@@ -53,6 +53,13 @@ public:
     void draw(const Mesh& mesh, const ShaderProgram& program, const Mat4& view,
               const Mat4& projection, const Mat4& model);
 
+    // Draw a sky-object mesh (sun/moon/star quads, unlit): no model
+    // transform and no u_model uniform — the geometry is positioned in
+    // world space by the shader (u_offset). The program must declare
+    // u_view/u_proj.
+    void drawSky(const Mesh& mesh, const ShaderProgram& program,
+                 const Mat4& view, const Mat4& projection);
+
     // Stats for the current frame (reset by beginFrame).
     const Stats& stats() const { return m_stats; }
 

@@ -32,9 +32,12 @@ cmake --build build
 
 # 其他参数
 ./build/bin/minecraft --config config/config.json --seed 42 --log-level debug
+
+# 从指定时刻开始（0 = 黎明前, 0.25 = 正午, 0.5 = 日落, 0.75 = 午夜）
+./build/bin/minecraft --time 0.75
 ```
 
-## 当前可玩内容（Phase 7）
+## 当前可玩内容（Phase 8）
 
 - **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时），`LeftShift` 冲刺，
   鼠标转向（**左键点击锁定指针；转向仅在指针锁定时生效**，未锁定的光标
@@ -77,11 +80,21 @@ cmake --build build
   （天空光按变化点 ±16 的整列——垂直天空光无距离限制；方块光按 ±16 盒），光值实际
   变化的 chunk 才重建 mesh。渲染：每个面烘焙"面后方一格"的光值到顶点（块状光照），
   shader 取 `max(sky, block)` × MC 经典面着色（顶 1.0 / 侧 0.8、0.6 / 底 0.5）+ 3%
-  环境光下限；无昼夜（Phase 8）。glowstone（emission 15）在 hotbar 里，放进暗处会发光
+  环境光下限。glowstone（emission 15）在 hotbar 里，放进暗处会发光（**夜间也亮**——
+  方块光不受昼夜影响）
+- **昼夜循环**：游戏内时间（`world.day_length_seconds` 默认 240s 一天，
+  `world.start_time_of_day` 默认 0.25=正午；`--time <0..1>` 可覆盖起点）。天空光按
+  `dayFactor` 缩放（黎明 [0.05,0.15) / 黄昏 [0.45,0.55) smoothstep 渐变，白天=1、
+  夜晚=0——MC 式呈现层近似，光值本身仍按正午存储）；天空背景色按时间关键帧插值
+  （夜深蓝 → 黎明橙 → 昼蓝 → 黄昏橙 → 夜深蓝）；太阳/月亮是像素级圆形 billboard
+  （40/28px，越靠近地平线越淡），太阳轨迹：t=0 正东地平线 → 正午天顶 → t=0.5 正西
+  地平线 → 午夜天底（月亮恒在太阳对面）；夜空有 300 颗确定性星星（世界空间
+  r=800 上半球，`splitmix64` 哈希生成）。时间按每帧固定 1/60s 推进（不用墙钟），
+  保证无输入运行逐字节可复现
 - **数据驱动方块**：14 个方块（stone/dirt/grass/sand/wood/leaves/glass/water/bedrock/glowstone +
   4 种矿石）+ 内置 air 哨兵（`BlockID{0}`，非数据方块，注册表从 id 1 分配）
 - 16×16 瓦片 TextureAtlas（Minecraft 同款规格），16 张占位纹理
-- 天空色 + 光照贴图（lightmap 顶点烘焙，Phase 7）
+- 光照贴图（lightmap 顶点烘焙，Phase 7）+ 昼夜循环（Phase 8）
 - 窗口标题实时显示 FPS 与 draw call 数
 
 ### 新增一个生物群系 / 矿石（无需改核心代码）
@@ -157,7 +170,8 @@ mine-craft/
 │   ├── player/      # 玩家：第一人称状态 + AABB 体素碰撞/滑动/重力跳跃（驱动相机）
 │   ├── renderer/    # 渲染器（GL 封装）：Shader/Texture/Mesh/Renderer/TextureAtlas
 │   └── world/       # 体素世界：coordinates（world/chunk/local 转换）、Chunk（块+光照数组）、
-│                    # World、ChunkMesher（按面烘焙光照）、raycast（DDA 体素射线+放置校验）、
+│                    # World、ChunkMesher（按面烘焙光照）、day_cycle（昼夜循环：时间/
+│                    # dayFactor/天空色/日月方位/确定性星空）、raycast（DDA 体素射线+放置校验）、
 │                    # lighting（Sky/Block Light 0-15 传播与局部更新）、noise（确定性
 │                    # value noise/fBm）、BiomeRegistry、WorldgenParams（worldgen.json）、
 │                    # WorldGenerator（Seed 可复现生成）
@@ -175,7 +189,7 @@ mine-craft/
 - [x] **Phase 5** — 玩家系统：第一人称移动、AABB 碰撞、滑动处理
 - [x] **Phase 6** — Raycast：方块破坏/放置
 - [x] **Phase 7** — 光照：Sky/Block Light（0-15），传播与更新
-- [ ] **Phase 8** — 昼夜循环：太阳/月亮/天空色
+- [x] **Phase 8** — 昼夜循环：太阳/月亮/星星/天空色（dayFactor 缩放天空光）
 - [ ] **Phase 9** — 流体：水（FluidState/FluidLevel/水平扩散）
 - [ ] **Phase 10** — 实体系统：Entity/Player/ItemEntity/Projectile
 - [ ] **Phase 11** — 物品与背包：Item/ItemStack/Inventory

@@ -139,7 +139,9 @@ std::string Config::defaultConfigJson() {
     },
     "world": {
         "seed": 123456789,
-        "view_distance": 8
+        "view_distance": 8,
+        "day_length_seconds": 240,
+        "start_time_of_day": 0.25
     },
     "audio": {
         "volume": 0.7

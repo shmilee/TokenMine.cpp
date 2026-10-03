@@ -36,6 +36,7 @@
 #include "world/biome.hpp"
 #include "world/chunk.hpp"
 #include "world/chunk_mesher.hpp"
+#include "world/day_cycle.hpp"
 #include "world/lighting.hpp"
 #include "world/raycast.hpp"
 #include "world/world.hpp"
@@ -47,6 +48,7 @@ struct GameArgs {
     std::filesystem::path configPath = "config/config.json";
     int frames = 0;        // 0 = run until closed
     std::int64_t seed = -1; // -1 = use config value
+    double time = -1;      // -1 = use config start_time_of_day (else [0, 1))
     LogLevel logLevel = LogLevel::Info;
     std::filesystem::path screenshotPath; // if set: save after the last frame
 };
@@ -77,6 +79,11 @@ private:
     // Rebuilds the GPU mesh of every dirty (or never-meshed) chunk.
     Result<void> updateChunkMeshes();
     Result<void> takeScreenshot(const std::filesystem::path& path);
+
+    // Draw the sun, moon and starfield (unlit billboarded quads, blended).
+    // Called between the opaque and transparent chunk passes.
+    void drawSkyObjects(const Mat4& view, const Mat4& projection,
+                        int viewportHeight);
 
     // Pointer-lock state machine + block interaction (called from update
     // while the pointer is captured).
@@ -119,6 +126,15 @@ private:
     std::size_t m_hotbarSelected = 0;
 
     ShaderProgram m_basicShader;
+
+    // Day/night cycle (config-driven; advanced by a fixed per-frame step so
+    // headless runs stay byte-reproducible — see kDayStepPerFrame).
+    DayCycle m_dayCycle;
+    // Unlit billboarded sky sprites (sun, moon, stars), drawn with
+    // m_skyShader between the opaque and transparent chunk passes.
+    ShaderProgram m_skyShader;
+    Mesh m_starMesh;     // kStarCount quads on the upper hemisphere
+    Mesh m_skyPointMesh; // one quad at the origin (offset per draw)
 
     int m_frameCount = 0;
     double m_fpsSmoothed = 0.0;

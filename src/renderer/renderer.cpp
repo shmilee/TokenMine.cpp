@@ -80,4 +80,29 @@ void Renderer::draw(const Mesh& mesh, const ShaderProgram& program,
     m_stats.vertices += mesh.indexCount();
 }
 
+void Renderer::drawSky(const Mesh& mesh, const ShaderProgram& program,
+                       const Mat4& view, const Mat4& projection) {
+    if (!mesh.valid() || !program.valid()) {
+        MC_LOG_WARN("drawSky() skipped: invalid mesh/program");
+        return;
+    }
+    program.bind();
+    program.setUniformMat4("u_view", view);
+    program.setUniformMat4("u_proj", projection);
+    mesh.bind();
+    glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh.indexCount()),
+                   GL_UNSIGNED_INT, nullptr);
+    program.unbind();
+    const GLenum glErr = glGetError();
+    if (glErr != GL_NO_ERROR) {
+        char hex[16];
+        std::snprintf(hex, sizeof(hex), "0x%x",
+                      static_cast<unsigned>(glErr));
+        MC_LOG_ERROR(std::string("GL error after draw call: ") + hex);
+    }
+
+    m_stats.drawCalls++;
+    m_stats.vertices += mesh.indexCount();
+}
+
 } // namespace mc

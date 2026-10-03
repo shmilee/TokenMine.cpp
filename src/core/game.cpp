@@ -3,6 +3,7 @@
 #include <GL/glew.h>
 #include <SDL3/SDL.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -17,7 +18,24 @@ namespace {
 constexpr float kFovDegrees = 70.0f;
 constexpr float kNear = 0.1f;
 constexpr float kFar = 1000.0f;
-constexpr Vec4 kSkyColor {0.47f, 0.71f, 0.95f, 1.0f};
+
+// Sky objects (sun/moon/stars) sit this far from the world origin — inside
+// the far plane (kFar) so they are never clipped.
+constexpr double kSkyDistance = 800.0;
+constexpr int kStarCount = 300;
+// Fixed starfield (deterministic hash; any value works).
+constexpr std::uint64_t kStarSeed = 0x5EEDULL;
+// Sprite sizes in pixels (billboarded quads — see sky.vert).
+constexpr float kStarSpriteSize = 2.0f;
+constexpr float kSunSpriteSize = 40.0f;
+constexpr float kMoonSpriteSize = 28.0f;
+// Sun/moon fade-out: alpha = clamp(elevation / kHorizonFade, 0, 1), so they
+// are fully visible a little above the horizon and invisible on/below it.
+constexpr float kHorizonFade = 0.1f;
+// Day/night time advances by this fixed amount per frame (not the wall
+// clock), so headless runs are byte-reproducible frame for frame; the
+// real-time speed is exact at 60 FPS.
+constexpr double kDayStepPerFrame = 1.0 / 60.0;
 
 // Demo area: 4x4 chunk columns covering world x,z in [-32, 32).
 constexpr int kDemoChunkMin = -2;
@@ -59,6 +77,65 @@ Result<void> Game::buildScene() {
     auto shader = ShaderProgram::create(*vertSrc, *fragSrc);
     MC_TRY(shader);
     m_basicShader = std::move(*shader);
+
+    // -- sky shader (unlit point sprites: sun, moon, stars) -------------------
+    auto skyVert = m_assets.loadText("shaders/sky.vert");
+    MC_TRY(skyVert);
+    auto skyFrag = m_assets.loadText("shaders/sky.frag");
+    MC_TRY(skyFrag);
+    auto skyShader = ShaderProgram::create(*skyVert, *skyFrag);
+    MC_TRY(skyShader);
+    m_skyShader = std::move(*skyShader);
+
+    // -- day/night cycle (config-driven; --time overrides the start time) -----
+    DayCycle::Params dayParams;
+    dayParams.dayLengthSeconds =
+        m_config.getDouble("world.day_length_seconds", 240.0);
+    dayParams.startTimeOfDay =
+        m_config.getDouble("world.start_time_of_day", 0.25);
+    m_dayCycle = DayCycle(dayParams);
+
+    // -- sky sprites: the starfield (deterministic quads) + the single quad
+    //    the sun and moon share (positioned per draw by u_offset) ------------
+    // Shared quad corners: view-space [-0.5, 0.5]^2, carried in the vertex
+    // "normal" slot (the sky shader reads it as a_corner).
+    const Vec3 kQuadCorners[4] = {{-0.5f, -0.5f, 0.0f},
+                                  {0.5f, -0.5f, 0.0f},
+                                  {0.5f, 0.5f, 0.0f},
+                                  {-0.5f, 0.5f, 0.0f}};
+    const std::uint32_t kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
+
+    std::vector<MeshVertex> starVerts;
+    starVerts.reserve(static_cast<std::size_t>(kStarCount) * 4);
+    std::vector<std::uint32_t> starIndices;
+    starIndices.reserve(static_cast<std::size_t>(kStarCount) * 6);
+    int star = 0;
+    for (const Vec3& p :
+         DayCycle::makeStarPositions(kStarSeed, kStarCount, kSkyDistance)) {
+        for (const Vec3& corner : kQuadCorners) {
+            MeshVertex v;
+            v.position = p;
+            v.normal = corner;
+            starVerts.push_back(v);
+        }
+        const std::uint32_t base = static_cast<std::uint32_t>(star * 4);
+        for (const std::uint32_t idx : kQuadIndices) {
+            starIndices.push_back(base + idx);
+        }
+        ++star;
+    }
+    auto starUpload = m_starMesh.upload(starVerts, starIndices);
+    MC_TRY(starUpload);
+
+    std::vector<MeshVertex> pointVerts;
+    for (const Vec3& corner : kQuadCorners) {
+        MeshVertex v;
+        v.normal = corner;
+        pointVerts.push_back(v);
+    }
+    auto pointUpload =
+        m_skyPointMesh.upload(pointVerts, {0, 1, 2, 0, 2, 3});
+    MC_TRY(pointUpload);
 
     // -- blocks (data-driven from assets/data/blocks/*.json) ------------------
     auto blocksLoad = m_blocks.loadDirectory(m_assets, "data/blocks");
@@ -245,6 +322,9 @@ Result<void> Game::init(const GameArgs& args) {
     if (m_args.seed >= 0) {
         m_config.set("world.seed", static_cast<long long>(m_args.seed));
     }
+    if (m_args.time >= 0.0) {
+        m_config.set("world.start_time_of_day", m_args.time);
+    }
 
     const auto seed = m_config.getInt64("world.seed", 0);
     const int viewDistance = m_config.getInt("world.view_distance", 8);
@@ -357,6 +437,10 @@ int Game::run() {
 }
 
 void Game::update(double dt) {
+    // Day/night: a fixed per-frame step (see kDayStepPerFrame) keeps
+    // headless runs byte-reproducible.
+    m_dayCycle.update(kDayStepPerFrame);
+
     handleInteraction();
 
     // A newly created chunk (placing outside the demo area) starts with
@@ -471,7 +555,10 @@ void Game::render() {
     const int h = m_window.height();
 
     m_renderer.beginFrame(w, h);
-    m_renderer.clear(kSkyColor);
+    // The sky background is the day-cycle color (deep night blue at
+    // midnight, orange at dawn/dusk, the classic blue by day).
+    const Vec3 sky = m_dayCycle.skyColor();
+    m_renderer.clear({sky.x, sky.y, sky.z, 1.0f});
 
     const Mat4 projection = Mat4::perspective(
         kFovDegrees * static_cast<float>(M_PI) / 180.0f,
@@ -479,10 +566,12 @@ void Game::render() {
     const Mat4 view = m_camera.viewMatrix();
 
     // Shared uniforms (program state persists across draws). Lighting is
-    // baked into the vertices by the mesher (Phase 7) — no light uniforms.
+    // baked into the vertices by the mesher (Phase 7) — no light uniforms
+    // except the day/night scale for sky light.
     m_basicShader.bind();
     m_basicShader.setUniform1i("u_texture", 0);
     m_basicShader.setUniform1i("u_useTexture", 1);
+    m_basicShader.setUniform1f("u_dayFactor", m_dayCycle.dayFactor());
 
     m_atlas.texture().bind();
 
@@ -499,6 +588,11 @@ void Game::render() {
     }
 
     m_renderer.enableBlending();
+    // Sky objects (unlit billboarded quads at kSkyDistance): drawn after
+    // the opaque pass so the depth test occludes them behind terrain, and
+    // before the transparent pass (they never overlap chunk geometry in
+    // depth — they sit behind everything in the demo area).
+    drawSkyObjects(view, projection, h);
     for (const ChunkPos& pos : positions) {
         const auto it = m_chunkMeshes.find(pos);
         if (it == m_chunkMeshes.end() || !it->second.transparent.has_value()) {
@@ -510,6 +604,60 @@ void Game::render() {
     m_renderer.disableBlending();
 
     m_renderer.endFrame();
+}
+
+void Game::drawSkyObjects(const Mat4& view, const Mat4& projection,
+                          int viewportHeight) {
+    // View-space length of one pixel at the sprite's depth (see sky.vert).
+    const float pxToWorld = 2.0f *
+                             std::tan(kFovDegrees * static_cast<float>(M_PI) /
+                                      360.0f) /
+                             static_cast<float>(viewportHeight);
+
+    const float starAlpha = m_dayCycle.starAlpha();
+    if (starAlpha > 0.0f) {
+        m_skyShader.bind();
+        m_skyShader.setUniformMat4("u_view", view);
+        m_skyShader.setUniformMat4("u_proj", projection);
+        m_skyShader.setUniform3f("u_offset", 0.0f, 0.0f, 0.0f);
+        m_skyShader.setUniform2f("u_sizePixels", kStarSpriteSize,
+                                 kStarSpriteSize);
+        m_skyShader.setUniform1f("u_pxToWorld", pxToWorld);
+        m_skyShader.setUniform4f("u_color", 1.0f, 1.0f, 1.0f, starAlpha);
+        m_renderer.drawSky(m_starMesh, m_skyShader, view, projection);
+    }
+
+    // Sun and moon share the single quad, offset along the celestial
+    // direction. Both fade out as they cross the horizon.
+    const Vec3 sun = m_dayCycle.sunDirection();
+    const float sunAlpha = std::clamp(sun.y / kHorizonFade, 0.0f, 1.0f);
+    if (sunAlpha > 0.0f) {
+        m_skyShader.bind();
+        m_skyShader.setUniformMat4("u_view", view);
+        m_skyShader.setUniformMat4("u_proj", projection);
+        const Vec3 sunPos = sun * static_cast<float>(kSkyDistance);
+        m_skyShader.setUniform3f("u_offset", sunPos.x, sunPos.y, sunPos.z);
+        m_skyShader.setUniform2f("u_sizePixels", kSunSpriteSize,
+                                 kSunSpriteSize);
+        m_skyShader.setUniform1f("u_pxToWorld", pxToWorld);
+        m_skyShader.setUniform4f("u_color", 1.0f, 0.93f, 0.78f, sunAlpha);
+        m_renderer.drawSky(m_skyPointMesh, m_skyShader, view, projection);
+    }
+
+    const Vec3 moon = m_dayCycle.moonDirection();
+    const float moonAlpha = std::clamp(moon.y / kHorizonFade, 0.0f, 1.0f);
+    if (moonAlpha > 0.0f) {
+        m_skyShader.bind();
+        m_skyShader.setUniformMat4("u_view", view);
+        m_skyShader.setUniformMat4("u_proj", projection);
+        const Vec3 moonPos = moon * static_cast<float>(kSkyDistance);
+        m_skyShader.setUniform3f("u_offset", moonPos.x, moonPos.y, moonPos.z);
+        m_skyShader.setUniform2f("u_sizePixels", kMoonSpriteSize,
+                                 kMoonSpriteSize);
+        m_skyShader.setUniform1f("u_pxToWorld", pxToWorld);
+        m_skyShader.setUniform4f("u_color", 0.85f, 0.88f, 1.0f, moonAlpha);
+        m_renderer.drawSky(m_skyPointMesh, m_skyShader, view, projection);
+    }
 }
 
 // Capture the front buffer (valid right after swapBuffers) into a PNG.

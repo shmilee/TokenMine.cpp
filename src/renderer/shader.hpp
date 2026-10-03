@@ -44,7 +44,10 @@ public:
     // not exist (it may have been optimized out).
     void setUniform1i(const std::string& name, int value) const;
     void setUniform1f(const std::string& name, float value) const;
+    void setUniform2f(const std::string& name, float x, float y) const;
     void setUniform3f(const std::string& name, float x, float y, float z) const;
+    void setUniform4f(const std::string& name, float x, float y, float z,
+                      float w) const;
     void setUniformMat4(const std::string& name, const Mat4& value) const;
 
 private:

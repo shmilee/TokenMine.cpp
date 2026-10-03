@@ -17,6 +17,8 @@ void printUsage() {
         "Usage: minecraft [options]\n"
         "  --config <path>   Config file (default: config/config.json)\n"
         "  --seed <n>        Override world seed\n"
+        "  --time <0..1>     Start time of day (0 = pre-dawn, 0.25 = noon,\n"
+        "                    0.5 = sunset, 0.75 = midnight)\n"
         "  --frames <n>      Exit after N frames (0 = run until closed)\n"
         "  --screenshot <p>  Save a PNG screenshot of the last frame\n"
         "  --log-level <l>   trace|debug|info|warn|error\n"
@@ -51,6 +53,14 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
             const char* v = nextValue(i, "--seed");
             if (!v) return false;
             args.seed = std::atoll(v);
+        } else if (arg == "--time") {
+            const char* v = nextValue(i, "--time");
+            if (!v) return false;
+            args.time = std::atof(v);
+            if (args.time < 0.0 || args.time >= 1.0) {
+                err = "--time must be in [0, 1)";
+                return false;
+            }
         } else if (arg == "--frames") {
             const char* v = nextValue(i, "--frames");
             if (!v) return false;
