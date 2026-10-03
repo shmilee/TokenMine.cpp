@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstring>
 #include <fstream>
+#include <numbers>
 
 #include "core/json.hpp"
 #include "core/png.hpp"
@@ -46,6 +47,14 @@ constexpr int kDemoChunkMax = 1;
 
 // How far the crosshair raycast reaches (blocks; Minecraft's reach).
 constexpr float kReach = 5.0f;
+
+// Dropped-item animation (Phase 10): derived from the frame counter, not
+// the wall clock, so headless runs stay byte-reproducible. At 60 FPS the
+// pickup bobs with a 1.5 s period (amplitude 0.05 blocks) and spins once
+// every 4 s, like Minecraft's item pickup.
+constexpr int kItemBobPeriodFrames = 90;
+constexpr int kItemSpinPeriodFrames = 240;
+constexpr float kItemBobAmplitude = 0.05f;
 
 double nowSeconds() {
     return static_cast<double>(SDL_GetPerformanceCounter()) /
@@ -486,6 +495,10 @@ void Game::update(double dt) {
     m_camera.position = m_player->eyePosition();
     m_camera.yaw = m_player->yaw;
     m_camera.pitch = m_player->pitch;
+
+    // Other entities (Phase 10): per-entity physics, then item merging and
+    // despawn (see updateEntities).
+    updateEntities(dt);
 }
 
 // ---------------------------------------------------------------------------
@@ -539,6 +552,22 @@ void Game::breakBlock() {
     // Relight the region around the change (a broken occluder lets light
     // in; the broken cell stops blocking).
     Lighting::updateLocal(m_world, m_blocks, hit->block);
+
+    // Drops are data-driven: `properties.drops` names the block (Phase 11
+    // swaps the name for a real item id). The item spawns at the block
+    // center with zero velocity, so its rest position is exact and headless
+    // runs stay byte-reproducible (see ItemEntity).
+    const std::string& drops = m_blocks.at(id).properties.drops;
+    if (!drops.empty()) {
+        const BlockID dropId = m_blocks.idForName(drops);
+        if (dropId.valid()) {
+            const Vec3 dropPos {static_cast<float>(hit->block.x) + 0.5f,
+                                static_cast<float>(hit->block.y) + 0.5f,
+                                static_cast<float>(hit->block.z) + 0.5f};
+            m_entities.push_back(std::make_unique<ItemEntity>(
+                m_world, m_blocks, dropId, dropPos));
+        }
+    }
 }
 
 void Game::placeBlock() {
@@ -571,6 +600,107 @@ void Game::cycleHotbar() {
         return;
     }
     m_hotbarSelected = (m_hotbarSelected + 1) % m_hotbar.size();
+}
+
+// ---------------------------------------------------------------------------
+// Entities (Phase 10)
+// ---------------------------------------------------------------------------
+
+void Game::updateEntities(double dt) {
+    for (auto& entity : m_entities) {
+        entity->update(dt);
+    }
+    // Item merge: index order, `j` absorbed into `i` (j > i). A removed
+    // entity is skipped as a future merge target, so each item is absorbed
+    // at most once (deterministic result for a given spawn order).
+    const std::size_t n = m_entities.size();
+    std::vector<bool> gone(n, false);
+    for (std::size_t i = 0; i < n; ++i) {
+        if (gone[i]) {
+            continue;
+        }
+        auto* a = dynamic_cast<ItemEntity*>(m_entities[i].get());
+        if (a == nullptr) {
+            continue;
+        }
+        for (std::size_t j = i + 1; j < n; ++j) {
+            if (gone[j]) {
+                continue;
+            }
+            auto* b = dynamic_cast<ItemEntity*>(m_entities[j].get());
+            if (b != nullptr && b->canMergeInto(*a)) {
+                a->absorb(*b);
+                gone[j] = true;
+            }
+        }
+    }
+    // Despawn: merged-away + aged-out / impact / below the kill plane.
+    for (std::size_t i = 0; i < n; ++i) {
+        if (!gone[i] && m_entities[i]->shouldDespawn()) {
+            gone[i] = true;
+        }
+    }
+    if (std::none_of(gone.begin(), gone.end(), [](bool g) { return g; })) {
+        return;
+    }
+    std::vector<std::unique_ptr<Entity>> kept;
+    kept.reserve(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        if (!gone[i]) {
+            kept.push_back(std::move(m_entities[i]));
+        }
+    }
+    m_entities = std::move(kept);
+}
+
+void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
+                            bool transparentPass) {
+    for (const auto& entity : m_entities) {
+        const ItemEntity* item =
+            dynamic_cast<const ItemEntity*>(entity.get());
+        if (item == nullptr) {
+            continue;
+        }
+        const Block& block = m_blocks.at(item->block());
+        if (block.properties.transparent != transparentPass) {
+            continue;
+        }
+        const Mesh& mesh = itemMesh(item->block());
+        if (!mesh.valid()) {
+            continue;
+        }
+        // Bob + spin from the frame counter (see kItemBobPeriodFrames):
+        // deterministic in headless runs; at 60 FPS the pickup bobs with a
+        // 1.5 s period and spins around once every 4 s.
+        const Vec3 p = item->position();
+        const float t = static_cast<float>(m_frameCount);
+        const float bob =
+            kItemBobAmplitude *
+            std::sin(2.0f * std::numbers::pi * t /
+                     static_cast<float>(kItemBobPeriodFrames));
+        const float spin = 2.0f * std::numbers::pi * t /
+                           static_cast<float>(kItemSpinPeriodFrames);
+        const Vec3 center {p.x, p.y + item->height() * 0.5f + bob, p.z};
+        const Mat4 model =
+            Mat4::multiply(Mat4::translate(center), Mat4::rotateY(spin));
+        m_renderer.draw(mesh, m_basicShader, view, projection, model);
+    }
+}
+
+const Mesh& Game::itemMesh(BlockID id) {
+    auto it = m_itemMeshes.find(id);
+    if (it != m_itemMeshes.end()) {
+        return it->second;
+    }
+    Mesh& mesh = m_itemMeshes[id];
+    const ItemMeshGeometry geom =
+        makeItemCubeGeometry(m_blocks.at(id), m_atlas.layout());
+    auto r = mesh.upload(geom.vertices, geom.indices);
+    if (!r.ok()) {
+        MC_LOG_ERROR("Item mesh build failed for block '" +
+                     m_blocks.at(id).name + "': " + r.error().describe());
+    }
+    return mesh;
 }
 
 void Game::render() {
@@ -609,6 +739,9 @@ void Game::render() {
         m_renderer.draw(*it->second.opaque, m_basicShader, view, projection,
                         chunkModel(pos));
     }
+    // Dropped items (Phase 10): the opaque ones with the chunk pass; the
+    // transparent ones (leaves, glass) join the blending pass below.
+    drawItemEntities(view, projection, false);
 
     m_renderer.enableBlending();
     // Sky objects (unlit billboarded quads at kSkyDistance): drawn after
@@ -624,6 +757,7 @@ void Game::render() {
         m_renderer.draw(*it->second.transparent, m_basicShader, view,
                         projection, chunkModel(pos));
     }
+    drawItemEntities(view, projection, true);
     m_renderer.disableBlending();
 
     m_renderer.endFrame();

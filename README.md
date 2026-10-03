@@ -37,7 +37,7 @@ cmake --build build
 ./build/bin/minecraft --time 0.75
 ```
 
-## 当前可玩内容（Phase 9）
+## 当前可玩内容（Phase 10）
 
 - **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时）/游泳时随时上浮，
   `LeftShift` 冲刺，鼠标转向（**左键点击锁定指针；转向仅在指针锁定时生效**，
@@ -55,6 +55,12 @@ cmake --build build
     Phase 11 换成物品/背包）
   - `ESC`（锁定时）：释放指针；未锁定时 ESC 退出游戏
   - 破坏/放置复用 `setBlock` 脏标记管线，下一帧自动重建受影响 chunk 的 mesh
+- **掉落物**（Phase 10，`ItemEntity`）：破坏 `properties.drops` 非空的方块时，
+  在方块中心生成一个掉落物实体（数据驱动，零初速——静止位精确、截图可复现）。
+  掉落物是 0.25 的小立方体：走统一的 Entity 碰撞物理（重力/终端速度/水平摩擦），
+  落地后原地悬浮摆动 + 自转（动画由帧计数器驱动，非墙钟），同类 0.75 格内自动
+  合并（堆叠上限 64），120 秒（MC 同款）或掉出世界后消失。拾取（进背包）
+  留到 Phase 11
 - **AABB 体素碰撞 + 滑动**：玩家 0.6×1.8 包围盒（底面中心为位置），轴分离解析
   （X→Z→Y）——撞墙时该轴停住、另一水平轴继续走（滑动）；贴面精确解析（无 epsilon
   抖动）；子步化防高速穿透（每子步 ≤0.4 块）；重力 + 终端速度 + 跳跃高度 1.13 块
@@ -184,7 +190,11 @@ mine-craft/
 │   ├── block/       # 数据驱动方块系统：Block 数据模型 + BlockRegistry（JSON 加载/校验）
 │   ├── core/        # 核心框架：日志、错误处理、JSON、配置、资源、窗口、输入、相机、PNG、主循环
 │   │   └── math/    # 数学库（header-only）：Vec2/Vec3/Vec4/Mat4
-│   ├── player/      # 玩家：第一人称状态 + AABB 体素碰撞/滑动/重力跳跃（驱动相机）
+│   ├── player/      # 玩家：第一人称状态 + 输入驱动移动（继承 Entity 的统一碰撞物理）
+│   ├── entity/      # 实体系统：Entity 基类（底面中心位置/子步化轴分离碰撞/滑动/kill plane）、
+│   │                # ItemEntity（掉落物：摩擦停驻/同类合并/120s 消亡）、Projectile（投射物：
+│   │                # 受重力抛物线/撞 solid 即钉住）、item_mesh（掉落物完整立方体几何，
+│   │                # 与 chunk mesher 共享 cube_face_table）
 │   ├── renderer/    # 渲染器（GL 封装）：Shader/Texture/Mesh/Renderer/TextureAtlas
 │   └── world/       # 体素世界：coordinates（world/chunk/local 转换）、Chunk（块+光照数组）、
 │                    # World、ChunkMesher（按面烘焙光照）、day_cycle（昼夜循环：时间/
@@ -210,7 +220,7 @@ mine-craft/
 - [x] **Phase 7** — 光照：Sky/Block Light（0-15），传播与更新
 - [x] **Phase 8** — 昼夜循环：太阳/月亮/星星/天空色（dayFactor 缩放天空光）
 - [x] **Phase 9** — 流体：水（0-8 等级/下落/水平扩散/水光衰减/游泳/半透明水面）
-- [ ] **Phase 10** — 实体系统：Entity/Player/ItemEntity/Projectile
+- [x] **Phase 10** — 实体系统：Entity 基类（统一 AABB 物理）/Player 并入/ItemEntity 掉落物/Projectile 投射物
 - [ ] **Phase 11** — 物品与背包：Item/ItemStack/Inventory
 - [ ] **Phase 12** — 合成：数据驱动 Recipe
 - [ ] **Phase 13** — 存档：Seed + 修改数据

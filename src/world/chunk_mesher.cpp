@@ -1,56 +1,10 @@
 #include "world/chunk_mesher.hpp"
 
+#include "block/cube_face_table.hpp"
 #include "core/math/vec3.hpp"
 #include "world/lighting.hpp"
 
 namespace mc {
-
-namespace {
-
-// Face table for a block occupying [x, x+1] x [y, y+1] x [z, z+1].
-// Corner offsets are per-axis 0/1 relative to the block's lower corner;
-// corners are ordered counter-clockwise when viewed from outside the block
-// (GL front faces). Winding is guarded by the FaceWinding unit test:
-// cross(corner1 - corner0, corner2 - corner0) must point along the face
-// normal for every face.
-//
-// NOTE: the Phase 1/2 unit-cube table had the +Y/-Y rows wound backwards
-// (visible only from inside the cube). Its screenshot verification sampled
-// side faces, which hid the bug; the Y rows here are the corrected versions.
-struct Face {
-    int dx, dy, dz; // neighbor block offset
-    Vec3 normal;
-    int corner[4][3];
-    int textureSlot; // 0 = top, 1 = side, 2 = bottom
-};
-
-constexpr Face kFaces[6] = {
-    {0, 1, 0, {0.0f, 1.0f, 0.0f},
-     {{0, 1, 0}, {0, 1, 1}, {1, 1, 1}, {1, 1, 0}}, 0}, // +Y (top)
-    {0, -1, 0, {0.0f, -1.0f, 0.0f},
-     {{0, 0, 1}, {0, 0, 0}, {1, 0, 0}, {1, 0, 1}}, 2}, // -Y (bottom)
-    {0, 0, 1, {0.0f, 0.0f, 1.0f},
-     {{0, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 1, 1}}, 1}, // +Z
-    {0, 0, -1, {0.0f, 0.0f, -1.0f},
-     {{1, 0, 0}, {0, 0, 0}, {0, 1, 0}, {1, 1, 0}}, 1}, // -Z
-    {1, 0, 0, {1.0f, 0.0f, 0.0f},
-     {{1, 0, 1}, {1, 0, 0}, {1, 1, 0}, {1, 1, 1}}, 1}, // +X
-    {-1, 0, 0, {-1.0f, 0.0f, 0.0f},
-     {{0, 0, 0}, {0, 0, 1}, {0, 1, 1}, {0, 1, 0}}, 1}, // -X
-};
-
-const std::string& faceTexture(const Block& block, int slot) {
-    switch (slot) {
-        case 0:
-            return block.model.textures.top;
-        case 2:
-            return block.model.textures.bottom;
-        default:
-            return block.model.textures.side;
-    }
-}
-
-} // namespace
 
 ChunkMesher::ChunkMesher(const World& world, const BlockRegistry& blocks,
                          const AtlasLayout& layout)
@@ -91,7 +45,7 @@ ChunkMeshData ChunkMesher::mesh(const ChunkPos& pos) const {
                     block.properties.transparent ? &out.transparentIndices
                                                  : &out.opaqueIndices;
 
-                for (const Face& face : kFaces) {
+                for (const CubeFace& face : kCubeFaces) {
                     const BlockID neighbor = m_world.getBlock(
                         origin.x + lx + face.dx, origin.y + ly + face.dy,
                         origin.z + lz + face.dz);
@@ -101,9 +55,9 @@ ChunkMeshData ChunkMesher::mesh(const ChunkPos& pos) const {
                     }
 
                     const Vec2 u0 =
-                        AtlasLayout::uvMin(m_layout, faceTexture(block, face.textureSlot));
+                        AtlasLayout::uvMin(m_layout, cubeFaceTexture(block, face.textureSlot));
                     const Vec2 u1 =
-                        AtlasLayout::uvMax(m_layout, faceTexture(block, face.textureSlot));
+                        AtlasLayout::uvMax(m_layout, cubeFaceTexture(block, face.textureSlot));
                     // Corner UVs follow the corner order: (u0,v1),(u1,v1),
                     // (u1,v0),(u0,v0) — the Phase 2-verified tile mapping.
                     const Vec2 faceUv[4] = {
@@ -155,7 +109,7 @@ void ChunkMesher::emitFluid(ChunkMeshData& out, const Block& fluidBlock,
     const int wx = origin.x + lx;
     const int wy = origin.y + ly;
     const int wz = origin.z + lz;
-    for (const Face& face : kFaces) {
+    for (const CubeFace& face : kCubeFaces) {
         const int nx = wx + face.dx;
         const int ny = wy + face.dy;
         const int nz = wz + face.dz;
@@ -182,9 +136,9 @@ void ChunkMesher::emitFluid(ChunkMeshData& out, const Block& fluidBlock,
         }
 
         const Vec2 u0 = AtlasLayout::uvMin(m_layout,
-                                           faceTexture(fluidBlock, face.textureSlot));
+                                           cubeFaceTexture(fluidBlock, face.textureSlot));
         const Vec2 u1 = AtlasLayout::uvMax(m_layout,
-                                           faceTexture(fluidBlock, face.textureSlot));
+                                           cubeFaceTexture(fluidBlock, face.textureSlot));
         // Corner UVs follow the corner order: (u0,v1),(u1,v1),(u1,v0),(u0,v0).
         const Vec2 faceUv[4] = {
             {u0.x, u1.y}, {u1.x, u1.y}, {u1.x, u0.y}, {u0.x, u0.y},

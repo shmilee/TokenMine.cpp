@@ -1,48 +1,35 @@
-// Player: the first-person actor. Owns position, orientation and velocity,
-// and moves against the voxel world with AABB collision + sliding.
+// Player: the first-person actor.
 //
-// Position convention (Minecraft-style): `position` is the CENTER of the
-// BOTTOM face of the player's AABB, in world block units. The AABB is
-//   min = {x - width/2, y, z - width/2}
-//   max = {x + width/2, y + height, z + width/2}
-// The camera eye sits at position + (0, eyeHeight, 0).
+// The position/AABB convention, the sub-stepped axis-separated collision
+// model and the kill plane live in the Entity base (see entity.hpp). This
+// class adds the player-specific parts: orientation (yaw/pitch) and the
+// input-driven movement model.
 //
 // Movement model (per update):
 //   1. mouse look (yaw/pitch, pitch clamped to +/- ~89 deg)
 //   2. desired horizontal velocity from WASD relative to yaw (walk/sprint)
-//   3. gravity on the vertical velocity; Space jumps while onGround
-//   4. integration per axis (X, Z, then Y) against solid blocks. Each axis
-//      is resolved independently, which is what produces "sliding": the
-//      blocked axis zeroes its velocity while the other keeps moving.
-//   5. onGround = the Y resolution clamped downward this tick
+//   3. sub-stepped physics (Entity::moveInSubsteps): per sub-step gravity
+//      (or swim physics while the AABB overlaps a fluid cell), a Space jump
+//      while onGround (or swim-up in water), then the X/Z/Y collision moves
+//   4. below the kill plane: respawn at spawn
 //
-// Collision details:
-//   - A block cell [b, b+1) overlaps the AABB iff `min < b+1 && max > b`
-//     (strict). Block boundaries are integers, exactly representable in
-//     float, so resting exactly on a face is not an overlap and needs no
-//     epsilon: gravity re-penetrates the face each tick and the Y resolve
-//     clamps back to the exact integer boundary (no jitter).
-//   - When an axis is blocked, the player is clamped flush against the
-//     limiting block face and that axis's velocity is zeroed.
-//   - Tunneling: the tick is sub-stepped so no axis moves more than
-//     kMaxSubstepMove blocks per step (less than half a block).
+// Swimming (Phase 9, while the AABB overlaps a fluid cell): reduced gravity
+// and sink speed, reduced horizontal speed, and Space swims upward instead
+// of jumping (also from the ground — a shallow pool floor does not jump, it
+// surfaces).
 //
-// The World + BlockRegistry are the sole source of solid/air: the player
-// reads properties.solid and never switches on block identity. Water is
-// non-solid (the player can be inside it); when the AABB overlaps a fluid
-// cell the player SWIMS: reduced gravity/terminal velocity, reduced
-// horizontal speed, and Space swims upward (Minecraft-style, Phase 9).
+// The World + BlockRegistry are the sole source of solid/air (via Entity):
+// the player reads properties.solid and never switches on block identity.
 #pragma once
 
 #include "core/input.hpp"
 #include "core/math/vec3.hpp"
+#include "entity/entity.hpp"
 #include "world/world.hpp"
 
 namespace mc {
 
-class BlockRegistry;
-
-class Player {
+class Player : public Entity {
 public:
     struct Params {
         float width = 0.6f;
@@ -67,14 +54,16 @@ public:
     // respawn point (bottom-center AABB position).
     Player(const World& world, const BlockRegistry& blocks, Vec3 spawnPos);
 
+    // Advance the simulation by dt seconds (Entity::update virtual). The
+    // controls (polled input + look state) must have been set by the
+    // 3-argument overload below first.
+    void update(double dt) override;
+
     // Advance the simulation by dt seconds using the polled input.
     // Mouse look is applied only when `lookEnabled` (the game passes the
     // window's pointer-captured state, so an unlocked cursor never rotates
     // the view).
     void update(double dt, const Input& input, bool lookEnabled);
-
-    // Move the player to `pos` (bottom-center) and zero its velocity.
-    void teleportTo(Vec3 pos);
 
     // Is the AABB (bottom-center + given dimensions) free of solid blocks?
     // Used for spawn point validation.
@@ -87,49 +76,30 @@ public:
     float yaw = 0.0f;
     float pitch = 0.0f;
 
-    const Vec3& position() const { return m_position; }
     Vec3 eyePosition() const {
-        return m_position + Vec3{0.0f, m_params.eyeHeight, 0.0f};
+        return position() + Vec3{0.0f, m_params.eyeHeight, 0.0f};
     }
-    bool onGround() const { return m_onGround; }
-    const Vec3& velocity() const { return m_velocity; }
-
-    Vec3 aabbMin() const;
-    Vec3 aabbMax() const;
 
     const Params& params() const { return m_params; }
-    const World& world() const { return m_world; }
 
 private:
-    // One physics sub-step (look + desired velocity are applied per tick,
-    // not per sub-step, in update()). `inWater` is the tick's water state
-    // (swim physics instead of air physics while true).
-    void step(double h, const Input& input, bool inWater);
-
-    // Move along one axis by `delta` and resolve against solid blocks.
-    // For the Y axis, a downward clamp sets m_onGround.
-    void moveAxis(int axis, float delta);
-
-    // Solid = registered block with properties.solid (air is never solid).
-    bool isSolid(BlockID id) const;
+    // One physics sub-step (Entity::integrate): swim/air gravity + the
+    // jump. `look`/`inWater` are tick state, consumed per sub-step.
+    void integrate(float h) override;
 
     // The AABB overlaps at least one fluid cell (water).
     bool isInWater() const;
 
-    const World& m_world;
-    const BlockRegistry& m_blocks;
-
     Params m_params;
     Vec3 m_spawnPos {0.0f, 0.0f, 0.0f};
-
-    Vec3 m_position {0.0f, 0.0f, 0.0f}; // bottom-center of the AABB
-    Vec3 m_velocity {0.0f, 0.0f, 0.0f}; // blocks / second
-    bool m_onGround = false;
+    // Tick state for update()/integrate(): the polled input, the look
+    // state, and this tick's water state (computed once per update, not
+    // per sub-step).
+    const Input* m_input = nullptr;
+    bool m_lookEnabled = false;
+    bool m_inWater = false;
 
     static constexpr float kMaxPitch = 1.5533f; // ~89 deg
-    static constexpr float kMaxSubstepMove = 0.4f; // blocks per physics sub-step
-    static constexpr int kMaxSubsteps = 64;
-    static constexpr float kKillPlaneY = -32.0f; // fell out of the world -> respawn
 };
 
 } // namespace mc

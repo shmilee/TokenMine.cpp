@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -27,6 +28,10 @@
 #include "core/input.hpp"
 #include "core/logger.hpp"
 #include "core/window.hpp"
+#include "entity/entity.hpp"
+#include "entity/item_entity.hpp"
+#include "entity/item_mesh.hpp"
+#include "entity/projectile.hpp"
 #include "player/player.hpp"
 #include "renderer/mesh.hpp"
 #include "renderer/renderer.hpp"
@@ -96,6 +101,19 @@ private:
     void placeBlock();
     void cycleHotbar();
 
+    // Entity simulation (Phase 10): per-entity physics, then the item merge
+    // pass and despawn (removal is deferred so the merge order — and
+    // therefore the merge result — is deterministic).
+    void updateEntities(double dt);
+    // Dropped-item rendering: the items whose block belongs to the given
+    // pass (opaque / transparent), bobbing + spinning around their rest
+    // position (frame-counter driven — see kItemBobPeriodFrames).
+    void drawItemEntities(const Mat4& view, const Mat4& projection,
+                          bool transparentPass);
+    // The cached full-cube mesh for a dropped block (built lazily on first
+    // render; the geometry is cached, only the draw transform varies).
+    const Mesh& itemMesh(BlockID id);
+
     GameArgs m_args;
     Config m_config;
     AssetManager m_assets;
@@ -120,6 +138,13 @@ private:
     // The first-person actor (built in buildScene after the world exists;
     // it holds references to the world and the block registry).
     std::optional<Player> m_player;
+
+    // Non-player entities (Phase 10): dropped items + projectiles. The
+    // game is the sole owner — it updates them each frame, merges items,
+    // and removes the despawned.
+    std::vector<std::unique_ptr<Entity>> m_entities;
+    // Dropped-item meshes: one full-cube mesh per block id (built lazily).
+    std::unordered_map<BlockID, Mesh, BlockIDHash> m_itemMeshes;
 
     // Temporary block-selection list (assets/data/hotbar.json, Tab cycles);
     // replaced by the item/inventory system in Phase 11.

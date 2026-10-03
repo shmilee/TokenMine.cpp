@@ -12,7 +12,9 @@
 // real consumer (chunk storage).
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -74,6 +76,13 @@ struct Block {
     std::string name;
     BlockProperties properties;
     BlockModel model;
+};
+
+// Hash for BlockID in unordered containers (identity hash).
+struct BlockIDHash {
+    std::size_t operator()(BlockID id) const noexcept {
+        return std::hash<int>{}(id.value);
+    }
 };
 
 } // namespace mc
