@@ -1,0 +1,9 @@
+build/
+cmake-build-*/
+logs/*.log
+data/*.save
+data/chunks/
+compile_commands.json
+.cache/
+.vscode/
+.idea/

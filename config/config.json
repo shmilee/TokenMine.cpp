@@ -1,0 +1,19 @@
+{
+  "window": {
+    "title": "MineCraft",
+    "width": 1280,
+    "height": 720,
+    "fullscreen": false
+  },
+  "render": {
+    "vsync": true,
+    "fps_cap": 0
+  },
+  "world": {
+    "seed": 123456789,
+    "view_distance": 8
+  },
+  "audio": {
+    "volume": 0.7
+  }
+}
