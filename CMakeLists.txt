@@ -13,6 +13,7 @@ endif()
 find_package(SDL3 REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GLEW REQUIRED IMPORTED_TARGET glew)
+pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
 find_package(GTest REQUIRED)
 
 add_compile_options(-Wall -Wextra -Wpedantic -Werror)
@@ -29,10 +30,17 @@ add_library(mc_core STATIC
     src/core/config.cpp
     src/core/asset_manager.cpp
     src/core/window.cpp
+    src/core/input.cpp
+    src/core/camera.cpp
+    src/core/png.cpp
     src/core/game.cpp
+    src/renderer/shader.cpp
+    src/renderer/texture.cpp
+    src/renderer/mesh.cpp
+    src/renderer/renderer.cpp
 )
 target_include_directories(mc_core PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(mc_core PUBLIC SDL3::SDL3 PkgConfig::GLEW)
+target_link_libraries(mc_core PUBLIC SDL3::SDL3 PkgConfig::GLEW PkgConfig::ZLIB)
 
 # ---------------------------------------------------------------------------
 # Game executable
@@ -49,6 +57,12 @@ add_executable(minecraft_tests
     tests/test_config.cpp
     tests/test_asset_manager.cpp
     tests/test_result.cpp
+    tests/test_math.cpp
+    tests/test_input.cpp
+    tests/test_camera.cpp
+    tests/test_png.cpp
 )
+target_compile_definitions(minecraft_tests PRIVATE
+    MC_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data")
 target_link_libraries(minecraft_tests PRIVATE mc_core GTest::gtest_main)
 add_test(NAME unit_tests COMMAND minecraft_tests)

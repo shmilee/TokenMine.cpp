@@ -33,9 +33,11 @@ public:
     // Destroy context, window, and quit SDL. Safe to call once after init.
     void shutdown();
 
-    // Pump pending OS events. Sets the close flag on ESC / window close.
-    void pollEvents();
-    bool shouldClose() const { return m_shouldClose; }
+    // Hide cursor and deliver relative mouse motion (first-person look).
+    // Event delivery itself is owned by Input (single consumer of the SDL
+    // event queue); Window only manages context, swap and mode.
+    void setRelativeMouseMode(bool enabled);
+    bool relativeMouseMode() const;
 
     void swapBuffers();
     void setTitle(const std::string& title);
@@ -53,7 +55,6 @@ private:
     int m_height = 0;
     std::string m_title;
     bool m_vsync = true;
-    bool m_shouldClose = false;
     bool m_sdlActive = false;
 };
 

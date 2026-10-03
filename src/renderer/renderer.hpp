@@ -1,0 +1,59 @@
+// Renderer: the only component (besides Window, for the context) that calls
+// GL APIs. Game logic submits declarative draw commands; it never touches
+// GL state directly.
+//
+// Responsibilities in Phase 1:
+//   - per-frame viewport + clear
+//   - draw calls with MVP matrices
+//   - frame statistics (draw calls, vertices) for the future F3 overlay
+//
+// Thread ownership: game thread with the GL context current (created by
+// Window). Call init() after Window::init().
+#pragma once
+
+#include "core/error.hpp"
+#include "core/math/mat4.hpp"
+#include "core/math/vec4.hpp"
+#include "renderer/mesh.hpp"
+#include "renderer/shader.hpp"
+
+namespace mc {
+
+class Window;
+
+class Renderer {
+public:
+    struct Stats {
+        unsigned drawCalls = 0;
+        unsigned long long vertices = 0;
+    };
+
+    Renderer() = default;
+    ~Renderer() = default;
+    Renderer(const Renderer&) = delete;
+    Renderer& operator=(const Renderer&) = delete;
+
+    // Enable depth test / back-face culling, verify a context exists.
+    Result<void> init();
+    bool valid() const { return m_valid; }
+
+    void beginFrame(int width, int height);
+    void endFrame();
+
+    void clear(const Vec4& color);
+
+    // Draw one indexed mesh. The program must declare u_model/u_view/u_proj.
+    // Texture binding is the caller's job (bind the texture + set the
+    // sampler uniform before this call).
+    void draw(const Mesh& mesh, const ShaderProgram& program, const Mat4& view,
+              const Mat4& projection, const Mat4& model);
+
+    // Stats for the current frame (reset by beginFrame).
+    const Stats& stats() const { return m_stats; }
+
+private:
+    bool m_valid = false;
+    Stats m_stats;
+};
+
+} // namespace mc

@@ -88,9 +88,12 @@ private:
 //
 // In a function returning Result<T> this returns the Error (implicit
 // conversion). In a function returning Result<void> the same applies.
+// Const reference (no copy, no move): works for both temporaries and named
+// Results, and leaves the original Result fully usable on the success path
+// (e.g. `auto r = f(); MC_TRY(r); use(r.value());`).
 #define MC_TRY(expr)                                                             \
     do {                                                                         \
-        const auto mc_try_result_ = (expr);                                      \
+        const auto& mc_try_result_ = (expr);                                     \
         if (!mc_try_result_.ok()) {                                              \
             return mc_try_result_.error();                                       \
         }                                                                        \

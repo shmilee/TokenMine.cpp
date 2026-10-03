@@ -18,6 +18,7 @@ void printUsage() {
         "  --config <path>   Config file (default: config/config.json)\n"
         "  --seed <n>        Override world seed\n"
         "  --frames <n>      Exit after N frames (0 = run until closed)\n"
+        "  --screenshot <p>  Save a PNG screenshot of the last frame\n"
         "  --log-level <l>   trace|debug|info|warn|error\n"
         "  -h, --help        Show this help\n");
 }
@@ -58,6 +59,10 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
                 err = "--frames must be >= 0";
                 return false;
             }
+        } else if (arg == "--screenshot") {
+            const char* v = nextValue(i, "--screenshot");
+            if (!v) return false;
+            args.screenshotPath = v;
         } else if (arg == "--log-level") {
             const char* v = nextValue(i, "--log-level");
             if (!v) return false;

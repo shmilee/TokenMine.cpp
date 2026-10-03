@@ -80,26 +80,17 @@ void Window::shutdown() {
     }
 }
 
-void Window::pollEvents() {
-    SDL_Event event;
-    while (SDL_PollEvent(&event)) {
-        switch (event.type) {
-            case SDL_EVENT_QUIT:
-                m_shouldClose = true;
-                break;
-            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-                m_shouldClose = true;
-                break;
-            case SDL_EVENT_KEY_DOWN:
-                // SDL3: SDL_KeyboardEvent.key is the virtual key code.
-                if (event.key.key == SDLK_ESCAPE) {
-                    m_shouldClose = true;
-                }
-                break;
-            default:
-                break;
+void Window::setRelativeMouseMode(bool enabled) {
+    if (m_window != nullptr) {
+        if (!SDL_SetWindowRelativeMouseMode(m_window, enabled)) {
+            MC_LOG_WARN(std::string("Failed to set relative mouse mode: ") +
+                        SDL_GetError());
         }
     }
+}
+
+bool Window::relativeMouseMode() const {
+    return m_window != nullptr && SDL_GetWindowRelativeMouseMode(m_window);
 }
 
 void Window::swapBuffers() {

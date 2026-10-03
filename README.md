@@ -11,7 +11,7 @@
 | 窗口/输入 | SDL3 | |
 | 图形 | OpenGL 3.3 Core (GLEW) | |
 | 音频 | OpenAL（音频阶段引入） | |
-| 图像 | SDL3_image（纹理阶段引入） | |
+| 图像 | 内置 PNG 编解码器（`src/core/png.hpp`，zlib） | 8/16 位 RGB/RGBA/灰度/调色板，全 filter，CRC 校验 |
 | 测试 | GoogleTest | |
 | JSON | 内置实现（`src/core/json.hpp`） | 无外部依赖 |
 
@@ -27,9 +27,18 @@ cmake --build build
 # 运行 120 帧后自动退出（可用于自动化验证）
 ./build/bin/minecraft --frames 120
 
+# 运行 300 帧并保存最后一帧截图
+./build/bin/minecraft --frames 300 --screenshot shot.png
+
 # 其他参数
 ./build/bin/minecraft --config config/config.json --seed 42 --log-level debug
 ```
+
+## 当前可玩内容（Phase 1）
+
+- 第一人称相机：`W/A/S/D` 移动，`Space` 上升，`Shift` 加速，鼠标转向（**左键点击锁定/释放指针**）
+- 旋转的棋盘格纹理立方体 + 平铺纹理地面 + 天空色 + 方向光（占位光照，Phase 7 替换）
+- 窗口标题实时显示 FPS 与 draw call 数
 
 ## 测试
 
@@ -48,14 +57,16 @@ mine-craft/
 ├── data/            # 存档目录（后续阶段使用）
 ├── logs/            # 运行日志（logs/mine-craft.log）
 ├── src/
-│   └── core/        # 核心框架：日志、错误处理、JSON、配置、资源、窗口、主循环
-└── tests/           # 单元测试（GTest）
+│   ├── core/        # 核心框架：日志、错误处理、JSON、配置、资源、窗口、输入、相机、PNG、主循环
+│   │   └── math/    # 数学库（header-only）：Vec2/Vec3/Vec4/Mat4
+│   └── renderer/    # 渲染器（GL 封装）：Shader/Texture/Mesh/Renderer
+└── tests/           # 单元测试（GTest）+ PNG 测试夹具（tests/data/，可用 tests/generate_fixtures.py 重新生成）
 ```
 
 ## 架构规划（分阶段）
 
 - [x] **Phase 0** — 项目基础：构建系统、主循环、日志、配置、资源系统、错误处理、测试框架
-- [ ] **Phase 1** — 基础 3D 引擎：Renderer、Camera、Shader/Texture/Mesh/Buffer
+- [x] **Phase 1** — 基础 3D 引擎：数学库、Input、Camera、Renderer（Shader/Texture/Mesh/VAO）、PNG 编解码、demo 场景
 - [ ] **Phase 2** — 方块系统：Block/BlockState/BlockRegistry，数据驱动
 - [ ] **Phase 3** — Chunk 系统：World/ChunkManager/坐标转换/Chunk Mesh（Face Culling → Greedy Meshing）
 - [ ] **Phase 4** — 世界生成：WorldGenerator（地形/生物群系/洞穴/矿脉/树木），Seed 可复现
