@@ -1,5 +1,9 @@
 // Registry of all block definitions, populated from JSON data files
-// (assets/data/blocks/*.json). One file per block:
+// (assets/data/blocks/*.json). One file per block.
+//
+// BlockID{0} ("air") is a reserved built-in sentinel (the absence of a
+// block — no JSON, no textures); data blocks are assigned ids from 1 on.
+//
 //
 // {
 //   "id": "grass",
@@ -32,6 +36,9 @@ namespace mc {
 
 class BlockRegistry {
 public:
+    // Creates a registry containing only the built-in air sentinel (id 0).
+    BlockRegistry();
+
     // Parse and register one block definition. Assigns the next free id.
     Result<BlockID> registerBlock(const Json& def);
 

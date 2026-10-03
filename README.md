@@ -34,14 +34,21 @@ cmake --build build
 ./build/bin/minecraft --config config/config.json --seed 42 --log-level debug
 ```
 
-## 当前可玩内容（Phase 2）
+## 当前可玩内容（Phase 3）
 
 - 第一人称相机：`W/A/S/D` 移动，`Space` 上升，`Shift` 加速，鼠标转向（**左键点击锁定/释放指针**）
-- **数据驱动方块展示台**：8 个方块（stone/dirt/grass/sand/wood/leaves/glass/water）一排展示，
-  每个方块使用自己的 top/side/bottom 纹理；透明方块（leaves/glass/water）走 alpha 混合 pass；
-  grass 方块旋转展示多面纹理
+- **Chunk 体素世界**：16×16×16 chunk（Minecraft section 模型），世界高度 128（y ∈ [0,128)），
+  X/Z 无限扩展。演示地形：2×2 chunk 列的平地（grass 表层 + 3 层 dirt + 深处 stone），
+  加玻璃柱与水面点缀
+- **Face Culling 网格化**：只渲染暴露给 air/非 opaque 邻居的面；跨 chunk 边界通过
+  `World` 查询邻居剔除；每个 chunk 输出 opaque + transparent 两个 mesh，
+  渲染顺序不透明 → alpha 混合（glass/leaves/water）
+- **脏标记增量重网格**：`setBlock` 标记本 chunk（及共享面的邻居 chunk）dirty，
+  下一帧只重建 dirty chunk 的 GPU mesh
+- **数据驱动方块**：8 个方块（stone/dirt/grass/sand/wood/leaves/glass/water）+ 内置 air 哨兵
+  （`BlockID{0}`，非数据方块，注册表从 id 1 分配）
 - 16×16 瓦片 TextureAtlas（Minecraft 同款规格），10 张占位纹理
-- 平铺纹理地面 + 天空色 + 方向光（占位光照，Phase 7 替换）
+- 天空色 + 方向光（占位光照，Phase 7 替换）
 - 窗口标题实时显示 FPS 与 draw call 数
 
 ### 新增一个方块（无需改核心代码）
@@ -80,7 +87,8 @@ mine-craft/
 │   ├── block/       # 数据驱动方块系统：Block 数据模型 + BlockRegistry（JSON 加载/校验）
 │   ├── core/        # 核心框架：日志、错误处理、JSON、配置、资源、窗口、输入、相机、PNG、主循环
 │   │   └── math/    # 数学库（header-only）：Vec2/Vec3/Vec4/Mat4
-│   └── renderer/    # 渲染器（GL 封装）：Shader/Texture/Mesh/Renderer/TextureAtlas
+│   ├── renderer/    # 渲染器（GL 封装）：Shader/Texture/Mesh/Renderer/TextureAtlas
+│   └── world/       # 体素世界：coordinates（world/chunk/local 转换）、Chunk、World、ChunkMesher
 ├── tools/           # 开发工具：generate_block_textures.py（16x16 占位纹理生成）
 └── tests/           # 单元测试（GTest）+ PNG 测试夹具（tests/data/，可用 tests/generate_fixtures.py 重新生成）
 ```
@@ -90,7 +98,7 @@ mine-craft/
 - [x] **Phase 0** — 项目基础：构建系统、主循环、日志、配置、资源系统、错误处理、测试框架
 - [x] **Phase 1** — 基础 3D 引擎：数学库、Input、Camera、Renderer（Shader/Texture/Mesh/VAO）、PNG 编解码、demo 场景
 - [x] **Phase 2** — 方块系统：Block 数据模型、BlockRegistry（JSON 数据驱动 + 严格校验）、16×16 TextureAtlas、透明 pass
-- [ ] **Phase 3** — Chunk 系统：World/ChunkManager/坐标转换/Chunk Mesh（Face Culling → Greedy Meshing）
+- [x] **Phase 3** — Chunk 系统：World/Chunk/坐标转换（负坐标安全）/Chunk Mesh（Face Culling；Greedy Meshing 留待性能需要时）
 - [ ] **Phase 4** — 世界生成：WorldGenerator（地形/生物群系/洞穴/矿脉/树木），Seed 可复现
 - [ ] **Phase 5** — 玩家系统：第一人称移动、AABB 碰撞、滑动处理
 - [ ] **Phase 6** — Raycast：方块破坏/放置

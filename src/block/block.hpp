@@ -19,6 +19,11 @@
 namespace mc {
 
 // Stable handle into a BlockRegistry. Invalid until assigned.
+//
+// Convention: BlockID{0} is the reserved "air" sentinel — the absence of a
+// block. It is built into every BlockRegistry (not a data-driven block: no
+// JSON, no textures). Chunk storage and meshing treat it as empty space;
+// data blocks are assigned ids starting at 1.
 struct BlockID {
     int value = -1;
 
@@ -27,6 +32,7 @@ struct BlockID {
     constexpr bool operator!=(BlockID o) const { return value != o.value; }
     constexpr bool operator<(BlockID o) const { return value < o.value; }
     static constexpr BlockID invalid() { return {-1}; }
+    static constexpr BlockID air() { return {0}; }
 };
 
 // Behavioral properties. All fields have sensible defaults; JSON files only

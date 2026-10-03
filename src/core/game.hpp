@@ -1,15 +1,18 @@
-// Top-level game object: owns configuration, assets, window, input, camera
-// and the renderer; runs the main loop.
+// Top-level game object: owns configuration, assets, window, input, camera,
+// renderer and the voxel world; runs the main loop.
 //
-// Phase 2 scope: data-driven block system (registry from JSON + texture
-// atlas) demonstrated by a block showcase row (each block rendered with its
-// own top/side/bottom textures, transparent blocks in a blending pass), plus
-// first-person camera controls. The voxel world arrives in Phase 3.
+// Phase 3 scope: chunk-based voxel world (World/Chunk, 16^3 sections,
+// face-culled chunk meshing) demonstrated by flat 2x2-chunk terrain. Each
+// chunk owns up to two GPU meshes (opaque + transparent/blended); a chunk's
+// meshes are rebuilt lazily when it is marked dirty (first meshing or a
+// setBlock on/next to it).
 #pragma once
 
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "block/block_registry.hpp"
@@ -25,6 +28,9 @@
 #include "renderer/shader.hpp"
 #include "renderer/texture.hpp"
 #include "renderer/texture_atlas.hpp"
+#include "world/chunk.hpp"
+#include "world/chunk_mesher.hpp"
+#include "world/world.hpp"
 
 namespace mc {
 
@@ -47,32 +53,21 @@ public:
 
     const Config& config() const { return m_config; }
     AssetManager& assets() { return m_assets; }
+    const World& world() const { return m_world; }
 
 private:
-    // One showcase instance of a registered block.
-    struct ShowcaseCube {
-        BlockID block;
-        Mesh mesh;
-        Vec3 position {0.0f, 0.5f, 0.0f};
-        bool spin = false;
+    // GPU geometry of one chunk: opaque + transparent (blended) sub-meshes.
+    struct ChunkMesh {
+        std::optional<Mesh> opaque;
+        std::optional<Mesh> transparent;
     };
 
     Result<void> buildScene();
     void update(double dt);
     void render();
-
-    // Demo geometry / textures.
+    // Rebuilds the GPU mesh of every dirty (or never-meshed) chunk.
+    Result<void> updateChunkMeshes();
     Result<void> takeScreenshot(const std::filesystem::path& path);
-    // Full-cube mesh whose per-face UVs cover the atlas tiles named by the
-    // block model. (Superseded by chunk meshing in Phase 3.)
-    static std::vector<MeshVertex> buildBlockCube(const BlockModel& model,
-                                                  const AtlasLayout& layout);
-    static std::vector<MeshVertex> buildGroundPlane(float size);
-    static std::vector<std::uint32_t> buildCubeIndices();
-    static std::vector<std::uint32_t> buildGroundIndices();
-    static std::vector<std::uint8_t> makeGroundPixels(int size);
-    void drawShowcaseCube(const ShowcaseCube& cube, const Mat4& view,
-                          const Mat4& projection);
 
     GameArgs m_args;
     Config m_config;
@@ -86,10 +81,11 @@ private:
     BlockRegistry m_blocks;
     TextureAtlas m_atlas;
 
+    // Voxel world + per-chunk GPU meshes.
+    World m_world;
+    std::unordered_map<ChunkPos, ChunkMesh> m_chunkMeshes;
+
     ShaderProgram m_basicShader;
-    Texture m_groundTexture;
-    Mesh m_groundMesh;
-    std::vector<ShowcaseCube> m_showcase;
 
     double m_time = 0.0;
     int m_frameCount = 0;

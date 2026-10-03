@@ -3,7 +3,6 @@
 #include <GL/glew.h>
 #include <SDL3/SDL.h>
 
-#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -19,16 +18,53 @@ constexpr float kNear = 0.1f;
 constexpr float kFar = 1000.0f;
 constexpr Vec4 kSkyColor {0.47f, 0.71f, 0.95f, 1.0f};
 
+// Demo terrain parameters (Phase 4 replaces this with seeded generation).
+constexpr int kDemoSurfaceY = 32;  // world Y of the grass layer
+constexpr int kDemoDirtDepth = 3;  // dirt layers below the grass
+// 2x2 chunk columns covering world x,z in [-16, 16).
+constexpr int kDemoChunkMin = -1;
+constexpr int kDemoChunkMax = 0;
+
 double nowSeconds() {
     return static_cast<double>(SDL_GetPerformanceCounter()) /
            SDL_GetPerformanceFrequency();
 }
 
-// Deterministic hash for procedural texture variation (not game logic).
-std::uint32_t hash2(std::uint32_t x, std::uint32_t y) {
-    std::uint32_t h = x * 374761393u + y * 668265263u;
-    h = (h ^ (h >> 13)) * 1274126177u;
-    return h ^ (h >> 16);
+// Demo chunk content: a flat surface, dirt below it, stone at depth, air
+// above. Pure function of the chunk position (deterministic).
+void fillDemoChunk(Chunk& chunk, const ChunkPos& pos, BlockID grass,
+                   BlockID dirt, BlockID stone) {
+    const int dirtTop = kDemoSurfaceY - kDemoDirtDepth;
+    for (int x = 0; x < Chunk::kSize; ++x) {
+        for (int z = 0; z < Chunk::kSize; ++z) {
+            for (int y = 0; y < Chunk::kSize; ++y) {
+                const int worldY = pos.y * Chunk::kSize + y;
+                const BlockID id =
+                    (worldY == kDemoSurfaceY)
+                        ? grass
+                        : (worldY > dirtTop && worldY < kDemoSurfaceY)
+                              ? dirt
+                              : (worldY <= dirtTop) ? stone
+                                                    : BlockID::air();
+                chunk.set(x, y, z, id);
+            }
+        }
+    }
+}
+
+Result<BlockID> blockId(const BlockRegistry& reg, const char* name) {
+    const Block* b = reg.findByName(name);
+    if (b == nullptr) {
+        return MC_FAIL(std::string("demo: required block '") + name +
+                       "' is not registered");
+    }
+    return b->id;
+}
+
+Mat4 chunkModel(const ChunkPos& pos) {
+    const BlockPos o = chunkOrigin(pos);
+    return Mat4::translate({static_cast<float>(o.x), static_cast<float>(o.y),
+                            static_cast<float>(o.z)});
 }
 
 } // namespace
@@ -42,101 +78,6 @@ Game::~Game() {
 // ---------------------------------------------------------------------------
 // Scene construction
 // ---------------------------------------------------------------------------
-
-std::vector<MeshVertex> Game::buildBlockCube(const BlockModel& model,
-                                             const AtlasLayout& layout) {
-    // 24 vertices: 4 per face, each with its own normal. UVs cover the atlas
-    // tile the block model assigns to each face group (top/side/bottom).
-    const float s = 0.5f;
-    struct Face {
-        Vec3 n;
-        Vec3 c[4]; // corners CCW viewed from outside
-        const std::string* tex;
-    };
-    const Face faces[6] = {
-        {{0, 1, 0}, {{-s, s, -s}, {s, s, -s}, {s, s, s}, {-s, s, s}},
-         &model.textures.top}, // +Y
-        {{0, -1, 0}, {{-s, -s, s}, {s, -s, s}, {s, -s, -s}, {-s, -s, -s}},
-         &model.textures.bottom}, // -Y
-        {{0, 0, 1}, {{-s, -s, s}, {s, -s, s}, {s, s, s}, {-s, s, s}},
-         &model.textures.side}, // +Z
-        {{0, 0, -1}, {{s, -s, -s}, {-s, -s, -s}, {-s, s, -s}, {s, s, -s}},
-         &model.textures.side}, // -Z
-        {{1, 0, 0}, {{s, -s, s}, {s, -s, -s}, {s, s, -s}, {s, s, s}},
-         &model.textures.side}, // +X
-        {{-1, 0, 0}, {{-s, -s, -s}, {-s, -s, s}, {-s, s, s}, {-s, s, -s}},
-         &model.textures.side}, // -X
-    };
-
-    std::vector<MeshVertex> verts;
-    verts.reserve(24);
-    for (const Face& f : faces) {
-        const Vec2 u0 = AtlasLayout::uvMin(layout, *f.tex);
-        const Vec2 u1 = AtlasLayout::uvMax(layout, *f.tex);
-        // Corner UVs follow the corner order (matches the unit-cube mapping
-        // (0,1),(1,1),(1,0),(0,0) scaled onto the tile rectangle).
-        const Vec2 faceUv[4] = {
-            {u0.x, u1.y}, {u1.x, u1.y}, {u1.x, u0.y}, {u0.x, u0.y},
-        };
-        for (int i = 0; i < 4; ++i) {
-            MeshVertex v;
-            v.position = f.c[i];
-            v.normal = f.n;
-            v.uv = faceUv[i];
-            v.light = 1.0f;
-            verts.push_back(v);
-        }
-    }
-    return verts;
-}
-
-std::vector<std::uint32_t> Game::buildCubeIndices() {
-    std::vector<std::uint32_t> idx;
-    idx.reserve(36);
-    for (std::uint32_t face = 0; face < 6; ++face) {
-        const std::uint32_t base = face * 4;
-        idx.insert(idx.end(), {base, base + 1, base + 2, base, base + 2,
-                               base + 3});
-    }
-    return idx;
-}
-
-std::vector<MeshVertex> Game::buildGroundPlane(float size) {
-    const float h = size * 0.5f;
-    const float uvScale = size * 0.5f; // tile the texture at 1x1 world units
-    std::vector<MeshVertex> verts = {
-        {{-h, 0.0f, -h}, {0, 1, 0}, {0.0f, uvScale}, 1.0f},
-        {{h, 0.0f, -h}, {0, 1, 0}, {uvScale, uvScale}, 1.0f},
-        {{h, 0.0f, h}, {0, 1, 0}, {uvScale, 0.0f}, 1.0f},
-        {{-h, 0.0f, h}, {0, 1, 0}, {0.0f, 0.0f}, 1.0f},
-    };
-    return verts;
-}
-
-std::vector<std::uint32_t> Game::buildGroundIndices() {
-    // Winding chosen so the normal points +Y (up): the triangles must be
-    // counter-clockwise when viewed from above, otherwise back-face
-    // culling discards them.
-    return {0, 2, 1, 0, 3, 2};
-}
-
-std::vector<std::uint8_t> Game::makeGroundPixels(int size) {
-    // Green with deterministic per-pixel variation (procedural "grass").
-    std::vector<std::uint8_t> pixels(static_cast<std::size_t>(size) * size * 4);
-    for (int y = 0; y < size; ++y) {
-        for (int x = 0; x < size; ++x) {
-            const std::uint32_t h = hash2(static_cast<std::uint32_t>(x),
-                                          static_cast<std::uint32_t>(y));
-            const int v = static_cast<int>(h % 40);
-            std::uint8_t* p = pixels.data() + (y * size + x) * 4;
-            p[0] = static_cast<std::uint8_t>(50 + v);
-            p[1] = static_cast<std::uint8_t>(130 + v);
-            p[2] = static_cast<std::uint8_t>(45 + v / 2);
-            p[3] = 255;
-        }
-    }
-    return pixels;
-}
 
 Result<void> Game::buildScene() {
     // -- shaders -------------------------------------------------------------
@@ -167,49 +108,85 @@ Result<void> Game::buildScene() {
         }
     }
 
-    // -- ground (procedural texture, not block-based) ---------------------------
-    auto groundPixels = makeGroundPixels(8);
-    auto groundTex = Texture::createFromPixels(8, 8, groundPixels.data());
-    MC_TRY(groundTex);
-    m_groundTexture = std::move(*groundTex);
-    m_groundTexture.setRepeat(true);
+    // -- demo world: 2x2 chunk columns of flat terrain --------------------------
+    auto grass = blockId(m_blocks, "grass");
+    MC_TRY(grass);
+    auto dirt = blockId(m_blocks, "dirt");
+    MC_TRY(dirt);
+    auto stone = blockId(m_blocks, "stone");
+    MC_TRY(stone);
+    auto glass = blockId(m_blocks, "glass");
+    MC_TRY(glass);
+    auto water = blockId(m_blocks, "water");
+    MC_TRY(water);
 
-    const auto groundVerts = buildGroundPlane(64.0f);
-    const auto groundIdx = buildGroundIndices();
-    auto groundUpload = m_groundMesh.upload(groundVerts, groundIdx);
-    MC_TRY(groundUpload);
-
-    // -- block showcase row ------------------------------------------------------
-    // Demo layout order (grass in the middle, spinning).
-    const char* const showcaseOrder[] = {
-        "wood", "dirt", "stone", "grass", "sand", "leaves", "glass", "water",
-    };
-    const float spacing = 2.0f;
-    const float xCenter =
-        -(static_cast<float>(sizeof(showcaseOrder) / sizeof(showcaseOrder[0]) - 1) /
-          2.0f) * spacing;
-    m_showcase.clear();
-    for (std::size_t i = 0; i < sizeof(showcaseOrder) / sizeof(showcaseOrder[0]);
-         ++i) {
-        const std::string name = showcaseOrder[i];
-        const Block* block = m_blocks.findByName(name);
-        if (block == nullptr) {
-            return MC_FAIL("showcase: block '" + name + "' is not registered");
+    const BlockID grassId = *grass;
+    const BlockID dirtId = *dirt;
+    const BlockID stoneId = *stone;
+    m_world.setChunkGenerator(
+        [grassId, dirtId, stoneId](Chunk& chunk, const ChunkPos& pos) {
+            fillDemoChunk(chunk, pos, grassId, dirtId, stoneId);
+        });
+    for (int cx = kDemoChunkMin; cx <= kDemoChunkMax; ++cx) {
+        for (int cz = kDemoChunkMin; cz <= kDemoChunkMax; ++cz) {
+            for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy) {
+                m_world.getOrCreateChunk({cx, cy, cz});
+            }
         }
-        ShowcaseCube cube;
-        cube.block = block->id;
-        cube.position = {xCenter + static_cast<float>(i) * spacing, 0.5f, 0.0f};
-        cube.spin = (name == "grass");
-        const auto verts = buildBlockCube(block->model, m_atlas.layout());
-        auto uploaded = cube.mesh.upload(verts, buildCubeIndices());
-        MC_TRY(uploaded);
-        m_showcase.push_back(std::move(cube));
     }
+
+    // A few decorations so the first frame exercises the blending pass and
+    // cross-chunk culling: glass columns on the surface, a water puddle
+    // (replacing the grass block in place).
+    m_world.setBlock(3, kDemoSurfaceY + 1, 3, *glass);
+    m_world.setBlock(4, kDemoSurfaceY + 1, 3, *glass);
+    m_world.setBlock(6, kDemoSurfaceY, 2, *water);
+
+    // Position the camera above the demo surface, looking across it.
+    m_camera.position = {0.0f, static_cast<float>(kDemoSurfaceY + 6), 14.0f};
+    m_camera.yaw = 0.0f;
+    m_camera.pitch = -0.35f;
 
     MC_LOG_INFO("Scene built: " + std::to_string(m_blocks.count()) +
                 " blocks, " + std::to_string(m_atlas.tileCount()) +
-                " atlas tiles, " + std::to_string(m_showcase.size()) +
-                " showcase cubes");
+                " atlas tiles, " + std::to_string(m_world.chunkCount()) +
+                " chunks");
+    return {};
+}
+
+// ---------------------------------------------------------------------------
+// Chunk meshing (CPU, game thread; Phase 14 moves it to worker threads)
+// ---------------------------------------------------------------------------
+
+Result<void> Game::updateChunkMeshes() {
+    const ChunkMesher mesher(m_world, m_blocks, m_atlas.layout());
+    const std::vector<ChunkPos> positions = m_world.chunkPositions();
+    for (const ChunkPos& pos : positions) {
+        // The chunk exists (it came from chunkPositions), so this does not
+        // create or rehash; the reference stays valid for this iteration
+        // (no World mutation happens while we hold it).
+        Chunk& chunk = m_world.getOrCreateChunk(pos);
+        if (!chunk.dirty()) {
+            continue;
+        }
+        const ChunkMeshData data = mesher.mesh(pos);
+
+        ChunkMesh& cm = m_chunkMeshes[pos];
+        cm.opaque.reset();
+        cm.transparent.reset();
+        if (!data.opaqueEmpty()) {
+            cm.opaque.emplace();
+            auto r = cm.opaque->upload(data.opaqueVertices, data.opaqueIndices);
+            MC_TRY(r);
+        }
+        if (!data.transparentEmpty()) {
+            cm.transparent.emplace();
+            auto r = cm.transparent->upload(data.transparentVertices,
+                                            data.transparentIndices);
+            MC_TRY(r);
+        }
+        chunk.clearDirty();
+    }
     return {};
 }
 
@@ -349,11 +326,14 @@ int Game::run() {
 }
 
 void Game::update(double dt) {
-    m_time += dt;
-
     // Pointer lock: left click toggles first-person mouse look.
     if (m_input.wasPressed(MouseButton::Left)) {
         m_window.setRelativeMouseMode(!m_window.relativeMouseMode());
+    }
+
+    const auto meshes = updateChunkMeshes();
+    if (!meshes.ok()) {
+        MC_LOG_ERROR("Chunk meshing failed: " + meshes.error().describe());
     }
 
     m_camera.update(dt, m_input);
@@ -377,40 +357,32 @@ void Game::render() {
     m_basicShader.setUniform1i("u_useTexture", 1);
     m_basicShader.setUniform3f("u_lightDir", -0.4f, 0.8f, -0.3f);
 
-    // Ground plane (tiled procedural texture).
-    m_groundTexture.bind();
-    m_renderer.draw(m_groundMesh, m_basicShader, view, projection,
-                    Mat4::identity());
+    m_atlas.texture().bind();
 
-    // Block showcase: opaque pass first, then transparent blocks with
-    // alpha blending (correct occlusion order).
-    m_atlas.texture().bind();
-    for (const ShowcaseCube& cube : m_showcase) {
-        if (m_blocks.at(cube.block).properties.transparent) {
+    // Chunk passes: all opaque geometry first, then the transparent
+    // (blended) geometry, so blending composites over the opaque scene.
+    const std::vector<ChunkPos> positions = m_world.chunkPositions();
+    for (const ChunkPos& pos : positions) {
+        const auto it = m_chunkMeshes.find(pos);
+        if (it == m_chunkMeshes.end() || !it->second.opaque.has_value()) {
             continue;
         }
-        drawShowcaseCube(cube, view, projection);
+        m_renderer.draw(*it->second.opaque, m_basicShader, view, projection,
+                        chunkModel(pos));
     }
+
     m_renderer.enableBlending();
-    m_atlas.texture().bind();
-    for (const ShowcaseCube& cube : m_showcase) {
-        if (!m_blocks.at(cube.block).properties.transparent) {
+    for (const ChunkPos& pos : positions) {
+        const auto it = m_chunkMeshes.find(pos);
+        if (it == m_chunkMeshes.end() || !it->second.transparent.has_value()) {
             continue;
         }
-        drawShowcaseCube(cube, view, projection);
+        m_renderer.draw(*it->second.transparent, m_basicShader, view,
+                        projection, chunkModel(pos));
     }
     m_renderer.disableBlending();
 
     m_renderer.endFrame();
-}
-
-void Game::drawShowcaseCube(const ShowcaseCube& cube, const Mat4& view,
-                            const Mat4& projection) {
-    Mat4 model = Mat4::translate(cube.position);
-    if (cube.spin) {
-        model = Mat4::multiply(Mat4::rotateY(static_cast<float>(m_time)), model);
-    }
-    m_renderer.draw(cube.mesh, m_basicShader, view, projection, model);
 }
 
 // Capture the front buffer (valid right after swapBuffers) into a PNG.

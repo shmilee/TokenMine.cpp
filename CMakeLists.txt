@@ -35,6 +35,9 @@ add_library(mc_core STATIC
     src/core/png.cpp
     src/core/game.cpp
     src/block/block_registry.cpp
+    src/world/chunk.cpp
+    src/world/world.cpp
+    src/world/chunk_mesher.cpp
     src/renderer/shader.cpp
     src/renderer/texture.cpp
     src/renderer/mesh.cpp
@@ -65,6 +68,10 @@ add_executable(minecraft_tests
     tests/test_png.cpp
     tests/test_block.cpp
     tests/test_atlas.cpp
+    tests/test_coordinates.cpp
+    tests/test_chunk.cpp
+    tests/test_world.cpp
+    tests/test_chunk_mesher.cpp
 )
 target_compile_definitions(minecraft_tests PRIVATE
     MC_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data")

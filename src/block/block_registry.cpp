@@ -10,6 +10,36 @@ namespace mc {
 
 namespace {
 
+// The reserved air sentinel: id 0, "no block". Not data-driven (no JSON,
+// no textures) — chunk storage defaults to it and the mesher never emits
+// its faces. Registered in every BlockRegistry so at(BlockID::air()) and
+// findByName("air") always work.
+Block makeAirBlock() {
+    Block air;
+    air.id = BlockID::air();
+    air.name = "air";
+    air.properties.solid = false;
+    air.properties.opaque = false;
+    air.properties.transparent = false;
+    air.properties.destroyable = false;
+    air.properties.hardness = 0.0f;
+    return air;
+}
+
+} // namespace
+
+BlockRegistry::BlockRegistry() {
+    m_blocks.push_back(makeAirBlock());
+    m_names.emplace("air", BlockID::air().value);
+}
+
+void BlockRegistry::clear() {
+    // Reset to the pristine state (built-in air sentinel only).
+    *this = BlockRegistry{};
+}
+
+namespace {
+
 // Typed field reader: returns an error naming the field when the JSON value
 // has the wrong type (no silent fallbacks for malformed data files).
 template <typename F>
@@ -227,16 +257,19 @@ std::vector<BlockID> BlockRegistry::allIds() const {
 std::set<std::string> BlockRegistry::requiredTextures() const {
     std::set<std::string> names;
     for (const auto& b : m_blocks) {
-        names.insert(b.model.textures.top);
-        names.insert(b.model.textures.side);
-        names.insert(b.model.textures.bottom);
+        // Empty names mean "no texture" (the built-in air sentinel) and
+        // never appear in a valid data block (parseModel rejects them).
+        if (!b.model.textures.top.empty()) {
+            names.insert(b.model.textures.top);
+        }
+        if (!b.model.textures.side.empty()) {
+            names.insert(b.model.textures.side);
+        }
+        if (!b.model.textures.bottom.empty()) {
+            names.insert(b.model.textures.bottom);
+        }
     }
     return names;
-}
-
-void BlockRegistry::clear() {
-    m_blocks.clear();
-    m_names.clear();
 }
 
 } // namespace mc

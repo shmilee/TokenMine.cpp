@@ -154,13 +154,51 @@ TEST(BlockRegistryTest, ToleratesUnknownFields) {
     ASSERT_TRUE(r.ok()) << r.error().message;
 }
 
+TEST(BlockRegistryTest, AirIsReservedSentinel) {
+    // BlockID{0} is the built-in "no block" sentinel: present in every
+    // registry, not data-driven, never assignable to a data block.
+    BlockRegistry reg;
+    EXPECT_EQ(reg.count(), 1u);
+    EXPECT_EQ(reg.idForName("air"), BlockID::air());
+    EXPECT_EQ(BlockID::air(), BlockID{0});
+    const Block& air = reg.at(BlockID::air());
+    EXPECT_FALSE(air.properties.solid);
+    EXPECT_FALSE(air.properties.opaque);
+    EXPECT_FALSE(air.properties.transparent);
+    EXPECT_FALSE(air.properties.destroyable);
+
+    // First data block gets id 1, never 0.
+    auto r = reg.registerBlock(parseDef(minimalDef("stone")));
+    ASSERT_TRUE(r.ok());
+    EXPECT_EQ(*r, BlockID{1});
+
+    // A JSON block cannot claim the "air" id.
+    auto dup = reg.registerBlock(parseDef(minimalDef("air")));
+    ASSERT_FALSE(dup.ok());
+    EXPECT_NE(dup.error().message.find("duplicate"), std::string::npos);
+
+    // Air's empty texture names do not leak into the required set.
+    auto textures = reg.requiredTextures();
+    ASSERT_EQ(textures.size(), 1u);
+    EXPECT_TRUE(textures.count("t"));
+}
+
+TEST(BlockRegistryTest, ClearRestoresAirOnly) {
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.registerBlock(parseDef(minimalDef("stone"))).ok());
+    reg.clear();
+    EXPECT_EQ(reg.count(), 1u);
+    EXPECT_EQ(reg.idForName("air"), BlockID::air());
+    EXPECT_FALSE(reg.idForName("stone").valid());
+}
+
 TEST(BlockRegistryTest, Lookups) {
     BlockRegistry reg;
     auto a = reg.registerBlock(parseDef(minimalDef("alpha")));
     auto b = reg.registerBlock(parseDef(minimalDef("beta")));
     ASSERT_TRUE(a.ok() && b.ok());
 
-    EXPECT_EQ(reg.count(), 2u);
+    EXPECT_EQ(reg.count(), 3u); // air + alpha + beta
     EXPECT_EQ(reg.idForName("alpha"), *a);
     EXPECT_FALSE(reg.idForName("nope").valid());
     EXPECT_EQ(reg.findByName("beta"), &reg.at(*b));
@@ -169,9 +207,10 @@ TEST(BlockRegistryTest, Lookups) {
     EXPECT_EQ(reg.at(*a).name, "alpha");
 
     auto ids = reg.allIds();
-    ASSERT_EQ(ids.size(), 2u);
-    EXPECT_EQ(ids[0], *a);
-    EXPECT_EQ(ids[1], *b);
+    ASSERT_EQ(ids.size(), 3u);
+    EXPECT_EQ(ids[0], BlockID::air());
+    EXPECT_EQ(ids[1], *a);
+    EXPECT_EQ(ids[2], *b);
 
     // References stay valid across further registrations (deque storage).
     const Block* stable = &reg.at(*a);
@@ -204,10 +243,11 @@ TEST(BlockRegistryTest, LoadDirectory) {
     BlockRegistry reg;
     auto r = reg.loadDirectory(assets, "data/blocks");
     ASSERT_TRUE(r.ok()) << r.error().message;
-    EXPECT_EQ(reg.count(), 2u);
-    // Files load in sorted order: alpha gets id 0.
-    EXPECT_EQ(reg.at(BlockID{0}).name, "alpha");
-    EXPECT_EQ(reg.at(BlockID{1}).name, "beta");
+    EXPECT_EQ(reg.count(), 3u); // air + 2 files
+    // Files load in sorted order: alpha gets id 1 (air keeps 0).
+    EXPECT_EQ(reg.at(BlockID{0}).name, "air");
+    EXPECT_EQ(reg.at(BlockID{1}).name, "alpha");
+    EXPECT_EQ(reg.at(BlockID{2}).name, "beta");
     std::filesystem::remove_all(root);
 }
 
@@ -243,6 +283,6 @@ TEST(BlockRegistryTest, LoadDirectoryMissingDirIsEmpty) {
     BlockRegistry reg;
     auto r = reg.loadDirectory(assets, "data/blocks");
     ASSERT_TRUE(r.ok()) << r.error().message;
-    EXPECT_EQ(reg.count(), 0u);
+    EXPECT_EQ(reg.count(), 1u); // only the built-in air sentinel
     std::filesystem::remove_all(root);
 }
