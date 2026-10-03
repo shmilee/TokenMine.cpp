@@ -34,9 +34,15 @@ cmake --build build
 ./build/bin/minecraft --config config/config.json --seed 42 --log-level debug
 ```
 
-## 当前可玩内容（Phase 4）
+## 当前可玩内容（Phase 5）
 
-- 第一人称相机：`W/A/S/D` 移动，`Space` 上升，`Shift` 加速，鼠标转向（**左键点击锁定/释放指针**）
+- **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时），`LeftShift` 冲刺，
+  鼠标转向（**左键点击锁定/释放指针；转向仅在指针锁定时生效**，未锁定的光标
+  不会转动视角——保证无输入运行下截图可逐字节复现）
+- **AABB 体素碰撞 + 滑动**：玩家 0.6×1.8 包围盒（底面中心为位置），轴分离解析
+  （X→Z→Y）——撞墙时该轴停住、另一水平轴继续走（滑动）；贴面精确解析（无 epsilon
+  抖动）；子步化防高速穿透（每子步 ≤0.4 块）；重力 + 终端速度 + 跳跃高度 1.13 块
+  （可跳上 1 格台阶，跳不上 2 格）；掉出世界（y < -32）回出生点
 - **程序化体素世界（Seed 可复现）**：16×16×16 chunk，世界高度 128（y ∈ [0,128)），X/Z 无限。
   同一 seed 逐块复现（单元测试 + 像素级截图比对保证）；不同 seed 生成不同世界
 - **WorldGenerator**（无状态、纯函数 `generateChunk`，Phase 14 可直接并行）：
@@ -49,7 +55,8 @@ cmake --build build
     跨 chunk 无缝；只替换 stone（不破坏洞穴）
   - **树木**：世界空间格网候选 + 数据驱动的树密度；树干 4~7 格 + 两层树冠 + 顶帽；
     跨 chunk 边界由邻接 chunk 各自补齐（边际格网机制），只写入 air（不破坏地形）
-- **演示区**：4×4 chunk 列（64×64 方块），相机按 seed 自动落在陆地并俯视地形
+- **演示区**：4×4 chunk 列（64×64 方块）；玩家按 seed 自动出生在干燥陆地上
+  （候选列需满足：高于海平面 + 出生包围盒内无方块，避开树干/树冠）
 - **Face Culling 网格化**：只渲染暴露给 air/非 opaque 邻居的面；跨 chunk 边界通过
   `World` 查询邻居剔除；每个 chunk 输出 opaque + transparent 两个 mesh，
   渲染顺序不透明 → alpha 混合（leaves/glass/water）
@@ -121,6 +128,7 @@ mine-craft/
 │   ├── block/       # 数据驱动方块系统：Block 数据模型 + BlockRegistry（JSON 加载/校验）
 │   ├── core/        # 核心框架：日志、错误处理、JSON、配置、资源、窗口、输入、相机、PNG、主循环
 │   │   └── math/    # 数学库（header-only）：Vec2/Vec3/Vec4/Mat4
+│   ├── player/      # 玩家：第一人称状态 + AABB 体素碰撞/滑动/重力跳跃（驱动相机）
 │   ├── renderer/    # 渲染器（GL 封装）：Shader/Texture/Mesh/Renderer/TextureAtlas
 │   └── world/       # 体素世界：coordinates（world/chunk/local 转换）、Chunk、World、
 │                    # ChunkMesher、noise（确定性 value noise/fBm）、BiomeRegistry、
@@ -136,7 +144,7 @@ mine-craft/
 - [x] **Phase 2** — 方块系统：Block 数据模型、BlockRegistry（JSON 数据驱动 + 严格校验）、16×16 TextureAtlas、透明 pass
 - [x] **Phase 3** — Chunk 系统：World/Chunk/坐标转换（负坐标安全）/Chunk Mesh（Face Culling；Greedy Meshing 留待性能需要时）
 - [x] **Phase 4** — 世界生成：WorldGenerator（地形/生物群系/洞穴/矿脉/树木），Seed 可复现（无状态生成器，数据驱动 biome/ore/参数）
-- [ ] **Phase 5** — 玩家系统：第一人称移动、AABB 碰撞、滑动处理
+- [x] **Phase 5** — 玩家系统：第一人称移动、AABB 碰撞、滑动处理
 - [ ] **Phase 6** — Raycast：方块破坏/放置
 - [ ] **Phase 7** — 光照：Sky/Block Light（0-15），传播与更新
 - [ ] **Phase 8** — 昼夜循环：太阳/月亮/天空色

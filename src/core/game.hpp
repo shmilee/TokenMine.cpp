@@ -1,12 +1,13 @@
 // Top-level game object: owns configuration, assets, window, input, camera,
 // renderer and the voxel world; runs the main loop.
 //
-// Phase 4 scope: chunk-based voxel world (World/Chunk, 16^3 sections,
+// Phase 5 scope: chunk-based voxel world (World/Chunk, 16^3 sections,
 // face-culled chunk meshing) filled by the seeded, data-driven
-// WorldGenerator (terrain + biomes + caves + ore veins + trees). Each chunk
-// owns up to two GPU meshes (opaque + transparent/blended); a chunk's
-// meshes are rebuilt lazily when it is marked dirty (first meshing or a
-// setBlock on/next to it).
+// WorldGenerator (terrain + biomes + caves + ore veins + trees), with a
+// walking Player (AABB voxel collision + sliding) driving the first-person
+// camera. Each chunk owns up to two GPU meshes (opaque + transparent/
+// blended); a chunk's meshes are rebuilt lazily when it is marked dirty
+// (first meshing or a setBlock on/next to it).
 #pragma once
 
 #include <cstdint>
@@ -24,6 +25,7 @@
 #include "core/input.hpp"
 #include "core/logger.hpp"
 #include "core/window.hpp"
+#include "player/player.hpp"
 #include "renderer/mesh.hpp"
 #include "renderer/renderer.hpp"
 #include "renderer/shader.hpp"
@@ -92,6 +94,10 @@ private:
     // Seeded world generator (built in buildScene). Optional: the game only
     // touches it after init succeeded.
     std::optional<WorldGenerator> m_generator;
+
+    // The first-person actor (built in buildScene after the world exists;
+    // it holds references to the world and the block registry).
+    std::optional<Player> m_player;
 
     ShaderProgram m_basicShader;
 

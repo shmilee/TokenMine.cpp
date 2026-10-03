@@ -1,49 +1,8 @@
 #include "core/camera.hpp"
 
-#include <algorithm>
 #include <cmath>
 
-#include "core/input.hpp"
-
 namespace mc {
-
-void Camera::update(double dt, const Input& input) {
-    // Mouse look.
-    const Vec2 delta = input.mouseDelta();
-    yaw -= delta.x * mouseSensitivity;
-    pitch -= delta.y * mouseSensitivity;
-    pitch = std::clamp(pitch, -kMaxPitch, kMaxPitch);
-
-    // Movement (planar).
-    Vec3 direction {0.0f, 0.0f, 0.0f};
-    const Vec3 fwd = forward();
-    const Vec3 flat {fwd.x, 0.0f, fwd.z};
-    const Vec3 flatFwd = normalized(flat);
-    const Vec3 flatRight {flatFwd.z * -1.0f, 0.0f, flatFwd.x};
-
-    if (input.isDown(GameKey::W)) {
-        direction += flatFwd;
-    }
-    if (input.isDown(GameKey::S)) {
-        direction -= flatFwd;
-    }
-    if (input.isDown(GameKey::D)) {
-        direction += flatRight;
-    }
-    if (input.isDown(GameKey::A)) {
-        direction -= flatRight;
-    }
-    if (input.isDown(GameKey::Space)) {
-        direction.y += 1.0f;
-    }
-
-    if (lengthSq(direction) > 0.0f) {
-        const float speed = input.isDown(GameKey::LeftShift)
-                                ? moveSpeed * sprintMultiplier
-                                : moveSpeed;
-        position += normalized(direction) * (speed * static_cast<float>(dt));
-    }
-}
 
 Vec3 Camera::forward() const {
     const float cp = std::cos(pitch);

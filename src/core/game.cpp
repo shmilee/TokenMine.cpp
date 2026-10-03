@@ -97,38 +97,49 @@ Result<void> Game::buildScene() {
         }
     }
 
-    // Position the camera above dry land: the seed may put the origin
-    // underwater, so check nearby columns before falling back to (0, 0).
-    int camX = 0;
-    int camZ = 0;
-    int surfaceY = m_generator->surfaceHeight(0, 0);
+    // Spawn the player on dry land: the seed may put the origin underwater
+    // or a tree may stand on the column, so check nearby candidates before
+    // falling back to (0, 0).
+    const Player::Params playerDims; // default dimensions for the room check
+    Vec3 spawnPos {0.5f,
+                   static_cast<float>(m_generator->surfaceHeight(0, 0)) + 1.0f,
+                   0.5f};
     constexpr int kSpawnCandidates[][2] = {
         {0, 0}, {4, 0}, {-4, 0}, {8, 0}, {-8, 0},
         {0, 4}, {0, -4}, {4, 4}, {-4, -4}, {8, 8},
     };
+    int spawnX = 0;
+    int spawnZ = 0;
     for (const auto& c : kSpawnCandidates) {
         const int h = m_generator->surfaceHeight(c[0], c[1]);
-        if (h > m_generator->params().seaLevel) {
-            camX = c[0];
-            camZ = c[1];
-            surfaceY = h;
+        if (h <= m_generator->params().seaLevel) {
+            continue;
+        }
+        const Vec3 cand {static_cast<float>(c[0]) + 0.5f,
+                         static_cast<float>(h) + 1.0f,
+                         static_cast<float>(c[1]) + 0.5f};
+        if (Player::hasRoomAt(m_world, m_blocks, cand, playerDims.width,
+                              playerDims.height)) {
+            spawnPos = cand;
+            spawnX = c[0];
+            spawnZ = c[1];
             break;
         }
     }
-    m_camera.position = {static_cast<float>(camX),
-                         static_cast<float>(surfaceY + 6),
-                         static_cast<float>(camZ + 14)};
-    m_camera.yaw = 0.0f;
-    m_camera.pitch = -0.35f;
+    m_player.emplace(m_world, m_blocks, spawnPos);
+    m_player->pitch = -0.25f; // look slightly down at the landscape
+    m_camera.position = m_player->eyePosition();
+    m_camera.yaw = m_player->yaw;
+    m_camera.pitch = m_player->pitch;
 
     MC_LOG_INFO("Scene built: " + std::to_string(m_blocks.count()) +
                 " blocks, " + std::to_string(m_atlas.tileCount()) +
                 " atlas tiles, " + std::to_string(m_world.chunkCount()) +
                 " chunks (seed=" + std::to_string(m_generator->seed()) +
-                ", spawn x=" + std::to_string(camX) + " z=" +
-                std::to_string(camZ) + ", surface y=" +
-                std::to_string(surfaceY) + ", biome=" +
-                m_generator->biomeNameAt(camX, camZ) + ")");
+                ", spawn x=" + std::to_string(spawnX) + " z=" +
+                std::to_string(spawnZ) + ", surface y=" +
+                std::to_string(m_generator->surfaceHeight(spawnX, spawnZ)) +
+                ", biome=" + m_generator->biomeNameAt(spawnX, spawnZ) + ")");
     return {};
 }
 
@@ -314,7 +325,14 @@ void Game::update(double dt) {
         MC_LOG_ERROR("Chunk meshing failed: " + meshes.error().describe());
     }
 
-    m_camera.update(dt, m_input);
+    // The player owns the first-person state; the camera is just its view
+    // (eye position + orientation). Mouse look is only active while the
+    // pointer is captured (left click toggles it), so an unlocked cursor
+    // never rotates the view.
+    m_player->update(dt, m_input, m_window.relativeMouseMode());
+    m_camera.position = m_player->eyePosition();
+    m_camera.yaw = m_player->yaw;
+    m_camera.pitch = m_player->pitch;
 }
 
 void Game::render() {
