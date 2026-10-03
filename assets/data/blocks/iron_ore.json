@@ -1,0 +1,10 @@
+{
+  "id": "iron_ore",
+  "properties": {
+    "hardness": 3.0,
+    "drops": "iron_ore"
+  },
+  "model": {
+    "textures": { "top": "iron_ore", "side": "iron_ore", "bottom": "iron_ore" }
+  }
+}

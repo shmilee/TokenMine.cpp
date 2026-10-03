@@ -18,47 +18,13 @@ constexpr float kNear = 0.1f;
 constexpr float kFar = 1000.0f;
 constexpr Vec4 kSkyColor {0.47f, 0.71f, 0.95f, 1.0f};
 
-// Demo terrain parameters (Phase 4 replaces this with seeded generation).
-constexpr int kDemoSurfaceY = 32;  // world Y of the grass layer
-constexpr int kDemoDirtDepth = 3;  // dirt layers below the grass
-// 2x2 chunk columns covering world x,z in [-16, 16).
-constexpr int kDemoChunkMin = -1;
-constexpr int kDemoChunkMax = 0;
+// Demo area: 4x4 chunk columns covering world x,z in [-32, 32).
+constexpr int kDemoChunkMin = -2;
+constexpr int kDemoChunkMax = 1;
 
 double nowSeconds() {
     return static_cast<double>(SDL_GetPerformanceCounter()) /
            SDL_GetPerformanceFrequency();
-}
-
-// Demo chunk content: a flat surface, dirt below it, stone at depth, air
-// above. Pure function of the chunk position (deterministic).
-void fillDemoChunk(Chunk& chunk, const ChunkPos& pos, BlockID grass,
-                   BlockID dirt, BlockID stone) {
-    const int dirtTop = kDemoSurfaceY - kDemoDirtDepth;
-    for (int x = 0; x < Chunk::kSize; ++x) {
-        for (int z = 0; z < Chunk::kSize; ++z) {
-            for (int y = 0; y < Chunk::kSize; ++y) {
-                const int worldY = pos.y * Chunk::kSize + y;
-                const BlockID id =
-                    (worldY == kDemoSurfaceY)
-                        ? grass
-                        : (worldY > dirtTop && worldY < kDemoSurfaceY)
-                              ? dirt
-                              : (worldY <= dirtTop) ? stone
-                                                    : BlockID::air();
-                chunk.set(x, y, z, id);
-            }
-        }
-    }
-}
-
-Result<BlockID> blockId(const BlockRegistry& reg, const char* name) {
-    const Block* b = reg.findByName(name);
-    if (b == nullptr) {
-        return MC_FAIL(std::string("demo: required block '") + name +
-                       "' is not registered");
-    }
-    return b->id;
 }
 
 Mat4 chunkModel(const ChunkPos& pos) {
@@ -108,25 +74,21 @@ Result<void> Game::buildScene() {
         }
     }
 
-    // -- demo world: 2x2 chunk columns of flat terrain --------------------------
-    auto grass = blockId(m_blocks, "grass");
-    MC_TRY(grass);
-    auto dirt = blockId(m_blocks, "dirt");
-    MC_TRY(dirt);
-    auto stone = blockId(m_blocks, "stone");
-    MC_TRY(stone);
-    auto glass = blockId(m_blocks, "glass");
-    MC_TRY(glass);
-    auto water = blockId(m_blocks, "water");
-    MC_TRY(water);
+    // -- world generation (Phase 4: seeded, data-driven) ---------------------
+    auto biomesLoad = m_biomes.loadDirectory(m_assets, "data/biomes");
+    MC_TRY(biomesLoad);
+    auto worldgen = WorldgenParams::load(m_assets);
+    MC_TRY(worldgen);
+    const std::int64_t seed = m_config.getInt64("world.seed", 0);
+    auto gen = WorldGenerator::create(seed, *worldgen, m_biomes, m_blocks);
+    MC_TRY(gen);
+    m_generator = std::move(*gen);
 
-    const BlockID grassId = *grass;
-    const BlockID dirtId = *dirt;
-    const BlockID stoneId = *stone;
-    m_world.setChunkGenerator(
-        [grassId, dirtId, stoneId](Chunk& chunk, const ChunkPos& pos) {
-            fillDemoChunk(chunk, pos, grassId, dirtId, stoneId);
-        });
+    m_world.setChunkGenerator([this](Chunk& chunk, const ChunkPos& pos) {
+        // The generator is stateless and only writes into the given chunk
+        // (never back into the World), which the World contract requires.
+        m_generator->generateChunk(chunk, pos);
+    });
     for (int cx = kDemoChunkMin; cx <= kDemoChunkMax; ++cx) {
         for (int cz = kDemoChunkMin; cz <= kDemoChunkMax; ++cz) {
             for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy) {
@@ -135,22 +97,38 @@ Result<void> Game::buildScene() {
         }
     }
 
-    // A few decorations so the first frame exercises the blending pass and
-    // cross-chunk culling: glass columns on the surface, a water puddle
-    // (replacing the grass block in place).
-    m_world.setBlock(3, kDemoSurfaceY + 1, 3, *glass);
-    m_world.setBlock(4, kDemoSurfaceY + 1, 3, *glass);
-    m_world.setBlock(6, kDemoSurfaceY, 2, *water);
-
-    // Position the camera above the demo surface, looking across it.
-    m_camera.position = {0.0f, static_cast<float>(kDemoSurfaceY + 6), 14.0f};
+    // Position the camera above dry land: the seed may put the origin
+    // underwater, so check nearby columns before falling back to (0, 0).
+    int camX = 0;
+    int camZ = 0;
+    int surfaceY = m_generator->surfaceHeight(0, 0);
+    constexpr int kSpawnCandidates[][2] = {
+        {0, 0}, {4, 0}, {-4, 0}, {8, 0}, {-8, 0},
+        {0, 4}, {0, -4}, {4, 4}, {-4, -4}, {8, 8},
+    };
+    for (const auto& c : kSpawnCandidates) {
+        const int h = m_generator->surfaceHeight(c[0], c[1]);
+        if (h > m_generator->params().seaLevel) {
+            camX = c[0];
+            camZ = c[1];
+            surfaceY = h;
+            break;
+        }
+    }
+    m_camera.position = {static_cast<float>(camX),
+                         static_cast<float>(surfaceY + 6),
+                         static_cast<float>(camZ + 14)};
     m_camera.yaw = 0.0f;
     m_camera.pitch = -0.35f;
 
     MC_LOG_INFO("Scene built: " + std::to_string(m_blocks.count()) +
                 " blocks, " + std::to_string(m_atlas.tileCount()) +
                 " atlas tiles, " + std::to_string(m_world.chunkCount()) +
-                " chunks");
+                " chunks (seed=" + std::to_string(m_generator->seed()) +
+                ", spawn x=" + std::to_string(camX) + " z=" +
+                std::to_string(camZ) + ", surface y=" +
+                std::to_string(surfaceY) + ", biome=" +
+                m_generator->biomeNameAt(camX, camZ) + ")");
     return {};
 }
 

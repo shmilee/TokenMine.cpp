@@ -34,22 +34,56 @@ cmake --build build
 ./build/bin/minecraft --config config/config.json --seed 42 --log-level debug
 ```
 
-## 当前可玩内容（Phase 3）
+## 当前可玩内容（Phase 4）
 
 - 第一人称相机：`W/A/S/D` 移动，`Space` 上升，`Shift` 加速，鼠标转向（**左键点击锁定/释放指针**）
-- **Chunk 体素世界**：16×16×16 chunk（Minecraft section 模型），世界高度 128（y ∈ [0,128)），
-  X/Z 无限扩展。演示地形：2×2 chunk 列的平地（grass 表层 + 3 层 dirt + 深处 stone），
-  加玻璃柱与水面点缀
+- **程序化体素世界（Seed 可复现）**：16×16×16 chunk，世界高度 128（y ∈ [0,128)），X/Z 无限。
+  同一 seed 逐块复现（单元测试 + 像素级截图比对保证）；不同 seed 生成不同世界
+- **WorldGenerator**（无状态、纯函数 `generateChunk`，Phase 14 可直接并行）：
+  - **地形**：fBm 2D 噪声高度场（±24 格，基线 40），y=0 bedrock 层，深处 stone
+  - **生物群系**：低频噪声 + 权重选择（`assets/data/biomes/*.json`：desert/forest/plains），
+    各 biome 有自己的表层/次表层/树密度/高度系数
+  - **水**：低于海平面（y=34）的柱体填充水到海平面（静态，流体模拟在 Phase 9）
+  - **洞穴**：3D 噪声阈值雕刻，保留表层 4 格与底层 2 格的壳
+  - **矿脉**：世界空间格网 + 随机游走（coal/iron/gold/diamond，`max_y` 分层限制），
+    跨 chunk 无缝；只替换 stone（不破坏洞穴）
+  - **树木**：世界空间格网候选 + 数据驱动的树密度；树干 4~7 格 + 两层树冠 + 顶帽；
+    跨 chunk 边界由邻接 chunk 各自补齐（边际格网机制），只写入 air（不破坏地形）
+- **演示区**：4×4 chunk 列（64×64 方块），相机按 seed 自动落在陆地并俯视地形
 - **Face Culling 网格化**：只渲染暴露给 air/非 opaque 邻居的面；跨 chunk 边界通过
   `World` 查询邻居剔除；每个 chunk 输出 opaque + transparent 两个 mesh，
-  渲染顺序不透明 → alpha 混合（glass/leaves/water）
+  渲染顺序不透明 → alpha 混合（leaves/glass/water）
 - **脏标记增量重网格**：`setBlock` 标记本 chunk（及共享面的邻居 chunk）dirty，
   下一帧只重建 dirty chunk 的 GPU mesh
-- **数据驱动方块**：8 个方块（stone/dirt/grass/sand/wood/leaves/glass/water）+ 内置 air 哨兵
-  （`BlockID{0}`，非数据方块，注册表从 id 1 分配）
-- 16×16 瓦片 TextureAtlas（Minecraft 同款规格），10 张占位纹理
+- **数据驱动方块**：13 个方块（stone/dirt/grass/sand/wood/leaves/glass/water/bedrock +
+  4 种矿石）+ 内置 air 哨兵（`BlockID{0}`，非数据方块，注册表从 id 1 分配）
+- 16×16 瓦片 TextureAtlas（Minecraft 同款规格），15 张占位纹理
 - 天空色 + 方向光（占位光照，Phase 7 替换）
 - 窗口标题实时显示 FPS 与 draw call 数
+
+### 新增一个生物群系 / 矿石（无需改核心代码）
+
+1. 生物群系：`assets/data/biomes/<name>.json` —— 权重/表层/次表层/深度/树密度/高度系数：
+
+   ```json
+   {
+     "id": "swamp",
+     "weight": 3,
+     "surface": "grass",
+     "subsurface": "dirt",
+     "subsurface_depth": 3,
+     "tree_density": 0.08,
+     "height_scale": 0.8
+   }
+   ```
+
+2. 矿石：`assets/data/worldgen.json` 的 `ores.veins` 数组加一项（方块需已注册）：
+
+   ```json
+   { "block": "diamond_ore", "probability": 0.05, "vein_size": 5, "max_y": 20 }
+   ```
+
+地形/洞穴/树木参数同样在 `assets/data/worldgen.json`（缺省=默认值，类型错误=启动报错）。
 
 ### 新增一个方块（无需改核心代码）
 
@@ -58,9 +92,9 @@ cmake --build build
 
    ```json
    {
-     "id": "bedrock",
-     "properties": { "hardness": -1, "destroyable": false },
-     "model": { "textures": { "top": "bedrock", "side": "bedrock", "bottom": "bedrock" } }
+     "id": "glowstone",
+     "properties": { "hardness": 0.3, "light_emission": 12, "drops": "glowstone" },
+     "model": { "textures": { "top": "glowstone", "side": "glowstone", "bottom": "glowstone" } }
    }
    ```
 
@@ -88,7 +122,9 @@ mine-craft/
 │   ├── core/        # 核心框架：日志、错误处理、JSON、配置、资源、窗口、输入、相机、PNG、主循环
 │   │   └── math/    # 数学库（header-only）：Vec2/Vec3/Vec4/Mat4
 │   ├── renderer/    # 渲染器（GL 封装）：Shader/Texture/Mesh/Renderer/TextureAtlas
-│   └── world/       # 体素世界：coordinates（world/chunk/local 转换）、Chunk、World、ChunkMesher
+│   └── world/       # 体素世界：coordinates（world/chunk/local 转换）、Chunk、World、
+│                    # ChunkMesher、noise（确定性 value noise/fBm）、BiomeRegistry、
+│                    # WorldgenParams（worldgen.json）、WorldGenerator（Seed 可复现生成）
 ├── tools/           # 开发工具：generate_block_textures.py（16x16 占位纹理生成）
 └── tests/           # 单元测试（GTest）+ PNG 测试夹具（tests/data/，可用 tests/generate_fixtures.py 重新生成）
 ```
@@ -99,7 +135,7 @@ mine-craft/
 - [x] **Phase 1** — 基础 3D 引擎：数学库、Input、Camera、Renderer（Shader/Texture/Mesh/VAO）、PNG 编解码、demo 场景
 - [x] **Phase 2** — 方块系统：Block 数据模型、BlockRegistry（JSON 数据驱动 + 严格校验）、16×16 TextureAtlas、透明 pass
 - [x] **Phase 3** — Chunk 系统：World/Chunk/坐标转换（负坐标安全）/Chunk Mesh（Face Culling；Greedy Meshing 留待性能需要时）
-- [ ] **Phase 4** — 世界生成：WorldGenerator（地形/生物群系/洞穴/矿脉/树木），Seed 可复现
+- [x] **Phase 4** — 世界生成：WorldGenerator（地形/生物群系/洞穴/矿脉/树木），Seed 可复现（无状态生成器，数据驱动 biome/ore/参数）
 - [ ] **Phase 5** — 玩家系统：第一人称移动、AABB 碰撞、滑动处理
 - [ ] **Phase 6** — Raycast：方块破坏/放置
 - [ ] **Phase 7** — 光照：Sky/Block Light（0-15），传播与更新

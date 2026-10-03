@@ -38,6 +38,10 @@ add_library(mc_core STATIC
     src/world/chunk.cpp
     src/world/world.cpp
     src/world/chunk_mesher.cpp
+    src/world/noise.cpp
+    src/world/biome.cpp
+    src/world/worldgen_config.cpp
+    src/world/world_generator.cpp
     src/renderer/shader.cpp
     src/renderer/texture.cpp
     src/renderer/mesh.cpp
@@ -72,6 +76,10 @@ add_executable(minecraft_tests
     tests/test_chunk.cpp
     tests/test_world.cpp
     tests/test_chunk_mesher.cpp
+    tests/test_noise.cpp
+    tests/test_biome.cpp
+    tests/test_worldgen_config.cpp
+    tests/test_world_generator.cpp
 )
 target_compile_definitions(minecraft_tests PRIVATE
     MC_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data")

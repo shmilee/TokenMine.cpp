@@ -1,9 +1,10 @@
 // Top-level game object: owns configuration, assets, window, input, camera,
 // renderer and the voxel world; runs the main loop.
 //
-// Phase 3 scope: chunk-based voxel world (World/Chunk, 16^3 sections,
-// face-culled chunk meshing) demonstrated by flat 2x2-chunk terrain. Each
-// chunk owns up to two GPU meshes (opaque + transparent/blended); a chunk's
+// Phase 4 scope: chunk-based voxel world (World/Chunk, 16^3 sections,
+// face-culled chunk meshing) filled by the seeded, data-driven
+// WorldGenerator (terrain + biomes + caves + ore veins + trees). Each chunk
+// owns up to two GPU meshes (opaque + transparent/blended); a chunk's
 // meshes are rebuilt lazily when it is marked dirty (first meshing or a
 // setBlock on/next to it).
 #pragma once
@@ -28,9 +29,11 @@
 #include "renderer/shader.hpp"
 #include "renderer/texture.hpp"
 #include "renderer/texture_atlas.hpp"
+#include "world/biome.hpp"
 #include "world/chunk.hpp"
 #include "world/chunk_mesher.hpp"
 #include "world/world.hpp"
+#include "world/world_generator.hpp"
 
 namespace mc {
 
@@ -79,15 +82,19 @@ private:
 
     // Data-driven content.
     BlockRegistry m_blocks;
+    BiomeRegistry m_biomes;
     TextureAtlas m_atlas;
 
     // Voxel world + per-chunk GPU meshes.
     World m_world;
     std::unordered_map<ChunkPos, ChunkMesh> m_chunkMeshes;
 
+    // Seeded world generator (built in buildScene). Optional: the game only
+    // touches it after init succeeded.
+    std::optional<WorldGenerator> m_generator;
+
     ShaderProgram m_basicShader;
 
-    double m_time = 0.0;
     int m_frameCount = 0;
     double m_fpsSmoothed = 0.0;
     double m_lastTitleUpdate = 0.0;

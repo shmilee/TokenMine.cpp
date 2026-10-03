@@ -1,0 +1,10 @@
+{
+  "id": "bedrock",
+  "properties": {
+    "hardness": 0,
+    "destroyable": false
+  },
+  "model": {
+    "textures": { "top": "bedrock", "side": "bedrock", "bottom": "bedrock" }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "id": "desert",
+  "weight": 2,
+  "surface": "sand",
+  "subsurface": "sand",
+  "subsurface_depth": 4,
+  "tree_density": 0.0,
+  "height_scale": 0.9
+}

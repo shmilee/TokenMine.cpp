@@ -131,6 +131,37 @@ def water(x, y):
             clamp(189 + noise(x, y, 23, 10)), 200)
 
 
+def bedrock(x, y):
+    # Dark, high-contrast mottling.
+    v = clamp(52 + noise(x, y, 44, 30))
+    return (v, v, v, 255)
+
+
+def ore(x, y, salt, color, density):
+    # Stone base with colored speckles (ore lumps).
+    if h2(x, y, salt) % 100 < density:
+        return (clamp(color[0] + noise(x, y, salt + 1, 6)),
+                clamp(color[1] + noise(x, y, salt + 2, 6)),
+                clamp(color[2] + noise(x, y, salt + 3, 6)), 255)
+    return stone(x, y)
+
+
+def coal_ore(x, y):
+    return ore(x, y, 40, (48, 48, 48), 18)
+
+
+def iron_ore(x, y):
+    return ore(x, y, 41, (216, 178, 142), 14)
+
+
+def gold_ore(x, y):
+    return ore(x, y, 42, (252, 238, 79), 12)
+
+
+def diamond_ore(x, y):
+    return ore(x, y, 43, (93, 236, 245), 10)
+
+
 TEXTURES = {
     "stone": stone,
     "dirt": dirt,
@@ -142,6 +173,11 @@ TEXTURES = {
     "leaves": leaves,
     "glass": glass,
     "water": water,
+    "bedrock": bedrock,
+    "coal_ore": coal_ore,
+    "iron_ore": iron_ore,
+    "gold_ore": gold_ore,
+    "diamond_ore": diamond_ore,
 }
 
 

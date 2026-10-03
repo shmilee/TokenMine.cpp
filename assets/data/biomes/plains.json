@@ -1,0 +1,9 @@
+{
+  "id": "plains",
+  "weight": 4,
+  "surface": "grass",
+  "subsurface": "dirt",
+  "subsurface_depth": 3,
+  "tree_density": 0.03,
+  "height_scale": 1.0
+}

@@ -1,0 +1,10 @@
+{
+  "id": "gold_ore",
+  "properties": {
+    "hardness": 3.0,
+    "drops": "gold_ore"
+  },
+  "model": {
+    "textures": { "top": "gold_ore", "side": "gold_ore", "bottom": "gold_ore" }
+  }
+}

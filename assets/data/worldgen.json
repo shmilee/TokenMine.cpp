@@ -1,0 +1,38 @@
+{
+  "terrain": {
+    "base_height": 40,
+    "height_amplitude": 24,
+    "sea_level": 34,
+    "height_noise_scale": 0.02,
+    "height_octaves": 4,
+    "bottom_block": "bedrock",
+    "deep_block": "stone",
+    "water_block": "water"
+  },
+  "biomes": {
+    "noise_scale": 0.02
+  },
+  "caves": {
+    "enabled": true,
+    "noise_scale": 0.06,
+    "threshold": 0.68,
+    "min_y": 2,
+    "surface_guard": 4
+  },
+  "ores": {
+    "lattice": 8,
+    "veins": [
+      { "block": "coal_ore", "probability": 0.4, "vein_size": 9, "max_y": 80 },
+      { "block": "iron_ore", "probability": 0.25, "vein_size": 8, "max_y": 56 },
+      { "block": "gold_ore", "probability": 0.12, "vein_size": 7, "max_y": 36 },
+      { "block": "diamond_ore", "probability": 0.05, "vein_size": 5, "max_y": 20 }
+    ]
+  },
+  "trees": {
+    "lattice": 4,
+    "trunk": "wood",
+    "leaves": "leaves",
+    "min_height": 4,
+    "height_range": 3
+  }
+}
