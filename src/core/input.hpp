@@ -27,6 +27,7 @@ enum class GameKey {
     LeftShift,
     LeftControl,
     LeftAlt,
+    Tab,
     Escape,
     // Keep in sync with kKeyCount.
 };

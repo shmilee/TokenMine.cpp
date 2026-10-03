@@ -7,6 +7,7 @@
 #include <cstring>
 #include <fstream>
 
+#include "core/json.hpp"
 #include "core/png.hpp"
 
 namespace mc {
@@ -21,6 +22,9 @@ constexpr Vec4 kSkyColor {0.47f, 0.71f, 0.95f, 1.0f};
 // Demo area: 4x4 chunk columns covering world x,z in [-32, 32).
 constexpr int kDemoChunkMin = -2;
 constexpr int kDemoChunkMax = 1;
+
+// How far the crosshair raycast reaches (blocks; Minecraft's reach).
+constexpr float kReach = 5.0f;
 
 double nowSeconds() {
     return static_cast<double>(SDL_GetPerformanceCounter()) /
@@ -72,6 +76,34 @@ Result<void> Game::buildScene() {
             return MC_FAIL("block references missing texture '" + name +
                            "' (no such tile in the atlas)");
         }
+    }
+
+    // -- hotbar (temporary selection list, data-driven; Phase 11 replaces it
+    //    with the item/inventory system) ------------------------------------
+    auto hotbarText = m_assets.loadText("data/hotbar.json");
+    MC_TRY(hotbarText);
+    auto hotbarJson = Json::parse(*hotbarText);
+    MC_TRY(hotbarJson);
+    const Json* list = hotbarJson->find("blocks");
+    if (list == nullptr || !list->isArray()) {
+        return MC_FAIL("hotbar.json: 'blocks' array is required");
+    }
+    m_hotbar.clear();
+    for (std::size_t i = 0; i < list->size(); ++i) {
+        const Json& entry = list->at(i);
+        if (!entry.isString()) {
+            return MC_FAIL("hotbar.json: entry #" + std::to_string(i) +
+                           " must be a block name string");
+        }
+        const BlockID id = m_blocks.idForName(entry.asString());
+        if (!id.valid()) {
+            return MC_FAIL("hotbar.json: unknown block '" + entry.asString() +
+                           "'");
+        }
+        m_hotbar.push_back(id);
+    }
+    if (m_hotbar.empty()) {
+        return MC_FAIL("hotbar.json: 'blocks' must not be empty");
     }
 
     // -- world generation (Phase 4: seeded, data-driven) ---------------------
@@ -250,7 +282,11 @@ int Game::run() {
     while (true) {
         m_input.frameBegin();
         m_input.pump();
-        if (m_input.quitRequested() || m_input.wasPressed(GameKey::Escape)) {
+        // ESC exits only while the pointer is free; while captured it
+        // releases the pointer instead (handled in update).
+        if (m_input.quitRequested() ||
+            (!m_window.relativeMouseMode() &&
+             m_input.wasPressed(GameKey::Escape))) {
             MC_LOG_INFO("Exit requested, shutting down");
             break;
         }
@@ -315,10 +351,7 @@ int Game::run() {
 }
 
 void Game::update(double dt) {
-    // Pointer lock: left click toggles first-person mouse look.
-    if (m_input.wasPressed(MouseButton::Left)) {
-        m_window.setRelativeMouseMode(!m_window.relativeMouseMode());
-    }
+    handleInteraction();
 
     const auto meshes = updateChunkMeshes();
     if (!meshes.ok()) {
@@ -327,12 +360,90 @@ void Game::update(double dt) {
 
     // The player owns the first-person state; the camera is just its view
     // (eye position + orientation). Mouse look is only active while the
-    // pointer is captured (left click toggles it), so an unlocked cursor
-    // never rotates the view.
+    // pointer is captured, so an unlocked cursor never rotates the view.
     m_player->update(dt, m_input, m_window.relativeMouseMode());
     m_camera.position = m_player->eyePosition();
     m_camera.yaw = m_player->yaw;
     m_camera.pitch = m_player->pitch;
+}
+
+// ---------------------------------------------------------------------------
+// Pointer lock + block interaction (Phase 6)
+// ---------------------------------------------------------------------------
+
+void Game::handleInteraction() {
+    const bool locked = m_window.relativeMouseMode();
+    if (!locked) {
+        // Left click captures the pointer (standard first-person behavior).
+        if (m_input.wasPressed(MouseButton::Left)) {
+            m_window.setRelativeMouseMode(true);
+        }
+        return;
+    }
+
+    if (m_input.wasPressed(GameKey::Escape)) {
+        m_window.setRelativeMouseMode(false);
+        return;
+    }
+    if (m_input.wasPressed(MouseButton::Left)) {
+        breakBlock();
+    }
+    if (m_input.wasPressed(MouseButton::Right)) {
+        placeBlock();
+    }
+    if (m_input.wasPressed(GameKey::Tab)) {
+        cycleHotbar();
+    }
+}
+
+std::optional<BlockHit> Game::targetBlock() const {
+    return raycastBlock(m_world, m_camera.position, m_camera.forward(),
+                        kReach);
+}
+
+void Game::breakBlock() {
+    const std::optional<BlockHit> hit = targetBlock();
+    if (!hit) {
+        return;
+    }
+    const BlockID id = m_world.getBlock(hit->block.x, hit->block.y,
+                                        hit->block.z);
+    // Breakability is data-driven: water/bedrock set destroyable=false.
+    if (!m_blocks.at(id).properties.destroyable) {
+        return;
+    }
+    // setBlock marks the chunk (and face-sharing neighbors) dirty; the mesh
+    // rebuild happens on the next frame.
+    m_world.setBlock(hit->block.x, hit->block.y, hit->block.z, BlockID::air());
+}
+
+void Game::placeBlock() {
+    if (m_hotbar.empty()) {
+        return;
+    }
+    const std::optional<BlockHit> hit = targetBlock();
+    if (!hit) {
+        return;
+    }
+    // The target cell is the face neighbor of the hit block. The normal is a
+    // unit axis vector, so the int cast is exact.
+    const BlockPos target {
+        hit->block.x + static_cast<int>(hit->normal.x),
+        hit->block.y + static_cast<int>(hit->normal.y),
+        hit->block.z + static_cast<int>(hit->normal.z)};
+    if (!canPlaceAt(m_world, m_blocks, target, m_player->aabbMin(),
+                    m_player->aabbMax())) {
+        return;
+    }
+    m_world.setBlock(target.x, target.y, target.z,
+                     m_hotbar[m_hotbarSelected]);
+}
+
+void Game::cycleHotbar() {
+    if (m_hotbar.empty()) {
+        return;
+    }
+    m_hotbarSelected = (m_hotbarSelected + 1) % m_hotbar.size();
 }
 
 void Game::render() {

@@ -1,13 +1,15 @@
 // Top-level game object: owns configuration, assets, window, input, camera,
 // renderer and the voxel world; runs the main loop.
 //
-// Phase 5 scope: chunk-based voxel world (World/Chunk, 16^3 sections,
-// face-culled chunk meshing) filled by the seeded, data-driven
-// WorldGenerator (terrain + biomes + caves + ore veins + trees), with a
-// walking Player (AABB voxel collision + sliding) driving the first-person
-// camera. Each chunk owns up to two GPU meshes (opaque + transparent/
-// blended); a chunk's meshes are rebuilt lazily when it is marked dirty
-// (first meshing or a setBlock on/next to it).
+// Phase 6 scope: the Phase 5 world + walking Player, plus block
+// interaction: a DDA voxel raycast from the eye selects a block (reach 5);
+// left click breaks it (if properties.destroyable), right click places the
+// currently selected hotbar block on the hit face (if the target cell is
+// placeable and does not overlap the player). Hotbar selection is a
+// temporary data-driven list (assets/data/hotbar.json, Tab to cycle) until
+// the item/inventory system lands in Phase 11. Each chunk owns up to two
+// GPU meshes (opaque + transparent/blended); a chunk's meshes are rebuilt
+// lazily when it is marked dirty (first meshing or a setBlock on/next to it).
 #pragma once
 
 #include <cstdint>
@@ -34,6 +36,7 @@
 #include "world/biome.hpp"
 #include "world/chunk.hpp"
 #include "world/chunk_mesher.hpp"
+#include "world/raycast.hpp"
 #include "world/world.hpp"
 #include "world/world_generator.hpp"
 
@@ -74,6 +77,16 @@ private:
     Result<void> updateChunkMeshes();
     Result<void> takeScreenshot(const std::filesystem::path& path);
 
+    // Pointer-lock state machine + block interaction (called from update
+    // while the pointer is captured).
+    void handleInteraction();
+    // The block the crosshair is aiming at (raycast from the eye, within
+    // kReach), if any.
+    std::optional<BlockHit> targetBlock() const;
+    void breakBlock();
+    void placeBlock();
+    void cycleHotbar();
+
     GameArgs m_args;
     Config m_config;
     AssetManager m_assets;
@@ -98,6 +111,11 @@ private:
     // The first-person actor (built in buildScene after the world exists;
     // it holds references to the world and the block registry).
     std::optional<Player> m_player;
+
+    // Temporary block-selection list (assets/data/hotbar.json, Tab cycles);
+    // replaced by the item/inventory system in Phase 11.
+    std::vector<BlockID> m_hotbar;
+    std::size_t m_hotbarSelected = 0;
 
     ShaderProgram m_basicShader;
 

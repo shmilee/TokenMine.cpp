@@ -34,11 +34,20 @@ cmake --build build
 ./build/bin/minecraft --config config/config.json --seed 42 --log-level debug
 ```
 
-## 当前可玩内容（Phase 5）
+## 当前可玩内容（Phase 6）
 
 - **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时），`LeftShift` 冲刺，
-  鼠标转向（**左键点击锁定/释放指针；转向仅在指针锁定时生效**，未锁定的光标
+  鼠标转向（**左键点击锁定指针；转向仅在指针锁定时生效**，未锁定的光标
   不会转动视角——保证无输入运行下截图可逐字节复现）
+- **方块交互**（DDA 体素 raycast，reach 5 格）：
+  - `左键`（锁定时）：破坏准星指向的方块（`properties.destroyable` 数据驱动，
+    水/基岩不可破坏）
+  - `右键`（锁定时）：在命中面的邻格放置当前选中的方块（不能放进 solid 方块
+    或玩家自身包围盒内）
+  - `Tab`：切换选中方块（`assets/data/hotbar.json` 数据驱动列表，临时方案，
+    Phase 11 换成物品/背包）
+  - `ESC`（锁定时）：释放指针；未锁定时 ESC 退出游戏
+  - 破坏/放置复用 `setBlock` 脏标记管线，下一帧自动重建受影响 chunk 的 mesh
 - **AABB 体素碰撞 + 滑动**：玩家 0.6×1.8 包围盒（底面中心为位置），轴分离解析
   （X→Z→Y）——撞墙时该轴停住、另一水平轴继续走（滑动）；贴面精确解析（无 epsilon
   抖动）；子步化防高速穿透（每子步 ≤0.4 块）；重力 + 终端速度 + 跳跃高度 1.13 块
@@ -92,6 +101,16 @@ cmake --build build
 
 地形/洞穴/树木参数同样在 `assets/data/worldgen.json`（缺省=默认值，类型错误=启动报错）。
 
+### 调整可放置方块列表（hotbar）
+
+`assets/data/hotbar.json` 的 `blocks` 数组（游戏内 `Tab` 循环切换）：
+
+```json
+{ "blocks": ["stone", "dirt", "grass", "sand", "wood", "leaves", "glass"] }
+```
+
+方块名必须已注册（未知名=启动报错）；列表不能为空。
+
 ### 新增一个方块（无需改核心代码）
 
 1. `assets/textures/blocks/<name>.png` —— 16×16 RGBA 纹理（可参考 `tools/generate_block_textures.py`）
@@ -131,8 +150,9 @@ mine-craft/
 │   ├── player/      # 玩家：第一人称状态 + AABB 体素碰撞/滑动/重力跳跃（驱动相机）
 │   ├── renderer/    # 渲染器（GL 封装）：Shader/Texture/Mesh/Renderer/TextureAtlas
 │   └── world/       # 体素世界：coordinates（world/chunk/local 转换）、Chunk、World、
-│                    # ChunkMesher、noise（确定性 value noise/fBm）、BiomeRegistry、
-│                    # WorldgenParams（worldgen.json）、WorldGenerator（Seed 可复现生成）
+│                    # ChunkMesher、raycast（DDA 体素射线+放置校验）、noise（确定性
+│                    # value noise/fBm）、BiomeRegistry、WorldgenParams（worldgen.json）、
+│                    # WorldGenerator（Seed 可复现生成）
 ├── tools/           # 开发工具：generate_block_textures.py（16x16 占位纹理生成）
 └── tests/           # 单元测试（GTest）+ PNG 测试夹具（tests/data/，可用 tests/generate_fixtures.py 重新生成）
 ```
@@ -145,7 +165,7 @@ mine-craft/
 - [x] **Phase 3** — Chunk 系统：World/Chunk/坐标转换（负坐标安全）/Chunk Mesh（Face Culling；Greedy Meshing 留待性能需要时）
 - [x] **Phase 4** — 世界生成：WorldGenerator（地形/生物群系/洞穴/矿脉/树木），Seed 可复现（无状态生成器，数据驱动 biome/ore/参数）
 - [x] **Phase 5** — 玩家系统：第一人称移动、AABB 碰撞、滑动处理
-- [ ] **Phase 6** — Raycast：方块破坏/放置
+- [x] **Phase 6** — Raycast：方块破坏/放置
 - [ ] **Phase 7** — 光照：Sky/Block Light（0-15），传播与更新
 - [ ] **Phase 8** — 昼夜循环：太阳/月亮/天空色
 - [ ] **Phase 9** — 流体：水（FluidState/FluidLevel/水平扩散）

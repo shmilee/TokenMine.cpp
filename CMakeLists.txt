@@ -37,6 +37,7 @@ add_library(mc_core STATIC
     src/block/block_registry.cpp
     src/player/player.cpp
     src/world/chunk.cpp
+    src/world/raycast.cpp
     src/world/world.cpp
     src/world/chunk_mesher.cpp
     src/world/noise.cpp
@@ -75,6 +76,7 @@ add_executable(minecraft_tests
     tests/test_atlas.cpp
     tests/test_coordinates.cpp
     tests/test_chunk.cpp
+    tests/test_raycast.cpp
     tests/test_world.cpp
     tests/test_chunk_mesher.cpp
     tests/test_noise.cpp
