@@ -38,9 +38,21 @@ public:
     // World coordinates. y outside [0, kWorldHeight) reads as air.
     BlockID getBlock(int x, int y, int z) const;
     // Returns false (and changes nothing) when y is out of range or the id
-    // is invalid. Marks the target chunk — and any neighbor chunk sharing
-    // a face with the edited block — dirty.
+    // is invalid. Placing a block displaces any fluid in the cell (the
+    // fluid reads 0 afterwards). Marks the target chunk — and any neighbor
+    // chunk sharing a face with the edited block — dirty.
     bool setBlock(int x, int y, int z, BlockID id);
+
+    // Fluid level (0..kMaxFluidLevel). y outside [0, kWorldHeight) or a
+    // chunk that was never created reads 0 (the void is dry).
+    std::uint8_t getFluid(int x, int y, int z) const;
+    // Sets the fluid level of an existing chunk. Returns false (and changes
+    // nothing) when y is out of range, the level is out of range, the chunk
+    // was never created (the void is never created here), the cell holds a
+    // block (fluid only fills air cells — a block displaces fluid instead),
+    // or the level is unchanged. Marks the target chunk and face-sharing
+    // neighbors dirty, like setBlock.
+    bool setFluid(int x, int y, int z, std::uint8_t level);
 
     // Light queries (0..15), same coordinate conventions as getBlock.
     // Above the world (y >= kWorldHeight) and around the world (a chunk

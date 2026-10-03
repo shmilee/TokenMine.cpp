@@ -41,6 +41,7 @@ add_library(mc_core STATIC
     src/world/world.cpp
     src/world/chunk_mesher.cpp
     src/world/day_cycle.cpp
+    src/world/fluid.cpp
     src/world/lighting.cpp
     src/world/noise.cpp
     src/world/biome.cpp
@@ -82,6 +83,7 @@ add_executable(minecraft_tests
     tests/test_world.cpp
     tests/test_chunk_mesher.cpp
     tests/test_day_cycle.cpp
+    tests/test_fluid.cpp
     tests/test_lighting.cpp
     tests/test_noise.cpp
     tests/test_player.cpp

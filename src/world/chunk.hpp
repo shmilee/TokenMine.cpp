@@ -2,7 +2,8 @@
 // meshing (Minecraft's "chunk section").
 //
 // Storage: a dense array of BlockID where id 0 (BlockID::air()) means
-// "no block", plus two light arrays (sky and block light, 0..15 per cell).
+// "no block", two light arrays (sky and block light, 0..15 per cell) and a
+// fluid level array (0..kMaxFluidLevel per cell; see World::setFluid).
 // Coordinates are local, in [0, kSize); all world<->local
 // conversion lives in world/coordinates.hpp.
 //
@@ -20,6 +21,11 @@
 #include "world/coordinates.hpp"
 
 namespace mc {
+
+// Fluid level range: 0 = no fluid, 1..7 = flowing, 8 = full/source.
+// The game simulates one fluid (water); a level > 0 means the cell holds
+// that much fluid and no block (a block displaces fluid, see World).
+inline constexpr std::uint8_t kMaxFluidLevel = 8;
 
 class Chunk {
 public:
@@ -46,6 +52,14 @@ public:
     void setBlockLightAt(int x, int y, int z, std::uint8_t value);
     void clearSkyLight();
     void clearBlockLight();
+
+    // -- Fluid (0..kMaxFluidLevel; written by the fluid simulation, --------
+    // read by the mesher/lighting/player). A fresh chunk is dry.
+    std::uint8_t fluidAt(int x, int y, int z) const;
+    void setFluidAt(int x, int y, int z, std::uint8_t level); // marks dirty
+    void clearFluid();
+    const std::uint8_t* fluidData() const { return m_fluid.data(); }
+
     // Raw array access (kVolume bytes each) for bulk readers/comparators.
     const std::uint8_t* skyLightData() const { return m_skyLight.data(); }
     const std::uint8_t* blockLightData() const { return m_blockLight.data(); }
@@ -60,6 +74,7 @@ private:
     std::array<BlockID, kVolume> m_blocks;
     std::array<std::uint8_t, kVolume> m_skyLight {};
     std::array<std::uint8_t, kVolume> m_blockLight {};
+    std::array<std::uint8_t, kVolume> m_fluid {};
     bool m_dirty = true;
 };
 

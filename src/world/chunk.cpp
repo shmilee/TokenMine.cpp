@@ -21,6 +21,7 @@ void Chunk::set(int x, int y, int z, BlockID id) {
 
 void Chunk::fill(BlockID id) {
     std::fill(m_blocks.begin(), m_blocks.end(), id);
+    clearFluid(); // a cell holds a block XOR fluid
     m_dirty = true;
 }
 
@@ -50,6 +51,22 @@ void Chunk::clearSkyLight() { std::fill(m_skyLight.begin(), m_skyLight.end(), 0)
 
 void Chunk::clearBlockLight() {
     std::fill(m_blockLight.begin(), m_blockLight.end(), 0);
+}
+
+std::uint8_t Chunk::fluidAt(int x, int y, int z) const {
+    assert(inBounds(x) && inBounds(y) && inBounds(z));
+    return m_fluid[index(x, y, z)];
+}
+
+void Chunk::setFluidAt(int x, int y, int z, std::uint8_t level) {
+    assert(inBounds(x) && inBounds(y) && inBounds(z));
+    assert(level <= kMaxFluidLevel);
+    m_fluid[index(x, y, z)] = level;
+    m_dirty = true;
+}
+
+void Chunk::clearFluid() {
+    std::fill(m_fluid.begin(), m_fluid.end(), 0);
 }
 
 std::size_t Chunk::index(int x, int y, int z) {

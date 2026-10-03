@@ -69,7 +69,7 @@ Result<WorldgenParams> WorldgenParams::parse(const Json& def) {
         warnUnknown(*t, "terrain",
                     {"base_height", "height_amplitude", "sea_level",
                      "height_noise_scale", "height_octaves", "bottom_block",
-                     "deep_block", "water_block"});
+                     "deep_block"});
         auto r = readField(*t, "terrain", "base_height", "number",
                            [&](const Json& v) { p.baseHeight = v.asInt(); });
         MC_TRY(r);
@@ -90,9 +90,6 @@ Result<WorldgenParams> WorldgenParams::parse(const Json& def) {
         MC_TRY(r);
         r = readField(*t, "terrain", "deep_block", "string",
                       [&](const Json& v) { p.deepBlock = v.asString(); });
-        MC_TRY(r);
-        r = readField(*t, "terrain", "water_block", "string",
-                      [&](const Json& v) { p.waterBlock = v.asString(); });
         MC_TRY(r);
     }
 
@@ -223,9 +220,8 @@ Result<WorldgenParams> WorldgenParams::parse(const Json& def) {
     if (p.heightOctaves < 1 || p.heightOctaves > 8) {
         return MC_FAIL("'terrain.height_octaves' must be in [1, 8]");
     }
-    if (p.bottomBlock.empty() || p.deepBlock.empty() ||
-        p.waterBlock.empty()) {
-        return MC_FAIL("terrain block names (bottom/deep/water) must be "
+    if (p.bottomBlock.empty() || p.deepBlock.empty()) {
+        return MC_FAIL("terrain block names (bottom/deep) must be "
                        "non-empty");
     }
     if (p.biomeNoiseScale <= 0.0f) {

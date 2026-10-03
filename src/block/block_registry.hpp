@@ -22,6 +22,7 @@
 
 #include <cstddef>
 #include <deque>
+#include <optional>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -53,6 +54,10 @@ public:
     const Block* find(BlockID id) const;
     const Block* findByName(const std::string& name) const;
     BlockID idForName(const std::string& name) const; // invalid() when absent
+    // The block that carries the simulated fluid (properties.fluid). The
+    // game simulates one fluid (water); the mesher uses this block's
+    // textures for every fluid face. nullopt when no fluid block is defined.
+    std::optional<BlockID> fluidBlock() const;
 
     std::size_t count() const { return m_blocks.size(); }
     std::vector<BlockID> allIds() const;

@@ -37,6 +37,7 @@
 #include "world/chunk.hpp"
 #include "world/chunk_mesher.hpp"
 #include "world/day_cycle.hpp"
+#include "world/fluid.hpp"
 #include "world/lighting.hpp"
 #include "world/raycast.hpp"
 #include "world/world.hpp"

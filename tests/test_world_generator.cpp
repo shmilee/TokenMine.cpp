@@ -125,6 +125,21 @@ struct Region {
         const BlockPos local = worldToChunkLocal(cp, p);
         return it->second.get(local.x, local.y, local.z);
     }
+
+    // Fluid level at world coordinates (missing chunks read as dry).
+    std::uint8_t fluidAt(int x, int y, int z) const {
+        if (y < 0 || y >= kWorldHeight) {
+            return 0;
+        }
+        const BlockPos p{x, y, z};
+        const ChunkPos cp = worldToChunk(p);
+        const auto it = chunks.find(cp);
+        if (it == chunks.end()) {
+            return 0;
+        }
+        const BlockPos local = worldToChunkLocal(cp, p);
+        return it->second.fluidAt(local.x, local.y, local.z);
+    }
 };
 
 // Find the trunk base (world y of the bottommost wood block) of the column
@@ -231,7 +246,6 @@ TEST(WorldGeneratorTest, ColumnStructureMatchesBiome) {
     const BlockID coalId = r.setup.blocks.idForName("coal_ore");
     const BlockID ironId = r.setup.blocks.idForName("iron_ore");
     const BlockID bedrockId = r.setup.blocks.idForName("bedrock");
-    const BlockID waterId = r.setup.blocks.idForName("water");
     int checked = 0;
     for (int x = 0; x < 32; x += 4) {
         for (int z = 0; z < 32; z += 4) {
@@ -265,13 +279,15 @@ TEST(WorldGeneratorTest, ColumnStructureMatchesBiome) {
                 }
                 EXPECT_EQ(r.at(x, h + 9, z), BlockID::air());
             } else {
-                // Underwater column: water from the surface up to the sea
-                // level, air above.
+                // Underwater column: fluid (full level) from the surface up
+                // to the sea level — the block stays air — and air above.
                 for (int y = h + 1; y <= r.setup.params.seaLevel; ++y) {
-                    EXPECT_EQ(r.at(x, y, z), waterId);
+                    EXPECT_EQ(r.at(x, y, z), BlockID::air());
+                    EXPECT_EQ(r.fluidAt(x, y, z), kMaxFluidLevel);
                 }
                 EXPECT_EQ(r.at(x, r.setup.params.seaLevel + 1, z),
                           BlockID::air());
+                EXPECT_EQ(r.fluidAt(x, r.setup.params.seaLevel + 1, z), 0);
             }
             ++checked;
         }
@@ -560,14 +576,6 @@ TEST(WorldGeneratorTest, CreateFailsOnUnknownOreBlock) {
     EXPECT_NE(r.error().message.find("uranium_ore"), std::string::npos);
 }
 
-TEST(WorldGeneratorTest, CreateFailsOnUnknownWaterBlock) {
-    GenSetup s;
-    s.params.waterBlock = "lava";
-    auto r = WorldGenerator::create(1, s.params, s.biomes, s.blocks);
-    ASSERT_FALSE(r.ok());
-    EXPECT_NE(r.error().message.find("lava"), std::string::npos);
-}
-
 TEST(WorldGeneratorTest, CavesCanBeDisabled) {
     GenSetup s;
     s.params.cavesEnabled = false;
@@ -593,9 +601,12 @@ TEST(WorldGeneratorTest, CavesCanBeDisabled) {
                         ++airPockets;
                     }
                 } else if (wy <= s.params.seaLevel) {
-                    // Underwater column: the fill is solid/water up to the
-                    // sea level, so any air here is a pocket.
-                    ++airPockets;
+                    // Underwater column: the fill is solid/fluid up to the
+                    // sea level, so any air cell not holding fluid is a
+                    // pocket.
+                    if (chunk.fluidAt(lx, ly, lz) == 0) {
+                        ++airPockets;
+                    }
                 }
             }
         }

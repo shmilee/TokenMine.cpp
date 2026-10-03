@@ -60,6 +60,46 @@ bool World::setBlock(int x, int y, int z, BlockID id) {
     Chunk& chunk = getOrCreateChunk(cp);
     const BlockPos local = worldToChunkLocal(cp, p);
     chunk.set(local.x, local.y, local.z, id);
+    // A block displaces any fluid in the cell (placing into water).
+    if (chunk.fluidAt(local.x, local.y, local.z) != 0) {
+        chunk.setFluidAt(local.x, local.y, local.z, 0);
+    }
+    markNeighborChunksDirty(local.x, local.y, local.z, cp);
+    return true;
+}
+
+std::uint8_t World::getFluid(int x, int y, int z) const {
+    if (!isWorldYValid(y)) {
+        return 0;
+    }
+    const BlockPos p{x, y, z};
+    const ChunkPos cp = worldToChunk(p);
+    const auto it = m_chunks.find(cp);
+    if (it == m_chunks.end()) {
+        return 0; // void is dry
+    }
+    const BlockPos local = worldToChunkLocal(cp, p);
+    return it->second.fluidAt(local.x, local.y, local.z);
+}
+
+bool World::setFluid(int x, int y, int z, std::uint8_t level) {
+    if (!isWorldYValid(y) || level > kMaxFluidLevel) {
+        return false;
+    }
+    const BlockPos p{x, y, z};
+    const ChunkPos cp = worldToChunk(p);
+    Chunk* chunk = findChunkMut(cp);
+    if (chunk == nullptr) {
+        return false; // no chunk: the void stays dry (never created here)
+    }
+    const BlockPos local = worldToChunkLocal(cp, p);
+    if (chunk->get(local.x, local.y, local.z) != BlockID::air()) {
+        return false; // a block occupies the cell
+    }
+    if (chunk->fluidAt(local.x, local.y, local.z) == level) {
+        return false; // no change
+    }
+    chunk->setFluidAt(local.x, local.y, local.z, level);
     markNeighborChunksDirty(local.x, local.y, local.z, cp);
     return true;
 }

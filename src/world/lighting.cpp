@@ -15,12 +15,19 @@ const BlockPos kDirections[6] = {
     {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
 };
 
-bool isOpaqueAt(const World& world, const BlockRegistry& blocks, int x,
-                int y, int z) {
-    return blocks.at(world.getBlock(x, y, z)).properties.opaque;
+// The cost of entering the target cell (a fluid cell attenuates in every
+// direction; air keeps the per-type costs: sky light is free vertically,
+// block light costs 1 everywhere).
+int enterCost(const Chunk* chunk, int lx, int ly, int lz, bool sky,
+              bool vertical) {
+    const BlockID id = chunk->get(lx, ly, lz);
+    if (id == BlockID::air() && chunk->fluidAt(lx, ly, lz) > 0) {
+        return kFluidLightAttenuation;
+    }
+    return vertical ? (sky ? 0 : 1) : 1;
 }
 
-// The BFS core, shared by both light types and both entry points.
+// The BFS core, shared by both light types and all entry points.
 //
 // `queue` is seeded with source cells; `inRegion` decides where values may
 // be written. Cells outside the region are read-only boundary conditions —
@@ -28,7 +35,8 @@ bool isOpaqueAt(const World& world, const BlockRegistry& blocks, int x,
 // may still be seeded so their light can flow into the region.
 //
 // Rules: light cannot enter an opaque cell; sky light propagates free
-// vertically and -1 per horizontal step, block light -1 per step in every
+// vertically in air and -1 per horizontal air step, block light -1 per air
+// step in every direction, fluid cells cost kFluidLightAttenuation in every
 // direction; a cell is updated (and re-queued) only on a strict increase.
 void propagateBFS(World& world, const BlockRegistry& blocks, bool sky,
                   std::deque<BlockPos>& queue,
@@ -46,14 +54,6 @@ void propagateBFS(World& world, const BlockRegistry& blocks, bool sky,
             const int nx = p.x + d.x;
             const int ny = p.y + d.y;
             const int nz = p.z + d.z;
-            const int attenuation = (d.y != 0) ? (sky ? 0 : 1) : 1;
-            const int next = value - attenuation;
-            if (next <= 0) {
-                continue;
-            }
-            if (isOpaqueAt(world, blocks, nx, ny, nz)) {
-                continue;
-            }
             if (!inRegion(nx, ny, nz)) {
                 continue;
             }
@@ -64,6 +64,16 @@ void propagateBFS(World& world, const BlockRegistry& blocks, bool sky,
                 continue; // void: read as open sky / dark, never written
             }
             const BlockPos local = worldToChunkLocal(cp, np);
+            const BlockID id = chunk->get(local.x, local.y, local.z);
+            if (id != BlockID::air() && blocks.at(id).properties.opaque) {
+                continue;
+            }
+            const int next = value -
+                             enterCost(chunk, local.x, local.y, local.z, sky,
+                                       d.y != 0);
+            if (next <= 0) {
+                continue;
+            }
             const std::uint8_t current =
                 sky ? chunk->skyLightAt(local.x, local.y, local.z)
                     : chunk->blockLightAt(local.x, local.y, local.z);
@@ -82,11 +92,14 @@ void propagateBFS(World& world, const BlockRegistry& blocks, bool sky,
 }
 
 // Sky-light column scan for one (x, z) column: the topmost contiguous run
-// of non-opaque cells reads 15 (open to the sky), everything below reads 0
-// until the BFS fills it from horizontal neighbors. Missing chunks are air
-// (the open run continues) and are never written.
+// of non-opaque cells is open to the sky and reads 15, attenuated by
+// kFluidLightAttenuation per fluid cell while scanning down (air carries
+// the running light unchanged); everything below the first opaque cell
+// reads 0 until the BFS fills it from horizontal neighbors. Missing chunks
+// are air (the open run continues) and are never written.
 void rescanColumn(World& world, const BlockRegistry& blocks, int x, int z) {
     bool open = true;
+    int light = kMaxLight; // sky light available just above the current cell
     for (int y = kWorldHeight - 1; y >= 0; --y) {
         const BlockPos p{x, y, z};
         const ChunkPos cp = worldToChunk(p);
@@ -97,10 +110,15 @@ void rescanColumn(World& world, const BlockRegistry& blocks, int x, int z) {
         const BlockPos local = worldToChunkLocal(cp, p);
         std::uint8_t target = 0;
         if (open) {
-            if (isOpaqueAt(world, blocks, x, y, z)) {
+            const BlockID id = chunk->get(local.x, local.y, local.z);
+            if (id != BlockID::air() && blocks.at(id).properties.opaque) {
                 open = false; // the opaque cell itself reads 0
             } else {
-                target = static_cast<std::uint8_t>(kMaxLight);
+                if (id == BlockID::air() &&
+                    chunk->fluidAt(local.x, local.y, local.z) > 0) {
+                    light = std::max(0, light - kFluidLightAttenuation);
+                }
+                target = static_cast<std::uint8_t>(light);
             }
         }
         const std::uint8_t current = chunk->skyLightAt(local.x, local.y, local.z);
@@ -189,8 +207,22 @@ void Lighting::propagateAll(World& world, const BlockRegistry& blocks) {
 }
 
 void Lighting::updateLocal(World& world, const BlockRegistry& blocks,
-                           const BlockPos& c) {
+                           const BlockPos& changed) {
+    updateRegion(world, blocks, changed, changed);
+}
+
+void Lighting::updateRegion(World& world, const BlockRegistry& blocks,
+                            const BlockPos& min, const BlockPos& max) {
     const int R = kLightUpdateRadius;
+    // Region shapes: sky light travels vertically without air attenuation,
+    // so the sky re-scan covers FULL COLUMNS over the X/Z footprint (the
+    // changed box's footprint, expanded by R) - one change can light every
+    // block below a broken ceiling; block light dies within 15 steps, so it
+    // is re-propagated in the box expanded by R.
+    const int sx0 = min.x - R;
+    const int sx1 = max.x + R;
+    const int sz0 = min.z - R;
+    const int sz1 = max.z + R;
 
     // The re-light rewrites light in stages (the sky rescan clears values
     // that the BFS may restore), so "dirty" must be decided on the NET
@@ -207,8 +239,8 @@ void Lighting::updateLocal(World& world, const BlockRegistry& blocks,
         // Y-chunk layers; the block box's chunks are a subset of those.
         std::unordered_set<ChunkPos> touched;
         touched.reserve(33 * 33 * 8);
-        for (int x = c.x - R; x <= c.x + R; ++x) {
-            for (int z = c.z - R; z <= c.z + R; ++z) {
+        for (int x = sx0; x <= sx1; ++x) {
+            for (int z = sz0; z <= sz1; ++z) {
                 const int cx = floorDiv(x, kChunkSize);
                 const int cz = floorDiv(z, kChunkSize);
                 for (int y = 0; y < kWorldHeight; y += kChunkSize) {
@@ -235,8 +267,8 @@ void Lighting::updateLocal(World& world, const BlockRegistry& blocks,
     // change an entire column (a broken ceiling lights every block below
     // it) — the re-light must rescan and re-propagate whole columns, not a
     // box around the change.
-    for (int x = c.x - R; x <= c.x + R; ++x) {
-        for (int z = c.z - R; z <= c.z + R; ++z) {
+    for (int x = sx0; x <= sx1; ++x) {
+        for (int z = sz0; z <= sz1; ++z) {
             rescanColumn(world, blocks, x, z);
         }
     }
@@ -245,9 +277,8 @@ void Lighting::updateLocal(World& world, const BlockRegistry& blocks,
         // Seed: lit cells inside the footprint plus the adjacent column
         // shell. The shell keeps its old (still correct) values and acts as
         // the boundary source for horizontal propagation.
-        const int a = R + 1;
-        for (int x = c.x - a; x <= c.x + a; ++x) {
-            for (int z = c.z - a; z <= c.z + a; ++z) {
+        for (int x = sx0 - 1; x <= sx1 + 1; ++x) {
+            for (int z = sz0 - 1; z <= sz1 + 1; ++z) {
                 for (int y = 0; y < kWorldHeight; ++y) {
                     const BlockPos p{x, y, z};
                     if (!world.hasChunk(worldToChunk(p))) {
@@ -260,19 +291,19 @@ void Lighting::updateLocal(World& world, const BlockRegistry& blocks,
             }
         }
         propagateBFS(world, blocks, true, queue,
-                     [c, R](int x, int, int z) {
-                         return x >= c.x - R && x <= c.x + R &&
-                                z >= c.z - R && z <= c.z + R;
+                     [sx0, sx1, sz0, sz1](int x, int, int z) {
+                         return x >= sx0 && x <= sx1 &&
+                                z >= sz0 && z <= sz1;
                      });
     }
 
     // -- Block light: the ±R box (block light dies within 15 steps). --------
-    const int x0 = c.x - R;
-    const int x1 = c.x + R;
-    const int y0 = std::max(0, c.y - R);
-    const int y1 = std::min(kWorldHeight - 1, c.y + R);
-    const int z0 = c.z - R;
-    const int z1 = c.z + R;
+    const int x0 = sx0;
+    const int x1 = sx1;
+    const int y0 = std::max(0, min.y - R);
+    const int y1 = std::min(kWorldHeight - 1, max.y + R);
+    const int z0 = sz0;
+    const int z1 = sz1;
     std::deque<BlockPos> queue;
 
     // Clear the box; re-seed emission sources (a placed/broken glowstone).

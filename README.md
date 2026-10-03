@@ -37,14 +37,18 @@ cmake --build build
 ./build/bin/minecraft --time 0.75
 ```
 
-## 当前可玩内容（Phase 8）
+## 当前可玩内容（Phase 9）
 
-- **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时），`LeftShift` 冲刺，
-  鼠标转向（**左键点击锁定指针；转向仅在指针锁定时生效**，未锁定的光标
-  不会转动视角——保证无输入运行下截图可逐字节复现）
+- **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时）/游泳时随时上浮，
+  `LeftShift` 冲刺，鼠标转向（**左键点击锁定指针；转向仅在指针锁定时生效**，
+  未锁定的光标不会转动视角——保证无输入运行下截图可逐字节复现）
+- **游泳**（Phase 9）：玩家包围盒与任何水体格相交即进入水中状态——水中重力减半
+  （12 vs 32）、终端速度 4、水平速度降为 3.1（冲刺无效）、`Space` 随时上浮（4.5）；
+  浅水（头在水面上）可以"蹚水走"，深水可以游
 - **方块交互**（DDA 体素 raycast，reach 5 格）：
   - `左键`（锁定时）：破坏准星指向的方块（`properties.destroyable` 数据驱动，
-    水/基岩不可破坏）
+    基岩不可破坏）；raycast 把水体当 air 穿过——可以隔水破坏湖底/水下的方块
+    （水会被破坏排水、随后流体模拟把它补回）
   - `右键`（锁定时）：在命中面的邻格放置当前选中的方块（不能放进 solid 方块
     或玩家自身包围盒内）
   - `Tab`：切换选中方块（`assets/data/hotbar.json` 数据驱动列表，临时方案，
@@ -61,7 +65,8 @@ cmake --build build
   - **地形**：fBm 2D 噪声高度场（±24 格，基线 40），y=0 bedrock 层，深处 stone
   - **生物群系**：低频噪声 + 权重选择（`assets/data/biomes/*.json`：desert/forest/plains），
     各 biome 有自己的表层/次表层/树密度/高度系数
-  - **水**：低于海平面（y=34）的柱体填充水到海平面（静态，流体模拟在 Phase 9）
+  - **水**：低于海平面（y=34）的柱体填充流体水（fluid level 8）到海平面；
+    生成即处于平衡态（游戏内 20Hz 流体 tick 不会扰动湖面）
   - **洞穴**：3D 噪声阈值雕刻，保留表层 4 格与底层 2 格的壳
   - **矿脉**：世界空间格网 + 随机游走（coal/iron/gold/diamond，`max_y` 分层限制），
     跨 chunk 无缝；只替换 stone（不破坏洞穴）
@@ -69,6 +74,18 @@ cmake --build build
     跨 chunk 边界由邻接 chunk 各自补齐（边际格网机制），只写入 air（不破坏地形）
 - **演示区**：4×4 chunk 列（64×64 方块）；玩家按 seed 自动出生在干燥陆地上
   （候选列需满足：高于海平面 + 出生包围盒内无方块，避开树干/树冠）
+- **流体模拟（水，Phase 9）**：每个 chunk 一个 16³ 的 0-8 等级数组
+  （8=满/源，1-7 流动；同一 cell 里水与方块互斥）。`FluidSim::tick`（游戏线程，
+  每 3 帧一次 ≈20Hz，快照式确定性）：下落（下方空/流动则沿列传送带下移）、
+  满格失撑也下落（对 MC 的刻意偏离）、静止在方块上水平扩散 L-1（1 级终端）、
+  坐在**满水**上补满到 8（source 托底的柱是满的——破坏湖底后整列补满、湖面恢复）、
+  坐在流动池上按等级吸收/抬升（水量不守恒，见 `KNOWN_ISSUES.md`）。
+  `World::setFluid` 只写已存在 chunk 的 air 格；`setBlock` 会把所在格的水排掉
+- **水的光照衰减**：天空光每穿一格水 -3（列顶扫描 + BFS 与不透明方块共用传播器）；
+  深水湖底随深度变暗（截图可见浅水亮、深水暗的渐变）
+- **半透明水体渲染**：`ChunkMesher::emitFluid` 输出 level/8 缩放的立方体（流动水
+  顶面半高），水-水内部面剔除，流体面烘焙**自身格**的光；shader 使用纹理 alpha
+  （水 α≈0.78 / 玻璃 α≈0.21 / 叶子 α≈0.92 + 透明孔），湖面可透视湖底
 - **Face Culling 网格化**：只渲染暴露给 air/非 opaque 邻居的面；跨 chunk 边界通过
   `World` 查询邻居剔除；每个 chunk 输出 opaque + transparent 两个 mesh，
   渲染顺序不透明 → alpha 混合（leaves/glass/water）
@@ -172,7 +189,9 @@ mine-craft/
 │   └── world/       # 体素世界：coordinates（world/chunk/local 转换）、Chunk（块+光照数组）、
 │                    # World、ChunkMesher（按面烘焙光照）、day_cycle（昼夜循环：时间/
 │                    # dayFactor/天空色/日月方位/确定性星空）、raycast（DDA 体素射线+放置校验）、
-│                    # lighting（Sky/Block Light 0-15 传播与局部更新）、noise（确定性
+│                    # lighting（Sky/Block Light 0-15 传播与局部更新，水每格衰减 3）、
+│                    # fluid（FluidSim：0-8 等级水模拟——下落/扩散/吸收/补满）、
+│                    # noise（确定性
 │                    # value noise/fBm）、BiomeRegistry、WorldgenParams（worldgen.json）、
 │                    # WorldGenerator（Seed 可复现生成）
 ├── tools/           # 开发工具：generate_block_textures.py（16x16 占位纹理生成）
@@ -190,7 +209,7 @@ mine-craft/
 - [x] **Phase 6** — Raycast：方块破坏/放置
 - [x] **Phase 7** — 光照：Sky/Block Light（0-15），传播与更新
 - [x] **Phase 8** — 昼夜循环：太阳/月亮/星星/天空色（dayFactor 缩放天空光）
-- [ ] **Phase 9** — 流体：水（FluidState/FluidLevel/水平扩散）
+- [x] **Phase 9** — 流体：水（0-8 等级/下落/水平扩散/水光衰减/游泳/半透明水面）
 - [ ] **Phase 10** — 实体系统：Entity/Player/ItemEntity/Projectile
 - [ ] **Phase 11** — 物品与背包：Item/ItemStack/Inventory
 - [ ] **Phase 12** — 合成：数据驱动 Recipe

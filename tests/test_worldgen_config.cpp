@@ -30,7 +30,6 @@ TEST(WorldgenConfigTest, EmptyObjectYieldsDefaults) {
     EXPECT_EQ(p.heightOctaves, 4);
     EXPECT_EQ(p.bottomBlock, "stone");
     EXPECT_EQ(p.deepBlock, "stone");
-    EXPECT_EQ(p.waterBlock, "water");
     EXPECT_FLOAT_EQ(p.biomeNoiseScale, 0.02f);
     EXPECT_TRUE(p.cavesEnabled);
     EXPECT_FLOAT_EQ(p.caveThreshold, 0.68f);
@@ -50,7 +49,7 @@ TEST(WorldgenConfigTest, FullOverride) {
         R"({)"
         R"("terrain":{"base_height":50,"height_amplitude":10,"sea_level":30,)"
         R"("height_noise_scale":0.02,"height_octaves":3,)"
-        R"("bottom_block":"bedrock","deep_block":"stone","water_block":"water"},)"
+        R"("bottom_block":"bedrock","deep_block":"stone"},)"
         R"("biomes":{"noise_scale":0.005},)"
         R"("caves":{"enabled":false,"noise_scale":0.05,"threshold":0.7,)"
         R"("min_y":3,"surface_guard":6},)"
@@ -159,11 +158,11 @@ TEST(WorldgenConfigTest, RejectsInvalidThreshold) {
     EXPECT_NE(r.error().message.find("threshold"), std::string::npos);
 }
 
-TEST(WorldgenConfigTest, RejectsEmptyWaterBlock) {
+TEST(WorldgenConfigTest, RejectsEmptyBottomBlock) {
     auto r = WorldgenParams::parse(
-        parseJson(R"({"terrain":{"water_block":""}})"));
+        parseJson(R"({"terrain":{"bottom_block":""}})"));
     ASSERT_FALSE(r.ok());
-    EXPECT_NE(r.error().message.find("water"), std::string::npos);
+    EXPECT_NE(r.error().message.find("bottom"), std::string::npos);
 }
 
 TEST(WorldgenConfigTest, RejectsNegativeAmplitude) {

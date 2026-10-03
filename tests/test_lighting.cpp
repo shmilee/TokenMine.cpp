@@ -1,5 +1,5 @@
 // Lighting tests: sky-light column scan + propagation (height, occlusion,
-// horizontal attenuation, vertical free fall, water pass-through),
+// horizontal attenuation, vertical free fall, water attenuation),
 // block-light sources/attenuation/occlusion, cross-chunk propagation,
 // dirty tracking of local updates, and the key invariant: a local re-light
 // (updateLocal) after a single block change must produce exactly the same
@@ -216,19 +216,68 @@ TEST(LightingTest, SkyHorizontalAttenuationVerticalFree) {
     EXPECT_EQ(world.getSkyLight(2, 10, 8), 0);
 }
 
-TEST(LightingTest, WaterPassesSkyLight) {
-    // Binary opacity: water (non-opaque) does not attenuate sky light.
+TEST(LightingTest, WaterAttenuatesSkyLightVertically) {
+    // Enclosed water column: the open top admits sky 15, then each water
+    // cell costs kFluidLightAttenuation on the way down (the walls block
+    // side entry, so the column scan's values stand).
+    const BlockRegistry reg = makeRegistry();
+    const BlockID stone = idOf(reg, "stone");
+    World world;
+    fillBox(world, 7, 0, 7, 9, 0, 9, stone); // the floor
+    fillBox(world, 7, 1, 7, 9, 5, 9, stone); // a sealed box (open top)
+    for (int y = 1; y <= 5; ++y) {
+        world.setBlock(8, y, 8, BlockID::air()); // hollow out the column
+        ASSERT_TRUE(world.setFluid(8, y, 8, kMaxFluidLevel));
+    }
+    Lighting::propagateAll(world, reg);
+    EXPECT_EQ(world.getSkyLight(8, 5, 8), 12); // 15 - 3
+    EXPECT_EQ(world.getSkyLight(8, 4, 8), 9);  // 12 - 3
+    EXPECT_EQ(world.getSkyLight(8, 3, 8), 6);
+    EXPECT_EQ(world.getSkyLight(8, 2, 8), 3);
+    EXPECT_EQ(world.getSkyLight(8, 1, 8), 0);
+    EXPECT_EQ(world.getSkyLight(8, 0, 8), 0); // opaque floor
+}
+
+TEST(LightingTest, WaterSideEntryRaisesColumn) {
+    // The same column WITHOUT walls: open air beside the water spreads in
+    // at 15 - 3 = 12 per cell (max wins), so the whole column reads 12.
     const BlockRegistry reg = makeRegistry();
     World world;
     world.setBlock(8, 0, 8, idOf(reg, "stone"));
-    const BlockID water = idOf(reg, "water");
     for (int y = 1; y <= 5; ++y) {
-        world.setBlock(8, y, 8, water);
+        ASSERT_TRUE(world.setFluid(8, y, 8, kMaxFluidLevel));
     }
     Lighting::propagateAll(world, reg);
-    EXPECT_EQ(world.getSkyLight(8, 1, 8), 15);
-    EXPECT_EQ(world.getSkyLight(8, 5, 8), 15);
+    for (int y = 1; y <= 5; ++y) {
+        EXPECT_EQ(world.getSkyLight(8, y, 8), 12);
+    }
     EXPECT_EQ(world.getSkyLight(8, 0, 8), 0);
+}
+
+TEST(LightingTest, BlockLightThroughWater) {
+    // A glowstone beside a 4-cell puddle under a stone ceiling (which
+    // blocks the cheaper air route over the puddle): entering each water
+    // cell costs kFluidLightAttenuation (12, 9, 6, 3); air beyond the
+    // puddle costs 1.
+    const BlockRegistry reg = makeRegistry();
+    World world;
+    world.setBlock(8, 0, 8, idOf(reg, "glowstone"));
+    for (int x = 8; x <= 14; ++x) {
+        world.setBlock(x, 1, 8, idOf(reg, "stone")); // the ceiling
+        world.setBlock(x, 0, 7, idOf(reg, "stone")); // side walls, so the
+        world.setBlock(x, 0, 9, idOf(reg, "stone")); // light can't route
+    }                                                     // around
+    for (int x = 9; x <= 12; ++x) {
+        ASSERT_TRUE(world.setFluid(x, 0, 8, kMaxFluidLevel));
+    }
+    Lighting::propagateAll(world, reg);
+    EXPECT_EQ(world.getBlockLight(8, 0, 8), 15); // the source keeps its value
+    EXPECT_EQ(world.getBlockLight(9, 0, 8), 12);
+    EXPECT_EQ(world.getBlockLight(10, 0, 8), 9);
+    EXPECT_EQ(world.getBlockLight(11, 0, 8), 6);
+    EXPECT_EQ(world.getBlockLight(12, 0, 8), 3);
+    EXPECT_EQ(world.getBlockLight(13, 0, 8), 2); // air beyond: -1
+    EXPECT_EQ(world.getBlockLight(14, 0, 8), 1);
 }
 
 // -- block light ----------------------------------------------------------------
@@ -385,6 +434,59 @@ TEST(LightingTest, UpdateLocalKeepsDistantSourceLight) {
     Lighting::updateLocal(local, reg, {30, 1, 8});
     Lighting::propagateAll(full, reg);
     expectSameLight(local, full);
+}
+
+// -- updateRegion (batched cell changes, e.g. a fluid tick) ------------------------
+
+TEST(LightingTest, UpdateRegionAfterFluidChange) {
+    const BlockRegistry reg = makeRegistry();
+    const BlockID stone = idOf(reg, "stone");
+    World local, full;
+    // A walled 4x4 pool, 3 deep, in the middle of chunk {0,0,0}; an
+    // unrelated empty chunk at {3,0,0}.
+    const auto buildPool = [&](World& w) {
+        w.getOrCreateChunk({0, 0, 0});
+        w.getOrCreateChunk({3, 0, 0});
+        fillBox(w, 0, 0, 0, 15, 0, 15, stone);
+        for (int x = 6; x <= 9; ++x) {
+            for (int z = 6; z <= 9; ++z) {
+                for (int y = 1; y <= 3; ++y) {
+                    ASSERT_TRUE(w.setFluid(x, y, z, kMaxFluidLevel));
+                }
+            }
+        }
+        for (int y = 1; y <= 3; ++y) {
+            for (int x = 5; x <= 10; ++x) {
+                for (int z = 5; z <= 10; ++z) {
+                    if (x >= 6 && x <= 9 && z >= 6 && z <= 9) {
+                        continue;
+                    }
+                    w.setBlock(x, y, z, stone); // the walls
+                }
+            }
+        }
+    };
+    buildPool(local);
+    buildPool(full);
+    Lighting::propagateAll(local, reg);
+    Lighting::propagateAll(full, reg);
+
+    // Two fluid changes: drain the pool's bottom center, add a shallow
+    // puddle cell at the pool's corner. The bounding box spans both.
+    local.setFluid(8, 1, 8, 0);
+    local.setFluid(6, 3, 6, 5);
+    full.setFluid(8, 1, 8, 0);
+    full.setFluid(6, 3, 6, 5);
+    local.findChunkMut({0, 0, 0})->clearDirty();
+    local.findChunkMut({3, 0, 0})->clearDirty();
+    Lighting::updateRegion(local, reg, {6, 1, 6}, {8, 3, 8});
+    Lighting::propagateAll(full, reg);
+    expectSameLight(local, full);
+
+    // Net-change dirty tracking: the pool chunk's light changed (dirty);
+    // the far chunk is outside the re-lit footprint (stays clean).
+    EXPECT_TRUE(local.findChunk({0, 0, 0})->dirty());
+    EXPECT_FALSE(local.findChunk({3, 0, 0})->dirty());
 }
 
 // -- updateLocal dirty tracking ----------------------------------------------------

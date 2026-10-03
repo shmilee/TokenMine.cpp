@@ -4,9 +4,20 @@
 // through the World, so culling is correct across chunk boundaries; a
 // missing neighbor chunk reads as air (faces toward the void are drawn).
 //
-// Known simplification (refined in the lighting/fluid phases): two adjacent
-// non-opaque blocks of the same kind (water next to water, leaves next to
-// leaves) still emit the face between them. Correct, just wasteful.
+// Fluids (water): a cell's fluid level (0..kMaxFluidLevel, see Chunk) is
+// meshed as a cube scaled to a height of level/kMaxFluidLevel — a full
+// level is the ordinary cube. Culling is fluid-aware: a face is hidden by
+// an equal-or-higher fluid neighbor (so water-to-water faces are culled),
+// a top face by an opaque block above, a bottom face by any fluid below.
+// A fluid face is lit by its own cell's light (the water darkens with
+// depth, see lighting). The fluid's textures come from the registry's
+// fluid block (BlockRegistry::fluidBlock, properties.fluid). A fluid block
+// stored in the block array is a data error and is skipped (fluids live in
+// the fluid array, not the block array).
+//
+// Known simplification: two adjacent non-opaque BLOCKS of the same kind
+// (leaves next to leaves) still emit the face between them. Correct, just
+// wasteful. (Water-to-water faces are culled — fluids are level-aware.)
 //
 // Output: two sub-meshes per chunk so the renderer can draw all opaque
 // geometry first and the transparent (blended) geometry second:
@@ -48,6 +59,13 @@ public:
     ChunkMeshData mesh(const ChunkPos& pos) const;
 
 private:
+    // Emit the fluid surface of one cell (level > 0) into the transparent
+    // sub-mesh: the unit-cube faces scaled to level/kMaxFluidLevel, with
+    // fluid-aware culling and the cell's own light baked in.
+    void emitFluid(ChunkMeshData& out, const Block& fluidBlock,
+                   const BlockPos& origin, int lx, int ly, int lz,
+                   std::uint8_t level) const;
+
     const World& m_world;
     const BlockRegistry& m_blocks;
     const AtlasLayout& m_layout;

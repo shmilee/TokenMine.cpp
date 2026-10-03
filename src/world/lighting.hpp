@@ -2,26 +2,33 @@
 // chunk (see Chunk) and queried through World::getSkyLight/getBlockLight.
 //
 // Propagation model (simplified Minecraft):
-//  - A cell blocks light iff its block is properties.opaque (binary
-//    opacity: opaque = 15, otherwise 0 — water/leaves pass light through).
+//  - A cell blocks light iff its block is properties.opaque. Air is free
+//    for sky light; a fluid cell (water) attenuates by
+//    kFluidLightAttenuation (Minecraft's water value) in every direction —
+//    a lake bottom is dim in proportion to the water depth.
 //  - Sky light: every column's topmost contiguous run of non-opaque cells
-//    reads 15 (open to the sky); light then propagates through
-//    non-opaque cells, free vertically, -1 per horizontal step.
+//    reads 15 (open to the sky), attenuated per fluid cell while scanning
+//    down; light then propagates through non-opaque cells, free vertically
+//    in air, -1 per horizontal air step, -3 per fluid cell.
 //  - Block light: every block with properties.lightEmission > 0 is a
 //    source (its own cell holds the emission value, even if opaque);
-//    light propagates through non-opaque cells, -1 per step in all
-//    directions.
-//  - The void around the world is open sky (sky 15, block 0).
+//    light propagates through non-opaque cells, -1 per air step, -3 per
+//    fluid cell, in all directions.
+//  - The void around the world is open sky (sky 15, block 0) and dry.
 //
-// Two entry points share one BFS core:
+// Three entry points share one BFS core:
 //  - propagateAll: recompute everything (startup, new chunk created).
-//  - updateLocal: after a single block change, re-light only the region
-//    that can have changed — see the method docs for the region shapes
-//    (sky: full columns in a ±radius footprint, because sky light travels
-//    vertically without attenuation; block: a ±radius box, because block
-//    light decays away within 15 steps). Cells outside the region keep
-//    their previous values, which remain correct, and serve as read-only
-//    boundary sources for the propagation.
+//  - updateLocal: after a single block change, re-light the ±radius region
+//    around it (a one-cell box, see updateRegion).
+//  - updateRegion: after a batch of cell changes (a fluid tick), re-light
+//    the region around their bounding box.
+//    Region shape: sky light travels vertically without air attenuation,
+//    so the sky re-scan covers FULL COLUMNS over the box's X/Z footprint
+//    (expanded by the radius); block light decays within 15 steps, so it
+//    is re-propagated in the box expanded by the radius. Cells outside the
+//    region keep their previous values, which remain correct, and serve as
+//    read-only boundary sources for the propagation. Only chunks whose
+//    light actually changed (net) are marked dirty.
 #pragma once
 
 #include "block/block_registry.hpp"
@@ -32,9 +39,12 @@ namespace mc {
 
 // Highest light value (Minecraft's light scale).
 inline constexpr int kMaxLight = 15;
-// Re-light radius after a single block change: max light range (15) plus a
-// one-cell boundary margin.
+// Re-light radius after cell changes: max light range (15) plus a one-cell
+// boundary margin.
 inline constexpr int kLightUpdateRadius = 16;
+// Light lost when entering a fluid cell (Minecraft's water value), applied
+// in every direction for both sky and block light.
+inline constexpr int kFluidLightAttenuation = 3;
 
 class Lighting {
 public:
@@ -48,6 +58,13 @@ public:
     // chunks that came out identical are left untouched.
     static void updateLocal(World& world, const BlockRegistry& blocks,
                             const BlockPos& changed);
+
+    // Re-light the region whose light can have changed after a batch of
+    // cell changes inside the [min, max] box (a fluid tick passes the
+    // bounding box of its changed cells; a single cell is min == max).
+    // Same net-change dirty semantics as updateLocal.
+    static void updateRegion(World& world, const BlockRegistry& blocks,
+                             const BlockPos& min, const BlockPos& max);
 };
 
 } // namespace mc

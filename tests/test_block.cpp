@@ -70,6 +70,27 @@ TEST(BlockRegistryTest, FullDefinition) {
     EXPECT_TRUE(textures.count("dirt"));
 }
 
+TEST(BlockRegistryTest, FluidBlockLookup) {
+    BlockRegistry reg;
+    // No fluid block yet (air is not one).
+    EXPECT_FALSE(reg.fluidBlock().has_value());
+    ASSERT_TRUE(reg.registerBlock(parseDef(minimalDef("stone"))).ok());
+    EXPECT_FALSE(reg.fluidBlock().has_value());
+    const std::string waterDef =
+        R"({"id":"water","properties":{"fluid":true},"model":{"textures":{"top":)"
+        R"("t","side":"t","bottom":"t"}}})";
+    auto r = reg.registerBlock(parseDef(waterDef));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    ASSERT_TRUE(reg.fluidBlock().has_value());
+    EXPECT_EQ(*reg.fluidBlock(), *r);
+    // The first fluid block wins (the game defines exactly one).
+    const std::string lavaDef =
+        R"({"id":"lava","properties":{"fluid":true},"model":{"textures":{"top":)"
+        R"("t","side":"t","bottom":"t"}}})";
+    ASSERT_TRUE(reg.registerBlock(parseDef(lavaDef)).ok());
+    EXPECT_EQ(*reg.fluidBlock(), *r);
+}
+
 TEST(BlockRegistryTest, RejectsDuplicateId) {
     BlockRegistry reg;
     ASSERT_TRUE(reg.registerBlock(parseDef(minimalDef("stone"))).ok());

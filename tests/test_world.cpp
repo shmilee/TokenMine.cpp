@@ -144,6 +144,73 @@ TEST(WorldTest, BoundarySetWithoutNeighborOnlyMarksSelf) {
     EXPECT_EQ(world.chunkCount(), 1u);
 }
 
+TEST(WorldTest, EmptyWorldReadsNoFluid) {
+    World world;
+    EXPECT_EQ(world.getFluid(0, 0, 0), 0);
+    EXPECT_EQ(world.getFluid(-5, 3, 10), 0);
+    EXPECT_EQ(world.getFluid(0, -1, 0), 0);
+    EXPECT_EQ(world.getFluid(0, kWorldHeight, 0), 0);
+}
+
+TEST(WorldTest, SetFluidRoundTripNeedsExistingChunk) {
+    World world;
+    // The void is dry: setFluid never creates a chunk.
+    EXPECT_FALSE(world.setFluid(3, 5, 3, 8));
+    EXPECT_EQ(world.chunkCount(), 0u);
+
+    world.getOrCreateChunk({0, 0, 0});
+    ASSERT_TRUE(world.setFluid(3, 5, 3, 8));
+    EXPECT_EQ(world.getFluid(3, 5, 3), 8);
+    EXPECT_EQ(world.getFluid(4, 5, 3), 0);
+    // Level 0 (drain) works too.
+    ASSERT_TRUE(world.setFluid(3, 5, 3, 0));
+    EXPECT_EQ(world.getFluid(3, 5, 3), 0);
+}
+
+TEST(WorldTest, SetFluidValidation) {
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    // Out-of-range levels and Y are refused.
+    EXPECT_FALSE(world.setFluid(3, 5, 3, static_cast<std::uint8_t>(
+        kMaxFluidLevel + 1)));
+    EXPECT_FALSE(world.setFluid(3, -1, 3, 8));
+    EXPECT_FALSE(world.setFluid(3, kWorldHeight, 3, 8));
+    // A block-occupied cell refuses fluid (block XOR fluid).
+    ASSERT_TRUE(world.setBlock(3, 5, 3, BlockID{1}));
+    EXPECT_FALSE(world.setFluid(3, 5, 3, 8));
+    EXPECT_EQ(world.getFluid(3, 5, 3), 0);
+    // An unchanged level is a no-op (does not re-dirty).
+    ASSERT_TRUE(world.setFluid(4, 5, 3, 8));
+    world.findChunkMut({0, 0, 0})->clearDirty();
+    EXPECT_FALSE(world.setFluid(4, 5, 3, 8));
+    EXPECT_FALSE(world.findChunk({0, 0, 0})->dirty());
+}
+
+TEST(WorldTest, SetBlockDisplacesFluid) {
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    ASSERT_TRUE(world.setFluid(3, 5, 3, 8));
+    // Placing a block into the water cell displaces the fluid (Minecraft's
+    // place-into-water behavior).
+    ASSERT_TRUE(world.setBlock(3, 5, 3, BlockID{1}));
+    EXPECT_EQ(world.getBlock(3, 5, 3), BlockID{1});
+    EXPECT_EQ(world.getFluid(3, 5, 3), 0);
+}
+
+TEST(WorldTest, BoundarySetFluidMarksNeighborDirty) {
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    world.getOrCreateChunk({1, 0, 0});
+    world.getOrCreateChunk({0, 0, 0}).clearDirty();
+    world.getOrCreateChunk({1, 0, 0}).clearDirty();
+    // Local x=15 of chunk 0 shares a face with chunk 1: a fluid change
+    // there invalidates both meshes (the neighbor's water-face culling
+    // depends on it).
+    ASSERT_TRUE(world.setFluid(15, 4, 4, 8));
+    EXPECT_TRUE(world.findChunk({0, 0, 0})->dirty());
+    EXPECT_TRUE(world.findChunk({1, 0, 0})->dirty());
+}
+
 TEST(WorldTest, ChunkPositionsSorted) {
     World world;
     world.getOrCreateChunk({3, 0, -2});

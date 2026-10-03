@@ -104,7 +104,6 @@ Result<WorldGenerator> WorldGenerator::create(std::int64_t seed,
     const FillBlock fills[] = {
         {"terrain bottom block", params.bottomBlock, &gen.m_bottom},
         {"terrain deep block", params.deepBlock, &gen.m_deep},
-        {"terrain water block", params.waterBlock, &gen.m_water},
         {"tree trunk block", params.treeTrunk, &gen.m_trunk},
         {"tree leaves block", params.treeLeaves, &gen.m_leaves},
     };
@@ -207,11 +206,14 @@ void WorldGenerator::fillTerrain(Chunk& chunk, const ChunkPos& pos,
                     id = (wy < h - b.subsurfaceDepth) ? m_deep : b.subsurface;
                 } else if (wy == h) {
                     id = b.surface;
-                } else if (h < m_params.seaLevel && wy <= m_params.seaLevel) {
-                    // The column is underwater: fill air up to the sea level.
-                    id = m_water;
                 }
                 chunk.set(lx, ly, lz, id);
+                if (h < m_params.seaLevel && wy > h && wy <= m_params.seaLevel) {
+                    // The column is underwater: fill the full fluid level up
+                    // to the sea level (water lives in the fluid array; the
+                    // block stays air).
+                    chunk.setFluidAt(lx, ly, lz, kMaxFluidLevel);
+                }
             }
         }
     }

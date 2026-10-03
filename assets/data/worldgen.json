@@ -6,8 +6,7 @@
     "height_noise_scale": 0.02,
     "height_octaves": 4,
     "bottom_block": "bedrock",
-    "deep_block": "stone",
-    "water_block": "water"
+    "deep_block": "stone"
   },
   "biomes": {
     "noise_scale": 0.02

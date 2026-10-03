@@ -5,8 +5,9 @@
 
 ## 渲染
 
-- **同类非 opaque 方块之间的内部面仍会生成**（水挨水、叶子挨叶子）— 剔除规则 v1 只判断"邻居是否 opaque"，结果正确但多发了面。`[Phase 3]` 计划随流体（Phase 9）细化为"邻居是否为同种流体"。
-- **光的遮挡是二值的**（opaque=15，其余=0）— 水/玻璃/叶子不衰减光（Minecraft 中水每格衰减天空光 2、叶子有 fancy 选项）。光照数据里只有 `opaque` 布尔，没有 0-15 的 opacity 字段；要支持需改 `BlockProperties` + 数据 + 传播算法（衰减系数）。`[Phase 7]`
+- **叶子挨叶子的内部面仍会生成** — 剔除规则 v1 只判断"邻居是否 opaque"，结果正确但多发了面。水-水的内部面已在 Phase 9 由流体网格化剔除（相邻水位相同/更高的水面不出面）；叶子-叶子待细化为"邻居是否为同种方块"。`[Phase 3]`（水部分 `[Phase 9]` 已解决）
+- **玻璃/叶子不衰减光** — 光的遮挡对非水方块仍是二值的（opaque=15，其余=0）：Minecraft 中玻璃/叶子有衰减（叶子有 fancy 选项）。水的每格衰减（天空光 -3）已在 Phase 9 实现；玻璃/叶子要支持需给 `BlockProperties` 加 0-15 的 opacity 字段并改传播算法（衰减系数）。`[Phase 7]`（水部分 `[Phase 9]` 已解决）
+- **水面是 level/8 缩放的立方体顶面，无波纹动画** — 流动水（level 1-7）的顶面高度按等级线性缩放，静态观感；Minecraft 有水面波纹动画。`[Phase 9]`
 - **按面采样光照，无逐顶点插值/环境光遮蔽** — 每个面采样面后方一格的光值，4 个顶点同值（块状光照感，Minecraft 经典观感）；无 AO 阴影。`[Phase 7]`
 - **昼夜是呈现层缩放，不是夜间重算光照** — 天空光恒按正午存储（0-15），渲染时 sky × dayFactor（夜晚=0）。Minecraft 会在夜间真正重传播光照（例如日落时光线从洞口退出的动态变化）；本实现夜晚的天空光区域是"均匀变暗"，无动态传播变化。方块光（glowstone）不受昼夜影响（与 MC 一致）。`[Phase 8]`
 - **昼夜时间按每帧固定 1/60s 推进（非墙钟）** — 保证无输入运行（截图验证）逐字节可复现；代价是非 60Hz 显示器上昼夜的真实时间速度按比例偏差（120Hz = 2× 速）。`[Phase 8]`
@@ -19,7 +20,6 @@
 
 ## 世界 / 生成
 
-- **水是静态方块** — 无水平扩散/下落/FluidState。`[Phase 3]` Phase 9 实现流体模拟。
 - **洞穴是"奶酪洞"** — 单个 3D 噪声阈值雕刻（`caves.threshold`），生成的是团块状空腔，不是 Minecraft 式的 spaghetti 隧道（两条 3D 噪声相交）。形状可用配置调，但拓扑类型要等以后升级。`[Phase 4]`
 - **矿脉是简化随机游走** — 从世界空间格网单元出发、每步 27 邻域随机走的短链（`vein_size` 个方块）；不是 Minecraft 的 3×2×1 旋转椭球 vein。跨 chunk 无缝（格网+边际机制），分布由 `ores.veins` 数据驱动。`[Phase 4]`
 - **树是固定模板** — 树干 1×N（4~7）+ 两层半径 2 树冠 + 顶部半径 1 帽，无生长阶段、无 BlockState、无树种差异（不同树只有高度随机）。`[Phase 4]`
@@ -30,11 +30,15 @@
 - **无准星/目标高亮** — 破坏/放置靠 raycast 命中，但屏幕上没有准星，也没有 MC 式的目标方块描边；命中判定纯几何（reach 5）。`[Phase 6]` 随 UI（Phase 15）加准星+描边。
 - **破坏是瞬时的** — 无破坏耗时/裂纹动画/工具系统；`properties.hardness` 数据已存在但未使用。`[Phase 6]` 随物品/工具（Phase 11）实现。
 - **放置到未生成区域会同步生成 chunk** — 演示区边缘之外放置方块会触发 `getOrCreateChunk`（生成器在游戏线程同步跑）。`[Phase 6]` Phase 14（异步 chunk streaming）。
-- **无游泳/水体物理** — 水是 `solid:false`，玩家直接穿过去，无浮力/游泳速度/水下视角；水可被方块替换（非 solid 格可放置）但不能破坏（`destroyable:false`）。`[Phase 5]` 随流体（Phase 9）一并处理。
 - **无潜行/无 1 格自动台阶** — 上 1 格台阶必须主动跳跃；无 crouch（卡 1.8 门框）、无自动 step-up。`[Phase 5]`
 - **水平速度无惯性** — 期望速度每 tick 直接设定（无加速/摩擦），松键即停。手感可用但非 Minecraft 式平滑。`[Phase 5]`
 - **虚空坠落 = 传送回出生点** — 世界边缘是虚空（见渲染节），掉到 y < -32 直接回出生点，无死亡/掉落伤害/护甲。`[Phase 5]` 随 chunk streaming（Phase 14）+ 死亡机制处理。
 - **无实体/物品/合成/存档** — Phase 10/11/12/13（Phase 10 会把 Player 并入统一 Entity 体系）。
+- **水量不守恒** — 简化规则下流体体积会凭空增减：浅膜落入更深流动池被"吸收"（池保持原水位）；下落链落入世界底部直接消失；落入池时按等级抬升池水位而非按体积换算。Minecraft 用源/流动状态机近似守恒。`[Phase 9]`
+- **满水格（source）失去支撑会下落** — 对 Minecraft 的刻意偏离：MC 中 source 水不随支撑消失而下落（只会停止扩散）；本实现中任何满格下方为空都会沿列下落（传送带式补位），行为更"物理"但与 MC 不符。`[Phase 9]`
+- **流体不会流进未加载的 chunk** — `World::setFluid` 只写已存在 chunk（不创建）；FluidSim 只 tick 已存在 chunk。湖流到演示区边缘会"暂停"，chunk 加载后恢复扩散。`[Phase 9]` 随 chunk streaming（Phase 14）自然缓解。
+- **只有一种流体（水）** — 无岩浆/蜂蜜等；`fluidBlock()` 取第一个 `properties.fluid` 数据方块作纹理参考，加第二种流体需扩展存储（level 数组按流体类型分）。`[Phase 9]`
+- **流体不在存档里** — 保存/加载（Phase 13）目前不含 per-chunk 流体数组；存档前需把流体数据纳入修改数据快照。`[Phase 9]` Phase 13。
 
 ## 性能 / 架构
 
@@ -50,6 +54,9 @@
 
 ## 已修复（归档）
 
+- **`[2026-10-04, Phase 9]` 透明 pass 实际渲染为不透明** — basic.frag 硬编码 `alpha=1.0`、只取纹理 `.rgb`，导致"透明 pass"里的水/玻璃/叶子全部不透明（树叶纹理里的 20 个透明孔被渲染成纯黑斑点；水看不见湖底）。改为取纹理 `texel.a`（图集本身是 RGBA，alpha 一直保留在 GPU 纹理里）。副作用：截图 PNG 的 alpha 通道曾写入 framebuffer 混合残留值（水面 α≈0.831），`takeScreenshot` 现在强制 α=255（截图是不透明画面记录）。`[Phase 2]` 引入、`[Phase 9]` 发现并修复。
+- **`[2026-10-04, Phase 9]` 破坏 1 格深湖底后流体列永久振荡** — 落水满格上方的邻居 7 级膜"坐在满水上被吸收"（7→0），下一 tick 邻居再补 7，7↔0 每 tick 振荡、永不平衡（E2E 探针 330 个 tick 后仍振荡）。修复：`FluidSim` 坐在**满水**上的格子补满到 8（有 source 托底的柱是满的——MC 行为），仅"坐在流动（非满）池上"才走吸收/抬升规则。回归测试 `FilmAboveFullWaterRefillsToFull` + `BrokenLakeFloorRefillsAndSettles`。
+- **`[2026-10-04, Phase 9]` 水是静态方块/无游泳** — Phase 9 实现完整流体：per-chunk 0-8 等级数组（8=满/源，1-7 流动；cell 里水与方块互斥），`World::setFluid`（只写已有 chunk、只写 air 格）/`setBlock` 排水；`FluidSim::tick`（快照式、下落传送带、水平扩散 L-1、1 级终端、满水托底补满、max-merge 冲突合并、确定性）游戏线程 20Hz（每 3 帧一次）；玩家游泳（水中重力 12/终端 4/水平 3.1/Space 上浮 4.5，AABB 与流体格相交判定）；光照水衰减（天空光每格 -3，列扫描+BFS）；网格化 `emitFluid`（level/8 缩放立方体、水-水剔面、流体面烘焙自身格光）；世界生成湖改填 fluid 8（`worldgen.json` 移除 `water_block` 键，water 数据方块仅作纹理参考经 `BlockRegistry::fluidBlock()`）。
 - **`[2026-10-03, Phase 8]` 静态天空色/无昼夜** — Phase 8 实现昼夜循环：`DayCycle`（`src/world/day_cycle.{hpp,cpp}`，确定性游戏内时间）；shader 天空光 × `u_dayFactor`（黎明/黄昏 smoothstep 渐变，夜晚天空光=0，方块光不受影响）；天空背景色关键帧插值（夜蓝→黎明橙→昼蓝→黄昏橙→夜蓝，正午段与 Phase 1-7 天空色逐位一致——保证基线截图不变）；太阳/月亮/300 颗星为像素级圆形 billboard quad（`assets/shaders/sky.{vert,frag}`，Renderer::drawSky，无 u_model）。新增 CLI `--time <0..1>` 与配置 `world.day_length_seconds`（240）/`world.start_time_of_day`（0.25）。
 - **`[2026-10-03, Phase 7]` 占位方向光** — 替换为正式光照系统：每 chunk 两个 16³ 字节数组（sky/block light，0-15）；天空光=列顶扫描（最高 opaque 上方=15）+ BFS（垂直无衰减、水平 -1）；方块光=light_emission 源 BFS（全方向 -1）；setBlock 后局部重传播（天空光按整列、方块光按 ±16 盒，区域外读旧值作边界）；渲染改为顶点烘焙按面光值 + MC 经典面着色（顶 1.0/侧 0.8,0.6/底 0.5）+ 3% 环境光下限；shader 移除 u_lightDir 方向光。关键不变量有测试保证：`updateLocal` 与 `propagateAll` 结果逐格一致。
 - **`[2026-10-03, Phase 3]` face 表 +Y/-Y 面绕序反了** — 顶面从上方看是顺时针（被 GL 背面剔除，永远看不见），底面从上方可见。Phase 1/2 的截图验证只采样了侧面纹理，掩盖了该 bug；Phase 3 排查渲染异常时发现并修正，新增绕序回归测试（`FaceWindingIsCounterClockwiseFromOutside`）防复发。

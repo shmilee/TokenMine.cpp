@@ -29,7 +29,9 @@
 //
 // The World + BlockRegistry are the sole source of solid/air: the player
 // reads properties.solid and never switches on block identity. Water is
-// non-solid, so the player passes through it (no swimming in Phase 5).
+// non-solid (the player can be inside it); when the AABB overlaps a fluid
+// cell the player SWIMS: reduced gravity/terminal velocity, reduced
+// horizontal speed, and Space swims upward (Minecraft-style, Phase 9).
 #pragma once
 
 #include "core/input.hpp"
@@ -51,6 +53,13 @@ public:
         float jumpSpeed = 8.5f;      // initial vertical velocity (blocks/s)
         float gravity = 32.0f;       // downward acceleration (blocks/s^2)
         float terminalVelocity = 38.0f; // max fall speed (blocks/s)
+        // Swimming (while the AABB overlaps a fluid cell): reduced gravity
+        // and sink speed, a lower horizontal speed, and Space swims upward
+        // instead of jumping (Minecraft-style values).
+        float swimSpeed = 3.1f;         // horizontal speed in water (blocks/s)
+        float swimUpSpeed = 4.5f;       // vertical velocity while swimming up
+        float waterGravity = 12.0f;     // downward acceleration in water (blocks/s^2)
+        float waterTerminalVelocity = 4.0f; // max sink speed in water (blocks/s)
         float mouseSensitivity = 0.0025f; // radians / pixel
     };
 
@@ -93,8 +102,9 @@ public:
 
 private:
     // One physics sub-step (look + desired velocity are applied per tick,
-    // not per sub-step, in update()).
-    void step(double h, const Input& input);
+    // not per sub-step, in update()). `inWater` is the tick's water state
+    // (swim physics instead of air physics while true).
+    void step(double h, const Input& input, bool inWater);
 
     // Move along one axis by `delta` and resolve against solid blocks.
     // For the Y axis, a downward clamp sets m_onGround.
@@ -102,6 +112,9 @@ private:
 
     // Solid = registered block with properties.solid (air is never solid).
     bool isSolid(BlockID id) const;
+
+    // The AABB overlaps at least one fluid cell (water).
+    bool isInWater() const;
 
     const World& m_world;
     const BlockRegistry& m_blocks;

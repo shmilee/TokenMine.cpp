@@ -306,6 +306,78 @@ TEST(PlayerTest, WalksThroughWater) {
     EXPECT_TRUE(p.onGround());
 }
 
+// -- swimming (Phase 9: fluid cells) ------------------------------------------
+
+namespace {
+
+// A 2-deep pool of full fluid (y=1..2) on the fixture's floor.
+void buildPool(Fixture& f, int x0, int x1, int z0, int z1) {
+    for (int x = x0; x <= x1; ++x) {
+        for (int z = z0; z <= z1; ++z) {
+            f.world.setFluid(x, 1, z, kMaxFluidLevel);
+            f.world.setFluid(x, 2, z, kMaxFluidLevel);
+        }
+    }
+}
+
+} // namespace
+
+TEST(PlayerTest, SwimsUpWithSpace) {
+    Fixture f;
+    buildPool(f, 6, 10, 6, 10);
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f}); // feet on the pool floor
+    Input idle = heldInput({});
+    run(p, 10, idle);
+    ASSERT_TRUE(p.onGround());
+    Input swim = heldInput({GameKey::Space});
+    const float y0 = p.position().y;
+    run(p, 30, swim); // 0.5 s: rises at 4.5, peaks at ~0.84, sinks slightly
+    EXPECT_GT(p.position().y, y0 + 0.5f); // surfaced out of the pool
+}
+
+TEST(PlayerTest, SinksSlowlyInWater) {
+    Fixture f;
+    buildPool(f, 6, 10, 6, 10);
+    Player p = f.makePlayer({8.5f, 4.0f, 8.5f}); // 1 block above the pool top
+    Input idle = heldInput({});
+    float worst = 0.0f;
+    int cross = -1; // first frame with feet below the pool top (y=3)
+    for (int i = 0; i < 120; ++i) {
+        p.update(kDt, idle, false);
+        if (cross < 0 && p.position().y < 3.0f) {
+            cross = i;
+        }
+        // From the frame AFTER the crossing one, the water physics (with
+        // the 4 blocks/s sink cap) is active; the crossing frame itself was
+        // still air physics at ~8 blocks/s.
+        if (cross > 0 && i > cross && p.velocity().y < -worst) {
+            worst = -p.velocity().y;
+        }
+        if (p.onGround()) {
+            break;
+        }
+    }
+    // The sink speed never exceeds the water terminal (4 blocks/s).
+    EXPECT_LE(worst, 4.0f + 1e-3f);
+    EXPECT_TRUE(p.onGround());
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f); // back on the pool floor
+}
+
+TEST(PlayerTest, SwimSpeedIsReduced) {
+    Fixture f;
+    buildPool(f, 6, 20, 6, 10); // a long pool
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(p, 5, idle);
+    p.yaw = -kPi / 2.0f; // facing +X
+    Input walk = heldInput({GameKey::W});
+    const float x0 = p.position().x;
+    run(p, 30, walk); // 0.5 s
+    // swimSpeed (3.1) x 0.5 s — clearly below walk speed (4.3 x 0.5 = 2.15).
+    EXPECT_NEAR(p.position().x - x0, 1.55f, 0.1f);
+    EXPECT_TRUE(p.onGround());
+}
+
 // -- movement direction / speed ----------------------------------------------
 
 TEST(PlayerTest, MovementDirectionFollowsYaw) {

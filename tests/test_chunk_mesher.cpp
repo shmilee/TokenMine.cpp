@@ -3,6 +3,7 @@
 // positions, outward normals) and per-face UV mapping.
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -139,16 +140,139 @@ TEST(ChunkMesherTest, MissingNeighborChunkEmitsFace) {
     EXPECT_EQ(countVerticesWithNormal(data.opaqueVertices, {-1.0f, 0.0f, 0.0f}), 4);
 }
 
-TEST(ChunkMesherTest, TransparentNeighborDoesNotCull) {
+TEST(ChunkMesherTest, FluidNeighborDoesNotCull) {
     BlockRegistry reg = makeRegistry();
     World world;
     world.setBlock(8, 4, 8, reg.idForName("stone"));
-    world.setBlock(8, 5, 8, reg.idForName("water")); // water on top of stone
+    world.setFluid(8, 5, 8, kMaxFluidLevel); // water on top of stone
     const auto data = mesh(world, reg, {0, 0, 0});
-    // Stone keeps all 6 faces (water does not occlude).
+    // Stone keeps all 6 faces (fluid does not occlude).
     EXPECT_EQ(data.opaqueVertices.size(), 24u);
     // Water: 6 faces minus the bottom (stone is opaque below).
     EXPECT_EQ(data.transparentVertices.size(), 20u);
+}
+
+TEST(ChunkMesherTest, FluidToFluidFacesCulled) {
+    BlockRegistry reg = makeRegistry();
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    world.setFluid(8, 4, 8, kMaxFluidLevel);
+    world.setFluid(9, 4, 8, kMaxFluidLevel);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    // Two full cells: 6 + 6 faces, minus the shared face from each side
+    // (fluid-to-fluid is culled, unlike same-kind non-opaque blocks).
+    EXPECT_EQ(data.transparentVertices.size(), 40u);
+    // The shared face is gone from both sides.
+    EXPECT_EQ(countVerticesWithNormal(data.transparentVertices, {1.0f, 0.0f, 0.0f}),
+              4); // only the east face of cell (9,4,8)
+    EXPECT_EQ(countVerticesWithNormal(data.transparentVertices, {-1.0f, 0.0f, 0.0f}),
+              4); // only the west face of cell (8,4,8)
+}
+
+TEST(ChunkMesherTest, FluidTopFaceAtLevelHeight) {
+    // A level-4 fluid cell: the top face sits at y = 4 + 4/8 and the side
+    // faces run from y = 4 to y = 4.5 (the scaled-cube geometry).
+    BlockRegistry reg = makeRegistry();
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    world.setFluid(8, 4, 8, 4);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    // All 6 faces (isolated cell: even the bottom toward empty air).
+    EXPECT_EQ(data.transparentVertices.size(), 24u);
+    int top = 0;
+    int sideTopCorners = 0;
+    for (const MeshVertex& v : data.transparentVertices) {
+        if (v.normal == Vec3{0.0f, 1.0f, 0.0f}) {
+            EXPECT_FLOAT_EQ(v.position.y, 4.5f);
+            ++top;
+        }
+        if (v.normal.x != 0.0f || v.normal.z != 0.0f) {
+            // Side corners: the bottom ring at y=4, the top ring at y=4.5.
+            EXPECT_TRUE(std::fabs(v.position.y - 4.0f) < 1e-6f ||
+                        std::fabs(v.position.y - 4.5f) < 1e-6f);
+            if (std::fabs(v.position.y - 4.5f) < 1e-6f) {
+                ++sideTopCorners;
+            }
+        }
+    }
+    EXPECT_EQ(top, 4);
+    EXPECT_EQ(sideTopCorners, 8); // 4 side faces x 2 top corners
+}
+
+TEST(ChunkMesherTest, OpaqueBlockAboveCullsFluidTopFace) {
+    BlockRegistry reg = makeRegistry();
+    World world;
+    world.setBlock(8, 5, 8, reg.idForName("stone"));
+    world.setFluid(8, 4, 8, kMaxFluidLevel);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    // Fluid: top culled (opaque above); 4 sides + bottom (empty below).
+    EXPECT_EQ(data.transparentVertices.size(), 20u);
+    EXPECT_EQ(countVerticesWithNormal(data.transparentVertices,
+                                      {0.0f, 1.0f, 0.0f}),
+              0);
+    // Stone: all 6 faces (the fluid below does not occlude).
+    EXPECT_EQ(data.opaqueVertices.size(), 24u);
+}
+
+TEST(ChunkMesherTest, FluidFaceBakesOwnCellLight) {
+    // A fluid face is lit by its own cell's light, not the neighbor's (the
+    // cell behind a water face is the water).
+    BlockRegistry reg = makeRegistry();
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    world.setFluid(8, 4, 8, kMaxFluidLevel);
+    Chunk& chunk = world.getOrCreateChunk({0, 0, 0});
+    chunk.setSkyLightAt(8, 4, 8, 5);  // the fluid cell
+    chunk.setSkyLightAt(8, 5, 8, 15); // the air above (a different value)
+    const auto data = mesh(world, reg, {0, 0, 0});
+    int checked = 0;
+    for (const MeshVertex& v : data.transparentVertices) {
+        if (v.normal == Vec3{0.0f, 1.0f, 0.0f}) {
+            EXPECT_FLOAT_EQ(v.skyLight, 5.0f / 15.0f);
+            ++checked;
+        }
+    }
+    EXPECT_EQ(checked, 4);
+}
+
+// The scaled (partial-height) fluid faces must keep the unit cube's
+// CCW-from-outside winding (the scale is a pure y shrink of the corner
+// table).
+TEST(ChunkMesherTest, FluidFaceWindingIsCounterClockwiseFromOutside) {
+    BlockRegistry reg = makeRegistry();
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    world.setFluid(8, 4, 8, 4); // partial height: sides are 0.5 tall
+    const auto data = mesh(world, reg, {0, 0, 0});
+
+    const std::vector<Vec3> axes = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0},
+                                    {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+    for (const Vec3 n : axes) {
+        std::size_t start = data.transparentVertices.size();
+        for (std::size_t i = 0; i + 3 < data.transparentVertices.size(); ++i) {
+            bool run = true;
+            for (int k = 0; k < 4; ++k) {
+                if (data.transparentVertices[i + k].normal != n) {
+                    run = false;
+                    break;
+                }
+            }
+            if (run) {
+                start = i;
+                break;
+            }
+        }
+        ASSERT_LT(start, data.transparentVertices.size())
+            << "no face with normal (" << n.x << "," << n.y << "," << n.z << ")";
+        const MeshVertex& v0 = data.transparentVertices[start];
+        const MeshVertex& v1 = data.transparentVertices[start + 1];
+        const MeshVertex& v2 = data.transparentVertices[start + 2];
+        const Vec3 e1 = v1.position - v0.position;
+        const Vec3 e2 = v2.position - v0.position;
+        EXPECT_GT(dot(cross(e1, e2), n), 0.0f)
+            << "fluid face wound clockwise from outside: normal (" << n.x
+            << "," << n.y << "," << n.z << ")";
+    }
 }
 
 TEST(ChunkMesherTest, OpaqueNeighborCullsTransparentFace) {
@@ -178,13 +302,12 @@ TEST(ChunkMesherTest, MixedBlockTypesSplitByPass) {
     BlockRegistry reg = makeRegistry();
     World world;
     world.setBlock(7, 4, 8, reg.idForName("stone"));
-    world.setBlock(9, 4, 8, reg.idForName("water"));
+    world.setFluid(8, 4, 8, kMaxFluidLevel); // water directly next to the stone
     const auto data = mesh(world, reg, {0, 0, 0});
-    // Stone: 6 faces (water neighbor is non-opaque). Water: 5 faces
-    // (west face... water is at (9,4,8), stone at (7,4,8) — not adjacent,
-    // so water also keeps 6 faces).
+    // Stone: 6 faces (the fluid neighbor does not occlude). Water: 5 faces
+    // (the west face is culled by the opaque stone).
     EXPECT_EQ(data.opaqueVertices.size(), 24u);
-    EXPECT_EQ(data.transparentVertices.size(), 24u);
+    EXPECT_EQ(data.transparentVertices.size(), 20u);
 }
 
 TEST(ChunkMesherTest, VerticalCrossChunkFaceIsCulled) {

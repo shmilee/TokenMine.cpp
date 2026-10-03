@@ -36,7 +36,6 @@ struct WorldgenParams {
     int heightOctaves = 4;
     std::string bottomBlock = "stone"; // the y=0 layer
     std::string deepBlock = "stone";   // the world's deep bedrock
-    std::string waterBlock = "water";
 
     // Biome selection (section "biomes").
     float biomeNoiseScale = 0.02f;

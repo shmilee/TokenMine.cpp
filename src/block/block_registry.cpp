@@ -245,6 +245,17 @@ BlockID BlockRegistry::idForName(const std::string& name) const {
     return it == m_names.end() ? BlockID::invalid() : BlockID{it->second};
 }
 
+std::optional<BlockID> BlockRegistry::fluidBlock() const {
+    // The air sentinel is first; the first fluid property block wins (the
+    // game defines exactly one).
+    for (const Block& b : m_blocks) {
+        if (b.properties.fluid) {
+            return b.id;
+        }
+    }
+    return std::nullopt;
+}
+
 std::vector<BlockID> BlockRegistry::allIds() const {
     std::vector<BlockID> ids;
     ids.reserve(m_blocks.size());

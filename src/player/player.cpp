@@ -96,6 +96,10 @@ void Player::update(double dt, const Input& input, bool lookEnabled) {
     const Vec3 fwd = normalized(flatFwd);
     const Vec3 right {fwd.z * -1.0f, 0.0f, fwd.x};
 
+    // 2a. Water state: while the AABB overlaps a fluid cell the player
+    // swims (reduced gravity/sink, reduced speed, Space swims up).
+    const bool inWater = isInWater();
+
     Vec3 wish {0.0f, 0.0f, 0.0f};
     if (input.isDown(GameKey::W)) {
         wish += fwd;
@@ -110,9 +114,11 @@ void Player::update(double dt, const Input& input, bool lookEnabled) {
         wish -= right;
     }
     if (lengthSq(wish) > 0.0f) {
-        const float speed = input.isDown(GameKey::LeftShift)
-                                ? m_params.sprintSpeed
-                                : m_params.walkSpeed;
+        const float speed = inWater
+                                ? m_params.swimSpeed
+                                : (input.isDown(GameKey::LeftShift)
+                                       ? m_params.sprintSpeed
+                                       : m_params.walkSpeed);
         const Vec3 dir = normalized(wish);
         m_velocity.x = dir.x * speed;
         m_velocity.z = dir.z * speed;
@@ -124,9 +130,14 @@ void Player::update(double dt, const Input& input, bool lookEnabled) {
     // 3. Sub-step the tick so no axis moves more than kMaxSubstepMove per
     //    step: at terminal velocity a 0.25 s hiccup would otherwise move
     //    ~9 blocks and tunnel straight through the floor.
-    const float vyAfter =
-        std::max(m_velocity.y - m_params.gravity * static_cast<float>(dt),
-                 -m_params.terminalVelocity);
+    const float vyAfter = inWater
+                              ? std::max(
+                                    m_velocity.y - m_params.waterGravity *
+                                                      static_cast<float>(dt),
+                                    -m_params.waterTerminalVelocity)
+                              : std::max(m_velocity.y - m_params.gravity *
+                                             static_cast<float>(dt),
+                                         -m_params.terminalVelocity);
     const float maxDisp =
         std::max({std::abs(m_velocity.x), std::abs(vyAfter),
                   std::abs(m_velocity.z)}) *
@@ -138,7 +149,7 @@ void Player::update(double dt, const Input& input, bool lookEnabled) {
     }
     const double h = dt / static_cast<double>(steps);
     for (int i = 0; i < steps; ++i) {
-        step(h, input);
+        step(h, input, inWater);
     }
 
     // Fell out of the world (the demo world's edge is void).
@@ -147,18 +158,31 @@ void Player::update(double dt, const Input& input, bool lookEnabled) {
     }
 }
 
-void Player::step(double h, const Input& input) {
+void Player::step(double h, const Input& input, bool inWater) {
     const float fh = static_cast<float>(h);
 
-    // Gravity, capped at terminal velocity.
-    m_velocity.y -= m_params.gravity * fh;
-    if (m_velocity.y < -m_params.terminalVelocity) {
-        m_velocity.y = -m_params.terminalVelocity;
-    }
-    // Jump: only from the ground (m_onGround is the previous sub-step's
-    // result, so one press cannot re-trigger mid-air).
-    if (input.isDown(GameKey::Space) && m_onGround) {
-        m_velocity.y = m_params.jumpSpeed;
+    if (inWater) {
+        // Swim: reduced gravity, a low sink cap, and Space raises the
+        // player (also from the ground — a shallow pool floor does not
+        // jump, it surfaces).
+        m_velocity.y -= m_params.waterGravity * fh;
+        if (m_velocity.y < -m_params.waterTerminalVelocity) {
+            m_velocity.y = -m_params.waterTerminalVelocity;
+        }
+        if (input.isDown(GameKey::Space)) {
+            m_velocity.y = m_params.swimUpSpeed;
+        }
+    } else {
+        // Gravity, capped at terminal velocity.
+        m_velocity.y -= m_params.gravity * fh;
+        if (m_velocity.y < -m_params.terminalVelocity) {
+            m_velocity.y = -m_params.terminalVelocity;
+        }
+        // Jump: only from the ground (m_onGround is the previous
+        // sub-step's result, so one press cannot re-trigger mid-air).
+        if (input.isDown(GameKey::Space) && m_onGround) {
+            m_velocity.y = m_params.jumpSpeed;
+        }
     }
 
     // Integrate per axis; the Y resolve is what (re)establishes onGround.
@@ -252,6 +276,36 @@ void Player::moveAxis(int axis, float delta) {
             m_velocity.z = 0.0f;
             break;
     }
+}
+
+bool Player::isInWater() const {
+    const Vec3 mn = aabbMin();
+    const Vec3 mx = aabbMax();
+    const int x0 = static_cast<int>(std::floorf(mn.x));
+    const int x1 = static_cast<int>(std::floorf(mx.x));
+    const int y0 = static_cast<int>(std::floorf(mn.y));
+    const int y1 = static_cast<int>(std::floorf(mx.y));
+    const int z0 = static_cast<int>(std::floorf(mn.z));
+    const int z1 = static_cast<int>(std::floorf(mx.z));
+    for (int x = x0; x <= x1; ++x) {
+        for (int y = y0; y <= y1; ++y) {
+            for (int z = z0; z <= z1; ++z) {
+                if (!(mn.x < x + 1 && mx.x > x)) {
+                    continue;
+                }
+                if (!(mn.y < y + 1 && mx.y > y)) {
+                    continue;
+                }
+                if (!(mn.z < z + 1 && mx.z > z)) {
+                    continue;
+                }
+                if (m_world.getFluid(x, y, z) > 0) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
 } // namespace mc

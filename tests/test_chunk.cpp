@@ -55,6 +55,37 @@ TEST(ChunkTest, FillAndClear) {
     EXPECT_TRUE(chunk.dirty());
 }
 
+TEST(ChunkTest, NewChunkIsDry) {
+    Chunk chunk;
+    EXPECT_EQ(chunk.fluidAt(0, 0, 0), 0);
+    EXPECT_EQ(chunk.fluidAt(8, 8, 8), 0);
+    EXPECT_EQ(chunk.fluidAt(15, 15, 15), 0);
+}
+
+TEST(ChunkTest, SetFluidRoundTripMarksDirty) {
+    Chunk chunk;
+    chunk.setFluidAt(3, 4, 5, 8);
+    EXPECT_EQ(chunk.fluidAt(3, 4, 5), 8);
+    EXPECT_EQ(chunk.fluidAt(2, 4, 5), 0);
+    EXPECT_TRUE(chunk.dirty());
+    chunk.clearDirty();
+    EXPECT_FALSE(chunk.dirty());
+    chunk.setFluidAt(0, 0, 0, 3);
+    EXPECT_TRUE(chunk.dirty()); // any set re-dirties
+    EXPECT_EQ(chunk.fluidData()[Chunk::index(0, 0, 0)], 3);
+}
+
+TEST(ChunkTest, ClearAndFillDryTheChunk) {
+    Chunk chunk;
+    chunk.setFluidAt(7, 7, 7, 5);
+    chunk.clear();
+    EXPECT_EQ(chunk.fluidAt(7, 7, 7), 0); // clear() dries
+    chunk.setFluidAt(7, 7, 7, 5);
+    chunk.fill(BlockID{7});
+    EXPECT_EQ(chunk.fluidAt(7, 7, 7), 0); // fill() dries (block XOR fluid)
+    EXPECT_EQ(chunk.get(7, 7, 7), BlockID{7});
+}
+
 TEST(ChunkTest, MarkDirty) {
     Chunk chunk;
     chunk.clearDirty();

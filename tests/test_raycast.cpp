@@ -36,6 +36,12 @@ BlockRegistry makeBlocks() {
     if (!r.ok()) {
         ADD_FAILURE() << r.error().message;
     }
+    r = blocks.registerBlock(parseJson(
+        R"({"id":"glass","properties":{"solid":false,"opaque":false,"transparent":true},)"
+        R"("model":{"textures":{"top":"g","side":"g","bottom":"g"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
     return blocks;
 }
 
@@ -221,17 +227,32 @@ TEST(RaycastTest, FliesOutOfWorldWithoutHit) {
 }
 
 TEST(RaycastTest, NonSolidBlockIsHitGeometrically) {
-    // The raycast is property-free: water (non-solid) still blocks the ray,
-    // and the break rule (destroyable=false) is applied by the caller.
+    // The raycast is property-free: a non-solid block (glass) still blocks
+    // the ray, and the break rule (destroyable) is applied by the caller.
     BlockRegistry blocks = makeBlocks();
-    const BlockID water = blocks.idForName("water");
+    const BlockID glass = blocks.idForName("glass");
     World world;
-    ASSERT_TRUE(world.setBlock(0, 0, -1, water));
+    ASSERT_TRUE(world.setBlock(0, 0, -1, glass));
     auto hit = raycastBlock(world, {0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, -1.0f},
                             kInfT);
     ASSERT_TRUE(hit.has_value());
-    EXPECT_EQ(world.getBlock(hit->block.x, hit->block.y, hit->block.z), water);
-    EXPECT_FALSE(blocks.at(water).properties.destroyable);
+    EXPECT_EQ(world.getBlock(hit->block.x, hit->block.y, hit->block.z), glass);
+}
+
+TEST(RaycastTest, RaycastPassesThroughFluid) {
+    // Water lives in the fluid array (the block array reads air), so the
+    // ray passes through it and hits the block behind — aiming through
+    // water selects the lake floor, not the water.
+    BlockRegistry blocks = makeBlocks();
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    ASSERT_TRUE(world.setFluid(0, 0, 0, kMaxFluidLevel));
+    ASSERT_TRUE(world.setBlock(0, 0, -1, BlockID{1}));
+    auto hit = raycastBlock(world, {0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, -1.0f},
+                            kInfT);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->block, (BlockPos{0, 0, -1}));
+    EXPECT_NEAR(hit->distance, 0.5f, 1e-4f);
 }
 
 // -- placement validation ------------------------------------------------------
@@ -259,12 +280,13 @@ TEST(RaycastTest, CannotPlaceIntoSolidCell) {
     EXPECT_FALSE(canPlaceAt(world, blocks, {0, 1, -2}, kPlayerMin, kPlayerMax));
 }
 
-TEST(RaycastTest, CanPlaceIntoWaterCell) {
+TEST(RaycastTest, CanPlaceIntoFluidCell) {
+    // A fluid cell reads as air and is non-solid: placeable (placing a
+    // block into water displaces the fluid, see World::setBlock).
     BlockRegistry blocks = makeBlocks();
-    const BlockID water = blocks.idForName("water");
     World world;
-    ASSERT_TRUE(world.setBlock(0, 1, -2, water));
-    // Non-solid cells may be replaced.
+    world.getOrCreateChunk({0, 0, -1}); // z=-2 floors to chunk -1
+    ASSERT_TRUE(world.setFluid(0, 1, -2, kMaxFluidLevel));
     EXPECT_TRUE(canPlaceAt(world, blocks, {0, 1, -2}, kPlayerMin, kPlayerMax));
 }
 

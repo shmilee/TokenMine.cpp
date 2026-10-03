@@ -15,7 +15,10 @@
 // seamless with no cross-chunk bookkeeping.
 //
 // Generation order per chunk:
-//   1. terrain fill  (y=0 bottom / deep stone / subsurface / surface / water)
+//   1. terrain fill  (y=0 bottom / deep stone / subsurface / surface;
+//                     columns below the sea level are filled with the full
+//                     fluid level — water lives in the chunk's fluid array,
+//                     not the block array)
 //   2. cave carving  (3D noise threshold, strictly below the surface)
 //   3. ore veins     (replace deep stone only, so caves stay carved)
 //   4. trees         (replace air only, so they never destroy terrain)
@@ -105,7 +108,6 @@ private:
     // Resolved terrain fill blocks (data-driven names, see WorldgenParams).
     BlockID m_bottom = BlockID::invalid();
     BlockID m_deep = BlockID::invalid();
-    BlockID m_water = BlockID::invalid();
     BlockID m_trunk = BlockID::invalid();
     BlockID m_leaves = BlockID::invalid();
 };

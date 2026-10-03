@@ -36,6 +36,9 @@ constexpr float kHorizonFade = 0.1f;
 // clock), so headless runs are byte-reproducible frame for frame; the
 // real-time speed is exact at 60 FPS.
 constexpr double kDayStepPerFrame = 1.0 / 60.0;
+// The fluid simulation ticks every Nth frame (20 ticks/s at 60 FPS); the
+// fixed frame step keeps headless runs byte-reproducible.
+constexpr int kFluidTickEveryNFrames = 3;
 
 // Demo area: 4x4 chunk columns covering world x,z in [-32, 32).
 constexpr int kDemoChunkMin = -2;
@@ -443,6 +446,26 @@ void Game::update(double dt) {
 
     handleInteraction();
 
+    // Fluids tick at 20/s (every third frame at 60fps). Changed fluid
+    // levels shift the light (water attenuates it), so re-light the touched
+    // region before meshing; a settled world changes nothing.
+    if (m_frameCount % kFluidTickEveryNFrames == 0) {
+        const std::vector<BlockPos> changed = FluidSim::tick(m_world);
+        if (!changed.empty()) {
+            BlockPos min = changed.front();
+            BlockPos max = changed.front();
+            for (const BlockPos& p : changed) {
+                min.x = std::min(min.x, p.x);
+                min.y = std::min(min.y, p.y);
+                min.z = std::min(min.z, p.z);
+                max.x = std::max(max.x, p.x);
+                max.y = std::max(max.y, p.y);
+                max.z = std::max(max.z, p.z);
+            }
+            Lighting::updateRegion(m_world, m_blocks, min, max);
+        }
+    }
+
     // A newly created chunk (placing outside the demo area) starts with
     // zero light; re-propagate the whole world before meshing so nothing
     // renders dark.
@@ -682,6 +705,12 @@ Result<void> Game::takeScreenshot(const std::filesystem::path& path) {
         std::memcpy(image.rgba.data() + static_cast<std::size_t>(y) * w * 4,
                     pixels.data() + static_cast<std::size_t>(h - 1 - y) * w * 4,
                     static_cast<std::size_t>(w) * 4);
+    }
+
+    // The framebuffer alpha is a blend-state byproduct (e.g. water's texture
+    // alpha), not part of the displayed image: screenshots are opaque.
+    for (std::size_t i = 3; i < image.rgba.size(); i += 4) {
+        image.rgba[i] = 255;
     }
 
     auto png = Png::encode(image);
