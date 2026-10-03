@@ -42,6 +42,11 @@ public:
 
     void clear(const Vec4& color);
 
+    // Alpha blending for the transparent block pass (glass, leaves, water).
+    // Call enableBlending() before the batch, disableBlending() after.
+    void enableBlending();
+    void disableBlending();
+
     // Draw one indexed mesh. The program must declare u_model/u_view/u_proj.
     // Texture binding is the caller's job (bind the texture + set the
     // sampler uniform before this call).

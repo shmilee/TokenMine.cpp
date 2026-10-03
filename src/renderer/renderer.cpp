@@ -2,6 +2,8 @@
 
 #include <GL/glew.h>
 
+#include <cstdio>
+
 #include "core/logger.hpp"
 
 namespace mc {
@@ -42,6 +44,15 @@ void Renderer::clear(const Vec4& color) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
+void Renderer::enableBlending() {
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+}
+
+void Renderer::disableBlending() {
+    glDisable(GL_BLEND);
+}
+
 void Renderer::draw(const Mesh& mesh, const ShaderProgram& program,
                     const Mat4& view, const Mat4& projection,
                     const Mat4& model) {
@@ -57,6 +68,13 @@ void Renderer::draw(const Mesh& mesh, const ShaderProgram& program,
     glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh.indexCount()),
                    GL_UNSIGNED_INT, nullptr);
     program.unbind();
+    const GLenum glErr = glGetError();
+    if (glErr != GL_NO_ERROR) {
+        char hex[16];
+        std::snprintf(hex, sizeof(hex), "0x%x",
+                      static_cast<unsigned>(glErr));
+        MC_LOG_ERROR(std::string("GL error after draw call: ") + hex);
+    }
 
     m_stats.drawCalls++;
     m_stats.vertices += mesh.indexCount();

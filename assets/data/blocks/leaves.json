@@ -1,0 +1,13 @@
+{
+  "id": "leaves",
+  "properties": {
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "hardness": 0.2,
+    "drops": "leaves"
+  },
+  "model": {
+    "textures": { "top": "leaves", "side": "leaves", "bottom": "leaves" }
+  }
+}

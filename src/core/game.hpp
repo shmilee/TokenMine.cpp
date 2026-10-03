@@ -1,10 +1,10 @@
 // Top-level game object: owns configuration, assets, window, input, camera
 // and the renderer; runs the main loop.
 //
-// Phase 1 scope: a basic 3D scene (tiled ground + rotating textured cube)
-// with first-person camera controls (WASD + mouse look, click to lock
-// pointer, ESC to exit). World/player/physics arrive in later phases and
-// plug into update() without changing the loop.
+// Phase 2 scope: data-driven block system (registry from JSON + texture
+// atlas) demonstrated by a block showcase row (each block rendered with its
+// own top/side/bottom textures, transparent blocks in a blending pass), plus
+// first-person camera controls. The voxel world arrives in Phase 3.
 #pragma once
 
 #include <cstdint>
@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "block/block_registry.hpp"
 #include "core/asset_manager.hpp"
 #include "core/camera.hpp"
 #include "core/config.hpp"
@@ -23,6 +24,7 @@
 #include "renderer/renderer.hpp"
 #include "renderer/shader.hpp"
 #include "renderer/texture.hpp"
+#include "renderer/texture_atlas.hpp"
 
 namespace mc {
 
@@ -47,18 +49,30 @@ public:
     AssetManager& assets() { return m_assets; }
 
 private:
+    // One showcase instance of a registered block.
+    struct ShowcaseCube {
+        BlockID block;
+        Mesh mesh;
+        Vec3 position {0.0f, 0.5f, 0.0f};
+        bool spin = false;
+    };
+
     Result<void> buildScene();
     void update(double dt);
     void render();
 
     // Demo geometry / textures.
     Result<void> takeScreenshot(const std::filesystem::path& path);
-    static std::vector<MeshVertex> buildCube();
+    // Full-cube mesh whose per-face UVs cover the atlas tiles named by the
+    // block model. (Superseded by chunk meshing in Phase 3.)
+    static std::vector<MeshVertex> buildBlockCube(const BlockModel& model,
+                                                  const AtlasLayout& layout);
     static std::vector<MeshVertex> buildGroundPlane(float size);
     static std::vector<std::uint32_t> buildCubeIndices();
     static std::vector<std::uint32_t> buildGroundIndices();
-    static std::vector<std::uint8_t> makeCheckerPixels(int size, int checker);
     static std::vector<std::uint8_t> makeGroundPixels(int size);
+    void drawShowcaseCube(const ShowcaseCube& cube, const Mat4& view,
+                          const Mat4& projection);
 
     GameArgs m_args;
     Config m_config;
@@ -68,11 +82,14 @@ private:
     Camera m_camera;
     Renderer m_renderer;
 
+    // Data-driven content.
+    BlockRegistry m_blocks;
+    TextureAtlas m_atlas;
+
     ShaderProgram m_basicShader;
-    Texture m_checkerTexture;
     Texture m_groundTexture;
-    Mesh m_cubeMesh;
     Mesh m_groundMesh;
+    std::vector<ShowcaseCube> m_showcase;
 
     double m_time = 0.0;
     int m_frameCount = 0;

@@ -34,11 +34,31 @@ cmake --build build
 ./build/bin/minecraft --config config/config.json --seed 42 --log-level debug
 ```
 
-## 当前可玩内容（Phase 1）
+## 当前可玩内容（Phase 2）
 
 - 第一人称相机：`W/A/S/D` 移动，`Space` 上升，`Shift` 加速，鼠标转向（**左键点击锁定/释放指针**）
-- 旋转的棋盘格纹理立方体 + 平铺纹理地面 + 天空色 + 方向光（占位光照，Phase 7 替换）
+- **数据驱动方块展示台**：8 个方块（stone/dirt/grass/sand/wood/leaves/glass/water）一排展示，
+  每个方块使用自己的 top/side/bottom 纹理；透明方块（leaves/glass/water）走 alpha 混合 pass；
+  grass 方块旋转展示多面纹理
+- 16×16 瓦片 TextureAtlas（Minecraft 同款规格），10 张占位纹理
+- 平铺纹理地面 + 天空色 + 方向光（占位光照，Phase 7 替换）
 - 窗口标题实时显示 FPS 与 draw call 数
+
+### 新增一个方块（无需改核心代码）
+
+1. `assets/textures/blocks/<name>.png` —— 16×16 RGBA 纹理（可参考 `tools/generate_block_textures.py`）
+2. `assets/data/blocks/<id>.json` —— 方块定义（属性/掉落/模型/纹理），例如：
+
+   ```json
+   {
+     "id": "bedrock",
+     "properties": { "hardness": -1, "destroyable": false },
+     "model": { "textures": { "top": "bedrock", "side": "bedrock", "bottom": "bedrock" } }
+   }
+   ```
+
+   属性缺省即默认值（solid/opaque/destroyable=true, hardness=1.0, light_emission=0, drops 为空=不掉落）。
+   校验严格：类型错误、越界值、重复 id、缺失纹理面都会报明确错误；未知字段警告但不拒绝。
 
 ## 测试
 
@@ -57,9 +77,11 @@ mine-craft/
 ├── data/            # 存档目录（后续阶段使用）
 ├── logs/            # 运行日志（logs/mine-craft.log）
 ├── src/
+│   ├── block/       # 数据驱动方块系统：Block 数据模型 + BlockRegistry（JSON 加载/校验）
 │   ├── core/        # 核心框架：日志、错误处理、JSON、配置、资源、窗口、输入、相机、PNG、主循环
 │   │   └── math/    # 数学库（header-only）：Vec2/Vec3/Vec4/Mat4
-│   └── renderer/    # 渲染器（GL 封装）：Shader/Texture/Mesh/Renderer
+│   └── renderer/    # 渲染器（GL 封装）：Shader/Texture/Mesh/Renderer/TextureAtlas
+├── tools/           # 开发工具：generate_block_textures.py（16x16 占位纹理生成）
 └── tests/           # 单元测试（GTest）+ PNG 测试夹具（tests/data/，可用 tests/generate_fixtures.py 重新生成）
 ```
 
@@ -67,7 +89,7 @@ mine-craft/
 
 - [x] **Phase 0** — 项目基础：构建系统、主循环、日志、配置、资源系统、错误处理、测试框架
 - [x] **Phase 1** — 基础 3D 引擎：数学库、Input、Camera、Renderer（Shader/Texture/Mesh/VAO）、PNG 编解码、demo 场景
-- [ ] **Phase 2** — 方块系统：Block/BlockState/BlockRegistry，数据驱动
+- [x] **Phase 2** — 方块系统：Block 数据模型、BlockRegistry（JSON 数据驱动 + 严格校验）、16×16 TextureAtlas、透明 pass
 - [ ] **Phase 3** — Chunk 系统：World/ChunkManager/坐标转换/Chunk Mesh（Face Culling → Greedy Meshing）
 - [ ] **Phase 4** — 世界生成：WorldGenerator（地形/生物群系/洞穴/矿脉/树木），Seed 可复现
 - [ ] **Phase 5** — 玩家系统：第一人称移动、AABB 碰撞、滑动处理

@@ -86,6 +86,14 @@ public:
         return it == obj.end() ? nullptr : &it->second;
     }
     bool contains(const std::string& key) const { return find(key) != nullptr; }
+
+    // Direct view of the member map (asserts this is an object). Enables
+    // iteration: `for (const auto& [key, value] : json.members())`.
+    // (Named `members` to avoid clashing with the object() factory.)
+    const Object& members() const {
+        assert(isObject());
+        return std::get<Object>(m_value);
+    }
     std::size_t memberCount() const {
         return isObject() ? std::get<Object>(m_value).size() : 0;
     }

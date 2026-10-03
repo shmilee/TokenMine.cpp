@@ -34,10 +34,12 @@ add_library(mc_core STATIC
     src/core/camera.cpp
     src/core/png.cpp
     src/core/game.cpp
+    src/block/block_registry.cpp
     src/renderer/shader.cpp
     src/renderer/texture.cpp
     src/renderer/mesh.cpp
     src/renderer/renderer.cpp
+    src/renderer/texture_atlas.cpp
 )
 target_include_directories(mc_core PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(mc_core PUBLIC SDL3::SDL3 PkgConfig::GLEW PkgConfig::ZLIB)
@@ -61,6 +63,8 @@ add_executable(minecraft_tests
     tests/test_input.cpp
     tests/test_camera.cpp
     tests/test_png.cpp
+    tests/test_block.cpp
+    tests/test_atlas.cpp
 )
 target_compile_definitions(minecraft_tests PRIVATE
     MC_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data")

@@ -1,0 +1,13 @@
+{
+  "id": "water",
+  "properties": {
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "fluid": true,
+    "destroyable": false
+  },
+  "model": {
+    "textures": { "top": "water", "side": "water", "bottom": "water" }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "glass",
+  "properties": {
+    "opaque": false,
+    "transparent": true,
+    "hardness": 0.3,
+    "drops": ""
+  },
+  "model": {
+    "textures": { "top": "glass", "side": "glass", "bottom": "glass" }
+  }
+}

@@ -1,0 +1,67 @@
+// Registry of all block definitions, populated from JSON data files
+// (assets/data/blocks/*.json). One file per block:
+//
+// {
+//   "id": "grass",
+//   "properties": { "hardness": 0.6, "drops": "dirt", ... },  // all optional
+//   "model": {
+//     "shape": "full_cube",
+//     "textures": { "top": "grass_top", "side": "grass_side", "bottom": "dirt" }
+//   }
+// }
+//
+// Validation is strict: type errors, out-of-range values, duplicate ids,
+// missing textures and opaque+transparent conflicts all produce descriptive
+// errors naming the block. Unknown fields are tolerated (with a warning)
+// for forward compatibility.
+#pragma once
+
+#include <cstddef>
+#include <deque>
+#include <set>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include "block/block.hpp"
+#include "core/asset_manager.hpp"
+#include "core/error.hpp"
+#include "core/json.hpp"
+
+namespace mc {
+
+class BlockRegistry {
+public:
+    // Parse and register one block definition. Assigns the next free id.
+    Result<BlockID> registerBlock(const Json& def);
+
+    // Load and register every *.json file in `relativeDir` under the asset
+    // root (sorted for determinism). Non-const: text loading updates the
+    // AssetManager cache.
+    Result<void> loadDirectory(AssetManager& assets,
+                               const std::string& relativeDir = "data/blocks");
+
+    // -- lookups -------------------------------------------------------------
+    const Block& at(BlockID id) const; // asserts valid id
+    const Block* find(BlockID id) const;
+    const Block* findByName(const std::string& name) const;
+    BlockID idForName(const std::string& name) const; // invalid() when absent
+
+    std::size_t count() const { return m_blocks.size(); }
+    std::vector<BlockID> allIds() const;
+
+    // Every texture name referenced by any block (for atlas cross-checks).
+    std::set<std::string> requiredTextures() const;
+
+    void clear();
+
+private:
+    // Parse one properties object into `out` (starts at defaults).
+    static Result<void> parseProperties(const Json& def, BlockProperties& out);
+    static Result<void> parseModel(const Json& def, BlockModel& out);
+
+    std::deque<Block> m_blocks; // deque: stable references on push
+    std::unordered_map<std::string, int> m_names;
+};
+
+} // namespace mc

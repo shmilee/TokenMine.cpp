@@ -1,0 +1,10 @@
+{
+  "id": "dirt",
+  "properties": {
+    "hardness": 0.5,
+    "drops": "dirt"
+  },
+  "model": {
+    "textures": { "top": "dirt", "side": "dirt", "bottom": "dirt" }
+  }
+}
