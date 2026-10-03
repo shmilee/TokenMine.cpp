@@ -9,7 +9,7 @@
 namespace mc {
 
 namespace {
-constexpr std::size_t kVertexSize = sizeof(MeshVertex); // 36 bytes, packed
+constexpr std::size_t kVertexSize = sizeof(MeshVertex); // 40 bytes, packed
 }
 
 Mesh::~Mesh() {
@@ -99,10 +99,14 @@ Result<void> Mesh::upload(const std::vector<MeshVertex>& vertices,
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(kVertexSize),
                           reinterpret_cast<const void*>(offsetof(MeshVertex, uv)));
-    // location 3: light
+    // location 3: sky light
     glEnableVertexAttribArray(3);
     glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(kVertexSize),
-                          reinterpret_cast<const void*>(offsetof(MeshVertex, light)));
+                          reinterpret_cast<const void*>(offsetof(MeshVertex, skyLight)));
+    // location 4: block light
+    glEnableVertexAttribArray(4);
+    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(kVertexSize),
+                          reinterpret_cast<const void*>(offsetof(MeshVertex, blockLight)));
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ibo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER,

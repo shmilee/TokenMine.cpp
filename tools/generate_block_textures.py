@@ -162,6 +162,17 @@ def diamond_ore(x, y):
     return ore(x, y, 43, (93, 236, 245), 10)
 
 
+def glowstone(x, y):
+    # Warm orange-yellow base with bright glowing speckles.
+    if h2(x, y, 50) % 100 < 16:
+        return (clamp(255 + noise(x, y, 51, 10)),
+                clamp(224 + noise(x, y, 52, 12)),
+                clamp(120 + noise(x, y, 53, 14)), 255)
+    return (clamp(196 + noise(x, y, 54, 12)),
+            clamp(160 + noise(x, y, 55, 12)),
+            clamp(66 + noise(x, y, 56, 10)), 255)
+
+
 TEXTURES = {
     "stone": stone,
     "dirt": dirt,
@@ -178,6 +189,7 @@ TEXTURES = {
     "iron_ore": iron_ore,
     "gold_ore": gold_ore,
     "diamond_ore": diamond_ore,
+    "glowstone": glowstone,
 }
 
 

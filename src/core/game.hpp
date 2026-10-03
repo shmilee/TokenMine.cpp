@@ -36,6 +36,7 @@
 #include "world/biome.hpp"
 #include "world/chunk.hpp"
 #include "world/chunk_mesher.hpp"
+#include "world/lighting.hpp"
 #include "world/raycast.hpp"
 #include "world/world.hpp"
 #include "world/world_generator.hpp"
@@ -123,6 +124,11 @@ private:
     double m_fpsSmoothed = 0.0;
     double m_lastTitleUpdate = 0.0;
     bool m_initialized = false;
+
+    // Chunk count the lighting was last fully propagated for; a new chunk
+    // (out-of-area placement) starts with no light, so the next frame
+    // re-propagates the whole world before meshing.
+    std::size_t m_lastLightedChunks = 0;
 };
 
 } // namespace mc

@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "world/lighting.hpp" // kMaxLight
+
 namespace mc {
 
 BlockID World::getBlock(int x, int y, int z) const {
@@ -16,6 +18,37 @@ BlockID World::getBlock(int x, int y, int z) const {
     }
     const BlockPos local = worldToChunkLocal(cp, p);
     return it->second.get(local.x, local.y, local.z);
+}
+
+std::uint8_t World::getSkyLight(int x, int y, int z) const {
+    if (y < 0) {
+        return 0; // below the world: nothing to light
+    }
+    if (y >= kWorldHeight) {
+        return kMaxLight; // open sky above the world
+    }
+    const BlockPos p{x, y, z};
+    const ChunkPos cp = worldToChunk(p);
+    const auto it = m_chunks.find(cp);
+    if (it == m_chunks.end()) {
+        return kMaxLight; // void is open sky
+    }
+    const BlockPos local = worldToChunkLocal(cp, p);
+    return it->second.skyLightAt(local.x, local.y, local.z);
+}
+
+std::uint8_t World::getBlockLight(int x, int y, int z) const {
+    if (!isWorldYValid(y)) {
+        return 0;
+    }
+    const BlockPos p{x, y, z};
+    const ChunkPos cp = worldToChunk(p);
+    const auto it = m_chunks.find(cp);
+    if (it == m_chunks.end()) {
+        return 0; // void emits no block light
+    }
+    const BlockPos local = worldToChunkLocal(cp, p);
+    return it->second.blockLightAt(local.x, local.y, local.z);
 }
 
 bool World::setBlock(int x, int y, int z, BlockID id) {
@@ -45,6 +78,11 @@ Chunk& World::getOrCreateChunk(const ChunkPos& pos) {
 
 const Chunk* World::findChunk(const ChunkPos& pos) const {
     const auto it = m_chunks.find(pos);
+    return it == m_chunks.end() ? nullptr : &it->second;
+}
+
+Chunk* World::findChunkMut(const ChunkPos& pos) {
+    auto it = m_chunks.find(pos);
     return it == m_chunks.end() ? nullptr : &it->second;
 }
 

@@ -18,6 +18,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <unordered_map>
 #include <vector>
@@ -41,9 +42,19 @@ public:
     // a face with the edited block — dirty.
     bool setBlock(int x, int y, int z, BlockID id);
 
+    // Light queries (0..15), same coordinate conventions as getBlock.
+    // Above the world (y >= kWorldHeight) and around the world (a chunk
+    // that was never created) the void is open sky: sky 15, block 0.
+    // Below the world (y < 0) both read 0.
+    std::uint8_t getSkyLight(int x, int y, int z) const;
+    std::uint8_t getBlockLight(int x, int y, int z) const;
+
     // Chunk access.
     Chunk& getOrCreateChunk(const ChunkPos& pos); // runs generator if new
     const Chunk* findChunk(const ChunkPos& pos) const;
+    // Non-const access to an existing chunk WITHOUT creating it (the
+    // lighting system writes light arrays into chunks it does not create).
+    Chunk* findChunkMut(const ChunkPos& pos);
     bool hasChunk(const ChunkPos& pos) const;
     std::size_t chunkCount() const { return m_chunks.size(); }
     // Sorted, for deterministic iteration (rendering, saving, meshing).

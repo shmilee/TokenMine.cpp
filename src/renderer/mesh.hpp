@@ -3,11 +3,12 @@
 // One mesh = one draw call's worth of geometry. Vertex format is fixed
 // (MeshVertex) so the VAO layout is set once at upload time.
 //
-// Vertex layout (9 floats, 36 bytes):
-//   location 0: position (vec3)
-//   location 1: normal   (vec3)
-//   location 2: uv       (vec2)
-//   location 3: light    (float, 0..1 — per-vertex light for Phase 7)
+// Vertex layout (10 floats, 40 bytes):
+//   location 0: position   (vec3)
+//   location 1: normal     (vec3)
+//   location 2: uv         (vec2)
+//   location 3: skyLight   (float, 0..1 — light value / 15)
+//   location 4: blockLight (float, 0..1 — light value / 15)
 //
 // Thread ownership: game thread with GL context current.
 #pragma once
@@ -25,7 +26,8 @@ struct MeshVertex {
     Vec3 position {0.0f, 0.0f, 0.0f};
     Vec3 normal {0.0f, 0.0f, 1.0f};
     Vec2 uv {0.0f, 0.0f};
-    float light = 1.0f;
+    float skyLight = 0.0f;
+    float blockLight = 0.0f;
 };
 
 class Mesh {

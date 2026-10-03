@@ -1,6 +1,7 @@
 #include "world/chunk_mesher.hpp"
 
 #include "core/math/vec3.hpp"
+#include "world/lighting.hpp"
 
 namespace mc {
 
@@ -96,6 +97,19 @@ ChunkMeshData ChunkMesher::mesh(const ChunkPos& pos) const {
                     const Vec2 faceUv[4] = {
                         {u0.x, u1.y}, {u1.x, u1.y}, {u1.x, u0.y}, {u0.x, u0.y},
                     };
+                    // Per-face light: sample the cell the face borders
+                    // (block position + face normal) and bake it into all
+                    // four corners. Blocky light, like Minecraft's.
+                    const std::uint8_t faceSky = m_world.getSkyLight(
+                        origin.x + lx + face.dx, origin.y + ly + face.dy,
+                        origin.z + lz + face.dz);
+                    const std::uint8_t faceBlock = m_world.getBlockLight(
+                        origin.x + lx + face.dx, origin.y + ly + face.dy,
+                        origin.z + lz + face.dz);
+                    const float skyF =
+                        static_cast<float>(faceSky) / static_cast<float>(kMaxLight);
+                    const float blockF =
+                        static_cast<float>(faceBlock) / static_cast<float>(kMaxLight);
                     const std::uint32_t first =
                         static_cast<std::uint32_t>(verts->size());
                     for (int i = 0; i < 4; ++i) {
@@ -106,7 +120,8 @@ ChunkMeshData ChunkMesher::mesh(const ChunkPos& pos) const {
                             static_cast<float>(lz + face.corner[i][2])};
                         v.normal = face.normal;
                         v.uv = faceUv[i];
-                        v.light = 1.0f; // per-vertex light arrives in Phase 7
+                        v.skyLight = skyF;
+                        v.blockLight = blockF;
                         verts->push_back(v);
                     }
                     indices->insert(indices->end(),

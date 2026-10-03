@@ -40,6 +40,7 @@ add_library(mc_core STATIC
     src/world/raycast.cpp
     src/world/world.cpp
     src/world/chunk_mesher.cpp
+    src/world/lighting.cpp
     src/world/noise.cpp
     src/world/biome.cpp
     src/world/worldgen_config.cpp
@@ -79,6 +80,7 @@ add_executable(minecraft_tests
     tests/test_raycast.cpp
     tests/test_world.cpp
     tests/test_chunk_mesher.cpp
+    tests/test_lighting.cpp
     tests/test_noise.cpp
     tests/test_player.cpp
     tests/test_biome.cpp

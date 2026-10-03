@@ -1,0 +1,12 @@
+{
+  "id": "glowstone",
+  "properties": {
+    "hardness": 0.3,
+    "light_emission": 15,
+    "drops": "glowstone"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "glowstone", "side": "glowstone", "bottom": "glowstone" }
+  }
+}

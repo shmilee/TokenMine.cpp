@@ -129,6 +129,12 @@ Result<void> Game::buildScene() {
         }
     }
 
+    // Lighting: full propagation over the generated area. Runs once at
+    // startup (a few tens of ms); break/place then use the cheap local
+    // update, and a newly created chunk re-triggers a full propagation.
+    Lighting::propagateAll(m_world, m_blocks);
+    m_lastLightedChunks = m_world.chunkCount();
+
     // Spawn the player on dry land: the seed may put the origin underwater
     // or a tree may stand on the column, so check nearby candidates before
     // falling back to (0, 0).
@@ -353,6 +359,14 @@ int Game::run() {
 void Game::update(double dt) {
     handleInteraction();
 
+    // A newly created chunk (placing outside the demo area) starts with
+    // zero light; re-propagate the whole world before meshing so nothing
+    // renders dark.
+    if (m_world.chunkCount() != m_lastLightedChunks) {
+        Lighting::propagateAll(m_world, m_blocks);
+        m_lastLightedChunks = m_world.chunkCount();
+    }
+
     const auto meshes = updateChunkMeshes();
     if (!meshes.ok()) {
         MC_LOG_ERROR("Chunk meshing failed: " + meshes.error().describe());
@@ -415,6 +429,9 @@ void Game::breakBlock() {
     // setBlock marks the chunk (and face-sharing neighbors) dirty; the mesh
     // rebuild happens on the next frame.
     m_world.setBlock(hit->block.x, hit->block.y, hit->block.z, BlockID::air());
+    // Relight the region around the change (a broken occluder lets light
+    // in; the broken cell stops blocking).
+    Lighting::updateLocal(m_world, m_blocks, hit->block);
 }
 
 void Game::placeBlock() {
@@ -437,6 +454,9 @@ void Game::placeBlock() {
     }
     m_world.setBlock(target.x, target.y, target.z,
                      m_hotbar[m_hotbarSelected]);
+    // Relight the region around the change (a placed occluder blocks light;
+    // a placed glowstone is a new light source).
+    Lighting::updateLocal(m_world, m_blocks, target);
 }
 
 void Game::cycleHotbar() {
@@ -458,11 +478,11 @@ void Game::render() {
         static_cast<float>(w) / static_cast<float>(h), kNear, kFar);
     const Mat4 view = m_camera.viewMatrix();
 
-    // Shared uniforms (program state persists across draws).
+    // Shared uniforms (program state persists across draws). Lighting is
+    // baked into the vertices by the mesher (Phase 7) — no light uniforms.
     m_basicShader.bind();
     m_basicShader.setUniform1i("u_texture", 0);
     m_basicShader.setUniform1i("u_useTexture", 1);
-    m_basicShader.setUniform3f("u_lightDir", -0.4f, 0.8f, -0.3f);
 
     m_atlas.texture().bind();
 

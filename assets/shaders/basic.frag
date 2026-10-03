@@ -1,23 +1,23 @@
 #version 330 core
 
-in vec3 v_normal;
 in vec2 v_uv;
-in float v_light;
+in float v_skyLight;
+in float v_blockLight;
+in float v_faceShade;
 
 uniform sampler2D u_texture;
 uniform int u_useTexture;
 uniform vec3 u_color;
-// Direction toward the light (normalized).
-uniform vec3 u_lightDir;
 
 out vec4 fragColor;
 
 void main() {
     // GLSL requires a boolean condition for ?: (no implicit int conversion).
     vec3 base = (u_useTexture != 0) ? texture(u_texture, v_uv).rgb : u_color;
-    float ndl = max(dot(normalize(v_normal), normalize(u_lightDir)), 0.0);
-    // Placeholder lighting: simple directional + ambient. Replaced by the
-    // real lighting system in Phase 7.
-    float lit = 0.3 + 0.7 * ndl;
-    fragColor = vec4(base * lit * v_light, 1.0);
+    // Lightmap lighting: the brighter of sky and block light (each 0..1),
+    // with per-face shading and a small ambient floor so fully dark areas
+    // stay distinguishable from the void background.
+    const float kAmbient = 0.03;
+    float light = max(v_skyLight, v_blockLight);
+    fragColor = vec4(base * (kAmbient + (1.0 - kAmbient) * light * v_faceShade), 1.0);
 }

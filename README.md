@@ -34,7 +34,7 @@ cmake --build build
 ./build/bin/minecraft --config config/config.json --seed 42 --log-level debug
 ```
 
-## 当前可玩内容（Phase 6）
+## 当前可玩内容（Phase 7）
 
 - **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时），`LeftShift` 冲刺，
   鼠标转向（**左键点击锁定指针；转向仅在指针锁定时生效**，未锁定的光标
@@ -71,10 +71,17 @@ cmake --build build
   渲染顺序不透明 → alpha 混合（leaves/glass/water）
 - **脏标记增量重网格**：`setBlock` 标记本 chunk（及共享面的邻居 chunk）dirty，
   下一帧只重建 dirty chunk 的 GPU mesh
-- **数据驱动方块**：13 个方块（stone/dirt/grass/sand/wood/leaves/glass/water/bedrock +
+- **光照（Sky/Block Light 0-15）**：每个 chunk 两个 16³ 字节数组；天空光由列顶扫描
+  （最高 opaque 方块上方=15）+ BFS 传播（垂直无衰减、水平每格 -1）；方块光由
+  `properties.light_emission` 源 BFS（全方向每格 -1）。破坏/放置后只重传播受影响区域
+  （天空光按变化点 ±16 的整列——垂直天空光无距离限制；方块光按 ±16 盒），光值实际
+  变化的 chunk 才重建 mesh。渲染：每个面烘焙"面后方一格"的光值到顶点（块状光照），
+  shader 取 `max(sky, block)` × MC 经典面着色（顶 1.0 / 侧 0.8、0.6 / 底 0.5）+ 3%
+  环境光下限；无昼夜（Phase 8）。glowstone（emission 15）在 hotbar 里，放进暗处会发光
+- **数据驱动方块**：14 个方块（stone/dirt/grass/sand/wood/leaves/glass/water/bedrock/glowstone +
   4 种矿石）+ 内置 air 哨兵（`BlockID{0}`，非数据方块，注册表从 id 1 分配）
-- 16×16 瓦片 TextureAtlas（Minecraft 同款规格），15 张占位纹理
-- 天空色 + 方向光（占位光照，Phase 7 替换）
+- 16×16 瓦片 TextureAtlas（Minecraft 同款规格），16 张占位纹理
+- 天空色 + 光照贴图（lightmap 顶点烘焙，Phase 7）
 - 窗口标题实时显示 FPS 与 draw call 数
 
 ### 新增一个生物群系 / 矿石（无需改核心代码）
@@ -106,7 +113,7 @@ cmake --build build
 `assets/data/hotbar.json` 的 `blocks` 数组（游戏内 `Tab` 循环切换）：
 
 ```json
-{ "blocks": ["stone", "dirt", "grass", "sand", "wood", "leaves", "glass"] }
+{ "blocks": ["stone", "dirt", "grass", "sand", "wood", "leaves", "glass", "glowstone"] }
 ```
 
 方块名必须已注册（未知名=启动报错）；列表不能为空。
@@ -149,8 +156,9 @@ mine-craft/
 │   │   └── math/    # 数学库（header-only）：Vec2/Vec3/Vec4/Mat4
 │   ├── player/      # 玩家：第一人称状态 + AABB 体素碰撞/滑动/重力跳跃（驱动相机）
 │   ├── renderer/    # 渲染器（GL 封装）：Shader/Texture/Mesh/Renderer/TextureAtlas
-│   └── world/       # 体素世界：coordinates（world/chunk/local 转换）、Chunk、World、
-│                    # ChunkMesher、raycast（DDA 体素射线+放置校验）、noise（确定性
+│   └── world/       # 体素世界：coordinates（world/chunk/local 转换）、Chunk（块+光照数组）、
+│                    # World、ChunkMesher（按面烘焙光照）、raycast（DDA 体素射线+放置校验）、
+│                    # lighting（Sky/Block Light 0-15 传播与局部更新）、noise（确定性
 │                    # value noise/fBm）、BiomeRegistry、WorldgenParams（worldgen.json）、
 │                    # WorldGenerator（Seed 可复现生成）
 ├── tools/           # 开发工具：generate_block_textures.py（16x16 占位纹理生成）
@@ -166,7 +174,7 @@ mine-craft/
 - [x] **Phase 4** — 世界生成：WorldGenerator（地形/生物群系/洞穴/矿脉/树木），Seed 可复现（无状态生成器，数据驱动 biome/ore/参数）
 - [x] **Phase 5** — 玩家系统：第一人称移动、AABB 碰撞、滑动处理
 - [x] **Phase 6** — Raycast：方块破坏/放置
-- [ ] **Phase 7** — 光照：Sky/Block Light（0-15），传播与更新
+- [x] **Phase 7** — 光照：Sky/Block Light（0-15），传播与更新
 - [ ] **Phase 8** — 昼夜循环：太阳/月亮/天空色
 - [ ] **Phase 9** — 流体：水（FluidState/FluidLevel/水平扩散）
 - [ ] **Phase 10** — 实体系统：Entity/Player/ItemEntity/Projectile
