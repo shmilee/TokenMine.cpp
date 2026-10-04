@@ -10,6 +10,11 @@ const ItemStack& Inventory::at(std::size_t slot) const {
     return m_slots[slot];
 }
 
+ItemStack& Inventory::at(std::size_t slot) {
+    assert(slot < m_slots.size());
+    return m_slots[slot];
+}
+
 int Inventory::add(ItemID item, int count, const ItemRegistry& items) {
     if (!item.valid() || count <= 0) {
         return -1;

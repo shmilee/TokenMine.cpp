@@ -14,27 +14,49 @@ namespace mc {
 // Layout (pure)
 // ---------------------------------------------------------------------------
 
-Result<AtlasLayout> AtlasLayout::compute(const std::vector<std::string>& names,
-                                         int tileSize) {
-    if (names.empty()) {
-        return MC_FAIL("atlas layout with zero tiles");
-    }
+namespace {
+
+bool isPowerOfTwo(int n) { return n > 0 && (n & (n - 1)) == 0; }
+
+} // namespace
+
+Result<AtlasLayout> AtlasLayout::parse(const Json& def, int tileSize) {
     if (tileSize <= 0) {
         return MC_FAIL("invalid tile size " + std::to_string(tileSize));
     }
-
-    std::vector<std::string> sorted = names;
-    std::sort(sorted.begin(), sorted.end());
-    for (std::size_t i = 1; i < sorted.size(); ++i) {
-        if (sorted[i] == sorted[i - 1]) {
-            return MC_FAIL("duplicate atlas tile name: '" + sorted[i] + "'");
+    if (!def.isObject()) {
+        return MC_FAIL("atlas layout must be a JSON object");
+    }
+    for (const auto& [key, value] : def.members()) {
+        if (key != "columns" && key != "rows" && key != "tiles") {
+            MC_LOG_WARN("atlas layout: unknown field '" + key + "' ignored");
         }
     }
 
-    const std::size_t n = sorted.size();
-    const int cols = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(n))));
-    const int rows = static_cast<int>((n + static_cast<std::size_t>(cols) - 1) /
-                                      static_cast<std::size_t>(cols));
+    const Json* colsJson = def.find("columns");
+    const Json* rowsJson = def.find("rows");
+    if (colsJson == nullptr || !colsJson->isNumber() ||
+        rowsJson == nullptr || !rowsJson->isNumber()) {
+        return MC_FAIL("atlas layout requires integer 'columns' and 'rows'");
+    }
+    const double cd = colsJson->asDouble();
+    const double rd = rowsJson->asDouble();
+    if (cd != std::floor(cd) || rd != std::floor(rd) || !isPowerOfTwo(static_cast<int>(cd)) ||
+        !isPowerOfTwo(static_cast<int>(rd))) {
+        return MC_FAIL("atlas layout 'columns' and 'rows' must be powers of two "
+                       "(exact UV fractions, pixel-stable sampling); got " +
+                       std::to_string(static_cast<int>(cd)) + "x" +
+                       std::to_string(static_cast<int>(rd)));
+    }
+    const int cols = static_cast<int>(cd);
+    const int rows = static_cast<int>(rd);
+
+    const Json* tilesJson = def.find("tiles");
+    if (tilesJson == nullptr || !tilesJson->isObject() ||
+        tilesJson->members().empty()) {
+        return MC_FAIL("atlas layout requires a non-empty 'tiles' object "
+                       "mapping tile names to [col, row] cells");
+    }
 
     AtlasLayout layout;
     layout.tileWidth = tileSize;
@@ -43,9 +65,35 @@ Result<AtlasLayout> AtlasLayout::compute(const std::vector<std::string>& names,
     layout.rows = rows;
     layout.atlasWidth = cols * tileSize;
     layout.atlasHeight = rows * tileSize;
-    for (std::size_t i = 0; i < n; ++i) {
-        layout.tiles[sorted[i]] = Tile{static_cast<int>(i % static_cast<std::size_t>(cols)),
-                                       static_cast<int>(i / static_cast<std::size_t>(cols))};
+    std::unordered_map<int, std::string> cellOwner; // row*cols+col -> name
+    for (const auto& [name, cell] : tilesJson->members()) {
+        if (name.empty()) {
+            return MC_FAIL("atlas layout has a tile with an empty name");
+        }
+        if (!cell.isArray() || cell.size() != 2 || !cell.at(0).isNumber() ||
+            !cell.at(1).isNumber()) {
+            return MC_FAIL("atlas layout tile '" + name +
+                           "' must be a [col, row] array of two integers");
+        }
+        const double cx = cell.at(0).asDouble();
+        const double cy = cell.at(1).asDouble();
+        const int c = static_cast<int>(cx);
+        const int r = static_cast<int>(cy);
+        if (cx != std::floor(cx) || cy != std::floor(cy) || c < 0 ||
+            c >= cols || r < 0 || r >= rows) {
+            return MC_FAIL("atlas layout tile '" + name + "' cell [" +
+                           std::to_string(c) + ", " + std::to_string(r) +
+                           "] lies outside the " + std::to_string(cols) + "x" +
+                           std::to_string(rows) + " grid");
+        }
+        const int idx = r * cols + c;
+        if (cellOwner.count(idx) != 0) {
+            return MC_FAIL("atlas layout: tiles '" + cellOwner[idx] + "' and '" +
+                           name + "' share cell [" + std::to_string(c) + ", " +
+                           std::to_string(r) + "]");
+        }
+        cellOwner[idx] = name;
+        layout.tiles[name] = Tile {c, r};
     }
     return layout;
 }
@@ -135,16 +183,28 @@ Result<void> TextureAtlas::loadDirectory(const AssetManager& assets,
     return {};
 }
 
-Result<void> TextureAtlas::upload() {
-    std::vector<std::string> names;
-    names.reserve(m_tiles.size());
+Result<void> TextureAtlas::upload(const Json& layoutDef) {
+    auto layout = AtlasLayout::parse(layoutDef, kTileSize);
+    MC_TRY(layout);
+
+    // Cross-check the layout against the loaded tiles in both directions:
+    // every PNG needs a cell, and every named cell needs a PNG.
     for (const auto& [name, tile] : m_tiles) {
         (void)tile;
-        names.push_back(name);
+        if (!layout->contains(name)) {
+            return MC_FAIL("texture tile '" + name +
+                           "' has no entry in the atlas layout");
+        }
+    }
+    for (const auto& [name, pos] : layout->tiles) {
+        (void)pos;
+        if (m_tiles.count(name) == 0) {
+            return MC_FAIL("atlas layout entry '" + name +
+                           "' has no texture tile (no '" + name +
+                           ".png' in the texture directory)");
+        }
     }
 
-    auto layout = AtlasLayout::compute(names, kTileSize);
-    MC_TRY(layout);
     m_layout = std::move(*layout);
 
     // Pack pixels (top-to-bottom rows, matching the UV mapping).

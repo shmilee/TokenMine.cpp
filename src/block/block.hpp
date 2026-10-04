@@ -16,9 +16,17 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace mc {
+
+// Right-click interaction kinds (Phase 17). A block whose
+// BlockProperties.interact names one of these opens the corresponding GUI
+// instead of placing a block. The set is validated at data load (see
+// BlockRegistry) — a block can only declare an interaction the game
+// implements.
+inline constexpr std::string_view kInteractCraftingTable = "crafting_table";
 
 // Stable handle into a BlockRegistry. Invalid until assigned.
 //
@@ -55,6 +63,10 @@ struct BlockProperties {
     // How many of the drop item one break yields (1..64, must fit in one
     // stack of the drop item — cross-checked at game init).
     int dropsCount = 1;
+    // Right-click interaction (Phase 17): kInteractCraftingTable opens the
+    // crafting-table GUI instead of placing a block. Empty (the default) =
+    // no special interaction. Validated against the known set at data load.
+    std::string interact;
 };
 
 // Which texture name is applied to each face group.

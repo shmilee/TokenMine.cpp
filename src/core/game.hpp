@@ -47,6 +47,7 @@
 #include "ui/debug_overlay.hpp"
 #include "ui/font.hpp"
 #include "ui/inventory_ui.hpp"
+#include "item/crafting_grid.hpp"
 #include "item/inventory.hpp"
 #include "item/item_registry.hpp"
 #include "item/recipe.hpp"
@@ -88,10 +89,18 @@ struct GameArgs {
 
 class Game {
 public:
-    // The inventory UI (Phase 15) holds references to the inventory and
-    // the item registry, so it is constructed here (after both, in
-    // declaration order).
-    Game() : m_inventoryUi(m_inventory, m_items) {}
+    // Which crafting panel (Phase 17) is open (None = nothing open).
+    enum class OpenPanel {
+        None,      // no panel
+        Inventory, // E: 2x2 grid + the shapeless recipe list
+        Table,     // right-clicked crafting table: the 3x3 grid
+    };
+
+    // The crafting UIs (Phase 15/17) hold references to the inventory,
+    // the crafting grids and the registries, so they are constructed here
+    // (after all of them, in declaration order).
+    Game() : m_inventoryUi(m_inventory, m_inventoryGrid, m_items, m_recipes),
+             m_tableUi(m_inventory, m_tableGrid, m_items, m_recipes) {}
     ~Game();
 
     Result<void> init(const GameArgs& args);
@@ -190,13 +199,18 @@ private:
     // -- Phase 15 UI / audio / particles ------------------------------------
     // E/F3/F5 handling (F3 + F5 work in any pointer state; E opens the
     // inventory only from the captured state and closes it from the free
-    // state, ESC closes it too).
+    // state, ESC closes any open panel too).
     void handleUiKeys();
-    // Click routing while the inventory is open: craft rows first, then
-    // slot pick-and-place (InventoryUI).
-    void handleInventoryClicks();
-    void openInventory();
-    void closeInventory();
+    // The shapeless recipes in registry order (the E panel's craft list —
+    // shaped recipes are crafted in the grids, not from the list).
+    std::vector<const Recipe*> shapelessRecipes() const;
+    // Click routing while a crafting panel is open (Phase 17): shapeless
+    // craft rows (the E panel only), then the output slot, a grid cell or
+    // an inventory slot (the active panel's InventoryUI).
+    void handlePanelClicks();
+    // Opens the given panel (releasing the pointer) / closes the open one.
+    void openPanel(OpenPanel panel);
+    void closePanel();
     // Footstep sound timer (moving + on ground, pointer captured).
     void updateSoundTimers(double dt);
     // Phase 16 survival polling: a health drop drives the hurt flash +
@@ -351,8 +365,17 @@ private:
     // Phase 15 state (all default-off: the no-input baseline renders no
     // UI at all, keeping the Phase 14 screenshots byte-identical).
     bool m_debugOverlay = false;
-    bool m_inventoryOpen = false;
+
+    // Phase 17 crafting: the two persistent crafting grids (the E panel's
+    // 2x2 uses the top-left 4 cells of its 9-cell model; the table's grid
+    // is separate) and the open-panel state machine. The grids survive a
+    // close/reopen (see KNOWN_ISSUES) and are saved (format 3).
+    CraftingGrid m_inventoryGrid;
+    CraftingGrid m_tableGrid;
     InventoryUI m_inventoryUi;
+    InventoryUI m_tableUi;
+    OpenPanel m_openPanel = OpenPanel::None;
+    bool panelOpen() const { return m_openPanel != OpenPanel::None; }
 
     // Phase 15 particles + audio: the break bursts (deterministic seeds:
     // world seed mixed with an increasing per-break counter) and the sound

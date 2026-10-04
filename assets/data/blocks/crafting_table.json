@@ -1,0 +1,15 @@
+{
+  "id": "crafting_table",
+  "properties": {
+    "hardness": 2.5,
+    "drops": "crafting_table",
+    "interact": "crafting_table"
+  },
+  "model": {
+    "textures": {
+      "top": "crafting_table_top",
+      "side": "crafting_table_side",
+      "bottom": "planks"
+    }
+  }
+}

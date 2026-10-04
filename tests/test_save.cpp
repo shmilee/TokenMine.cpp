@@ -13,6 +13,7 @@
 #include "block/block_registry.hpp"
 #include "core/json.hpp"
 #include "core/save.hpp"
+#include "item/crafting_grid.hpp"
 #include "item/item_registry.hpp"
 #include "world/world.hpp"
 
@@ -144,12 +145,140 @@ TEST(SaveRoundTripTest, SerializeRejectsUnregisteredSlotItem) {
 
 TEST(SaveParseTest, RejectsUnknownOrMissingFormat) {
     Fixture f;
-    // Format 3 is a future version this build cannot read; a missing
-    // format is a corrupt file. (Formats 1 and 2 are both accepted —
+    // Format 4 is a future version this build cannot read; a missing
+    // format is a corrupt file. (Formats 1, 2 and 3 are all accepted —
     // see FormatOneLoadsWithoutHealth.)
-    Json root = parseJson(R"({"format":3,"seed":42,"time":0.25,"player":{},"inventory":{},"entities":[],"blocks":[],"fluids":[]})");
+    Json root = parseJson(R"({"format":4,"seed":42,"time":0.25,"player":{},"inventory":{},"entities":[],"blocks":[],"fluids":[]})");
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
     EXPECT_FALSE(parseSave(withoutKey(root, "format"), f.items, f.blocks, 42).ok());
+}
+
+// -- crafting grids (format 3; Phase 17) ------------------------------------------
+
+TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.invGrid.resize(CraftingGrid::kSize);
+    s.tableGrid.resize(CraftingGrid::kSize);
+    s.invGrid[0] = ItemStack {f.items.idForName("dirt"), 5};
+    s.invGrid[4] = ItemStack {f.items.idForName("pick"), 1};
+    s.tableGrid[8] = ItemStack {f.items.idForName("stone"), 64};
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    // Format 3 writes are always format 3.
+    EXPECT_EQ(j->find("format")->asInt(), 3);
+    auto out = parseSave(*j, f.items, f.blocks, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
+    ASSERT_EQ(out->tableGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
+    for (int i = 0; i < CraftingGrid::kSize; ++i) {
+        EXPECT_EQ(out->invGrid[static_cast<std::size_t>(i)],
+                  s.invGrid[static_cast<std::size_t>(i)])
+            << "invGrid cell " << i;
+        EXPECT_EQ(out->tableGrid[static_cast<std::size_t>(i)],
+                  s.tableGrid[static_cast<std::size_t>(i)])
+            << "tableGrid cell " << i;
+    }
+}
+
+TEST(SaveRoundTripTest, EmptyGridsRoundTrip) {
+    Fixture f;
+    const SaveGame s = makeSave(f); // no grids set
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    auto out = parseSave(*j, f.items, f.blocks, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    // Format 3 always carries both grids (here: all 9 cells empty).
+    EXPECT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
+    EXPECT_EQ(out->tableGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
+    for (int i = 0; i < CraftingGrid::kSize; ++i) {
+        EXPECT_TRUE(out->invGrid[static_cast<std::size_t>(i)].empty());
+        EXPECT_TRUE(out->tableGrid[static_cast<std::size_t>(i)].empty());
+    }
+}
+
+TEST(SaveParseTest, FormatTwoLoadsWithEmptyGrids) {
+    // A format-2 file (Phase 16, pre-grids) still loads: the grids stay
+    // empty (the old saves predate them).
+    Fixture f;
+    const SaveGame s = makeSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["format"] = Json(2);
+    root = withoutKey(root, "inv_grid");
+    root = withoutKey(root, "table_grid");
+    auto out = parseSave(root, f.items, f.blocks, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_TRUE(out->invGrid.empty());
+    EXPECT_TRUE(out->tableGrid.empty());
+}
+
+TEST(SaveParseTest, FormatThreeRequiresBothGrids) {
+    Fixture f;
+    const SaveGame s = makeSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json missingInv = *j;
+    missingInv = withoutKey(missingInv, "inv_grid");
+    EXPECT_FALSE(parseSave(missingInv, f.items, f.blocks, 42).ok());
+    Json missingTable = *j;
+    missingTable = withoutKey(missingTable, "table_grid");
+    EXPECT_FALSE(parseSave(missingTable, f.items, f.blocks, 42).ok());
+}
+
+TEST(SaveParseTest, RejectsBadCraftingGrid) {
+    Fixture f;
+    const SaveGame s = makeSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    auto withGrid = [&](Json grid) {
+        Json root = *j;
+        root["inv_grid"] = std::move(grid);
+        return root;
+    };
+    // Wrong size (8 cells).
+    {
+        Json shortGrid = Json::array();
+        for (int i = 0; i < CraftingGrid::kSize - 1; ++i) {
+            Json e = Json::object();
+            e["item"] = Json(std::string(""));
+            e["count"] = Json(0);
+            shortGrid.push_back(std::move(e));
+        }
+        EXPECT_FALSE(parseSave(withGrid(shortGrid), f.items, f.blocks, 42).ok());
+    }
+    // Unknown item in a cell.
+    {
+        Json bad = *j;
+        Json cells = bad["inv_grid"];
+        Json e = Json::object();
+        e["item"] = Json(std::string("nope"));
+        e["count"] = Json(1);
+        // Rebuild with cell 0 replaced (Json arrays have no index-set).
+        Json rebuilt = Json::array();
+        rebuilt.push_back(std::move(e));
+        for (std::size_t i = 1; i < cells.size(); ++i) {
+            rebuilt.push_back(cells.at(i));
+        }
+        bad["inv_grid"] = std::move(rebuilt);
+        EXPECT_FALSE(parseSave(bad, f.items, f.blocks, 42).ok());
+    }
+    // Count above the tool's max stack (1).
+    {
+        Json bad = *j;
+        Json cells = bad["inv_grid"];
+        Json e = Json::object();
+        e["item"] = Json(std::string("pick"));
+        e["count"] = Json(2);
+        Json rebuilt = Json::array();
+        rebuilt.push_back(std::move(e));
+        for (std::size_t i = 1; i < cells.size(); ++i) {
+            rebuilt.push_back(cells.at(i));
+        }
+        bad["table_grid"] = std::move(rebuilt);
+        EXPECT_FALSE(parseSave(bad, f.items, f.blocks, 42).ok());
+    }
 }
 
 TEST(SaveRoundTripTest, HealthRoundTrips) {
@@ -164,17 +293,22 @@ TEST(SaveRoundTripTest, HealthRoundTrips) {
 }
 
 TEST(SaveParseTest, FormatOneLoadsWithoutHealth) {
-    // A format-1 file (Phase 13, no health field) still loads: the health
-    // stays "unspecified" (-1) and the game applies the player's max.
+    // A format-1 file (Phase 13, no health field, no crafting grids)
+    // still loads: the health stays "unspecified" (-1) and the game
+    // applies the player's max.
     Fixture f;
     SaveGame s = makeSave(f); // playerHealth -1: the field is omitted
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["format"] = Json(1);
+    root = withoutKey(root, "inv_grid"); // format 1 predates the grids
+    root = withoutKey(root, "table_grid");
     auto out = parseSave(root, f.items, f.blocks, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerHealth, -1.0f);
+    EXPECT_TRUE(out->invGrid.empty());
+    EXPECT_TRUE(out->tableGrid.empty());
 }
 
 TEST(SaveParseTest, RejectsNegativeHealth) {
@@ -268,7 +402,7 @@ TEST(SaveParseTest, RejectsBadInventory) {
         Json e = Json::object();
         e["item"] = Json(std::string(""));
         e["count"] = Json(0);
-        slots26.push_back(std::move(e));
+        slots26.push_back(e);
     }
     EXPECT_FALSE(parseSave(withSlots(slots26), f.items, f.blocks, 42).ok());
 

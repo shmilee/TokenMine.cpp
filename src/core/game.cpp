@@ -306,9 +306,16 @@ Result<void> Game::buildScene() {
     MC_TRY(blocksLoad);
 
     // -- texture atlas (16x16 tiles from assets/textures/blocks/*.png) --------
+    // The layout is data (data/textures/block_atlas.json): explicit cells
+    // per tile on a power-of-two grid, so adding a texture never moves an
+    // existing tile's UVs (byte-stable baseline screenshots).
     auto atlasLoad = m_atlas.loadDirectory(m_assets, "textures/blocks");
     MC_TRY(atlasLoad);
-    auto atlasUpload = m_atlas.upload();
+    auto atlasLayoutText = m_assets.loadText("data/textures/block_atlas.json");
+    MC_TRY(atlasLayoutText);
+    auto atlasLayout = Json::parse(*atlasLayoutText);
+    MC_TRY(atlasLayout);
+    auto atlasUpload = m_atlas.upload(*atlasLayout);
     MC_TRY(atlasUpload);
 
     // Cross-check: every texture a block references must exist in the atlas.
@@ -732,6 +739,12 @@ Result<SaveGame> Game::collectSave() const {
     for (std::size_t i = 0; i < save.slots.size(); ++i) {
         save.slots[i] = m_inventory.at(i);
     }
+    // The crafting grids (format 3): items left in a grid are the player's
+    // — saving them keeps a mid-craft state loadable.
+    for (int i = 0; i < CraftingGrid::kSize; ++i) {
+        save.invGrid.push_back(m_inventoryGrid.at(i));
+        save.tableGrid.push_back(m_tableGrid.at(i));
+    }
     for (const std::unique_ptr<Entity>& e : m_entities) {
         // The game only ever spawns ItemEntities; anything else means a
         // code path this save format cannot express — fail loudly.
@@ -831,6 +844,17 @@ Result<void> Game::applySave(const SaveGame& save) {
         m_inventory.setSlot(i, save.slots[i]);
     }
     m_selectedSlot = static_cast<std::size_t>(save.selectedSlot);
+    // 4b) Crafting grids (format 3; format 1/2 saves load them empty).
+    m_inventoryGrid.clear();
+    m_tableGrid.clear();
+    for (int i = 0; i < CraftingGrid::kSize; ++i) {
+        if (i < static_cast<int>(save.invGrid.size())) {
+            m_inventoryGrid.setSlot(i, save.invGrid[static_cast<std::size_t>(i)]);
+        }
+        if (i < static_cast<int>(save.tableGrid.size())) {
+            m_tableGrid.setSlot(i, save.tableGrid[static_cast<std::size_t>(i)]);
+        }
+    }
     // 5) Dropped items (with their lifetime/pickup timers restored).
     for (const SavedItemEntity& e : save.entities) {
         const Item& item = m_items.at(m_items.idForName(e.item));
@@ -944,7 +968,7 @@ int Game::run() {
         // pointer, while the inventory is open it closes it, while dead
         // the death screen owns the input — all handled in update).
         if (m_input.quitRequested() ||
-            (!m_window.relativeMouseMode() && !m_inventoryOpen &&
+            (!m_window.relativeMouseMode() && !panelOpen() &&
              !m_player->isDead() &&
              m_input.wasPressed(GameKey::Escape))) {
             MC_LOG_INFO("Exit requested, shutting down");
@@ -1057,8 +1081,8 @@ void Game::update(double dt) {
     // While the inventory is open, player physics and block interaction
     // are paused; the world keeps ticking (day cycle, fluids, entities,
     // streaming) — see KNOWN_ISSUES.
-    if (m_inventoryOpen) {
-        handleInventoryClicks();
+    if (panelOpen()) {
+        handlePanelClicks();
     } else {
         handleInteraction(dt);
     }
@@ -1093,7 +1117,7 @@ void Game::update(double dt) {
     // pointer is captured, so an unlocked cursor never rotates the view.
     // Paused while the inventory is open (Phase 15) or the player is dead
     // (Phase 16: the death screen freezes the body; R respawns).
-    if (!m_inventoryOpen && !m_player->isDead()) {
+    if (!panelOpen() && !m_player->isDead()) {
         m_player->update(dt, m_input, m_window.relativeMouseMode());
     }
     m_camera.position = m_player->eyePosition();
@@ -1152,6 +1176,17 @@ void Game::handleInteraction(double dt) {
         return;
     }
     if (m_input.wasPressed(MouseButton::Right)) {
+        // Data-driven interaction (Phase 17): a block whose `interact`
+        // property names a known GUI opens it instead of placing.
+        if (const std::optional<BlockHit> hit = targetBlock(); hit) {
+            const Block& b = m_blocks.at(
+                m_world.getBlock(hit->block.x, hit->block.y,
+                                 hit->block.z));
+            if (b.properties.interact == kInteractCraftingTable) {
+                openPanel(OpenPanel::Table);
+                return;
+            }
+        }
         placeBlock();
     }
     if (m_input.wasPressed(GameKey::Tab)) {
@@ -1510,64 +1545,98 @@ void Game::handleUiKeys() {
         }
     }
     if (m_input.wasPressed(GameKey::E)) {
-        if (m_inventoryOpen) {
-            closeInventory();
+        if (panelOpen()) {
+            closePanel();
         } else if (m_window.relativeMouseMode()) {
-            openInventory();
+            openPanel(OpenPanel::Inventory);
         }
     }
-    if (m_inventoryOpen && m_input.wasPressed(GameKey::Escape)) {
-        closeInventory();
+    if (panelOpen() && m_input.wasPressed(GameKey::Escape)) {
+        closePanel();
     }
 }
 
-void Game::openInventory() {
+void Game::openPanel(OpenPanel panel) {
     m_window.setRelativeMouseMode(false); // free the cursor for clicking
-    m_inventoryOpen = true;
+    m_openPanel = panel;
     resetBreaking();
     m_sound.play("ui_open");
 }
 
-void Game::closeInventory() {
-    m_inventoryOpen = false;
+void Game::closePanel() {
+    m_openPanel = OpenPanel::None;
     m_sound.play("ui_close");
 }
 
-void Game::handleInventoryClicks() {
+// The shapeless recipes in registry order: the E panel's craft list
+// (shaped recipes are crafted in the grids, not from the list).
+std::vector<const Recipe*> Game::shapelessRecipes() const {
+    std::vector<const Recipe*> out;
+    for (const Recipe& r : m_recipes.all()) {
+        if (r.type == RecipeType::Shapeless) {
+            out.push_back(&r);
+        }
+    }
+    return out;
+}
+
+void Game::handlePanelClicks() {
     const int w = m_window.width();
     const int h = m_window.height();
+    const bool table = m_openPanel == OpenPanel::Table;
+    const PanelKind kind =
+        table ? PanelKind::CraftingTable : PanelKind::Inventory;
+    std::vector<const Recipe*> shapeless;
+    if (!table) {
+        shapeless = shapelessRecipes();
+    }
     const InventoryLayout layout =
-        InventoryLayout::compute(w, h, static_cast<int>(m_recipes.count()));
+        InventoryLayout::compute(w, h, static_cast<int>(shapeless.size()),
+                                 kind);
     const Vec2 mp = m_input.mousePosition();
     const int px = static_cast<int>(mp.x);
     const int py = static_cast<int>(mp.y);
+    InventoryUI& ui = table ? m_tableUi : m_inventoryUi;
+    // The layout hit tests are disjoint: at most one of slot / grid cell /
+    // output is active (the UI dispatch checks output first, then grid,
+    // then slot; all-inactive drops the carry on a left click).
+    const int cell = layout.gridCellAt(px, py);
+    const int gridSlot =
+        cell >= 0 ? layout.gridSlots[static_cast<std::size_t>(cell)] : -1;
+    const bool onOutput = layout.inOutput(px, py);
     if (m_input.wasPressed(MouseButton::Left)) {
         // Craft rows first (they sit beside the slots, so the hit test is
         // unambiguous): a click crafts when the inventory can satisfy the
         // recipe (all-or-nothing, see craft()).
-        const int row = layout.recipeRowAt(px, py);
-        if (row >= 0) {
-            const Recipe& recipe = m_recipes.all()[row];
-            if (canCraft(m_inventory, recipe, m_items)) {
-                auto crafted = craft(m_inventory, recipe, m_items);
-                if (crafted.ok()) {
-                    m_sound.play("craft");
-                } else {
-                    MC_LOG_ERROR("Craft failed: " + crafted.error().describe());
+        if (!table) {
+            const int row = layout.recipeRowAt(px, py);
+            if (row >= 0) {
+                const Recipe& recipe = *shapeless[static_cast<std::size_t>(row)];
+                if (canCraft(m_inventory, recipe, m_items)) {
+                    auto crafted = craft(m_inventory, recipe, m_items);
+                    if (crafted.ok()) {
+                        m_sound.play("craft");
+                    } else {
+                        MC_LOG_ERROR("Craft failed: " + crafted.error().describe());
+                    }
                 }
+                return;
             }
-            return;
         }
-        m_inventoryUi.leftClick(layout.slotAt(px, py));
+        if (ui.leftClick(layout.slotAt(px, py), gridSlot, onOutput)) {
+            m_sound.play("craft");
+        }
         return;
     }
     if (m_input.wasPressed(MouseButton::Right)) {
-        m_inventoryUi.rightClick(layout.slotAt(px, py));
+        if (ui.rightClick(layout.slotAt(px, py), gridSlot, onOutput)) {
+            m_sound.play("craft");
+        }
     }
 }
 
 void Game::updateSoundTimers(double dt) {
-    if (!m_player || !m_window.relativeMouseMode() || m_inventoryOpen) {
+    if (!m_player || !m_window.relativeMouseMode() || panelOpen()) {
         return;
     }
     const Vec3 v = m_player->velocity();
@@ -1651,7 +1720,7 @@ void Game::drawWorldOverlay(const Mat4& view, const Mat4& projection) {
     // block being broken; the outline over whatever block the ray hits.
     // Both are world-space draws through the UI shader (unlit).
     const bool playing =
-        m_window.relativeMouseMode() && !m_inventoryOpen;
+        m_window.relativeMouseMode() && !panelOpen();
     if (!playing) {
         return;
     }
@@ -1868,8 +1937,8 @@ void Game::renderUi() {
     const int mx = static_cast<int>(mouse.x);
     const int my = static_cast<int>(mouse.y);
 
-    // -- hotbar + crosshair + held item (while captured, inventory closed) --
-    if (locked && !m_inventoryOpen) {
+    // -- hotbar + crosshair + held item (while captured, no panel open) --
+    if (locked && !panelOpen()) {
         const int n = Inventory::kHotbarSize;
         const int total = n * kHotbarSlotSize + (n - 1) * kHotbarSlotGap;
         const int x0 = (w - total) / 2;
@@ -1944,19 +2013,35 @@ void Game::renderUi() {
         addText(hint, (w - textWidth(hint)) / 2, h / 2 + 8, 1, kText);
     }
 
-    // -- inventory + crafting panel (while open) ----------------------------
-    if (m_inventoryOpen) {
+    // -- crafting panel (while open): the E inventory (2x2 grid + the
+    // shapeless recipe list) or the crafting table (3x3 grid). ---------------
+    if (panelOpen()) {
+        const bool table = m_openPanel == OpenPanel::Table;
+        const PanelKind kind =
+            table ? PanelKind::CraftingTable : PanelKind::Inventory;
+        std::vector<const Recipe*> shapeless;
+        if (!table) {
+            shapeless = shapelessRecipes();
+        }
         const InventoryLayout layout =
             InventoryLayout::compute(w, h,
-                                     static_cast<int>(m_recipes.count()));
+                                     static_cast<int>(shapeless.size()),
+                                     kind);
+        InventoryUI& ui = table ? m_tableUi : m_inventoryUi;
+
         // Panel background + titles.
         addQuad(batchFor(kPanel, false, nullptr), layout.panel.x,
                 layout.panel.y, layout.panel.w, layout.panel.h);
-        addText("Inventory", layout.title.x, layout.title.y + 6, 2, kText);
-        addText("Crafting", layout.craftHeader.x, layout.craftHeader.y + 6,
-                2, kText);
+        addText(table ? "Crafting Table" : "Inventory", layout.title.x,
+                layout.title.y + 6, 2, kText);
+        if (!table) {
+            addText("Crafting", layout.craftHeader.x,
+                    layout.craftHeader.y + 6, 2, kText);
+        }
 
         const int hoverSlot = layout.slotAt(mx, my);
+        const int hoverCell = layout.gridCellAt(mx, my);
+        const bool hoverOutput = layout.inOutput(mx, my);
         for (std::size_t i = 0; i < layout.slots.size(); ++i) {
             const UIRect& r = layout.slots[i];
             addQuad(batchFor(kSlotBg, false, nullptr), r.x, r.y, r.w, r.h);
@@ -1978,10 +2063,52 @@ void Game::renderUi() {
             }
         }
 
-        // Crafting rows: output icon + "name xN" (white when craftable,
-        // dim otherwise) + the ingredient list.
+        // Crafting grid cells + the output slot (the matched recipe's
+        // result — shaped first, then shapeless; see matchGridRecipe).
+        for (std::size_t i = 0; i < layout.gridCells.size(); ++i) {
+            const UIRect& r = layout.gridCells[i];
+            addQuad(batchFor(kSlotBg, false, nullptr), r.x, r.y, r.w, r.h);
+            if (static_cast<int>(i) == hoverCell) {
+                addBorder(batchFor(kHover, false, nullptr), r, 2);
+            } else {
+                addBorder(batchFor(kBorder, false, nullptr), r, 1);
+            }
+            const ItemStack& stack = ui.grid().at(layout.gridSlots[i]);
+            drawIcon(stack, static_cast<float>(r.x + r.w / 2),
+                     static_cast<float>(r.y + r.h / 2), 34);
+            if (!stack.empty() &&
+                stack.count < m_items.at(stack.item).maxStack) {
+                const std::string count = std::to_string(stack.count);
+                addText(count, r.x + r.w - 4 - textWidth(count),
+                        r.y + r.h - 4 - kGlyphSize, 1, kText);
+            }
+        }
+        {
+            const UIRect& r = layout.output;
+            addQuad(batchFor(kSlotBg, false, nullptr), r.x, r.y, r.w, r.h);
+            if (hoverOutput) {
+                addBorder(batchFor(kHover, false, nullptr), r, 2);
+            } else {
+                addBorder(batchFor(kBorder, false, nullptr), r, 1);
+            }
+            const GridMatch m = ui.match();
+            if (m.matched()) {
+                const ItemStack out {m.recipe->output,
+                                     m.recipe->outputCount};
+                drawIcon(out, static_cast<float>(r.x + r.w / 2),
+                         static_cast<float>(r.y + r.h / 2), 34);
+                if (out.count < m_items.at(out.item).maxStack) {
+                    const std::string count = std::to_string(out.count);
+                    addText(count, r.x + r.w - 4 - textWidth(count),
+                            r.y + r.h - 4 - kGlyphSize, 1, kText);
+                }
+            }
+        }
+
+        // Crafting rows (E panel only): output icon + "name xN" (white when
+        // craftable, dim otherwise) + the ingredient list.
         for (std::size_t i = 0; i < layout.recipes.size(); ++i) {
-            const Recipe& recipe = m_recipes.all()[i];
+            const Recipe& recipe = *shapeless[static_cast<std::size_t>(i)];
             const UIRect& r = layout.recipes[i];
             const bool can = canCraft(m_inventory, recipe, m_items);
             const Vec4 outColor = can ? kText : kTextDim;
@@ -2002,16 +2129,24 @@ void Game::renderUi() {
             addText("needs: " + needs, r.x + 32, r.y + 24, 1, kTextDim);
         }
 
-        // The hovered slot's item name + the carried stack at the cursor.
+        // The hovered slot/cell's item name + the carried stack at the
+        // cursor.
         if (hoverSlot >= 0) {
             const ItemStack& stack = m_inventory.at(hoverSlot);
             if (!stack.empty()) {
                 addText(m_items.at(stack.item).name, mx + 12, my + 12, 1,
                         kText);
             }
+        } else if (hoverCell >= 0) {
+            const ItemStack& stack =
+                ui.grid().at(layout.gridSlots[static_cast<std::size_t>(hoverCell)]);
+            if (!stack.empty()) {
+                addText(m_items.at(stack.item).name, mx + 12, my + 12, 1,
+                        kText);
+            }
         }
-        if (m_inventoryUi.carrying()) {
-            drawIcon(m_inventoryUi.carry(), static_cast<float>(mx),
+        if (ui.carrying()) {
+            drawIcon(ui.carry(), static_cast<float>(mx),
                      static_cast<float>(my), 34);
         }
         // Close hint, centered at the panel bottom.
@@ -2050,7 +2185,7 @@ void Game::renderUi() {
         info.streamPending = static_cast<int>(m_streamPending.size());
         info.streamRadius = m_streamRadius;
         info.pointerLocked = locked;
-        info.inventoryOpen = m_inventoryOpen;
+        info.inventoryOpen = panelOpen();
         info.particles = m_particles.size();
         if (m_player) {
             info.health = m_player->health();

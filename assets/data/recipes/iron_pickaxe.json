@@ -1,8 +1,14 @@
 {
   "id": "iron_pickaxe",
+  "type": "shaped",
   "output": { "item": "iron_pickaxe", "count": 1 },
-  "ingredients": [
-    { "item": "iron_ingot", "count": 3 },
-    { "item": "stick", "count": 2 }
-  ]
+  "pattern": [
+    "III",
+    " S ",
+    " S "
+  ],
+  "key": {
+    "I": "iron_ingot",
+    "S": "stick"
+  }
 }

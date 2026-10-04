@@ -1,37 +1,56 @@
-// Crafting recipes (Phase 12): data-driven recipe definitions + the pure
-// craft logic.
+// Crafting recipes (Phase 12, shaped support Phase 17): data-driven
+// recipe definitions + the pure craft logic.
 //
-// A recipe is a shapeless bag of ingredients (order-independent) that
-// yields one output stack. There is no in-game crafting UI or trigger yet
-// (Phase 15): the Game loads and validates the recipe data at startup, and
-// canCraft/craft are the deterministic core the future UI will call.
+// Two recipe kinds, both data-driven:
+//   - shapeless: a bag of ingredients (order-independent) that yields one
+//     output stack. Crafted from the recipe list in the inventory panel or
+//     from a crafting grid (any placement of the bag).
+//   - shaped (Phase 17): a pattern of item cells (1..3 rows, 1..3 chars
+//     per row, space = empty) with a char -> item key. It matches a
+//     crafting grid when the pattern fits at some offset and every grid
+//     cell the pattern does not cover is empty (the grid model is 3x3; the
+//     inventory panel exposes its top-left 2x2 — see crafting_grid.hpp).
 //
 // Recipe JSON (assets/data/recipes/*.json, one file per recipe):
+// Shapeless:
 // {
-//   "id": "iron_pickaxe",
-//   "output": { "item": "iron_pickaxe", "count": 1 },
-//   "ingredients": [
-//     { "item": "iron_ingot", "count": 3 },
-//     { "item": "stick", "count": 2 }
-//   ]
+//   "id": "planks",
+//   "output": { "item": "planks", "count": 4 },
+//   "ingredients": [ { "item": "wood", "count": 1 } ]
 // }
+// Shaped ("type" defaults to "shapeless" when absent):
+// {
+//   "id": "crafting_table",
+//   "type": "shaped",
+//   "output": { "item": "crafting_table", "count": 1 },
+//   "pattern": ["PP", "PP"],
+//   "key": { "P": "planks" }
+// }
+// A shaped definition requires 'pattern' + 'key' and must NOT carry
+// 'ingredients'; a shapeless one requires 'ingredients' and must not
+// carry 'pattern'/'key'.
 //
 // Validation is strict and cross-checked against the ItemRegistry (which
 // the game loads first): unknown item references, an empty ingredient
 // list, out-of-range counts (the output must fit one stack of its item),
-// and duplicate ingredient items all produce descriptive errors naming the
-// recipe. Unknown fields warn but do not reject.
+// duplicate ingredient items, pattern rows/chars beyond 3, a pattern char
+// missing from the key, a key entry unused by the pattern, and an all-empty
+// pattern all produce descriptive errors naming the recipe. Unknown fields
+// warn but do not reject.
 //
-// craft() semantics (all-or-nothing, deterministic):
+// craft() semantics (all-or-nothing, deterministic; shapeless recipes on
+// the player's inventory):
 //   - ingredients are consumed in recipe order, each from the lowest-index
 //     slot upward (hotbar before storage);
 //   - the whole operation is simulated on a copy of the inventory and
 //     committed only when it fully succeeds — the output always has room
 //     (even when the output item is also an ingredient), and a failed
 //     craft leaves the inventory bit-for-bit unchanged.
+// Grid crafting (shaped or shapeless) is in crafting_grid.hpp.
 #pragma once
 
 #include <cstddef>
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -45,12 +64,23 @@
 
 namespace mc {
 
+enum class RecipeType {
+    Shapeless, // bag of ingredients (order- and position-independent)
+    Shaped,    // pattern of cells matched against a crafting grid
+};
+
 struct Recipe {
     std::string id;
+    RecipeType type = RecipeType::Shapeless;
     ItemID output;
     int outputCount = 1;
-    // (item, required count), recipe order. Order-independent semantics.
+    // Shapeless: (item, required count), recipe order. Order-independent
+    // semantics. Empty for shaped recipes.
     std::vector<std::pair<ItemID, int>> ingredients;
+    // Shaped: the pattern rows (1..3 rows, 1..3 chars each; a space is an
+    // empty cell) and the char -> item key. Empty for shapeless recipes.
+    std::vector<std::string> pattern;
+    std::map<char, ItemID> key;
 };
 
 class RecipeRegistry {

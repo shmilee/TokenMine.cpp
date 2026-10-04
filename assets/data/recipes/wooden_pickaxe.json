@@ -1,8 +1,14 @@
 {
   "id": "wooden_pickaxe",
+  "type": "shaped",
   "output": { "item": "wooden_pickaxe", "count": 1 },
-  "ingredients": [
-    { "item": "wood", "count": 2 },
-    { "item": "stick", "count": 2 }
-  ]
+  "pattern": [
+    "PPP",
+    " S ",
+    " S "
+  ],
+  "key": {
+    "P": "planks",
+    "S": "stick"
+  }
 }

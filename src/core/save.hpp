@@ -19,9 +19,11 @@
 //     "selected": 0,
 //     "slots": [ { "item": "stone", "count": 64 }, { "item": "", "count": 0 } ]
 //   },                                        // exactly Inventory::kTotalSize
+//   "inv_grid": [ ... 9 entries ... ],        // format 3+: the inventory
+//   "table_grid": [ ... 9 entries ... ],      // panel's grid + the table's
 //   "entities": [ { "type": "item", "item": "dirt", "count": 1,
 //                   "pos": [0.5, 52.5, 0.5], "age": 12.5,
-//                   "pickup_delay": 0.25 } ],
+//                   "pickup_delay": 0.25 } ], // grid (same slot entries)
 //   "blocks": [ [0, 53, 0, "air"] ],          // cell edits vs generation
 //   "fluids": [ [4, 50, 4, 5] ]               // (name "air" = block removed)
 // }
@@ -29,12 +31,13 @@
 // Validation on load is STRICT (the file is machine-generated, so an
 // unexpected field means corruption or a version mismatch — unlike
 // user-authored data files, unknown fields are an ERROR, not a warning):
-//   - format must be 1 or 2 (format 1 files predate the player health
-//     field and load with full health); the seed must equal the seed the
-//     world was generated with; every item/block name must be registered;
-//     counts respect the item data (1..maxStack, entity cap 64); y in
-//     [0, 128); no duplicate edit position, and a block edit and a fluid
-//     edit can never share a cell (a block displaces fluid).
+//   - format must be 1..3 (format 1 files predate the player health field
+//     and load with full health; format 2 predates the crafting grids and
+//     loads with empty grids); the seed must equal the seed the world was
+//     generated with; every item/block name must be registered; counts
+//     respect the item data (1..maxStack, entity cap 64); y in [0, 128);
+//     no duplicate edit position, and a block edit and a fluid edit can
+//     never share a cell (a block displaces fluid).
 //
 // diffWorld() compares every existing chunk against the reference
 // generation (the same pure generator the World itself used) and emits
@@ -61,8 +64,11 @@ namespace mc {
 // Save format version (bump when the schema changes).
 //   1: original (Phase 13) — no player health field.
 //   2: player health (Phase 16 survival). Format-1 files still load
-//      (health defaults to full); writes are always format 2.
-inline constexpr int kSaveFormat = 2;
+//      (health defaults to full).
+//   3: the crafting grids (Phase 17) — "inv_grid" + "table_grid" (9 slot
+//      entries each). Format 1/2 files still load (grids default to
+//      empty); writes are always format 3.
+inline constexpr int kSaveFormat = 3;
 inline constexpr int kSaveFormatMin = 1;
 
 // One cell whose block differs from generation ("air" = removed).
@@ -101,6 +107,11 @@ struct SaveGame {
     float playerHealth = -1.0f;
     int selectedSlot = 0;
     std::vector<ItemStack> slots; // exactly Inventory::kTotalSize
+    // The crafting grids (format 3; Phase 17): the inventory panel's grid
+    // and the crafting table's grid, 9 cells each (CraftingGrid::kSize).
+    // Empty for format 1/2 saves (the game leaves the grids empty).
+    std::vector<ItemStack> invGrid;
+    std::vector<ItemStack> tableGrid;
     std::vector<SavedItemEntity> entities;
     std::vector<SavedBlockEdit> blockEdits; // sorted by pos
     std::vector<SavedFluidEdit> fluidEdits; // sorted by pos

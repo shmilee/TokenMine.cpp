@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "entity/item_entity.hpp"
+#include "item/crafting_grid.hpp"
 
 namespace mc {
 
@@ -40,6 +41,64 @@ Result<void> rejectUnknownFields(const Json& obj,
                            "' (save files are machine-generated; unknown "
                            "fields mean corruption or a version mismatch)");
         }
+    }
+    return {};
+}
+
+// One { "item", "count } entry, shared by inventory slots and the crafting
+// grids (format 3): "" / 0 = empty, otherwise a registered item name with a
+// count in [1, maxStack].
+Result<void> parseSlotEntry(const Json& e, const ItemRegistry& items,
+                            const std::string& what, ItemStack& out) {
+    if (!e.isObject()) {
+        return MC_FAIL(what + " must be an object");
+    }
+    const std::set<std::string> slotFields {"item", "count"};
+    MC_TRY(rejectUnknownFields(e, slotFields, what));
+    const Json* name = e.find("item");
+    const Json* count = e.find("count");
+    if (name == nullptr || !name->isString() || count == nullptr ||
+        !count->isNumber()) {
+        return MC_FAIL(what + " requires string 'item' and numeric 'count'");
+    }
+    const int n = count->asInt();
+    if (name->asString().empty()) {
+        if (n != 0) {
+            return MC_FAIL(what + " is empty ('item' = \"\") but has count " +
+                           std::to_string(n));
+        }
+        out = ItemStack {};
+        return {};
+    }
+    const ItemID id = items.idForName(name->asString());
+    if (!id.valid()) {
+        return MC_FAIL(what + " holds unknown item '" + name->asString() +
+                       "'");
+    }
+    if (n < 1 || n > items.at(id).maxStack) {
+        return MC_FAIL(what + " count " + std::to_string(n) +
+                       " is out of range for '" + name->asString() +
+                       "' (max stack " +
+                       std::to_string(items.at(id).maxStack) + ")");
+    }
+    out = ItemStack {id, n};
+    return {};
+}
+
+// One crafting grid (format 3): an array of exactly CraftingGrid::kSize
+// slot entries.
+Result<void> parseGrid(const Json& arr, const ItemRegistry& items,
+                       const std::string& what, std::vector<ItemStack>& out) {
+    if (!arr.isArray() ||
+        arr.size() != static_cast<std::size_t>(CraftingGrid::kSize)) {
+        return MC_FAIL("save '" + what + "' must be an array of exactly " +
+                       std::to_string(CraftingGrid::kSize) + " entries");
+    }
+    out.resize(static_cast<std::size_t>(CraftingGrid::kSize));
+    for (std::size_t i = 0; i < arr.size(); ++i) {
+        auto r = parseSlotEntry(arr.at(i), items, what + " #" +
+                                        std::to_string(i), out[i]);
+        MC_TRY(r);
     }
     return {};
 }
@@ -164,6 +223,44 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     inventory["slots"] = slots;
     root["inventory"] = inventory;
 
+    // Format 3: the crafting grids (9 slot entries each; the inventory
+    // panel's 2x2 lives in its grid's top-left 4 cells). Always written —
+    // format-3 files must carry both, even when empty.
+    auto serializeGrid = [&](const std::vector<ItemStack>& grid) -> Result<Json> {
+        Json arr = Json::array();
+        const ItemStack emptyStack;
+        for (int i = 0; i < CraftingGrid::kSize; ++i) {
+            const ItemStack& s =
+                i < static_cast<int>(grid.size()) ? grid[static_cast<std::size_t>(i)]
+                                                  : emptyStack;
+            Json e = Json::object();
+            if (s.empty()) {
+                e["item"] = Json(std::string(""));
+                e["count"] = Json(0);
+            } else {
+                const Item* item = items.find(s.item);
+                if (item == nullptr) {
+                    return MC_FAIL("a crafting grid holds an unregistered "
+                                   "item id " + std::to_string(s.item.value));
+                }
+                e["item"] = Json(item->name);
+                e["count"] = Json(s.count);
+            }
+            arr.push_back(std::move(e));
+        }
+        return arr;
+    };
+    {
+        auto invGrid = serializeGrid(save.invGrid);
+        MC_TRY(invGrid);
+        root["inv_grid"] = std::move(*invGrid);
+    }
+    {
+        auto tableGrid = serializeGrid(save.tableGrid);
+        MC_TRY(tableGrid);
+        root["table_grid"] = std::move(*tableGrid);
+    }
+
     Json entities = Json::array();
     for (const SavedItemEntity& e : save.entities) {
         Json jpos = Json::array();
@@ -214,7 +311,8 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         return MC_FAIL("save file must be a JSON object");
     }
     const std::set<std::string> topLevel {"format", "seed", "time", "player",
-                                          "inventory", "entities", "blocks",
+                                          "inventory", "inv_grid",
+                                          "table_grid", "entities", "blocks",
                                           "fluids"};
     MC_TRY(rejectUnknownFields(def, topLevel, "save file"));
 
@@ -320,43 +418,30 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     }
     save.slots.resize(static_cast<std::size_t>(Inventory::kTotalSize));
     for (std::size_t i = 0; i < slots->size(); ++i) {
-        const Json& e = slots->at(i);
-        if (!e.isObject()) {
-            return MC_FAIL("save slot #" + std::to_string(i) +
-                           " must be an object");
+        auto r = parseSlotEntry(slots->at(i), items, "save slot #" +
+                                       std::to_string(i), save.slots[i]);
+        MC_TRY(r);
+    }
+
+    // -- crafting grids (format 3; Phase 17) --------------------------------------
+    // Absent in format 1/2 files: the grids load empty (the old saves
+    // predate them). Required and strictly validated in format 3.
+    const int fmtVersion = def.find("format")->asInt();
+    if (fmtVersion >= 3) {
+        const Json* invGrid = def.find("inv_grid");
+        if (invGrid == nullptr) {
+            return MC_FAIL("save format 3 requires an 'inv_grid' array");
         }
-        const std::set<std::string> slotFields {"item", "count"};
-        MC_TRY(rejectUnknownFields(e, slotFields, "save slot #" +
-                                                std::to_string(i)));
-        const Json* name = e.find("item");
-        const Json* count = e.find("count");
-        if (name == nullptr || !name->isString() || count == nullptr ||
-            !count->isNumber()) {
-            return MC_FAIL("save slot #" + std::to_string(i) +
-                           " requires string 'item' and numeric 'count'");
+        MC_TRY(parseGrid(*invGrid, items, "inv_grid", save.invGrid));
+        const Json* tableGrid = def.find("table_grid");
+        if (tableGrid == nullptr) {
+            return MC_FAIL("save format 3 requires a 'table_grid' array");
         }
-        const int n = count->asInt();
-        if (name->asString().empty()) {
-            if (n != 0) {
-                return MC_FAIL("save slot #" + std::to_string(i) +
-                               " is empty ('item' = \"\") but has count " +
-                               std::to_string(n));
-            }
-            continue; // default ItemStack {} = empty
-        }
-        const ItemID id = items.idForName(name->asString());
-        if (!id.valid()) {
-            return MC_FAIL("save slot #" + std::to_string(i) +
-                           " holds unknown item '" + name->asString() + "'");
-        }
-        if (n < 1 || n > items.at(id).maxStack) {
-            return MC_FAIL("save slot #" + std::to_string(i) +
-                           " count " + std::to_string(n) +
-                           " is out of range for '" + name->asString() +
-                           "' (max stack " +
-                           std::to_string(items.at(id).maxStack) + ")");
-        }
-        save.slots[i] = ItemStack {id, n};
+        MC_TRY(parseGrid(*tableGrid, items, "table_grid", save.tableGrid));
+    } else if (def.find("inv_grid") != nullptr ||
+               def.find("table_grid") != nullptr) {
+        return MC_FAIL("save grids ('inv_grid'/'table_grid') require "
+                       "format 3 (got " + std::to_string(fmtVersion) + ")");
     }
 
     // -- entities ------------------------------------------------------------------

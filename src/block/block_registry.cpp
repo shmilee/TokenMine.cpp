@@ -98,6 +98,9 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "drops_count", "number",
                    [&](const Json& v) { out.dropsCount = v.asInt(); });
     MC_TRY(r);
+    r = checkField(*p, "interact", "string",
+                   [&](const Json& v) { out.interact = v.asString(); });
+    MC_TRY(r);
 
     if (out.dropsCount < 1 || out.dropsCount > 64) {
         return MC_FAIL("'drops_count' must be in [1, 64], got " +
@@ -115,6 +118,12 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     if (out.lightEmission < 0 || out.lightEmission > 15) {
         return MC_FAIL("'light_emission' must be in [0, 15], got " +
                        std::to_string(out.lightEmission));
+    }
+    if (!out.interact.empty() &&
+        out.interact != kInteractCraftingTable) {
+        return MC_FAIL("block property 'interact' is unsupported: '" +
+                       out.interact + "' (only '" +
+                       std::string(kInteractCraftingTable) + "' exists)");
     }
     if (out.opaque && out.transparent) {
         return MC_FAIL("block cannot be both 'opaque' and 'transparent'");

@@ -543,8 +543,9 @@ TEST(LightingTest, MesherBakesFaceLight) {
     Lighting::propagateAll(world, reg);
     ASSERT_EQ(world.getSkyLight(8, 8, 8), 0); // sanity: the pocket is dark
 
-    auto layoutResult = AtlasLayout::compute({"t"});
-    ASSERT_TRUE(layoutResult.ok());
+    auto layoutResult =
+        AtlasLayout::parse(parseDef(R"({"columns":1,"rows":1,"tiles":{"t":[0,0]}})"));
+    ASSERT_TRUE(layoutResult.ok()) << layoutResult.error().message;
     const ChunkMeshData data =
         ChunkMesher(world, reg, *layoutResult).mesh({0, 0, 0});
 

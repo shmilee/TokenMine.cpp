@@ -42,7 +42,7 @@ cmake --build build
 ./build/bin/minecraft --save myworld --new
 ```
 
-## 当前可玩内容（Phase 16）
+## 当前可玩内容（Phase 17）
 
 - **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时）/游泳时随时上浮，
   `LeftShift` 冲刺，鼠标转向（**左键点击锁定指针；转向仅在指针锁定时生效**，
@@ -67,6 +67,16 @@ cmake --build build
     取自 48×16 条带（`assets/textures/health.png`，`tools/generate_health_icons.py`）；
     填充 = `clamp(hp − 2i, 0, 2)`（半心按 0.5 HP 粒度渲染）。只在游玩态（锁定 +
     背包未开）显示，无输入运行零新增绘制
+- **合成**（Phase 17，`CraftingGrid`/shaped 配方/工作台，全数据驱动）：
+  - **形状配方**：配方 JSON 加 `"type": "shaped"` + `pattern`（行字符串，空格=空位）
+    + `key`（字母→物品）；无 `type` 字段 = shapeless 原料袋（Phase 12 语义）。
+    3×3 网格匹配 = pattern 偏移扫描（pattern 的每个可能左上偏移都试一遍，空格
+    对应的格必须为空）；匹配顺序先 shaped 后 shapeless，配方按文件名字典序
+  - **工作台**：数据驱动方块（`"interact": "crafting_table"` 属性，破坏掉自身）；
+    **锁定时右键命中它 = 打开工作台面板**（3×3 网格 + 输出格，无配方列表），
+    不放置方块；网格内容容器语义（关面板保留、入存档）
+  - **E 背包面板**：2×2 合成格 = 共享 3×3 网格模型的左上 4 格（放不进 shaped
+    配方）；右侧配方列表**只显示 shapeless 配方**（shaped 必须用工作台）
 - **游泳**（Phase 9）：玩家包围盒与任何水体格相交即进入水中状态——水中重力减半
   （12 vs 32）、终端速度 4、水平速度降为 3.1（冲刺无效）、`Space` 随时上浮（4.5）；
   浅水（头在水面上）可以"蹚水走"，深水可以游
@@ -76,9 +86,10 @@ cmake --build build
     `properties.destroyable` 数据驱动，基岩不可破坏）。准星移开/松键/换工具
     进度清零。raycast 把水体当 air 穿过——可以隔水破坏湖底/水下的方块
     （水会被破坏排水、随后流体模拟把它补回）
-  - `右键`（锁定时）：在命中面的邻格放置**当前选中格**的方块物品，并**消耗
-    1 个**（方块不再无限——背包是方块的来源；工具不可放置）；不能放进 solid
-    方块或玩家自身包围盒内
+  - `右键`（锁定时）：先试 interact——命中格有 `interact` 属性（当前仅工作台）
+    则打开对应面板、不放置；否则在命中面的邻格放置**当前选中格**的方块物品，
+    并**消耗 1 个**（方块不再无限——背包是方块的来源；工具不可放置）；不能
+    放进 solid 方块或玩家自身包围盒内
   - `Tab`：切换选中的 hotbar 格（9 格）
   - `Q`（锁定时）：丢弃选中格 1 个到脚下（生成掉落物，0.5s 拾取延迟防立即回吸）
   - `ESC`（锁定时）：释放指针；未锁定时 ESC 退出游戏
@@ -95,7 +106,8 @@ cmake --build build
     `tools/generate_item_icons.py` 程序化生成）
   - **背包 + 合成面板**（`E` 开关；打开时释放指针、暂停玩家物理与方块交互，
     世界/昼夜/流体/实体/流式照常 tick）：27 格（hotbar 行 + 18 背包格）+
-    右侧配方列表（产物图标 + 名称 ×N，白色=可合成/灰色=不可 + 原料清单）；
+    2×2 合成格（共享 3×3 网格模型的左上 4 格）+ 右侧配方列表（**仅 shapeless
+    配方**；产物图标 + 名称 ×N，白色=可合成/灰色=不可 + 原料清单）；
     **左键**取整堆/放入/交换（取出被占格的堆）/并入有剩余空间的同物堆，
     **右键**移 1 个（同物有空间或空格；不同物格=无效操作），点击面板外（左键）
     丢弃手持堆；悬停格显示物品名；点击配方行 = `craft()`（全有或全无）
@@ -128,14 +140,15 @@ cmake --build build
     （1..64 默认 1，须 ≤ 掉落物品 max_stack）掉落 `ItemEntity`——矿石掉材料
     （iron_ore → iron_ingot），wood 掉 wood 本身（木板配方的原料）；
     玩家走近（1.0 格内）自动拾取进背包（MC 同款 0.5s 拾取延迟 + 120s 消亡）
-- **合成**（Phase 12，`Recipe`/`RecipeRegistry`/`craft`，全数据驱动）：
-  配方 = `assets/data/recipes/*.json`（shapeless 原料袋 → 产物，经 ItemRegistry
-  交叉严格校验：物品引用/产物数量 ≤ max_stack/无重复原料）；`canCraft`/`craft`
-  是确定性纯逻辑（原料按槽序升序消耗、副本模拟全有或全无——失败背包逐位不变，
-  产出永远放得下）。当前 4 配方：wood→4 planks、2 planks→4 stick、
-  2 wood+2 stick→wooden_pickaxe、3 iron_ingot+2 stick→iron_pickaxe
-  （iron_pickaxe 由此获得产出途径）。游戏内触发：背包面板（`E`）右侧配方列表
-  点击行 = `craft()`（Phase 15）
+- **合成**（Phase 12 shapeless 基础 + Phase 17 shaped/工作台，全数据驱动）：
+  配方 = `assets/data/recipes/*.json`（shapeless 原料袋 → 产物，或
+  `"type": "shaped"` + `pattern`/`key` 形状配方，经 ItemRegistry 交叉严格
+  校验）；`canCraft`/`craft` 是确定性纯逻辑（原料按槽序升序消耗、副本模拟
+  全有或全无——失败背包逐位不变，产出永远放得下）。当前 5 配方：wood→4
+  planks、2 planks→4 stick（shapeless）、2×2 planks→crafting_table、
+  wooden_pickaxe（PPP/.S./.S.）、iron_pickaxe（III/.S./.S.）（均 shaped，
+  Phase 17）。游戏内触发：背包面板（`E`）右侧配方列表点击行 = `craft()`
+  （仅 shapeless，Phase 15）；或放置并右键工作台打开 3×3 面板合成（Phase 17）
 - **存档/读档**（Phase 13，`--save <slot>`，`src/core/save.{hpp,cpp}`）：
   存档文件 `data/saves/<slot>.json` = **seed + 与生成态的 diff + 完整游戏状态**——
   不重复存储地形，只存"和这个 seed 生成的世界不同的格子"（`blocks`/`fluids`
@@ -220,9 +233,11 @@ cmake --build build
   地平线 → 午夜天底（月亮恒在太阳对面）；夜空有 300 颗确定性星星（世界空间
   r=800 上半球，`splitmix64` 哈希生成）。时间按每帧固定 1/60s 推进（不用墙钟），
   保证无输入运行逐字节可复现
-- **数据驱动方块**：14 个方块（stone/dirt/grass/sand/wood/leaves/glass/water/bedrock/glowstone +
+- **数据驱动方块**：15 个方块（stone/dirt/grass/sand/wood/leaves/glass/water/bedrock/glowstone/crafting_table +
   4 种矿石）+ 内置 air 哨兵（`BlockID{0}`，非数据方块，注册表从 id 1 分配）
-- 16×16 瓦片 TextureAtlas（Minecraft 同款规格），16 张占位纹理
+- 16×16 瓦片 TextureAtlas（Minecraft 同款规格），**布局数据驱动**
+  （`assets/data/textures/block_atlas.json`，4×8；row 4 = 工作台顶/侧 + planks；
+  新增纹理 = 加 PNG + 加一行 JSON，不改代码）
 - 光照贴图（lightmap 顶点烘焙，Phase 7）+ 昼夜循环（Phase 8）
 - 窗口标题实时显示 FPS 与 draw call 数
 
@@ -297,6 +312,9 @@ cmake --build build
    ```
 
    属性缺省即默认值（solid/opaque/destroyable=true, hardness=1.0, light_emission=0, drops 为空=不掉落, drops_count=1）。
+   可选 `interact: "crafting_table"`（Phase 17）：锁定时右键命中该方块打开
+   工作台面板而非放置——值必须来自已知交互集（当前仅 `crafting_table`，
+   其他值 = 启动报错）。
    校验严格：类型错误、越界值、重复 id、缺失纹理面都会报明确错误；未知字段警告但不拒绝。
    `drops` 是**物品名**（游戏启动时对 ItemRegistry 严格校验，未知名=启动报错）——
    block item 与方块同名，所以 `grass → "dirt"` 表示破坏 grass 掉 dirt；
@@ -323,13 +341,19 @@ cmake --build build
 
 校验严格（经 ItemRegistry 交叉检查，错误信息点名配方）：id 非空且唯一；
 `output.item`/原料物品名必须已注册；`output.count` ∈ [1, 产物 max_stack]；
-原料非空、数量 ≥1、同一物品不得重复出现（合并为一条）；未知字段警告。
+shapeless：原料非空、数量 ≥1、同一物品不得重复出现（合并为一条）；
+shaped（Phase 17）：`pattern` 1..3 行、行长 ≤3、空格=空位、非空字母必须在
+`key` 中定义且指向已注册物品；未知字段警告。
 `craft()` 语义：原料按槽序升序消耗（hotbar 先于背包），先在背包副本上模拟
 "消耗+入包"，成功才提交——失败时背包逐位不变（不会扣料却放不下产物丢物品，
-产物是原料之一的配方也正确）。当前配方链：wood→4 planks→(2 planks→4 stick)、
-2 wood+2 stick→wooden_pickaxe、3 iron_ingot+2 stick→iron_pickaxe。
-游戏内触发：`E` 背包面板右侧的配方列表，点击配方行执行 `craft()`
-（Phase 15；可合成的配方白色高亮、不可合成的灰色）。
+产物是原料之一的配方也正确）。网格配方（Phase 17）另走 `CraftingGrid` 匹配：
+pattern 偏移扫描（任意左上偏移放进 3×3、空格对应格必须为空），先 shaped 后
+shapeless、配方按文件名字典序。当前配方链：wood→4 planks→(2 planks→4
+stick)、2×2 planks→crafting_table、wooden_pickaxe（PPP/.S./.S.）、
+iron_pickaxe（III/.S./.S.）。
+游戏内触发：`E` 背包面板右侧的配方列表（仅 shapeless），点击配方行执行
+`craft()`（Phase 15；可合成的配方白色高亮、不可合成的灰色）；或放置并右键
+工作台打开 3×3 面板，按形状放料后取输出格（Phase 17）。
 
 ### 使用存档（Phase 13）
 
@@ -425,6 +449,7 @@ mine-craft/
 - [x] **Phase 14** — Chunk Streaming + 多线程：ThreadPool（post/flush）+ worker 线程按列并行生成（view_distance 半径环，迟滞激活）+ insertChunk 边界标脏 + 增量光照 worker job（替代全量重传播）；基线逐字节不变
 - [x] **Phase 15** — UI / 音效 / 粒子 / 性能统计：游戏内 UI（准星/目标描边/hotbar/手持/背包+合成面板/F3 overlay/F5 存档）、破坏裂纹+粒子、SDL3 音效、物品图标；UI 全按键/指针门控，无输入基线逐字节不变
 - [x] **Phase 16** — 生存系统：生命值/坠落伤害/死亡与重生（R，背包保留）/自然回复/受伤红闪、潜行（LeftControl）、1 格自动台阶（step-up）、玩家↔掉落物分离、生命 HUD（10 心三态）；存档格式 2（player.health）；基线逐字节不变
+- [x] **Phase 17** — 工作台 + 形状合成：shaped 配方 JSON（`pattern`/`key`，网格偏移扫描匹配，先 shaped 后 shapeless）/`CraftingGrid` 9 格网格（`matchesShaped`/`matchesShapeless`/`matchGridRecipe` 纯逻辑）/`BlockProperties.interact` 数据属性 + crafting_table 方块（右键开 3×3 面板、破坏掉自身）/工作台面板（独立容器网格，跨开关保留、入存档）/E 面板 2×2 = 共享 3×3 模型左上 4 格、配方列表仅 shapeless/存档格式 3（`inv_grid`+`table_grid`）/atlas 布局数据驱动（`block_atlas.json` 4×8，row 4 = 工作台顶·侧 + planks）；无输入基线逐字节不变
 
 ## 开发约定
 

@@ -413,3 +413,202 @@ TEST(CraftTest, OutputItemCanBeAnIngredient) {
     ASSERT_TRUE(c.ok()) << c.error().message;
     EXPECT_EQ(inv.at(0), (ItemStack {f.dirt, 2}));
 }
+
+// -- shaped recipes (Phase 17) ---------------------------------------------------
+
+TEST(ShapedRecipeTest, RegistersValidShapedRecipe) {
+    Fixture f;
+    auto r = f.recipes.registerRecipe(
+        parseJson(R"({"id":"ingot_table","type":"shaped",
+                     "output":{"item":"ingot","count":1},
+                     "pattern":["II","II"],
+                     "key":{"I":"ingot"}})"),
+        f.items);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Recipe* rec = f.recipes.find("ingot_table");
+    ASSERT_NE(rec, nullptr);
+    EXPECT_EQ(rec->type, RecipeType::Shaped);
+    ASSERT_EQ(rec->pattern.size(), 2u);
+    EXPECT_EQ(rec->pattern[0], "II");
+    EXPECT_EQ(rec->pattern[1], "II");
+    ASSERT_EQ(rec->key.size(), 1u);
+    EXPECT_EQ(rec->key.at('I'), f.ingot);
+    EXPECT_TRUE(rec->ingredients.empty());
+}
+
+TEST(ShapedRecipeTest, DefaultTypeIsShapeless) {
+    Fixture f;
+    auto r = f.recipes.registerRecipe(
+        parseJson(R"({"id":"x","output":{"item":"ingot","count":1},
+                     "ingredients":[{"item":"stone","count":1}]})"),
+        f.items);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(f.recipes.find("x")->type, RecipeType::Shapeless);
+    // An explicit "shapeless" is accepted too.
+    auto r2 = f.recipes.registerRecipe(
+        parseJson(R"({"id":"y","type":"shapeless",
+                     "output":{"item":"ingot","count":1},
+                     "ingredients":[{"item":"stone","count":1}]})"),
+        f.items);
+    ASSERT_TRUE(r2.ok()) << r2.error().message;
+    EXPECT_EQ(f.recipes.find("y")->type, RecipeType::Shapeless);
+}
+
+TEST(ShapedRecipeTest, RejectsUnknownType) {
+    Fixture f;
+    EXPECT_FALSE(f.recipes
+                     .registerRecipe(
+                         parseJson(R"({"id":"x","type":"fancy",
+                                      "output":{"item":"ingot","count":1},
+                                      "ingredients":[{"item":"stone","count":1}]})"),
+                         f.items)
+                     .ok());
+}
+
+TEST(ShapedRecipeTest, RejectsShapedWithoutPatternOrKey) {
+    Fixture f;
+    EXPECT_FALSE(f.recipes
+                     .registerRecipe(
+                         parseJson(R"({"id":"x","type":"shaped",
+                                      "output":{"item":"ingot","count":1},
+                                      "key":{"I":"ingot"}})"),
+                         f.items)
+                     .ok()); // pattern missing
+    EXPECT_FALSE(f.recipes
+                     .registerRecipe(
+                         parseJson(R"({"id":"y","type":"shaped",
+                                      "output":{"item":"ingot","count":1},
+                                      "pattern":["II"]})"),
+                         f.items)
+                     .ok()); // key missing
+}
+
+TEST(ShapedRecipeTest, RejectsPatternTooLarge) {
+    Fixture f;
+    EXPECT_FALSE(f.recipes
+                     .registerRecipe(
+                         parseJson(R"({"id":"x","type":"shaped",
+                                      "output":{"item":"ingot","count":1},
+                                      "pattern":["II","II","II","II"],
+                                      "key":{"I":"ingot"}})"),
+                         f.items)
+                     .ok()); // 4 rows
+    EXPECT_FALSE(f.recipes
+                     .registerRecipe(
+                         parseJson(R"({"id":"y","type":"shaped",
+                                      "output":{"item":"ingot","count":1},
+                                      "pattern":["III I"],
+                                      "key":{"I":"ingot"}})"),
+                         f.items)
+                     .ok()); // 5 chars in a row
+}
+
+TEST(ShapedRecipeTest, RejectsEmptyPattern) {
+    Fixture f;
+    EXPECT_FALSE(f.recipes
+                     .registerRecipe(
+                         parseJson(R"({"id":"x","type":"shaped",
+                                      "output":{"item":"ingot","count":1},
+                                      "pattern":["   "],
+                                      "key":{}})"),
+                         f.items)
+                     .ok());
+}
+
+TEST(ShapedRecipeTest, RejectsPatternCharWithoutKey) {
+    Fixture f;
+    EXPECT_FALSE(f.recipes
+                     .registerRecipe(
+                         parseJson(R"({"id":"x","type":"shaped",
+                                      "output":{"item":"ingot","count":1},
+                                      "pattern":["IS"],
+                                      "key":{"I":"ingot"}})"),
+                         f.items)
+                     .ok());
+}
+
+TEST(ShapedRecipeTest, RejectsUnusedKeyEntry) {
+    Fixture f;
+    EXPECT_FALSE(f.recipes
+                     .registerRecipe(
+                         parseJson(R"({"id":"x","type":"shaped",
+                                      "output":{"item":"ingot","count":1},
+                                      "pattern":["II"],
+                                      "key":{"I":"ingot","S":"stone"}})"),
+                         f.items)
+                     .ok());
+}
+
+TEST(ShapedRecipeTest, RejectsUnknownKeyItem) {
+    Fixture f;
+    EXPECT_FALSE(f.recipes
+                     .registerRecipe(
+                         parseJson(R"({"id":"x","type":"shaped",
+                                      "output":{"item":"ingot","count":1},
+                                      "pattern":["NN"],
+                                      "key":{"N":"nope"}})"),
+                         f.items)
+                     .ok());
+}
+
+TEST(ShapedRecipeTest, RejectsBadKeyEntry) {
+    Fixture f;
+    // A two-character key entry is not a single pattern char.
+    EXPECT_FALSE(f.recipes
+                     .registerRecipe(
+                         parseJson(R"({"id":"x","type":"shaped",
+                                      "output":{"item":"ingot","count":1},
+                                      "pattern":["II"],
+                                      "key":{"IN":"ingot"}})"),
+                         f.items)
+                     .ok());
+}
+
+TEST(ShapedRecipeTest, ShapedRejectsIngredients) {
+    Fixture f;
+    EXPECT_FALSE(f.recipes
+                     .registerRecipe(
+                         parseJson(R"({"id":"x","type":"shaped",
+                                      "output":{"item":"ingot","count":1},
+                                      "pattern":["II"],
+                                      "key":{"I":"ingot"},
+                                      "ingredients":[{"item":"stone","count":1}]})"),
+                         f.items)
+                     .ok());
+}
+
+TEST(ShapedRecipeTest, ShapelessRejectsPatternAndKey) {
+    Fixture f;
+    EXPECT_FALSE(f.recipes
+                     .registerRecipe(
+                         parseJson(R"({"id":"x",
+                                      "output":{"item":"ingot","count":1},
+                                      "ingredients":[{"item":"stone","count":1}],
+                                      "pattern":["SS"]})"),
+                         f.items)
+                     .ok());
+    EXPECT_FALSE(f.recipes
+                     .registerRecipe(
+                         parseJson(R"({"id":"y",
+                                      "output":{"item":"ingot","count":1},
+                                      "ingredients":[{"item":"stone","count":1}],
+                                      "key":{"S":"stone"}})"),
+                         f.items)
+                     .ok());
+}
+
+TEST(ShapedRecipeTest, ShapedPatternWithHole) {
+    Fixture f;
+    // A T-shape with an interior space: legal, and the space is not a key
+    // entry.
+    auto r = f.recipes.registerRecipe(
+        parseJson(R"({"id":"t","type":"shaped",
+                     "output":{"item":"ingot","count":2},
+                     "pattern":["III"," I "],
+                     "key":{"I":"ingot"}})"),
+        f.items);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Recipe* rec = f.recipes.find("t");
+    ASSERT_NE(rec, nullptr);
+    EXPECT_EQ(rec->pattern[1], " I ");
+}

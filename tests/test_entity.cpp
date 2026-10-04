@@ -95,8 +95,24 @@ struct Fixture {
     }
 };
 
+// A 1-column strip tall enough (power of two) for every name; each name
+// gets its own row (the tests only need distinct, valid UVs).
 AtlasLayout makeLayout(const std::vector<std::string>& names) {
-    auto r = AtlasLayout::compute(names);
+    int rows = 1;
+    while (rows < static_cast<int>(names.size())) {
+        rows *= 2;
+    }
+    std::string tiles = "{";
+    for (std::size_t i = 0; i < names.size(); ++i) {
+        if (i != 0) {
+            tiles += ",";
+        }
+        tiles += "\"" + names[i] + "\":[0," + std::to_string(i) + "]";
+    }
+    tiles += "}";
+    auto r = AtlasLayout::parse(parseJson(
+        std::string("{\"columns\":1,\"rows\":") + std::to_string(rows) +
+        ",\"tiles\":" + tiles + "}"));
     if (!r.ok()) {
         ADD_FAILURE() << r.error().message;
     }

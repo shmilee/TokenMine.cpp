@@ -173,6 +173,36 @@ def glowstone(x, y):
             clamp(66 + noise(x, y, 56, 10)), 255)
 
 
+def planks(x, y):
+    # Horizontal boards (4px each) with a dark seam line on the top edge.
+    if y % 4 == 0:
+        return (101, 77, 46, 255)
+    board = y // 4
+    v = noise(x, y, 57 + board, 8)
+    return (clamp(168 + v),
+            clamp(134 + v),
+            clamp(82 + v), 255)
+
+
+def crafting_table_top(x, y):
+    # Planks + the 2x2 work surface: a 2px frame border and a center cross.
+    border = x in (0, 1, 14, 15) or y in (0, 1, 14, 15)
+    cross = x in (7, 8) or y in (7, 8)
+    if border or cross:
+        return (94, 71, 43, 255)
+    return planks(x, y)
+
+
+def crafting_table_side(x, y):
+    # Planks + a 2x2 grid emblem in the middle (an 8x8 square with cross).
+    if 4 <= x <= 11 and 4 <= y <= 11:
+        border = x in (4, 11) or y in (4, 11)
+        cross = x == 7 or y == 7
+        if border or cross:
+            return (94, 71, 43, 255)
+    return planks(x, y)
+
+
 TEXTURES = {
     "stone": stone,
     "dirt": dirt,
@@ -190,6 +220,9 @@ TEXTURES = {
     "gold_ore": gold_ore,
     "diamond_ore": diamond_ore,
     "glowstone": glowstone,
+    "planks": planks,
+    "crafting_table_top": crafting_table_top,
+    "crafting_table_side": crafting_table_side,
 }
 
 

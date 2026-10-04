@@ -35,6 +35,8 @@ public:
     int hotbarSize() const { return kHotbarSize; }
 
     const ItemStack& at(std::size_t slot) const; // asserts in range
+    // Mutable view (the inventory UI's pick-and-place writes through it).
+    ItemStack& at(std::size_t slot);
     bool isEmpty(std::size_t slot) const { return m_slots[slot].empty(); }
 
     // Merges `count` of `item` as described above. Returns the slot the

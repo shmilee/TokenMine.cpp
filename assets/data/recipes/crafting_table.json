@@ -1,0 +1,12 @@
+{
+  "id": "crafting_table",
+  "type": "shaped",
+  "output": { "item": "crafting_table", "count": 1 },
+  "pattern": [
+    "PP",
+    "PP"
+  ],
+  "key": {
+    "P": "planks"
+  }
+}

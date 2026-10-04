@@ -357,3 +357,35 @@ TEST(BlockRegistryTest, RejectsDropsCountWithoutDrops) {
                          R"({"id":"a","properties":{"drops_count":4},)" + model))
                      .ok());
 }
+
+// -- interact (Phase 17) -----------------------------------------------------
+
+TEST(BlockRegistryTest, InteractDefaultsToEmpty) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(minimalDef("stone")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).properties.interact, "");
+}
+
+TEST(BlockRegistryTest, InteractParsesCraftingTable) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"crafting_table","properties":{"interact":"crafting_table"},"model")"
+        R"(:{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).properties.interact, kInteractCraftingTable);
+}
+
+TEST(BlockRegistryTest, RejectsUnknownInteract) {
+    const std::string model =
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})";
+    EXPECT_FALSE(BlockRegistry()
+                     .registerBlock(parseDef(
+                         R"({"id":"a","properties":{"interact":"fancy"},)" +
+                         model))
+                     .ok());
+    EXPECT_FALSE(BlockRegistry()
+                     .registerBlock(parseDef(
+                         R"({"id":"a","properties":{"interact":7},)" + model))
+                     .ok());
+}
