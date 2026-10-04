@@ -6,6 +6,36 @@
 
 namespace mc {
 
+namespace {
+
+// Mask-coordinate assignment per face direction (kFaceSlices is indexed
+// like kCubeFaces: +Y, -Y, +Z, -Z, +X, -X). The slice axis is the face
+// normal's axis; (u, v) are the two in-plane cell axes of the 16x16 mask
+// grid. The relationship between the mask directions and the face's
+// corner-table edge directions (+u vs the c0->c1 edge, +v vs the c0->c3
+// edge) is derived from the table at emission time, so any consistent
+// (u, v) choice stays correct.
+struct FaceSlice {
+    int axis;  // 0=x, 1=y, 2=z — the face normal's axis
+    int sign;  // +1 (normal along +axis) or -1
+    int uAxis; // mask u runs along this cell axis
+    int vAxis; // mask v runs along this cell axis
+};
+
+constexpr FaceSlice kFaceSlices[6] = {
+    {1, +1, 2, 0},  // +Y: u = z, v = x
+    {1, -1, 2, 0},  // -Y: u = z, v = x
+    {2, +1, 0, 1},  // +Z: u = x, v = y
+    {2, -1, 0, 1},  // -Z: u = x, v = y
+    {0, +1, 2, 1},  // +X: u = z, v = y
+    {0, -1, 2, 1},  // -X: u = z, v = y
+};
+
+constexpr Vec3 kAxisUnit[3] = {{1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f},
+                               {0.0f, 0.0f, 1.0f}};
+
+} // namespace
+
 ChunkMesher::ChunkMesher(const World& world, const BlockRegistry& blocks,
                          const AtlasLayout& layout)
     : m_world(world), m_blocks(blocks), m_layout(layout) {}
@@ -18,86 +48,230 @@ ChunkMeshData ChunkMesher::mesh(const ChunkPos& pos) const {
     }
 
     const BlockPos origin = chunkOrigin(pos);
+
+    // Fluids: per-cell level-scaled cubes (not merged — see the header).
     // Fluid faces are textured from the registry's fluid block
     // (properties.fluid); without one, fluid cells render nothing.
     const std::optional<BlockID> fluidId = m_blocks.fluidBlock();
     for (int ly = 0; ly < kChunkSize; ++ly) {
         for (int lz = 0; lz < kChunkSize; ++lz) {
             for (int lx = 0; lx < kChunkSize; ++lx) {
-                const BlockID id = chunk->get(lx, ly, lz);
-                const std::uint8_t level = chunk->fluidAt(lx, ly, lz);
-                if (id == BlockID::air()) {
-                    if (level == 0 || fluidId == std::nullopt) {
-                        continue;
-                    }
-                    emitFluid(out, m_blocks.at(*fluidId), origin, lx, ly, lz,
-                              level);
+                if (chunk->get(lx, ly, lz) != BlockID::air()) {
                     continue;
                 }
-                if (m_blocks.at(id).properties.fluid) {
-                    continue; // a fluid block is stored as a fluid level
+                const std::uint8_t level = chunk->fluidAt(lx, ly, lz);
+                if (level == 0 || fluidId == std::nullopt) {
+                    continue;
                 }
-                const Block& block = m_blocks.at(id);
-                std::vector<MeshVertex>* verts =
-                    block.properties.transparent ? &out.transparentVertices
-                                                 : &out.opaqueVertices;
-                std::vector<std::uint32_t>* indices =
-                    block.properties.transparent ? &out.transparentIndices
-                                                 : &out.opaqueIndices;
-
-                for (const CubeFace& face : kCubeFaces) {
-                    const BlockID neighbor = m_world.getBlock(
-                        origin.x + lx + face.dx, origin.y + ly + face.dy,
-                        origin.z + lz + face.dz);
-                    if (neighbor != BlockID::air() &&
-                        m_blocks.at(neighbor).properties.opaque) {
-                        continue; // fully occluded
-                    }
-
-                    const Vec2 u0 =
-                        AtlasLayout::uvMin(m_layout, cubeFaceTexture(block, face.textureSlot));
-                    const Vec2 u1 =
-                        AtlasLayout::uvMax(m_layout, cubeFaceTexture(block, face.textureSlot));
-                    // Corner UVs follow the corner order: (u0,v1),(u1,v1),
-                    // (u1,v0),(u0,v0) — the Phase 2-verified tile mapping.
-                    const Vec2 faceUv[4] = {
-                        {u0.x, u1.y}, {u1.x, u1.y}, {u1.x, u0.y}, {u0.x, u0.y},
-                    };
-                    // Per-face light: sample the cell the face borders
-                    // (block position + face normal) and bake it into all
-                    // four corners. Blocky light, like Minecraft's.
-                    const std::uint8_t faceSky = m_world.getSkyLight(
-                        origin.x + lx + face.dx, origin.y + ly + face.dy,
-                        origin.z + lz + face.dz);
-                    const std::uint8_t faceBlock = m_world.getBlockLight(
-                        origin.x + lx + face.dx, origin.y + ly + face.dy,
-                        origin.z + lz + face.dz);
-                    const float skyF =
-                        static_cast<float>(faceSky) / static_cast<float>(kMaxLight);
-                    const float blockF =
-                        static_cast<float>(faceBlock) / static_cast<float>(kMaxLight);
-                    const std::uint32_t first =
-                        static_cast<std::uint32_t>(verts->size());
-                    for (int i = 0; i < 4; ++i) {
-                        MeshVertex v;
-                        v.position = {
-                            static_cast<float>(lx + face.corner[i][0]),
-                            static_cast<float>(ly + face.corner[i][1]),
-                            static_cast<float>(lz + face.corner[i][2])};
-                        v.normal = face.normal;
-                        v.uv = faceUv[i];
-                        v.skyLight = skyF;
-                        v.blockLight = blockF;
-                        verts->push_back(v);
-                    }
-                    indices->insert(indices->end(),
-                                    {first, first + 1, first + 2, first,
-                                     first + 2, first + 3});
-                }
+                emitFluid(out, m_blocks.at(*fluidId), origin, lx, ly, lz,
+                          level);
             }
         }
     }
+
+    // Block faces: greedy meshing, one direction at a time (fixed order —
+    // the vertex order is deterministic across runs).
+    for (int f = 0; f < 6; ++f) {
+        meshFaceDirection(out, *chunk, origin, kCubeFaces[f], f);
+    }
     return out;
+}
+
+void ChunkMesher::meshFaceDirection(ChunkMeshData& out, const Chunk& chunk,
+                                    const BlockPos& origin,
+                                    const CubeFace& face, int faceIndex) const {
+    const FaceSlice slice = kFaceSlices[faceIndex];
+
+    // One 16x16 mask per slice plane. Plane p is the world plane between
+    // cell p-1 and cell p along the normal axis; the +normal face lives on
+    // the plane of its cell+1, the -normal face on the plane of its cell.
+    for (int p = 0; p <= kChunkSize; ++p) {
+        const int ca = (slice.sign > 0) ? p - 1 : p; // cell along the axis
+        if (ca < 0 || ca >= kChunkSize) {
+            continue;
+        }
+
+        MaskCell mask[kChunkSize][kChunkSize];
+        for (int v = 0; v < kChunkSize; ++v) {
+            for (int u = 0; u < kChunkSize; ++u) {
+                int c[3] = {0, 0, 0};
+                c[slice.axis] = ca;
+                c[slice.uAxis] = u;
+                c[slice.vAxis] = v;
+
+                const BlockID id = chunk.get(c[0], c[1], c[2]);
+                if (id == BlockID::air()) {
+                    continue;
+                }
+                const Block& block = m_blocks.at(id);
+                if (block.properties.fluid) {
+                    continue; // a fluid block is stored as a fluid level
+                }
+                const BlockID neighbor = m_world.getBlock(
+                    origin.x + c[0] + face.dx, origin.y + c[1] + face.dy,
+                    origin.z + c[2] + face.dz);
+                if (neighbor != BlockID::air() &&
+                    m_blocks.at(neighbor).properties.opaque) {
+                    continue; // fully occluded
+                }
+
+                MaskCell& cell = mask[v][u];
+                cell.valid = true;
+                cell.transparent = block.properties.transparent;
+                const AtlasLayout::Tile tile =
+                    m_layout.tiles.at(cubeFaceTexture(block, face.textureSlot));
+                cell.tileCol = tile.col;
+                cell.tileRow = tile.row;
+                // Per-face light: sample the cell the face borders
+                // (block position + face normal) and bake it — the same
+                // "blocky light" convention as the per-face mesher. Merging
+                // below only combines faces with identical baked light.
+                cell.sky = m_world.getSkyLight(origin.x + c[0] + face.dx,
+                                                origin.y + c[1] + face.dy,
+                                                origin.z + c[2] + face.dz);
+                cell.blockLight = m_world.getBlockLight(
+                    origin.x + c[0] + face.dx, origin.y + c[1] + face.dy,
+                    origin.z + c[2] + face.dz);
+            }
+        }
+
+        // Flood-merge: a run grows right (u) along the seed row, then down
+        // (v) while the whole current width stays identical. The partition
+        // is deterministic for this fixed scan order.
+        bool visited[kChunkSize][kChunkSize] = {};
+        for (int v = 0; v < kChunkSize; ++v) {
+            for (int u = 0; u < kChunkSize; ++u) {
+                const MaskCell& seed = mask[v][u];
+                if (!seed.valid || visited[v][u]) {
+                    continue;
+                }
+                int w = 1;
+                while (u + w < kChunkSize && mask[v][u + w].valid &&
+                       mask[v][u + w].sameAs(seed)) {
+                    ++w;
+                }
+                int h = 1;
+                while (v + h < kChunkSize) {
+                    bool ok = true;
+                    for (int i = 0; i < w; ++i) {
+                        const MaskCell& row = mask[v + h][u + i];
+                        if (!row.valid || !row.sameAs(seed)) {
+                            ok = false;
+                            break;
+                        }
+                    }
+                    if (!ok) {
+                        break;
+                    }
+                    ++h;
+                }
+                for (int i = 0; i < h; ++i) {
+                    for (int j = 0; j < w; ++j) {
+                        visited[v + i][u + j] = true;
+                    }
+                }
+                emitMergedQuad(out, face, faceIndex, p, u, v, w, h, seed);
+            }
+        }
+    }
+}
+
+void ChunkMesher::emitMergedQuad(ChunkMeshData& out, const CubeFace& face,
+                                 int faceIndex, int p, int u0, int v0, int w,
+                                 int h, const MaskCell& seed) const {
+    const FaceSlice slice = kFaceSlices[faceIndex];
+    const int ca = (slice.sign > 0) ? p - 1 : p;
+    int c[3] = {0, 0, 0};
+    c[slice.axis] = ca;
+    c[slice.uAxis] = u0;
+    c[slice.vAxis] = v0;
+
+    // The seed cell's c0 corner (chunk-local), and the face's two edge
+    // direction vectors from the corner table (unit, integer).
+    const float cx = c[0] + face.corner[0][0];
+    const float cy = c[1] + face.corner[0][1];
+    const float cz = c[2] + face.corner[0][2];
+    const float ewx = face.corner[1][0] - face.corner[0][0];
+    const float ewy = face.corner[1][1] - face.corner[0][1];
+    const float ewz = face.corner[1][2] - face.corner[0][2];
+    const float ecx = face.corner[3][0] - face.corner[0][0];
+    const float ecy = face.corner[3][1] - face.corner[0][1];
+    const float ecz = face.corner[3][2] - face.corner[0][2];
+
+    // Which way the mask axes point relative to the face's edge axes. The
+    // run of w mask cells extends the quad by w along the c0->c1 edge (or
+    // backwards), h along c0->c3 (or backwards).
+    const Vec3 uVec = kAxisUnit[slice.uAxis];
+    const Vec3 vVec = kAxisUnit[slice.vAxis];
+    const int signA = (uVec.x * ewx + uVec.y * ewy + uVec.z * ewz) > 0.0f ? +1
+                                                                         : -1;
+    const int signB = (vVec.x * ecx + vVec.y * ecy + vVec.z * ecz) > 0.0f ? +1
+                                                                         : -1;
+    // The quad in face-local (alpha, beta) cells: alpha along the c0->c1
+    // edge (alpha = 0 at c0), beta along the c0->c3 edge (beta = 0 at c0).
+    // The legacy UV convention is u = alpha (in tiles), v = 1 - beta.
+    const float alpha0 = (signA > 0) ? 0.0f : 1.0f - static_cast<float>(w);
+    const float alpha1 = (signA > 0) ? static_cast<float>(w) : 1.0f;
+    const float beta0 = (signB > 0) ? 0.0f : 1.0f - static_cast<float>(h);
+    const float beta1 = (signB > 0) ? static_cast<float>(h) : 1.0f;
+
+    // Corners in (alpha, beta): (a0,b0), (a1,b0), (a1,b1), (a0,b1) — the
+    // same order type as the legacy (c0, c1, c2, c3), so the winding
+    // cross(edgeW, edgeW + edgeH) stays along the face normal.
+    const float corners[4][2] = {
+        {alpha0, beta0}, {alpha1, beta0}, {alpha1, beta1}, {alpha0, beta1},
+    };
+
+    std::vector<MeshVertex>* verts =
+        seed.transparent ? &out.transparentVertices : &out.opaqueVertices;
+    std::vector<std::uint32_t>* indices =
+        seed.transparent ? &out.transparentIndices : &out.opaqueIndices;
+
+    const float skyF =
+        static_cast<float>(seed.sky) / static_cast<float>(kMaxLight);
+    const float blockF =
+        static_cast<float>(seed.blockLight) / static_cast<float>(kMaxLight);
+    // Single-face quads (w = h = 1) keep the legacy atlas-space UV and
+    // the shader's direct-sampling path (tiled = 0) — bit-identical to
+    // the Phase 17 per-face mesh. Only actually merged quads (w * h > 1)
+    // use the tiled convention: uv = the atlas tile index, uvLocal = the
+    // position in tile units, and basic.frag wraps the fractional part
+    // back into the tile.
+    const bool tiled = (w != 1 || h != 1);
+    const float legU0 = static_cast<float>(seed.tileCol) / m_layout.columns;
+    const float legU1 =
+        static_cast<float>(seed.tileCol + 1) / m_layout.columns;
+    const float legV0 = static_cast<float>(seed.tileRow) / m_layout.rows;
+    const float legV1 =
+        static_cast<float>(seed.tileRow + 1) / m_layout.rows;
+    // Legacy corner UVs in the (p0, p1, p2, p3) = (c0, c1, c2, c3) order.
+    const float legacyUv[4][2] = {{legU0, legV1}, {legU1, legV1},
+                                  {legU1, legV0}, {legU0, legV0}};
+
+    const std::uint32_t first = static_cast<std::uint32_t>(verts->size());
+    for (int i = 0; i < 4; ++i) {
+        const float a = corners[i][0];
+        const float b = corners[i][1];
+        MeshVertex v;
+        v.position = {cx + a * ewx + b * ecx, cy + a * ewy + b * ecy,
+                      cz + a * ewz + b * ecz};
+        v.normal = face.normal;
+        if (tiled) {
+            v.uv = {static_cast<float>(seed.tileCol),
+                    static_cast<float>(seed.tileRow)};
+            v.uvLocal = {a, 1.0f - b};
+            v.tiled = 1.0f;
+        } else {
+            v.uv = {legacyUv[i][0], legacyUv[i][1]};
+            v.tiled = 0.0f;
+        }
+        v.skyLight = skyF;
+        v.blockLight = blockF;
+        verts->push_back(v);
+    }
+    indices->insert(indices->end(),
+                    {first, first + 1, first + 2, first, first + 2,
+                     first + 3});
 }
 
 void ChunkMesher::emitFluid(ChunkMeshData& out, const Block& fluidBlock,
@@ -139,7 +313,8 @@ void ChunkMesher::emitFluid(ChunkMeshData& out, const Block& fluidBlock,
                                            cubeFaceTexture(fluidBlock, face.textureSlot));
         const Vec2 u1 = AtlasLayout::uvMax(m_layout,
                                            cubeFaceTexture(fluidBlock, face.textureSlot));
-        // Corner UVs follow the corner order: (u0,v1),(u1,v1),(u1,v0),(u0,v0).
+        // Corner UVs follow the corner order: (u0,v1),(u1,v1),
+        // (u1,v0),(u0,v0).
         const Vec2 faceUv[4] = {
             {u0.x, u1.y}, {u1.x, u1.y}, {u1.x, u0.y}, {u0.x, u0.y},
         };

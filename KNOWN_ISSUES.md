@@ -77,7 +77,14 @@
 
 - **Chunk 网格化在游戏线程（有界）** — 启动时演示区所有 chunk 在第一帧同步 mesh；Phase 14 后增量 meshing 的每帧成本由流式预算（1 列/帧）限界（实测 ~0.01 ms/chunk，8 chunk/帧 ≈ 0.08 ms）。worker 网格化需要"快照式"设计（worker 读 World 的边界邻块），留待性能成为瓶颈时。`[Phase 3]`（生成部分 `[Phase 14]` 已并行化）
 - **`Chunk&` 引用会被 unordered_map rehash 失效** — `getOrCreateChunk` 返回的引用在后续可能 rehash 的 World 变更（其他 chunk 的 setBlock/getOrCreateChunk）后失效；已在 world.hpp 头部文档化，调用方须在一个逻辑操作内使用。`[Phase 3]`
-- **Greedy Meshing 未实现** — 只做 Face Culling，顶点数按暴露面线性增长。计划：性能成为瓶颈时再引入（README 路线图已注明）。
+- **Greedy Meshing 已实现（Phase 18）** — 逐面片合并为同（纹理、sub-mesh、面光）run 的单 quad；200-chunk 实测总三角形 109,648 → 33,558（3.3×，不透明 3.5×）。剩余简化见「渲染 / 网格化（Phase 18）」。
+
+## 渲染 / 网格化（Phase 18）
+
+- **无输入基线重拍（base3 → base18）** — Greedy Meshing 有意改变了无输入渲染：合并 quad 的纹理 UV 插值与逐面片在浮点层不同（数学上同一映射），GL_NEAREST 下少数纹素边界翻转；合并 quad 的剪影边缘线（远世界边界山脊）亚像素偏移 1-2 px。实测与 base3 差 3593 px（0.39%），全部为剪影边缘/纹理重采样（几何覆盖集经逐 chunk 对比 100% 相等）。`/tmp/opencode/base18.png` 为新基线，后续阶段对它字节门控。单面片（1×1）quad 保持 Phase 17 的 legacy atlas UV + `tiled=0` 路径，逐位精确不变。`[Phase 18]`
+- **合并不跨 chunk 边界** — 每个 chunk 独立合并：相邻 chunk 的同质地形产生相邻的两个 quad 而非一个大 quad（边界处少合并）。标准做法（Minecraft 同样逐 chunk 合并）；跨 chunk 合并需要边界交换，留待需要时。`[Phase 18]`
+- **流体表面仍逐面片** — 水面是 level 缩放的几何（顶面在 level/8 高度、侧壁随 level），合并规则与整格面片不同，Phase 18 刻意不合并（保持逐面片 + 原有 culling）。`[Phase 18]`
+- **两个相邻非 opaque 方块之间仍双向出面** — 每平面两个独立 slice（+normal 来自下方格、−normal 来自上方格）分别合并，叶片-叶片/玻璃-玻璃之间的双面保留（正确、略浪费；相机只看到前向一面，背面被 cull）。`[Phase 2]`（Phase 18 按设计保留）
 
 ## UI / 音效 / 粒子（Phase 15）
 

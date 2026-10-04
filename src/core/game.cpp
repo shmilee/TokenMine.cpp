@@ -2268,6 +2268,11 @@ void Game::render() {
     m_basicShader.setUniform1i("u_texture", 0);
     m_basicShader.setUniform1i("u_useTexture", 1);
     m_basicShader.setUniform1f("u_dayFactor", m_dayCycle.dayFactor());
+    // One atlas tile in UV space, for the tiled greedy chunk quads
+    // (Phase 18). Unread on the legacy (tiled = 0) path.
+    m_basicShader.setUniform2f(
+        "u_tileSize", 1.0f / static_cast<float>(m_atlas.layout().columns),
+        1.0f / static_cast<float>(m_atlas.layout().rows));
 
     m_atlas.texture().bind();
 

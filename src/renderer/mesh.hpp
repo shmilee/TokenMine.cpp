@@ -3,12 +3,26 @@
 // One mesh = one draw call's worth of geometry. Vertex format is fixed
 // (MeshVertex) so the VAO layout is set once at upload time.
 //
-// Vertex layout (10 floats, 40 bytes):
+// Vertex layout (13 floats, 52 bytes):
 //   location 0: position   (vec3)
 //   location 1: normal     (vec3)
-//   location 2: uv         (vec2)
+//   location 2: uv         (vec2) — legacy producers and single-face
+//                             chunk quads: atlas-space UV. Greedy-merged
+//                             chunk quads (tiled = 1, Phase 18): the
+//                             atlas TILE INDEX (integer col/row).
 //   location 3: skyLight   (float, 0..1 — light value / 15)
 //   location 4: blockLight (float, 0..1 — light value / 15)
+//   location 5: uvLocal    (vec2) — tiled chunk quads: position in TILE
+//                             UNITS (a run of W x H merged faces spans
+//                             [0, W) x [1 - H, 1] around the seed cell;
+//                             the fragment shader wraps the fractional
+//                             part back into the tile). Zero otherwise.
+//   location 6: tiled      (float, 0 or 1) — 1 selects the tiled UV
+//                             path in the fragment shader (Phase 18
+//                             greedy meshing). Zero for every legacy
+//                             producer (item cube, particles, cracks,
+//                             UI), whose atlas-space UVs are sampled
+//                             exactly as before.
 //
 // Thread ownership: game thread with GL context current.
 #pragma once
@@ -28,6 +42,8 @@ struct MeshVertex {
     Vec2 uv {0.0f, 0.0f};
     float skyLight = 0.0f;
     float blockLight = 0.0f;
+    Vec2 uvLocal {0.0f, 0.0f};
+    float tiled = 0.0f;
 };
 
 // GL primitive for the draw. Triangles is indexed (the chunk meshes and

@@ -9,7 +9,7 @@
 namespace mc {
 
 namespace {
-constexpr std::size_t kVertexSize = sizeof(MeshVertex); // 40 bytes, packed
+constexpr std::size_t kVertexSize = sizeof(MeshVertex); // 52 bytes, packed
 }
 
 Mesh::~Mesh() {
@@ -127,6 +127,14 @@ Result<void> Mesh::upload(const std::vector<MeshVertex>& vertices,
     glEnableVertexAttribArray(4);
     glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(kVertexSize),
                           reinterpret_cast<const void*>(offsetof(MeshVertex, blockLight)));
+    // location 5: local UV (tiled chunk quads, Phase 18; zero elsewhere)
+    glEnableVertexAttribArray(5);
+    glVertexAttribPointer(5, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(kVertexSize),
+                          reinterpret_cast<const void*>(offsetof(MeshVertex, uvLocal)));
+    // location 6: tiled flag (1 = greedy-merged chunk quad, Phase 18)
+    glEnableVertexAttribArray(6);
+    glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(kVertexSize),
+                          reinterpret_cast<const void*>(offsetof(MeshVertex, tiled)));
 
     if (indexed) {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ibo);
