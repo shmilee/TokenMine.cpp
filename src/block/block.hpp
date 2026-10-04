@@ -52,6 +52,9 @@ struct BlockProperties {
     // ItemRegistry at game init — block items share the block's name, so
     // grass -> "dirt" drops the dirt block item). Empty = drops nothing.
     std::string drops;
+    // How many of the drop item one break yields (1..64, must fit in one
+    // stack of the drop item — cross-checked at game init).
+    int dropsCount = 1;
 };
 
 // Which texture name is applied to each face group.

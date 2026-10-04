@@ -36,6 +36,20 @@ void ItemRegistry::clear() {
     m_names.clear();
 }
 
+Result<void> ItemRegistry::parseMaxStack(const Json& def, Item& out) {
+    if (const Json* ms = def.find("max_stack")) {
+        if (!ms->isNumber()) {
+            return MC_FAIL("'max_stack' must be a number");
+        }
+        out.maxStack = ms->asInt();
+    }
+    if (out.maxStack < 1 || out.maxStack > 64) {
+        return MC_FAIL("'max_stack' must be in [1, 64], got " +
+                       std::to_string(out.maxStack));
+    }
+    return {};
+}
+
 Result<void> ItemRegistry::parseTool(const Json& def, Item& out) {
     if (const Json* tool = def.find("tool")) {
         if (!tool->isObject()) {
@@ -48,20 +62,12 @@ Result<void> ItemRegistry::parseTool(const Json& def, Item& out) {
             out.breakSpeed = static_cast<float>(speed->asDouble());
         }
     }
-    if (const Json* ms = def.find("max_stack")) {
-        if (!ms->isNumber()) {
-            return MC_FAIL("'max_stack' must be a number");
-        }
-        out.maxStack = ms->asInt();
-    }
     if (out.breakSpeed <= 0.0f) {
         return MC_FAIL("'tool.break_speed' must be > 0, got " +
                        std::to_string(out.breakSpeed));
     }
-    if (out.maxStack < 1 || out.maxStack > 64) {
-        return MC_FAIL("'max_stack' must be in [1, 64], got " +
-                       std::to_string(out.maxStack));
-    }
+    auto r = parseMaxStack(def, out);
+    MC_TRY(r);
     return {};
 }
 
@@ -81,15 +87,22 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
         return MC_FAIL("duplicate item id '" + name + "'");
     }
 
-    // Explicit items are tools: block items are defined by their block
-    // (buildBlockItems), so a separate block-item JSON would be a
-    // conflicting second source of truth.
+    // Explicit items are tools or materials: block items are defined by
+    // their block (buildBlockItems), so a separate block-item JSON would
+    // be a conflicting second source of truth.
     const Json* typeJson = def.find("type");
     if (typeJson == nullptr || !typeJson->isString() ||
-        typeJson->asString() != "tool") {
+        (typeJson->asString() != "tool" &&
+         typeJson->asString() != "material")) {
         return MC_FAIL("explicit item '" + name +
-                       "' requires 'type': \"tool\" (block items are "
-                       "defined by their block)");
+                       "' requires 'type': \"tool\" or \"material\" "
+                       "(block items are defined by their block)");
+    }
+    const bool isTool = typeJson->asString() == "tool";
+    if (!isTool && def.find("tool") != nullptr) {
+        return MC_FAIL("item '" + name +
+                       "' is a material: the 'tool' field is only "
+                       "valid for type \"tool\"");
     }
 
     // Warn about unknown top-level keys (typos, future fields).
@@ -103,8 +116,8 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
 
     Item item;
     item.name = name;
-    item.type = ItemType::Tool;
-    auto r = parseTool(def, item);
+    item.type = isTool ? ItemType::Tool : ItemType::Material;
+    auto r = isTool ? parseTool(def, item) : parseMaxStack(def, item);
     MC_TRY(r);
 
     item.id = ItemID{static_cast<int>(m_items.size())};

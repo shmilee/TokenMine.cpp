@@ -5,14 +5,17 @@
 //     built from the BlockRegistry via buildBlockItems(). Run this BEFORE
 //     loadDirectory so an explicit item colliding with a block name is
 //     rejected;
-//   - explicit items (tools): assets/data/items/*.json, one file per item:
+//   - explicit items (tools and materials): assets/data/items/*.json, one
+//     file per item:
 //
 // {
 //   "id": "wooden_pickaxe",
 //   "type": "tool",
-//   "tool": { "break_speed": 2.0 },   // > 0, default 1.0
+//   "tool": { "break_speed": 2.0 },   // tools only; > 0, default 1.0
 //   "max_stack": 1                    // 1..64, default 64
 // }
+//
+// Materials have no tool-specific fields: { "id": "stick", "type": "material" }.
 //
 // Validation is strict (same discipline as the block registry): type
 // errors, out-of-range values and duplicate ids all produce descriptive
@@ -64,7 +67,9 @@ public:
     void clear();
 
 private:
-    // Parse the tool-specific fields into `out` (starts at defaults).
+    // Parse `max_stack` into `out` (starts at defaults).
+    static Result<void> parseMaxStack(const Json& def, Item& out);
+    // Parse the tool fields (`tool.break_speed` + `max_stack`) into `out`.
     static Result<void> parseTool(const Json& def, Item& out);
 
     std::deque<Item> m_items; // deque: stable references on push

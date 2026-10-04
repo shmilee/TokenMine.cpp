@@ -1,0 +1,7 @@
+{
+  "id": "planks",
+  "output": { "item": "planks", "count": 4 },
+  "ingredients": [
+    { "item": "wood", "count": 1 }
+  ]
+}

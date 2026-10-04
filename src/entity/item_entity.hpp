@@ -45,8 +45,10 @@ public:
 
     // `maxStack` is the item's data-defined stack cap (the game passes the
     // ItemRegistry value); the effective cap is min(maxStack, kMaxStack).
+    // `count` is the starting amount (block drops pass
+    // BlockProperties::dropsCount; Q-drops pass 1).
     ItemEntity(const World& world, const BlockRegistry& blocks,
-               const std::string& item, int maxStack, Vec3 pos);
+               const std::string& item, int maxStack, int count, Vec3 pos);
 
     void update(double dt) override;
     bool shouldDespawn() const override {
@@ -70,7 +72,7 @@ private:
 
     std::string m_item;
     int m_maxStack;
-    int m_count = 1;
+    int m_count; // set in the constructor (>= 1)
     double m_age = 0.0;
     double m_pickupDelay = kPickupDelaySeconds;
 

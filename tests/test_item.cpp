@@ -352,3 +352,38 @@ TEST(BreakDurationTest, ScalesWithHardnessAndSpeed) {
     EXPECT_DOUBLE_EQ(breakDurationSeconds(1.5f, 2.0f), 1.125);
     EXPECT_DOUBLE_EQ(breakDurationSeconds(1.5f, 4.0f), 0.5625);
 }
+
+// -- material items (Phase 12) ----------------------------------------------
+
+TEST(ItemRegistryTest, RegisterMaterial) {
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(R"({"id":"stick","type":"material"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Item& it = items.at(*r);
+    EXPECT_EQ(it.name, "stick");
+    EXPECT_EQ(it.type, ItemType::Material);
+    EXPECT_EQ(it.block, BlockID::invalid()); // materials place nothing
+    EXPECT_FLOAT_EQ(it.breakSpeed, 1.0f);
+    EXPECT_EQ(it.maxStack, 64); // default
+}
+
+TEST(ItemRegistryTest, MaterialMaxStackIsDataDriven) {
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"gem","type":"material","max_stack":16})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(items.at(*r).maxStack, 16);
+}
+
+TEST(ItemRegistryTest, MaterialRejectsToolField) {
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(
+        R"({"id":"gem","type":"material","tool":{"break_speed":2.0}})"));
+    EXPECT_FALSE(r.ok());
+}
+
+TEST(ItemRegistryTest, RejectsUnknownItemType) {
+    ItemRegistry items;
+    EXPECT_FALSE(
+        items.registerItem(parseJson(R"({"id":"x","type":"weapon"})")).ok());
+}

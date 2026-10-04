@@ -95,7 +95,19 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "drops", "string",
                    [&](const Json& v) { out.drops = v.asString(); });
     MC_TRY(r);
+    r = checkField(*p, "drops_count", "number",
+                   [&](const Json& v) { out.dropsCount = v.asInt(); });
+    MC_TRY(r);
 
+    if (out.dropsCount < 1 || out.dropsCount > 64) {
+        return MC_FAIL("'drops_count' must be in [1, 64], got " +
+                       std::to_string(out.dropsCount));
+    }
+    if (out.drops.empty() && out.dropsCount != 1) {
+        return MC_FAIL("'drops_count' without 'drops' is meaningless "
+                       "(got " +
+                       std::to_string(out.dropsCount) + ")");
+    }
     if (out.hardness < 0.0) {
         return MC_FAIL("'hardness' must be >= 0, got " +
                        std::to_string(out.hardness));

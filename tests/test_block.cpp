@@ -307,3 +307,53 @@ TEST(BlockRegistryTest, LoadDirectoryMissingDirIsEmpty) {
     EXPECT_EQ(reg.count(), 1u); // only the built-in air sentinel
     std::filesystem::remove_all(root);
 }
+
+// -- drops_count (Phase 12) ---------------------------------------------------
+
+TEST(BlockRegistryTest, DropsCountParses) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"wood","properties":{"drops":"planks","drops_count":4},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).properties.drops, "planks");
+    EXPECT_EQ(reg.at(*r).properties.dropsCount, 4);
+}
+
+TEST(BlockRegistryTest, DropsCountDefaultsToOne) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"grass","properties":{"drops":"dirt"},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).properties.dropsCount, 1);
+}
+
+TEST(BlockRegistryTest, RejectsBadDropsCount) {
+    const std::string model =
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})";
+    EXPECT_FALSE(BlockRegistry()
+                     .registerBlock(parseDef(
+                         R"({"id":"a","properties":{"drops":"x","drops_count":0},)"
+                         + model))
+                     .ok());
+    EXPECT_FALSE(BlockRegistry()
+                     .registerBlock(parseDef(
+                         R"({"id":"a","properties":{"drops":"x","drops_count":65},)"
+                         + model))
+                     .ok());
+    EXPECT_FALSE(BlockRegistry()
+                     .registerBlock(parseDef(
+                         R"({"id":"a","properties":{"drops":"x","drops_count":"four"},)"
+                         + model))
+                     .ok());
+}
+
+TEST(BlockRegistryTest, RejectsDropsCountWithoutDrops) {
+    const std::string model =
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})";
+    EXPECT_FALSE(BlockRegistry()
+                     .registerBlock(parseDef(
+                         R"({"id":"a","properties":{"drops_count":4},)" + model))
+                     .ok());
+}

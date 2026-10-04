@@ -1,0 +1,8 @@
+{
+  "id": "wooden_pickaxe",
+  "output": { "item": "wooden_pickaxe", "count": 1 },
+  "ingredients": [
+    { "item": "wood", "count": 2 },
+    { "item": "stick", "count": 2 }
+  ]
+}

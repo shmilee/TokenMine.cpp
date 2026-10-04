@@ -58,15 +58,27 @@ cmake --build build
   - `Q`（锁定时）：丢弃选中格 1 个到脚下（生成掉落物，0.5s 拾取延迟防立即回吸）
   - `ESC`（锁定时）：释放指针；未锁定时 ESC 退出游戏
   - 破坏/放置复用 `setBlock` 脏标记管线，下一帧自动重建受影响 chunk 的 mesh
-- **物品与背包**（Phase 11，`Item`/`ItemStack`/`Inventory`，全数据驱动）：
-  - 物品 = 纯数据（`ItemRegistry`）：**每个数据方块隐式生成同名 block item**
-    （无独立 JSON，方块定义是唯一来源）；**工具**是显式数据
-    （`assets/data/items/*.json`，`break_speed`/`max_stack`）
+- **物品与背包**（Phase 11/12，`Item`/`ItemStack`/`Inventory`，全数据驱动）：
+  - 物品 = 纯数据（`ItemRegistry`，当前 22 种 = 14 block + 2 工具 + 6 材料）：
+    **每个数据方块隐式生成同名 block item**（无独立 JSON，方块定义是唯一来源）；
+    **工具/材料**是显式数据（`assets/data/items/*.json`，`type: "tool"` 带
+    `break_speed`，`type: "material"` 是通用非方块物品——锭/木棍/木板等，
+    作为配方原料/产物和方块掉落）
   - 背包 27 格 = 9 hotbar + 18 背包（`assets/data/hotbar.json` 的 `items` 列表
     定义初始 hotbar，每格满堆栈）；拾取确定性入包（先合并同物堆栈、再找空位，
     hotbar 优先于背包）
-  - 破坏方块按 `properties.drops`（物品名，init 严格校验）掉落 `ItemEntity`；
+  - 破坏方块按 `properties.drops`（物品名，init 严格校验）+ `drops_count`
+    （1..64 默认 1，须 ≤ 掉落物品 max_stack）掉落 `ItemEntity`——矿石掉材料
+    （iron_ore → iron_ingot），wood 掉 wood 本身（木板配方的原料）；
     玩家走近（1.0 格内）自动拾取进背包（MC 同款 0.5s 拾取延迟 + 120s 消亡）
+- **合成**（Phase 12，`Recipe`/`RecipeRegistry`/`craft`，全数据驱动）：
+  配方 = `assets/data/recipes/*.json`（shapeless 原料袋 → 产物，经 ItemRegistry
+  交叉严格校验：物品引用/产物数量 ≤ max_stack/无重复原料）；`canCraft`/`craft`
+  是确定性纯逻辑（原料按槽序升序消耗、副本模拟全有或全无——失败背包逐位不变，
+  产出永远放得下）。当前 4 配方：wood→4 planks、2 planks→4 stick、
+  2 wood+2 stick→wooden_pickaxe、3 iron_ingot+2 stick→iron_pickaxe
+  （iron_pickaxe 由此获得产出途径）。**游戏内尚无合成 UI/触发（Phase 15）**——
+  系统已完整并由单测覆盖，启动时数据严格校验
 - **掉落物**（Phase 10，`ItemEntity`）：0.25 的小立方体，走统一的 Entity 碰撞
   物理（重力/终端速度/水平摩擦），落地后原地悬浮摆动 + 自转（动画由帧计数器
   驱动，非墙钟），同类 0.75 格内自动合并（堆叠上限按物品数据，block 64/工具 1），
@@ -155,7 +167,7 @@ cmake --build build
 
 地形/洞穴/树木参数同样在 `assets/data/worldgen.json`（缺省=默认值，类型错误=启动报错）。
 
-### 调整初始 hotbar / 新增工具
+### 调整初始 hotbar / 新增工具与材料
 
 `assets/data/hotbar.json` 的 `items` 数组（游戏内 `Tab` 循环切换 9 格，`Q` 从选中格丢弃）：
 
@@ -164,19 +176,25 @@ cmake --build build
 ```
 
 物品名必须已注册（未知名=启动报错）；列表不能为空、至多 9 项；每格初始为满堆栈
-（block 64 / 工具 1）。新增工具 = `assets/data/items/<name>.json`：
+（block 64 / 工具 1 / 材料 64）。新增工具或材料 = `assets/data/items/<name>.json`：
 
 ```json
 {
   "id": "wooden_pickaxe",
   "type": "tool",
-  "tool": { "break_speed": 2.0 },   // >0，默认 1.0（破坏耗时 = 1.5s × hardness ÷ speed）
+  "tool": { "break_speed": 2.0 },   // 仅工具；>0，默认 1.0（破坏耗时 = 1.5s × hardness ÷ speed）
   "max_stack": 1                    // 1..64，默认 64
 }
 ```
 
+```json
+{ "id": "stick", "type": "material" }   // 材料：无 tool 字段，max_stack 默认 64
+```
+
 block item 没有独立 JSON——每个数据方块隐式生成同名 item（方块定义是唯一来源）；
-显式物品只能是 `type: "tool"`（否则启动报错，防止第二数据源冲突）。
+显式物品只能是 `type: "tool"` 或 `type: "material"`（材料带 `tool` 字段=启动报错，
+防止第二数据源冲突）。非 block 物品（工具/材料）不可放置、掉落物无实体表示
+（见 KNOWN_ISSUES.md）。
 
 ### 新增一个方块（无需改核心代码）
 
@@ -191,12 +209,39 @@ block item 没有独立 JSON——每个数据方块隐式生成同名 item（�
    }
    ```
 
-   属性缺省即默认值（solid/opaque/destroyable=true, hardness=1.0, light_emission=0, drops 为空=不掉落）。
+   属性缺省即默认值（solid/opaque/destroyable=true, hardness=1.0, light_emission=0, drops 为空=不掉落, drops_count=1）。
    校验严格：类型错误、越界值、重复 id、缺失纹理面都会报明确错误；未知字段警告但不拒绝。
    `drops` 是**物品名**（游戏启动时对 ItemRegistry 严格校验，未知名=启动报错）——
-   block item 与方块同名，所以 `grass → "dirt"` 表示破坏 grass 掉 dirt。
+   block item 与方块同名，所以 `grass → "dirt"` 表示破坏 grass 掉 dirt；
+   矿石掉材料物品（`iron_ore → "iron_ingot"`）。`drops_count`（1..64，默认 1）
+   是单次破坏的掉落数量，须 ≤ 掉落物品的 max_stack（init 交叉校验）。
    `hardness` 驱动破坏耗时（按住左键，`1.5s × hardness ÷ 选中物品 break speed`，
    hardness ≤0 且可破坏=即时破坏）。
+
+### 新增一个配方（无需改核心代码）
+
+`assets/data/recipes/<id>.json`（shapeless：原料袋，顺序无关；产物必须装进一个
+堆栈）：
+
+```json
+{
+  "id": "iron_pickaxe",
+  "output": { "item": "iron_pickaxe", "count": 1 },
+  "ingredients": [
+    { "item": "iron_ingot", "count": 3 },
+    { "item": "stick", "count": 2 }
+  ]
+}
+```
+
+校验严格（经 ItemRegistry 交叉检查，错误信息点名配方）：id 非空且唯一；
+`output.item`/原料物品名必须已注册；`output.count` ∈ [1, 产物 max_stack]；
+原料非空、数量 ≥1、同一物品不得重复出现（合并为一条）；未知字段警告。
+`craft()` 语义：原料按槽序升序消耗（hotbar 先于背包），先在背包副本上模拟
+"消耗+入包"，成功才提交——失败时背包逐位不变（不会扣料却放不下产物丢物品，
+产物是原料之一的配方也正确）。当前配方链：wood→4 planks→(2 planks→4 stick)、
+2 wood+2 stick→wooden_pickaxe、3 iron_ingot+2 stick→iron_pickaxe。
+游戏内合成 UI/触发在 Phase 15（系统已完整、启动严格校验、单测覆盖）。
 
 ## 测试
 
@@ -223,9 +268,11 @@ mine-craft/
 │   │                # ItemEntity（掉落物：摩擦停驻/同类合并/120s 消亡）、Projectile（投射物：
 │   │                # 受重力抛物线/撞 solid 即钉住）、item_mesh（掉落物完整立方体几何，
 │   │                # 与 chunk mesher 共享 cube_face_table）
-│   ├── item/        # 物品系统（Phase 11）：Item/ItemStack 数据模型 + 破坏耗时公式、
-│   │                # ItemRegistry（方块隐式同名 block item + 显式工具 JSON 严格校验）、
-│   │                # Inventory（27 格 = 9 hotbar + 18 背包，确定性合并/入包/take）
+│   ├── item/        # 物品系统（Phase 11/12）：Item/ItemStack 数据模型 + 破坏耗时公式、
+│   │                # ItemRegistry（方块隐式同名 block item + 显式工具/材料 JSON 严格校验）、
+│   │                # Inventory（27 格 = 9 hotbar + 18 背包，确定性合并/入包/take）、
+│   │                # Recipe/RecipeRegistry（JSON 配方 + 经 ItemRegistry 交叉校验）、
+│   │                # canCraft/craft（确定性、全有或全无的合成纯逻辑）
 │   ├── renderer/    # 渲染器（GL 封装）：Shader/Texture/Mesh/Renderer/TextureAtlas
 │   └── world/       # 体素世界：coordinates（world/chunk/local 转换）、Chunk（块+光照数组）、
 │                    # World、ChunkMesher（按面烘焙光照）、day_cycle（昼夜循环：时间/
@@ -253,7 +300,7 @@ mine-craft/
 - [x] **Phase 9** — 流体：水（0-8 等级/下落/水平扩散/水光衰减/游泳/半透明水面）
 - [x] **Phase 10** — 实体系统：Entity 基类（统一 AABB 物理）/Player 并入/ItemEntity 掉落物/Projectile 投射物
 - [x] **Phase 11** — 物品与背包：Item/ItemStack/Inventory、掉落物拾取、按住破坏（hardness/工具数据驱动）、Q 丢弃
-- [ ] **Phase 12** — 合成：数据驱动 Recipe
+- [x] **Phase 12** — 合成：数据驱动 Recipe（Recipe/RecipeRegistry 严格校验 + canCraft/craft 纯逻辑 + `drops_count` + 材料物品；游戏内合成 UI 在 Phase 15）
 - [ ] **Phase 13** — 存档：Seed + 修改数据
 - [ ] **Phase 14** — Chunk Streaming + 多线程（Job Queue/Thread Pool）
 - [ ] **Phase 15** — UI / 音效 / 粒子 / 性能统计（F3 Debug Overlay）

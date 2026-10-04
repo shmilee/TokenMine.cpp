@@ -84,8 +84,8 @@ struct Fixture {
     // `item` defaults to dirt (a second distinct item, for merge tests);
     // names match the block items (stone/dirt are registered above).
     ItemEntity makeItem(Vec3 pos, const std::string& item = "dirt",
-                        int maxStack = 64) const {
-        return ItemEntity(world, blocks, item, maxStack, pos);
+                        int maxStack = 64, int count = 1) const {
+        return ItemEntity(world, blocks, item, maxStack, count, pos);
     }
 
     void run(Entity& e, int n, double dt = kDt) {
@@ -193,7 +193,7 @@ TEST(ItemEntityTest, DespawnAfterAge) {
 TEST(ItemEntityTest, DespawnBelowKillPlane) {
     BlockRegistry blocks = makeBlocks();
     World world; // no floor at all: the void
-    ItemEntity item(world, blocks, "stone", 64, {8.5f, 10.0f, 8.5f});
+    ItemEntity item(world, blocks, "stone", 64, 1, {8.5f, 10.0f, 8.5f});
     int ticks = 0;
     while (!item.shouldDespawn() && ticks < 500) {
         item.update(kDt);

@@ -38,6 +38,7 @@
 #include "entity/projectile.hpp"
 #include "item/inventory.hpp"
 #include "item/item_registry.hpp"
+#include "item/recipe.hpp"
 #include "player/player.hpp"
 #include "renderer/mesh.hpp"
 #include "renderer/renderer.hpp"
@@ -168,12 +169,15 @@ private:
     std::unordered_map<BlockID, Mesh, BlockIDHash> m_itemMeshes;
 
     // Item/inventory system (Phase 11): item registry (implicit block
-    // items + explicit tools from assets/data/items), the player's
-    // inventory (hotbar = first Inventory::kHotbarSize slots, starting
-    // contents from assets/data/hotbar.json) and the selected hotbar slot.
+    // items + explicit tools/materials from assets/data/items), the
+    // player's inventory (hotbar = first Inventory::kHotbarSize slots,
+    // starting contents from assets/data/hotbar.json) and the selected
+    // hotbar slot. Crafting recipes (Phase 12) are loaded and validated at
+    // startup; the in-game crafting UI/trigger is Phase 15.
     ItemRegistry m_items;
     Inventory m_inventory;
     std::size_t m_selectedSlot = 0;
+    RecipeRegistry m_recipes;
 
     // Hold-to-break state (Phase 11): the cell being broken and how long
     // it has been held (seconds). Reset on target change, pointer unlock,

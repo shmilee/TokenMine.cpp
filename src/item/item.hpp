@@ -4,7 +4,7 @@
 // type, and type-specific behavior fields. Core systems read these fields
 // and never switch on item identity.
 //
-// Two item kinds:
+// Three item kinds:
 //   - Block items: one implicit item per data block (same name as the
 //     block); placing one puts its block in the world, and it renders as
 //     that block's cube when dropped. They are built from the
@@ -12,6 +12,14 @@
 //     JSON for them, the block definition is the single source of truth.
 //   - Tool items: explicit data (assets/data/items/*.json); they carry a
 //     break speed multiplier used by the hold-to-break rule.
+//   - Material items: explicit data (assets/data/items/*.json); generic
+//     non-placeable items (ingots, planks, sticks, ...) that are crafting
+//     inputs/outputs and block drops (e.g. ore -> ingot).
+//
+// Tools and materials share one property: no in-world representation
+// (dropped ones are invisible entities — see KNOWN_ISSUES.md). All
+// non-block-item code paths (placement, rendering, break speed) dispatch
+// on ItemType, so adding a new explicit kind is data + one enum value.
 //
 // An ItemStack is an (item, count) pair; an empty slot is a stack with an
 // invalid item and/or zero count.
@@ -34,8 +42,9 @@ struct ItemID {
 };
 
 enum class ItemType {
-    Block, // placeable as its block (implicit per data block)
-    Tool,  // affects break speed (explicit data)
+    Block,    // placeable as its block (implicit per data block)
+    Tool,     // affects break speed (explicit data)
+    Material, // generic non-placeable item (explicit data)
 };
 
 struct Item {
@@ -44,10 +53,11 @@ struct Item {
     ItemType type = ItemType::Block;
     // ItemType::Block only: the block that is placed and rendered.
     BlockID block = BlockID::invalid();
-    // ItemType::Tool only: break-speed multiplier (hand and block items
-    // break at 1.0).
+    // ItemType::Tool only: break-speed multiplier (hand, block items and
+    // materials break at 1.0).
     float breakSpeed = 1.0f;
-    // Maximum count in one stack (1 for tools, 64 for blocks by default).
+    // Maximum count in one stack (1 for tools, 64 for blocks/materials by
+    // default).
     int maxStack = 64;
 };
 

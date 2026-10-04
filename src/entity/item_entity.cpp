@@ -6,10 +6,12 @@
 namespace mc {
 
 ItemEntity::ItemEntity(const World& world, const BlockRegistry& blocks,
-                       const std::string& item, int maxStack, Vec3 pos)
+                       const std::string& item, int maxStack, int count,
+                       Vec3 pos)
     : Entity(world, blocks, pos, kSize, kSize),
       m_item(item),
-      m_maxStack(std::min(maxStack, kMaxStack)) {}
+      m_maxStack(std::min(maxStack, kMaxStack)),
+      m_count(std::max(1, count)) {}
 
 void ItemEntity::update(double dt) {
     if (dt <= 0.0) {

@@ -173,25 +173,39 @@ Result<void> Game::buildScene() {
         }
     }
 
-    // -- items (Phase 11): implicit block items + explicit tools ------------
+    // -- items (Phase 11): implicit block items + explicit data items -------
     // Block items are defined by their blocks (same name); explicit items
-    // (tools) come from data files. Build the block items first so an
-    // explicit item colliding with a block name is rejected.
+    // (tools and materials) come from data files. Build the block items
+    // first so an explicit item colliding with a block name is rejected.
     MC_TRY(m_items.buildBlockItems(m_blocks));
     auto itemsLoad = m_items.loadDirectory(m_assets, "data/items");
     MC_TRY(itemsLoad);
-    // Strict data check: a block's drops must name a registered item
-    // (block items cover the usual case, e.g. grass -> dirt).
+    // Strict data check: a block's drops must name a registered item whose
+    // max stack fits dropsCount (block items cover the usual case, e.g.
+    // grass -> dirt; ores drop material items, e.g. iron_ore -> iron_ingot).
     for (const BlockID id : m_blocks.allIds()) {
         const Block& b = m_blocks.at(id);
         if (b.properties.drops.empty()) {
             continue;
         }
-        if (!m_items.idForName(b.properties.drops).valid()) {
+        const ItemID dropId = m_items.idForName(b.properties.drops);
+        if (!dropId.valid()) {
             return MC_FAIL("block '" + b.name + "' drops unknown item '" +
                            b.properties.drops + "'");
         }
+        if (b.properties.dropsCount > m_items.at(dropId).maxStack) {
+            return MC_FAIL("block '" + b.name + "' drops " +
+                           std::to_string(b.properties.dropsCount) +
+                           " of '" + b.properties.drops +
+                           "' but its max stack is " +
+                           std::to_string(m_items.at(dropId).maxStack));
+        }
     }
+
+    // -- recipes (Phase 12): data-driven crafting (UI/trigger = Phase 15) --
+    auto recipesLoad = m_recipes.loadDirectory(m_assets, m_items,
+                                               "data/recipes");
+    MC_TRY(recipesLoad);
 
     // -- hotbar (starting inventory contents, data-driven) -------------------
     // assets/data/hotbar.json: { "items": [name, ...] } — at most
@@ -625,14 +639,16 @@ void Game::breakBlock(const BlockHit& hit) {
     // against the ItemRegistry at init). The item spawns at the block
     // center with zero velocity, so its rest position is exact and headless
     // runs stay byte-reproducible (see ItemEntity).
-    const std::string& drops = m_blocks.at(id).properties.drops;
-    if (!drops.empty()) {
-        const Item& dropItem = m_items.at(m_items.idForName(drops));
+    const Block& block = m_blocks.at(id);
+    if (!block.properties.drops.empty()) {
+        const Item& dropItem = m_items.at(m_items.idForName(block.properties.drops));
         const Vec3 dropPos {static_cast<float>(hit.block.x) + 0.5f,
                             static_cast<float>(hit.block.y) + 0.5f,
                             static_cast<float>(hit.block.z) + 0.5f};
+        // dropsCount (validated at init to fit the item's max stack).
         m_entities.push_back(std::make_unique<ItemEntity>(
-            m_world, m_blocks, dropItem.name, dropItem.maxStack, dropPos));
+            m_world, m_blocks, dropItem.name, dropItem.maxStack,
+            block.properties.dropsCount, dropPos));
     }
 }
 
@@ -693,7 +709,7 @@ void Game::dropSelectedItem() {
     const Vec3 pos = m_player->position();
     m_entities.push_back(std::make_unique<ItemEntity>(m_world, m_blocks,
                                                       item.name, item.maxStack,
-                                                      pos));
+                                                      /*count=*/1, pos));
 }
 
 float Game::selectedBreakSpeed() const {

@@ -2,7 +2,7 @@
   "id": "coal_ore",
   "properties": {
     "hardness": 3.0,
-    "drops": "coal_ore"
+    "drops": "coal"
   },
   "model": {
     "textures": { "top": "coal_ore", "side": "coal_ore", "bottom": "coal_ore" }

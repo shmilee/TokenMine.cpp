@@ -53,11 +53,18 @@
 
 - **工具无分块类型效率** — 工具的 `break_speed` 是 flat 乘数（对任何方块生效）；Minecraft 有镐/铲/斧分类 × 方块类别（石类对镐、土类对铲）+ 无效率工具慢 10× 的规则。v1 只有 flat 乘数，加分类需给方块数据加类别字段并改破坏耗时公式。`[Phase 11]`
 - **无库存 UI** — hotbar/背包内容无任何屏幕显示（看不到选中格与数量）；背包格 9-26（storage）可被拾取填入但不可见、不可选（Tab 只循环 9 个 hotbar 格）；无手持物品视图。`[Phase 11]` Phase 15。
-- **工具无 in-world/手持表现** — 工具没有纹理/图标，Q 丢出的工具是**不可见实体**（`drawItemEntities` 跳过非 block 物品——物理/拾取/合并/消亡照常工作）；手持视图同样缺失。`[Phase 11]` Phase 15。
+- **非 block 物品（工具/材料）无 in-world/手持表现** — 工具与材料都没有纹理/图标，Q 丢出或挖出的工具/材料是**不可见实体**（`drawItemEntities` 跳过非 block 物品——物理/拾取/合并/消亡照常工作）；手持视图同样缺失。`[Phase 11]`（材料 `[Phase 12]` 起同样适用）Phase 15。
 - **拾取是固定 1.0 格半径，无磁力** — 玩家底心距掉落物底心 <1.0 且过 0.5s 拾取延迟即整堆入包；Minecraft 会随时间逐渐把物品拉向玩家。`[Phase 11]`
 - **放置消耗库存（行为变化，非缺陷）** — Phase 11 起方块不再是无限的：初始 hotbar 每格满堆栈（block 64/工具 1，`hotbar.json` 定义），放置消耗 1 个；hotbar 与背包都空时右键无效。`[Phase 11]`
-- **工具数据部分不可获得** — `iron_pickaxe`（break_speed 4.0）已注册但游戏内无途径获得（无合成，Phase 12）；初始 hotbar 只有 `wooden_pickaxe`。数据驱动注册表允许"先有数据、后有产出"。`[Phase 11]`
+- **工具数据部分不可获得** — `iron_pickaxe`（break_speed 4.0）已有配方数据（3 iron_ingot + 2 stick，Phase 12），但游戏内无合成 UI/触发（Phase 15），仍然无法在游戏内获得；初始 hotbar 只有 `wooden_pickaxe`。`[Phase 11]`（配方途径 `[Phase 12]`）
 - **背包与实体不持久化** — 存档（Phase 13）必须同时包含 Inventory（27 格 ItemStack）与实体列表（类型/物品/位置/数量/已存时长）；目前重启后库存回初始 hotbar、掉落物全部消失。`[Phase 11]` Phase 13（实体部分 `[Phase 10]`）。
+
+## 合成（Phase 12）
+
+- **无游戏内合成 UI/触发** — 合成系统（`Recipe`/`RecipeRegistry` 经 ItemRegistry 交叉严格校验 + `canCraft`/`craft` 确定性纯逻辑 + 4 个配方数据 + 6 种材料物品）已完整并由单测覆盖，游戏启动时严格加载校验；但游戏内**没有任何操作能触发合成**（无 UI、无配方书、无热键）。系统验证目前只靠单测（与 Phase 10 Projectile 无发射器同一模式）。`[Phase 12]` Phase 15（UI）。
+- **配方只有 shapeless** — 无 shaped（3×3 网格按位置）配方、无催化剂/"需要工作台"类别、无多配方消歧（同原料不同产物不可能出现——`craft` 按 id 精确执行一个配方，未来 UI 负责让玩家选配方，系统不负责猜）。`[Phase 12]`
+- **部分材料暂无用途** — `coal`/`gold_ingot`/`diamond` 可从对应矿石挖得，但没有配方消费它们（无炉子/火把/饰品）；`planks`/`stick`/`iron_ingot` 已在配方链中。`[Phase 12]`
+- **矿石掉落改为材料（行为变化，刻意）** — 4 种矿石现在掉材料物品（coal_ore→coal、iron_ore→iron_ingot、gold_ore→gold_ingot、diamond_ore→diamond，MC 同款），**矿方块物品不能再从采矿获得**（数据仍在、可放置，只是无产出途径）；wood 仍掉 wood 本身（它是木板配方的原料，若改掉 planks 则配方链断）。`[Phase 12]`
 
 ## 性能 / 架构
 

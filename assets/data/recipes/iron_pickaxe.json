@@ -1,0 +1,8 @@
+{
+  "id": "iron_pickaxe",
+  "output": { "item": "iron_pickaxe", "count": 1 },
+  "ingredients": [
+    { "item": "iron_ingot", "count": 3 },
+    { "item": "stick", "count": 2 }
+  ]
+}

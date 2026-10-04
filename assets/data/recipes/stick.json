@@ -1,0 +1,7 @@
+{
+  "id": "stick",
+  "output": { "item": "stick", "count": 4 },
+  "ingredients": [
+    { "item": "planks", "count": 2 }
+  ]
+}

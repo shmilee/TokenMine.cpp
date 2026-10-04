@@ -2,7 +2,7 @@
   "id": "diamond_ore",
   "properties": {
     "hardness": 5.0,
-    "drops": "diamond_ore"
+    "drops": "diamond"
   },
   "model": {
     "textures": { "top": "diamond_ore", "side": "diamond_ore", "bottom": "diamond_ore" }
