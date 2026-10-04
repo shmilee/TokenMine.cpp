@@ -15,6 +15,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(GLEW REQUIRED IMPORTED_TARGET glew)
 pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
 find_package(GTest REQUIRED)
+find_package(Threads REQUIRED)
 
 add_compile_options(-Wall -Wextra -Wpedantic -Werror)
 
@@ -34,6 +35,7 @@ add_library(mc_core STATIC
     src/core/camera.cpp
     src/core/png.cpp
     src/core/save.cpp
+    src/core/thread_pool.cpp
     src/core/game.cpp
     src/block/block_registry.cpp
     src/entity/entity.cpp
@@ -48,6 +50,7 @@ add_library(mc_core STATIC
     src/world/raycast.cpp
     src/world/world.cpp
     src/world/chunk_mesher.cpp
+    src/world/chunk_streaming.cpp
     src/world/day_cycle.cpp
     src/world/fluid.cpp
     src/world/lighting.cpp
@@ -62,7 +65,8 @@ add_library(mc_core STATIC
     src/renderer/texture_atlas.cpp
 )
 target_include_directories(mc_core PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(mc_core PUBLIC SDL3::SDL3 PkgConfig::GLEW PkgConfig::ZLIB)
+target_link_libraries(mc_core PUBLIC SDL3::SDL3 PkgConfig::GLEW
+                        PkgConfig::ZLIB Threads::Threads)
 
 # ---------------------------------------------------------------------------
 # Game executable
@@ -97,6 +101,8 @@ add_executable(minecraft_tests
     tests/test_item.cpp
     tests/test_recipe.cpp
     tests/test_save.cpp
+    tests/test_thread_pool.cpp
+    tests/test_chunk_streaming.cpp
     tests/test_noise.cpp
     tests/test_player.cpp
     tests/test_biome.cpp

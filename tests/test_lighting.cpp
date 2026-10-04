@@ -583,3 +583,113 @@ TEST(LightingTest, MesherBakesFaceLight) {
     EXPECT_TRUE(sawDark);
     EXPECT_TRUE(sawLit);
 }
+
+// -- streaming (Phase 14): insert a generated column, re-light its box ----
+// The streaming pipeline integrates a worker-generated column and then
+// re-lights it with updateRegion(column box). The result must be exactly
+// the light a full propagation of the world INCLUDING the column would
+// produce. The pre-existing chunks hold no light sources, so no stale
+// (void-lit) values can leak from outside the region — the documented
+// sealed-cave limitation does not apply here.
+
+namespace {
+
+// Three columns (x 0..47): ground at y=0, a step at y=1 for x 0..7, a wall
+// at x=32 (y 1..6, z=8) inside the third column, a glowstone at (40, 1, 8)
+// inside the third column. `withThird` builds the third column in the world
+// directly; otherwise it is left for the test to insert as a prebuilt
+// chunk.
+void buildStreamingScenario(World& world, const BlockRegistry& reg, bool withThird) {
+    const BlockID stone = idOf(reg, "stone");
+    const BlockID glow = idOf(reg, "glowstone");
+    world.getOrCreateChunk({0, 0, 0});
+    world.getOrCreateChunk({1, 0, 0});
+    if (withThird) {
+        world.getOrCreateChunk({2, 0, 0});
+    }
+    fillBox(world, 0, 0, 0, 31, 0, 15, stone);
+    fillBox(world, 0, 1, 0, 7, 1, 15, stone);
+    if (withThird) {
+        fillBox(world, 32, 0, 0, 47, 0, 15, stone);
+        fillBox(world, 32, 1, 8, 32, 6, 8, stone);
+        world.setBlock(40, 1, 8, glow);
+    }
+}
+
+// The prebuilt lower third column as a scratch chunk (what a worker
+// produces).
+Chunk buildThirdColumnChunk(const BlockRegistry& reg) {
+    const BlockID stone = idOf(reg, "stone");
+    const BlockID glow = idOf(reg, "glowstone");
+    Chunk chunk;
+    for (int lz = 0; lz < kChunkSize; ++lz) {
+        for (int lx = 0; lx < kChunkSize; ++lx) {
+            chunk.set(lx, 0, lz, stone); // ground (world x 32..47)
+        }
+    }
+    for (int ly = 1; ly <= 6; ++ly) {
+        chunk.set(0, ly, 8, stone); // the wall
+    }
+    chunk.set(8, 1, 8, glow); // (40, 1, 8)
+    return chunk;
+}
+
+} // namespace
+
+TEST(LightingTest, InsertedColumnRelightMatchesFullPropagation) {
+    const BlockRegistry reg = makeRegistry();
+    World incremental, full;
+    buildStreamingScenario(incremental, reg, false);
+    buildStreamingScenario(full, reg, true);
+    Lighting::propagateAll(incremental, reg);
+    Lighting::propagateAll(full, reg);
+
+    // The column arrives pre-built; insert it and re-light its box,
+    // exactly as the streaming pipeline does.
+    ASSERT_TRUE(incremental.insertChunk({2, 0, 0},
+                                        buildThirdColumnChunk(reg)));
+    Lighting::updateRegion(incremental, reg, {32, 0, 0}, {47, 15, 15});
+    expectSameLight(incremental, full);
+}
+
+TEST(LightingTest, InsertedTwoChunkColumnRelightMatchesFullPropagation) {
+    const BlockRegistry reg = makeRegistry();
+    const BlockID stone = idOf(reg, "stone");
+    const BlockID glow = idOf(reg, "glowstone");
+
+    // Same content, but the third column spans two vertical chunks
+    // (y 0..31): the ground + wall + glowstone as in the one-chunk case,
+    // a second glowstone in the upper chunk, and a stone ceiling at y=31
+    // that occludes the sky for the whole column.
+    const auto build = [&](World& world) {
+        buildStreamingScenario(world, reg, true);
+        world.getOrCreateChunk({2, 1, 0});
+        world.setBlock(40, 25, 8, glow); // upper-chunk glowstone
+        fillBox(world, 32, 31, 0, 47, 31, 15, stone); // the ceiling
+    };
+    World full;
+    build(full);
+    // The incremental world starts WITHOUT the third column (both layers);
+    // buildStreamingScenario(withThird=false) is exactly that.
+    World incremental;
+    buildStreamingScenario(incremental, reg, false);
+
+    Lighting::propagateAll(incremental, reg);
+    Lighting::propagateAll(full, reg);
+
+    // Both layers of the column arrive pre-built and are inserted at once
+    // (the pipeline integrates a whole column), then the merged box is
+    // re-lit.
+    Chunk lower = buildThirdColumnChunk(reg);
+    Chunk upper;
+    upper.set(8, 9, 8, glow); // (40, 25, 8)
+    for (int lz = 0; lz < kChunkSize; ++lz) {
+        for (int lx = 0; lx < kChunkSize; ++lx) {
+            upper.set(lx, 15, lz, stone); // the ceiling (world y=31)
+        }
+    }
+    ASSERT_TRUE(incremental.insertChunk({2, 0, 0}, std::move(lower)));
+    ASSERT_TRUE(incremental.insertChunk({2, 1, 0}, std::move(upper)));
+    Lighting::updateRegion(incremental, reg, {32, 0, 0}, {47, 31, 15});
+    expectSameLight(incremental, full);
+}

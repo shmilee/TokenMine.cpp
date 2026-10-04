@@ -17,9 +17,12 @@
 #pragma once
 
 #include <cstdint>
+#include <deque>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -32,6 +35,7 @@
 #include "core/input.hpp"
 #include "core/logger.hpp"
 #include "core/save.hpp"
+#include "core/thread_pool.hpp"
 #include "core/window.hpp"
 #include "entity/entity.hpp"
 #include "entity/item_entity.hpp"
@@ -49,6 +53,7 @@
 #include "world/biome.hpp"
 #include "world/chunk.hpp"
 #include "world/chunk_mesher.hpp"
+#include "world/chunk_streaming.hpp"
 #include "world/day_cycle.hpp"
 #include "world/fluid.hpp"
 #include "world/lighting.hpp"
@@ -100,6 +105,24 @@ private:
     void render();
     // Rebuilds the GPU mesh of every dirty (or never-meshed) chunk.
     Result<void> updateChunkMeshes();
+
+    // Chunk streaming (Phase 14). integrateStreamedColumns runs after the
+    // pool flush: worker-generated columns are inserted into the World
+    // (insertChunk marks the chunk + face-sharing neighbors dirty, so the
+    // next updateChunkMeshes re-meshes them and the boundary). The two
+    // post* methods run last in update, after every main-thread World
+    // write: from then on until the next flush the workers own the window.
+    void integrateStreamedColumns();
+    // Decides the columns to stream around the player (trigger + radius,
+    // see chunk_streaming) and posts up to kStreamColumnsPerFrame
+    // generation jobs to the pool.
+    void streamChunks();
+    // Finds chunks that appeared this frame (streamed-in or created by the
+    // placement path) and posts one worker lighting job per affected
+    // column box. The chunks render one frame dark and are re-meshed with
+    // the correct light the frame after the job completes (deterministic,
+    // frame-locked by the flush).
+    void postLightJobs();
     Result<void> takeScreenshot(const std::filesystem::path& path);
 
     // Draw the sun, moon and starfield (unlit billboarded quads, blended).
@@ -192,6 +215,45 @@ private:
     // it holds references to the world and the block registry).
     std::optional<Player> m_player;
 
+    // Chunk streaming (Phase 14): worker pool for out-of-area terrain. The
+    // per-frame pipeline (see update) makes this race-free:
+    //   flush -> integrate (main writes) -> interaction/fluids (main writes)
+    //   -> mesh + render (main reads only) -> post jobs (workers run until
+    //   the next flush). A job therefore touches shared state only while the
+    //   main thread is in its read-only window.
+    //   - generation jobs touch no shared state at all (the generator is a
+    //     pure function; results land in the job's own scratch chunks);
+    //   - lighting jobs write light arrays + the dirty flag, which the main
+    //     thread never writes in its read-only window (meshing only reads
+    //     light, baking it into vertices).
+    std::unique_ptr<ThreadPool> m_pool;
+    // One in-flight generation job: a whole column
+    // (kVerticalChunksPerColumn scratch chunks). `done` is written by the
+    // worker and read by the main thread only after pool->flush()
+    // (happens-before via the pool's mutex).
+    struct StreamJob {
+        ColumnPos column;
+        std::unique_ptr<Chunk[]> chunks;
+        bool done = false;
+    };
+    // In-flight generation jobs (deque: the heap-allocated StreamJob never
+    // moves, so worker lambdas may capture it by raw pointer).
+    std::deque<std::unique_ptr<StreamJob>> m_streamJobs;
+    // Columns with a generation job in flight (not yet in the World).
+    std::set<ColumnPos> m_streamPending;
+    // Streaming hysteresis (see chunk_streaming): engaged when the player
+    // reaches the edge of the loaded area, disengaged when the player is
+    // deep inside it again. While engaged, the full radius ring around
+    // the player is filled (view_distance becomes visible terrain).
+    bool m_streamingEngaged = false;
+    // The streaming radius in chunk columns (config world.view_distance).
+    int m_streamRadius = 8;
+    // Every chunk the lighting pipeline has covered (all chunks at scene
+    // build time, integrated or created since). A chunk appearing outside
+    // this set is new this frame (streamed-in or placed into) and gets a
+    // worker lighting job for its column box.
+    std::set<ChunkPos> m_litChunks;
+
     // Non-player entities (Phase 10): dropped items + projectiles. The
     // game is the sole owner — it updates them each frame, merges items,
     // and removes the despawned.
@@ -231,11 +293,6 @@ private:
     double m_fpsSmoothed = 0.0;
     double m_lastTitleUpdate = 0.0;
     bool m_initialized = false;
-
-    // Chunk count the lighting was last fully propagated for; a new chunk
-    // (out-of-area placement) starts with no light, so the next frame
-    // re-propagates the whole world before meshing.
-    std::size_t m_lastLightedChunks = 0;
 };
 
 } // namespace mc

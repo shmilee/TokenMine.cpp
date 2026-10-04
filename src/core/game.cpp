@@ -46,6 +46,25 @@ constexpr int kFluidTickEveryNFrames = 3;
 constexpr int kDemoChunkMin = -2;
 constexpr int kDemoChunkMax = 1;
 
+// Chunk streaming (Phase 14). The demo area is generated synchronously at
+// startup (keeps stationary runs job-free, so headless baselines stay
+// byte-reproducible); beyond it, columns are generated on worker threads
+// as the player approaches the edge of the loaded area.
+// Worker count of the streaming pool (generation + lighting jobs).
+constexpr int kStreamWorkerCount = 4;
+// Columns posted for generation per frame (the main thread then meshes
+// and integrates them; 1 keeps the main-thread work well under the frame
+// budget while the pool stays pipelined a few columns deep).
+constexpr int kStreamColumnsPerFrame = 1;
+// Streaming engages when the player's column is within this many columns
+// (Chebyshev) of a missing one inside the radius ring. 1 = the player
+// must reach the edge of the loaded area; an idle player in the center of
+// the 4x4 demo area (2 columns from its edge) never engages.
+constexpr int kStreamTriggerDistance = 1;
+
+// A column is the full world height: kWorldHeight / kChunkSize chunks.
+constexpr int kVerticalChunksPerColumn = kWorldHeight / kChunkSize;
+
 // How far the crosshair raycast reaches (blocks; Minecraft's reach).
 constexpr float kReach = 5.0f;
 
@@ -261,9 +280,14 @@ Result<void> Game::buildScene() {
 
     // Lighting: full propagation over the generated area. Runs once at
     // startup (a few tens of ms); break/place then use the cheap local
-    // update, and a newly created chunk re-triggers a full propagation.
+    // update, and chunks that appear later (streamed-in or placed into)
+    // get a worker lighting job for their column box (postLightJobs).
     Lighting::propagateAll(m_world, m_blocks);
-    m_lastLightedChunks = m_world.chunkCount();
+
+    // Chunk streaming (Phase 14): the worker pool and the radius (config
+    // world.view_distance, in chunk columns around the player).
+    m_pool = std::make_unique<ThreadPool>(kStreamWorkerCount);
+    m_streamRadius = m_config.getInt("world.view_distance", 8);
 
     // Spawn the player on dry land: the seed may put the origin underwater
     // or a tree may stand on the column, so check nearby candidates before
@@ -306,6 +330,12 @@ Result<void> Game::buildScene() {
     // over the fresh ones (--time only affects fresh worlds).
     MC_TRY(tryLoadSave());
 
+    // The lighting pipeline has covered every chunk that exists now (the
+    // fresh demo area, or the loaded save's world — applySave ends with a
+    // full propagation). Anything that appears later is new.
+    const std::vector<ChunkPos> litNow = m_world.chunkPositions();
+    m_litChunks.insert(litNow.begin(), litNow.end());
+
     MC_LOG_INFO("Scene built: " + std::to_string(m_blocks.count()) +
                 " blocks, " + std::to_string(m_atlas.tileCount()) +
                 " atlas tiles, " + std::to_string(m_world.chunkCount()) +
@@ -318,7 +348,11 @@ Result<void> Game::buildScene() {
 }
 
 // ---------------------------------------------------------------------------
-// Chunk meshing (CPU, game thread; Phase 14 moves it to worker threads)
+// Chunk meshing (CPU geometry + GPU upload, game thread). Meshing stays on
+// the game thread in Phase 14: it reads the live World (face culling
+// across chunk boundaries), and the streaming budget
+// (kStreamColumnsPerFrame) bounds its per-frame cost to a few chunks
+// (measured ~0.01 ms/chunk on this machine).
 // ---------------------------------------------------------------------------
 
 Result<void> Game::updateChunkMeshes() {
@@ -351,6 +385,167 @@ Result<void> Game::updateChunkMeshes() {
         chunk.clearDirty();
     }
     return {};
+}
+
+// ---------------------------------------------------------------------------
+// Chunk streaming (Phase 14): worker-generated columns around the player
+// ---------------------------------------------------------------------------
+
+void Game::integrateStreamedColumns() {
+    if (m_streamJobs.empty()) {
+        return;
+    }
+    // Runs right after pool->flush(): completed jobs are fully published
+    // (happens-before via the pool's mutex). insertChunk marks the chunk
+    // and its face-sharing neighbors dirty, so updateChunkMeshes (later
+    // this frame) re-meshes them with correct boundary culling.
+    std::deque<std::unique_ptr<StreamJob>> inFlight;
+    for (auto& job : m_streamJobs) {
+        if (!job->done) {
+            inFlight.push_back(std::move(job));
+            continue;
+        }
+        for (int cy = 0; cy < kVerticalChunksPerColumn; ++cy) {
+            m_world.insertChunk({job->column.x, cy, job->column.z},
+                                std::move(job->chunks[cy]));
+        }
+        m_streamPending.erase(job->column);
+        MC_LOG_INFO("Streamed column (" + std::to_string(job->column.x) +
+                    ", " + std::to_string(job->column.z) +
+                    ") integrated (" + std::to_string(m_world.chunkCount()) +
+                    " chunks loaded)");
+    }
+    m_streamJobs = std::move(inFlight);
+}
+
+void Game::streamChunks() {
+    if (!m_pool || !m_generator || !m_player) {
+        return;
+    }
+    // The player's column (bottom-center position).
+    const Vec3 p = m_player->position();
+    const ColumnPos player{
+        floorDiv(static_cast<int>(std::floor(p.x)), kChunkSize),
+        floorDiv(static_cast<int>(std::floor(p.z)), kChunkSize)};
+
+    // The loaded columns (the projection of the existing chunks).
+    std::set<ColumnPos> loadedSet;
+    std::vector<ColumnPos> loaded;
+    for (const ChunkPos& c : m_world.chunkPositions()) {
+        if (loadedSet.insert({c.x, c.z}).second) {
+            loaded.push_back({c.x, c.z});
+        }
+    }
+
+    // Hysteresis (see chunk_streaming): engage when the player reaches
+    // the edge of the loaded area; while engaged, keep filling the full
+    // radius ring (an exploring player ends up with view_distance of
+    // terrain around them); disengage only when the ring around the
+    // player is fully loaded (nearestMissingDistance returns the radius
+    // + 1 sentinel). A never-engaged idle player in the center of the
+    // loaded area stays job-free (keeps headless baselines
+    // byte-reproducible).
+    const int nearestMissing =
+        nearestMissingDistance(player, loaded, m_streamRadius);
+    if (!m_streamingEngaged) {
+        if (nearestMissing > kStreamTriggerDistance) {
+            return;
+        }
+        m_streamingEngaged = true;
+        MC_LOG_INFO("Chunk streaming engaged (radius " +
+                    std::to_string(m_streamRadius) + " columns)");
+    } else if (nearestMissing > m_streamRadius) {
+        m_streamingEngaged = false; // the radius ring is fully loaded
+    }
+
+    int posted = 0;
+    const std::vector<ColumnPos> missing =
+        missingColumns(player, loaded, m_streamRadius);
+    for (const ColumnPos& col : missing) {
+        if (posted >= kStreamColumnsPerFrame) {
+            break;
+        }
+        if (m_streamPending.count(col) > 0) {
+            continue; // a generation job for this column is in flight
+        }
+        auto job = std::make_unique<StreamJob>();
+        job->column = col;
+        job->chunks = std::make_unique<Chunk[]>(kVerticalChunksPerColumn);
+        m_streamPending.insert(col);
+        StreamJob* rawJob = job.get();
+        m_streamJobs.push_back(std::move(job));
+        // The worker fills the job's own scratch chunks with the pure
+        // generator (no World access, no shared mutable state — the
+        // generator's members are immutable after create()).
+        m_pool->post([this, rawJob] {
+            for (int cy = 0; cy < kVerticalChunksPerColumn; ++cy) {
+                m_generator->generateChunk(rawJob->chunks[cy],
+                                           {rawJob->column.x, cy,
+                                            rawJob->column.z});
+            }
+            rawJob->done = true;
+        });
+        ++posted;
+    }
+}
+
+void Game::postLightJobs() {
+    if (!m_pool) {
+        return;
+    }
+    // Chunks that appeared since the last frame: streamed-in columns
+    // (integrated at the top of update) or the placement path's
+    // synchronous getOrCreateChunk. Everything else is already covered by
+    // the lighting pipeline (init/load propagateAll + local updates).
+    const std::vector<ChunkPos> positions = m_world.chunkPositions();
+    std::map<ColumnPos, std::array<BlockPos, 2>> boxes;
+    for (const ChunkPos& c : positions) {
+        if (!m_litChunks.insert(c).second) {
+            continue;
+        }
+        const ColumnPos col{c.x, c.z};
+        const BlockPos lo{c.x * kChunkSize, c.y * kChunkSize,
+                          c.z * kChunkSize};
+        const BlockPos hi{lo.x + kChunkSize - 1, lo.y + kChunkSize - 1,
+                          lo.z + kChunkSize - 1};
+        auto it = boxes.find(col);
+        if (it == boxes.end()) {
+            boxes.emplace(col, std::array<BlockPos, 2> {lo, hi});
+            continue;
+        }
+        // Merge into the column's box (partial columns: the placement
+        // path creates a single chunk).
+        BlockPos& blo = it->second[0];
+        BlockPos& bhi = it->second[1];
+        blo.x = std::min(blo.x, lo.x);
+        blo.y = std::min(blo.y, lo.y);
+        blo.z = std::min(blo.z, lo.z);
+        bhi.x = std::max(bhi.x, hi.x);
+        bhi.y = std::max(bhi.y, hi.y);
+        bhi.z = std::max(bhi.z, hi.z);
+    }
+    if (boxes.empty()) {
+        return;
+    }
+    // ONE job per frame, running the region updates sequentially. The
+    // region of one box overlaps the region of an adjacent new column
+    // (each expands by kLightUpdateRadius), so two lighting jobs must
+    // never run concurrently — they would race on the shared light
+    // arrays. A single job is serialized by the pool and stays in the
+    // worker window (the main thread only reads the World until the next
+    // flush). The worker writes light arrays and the dirty flag, which
+    // the main thread re-reads at the next frame's meshing (after the
+    // flush).
+    std::vector<std::array<BlockPos, 2>> jobBoxes;
+    jobBoxes.reserve(boxes.size());
+    for (const auto& [col, box] : boxes) {
+        jobBoxes.push_back(box);
+    }
+    m_pool->post([this, jobBoxes = std::move(jobBoxes)] {
+        for (const auto& box : jobBoxes) {
+            Lighting::updateRegion(m_world, m_blocks, box[0], box[1]);
+        }
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -461,7 +656,6 @@ Result<void> Game::applySave(const SaveGame& save) {
     // 2) Lighting: a full re-propagation is exact for any edit count (the
     //    incremental local updates converge to the same values).
     Lighting::propagateAll(m_world, m_blocks);
-    m_lastLightedChunks = m_world.chunkCount();
     // 3) Player. teleportTo zero's the velocity; when the save was taken
     //    at rest the one-frame gravity re-settle is position-exact (the
     //    floor plane is an integer).
@@ -646,6 +840,16 @@ int Game::run() {
         }
     }
 
+    // Chunk streaming (Phase 14): drain the worker pool before the save
+    // and shutdown — a job exception would surface in the flush, and the
+    // reset joins the workers. In-flight generation columns are not
+    // integrated (integration happens in update); that is correct, they
+    // are pristine generated terrain that a save never records.
+    if (m_pool) {
+        m_pool->flush();
+        m_pool.reset();
+    }
+
     // Save (Phase 13): persist the world state for the slot (opt-in via
     // --save, after the final frame — and after any screenshot, which is
     // taken inside the loop). A failed save is logged, not fatal: the
@@ -664,6 +868,17 @@ int Game::run() {
 }
 
 void Game::update(double dt) {
+    // Chunk streaming (Phase 14) — frame pipeline, the race-free part:
+    // every worker job from the previous frame (generation, lighting)
+    // completes at this flush; from here until the posts at the end of
+    // this function the main thread is the sole writer of the World, and
+    // after the posts the main thread only reads it (meshing already
+    // happened; rendering reads no World data beyond the chunk list).
+    if (m_pool) {
+        m_pool->flush();
+    }
+    integrateStreamedColumns();
+
     // Day/night: a fixed per-frame step (see kDayStepPerFrame) keeps
     // headless runs byte-reproducible.
     m_dayCycle.update(kDayStepPerFrame);
@@ -690,14 +905,6 @@ void Game::update(double dt) {
         }
     }
 
-    // A newly created chunk (placing outside the demo area) starts with
-    // zero light; re-propagate the whole world before meshing so nothing
-    // renders dark.
-    if (m_world.chunkCount() != m_lastLightedChunks) {
-        Lighting::propagateAll(m_world, m_blocks);
-        m_lastLightedChunks = m_world.chunkCount();
-    }
-
     const auto meshes = updateChunkMeshes();
     if (!meshes.ok()) {
         MC_LOG_ERROR("Chunk meshing failed: " + meshes.error().describe());
@@ -714,6 +921,21 @@ void Game::update(double dt) {
     // Other entities (Phase 10): per-entity physics, then item merging and
     // despawn (see updateEntities).
     updateEntities(dt);
+
+    // Streaming decision + generation jobs: posted after every
+    // main-thread World write of this frame (interaction, fluids) and
+    // after meshing. The workers run from here until the next flush while
+    // the main thread only reads the World (rendering); generation jobs
+    // touch no shared state at all (pure generator into the job's own
+    // scratch chunks).
+    streamChunks();
+    // Lighting for chunks that appeared this frame (streamed-in columns,
+    // or the placement path's synchronous creation): one worker job
+    // (adjacent regions overlap, so the updates run sequentially inside
+    // it). The affected chunks render one frame dark (light 0) and are
+    // re-meshed with the correct light the frame after the job completes
+    // — deterministic, frame-locked by the flush.
+    postLightJobs();
 }
 
 // ---------------------------------------------------------------------------

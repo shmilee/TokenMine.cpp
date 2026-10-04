@@ -63,6 +63,14 @@ public:
 
     // Chunk access.
     Chunk& getOrCreateChunk(const ChunkPos& pos); // runs generator if new
+    // Insert a pre-built chunk (Phase 14 streaming: worker threads fill a
+    // scratch chunk with the generator, the main thread integrates it).
+    // The chunk must not exist yet and must not be dirty. Marks the chunk
+    // and every face-sharing existing neighbor dirty: their boundary
+    // faces were meshed against the void, and the new neighbor's content
+    // changes their cull decision (the reverse direction is correct from
+    // the start because the new chunk meshes after insertion).
+    bool insertChunk(const ChunkPos& pos, Chunk&& chunk);
     const Chunk* findChunk(const ChunkPos& pos) const;
     // Non-const access to an existing chunk WITHOUT creating it (the
     // lighting system writes light arrays into chunks it does not create).

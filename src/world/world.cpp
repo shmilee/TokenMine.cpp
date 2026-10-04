@@ -116,6 +116,30 @@ Chunk& World::getOrCreateChunk(const ChunkPos& pos) {
     return chunk;
 }
 
+bool World::insertChunk(const ChunkPos& pos, Chunk&& chunk) {
+    auto result = m_chunks.emplace(pos, std::move(chunk));
+    if (!result.second) {
+        return false; // the chunk already exists; nothing was inserted
+    }
+    // The chunk (a fresh Chunk is dirty by construction) and every
+    // face-sharing existing neighbor need a re-mesh: the neighbors'
+    // boundary faces were decided against the void before the new chunk
+    // existed.
+    const auto mark = [this](const ChunkPos& p) {
+        auto it = m_chunks.find(p);
+        if (it != m_chunks.end()) {
+            it->second.markDirty();
+        }
+    };
+    mark({pos.x - 1, pos.y, pos.z});
+    mark({pos.x + 1, pos.y, pos.z});
+    mark({pos.x, pos.y - 1, pos.z});
+    mark({pos.x, pos.y + 1, pos.z});
+    mark({pos.x, pos.y, pos.z - 1});
+    mark({pos.x, pos.y, pos.z + 1});
+    return true;
+}
+
 const Chunk* World::findChunk(const ChunkPos& pos) const {
     const auto it = m_chunks.find(pos);
     return it == m_chunks.end() ? nullptr : &it->second;

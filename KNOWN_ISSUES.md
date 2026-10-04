@@ -13,10 +13,8 @@
 - **昼夜时间按每帧固定 1/60s 推进（非墙钟）** — 保证无输入运行（截图验证）逐字节可复现；代价是非 60Hz 显示器上昼夜的真实时间速度按比例偏差（120Hz = 2× 速）。`[Phase 8]`
 - **太阳/月亮/星星是 billboard 圆形 sprite** — 太阳 40px / 月亮 28px / 星星 2px 的像素级圆形 quad（着色器 view-space 膨胀；不用点精灵——Mesa ANV 等驱动会把 shader `gl_PointSize` 钳到 1）。无纹理、无月相、无星星闪烁；星星固定在以世界原点为心的 r=800 上半球（走路时有极小视差），无银河。`[Phase 8]`
 - **无云、无昼夜音效** — 云层与昼夜环境音未实现。`[Phase 8]`
-- **光不传播进未生成区域** — 演示区之外的缺失 chunk 读作"开放虚空"（sky=15 / block=0）作为传播边界源；生成新区后触发全量重传播，边缘光缝在生成前可见。`[Phase 7]` 随 chunk streaming（Phase 14）处理。
-- **光照更新全在游戏线程** — 首次全量传播（~几十 ms）在新 chunk 生成时也会重跑；每次破坏/放置做局部重传播（±16 整列天空光 + ±16 盒方块光，~几 ms）。演示区规模下无感，世界变大后随 Phase 14 移入 job queue。`[Phase 7]`
+- **世界边缘即"虚空"（无雾）** — 未加载区域读作 air，没有雾效/边缘遮挡，站在流式加载的边缘能看到悬空截面（Phase 14 起"边缘"随玩家移动，不再是固定的演示区边界）。`[Phase 3]`（流式部分 `[Phase 14]` 已缓解）
 - **顶面/底面纹理朝向约定** — Phase 3 修正 Y 面绕序后，顶面纹理的 u 轴指向 +Z、v 轴指向 -X（与 Minecraft"顶面纹顶部朝向 -Z"不同）。占位纹理下无视觉影响；正式纹理阶段可统一调整。`[Phase 3]`
-- **世界边缘即"虚空"** — 缺失 chunk 读作 air，没有雾效/边缘遮挡，站在世界边缘能看到悬空截面。`[Phase 3]` 计划随 chunk streaming（Phase 14）处理。
 
 ## 世界 / 生成
 
@@ -27,13 +25,13 @@
 - **地形高度与洞穴/矿/树相互独立** — 洞穴只保留表层 4 格（`surface_guard`）与底层 2 格（`min_y`）的壳，不感知矿脉/树洞；可能出现洞口正对矿脉等巧合。`[Phase 4]`
 - **无准星/目标高亮** — 破坏/放置靠 raycast 命中，但屏幕上没有准星，也没有 MC 式的目标方块描边；命中判定纯几何（reach 5）。`[Phase 6]` 随 UI（Phase 15）加准星+描边。
 - **无裂纹动画** — 破坏已是数据驱动耗时（Phase 11：按住左键，`1.5s × hardness ÷ 选中物品 break speed`），但进度无任何视觉反馈——方块要么完整、要么消失，没有 MC 式渐进裂纹纹理/描边。`[Phase 6]`（破坏耗时/工具系统 `[Phase 11]` 已实现）裂纹动画留待 Phase 15（UI/粒子）。
-- **放置到未生成区域会同步生成 chunk** — 演示区边缘之外放置方块会触发 `getOrCreateChunk`（生成器在游戏线程同步跑）。`[Phase 6]` Phase 14（异步 chunk streaming）。
+- **放置到未生成区域会同步生成 chunk** — 演示区边缘之外放置方块仍触发 `getOrCreateChunk`（生成器在游戏线程同步跑）。Phase 14 实现了流式加载，但放置需要**立即**拿到目标 chunk（放置当帧生效），所以该路径刻意保持同步（一列 8 chunk ≈1.6 ms 的生成尖峰）；流式管线随后按正常路径为它补光照。`[Phase 6]`
 - **无潜行/无 1 格自动台阶** — 上 1 格台阶必须主动跳跃；无 crouch（卡 1.8 门框）、无自动 step-up。`[Phase 5]`
 - **水平速度无惯性** — 期望速度每 tick 直接设定（无加速/摩擦），松键即停。手感可用但非 Minecraft 式平滑。`[Phase 5]`
-- **虚空坠落 = 传送回出生点** — 世界边缘是虚空（见渲染节），掉到 y < -32 直接回出生点，无死亡/掉落伤害/护甲。`[Phase 5]` 随 chunk streaming（Phase 14）+ 死亡机制处理。
+- **虚空坠落 = 传送回出生点** — 掉到 y < -32 直接回出生点，无死亡/掉落伤害/护甲。Phase 14 起世界随玩家流式扩展，走路时地面始终在前方加载（预算 1 列/帧 ≫ 步行速度），虚空坠落大幅减少——但仍可能发生（读档点位于未加载区域时先下落几帧再由流式补上地面；快于流式速度离开时）。`[Phase 5]`（虚空范围 `[Phase 14]` 已缓解）死亡机制待后续。
 - **水量不守恒** — 简化规则下流体体积会凭空增减：浅膜落入更深流动池被"吸收"（池保持原水位）；下落链落入世界底部直接消失；落入池时按等级抬升池水位而非按体积换算。Minecraft 用源/流动状态机近似守恒。`[Phase 9]`
 - **满水格（source）失去支撑会下落** — 对 Minecraft 的刻意偏离：MC 中 source 水不随支撑消失而下落（只会停止扩散）；本实现中任何满格下方为空都会沿列下落（传送带式补位），行为更"物理"但与 MC 不符。`[Phase 9]`
-- **流体不会流进未加载的 chunk** — `World::setFluid` 只写已存在 chunk（不创建）；FluidSim 只 tick 已存在 chunk。湖流到演示区边缘会"暂停"，chunk 加载后恢复扩散。`[Phase 9]` 随 chunk streaming（Phase 14）自然缓解。
+- **流体不会流进未加载的 chunk** — `World::setFluid` 只写已存在 chunk（不创建）；FluidSim 只 tick 已存在 chunk。Phase 14 起"未加载"只存在于流式半径环之外/玩家身后：水在加载区边界暂停，玩家走近加载后恢复扩散（生成地形本身的水是平衡态，tick 无变化）。`[Phase 9]`（范围 `[Phase 14]` 已收窄）
 - **只有一种流体（水）** — 无岩浆/蜂蜜等；`fluidBlock()` 取第一个 `properties.fluid` 数据方块作纹理参考，加第二种流体需扩展存储（level 数组按流体类型分）。`[Phase 9]`
 
 ## 实体（Phase 10）
@@ -65,18 +63,25 @@
 ## 存档（Phase 13）
 
 - **存档是 opt-in（`--save <slot>`），无默认世界** — 不带 `--save` 时不读不写（保持既有运行行为与基线截图不变）；没有"上次世界"的隐式恢复，也没有 MC 式多存档槽管理/选择 UI（多个槽只是多个文件，手动切换）。`[Phase 13]`
-- **写存档时在退出路径重跑生成器做 diff** — `diffWorld` 对每个已有 chunk 用 scratch chunk 重跑纯函数 `generateChunk` 逐格比对（128 chunk 约几十 ms 的 CPU 尖峰，仅发生在干净退出时）；世界变大后（Phase 14 流式加载）需要改增量编辑跟踪或并行 diff。`[Phase 13]`
+- **写存档时在退出路径重跑生成器做 diff** — `diffWorld` 对每个已有 chunk 用 scratch chunk 重跑纯函数 `generateChunk` 逐格比对（仅发生在干净退出时）；Phase 14 流式加载后世界可达 2300+ chunk，尖峰相应变长（实测 2312 chunk ≈ 0.5 s，一次性）；需要改增量编辑跟踪或并行 diff。`[Phase 13]`（`[Phase 14]` 起规模放大）
 - **只在干净退出时写，会话中无自动存档** — 崩溃/断电丢失自上次退出以来的全部修改；无周期性 autosave、无"保存并退出"热键（游戏内无 UI，Phase 15）。`[Phase 13]`
 - **玩家速度/onGround 不存** — 读档用 `teleportTo`（速度清零、onGround=false）：存档时玩家静止则一帧重力回落到整数平面后逐位精确；存档时玩家在空中/移动则位置保留但速度丢失（读档后从该位置重新下落）。`[Phase 13]`
 - **实体 `age` 按真实 dt 累积（墙钟）** — 与玩家/物理一致（非固定步长），所以含实体的存档文件在 age 字段上跨运行差 ±1-2 帧；渲染不依赖 age（掉落物动画由帧计数器驱动），截图确定性不受影响。昼夜 `time` 是固定步长（位精确）。`[Phase 13]`
 - **`DayCycle::setTimeOfDay` 至多 1 ulp 偏差** — 存 timeOfDay [0,1)，恢复时解出 totalSeconds；对远离配置 start_time 的值，`startTime + delta` 的浮点往返可能差 1 ulp（~1e-16）。昼夜渐变段是常量/平滑的，呈现无影响。`[Phase 13]`
-- **演示区外的编辑会带上"生成的 chunk"** — 在演示区外放置方块会同步生成该 chunk（既有行为），存档 diff 覆盖它；读档时 `setBlock` 重建同样生成该 chunk——一致，但读档后的世界含全新世界没有的 chunk（`m_lastLightedChunks` 已同步，光照全量重传播）。`[Phase 13]`
+- **演示区外的编辑会带上"生成的 chunk"** — 在演示区外放置方块会同步生成该 chunk（既有行为），存档 diff 覆盖它；读档时 `setBlock` 重建同样生成该 chunk——一致，但读档后的世界含全新世界没有的 chunk（读档后 `propagateAll` 全量重传播，之后新出现的 chunk 由 Phase 14 的 worker 光照 job 处理）。`[Phase 13]`
 - **存档无迁移机制** — format 1 之外一律拒绝（无 format 2 读取器）；字段集由 format 号锁定，未知字段=报错（机器生成文件的损坏/版本检测，与用户数据文件的"警告容忍"相反）。`[Phase 13]`
+
+## Chunk 流式（Phase 14）
+
+- **只增不卸载** — 流式只加载、从不卸载 chunk：内存随探索面积线性增长（半径 8 列环 ≈ 2304 chunk ≈ 35 MB）。卸载需要先把"卸载前该区域的编辑"持久化（与 Phase 13 存档格式交互：diff 是相对生成器的，卸载本身不入档，但卸载后再编辑会重新生成 chunk，diff 语义仍成立——真正的问题是卸载时玩家/实体可能站在将被卸载的 chunk 上、流体边界状态丢失），v1 刻意不做。`[Phase 14]`
+- **新列首帧以光 0 渲染（1 帧暗）** — 流式列集成后先网格化（光数组还是 0）、光照 worker job 在网格化之后才 post，该列与受影响的边界 chunk 有 1 帧暗色，job 完成后（下帧）重网格为正确光照。帧锁定下的确定性 pop-in（与 MC 的 chunk pop-in 观感一致）；若未来要消除需把光照提前到集成同帧（~19 ms 主线程尖峰）。`[Phase 14]`
+- **增量光照不能"消光"（封洞伪影）** — 新列的光照走 `updateRegion`（天空光列重扫可减可增；BFS 只严格增大）。若某处旧高光的唯一通路穿过当时未加载的虚空（如演示区边缘的洞穴开向虚空），新列生成后通路被封，区域外的旧高值不会被降低（BFS 不跨区减光）。旧代码的"新 chunk→全量重传播"无此伪影（代价是每次 50 ms+ 游戏线程尖峰）。窄场景，演示区边缘的洞穴开向虚空才触发。`[Phase 14]`
+- **流式触发是"贴近缺失列"迟滞，静止玩家永不流式** — 激活 = 玩家距缺失列 ≤1（Chebyshev）；激活后直到玩家周围半径环充满才解除。设计目的：无输入运行（基线截图）零 job、逐字节复现。副作用：站在加载区正中（距边缘 2 列）的玩家即使半径环未充满也不会流式（他从未"贴近过"边缘）。`[Phase 14]`
+- **存档点位于未加载区域时，读档玩家先下落几帧** — 读档世界 = 演示区 + 编辑重建的 chunk；存档玩家在演示区外时，他的列由流式在 ~2-4 帧内补上（触发器对"玩家自身列缺失"= 距离 0 立即激活），期间玩家从存档位置下落（实测 ~0.03 格，落在整数地面平面后逐位精确）。无死亡风险（远小于 -32 杀线）。`[Phase 14]`
 
 ## 性能 / 架构
 
-- **Chunk 网格化在单线程游戏线程** — 演示区所有 chunk 在第一帧同步 mesh；chunk 数量增长后需要 job queue。`[Phase 3]` Phase 14（worker threads）。`WorldGenerator::generateChunk` 已按无状态纯函数设计（Phase 4），可直接并行。
-- **`world.view_distance` 配置存在但未使用** — 演示区大小是编译期常量，没有按视距流式加载。`[Phase 3]` Phase 14。
+- **Chunk 网格化在游戏线程（有界）** — 启动时演示区所有 chunk 在第一帧同步 mesh；Phase 14 后增量 meshing 的每帧成本由流式预算（1 列/帧）限界（实测 ~0.01 ms/chunk，8 chunk/帧 ≈ 0.08 ms）。worker 网格化需要"快照式"设计（worker 读 World 的边界邻块），留待性能成为瓶颈时。`[Phase 3]`（生成部分 `[Phase 14]` 已并行化）
 - **`Chunk&` 引用会被 unordered_map rehash 失效** — `getOrCreateChunk` 返回的引用在后续可能 rehash 的 World 变更（其他 chunk 的 setBlock/getOrCreateChunk）后失效；已在 world.hpp 头部文档化，调用方须在一个逻辑操作内使用。`[Phase 3]`
 - **Greedy Meshing 未实现** — 只做 Face Culling，顶点数按暴露面线性增长。计划：性能成为瓶颈时再引入（README 路线图已注明）。
 
@@ -87,6 +92,7 @@
 
 ## 已修复（归档）
 
+- **`[2026-10-04, Phase 14]` `world.view_distance` 未使用 / 世界边缘固定 / 新 chunk 触发全量重传播 / 光照更新全在游戏线程** — Phase 14 实现 chunk 流式 + 多线程：`ThreadPool`（`src/core/thread_pool.{hpp,cpp}`，固定 4 worker、`post`/`flush` 帧同步点、首个 job 异常在 flush 重抛、析构先跑完 pending job 再 join）+ 纯决策逻辑 `chunk_streaming`（`missingColumns` 距离优先确定性排序 / `nearestMissingDistance` 迟滞输入 / 玩家列 Chebyshev 几何）+ `World::insertChunk`（预建 chunk 插入 + 面邻居标脏防边界 Z-fighting）+ 帧管线（flush → 主线程写 World → 网格化/渲染只读 → post jobs，worker 只运行在 post→flush 窗口）。按"列"（整列 8 垂直 chunk）流式：worker 线程并行调纯函数 `generateChunk` 填 scratch chunk（零 World 接触），主线程集成 + 网格化；`world.view_distance`（默认 8 列）首次生效为流式半径；迟滞激活（≤1 列贴近缺失列 → 激活，半径环充满 → 解除），静止玩家零 job。新列光照 = 单 worker job 顺序 `updateRegion`（相邻区域重叠，光照 job 禁止并发），替代旧的"chunkCount 变化 → 游戏线程 `propagateAll`"（每新 chunk 50 ms+ 尖峰）。新增 21 个单测（ThreadPool 执行/flush 语义/worker 线程/异常传递/析构 join/5000 job 压力；流式几何排序/半径边界/迟滞；insertChunk 去重/邻居标脏/自标脏；增量光照 == 全量传播逐格等价 ×2 场景）+ E2E（无输入基线逐字节不变；seed 57 走 36 格跨边缘停在 1 格台阶、半径 8 环 273 列流满、两次运行截图逐字节一致、2312 chunk 14 s 静止；save 标志运行中性；读档玩家落在未加载区、流式 4 ms 内补地面、两次运行逐字节一致）。新简化记入「Chunk 流式（Phase 14）」节。
 - **`[2026-10-04, Phase 13]` 无存档 / 背包与实体不持久化 / 流体改动不入档** — Phase 13 实现完整存档（`--save <slot>`/`--new`，`src/core/save.{hpp,cpp}`）：`data/saves/<slot>.json` = seed + 与 `generateChunk(seed)` 的 diff（`blocks`/`fluids` 编辑列表，只存不同的格子）+ 玩家 pos/yaw/pitch + 昼夜 timeOfDay + 27 格背包 + 选中格 + 掉落物实体（item/count/pos/age/pickup_delay）。读档 = 生成世界后逐格应用（先方块后流体）→ `propagateAll` → 恢复玩家/背包/实体（`setAge`/`setPickupDelay`）/`DayCycle::setTimeOfDay`。严格加载校验（format 号/seed 一致/注册表交叉/位置不重复/方块+流体不同格/未知字段=错误）。JSON 浮点序列化本就最短可往返精度（位精确）。新增 17 个单测（round-trip 位精确/严格校验全路径/diff 精确检出/apply 恢复与失败/diff→fresh→apply 全格等价）+ E2E（无 flag 基线字节不变；存档文件跨运行字节一致；加载路径截图字节一致；含实体存档 age 恢复精确）。
 - **`[2026-10-04, Phase 11]` 破坏不掉落物品 / 无拾取 / 无背包** — Phase 11 实现完整物品闭环：`Item`/`ItemStack`/`ItemRegistry`（每个数据方块隐式同名 block item + `assets/data/items/*.json` 显式工具，严格校验）/`Inventory`（27 格 = 9 hotbar + 18 背包，确定性合并入包）；破坏按 `properties.drops`（物品名，init 严格校验）生成 `ItemEntity`（现持物品名 + 数据 maxStack，合并上限尊重物品数据），玩家 1.0 格内自动拾取（0.5s 延迟防 Q 丢出即回吸）；hotbar 改为背包前 9 格（`hotbar.json` 的 `items` 列表定义初始内容，满堆栈），放置消耗选中格，`Q` 丢弃 1 个。
 - **`[2026-10-04, Phase 11]` 破坏瞬时 / 选择方块临时方案** — 破坏改为按住驱动：`breakDurationSeconds(hardness, breakSpeed) = 1.5s × hardness ÷ speed`（工具 = 数据 `break_speed`，徒手/方块物品 = 1.0；hardness ≤0 且可破坏 = 即时），准星移开/松键/换工具（Tab）进度清零；`properties.hardness` 数据首次投入使用。hotbar 从"临时 BlockID 列表"换成背包物品格（Tab 循环 9 格）。已知简化（flat 工具乘数/无裂纹动画/无 UI）记入「物品 / 背包」节。

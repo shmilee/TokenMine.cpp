@@ -42,7 +42,7 @@ cmake --build build
 ./build/bin/minecraft --save myworld --new
 ```
 
-## 当前可玩内容（Phase 13）
+## 当前可玩内容（Phase 14）
 
 - **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时）/游泳时随时上浮，
   `LeftShift` 冲刺，鼠标转向（**左键点击锁定指针；转向仅在指针锁定时生效**，
@@ -108,7 +108,18 @@ cmake --build build
   （可跳上 1 格台阶，跳不上 2 格）；掉出世界（y < -32）回出生点
 - **程序化体素世界（Seed 可复现）**：16×16×16 chunk，世界高度 128（y ∈ [0,128)），X/Z 无限。
   同一 seed 逐块复现（单元测试 + 像素级截图比对保证）；不同 seed 生成不同世界
-- **WorldGenerator**（无状态、纯函数 `generateChunk`，Phase 14 可直接并行）：
+- **Chunk 流式加载 + 多线程**（Phase 14，`ThreadPool` + `chunk_streaming`）：
+  演示区之外的世界**按"列"（整列 8 个垂直 chunk）在 worker 线程上生成**——
+  玩家走近已加载区边缘（距缺失列 ≤1 列）时流式激活（迟滞：半径环充满前不解除），
+  每帧预算 1 列，按距离优先（最近先）填充 `world.view_distance`（默认 8 列，
+  配置首次生效）的半径环。新列集成（`World::insertChunk`，面邻居标脏重网格化
+  防边界 Z-fighting）与光照（`updateRegion` 柱 box 的 worker job，替代旧的
+  "新 chunk→全量重传播"）都走同一帧管线：flush → 主线程写 World → 网格化/
+  渲染（只读）→ post jobs（worker 运行窗口）。新列首帧以光 0 渲染、下一帧
+  补光重网格（帧锁定下的确定性 pop-in）。**只增不卸载**（v1，见
+  `KNOWN_ISSUES.md`）。静止玩家（距边缘 ≥2 列）永不触发 → 无输入运行零 job，
+  基线截图逐字节复现
+- **WorldGenerator**（无状态、纯函数 `generateChunk`，worker 线程并行调用）：
   - **地形**：fBm 2D 噪声高度场（±24 格，基线 40），y=0 bedrock 层，深处 stone
   - **生物群系**：低频噪声 + 权重选择（`assets/data/biomes/*.json`：desert/forest/plains），
     各 biome 有自己的表层/次表层/树密度/高度系数
@@ -119,8 +130,10 @@ cmake --build build
     跨 chunk 无缝；只替换 stone（不破坏洞穴）
   - **树木**：世界空间格网候选 + 数据驱动的树密度；树干 4~7 格 + 两层树冠 + 顶帽；
     跨 chunk 边界由邻接 chunk 各自补齐（边际格网机制），只写入 air（不破坏地形）
-- **演示区**：4×4 chunk 列（64×64 方块）；玩家按 seed 自动出生在干燥陆地上
-  （候选列需满足：高于海平面 + 出生包围盒内无方块，避开树干/树冠）
+- **演示区 + 流式扩展**：启动时同步生成 4×4 chunk 列（64×64 方块）；玩家按
+  seed 自动出生在干燥陆地上（候选列需满足：高于海平面 + 出生包围盒内无方块，
+  避开树干/树冠）。走出演示区后世界按流式加载（上一项）继续扩展——X/Z 真正
+  无限，走到哪加载到哪（半径 `world.view_distance` 列）
 - **流体模拟（水，Phase 9）**：每个 chunk 一个 16³ 的 0-8 等级数组
   （8=满/源，1-7 流动；同一 cell 里水与方块互斥）。`FluidSim::tick`（游戏线程，
   每 3 帧一次 ≈20Hz，快照式确定性）：下落（下方空/流动则沿列传送带下移）、
@@ -343,7 +356,7 @@ mine-craft/
 - [x] **Phase 11** — 物品与背包：Item/ItemStack/Inventory、掉落物拾取、按住破坏（hardness/工具数据驱动）、Q 丢弃
 - [x] **Phase 12** — 合成：数据驱动 Recipe（Recipe/RecipeRegistry 严格校验 + canCraft/craft 纯逻辑 + `drops_count` + 材料物品；游戏内合成 UI 在 Phase 15）
 - [x] **Phase 13** — 存档：Seed + 修改数据（`--save <slot>`/`--new`，diff 式存档 + 严格校验 + 背包/实体/时间持久化）
-- [ ] **Phase 14** — Chunk Streaming + 多线程（Job Queue/Thread Pool）
+- [x] **Phase 14** — Chunk Streaming + 多线程：ThreadPool（post/flush）+ worker 线程按列并行生成（view_distance 半径环，迟滞激活）+ insertChunk 边界标脏 + 增量光照 worker job（替代全量重传播）；基线逐字节不变
 - [ ] **Phase 15** — UI / 音效 / 粒子 / 性能统计（F3 Debug Overlay）
 
 ## 开发约定

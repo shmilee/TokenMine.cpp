@@ -223,3 +223,64 @@ TEST(WorldTest, ChunkPositionsSorted) {
         EXPECT_LT(positions[i - 1], positions[i]);
     }
 }
+
+// -- insertChunk (Phase 14 streaming: worker-generated chunk integration) --
+
+TEST(WorldTest, InsertChunkAddsPrebuiltChunk) {
+    World world;
+    Chunk chunk;
+    chunk.set(3, 4, 5, BlockID{7});
+    ASSERT_TRUE(world.insertChunk({0, 0, 0}, std::move(chunk)));
+    EXPECT_EQ(world.chunkCount(), 1u);
+    EXPECT_TRUE(world.hasChunk({0, 0, 0}));
+    EXPECT_EQ(world.getBlock(3, 4, 5), BlockID{7});
+    // A fresh inserted chunk is dirty (never meshed) and its light arrays
+    // are zero (the streaming pipeline lights it with a region update).
+    EXPECT_TRUE(world.findChunk({0, 0, 0})->dirty());
+    EXPECT_EQ(world.getSkyLight(3, 4, 5), 0);
+    EXPECT_EQ(world.getBlockLight(3, 4, 5), 0);
+}
+
+TEST(WorldTest, InsertChunkDuplicateRefused) {
+    World world;
+    Chunk a;
+    a.set(0, 0, 0, BlockID{1});
+    ASSERT_TRUE(world.insertChunk({0, 0, 0}, std::move(a)));
+    Chunk b;
+    b.set(1, 1, 1, BlockID{2});
+    EXPECT_FALSE(world.insertChunk({0, 0, 0}, std::move(b)));
+    // The original content is untouched.
+    EXPECT_EQ(world.getBlock(0, 0, 0), BlockID{1});
+    EXPECT_EQ(world.getBlock(1, 1, 1), BlockID::air());
+    EXPECT_EQ(world.chunkCount(), 1u);
+}
+
+TEST(WorldTest, InsertChunkMarksFaceNeighborsDirty) {
+    World world;
+    const ChunkPos pos{1, 0, 1};
+    const ChunkPos neighbors[6] = {
+        {0, 0, 1}, {2, 0, 1},
+        {1, -1, 1}, {1, 1, 1},
+        {1, 0, 0}, {1, 0, 2}};
+    for (const ChunkPos& n : neighbors) {
+        Chunk c;
+        ASSERT_TRUE(world.insertChunk(n, std::move(c)));
+    }
+    for (const ChunkPos& n : neighbors) {
+        world.getOrCreateChunk(n).clearDirty();
+    }
+    Chunk fresh;
+    fresh.set(2, 3, 4, BlockID{9});
+    ASSERT_TRUE(world.insertChunk(pos, std::move(fresh)));
+    // Every face-sharing neighbor needs a re-mesh (its boundary faces were
+    // decided against the void); the inserted chunk is dirty as well.
+    for (const ChunkPos& n : neighbors) {
+        EXPECT_TRUE(world.getOrCreateChunk(n).dirty());
+    }
+    EXPECT_TRUE(world.getOrCreateChunk(pos).dirty());
+    // A diagonal chunk shares no face and stays clean.
+    Chunk diag;
+    ASSERT_TRUE(world.insertChunk({0, -1, 0}, std::move(diag)));
+    world.getOrCreateChunk({0, -1, 0}).clearDirty();
+    EXPECT_FALSE(world.getOrCreateChunk({0, -1, 0}).dirty());
+}
