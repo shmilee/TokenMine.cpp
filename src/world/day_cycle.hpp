@@ -50,6 +50,13 @@ public:
     // Advance by dt seconds of game time.
     void update(double dt);
 
+    // Set the time of day directly (save/load, Phase 13). t is normalized
+    // into [0, 1); the stored total-seconds is the unique value whose
+    // timeOfDay() lands on t (at most a 1-ulp difference from t for
+    // values far from the configured start time — the day/night ramps are
+    // constant or smooth there, so the presentation is unaffected).
+    void setTimeOfDay(double t);
+
     double timeOfDay() const; // [0, 1)
     float dayFactor() const;  // 0..1 sky-light multiplier (0 = deep night)
     float starAlpha() const;  // 0..1 star visibility (1 = deep night)

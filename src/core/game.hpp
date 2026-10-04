@@ -31,6 +31,7 @@
 #include "core/error.hpp"
 #include "core/input.hpp"
 #include "core/logger.hpp"
+#include "core/save.hpp"
 #include "core/window.hpp"
 #include "entity/entity.hpp"
 #include "entity/item_entity.hpp"
@@ -64,6 +65,14 @@ struct GameArgs {
     double time = -1;      // -1 = use config start_time_of_day (else [0, 1))
     LogLevel logLevel = LogLevel::Info;
     std::filesystem::path screenshotPath; // if set: save after the last frame
+    // Save slot (Phase 13): --save <slot>. At startup loads
+    // data/saves/<slot>.json when it exists (unless newWorld); on a clean
+    // exit writes it back. Unset = no save/load at all (the default —
+    // pre-Phase-13 behavior, so existing runs are unaffected).
+    std::optional<std::string> saveSlot;
+    // --new: ignore an existing save for the slot (fresh world); the slot
+    // is overwritten on exit. Requires saveSlot.
+    bool newWorld = false;
 };
 
 class Game {
@@ -135,6 +144,28 @@ private:
     // The cached full-cube mesh for a dropped block (built lazily on first
     // render; the geometry is cached, only the draw transform varies).
     const Mesh& itemMesh(BlockID id);
+
+    // Save/load (Phase 13), opt-in via --save <slot>. The file
+    // data/saves/<slot>.json holds the seed + the cells that differ from
+    // that seed's generation + the full game state (see core/save.hpp).
+    std::filesystem::path savePath() const;
+    // Gathers the current state into a SaveGame (world diff + player +
+    // inventory + entities + time).
+    Result<SaveGame> collectSave() const;
+    // Serializes collectSave() to the slot file (logs the result).
+    Result<void> writeSave() const;
+    // Reads + strictly parses the slot file (cross-checked against the
+    // registries and the world seed).
+    Result<SaveGame> readSaveFile(const std::filesystem::path& path) const;
+    // Applies a parsed save: cell edits + relight, player, inventory
+    // (replacing the hotbar.json fill), entities, day-cycle time.
+    Result<void> applySave(const SaveGame& save);
+    // No-op unless --save is set, the slot is not --new, and the file
+    // exists; then reads + applies it.
+    Result<void> tryLoadSave();
+    // The pure generator as a World chunk callback — used at world
+    // creation AND as the generation reference for save diffs.
+    World::ChunkGenerator makeChunkGenerator() const;
 
     GameArgs m_args;
     Config m_config;

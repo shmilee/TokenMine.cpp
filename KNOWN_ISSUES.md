@@ -31,12 +31,10 @@
 - **无潜行/无 1 格自动台阶** — 上 1 格台阶必须主动跳跃；无 crouch（卡 1.8 门框）、无自动 step-up。`[Phase 5]`
 - **水平速度无惯性** — 期望速度每 tick 直接设定（无加速/摩擦），松键即停。手感可用但非 Minecraft 式平滑。`[Phase 5]`
 - **虚空坠落 = 传送回出生点** — 世界边缘是虚空（见渲染节），掉到 y < -32 直接回出生点，无死亡/掉落伤害/护甲。`[Phase 5]` 随 chunk streaming（Phase 14）+ 死亡机制处理。
-- **无合成/存档** — 实体（Phase 10）与物品/背包（Phase 11）已落地；合成（数据驱动 Recipe）与存档仍缺。Phase 12/13。
 - **水量不守恒** — 简化规则下流体体积会凭空增减：浅膜落入更深流动池被"吸收"（池保持原水位）；下落链落入世界底部直接消失；落入池时按等级抬升池水位而非按体积换算。Minecraft 用源/流动状态机近似守恒。`[Phase 9]`
 - **满水格（source）失去支撑会下落** — 对 Minecraft 的刻意偏离：MC 中 source 水不随支撑消失而下落（只会停止扩散）；本实现中任何满格下方为空都会沿列下落（传送带式补位），行为更"物理"但与 MC 不符。`[Phase 9]`
 - **流体不会流进未加载的 chunk** — `World::setFluid` 只写已存在 chunk（不创建）；FluidSim 只 tick 已存在 chunk。湖流到演示区边缘会"暂停"，chunk 加载后恢复扩散。`[Phase 9]` 随 chunk streaming（Phase 14）自然缓解。
 - **只有一种流体（水）** — 无岩浆/蜂蜜等；`fluidBlock()` 取第一个 `properties.fluid` 数据方块作纹理参考，加第二种流体需扩展存储（level 数组按流体类型分）。`[Phase 9]`
-- **流体不在存档里** — 保存/加载（Phase 13）目前不含 per-chunk 流体数组；存档前需把流体数据纳入修改数据快照。`[Phase 9]` Phase 13。
 
 ## 实体（Phase 10）
 
@@ -46,7 +44,6 @@
 - **实体与流体无交互** — 掉落物/投射物直接穿过水（无浮力/游泳/阻力）。`[Phase 10]`
 - **无实体间碰撞** — 实体之间（含玩家）互相穿过，可以走进掉落物。`[Phase 10]`
 - **Projectile 无游戏内发射器、也不渲染** — `Projectile` 实体（抛物线/撞 solid 钉住/30s 消亡）已实现并有单测，但游戏内没有弓等发射器，也没有投射物的渲染几何。`[Phase 10]`（弓留待后续阶段）
-- **实体不持久化** — 存档（Phase 13）必须包含实体列表（类型/方块/位置/数量/已存时长）；目前重启后掉落物全部消失。`[Phase 10]` Phase 13。
 - **掉落物零初速生成（刻意权衡）** — Minecraft 的掉落物带随机初速散开；本实现在方块中心零速生成，静止位精确、无随机性，headless 截图可逐字节复现。`[Phase 10]`
 
 ## 物品 / 背包（Phase 11）
@@ -57,7 +54,6 @@
 - **拾取是固定 1.0 格半径，无磁力** — 玩家底心距掉落物底心 <1.0 且过 0.5s 拾取延迟即整堆入包；Minecraft 会随时间逐渐把物品拉向玩家。`[Phase 11]`
 - **放置消耗库存（行为变化，非缺陷）** — Phase 11 起方块不再是无限的：初始 hotbar 每格满堆栈（block 64/工具 1，`hotbar.json` 定义），放置消耗 1 个；hotbar 与背包都空时右键无效。`[Phase 11]`
 - **工具数据部分不可获得** — `iron_pickaxe`（break_speed 4.0）已有配方数据（3 iron_ingot + 2 stick，Phase 12），但游戏内无合成 UI/触发（Phase 15），仍然无法在游戏内获得；初始 hotbar 只有 `wooden_pickaxe`。`[Phase 11]`（配方途径 `[Phase 12]`）
-- **背包与实体不持久化** — 存档（Phase 13）必须同时包含 Inventory（27 格 ItemStack）与实体列表（类型/物品/位置/数量/已存时长）；目前重启后库存回初始 hotbar、掉落物全部消失。`[Phase 11]` Phase 13（实体部分 `[Phase 10]`）。
 
 ## 合成（Phase 12）
 
@@ -65,6 +61,17 @@
 - **配方只有 shapeless** — 无 shaped（3×3 网格按位置）配方、无催化剂/"需要工作台"类别、无多配方消歧（同原料不同产物不可能出现——`craft` 按 id 精确执行一个配方，未来 UI 负责让玩家选配方，系统不负责猜）。`[Phase 12]`
 - **部分材料暂无用途** — `coal`/`gold_ingot`/`diamond` 可从对应矿石挖得，但没有配方消费它们（无炉子/火把/饰品）；`planks`/`stick`/`iron_ingot` 已在配方链中。`[Phase 12]`
 - **矿石掉落改为材料（行为变化，刻意）** — 4 种矿石现在掉材料物品（coal_ore→coal、iron_ore→iron_ingot、gold_ore→gold_ingot、diamond_ore→diamond，MC 同款），**矿方块物品不能再从采矿获得**（数据仍在、可放置，只是无产出途径）；wood 仍掉 wood 本身（它是木板配方的原料，若改掉 planks 则配方链断）。`[Phase 12]`
+
+## 存档（Phase 13）
+
+- **存档是 opt-in（`--save <slot>`），无默认世界** — 不带 `--save` 时不读不写（保持既有运行行为与基线截图不变）；没有"上次世界"的隐式恢复，也没有 MC 式多存档槽管理/选择 UI（多个槽只是多个文件，手动切换）。`[Phase 13]`
+- **写存档时在退出路径重跑生成器做 diff** — `diffWorld` 对每个已有 chunk 用 scratch chunk 重跑纯函数 `generateChunk` 逐格比对（128 chunk 约几十 ms 的 CPU 尖峰，仅发生在干净退出时）；世界变大后（Phase 14 流式加载）需要改增量编辑跟踪或并行 diff。`[Phase 13]`
+- **只在干净退出时写，会话中无自动存档** — 崩溃/断电丢失自上次退出以来的全部修改；无周期性 autosave、无"保存并退出"热键（游戏内无 UI，Phase 15）。`[Phase 13]`
+- **玩家速度/onGround 不存** — 读档用 `teleportTo`（速度清零、onGround=false）：存档时玩家静止则一帧重力回落到整数平面后逐位精确；存档时玩家在空中/移动则位置保留但速度丢失（读档后从该位置重新下落）。`[Phase 13]`
+- **实体 `age` 按真实 dt 累积（墙钟）** — 与玩家/物理一致（非固定步长），所以含实体的存档文件在 age 字段上跨运行差 ±1-2 帧；渲染不依赖 age（掉落物动画由帧计数器驱动），截图确定性不受影响。昼夜 `time` 是固定步长（位精确）。`[Phase 13]`
+- **`DayCycle::setTimeOfDay` 至多 1 ulp 偏差** — 存 timeOfDay [0,1)，恢复时解出 totalSeconds；对远离配置 start_time 的值，`startTime + delta` 的浮点往返可能差 1 ulp（~1e-16）。昼夜渐变段是常量/平滑的，呈现无影响。`[Phase 13]`
+- **演示区外的编辑会带上"生成的 chunk"** — 在演示区外放置方块会同步生成该 chunk（既有行为），存档 diff 覆盖它；读档时 `setBlock` 重建同样生成该 chunk——一致，但读档后的世界含全新世界没有的 chunk（`m_lastLightedChunks` 已同步，光照全量重传播）。`[Phase 13]`
+- **存档无迁移机制** — format 1 之外一律拒绝（无 format 2 读取器）；字段集由 format 号锁定，未知字段=报错（机器生成文件的损坏/版本检测，与用户数据文件的"警告容忍"相反）。`[Phase 13]`
 
 ## 性能 / 架构
 
@@ -80,6 +87,7 @@
 
 ## 已修复（归档）
 
+- **`[2026-10-04, Phase 13]` 无存档 / 背包与实体不持久化 / 流体改动不入档** — Phase 13 实现完整存档（`--save <slot>`/`--new`，`src/core/save.{hpp,cpp}`）：`data/saves/<slot>.json` = seed + 与 `generateChunk(seed)` 的 diff（`blocks`/`fluids` 编辑列表，只存不同的格子）+ 玩家 pos/yaw/pitch + 昼夜 timeOfDay + 27 格背包 + 选中格 + 掉落物实体（item/count/pos/age/pickup_delay）。读档 = 生成世界后逐格应用（先方块后流体）→ `propagateAll` → 恢复玩家/背包/实体（`setAge`/`setPickupDelay`）/`DayCycle::setTimeOfDay`。严格加载校验（format 号/seed 一致/注册表交叉/位置不重复/方块+流体不同格/未知字段=错误）。JSON 浮点序列化本就最短可往返精度（位精确）。新增 17 个单测（round-trip 位精确/严格校验全路径/diff 精确检出/apply 恢复与失败/diff→fresh→apply 全格等价）+ E2E（无 flag 基线字节不变；存档文件跨运行字节一致；加载路径截图字节一致；含实体存档 age 恢复精确）。
 - **`[2026-10-04, Phase 11]` 破坏不掉落物品 / 无拾取 / 无背包** — Phase 11 实现完整物品闭环：`Item`/`ItemStack`/`ItemRegistry`（每个数据方块隐式同名 block item + `assets/data/items/*.json` 显式工具，严格校验）/`Inventory`（27 格 = 9 hotbar + 18 背包，确定性合并入包）；破坏按 `properties.drops`（物品名，init 严格校验）生成 `ItemEntity`（现持物品名 + 数据 maxStack，合并上限尊重物品数据），玩家 1.0 格内自动拾取（0.5s 延迟防 Q 丢出即回吸）；hotbar 改为背包前 9 格（`hotbar.json` 的 `items` 列表定义初始内容，满堆栈），放置消耗选中格，`Q` 丢弃 1 个。
 - **`[2026-10-04, Phase 11]` 破坏瞬时 / 选择方块临时方案** — 破坏改为按住驱动：`breakDurationSeconds(hardness, breakSpeed) = 1.5s × hardness ÷ speed`（工具 = 数据 `break_speed`，徒手/方块物品 = 1.0；hardness ≤0 且可破坏 = 即时），准星移开/松键/换工具（Tab）进度清零；`properties.hardness` 数据首次投入使用。hotbar 从"临时 BlockID 列表"换成背包物品格（Tab 循环 9 格）。已知简化（flat 工具乘数/无裂纹动画/无 UI）记入「物品 / 背包」节。
 - **`[2026-10-04, Phase 9]` 透明 pass 实际渲染为不透明** — basic.frag 硬编码 `alpha=1.0`、只取纹理 `.rgb`，导致"透明 pass"里的水/玻璃/叶子全部不透明（树叶纹理里的 20 个透明孔被渲染成纯黑斑点；水看不见湖底）。改为取纹理 `texel.a`（图集本身是 RGBA，alpha 一直保留在 GPU 纹理里）。副作用：截图 PNG 的 alpha 通道曾写入 framebuffer 混合残留值（水面 α≈0.831），`takeScreenshot` 现在强制 α=255（截图是不透明画面记录）。`[Phase 2]` 引入、`[Phase 9]` 发现并修复。

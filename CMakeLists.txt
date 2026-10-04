@@ -33,6 +33,7 @@ add_library(mc_core STATIC
     src/core/input.cpp
     src/core/camera.cpp
     src/core/png.cpp
+    src/core/save.cpp
     src/core/game.cpp
     src/block/block_registry.cpp
     src/entity/entity.cpp
@@ -95,6 +96,7 @@ add_executable(minecraft_tests
     tests/test_entity.cpp
     tests/test_item.cpp
     tests/test_recipe.cpp
+    tests/test_save.cpp
     tests/test_noise.cpp
     tests/test_player.cpp
     tests/test_biome.cpp

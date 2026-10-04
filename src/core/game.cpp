@@ -8,6 +8,7 @@
 #include <cstring>
 #include <fstream>
 #include <numbers>
+#include <sstream>
 
 #include "core/json.hpp"
 #include "core/png.hpp"
@@ -249,11 +250,7 @@ Result<void> Game::buildScene() {
     MC_TRY(gen);
     m_generator = std::move(*gen);
 
-    m_world.setChunkGenerator([this](Chunk& chunk, const ChunkPos& pos) {
-        // The generator is stateless and only writes into the given chunk
-        // (never back into the World), which the World contract requires.
-        m_generator->generateChunk(chunk, pos);
-    });
+    m_world.setChunkGenerator(makeChunkGenerator());
     for (int cx = kDemoChunkMin; cx <= kDemoChunkMax; ++cx) {
         for (int cz = kDemoChunkMin; cz <= kDemoChunkMax; ++cz) {
             for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy) {
@@ -303,6 +300,12 @@ Result<void> Game::buildScene() {
     m_camera.yaw = m_player->yaw;
     m_camera.pitch = m_player->pitch;
 
+    // -- save load (Phase 13): a saved state REPLACES the fresh world ----
+    // Runs after generation + spawn: the cell edits apply on top of the
+    // generated terrain, and the saved player/inventory/entities/time win
+    // over the fresh ones (--time only affects fresh worlds).
+    MC_TRY(tryLoadSave());
+
     MC_LOG_INFO("Scene built: " + std::to_string(m_blocks.count()) +
                 " blocks, " + std::to_string(m_atlas.tileCount()) +
                 " atlas tiles, " + std::to_string(m_world.chunkCount()) +
@@ -347,6 +350,163 @@ Result<void> Game::updateChunkMeshes() {
         }
         chunk.clearDirty();
     }
+    return {};
+}
+
+// ---------------------------------------------------------------------------
+// Save / load (Phase 13): seed + modifications + full game state
+// ---------------------------------------------------------------------------
+
+World::ChunkGenerator Game::makeChunkGenerator() const {
+    // The generator is stateless and only writes into the given chunk
+    // (never back into the World), which the World contract requires.
+    // The SAME callback serves world creation and the save diff reference.
+    return [this](Chunk& chunk, const ChunkPos& pos) {
+        m_generator->generateChunk(chunk, pos);
+    };
+}
+
+std::filesystem::path Game::savePath() const {
+    return "data/saves/" + *m_args.saveSlot + ".json";
+}
+
+Result<SaveGame> Game::collectSave() const {
+    SaveGame save;
+    save.seed = m_generator->seed();
+    save.time = m_dayCycle.timeOfDay();
+    save.playerPos = m_player->position();
+    save.playerYaw = m_player->yaw;
+    save.playerPitch = m_player->pitch;
+    save.selectedSlot = static_cast<int>(m_selectedSlot);
+    save.slots.resize(m_inventory.size());
+    for (std::size_t i = 0; i < save.slots.size(); ++i) {
+        save.slots[i] = m_inventory.at(i);
+    }
+    for (const std::unique_ptr<Entity>& e : m_entities) {
+        // The game only ever spawns ItemEntities; anything else means a
+        // code path this save format cannot express — fail loudly.
+        const ItemEntity* item = dynamic_cast<const ItemEntity*>(e.get());
+        if (item == nullptr) {
+            return MC_FAIL("cannot save: an entity of a kind this build "
+                           "does not persist exists");
+        }
+        SavedItemEntity se;
+        se.item = item->itemName();
+        se.count = item->count();
+        se.pos = item->position();
+        se.age = item->age();
+        se.pickupDelay = item->pickupDelayRemaining();
+        save.entities.push_back(std::move(se));
+    }
+    // The modifications: every cell that differs from what the seed
+    // generates (block + fluid), sorted by position.
+    auto diff = diffWorld(m_world, makeChunkGenerator(), m_blocks,
+                          save.blockEdits, save.fluidEdits);
+    if (!diff.ok()) {
+        return diff.error();
+    }
+    return save;
+}
+
+Result<void> Game::writeSave() const {
+    auto saved = collectSave();
+    MC_TRY(saved);
+    auto serialized = serializeSave(*saved, m_items);
+    MC_TRY(serialized);
+    const std::filesystem::path path = savePath();
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+    std::ofstream out(path);
+    if (!out) {
+        return MC_FAIL("cannot open save file for writing: '" + path.string() +
+                       "'");
+    }
+    out << serialized->dump(2) << '\n';
+    out.close();
+    if (!out) {
+        return MC_FAIL("write error for save file '" + path.string() + "'");
+    }
+    MC_LOG_INFO("World saved to '" + path.string() + "' (" +
+                std::to_string(saved->blockEdits.size()) +
+                " block edits, " + std::to_string(saved->fluidEdits.size()) +
+                " fluid edits, " + std::to_string(saved->entities.size()) +
+                " entities, " + std::to_string(saved->slots.size()) +
+                " slots)");
+    return {};
+}
+
+Result<SaveGame> Game::readSaveFile(const std::filesystem::path& path) const {
+    std::ifstream in(path);
+    if (!in) {
+        return MC_FAIL("cannot open save file '" + path.string() + "'");
+    }
+    std::stringstream ss;
+    ss << in.rdbuf();
+    auto parsed = Json::parse(ss.str());
+    if (!parsed.ok()) {
+        return MC_FAIL("invalid JSON in save file '" + path.string() + "': " +
+                       parsed.error().message);
+    }
+    auto save = parseSave(*parsed, m_items, m_blocks, m_generator->seed());
+    if (!save.ok()) {
+        return MC_FAIL("save file '" + path.string() + "': " +
+                       save.error().message);
+    }
+    return *save;
+}
+
+Result<void> Game::applySave(const SaveGame& save) {
+    // 1) Cell edits onto the generated world (blocks first, then fluids).
+    MC_TRY(applyWorldEdits(save, m_blocks, m_world));
+    // 2) Lighting: a full re-propagation is exact for any edit count (the
+    //    incremental local updates converge to the same values).
+    Lighting::propagateAll(m_world, m_blocks);
+    m_lastLightedChunks = m_world.chunkCount();
+    // 3) Player. teleportTo zero's the velocity; when the save was taken
+    //    at rest the one-frame gravity re-settle is position-exact (the
+    //    floor plane is an integer).
+    m_player->teleportTo(save.playerPos);
+    m_player->yaw = save.playerYaw;
+    m_player->pitch = save.playerPitch;
+    m_camera.position = m_player->eyePosition();
+    m_camera.yaw = m_player->yaw;
+    m_camera.pitch = m_player->pitch;
+    // 4) Inventory (replaces the hotbar.json fill) + selection.
+    for (std::size_t i = 0; i < m_inventory.size(); ++i) {
+        m_inventory.set(i, save.slots[i]);
+    }
+    m_selectedSlot = static_cast<std::size_t>(save.selectedSlot);
+    // 5) Dropped items (with their lifetime/pickup timers restored).
+    for (const SavedItemEntity& e : save.entities) {
+        const Item& item = m_items.at(m_items.idForName(e.item));
+        auto entity = std::make_unique<ItemEntity>(
+            m_world, m_blocks, e.item, item.maxStack, e.count, e.pos);
+        entity->setAge(e.age);
+        entity->setPickupDelay(e.pickupDelay);
+        m_entities.push_back(std::move(entity));
+    }
+    // 6) Day-cycle time (wins over --time for a loaded save).
+    m_dayCycle.setTimeOfDay(save.time);
+    return {};
+}
+
+Result<void> Game::tryLoadSave() {
+    if (!m_args.saveSlot.has_value() || m_args.newWorld) {
+        return {};
+    }
+    const std::filesystem::path path = savePath();
+    if (!std::filesystem::exists(path)) {
+        MC_LOG_INFO("No save at '" + path.string() + "' — starting fresh");
+        return {};
+    }
+    auto save = readSaveFile(path);
+    MC_TRY(save);
+    MC_TRY(applySave(*save));
+    MC_LOG_INFO("Loaded save '" + path.string() + "' (" +
+                std::to_string(save->blockEdits.size()) +
+                " block edits, " + std::to_string(save->fluidEdits.size()) +
+                " fluid edits, " + std::to_string(save->entities.size()) +
+                " entities)");
     return {};
 }
 
@@ -483,6 +643,17 @@ int Game::run() {
                                   std::lround(m_fpsSmoothed))) +
                               " FPS | " + std::to_string(m_renderer.stats().drawCalls) +
                               " draw calls");
+        }
+    }
+
+    // Save (Phase 13): persist the world state for the slot (opt-in via
+    // --save, after the final frame — and after any screenshot, which is
+    // taken inside the loop). A failed save is logged, not fatal: the
+    // session itself ran cleanly.
+    if (m_args.saveSlot.has_value()) {
+        auto saved = writeSave();
+        if (!saved.ok()) {
+            MC_LOG_ERROR("Save failed: " + saved.error().describe());
         }
     }
 

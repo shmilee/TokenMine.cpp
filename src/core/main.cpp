@@ -21,6 +21,12 @@ void printUsage() {
         "                    0.5 = sunset, 0.75 = midnight)\n"
         "  --frames <n>      Exit after N frames (0 = run until closed)\n"
         "  --screenshot <p>  Save a PNG screenshot of the last frame\n"
+        "  --save <slot>     Save slot (letters/digits/_/-): load\n"
+        "                    data/saves/<slot>.json at startup when present,\n"
+        "                    write it on clean exit (opt-in; default = no\n"
+        "                    save/load at all)\n"
+        "  --new             Start a fresh world, ignoring an existing save;\n"
+        "                    the slot is overwritten on exit (requires --save)\n"
         "  --log-level <l>   trace|debug|info|warn|error\n"
         "  -h, --help        Show this help\n");
 }
@@ -73,6 +79,27 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
             const char* v = nextValue(i, "--screenshot");
             if (!v) return false;
             args.screenshotPath = v;
+        } else if (arg == "--save") {
+            const char* v = nextValue(i, "--save");
+            if (!v) return false;
+            const std::string slot = v;
+            if (slot.empty()) {
+                err = "--save requires a slot name";
+                return false;
+            }
+            for (const char c : slot) {
+                const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                                (c >= '0' && c <= '9') || c == '_' || c == '-';
+                if (!ok) {
+                    err = "--save slot may only contain letters, digits, "
+                          "'_' or '-' (got '" +
+                          std::string(1, c) + "')";
+                    return false;
+                }
+            }
+            args.saveSlot = std::move(slot);
+        } else if (arg == "--new") {
+            args.newWorld = true;
         } else if (arg == "--log-level") {
             const char* v = nextValue(i, "--log-level");
             if (!v) return false;
@@ -88,6 +115,10 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
             err = "unknown argument: " + arg;
             return false;
         }
+    }
+    if (args.newWorld && !args.saveSlot.has_value()) {
+        err = "--new requires --save <slot>";
+        return false;
     }
     return true;
 }

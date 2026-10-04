@@ -3,6 +3,7 @@ cmake-build-*/
 logs/*.log
 data/*.save
 data/chunks/
+data/saves/
 compile_commands.json
 .cache/
 .vscode/

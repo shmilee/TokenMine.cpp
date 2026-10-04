@@ -53,6 +53,20 @@ void DayCycle::update(double dt) {
     m_totalSeconds += dt;
 }
 
+void DayCycle::setTimeOfDay(double t) {
+    t = std::fmod(t, 1.0);
+    if (t < 0.0) {
+        t += 1.0;
+    }
+    // timeOfDay() = fmod(startTimeOfDay + totalSeconds / dayLength, 1), so
+    // solve for the total-seconds delta in [0, 1) cycles.
+    double delta = std::fmod(t - m_params.startTimeOfDay, 1.0);
+    if (delta < 0.0) {
+        delta += 1.0;
+    }
+    m_totalSeconds = delta * m_params.dayLengthSeconds;
+}
+
 double DayCycle::timeOfDay() const {
     double t = m_params.startTimeOfDay + m_totalSeconds / m_params.dayLengthSeconds;
     t = std::fmod(t, 1.0);

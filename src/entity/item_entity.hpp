@@ -59,6 +59,11 @@ public:
     int count() const { return m_count; }
     double age() const { return m_age; }
     bool pickupReady() const { return m_pickupDelay <= 0.0; }
+    // Remaining pickup delay (seconds; 0 = pickable now). Save/load
+    // (Phase 13) restores the timers with setAge/setPickupDelay.
+    double pickupDelayRemaining() const { return m_pickupDelay; }
+    void setAge(double a) { m_age = a; }
+    void setPickupDelay(double remaining) { m_pickupDelay = remaining; }
 
     // Can `this` be absorbed into `other`? Same item, stack room in
     // `other`, and within the merge radius of each other.

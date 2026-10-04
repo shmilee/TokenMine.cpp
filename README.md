@@ -35,9 +35,14 @@ cmake --build build
 
 # 从指定时刻开始（0 = 黎明前, 0.25 = 正午, 0.5 = 日落, 0.75 = 午夜）
 ./build/bin/minecraft --time 0.75
+
+# 存档槽（Phase 13）：启动时加载 data/saves/<slot>.json（若存在），干净退出时写回
+./build/bin/minecraft --save myworld
+# 忽略现有存档、从全新世界开始（退出时覆盖该槽）
+./build/bin/minecraft --save myworld --new
 ```
 
-## 当前可玩内容（Phase 11）
+## 当前可玩内容（Phase 13）
 
 - **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时）/游泳时随时上浮，
   `LeftShift` 冲刺，鼠标转向（**左键点击锁定指针；转向仅在指针锁定时生效**，
@@ -79,6 +84,19 @@ cmake --build build
   2 wood+2 stick→wooden_pickaxe、3 iron_ingot+2 stick→iron_pickaxe
   （iron_pickaxe 由此获得产出途径）。**游戏内尚无合成 UI/触发（Phase 15）**——
   系统已完整并由单测覆盖，启动时数据严格校验
+- **存档/读档**（Phase 13，`--save <slot>`，`src/core/save.{hpp,cpp}`）：
+  存档文件 `data/saves/<slot>.json` = **seed + 与生成态的 diff + 完整游戏状态**——
+  不重复存储地形，只存"和这个 seed 生成的世界不同的格子"（`blocks`/`fluids`
+  编辑列表，破坏=`"air"`）+ 玩家位置/朝向 + 昼夜时间 + 27 格背包 + 选中格 +
+  掉落物实体（含 120s 寿命与拾取延迟计时器）。读档 = 正常从 seed 生成世界后
+  逐格应用编辑（先方块后流体）→ 全量重传播光照 → 恢复玩家/背包/实体/时间。
+  加载校验**严格**（机器生成的文件出现未知字段 = 损坏/版本不符，直接报错：
+  format 号、seed 与生成 seed 一致、物品/方块名已注册、数量 ≤ max_stack、
+  y ∈ [0,128)、同一格不得同时有方块+流体编辑、位置不重复）。
+  无 `--save` = 不读不写（默认行为不变）；`--new` = 忽略现有存档开新档
+  （退出时覆盖）；干净退出（含 `--frames` 到点）自动写回，写失败只记错误日志
+  不影响退出码。JSON 浮点序列化是**最短可往返精度**（位精确 round-trip），
+  位置/时间/朝向加载后与原值位级一致
 - **掉落物**（Phase 10，`ItemEntity`）：0.25 的小立方体，走统一的 Entity 碰撞
   物理（重力/终端速度/水平摩擦），落地后原地悬浮摆动 + 自转（动画由帧计数器
   驱动，非墙钟），同类 0.75 格内自动合并（堆叠上限按物品数据，block 64/工具 1），
@@ -243,6 +261,27 @@ block item 没有独立 JSON——每个数据方块隐式生成同名 item（�
 2 wood+2 stick→wooden_pickaxe、3 iron_ingot+2 stick→iron_pickaxe。
 游戏内合成 UI/触发在 Phase 15（系统已完整、启动严格校验、单测覆盖）。
 
+### 使用存档（Phase 13）
+
+```bash
+./build/bin/minecraft --save myworld      # 首次：新游戏；此后：读档
+./build/bin/minecraft --save myworld --new  # 推倒重来（退出时覆盖 myworld 槽）
+```
+
+- 存档槽名只允许字母/数字/`_`/`-`（防路径穿越）；文件在 `data/saves/<slot>.json`
+  （git 忽略），JSON 格式化输出、可直接阅读
+- **存什么**：seed、`time`（timeOfDay [0,1)）、玩家 pos/yaw/pitch、背包 27 格 +
+  选中格、掉落物实体（item/count/pos/age/pickup_delay）、`blocks` 与 `fluids`
+  编辑列表（仅与 `generateChunk(seed)` 不同的格子，按位置排序）。一次没动过世界
+  的存档 edits 为空
+- **读档语义**：`--time` 只对全新世界生效（已加载存档时存档时间优先）；
+  `--seed` 与存档 seed 不一致 = 启动报错（编辑会落到错误地形上）；存档里的
+  玩家位置/朝向覆盖出生点与初始视角
+- **何时写**：干净退出（ESC 二次/关窗/`--frames` 到点）自动写回；初始化失败或
+  崩溃不写（保护旧档）。写失败只记 ERROR 日志、退出码仍为 0（本局已正常运行）
+- 存档是机器生成的：字段集由 format 号锁定（当前 format 1），加载器对未知字段
+  一律报错（与用户手写数据文件的"警告但容忍"策略相反）
+
 ## 测试
 
 ```bash
@@ -257,11 +296,13 @@ ctest --test-dir build --output-on-failure
 mine-craft/
 ├── assets/          # 游戏资源（textures/ models/ shaders/ sounds/ data/）
 ├── config/          # 用户配置（config.json，不存在时自动生成默认值）
-├── data/            # 存档目录（后续阶段使用）
+├── data/            # 存档目录（data/saves/<slot>.json，Phase 13）
 ├── logs/            # 运行日志（logs/mine-craft.log）
 ├── src/
 │   ├── block/       # 数据驱动方块系统：Block 数据模型 + BlockRegistry（JSON 加载/校验）
-│   ├── core/        # 核心框架：日志、错误处理、JSON、配置、资源、窗口、输入、相机、PNG、主循环
+│   ├── core/        # 核心框架：日志、错误处理、JSON、配置、资源、窗口、输入、相机、PNG、
+│   │                # 存档（save：SaveGame + diffWorld/applyWorldEdits + 严格序列化/解析，
+│   │                # 无 GL 依赖可单测）、主循环
 │   │   └── math/    # 数学库（header-only）：Vec2/Vec3/Vec4/Mat4
 │   ├── player/      # 玩家：第一人称状态 + 输入驱动移动（继承 Entity 的统一碰撞物理）
 │   ├── entity/      # 实体系统：Entity 基类（底面中心位置/子步化轴分离碰撞/滑动/kill plane）、
@@ -301,7 +342,7 @@ mine-craft/
 - [x] **Phase 10** — 实体系统：Entity 基类（统一 AABB 物理）/Player 并入/ItemEntity 掉落物/Projectile 投射物
 - [x] **Phase 11** — 物品与背包：Item/ItemStack/Inventory、掉落物拾取、按住破坏（hardness/工具数据驱动）、Q 丢弃
 - [x] **Phase 12** — 合成：数据驱动 Recipe（Recipe/RecipeRegistry 严格校验 + canCraft/craft 纯逻辑 + `drops_count` + 材料物品；游戏内合成 UI 在 Phase 15）
-- [ ] **Phase 13** — 存档：Seed + 修改数据
+- [x] **Phase 13** — 存档：Seed + 修改数据（`--save <slot>`/`--new`，diff 式存档 + 严格校验 + 背包/实体/时间持久化）
 - [ ] **Phase 14** — Chunk Streaming + 多线程（Job Queue/Thread Pool）
 - [ ] **Phase 15** — UI / 音效 / 粒子 / 性能统计（F3 Debug Overlay）
 
