@@ -53,6 +53,9 @@ TEST(InputTest, AllMappedKeys) {
         {SDLK_TAB, GameKey::Tab},
         {SDLK_ESCAPE, GameKey::Escape},
         {SDLK_Q, GameKey::Q},
+        {SDLK_E, GameKey::E},
+        {SDLK_F3, GameKey::F3},
+        {SDLK_F5, GameKey::F5},
     };
     Input input;
     input.frameBegin();
@@ -89,11 +92,26 @@ TEST(InputTest, MouseButtons) {
 TEST(InputTest, MouseDeltaAccumulatesAndResets) {
     Input input;
     input.frameBegin();
-    input.handleMouseMotion(5.0f, -3.0f);
-    input.handleMouseMotion(2.0f, 1.0f);
+    input.handleMouseMotion(5.0f, -3.0f, 0.0f, 0.0f);
+    input.handleMouseMotion(2.0f, 1.0f, 0.0f, 0.0f);
     EXPECT_EQ(input.mouseDelta(), (Vec2{7.0f, -2.0f}));
 
     input.frameBegin();
+    EXPECT_EQ(input.mouseDelta(), (Vec2{0.0f, 0.0f}));
+}
+
+TEST(InputTest, MousePositionTracksLastAbsolute) {
+    Input input;
+    input.frameBegin();
+    EXPECT_EQ(input.mousePosition(), (Vec2{0.0f, 0.0f}));
+    input.handleMouseMotion(1.0f, 1.0f, 100.0f, 200.0f);
+    EXPECT_EQ(input.mousePosition(), (Vec2{100.0f, 200.0f}));
+    input.handleMouseMotion(1.0f, 1.0f, 130.0f, 250.0f);
+    EXPECT_EQ(input.mousePosition(), (Vec2{130.0f, 250.0f}));
+    // The absolute position survives frameBegin (the cursor sits where it
+    // last was); only the delta resets.
+    input.frameBegin();
+    EXPECT_EQ(input.mousePosition(), (Vec2{130.0f, 250.0f}));
     EXPECT_EQ(input.mouseDelta(), (Vec2{0.0f, 0.0f}));
 }
 

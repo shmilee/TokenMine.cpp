@@ -30,6 +30,15 @@ struct MeshVertex {
     float blockLight = 0.0f;
 };
 
+// GL primitive for the draw. Triangles is indexed (the chunk meshes and
+// the UI quad batches, which are non-indexed triangle strips flattened to
+// two triangles per quad) or non-indexed; Lines is always non-indexed
+// (the Phase 15 target-block outline: 24 vertices = 12 line segments).
+enum class MeshMode {
+    Triangles,
+    Lines,
+};
+
 class Mesh {
 public:
     Mesh() = default;
@@ -39,13 +48,17 @@ public:
     Mesh(const Mesh&) = delete;
     Mesh& operator=(const Mesh&) = delete;
 
-    // Upload geometry. Indices reference vertices.
+    // Upload geometry. For Triangles the indices reference vertices (may
+    // be empty, in which case the vertices are drawn in order); for Lines
+    // the indices must be empty.
     Result<void> upload(const std::vector<MeshVertex>& vertices,
-                        const std::vector<std::uint32_t>& indices);
+                        const std::vector<std::uint32_t>& indices = {},
+                        MeshMode mode = MeshMode::Triangles);
 
     bool valid() const { return m_vao != 0; }
     std::size_t vertexCount() const { return m_vertexCount; }
     std::size_t indexCount() const { return m_indexCount; }
+    MeshMode mode() const { return m_mode; }
 
     // glBindVertexArray — all vertex attributes come from the VAO.
     void bind() const;
@@ -58,6 +71,7 @@ private:
     std::uint32_t m_ibo = 0;
     std::size_t m_vertexCount = 0;
     std::size_t m_indexCount = 0;
+    MeshMode m_mode = MeshMode::Triangles;
 };
 
 } // namespace mc

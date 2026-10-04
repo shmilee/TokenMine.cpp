@@ -31,6 +31,7 @@ void Mesh::destroy() {
     }
     m_vertexCount = 0;
     m_indexCount = 0;
+    m_mode = MeshMode::Triangles;
 }
 
 Mesh::Mesh(Mesh&& other) noexcept {
@@ -39,8 +40,10 @@ Mesh::Mesh(Mesh&& other) noexcept {
     m_ibo = other.m_ibo;
     m_vertexCount = other.m_vertexCount;
     m_indexCount = other.m_indexCount;
+    m_mode = other.m_mode;
     other.m_vao = other.m_vbo = other.m_ibo = 0;
     other.m_vertexCount = other.m_indexCount = 0;
+    other.m_mode = MeshMode::Triangles;
 }
 
 Mesh& Mesh::operator=(Mesh&& other) noexcept {
@@ -51,31 +54,48 @@ Mesh& Mesh::operator=(Mesh&& other) noexcept {
         m_ibo = other.m_ibo;
         m_vertexCount = other.m_vertexCount;
         m_indexCount = other.m_indexCount;
+        m_mode = other.m_mode;
         other.m_vao = other.m_vbo = other.m_ibo = 0;
         other.m_vertexCount = other.m_indexCount = 0;
+        other.m_mode = MeshMode::Triangles;
     }
     return *this;
 }
 
 Result<void> Mesh::upload(const std::vector<MeshVertex>& vertices,
-                          const std::vector<std::uint32_t>& indices) {
-    if (vertices.empty() || indices.empty()) {
-        return MC_FAIL("mesh upload with empty vertex/index data");
+                          const std::vector<std::uint32_t>& indices,
+                          MeshMode mode) {
+    if (vertices.empty()) {
+        return MC_FAIL("mesh upload with empty vertex data");
     }
-    for (const std::uint32_t idx : indices) {
-        if (idx >= vertices.size()) {
-            return MC_FAIL("mesh index " + std::to_string(idx) +
-                           " out of range (" +
-                           std::to_string(vertices.size()) + " vertices)");
+    if (mode == MeshMode::Lines) {
+        if (!indices.empty()) {
+            return MC_FAIL("line meshes are non-indexed");
+        }
+        if (vertices.size() % 2 != 0) {
+            return MC_FAIL("line meshes need an even vertex count, got " +
+                           std::to_string(vertices.size()));
+        }
+    } else {
+        for (const std::uint32_t idx : indices) {
+            if (idx >= vertices.size()) {
+                return MC_FAIL("mesh index " + std::to_string(idx) +
+                               " out of range (" +
+                               std::to_string(vertices.size()) + " vertices)");
+            }
         }
     }
 
     destroy();
+    m_mode = mode;
+    const bool indexed = mode == MeshMode::Triangles && !indices.empty();
 
     glGenVertexArrays(1, &m_vao);
     glGenBuffers(1, &m_vbo);
-    glGenBuffers(1, &m_ibo);
-    if (m_vao == 0 || m_vbo == 0 || m_ibo == 0) {
+    if (indexed) {
+        glGenBuffers(1, &m_ibo);
+    }
+    if (m_vao == 0 || m_vbo == 0 || (indexed && m_ibo == 0)) {
         destroy();
         return MC_FAIL("GL buffer/VAO generation failed");
     }
@@ -108,15 +128,18 @@ Result<void> Mesh::upload(const std::vector<MeshVertex>& vertices,
     glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(kVertexSize),
                           reinterpret_cast<const void*>(offsetof(MeshVertex, blockLight)));
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ibo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(indices.size() * sizeof(std::uint32_t)),
-                 indices.data(), GL_STATIC_DRAW);
+    if (indexed) {
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ibo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(indices.size() *
+                                             sizeof(std::uint32_t)),
+                     indices.data(), GL_STATIC_DRAW);
+    }
 
     glBindVertexArray(0);
 
     m_vertexCount = vertices.size();
-    m_indexCount = indices.size();
+    m_indexCount = indexed ? indices.size() : 0;
 
     const GLenum glErr = glGetError();
     if (glErr != GL_NO_ERROR) {

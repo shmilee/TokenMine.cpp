@@ -1,4 +1,5 @@
 {
   "id": "gold_ingot",
-  "type": "material"
+  "type": "material",
+  "icon": "gold_ingot"
 }

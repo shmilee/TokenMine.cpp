@@ -59,6 +59,10 @@ struct Item {
     // Maximum count in one stack (1 for tools, 64 for blocks/materials by
     // default).
     int maxStack = 64;
+    // Phase 15 UI: the item's 2D icon texture name (a file under
+    // assets/textures/items/, validated against the filesystem at game
+    // init). Empty for block items, which render a 3D block cube instead.
+    std::string icon;
 };
 
 struct ItemStack {

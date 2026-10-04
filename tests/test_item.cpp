@@ -271,7 +271,7 @@ TEST(InventoryTest, AddGoesToFirstEmptySlot) {
 
 TEST(InventoryTest, AddMergesIntoPartialStackBeforeUsingEmptySlots) {
     InvFixture f;
-    f.inv.set(5, (ItemStack {f.dirt, 3}));
+    f.inv.setSlot(5, (ItemStack {f.dirt, 3}));
     int slot = f.inv.add(f.dirt, 4, f.items);
     EXPECT_EQ(slot, 5); // merged, not placed into slot 0
     EXPECT_EQ(f.inv.at(5), (ItemStack {f.dirt, 7}));
@@ -280,9 +280,9 @@ TEST(InventoryTest, AddMergesIntoPartialStackBeforeUsingEmptySlots) {
 
 TEST(InventoryTest, AddSkipsFullStacksAndUsesFirstEmpty) {
     InvFixture f;
-    f.inv.set(0, (ItemStack {f.dirt, 64})); // full dirt
-    f.inv.set(1, (ItemStack {f.stone, 64}));
-    f.inv.set(2, (ItemStack {f.stone, 64}));
+    f.inv.setSlot(0, (ItemStack {f.dirt, 64})); // full dirt
+    f.inv.setSlot(1, (ItemStack {f.stone, 64}));
+    f.inv.setSlot(2, (ItemStack {f.stone, 64}));
     int slot = f.inv.add(f.dirt, 1, f.items);
     EXPECT_EQ(slot, 3); // slot 0's dirt is full; slot 3 is the first empty
     slot = f.inv.add(f.dirt, 10, f.items);
@@ -292,9 +292,9 @@ TEST(InventoryTest, AddSkipsFullStacksAndUsesFirstEmpty) {
 
 TEST(InventoryTest, AddFailsWhenFull) {
     InvFixture f;
-    f.inv.set(0, (ItemStack {f.dirt, 64}));
+    f.inv.setSlot(0, (ItemStack {f.dirt, 64}));
     for (std::size_t i = 1; i < f.inv.size(); ++i) {
-        f.inv.set(i, (ItemStack {f.stone, 64}));
+        f.inv.setSlot(i, (ItemStack {f.stone, 64}));
     }
     EXPECT_TRUE(f.inv.isFull(f.dirt, f.items));
     EXPECT_EQ(f.inv.add(f.dirt, 1, f.items), -1);
@@ -302,7 +302,7 @@ TEST(InventoryTest, AddFailsWhenFull) {
 
     // Making room (take one stone out of the last slot) changes nothing for
     // dirt (the stone slot is not dirt), but freeing a dirt slot does:
-    f.inv.set(1, (ItemStack {f.dirt, 64}));
+    f.inv.setSlot(1, (ItemStack {f.dirt, 64}));
     f.inv.take(1, 1);
     EXPECT_FALSE(f.inv.isFull(f.dirt, f.items));
     EXPECT_EQ(f.inv.add(f.dirt, 1, f.items), 1);
@@ -311,7 +311,7 @@ TEST(InventoryTest, AddFailsWhenFull) {
 
 TEST(InventoryTest, TakePartialAndClampsToEmpty) {
     InvFixture f;
-    f.inv.set(0, (ItemStack {f.dirt, 5}));
+    f.inv.setSlot(0, (ItemStack {f.dirt, 5}));
     EXPECT_EQ(f.inv.take(0, 2), 2);
     EXPECT_EQ(f.inv.at(0), (ItemStack {f.dirt, 3}));
     EXPECT_EQ(f.inv.take(0, 10), 3); // clamped to what is there
@@ -325,10 +325,10 @@ TEST(InventoryTest, IsFullSeesEmptySlotsAsRoom) {
     EXPECT_FALSE(f.inv.isFull(f.dirt, f.items)); // all empty: room for anything
     // Fill everything with full dirt stacks except the last slot.
     for (std::size_t i = 0; i + 1 < f.inv.size(); ++i) {
-        f.inv.set(i, (ItemStack {f.dirt, 64}));
+        f.inv.setSlot(i, (ItemStack {f.dirt, 64}));
     }
     EXPECT_FALSE(f.inv.isFull(f.dirt, f.items)); // one empty slot left
-    f.inv.set(f.inv.size() - 1, (ItemStack {f.dirt, 64}));
+    f.inv.setSlot(f.inv.size() - 1, (ItemStack {f.dirt, 64}));
     EXPECT_TRUE(f.inv.isFull(f.dirt, f.items)); // now really full
     EXPECT_TRUE(f.inv.isFull(f.stone, f.items)); // no empty slot either
     // A partially freed dirt slot is room for dirt (but not for stone).

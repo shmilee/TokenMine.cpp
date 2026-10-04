@@ -46,9 +46,10 @@ public:
     // the number actually removed; the slot becomes empty at zero.
     int take(std::size_t slot, int n);
 
-    // Sets a slot (initialization only — the game fills the starting
-    // hotbar this way).
-    void set(std::size_t slot, const ItemStack& stack);
+    // Direct slot write. Used by initialization (the starting hotbar),
+    // save loading, and the inventory UI's pick-and-place (Phase 15),
+    // which needs targeted writes that add()/take() cannot express.
+    void setSlot(std::size_t slot, const ItemStack& stack);
 
     // True when a full stack of `item` would not fit (no empty slot and
     // every stack of the item is full).

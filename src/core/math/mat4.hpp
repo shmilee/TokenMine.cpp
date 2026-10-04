@@ -66,6 +66,16 @@ public:
         return result;
     }
 
+    // Uniform scale about the origin (the Phase 15 screen-space icons
+    // compose translate * rotate * scale).
+    static Mat4 scale(float s) {
+        Mat4 result {};
+        result.set(0, 0, s);
+        result.set(1, 1, s);
+        result.set(2, 2, s);
+        return result;
+    }
+
     static Mat4 translate(float x, float y, float z) {
         Mat4 result {};
         result.set(0, 3, x);

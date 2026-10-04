@@ -47,6 +47,13 @@ public:
     void enableBlending();
     void disableBlending();
 
+    // Phase 15 UI switches: the 2D overlay pass runs with the depth test
+    // and back-face culling disabled (screen-space quads are drawn in an
+    // y-down ortho projection where the world-space winding rules do not
+    // hold). The world pass restores both before the next frame.
+    void setDepthTest(bool enabled);
+    void setCulling(bool enabled);
+
     // Draw one indexed mesh. The program must declare u_model/u_view/u_proj.
     // Texture binding is the caller's job (bind the texture + set the
     // sampler uniform before this call).

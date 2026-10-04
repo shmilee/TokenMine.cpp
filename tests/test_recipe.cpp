@@ -305,7 +305,7 @@ TEST(RecipeRegistryTest, LoadDirectoryRejectsInvalidJson) {
 TEST(CraftTest, CanCraftFalseWhenIngredientMissing) {
     Fixture f;
     Inventory inv;
-    inv.set(0, (ItemStack {f.dirt, 3})); // need 4
+    inv.setSlot(0, (ItemStack {f.dirt, 3})); // need 4
     const Recipe r = f.recipe("x", f.ingot, 1, {{f.dirt, 4}});
     EXPECT_FALSE(canCraft(inv, r, f.items));
 }
@@ -313,8 +313,8 @@ TEST(CraftTest, CanCraftFalseWhenIngredientMissing) {
 TEST(CraftTest, CanCraftTrueWithExactAmount) {
     Fixture f;
     Inventory inv;
-    inv.set(0, (ItemStack {f.dirt, 2}));
-    inv.set(5, (ItemStack {f.dirt, 2})); // spread across slots
+    inv.setSlot(0, (ItemStack {f.dirt, 2}));
+    inv.setSlot(5, (ItemStack {f.dirt, 2})); // spread across slots
     const Recipe r = f.recipe("x", f.ingot, 1, {{f.dirt, 4}});
     EXPECT_TRUE(canCraft(inv, r, f.items));
 }
@@ -322,9 +322,9 @@ TEST(CraftTest, CanCraftTrueWithExactAmount) {
 TEST(CraftTest, CraftConsumesLowestSlotsFirst) {
     Fixture f;
     Inventory inv;
-    inv.set(0, (ItemStack {f.stone, 5}));
-    inv.set(1, (ItemStack {f.dirt, 2}));
-    inv.set(3, (ItemStack {f.dirt, 3}));
+    inv.setSlot(0, (ItemStack {f.stone, 5}));
+    inv.setSlot(1, (ItemStack {f.dirt, 2}));
+    inv.setSlot(3, (ItemStack {f.dirt, 3}));
     const Recipe r = f.recipe("x", f.ingot, 1, {{f.dirt, 4}});
     auto c = craft(inv, r, f.items);
     ASSERT_TRUE(c.ok()) << c.error().message;
@@ -341,8 +341,8 @@ TEST(CraftTest, CraftConsumesLowestSlotsFirst) {
 TEST(CraftTest, CraftAllOrNothingLeavesInventoryUnchanged) {
     Fixture f;
     Inventory inv;
-    inv.set(0, (ItemStack {f.stone, 5}));
-    inv.set(1, (ItemStack {f.dirt, 1}));
+    inv.setSlot(0, (ItemStack {f.stone, 5}));
+    inv.setSlot(1, (ItemStack {f.dirt, 1}));
     const Recipe r = f.recipe("x", f.ingot, 1,
                               {{f.dirt, 2}, {f.stone, 3}});
     const auto before = f.snapshot(inv);
@@ -364,8 +364,8 @@ TEST(CraftTest, CraftErrorNamesTheRecipe) {
 TEST(CraftTest, CraftOutputMergesIntoPartialStack) {
     Fixture f;
     Inventory inv;
-    inv.set(0, (ItemStack {f.stone, 1}));
-    inv.set(2, (ItemStack {f.dirt, 60})); // 60 + 4 = 64 = max stack
+    inv.setSlot(0, (ItemStack {f.stone, 1}));
+    inv.setSlot(2, (ItemStack {f.dirt, 60})); // 60 + 4 = 64 = max stack
     const Recipe r = f.recipe("x", f.dirt, 4, {{f.stone, 1}});
     auto c = craft(inv, r, f.items);
     ASSERT_TRUE(c.ok()) << c.error().message;
@@ -376,7 +376,7 @@ TEST(CraftTest, CraftOutputMergesIntoPartialStack) {
 TEST(CraftTest, CraftOutputUsesFirstEmptySlot) {
     Fixture f;
     Inventory inv;
-    inv.set(3, (ItemStack {f.stone, 1})); // ingredient NOT in slot 0
+    inv.setSlot(3, (ItemStack {f.stone, 1})); // ingredient NOT in slot 0
     const Recipe r = f.recipe("x", f.ingot, 2, {{f.stone, 1}});
     auto c = craft(inv, r, f.items);
     ASSERT_TRUE(c.ok()) << c.error().message;
@@ -391,7 +391,7 @@ TEST(CraftTest, CraftFailsWhenNoRoomForOutput) {
     Fixture f;
     Inventory inv;
     for (std::size_t i = 0; i < inv.size(); ++i) {
-        inv.set(i, (ItemStack {f.stone, 64}));
+        inv.setSlot(i, (ItemStack {f.stone, 64}));
     }
     const Recipe r = f.recipe("x", f.dirt, 1, {{f.stone, 1}});
     const auto before = f.snapshot(inv);
@@ -406,7 +406,7 @@ TEST(CraftTest, OutputItemCanBeAnIngredient) {
     // exact. Net effect: -1 dirt.
     Fixture f;
     Inventory inv;
-    inv.set(0, (ItemStack {f.dirt, 3}));
+    inv.setSlot(0, (ItemStack {f.dirt, 3}));
     const Recipe r = f.recipe("x", f.dirt, 1, {{f.dirt, 2}});
     EXPECT_TRUE(canCraft(inv, r, f.items));
     auto c = craft(inv, r, f.items);

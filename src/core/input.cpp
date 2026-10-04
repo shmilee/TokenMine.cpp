@@ -18,6 +18,9 @@ std::optional<GameKey> Input::mapKey(std::uint32_t sdlKeycode) {
         case SDLK_TAB: return GameKey::Tab;
         case SDLK_ESCAPE: return GameKey::Escape;
         case SDLK_Q: return GameKey::Q;
+        case SDLK_E: return GameKey::E;
+        case SDLK_F3: return GameKey::F3;
+        case SDLK_F5: return GameKey::F5;
         default: return std::nullopt;
     }
 }
@@ -55,7 +58,8 @@ void Input::pump() {
                                   event.type == SDL_EVENT_MOUSE_BUTTON_DOWN);
                 break;
             case SDL_EVENT_MOUSE_MOTION:
-                handleMouseMotion(event.motion.xrel, event.motion.yrel);
+                handleMouseMotion(event.motion.xrel, event.motion.yrel,
+                                  event.motion.x, event.motion.y);
                 break;
             default:
                 break;
@@ -87,9 +91,10 @@ void Input::handleMouseButton(int sdlButton, bool down) {
     m_buttonDown[idx] = down;
 }
 
-void Input::handleMouseMotion(float dx, float dy) {
+void Input::handleMouseMotion(float dx, float dy, float x, float y) {
     m_mouseDelta.x += dx;
     m_mouseDelta.y += dy;
+    m_mousePos = Vec2 {x, y};
 }
 
 void Input::handleQuit() {

@@ -1,0 +1,52 @@
+// Phase 15 UI tests: the F3 debug overlay line formatting (a pure
+// function of a state snapshot).
+#include <gtest/gtest.h>
+
+#include "ui/debug_overlay.hpp"
+
+using namespace mc;
+
+TEST(DebugOverlayTest, LinesFormat) {
+    DebugInfo info;
+    info.fps = 60;
+    info.frame = 1234;
+    info.drawCalls = 45;
+    info.vertices = 987654;
+    info.chunks = 2312;
+    info.posX = 0.5;
+    info.posY = 54.0;
+    info.posZ = -34.7;
+    info.yaw = 0.0;
+    info.pitch = -0.25;
+    info.columnX = 0;
+    info.columnZ = -3;
+    info.seed = 123456789;
+    info.timeOfDay = 0.333;
+    info.dayFactor = 1.0;
+    info.pointerLocked = true;
+    info.streamRadius = 8;
+    info.particles = 7;
+    const auto lines = debugOverlayLines(info);
+    ASSERT_EQ(lines.size(), 8u);
+    EXPECT_EQ(lines[0], "MineCraft v0.0.1 (Phase 15)");
+    EXPECT_EQ(lines[1], "60 FPS | frame 1234");
+    EXPECT_EQ(lines[2], "chunks 2312 | draws 45 | verts 987654");
+    EXPECT_EQ(lines[3], "pos 0.50, 54.00, -34.70  yaw 0.00  pitch -0.25");
+    EXPECT_EQ(lines[4], "col (0, -3)  seed 123456789");
+    EXPECT_EQ(lines[5], "time 0.333  day 1.00  locked");
+    EXPECT_EQ(lines[6], "streaming idle  pending 0  radius 8");
+    EXPECT_EQ(lines[7], "inventory closed  particles 7");
+}
+
+TEST(DebugOverlayTest, EngagedStreamingAndOpenInventory) {
+    DebugInfo info;
+    info.streamingEngaged = true;
+    info.streamPending = 3;
+    info.inventoryOpen = true;
+    info.pointerLocked = false;
+    info.particles = 256;
+    const auto lines = debugOverlayLines(info);
+    EXPECT_EQ(lines[5], "time 0.000  day 0.00  free");
+    EXPECT_EQ(lines[6], "streaming engaged  pending 3  radius 0");
+    EXPECT_EQ(lines[7], "inventory open  particles 256");
+}

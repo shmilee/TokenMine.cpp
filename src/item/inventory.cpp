@@ -49,7 +49,7 @@ int Inventory::take(std::size_t slot, int n) {
     return removed;
 }
 
-void Inventory::set(std::size_t slot, const ItemStack& stack) {
+void Inventory::setSlot(std::size_t slot, const ItemStack& stack) {
     assert(slot < m_slots.size());
     m_slots[slot] = stack;
 }

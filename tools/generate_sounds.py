@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""Generate the game's sound effects (16-bit mono 44.1 kHz WAVs) for
+Phase 15.
+
+Deterministic: every sample comes from fixed-phase sine waves and a
+seeded LCG noise source, so the output is stable across runs and
+platforms. Re-run after editing this file to refresh assets/sounds/.
+
+The set is small and generic by design (one dig/place/break sound for all
+blocks, not per-material — see KNOWN_ISSUES). Files:
+  dig.wav      short filtered-noise tap (mining tick while breaking)
+  place.wav    low thud + click (block placement)
+  break.wav    crumbly noise burst (block destroyed)
+  pickup.wav   two rising sine blips (item pickup / drop)
+  step.wav     very soft low thud (footstep)
+  ui_open.wav  short rising sine sweep
+  ui_close.wav short falling sine sweep
+  craft.wav    two-part sine chime (recipe crafted)
+"""
+import math
+import os
+import struct
+
+RATE = 44100
+OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "assets", "sounds")
+
+
+class Lcg:
+    """Deterministic 32-bit LCG (fixed seed per sound)."""
+
+    def __init__(self, seed: int):
+        self.state = seed & 0xFFFFFFFF
+
+    def next(self) -> float:
+        self.state = (self.state * 1664525 + 1013904223) & 0xFFFFFFFF
+        return self.state / 0xFFFFFFFF * 2.0 - 1.0
+
+
+def write_wav(path: str, samples) -> None:
+    """samples: list of floats in [-1, 1] -> 16-bit mono PCM WAV."""
+    n = len(samples)
+    data = bytearray()
+    for s in samples:
+        v = max(-1.0, min(1.0, s))
+        data += struct.pack("<h", int(v * 32767))
+    header = (b"RIFF" + struct.pack("<I", 36 + n * 2) + b"WAVE"
+              + b"fmt " + struct.pack("<IHHIIHH", 16, 1, 1, RATE,
+                                      RATE * 2, 2, 16)
+              + b"data" + struct.pack("<I", n * 2))
+    with open(path, "wb") as f:
+        f.write(header + bytes(data))
+
+
+def env(t: float, dur: float, decay: float, release=0.004) -> float:
+    """Exponential decay with a short release tail (no clicks)."""
+    e = math.exp(-decay * t)
+    if t > dur - release:
+        e *= (dur - t) / release
+    return max(0.0, e)
+
+
+def sound(dur: float, fn) -> list:
+    n = int(RATE * dur)
+    return [fn(i / RATE, i / n) for i in range(n)]
+
+
+def lowpass3(x: list) -> list:
+    """3-tap moving average (a gentle lowpass for the noise taps)."""
+    return [max(0.0, (x[max(0, i - 1)] + x[i] + x[min(len(x) - 1, i + 1)]) / 3.0)
+            for i in range(len(x))]
+
+
+def dig():
+    noise = [Lcg(0xD160).next() for _ in range(int(RATE * 0.10))]
+    out = [noise[i] * env(i / RATE, 0.10, 30.0) * 0.5 for i in range(len(noise))]
+    return lowpass3(out)
+
+
+def place():
+    lcg = Lcg(0x7A1CE)
+
+    def f(t, _):
+        return (math.sin(2 * math.pi * 110 * t) * math.exp(-t * 40) * 0.6
+                + lcg.next() * math.exp(-t * 90) * 0.2)
+    return sound(0.09, f)
+
+
+def break_sfx():
+    noise = [Lcg(0xBEEF).next() for _ in range(int(RATE * 0.18))]
+    out = [noise[i] * env(i / RATE, 0.18, 15.0) * 0.65 for i in range(len(noise))]
+    return lowpass3(out)
+
+
+def pickup():
+    def f(t, _):
+        if t < 0.045:
+            return math.sin(2 * math.pi * 660 * t) * math.exp(-t * 30) * 0.4
+        u = t - 0.045
+        return math.sin(2 * math.pi * 990 * u) * math.exp(-u * 30) * 0.4
+    return sound(0.09, f)
+
+
+def step():
+    lcg = Lcg(0x57E7)
+
+    def f(t, _):
+        return ((math.sin(2 * math.pi * 85 * t) * math.exp(-t * 55) * 0.5
+                 + lcg.next() * math.exp(-t * 70) * 0.15) * 0.7)
+    return sound(0.06, f)
+
+
+def sweep(f0: float, f1: float):
+    dur = 0.07
+
+    def f(t, _):
+        f = f0 + (f1 - f0) * t / dur
+        return math.sin(2 * math.pi * f * t) * math.exp(-t * 25) * 0.3
+    return sound(dur, f)
+
+
+def ui_open():
+    return sweep(500, 800)
+
+
+def ui_close():
+    return sweep(800, 500)
+
+
+def craft():
+    def f(t, _):
+        return ((math.sin(2 * math.pi * 880 * t)
+                 + math.sin(2 * math.pi * 1320 * t) * 0.5)
+                * math.exp(-t * 18) * 0.35)
+    return sound(0.15, f)
+
+
+SOUNDS = {
+    "dig": dig,
+    "place": place,
+    "break": break_sfx,
+    "pickup": pickup,
+    "step": step,
+    "ui_open": ui_open,
+    "ui_close": ui_close,
+    "craft": craft,
+}
+
+
+def main() -> None:
+    os.makedirs(OUT_DIR, exist_ok=True)
+    for name, fn in SOUNDS.items():
+        write_wav(os.path.join(OUT_DIR, name + ".wav"), fn())
+        print(f"wrote {OUT_DIR}/{name}.wav")
+
+
+if __name__ == "__main__":
+    main()

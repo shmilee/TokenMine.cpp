@@ -16,6 +16,7 @@
 // it is marked dirty (first meshing or a setBlock on/next to it).
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <deque>
 #include <filesystem>
@@ -35,12 +36,17 @@
 #include "core/input.hpp"
 #include "core/logger.hpp"
 #include "core/save.hpp"
+#include "core/sound.hpp"
 #include "core/thread_pool.hpp"
 #include "core/window.hpp"
 #include "entity/entity.hpp"
 #include "entity/item_entity.hpp"
 #include "entity/item_mesh.hpp"
+#include "entity/particle.hpp"
 #include "entity/projectile.hpp"
+#include "ui/debug_overlay.hpp"
+#include "ui/font.hpp"
+#include "ui/inventory_ui.hpp"
 #include "item/inventory.hpp"
 #include "item/item_registry.hpp"
 #include "item/recipe.hpp"
@@ -82,7 +88,10 @@ struct GameArgs {
 
 class Game {
 public:
-    Game() = default;
+    // The inventory UI (Phase 15) holds references to the inventory and
+    // the item registry, so it is constructed here (after both, in
+    // declaration order).
+    Game() : m_inventoryUi(m_inventory, m_items) {}
     ~Game();
 
     Result<void> init(const GameArgs& args);
@@ -98,6 +107,16 @@ private:
     struct ChunkMesh {
         std::optional<Mesh> opaque;
         std::optional<Mesh> transparent;
+    };
+
+    // One screen-space draw batch (Phase 15 UI): all quads/glyphs with the
+    // same color + texture are merged into a single non-indexed mesh, so
+    // the whole UI is a handful of draw calls.
+    struct UiBatch {
+        std::vector<MeshVertex> vertices;
+        Vec4 color {1.0f, 1.0f, 1.0f, 1.0f};
+        bool textured = false;
+        const Texture* texture = nullptr;
     };
 
     Result<void> buildScene();
@@ -167,6 +186,38 @@ private:
     // The cached full-cube mesh for a dropped block (built lazily on first
     // render; the geometry is cached, only the draw transform varies).
     const Mesh& itemMesh(BlockID id);
+
+    // -- Phase 15 UI / audio / particles ------------------------------------
+    // E/F3/F5 handling (F3 + F5 work in any pointer state; E opens the
+    // inventory only from the captured state and closes it from the free
+    // state, ESC closes it too).
+    void handleUiKeys();
+    // Click routing while the inventory is open: craft rows first, then
+    // slot pick-and-place (InventoryUI).
+    void handleInventoryClicks();
+    void openInventory();
+    void closeInventory();
+    // Footstep sound timer (moving + on ground, pointer captured).
+    void updateSoundTimers(double dt);
+    // World-space overlay: the break crack on the target block + the
+    // target outline (drawn in the blending pass, depth test on).
+    void drawWorldOverlay(const Mat4& view, const Mat4& projection);
+    // Particle batch for one pass (dynamic mesh, rebuilt per frame;
+    // split by the block's transparency like the item entities).
+    void drawParticles(const Mat4& view, const Mat4& projection,
+                       bool transparentPass);
+    // The whole screen-space pass: hotbar + crosshair + held item (while
+    // captured), the inventory/craft panel (while open), the F3 overlay
+    // (while toggled). Runs with depth test + culling off; every element
+    // is gated on a key/pointer state, so the no-input baseline renders
+    // nothing extra.
+    void renderUi();
+    // Screen-space ortho projection (y-down: y = 0 is the window top).
+    Mat4 uiProjection(int w, int h) const;
+    // Uploads one UI vertex batch and draws it with the UI shader.
+    void drawUiBatch(const std::vector<MeshVertex>& vertices,
+                     const Mat4& projection, const Texture& texture,
+                     bool textured, const Vec4& color);
 
     // Save/load (Phase 13), opt-in via --save <slot>. The file
     // data/saves/<slot>.json holds the seed + the cells that differ from
@@ -277,6 +328,33 @@ private:
     // selection change, and completion.
     std::optional<BlockPos> m_breakTarget;
     double m_breakProgress = 0.0;
+    // Last progress value at which a dig sound played (Phase 15).
+    double m_lastDigProgress = 0.0;
+    // Footstep timer (seconds since the last step sound; Phase 15).
+    double m_stepTimer = 0.0;
+
+    // Phase 15 UI: unlit screen-space shader + the generated font/crack
+    // textures, the 2D icons of the explicit items (indexed by ItemID
+    // value; empty entry = no icon), the target-block outline (line
+    // mesh) and one crack overlay cube per stage.
+    ShaderProgram m_uiShader;
+    Texture m_fontTexture;
+    Texture m_crackTexture;
+    std::vector<Texture> m_itemIcons;
+    Mesh m_outlineMesh;
+    std::array<Mesh, 5> m_crackMeshes;
+    // Phase 15 state (all default-off: the no-input baseline renders no
+    // UI at all, keeping the Phase 14 screenshots byte-identical).
+    bool m_debugOverlay = false;
+    bool m_inventoryOpen = false;
+    InventoryUI m_inventoryUi;
+
+    // Phase 15 particles + audio: the break bursts (deterministic seeds:
+    // world seed mixed with an increasing per-break counter) and the sound
+    // bank (gracefully silent when no audio device exists).
+    ParticleSystem m_particles;
+    std::uint64_t m_particleBreakCounter = 0;
+    SoundBank m_sound;
 
     ShaderProgram m_basicShader;
 

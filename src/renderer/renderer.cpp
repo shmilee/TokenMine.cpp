@@ -53,6 +53,22 @@ void Renderer::disableBlending() {
     glDisable(GL_BLEND);
 }
 
+void Renderer::setDepthTest(bool enabled) {
+    if (enabled) {
+        glEnable(GL_DEPTH_TEST);
+    } else {
+        glDisable(GL_DEPTH_TEST);
+    }
+}
+
+void Renderer::setCulling(bool enabled) {
+    if (enabled) {
+        glEnable(GL_CULL_FACE);
+    } else {
+        glDisable(GL_CULL_FACE);
+    }
+}
+
 void Renderer::draw(const Mesh& mesh, const ShaderProgram& program,
                     const Mat4& view, const Mat4& projection,
                     const Mat4& model) {
@@ -65,8 +81,15 @@ void Renderer::draw(const Mesh& mesh, const ShaderProgram& program,
     program.setUniformMat4("u_view", view);
     program.setUniformMat4("u_proj", projection);
     mesh.bind();
-    glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh.indexCount()),
-                   GL_UNSIGNED_INT, nullptr);
+    if (mesh.mode() == MeshMode::Lines) {
+        glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(mesh.vertexCount()));
+    } else if (mesh.indexCount() > 0) {
+        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh.indexCount()),
+                       GL_UNSIGNED_INT, nullptr);
+    } else {
+        glDrawArrays(GL_TRIANGLES, 0,
+                     static_cast<GLsizei>(mesh.vertexCount()));
+    }
     program.unbind();
     const GLenum glErr = glGetError();
     if (glErr != GL_NO_ERROR) {
@@ -77,7 +100,10 @@ void Renderer::draw(const Mesh& mesh, const ShaderProgram& program,
     }
 
     m_stats.drawCalls++;
-    m_stats.vertices += mesh.indexCount();
+    // Vertices issued to the GPU (index count for indexed meshes, vertex
+    // count for non-indexed ones).
+    m_stats.vertices +=
+        (mesh.indexCount() > 0) ? mesh.indexCount() : mesh.vertexCount();
 }
 
 void Renderer::drawSky(const Mesh& mesh, const ShaderProgram& program,

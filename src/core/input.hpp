@@ -30,10 +30,13 @@ enum class GameKey {
     Tab,
     Escape,
     Q, // drop one from the selected hotbar slot (Phase 11)
+    E, // toggle the inventory screen (Phase 15)
+    F3, // toggle the F3 debug overlay (Phase 15)
+    F5, // save now, when a save slot is active (Phase 15)
     // Keep in sync with kKeyCount.
 };
 
-inline constexpr int kKeyCount = static_cast<int>(GameKey::Q) + 1;
+inline constexpr int kKeyCount = static_cast<int>(GameKey::F5) + 1;
 
 enum class MouseButton {
     Left,
@@ -72,12 +75,17 @@ public:
     // Accumulated relative mouse motion since frameBegin.
     Vec2 mouseDelta() const { return m_mouseDelta; }
 
+    // Last absolute mouse position in window pixels (the UI screens read
+    // it; while the pointer is captured SDL reports (0, 0) and the value
+    // is stale by design — the UI is only used while the pointer is free).
+    Vec2 mousePosition() const { return m_mousePos; }
+
     // -- Event entry points --------------------------------------------------
     // Used by pump() and directly by unit tests (SDL key codes are the
     // platform-independent SDLK_* virtual key codes).
     void handleKey(std::uint32_t sdlKeycode, bool down);
     void handleMouseButton(int sdlButton, bool down);
-    void handleMouseMotion(float dx, float dy);
+    void handleMouseMotion(float dx, float dy, float x, float y);
     void handleQuit();
 
 private:
@@ -89,6 +97,9 @@ private:
     std::array<bool, kMouseButtonCount> m_buttonDown {};
     std::array<bool, kMouseButtonCount> m_buttonPressed {};
     Vec2 m_mouseDelta {0.0f, 0.0f};
+    // Absolute position: updated on every motion event, NOT reset by
+    // frameBegin (the cursor sits where it last was).
+    Vec2 m_mousePos {0.0f, 0.0f};
     bool m_quit = false;
 };
 

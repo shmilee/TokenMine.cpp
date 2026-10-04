@@ -10,7 +10,7 @@
 | 构建 | CMake + Ninja | |
 | 窗口/输入 | SDL3 | |
 | 图形 | OpenGL 3.3 Core (GLEW) | |
-| 音频 | OpenAL（音频阶段引入） | |
+| 音频 | SDL3 Audio（`SoundBank`，SDL 内置音频后端） | Phase 15 引入，8 个程序化 WAV |
 | 图像 | 内置 PNG 编解码器（`src/core/png.hpp`，zlib） | 8/16 位 RGB/RGBA/灰度/调色板，全 filter，CRC 校验 |
 | 测试 | GoogleTest | |
 | JSON | 内置实现（`src/core/json.hpp`） | 无外部依赖 |
@@ -42,7 +42,7 @@ cmake --build build
 ./build/bin/minecraft --save myworld --new
 ```
 
-## 当前可玩内容（Phase 14）
+## 当前可玩内容（Phase 15）
 
 - **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时）/游泳时随时上浮，
   `LeftShift` 冲刺，鼠标转向（**左键点击锁定指针；转向仅在指针锁定时生效**，
@@ -63,6 +63,38 @@ cmake --build build
   - `Q`（锁定时）：丢弃选中格 1 个到脚下（生成掉落物，0.5s 拾取延迟防立即回吸）
   - `ESC`（锁定时）：释放指针；未锁定时 ESC 退出游戏
   - 破坏/放置复用 `setBlock` 脏标记管线，下一帧自动重建受影响 chunk 的 mesh
+- **游戏内 UI**（Phase 15，专用无光照 UI 着色器 + 批量化绘制；
+  所有 UI 元素只在按键/指针锁定时渲染，无输入运行渲染零新增 → 基线截图逐字节不变）：
+  - **准星**（指针锁定时屏幕中央白色十字）与**目标方块描边**（24 顶点线框立方体，
+    描出 raycast 命中格）——只在游玩态（锁定 + 背包未开）显示
+  - **hotbar**（锁定且背包关闭时）：底部 9 格，选中格橙色边框，堆栈数 < max 时
+    显示数量；**手持物品**右下角大图标（76px）
+  - **物品图标**：block item = 带光照的倾斜 3D 立方体（复用掉落物 cube mesh +
+    基本着色器，白天亮夜晚暗，与掉落物同观感）；工具/材料 = 16×16 图标纹理
+    （`Item.icon` 数据字段 → `assets/textures/items/<icon>.png`，
+    `tools/generate_item_icons.py` 程序化生成）
+  - **背包 + 合成面板**（`E` 开关；打开时释放指针、暂停玩家物理与方块交互，
+    世界/昼夜/流体/实体/流式照常 tick）：27 格（hotbar 行 + 18 背包格）+
+    右侧配方列表（产物图标 + 名称 ×N，白色=可合成/灰色=不可 + 原料清单）；
+    **左键**取整堆/放入/交换（取出被占格的堆）/并入有剩余空间的同物堆，
+    **右键**移 1 个（同物有空间或空格；不同物格=无效操作），点击面板外（左键）
+    丢弃手持堆；悬停格显示物品名；点击配方行 = `craft()`（全有或全无）
+  - **F3 性能/调试 overlay**（任意指针状态可切换）：标题/FPS/帧号、chunk 数/
+    draw call/顶点数、玩家坐标/朝向、列数/seed、昼夜时刻/指针状态、流式激活/
+    待加载列/半径、背包内容/粒子数
+  - **F5 立即存档**（`--save` 槽激活时，游戏内随时保存，日志记录结果）
+- **破坏反馈**（Phase 15）：**渐进裂纹**——破坏进度映射到 5 级累积裂纹纹理
+  （`assets/textures/cracks.png`，80×16 五格，白 alpha 随机游走裂纹），破坏中的
+  方块上叠加半透明裂纹面（进度 = `1.5s × hardness ÷ speed` 的完成比）；**破坏
+  粒子**——方块碎成 16 个 0.12 格小立方体（带初速弹散 + 重力，0.45~0.75s 消亡，
+  无碰撞，spawn 时烘焙所在格光照——渲染是只读窗口不能读光数组），按透明性
+  分 opaque/transparent 两 pass，逐帧动态 mesh
+- **音效**（Phase 15，`SoundBank` = SDL3 `SDL_OpenAudioDeviceStream` 队列式播放，
+  无回调；初始化失败优雅降级为静音 + WARN）：固定事件集 v1（数据驱动，无
+  per-block 差异）——破坏（按住时每 0.3s 一个 dig tick + 完成时的 break）、
+  放置、拾取（含 Q 丢弃）、脚步（移动 + 贴地 + 锁定 + 背包关闭时每 0.4s）、
+  背包开/关、合成成功。8 个程序化 WAV（`tools/generate_sounds.py`，44.1kHz
+  16-bit 单声道），音量 `config audio.volume`（默认 0.7）
 - **物品与背包**（Phase 11/12，`Item`/`ItemStack`/`Inventory`，全数据驱动）：
   - 物品 = 纯数据（`ItemRegistry`，当前 22 种 = 14 block + 2 工具 + 6 材料）：
     **每个数据方块隐式生成同名 block item**（无独立 JSON，方块定义是唯一来源）；
@@ -82,8 +114,8 @@ cmake --build build
   是确定性纯逻辑（原料按槽序升序消耗、副本模拟全有或全无——失败背包逐位不变，
   产出永远放得下）。当前 4 配方：wood→4 planks、2 planks→4 stick、
   2 wood+2 stick→wooden_pickaxe、3 iron_ingot+2 stick→iron_pickaxe
-  （iron_pickaxe 由此获得产出途径）。**游戏内尚无合成 UI/触发（Phase 15）**——
-  系统已完整并由单测覆盖，启动时数据严格校验
+  （iron_pickaxe 由此获得产出途径）。游戏内触发：背包面板（`E`）右侧配方列表
+  点击行 = `craft()`（Phase 15）
 - **存档/读档**（Phase 13，`--save <slot>`，`src/core/save.{hpp,cpp}`）：
   存档文件 `data/saves/<slot>.json` = **seed + 与生成态的 diff + 完整游戏状态**——
   不重复存储地形，只存"和这个 seed 生成的世界不同的格子"（`blocks`/`fluids`
@@ -214,18 +246,22 @@ cmake --build build
   "id": "wooden_pickaxe",
   "type": "tool",
   "tool": { "break_speed": 2.0 },   // 仅工具；>0，默认 1.0（破坏耗时 = 1.5s × hardness ÷ speed）
-  "max_stack": 1                    // 1..64，默认 64
+  "max_stack": 1,                   // 1..64，默认 64
+  "icon": "wooden_pickaxe"          // UI 图标（Phase 15）：assets/textures/items/<icon>.png
 }
 ```
 
 ```json
-{ "id": "stick", "type": "material" }   // 材料：无 tool 字段，max_stack 默认 64
+{ "id": "stick", "type": "material", "icon": "stick" }   // 材料：无 tool 字段，max_stack 默认 64
 ```
 
-block item 没有独立 JSON——每个数据方块隐式生成同名 item（方块定义是唯一来源）；
-显式物品只能是 `type: "tool"` 或 `type: "material"`（材料带 `tool` 字段=启动报错，
-防止第二数据源冲突）。非 block 物品（工具/材料）不可放置、掉落物无实体表示
-（见 KNOWN_ISSUES.md）。
+`icon` 指向 `assets/textures/items/<icon>.png`（16×16 RGBA，可多个物品共享同一
+图标文件；文件缺失 = 启动报错；缺省=不画图标）。block item 没有独立 JSON——
+每个数据方块隐式生成同名 item（方块定义是唯一来源，UI 里以带光照的 3D 立方体
+呈现，不用 2D 图标）；显式物品只能是 `type: "tool"` 或 `type: "material"`
+（材料带 `tool` 字段=启动报错，防止第二数据源冲突）。非 block 物品（工具/材料）
+不可放置；它们的**掉落物在 world 中仍无实体表示**（UI/手持/背包图标已有，
+见 KNOWN_ISSUES.md）。
 
 ### 新增一个方块（无需改核心代码）
 
@@ -272,7 +308,8 @@ block item 没有独立 JSON——每个数据方块隐式生成同名 item（�
 "消耗+入包"，成功才提交——失败时背包逐位不变（不会扣料却放不下产物丢物品，
 产物是原料之一的配方也正确）。当前配方链：wood→4 planks→(2 planks→4 stick)、
 2 wood+2 stick→wooden_pickaxe、3 iron_ingot+2 stick→iron_pickaxe。
-游戏内合成 UI/触发在 Phase 15（系统已完整、启动严格校验、单测覆盖）。
+游戏内触发：`E` 背包面板右侧的配方列表，点击配方行执行 `craft()`
+（Phase 15；可合成的配方白色高亮、不可合成的灰色）。
 
 ### 使用存档（Phase 13）
 
@@ -290,7 +327,8 @@ block item 没有独立 JSON——每个数据方块隐式生成同名 item（�
 - **读档语义**：`--time` 只对全新世界生效（已加载存档时存档时间优先）；
   `--seed` 与存档 seed 不一致 = 启动报错（编辑会落到错误地形上）；存档里的
   玩家位置/朝向覆盖出生点与初始视角
-- **何时写**：干净退出（ESC 二次/关窗/`--frames` 到点）自动写回；初始化失败或
+- **何时写**：干净退出（ESC 二次/关窗/`--frames` 到点）自动写回；游戏内 **`F5`
+  立即存档**（Phase 15，`--save` 槽激活时，日志记录成功/失败）；初始化失败或
   崩溃不写（保护旧档）。写失败只记 ERROR 日志、退出码仍为 0（本局已正常运行）
 - 存档是机器生成的：字段集由 format 号锁定（当前 format 1），加载器对未知字段
   一律报错（与用户手写数据文件的"警告但容忍"策略相反）
@@ -315,19 +353,25 @@ mine-craft/
 │   ├── block/       # 数据驱动方块系统：Block 数据模型 + BlockRegistry（JSON 加载/校验）
 │   ├── core/        # 核心框架：日志、错误处理、JSON、配置、资源、窗口、输入、相机、PNG、
 │   │                # 存档（save：SaveGame + diffWorld/applyWorldEdits + 严格序列化/解析，
-│   │                # 无 GL 依赖可单测）、主循环
+│   │                # 无 GL 依赖可单测）、sound（SoundBank：SDL3 音频流队列 + WAV 解析，
+│   │                # 初始化失败优雅降级静音）、主循环
 │   │   └── math/    # 数学库（header-only）：Vec2/Vec3/Vec4/Mat4
 │   ├── player/      # 玩家：第一人称状态 + 输入驱动移动（继承 Entity 的统一碰撞物理）
 │   ├── entity/      # 实体系统：Entity 基类（底面中心位置/子步化轴分离碰撞/滑动/kill plane）、
 │   │                # ItemEntity（掉落物：摩擦停驻/同类合并/120s 消亡）、Projectile（投射物：
-│   │                # 受重力抛物线/撞 solid 即钉住）、item_mesh（掉落物完整立方体几何，
+│   │                # 受重力抛物线/撞 solid 即钉住）、particle（破坏粒子：确定性爆发/
+│   │                # 半隐式 Euler/无碰撞/spawn 烘焙光照）、item_mesh（掉落物完整立方体几何，
 │   │                # 与 chunk mesher 共享 cube_face_table）
-│   ├── item/        # 物品系统（Phase 11/12）：Item/ItemStack 数据模型 + 破坏耗时公式、
+│   ├── item/        # 物品系统（Phase 11/12）：Item/ItemStack 数据模型（含 icon 字段）+ 破坏耗时公式、
 │   │                # ItemRegistry（方块隐式同名 block item + 显式工具/材料 JSON 严格校验）、
-│   │                # Inventory（27 格 = 9 hotbar + 18 背包，确定性合并/入包/take）、
+│   │                # Inventory（27 格 = 9 hotbar + 18 背包，确定性合并/入包/take/setSlot）、
 │   │                # Recipe/RecipeRegistry（JSON 配方 + 经 ItemRegistry 交叉校验）、
 │   │                # canCraft/craft（确定性、全有或全无的合成纯逻辑）
-│   ├── renderer/    # 渲染器（GL 封装）：Shader/Texture/Mesh/Renderer/TextureAtlas
+│   ├── ui/          # 界面（Phase 15，纯逻辑无 GL 可单测）：font（8x8 字形 atlas UV/文本
+│   │                # 顶点生成）、debug_overlay（F3 行格式化）、inventory_ui（面板布局 +
+│   │                # 左右键点击状态机，纯函数）
+│   ├── renderer/    # 渲染器（GL 封装）：Shader/Texture/Mesh（Triangles/Lines）/Renderer
+│   │                # （setDepthTest/setCulling）/TextureAtlas
 │   └── world/       # 体素世界：coordinates（world/chunk/local 转换）、Chunk（块+光照数组）、
 │                    # World、ChunkMesher（按面烘焙光照）、day_cycle（昼夜循环：时间/
 │                    # dayFactor/天空色/日月方位/确定性星空）、raycast（DDA 体素射线+放置校验）、
@@ -336,7 +380,9 @@ mine-craft/
 │                    # noise（确定性
 │                    # value noise/fBm）、BiomeRegistry、WorldgenParams（worldgen.json）、
 │                    # WorldGenerator（Seed 可复现生成）
-├── tools/           # 开发工具：generate_block_textures.py（16x16 占位纹理生成）
+├── tools/           # 开发工具：generate_block_textures.py（16x16 占位纹理）、
+│                    # generate_font.py（8x8 字形 atlas）、generate_cracks.py（5 级裂纹条）、
+│                    # generate_item_icons.py（16x16 物品图标）、generate_sounds.py（8 个 WAV）
 └── tests/           # 单元测试（GTest）+ PNG 测试夹具（tests/data/，可用 tests/generate_fixtures.py 重新生成）
 ```
 
@@ -354,10 +400,10 @@ mine-craft/
 - [x] **Phase 9** — 流体：水（0-8 等级/下落/水平扩散/水光衰减/游泳/半透明水面）
 - [x] **Phase 10** — 实体系统：Entity 基类（统一 AABB 物理）/Player 并入/ItemEntity 掉落物/Projectile 投射物
 - [x] **Phase 11** — 物品与背包：Item/ItemStack/Inventory、掉落物拾取、按住破坏（hardness/工具数据驱动）、Q 丢弃
-- [x] **Phase 12** — 合成：数据驱动 Recipe（Recipe/RecipeRegistry 严格校验 + canCraft/craft 纯逻辑 + `drops_count` + 材料物品；游戏内合成 UI 在 Phase 15）
+- [x] **Phase 12** — 合成：数据驱动 Recipe（Recipe/Registry 严格校验 + canCraft/craft 纯逻辑 + `drops_count` + 材料物品；游戏内合成 UI 在 Phase 15 实现）
 - [x] **Phase 13** — 存档：Seed + 修改数据（`--save <slot>`/`--new`，diff 式存档 + 严格校验 + 背包/实体/时间持久化）
 - [x] **Phase 14** — Chunk Streaming + 多线程：ThreadPool（post/flush）+ worker 线程按列并行生成（view_distance 半径环，迟滞激活）+ insertChunk 边界标脏 + 增量光照 worker job（替代全量重传播）；基线逐字节不变
-- [ ] **Phase 15** — UI / 音效 / 粒子 / 性能统计（F3 Debug Overlay）
+- [x] **Phase 15** — UI / 音效 / 粒子 / 性能统计：游戏内 UI（准星/目标描边/hotbar/手持/背包+合成面板/F3 overlay/F5 存档）、破坏裂纹+粒子、SDL3 音效、物品图标；UI 全按键/指针门控，无输入基线逐字节不变
 
 ## 开发约定
 

@@ -108,7 +108,7 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     // Warn about unknown top-level keys (typos, future fields).
     for (const auto& [key, value] : def.members()) {
         if (key != "id" && key != "type" && key != "tool" &&
-            key != "max_stack") {
+            key != "max_stack" && key != "icon") {
             MC_LOG_WARN("Item '" + name + "': unknown field '" + key +
                         "' ignored");
         }
@@ -119,6 +119,18 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     item.type = isTool ? ItemType::Tool : ItemType::Material;
     auto r = isTool ? parseTool(def, item) : parseMaxStack(def, item);
     MC_TRY(r);
+
+    // Optional 2D icon (Phase 15 UI): a texture file name under
+    // assets/textures/items/. Block items never set one (they render the
+    // 3D block cube). The file-existence cross-check happens in the game
+    // (same pattern as the block texture check).
+    if (const Json* icon = def.find("icon")) {
+        if (!icon->isString() || icon->asString().empty()) {
+            return MC_FAIL("item '" + name +
+                           "': 'icon' must be a non-empty string");
+        }
+        item.icon = icon->asString();
+    }
 
     item.id = ItemID{static_cast<int>(m_items.size())};
     m_names.emplace(name, item.id.value);

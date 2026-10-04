@@ -1,4 +1,5 @@
 {
   "id": "coal",
-  "type": "material"
+  "type": "material",
+  "icon": "coal"
 }

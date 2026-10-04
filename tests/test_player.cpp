@@ -428,14 +428,14 @@ TEST(PlayerTest, MouseLookTurnsAndClampsPitch) {
     Input input = heldInput({});
     input.frameBegin();
     // 100 px right, 50 px up, at default sensitivity 0.0025 rad/px.
-    input.handleMouseMotion(100.0f, -50.0f);
+    input.handleMouseMotion(100.0f, -50.0f, 0.0f, 0.0f);
     p.update(kDt, input, true);
     EXPECT_NEAR(p.yaw, -0.25f, 1e-4f);
     EXPECT_NEAR(p.pitch, 0.125f, 1e-4f);
 
     // Far more than 90 deg up: the pitch must clamp to ~89 deg.
     input.frameBegin();
-    input.handleMouseMotion(0.0f, -10000.0f);
+    input.handleMouseMotion(0.0f, -10000.0f, 0.0f, 0.0f);
     p.update(kDt, input, true);
     EXPECT_GT(p.pitch, 1.5f);
     EXPECT_LT(p.pitch, 1.6f);
@@ -444,7 +444,7 @@ TEST(PlayerTest, MouseLookTurnsAndClampsPitch) {
     const float yawBefore = p.yaw;
     const float pitchBefore = p.pitch;
     input.frameBegin();
-    input.handleMouseMotion(100.0f, -50.0f);
+    input.handleMouseMotion(100.0f, -50.0f, 0.0f, 0.0f);
     p.update(kDt, input, false);
     EXPECT_FLOAT_EQ(p.yaw, yawBefore);
     EXPECT_FLOAT_EQ(p.pitch, pitchBefore);

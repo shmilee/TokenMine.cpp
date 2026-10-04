@@ -1,4 +1,5 @@
 {
   "id": "planks",
-  "type": "material"
+  "type": "material",
+  "icon": "planks"
 }

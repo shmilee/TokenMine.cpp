@@ -10,8 +10,12 @@
 #include <numbers>
 #include <sstream>
 
+#include "block/cube_face_table.hpp"
 #include "core/json.hpp"
 #include "core/png.hpp"
+#include "entity/item_entity.hpp"
+#include "ui/font.hpp"
+#include "ui/inventory_ui.hpp"
 
 namespace mc {
 
@@ -82,6 +86,30 @@ constexpr int kItemBobPeriodFrames = 90;
 constexpr int kItemSpinPeriodFrames = 240;
 constexpr float kItemBobAmplitude = 0.05f;
 
+// Phase 15 UI (screen-space, pixels; the font is 8x8 at scale 1).
+constexpr int kHotbarSlotSize = 44;
+constexpr int kHotbarSlotGap = 2;
+constexpr int kHotbarBottomMargin = 8;
+constexpr int kHotbarIconPx = 30;
+constexpr int kHeldIconPx = 76;
+constexpr int kHeldIconOffset = 72; // center of the held icon from the corner
+constexpr int kF3Margin = 8;
+constexpr int kF3LineHeight = 14;
+constexpr int kCrackStages = 5;
+// The overlay cubes sit just outside the target block's faces so they
+// never z-fight with the block itself (the crack) and stay visible from
+// outside (the outline).
+constexpr float kCrackCubeScale = 1.006f;
+constexpr float kOutlineScale = 1.004f;
+// The icon cubes are drawn at a fixed tilt (deterministic; no bob).
+constexpr float kIconTiltYaw = 0.65f;
+constexpr float kIconTiltPitch = -0.35f;
+
+// Phase 15 sound cadence (seconds).
+constexpr double kDigSoundInterval = 0.3;
+constexpr double kStepSoundInterval = 0.4;
+constexpr float kStepMinSpeed = 0.5f; // blocks/s horizontal to count as walking
+
 double nowSeconds() {
     return static_cast<double>(SDL_GetPerformanceCounter()) /
            SDL_GetPerformanceFrequency();
@@ -96,6 +124,9 @@ Mat4 chunkModel(const ChunkPos& pos) {
 } // namespace
 
 Game::~Game() {
+    // Close audio before the window's SDL_Quit (idempotent: run() already
+    // did this on the normal path; this covers an early destruction).
+    m_sound.shutdown();
     if (m_initialized) {
         m_window.shutdown();
     }
@@ -124,6 +155,89 @@ Result<void> Game::buildScene() {
     auto skyShader = ShaderProgram::create(*skyVert, *skyFrag);
     MC_TRY(skyShader);
     m_skyShader = std::move(*skyShader);
+
+    // -- Phase 15 UI: unlit screen-space shader + generated textures --------
+    auto uiVert = m_assets.loadText("shaders/ui.vert");
+    MC_TRY(uiVert);
+    auto uiFrag = m_assets.loadText("shaders/ui.frag");
+    MC_TRY(uiFrag);
+    auto uiShader = ShaderProgram::create(*uiVert, *uiFrag);
+    MC_TRY(uiShader);
+    m_uiShader = std::move(*uiShader);
+
+    auto fontPath = m_assets.resolve("textures/font.png");
+    MC_TRY(fontPath);
+    auto fontTex = Texture::loadPng(*fontPath);
+    MC_TRY(fontTex);
+    m_fontTexture = std::move(*fontTex);
+
+    auto crackPath = m_assets.resolve("textures/cracks.png");
+    MC_TRY(crackPath);
+    auto crackTex = Texture::loadPng(*crackPath);
+    MC_TRY(crackTex);
+    m_crackTexture = std::move(*crackTex);
+
+    // Target-block outline: a slightly enlarged unit cube as 24 line
+    // vertices (12 edges x 2 endpoints), centered on the origin.
+    {
+        const float s = kOutlineScale * 0.5f;
+        const float x0 = -s, x1 = s, y0 = -s, y1 = s, z0 = -s, z1 = s;
+        const Vec3 kEdges[24] = {
+            {x0, y0, z0}, {x1, y0, z0}, {x1, y0, z0}, {x1, y0, z1},
+            {x1, y0, z1}, {x0, y0, z1}, {x0, y0, z1}, {x0, y0, z0},
+            {x0, y1, z0}, {x1, y1, z0}, {x1, y1, z0}, {x1, y1, z1},
+            {x1, y1, z1}, {x0, y1, z1}, {x0, y1, z1}, {x0, y1, z0},
+            {x0, y0, z0}, {x0, y1, z0}, {x1, y0, z0}, {x1, y1, z0},
+            {x1, y0, z1}, {x1, y1, z1}, {x0, y0, z1}, {x0, y1, z1},
+        };
+        std::vector<MeshVertex> verts;
+        verts.reserve(24);
+        for (const Vec3& p : kEdges) {
+            MeshVertex v;
+            v.position = p;
+            verts.push_back(v);
+        }
+        auto up = m_outlineMesh.upload(verts, {}, MeshMode::Lines);
+        MC_TRY(up);
+    }
+
+    // Crack overlays: one full cube per stage (kCrackStages tiles of the
+    // crack strip), slightly enlarged, UVs = the stage's tile.
+    for (int stage = 0; stage < kCrackStages; ++stage) {
+        std::vector<MeshVertex> verts;
+        std::vector<std::uint32_t> indices;
+        verts.reserve(24);
+        indices.reserve(36);
+        const float u0 = static_cast<float>(stage) / kCrackStages;
+        const float u1 = static_cast<float>(stage + 1) / kCrackStages;
+        for (const CubeFace& face : kCubeFaces) {
+            // Full tile height (the crack art is directionless); the corner
+            // UV order matches the verified cube-face mapping.
+            const Vec2 faceUv[4] = {
+                {u0, 1.0f}, {u1, 1.0f}, {u1, 0.0f}, {u0, 0.0f},
+            };
+            const std::uint32_t first =
+                static_cast<std::uint32_t>(verts.size());
+            for (int i = 0; i < 4; ++i) {
+                MeshVertex v;
+                v.position = {
+                    (static_cast<float>(face.corner[i][0]) - 0.5f) *
+                        kCrackCubeScale,
+                    (static_cast<float>(face.corner[i][1]) - 0.5f) *
+                        kCrackCubeScale,
+                    (static_cast<float>(face.corner[i][2]) - 0.5f) *
+                        kCrackCubeScale};
+                v.normal = face.normal;
+                v.uv = faceUv[i];
+                verts.push_back(v);
+            }
+            indices.insert(indices.end(),
+                           {first, first + 1, first + 2, first, first + 2,
+                            first + 3});
+        }
+        auto up = m_crackMeshes[stage].upload(verts, indices);
+        MC_TRY(up);
+    }
 
     // -- day/night cycle (config-driven; --time overrides the start time) -----
     DayCycle::Params dayParams;
@@ -222,6 +336,28 @@ Result<void> Game::buildScene() {
         }
     }
 
+    // -- item icons (Phase 15 UI) ------------------------------------------
+    // Each explicit item may name a 2D icon under assets/textures/items/
+    // (strict: the file must exist — same cross-check pattern as the block
+    // textures). Block items have no icon (the UI renders a 3D block cube).
+    m_itemIcons.resize(m_items.count());
+    for (const ItemID id : m_items.allIds()) {
+        const Item& item = m_items.at(id);
+        if (item.icon.empty()) {
+            continue;
+        }
+        const std::string rel = "textures/items/" + item.icon + ".png";
+        if (!m_assets.exists(rel)) {
+            return MC_FAIL("item '" + item.name + "' references missing "
+                           "icon texture '" + rel + "'");
+        }
+        auto iconPath = m_assets.resolve(rel);
+        MC_TRY(iconPath);
+        auto iconTex = Texture::loadPng(*iconPath);
+        MC_TRY(iconTex);
+        m_itemIcons[static_cast<std::size_t>(id.value)] = std::move(*iconTex);
+    }
+
     // -- recipes (Phase 12): data-driven crafting (UI/trigger = Phase 15) --
     auto recipesLoad = m_recipes.loadDirectory(m_assets, m_items,
                                                "data/recipes");
@@ -256,7 +392,7 @@ Result<void> Game::buildScene() {
             return MC_FAIL("hotbar.json: unknown item '" + entry.asString() +
                            "'");
         }
-        m_inventory.set(i, ItemStack {iid, m_items.at(iid).maxStack});
+        m_inventory.setSlot(i, ItemStack {iid, m_items.at(iid).maxStack});
     }
 
     // -- world generation (Phase 4: seeded, data-driven) ---------------------
@@ -335,6 +471,12 @@ Result<void> Game::buildScene() {
     // full propagation). Anything that appears later is new.
     const std::vector<ChunkPos> litNow = m_world.chunkPositions();
     m_litChunks.insert(litNow.begin(), litNow.end());
+
+    // -- audio (Phase 15) ----------------------------------------------------
+    // Graceful: with no audio device the bank stays disabled and every
+    // play() is a no-op (the game is otherwise unaffected).
+    m_sound.init(m_assets, "sounds",
+                 m_config.getDouble("audio.volume", 0.7));
 
     MC_LOG_INFO("Scene built: " + std::to_string(m_blocks.count()) +
                 " blocks, " + std::to_string(m_atlas.tileCount()) +
@@ -667,7 +809,7 @@ Result<void> Game::applySave(const SaveGame& save) {
     m_camera.pitch = m_player->pitch;
     // 4) Inventory (replaces the hotbar.json fill) + selection.
     for (std::size_t i = 0; i < m_inventory.size(); ++i) {
-        m_inventory.set(i, save.slots[i]);
+        m_inventory.setSlot(i, save.slots[i]);
     }
     m_selectedSlot = static_cast<std::size_t>(save.selectedSlot);
     // 5) Dropped items (with their lifetime/pickup timers restored).
@@ -778,10 +920,11 @@ int Game::run() {
     while (true) {
         m_input.frameBegin();
         m_input.pump();
-        // ESC exits only while the pointer is free; while captured it
-        // releases the pointer instead (handled in update).
+        // ESC exits only while the pointer is free AND the inventory is
+        // closed (while captured it releases the pointer, while the
+        // inventory is open it closes it — both handled in update).
         if (m_input.quitRequested() ||
-            (!m_window.relativeMouseMode() &&
+            (!m_window.relativeMouseMode() && !m_inventoryOpen &&
              m_input.wasPressed(GameKey::Escape))) {
             MC_LOG_INFO("Exit requested, shutting down");
             break;
@@ -850,6 +993,10 @@ int Game::run() {
         m_pool.reset();
     }
 
+    // Audio (Phase 15): close the stream/device before the window's
+    // SDL_Quit (idempotent — the destructor does the same).
+    m_sound.shutdown();
+
     // Save (Phase 13): persist the world state for the slot (opt-in via
     // --save, after the final frame — and after any screenshot, which is
     // taken inside the loop). A failed save is logged, not fatal: the
@@ -883,7 +1030,17 @@ void Game::update(double dt) {
     // headless runs byte-reproducible.
     m_dayCycle.update(kDayStepPerFrame);
 
-    handleInteraction(dt);
+    // Phase 15 UI keys: F3/F5 work in any pointer state; E opens the
+    // inventory (releasing the pointer) or closes it.
+    handleUiKeys();
+    // While the inventory is open, player physics and block interaction
+    // are paused; the world keeps ticking (day cycle, fluids, entities,
+    // streaming) — see KNOWN_ISSUES.
+    if (m_inventoryOpen) {
+        handleInventoryClicks();
+    } else {
+        handleInteraction(dt);
+    }
 
     // Fluids tick at 20/s (every third frame at 60fps). Changed fluid
     // levels shift the light (water attenuates it), so re-light the touched
@@ -913,7 +1070,10 @@ void Game::update(double dt) {
     // The player owns the first-person state; the camera is just its view
     // (eye position + orientation). Mouse look is only active while the
     // pointer is captured, so an unlocked cursor never rotates the view.
-    m_player->update(dt, m_input, m_window.relativeMouseMode());
+    // Paused while the inventory is open (Phase 15).
+    if (!m_inventoryOpen) {
+        m_player->update(dt, m_input, m_window.relativeMouseMode());
+    }
     m_camera.position = m_player->eyePosition();
     m_camera.yaw = m_player->yaw;
     m_camera.pitch = m_player->pitch;
@@ -921,6 +1081,10 @@ void Game::update(double dt) {
     // Other entities (Phase 10): per-entity physics, then item merging and
     // despawn (see updateEntities).
     updateEntities(dt);
+
+    // Break particles (Phase 15) + the footstep sound timer.
+    m_particles.update(dt);
+    updateSoundTimers(dt);
 
     // Streaming decision + generation jobs: posted after every
     // main-thread World write of this frame (interaction, fluids) and
@@ -984,6 +1148,7 @@ std::optional<BlockHit> Game::targetBlock() const {
 void Game::resetBreaking() {
     m_breakTarget.reset();
     m_breakProgress = 0.0;
+    m_lastDigProgress = 0.0;
 }
 
 void Game::updateBreaking(double dt) {
@@ -1013,6 +1178,12 @@ void Game::updateBreaking(double dt) {
         return;
     }
     m_breakProgress += dt;
+    // Mining tick (Phase 15): a dig sound every kDigSoundInterval of held
+    // progress (the crack overlay renders the same progress, see render).
+    while (m_breakProgress >= m_lastDigProgress + kDigSoundInterval) {
+        m_sound.play("dig");
+        m_lastDigProgress += kDigSoundInterval;
+    }
     if (m_breakProgress >= duration) {
         breakBlock(*hit);
         resetBreaking();
@@ -1043,6 +1214,31 @@ void Game::breakBlock(const BlockHit& hit) {
             m_world, m_blocks, dropItem.name, dropItem.maxStack,
             block.properties.dropsCount, dropPos));
     }
+
+    // Break particles (Phase 15): a deterministic burst (world seed mixed
+    // with an increasing per-break counter: the same input sequence gives
+    // the same burst). The light is baked here — updateLocal already ran
+    // above — because the render pass must not read the light arrays
+    // (worker lighting jobs may be running while it renders).
+    const Chunk* chunk = m_world.findChunk(worldToChunk(hit.block));
+    float sky = 1.0f;
+    float blockLight = 0.0f;
+    if (chunk != nullptr) {
+        const BlockPos local =
+            worldToChunkLocal(worldToChunk(hit.block), hit.block);
+        sky = static_cast<float>(chunk->skyLightAt(local.x, local.y,
+                                                   local.z)) /
+              15.0f;
+        blockLight = static_cast<float>(
+                         chunk->blockLightAt(local.x, local.y, local.z)) /
+                     15.0f;
+    }
+    const std::uint64_t rngSeed =
+        m_generator->seed() +
+        (++m_particleBreakCounter) * 0x9E3779B97F4A7C15ULL;
+    m_particles.spawnBreak(hit.block.x, hit.block.y, hit.block.z, id, sky,
+                           blockLight, rngSeed);
+    m_sound.play("break");
 }
 
 void Game::placeBlock() {
@@ -1076,6 +1272,7 @@ void Game::placeBlock() {
     // Placing consumes one from the selected stack (the inventory is the
     // source of blocks — no more infinite placement).
     m_inventory.take(m_selectedSlot, 1);
+    m_sound.play("place");
 }
 
 void Game::cycleHotbar() {
@@ -1103,6 +1300,7 @@ void Game::dropSelectedItem() {
     m_entities.push_back(std::make_unique<ItemEntity>(m_world, m_blocks,
                                                       item.name, item.maxStack,
                                                       /*count=*/1, pos));
+    m_sound.play("pickup");
 }
 
 float Game::selectedBreakSpeed() const {
@@ -1171,6 +1369,7 @@ void Game::updateEntities(double dt) {
             continue; // inventory full: the item stays on the ground
         }
         gone[i] = true;
+        m_sound.play("pickup");
     }
     // Despawn: merged-away / picked-up + aged-out / impact / below the
     // kill plane.
@@ -1252,6 +1451,524 @@ const Mesh& Game::itemMesh(BlockID id) {
     return mesh;
 }
 
+// ---------------------------------------------------------------------------
+// Phase 15: UI keys, inventory, sounds, overlay and particles
+// ---------------------------------------------------------------------------
+
+void Game::handleUiKeys() {
+    if (m_input.wasPressed(GameKey::F3)) {
+        m_debugOverlay = !m_debugOverlay;
+    }
+    if (m_input.wasPressed(GameKey::F5)) {
+        if (m_args.saveSlot.has_value()) {
+            auto saved = writeSave();
+            if (!saved.ok()) {
+                MC_LOG_ERROR("F5 save failed: " + saved.error().describe());
+            }
+        } else {
+            MC_LOG_WARN("F5: no save slot (pass --save <slot>)");
+        }
+    }
+    if (m_input.wasPressed(GameKey::E)) {
+        if (m_inventoryOpen) {
+            closeInventory();
+        } else if (m_window.relativeMouseMode()) {
+            openInventory();
+        }
+    }
+    if (m_inventoryOpen && m_input.wasPressed(GameKey::Escape)) {
+        closeInventory();
+    }
+}
+
+void Game::openInventory() {
+    m_window.setRelativeMouseMode(false); // free the cursor for clicking
+    m_inventoryOpen = true;
+    resetBreaking();
+    m_sound.play("ui_open");
+}
+
+void Game::closeInventory() {
+    m_inventoryOpen = false;
+    m_sound.play("ui_close");
+}
+
+void Game::handleInventoryClicks() {
+    const int w = m_window.width();
+    const int h = m_window.height();
+    const InventoryLayout layout =
+        InventoryLayout::compute(w, h, static_cast<int>(m_recipes.count()));
+    const Vec2 mp = m_input.mousePosition();
+    const int px = static_cast<int>(mp.x);
+    const int py = static_cast<int>(mp.y);
+    if (m_input.wasPressed(MouseButton::Left)) {
+        // Craft rows first (they sit beside the slots, so the hit test is
+        // unambiguous): a click crafts when the inventory can satisfy the
+        // recipe (all-or-nothing, see craft()).
+        const int row = layout.recipeRowAt(px, py);
+        if (row >= 0) {
+            const Recipe& recipe = m_recipes.all()[row];
+            if (canCraft(m_inventory, recipe, m_items)) {
+                auto crafted = craft(m_inventory, recipe, m_items);
+                if (crafted.ok()) {
+                    m_sound.play("craft");
+                } else {
+                    MC_LOG_ERROR("Craft failed: " + crafted.error().describe());
+                }
+            }
+            return;
+        }
+        m_inventoryUi.leftClick(layout.slotAt(px, py));
+        return;
+    }
+    if (m_input.wasPressed(MouseButton::Right)) {
+        m_inventoryUi.rightClick(layout.slotAt(px, py));
+    }
+}
+
+void Game::updateSoundTimers(double dt) {
+    if (!m_player || !m_window.relativeMouseMode() || m_inventoryOpen) {
+        return;
+    }
+    const Vec3 v = m_player->velocity();
+    const bool moving =
+        std::abs(v.x) > kStepMinSpeed || std::abs(v.z) > kStepMinSpeed;
+    if (moving && m_player->onGround()) {
+        m_stepTimer += dt;
+        if (m_stepTimer >= kStepSoundInterval) {
+            m_stepTimer = 0.0;
+            m_sound.play("step");
+        }
+    } else {
+        m_stepTimer = 0.0;
+    }
+}
+
+Mat4 Game::uiProjection(int w, int h) const {
+    // Screen pixels, y-down (y = 0 is the window top). The depth range
+    // must cover the 3D block-cube icons (the 76px held icon spans
+    // |z| up to ~66px after its tilt); everything 2D sits at z = 0 and
+    // the UI pass runs with the depth test off, so the wide range is
+    // harmless.
+    return Mat4::ortho(0.0f, static_cast<float>(w), static_cast<float>(h),
+                       0.0f, -128.0f, 128.0f);
+}
+
+void Game::drawUiBatch(const std::vector<MeshVertex>& vertices,
+                       const Mat4& projection, const Texture& texture,
+                       bool textured, const Vec4& color) {
+    if (vertices.empty()) {
+        return;
+    }
+    Mesh mesh;
+    auto up = mesh.upload(vertices);
+    if (!up.ok()) {
+        MC_LOG_ERROR("UI mesh upload failed: " + up.error().describe());
+        return;
+    }
+    m_uiShader.bind();
+    m_uiShader.setUniform1i("u_texture", 0);
+    m_uiShader.setUniform1i("u_useTexture", textured ? 1 : 0);
+    m_uiShader.setUniform4f("u_color", color.x, color.y, color.z, color.w);
+    if (textured) {
+        texture.bind();
+    }
+    m_renderer.draw(mesh, m_uiShader, Mat4::identity(), projection,
+                    Mat4::identity());
+}
+
+void Game::drawWorldOverlay(const Mat4& view, const Mat4& projection) {
+    // Only while playing (pointer captured, no inventory): the crosshair
+    // aim is what the overlay describes. The crack is drawn over the
+    // block being broken; the outline over whatever block the ray hits.
+    // Both are world-space draws through the UI shader (unlit).
+    const bool playing =
+        m_window.relativeMouseMode() && !m_inventoryOpen;
+    if (!playing) {
+        return;
+    }
+    if (m_breakTarget.has_value() && m_breakProgress > 0.0) {
+        const BlockPos& b = *m_breakTarget;
+        const Block& block =
+            m_blocks.at(m_world.getBlock(b.x, b.y, b.z));
+        const double duration = breakDurationSeconds(
+            block.properties.hardness, selectedBreakSpeed());
+        const int stage =
+            duration > 0.0
+                ? std::clamp(
+                      static_cast<int>(std::floor(
+                          (m_breakProgress / duration) * kCrackStages)),
+                      0, kCrackStages - 1)
+                : kCrackStages - 1;
+        const Vec3 center {static_cast<float>(b.x) + 0.5f,
+                           static_cast<float>(b.y) + 0.5f,
+                           static_cast<float>(b.z) + 0.5f};
+        m_uiShader.bind();
+        m_uiShader.setUniform1i("u_texture", 0);
+        m_uiShader.setUniform1i("u_useTexture", 1);
+        m_uiShader.setUniform4f("u_color", 1.0f, 1.0f, 1.0f, 1.0f);
+        m_crackTexture.bind();
+        m_renderer.draw(m_crackMeshes[static_cast<std::size_t>(stage)],
+                        m_uiShader, view, projection,
+                        Mat4::translate(center));
+    }
+    if (const std::optional<BlockHit> hit = targetBlock()) {
+        const Vec3 center {static_cast<float>(hit->block.x) + 0.5f,
+                           static_cast<float>(hit->block.y) + 0.5f,
+                           static_cast<float>(hit->block.z) + 0.5f};
+        m_uiShader.bind();
+        m_uiShader.setUniform1i("u_texture", 0);
+        m_uiShader.setUniform1i("u_useTexture", 0);
+        m_uiShader.setUniform4f("u_color", 0.0f, 0.0f, 0.0f, 0.85f);
+        m_renderer.draw(m_outlineMesh, m_uiShader, view, projection,
+                        Mat4::translate(center));
+    }
+}
+
+void Game::drawParticles(const Mat4& view, const Mat4& projection,
+                         bool transparentPass) {
+    if (m_particles.empty()) {
+        return;
+    }
+    // One dynamic batch per pass: all particles of matching blocks as a
+    // single indexed mesh (a 0.12-block cube per particle, the broken
+    // block's own faces). Light values were baked at spawn time.
+    std::vector<MeshVertex> verts;
+    std::vector<std::uint32_t> indices;
+    const float half = 0.06f;
+    for (const Particle& p : m_particles.particles()) {
+        const Block& block = m_blocks.at(p.block);
+        if (block.properties.transparent != transparentPass) {
+            continue;
+        }
+        for (const CubeFace& face : kCubeFaces) {
+            const std::string& tex =
+                cubeFaceTexture(block, face.textureSlot);
+            const Vec2 u0 = AtlasLayout::uvMin(m_atlas.layout(), tex);
+            const Vec2 u1 = AtlasLayout::uvMax(m_atlas.layout(), tex);
+            const Vec2 faceUv[4] = {
+                {u0.x, u1.y}, {u1.x, u1.y}, {u1.x, u0.y}, {u0.x, u0.y},
+            };
+            const std::uint32_t first =
+                static_cast<std::uint32_t>(verts.size());
+            for (int i = 0; i < 4; ++i) {
+                MeshVertex v;
+                v.position = {
+                    p.position.x +
+                        (static_cast<float>(face.corner[i][0]) - 0.5f) * 2.0f * half,
+                    p.position.y +
+                        (static_cast<float>(face.corner[i][1]) - 0.5f) * 2.0f * half,
+                    p.position.z +
+                        (static_cast<float>(face.corner[i][2]) - 0.5f) * 2.0f * half};
+                v.normal = face.normal;
+                v.uv = faceUv[i];
+                v.skyLight = p.skyLight;
+                v.blockLight = p.blockLight;
+                verts.push_back(v);
+            }
+            indices.insert(indices.end(),
+                           {first, first + 1, first + 2, first, first + 2,
+                            first + 3});
+        }
+    }
+    if (verts.empty()) {
+        return;
+    }
+    Mesh mesh;
+    auto up = mesh.upload(verts, indices);
+    if (!up.ok()) {
+        MC_LOG_ERROR("Particle mesh upload failed: " + up.error().describe());
+        return;
+    }
+    m_renderer.draw(mesh, m_basicShader, view, projection, Mat4::identity());
+}
+
+// ---------------------------------------------------------------------------
+// Phase 15: the screen-space UI pass
+// ---------------------------------------------------------------------------
+
+void Game::renderUi() {
+    const int w = m_window.width();
+    const int h = m_window.height();
+    const bool locked = m_window.relativeMouseMode();
+    const Mat4 ortho = uiProjection(w, h);
+
+    // Palette (Minecraft-like: dark translucent panels, gray borders, the
+    // selected slot in orange).
+    const Vec4 kSlotBg {0.0f, 0.0f, 0.0f, 0.45f};
+    const Vec4 kBorder {1.0f, 1.0f, 1.0f, 0.30f};
+    const Vec4 kSelected {1.0f, 0.82f, 0.0f, 1.0f};
+    const Vec4 kHover {1.0f, 1.0f, 1.0f, 0.85f};
+    const Vec4 kPanel {0.08f, 0.08f, 0.11f, 0.88f};
+    const Vec4 kText {1.0f, 1.0f, 1.0f, 0.92f};
+    const Vec4 kTextDim {1.0f, 1.0f, 1.0f, 0.55f};
+    const Vec4 kCrosshair {1.0f, 1.0f, 1.0f, 0.85f};
+
+    std::vector<UiBatch> batches;
+    auto batchFor = [&](const Vec4& color, bool textured,
+                        const Texture* tex) -> UiBatch& {
+        for (auto& b : batches) {
+            if (b.textured == textured && b.texture == tex &&
+                b.color.x == color.x && b.color.y == color.y &&
+                b.color.z == color.z && b.color.w == color.w) {
+                return b;
+            }
+        }
+        UiBatch b;
+        b.color = color;
+        b.textured = textured;
+        b.texture = tex;
+        batches.push_back(std::move(b));
+        return batches.back();
+    };
+    auto addQuad = [&batches](UiBatch& b, int x, int y, int qw, int qh) {
+        const float x0 = static_cast<float>(x);
+        const float y0 = static_cast<float>(y);
+        const float x1 = x0 + static_cast<float>(qw);
+        const float y1 = y0 + static_cast<float>(qh);
+        const auto put = [&](float px, float py) {
+            MeshVertex v;
+            v.position = {px, py, 0.0f};
+            b.vertices.push_back(v);
+        };
+        put(x0, y0); put(x1, y0); put(x1, y1);
+        put(x0, y0); put(x1, y1); put(x0, y1);
+    };
+    auto addBorder = [&](UiBatch& b, const UIRect& r, int thickness) {
+        addQuad(b, r.x, r.y, r.w, thickness);
+        addQuad(b, r.x, r.y + r.h - thickness, r.w, thickness);
+        addQuad(b, r.x, r.y, thickness, r.h);
+        addQuad(b, r.x + r.w - thickness, r.y, thickness, r.h);
+    };
+    auto addText = [&](const std::string& text, int x, int y, int scale,
+                       const Vec4& color) {
+        makeTextVertices(text, x, y, scale,
+                         batchFor(color, true, &m_fontTexture).vertices);
+    };
+
+    // Item icons: 2D textures (tools, materials) are batched quads like
+    // everything else; block items render a lit 3D cube, which is
+    // RECORDED and drawn only after all 2D batches — the slot backgrounds
+    // are 2D batches, and drawing the cubes first would put them under
+    // the backgrounds.
+    struct UiIconDraw {
+        ItemStack stack;
+        float cx, cy;
+        int sizePx;
+    };
+    std::vector<UiIconDraw> iconDraws;
+    auto drawIcon = [&](const ItemStack& stack, float cx, float cy,
+                        int sizePx) {
+        if (stack.empty()) {
+            return;
+        }
+        const Item& item = m_items.at(stack.item);
+        if (item.type == ItemType::Block) {
+            if (itemMesh(item.block).valid()) {
+                iconDraws.push_back(UiIconDraw {stack, cx, cy, sizePx});
+            }
+            return;
+        }
+        const std::size_t idx = static_cast<std::size_t>(stack.item.value);
+        if (idx >= m_itemIcons.size() || !m_itemIcons[idx].valid()) {
+            return;
+        }
+        UiBatch& b = batchFor(Vec4 {1.0f, 1.0f, 1.0f, 1.0f}, true,
+                              &m_itemIcons[idx]);
+        addQuad(b, static_cast<int>(cx) - sizePx / 2,
+                static_cast<int>(cy) - sizePx / 2, sizePx, sizePx);
+    };
+
+    const Vec2 mouse = m_input.mousePosition();
+    const int mx = static_cast<int>(mouse.x);
+    const int my = static_cast<int>(mouse.y);
+
+    // -- hotbar + crosshair + held item (while captured, inventory closed) --
+    if (locked && !m_inventoryOpen) {
+        const int n = Inventory::kHotbarSize;
+        const int total = n * kHotbarSlotSize + (n - 1) * kHotbarSlotGap;
+        const int x0 = (w - total) / 2;
+        const int y0 = h - kHotbarBottomMargin - kHotbarSlotSize;
+        for (int i = 0; i < n; ++i) {
+            const int sx = x0 + i * (kHotbarSlotSize + kHotbarSlotGap);
+            const UIRect slot {sx, y0, kHotbarSlotSize, kHotbarSlotSize};
+            addQuad(batchFor(kSlotBg, false, nullptr), slot.x, slot.y,
+                    slot.w, slot.h);
+            if (static_cast<std::size_t>(i) == m_selectedSlot) {
+                addBorder(batchFor(kSelected, false, nullptr), slot, 2);
+            } else {
+                addBorder(batchFor(kBorder, false, nullptr), slot, 1);
+            }
+            const ItemStack& stack = m_inventory.at(i);
+            drawIcon(stack, static_cast<float>(sx + kHotbarSlotSize / 2),
+                     static_cast<float>(y0 + kHotbarSlotSize / 2),
+                     kHotbarIconPx);
+            if (!stack.empty() &&
+                stack.count < m_items.at(stack.item).maxStack) {
+                const std::string count = std::to_string(stack.count);
+                addText(count, sx + kHotbarSlotSize - 4 - textWidth(count),
+                        y0 + kHotbarSlotSize - 4 - kGlyphSize, 1, kText);
+            }
+        }
+        // Crosshair: a 2px thin cross at the screen center.
+        UiBatch& cross = batchFor(kCrosshair, false, nullptr);
+        addQuad(cross, w / 2 - 5, h / 2 - 1, 11, 2);
+        addQuad(cross, w / 2 - 1, h / 2 - 5, 2, 11);
+        // Held item: a large icon in the bottom-right corner.
+        drawIcon(m_inventory.at(m_selectedSlot),
+                 static_cast<float>(w - kHeldIconOffset),
+                 static_cast<float>(h - kHeldIconOffset), kHeldIconPx);
+    }
+
+    // -- inventory + crafting panel (while open) ----------------------------
+    if (m_inventoryOpen) {
+        const InventoryLayout layout =
+            InventoryLayout::compute(w, h,
+                                     static_cast<int>(m_recipes.count()));
+        // Panel background + titles.
+        addQuad(batchFor(kPanel, false, nullptr), layout.panel.x,
+                layout.panel.y, layout.panel.w, layout.panel.h);
+        addText("Inventory", layout.title.x, layout.title.y + 6, 2, kText);
+        addText("Crafting", layout.craftHeader.x, layout.craftHeader.y + 6,
+                2, kText);
+
+        const int hoverSlot = layout.slotAt(mx, my);
+        for (std::size_t i = 0; i < layout.slots.size(); ++i) {
+            const UIRect& r = layout.slots[i];
+            addQuad(batchFor(kSlotBg, false, nullptr), r.x, r.y, r.w, r.h);
+            if (i == m_selectedSlot) {
+                addBorder(batchFor(kSelected, false, nullptr), r, 2);
+            } else if (static_cast<int>(i) == hoverSlot) {
+                addBorder(batchFor(kHover, false, nullptr), r, 2);
+            } else {
+                addBorder(batchFor(kBorder, false, nullptr), r, 1);
+            }
+            const ItemStack& stack = m_inventory.at(i);
+            drawIcon(stack, static_cast<float>(r.x + r.w / 2),
+                     static_cast<float>(r.y + r.h / 2), 34);
+            if (!stack.empty() &&
+                stack.count < m_items.at(stack.item).maxStack) {
+                const std::string count = std::to_string(stack.count);
+                addText(count, r.x + r.w - 4 - textWidth(count),
+                        r.y + r.h - 4 - kGlyphSize, 1, kText);
+            }
+        }
+
+        // Crafting rows: output icon + "name xN" (white when craftable,
+        // dim otherwise) + the ingredient list.
+        for (std::size_t i = 0; i < layout.recipes.size(); ++i) {
+            const Recipe& recipe = m_recipes.all()[i];
+            const UIRect& r = layout.recipes[i];
+            const bool can = canCraft(m_inventory, recipe, m_items);
+            const Vec4 outColor = can ? kText : kTextDim;
+            drawIcon(ItemStack {recipe.output, recipe.outputCount},
+                     static_cast<float>(r.x + 14),
+                     static_cast<float>(r.y + r.h / 2), 28);
+            addText(m_items.at(recipe.output).name + " x" +
+                        std::to_string(recipe.outputCount),
+                    r.x + 32, r.y + 6, 1, outColor);
+            std::string needs;
+            for (const auto& [item, count] : recipe.ingredients) {
+                if (!needs.empty()) {
+                    needs += ", ";
+                }
+                needs += m_items.at(item).name + " x" +
+                         std::to_string(count);
+            }
+            addText("needs: " + needs, r.x + 32, r.y + 24, 1, kTextDim);
+        }
+
+        // The hovered slot's item name + the carried stack at the cursor.
+        if (hoverSlot >= 0) {
+            const ItemStack& stack = m_inventory.at(hoverSlot);
+            if (!stack.empty()) {
+                addText(m_items.at(stack.item).name, mx + 12, my + 12, 1,
+                        kText);
+            }
+        }
+        if (m_inventoryUi.carrying()) {
+            drawIcon(m_inventoryUi.carry(), static_cast<float>(mx),
+                     static_cast<float>(my), 34);
+        }
+        // Close hint, centered at the panel bottom.
+        const std::string hint = "E to close";
+        addText(hint, layout.panel.x + (layout.panel.w - textWidth(hint, 1)) / 2,
+                layout.panel.y + layout.panel.h - 16, 1, kTextDim);
+    }
+
+    // -- F3 debug overlay (while toggled) ------------------------------------
+    if (m_debugOverlay) {
+        DebugInfo info;
+        info.fps = static_cast<int>(std::lround(m_fpsSmoothed));
+        info.frame = m_frameCount;
+        info.drawCalls = m_renderer.stats().drawCalls;
+        info.vertices = m_renderer.stats().vertices;
+        info.chunks = static_cast<int>(m_world.chunkCount());
+        if (m_player) {
+            info.posX = m_player->position().x;
+            info.posY = m_player->position().y;
+            info.posZ = m_player->position().z;
+            info.yaw = m_player->yaw;
+            info.pitch = m_player->pitch;
+        }
+        if (m_player) {
+            info.columnX =
+                floorDiv(static_cast<int>(std::floor(m_player->position().x)),
+                         kChunkSize);
+            info.columnZ =
+                floorDiv(static_cast<int>(std::floor(m_player->position().z)),
+                         kChunkSize);
+        }
+        info.seed = m_generator ? m_generator->seed() : 0;
+        info.timeOfDay = m_dayCycle.timeOfDay();
+        info.dayFactor = m_dayCycle.dayFactor();
+        info.streamingEngaged = m_streamingEngaged;
+        info.streamPending = static_cast<int>(m_streamPending.size());
+        info.streamRadius = m_streamRadius;
+        info.pointerLocked = locked;
+        info.inventoryOpen = m_inventoryOpen;
+        info.particles = m_particles.size();
+        int y = kF3Margin;
+        for (const std::string& line : debugOverlayLines(info)) {
+            addText(line, kF3Margin, y, 1, kText);
+            y += kF3LineHeight;
+        }
+    }
+
+    // Upload + draw every 2D batch (backgrounds, borders, text, 2D item
+    // icons). The 3D block-cube icons are drawn after this loop.
+    for (auto& b : batches) {
+        drawUiBatch(b.vertices, ortho, b.textured ? *b.texture
+                                                  : m_fontTexture,
+                    b.textured, b.color);
+    }
+
+    // 3D block-cube icons last: on top of every 2D element (the slot
+    // backgrounds would otherwise cover them). The batch draws above may
+    // have bound the font/icon textures to unit 0; the cube UVs live in
+    // the block atlas, so re-bind it.
+    if (!iconDraws.empty()) {
+        m_atlas.texture().bind();
+        for (const UiIconDraw& d : iconDraws) {
+            const Mesh& mesh = itemMesh(m_items.at(d.stack.item).block);
+            if (!mesh.valid()) {
+                continue;
+            }
+            const float s =
+                static_cast<float>(d.sizePx) / ItemEntity::kSize;
+            const Mat4 model = Mat4::multiply(
+                Mat4::multiply(
+                    Mat4::multiply(
+                        Mat4::translate({d.cx, d.cy, 0.0f}),
+                        Mat4::rotateY(kIconTiltYaw)),
+                    Mat4::rotateX(kIconTiltPitch)),
+                Mat4::scale(s));
+            m_renderer.draw(mesh, m_basicShader, Mat4::identity(), ortho,
+                            model);
+        }
+    }
+}
+
 void Game::render() {
     const int w = m_window.width();
     const int h = m_window.height();
@@ -1291,6 +2008,9 @@ void Game::render() {
     // Dropped items (Phase 10): the opaque ones with the chunk pass; the
     // transparent ones (leaves, glass) join the blending pass below.
     drawItemEntities(view, projection, false);
+    // Opaque break particles (Phase 15) belong to the opaque pass so the
+    // transparent geometry blends over them.
+    drawParticles(view, projection, false);
 
     m_renderer.enableBlending();
     // Sky objects (unlit billboarded quads at kSkyDistance): drawn after
@@ -1307,7 +2027,22 @@ void Game::render() {
                         projection, chunkModel(pos));
     }
     drawItemEntities(view, projection, true);
+    drawParticles(view, projection, true);
+    // The break crack + target outline (Phase 15): world-space, blended,
+    // depth test still on (the overlay cubes sit just outside the block).
+    drawWorldOverlay(view, projection);
     m_renderer.disableBlending();
+
+    // Phase 15 UI pass: screen space (y-down ortho), depth test + culling
+    // off. Every element is gated on a pointer/key state, so a no-input
+    // run renders exactly the Phase 14 image (byte-identical baseline).
+    m_renderer.setDepthTest(false);
+    m_renderer.setCulling(false);
+    m_renderer.enableBlending();
+    renderUi();
+    m_renderer.disableBlending();
+    m_renderer.setDepthTest(true);
+    m_renderer.setCulling(true);
 
     m_renderer.endFrame();
 }

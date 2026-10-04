@@ -35,12 +35,14 @@ add_library(mc_core STATIC
     src/core/camera.cpp
     src/core/png.cpp
     src/core/save.cpp
+    src/core/sound.cpp
     src/core/thread_pool.cpp
     src/core/game.cpp
     src/block/block_registry.cpp
     src/entity/entity.cpp
     src/entity/item_entity.cpp
     src/entity/item_mesh.cpp
+    src/entity/particle.cpp
     src/entity/projectile.cpp
     src/item/item_registry.cpp
     src/item/inventory.cpp
@@ -63,6 +65,9 @@ add_library(mc_core STATIC
     src/renderer/mesh.cpp
     src/renderer/renderer.cpp
     src/renderer/texture_atlas.cpp
+    src/ui/font.cpp
+    src/ui/debug_overlay.cpp
+    src/ui/inventory_ui.cpp
 )
 target_include_directories(mc_core PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(mc_core PUBLIC SDL3::SDL3 PkgConfig::GLEW
@@ -103,6 +108,11 @@ add_executable(minecraft_tests
     tests/test_save.cpp
     tests/test_thread_pool.cpp
     tests/test_chunk_streaming.cpp
+    tests/test_font.cpp
+    tests/test_debug_overlay.cpp
+    tests/test_inventory_ui.cpp
+    tests/test_particle.cpp
+    tests/test_sound.cpp
     tests/test_noise.cpp
     tests/test_player.cpp
     tests/test_biome.cpp
