@@ -72,6 +72,14 @@ public:
     // The absorbed entity is left untouched — the game removes it.
     void absorb(const ItemEntity& other);
 
+    // Push this item out of another entity's AABB (the player, Phase 16):
+    // along the axis of MINIMUM penetration (x→y→z on ties, deterministic),
+    // away from the other body's center (+axis when the centers coincide).
+    // Only the item moves — the other body is immovable (Minecraft pushes
+    // items out of the player, not the player out of items). The velocity
+    // is untouched (a slide continues). Returns true when the item moved.
+    bool separateFrom(const Vec3& otherMin, const Vec3& otherMax);
+
 private:
     void integrate(float h) override;
 

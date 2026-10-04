@@ -22,6 +22,8 @@
 // the player reads properties.solid and never switches on block identity.
 #pragma once
 
+#include <algorithm>
+
 #include "core/input.hpp"
 #include "core/math/vec3.hpp"
 #include "entity/entity.hpp"
@@ -48,6 +50,20 @@ public:
         float waterGravity = 12.0f;     // downward acceleration in water (blocks/s^2)
         float waterTerminalVelocity = 4.0f; // max sink speed in water (blocks/s)
         float mouseSensitivity = 0.0025f; // radians / pixel
+        // Survival (Phase 16): health and fall damage. No fall damage for
+        // the first `fallDamageOffset` blocks (Minecraft: 3 are safe), then
+        // 1 HP per block.
+        float maxHealth = 20.0f;
+        float fallDamageOffset = 3.0f;
+        // Crouch (LeftControl): the AABB shrinks to crouchHeight, movement
+        // scales by crouchSpeedScale, and the player does not walk off a
+        // 1-block ledge while on the ground.
+        float crouchHeight = 1.6f;
+        float crouchSpeedScale = 0.3f;
+        // Regeneration (Minecraft's hunger regen, simplified): after
+        // regenDelaySeconds without damage, +1 HP every regenIntervalSeconds.
+        double regenDelaySeconds = 10.0;
+        double regenIntervalSeconds = 4.0;
     };
 
     // `world` and `blocks` must outlive the player. `spawnPos` is the
@@ -76,11 +92,44 @@ public:
     float yaw = 0.0f;
     float pitch = 0.0f;
 
+    // Eye height: the standing value, lowered by the crouch delta (the eye
+    // stays a fixed distance below the top of the head).
+    float currentEyeHeight() const {
+        return m_crouching
+            ? m_params.eyeHeight -
+                  (m_params.height - m_params.crouchHeight)
+            : m_params.eyeHeight;
+    }
+
     Vec3 eyePosition() const {
-        return position() + Vec3{0.0f, m_params.eyeHeight, 0.0f};
+        return position() + Vec3{0.0f, currentEyeHeight(), 0.0f};
     }
 
     const Params& params() const { return m_params; }
+
+    // -- survival (Phase 16) --------------------------------------------------
+    float health() const { return m_health; }
+    float maxHealth() const { return m_params.maxHealth; }
+    bool isDead() const { return m_dead; }
+    bool isCrouching() const { return m_crouching; }
+    double timeSinceDamage() const { return m_timeSinceDamage; }
+
+    // Apply `amount` damage. Returns true when health actually decreased
+    // (the game drives the hurt sound/flash from this). Lethal damage sets
+    // the dead state; a dead player is frozen (update() no-ops).
+    bool damage(float amount);
+
+    // Back at the spawn point with full health and cleared fall state. The
+    // game calls this on the R key. The inventory is untouched
+    // (Minecraft-Java keep-inventory respawn).
+    void respawn();
+
+    // Restore health (save load): clamped to [0, max]; 0 sets the dead
+    // state (a dead save reloads dead).
+    void setHealth(float h) {
+        m_health = std::clamp(h, 0.0f, m_params.maxHealth);
+        m_dead = m_health <= 0.0f;
+    }
 
 private:
     // One physics sub-step (Entity::integrate): swim/air gravity + the
@@ -90,6 +139,27 @@ private:
     // The AABB overlaps at least one fluid cell (water).
     bool isInWater() const;
 
+    // Crouch height state machine: shrink to crouchHeight while the key is
+    // held (even mid-air); grow back only when the headroom fits the full
+    // height. The feet never move (position is the bottom center).
+    void updateCrouchHeight();
+
+    // Crouching on the ground: hold the player back at a 1-block ledge
+    // (Minecraft behavior). Per wish axis, the cell the AABB face would
+    // reach by the end of this tick (predictive: the guard can only zero
+    // the velocity, not rewind an overshoot) at support level must be
+    // solid or the axis's velocity is zeroed.
+    void applyCrouchEdgeGuard(const Vec3& dir, double dt);
+
+    // Step up 1 block when flush against a 1-block step (not crouching, on
+    // the ground, step cell solid, the two cells above it free). On success
+    // the player is lifted and this tick's horizontal move is re-applied
+    // along the stepped axis (x axis first, then z; one step per tick).
+    void stepUp(const Vec3& wishDir, float distPerTick);
+
+    // A world cell is solid (air and unregistered ids are not).
+    bool isSolidCell(int x, int y, int z) const;
+
     Params m_params;
     Vec3 m_spawnPos {0.0f, 0.0f, 0.0f};
     // Tick state for update()/integrate(): the polled input, the look
@@ -98,8 +168,23 @@ private:
     const Input* m_input = nullptr;
     bool m_lookEnabled = false;
     bool m_inWater = false;
+    // Crouch state this tick (set in update before the speed computation).
+    bool m_crouching = false;
+    // Survival: health, the damage clock (regen delay), the regen
+    // accumulator (only runs after the delay), the fall tracking (net drop
+    // since the last leave-the-ground), and the death state.
+    float m_health = Params {}.maxHealth;
+    double m_timeSinceDamage = 0.0;
+    double m_regenAccum = 0.0;
+    bool m_wasOnGround = false;
+    float m_fallStartY = 0.0f;
+    bool m_dead = false;
 
     static constexpr float kMaxPitch = 1.5533f; // ~89 deg
+    // The crouch edge guard / step-up treat an AABB face as "flush" with a
+    // block face within this tolerance (the collision clamp is exact, so
+    // this only guards float round-trips).
+    static constexpr float kFaceEps = 1e-4f;
 };
 
 } // namespace mc

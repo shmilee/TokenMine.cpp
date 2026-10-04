@@ -134,6 +134,12 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     player["pos"] = pos;
     player["yaw"] = Json(save.playerYaw);
     player["pitch"] = Json(save.playerPitch);
+    // Format 2: the player's health. -1 (unspecified) omits the field —
+    // a missing health loads as full, so this stays a valid file either
+    // way. The game always writes the real value (0..max).
+    if (save.playerHealth >= 0.0f) {
+        player["health"] = Json(save.playerHealth);
+    }
     root["player"] = player;
 
     Json slots = Json::array();
@@ -216,9 +222,13 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     if (fmt == nullptr || !fmt->isNumber()) {
         return MC_FAIL("save file requires 'format' (a number)");
     }
-    if (fmt->asInt() != kSaveFormat) {
-        return MC_FAIL("unsupported save format " + std::to_string(fmt->asInt()) +
-                       " (this build reads format " +
+    // Format 1 (Phase 13, no health field) and 2 (Phase 16, player
+    // health) both load; anything else is a version mismatch.
+    if (fmt->asInt() < kSaveFormatMin || fmt->asInt() > kSaveFormat) {
+        return MC_FAIL("unsupported save format " +
+                       std::to_string(fmt->asInt()) +
+                       " (this build reads formats " +
+                       std::to_string(kSaveFormatMin) + "-" +
                        std::to_string(kSaveFormat) + ")");
     }
 
@@ -249,7 +259,8 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     if (player == nullptr || !player->isObject()) {
         return MC_FAIL("save file requires a 'player' object");
     }
-    const std::set<std::string> playerFields {"pos", "yaw", "pitch"};
+    const std::set<std::string> playerFields {"pos", "yaw", "pitch",
+                                              "health"};
     MC_TRY(rejectUnknownFields(*player, playerFields, "save 'player'"));
     const Json* ppos = player->find("pos");
     if (ppos == nullptr || !ppos->isArray() || ppos->size() != 3) {
@@ -272,6 +283,16 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     }
     save.playerYaw = static_cast<float>(yaw->asDouble());
     save.playerPitch = static_cast<float>(pitch->asDouble());
+    // Optional (absent in format 1): -1 stays "unspecified" and the game
+    // applies the player's max health. The upper bound is the player's max
+    // (unknown here); the game clamps on load.
+    const Json* health = player->find("health");
+    if (health != nullptr) {
+        if (!health->isNumber() || health->asDouble() < 0.0) {
+            return MC_FAIL("save 'player.health' must be a number >= 0");
+        }
+        save.playerHealth = static_cast<float>(health->asDouble());
+    }
 
     // -- inventory ---------------------------------------------------------------
     const Json* inv = def.find("inventory");

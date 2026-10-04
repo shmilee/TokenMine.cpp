@@ -32,6 +32,8 @@ struct DebugInfo {
     bool pointerLocked = false;
     bool inventoryOpen = false;
     std::size_t particles = 0;
+    double health = 0.0;   // Phase 16
+    double maxHealth = 0.0;
 };
 
 // One line per entry, top to bottom.

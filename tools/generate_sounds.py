@@ -16,6 +16,8 @@ blocks, not per-material — see KNOWN_ISSUES). Files:
   ui_open.wav  short rising sine sweep
   ui_close.wav short falling sine sweep
   craft.wav    two-part sine chime (recipe crafted)
+  hurt.wav     falling sawtooth-ish groan (player damaged, Phase 16)
+  death.wav    long falling sweep (player died, Phase 16)
 """
 import math
 import os
@@ -134,6 +136,32 @@ def craft():
     return sound(0.15, f)
 
 
+def hurt():
+    # A short falling groan: a descending 220->90 Hz sine with a gritty
+    # noise layer, quick decay.
+    lcg = Lcg(0x2A77)
+    dur = 0.18
+
+    def f(t, _):
+        fr = 220.0 - 130.0 * (t / dur)
+        return (math.sin(2 * math.pi * fr * t) * math.exp(-t * 14) * 0.45
+                + lcg.next() * math.exp(-t * 30) * 0.12)
+    return sound(dur, f)
+
+
+def death():
+    # A long, mournful falling sweep (440 -> 55 Hz) with a low thud.
+    lcg = Lcg(0xD347)
+    dur = 0.8
+
+    def f(t, _):
+        fr = 440.0 * (55.0 / 440.0) ** (t / dur)  # exponential glide down
+        return ((math.sin(2 * math.pi * fr * t) * math.exp(-t * 3.5) * 0.4
+                 + math.sin(2 * math.pi * 60 * t) * math.exp(-t * 6) * 0.25
+                 + lcg.next() * math.exp(-t * 20) * 0.05))
+    return sound(dur, f)
+
+
 SOUNDS = {
     "dig": dig,
     "place": place,
@@ -143,6 +171,8 @@ SOUNDS = {
     "ui_open": ui_open,
     "ui_close": ui_close,
     "craft": craft,
+    "hurt": hurt,
+    "death": death,
 }
 
 

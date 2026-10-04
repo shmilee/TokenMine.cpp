@@ -72,6 +72,11 @@ public:
         m_onGround = false;
     }
 
+    // Set the position (bottom-center) WITHOUT touching the velocity or the
+    // ground state. Used by the player-vs-item separation (Phase 16): a
+    // pushed item keeps moving (a teleport would kill its slide).
+    void setPosition(Vec3 pos) { m_position = pos; }
+
     const World& world() const { return m_world; }
 
     // Fell out of the world (the world's edge is void).

@@ -64,4 +64,44 @@ void ItemEntity::absorb(const ItemEntity& other) {
     m_count = std::min(m_count + other.m_count, m_maxStack);
 }
 
+bool ItemEntity::separateFrom(const Vec3& otherMin, const Vec3& otherMax) {
+    const Vec3 mn = aabbMin();
+    const Vec3 mx = aabbMax();
+    // Overlap extent per axis (<= 0 on any axis: no 3D overlap).
+    const float ox = std::min(mx.x, otherMax.x) - std::max(mn.x, otherMin.x);
+    const float oy = std::min(mx.y, otherMax.y) - std::max(mn.y, otherMin.y);
+    const float oz = std::min(mx.z, otherMax.z) - std::max(mn.z, otherMin.z);
+    if (ox <= 0.0f || oy <= 0.0f || oz <= 0.0f) {
+        return false;
+    }
+    // Shallowest-penetration axis (the overlap extent), x→y→z priority on
+    // exact ties. Along that axis the item is pushed AWAY from the other
+    // body's center (+axis when the centers coincide), by just enough that
+    // its far face lands on the other body's face: the push distance is
+    // the face-to-face span, not the overlap (pushing by the overlap alone
+    // leaves a residual overlap).
+    Vec3 next = position();
+    if (ox <= oy && ox <= oz) {
+        if (mn.x + mx.x <= otherMin.x + otherMax.x) {
+            next.x -= mx.x - otherMin.x;
+        } else {
+            next.x += otherMax.x - mn.x;
+        }
+    } else if (oy <= oz) {
+        if (mn.y + mx.y <= otherMin.y + otherMax.y) {
+            next.y -= mx.y - otherMin.y;
+        } else {
+            next.y += otherMax.y - mn.y;
+        }
+    } else {
+        if (mn.z + mx.z <= otherMin.z + otherMax.z) {
+            next.z -= mx.z - otherMin.z;
+        } else {
+            next.z += otherMax.z - mn.z;
+        }
+    }
+    setPosition(next);
+    return true;
+}
+
 } // namespace mc

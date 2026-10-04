@@ -26,9 +26,11 @@ TEST(DebugOverlayTest, LinesFormat) {
     info.pointerLocked = true;
     info.streamRadius = 8;
     info.particles = 7;
+    info.health = 17.0;
+    info.maxHealth = 20.0;
     const auto lines = debugOverlayLines(info);
-    ASSERT_EQ(lines.size(), 8u);
-    EXPECT_EQ(lines[0], "MineCraft v0.0.1 (Phase 15)");
+    ASSERT_EQ(lines.size(), 9u);
+    EXPECT_EQ(lines[0], "MineCraft v0.0.1 (Phase 16)");
     EXPECT_EQ(lines[1], "60 FPS | frame 1234");
     EXPECT_EQ(lines[2], "chunks 2312 | draws 45 | verts 987654");
     EXPECT_EQ(lines[3], "pos 0.50, 54.00, -34.70  yaw 0.00  pitch -0.25");
@@ -36,6 +38,7 @@ TEST(DebugOverlayTest, LinesFormat) {
     EXPECT_EQ(lines[5], "time 0.333  day 1.00  locked");
     EXPECT_EQ(lines[6], "streaming idle  pending 0  radius 8");
     EXPECT_EQ(lines[7], "inventory closed  particles 7");
+    EXPECT_EQ(lines[8], "health 17.0 / 20.0");
 }
 
 TEST(DebugOverlayTest, EngagedStreamingAndOpenInventory) {

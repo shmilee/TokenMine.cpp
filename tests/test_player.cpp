@@ -84,6 +84,7 @@ std::uint32_t sdlCode(GameKey key) {
         case GameKey::D: return SDLK_D;
         case GameKey::Space: return SDLK_SPACE;
         case GameKey::LeftShift: return SDLK_LSHIFT;
+        case GameKey::LeftControl: return SDLK_LCTRL;
         default: return 0;
     }
 }
@@ -212,6 +213,8 @@ TEST(PlayerTest, JumpReachesExpectedHeight) {
 TEST(PlayerTest, ClimbsOneBlockButNotTwo) {
     // One-block step at x in [10, 20), z in [8, 10) (wide enough that the
     // player cannot walk off the far end within the test window).
+    // Phase 16: no jump needed — walking into the step auto-steps up one
+    // block (flush face + solid step cell + two free cells above it).
     {
         Fixture f;
         for (int x = 10; x < 20; ++x) {
@@ -222,22 +225,13 @@ TEST(PlayerTest, ClimbsOneBlockButNotTwo) {
         Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
         p.yaw = -kPi / 2.0f; // facing +X (into the step)
         Input walk = heldInput({GameKey::W});
-        run(p, 60, walk); // no jump: the step is a wall
-        EXPECT_FLOAT_EQ(p.position().x, 10.0f - 0.3f);
-        EXPECT_FLOAT_EQ(p.position().y, 1.0f);
-
-        // One jump (Space pressed for a single tick) + keep walking: the
-        // player clears the step face once its bottom is above y=2 and
-        // lands on the step top, then walks along it (no re-jump).
-        walk.frameBegin();
-        walk.handleKey(SDLK_SPACE, true);
-        p.update(kDt, walk, false);
-        walk.handleKey(SDLK_SPACE, false);
-        run(p, 90, walk);
+        run(p, 60, walk); // walk only: the step is climbed, not jumped
         EXPECT_GT(p.position().x, 10.3f); // crossed the step
         EXPECT_FLOAT_EQ(p.position().y, 2.0f); // resting on the step top
+        EXPECT_TRUE(p.onGround());
     }
-    // Two-block step: jump peak (2.13) is below its top (3).
+    // Two-block step: no step-up (the cell above the step is solid) and
+    // the jump peak (2.13) is below its top (3).
     {
         Fixture f;
         for (int x = 10; x < 20; ++x) {
@@ -260,6 +254,26 @@ TEST(PlayerTest, ClimbsOneBlockButNotTwo) {
         EXPECT_FLOAT_EQ(p.position().x, 10.0f - 0.3f);
         EXPECT_LT(maxY, 3.0f);
     }
+}
+
+TEST(PlayerTest, ClimbsOneBlockAlongZ) {
+    // Regression: the Z-axis step-up never fired (the front-cell lookup was
+    // indexed with moveAxis's numbering, axis==2, so cz stayed at the
+    // player's own cell — air — and the step check always failed). Walk
+    // -Z into a one-block step (the X-axis twin above covers +X).
+    Fixture f;
+    for (int x = 8; x < 10; ++x) {
+        for (int z = -16; z < -8; ++z) { // wide: cannot walk off in 1 s
+            f.world.setBlock(x, 1, z, f.stone);
+        }
+    }
+    Player p = f.makePlayer({8.5f, 1.0f, -7.5f});
+    p.yaw = 0.0f; // facing -Z (into the step)
+    Input walk = heldInput({GameKey::W});
+    run(p, 60, walk); // walk only: the step is climbed, not jumped
+    EXPECT_LT(p.position().z, -8.3f); // crossed the step
+    EXPECT_FLOAT_EQ(p.position().y, 2.0f); // resting on the step top
+    EXPECT_TRUE(p.onGround());
 }
 
 TEST(PlayerTest, CeilingStopsRise) {
@@ -452,32 +466,234 @@ TEST(PlayerTest, MouseLookTurnsAndClampsPitch) {
 
 // -- world bounds ------------------------------------------------------------
 
-TEST(PlayerTest, VoidFallRespawnsAtSpawn) {
-    // No floor at all: the player falls through the world's bottom. One
+TEST(PlayerTest, VoidFallKillsPlayer) {
+    // No floor at all: the player falls through the world's bottom. Phase
+    // 16: the kill plane is DEATH (the old respawn-teleport is gone). One
     // full fall (10 -> kill plane at -32) takes ~102 ticks.
     BlockRegistry blocks = makeBlocks();
     World world;
     Player p(world, blocks, {8.5f, 10.0f, 8.5f});
     Input idle = heldInput({});
-    int respawnTick = -1;
+    int deathTick = -1;
     float minY = 1e30f;
     for (int i = 0; i < 200; ++i) {
         idle.frameBegin();
         p.update(kDt, idle, false);
         minY = std::min(minY, p.position().y);
-        // y == spawn and v == 0 only happens right after a respawn.
-        if (respawnTick < 0 && i > 0 &&
-            p.position().y == 10.0f && p.velocity().y == 0.0f) {
-            respawnTick = i;
+        if (deathTick < 0 && p.isDead()) {
+            deathTick = i;
         }
     }
-    EXPECT_GE(respawnTick, 0); // came back to the spawn point
+    EXPECT_GE(deathTick, 0); // died below the kill plane
     // The kill plane triggers within one tick of terminal-velocity travel.
     EXPECT_GT(minY, -33.0f);
-    // After respawning, the player falls again (not frozen).
+    EXPECT_FLOAT_EQ(p.health(), 0.0f);
+    // A dead player is frozen: update() no-ops (the game re-enters via
+    // respawn() on the R key).
+    const Vec3 deadPos = p.position();
+    run(p, 10, idle);
+    EXPECT_EQ(p.position(), deadPos);
+    // Respawn: back at the spawn point with full health, falling again.
+    p.respawn();
+    EXPECT_FALSE(p.isDead());
+    EXPECT_FLOAT_EQ(p.health(), p.maxHealth());
+    EXPECT_FLOAT_EQ(p.position().y, 10.0f);
     run(p, 10, idle);
     EXPECT_LT(p.position().y, 10.0f);
     EXPECT_LT(p.velocity().y, 0.0f);
+}
+
+// -- survival (Phase 16): fall damage, death, regen, crouch, step-up --------
+
+TEST(PlayerTest, FallDamageOneHpPerBlockAboveThree) {
+    Fixture f;
+    // A 4-block platform at x,z in [8, 10): top at y=5, the floor below at
+    // y=1 -> a 4-block fall. Minecraft's rule: the first 3 blocks are safe,
+    // 1 HP per block above. (The net drop is ~3.99 because the leave-ground
+    // frame already includes one tick of gravity.)
+    for (int x = 8; x < 10; ++x) {
+        for (int z = 8; z < 10; ++z) {
+            for (int y = 1; y < 5; ++y) {
+                f.world.setBlock(x, y, z, f.stone);
+            }
+        }
+    }
+    Player p = f.makePlayer({8.5f, 5.0f, 8.5f});
+    p.yaw = -kPi / 2.0f; // facing +X (off the platform edge)
+    Input walk = heldInput({GameKey::W});
+    run(p, 90, walk); // ~25 ticks to the edge, then the 4-block fall
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f); // landed on the floor
+    EXPECT_TRUE(p.onGround());
+    EXPECT_LT(p.health(), p.maxHealth());  // took damage
+    EXPECT_GT(p.health(), p.maxHealth() - 1.1f); // ~1 HP (4-block fall)
+    EXPECT_FALSE(p.isDead());
+}
+
+TEST(PlayerTest, FallDamageNoneWithinThreeBlocks) {
+    Fixture f;
+    // A 3-block platform: top at y=4 -> a 3-block fall (net ~2.99), which
+    // is within the safe threshold: no damage at all.
+    for (int x = 8; x < 10; ++x) {
+        for (int z = 8; z < 10; ++z) {
+            for (int y = 1; y < 4; ++y) {
+                f.world.setBlock(x, y, z, f.stone);
+            }
+        }
+    }
+    Player p = f.makePlayer({8.5f, 4.0f, 8.5f});
+    p.yaw = -kPi / 2.0f;
+    Input walk = heldInput({GameKey::W});
+    run(p, 90, walk);
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f);
+    EXPECT_FLOAT_EQ(p.health(), p.maxHealth()); // untouched
+}
+
+TEST(PlayerTest, FallDamageClearedByWater) {
+    Fixture f;
+    // A 5-block platform (top y=6) over a water-filled pit: the landing is
+    // in water, which cancels the fall damage (Minecraft's rule). The pool
+    // is a FLUID level (isInWater reads the fluid layer, not the block).
+    for (int x = 8; x < 20; ++x) {
+        for (int z = 8; z < 10; ++z) {
+            f.world.setFluid(x, 1, z, kMaxFluidLevel); // pool: top at y=2
+        }
+    }
+    for (int x = 8; x < 10; ++x) {
+        for (int z = 8; z < 10; ++z) {
+            for (int y = 2; y < 6; ++y) {
+                f.world.setBlock(x, y, z, f.stone);
+            }
+        }
+    }
+    Player p = f.makePlayer({8.5f, 6.0f, 8.5f});
+    p.yaw = -kPi / 2.0f;
+    Input walk = heldInput({GameKey::W});
+    run(p, 90, walk); // walk off the platform; the water slows the sink
+    // Idle: the swim physics keeps the player on the pool floor (holding
+    // W would swim it out toward the floor's edge).
+    Input idle = heldInput({});
+    run(p, 120, idle);
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f); // on the pool floor
+    EXPECT_TRUE(p.onGround());
+    EXPECT_FLOAT_EQ(p.health(), p.maxHealth()); // water cleared the fall
+}
+
+TEST(PlayerTest, LethalDamageKillsAndRespawnRestores) {
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    EXPECT_TRUE(p.damage(19.0f));
+    EXPECT_FLOAT_EQ(p.health(), 1.0f);
+    EXPECT_FALSE(p.isDead());
+    EXPECT_TRUE(p.damage(1.0f));
+    EXPECT_FLOAT_EQ(p.health(), 0.0f);
+    EXPECT_TRUE(p.isDead());
+    // Dead: further damage is a no-op and the body is frozen.
+    EXPECT_FALSE(p.damage(5.0f));
+    const Vec3 deadPos = p.position();
+    run(p, 10, idle);
+    EXPECT_EQ(p.position(), deadPos);
+    // Respawn: spawn point, full health, alive, and moving again.
+    p.respawn();
+    EXPECT_FALSE(p.isDead());
+    EXPECT_FLOAT_EQ(p.health(), p.maxHealth());
+    EXPECT_FLOAT_EQ(p.position().x, 8.5f);
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f);
+    EXPECT_FLOAT_EQ(p.position().z, 8.5f);
+    p.yaw = -kPi / 2.0f;
+    Input walk = heldInput({GameKey::W});
+    run(p, 10, walk);
+    EXPECT_GT(p.position().x, 8.5f);
+}
+
+TEST(PlayerTest, RegenAfterDelay) {
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    p.damage(1.0f); // health 19, the damage clock restarts
+    // Before the 10 s delay: no regen.
+    run(p, 5 * 60, idle);
+    EXPECT_FLOAT_EQ(p.health(), 19.0f);
+    // After the delay: +1 HP every 4 s, capped at max. 14 s covers two
+    // intervals -> 19 -> 20 (capped).
+    run(p, 14 * 60, idle);
+    EXPECT_FLOAT_EQ(p.health(), p.maxHealth());
+}
+
+TEST(PlayerTest, CrouchShrinksHeightAndScalesSpeed) {
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(p, 5, idle); // settle
+    ASSERT_FLOAT_EQ(p.aabbMax().y - p.position().y, 1.8f); // standing
+    p.yaw = -kPi / 2.0f;
+    Input crouch = heldInput({GameKey::W, GameKey::LeftControl});
+    run(p, 30, crouch); // 0.5 s of crouch-walking
+    EXPECT_TRUE(p.isCrouching());
+    EXPECT_FLOAT_EQ(p.aabbMax().y - p.position().y, 1.6f); // crouched
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f); // the feet never move
+    // Crouch-walk: 0.3 x 4.3 x 0.5 s ~= 0.65 blocks (walking: 2.15).
+    EXPECT_GT(p.position().x, 8.5f);
+    EXPECT_LT(p.position().x, 9.2f);
+    // Release the crouch (headroom is fine): back to standing height.
+    run(p, 5, idle);
+    EXPECT_FALSE(p.isCrouching());
+    EXPECT_FLOAT_EQ(p.aabbMax().y - p.position().y, 1.8f);
+}
+
+TEST(PlayerTest, CrouchStaysOnLedge) {
+    Fixture f;
+    // Remove the floor east of x=0 so the player can reach an edge.
+    for (int x = 0; x < 16; ++x) {
+        for (int z = -16; z < 16; ++z) {
+            f.world.setBlock(x, 0, z, BlockID::air());
+        }
+    }
+    Player p = f.makePlayer({-0.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(p, 5, idle);
+    p.yaw = -kPi / 2.0f; // +X, toward the edge at x=0
+    Input crouchWalk = heldInput({GameKey::W, GameKey::LeftControl});
+    run(p, 180, crouchWalk); // 3 s of crouch-walking at the edge
+    // Held at the edge: the AABB face never crosses x=0 and the player
+    // stays on the ground (a non-crouching walk would have gone over).
+    EXPECT_LE(p.position().x + 0.3f, 1e-3f);
+    EXPECT_GE(p.position().x, -0.5f);
+    EXPECT_TRUE(p.onGround());
+}
+
+TEST(PlayerTest, CrouchDoesNotStepUp) {
+    Fixture f;
+    // One-block step at x in [10, 20): crouching disables the auto step.
+    for (int x = 10; x < 20; ++x) {
+        for (int z = 8; z < 10; ++z) {
+            f.world.setBlock(x, 1, z, f.stone);
+        }
+    }
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    p.yaw = -kPi / 2.0f;
+    Input crouchWalk = heldInput({GameKey::W, GameKey::LeftControl});
+    run(p, 180, crouchWalk);
+    EXPECT_FLOAT_EQ(p.position().x, 10.0f - 0.3f); // clamped at the step
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f);        // never stepped up
+}
+
+TEST(PlayerTest, StepUpBlockedByLowHeadroom) {
+    Fixture f;
+    // One-block step with a ceiling two cells up: the lifted player would
+    // hit it, so no step (the player stays clamped at the step face).
+    for (int x = 10; x < 20; ++x) {
+        for (int z = 8; z < 10; ++z) {
+            f.world.setBlock(x, 1, z, f.stone); // the step
+            f.world.setBlock(x, 3, z, f.stone); // the ceiling
+        }
+    }
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    p.yaw = -kPi / 2.0f;
+    Input walk = heldInput({GameKey::W});
+    run(p, 120, walk);
+    EXPECT_FLOAT_EQ(p.position().x, 10.0f - 0.3f);
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f);
 }
 
 TEST(PlayerTest, HighSpeedFallDoesNotTunnelThroughFloor) {

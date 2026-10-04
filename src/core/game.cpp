@@ -110,6 +110,10 @@ constexpr double kDigSoundInterval = 0.3;
 constexpr double kStepSoundInterval = 0.4;
 constexpr float kStepMinSpeed = 0.5f; // blocks/s horizontal to count as walking
 
+// Phase 16 survival: the red damage veil's lifetime (it fades linearly to
+// 0 over this window after a damage event).
+constexpr double kHurtFlashSeconds = 0.5;
+
 double nowSeconds() {
     return static_cast<double>(SDL_GetPerformanceCounter()) /
            SDL_GetPerformanceFrequency();
@@ -176,6 +180,14 @@ Result<void> Game::buildScene() {
     auto crackTex = Texture::loadPng(*crackPath);
     MC_TRY(crackTex);
     m_crackTexture = std::move(*crackTex);
+
+    // Health heart strip (Phase 16): 48x16, three 16x16 tiles
+    // (full/half/empty; tile t occupies u in [t/3, (t+1)/3]).
+    auto healthPath = m_assets.resolve("textures/health.png");
+    MC_TRY(healthPath);
+    auto healthTex = Texture::loadPng(*healthPath);
+    MC_TRY(healthTex);
+    m_healthTexture = std::move(*healthTex);
 
     // Target-block outline: a slightly enlarged unit cube as 24 line
     // vertices (12 edges x 2 endpoints), centered on the origin.
@@ -714,6 +726,7 @@ Result<SaveGame> Game::collectSave() const {
     save.playerPos = m_player->position();
     save.playerYaw = m_player->yaw;
     save.playerPitch = m_player->pitch;
+    save.playerHealth = m_player->health();
     save.selectedSlot = static_cast<int>(m_selectedSlot);
     save.slots.resize(m_inventory.size());
     for (std::size_t i = 0; i < save.slots.size(); ++i) {
@@ -804,6 +817,12 @@ Result<void> Game::applySave(const SaveGame& save) {
     m_player->teleportTo(save.playerPos);
     m_player->yaw = save.playerYaw;
     m_player->pitch = save.playerPitch;
+    // Health (Phase 16): a format-1 save has none (-1 = full); a saved 0
+    // reloads the player dead (the death screen offers R).
+    m_player->setHealth(save.playerHealth < 0.0f
+                            ? m_player->maxHealth()
+                            : save.playerHealth);
+    m_prevHealth = m_player->health(); // no hurt event from the load itself
     m_camera.position = m_player->eyePosition();
     m_camera.yaw = m_player->yaw;
     m_camera.pitch = m_player->pitch;
@@ -921,10 +940,12 @@ int Game::run() {
         m_input.frameBegin();
         m_input.pump();
         // ESC exits only while the pointer is free AND the inventory is
-        // closed (while captured it releases the pointer, while the
-        // inventory is open it closes it — both handled in update).
+        // closed AND the player is alive (while captured it releases the
+        // pointer, while the inventory is open it closes it, while dead
+        // the death screen owns the input — all handled in update).
         if (m_input.quitRequested() ||
             (!m_window.relativeMouseMode() && !m_inventoryOpen &&
+             !m_player->isDead() &&
              m_input.wasPressed(GameKey::Escape))) {
             MC_LOG_INFO("Exit requested, shutting down");
             break;
@@ -1070,13 +1091,19 @@ void Game::update(double dt) {
     // The player owns the first-person state; the camera is just its view
     // (eye position + orientation). Mouse look is only active while the
     // pointer is captured, so an unlocked cursor never rotates the view.
-    // Paused while the inventory is open (Phase 15).
-    if (!m_inventoryOpen) {
+    // Paused while the inventory is open (Phase 15) or the player is dead
+    // (Phase 16: the death screen freezes the body; R respawns).
+    if (!m_inventoryOpen && !m_player->isDead()) {
         m_player->update(dt, m_input, m_window.relativeMouseMode());
     }
     m_camera.position = m_player->eyePosition();
     m_camera.yaw = m_player->yaw;
     m_camera.pitch = m_player->pitch;
+
+    // Survival events (Phase 16): poll the player's health/death state —
+    // a drop drives the hurt flash + sound, a death releases the pointer,
+    // R (while dead) respawns. Runs even while paused so the flash decays.
+    updateSurvival(dt);
 
     // Other entities (Phase 10): per-entity physics, then item merging and
     // despawn (see updateEntities).
@@ -1109,8 +1136,10 @@ void Game::update(double dt) {
 void Game::handleInteraction(double dt) {
     const bool locked = m_window.relativeMouseMode();
     if (!locked) {
-        // Left click captures the pointer (standard first-person behavior).
-        if (m_input.wasPressed(MouseButton::Left)) {
+        // Left click captures the pointer (standard first-person behavior)
+        // — but never while dead (the death screen owns the input; R
+        // respawns first).
+        if (!m_player->isDead() && m_input.wasPressed(MouseButton::Left)) {
             m_window.setRelativeMouseMode(true);
         }
         resetBreaking();
@@ -1319,6 +1348,17 @@ float Game::selectedBreakSpeed() const {
 void Game::updateEntities(double dt) {
     for (auto& entity : m_entities) {
         entity->update(dt);
+    }
+    // Player <-> item separation (Phase 16): an item overlapping the
+    // player's AABB is pushed out along the minimum-penetration axis (the
+    // player is immovable — Minecraft pushes items out of the player).
+    // Deterministic: fixed index order, one push per item per frame.
+    const Vec3 pMin = m_player->aabbMin();
+    const Vec3 pMax = m_player->aabbMax();
+    for (auto& entity : m_entities) {
+        if (auto* item = dynamic_cast<ItemEntity*>(entity.get())) {
+            item->separateFrom(pMin, pMax);
+        }
     }
     // Item merge: index order, `j` absorbed into `i` (j > i). A removed
     // entity is skipped as a future merge target, so each item is absorbed
@@ -1544,6 +1584,34 @@ void Game::updateSoundTimers(double dt) {
     }
 }
 
+void Game::updateSurvival(double dt) {
+    if (m_hurtFlash > 0.0) {
+        m_hurtFlash = std::max(0.0, m_hurtFlash - dt);
+    }
+    const float hp = m_player->health();
+    const bool dead = m_player->isDead();
+    if (m_prevHealth >= 0.0f && hp < m_prevHealth) {
+        // A health drop this frame: the red veil restarts and the hurt
+        // sound plays (suppressed when the drop was lethal — the death
+        // sound follows instead).
+        m_hurtFlash = kHurtFlashSeconds;
+        if (!dead) {
+            m_sound.play("hurt");
+        }
+    }
+    if (dead && m_prevHealth >= 0.0f && m_prevHealth > 0.0f) {
+        // Alive -> dead transition: the death screen owns the input, so
+        // release the pointer (it was locked while the fall happened).
+        m_window.setRelativeMouseMode(false);
+        m_sound.play("death");
+    }
+    m_prevHealth = hp;
+    if (dead && m_input.wasPressed(GameKey::R)) {
+        m_player->respawn();
+        m_prevHealth = m_player->health(); // no hurt flash on respawn
+    }
+}
+
 Mat4 Game::uiProjection(int w, int h) const {
     // Screen pixels, y-down (y = 0 is the window top). The depth range
     // must cover the 3D block-cube icons (the 76px held icon spans
@@ -1721,18 +1789,35 @@ void Game::renderUi() {
         batches.push_back(std::move(b));
         return batches.back();
     };
-    auto addQuad = [&batches](UiBatch& b, int x, int y, int qw, int qh) {
+    // A screen-space quad with an explicit UV rect (image space, v-down:
+    // v=0 is the texture's TOP row — textures upload without a flip).
+    // Textured batches (item icons, hearts) sample their rect; untextured
+    // batches ignore the UVs (u_useTexture=0).
+    auto addQuadUv = [&batches](UiBatch& b, int x, int y, int qw, int qh,
+                                 const Vec2& uvMin, const Vec2& uvMax) {
         const float x0 = static_cast<float>(x);
         const float y0 = static_cast<float>(y);
         const float x1 = x0 + static_cast<float>(qw);
         const float y1 = y0 + static_cast<float>(qh);
-        const auto put = [&](float px, float py) {
-            MeshVertex v;
-            v.position = {px, py, 0.0f};
-            b.vertices.push_back(v);
+        const auto put = [&](float px, float py, float u, float pv) {
+            MeshVertex vert;
+            vert.position = {px, py, 0.0f};
+            vert.uv = {u, pv};
+            b.vertices.push_back(vert);
         };
-        put(x0, y0); put(x1, y0); put(x1, y1);
-        put(x0, y0); put(x1, y1); put(x0, y1);
+        put(x0, y0, uvMin.x, uvMin.y);
+        put(x1, y0, uvMax.x, uvMin.y);
+        put(x1, y1, uvMax.x, uvMax.y);
+        put(x0, y0, uvMin.x, uvMin.y);
+        put(x1, y1, uvMax.x, uvMax.y);
+        put(x0, y1, uvMin.x, uvMax.y);
+    };
+    auto addQuad = [&batches, &addQuadUv](UiBatch& b, int x, int y, int qw,
+                                          int qh) {
+        // Full-rect UVs: a single-tile textured quad (item icons) samples
+        // the whole texture. (P15 bug fix: the old code left the UVs at
+        // (0, 0) and the icon rendered as its top-left pixel.)
+        addQuadUv(b, x, y, qw, qh, Vec2 {0.0f, 0.0f}, Vec2 {1.0f, 1.0f});
     };
     auto addBorder = [&](UiBatch& b, const UIRect& r, int thickness) {
         addQuad(b, r.x, r.y, r.w, thickness);
@@ -1810,6 +1895,32 @@ void Game::renderUi() {
                         y0 + kHotbarSlotSize - 4 - kGlyphSize, 1, kText);
             }
         }
+        // Health bar (Phase 16): 10 hearts above the hotbar, 2 HP each,
+        // three-state tiles (full / half / empty).
+        {
+            constexpr int kHeartPx = 16;
+            constexpr int kHeartGap = 2;
+            constexpr int kHeartCount = 10;
+            const int htotal = kHeartCount * kHeartPx +
+                               (kHeartCount - 1) * kHeartGap;
+            const int hx0 = (w - htotal) / 2;
+            const int hy = y0 - kHeartPx - 6;
+            const float hp = m_player->health();
+            UiBatch& hearts =
+                batchFor(Vec4 {1.0f, 1.0f, 1.0f, 1.0f}, true,
+                         &m_healthTexture);
+            for (int i = 0; i < kHeartCount; ++i) {
+                // Heart i covers the HP interval [2i, 2i+2); three states
+                // (a sub-half fill renders as half — see KNOWN_ISSUES).
+                const float fill = std::clamp(hp - 2.0f * i, 0.0f, 2.0f);
+                const int tile =
+                    fill >= 1.99f ? 0 : (fill >= 0.99f ? 1 : 2);
+                addQuadUv(hearts, hx0 + i * (kHeartPx + kHeartGap), hy,
+                          kHeartPx, kHeartPx,
+                          Vec2 {static_cast<float>(tile) / 3.0f, 0.0f},
+                          Vec2 {static_cast<float>(tile + 1) / 3.0f, 1.0f});
+            }
+        }
         // Crosshair: a 2px thin cross at the screen center.
         UiBatch& cross = batchFor(kCrosshair, false, nullptr);
         addQuad(cross, w / 2 - 5, h / 2 - 1, 11, 2);
@@ -1818,6 +1929,19 @@ void Game::renderUi() {
         drawIcon(m_inventory.at(m_selectedSlot),
                  static_cast<float>(w - kHeldIconOffset),
                  static_cast<float>(h - kHeldIconOffset), kHeldIconPx);
+    }
+
+    // -- death screen (Phase 16, while the player is dead) ------------------
+    // The player physics is frozen; the pointer was released on death, so
+    // R (any pointer state) respawns.
+    if (m_player && m_player->isDead()) {
+        addQuad(batchFor(Vec4 {0.0f, 0.0f, 0.0f, 0.55f}, false, nullptr), 0,
+                0, w, h);
+        const std::string died = "You died!";
+        const std::string hint = "Press R to respawn";
+        addText(died, (w - textWidth(died, 2)) / 2, h / 2 - 24, 2,
+                Vec4 {1.0f, 0.35f, 0.35f, 1.0f});
+        addText(hint, (w - textWidth(hint)) / 2, h / 2 + 8, 1, kText);
     }
 
     // -- inventory + crafting panel (while open) ----------------------------
@@ -1928,6 +2052,10 @@ void Game::renderUi() {
         info.pointerLocked = locked;
         info.inventoryOpen = m_inventoryOpen;
         info.particles = m_particles.size();
+        if (m_player) {
+            info.health = m_player->health();
+            info.maxHealth = m_player->maxHealth();
+        }
         int y = kF3Margin;
         for (const std::string& line : debugOverlayLines(info)) {
             addText(line, kF3Margin, y, 1, kText);
@@ -1966,6 +2094,20 @@ void Game::renderUi() {
             m_renderer.draw(mesh, m_basicShader, Mat4::identity(), ortho,
                             model);
         }
+    }
+
+    // Hurt flash (Phase 16): a full-screen red veil that decays over
+    // kHurtFlashSeconds after a damage event. Drawn last (over every UI
+    // element); the timer is 0 in the no-input baseline, so nothing is
+    // drawn there.
+    if (m_hurtFlash > 0.0) {
+        const float a =
+            0.35f * static_cast<float>(m_hurtFlash / kHurtFlashSeconds);
+        UiBatch flash;
+        flash.color = {1.0f, 0.0f, 0.0f, a};
+        addQuad(flash, 0, 0, w, h);
+        drawUiBatch(flash.vertices, ortho, m_fontTexture, false,
+                    flash.color);
     }
 }
 

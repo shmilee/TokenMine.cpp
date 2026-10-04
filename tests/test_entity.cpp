@@ -228,6 +228,48 @@ TEST(ItemEntityTest, NoMergeBeyondDistance) {
     EXPECT_FALSE(b.canMergeInto(a));
 }
 
+// -- player <-> item separation (Phase 16) ----------------------------------
+
+TEST(ItemEntityTest, SeparateFromNoOverlapIsNoop) {
+    Fixture f;
+    ItemEntity item = f.makeItem({8.5f, 1.125f, 8.5f});
+    // A player AABB 4 blocks away: no 3D overlap, nothing moves.
+    EXPECT_FALSE(item.separateFrom({12.0f, 1.0f, 8.25f},
+                                   {12.6f, 2.8f, 8.85f}));
+    EXPECT_EQ(item.position(), (Vec3{8.5f, 1.125f, 8.5f}));
+}
+
+TEST(ItemEntityTest, SeparateFromTieGoesToXAxis) {
+    Fixture f;
+    // Item (0.25 cube) at (8.625, 1.125, 8.5): AABB x [8.5, 8.75],
+    // y [1.125, 1.375], z [8.375, 8.625]. Player AABB x [8.5, 9.0],
+    // y [1.0, 2.8], z [8.3, 8.7]: all three overlaps are 0.25 (tied ->
+    // the x axis). The item center (8.625) sits left of the player
+    // center (8.75): the push is -x, the item's right face (8.75) onto
+    // the player's left face (8.5) -> center 8.375, no residual overlap.
+    ItemEntity item = f.makeItem({8.625f, 1.125f, 8.5f});
+    EXPECT_TRUE(item.separateFrom({8.5f, 1.0f, 8.3f}, {9.0f, 2.8f, 8.7f}));
+    EXPECT_FLOAT_EQ(item.position().x, 8.375f);
+    EXPECT_FLOAT_EQ(item.position().y, 1.125f);
+    EXPECT_FLOAT_EQ(item.position().z, 8.5f);
+}
+
+TEST(ItemEntityTest, SeparateFromPrefersShallowestAxis) {
+    Fixture f;
+    // Item (0.25 cube) at (9.0625, 1.125, 8.5): AABB x [8.9375, 9.1875]
+    // (straddling the player's right face at 9.0), y [1.125, 1.375],
+    // z [8.375, 8.625] (both fully inside). Player AABB x [8.4, 9.0],
+    // y [1.0, 2.8], z [8.3, 8.7]: overlaps x 0.0625 (shallowest),
+    // y 0.25, z 0.25 -> the x axis. The item center (9.0625) sits right
+    // of the player center (8.7): the push is +x, the item's left face
+    // (8.9375) onto the player's right face (9.0) -> center 9.125.
+    ItemEntity item = f.makeItem({9.0625f, 1.125f, 8.5f});
+    EXPECT_TRUE(item.separateFrom({8.4f, 1.0f, 8.3f}, {9.0f, 2.8f, 8.7f}));
+    EXPECT_FLOAT_EQ(item.position().x, 9.125f);
+    EXPECT_FLOAT_EQ(item.position().y, 1.125f);
+    EXPECT_FLOAT_EQ(item.position().z, 8.5f);
+}
+
 TEST(ItemEntityTest, StackCappedAtMax) {
     Fixture f;
     ItemEntity a = f.makeItem({8.0f, 1.0f, 8.0f});

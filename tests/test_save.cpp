@@ -144,9 +144,48 @@ TEST(SaveRoundTripTest, SerializeRejectsUnregisteredSlotItem) {
 
 TEST(SaveParseTest, RejectsUnknownOrMissingFormat) {
     Fixture f;
-    Json root = parseJson(R"({"format":2,"seed":42,"time":0.25,"player":{},"inventory":{},"entities":[],"blocks":[],"fluids":[]})");
+    // Format 3 is a future version this build cannot read; a missing
+    // format is a corrupt file. (Formats 1 and 2 are both accepted —
+    // see FormatOneLoadsWithoutHealth.)
+    Json root = parseJson(R"({"format":3,"seed":42,"time":0.25,"player":{},"inventory":{},"entities":[],"blocks":[],"fluids":[]})");
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
     EXPECT_FALSE(parseSave(withoutKey(root, "format"), f.items, f.blocks, 42).ok());
+}
+
+TEST(SaveRoundTripTest, HealthRoundTrips) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerHealth = 13.5f;
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    auto out = parseSave(*j, f.items, f.blocks, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_FLOAT_EQ(out->playerHealth, 13.5f);
+}
+
+TEST(SaveParseTest, FormatOneLoadsWithoutHealth) {
+    // A format-1 file (Phase 13, no health field) still loads: the health
+    // stays "unspecified" (-1) and the game applies the player's max.
+    Fixture f;
+    SaveGame s = makeSave(f); // playerHealth -1: the field is omitted
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    Json root = *j;
+    root["format"] = Json(1);
+    auto out = parseSave(root, f.items, f.blocks, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_FLOAT_EQ(out->playerHealth, -1.0f);
+}
+
+TEST(SaveParseTest, RejectsNegativeHealth) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerHealth = 5.0f;
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    Json root = *j;
+    root["player"]["health"] = Json(-1.0);
+    EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
 }
 
 TEST(SaveParseTest, RejectsSeedMismatch) {

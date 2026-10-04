@@ -10,10 +10,11 @@
 // File layout (data/saves/<slot>.json, pretty-printed):
 //
 // {
-//   "format": 1,
+//   "format": 2,
 //   "seed": 123456789,
 //   "time": 0.2541666,                       // timeOfDay, [0, 1)
-//   "player": { "pos": [0.5, 53.0, 0.5], "yaw": 0.0, "pitch": -0.25 },
+//   "player": { "pos": [0.5, 53.0, 0.5], "yaw": 0.0, "pitch": -0.25,
+//               "health": 20.0 },            // format 2+ (format 1: full)
 //   "inventory": {
 //     "selected": 0,
 //     "slots": [ { "item": "stone", "count": 64 }, { "item": "", "count": 0 } ]
@@ -28,11 +29,12 @@
 // Validation on load is STRICT (the file is machine-generated, so an
 // unexpected field means corruption or a version mismatch — unlike
 // user-authored data files, unknown fields are an ERROR, not a warning):
-//   - format must be 1; the seed must equal the seed the world was
-//     generated with; every item/block name must be registered; counts
-//     respect the item data (1..maxStack, entity cap 64); y in [0, 128);
-//     no duplicate edit position, and a block edit and a fluid edit can
-//     never share a cell (a block displaces fluid).
+//   - format must be 1 or 2 (format 1 files predate the player health
+//     field and load with full health); the seed must equal the seed the
+//     world was generated with; every item/block name must be registered;
+//     counts respect the item data (1..maxStack, entity cap 64); y in
+//     [0, 128); no duplicate edit position, and a block edit and a fluid
+//     edit can never share a cell (a block displaces fluid).
 //
 // diffWorld() compares every existing chunk against the reference
 // generation (the same pure generator the World itself used) and emits
@@ -57,7 +59,11 @@
 namespace mc {
 
 // Save format version (bump when the schema changes).
-inline constexpr int kSaveFormat = 1;
+//   1: original (Phase 13) — no player health field.
+//   2: player health (Phase 16 survival). Format-1 files still load
+//      (health defaults to full); writes are always format 2.
+inline constexpr int kSaveFormat = 2;
+inline constexpr int kSaveFormatMin = 1;
 
 // One cell whose block differs from generation ("air" = removed).
 struct SavedBlockEdit {
@@ -89,6 +95,10 @@ struct SaveGame {
     Vec3 playerPos;
     float playerYaw = 0.0f;
     float playerPitch = 0.0f;
+    // Health (Phase 16). -1 = "unspecified" (format-1 files): the game
+    // applies the player's max health. A saved 0 means the player was
+    // dead when the file was written.
+    float playerHealth = -1.0f;
     int selectedSlot = 0;
     std::vector<ItemStack> slots; // exactly Inventory::kTotalSize
     std::vector<SavedItemEntity> entities;

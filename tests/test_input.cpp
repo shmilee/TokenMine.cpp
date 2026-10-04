@@ -56,6 +56,7 @@ TEST(InputTest, AllMappedKeys) {
         {SDLK_E, GameKey::E},
         {SDLK_F3, GameKey::F3},
         {SDLK_F5, GameKey::F5},
+        {SDLK_R, GameKey::R},
     };
     Input input;
     input.frameBegin();

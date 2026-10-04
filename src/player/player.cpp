@@ -61,8 +61,8 @@ void Player::update(double dt, const Input& input, bool lookEnabled) {
 }
 
 void Player::update(double dt) {
-    if (dt <= 0.0) {
-        return;
+    if (dt <= 0.0 || m_dead) {
+        return; // a dead player is frozen; the game re-enters via respawn()
     }
 
     // 1. Mouse look (only while the pointer is captured).
@@ -83,6 +83,12 @@ void Player::update(double dt) {
     // swims (reduced gravity/sink, reduced speed, Space swims up).
     m_inWater = isInWater();
 
+    // 2b. Crouch (LeftControl): the height state machine runs before the
+    // speed computation (crouch scales the speed) and before the edge
+    // guard (crouching on the ground holds at ledges).
+    m_crouching = m_input->isDown(GameKey::LeftControl);
+    updateCrouchHeight();
+
     Vec3 wish {0.0f, 0.0f, 0.0f};
     if (m_input->isDown(GameKey::W)) {
         wish += fwd;
@@ -96,15 +102,23 @@ void Player::update(double dt) {
     if (m_input->isDown(GameKey::A)) {
         wish -= right;
     }
+    Vec3 dir {0.0f, 0.0f, 0.0f};
     if (lengthSq(wish) > 0.0f) {
-        const float speed = m_inWater
-                                ? m_params.swimSpeed
-                                : (m_input->isDown(GameKey::LeftShift)
-                                        ? m_params.sprintSpeed
-                                        : m_params.walkSpeed);
-        const Vec3 dir = normalized(wish);
+        float speed = m_inWater
+                          ? m_params.swimSpeed
+                          : (m_input->isDown(GameKey::LeftShift)
+                                  ? m_params.sprintSpeed
+                                  : m_params.walkSpeed);
+        if (m_crouching && !m_inWater) {
+            speed *= m_params.crouchSpeedScale;
+        }
+        dir = normalized(wish);
         m_velocity.x = dir.x * speed;
         m_velocity.z = dir.z * speed;
+        // Crouching on the ground: do not walk off a 1-block ledge.
+        if (m_crouching && m_onGround) {
+            applyCrouchEdgeGuard(dir, dt);
+        }
     } else {
         m_velocity.x = 0.0f;
         m_velocity.z = 0.0f;
@@ -123,12 +137,169 @@ void Player::update(double dt) {
     const float maxSpeed =
         std::max({std::abs(m_velocity.x), std::abs(vyAfter),
                   std::abs(m_velocity.z)});
+    // The tick's horizontal speed before the sub-steps (a clamped axis
+    // zeroes its velocity inside the sub-steps; stepUp needs the value).
+    const float preMoveSpeed =
+        std::max(std::abs(m_velocity.x), std::abs(m_velocity.z));
     moveInSubsteps(dt, maxSpeed);
 
-    // Fell out of the world (the demo world's edge is void).
-    if (belowKillPlane()) {
-        teleportTo(m_spawnPos);
+    // 3b. Step up 1 block when flush against a step (not crouching, on
+    // the ground).
+    if (!m_crouching && m_onGround && lengthSq(wish) > 0.0f) {
+        stepUp(dir, preMoveSpeed * static_cast<float>(dt));
     }
+
+    // 4. Survival (Phase 16): fall damage on landing, regeneration, and
+    // the kill plane is now DEATH (the old respawn-teleport is gone).
+    if (m_onGround && !m_wasOnGround) {
+        // Just landed: the net drop since leaving the ground. No damage
+        // for the first fallDamageOffset blocks, 1 HP per block above
+        // (Minecraft's rule); landing in water cancels the fall damage.
+        // The water check is FRESH (not the tick's m_inWater): a falling
+        // player enters a 1-deep pool one tick after the last airborne
+        // sample, so the tick state would miss the landing-in-water.
+        const float fall = m_fallStartY - m_position.y;
+        if (fall > m_params.fallDamageOffset && !isInWater()) {
+            damage(fall - m_params.fallDamageOffset);
+        }
+        m_fallStartY = m_position.y;
+    }
+    if (!m_onGround && m_wasOnGround) {
+        m_fallStartY = m_position.y; // just left the ground
+    }
+    m_wasOnGround = m_onGround;
+
+    if (m_timeSinceDamage >= m_params.regenDelaySeconds) {
+        m_regenAccum += dt;
+        while (m_regenAccum >= m_params.regenIntervalSeconds) {
+            m_regenAccum -= m_params.regenIntervalSeconds;
+            m_health = std::min(m_params.maxHealth, m_health + 1.0f);
+        }
+    }
+    m_timeSinceDamage += dt;
+
+    // Fell out of the world (the world's edge is void): death.
+    if (belowKillPlane()) {
+        damage(m_params.maxHealth * 1000.0f); // instant, always lethal
+    }
+}
+
+bool Player::damage(float amount) {
+    if (m_dead || amount <= 0.0f) {
+        return false;
+    }
+    m_health -= amount;
+    m_timeSinceDamage = 0.0;
+    m_regenAccum = 0.0;
+    if (m_health <= 0.0f) {
+        m_health = 0.0f;
+        m_dead = true;
+    }
+    return true;
+}
+
+void Player::respawn() {
+    m_dead = false;
+    m_health = m_params.maxHealth;
+    m_timeSinceDamage = 0.0;
+    m_regenAccum = 0.0;
+    m_wasOnGround = false;
+    m_fallStartY = m_spawnPos.y;
+    teleportTo(m_spawnPos);
+}
+
+void Player::updateCrouchHeight() {
+    if (m_crouching) {
+        m_height = m_params.crouchHeight;
+    } else if (m_height < m_params.height) {
+        // Stand back up only when the headroom fits the full height
+        // (trapped under a low ceiling: stay crouched).
+        if (hasRoomAt(m_world, m_blocks, m_position, m_params.width,
+                      m_params.height)) {
+            m_height = m_params.height;
+        }
+    }
+}
+
+void Player::applyCrouchEdgeGuard(const Vec3& dir, double dt) {
+    const float half = m_width * 0.5f;
+    // The SUPPORT cell under the front face: on the ground the feet sit
+    // exactly on an integer boundary, so the support block is one cell
+    // BELOW floor(position.y) (floor(position.y) is the air the feet are
+    // in). The guard only runs while onGround, so the subtraction is safe.
+    const int fy = static_cast<int>(std::floorf(m_position.y - kFaceEps));
+    // PREDICTIVE: test the cell the AABB face would reach at the END of
+    // this tick (face + this tick's remaining move, velocity * dt). The
+    // guard can only zero the velocity (it cannot rewind an overshoot), so
+    // looking one tick ahead keeps the face from ever crossing the edge.
+    if (std::abs(dir.x) > 0.01f) {
+        const float reach = m_position.x + dir.x * (half + kFaceEps) +
+                            m_velocity.x * static_cast<float>(dt);
+        const int cx = static_cast<int>(std::floorf(reach));
+        if (!isSolidCell(cx, fy,
+                         static_cast<int>(std::floorf(m_position.z)))) {
+            m_velocity.x = 0.0f;
+        }
+    }
+    if (std::abs(dir.z) > 0.01f) {
+        const float reach = m_position.z + dir.z * (half + kFaceEps) +
+                            m_velocity.z * static_cast<float>(dt);
+        const int cz = static_cast<int>(std::floorf(reach));
+        if (!isSolidCell(static_cast<int>(std::floorf(m_position.x)), fy,
+                         cz)) {
+            m_velocity.z = 0.0f;
+        }
+    }
+}
+
+void Player::stepUp(const Vec3& wishDir, float distPerTick) {
+    const float half = m_width * 0.5f;
+    const int fx0 = static_cast<int>(std::floorf(m_position.x));
+    const int fy = static_cast<int>(std::floorf(m_position.y));
+    const int fz0 = static_cast<int>(std::floorf(m_position.z));
+    // x axis first, then z (fixed order); at most one step per tick.
+    for (int axis = 0; axis < 2; ++axis) {
+        const float w = axis == 0 ? wishDir.x : wishDir.z;
+        if (std::abs(w) <= 0.01f) {
+            continue;
+        }
+        // Only a player flush against a block face can be blocked by a
+        // step; the face position is exact after the collision clamp.
+        const float face = axis == 0
+            ? m_position.x + (w > 0.0f ? 1.0f : -1.0f) * half
+            : m_position.z + (w > 0.0f ? 1.0f : -1.0f) * half;
+        const float snapped = std::roundf(face);
+        if (std::abs(face - snapped) > kFaceEps) {
+            continue;
+        }
+        const int front = static_cast<int>(snapped) + (w > 0.0f ? 1 : -1);
+        // axis 0 is X, axis 1 is Z (the loop index, NOT the moveAxis
+        // numbering 0=x, 1=y, 2=z — that mapping is applied at the
+        // moveAxis call below).
+        const int cx = axis == 0 ? front : fx0;
+        const int cz = axis == 1 ? front : fz0;
+        // The step exists (solid at foot level) and the lifted player
+        // fits (the two cells above the step are free).
+        if (!isSolidCell(cx, fy, cz) || isSolidCell(cx, fy + 1, cz) ||
+            isSolidCell(cx, fy + 2, cz)) {
+            continue;
+        }
+        m_position.y += 1.0f;
+        // Re-apply this tick's horizontal move along the stepped axis: the
+        // sub-steps consumed it, clamped against the step face. The
+        // per-tick distance (speed*dt, max 5.6/60 ~ 0.093 blocks) is well
+        // under kMaxSubstepMove, so one moveAxis call is tunnel-safe.
+        moveAxis(axis == 0 ? 0 : 2, w * distPerTick);
+        return;
+    }
+}
+
+bool Player::isSolidCell(int x, int y, int z) const {
+    const BlockID id = m_world.getBlock(x, y, z);
+    if (!id.valid() || id == BlockID::air()) {
+        return false;
+    }
+    return m_blocks.at(id).properties.solid;
 }
 
 void Player::integrate(float h) {

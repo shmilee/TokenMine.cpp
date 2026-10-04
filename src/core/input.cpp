@@ -21,6 +21,7 @@ std::optional<GameKey> Input::mapKey(std::uint32_t sdlKeycode) {
         case SDLK_E: return GameKey::E;
         case SDLK_F3: return GameKey::F3;
         case SDLK_F5: return GameKey::F5;
+        case SDLK_R: return GameKey::R;
         default: return std::nullopt;
     }
 }

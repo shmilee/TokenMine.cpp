@@ -24,9 +24,8 @@
 - **基岩只有单层** — y=0 是 `terrain.bottom_block`（数据里为 bedrock），只有一层厚；y≥1 的石头理论上可被挖穿（Phase 6 前没有挖掘）。`[Phase 4]`
 - **地形高度与洞穴/矿/树相互独立** — 洞穴只保留表层 4 格（`surface_guard`）与底层 2 格（`min_y`）的壳，不感知矿脉/树洞；可能出现洞口正对矿脉等巧合。`[Phase 4]`
 - **放置到未生成区域会同步生成 chunk** — 演示区边缘之外放置方块仍触发 `getOrCreateChunk`（生成器在游戏线程同步跑）。Phase 14 实现了流式加载，但放置需要**立即**拿到目标 chunk（放置当帧生效），所以该路径刻意保持同步（一列 8 chunk ≈1.6 ms 的生成尖峰）；流式管线随后按正常路径为它补光照。`[Phase 6]`
-- **无潜行/无 1 格自动台阶** — 上 1 格台阶必须主动跳跃；无 crouch（卡 1.8 门框）、无自动 step-up。`[Phase 5]`
 - **水平速度无惯性** — 期望速度每 tick 直接设定（无加速/摩擦），松键即停。手感可用但非 Minecraft 式平滑。`[Phase 5]`
-- **虚空坠落 = 传送回出生点** — 掉到 y < -32 直接回出生点，无死亡/掉落伤害/护甲。Phase 14 起世界随玩家流式扩展，走路时地面始终在前方加载（预算 1 列/帧 ≫ 步行速度），虚空坠落大幅减少——但仍可能发生（读档点位于未加载区域时先下落几帧再由流式补上地面；快于流式速度离开时）。`[Phase 5]`（虚空范围 `[Phase 14]` 已缓解）死亡机制待后续。
+- **虚空坠落 = 死亡（非传送）** — 掉到 y < -32 直接死亡（`damage(maxHealth×1000)`），走死亡/重生流程（Phase 16，`R` 回出生点满血，背包保留）。Phase 14 起世界随玩家流式扩展，走路时地面始终在前方加载（预算 1 列/帧 ≫ 步行速度），虚空坠落大幅减少——但仍可能发生（读档点位于未加载区域时先下落几帧再由流式补上地面；快于流式速度离开时）。`[Phase 5]`（虚空范围 `[Phase 14]` 缓解；`[Phase 16]` 死亡机制已实现）
 - **水量不守恒** — 简化规则下流体体积会凭空增减：浅膜落入更深流动池被"吸收"（池保持原水位）；下落链落入世界底部直接消失；落入池时按等级抬升池水位而非按体积换算。Minecraft 用源/流动状态机近似守恒。`[Phase 9]`
 - **满水格（source）失去支撑会下落** — 对 Minecraft 的刻意偏离：MC 中 source 水不随支撑消失而下落（只会停止扩散）；本实现中任何满格下方为空都会沿列下落（传送带式补位），行为更"物理"但与 MC 不符。`[Phase 9]`
 - **流体不会流进未加载的 chunk** — `World::setFluid` 只写已存在 chunk（不创建）；FluidSim 只 tick 已存在 chunk。Phase 14 起"未加载"只存在于流式半径环之外/玩家身后：水在加载区边界暂停，玩家走近加载后恢复扩散（生成地形本身的水是平衡态，tick 无变化）。`[Phase 9]`（范围 `[Phase 14]` 已收窄）
@@ -38,7 +37,7 @@
 - **掉落物动画由帧计数器驱动（非墙钟）** — 上下浮动（1.5s 周期）/自转（4s 周期）取自 `m_frameCount`，保证无输入/自动化运行逐字节可复现；代价是非 60Hz 显示器上动画速度随帧率变化（与昼夜时间同一权衡）。`[Phase 10]`
 - **透明掉落物不做深度排序** — 掉落物按其方块属于哪个 pass（opaque/transparent）与 chunk 同 pass 绘制，但"掉落物之间 + 掉落物与 chunk 之间"无全局排序，复杂透明场景可能出现混合顺序伪影（当前透明方块只有水/玻璃/叶子，演示区规模下不易察觉）。`[Phase 10]`
 - **实体与流体无交互** — 掉落物/投射物直接穿过水（无浮力/游泳/阻力）。`[Phase 10]`
-- **无实体间碰撞** — 实体之间（含玩家）互相穿过，可以走进掉落物。`[Phase 10]`
+- **实体间碰撞只做玩家↔掉落物分离** — Phase 16 起玩家会把掉落物沿最小穿透轴推开（面到面跨度，远离玩家中心），不再"走进"掉落物；但**掉落物之间**、以及未来的实体（投射物/mob）之间仍互相穿过（无通用实体-实体碰撞求解）。`[Phase 10]`（玩家↔掉落物 `[Phase 16]` 已解决）
 - **Projectile 无游戏内发射器、也不渲染** — `Projectile` 实体（抛物线/撞 solid 钉住/30s 消亡）已实现并有单测，但游戏内没有弓等发射器，也没有投射物的渲染几何。`[Phase 10]`（弓留待后续阶段）
 - **掉落物零初速生成（刻意权衡）** — Minecraft 的掉落物带随机初速散开；本实现在方块中心零速生成，静止位精确、无随机性，headless 截图可逐字节复现。`[Phase 10]`
 
@@ -91,12 +90,22 @@
 - **字体是程序化 8×8 像素字** — `tools/generate_font.py` 生成 128×256 字形 atlas（16px cell、glyph 4px 偏移），仅 ASCII 可打印（非 ASCII → `?`）；无等宽以外的字重/字号渐变（缩放是整数像素复制）、无中文字形。`[Phase 15]`
 - **物品名 tooltip 只有名字** — 悬停格显示物品名（无数量/描述/工具耐久/附魔文本）。`[Phase 15]`
 
+## 生存（Phase 16）
+
+- **伤害来源只有坠落与虚空** — 无 mob 攻击、无岩浆/火/窒息伤害、无摔落以外的接触伤害。`fallDamage = max(0, 净下落格数 − fallDamageOffset)`（offset 默认 3），从离地帧的 `fallStartY` 到落地点的净竖直距离结算；落入水中的落地取消伤害。无护甲/摔落缓冲机制。`[Phase 16]`
+- **生命 HUD 是 10 心三态，半心按 0.5 HP 粒度渲染** — 每颗心 2 HP，填充 = `clamp(hp − 2i, 0, 2)`（2=满/1=半/0=空），贴图是 3 个固定状态（满/半/空），无更细粒度（如 0.5 HP 的四分之心）；MC 的心是 10 颗每颗 1 HP 且支持 0.5 增量。`[Phase 16]`
+- **无死亡分数/死亡统计** — 死亡只显示 "You died! / Press R"，无得分、无死亡次数、无 Game Over 统计屏；重生保留背包与全部物品（无死亡掉落）。`[Phase 16]`
+- **自然回复是无条件定时** — 脱离受伤 `regenDelay=10s` 后每 `regenInterval=4s` 回 1 HP；无饥饿条、无食物、回复不依赖任何资源。`[Phase 16]`
+- **潜行缩高在纯整数方块世界无通行效果** — 潜行把身高 1.8→1.6（脚底不动、眼高 1.62→1.42）。整数方块世界的头顶空间恒为 ≥2.0（站立可过）或 ≤1.0（潜行也不可过），1.6 不改变可通行集合；潜行当前只影响速度（×0.3）与禁用 step-up，"钻 1.8 门框" 的效果要等出现非整数高度（半块/实体头顶）才有意义。`[Phase 16]`
+- **step-up 只抬升 1 格、每 tick 至多一次** — 条件：非潜行 + 贴地 + 身体贴住整数块面（`kFaceEps=1e-4`）+ 面前脚位 solid + 其上方 2 格空；X 轴优先于 Z 轴（固定顺序），一次 update 只抬一次。2 格及以上仍须跳跃。`[Phase 16]`
+
 ## 数据 / 内容
 
 - **方块无 per-instance 状态** — BlockState 概念未引入（朝向、附属、流体等级等需要时再设计）。`[Phase 2]`
 
 ## 已修复（归档）
 
+- **`[2026-10-04, Phase 16]` 无潜行/无 1 格自动台阶（P5）/ 虚空坠落=传送回出生点·无死亡机制（P5）/ 实体间互相穿过（P10，玩家↔掉落物部分）/ 无生命值·受伤·死亡 UI** — Phase 16 实现生存系统：`Player` 扩展 `maxHealth=20`（10 心）+ **坠落伤害**（`max(0, 净下落格数 − 3)`，离地帧记 `fallStartY`，落地结算，落水中取消）+ **虚空（y < −32）= 死亡** + 死亡冻结 + "You died! / Press R" + `R` 重生（回出生点满血、速度清零、**背包保留**）+ **自然回复**（脱离受伤 10s 后每 4s 回 1 HP）+ **受伤红闪**（`0.35×剩余/0.5s` 渐隐，`m_prevHealth` 轮询驱动，致死伤不重复播）+ **潜行**（`LeftControl`：身高 1.8→1.6 脚底不动、眼高 1.62→1.42、速度 ×0.3 水中除外、潜行不 step-up）+ **1 格自动台阶**（非潜行+贴地+贴整数块面+面前脚位 solid+上方 2 格空 → 抬 1 格继续本 tick 移动，X 轴优先、每 tick 至多一次）+ **玩家↔掉落物分离**（沿最小穿透轴把物品推开、远离玩家中心、面到面跨度，玩家不被动位移）+ **生命 HUD**（hotbar 上方 10 心 16px/2px，三态满/半/空取自 48×16 条带，填充 `clamp(hp−2i,0,2)`，仅游玩态渲染）。存档格式 2（`player.health`，省略=满；解析接受 1–2；`applySave` 映射 −1→maxHealth、0→死亡）。音效 +2（hurt/death → 10 样本）。**stepUp Z 轴回归 bug**（`cz` 误用 moveAxis 编号 `axis==2` 恒假 → Z 向永不 step，X 向正常）由新增 `ClimbsOneBlockAlongZ` 单测捕获并在同阶段修复（`axis==1`）。`addQuad` 拆分 `addQuadUv`（P15 遗留：`addQuad` 曾把 UV 留 (0,0)）。新增 15 个单测（PlayerTest 生存套件[坠落伤害精确/落水中取消/虚空死亡/重生满血清速留包/回复计时/潜行缩高+不 step/step-up X·Z 轴+2 格不抬+低顶不抬]、ItemEntityTest 玩家↔物品分离 ×3、SaveTest health 往返、InputTest R 键、DebugOverlayTest Phase 16 行）。E2E：base 逐字节不变；fall（4 格坑→hp 19.008842、心 10 半[左红(222,38,34)/右暗(55,57,70)]、心 1 满）×2 字节一致；step（Tab 泥土 B (0,54,-3)+Tab×8 石头 C (0,55,-3) 叠 B 顶+石头 A (0,54,-1)，W 1.5s 自动 step-up 上 A、跨越、1 格落下、被 B+C 墙钳 (0.5,54.0,−1.7) 精确）×2 字节一致。**驱动规则**：xdotool 鼠标按钮必须 `mousedown 1`/`mouseup 1`（`keydown 1` 是数字键"1"）；fall 瞄准 pitch −1.37（448px 下移，浅角度 −1.2 会削坑远壁）。新简化记入「生存（Phase 16）」节。
 - **`[2026-10-04, Phase 15]` 无准星/目标高亮（P6）/ 无裂纹动画（P6）/ 无库存 UI（P11）/ 工具数据部分不可获得（P11）/ 无游戏内合成 UI·触发（P12）/ 音频系统未引入** — Phase 15 实现 UI/音效/粒子/性能统计：专用无光照 UI 着色器（`assets/shaders/ui.{vert,frag}`，u_useTexture/u_color，ortho 屏幕空间与 perspective 世界空间通用）+ 批量化绘制（`UiBatch`，同色同纹理合并为一个 mesh+draw）；准星/目标方块线框描边（`MeshMode::Lines`）/hotbar（选中橙框+数量）/手持物品；`E` 背包+合成面板（纯逻辑 `InventoryLayout`+点击状态机 `InventoryUI`：左键取/放/交换/并入、右键移 1、点击外丢弃、悬停物品名、点击配方行 `craft()`）；`F3` 调试 overlay（8 行：FPS 整数/chunk·draw·顶点/坐标/seed/昼夜/流式/背包·粒子）；`F5` 立即存档（`--save` 激活时）。破坏反馈：5 级累积裂纹条（`tools/generate_cracks.py`，进度→stage 钳制）+ 破坏粒子（`ParticleSystem`，确定性 splitmix64 爆发、半隐式 Euler、上限 256、spawn 烘焙光照——渲染只读窗口不读光数组）。音效：`SoundBank`（SDL3 `SDL_OpenAudioDeviceStream` 队列式，NULL 回调，`SDL_PutAudioStreamData` 排队；init 失败优雅降级静音+WARN）+ 8 个程序化 WAV（`tools/generate_sounds.py`，44.1kHz 16-bit 单声道），固定事件集（dig 每 0.3s tick/break/place/pickup/step 每 0.4s/ui_open·close/craft），音量 `audio.volume`（默认 0.7）。物品图标：block item = 带光照倾斜 3D cube（复用掉落物 mesh，3D 图标在 2D 批之后绘制防被槽背景盖住），工具/材料 = `Item.icon` 数据字段 → `assets/textures/items/<icon>.png`（`tools/generate_item_icons.py`，init 交叉校验文件存在）。字体：程序化 8×8 字形（`tools/generate_font.py` → `font.png` 128×256，`src/ui/font` UV/顶点纯逻辑）。**门控规则**：所有 UI 只在按键（F3/E）或指针锁定或事件（裂纹/粒子/音效）时渲染 → 无输入 60 帧运行零新增绘制，`base3.png` 基线逐字节不变（E2E 验证）。新增 40 个单测（font UV/文本宽度/顶点；debug overlay 行格式；InventoryUI 布局/左键全流程/右键/点击外丢弃/合成行；Particle 确定性爆发/更新/上限/死亡；Sound parseWav/applyGain）+ E2E（无输入基线逐字节；锁定态准星+hotbar+手持+描边；F3 overlay；背包面板+悬停；背包左键取整堆移格；点击 planks 配方行合成 wood 64→63+planks×4；按住破坏 0.45s 裂纹 stage 2；破坏后粒子消亡定格——各用例两次运行截图逐字节一致；8 次运行日志 "Audio ready: 8 samples, volume 0.700000"）。新简化记入「UI / 音效 / 粒子（Phase 15）」节。
 - **`[2026-10-04, Phase 14]` `world.view_distance` 未使用 / 世界边缘固定 / 新 chunk 触发全量重传播 / 光照更新全在游戏线程** — Phase 14 实现 chunk 流式 + 多线程：`ThreadPool`（`src/core/thread_pool.{hpp,cpp}`，固定 4 worker、`post`/`flush` 帧同步点、首个 job 异常在 flush 重抛、析构先跑完 pending job 再 join）+ 纯决策逻辑 `chunk_streaming`（`missingColumns` 距离优先确定性排序 / `nearestMissingDistance` 迟滞输入 / 玩家列 Chebyshev 几何）+ `World::insertChunk`（预建 chunk 插入 + 面邻居标脏防边界 Z-fighting）+ 帧管线（flush → 主线程写 World → 网格化/渲染只读 → post jobs，worker 只运行在 post→flush 窗口）。按"列"（整列 8 垂直 chunk）流式：worker 线程并行调纯函数 `generateChunk` 填 scratch chunk（零 World 接触），主线程集成 + 网格化；`world.view_distance`（默认 8 列）首次生效为流式半径；迟滞激活（≤1 列贴近缺失列 → 激活，半径环充满 → 解除），静止玩家零 job。新列光照 = 单 worker job 顺序 `updateRegion`（相邻区域重叠，光照 job 禁止并发），替代旧的"chunkCount 变化 → 游戏线程 `propagateAll`"（每新 chunk 50 ms+ 尖峰）。新增 21 个单测（ThreadPool 执行/flush 语义/worker 线程/异常传递/析构 join/5000 job 压力；流式几何排序/半径边界/迟滞；insertChunk 去重/邻居标脏/自标脏；增量光照 == 全量传播逐格等价 ×2 场景）+ E2E（无输入基线逐字节不变；seed 57 走 36 格跨边缘停在 1 格台阶、半径 8 环 273 列流满、两次运行截图逐字节一致、2312 chunk 14 s 静止；save 标志运行中性；读档玩家落在未加载区、流式 4 ms 内补地面、两次运行逐字节一致）。新简化记入「Chunk 流式（Phase 14）」节。
 - **`[2026-10-04, Phase 13]` 无存档 / 背包与实体不持久化 / 流体改动不入档** — Phase 13 实现完整存档（`--save <slot>`/`--new`，`src/core/save.{hpp,cpp}`）：`data/saves/<slot>.json` = seed + 与 `generateChunk(seed)` 的 diff（`blocks`/`fluids` 编辑列表，只存不同的格子）+ 玩家 pos/yaw/pitch + 昼夜 timeOfDay + 27 格背包 + 选中格 + 掉落物实体（item/count/pos/age/pickup_delay）。读档 = 生成世界后逐格应用（先方块后流体）→ `propagateAll` → 恢复玩家/背包/实体（`setAge`/`setPickupDelay`）/`DayCycle::setTimeOfDay`。严格加载校验（format 号/seed 一致/注册表交叉/位置不重复/方块+流体不同格/未知字段=错误）。JSON 浮点序列化本就最短可往返精度（位精确）。新增 17 个单测（round-trip 位精确/严格校验全路径/diff 精确检出/apply 恢复与失败/diff→fresh→apply 全格等价）+ E2E（无 flag 基线字节不变；存档文件跨运行字节一致；加载路径截图字节一致；含实体存档 age 恢复精确）。

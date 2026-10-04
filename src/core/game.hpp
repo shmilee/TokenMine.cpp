@@ -199,6 +199,11 @@ private:
     void closeInventory();
     // Footstep sound timer (moving + on ground, pointer captured).
     void updateSoundTimers(double dt);
+    // Phase 16 survival polling: a health drop drives the hurt flash +
+    // sound, a death releases the pointer (the death screen is rendered
+    // from the player's state) and plays the death sound, and R (while
+    // dead) respawns the player.
+    void updateSurvival(double dt);
     // World-space overlay: the break crack on the target block + the
     // target outline (drawn in the blending pass, depth test on).
     void drawWorldOverlay(const Mat4& view, const Mat4& projection);
@@ -355,6 +360,14 @@ private:
     ParticleSystem m_particles;
     std::uint64_t m_particleBreakCounter = 0;
     SoundBank m_sound;
+
+    // Phase 16 survival: the health heart strip (48x16, three 16x16 tiles:
+    // full/half/empty) and the damage-flash + event polling state. The
+    // player owns the health; the game polls it each frame (a drop = hurt
+    // flash + sound, a death = pointer release + sound; R respawns).
+    Texture m_healthTexture;
+    double m_hurtFlash = 0.0; // seconds remaining of the red flash
+    float m_prevHealth = -1.0f; // -1 = first frame (no hurt event)
 
     ShaderProgram m_basicShader;
 

@@ -33,10 +33,11 @@ enum class GameKey {
     E, // toggle the inventory screen (Phase 15)
     F3, // toggle the F3 debug overlay (Phase 15)
     F5, // save now, when a save slot is active (Phase 15)
+    R, // respawn, while dead (Phase 16)
     // Keep in sync with kKeyCount.
 };
 
-inline constexpr int kKeyCount = static_cast<int>(GameKey::F5) + 1;
+inline constexpr int kKeyCount = static_cast<int>(GameKey::R) + 1;
 
 enum class MouseButton {
     Left,
