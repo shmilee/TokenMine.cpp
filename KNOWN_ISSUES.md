@@ -25,15 +25,13 @@
 - **树是固定模板** — 树干 1×N（4~7）+ 两层半径 2 树冠 + 顶部半径 1 帽，无生长阶段、无 BlockState、无树种差异（不同树只有高度随机）。`[Phase 4]`
 - **基岩只有单层** — y=0 是 `terrain.bottom_block`（数据里为 bedrock），只有一层厚；y≥1 的石头理论上可被挖穿（Phase 6 前没有挖掘）。`[Phase 4]`
 - **地形高度与洞穴/矿/树相互独立** — 洞穴只保留表层 4 格（`surface_guard`）与底层 2 格（`min_y`）的壳，不感知矿脉/树洞；可能出现洞口正对矿脉等巧合。`[Phase 4]`
-- **破坏方块不掉落物品（部分解决）** — Phase 10 起按 `properties.drops`（数据驱动）生成掉落物实体 `ItemEntity`（统一 Entity 物理/同类合并/120s 消亡/渲染）；但**拾取未实现**——物品落定后只能原地等到消亡，没有背包/物品概念。`[Phase 6]`（Phase 10 掉落物已实现）Phase 11（物品与背包/拾取）。
-- **选择方块是临时方案** — `assets/data/hotbar.json` 列表 + `Tab` 循环，无 UI 显示（看不到当前选中什么）、无物品概念。`[Phase 6]` Phase 11 换成物品/背包/hotbar UI。
 - **无准星/目标高亮** — 破坏/放置靠 raycast 命中，但屏幕上没有准星，也没有 MC 式的目标方块描边；命中判定纯几何（reach 5）。`[Phase 6]` 随 UI（Phase 15）加准星+描边。
-- **破坏是瞬时的** — 无破坏耗时/裂纹动画/工具系统；`properties.hardness` 数据已存在但未使用。`[Phase 6]` 随物品/工具（Phase 11）实现。
+- **无裂纹动画** — 破坏已是数据驱动耗时（Phase 11：按住左键，`1.5s × hardness ÷ 选中物品 break speed`），但进度无任何视觉反馈——方块要么完整、要么消失，没有 MC 式渐进裂纹纹理/描边。`[Phase 6]`（破坏耗时/工具系统 `[Phase 11]` 已实现）裂纹动画留待 Phase 15（UI/粒子）。
 - **放置到未生成区域会同步生成 chunk** — 演示区边缘之外放置方块会触发 `getOrCreateChunk`（生成器在游戏线程同步跑）。`[Phase 6]` Phase 14（异步 chunk streaming）。
 - **无潜行/无 1 格自动台阶** — 上 1 格台阶必须主动跳跃；无 crouch（卡 1.8 门框）、无自动 step-up。`[Phase 5]`
 - **水平速度无惯性** — 期望速度每 tick 直接设定（无加速/摩擦），松键即停。手感可用但非 Minecraft 式平滑。`[Phase 5]`
 - **虚空坠落 = 传送回出生点** — 世界边缘是虚空（见渲染节），掉到 y < -32 直接回出生点，无死亡/掉落伤害/护甲。`[Phase 5]` 随 chunk streaming（Phase 14）+ 死亡机制处理。
-- **无物品/合成/存档** — 实体系统 Phase 10 已落地（Entity 基类、Player 并入统一 Entity 体系、ItemEntity、Projectile）；物品概念/背包/合成/存档仍缺。Phase 11/12/13。
+- **无合成/存档** — 实体（Phase 10）与物品/背包（Phase 11）已落地；合成（数据驱动 Recipe）与存档仍缺。Phase 12/13。
 - **水量不守恒** — 简化规则下流体体积会凭空增减：浅膜落入更深流动池被"吸收"（池保持原水位）；下落链落入世界底部直接消失；落入池时按等级抬升池水位而非按体积换算。Minecraft 用源/流动状态机近似守恒。`[Phase 9]`
 - **满水格（source）失去支撑会下落** — 对 Minecraft 的刻意偏离：MC 中 source 水不随支撑消失而下落（只会停止扩散）；本实现中任何满格下方为空都会沿列下落（传送带式补位），行为更"物理"但与 MC 不符。`[Phase 9]`
 - **流体不会流进未加载的 chunk** — `World::setFluid` 只写已存在 chunk（不创建）；FluidSim 只 tick 已存在 chunk。湖流到演示区边缘会"暂停"，chunk 加载后恢复扩散。`[Phase 9]` 随 chunk streaming（Phase 14）自然缓解。
@@ -51,6 +49,16 @@
 - **实体不持久化** — 存档（Phase 13）必须包含实体列表（类型/方块/位置/数量/已存时长）；目前重启后掉落物全部消失。`[Phase 10]` Phase 13。
 - **掉落物零初速生成（刻意权衡）** — Minecraft 的掉落物带随机初速散开；本实现在方块中心零速生成，静止位精确、无随机性，headless 截图可逐字节复现。`[Phase 10]`
 
+## 物品 / 背包（Phase 11）
+
+- **工具无分块类型效率** — 工具的 `break_speed` 是 flat 乘数（对任何方块生效）；Minecraft 有镐/铲/斧分类 × 方块类别（石类对镐、土类对铲）+ 无效率工具慢 10× 的规则。v1 只有 flat 乘数，加分类需给方块数据加类别字段并改破坏耗时公式。`[Phase 11]`
+- **无库存 UI** — hotbar/背包内容无任何屏幕显示（看不到选中格与数量）；背包格 9-26（storage）可被拾取填入但不可见、不可选（Tab 只循环 9 个 hotbar 格）；无手持物品视图。`[Phase 11]` Phase 15。
+- **工具无 in-world/手持表现** — 工具没有纹理/图标，Q 丢出的工具是**不可见实体**（`drawItemEntities` 跳过非 block 物品——物理/拾取/合并/消亡照常工作）；手持视图同样缺失。`[Phase 11]` Phase 15。
+- **拾取是固定 1.0 格半径，无磁力** — 玩家底心距掉落物底心 <1.0 且过 0.5s 拾取延迟即整堆入包；Minecraft 会随时间逐渐把物品拉向玩家。`[Phase 11]`
+- **放置消耗库存（行为变化，非缺陷）** — Phase 11 起方块不再是无限的：初始 hotbar 每格满堆栈（block 64/工具 1，`hotbar.json` 定义），放置消耗 1 个；hotbar 与背包都空时右键无效。`[Phase 11]`
+- **工具数据部分不可获得** — `iron_pickaxe`（break_speed 4.0）已注册但游戏内无途径获得（无合成，Phase 12）；初始 hotbar 只有 `wooden_pickaxe`。数据驱动注册表允许"先有数据、后有产出"。`[Phase 11]`
+- **背包与实体不持久化** — 存档（Phase 13）必须同时包含 Inventory（27 格 ItemStack）与实体列表（类型/物品/位置/数量/已存时长）；目前重启后库存回初始 hotbar、掉落物全部消失。`[Phase 11]` Phase 13（实体部分 `[Phase 10]`）。
+
 ## 性能 / 架构
 
 - **Chunk 网格化在单线程游戏线程** — 演示区所有 chunk 在第一帧同步 mesh；chunk 数量增长后需要 job queue。`[Phase 3]` Phase 14（worker threads）。`WorldGenerator::generateChunk` 已按无状态纯函数设计（Phase 4），可直接并行。
@@ -65,6 +73,8 @@
 
 ## 已修复（归档）
 
+- **`[2026-10-04, Phase 11]` 破坏不掉落物品 / 无拾取 / 无背包** — Phase 11 实现完整物品闭环：`Item`/`ItemStack`/`ItemRegistry`（每个数据方块隐式同名 block item + `assets/data/items/*.json` 显式工具，严格校验）/`Inventory`（27 格 = 9 hotbar + 18 背包，确定性合并入包）；破坏按 `properties.drops`（物品名，init 严格校验）生成 `ItemEntity`（现持物品名 + 数据 maxStack，合并上限尊重物品数据），玩家 1.0 格内自动拾取（0.5s 延迟防 Q 丢出即回吸）；hotbar 改为背包前 9 格（`hotbar.json` 的 `items` 列表定义初始内容，满堆栈），放置消耗选中格，`Q` 丢弃 1 个。
+- **`[2026-10-04, Phase 11]` 破坏瞬时 / 选择方块临时方案** — 破坏改为按住驱动：`breakDurationSeconds(hardness, breakSpeed) = 1.5s × hardness ÷ speed`（工具 = 数据 `break_speed`，徒手/方块物品 = 1.0；hardness ≤0 且可破坏 = 即时），准星移开/松键/换工具（Tab）进度清零；`properties.hardness` 数据首次投入使用。hotbar 从"临时 BlockID 列表"换成背包物品格（Tab 循环 9 格）。已知简化（flat 工具乘数/无裂纹动画/无 UI）记入「物品 / 背包」节。
 - **`[2026-10-04, Phase 9]` 透明 pass 实际渲染为不透明** — basic.frag 硬编码 `alpha=1.0`、只取纹理 `.rgb`，导致"透明 pass"里的水/玻璃/叶子全部不透明（树叶纹理里的 20 个透明孔被渲染成纯黑斑点；水看不见湖底）。改为取纹理 `texel.a`（图集本身是 RGBA，alpha 一直保留在 GPU 纹理里）。副作用：截图 PNG 的 alpha 通道曾写入 framebuffer 混合残留值（水面 α≈0.831），`takeScreenshot` 现在强制 α=255（截图是不透明画面记录）。`[Phase 2]` 引入、`[Phase 9]` 发现并修复。
 - **`[2026-10-04, Phase 9]` 破坏 1 格深湖底后流体列永久振荡** — 落水满格上方的邻居 7 级膜"坐在满水上被吸收"（7→0），下一 tick 邻居再补 7，7↔0 每 tick 振荡、永不平衡（E2E 探针 330 个 tick 后仍振荡）。修复：`FluidSim` 坐在**满水**上的格子补满到 8（有 source 托底的柱是满的——MC 行为），仅"坐在流动（非满）池上"才走吸收/抬升规则。回归测试 `FilmAboveFullWaterRefillsToFull` + `BrokenLakeFloorRefillsAndSettles`。
 - **`[2026-10-04, Phase 9]` 水是静态方块/无游泳** — Phase 9 实现完整流体：per-chunk 0-8 等级数组（8=满/源，1-7 流动；cell 里水与方块互斥），`World::setFluid`（只写已有 chunk、只写 air 格）/`setBlock` 排水；`FluidSim::tick`（快照式、下落传送带、水平扩散 L-1、1 级终端、满水托底补满、max-merge 冲突合并、确定性）游戏线程 20Hz（每 3 帧一次）；玩家游泳（水中重力 12/终端 4/水平 3.1/Space 上浮 4.5，AABB 与流体格相交判定）；光照水衰减（天空光每格 -3，列扫描+BFS）；网格化 `emitFluid`（level/8 缩放立方体、水-水剔面、流体面烘焙自身格光）；世界生成湖改填 fluid 8（`worldgen.json` 移除 `water_block` 键，water 数据方块仅作纹理参考经 `BlockRegistry::fluidBlock()`）。

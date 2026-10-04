@@ -37,7 +37,7 @@ cmake --build build
 ./build/bin/minecraft --time 0.75
 ```
 
-## 当前可玩内容（Phase 10）
+## 当前可玩内容（Phase 11）
 
 - **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时）/游泳时随时上浮，
   `LeftShift` 冲刺，鼠标转向（**左键点击锁定指针；转向仅在指针锁定时生效**，
@@ -46,21 +46,32 @@ cmake --build build
   （12 vs 32）、终端速度 4、水平速度降为 3.1（冲刺无效）、`Space` 随时上浮（4.5）；
   浅水（头在水面上）可以"蹚水走"，深水可以游
 - **方块交互**（DDA 体素 raycast，reach 5 格）：
-  - `左键`（锁定时）：破坏准星指向的方块（`properties.destroyable` 数据驱动，
-    基岩不可破坏）；raycast 把水体当 air 穿过——可以隔水破坏湖底/水下的方块
+  - `左键`（锁定时，**按住**）：破坏准星指向的方块，耗时数据驱动
+    （`1.5s × properties.hardness ÷ 当前选中物品的 break speed`，徒手=1.0；
+    `properties.destroyable` 数据驱动，基岩不可破坏）。准星移开/松键/换工具
+    进度清零。raycast 把水体当 air 穿过——可以隔水破坏湖底/水下的方块
     （水会被破坏排水、随后流体模拟把它补回）
-  - `右键`（锁定时）：在命中面的邻格放置当前选中的方块（不能放进 solid 方块
-    或玩家自身包围盒内）
-  - `Tab`：切换选中方块（`assets/data/hotbar.json` 数据驱动列表，临时方案，
-    Phase 11 换成物品/背包）
+  - `右键`（锁定时）：在命中面的邻格放置**当前选中格**的方块物品，并**消耗
+    1 个**（方块不再无限——背包是方块的来源；工具不可放置）；不能放进 solid
+    方块或玩家自身包围盒内
+  - `Tab`：切换选中的 hotbar 格（9 格）
+  - `Q`（锁定时）：丢弃选中格 1 个到脚下（生成掉落物，0.5s 拾取延迟防立即回吸）
   - `ESC`（锁定时）：释放指针；未锁定时 ESC 退出游戏
   - 破坏/放置复用 `setBlock` 脏标记管线，下一帧自动重建受影响 chunk 的 mesh
-- **掉落物**（Phase 10，`ItemEntity`）：破坏 `properties.drops` 非空的方块时，
-  在方块中心生成一个掉落物实体（数据驱动，零初速——静止位精确、截图可复现）。
-  掉落物是 0.25 的小立方体：走统一的 Entity 碰撞物理（重力/终端速度/水平摩擦），
-  落地后原地悬浮摆动 + 自转（动画由帧计数器驱动，非墙钟），同类 0.75 格内自动
-  合并（堆叠上限 64），120 秒（MC 同款）或掉出世界后消失。拾取（进背包）
-  留到 Phase 11
+- **物品与背包**（Phase 11，`Item`/`ItemStack`/`Inventory`，全数据驱动）：
+  - 物品 = 纯数据（`ItemRegistry`）：**每个数据方块隐式生成同名 block item**
+    （无独立 JSON，方块定义是唯一来源）；**工具**是显式数据
+    （`assets/data/items/*.json`，`break_speed`/`max_stack`）
+  - 背包 27 格 = 9 hotbar + 18 背包（`assets/data/hotbar.json` 的 `items` 列表
+    定义初始 hotbar，每格满堆栈）；拾取确定性入包（先合并同物堆栈、再找空位，
+    hotbar 优先于背包）
+  - 破坏方块按 `properties.drops`（物品名，init 严格校验）掉落 `ItemEntity`；
+    玩家走近（1.0 格内）自动拾取进背包（MC 同款 0.5s 拾取延迟 + 120s 消亡）
+- **掉落物**（Phase 10，`ItemEntity`）：0.25 的小立方体，走统一的 Entity 碰撞
+  物理（重力/终端速度/水平摩擦），落地后原地悬浮摆动 + 自转（动画由帧计数器
+  驱动，非墙钟），同类 0.75 格内自动合并（堆叠上限按物品数据，block 64/工具 1），
+  120 秒（MC 同款）或掉出世界后消失。零初速生成——静止位精确、截图可复现
+  （对 MC 随机初速的刻意偏离）
 - **AABB 体素碰撞 + 滑动**：玩家 0.6×1.8 包围盒（底面中心为位置），轴分离解析
   （X→Z→Y）——撞墙时该轴停住、另一水平轴继续走（滑动）；贴面精确解析（无 epsilon
   抖动）；子步化防高速穿透（每子步 ≤0.4 块）；重力 + 终端速度 + 跳跃高度 1.13 块
@@ -144,15 +155,28 @@ cmake --build build
 
 地形/洞穴/树木参数同样在 `assets/data/worldgen.json`（缺省=默认值，类型错误=启动报错）。
 
-### 调整可放置方块列表（hotbar）
+### 调整初始 hotbar / 新增工具
 
-`assets/data/hotbar.json` 的 `blocks` 数组（游戏内 `Tab` 循环切换）：
+`assets/data/hotbar.json` 的 `items` 数组（游戏内 `Tab` 循环切换 9 格，`Q` 从选中格丢弃）：
 
 ```json
-{ "blocks": ["stone", "dirt", "grass", "sand", "wood", "leaves", "glass", "glowstone"] }
+{ "items": ["stone", "dirt", "grass", "sand", "wood", "leaves", "glass", "glowstone", "wooden_pickaxe"] }
 ```
 
-方块名必须已注册（未知名=启动报错）；列表不能为空。
+物品名必须已注册（未知名=启动报错）；列表不能为空、至多 9 项；每格初始为满堆栈
+（block 64 / 工具 1）。新增工具 = `assets/data/items/<name>.json`：
+
+```json
+{
+  "id": "wooden_pickaxe",
+  "type": "tool",
+  "tool": { "break_speed": 2.0 },   // >0，默认 1.0（破坏耗时 = 1.5s × hardness ÷ speed）
+  "max_stack": 1                    // 1..64，默认 64
+}
+```
+
+block item 没有独立 JSON——每个数据方块隐式生成同名 item（方块定义是唯一来源）；
+显式物品只能是 `type: "tool"`（否则启动报错，防止第二数据源冲突）。
 
 ### 新增一个方块（无需改核心代码）
 
@@ -169,6 +193,10 @@ cmake --build build
 
    属性缺省即默认值（solid/opaque/destroyable=true, hardness=1.0, light_emission=0, drops 为空=不掉落）。
    校验严格：类型错误、越界值、重复 id、缺失纹理面都会报明确错误；未知字段警告但不拒绝。
+   `drops` 是**物品名**（游戏启动时对 ItemRegistry 严格校验，未知名=启动报错）——
+   block item 与方块同名，所以 `grass → "dirt"` 表示破坏 grass 掉 dirt。
+   `hardness` 驱动破坏耗时（按住左键，`1.5s × hardness ÷ 选中物品 break speed`，
+   hardness ≤0 且可破坏=即时破坏）。
 
 ## 测试
 
@@ -195,6 +223,9 @@ mine-craft/
 │   │                # ItemEntity（掉落物：摩擦停驻/同类合并/120s 消亡）、Projectile（投射物：
 │   │                # 受重力抛物线/撞 solid 即钉住）、item_mesh（掉落物完整立方体几何，
 │   │                # 与 chunk mesher 共享 cube_face_table）
+│   ├── item/        # 物品系统（Phase 11）：Item/ItemStack 数据模型 + 破坏耗时公式、
+│   │                # ItemRegistry（方块隐式同名 block item + 显式工具 JSON 严格校验）、
+│   │                # Inventory（27 格 = 9 hotbar + 18 背包，确定性合并/入包/take）
 │   ├── renderer/    # 渲染器（GL 封装）：Shader/Texture/Mesh/Renderer/TextureAtlas
 │   └── world/       # 体素世界：coordinates（world/chunk/local 转换）、Chunk（块+光照数组）、
 │                    # World、ChunkMesher（按面烘焙光照）、day_cycle（昼夜循环：时间/
@@ -221,7 +252,7 @@ mine-craft/
 - [x] **Phase 8** — 昼夜循环：太阳/月亮/星星/天空色（dayFactor 缩放天空光）
 - [x] **Phase 9** — 流体：水（0-8 等级/下落/水平扩散/水光衰减/游泳/半透明水面）
 - [x] **Phase 10** — 实体系统：Entity 基类（统一 AABB 物理）/Player 并入/ItemEntity 掉落物/Projectile 投射物
-- [ ] **Phase 11** — 物品与背包：Item/ItemStack/Inventory
+- [x] **Phase 11** — 物品与背包：Item/ItemStack/Inventory、掉落物拾取、按住破坏（hardness/工具数据驱动）、Q 丢弃
 - [ ] **Phase 12** — 合成：数据驱动 Recipe
 - [ ] **Phase 13** — 存档：Seed + 修改数据
 - [ ] **Phase 14** — Chunk Streaming + 多线程（Job Queue/Thread Pool）

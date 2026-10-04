@@ -1,15 +1,19 @@
 // Top-level game object: owns configuration, assets, window, input, camera,
 // renderer and the voxel world; runs the main loop.
 //
-// Phase 6 scope: the Phase 5 world + walking Player, plus block
-// interaction: a DDA voxel raycast from the eye selects a block (reach 5);
-// left click breaks it (if properties.destroyable), right click places the
-// currently selected hotbar block on the hit face (if the target cell is
-// placeable and does not overlap the player). Hotbar selection is a
-// temporary data-driven list (assets/data/hotbar.json, Tab to cycle) until
-// the item/inventory system lands in Phase 11. Each chunk owns up to two
-// GPU meshes (opaque + transparent/blended); a chunk's meshes are rebuilt
-// lazily when it is marked dirty (first meshing or a setBlock on/next to it).
+// Block interaction: a DDA voxel raycast from the eye selects a block
+// (reach 5). Holding left button breaks the target (if
+// properties.destroyable) over a data-driven duration (1.5 s × hardness /
+// the selected item's break speed — see breakDurationSeconds); right click
+// places the selected inventory slot's block item on the hit face (if the
+// target cell is placeable and does not overlap the player) and consumes
+// one from that stack. The hotbar is the first Inventory::kHotbarSize slots
+// of the player's inventory (starting contents from
+// assets/data/hotbar.json, Tab to cycle the selection, Q drops one from the
+// selected slot). Broken blocks drop ItemEntity pickups that the player
+// collects by walking over them. Each chunk owns up to two GPU meshes
+// (opaque + transparent/blended); a chunk's meshes are rebuilt lazily when
+// it is marked dirty (first meshing or a setBlock on/next to it).
 #pragma once
 
 #include <cstdint>
@@ -32,6 +36,8 @@
 #include "entity/item_entity.hpp"
 #include "entity/item_mesh.hpp"
 #include "entity/projectile.hpp"
+#include "item/inventory.hpp"
+#include "item/item_registry.hpp"
 #include "player/player.hpp"
 #include "renderer/mesh.hpp"
 #include "renderer/renderer.hpp"
@@ -91,15 +97,30 @@ private:
     void drawSkyObjects(const Mat4& view, const Mat4& projection,
                         int viewportHeight);
 
-    // Pointer-lock state machine + block interaction (called from update
-    // while the pointer is captured).
-    void handleInteraction();
+    // Pointer-lock state machine + block interaction (called from update).
+    void handleInteraction(double dt);
     // The block the crosshair is aiming at (raycast from the eye, within
     // kReach), if any.
     std::optional<BlockHit> targetBlock() const;
-    void breakBlock();
+    // Hold-to-break state machine (Phase 11): advances the progress while
+    // the crosshair stays on the same destroyable block and breaks it when
+    // the data-driven duration elapses (see breakDurationSeconds).
+    void updateBreaking(double dt);
+    void resetBreaking();
+    // Performs the break: air + relight + data-driven drop (ItemEntity).
+    // The caller guarantees the hit is destroyable.
+    void breakBlock(const BlockHit& hit);
+    // Places one from the selected hotbar slot (block items only) and
+    // consumes it from the stack.
     void placeBlock();
+    // Cycles the hotbar selection; resets break progress (the selected
+    // tool changed, Minecraft behavior).
     void cycleHotbar();
+    // Drops one from the selected hotbar slot at the player's feet (Q).
+    void dropSelectedItem();
+    // Break speed of the selected item: tools use their data break_speed,
+    // hand (empty slot) and block items break at 1.0.
+    float selectedBreakSpeed() const;
 
     // Entity simulation (Phase 10): per-entity physics, then the item merge
     // pass and despawn (removal is deferred so the merge order — and
@@ -146,10 +167,19 @@ private:
     // Dropped-item meshes: one full-cube mesh per block id (built lazily).
     std::unordered_map<BlockID, Mesh, BlockIDHash> m_itemMeshes;
 
-    // Temporary block-selection list (assets/data/hotbar.json, Tab cycles);
-    // replaced by the item/inventory system in Phase 11.
-    std::vector<BlockID> m_hotbar;
-    std::size_t m_hotbarSelected = 0;
+    // Item/inventory system (Phase 11): item registry (implicit block
+    // items + explicit tools from assets/data/items), the player's
+    // inventory (hotbar = first Inventory::kHotbarSize slots, starting
+    // contents from assets/data/hotbar.json) and the selected hotbar slot.
+    ItemRegistry m_items;
+    Inventory m_inventory;
+    std::size_t m_selectedSlot = 0;
+
+    // Hold-to-break state (Phase 11): the cell being broken and how long
+    // it has been held (seconds). Reset on target change, pointer unlock,
+    // selection change, and completion.
+    std::optional<BlockPos> m_breakTarget;
+    double m_breakProgress = 0.0;
 
     ShaderProgram m_basicShader;
 

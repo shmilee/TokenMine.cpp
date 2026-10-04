@@ -48,9 +48,9 @@ struct BlockProperties {
     float hardness = 1.0f;       // base break time in seconds (tools refine it)
     int lightEmission = 0;       // block light 0..15 (Phase 7)
 
-    // Item dropped on break, addressed by item id. Empty = drops nothing.
-    // Items are Phase 11; until then the convention is to use the block's
-    // own id (or a related block's id, e.g. grass -> dirt).
+    // Item dropped on break, addressed by item NAME (validated against the
+    // ItemRegistry at game init — block items share the block's name, so
+    // grass -> "dirt" drops the dirt block item). Empty = drops nothing.
     std::string drops;
 };
 

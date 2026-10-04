@@ -1,0 +1,74 @@
+// Registry of all item definitions (Phase 11).
+//
+// Two sources:
+//   - implicit block items: one per data block (same name as the block),
+//     built from the BlockRegistry via buildBlockItems(). Run this BEFORE
+//     loadDirectory so an explicit item colliding with a block name is
+//     rejected;
+//   - explicit items (tools): assets/data/items/*.json, one file per item:
+//
+// {
+//   "id": "wooden_pickaxe",
+//   "type": "tool",
+//   "tool": { "break_speed": 2.0 },   // > 0, default 1.0
+//   "max_stack": 1                    // 1..64, default 64
+// }
+//
+// Validation is strict (same discipline as the block registry): type
+// errors, out-of-range values and duplicate ids all produce descriptive
+// errors naming the item. Unknown fields are tolerated (with a warning)
+// for forward compatibility.
+#pragma once
+
+#include <cstddef>
+#include <deque>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include "block/block_registry.hpp"
+#include "core/asset_manager.hpp"
+#include "core/error.hpp"
+#include "core/json.hpp"
+#include "item/item.hpp"
+
+namespace mc {
+
+class ItemRegistry {
+public:
+    ItemRegistry() = default;
+
+    // Registers one implicit block item per data block in `blocks` (the
+    // air sentinel is skipped — it is a code sentinel, not a data block).
+    Result<void> buildBlockItems(const BlockRegistry& blocks);
+
+    // Parse and register one explicit item. Assigns the next free id.
+    Result<ItemID> registerItem(const Json& def);
+
+    // Load and register every *.json file in `relativeDir` under the asset
+    // root (sorted for determinism). Non-const: text loading updates the
+    // AssetManager cache.
+    Result<void> loadDirectory(AssetManager& assets,
+                               const std::string& relativeDir =
+                                   "data/items");
+
+    // -- lookups -------------------------------------------------------------
+    const Item& at(ItemID id) const; // asserts valid id
+    const Item* find(ItemID id) const;
+    const Item* findByName(const std::string& name) const;
+    ItemID idForName(const std::string& name) const; // invalid() when absent
+
+    std::size_t count() const { return m_items.size(); }
+    std::vector<ItemID> allIds() const;
+
+    void clear();
+
+private:
+    // Parse the tool-specific fields into `out` (starts at defaults).
+    static Result<void> parseTool(const Json& def, Item& out);
+
+    std::deque<Item> m_items; // deque: stable references on push
+    std::unordered_map<std::string, int> m_names;
+};
+
+} // namespace mc

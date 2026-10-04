@@ -17,6 +17,7 @@ std::optional<GameKey> Input::mapKey(std::uint32_t sdlKeycode) {
         case SDLK_LALT: return GameKey::LeftAlt;
         case SDLK_TAB: return GameKey::Tab;
         case SDLK_ESCAPE: return GameKey::Escape;
+        case SDLK_Q: return GameKey::Q;
         default: return std::nullopt;
     }
 }

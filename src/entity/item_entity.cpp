@@ -6,14 +6,20 @@
 namespace mc {
 
 ItemEntity::ItemEntity(const World& world, const BlockRegistry& blocks,
-                       BlockID block, Vec3 pos)
-    : Entity(world, blocks, pos, kSize, kSize), m_block(block) {}
+                       const std::string& item, int maxStack, Vec3 pos)
+    : Entity(world, blocks, pos, kSize, kSize),
+      m_item(item),
+      m_maxStack(std::min(maxStack, kMaxStack)) {}
 
 void ItemEntity::update(double dt) {
     if (dt <= 0.0) {
         return;
     }
     m_age += dt;
+    // The pickup delay counts down with the simulation clock.
+    if (m_pickupDelay > 0.0) {
+        m_pickupDelay = std::max(0.0, m_pickupDelay - dt);
+    }
     // Peak-speed estimate for the sub-step count: this tick's post-gravity
     // vertical velocity (the horizontal one only decays).
     const float vyAfter = std::max(
@@ -44,8 +50,8 @@ void ItemEntity::integrate(float h) {
 }
 
 bool ItemEntity::canMergeInto(const ItemEntity& other) const {
-    if (m_block != other.m_block ||
-        other.m_count + m_count > kMaxStack) {
+    if (m_item != other.m_item ||
+        other.m_count + m_count > other.m_maxStack) {
         return false;
     }
     const Vec3 d = position() - other.position();
@@ -53,7 +59,7 @@ bool ItemEntity::canMergeInto(const ItemEntity& other) const {
 }
 
 void ItemEntity::absorb(const ItemEntity& other) {
-    m_count = std::min(m_count + other.m_count, kMaxStack);
+    m_count = std::min(m_count + other.m_count, m_maxStack);
 }
 
 } // namespace mc

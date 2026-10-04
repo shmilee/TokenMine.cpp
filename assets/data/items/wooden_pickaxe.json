@@ -1,0 +1,6 @@
+{
+  "id": "wooden_pickaxe",
+  "type": "tool",
+  "tool": { "break_speed": 2.0 },
+  "max_stack": 1
+}

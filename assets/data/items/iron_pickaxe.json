@@ -1,0 +1,6 @@
+{
+  "id": "iron_pickaxe",
+  "type": "tool",
+  "tool": { "break_speed": 4.0 },
+  "max_stack": 1
+}

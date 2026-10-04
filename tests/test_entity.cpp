@@ -81,12 +81,11 @@ struct Fixture {
         }
     }
 
-    // `block` defaults to dirt (a second distinct solid, for merge tests).
-    ItemEntity makeItem(Vec3 pos, BlockID block = BlockID::invalid()) const {
-        if (!block.valid()) {
-            block = dirt;
-        }
-        return ItemEntity(world, blocks, block, pos);
+    // `item` defaults to dirt (a second distinct item, for merge tests);
+    // names match the block items (stone/dirt are registered above).
+    ItemEntity makeItem(Vec3 pos, const std::string& item = "dirt",
+                        int maxStack = 64) const {
+        return ItemEntity(world, blocks, item, maxStack, pos);
     }
 
     void run(Entity& e, int n, double dt = kDt) {
@@ -194,8 +193,7 @@ TEST(ItemEntityTest, DespawnAfterAge) {
 TEST(ItemEntityTest, DespawnBelowKillPlane) {
     BlockRegistry blocks = makeBlocks();
     World world; // no floor at all: the void
-    ItemEntity item(world, blocks, blocks.idForName("stone"),
-                    {8.5f, 10.0f, 8.5f});
+    ItemEntity item(world, blocks, "stone", 64, {8.5f, 10.0f, 8.5f});
     int ticks = 0;
     while (!item.shouldDespawn() && ticks < 500) {
         item.update(kDt);
@@ -216,10 +214,10 @@ TEST(ItemEntityTest, MergesSameBlockWithinDistance) {
     EXPECT_EQ(b.count(), 1);
 }
 
-TEST(ItemEntityTest, NoMergeDifferentBlock) {
+TEST(ItemEntityTest, NoMergeDifferentItem) {
     Fixture f;
-    ItemEntity a = f.makeItem({8.0f, 1.0f, 8.0f}, f.stone);
-    ItemEntity b = f.makeItem({8.5f, 1.0f, 8.0f}, f.dirt);
+    ItemEntity a = f.makeItem({8.0f, 1.0f, 8.0f}, "stone");
+    ItemEntity b = f.makeItem({8.5f, 1.0f, 8.0f}, "dirt");
     EXPECT_FALSE(b.canMergeInto(a));
 }
 
@@ -241,6 +239,29 @@ TEST(ItemEntityTest, StackCappedAtMax) {
     EXPECT_EQ(a.count(), ItemEntity::kMaxStack);
     ItemEntity d = f.makeItem({8.2f, 1.0f, 8.0f});
     EXPECT_FALSE(d.canMergeInto(a)); // 64 + 1 overflows the stack
+}
+
+TEST(ItemEntityTest, MergeRespectsItemMaxStack) {
+    // A tool item with max_stack 1 (the game passes the ItemRegistry value):
+    // two tools never merge into a stack of 2.
+    Fixture f;
+    ItemEntity a = f.makeItem({8.0f, 1.0f, 8.0f}, "pick", 1);
+    ItemEntity b = f.makeItem({8.5f, 1.0f, 8.0f}, "pick", 1);
+    EXPECT_FALSE(b.canMergeInto(a)); // 1 + 1 > maxStack 1
+}
+
+TEST(ItemEntityTest, PickupDelayCountsDown) {
+    Fixture f;
+    ItemEntity item = f.makeItem({8.5f, 1.0f, 8.5f});
+    EXPECT_FALSE(item.pickupReady()); // fresh spawn: the delay is active
+    // 0.25 is exact in binary, so the two updates subtract the 0.5 s delay
+    // with no floating-point residue (0.5 - 0.25 - 0.25 == 0.0).
+    item.update(0.25); // half the delay
+    EXPECT_FALSE(item.pickupReady());
+    item.update(0.25); // total 0.5 s: the delay is exactly exhausted
+    EXPECT_TRUE(item.pickupReady());
+    f.run(item, 60);
+    EXPECT_TRUE(item.pickupReady()); // stays ready
 }
 
 // -- Projectile ----------------------------------------------------------------

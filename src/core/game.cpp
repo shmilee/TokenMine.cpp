@@ -48,6 +48,12 @@ constexpr int kDemoChunkMax = 1;
 // How far the crosshair raycast reaches (blocks; Minecraft's reach).
 constexpr float kReach = 5.0f;
 
+// A dropped item is picked up when its bottom-center is within this
+// distance of the player's bottom-center (and past the item's pickup
+// delay). Minecraft pulls items in gradually (magnetism); the fixed
+// radius is the v1 — see KNOWN_ISSUES.md.
+constexpr float kPickupDistance = 1.0f;
+
 // Dropped-item animation (Phase 10): derived from the frame counter, not
 // the wall clock, so headless runs stay byte-reproducible. At 60 FPS the
 // pickup bobs with a 1.5 s period (amplitude 0.05 blocks) and spins once
@@ -167,32 +173,56 @@ Result<void> Game::buildScene() {
         }
     }
 
-    // -- hotbar (temporary selection list, data-driven; Phase 11 replaces it
-    //    with the item/inventory system) ------------------------------------
+    // -- items (Phase 11): implicit block items + explicit tools ------------
+    // Block items are defined by their blocks (same name); explicit items
+    // (tools) come from data files. Build the block items first so an
+    // explicit item colliding with a block name is rejected.
+    MC_TRY(m_items.buildBlockItems(m_blocks));
+    auto itemsLoad = m_items.loadDirectory(m_assets, "data/items");
+    MC_TRY(itemsLoad);
+    // Strict data check: a block's drops must name a registered item
+    // (block items cover the usual case, e.g. grass -> dirt).
+    for (const BlockID id : m_blocks.allIds()) {
+        const Block& b = m_blocks.at(id);
+        if (b.properties.drops.empty()) {
+            continue;
+        }
+        if (!m_items.idForName(b.properties.drops).valid()) {
+            return MC_FAIL("block '" + b.name + "' drops unknown item '" +
+                           b.properties.drops + "'");
+        }
+    }
+
+    // -- hotbar (starting inventory contents, data-driven) -------------------
+    // assets/data/hotbar.json: { "items": [name, ...] } — at most
+    // Inventory::kHotbarSize entries; slot i starts with a full stack of
+    // the item (placing consumes the stacks; blocks are no longer infinite).
     auto hotbarText = m_assets.loadText("data/hotbar.json");
     MC_TRY(hotbarText);
     auto hotbarJson = Json::parse(*hotbarText);
     MC_TRY(hotbarJson);
-    const Json* list = hotbarJson->find("blocks");
-    if (list == nullptr || !list->isArray()) {
-        return MC_FAIL("hotbar.json: 'blocks' array is required");
+    const Json* list = hotbarJson->find("items");
+    if (list == nullptr || !list->isArray() || list->size() == 0) {
+        return MC_FAIL("hotbar.json: 'items' array is required and must "
+                       "not be empty");
     }
-    m_hotbar.clear();
+    if (list->size() > static_cast<std::size_t>(Inventory::kHotbarSize)) {
+        return MC_FAIL("hotbar.json: at most " +
+                       std::to_string(Inventory::kHotbarSize) +
+                       " items (hotbar size)");
+    }
     for (std::size_t i = 0; i < list->size(); ++i) {
         const Json& entry = list->at(i);
         if (!entry.isString()) {
             return MC_FAIL("hotbar.json: entry #" + std::to_string(i) +
-                           " must be a block name string");
+                           " must be an item name string");
         }
-        const BlockID id = m_blocks.idForName(entry.asString());
-        if (!id.valid()) {
-            return MC_FAIL("hotbar.json: unknown block '" + entry.asString() +
+        const ItemID iid = m_items.idForName(entry.asString());
+        if (!iid.valid()) {
+            return MC_FAIL("hotbar.json: unknown item '" + entry.asString() +
                            "'");
         }
-        m_hotbar.push_back(id);
-    }
-    if (m_hotbar.empty()) {
-        return MC_FAIL("hotbar.json: 'blocks' must not be empty");
+        m_inventory.set(i, ItemStack {iid, m_items.at(iid).maxStack});
     }
 
     // -- world generation (Phase 4: seeded, data-driven) ---------------------
@@ -453,7 +483,7 @@ void Game::update(double dt) {
     // headless runs byte-reproducible.
     m_dayCycle.update(kDayStepPerFrame);
 
-    handleInteraction();
+    handleInteraction(dt);
 
     // Fluids tick at 20/s (every third frame at 60fps). Changed fluid
     // levels shift the light (water attenuates it), so re-light the touched
@@ -505,28 +535,37 @@ void Game::update(double dt) {
 // Pointer lock + block interaction (Phase 6)
 // ---------------------------------------------------------------------------
 
-void Game::handleInteraction() {
+void Game::handleInteraction(double dt) {
     const bool locked = m_window.relativeMouseMode();
     if (!locked) {
         // Left click captures the pointer (standard first-person behavior).
         if (m_input.wasPressed(MouseButton::Left)) {
             m_window.setRelativeMouseMode(true);
         }
+        resetBreaking();
         return;
     }
 
     if (m_input.wasPressed(GameKey::Escape)) {
         m_window.setRelativeMouseMode(false);
+        resetBreaking();
         return;
-    }
-    if (m_input.wasPressed(MouseButton::Left)) {
-        breakBlock();
     }
     if (m_input.wasPressed(MouseButton::Right)) {
         placeBlock();
     }
     if (m_input.wasPressed(GameKey::Tab)) {
         cycleHotbar();
+    }
+    if (m_input.wasPressed(GameKey::Q)) {
+        dropSelectedItem();
+    }
+    // Breaking is hold-driven (Phase 11): progress accumulates while the
+    // button stays down on the same target block.
+    if (m_input.isDown(MouseButton::Left)) {
+        updateBreaking(dt);
+    } else {
+        resetBreaking();
     }
 }
 
@@ -535,44 +574,77 @@ std::optional<BlockHit> Game::targetBlock() const {
                         kReach);
 }
 
-void Game::breakBlock() {
+void Game::resetBreaking() {
+    m_breakTarget.reset();
+    m_breakProgress = 0.0;
+}
+
+void Game::updateBreaking(double dt) {
     const std::optional<BlockHit> hit = targetBlock();
     if (!hit) {
+        resetBreaking();
         return;
     }
-    const BlockID id = m_world.getBlock(hit->block.x, hit->block.y,
-                                        hit->block.z);
+    const Block& block =
+        m_blocks.at(m_world.getBlock(hit->block.x, hit->block.y,
+                                     hit->block.z));
     // Breakability is data-driven: water/bedrock set destroyable=false.
-    if (!m_blocks.at(id).properties.destroyable) {
+    if (!block.properties.destroyable) {
+        resetBreaking();
         return;
     }
+    if (!m_breakTarget.has_value() || *m_breakTarget != hit->block) {
+        m_breakTarget = hit->block;
+        m_breakProgress = 0.0;
+    }
+    const double duration =
+        breakDurationSeconds(block.properties.hardness, selectedBreakSpeed());
+    if (duration <= 0.0) {
+        // Data-driven instant break (hardness 0 while destroyable).
+        breakBlock(*hit);
+        resetBreaking();
+        return;
+    }
+    m_breakProgress += dt;
+    if (m_breakProgress >= duration) {
+        breakBlock(*hit);
+        resetBreaking();
+    }
+}
+
+void Game::breakBlock(const BlockHit& hit) {
+    const BlockID id = m_world.getBlock(hit.block.x, hit.block.y, hit.block.z);
     // setBlock marks the chunk (and face-sharing neighbors) dirty; the mesh
     // rebuild happens on the next frame.
-    m_world.setBlock(hit->block.x, hit->block.y, hit->block.z, BlockID::air());
+    m_world.setBlock(hit.block.x, hit.block.y, hit.block.z, BlockID::air());
     // Relight the region around the change (a broken occluder lets light
     // in; the broken cell stops blocking).
-    Lighting::updateLocal(m_world, m_blocks, hit->block);
+    Lighting::updateLocal(m_world, m_blocks, hit.block);
 
-    // Drops are data-driven: `properties.drops` names the block (Phase 11
-    // swaps the name for a real item id). The item spawns at the block
+    // Drops are data-driven: `properties.drops` names an item (validated
+    // against the ItemRegistry at init). The item spawns at the block
     // center with zero velocity, so its rest position is exact and headless
     // runs stay byte-reproducible (see ItemEntity).
     const std::string& drops = m_blocks.at(id).properties.drops;
     if (!drops.empty()) {
-        const BlockID dropId = m_blocks.idForName(drops);
-        if (dropId.valid()) {
-            const Vec3 dropPos {static_cast<float>(hit->block.x) + 0.5f,
-                                static_cast<float>(hit->block.y) + 0.5f,
-                                static_cast<float>(hit->block.z) + 0.5f};
-            m_entities.push_back(std::make_unique<ItemEntity>(
-                m_world, m_blocks, dropId, dropPos));
-        }
+        const Item& dropItem = m_items.at(m_items.idForName(drops));
+        const Vec3 dropPos {static_cast<float>(hit.block.x) + 0.5f,
+                            static_cast<float>(hit.block.y) + 0.5f,
+                            static_cast<float>(hit.block.z) + 0.5f};
+        m_entities.push_back(std::make_unique<ItemEntity>(
+            m_world, m_blocks, dropItem.name, dropItem.maxStack, dropPos));
     }
 }
 
 void Game::placeBlock() {
-    if (m_hotbar.empty()) {
+    // The selected inventory slot must hold a placeable block item.
+    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    if (stack.empty()) {
         return;
+    }
+    const Item& item = m_items.at(stack.item);
+    if (item.type != ItemType::Block) {
+        return; // tools (and future non-block items) are not placeable
     }
     const std::optional<BlockHit> hit = targetBlock();
     if (!hit) {
@@ -588,18 +660,49 @@ void Game::placeBlock() {
                     m_player->aabbMax())) {
         return;
     }
-    m_world.setBlock(target.x, target.y, target.z,
-                     m_hotbar[m_hotbarSelected]);
+    m_world.setBlock(target.x, target.y, target.z, item.block);
     // Relight the region around the change (a placed occluder blocks light;
     // a placed glowstone is a new light source).
     Lighting::updateLocal(m_world, m_blocks, target);
+    // Placing consumes one from the selected stack (the inventory is the
+    // source of blocks — no more infinite placement).
+    m_inventory.take(m_selectedSlot, 1);
 }
 
 void Game::cycleHotbar() {
-    if (m_hotbar.empty()) {
+    m_selectedSlot =
+        (m_selectedSlot + 1) % static_cast<std::size_t>(Inventory::kHotbarSize);
+    // The selected item (and its break speed) changed: restart any break
+    // in progress (Minecraft behavior).
+    resetBreaking();
+}
+
+void Game::dropSelectedItem() {
+    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    if (stack.empty()) {
         return;
     }
-    m_hotbarSelected = (m_hotbarSelected + 1) % m_hotbar.size();
+    const Item& item = m_items.at(stack.item);
+    if (m_inventory.take(m_selectedSlot, 1) == 0) {
+        return;
+    }
+    // Spawn at the player's feet (bottom-center) with zero velocity — the
+    // same determinism convention as block drops. The item's pickup delay
+    // (see ItemEntity::kPickupDelaySeconds) keeps it from being
+    // re-picked up on the next frame.
+    const Vec3 pos = m_player->position();
+    m_entities.push_back(std::make_unique<ItemEntity>(m_world, m_blocks,
+                                                      item.name, item.maxStack,
+                                                      pos));
+}
+
+float Game::selectedBreakSpeed() const {
+    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    if (stack.empty()) {
+        return 1.0f; // bare hands
+    }
+    const Item& item = m_items.at(stack.item);
+    return item.type == ItemType::Tool ? item.breakSpeed : 1.0f;
 }
 
 // ---------------------------------------------------------------------------
@@ -634,7 +737,34 @@ void Game::updateEntities(double dt) {
             }
         }
     }
-    // Despawn: merged-away + aged-out / impact / below the kill plane.
+    // Pickup (Phase 11): items within kPickupDistance of the player's
+    // bottom-center that are past their pickup delay go into the inventory
+    // (deterministic index order; if the inventory has no room the item
+    // stays where it is and is retried next frame).
+    const Vec3 playerPos = m_player->position();
+    const float pickupSq = kPickupDistance * kPickupDistance;
+    for (std::size_t i = 0; i < n; ++i) {
+        if (gone[i]) {
+            continue;
+        }
+        auto* item = dynamic_cast<ItemEntity*>(m_entities[i].get());
+        if (item == nullptr || !item->pickupReady()) {
+            continue;
+        }
+        const Vec3 d = item->position() - playerPos;
+        if (lengthSq(d) > pickupSq) {
+            continue;
+        }
+        // Validity is guaranteed: drops are validated at init and only
+        // spawn from that validated data.
+        const ItemID iid = m_items.idForName(item->itemName());
+        if (m_inventory.add(iid, item->count(), m_items) < 0) {
+            continue; // inventory full: the item stays on the ground
+        }
+        gone[i] = true;
+    }
+    // Despawn: merged-away / picked-up + aged-out / impact / below the
+    // kill plane.
     for (std::size_t i = 0; i < n; ++i) {
         if (!gone[i] && m_entities[i]->shouldDespawn()) {
             gone[i] = true;
@@ -661,11 +791,21 @@ void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
         if (item == nullptr) {
             continue;
         }
-        const Block& block = m_blocks.at(item->block());
+        const ItemID iid = m_items.idForName(item->itemName());
+        if (!iid.valid()) {
+            continue; // cannot happen (item data is validated at init)
+        }
+        const Item& it = m_items.at(iid);
+        if (it.type != ItemType::Block) {
+            // Tools have no in-world cube (the held-item view arrives with
+            // the UI in Phase 15).
+            continue;
+        }
+        const Block& block = m_blocks.at(it.block);
         if (block.properties.transparent != transparentPass) {
             continue;
         }
-        const Mesh& mesh = itemMesh(item->block());
+        const Mesh& mesh = itemMesh(it.block);
         if (!mesh.valid()) {
             continue;
         }

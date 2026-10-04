@@ -50,7 +50,9 @@ TEST(InputTest, AllMappedKeys) {
         {SDLK_LSHIFT, GameKey::LeftShift},
         {SDLK_LCTRL, GameKey::LeftControl},
         {SDLK_LALT, GameKey::LeftAlt},
+        {SDLK_TAB, GameKey::Tab},
         {SDLK_ESCAPE, GameKey::Escape},
+        {SDLK_Q, GameKey::Q},
     };
     Input input;
     input.frameBegin();

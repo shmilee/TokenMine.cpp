@@ -39,6 +39,8 @@ add_library(mc_core STATIC
     src/entity/item_entity.cpp
     src/entity/item_mesh.cpp
     src/entity/projectile.cpp
+    src/item/item_registry.cpp
+    src/item/inventory.cpp
     src/player/player.cpp
     src/world/chunk.cpp
     src/world/raycast.cpp
@@ -90,6 +92,7 @@ add_executable(minecraft_tests
     tests/test_fluid.cpp
     tests/test_lighting.cpp
     tests/test_entity.cpp
+    tests/test_item.cpp
     tests/test_noise.cpp
     tests/test_player.cpp
     tests/test_biome.cpp

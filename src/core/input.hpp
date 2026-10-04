@@ -29,10 +29,11 @@ enum class GameKey {
     LeftAlt,
     Tab,
     Escape,
+    Q, // drop one from the selected hotbar slot (Phase 11)
     // Keep in sync with kKeyCount.
 };
 
-inline constexpr int kKeyCount = static_cast<int>(GameKey::Escape) + 1;
+inline constexpr int kKeyCount = static_cast<int>(GameKey::Q) + 1;
 
 enum class MouseButton {
     Left,
