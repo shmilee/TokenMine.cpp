@@ -32,6 +32,7 @@ struct DebugInfo {
     bool pointerLocked = false;
     bool inventoryOpen = false;
     std::size_t particles = 0;
+    std::size_t entities = 0; // Phase 19: the entity list (dropped items...)
     double health = 0.0;   // Phase 16
     double maxHealth = 0.0;
 };

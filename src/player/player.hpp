@@ -131,6 +131,11 @@ public:
         m_dead = m_health <= 0.0f;
     }
 
+    // Entity separation (Phases 16/19): the player is immovable — entities
+    // are pushed out of the player (Minecraft's behavior), never the other
+    // way around.
+    bool pushableByEntities() const override { return false; }
+
 private:
     // One physics sub-step (Entity::integrate): swim/air gravity + the
     // jump. `look`/`inWater` are tick state, consumed per sub-step.

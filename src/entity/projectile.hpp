@@ -33,6 +33,11 @@ public:
     bool dead() const { return m_dead; }
     double age() const { return m_age; }
 
+    // Entity separation (Phase 19): projectiles fly through every entity
+    // (Minecraft arrows pass through items/mobs) — the separation pass
+    // skips them entirely.
+    bool collidesWithEntities() const override { return false; }
+
 private:
     void integrate(float h) override;
     void afterSubstep(bool blocked) override;

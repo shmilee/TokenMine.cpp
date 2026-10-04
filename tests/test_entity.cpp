@@ -14,6 +14,7 @@
 #include "entity/item_entity.hpp"
 #include "entity/item_mesh.hpp"
 #include "entity/projectile.hpp"
+#include "player/player.hpp"
 #include "renderer/texture_atlas.hpp"
 #include "world/world.hpp"
 
@@ -445,4 +446,239 @@ TEST(ItemMeshTest, UvCornersStayInsideTheFaceTile) {
             EXPECT_LE(uv.y, u1.y + 1e-6f);
         }
     }
+}
+
+// -- entity-vs-entity separation (Phase 19) ----------------------------------
+
+namespace {
+
+// A non-pushable stub body: the "future mob" placeholder for the immovable
+// case beyond the player.
+class StubBody : public Entity {
+public:
+    StubBody(const World& world, const BlockRegistry& blocks, Vec3 pos)
+        : Entity(world, blocks, pos, 0.6f, 1.8f) {}
+    void update(double) override {}
+    void integrate(float) override {}
+    bool pushableByEntities() const override { return false; }
+};
+
+// Strict 3D AABB overlap (the separation convention: touching faces are
+// not an overlap).
+bool aabbOverlap(const Vec3& a0, const Vec3& a1, const Vec3& b0,
+                 const Vec3& b1) {
+    return std::min(a1.x, b1.x) > std::max(a0.x, b0.x) &&
+           std::min(a1.y, b1.y) > std::max(a0.y, b0.y) &&
+           std::min(a1.z, b1.z) > std::max(a0.z, b0.z);
+}
+
+// The bottleneck per-axis overlap extent: 3D overlap requires ALL axes to
+// overlap, so this is > 0 iff the AABBs overlap (and the smallest positive
+// value is how far apart the pair is on the separating axis).
+float minAabbExtent(const Vec3& a0, const Vec3& a1, const Vec3& b0,
+                    const Vec3& b1) {
+    const float ox = std::min(a1.x, b1.x) - std::max(a0.x, b0.x);
+    const float oy = std::min(a1.y, b1.y) - std::max(a0.y, b0.y);
+    const float oz = std::min(a1.z, b1.z) - std::max(a0.z, b0.z);
+    return std::min({ox, oy, oz});
+}
+
+Vec3 aabbMinOf(const Vec3& bottomCenter, float width) {
+    return {bottomCenter.x - width * 0.5f, bottomCenter.y,
+            bottomCenter.z - width * 0.5f};
+}
+
+Vec3 aabbMaxOf(const Vec3& bottomCenter, float width, float height) {
+    return {bottomCenter.x + width * 0.5f, bottomCenter.y + height,
+            bottomCenter.z + width * 0.5f};
+}
+
+} // namespace
+
+TEST(SeparationTest, PairSplitsTwoPushableBodiesHalfEach) {
+    Fixture f;
+    ItemEntity a = f.makeItem({8.5f, 1.0f, 8.5f}, "stone");
+    ItemEntity b = f.makeItem({8.625f, 1.0f, 8.5f}, "dirt");
+    // a [8.375, 8.625], b [8.5, 8.75]: the x overlap (0.125) is shallower
+    // than y/z (0.25). a is left of b: each moves half the face span
+    // (0.0625) apart, landing face-to-face at 8.5625.
+    EXPECT_TRUE(separateEntityPair(a, b, true));
+    EXPECT_FLOAT_EQ(a.position().x, 8.5f - 0.0625f);
+    EXPECT_FLOAT_EQ(b.position().x, 8.625f + 0.0625f);
+    EXPECT_FLOAT_EQ(a.position().y, 1.0f);
+    EXPECT_FLOAT_EQ(b.position().y, 1.0f);
+    EXPECT_EQ(b.position().z, 8.5f);
+    // Touching, not overlapping.
+    EXPECT_LE(a.aabbMax().x, b.aabbMin().x);
+    // The push does not touch the velocity.
+    EXPECT_EQ(a.velocity().x, 0.0f);
+    EXPECT_EQ(b.velocity().x, 0.0f);
+}
+
+TEST(SeparationTest, PairKeepsPlayerImmovableAndPushesItemOut) {
+    Fixture f;
+    Player player(f.world, f.blocks, {8.75f, 1.0f, 8.5f});
+    ItemEntity item = f.makeItem({8.625f, 1.125f, 8.5f});
+    // All three overlaps are 0.25 (tied -> x). The item center (8.625)
+    // sits left of the player center (8.75): the item takes the full face
+    // span (the player is immovable, the Phase 16 rule) and lands flush on
+    // the player's left face.
+    const Vec3 playerBefore = player.position();
+    const Vec3 itemBefore = item.position();
+    EXPECT_TRUE(separateEntityPair(player, item, true));
+    EXPECT_EQ(player.position(), playerBefore); // immovable
+    EXPECT_FLOAT_EQ(item.position().y, itemBefore.y);
+    EXPECT_FLOAT_EQ(item.position().z, itemBefore.z);
+    EXPECT_LT(item.position().x, itemBefore.x); // pushed away (-x)
+    EXPECT_FLOAT_EQ(item.position().x,
+                    8.625f - (8.75f - player.aabbMin().x));
+    // No residual overlap.
+    EXPECT_FALSE(aabbOverlap(player.aabbMin(), player.aabbMax(),
+                             item.aabbMin(), item.aabbMax()));
+}
+
+TEST(SeparationTest, PairTieLaterBodyGoesNegative) {
+    Fixture f;
+    ItemEntity a = f.makeItem({8.5f, 1.0f, 8.5f}, "stone");
+    ItemEntity b = f.makeItem({8.5f, 1.0f, 8.5f}, "dirt");
+    // Exact center tie on all axes (tied extents -> x): both bodies are
+    // pushable, so the LATER body (b) goes negative and the earlier one
+    // (a) positive; each moves half the full overlap (0.125).
+    EXPECT_TRUE(separateEntityPair(a, b, true));
+    EXPECT_FLOAT_EQ(a.position().x, 8.5f + 0.125f);
+    EXPECT_FLOAT_EQ(b.position().x, 8.5f - 0.125f);
+}
+
+TEST(SeparationTest, PairTiePlayerItemKeepsPhase16Direction) {
+    Fixture f;
+    Player player(f.world, f.blocks, {8.75f, 1.0f, 8.5f});
+    ItemEntity item = f.makeItem({8.75f, 1.125f, 8.5f});
+    // Exact center tie on x (the shallowest axis, tied extents): the
+    // player is immovable, so the pushable item is pushed to the -axis
+    // side by the full face span — the Phase 16 direction (an item
+    // dropped exactly at the player's feet goes to the player's left).
+    EXPECT_TRUE(separateEntityPair(player, item, true));
+    EXPECT_EQ(player.position(), (Vec3{8.75f, 1.0f, 8.5f})); // immovable
+    // The item's far face lands flush on the player's -x face.
+    EXPECT_FLOAT_EQ(item.aabbMax().x, player.aabbMin().x);
+    EXPECT_FLOAT_EQ(item.position().x,
+                    8.75f - (player.aabbMax().x - 8.625f));
+    EXPECT_FALSE(aabbOverlap(player.aabbMin(), player.aabbMax(),
+                             item.aabbMin(), item.aabbMax()));
+}
+
+TEST(SeparationTest, PairMinimumAxisYResolvesVertically) {
+    Fixture f;
+    ItemEntity a = f.makeItem({8.5f, 1.0f, 8.5f});
+    ItemEntity b = f.makeItem({8.5f, 1.2f, 8.5f});
+    // y overlap 0.05 < x/z 0.25 -> the y axis. a (below) would be pushed
+    // into the stone floor, so the world-aware fallback hands the full
+    // separation to b: a stays on the floor, b lands on top of a.
+    EXPECT_TRUE(separateEntityPair(a, b, true));
+    EXPECT_EQ(a.position(), (Vec3{8.5f, 1.0f, 8.5f}));
+    EXPECT_FLOAT_EQ(b.position().y, 1.2f + (1.25f - 1.2f));
+    EXPECT_LE(b.aabbMin().y, a.aabbMax().y);
+}
+
+TEST(SeparationTest, PairTouchingFacesDoNotSeparate) {
+    Fixture f;
+    ItemEntity a = f.makeItem({8.5f, 1.0f, 8.5f}, "stone");
+    ItemEntity b = f.makeItem({8.75f, 1.0f, 8.5f}, "dirt");
+    // a [8.375, 8.625], b [8.625, 8.875]: touching at 8.625 (the strict
+    // overlap test) -> nothing moves.
+    EXPECT_FALSE(separateEntityPair(a, b, true));
+    EXPECT_EQ(a.position(), (Vec3{8.5f, 1.0f, 8.5f}));
+    EXPECT_EQ(b.position(), (Vec3{8.75f, 1.0f, 8.5f}));
+}
+
+TEST(SeparationTest, PairBothImmovableBodiesStayPut) {
+    Fixture f;
+    StubBody a(f.world, f.blocks, {8.5f, 1.0f, 8.5f});
+    StubBody b(f.world, f.blocks, {8.6f, 1.0f, 8.5f});
+    EXPECT_FALSE(separateEntityPair(a, b, true));
+    EXPECT_EQ(a.position(), (Vec3{8.5f, 1.0f, 8.5f}));
+    EXPECT_EQ(b.position(), (Vec3{8.6f, 1.0f, 8.5f}));
+}
+
+TEST(SeparationTest, ListQDropClusterConvergesDeterministically) {
+    // The common Q-drop case: two different items spawned at the player's
+    // feet (same position, fully overlapping). The player pairs are
+    // resolved first (the player is immovable, the items' centers tie ->
+    // -x, the Phase 16 direction), the item pair then splits them; the
+    // sweeps converge to the items stacked face-to-face flush against the
+    // player's LEFT face (player x [8.45, 9.05]: i0 flush at 8.325,
+    // i1 at 8.075) within the sub-visual convergence threshold.
+    auto runOnce = []() {
+        Fixture f;
+        Player player(f.world, f.blocks, {8.75f, 1.0f, 8.5f});
+        ItemEntity i0 = f.makeItem({8.75f, 1.0f, 8.5f}, "stone");
+        ItemEntity i1 = f.makeItem({8.75f, 1.0f, 8.5f}, "dirt");
+        std::vector<Entity*> bodies {&player, &i0, &i1};
+        separateEntityList(bodies);
+        return std::make_tuple(player.position(), i0.position(),
+                               i1.position());
+    };
+    const auto [p1, a1, b1] = runOnce();
+    const auto [p2, a2, b2] = runOnce();
+    // Deterministic: two fresh runs land on the exact same floats.
+    EXPECT_EQ(p1, p2);
+    EXPECT_EQ(a1, a2);
+    EXPECT_EQ(b1, b2);
+    // The player never moved; the items ended up on its -x side, ordered
+    // i0 (the earlier body) between the player and i1.
+    EXPECT_EQ(p1, (Vec3{8.75f, 1.0f, 8.5f}));
+    EXPECT_LT(a1.x, p1.x);
+    EXPECT_GT(a1.x, b1.x);
+    // Converged: i0 against the player's left face, i1 against i0, and
+    // every pair within the sub-visual convergence threshold (the
+    // competing constraints halve the residual per sweep; the pass stops
+    // at kSeparationConvergence).
+    EXPECT_NEAR(a1.x, 8.45f - 0.125f, 1e-4f);
+    EXPECT_NEAR(b1.x, 8.2f - 0.125f, 1e-4f);
+    const Vec3 pMin = aabbMinOf(p1, 0.6f);
+    const Vec3 pMax = aabbMaxOf(p1, 0.6f, 1.8f);
+    const Vec3 aMin = aabbMinOf(a1, 0.25f);
+    const Vec3 aMax = aabbMaxOf(a1, 0.25f, 0.25f);
+    const Vec3 bMin = aabbMinOf(b1, 0.25f);
+    const Vec3 bMax = aabbMaxOf(b1, 0.25f, 0.25f);
+    EXPECT_LE(minAabbExtent(pMin, pMax, aMin, aMax), 1e-5f);
+    EXPECT_LE(minAabbExtent(pMin, pMax, bMin, bMax), 1e-5f);
+    EXPECT_LE(minAabbExtent(aMin, aMax, bMin, bMax), 1e-5f);
+    // (Re-)running the pass on the settled cluster moves nothing up to the
+    // convergence threshold.
+    Fixture f;
+    Player player2(f.world, f.blocks, p1);
+    ItemEntity i0 = f.makeItem(a1, "stone");
+    ItemEntity i1 = f.makeItem(b1, "dirt");
+    std::vector<Entity*> bodies {&player2, &i0, &i1};
+    separateEntityList(bodies);
+    EXPECT_NEAR(i0.position().x, a1.x, 1e-5f);
+    EXPECT_NEAR(i1.position().x, b1.x, 1e-5f);
+}
+
+TEST(SeparationTest, ListSkipsNonCollidingBodies) {
+    Fixture f;
+    ItemEntity item = f.makeItem({8.5f, 1.0f, 8.5f});
+    Projectile arrow(f.world, f.blocks, {8.5f, 1.0f, 8.5f},
+                     {0.0f, 1.0f, 0.0f});
+    // The projectile flies through the item (Minecraft arrows): no
+    // separation, no moved sweeps.
+    EXPECT_FALSE(arrow.collidesWithEntities());
+    std::vector<Entity*> bodies {&item, &arrow};
+    EXPECT_EQ(separateEntityList(bodies), 0);
+    EXPECT_EQ(item.position(), (Vec3{8.5f, 1.0f, 8.5f}));
+}
+
+TEST(SeparationTest, ParticipationFlags) {
+    Fixture f;
+    Player player(f.world, f.blocks, {8.5f, 1.0f, 8.5f});
+    ItemEntity item = f.makeItem({8.5f, 1.0f, 8.5f});
+    Projectile arrow(f.world, f.blocks, {8.5f, 1.0f, 8.5f},
+                     {1.0f, 0.0f, 0.0f});
+    EXPECT_TRUE(player.collidesWithEntities());
+    EXPECT_FALSE(player.pushableByEntities()); // immovable (Phase 16 rule)
+    EXPECT_TRUE(item.collidesWithEntities());
+    EXPECT_TRUE(item.pushableByEntities());
+    EXPECT_FALSE(arrow.collidesWithEntities()); // arrows pass through
+    EXPECT_TRUE(arrow.pushableByEntities());
 }

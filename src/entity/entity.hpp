@@ -30,6 +30,8 @@
 // observable).
 #pragma once
 
+#include <vector>
+
 #include "block/block_registry.hpp"
 #include "core/math/vec3.hpp"
 #include "world/world.hpp"
@@ -73,9 +75,39 @@ public:
     }
 
     // Set the position (bottom-center) WITHOUT touching the velocity or the
-    // ground state. Used by the player-vs-item separation (Phase 16): a
-    // pushed item keeps moving (a teleport would kill its slide).
+    // ground state. Used by the entity separation (Phases 16/19): a pushed
+    // item keeps moving (a teleport would kill its slide).
     void setPosition(Vec3 pos) { m_position = pos; }
+
+    // Would the AABB placed at `pos` (bottom-center) overlap a solid block?
+    // Same strict convention as the collision resolve: a face resting
+    // exactly on a block boundary is free. The entity-separation pass
+    // (Phase 19) never moves a body into a position this rejects.
+    bool hasRoomAt(Vec3 pos) const;
+
+    // Entity-vs-entity collision (Phase 19): does this entity participate
+    // in the separation pass at all? Projectiles fly through every entity
+    // (Minecraft arrows) and opt out.
+    virtual bool collidesWithEntities() const { return true; }
+
+    // Can the separation pass move this entity? The player is immovable —
+    // items are pushed out of the player (Minecraft's behavior, Phase 16),
+    // never the other way around.
+    virtual bool pushableByEntities() const { return true; }
+
+    // Push this entity out of the IMMOVABLE AABB [otherMin, otherMax]
+    // (Phase 16 primitive, kept for tests and as the one-sided special
+    // case of the pair pass below): along the axis of MINIMUM penetration
+    // (x->y->z priority on exact ties, deterministic), AWAY from the other
+    // body's center (-axis when the centers coincide, the Phase 16
+    // direction), by the
+    // face-to-face span — the push that lands this body's far face flush
+    // on the other body's face (pushing by the overlap alone leaves a
+    // residual overlap when the other body is wider). The body only moves
+    // to a position its AABB can occupy (hasRoomAt); a blocked push leaves
+    // it in place. The velocity is untouched (a slide continues). Returns
+    // true when the entity moved.
+    bool separateFrom(const Vec3& otherMin, const Vec3& otherMax);
 
     const World& world() const { return m_world; }
 
@@ -125,5 +157,62 @@ private:
     // Solid = registered block with properties.solid (air is never solid).
     bool isSolid(BlockID id) const;
 };
+
+// -- entity-vs-entity separation (Phase 19) ----------------------------------
+
+// The resolved geometry of one overlapping pair (a vs b).
+struct EntitySeparation {
+    bool overlap = false;  // 3D AABB overlap (strict: touching faces don't count)
+    int axis = 0;          // 0=x 1=y 2=z: the minimum-penetration axis (x->y->z
+                           // priority on exact ties)
+    bool aLeft = false;    // a sits on the -axis side (an exact center tie is
+                           // resolved by the caller's aTieNegative)
+    float distance = 0.0f; // face-to-face span: how far `a` must travel along
+                           // the axis, away from b, to clear it completely
+};
+
+// Pure geometry: overlap test, axis/orientation and the clearance span.
+// `aTieNegative` resolves the exact-center tie: true = a sits on the
+// -axis side when the two centers coincide exactly.
+EntitySeparation computeEntitySeparation(const Vec3& aMin, const Vec3& aMax,
+                                         const Vec3& bMin, const Vec3& bMax,
+                                         bool aTieNegative);
+
+// Resolve the overlap of two entities: the pair is pushed apart along the
+// minimum-penetration axis — 50/50 when both bodies are pushable, the
+// pushable one takes it all against an immovable one (the Phase 16
+// player-vs-item rule). A body only moves to a position its AABB can occupy
+// (hasRoomAt): a blocked share falls back to the other body taking the full
+// separation; if both sides are blocked the pair is left as is. An exact
+// center tie pushes the pushable body to the -axis side — which keeps the
+// Phase 16 player-vs-item direction (the item goes negative); when both
+// bodies are pushable the later one in the list goes negative (`aFirst`
+// marks which body the pass sees first). Returns true when at least one
+// body moved.
+bool separateEntityPair(Entity& a, Entity& b, bool aFirst);
+
+// The per-frame separation pass: repeated sweeps over `bodies` (pairs
+// (i, j), i < j, in list order — the caller puts the player first; the list
+// order decides the exact-center tie between two pushable bodies: the
+// later one goes negative). Pairs where either side opts out
+// (collidesWithEntities) are skipped. Sweeps repeat until one
+// moves nothing, until a sweep's largest body move drops below
+// kSeparationConvergence (the competing constraints — e.g. an item flush
+// against the player AND touching the next item — halve the residual
+// interpenetration per sweep, so this stops at a sub-visual residual), or
+// until kSeparationSweeps is reached (the hard cap keeps the worst case
+// bounded and deterministic). Returns the number of sweeps that moved
+// something.
+int separateEntityList(const std::vector<Entity*>& bodies);
+
+// Per-sweep convergence threshold of the separation pass (blocks): below
+// this, the residual interpenetration is sub-visual (1e-6 blocks is about
+// 1e-5 px at typical view distances).
+inline constexpr float kSeparationConvergence = 1e-6f;
+
+// Hard cap on the separation pass (see separateEntityList): a realistic
+// drop cluster converges in ~20 sweeps; the cap bounds pathological
+// oscillation and pins the result.
+inline constexpr int kSeparationSweeps = 32;
 
 } // namespace mc

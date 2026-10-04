@@ -26,6 +26,7 @@ TEST(DebugOverlayTest, LinesFormat) {
     info.pointerLocked = true;
     info.streamRadius = 8;
     info.particles = 7;
+    info.entities = 3;
     info.health = 17.0;
     info.maxHealth = 20.0;
     const auto lines = debugOverlayLines(info);
@@ -37,7 +38,7 @@ TEST(DebugOverlayTest, LinesFormat) {
     EXPECT_EQ(lines[4], "col (0, -3)  seed 123456789");
     EXPECT_EQ(lines[5], "time 0.333  day 1.00  locked");
     EXPECT_EQ(lines[6], "streaming idle  pending 0  radius 8");
-    EXPECT_EQ(lines[7], "inventory closed  particles 7");
+    EXPECT_EQ(lines[7], "inventory closed  particles 7  entities 3");
     EXPECT_EQ(lines[8], "health 17.0 / 20.0");
 }
 
@@ -48,8 +49,9 @@ TEST(DebugOverlayTest, EngagedStreamingAndOpenInventory) {
     info.inventoryOpen = true;
     info.pointerLocked = false;
     info.particles = 256;
+    info.entities = 2;
     const auto lines = debugOverlayLines(info);
     EXPECT_EQ(lines[5], "time 0.000  day 0.00  free");
     EXPECT_EQ(lines[6], "streaming engaged  pending 3  radius 0");
-    EXPECT_EQ(lines[7], "inventory open  particles 256");
+    EXPECT_EQ(lines[7], "inventory open  particles 256  entities 2");
 }

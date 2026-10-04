@@ -451,6 +451,7 @@ mine-craft/
 - [x] **Phase 16** — 生存系统：生命值/坠落伤害/死亡与重生（R，背包保留）/自然回复/受伤红闪、潜行（LeftControl）、1 格自动台阶（step-up）、玩家↔掉落物分离、生命 HUD（10 心三态）；存档格式 2（player.health）；基线逐字节不变
 - [x] **Phase 17** — 工作台 + 形状合成：shaped 配方 JSON（`pattern`/`key`，网格偏移扫描匹配，先 shaped 后 shapeless）/`CraftingGrid` 9 格网格（`matchesShaped`/`matchesShapeless`/`matchGridRecipe` 纯逻辑）/`BlockProperties.interact` 数据属性 + crafting_table 方块（右键开 3×3 面板、破坏掉自身）/工作台面板（独立容器网格，跨开关保留、入存档）/E 面板 2×2 = 共享 3×3 模型左上 4 格、配方列表仅 shapeless/存档格式 3（`inv_grid`+`table_grid`）/atlas 布局数据驱动（`block_atlas.json` 4×8，row 4 = 工作台顶·侧 + planks）；无输入基线逐字节不变
 - [x] **Phase 18** — Greedy Meshing：逐面片按（纹理、sub-mesh、面光）合并为单 quad（光保守合并：面光不同不合并，光照零近似）/每平面双 slice（相邻非 opaque 方块间双面保留）/tiled UV 约定（合并 quad：`uv`=tile 索引 + `uvLocal`=tile 单位位置，`basic.frag` fract 回卷；单面片保持 legacy atlas UV 逐位精确）/`MeshVertex` +`uvLocal`+`tiled`（13 float）；200-chunk 实测总三角形 3.3× 下降（109,648 → 33,558）；无输入基线重拍（`base18`，3593 px 亚纹素重采样/剪影边缘差，几何覆盖集逐 chunk 100% 相等）
+- [x] **Phase 19** — 通用实体间碰撞：Phase 16 玩家↔掉落物分离推广为通用分离 pass（固定序 body 列表：玩家先、实体按索引；重叠对沿最小穿透轴推离——两可推动体 50/50、对不可推动体全量面到面跨度；`hasRoomAt` 世界感知：被挡份额转由另一侧全量接管、双挡跳过；重复 sweep 至 <1e-6 块亚视觉残差或 32 次上限）/数据位 `collidesWithEntities`（投射物不参与，箭穿过实体）+ `pushableByEntities`（玩家不可推动）/中心精确重合保持 P16 方向（可推动体走 −axis，Q 丢脚底 → 玩家 −x 侧）/`Entity::hasRoomAt` 严格格扫描/`separateFrom` 上移 Entity 基类（P16 三测原样保留为回归锚）/F3 overlay +实体计数；无输入基线逐字节不变（`base18` 门通过），items 场景 ×2 字节一致 + 像素判据（stone 灰/dirt 棕分离位）
 
 ## 开发约定
 

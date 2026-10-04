@@ -33,8 +33,9 @@ std::vector<std::string> debugOverlayLines(const DebugInfo& info) {
         fmt("streaming %s  pending %d  radius %d",
             info.streamingEngaged ? "engaged" : "idle", info.streamPending,
             info.streamRadius),
-        fmt("inventory %s  particles %zu",
-            info.inventoryOpen ? "open" : "closed", info.particles),
+        fmt("inventory %s  particles %zu  entities %zu",
+            info.inventoryOpen ? "open" : "closed", info.particles,
+            info.entities),
         fmt("health %.1f / %.1f", info.health, info.maxHealth),
     };
 }

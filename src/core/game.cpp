@@ -1384,17 +1384,24 @@ void Game::updateEntities(double dt) {
     for (auto& entity : m_entities) {
         entity->update(dt);
     }
-    // Player <-> item separation (Phase 16): an item overlapping the
-    // player's AABB is pushed out along the minimum-penetration axis (the
-    // player is immovable — Minecraft pushes items out of the player).
-    // Deterministic: fixed index order, one push per item per frame.
-    const Vec3 pMin = m_player->aabbMin();
-    const Vec3 pMax = m_player->aabbMax();
+    // Entity-vs-entity separation (Phase 19; the player-vs-item part is
+    // the Phase 16 pass, now generalized): the pass runs over a fixed-order
+    // body list — the player first (immovable: Minecraft pushes items out
+    // of the player), then the entity list by index — so the pair order
+    // and the exact-center tie are deterministic (an item dropped exactly
+    // at the player's feet goes to the player's -x side, the Phase 16
+    // direction). Overlapping pairs are pushed apart along the
+    // minimum-penetration axis (50/50 between two pushable bodies, full
+    // span against an immovable one); projectiles never participate
+    // (collidesWithEntities). Repeated until stable, capped (see
+    // separateEntityList).
+    std::vector<Entity*> bodies;
+    bodies.reserve(m_entities.size() + 1);
+    bodies.push_back(m_player.operator->());
     for (auto& entity : m_entities) {
-        if (auto* item = dynamic_cast<ItemEntity*>(entity.get())) {
-            item->separateFrom(pMin, pMax);
-        }
+        bodies.push_back(entity.get());
     }
+    separateEntityList(bodies);
     // Item merge: index order, `j` absorbed into `i` (j > i). A removed
     // entity is skipped as a future merge target, so each item is absorbed
     // at most once (deterministic result for a given spawn order).
@@ -2187,6 +2194,7 @@ void Game::renderUi() {
         info.pointerLocked = locked;
         info.inventoryOpen = panelOpen();
         info.particles = m_particles.size();
+        info.entities = m_entities.size();
         if (m_player) {
             info.health = m_player->health();
             info.maxHealth = m_player->maxHealth();
