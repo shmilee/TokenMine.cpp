@@ -32,6 +32,7 @@
 #include "core/asset_manager.hpp"
 #include "core/camera.hpp"
 #include "core/config.hpp"
+#include "core/difficulty.hpp"
 #include "core/error.hpp"
 #include "core/input.hpp"
 #include "core/logger.hpp"
@@ -403,6 +404,13 @@ private:
     MobRegistry m_mobTypes;
     MobSpawningConfig m_spawnConfig;
     bool m_mobsEnabled = true;
+    // Difficulty (Phase 25): config mobs.difficulty (default "normal"),
+    // strict-parsed; scales the hostile spawn cadence, the spawn-protection
+    // radius and the hostile damage (core/difficulty.hpp). m_spawnPoint is
+    // the WORLD spawn (the fresh-world spawn, before save load) — the
+    // center of the spawn-protection circle.
+    Difficulty m_difficulty = Difficulty::Normal;
+    Vec3 m_spawnPoint {0.5f, 0.0f, 0.5f};
     std::unordered_map<MobID, Mesh, MobIDHash> m_mobMeshes;
     std::uint64_t m_spawnCounter = 0;
     // Swing cooldown (seconds; Phase 20): one attack hit per

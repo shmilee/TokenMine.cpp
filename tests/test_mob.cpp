@@ -233,6 +233,43 @@ TEST(MobRegistryTest, RejectsNonIntegerSpawnMaxLight) {
     EXPECT_FALSE(r.ok());
 }
 
+// -- hostile flag (Phase 25: the difficulty system is data-driven) ------------
+
+TEST(MobRegistryTest, HostileDefaultsToFalse) {
+    // kZombieDef has no 'hostile': the default (passive) applies — the
+    // difficulty system must not guess hostility from behavior values.
+    MobRegistry mobs = makeMobRegistry();
+    EXPECT_FALSE(mobs.at(MobID{0}).properties.hostile);
+}
+
+TEST(MobRegistryTest, ParsesHostileTrueAndExplicitFalse) {
+    for (const char* value : {"true", "false"}) {
+        MobRegistry mobs;
+        std::string def = kZombieDef;
+        const std::string key = "\"wander_interval\": 2.5";
+        def.replace(def.find(key), key.size(),
+                    std::string("\"wander_interval\": 2.5, \"hostile\": ") +
+                        value);
+        auto r = mobs.registerMob(parseJson(def));
+        ASSERT_TRUE(r.ok()) << r.error().message;
+        EXPECT_EQ(mobs.at(*r).properties.hostile,
+                  std::string(value) == "true");
+    }
+}
+
+TEST(MobRegistryTest, RejectsNonBoolHostile) {
+    for (const char* bad : {"\"yes\"", "1"}) {
+        MobRegistry mobs;
+        std::string def = kZombieDef;
+        const std::string key = "\"wander_interval\": 2.5";
+        def.replace(def.find(key), key.size(),
+                    std::string("\"wander_interval\": 2.5, \"hostile\": ") +
+                        bad);
+        auto r = mobs.registerMob(parseJson(def));
+        EXPECT_FALSE(r.ok()) << "accepted hostile: " << bad;
+    }
+}
+
 TEST(MobRegistryTest, ParsesPassiveMob) {
     // A passive mob (Phase 22): zero detect/attack values are valid data
     // ("never chases / never attacks / harmless"), not typos.
@@ -497,6 +534,62 @@ TEST(MobSpawnCellTest, PermissiveMobSpawnsInLight) {
     auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
                                  0.6f, 1.8f, 1.0f, 15, kPlayerMin,
                                  kPlayerMax, {});
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {0, 0, -6}));
+}
+
+// -- spawn protection circle (Phase 25) ---------------------------------------
+//
+// The circle is centered on the WORLD spawn point (here: the cell (0,0)
+// center (0.5, 0.5), where the fixture player stands) and gates hostile
+// natural spawns by the difficulty's radius (passive mobs pass 0 — the
+// caller's job).
+
+TEST(MobSpawnCellTest, ProtectionCoversTheWholeRingYieldsNoCell) {
+    Fixture f;
+    // Radius 12 (normal) around (0.5, 0.5): the farthest ring cell of the
+    // 4..6 ring is sqrt(2) * 6 = 8.49 < 12, so every candidate is inside
+    // the protection circle.
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax,
+                                 {}, 12.0f, 0.5f, 0.5f);
+    EXPECT_FALSE(cell.has_value());
+}
+
+TEST(MobSpawnCellTest, ProtectionRejectsNearCellsScanContinues) {
+    Fixture f;
+    // Radius 6.0 (easy) with the circle center 6 blocks NORTH of the
+    // player (0.5, -6.5): the whole -z half of the ring sits inside the
+    // circle, the +z / side cells do not.
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax,
+                                 {}, 6.0f, 0.5f, -6.5f);
+    ASSERT_TRUE(cell.has_value());
+    // Scan order (dz then dx from -6): the dz=-6..-4 ring cells all sit
+    // within 6.0 of (0.5, -6.5) (max circle distance there: (dx=±5, dz=-5)
+    // at sqrt(25+4) = 5.39); at dz=-3 the first ring cell (dx=-5, distSq
+    // from the player 34) is sqrt(25+16) = 6.4 from the circle center
+    // -> outside -> the first valid cell.
+    EXPECT_EQ(*cell, (BlockPos {-5, 0, -3}));
+}
+
+TEST(MobSpawnCellTest, ProtectionCircleFarAwayHasNoEffect) {
+    Fixture f;
+    // The circle center 100 blocks away: no candidate is inside it.
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax,
+                                 {}, 12.0f, 100.5f, 100.5f);
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {0, 0, -6}));
+}
+
+TEST(MobSpawnCellTest, ZeroProtectionRadiusIsLegacyBehavior) {
+    Fixture f;
+    // Radius 0 (a passive mob's caller value) disables the circle even
+    // with the center under the player.
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax,
+                                 {}, 0.0f, 0.5f, 0.5f);
     ASSERT_TRUE(cell.has_value());
     EXPECT_EQ(*cell, (BlockPos {0, 0, -6}));
 }

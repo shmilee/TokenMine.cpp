@@ -19,6 +19,10 @@
 //                                 // (Minecraft hostile-mob convention:
 //                                 // dark only, default 0; see the spawn
 //                                 // light definition in mob_spawning.hpp)
+//     "hostile": true,            // optional bool, default false (Phase 25):
+//                                 // subject to the difficulty system
+//                                 // (spawn protection + damage scale; see
+//                                 // core/difficulty.hpp)
 //     "drops": "rotten_flesh",    // item name; "" = nothing (optional)
 //     "drops_count": 1            // 1..64 (optional, default 1)
 //   },
@@ -106,6 +110,13 @@ struct MobProperties {
     // Minecraft hostile-mob convention; a 15 would allow any time of day,
     // for future passive mobs).
     int spawnMaxLight = 0;
+    // Hostile (Phase 25): the mob is a hostile for the difficulty system
+    // (core/difficulty.hpp) — the spawn-protection circle applies to its
+    // natural spawns and its attack_damage is scaled by the difficulty.
+    // Passive mobs (false, the default) are exempt from both. The flag is
+    // data, not derived from behavior values (attack_damage 0 could still
+    // be a hostile that never hits in v1, and vice versa).
+    bool hostile = false;
     std::string drops;   // item name; empty = no drops
     int dropsCount = 1;  // 1..64
 };

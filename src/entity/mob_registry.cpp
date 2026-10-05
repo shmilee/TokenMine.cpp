@@ -103,6 +103,15 @@ Result<void> MobRegistry::parseProperties(const Json& def,
         }
     }
 
+    // Optional 'hostile' (bool, default false; Phase 25): the difficulty
+    // system flag (see MobProperties).
+    if (const Json* host = def.find("hostile")) {
+        if (!host->isBool()) {
+            return MC_FAIL("mob properties: 'hostile' must be a boolean");
+        }
+        out.hostile = host->asBool();
+    }
+
     if (const Json* drops = def.find("drops")) {
         if (!drops->isString()) {
             return MC_FAIL("mob properties: 'drops' must be a string "

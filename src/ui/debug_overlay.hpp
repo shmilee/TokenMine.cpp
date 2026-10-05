@@ -37,6 +37,7 @@ struct DebugInfo {
     double maxHealth = 0.0;
     double hunger = 0.0;    // Phase 23
     double maxHunger = 0.0;
+    std::string difficulty; // Phase 25: "easy" | "normal" | "hard"
 };
 
 // One line per entry, top to bottom.

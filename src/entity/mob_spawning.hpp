@@ -29,7 +29,12 @@
 //     hostile mobs (spawnMaxLight 0) only spawn in the dark,
 //   - the spawn AABB does not overlap the player's AABB,
 //   - no existing mob's bottom-center is within kSpawnClearance
-//     (horizontal) of the spawn point (no spawning on top of each other).
+//     (horizontal) of the spawn point (no spawning on top of each other),
+//   - the spawn-protection circle (Phase 25): the cell center is at least
+//     protectionRadius away (horizontal) from (protectionX, protectionZ)
+//     — the WORLD spawn point. Hostile mobs are gated by the difficulty's
+//     radius (core/difficulty.hpp); passive mobs pass protectionRadius 0
+//     (exempt, exactly like Minecraft).
 
 #pragma once
 
@@ -86,6 +91,9 @@ std::optional<BlockPos> findMobSpawnCell(const World& world,
                                          float dayFactor, int spawnMaxLight,
                                          const Vec3& playerMin,
                                          const Vec3& playerMax,
-                                         const std::vector<Vec3>& mobPositions);
+                                         const std::vector<Vec3>& mobPositions,
+                                         float protectionRadius = 0.0f,
+                                         float protectionX = 0.0f,
+                                         float protectionZ = 0.0f);
 
 } // namespace mc

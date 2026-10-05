@@ -14,6 +14,7 @@
 #include "core/json.hpp"
 #include "core/png.hpp"
 #include "core/bow.hpp"
+#include "core/difficulty.hpp"
 #include "entity/arrow_mesh.hpp"
 #include "entity/item_entity.hpp"
 #include "entity/mob_entity.hpp"
@@ -413,6 +414,13 @@ Result<void> Game::buildScene() {
     MC_TRY(spawnCfg);
     m_spawnConfig = *spawnCfg;
     m_mobsEnabled = m_config.getBool("mobs.enabled", true);
+    // Difficulty (Phase 25): strict — an unknown value fails init with a
+    // message naming the field (the config default is "normal", which is
+    // also the no-behavior-change baseline: scales 1.0 / cadence base).
+    auto difficulty = parseDifficulty(
+        m_config.getString("mobs.difficulty", "normal"));
+    MC_TRY(difficulty);
+    m_difficulty = *difficulty;
     for (const std::string& name : m_spawnConfig.mobs) {
         if (m_mobTypes.findByName(name) == nullptr) {
             return MC_FAIL("mob_spawning.json: unknown mob '" + name + "'");
@@ -572,6 +580,11 @@ Result<void> Game::buildScene() {
             break;
         }
     }
+    // The WORLD spawn (Phase 25): the center of the hostile spawn-protection
+    // circle. Captured BEFORE the save load — a loaded save moves the
+    // player, but the protection stays anchored to the world spawn (the
+    // Minecraft semantics; there are no beds in v1).
+    m_spawnPoint = spawnPos;
     m_player.emplace(m_world, m_blocks, spawnPos);
     m_player->pitch = -0.25f; // look slightly down at the landscape
     m_camera.position = m_player->eyePosition();
@@ -1723,9 +1736,15 @@ void Game::updateEntities(double dt) {
     // config (first_spawn_frame keeps the 60-frame no-input baseline
     // mob-free). The scan is a pure function of world + player, so the
     // same runs spawn the same mobs.
+    // The cadence is the data base scaled by the difficulty (Phase 25:
+    // check_every_frames / hostileSpawnRateScale — 30 -> 60/30/20 for
+    // easy/normal/hard). Normal = the base itself (baseline unchanged).
     if (m_mobsEnabled &&
         m_frameCount >= m_spawnConfig.firstSpawnFrame &&
-        m_frameCount % m_spawnConfig.checkEveryFrames == 0) {
+        m_frameCount %
+                checkEveryFramesFor(m_spawnConfig.checkEveryFrames,
+                                    m_difficulty) ==
+            0) {
         attemptMobSpawn();
     }
     // The mobs need the player's state for their AI (the player updates
@@ -2029,13 +2048,19 @@ void Game::attemptMobSpawn() {
     if (floorY < 0) {
         return;  // the player is over the void: no spawning
     }
+    // Spawn protection (Phase 25): hostiles are gated by the difficulty's
+    // radius around the world spawn point; passive mobs pass 0 (exempt).
+    const float protection = def.properties.hostile
+        ? spawnProtectionRadius(m_difficulty)
+        : 0.0f;
     auto cell = findMobSpawnCell(m_world, m_blocks, m_spawnConfig.minRadius,
                                  m_spawnConfig.maxRadius, px, pz, floorY,
                                  def.model.width, def.model.height,
                                  m_dayCycle.dayFactor(),
                                  def.properties.spawnMaxLight,
                                  m_player->aabbMin(), m_player->aabbMax(),
-                                 mobPositions);
+                                 mobPositions, protection, m_spawnPoint.x,
+                                 m_spawnPoint.z);
     if (!cell) {
         return;
     }
@@ -2053,9 +2078,14 @@ void Game::attemptMobSpawn() {
                                            seed);
     // The AI's landed attacks damage the player (Phase 16's damage path
     // owns the flash/sound/death — updateSurvival polls the health).
-    mob->setHitCallback([this](float amount) {
+    // Hostile damage is scaled by the difficulty (Phase 25); passive mobs
+    // (attack_damage 0 in the data) pass the scale untouched.
+    const float damageScale = def.properties.hostile
+        ? hostileDamageScale(m_difficulty)
+        : 1.0f;
+    mob->setHitCallback([this, damageScale](float amount) {
         if (!m_player->isDead()) {
-            m_player->damage(amount);
+            m_player->damage(amount * damageScale);
         }
     });
     m_entities.push_back(std::move(mob));
@@ -2852,6 +2882,7 @@ void Game::renderUi() {
             info.hunger = m_player->hunger();
             info.maxHunger = m_player->maxHunger();
         }
+        info.difficulty = difficultyName(m_difficulty);
         int y = kF3Margin;
         for (const std::string& line : debugOverlayLines(info)) {
             addText(line, kF3Margin, y, 1, kText);

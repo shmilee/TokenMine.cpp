@@ -118,7 +118,10 @@ std::optional<BlockPos> findMobSpawnCell(const World& world,
                                          float dayFactor, int spawnMaxLight,
                                          const Vec3& playerMin,
                                          const Vec3& playerMax,
-                                         const std::vector<Vec3>& mobPositions) {
+                                         const std::vector<Vec3>& mobPositions,
+                                         float protectionRadius,
+                                         float protectionX,
+                                         float protectionZ) {
     // Cells the mob's AABB occupies above the floor top: the AABB spans
     // [floorTop, floorTop + height), which strictly overlaps the cells
     // floorTop .. floorTop + ceil(height - eps) - 1.
@@ -137,6 +140,19 @@ std::optional<BlockPos> findMobSpawnCell(const World& world,
             }
             const int x = cx + dx;
             const int z = cz + dz;
+
+            // Spawn protection (Phase 25): no natural hostile spawn within
+            // protectionRadius (horizontal) of the world spawn point
+            // (passive mobs pass 0 — exempt). Checked first: it is the
+            // cheapest rejection and the policy is about the cell itself.
+            if (protectionRadius > 0.0f) {
+                const float pdx = static_cast<float>(x) + 0.5f - protectionX;
+                const float pdz = static_cast<float>(z) + 0.5f - protectionZ;
+                if (pdx * pdx + pdz * pdz < protectionRadius *
+                                                  protectionRadius) {
+                    continue;
+                }
+            }
 
             // Floor: the HIGHEST solid cell within kSpawnFloorDelta of the
             // player's floor (scanning downward = the surface the mob would

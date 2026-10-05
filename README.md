@@ -84,8 +84,9 @@ cmake --build build
     `tools/generate_health_icons.py` / `generate_hunger_icons.py`）；
     填充 = `clamp(value − 2i, 0, 2)`（半图标按 0.5 粒度渲染）。只在游玩态
     （锁定 + 背包未开）显示，无输入运行零新增绘制
-- **Mob 与 AI**（Phase 20，`MobEntity`/`MobRegistry`，全数据驱动；数据含
-  zombie（敌对）+ cow（被动，Phase 22））：
+- **Mob 与 AI**（Phase 20，Phase 22 被动 mob，Phase 25 难度系统，
+  `MobEntity`/`MobRegistry`，全数据驱动；数据含 zombie（敌对）+
+  cow（被动，Phase 22））：
   - **生成**：帧节奏驱动（`data/mob_spawning.json`：每 `check_every_frames` 帧尝试
     一次、`first_spawn_frame` 之前不生成、`max_mobs` 上限）；生成格 = 玩家列周围
     `[min_radius, max_radius]` 环内按固定扫描序的第一个合法格（固体地板 + 头顶
@@ -126,6 +127,22 @@ cmake --build build
     箱体的 −Z 面是脸）；天空光全亮烘焙（与掉落物同一简化，无局部光）
   - **开关**：config `mobs.enabled`（默认 true）；**mob 不入存档**（与 Minecraft
     一致：生成物是瞬态的，其掉落物是物品、随存档保存）
+  - **难度（Phase 25）**：config `mobs.difficulty` = `easy` / `normal` /
+    `hard`（默认 `normal`，严格校验，未知值 init 报错）。mob 数据是
+    **normal 基线**，其他难度按 `core/difficulty.hpp` 纯函数缩放（游戏与
+    单测共享，F3 显示当前难度）：
+    ① **出生点保护环**——敌对 mob（数据字段 `hostile: true`，当前仅
+    zombie）不在**世界出生点**（新世界的出生点，读档不改变它）
+    `spawnProtectionRadius` 块内自然生成（Minecraft 值：easy 8 /
+    normal 12 / hard 16，水平距离）；被动 mob 不受保护环限制
+    （Minecraft 约定）；
+    ② **敌对伤害缩放**——玩家受伤 = `attack_damage × hostileDamageScale`
+    （zombie 3 → easy 1.5 / normal 3 / hard 4，镜像 Minecraft 2.5/3/4 的
+    相对形状）；
+    ③ **生成率缩放**——尝试节奏 = `check_every_frames ÷
+    hostileSpawnRateScale`（30 → easy 60 / normal 30 / hard 20；节奏为全部
+    mob 类型共享，v1 非按类型权重）。`normal` = 三个缩放全 1.0 =
+    基线行为不变
 - **弓与箭**（Phase 21 发射，Phase 24 蓄力/箭物品/插墙残箭/近战；
   物品数据驱动 + P10 `Projectile`）：
   - **获取**：shaped 配方 `bow`（工作台：3 stick + 1 planks 的 C 形，
@@ -480,6 +497,7 @@ iron_pickaxe（III/.S./.S.）。
        "detect_radius": 16, "attack_range": 1.6,
        "attack_damage": 3, "attack_cooldown": 1.0, "wander_interval": 2.5,
        "spawn_max_light": 0,
+       "hostile": true,
        "drops": "rotten_flesh", "drops_count": 1
      },
      "model": {
@@ -495,7 +513,9 @@ iron_pickaxe（III/.S./.S.）。
    校验严格（同方块/物品注册表纪律）：id 非空且唯一、数值字段 >0（唯三例外
    `detect_radius`/`attack_range`/`attack_damage` 允许 0 = 被动/无害，负数
    拒绝）、`spawn_max_light` 为 0..15 的整数（默认 0，光照门——见上）、
-   `drops_count` ∈ [1,64]、box 越界/缺纹理名 = 明确报错；未知字段警告。
+   `hostile` 为可选布尔（默认 false；难度系统的数据开关——保护环 + 伤害
+   缩放，非布尔拒绝）、`drops_count` ∈ [1,64]、box 越界/缺纹理名 = 明确
+   报错；未知字段警告。
    `drops` 是**物品名**（init 时对 ItemRegistry 交叉校验，`""` = 不掉落）。
 3. 生成名单：`assets/data/mob_spawning.json` 的 `mobs` 数组加入该 id
    （生成节奏/环半径/上限/离玩家消散距离都在这个文件里，全部数据驱动）。
@@ -611,6 +631,7 @@ mine-craft/
 
 - [x] **Phase 23** — 饥饿条 + 食物：物品可选字段 `restore_hunger`（整数 [1,20]，缺省=非食物、显式 0 拒绝）——`rotten_flesh` = 4（zombie 掉落即可食，"打 mob → 吃掉落"闭环）/玩家饥饿（`maxHunger=20`，每 4s 衰减 1 点，无饱和度 v1；饥饿 0 时每 4s 受 1 点饥饿伤害——走正常 `damage()` 路径复用红闪/音效/死亡）/自然回复饥饿门控（< 6 暂停，不重置）/吃食物（选中食物右键 = 吃：回复 + 扣 1 库存 + "eat" 音效，吞掉该次右键不放置/交互；满饥饿 no-op 但仍吞键）/重生恢复满饥饿/饥饿 HUD（心带右侧同行 10 只鸡腿，48×16 三态条带 `assets/textures/hunger.png` + `tools/generate_hunger_icons.py`，与心带共享图标度量）/存档格式 4（`player.hunger`，format 1-3 缺省 = 满）/`eat` 音效（12 WAV）/F3 加 hunger 行；E2E：base18 门字节不变（HUD 仅游玩态）、decay ×2 与 eat ×2 各自逐字节一致、eat vs decay 59 px 差（55 = 最后一只鸡腿 半→满 右侧 x[900,908] y[649,661]、4 = 热栏计数 16→15，UI 外零差）；615/615 单测（+12：food 字段解析/默认/拒绝 ×3、饥饿衰减/饥饿伤害/饿死/低饥阻断回复/钳制/重生恢复 ×6、存档 format 4 往返/缺省/拒绝 ×3）
 - [x] **Phase 24** — 弓后续（P21 简化项回收）：蓄力（右键拉弓：`Input::wasReleased` 释放边沿事件；按住累加真实 dt、封顶 `kBowFullDrawSeconds=1.6s`、松键射出 `power=clamp(拉弓/1.6, 0.1, 1)`——`core/bow.hpp` 纯函数游戏与单测共享；速度/伤害 = 物品数据 × power；左键改弓近战 `attack_damage` 数据（bow=1）且永不挖掘；蓄力状态在解锁/面板/换热栏/重生清零；拉弓渲染 = 手持图标按威力拉向屏幕中心 64px）/箭物品 + 弹药（material `arrow` max_stack 64 + 图标 + shaped 配方 2 stick 竖排→2；发射器新数据字段 `ammo`（物品名，init 经 ItemRegistry 交叉校验；缺席=无限箭），发射消耗槽序升序第一个箭）/插墙残箭（`Projectile` 撞 solid 由即亡改 stuck 态：留命中处、`stuckDir` 保留撞击前方向——碰撞解算器清零速度碰撞轴、渲染与命中测试改用/跳过；无物理、按 `kMaxAge` 30s 消亡——P10 头注释"撞墙钉住"原意）/"bow" 弦音（13 WAV）/bow.json 加 `ammo`+`attack_damage`；E2E：base18 门 ×2 字节不变、满蓄力射击 ×2 与短蓄力射击 ×2 与对照 ×2 各自逐字节一致（松键边沿的墙钟→帧钟 ±1 帧抖动只在射击用例偶发，多跑取字节一致对）、full vs ctrl 178 px 差（174 = 飞行箭 x[636,643] y[407,429]、4 = 热栏计数 16→15，UI 外零差）、short vs ctrl 1002 px 差（998 = 插墙箭 x[608,647] y[544,610]、4 = 计数；短蓄力 power 0.1875 → 速度 2.81 插进身前草地 vs 满蓄力 15 飞向天空——蓄力缩放同屏验证）；626/626 单测（+11：释放边沿 1、ammo 解析/默认/拒绝 3、蓄力 power 映射 4、stuck 语义（不动/计时消亡/保留方向）2、竖排 1 列 shaped 配方 1）
+- [x] **Phase 25** — 生成保护半径/难度系统：`core/difficulty.hpp` 纯模型（`easy`/`normal`/`hard` 严格大小写解析；出生点保护半径 8/12/16 = Minecraft 值；敌对伤害缩放 0.5/1.0/4÷3（zombie 3 → 1.5/3/4，镜像 MC 2.5/3/4 相对形状）；生成节奏缩放 0.5/1.0/1.5 → 30 帧 → 60/30/20，`normal` = 全 1.0 = 基线零变化）/ mob 数据字段 `hostile`（可选 bool 默认 false，非 bool 拒绝；数据驱动非行为推导；zombie = true）/ 保护环 = 世界出生点水平圆（读档不改中心；仅 hostile 受检，passive 豁免——Minecraft 约定）/ `findMobSpawnCell` 保护参（扫描首查）/ config `mobs.difficulty`（默认 normal）/ F3 difficulty 行；639/639；无输入基线逐字节不变
 
 ## 开发约定
 
