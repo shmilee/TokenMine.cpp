@@ -329,6 +329,112 @@ TEST(MobRegistryTest, RejectsNegativePassiveFields) {
     }
 }
 
+TEST(MobRegistryTest, ParsesSheep) {
+    // Phase 26: the second passive mob — a woolly quadruped with the cow's
+    // data shape (all-zero attack fields, spawnable at any light, 1 drop).
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(R"({
+      "id": "sheep",
+      "properties": {
+        "health": 8,
+        "speed": 0.5,
+        "detect_radius": 0,
+        "attack_range": 0,
+        "attack_damage": 0,
+        "attack_cooldown": 1.0,
+        "wander_interval": 3.0,
+        "spawn_max_light": 15,
+        "drops": "wool",
+        "drops_count": 1
+      },
+      "model": {
+        "width": 1.2,
+        "height": 1.5,
+        "boxes": [
+          {"pos": [0.0, 0.9, 0.0], "size": [0.8, 0.8, 1.2], "texture": "a"},
+          {"pos": [0.0, 1.25, -0.4], "size": [0.4, 0.4, 0.4], "texture": "b"}
+        ]
+      }
+    })"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Mob& mob = mobs.at(*r);
+    EXPECT_FLOAT_EQ(mob.properties.health, 8.0f);
+    EXPECT_EQ(mob.properties.spawnMaxLight, 15);
+    EXPECT_EQ(mob.properties.drops, "wool");
+    EXPECT_FLOAT_EQ(mob.model.width, 1.2f);
+    EXPECT_EQ(mob.model.boxes.size(), 2u);
+}
+
+TEST(MobRegistryTest, ParsesChicken) {
+    // Phase 26: the small passive bird — the first model SMALLER than the
+    // zombie (AABB 0.5x0.8); the spawn-cell/overlap/spacing rules all key
+    // off these model numbers, so they must parse exactly.
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(R"({
+      "id": "chicken",
+      "properties": {
+        "health": 4,
+        "speed": 0.6,
+        "detect_radius": 0,
+        "attack_range": 0,
+        "attack_damage": 0,
+        "attack_cooldown": 1.0,
+        "wander_interval": 2.0,
+        "spawn_max_light": 15,
+        "drops": "feather",
+        "drops_count": 1
+      },
+      "model": {
+        "width": 0.5,
+        "height": 0.8,
+        "boxes": [
+          {"pos": [0.0, 0.25, 0.0], "size": [0.3, 0.4, 0.5], "texture": "a"},
+          {"pos": [0.0, 0.6, -0.1], "size": [0.25, 0.25, 0.25], "texture": "b"}
+        ]
+      }
+    })"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Mob& mob = mobs.at(*r);
+    EXPECT_FLOAT_EQ(mob.properties.health, 4.0f);
+    EXPECT_FLOAT_EQ(mob.properties.wanderInterval, 2.0f);
+    EXPECT_EQ(mob.properties.spawnMaxLight, 15);
+    EXPECT_EQ(mob.properties.drops, "feather");
+    EXPECT_FLOAT_EQ(mob.model.width, 0.5f);
+    EXPECT_FLOAT_EQ(mob.model.height, 0.8f);
+    EXPECT_EQ(mob.model.boxes.size(), 2u);
+}
+
+TEST(MobRegistryTest, RejectsChickenBoxOutsideAabb) {
+    // The chicken's 0.5x0.8 AABB is the smallest model so far: a head box
+    // whose top (0.7 + 0.3/2 = 0.85) pokes above the AABB height must be
+    // rejected by the box-in-AABB validation.
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(R"({
+      "id": "chicken",
+      "properties": {
+        "health": 4,
+        "speed": 0.6,
+        "detect_radius": 0,
+        "attack_range": 0,
+        "attack_damage": 0,
+        "attack_cooldown": 1.0,
+        "wander_interval": 2.0,
+        "spawn_max_light": 15,
+        "drops": "feather",
+        "drops_count": 1
+      },
+      "model": {
+        "width": 0.5,
+        "height": 0.8,
+        "boxes": [
+          {"pos": [0.0, 0.25, 0.0], "size": [0.3, 0.4, 0.5], "texture": "a"},
+          {"pos": [0.0, 0.7, -0.1], "size": [0.3, 0.3, 0.3], "texture": "b"}
+        ]
+      }
+    })"));
+    EXPECT_FALSE(r.ok());
+}
+
 // -- spawning config ----------------------------------------------------------
 
 TEST(MobSpawningConfigTest, ParsesValid) {
@@ -350,6 +456,27 @@ TEST(MobSpawningConfigTest, ParsesValid) {
     EXPECT_FLOAT_EQ((*r).despawnDistance, 40.0f);
     ASSERT_EQ((*r).mobs.size(), 1);
     EXPECT_EQ((*r).mobs[0], "zombie");
+}
+
+TEST(MobSpawningConfigTest, ParsesFourMobList) {
+    // Phase 26: the data list grew to four types (zombie, cow, sheep,
+    // chicken). List order is significant — the deterministic type pick is
+    // pick % list.size() with this exact order (game.cpp attemptMobSpawn).
+    auto r = MobSpawningConfig::parse(parseJson(R"({
+      "check_every_frames": 30,
+      "first_spawn_frame": 60,
+      "max_mobs": 4,
+      "min_radius": 4,
+      "max_radius": 6,
+      "despawn_distance": 40,
+      "mobs": ["zombie", "cow", "sheep", "chicken"]
+    })"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    ASSERT_EQ((*r).mobs.size(), 4u);
+    EXPECT_EQ((*r).mobs[0], "zombie");
+    EXPECT_EQ((*r).mobs[1], "cow");
+    EXPECT_EQ((*r).mobs[2], "sheep");
+    EXPECT_EQ((*r).mobs[3], "chicken");
 }
 
 TEST(MobSpawningConfigTest, RejectsInvertedRadii) {

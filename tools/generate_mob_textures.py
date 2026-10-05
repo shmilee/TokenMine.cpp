@@ -102,6 +102,46 @@ def cow_fur_tile(salt: int, base, eyes=False) -> list:
     return pixels
 
 
+def sheep_wool_tile(salt: int, base, eyes=False) -> list:
+    """Sheep wool (Phase 26): white base with a touch more noise than skin
+    (fluff); the head also gets two dark neutral eyes (rows 5-6)."""
+    (br, bg, bb) = base
+    pixels = []
+    for y in range(SIZE):
+        row = []
+        for x in range(SIZE):
+            n = noise(x, y, salt, 12)
+            r, g, b = clamp(br + n), clamp(bg + n), clamp(bb + n)
+            if eyes and 5 <= y <= 6 and (3 <= x <= 5 or 10 <= x <= 12):
+                (r, g, b) = (40, 38, 34)
+            row.append((r, g, b, 255))
+        pixels.append(row)
+    return pixels
+
+
+def chicken_tile(salt: int, base, face=False) -> list:
+    """Chicken plumage (Phase 26): cream base + noise; the head ("face")
+    also gets two dark eyes (rows 5-6), a red comb (rows 1-2) and an
+    orange beak (rows 7-8, center column)."""
+    (br, bg, bb) = base
+    pixels = []
+    for y in range(SIZE):
+        row = []
+        for x in range(SIZE):
+            n = noise(x, y, salt, 8)
+            r, g, b = clamp(br + n), clamp(bg + n), clamp(bb + n)
+            if face:
+                if 5 <= y <= 6 and (3 <= x <= 5 or 10 <= x <= 12):
+                    (r, g, b) = (35, 30, 25)
+                elif 1 <= y <= 2 and 6 <= x <= 9:
+                    (r, g, b) = (178, 44, 38)       # red comb
+                elif 7 <= y <= 8 and 7 <= x <= 8:
+                    (r, g, b) = (228, 148, 44)      # orange beak
+            row.append((r, g, b, 255))
+        pixels.append(row)
+    return pixels
+
+
 def shirt_tile(salt: int, base) -> list:
     (br, bg, bb) = base
     pixels = []
@@ -127,6 +167,17 @@ def main() -> None:
               cow_fur_tile(0xC0F1, (122, 88, 62)))
     write_png(os.path.join(OUT_DIR, "cow_head.png"),
               cow_fur_tile(0xC0F2, (122, 88, 62), eyes=True))
+    # White sheep wool (Phase 26; eyes on the head's front face).
+    write_png(os.path.join(OUT_DIR, "sheep_body.png"),
+              sheep_wool_tile(0x5EE1, (228, 226, 220)))
+    write_png(os.path.join(OUT_DIR, "sheep_head.png"),
+              sheep_wool_tile(0x5EE2, (228, 226, 220), eyes=True))
+    # Cream chicken plumage (Phase 26; eyes + comb + beak on the head's
+    # front face).
+    write_png(os.path.join(OUT_DIR, "chicken_body.png"),
+              chicken_tile(0xC1C1, (238, 236, 226)))
+    write_png(os.path.join(OUT_DIR, "chicken_head.png"),
+              chicken_tile(0xC1C2, (238, 236, 226), face=True))
 
 
 if __name__ == "__main__":

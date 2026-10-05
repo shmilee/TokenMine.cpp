@@ -24,6 +24,10 @@
     "zombie_head": [3, 4],
     "zombie_body": [0, 5],
     "cow_body": [1, 5],
-    "cow_head": [2, 5]
+    "cow_head": [2, 5],
+    "sheep_body": [3, 5],
+    "sheep_head": [0, 6],
+    "chicken_body": [1, 6],
+    "chicken_head": [2, 6]
   }
 }

@@ -1,0 +1,31 @@
+{
+  "id": "chicken",
+  "properties": {
+    "health": 4,
+    "speed": 0.6,
+    "detect_radius": 0,
+    "attack_range": 0,
+    "attack_damage": 0,
+    "attack_cooldown": 1.0,
+    "wander_interval": 2.0,
+    "spawn_max_light": 15,
+    "drops": "feather",
+    "drops_count": 1
+  },
+  "model": {
+    "width": 0.5,
+    "height": 0.8,
+    "boxes": [
+      {
+        "pos": [0.0, 0.25, 0.0],
+        "size": [0.3, 0.4, 0.5],
+        "texture": "chicken_body"
+      },
+      {
+        "pos": [0.0, 0.6, -0.1],
+        "size": [0.25, 0.25, 0.25],
+        "texture": "chicken_head"
+      }
+    ]
+  }
+}

@@ -84,9 +84,9 @@ cmake --build build
     `tools/generate_health_icons.py` / `generate_hunger_icons.py`）；
     填充 = `clamp(value − 2i, 0, 2)`（半图标按 0.5 粒度渲染）。只在游玩态
     （锁定 + 背包未开）显示，无输入运行零新增绘制
-- **Mob 与 AI**（Phase 20，Phase 22 被动 mob，Phase 25 难度系统，
+- **Mob 与 AI**（Phase 20，Phase 22/26 被动 mob，Phase 25 难度系统，
   `MobEntity`/`MobRegistry`，全数据驱动；数据含 zombie（敌对）+
-  cow（被动，Phase 22））：
+  cow/sheep/chicken（被动，Phase 22/26））：
   - **生成**：帧节奏驱动（`data/mob_spawning.json`：每 `check_every_frames` 帧尝试
     一次、`first_spawn_frame` 之前不生成、`max_mobs` 上限）；生成格 = 玩家列周围
     `[min_radius, max_radius]` 环内按固定扫描序的第一个合法格（固体地板 + 头顶
@@ -98,8 +98,9 @@ cmake --build build
      必须 ≤ 该 mob 的 `spawn_max_light`（mob 数据字段，0..15，默认 0 = 只在
      黑暗生成——Minecraft 敌对 mob 约定）。dayFactor 是渲染层昼夜系数（正午
      1、深夜 0、晨昏平滑过渡），所以 zombie 白天（开阔地天空光 15 → 有效
-     15 > 0）不生成、夜晚生成；cow（`spawn_max_light` 15）任何光照/时间
-     都可生成（被动 mob 约定）；萤石照亮处即使夜晚也不生成 zombie；树冠/
+     15 > 0）不生成、夜晚生成；cow/sheep/chicken（`spawn_max_light` 15）
+     任何光照/时间都可生成（被动 mob 约定）；萤石照亮处即使夜晚也不生成
+     zombie；树冠/
      洞穴的永久暗格（存储天空光 0）白天也可生成（与 Minecraft 一致）。
      类型在每次尝试时按数据名单确定性抽取（种子 ⊕ 帧号），抽中的类型过不
      了光门则该次尝试作废（如白天抽中 zombie）
@@ -109,20 +110,23 @@ cmake --build build
     ≤2：全速追）→ **Attack**（水平距离 ≤`attack_range` 且高度差 ≤1：停下、
     面向玩家、每 `attack_cooldown` 秒打 `attack_damage` 点——走 P16 的玩家
     受伤路径：红闪/音效/死亡全由既有轮询驱动）。玩家死亡时不追不打。
-    **被动 mob**（Phase 22）：`detect_radius`/`attack_range`/
-    `attack_damage` 三个字段允许 0（校验 `>= 0`，负数仍拒绝）——0 值使
-    追/击条件永不成立，cow 只有 Wander 状态，纯数据表达，AI 代码无特判
+    **被动 mob**（Phase 22 落地、Phase 26 扩到 sheep/chicken）：`detect_radius`/
+    `attack_range`/`attack_damage` 三个字段允许 0（校验 `>= 0`，负数仍拒绝）——0 值
+    使追/击条件永不成立，被动 mob 只有 Wander 状态，纯数据表达，AI 代码无特判
   - **玩家攻击**：左键命中 mob（射线先比方块距离——**方块遮挡**：方块更近则打
     方块）= 挥击，按住时每 `0.25s` 一击：伤害取**选中物品的 `attack_damage`**
     数据（徒手/方块/材料=1.0，工具见 `data/items/*.json`，木镐 2 / 铁镐 3）+
     沿瞄准方向击退（水平 4 + 抬升 2.5，0.3s 击退窗口内 AI 不接管速度）
   - **死亡**：HP 归零 → 掉落 `drops` 数据定义的物品（zombie 掉
-    `rotten_flesh`，cow 掉 `leather`——均为 material 物品 + 图标）后移除；
-    击退/坠落无伤害（v1）
+    `rotten_flesh`，cow 掉 `leather`，sheep 掉 `wool`，chicken 掉
+    `feather`——均为 material 物品 + 图标）后移除；击退/坠落无伤害（v1）
   - **渲染**：box 模型（zombie = 头 0.5³ + 身 0.5×1.0×0.3；cow = 头
-    0.45³ + 身 0.8×0.7×1.1、AABB 1.2×1.5 比 zombie 宽，各 6 面同一 atlas
-    tile，`tools/generate_mob_textures.py` 生成 zombie 绿皮肤+深色眼/青色
-    上衣、cow 棕底白斑毛+深色眼），
+    0.45³ + 身 0.8×0.7×1.1、AABB 1.2×1.5 比 zombie 宽；sheep = 头 0.4³ + 身
+    0.8×0.8×1.2、AABB 同 cow；chicken = 头 0.25³ + 身 0.3×0.4×0.5、AABB
+    0.5×0.8 比 zombie 小，各 6 面同一 atlas tile，
+    `tools/generate_mob_textures.py` 生成 zombie 绿皮肤+深色眼/青色上衣、
+    cow 棕底白斑毛+深色眼、sheep 白绒毛+深色眼、chicken 米白羽+深色眼+
+    红冠+橙喙；atlas 27 tile），
     与掉落物同 pass（`translate(位置) × rotateY(朝向)`，朝向 = 相机 yaw 约定，
     箱体的 −Z 面是脸）；天空光全亮烘焙（与掉落物同一简化，无局部光）
   - **开关**：config `mobs.enabled`（默认 true）；**mob 不入存档**（与 Minecraft
@@ -632,6 +636,7 @@ mine-craft/
 - [x] **Phase 23** — 饥饿条 + 食物：物品可选字段 `restore_hunger`（整数 [1,20]，缺省=非食物、显式 0 拒绝）——`rotten_flesh` = 4（zombie 掉落即可食，"打 mob → 吃掉落"闭环）/玩家饥饿（`maxHunger=20`，每 4s 衰减 1 点，无饱和度 v1；饥饿 0 时每 4s 受 1 点饥饿伤害——走正常 `damage()` 路径复用红闪/音效/死亡）/自然回复饥饿门控（< 6 暂停，不重置）/吃食物（选中食物右键 = 吃：回复 + 扣 1 库存 + "eat" 音效，吞掉该次右键不放置/交互；满饥饿 no-op 但仍吞键）/重生恢复满饥饿/饥饿 HUD（心带右侧同行 10 只鸡腿，48×16 三态条带 `assets/textures/hunger.png` + `tools/generate_hunger_icons.py`，与心带共享图标度量）/存档格式 4（`player.hunger`，format 1-3 缺省 = 满）/`eat` 音效（12 WAV）/F3 加 hunger 行；E2E：base18 门字节不变（HUD 仅游玩态）、decay ×2 与 eat ×2 各自逐字节一致、eat vs decay 59 px 差（55 = 最后一只鸡腿 半→满 右侧 x[900,908] y[649,661]、4 = 热栏计数 16→15，UI 外零差）；615/615 单测（+12：food 字段解析/默认/拒绝 ×3、饥饿衰减/饥饿伤害/饿死/低饥阻断回复/钳制/重生恢复 ×6、存档 format 4 往返/缺省/拒绝 ×3）
 - [x] **Phase 24** — 弓后续（P21 简化项回收）：蓄力（右键拉弓：`Input::wasReleased` 释放边沿事件；按住累加真实 dt、封顶 `kBowFullDrawSeconds=1.6s`、松键射出 `power=clamp(拉弓/1.6, 0.1, 1)`——`core/bow.hpp` 纯函数游戏与单测共享；速度/伤害 = 物品数据 × power；左键改弓近战 `attack_damage` 数据（bow=1）且永不挖掘；蓄力状态在解锁/面板/换热栏/重生清零；拉弓渲染 = 手持图标按威力拉向屏幕中心 64px）/箭物品 + 弹药（material `arrow` max_stack 64 + 图标 + shaped 配方 2 stick 竖排→2；发射器新数据字段 `ammo`（物品名，init 经 ItemRegistry 交叉校验；缺席=无限箭），发射消耗槽序升序第一个箭）/插墙残箭（`Projectile` 撞 solid 由即亡改 stuck 态：留命中处、`stuckDir` 保留撞击前方向——碰撞解算器清零速度碰撞轴、渲染与命中测试改用/跳过；无物理、按 `kMaxAge` 30s 消亡——P10 头注释"撞墙钉住"原意）/"bow" 弦音（13 WAV）/bow.json 加 `ammo`+`attack_damage`；E2E：base18 门 ×2 字节不变、满蓄力射击 ×2 与短蓄力射击 ×2 与对照 ×2 各自逐字节一致（松键边沿的墙钟→帧钟 ±1 帧抖动只在射击用例偶发，多跑取字节一致对）、full vs ctrl 178 px 差（174 = 飞行箭 x[636,643] y[407,429]、4 = 热栏计数 16→15，UI 外零差）、short vs ctrl 1002 px 差（998 = 插墙箭 x[608,647] y[544,610]、4 = 计数；短蓄力 power 0.1875 → 速度 2.81 插进身前草地 vs 满蓄力 15 飞向天空——蓄力缩放同屏验证）；626/626 单测（+11：释放边沿 1、ammo 解析/默认/拒绝 3、蓄力 power 映射 4、stuck 语义（不动/计时消亡/保留方向）2、竖排 1 列 shaped 配方 1）
 - [x] **Phase 25** — 生成保护半径/难度系统：`core/difficulty.hpp` 纯模型（`easy`/`normal`/`hard` 严格大小写解析；出生点保护半径 8/12/16 = Minecraft 值；敌对伤害缩放 0.5/1.0/4÷3（zombie 3 → 1.5/3/4，镜像 MC 2.5/3/4 相对形状）；生成节奏缩放 0.5/1.0/1.5 → 30 帧 → 60/30/20，`normal` = 全 1.0 = 基线零变化）/ mob 数据字段 `hostile`（可选 bool 默认 false，非 bool 拒绝；数据驱动非行为推导；zombie = true）/ 保护环 = 世界出生点水平圆（读档不改中心；仅 hostile 受检，passive 豁免——Minecraft 约定）/ `findMobSpawnCell` 保护参（扫描首查）/ config `mobs.difficulty`（默认 normal）/ F3 difficulty 行；639/639；无输入基线逐字节不变
+- [x] **Phase 26** — 更多 mob（纯数据）：按 P22 已验证的纯数据流落地 sheep/chicken 被动 mob（零新增游戏代码）——`data/mobs/sheep.json`（HP 8、speed 0.5、全 0 攻击字段、`spawn_max_light` 15、掉 `wool`；box 头 0.4³ + 身 0.8×0.8×1.2，AABB 1.2×1.5 同 cow）/ `data/mobs/chicken.json`（HP 4、speed 0.6、`wander_interval` 2.0、掉 `feather`；box 头 0.25³ + 身 0.3×0.4×0.5，AABB 0.5×0.8 = 首个比 zombie 小的模型——生成格/重叠/间距规则全用模型数据，无改动）/ `wool` + `feather` material 物品 + 图标 / mob 纹理 4 tile（sheep 白绒毛+深色眼、chicken 米白羽+深色眼+红冠+橙喙，atlas 23→27，新 tile 只占空位、既有坐标零移动）/ 名单 [zombie, cow, sheep, chicken]——类型抽取 = `pick % 名单长度`（种子 ⊕ 帧号），扩名单改变各帧抽中类型；**base 60 帧运行在 `first_spawn_frame=60` 的首次尝试之前结构上零尝试（主循环 `update` 时 `m_frameCount` 尚未自增）= 基线结构性不受名单影响**；643/643（+4：sheep/chicken 完整解析、chicken box 越界 AABB 拒绝、4 类型名单解析）；E2E（P25 协议：每拍前 unmap 覆盖窗 + ≥6s 窗口 + 零并发）：base18 门 ×2 字节不变、白天 360f（t=0.275 仍在正午平台）mobs-on ×2 与 mobs-off ×2 各自逐字节一致（mobs-off == base 逐字节）、vs 对照 **15535 px 差 = 恰好 4 个 mob 剪影**（2 chicken + 1 sheep + 1 cow，与确定性预测逐一对应：f60/f90 chicken 生成、f120/f150/f210 zombie 光门拒绝、f180 cow 生成、f240 sheep 生成（`max_mobs` 4 满）、f270/f300/f330 全部 cap 拒绝）、**zombie 绿 0 px**（白天敌对压制保持）、心/饥饿/热栏三带全 0
 
 ## 开发约定
 

@@ -242,6 +242,38 @@ def leather():
     return px
 
 
+def wool():
+    """A square of wool (Phase 26): a white fluffy slab, same silhouette
+    logic as the leather hide but white, with a slightly darker rim."""
+    px = blank()
+    base = (232, 230, 224)
+    rim = (190, 188, 180)
+    for y in range(SIZE):
+        for x in range(SIZE):
+            d = max(abs(x - 7.5), abs(y - 7.5))
+            if d < 5.5 + (h2(x, y, 61) % 3) - 1:
+                setpx(px, x, y, rim if d > 4.2 else base, salt=61)
+    return px
+
+
+def feather():
+    """A feather (Phase 26): a cream diagonal quill (bottom-left to
+    top-right) with a darker shaft along its center."""
+    px = blank()
+    cream = (240, 238, 228)
+    shaft = (196, 192, 178)
+    for i in range(11):
+        x = 2 + i
+        y = 13 - i
+        setpx(px, x, y, cream, salt=62)
+        if 1 <= i <= 9:
+            setpx(px, x, y - 1, cream, salt=63)
+            setpx(px, x, y + 1, cream, salt=64)
+    for i in range(3, 11, 2):
+        setpx(px, 2 + i, 13 - i, shaft, salt=65)
+    return px
+
+
 def bow():
     px = blank()
     stave = (110, 74, 42)
@@ -295,6 +327,8 @@ ITEMS = {
     "bow": bow,
     "arrow": arrow,
     "leather": leather,
+    "wool": wool,
+    "feather": feather,
 }
 
 
