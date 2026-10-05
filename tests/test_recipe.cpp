@@ -597,6 +597,26 @@ TEST(ShapedRecipeTest, ShapelessRejectsPatternAndKey) {
                      .ok());
 }
 
+TEST(ShapedRecipeTest, RegistersVerticalSingleColumnPattern) {
+    Fixture f;
+    // The arrow recipe's shape (Phase 24): a 1-char-wide, 2-row pattern.
+    // 1..3 chars per row is legal, and the pattern matches the grid at
+    // any horizontal offset.
+    auto r = f.recipes.registerRecipe(
+        parseJson(R"({"id":"arrow","type":"shaped",
+                      "output":{"item":"ingot","count":2},
+                      "pattern":["S","S"],
+                      "key":{"S":"stone"}})"),
+        f.items);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Recipe* rec = f.recipes.find("arrow");
+    ASSERT_NE(rec, nullptr);
+    ASSERT_EQ(rec->pattern.size(), 2u);
+    EXPECT_EQ(rec->pattern[0], "S");
+    EXPECT_EQ(rec->pattern[1], "S");
+    EXPECT_EQ(rec->outputCount, 2);
+}
+
 TEST(ShapedRecipeTest, ShapedPatternWithHole) {
     Fixture f;
     // A T-shape with an interior space: legal, and the space is not a key

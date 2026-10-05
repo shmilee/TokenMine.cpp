@@ -13,6 +13,7 @@
 #include "block/cube_face_table.hpp"
 #include "core/json.hpp"
 #include "core/png.hpp"
+#include "core/bow.hpp"
 #include "entity/arrow_mesh.hpp"
 #include "entity/item_entity.hpp"
 #include "entity/mob_entity.hpp"
@@ -121,6 +122,9 @@ constexpr int kHotbarBottomMargin = 8;
 constexpr int kHotbarIconPx = 30;
 constexpr int kHeldIconPx = 76;
 constexpr int kHeldIconOffset = 72; // center of the held icon from the corner
+// Bow draw (Phase 24): the held icon is pulled this many pixels toward
+// the screen center at full charge (the v1 draw indicator).
+constexpr float kBowDrawPullPx = 64.0f;
 constexpr int kF3Margin = 8;
 constexpr int kF3LineHeight = 14;
 constexpr int kCrackStages = 5;
@@ -458,6 +462,18 @@ Result<void> Game::buildScene() {
         auto iconTex = Texture::loadPng(*iconPath);
         MC_TRY(iconTex);
         m_itemIcons[static_cast<std::size_t>(id.value)] = std::move(*iconTex);
+    }
+
+    // -- launcher ammo (Phase 24): the 'ammo' field names an item that
+    // must exist (same cross-check pattern as the icon file check; it
+    // could not be validated per-file, the ammo item may be defined in a
+    // later file).
+    for (const ItemID id : m_items.allIds()) {
+        const Item& item = m_items.at(id);
+        if (!item.ammo.empty() && m_items.findByName(item.ammo) == nullptr) {
+            return MC_FAIL("item '" + item.name + "' references unknown "
+                           "ammo item '" + item.ammo + "'");
+        }
     }
 
     // -- recipes (Phase 12): data-driven crafting (UI/trigger = Phase 15) --
@@ -1265,6 +1281,7 @@ void Game::handleInteraction(double dt) {
         }
         resetBreaking();
         m_swingCooldown = 0.0;
+        resetBowDraw();
         return;
     }
 
@@ -1272,6 +1289,7 @@ void Game::handleInteraction(double dt) {
         m_window.setRelativeMouseMode(false);
         resetBreaking();
         m_swingCooldown = 0.0;
+        resetBowDraw();
         return;
     }
     if (m_input.wasPressed(MouseButton::Right)) {
@@ -1280,6 +1298,18 @@ void Game::handleInteraction(double dt) {
         // eat is a no-op but the click is still consumed (Minecraft: you
         // cannot place while "eating" a full bar).
         if (tryEat()) {
+            return;
+        }
+        // Launcher (Phase 24): the right button is the DRAW. Starting it
+        // consumes the click entirely (no interact, no placement — a bow
+        // in hand never places). The draw starts only when ammo is
+        // available (Minecraft: no draw without arrows).
+        if (selectedShootSpeed() > 0.0f) {
+            if (ammoAvailable()) {
+                m_bowDrawing = true;
+                m_bowDrawSeconds = 0.0;
+                m_sound.play("bow");
+            }
             return;
         }
         // Data-driven interaction (Phase 17): a block whose `interact`
@@ -1301,19 +1331,23 @@ void Game::handleInteraction(double dt) {
     if (m_input.wasPressed(GameKey::Q)) {
         dropSelectedItem();
     }
-    // Left button (Phases 11/20/21): a launcher item selected (the bow —
-    // data 'shoot_speed' > 0) fires on the swing cadence, one arrow per
-    // kSwingInterval while held, and does NOT mine or melee (Minecraft:
-    // with a bow, the left button is the shot, not a swing). Otherwise:
-    // on a mob under the crosshair the swing attacks it (one hit per
-    // kSwingInterval while held — damage + knockback, the block behind it
-    // is NOT mined); on a block it mines (hold-to-break progress).
-    // Leaving either target resets the other's state.
+    // Left button (Phases 11/20/21/24): a launcher item selected (the bow
+    // — data 'shoot_speed' > 0) MELEE-attacks a mob under the crosshair
+    // (one hit per kSwingInterval while held — the item's data
+    // attack_damage, the bow's 1) but NEVER mines (Minecraft: the bow is
+    // a weapon, not a tool; the shot is the right-button draw).
+    // Otherwise: on a mob under the crosshair the swing attacks it
+    // (damage + knockback, the block behind it is NOT mined); on a block
+    // it mines (hold-to-break progress). Leaving either target resets
+    // the other's state.
     if (m_input.isDown(MouseButton::Left)) {
         if (selectedShootSpeed() > 0.0f) {
             resetBreaking();
-            m_swingCooldown = 0.0;
-            updateBowShooting(dt);
+            if (const std::optional<MobHit> mob = targetMob()) {
+                updateAttacking(dt, *mob->mob);
+            } else {
+                m_swingCooldown = 0.0;
+            }
         } else if (const std::optional<MobHit> mob = targetMob()) {
             resetBreaking();
             updateAttacking(dt, *mob->mob);
@@ -1324,7 +1358,12 @@ void Game::handleInteraction(double dt) {
     } else {
         resetBreaking();
         m_swingCooldown = 0.0;
-        m_bowCooldown = 0.0;
+    }
+    // Draw charge (Phase 24): with a launcher selected, the held right
+    // button accumulates draw time (real dt, like the survival timers)
+    // and the release fires one arrow with the charge's power.
+    if (selectedShootSpeed() > 0.0f) {
+        updateBowDraw(dt);
     }
 }
 
@@ -1446,40 +1485,84 @@ float Game::selectedShootSpeed() const {
     return m_items.at(stack.item).shootSpeed;  // data (0 = not a launcher)
 }
 
-float Game::selectedShootDamage() const {
+bool Game::ammoAvailable() const {
     const ItemStack& stack = m_inventory.at(m_selectedSlot);
     if (stack.empty()) {
-        return 0.0f;
+        return false; // not a launcher (selectedShootSpeed guards callers)
     }
-    return m_items.at(stack.item).shootDamage;  // data (default 0)
+    const Item& item = m_items.at(stack.item);
+    if (item.ammo.empty()) {
+        return true; // no 'ammo' data = unlimited (pre-Phase-24 semantics)
+    }
+    const ItemID ammo = m_items.idForName(item.ammo); // init cross-checked
+    for (std::size_t i = 0; i < m_inventory.size(); ++i) {
+        if (m_inventory.at(i).item == ammo) {
+            return true;
+        }
+    }
+    return false;
 }
 
-void Game::updateBowShooting(double dt) {
-    // The bow fires on the swing cadence (hold = one arrow per
-    // kSwingInterval; the release reset happens in handleInteraction).
-    // v1 has no charge-up: every shot fires at the item's full data speed
-    // (KNOWN_ISSUES.md).
-    if (m_bowCooldown > 0.0) {
-        m_bowCooldown -= dt;
+void Game::updateBowDraw(double dt) {
+    if (!m_bowDrawing) {
         return;
     }
-    m_bowCooldown = kSwingInterval;
-    shootArrow();
+    if (m_input.isDown(MouseButton::Right)) {
+        // The charge fills in real dt, capped at the full-draw time
+        // (core/bow.hpp). A press and a release in the same frame still
+        // fire (at the minimum power), like a Minecraft quick click.
+        m_bowDrawSeconds =
+            std::min(m_bowDrawSeconds + dt, kBowFullDrawSeconds);
+    } else if (m_input.wasReleased(MouseButton::Right)) {
+        fireBow();
+    } else {
+        // The button is up without a release edge this frame (a stale
+        // event, or the lock was lost): cancel the draw rather than hang
+        // it.
+        resetBowDraw();
+    }
 }
 
-void Game::shootArrow() {
-    // The arrow spawns in front of the eye along the aim, as a plain P10
-    // Projectile at the launcher item's data speed + damage. The
-    // updateEntities pass runs its swept arrow-vs-mob hit test; the
-    // despawn pass removes it on impact / age / kill plane. Arrows are
-    // not items: no ammo is consumed (KNOWN_ISSUES.md), and they are not
-    // saved (ephemeral, like mobs).
+void Game::fireBow() {
+    const Item& item = m_items.at(m_inventory.at(m_selectedSlot).item);
+    // Ammo (Phase 24): one from the lowest-index slot that holds the
+    // launcher's data 'ammo' item. The inventory can run out between the
+    // draw start and the release — then the shot is cancelled silently.
+    if (!item.ammo.empty()) {
+        const ItemID ammo = m_items.idForName(item.ammo);
+        int slot = -1;
+        for (std::size_t i = 0; i < m_inventory.size(); ++i) {
+            if (m_inventory.at(i).item == ammo) {
+                slot = static_cast<int>(i);
+                break;
+            }
+        }
+        if (slot < 0) {
+            resetBowDraw();
+            return;
+        }
+        m_inventory.take(static_cast<std::size_t>(slot), 1);
+    }
+    // The arrow spawns in front of the eye along the aim (the launch
+    // origin never sits inside the near plane), at the item's data
+    // speed/damage scaled by the charge's power (core/bow.hpp — a full
+    // draw is the item's full data values). The updateEntities pass runs
+    // its swept arrow-vs-mob hit test; the despawn pass removes it on
+    // age / kill plane, and a block impact STICKS it (Phase 24). Arrows
+    // are not saved (ephemeral, like mobs).
+    const float power = bowPower(m_bowDrawSeconds);
     const Vec3 f = m_camera.forward();
     const Vec3 o = m_camera.position + f * kArrowSpawnOffset;
     m_entities.push_back(std::make_unique<Projectile>(
-        m_world, m_blocks, o, f, selectedShootSpeed(),
-        selectedShootDamage()));
+        m_world, m_blocks, o, f, item.shootSpeed * power,
+        item.shootDamage * power));
     m_sound.play("shoot");
+    resetBowDraw();
+}
+
+void Game::resetBowDraw() {
+    m_bowDrawing = false;
+    m_bowDrawSeconds = 0.0;
 }
 
 void Game::breakBlock(const BlockHit& hit) {
@@ -1596,8 +1679,10 @@ void Game::cycleHotbar() {
     m_selectedSlot =
         (m_selectedSlot + 1) % static_cast<std::size_t>(Inventory::kHotbarSize);
     // The selected item (and its break speed) changed: restart any break
-    // in progress (Minecraft behavior).
+    // in progress (Minecraft behavior) and cancel an in-progress bow
+    // draw (the launcher changed; Phase 24).
     resetBreaking();
+    resetBowDraw();
 }
 
 void Game::dropSelectedItem() {
@@ -1682,7 +1767,10 @@ void Game::updateEntities(double dt) {
     // (single-player v1, KNOWN_ISSUES.md).
     for (auto& [arrow, prev] : arrowSteps) {
         if (arrow->dead()) {
-            continue;  // a block impact this step already consumed it
+            continue;  // a mob hit this step already consumed it
+        }
+        if (arrow->stuck()) {
+            continue;  // stuck in a block (Phase 24): no motion, no hits
         }
         const Vec3 step = arrow->position() - prev;
         for (auto& entity : m_entities) {
@@ -2036,12 +2124,16 @@ void Game::drawArrows(const Mat4& view, const Mat4& projection) {
             continue;
         }
         // Collision-box center (the box is kSize tall; the box mesh is
-        // centered on its origin) oriented along the velocity (local -Z).
-        // Dead arrows are removed in this frame's update, so a dead one is
-        // never rendered.
+        // centered on its origin) oriented along the travel direction
+        // (local -Z). A stuck arrow (Phase 24) keeps the pre-impact
+        // direction for the orientation — the collision resolver zeroed
+        // the blocked axis of the live velocity. Dead arrows are removed
+        // in this frame's update, so a dead one is never rendered.
         const Vec3 c = arrow->position() +
                        Vec3 {0.0f, Projectile::kSize * 0.5f, 0.0f};
-        const auto [yaw, pitch] = arrowOrientation(arrow->velocity());
+        const Vec3 dir =
+            arrow->stuck() ? arrow->stuckDir() : arrow->velocity();
+        const auto [yaw, pitch] = arrowOrientation(dir);
         const Mat4 model = Mat4::multiply(
             Mat4::multiply(Mat4::translate(c), Mat4::rotateY(yaw)),
             Mat4::rotateX(pitch));
@@ -2100,6 +2192,7 @@ void Game::openPanel(OpenPanel panel) {
     m_window.setRelativeMouseMode(false); // free the cursor for clicking
     m_openPanel = panel;
     resetBreaking();
+    resetBowDraw(); // a panel interrupts a draw (Phase 24)
     m_sound.play("ui_open");
 }
 
@@ -2545,10 +2638,24 @@ void Game::renderUi() {
         UiBatch& cross = batchFor(kCrosshair, false, nullptr);
         addQuad(cross, w / 2 - 5, h / 2 - 1, 11, 2);
         addQuad(cross, w / 2 - 1, h / 2 - 5, 2, 11);
-        // Held item: a large icon in the bottom-right corner.
-        drawIcon(m_inventory.at(m_selectedSlot),
-                 static_cast<float>(w - kHeldIconOffset),
-                 static_cast<float>(h - kHeldIconOffset), kHeldIconPx);
+        // Held item: a large icon in the bottom-right corner. While the
+        // bow is drawn (Phase 24) the icon is pulled toward the screen
+        // center by the charge power — the v1 draw indicator (no 3D hand
+        // model; see KNOWN_ISSUES.md).
+        float heldX = static_cast<float>(w - kHeldIconOffset);
+        float heldY = static_cast<float>(h - kHeldIconOffset);
+        if (m_bowDrawing) {
+            const Vec2 toCenter {static_cast<float>(w / 2) - heldX,
+                                 static_cast<float>(h / 2) - heldY};
+            const float len =
+                std::sqrt(toCenter.x * toCenter.x + toCenter.y * toCenter.y);
+            if (len > 1e-4f) {
+                const float pull = kBowDrawPullPx * bowPower(m_bowDrawSeconds);
+                heldX += toCenter.x / len * pull;
+                heldY += toCenter.y / len * pull;
+            }
+        }
+        drawIcon(m_inventory.at(m_selectedSlot), heldX, heldY, kHeldIconPx);
     }
 
     // -- death screen (Phase 16, while the player is dead) ------------------

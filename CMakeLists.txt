@@ -109,6 +109,7 @@ add_executable(minecraft_tests
     tests/test_fluid.cpp
     tests/test_lighting.cpp
     tests/test_arrow.cpp
+    tests/test_bow.cpp
     tests/test_entity.cpp
     tests/test_mob.cpp
     tests/test_item.cpp

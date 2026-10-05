@@ -388,7 +388,7 @@ TEST(ItemRegistryTest, RejectsUnknownItemType) {
         items.registerItem(parseJson(R"({"id":"x","type":"weapon"})")).ok());
 }
 
-// -- projectile launching (Phase 21: the bow) --------------------------------
+// -- projectile launching (Phase 21: the bow; charge + ammo Phase 24) --------
 
 TEST(ItemRegistryTest, ParsesShootFields) {
     // The bow: a material that launches Projectiles (data-driven launch).
@@ -442,6 +442,43 @@ TEST(ItemRegistryTest, RejectsBadShootDamage) {
     EXPECT_FALSE(items.registerItem(
                      parseJson(
                          R"({"id":"b","type":"material","shoot_damage":"hard"})"))
+                     .ok());
+}
+
+// -- launcher ammo (Phase 24) ------------------------------------------------
+
+TEST(ItemRegistryTest, ParsesAmmo) {
+    // The bow's ammo: a launcher that consumes one `arrow` per shot. The
+    // name's existence is cross-checked at game init (the ammo item may
+    // be defined in a later file), not here.
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"bow","type":"material","max_stack":1,
+                      "shoot_speed":15.0,"shoot_damage":5.0,
+                      "ammo":"arrow"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(items.at(*r).ammo, "arrow");
+}
+
+TEST(ItemRegistryTest, AmmoDefaultsToEmpty) {
+    // No 'ammo' field: the launcher fires without consuming anything
+    // (every pre-Phase-24 launcher).
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"gem","type":"material","shoot_speed":10.0})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(items.at(*r).ammo.empty());
+}
+
+TEST(ItemRegistryTest, RejectsBadAmmo) {
+    ItemRegistry items;
+    // An explicit empty string is a typo (ABSENT is the default), same
+    // discipline as restore_hunger / shoot_speed.
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material","ammo":""})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material","ammo":5})"))
                      .ok());
 }
 

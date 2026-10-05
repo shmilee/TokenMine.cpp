@@ -325,32 +325,72 @@ TEST(ItemEntityTest, PickupDelayCountsDown) {
 
 // -- Projectile ----------------------------------------------------------------
 
-// NOTE: the 30 s lifetime shares the age path verified by
-// ItemEntityTest.DespawnAfterAge; it cannot be exercised in isolation
-// because a live projectile is always either in flight (gravity eventually
-// puts it into a solid or the kill plane) or already dead.
-
-TEST(ProjectileTest, LaunchArcsAlongDirectionAndDiesOnFloor) {
+TEST(ProjectileTest, LaunchArcsAlongDirectionAndSticksOnFloor) {
     Fixture f;
     Projectile arrow(f.world, f.blocks, {0.5f, 5.0f, 0.5f}, {1.0f, 0.0f, 0.0f});
     f.run(arrow, 30); // 0.5 s: mid-flight
     EXPECT_FALSE(arrow.dead());
+    EXPECT_FALSE(arrow.stuck());
     EXPECT_GT(arrow.position().x, 6.0f); // ~0.5 + 15 * 0.5
     EXPECT_NEAR(arrow.position().y, 5.0f - 0.5f * 20.0f * 0.25f, 0.3f);
     f.run(arrow, 90); // 2 s total: long past the floor impact (~0.6 s)
-    EXPECT_TRUE(arrow.dead());
+    // Phase 24: a floor impact STICKS the arrow (the Phase 10 "撞墙钉住"
+    // intent) — it is not consumed.
+    EXPECT_FALSE(arrow.dead());
+    EXPECT_TRUE(arrow.stuck());
     EXPECT_FLOAT_EQ(arrow.position().y, 1.0f); // stuck where it hit the floor
     EXPECT_LT(arrow.position().x, 12.0f);      // hit before running on
 }
 
-TEST(ProjectileTest, DespawnOnWallHit) {
+TEST(ProjectileTest, SticksOnWallHit) {
     Fixture f;
     f.wallX(12, 0, 20, -16, 16);
     Projectile arrow(f.world, f.blocks, {8.5f, 5.0f, 8.5f}, {1.0f, 0.0f, 0.0f});
     f.run(arrow, 30); // the wall is ~0.23 s away
-    EXPECT_TRUE(arrow.dead());
+    EXPECT_FALSE(arrow.dead());
+    EXPECT_TRUE(arrow.stuck());
     // Stuck flush against the wall face (x = 12 - size/2).
     EXPECT_FLOAT_EQ(arrow.position().x, 12.0f - Projectile::kSize * 0.5f);
+}
+
+TEST(ProjectileTest, StuckArrowKeepsIncomingDirection) {
+    // The collision resolver zeroes the blocked axis of the velocity, so
+    // the render orientation needs the incoming direction (stuckDir).
+    // A HORIZONTAL shot is pulled down by gravity during flight, so the
+    // arrow strikes the wall below its launch angle: stuckDir is the
+    // pre-impact velocity direction (unit, x-dominant, y < 0), NOT the
+    // raw launch direction and NOT the zeroed live velocity.
+    Fixture f;
+    f.wallX(12, 0, 20, -16, 16);
+    Projectile arrow(f.world, f.blocks, {8.5f, 5.0f, 8.5f}, {1.0f, 0.0f, 0.0f});
+    f.run(arrow, 30);
+    ASSERT_TRUE(arrow.stuck());
+    const Vec3 dir = arrow.stuckDir();
+    EXPECT_NEAR(length(dir), 1.0f, 1e-5f);
+    EXPECT_GT(dir.x, 0.9f);
+    EXPECT_LT(dir.y, -0.2f); // gravity bent the arc down over the flight
+    EXPECT_NEAR(dir.z, 0.0f, 1e-6f);
+    // ... while the live velocity's blocked (x) axis is zeroed.
+    EXPECT_FLOAT_EQ(arrow.velocity().x, 0.0f);
+}
+
+TEST(ProjectileTest, StuckArrowDoesNotMoveAndAgesOut) {
+    // A stuck arrow is static (no physics) but keeps aging: it despawns
+    // when the age reaches kMaxAge, like any other arrow.
+    Fixture f;
+    f.wallX(12, 0, 20, -16, 16);
+    Projectile arrow(f.world, f.blocks, {8.5f, 5.0f, 8.5f}, {1.0f, 0.0f, 0.0f});
+    f.run(arrow, 30);
+    ASSERT_TRUE(arrow.stuck());
+    const Vec3 stuckAt = arrow.position();
+    const double ageAtStuck = arrow.age();
+    f.run(arrow, 120); // 2 s more: a flying arrow would travel ~30 blocks
+    EXPECT_EQ(arrow.position(), stuckAt); // but this one did not move
+    EXPECT_FALSE(arrow.shouldDespawn());  // 2 s < 30 s
+    f.run(arrow, static_cast<int>(Projectile::kMaxAge / kDt) + 60);
+    EXPECT_FALSE(arrow.dead());            // it aged out, it was not killed
+    EXPECT_TRUE(arrow.shouldDespawn());
+    EXPECT_GE(arrow.age(), ageAtStuck + Projectile::kMaxAge - 0.1);
 }
 
 TEST(ProjectileTest, DespawnBelowKillPlaneNotOnImpact) {

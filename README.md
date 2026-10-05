@@ -126,28 +126,47 @@ cmake --build build
     箱体的 −Z 面是脸）；天空光全亮烘焙（与掉落物同一简化，无局部光）
   - **开关**：config `mobs.enabled`（默认 true）；**mob 不入存档**（与 Minecraft
     一致：生成物是瞬态的，其掉落物是物品、随存档保存）
-- **弓与箭**（Phase 21，物品数据驱动发射 + P10 `Projectile`）：
+- **弓与箭**（Phase 21 发射，Phase 24 蓄力/箭物品/插墙残箭/近战；
+  物品数据驱动 + P10 `Projectile`）：
   - **获取**：shaped 配方 `bow`（工作台：3 stick + 1 planks 的 C 形，
     `data/recipes/bow.json`）；material 物品 `bow`（`data/items/bow.json`，
-    `max_stack 1`，图标 `bow.png`）
-  - **发射**：选中 `shoot_speed > 0` 的物品（发射器）时**左键 = 射箭**——按住
-    每 `0.25s`（挥击同款节奏）射一支，**不再**挖方块/挥击（Minecraft：弓的
-    左键是射击）；箭从眼前 0.3 格沿瞄准方向以物品 `shoot_speed` 数据（bow = 15，
-    MC 满威力）出发，播放 "shoot"
+    `max_stack 1`，图标 `bow.png`，`ammo: arrow`，`attack_damage: 1`）；
+    **箭 = material 物品 `arrow`**（`max_stack 64`，图标 `arrow.png`）+
+    shaped 配方 **2 stick（竖排）→ 2 arrow**（`data/recipes/arrow.json`）
+  - **发射（蓄力）**：选中 `shoot_speed > 0` 的物品（发射器）时**右键 =
+    拉弓**——按下即开始蓄力（该次右键被吞：不交互工作台/不放置方块；
+    需有弹药才能起拉；播放 "bow" 弦音），按住累加拉弓时间（真实 dt，封顶
+    `kBowFullDrawSeconds = 1.6s`），**松键射出**：`power =
+    clamp(拉弓/1.6, 0.1, 1)`（`core/bow.hpp` 纯函数，游戏与单测共享）——
+    速度 = `shoot_speed × power`、伤害 = `shoot_damage × power`；满蓄力 =
+    物品数据满值（bow = 15 / 5，MC 满威力），快速点击 = 最低威力 0.1；
+    箭从眼前 0.3 格沿瞄准方向出发，播放 "shoot"。蓄力状态在解锁/开面板/
+    换热栏格/重生时清零。**左键 = 弓近战**：准星命中 mob 时按物品
+    `attack_damage` 数据（bow = 1）伤害 + 击退（0.25s 挥击节奏），
+    **永不挖掘**（弓是武器不是工具）
+  - **弹药**：发射消耗 1 个发射器 `ammo` 数据字段点名的物品（**槽序升序
+    第一个持有它的槽位**）；无弹药不能起拉，拉弓中途耗尽则松键取消
+    （无箭不射）；`ammo` 缺席的发射器 = 无限箭（Phase 21 前语义），
+    字段名在 init 时经 ItemRegistry 交叉校验
   - **箭**（P10 `Projectile` 实体）：重力 20 b/s²（MC 箭 0.05/格/tick²）、
-    终端 38、撞 solid 即亡（v1 无"插在墙上"）、30s 寿命、世界下方杀界；
-    **固定帧步长** `kProjectileStepPerFrame`（运动实体截图可复现约定）
-  - **箭矢命中**：每帧对每支箭做**扫掠 AABB 测试**（上一步位置→本步位置，
-    `raycastAabb` 位移为方向、t∈[0,1]）对每个存活 mob——命中则按箭携带的
-    `shoot_damage` 数据（bow = 5，zombie 4 箭毙）伤害 + 沿箭水平速度的
-    近战式击退，箭被消耗；箭**穿过**玩家与其他实体（`collidesWithEntities
-    = false`），不伤玩家（单人生存 v1）
+    终端 38、**撞 solid = 插住**（stuck：留在命中处、保留撞击方向
+    `stuckDir` 供渲染——碰撞解算器会清零速度的碰撞轴，`stuckDir` 在
+    子步前捕获）、30s 寿命（与飞行箭共用 `kMaxAge`；MC 插墙箭 100s）、
+    世界下方杀界；**固定帧步长** `kProjectileStepPerFrame`（运动实体
+    截图可复现约定）；插住后无物理、不参与 mob 命中测试
+  - **箭矢命中**：每帧对每支**飞行中**的箭做**扫掠 AABB 测试**（上一步
+    位置→本步位置，`raycastAabb` 位移为方向、t∈[0,1]）对每个存活 mob——
+    命中则按箭携带的 `shoot_damage × power`（满威力 bow = 5，zombie 4 箭毙）
+    伤害 + 沿箭水平速度的近战式击退，箭被消耗；箭**穿过**玩家与其他实体
+    （`collidesWithEntities = false`），不伤玩家（单人生存 v1）
   - **渲染**：细盒体（长 0.55 × 粗 0.05，本地 −Z = 飞行方向）纯色
     （基本着色器 `u_useTexture=0` 路径，无箭纹理），朝向 = `rotateY(yaw) ×
-    rotateX(pitch)` 把本地 −Z 转到速度（相机同款约定，`arrowOrientation`
-    纯函数）；天空光全亮烘焙（随昼夜变暗）
-  - **v1 简化**（KNOWN_ISSUES.md）：无蓄力（永远满威力）、无箭物品/弹药消耗
-    （无限箭）、箭不入存档（瞬态，同 mob）、无插墙残箭、不伤玩家
+    rotateX(pitch)` 把本地 −Z 转到速度（插墙箭用 `stuckDir`；相机同款约定，
+    `arrowOrientation` 纯函数）；天空光全亮烘焙（随昼夜变暗）；拉弓时
+    **手持物品图标被蓄力威力拉向屏幕中心**（v1 拉弓指示，无 3D 手部模型）
+  - **v1 简化**（KNOWN_ISSUES.md）：箭不入存档（瞬态，同 mob）、不伤
+    玩家/无自伤、无箭纹理、插墙箭 30s 消亡（MC 100s）、拉弓 = 2D 图标
+    位移
 - **合成**（Phase 17，`CraftingGrid`/shaped 配方/工作台，全数据驱动）：
   - **形状配方**：配方 JSON 加 `"type": "shaped"` + `pattern`（行字符串，空格=空位）
     + `key`（字母→物品）；无 `type` 字段 = shapeless 原料袋（Phase 12 语义）。
@@ -206,12 +225,13 @@ cmake --build build
   无回调；初始化失败优雅降级为静音 + WARN）：固定事件集 v1（数据驱动，无
   per-block 差异）——破坏（按住时每 0.3s 一个 dig tick + 完成时的 break）、
   放置、拾取（含 Q 丢弃）、脚步（移动 + 贴地 + 锁定 + 背包关闭时每 0.4s）、
-  背包开/关、合成成功、受伤/死亡（Phase 16）、射箭（Phase 21）、进食
-  （Phase 23）。12 个程序化 WAV（`tools/generate_sounds.py`，44.1kHz 16-bit
+  背包开/关、合成成功、受伤/死亡（Phase 16）、射箭（Phase 21）、拉弓弦音
+  （Phase 24）、进食（Phase 23）。13 个程序化 WAV
+  （`tools/generate_sounds.py`，44.1kHz 16-bit
   单声道），音量
   `config audio.volume`（默认 0.7）
 - **物品与背包**（Phase 11/12，`Item`/`ItemStack`/`Inventory`，全数据驱动）：
-  - 物品 = 纯数据（`ItemRegistry`，当前 24 种 = 14 block + 2 工具 + 8 材料）：
+  - 物品 = 纯数据（`ItemRegistry`，当前 25 种 = 14 block + 2 工具 + 9 材料）：
     **每个数据方块隐式生成同名 block item**（无独立 JSON，方块定义是唯一来源）；
     **工具/材料**是显式数据（`assets/data/items/*.json`，`type: "tool"` 带
     `break_speed`，`type: "material"` 是通用非方块物品——锭/木棍/木板等，
@@ -227,10 +247,11 @@ cmake --build build
   配方 = `assets/data/recipes/*.json`（shapeless 原料袋 → 产物，或
   `"type": "shaped"` + `pattern`/`key` 形状配方，经 ItemRegistry 交叉严格
   校验）；`canCraft`/`craft` 是确定性纯逻辑（原料按槽序升序消耗、副本模拟
-  全有或全无——失败背包逐位不变，产出永远放得下）。当前 5 配方：wood→4
+  全有或全无——失败背包逐位不变，产出永远放得下）。当前 7 配方：wood→4
   planks、2 planks→4 stick（shapeless）、2×2 planks→crafting_table、
-  wooden_pickaxe（PPP/.S./.S.）、iron_pickaxe（III/.S./.S.）（均 shaped，
-  Phase 17）。游戏内触发：背包面板（`E`）右侧配方列表点击行 = `craft()`
+  wooden_pickaxe（PPP/.S./.S.）、iron_pickaxe（III/.S./.S.）、bow
+  （.S./SP/.S.，Phase 21）、2 stick 竖排→2 arrow（Phase 24）（后 5 个为
+  shaped）。游戏内触发：背包面板（`E`）右侧配方列表点击行 = `craft()`
   （仅 shapeless，Phase 15）；或放置并右键工作台打开 3×3 面板合成（Phase 17）
 - **存档/读档**（Phase 13，`--save <slot>`，`src/core/save.{hpp,cpp}`）：
   存档文件 `data/saves/<slot>.json` = **seed + 与生成态的 diff + 完整游戏状态**——
@@ -368,6 +389,7 @@ cmake --build build
   "shoot_speed": 15.0,              // 可选（Phase 21）：发射器速度，(0, 100]；>0 = 投射物发射器（弓）
   "shoot_damage": 5.0,              // 可选（Phase 21）：箭矢命中伤害，[0, 100]，默认 0
   "restore_hunger": 4,              // 可选（Phase 23）：食物恢复饥饿，整数 [1,20]；缺省=非食物
+  "ammo": "arrow"                   // 可选（Phase 24）：发射器弹药物品名（须存在，init 交叉校验）；发射消耗 1 个
   "max_stack": 1,                   // 1..64，默认 64
   "icon": "wooden_pickaxe"          // UI 图标（Phase 15）：assets/textures/items/<icon>.png
 }
@@ -555,7 +577,7 @@ mine-craft/
 │                    # WorldGenerator（Seed 可复现生成）
 ├── tools/           # 开发工具：generate_block_textures.py（16x16 占位纹理）、
 │                    # generate_font.py（8x8 字形 atlas）、generate_cracks.py（5 级裂纹条）、
-│                    # generate_item_icons.py（16x16 物品图标）、generate_sounds.py（8 个 WAV）
+│                    # generate_item_icons.py（16x16 物品图标）、generate_sounds.py（13 个 WAV）
 └── tests/           # 单元测试（GTest）+ PNG 测试夹具（tests/data/，可用 tests/generate_fixtures.py 重新生成）
 ```
 
@@ -588,6 +610,7 @@ mine-craft/
 - [x] **Phase 22** — 更多 mob（纯数据）：被动 mob 落地——`detect_radius`/`attack_range`/`attack_damage` 校验放宽为 `>= 0`（0 = 永不追/永不攻击/无害，负数与其余必填字段 0 仍拒绝；AI 状态机对 0 值天然不触发 Chase/Attack，零特判代码）/cow（`data/mobs/cow.json`：HP 10、speed 0.5、全 0 攻击字段、`wander_interval` 3.0、`spawn_max_light` 15 = 任何光照/时间可生成、掉 `leather`；box 模型 头 0.45³ + 身 0.8×0.7×1.1、AABB 1.2×1.5——首个比 zombie 宽的模型）/`leather` material 物品 + 图标/cow 纹理（棕底白斑毛 + 深色眼，2 tile，atlas 21→23）/`mob_spawning.json` 名单 [zombie, cow]——类型按名单确定性抽取（种子 ⊕ 帧号），过不了光门的尝试作废（白天抽中 zombie）；E2E：base18 门 ×2 字节不变（atlas +2 tile 对既有渲染零影响）、白天 240f mobs-on ×2 与 mobs-off ×2 各自逐字节一致、vs 对照 7578 px 差（bbox x[631,743] y[244,326] 单一 cow 轮廓，77% cow 棕 + 1% 白斑 + 22% 边缘/暗部，**zombie 绿 0 px** = 白天敌对压制保持，UI/心带零差）；603/603 单测（+3：passive 解析、负数/零拒绝 ×7 用例、passive AI 300 帧不追不打）
 
 - [x] **Phase 23** — 饥饿条 + 食物：物品可选字段 `restore_hunger`（整数 [1,20]，缺省=非食物、显式 0 拒绝）——`rotten_flesh` = 4（zombie 掉落即可食，"打 mob → 吃掉落"闭环）/玩家饥饿（`maxHunger=20`，每 4s 衰减 1 点，无饱和度 v1；饥饿 0 时每 4s 受 1 点饥饿伤害——走正常 `damage()` 路径复用红闪/音效/死亡）/自然回复饥饿门控（< 6 暂停，不重置）/吃食物（选中食物右键 = 吃：回复 + 扣 1 库存 + "eat" 音效，吞掉该次右键不放置/交互；满饥饿 no-op 但仍吞键）/重生恢复满饥饿/饥饿 HUD（心带右侧同行 10 只鸡腿，48×16 三态条带 `assets/textures/hunger.png` + `tools/generate_hunger_icons.py`，与心带共享图标度量）/存档格式 4（`player.hunger`，format 1-3 缺省 = 满）/`eat` 音效（12 WAV）/F3 加 hunger 行；E2E：base18 门字节不变（HUD 仅游玩态）、decay ×2 与 eat ×2 各自逐字节一致、eat vs decay 59 px 差（55 = 最后一只鸡腿 半→满 右侧 x[900,908] y[649,661]、4 = 热栏计数 16→15，UI 外零差）；615/615 单测（+12：food 字段解析/默认/拒绝 ×3、饥饿衰减/饥饿伤害/饿死/低饥阻断回复/钳制/重生恢复 ×6、存档 format 4 往返/缺省/拒绝 ×3）
+- [x] **Phase 24** — 弓后续（P21 简化项回收）：蓄力（右键拉弓：`Input::wasReleased` 释放边沿事件；按住累加真实 dt、封顶 `kBowFullDrawSeconds=1.6s`、松键射出 `power=clamp(拉弓/1.6, 0.1, 1)`——`core/bow.hpp` 纯函数游戏与单测共享；速度/伤害 = 物品数据 × power；左键改弓近战 `attack_damage` 数据（bow=1）且永不挖掘；蓄力状态在解锁/面板/换热栏/重生清零；拉弓渲染 = 手持图标按威力拉向屏幕中心 64px）/箭物品 + 弹药（material `arrow` max_stack 64 + 图标 + shaped 配方 2 stick 竖排→2；发射器新数据字段 `ammo`（物品名，init 经 ItemRegistry 交叉校验；缺席=无限箭），发射消耗槽序升序第一个箭）/插墙残箭（`Projectile` 撞 solid 由即亡改 stuck 态：留命中处、`stuckDir` 保留撞击前方向——碰撞解算器清零速度碰撞轴、渲染与命中测试改用/跳过；无物理、按 `kMaxAge` 30s 消亡——P10 头注释"撞墙钉住"原意）/"bow" 弦音（13 WAV）/bow.json 加 `ammo`+`attack_damage`；E2E：base18 门 ×2 字节不变、满蓄力射击 ×2 与短蓄力射击 ×2 与对照 ×2 各自逐字节一致（松键边沿的墙钟→帧钟 ±1 帧抖动只在射击用例偶发，多跑取字节一致对）、full vs ctrl 178 px 差（174 = 飞行箭 x[636,643] y[407,429]、4 = 热栏计数 16→15，UI 外零差）、short vs ctrl 1002 px 差（998 = 插墙箭 x[608,647] y[544,610]、4 = 计数；短蓄力 power 0.1875 → 速度 2.81 插进身前草地 vs 满蓄力 15 飞向天空——蓄力缩放同屏验证）；626/626 单测（+11：释放边沿 1、ammo 解析/默认/拒绝 3、蓄力 power 映射 4、stuck 语义（不动/计时消亡/保留方向）2、竖排 1 列 shaped 配方 1）
 
 ## 开发约定
 

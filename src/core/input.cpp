@@ -38,6 +38,7 @@ std::optional<MouseButton> Input::mapButton(int sdlButton) {
 void Input::frameBegin() {
     m_keyPressed.fill(false);
     m_buttonPressed.fill(false);
+    m_buttonReleased.fill(false);
     m_mouseDelta = Vec2 {0.0f, 0.0f};
 }
 
@@ -88,6 +89,8 @@ void Input::handleMouseButton(int sdlButton, bool down) {
     const int idx = static_cast<int>(*button);
     if (down && !m_buttonDown[idx]) {
         m_buttonPressed[idx] = true;
+    } else if (!down && m_buttonDown[idx]) {
+        m_buttonReleased[idx] = true; // release edge (Phase 24)
     }
     m_buttonDown[idx] = down;
 }

@@ -16,6 +16,11 @@ void Projectile::update(double dt) {
         return;
     }
     m_age += dt;
+    if (m_stuck) {
+        // A stuck arrow (Phase 24) no longer integrates: it ages in place
+        // until the kMaxAge despawn (the age line above keeps running).
+        return;
+    }
     // Peak-speed estimate for the sub-step count: this tick's post-gravity
     // vertical velocity (the horizontal one is constant).
     const float vyAfter = std::max(
@@ -23,6 +28,12 @@ void Projectile::update(double dt) {
     const float maxSpeed =
         std::max({std::abs(m_velocity.x), std::abs(vyAfter),
                   std::abs(m_velocity.z)});
+    // Capture the incoming direction before the sub-steps: if a solid
+    // stops one of the axes this tick, the collision resolver zeroes that
+    // axis of m_velocity, and the stuck render orientation (stuckDir)
+    // needs the pre-impact direction (the per-sub-step gravity delta over
+    // one 1/60 s tick is orientation-negligible).
+    m_stuckDir = normalized(m_velocity);
     moveInSubsteps(dt, maxSpeed);
 }
 
@@ -34,9 +45,11 @@ void Projectile::integrate(float h) {
 }
 
 void Projectile::afterSubstep(bool blocked) {
-    if (blocked) {
-        // A solid block stopped one of the axes: the arrow sticks.
-        m_dead = true;
+    if (blocked && !m_stuck) {
+        // A solid block stopped one of the axes: the arrow sticks where
+        // it hit (Phase 24 — the Phase 10 "撞墙钉住" intent). It keeps
+        // rendering (oriented along m_stuckDir) and despawns by age.
+        m_stuck = true;
     }
 }
 

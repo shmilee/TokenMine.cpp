@@ -18,6 +18,9 @@ blocks, not per-material — see KNOWN_ISSUES). Files:
   craft.wav    two-part sine chime (recipe crafted)
   hurt.wav     falling sawtooth-ish groan (player damaged, Phase 16)
   death.wav    long falling sweep (player died, Phase 16)
+  shoot.wav    descending whoosh (arrow release, Phase 21)
+  bow.wav      string twang (bow draw start, Phase 24)
+  eat.wav      muffled chewing (food eaten, Phase 23)
 """
 import math
 import os
@@ -173,6 +176,17 @@ def shoot():
     return lowpass3(sound(0.12, f))
 
 
+def bow():
+    """String twang (the bow's draw, Phase 24): a short plucked 180 Hz
+    sine with a gritty noise layer, fast decay."""
+    lcg = Lcg(0xB024)
+
+    def f(t, _):
+        return (math.sin(2 * math.pi * 180.0 * t) * math.exp(-t * 22) * 0.5
+                + lcg.next() * math.exp(-t * 35) * 0.25)
+    return sound(0.15, f)
+
+
 def eat():
     """Muffled chewing (Phase 23): a lowpassed noise burst gated by a slow
     chew pulse, with a short release so it ends cleanly."""
@@ -201,6 +215,7 @@ SOUNDS = {
     "hurt": hurt,
     "death": death,
     "shoot": shoot,
+    "bow": bow,
     "eat": eat,
 }
 

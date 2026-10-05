@@ -5,6 +5,8 @@
 //   - level-triggered:  isDown()      (held)
 //   - edge-triggered:   wasPressed()  (true once, on the frame the key went
 //                                     down; cleared by the next frameBegin)
+//                        wasReleased() (true once, on the frame the key went
+//                                     up; same clearing; Phase 24)
 //
 // SDL types are mapped to GameKey/MouseButton at the boundary so the rest
 // of the codebase (and the unit tests) never touches SDL.
@@ -72,6 +74,12 @@ public:
     bool wasPressed(MouseButton button) const {
         return m_buttonPressed[static_cast<int>(button)];
     }
+    // True once, on the frame the button went up (Phase 24; the bow's
+    // charge is fired on the right-button release). A button-up for a
+    // button that was not down (a stale WM event) does not set the edge.
+    bool wasReleased(MouseButton button) const {
+        return m_buttonReleased[static_cast<int>(button)];
+    }
 
     // Accumulated relative mouse motion since frameBegin.
     Vec2 mouseDelta() const { return m_mouseDelta; }
@@ -97,6 +105,7 @@ private:
     std::array<bool, kKeyCount> m_keyPressed {};
     std::array<bool, kMouseButtonCount> m_buttonDown {};
     std::array<bool, kMouseButtonCount> m_buttonPressed {};
+    std::array<bool, kMouseButtonCount> m_buttonReleased {};
     Vec2 m_mouseDelta {0.0f, 0.0f};
     // Absolute position: updated on every motion event, NOT reset by
     // frameBegin (the cursor sits where it last was).

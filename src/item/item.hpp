@@ -64,12 +64,20 @@ struct Item {
     // block items / materials).
     float attackDamage = 1.0f;
     // Phase 21: projectile launching (optional data fields 'shoot_speed'
-    // / 'shoot_damage'). shootSpeed > 0 marks the item as a LAUNCHER:
-    // while it is selected, holding the left button fires a Projectile
-    // every swing interval (the bow). Both default 0 = not a launcher
-    // (every pre-Phase-21 item).
+    // / 'shoot_damage'). shootSpeed > 0 marks the item as a LAUNCHER
+    // (the bow). Both default 0 = not a launcher (every pre-Phase-21
+    // item).
     float shootSpeed = 0.0f;
     float shootDamage = 0.0f;
+    // Phase 24: the launcher's AMMO item (optional data field 'ammo', an
+    // item name). Empty = the launcher fires without consuming anything
+    // (every pre-Phase-24 launcher). While a launcher is selected, the
+    // right button draws the bow and the release fires ONE arrow only if
+    // the inventory still holds at least one `ammo` item; firing consumes
+    // one from the lowest-index slot that holds it (see
+    // Game::fireBow). The name is cross-checked against the ItemRegistry
+    // at game init (same pattern as the icon file check).
+    std::string ammo;
     // Phase 23: food (optional data field 'restore_hunger', integer in
     // [1, 20]). restoreHunger > 0 marks the item as FOOD: while it is
     // selected, the right button eats one (restores this much hunger and

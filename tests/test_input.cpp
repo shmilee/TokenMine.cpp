@@ -90,6 +90,30 @@ TEST(InputTest, MouseButtons) {
     input.handleMouseButton(4, true);
 }
 
+TEST(InputTest, MouseButtonReleaseEdge) {
+    // Phase 24: wasReleased is the mirror of wasPressed — true once, on
+    // the frame the button went up (the bow fires on the right release).
+    Input input;
+    input.frameBegin();
+    input.handleMouseButton(SDL_BUTTON_RIGHT, true);
+    EXPECT_TRUE(input.wasPressed(MouseButton::Right));
+    EXPECT_FALSE(input.wasReleased(MouseButton::Right));
+
+    input.frameBegin();
+    EXPECT_TRUE(input.isDown(MouseButton::Right)); // still held
+    input.handleMouseButton(SDL_BUTTON_RIGHT, false);
+    EXPECT_FALSE(input.isDown(MouseButton::Right));
+    EXPECT_FALSE(input.wasPressed(MouseButton::Right));
+    EXPECT_TRUE(input.wasReleased(MouseButton::Right)); // edge on this frame
+
+    input.frameBegin();
+    EXPECT_FALSE(input.wasReleased(MouseButton::Right)); // edge consumed
+
+    // A stale up-event (the button was never down) sets no release edge.
+    input.handleMouseButton(SDL_BUTTON_MIDDLE, false);
+    EXPECT_FALSE(input.wasReleased(MouseButton::Middle));
+}
+
 TEST(InputTest, MouseDeltaAccumulatesAndResets) {
     Input input;
     input.frameBegin();

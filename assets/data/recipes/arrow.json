@@ -1,0 +1,12 @@
+{
+  "id": "arrow",
+  "type": "shaped",
+  "output": { "item": "arrow", "count": 2 },
+  "pattern": [
+    "S",
+    "S"
+  ],
+  "key": {
+    "S": "stick"
+  }
+}

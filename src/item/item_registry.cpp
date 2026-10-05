@@ -70,8 +70,10 @@ Result<void> ItemRegistry::parseAttackDamage(const Json& def, Item& out) {
 Result<void> ItemRegistry::parseShoot(const Json& def, Item& out) {
     // Optional 'shoot_speed' / 'shoot_damage' (Phase 21): the item is a
     // projectile launcher (the bow) when shoot_speed > 0. While selected,
-    // holding the left button then fires a Projectile on the swing cadence
-    // (see Game::updateBowShooting).
+    // the right button draws the bow and the release fires a Projectile
+    // with speed/damage scaled by the charge (Phase 24, see
+    // Game::fireBow + core/bow.hpp); the left button is the bow's melee
+    // swing.
     if (const Json* ss = def.find("shoot_speed")) {
         if (!ss->isNumber()) {
             return MC_FAIL("'shoot_speed' must be a number");
@@ -114,6 +116,23 @@ Result<void> ItemRegistry::parseFood(const Json& def, Item& out) {
             return MC_FAIL("'restore_hunger' must be in [1, 20], got " +
                            std::to_string(out.restoreHunger));
         }
+    }
+    return {};
+}
+
+Result<void> ItemRegistry::parseAmmo(const Json& def, Item& out) {
+    // Optional 'ammo' (Phase 24): the launcher's ammo item name. Presence
+    // (a non-empty string) marks the launcher as CONSUMING ammo: firing
+    // requires at least one in the inventory and consumes one. The absent
+    // field is the "no ammo" default, so an explicit empty string is
+    // rejected as a typo (same discipline as restore_hunger /
+    // shoot_speed). The name is resolved against the ItemRegistry at game
+    // init (the ammo item may be defined in a later file).
+    if (const Json* am = def.find("ammo")) {
+        if (!am->isString() || am->asString().empty()) {
+            return MC_FAIL("'ammo' must be a non-empty item name");
+        }
+        out.ammo = am->asString();
     }
     return {};
 }
@@ -176,7 +195,7 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
         if (key != "id" && key != "type" && key != "tool" &&
             key != "max_stack" && key != "attack_damage" &&
             key != "shoot_speed" && key != "shoot_damage" &&
-            key != "restore_hunger" && key != "icon") {
+            key != "restore_hunger" && key != "ammo" && key != "icon") {
             MC_LOG_WARN("Item '" + name + "': unknown field '" + key +
                         "' ignored");
         }
@@ -192,6 +211,8 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     r = parseShoot(def, item);
     MC_TRY(r);
     r = parseFood(def, item);
+    MC_TRY(r);
+    r = parseAmmo(def, item);
     MC_TRY(r);
 
     // Optional 2D icon (Phase 15 UI): a texture file name under

@@ -261,6 +261,27 @@ def bow():
     return px
 
 
+def arrow():
+    """An arrow: a 2px diagonal shaft from the bottom-left to the
+    top-right, a small steel tip at the top end and light fletching at
+    the bottom end (Phase 24; the bow's ammo item)."""
+    px = blank()
+    shaft = (140, 100, 58)
+    line(px, 3, 12, 12, 3, shaft, salt=77, width=2)
+    # A few darker fibers along the shaft.
+    for (x, y) in ((5, 10), (8, 7), (10, 5)):
+        setpx(px, x, y, (104, 74, 42), salt=78, amount=3)
+    # The tip: a small steel head at the top-right end.
+    tip = (206, 206, 214)
+    for (x, y) in ((12, 2), (13, 2), (13, 3), (14, 2), (14, 3)):
+        setpx(px, x, y, tip, salt=79)
+    # The fletching: light barbs at the bottom-left end.
+    fletch = (228, 222, 208)
+    for (x, y) in ((2, 13), (3, 14), (1, 12), (4, 12)):
+        setpx(px, x, y, fletch, salt=80)
+    return px
+
+
 ITEMS = {
     "planks": planks,
     "stick": stick,
@@ -272,6 +293,7 @@ ITEMS = {
     "wooden_pickaxe": wooden_pickaxe,
     "iron_pickaxe": iron_pickaxe,
     "bow": bow,
+    "arrow": arrow,
     "leather": leather,
 }
 

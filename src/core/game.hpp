@@ -183,15 +183,29 @@ private:
     void updateAttacking(double dt, MobEntity& mob);
     // Melee damage of the selected item (data; bare hand = 1.0).
     float selectedAttackDamage() const;
-    // Bow launching (Phase 21): the selected item's launch data (data
-    // 'shoot_speed' / 'shoot_damage'; 0 = the selected item is not a
-    // launcher). While a launcher is selected, holding the left button
-    // fires one arrow per kSwingInterval (the swing cadence) — no mining
-    // or melee on that button while it is held.
+    // Bow launching (Phase 21, charge + ammo Phase 24): the selected
+    // item's launch data (data 'shoot_speed' / 'shoot_damage'; 0 = the
+    // selected item is not a launcher). While a launcher is selected the
+    // RIGHT button draws (a press starts the charge when ammo is
+    // available — the click is consumed, no interact/place; the hold
+    // accumulates draw time, capped at kBowFullDrawSeconds) and the
+    // RELEASE fires one arrow with the charge's power (core/bow.hpp),
+    // consuming one ammo item (data 'ammo'; the lowest-index slot that
+    // holds it). The LEFT button is the bow's melee swing (the item's
+    // data attack_damage) on a mob under the crosshair; a launcher never
+    // mines.
     float selectedShootSpeed() const;
     float selectedShootDamage() const;
-    void updateBowShooting(double dt);
-    void shootArrow();
+    // True when the selected launcher can fire: no 'ammo' data = always;
+    // otherwise at least one ammo item in the inventory.
+    bool ammoAvailable() const;
+    void updateBowDraw(double dt);
+    // Fires one arrow with the charge's power (see updateBowDraw),
+    // consuming one ammo item; a draw with no ammo left is cancelled
+    // silently. Resets the draw state.
+    void fireBow();
+    // Cancels an in-progress draw (item switch, unlock, panel, ...).
+    void resetBowDraw();
     // Performs the break: air + relight + data-driven drop (ItemEntity).
     // The caller guarantees the hit is destroyable.
     void breakBlock(const BlockHit& hit);
@@ -396,10 +410,13 @@ private:
     // on release / when the aim leaves the mob (the next swing is
     // immediate).
     double m_swingCooldown = 0.0;
-    // Bow fire cooldown (seconds; Phase 21): one arrow per kSwingInterval
-    // while the left button is held with a launcher selected (the same
-    // cadence as the melee swing). Reset to 0 on release.
-    double m_bowCooldown = 0.0;
+    // Bow draw (Phase 24): true while the right button is held with a
+    // launcher selected; m_bowDrawSeconds accumulates the draw in real dt
+    // (capped at kBowFullDrawSeconds). Reset by fireBow/resetBowDraw and
+    // by every state change that interrupts a draw (unlock, panel, item
+    // switch).
+    bool m_bowDrawing = false;
+    double m_bowDrawSeconds = 0.0;
     // The shared arrow mesh (Phase 21; built lazily on first render).
     Mesh m_arrowMesh;
 

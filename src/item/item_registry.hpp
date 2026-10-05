@@ -78,6 +78,11 @@ private:
     // Parse the optional food field `restore_hunger` (Phase 23) into
     // `out`. Presence marks the item as food (restoreHunger in [1, 20]).
     static Result<void> parseFood(const Json& def, Item& out);
+    // Parse the optional launcher ammo field `ammo` (Phase 24) into
+    // `out` (an item name; presence marks the launcher as consuming
+    // ammo). The name's existence is cross-checked at game init (the
+    // ammo item may be defined in a later file).
+    static Result<void> parseAmmo(const Json& def, Item& out);
     // Parse the tool fields (`tool.break_speed` + `max_stack`) into `out`.
     static Result<void> parseTool(const Json& def, Item& out);
 

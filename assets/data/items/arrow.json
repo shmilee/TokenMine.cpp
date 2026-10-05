@@ -1,0 +1,6 @@
+{
+  "id": "arrow",
+  "type": "material",
+  "max_stack": 64,
+  "icon": "arrow"
+}
