@@ -1,0 +1,14 @@
+{
+  "id": "bow",
+  "type": "shaped",
+  "output": { "item": "bow", "count": 1 },
+  "pattern": [
+    " S ",
+    "S P",
+    " S "
+  ],
+  "key": {
+    "S": "stick",
+    "P": "planks"
+  }
+}

@@ -66,6 +66,34 @@ Result<void> ItemRegistry::parseAttackDamage(const Json& def, Item& out) {
     return {};
 }
 
+Result<void> ItemRegistry::parseShoot(const Json& def, Item& out) {
+    // Optional 'shoot_speed' / 'shoot_damage' (Phase 21): the item is a
+    // projectile launcher (the bow) when shoot_speed > 0. While selected,
+    // holding the left button then fires a Projectile on the swing cadence
+    // (see Game::updateBowShooting).
+    if (const Json* ss = def.find("shoot_speed")) {
+        if (!ss->isNumber()) {
+            return MC_FAIL("'shoot_speed' must be a number");
+        }
+        out.shootSpeed = static_cast<float>(ss->asDouble());
+        if (out.shootSpeed <= 0.0f || out.shootSpeed > 100.0f) {
+            return MC_FAIL("'shoot_speed' must be in (0, 100], got " +
+                           std::to_string(out.shootSpeed));
+        }
+    }
+    if (const Json* sd = def.find("shoot_damage")) {
+        if (!sd->isNumber()) {
+            return MC_FAIL("'shoot_damage' must be a number");
+        }
+        out.shootDamage = static_cast<float>(sd->asDouble());
+        if (out.shootDamage < 0.0f || out.shootDamage > 100.0f) {
+            return MC_FAIL("'shoot_damage' must be in [0, 100], got " +
+                           std::to_string(out.shootDamage));
+        }
+    }
+    return {};
+}
+
 Result<void> ItemRegistry::parseTool(const Json& def, Item& out) {
     if (const Json* tool = def.find("tool")) {
         if (!tool->isObject()) {
@@ -123,6 +151,7 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     for (const auto& [key, value] : def.members()) {
         if (key != "id" && key != "type" && key != "tool" &&
             key != "max_stack" && key != "attack_damage" &&
+            key != "shoot_speed" && key != "shoot_damage" &&
             key != "icon") {
             MC_LOG_WARN("Item '" + name + "': unknown field '" + key +
                         "' ignored");
@@ -135,6 +164,8 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     auto r = isTool ? parseTool(def, item) : parseMaxStack(def, item);
     MC_TRY(r);
     r = parseAttackDamage(def, item);
+    MC_TRY(r);
+    r = parseShoot(def, item);
     MC_TRY(r);
 
     // Optional 2D icon (Phase 15 UI): a texture file name under

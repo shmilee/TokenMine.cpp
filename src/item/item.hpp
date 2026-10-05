@@ -63,6 +63,13 @@ struct Item {
     // (optional data field 'attack_damage'; default 1.0 = bare hand /
     // block items / materials).
     float attackDamage = 1.0f;
+    // Phase 21: projectile launching (optional data fields 'shoot_speed'
+    // / 'shoot_damage'). shootSpeed > 0 marks the item as a LAUNCHER:
+    // while it is selected, holding the left button fires a Projectile
+    // every swing interval (the bow). Both default 0 = not a launcher
+    // (every pre-Phase-21 item).
+    float shootSpeed = 0.0f;
+    float shootDamage = 0.0f;
     // Phase 15 UI: the item's 2D icon texture name (a file under
     // assets/textures/items/, validated against the filesystem at game
     // init). Empty for block items, which render a 3D block cube instead.

@@ -225,6 +225,25 @@ def iron_pickaxe():
     return pickaxe((206, 206, 212), (238, 238, 244), salt=53)
 
 
+def bow():
+    px = blank()
+    stave = (110, 74, 42)
+    string = (206, 200, 188)
+    # The string: a light vertical line on the right.
+    for y in range(2, 14):
+        setpx(px, 11, y, string, salt=71)
+    # The stave: a brown C-arc from the top tip to the bottom tip.
+    for (x, y) in ((6, 2), (5, 3), (4, 4), (3, 5), (2, 6), (2, 7), (2, 8),
+                   (2, 9), (3, 10), (4, 11), (5, 12), (6, 13)):
+        setpx(px, x, y, stave, salt=72)
+        setpx(px, x + 1, y, (94, 62, 36), salt=73)
+    # The tips connect the stave to the string.
+    for x in (8, 9, 10):
+        setpx(px, x, 2, stave, salt=74)
+        setpx(px, x, 13, stave, salt=75)
+    return px
+
+
 ITEMS = {
     "planks": planks,
     "stick": stick,
@@ -235,6 +254,7 @@ ITEMS = {
     "iron_ingot": iron_ingot,
     "wooden_pickaxe": wooden_pickaxe,
     "iron_pickaxe": iron_pickaxe,
+    "bow": bow,
 }
 
 

@@ -367,6 +367,22 @@ TEST(ProjectileTest, DespawnBelowKillPlaneNotOnImpact) {
     EXPECT_FALSE(arrow.dead()); // no solid was ever touched
 }
 
+TEST(ProjectileTest, KillConsumesItForDespawn) {
+    // Phase 21: a mob hit consumes the arrow (no block impact, no
+    // sticking) — the same removal path as an impact. The per-hit damage
+    // rides with the projectile (set at launch from the item data).
+    BlockRegistry blocks = makeBlocks();
+    World world;
+    Projectile arrow(world, blocks, {8.5f, 10.0f, 8.5f}, {0.0f, 0.0f, 1.0f},
+                     15.0f, 5.0f);
+    EXPECT_FLOAT_EQ(arrow.damage(), 5.0f);
+    EXPECT_FALSE(arrow.dead());
+    EXPECT_FALSE(arrow.shouldDespawn());
+    arrow.kill();
+    EXPECT_TRUE(arrow.dead());
+    EXPECT_TRUE(arrow.shouldDespawn());
+}
+
 // -- dropped-item geometry ------------------------------------------------------
 
 namespace {

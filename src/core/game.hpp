@@ -183,6 +183,15 @@ private:
     void updateAttacking(double dt, MobEntity& mob);
     // Melee damage of the selected item (data; bare hand = 1.0).
     float selectedAttackDamage() const;
+    // Bow launching (Phase 21): the selected item's launch data (data
+    // 'shoot_speed' / 'shoot_damage'; 0 = the selected item is not a
+    // launcher). While a launcher is selected, holding the left button
+    // fires one arrow per kSwingInterval (the swing cadence) — no mining
+    // or melee on that button while it is held.
+    float selectedShootSpeed() const;
+    float selectedShootDamage() const;
+    void updateBowShooting(double dt);
+    void shootArrow();
     // Performs the break: air + relight + data-driven drop (ItemEntity).
     // The caller guarantees the hit is destroyable.
     void breakBlock(const BlockHit& hit);
@@ -220,6 +229,15 @@ private:
     void attemptMobSpawn();
     void drawMobs(const Mat4& view, const Mat4& projection);
     const Mesh& mobMesh(MobID id);
+
+    // Arrow rendering (Phase 21): the arrows (the P10 Projectiles the bow
+    // launches) draw after the mobs in the opaque pass with the shared
+    // box mesh, oriented along their velocity (model = translate *
+    // rotateY(yaw) * rotateX(pitch), local -Z = travel direction, see
+    // arrowOrientation), in the basic shader's solid-color path
+    // (u_useTexture 0).
+    void drawArrows(const Mat4& view, const Mat4& projection);
+    const Mesh& arrowMesh();
 
     // -- Phase 15 UI / audio / particles ------------------------------------
     // E/F3/F5 handling (F3 + F5 work in any pointer state; E opens the
@@ -371,6 +389,12 @@ private:
     // on release / when the aim leaves the mob (the next swing is
     // immediate).
     double m_swingCooldown = 0.0;
+    // Bow fire cooldown (seconds; Phase 21): one arrow per kSwingInterval
+    // while the left button is held with a launcher selected (the same
+    // cadence as the melee swing). Reset to 0 on release.
+    double m_bowCooldown = 0.0;
+    // The shared arrow mesh (Phase 21; built lazily on first render).
+    Mesh m_arrowMesh;
 
     // Item/inventory system (Phase 11): item registry (implicit block
     // items + explicit tools/materials from assets/data/items), the

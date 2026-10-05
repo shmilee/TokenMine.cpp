@@ -13,6 +13,7 @@
 #include "block/cube_face_table.hpp"
 #include "core/json.hpp"
 #include "core/png.hpp"
+#include "entity/arrow_mesh.hpp"
 #include "entity/item_entity.hpp"
 #include "entity/mob_entity.hpp"
 #include "entity/mob_mesh.hpp"
@@ -46,13 +47,16 @@ constexpr float kHorizonFade = 0.1f;
 // real-time speed is exact at 60 FPS.
 constexpr double kDayStepPerFrame = 1.0 / 60.0;
 
-// Mobs (Phase 20) simulate on the SAME fixed per-frame step: a moving mob's
-// position at frame N must be a pure function of N (the day cycle and the
-// item animation set the precedent — real dt varies with load, and a moving
-// body's final position would drift by sub-pixels between runs). At the
-// 60 FPS cap the real-time speed is exact; at lower caps the mob slows down
-// with the frame clock (the day cycle's behavior).
+// Mobs (Phase 20) and arrows (Phase 21) — every MOVING entity — simulate
+// on the SAME fixed per-frame step: a moving body's position at frame N
+// must be a pure function of N (the day cycle and the item animation set
+// the precedent — real dt varies with load, and a moving body's final
+// position would drift by sub-pixels between runs). At the 60 FPS cap the
+// real-time speed is exact; at lower caps the body slows down with the
+// frame clock (the day cycle's behavior).
 constexpr double kMobStepPerFrame = 1.0 / 60.0;
+// Arrows share the moving-entity convention (Phase 21).
+constexpr double kProjectileStepPerFrame = 1.0 / 60.0;
 // The fluid simulation ticks every Nth frame (20 ticks/s at 60 FPS); the
 // fixed frame step keeps headless runs byte-reproducible.
 constexpr int kFluidTickEveryNFrames = 3;
@@ -89,6 +93,12 @@ constexpr float kReach = 5.0f;
 constexpr double kSwingInterval = 0.25;  // seconds between attack hits
 constexpr float kKnockbackSpeed = 4.0f;  // horizontal knockback (blocks/s)
 constexpr float kKnockbackLift = 2.5f;   // vertical knockback (blocks/s)
+
+// Bow (Phase 21): the arrow spawns this far in front of the eye (the
+// launch origin never sits inside the camera near plane), and a hit arrow
+// knocks back with the melee constants above (along the arrow's horizontal
+// velocity).
+constexpr float kArrowSpawnOffset = 0.3f;
 
 // A dropped item is picked up when its bottom-center is within this
 // distance of the player's bottom-center (and past the item's pickup
@@ -812,12 +822,21 @@ Result<SaveGame> Game::collectSave() const {
         save.tableGrid.push_back(m_tableGrid.at(i));
     }
     for (const std::unique_ptr<Entity>& e : m_entities) {
-        // The game only ever spawns ItemEntities; anything else means a
-        // code path this save format cannot express — fail loudly.
+        // Persisted entities are ItemEntities. Mobs (Phase 20) and arrows
+        // (Phase 21) are EPHEMERAL by design — the save format expresses
+        // them by not storing them (a mob/arrow alive at save time is
+        // simply gone on load), so they are skipped, not an error. Any
+        // OTHER kind means a code path this save format cannot express —
+        // fail loudly.
         const ItemEntity* item = dynamic_cast<const ItemEntity*>(e.get());
         if (item == nullptr) {
-            return MC_FAIL("cannot save: an entity of a kind this build "
-                           "does not persist exists");
+            if (dynamic_cast<const MobEntity*>(e.get()) == nullptr &&
+                dynamic_cast<const Projectile*>(e.get()) == nullptr) {
+                return MC_FAIL(
+                    "cannot save: an entity of a kind this build does not "
+                    "persist exists");
+            }
+            continue;
         }
         SavedItemEntity se;
         se.item = item->itemName();
@@ -1263,13 +1282,20 @@ void Game::handleInteraction(double dt) {
     if (m_input.wasPressed(GameKey::Q)) {
         dropSelectedItem();
     }
-    // Left button (Phases 11/20): on a mob under the crosshair the swing
-    // attacks it (one hit per kSwingInterval while held — damage +
-    // knockback, the block behind it is NOT mined); on a block it mines
-    // (hold-to-break progress). Leaving either target resets the other's
-    // state.
+    // Left button (Phases 11/20/21): a launcher item selected (the bow —
+    // data 'shoot_speed' > 0) fires on the swing cadence, one arrow per
+    // kSwingInterval while held, and does NOT mine or melee (Minecraft:
+    // with a bow, the left button is the shot, not a swing). Otherwise:
+    // on a mob under the crosshair the swing attacks it (one hit per
+    // kSwingInterval while held — damage + knockback, the block behind it
+    // is NOT mined); on a block it mines (hold-to-break progress).
+    // Leaving either target resets the other's state.
     if (m_input.isDown(MouseButton::Left)) {
-        if (const std::optional<MobHit> mob = targetMob()) {
+        if (selectedShootSpeed() > 0.0f) {
+            resetBreaking();
+            m_swingCooldown = 0.0;
+            updateBowShooting(dt);
+        } else if (const std::optional<MobHit> mob = targetMob()) {
             resetBreaking();
             updateAttacking(dt, *mob->mob);
         } else {
@@ -1279,6 +1305,7 @@ void Game::handleInteraction(double dt) {
     } else {
         resetBreaking();
         m_swingCooldown = 0.0;
+        m_bowCooldown = 0.0;
     }
 }
 
@@ -1390,6 +1417,50 @@ float Game::selectedAttackDamage() const {
         return 1.0f;  // bare hand
     }
     return m_items.at(stack.item).attackDamage;  // data (default 1.0)
+}
+
+float Game::selectedShootSpeed() const {
+    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    if (stack.empty()) {
+        return 0.0f;  // no launcher
+    }
+    return m_items.at(stack.item).shootSpeed;  // data (0 = not a launcher)
+}
+
+float Game::selectedShootDamage() const {
+    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    if (stack.empty()) {
+        return 0.0f;
+    }
+    return m_items.at(stack.item).shootDamage;  // data (default 0)
+}
+
+void Game::updateBowShooting(double dt) {
+    // The bow fires on the swing cadence (hold = one arrow per
+    // kSwingInterval; the release reset happens in handleInteraction).
+    // v1 has no charge-up: every shot fires at the item's full data speed
+    // (KNOWN_ISSUES.md).
+    if (m_bowCooldown > 0.0) {
+        m_bowCooldown -= dt;
+        return;
+    }
+    m_bowCooldown = kSwingInterval;
+    shootArrow();
+}
+
+void Game::shootArrow() {
+    // The arrow spawns in front of the eye along the aim, as a plain P10
+    // Projectile at the launcher item's data speed + damage. The
+    // updateEntities pass runs its swept arrow-vs-mob hit test; the
+    // despawn pass removes it on impact / age / kill plane. Arrows are
+    // not items: no ammo is consumed (KNOWN_ISSUES.md), and they are not
+    // saved (ephemeral, like mobs).
+    const Vec3 f = m_camera.forward();
+    const Vec3 o = m_camera.position + f * kArrowSpawnOffset;
+    m_entities.push_back(std::make_unique<Projectile>(
+        m_world, m_blocks, o, f, selectedShootSpeed(),
+        selectedShootDamage()));
+    m_sound.play("shoot");
 }
 
 void Game::breakBlock(const BlockHit& hit) {
@@ -1535,12 +1606,64 @@ void Game::updateEntities(double dt) {
     // an exact boundary regardless of the dt history).
     const Vec3 playerPos = m_player->position();
     const bool playerAlive = !m_player->isDead();
+    // Arrow pre-step positions (Phase 21): captured before the update so
+    // the swept arrow-vs-mob hit test below can run over each arrow's
+    // per-step displacement.
+    std::vector<std::pair<Projectile*, Vec3>> arrowSteps;
+    for (auto& entity : m_entities) {
+        if (auto* arrow = dynamic_cast<Projectile*>(entity.get())) {
+            arrowSteps.push_back({arrow, arrow->position()});
+        }
+    }
     for (auto& entity : m_entities) {
         if (auto* mob = dynamic_cast<MobEntity*>(entity.get())) {
             mob->setPlayer(playerPos, playerAlive);
             mob->update(kMobStepPerFrame);
+        } else if (dynamic_cast<Projectile*>(entity.get()) != nullptr) {
+            // Moving entity: the fixed step (kProjectileStepPerFrame).
+            entity->update(kProjectileStepPerFrame);
         } else {
             entity->update(dt);
+        }
+    }
+    // Arrow hits (Phase 21): a swept test from each arrow's pre-step
+    // position to its new one against every live mob's AABB — raycastAabb
+    // with the per-step displacement as the direction, where t in [0, 1]
+    // is a hit inside this step (t = 0: the arrow starts inside the mob).
+    // The first mob hit (entity index order) takes the launcher's data
+    // damage + the melee-style knockback along the arrow's horizontal
+    // velocity, and the arrow is consumed (the despawn pass removes it
+    // this frame). Arrows fly through the player and every other entity
+    // (collidesWithEntities = false) and never damage the player
+    // (single-player v1, KNOWN_ISSUES.md).
+    for (auto& [arrow, prev] : arrowSteps) {
+        if (arrow->dead()) {
+            continue;  // a block impact this step already consumed it
+        }
+        const Vec3 step = arrow->position() - prev;
+        for (auto& entity : m_entities) {
+            auto* mob = dynamic_cast<MobEntity*>(entity.get());
+            if (mob == nullptr || mob->dead()) {
+                continue;
+            }
+            const float t =
+                raycastAabb(prev, step, mob->aabbMin(), mob->aabbMax());
+            if (t < 0.0f || t > 1.0f) {
+                continue;
+            }
+            mob->damage(arrow->damage());
+            const Vec3 v = arrow->velocity();
+            Vec3 kb {v.x, 0.0f, v.z};
+            const float len = std::sqrt(kb.x * kb.x + kb.z * kb.z);
+            if (len > 1e-4f) {
+                kb.x *= kKnockbackSpeed / len;
+                kb.z *= kKnockbackSpeed / len;
+            }
+            kb.y = kKnockbackLift;
+            mob->addKnockback(kb);
+            m_sound.play("hurt");
+            arrow->kill();
+            break;
         }
     }
     // Entity-vs-entity separation (Phase 19; the player-vs-item part is
@@ -1839,6 +1962,61 @@ const Mesh& Game::mobMesh(MobID id) {
                      m_mobTypes.at(id).name + "': " + r.error().describe());
     }
     return mesh;
+}
+
+void Game::drawArrows(const Mat4& view, const Mat4& projection) {
+    // The arrows render in the basic shader's solid-color path (v1 has no
+    // arrow texture): u_useTexture is per-program state shared with every
+    // textured draw of the frame, so it is switched here and restored
+    // immediately (the next pass, the particles, samples the atlas).
+    const Mesh& mesh = arrowMesh();
+    if (!mesh.valid()) {
+        return;
+    }
+    // The program is UNBOUND here: Renderer::draw binds/unbinds around
+    // every draw, and the last textured draw of the opaque pass left it
+    // off. Setting a uniform on an unbound program is
+    // GL_INVALID_OPERATION, so bind it for the switch (uniforms persist
+    // on the program object; the next pass re-binds per draw).
+    m_basicShader.bind();
+    m_basicShader.setUniform1i("u_useTexture", 0);
+    m_basicShader.setUniform3f("u_color", kArrowColorR, kArrowColorG,
+                               kArrowColorB);
+    for (const auto& entity : m_entities) {
+        const Projectile* arrow =
+            dynamic_cast<const Projectile*>(entity.get());
+        if (arrow == nullptr) {
+            continue;
+        }
+        // Collision-box center (the box is kSize tall; the box mesh is
+        // centered on its origin) oriented along the velocity (local -Z).
+        // Dead arrows are removed in this frame's update, so a dead one is
+        // never rendered.
+        const Vec3 c = arrow->position() +
+                       Vec3 {0.0f, Projectile::kSize * 0.5f, 0.0f};
+        const auto [yaw, pitch] = arrowOrientation(arrow->velocity());
+        const Mat4 model = Mat4::multiply(
+            Mat4::multiply(Mat4::translate(c), Mat4::rotateY(yaw)),
+            Mat4::rotateX(pitch));
+        m_renderer.draw(mesh, m_basicShader, view, projection, model);
+    }
+    // Re-bind for the restore: the last arrow draw (if any) unbound the
+    // program.
+    m_basicShader.bind();
+    m_basicShader.setUniform1i("u_useTexture", 1);
+    m_basicShader.unbind();
+}
+
+const Mesh& Game::arrowMesh() {
+    if (m_arrowMesh.valid()) {
+        return m_arrowMesh;
+    }
+    const ItemMeshGeometry geom = makeArrowGeometry();
+    auto r = m_arrowMesh.upload(geom.vertices, geom.indices);
+    if (!r.ok()) {
+        MC_LOG_ERROR("Arrow mesh build failed: " + r.error().describe());
+    }
+    return m_arrowMesh;
 }
 
 // ---------------------------------------------------------------------------
@@ -2609,6 +2787,8 @@ void Game::render() {
     // Mobs (Phase 20): opaque box models, with the opaque pass (the depth
     // test then occludes them behind terrain exactly like the chunks).
     drawMobs(view, projection);
+    // Arrows (Phase 21): the bow's in-flight projectiles, solid color.
+    drawArrows(view, projection);
     // Opaque break particles (Phase 15) belong to the opaque pass so the
     // transparent geometry blends over them.
     drawParticles(view, projection, false);

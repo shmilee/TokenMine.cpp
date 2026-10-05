@@ -387,3 +387,60 @@ TEST(ItemRegistryTest, RejectsUnknownItemType) {
     EXPECT_FALSE(
         items.registerItem(parseJson(R"({"id":"x","type":"weapon"})")).ok());
 }
+
+// -- projectile launching (Phase 21: the bow) --------------------------------
+
+TEST(ItemRegistryTest, ParsesShootFields) {
+    // The bow: a material that launches Projectiles (data-driven launch).
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"bow","type":"material","max_stack":1,
+                      "shoot_speed":15.0,"shoot_damage":5.0})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Item& it = items.at(*r);
+    EXPECT_FLOAT_EQ(it.shootSpeed, 15.0f);
+    EXPECT_FLOAT_EQ(it.shootDamage, 5.0f);
+}
+
+TEST(ItemRegistryTest, ShootFieldsDefaultToZero) {
+    // No launch fields: not a launcher (every pre-Phase-21 item).
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"gem","type":"material"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FLOAT_EQ(items.at(*r).shootSpeed, 0.0f);
+    EXPECT_FLOAT_EQ(items.at(*r).shootDamage, 0.0f);
+}
+
+TEST(ItemRegistryTest, RejectsBadShootSpeed) {
+    ItemRegistry items;
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material","shoot_speed":0})"))
+                     .ok()); // explicit 0 = a typo (ABSENT is the default)
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material","shoot_speed":-1})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material","shoot_speed":101})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","shoot_speed":"fast"})"))
+                     .ok());
+}
+
+TEST(ItemRegistryTest, RejectsBadShootDamage) {
+    ItemRegistry items;
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","shoot_damage":-1})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","shoot_damage":101})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","shoot_damage":"hard"})"))
+                     .ok());
+}

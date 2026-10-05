@@ -6,8 +6,8 @@
 namespace mc {
 
 Projectile::Projectile(const World& world, const BlockRegistry& blocks,
-                       Vec3 pos, Vec3 direction, float speed)
-    : Entity(world, blocks, pos, kSize, kSize) {
+                       Vec3 pos, Vec3 direction, float speed, float damage)
+    : Entity(world, blocks, pos, kSize, kSize), m_damage(damage) {
     m_velocity = normalized(direction) * speed;
 }
 

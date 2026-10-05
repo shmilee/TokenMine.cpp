@@ -162,6 +162,17 @@ def death():
     return sound(dur, f)
 
 
+def shoot():
+    """Short descending whoosh (the bow's arrow release, Phase 21)."""
+    lcg = Lcg(0xB077)
+
+    def f(t, _):
+        fl = 700.0 * (1.0 - t / 0.12) + 150.0  # descending whoosh
+        return (math.sin(2 * math.pi * fl * t) * 0.35
+                + lcg.next() * 0.5) * math.exp(-t * 18)
+    return lowpass3(sound(0.12, f))
+
+
 SOUNDS = {
     "dig": dig,
     "place": place,
@@ -173,6 +184,7 @@ SOUNDS = {
     "craft": craft,
     "hurt": hurt,
     "death": death,
+    "shoot": shoot,
 }
 
 

@@ -47,7 +47,7 @@ cmake --build build
 视口、投影纵横比与屏幕 UI 布局每帧读取窗口当前像素尺寸，缩放后场景立即跟随
 （最小尺寸 320×200）；设为 `false` 则锁定在配置尺寸。
 
-## 当前可玩内容（Phase 20）
+## 当前可玩内容（Phase 21）
 
 - **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时）/游泳时随时上浮，
   `LeftShift` 冲刺，鼠标转向（**左键点击锁定指针；转向仅在指针锁定时生效**，
@@ -104,6 +104,28 @@ cmake --build build
     箱体的 −Z 面是脸）；天空光全亮烘焙（与掉落物同一简化，无局部光）
   - **开关**：config `mobs.enabled`（默认 true）；**mob 不入存档**（与 Minecraft
     一致：生成物是瞬态的，其掉落物是物品、随存档保存）
+- **弓与箭**（Phase 21，物品数据驱动发射 + P10 `Projectile`）：
+  - **获取**：shaped 配方 `bow`（工作台：3 stick + 1 planks 的 C 形，
+    `data/recipes/bow.json`）；material 物品 `bow`（`data/items/bow.json`，
+    `max_stack 1`，图标 `bow.png`）
+  - **发射**：选中 `shoot_speed > 0` 的物品（发射器）时**左键 = 射箭**——按住
+    每 `0.25s`（挥击同款节奏）射一支，**不再**挖方块/挥击（Minecraft：弓的
+    左键是射击）；箭从眼前 0.3 格沿瞄准方向以物品 `shoot_speed` 数据（bow = 15，
+    MC 满威力）出发，播放 "shoot"
+  - **箭**（P10 `Projectile` 实体）：重力 20 b/s²（MC 箭 0.05/格/tick²）、
+    终端 38、撞 solid 即亡（v1 无"插在墙上"）、30s 寿命、世界下方杀界；
+    **固定帧步长** `kProjectileStepPerFrame`（运动实体截图可复现约定）
+  - **箭矢命中**：每帧对每支箭做**扫掠 AABB 测试**（上一步位置→本步位置，
+    `raycastAabb` 位移为方向、t∈[0,1]）对每个存活 mob——命中则按箭携带的
+    `shoot_damage` 数据（bow = 5，zombie 4 箭毙）伤害 + 沿箭水平速度的
+    近战式击退，箭被消耗；箭**穿过**玩家与其他实体（`collidesWithEntities
+    = false`），不伤玩家（单人生存 v1）
+  - **渲染**：细盒体（长 0.55 × 粗 0.05，本地 −Z = 飞行方向）纯色
+    （基本着色器 `u_useTexture=0` 路径，无箭纹理），朝向 = `rotateY(yaw) ×
+    rotateX(pitch)` 把本地 −Z 转到速度（相机同款约定，`arrowOrientation`
+    纯函数）；天空光全亮烘焙（随昼夜变暗）
+  - **v1 简化**（KNOWN_ISSUES.md）：无蓄力（永远满威力）、无箭物品/弹药消耗
+    （无限箭）、箭不入存档（瞬态，同 mob）、无插墙残箭、不伤玩家
 - **合成**（Phase 17，`CraftingGrid`/shaped 配方/工作台，全数据驱动）：
   - **形状配方**：配方 JSON 加 `"type": "shaped"` + `pattern`（行字符串，空格=空位）
     + `key`（字母→物品）；无 `type` 字段 = shapeless 原料袋（Phase 12 语义）。
@@ -162,10 +184,11 @@ cmake --build build
   无回调；初始化失败优雅降级为静音 + WARN）：固定事件集 v1（数据驱动，无
   per-block 差异）——破坏（按住时每 0.3s 一个 dig tick + 完成时的 break）、
   放置、拾取（含 Q 丢弃）、脚步（移动 + 贴地 + 锁定 + 背包关闭时每 0.4s）、
-  背包开/关、合成成功。8 个程序化 WAV（`tools/generate_sounds.py`，44.1kHz
-  16-bit 单声道），音量 `config audio.volume`（默认 0.7）
+  背包开/关、合成成功、受伤/死亡（Phase 16）、射箭（Phase 21）。11 个程序化
+  WAV（`tools/generate_sounds.py`，44.1kHz 16-bit 单声道），音量
+  `config audio.volume`（默认 0.7）
 - **物品与背包**（Phase 11/12，`Item`/`ItemStack`/`Inventory`，全数据驱动）：
-  - 物品 = 纯数据（`ItemRegistry`，当前 22 种 = 14 block + 2 工具 + 6 材料）：
+  - 物品 = 纯数据（`ItemRegistry`，当前 23 种 = 14 block + 2 工具 + 7 材料）：
     **每个数据方块隐式生成同名 block item**（无独立 JSON，方块定义是唯一来源）；
     **工具/材料**是显式数据（`assets/data/items/*.json`，`type: "tool"` 带
     `break_speed`，`type: "material"` 是通用非方块物品——锭/木棍/木板等，
@@ -319,6 +342,8 @@ cmake --build build
   "type": "tool",
   "tool": { "break_speed": 2.0 },   // 仅工具；>0，默认 1.0（破坏耗时 = 1.5s × hardness ÷ speed）
   "attack_damage": 2,               // 可选（Phase 20）：挥击伤害，(0, 100]，默认 1.0
+  "shoot_speed": 15.0,              // 可选（Phase 21）：发射器速度，(0, 100]；>0 = 投射物发射器（弓）
+  "shoot_damage": 5.0,              // 可选（Phase 21）：箭矢命中伤害，[0, 100]，默认 0
   "max_stack": 1,                   // 1..64，默认 64
   "icon": "wooden_pickaxe"          // UI 图标（Phase 15）：assets/textures/items/<icon>.png
 }
@@ -443,7 +468,8 @@ v1 数据只有 zombie（绿色、只在黑暗生成（`spawn_max_light` 0）、
 - **存什么**：seed、`time`（timeOfDay [0,1)）、玩家 pos/yaw/pitch、背包 27 格 +
   选中格、掉落物实体（item/count/pos/age/pickup_delay）、`blocks` 与 `fluids`
   编辑列表（仅与 `generateChunk(seed)` 不同的格子，按位置排序）。一次没动过世界
-  的存档 edits 为空
+  的存档 edits 为空。**mob（Phase 20）与箭（Phase 21）是瞬态实体**：保存时跳过
+  （读档后不出现），不是错误；未知实体种类才会保存失败
 - **读档语义**：`--time` 只对全新世界生效（已加载存档时存档时间优先）；
   `--seed` 与存档 seed 不一致 = 启动报错（编辑会落到错误地形上）；存档里的
   玩家位置/朝向覆盖出生点与初始视角
@@ -530,6 +556,7 @@ mine-craft/
 - [x] **Phase 19** — 通用实体间碰撞：Phase 16 玩家↔掉落物分离推广为通用分离 pass（固定序 body 列表：玩家先、实体按索引；重叠对沿最小穿透轴推离——两可推动体 50/50、对不可推动体全量面到面跨度；`hasRoomAt` 世界感知：被挡份额转由另一侧全量接管、双挡跳过；重复 sweep 至 <1e-6 块亚视觉残差或 32 次上限）/数据位 `collidesWithEntities`（投射物不参与，箭穿过实体）+ `pushableByEntities`（玩家不可推动）/中心精确重合保持 P16 方向（可推动体走 −axis，Q 丢脚底 → 玩家 −x 侧）/`Entity::hasRoomAt` 严格格扫描/`separateFrom` 上移 Entity 基类（P16 三测原样保留为回归锚）/F3 overlay +实体计数；无输入基线逐字节不变（`base18` 门通过），items 场景 ×2 字节一致 + 像素判据（stone 灰/dirt 棕分离位）
 - [x] **Phase 20** — Mob 与 AI：数据驱动 mob 类型（`data/mobs/*.json` 严格校验：health/speed/detect_radius/attack_range/attack_damage/attack_cooldown/wander_interval/drops(+count)/box 模型（每箱一 atlas tile，须在模型 AABB 内）+ init 交叉校验（纹理/掉落/spawning 列表））/`MobEntity` AI 状态机（Wander 种子随机决策 → Chase 全速 → Attack 冷却打击，经 hit 回调走 P16 受伤路径；击退窗口抑制 AI；死亡掉落入 despawn pass）/确定性生成（帧节奏 + 固定扫描序首合法格：地板/头顶/高度带/玩家重叠/mob 间距；种子 = 世界种子 ⊕ 生成序号）/玩家攻击（左键 mob 优先于方块——方块遮挡；0.25s 挥击节奏；物品 `attack_damage` 数据 + 击退）/box 模型 mesh（共享六面表，`textures/mobs` 并入 atlas：zombie 头/身 2 tile，atlas 21 tile）/mob 固定帧步长（`kMobStepPerFrame`，运动实体截图逐字节可复现的日循环同款约定）/zombie 掉 `rotten_flesh`（新 material 物品+图标）/config `mobs.enabled`（默认 true；`first_spawn_frame=60` 保证 60 帧基线无 mob）；无输入基线逐字节不变（`base18` 门通过），mobs 240f ×2 字节一致 + 像素判据（vs 无 mob 对照：世界区 54k px 差、8.4k 绿皮肤 px、UI 零差、无伤害）
 - [x] **Phase 20.5** — 修复两项用户反馈：① 昼夜生成规则——mob 数据字段 `spawn_max_light`（0..15 默认 0，Minecraft 敌对 mob 约定）+ `findMobSpawnCell` 光照门（生成格脚位的当前有效光照 = floor(天空光×dayFactor) 与方块光取大，≤ 阈值才生成；zombie 白天不生成、夜晚/暗格生成）；② 窗口缩放——`window.resizable`（默认 true）+ `Window::width/height` 每帧实时读像素尺寸（SDL3 `SDL_GetWindowSizeInPixels`），视口/投影纵横比/UI 布局/截图全部跟随窗口，最小 320×200。588/588 单测；E2E：base18 门 ×2 字节不变、白天 mobs-on == mobs-off（字节级证明白天不生成）、夜晚（day_length 1200s + start 0.536 黄昏段）mobs ×2 字节一致 vs 对照 54k px 差（bbox 与 P20 相同）、resize 运行 截图 == 窗口实际尺寸（场景跟随缩放）
+- [x] **Phase 21** — 弓 + Projectile 游戏内发射器 + 箭渲染：物品数据字段 `shoot_speed`/`shoot_damage`（`(0,100]`/`[0,100]`，缺席=非发射器；严格校验）+ bow 物品（material，max_stack 1，图标）+ shaped 配方（3 stick + 1 planks C 形）/发射器语义（选中发射器时左键=射箭，不再挖掘/挥击；按住 0.25s 节奏；箭 = P10 `Projectile`：数据速度/伤害、眼前 0.3 格沿瞄准、固定帧步长 `kProjectileStepPerFrame`）/`Projectile` +`damage()`/`kill()`（非方块来源消耗，同 despawn 路径）/箭矢↔mob 每帧扫掠 AABB 命中（`raycastAabb` 位移方向 t∈[0,1]，首命中伤 `shoot_damage` + 近战式击退，箭消耗；穿过玩家/其他实体、不伤玩家）/箭渲染（0.55×0.05 细盒体纯色 `u_useTexture=0` 路径，`arrowOrientation` 纯函数把本地 −Z 转到速度，相机同款 rotateY×rotateX 约定）/`shoot` 音效 + 弓图标/存档守卫修正（mob/箭为瞬态实体，保存时跳过而非报错——修复 P20 遗留的"存活 mob 时 --save 退出保存失败"）；600/600 单测（+12：shoot 字段解析/默认/拒绝 ×5、箭几何 4、朝向 3、`kill()` 1）；E2E：base18 门 ×2 字节不变、bow 存档运行（热栏 0 = bow）×3 字节一致（运动实体确定性）、vs 无射击对照 616 px 差（2 支飞行箭、屏幕中央竖直带 x[632,647] y[338,489]、93% 箭棕色像素、UI/心带零差）
 
 ## 开发约定
 

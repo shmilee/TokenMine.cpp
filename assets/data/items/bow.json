@@ -1,0 +1,8 @@
+{
+  "id": "bow",
+  "type": "material",
+  "max_stack": 1,
+  "icon": "bow",
+  "shoot_speed": 15.0,
+  "shoot_damage": 5.0
+}
