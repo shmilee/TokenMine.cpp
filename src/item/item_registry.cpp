@@ -50,6 +50,22 @@ Result<void> ItemRegistry::parseMaxStack(const Json& def, Item& out) {
     return {};
 }
 
+Result<void> ItemRegistry::parseAttackDamage(const Json& def, Item& out) {
+    // Optional 'attack_damage' (Phase 20): melee damage of a swing with
+    // this item. Defaults to 1.0 (bare hand / block items).
+    if (const Json* ad = def.find("attack_damage")) {
+        if (!ad->isNumber()) {
+            return MC_FAIL("'attack_damage' must be a number");
+        }
+        out.attackDamage = static_cast<float>(ad->asDouble());
+    }
+    if (out.attackDamage <= 0.0f || out.attackDamage > 100.0f) {
+        return MC_FAIL("'attack_damage' must be in (0, 100], got " +
+                       std::to_string(out.attackDamage));
+    }
+    return {};
+}
+
 Result<void> ItemRegistry::parseTool(const Json& def, Item& out) {
     if (const Json* tool = def.find("tool")) {
         if (!tool->isObject()) {
@@ -66,9 +82,7 @@ Result<void> ItemRegistry::parseTool(const Json& def, Item& out) {
         return MC_FAIL("'tool.break_speed' must be > 0, got " +
                        std::to_string(out.breakSpeed));
     }
-    auto r = parseMaxStack(def, out);
-    MC_TRY(r);
-    return {};
+    return parseMaxStack(def, out);
 }
 
 Result<ItemID> ItemRegistry::registerItem(const Json& def) {
@@ -108,7 +122,8 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     // Warn about unknown top-level keys (typos, future fields).
     for (const auto& [key, value] : def.members()) {
         if (key != "id" && key != "type" && key != "tool" &&
-            key != "max_stack" && key != "icon") {
+            key != "max_stack" && key != "attack_damage" &&
+            key != "icon") {
             MC_LOG_WARN("Item '" + name + "': unknown field '" + key +
                         "' ignored");
         }
@@ -118,6 +133,8 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     item.name = name;
     item.type = isTool ? ItemType::Tool : ItemType::Material;
     auto r = isTool ? parseTool(def, item) : parseMaxStack(def, item);
+    MC_TRY(r);
+    r = parseAttackDamage(def, item);
     MC_TRY(r);
 
     // Optional 2D icon (Phase 15 UI): a texture file name under

@@ -42,6 +42,9 @@
 #include "entity/entity.hpp"
 #include "entity/item_entity.hpp"
 #include "entity/item_mesh.hpp"
+#include "entity/mob_entity.hpp"
+#include "entity/mob_registry.hpp"
+#include "entity/mob_spawning.hpp"
 #include "entity/particle.hpp"
 #include "entity/projectile.hpp"
 #include "ui/debug_overlay.hpp"
@@ -168,6 +171,18 @@ private:
     // the data-driven duration elapses (see breakDurationSeconds).
     void updateBreaking(double dt);
     void resetBreaking();
+    // Mob targeting + attacking (Phase 20): the mob under the crosshair
+    // (the nearer of the block hit and the mob AABB hits wins — blocks
+    // occlude), and the swing state machine (one hit per kSwingInterval
+    // while the button stays down on the mob: data damage + knockback).
+    struct MobHit {
+        MobEntity* mob;
+        float distance;
+    };
+    std::optional<MobHit> targetMob() const;
+    void updateAttacking(double dt, MobEntity& mob);
+    // Melee damage of the selected item (data; bare hand = 1.0).
+    float selectedAttackDamage() const;
     // Performs the break: air + relight + data-driven drop (ItemEntity).
     // The caller guarantees the hit is destroyable.
     void breakBlock(const BlockHit& hit);
@@ -195,6 +210,16 @@ private:
     // The cached full-cube mesh for a dropped block (built lazily on first
     // render; the geometry is cached, only the draw transform varies).
     const Mesh& itemMesh(BlockID id);
+
+    // Mob rendering + spawning (Phase 20): the mobs are drawn after the
+    // item entities with their cached box-model mesh (translate by the
+    // mob's bottom-center, rotateY by its facing). attemptMobSpawn runs on
+    // the data cadence (see mob_spawning) and pushes one MobEntity at the
+    // deterministic scan's cell; it is a no-op unless the spawn config
+    // allows it (cap, cadence, first frame, enabled flag).
+    void attemptMobSpawn();
+    void drawMobs(const Mat4& view, const Mat4& projection);
+    const Mesh& mobMesh(MobID id);
 
     // -- Phase 15 UI / audio / particles ------------------------------------
     // E/F3/F5 handling (F3 + F5 work in any pointer state; E opens the
@@ -330,6 +355,22 @@ private:
     std::vector<std::unique_ptr<Entity>> m_entities;
     // Dropped-item meshes: one full-cube mesh per block id (built lazily).
     std::unordered_map<BlockID, Mesh, BlockIDHash> m_itemMeshes;
+
+    // Mobs (Phase 20): the data-driven types (assets/data/mobs) + the
+    // spawn config (assets/data/mob_spawning.json), the enable flag
+    // (config mobs.enabled, default true), the per-type box-model meshes
+    // (built lazily) and the spawn counter (feeds the per-mob RNG seeds,
+    // so the same runs spawn the same mobs with the same seeds).
+    MobRegistry m_mobTypes;
+    MobSpawningConfig m_spawnConfig;
+    bool m_mobsEnabled = true;
+    std::unordered_map<MobID, Mesh, MobIDHash> m_mobMeshes;
+    std::uint64_t m_spawnCounter = 0;
+    // Swing cooldown (seconds; Phase 20): one attack hit per
+    // kSwingInterval while the left button is held on a mob. Reset to 0
+    // on release / when the aim leaves the mob (the next swing is
+    // immediate).
+    double m_swingCooldown = 0.0;
 
     // Item/inventory system (Phase 11): item registry (implicit block
     // items + explicit tools/materials from assets/data/items), the

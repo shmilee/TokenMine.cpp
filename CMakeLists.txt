@@ -42,6 +42,10 @@ add_library(mc_core STATIC
     src/entity/entity.cpp
     src/entity/item_entity.cpp
     src/entity/item_mesh.cpp
+    src/entity/mob_entity.cpp
+    src/entity/mob_mesh.cpp
+    src/entity/mob_registry.cpp
+    src/entity/mob_spawning.cpp
     src/entity/particle.cpp
     src/entity/projectile.cpp
     src/item/item_registry.cpp
@@ -104,6 +108,7 @@ add_executable(minecraft_tests
     tests/test_fluid.cpp
     tests/test_lighting.cpp
     tests/test_entity.cpp
+    tests/test_mob.cpp
     tests/test_item.cpp
     tests/test_recipe.cpp
     tests/test_crafting_grid.cpp

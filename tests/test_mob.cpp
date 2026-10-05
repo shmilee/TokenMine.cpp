@@ -1,0 +1,668 @@
+// Mob system tests (Phase 20): the mob registry (strict validation),
+// the spawning config + pure spawn-cell scan, the box-model mesh
+// geometry, the mob AI state machine (wander/chase/attack, knockback,
+// determinism), combat (damage/death) and the AABB raycast used for
+// player targeting.
+#include <gtest/gtest.h>
+
+#include <cmath>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+#include "block/block_registry.hpp"
+#include "core/json.hpp"
+#include "entity/mob_entity.hpp"
+#include "entity/mob_mesh.hpp"
+#include "entity/mob_registry.hpp"
+#include "entity/mob_spawning.hpp"
+#include "item/item_registry.hpp"
+#include "renderer/texture_atlas.hpp"
+#include "world/raycast.hpp"
+#include "world/world.hpp"
+
+using namespace mc;
+
+namespace {
+
+constexpr double kDt = 1.0 / 60.0;
+
+Json parseJson(const std::string& text) {
+    auto r = Json::parse(text);
+    if (!r.ok()) {
+        ADD_FAILURE() << "parse failed: " << r.error().message;
+        return Json::object();
+    }
+    return *r;
+}
+
+// stone: one solid block (floors + roofs in the spawn tests).
+BlockRegistry makeBlocks() {
+    BlockRegistry blocks;
+    auto r = blocks.registerBlock(parseJson(
+        R"({"id":"stone","model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    return blocks;
+}
+
+// A solid stone floor covering x,z in [-16, 16) at y=0 (top surface y=1).
+struct Fixture {
+    BlockRegistry blocks = makeBlocks();
+    World world;
+    BlockID stone;
+
+    Fixture() {
+        stone = blocks.idForName("stone");
+        for (int x = -16; x < 16; ++x) {
+            for (int z = -16; z < 16; ++z) {
+                world.setBlock(x, 0, z, stone);
+            }
+        }
+    }
+};
+
+// The zombie-like test definition (a registry instance is needed once;
+// every test registers its own copy so ids are stable per test).
+const char* kZombieDef = R"({
+  "id": "zombie",
+  "properties": {
+    "health": 20,
+    "speed": 0.8,
+    "detect_radius": 16,
+    "attack_range": 1.6,
+    "attack_damage": 3,
+    "attack_cooldown": 1.0,
+    "wander_interval": 2.5
+  },
+  "model": {
+    "width": 0.6,
+    "height": 1.8,
+    "boxes": [
+      {"pos": [0.0, 1.25, 0.0], "size": [0.5, 0.5, 0.5], "texture": "a"},
+      {"pos": [0.0, 0.5, 0.0], "size": [0.5, 1.0, 0.3], "texture": "b"}
+    ]
+  }
+})";
+
+// Registers the zombie def; ADD_FAILURE on error (tests expect success).
+MobRegistry makeMobRegistry() {
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(kZombieDef));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    return mobs;
+}
+
+MobEntity makeMob(const Fixture& f, const Mob& def, Vec3 pos,
+                  std::uint64_t seed = 42) {
+    return MobEntity(f.world, f.blocks, def, pos, seed);
+}
+
+// The player AABB of a 0.6x1.8 body standing at (0.5, 1, 0.5) on the
+// fixture floor (the spawn tests anchor the ring on that column).
+const Vec3 kPlayerMin = {0.2f, 1.0f, 0.2f};
+const Vec3 kPlayerMax = {0.8f, 2.8f, 0.8f};
+
+} // namespace
+
+// -- mob registry ------------------------------------------------------------
+
+TEST(MobRegistryTest, ParsesZombie) {
+    MobRegistry mobs = makeMobRegistry();
+    ASSERT_EQ(mobs.count(), 1);
+    const Mob& m = mobs.at(MobID{0});
+    EXPECT_EQ(m.name, "zombie");
+    EXPECT_FLOAT_EQ(m.properties.health, 20.0f);
+    EXPECT_FLOAT_EQ(m.properties.speed, 0.8f);
+    EXPECT_FLOAT_EQ(m.properties.detectRadius, 16.0f);
+    EXPECT_FLOAT_EQ(m.properties.attackRange, 1.6f);
+    EXPECT_FLOAT_EQ(m.properties.attackDamage, 3.0f);
+    EXPECT_FLOAT_EQ(m.properties.attackCooldown, 1.0f);
+    EXPECT_FLOAT_EQ(m.properties.wanderInterval, 2.5f);
+    EXPECT_TRUE(m.properties.drops.empty());
+    EXPECT_EQ(m.properties.dropsCount, 1);
+    EXPECT_FLOAT_EQ(m.model.width, 0.6f);
+    EXPECT_FLOAT_EQ(m.model.height, 1.8f);
+    ASSERT_EQ(m.model.boxes.size(), 2);
+    EXPECT_FLOAT_EQ(m.model.boxes[0].center.y, 1.25f);
+    EXPECT_FLOAT_EQ(m.model.boxes[1].size.y, 1.0f);
+    EXPECT_EQ(m.model.boxes[0].texture, "a");
+    EXPECT_EQ(mobs.idForName("zombie").value, 0);
+    EXPECT_EQ(mobs.idForName("nope"), MobID::invalid());
+}
+
+TEST(MobRegistryTest, RejectsMissingId) {
+    MobRegistry mobs;
+    // A fully valid mob definition without the "id" field.
+    auto r = mobs.registerMob(parseJson(
+        R"({"properties": {"health": 1, "speed": 1, "detect_radius": 1,
+          "attack_range": 1, "attack_damage": 1, "attack_cooldown": 1,
+          "wander_interval": 1},
+           "model": {"width": 1, "height": 1,
+                     "boxes": [{"pos": [0, 0.5, 0], "size": [0.5, 1, 0.5],
+                                "texture": "a"}]}})"));
+    EXPECT_FALSE(r.ok());
+}
+
+TEST(MobRegistryTest, RejectsNonPositiveHealth) {
+    MobRegistry mobs;
+    std::string def = kZombieDef;
+    const std::string key = "\"health\": 20";
+    def.replace(def.find(key), key.size(), "\"health\": 0");
+    auto r = mobs.registerMob(parseJson(def));
+    EXPECT_FALSE(r.ok());
+}
+
+TEST(MobRegistryTest, RejectsEmptyBoxes) {
+    MobRegistry mobs;
+    std::string def = kZombieDef;
+    const std::size_t p = def.find("\"boxes\"");
+    def.replace(p, def.size() - p, "\"boxes\": [] } }");
+    auto r = mobs.registerMob(parseJson(def));
+    EXPECT_FALSE(r.ok());
+}
+
+TEST(MobRegistryTest, RejectsBoxOutsideModelAabb) {
+    MobRegistry mobs;
+    std::string def = kZombieDef;
+    // The head box shifted up beyond the 1.8 height.
+    def.replace(def.find("[0.0, 1.25, 0.0]"), 16, "[0.0, 1.75, 0.0]");
+    auto r = mobs.registerMob(parseJson(def));
+    EXPECT_FALSE(r.ok());
+}
+
+TEST(MobRegistryTest, RejectsBadDropsCount) {
+    MobRegistry mobs;
+    std::string def = kZombieDef;
+    const std::string key = "\"wander_interval\": 2.5";
+    def.replace(def.find(key), key.size(),
+                "\"wander_interval\": 2.5,\n    \"drops\": \"x\",\n"
+                "    \"drops_count\": 65");
+    auto r = mobs.registerMob(parseJson(def));
+    EXPECT_FALSE(r.ok());
+}
+
+TEST(MobRegistryTest, RejectsDuplicateId) {
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.registerMob(parseJson(kZombieDef)).ok());
+    auto r = mobs.registerMob(parseJson(kZombieDef));
+    EXPECT_FALSE(r.ok());
+}
+
+// -- spawning config ----------------------------------------------------------
+
+TEST(MobSpawningConfigTest, ParsesValid) {
+    auto r = MobSpawningConfig::parse(parseJson(R"({
+      "check_every_frames": 30,
+      "first_spawn_frame": 60,
+      "max_mobs": 4,
+      "min_radius": 4,
+      "max_radius": 6,
+      "despawn_distance": 40,
+      "mobs": ["zombie"]
+    })"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ((*r).checkEveryFrames, 30);
+    EXPECT_EQ((*r).firstSpawnFrame, 60);
+    EXPECT_EQ((*r).maxMobs, 4);
+    EXPECT_FLOAT_EQ((*r).minRadius, 4.0f);
+    EXPECT_FLOAT_EQ((*r).maxRadius, 6.0f);
+    EXPECT_FLOAT_EQ((*r).despawnDistance, 40.0f);
+    ASSERT_EQ((*r).mobs.size(), 1);
+    EXPECT_EQ((*r).mobs[0], "zombie");
+}
+
+TEST(MobSpawningConfigTest, RejectsInvertedRadii) {
+    auto r = MobSpawningConfig::parse(parseJson(R"({
+      "check_every_frames": 30, "first_spawn_frame": 60, "max_mobs": 4,
+      "min_radius": 6, "max_radius": 4, "despawn_distance": 40,
+      "mobs": ["zombie"]
+    })"));
+    EXPECT_FALSE(r.ok());
+}
+
+TEST(MobSpawningConfigTest, RejectsEmptyMobs) {
+    auto r = MobSpawningConfig::parse(parseJson(R"({
+      "check_every_frames": 30, "first_spawn_frame": 60, "max_mobs": 4,
+      "min_radius": 4, "max_radius": 6, "despawn_distance": 40,
+      "mobs": []
+    })"));
+    EXPECT_FALSE(r.ok());
+}
+
+TEST(MobSpawningConfigTest, RejectsDespawnInsideRing) {
+    auto r = MobSpawningConfig::parse(parseJson(R"({
+      "check_every_frames": 30, "first_spawn_frame": 60, "max_mobs": 4,
+      "min_radius": 4, "max_radius": 6, "despawn_distance": 6,
+      "mobs": ["zombie"]
+    })"));
+    EXPECT_FALSE(r.ok());
+}
+
+// -- spawn-cell scan -----------------------------------------------------------
+//
+// Fixture: a flat stone floor at y=0 (top surface y=1), the player column
+// at (0, 0) with its floor at y=0, the player AABB of a body standing at
+// (0.5, 1, 0.5).
+
+TEST(MobSpawnCellTest, FirstValidCellInScanOrder) {
+    Fixture f;
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, kPlayerMin, kPlayerMax, {});
+    ASSERT_TRUE(cell.has_value());
+    // Scan order: dz from -6, then dx from -6; the first ring cell is
+    // (dx=0, dz=-6) — distance 6.0, on the flat floor, clear headroom.
+    EXPECT_EQ(*cell, (BlockPos {0, 0, -6}));
+}
+
+TEST(MobSpawnCellTest, SkipsCellWithBlockedHeadroom) {
+    Fixture f;
+    // A 3-block wall in the first candidate's column (0, -6): the floor
+    // scan lands on the highest band cell (y=2) and the headroom check
+    // then sees the wall continue above it (y=3) -> rejected. (A single
+    // block there would simply become the new floor — standing on a
+    // 1-block roof is valid.)
+    for (int y = 1; y <= 3; ++y) {
+        f.world.setBlock(0, y, -6, f.stone);
+    }
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, kPlayerMin, kPlayerMax, {});
+    ASSERT_TRUE(cell.has_value());
+    // (0, -6) is blocked; the next candidate in scan order is (dx=-3,
+    // dz=-5) — distance 5.83.
+    EXPECT_EQ(*cell, (BlockPos {-3, 0, -5}));
+}
+
+TEST(MobSpawnCellTest, SkipsCellInFluid) {
+    Fixture f;
+    f.world.setFluid(0, 1, -6, 1);
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, kPlayerMin, kPlayerMax, {});
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {-3, 0, -5}));
+}
+
+TEST(MobSpawnCellTest, RespectsMinRadius) {
+    Fixture f;
+    auto cell = findMobSpawnCell(f.world, f.blocks, 6.5f, 8.0f, 0, 0, 0,
+                                 0.6f, 1.8f, kPlayerMin, kPlayerMax, {});
+    ASSERT_TRUE(cell.has_value());
+    // First ring cell: (dx=0, dz=-8) — distance 8.0.
+    EXPECT_EQ(*cell, (BlockPos {0, 0, -8}));
+}
+
+TEST(MobSpawnCellTest, NoFloorInRingYieldsNoCell) {
+    Fixture f;
+    // The fixture floor spans x, z in [-16, 16) (its farthest corner
+    // (-16, -16) sits at distance sqrt(512) = 22.6); a ring beyond 22.7
+    // has no solid floor.
+    auto cell = findMobSpawnCell(f.world, f.blocks, 22.7f, 24.0f, 0, 0, 0,
+                                 0.6f, 1.8f, kPlayerMin, kPlayerMax, {});
+    EXPECT_FALSE(cell.has_value());
+}
+
+TEST(MobSpawnCellTest, KeepsClearanceFromExistingMobs) {
+    Fixture f;
+    // An existing mob AT the first candidate's spawn point (0.5, 1, -5.5).
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, kPlayerMin, kPlayerMax,
+                                 {Vec3 {0.5f, 1.0f, -5.5f}});
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {-3, 0, -5}));
+}
+
+TEST(MobSpawnCellTest, RejectsSpawnOverlappingThePlayer) {
+    Fixture f;
+    // A wide player AABB so the first ring candidate's spawn AABB
+    // (center 0.5, 1, -0.5; z span [-0.8, -0.2]) overlaps it (the
+    // player's z starts at -0.3); the next candidate (dx=-1, dz=0) is
+    // not overlapped (its x span [-0.8, -0.2] stops before the player's
+    // x start at 0.2).
+    auto cell = findMobSpawnCell(f.world, f.blocks, 0.4f, 1.0f, 0, 0, 0,
+                                 0.6f, 1.8f, {0.2f, 1.0f, -0.3f},
+                                 {3.0f, 2.8f, 3.0f}, {});
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {-1, 0, 0}));
+}
+
+TEST(MobSpawnCellTest, RejectsFloorFarFromThePlayers) {
+    Fixture f;
+    // Raise the player's floor: the flat floor at y=0 is then more than
+    // kSpawnFloorDelta below it, so no cell qualifies.
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 10,
+                                 0.6f, 1.8f, kPlayerMin, kPlayerMax, {});
+    EXPECT_FALSE(cell.has_value());
+}
+
+// -- box-model mesh ------------------------------------------------------------
+
+namespace {
+
+AtlasLayout makeMobLayout() {
+    auto r = AtlasLayout::parse(parseJson(
+        R"({"columns":1,"rows":2,"tiles":{"a":[0,0],"b":[0,1]}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    return *r;
+}
+
+ItemMeshGeometry makeMobGeometry() {
+    const MobRegistry mobs = makeMobRegistry();
+    return makeMobModelGeometry(mobs.at(MobID{0}).model, makeMobLayout());
+}
+
+} // namespace
+
+TEST(MobMeshTest, VertexAndIndexCounts) {
+    const ItemMeshGeometry g = makeMobGeometry();
+    // 2 boxes x 6 faces x 4 vertices / 6 indices.
+    EXPECT_EQ(g.vertices.size(), 48);
+    EXPECT_EQ(g.indices.size(), 72);
+}
+
+TEST(MobMeshTest, VerticesStayInsideTheModelAabb) {
+    const ItemMeshGeometry g = makeMobGeometry();
+    for (const MeshVertex& v : g.vertices) {
+        EXPECT_GE(v.position.x, -0.3f - 1e-5f);
+        EXPECT_LE(v.position.x, 0.3f + 1e-5f);
+        EXPECT_GE(v.position.y, 0.0f - 1e-5f);
+        EXPECT_LE(v.position.y, 1.8f + 1e-5f);
+        EXPECT_GE(v.position.z, -0.3f - 1e-5f);
+        EXPECT_LE(v.position.z, 0.3f + 1e-5f);
+    }
+}
+
+TEST(MobMeshTest, FaceWindingIsCounterClockwiseFromOutside) {
+    // Same invariant as the chunk mesher's face table and the item cube:
+    // for every face, cross(corner1 - corner0, corner2 - corner0) must
+    // point along the face normal.
+    const ItemMeshGeometry g = makeMobGeometry();
+    for (std::size_t face = 0; face < g.vertices.size() / 4; ++face) {
+        const std::size_t base = face * 4;
+        const Vec3 c0 = g.vertices[base].position;
+        const Vec3 c1 = g.vertices[base + 1].position;
+        const Vec3 c2 = g.vertices[base + 2].position;
+        const Vec3 crossDir = cross(c1 - c0, c2 - c0);
+        EXPECT_GT(dot(crossDir, g.vertices[base].normal), 0.0f);
+    }
+}
+
+TEST(MobMeshTest, UvsStayInsideTheBoxTile) {
+    const ItemMeshGeometry g = makeMobGeometry();
+    const AtlasLayout layout = makeMobLayout();
+    // Box 0 (vertices 0..23) uses tile "a"; box 1 uses tile "b".
+    for (std::size_t i = 0; i < g.vertices.size(); ++i) {
+        const std::string& tile = i < 24 ? "a" : "b";
+        const Vec2 u0 = AtlasLayout::uvMin(layout, tile);
+        const Vec2 u1 = AtlasLayout::uvMax(layout, tile);
+        EXPECT_GE(g.vertices[i].uv.x, u0.x - 1e-6f);
+        EXPECT_LE(g.vertices[i].uv.x, u1.x + 1e-6f);
+        EXPECT_GE(g.vertices[i].uv.y, u0.y - 1e-6f);
+        EXPECT_LE(g.vertices[i].uv.y, u1.y + 1e-6f);
+    }
+}
+
+// -- mob AI --------------------------------------------------------------------
+
+TEST(MobAiTest, ChasesPlayerInDetectRange) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 5.5f});
+    // The player is 3 blocks away in +z (inside detect radius 16, outside
+    // attack range 1.6).
+    mob.setPlayer({8.5f, 1.0f, 8.5f}, true);
+    mob.update(kDt);
+    EXPECT_EQ(mob.state(), MobState::Chase);
+    // Full data speed straight toward the player.
+    EXPECT_NEAR(mob.velocity().z, 0.8f, 1e-3f);
+    EXPECT_NEAR(mob.velocity().x, 0.0f, 1e-3f);
+    // Facing +z is yaw +/-pi (forward(yaw) = (-sin, 0, -cos); the exact
+    // sign depends on the zero of the -x component — check the direction).
+    EXPECT_NEAR(std::cos(mob.facingYaw()), -1.0f, 1e-5f);
+    EXPECT_NEAR(std::sin(mob.facingYaw()), 0.0f, 1e-5f);
+}
+
+TEST(MobAiTest, DoesNotChaseBeyondDetectRadius) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 5.5f});
+    // 22 blocks away: beyond the detect radius of 16.
+    mob.setPlayer({8.5f, 1.0f, 27.5f}, true);
+    mob.update(kDt);
+    EXPECT_EQ(mob.state(), MobState::Wander);
+    // Wander speed is at most half the chase speed (or still).
+    const float speed = std::hypot(mob.velocity().x, mob.velocity().z);
+    EXPECT_LE(speed, 0.4f + 1e-3f);
+}
+
+TEST(MobAiTest, AttacksOnCooldown) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 7.5f});
+    // 0.5 blocks from the player: inside the attack range of 1.6.
+    mob.setPlayer({8.5f, 1.0f, 8.0f}, true);
+    int hits = 0;
+    float totalDamage = 0.0f;
+    mob.setHitCallback([&](float amount) {
+        ++hits;
+        totalDamage += amount;
+    });
+    mob.update(kDt);
+    EXPECT_EQ(mob.state(), MobState::Attack);
+    EXPECT_NEAR(mob.velocity().x, 0.0f, 1e-6f);
+    EXPECT_NEAR(mob.velocity().z, 0.0f, 1e-6f);
+    EXPECT_EQ(hits, 1);
+    EXPECT_FLOAT_EQ(totalDamage, 3.0f);
+    // 59 more updates (60 total = 1.0 s): the cooldown has not expired
+    // yet (it decrements AFTER the check, so the hit at exactly 1.0 s is
+    // the 61st update).
+    for (int i = 0; i < 59; ++i) {
+        mob.update(kDt);
+    }
+    EXPECT_EQ(hits, 1);
+    // The second hit lands within the next two updates (1.0 s plus
+    // floating-point drift of the decrement chain).
+    int extra = 0;
+    while (hits < 2 && extra < 4) {
+        mob.update(kDt);
+        ++extra;
+    }
+    EXPECT_EQ(hits, 2);
+    EXPECT_LE(extra, 2);
+    EXPECT_FLOAT_EQ(totalDamage, 6.0f);
+}
+
+TEST(MobAiTest, DoesNotAttackBeyondVerticalRange) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 7.5f});
+    // Horizontally in range, but 1.5 blocks higher (the attack band is
+    // 1.0; the detect band is 2.0, so the mob chases without attacking).
+    mob.setPlayer({8.5f, 2.5f, 8.0f}, true);
+    int hits = 0;
+    mob.setHitCallback([&](float) { ++hits; });
+    mob.update(kDt);
+    EXPECT_EQ(mob.state(), MobState::Chase);
+    EXPECT_EQ(hits, 0);
+}
+
+TEST(MobAiTest, IgnoresDeadPlayer) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 7.5f});
+    mob.setPlayer({8.5f, 1.0f, 8.0f}, false);
+    int hits = 0;
+    mob.setHitCallback([&](float) { ++hits; });
+    mob.update(kDt);
+    EXPECT_EQ(mob.state(), MobState::Wander);
+    EXPECT_EQ(hits, 0);
+}
+
+TEST(MobAiTest, WanderIsDeterministicForTheSameSeed) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity a = makeMob(f, def, {4.5f, 1.0f, 4.5f}, 777);
+    MobEntity b = makeMob(f, def, {4.5f, 1.0f, 4.5f}, 777);
+    const Vec3 far {30.0f, 1.0f, 30.0f};  // out of detect range: pure wander
+    a.setPlayer(far, true);
+    b.setPlayer(far, true);
+    for (int i = 0; i < 300; ++i) {
+        a.update(kDt);
+        b.update(kDt);
+    }
+    EXPECT_EQ(a.state(), b.state());
+    EXPECT_FLOAT_EQ(a.position().x, b.position().x);
+    EXPECT_FLOAT_EQ(a.position().y, b.position().y);
+    EXPECT_FLOAT_EQ(a.position().z, b.position().z);
+    EXPECT_FLOAT_EQ(a.facingYaw(), b.facingYaw());
+}
+
+TEST(MobAiTest, KnockbackSuppressesSteeringThenResumes) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 5.5f});
+    mob.setPlayer({8.5f, 1.0f, 8.5f}, true);  // chases in +z
+    mob.update(kDt);
+    EXPECT_EQ(mob.state(), MobState::Chase);
+    // A knockback away from the player (-z) with a lift.
+    const Vec3 before = mob.position();
+    mob.addKnockback({0.0f, 2.0f, -6.0f});
+    mob.update(kDt);
+    // During the 0.3 s window the AI does not override the impulse: the
+    // horizontal velocity still points -z (decayed by the damping).
+    EXPECT_LT(mob.velocity().z, 0.0f);
+    EXPECT_LT(mob.position().z, before.z);
+    // After the window the chase resumes at full speed.
+    for (int i = 0; i < 24; ++i) {  // 0.4 s > kKnockbackTime
+        mob.update(kDt);
+    }
+    EXPECT_EQ(mob.state(), MobState::Chase);
+    EXPECT_NEAR(mob.velocity().z, 0.8f, 1e-3f);
+}
+
+// -- combat ----------------------------------------------------------------------
+
+TEST(MobCombatTest, DamageKillsAtZero) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {4.5f, 1.0f, 4.5f});
+    EXPECT_FLOAT_EQ(mob.health(), 20.0f);
+    // A killing hit reports true (and clamps the health to 0).
+    EXPECT_TRUE(mob.damage(20.0f));
+    EXPECT_TRUE(mob.dead());
+    EXPECT_FLOAT_EQ(mob.health(), 0.0f);
+    EXPECT_TRUE(mob.damage(5.0f));  // already dead: still reports dead
+    EXPECT_TRUE(mob.shouldDespawn());  // dead -> the game removes it
+}
+
+TEST(MobCombatTest, PartialDamageDoesNotKill) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {4.5f, 1.0f, 4.5f});
+    EXPECT_FALSE(mob.damage(3.0f));
+    EXPECT_FLOAT_EQ(mob.health(), 17.0f);
+    EXPECT_FALSE(mob.dead());
+}
+
+TEST(MobCombatTest, KnockbackAppliesTheImpulse) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {4.5f, 1.0f, 4.5f});
+    mob.setVelocity({0.8f, 0.0f, 0.0f});
+    mob.addKnockback({-2.0f, 1.0f, 0.0f});
+    EXPECT_NEAR(mob.velocity().x, -1.2f, 1e-6f);
+    EXPECT_NEAR(mob.velocity().y, 1.0f, 1e-6f);
+    EXPECT_NEAR(mob.velocity().z, 0.0f, 1e-6f);
+}
+
+// -- AABB raycast (player targeting) ----------------------------------------------
+
+TEST(MobRaycastTest, HitReturnsEntryDistance) {
+    // A mob AABB at the origin (0.6 wide, 1.8 tall); a ray from (0, 0, 5)
+    // toward -z enters at z = 0.3 -> t = 4.7.
+    const float t = raycastAabb({0.0f, 0.0f, 5.0f}, {0.0f, 0.0f, -1.0f},
+                                {-0.3f, 0.0f, -0.3f}, {0.3f, 1.8f, 0.3f});
+    EXPECT_NEAR(t, 4.7f, 1e-5f);
+}
+
+TEST(MobRaycastTest, MissReturnsNegative) {
+    // The box is behind the ray origin (ray toward +x from (5, 0.9, 0)).
+    const float t = raycastAabb({5.0f, 0.9f, 0.0f}, {1.0f, 0.0f, 0.0f},
+                                {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f});
+    EXPECT_LT(t, 0.0f);
+}
+
+TEST(MobRaycastTest, OriginInsideReturnsZero) {
+    const float t = raycastAabb({0.5f, 0.5f, 0.5f}, {1.0f, 0.0f, 0.0f},
+                                {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f});
+    EXPECT_FLOAT_EQ(t, 0.0f);
+}
+
+TEST(MobRaycastTest, ParallelMissWhenOutsideSlab) {
+    // Ray along x at y = 5: parallel to the y slab and outside its span.
+    const float t = raycastAabb({-5.0f, 5.0f, 0.5f}, {1.0f, 0.0f, 0.0f},
+                                {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f});
+    EXPECT_LT(t, 0.0f);
+}
+
+// -- item attack_damage ----------------------------------------------------------
+
+namespace {
+
+BlockRegistry makeItemBlocks() {
+    BlockRegistry blocks;
+    auto r = blocks.registerBlock(parseJson(
+        R"({"id":"stone","model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    return blocks;
+}
+
+} // namespace
+
+TEST(MobItemsTest, ToolParsesAttackDamage) {
+    ItemRegistry items;
+    ASSERT_TRUE(items.buildBlockItems(makeItemBlocks()).ok());
+    auto r = items.registerItem(parseJson(R"({
+      "id": "iron_pickaxe", "type": "tool",
+      "tool": {"break_speed": 4.0},
+      "attack_damage": 3, "max_stack": 1
+    })"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FLOAT_EQ(items.at(*r).attackDamage, 3.0f);
+}
+
+TEST(MobItemsTest, AttackDamageDefaultsToOne) {
+    ItemRegistry items;
+    ASSERT_TRUE(items.buildBlockItems(makeItemBlocks()).ok());
+    auto r = items.registerItem(
+        parseJson(R"({"id": "stick", "type": "material"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FLOAT_EQ(items.at(*r).attackDamage, 1.0f);
+    // Block items (implicit) also default to 1.0.
+    EXPECT_FLOAT_EQ(items.at(items.idForName("stone")).attackDamage, 1.0f);
+}
+
+TEST(MobItemsTest, RejectsNonPositiveAttackDamage) {
+    ItemRegistry items;
+    ASSERT_TRUE(items.buildBlockItems(makeItemBlocks()).ok());
+    auto r = items.registerItem(parseJson(R"({
+      "id": "stick", "type": "material", "attack_damage": 0
+    })"));
+    EXPECT_FALSE(r.ok());
+}

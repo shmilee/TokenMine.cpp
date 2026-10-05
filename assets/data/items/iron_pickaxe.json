@@ -4,6 +4,7 @@
   "tool": {
     "break_speed": 4.0
   },
+  "attack_damage": 3,
   "max_stack": 1,
   "icon": "iron_pickaxe"
 }

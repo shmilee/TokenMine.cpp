@@ -155,6 +155,22 @@ def gem(c1, c2, c3, salt):
     return px
 
 
+def rotten_flesh():
+    """A pile of meat: two overlapping irregular lumps, pinkish-brown."""
+    px = blank()
+    base = (178, 116, 106)
+    for (cx, cy, r) in ((6, 9, 4.5), (10, 7, 4.0)):
+        for y in range(SIZE):
+            for x in range(SIZE):
+                d = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
+                if d < r + (h2(x, y, 31) % 3) - 1:
+                    setpx(px, x, y, base, salt=33)
+    # A few dark specks (rot).
+    for (x, y) in ((5, 8), (8, 10), (10, 6), (12, 8)):
+        setpx(px, x, y, (118, 70, 64), salt=35, amount=4)
+    return px
+
+
 def diamond():
     return gem((100, 225, 235), (170, 245, 250), (58, 175, 190), salt=29)
 
@@ -212,6 +228,7 @@ def iron_pickaxe():
 ITEMS = {
     "planks": planks,
     "stick": stick,
+    "rotten_flesh": rotten_flesh,
     "coal": coal,
     "diamond": diamond,
     "gold_ingot": gold_ingot,

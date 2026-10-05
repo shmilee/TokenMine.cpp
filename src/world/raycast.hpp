@@ -50,4 +50,11 @@ std::optional<BlockHit> raycastBlock(const World& world, Vec3 origin,
 bool canPlaceAt(const World& world, const BlockRegistry& blocks, BlockPos cell,
                 const Vec3& playerMin, const Vec3& playerMax);
 
+// Slab test of a ray against an axis-aligned box (Phase 20, mob targeting).
+// Returns the ray parameter t at ENTRY, or -1 for a miss. `dir` does not
+// need to be normalized (t is then in dir-units); the game passes the unit
+// camera forward, so t is in blocks. t = 0 when the origin is inside the
+// box (an "immediate" hit); a box fully behind the origin misses.
+float raycastAabb(Vec3 origin, Vec3 dir, Vec3 boxMin, Vec3 boxMax);
+
 } // namespace mc

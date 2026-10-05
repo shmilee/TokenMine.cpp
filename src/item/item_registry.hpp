@@ -69,6 +69,8 @@ public:
 private:
     // Parse `max_stack` into `out` (starts at defaults).
     static Result<void> parseMaxStack(const Json& def, Item& out);
+    // Parse the optional `attack_damage` (Phase 20) into `out`.
+    static Result<void> parseAttackDamage(const Json& def, Item& out);
     // Parse the tool fields (`tool.break_speed` + `max_stack`) into `out`.
     static Result<void> parseTool(const Json& def, Item& out);
 

@@ -20,6 +20,8 @@
     "wood_top": [3, 3],
     "crafting_table_side": [0, 4],
     "crafting_table_top": [1, 4],
-    "planks": [2, 4]
+    "planks": [2, 4],
+    "zombie_head": [3, 4],
+    "zombie_body": [0, 5]
   }
 }

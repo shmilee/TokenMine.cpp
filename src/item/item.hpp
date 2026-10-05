@@ -59,6 +59,10 @@ struct Item {
     // Maximum count in one stack (1 for tools, 64 for blocks/materials by
     // default).
     int maxStack = 64;
+    // Phase 20: melee damage when the player swings with this item
+    // (optional data field 'attack_damage'; default 1.0 = bare hand /
+    // block items / materials).
+    float attackDamage = 1.0f;
     // Phase 15 UI: the item's 2D icon texture name (a file under
     // assets/textures/items/, validated against the filesystem at game
     // init). Empty for block items, which render a 3D block cube instead.

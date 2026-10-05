@@ -14,6 +14,9 @@
 #include "core/json.hpp"
 #include "core/png.hpp"
 #include "entity/item_entity.hpp"
+#include "entity/mob_entity.hpp"
+#include "entity/mob_mesh.hpp"
+#include "world/noise.hpp"
 #include "ui/font.hpp"
 #include "ui/inventory_ui.hpp"
 
@@ -42,6 +45,14 @@ constexpr float kHorizonFade = 0.1f;
 // clock), so headless runs are byte-reproducible frame for frame; the
 // real-time speed is exact at 60 FPS.
 constexpr double kDayStepPerFrame = 1.0 / 60.0;
+
+// Mobs (Phase 20) simulate on the SAME fixed per-frame step: a moving mob's
+// position at frame N must be a pure function of N (the day cycle and the
+// item animation set the precedent — real dt varies with load, and a moving
+// body's final position would drift by sub-pixels between runs). At the
+// 60 FPS cap the real-time speed is exact; at lower caps the mob slows down
+// with the frame clock (the day cycle's behavior).
+constexpr double kMobStepPerFrame = 1.0 / 60.0;
 // The fluid simulation ticks every Nth frame (20 ticks/s at 60 FPS); the
 // fixed frame step keeps headless runs byte-reproducible.
 constexpr int kFluidTickEveryNFrames = 3;
@@ -71,6 +82,13 @@ constexpr int kVerticalChunksPerColumn = kWorldHeight / kChunkSize;
 
 // How far the crosshair raycast reaches (blocks; Minecraft's reach).
 constexpr float kReach = 5.0f;
+
+// Mobs (Phase 20): the player's attack cadence + the knockback a hit
+// applies (the horizontal speed along the aim + a vertical lift; the
+// MobEntity's knockback window decays it).
+constexpr double kSwingInterval = 0.25;  // seconds between attack hits
+constexpr float kKnockbackSpeed = 4.0f;  // horizontal knockback (blocks/s)
+constexpr float kKnockbackLift = 2.5f;   // vertical knockback (blocks/s)
 
 // A dropped item is picked up when its bottom-center is within this
 // distance of the player's bottom-center (and past the item's pickup
@@ -311,6 +329,10 @@ Result<void> Game::buildScene() {
     // existing tile's UVs (byte-stable baseline screenshots).
     auto atlasLoad = m_atlas.loadDirectory(m_assets, "textures/blocks");
     MC_TRY(atlasLoad);
+    // Mob texture tiles (Phase 20) join the same atlas (separate directory,
+    // same data-driven layout file).
+    auto mobAtlasLoad = m_atlas.loadDirectory(m_assets, "textures/mobs");
+    MC_TRY(mobAtlasLoad);
     auto atlasLayoutText = m_assets.loadText("data/textures/block_atlas.json");
     MC_TRY(atlasLayoutText);
     auto atlasLayout = Json::parse(*atlasLayoutText);
@@ -352,6 +374,50 @@ Result<void> Game::buildScene() {
                            " of '" + b.properties.drops +
                            "' but its max stack is " +
                            std::to_string(m_items.at(dropId).maxStack));
+        }
+    }
+
+    // -- mobs (Phase 20): data-driven types + spawn config ------------------
+    // Types come from data/mobs/*.json (one file per mob); the spawn
+    // cadence/ring/cap from data/mob_spawning.json; the enable flag from
+    // the config (mobs.enabled, default true). Cross-checks (same
+    // discipline as block drops): the spawning list, every model texture
+    // and every drop must resolve.
+    MC_TRY(m_mobTypes.loadDirectory(m_assets, "data/mobs"));
+    auto spawnText = m_assets.loadText("data/mob_spawning.json");
+    MC_TRY(spawnText);
+    auto spawnJson = Json::parse(*spawnText);
+    MC_TRY(spawnJson);
+    auto spawnCfg = MobSpawningConfig::parse(*spawnJson);
+    MC_TRY(spawnCfg);
+    m_spawnConfig = *spawnCfg;
+    m_mobsEnabled = m_config.getBool("mobs.enabled", true);
+    for (const std::string& name : m_spawnConfig.mobs) {
+        if (m_mobTypes.findByName(name) == nullptr) {
+            return MC_FAIL("mob_spawning.json: unknown mob '" + name + "'");
+        }
+    }
+    for (const MobID mid : m_mobTypes.allIds()) {
+        const Mob& mob = m_mobTypes.at(mid);
+        for (const MobBox& box : mob.model.boxes) {
+            if (!m_atlas.contains(box.texture)) {
+                return MC_FAIL("mob '" + mob.name + "': model texture '" +
+                               box.texture + "' not in the atlas");
+            }
+        }
+        if (!mob.properties.drops.empty()) {
+            const ItemID dropId = m_items.idForName(mob.properties.drops);
+            if (!dropId.valid()) {
+                return MC_FAIL("mob '" + mob.name + "' drops unknown item '" +
+                               mob.properties.drops + "'");
+            }
+            if (mob.properties.dropsCount > m_items.at(dropId).maxStack) {
+                return MC_FAIL("mob '" + mob.name + "' drops " +
+                               std::to_string(mob.properties.dropsCount) +
+                               " of '" + mob.properties.drops +
+                               "' but its max stack is " +
+                               std::to_string(m_items.at(dropId).maxStack));
+            }
         }
     }
 
@@ -1167,12 +1233,14 @@ void Game::handleInteraction(double dt) {
             m_window.setRelativeMouseMode(true);
         }
         resetBreaking();
+        m_swingCooldown = 0.0;
         return;
     }
 
     if (m_input.wasPressed(GameKey::Escape)) {
         m_window.setRelativeMouseMode(false);
         resetBreaking();
+        m_swingCooldown = 0.0;
         return;
     }
     if (m_input.wasPressed(MouseButton::Right)) {
@@ -1195,12 +1263,22 @@ void Game::handleInteraction(double dt) {
     if (m_input.wasPressed(GameKey::Q)) {
         dropSelectedItem();
     }
-    // Breaking is hold-driven (Phase 11): progress accumulates while the
-    // button stays down on the same target block.
+    // Left button (Phases 11/20): on a mob under the crosshair the swing
+    // attacks it (one hit per kSwingInterval while held — damage +
+    // knockback, the block behind it is NOT mined); on a block it mines
+    // (hold-to-break progress). Leaving either target resets the other's
+    // state.
     if (m_input.isDown(MouseButton::Left)) {
-        updateBreaking(dt);
+        if (const std::optional<MobHit> mob = targetMob()) {
+            resetBreaking();
+            updateAttacking(dt, *mob->mob);
+        } else {
+            m_swingCooldown = 0.0;
+            updateBreaking(dt);
+        }
     } else {
         resetBreaking();
+        m_swingCooldown = 0.0;
     }
 }
 
@@ -1252,6 +1330,66 @@ void Game::updateBreaking(double dt) {
         breakBlock(*hit);
         resetBreaking();
     }
+}
+
+std::optional<Game::MobHit> Game::targetMob() const {
+    // The block occludes: the nearer of the block hit and the mob AABB
+    // hits wins (a mob behind the aimed block is not hit; a mob in front
+    // of the block is).
+    float bestT = kReach;
+    if (const std::optional<BlockHit> b = targetBlock()) {
+        bestT = b->distance;
+    }
+    MobEntity* best = nullptr;
+    const Vec3 o = m_camera.position;
+    const Vec3 d = m_camera.forward();
+    for (const auto& entity : m_entities) {
+        const MobEntity* mob =
+            dynamic_cast<const MobEntity*>(entity.get());
+        if (mob == nullptr || mob->dead()) {
+            continue;
+        }
+        const float t =
+            raycastAabb(o, d, mob->aabbMin(), mob->aabbMax());
+        if (t >= 0.0f && t < bestT) {
+            bestT = t;
+            best = const_cast<MobEntity*>(mob);
+        }
+    }
+    if (best == nullptr) {
+        return std::nullopt;
+    }
+    return MobHit {best, bestT};
+}
+
+void Game::updateAttacking(double dt, MobEntity& mob) {
+    if (m_swingCooldown > 0.0) {
+        m_swingCooldown -= dt;
+        return;
+    }
+    // A swing landed: data damage (selected item) + knockback along the
+    // aim (horizontal) with a lift. Removal + drops happen in the
+    // updateEntities despawn pass (same frame).
+    m_swingCooldown = kSwingInterval;
+    mob.damage(selectedAttackDamage());
+    const Vec3 f = m_camera.forward();
+    Vec3 kb {f.x, 0.0f, f.z};
+    const float len = std::sqrt(kb.x * kb.x + kb.z * kb.z);
+    if (len > 1e-4f) {
+        kb.x *= kKnockbackSpeed / len;
+        kb.z *= kKnockbackSpeed / len;
+    }
+    kb.y = kKnockbackLift;
+    mob.addKnockback(kb);
+    m_sound.play("hurt");
+}
+
+float Game::selectedAttackDamage() const {
+    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    if (stack.empty()) {
+        return 1.0f;  // bare hand
+    }
+    return m_items.at(stack.item).attackDamage;  // data (default 1.0)
 }
 
 void Game::breakBlock(const BlockHit& hit) {
@@ -1381,8 +1519,29 @@ float Game::selectedBreakSpeed() const {
 // ---------------------------------------------------------------------------
 
 void Game::updateEntities(double dt) {
+    // Mob spawning (Phase 20): a deterministic frame cadence from the data
+    // config (first_spawn_frame keeps the 60-frame no-input baseline
+    // mob-free). The scan is a pure function of world + player, so the
+    // same runs spawn the same mobs.
+    if (m_mobsEnabled &&
+        m_frameCount >= m_spawnConfig.firstSpawnFrame &&
+        m_frameCount % m_spawnConfig.checkEveryFrames == 0) {
+        attemptMobSpawn();
+    }
+    // The mobs need the player's state for their AI (the player updates
+    // before the entities in the frame; a dead player is not chased).
+    // Mobs step on the fixed kMobStepPerFrame (see its comment); the other
+    // entities keep the real dt (they rest — a dropped item's position is
+    // an exact boundary regardless of the dt history).
+    const Vec3 playerPos = m_player->position();
+    const bool playerAlive = !m_player->isDead();
     for (auto& entity : m_entities) {
-        entity->update(dt);
+        if (auto* mob = dynamic_cast<MobEntity*>(entity.get())) {
+            mob->setPlayer(playerPos, playerAlive);
+            mob->update(kMobStepPerFrame);
+        } else {
+            entity->update(dt);
+        }
     }
     // Entity-vs-entity separation (Phase 19; the player-vs-item part is
     // the Phase 16 pass, now generalized): the pass runs over a fixed-order
@@ -1430,7 +1589,6 @@ void Game::updateEntities(double dt) {
     // bottom-center that are past their pickup delay go into the inventory
     // (deterministic index order; if the inventory has no room the item
     // stays where it is and is retried next frame).
-    const Vec3 playerPos = m_player->position();
     const float pickupSq = kPickupDistance * kPickupDistance;
     for (std::size_t i = 0; i < n; ++i) {
         if (gone[i]) {
@@ -1454,10 +1612,40 @@ void Game::updateEntities(double dt) {
         m_sound.play("pickup");
     }
     // Despawn: merged-away / picked-up + aged-out / impact / below the
-    // kill plane.
+    // kill plane + dead mobs (Phase 20: their data-defined drops spawn
+    // here, AFTER the list rebuild — pushing during the scan would lose
+    // them) + mobs beyond the despawn distance from the player.
+    const float despawnSq =
+        m_spawnConfig.despawnDistance * m_spawnConfig.despawnDistance;
+    struct MobDrop {
+        std::string item;
+        int count;
+        Vec3 pos;
+    };
+    std::vector<MobDrop> mobDrops;
+    int mobDeaths = 0;
     for (std::size_t i = 0; i < n; ++i) {
-        if (!gone[i] && m_entities[i]->shouldDespawn()) {
-            gone[i] = true;
+        if (gone[i]) {
+            continue;
+        }
+        MobEntity* mob = dynamic_cast<MobEntity*>(m_entities[i].get());
+        if (mob != nullptr && !mob->dead()) {
+            const Vec3 d = mob->position() - playerPos;
+            if (lengthSq(d) > despawnSq) {
+                gone[i] = true;
+                continue;
+            }
+        }
+        if (!m_entities[i]->shouldDespawn()) {
+            continue;
+        }
+        gone[i] = true;
+        if (mob != nullptr && mob->dead() &&
+            !mob->def().properties.drops.empty()) {
+            mobDrops.push_back({mob->def().properties.drops,
+                                mob->def().properties.dropsCount,
+                                mob->position()});
+            ++mobDeaths;
         }
     }
     if (std::none_of(gone.begin(), gone.end(), [](bool g) { return g; })) {
@@ -1471,6 +1659,17 @@ void Game::updateEntities(double dt) {
         }
     }
     m_entities = std::move(kept);
+    for (const MobDrop& drop : mobDrops) {
+        // Validity is guaranteed: drops are validated at init. The drop
+        // spawns at the mob's bottom-center with zero velocity (the same
+        // deterministic rest-position convention as broken blocks).
+        const Item& it = m_items.at(m_items.idForName(drop.item));
+        m_entities.push_back(std::make_unique<ItemEntity>(
+            m_world, m_blocks, it.name, it.maxStack, drop.count, drop.pos));
+    }
+    if (mobDeaths > 0) {
+        m_sound.play("death");
+    }
 }
 
 void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
@@ -1529,6 +1728,113 @@ const Mesh& Game::itemMesh(BlockID id) {
     if (!r.ok()) {
         MC_LOG_ERROR("Item mesh build failed for block '" +
                      m_blocks.at(id).name + "': " + r.error().describe());
+    }
+    return mesh;
+}
+
+void Game::attemptMobSpawn() {
+    // The live-mob census (count + bottom-centers for the clearance rule).
+    int mobCount = 0;
+    std::vector<Vec3> mobPositions;
+    for (const auto& entity : m_entities) {
+        if (dynamic_cast<const MobEntity*>(entity.get()) != nullptr) {
+            ++mobCount;
+            mobPositions.push_back(entity->position());
+        }
+    }
+    if (mobCount >= m_spawnConfig.maxMobs) {
+        return;
+    }
+    // Deterministic type pick among the data-listed mobs (the seed mixes
+    // the world seed with the frame, so the choice is a pure function of
+    // the run; v1 data lists a single mob).
+    const std::uint64_t pick =
+        splitmix64(static_cast<std::uint64_t>(m_generator->seed()) ^
+                   (std::uint64_t{0x9E3779B97F4A7C15} *
+                    static_cast<std::uint64_t>(m_frameCount)));
+    const Mob& def = m_mobTypes.at(
+        m_mobTypes.idForName(m_spawnConfig.mobs[static_cast<std::size_t>(
+            pick % m_spawnConfig.mobs.size())]));
+
+    // Player anchor: the player's column + the floor block under its feet
+    // (the highest solid cell at or below the feet in that column).
+    const Vec3 p = m_player->position();
+    const int px = static_cast<int>(std::floor(p.x));
+    const int pz = static_cast<int>(std::floor(p.z));
+    int floorY = -1;
+    for (int y = static_cast<int>(std::floor(p.y)); y >= 0; --y) {
+        if (m_blocks.at(m_world.getBlock(px, y, pz)).properties.solid) {
+            floorY = y;
+            break;
+        }
+    }
+    if (floorY < 0) {
+        return;  // the player is over the void: no spawning
+    }
+    auto cell = findMobSpawnCell(m_world, m_blocks, m_spawnConfig.minRadius,
+                                 m_spawnConfig.maxRadius, px, pz, floorY,
+                                 def.model.width, def.model.height,
+                                 m_player->aabbMin(), m_player->aabbMax(),
+                                 mobPositions);
+    if (!cell) {
+        return;
+    }
+    // Spawn at the cell center, feet on the floor top; the per-mob seed is
+    // the world seed mixed with the (increasing) spawn counter, so the same
+    // runs produce the same mobs with the same AI streams.
+    const Vec3 spawn {static_cast<float>(cell->x) + 0.5f,
+                      static_cast<float>(cell->y) + 1.0f,
+                      static_cast<float>(cell->z) + 0.5f};
+    ++m_spawnCounter;
+    const std::uint64_t seed =
+        static_cast<std::uint64_t>(m_generator->seed()) ^
+        (std::uint64_t{0x9E3779B97F4A7C15} * m_spawnCounter);
+    auto mob = std::make_unique<MobEntity>(m_world, m_blocks, def, spawn,
+                                           seed);
+    // The AI's landed attacks damage the player (Phase 16's damage path
+    // owns the flash/sound/death — updateSurvival polls the health).
+    mob->setHitCallback([this](float amount) {
+        if (!m_player->isDead()) {
+            m_player->damage(amount);
+        }
+    });
+    m_entities.push_back(std::move(mob));
+}
+
+void Game::drawMobs(const Mat4& view, const Mat4& projection) {
+    // Mobs are always opaque (the model boxes carry no transparency), so
+    // they draw with the opaque item pass. Dead mobs are removed in the
+    // same frame's update, so a dead one is never rendered.
+    for (const auto& entity : m_entities) {
+        const MobEntity* mob =
+            dynamic_cast<const MobEntity*>(entity.get());
+        if (mob == nullptr) {
+            continue;
+        }
+        const Mesh& mesh = mobMesh(mob->typeId());
+        if (!mesh.valid()) {
+            continue;
+        }
+        // Bottom-center origin: translate to the mob, rotate by its facing
+        // (camera yaw convention — the -Z face of a box is the front).
+        const Mat4 model = Mat4::multiply(
+            Mat4::translate(mob->position()), Mat4::rotateY(mob->facingYaw()));
+        m_renderer.draw(mesh, m_basicShader, view, projection, model);
+    }
+}
+
+const Mesh& Game::mobMesh(MobID id) {
+    auto it = m_mobMeshes.find(id);
+    if (it != m_mobMeshes.end()) {
+        return it->second;
+    }
+    Mesh& mesh = m_mobMeshes[id];
+    const ItemMeshGeometry geom =
+        makeMobModelGeometry(m_mobTypes.at(id).model, m_atlas.layout());
+    auto r = mesh.upload(geom.vertices, geom.indices);
+    if (!r.ok()) {
+        MC_LOG_ERROR("Mob mesh build failed for mob '" +
+                     m_mobTypes.at(id).name + "': " + r.error().describe());
     }
     return mesh;
 }
@@ -2298,6 +2604,9 @@ void Game::render() {
     // Dropped items (Phase 10): the opaque ones with the chunk pass; the
     // transparent ones (leaves, glass) join the blending pass below.
     drawItemEntities(view, projection, false);
+    // Mobs (Phase 20): opaque box models, with the opaque pass (the depth
+    // test then occludes them behind terrain exactly like the chunks).
+    drawMobs(view, projection);
     // Opaque break particles (Phase 15) belong to the opaque pass so the
     // transparent geometry blends over them.
     drawParticles(view, projection, false);

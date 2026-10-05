@@ -133,4 +133,37 @@ bool canPlaceAt(const World& world, const BlockRegistry& blocks, BlockPos cell,
     return true;
 }
 
+float raycastAabb(Vec3 origin, Vec3 dir, Vec3 boxMin, Vec3 boxMax) {
+    // Standard slab method: each axis contributes an interval of ray
+    // parameters that pierce its slab; the intersection of the three is
+    // the hit. tmin starts at 0, so an origin inside the box reports 0.
+    float tmin = 0.0f;
+    float tmax = std::numeric_limits<float>::max();
+    const float o[3] = {origin.x, origin.y, origin.z};
+    const float d[3] = {dir.x, dir.y, dir.z};
+    const float lo[3] = {boxMin.x, boxMin.y, boxMin.z};
+    const float hi[3] = {boxMax.x, boxMax.y, boxMax.z};
+    for (int a = 0; a < 3; ++a) {
+        if (std::abs(d[a]) < 1e-8f) {
+            // Parallel to the slab: a hit requires the origin to be
+            // within the slab's span.
+            if (o[a] < lo[a] || o[a] > hi[a]) {
+                return -1.0f;
+            }
+            continue;
+        }
+        float t1 = (lo[a] - o[a]) / d[a];
+        float t2 = (hi[a] - o[a]) / d[a];
+        if (t1 > t2) {
+            std::swap(t1, t2);
+        }
+        tmin = std::max(tmin, t1);
+        tmax = std::min(tmax, t2);
+        if (tmin > tmax) {
+            return -1.0f;
+        }
+    }
+    return tmin;
+}
+
 } // namespace mc

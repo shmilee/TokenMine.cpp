@@ -42,7 +42,7 @@ cmake --build build
 ./build/bin/minecraft --save myworld --new
 ```
 
-## 当前可玩内容（Phase 17）
+## 当前可玩内容（Phase 20）
 
 - **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时）/游泳时随时上浮，
   `LeftShift` 冲刺，鼠标转向（**左键点击锁定指针；转向仅在指针锁定时生效**，
@@ -67,6 +67,30 @@ cmake --build build
     取自 48×16 条带（`assets/textures/health.png`，`tools/generate_health_icons.py`）；
     填充 = `clamp(hp − 2i, 0, 2)`（半心按 0.5 HP 粒度渲染）。只在游玩态（锁定 +
     背包未开）显示，无输入运行零新增绘制
+- **Mob 与 AI**（Phase 20，`MobEntity`/`MobRegistry`，全数据驱动；v1 数据仅 zombie）：
+  - **生成**：帧节奏驱动（`data/mob_spawning.json`：每 `check_every_frames` 帧尝试
+    一次、`first_spawn_frame` 之前不生成、`max_mobs` 上限）；生成格 = 玩家列周围
+    `[min_radius, max_radius]` 环内按固定扫描序的第一个合法格（固体地板 + 头顶
+    空余 + 地板高度差不超过 2 格 + 不压玩家 + 与其他 mob 水平间隔 ≥1 块）——
+    纯函数，同一运行必生成同一只
+  - **AI 状态机**（确定性：种子 = 世界种子 ⊕ 生成序号，splitmix64 流）：
+    **Wander**（默认；每 `wander_interval` 秒一次种子随机决策：1/3 站定、
+    其余半速随机方向走）→ **Chase**（玩家进入 `detect_radius`（水平）且高度差
+    ≤2：全速追）→ **Attack**（水平距离 ≤`attack_range` 且高度差 ≤1：停下、
+    面向玩家、每 `attack_cooldown` 秒打 `attack_damage` 点——走 P16 的玩家
+    受伤路径：红闪/音效/死亡全由既有轮询驱动）。玩家死亡时不追不打
+  - **玩家攻击**：左键命中 mob（射线先比方块距离——**方块遮挡**：方块更近则打
+    方块）= 挥击，按住时每 `0.25s` 一击：伤害取**选中物品的 `attack_damage`**
+    数据（徒手/方块/材料=1.0，工具见 `data/items/*.json`，木镐 2 / 铁镐 3）+
+    沿瞄准方向击退（水平 4 + 抬升 2.5，0.3s 击退窗口内 AI 不接管速度）
+  - **死亡**：HP 归零 → 掉落 `drops` 数据定义的物品（zombie 掉 `rotten_flesh`，
+    新 material 物品 + 图标）后移除；击退/坠落无伤害（v1）
+  - **渲染**：box 模型（zombie = 头 0.5³ + 身 0.5×1.0×0.3，各 6 面同一 atlas
+    tile，`tools/generate_mob_textures.py` 生成绿皮肤+深色眼 / 青色上衣），
+    与掉落物同 pass（`translate(位置) × rotateY(朝向)`，朝向 = 相机 yaw 约定，
+    箱体的 −Z 面是脸）；天空光全亮烘焙（与掉落物同一简化，无局部光）
+  - **开关**：config `mobs.enabled`（默认 true）；**mob 不入存档**（与 Minecraft
+    一致：生成物是瞬态的，其掉落物是物品、随存档保存）
 - **合成**（Phase 17，`CraftingGrid`/shaped 配方/工作台，全数据驱动）：
   - **形状配方**：配方 JSON 加 `"type": "shaped"` + `pattern`（行字符串，空格=空位）
     + `key`（字母→物品）；无 `type` 字段 = shapeless 原料袋（Phase 12 语义）。
@@ -281,6 +305,7 @@ cmake --build build
   "id": "wooden_pickaxe",
   "type": "tool",
   "tool": { "break_speed": 2.0 },   // 仅工具；>0，默认 1.0（破坏耗时 = 1.5s × hardness ÷ speed）
+  "attack_damage": 2,               // 可选（Phase 20）：挥击伤害，(0, 100]，默认 1.0
   "max_stack": 1,                   // 1..64，默认 64
   "icon": "wooden_pickaxe"          // UI 图标（Phase 15）：assets/textures/items/<icon>.png
 }
@@ -354,6 +379,42 @@ iron_pickaxe（III/.S./.S.）。
 游戏内触发：`E` 背包面板右侧的配方列表（仅 shapeless），点击配方行执行
 `craft()`（Phase 15；可合成的配方白色高亮、不可合成的灰色）；或放置并右键
 工作台打开 3×3 面板，按形状放料后取输出格（Phase 17）。
+
+### 新增一个 Mob（无需改核心代码，Phase 20）
+
+1. `assets/textures/mobs/<tile>.png` —— 16×16 RGBA 纹理（`tools/generate_mob_textures.py`
+   同款：splitmix64 确定性噪声 + 简单五官）；并在 `data/textures/block_atlas.json`
+   的 `tiles` 里给它一个空位 `[col, row]`（4×8 网格，现有 21 tile，勿动已有条目）
+2. `assets/data/mobs/<id>.json` —— mob 定义（行为参数 + box 模型，每箱一个
+   atlas tile；box 必须在 `width × height` 的 AABB 内）：
+
+   ```json
+   {
+     "id": "zombie",
+     "properties": {
+       "health": 20, "speed": 0.8,
+       "detect_radius": 16, "attack_range": 1.6,
+       "attack_damage": 3, "attack_cooldown": 1.0, "wander_interval": 2.5,
+       "drops": "rotten_flesh", "drops_count": 1
+     },
+     "model": {
+       "width": 0.6, "height": 1.8,
+       "boxes": [
+         { "pos": [0.0, 1.25, 0.0], "size": [0.5, 0.5, 0.5], "texture": "zombie_head" },
+         { "pos": [0.0, 0.5, 0.0],  "size": [0.5, 1.0, 0.3], "texture": "zombie_body" }
+       ]
+     }
+   }
+   ```
+
+   校验严格（同方块/物品注册表纪律）：id 非空且唯一、数值字段 >0、
+   `drops_count` ∈ [1,64]、box 越界/缺纹理名 = 明确报错；未知字段警告。
+   `drops` 是**物品名**（init 时对 ItemRegistry 交叉校验，`""` = 不掉落）。
+3. 生成名单：`assets/data/mob_spawning.json` 的 `mobs` 数组加入该 id
+   （生成节奏/环半径/上限/离玩家消散距离都在这个文件里，全部数据驱动）。
+
+v1 数据只有 zombie（绿色、无光生成条件、不游泳不拆方块、无动画——见
+KNOWN_ISSUES.md 的 Mob 章节）。
 
 ### 使用存档（Phase 13）
 
@@ -452,6 +513,7 @@ mine-craft/
 - [x] **Phase 17** — 工作台 + 形状合成：shaped 配方 JSON（`pattern`/`key`，网格偏移扫描匹配，先 shaped 后 shapeless）/`CraftingGrid` 9 格网格（`matchesShaped`/`matchesShapeless`/`matchGridRecipe` 纯逻辑）/`BlockProperties.interact` 数据属性 + crafting_table 方块（右键开 3×3 面板、破坏掉自身）/工作台面板（独立容器网格，跨开关保留、入存档）/E 面板 2×2 = 共享 3×3 模型左上 4 格、配方列表仅 shapeless/存档格式 3（`inv_grid`+`table_grid`）/atlas 布局数据驱动（`block_atlas.json` 4×8，row 4 = 工作台顶·侧 + planks）；无输入基线逐字节不变
 - [x] **Phase 18** — Greedy Meshing：逐面片按（纹理、sub-mesh、面光）合并为单 quad（光保守合并：面光不同不合并，光照零近似）/每平面双 slice（相邻非 opaque 方块间双面保留）/tiled UV 约定（合并 quad：`uv`=tile 索引 + `uvLocal`=tile 单位位置，`basic.frag` fract 回卷；单面片保持 legacy atlas UV 逐位精确）/`MeshVertex` +`uvLocal`+`tiled`（13 float）；200-chunk 实测总三角形 3.3× 下降（109,648 → 33,558）；无输入基线重拍（`base18`，3593 px 亚纹素重采样/剪影边缘差，几何覆盖集逐 chunk 100% 相等）
 - [x] **Phase 19** — 通用实体间碰撞：Phase 16 玩家↔掉落物分离推广为通用分离 pass（固定序 body 列表：玩家先、实体按索引；重叠对沿最小穿透轴推离——两可推动体 50/50、对不可推动体全量面到面跨度；`hasRoomAt` 世界感知：被挡份额转由另一侧全量接管、双挡跳过；重复 sweep 至 <1e-6 块亚视觉残差或 32 次上限）/数据位 `collidesWithEntities`（投射物不参与，箭穿过实体）+ `pushableByEntities`（玩家不可推动）/中心精确重合保持 P16 方向（可推动体走 −axis，Q 丢脚底 → 玩家 −x 侧）/`Entity::hasRoomAt` 严格格扫描/`separateFrom` 上移 Entity 基类（P16 三测原样保留为回归锚）/F3 overlay +实体计数；无输入基线逐字节不变（`base18` 门通过），items 场景 ×2 字节一致 + 像素判据（stone 灰/dirt 棕分离位）
+- [x] **Phase 20** — Mob 与 AI：数据驱动 mob 类型（`data/mobs/*.json` 严格校验：health/speed/detect_radius/attack_range/attack_damage/attack_cooldown/wander_interval/drops(+count)/box 模型（每箱一 atlas tile，须在模型 AABB 内）+ init 交叉校验（纹理/掉落/spawning 列表））/`MobEntity` AI 状态机（Wander 种子随机决策 → Chase 全速 → Attack 冷却打击，经 hit 回调走 P16 受伤路径；击退窗口抑制 AI；死亡掉落入 despawn pass）/确定性生成（帧节奏 + 固定扫描序首合法格：地板/头顶/高度带/玩家重叠/mob 间距；种子 = 世界种子 ⊕ 生成序号）/玩家攻击（左键 mob 优先于方块——方块遮挡；0.25s 挥击节奏；物品 `attack_damage` 数据 + 击退）/box 模型 mesh（共享六面表，`textures/mobs` 并入 atlas：zombie 头/身 2 tile，atlas 21 tile）/mob 固定帧步长（`kMobStepPerFrame`，运动实体截图逐字节可复现的日循环同款约定）/zombie 掉 `rotten_flesh`（新 material 物品+图标）/config `mobs.enabled`（默认 true；`first_spawn_frame=60` 保证 60 帧基线无 mob）；无输入基线逐字节不变（`base18` 门通过），mobs 240f ×2 字节一致 + 像素判据（vs 无 mob 对照：世界区 54k px 差、8.4k 绿皮肤 px、UI 零差、无伤害）
 
 ## 开发约定
 
