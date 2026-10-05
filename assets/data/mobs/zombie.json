@@ -8,6 +8,7 @@
     "attack_damage": 3,
     "attack_cooldown": 1.0,
     "wander_interval": 2.5,
+    "spawn_max_light": 0,
     "drops": "rotten_flesh",
     "drops_count": 1
   },

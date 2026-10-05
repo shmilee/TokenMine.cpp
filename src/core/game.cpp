@@ -1774,6 +1774,8 @@ void Game::attemptMobSpawn() {
     auto cell = findMobSpawnCell(m_world, m_blocks, m_spawnConfig.minRadius,
                                  m_spawnConfig.maxRadius, px, pz, floorY,
                                  def.model.width, def.model.height,
+                                 m_dayCycle.dayFactor(),
+                                 def.properties.spawnMaxLight,
                                  m_player->aabbMin(), m_player->aabbMax(),
                                  mobPositions);
     if (!cell) {

@@ -7,6 +7,13 @@
 
 namespace mc {
 
+namespace {
+// Smallest allowed window size (windowed mode): below this the projection
+// aspect and the screen-space UI (hotbar, hearts, F3) stop making sense.
+constexpr int kMinWindowWidth = 320;
+constexpr int kMinWindowHeight = 200;
+} // namespace
+
 Window::~Window() {
     if (m_sdlActive) {
         shutdown();
@@ -33,14 +40,30 @@ Result<void> Window::init(const Config& config) {
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
+    // window.resizable (default true): windowed windows follow the user's
+    // resize — the game reads the drawable size live every frame (see
+    // Window::width/height), so the GL viewport, projection aspect, and
+    // the screen-space UI all track the new size without any event
+    // handling. false keeps the window at its configured size (some
+    // desktop WMs auto-tile resizable windows, which is also why
+    // headless/automation runs pin this off to hold a fixed geometry).
+    const bool resizable = config.getBool("window.resizable", true);
     Uint32 flags = SDL_WINDOW_OPENGL;
     if (fullscreen) {
         flags |= SDL_WINDOW_FULLSCREEN;
+    } else if (resizable) {
+        flags |= SDL_WINDOW_RESIZABLE;
     }
 
     m_window = SDL_CreateWindow(m_title.c_str(), m_width, m_height, flags);
     if (m_window == nullptr) {
         return MC_FAIL(std::string("SDL_CreateWindow failed: ") + SDL_GetError());
+    }
+    if (resizable) {
+        // Keep the window out of the degenerate range where the
+        // projection aspect (width / height) and the screen-space UI stop
+        // making sense.
+        SDL_SetWindowMinimumSize(m_window, kMinWindowWidth, kMinWindowHeight);
     }
 
     m_glContext = SDL_GL_CreateContext(m_window);
@@ -91,6 +114,28 @@ void Window::setRelativeMouseMode(bool enabled) {
 
 bool Window::relativeMouseMode() const {
     return m_window != nullptr && SDL_GetWindowRelativeMouseMode(m_window);
+}
+
+int Window::width() const {
+    if (m_window == nullptr) {
+        return m_width; // initial size until the window exists
+    }
+    int w = 0;
+    int h = 0;
+    // Pixel size (the GL drawable size; equals the window size at 1:1
+    // scaling, the high-DPI-correct value otherwise).
+    SDL_GetWindowSizeInPixels(m_window, &w, &h);
+    return w;
+}
+
+int Window::height() const {
+    if (m_window == nullptr) {
+        return m_height; // initial size until the window exists
+    }
+    int w = 0;
+    int h = 0;
+    SDL_GetWindowSizeInPixels(m_window, &w, &h);
+    return h;
 }
 
 void Window::swapBuffers() {

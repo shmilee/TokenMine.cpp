@@ -99,11 +99,23 @@ Result<MobSpawningConfig> MobSpawningConfig::parse(const Json& def) {
     return out;
 }
 
+int currentSpawnLight(const World& world, int x, int y, int z,
+                      float dayFactor) {
+    // Day/night scales the sky-light contribution (0 at deep night);
+    // block light is time-independent. Floor to an integer light level.
+    const int skyNow = static_cast<int>(std::floor(
+        static_cast<double>(world.getSkyLight(x, y, z)) *
+        static_cast<double>(dayFactor)));
+    const int block = static_cast<int>(world.getBlockLight(x, y, z));
+    return std::max(skyNow, block);
+}
+
 std::optional<BlockPos> findMobSpawnCell(const World& world,
                                          const BlockRegistry& blocks,
                                          float minRadius, float maxRadius,
                                          int cx, int cz, int playerFloorY,
                                          float width, float height,
+                                         float dayFactor, int spawnMaxLight,
                                          const Vec3& playerMin,
                                          const Vec3& playerMax,
                                          const std::vector<Vec3>& mobPositions) {
@@ -155,6 +167,16 @@ std::optional<BlockPos> findMobSpawnCell(const World& world,
                 }
             }
             if (!open) {
+                continue;
+            }
+
+            // Light gate (the day/night rule): the CURRENT effective light
+            // of the cell the mob would stand in (feet cell) must not
+            // exceed the mob's spawn_max_light. At night the sky
+            // contribution is 0, so dark-only mobs may spawn under open
+            // sky; by day it is the full stored level, so they may not.
+            if (currentSpawnLight(world, x, floorY + 1, z, dayFactor) >
+                spawnMaxLight) {
                 continue;
             }
 

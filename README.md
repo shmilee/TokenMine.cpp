@@ -42,6 +42,11 @@ cmake --build build
 ./build/bin/minecraft --save myworld --new
 ```
 
+**窗口**：大小由 `config/config.json` 的 `window.width`/`window.height` 决定（默认
+1280×720）。窗口模式下窗口可被用户缩放（`window.resizable`，默认 `true`）——
+视口、投影纵横比与屏幕 UI 布局每帧读取窗口当前像素尺寸，缩放后场景立即跟随
+（最小尺寸 320×200）；设为 `false` 则锁定在配置尺寸。
+
 ## 当前可玩内容（Phase 20）
 
 - **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时）/游泳时随时上浮，
@@ -71,8 +76,16 @@ cmake --build build
   - **生成**：帧节奏驱动（`data/mob_spawning.json`：每 `check_every_frames` 帧尝试
     一次、`first_spawn_frame` 之前不生成、`max_mobs` 上限）；生成格 = 玩家列周围
     `[min_radius, max_radius]` 环内按固定扫描序的第一个合法格（固体地板 + 头顶
-    空余 + 地板高度差不超过 2 格 + 不压玩家 + 与其他 mob 水平间隔 ≥1 块）——
+    空余 + 地板高度差不超过 2 格 + 不压玩家 + 与其他 mob 水平间隔 ≥1 块 +
+     **光照门**）——
     纯函数，同一运行必生成同一只
+   - **光照门（昼夜生成规则，Phase 20.5）**：生成格（脚位）的**当前有效光照**
+     = `floor(天空光 × dayFactor)` 与方块光（萤石，不受昼夜影响）取较大者，
+     必须 ≤ 该 mob 的 `spawn_max_light`（mob 数据字段，0..15，默认 0 = 只在
+     黑暗生成——Minecraft 敌对 mob 约定）。dayFactor 是渲染层昼夜系数（正午
+     1、深夜 0、晨昏平滑过渡），所以 zombie 白天（开阔地天空光 15 → 有效
+     15 > 0）不生成、夜晚生成；萤石照亮处即使夜晚也不生成；树冠/洞穴的
+     永久暗格（存储天空光 0）白天也可生成（与 Minecraft 一致）
   - **AI 状态机**（确定性：种子 = 世界种子 ⊕ 生成序号，splitmix64 流）：
     **Wander**（默认；每 `wander_interval` 秒一次种子随机决策：1/3 站定、
     其余半速随机方向走）→ **Chase**（玩家进入 `detect_radius`（水平）且高度差
@@ -395,6 +408,7 @@ iron_pickaxe（III/.S./.S.）。
        "health": 20, "speed": 0.8,
        "detect_radius": 16, "attack_range": 1.6,
        "attack_damage": 3, "attack_cooldown": 1.0, "wander_interval": 2.5,
+       "spawn_max_light": 0,
        "drops": "rotten_flesh", "drops_count": 1
      },
      "model": {
@@ -408,13 +422,14 @@ iron_pickaxe（III/.S./.S.）。
    ```
 
    校验严格（同方块/物品注册表纪律）：id 非空且唯一、数值字段 >0、
+   `spawn_max_light` 为 0..15 的整数（默认 0，光照门——见上）、
    `drops_count` ∈ [1,64]、box 越界/缺纹理名 = 明确报错；未知字段警告。
    `drops` 是**物品名**（init 时对 ItemRegistry 交叉校验，`""` = 不掉落）。
 3. 生成名单：`assets/data/mob_spawning.json` 的 `mobs` 数组加入该 id
    （生成节奏/环半径/上限/离玩家消散距离都在这个文件里，全部数据驱动）。
 
-v1 数据只有 zombie（绿色、无光生成条件、不游泳不拆方块、无动画——见
-KNOWN_ISSUES.md 的 Mob 章节）。
+v1 数据只有 zombie（绿色、只在黑暗生成（`spawn_max_light` 0）、
+不游泳不拆方块、无动画——见 KNOWN_ISSUES.md 的 Mob 章节）。
 
 ### 使用存档（Phase 13）
 
@@ -514,6 +529,7 @@ mine-craft/
 - [x] **Phase 18** — Greedy Meshing：逐面片按（纹理、sub-mesh、面光）合并为单 quad（光保守合并：面光不同不合并，光照零近似）/每平面双 slice（相邻非 opaque 方块间双面保留）/tiled UV 约定（合并 quad：`uv`=tile 索引 + `uvLocal`=tile 单位位置，`basic.frag` fract 回卷；单面片保持 legacy atlas UV 逐位精确）/`MeshVertex` +`uvLocal`+`tiled`（13 float）；200-chunk 实测总三角形 3.3× 下降（109,648 → 33,558）；无输入基线重拍（`base18`，3593 px 亚纹素重采样/剪影边缘差，几何覆盖集逐 chunk 100% 相等）
 - [x] **Phase 19** — 通用实体间碰撞：Phase 16 玩家↔掉落物分离推广为通用分离 pass（固定序 body 列表：玩家先、实体按索引；重叠对沿最小穿透轴推离——两可推动体 50/50、对不可推动体全量面到面跨度；`hasRoomAt` 世界感知：被挡份额转由另一侧全量接管、双挡跳过；重复 sweep 至 <1e-6 块亚视觉残差或 32 次上限）/数据位 `collidesWithEntities`（投射物不参与，箭穿过实体）+ `pushableByEntities`（玩家不可推动）/中心精确重合保持 P16 方向（可推动体走 −axis，Q 丢脚底 → 玩家 −x 侧）/`Entity::hasRoomAt` 严格格扫描/`separateFrom` 上移 Entity 基类（P16 三测原样保留为回归锚）/F3 overlay +实体计数；无输入基线逐字节不变（`base18` 门通过），items 场景 ×2 字节一致 + 像素判据（stone 灰/dirt 棕分离位）
 - [x] **Phase 20** — Mob 与 AI：数据驱动 mob 类型（`data/mobs/*.json` 严格校验：health/speed/detect_radius/attack_range/attack_damage/attack_cooldown/wander_interval/drops(+count)/box 模型（每箱一 atlas tile，须在模型 AABB 内）+ init 交叉校验（纹理/掉落/spawning 列表））/`MobEntity` AI 状态机（Wander 种子随机决策 → Chase 全速 → Attack 冷却打击，经 hit 回调走 P16 受伤路径；击退窗口抑制 AI；死亡掉落入 despawn pass）/确定性生成（帧节奏 + 固定扫描序首合法格：地板/头顶/高度带/玩家重叠/mob 间距；种子 = 世界种子 ⊕ 生成序号）/玩家攻击（左键 mob 优先于方块——方块遮挡；0.25s 挥击节奏；物品 `attack_damage` 数据 + 击退）/box 模型 mesh（共享六面表，`textures/mobs` 并入 atlas：zombie 头/身 2 tile，atlas 21 tile）/mob 固定帧步长（`kMobStepPerFrame`，运动实体截图逐字节可复现的日循环同款约定）/zombie 掉 `rotten_flesh`（新 material 物品+图标）/config `mobs.enabled`（默认 true；`first_spawn_frame=60` 保证 60 帧基线无 mob）；无输入基线逐字节不变（`base18` 门通过），mobs 240f ×2 字节一致 + 像素判据（vs 无 mob 对照：世界区 54k px 差、8.4k 绿皮肤 px、UI 零差、无伤害）
+- [x] **Phase 20.5** — 修复两项用户反馈：① 昼夜生成规则——mob 数据字段 `spawn_max_light`（0..15 默认 0，Minecraft 敌对 mob 约定）+ `findMobSpawnCell` 光照门（生成格脚位的当前有效光照 = floor(天空光×dayFactor) 与方块光取大，≤ 阈值才生成；zombie 白天不生成、夜晚/暗格生成）；② 窗口缩放——`window.resizable`（默认 true）+ `Window::width/height` 每帧实时读像素尺寸（SDL3 `SDL_GetWindowSizeInPixels`），视口/投影纵横比/UI 布局/截图全部跟随窗口，最小 320×200。588/588 单测；E2E：base18 门 ×2 字节不变、白天 mobs-on == mobs-off（字节级证明白天不生成）、夜晚（day_length 1200s + start 0.536 黄昏段）mobs ×2 字节一致 vs 对照 54k px 差（bbox 与 P20 相同）、resize 运行 截图 == 窗口实际尺寸（场景跟随缩放）
 
 ## 开发约定
 

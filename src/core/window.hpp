@@ -42,8 +42,12 @@ public:
     void swapBuffers();
     void setTitle(const std::string& title);
 
-    int width() const { return m_width; }
-    int height() const { return m_height; }
+    // Current DRAWABLE size in pixels (live: queries SDL on every call,
+    // so a user resize is picked up on the next frame — the viewport,
+    // projection aspect, UI layout and screenshots all follow the window).
+    // The initial (config) size is returned until the window exists.
+    int width() const;
+    int height() const;
 
     // Opaque handle for the Renderer (Phase 1).
     const SDL_Window* nativeHandle() const { return m_window; }

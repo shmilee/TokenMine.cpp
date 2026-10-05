@@ -12,6 +12,11 @@
 //     "attack_damage": 3,         // damage to the player per hit
 //     "attack_cooldown": 1.0,     // seconds between hits
 //     "wander_interval": 2.5,     // seconds between wander decisions
+//     "spawn_max_light": 0,       // 0..15; only spawn where the current
+//                                 // effective light level is <= this
+//                                 // (Minecraft hostile-mob convention:
+//                                 // dark only, default 0; see the spawn
+//                                 // light definition in mob_spawning.hpp)
 //     "drops": "rotten_flesh",    // item name; "" = nothing (optional)
 //     "drops_count": 1            // 1..64 (optional, default 1)
 //   },
@@ -92,6 +97,13 @@ struct MobProperties {
     float attackDamage = 0.0f;
     float attackCooldown = 0.0f;
     float wanderInterval = 0.0f;
+    // Spawning light gate (0..15): the mob may only spawn where the
+    // cell's CURRENT effective light level (sky light scaled by the
+    // day/night factor + block light, see currentSpawnLight in
+    // mob_spawning.hpp) is <= this value. 0 = darkness only (the
+    // Minecraft hostile-mob convention; a 15 would allow any time of day,
+    // for future passive mobs).
+    int spawnMaxLight = 0;
     std::string drops;   // item name; empty = no drops
     int dropsCount = 1;  // 1..64
 };

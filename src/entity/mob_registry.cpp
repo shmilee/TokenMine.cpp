@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <filesystem>
 
 #include "core/logger.hpp"
@@ -64,6 +65,25 @@ Result<void> MobRegistry::parseProperties(const Json& def,
     r = readPositiveNumber(def, "wander_interval", out.wanderInterval,
                            "mob properties");
     MC_TRY(r);
+    // Optional 'spawn_max_light' (0..15, integer): the spawning light
+    // gate (see MobProperties). Defaults to 0 = darkness only.
+    if (const Json* sl = def.find("spawn_max_light")) {
+        if (!sl->isNumber()) {
+            return MC_FAIL("mob properties: 'spawn_max_light' must be a "
+                           "number");
+        }
+        const double d = sl->asDouble();
+        if (d != std::floor(d)) {
+            return MC_FAIL("mob properties: 'spawn_max_light' must be an "
+                           "integer (0..15)");
+        }
+        out.spawnMaxLight = static_cast<int>(d);
+        if (out.spawnMaxLight < 0 || out.spawnMaxLight > 15) {
+            return MC_FAIL("mob properties: 'spawn_max_light' must be in "
+                           "[0, 15], got " +
+                           std::to_string(out.spawnMaxLight));
+        }
+    }
 
     if (const Json* drops = def.find("drops")) {
         if (!drops->isString()) {

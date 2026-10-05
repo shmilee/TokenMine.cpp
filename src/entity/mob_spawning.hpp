@@ -24,6 +24,9 @@
 //     (headroom for the mob's AABB),
 //   - the floor top is within kSpawnFloorDelta of the player's floor
 //     (no spawning onto far cliffs or into far valleys),
+//   - the CURRENT light level at the spawn cell (see currentSpawnLight)
+//     is <= the mob's spawnMaxLight — the Minecraft day/night rule:
+//     hostile mobs (spawnMaxLight 0) only spawn in the dark,
 //   - the spawn AABB does not overlap the player's AABB,
 //   - no existing mob's bottom-center is within kSpawnClearance
 //     (horizontal) of the spawn point (no spawning on top of each other).
@@ -64,11 +67,23 @@ struct MobSpawningConfig {
 inline constexpr int kSpawnFloorDelta = 2;
 inline constexpr float kSpawnClearance = 1.0f;
 
+// The CURRENT effective light level (0..15) of a cell for spawn gating —
+// the Minecraft semantics emulated with this engine's presentation-layer
+// day/night (see day_cycle.hpp): the stored daytime sky light scaled by
+// the day-cycle factor (deep night -> 0, exactly how the renderer darkens
+// it), plus block light (glowstone), which is unaffected by day/night.
+// The integer light level is the floor of the scaled sky contribution.
+// (At deep night the open-sky level is 0, so dark-sky mobs may spawn; by
+// day it is the stored sky level, so they may not.)
+int currentSpawnLight(const World& world, int x, int y, int z,
+                      float dayFactor);
+
 std::optional<BlockPos> findMobSpawnCell(const World& world,
                                          const BlockRegistry& blocks,
                                          float minRadius, float maxRadius,
                                          int cx, int cz, int playerFloorY,
                                          float width, float height,
+                                         float dayFactor, int spawnMaxLight,
                                          const Vec3& playerMin,
                                          const Vec3& playerMax,
                                          const std::vector<Vec3>& mobPositions);

@@ -192,6 +192,47 @@ TEST(MobRegistryTest, RejectsDuplicateId) {
     EXPECT_FALSE(r.ok());
 }
 
+TEST(MobRegistryTest, SpawnMaxLightDefaultsToZero) {
+    // kZombieDef has no spawn_max_light: the hostile-mob default (dark
+    // only) applies.
+    MobRegistry mobs = makeMobRegistry();
+    EXPECT_EQ(mobs.at(MobID{0}).properties.spawnMaxLight, 0);
+}
+
+TEST(MobRegistryTest, ParsesSpawnMaxLight) {
+    MobRegistry mobs;
+    std::string def = kZombieDef;
+    const std::string key = "\"wander_interval\": 2.5";
+    def.replace(def.find(key), key.size(),
+                "\"wander_interval\": 2.5, \"spawn_max_light\": 7");
+    auto r = mobs.registerMob(parseJson(def));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(mobs.at(*r).properties.spawnMaxLight, 7);
+}
+
+TEST(MobRegistryTest, RejectsSpawnMaxLightOutOfRange) {
+    for (const int bad : {16, -1}) {
+        MobRegistry mobs;
+        std::string def = kZombieDef;
+        const std::string key = "\"wander_interval\": 2.5";
+        def.replace(def.find(key), key.size(),
+                    "\"wander_interval\": 2.5, \"spawn_max_light\": " +
+                    std::to_string(bad));
+        auto r = mobs.registerMob(parseJson(def));
+        EXPECT_FALSE(r.ok());
+    }
+}
+
+TEST(MobRegistryTest, RejectsNonIntegerSpawnMaxLight) {
+    MobRegistry mobs;
+    std::string def = kZombieDef;
+    const std::string key = "\"wander_interval\": 2.5";
+    def.replace(def.find(key), key.size(),
+                "\"wander_interval\": 2.5, \"spawn_max_light\": 1.5");
+    auto r = mobs.registerMob(parseJson(def));
+    EXPECT_FALSE(r.ok());
+}
+
 // -- spawning config ----------------------------------------------------------
 
 TEST(MobSpawningConfigTest, ParsesValid) {
@@ -251,7 +292,7 @@ TEST(MobSpawningConfigTest, RejectsDespawnInsideRing) {
 TEST(MobSpawnCellTest, FirstValidCellInScanOrder) {
     Fixture f;
     auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
-                                 0.6f, 1.8f, kPlayerMin, kPlayerMax, {});
+                                 0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax, {});
     ASSERT_TRUE(cell.has_value());
     // Scan order: dz from -6, then dx from -6; the first ring cell is
     // (dx=0, dz=-6) — distance 6.0, on the flat floor, clear headroom.
@@ -269,7 +310,7 @@ TEST(MobSpawnCellTest, SkipsCellWithBlockedHeadroom) {
         f.world.setBlock(0, y, -6, f.stone);
     }
     auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
-                                 0.6f, 1.8f, kPlayerMin, kPlayerMax, {});
+                                 0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax, {});
     ASSERT_TRUE(cell.has_value());
     // (0, -6) is blocked; the next candidate in scan order is (dx=-3,
     // dz=-5) — distance 5.83.
@@ -280,7 +321,7 @@ TEST(MobSpawnCellTest, SkipsCellInFluid) {
     Fixture f;
     f.world.setFluid(0, 1, -6, 1);
     auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
-                                 0.6f, 1.8f, kPlayerMin, kPlayerMax, {});
+                                 0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax, {});
     ASSERT_TRUE(cell.has_value());
     EXPECT_EQ(*cell, (BlockPos {-3, 0, -5}));
 }
@@ -288,7 +329,7 @@ TEST(MobSpawnCellTest, SkipsCellInFluid) {
 TEST(MobSpawnCellTest, RespectsMinRadius) {
     Fixture f;
     auto cell = findMobSpawnCell(f.world, f.blocks, 6.5f, 8.0f, 0, 0, 0,
-                                 0.6f, 1.8f, kPlayerMin, kPlayerMax, {});
+                                 0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax, {});
     ASSERT_TRUE(cell.has_value());
     // First ring cell: (dx=0, dz=-8) — distance 8.0.
     EXPECT_EQ(*cell, (BlockPos {0, 0, -8}));
@@ -300,7 +341,7 @@ TEST(MobSpawnCellTest, NoFloorInRingYieldsNoCell) {
     // (-16, -16) sits at distance sqrt(512) = 22.6); a ring beyond 22.7
     // has no solid floor.
     auto cell = findMobSpawnCell(f.world, f.blocks, 22.7f, 24.0f, 0, 0, 0,
-                                 0.6f, 1.8f, kPlayerMin, kPlayerMax, {});
+                                 0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax, {});
     EXPECT_FALSE(cell.has_value());
 }
 
@@ -308,7 +349,7 @@ TEST(MobSpawnCellTest, KeepsClearanceFromExistingMobs) {
     Fixture f;
     // An existing mob AT the first candidate's spawn point (0.5, 1, -5.5).
     auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
-                                 0.6f, 1.8f, kPlayerMin, kPlayerMax,
+                                 0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax,
                                  {Vec3 {0.5f, 1.0f, -5.5f}});
     ASSERT_TRUE(cell.has_value());
     EXPECT_EQ(*cell, (BlockPos {-3, 0, -5}));
@@ -322,7 +363,7 @@ TEST(MobSpawnCellTest, RejectsSpawnOverlappingThePlayer) {
     // not overlapped (its x span [-0.8, -0.2] stops before the player's
     // x start at 0.2).
     auto cell = findMobSpawnCell(f.world, f.blocks, 0.4f, 1.0f, 0, 0, 0,
-                                 0.6f, 1.8f, {0.2f, 1.0f, -0.3f},
+                                 0.6f, 1.8f, 0.0f, 0, {0.2f, 1.0f, -0.3f},
                                  {3.0f, 2.8f, 3.0f}, {});
     ASSERT_TRUE(cell.has_value());
     EXPECT_EQ(*cell, (BlockPos {-1, 0, 0}));
@@ -333,8 +374,72 @@ TEST(MobSpawnCellTest, RejectsFloorFarFromThePlayers) {
     // Raise the player's floor: the flat floor at y=0 is then more than
     // kSpawnFloorDelta below it, so no cell qualifies.
     auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 10,
-                                 0.6f, 1.8f, kPlayerMin, kPlayerMax, {});
+                                 0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax, {});
     EXPECT_FALSE(cell.has_value());
+}
+
+// Light-gate tests (the day/night spawn rule). Fixture cells read as
+// 0/0 light (fresh chunks = dark); a cell is made "bright" by writing
+// the chunk's light arrays directly (world (0, 1, -6) = local (0, 1, 10)
+// of chunk (0, 0, -1)).
+TEST(MobSpawnCellTest, SpawnsInDarknessAtNight) {
+    Fixture f;
+    // Night (dayFactor 0): the open surface's sky contribution scales to
+    // 0, so the dark-only mob may spawn at the first candidate.
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax,
+                                 {});
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {0, 0, -6}));
+}
+
+TEST(MobSpawnCellTest, SkipsCellThatIsTooBrightByDay) {
+    Fixture f;
+    // Full sky light in the first candidate's feet cell; by day
+    // (dayFactor 1) the effective level is 15 > 0 -> rejected, the scan
+    // continues to the next candidate (-3, -5).
+    f.world.getOrCreateChunk({0, 0, -1}).setSkyLightAt(0, 1, 10, 15);
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, 1.0f, 0, kPlayerMin, kPlayerMax,
+                                 {});
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {-3, 0, -5}));
+}
+
+TEST(MobSpawnCellTest, NightScalesSkyLightToZero) {
+    Fixture f;
+    // The SAME bright cell is spawnable at night (dayFactor 0 -> the sky
+    // contribution is 0, the renderer-darkening convention).
+    f.world.getOrCreateChunk({0, 0, -1}).setSkyLightAt(0, 1, 10, 15);
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax,
+                                 {});
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {0, 0, -6}));
+}
+
+TEST(MobSpawnCellTest, BlockLightStillBlocksSpawnAtNight) {
+    Fixture f;
+    // Block light (glowstone) is time-independent: level 1 > 0 even at
+    // deep night -> rejected.
+    f.world.getOrCreateChunk({0, 0, -1}).setBlockLightAt(0, 1, 10, 1);
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax,
+                                 {});
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {-3, 0, -5}));
+}
+
+TEST(MobSpawnCellTest, PermissiveMobSpawnsInLight) {
+    Fixture f;
+    // A mob with spawn_max_light 15 (a future passive mob) may spawn in
+    // full daylight.
+    f.world.getOrCreateChunk({0, 0, -1}).setSkyLightAt(0, 1, 10, 15);
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, 1.0f, 15, kPlayerMin,
+                                 kPlayerMax, {});
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {0, 0, -6}));
 }
 
 // -- box-model mesh ------------------------------------------------------------
