@@ -28,6 +28,24 @@ Result<void> readPositiveNumber(const Json& def, const char* key,
     return {};
 }
 
+// Reads a required non-negative number from `def`. The AI treats 0 of the
+// detect/attack fields as "never" (a passive mob: it wanders and never
+// chases or attacks), so 0 is valid data there, not a typo.
+Result<void> readNonNegativeNumber(const Json& def, const char* key,
+                                   float& out, std::string what) {
+    const Json* v = def.find(key);
+    if (v == nullptr || !v->isNumber()) {
+        return MC_FAIL(what + ": '" + key + "' is required and must be a "
+                       "number");
+    }
+    out = static_cast<float>(v->asDouble());
+    if (out < 0.0f) {
+        return MC_FAIL(what + ": '" + key + "' must be >= 0, got " +
+                       std::to_string(out));
+    }
+    return {};
+}
+
 // Reads a required [x, y, z] array of numbers.
 Result<Vec3> readVec3(const Json& v, std::string what) {
     if (!v.isArray() || v.size() != 3 || !v.at(0).isNumber() ||
@@ -50,14 +68,14 @@ Result<void> MobRegistry::parseProperties(const Json& def,
     MC_TRY(r);
     r = readPositiveNumber(def, "speed", out.speed, "mob properties");
     MC_TRY(r);
-    r = readPositiveNumber(def, "detect_radius", out.detectRadius,
-                           "mob properties");
+    r = readNonNegativeNumber(def, "detect_radius", out.detectRadius,
+                              "mob properties");
     MC_TRY(r);
-    r = readPositiveNumber(def, "attack_range", out.attackRange,
-                           "mob properties");
+    r = readNonNegativeNumber(def, "attack_range", out.attackRange,
+                              "mob properties");
     MC_TRY(r);
-    r = readPositiveNumber(def, "attack_damage", out.attackDamage,
-                           "mob properties");
+    r = readNonNegativeNumber(def, "attack_damage", out.attackDamage,
+                              "mob properties");
     MC_TRY(r);
     r = readPositiveNumber(def, "attack_cooldown", out.attackCooldown,
                            "mob properties");

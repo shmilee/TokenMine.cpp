@@ -79,6 +79,29 @@ def skin_tile(salt: int, base, eyes=False) -> list:
     return pixels
 
 
+def cow_fur_tile(salt: int, base, eyes=False) -> list:
+    """Cow fur (Phase 22): brown base with white mottled patches (the hash
+    decides the patch boundaries); the head also gets two dark eyes
+    (rows 5-6)."""
+    (br, bg, bb) = base
+    (wr, wg, wb) = (228, 222, 210)
+    pixels = []
+    for y in range(SIZE):
+        row = []
+        for x in range(SIZE):
+            patch = h2(x, y, salt + 7) % 100 < 26
+            n = noise(x, y, salt, 10)
+            if patch:
+                r, g, b = clamp(wr + n), clamp(wg + n), clamp(wb + n)
+            else:
+                r, g, b = clamp(br + n), clamp(bg + n), clamp(bb + n)
+            if eyes and 5 <= y <= 6 and (3 <= x <= 5 or 10 <= x <= 12):
+                (r, g, b) = (40, 28, 20)
+            row.append((r, g, b, 255))
+        pixels.append(row)
+    return pixels
+
+
 def shirt_tile(salt: int, base) -> list:
     (br, bg, bb) = base
     pixels = []
@@ -99,6 +122,11 @@ def main() -> None:
               skin_tile(0x5EED, (110, 168, 84), eyes=True))
     write_png(os.path.join(OUT_DIR, "zombie_body.png"),
               shirt_tile(0x5EED, (52, 92, 112)))
+    # Brown-and-white cow fur (eyes on the head's front face).
+    write_png(os.path.join(OUT_DIR, "cow_body.png"),
+              cow_fur_tile(0xC0F1, (122, 88, 62)))
+    write_png(os.path.join(OUT_DIR, "cow_head.png"),
+              cow_fur_tile(0xC0F2, (122, 88, 62), eyes=True))
 
 
 if __name__ == "__main__":

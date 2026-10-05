@@ -7,9 +7,11 @@
 //   "properties": {
 //     "health": 20,               // > 0
 //     "speed": 0.8,               // blocks/s while chasing, > 0
-//     "detect_radius": 16,        // horizontal distance that starts a chase
-//     "attack_range": 1.6,        // horizontal distance that allows attacks
-//     "attack_damage": 3,         // damage to the player per hit
+//     "detect_radius": 16,        // >= 0; horizontal distance that starts a
+//                                 // chase (0 = never: a passive mob)
+//     "attack_range": 1.6,        // >= 0; horizontal distance that allows
+//                                 // attacks (0 = never attacks)
+//     "attack_damage": 3,         // >= 0; damage per hit (0 = harmless)
 //     "attack_cooldown": 1.0,     // seconds between hits
 //     "wander_interval": 2.5,     // seconds between wander decisions
 //     "spawn_max_light": 0,       // 0..15; only spawn where the current

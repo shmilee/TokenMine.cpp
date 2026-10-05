@@ -72,7 +72,8 @@ cmake --build build
     取自 48×16 条带（`assets/textures/health.png`，`tools/generate_health_icons.py`）；
     填充 = `clamp(hp − 2i, 0, 2)`（半心按 0.5 HP 粒度渲染）。只在游玩态（锁定 +
     背包未开）显示，无输入运行零新增绘制
-- **Mob 与 AI**（Phase 20，`MobEntity`/`MobRegistry`，全数据驱动；v1 数据仅 zombie）：
+- **Mob 与 AI**（Phase 20，`MobEntity`/`MobRegistry`，全数据驱动；数据含
+  zombie（敌对）+ cow（被动，Phase 22））：
   - **生成**：帧节奏驱动（`data/mob_spawning.json`：每 `check_every_frames` 帧尝试
     一次、`first_spawn_frame` 之前不生成、`max_mobs` 上限）；生成格 = 玩家列周围
     `[min_radius, max_radius]` 环内按固定扫描序的第一个合法格（固体地板 + 头顶
@@ -84,22 +85,31 @@ cmake --build build
      必须 ≤ 该 mob 的 `spawn_max_light`（mob 数据字段，0..15，默认 0 = 只在
      黑暗生成——Minecraft 敌对 mob 约定）。dayFactor 是渲染层昼夜系数（正午
      1、深夜 0、晨昏平滑过渡），所以 zombie 白天（开阔地天空光 15 → 有效
-     15 > 0）不生成、夜晚生成；萤石照亮处即使夜晚也不生成；树冠/洞穴的
-     永久暗格（存储天空光 0）白天也可生成（与 Minecraft 一致）
+     15 > 0）不生成、夜晚生成；cow（`spawn_max_light` 15）任何光照/时间
+     都可生成（被动 mob 约定）；萤石照亮处即使夜晚也不生成 zombie；树冠/
+     洞穴的永久暗格（存储天空光 0）白天也可生成（与 Minecraft 一致）。
+     类型在每次尝试时按数据名单确定性抽取（种子 ⊕ 帧号），抽中的类型过不
+     了光门则该次尝试作废（如白天抽中 zombie）
   - **AI 状态机**（确定性：种子 = 世界种子 ⊕ 生成序号，splitmix64 流）：
     **Wander**（默认；每 `wander_interval` 秒一次种子随机决策：1/3 站定、
     其余半速随机方向走）→ **Chase**（玩家进入 `detect_radius`（水平）且高度差
     ≤2：全速追）→ **Attack**（水平距离 ≤`attack_range` 且高度差 ≤1：停下、
     面向玩家、每 `attack_cooldown` 秒打 `attack_damage` 点——走 P16 的玩家
-    受伤路径：红闪/音效/死亡全由既有轮询驱动）。玩家死亡时不追不打
+    受伤路径：红闪/音效/死亡全由既有轮询驱动）。玩家死亡时不追不打。
+    **被动 mob**（Phase 22）：`detect_radius`/`attack_range`/
+    `attack_damage` 三个字段允许 0（校验 `>= 0`，负数仍拒绝）——0 值使
+    追/击条件永不成立，cow 只有 Wander 状态，纯数据表达，AI 代码无特判
   - **玩家攻击**：左键命中 mob（射线先比方块距离——**方块遮挡**：方块更近则打
     方块）= 挥击，按住时每 `0.25s` 一击：伤害取**选中物品的 `attack_damage`**
     数据（徒手/方块/材料=1.0，工具见 `data/items/*.json`，木镐 2 / 铁镐 3）+
     沿瞄准方向击退（水平 4 + 抬升 2.5，0.3s 击退窗口内 AI 不接管速度）
-  - **死亡**：HP 归零 → 掉落 `drops` 数据定义的物品（zombie 掉 `rotten_flesh`，
-    新 material 物品 + 图标）后移除；击退/坠落无伤害（v1）
-  - **渲染**：box 模型（zombie = 头 0.5³ + 身 0.5×1.0×0.3，各 6 面同一 atlas
-    tile，`tools/generate_mob_textures.py` 生成绿皮肤+深色眼 / 青色上衣），
+  - **死亡**：HP 归零 → 掉落 `drops` 数据定义的物品（zombie 掉
+    `rotten_flesh`，cow 掉 `leather`——均为 material 物品 + 图标）后移除；
+    击退/坠落无伤害（v1）
+  - **渲染**：box 模型（zombie = 头 0.5³ + 身 0.5×1.0×0.3；cow = 头
+    0.45³ + 身 0.8×0.7×1.1、AABB 1.2×1.5 比 zombie 宽，各 6 面同一 atlas
+    tile，`tools/generate_mob_textures.py` 生成 zombie 绿皮肤+深色眼/青色
+    上衣、cow 棕底白斑毛+深色眼），
     与掉落物同 pass（`translate(位置) × rotateY(朝向)`，朝向 = 相机 yaw 约定，
     箱体的 −Z 面是脸）；天空光全亮烘焙（与掉落物同一简化，无局部光）
   - **开关**：config `mobs.enabled`（默认 true）；**mob 不入存档**（与 Minecraft
@@ -188,7 +198,7 @@ cmake --build build
   WAV（`tools/generate_sounds.py`，44.1kHz 16-bit 单声道），音量
   `config audio.volume`（默认 0.7）
 - **物品与背包**（Phase 11/12，`Item`/`ItemStack`/`Inventory`，全数据驱动）：
-  - 物品 = 纯数据（`ItemRegistry`，当前 23 种 = 14 block + 2 工具 + 7 材料）：
+  - 物品 = 纯数据（`ItemRegistry`，当前 24 种 = 14 block + 2 工具 + 8 材料）：
     **每个数据方块隐式生成同名 block item**（无独立 JSON，方块定义是唯一来源）；
     **工具/材料**是显式数据（`assets/data/items/*.json`，`type: "tool"` 带
     `break_speed`，`type: "material"` 是通用非方块物品——锭/木棍/木板等，
@@ -446,15 +456,18 @@ iron_pickaxe（III/.S./.S.）。
    }
    ```
 
-   校验严格（同方块/物品注册表纪律）：id 非空且唯一、数值字段 >0、
-   `spawn_max_light` 为 0..15 的整数（默认 0，光照门——见上）、
+   校验严格（同方块/物品注册表纪律）：id 非空且唯一、数值字段 >0（唯三例外
+   `detect_radius`/`attack_range`/`attack_damage` 允许 0 = 被动/无害，负数
+   拒绝）、`spawn_max_light` 为 0..15 的整数（默认 0，光照门——见上）、
    `drops_count` ∈ [1,64]、box 越界/缺纹理名 = 明确报错；未知字段警告。
    `drops` 是**物品名**（init 时对 ItemRegistry 交叉校验，`""` = 不掉落）。
 3. 生成名单：`assets/data/mob_spawning.json` 的 `mobs` 数组加入该 id
    （生成节奏/环半径/上限/离玩家消散距离都在这个文件里，全部数据驱动）。
 
-v1 数据只有 zombie（绿色、只在黑暗生成（`spawn_max_light` 0）、
-不游泳不拆方块、无动画——见 KNOWN_ISSUES.md 的 Mob 章节）。
+v1 数据有 zombie（敌对：绿色、只在黑暗生成（`spawn_max_light` 0））与
+cow（被动：棕白斑毛、`detect_radius`/`attack_range`/`attack_damage` 全 0、
+`spawn_max_light` 15 任何时间可生成、掉 `leather`）；两者都不游泳不拆方块
+无动画——见 KNOWN_ISSUES.md 的 Mob 章节。
 
 ### 使用存档（Phase 13）
 
@@ -557,6 +570,8 @@ mine-craft/
 - [x] **Phase 20** — Mob 与 AI：数据驱动 mob 类型（`data/mobs/*.json` 严格校验：health/speed/detect_radius/attack_range/attack_damage/attack_cooldown/wander_interval/drops(+count)/box 模型（每箱一 atlas tile，须在模型 AABB 内）+ init 交叉校验（纹理/掉落/spawning 列表））/`MobEntity` AI 状态机（Wander 种子随机决策 → Chase 全速 → Attack 冷却打击，经 hit 回调走 P16 受伤路径；击退窗口抑制 AI；死亡掉落入 despawn pass）/确定性生成（帧节奏 + 固定扫描序首合法格：地板/头顶/高度带/玩家重叠/mob 间距；种子 = 世界种子 ⊕ 生成序号）/玩家攻击（左键 mob 优先于方块——方块遮挡；0.25s 挥击节奏；物品 `attack_damage` 数据 + 击退）/box 模型 mesh（共享六面表，`textures/mobs` 并入 atlas：zombie 头/身 2 tile，atlas 21 tile）/mob 固定帧步长（`kMobStepPerFrame`，运动实体截图逐字节可复现的日循环同款约定）/zombie 掉 `rotten_flesh`（新 material 物品+图标）/config `mobs.enabled`（默认 true；`first_spawn_frame=60` 保证 60 帧基线无 mob）；无输入基线逐字节不变（`base18` 门通过），mobs 240f ×2 字节一致 + 像素判据（vs 无 mob 对照：世界区 54k px 差、8.4k 绿皮肤 px、UI 零差、无伤害）
 - [x] **Phase 20.5** — 修复两项用户反馈：① 昼夜生成规则——mob 数据字段 `spawn_max_light`（0..15 默认 0，Minecraft 敌对 mob 约定）+ `findMobSpawnCell` 光照门（生成格脚位的当前有效光照 = floor(天空光×dayFactor) 与方块光取大，≤ 阈值才生成；zombie 白天不生成、夜晚/暗格生成）；② 窗口缩放——`window.resizable`（默认 true）+ `Window::width/height` 每帧实时读像素尺寸（SDL3 `SDL_GetWindowSizeInPixels`），视口/投影纵横比/UI 布局/截图全部跟随窗口，最小 320×200。588/588 单测；E2E：base18 门 ×2 字节不变、白天 mobs-on == mobs-off（字节级证明白天不生成）、夜晚（day_length 1200s + start 0.536 黄昏段）mobs ×2 字节一致 vs 对照 54k px 差（bbox 与 P20 相同）、resize 运行 截图 == 窗口实际尺寸（场景跟随缩放）
 - [x] **Phase 21** — 弓 + Projectile 游戏内发射器 + 箭渲染：物品数据字段 `shoot_speed`/`shoot_damage`（`(0,100]`/`[0,100]`，缺席=非发射器；严格校验）+ bow 物品（material，max_stack 1，图标）+ shaped 配方（3 stick + 1 planks C 形）/发射器语义（选中发射器时左键=射箭，不再挖掘/挥击；按住 0.25s 节奏；箭 = P10 `Projectile`：数据速度/伤害、眼前 0.3 格沿瞄准、固定帧步长 `kProjectileStepPerFrame`）/`Projectile` +`damage()`/`kill()`（非方块来源消耗，同 despawn 路径）/箭矢↔mob 每帧扫掠 AABB 命中（`raycastAabb` 位移方向 t∈[0,1]，首命中伤 `shoot_damage` + 近战式击退，箭消耗；穿过玩家/其他实体、不伤玩家）/箭渲染（0.55×0.05 细盒体纯色 `u_useTexture=0` 路径，`arrowOrientation` 纯函数把本地 −Z 转到速度，相机同款 rotateY×rotateX 约定）/`shoot` 音效 + 弓图标/存档守卫修正（mob/箭为瞬态实体，保存时跳过而非报错——修复 P20 遗留的"存活 mob 时 --save 退出保存失败"）；600/600 单测（+12：shoot 字段解析/默认/拒绝 ×5、箭几何 4、朝向 3、`kill()` 1）；E2E：base18 门 ×2 字节不变、bow 存档运行（热栏 0 = bow）×3 字节一致（运动实体确定性）、vs 无射击对照 616 px 差（2 支飞行箭、屏幕中央竖直带 x[632,647] y[338,489]、93% 箭棕色像素、UI/心带零差）
+
+- [x] **Phase 22** — 更多 mob（纯数据）：被动 mob 落地——`detect_radius`/`attack_range`/`attack_damage` 校验放宽为 `>= 0`（0 = 永不追/永不攻击/无害，负数与其余必填字段 0 仍拒绝；AI 状态机对 0 值天然不触发 Chase/Attack，零特判代码）/cow（`data/mobs/cow.json`：HP 10、speed 0.5、全 0 攻击字段、`wander_interval` 3.0、`spawn_max_light` 15 = 任何光照/时间可生成、掉 `leather`；box 模型 头 0.45³ + 身 0.8×0.7×1.1、AABB 1.2×1.5——首个比 zombie 宽的模型）/`leather` material 物品 + 图标/cow 纹理（棕底白斑毛 + 深色眼，2 tile，atlas 21→23）/`mob_spawning.json` 名单 [zombie, cow]——类型按名单确定性抽取（种子 ⊕ 帧号），过不了光门的尝试作废（白天抽中 zombie）；E2E：base18 门 ×2 字节不变（atlas +2 tile 对既有渲染零影响）、白天 240f mobs-on ×2 与 mobs-off ×2 各自逐字节一致、vs 对照 7578 px 差（bbox x[631,743] y[244,326] 单一 cow 轮廓，77% cow 棕 + 1% 白斑 + 22% 边缘/暗部，**zombie 绿 0 px** = 白天敌对压制保持，UI/心带零差）；603/603 单测（+3：passive 解析、负数/零拒绝 ×7 用例、passive AI 300 帧不追不打）
 
 ## 开发约定
 

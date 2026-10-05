@@ -1870,7 +1870,10 @@ void Game::attemptMobSpawn() {
     }
     // Deterministic type pick among the data-listed mobs (the seed mixes
     // the world seed with the frame, so the choice is a pure function of
-    // the run; v1 data lists a single mob).
+    // the run). Note: the pick happens BEFORE the light gate, so an
+    // attempt whose type cannot spawn at the current light is simply
+    // wasted (e.g. a zombie pick by day) — the cadence, not the type,
+    // decides when attempts happen.
     const std::uint64_t pick =
         splitmix64(static_cast<std::uint64_t>(m_generator->seed()) ^
                    (std::uint64_t{0x9E3779B97F4A7C15} *

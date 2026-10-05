@@ -24,6 +24,10 @@
 //            `attack_damage` through the hit callback every
 //            `attack_cooldown` (the game wires it to Player::damage).
 // A dead player is neither chased nor attacked (the mob wanders).
+// Passive mobs (Phase 22): detect_radius 0 (and/or attack_range 0 /
+// attack_damage 0) make the chase/attack conditions never hold, so the
+// mob only ever wanders — no code path distinguishes them from hostile
+// mobs, the data alone decides.
 //
 // Combat (player side): damage() subtracts from health; a killing hit sets
 // the dead state — the game removes the mob the same frame and spawns its

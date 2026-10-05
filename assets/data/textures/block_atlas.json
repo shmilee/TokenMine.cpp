@@ -22,6 +22,8 @@
     "crafting_table_top": [1, 4],
     "planks": [2, 4],
     "zombie_head": [3, 4],
-    "zombie_body": [0, 5]
+    "zombie_body": [0, 5],
+    "cow_body": [1, 5],
+    "cow_head": [2, 5]
   }
 }

@@ -1,0 +1,6 @@
+{
+  "id": "leather",
+  "type": "material",
+  "max_stack": 64,
+  "icon": "leather"
+}

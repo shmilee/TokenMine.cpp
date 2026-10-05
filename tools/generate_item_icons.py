@@ -225,6 +225,23 @@ def iron_pickaxe():
     return pickaxe((206, 206, 212), (238, 238, 244), salt=53)
 
 
+def leather():
+    """A piece of leather hide: a tan irregular slab with a darker rim and
+    a few crease lines."""
+    px = blank()
+    base = (196, 158, 108)
+    rim = (140, 104, 62)
+    for y in range(SIZE):
+        for x in range(SIZE):
+            d = max(abs(x - 7.5), abs(y - 7.5))
+            if d < 5.5 + (h2(x, y, 41) % 3) - 1:
+                setpx(px, x, y, rim if d > 4.2 else base, salt=41)
+    # Crease lines.
+    line(px, 5, 6, 10, 5, (150, 112, 70), salt=43)
+    line(px, 6, 9, 11, 10, (150, 112, 70), salt=45)
+    return px
+
+
 def bow():
     px = blank()
     stave = (110, 74, 42)
@@ -255,6 +272,7 @@ ITEMS = {
     "wooden_pickaxe": wooden_pickaxe,
     "iron_pickaxe": iron_pickaxe,
     "bow": bow,
+    "leather": leather,
 }
 
 

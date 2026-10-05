@@ -233,6 +233,65 @@ TEST(MobRegistryTest, RejectsNonIntegerSpawnMaxLight) {
     EXPECT_FALSE(r.ok());
 }
 
+TEST(MobRegistryTest, ParsesPassiveMob) {
+    // A passive mob (Phase 22): zero detect/attack values are valid data
+    // ("never chases / never attacks / harmless"), not typos.
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(R"({
+      "id": "cow",
+      "properties": {
+        "health": 10,
+        "speed": 0.5,
+        "detect_radius": 0,
+        "attack_range": 0,
+        "attack_damage": 0,
+        "attack_cooldown": 1.0,
+        "wander_interval": 3.0,
+        "spawn_max_light": 15,
+        "drops": "leather",
+        "drops_count": 1
+      },
+      "model": {
+        "width": 1.2,
+        "height": 1.5,
+        "boxes": [
+          {"pos": [0.0, 0.9, 0.0], "size": [0.8, 0.7, 1.1], "texture": "a"},
+          {"pos": [0.0, 1.2, -0.35], "size": [0.45, 0.45, 0.45], "texture": "b"}
+        ]
+      }
+    })"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Mob& mob = mobs.at(*r);
+    EXPECT_FLOAT_EQ(mob.properties.detectRadius, 0.0f);
+    EXPECT_FLOAT_EQ(mob.properties.attackRange, 0.0f);
+    EXPECT_FLOAT_EQ(mob.properties.attackDamage, 0.0f);
+    EXPECT_EQ(mob.properties.spawnMaxLight, 15);
+    EXPECT_EQ(mob.properties.drops, "leather");
+    EXPECT_EQ(mob.model.boxes.size(), 2u);
+}
+
+TEST(MobRegistryTest, RejectsNegativePassiveFields) {
+    // 0 is valid for the detect/attack fields (passive mob), but negative
+    // values and zeroed-out required-positive fields are still rejected.
+    const char* const cases[][2] = {
+        {"\"detect_radius\": 16", "\"detect_radius\": -1"},
+        {"\"attack_range\": 1.6", "\"attack_range\": -0.5"},
+        {"\"attack_damage\": 3", "\"attack_damage\": -1"},
+        {"\"health\": 20", "\"health\": 0"},
+        {"\"speed\": 0.8", "\"speed\": 0"},
+        {"\"attack_cooldown\": 1.0", "\"attack_cooldown\": 0"},
+        {"\"wander_interval\": 2.5", "\"wander_interval\": 0"},
+    };
+    for (const auto& c : cases) {
+        MobRegistry mobs;
+        std::string def = kZombieDef;
+        const std::string from(c[0]);
+        def.replace(def.find(from), from.size(), c[1]);
+        auto r = mobs.registerMob(parseJson(def));
+        EXPECT_FALSE(r.ok()) << c[0];
+    }
+}
+
 // -- spawning config ----------------------------------------------------------
 
 TEST(MobSpawningConfigTest, ParsesValid) {
@@ -654,6 +713,39 @@ TEST(MobAiTest, KnockbackSuppressesSteeringThenResumes) {
     }
     EXPECT_EQ(mob.state(), MobState::Chase);
     EXPECT_NEAR(mob.velocity().z, 0.8f, 1e-3f);
+}
+
+TEST(MobAiTest, PassiveMobNeverChasesOrAttacks) {
+    // detect_radius 0 + attack_range 0 + attack_damage 0 (Phase 22): the
+    // chase/attack conditions never hold even with the player a half block
+    // away, so the mob only wanders and never lands a hit.
+    Fixture f;
+    MobRegistry mobs;
+    std::string def = kZombieDef;
+    const std::string detect = "\"detect_radius\": 16";
+    def.replace(def.find(detect), detect.size(), "\"detect_radius\": 0");
+    const std::string range = "\"attack_range\": 1.6";
+    def.replace(def.find(range), range.size(), "\"attack_range\": 0");
+    const std::string damage = "\"attack_damage\": 3";
+    def.replace(def.find(damage), damage.size(), "\"attack_damage\": 0");
+    ASSERT_TRUE(mobs.registerMob(parseJson(def)).ok());
+    MobEntity mob = makeMob(f, mobs.at(MobID{0}), {8.5f, 1.0f, 7.5f});
+    // 0.5 blocks from the player: well inside the hostile mob's 1.6 range.
+    mob.setPlayer({8.5f, 1.0f, 8.0f}, true);
+    int hits = 0;
+    float totalDamage = 0.0f;
+    mob.setHitCallback([&](float amount) {
+        ++hits;
+        totalDamage += amount;
+    });
+    // 300 updates (5 s): a couple of wander decisions fire, but the state
+    // never leaves Wander and no hit may ever land.
+    for (int i = 0; i < 300; ++i) {
+        mob.update(kDt);
+        EXPECT_EQ(mob.state(), MobState::Wander);
+    }
+    EXPECT_EQ(hits, 0);
+    EXPECT_FLOAT_EQ(totalDamage, 0.0f);
 }
 
 // -- combat ----------------------------------------------------------------------
