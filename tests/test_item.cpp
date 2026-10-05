@@ -444,3 +444,48 @@ TEST(ItemRegistryTest, RejectsBadShootDamage) {
                          R"({"id":"b","type":"material","shoot_damage":"hard"})"))
                      .ok());
 }
+
+// -- food (Phase 23) --------------------------------------------------------
+
+TEST(ItemRegistryTest, ParsesFood) {
+    // rotten_flesh: a material that feeds the player (data-driven food).
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"rotten_flesh","type":"material","max_stack":64,
+                      "restore_hunger":4})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(items.at(*r).restoreHunger, 4);
+}
+
+TEST(ItemRegistryTest, FoodDefaultsToNotFood) {
+    // No restore_hunger: not food (every pre-Phase-23 item).
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"gem","type":"material"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(items.at(*r).restoreHunger, 0);
+}
+
+TEST(ItemRegistryTest, RejectsBadRestoreHunger) {
+    ItemRegistry items;
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","restore_hunger":0})"))
+                     .ok()); // explicit 0 = a typo (ABSENT is the default)
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","restore_hunger":-1})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","restore_hunger":21})"))
+                     .ok()); // above the player's max hunger
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","restore_hunger":2.5})"))
+                     .ok()); // must be an integer
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","restore_hunger":"a lot"})"))
+                     .ok());
+}

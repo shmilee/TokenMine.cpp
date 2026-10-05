@@ -47,18 +47,28 @@ cmake --build build
 视口、投影纵横比与屏幕 UI 布局每帧读取窗口当前像素尺寸，缩放后场景立即跟随
 （最小尺寸 320×200）；设为 `false` 则锁定在配置尺寸。
 
-## 当前可玩内容（Phase 21）
+## 当前可玩内容（Phase 23）
 
 - **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时）/游泳时随时上浮，
   `LeftShift` 冲刺，鼠标转向（**左键点击锁定指针；转向仅在指针锁定时生效**，
   未锁定的光标不会转动视角——保证无输入运行下截图可逐字节复现）
-- **生存系统**（Phase 16，`Player` 扩展）：
+- **生存系统**（Phase 16 + 23，`Player` 扩展）：
   - **生命值 / 受伤 / 死亡**：`maxHealth=20`（10 颗心，每颗 2 HP）；
     **坠落伤害** = `max(0, 净下落格数 − 3)` HP（从离地帧记录 `fallStartY`，
     落地时结算；落入水中的落地取消伤害）；掉出世界（y < −32）= 直接死亡
     （`damage(maxHealth×1000)`）。死亡后冻结玩家、显示 "You died! / Press R"，
-    `R` 重生 = 回出生点 + 满血 + 速度清零（**背包保留**）
-  - **自然回复**：脱离受伤状态 `regenDelay=10s` 后，每 `regenInterval=4s` 回 1 HP
+    `R` 重生 = 回出生点 + 满血 + **满饥饿** + 速度清零（**背包保留**）
+  - **自然回复**：脱离受伤状态 `regenDelay=10s` 后，每 `regenInterval=4s` 回 1 HP；
+    **饥饿门控**（Phase 23，Minecraft 规则：饥饿 < 6 无自然回复）——门控关闭时
+    累加器暂停（不重置），吃饱后继续
+  - **饥饿**（Phase 23，`maxHunger=20`，10 只鸡腿每只 2 点）：每 `hungerDecay=4s`
+    衰减 1 点（无饱和度缓冲，v1）；**饥饿 = 0** 时每 `starveInterval=4s` 受 1 点
+    饥饿伤害（走正常伤害路径 → 红闪/音效/死亡全套复用）；**吃食物**：选中食物
+    时右键 = 吃（回复该物品 `restore_hunger` 数据点、扣 1 个库存、播放 "eat"），
+    不再放置/交互；**满饥饿时吃为 no-op 但仍吞掉该次右键**（Minecraft：满条
+    时不能放置）
+  - **食物数据**（Phase 23）：物品可选字段 `restore_hunger`（整数 [1, 20]；
+    缺省 = 非食物，显式 0 拒绝）——当前仅 `rotten_flesh`（=4，zombie 掉落）
   - **受伤反馈**：受击瞬间屏幕红色闪光（`0.35×剩余/0.5s` 渐隐）+ 播放 "hurt"；
     死亡播放 "death"。游戏轮询生命值（`m_prevHealth`）驱动，致死伤不重复播放
   - **潜行**（`LeftControl`）：身高 1.8→1.6（脚底不动）、眼高 1.62→1.42、
@@ -68,10 +78,12 @@ cmake --build build
     （无需跳跃即可爬上 1 格台阶，2 格仍不行）
   - **玩家 ↔ 掉落物分离**：玩家与物品实体不再互相穿过——沿最小穿透轴把
     物品推开（远离玩家中心，面到面跨度）；玩家自身不被动位移
-  - **生命 HUD**：hotbar 上方 10 颗心（16px、2px 间隔），三态贴图（满 / 半 / 空）
-    取自 48×16 条带（`assets/textures/health.png`，`tools/generate_health_icons.py`）；
-    填充 = `clamp(hp − 2i, 0, 2)`（半心按 0.5 HP 粒度渲染）。只在游玩态（锁定 +
-    背包未开）显示，无输入运行零新增绘制
+  - **生命 / 饥饿 HUD**：hotbar 上方 10 颗心（16px、2px 间隔）+ 心带右侧同行
+    10 只鸡腿（带间 6px 间距），各三态贴图（满 / 半 / 空）取自 48×16 条带
+    （`assets/textures/health.png` / `hunger.png`，
+    `tools/generate_health_icons.py` / `generate_hunger_icons.py`）；
+    填充 = `clamp(value − 2i, 0, 2)`（半图标按 0.5 粒度渲染）。只在游玩态
+    （锁定 + 背包未开）显示，无输入运行零新增绘制
 - **Mob 与 AI**（Phase 20，`MobEntity`/`MobRegistry`，全数据驱动；数据含
   zombie（敌对）+ cow（被动，Phase 22））：
   - **生成**：帧节奏驱动（`data/mob_spawning.json`：每 `check_every_frames` 帧尝试
@@ -194,8 +206,9 @@ cmake --build build
   无回调；初始化失败优雅降级为静音 + WARN）：固定事件集 v1（数据驱动，无
   per-block 差异）——破坏（按住时每 0.3s 一个 dig tick + 完成时的 break）、
   放置、拾取（含 Q 丢弃）、脚步（移动 + 贴地 + 锁定 + 背包关闭时每 0.4s）、
-  背包开/关、合成成功、受伤/死亡（Phase 16）、射箭（Phase 21）。11 个程序化
-  WAV（`tools/generate_sounds.py`，44.1kHz 16-bit 单声道），音量
+  背包开/关、合成成功、受伤/死亡（Phase 16）、射箭（Phase 21）、进食
+  （Phase 23）。12 个程序化 WAV（`tools/generate_sounds.py`，44.1kHz 16-bit
+  单声道），音量
   `config audio.volume`（默认 0.7）
 - **物品与背包**（Phase 11/12，`Item`/`ItemStack`/`Inventory`，全数据驱动）：
   - 物品 = 纯数据（`ItemRegistry`，当前 24 种 = 14 block + 2 工具 + 8 材料）：
@@ -222,8 +235,8 @@ cmake --build build
 - **存档/读档**（Phase 13，`--save <slot>`，`src/core/save.{hpp,cpp}`）：
   存档文件 `data/saves/<slot>.json` = **seed + 与生成态的 diff + 完整游戏状态**——
   不重复存储地形，只存"和这个 seed 生成的世界不同的格子"（`blocks`/`fluids`
-  编辑列表，破坏=`"air"`）+ 玩家位置/朝向 + 昼夜时间 + 27 格背包 + 选中格 +
-  掉落物实体（含 120s 寿命与拾取延迟计时器）。读档 = 正常从 seed 生成世界后
+  编辑列表，破坏=`"air"`）+ 玩家位置/朝向/生命/饥饿 + 昼夜时间 + 27 格背包 +
+  选中格 + 掉落物实体（含 120s 寿命与拾取延迟计时器）。读档 = 正常从 seed 生成世界后
   逐格应用编辑（先方块后流体）→ 全量重传播光照 → 恢复玩家/背包/实体/时间。
   加载校验**严格**（机器生成的文件出现未知字段 = 损坏/版本不符，直接报错：
   format 号、seed 与生成 seed 一致、物品/方块名已注册、数量 ≤ max_stack、
@@ -354,6 +367,7 @@ cmake --build build
   "attack_damage": 2,               // 可选（Phase 20）：挥击伤害，(0, 100]，默认 1.0
   "shoot_speed": 15.0,              // 可选（Phase 21）：发射器速度，(0, 100]；>0 = 投射物发射器（弓）
   "shoot_damage": 5.0,              // 可选（Phase 21）：箭矢命中伤害，[0, 100]，默认 0
+  "restore_hunger": 4,              // 可选（Phase 23）：食物恢复饥饿，整数 [1,20]；缺省=非食物
   "max_stack": 1,                   // 1..64，默认 64
   "icon": "wooden_pickaxe"          // UI 图标（Phase 15）：assets/textures/items/<icon>.png
 }
@@ -572,6 +586,8 @@ mine-craft/
 - [x] **Phase 21** — 弓 + Projectile 游戏内发射器 + 箭渲染：物品数据字段 `shoot_speed`/`shoot_damage`（`(0,100]`/`[0,100]`，缺席=非发射器；严格校验）+ bow 物品（material，max_stack 1，图标）+ shaped 配方（3 stick + 1 planks C 形）/发射器语义（选中发射器时左键=射箭，不再挖掘/挥击；按住 0.25s 节奏；箭 = P10 `Projectile`：数据速度/伤害、眼前 0.3 格沿瞄准、固定帧步长 `kProjectileStepPerFrame`）/`Projectile` +`damage()`/`kill()`（非方块来源消耗，同 despawn 路径）/箭矢↔mob 每帧扫掠 AABB 命中（`raycastAabb` 位移方向 t∈[0,1]，首命中伤 `shoot_damage` + 近战式击退，箭消耗；穿过玩家/其他实体、不伤玩家）/箭渲染（0.55×0.05 细盒体纯色 `u_useTexture=0` 路径，`arrowOrientation` 纯函数把本地 −Z 转到速度，相机同款 rotateY×rotateX 约定）/`shoot` 音效 + 弓图标/存档守卫修正（mob/箭为瞬态实体，保存时跳过而非报错——修复 P20 遗留的"存活 mob 时 --save 退出保存失败"）；600/600 单测（+12：shoot 字段解析/默认/拒绝 ×5、箭几何 4、朝向 3、`kill()` 1）；E2E：base18 门 ×2 字节不变、bow 存档运行（热栏 0 = bow）×3 字节一致（运动实体确定性）、vs 无射击对照 616 px 差（2 支飞行箭、屏幕中央竖直带 x[632,647] y[338,489]、93% 箭棕色像素、UI/心带零差）
 
 - [x] **Phase 22** — 更多 mob（纯数据）：被动 mob 落地——`detect_radius`/`attack_range`/`attack_damage` 校验放宽为 `>= 0`（0 = 永不追/永不攻击/无害，负数与其余必填字段 0 仍拒绝；AI 状态机对 0 值天然不触发 Chase/Attack，零特判代码）/cow（`data/mobs/cow.json`：HP 10、speed 0.5、全 0 攻击字段、`wander_interval` 3.0、`spawn_max_light` 15 = 任何光照/时间可生成、掉 `leather`；box 模型 头 0.45³ + 身 0.8×0.7×1.1、AABB 1.2×1.5——首个比 zombie 宽的模型）/`leather` material 物品 + 图标/cow 纹理（棕底白斑毛 + 深色眼，2 tile，atlas 21→23）/`mob_spawning.json` 名单 [zombie, cow]——类型按名单确定性抽取（种子 ⊕ 帧号），过不了光门的尝试作废（白天抽中 zombie）；E2E：base18 门 ×2 字节不变（atlas +2 tile 对既有渲染零影响）、白天 240f mobs-on ×2 与 mobs-off ×2 各自逐字节一致、vs 对照 7578 px 差（bbox x[631,743] y[244,326] 单一 cow 轮廓，77% cow 棕 + 1% 白斑 + 22% 边缘/暗部，**zombie 绿 0 px** = 白天敌对压制保持，UI/心带零差）；603/603 单测（+3：passive 解析、负数/零拒绝 ×7 用例、passive AI 300 帧不追不打）
+
+- [x] **Phase 23** — 饥饿条 + 食物：物品可选字段 `restore_hunger`（整数 [1,20]，缺省=非食物、显式 0 拒绝）——`rotten_flesh` = 4（zombie 掉落即可食，"打 mob → 吃掉落"闭环）/玩家饥饿（`maxHunger=20`，每 4s 衰减 1 点，无饱和度 v1；饥饿 0 时每 4s 受 1 点饥饿伤害——走正常 `damage()` 路径复用红闪/音效/死亡）/自然回复饥饿门控（< 6 暂停，不重置）/吃食物（选中食物右键 = 吃：回复 + 扣 1 库存 + "eat" 音效，吞掉该次右键不放置/交互；满饥饿 no-op 但仍吞键）/重生恢复满饥饿/饥饿 HUD（心带右侧同行 10 只鸡腿，48×16 三态条带 `assets/textures/hunger.png` + `tools/generate_hunger_icons.py`，与心带共享图标度量）/存档格式 4（`player.hunger`，format 1-3 缺省 = 满）/`eat` 音效（12 WAV）/F3 加 hunger 行；E2E：base18 门字节不变（HUD 仅游玩态）、decay ×2 与 eat ×2 各自逐字节一致、eat vs decay 59 px 差（55 = 最后一只鸡腿 半→满 右侧 x[900,908] y[649,661]、4 = 热栏计数 16→15，UI 外零差）；615/615 单测（+12：food 字段解析/默认/拒绝 ×3、饥饿衰减/饥饿伤害/饿死/低饥阻断回复/钳制/重生恢复 ×6、存档 format 4 往返/缺省/拒绝 ×3）
 
 ## 开发约定
 

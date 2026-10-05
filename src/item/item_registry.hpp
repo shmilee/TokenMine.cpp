@@ -75,6 +75,9 @@ private:
     // (Phase 21) into `out`. shoot_speed > 0 marks the item as a
     // projectile launcher (the bow).
     static Result<void> parseShoot(const Json& def, Item& out);
+    // Parse the optional food field `restore_hunger` (Phase 23) into
+    // `out`. Presence marks the item as food (restoreHunger in [1, 20]).
+    static Result<void> parseFood(const Json& def, Item& out);
     // Parse the tool fields (`tool.break_speed` + `max_stack`) into `out`.
     static Result<void> parseTool(const Json& def, Item& out);
 

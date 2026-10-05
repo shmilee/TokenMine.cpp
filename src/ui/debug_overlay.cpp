@@ -20,7 +20,7 @@ std::string fmt(const char* format, ...) {
 
 std::vector<std::string> debugOverlayLines(const DebugInfo& info) {
     return {
-        "MineCraft v0.0.1 (Phase 16)",
+        "MineCraft v0.0.1 (Phase 23)",
         fmt("%d FPS | frame %d", info.fps, info.frame),
         fmt("chunks %d | draws %u | verts %llu", info.chunks, info.drawCalls,
             info.vertices),
@@ -37,6 +37,7 @@ std::vector<std::string> debugOverlayLines(const DebugInfo& info) {
             info.inventoryOpen ? "open" : "closed", info.particles,
             info.entities),
         fmt("health %.1f / %.1f", info.health, info.maxHealth),
+        fmt("hunger %.0f / %.0f", info.hunger, info.maxHunger),
     };
 }
 

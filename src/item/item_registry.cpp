@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <filesystem>
 
 #include "core/logger.hpp"
@@ -94,6 +95,29 @@ Result<void> ItemRegistry::parseShoot(const Json& def, Item& out) {
     return {};
 }
 
+Result<void> ItemRegistry::parseFood(const Json& def, Item& out) {
+    // Optional 'restore_hunger' (Phase 23): the item is FOOD when the
+    // field is present — right-clicking with it selected eats one
+    // (restores this much hunger). Integer in [1, 20] (the player's max
+    // hunger); the ABSENT field is the "not food" default, so an explicit
+    // 0 is rejected as a typo (same discipline as shoot_speed).
+    if (const Json* rh = def.find("restore_hunger")) {
+        if (!rh->isNumber()) {
+            return MC_FAIL("'restore_hunger' must be a number");
+        }
+        const double d = rh->asDouble();
+        if (d != std::floor(d)) {
+            return MC_FAIL("'restore_hunger' must be an integer (1..20)");
+        }
+        out.restoreHunger = static_cast<int>(d);
+        if (out.restoreHunger < 1 || out.restoreHunger > 20) {
+            return MC_FAIL("'restore_hunger' must be in [1, 20], got " +
+                           std::to_string(out.restoreHunger));
+        }
+    }
+    return {};
+}
+
 Result<void> ItemRegistry::parseTool(const Json& def, Item& out) {
     if (const Json* tool = def.find("tool")) {
         if (!tool->isObject()) {
@@ -152,7 +176,7 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
         if (key != "id" && key != "type" && key != "tool" &&
             key != "max_stack" && key != "attack_damage" &&
             key != "shoot_speed" && key != "shoot_damage" &&
-            key != "icon") {
+            key != "restore_hunger" && key != "icon") {
             MC_LOG_WARN("Item '" + name + "': unknown field '" + key +
                         "' ignored");
         }
@@ -166,6 +190,8 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     r = parseAttackDamage(def, item);
     MC_TRY(r);
     r = parseShoot(def, item);
+    MC_TRY(r);
+    r = parseFood(def, item);
     MC_TRY(r);
 
     // Optional 2D icon (Phase 15 UI): a texture file name under

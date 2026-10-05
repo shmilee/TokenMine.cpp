@@ -169,7 +169,12 @@ void Player::update(double dt) {
     }
     m_wasOnGround = m_onGround;
 
-    if (m_timeSinceDamage >= m_params.regenDelaySeconds) {
+    // Regeneration is GATED by hunger (Phase 23, Minecraft's rule: below
+    // the threshold there is no natural regen). The accumulator pauses
+    // rather than resets while the gate is closed, so a full meal makes
+    // the pending progress count.
+    if (m_timeSinceDamage >= m_params.regenDelaySeconds &&
+        m_hunger >= m_params.regenHungerThreshold) {
         m_regenAccum += dt;
         while (m_regenAccum >= m_params.regenIntervalSeconds) {
             m_regenAccum -= m_params.regenIntervalSeconds;
@@ -177,6 +182,33 @@ void Player::update(double dt) {
         }
     }
     m_timeSinceDamage += dt;
+
+    // Hunger (Phase 23): one point every hungerDecaySeconds while above
+    // zero (no saturation buffer in v1 — see KNOWN_ISSUES); at zero the
+    // player starves (1 HP per interval, through the normal damage path so
+    // the game's hurt flash/sound and death handling all fire).
+    if (m_hunger > 0.0f) {
+        m_starveAccum = 0.0; // a meal resets the pending starvation tick
+        m_hungerAccum += dt;
+        while (m_hungerAccum >= m_params.hungerDecaySeconds) {
+            m_hungerAccum -= m_params.hungerDecaySeconds;
+            m_hunger = std::max(0.0f, m_hunger - 1.0f);
+            if (m_hunger <= 0.0f) {
+                m_hungerAccum = 0.0;
+                break;
+            }
+        }
+    }
+    if (m_hunger <= 0.0f && !m_dead) {
+        m_starveAccum += dt;
+        while (m_starveAccum >= m_params.starveDamageIntervalSeconds) {
+            m_starveAccum -= m_params.starveDamageIntervalSeconds;
+            damage(1.0f);
+            if (m_dead) {
+                break;
+            }
+        }
+    }
 
     // Fell out of the world (the world's edge is void): death.
     if (belowKillPlane()) {
@@ -203,6 +235,10 @@ void Player::respawn() {
     m_health = m_params.maxHealth;
     m_timeSinceDamage = 0.0;
     m_regenAccum = 0.0;
+    // Respawn also refills the hunger (Minecraft: a fresh start is full).
+    m_hunger = m_params.maxHunger;
+    m_hungerAccum = 0.0;
+    m_starveAccum = 0.0;
     m_wasOnGround = false;
     m_fallStartY = m_spawnPos.y;
     teleportTo(m_spawnPos);

@@ -198,6 +198,13 @@ private:
     // Places one from the selected hotbar slot (block items only) and
     // consumes it from the stack.
     void placeBlock();
+    // Eats one from the selected hotbar slot when it holds food (Phase 23)
+    // and the player is not at full hunger: restores the item's data
+    // restore_hunger, consumes the stack entry, and plays the eat sound.
+    // Returns true when the click was consumed by eating (food selected,
+    // including the no-op case at full hunger), so the caller skips the
+    // normal right-click (interact/place) behavior for that click.
+    bool tryEat();
     // Cycles the hotbar selection; resets break progress (the selected
     // tool changed, Minecraft behavior).
     void cycleHotbar();
@@ -456,6 +463,10 @@ private:
     Texture m_healthTexture;
     double m_hurtFlash = 0.0; // seconds remaining of the red flash
     float m_prevHealth = -1.0f; // -1 = first frame (no hurt event)
+    // Phase 23 hunger: the drumstick strip (same 48x16 three-tile layout as
+    // the health strip). The player owns the hunger; the game only draws it
+    // and feeds it (tryEat).
+    Texture m_hungerTexture;
 
     ShaderProgram m_basicShader;
 

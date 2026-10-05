@@ -70,6 +70,13 @@ struct Item {
     // (every pre-Phase-21 item).
     float shootSpeed = 0.0f;
     float shootDamage = 0.0f;
+    // Phase 23: food (optional data field 'restore_hunger', integer in
+    // [1, 20]). restoreHunger > 0 marks the item as FOOD: while it is
+    // selected, the right button eats one (restores this much hunger and
+    // consumes the stack entry) instead of placing/interacting. 0 = not
+    // food (every pre-Phase-23 item; explicit 0 is rejected as a typo,
+    // the absent field is the "not food" default).
+    int restoreHunger = 0;
     // Phase 15 UI: the item's 2D icon texture name (a file under
     // assets/textures/items/, validated against the filesystem at game
     // init). Empty for block items, which render a 3D block cube instead.

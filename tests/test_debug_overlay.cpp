@@ -29,9 +29,11 @@ TEST(DebugOverlayTest, LinesFormat) {
     info.entities = 3;
     info.health = 17.0;
     info.maxHealth = 20.0;
+    info.hunger = 14.0;
+    info.maxHunger = 20.0;
     const auto lines = debugOverlayLines(info);
-    ASSERT_EQ(lines.size(), 9u);
-    EXPECT_EQ(lines[0], "MineCraft v0.0.1 (Phase 16)");
+    ASSERT_EQ(lines.size(), 10u);
+    EXPECT_EQ(lines[0], "MineCraft v0.0.1 (Phase 23)");
     EXPECT_EQ(lines[1], "60 FPS | frame 1234");
     EXPECT_EQ(lines[2], "chunks 2312 | draws 45 | verts 987654");
     EXPECT_EQ(lines[3], "pos 0.50, 54.00, -34.70  yaw 0.00  pitch -0.25");
@@ -40,6 +42,7 @@ TEST(DebugOverlayTest, LinesFormat) {
     EXPECT_EQ(lines[6], "streaming idle  pending 0  radius 8");
     EXPECT_EQ(lines[7], "inventory closed  particles 7  entities 3");
     EXPECT_EQ(lines[8], "health 17.0 / 20.0");
+    EXPECT_EQ(lines[9], "hunger 14 / 20");
 }
 
 TEST(DebugOverlayTest, EngagedStreamingAndOpenInventory) {

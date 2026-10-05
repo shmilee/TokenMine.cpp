@@ -62,8 +62,21 @@ public:
         float crouchSpeedScale = 0.3f;
         // Regeneration (Minecraft's hunger regen, simplified): after
         // regenDelaySeconds without damage, +1 HP every regenIntervalSeconds.
+        // Phase 23: the regen additionally requires hunger >=
+        // regenHungerThreshold (Minecraft: below 6 hunger points there is
+        // no natural regen).
         double regenDelaySeconds = 10.0;
         double regenIntervalSeconds = 4.0;
+        // Hunger (Phase 23): maxHunger hunger points (10 drumstick icons,
+        // 2 each); hungerDecaySeconds per -1 point (Minecraft's base
+        // survival pace, no saturation buffer in v1); at ZERO hunger the
+        // player takes 1 HP every starveDamageIntervalSeconds
+        // (Minecraft's starvation); regenHungerThreshold gates the regen
+        // above.
+        float maxHunger = 20.0f;
+        double hungerDecaySeconds = 4.0;
+        double starveDamageIntervalSeconds = 4.0;
+        float regenHungerThreshold = 6.0f;
     };
 
     // `world` and `blocks` must outlive the player. `spawnPos` is the
@@ -113,6 +126,21 @@ public:
     bool isDead() const { return m_dead; }
     bool isCrouching() const { return m_crouching; }
     double timeSinceDamage() const { return m_timeSinceDamage; }
+
+    // -- hunger (Phase 23) -----------------------------------------------------
+    float hunger() const { return m_hunger; }
+    float maxHunger() const { return m_params.maxHunger; }
+
+    // Restore `amount` hunger points (eating): clamped to [0, max].
+    void restoreHunger(float amount) {
+        m_hunger = std::clamp(m_hunger + amount, 0.0f, m_params.maxHunger);
+    }
+
+    // Set the hunger (save load / tests): clamped to [0, max]. Zero hunger
+    // does NOT kill — starvation damage in update() is the death path.
+    void setHunger(float h) {
+        m_hunger = std::clamp(h, 0.0f, m_params.maxHunger);
+    }
 
     // Apply `amount` damage. Returns true when health actually decreased
     // (the game drives the hurt sound/flash from this). Lethal damage sets
@@ -184,6 +212,11 @@ private:
     bool m_wasOnGround = false;
     float m_fallStartY = 0.0f;
     bool m_dead = false;
+    // Hunger (Phase 23): the level, the decay accumulator (only runs while
+    // hungry), and the starvation accumulator (only runs at zero).
+    float m_hunger = Params {}.maxHunger;
+    double m_hungerAccum = 0.0;
+    double m_starveAccum = 0.0;
 
     static constexpr float kMaxPitch = 1.5533f; // ~89 deg
     // The crouch edge guard / step-up treat an AABB face as "flush" with a

@@ -217,6 +217,13 @@ Result<void> Game::buildScene() {
     MC_TRY(healthTex);
     m_healthTexture = std::move(*healthTex);
 
+    // Hunger drumstick strip (Phase 23): same 48x16 three-tile layout.
+    auto hungerPath = m_assets.resolve("textures/hunger.png");
+    MC_TRY(hungerPath);
+    auto hungerTex = Texture::loadPng(*hungerPath);
+    MC_TRY(hungerTex);
+    m_hungerTexture = std::move(*hungerTex);
+
     // Target-block outline: a slightly enlarged unit cube as 24 line
     // vertices (12 edges x 2 endpoints), centered on the origin.
     {
@@ -810,6 +817,7 @@ Result<SaveGame> Game::collectSave() const {
     save.playerYaw = m_player->yaw;
     save.playerPitch = m_player->pitch;
     save.playerHealth = m_player->health();
+    save.playerHunger = m_player->hunger();
     save.selectedSlot = static_cast<int>(m_selectedSlot);
     save.slots.resize(m_inventory.size());
     for (std::size_t i = 0; i < save.slots.size(); ++i) {
@@ -920,6 +928,10 @@ Result<void> Game::applySave(const SaveGame& save) {
     m_player->setHealth(save.playerHealth < 0.0f
                             ? m_player->maxHealth()
                             : save.playerHealth);
+    // Hunger (Phase 23): format 1-3 saves have none (-1 = full).
+    m_player->setHunger(save.playerHunger < 0.0f
+                            ? m_player->maxHunger()
+                            : save.playerHunger);
     m_prevHealth = m_player->health(); // no hurt event from the load itself
     m_camera.position = m_player->eyePosition();
     m_camera.yaw = m_player->yaw;
@@ -1263,6 +1275,13 @@ void Game::handleInteraction(double dt) {
         return;
     }
     if (m_input.wasPressed(MouseButton::Right)) {
+        // Food (Phase 23): a selected food item is EATEN, not used — the
+        // click is consumed (no interact, no placement). At full hunger the
+        // eat is a no-op but the click is still consumed (Minecraft: you
+        // cannot place while "eating" a full bar).
+        if (tryEat()) {
+            return;
+        }
         // Data-driven interaction (Phase 17): a block whose `interact`
         // property names a known GUI opens it instead of placing.
         if (const std::optional<BlockHit> hit = targetBlock(); hit) {
@@ -1546,6 +1565,31 @@ void Game::placeBlock() {
     // source of blocks — no more infinite placement).
     m_inventory.take(m_selectedSlot, 1);
     m_sound.play("place");
+}
+
+bool Game::tryEat() {
+    // Only the selected slot can feed the player (Minecraft). The item is
+    // food when its data marks restore_hunger (Item::restoreHunger > 0);
+    // there is no hardcoded item list.
+    if (!m_player || m_player->isDead()) {
+        return false;
+    }
+    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    if (stack.empty()) {
+        return false;
+    }
+    const Item& item = m_items.at(stack.item);
+    if (item.restoreHunger <= 0) {
+        return false; // not food: fall through to the normal right-click
+    }
+    // Food is selected: the click is consumed either way.
+    if (m_player->hunger() >= m_player->maxHunger()) {
+        return true; // full: the eat is a no-op (nothing placed, no sound)
+    }
+    m_player->restoreHunger(static_cast<float>(item.restoreHunger));
+    m_inventory.take(m_selectedSlot, 1);
+    m_sound.play("eat");
+    return true;
 }
 
 void Game::cycleHotbar() {
@@ -2460,31 +2504,42 @@ void Game::renderUi() {
                         y0 + kHotbarSlotSize - 4 - kGlyphSize, 1, kText);
             }
         }
-        // Health bar (Phase 16): 10 hearts above the hotbar, 2 HP each,
-        // three-state tiles (full / half / empty).
+        // Health bar (Phase 16) + hunger bar (Phase 23): 10 hearts above
+        // the hotbar, 2 HP each, three-state tiles (full / half / empty);
+        // the hunger is 10 drumsticks (2 each, same tiles) on the SAME row
+        // to the right of the hearts. Both strips share the icon metrics.
         {
-            constexpr int kHeartPx = 16;
-            constexpr int kHeartGap = 2;
-            constexpr int kHeartCount = 10;
-            const int htotal = kHeartCount * kHeartPx +
-                               (kHeartCount - 1) * kHeartGap;
-            const int hx0 = (w - htotal) / 2;
-            const int hy = y0 - kHeartPx - 6;
-            const float hp = m_player->health();
-            UiBatch& hearts =
-                batchFor(Vec4 {1.0f, 1.0f, 1.0f, 1.0f}, true,
-                         &m_healthTexture);
-            for (int i = 0; i < kHeartCount; ++i) {
-                // Heart i covers the HP interval [2i, 2i+2); three states
-                // (a sub-half fill renders as half — see KNOWN_ISSUES).
-                const float fill = std::clamp(hp - 2.0f * i, 0.0f, 2.0f);
-                const int tile =
-                    fill >= 1.99f ? 0 : (fill >= 0.99f ? 1 : 2);
-                addQuadUv(hearts, hx0 + i * (kHeartPx + kHeartGap), hy,
-                          kHeartPx, kHeartPx,
-                          Vec2 {static_cast<float>(tile) / 3.0f, 0.0f},
-                          Vec2 {static_cast<float>(tile + 1) / 3.0f, 1.0f});
-            }
+            constexpr int kIconPx = 16;
+            constexpr int kIconGap = 2;
+            constexpr int kIconCount = 10;
+            constexpr int kStripGap = 6; // between the hearts and hunger
+            const int stripW = kIconCount * kIconPx +
+                               (kIconCount - 1) * kIconGap;
+            // The hearts stay centered (the Phase 16 layout); the hunger
+            // strip starts just past their right edge.
+            const int hx0 = (w - stripW) / 2;
+            const int gx0 = hx0 + stripW + kStripGap;
+            const int hy = y0 - kIconPx - 6;
+            // One pass per strip: tile t occupies u in [t/3, (t+1)/3].
+            auto drawStrip = [&](int x0, const Texture& tex, float value) {
+                UiBatch& batch =
+                    batchFor(Vec4 {1.0f, 1.0f, 1.0f, 1.0f}, true, &tex);
+                for (int i = 0; i < kIconCount; ++i) {
+                    // Icon i covers the interval [2i, 2i+2); three states
+                    // (a sub-half fill renders as half — see KNOWN_ISSUES).
+                    const float fill =
+                        std::clamp(value - 2.0f * i, 0.0f, 2.0f);
+                    const int tile =
+                        fill >= 1.99f ? 0 : (fill >= 0.99f ? 1 : 2);
+                    addQuadUv(batch, x0 + i * (kIconPx + kIconGap), hy,
+                              kIconPx, kIconPx,
+                              Vec2 {static_cast<float>(tile) / 3.0f, 0.0f},
+                              Vec2 {static_cast<float>(tile + 1) / 3.0f,
+                                    1.0f});
+                }
+            };
+            drawStrip(hx0, m_healthTexture, m_player->health());
+            drawStrip(gx0, m_hungerTexture, m_player->hunger());
         }
         // Crosshair: a 2px thin cross at the screen center.
         UiBatch& cross = batchFor(kCrosshair, false, nullptr);
@@ -2687,6 +2742,8 @@ void Game::renderUi() {
         if (m_player) {
             info.health = m_player->health();
             info.maxHealth = m_player->maxHealth();
+            info.hunger = m_player->hunger();
+            info.maxHunger = m_player->maxHunger();
         }
         int y = kF3Margin;
         for (const std::string& line : debugOverlayLines(info)) {

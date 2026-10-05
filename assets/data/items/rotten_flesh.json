@@ -2,5 +2,6 @@
   "id": "rotten_flesh",
   "type": "material",
   "max_stack": 64,
-  "icon": "rotten_flesh"
+  "icon": "rotten_flesh",
+  "restore_hunger": 4
 }

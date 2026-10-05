@@ -145,10 +145,10 @@ TEST(SaveRoundTripTest, SerializeRejectsUnregisteredSlotItem) {
 
 TEST(SaveParseTest, RejectsUnknownOrMissingFormat) {
     Fixture f;
-    // Format 4 is a future version this build cannot read; a missing
-    // format is a corrupt file. (Formats 1, 2 and 3 are all accepted —
+    // Format 5 is a future version this build cannot read; a missing
+    // format is a corrupt file. (Formats 1-4 are all accepted —
     // see FormatOneLoadsWithoutHealth.)
-    Json root = parseJson(R"({"format":4,"seed":42,"time":0.25,"player":{},"inventory":{},"entities":[],"blocks":[],"fluids":[]})");
+    Json root = parseJson(R"({"format":5,"seed":42,"time":0.25,"player":{},"inventory":{},"entities":[],"blocks":[],"fluids":[]})");
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
     EXPECT_FALSE(parseSave(withoutKey(root, "format"), f.items, f.blocks, 42).ok());
 }
@@ -165,8 +165,8 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     s.tableGrid[8] = ItemStack {f.items.idForName("stone"), 64};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Format 3 writes are always format 3.
-    EXPECT_EQ(j->find("format")->asInt(), 3);
+    // Format 4 writes are always format 4.
+    EXPECT_EQ(j->find("format")->asInt(), 4);
     auto out = parseSave(*j, f.items, f.blocks, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -319,6 +319,49 @@ TEST(SaveParseTest, RejectsNegativeHealth) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["player"]["health"] = Json(-1.0);
+    EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+}
+
+// -- hunger (format 4; Phase 23) --------------------------------------------------
+
+TEST(SaveRoundTripTest, HungerRoundTrips) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerHunger = 7.0f;
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    auto out = parseSave(*j, f.items, f.blocks, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_FLOAT_EQ(out->playerHunger, 7.0f);
+}
+
+TEST(SaveParseTest, FormatThreeLoadsWithoutHunger) {
+    // A format-3 file (Phase 22 and earlier, no hunger field) still
+    // loads: the hunger stays "unspecified" (-1) and the game applies the
+    // player's max.
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerHealth = 12.0f;
+    s.playerHunger = -1.0f; // omitted by the serializer
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    Json root = *j;
+    root["format"] = Json(3);
+    ASSERT_EQ(root["player"].find("hunger"), nullptr);
+    auto out = parseSave(root, f.items, f.blocks, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_FLOAT_EQ(out->playerHunger, -1.0f);
+    EXPECT_FLOAT_EQ(out->playerHealth, 12.0f);
+}
+
+TEST(SaveParseTest, RejectsNegativeHunger) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerHunger = 5.0f;
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    Json root = *j;
+    root["player"]["hunger"] = Json(-1.0);
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
 }
 

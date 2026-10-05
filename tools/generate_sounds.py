@@ -173,6 +173,22 @@ def shoot():
     return lowpass3(sound(0.12, f))
 
 
+def eat():
+    """Muffled chewing (Phase 23): a lowpassed noise burst gated by a slow
+    chew pulse, with a short release so it ends cleanly."""
+    lcg = Lcg(0xE47C)
+    dur = 0.30
+
+    def f(t, _):
+        # A ~8 Hz chew gate (3 chews over the 0.3 s), sharpened.
+        chew = 0.5 + 0.5 * math.sin(2 * math.pi * 8.0 * t - math.pi / 2)
+        gate = max(0.0, chew) ** 2
+        # Low thump under each chew for body.
+        thump = math.sin(2 * math.pi * 90.0 * t) * 0.25
+        return (lcg.next() * 0.7 + thump) * gate * env(t, dur, 6.0) * 0.8
+    return lowpass3(sound(dur, f))
+
+
 SOUNDS = {
     "dig": dig,
     "place": place,
@@ -185,6 +201,7 @@ SOUNDS = {
     "hurt": hurt,
     "death": death,
     "shoot": shoot,
+    "eat": eat,
 }
 
 

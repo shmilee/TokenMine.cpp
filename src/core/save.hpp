@@ -14,7 +14,8 @@
 //   "seed": 123456789,
 //   "time": 0.2541666,                       // timeOfDay, [0, 1)
 //   "player": { "pos": [0.5, 53.0, 0.5], "yaw": 0.0, "pitch": -0.25,
-//               "health": 20.0 },            // format 2+ (format 1: full)
+//               "health": 20.0,              // format 2+ (format 1: full)
+//               "hunger": 20.0 },            // format 4+ (older: full)
 //   "inventory": {
 //     "selected": 0,
 //     "slots": [ { "item": "stone", "count": 64 }, { "item": "", "count": 0 } ]
@@ -68,7 +69,7 @@ namespace mc {
 //   3: the crafting grids (Phase 17) — "inv_grid" + "table_grid" (9 slot
 //      entries each). Format 1/2 files still load (grids default to
 //      empty); writes are always format 3.
-inline constexpr int kSaveFormat = 3;
+inline constexpr int kSaveFormat = 4;
 inline constexpr int kSaveFormatMin = 1;
 
 // One cell whose block differs from generation ("air" = removed).
@@ -105,6 +106,9 @@ struct SaveGame {
     // applies the player's max health. A saved 0 means the player was
     // dead when the file was written.
     float playerHealth = -1.0f;
+    // Hunger (Phase 23). -1 = "unspecified" (format 1-3 files): the game
+    // applies the player's max hunger on load.
+    float playerHunger = -1.0f;
     int selectedSlot = 0;
     std::vector<ItemStack> slots; // exactly Inventory::kTotalSize
     // The crafting grids (format 3; Phase 17): the inventory panel's grid

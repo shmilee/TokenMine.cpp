@@ -199,6 +199,10 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     if (save.playerHealth >= 0.0f) {
         player["health"] = Json(save.playerHealth);
     }
+    // Format 4: the player's hunger (same omit-when-unspecified pattern).
+    if (save.playerHunger >= 0.0f) {
+        player["hunger"] = Json(save.playerHunger);
+    }
     root["player"] = player;
 
     Json slots = Json::array();
@@ -358,7 +362,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         return MC_FAIL("save file requires a 'player' object");
     }
     const std::set<std::string> playerFields {"pos", "yaw", "pitch",
-                                              "health"};
+                                              "health", "hunger"};
     MC_TRY(rejectUnknownFields(*player, playerFields, "save 'player'"));
     const Json* ppos = player->find("pos");
     if (ppos == nullptr || !ppos->isArray() || ppos->size() != 3) {
@@ -390,6 +394,16 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
             return MC_FAIL("save 'player.health' must be a number >= 0");
         }
         save.playerHealth = static_cast<float>(health->asDouble());
+    }
+    // Optional (absent in format 1-3): -1 stays "unspecified" and the
+    // game applies the player's max hunger. Upper bound is the player's
+    // max (unknown here); the game clamps on load.
+    const Json* hunger = player->find("hunger");
+    if (hunger != nullptr) {
+        if (!hunger->isNumber() || hunger->asDouble() < 0.0) {
+            return MC_FAIL("save 'player.hunger' must be a number >= 0");
+        }
+        save.playerHunger = static_cast<float>(hunger->asDouble());
     }
 
     // -- inventory ---------------------------------------------------------------

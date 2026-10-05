@@ -620,6 +620,88 @@ TEST(PlayerTest, RegenAfterDelay) {
     EXPECT_FLOAT_EQ(p.health(), p.maxHealth());
 }
 
+// -- hunger (Phase 23) -------------------------------------------------------
+
+// Note on the timings below: the accumulators add the double 1/60 per
+// frame, so the first 4 s boundary lands on frame 241 (the 240-frame sum
+// is a hair under 4.0), and every later boundary follows 240 frames after.
+// The asserts pick windows with a full frame of slack on each side.
+
+TEST(PlayerTest, HungerDecaysEvery4Seconds) {
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    ASSERT_FLOAT_EQ(p.hunger(), p.maxHunger()); // fresh player: full
+    // 25 s: six 4 s decay ticks have passed (the 7th is ~3 s away): 14.
+    run(p, 25 * 60, idle);
+    EXPECT_FLOAT_EQ(p.hunger(), 14.0f);
+    // 5 s more: the 7th tick has passed (the 8th is ~1 s away): 13.
+    run(p, 5 * 60, idle);
+    EXPECT_FLOAT_EQ(p.hunger(), 13.0f);
+}
+
+TEST(PlayerTest, StarvationDamagesAtZeroHunger) {
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    p.setHunger(0.0f);
+    // At zero hunger: 1 HP per 4 s through the normal damage path.
+    run(p, 5 * 60, idle); // the first tick has passed, the second is 1 s away
+    EXPECT_FLOAT_EQ(p.health(), 19.0f);
+    EXPECT_FALSE(p.isDead());
+    run(p, 5 * 60, idle); // the second tick has passed
+    EXPECT_FLOAT_EQ(p.health(), 18.0f);
+}
+
+TEST(PlayerTest, StarvationKillsAtZeroHunger) {
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    p.setHunger(0.0f);
+    // 20 points of starvation: the 20th tick lands at ~80 s (frame 4801).
+    run(p, 81 * 60, idle);
+    EXPECT_TRUE(p.isDead());
+    EXPECT_FLOAT_EQ(p.health(), 0.0f);
+}
+
+TEST(PlayerTest, LowHungerBlocksRegen) {
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    p.damage(1.0f); // health 19, the damage clock restarts
+    p.setHunger(5.0f); // below the regen threshold (6)
+    // 15 s: the regen delay (10 s) passes, but the hunger gate never does —
+    // no HP comes back (hunger decays 5 -> 2 during the run, never starving).
+    run(p, 15 * 60, idle);
+    EXPECT_FLOAT_EQ(p.health(), 19.0f);
+    EXPECT_FLOAT_EQ(p.hunger(), 2.0f);
+}
+
+TEST(PlayerTest, RestoreHungerClampsToMax) {
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    p.setHunger(18.0f);
+    p.restoreHunger(5.0f); // over the top: clamps to the max
+    EXPECT_FLOAT_EQ(p.hunger(), p.maxHunger());
+    p.setHunger(0.0f);
+    p.restoreHunger(4.0f);
+    EXPECT_FLOAT_EQ(p.hunger(), 4.0f);
+}
+
+TEST(PlayerTest, RespawnRestoresHunger) {
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    p.setHunger(3.0f);
+    p.damage(20.0f); // lethal
+    ASSERT_TRUE(p.isDead());
+    p.respawn();
+    EXPECT_FLOAT_EQ(p.hunger(), p.maxHunger());
+    // The decay clock restarted: no instant drop.
+    run(p, 3 * 60, idle);
+    EXPECT_FLOAT_EQ(p.hunger(), p.maxHunger());
+}
+
 TEST(PlayerTest, CrouchShrinksHeightAndScalesSpeed) {
     Fixture f;
     Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
