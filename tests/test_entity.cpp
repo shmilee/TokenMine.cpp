@@ -342,6 +342,38 @@ TEST(ProjectileTest, LaunchArcsAlongDirectionAndSticksOnFloor) {
     EXPECT_LT(arrow.position().x, 12.0f);      // hit before running on
 }
 
+TEST(ProjectileTest, HurtPlayerFlagDefaultsFalseAndSettable) {
+    // Phase 27: the player's own bow arrows (the Phase 21 default) never
+    // hit the player (no self-damage); mob-shot arrows (the skeleton) are
+    // flagged at launch so the game's swept test runs them against the
+    // player's AABB.
+    Fixture f;
+    Projectile bowArrow(f.world, f.blocks, {0.5f, 5.0f, 0.5f},
+                        {1.0f, 0.0f, 0.0f});
+    EXPECT_FALSE(bowArrow.hurtPlayer());
+    Projectile skeletonArrow(f.world, f.blocks, {0.5f, 5.0f, 0.5f},
+                             {1.0f, 0.0f, 0.0f}, 15.0f, 2.0f,
+                             /*hurtPlayer=*/true);
+    EXPECT_TRUE(skeletonArrow.hurtPlayer());
+    EXPECT_FLOAT_EQ(skeletonArrow.damage(), 2.0f);
+}
+
+TEST(ProjectileTest, SourceDefaultsNullAndSettable) {
+    // Phase 27: the swept arrow-vs-mob test skips the source — without it
+    // a mob-shot arrow (spawned inside the shooter's own AABB) would hit
+    // its shooter on the next frame (t = 0: starts inside the box).
+    Fixture f;
+    Projectile bowArrow(f.world, f.blocks, {0.5f, 5.0f, 0.5f},
+                        {1.0f, 0.0f, 0.0f});
+    EXPECT_EQ(bowArrow.source(), nullptr);
+    Projectile mobArrow(f.world, f.blocks, {0.5f, 5.0f, 0.5f},
+                        {1.0f, 0.0f, 0.0f}, 15.0f, 2.0f,
+                        /*hurtPlayer=*/true);
+    EXPECT_EQ(mobArrow.source(), nullptr);
+    mobArrow.setSource(nullptr);
+    EXPECT_EQ(mobArrow.source(), nullptr);
+}
+
 TEST(ProjectileTest, SticksOnWallHit) {
     Fixture f;
     f.wallX(12, 0, 20, -16, 16);

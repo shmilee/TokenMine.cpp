@@ -28,6 +28,8 @@
     "sheep_body": [3, 5],
     "sheep_head": [0, 6],
     "chicken_body": [1, 6],
-    "chicken_head": [2, 6]
+    "chicken_head": [2, 6],
+    "skeleton_body": [3, 6],
+    "skeleton_head": [0, 7]
   }
 }

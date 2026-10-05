@@ -112,6 +112,47 @@ Result<void> MobRegistry::parseProperties(const Json& def,
         out.hostile = host->asBool();
     }
 
+    // Optional ranged-attack fields (Phase 27, skeleton): all default to
+    // 0 (absent = melee mob). shoot_range/retreat_distance accept >= 0;
+    // shoot_speed, when PRESENT, must be in (0, 100] (the item field's
+    // range) — an explicit 0 is a typo even for melee mobs. A ranged mob
+    // (shoot_range > 0) must also define shoot_speed.
+    if (const Json* sr = def.find("shoot_range")) {
+        if (!sr->isNumber()) {
+            return MC_FAIL("mob properties: 'shoot_range' must be a number");
+        }
+        out.shootRange = static_cast<float>(sr->asDouble());
+        if (out.shootRange < 0.0f) {
+            return MC_FAIL("mob properties: 'shoot_range' must be >= 0, "
+                           "got " + std::to_string(out.shootRange));
+        }
+    }
+    if (const Json* rd = def.find("retreat_distance")) {
+        if (!rd->isNumber()) {
+            return MC_FAIL("mob properties: 'retreat_distance' must be a "
+                           "number");
+        }
+        out.retreatDistance = static_cast<float>(rd->asDouble());
+        if (out.retreatDistance < 0.0f) {
+            return MC_FAIL("mob properties: 'retreat_distance' must be >= 0, "
+                           "got " + std::to_string(out.retreatDistance));
+        }
+    }
+    if (const Json* ss = def.find("shoot_speed")) {
+        if (!ss->isNumber()) {
+            return MC_FAIL("mob properties: 'shoot_speed' must be a number");
+        }
+        out.shootSpeed = static_cast<float>(ss->asDouble());
+        if (out.shootSpeed <= 0.0f || out.shootSpeed > 100.0f) {
+            return MC_FAIL("mob properties: 'shoot_speed' must be in "
+                           "(0, 100], got " + std::to_string(out.shootSpeed));
+        }
+    }
+    if (out.shootRange > 0.0f && out.shootSpeed <= 0.0f) {
+        return MC_FAIL("mob properties: 'shoot_range' > 0 requires "
+                       "'shoot_speed' in (0, 100]");
+    }
+
     if (const Json* drops = def.find("drops")) {
         if (!drops->isString()) {
             return MC_FAIL("mob properties: 'drops' must be a string "

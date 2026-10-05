@@ -3,11 +3,15 @@
 #include <algorithm>
 #include <cmath>
 
+#include "core/logger.hpp"
+
 namespace mc {
 
 Projectile::Projectile(const World& world, const BlockRegistry& blocks,
-                       Vec3 pos, Vec3 direction, float speed, float damage)
-    : Entity(world, blocks, pos, kSize, kSize), m_damage(damage) {
+                       Vec3 pos, Vec3 direction, float speed, float damage,
+                       bool hurtPlayer)
+    : Entity(world, blocks, pos, kSize, kSize), m_damage(damage),
+      m_hurtPlayer(hurtPlayer) {
     m_velocity = normalized(direction) * speed;
 }
 
@@ -50,6 +54,12 @@ void Projectile::afterSubstep(bool blocked) {
         // it hit (Phase 24 — the Phase 10 "撞墙钉住" intent). It keeps
         // rendering (oriented along m_stuckDir) and despawns by age.
         m_stuck = true;
+        if (m_hurtPlayer) {
+            const Vec3 p = position();
+            MC_LOG_DEBUG("mob arrow stuck in block at (" +
+                         std::to_string(p.x) + ", " + std::to_string(p.y) +
+                         ", " + std::to_string(p.z) + ")");
+        }
     }
 }
 

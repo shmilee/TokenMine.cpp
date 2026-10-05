@@ -7,6 +7,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -75,6 +76,37 @@ const char* kZombieDef = R"({
     "attack_damage": 3,
     "attack_cooldown": 1.0,
     "wander_interval": 2.5
+  },
+  "model": {
+    "width": 0.6,
+    "height": 1.8,
+    "boxes": [
+      {"pos": [0.0, 1.25, 0.0], "size": [0.5, 0.5, 0.5], "texture": "a"},
+      {"pos": [0.0, 0.5, 0.0], "size": [0.5, 1.0, 0.3], "texture": "b"}
+    ]
+  }
+})";
+
+// The skeleton test definition (Phase 27): the ranged hostile mob —
+// shoot_range 14 > 0 marks the ranged attacker, retreat_distance 3 the
+// kite band, attack_range 0 (it never melee-attacks).
+const char* kSkeletonDef = R"({
+  "id": "skeleton",
+  "properties": {
+    "health": 20,
+    "speed": 0.8,
+    "detect_radius": 16,
+    "attack_range": 0,
+    "attack_damage": 2,
+    "attack_cooldown": 1.5,
+    "shoot_range": 14,
+    "retreat_distance": 3,
+    "shoot_speed": 15,
+    "wander_interval": 2.5,
+    "spawn_max_light": 0,
+    "hostile": true,
+    "drops": "arrow",
+    "drops_count": 1
   },
   "model": {
     "width": 0.6,
@@ -435,6 +467,54 @@ TEST(MobRegistryTest, RejectsChickenBoxOutsideAabb) {
     EXPECT_FALSE(r.ok());
 }
 
+TEST(MobRegistryTest, ParsesSkeleton) {
+    // Phase 27: the ranged hostile mob — shoot_range > 0 marks a ranged
+    // attacker (fire on the cooldown, kite inside retreat_distance);
+    // attack_range 0 = it never melee-attacks; hostile = true puts it in
+    // the difficulty protection ring / damage scale (Phase 25).
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(kSkeletonDef));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Mob& mob = mobs.at(*r);
+    EXPECT_FLOAT_EQ(mob.properties.shootRange, 14.0f);
+    EXPECT_FLOAT_EQ(mob.properties.retreatDistance, 3.0f);
+    EXPECT_FLOAT_EQ(mob.properties.shootSpeed, 15.0f);
+    EXPECT_FLOAT_EQ(mob.properties.attackRange, 0.0f);
+    EXPECT_FLOAT_EQ(mob.properties.attackDamage, 2.0f);
+    EXPECT_TRUE(mob.properties.hostile);
+    EXPECT_EQ(mob.properties.spawnMaxLight, 0);
+    EXPECT_EQ(mob.properties.drops, "arrow");
+}
+
+TEST(MobRegistryTest, RejectsRangedFieldErrors) {
+    // Phase 27: the optional ranged fields are strictly validated —
+    // negatives rejected, shoot_speed in (0, 100] when present (an
+    // explicit 0 is a typo even for melee mobs), and a ranged mob
+    // (shoot_range > 0) must define a shoot_speed.
+    struct Case {
+        const char* valid;
+        const char* broken;
+    };
+    const Case cases[] = {
+        {"\"shoot_range\": 14", "\"shoot_range\": -1"},
+        {"\"retreat_distance\": 3", "\"retreat_distance\": -0.5"},
+        {"\"shoot_speed\": 15", "\"shoot_speed\": 0"},
+        {"\"shoot_speed\": 15", "\"shoot_speed\": 101"},
+    };
+    for (const Case& c : cases) {
+        std::string def = kSkeletonDef;
+        def.replace(def.find(c.valid), std::strlen(c.valid), c.broken);
+        MobRegistry mobs;
+        EXPECT_FALSE(mobs.registerMob(parseJson(def)).ok()) << c.broken;
+    }
+    // Cross-field: shoot_range > 0 without any shoot_speed.
+    std::string def = kSkeletonDef;
+    const char* speed = "\"shoot_speed\": 15,\n    ";
+    def.replace(def.find(speed), std::strlen(speed), "");
+    MobRegistry mobs;
+    EXPECT_FALSE(mobs.registerMob(parseJson(def)).ok());
+}
+
 // -- spawning config ----------------------------------------------------------
 
 TEST(MobSpawningConfigTest, ParsesValid) {
@@ -477,6 +557,23 @@ TEST(MobSpawningConfigTest, ParsesFourMobList) {
     EXPECT_EQ((*r).mobs[1], "cow");
     EXPECT_EQ((*r).mobs[2], "sheep");
     EXPECT_EQ((*r).mobs[3], "chicken");
+}
+
+TEST(MobSpawningConfigTest, ParsesFiveMobList) {
+    // Phase 27: the list grows to five (the skeleton, the first ranged
+    // hostile). The deterministic type pick is pick % 5 with this order.
+    auto r = MobSpawningConfig::parse(parseJson(R"({
+      "check_every_frames": 30,
+      "first_spawn_frame": 60,
+      "max_mobs": 4,
+      "min_radius": 4,
+      "max_radius": 6,
+      "despawn_distance": 40,
+      "mobs": ["zombie", "cow", "sheep", "chicken", "skeleton"]
+    })"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    ASSERT_EQ((*r).mobs.size(), 5u);
+    EXPECT_EQ((*r).mobs[4], "skeleton");
 }
 
 TEST(MobSpawningConfigTest, RejectsInvertedRadii) {
@@ -966,6 +1063,59 @@ TEST(MobAiTest, PassiveMobNeverChasesOrAttacks) {
     }
     EXPECT_EQ(hits, 0);
     EXPECT_FLOAT_EQ(totalDamage, 0.0f);
+}
+
+TEST(MobAiTest, RangedMobShootsAndHoldsDistance) {
+    // Phase 27: the skeleton 8 blocks from the player (inside shoot_range
+    // 14, outside retreat_distance 3) stands, faces the player, and fires
+    // on the 1.5 s cooldown — it never closes in and never melee-hits.
+    Fixture f;
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.registerMob(parseJson(kSkeletonDef)).ok());
+    MobEntity mob = makeMob(f, mobs.at(MobID{0}), {8.5f, 1.0f, 1.5f});
+    mob.setPlayer({8.5f, 1.0f, 9.5f}, true);  // 8 blocks away
+    int shots = 0;
+    int hits = 0;
+    mob.setShootCallback([&] { ++shots; });
+    mob.setHitCallback([&](float) { ++hits; });
+    for (int i = 0; i < 300; ++i) {
+        mob.update(kDt);
+        EXPECT_EQ(mob.state(), MobState::RangedAttack);
+    }
+    // 5 s at a 1.5 s cooldown: the cooldown starts at 0, so the first shot
+    // lands on frame 0, then ~1.517 / ~3.033 / ~4.55 s (the 1/60 double
+    // subtraction leaves a residue that pushes each cycle one frame out).
+    EXPECT_EQ(shots, 4);
+    EXPECT_EQ(hits, 0);  // it never melee-attacks (attack_range 0)
+    // Standing still: no horizontal drift.
+    EXPECT_NEAR(mob.position().x, 8.5f, 0.01f);
+    EXPECT_NEAR(mob.position().z, 1.5f, 0.01f);
+}
+
+TEST(MobAiTest, RangedMobRetreatsWhenClose) {
+    // Phase 27: the skeleton with the player a block away (inside
+    // retreat_distance 3) backs away at full speed while it keeps firing;
+    // once the player is outside the retreat distance it stands.
+    Fixture f;
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.registerMob(parseJson(kSkeletonDef)).ok());
+    MobEntity mob = makeMob(f, mobs.at(MobID{0}), {8.5f, 1.0f, 7.5f});
+    mob.setPlayer({8.5f, 1.0f, 8.5f}, true);  // 1 block away, +z side
+    int shots = 0;
+    int hits = 0;
+    mob.setShootCallback([&] { ++shots; });
+    mob.setHitCallback([&](float) { ++hits; });
+    mob.update(kDt);
+    EXPECT_EQ(mob.state(), MobState::RangedAttack);
+    EXPECT_LT(mob.velocity().z, -0.5f);  // retreating (-z, away from player)
+    for (int i = 1; i < 300; ++i) {
+        mob.update(kDt);
+    }
+    const float distH = std::hypot(mob.position().x - 8.5f,
+                                   mob.position().z - 8.5f);
+    EXPECT_GT(distH, 3.0f);  // kited the player past the retreat distance
+    EXPECT_GE(shots, 1);     // kept firing while retreating
+    EXPECT_EQ(hits, 0);
 }
 
 // -- combat ----------------------------------------------------------------------

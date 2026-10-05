@@ -117,6 +117,15 @@ struct MobProperties {
     // data, not derived from behavior values (attack_damage 0 could still
     // be a hostile that never hits in v1, and vice versa).
     bool hostile = false;
+    // Ranged attack (Phase 27, skeleton): `shootRange > 0` makes the mob a
+    // ranged attacker — within `shootRange` (horizontal) of the player it
+    // fires arrows (one per `attackCooldown`) instead of closing in, and
+    // backs away at full speed while the player is inside `retreatDistance`
+    // (0 = never back away). `shootSpeed` is the arrow launch speed.
+    // Melee mobs leave all three at 0 (absent in data).
+    float shootRange = 0.0f;
+    float retreatDistance = 0.0f;
+    float shootSpeed = 0.0f;
     std::string drops;   // item name; empty = no drops
     int dropsCount = 1;  // 1..64
 };

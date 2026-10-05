@@ -83,6 +83,35 @@ void MobEntity::runAi(double dt) {
     const bool seesPlayer = m_playerAlive && distH <= p.detectRadius &&
                             std::abs(dy) <= kDetectVertical;
 
+    if (seesPlayer && p.shootRange > 0.0f && distH <= p.shootRange) {
+        // Ranged attack (Phase 27, the skeleton): face the player and fire
+        // on the cooldown. While the player is inside retreat_distance the
+        // mob backs away at full data speed (Minecraft's kite); otherwise
+        // it stands and shoots. It never closes in to melee — a ranged
+        // mob's data attack_range is its (unused) melee range, 0 for the
+        // skeleton, so the melee branch below can never hold for it.
+        m_state = MobState::RangedAttack;
+        if (distH > 1e-4f) {
+            // Camera yaw convention: forward(yaw) = (-sin, 0, -cos).
+            m_yaw = std::atan2(-dx, -dz);
+        }
+        if (distH <= p.retreatDistance) {
+            const float inv = 1.0f / std::max(distH, 1e-4f);
+            m_velocity.x = -dx * inv * p.speed;
+            m_velocity.z = -dz * inv * p.speed;
+        } else {
+            m_velocity.x = 0.0f;
+            m_velocity.z = 0.0f;
+        }
+        if (m_attackCooldown <= 0.0) {
+            m_attackCooldown = p.attackCooldown;
+            if (m_shootPlayer) {
+                m_shootPlayer();
+            }
+        }
+        return;
+    }
+
     if (seesPlayer && distH <= p.attackRange &&
         std::abs(dy) <= kAttackVertical) {
         // Attack: stand still, face the player, swing on the cooldown.

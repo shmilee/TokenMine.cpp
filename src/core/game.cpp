@@ -1792,10 +1792,25 @@ void Game::updateEntities(double dt) {
             continue;  // stuck in a block (Phase 24): no motion, no hits
         }
         const Vec3 step = arrow->position() - prev;
+        // Mob-shot arrows (Phase 27) can hit the player: the same swept
+        // test as the mobs, run FIRST (the arrow's target). The player's
+        // own bow arrows are unflagged and keep flying through the player
+        // (no self-damage, single-player v1).
+        if (arrow->hurtPlayer()) {
+            const float tp = raycastAabb(prev, step, m_player->aabbMin(),
+                                         m_player->aabbMax());
+            if (tp >= 0.0f && tp <= 1.0f && !m_player->isDead()) {
+                m_player->damage(arrow->damage());
+                arrow->kill();
+                MC_LOG_DEBUG("mob arrow hit player for " +
+                             std::to_string(arrow->damage()));
+                continue;  // consumed: no mob test this step
+            }
+        }
         for (auto& entity : m_entities) {
             auto* mob = dynamic_cast<MobEntity*>(entity.get());
-            if (mob == nullptr || mob->dead()) {
-                continue;
+            if (mob == nullptr || mob->dead() || mob == arrow->source()) {
+                continue;  // the shooter's own arrow never self-hits
             }
             const float t =
                 raycastAabb(prev, step, mob->aabbMin(), mob->aabbMax());
@@ -2017,6 +2032,9 @@ void Game::attemptMobSpawn() {
         }
     }
     if (mobCount >= m_spawnConfig.maxMobs) {
+        MC_LOG_DEBUG("mob spawn f" + std::to_string(m_frameCount) +
+                     ": cap reached (" + std::to_string(mobCount) +
+                     " live), attempt skipped");
         return;
     }
     // Deterministic type pick among the data-listed mobs (the seed mixes
@@ -2062,6 +2080,9 @@ void Game::attemptMobSpawn() {
                                  mobPositions, protection, m_spawnPoint.x,
                                  m_spawnPoint.z);
     if (!cell) {
+        MC_LOG_DEBUG("mob spawn f" + std::to_string(m_frameCount) +
+                     ": pick '" + def.name + "' found no valid cell "
+                     "(light gate / clearance / protection)");
         return;
     }
     // Spawn at the cell center, feet on the floor top; the per-mob seed is
@@ -2070,6 +2091,10 @@ void Game::attemptMobSpawn() {
     const Vec3 spawn {static_cast<float>(cell->x) + 0.5f,
                       static_cast<float>(cell->y) + 1.0f,
                       static_cast<float>(cell->z) + 0.5f};
+    MC_LOG_DEBUG("mob spawn f" + std::to_string(m_frameCount) +
+                 ": '" + def.name + "' at (" + std::to_string(spawn.x) +
+                 ", " + std::to_string(spawn.y) + ", " +
+                 std::to_string(spawn.z) + ")");
     ++m_spawnCounter;
     const std::uint64_t seed =
         static_cast<std::uint64_t>(m_generator->seed()) ^
@@ -2088,6 +2113,52 @@ void Game::attemptMobSpawn() {
             m_player->damage(amount * damageScale);
         }
     });
+    // Ranged mobs (Phase 27, the skeleton): the AI's shot spawns an arrow
+    // from the mob's head at the player's eye — the same Projectile the
+    // bow fires (it sticks in blocks, ages out, and renders), flagged
+    // hurtPlayer so the update pass sweeps it against the player too.
+    // Damage = the data attack_damage × the difficulty scale (the melee
+    // callback above uses the same scale). The raw pointer stays valid:
+    // the mob lives in m_entities until the despawn pass removes it, and
+    // the callback only runs while the mob is alive (runAi).
+    if (def.properties.shootRange > 0.0f) {
+        const float arrowDamage = def.properties.attackDamage * damageScale;
+        const float arrowSpeed = def.properties.shootSpeed;
+        MobEntity* raw = mob.get();
+        mob->setShootCallback([this, raw, arrowSpeed, arrowDamage]() {
+            if (m_player->isDead() || raw->dead()) {
+                return;
+            }
+            const Vec3 eye = raw->eyePosition();
+            Vec3 toPlayer = m_player->eyePosition() - eye;
+            const float dist = std::sqrt(dot(toPlayer, toPlayer));
+            if (dist < 1e-4f) {
+                return;
+            }
+            // Arc compensation (the Minecraft skeleton leads the target):
+            // the arrow drops 0.5 * g * t^2 while it flies t = dist/speed
+            // seconds, so aim ABOVE the player's eye by exactly that drop.
+            // Without it a straight-line aim only lands within ~6 blocks
+            // (drop > eye height past that) and a skeleton standing at its
+            // preferred range would never hit.
+            const float flightTime = dist / arrowSpeed;
+            toPlayer.y += 0.5f * Projectile::kGravity * flightTime *
+                           flightTime;
+            const Vec3 dir =
+                toPlayer * (1.0f / std::sqrt(dot(toPlayer, toPlayer)));
+            auto arrow = std::make_unique<Projectile>(
+                m_world, m_blocks, eye + dir * kArrowSpawnOffset, dir,
+                arrowSpeed, arrowDamage, /*hurtPlayer=*/true);
+            arrow->setSource(raw);  // the hit test skips its shooter
+            m_entities.push_back(std::move(arrow));
+            m_sound.play("shoot");
+            MC_LOG_DEBUG("skeleton shot: from (" + std::to_string(eye.x) +
+                         ", " + std::to_string(eye.y) + ", " +
+                         std::to_string(eye.z) + ") dist=" +
+                         std::to_string(dist) + " dmg=" +
+                         std::to_string(arrowDamage));
+        });
+    }
     m_entities.push_back(std::move(mob));
 }
 

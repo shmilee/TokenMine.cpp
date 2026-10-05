@@ -142,6 +142,27 @@ def chicken_tile(salt: int, base, face=False) -> list:
     return pixels
 
 
+def skeleton_tile(salt: int, base, skull=False) -> list:
+    """Skeleton bones (Phase 27): bone-white base + noise; the skull also
+    gets two dark eye sockets (rows 5-6) and a dark nasal cavity (rows
+    7-8, center)."""
+    (br, bg, bb) = base
+    pixels = []
+    for y in range(SIZE):
+        row = []
+        for x in range(SIZE):
+            n = noise(x, y, salt, 10)
+            r, g, b = clamp(br + n), clamp(bg + n), clamp(bb + n)
+            if skull:
+                if 5 <= y <= 6 and (3 <= x <= 5 or 10 <= x <= 12):
+                    (r, g, b) = (25, 22, 20)       # eye sockets
+                elif 7 <= y <= 8 and 7 <= x <= 8:
+                    (r, g, b) = (35, 32, 28)       # nasal cavity
+            row.append((r, g, b, 255))
+        pixels.append(row)
+    return pixels
+
+
 def shirt_tile(salt: int, base) -> list:
     (br, bg, bb) = base
     pixels = []
@@ -178,6 +199,12 @@ def main() -> None:
               chicken_tile(0xC1C1, (238, 236, 226)))
     write_png(os.path.join(OUT_DIR, "chicken_head.png"),
               chicken_tile(0xC1C2, (238, 236, 226), face=True))
+    # Bone-white skeleton (Phase 27; skull sockets on the head's front
+    # face).
+    write_png(os.path.join(OUT_DIR, "skeleton_body.png"),
+              skeleton_tile(0x5C11, (205, 203, 193)))
+    write_png(os.path.join(OUT_DIR, "skeleton_head.png"),
+              skeleton_tile(0x5C12, (222, 220, 210), skull=True))
 
 
 if __name__ == "__main__":

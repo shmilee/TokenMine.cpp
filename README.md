@@ -47,7 +47,89 @@ cmake --build build
 视口、投影纵横比与屏幕 UI 布局每帧读取窗口当前像素尺寸，缩放后场景立即跟随
 （最小尺寸 320×200）；设为 `false` 则锁定在配置尺寸。
 
-## 当前可玩内容（Phase 23）
+## 玩法指南
+
+### 操作
+
+| 按键 | 功能 |
+|---|---|
+| `W/A/S/D` | 移动 |
+| 鼠标左键（单击） | 锁定指针——**锁定后才能用鼠标转向视角** |
+| 鼠标移动 | 转向视角（仅指针锁定时生效） |
+| 鼠标左键（按住） | 挖掘准星处的方块（`1.5s × 方块硬度 ÷ 工具速度`）；若准星对准 mob = 攻击（每 0.25s 一击） |
+| 鼠标右键 | 按选中物品：放置方块 / 吃东西 / 拉弓蓄力（松手射出）/ 打开工作台面板 |
+| `Space` | 跳跃（贴地时）；水中 = 上浮 |
+| `LeftShift` | 冲刺（5.6 块/秒，行走 4.3） |
+| `LeftControl` | 潜行（身位降低、不自动迈 1 格台阶、防跌落边缘） |
+| `Tab` | 循环切换热栏选中格 |
+| `Q` | 丢弃选中格物品（落地为掉落物） |
+| `E` | 打开背包 + 合成面板（2×2 合成格 + shapeless 配方列表） |
+| `F3` | 调试信息（坐标/朝向/时间/难度/FPS 等） |
+| `F5` | 立即存档（仅 `--save` 运行时有效） |
+| `R` | 死亡后重生 |
+| `ESC` | 解锁指针 / 关闭窗口退出 |
+
+### 生存循环
+
+1. **白天是安全的**（zombie 和 skeleton 只在黑暗处生成）。挖树（`wood`）→
+   合成木板/木棍/工具（见下）；挖矿石获得材料（煤/铁/金/钻石直接掉对应材料）。
+2. **天黑前做好准备**：夜里 zombie（贴身近战）和 skeleton（远距离射箭）会
+   生成并追杀你，树冠/洞穴的暗格里白天也会生成。世界出生点周围有保护环
+   （按难度 8/12/16 块），敌对 mob 不会在环内自然生成。
+3. **饥饿**：饥饿值 20，每 4 秒自然衰减 1 点；饥饿到 0 后每 4 秒掉 1 HP
+   （饿死）。回复饥饿 = 吃东西（见下）。
+4. **回复生命**：脱离受伤 10 秒后，若饥饿 ≥ 6，每 4 秒自动回 1 HP。
+5. **死亡**：HP 归零 → 画面冻结显示 "You died! / Press R"，按 `R` 回出生点
+   重生（满血 + 满饥饿，**背包保留**）。坠落（净下落 > 3 格）和掉出世界
+   （y < −32）都会致命。
+
+### 战斗与食物
+
+- **攻击**：左键按住挥击，伤害 = **选中物品**的 `attack_damage`（徒手/方块/
+  材料 = 1，木镐 = 2，铁镐 = 3，弓近战 = 1），命中 mob 还会击退它。
+- **杀 mob 掉物品**（走近掉落物自动拾取，0.5s 拾取延迟）：
+  | mob | HP | 掉落 | 用途 |
+  |---|---|---|---|
+  | zombie（夜晚/黑暗） | 20 | `rotten_flesh` | **食物**（右键吃，+4 饥饿） |
+  | skeleton（夜晚/黑暗） | 20 | `arrow` | 弓的弹药 |
+  | cow（白天夜晚均可） | 10 | `leather` | 材料（暂不可食用） |
+  | sheep | 8 | `wool` | 材料 |
+  | chicken | 4 | `feather` | 材料 |
+- **吃东西**：选中食物后**右键** = 吃（回复数据点饥饿、消耗 1 个）；当前
+  唯一食物是 zombie 掉的 `rotten_flesh`（+4）。满饥饿时吃 = 无效果。
+  所以生存闭环是：**打 zombie → 吃掉落腐肉 → 撑过夜晚**。
+
+### 工具与合成路线
+
+- **E 面板**（2×2 格 + 左侧 shapeless 配方列表，点配方直接合成）：
+  - `wood` → 木板 ×4；木板 ×2 → 木棍 ×4；木板 2×2 → 工作台
+  - 木棍竖排 ×2 → 箭 ×2
+- **工作台**（右键放置的工作台，3×3 格）：
+  - 木镐（木板 3 + 木棍 2，镐形）——挖掘速度 ×2、攻击 2
+  - 铁镐（铁锭 3 + 木棍 2）——挖掘速度 ×4、攻击 3（铁锭 = 挖铁矿石）
+  - 弓（木棍 3 + 木板 1，C 形）
+- **弓的用法**：选中弓**按住右键**拉弓（1.6s 满蓄力），**松手射出**——
+  伤害/速度 = 5 × 威力 / 15 × 威力（快速点射 = 最低威力 0.1）；每支箭消耗 1 个
+  `arrow` 弹药（没有箭射不出去）；左键 = 弓近战（伤害 1，永不挖掘）。
+
+### 昼夜与危险
+
+- 昼夜循环：`config.json` 的 `world.day_length_seconds`（默认 1200s = 20 分钟
+  一天）；`--time 0.25` = 正午、`0.5` = 日落、`0.75` = 午夜。
+- **zombie**：只在黑暗生成（开阔地 = 夜晚；树冠/洞穴的暗格白天也危险），
+  16 块内发现你就全速追，贴身后每 1 秒打 3 点（随难度缩放：easy 1.5 /
+  normal 3 / hard 4）。
+- **skeleton**（Phase 27）：同样只在黑暗生成；16 块内发现你，**14 块内开始
+  射箭**（每 1.5 秒一支，每支 2 点，随难度缩放），你靠到 3 块内它会边退
+  边射——保持中距离对射或绕开它；它的箭有重力弧线（发射时已做提前量
+  补偿，站桩躲不掉，**移动可以躲**）。
+- **难度**（`config.json` 的 `mobs.difficulty`）：`easy` / `normal` /
+  `hard`——影响敌对生成保护环半径（8/12/16）、敌对伤害（×0.5/1.0/1.33）、
+  敌对生成节奏（慢/中/快）。
+- mob 生成在你周围 4–6 块的环内，同时最多 4 只，离你 40 块外自动消失；
+  mob 不入存档（读档后重新自然生成）。
+
+## 当前可玩内容（Phase 27）
 
 - **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时）/游泳时随时上浮，
   `LeftShift` 冲刺，鼠标转向（**左键点击锁定指针；转向仅在指针锁定时生效**，
@@ -85,8 +167,8 @@ cmake --build build
     填充 = `clamp(value − 2i, 0, 2)`（半图标按 0.5 粒度渲染）。只在游玩态
     （锁定 + 背包未开）显示，无输入运行零新增绘制
 - **Mob 与 AI**（Phase 20，Phase 22/26 被动 mob，Phase 25 难度系统，
-  `MobEntity`/`MobRegistry`，全数据驱动；数据含 zombie（敌对）+
-  cow/sheep/chicken（被动，Phase 22/26））：
+  Phase 27 skeleton 远程敌对，`MobEntity`/`MobRegistry`，全数据驱动；
+  数据含 zombie/skeleton（敌对）+ cow/sheep/chicken（被动））：
   - **生成**：帧节奏驱动（`data/mob_spawning.json`：每 `check_every_frames` 帧尝试
     一次、`first_spawn_frame` 之前不生成、`max_mobs` 上限）；生成格 = 玩家列周围
     `[min_radius, max_radius]` 环内按固定扫描序的第一个合法格（固体地板 + 头顶
@@ -110,6 +192,14 @@ cmake --build build
     ≤2：全速追）→ **Attack**（水平距离 ≤`attack_range` 且高度差 ≤1：停下、
     面向玩家、每 `attack_cooldown` 秒打 `attack_damage` 点——走 P16 的玩家
     受伤路径：红闪/音效/死亡全由既有轮询驱动）。玩家死亡时不追不打。
+    **RangedAttack**（Phase 27，数据 `shoot_range > 0` 的 mob = skeleton）：
+    玩家进入 `shoot_range`（水平）→ 面向玩家、每 `attackCooldown` 秒经
+    shoot 回调放箭（游戏在 mob 头部生成带 `hurtPlayer` 标记的箭，瞄点 =
+    玩家眼高 + 0.5·g·t² 的弧线提前量——站桩必中、移动可躲；箭被扫掠
+    命中玩家 AABB 时走 P16 受伤路径）；玩家贴近 `retreat_distance` 内 →
+    全速后撤（边退边射，Minecraft kite）；超过 `shoot_range` 但仍在
+    `detect_radius` 内 → 按 Chase 逼近。远程 mob 的 `attack_range` 是
+    （不使用的）近战距离，skeleton 设 0 = 永不近战。
     **被动 mob**（Phase 22 落地、Phase 26 扩到 sheep/chicken）：`detect_radius`/
     `attack_range`/`attack_damage` 三个字段允许 0（校验 `>= 0`，负数仍拒绝）——0 值
     使追/击条件永不成立，被动 mob 只有 Wander 状态，纯数据表达，AI 代码无特判
@@ -118,15 +208,17 @@ cmake --build build
     数据（徒手/方块/材料=1.0，工具见 `data/items/*.json`，木镐 2 / 铁镐 3）+
     沿瞄准方向击退（水平 4 + 抬升 2.5，0.3s 击退窗口内 AI 不接管速度）
   - **死亡**：HP 归零 → 掉落 `drops` 数据定义的物品（zombie 掉
-    `rotten_flesh`，cow 掉 `leather`，sheep 掉 `wool`，chicken 掉
-    `feather`——均为 material 物品 + 图标）后移除；击退/坠落无伤害（v1）
-  - **渲染**：box 模型（zombie = 头 0.5³ + 身 0.5×1.0×0.3；cow = 头
+    `rotten_flesh`，skeleton 掉 `arrow`，cow 掉 `leather`，sheep 掉
+    `wool`，chicken 掉 `feather`——均为 material 物品 + 图标）后移除；
+    击退/坠落无伤害（v1）
+  - **渲染**：box 模型（zombie = 头 0.5³ + 身 0.5×1.0×0.3；skeleton 同
+    zombie 尺寸（头 0.5³ + 身 0.5×1.0×0.3、AABB 0.6×1.8）；cow = 头
     0.45³ + 身 0.8×0.7×1.1、AABB 1.2×1.5 比 zombie 宽；sheep = 头 0.4³ + 身
     0.8×0.8×1.2、AABB 同 cow；chicken = 头 0.25³ + 身 0.3×0.4×0.5、AABB
     0.5×0.8 比 zombie 小，各 6 面同一 atlas tile，
     `tools/generate_mob_textures.py` 生成 zombie 绿皮肤+深色眼/青色上衣、
-    cow 棕底白斑毛+深色眼、sheep 白绒毛+深色眼、chicken 米白羽+深色眼+
-    红冠+橙喙；atlas 27 tile），
+    skeleton 骨白+深色眼窝/鼻腔、cow 棕底白斑毛+深色眼、sheep 白绒毛+
+    深色眼、chicken 米白羽+深色眼+红冠+橙喙；atlas 29 tile），
     与掉落物同 pass（`translate(位置) × rotateY(朝向)`，朝向 = 相机 yaw 约定，
     箱体的 −Z 面是脸）；天空光全亮烘焙（与掉落物同一简化，无局部光）
   - **开关**：config `mobs.enabled`（默认 true）；**mob 不入存档**（与 Minecraft
@@ -637,6 +729,7 @@ mine-craft/
 - [x] **Phase 24** — 弓后续（P21 简化项回收）：蓄力（右键拉弓：`Input::wasReleased` 释放边沿事件；按住累加真实 dt、封顶 `kBowFullDrawSeconds=1.6s`、松键射出 `power=clamp(拉弓/1.6, 0.1, 1)`——`core/bow.hpp` 纯函数游戏与单测共享；速度/伤害 = 物品数据 × power；左键改弓近战 `attack_damage` 数据（bow=1）且永不挖掘；蓄力状态在解锁/面板/换热栏/重生清零；拉弓渲染 = 手持图标按威力拉向屏幕中心 64px）/箭物品 + 弹药（material `arrow` max_stack 64 + 图标 + shaped 配方 2 stick 竖排→2；发射器新数据字段 `ammo`（物品名，init 经 ItemRegistry 交叉校验；缺席=无限箭），发射消耗槽序升序第一个箭）/插墙残箭（`Projectile` 撞 solid 由即亡改 stuck 态：留命中处、`stuckDir` 保留撞击前方向——碰撞解算器清零速度碰撞轴、渲染与命中测试改用/跳过；无物理、按 `kMaxAge` 30s 消亡——P10 头注释"撞墙钉住"原意）/"bow" 弦音（13 WAV）/bow.json 加 `ammo`+`attack_damage`；E2E：base18 门 ×2 字节不变、满蓄力射击 ×2 与短蓄力射击 ×2 与对照 ×2 各自逐字节一致（松键边沿的墙钟→帧钟 ±1 帧抖动只在射击用例偶发，多跑取字节一致对）、full vs ctrl 178 px 差（174 = 飞行箭 x[636,643] y[407,429]、4 = 热栏计数 16→15，UI 外零差）、short vs ctrl 1002 px 差（998 = 插墙箭 x[608,647] y[544,610]、4 = 计数；短蓄力 power 0.1875 → 速度 2.81 插进身前草地 vs 满蓄力 15 飞向天空——蓄力缩放同屏验证）；626/626 单测（+11：释放边沿 1、ammo 解析/默认/拒绝 3、蓄力 power 映射 4、stuck 语义（不动/计时消亡/保留方向）2、竖排 1 列 shaped 配方 1）
 - [x] **Phase 25** — 生成保护半径/难度系统：`core/difficulty.hpp` 纯模型（`easy`/`normal`/`hard` 严格大小写解析；出生点保护半径 8/12/16 = Minecraft 值；敌对伤害缩放 0.5/1.0/4÷3（zombie 3 → 1.5/3/4，镜像 MC 2.5/3/4 相对形状）；生成节奏缩放 0.5/1.0/1.5 → 30 帧 → 60/30/20，`normal` = 全 1.0 = 基线零变化）/ mob 数据字段 `hostile`（可选 bool 默认 false，非 bool 拒绝；数据驱动非行为推导；zombie = true）/ 保护环 = 世界出生点水平圆（读档不改中心；仅 hostile 受检，passive 豁免——Minecraft 约定）/ `findMobSpawnCell` 保护参（扫描首查）/ config `mobs.difficulty`（默认 normal）/ F3 difficulty 行；639/639；无输入基线逐字节不变
 - [x] **Phase 26** — 更多 mob（纯数据）：按 P22 已验证的纯数据流落地 sheep/chicken 被动 mob（零新增游戏代码）——`data/mobs/sheep.json`（HP 8、speed 0.5、全 0 攻击字段、`spawn_max_light` 15、掉 `wool`；box 头 0.4³ + 身 0.8×0.8×1.2，AABB 1.2×1.5 同 cow）/ `data/mobs/chicken.json`（HP 4、speed 0.6、`wander_interval` 2.0、掉 `feather`；box 头 0.25³ + 身 0.3×0.4×0.5，AABB 0.5×0.8 = 首个比 zombie 小的模型——生成格/重叠/间距规则全用模型数据，无改动）/ `wool` + `feather` material 物品 + 图标 / mob 纹理 4 tile（sheep 白绒毛+深色眼、chicken 米白羽+深色眼+红冠+橙喙，atlas 23→27，新 tile 只占空位、既有坐标零移动）/ 名单 [zombie, cow, sheep, chicken]——类型抽取 = `pick % 名单长度`（种子 ⊕ 帧号），扩名单改变各帧抽中类型；**base 60 帧运行在 `first_spawn_frame=60` 的首次尝试之前结构上零尝试（主循环 `update` 时 `m_frameCount` 尚未自增）= 基线结构性不受名单影响**；643/643（+4：sheep/chicken 完整解析、chicken box 越界 AABB 拒绝、4 类型名单解析）；E2E（P25 协议：每拍前 unmap 覆盖窗 + ≥6s 窗口 + 零并发）：base18 门 ×2 字节不变、白天 360f（t=0.275 仍在正午平台）mobs-on ×2 与 mobs-off ×2 各自逐字节一致（mobs-off == base 逐字节）、vs 对照 **15535 px 差 = 恰好 4 个 mob 剪影**（2 chicken + 1 sheep + 1 cow，与确定性预测逐一对应：f60/f90 chicken 生成、f120/f150/f210 zombie 光门拒绝、f180 cow 生成、f240 sheep 生成（`max_mobs` 4 满）、f270/f300/f330 全部 cap 拒绝）、**zombie 绿 0 px**（白天敌对压制保持）、心/饥饿/热栏三带全 0
+- [x] **Phase 27** — 更多 mob（代码）：skeleton 远程敌对 mob——首个打破纯数据流的 mob（新增 AI 状态 + 箭伤玩家路径）。**数据** `data/mobs/skeleton.json`（HP 20、speed 0.8、`detect_radius` 16、`attack_range` 0 = 永不近战、`attack_damage` 2（箭伤）、`attack_cooldown` 1.5、新字段 `shoot_range` 14 / `retreat_distance` 3 / `shoot_speed` 15、`spawn_max_light` 0、`hostile` true（P25 自动进保护环/伤害缩放/生成节奏）、掉 `arrow`（既有 material）；box 模型同 zombie 尺寸）+ 严格校验（负数拒绝、`shoot_speed` 显式值须 (0,100]、`shoot_range>0` 必须有 `shoot_speed` 跨字段校验）/ 名单 [zombie, cow, sheep, chicken, skeleton]（%5）/ 纹理 2 tile（骨白 skull 深色眼窝+鼻腔，atlas 27→29 只占空位）。**代码** `MobState::RangedAttack`（`shoot_range>0` 且玩家水平 ≤shoot_range：面向玩家 + 冷却经 shoot 回调放箭；≤retreat_distance 全速后撤边退边射；超 shoot_range 按 Chase 逼近）/ `Projectile` +`hurtPlayer` 标志（游戏扫掠测试先对玩家 AABB：命中 = P16 受伤路径 + 箭消耗）+`source`（**箭不伤射手**：spawn 点在其自身 AABB 内，下一帧扫掠 t=0 自命中会自杀自灭——命中循环跳过 source）/ 放箭瞄点 = 玩家眼高 + 0.5·g·(d/speed)² 弧线提前量（无补偿时直线瞄只命中 ≤6 块，10 块外箭从脚下飞过）/ 生成 debug 日志（cap 拒绝/无格/生成位置/射击/箭命中玩家，`--log-level debug`）；650/650（+7：skeleton 解析、ranged 字段拒绝 ×5、远程 AI 站桩射击 300 帧 4 发零近战、贴近后撤、5 型名单、`hurtPlayer`/`source` 标志）；E2E（P25 协议）：base18 门 ×2 字节不变（名单 4→5 结构性免疫）、白天 360f mobs-on ×2 与 mobs-off ×2 逐字节一致（mobs-off == base）、vs 对照 36607 px = 4 被动剪影（2 sheep + chicken + cow，与 %5 pick 序列逐一对应，hostile 光门拒，zombie 绿 0）、夜晚（seed 9 手工存档 p27far：seed 123456789 的 pick 流在前 4 抽无 skeleton 且 cap 于 f150 满，换种子使前 4 抽 = cow/skeleton/cow/skeleton）360f ×2 逐字节一致、**存档 health 8 确定性**（20 − 6 箭×2，debug 日志全程可验证：生成→站桩射击→箭命中×6）、FRESH-FLASH 天门（伤害红纱 a≈0.25 全屏——去纱后 vs 对照 3 cluster = 2 skeleton（skull 眼窝可辨）+ 2 cow，zombie 绿 0）
 
 ## 开发约定
 

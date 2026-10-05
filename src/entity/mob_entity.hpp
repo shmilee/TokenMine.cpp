@@ -23,6 +23,16 @@
 //            height: stand still, face the player, and deal
 //            `attack_damage` through the hit callback every
 //            `attack_cooldown` (the game wires it to Player::damage).
+//   RangedAttack (Phase 27) — for mobs whose data `shoot_range > 0`
+//            (the skeleton): the player is within `shoot_range` (horizontal)
+//            → face it and fire through the shoot callback every
+//            `attackCooldown` (the game spawns an arrow at the player's eye
+//            with the data shoot_speed / difficulty-scaled damage). While
+//            the player is inside `retreat_distance` (0 = never) the mob
+//            backs away at full data speed instead of standing. Beyond
+//            shoot_range (but inside detect_radius) it chases like a melee
+//            mob. A ranged mob's `attack_range` is its (unused) melee
+//            range — the skeleton sets it to 0, so it never melee-attacks.
 // A dead player is neither chased nor attacked (the mob wanders).
 // Passive mobs (Phase 22): detect_radius 0 (and/or attack_range 0 /
 // attack_damage 0) make the chase/attack conditions never hold, so the
@@ -55,6 +65,9 @@ enum class MobState {
     Wander, // no player in range: seeded random decisions
     Chase,  // player in range: walk toward it
     Attack, // in attack range: stand still and swing on the cooldown
+    // Ranged attack (Phase 27): fire on the cooldown, back away inside
+    // retreat_distance.
+    RangedAttack,
 };
 
 class MobEntity : public Entity {
@@ -95,6 +108,19 @@ public:
     void setHitCallback(std::function<void(float)> cb) {
         m_hitPlayer = std::move(cb);
     }
+    // Ranged mobs (Phase 27): the AI invokes this to fire; the game
+    // spawns the arrow (data shoot_speed, difficulty-scaled damage) aimed
+    // at the player's eye. The callback reads the mob through the pointer
+    // the game captured at spawn, so the mob must outlive its callback.
+    void setShootCallback(std::function<void()> cb) {
+        m_shootPlayer = std::move(cb);
+    }
+    // Head height for ranged shots (80% of the model height): the arrow
+    // spawn point (the game aims from here at the player's eye).
+    Vec3 eyePosition() const {
+        return position() +
+               Vec3 {0.0f, m_def->model.height * kEyeHeightFraction, 0.0f};
+    }
 
 private:
     void integrate(float h) override;
@@ -112,6 +138,7 @@ private:
     double m_knockbackTime = 0.0;   // seconds of AI suppression left
     std::uint64_t m_rng = 0;        // splitmix64 state (per-mob)
     std::function<void(float)> m_hitPlayer;
+    std::function<void()> m_shootPlayer;  // ranged fire (Phase 27)
 
     // Shared fall (same numbers as dropped items / player).
     static constexpr float kGravity = 32.0f;
@@ -125,6 +152,8 @@ private:
     // while the AI holds off; then steering resumes.
     static constexpr double kKnockbackTime = 0.3;
     static constexpr float kKnockbackDamping = 6.0f;
+    // The ranged-shot origin as a fraction of the model height (the head).
+    static constexpr float kEyeHeightFraction = 0.8f;
 };
 
 } // namespace mc
