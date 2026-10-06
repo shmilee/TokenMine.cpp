@@ -40,6 +40,8 @@
 
 - [x] **Phase 32** — 玩家参数配置化（用户指定："像 hungerDecaySeconds 这类参数最好能在配置中修改"）：`Player::Params` 全部 24 个数值（运动/游泳/几何/生存节奏）可由 `config/config.json` 的 `player.*` 节覆盖——`Player::Params::fromConfig`（缺失键 = 结构体默认；已存在键必须是 JSON 数字且过范围检查：非数值/非正/eye_height ≥ height/crouch_height ≥ height/regen_hunger_threshold > max_hunger = 启动报错；未知 `player.*` 键容忍）/ `Player` 构造 +params 重载（3 参委托 4 参）/ Game init 加载（`MC_TRY`，出生点 room check 同步用配置尺寸）/ HUD 心带·饥饿带图标数由 `ceil(max/2)` 派生（默认 20 = 10 图标，逐位不变；非默认 max 自动扩展条带）/ 种子配置带出 9 个生存节奏键 / 测试 +11（fromConfig 默认/全量覆盖/逐键缺省/非数值拒绝/零负拒绝/offset 与 threshold 允许 0/eye·crouch 跨字段拒绝/threshold 越界拒绝/未知键容忍/config→Player 端到端 1s tick 90 帧 → 19）；680/680；E2E：base18 门 ×2 字节一致（第 7 次结构性免疫：config 解析仅启动期、config_xep 无 player 节 = 全默认、HUD 无输入不绘制且默认 20/20 派生 = 10 图标逐位一致）、白天 360f ×2 字节一致且 == p28_daym_a、**probe 运行游戏级验证**（config + `hunger_decay_seconds: 1`，360f 存档 = hunger 14【Python 镜像累加器：首个 1s 边界落帧 60、360f 内 6 tick】/ sat 0 / health 20 / time 0.275 全命中）
 
+- [x] **Phase 33** — 死亡时暂停流式加载（用户确认；由用户日志发现：玩家死亡后身体冻结，但流式仍在死亡画面背后把 view_distance 80 的半径方（~20.7 万 chunk / 数 GB）继续填满，需数小时 CPU）：`Game::streamChunks()` 一行门控——`isDead()` 时在**迟滞逻辑之前**提前返回（激活状态保留，`R` 重生后继续填充；在飞的 ≤1 列经 post→flush 窗口自然排空、`postLightJobs` 照常照亮——integrate/光照**不**门控，否则该列停在光 0）。昼夜/流体/mob 不受影响（与背包打开同规则）。680/680（Game 级行为按惯例走 E2E，无新增单测）；E2E：base18 门 ×2 字节一致（**第 8 次结构性免疫**：无输入运行不会死 → 门控惰性）、白天 360f ×2 字节一致且 == p28_daym_a、**饿死死亡场景（全程无输入、确定性）**：probe config（hunger 1s/pt + starve 1s/HP + `view_distance` 25）+ 存档置演示区**边缘列** (1,0)（距缺失列 ≤1 才激活流式——PITS 新坑位）→ t=40.0s 整确定性死亡（真实 dt，fps 无关）；死亡时已填 946/2601 列（方未满）+ **41.5s 后零集成**（无门控则会继续到 ~43s）+ 最终 7696 chunks < 20808 + 存档 ×2 字节一致 + 死亡屏幕像素验证（白字 612 px）；**顺带发现 2 个既有问题**（→ KNOWN_ISSUES）："You died!" 白字（`ui.frag` textured 批次忽略 `u_color.rgb`，P16 起从未像素验证）、存档加载到空中绕过坠落伤害（`fallStartY` 未记录）
+
 ## 细节存档索引（docs/archive/）
 
 - **Phase 3** — `archive/phase-3.md`
@@ -71,5 +73,6 @@
 - **Phase 29** — `archive/phase-29.md`
 - **Phase 31** — `archive/phase-31.md`
 - **Phase 32** — `archive/phase-32.md`
+- **Phase 33** — `archive/phase-33.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

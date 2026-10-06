@@ -14,6 +14,8 @@
     **坠落伤害** = `max(0, 净下落格数 − 3)` HP（从离地帧记录 `fallStartY`，
     落地时结算；落入水中的落地取消伤害）；掉出世界（y < −32）= 直接死亡
     （`damage(maxHealth×1000)`）。死亡后冻结玩家、显示 "You died! / Press R"，
+    流式加载同时暂停（Phase 33：见世界生成节——不暂停的话死亡画面背后会按
+    `view_distance` 继续填满半径方，大半径下 = 数小时 CPU + 数 GB 内存），
     `R` 重生 = 回出生点 + 满血 + **满饥饿** + **满饱和度**（= 一顿饱饭）
     + 速度清零（**背包保留**）
   - **自然回复**：脱离受伤状态 `regenDelay=10s` 后，每 `regenInterval=4s` 回 1 HP；
@@ -292,7 +294,13 @@
   渲染（只读）→ post jobs（worker 运行窗口）。新列首帧以光 0 渲染、下一帧
   补光重网格（帧锁定下的确定性 pop-in）。**只增不卸载**（v1，见
   `docs/KNOWN_ISSUES.md`）。静止玩家（距边缘 ≥2 列）永不触发 → 无输入运行零 job，
-  基线截图逐字节复现
+  基线截图逐字节复现。**死亡时暂停**（Phase 33）：`streamChunks()` 在
+   `isDead()` 时提前返回（在迟滞逻辑**之前**，激活状态保留）——死亡画面冻结
+   玩家，但流式若继续会围绕尸体把半径方填满（`view_distance` 80 ≈ 20.7 万
+   chunk / 数 GB / 数小时）；在飞的 ≤1 列经 post→flush 窗口自然排空，
+   `postLightJobs` 照常照亮（integrate/光照不门控，否则该列会停在光 0）；
+   `R` 重生后从保留的迟滞状态继续填充。昼夜/流体/mob 照常 tick（与背包打开
+   同规则）
 - **WorldGenerator**（无状态、纯函数 `generateChunk`，worker 线程并行调用）：
   - **地形**：fBm 2D 噪声高度场（±24 格，基线 40），y=0 bedrock 层，深处 stone
   - **生物群系**：低频噪声 + 权重选择（`assets/data/biomes/*.json`：desert/forest/plains），

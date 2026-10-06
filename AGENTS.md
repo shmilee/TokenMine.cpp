@@ -9,11 +9,12 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 30 完成时）
+## 现状（Phase 33 完成时）
 
-- 功能阶段 P0–P29 全部完成并提交；Phase 30 = 文档整理分块（本文件所在提交）。
-- 测试 **669/669**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
-- 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P29 = 第 5 次结构性免疫验证）。
+- 功能阶段 P0–P33 全部完成并提交；P31 = 饥饿节奏 MC 对齐、P32 = 玩家参数
+  配置化、P33 = 死亡时暂停流式加载。
+- 测试 **680/680**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+- 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P33 = 第 8 次结构性免疫验证）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 
 ## 命令

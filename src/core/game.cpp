@@ -701,6 +701,17 @@ void Game::streamChunks() {
     if (!m_pool || !m_generator || !m_player) {
         return;
     }
+    // While the player is dead the body is frozen and the death screen
+    // owns the input: stop requesting new columns. The radius square
+    // around the corpse would otherwise keep filling to view_distance
+    // (a radius-80 square holds ~200k chunks: hours of streaming and
+    // several GB of allocations behind the death veil). In-flight jobs
+    // (at most kStreamColumnsPerFrame) still drain through the
+    // post->flush window and get lit by postLightJobs as usual, and the
+    // preserved hysteresis state resumes the fill on respawn (R).
+    if (m_player->isDead()) {
+        return;
+    }
     // The player's column (bottom-center position).
     const Vec3 p = m_player->position();
     const ColumnPos player{
