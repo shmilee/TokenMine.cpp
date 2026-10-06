@@ -10,8 +10,12 @@ namespace mc {
 
 namespace {
 
-// 53-bit uniform in [0, 1) from a splitmix64 stream.
+// 53-bit uniform in [0, 1) from an advancing splitmix64 stream:
+// state += gamma, then mix (the repo's splitmix64 is a pure finalizer —
+// without the step every call in a burst returned the same value and all
+// 16 particles overlapped into one visible point; fixed in Phase 29).
 double uniform01(std::uint64_t& state) {
+    state += 0x9E3779B97F4A7C15ULL;
     return static_cast<double>(splitmix64(state) >> 11) /
            static_cast<double>(1ull << 53);
 }

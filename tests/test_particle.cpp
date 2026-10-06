@@ -2,6 +2,7 @@
 // gravity integration, lifetime culling, the particle cap).
 #include <gtest/gtest.h>
 
+#include <set>
 #include <vector>
 
 #include "block/block.hpp"
@@ -43,6 +44,45 @@ TEST(ParticleTest, DifferentSeedsGiveDifferentBursts) {
         }
     }
     EXPECT_TRUE(anyDifferent);
+}
+
+TEST(ParticleTest, BurstParticlesAreDistinctWithinOneBurst) {
+    // Phase 29 regression: uniform01 must advance the splitmix64 state —
+    // before the fix every call in a burst returned the same value, so all
+    // 16 particles shared one offset/velocity/life (one visible point).
+    ParticleSystem p;
+    p.spawnBreak(1, 2, 3, BlockID {1}, 0.8f, 0.1f, 0x1234);
+    const auto& parts = p.particles();
+    ASSERT_EQ(parts.size(),
+              static_cast<std::size_t>(ParticleSystem::kBreakBurstCount));
+    std::set<float> distinctX;
+    std::set<float> distinctLife;
+    for (const Particle& part : parts) {
+        distinctX.insert(part.position.x);
+        distinctLife.insert(part.life);
+    }
+    EXPECT_EQ(distinctX.size(), parts.size());
+    EXPECT_EQ(distinctLife.size(), parts.size());
+}
+
+TEST(ParticleTest, BurstValuesMatchTheAdvancingStream) {
+    // Pins the exact Phase 29 stream: state += gamma before each mix, one
+    // advance per uniform01 call, call order ox/oy/oz/u1..u4/life per
+    // particle. Position/life involve no libm calls, so the pins hold on
+    // any IEEE-754 platform.
+    ParticleSystem p;
+    p.spawnBreak(1, 2, 3, BlockID {1}, 0.8f, 0.1f, 0x1234);
+    const auto& parts = p.particles();
+    ASSERT_EQ(parts.size(),
+              static_cast<std::size_t>(ParticleSystem::kBreakBurstCount));
+    EXPECT_FLOAT_EQ(parts[0].position.x, 1.4108357429504395f);
+    EXPECT_FLOAT_EQ(parts[0].position.y, 2.396921157836914f);
+    EXPECT_FLOAT_EQ(parts[0].position.z, 3.5287749767303467f);
+    EXPECT_FLOAT_EQ(parts[0].life, 0.6028023362159729f);
+    EXPECT_FLOAT_EQ(parts[1].position.x, 1.187707781791687f);
+    EXPECT_FLOAT_EQ(parts[1].position.y, 2.493948221206665f);
+    EXPECT_FLOAT_EQ(parts[1].position.z, 3.238013982772827f);
+    EXPECT_FLOAT_EQ(parts[1].life, 0.5545276999473572f);
 }
 
 TEST(ParticleTest, ParticlesStartNearTheBrokenBlock) {
