@@ -554,7 +554,13 @@ Result<void> Game::buildScene() {
     // Spawn the player on dry land: the seed may put the origin underwater
     // or a tree may stand on the column, so check nearby candidates before
     // falling back to (0, 0).
-    const Player::Params playerDims; // default dimensions for the room check
+    // Player tuning (Phase 32): the config's player.* keys override the
+    // Player::Params defaults (a missing key = the struct default; present
+    // keys are validated, so a mistyped value fails startup instead of
+    // silently falling back).
+    const auto playerParams = Player::Params::fromConfig(m_config);
+    MC_TRY(playerParams);
+    const Player::Params& playerDims = *playerParams; // room check
     Vec3 spawnPos {0.5f,
                    static_cast<float>(m_generator->surfaceHeight(0, 0)) + 1.0f,
                    0.5f};
@@ -585,7 +591,7 @@ Result<void> Game::buildScene() {
     // player, but the protection stays anchored to the world spawn (the
     // Minecraft semantics; there are no beds in v1).
     m_spawnPoint = spawnPos;
-    m_player.emplace(m_world, m_blocks, spawnPos);
+    m_player.emplace(m_world, m_blocks, spawnPos, *playerParams);
     m_player->pitch = -0.25f; // look slightly down at the landscape
     m_camera.position = m_player->eyePosition();
     m_camera.yaw = m_player->yaw;
@@ -2768,27 +2774,33 @@ void Game::renderUi() {
                         y0 + kHotbarSlotSize - 4 - kGlyphSize, 1, kText);
             }
         }
-        // Health bar (Phase 16) + hunger bar (Phase 23): 10 hearts above
-        // the hotbar, 2 HP each, three-state tiles (full / half / empty);
-        // the hunger is 10 drumsticks (2 each, same tiles) on the SAME row
-        // to the right of the hearts. Both strips share the icon metrics.
+        // Health bar (Phase 16) + hunger bar (Phase 23): hearts above the
+        // hotbar, 2 points per icon, three-state tiles (full / half /
+        // empty); the hunger strip (drumsticks, same tiles) sits on the
+        // SAME row to the right of the hearts. Both strips share the icon
+        // metrics; the icon count follows the configured max (the default
+        // 20 = the 10-icon Phase 16/23 layout, bit-identical).
         {
             constexpr int kIconPx = 16;
             constexpr int kIconGap = 2;
-            constexpr int kIconCount = 10;
             constexpr int kStripGap = 6; // between the hearts and hunger
-            const int stripW = kIconCount * kIconPx +
-                               (kIconCount - 1) * kIconGap;
+            const int heartIcons =
+                static_cast<int>(std::ceil(m_player->maxHealth() / 2.0f));
+            const int hungerIcons =
+                static_cast<int>(std::ceil(m_player->maxHunger() / 2.0f));
+            const int heartW =
+                heartIcons * kIconPx + (heartIcons - 1) * kIconGap;
             // The hearts stay centered (the Phase 16 layout); the hunger
             // strip starts just past their right edge.
-            const int hx0 = (w - stripW) / 2;
-            const int gx0 = hx0 + stripW + kStripGap;
+            const int hx0 = (w - heartW) / 2;
+            const int gx0 = hx0 + heartW + kStripGap;
             const int hy = y0 - kIconPx - 6;
             // One pass per strip: tile t occupies u in [t/3, (t+1)/3].
-            auto drawStrip = [&](int x0, const Texture& tex, float value) {
+            auto drawStrip = [&](int x0, int icons, const Texture& tex,
+                                 float value) {
                 UiBatch& batch =
                     batchFor(Vec4 {1.0f, 1.0f, 1.0f, 1.0f}, true, &tex);
-                for (int i = 0; i < kIconCount; ++i) {
+                for (int i = 0; i < icons; ++i) {
                     // Icon i covers the interval [2i, 2i+2); three states
                     // (a sub-half fill renders as half — see docs/KNOWN_ISSUES).
                     const float fill =
@@ -2802,8 +2814,8 @@ void Game::renderUi() {
                                     1.0f});
                 }
             };
-            drawStrip(hx0, m_healthTexture, m_player->health());
-            drawStrip(gx0, m_hungerTexture, m_player->hunger());
+            drawStrip(hx0, heartIcons, m_healthTexture, m_player->health());
+            drawStrip(gx0, hungerIcons, m_hungerTexture, m_player->hunger());
         }
         // Crosshair: a 2px thin cross at the screen center.
         UiBatch& cross = batchFor(kCrosshair, false, nullptr);

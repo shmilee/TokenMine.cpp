@@ -10,9 +10,79 @@
 namespace mc {
 
 Player::Player(const World& world, const BlockRegistry& blocks, Vec3 spawnPos)
-    : Entity(world, blocks, spawnPos, Params {}.width, Params {}.height),
-      m_spawnPos(spawnPos) {
+    : Player(world, blocks, spawnPos, Params {}) {
+}
+
+Player::Player(const World& world, const BlockRegistry& blocks, Vec3 spawnPos,
+               Params params)
+    : Entity(world, blocks, spawnPos, params.width, params.height),
+      m_params(params), m_spawnPos(spawnPos) {
     teleportTo(spawnPos);
+}
+
+Result<Player::Params> Player::Params::fromConfig(const Config& config) {
+    Params p;
+    // One reader per field: a missing key keeps the struct default, a
+    // present key must be a finite JSON number (the Config getters would
+    // silently fall back to the default on a type mismatch, so this reads
+    // the raw values).
+    auto read = [&config](const char* name, auto& out,
+                          bool allowZero) -> Result<void> {
+        const std::string key = std::string("player.") + name;
+        const Json* j = config.at(key);
+        if (j == nullptr) {
+            return {}; // absent: keep the current (default) value
+        }
+        if (!j->isNumber()) {
+            return MC_FAIL("config " + key + " must be a number");
+        }
+        const double v = j->asDouble(0.0);
+        if (!std::isfinite(v) || (allowZero ? v < 0.0 : v <= 0.0)) {
+            return MC_FAIL("config " + key + " must be " +
+                           (allowZero ? "non-negative" : "positive") +
+                           ", got " + std::to_string(v));
+        }
+        out = static_cast<std::remove_reference_t<decltype(out)>>(v);
+        return {};
+    };
+    MC_TRY(read("width", p.width, false));
+    MC_TRY(read("height", p.height, false));
+    MC_TRY(read("eye_height", p.eyeHeight, false));
+    MC_TRY(read("walk_speed", p.walkSpeed, false));
+    MC_TRY(read("sprint_speed", p.sprintSpeed, false));
+    MC_TRY(read("jump_speed", p.jumpSpeed, false));
+    MC_TRY(read("gravity", p.gravity, false));
+    MC_TRY(read("terminal_velocity", p.terminalVelocity, false));
+    MC_TRY(read("swim_speed", p.swimSpeed, false));
+    MC_TRY(read("swim_up_speed", p.swimUpSpeed, false));
+    MC_TRY(read("water_gravity", p.waterGravity, false));
+    MC_TRY(read("water_terminal_velocity", p.waterTerminalVelocity, false));
+    MC_TRY(read("mouse_sensitivity", p.mouseSensitivity, false));
+    MC_TRY(read("max_health", p.maxHealth, false));
+    MC_TRY(read("fall_damage_offset", p.fallDamageOffset, true));
+    MC_TRY(read("crouch_height", p.crouchHeight, false));
+    MC_TRY(read("crouch_speed_scale", p.crouchSpeedScale, false));
+    MC_TRY(read("regen_delay_seconds", p.regenDelaySeconds, false));
+    MC_TRY(read("regen_interval_seconds", p.regenIntervalSeconds, false));
+    MC_TRY(read("max_hunger", p.maxHunger, false));
+    MC_TRY(read("hunger_decay_seconds", p.hungerDecaySeconds, false));
+    MC_TRY(read("starve_damage_interval_seconds",
+                p.starveDamageIntervalSeconds, false));
+    MC_TRY(read("regen_hunger_threshold", p.regenHungerThreshold, true));
+    MC_TRY(read("sprint_hunger_decay_factor", p.sprintHungerDecayFactor,
+                false));
+    // Cross-field sanity (the defaults satisfy all three).
+    if (p.eyeHeight >= p.height) {
+        return MC_FAIL("config player.eye_height must be < player.height");
+    }
+    if (p.crouchHeight >= p.height) {
+        return MC_FAIL("config player.crouch_height must be < player.height");
+    }
+    if (p.regenHungerThreshold > p.maxHunger) {
+        return MC_FAIL("config player.regen_hunger_threshold must be <= "
+                       "player.max_hunger");
+    }
+    return p;
 }
 
 bool Player::hasRoomAt(const World& world, const BlockRegistry& blocks,

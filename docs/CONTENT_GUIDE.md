@@ -170,6 +170,33 @@ cow（被动：棕白斑毛、`detect_radius`/`attack_range`/`attack_damage` 全
 `spawn_max_light` 15 任何时间可生成、掉 `leather`）；两者都不游泳不拆方块
 无动画——见 docs/KNOWN_ISSUES.md 的 Mob 章节。
 
+## 调节玩家参数（config/config.json `player.*`，Phase 32）
+
+玩家运动/生存模型的全部数值在 `Player::Params`，可在 `config/config.json`
+覆盖：**缺键 = 结构体默认值**；**已存在的键必须是 JSON 数字**且过范围检查
+（类型错/越界 = 启动报错，不会静默回退默认）；未知 `player.*` 键容忍（与
+config 其余部分的前向兼容一致）。种子配置（首次运行生成的 config.json）
+默认带出 9 个生存节奏键，其余键写出即生效：
+
+| 键 | 默认 | 说明 / 约束 |
+|---|---|---|
+| `max_health` | 20 | 最大生命；心带图标数 = ceil(max/2)（默认 10 心 × 2 HP）；>0 |
+| `fall_damage_offset` | 3 | 免坠落伤害格数（Minecraft: 3）；≥0 |
+| `regen_delay_seconds` | 10 | 脱离受伤后多久开始自然回复；>0 |
+| `regen_interval_seconds` | 4 | 自然回复每 +1 HP 的间隔；>0 |
+| `max_hunger` | 20 | 最大饥饿；饥饿带图标数 = ceil(max/2)；>0 |
+| `hunger_decay_seconds` | 36 | 衰减 tick 间隔（Minecraft 被动节奏：1 点 = 720 tick）；>0 |
+| `starve_damage_interval_seconds` | 20 | 饥饿 = 0 时每间隔受 1 HP 饥饿伤害（Minecraft normal：400 tick）；>0 |
+| `regen_hunger_threshold` | 6 | 低于该饥饿值无自然回复（Minecraft 规则）；0 ≤ v ≤ `max_hunger` |
+| `sprint_hunger_decay_factor` | 2 | 疾跑衰减加速因子（间隔 ÷ 因子）；>0 |
+
+运动/几何全套键（同样可覆盖，均 >0）：`width`（0.6）、`height`（1.8）、
+`eye_height`（1.62，须 < `height`）、`walk_speed`（4.3）、`sprint_speed`（5.6）、
+`jump_speed`（8.5）、`gravity`（32）、`terminal_velocity`（38）、`swim_speed`（3.1）、
+`swim_up_speed`（4.5）、`water_gravity`（12）、`water_terminal_velocity`（4）、
+`mouse_sensitivity`（0.0025）、`crouch_height`（1.6，须 < `height`）、
+`crouch_speed_scale`（0.3）。
+
 ## 使用存档（Phase 13）
 
 ```bash

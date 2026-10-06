@@ -24,6 +24,7 @@
 
 #include <algorithm>
 
+#include "core/config.hpp"
 #include "core/input.hpp"
 #include "core/math/vec3.hpp"
 #include "entity/entity.hpp"
@@ -83,11 +84,28 @@ public:
         double starveDamageIntervalSeconds = 20.0;
         float regenHungerThreshold = 6.0f;
         double sprintHungerDecayFactor = 2.0;
+
+        // Build the parameters from the config's `player.*` keys (Phase 32):
+        // a missing key keeps the struct default, a present key must be a
+        // JSON number (the Config getters would silently fall back to the
+        // default on a type mismatch, so this reads the raw values).
+        // Rejected: non-numeric values, non-positive values (only
+        // fall_damage_offset and regen_hunger_threshold may be 0),
+        // eye_height >= height, crouch_height >= height, and
+        // regen_hunger_threshold > max_hunger. Unknown player.* keys are
+        // tolerated (config forward-compat, like the rest of the config).
+        static Result<Params> fromConfig(const Config& config);
+
+        friend bool operator==(const Params&, const Params&) = default;
     };
 
     // `world` and `blocks` must outlive the player. `spawnPos` is the
-    // respawn point (bottom-center AABB position).
+    // respawn point (bottom-center AABB position). The params overload
+    // tunes the movement/survival model (the game builds it from config
+    // `player.*`); the plain form uses the struct defaults.
     Player(const World& world, const BlockRegistry& blocks, Vec3 spawnPos);
+    Player(const World& world, const BlockRegistry& blocks, Vec3 spawnPos,
+           Params params);
 
     // Advance the simulation by dt seconds (Entity::update virtual). The
     // controls (polled input + look state) must have been set by the

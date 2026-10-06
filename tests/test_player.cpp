@@ -70,8 +70,9 @@ struct Fixture {
         }
     }
 
-    Player makePlayer(Vec3 pos) const {
-        return Player(world, blocks, pos);
+    Player makePlayer(Vec3 pos,
+                      const Player::Params& params = Player::Params {}) const {
+        return Player(world, blocks, pos, params);
     }
 };
 
@@ -878,4 +879,176 @@ TEST(PlayerTest, HasRoomAtChecksSolidBlocks) {
     // A water block does not (non-solid).
     f.world.setBlock(8, 2, 8, f.water);
     EXPECT_TRUE(Player::hasRoomAt(f.world, f.blocks, {8.5f, 1.0f, 8.5f}, w, h));
+}
+
+// -- config params (Phase 32) ---------------------------------------------------
+
+// The Config getters silently fall back to the default on a type mismatch,
+// so fromConfig must read the raw values: every present key below is either
+// a JSON number (accepted, range-checked) or a string (rejected).
+
+TEST(PlayerParamsConfigTest, DefaultsWhenNoPlayerSection) {
+    Config cfg;
+    auto r = Player::Params::fromConfig(cfg);
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    EXPECT_EQ(*r, Player::Params {});
+}
+
+TEST(PlayerParamsConfigTest, ExplicitValuesOverride) {
+    Config cfg;
+    cfg.set("player.width", Json(0.5));
+    cfg.set("player.height", Json(1.9));
+    cfg.set("player.eye_height", Json(1.7));
+    cfg.set("player.walk_speed", Json(4.0));
+    cfg.set("player.sprint_speed", Json(6.0));
+    cfg.set("player.jump_speed", Json(9.0));
+    cfg.set("player.gravity", Json(30.0));
+    cfg.set("player.terminal_velocity", Json(40.0));
+    cfg.set("player.swim_speed", Json(3.0));
+    cfg.set("player.swim_up_speed", Json(4.0));
+    cfg.set("player.water_gravity", Json(10.0));
+    cfg.set("player.water_terminal_velocity", Json(3.0));
+    cfg.set("player.mouse_sensitivity", Json(0.002));
+    cfg.set("player.max_health", Json(30.0));
+    cfg.set("player.fall_damage_offset", Json(2.0));
+    cfg.set("player.crouch_height", Json(1.5));
+    cfg.set("player.crouch_speed_scale", Json(0.4));
+    cfg.set("player.regen_delay_seconds", Json(8.0));
+    cfg.set("player.regen_interval_seconds", Json(3.0));
+    cfg.set("player.max_hunger", Json(24.0));
+    cfg.set("player.hunger_decay_seconds", Json(12.0));
+    cfg.set("player.starve_damage_interval_seconds", Json(10.0));
+    cfg.set("player.regen_hunger_threshold", Json(8.0));
+    cfg.set("player.sprint_hunger_decay_factor", Json(3.0));
+    auto r = Player::Params::fromConfig(cfg);
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    const Player::Params& p = *r;
+    EXPECT_FLOAT_EQ(p.width, 0.5f);
+    EXPECT_FLOAT_EQ(p.height, 1.9f);
+    EXPECT_FLOAT_EQ(p.eyeHeight, 1.7f);
+    EXPECT_FLOAT_EQ(p.walkSpeed, 4.0f);
+    EXPECT_FLOAT_EQ(p.sprintSpeed, 6.0f);
+    EXPECT_FLOAT_EQ(p.jumpSpeed, 9.0f);
+    EXPECT_FLOAT_EQ(p.gravity, 30.0f);
+    EXPECT_FLOAT_EQ(p.terminalVelocity, 40.0f);
+    EXPECT_FLOAT_EQ(p.swimSpeed, 3.0f);
+    EXPECT_FLOAT_EQ(p.swimUpSpeed, 4.0f);
+    EXPECT_FLOAT_EQ(p.waterGravity, 10.0f);
+    EXPECT_FLOAT_EQ(p.waterTerminalVelocity, 3.0f);
+    EXPECT_FLOAT_EQ(p.mouseSensitivity, 0.002f);
+    EXPECT_FLOAT_EQ(p.maxHealth, 30.0f);
+    EXPECT_FLOAT_EQ(p.fallDamageOffset, 2.0f);
+    EXPECT_FLOAT_EQ(p.crouchHeight, 1.5f);
+    EXPECT_FLOAT_EQ(p.crouchSpeedScale, 0.4f);
+    EXPECT_DOUBLE_EQ(p.regenDelaySeconds, 8.0);
+    EXPECT_DOUBLE_EQ(p.regenIntervalSeconds, 3.0);
+    EXPECT_FLOAT_EQ(p.maxHunger, 24.0f);
+    EXPECT_DOUBLE_EQ(p.hungerDecaySeconds, 12.0);
+    EXPECT_DOUBLE_EQ(p.starveDamageIntervalSeconds, 10.0);
+    EXPECT_FLOAT_EQ(p.regenHungerThreshold, 8.0f);
+    EXPECT_DOUBLE_EQ(p.sprintHungerDecayFactor, 3.0);
+}
+
+TEST(PlayerParamsConfigTest, MissingKeysKeepPerKeyDefaults) {
+    Config cfg;
+    cfg.set("player.hunger_decay_seconds", Json(12.0));
+    cfg.set("player.max_health", Json(24.0));
+    auto r = Player::Params::fromConfig(cfg);
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    const Player::Params d; // the struct defaults
+    EXPECT_DOUBLE_EQ(r->hungerDecaySeconds, 12.0);
+    EXPECT_FLOAT_EQ(r->maxHealth, 24.0f);
+    // Everything else is untouched.
+    EXPECT_DOUBLE_EQ(r->starveDamageIntervalSeconds, d.starveDamageIntervalSeconds);
+    EXPECT_FLOAT_EQ(r->maxHunger, d.maxHunger);
+    EXPECT_FLOAT_EQ(r->walkSpeed, d.walkSpeed);
+    EXPECT_DOUBLE_EQ(r->sprintHungerDecayFactor, d.sprintHungerDecayFactor);
+}
+
+TEST(PlayerParamsConfigTest, RejectsNonNumericValues) {
+    Config cfg;
+    cfg.set("player.max_health", Json("20")); // a string, not a number
+    auto r = Player::Params::fromConfig(cfg);
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("player.max_health"), std::string::npos);
+}
+
+TEST(PlayerParamsConfigTest, RejectsZeroAndNegative) {
+    Config zero;
+    zero.set("player.hunger_decay_seconds", Json(0));
+    auto r0 = Player::Params::fromConfig(zero);
+    ASSERT_FALSE(r0.ok());
+    EXPECT_NE(r0.error().message.find("player.hunger_decay_seconds"),
+              std::string::npos);
+
+    Config negative;
+    negative.set("player.walk_speed", Json(-4.0));
+    auto rn = Player::Params::fromConfig(negative);
+    ASSERT_FALSE(rn.ok());
+    EXPECT_NE(rn.error().message.find("player.walk_speed"), std::string::npos);
+}
+
+TEST(PlayerParamsConfigTest, AllowsZeroFallDamageOffsetAndThreshold) {
+    Config cfg;
+    cfg.set("player.fall_damage_offset", Json(0));
+    cfg.set("player.regen_hunger_threshold", Json(0));
+    auto r = Player::Params::fromConfig(cfg);
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    EXPECT_FLOAT_EQ(r->fallDamageOffset, 0.0f);
+    EXPECT_FLOAT_EQ(r->regenHungerThreshold, 0.0f);
+}
+
+TEST(PlayerParamsConfigTest, RejectsEyeHeightAtOrAboveHeight) {
+    Config equal;
+    equal.set("player.eye_height", Json(1.8)); // == the default height
+    EXPECT_FALSE(Player::Params::fromConfig(equal).ok());
+    Config above;
+    above.set("player.eye_height", Json(2.0));
+    auto r = Player::Params::fromConfig(above);
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("eye_height"), std::string::npos);
+}
+
+TEST(PlayerParamsConfigTest, RejectsCrouchHeightAtOrAboveHeight) {
+    Config cfg;
+    cfg.set("player.crouch_height", Json(1.8)); // == the default height
+    auto r = Player::Params::fromConfig(cfg);
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("crouch_height"), std::string::npos);
+}
+
+TEST(PlayerParamsConfigTest, RejectsThresholdAboveMaxHunger) {
+    Config above;
+    above.set("player.regen_hunger_threshold", Json(21.0)); // > the default max
+    auto r = Player::Params::fromConfig(above);
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("regen_hunger_threshold"),
+              std::string::npos);
+    // Equal to the max is allowed (regen never fires, but is not broken).
+    Config equal;
+    equal.set("player.regen_hunger_threshold", Json(20.0));
+    EXPECT_TRUE(Player::Params::fromConfig(equal).ok());
+}
+
+TEST(PlayerParamsConfigTest, UnknownPlayerKeysAreTolerated) {
+    Config cfg;
+    cfg.set("player.floating_pointy_hat", Json(1.0));
+    auto r = Player::Params::fromConfig(cfg);
+    EXPECT_TRUE(r.ok());
+}
+
+TEST(PlayerParamsConfigTest, ConfiguredParamsReachThePlayer) {
+    // End to end: a 1 s decay tick from the config is what the player runs
+    // with — hunger drops by exactly one point after 1.5 s (the 1/60
+    // boundary lands on frame 61; the 2nd tick is ~2 s away).
+    Config cfg;
+    cfg.set("player.hunger_decay_seconds", Json(1.0));
+    auto r = Player::Params::fromConfig(cfg);
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f}, *r);
+    Input idle = heldInput({});
+    EXPECT_FLOAT_EQ(p.params().hungerDecaySeconds, 1.0);
+    run(p, 90, idle); // 1.5 s
+    EXPECT_FLOAT_EQ(p.hunger(), 19.0f);
 }

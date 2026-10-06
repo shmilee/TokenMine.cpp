@@ -119,5 +119,7 @@ TEST_F(ConfigTest, DefaultConfigIsValidJson) {
     EXPECT_TRUE(parsed->find("render")->contains("vsync"));
     EXPECT_TRUE(parsed->find("world")->contains("seed"));
     EXPECT_TRUE(parsed->find("world")->contains("view_distance"));
+    EXPECT_TRUE(parsed->find("player")->contains("hunger_decay_seconds"));
+    EXPECT_TRUE(parsed->find("player")->contains("max_health"));
     EXPECT_TRUE(parsed->find("audio")->contains("volume"));
 }

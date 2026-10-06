@@ -38,6 +38,8 @@
 - [x] **Phase 30** — 文档整理分块 + 代理快速接收（用户指定，纯文档）：README(765 行)/KNOWN_ISSUES(228)/SESSION_CONTEXT(2355) 三件套按需拆分——`README.md` 瘦身 79 行（概览/技术栈/构建运行/文档地图/开发约定）+ 新增 `AGENTS.md` 代理入口（现状/命令/硬性规则 Top10/E2E 摘要/阶段流程/坑位 Top8/禁止事项/文档地图，OpenCode 自动加载）+ `docs/` 8 篇（GAMEPLAY/MECHANICS/CONTENT_GUIDE/ARCHITECTURE/PROTOCOL【新增「E2E 协议」节，合并 P25–P29 协议】/PITS【~55 坑位原文移入】/KNOWN_ISSUES【仅活跃清单+已修复存档索引】/ROADMAP）+ `docs/archive/phase-3..29.md` 27 个单阶段细节存档；SESSION_CONTEXT 瘦身至 246 行（本地专用）；16 处代码注释引用更新；内容逐行无损核验；零代码改动，669/669
 - [x] **Phase 31** — 饥饿节奏对齐 Minecraft（用户反馈"体力下降很快"）：`PlayerParams.hungerDecaySeconds` 4s → 36s（MC 被动节奏：1 点 = 720 tick = 36s）+ `starveDamageIntervalSeconds` 4s → 20s（MC normal：1 HP = 400 tick = 20s）；`sprintHungerDecayFactor` 2.0 不变（= 18s/点，MC 36s→18s 相对节奏）；满条（20 饥饿 + 20 饱和度 = 40 tick）80s → 24min。零代码路径改动（仅参数值）；基线结构性免疫第 6 次（无输入 = 无指针锁 = 无 HUD，饥饿值从不被绘制；且 60f/360f 运行远未到新 36s 边界帧 2161——旧 4s tick 在帧 241 只改内存从不动像素）。669/669（test_player.cpp 7 处钉值重钉：衰减 95s→18/120s→17、饥饿伤害 25s→19/45s→18、饿死 405s、低饥阻断回复 50s→hunger 4、饱和度 190s→sat 0/230s→hunger 19、疾跑 75s→16 vs 对照 18；边界帧：36s→2161（2160 帧和略小于 36.0）、20s→1200（1200 帧和略大于 20.0）、18s 疾跑→1080）；E2E：base18 门 ×2 字节一致（结构性免疫第 6 次验证）、白天 360f ×2 字节一致且与 p28_daym_a 逐字节一致（场景零扰动）
 
+- [x] **Phase 32** — 玩家参数配置化（用户指定："像 hungerDecaySeconds 这类参数最好能在配置中修改"）：`Player::Params` 全部 24 个数值（运动/游泳/几何/生存节奏）可由 `config/config.json` 的 `player.*` 节覆盖——`Player::Params::fromConfig`（缺失键 = 结构体默认；已存在键必须是 JSON 数字且过范围检查：非数值/非正/eye_height ≥ height/crouch_height ≥ height/regen_hunger_threshold > max_hunger = 启动报错；未知 `player.*` 键容忍）/ `Player` 构造 +params 重载（3 参委托 4 参）/ Game init 加载（`MC_TRY`，出生点 room check 同步用配置尺寸）/ HUD 心带·饥饿带图标数由 `ceil(max/2)` 派生（默认 20 = 10 图标，逐位不变；非默认 max 自动扩展条带）/ 种子配置带出 9 个生存节奏键 / 测试 +11（fromConfig 默认/全量覆盖/逐键缺省/非数值拒绝/零负拒绝/offset 与 threshold 允许 0/eye·crouch 跨字段拒绝/threshold 越界拒绝/未知键容忍/config→Player 端到端 1s tick 90 帧 → 19）；680/680；E2E：base18 门 ×2 字节一致（第 7 次结构性免疫：config 解析仅启动期、config_xep 无 player 节 = 全默认、HUD 无输入不绘制且默认 20/20 派生 = 10 图标逐位一致）、白天 360f ×2 字节一致且 == p28_daym_a、**probe 运行游戏级验证**（config + `hunger_decay_seconds: 1`，360f 存档 = hunger 14【Python 镜像累加器：首个 1s 边界落帧 60、360f 内 6 tick】/ sat 0 / health 20 / time 0.275 全命中）
+
 ## 细节存档索引（docs/archive/）
 
 - **Phase 3** — `archive/phase-3.md`
@@ -68,5 +70,6 @@
 - **Phase 28** — `archive/phase-28.md`
 - **Phase 29** — `archive/phase-29.md`
 - **Phase 31** — `archive/phase-31.md`
+- **Phase 32** — `archive/phase-32.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

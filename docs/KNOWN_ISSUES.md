@@ -113,7 +113,8 @@
   读档 = 0）：每 36s 衰减 tick（Phase 31 对齐 MC 被动节奏）**先扣 1 点饱和度、
   耗尽才掉饥饿条**；食物饱食度
   = `2 × restore_hunger`（`kSaturationFactor`，MC 熟食 ≈2× 经验法则，无逐食物
-  数据字段）。未建模：MC 的 exhaustion 子点（衰减节奏本身仍固定 36s，饱和只
+  数据字段）。未建模：MC 的 exhaustion 子点（衰减节奏为单一固定速度——
+  `player.hunger_decay_seconds` 可配置，Phase 32——饱和只
   推迟掉条）、**生肉的 MC 低饱和度**（beef 1.8 / mutton 1.2 / chicken 1.2——
   本游戏生肉也按 2× 算，饱食度偏高）、回复 HP 不消耗饱食度。`[Phase 28]`
 - **进食通道无进度条、无手部动画** — Phase 28 进食 = 按住右键 1.6s（MC 32 tick

@@ -143,6 +143,17 @@ std::string Config::defaultConfigJson() {
         "day_length_seconds": 240,
         "start_time_of_day": 0.25
     },
+    "player": {
+        "max_health": 20,
+        "fall_damage_offset": 3,
+        "regen_delay_seconds": 10,
+        "regen_interval_seconds": 4,
+        "max_hunger": 20,
+        "hunger_decay_seconds": 36,
+        "starve_damage_interval_seconds": 20,
+        "regen_hunger_threshold": 6,
+        "sprint_hunger_decay_factor": 2
+    },
     "audio": {
         "volume": 0.7
     }

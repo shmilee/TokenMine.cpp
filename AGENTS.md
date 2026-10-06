@@ -66,7 +66,7 @@ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build  # 构
 1. 用户确认方向 → 2. 实现（数据驱动、无 TODO）→ 3. 构建 + 全量测试（`-Werror`）→
 4. E2E（base 门 + 回归对 + 场景专属验证，按上面协议）→ 5. 文档（ROADMAP 行、
 KNOWN_ISSUES、SESSION_CONTEXT）→ 6. **显式路径列表** git commit（永不 `git add -A`；
-**永不提交 `config/config.json`**（用户手改）与 `SESSION_CONTEXT.md`（本地））→
+永不提交 `SESSION_CONTEXT.md`（本地））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
 ## 坑位 Top 8（全文 docs/PITS.md，~55 条）
@@ -89,7 +89,9 @@ KNOWN_ISSUES、SESSION_CONTEXT）→ 6. **显式路径列表** git commit（永�
 
 ## 禁止事项
 
-- **永不还原/提交 `config/config.json`**（用户手改：view_distance 80 / day_length 600）。
+- `config/config.json` 是**已提交文件**（P32 起：用户调值 view_distance 80 /
+  day_length 600 + `player` 默认节）——**不还原用户的调值**；内容改动仅在用户
+  要求时做，提交用显式路径。
 - **永不 `git add -A`**——提交用显式路径列表。
 - `SESSION_CONTEXT.md` 本地专用（`.git/info/exclude`），永不提交。
 - 无 TODO/伪代码/硬编码检查/魔法数字；新内容一律走数据文件 + 注册表严格校验。
