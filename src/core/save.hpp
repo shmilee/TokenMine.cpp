@@ -15,7 +15,8 @@
 //   "time": 0.2541666,                       // timeOfDay, [0, 1)
 //   "player": { "pos": [0.5, 53.0, 0.5], "yaw": 0.0, "pitch": -0.25,
 //               "health": 20.0,              // format 2+ (format 1: full)
-//               "hunger": 20.0 },            // format 4+ (older: full)
+//               "hunger": 20.0,              // format 4+ (older: full)
+//               "saturation": 6.0 },         // format 5+ (older: 0)
 //   "inventory": {
 //     "selected": 0,
 //     "slots": [ { "item": "stone", "count": 64 }, { "item": "", "count": 0 } ]
@@ -32,9 +33,11 @@
 // Validation on load is STRICT (the file is machine-generated, so an
 // unexpected field means corruption or a version mismatch — unlike
 // user-authored data files, unknown fields are an ERROR, not a warning):
-//   - format must be 1..3 (format 1 files predate the player health field
+//   - format must be 1..5 (format 1 files predate the player health field
 //     and load with full health; format 2 predates the crafting grids and
-//     loads with empty grids); the seed must equal the seed the world was
+//     loads with empty grids; format 1-3 predates the hunger field and
+//     loads with full hunger; format 1-4 predates the saturation field
+//     and loads it at 0); the seed must equal the seed the world was
 //     generated with; every item/block name must be registered; counts
 //     respect the item data (1..maxStack, entity cap 64); y in [0, 128);
 //     no duplicate edit position, and a block edit and a fluid edit can
@@ -69,7 +72,11 @@ namespace mc {
 //   3: the crafting grids (Phase 17) — "inv_grid" + "table_grid" (9 slot
 //      entries each). Format 1/2 files still load (grids default to
 //      empty); writes are always format 3.
-inline constexpr int kSaveFormat = 4;
+//   4: the player's hunger (Phase 23). Format 1-3 files still load
+//      (hunger defaults to full).
+//   5: the player's saturation (Phase 28, the hidden satiety buffer).
+//      Format 1-4 files still load (saturation defaults to 0).
+inline constexpr int kSaveFormat = 5;
 inline constexpr int kSaveFormatMin = 1;
 
 // One cell whose block differs from generation ("air" = removed).
@@ -109,6 +116,10 @@ struct SaveGame {
     // Hunger (Phase 23). -1 = "unspecified" (format 1-3 files): the game
     // applies the player's max hunger on load.
     float playerHunger = -1.0f;
+    // Saturation (Phase 28, the hidden satiety buffer, [0, max hunger]).
+    // -1 = "unspecified" (format 1-4 files): the game loads it at 0
+    // (no buffer — the pre-Phase-28 behavior).
+    float playerSaturation = -1.0f;
     int selectedSlot = 0;
     std::vector<ItemStack> slots; // exactly Inventory::kTotalSize
     // The crafting grids (format 3; Phase 17): the inventory panel's grid

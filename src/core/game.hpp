@@ -34,6 +34,7 @@
 #include "core/config.hpp"
 #include "core/difficulty.hpp"
 #include "core/error.hpp"
+#include "core/food.hpp"
 #include "core/input.hpp"
 #include "core/logger.hpp"
 #include "core/save.hpp"
@@ -220,6 +221,11 @@ private:
     // including the no-op case at full hunger), so the caller skips the
     // normal right-click (interact/place) behavior for that click.
     bool tryEat();
+    // Advances the eat channel in real dt (Phase 28): interrupts (damage,
+    // death, unlock, panel, selection change) and the terminal events
+    // (complete = consume + restore + sound, early release = cancel).
+    void updateEatChannel(double dt);
+    void resetEatChannel();
     // Cycles the hotbar selection; resets break progress (the selected
     // tool changed, Minecraft behavior).
     void cycleHotbar();
@@ -425,6 +431,16 @@ private:
     // switch).
     bool m_bowDrawing = false;
     double m_bowDrawSeconds = 0.0;
+    // Eat channel (Phase 28, core/food.hpp): the Minecraft-style 1.6 s
+    // eat animation — right-clicking with food selected starts the
+    // channel (m_eatSlot/m_eatItem capture the slot and item; completion
+    // consumes one and restores hunger + saturation). Interrupted by
+    // damage, death, unlock, panel, selection change, early release, or a
+    // left-button swing (none of these consume the food).
+    EatChannel m_eatChannel;
+    std::size_t m_eatSlot = 0;
+    ItemID m_eatItem = ItemID::invalid();
+    float m_eatStartHealth = -1.0f; // damage during the channel cancels it
     // The shared arrow mesh (Phase 21; built lazily on first render).
     Mesh m_arrowMesh;
 

@@ -76,28 +76,34 @@ cmake --build build
 2. **天黑前做好准备**：夜里 zombie（贴身近战）和 skeleton（远距离射箭）会
    生成并追杀你，树冠/洞穴的暗格里白天也会生成。世界出生点周围有保护环
    （按难度 8/12/16 块），敌对 mob 不会在环内自然生成。
-3. **饥饿**：饥饿值 20，每 4 秒自然衰减 1 点；饥饿到 0 后每 4 秒掉 1 HP
-   （饿死）。回复饥饿 = 吃东西（见下）。
+3. **饥饿**：饥饿值 20，每 4 秒自然衰减 1 点——但衰减先消耗隐藏的**饱和度**
+   缓冲（吃东西时按 2× 恢复量充入，缓冲耗尽才掉饥饿条，即"吃饱了饿得慢"）；
+   **疾跑**（`Shift` + 移动）时衰减速率 ×2；饥饿到 0 后每 4 秒掉 1 HP（饿死）。
+   回复饥饿 = 吃东西（见下）。
 4. **回复生命**：脱离受伤 10 秒后，若饥饿 ≥ 6，每 4 秒自动回 1 HP。
 5. **死亡**：HP 归零 → 画面冻结显示 "You died! / Press R"，按 `R` 回出生点
-   重生（满血 + 满饥饿，**背包保留**）。坠落（净下落 > 3 格）和掉出世界
-   （y < −32）都会致命。
+   重生（满血 + 满饥饿 + 满饱和度，**背包保留**）。坠落（净下落 > 3 格）和掉出
+   世界（y < −32）都会致命。
 
 ### 战斗与食物
 
 - **攻击**：左键按住挥击，伤害 = **选中物品**的 `attack_damage`（徒手/方块/
   材料 = 1，木镐 = 2，铁镐 = 3，弓近战 = 1），命中 mob 还会击退它。
-- **杀 mob 掉物品**（走近掉落物自动拾取，0.5s 拾取延迟）：
+- **杀 mob 掉物品**（走近掉落物自动拾取，0.5s 拾取延迟；每只 mob 的数据可定义
+  **多个掉落**，死亡时按列表顺序各掉一件）：
   | mob | HP | 掉落 | 用途 |
   |---|---|---|---|
-  | zombie（夜晚/黑暗） | 20 | `rotten_flesh` | **食物**（右键吃，+4 饥饿） |
+  | zombie（夜晚/黑暗） | 20 | `rotten_flesh` | **食物**（+4 饥饿） |
   | skeleton（夜晚/黑暗） | 20 | `arrow` | 弓的弹药 |
-  | cow（白天夜晚均可） | 10 | `leather` | 材料（暂不可食用） |
-  | sheep | 8 | `wool` | 材料 |
-  | chicken | 4 | `feather` | 材料 |
-- **吃东西**：选中食物后**右键** = 吃（回复数据点饥饿、消耗 1 个）；当前
-  唯一食物是 zombie 掉的 `rotten_flesh`（+4）。满饥饿时吃 = 无效果。
-  所以生存闭环是：**打 zombie → 吃掉落腐肉 → 撑过夜晚**。
+  | cow（白天夜晚均可） | 10 | `leather` + `beef` | 材料 + **食物**（+3 饥饿） |
+  | sheep | 8 | `wool` + `mutton` | 材料 + **食物**（+2 饥饿） |
+  | chicken | 4 | `feather` + `chicken` | 材料 + **食物**（+2 饥饿） |
+- **吃东西**：选中食物后**按住右键 1.6 秒** = 吃（Minecraft 式进食动画：手持
+  图标随进度向屏幕中心抬起；**中途松开 = 取消不吃**，受击/死亡/解锁鼠标/开面板/
+  换物品/左键挥击同样取消且**不消耗食物**；完成时回复数据点饥饿 + 2× 饱和度、
+  消耗 1 个、播放进食音）。食物共 4 种：`rotten_flesh`（+4）、`beef`（+3）、
+  `mutton`（+2）、`chicken`（+2）。满饥饿时右键食物 = 无效果（仍吞掉该次右键）。
+  所以生存闭环是：**打/杀 mob → 吃掉落肉 → 撑过夜晚**（被动 mob 也是食物来源）。
 
 ### 工具与合成路线
 
@@ -129,28 +135,41 @@ cmake --build build
 - mob 生成在你周围 4–6 块的环内，同时最多 4 只，离你 40 块外自动消失；
   mob 不入存档（读档后重新自然生成）。
 
-## 当前可玩内容（Phase 27）
+## 当前可玩内容（Phase 28）
 
 - **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时）/游泳时随时上浮，
   `LeftShift` 冲刺，鼠标转向（**左键点击锁定指针；转向仅在指针锁定时生效**，
   未锁定的光标不会转动视角——保证无输入运行下截图可逐字节复现）
-- **生存系统**（Phase 16 + 23，`Player` 扩展）：
+- **生存系统**（Phase 16 + 23，Phase 28 饱和度/进食动画，`Player` 扩展）：
   - **生命值 / 受伤 / 死亡**：`maxHealth=20`（10 颗心，每颗 2 HP）；
     **坠落伤害** = `max(0, 净下落格数 − 3)` HP（从离地帧记录 `fallStartY`，
     落地时结算；落入水中的落地取消伤害）；掉出世界（y < −32）= 直接死亡
     （`damage(maxHealth×1000)`）。死亡后冻结玩家、显示 "You died! / Press R"，
-    `R` 重生 = 回出生点 + 满血 + **满饥饿** + 速度清零（**背包保留**）
+    `R` 重生 = 回出生点 + 满血 + **满饥饿** + **满饱和度**（= 一顿饱饭）
+    + 速度清零（**背包保留**）
   - **自然回复**：脱离受伤状态 `regenDelay=10s` 后，每 `regenInterval=4s` 回 1 HP；
     **饥饿门控**（Phase 23，Minecraft 规则：饥饿 < 6 无自然回复）——门控关闭时
     累加器暂停（不重置），吃饱后继续
-  - **饥饿**（Phase 23，`maxHunger=20`，10 只鸡腿每只 2 点）：每 `hungerDecay=4s`
-    衰减 1 点（无饱和度缓冲，v1）；**饥饿 = 0** 时每 `starveInterval=4s` 受 1 点
-    饥饿伤害（走正常伤害路径 → 红闪/音效/死亡全套复用）；**吃食物**：选中食物
-    时右键 = 吃（回复该物品 `restore_hunger` 数据点、扣 1 个库存、播放 "eat"），
-    不再放置/交互；**满饥饿时吃为 no-op 但仍吞掉该次右键**（Minecraft：满条
-    时不能放置）
-  - **食物数据**（Phase 23）：物品可选字段 `restore_hunger`（整数 [1, 20]；
-    缺省 = 非食物，显式 0 拒绝）——当前仅 `rotten_flesh`（=4，zombie 掉落）
+  - **饥饿**（Phase 23，Phase 28，`maxHunger=20`，10 只鸡腿每只 2 点）：
+    每 `hungerDecay=4s` 一个衰减 tick——**先扣 1 点隐藏饱和度**（Phase 28，
+    缓冲耗尽才动饥饿条；饱和度上限 = `maxHunger`），饱和度 = 0 时才衰减
+    1 点饥饿条；**疾跑**（`Shift` + 移动、非水中——与选 `sprintSpeed` 的判定
+    同一条件）时 tick 速率 ×2（`sprintHungerDecayFactor`，Minecraft 40s→20s
+    的相对节奏）；**饥饿 = 0** 时每 `starveInterval=4s` 受 1 点饥饿伤害
+    （走正常伤害路径 → 红闪/音效/死亡全套复用）；**吃食物**（Phase 28 进食
+    通道，`core/food.hpp` 纯状态机）：选中食物时**按住右键 1.6s**（Minecraft
+    进食时长 `kEatDurationSeconds`）= 吃——完成时回复该物品 `restore_hunger`
+    数据点饥饿 + **2× 饱和度**（`kSaturationFactor`，Minecraft 熟食 ≈2× 经验
+    法则）、扣 1 个库存、播放 "eat"；**提前松开右键 = 取消**（不消耗、无声
+    音）；受击/死亡/解锁鼠标/开面板/切换选中格/左键挥击同样取消；进食中
+    手持图标向屏幕中心抬起（进度 0→1，复用弓拉取几何，v1 无 3D 手部动画——
+    见 KNOWN_ISSUES）；进食中再按右键 = 忽略（进食继续）；不再放置/交互；
+    **满饥饿时右键食物为 no-op 但仍吞掉该次右键**（Minecraft：满条时不能
+    放置）
+  - **食物数据**（Phase 23，Phase 28 扩充）：物品可选字段 `restore_hunger`
+    （整数 [1, 20]；缺省 = 非食物，显式 0 拒绝）——当前 4 种食物：
+    `rotten_flesh`（=4，zombie 掉落）、`beef`（=3，cow 掉落）、
+    `mutton`（=2，sheep 掉落）、`chicken`（=2，chicken 掉落）
   - **受伤反馈**：受击瞬间屏幕红色闪光（`0.35×剩余/0.5s` 渐隐）+ 播放 "hurt"；
     死亡播放 "death"。游戏轮询生命值（`m_prevHealth`）驱动，致死伤不重复播放
   - **潜行**（`LeftControl`）：身高 1.8→1.6（脚底不动）、眼高 1.62→1.42、
@@ -207,10 +226,11 @@ cmake --build build
     方块）= 挥击，按住时每 `0.25s` 一击：伤害取**选中物品的 `attack_damage`**
     数据（徒手/方块/材料=1.0，工具见 `data/items/*.json`，木镐 2 / 铁镐 3）+
     沿瞄准方向击退（水平 4 + 抬升 2.5，0.3s 击退窗口内 AI 不接管速度）
-  - **死亡**：HP 归零 → 掉落 `drops` 数据定义的物品（zombie 掉
-    `rotten_flesh`，skeleton 掉 `arrow`，cow 掉 `leather`，sheep 掉
-    `wool`，chicken 掉 `feather`——均为 material 物品 + 图标）后移除；
-    击退/坠落无伤害（v1）
+  - **死亡**：HP 归零 → 掉落 `drops` 数据定义的**物品列表**（Phase 28：
+    每条目 `{item, count}`，按列表顺序各掉一件 ItemEntity；zombie 掉
+    `rotten_flesh`，skeleton 掉 `arrow`，cow 掉 `leather`+`beef`，sheep 掉
+    `wool`+`mutton`，chicken 掉 `feather`+`chicken`——均为 material 物品
+    + 图标）后移除；击退/坠落无伤害（v1）
   - **渲染**：box 模型（zombie = 头 0.5³ + 身 0.5×1.0×0.3；skeleton 同
     zombie 尺寸（头 0.5³ + 身 0.5×1.0×0.3、AABB 0.6×1.8）；cow = 头
     0.45³ + 身 0.8×0.7×1.1、AABB 1.2×1.5 比 zombie 宽；sheep = 头 0.4³ + 身
@@ -369,7 +389,8 @@ cmake --build build
 - **存档/读档**（Phase 13，`--save <slot>`，`src/core/save.{hpp,cpp}`）：
   存档文件 `data/saves/<slot>.json` = **seed + 与生成态的 diff + 完整游戏状态**——
   不重复存储地形，只存"和这个 seed 生成的世界不同的格子"（`blocks`/`fluids`
-  编辑列表，破坏=`"air"`）+ 玩家位置/朝向/生命/饥饿 + 昼夜时间 + 27 格背包 +
+  编辑列表，破坏=`"air"`）+ 玩家位置/朝向/生命/饥饿/饱和度（格式 5）
+  + 昼夜时间 + 27 格背包 +
   选中格 + 掉落物实体（含 120s 寿命与拾取延迟计时器）。读档 = 正常从 seed 生成世界后
   逐格应用编辑（先方块后流体）→ 全量重传播光照 → 恢复玩家/背包/实体/时间。
   加载校验**严格**（机器生成的文件出现未知字段 = 损坏/版本不符，直接报错：
@@ -594,7 +615,7 @@ iron_pickaxe（III/.S./.S.）。
        "attack_damage": 3, "attack_cooldown": 1.0, "wander_interval": 2.5,
        "spawn_max_light": 0,
        "hostile": true,
-       "drops": "rotten_flesh", "drops_count": 1
+       "drops": [ {"item": "rotten_flesh", "count": 1} ]
      },
      "model": {
        "width": 0.6, "height": 1.8,
@@ -610,9 +631,11 @@ iron_pickaxe（III/.S./.S.）。
    `detect_radius`/`attack_range`/`attack_damage` 允许 0 = 被动/无害，负数
    拒绝）、`spawn_max_light` 为 0..15 的整数（默认 0，光照门——见上）、
    `hostile` 为可选布尔（默认 false；难度系统的数据开关——保护环 + 伤害
-   缩放，非布尔拒绝）、`drops_count` ∈ [1,64]、box 越界/缺纹理名 = 明确
-   报错；未知字段警告。
-   `drops` 是**物品名**（init 时对 ItemRegistry 交叉校验，`""` = 不掉落）。
+   缩放，非布尔拒绝）、`drops` 每条目 `count` ∈ [1,64]、box 越界/缺纹理名
+   = 明确报错；未知字段警告。
+   `drops` 是**物品列表**（Phase 28：`[{"item": "leather", "count": 1}, ...]`，
+   每条目物品名 init 时对 ItemRegistry 交叉校验；缺省/`[]` = 不掉落；
+   旧的单字符串 + `drops_count` schema 被显式拒绝——迁移防护）。
 3. 生成名单：`assets/data/mob_spawning.json` 的 `mobs` 数组加入该 id
    （生成节奏/环半径/上限/离玩家消散距离都在这个文件里，全部数据驱动）。
 
@@ -730,6 +753,7 @@ mine-craft/
 - [x] **Phase 25** — 生成保护半径/难度系统：`core/difficulty.hpp` 纯模型（`easy`/`normal`/`hard` 严格大小写解析；出生点保护半径 8/12/16 = Minecraft 值；敌对伤害缩放 0.5/1.0/4÷3（zombie 3 → 1.5/3/4，镜像 MC 2.5/3/4 相对形状）；生成节奏缩放 0.5/1.0/1.5 → 30 帧 → 60/30/20，`normal` = 全 1.0 = 基线零变化）/ mob 数据字段 `hostile`（可选 bool 默认 false，非 bool 拒绝；数据驱动非行为推导；zombie = true）/ 保护环 = 世界出生点水平圆（读档不改中心；仅 hostile 受检，passive 豁免——Minecraft 约定）/ `findMobSpawnCell` 保护参（扫描首查）/ config `mobs.difficulty`（默认 normal）/ F3 difficulty 行；639/639；无输入基线逐字节不变
 - [x] **Phase 26** — 更多 mob（纯数据）：按 P22 已验证的纯数据流落地 sheep/chicken 被动 mob（零新增游戏代码）——`data/mobs/sheep.json`（HP 8、speed 0.5、全 0 攻击字段、`spawn_max_light` 15、掉 `wool`；box 头 0.4³ + 身 0.8×0.8×1.2，AABB 1.2×1.5 同 cow）/ `data/mobs/chicken.json`（HP 4、speed 0.6、`wander_interval` 2.0、掉 `feather`；box 头 0.25³ + 身 0.3×0.4×0.5，AABB 0.5×0.8 = 首个比 zombie 小的模型——生成格/重叠/间距规则全用模型数据，无改动）/ `wool` + `feather` material 物品 + 图标 / mob 纹理 4 tile（sheep 白绒毛+深色眼、chicken 米白羽+深色眼+红冠+橙喙，atlas 23→27，新 tile 只占空位、既有坐标零移动）/ 名单 [zombie, cow, sheep, chicken]——类型抽取 = `pick % 名单长度`（种子 ⊕ 帧号），扩名单改变各帧抽中类型；**base 60 帧运行在 `first_spawn_frame=60` 的首次尝试之前结构上零尝试（主循环 `update` 时 `m_frameCount` 尚未自增）= 基线结构性不受名单影响**；643/643（+4：sheep/chicken 完整解析、chicken box 越界 AABB 拒绝、4 类型名单解析）；E2E（P25 协议：每拍前 unmap 覆盖窗 + ≥6s 窗口 + 零并发）：base18 门 ×2 字节不变、白天 360f（t=0.275 仍在正午平台）mobs-on ×2 与 mobs-off ×2 各自逐字节一致（mobs-off == base 逐字节）、vs 对照 **15535 px 差 = 恰好 4 个 mob 剪影**（2 chicken + 1 sheep + 1 cow，与确定性预测逐一对应：f60/f90 chicken 生成、f120/f150/f210 zombie 光门拒绝、f180 cow 生成、f240 sheep 生成（`max_mobs` 4 满）、f270/f300/f330 全部 cap 拒绝）、**zombie 绿 0 px**（白天敌对压制保持）、心/饥饿/热栏三带全 0
 - [x] **Phase 27** — 更多 mob（代码）：skeleton 远程敌对 mob——首个打破纯数据流的 mob（新增 AI 状态 + 箭伤玩家路径）。**数据** `data/mobs/skeleton.json`（HP 20、speed 0.8、`detect_radius` 16、`attack_range` 0 = 永不近战、`attack_damage` 2（箭伤）、`attack_cooldown` 1.5、新字段 `shoot_range` 14 / `retreat_distance` 3 / `shoot_speed` 15、`spawn_max_light` 0、`hostile` true（P25 自动进保护环/伤害缩放/生成节奏）、掉 `arrow`（既有 material）；box 模型同 zombie 尺寸）+ 严格校验（负数拒绝、`shoot_speed` 显式值须 (0,100]、`shoot_range>0` 必须有 `shoot_speed` 跨字段校验）/ 名单 [zombie, cow, sheep, chicken, skeleton]（%5）/ 纹理 2 tile（骨白 skull 深色眼窝+鼻腔，atlas 27→29 只占空位）。**代码** `MobState::RangedAttack`（`shoot_range>0` 且玩家水平 ≤shoot_range：面向玩家 + 冷却经 shoot 回调放箭；≤retreat_distance 全速后撤边退边射；超 shoot_range 按 Chase 逼近）/ `Projectile` +`hurtPlayer` 标志（游戏扫掠测试先对玩家 AABB：命中 = P16 受伤路径 + 箭消耗）+`source`（**箭不伤射手**：spawn 点在其自身 AABB 内，下一帧扫掠 t=0 自命中会自杀自灭——命中循环跳过 source）/ 放箭瞄点 = 玩家眼高 + 0.5·g·(d/speed)² 弧线提前量（无补偿时直线瞄只命中 ≤6 块，10 块外箭从脚下飞过）/ 生成 debug 日志（cap 拒绝/无格/生成位置/射击/箭命中玩家，`--log-level debug`）；650/650（+7：skeleton 解析、ranged 字段拒绝 ×5、远程 AI 站桩射击 300 帧 4 发零近战、贴近后撤、5 型名单、`hurtPlayer`/`source` 标志）；E2E（P25 协议）：base18 门 ×2 字节不变（名单 4→5 结构性免疫）、白天 360f mobs-on ×2 与 mobs-off ×2 逐字节一致（mobs-off == base）、vs 对照 36607 px = 4 被动剪影（2 sheep + chicken + cow，与 %5 pick 序列逐一对应，hostile 光门拒，zombie 绿 0）、夜晚（seed 9 手工存档 p27far：seed 123456789 的 pick 流在前 4 抽无 skeleton 且 cap 于 f150 满，换种子使前 4 抽 = cow/skeleton/cow/skeleton）360f ×2 逐字节一致、**存档 health 8 确定性**（20 − 6 箭×2，debug 日志全程可验证：生成→站桩射击→箭命中×6）、FRESH-FLASH 天门（伤害红纱 a≈0.25 全屏——去纱后 vs 对照 3 cluster = 2 skeleton（skull 眼窝可辨）+ 2 cow，zombie 绿 0）
+- [x] **Phase 28** — 饥饿后续（P23 简化项回收 + 食物扩充，用户指定羊肉/鸡肉/牛肉）：隐藏饱和度缓冲 + 1.6s 进食通道 + 疾跑 ×2 衰减 + 3 新食物（`beef` +3 / `mutton` +2 / `chicken` +2，MC 生肉值）+ 掉落数据改列表 `drops: [{"item","count"}]`（cow = leather+beef、sheep = wool+mutton、chicken = feather+chicken，zombie/skeleton 单掉落；旧字符串 schema 硬拒绝 = 迁移防护）。**数据** 3 material 物品 + 3 程序化图标（`generate_item_icons.py`，既有图标重跑零变化）/ 5 mob JSON 迁移。**代码** `core/food.hpp` 纯状态机（同 P24 `bow.hpp` 模式：1.6s = MC 32 tick、提前松开 = 取消不消耗、进食中再按右键 = 忽略）/ `Player` 饱和度 [0, maxHunger]（新世界 0、重生满）+ 4s tick 先扣饱和度耗尽才掉条（MC exhaustion 简化）+ 疾跑（Shift+移动+非水中）tick ×2 / `Game` 进食通道（中断 = 松手/受击/死亡/解锁/开面板/换格/左键挥击；完成 = 扣 1 + 恢复饥饿 + 2× 饱和度）/ 手持图标拉取统一弓/进食（共享 64px）/ `MobRegistry` 列表严格解析 / 死亡掉落逐条目 / 存档格式 5（`player.saturation`）。667/667（+17：test_food.cpp 新 6【完成落第 97 帧 = 96×(1/60) < double 1.6】/ Player +4 / Item +1 / Mob +3 + 5 既有改列表 / Save +3 + 2 既有）；E2E（P25 协议 + xdotool 脚本化输入）：base18 门 ×2 字节不变（第 4 次结构性免疫）、白天/夜晚 5 对全部与 P27 同名输出逐字节一致（skeleton 射箭场景 health 8 比特级复现 = 零扰动）、**eat 由存档状态确定性验证**：p28eat（正午、hunger 14、sat 0、beef×8）+ 脚本（D+1.5s 锁、D+3.0s 右键按、D+5.5s 松）×5 次运行存档全命中预测（health 20 / hunger 16 / sat 5 / beef×7——tick-margin 对 D∈[0,0.5] 全确定）；输入运行全帧字节一致受 SDL 指针锁定 grab delta 环境限制（见 KNOWN_ISSUES，存档 yaw/pitch = 漂移探测器）
 
 ## 开发约定
 

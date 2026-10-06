@@ -10,8 +10,9 @@
     "wander_interval": 2.5,
     "spawn_max_light": 0,
     "hostile": true,
-    "drops": "rotten_flesh",
-    "drops_count": 1
+    "drops": [
+      { "item": "rotten_flesh", "count": 1 }
+    ]
   },
   "model": {
     "width": 0.6,

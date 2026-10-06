@@ -105,8 +105,7 @@ const char* kSkeletonDef = R"({
     "wander_interval": 2.5,
     "spawn_max_light": 0,
     "hostile": true,
-    "drops": "arrow",
-    "drops_count": 1
+    "drops": [{"item": "arrow", "count": 1}]
   },
   "model": {
     "width": 0.6,
@@ -155,7 +154,6 @@ TEST(MobRegistryTest, ParsesZombie) {
     EXPECT_FLOAT_EQ(m.properties.attackCooldown, 1.0f);
     EXPECT_FLOAT_EQ(m.properties.wanderInterval, 2.5f);
     EXPECT_TRUE(m.properties.drops.empty());
-    EXPECT_EQ(m.properties.dropsCount, 1);
     EXPECT_FLOAT_EQ(m.model.width, 0.6f);
     EXPECT_FLOAT_EQ(m.model.height, 1.8f);
     ASSERT_EQ(m.model.boxes.size(), 2);
@@ -211,10 +209,73 @@ TEST(MobRegistryTest, RejectsBadDropsCount) {
     std::string def = kZombieDef;
     const std::string key = "\"wander_interval\": 2.5";
     def.replace(def.find(key), key.size(),
-                "\"wander_interval\": 2.5,\n    \"drops\": \"x\",\n"
-                "    \"drops_count\": 65");
+                "\"wander_interval\": 2.5,\n    \"drops\": "
+                "[{\"item\": \"x\", \"count\": 65}]");
     auto r = mobs.registerMob(parseJson(def));
     EXPECT_FALSE(r.ok());
+}
+
+// Phase 28: the drops LIST schema — {item, count} entries with strict
+// validation, and the old single-string + drops_count schema rejected
+// (migration guard).
+TEST(MobRegistryTest, ParsesDropsList) {
+    MobRegistry mobs;
+    std::string def = kZombieDef;
+    const std::string key = "\"wander_interval\": 2.5";
+    def.replace(def.find(key), key.size(),
+                "\"wander_interval\": 2.5,\n    \"drops\": "
+                "[{\"item\": \"leather\"}, "
+                "{\"item\": \"beef\", \"count\": 2}]");
+    auto r = mobs.registerMob(parseJson(def));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Mob& m = mobs.at(*r);
+    ASSERT_EQ(m.properties.drops.size(), 2u);
+    EXPECT_EQ(m.properties.drops[0].item, "leather");
+    EXPECT_EQ(m.properties.drops[0].count, 1); // default count
+    EXPECT_EQ(m.properties.drops[1].item, "beef");
+    EXPECT_EQ(m.properties.drops[1].count, 2);
+}
+
+TEST(MobRegistryTest, RejectsLegacyDropsSchema) {
+    // The Phase 27-and-earlier schema ("drops": "item" + "drops_count")
+    // is no longer accepted: a string 'drops' fails, and a stray
+    // 'drops_count' field fails too.
+    const std::string key = "\"wander_interval\": 2.5";
+    const std::string variants[] = {
+        "\"wander_interval\": 2.5,\n    \"drops\": \"rotten_flesh\"",
+        "\"wander_interval\": 2.5,\n    \"drops_count\": 1",
+        "\"wander_interval\": 2.5,\n    \"drops\": "
+        "[{\"item\": \"leather\"}],\n    \"drops_count\": 1",
+    };
+    for (const std::string& variant : variants) {
+        MobRegistry mobs;
+        std::string def = kZombieDef;
+        def.replace(def.find(key), key.size(), variant);
+        auto r = mobs.registerMob(parseJson(def));
+        EXPECT_FALSE(r.ok()) << variant;
+    }
+}
+
+TEST(MobRegistryTest, RejectsMalformedDropsEntries) {
+    const std::string key = "\"wander_interval\": 2.5";
+    const std::string variants[] = {
+        "\"wander_interval\": 2.5,\n    \"drops\": \"leather\"",
+        "\"wander_interval\": 2.5,\n    \"drops\": [\"leather\"]",
+        "\"wander_interval\": 2.5,\n    \"drops\": [123]",
+        "\"wander_interval\": 2.5,\n    \"drops\": [{}]",
+        "\"wander_interval\": 2.5,\n    \"drops\": [{\"item\": \"\"}]",
+        "\"wander_interval\": 2.5,\n    \"drops\": "
+        "[{\"item\": \"leather\", \"count\": 0}]",
+        "\"wander_interval\": 2.5,\n    \"drops\": "
+        "[{\"item\": \"leather\", \"count\": 1.5}]",
+    };
+    for (const std::string& variant : variants) {
+        MobRegistry mobs;
+        std::string def = kZombieDef;
+        def.replace(def.find(key), key.size(), variant);
+        auto r = mobs.registerMob(parseJson(def));
+        EXPECT_FALSE(r.ok()) << variant;
+    }
 }
 
 TEST(MobRegistryTest, RejectsDuplicateId) {
@@ -317,8 +378,8 @@ TEST(MobRegistryTest, ParsesPassiveMob) {
         "attack_cooldown": 1.0,
         "wander_interval": 3.0,
         "spawn_max_light": 15,
-        "drops": "leather",
-        "drops_count": 1
+        "drops": [{"item": "leather", "count": 1},
+                  {"item": "beef", "count": 1}]
       },
       "model": {
         "width": 1.2,
@@ -335,7 +396,11 @@ TEST(MobRegistryTest, ParsesPassiveMob) {
     EXPECT_FLOAT_EQ(mob.properties.attackRange, 0.0f);
     EXPECT_FLOAT_EQ(mob.properties.attackDamage, 0.0f);
     EXPECT_EQ(mob.properties.spawnMaxLight, 15);
-    EXPECT_EQ(mob.properties.drops, "leather");
+    // Phase 28: the drop LIST (leather + the new beef food).
+    ASSERT_EQ(mob.properties.drops.size(), 2u);
+    EXPECT_EQ(mob.properties.drops[0].item, "leather");
+    EXPECT_EQ(mob.properties.drops[1].item, "beef");
+    EXPECT_EQ(mob.properties.drops[1].count, 1);
     EXPECT_EQ(mob.model.boxes.size(), 2u);
 }
 
@@ -376,8 +441,8 @@ TEST(MobRegistryTest, ParsesSheep) {
         "attack_cooldown": 1.0,
         "wander_interval": 3.0,
         "spawn_max_light": 15,
-        "drops": "wool",
-        "drops_count": 1
+        "drops": [{"item": "wool", "count": 1},
+                  {"item": "mutton", "count": 1}]
       },
       "model": {
         "width": 1.2,
@@ -392,7 +457,10 @@ TEST(MobRegistryTest, ParsesSheep) {
     const Mob& mob = mobs.at(*r);
     EXPECT_FLOAT_EQ(mob.properties.health, 8.0f);
     EXPECT_EQ(mob.properties.spawnMaxLight, 15);
-    EXPECT_EQ(mob.properties.drops, "wool");
+    // Phase 28: the drop LIST (wool + the new mutton food).
+    ASSERT_EQ(mob.properties.drops.size(), 2u);
+    EXPECT_EQ(mob.properties.drops[0].item, "wool");
+    EXPECT_EQ(mob.properties.drops[1].item, "mutton");
     EXPECT_FLOAT_EQ(mob.model.width, 1.2f);
     EXPECT_EQ(mob.model.boxes.size(), 2u);
 }
@@ -413,8 +481,8 @@ TEST(MobRegistryTest, ParsesChicken) {
         "attack_cooldown": 1.0,
         "wander_interval": 2.0,
         "spawn_max_light": 15,
-        "drops": "feather",
-        "drops_count": 1
+        "drops": [{"item": "feather", "count": 1},
+                  {"item": "chicken", "count": 1}]
       },
       "model": {
         "width": 0.5,
@@ -430,7 +498,10 @@ TEST(MobRegistryTest, ParsesChicken) {
     EXPECT_FLOAT_EQ(mob.properties.health, 4.0f);
     EXPECT_FLOAT_EQ(mob.properties.wanderInterval, 2.0f);
     EXPECT_EQ(mob.properties.spawnMaxLight, 15);
-    EXPECT_EQ(mob.properties.drops, "feather");
+    // Phase 28: the drop LIST (feather + the new chicken food).
+    ASSERT_EQ(mob.properties.drops.size(), 2u);
+    EXPECT_EQ(mob.properties.drops[0].item, "feather");
+    EXPECT_EQ(mob.properties.drops[1].item, "chicken");
     EXPECT_FLOAT_EQ(mob.model.width, 0.5f);
     EXPECT_FLOAT_EQ(mob.model.height, 0.8f);
     EXPECT_EQ(mob.model.boxes.size(), 2u);
@@ -452,8 +523,7 @@ TEST(MobRegistryTest, RejectsChickenBoxOutsideAabb) {
         "attack_cooldown": 1.0,
         "wander_interval": 2.0,
         "spawn_max_light": 15,
-        "drops": "feather",
-        "drops_count": 1
+        "drops": [{"item": "feather", "count": 1}]
       },
       "model": {
         "width": 0.5,
@@ -483,7 +553,9 @@ TEST(MobRegistryTest, ParsesSkeleton) {
     EXPECT_FLOAT_EQ(mob.properties.attackDamage, 2.0f);
     EXPECT_TRUE(mob.properties.hostile);
     EXPECT_EQ(mob.properties.spawnMaxLight, 0);
-    EXPECT_EQ(mob.properties.drops, "arrow");
+    // Phase 28: the drop LIST (the arrow, one entry).
+    ASSERT_EQ(mob.properties.drops.size(), 1u);
+    EXPECT_EQ(mob.properties.drops[0].item, "arrow");
 }
 
 TEST(MobRegistryTest, RejectsRangedFieldErrors) {

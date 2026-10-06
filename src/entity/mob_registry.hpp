@@ -23,8 +23,11 @@
 //                                 // subject to the difficulty system
 //                                 // (spawn protection + damage scale; see
 //                                 // core/difficulty.hpp)
-//     "drops": "rotten_flesh",    // item name; "" = nothing (optional)
-//     "drops_count": 1            // 1..64 (optional, default 1)
+//     "drops": [                  // what the mob drops on death (Phase 28:
+//       { "item": "leather",      // a list — one entry per dropped item,
+//                "count": 1 },    // spawned in list order, each count 1..64
+//       { "item": "beef",         // (default 1); absent/[] = nothing)
+//                "count": 1 } ]
 //   },
 //   "model": {
 //     "width": 0.6,               // AABB width (x and z), > 0
@@ -94,6 +97,14 @@ struct MobModel {
     std::vector<MobBox> boxes;
 };
 
+// One entry of a mob's drop list (Phase 28). `item` is the item NAME
+// (resolved in the ItemRegistry at game init, like block drops); `count`
+// is 1..64 (validated to fit the item's max stack at init).
+struct MobDrop {
+    std::string item;
+    int count = 1;
+};
+
 // Behavior parameters of a mob type (all from data; see the file head).
 struct MobProperties {
     float health = 0.0f;
@@ -126,8 +137,9 @@ struct MobProperties {
     float shootRange = 0.0f;
     float retreatDistance = 0.0f;
     float shootSpeed = 0.0f;
-    std::string drops;   // item name; empty = no drops
-    int dropsCount = 1;  // 1..64
+    // Drops (Phase 28): the item list the mob drops on death — one entry
+    // per dropped item, spawned in list order. Empty = no drops.
+    std::vector<MobDrop> drops;
 };
 
 struct Mob {

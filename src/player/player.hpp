@@ -68,15 +68,20 @@ public:
         double regenDelaySeconds = 10.0;
         double regenIntervalSeconds = 4.0;
         // Hunger (Phase 23): maxHunger hunger points (10 drumstick icons,
-        // 2 each); hungerDecaySeconds per -1 point (Minecraft's base
-        // survival pace, no saturation buffer in v1); at ZERO hunger the
-        // player takes 1 HP every starveDamageIntervalSeconds
-        // (Minecraft's starvation); regenHungerThreshold gates the regen
-        // above.
+        // 2 each); hungerDecaySeconds per decay tick (Minecraft's base
+        // survival pace); at ZERO hunger the player takes 1 HP every
+        // starveDamageIntervalSeconds (Minecraft's starvation);
+        // regenHungerThreshold gates the regen above. Phase 28: each decay
+        // tick first drains the hidden saturation buffer (capped at
+        // maxHunger, the food's satiety — see core/food.hpp), else drops
+        // one hunger point; sprinting (LeftShift + moving, out of water)
+        // runs the decay at sprintHungerDecayFactor pace (Minecraft's
+        // 40 s -> 20 s relative shape).
         float maxHunger = 20.0f;
         double hungerDecaySeconds = 4.0;
         double starveDamageIntervalSeconds = 4.0;
         float regenHungerThreshold = 6.0f;
+        double sprintHungerDecayFactor = 2.0;
     };
 
     // `world` and `blocks` must outlive the player. `spawnPos` is the
@@ -140,6 +145,22 @@ public:
     // does NOT kill — starvation damage in update() is the death path.
     void setHunger(float h) {
         m_hunger = std::clamp(h, 0.0f, m_params.maxHunger);
+    }
+
+    // Saturation (Phase 28): the hidden satiety buffer, [0, max] (a full
+    // meal = a full buffer). Each hunger decay tick drains 1 of it before
+    // touching the hunger bar (see core/food.hpp).
+    float saturation() const { return m_saturation; }
+
+    // Restore `amount` saturation (eating): clamped to [0, max].
+    void restoreSaturation(float amount) {
+        m_saturation = std::clamp(m_saturation + amount, 0.0f,
+                                  m_params.maxHunger);
+    }
+
+    // Set the saturation (save load / tests): clamped to [0, max].
+    void setSaturation(float s) {
+        m_saturation = std::clamp(s, 0.0f, m_params.maxHunger);
     }
 
     // Apply `amount` damage. Returns true when health actually decreased
@@ -212,9 +233,11 @@ private:
     bool m_wasOnGround = false;
     float m_fallStartY = 0.0f;
     bool m_dead = false;
-    // Hunger (Phase 23): the level, the decay accumulator (only runs while
-    // hungry), and the starvation accumulator (only runs at zero).
+    // Hunger (Phase 23): the level, the decay accumulator (runs always —
+    // a dead player never reaches update), and the starvation accumulator
+    // (only runs at zero). Phase 28: the hidden saturation buffer.
     float m_hunger = Params {}.maxHunger;
+    float m_saturation = 0.0f;
     double m_hungerAccum = 0.0;
     double m_starveAccum = 0.0;
 

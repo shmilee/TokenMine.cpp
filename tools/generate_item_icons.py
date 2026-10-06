@@ -171,6 +171,62 @@ def rotten_flesh():
     return px
 
 
+def beef():
+    """Raw beef (Phase 28): a dark-red chunk with pale fat marbling."""
+    px = blank()
+    base = (166, 60, 52)
+    fat = (232, 196, 184)
+    # Chunk: an irregular rounded blob spanning roughly x 2..13, y 4..13.
+    for y in range(4, 14):
+        for x in range(2, 14):
+            d = ((x - 7.5) ** 2) / 50.0 + ((y - 8.5) ** 2) / 32.0
+            if d < 1.0 + (h2(x, y, 81) % 3) * 0.15:
+                setpx(px, x, y, base, salt=81)
+    # Fat marbling: short pale dashes across the chunk.
+    for (x0, y0, x1) in ((4, 7, 7), (7, 10, 10), (5, 12, 6), (9, 6, 11)):
+        for x in range(x0, x1 + 1):
+            setpx(px, x, y0, fat, salt=82, amount=4)
+    return px
+
+
+def mutton():
+    """Raw mutton (Phase 28): a pink slab with a white fat cap."""
+    px = blank()
+    meat = (214, 128, 120)
+    fat = (240, 224, 212)
+    # Slab: rounded rectangle x 2..13, y 5..12 (corners skipped).
+    for y in range(5, 13):
+        for x in range(2, 14):
+            if (x in (2, 13)) and (y in (5, 12)):
+                continue
+            if y < 7:
+                setpx(px, x, y, fat, salt=83)
+            else:
+                setpx(px, x, y, meat, salt=84)
+    # Seam between the fat cap and the meat.
+    for x in range(2, 14):
+        setpx(px, x, 7, (196, 108, 100), salt=85, amount=4)
+    return px
+
+
+def chicken():
+    """Raw chicken (Phase 28): a pale drumstick — round meat on a bone."""
+    px = blank()
+    meat = (240, 206, 172)
+    bone = (250, 246, 236)
+    # Meat: a circle centered (8, 6), radius ~4.
+    for y in range(SIZE):
+        for x in range(SIZE):
+            d = ((x - 8) ** 2 + (y - 6) ** 2) ** 0.5
+            if d < 4.2 + (h2(x, y, 86) % 2) * 0.3:
+                setpx(px, x, y, meat, salt=86)
+    # Bone: a 2-px shaft under the meat, knobbed at the end.
+    line(px, 8, 9, 8, 13, bone, salt=87, width=2)
+    for (x, y) in ((7, 13), (7, 14), (10, 13), (10, 14)):
+        setpx(px, x, y, bone, salt=88, amount=4)
+    return px
+
+
 def diamond():
     return gem((100, 225, 235), (170, 245, 250), (58, 175, 190), salt=29)
 
@@ -329,6 +385,9 @@ ITEMS = {
     "leather": leather,
     "wool": wool,
     "feather": feather,
+    "beef": beef,
+    "mutton": mutton,
+    "chicken": chicken,
 }
 
 

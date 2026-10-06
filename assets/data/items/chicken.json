@@ -1,0 +1,7 @@
+{
+  "id": "chicken",
+  "type": "material",
+  "max_stack": 64,
+  "icon": "chicken",
+  "restore_hunger": 2
+}

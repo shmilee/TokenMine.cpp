@@ -102,6 +102,12 @@ void Player::update(double dt) {
     if (m_input->isDown(GameKey::A)) {
         wish -= right;
     }
+    // Sprinting (Phase 28): the exact condition that selects sprintSpeed
+    // (Shift + moving, out of water) — it also doubles the hunger decay
+    // pace further down (Minecraft's 40 s -> 20 s relative shape).
+    const bool sprinting =
+        m_input->isDown(GameKey::LeftShift) && lengthSq(wish) > 0.0f &&
+        !m_inWater;
     Vec3 dir {0.0f, 0.0f, 0.0f};
     if (lengthSq(wish) > 0.0f) {
         float speed = m_inWater
@@ -183,15 +189,22 @@ void Player::update(double dt) {
     }
     m_timeSinceDamage += dt;
 
-    // Hunger (Phase 23): one point every hungerDecaySeconds while above
-    // zero (no saturation buffer in v1 — see KNOWN_ISSUES); at zero the
-    // player starves (1 HP per interval, through the normal damage path so
-    // the game's hurt flash/sound and death handling all fire).
+    // Hunger (Phase 23/28): a decay tick every hungerDecaySeconds of real
+    // dt (sprinting doubles the pace — the factor above); each tick first
+    // drains 1 of the hidden saturation buffer (the food's satiety, Phase
+    // 28), else drops one hunger point. At zero the player starves (1 HP
+    // per interval, through the normal damage path so the game's hurt
+    // flash/sound and death handling all fire).
+    m_hungerAccum +=
+        dt * (sprinting ? m_params.sprintHungerDecayFactor : 1.0);
     if (m_hunger > 0.0f) {
         m_starveAccum = 0.0; // a meal resets the pending starvation tick
-        m_hungerAccum += dt;
-        while (m_hungerAccum >= m_params.hungerDecaySeconds) {
-            m_hungerAccum -= m_params.hungerDecaySeconds;
+    }
+    while (m_hungerAccum >= m_params.hungerDecaySeconds) {
+        m_hungerAccum -= m_params.hungerDecaySeconds;
+        if (m_saturation > 0.0f) {
+            m_saturation = std::max(0.0f, m_saturation - 1.0f);
+        } else {
             m_hunger = std::max(0.0f, m_hunger - 1.0f);
             if (m_hunger <= 0.0f) {
                 m_hungerAccum = 0.0;
@@ -237,6 +250,8 @@ void Player::respawn() {
     m_regenAccum = 0.0;
     // Respawn also refills the hunger (Minecraft: a fresh start is full).
     m_hunger = m_params.maxHunger;
+    // A full meal: the full bar plus the full hidden buffer (Phase 28).
+    m_saturation = m_params.maxHunger;
     m_hungerAccum = 0.0;
     m_starveAccum = 0.0;
     m_wasOnGround = false;

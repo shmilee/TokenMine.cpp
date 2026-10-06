@@ -1,0 +1,7 @@
+{
+  "id": "mutton",
+  "type": "material",
+  "max_stack": 64,
+  "icon": "mutton",
+  "restore_hunger": 2
+}

@@ -106,22 +106,35 @@
 - **潜行缩高在纯整数方块世界无通行效果** — 潜行把身高 1.8→1.6（脚底不动、眼高 1.62→1.42）。整数方块世界的头顶空间恒为 ≥2.0（站立可过）或 ≤1.0（潜行也不可过），1.6 不改变可通行集合；潜行当前只影响速度（×0.3）与禁用 step-up，"钻 1.8 门框" 的效果要等出现非整数高度（半块/实体头顶）才有意义。`[Phase 16]`
 - **step-up 只抬升 1 格、每 tick 至多一次** — 条件：非潜行 + 贴地 + 身体贴住整数块面（`kFaceEps=1e-4`）+ 面前脚位 solid + 其上方 2 格空；X 轴优先于 Z 轴（固定顺序），一次 update 只抬一次。2 格及以上仍须跳跃。`[Phase 16]`
 
-## 饥饿 / 食物（Phase 23）
+## 饥饿 / 食物（Phase 23，Phase 28）
 
-- **无饱和度（saturation）** — 饥饿只按固定节奏衰减（每 4s 1 点，从满条就开始），
-  无 MC 的隐藏饱和度缓冲（MC：先耗隐藏值、吃高饱食度食物可撑更久）；也没有
-  饱食度概念，食物只有"恢复饥饿点"一个维度。`[Phase 23]`
-- **进食是瞬时的、无动画/无时长** — 右键食物 = 立即吃（1 次点击 = 吃 1 个），
-  无 MC 的 ~1.6s 进食动画/进度、无"进食中被打断"状态；按住右键不重复吃
-  （`wasPressed` 边沿触发）。`[Phase 23]`
-- **饥饿不随移动/冲刺消耗** — 衰减纯时间驱动，站桩与跑动同速；MC 的移动/冲刺
-  会额外耗饥饿。`[Phase 23]`
+- **饱和度是简化模型，非 MC 的 exhaustion 机制** — Phase 28 实现了隐藏
+  饱和度缓冲（上限 = `maxHunger`，存档格式 5 `player.saturation`，format 1-4
+  读档 = 0）：每 4s 衰减 tick **先扣 1 点饱和度、耗尽才掉饥饿条**；食物饱食度
+  = `2 × restore_hunger`（`kSaturationFactor`，MC 熟食 ≈2× 经验法则，无逐食物
+  数据字段）。未建模：MC 的 exhaustion 子点（衰减节奏本身仍固定 4s，饱和只
+  推迟掉条）、**生肉的 MC 低饱和度**（beef 1.8 / mutton 1.2 / chicken 1.2——
+  本游戏生肉也按 2× 算，饱食度偏高）、回复 HP 不消耗饱食度。`[Phase 28]`
+- **进食通道无进度条、无手部动画** — Phase 28 进食 = 按住右键 1.6s（MC 32 tick
+  时长）的通道（`core/food.hpp` 纯状态机，real dt）：唯一视觉提示是**手持物品
+  图标向屏幕中心抬起**（进度 0→1、满进度 64px，复用弓拉取几何）；无 MC 的 3D
+  手部举到嘴边动画 / 进食进度条。中断 = 取消且不消耗食物：提前松开右键 /
+  受击 / 死亡 / 解锁鼠标 / 开面板 / 切换选中格（Tab）/ 左键挥击；进食中再按
+  右键 = 忽略（进食继续）。浮点边界：96×(1/60) 累加略短于 double 1.6，完成帧
+  落在第 97 帧（同 4s 衰减落第 241 帧的 1/60 累加约定）。`[Phase 28]`
+- **饥饿消耗：只有冲刺 ×2，走动/跳跃/攻击不额外耗** — Phase 28 起**疾跑**
+  （`Shift`+移动、非水中——与选 `sprintSpeed` 同一输入条件，含贴墙冲刺）把
+  4s 衰减节奏变 2s（MC 40s→20s 的相对节奏）；MC 的跳跃（+0.05/tick 级）与
+  攻击（+0.1 级）额外耗饥未建模，纯走动与 MC 一致不额外耗。`[Phase 23/28]`
 - **满饥饿时吃 = no-op 但吞掉右键** — 选中食物且饥饿已满时，右键既不进食也不
   放置/交互（对齐 MC "满条时不能放置"）；该次点击被静默消耗。`[Phase 23]`
 - **食物不直接回血** — `restore_hunger` 只加饥饿点；HP 恢复只走（门控后的）
   自然回复与饥饿=0 的扣血，无"吃牛排直接 +4 HP"类食物。`[Phase 23]`
-- **当前仅 1 种食物** — `rotten_flesh`（+4）；`leather`（cow 掉落）刻意**不是**
-  食物（对齐 MC，纯收集品），未做面包/牛排/金苹果等。`[Phase 23]`
+- **食物共 4 种，均为生肉/腐肉** — Phase 28 起：`rotten_flesh`（+4，zombie）、
+  `beef`（+3，cow）、`mutton`（+2，sheep）、`chicken`（+2，chicken）；
+  `leather`/`wool`/`feather` 刻意**不是**食物（对齐 MC 的收集品定位）。
+  未做：熟肉（无烹饪系统）、面包（无小麦/种植系统）、金苹果（无苹果系统）、
+  牛奶桶（无实体容器物品）。`[Phase 23/28]`
 - **饥饿 HUD 在极窄窗口会被裁剪** — 心带居中（178px）+ 饥饿带在心带右侧
   （+6px 间距、178px），合计约 362px；窗口宽度 < ~380px 时饥饿带右端超出
   屏幕被裁剪（UI 是像素正交、越界即裁，无回退布局）。E2E/基线窗口 1280×720
@@ -138,6 +151,17 @@
 - **E 面板 2×2 固定在共享 3×3 模型的左上** — E 面板合成格与表格面板共用同一个 `CraftingGrid` 3×3 模型，只暴露槽 {0,1,3,4}（左上 2×2）；宽度或高度为 3 的 pattern（如 pickaxe `PPP/.S./.S.`）无法摆入，E 里的 shaped 匹配只可能命中落在左上角的 pattern（2×2 工作台配方可在 E 摆出合成，与 MC 一致）。`[Phase 17]`
 - **E 配方列表只显示 shapeless 配方** — shaped 配方不出现在列表里，唯一入口是工作台面板。`[Phase 17]`
 - **E2E 合成输入的环境约束（本机 :0）** — xdotool 每次调用 ~150 ms（长序列追不上帧帽截图）；XTest 伪事件**每个动作后必须 `XFlush`**（libX11 会缓冲无应答请求成 ~1s 一批投递，同帧事件被 `wasPressed` 边沿逻辑折叠）；合成输入要求点击位置处游戏窗口在最上层（运行时临时 unmap UI 窗口），但 unmap 期间用户的真实鼠标会污染运行（指针锁定期间的真实 motion = 相机旋转），所以运行前须等光标静止 ~400 ms；地面命中格瞄准容差在 pitch −0.80 时仅 ~±10 px，驱动用 pitch −0.68（~±49 px）。Xephyr :99 仅作逻辑回退（:0 光标扫过 Xephyr 窗口会被转发进 :99；llvmpipe 渲染不能用于 base 字节基线）。`[Phase 17]`
+- **指针锁定 grab delta（输入驱动 E2E 的环境约束，本机 :0）** — xdotool
+  `mousemove`（XWarpPointer）只移虚拟光标、不移物理鼠标；游戏进 relative mode
+  时 SDL 把光标 warp 到其自算窗口中心并上报一次性 motion delta ≈（warp 位置 −
+  SDL 中心）+ 物理微漂移 → 锁定时首帧相机旋转一次（0.0025 rad/px，4 px =
+  ±0.01 rad）。实测：warp 位置 1:1 传导（+4 px warp → +4 px 漂移）；同一 warp
+  位 batch 首次 0 px、其后稳定 4 px（手静止可复现 = 物理微漂移）；WM 实际窗口
+  原点 (4,64)（windowmove 0 60 不被尊重）→ SDL 中心 (636,416) 而非名义
+  (644,424)。对策 = warp 光标到实测中心（origin+(632,352)）+ 背靠背同 warp +
+  手静止；**存档 yaw/pitch 是漂移探测器**（干净 = 0.0000，漂移 = ±0.0100）。
+  **输入驱动 E2E 的全帧字节一致受此环境物理限制：存档状态（含 yaw/pitch）是
+  输入 E2E 的确定性权威证据，全帧字节一致用于无输入回归。** `[Phase 28]`
 
 ## Mob（Phase 20）
 
@@ -153,9 +177,12 @@
 - **mob 模拟走固定帧步长（`kMobStepPerFrame`）** — 运动实体的截图可复现约定（日循环同款）：mob 每帧固定推进 1/60s，非 60FPS 帧帽下 mob 时间随帧钟变慢（玩家/掉落物/流体仍是真实 dt）；掉帧时 mob 与玩家瞬时速度差 ≤1 个子步（无输入运行无感）。`[Phase 20]`
 - **类型抽取先于光门，过不了光门的尝试作废** — 每次生成尝试先按名单确定性抽取类型（种子 ⊕ 帧号）再找格：白天抽中 zombie（需光 ≤0）则本次无格可用、整次作废，相当于该类型在不可生成时段的生成率减半；v1 接受（名单 2 种，影响有限）。`[Phase 22]`
 - **被动 mob 无主动躲避** — cow 对玩家零反应（不逃跑 AI）：玩家靠近不触发任何行为；被打只有击退（0.3s 窗口后恢复游走），无持续远离玩家的逃跑速度。`[Phase 22]`
-- **cow 掉落固定 1 个 `leather`** — `drops_count` 是固定 1..64 整数：无 0–2 随机区间（Minecraft cow 掉 0–2 leather），无掉落幸运/附魔影响；`leather` 目前无合成用途（纯收集/交换物）。`[Phase 22]`
+- **掉落数量是固定列表，无随机区间** — Phase 28 起掉落数据 = `drops` 列表
+  （每条目 `{item, count}`，count 1..64 固定）：无 0–2 随机区间（Minecraft cow
+  掉 0–2 leather + 0–2 raw beef、skeleton 掉 0–2 箭）、无掉落幸运/附魔影响；
+  `leather` 目前无合成用途（纯收集/交换物）。`[Phase 22/28]`
 - **skeleton 无视线检查** — 只要玩家水平距离 ≤ `shoot_range` 且高度差 ≤2 就射，不检查中间有无方块遮挡（箭会插进墙里消失）；Minecraft skeleton 有 LOS 检查。`[Phase 27]`
-- **skeleton 掉落固定 1 个 `arrow`** — 无 0–2 随机区间（Minecraft skeleton 掉 0–2 箭 + 骨头）；无骨头物品。`[Phase 27]`
+- **skeleton 掉落固定 1 个 `arrow`** — 无 0–2 随机区间（Minecraft skeleton 掉 0–2 箭 + 骨头）；无骨头物品。`[Phase 27/28]`
 - **skeleton 箭提前量只补偿重力、不预判位移** — 瞄点 = 玩家当前眼高 + 重力弧线提前量：站桩玩家必中，移动玩家可躲（无 Minecraft 式的目标预判/弹道修正）。`[Phase 27]`
 
 ## 弓 / 箭（Phase 21 + Phase 24）
@@ -173,6 +200,7 @@
 - **方块无 per-instance 状态** — BlockState 概念未引入（朝向、附属、流体等级等需要时再设计）。`[Phase 2]`
 
 ## 已修复（归档）
+- **`[2026-10-06, Phase 28]` 无饱和度 / 进食瞬时 / 冲刺不额外耗饥饿 / 仅 1 种食物 / 掉落单字符串 schema（P23 简化项回收 + 食物扩充）** — Phase 28 回收 P23 的饥饿简化项并扩充食物（用户指定：加羊肉/鸡肉/牛肉等更多食物选择）+ 掉落数据改列表。**数据** 3 个新食物 material 物品 `beef`（restore_hunger 3）/ `mutton`（2）/ `chicken`（2）（MC 生肉值；max_stack 64；图标 = `tools/generate_item_icons.py` 3 个新程序化函数：beef = 深红肉块 + 浅色脂肪大理石纹、mutton = 粉色肉板 + 白色脂肪帽、chicken = 浅色鸡腿 + 骨；salts 81-88，既有图标重跑零变化）/ 5 个 mob 掉落 schema 迁移：`"drops": "item" + "drops_count"` → **列表** `"drops": [{"item","count"}]`（每条目 count 1..64 默认 1、列表顺序 spawn、缺省/`[]` = 不掉落；迁移防护：字符串形式 / 残留 `drops_count` / 非数组 / 非对象条目 / 缺 item / 空 item / 非整数 count / count 越界 = 硬拒绝；zombie [rotten_flesh×1]、skeleton [arrow×1]、cow [leather×1, beef×1]、sheep [wool×1, mutton×1]、chicken [feather×1, chicken×1]）。**代码** `core/food.hpp`（新纯状态机，同 P24 `bow.hpp` 模式：`kEatDurationSeconds=1.6` = MC 32 tick / `kSaturationFactor=2.0` = MC 熟食 ≈2× 经验法则（无逐食物数据字段）/ `EatChannel{start/update(dt,rightHeld)→None/Completed/Cancelled, progress}`；提前松开 = 取消不消耗、进食中再按右键 = 忽略）/ `Player`：`m_saturation` 隐藏缓冲 [0, maxHunger]（新世界 = 0、重生 = 满"一顿饱饭"）+ 4s 衰减 tick（real dt）先扣 1 饱和度、耗尽才掉饥饿条（MC exhaustion 简化：节奏固定 4s，饱和只推迟掉条）+ **疾跑（LeftShift + 移动 + 非水中——与选 `sprintSpeed` 同一输入条件，含贴墙冲刺）tick 节奏 ×2**（`sprintHungerDecayFactor=2.0`，MC 40s→20s 节奏）/ `Game`：`tryEat` = **起通道**（捕获 m_eatSlot/m_eatItem/m_eatStartHealth）、`updateEatChannel`（中断 = 提前松开 / 受击（health < start）/ 死亡 / 指针解锁 / 开面板 / 选中变更（slot 或 item 不匹配）/ 左键挥击——全部取消不消耗；完成 = 从捕获槽扣 1 + restoreHunger + restoreSaturation(2×) + "eat"）/ 手持图标拉取统一弓/进食（heldPull = bow power | channel.progress，共享 64px 几何）/ `MobRegistry`：`MobDrop` + 列表严格解析 / 死亡掉落循环每条目一个 ItemEntity（game.cpp 局部 struct 改名 `PendingDrop` 避免遮蔽 mc::MobDrop）/ init 逐条目交叉校验 / 存档格式 5（`player.saturation`，-1 省略 = 未指定，format 1-4 读档 = 0，负数拒绝）。**测试** 667/667（+17）：`tests/test_food.cpp` 新 6（通道起 / 完成【第 97 帧：96×(1/60) < double 1.6，IEEE 双精度累加边界】/ 松手取消 / stale 取消 / progress / 常量锚定）/ PlayerTest +4（饱和度吸收衰减 / 疾跑 ×2 + 站立对照 / 恢复钳制 / 重生满缓冲）/ ItemRegistryTest +1（3 种肉解析）/ MobRegistryTest +3（列表解析含默认 count / 旧 schema 拒绝 ×3 / 畸形条目拒绝 ×7）+ 5 个既有 drop 断言改列表 / SaveTest +3（format 5 往返 / format 4 读 0 / 负数拒绝）+ 2 个既有（未来版本 5→6 / 写入 format 4→5）。**E2E**（P25/P27 协议 + xdotool 脚本化输入，驱动 /tmp/opencode/p28_e2e.zsh）：**无输入回归全部字节级**——base18 门 ×2 字节不变（**第 4 次结构性免疫验证**：进食通道未激活 / 饱和度 0 → 旧衰减路径 / 疾跑 false / 掉落 schema 不影响无输入场景）、白天 360f mobs-on ×2 与 mobs-off ×2、夜晚（p27far）×2 + nomobs ×2——**5 对全部与 P27 同名输出逐字节一致**（skeleton 射箭场景 health 8 / hunger 18 / sat 0 比特级复现 = P28 生存代码变更对既有场景零扰动）；**eat 机制由存档状态确定性验证**（p28eat 存档：seed 123456789、t=0.25、day_length 480 → t(600f)=0.2708 正午平台、hunger 14、sat 0、slot0 beef×8 选中；脚本 D+1.5s 左键锁 → D+3.0s 右键按住 → D+5.5s 松开，600f）：**5 次运行存档全部一致且精确命中预测** health 20 / hunger 16 / sat 5 / beef×7 / sel 0（4s tick 保证先于进食 14→13【sat 0 → 直接掉条】、进食 D+4.6s 完成 13→16 + sat 0→6、8s tick sat 6→5、12s tick 未到；每 tick 余量 ≥1.6s，对 D∈[0,0.5] 全确定）。**踩坑（新教训，2 条）**：① **SDL 指针锁定 grab delta**——xdotool mousemove（XWarpPointer）只移虚拟光标；进 relative mode 时 SDL 上报一次性 motion delta ≈（warp 位置 − SDL 自算窗口中心）+ 物理鼠标微漂移 → 锁定时首帧相机旋转（0.0025 rad/px：4 px = ±0.01 rad）。实测：warp 位置 1:1 传导（+4 px warp → +4 px 漂移）；同一 warp 位 batch 首次 0 px、其后稳定 4 px（**手静止可复现** = 物理微漂移）；WM 实际窗口原点 (4,64)（windowmove 0 60 不被尊重）→ 中心 (636,416) 而非名义 (644,424)。对策 = warp 实测中心 + 背靠背同 warp + 手静止 + **存档 yaw/pitch 作漂移探测器**（干净 = 0.0000，漂移 = ±0.0100）；**输入驱动运行的全帧字节一致受此环境物理限制，存档状态 = 输入 E2E 确定性权威证据，全帧字节一致用于无输入回归**。② **`std::string::replace(pos, len, const char*, n)` 4 参重载取替换串前 n 字符**（非替换 len 字符）——测试代码误用致 JSON 截断损坏；字符串插入一律用 3 参 (pos, len, string)。
 - **`[2026-10-06, Phase 27]` 敌对 mob 仅 zombie（近战）——无远程 mob** — Phase 27 落地 skeleton（第二个敌对 mob、首个远程——**打破 P22/P26 纯数据流，新增代码**）。**数据** `data/mobs/skeleton.json`（HP 20、speed 0.8、`detect_radius` 16、`attack_range` 0 = 永不近战、`attack_damage` 2 = 箭伤、`attack_cooldown` 1.5、新可选字段 `shoot_range` 14 / `retreat_distance` 3 / `shoot_speed` 15（均默认 0 = 近战 mob）；`spawn_max_light` 0、`hostile` true = P25 自动进保护环/伤害缩放/生成节奏、掉 `arrow`（既有 material）；box 模型同 zombie 尺寸 0.6×1.8）+ 严格校验（负数拒绝、`shoot_speed` **显式**值须 (0,100]（缺席=0 合法、显式 0 是笔误）、`shoot_range>0` 必须有 `shoot_speed` 跨字段拒绝）/ 名单 [zombie, cow, sheep, chicken, skeleton]（抽取 = pick % 5）/ 纹理 2 tile（`skeleton_tile`：骨白 + 噪声，skull 深色眼窝 rows5-6 + 鼻腔 rows7-8；atlas 27→29 只占空位 [3,6]/[0,7]，既有坐标零移动）。**代码** `MobState::RangedAttack`（`shoot_range>0` 且玩家水平 ≤shoot_range 且高度差 ≤2：面向玩家 + 每 `attackCooldown` 经 shoot 回调放箭；≤retreat_distance 全速后撤**边退边射**（Minecraft kite）；超 shoot_range 按 Chase 逼近；`attack_range`=0 使近战分支对远程 mob 永不成立，纯数据表达）/ `Projectile` +`hurtPlayer`（默认 false）——游戏扫掠测试**先**对玩家 AABB（命中 = P16 受伤路径 + 箭 `kill()`；玩家自己的弓箭不带标志、仍穿过玩家）+ `source`（射手指针）——**箭不伤射手**：箭 spawn 点 = 头部 + 0.3 块瞄准偏移，仍在 0.6 宽身体的 AABB 内 → 下一帧扫掠 t=0（起点在盒内）自命中，每支箭自杀自灭 + 把射手击退向玩家（E2E 实证：6 箭全灭、skeleton 半速漂移、health 恒 20；命中循环跳过 `source` 修复）/ 放箭瞄点 = 玩家眼高 + **0.5·g·(d/speed)² 弧线提前量**（箭受重力 20 b/s²，无补偿时直线瞄只命中 ≤6.3 块，10 块外箭从玩家脚下飞过——E2E 实证 health 恒 20；`Projectile::kGravity` 转 public 供瞄点复用同一常量）/ `MobEntity::eyePosition()`（模型高 ×0.8 = 头部，放箭起点）/ 生成 debug 日志（cap 拒绝 / 抽中类型无格 / 生成位置 / skeleton 射击 / 箭命中玩家 / 箭插墙，`--log-level debug`，长期保留）。**测试** 650/650（+7：`ParsesSkeleton` 完整解析【含 ranged 三字段 + hostile + 掉 arrow】、`RejectsRangedFieldErrors`【负数 ×2 / 显式 0 / >100 / 跨字段缺 shoot_speed】、`RangedMobShootsAndHoldsDistance`【8 块外 300 帧：全程 RangedAttack、恰 4 发【冷却起点 0 + 1/60 浮点残差】、零近战、零水平漂移】、`RangedMobRetreatsWhenClose`【1 块贴近：首帧 velocity 背离玩家、300 帧后退至 >3 块、仍开火、零近战】、`ParsesFiveMobList`、`HurtPlayerFlagDefaultsFalseAndSettable` + `SourceDefaultsNullAndSettable`）。**E2E**（P25 协议：零并发 + 每拍前 unmap 覆盖窗 + 天门；**夜晚换 seed 9 手工存档 p27far**——seed 123456789 的 pick 流在 p25far 位置前 4 抽 = zombie/zombie/sheep/chicken、cap 于 f150 满、**skeleton 永不生成**（E2E 实证 health 恒 20 两轮；probe 工具用仓库 WorldGenerator 重放 spawn 扫描 + 表面高度，手工造 seed 9 存档：玩家 (22.5,45,0.5) = 世界出生点 +22 块、表面 44+1，保护环 R=12 外）：base18 门 ×2 字节不变（名单 4→5 结构性免疫第三次验证）、白天 360f mobs-on ×2 与 mobs-off ×2 逐字节一致（mobs-off == base = 正午平台）、vs 对照 **36607 px = 4 被动剪影**（2 sheep + chicken + cow，与 %5 pick 序列 f120/f150/f180/f240 逐一对应，f60/f90 zombie + f210/f300 skeleton 光门拒、f330 cap 拒，zombie 绿 0）、夜晚 360f ×2 逐字节一致 + **存档 health 8 确定性**（20 − 6 箭×2；debug 日志全程：f60 cow / f90 skeleton / f120 cow / f150 skeleton = cap 4，6 次 "skeleton shot" + 6 次 "arrow hit player for 2"，skeleton 站桩位置逐发不变）、天门 FRESH-FLASH（最后一击距截图 0.5s，伤害红纱 a≈0.25 全屏 tint——**去纱 diff**（对照图同参数加纱 + 容差 3）= 3 cluster = 2 skeleton（提亮后 skull 眼窝+鼻腔可辨）+ 2 cow，zombie 绿 0）、nomobs 对照 health 20 + FRESH。**踩坑（新教训，共 4 条）**：① **splitmix64 是纯 finalizer 不是状态机**——仓库 `splitmix64(x)` 无 `x += γ` 步（P27 预测脚本误加导致 %5 全表错、%4 恰好碰对 4 个值险些漏检）；**预测表必须逐字节对照仓库实现 + 用一次真实运行日志校验后再信**。② **箭自命中 t=0**——扫掠测试 "t=0 = 起点在盒内即命中" 的语义对 spawn 在自身盒内的箭是致命的（见上）；任何"实体 A 发射影响 A 自身的投射物"设计必须显式排除发射者。③ **直线瞄 + 重力 = 距离上限**——d²/(2·s²/g) ≤ 瞄点高度才命中；投射物射击 AI 必须做弧线提前量（或降低重力）。④ **E2E 外部输入污染**——用户在 :0 的真实鼠标点击/移动会落在 unmapped UI 后方的游戏窗口上（指针锁 + 视角转动 + 挖掘 → 截图含 HUD、物品、掉落，与"无输入"假设全破）；**×2 字节一致本身就是污染检测器**（本轮 dayc 对 393829 vs 364018 字节即暴露），另加 HUD 红心像素检查入驱动；无输入运行**永远不该有 HUD**（`locked && !panelOpen()` 门）——见到 HUD = 见到输入。
 - **`[2026-10-05, Phase 26]` 被动 mob 家族仅 cow（P22）——无 sheep/chicken** — Phase 26 按 P22 已验证的纯数据流落地 sheep/chicken（**零新增游戏代码**，纯数据 + 纹理 + 单测 + E2E）。**数据** `data/mobs/sheep.json`（HP 8、speed 0.5、全 0 攻击字段、`wander_interval` 3.0、`spawn_max_light` 15、掉 `wool`；box 头 0.4³ + 身 0.8×0.8×1.2，AABB 1.2×1.5 同 cow）/ `data/mobs/chicken.json`（HP 4、speed 0.6、`wander_interval` 2.0、掉 `feather`；box 头 0.25³ + 身 0.3×0.4×0.5，AABB 0.5×0.8 = **首个比 zombie 小的模型**——生成格/重叠/间距规则全用模型 AABB 数据，无改动）/ `wool` + `feather` material 物品（max_stack 64；图标 `tools/generate_item_icons.py`：wool = 白色绒毛板【复用 leather 的轮廓逻辑】、feather = 米白斜羽干 + 深色中轴）/ mob 纹理 4 tile（`tools/generate_mob_textures.py`：sheep 白绒毛 + 深色中性眼【噪声幅度 12 略高于 skin = 绒毛感】、chicken 米白羽 + 深色眼 + 红冠 rows1-2 + 橙喙 rows7-8；既有 6 个输出重跑逐字节零变化）/ atlas 23→27（`block_atlas.json` 新 tile 只占空位 [3,5]/[0,6]/[1,6]/[2,6]，既有坐标零移动）/ `mob_spawning.json` 名单 [zombie, cow, sheep, chicken]——类型抽取 = `pick % 名单长度`（种子 ⊕ 帧号），**扩名单改变各帧抽中类型**（f60：cow → chicken），但 **base 60 帧运行在首次尝试之前结构上零尝试**（`first_spawn_frame=60`：主循环 `update()` 执行时 `m_frameCount` 尚为 59、不满足 `>=60`，`++m_frameCount` 在其后 → 第 61 轮才首次尝试）→ **基线结构性不受名单影响**（P20 设计意图 "`first_spawn_frame=60` 保证 60 帧基线无 mob" 对任意名单成立）。**测试** 643/643（+4：`ParsesSheep`/`ParsesChicken` 完整被动解析【含小模型 AABB 0.5×0.8 尺寸断言】、`RejectsChickenBoxOutsideAabb`【头 box 顶 0.85 > AABB 0.8 拒绝——小模型下的 box-in-AABB 校验】、`ParsesFourMobList`【4 类型名单顺序断言——顺序是确定性抽取的锚】）。**E2E**（P25 协议：零并发 + 每拍前 unmap 覆盖窗 + ≥6s 窗口；白天场景 day_length 240 + start 0.25，360f → t=0.275 仍在正午平台、dayFactor 1.0 天空恒定）：base18 门 ×2 逐字节不变（结构论证 + 实证）；白天 360f mobs-on ×2 与 mobs-off ×2 各自逐字节一致（mobs-off == base 逐字节一致 = 正午平台静态场景），vs 对照 **15535 px 差 = 恰好 4 个 mob 剪影**（4 x-cluster：sheep x[216,310] y[164,238] 3715 px（树冠部分遮挡）/ 左 chicken x[346,412] y[326,405] 4029 / 中 chicken x[519,559] y[319,395] 2676（小模型 → 窄）/ cow x[660,734] y[243,320] 5115（最大）；与确定性预测逐一对应：f60/f90 chicken 生成、f120/f150/f210 zombie 光门拒绝、f180 cow 生成、f240 sheep 生成（`max_mobs` 4 满）、f270 chicken / f300 cow / f330 cow 全部 cap 拒绝）/ **zombie 绿 0 px**（白天敌对压制保持）/ 心带、饥饿带、热栏带全 0（无伤害、无饥饿衰减、无库存变化）。**踩坑（新教训）**：E2E 分析脚本自写 PNG 解码器按 RGB 3 通道假设，而游戏截图是 **RGBA 4 通道**（`takeScreenshot` 写 alpha=255）→ 通道错位产生假"周期性纹理错位 diff"（7 个跨屏 cluster + 大量 R/G/B 恰 255 饱和像素），极易误诊为 atlas UV 错位；改用 PIL 解码后正确（4 cluster、全在 mob 剪影内）。教训：**E2E 像素分析一律用标准库解码（PIL），先对已知颜色像素（天空/地面）做 sanity check 再统计**
 - **`[2026-10-05, Phase 25]` 敌对 mob 生成无保护区 / 无难度系统（Mob 节遗留）** — Phase 25 实现生成保护半径/难度系统。**纯模型** `core/difficulty.hpp`（新，头文件，游戏与单测共享）：`parseDifficulty`（easy/normal/hard 严格大小写解析，未知值拒绝）/ `spawnProtectionRadius`（8/12/16 = Minecraft 值）/ `hostileDamageScale`（0.5/1.0/4÷3——zombie 3 点 → 1.5/3/4，镜像 MC 2.5/3/4 的相对形状）/ `hostileSpawnRateScale`（0.5/1.0/1.5）/ `checkEveryFramesFor(base, d) = max(1, round(base/scale))`（30 → 60/30/20）；**normal = 三个缩放全 1.0 = 基线行为零变化**（默认值）。**数据** mob JSON 新字段 `hostile`（可选 bool，默认 false，非 bool 严格拒绝——数据驱动，不靠 `attack_damage>0` 推断；zombie.json = true）。**代码** `findMobSpawnCell` 新默认参 (protectionRadius, protectionX, protectionZ)：保护环 = **世界出生点**（世界属性，读档不改它）水平圆，**仅 hostile 受检、passive 豁免**（Minecraft 约定），扫描**首查**（最廉价拒绝；radius 0 = 无保护）/ Game：config `mobs.difficulty` 严格解析（默认 "normal" = 零行为变化）、生成节奏 = `checkEveryFramesFor(m_spawnConfig.checkEveryFrames, m_difficulty)`、伤害缩放 per-mob 在 hit 回调捕获（`hostile ? scale : 1.0`）、F3 新 `difficulty` 行、版本行 Phase 25。**测试** 639/639（+13：`test_difficulty.cpp` 新 6[解析 3/取值表 2/checkEveryFramesFor round+min1 1]、hostile 解析 3[缺省 false/true/非 bool 拒绝]、保护几何 4[环内拒/环外过/边界语义/passive 豁免]）。**E2E**（黄昏场景：day_length 1200 + start 0.536，dayFactor≈0.04——场景可见且敌对可生成；存档 p25prot = 玩家距世界出生 5 块、p25far = 22 块【所有保护圈外】；**协议**：批内零并发 :0 活动 + 每运行前 unmap 覆盖游戏区的已映射窗口 + 每截图过天空色新鲜度门【严格 0 容差、flash-aware——本阶段发现前缓冲呈现冻结与红闪伪装两个 E2E 机制，详见 SESSION_CONTEXT 坑位合集】）：base18 门 ×2 逐字节一致（normal 缺省 = 零变化）；**prot（360f）**：pe/pn/ph ×2 各自逐字节一致，对新鲜 nomobs 对照的**僵尸绿像素**判据 = easy **6589 px**（敌对在 R=8 环外生成并走向玩家）/ normal **0**（R=12 环内全保护）/ hard **0**（R=16），cow（豁免）棕像素 7563/7368/14665 照常生成；心带全 0（本确定运行僵尸生成格偏远侧、首击 >f360——早批"心带 5228"数已作废，系陈旧帧产物）；**rate（360f）**：每难度 3 次运行两两逐字节一致，对 p25far 新鲜 nomobs 对照：僵尸绿 6754/6770/7336、总差 50272/53550/54078、难度两两差 3968/5365/3926（生成时序不同 → 组成/位置不同）、心带 0（health 20）；节奏 60/30/20 本身由单测锚定（4-mob 上限使可见数量收敛 = v1 已知简化）；**dmg（600f）**：de/dh ×2 各自逐字节一致（天空 (123,60,37) 精确 = 无红闪），dmg-normal 6 次运行逐字节一致（天空 (143,51,31) = flash(α≈0.15) 罩在新鲜天空上——最后一击落截图帧前 ~17 模拟帧，红闪真实 dt 衰减在 60fps 下剩 ~217ms；30fps 运行同一击的闪已过期 = 旧批"两簇"是帧率产物而非非确定）；**存档 health 判据**（确定性模拟，全部运行一致）：easy **12.5**（5 击 ×1.5）/ normal **2.0**（6 击 ×3.0）/ hard **4.0**（4 击 ×4.0），心带两两差 1497/2864 px；跨难度世界区 ±1~4 小差 = 黄昏暗 mob 剪影位置不同（HUD 带差严格限于 mob x 范围 ≤810 = 半透明 HUD 透底，非缺陷）。**新 v1 条**：无 Peaceful / 保护 = 静态圆（无村庄保护）/ 节奏 = 全局共享缩放（非按类型权重），见 Mob 节。

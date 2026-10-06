@@ -9,8 +9,10 @@
     "attack_cooldown": 1.0,
     "wander_interval": 3.0,
     "spawn_max_light": 15,
-    "drops": "wool",
-    "drops_count": 1
+    "drops": [
+      { "item": "wool", "count": 1 },
+      { "item": "mutton", "count": 1 }
+    ]
   },
   "model": {
     "width": 1.2,

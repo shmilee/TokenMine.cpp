@@ -153,21 +153,55 @@ Result<void> MobRegistry::parseProperties(const Json& def,
                        "'shoot_speed' in (0, 100]");
     }
 
-    if (const Json* drops = def.find("drops")) {
-        if (!drops->isString()) {
-            return MC_FAIL("mob properties: 'drops' must be a string "
-                           "(item name, or \"\" for no drops)");
-        }
-        out.drops = drops->asString();
+    // Migration guard (Phase 28): the single-drop schema
+    // ("drops": "item" + "drops_count") is gone — the count now lives
+    // inside each list entry. Reject the old field names explicitly
+    // instead of silently ignoring them.
+    if (def.find("drops_count") != nullptr) {
+        return MC_FAIL("mob properties: 'drops_count' is no longer used "
+                       "(Phase 28) — put the count inside the matching "
+                       "'drops' entry: {\"item\": ..., \"count\": ...}");
     }
-    if (const Json* dc = def.find("drops_count")) {
-        if (!dc->isNumber()) {
-            return MC_FAIL("mob properties: 'drops_count' must be a number");
+    if (const Json* drops = def.find("drops")) {
+        // Phase 28: the drop LIST — one {item, count} entry per dropped
+        // item, spawned in list order. Absent or [] = no drops.
+        if (!drops->isArray()) {
+            return MC_FAIL("mob properties: 'drops' must be an array of "
+                           "{item, count} entries (the Phase 28 single-"
+                           "string schema is no longer accepted)");
         }
-        out.dropsCount = dc->asInt();
-        if (out.dropsCount < 1 || out.dropsCount > 64) {
-            return MC_FAIL("mob properties: 'drops_count' must be in "
-                           "[1, 64], got " + std::to_string(out.dropsCount));
+        for (std::size_t i = 0; i < drops->size(); ++i) {
+            const Json& entry = drops->at(i);
+            if (!entry.isObject()) {
+                return MC_FAIL("mob properties: 'drops' entry #" +
+                               std::to_string(i) + " must be an object "
+                               "{\"item\": ..., \"count\": ...}");
+            }
+            MobDrop drop;
+            const Json* item = entry.find("item");
+            if (item == nullptr || !item->isString() ||
+                item->asString().empty()) {
+                return MC_FAIL("mob properties: 'drops' entry #" +
+                               std::to_string(i) + " requires a non-empty "
+                               "string 'item'");
+            }
+            drop.item = item->asString();
+            if (const Json* count = entry.find("count")) {
+                if (!count->isNumber() || count->asDouble() !=
+                                            std::floor(count->asDouble())) {
+                    return MC_FAIL("mob properties: 'drops' entry #" +
+                                   std::to_string(i) + " 'count' must be "
+                                   "an integer");
+                }
+                drop.count = static_cast<int>(count->asDouble());
+                if (drop.count < 1 || drop.count > 64) {
+                    return MC_FAIL("mob properties: 'drops' entry #" +
+                                   std::to_string(i) + " 'count' must be "
+                                   "in [1, 64], got " +
+                                   std::to_string(drop.count));
+                }
+            }
+            out.drops.push_back(std::move(drop));
         }
     }
     return {};

@@ -9,8 +9,10 @@
     "attack_cooldown": 1.0,
     "wander_interval": 2.0,
     "spawn_max_light": 15,
-    "drops": "feather",
-    "drops_count": 1
+    "drops": [
+      { "item": "feather", "count": 1 },
+      { "item": "chicken", "count": 1 }
+    ]
   },
   "model": {
     "width": 0.5,

@@ -145,10 +145,10 @@ TEST(SaveRoundTripTest, SerializeRejectsUnregisteredSlotItem) {
 
 TEST(SaveParseTest, RejectsUnknownOrMissingFormat) {
     Fixture f;
-    // Format 5 is a future version this build cannot read; a missing
-    // format is a corrupt file. (Formats 1-4 are all accepted —
+    // Format 6 is a future version this build cannot read; a missing
+    // format is a corrupt file. (Formats 1-5 are all accepted —
     // see FormatOneLoadsWithoutHealth.)
-    Json root = parseJson(R"({"format":5,"seed":42,"time":0.25,"player":{},"inventory":{},"entities":[],"blocks":[],"fluids":[]})");
+    Json root = parseJson(R"({"format":6,"seed":42,"time":0.25,"player":{},"inventory":{},"entities":[],"blocks":[],"fluids":[]})");
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
     EXPECT_FALSE(parseSave(withoutKey(root, "format"), f.items, f.blocks, 42).ok());
 }
@@ -165,8 +165,8 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     s.tableGrid[8] = ItemStack {f.items.idForName("stone"), 64};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Format 4 writes are always format 4.
-    EXPECT_EQ(j->find("format")->asInt(), 4);
+    // Format 5 writes are always format 5.
+    EXPECT_EQ(j->find("format")->asInt(), 5);
     auto out = parseSave(*j, f.items, f.blocks, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -362,6 +362,49 @@ TEST(SaveParseTest, RejectsNegativeHunger) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["player"]["hunger"] = Json(-1.0);
+    EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+}
+
+// -- saturation (format 5; Phase 28) --------------------------------------------
+
+TEST(SaveRoundTripTest, SaturationRoundTrips) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerSaturation = 6.0f;
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    auto out = parseSave(*j, f.items, f.blocks, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_FLOAT_EQ(out->playerSaturation, 6.0f);
+}
+
+TEST(SaveParseTest, FormatFourLoadsWithoutSaturation) {
+    // A format-4 file (Phase 27 and earlier, no saturation field) still
+    // loads: the saturation stays "unspecified" (-1) and the game loads
+    // it at 0 (no buffer — the pre-Phase-28 behavior).
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerHunger = 14.0f;
+    s.playerSaturation = -1.0f; // omitted by the serializer
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    Json root = *j;
+    root["format"] = Json(4);
+    ASSERT_EQ(root["player"].find("saturation"), nullptr);
+    auto out = parseSave(root, f.items, f.blocks, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_FLOAT_EQ(out->playerSaturation, -1.0f);
+    EXPECT_FLOAT_EQ(out->playerHunger, 14.0f);
+}
+
+TEST(SaveParseTest, RejectsNegativeSaturation) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerSaturation = 5.0f;
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    Json root = *j;
+    root["player"]["saturation"] = Json(-0.5);
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
 }
 

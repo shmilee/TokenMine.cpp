@@ -702,6 +702,76 @@ TEST(PlayerTest, RespawnRestoresHunger) {
     EXPECT_FLOAT_EQ(p.hunger(), p.maxHunger());
 }
 
+// -- saturation (Phase 28) ------------------------------------------------------
+
+// Note on the timings: same 1/60-frame accumulator convention as the
+// hunger tests above — each 4 s boundary lands one frame late, so the
+// asserts pick windows with a full frame of slack.
+
+TEST(PlayerTest, SaturationAbsorbsDecayBeforeHunger) {
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    p.setHunger(20.0f);
+    p.setSaturation(5.0f);
+    // 21 s: five 4 s decay ticks — each one drains 1 of the saturation
+    // buffer instead of the hunger bar: saturation 5 -> 0, hunger stays
+    // at the max (the 6th tick is ~3 s away).
+    run(p, 21 * 60, idle);
+    EXPECT_FLOAT_EQ(p.saturation(), 0.0f);
+    EXPECT_FLOAT_EQ(p.hunger(), 20.0f);
+    // 5 s more: the 6th tick has passed and now hits the hunger bar.
+    run(p, 5 * 60, idle);
+    EXPECT_FLOAT_EQ(p.hunger(), 19.0f);
+    EXPECT_FLOAT_EQ(p.saturation(), 0.0f);
+}
+
+TEST(PlayerTest, SprintDoublesTheHungerDecay) {
+    // The sprint state is the input condition (Shift + moving wish, out
+    // of water) — the same condition that selects sprintSpeed — so a
+    // player sprinting INTO a wall still counts as sprinting. A wall in
+    // front keeps the body on the fixture floor for the whole 9 s.
+    Fixture f;
+    f.wallX(9, 1, 4, 8, 10); // right in front of the player, facing +X
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    p.yaw = -kPi / 2.0f; // +X, into the wall
+    Input sprint = heldInput({GameKey::W, GameKey::LeftShift});
+    p.setHunger(20.0f);
+    p.setSaturation(0.0f);
+    // Sprinting runs the decay at 2x pace (a tick every 2 s): 9 s -> four
+    // ticks -> 16 (the 5th is ~1 s away).
+    run(p, 9 * 60, sprint);
+    EXPECT_FLOAT_EQ(p.hunger(), 16.0f);
+    // Control: the same 9 s standing still is only two 4 s ticks -> 18.
+    Player q = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    q.setHunger(20.0f);
+    run(q, 9 * 60, idle);
+    EXPECT_FLOAT_EQ(q.hunger(), 18.0f);
+}
+
+TEST(PlayerTest, SaturationRestoresAndClampsToMax) {
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    p.setSaturation(19.0f);
+    p.restoreSaturation(5.0f); // over the top: clamps to the max (20)
+    EXPECT_FLOAT_EQ(p.saturation(), p.maxHunger());
+    p.setSaturation(0.0f);
+    p.restoreSaturation(3.5f);
+    EXPECT_FLOAT_EQ(p.saturation(), 3.5f);
+}
+
+TEST(PlayerTest, RespawnRestoresSaturation) {
+    // A respawn is a full meal: the full bar plus the full hidden buffer.
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    p.setSaturation(0.0f);
+    p.damage(20.0f); // lethal
+    ASSERT_TRUE(p.isDead());
+    p.respawn();
+    EXPECT_FLOAT_EQ(p.saturation(), p.maxHunger());
+}
+
 TEST(PlayerTest, CrouchShrinksHeightAndScalesSpeed) {
     Fixture f;
     Player p = f.makePlayer({8.5f, 1.0f, 8.5f});

@@ -434,16 +434,16 @@ Result<void> Game::buildScene() {
                                box.texture + "' not in the atlas");
             }
         }
-        if (!mob.properties.drops.empty()) {
-            const ItemID dropId = m_items.idForName(mob.properties.drops);
+        for (const MobDrop& drop : mob.properties.drops) {
+            const ItemID dropId = m_items.idForName(drop.item);
             if (!dropId.valid()) {
                 return MC_FAIL("mob '" + mob.name + "' drops unknown item '" +
-                               mob.properties.drops + "'");
+                               drop.item + "'");
             }
-            if (mob.properties.dropsCount > m_items.at(dropId).maxStack) {
+            if (drop.count > m_items.at(dropId).maxStack) {
                 return MC_FAIL("mob '" + mob.name + "' drops " +
-                               std::to_string(mob.properties.dropsCount) +
-                               " of '" + mob.properties.drops +
+                               std::to_string(drop.count) +
+                               " of '" + drop.item +
                                "' but its max stack is " +
                                std::to_string(m_items.at(dropId).maxStack));
             }
@@ -847,6 +847,7 @@ Result<SaveGame> Game::collectSave() const {
     save.playerPitch = m_player->pitch;
     save.playerHealth = m_player->health();
     save.playerHunger = m_player->hunger();
+    save.playerSaturation = m_player->saturation();
     save.selectedSlot = static_cast<int>(m_selectedSlot);
     save.slots.resize(m_inventory.size());
     for (std::size_t i = 0; i < save.slots.size(); ++i) {
@@ -961,6 +962,9 @@ Result<void> Game::applySave(const SaveGame& save) {
     m_player->setHunger(save.playerHunger < 0.0f
                             ? m_player->maxHunger()
                             : save.playerHunger);
+    // Saturation (Phase 28): format 1-4 saves have none (-1 = no buffer).
+    m_player->setSaturation(
+        save.playerSaturation < 0.0f ? 0.0f : save.playerSaturation);
     m_prevHealth = m_player->health(); // no hurt event from the load itself
     m_camera.position = m_player->eyePosition();
     m_camera.yaw = m_player->yaw;
@@ -1295,6 +1299,7 @@ void Game::handleInteraction(double dt) {
         resetBreaking();
         m_swingCooldown = 0.0;
         resetBowDraw();
+        resetEatChannel();
         return;
     }
 
@@ -1303,6 +1308,7 @@ void Game::handleInteraction(double dt) {
         resetBreaking();
         m_swingCooldown = 0.0;
         resetBowDraw();
+        resetEatChannel();
         return;
     }
     if (m_input.wasPressed(MouseButton::Right)) {
@@ -1354,6 +1360,11 @@ void Game::handleInteraction(double dt) {
     // it mines (hold-to-break progress). Leaving either target resets
     // the other's state.
     if (m_input.isDown(MouseButton::Left)) {
+        // A swing cancels an in-progress eat (Phase 28, Minecraft) — the
+        // food is not consumed; the swing itself proceeds normally.
+        if (m_eatChannel.active) {
+            resetEatChannel();
+        }
         if (selectedShootSpeed() > 0.0f) {
             resetBreaking();
             if (const std::optional<MobHit> mob = targetMob()) {
@@ -1378,6 +1389,11 @@ void Game::handleInteraction(double dt) {
     if (selectedShootSpeed() > 0.0f) {
         updateBowDraw(dt);
     }
+    // Eat channel (Phase 28): the held right button fills the 1.6 s eat
+    // (real dt, like the survival timers); completion consumes the food.
+    // No-op while inactive (food and launcher are exclusive in the
+    // selected slot, so the two channels never overlap).
+    updateEatChannel(dt);
 }
 
 std::optional<BlockHit> Game::targetBlock() const {
@@ -1682,20 +1698,70 @@ bool Game::tryEat() {
     if (m_player->hunger() >= m_player->maxHunger()) {
         return true; // full: the eat is a no-op (nothing placed, no sound)
     }
-    m_player->restoreHunger(static_cast<float>(item.restoreHunger));
-    m_inventory.take(m_selectedSlot, 1);
-    m_sound.play("eat");
+    // Eat channel (Phase 28): the eat is no longer instant — holding the
+    // right button for 1.6 s eats (updateEatChannel owns the completion:
+    // consume + restore + sound). An extra press while channeling is
+    // ignored (Minecraft: the eat continues).
+    if (m_eatChannel.active) {
+        return true;
+    }
+    m_eatChannel.start();
+    m_eatSlot = m_selectedSlot;
+    m_eatItem = stack.item;
+    m_eatStartHealth = m_player->health();
     return true;
+}
+
+void Game::updateEatChannel(double dt) {
+    if (!m_eatChannel.active) {
+        return;
+    }
+    // Interrupts (Phase 28, Minecraft): damage, death, pointer unlock, a
+    // panel, or the food leaving its slot (selection change, Q-drop, or
+    // the stack emptied some other way). Any of them cancels the channel
+    // — the food is NOT consumed.
+    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    if (m_player->isDead() || !m_window.relativeMouseMode() ||
+        panelOpen() || m_player->health() < m_eatStartHealth ||
+        m_selectedSlot != m_eatSlot || stack.item != m_eatItem) {
+        resetEatChannel();
+        return;
+    }
+    const EatEvent ev =
+        m_eatChannel.update(dt, m_input.isDown(MouseButton::Right));
+    if (ev == EatEvent::Completed) {
+        // The channel finished: eat one from the captured slot (its
+        // validity was just re-checked) — hunger plus the hidden
+        // saturation buffer (core/food.hpp), then the eat sound.
+        const Item& item = m_items.at(m_eatItem);
+        m_inventory.take(m_eatSlot, 1);
+        m_player->restoreHunger(static_cast<float>(item.restoreHunger));
+        m_player->restoreSaturation(
+            static_cast<float>(item.restoreHunger) * kSaturationFactor);
+        m_sound.play("eat");
+        resetEatChannel();
+    } else if (ev == EatEvent::Cancelled) {
+        // Early release: nothing is consumed, no sound.
+        resetEatChannel();
+    }
+}
+
+void Game::resetEatChannel() {
+    m_eatChannel.reset();
+    m_eatItem = ItemID::invalid();
+    m_eatStartHealth = -1.0f;
 }
 
 void Game::cycleHotbar() {
     m_selectedSlot =
         (m_selectedSlot + 1) % static_cast<std::size_t>(Inventory::kHotbarSize);
     // The selected item (and its break speed) changed: restart any break
-    // in progress (Minecraft behavior) and cancel an in-progress bow
-    // draw (the launcher changed; Phase 24).
+    // in progress (Minecraft behavior), cancel an in-progress bow draw
+    // (the launcher changed; Phase 24) and an in-progress eat (the food
+    // left its slot; Phase 28).
     resetBreaking();
     resetBowDraw();
+    resetEatChannel();
 }
 
 void Game::dropSelectedItem() {
@@ -1906,12 +1972,12 @@ void Game::updateEntities(double dt) {
     // them) + mobs beyond the despawn distance from the player.
     const float despawnSq =
         m_spawnConfig.despawnDistance * m_spawnConfig.despawnDistance;
-    struct MobDrop {
+    struct PendingDrop {
         std::string item;
         int count;
         Vec3 pos;
     };
-    std::vector<MobDrop> mobDrops;
+    std::vector<PendingDrop> mobDrops;
     int mobDeaths = 0;
     for (std::size_t i = 0; i < n; ++i) {
         if (gone[i]) {
@@ -1931,9 +1997,12 @@ void Game::updateEntities(double dt) {
         gone[i] = true;
         if (mob != nullptr && mob->dead() &&
             !mob->def().properties.drops.empty()) {
-            mobDrops.push_back({mob->def().properties.drops,
-                                mob->def().properties.dropsCount,
-                                mob->position()});
+            // Every data entry becomes its own item entity (Phase 28: a
+            // mob can drop several items, e.g. leather + beef), spawned
+            // in list order at the same rest position.
+            for (const MobDrop& drop : mob->def().properties.drops) {
+                mobDrops.push_back({drop.item, drop.count, mob->position()});
+            }
             ++mobDeaths;
         }
     }
@@ -1948,7 +2017,7 @@ void Game::updateEntities(double dt) {
         }
     }
     m_entities = std::move(kept);
-    for (const MobDrop& drop : mobDrops) {
+    for (const PendingDrop& drop : mobDrops) {
         // Validity is guaranteed: drops are validated at init. The drop
         // spawns at the mob's bottom-center with zero velocity (the same
         // deterministic rest-position convention as broken blocks).
@@ -2294,6 +2363,7 @@ void Game::openPanel(OpenPanel panel) {
     m_openPanel = panel;
     resetBreaking();
     resetBowDraw(); // a panel interrupts a draw (Phase 24)
+    resetEatChannel(); // a panel interrupts an eat too (Phase 28)
     m_sound.play("ui_open");
 }
 
@@ -2741,17 +2811,24 @@ void Game::renderUi() {
         addQuad(cross, w / 2 - 1, h / 2 - 5, 2, 11);
         // Held item: a large icon in the bottom-right corner. While the
         // bow is drawn (Phase 24) the icon is pulled toward the screen
-        // center by the charge power — the v1 draw indicator (no 3D hand
-        // model; see KNOWN_ISSUES.md).
+        // center by the charge power; while food is being eaten (Phase 28)
+        // by the eat channel's progress — the v1 draw/eat indicators (no
+        // 3D hand model; see KNOWN_ISSUES.md).
         float heldX = static_cast<float>(w - kHeldIconOffset);
         float heldY = static_cast<float>(h - kHeldIconOffset);
+        float heldPull = 0.0f;
         if (m_bowDrawing) {
+            heldPull = bowPower(m_bowDrawSeconds);
+        } else if (m_eatChannel.active) {
+            heldPull = m_eatChannel.progress();
+        }
+        if (heldPull > 0.0f) {
             const Vec2 toCenter {static_cast<float>(w / 2) - heldX,
                                  static_cast<float>(h / 2) - heldY};
             const float len =
                 std::sqrt(toCenter.x * toCenter.x + toCenter.y * toCenter.y);
             if (len > 1e-4f) {
-                const float pull = kBowDrawPullPx * bowPower(m_bowDrawSeconds);
+                const float pull = kBowDrawPullPx * heldPull;
                 heldX += toCenter.x / len * pull;
                 heldY += toCenter.y / len * pull;
             }

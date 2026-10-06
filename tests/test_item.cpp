@@ -494,6 +494,26 @@ TEST(ItemRegistryTest, ParsesFood) {
     EXPECT_EQ(items.at(*r).restoreHunger, 4);
 }
 
+TEST(ItemRegistryTest, ParsesMobMeatFoods) {
+    // Phase 28: the mob-drop meat foods — beef (cow, +3), mutton (sheep,
+    // +2) and chicken (chicken, +2). The saturation gained when eating
+    // them is the data-free 2x factor (core/food.hpp), not item data.
+    ItemRegistry items;
+    const struct {
+        const char* id;
+        int hunger;
+    } cases[] = {{"beef", 3}, {"mutton", 2}, {"chicken", 2}};
+    for (const auto& c : cases) {
+        std::string def = std::string(R"({"id":")") + c.id +
+                          R"(","type":"material","max_stack":64,"restore_hunger":)";
+        def += std::to_string(c.hunger) + "}";
+        auto r = items.registerItem(parseJson(def));
+        ASSERT_TRUE(r.ok()) << c.id << ": " << r.error().message;
+        EXPECT_EQ(items.at(*r).restoreHunger, c.hunger);
+        EXPECT_EQ(items.at(*r).maxStack, 64);
+    }
+}
+
 TEST(ItemRegistryTest, FoodDefaultsToNotFood) {
     // No restore_hunger: not food (every pre-Phase-23 item).
     ItemRegistry items;
