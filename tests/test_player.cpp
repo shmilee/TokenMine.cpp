@@ -623,21 +623,23 @@ TEST(PlayerTest, RegenAfterDelay) {
 // -- hunger (Phase 23) -------------------------------------------------------
 
 // Note on the timings below: the accumulators add the double 1/60 per
-// frame, so the first 4 s boundary lands on frame 241 (the 240-frame sum
-// is a hair under 4.0), and every later boundary follows 240 frames after.
-// The asserts pick windows with a full frame of slack on each side.
+// frame, so the first 36 s boundary lands on frame 2161 (the 2160-frame
+// sum is a hair under 36.0) and every later one follows 2160 frames
+// after; the 20 s starvation boundary lands on frame 1200 (the 1200-frame
+// sum a hair over 20.0). The asserts pick windows with many seconds of
+// slack on each side — one frame is trivial at this pace.
 
-TEST(PlayerTest, HungerDecaysEvery4Seconds) {
+TEST(PlayerTest, HungerDecaysEvery36Seconds) {
     Fixture f;
     Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
     Input idle = heldInput({});
     ASSERT_FLOAT_EQ(p.hunger(), p.maxHunger()); // fresh player: full
-    // 25 s: six 4 s decay ticks have passed (the 7th is ~3 s away): 14.
+    // 95 s: two 36 s decay ticks have passed (the 3rd is ~13 s away): 18.
+    run(p, 95 * 60, idle);
+    EXPECT_FLOAT_EQ(p.hunger(), 18.0f);
+    // 25 s more: the 3rd tick has passed (the 4th is ~24 s away): 17.
     run(p, 25 * 60, idle);
-    EXPECT_FLOAT_EQ(p.hunger(), 14.0f);
-    // 5 s more: the 7th tick has passed (the 8th is ~1 s away): 13.
-    run(p, 5 * 60, idle);
-    EXPECT_FLOAT_EQ(p.hunger(), 13.0f);
+    EXPECT_FLOAT_EQ(p.hunger(), 17.0f);
 }
 
 TEST(PlayerTest, StarvationDamagesAtZeroHunger) {
@@ -645,11 +647,11 @@ TEST(PlayerTest, StarvationDamagesAtZeroHunger) {
     Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
     Input idle = heldInput({});
     p.setHunger(0.0f);
-    // At zero hunger: 1 HP per 4 s through the normal damage path.
-    run(p, 5 * 60, idle); // the first tick has passed, the second is 1 s away
+    // At zero hunger: 1 HP per 20 s through the normal damage path.
+    run(p, 25 * 60, idle); // the first tick (20 s) has passed, the second 15 s away
     EXPECT_FLOAT_EQ(p.health(), 19.0f);
     EXPECT_FALSE(p.isDead());
-    run(p, 5 * 60, idle); // the second tick has passed
+    run(p, 20 * 60, idle); // the second tick (40 s) has passed
     EXPECT_FLOAT_EQ(p.health(), 18.0f);
 }
 
@@ -658,8 +660,8 @@ TEST(PlayerTest, StarvationKillsAtZeroHunger) {
     Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
     Input idle = heldInput({});
     p.setHunger(0.0f);
-    // 20 points of starvation: the 20th tick lands at ~80 s (frame 4801).
-    run(p, 81 * 60, idle);
+    // 20 points of starvation: the 20th tick lands at 400 s (frame 24000).
+    run(p, 405 * 60, idle);
     EXPECT_TRUE(p.isDead());
     EXPECT_FLOAT_EQ(p.health(), 0.0f);
 }
@@ -670,11 +672,11 @@ TEST(PlayerTest, LowHungerBlocksRegen) {
     Input idle = heldInput({});
     p.damage(1.0f); // health 19, the damage clock restarts
     p.setHunger(5.0f); // below the regen threshold (6)
-    // 15 s: the regen delay (10 s) passes, but the hunger gate never does —
-    // no HP comes back (hunger decays 5 -> 2 during the run, never starving).
-    run(p, 15 * 60, idle);
+    // 50 s: the regen delay (10 s) passes, but the hunger gate never does —
+    // no HP comes back (one 36 s decay tick drops hunger 5 -> 4, never starving).
+    run(p, 50 * 60, idle);
     EXPECT_FLOAT_EQ(p.health(), 19.0f);
-    EXPECT_FLOAT_EQ(p.hunger(), 2.0f);
+    EXPECT_FLOAT_EQ(p.hunger(), 4.0f);
 }
 
 TEST(PlayerTest, RestoreHungerClampsToMax) {
@@ -705,8 +707,8 @@ TEST(PlayerTest, RespawnRestoresHunger) {
 // -- saturation (Phase 28) ------------------------------------------------------
 
 // Note on the timings: same 1/60-frame accumulator convention as the
-// hunger tests above — each 4 s boundary lands one frame late, so the
-// asserts pick windows with a full frame of slack.
+// hunger tests above (first 36 s boundary at frame 2161); the asserts
+// pick windows with many seconds of slack.
 
 TEST(PlayerTest, SaturationAbsorbsDecayBeforeHunger) {
     Fixture f;
@@ -714,14 +716,14 @@ TEST(PlayerTest, SaturationAbsorbsDecayBeforeHunger) {
     Input idle = heldInput({});
     p.setHunger(20.0f);
     p.setSaturation(5.0f);
-    // 21 s: five 4 s decay ticks — each one drains 1 of the saturation
+    // 190 s: five 36 s decay ticks — each one drains 1 of the saturation
     // buffer instead of the hunger bar: saturation 5 -> 0, hunger stays
-    // at the max (the 6th tick is ~3 s away).
-    run(p, 21 * 60, idle);
+    // at the max (the 6th tick is ~26 s away).
+    run(p, 190 * 60, idle);
     EXPECT_FLOAT_EQ(p.saturation(), 0.0f);
     EXPECT_FLOAT_EQ(p.hunger(), 20.0f);
-    // 5 s more: the 6th tick has passed and now hits the hunger bar.
-    run(p, 5 * 60, idle);
+    // 40 s more: the 6th tick has passed and now hits the hunger bar.
+    run(p, 40 * 60, idle);
     EXPECT_FLOAT_EQ(p.hunger(), 19.0f);
     EXPECT_FLOAT_EQ(p.saturation(), 0.0f);
 }
@@ -730,7 +732,7 @@ TEST(PlayerTest, SprintDoublesTheHungerDecay) {
     // The sprint state is the input condition (Shift + moving wish, out
     // of water) — the same condition that selects sprintSpeed — so a
     // player sprinting INTO a wall still counts as sprinting. A wall in
-    // front keeps the body on the fixture floor for the whole 9 s.
+    // front keeps the body on the fixture floor for the whole 75 s.
     Fixture f;
     f.wallX(9, 1, 4, 8, 10); // right in front of the player, facing +X
     Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
@@ -738,15 +740,15 @@ TEST(PlayerTest, SprintDoublesTheHungerDecay) {
     Input sprint = heldInput({GameKey::W, GameKey::LeftShift});
     p.setHunger(20.0f);
     p.setSaturation(0.0f);
-    // Sprinting runs the decay at 2x pace (a tick every 2 s): 9 s -> four
-    // ticks -> 16 (the 5th is ~1 s away).
-    run(p, 9 * 60, sprint);
+    // Sprinting runs the decay at 2x pace (a tick every 18 s): 75 s ->
+    // four ticks -> 16 (the 5th is ~15 s away).
+    run(p, 75 * 60, sprint);
     EXPECT_FLOAT_EQ(p.hunger(), 16.0f);
-    // Control: the same 9 s standing still is only two 4 s ticks -> 18.
+    // Control: the same 75 s standing still is only two 36 s ticks -> 18.
     Player q = f.makePlayer({8.5f, 1.0f, 8.5f});
     Input idle = heldInput({});
     q.setHunger(20.0f);
-    run(q, 9 * 60, idle);
+    run(q, 75 * 60, idle);
     EXPECT_FLOAT_EQ(q.hunger(), 18.0f);
 }
 

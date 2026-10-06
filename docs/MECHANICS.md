@@ -17,12 +17,14 @@
   - **自然回复**：脱离受伤状态 `regenDelay=10s` 后，每 `regenInterval=4s` 回 1 HP；
     **饥饿门控**（Phase 23，Minecraft 规则：饥饿 < 6 无自然回复）——门控关闭时
     累加器暂停（不重置），吃饱后继续
-  - **饥饿**（Phase 23，Phase 28，`maxHunger=20`，10 只鸡腿每只 2 点）：
-    每 `hungerDecay=4s` 一个衰减 tick——**先扣 1 点隐藏饱和度**（Phase 28，
+  - **饥饿**（Phase 23，Phase 28，Phase 31，`maxHunger=20`，10 只鸡腿每只 2 点）：
+    每 `hungerDecay=36s` 一个衰减 tick（Minecraft 被动节奏：1 点 = 720 tick
+    = 36s，Phase 31）——**先扣 1 点隐藏饱和度**（Phase 28，
     缓冲耗尽才动饥饿条；饱和度上限 = `maxHunger`），饱和度 = 0 时才衰减
     1 点饥饿条；**疾跑**（`Shift` + 移动、非水中——与选 `sprintSpeed` 的判定
-    同一条件）时 tick 速率 ×2（`sprintHungerDecayFactor`，Minecraft 40s→20s
-    的相对节奏）；**饥饿 = 0** 时每 `starveInterval=4s` 受 1 点饥饿伤害
+    同一条件）时 tick 速率 ×2（`sprintHungerDecayFactor` = 18s/点，Minecraft
+    36s→18s 的相对节奏）；**饥饿 = 0** 时每 `starveInterval=20s` 受 1 点
+    饥饿伤害（Minecraft normal：1 HP = 400 tick = 20s，Phase 31）
     （走正常伤害路径 → 红闪/音效/死亡全套复用）；**吃食物**（Phase 28 进食
     通道，`core/food.hpp` 纯状态机）：选中食物时**按住右键 1.6s**（Minecraft
     进食时长 `kEatDurationSeconds`）= 吃——完成时回复该物品 `restore_hunger`

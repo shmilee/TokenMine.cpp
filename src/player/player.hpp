@@ -67,19 +67,20 @@ public:
         // no natural regen).
         double regenDelaySeconds = 10.0;
         double regenIntervalSeconds = 4.0;
-        // Hunger (Phase 23): maxHunger hunger points (10 drumstick icons,
-        // 2 each); hungerDecaySeconds per decay tick (Minecraft's base
-        // survival pace); at ZERO hunger the player takes 1 HP every
-        // starveDamageIntervalSeconds (Minecraft's starvation);
-        // regenHungerThreshold gates the regen above. Phase 28: each decay
-        // tick first drains the hidden saturation buffer (capped at
-        // maxHunger, the food's satiety — see core/food.hpp), else drops
-        // one hunger point; sprinting (LeftShift + moving, out of water)
-        // runs the decay at sprintHungerDecayFactor pace (Minecraft's
-        // 40 s -> 20 s relative shape).
+        // Hunger (Phase 23, pace Phase 31): maxHunger hunger points (10
+        // drumstick icons, 2 each); one decay tick per
+        // hungerDecaySeconds (Minecraft's passive pace: 1 hunger point =
+        // 720 ticks = 36 s); at ZERO hunger the player takes 1 HP every
+        // starveDamageIntervalSeconds (Minecraft normal: 1 HP per 400 ticks
+        // = 20 s); regenHungerThreshold gates the regen above. Phase 28:
+        // each decay tick first drains the hidden saturation buffer
+        // (capped at maxHunger, the food's satiety — see core/food.hpp),
+        // else drops one hunger point; sprinting (LeftShift + moving, out
+        // of water) runs the decay at sprintHungerDecayFactor pace
+        // (Minecraft's 36 s -> 18 s relative shape).
         float maxHunger = 20.0f;
-        double hungerDecaySeconds = 4.0;
-        double starveDamageIntervalSeconds = 4.0;
+        double hungerDecaySeconds = 36.0;
+        double starveDamageIntervalSeconds = 20.0;
         float regenHungerThreshold = 6.0f;
         double sprintHungerDecayFactor = 2.0;
     };
