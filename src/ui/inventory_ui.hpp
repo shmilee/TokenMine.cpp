@@ -38,7 +38,7 @@
 // The carried stack is owned by the panel's InventoryUI instance and
 // rendered by the game as a floating icon under the cursor. The CraftingGrid
 // is persistent state owned by the game: items left in the grid survive a
-// close/reopen (see KNOWN_ISSUES.md — Minecraft returns them to the
+// close/reopen (see docs/KNOWN_ISSUES.md — Minecraft returns them to the
 // inventory on close).
 #pragma once
 

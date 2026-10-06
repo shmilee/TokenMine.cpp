@@ -1,0 +1,347 @@
+# 当前可玩内容（Phase 28）——机制详解
+
+> Phase 30 文档整理：从 `README.md` 移入（未改写）。Phase 29 只改粒子外观（同 burst
+> 16 个分散小立方体，见 `docs/archive/phase-29.md`），其余机制描述不变。文中
+> `KNOWN_ISSUES` 均指 `docs/KNOWN_ISSUES.md`。
+
+- **第一人称玩家**：`W/A/S/D` 行走，`Space` 跳跃（仅贴地时）/游泳时随时上浮，
+  `LeftShift` 冲刺，鼠标转向（**左键点击锁定指针；转向仅在指针锁定时生效**，
+  未锁定的光标不会转动视角——保证无输入运行下截图可逐字节复现）
+- **生存系统**（Phase 16 + 23，Phase 28 饱和度/进食动画，`Player` 扩展）：
+  - **生命值 / 受伤 / 死亡**：`maxHealth=20`（10 颗心，每颗 2 HP）；
+    **坠落伤害** = `max(0, 净下落格数 − 3)` HP（从离地帧记录 `fallStartY`，
+    落地时结算；落入水中的落地取消伤害）；掉出世界（y < −32）= 直接死亡
+    （`damage(maxHealth×1000)`）。死亡后冻结玩家、显示 "You died! / Press R"，
+    `R` 重生 = 回出生点 + 满血 + **满饥饿** + **满饱和度**（= 一顿饱饭）
+    + 速度清零（**背包保留**）
+  - **自然回复**：脱离受伤状态 `regenDelay=10s` 后，每 `regenInterval=4s` 回 1 HP；
+    **饥饿门控**（Phase 23，Minecraft 规则：饥饿 < 6 无自然回复）——门控关闭时
+    累加器暂停（不重置），吃饱后继续
+  - **饥饿**（Phase 23，Phase 28，`maxHunger=20`，10 只鸡腿每只 2 点）：
+    每 `hungerDecay=4s` 一个衰减 tick——**先扣 1 点隐藏饱和度**（Phase 28，
+    缓冲耗尽才动饥饿条；饱和度上限 = `maxHunger`），饱和度 = 0 时才衰减
+    1 点饥饿条；**疾跑**（`Shift` + 移动、非水中——与选 `sprintSpeed` 的判定
+    同一条件）时 tick 速率 ×2（`sprintHungerDecayFactor`，Minecraft 40s→20s
+    的相对节奏）；**饥饿 = 0** 时每 `starveInterval=4s` 受 1 点饥饿伤害
+    （走正常伤害路径 → 红闪/音效/死亡全套复用）；**吃食物**（Phase 28 进食
+    通道，`core/food.hpp` 纯状态机）：选中食物时**按住右键 1.6s**（Minecraft
+    进食时长 `kEatDurationSeconds`）= 吃——完成时回复该物品 `restore_hunger`
+    数据点饥饿 + **2× 饱和度**（`kSaturationFactor`，Minecraft 熟食 ≈2× 经验
+    法则）、扣 1 个库存、播放 "eat"；**提前松开右键 = 取消**（不消耗、无声
+    音）；受击/死亡/解锁鼠标/开面板/切换选中格/左键挥击同样取消；进食中
+    手持图标向屏幕中心抬起（进度 0→1，复用弓拉取几何，v1 无 3D 手部动画——
+    见 docs/KNOWN_ISSUES）；进食中再按右键 = 忽略（进食继续）；不再放置/交互；
+    **满饥饿时右键食物为 no-op 但仍吞掉该次右键**（Minecraft：满条时不能
+    放置）
+  - **食物数据**（Phase 23，Phase 28 扩充）：物品可选字段 `restore_hunger`
+    （整数 [1, 20]；缺省 = 非食物，显式 0 拒绝）——当前 4 种食物：
+    `rotten_flesh`（=4，zombie 掉落）、`beef`（=3，cow 掉落）、
+    `mutton`（=2，sheep 掉落）、`chicken`（=2，chicken 掉落）
+  - **受伤反馈**：受击瞬间屏幕红色闪光（`0.35×剩余/0.5s` 渐隐）+ 播放 "hurt"；
+    死亡播放 "death"。游戏轮询生命值（`m_prevHealth`）驱动，致死伤不重复播放
+  - **潜行**（`LeftControl`）：身高 1.8→1.6（脚底不动）、眼高 1.62→1.42、
+    移动速度 ×0.3（水中除外）；潜行时**不**触发 1 格自动台阶
+  - **1 格自动台阶（step-up）**：非潜行 + 贴地 + 身体贴住整数块面 + 面前脚位
+    为 solid + 其上方 2 格为空 → 自动抬升 1 格并继续本 tick 的水平移动
+    （无需跳跃即可爬上 1 格台阶，2 格仍不行）
+  - **玩家 ↔ 掉落物分离**：玩家与物品实体不再互相穿过——沿最小穿透轴把
+    物品推开（远离玩家中心，面到面跨度）；玩家自身不被动位移
+  - **生命 / 饥饿 HUD**：hotbar 上方 10 颗心（16px、2px 间隔）+ 心带右侧同行
+    10 只鸡腿（带间 6px 间距），各三态贴图（满 / 半 / 空）取自 48×16 条带
+    （`assets/textures/health.png` / `hunger.png`，
+    `tools/generate_health_icons.py` / `generate_hunger_icons.py`）；
+    填充 = `clamp(value − 2i, 0, 2)`（半图标按 0.5 粒度渲染）。只在游玩态
+    （锁定 + 背包未开）显示，无输入运行零新增绘制
+- **Mob 与 AI**（Phase 20，Phase 22/26 被动 mob，Phase 25 难度系统，
+  Phase 27 skeleton 远程敌对，`MobEntity`/`MobRegistry`，全数据驱动；
+  数据含 zombie/skeleton（敌对）+ cow/sheep/chicken（被动））：
+  - **生成**：帧节奏驱动（`data/mob_spawning.json`：每 `check_every_frames` 帧尝试
+    一次、`first_spawn_frame` 之前不生成、`max_mobs` 上限）；生成格 = 玩家列周围
+    `[min_radius, max_radius]` 环内按固定扫描序的第一个合法格（固体地板 + 头顶
+    空余 + 地板高度差不超过 2 格 + 不压玩家 + 与其他 mob 水平间隔 ≥1 块 +
+     **光照门**）——
+    纯函数，同一运行必生成同一只
+   - **光照门（昼夜生成规则，Phase 20.5）**：生成格（脚位）的**当前有效光照**
+     = `floor(天空光 × dayFactor)` 与方块光（萤石，不受昼夜影响）取较大者，
+     必须 ≤ 该 mob 的 `spawn_max_light`（mob 数据字段，0..15，默认 0 = 只在
+     黑暗生成——Minecraft 敌对 mob 约定）。dayFactor 是渲染层昼夜系数（正午
+     1、深夜 0、晨昏平滑过渡），所以 zombie 白天（开阔地天空光 15 → 有效
+     15 > 0）不生成、夜晚生成；cow/sheep/chicken（`spawn_max_light` 15）
+     任何光照/时间都可生成（被动 mob 约定）；萤石照亮处即使夜晚也不生成
+     zombie；树冠/
+     洞穴的永久暗格（存储天空光 0）白天也可生成（与 Minecraft 一致）。
+     类型在每次尝试时按数据名单确定性抽取（种子 ⊕ 帧号），抽中的类型过不
+     了光门则该次尝试作废（如白天抽中 zombie）
+  - **AI 状态机**（确定性：种子 = 世界种子 ⊕ 生成序号，splitmix64 流）：
+    **Wander**（默认；每 `wander_interval` 秒一次种子随机决策：1/3 站定、
+    其余半速随机方向走）→ **Chase**（玩家进入 `detect_radius`（水平）且高度差
+    ≤2：全速追）→ **Attack**（水平距离 ≤`attack_range` 且高度差 ≤1：停下、
+    面向玩家、每 `attack_cooldown` 秒打 `attack_damage` 点——走 P16 的玩家
+    受伤路径：红闪/音效/死亡全由既有轮询驱动）。玩家死亡时不追不打。
+    **RangedAttack**（Phase 27，数据 `shoot_range > 0` 的 mob = skeleton）：
+    玩家进入 `shoot_range`（水平）→ 面向玩家、每 `attackCooldown` 秒经
+    shoot 回调放箭（游戏在 mob 头部生成带 `hurtPlayer` 标记的箭，瞄点 =
+    玩家眼高 + 0.5·g·t² 的弧线提前量——站桩必中、移动可躲；箭被扫掠
+    命中玩家 AABB 时走 P16 受伤路径）；玩家贴近 `retreat_distance` 内 →
+    全速后撤（边退边射，Minecraft kite）；超过 `shoot_range` 但仍在
+    `detect_radius` 内 → 按 Chase 逼近。远程 mob 的 `attack_range` 是
+    （不使用的）近战距离，skeleton 设 0 = 永不近战。
+    **被动 mob**（Phase 22 落地、Phase 26 扩到 sheep/chicken）：`detect_radius`/
+    `attack_range`/`attack_damage` 三个字段允许 0（校验 `>= 0`，负数仍拒绝）——0 值
+    使追/击条件永不成立，被动 mob 只有 Wander 状态，纯数据表达，AI 代码无特判
+  - **玩家攻击**：左键命中 mob（射线先比方块距离——**方块遮挡**：方块更近则打
+    方块）= 挥击，按住时每 `0.25s` 一击：伤害取**选中物品的 `attack_damage`**
+    数据（徒手/方块/材料=1.0，工具见 `data/items/*.json`，木镐 2 / 铁镐 3）+
+    沿瞄准方向击退（水平 4 + 抬升 2.5，0.3s 击退窗口内 AI 不接管速度）
+  - **死亡**：HP 归零 → 掉落 `drops` 数据定义的**物品列表**（Phase 28：
+    每条目 `{item, count}`，按列表顺序各掉一件 ItemEntity；zombie 掉
+    `rotten_flesh`，skeleton 掉 `arrow`，cow 掉 `leather`+`beef`，sheep 掉
+    `wool`+`mutton`，chicken 掉 `feather`+`chicken`——均为 material 物品
+    + 图标）后移除；击退/坠落无伤害（v1）
+  - **渲染**：box 模型（zombie = 头 0.5³ + 身 0.5×1.0×0.3；skeleton 同
+    zombie 尺寸（头 0.5³ + 身 0.5×1.0×0.3、AABB 0.6×1.8）；cow = 头
+    0.45³ + 身 0.8×0.7×1.1、AABB 1.2×1.5 比 zombie 宽；sheep = 头 0.4³ + 身
+    0.8×0.8×1.2、AABB 同 cow；chicken = 头 0.25³ + 身 0.3×0.4×0.5、AABB
+    0.5×0.8 比 zombie 小，各 6 面同一 atlas tile，
+    `tools/generate_mob_textures.py` 生成 zombie 绿皮肤+深色眼/青色上衣、
+    skeleton 骨白+深色眼窝/鼻腔、cow 棕底白斑毛+深色眼、sheep 白绒毛+
+    深色眼、chicken 米白羽+深色眼+红冠+橙喙；atlas 29 tile），
+    与掉落物同 pass（`translate(位置) × rotateY(朝向)`，朝向 = 相机 yaw 约定，
+    箱体的 −Z 面是脸）；天空光全亮烘焙（与掉落物同一简化，无局部光）
+  - **开关**：config `mobs.enabled`（默认 true）；**mob 不入存档**（与 Minecraft
+    一致：生成物是瞬态的，其掉落物是物品、随存档保存）
+  - **难度（Phase 25）**：config `mobs.difficulty` = `easy` / `normal` /
+    `hard`（默认 `normal`，严格校验，未知值 init 报错）。mob 数据是
+    **normal 基线**，其他难度按 `core/difficulty.hpp` 纯函数缩放（游戏与
+    单测共享，F3 显示当前难度）：
+    ① **出生点保护环**——敌对 mob（数据字段 `hostile: true`，当前仅
+    zombie）不在**世界出生点**（新世界的出生点，读档不改变它）
+    `spawnProtectionRadius` 块内自然生成（Minecraft 值：easy 8 /
+    normal 12 / hard 16，水平距离）；被动 mob 不受保护环限制
+    （Minecraft 约定）；
+    ② **敌对伤害缩放**——玩家受伤 = `attack_damage × hostileDamageScale`
+    （zombie 3 → easy 1.5 / normal 3 / hard 4，镜像 Minecraft 2.5/3/4 的
+    相对形状）；
+    ③ **生成率缩放**——尝试节奏 = `check_every_frames ÷
+    hostileSpawnRateScale`（30 → easy 60 / normal 30 / hard 20；节奏为全部
+    mob 类型共享，v1 非按类型权重）。`normal` = 三个缩放全 1.0 =
+    基线行为不变
+- **弓与箭**（Phase 21 发射，Phase 24 蓄力/箭物品/插墙残箭/近战；
+  物品数据驱动 + P10 `Projectile`）：
+  - **获取**：shaped 配方 `bow`（工作台：3 stick + 1 planks 的 C 形，
+    `data/recipes/bow.json`）；material 物品 `bow`（`data/items/bow.json`，
+    `max_stack 1`，图标 `bow.png`，`ammo: arrow`，`attack_damage: 1`）；
+    **箭 = material 物品 `arrow`**（`max_stack 64`，图标 `arrow.png`）+
+    shaped 配方 **2 stick（竖排）→ 2 arrow**（`data/recipes/arrow.json`）
+  - **发射（蓄力）**：选中 `shoot_speed > 0` 的物品（发射器）时**右键 =
+    拉弓**——按下即开始蓄力（该次右键被吞：不交互工作台/不放置方块；
+    需有弹药才能起拉；播放 "bow" 弦音），按住累加拉弓时间（真实 dt，封顶
+    `kBowFullDrawSeconds = 1.6s`），**松键射出**：`power =
+    clamp(拉弓/1.6, 0.1, 1)`（`core/bow.hpp` 纯函数，游戏与单测共享）——
+    速度 = `shoot_speed × power`、伤害 = `shoot_damage × power`；满蓄力 =
+    物品数据满值（bow = 15 / 5，MC 满威力），快速点击 = 最低威力 0.1；
+    箭从眼前 0.3 格沿瞄准方向出发，播放 "shoot"。蓄力状态在解锁/开面板/
+    换热栏格/重生时清零。**左键 = 弓近战**：准星命中 mob 时按物品
+    `attack_damage` 数据（bow = 1）伤害 + 击退（0.25s 挥击节奏），
+    **永不挖掘**（弓是武器不是工具）
+  - **弹药**：发射消耗 1 个发射器 `ammo` 数据字段点名的物品（**槽序升序
+    第一个持有它的槽位**）；无弹药不能起拉，拉弓中途耗尽则松键取消
+    （无箭不射）；`ammo` 缺席的发射器 = 无限箭（Phase 21 前语义），
+    字段名在 init 时经 ItemRegistry 交叉校验
+  - **箭**（P10 `Projectile` 实体）：重力 20 b/s²（MC 箭 0.05/格/tick²）、
+    终端 38、**撞 solid = 插住**（stuck：留在命中处、保留撞击方向
+    `stuckDir` 供渲染——碰撞解算器会清零速度的碰撞轴，`stuckDir` 在
+    子步前捕获）、30s 寿命（与飞行箭共用 `kMaxAge`；MC 插墙箭 100s）、
+    世界下方杀界；**固定帧步长** `kProjectileStepPerFrame`（运动实体
+    截图可复现约定）；插住后无物理、不参与 mob 命中测试
+  - **箭矢命中**：每帧对每支**飞行中**的箭做**扫掠 AABB 测试**（上一步
+    位置→本步位置，`raycastAabb` 位移为方向、t∈[0,1]）对每个存活 mob——
+    命中则按箭携带的 `shoot_damage × power`（满威力 bow = 5，zombie 4 箭毙）
+    伤害 + 沿箭水平速度的近战式击退，箭被消耗；箭**穿过**玩家与其他实体
+    （`collidesWithEntities = false`），不伤玩家（单人生存 v1）
+  - **渲染**：细盒体（长 0.55 × 粗 0.05，本地 −Z = 飞行方向）纯色
+    （基本着色器 `u_useTexture=0` 路径，无箭纹理），朝向 = `rotateY(yaw) ×
+    rotateX(pitch)` 把本地 −Z 转到速度（插墙箭用 `stuckDir`；相机同款约定，
+    `arrowOrientation` 纯函数）；天空光全亮烘焙（随昼夜变暗）；拉弓时
+    **手持物品图标被蓄力威力拉向屏幕中心**（v1 拉弓指示，无 3D 手部模型）
+  - **v1 简化**（docs/KNOWN_ISSUES.md）：箭不入存档（瞬态，同 mob）、不伤
+    玩家/无自伤、无箭纹理、插墙箭 30s 消亡（MC 100s）、拉弓 = 2D 图标
+    位移
+- **合成**（Phase 17，`CraftingGrid`/shaped 配方/工作台，全数据驱动）：
+  - **形状配方**：配方 JSON 加 `"type": "shaped"` + `pattern`（行字符串，空格=空位）
+    + `key`（字母→物品）；无 `type` 字段 = shapeless 原料袋（Phase 12 语义）。
+    3×3 网格匹配 = pattern 偏移扫描（pattern 的每个可能左上偏移都试一遍，空格
+    对应的格必须为空）；匹配顺序先 shaped 后 shapeless，配方按文件名字典序
+  - **工作台**：数据驱动方块（`"interact": "crafting_table"` 属性，破坏掉自身）；
+    **锁定时右键命中它 = 打开工作台面板**（3×3 网格 + 输出格，无配方列表），
+    不放置方块；网格内容容器语义（关面板保留、入存档）
+  - **E 背包面板**：2×2 合成格 = 共享 3×3 网格模型的左上 4 格（放不进 shaped
+    配方）；右侧配方列表**只显示 shapeless 配方**（shaped 必须用工作台）
+- **游泳**（Phase 9）：玩家包围盒与任何水体格相交即进入水中状态——水中重力减半
+  （12 vs 32）、终端速度 4、水平速度降为 3.1（冲刺无效）、`Space` 随时上浮（4.5）；
+  浅水（头在水面上）可以"蹚水走"，深水可以游
+- **方块交互**（DDA 体素 raycast，reach 5 格）：
+  - `左键`（锁定时，**按住**）：破坏准星指向的方块，耗时数据驱动
+    （`1.5s × properties.hardness ÷ 当前选中物品的 break speed`，徒手=1.0；
+    `properties.destroyable` 数据驱动，基岩不可破坏）。准星移开/松键/换工具
+    进度清零。raycast 把水体当 air 穿过——可以隔水破坏湖底/水下的方块
+    （水会被破坏排水、随后流体模拟把它补回）
+  - `右键`（锁定时）：先试 interact——命中格有 `interact` 属性（当前仅工作台）
+    则打开对应面板、不放置；否则在命中面的邻格放置**当前选中格**的方块物品，
+    并**消耗 1 个**（方块不再无限——背包是方块的来源；工具不可放置）；不能
+    放进 solid 方块或玩家自身包围盒内
+  - `Tab`：切换选中的 hotbar 格（9 格）
+  - `Q`（锁定时）：丢弃选中格 1 个到脚下（生成掉落物，0.5s 拾取延迟防立即回吸）
+  - `ESC`（锁定时）：释放指针；未锁定时 ESC 退出游戏
+  - 破坏/放置复用 `setBlock` 脏标记管线，下一帧自动重建受影响 chunk 的 mesh
+- **游戏内 UI**（Phase 15，专用无光照 UI 着色器 + 批量化绘制；
+  所有 UI 元素只在按键/指针锁定时渲染，无输入运行渲染零新增 → 基线截图逐字节不变）：
+  - **准星**（指针锁定时屏幕中央白色十字）与**目标方块描边**（24 顶点线框立方体，
+    描出 raycast 命中格）——只在游玩态（锁定 + 背包未开）显示
+  - **hotbar**（锁定且背包关闭时）：底部 9 格，选中格橙色边框，堆栈数 < max 时
+    显示数量；**手持物品**右下角大图标（76px）
+  - **物品图标**：block item = 带光照的倾斜 3D 立方体（复用掉落物 cube mesh +
+    基本着色器，白天亮夜晚暗，与掉落物同观感）；工具/材料 = 16×16 图标纹理
+    （`Item.icon` 数据字段 → `assets/textures/items/<icon>.png`，
+    `tools/generate_item_icons.py` 程序化生成）
+  - **背包 + 合成面板**（`E` 开关；打开时释放指针、暂停玩家物理与方块交互，
+    世界/昼夜/流体/实体/流式照常 tick）：27 格（hotbar 行 + 18 背包格）+
+    2×2 合成格（共享 3×3 网格模型的左上 4 格）+ 右侧配方列表（**仅 shapeless
+    配方**；产物图标 + 名称 ×N，白色=可合成/灰色=不可 + 原料清单）；
+    **左键**取整堆/放入/交换（取出被占格的堆）/并入有剩余空间的同物堆，
+    **右键**移 1 个（同物有空间或空格；不同物格=无效操作），点击面板外（左键）
+    丢弃手持堆；悬停格显示物品名；点击配方行 = `craft()`（全有或全无）
+  - **F3 性能/调试 overlay**（任意指针状态可切换）：标题/FPS/帧号、chunk 数/
+    draw call/顶点数、玩家坐标/朝向、列数/seed、昼夜时刻/指针状态、流式激活/
+    待加载列/半径、背包内容/粒子数
+  - **F5 立即存档**（`--save` 槽激活时，游戏内随时保存，日志记录结果）
+- **破坏反馈**（Phase 15）：**渐进裂纹**——破坏进度映射到 5 级累积裂纹纹理
+  （`assets/textures/cracks.png`，80×16 五格，白 alpha 随机游走裂纹），破坏中的
+  方块上叠加半透明裂纹面（进度 = `1.5s × hardness ÷ speed` 的完成比）；**破坏
+  粒子**——方块碎成 16 个 0.12 格小立方体（带初速弹散 + 重力，0.45~0.75s 消亡，
+  无碰撞，spawn 时烘焙所在格光照——渲染是只读窗口不能读光数组），按透明性
+  分 opaque/transparent 两 pass，逐帧动态 mesh
+- **音效**（Phase 15，`SoundBank` = SDL3 `SDL_OpenAudioDeviceStream` 队列式播放，
+  无回调；初始化失败优雅降级为静音 + WARN）：固定事件集 v1（数据驱动，无
+  per-block 差异）——破坏（按住时每 0.3s 一个 dig tick + 完成时的 break）、
+  放置、拾取（含 Q 丢弃）、脚步（移动 + 贴地 + 锁定 + 背包关闭时每 0.4s）、
+  背包开/关、合成成功、受伤/死亡（Phase 16）、射箭（Phase 21）、拉弓弦音
+  （Phase 24）、进食（Phase 23）。13 个程序化 WAV
+  （`tools/generate_sounds.py`，44.1kHz 16-bit
+  单声道），音量
+  `config audio.volume`（默认 0.7）
+- **物品与背包**（Phase 11/12，`Item`/`ItemStack`/`Inventory`，全数据驱动）：
+  - 物品 = 纯数据（`ItemRegistry`，当前 25 种 = 14 block + 2 工具 + 9 材料）：
+    **每个数据方块隐式生成同名 block item**（无独立 JSON，方块定义是唯一来源）；
+    **工具/材料**是显式数据（`assets/data/items/*.json`，`type: "tool"` 带
+    `break_speed`，`type: "material"` 是通用非方块物品——锭/木棍/木板等，
+    作为配方原料/产物和方块掉落）
+  - 背包 27 格 = 9 hotbar + 18 背包（`assets/data/hotbar.json` 的 `items` 列表
+    定义初始 hotbar，每格满堆栈）；拾取确定性入包（先合并同物堆栈、再找空位，
+    hotbar 优先于背包）
+  - 破坏方块按 `properties.drops`（物品名，init 严格校验）+ `drops_count`
+    （1..64 默认 1，须 ≤ 掉落物品 max_stack）掉落 `ItemEntity`——矿石掉材料
+    （iron_ore → iron_ingot），wood 掉 wood 本身（木板配方的原料）；
+    玩家走近（1.0 格内）自动拾取进背包（MC 同款 0.5s 拾取延迟 + 120s 消亡）
+- **合成**（Phase 12 shapeless 基础 + Phase 17 shaped/工作台，全数据驱动）：
+  配方 = `assets/data/recipes/*.json`（shapeless 原料袋 → 产物，或
+  `"type": "shaped"` + `pattern`/`key` 形状配方，经 ItemRegistry 交叉严格
+  校验）；`canCraft`/`craft` 是确定性纯逻辑（原料按槽序升序消耗、副本模拟
+  全有或全无——失败背包逐位不变，产出永远放得下）。当前 7 配方：wood→4
+  planks、2 planks→4 stick（shapeless）、2×2 planks→crafting_table、
+  wooden_pickaxe（PPP/.S./.S.）、iron_pickaxe（III/.S./.S.）、bow
+  （.S./SP/.S.，Phase 21）、2 stick 竖排→2 arrow（Phase 24）（后 5 个为
+  shaped）。游戏内触发：背包面板（`E`）右侧配方列表点击行 = `craft()`
+  （仅 shapeless，Phase 15）；或放置并右键工作台打开 3×3 面板合成（Phase 17）
+- **存档/读档**（Phase 13，`--save <slot>`，`src/core/save.{hpp,cpp}`）：
+  存档文件 `data/saves/<slot>.json` = **seed + 与生成态的 diff + 完整游戏状态**——
+  不重复存储地形，只存"和这个 seed 生成的世界不同的格子"（`blocks`/`fluids`
+  编辑列表，破坏=`"air"`）+ 玩家位置/朝向/生命/饥饿/饱和度（格式 5）
+  + 昼夜时间 + 27 格背包 +
+  选中格 + 掉落物实体（含 120s 寿命与拾取延迟计时器）。读档 = 正常从 seed 生成世界后
+  逐格应用编辑（先方块后流体）→ 全量重传播光照 → 恢复玩家/背包/实体/时间。
+  加载校验**严格**（机器生成的文件出现未知字段 = 损坏/版本不符，直接报错：
+  format 号、seed 与生成 seed 一致、物品/方块名已注册、数量 ≤ max_stack、
+  y ∈ [0,128)、同一格不得同时有方块+流体编辑、位置不重复）。
+  无 `--save` = 不读不写（默认行为不变）；`--new` = 忽略现有存档开新档
+  （退出时覆盖）；干净退出（含 `--frames` 到点）自动写回，写失败只记错误日志
+  不影响退出码。JSON 浮点序列化是**最短可往返精度**（位精确 round-trip），
+  位置/时间/朝向加载后与原值位级一致
+- **掉落物**（Phase 10，`ItemEntity`）：0.25 的小立方体，走统一的 Entity 碰撞
+  物理（重力/终端速度/水平摩擦），落地后原地悬浮摆动 + 自转（动画由帧计数器
+  驱动，非墙钟），同类 0.75 格内自动合并（堆叠上限按物品数据，block 64/工具 1），
+  120 秒（MC 同款）或掉出世界后消失。零初速生成——静止位精确、截图可复现
+  （对 MC 随机初速的刻意偏离）
+- **AABB 体素碰撞 + 滑动**：玩家 0.6×1.8 包围盒（底面中心为位置），轴分离解析
+  （X→Z→Y）——撞墙时该轴停住、另一水平轴继续走（滑动）；贴面精确解析（无 epsilon
+  抖动）；子步化防高速穿透（每子步 ≤0.4 块）；重力 + 终端速度 + 跳跃高度 1.13 块
+  （可跳上 1 格台阶，跳不上 2 格）；掉出世界（y < -32）回出生点
+- **程序化体素世界（Seed 可复现）**：16×16×16 chunk，世界高度 128（y ∈ [0,128)），X/Z 无限。
+  同一 seed 逐块复现（单元测试 + 像素级截图比对保证）；不同 seed 生成不同世界
+- **Chunk 流式加载 + 多线程**（Phase 14，`ThreadPool` + `chunk_streaming`）：
+  演示区之外的世界**按"列"（整列 8 个垂直 chunk）在 worker 线程上生成**——
+  玩家走近已加载区边缘（距缺失列 ≤1 列）时流式激活（迟滞：半径环充满前不解除），
+  每帧预算 1 列，按距离优先（最近先）填充 `world.view_distance`（默认 8 列，
+  配置首次生效）的半径环。新列集成（`World::insertChunk`，面邻居标脏重网格化
+  防边界 Z-fighting）与光照（`updateRegion` 柱 box 的 worker job，替代旧的
+  "新 chunk→全量重传播"）都走同一帧管线：flush → 主线程写 World → 网格化/
+  渲染（只读）→ post jobs（worker 运行窗口）。新列首帧以光 0 渲染、下一帧
+  补光重网格（帧锁定下的确定性 pop-in）。**只增不卸载**（v1，见
+  `docs/KNOWN_ISSUES.md`）。静止玩家（距边缘 ≥2 列）永不触发 → 无输入运行零 job，
+  基线截图逐字节复现
+- **WorldGenerator**（无状态、纯函数 `generateChunk`，worker 线程并行调用）：
+  - **地形**：fBm 2D 噪声高度场（±24 格，基线 40），y=0 bedrock 层，深处 stone
+  - **生物群系**：低频噪声 + 权重选择（`assets/data/biomes/*.json`：desert/forest/plains），
+    各 biome 有自己的表层/次表层/树密度/高度系数
+  - **水**：低于海平面（y=34）的柱体填充流体水（fluid level 8）到海平面；
+    生成即处于平衡态（游戏内 20Hz 流体 tick 不会扰动湖面）
+  - **洞穴**：3D 噪声阈值雕刻，保留表层 4 格与底层 2 格的壳
+  - **矿脉**：世界空间格网 + 随机游走（coal/iron/gold/diamond，`max_y` 分层限制），
+    跨 chunk 无缝；只替换 stone（不破坏洞穴）
+  - **树木**：世界空间格网候选 + 数据驱动的树密度；树干 4~7 格 + 两层树冠 + 顶帽；
+    跨 chunk 边界由邻接 chunk 各自补齐（边际格网机制），只写入 air（不破坏地形）
+- **演示区 + 流式扩展**：启动时同步生成 4×4 chunk 列（64×64 方块）；玩家按
+  seed 自动出生在干燥陆地上（候选列需满足：高于海平面 + 出生包围盒内无方块，
+  避开树干/树冠）。走出演示区后世界按流式加载（上一项）继续扩展——X/Z 真正
+  无限，走到哪加载到哪（半径 `world.view_distance` 列）
+- **流体模拟（水，Phase 9）**：每个 chunk 一个 16³ 的 0-8 等级数组
+  （8=满/源，1-7 流动；同一 cell 里水与方块互斥）。`FluidSim::tick`（游戏线程，
+  每 3 帧一次 ≈20Hz，快照式确定性）：下落（下方空/流动则沿列传送带下移）、
+  满格失撑也下落（对 MC 的刻意偏离）、静止在方块上水平扩散 L-1（1 级终端）、
+  坐在**满水**上补满到 8（source 托底的柱是满的——破坏湖底后整列补满、湖面恢复）、
+  坐在流动池上按等级吸收/抬升（水量不守恒，见 `docs/KNOWN_ISSUES.md`）。
+  `World::setFluid` 只写已存在 chunk 的 air 格；`setBlock` 会把所在格的水排掉
+- **水的光照衰减**：天空光每穿一格水 -3（列顶扫描 + BFS 与不透明方块共用传播器）；
+  深水湖底随深度变暗（截图可见浅水亮、深水暗的渐变）
+- **半透明水体渲染**：`ChunkMesher::emitFluid` 输出 level/8 缩放的立方体（流动水
+  顶面半高），水-水内部面剔除，流体面烘焙**自身格**的光；shader 使用纹理 alpha
+  （水 α≈0.78 / 玻璃 α≈0.21 / 叶子 α≈0.92 + 透明孔），湖面可透视湖底
+- **Face Culling 网格化**：只渲染暴露给 air/非 opaque 邻居的面；跨 chunk 边界通过
+  `World` 查询邻居剔除；每个 chunk 输出 opaque + transparent 两个 mesh，
+  渲染顺序不透明 → alpha 混合（leaves/glass/water）
+- **脏标记增量重网格**：`setBlock` 标记本 chunk（及共享面的邻居 chunk）dirty，
+  下一帧只重建 dirty chunk 的 GPU mesh
+- **光照（Sky/Block Light 0-15）**：每个 chunk 两个 16³ 字节数组；天空光由列顶扫描
+  （最高 opaque 方块上方=15）+ BFS 传播（垂直无衰减、水平每格 -1）；方块光由
+  `properties.light_emission` 源 BFS（全方向每格 -1）。破坏/放置后只重传播受影响区域
+  （天空光按变化点 ±16 的整列——垂直天空光无距离限制；方块光按 ±16 盒），光值实际
+  变化的 chunk 才重建 mesh。渲染：每个面烘焙"面后方一格"的光值到顶点（块状光照），
+  shader 取 `max(sky, block)` × MC 经典面着色（顶 1.0 / 侧 0.8、0.6 / 底 0.5）+ 3%
+  环境光下限。glowstone（emission 15）在 hotbar 里，放进暗处会发光（**夜间也亮**——
+  方块光不受昼夜影响）
+- **昼夜循环**：游戏内时间（`world.day_length_seconds` 默认 240s 一天，
+  `world.start_time_of_day` 默认 0.25=正午；`--time <0..1>` 可覆盖起点）。天空光按
+  `dayFactor` 缩放（黎明 [0.05,0.15) / 黄昏 [0.45,0.55) smoothstep 渐变，白天=1、
+  夜晚=0——MC 式呈现层近似，光值本身仍按正午存储）；天空背景色按时间关键帧插值
+  （夜深蓝 → 黎明橙 → 昼蓝 → 黄昏橙 → 夜深蓝）；太阳/月亮是像素级圆形 billboard
+  （40/28px，越靠近地平线越淡），太阳轨迹：t=0 正东地平线 → 正午天顶 → t=0.5 正西
+  地平线 → 午夜天底（月亮恒在太阳对面）；夜空有 300 颗确定性星星（世界空间
+  r=800 上半球，`splitmix64` 哈希生成）。时间按每帧固定 1/60s 推进（不用墙钟），
+  保证无输入运行逐字节可复现
+- **数据驱动方块**：15 个方块（stone/dirt/grass/sand/wood/leaves/glass/water/bedrock/glowstone/crafting_table +
+  4 种矿石）+ 内置 air 哨兵（`BlockID{0}`，非数据方块，注册表从 id 1 分配）
+- 16×16 瓦片 TextureAtlas（Minecraft 同款规格），**布局数据驱动**
+  （`assets/data/textures/block_atlas.json`，4×8；row 4 = 工作台顶/侧 + planks；
+  新增纹理 = 加 PNG + 加一行 JSON，不改代码）
+- 光照贴图（lightmap 顶点烘焙，Phase 7）+ 昼夜循环（Phase 8）
+- 窗口标题实时显示 FPS 与 draw call 数

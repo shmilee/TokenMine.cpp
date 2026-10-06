@@ -14,7 +14,7 @@
 // NOTE: the Phase 1/2 unit-cube table had the +Y/-Y rows wound backwards
 // (visible only from inside the cube). Its screenshot verification sampled
 // side faces, which hid the bug; the Y rows here are the corrected versions
-// (the Phase 3 fix, archived in KNOWN_ISSUES.md).
+// (the Phase 3 fix, archived in docs/KNOWN_ISSUES.md).
 #pragma once
 
 #include "block/block.hpp"

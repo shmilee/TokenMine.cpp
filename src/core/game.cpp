@@ -105,7 +105,7 @@ constexpr float kArrowSpawnOffset = 0.3f;
 // A dropped item is picked up when its bottom-center is within this
 // distance of the player's bottom-center (and past the item's pickup
 // delay). Minecraft pulls items in gradually (magnetism); the fixed
-// radius is the v1 — see KNOWN_ISSUES.md.
+// radius is the v1 — see docs/KNOWN_ISSUES.md.
 constexpr float kPickupDistance = 1.0f;
 
 // Dropped-item animation (Phase 10): derived from the frame counter, not
@@ -1210,7 +1210,7 @@ void Game::update(double dt) {
     handleUiKeys();
     // While the inventory is open, player physics and block interaction
     // are paused; the world keeps ticking (day cycle, fluids, entities,
-    // streaming) — see KNOWN_ISSUES.
+    // streaming) — see docs/KNOWN_ISSUES.
     if (panelOpen()) {
         handlePanelClicks();
     } else {
@@ -1849,7 +1849,7 @@ void Game::updateEntities(double dt) {
     // velocity, and the arrow is consumed (the despawn pass removes it
     // this frame). Arrows fly through the player and every other entity
     // (collidesWithEntities = false) and never damage the player
-    // (single-player v1, KNOWN_ISSUES.md).
+    // (single-player v1, docs/KNOWN_ISSUES.md).
     for (auto& [arrow, prev] : arrowSteps) {
         if (arrow->dead()) {
             continue;  // a mob hit this step already consumed it
@@ -2790,7 +2790,7 @@ void Game::renderUi() {
                     batchFor(Vec4 {1.0f, 1.0f, 1.0f, 1.0f}, true, &tex);
                 for (int i = 0; i < kIconCount; ++i) {
                     // Icon i covers the interval [2i, 2i+2); three states
-                    // (a sub-half fill renders as half — see KNOWN_ISSUES).
+                    // (a sub-half fill renders as half — see docs/KNOWN_ISSUES).
                     const float fill =
                         std::clamp(value - 2.0f * i, 0.0f, 2.0f);
                     const int tile =
@@ -2813,7 +2813,7 @@ void Game::renderUi() {
         // bow is drawn (Phase 24) the icon is pulled toward the screen
         // center by the charge power; while food is being eaten (Phase 28)
         // by the eat channel's progress — the v1 draw/eat indicators (no
-        // 3D hand model; see KNOWN_ISSUES.md).
+        // 3D hand model; see docs/KNOWN_ISSUES.md).
         float heldX = static_cast<float>(w - kHeldIconOffset);
         float heldY = static_cast<float>(h - kHeldIconOffset);
         float heldPull = 0.0f;

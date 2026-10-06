@@ -20,7 +20,7 @@ inline constexpr double kEatDurationSeconds = 1.6;
 
 // Saturation (hidden satiety buffer, Phase 28) gained per point of
 // restored hunger. Minecraft's cooked-food rule of thumb (saturation
-// ~2x the hunger value); see KNOWN_ISSUES for the v1 simplifications.
+// ~2x the hunger value); see docs/KNOWN_ISSUES for the v1 simplifications.
 inline constexpr float kSaturationFactor = 2.0f;
 
 enum class EatEvent {

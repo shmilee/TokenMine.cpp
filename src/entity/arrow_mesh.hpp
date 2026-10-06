@@ -5,7 +5,7 @@
 // arrowOrientation), centered on the origin — the game translates it to
 // the arrow's collision-box center. It is drawn in the basic shader's
 // solid-color path (u_useTexture = 0 + u_color): v1 has no arrow texture
-// (shaft + tip + fletching are one brown; see KNOWN_ISSUES.md).
+// (shaft + tip + fletching are one brown; see docs/KNOWN_ISSUES.md).
 //
 // Full sky light is baked (like dropped items / mob models): the shader
 // applies the day/night scale, so an arrow brightens and darkens with

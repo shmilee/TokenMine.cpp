@@ -1,0 +1,68 @@
+# 架构规划（分阶段）
+
+> Phase 30 文档整理：从 `README.md` 移入（未改写）。各阶段细节存档见文末索引。
+
+- [x] **Phase 0** — 项目基础：构建系统、主循环、日志、配置、资源系统、错误处理、测试框架
+- [x] **Phase 1** — 基础 3D 引擎：数学库、Input、Camera、Renderer（Shader/Texture/Mesh/VAO）、PNG 编解码、demo 场景
+- [x] **Phase 2** — 方块系统：Block 数据模型、BlockRegistry（JSON 数据驱动 + 严格校验）、16×16 TextureAtlas、透明 pass
+- [x] **Phase 3** — Chunk 系统：World/Chunk/坐标转换（负坐标安全）/Chunk Mesh（Face Culling；Greedy Meshing 留待性能需要时）
+- [x] **Phase 4** — 世界生成：WorldGenerator（地形/生物群系/洞穴/矿脉/树木），Seed 可复现（无状态生成器，数据驱动 biome/ore/参数）
+- [x] **Phase 5** — 玩家系统：第一人称移动、AABB 碰撞、滑动处理
+- [x] **Phase 6** — Raycast：方块破坏/放置
+- [x] **Phase 7** — 光照：Sky/Block Light（0-15），传播与更新
+- [x] **Phase 8** — 昼夜循环：太阳/月亮/星星/天空色（dayFactor 缩放天空光）
+- [x] **Phase 9** — 流体：水（0-8 等级/下落/水平扩散/水光衰减/游泳/半透明水面）
+- [x] **Phase 10** — 实体系统：Entity 基类（统一 AABB 物理）/Player 并入/ItemEntity 掉落物/Projectile 投射物
+- [x] **Phase 11** — 物品与背包：Item/ItemStack/Inventory、掉落物拾取、按住破坏（hardness/工具数据驱动）、Q 丢弃
+- [x] **Phase 12** — 合成：数据驱动 Recipe（Recipe/Registry 严格校验 + canCraft/craft 纯逻辑 + `drops_count` + 材料物品；游戏内合成 UI 在 Phase 15 实现）
+- [x] **Phase 13** — 存档：Seed + 修改数据（`--save <slot>`/`--new`，diff 式存档 + 严格校验 + 背包/实体/时间持久化）
+- [x] **Phase 14** — Chunk Streaming + 多线程：ThreadPool（post/flush）+ worker 线程按列并行生成（view_distance 半径环，迟滞激活）+ insertChunk 边界标脏 + 增量光照 worker job（替代全量重传播）；基线逐字节不变
+- [x] **Phase 15** — UI / 音效 / 粒子 / 性能统计：游戏内 UI（准星/目标描边/hotbar/手持/背包+合成面板/F3 overlay/F5 存档）、破坏裂纹+粒子、SDL3 音效、物品图标；UI 全按键/指针门控，无输入基线逐字节不变
+- [x] **Phase 16** — 生存系统：生命值/坠落伤害/死亡与重生（R，背包保留）/自然回复/受伤红闪、潜行（LeftControl）、1 格自动台阶（step-up）、玩家↔掉落物分离、生命 HUD（10 心三态）；存档格式 2（player.health）；基线逐字节不变
+- [x] **Phase 17** — 工作台 + 形状合成：shaped 配方 JSON（`pattern`/`key`，网格偏移扫描匹配，先 shaped 后 shapeless）/`CraftingGrid` 9 格网格（`matchesShaped`/`matchesShapeless`/`matchGridRecipe` 纯逻辑）/`BlockProperties.interact` 数据属性 + crafting_table 方块（右键开 3×3 面板、破坏掉自身）/工作台面板（独立容器网格，跨开关保留、入存档）/E 面板 2×2 = 共享 3×3 模型左上 4 格、配方列表仅 shapeless/存档格式 3（`inv_grid`+`table_grid`）/atlas 布局数据驱动（`block_atlas.json` 4×8，row 4 = 工作台顶·侧 + planks）；无输入基线逐字节不变
+- [x] **Phase 18** — Greedy Meshing：逐面片按（纹理、sub-mesh、面光）合并为单 quad（光保守合并：面光不同不合并，光照零近似）/每平面双 slice（相邻非 opaque 方块间双面保留）/tiled UV 约定（合并 quad：`uv`=tile 索引 + `uvLocal`=tile 单位位置，`basic.frag` fract 回卷；单面片保持 legacy atlas UV 逐位精确）/`MeshVertex` +`uvLocal`+`tiled`（13 float）；200-chunk 实测总三角形 3.3× 下降（109,648 → 33,558）；无输入基线重拍（`base18`，3593 px 亚纹素重采样/剪影边缘差，几何覆盖集逐 chunk 100% 相等）
+- [x] **Phase 19** — 通用实体间碰撞：Phase 16 玩家↔掉落物分离推广为通用分离 pass（固定序 body 列表：玩家先、实体按索引；重叠对沿最小穿透轴推离——两可推动体 50/50、对不可推动体全量面到面跨度；`hasRoomAt` 世界感知：被挡份额转由另一侧全量接管、双挡跳过；重复 sweep 至 <1e-6 块亚视觉残差或 32 次上限）/数据位 `collidesWithEntities`（投射物不参与，箭穿过实体）+ `pushableByEntities`（玩家不可推动）/中心精确重合保持 P16 方向（可推动体走 −axis，Q 丢脚底 → 玩家 −x 侧）/`Entity::hasRoomAt` 严格格扫描/`separateFrom` 上移 Entity 基类（P16 三测原样保留为回归锚）/F3 overlay +实体计数；无输入基线逐字节不变（`base18` 门通过），items 场景 ×2 字节一致 + 像素判据（stone 灰/dirt 棕分离位）
+- [x] **Phase 20** — Mob 与 AI：数据驱动 mob 类型（`data/mobs/*.json` 严格校验：health/speed/detect_radius/attack_range/attack_damage/attack_cooldown/wander_interval/drops(+count)/box 模型（每箱一 atlas tile，须在模型 AABB 内）+ init 交叉校验（纹理/掉落/spawning 列表））/`MobEntity` AI 状态机（Wander 种子随机决策 → Chase 全速 → Attack 冷却打击，经 hit 回调走 P16 受伤路径；击退窗口抑制 AI；死亡掉落入 despawn pass）/确定性生成（帧节奏 + 固定扫描序首合法格：地板/头顶/高度带/玩家重叠/mob 间距；种子 = 世界种子 ⊕ 生成序号）/玩家攻击（左键 mob 优先于方块——方块遮挡；0.25s 挥击节奏；物品 `attack_damage` 数据 + 击退）/box 模型 mesh（共享六面表，`textures/mobs` 并入 atlas：zombie 头/身 2 tile，atlas 21 tile）/mob 固定帧步长（`kMobStepPerFrame`，运动实体截图逐字节可复现的日循环同款约定）/zombie 掉 `rotten_flesh`（新 material 物品+图标）/config `mobs.enabled`（默认 true；`first_spawn_frame=60` 保证 60 帧基线无 mob）；无输入基线逐字节不变（`base18` 门通过），mobs 240f ×2 字节一致 + 像素判据（vs 无 mob 对照：世界区 54k px 差、8.4k 绿皮肤 px、UI 零差、无伤害）
+- [x] **Phase 20.5** — 修复两项用户反馈：① 昼夜生成规则——mob 数据字段 `spawn_max_light`（0..15 默认 0，Minecraft 敌对 mob 约定）+ `findMobSpawnCell` 光照门（生成格脚位的当前有效光照 = floor(天空光×dayFactor) 与方块光取大，≤ 阈值才生成；zombie 白天不生成、夜晚/暗格生成）；② 窗口缩放——`window.resizable`（默认 true）+ `Window::width/height` 每帧实时读像素尺寸（SDL3 `SDL_GetWindowSizeInPixels`），视口/投影纵横比/UI 布局/截图全部跟随窗口，最小 320×200。588/588 单测；E2E：base18 门 ×2 字节不变、白天 mobs-on == mobs-off（字节级证明白天不生成）、夜晚（day_length 1200s + start 0.536 黄昏段）mobs ×2 字节一致 vs 对照 54k px 差（bbox 与 P20 相同）、resize 运行 截图 == 窗口实际尺寸（场景跟随缩放）
+- [x] **Phase 21** — 弓 + Projectile 游戏内发射器 + 箭渲染：物品数据字段 `shoot_speed`/`shoot_damage`（`(0,100]`/`[0,100]`，缺席=非发射器；严格校验）+ bow 物品（material，max_stack 1，图标）+ shaped 配方（3 stick + 1 planks C 形）/发射器语义（选中发射器时左键=射箭，不再挖掘/挥击；按住 0.25s 节奏；箭 = P10 `Projectile`：数据速度/伤害、眼前 0.3 格沿瞄准、固定帧步长 `kProjectileStepPerFrame`）/`Projectile` +`damage()`/`kill()`（非方块来源消耗，同 despawn 路径）/箭矢↔mob 每帧扫掠 AABB 命中（`raycastAabb` 位移方向 t∈[0,1]，首命中伤 `shoot_damage` + 近战式击退，箭消耗；穿过玩家/其他实体、不伤玩家）/箭渲染（0.55×0.05 细盒体纯色 `u_useTexture=0` 路径，`arrowOrientation` 纯函数把本地 −Z 转到速度，相机同款 rotateY×rotateX 约定）/`shoot` 音效 + 弓图标/存档守卫修正（mob/箭为瞬态实体，保存时跳过而非报错——修复 P20 遗留的"存活 mob 时 --save 退出保存失败"）；600/600 单测（+12：shoot 字段解析/默认/拒绝 ×5、箭几何 4、朝向 3、`kill()` 1）；E2E：base18 门 ×2 字节不变、bow 存档运行（热栏 0 = bow）×3 字节一致（运动实体确定性）、vs 无射击对照 616 px 差（2 支飞行箭、屏幕中央竖直带 x[632,647] y[338,489]、93% 箭棕色像素、UI/心带零差）
+
+- [x] **Phase 22** — 更多 mob（纯数据）：被动 mob 落地——`detect_radius`/`attack_range`/`attack_damage` 校验放宽为 `>= 0`（0 = 永不追/永不攻击/无害，负数与其余必填字段 0 仍拒绝；AI 状态机对 0 值天然不触发 Chase/Attack，零特判代码）/cow（`data/mobs/cow.json`：HP 10、speed 0.5、全 0 攻击字段、`wander_interval` 3.0、`spawn_max_light` 15 = 任何光照/时间可生成、掉 `leather`；box 模型 头 0.45³ + 身 0.8×0.7×1.1、AABB 1.2×1.5——首个比 zombie 宽的模型）/`leather` material 物品 + 图标/cow 纹理（棕底白斑毛 + 深色眼，2 tile，atlas 21→23）/`mob_spawning.json` 名单 [zombie, cow]——类型按名单确定性抽取（种子 ⊕ 帧号），过不了光门的尝试作废（白天抽中 zombie）；E2E：base18 门 ×2 字节不变（atlas +2 tile 对既有渲染零影响）、白天 240f mobs-on ×2 与 mobs-off ×2 各自逐字节一致、vs 对照 7578 px 差（bbox x[631,743] y[244,326] 单一 cow 轮廓，77% cow 棕 + 1% 白斑 + 22% 边缘/暗部，**zombie 绿 0 px** = 白天敌对压制保持，UI/心带零差）；603/603 单测（+3：passive 解析、负数/零拒绝 ×7 用例、passive AI 300 帧不追不打）
+
+- [x] **Phase 23** — 饥饿条 + 食物：物品可选字段 `restore_hunger`（整数 [1,20]，缺省=非食物、显式 0 拒绝）——`rotten_flesh` = 4（zombie 掉落即可食，"打 mob → 吃掉落"闭环）/玩家饥饿（`maxHunger=20`，每 4s 衰减 1 点，无饱和度 v1；饥饿 0 时每 4s 受 1 点饥饿伤害——走正常 `damage()` 路径复用红闪/音效/死亡）/自然回复饥饿门控（< 6 暂停，不重置）/吃食物（选中食物右键 = 吃：回复 + 扣 1 库存 + "eat" 音效，吞掉该次右键不放置/交互；满饥饿 no-op 但仍吞键）/重生恢复满饥饿/饥饿 HUD（心带右侧同行 10 只鸡腿，48×16 三态条带 `assets/textures/hunger.png` + `tools/generate_hunger_icons.py`，与心带共享图标度量）/存档格式 4（`player.hunger`，format 1-3 缺省 = 满）/`eat` 音效（12 WAV）/F3 加 hunger 行；E2E：base18 门字节不变（HUD 仅游玩态）、decay ×2 与 eat ×2 各自逐字节一致、eat vs decay 59 px 差（55 = 最后一只鸡腿 半→满 右侧 x[900,908] y[649,661]、4 = 热栏计数 16→15，UI 外零差）；615/615 单测（+12：food 字段解析/默认/拒绝 ×3、饥饿衰减/饥饿伤害/饿死/低饥阻断回复/钳制/重生恢复 ×6、存档 format 4 往返/缺省/拒绝 ×3）
+- [x] **Phase 24** — 弓后续（P21 简化项回收）：蓄力（右键拉弓：`Input::wasReleased` 释放边沿事件；按住累加真实 dt、封顶 `kBowFullDrawSeconds=1.6s`、松键射出 `power=clamp(拉弓/1.6, 0.1, 1)`——`core/bow.hpp` 纯函数游戏与单测共享；速度/伤害 = 物品数据 × power；左键改弓近战 `attack_damage` 数据（bow=1）且永不挖掘；蓄力状态在解锁/面板/换热栏/重生清零；拉弓渲染 = 手持图标按威力拉向屏幕中心 64px）/箭物品 + 弹药（material `arrow` max_stack 64 + 图标 + shaped 配方 2 stick 竖排→2；发射器新数据字段 `ammo`（物品名，init 经 ItemRegistry 交叉校验；缺席=无限箭），发射消耗槽序升序第一个箭）/插墙残箭（`Projectile` 撞 solid 由即亡改 stuck 态：留命中处、`stuckDir` 保留撞击前方向——碰撞解算器清零速度碰撞轴、渲染与命中测试改用/跳过；无物理、按 `kMaxAge` 30s 消亡——P10 头注释"撞墙钉住"原意）/"bow" 弦音（13 WAV）/bow.json 加 `ammo`+`attack_damage`；E2E：base18 门 ×2 字节不变、满蓄力射击 ×2 与短蓄力射击 ×2 与对照 ×2 各自逐字节一致（松键边沿的墙钟→帧钟 ±1 帧抖动只在射击用例偶发，多跑取字节一致对）、full vs ctrl 178 px 差（174 = 飞行箭 x[636,643] y[407,429]、4 = 热栏计数 16→15，UI 外零差）、short vs ctrl 1002 px 差（998 = 插墙箭 x[608,647] y[544,610]、4 = 计数；短蓄力 power 0.1875 → 速度 2.81 插进身前草地 vs 满蓄力 15 飞向天空——蓄力缩放同屏验证）；626/626 单测（+11：释放边沿 1、ammo 解析/默认/拒绝 3、蓄力 power 映射 4、stuck 语义（不动/计时消亡/保留方向）2、竖排 1 列 shaped 配方 1）
+- [x] **Phase 25** — 生成保护半径/难度系统：`core/difficulty.hpp` 纯模型（`easy`/`normal`/`hard` 严格大小写解析；出生点保护半径 8/12/16 = Minecraft 值；敌对伤害缩放 0.5/1.0/4÷3（zombie 3 → 1.5/3/4，镜像 MC 2.5/3/4 相对形状）；生成节奏缩放 0.5/1.0/1.5 → 30 帧 → 60/30/20，`normal` = 全 1.0 = 基线零变化）/ mob 数据字段 `hostile`（可选 bool 默认 false，非 bool 拒绝；数据驱动非行为推导；zombie = true）/ 保护环 = 世界出生点水平圆（读档不改中心；仅 hostile 受检，passive 豁免——Minecraft 约定）/ `findMobSpawnCell` 保护参（扫描首查）/ config `mobs.difficulty`（默认 normal）/ F3 difficulty 行；639/639；无输入基线逐字节不变
+- [x] **Phase 26** — 更多 mob（纯数据）：按 P22 已验证的纯数据流落地 sheep/chicken 被动 mob（零新增游戏代码）——`data/mobs/sheep.json`（HP 8、speed 0.5、全 0 攻击字段、`spawn_max_light` 15、掉 `wool`；box 头 0.4³ + 身 0.8×0.8×1.2，AABB 1.2×1.5 同 cow）/ `data/mobs/chicken.json`（HP 4、speed 0.6、`wander_interval` 2.0、掉 `feather`；box 头 0.25³ + 身 0.3×0.4×0.5，AABB 0.5×0.8 = 首个比 zombie 小的模型——生成格/重叠/间距规则全用模型数据，无改动）/ `wool` + `feather` material 物品 + 图标 / mob 纹理 4 tile（sheep 白绒毛+深色眼、chicken 米白羽+深色眼+红冠+橙喙，atlas 23→27，新 tile 只占空位、既有坐标零移动）/ 名单 [zombie, cow, sheep, chicken]——类型抽取 = `pick % 名单长度`（种子 ⊕ 帧号），扩名单改变各帧抽中类型；**base 60 帧运行在 `first_spawn_frame=60` 的首次尝试之前结构上零尝试（主循环 `update` 时 `m_frameCount` 尚未自增）= 基线结构性不受名单影响**；643/643（+4：sheep/chicken 完整解析、chicken box 越界 AABB 拒绝、4 类型名单解析）；E2E（P25 协议：每拍前 unmap 覆盖窗 + ≥6s 窗口 + 零并发）：base18 门 ×2 字节不变、白天 360f（t=0.275 仍在正午平台）mobs-on ×2 与 mobs-off ×2 各自逐字节一致（mobs-off == base 逐字节）、vs 对照 **15535 px 差 = 恰好 4 个 mob 剪影**（2 chicken + 1 sheep + 1 cow，与确定性预测逐一对应：f60/f90 chicken 生成、f120/f150/f210 zombie 光门拒绝、f180 cow 生成、f240 sheep 生成（`max_mobs` 4 满）、f270/f300/f330 全部 cap 拒绝）、**zombie 绿 0 px**（白天敌对压制保持）、心/饥饿/热栏三带全 0
+- [x] **Phase 27** — 更多 mob（代码）：skeleton 远程敌对 mob——首个打破纯数据流的 mob（新增 AI 状态 + 箭伤玩家路径）。**数据** `data/mobs/skeleton.json`（HP 20、speed 0.8、`detect_radius` 16、`attack_range` 0 = 永不近战、`attack_damage` 2（箭伤）、`attack_cooldown` 1.5、新字段 `shoot_range` 14 / `retreat_distance` 3 / `shoot_speed` 15、`spawn_max_light` 0、`hostile` true（P25 自动进保护环/伤害缩放/生成节奏）、掉 `arrow`（既有 material）；box 模型同 zombie 尺寸）+ 严格校验（负数拒绝、`shoot_speed` 显式值须 (0,100]、`shoot_range>0` 必须有 `shoot_speed` 跨字段校验）/ 名单 [zombie, cow, sheep, chicken, skeleton]（%5）/ 纹理 2 tile（骨白 skull 深色眼窝+鼻腔，atlas 27→29 只占空位）。**代码** `MobState::RangedAttack`（`shoot_range>0` 且玩家水平 ≤shoot_range：面向玩家 + 冷却经 shoot 回调放箭；≤retreat_distance 全速后撤边退边射；超 shoot_range 按 Chase 逼近）/ `Projectile` +`hurtPlayer` 标志（游戏扫掠测试先对玩家 AABB：命中 = P16 受伤路径 + 箭消耗）+`source`（**箭不伤射手**：spawn 点在其自身 AABB 内，下一帧扫掠 t=0 自命中会自杀自灭——命中循环跳过 source）/ 放箭瞄点 = 玩家眼高 + 0.5·g·(d/speed)² 弧线提前量（无补偿时直线瞄只命中 ≤6 块，10 块外箭从脚下飞过）/ 生成 debug 日志（cap 拒绝/无格/生成位置/射击/箭命中玩家，`--log-level debug`）；650/650（+7：skeleton 解析、ranged 字段拒绝 ×5、远程 AI 站桩射击 300 帧 4 发零近战、贴近后撤、5 型名单、`hurtPlayer`/`source` 标志）；E2E（P25 协议）：base18 门 ×2 字节不变（名单 4→5 结构性免疫）、白天 360f mobs-on ×2 与 mobs-off ×2 逐字节一致（mobs-off == base）、vs 对照 36607 px = 4 被动剪影（2 sheep + chicken + cow，与 %5 pick 序列逐一对应，hostile 光门拒，zombie 绿 0）、夜晚（seed 9 手工存档 p27far：seed 123456789 的 pick 流在前 4 抽无 skeleton 且 cap 于 f150 满，换种子使前 4 抽 = cow/skeleton/cow/skeleton）360f ×2 逐字节一致、**存档 health 8 确定性**（20 − 6 箭×2，debug 日志全程可验证：生成→站桩射击→箭命中×6）、FRESH-FLASH 天门（伤害红纱 a≈0.25 全屏——去纱后 vs 对照 3 cluster = 2 skeleton（skull 眼窝可辨）+ 2 cow，zombie 绿 0）
+- [x] **Phase 28** — 饥饿后续（P23 简化项回收 + 食物扩充，用户指定羊肉/鸡肉/牛肉）：隐藏饱和度缓冲 + 1.6s 进食通道 + 疾跑 ×2 衰减 + 3 新食物（`beef` +3 / `mutton` +2 / `chicken` +2，MC 生肉值）+ 掉落数据改列表 `drops: [{"item","count"}]`（cow = leather+beef、sheep = wool+mutton、chicken = feather+chicken，zombie/skeleton 单掉落；旧字符串 schema 硬拒绝 = 迁移防护）。**数据** 3 material 物品 + 3 程序化图标（`generate_item_icons.py`，既有图标重跑零变化）/ 5 mob JSON 迁移。**代码** `core/food.hpp` 纯状态机（同 P24 `bow.hpp` 模式：1.6s = MC 32 tick、提前松开 = 取消不消耗、进食中再按右键 = 忽略）/ `Player` 饱和度 [0, maxHunger]（新世界 0、重生满）+ 4s tick 先扣饱和度耗尽才掉条（MC exhaustion 简化）+ 疾跑（Shift+移动+非水中）tick ×2 / `Game` 进食通道（中断 = 松手/受击/死亡/解锁/开面板/换格/左键挥击；完成 = 扣 1 + 恢复饥饿 + 2× 饱和度）/ 手持图标拉取统一弓/进食（共享 64px）/ `MobRegistry` 列表严格解析 / 死亡掉落逐条目 / 存档格式 5（`player.saturation`）。667/667（+17：test_food.cpp 新 6【完成落第 97 帧 = 96×(1/60) < double 1.6】/ Player +4 / Item +1 / Mob +3 + 5 既有改列表 / Save +3 + 2 既有）；E2E（P25 协议 + xdotool 脚本化输入）：base18 门 ×2 字节不变（第 4 次结构性免疫）、白天/夜晚 5 对全部与 P27 同名输出逐字节一致（skeleton 射箭场景 health 8 比特级复现 = 零扰动）、**eat 由存档状态确定性验证**：p28eat（正午、hunger 14、sat 0、beef×8）+ 脚本（D+1.5s 锁、D+3.0s 右键按、D+5.5s 松）×5 次运行存档全命中预测（health 20 / hunger 16 / sat 5 / beef×7——tick-margin 对 D∈[0,0.5] 全确定）；输入运行全帧字节一致受 SDL 指针锁定 grab delta 环境限制（见 KNOWN_ISSUES，存档 yaw/pitch = 漂移探测器）
+- [x] **Phase 29** — 粒子缺陷一行修复（P20 发现的同 burst 粒子同值缺陷）：`particle.cpp` 的 `uniform01` 原来只调纯 finalizer `splitmix64(state)` 而不推进 state → 同 burst 16 粒子全重叠成 1 个可见点；修复 = `state += gamma`（0x9E3779B97F4A7C15）后再 mix（与 `mob_entity.cpp` 推进式流同款约定）。基线结构性免疫（粒子只在破坏方块后存活 0.45–0.75s，无输入场景零粒子）。669/669（+2：16 粒子互异回归 + 精确流值钉定【position/life 路径无 libm 调用，钉值跨平台有效】）；E2E：base18 门 ×2 字节不变（第 5 次结构性免疫验证）、brk 对 ×2 存档除 yaw/pitch 外逐字段一致且全命中预测（pitch −1.5 朝脚下方块挖掘：4px grab 漂移对准星影响 0.0003 块 = 瞄准免疫；blocks diff + 掉落拾取 + 1 块坠落 + 4s tick 全确定）、粒子散布视觉验证（vis 对帧差 = 59×72 px / 353 色 cluster = 分散粒子，旧 bug 应为单 ~40 px 团）
+## 细节存档索引（docs/archive/）
+
+- **Phase 3** — `archive/phase-3.md`
+- **Phase 5** — `archive/phase-5.md`
+- **Phase 6** — `archive/phase-6.md`
+- **Phase 7** — `archive/phase-7.md`
+- **Phase 8** — `archive/phase-8.md`
+- **Phase 9** — `archive/phase-9.md`
+- **Phase 10** — `archive/phase-10.md`
+- **Phase 11** — `archive/phase-11.md`
+- **Phase 12** — `archive/phase-12.md`
+- **Phase 13** — `archive/phase-13.md`
+- **Phase 14** — `archive/phase-14.md`
+- **Phase 15** — `archive/phase-15.md`
+- **Phase 16** — `archive/phase-16.md`
+- **Phase 17** — `archive/phase-17.md`
+- **Phase 18** — `archive/phase-18.md`
+- **Phase 19** — `archive/phase-19.md`
+- **Phase 20** — `archive/phase-20.md`
+- **Phase 20.5** — `archive/phase-20.5.md`
+- **Phase 21** — `archive/phase-21.md`
+- **Phase 22** — `archive/phase-22.md`
+- **Phase 23** — `archive/phase-23.md`
+- **Phase 24** — `archive/phase-24.md`
+- **Phase 25** — `archive/phase-25.md`
+- **Phase 26** — `archive/phase-26.md`
+- **Phase 27** — `archive/phase-27.md`
+- **Phase 28** — `archive/phase-28.md`
+- **Phase 29** — `archive/phase-29.md`
+
+P0–P2、P4 无细节存档（提交列表见 `SESSION_CONTEXT.md`）。

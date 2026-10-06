@@ -17,7 +17,7 @@
 //     inputs/outputs and block drops (e.g. ore -> ingot).
 //
 // Tools and materials share one property: no in-world representation
-// (dropped ones are invisible entities — see KNOWN_ISSUES.md). All
+// (dropped ones are invisible entities — see docs/KNOWN_ISSUES.md). All
 // non-block-item code paths (placement, rendering, break speed) dispatch
 // on ItemType, so adding a new explicit kind is data + one enum value.
 //
@@ -109,7 +109,7 @@ struct ItemStack {
 // instantly.
 //
 // Minecraft refines this with per-block-type tool effectiveness (pickaxes
-// vs stone, ...); the flat multiplier is the v1 — see KNOWN_ISSUES.md.
+// vs stone, ...); the flat multiplier is the v1 — see docs/KNOWN_ISSUES.md.
 inline constexpr double kBreakBaseSeconds = 1.5;
 
 inline double breakDurationSeconds(float hardness, float breakSpeed) {

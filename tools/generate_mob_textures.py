@@ -8,7 +8,7 @@ to refresh assets/textures/mobs/.
 Mob model boxes sample one atlas tile on all six faces (same convention as
 the item cubes): the art is a flat procedural texture — base color + noise,
 plus a face on the head (the -Z face of the box is the "front"). See
-KNOWN_ISSUES for the static-model / no-animation simplification.
+docs/KNOWN_ISSUES for the static-model / no-animation simplification.
 """
 import os
 import struct

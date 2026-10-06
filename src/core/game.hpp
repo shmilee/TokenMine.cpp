@@ -482,7 +482,7 @@ private:
     // Phase 17 crafting: the two persistent crafting grids (the E panel's
     // 2x2 uses the top-left 4 cells of its 9-cell model; the table's grid
     // is separate) and the open-panel state machine. The grids survive a
-    // close/reopen (see KNOWN_ISSUES) and are saved (format 3).
+    // close/reopen (see docs/KNOWN_ISSUES) and are saved (format 3).
     CraftingGrid m_inventoryGrid;
     CraftingGrid m_tableGrid;
     InventoryUI m_inventoryUi;

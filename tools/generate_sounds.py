@@ -7,7 +7,7 @@ seeded LCG noise source, so the output is stable across runs and
 platforms. Re-run after editing this file to refresh assets/sounds/.
 
 The set is small and generic by design (one dig/place/break sound for all
-blocks, not per-material — see KNOWN_ISSUES). Files:
+blocks, not per-material — see docs/KNOWN_ISSUES). Files:
   dig.wav      short filtered-noise tap (mining tick while breaking)
   place.wav    low thud + click (block placement)
   break.wav    crumbly noise burst (block destroyed)

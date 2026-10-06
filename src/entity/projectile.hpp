@@ -9,7 +9,7 @@
 // arrow stays where it hit, keeps the incoming direction for rendering
 // (stuckDir — the collision resolver zeroes the blocked axis of the
 // velocity), and despawns after kMaxAge like any other arrow (Minecraft
-// keeps stuck arrows 100 s; v1 shares the 30 s — see KNOWN_ISSUES.md).
+// keeps stuck arrows 100 s; v1 shares the 30 s — see docs/KNOWN_ISSUES.md).
 // It also despawns after kMaxAge or below the kill plane while in flight.
 //
 // Combat (Phase 21): a projectile may carry `damage` (set at launch from
@@ -19,9 +19,9 @@
 // the mob and consumes the arrow via kill(). Arrows flagged `hurtPlayer`
 // (Phase 27: mob-shot arrows, the skeleton) are ALSO swept-tested against
 // the player's AABB and damage it; player-shot bow arrows are not flagged
-// (no self-damage, single-player v1 — see KNOWN_ISSUES.md).
+// (no self-damage, single-player v1 — see docs/KNOWN_ISSUES.md).
 //
-// v1 simplifications (KNOWN_ISSUES.md): arrows are not saved (transient
+// v1 simplifications (docs/KNOWN_ISSUES.md): arrows are not saved (transient
 // like mobs), and a stuck arrow stays put when its block is broken or
 // replaced.
 #pragma once

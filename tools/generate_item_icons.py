@@ -9,7 +9,7 @@ These icons cover the explicit (non-block) items: tools and materials have
 no block texture, so the hotbar / inventory / held-item UI renders their
 "icon" texture (an optional data field, validated at game init) instead of
 a 3D block cube. The art is a simple procedural silhouette — recognizable
-shape + item color, not detailed models (see KNOWN_ISSUES).
+shape + item color, not detailed models (see docs/KNOWN_ISSUES).
 """
 import os
 import struct
