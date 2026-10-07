@@ -305,3 +305,29 @@
   既有设计）——`addText(…, 红色)` 静默渲染为白字（死亡屏幕 "You died!"、
   合成 "needs:" 暗色、tooltip 颜色全部如此）。P16 起从未被像素级 E2E 验证，
   P33 才发现。像素断言文字时按**字体色（白）**检查，不要按代码里的颜色参数。
+- **awesome WM 会平铺新窗口（用户会话重启后布局变了，P34 发现）**：P34 开始时
+  游戏窗口映射成 1272×1552 的 tile，`xdotool windowmove/windowsize` 被忽略
+  （P0–P33 的会话里窗口是浮动的 1280×720——同一台机器、同一 WM，会话状态
+  不同）。E2E 恢复：`windowfocus <wid>` + `xdotool key Super+ctrl+space`
+  （用户 awesome 配置的浮动切换绑定）→ 窗口变 1280×720 且 `windowmove` 生效
+  （原点 (4,64)，同 P33）。**必须验证切换结果**（首按可能因焦点竞态被吞——
+  循环"量宽 ≠1280 → 重新 focus+切换"，上限 3 次，仍不对就 FATAL）；
+  无输入运行里这是纯 WM 层输入（游戏无焦点事件处理，零 SDL 事件，
+  基线结构性不受影响）。`xdotool search --class minecraft` 找窗口（
+  `--name "MineCraft"` 可能误配终端标题）。
+- **E2E probe 配置必须每批重新生成并核对内容（P34 踩坑）**：
+  `/tmp/opencode/config_p34ui2.json` 里残留着上一轮会话写的 `ui.scale: 1`
+  （键名正确、值错误），两整轮 panel 运行全部按 scale 1 渲染、点击坐标
+  （按 scale 2 计算）落空，浪费一轮调试。批处理脚本开头必须用
+  config_xep 重新 `json.dump` probe 配置，且跑前 `grep` 一眼关键值。
+- **`textWidth` 含 1px 字距，ink bbox ≠ n×8×scale（P34）**：
+  `textWidth(text, scale) = n×8×scale + (n−1)×scale`（glyph 8px + 1px
+  spacing，`adv=(kGlyphSize+1)×scale`）——"You died!"（9 字 scale 2）
+  文本宽 160 不是 144，原点 (1280−160)/2 = 560；ink 实际宽 150（'!' 窄）。
+  断言文字几何时按 `textWidth` 公式算，别用 n×8×scale 估。
+- **加载即死的存档（pos 低于击杀平面 −32）的 pos.y 有 ~2e-5 真实 dt 抖动
+  （P34）**：玩家加载在 y=−33，首帧物理用真实 dt 落一点点才触发
+  `belowKillPlane` 死亡——两次运行的 `player.pos[1]` 差 ~2.3e-5
+  （其余存档字段全部逐字节一致、截图逐字节一致）。虚空死亡场景的存档
+  对比要豁免 pos.y（截图 + 其余字段才是权威证据）；这是"玩家物理 = 真实
+  dt"既有约定的自然推论，非缺陷。

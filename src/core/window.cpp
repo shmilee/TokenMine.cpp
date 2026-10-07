@@ -138,6 +138,26 @@ int Window::height() const {
     return h;
 }
 
+int Window::logicalWidth() const {
+    if (m_window == nullptr) {
+        return m_width; // initial size until the window exists
+    }
+    int w = 0;
+    int h = 0;
+    SDL_GetWindowSize(m_window, &w, &h);
+    return w;
+}
+
+int Window::logicalHeight() const {
+    if (m_window == nullptr) {
+        return m_height; // initial size until the window exists
+    }
+    int w = 0;
+    int h = 0;
+    SDL_GetWindowSize(m_window, &w, &h);
+    return h;
+}
+
 void Window::swapBuffers() {
     if (m_window != nullptr) {
         SDL_GL_SwapWindow(m_window);

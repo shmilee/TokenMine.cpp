@@ -49,6 +49,14 @@ public:
     int width() const;
     int height() const;
 
+    // Current LOGICAL size (SDL_GetWindowSize). Equals width()/height()
+    // at dppx 1; on a HiDPI-scaled display it is the unscaled size while
+    // width()/height() (SDL_GetWindowSizeInPixels) are the drawable
+    // pixels. SDL mouse event coordinates are in this logical space, so
+    // the UI hit tests derive from it (Game::uiSize/uiMouse, Phase 34).
+    int logicalWidth() const;
+    int logicalHeight() const;
+
     // Opaque handle for the Renderer (Phase 1).
     const SDL_Window* nativeHandle() const { return m_window; }
 

@@ -26,6 +26,7 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "block/block_registry.hpp"
@@ -302,6 +303,21 @@ private:
     // is gated on a key/pointer state, so the no-input baseline renders
     // nothing extra.
     void renderUi();
+    // The UI geometry space in whole "UI pixels" (Phase 34): the window's
+    // LOGICAL size divided by the ui.scale config key, rounded. Every
+    // screen-space element (hotbar, hearts, panels, F3, death screen,
+    // held item) is laid out in this space, and uiProjection() stretches
+    // it onto the drawable — the GPU does the upscaling (NEAREST textures
+    // stay crisp). At dppx 1 with ui.scale 1.0 the space is exactly the
+    // drawable pixels (the no-input baseline).
+    struct UiSize {
+        int width = 0;
+        int height = 0;
+    };
+    UiSize uiSize() const;
+    // The mouse position in UI pixels: SDL delivers LOGICAL coordinates,
+    // which divide by ui.scale (the drawable stretch is a uniform scale).
+    std::pair<int, int> uiMouse() const;
     // Screen-space ortho projection (y-down: y = 0 is the window top).
     Mat4 uiProjection(int w, int h) const;
     // Uploads one UI vertex batch and draws it with the UI shader.
@@ -333,6 +349,7 @@ private:
 
     GameArgs m_args;
     Config m_config;
+    float m_uiScale = 1.0f; // ui.scale (Phase 34); 1.0 = pixel-exact
     AssetManager m_assets;
     Window m_window;
     Input m_input;

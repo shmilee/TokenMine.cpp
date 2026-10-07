@@ -74,6 +74,7 @@ add_library(mc_core STATIC
     src/ui/font.cpp
     src/ui/debug_overlay.cpp
     src/ui/inventory_ui.cpp
+    src/ui/ui_scale.cpp
 )
 target_include_directories(mc_core PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(mc_core PUBLIC SDL3::SDL3 PkgConfig::GLEW
@@ -123,6 +124,7 @@ add_executable(minecraft_tests
     tests/test_font.cpp
     tests/test_debug_overlay.cpp
     tests/test_inventory_ui.cpp
+    tests/test_ui_scale.cpp
     tests/test_particle.cpp
     tests/test_sound.cpp
     tests/test_noise.cpp

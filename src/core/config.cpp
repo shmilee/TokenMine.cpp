@@ -137,6 +137,9 @@ std::string Config::defaultConfigJson() {
         "vsync": true,
         "fps_cap": 0
     },
+    "ui": {
+        "scale": 1
+    },
     "world": {
         "seed": 123456789,
         "view_distance": 8,

@@ -22,6 +22,7 @@
 #include "world/noise.hpp"
 #include "ui/font.hpp"
 #include "ui/inventory_ui.hpp"
+#include "ui/ui_scale.hpp"
 
 namespace mc {
 
@@ -560,6 +561,10 @@ Result<void> Game::buildScene() {
     // silently falling back).
     const auto playerParams = Player::Params::fromConfig(m_config);
     MC_TRY(playerParams);
+    // UI scale (Phase 34): same missing-key / validated-value contract.
+    const auto uiScale = uiScaleFromConfig(m_config);
+    MC_TRY(uiScale);
+    m_uiScale = *uiScale;
     const Player::Params& playerDims = *playerParams; // room check
     Vec3 spawnPos {0.5f,
                    static_cast<float>(m_generator->surfaceHeight(0, 0)) + 1.0f,
@@ -2402,8 +2407,12 @@ std::vector<const Recipe*> Game::shapelessRecipes() const {
 }
 
 void Game::handlePanelClicks() {
-    const int w = m_window.width();
-    const int h = m_window.height();
+    // The layout and the mouse hit tests both live in UI pixels (Phase
+    // 34): InventoryLayout is pure geometry, so passing the UI space
+    // scales the panel identically to the rendered one.
+    const UiSize space = uiSize();
+    const int w = space.width;
+    const int h = space.height;
     const bool table = m_openPanel == OpenPanel::Table;
     const PanelKind kind =
         table ? PanelKind::CraftingTable : PanelKind::Inventory;
@@ -2414,9 +2423,9 @@ void Game::handlePanelClicks() {
     const InventoryLayout layout =
         InventoryLayout::compute(w, h, static_cast<int>(shapeless.size()),
                                  kind);
-    const Vec2 mp = m_input.mousePosition();
-    const int px = static_cast<int>(mp.x);
-    const int py = static_cast<int>(mp.y);
+    const std::pair<int, int> mp = uiMouse();
+    const int px = mp.first;
+    const int py = mp.second;
     InventoryUI& ui = table ? m_tableUi : m_inventoryUi;
     // The layout hit tests are disjoint: at most one of slot / grid cell /
     // output is active (the UI dispatch checks output first, then grid,
@@ -2502,8 +2511,25 @@ void Game::updateSurvival(double dt) {
     }
 }
 
+Game::UiSize Game::uiSize() const {
+    const double scale = static_cast<double>(m_uiScale);
+    return UiSize {
+        std::max(1, static_cast<int>(std::lround(
+            static_cast<double>(m_window.logicalWidth()) / scale))),
+        std::max(1, static_cast<int>(std::lround(
+            static_cast<double>(m_window.logicalHeight()) / scale)))};
+}
+
+std::pair<int, int> Game::uiMouse() const {
+    const Vec2 p = m_input.mousePosition();
+    const double scale = static_cast<double>(m_uiScale);
+    return {static_cast<int>(std::lround(p.x / scale)),
+            static_cast<int>(std::lround(p.y / scale))};
+}
+
 Mat4 Game::uiProjection(int w, int h) const {
-    // Screen pixels, y-down (y = 0 is the window top). The depth range
+    // UI pixels (y = 0 is the window top), stretched onto the drawable by
+    // the ortho range [0, w] x [0, h]. The depth range
     // must cover the 3D block-cube icons (the 76px held icon spans
     // |z| up to ~66px after its tilt); everything 2D sits at z = 0 and
     // the UI pass runs with the depth test off, so the wide range is
@@ -2646,8 +2672,14 @@ void Game::drawParticles(const Mat4& view, const Mat4& projection,
 // ---------------------------------------------------------------------------
 
 void Game::renderUi() {
-    const int w = m_window.width();
-    const int h = m_window.height();
+    // All UI geometry lives in the UI-pixel space (logical window size /
+    // ui.scale, Phase 34): uiProjection stretches it onto the drawable,
+    // so a larger ui.scale upsamples every element (font, hotbar, panels,
+    // F3, death screen) via the GPU. At dppx 1 with ui.scale 1.0 the
+    // space is exactly the drawable — the no-input baseline is unchanged.
+    const UiSize space = uiSize();
+    const int w = space.width;
+    const int h = space.height;
     const bool locked = m_window.relativeMouseMode();
     const Mat4 ortho = uiProjection(w, h);
 
@@ -2754,9 +2786,9 @@ void Game::renderUi() {
                 static_cast<int>(cy) - sizePx / 2, sizePx, sizePx);
     };
 
-    const Vec2 mouse = m_input.mousePosition();
-    const int mx = static_cast<int>(mouse.x);
-    const int my = static_cast<int>(mouse.y);
+    const std::pair<int, int> mouse = uiMouse();
+    const int mx = mouse.first;
+    const int my = mouse.second;
 
     // -- hotbar + crosshair + held item (while captured, no panel open) --
     if (locked && !panelOpen()) {
