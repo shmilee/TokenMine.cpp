@@ -1,6 +1,7 @@
 // Phase 15 UI tests: the pixel font (glyph UV mapping, text width, vertex
-// generation). The font atlas is assets/textures/font.png (128x256, 16px
-// cells indexed by ASCII code, 8x8 glyph at a 4px cell offset).
+// generation). Phase 35: the atlas is assets/textures/font.png (256x512,
+// 32px cells indexed by ASCII code, 16x16 glyph at an 8px cell offset) and
+// the text scale is a double (fractional scales downscale the glyphs).
 #include <gtest/gtest.h>
 
 #include <vector>
@@ -24,12 +25,13 @@ void expectUv(const GlyphUv& uv, int x0, int y0) {
 } // namespace
 
 TEST(FontTest, GlyphUvIsAsciiIndexedCell) {
-    // 'Q' = 81: cell (1, 10) -> x0 = 1*16+4 = 20, y0 = 10*16+4 = 164.
-    expectUv(glyphUv('Q'), 20, 164);
-    // ' ' = 32: cell (0, 4) -> x0 = 4, y0 = 68.
-    expectUv(glyphUv(' '), 4, 68);
-    // '~' = 126: cell (6, 15) -> x0 = 100, y0 = 244 (the last cell).
-    expectUv(glyphUv('~'), 100, 244);
+    // 'Q' = 81: cell (1, 10) -> x0 = 1*32+8 = 40, y0 = 10*32+8 = 328.
+    expectUv(glyphUv('Q'), 40, 328);
+    // ' ' = 32: cell (0, 4) -> x0 = 8, y0 = 4*32+8 = 136.
+    expectUv(glyphUv(' '), 8, 136);
+    // '~' = 126: cell (6, 15) -> x0 = 6*32+8 = 200, y0 = 15*32+8 = 488
+    // (the last cell).
+    expectUv(glyphUv('~'), 200, 488);
 }
 
 TEST(FontTest, GlyphUvStaysInsideTheAtlas) {
@@ -56,23 +58,24 @@ TEST(FontTest, UnknownCharactersMapToQuestionMark) {
 }
 
 TEST(FontTest, TextWidth) {
-    EXPECT_EQ(textWidth("", 1), 0);
-    EXPECT_EQ(textWidth("A", 1), 8);
-    EXPECT_EQ(textWidth("AB", 1), 17); // 8 + 1 spacing + 8
-    EXPECT_EQ(textWidth("AB", 2), 34); // 16 + 2 + 16
-    EXPECT_EQ(textWidth("AB", 0), 17); // scale clamps to 1
-    EXPECT_EQ(textWidth("AB", -3), 17);
+    EXPECT_DOUBLE_EQ(textWidth(""), 0.0);
+    EXPECT_DOUBLE_EQ(textWidth("A"), 16.0);
+    EXPECT_DOUBLE_EQ(textWidth("AB"), 33.0); // 16 + 1 spacing + 16
+    EXPECT_DOUBLE_EQ(textWidth("AB", 2.0), 66.0); // 32 + 2 + 32
+    EXPECT_DOUBLE_EQ(textWidth("AB", 0.5), 16.5); // fractional: 8+0.5+8
+    EXPECT_DOUBLE_EQ(textWidth("AB", 0.0), 33.0); // scale clamps to 1
+    EXPECT_DOUBLE_EQ(textWidth("AB", -3.0), 33.0);
 }
 
 TEST(FontTest, MakeTextVerticesSingleGlyph) {
     std::vector<MeshVertex> v;
-    makeTextVertices("A", 10, 20, 1, v);
+    makeTextVertices("A", 10, 20, 1.0, v);
     ASSERT_EQ(v.size(), 6u); // two triangles, non-indexed
-    // Top-left corner at (x, y); the glyph spans 8px in both axes.
+    // Top-left corner at (x, y); the glyph spans 16px in both axes.
     EXPECT_FLOAT_EQ(v[0].position.x, 10.0f);
     EXPECT_FLOAT_EQ(v[0].position.y, 20.0f);
-    EXPECT_FLOAT_EQ(v[1].position.x, 18.0f);
-    EXPECT_FLOAT_EQ(v[2].position.y, 28.0f);
+    EXPECT_FLOAT_EQ(v[1].position.x, 26.0f);
+    EXPECT_FLOAT_EQ(v[2].position.y, 36.0f);
     // UVs: top edge = v0 (the glyph's top, smaller v), bottom = v1.
     const GlyphUv a = glyphUv('A');
     EXPECT_FLOAT_EQ(v[0].uv.x, a.u0);
@@ -87,11 +90,21 @@ TEST(FontTest, MakeTextVerticesSingleGlyph) {
 
 TEST(FontTest, MakeTextVerticesAdvanceAndScale) {
     std::vector<MeshVertex> v;
-    makeTextVertices("AB", 0, 0, 2, v);
+    makeTextVertices("AB", 0, 0, 2.0, v);
     ASSERT_EQ(v.size(), 12u);
-    // Second glyph starts at the advance (8+1)*scale = 18.
-    EXPECT_FLOAT_EQ(v[6].position.x, 18.0f);
-    // At scale 2 the glyph is 16px wide/tall.
-    EXPECT_FLOAT_EQ(v[1].position.x, 16.0f);
-    EXPECT_FLOAT_EQ(v[2].position.y, 16.0f);
+    // Second glyph starts at the advance (16+1)*scale = 34.
+    EXPECT_FLOAT_EQ(v[6].position.x, 34.0f);
+    // At scale 2 the glyph is 32px wide/tall.
+    EXPECT_FLOAT_EQ(v[1].position.x, 32.0f);
+    EXPECT_FLOAT_EQ(v[2].position.y, 32.0f);
+}
+
+TEST(FontTest, MakeTextVerticesFractionalScale) {
+    std::vector<MeshVertex> v;
+    makeTextVertices("AB", 0, 0, 0.5, v);
+    ASSERT_EQ(v.size(), 12u);
+    // The glyph is 8px wide/tall; the advance is (16+1)*0.5 = 8.5.
+    EXPECT_FLOAT_EQ(v[1].position.x, 8.0f);
+    EXPECT_FLOAT_EQ(v[2].position.y, 8.0f);
+    EXPECT_FLOAT_EQ(v[6].position.x, 8.5f);
 }

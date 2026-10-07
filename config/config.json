@@ -5,6 +5,9 @@
     "height": 720,
     "fullscreen": false
   },
+  "ui": {
+    "scale": 1.5
+  },
   "render": {
     "vsync": true,
     "fps_cap": 0

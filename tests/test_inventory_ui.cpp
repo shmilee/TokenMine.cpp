@@ -194,6 +194,56 @@ TEST(InventoryLayoutTest, SlotHitTest) {
                             layout.panel.y + 2), -1);
 }
 
+TEST(InventoryLayoutTest, WideWindowKeepsTheNativeSize) {
+    const InventoryLayout layout = InventoryLayout::compute(1280, 720, 2);
+    EXPECT_DOUBLE_EQ(layout.scale, 1.0);
+    // Native design: 2*12 + 500 + 12 + (2*52+4+12+52) + 12 + 280 = 1000.
+    EXPECT_EQ(layout.panel.w, 1000);
+    // 2*12 + max(40 + 3*52+2*4, 40 + 2*52) = 228.
+    EXPECT_EQ(layout.panel.h, 228);
+    EXPECT_EQ(layout.slots[0].w, InventoryLayout::kSlot);
+}
+
+TEST(InventoryLayoutTest, NarrowWindowScalesThePanelDown) {
+    const InventoryLayout layout = InventoryLayout::compute(640, 360, 2);
+    // Width-constrained: s = (640-2)/1000 (the height has plenty of room).
+    EXPECT_DOUBLE_EQ(layout.scale, 638.0 / 1000.0);
+    // The panel fits with >=1 px of margin on every side.
+    EXPECT_GE(layout.panel.x, 0);
+    EXPECT_GE(layout.panel.y, 0);
+    EXPECT_LE(layout.panel.x + layout.panel.w, 640 - 1);
+    EXPECT_LE(layout.panel.y + layout.panel.h, 360 - 1);
+    // Slots are scaled (52 -> 33) and every child stays inside the panel.
+    EXPECT_EQ(layout.slots[0].w, 33);
+    for (const UIRect& r : layout.slots) {
+        EXPECT_TRUE(layout.panel.contains(r.x, r.y));
+        EXPECT_TRUE(layout.panel.contains(r.x + r.w - 1, r.y + r.h - 1));
+    }
+    // Adjacent hotbar slots never overlap (the scaled 4px gap is 2 or 3).
+    for (int i = 0; i < 8; ++i) {
+        const UIRect& a = layout.slots[static_cast<std::size_t>(i)];
+        const UIRect& b = layout.slots[static_cast<std::size_t>(i + 1)];
+        EXPECT_GE(b.x, a.x + a.w);
+        EXPECT_LE(b.x - (a.x + a.w), 6);
+    }
+    // The hit tests follow the scaled rects: slot 5's center is slot 5.
+    const UIRect& s5 = layout.slots[5];
+    EXPECT_EQ(layout.slotAt(s5.x + s5.w / 2, s5.y + s5.h / 2), 5);
+    // The grid cells and output still sit right of the slots and the
+    // recipe rows right of the output (same relative order, scaled).
+    EXPECT_GT(layout.gridCells[0].x, layout.slots[8].x + layout.slots[8].w);
+    EXPECT_GT(layout.recipes[0].x, layout.output.x + layout.output.w);
+}
+
+TEST(InventoryLayoutTest, ShortWindowScalesByHeight) {
+    const InventoryLayout layout = InventoryLayout::compute(1280, 200, 2);
+    // Height-constrained: s = (200-2)/228 (the width has plenty of room).
+    EXPECT_DOUBLE_EQ(layout.scale, 198.0 / 228.0);
+    EXPECT_LE(layout.panel.y + layout.panel.h, 199);
+    EXPECT_LE(layout.panel.x + layout.panel.w, 1279);
+    EXPECT_GT(layout.panel.x, 0); // the scaled panel is narrower than 1280
+}
+
 TEST(InventoryLayoutTest, SlotOrderIsStorageThenHotbar) {
     const InventoryLayout layout = InventoryLayout::compute(1280, 720, 4);
     // The bottom row (largest y) is the hotbar: slots 0..8 left to right.

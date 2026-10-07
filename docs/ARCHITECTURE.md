@@ -43,8 +43,8 @@ mine-craft/
 │                    # value noise/fBm）、BiomeRegistry、WorldgenParams（worldgen.json）、
 │                    # WorldGenerator（Seed 可复现生成）
 ├── tools/           # 开发工具：generate_block_textures.py（16x16 占位纹理）、
-│                    # generate_font.py（8x8 字形 atlas）、generate_cracks.py（5 级裂纹条）、
-│                    # generate_item_icons.py（16x16 物品图标）、generate_sounds.py（13 个 WAV）
+│                    # generate_font.py（16x16 字形 atlas 256×512）、generate_cracks.py（5 级裂纹条）、
+│                    # generate_item_icons.py（32x32 物品图标）、generate_sounds.py（13 个 WAV）
 └── tests/           # 单元测试（GTest）+ PNG 测试夹具（tests/data/，可用 tests/generate_fixtures.py 重新生成）
 ```
 ## 核心架构

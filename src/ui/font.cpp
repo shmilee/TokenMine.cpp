@@ -20,25 +20,25 @@ GlyphUv glyphUv(char c) {
         static_cast<float>(y0 + kGlyphSize) / kFontAtlasHeight};
 }
 
-int textWidth(const std::string& text, int scale) {
-    if (scale < 1) {
-        scale = 1;
+double textWidth(const std::string& text, double scale) {
+    if (scale <= 0.0) {
+        scale = 1.0;
     }
     if (text.empty()) {
-        return 0;
+        return 0.0;
     }
     const std::size_t n = text.size();
-    return static_cast<int>(n) * kGlyphSize * scale +
-           static_cast<int>(n - 1) * scale;
+    return static_cast<double>(n) * kGlyphSize * scale +
+           static_cast<double>(n - 1) * scale;
 }
 
-void makeTextVertices(const std::string& text, int x, int y, int scale,
+void makeTextVertices(const std::string& text, int x, int y, double scale,
                       std::vector<MeshVertex>& out) {
-    if (scale < 1) {
-        scale = 1;
+    if (scale <= 0.0) {
+        scale = 1.0;
     }
-    const int adv = (kGlyphSize + 1) * scale; // glyph + one spacing pixel
-    int cx = x;
+    const double adv = (kGlyphSize + 1) * scale; // glyph + one spacing px
+    double cx = x;
     for (const char c : text) {
         const GlyphUv uv = glyphUv(c);
         const float w = static_cast<float>(kGlyphSize * scale);

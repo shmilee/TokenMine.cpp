@@ -44,7 +44,7 @@
 ## 物品 / 背包（Phase 11）
 
 - **工具无分块类型效率** — 工具的 `break_speed` 是 flat 乘数（对任何方块生效）；Minecraft 有镐/铲/斧分类 × 方块类别（石类对镐、土类对铲）+ 无效率工具慢 10× 的规则。v1 只有 flat 乘数，加分类需给方块数据加类别字段并改破坏耗时公式。`[Phase 11]`
-- **非 block 物品的掉落物在 world 中不可见** — 工具/材料的**掉落物**（Q 丢出或挖出）没有 in-world 实体表示（`drawItemEntities` 跳过非 block 物品——物理/拾取/合并/消亡照常工作）；UI 侧（背包/hotbar/手持/合成产物）Phase 15 起已有图标（`Item.icon` 16×16 纹理）。`[Phase 11]`（UI 部分 `[Phase 15]` 已解决）
+- **非 block 物品的掉落物在 world 中不可见** — 工具/材料的**掉落物**（Q 丢出或挖出）没有 in-world 实体表示（`drawItemEntities` 跳过非 block 物品——物理/拾取/合并/消亡照常工作）；UI 侧（背包/hotbar/手持/合成产物）Phase 15 起已有图标（`Item.icon` 32×32 纹理，Phase 35）。`[Phase 11]`（UI 部分 `[Phase 15]` 已解决）
 - **拾取是固定 1.0 格半径，无磁力** — 玩家底心距掉落物底心 <1.0 且过 0.5s 拾取延迟即整堆入包；Minecraft 会随时间逐渐把物品拉向玩家。`[Phase 11]`
 - **放置消耗库存（行为变化，非缺陷）** — Phase 11 起方块不再是无限的：初始 hotbar 每格满堆栈（block 64/工具 1，`hotbar.json` 定义），放置消耗 1 个；hotbar 与背包都空时右键无效。`[Phase 11]`
 
@@ -89,14 +89,14 @@
 ## UI / 音效 / 粒子（Phase 15）
 
 - **音效是固定事件集，无 per-block/per-item 差异** — v1 只有 8 个数据驱动事件（dig/place/break/pickup/step/ui_open/ui_close/craft），所有方块共用同一 break/place/dig 音色，无 MC 式的材质/方块音色差异、无 3D 空间化（单声道 2D 播放）。加 per-block 音色需扩事件集 + 音色映射数据。`[Phase 15]`
-- **物品无 3D 模型，图标是程序化 16×16 贴图** — block item 的 UI 表示是带光照的倾斜 3D 立方体（复用掉落物 cube mesh），工具/材料是 `tools/generate_item_icons.py` 程序化生成的 16×16 平面图标（非 MC 的 3D 旋转手持模型）；无手持动画/旋转。`[Phase 15]`
+- **物品无 3D 模型，图标是程序化 32×32 贴图** — block item 的 UI 表示是带光照的倾斜 3D 立方体（复用掉落物 cube mesh），工具/材料是 `tools/generate_item_icons.py` 程序化生成的 32×32 平面图标（Phase 35：16×16 → 32×32，形状谓词按 2× 分辨率重采样——弧线/对角线获得真 2× 边缘细节，非 2×2 upscale；非 MC 的 3D 旋转手持模型）；无手持动画/旋转。`[Phase 15]`（32×32 `[Phase 35]`）
 - **背包 UI 右键语义极简** — 左键取整堆/放入/交换（取出被占堆）/并入有空间同物堆；右键只"移 1 个"（同物有空间或空格，不同物格无效）；无 MC 的"右键取半堆"、无拖拽、无 shift 快捷移动、无双击分拣。点击面板外（左键）丢弃手持堆。`[Phase 15]`
 - **背包打开不暂停世界模拟** — 打开背包只暂停**玩家物理与方块交互**；世界/昼夜/流体/实体/流式加载照常 tick（与 MC 的"暂停菜单"不同，更接近"边看背包边看世界"）。`[Phase 15]`
 - **F3 FPS 显示为整数** — `m_fpsSmoothed`（真实 dt 平滑）取整显示，vsync 稳定时恒 60；无小数帧率、无帧时间直方图/分位数（Minecraft F3 有 1% / 0.1% lows）。`[Phase 15]`
 - **粒子是逐帧动态 mesh、无碰撞** — 每帧重建一个动态 indexed mesh（0.12 格小立方体），粒子之间/粒子与世界无碰撞（穿模），无风/阻力，半隐式 Euler（先速后位）；上限 256、每爆发 16、寿命 0.45~0.75s。spawn 时烘焙光照（渲染是只读窗口，不能读光数组）。`[Phase 15]`
-- **字体是程序化 8×8 像素字** — `tools/generate_font.py` 生成 128×256 字形 atlas（16px cell、glyph 4px 偏移），仅 ASCII 可打印（非 ASCII → `?`）；无等宽以外的字重/字号渐变（缩放是整数像素复制）、无中文字形。`ui.scale`（Phase 34）可整体放大 UI（NEAREST 锐利放大），但**源字形仍是 8×8——细节上限不变**（放大只减少"太小"，不增加笔画细节）；更高清晰度的字体/物品图标素材（16×16 字形、32×32 图标）是后续候选。`[Phase 15]`（Phase 34 起 `ui.scale` 放大）
+- **字体无中文字形与字重渐变** — `tools/generate_font.py` 生成 256×512 字形 atlas（32px cell、16×16 glyph 8px 偏移；Phase 35：8×8 → 16×16，字形表一次性从 DejaVu Sans Bold em16 提取（基线 row 12、阈值 128）后静态嵌入生成器——纯 stdlib、确定性输出），仅 ASCII 可打印（非 ASCII → `?`）；无字重渐变（缩放支持 double scale——Phase 35 起面板自适应分数缩放，`textWidth/makeTextVertices` 均 double）；无中文字形。`[Phase 15]`（8×8 低细节 `[Phase 35]` 已解决：16×16 字形 + 32×32 物品图标）
 - **物品名 tooltip 只有名字** — 悬停格显示物品名（无数量/描述/工具耐久/附魔文本）。`[Phase 15]`
-- **"You died!" 死亡屏幕文字实际是白色（颜色参数被忽略）** — `ui.frag` 的 textured 批次以字体纹理 rgb 为颜色、`u_color` 只调制 alpha（着色器注释有记载的既有行为）；死亡屏幕传入的红色 `Vec4{1, 0.35, 0.35}` 被静默忽略，文字按字体色（白）渲染。同样被忽略的还有合成面板 "needs: ..." 的 `kTextDim` 暗色与配方名 tooltip 颜色。P16 的死亡屏幕从未被像素级 E2E 验证，无人发现（P33 E2E 首次像素验证死亡屏幕时发现）。`[Phase 33]`（发现）计划：着色器 textured 分支改 `texel.rgb × u_color.rgb`（所有彩色文字生效：死亡屏幕红字/"needs:" 暗色/tooltip）+ 受影响的屏幕（死亡屏/合成/tooltip）重新像素验证。
+- **"You died!" 死亡屏幕文字实际是白色（颜色参数被忽略）** — `ui.frag` 的 textured 批次以字体纹理 rgb 为颜色、`u_color` 只调制 alpha（着色器注释有记载的既有行为）；死亡屏幕传入的红色 `Vec4{1, 0.35, 0.35}` 被静默忽略，文字按字体色（白）渲染。同样被忽略的还有合成面板 "needs: ..." 的 `kTextDim` 暗色与配方名 tooltip 颜色。P16 的死亡屏幕从未被像素级 E2E 验证，无人发现（P33 E2E 首次像素验证死亡屏幕时发现）。`[Phase 33]`（发现）计划：着色器 textured 分支改 `texel.rgb × u_color.rgb`（所有彩色文字生效：死亡屏幕红字/"needs:" 暗色/tooltip）+ 受影响的屏幕（死亡屏/合成/tooltip）重新像素验证。（Phase 35 换 16×16 字体后重新像素验证：白字 bbox A (488,320,299,67)、B 恰好 2×，仍为白——修复计划不变。）
 
 ## 生存（Phase 16）
 
@@ -238,5 +238,6 @@
 | 27 | `archive/phase-27.md` |
 | 28 | `archive/phase-28.md` |
 | 29 | `archive/phase-29.md` |
+| 35 | `archive/phase-35.md` |
 
 P0–P2、P4 无细节存档（提交列表见 `SESSION_CONTEXT.md`）。

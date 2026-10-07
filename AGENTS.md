@@ -9,21 +9,23 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 34 完成时）
+## 现状（Phase 35 完成时）
 
-- 功能阶段 P0–P34 全部完成并提交；P31 = 饥饿节奏 MC 对齐、P32 = 玩家参数
+- 功能阶段 P0–P35 全部完成并提交；P31 = 饥饿节奏 MC 对齐、P32 = 玩家参数
   配置化、P33 = 死亡时暂停流式加载、P34 = UI 坐标空间 + `ui.scale`
-  （高分屏 UI 缩放；`Window::logicalWidth/Height`，UI = 逻辑尺寸 ÷
-  `ui.scale`，鼠标逻辑坐标 ÷ `ui.scale` 命中）。
-- 测试 **692/692**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
-- 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P33 = 第 8 次结构性免疫验证）。
+  （高分屏 UI 缩放）、P35 = 高分 UI 素材（16×16 字体 + 32×32 物品图标）
+  + 面板自适应（`InventoryLayout::scale` 贴合系数，长度 double 运算仅
+  rect 边界 lround；文字/图标随系数等比缩放）。
+- 测试 **696/696**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+- 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P35 = 第 10 次结构性
+  免疫验证——无输入不绘任何 UI，字体/图标只加载不采样）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 
 ## 命令
 
 ```bash
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build  # 构建（0 警告）
-./build/bin/minecraft_tests                                                 # 测试（669）
+./build/bin/minecraft_tests                                                 # 测试（696）
 ./build/bin/minecraft                                                       # 运行（ESC 退出）
 ./build/bin/minecraft --frames N [--screenshot /abs.png] [--save slot] [--new] [--config path]
 ```

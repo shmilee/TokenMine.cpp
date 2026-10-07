@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the 16x16 item icons (RGBA PNGs) for Phase 15.
+"""Generate the 32x32 item icons (RGBA PNGs) for Phase 35.
 
 Deterministic: per-pixel variation comes from a splitmix64 hash, so the
 output is stable across runs and platforms. Re-run after editing this file
@@ -10,12 +10,17 @@ no block texture, so the hotbar / inventory / held-item UI renders their
 "icon" texture (an optional data field, validated at game init) instead of
 a 3D block cube. The art is a simple procedural silhouette — recognizable
 shape + item color, not detailed models (see docs/KNOWN_ISSUES).
+
+Phase 35: the icons are re-sampled at 32x32 (2x the original 16x16 design
+space): shape predicates are evaluated at 2x resolution, so arcs, circles
+and diagonals gain real edge detail instead of 2x2 upscaled blocks, and
+the per-pixel noise is 4x denser.
 """
 import os
 import struct
 import zlib
 
-SIZE = 16
+SIZE = 32
 OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "assets",
                        "textures", "items")
 
@@ -72,8 +77,16 @@ def setpx(px, x, y, color, salt, amount=10):
     px[y][x] = (r, g, b, 255)
 
 
+def setpx2(px, x, y, color, salt, amount=10):
+    """Write the 2x2 block over design pixel (x, y) (the original 16x16
+    art's single-pixel features, doubled)."""
+    for ox in range(2):
+        for oy in range(2):
+            setpx(px, 2 * x + ox, 2 * y + oy, color, salt, amount)
+
+
 def line(px, x0, y0, x1, y1, color, salt, width=1):
-    """Bresenham line with `width` (1 or 2 px thick)."""
+    """Bresenham line with `width` px thick (2x the 16x16 design width)."""
     dx, dy = abs(x1 - x0), -abs(y1 - y0)
     sx = 1 if x0 < x1 else -1
     sy = 1 if y0 < y1 else -1
@@ -101,10 +114,10 @@ def planks():
             setpx(px, x, y, base, salt=7)
     # Three horizontal seams (plank edges) + staggered vertical joints.
     seam = (122, 88, 50)
-    for y in (4, 8, 12):
+    for y in (8, 16, 24):
         for x in range(SIZE):
             setpx(px, x, y, seam, salt=9, amount=4)
-    for (x, y0, y1) in ((3, 0, 4), (10, 4, 8), (6, 8, 12), (12, 12, 16)):
+    for (x, y0, y1) in ((6, 0, 8), (20, 8, 16), (12, 16, 24), (24, 24, 32)):
         for y in range(y0, min(y1, SIZE)):
             setpx(px, x, y, seam, salt=11, amount=4)
     return px
@@ -113,10 +126,10 @@ def planks():
 def stick():
     px = blank()
     color = (140, 100, 58)
-    line(px, 2, 13, 13, 2, color, salt=5, width=2)
+    line(px, 4, 26, 26, 4, color, salt=5, width=4)
     # A few darker fibers along the stick.
     for (x, y) in ((3, 12), (6, 9), (9, 6), (12, 3)):
-        setpx(px, x, y, (104, 74, 42), salt=13, amount=3)
+        setpx2(px, x, y, (104, 74, 42), salt=13, amount=3)
     return px
 
 
@@ -126,12 +139,12 @@ def coal():
     for y in range(SIZE):
         for x in range(SIZE):
             # Irregular chunk: a rounded square eroded by the hash.
-            d = max(abs(x - 7.5), abs(y - 7.5))
-            if d < 4.5 + (h2(x, y, 21) % 3) - 1:
+            d = max(abs(x - 15.0), abs(y - 15.0))
+            if d < 9.0 + (h2(x, y, 21) % 3) * 2 - 2:
                 setpx(px, x, y, base, salt=19)
     # A few bright glints.
     for (x, y) in ((5, 5), (9, 6), (7, 9)):
-        setpx(px, x, y, (96, 96, 104), salt=23, amount=4)
+        setpx2(px, x, y, (96, 96, 104), salt=23, amount=4)
     return px
 
 
@@ -140,18 +153,18 @@ def gem(c1, c2, c3, salt):
     px = blank()
     for y in range(SIZE):
         for x in range(SIZE):
-            d = abs(x - 7.5) + abs(y - 7.5)
-            if d > 6.2:
+            d = abs(x - 15.0) + abs(y - 15.0)
+            if d > 12.4:
                 continue
-            if y < 6:
+            if y < 12:
                 setpx(px, x, y, c2, salt=salt)
-            elif y > 9:
+            elif y > 18:
                 setpx(px, x, y, c3, salt=salt + 1)
             else:
                 setpx(px, x, y, c1, salt=salt + 2)
     # Facet seams.
-    for x in range(3, 13):
-        setpx(px, x, 7, (255, 255, 255), salt=salt + 3, amount=2)
+    for x in range(6, 26):
+        setpx(px, x, 14, (255, 255, 255), salt=salt + 3, amount=2)
     return px
 
 
@@ -159,15 +172,15 @@ def rotten_flesh():
     """A pile of meat: two overlapping irregular lumps, pinkish-brown."""
     px = blank()
     base = (178, 116, 106)
-    for (cx, cy, r) in ((6, 9, 4.5), (10, 7, 4.0)):
+    for (cx, cy, r) in ((12, 18, 9.0), (20, 14, 8.0)):
         for y in range(SIZE):
             for x in range(SIZE):
                 d = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
-                if d < r + (h2(x, y, 31) % 3) - 1:
+                if d < r + (h2(x, y, 31) % 3) * 2 - 2:
                     setpx(px, x, y, base, salt=33)
     # A few dark specks (rot).
     for (x, y) in ((5, 8), (8, 10), (10, 6), (12, 8)):
-        setpx(px, x, y, (118, 70, 64), salt=35, amount=4)
+        setpx2(px, x, y, (118, 70, 64), salt=35, amount=4)
     return px
 
 
@@ -176,14 +189,15 @@ def beef():
     px = blank()
     base = (166, 60, 52)
     fat = (232, 196, 184)
-    # Chunk: an irregular rounded blob spanning roughly x 2..13, y 4..13.
-    for y in range(4, 14):
-        for x in range(2, 14):
-            d = ((x - 7.5) ** 2) / 50.0 + ((y - 8.5) ** 2) / 32.0
-            if d < 1.0 + (h2(x, y, 81) % 3) * 0.15:
+    # Chunk: an irregular rounded blob spanning roughly x 4..27, y 8..27.
+    for y in range(8, 28):
+        for x in range(4, 28):
+            d = ((x - 15.0) ** 2) / 200.0 + ((y - 17.0) ** 2) / 128.0
+            if d < 1.0 + (h2(x, y, 81) % 3) * 0.3:
                 setpx(px, x, y, base, salt=81)
     # Fat marbling: short pale dashes across the chunk.
-    for (x0, y0, x1) in ((4, 7, 7), (7, 10, 10), (5, 12, 6), (9, 6, 11)):
+    for (x0, y0, x1) in ((8, 14, 14), (14, 20, 20), (10, 24, 12),
+                         (18, 12, 22)):
         for x in range(x0, x1 + 1):
             setpx(px, x, y0, fat, salt=82, amount=4)
     return px
@@ -194,18 +208,18 @@ def mutton():
     px = blank()
     meat = (214, 128, 120)
     fat = (240, 224, 212)
-    # Slab: rounded rectangle x 2..13, y 5..12 (corners skipped).
-    for y in range(5, 13):
-        for x in range(2, 14):
-            if (x in (2, 13)) and (y in (5, 12)):
+    # Slab: rounded rectangle x 4..27, y 10..25 (corners skipped).
+    for y in range(10, 26):
+        for x in range(4, 28):
+            if (x in (4, 27)) and (y in (10, 25)):
                 continue
-            if y < 7:
+            if y < 14:
                 setpx(px, x, y, fat, salt=83)
             else:
                 setpx(px, x, y, meat, salt=84)
     # Seam between the fat cap and the meat.
-    for x in range(2, 14):
-        setpx(px, x, 7, (196, 108, 100), salt=85, amount=4)
+    for x in range(4, 28):
+        setpx(px, x, 14, (196, 108, 100), salt=85, amount=4)
     return px
 
 
@@ -214,16 +228,16 @@ def chicken():
     px = blank()
     meat = (240, 206, 172)
     bone = (250, 246, 236)
-    # Meat: a circle centered (8, 6), radius ~4.
+    # Meat: a circle centered (16, 12), radius ~8.
     for y in range(SIZE):
         for x in range(SIZE):
-            d = ((x - 8) ** 2 + (y - 6) ** 2) ** 0.5
-            if d < 4.2 + (h2(x, y, 86) % 2) * 0.3:
+            d = ((x - 16) ** 2 + (y - 12) ** 2) ** 0.5
+            if d < 8.4 + (h2(x, y, 86) % 2) * 0.6:
                 setpx(px, x, y, meat, salt=86)
-    # Bone: a 2-px shaft under the meat, knobbed at the end.
-    line(px, 8, 9, 8, 13, bone, salt=87, width=2)
+    # Bone: a 4-px shaft under the meat, knobbed at the end.
+    line(px, 16, 18, 16, 26, bone, salt=87, width=4)
     for (x, y) in ((7, 13), (7, 14), (10, 13), (10, 14)):
-        setpx(px, x, y, bone, salt=88, amount=4)
+        setpx2(px, x, y, bone, salt=88, amount=4)
     return px
 
 
@@ -234,18 +248,18 @@ def diamond():
 def ingot(c_base, c_bevel, salt):
     """A trapezoid ingot: narrower on top, beveled upper edge."""
     px = blank()
-    for y in range(5, 13):
-        t = (y - 5) / 7.0  # 0 top .. 1 bottom
-        half_top, half_bot = 4.0, 6.0
+    for y in range(10, 26):
+        t = (y - 10) / 14.0  # 0 top .. 1 bottom
+        half_top, half_bot = 8.0, 12.0
         half = half_top + (half_bot - half_top) * t
-        x0 = max(0, int(7.5 - half + 0.5))
-        x1 = min(15, int(7.5 + half + 0.5))
+        x0 = max(0, int(15.0 - half + 0.5))
+        x1 = min(31, int(15.0 + half + 0.5))
         for x in range(x0, x1 + 1):
-            c = c_bevel if y == 5 else c_base
-            setpx(px, x, y, c, salt=salt + (0 if y == 5 else 1))
+            c = c_bevel if y < 12 else c_base
+            setpx(px, x, y, c, salt=salt + (0 if y < 12 else 1))
     # Bottom shadow line.
-    for x in range(2, 14):
-        setpx(px, x, 12, (tuple(int(v * 0.7) for v in c_base)),
+    for x in range(4, 28):
+        setpx(px, x, 24, (tuple(int(v * 0.7) for v in c_base)),
               salt=salt + 2, amount=4)
     return px
 
@@ -259,17 +273,17 @@ def iron_ingot():
 
 
 def pickaxe(head_color, head_bevel, salt):
-    """A pickaxe: a convex-up head arc across the top + a 2px diagonal
+    """A pickaxe: a convex-up head arc across the top + a 4px diagonal
     handle from the head's middle to the bottom-right."""
     px = blank()
     import math
-    for x in range(1, 15):
-        t = (x - 1) / 13.0
-        y = int(round(6.0 - 5.0 * math.sin(math.pi * t)))
-        setpx(px, x, y, head_bevel, salt=salt)
-        if y + 1 < SIZE:
-            setpx(px, x, y + 1, head_color, salt=salt + 1)
-    line(px, 7, 7, 13, 14, (146, 110, 62), salt=salt + 2, width=2)
+    for x in range(2, 30):
+        t = (x - 2) / 28.0
+        y = int(round(12.0 - 10.0 * math.sin(math.pi * t)))
+        for oy in range(4):
+            setpx(px, x, y + oy, head_bevel if oy < 2 else head_color,
+                  salt=salt + (0 if oy < 2 else 1))
+    line(px, 14, 14, 26, 28, (146, 110, 62), salt=salt + 2, width=4)
     return px
 
 
@@ -289,12 +303,12 @@ def leather():
     rim = (140, 104, 62)
     for y in range(SIZE):
         for x in range(SIZE):
-            d = max(abs(x - 7.5), abs(y - 7.5))
-            if d < 5.5 + (h2(x, y, 41) % 3) - 1:
-                setpx(px, x, y, rim if d > 4.2 else base, salt=41)
+            d = max(abs(x - 15.0), abs(y - 15.0))
+            if d < 11.0 + (h2(x, y, 41) % 3) * 2 - 2:
+                setpx(px, x, y, rim if d > 8.4 else base, salt=41)
     # Crease lines.
-    line(px, 5, 6, 10, 5, (150, 112, 70), salt=43)
-    line(px, 6, 9, 11, 10, (150, 112, 70), salt=45)
+    line(px, 10, 12, 20, 10, (150, 112, 70), salt=43, width=2)
+    line(px, 12, 18, 22, 20, (150, 112, 70), salt=45, width=2)
     return px
 
 
@@ -306,9 +320,9 @@ def wool():
     rim = (190, 188, 180)
     for y in range(SIZE):
         for x in range(SIZE):
-            d = max(abs(x - 7.5), abs(y - 7.5))
-            if d < 5.5 + (h2(x, y, 61) % 3) - 1:
-                setpx(px, x, y, rim if d > 4.2 else base, salt=61)
+            d = max(abs(x - 15.0), abs(y - 15.0))
+            if d < 11.0 + (h2(x, y, 61) % 3) * 2 - 2:
+                setpx(px, x, y, rim if d > 8.4 else base, salt=61)
     return px
 
 
@@ -318,15 +332,15 @@ def feather():
     px = blank()
     cream = (240, 238, 228)
     shaft = (196, 192, 178)
-    for i in range(11):
-        x = 2 + i
-        y = 13 - i
+    for i in range(21):
+        x = 4 + i
+        y = 26 - i
         setpx(px, x, y, cream, salt=62)
-        if 1 <= i <= 9:
-            setpx(px, x, y - 1, cream, salt=63)
-            setpx(px, x, y + 1, cream, salt=64)
-    for i in range(3, 11, 2):
-        setpx(px, 2 + i, 13 - i, shaft, salt=65)
+        if 2 <= i <= 18:
+            for oy in (-2, -1, 1, 2):
+                setpx(px, x, y + oy, cream, salt=63 + abs(oy))
+    for i in range(6, 20, 4):
+        setpx(px, 4 + i, 26 - i, shaft, salt=65)
     return px
 
 
@@ -335,38 +349,41 @@ def bow():
     stave = (110, 74, 42)
     string = (206, 200, 188)
     # The string: a light vertical line on the right.
-    for y in range(2, 14):
-        setpx(px, 11, y, string, salt=71)
-    # The stave: a brown C-arc from the top tip to the bottom tip.
-    for (x, y) in ((6, 2), (5, 3), (4, 4), (3, 5), (2, 6), (2, 7), (2, 8),
-                   (2, 9), (3, 10), (4, 11), (5, 12), (6, 13)):
+    for y in range(4, 28):
+        setpx(px, 22, y, string, salt=71)
+    # The stave: a brown C-arc from the top tip to the bottom tip (4 px
+    # wide: light outer band + dark inner band).
+    for (x, y) in ((12, 4), (10, 6), (8, 8), (6, 10), (4, 12), (4, 14),
+                   (4, 16), (4, 18), (6, 20), (8, 22), (10, 24), (12, 26)):
         setpx(px, x, y, stave, salt=72)
-        setpx(px, x + 1, y, (94, 62, 36), salt=73)
+        setpx(px, x + 1, y, stave, salt=72)
+        setpx(px, x + 2, y, (94, 62, 36), salt=73)
+        setpx(px, x + 3, y, (94, 62, 36), salt=73)
     # The tips connect the stave to the string.
-    for x in (8, 9, 10):
-        setpx(px, x, 2, stave, salt=74)
-        setpx(px, x, 13, stave, salt=75)
+    for x in range(16, 22):
+        setpx(px, x, 4, stave, salt=74)
+        setpx(px, x, 26, stave, salt=75)
     return px
 
 
 def arrow():
-    """An arrow: a 2px diagonal shaft from the bottom-left to the
-    top-right, a small steel tip at the top end and light fletching at
-    the bottom end (Phase 24; the bow's ammo item)."""
+    """An arrow: a 4px diagonal shaft from the bottom-left to the
+    top-right, a steel tip at the top end and light fletching at the
+    bottom end (Phase 24; the bow's ammo item)."""
     px = blank()
     shaft = (140, 100, 58)
-    line(px, 3, 12, 12, 3, shaft, salt=77, width=2)
+    line(px, 6, 24, 24, 6, shaft, salt=77, width=4)
     # A few darker fibers along the shaft.
     for (x, y) in ((5, 10), (8, 7), (10, 5)):
-        setpx(px, x, y, (104, 74, 42), salt=78, amount=3)
-    # The tip: a small steel head at the top-right end.
+        setpx2(px, x, y, (104, 74, 42), salt=78, amount=3)
+    # The tip: a steel head at the top-right end.
     tip = (206, 206, 214)
     for (x, y) in ((12, 2), (13, 2), (13, 3), (14, 2), (14, 3)):
-        setpx(px, x, y, tip, salt=79)
+        setpx2(px, x, y, tip, salt=79)
     # The fletching: light barbs at the bottom-left end.
     fletch = (228, 222, 208)
     for (x, y) in ((2, 13), (3, 14), (1, 12), (4, 12)):
-        setpx(px, x, y, fletch, salt=80)
+        setpx2(px, x, y, fletch, salt=80)
     return px
 
 

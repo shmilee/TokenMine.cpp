@@ -67,17 +67,28 @@ enum class PanelKind {
 };
 
 struct InventoryLayout {
+    // Native (unscaled) design, in UI px. Sizing is font-aware: the 16x16
+    // glyph (Phase 35) at scale 1 is 16 px tall, at 1.5 (the title) 24 px.
     static constexpr int kSlot = 52;
     static constexpr int kGap = 4;
     static constexpr int kColumns = 9; // Inventory::kHotbarSize
-    static constexpr int kTitleHeight = 30;
+    static constexpr int kTitleHeight = 40;
+    // Title text is drawn at 1.5x the body font scale (24 px native vs the
+    // body's 16 px). 2.0x was too large at ui.scale 2 — the 40.8 physical
+    // px title reached 62% of the 66 px slot height (user feedback).
+    static constexpr double kTitleFontScale = 1.5;
     static constexpr int kCraftWidth = 280;
-    static constexpr int kCraftRowHeight = 46;
+    static constexpr int kCraftRowHeight = 52;
     static constexpr int kPanelPadding = 12;
-    static constexpr int kSectionGap = 24;
     // Gaps around the crafting section (grid, output) — tighter than the
     // recipe-column gap because the section sits between the two.
     static constexpr int kCraftGap = 12;
+
+    // Fit factor (Phase 35): 1.0 when the window is at least the native
+    // panel size, below that the whole panel — and the text and icons the
+    // renderer draws from this factor — scales down proportionally, so
+    // the panel always fits with >=1 px of margin on each side.
+    double scale = 1.0;
 
     // 27 slot rects in slot-index order (0..26).
     std::vector<UIRect> slots;

@@ -1,13 +1,25 @@
 #include "ui/inventory_ui.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 namespace mc {
+
+namespace {
+
+int scaledLength(double v) {
+    // One length of the scaled layout: >=1 px so rects stay non-empty.
+    return std::max(1, static_cast<int>(std::lround(v)));
+}
+
+} // namespace
 
 InventoryLayout InventoryLayout::compute(int windowWidth, int windowHeight,
                                          int recipeCount, PanelKind kind) {
     InventoryLayout out;
     const bool table = kind == PanelKind::CraftingTable;
+
+    // Native (unscaled) design sizes.
     const int gridW = kColumns * kSlot + (kColumns - 1) * kGap;
     // 27 slots = 18 storage (two rows of nine) + the nine-slot hotbar row.
     const int gridH = 3 * kSlot + 2 * kGap;
@@ -17,19 +29,57 @@ InventoryLayout InventoryLayout::compute(int windowWidth, int windowHeight,
     const int gridCols = table ? 3 : 2;
     const int gridSectionW = gridCols * kSlot + (gridCols - 1) * kGap;
     const int sectionW = gridSectionW + kCraftGap + kSlot;
-    const int panelW = 2 * kPanelPadding + gridW + kCraftGap + sectionW +
-                       (table ? 0 : kCraftGap + kCraftWidth);
+    const int nativePanelW = 2 * kPanelPadding + gridW + kCraftGap + sectionW +
+                             (table ? 0 : kCraftGap + kCraftWidth);
     const int craftH =
         table ? 0 : kTitleHeight + recipeCount * kCraftRowHeight;
-    const int panelH = 2 * kPanelPadding + std::max(kTitleHeight + gridH,
-                                                    craftH);
-    out.panel = UIRect {(windowWidth - panelW) / 2,
-                        (windowHeight - panelH) / 2, panelW, panelH};
+    const int nativePanelH = 2 * kPanelPadding +
+                             std::max(kTitleHeight + gridH, craftH);
 
-    const int gridX = out.panel.x + kPanelPadding;
-    const int gridY = out.panel.y + kPanelPadding + kTitleHeight;
-    out.title = UIRect {gridX, out.panel.y + kPanelPadding, gridW,
-                        kTitleHeight};
+    // Fit factor (Phase 35): the panel is designed at the native size;
+    // when the window is smaller, EVERYTHING (slots, gaps, padding, title,
+    // rows — and the text/icons the renderer draws from `out.scale`)
+    // scales down proportionally so the panel fits with >=1 px of margin
+    // on each side. Lengths are carried as doubles and rounded only at
+    // the rect boundaries, so the parts can never sum past the panel.
+    double s = 1.0;
+    if (windowWidth > 2 && windowWidth - 2 < nativePanelW) {
+        s = std::min(s,
+                     static_cast<double>(windowWidth - 2) / nativePanelW);
+    }
+    if (windowHeight > 2 && windowHeight - 2 < nativePanelH) {
+        s = std::min(s,
+                     static_cast<double>(windowHeight - 2) / nativePanelH);
+    }
+    out.scale = s;
+
+    const double slotLen = kSlot * s;
+    const double gap = kGap * s;
+    const double pad = kPanelPadding * s;
+    const double titleH = kTitleHeight * s;
+    const double rowH = kCraftRowHeight * s;
+    const double craftW = kCraftWidth * s;
+    const double craftGap = kCraftGap * s;
+    const double gW = gridW * s;
+    const double gH = gridH * s;
+    const double gsecW = gridSectionW * s;
+    const double panelW = nativePanelW * s;
+    const double panelH = nativePanelH * s;
+    const int panelPixW = static_cast<int>(std::lround(panelW));
+    const int panelPixH = static_cast<int>(std::lround(panelH));
+    // s keeps panelPixW/H <= window-2, so both origins are >= 0.
+    out.panel = UIRect {(windowWidth - panelPixW) / 2,
+                        (windowHeight - panelPixH) / 2, panelPixW, panelPixH};
+
+    // Exact (unrounded) origins: every child rect rounds from the same
+    // doubles, so siblings stay consistent with the panel.
+    const double panelX = (windowWidth - panelW) / 2.0;
+    const double panelY = (windowHeight - panelH) / 2.0;
+    const double gridX = panelX + pad;
+    const double gridY = panelY + pad + titleH;
+    out.title = UIRect {static_cast<int>(std::lround(gridX)),
+                        static_cast<int>(std::lround(panelY + pad)),
+                        scaledLength(gW), scaledLength(titleH)};
 
     // slots[i] is the rect of inventory slot i: the bottom row is the
     // hotbar (slots 0..8, left to right); above it, two storage rows hold
@@ -40,37 +90,44 @@ InventoryLayout InventoryLayout::compute(int windowWidth, int windowHeight,
         const int col =
             (slot < Inventory::kHotbarSize) ? slot : (slot - Inventory::kHotbarSize) % kColumns;
         out.slots.push_back(UIRect {
-            gridX + col * (kSlot + kGap),
-            gridY + row * (kSlot + kGap), kSlot, kSlot});
+            static_cast<int>(std::lround(gridX + col * (slotLen + gap))),
+            static_cast<int>(std::lround(gridY + row * (slotLen + gap))),
+            scaledLength(slotLen), scaledLength(slotLen)});
     }
 
     // Crafting grid cells, row-major over the top-left gridCols x gridCols
     // corner of the 3x3 model (cell (r, c) = grid slot r*3 + c).
+    const double gridSectionX = gridX + gW + craftGap;
+    const double gridSectionY = gridY + (gH - gsecW) / 2.0;
     for (int r = 0; r < gridCols; ++r) {
         for (int c = 0; c < gridCols; ++c) {
             out.gridCells.push_back(UIRect {
-                gridX + gridW + kCraftGap + c * (kSlot + kGap),
-                gridY + (gridH - gridSectionW) / 2 + r * (kSlot + kGap),
-                kSlot, kSlot});
+                static_cast<int>(std::lround(gridSectionX + c * (slotLen + gap))),
+                static_cast<int>(std::lround(gridSectionY + r * (slotLen + gap))),
+                scaledLength(slotLen), scaledLength(slotLen)});
             out.gridSlots.push_back(r * CraftingGrid::kColumns + c);
         }
     }
     // The output slot, vertically centered against the slot rows.
+    const double outputX = gridSectionX + gsecW + craftGap;
     out.output = UIRect {
-        gridX + gridW + kCraftGap + gridSectionW + kCraftGap,
-        gridY + (gridH - kSlot) / 2, kSlot, kSlot};
+        static_cast<int>(std::lround(outputX)),
+        static_cast<int>(std::lround(gridY + (gH - slotLen) / 2.0)),
+        scaledLength(slotLen), scaledLength(slotLen)};
 
     // The shapeless recipe list (the table panel has none — the grid IS
     // its crafting UI).
     if (!table) {
-        const int craftX = out.output.x + kSlot + kCraftGap;
-        out.craftHeader = UIRect {craftX, out.panel.y + kPanelPadding,
-                                  kCraftWidth, kTitleHeight};
+        const double craftX = outputX + slotLen + craftGap;
+        out.craftHeader = UIRect {static_cast<int>(std::lround(craftX)),
+                                  static_cast<int>(std::lround(panelY + pad)),
+                                  scaledLength(craftW), scaledLength(titleH)};
         for (int i = 0; i < recipeCount; ++i) {
             out.recipes.push_back(UIRect {
-                craftX, out.panel.y + kPanelPadding + kTitleHeight +
-                            i * kCraftRowHeight,
-                kCraftWidth, kCraftRowHeight});
+                static_cast<int>(std::lround(craftX)),
+                static_cast<int>(std::lround(panelY + pad + titleH +
+                                             i * rowH)),
+                scaledLength(craftW), scaledLength(rowH)});
         }
     }
     return out;

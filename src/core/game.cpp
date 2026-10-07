@@ -117,7 +117,8 @@ constexpr int kItemBobPeriodFrames = 90;
 constexpr int kItemSpinPeriodFrames = 240;
 constexpr float kItemBobAmplitude = 0.05f;
 
-// Phase 15 UI (screen-space, pixels; the font is 8x8 at scale 1).
+// Phase 15 UI (screen-space, pixels; the font is 16x16 at scale 1,
+// Phase 35).
 constexpr int kHotbarSlotSize = 44;
 constexpr int kHotbarSlotGap = 2;
 constexpr int kHotbarBottomMargin = 8;
@@ -128,7 +129,7 @@ constexpr int kHeldIconOffset = 72; // center of the held icon from the corner
 // the screen center at full charge (the v1 draw indicator).
 constexpr float kBowDrawPullPx = 64.0f;
 constexpr int kF3Margin = 8;
-constexpr int kF3LineHeight = 14;
+constexpr int kF3LineHeight = 18; // 16 px glyph (Phase 35) + 2 px gap
 constexpr int kCrackStages = 5;
 // The overlay cubes sit just outside the target block's faces so they
 // never z-fight with the block itself (the crack) and stay visible from
@@ -2747,7 +2748,7 @@ void Game::renderUi() {
         addQuad(b, r.x, r.y, thickness, r.h);
         addQuad(b, r.x + r.w - thickness, r.y, thickness, r.h);
     };
-    auto addText = [&](const std::string& text, int x, int y, int scale,
+    auto addText = [&](const std::string& text, int x, int y, double scale,
                        const Vec4& color) {
         makeTextVertices(text, x, y, scale,
                          batchFor(color, true, &m_fontTexture).vertices);
@@ -2813,8 +2814,10 @@ void Game::renderUi() {
             if (!stack.empty() &&
                 stack.count < m_items.at(stack.item).maxStack) {
                 const std::string count = std::to_string(stack.count);
-                addText(count, sx + kHotbarSlotSize - 4 - textWidth(count),
-                        y0 + kHotbarSlotSize - 4 - kGlyphSize, 1, kText);
+                addText(count,
+                        sx + kHotbarSlotSize - 4 -
+                            static_cast<int>(textWidth(count)),
+                        y0 + kHotbarSlotSize - 4 - kGlyphSize, 1.0, kText);
             }
         }
         // Health bar (Phase 16) + hunger bar (Phase 23): hearts above the
@@ -2899,9 +2902,12 @@ void Game::renderUi() {
                 0, w, h);
         const std::string died = "You died!";
         const std::string hint = "Press R to respawn";
-        addText(died, (w - textWidth(died, 2)) / 2, h / 2 - 24, 2,
-                Vec4 {1.0f, 0.35f, 0.35f, 1.0f});
-        addText(hint, (w - textWidth(hint)) / 2, h / 2 + 8, 1, kText);
+        // 16 px glyphs (Phase 35): "died" at scale 2 = 32 px tall, hint
+        // 16 px — the block spans h/2-40 .. h/2+28, roughly centered.
+        addText(died, w / 2 - static_cast<int>(textWidth(died, 2.0)) / 2,
+                h / 2 - 40, 2.0, Vec4 {1.0f, 0.35f, 0.35f, 1.0f});
+        addText(hint, w / 2 - static_cast<int>(textWidth(hint)) / 2,
+                h / 2 + 12, 1.0, kText);
     }
 
     // -- crafting panel (while open): the E inventory (2x2 grid + the
@@ -2920,14 +2926,27 @@ void Game::renderUi() {
                                      kind);
         InventoryUI& ui = table ? m_tableUi : m_inventoryUi;
 
+        // Panel fit factor (Phase 35): below the native width the whole
+        // panel scales down; the text (font scale) and icons (quad sizes)
+        // follow the SAME factor so everything stays proportional.
+        const double s = layout.scale;
+        const auto L = [s](int v) {
+            return static_cast<int>(std::lround(v * s));
+        };
+        const int slotIcon = L(34); // icons inside slot-sized rects
+        const int rowIcon = L(28);  // icons inside the recipe rows
+        const int titleOffset = L(4); // 24 px title text in the 40 px row
+
         // Panel background + titles.
         addQuad(batchFor(kPanel, false, nullptr), layout.panel.x,
                 layout.panel.y, layout.panel.w, layout.panel.h);
         addText(table ? "Crafting Table" : "Inventory", layout.title.x,
-                layout.title.y + 6, 2, kText);
+                layout.title.y + titleOffset,
+                InventoryLayout::kTitleFontScale * s, kText);
         if (!table) {
             addText("Crafting", layout.craftHeader.x,
-                    layout.craftHeader.y + 6, 2, kText);
+                    layout.craftHeader.y + titleOffset,
+                    InventoryLayout::kTitleFontScale * s, kText);
         }
 
         const int hoverSlot = layout.slotAt(mx, my);
@@ -2945,12 +2964,13 @@ void Game::renderUi() {
             }
             const ItemStack& stack = m_inventory.at(i);
             drawIcon(stack, static_cast<float>(r.x + r.w / 2),
-                     static_cast<float>(r.y + r.h / 2), 34);
+                     static_cast<float>(r.y + r.h / 2), slotIcon);
             if (!stack.empty() &&
                 stack.count < m_items.at(stack.item).maxStack) {
                 const std::string count = std::to_string(stack.count);
-                addText(count, r.x + r.w - 4 - textWidth(count),
-                        r.y + r.h - 4 - kGlyphSize, 1, kText);
+                addText(count,
+                        r.x + r.w - L(4) - static_cast<int>(textWidth(count, s)),
+                        r.y + r.h - L(4) - L(kGlyphSize), s, kText);
             }
         }
 
@@ -2966,12 +2986,13 @@ void Game::renderUi() {
             }
             const ItemStack& stack = ui.grid().at(layout.gridSlots[i]);
             drawIcon(stack, static_cast<float>(r.x + r.w / 2),
-                     static_cast<float>(r.y + r.h / 2), 34);
+                     static_cast<float>(r.y + r.h / 2), slotIcon);
             if (!stack.empty() &&
                 stack.count < m_items.at(stack.item).maxStack) {
                 const std::string count = std::to_string(stack.count);
-                addText(count, r.x + r.w - 4 - textWidth(count),
-                        r.y + r.h - 4 - kGlyphSize, 1, kText);
+                addText(count,
+                        r.x + r.w - L(4) - static_cast<int>(textWidth(count, s)),
+                        r.y + r.h - L(4) - L(kGlyphSize), s, kText);
             }
         }
         {
@@ -2987,11 +3008,13 @@ void Game::renderUi() {
                 const ItemStack out {m.recipe->output,
                                      m.recipe->outputCount};
                 drawIcon(out, static_cast<float>(r.x + r.w / 2),
-                         static_cast<float>(r.y + r.h / 2), 34);
+                         static_cast<float>(r.y + r.h / 2), slotIcon);
                 if (out.count < m_items.at(out.item).maxStack) {
                     const std::string count = std::to_string(out.count);
-                    addText(count, r.x + r.w - 4 - textWidth(count),
-                            r.y + r.h - 4 - kGlyphSize, 1, kText);
+                    addText(count,
+                            r.x + r.w - L(4) -
+                                static_cast<int>(textWidth(count, s)),
+                            r.y + r.h - L(4) - L(kGlyphSize), s, kText);
                 }
             }
         }
@@ -3004,11 +3027,11 @@ void Game::renderUi() {
             const bool can = canCraft(m_inventory, recipe, m_items);
             const Vec4 outColor = can ? kText : kTextDim;
             drawIcon(ItemStack {recipe.output, recipe.outputCount},
-                     static_cast<float>(r.x + 14),
-                     static_cast<float>(r.y + r.h / 2), 28);
+                     static_cast<float>(r.x + L(14)),
+                     static_cast<float>(r.y + r.h / 2), rowIcon);
             addText(m_items.at(recipe.output).name + " x" +
                         std::to_string(recipe.outputCount),
-                    r.x + 32, r.y + 6, 1, outColor);
+                    r.x + L(32), r.y + L(8), s, outColor);
             std::string needs;
             for (const auto& [item, count] : recipe.ingredients) {
                 if (!needs.empty()) {
@@ -3017,7 +3040,8 @@ void Game::renderUi() {
                 needs += m_items.at(item).name + " x" +
                          std::to_string(count);
             }
-            addText("needs: " + needs, r.x + 32, r.y + 24, 1, kTextDim);
+            addText("needs: " + needs, r.x + L(32), r.y + L(28), s,
+                    kTextDim);
         }
 
         // The hovered slot/cell's item name + the carried stack at the
@@ -3025,25 +3049,27 @@ void Game::renderUi() {
         if (hoverSlot >= 0) {
             const ItemStack& stack = m_inventory.at(hoverSlot);
             if (!stack.empty()) {
-                addText(m_items.at(stack.item).name, mx + 12, my + 12, 1,
-                        kText);
+                addText(m_items.at(stack.item).name, mx + L(12), my + L(12),
+                        s, kText);
             }
         } else if (hoverCell >= 0) {
             const ItemStack& stack =
                 ui.grid().at(layout.gridSlots[static_cast<std::size_t>(hoverCell)]);
             if (!stack.empty()) {
-                addText(m_items.at(stack.item).name, mx + 12, my + 12, 1,
-                        kText);
+                addText(m_items.at(stack.item).name, mx + L(12), my + L(12),
+                        s, kText);
             }
         }
         if (ui.carrying()) {
             drawIcon(ui.carry(), static_cast<float>(mx),
-                     static_cast<float>(my), 34);
+                     static_cast<float>(my), slotIcon);
         }
         // Close hint, centered at the panel bottom.
         const std::string hint = "E to close";
-        addText(hint, layout.panel.x + (layout.panel.w - textWidth(hint, 1)) / 2,
-                layout.panel.y + layout.panel.h - 16, 1, kTextDim);
+        addText(hint,
+                layout.panel.x + static_cast<int>(std::lround(
+                    (layout.panel.w - textWidth(hint, s)) / 2.0)),
+                layout.panel.y + layout.panel.h - L(20), s, kTextDim);
     }
 
     // -- F3 debug overlay (while toggled) ------------------------------------
