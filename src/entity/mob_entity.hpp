@@ -122,6 +122,15 @@ public:
                Vec3 {0.0f, m_def->model.height * kEyeHeightFraction, 0.0f};
     }
 
+    // Phase 38: roll one death-drop entry's count in [minCount, maxCount]
+    // (both inclusive) with the mob's seeded splitmix64 stream — the same
+    // state-advancing flow as the wander decisions. Deaths happen on a
+    // deterministic frame (fixed step), so the roll is reproducible
+    // run-to-run for the same world seed + input sequence. A degenerate
+    // range (min == max) returns the constant without advancing the
+    // stream, so fixed-count drops keep the pre-Phase-38 stream exactly.
+    int rollDropCount(int minCount, int maxCount);
+
 private:
     void integrate(float h) override;
     void runAi(double dt);

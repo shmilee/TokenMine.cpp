@@ -186,20 +186,58 @@ Result<void> MobRegistry::parseProperties(const Json& def,
                                "string 'item'");
             }
             drop.item = item->asString();
-            if (const Json* count = entry.find("count")) {
+            // Phase 38: two count forms — the fixed "count" (1..64, the
+            // Phase 28 form) or the random range "count_min"/"count_max"
+            // (both required together, 0..64, min <= max). Mixing the
+            // forms is a data error, as is a range with a missing bound.
+            const Json* count = entry.find("count");
+            const Json* cmin = entry.find("count_min");
+            const Json* cmax = entry.find("count_max");
+            if (count && (cmin || cmax)) {
+                return MC_FAIL("mob properties: 'drops' entry #" +
+                               std::to_string(i) + " gives both 'count' "
+                               "and a 'count_min'/'count_max' range — "
+                               "use one form, not both");
+            }
+            if (cmin || cmax) {
+                if (!cmin || !cmax) {
+                    return MC_FAIL("mob properties: 'drops' entry #" +
+                                   std::to_string(i) + " gives only one "
+                                   "of 'count_min'/'count_max' — both "
+                                   "are required for a random range");
+                }
+                for (const Json* v : {cmin, cmax}) {
+                    if (!v->isNumber() || v->asDouble() !=
+                                            std::floor(v->asDouble()) ||
+                        v->asDouble() < 0.0 || v->asDouble() > 64.0) {
+                        return MC_FAIL("mob properties: 'drops' entry #" +
+                                       std::to_string(i) + " range bound "
+                                       "must be an integer in [0, 64]");
+                    }
+                }
+                drop.countMin = static_cast<int>(cmin->asDouble());
+                drop.countMax = static_cast<int>(cmax->asDouble());
+                if (drop.countMin > drop.countMax) {
+                    return MC_FAIL("mob properties: 'drops' entry #" +
+                                   std::to_string(i) + " has 'count_min' " +
+                                   std::to_string(drop.countMin) +
+                                   " > 'count_max' " +
+                                   std::to_string(drop.countMax));
+                }
+            } else if (count) {
                 if (!count->isNumber() || count->asDouble() !=
-                                            std::floor(count->asDouble())) {
+                                                std::floor(count->asDouble())) {
                     return MC_FAIL("mob properties: 'drops' entry #" +
                                    std::to_string(i) + " 'count' must be "
                                    "an integer");
                 }
-                drop.count = static_cast<int>(count->asDouble());
-                if (drop.count < 1 || drop.count > 64) {
+                const int n = static_cast<int>(count->asDouble());
+                if (n < 1 || n > 64) {
                     return MC_FAIL("mob properties: 'drops' entry #" +
                                    std::to_string(i) + " 'count' must be "
-                                   "in [1, 64], got " +
-                                   std::to_string(drop.count));
+                                   "in [1, 64], got " + std::to_string(n));
                 }
+                drop.countMin = drop.countMax = n;
             }
             out.drops.push_back(std::move(drop));
         }

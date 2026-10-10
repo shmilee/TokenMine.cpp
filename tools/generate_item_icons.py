@@ -326,6 +326,25 @@ def wool():
     return px
 
 
+def bone():
+    """A bone (Phase 38): a white diagonal shaft (bottom-left to
+    top-right) with a pair of rounded knobs at each end — the
+    Minecraft bone silhouette, same diagonal as the feather family."""
+    px = blank()
+    white = (245, 243, 235)
+    # Shaft: (10,22) to (22,10), 3 px thick.
+    line(px, 10, 22, 22, 10, white, salt=63, width=3)
+    # Knobs: two lobes at each end, perpendicular to the shaft.
+    for (cx, cy) in ((9, 23), (23, 9)):
+        for (ox, oy) in ((-2, -2), (2, 2)):
+            lx, ly = cx + ox, cy + oy
+            for y in range(SIZE):
+                for x in range(SIZE):
+                    if (x - lx) ** 2 + (y - ly) ** 2 < 6:
+                        setpx(px, x, y, white, salt=63)
+    return px
+
+
 def feather():
     """A feather (Phase 26): a cream diagonal quill (bottom-left to
     top-right) with a darker shaft along its center."""
@@ -401,6 +420,7 @@ ITEMS = {
     "arrow": arrow,
     "leather": leather,
     "wool": wool,
+    "bone": bone,
     "feather": feather,
     "beef": beef,
     "mutton": mutton,

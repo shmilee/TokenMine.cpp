@@ -109,4 +109,18 @@ private:
     static constexpr float kTerminalVelocity = 38.0f;
 };
 
+// Aim direction for a gravity-affected projectile (Phase 27's arc
+// compensation, Phase 38's target leading). From `origin`, launched at
+// `speed`, where to aim so the arrow meets `target` while it moves at
+// `targetVel` (blocks/second, the player's velocity at shot time): the
+// flight time t = |aim| / speed is iterated twice against the predicted
+// position (target + targetVel * t), then the final direction is
+// normalized(aim + (0, 0.5 * g * t^2, 0)) — the arc drop over the flight
+// time. A STATIONARY target (zero velocity) reproduces the Phase 27
+// formula bit-exactly (the second iteration is a no-op), so the leading
+// changes nothing for a standing player. Pure math — unit-testable
+// without a world.
+Vec3 computeAimDirection(Vec3 origin, Vec3 target, Vec3 targetVel,
+                         float speed);
+
 } // namespace mc

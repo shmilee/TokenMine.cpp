@@ -166,4 +166,19 @@ float raycastAabb(Vec3 origin, Vec3 dir, Vec3 boxMin, Vec3 boxMax) {
     return tmin;
 }
 
+bool hasLineOfSight(const World& world, Vec3 from, Vec3 to) {
+    const Vec3 d = to - from;
+    const float dist = std::sqrt(dot(d, d));
+    if (dist < 1e-4f) {
+        return true;  // co-located: nothing in between
+    }
+    const std::optional<BlockHit> hit =
+        raycastBlock(world, from, d * (1.0f / dist), dist);
+    // The player's eye is always in an air cell, so any hit short of the
+    // target is a real obstruction; a hit in the last epsilon would mean
+    // the target stands inside a block, which cannot happen, so treat it
+    // as clear either way.
+    return !hit.has_value() || hit->distance >= dist - 1e-3f;
+}
+
 } // namespace mc

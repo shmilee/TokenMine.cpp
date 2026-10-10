@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "core/logger.hpp"
+#include "core/math/vec3.hpp"
 
 namespace mc {
 
@@ -61,6 +62,27 @@ void Projectile::afterSubstep(bool blocked) {
                          ", " + std::to_string(p.z) + ")");
         }
     }
+}
+
+Vec3 computeAimDirection(Vec3 origin, Vec3 target, Vec3 targetVel,
+                         float speed) {
+    // Predict the target's position at the (iterated) flight time, twice:
+    // the first pass uses the straight-line time, the second re-solves
+    // against the predicted position (the player's speed is bounded and
+    // the second correction is already sub-block — two passes is the same
+    // practical convergence Minecraft's own predictor settles for).
+    Vec3 to = target - origin;
+    float dist = std::sqrt(dot(to, to));
+    for (int pass = 0; pass < 2; ++pass) {
+        const float t = dist / speed;
+        to = (target + targetVel * t) - origin;
+        dist = std::sqrt(dot(to, to));
+    }
+    // Arc compensation (Phase 27): the arrow drops 0.5 * g * t^2 over the
+    // flight, so aim ABOVE the predicted point by exactly that drop.
+    const float t = dist / speed;
+    to.y += 0.5f * Projectile::kGravity * t * t;
+    return normalized(to);
 }
 
 } // namespace mc

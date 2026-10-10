@@ -339,3 +339,56 @@ TEST(RaycastTest, CannotPlaceInCellPlayerIsWalkingInto) {
     // And two ahead is free.
     EXPECT_TRUE(canPlaceAt(world, blocks, {2, 1, 0}, min, max));
 }
+
+// -- line of sight (Phase 38, skeleton shooting) --------------------------------
+
+TEST(RaycastTest, LineOfSightClearThroughAir) {
+    World world;
+    EXPECT_TRUE(hasLineOfSight(world, {0.5f, 1.5f, 5.5f}, {0.5f, 1.5f, -4.5f}));
+}
+
+TEST(RaycastTest, LineOfSightBlockedByWallBetween) {
+    World world;
+    // A block in the middle of the segment: the shot must not be fired.
+    ASSERT_TRUE(world.setBlock(0, 1, 0, BlockID{1}));
+    EXPECT_FALSE(hasLineOfSight(world, {0.5f, 1.5f, 5.5f},
+                                {0.5f, 1.5f, -4.5f}));
+}
+
+TEST(RaycastTest, LineOfSightClearWhenWallIsBeyondTheTarget) {
+    World world;
+    // A wall PAST the target does not block the segment.
+    ASSERT_TRUE(world.setBlock(0, 1, -6, BlockID{1}));
+    EXPECT_TRUE(hasLineOfSight(world, {0.5f, 1.5f, 5.5f},
+                               {0.5f, 1.5f, -4.5f}));
+}
+
+TEST(RaycastTest, LineOfSightExemptFromCell) {
+    World world;
+    // The ray never hits the block it starts in (raycastBlock convention):
+    // a solid cell around `from` is transparent to the shot.
+    ASSERT_TRUE(world.setBlock(0, 1, 5, BlockID{1}));
+    EXPECT_TRUE(hasLineOfSight(world, {0.5f, 1.5f, 5.5f},
+                               {0.5f, 1.5f, -4.5f}));
+}
+
+TEST(RaycastTest, LineOfSightDiagonalWall) {
+    World world;
+    // A diagonal line from (0.5, 1.5, 4.5) to (3.5, 1.5, 0.5) crosses the
+    // cells (1, 1, 3), (2, 1, 2), ... — a block in any of them blocks,
+    // one in a cell the line never enters does not.
+    ASSERT_TRUE(world.setBlock(2, 1, 2, BlockID{1}));
+    EXPECT_FALSE(hasLineOfSight(world, {0.5f, 1.5f, 4.5f},
+                                {3.5f, 1.5f, 0.5f}));
+    world = World();
+    ASSERT_TRUE(world.setBlock(0, 1, 0, BlockID{1})); // off the diagonal
+    EXPECT_TRUE(hasLineOfSight(world, {0.5f, 1.5f, 4.5f},
+                               {3.5f, 1.5f, 0.5f}));
+}
+
+TEST(RaycastTest, LineOfSightCoincidentPoints) {
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID{1}));
+    EXPECT_TRUE(hasLineOfSight(world, {0.5f, 0.5f, 0.5f},
+                               {0.5f, 0.5f, 0.5f}));
+}

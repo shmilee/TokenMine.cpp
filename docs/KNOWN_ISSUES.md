@@ -183,13 +183,15 @@
 - **mob 模拟走固定帧步长（`kMobStepPerFrame`）** — 运动实体的截图可复现约定（日循环同款）：mob 每帧固定推进 1/60s，非 60FPS 帧帽下 mob 时间随帧钟变慢（玩家/掉落物/流体仍是真实 dt）；掉帧时 mob 与玩家瞬时速度差 ≤1 个子步（无输入运行无感）。`[Phase 20]`
 - **类型抽取先于光门，过不了光门的尝试作废** — 每次生成尝试先按名单确定性抽取类型（种子 ⊕ 帧号）再找格：白天抽中 zombie（需光 ≤0）则本次无格可用、整次作废，相当于该类型在不可生成时段的生成率减半；v1 接受（名单 2 种，影响有限）。`[Phase 22]`
 - **被动 mob 无主动躲避** — cow 对玩家零反应（不逃跑 AI）：玩家靠近不触发任何行为；被打只有击退（0.3s 窗口后恢复游走），无持续远离玩家的逃跑速度。`[Phase 22]`
-- **掉落数量是固定列表，无随机区间** — Phase 28 起掉落数据 = `drops` 列表
-  （每条目 `{item, count}`，count 1..64 固定）：无 0–2 随机区间（Minecraft cow
-  掉 0–2 leather + 0–2 raw beef、skeleton 掉 0–2 箭）、无掉落幸运/附魔影响；
-  `leather` 目前无合成用途（纯收集/交换物）。`[Phase 22/28]`
-- **skeleton 无视线检查** — 只要玩家水平距离 ≤ `shoot_range` 且高度差 ≤2 就射，不检查中间有无方块遮挡（箭会插进墙里消失）；Minecraft skeleton 有 LOS 检查。`[Phase 27]`
-- **skeleton 掉落固定 1 个 `arrow`** — 无 0–2 随机区间（Minecraft skeleton 掉 0–2 箭 + 骨头）；无骨头物品。`[Phase 27/28]`
-- **skeleton 箭提前量只补偿重力、不预判位移** — 瞄点 = 玩家当前眼高 + 重力弧线提前量：站桩玩家必中，移动玩家可躲（无 Minecraft 式的目标预判/弹道修正）。`[Phase 27]`
+- ~~**掉落数量是固定列表，无随机区间**~~ — Phase 28 起掉落数据 = `drops` 列表
+  （每条目 `{item, count}`，count 1..64 固定）；`[Phase 38]` 已加随机区间：条目可用
+  `count_min`/`count_max`（0..64、min ≤ max、必须成对、不得与 `count` 混用），死亡时按列表顺序
+  用该 mob 的种子流掷一次（0 = 该条目不掉）；skeleton 现掉 `bone` 0–2 + `arrow`，cow 仍固定 1
+  `leather` + 1 `beef`（数据选择，非 schema 缺口）；无掉落幸运/附魔影响；`leather` 目前无
+  合成用途（纯收集/交换物）。`[Phase 22/28]`（随机区间 `[Phase 38]`）
+- ~~**skeleton 无视线检查**~~ — `[Phase 38]` 已修复：射击回调先过 `hasLineOfSight`（纯 raycast 函数：眼→玩家眼被非空气格挡住 = blocked），blocked 则不发（箭反正只会插墙消失），冷却照常消耗、下个间隔重试（Minecraft 行为）+ debug log。E2E：存档手工 96 格石墙（两 skeleton与玩家之间）→ blocked=6 / shot=0 / health 20 / 两 skeleton 照常生成。
+- ~~**skeleton 掉落固定 1 个 `arrow`**~~ — `[Phase 38]` 已修复：新 material 物品 `bone`（图标 = 白色对角骨，generate_item_icons.py 新 salt 63，既有 17 图标零变化）+ skeleton `drops` = bone 0–2（随机区间）+ `arrow` 1。掷落用该 mob 自己的种子流（`rollDropCount`；固定 count 不推进流 → P38 前的精确流保留）；E2E 输入击杀 → 存档 entities = arrow×1 + bone×2。（Minecraft skeleton 还掉 0–2 箭；本项目箭保持固定 1。）
+- ~~**skeleton 箭提前量只补偿重力、不预判位移**~~ — `[Phase 38]` 已修复：`computeAimDirection`（projectile.hpp 自由函数）——“目标位置 + 速度×飞行时间”迭代 2 次 + 0.5·g·t² 弧线提前量；静止目标（速度 0）与 Phase 27 瞄法逐位相同（回归锚：E2E 射击场景 P37/P38 存档逐字节一致），移动目标被预判（单测：侧向/逃离目标最近接近距离严格小于无预判）——细节见 `archive/phase-38.md`。
 
 ## 弓 / 箭（Phase 21 + Phase 24）
 

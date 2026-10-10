@@ -157,11 +157,16 @@ iron_pickaxe（III/.S./.S.）。
    `detect_radius`/`attack_range`/`attack_damage` 允许 0 = 被动/无害，负数
    拒绝）、`spawn_max_light` 为 0..15 的整数（默认 0，光照门——见上）、
    `hostile` 为可选布尔（默认 false；难度系统的数据开关——保护环 + 伤害
-   缩放，非布尔拒绝）、`drops` 每条目 `count` ∈ [1,64]、box 越界/缺纹理名
+   缩放，非布尔拒绝）、`drops` 每条目：`count` ∈ [1,64] 或
+    `count_min`/`count_max` ∈ [0,64] 且 min ≤ max（Phase 38 随机区间：两者
+    必须成对、与 `count` 混用/只给一边 = 报错）、box 越界/缺纹理名
    = 明确报错；未知字段警告。
-   `drops` 是**物品列表**（Phase 28：`[{"item": "leather", "count": 1}, ...]`，
-   每条目物品名 init 时对 ItemRegistry 交叉校验；缺省/`[]` = 不掉落；
-   旧的单字符串 + `drops_count` schema 被显式拒绝——迁移防护）。
+   `drops` 是**物品列表**（Phase 28：`[{"item": "leather", "count": 1}, ...]`；
+   Phase 38：条目可用 `count_min`/`count_max` 随机区间（如
+   `{"item": "bone", "count_min": 0, "count_max": 2}`——死亡时按列表顺序
+   用该 mob 的种子流掷一次，0 = 该条目不掉）；每条目物品名 init 时对
+   ItemRegistry 交叉校验；缺省/`[]` = 不掉落；旧的单字符串 + `drops_count`
+   schema 被显式拒绝——迁移防护）。
 3. 生成名单：`assets/data/mob_spawning.json` 的 `mobs` 数组加入该 id
    （生成节奏/环半径/上限/离玩家消散距离都在这个文件里，全部数据驱动）。
 

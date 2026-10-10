@@ -442,9 +442,11 @@ Result<void> Game::buildScene() {
                 return MC_FAIL("mob '" + mob.name + "' drops unknown item '" +
                                drop.item + "'");
             }
-            if (drop.count > m_items.at(dropId).maxStack) {
-                return MC_FAIL("mob '" + mob.name + "' drops " +
-                               std::to_string(drop.count) +
+            // The ROLLED count can never exceed countMax (Phase 38), so
+            // the max stack is checked against the range's top.
+            if (drop.countMax > m_items.at(dropId).maxStack) {
+                return MC_FAIL("mob '" + mob.name + "' drops up to " +
+                               std::to_string(drop.countMax) +
                                " of '" + drop.item +
                                "' but its max stack is " +
                                std::to_string(m_items.at(dropId).maxStack));
@@ -2028,9 +2030,16 @@ void Game::updateEntities(double dt) {
             !mob->def().properties.drops.empty()) {
             // Every data entry becomes its own item entity (Phase 28: a
             // mob can drop several items, e.g. leather + beef), spawned
-            // in list order at the same rest position.
+            // in list order at the same rest position. Phase 38: a range
+            // entry is rolled once with the mob's seeded stream (a
+            // deterministic death frame → a reproducible roll); a roll of
+            // 0 drops nothing for that entry (the skeleton's 0-2 bones).
             for (const MobDrop& drop : mob->def().properties.drops) {
-                mobDrops.push_back({drop.item, drop.count, mob->position()});
+                const int n = mob->rollDropCount(drop.countMin,
+                                                 drop.countMax);
+                if (n > 0) {
+                    mobDrops.push_back({drop.item, n, mob->position()});
+                }
             }
             ++mobDeaths;
         }
@@ -2228,22 +2237,33 @@ void Game::attemptMobSpawn() {
                 return;
             }
             const Vec3 eye = raw->eyePosition();
-            Vec3 toPlayer = m_player->eyePosition() - eye;
+            const Vec3 target = m_player->eyePosition();
+            Vec3 toPlayer = target - eye;
             const float dist = std::sqrt(dot(toPlayer, toPlayer));
             if (dist < 1e-4f) {
                 return;
             }
-            // Arc compensation (the Minecraft skeleton leads the target):
-            // the arrow drops 0.5 * g * t^2 while it flies t = dist/speed
-            // seconds, so aim ABOVE the player's eye by exactly that drop.
-            // Without it a straight-line aim only lands within ~6 blocks
-            // (drop > eye height past that) and a skeleton standing at its
-            // preferred range would never hit.
-            const float flightTime = dist / arrowSpeed;
-            toPlayer.y += 0.5f * Projectile::kGravity * flightTime *
-                           flightTime;
-            const Vec3 dir =
-                toPlayer * (1.0f / std::sqrt(dot(toPlayer, toPlayer)));
+            // Phase 38 LOS gate: a wall between the two makes the arrow
+            // stick and vanish on impact, so don't fire at all. The AI
+            // already consumed the cooldown, so the skeleton retries after
+            // the full interval (Minecraft's behavior: it keeps nocking
+            // but never releases).
+            if (!hasLineOfSight(m_world, eye, target)) {
+                MC_LOG_DEBUG("skeleton shot blocked (no line of sight) from ("
+                             + std::to_string(eye.x) + ", " +
+                             std::to_string(eye.y) + ", " +
+                             std::to_string(eye.z) + ") dist=" +
+                             std::to_string(dist));
+                return;
+            }
+            // Phase 38 leading: aim where the player WILL be when the
+            // arrow arrives (computeAimDirection iterates the prediction
+            // twice; for a stationary target it reproduces the Phase 27
+            // arc-only aim bit-exactly, so standing players are hit exactly
+            // as before).
+            const Vec3 dir = computeAimDirection(eye, target,
+                                                 m_player->velocity(),
+                                                 arrowSpeed);
             auto arrow = std::make_unique<Projectile>(
                 m_world, m_blocks, eye + dir * kArrowSpawnOffset, dir,
                 arrowSpeed, arrowDamage, /*hurtPlayer=*/true);

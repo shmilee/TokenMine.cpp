@@ -1,0 +1,6 @@
+{
+  "id": "bone",
+  "type": "material",
+  "max_stack": 64,
+  "icon": "bone"
+}

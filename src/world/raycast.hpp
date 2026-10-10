@@ -57,4 +57,12 @@ bool canPlaceAt(const World& world, const BlockRegistry& blocks, BlockPos cell,
 // box (an "immediate" hit); a box fully behind the origin misses.
 float raycastAabb(Vec3 origin, Vec3 dir, Vec3 boxMin, Vec3 boxMax);
 
+// Line of sight (Phase 38, skeleton shooting): true when no non-air cell
+// blocks the segment from `from` to `to` — the same first-non-air-cell
+// predicate the arrows fly through, so the skeleton never fires a shot a
+// wall would stop (previously it shot through walls and the arrow
+// vanished on impact). The cell containing `from` is exempt (the
+// raycastBlock convention: a ray does not hit the block it starts in).
+bool hasLineOfSight(const World& world, Vec3 from, Vec3 to);
+
 } // namespace mc

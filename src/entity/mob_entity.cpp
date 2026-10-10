@@ -162,6 +162,17 @@ void MobEntity::runAi(double dt) {
     m_velocity.z = -std::cos(angle) * s;
 }
 
+int MobEntity::rollDropCount(int minCount, int maxCount) {
+    if (minCount >= maxCount) {
+        return minCount;
+    }
+    // Uniform over the (max - min + 1) integer outcomes; the stream
+    // advances exactly once (the wander-decision convention).
+    const std::uint64_t span =
+        static_cast<std::uint64_t>(maxCount - minCount + 1);
+    return minCount + static_cast<int>(nextMix(m_rng) % span);
+}
+
 bool MobEntity::damage(float amount) {
     if (m_dead || amount <= 0.0f) {
         return m_dead;

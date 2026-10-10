@@ -455,6 +455,85 @@ TEST(ProjectileTest, KillConsumesItForDespawn) {
     EXPECT_TRUE(arrow.shouldDespawn());
 }
 
+namespace {
+
+// The Phase 27 formula (arc-only, no leading): the regression anchor the
+// Phase 38 solver must reproduce bit-for-close for a stationary target.
+Vec3 p27Aim(Vec3 origin, Vec3 target, float speed) {
+    Vec3 to = target - origin;
+    const float dist = std::sqrt(dot(to, to));
+    to.y += 0.5f * Projectile::kGravity * (dist / speed) * (dist / speed);
+    return normalized(to);
+}
+
+// The closest the arrow's ballistic path ever gets to the target's straight
+// line (sampled at 10 Hz over 3 s) — the miss distance the swept hit-test
+// has to cover, independent of any flight-time convention.
+float aimMiss(Vec3 origin, Vec3 dir, float speed, Vec3 target, Vec3 vel) {
+    float best = 1e9f;
+    for (int i = 1; i <= 300; ++i) {
+        const float t = 0.01f * static_cast<float>(i);
+        const Vec3 arrow = origin + dir * (speed * t) -
+                           Vec3 {0.0f,
+                                 0.5f * Projectile::kGravity * t * t, 0.0f};
+        const Vec3 point = target + vel * t;
+        best = std::min(best, std::sqrt(dot(arrow - point, arrow - point)));
+    }
+    return best;
+}
+
+} // namespace
+
+TEST(ProjectileTest, AimDirectionStationaryMatchesArcOnly) {
+    // Phase 38 regression anchor: a stationary target (zero velocity) must
+    // reproduce the Phase 27 arc-only aim — the leading is a no-op, so
+    // standing players are hit exactly as before the change.
+    const Vec3 origin {0.0f, 5.0f, 0.0f};
+    const Vec3 target {10.0f, 5.0f, 0.0f};
+    const Vec3 aim = computeAimDirection(origin, target, Vec3::zero(), 15.0f);
+    const Vec3 expected = p27Aim(origin, target, 15.0f);
+    EXPECT_NEAR(aim.x, expected.x, 1e-6f);
+    EXPECT_NEAR(aim.y, expected.y, 1e-6f);
+    EXPECT_NEAR(aim.z, expected.z, 1e-6f);
+}
+
+TEST(ProjectileTest, AimDirectionLeadsAMovingTarget) {
+    const Vec3 origin {0.0f, 5.0f, 0.0f};
+    const Vec3 target {10.0f, 5.0f, 0.0f};
+    const float speed = 15.0f;
+
+    // Target running away in +x: the lead must aim past the target's
+    // current position and land strictly closer to where the target WILL
+    // be than the Phase 27 no-lead aim does.
+    const Vec3 away {3.0f, 0.0f, 0.0f};
+    const Vec3 lead = computeAimDirection(origin, target, away, speed);
+    const Vec3 noLead = p27Aim(origin, target, speed);
+    EXPECT_GT(aimMiss(origin, lead, speed, target, away), 0.0f);
+    EXPECT_LT(aimMiss(origin, lead, speed, target, away),
+              aimMiss(origin, noLead, speed, target, away));
+
+    // Target running toward the shooter: shorter flight, flatter aim
+    // (more of the unit vector along +x). (No miss-superiority claim here:
+    // a target running straight down the arrow's own flight line is
+    // already well covered by the no-lead arc — the lead's win is against
+    // sideways/away motion, below.)
+    const Vec3 toward {-3.0f, 0.0f, 0.0f};
+    const Vec3 leadIn = computeAimDirection(origin, target, toward, speed);
+    const Vec3 still = computeAimDirection(origin, target, Vec3::zero(),
+                                           speed);
+    EXPECT_GT(leadIn.x, still.x);
+
+    // Target moving sideways (+z): the aim gains a +z component — it
+    // points where the target will be, not where it is — and the closest
+    // approach is strictly better than the no-lead arc (the classic
+    // "moving targets can dodge" case the lead exists to fix).
+    const Vec3 side {0.0f, 0.0f, 4.0f};
+    const Vec3 leadSide = computeAimDirection(origin, target, side, speed);
+    EXPECT_GT(leadSide.z, 0.0f);
+    EXPECT_LT(aimMiss(origin, leadSide, speed, target, side),
+              aimMiss(origin, noLead, speed, target, side));
+}
+
 // -- dropped-item geometry ------------------------------------------------------
 
 namespace {

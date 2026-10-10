@@ -231,9 +231,65 @@ TEST(MobRegistryTest, ParsesDropsList) {
     const Mob& m = mobs.at(*r);
     ASSERT_EQ(m.properties.drops.size(), 2u);
     EXPECT_EQ(m.properties.drops[0].item, "leather");
-    EXPECT_EQ(m.properties.drops[0].count, 1); // default count
+    EXPECT_EQ(m.properties.drops[0].countMin, 1); // default count
+    EXPECT_EQ(m.properties.drops[0].countMax, 1);
     EXPECT_EQ(m.properties.drops[1].item, "beef");
-    EXPECT_EQ(m.properties.drops[1].count, 2);
+    EXPECT_EQ(m.properties.drops[1].countMin, 2);
+    EXPECT_EQ(m.properties.drops[1].countMax, 2);
+}
+
+// Phase 38: the random drop range ("count_min"/"count_max") alongside the
+// fixed "count" form.
+TEST(MobRegistryTest, ParsesDropCountRange) {
+    MobRegistry mobs;
+    std::string def = kZombieDef;
+    const std::string key = "\"wander_interval\": 2.5";
+    def.replace(def.find(key), key.size(),
+                "\"wander_interval\": 2.5,\n    \"drops\": "
+                "[{\"item\": \"bone\", \"count_min\": 0, \"count_max\": 2}, "
+                "{\"item\": \"arrow\", \"count\": 1}]");
+    auto r = mobs.registerMob(parseJson(def));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Mob& m = mobs.at(*r);
+    ASSERT_EQ(m.properties.drops.size(), 2u);
+    EXPECT_EQ(m.properties.drops[0].item, "bone");
+    EXPECT_EQ(m.properties.drops[0].countMin, 0);
+    EXPECT_EQ(m.properties.drops[0].countMax, 2);
+    EXPECT_EQ(m.properties.drops[1].item, "arrow");
+    EXPECT_EQ(m.properties.drops[1].countMin, 1);
+    EXPECT_EQ(m.properties.drops[1].countMax, 1);
+}
+
+TEST(MobRegistryTest, RejectsBadDropRanges) {
+    const std::string key = "\"wander_interval\": 2.5";
+    const std::string variants[] = {
+        // only one bound given
+        "\"wander_interval\": 2.5,\n    \"drops\": "
+        "[{\"item\": \"x\", \"count_min\": 0}]",
+        "\"wander_interval\": 2.5,\n    \"drops\": "
+        "[{\"item\": \"x\", \"count_max\": 2}]",
+        // both count forms in one entry
+        "\"wander_interval\": 2.5,\n    \"drops\": "
+        "[{\"item\": \"x\", \"count\": 1, \"count_min\": 0, \"count_max\": 2}]",
+        // inverted range
+        "\"wander_interval\": 2.5,\n    \"drops\": "
+        "[{\"item\": \"x\", \"count_min\": 5, \"count_max\": 2}]",
+        // out of bounds
+        "\"wander_interval\": 2.5,\n    \"drops\": "
+        "[{\"item\": \"x\", \"count_min\": 0, \"count_max\": 65}]",
+        "\"wander_interval\": 2.5,\n    \"drops\": "
+        "[{\"item\": \"x\", \"count_min\": -1, \"count_max\": 2}]",
+        // non-integer bound
+        "\"wander_interval\": 2.5,\n    \"drops\": "
+        "[{\"item\": \"x\", \"count_min\": 0.5, \"count_max\": 2}]",
+    };
+    for (const std::string& variant : variants) {
+        MobRegistry mobs;
+        std::string def = kZombieDef;
+        def.replace(def.find(key), key.size(), variant);
+        auto r = mobs.registerMob(parseJson(def));
+        EXPECT_FALSE(r.ok()) << variant;
+    }
 }
 
 TEST(MobRegistryTest, RejectsLegacyDropsSchema) {
@@ -400,7 +456,8 @@ TEST(MobRegistryTest, ParsesPassiveMob) {
     ASSERT_EQ(mob.properties.drops.size(), 2u);
     EXPECT_EQ(mob.properties.drops[0].item, "leather");
     EXPECT_EQ(mob.properties.drops[1].item, "beef");
-    EXPECT_EQ(mob.properties.drops[1].count, 1);
+    EXPECT_EQ(mob.properties.drops[1].countMin, 1);
+    EXPECT_EQ(mob.properties.drops[1].countMax, 1);
     EXPECT_EQ(mob.model.boxes.size(), 2u);
 }
 
@@ -1135,6 +1192,45 @@ TEST(MobAiTest, PassiveMobNeverChasesOrAttacks) {
     }
     EXPECT_EQ(hits, 0);
     EXPECT_FLOAT_EQ(totalDamage, 0.0f);
+}
+
+// Phase 38: death-drop count rolls use the mob's seeded splitmix64 stream
+// (the same state-advancing flow as the wander decisions). Pinned values
+// for seed 42: first draw 0xbdd732262feb6e95 (%3 = 1), second draw
+// 0x28efe333b266f103 (%5 = 1 → 1+1 = 2).
+TEST(MobAiTest, RollDropCountFollowsTheSeededStream) {
+    Fixture f;
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.registerMob(parseJson(kZombieDef)).ok());
+    MobEntity mob = makeMob(f, mobs.at(MobID{0}), {8.5f, 1.0f, 5.5f}, 42ULL);
+    EXPECT_EQ(mob.rollDropCount(0, 2), 1);  // first stream draw
+    EXPECT_EQ(mob.rollDropCount(1, 5), 2);  // second stream draw
+}
+
+TEST(MobAiTest, RollDropCountFixedRangeDoesNotAdvanceTheStream) {
+    // A degenerate range (min == max, the fixed-count form) returns the
+    // constant WITHOUT advancing the stream: fixed-count drops keep the
+    // pre-Phase-38 stream exactly, so a mixed drop list (bone range +
+    // arrow fixed) rolls the range from the same state the list-order
+    // walk reached.
+    Fixture f;
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.registerMob(parseJson(kZombieDef)).ok());
+    MobEntity mob = makeMob(f, mobs.at(MobID{0}), {8.5f, 1.0f, 5.5f}, 42ULL);
+    EXPECT_EQ(mob.rollDropCount(1, 1), 1);  // no stream advance
+    EXPECT_EQ(mob.rollDropCount(0, 2), 1);  // still the FIRST stream draw
+}
+
+TEST(MobAiTest, RollDropCountStaysInRange) {
+    Fixture f;
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.registerMob(parseJson(kZombieDef)).ok());
+    MobEntity mob = makeMob(f, mobs.at(MobID{0}), {8.5f, 1.0f, 5.5f}, 7ULL);
+    for (int i = 0; i < 200; ++i) {
+        const int n = mob.rollDropCount(0, 2);
+        EXPECT_GE(n, 0);
+        EXPECT_LE(n, 2);
+    }
 }
 
 TEST(MobAiTest, RangedMobShootsAndHoldsDistance) {

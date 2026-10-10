@@ -9,9 +9,9 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 37 完成时）
+## 现状（Phase 38 完成时）
 
-- 功能阶段 P0–P37 全部完成并提交；P31 = 饥饿节奏 MC 对齐、P32 = 玩家参数
+- 功能阶段 P0–P38 全部完成并提交；P31 = 饥饿节奏 MC 对齐、P32 = 玩家参数
   配置化、P33 = 死亡时暂停流式加载、P34 = UI 坐标空间 + `ui.scale`
   （高分屏 UI 缩放）、P35 = 高分 UI 素材（16×16 字体 + 32×32 物品图标）
   + 面板自适应（`InventoryLayout::scale` 贴合系数，长度 double 运算仅
@@ -20,11 +20,17 @@
   坠落追踪重钉（`Player::restorePosition`，空中读档不再绕过坠落伤害）、
   P37 = 并行化存档 diff（`diffWorld` >256 chunk 时每 chunk 一个 job 跑在
   临时 4-worker 池，位置排序输出是全序 → 与串行逐字节相同；~9600-chunk
-  退出 diff 1.3 s → 0.35 s，A/B 对 P36 串行构建存档字节一致）。
-- 测试 **700/700**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
-- 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P37 = 第 12 次结构性
-  免疫——无 `--save` 不触发 `collectSave`/`diffWorld`、F5 需输入；参考图
-  于 P36 经 P35 代码参考构建 A/B 逐字节重锚，P37 直接复用未重锚）。
+  退出 diff 1.3 s → 0.35 s，A/B 对 P36 串行构建存档字节一致）、
+  P38 = skeleton 后续三项（① 射击 LOS 门 `hasLineOfSight`（blocked 不发、
+  冷却照常消耗整间隔重试）② 掉落随机区间 `count_min`/`count_max` + 新
+  `bone` 物品（skeleton 掉 bone 0–2 + arrow 1，`rollDropCount` 走该 mob
+  种子流、固定 count 不推进流）③ 箭目标预判 `computeAimDirection`
+  （静止目标逐位复现 P27 瞄法，移动目标被预判））。
+- 测试 **713/713**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+- 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P38 = 第 13 次结构性
+  免疫——60f 基线无 mob（first_spawn_frame=60）、bone 图标只被 UI 采样、
+  LOS/预判/掉落路径全部需要 skeleton 在场；参考图于 P36 经 P35 代码参考
+  构建 A/B 逐字节重锚，P37/P38 直接复用未重锚）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 
 ## 命令

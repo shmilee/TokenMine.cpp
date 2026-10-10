@@ -435,3 +435,30 @@
   几乎同刻 = 弱证据，必须重跑。重跑后 F5 落中段帧（time 0.2554 vs
   退出 0.2628），证据成立。P36 的 F3/panel 运行没踩到（只有截图 +
   退出存档断言，无"两存档对比"）。
+- **按住类动作（挥击/挖掘）走 `isDown`，`xdotool click 1` 永远打不中（P38）**：
+  `Game::handleInteraction` 的挥击分支条件是 `m_input.isDown(MouseButton::Left)`
+  （按住时每 0.25 s 一击），而 `xdotool click 1` 的 press+release 在**同一帧的
+  pump() 内**成对到达 → `m_buttonDown` 回到 false → 下一帧 `isDown` = false →
+  一次 30 连点 = 0 次挥击（表象：blocks=0、无击杀、无 WARN，极难定位）。
+  对策：按住类动作用 `xdotool mousedown 1` … `sleep N` … `xdotool mouseup 1`
+  （P29 的破坏探针就是 press-hold，本坑是把它上升成规则）；`wasPressed` 类
+  动作（锁定/开关面板）用 click 没问题。
+- **指针锁定后 `xdotool mousemove`（绝对坐标）会变成巨型相对 delta（P38）**：
+  相对模式下 X 的指针虚拟位置不在窗口中心（实测屏幕 (0,0)），XWarpPointer 到
+  (700,820) → 游戏收到 (700,820) 的相对位移 → yaw −1.75 rad、pitch 夹到
+  −89°（+60px 的"微调"变成整面墙的转向）。对策：**锁定后绝不发绝对
+  mousemove**——需要转相机就把它写进存档的 yaw/pitch（P29 的 grab-delta
+  免疫法），运行中只发按键/鼠标按键。
+- **伤害红纱在 0.5 s 衰减边界会让截图 A/B 差 ±1 红量子（P38）**：
+  `kHurtFlashSeconds = 0.5`，红纱按**真实 dt** 衰减——最后一箭命中时刻距截图
+  帧 ~0.5 s 时（射击节奏 0.75 s/发的场景里几乎必然），残留 alpha 跨运行差
+  <1/255 → 全屏幕红通道 ±1（100% 像素、每通道 ≤1、红占 ≥90% 变化量）。
+  对策：截图 A/B 用**红纱容差比较器**（字节一致 OR 该精确签名：全屏 + 每通道
+  ≤2 + 红主导），**存档 A/B 才是权威证据**（P27 的 veil-removal diff 先例）。
+  场景设计上让最后一击远离末帧（>0.5 s 余量）可彻底规避。
+- **`--frames N` 数的是模拟子步不是渲染帧（P38）**：固定步长累加器——
+  渲染帧率掉到 40fps（xdotool 交互/WM 干扰）时每渲染帧补 1.5 个子步 →
+  `--frames 720` 的墙钟 = 18 s（不是 12 s），存档 `time` 字段按子步推进
+  （720 子步 = 12 s 游戏时间，与墙钟无关）。对策：输入运行的时间预算按
+  **子步时间**（frames/60）估游戏内时刻、按**墙钟**（frames/fps，fps 可能
+  <60）估 xdotool 序列长度——两者都要留足；断言别用墙钟反推帧号。

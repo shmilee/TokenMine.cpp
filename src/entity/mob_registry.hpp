@@ -97,12 +97,17 @@ struct MobModel {
     std::vector<MobBox> boxes;
 };
 
-// One entry of a mob's drop list (Phase 28). `item` is the item NAME
-// (resolved in the ItemRegistry at game init, like block drops); `count`
-// is 1..64 (validated to fit the item's max stack at init).
+// One entry of a mob's drop list (Phase 28; Phase 38 random range).
+// `item` is the item NAME (resolved in the ItemRegistry at game init,
+// like block drops). The count is either FIXED (countMin == countMax, from
+// "count", 1..64 — the Phase 28 form) or a RANDOM RANGE [countMin,
+// countMax] (from "count_min"/"count_max", 0..64, min <= max — Phase 38:
+// rolled once per death with the mob's seeded stream; 0 = that item does
+// not drop this time). Validated to fit the item's max stack at init.
 struct MobDrop {
     std::string item;
-    int count = 1;
+    int countMin = 1;
+    int countMax = 1;
 };
 
 // Behavior parameters of a mob type (all from data; see the file head).

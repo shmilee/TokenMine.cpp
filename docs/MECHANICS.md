@@ -88,8 +88,11 @@
     受伤路径：红闪/音效/死亡全由既有轮询驱动）。玩家死亡时不追不打。
     **RangedAttack**（Phase 27，数据 `shoot_range > 0` 的 mob = skeleton）：
     玩家进入 `shoot_range`（水平）→ 面向玩家、每 `attackCooldown` 秒经
-    shoot 回调放箭（游戏在 mob 头部生成带 `hurtPlayer` 标记的箭，瞄点 =
-    玩家眼高 + 0.5·g·t² 的弧线提前量——站桩必中、移动可躲；箭被扫掠
+    shoot 回调放箭（Phase 38：先过 LOS 门——眼→玩家眼被非空气格挡住则
+    不发（箭反正只会插墙消失），冷却照常消耗、下个间隔重试；游戏在 mob
+    头部生成带 `hurtPlayer` 标记的箭，瞄点 = `computeAimDirection` = 玩家
+    位置 + 速度×飞行时间迭代 2 次预判 + 0.5·g·t² 弧线提前量——静止玩家
+    （速度 0）与 Phase 27 瞄法逐位相同，移动玩家被预判；箭被扫掠
     命中玩家 AABB 时走 P16 受伤路径）；玩家贴近 `retreat_distance` 内 →
     全速后撤（边退边射，Minecraft kite）；超过 `shoot_range` 但仍在
     `detect_radius` 内 → 按 Chase 逼近。远程 mob 的 `attack_range` 是
@@ -102,8 +105,10 @@
     数据（徒手/方块/材料=1.0，工具见 `data/items/*.json`，木镐 2 / 铁镐 3）+
     沿瞄准方向击退（水平 4 + 抬升 2.5，0.3s 击退窗口内 AI 不接管速度）
   - **死亡**：HP 归零 → 掉落 `drops` 数据定义的**物品列表**（Phase 28：
-    每条目 `{item, count}`，按列表顺序各掉一件 ItemEntity；zombie 掉
-    `rotten_flesh`，skeleton 掉 `arrow`，cow 掉 `leather`+`beef`，sheep 掉
+    每条目 `{item, count}`；Phase 38：或 `{item, count_min, count_max}`
+    随机区间——死亡时按列表顺序用该 mob 的种子流掷一次，0 = 该条目不掉），
+    按列表顺序各掉一件 ItemEntity（zombie 掉 `rotten_flesh`，skeleton 掉
+    `bone` 0–2 + `arrow`，cow 掉 `leather`+`beef`，sheep 掉
     `wool`+`mutton`，chicken 掉 `feather`+`chicken`——均为 material 物品
     + 图标）后移除；击退/坠落无伤害（v1）
   - **渲染**：box 模型（zombie = 头 0.5³ + 身 0.5×1.0×0.3；skeleton 同
