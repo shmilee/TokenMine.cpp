@@ -970,10 +970,13 @@ Result<void> Game::applySave(const SaveGame& save) {
     // 2) Lighting: a full re-propagation is exact for any edit count (the
     //    incremental local updates converge to the same values).
     Lighting::propagateAll(m_world, m_blocks);
-    // 3) Player. teleportTo zero's the velocity; when the save was taken
-    //    at rest the one-frame gravity re-settle is position-exact (the
-    //    floor plane is an integer).
-    m_player->teleportTo(save.playerPos);
+    // 3) Player. restorePosition teleports (velocity zeroed) and re-pins
+    //    the fall tracking to the restored Y (Phase 36: a save taken
+    //    mid-air has no leave-the-ground transition on load, so without
+    //    the pin the saved fall would land damage-free). When the save
+    //    was taken at rest the one-frame gravity re-settle is
+    //    position-exact (the floor plane is an integer).
+    m_player->restorePosition(save.playerPos);
     m_player->yaw = save.playerYaw;
     m_player->pitch = save.playerPitch;
     // Health (Phase 16): a format-1 save has none (-1 = full); a saved 0

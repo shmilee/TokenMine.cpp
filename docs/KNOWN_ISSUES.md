@@ -59,7 +59,7 @@
 - **存档是 opt-in（`--save <slot>`），无默认世界** — 不带 `--save` 时不读不写（保持既有运行行为与基线截图不变）；没有"上次世界"的隐式恢复，也没有 MC 式多存档槽管理/选择 UI（多个槽只是多个文件，手动切换）。`[Phase 13]`
 - **写存档时在退出路径重跑生成器做 diff** — `diffWorld` 对每个已有 chunk 用 scratch chunk 重跑纯函数 `generateChunk` 逐格比对（仅发生在干净退出时）；Phase 14 流式加载后世界可达 2300+ chunk，尖峰相应变长（实测 2312 chunk ≈ 0.5 s，一次性）；需要改增量编辑跟踪或并行 diff。`[Phase 13]`（`[Phase 14]` 起规模放大）
 - **无周期性自动存档** — 崩溃/断电丢失自上次写入以来的全部修改；`F5` 立即存档（Phase 15，`--save` 槽激活时游戏内随时手动保存）已补上"会话中手动保存"，但仍无周期性 autosave/无"保存并退出"流程。`[Phase 13]`（手动保存热键 `[Phase 15]` 已解决）
-- **玩家速度/onGround 不存** — 读档用 `teleportTo`（速度清零、onGround=false）：存档时玩家静止则一帧重力回落到整数平面后逐位精确；存档时玩家在空中/移动则位置保留但速度丢失（读档后从该位置重新下落）。`[Phase 13]`
+- **玩家速度/onGround 不存** — 读档用 `restorePosition`（速度清零、onGround=false；Phase 36 起同时重钉 `fallStartY`，空中读档的重落会正确结算坠落伤害）：存档时玩家静止则一帧重力回落到整数平面后逐位精确；存档时玩家在空中/移动则位置保留但速度丢失（读档后从该位置重新下落）。`[Phase 13]`（坠落伤害部分 `[Phase 36]` 已解决）
 - **实体 `age` 按真实 dt 累积（墙钟）** — 与玩家/物理一致（非固定步长），所以含实体的存档文件在 age 字段上跨运行差 ±1-2 帧；渲染不依赖 age（掉落物动画由帧计数器驱动），截图确定性不受影响。昼夜 `time` 是固定步长（位精确）。`[Phase 13]`
 - **`DayCycle::setTimeOfDay` 至多 1 ulp 偏差** — 存 timeOfDay [0,1)，恢复时解出 totalSeconds；对远离配置 start_time 的值，`startTime + delta` 的浮点往返可能差 1 ulp（~1e-16）。昼夜渐变段是常量/平滑的，呈现无影响。`[Phase 13]`
 - **演示区外的编辑会带上"生成的 chunk"** — 在演示区外放置方块会同步生成该 chunk（既有行为），存档 diff 覆盖它；读档时 `setBlock` 重建同样生成该 chunk——一致，但读档后的世界含全新世界没有的 chunk（读档后 `propagateAll` 全量重传播，之后新出现的 chunk 由 Phase 14 的 worker 光照 job 处理）。`[Phase 13]`
@@ -96,12 +96,12 @@
 - **粒子是逐帧动态 mesh、无碰撞** — 每帧重建一个动态 indexed mesh（0.12 格小立方体），粒子之间/粒子与世界无碰撞（穿模），无风/阻力，半隐式 Euler（先速后位）；上限 256、每爆发 16、寿命 0.45~0.75s。spawn 时烘焙光照（渲染是只读窗口，不能读光数组）。`[Phase 15]`
 - **字体无中文字形与字重渐变** — `tools/generate_font.py` 生成 256×512 字形 atlas（32px cell、16×16 glyph 8px 偏移；Phase 35：8×8 → 16×16，字形表一次性从 DejaVu Sans Bold em16 提取（基线 row 12、阈值 128）后静态嵌入生成器——纯 stdlib、确定性输出），仅 ASCII 可打印（非 ASCII → `?`）；无字重渐变（缩放支持 double scale——Phase 35 起面板自适应分数缩放，`textWidth/makeTextVertices` 均 double）；无中文字形。`[Phase 15]`（8×8 低细节 `[Phase 35]` 已解决：16×16 字形 + 32×32 物品图标）
 - **物品名 tooltip 只有名字** — 悬停格显示物品名（无数量/描述/工具耐久/附魔文本）。`[Phase 15]`
-- **"You died!" 死亡屏幕文字实际是白色（颜色参数被忽略）** — `ui.frag` 的 textured 批次以字体纹理 rgb 为颜色、`u_color` 只调制 alpha（着色器注释有记载的既有行为）；死亡屏幕传入的红色 `Vec4{1, 0.35, 0.35}` 被静默忽略，文字按字体色（白）渲染。同样被忽略的还有合成面板 "needs: ..." 的 `kTextDim` 暗色与配方名 tooltip 颜色。P16 的死亡屏幕从未被像素级 E2E 验证，无人发现（P33 E2E 首次像素验证死亡屏幕时发现）。`[Phase 33]`（发现）计划：着色器 textured 分支改 `texel.rgb × u_color.rgb`（所有彩色文字生效：死亡屏幕红字/"needs:" 暗色/tooltip）+ 受影响的屏幕（死亡屏/合成/tooltip）重新像素验证。（Phase 35 换 16×16 字体后重新像素验证：白字 bbox A (488,320,299,67)、B 恰好 2×，仍为白——修复计划不变。）
+- ~~**"You died!" 死亡屏幕文字实际是白色（颜色参数被忽略）**~~ — `[Phase 33]` 发现，`[Phase 36]` 已修复：`ui.frag` textured 分支改 `texel.rgb × u_color.rgb`（所有 textured 绘制的 u_color.rgb 均为白，白字/图标/心带逐位不变，只死亡屏红字生效）+ E2E 重像素验证（红字 bbox A (488,320,282,24)/B 恰好 2×，hint 白字 bbox 不变）——细节见 `archive/phase-36.md`。
 
 ## 生存（Phase 16）
 
 - **伤害来源：坠落、虚空与 mob 攻击（Phase 20 起）** — 无岩浆/火/窒息伤害、无 mob 攻击以外的接触伤害。`fallDamage = max(0, 净下落格数 − fallDamageOffset)`（offset 默认 3），从离地帧的 `fallStartY` 到落地点的净竖直距离结算；落入水中的落地取消伤害。无护甲/摔落缓冲机制。`[Phase 16]`（mob 攻击 `[Phase 20]` 已解决）
-- **存档加载到空中位置时坠落伤害被绕过** — 坠落伤害在落地时结算 `max(0, fallStartY − 落地Y − offset)`，但 `fallStartY` 只在"离地"转换帧记录；从存档加载到空中（pos.y 高于地面）的玩家在加载时没有 grounded→air 转换，`fallStartY` 保持旧值（初始 0）→ `fall = 0 − 落地Y < 0` → 0 伤害（P33 E2E 探针实证：46–59 格自由落体全部满血 20 落地）。正常游玩不受影响（出生/重生都在地面）。`[Phase 33]`（发现）计划：`applySave` 恢复位置时若玩家处于空中，置 `fallStartY = pos.y`（一行修复 + 单测）。
+- ~~**存档加载到空中位置时坠落伤害被绕过**~~ — `[Phase 33]` 发现（P33 E2E 探针实证：46–59 格自由落体满血落地），`[Phase 36]` 已修复：`Player::restorePosition`（= `teleportTo` + `fallStartY = pos.y` 重钉），`applySave` 改走该路径 + 单测 ×2（空中 10 格 → 精确 7 HP；地面读档零伤害）+ E2E（存档 pos y=62 加载 → 8 格坠落 → health 15 精确）——细节见 `archive/phase-36.md`。
 - **生命 HUD 是 10 心三态，半心按 0.5 HP 粒度渲染** — 每颗心 2 HP，填充 = `clamp(hp − 2i, 0, 2)`（2=满/1=半/0=空），贴图是 3 个固定状态（满/半/空），无更细粒度（如 0.5 HP 的四分之心）；MC 的心是 10 颗每颗 1 HP 且支持 0.5 增量。`[Phase 16]`
 - **无死亡分数/死亡统计** — 死亡只显示 "You died! / Press R"，无得分、无死亡次数、无 Game Over 统计屏；重生保留背包与全部物品（无死亡掉落）。`[Phase 16]`
 - **自然回复是定时 + 饥饿门控（Phase 23 起）** — 脱离受伤 `regenDelay=10s` 后每 `regenInterval=4s` 回 1 HP，且要求饥饿 ≥ 6（Minecraft 规则：低于 6 无自然回复）；门控关闭时累加器暂停（不重置），吃饱后继续累计。回复本身不消耗饥饿点（无 MC 的"回复花饥饿"），饥饿只按时间衰减。`[Phase 16]`（饥饿门控 `[Phase 23]`）
@@ -238,6 +238,7 @@
 | 27 | `archive/phase-27.md` |
 | 28 | `archive/phase-28.md` |
 | 29 | `archive/phase-29.md` |
+| 36 | `archive/phase-36.md` |
 | 35 | `archive/phase-35.md` |
 
 P0–P2、P4 无细节存档（提交列表见 `SESSION_CONTEXT.md`）。

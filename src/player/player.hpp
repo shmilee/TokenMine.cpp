@@ -142,6 +142,16 @@ public:
         return position() + Vec3{0.0f, currentEyeHeight(), 0.0f};
     }
 
+    // Save restore (Phase 36): teleport and re-pin the fall tracking to
+    // the restored Y. A player restored mid-air has no leave-the-ground
+    // transition to record the fall start, so an unpinned m_fallStartY
+    // would let the saved fall land damage-free. Harmless when the save
+    // was taken at rest (the landing tick sees a zero net drop).
+    void restorePosition(Vec3 pos) {
+        teleportTo(pos);
+        m_fallStartY = pos.y;
+    }
+
     const Params& params() const { return m_params; }
 
     // -- survival (Phase 16) --------------------------------------------------

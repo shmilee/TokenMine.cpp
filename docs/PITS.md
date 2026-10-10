@@ -370,3 +370,47 @@
   但离散单像素特征（羽毛翅膀 ±1、glint/斑点、骨端 knob）不会自动变粗——
   羽毛翅膀初稿保持 ±1（3px/32 = 9%，旧 3px/16 = 19%），放大目检才发现、
   修成 ±2。重采样后按旧 art 的"相对粗细"逐个核对离散特征。
+- **E2E 参考资产放 /tmp 会被系统 tmp 清理整体抹掉（P36）**：P33→P36 间隔
+  3 天，`base18.png`、`p28_daym_a.png`、`config_xep.json`、`skygate.py` 与全部
+  批脚本消失。重建路径：probe 配置值 = 代码默认配置（批脚本内重新生成 +
+  断言内容）；跨阶段基线门改用**上一阶段代码的参考构建 A/B**
+  （`git worktree add <dir> <上一阶段 commit>` + 独立 build，同系统库版本，
+  无输入运行逐字节对比——比旧参考图更严格，还顺带隔离了系统库升级影响）；
+  基线图从验证过的运行重新生成、链条经 A/B 重锚。教训：关键参考资产要么
+  入库、要么每批开头检查存在性（缺失 = 重建，不许"沿用"）。
+- **zsh 的 `set -- $var` 不做词分割（P36）**：与 bash 不同，zsh 默认不分割
+  未加引号的变量展开——`set -- $pair`（`pair="a b"`）只设 `$1="a b"`、`$2`
+  未设，`set -u` 下直接致命错误（批死在第一个 pair 循环）。要分割用
+  `set -- ${=pair}`。写批脚本的 pair 循环时逐处检查。
+- **awesome WM 平铺新窗口是异步的，还会顺手改尺寸（P36）**：启动后一次性
+  量窗口宽（1280 ✓）可能赶上平铺前的旧值，随后 WM 把窗口 resize 到平铺尺寸
+  （实测 1272×1552）——游戏按窗口尺寸渲染，截图就是 1272×1552，整拍作废
+  （P35 的"宽度检查"防不住这个竞态，P36 首拍 refbase1 就这么废了）。
+  稳定化循环的完整教训（P36 连踩 4 轮才收敛）：
+  ① **浮动 toggle 必须打对窗口**——OpenCode 的 Firefox 窗口覆盖游戏区域，
+  不先 `windowraise`+`windowfocus`+把鼠标 warp 到窗口中心（focus-
+  follows-mouse）就发 `Super+ctrl+space`，toggle 会翻转别的客户端，游戏
+  窗口永远平铺；
+  ② toggle 在 resize **之后**命中时，解除平铺会**还原客户端原始尺寸**
+  （1272×1552 → 1280×720，无需 windowsize）但位置留在平铺位——之后
+  `windowsize 1280 720` + `windowmove 0 60` 兜底；
+  ③ **预算**：60 帧运行窗口存活仅 ~1.5s（init + 1.0s vsync 帧 + 截图），
+  收敛必须一轮 ~1s 内完成（raise→检查→warp/focus→toggle→size/move→
+  **同轮复查**）；循环里 `kill -0 $game` 先行——游戏已退出（窗口销毁、
+  xwininfo 返回空）就 break，别空转；
+  ④ **尺寸校验必须覆盖 panel()/f3run()**（不只有 shot()）：f3A2 的
+  1272×1552 截图就是这么静默漏过、crop 断言才暴露的（运行后校验游戏日志
+  "Screenshot saved: … (WxH)" = 1280x720，中途被平铺 = 作废）+ shot3/
+  重试环（≤3 次）。preflight：批开头 `pgrep -f "[b]uild/bin/minecraft"`
+  （方括号技巧防 pgrep 包装 shell 自匹配）——用户游戏/残留进程会抢
+  xdotool 窗口搜索。
+- **zsh 数字断言对 "n=10993" 形式的输出静默失败（P36）**：
+  `n=$(... | awk '{print $NF}')` 取到的是 `n=10993`（不是数字），
+  `[ "$n" -gt 10000 ]` 在 zsh 里不报错、只返回假 → 6 次 F3 运行明明
+  墨值完美（10993 = P35 精确值）全部误 RETRY。取数值用
+  `sed 's/.*n=//'` 并先验证是纯数字。
+- **系统 SDL3 升级（0.4.16 → 0.4.18）让 CMake 缓存指向已消失的 .so
+  （P36）**：`cmake --build build` 链接期报
+  `'/usr/lib/libSDL3.so.0.4.16', needed by 'bin/minecraft', missing`。
+  重跑 `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release` 重新解析即愈
+  （0 警告保持）。跨天/跨周的会话接手后第一次构建先想到这个。

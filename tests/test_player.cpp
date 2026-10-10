@@ -549,6 +549,39 @@ TEST(PlayerTest, FallDamageNoneWithinThreeBlocks) {
     EXPECT_FLOAT_EQ(p.health(), p.maxHealth()); // untouched
 }
 
+// -- save restore (Phase 36): fall tracking is pinned on load --------------
+
+TEST(PlayerTest, RestorePositionMidAirTakesFallDamage) {
+    Fixture f;
+    // A save taken mid-air: the restore puts the player 10 blocks above the
+    // floor. Without the fall-tracking pin (Phase 36), the missing
+    // leave-the-ground transition on load leaves m_fallStartY at its
+    // initial 0 and the 10-block fall lands damage-free.
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    p.restorePosition({8.5f, 11.0f, 8.5f});
+    Input idle = heldInput({});
+    run(p, 120, idle); // a 10-block fall takes < 1 s
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f); // landed on the floor
+    EXPECT_TRUE(p.onGround());
+    // Net drop exactly 10.0 (restore and landing both on integer planes)
+    // -> 10 - 3 (fallDamageOffset) = 7 HP.
+    EXPECT_FLOAT_EQ(p.health(), p.maxHealth() - 7.0f);
+}
+
+TEST(PlayerTest, RestorePositionAtRestTakesNoDamage) {
+    Fixture f;
+    // The save was taken standing on the floor: the landing tick after the
+    // restore sees a zero net drop (the pin equals the landing plane), so
+    // the re-pin must not invent damage.
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    p.restorePosition({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(p, 120, idle);
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f);
+    EXPECT_TRUE(p.onGround());
+    EXPECT_FLOAT_EQ(p.health(), p.maxHealth()); // untouched
+}
+
 TEST(PlayerTest, FallDamageClearedByWater) {
     Fixture f;
     // A 5-block platform (top y=6) over a water-filled pit: the landing is
