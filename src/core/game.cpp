@@ -908,9 +908,12 @@ Result<SaveGame> Game::collectSave() const {
         save.entities.push_back(std::move(se));
     }
     // The modifications: every cell that differs from what the seed
-    // generates (block + fluid), sorted by position.
+    // generates (block + fluid), sorted by position. Phase 37: large
+    // worlds diff on kSaveDiffWorkers threads (P33: ~14 s exit on a
+    // ~100k-chunk world single-threaded); the position-sorted output is
+    // byte-identical either way.
     auto diff = diffWorld(m_world, makeChunkGenerator(), m_blocks,
-                          save.blockEdits, save.fluidEdits);
+                          save.blockEdits, save.fluidEdits, kSaveDiffWorkers);
     if (!diff.ok()) {
         return diff.error();
     }

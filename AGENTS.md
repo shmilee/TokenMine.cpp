@@ -9,19 +9,22 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 36 完成时）
+## 现状（Phase 37 完成时）
 
-- 功能阶段 P0–P36 全部完成并提交；P31 = 饥饿节奏 MC 对齐、P32 = 玩家参数
+- 功能阶段 P0–P37 全部完成并提交；P31 = 饥饿节奏 MC 对齐、P32 = 玩家参数
   配置化、P33 = 死亡时暂停流式加载、P34 = UI 坐标空间 + `ui.scale`
   （高分屏 UI 缩放）、P35 = 高分 UI 素材（16×16 字体 + 32×32 物品图标）
   + 面板自适应（`InventoryLayout::scale` 贴合系数，长度 double 运算仅
   rect 边界 lround；文字/图标随系数等比缩放）、P36 = UI 着色器文字着色
   修复（textured 分支 `texel.rgb × u_color.rgb`，死亡屏红字生效）+ 读档
-  坠落追踪重钉（`Player::restorePosition`，空中读档不再绕过坠落伤害）。
-- 测试 **698/698**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
-- 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P36 = 第 11 次结构性
-  免疫——旧参考图被 /tmp 清理抹除，经 P35 代码参考构建 A/B 逐字节对比后
-  重锚）。
+  坠落追踪重钉（`Player::restorePosition`，空中读档不再绕过坠落伤害）、
+  P37 = 并行化存档 diff（`diffWorld` >256 chunk 时每 chunk 一个 job 跑在
+  临时 4-worker 池，位置排序输出是全序 → 与串行逐字节相同；~9600-chunk
+  退出 diff 1.3 s → 0.35 s，A/B 对 P36 串行构建存档字节一致）。
+- 测试 **700/700**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+- 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P37 = 第 12 次结构性
+  免疫——无 `--save` 不触发 `collectSave`/`diffWorld`、F5 需输入；参考图
+  于 P36 经 P35 代码参考构建 A/B 逐字节重锚，P37 直接复用未重锚）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 
 ## 命令

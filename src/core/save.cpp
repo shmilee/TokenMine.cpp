@@ -1,6 +1,8 @@
 #include "core/save.hpp"
+#include "core/thread_pool.hpp"
 
 #include <algorithm>
+#include <iterator>
 #include <set>
 #include <string>
 #include <utility>
@@ -107,37 +109,79 @@ Result<void> parseGrid(const Json& arr, const ItemRegistry& items,
 
 // -- world diff / apply -------------------------------------------------------
 
+// Compares one live chunk against a freshly generated reference chunk and
+// appends the differing cells. A fresh chunk is all-air — exactly what the
+// World's generator callback receives at creation, so the comparison is
+// apples to apples (the generator writes every cell).
+void diffChunk(const World& world, const World::ChunkGenerator& reference,
+               const BlockRegistry& blocks, const ChunkPos& cp,
+               std::vector<SavedBlockEdit>& outBlockEdits,
+               std::vector<SavedFluidEdit>& outFluidEdits) {
+    const Chunk* live = world.findChunk(cp);
+    if (live == nullptr) {
+        return; // cannot happen: positions come from the world
+    }
+    Chunk generated;
+    reference(generated, cp);
+    const BlockPos origin = chunkOrigin(cp);
+    for (int ly = 0; ly < Chunk::kSize; ++ly) {
+        for (int lz = 0; lz < Chunk::kSize; ++lz) {
+            for (int lx = 0; lx < Chunk::kSize; ++lx) {
+                const BlockPos pos {origin.x + lx, origin.y + ly,
+                                    origin.z + lz};
+                if (live->get(lx, ly, lz) != generated.get(lx, ly, lz)) {
+                    outBlockEdits.push_back(
+                        {pos, blocks.at(live->get(lx, ly, lz)).name});
+                }
+                const std::uint8_t liveFl = live->fluidAt(lx, ly, lz);
+                if (liveFl != generated.fluidAt(lx, ly, lz)) {
+                    outFluidEdits.push_back({pos, liveFl});
+                }
+            }
+        }
+    }
+}
+
 Result<void> diffWorld(const World& world,
                        const World::ChunkGenerator& reference,
                        const BlockRegistry& blocks,
                        std::vector<SavedBlockEdit>& outBlockEdits,
-                       std::vector<SavedFluidEdit>& outFluidEdits) {
-    for (const ChunkPos& cp : world.chunkPositions()) {
-        const Chunk* live = world.findChunk(cp);
-        if (live == nullptr) {
-            continue; // cannot happen: positions come from the world
+                       std::vector<SavedFluidEdit>& outFluidEdits,
+                       int workers) {
+    const std::vector<ChunkPos> positions = world.chunkPositions();
+    if (workers <= 1 ||
+        positions.size() <= kSaveDiffParallelMinChunks) {
+        for (const ChunkPos& cp : positions) {
+            diffChunk(world, reference, blocks, cp, outBlockEdits,
+                      outFluidEdits);
         }
-        // A fresh chunk is all-air — exactly what the World's generator
-        // callback receives at creation, so the comparison is apples to
-        // apples (the generator writes every cell).
-        Chunk generated;
-        reference(generated, cp);
-        const BlockPos origin = chunkOrigin(cp);
-        for (int ly = 0; ly < Chunk::kSize; ++ly) {
-            for (int lz = 0; lz < Chunk::kSize; ++lz) {
-                for (int lx = 0; lx < Chunk::kSize; ++lx) {
-                    const BlockPos pos {origin.x + lx, origin.y + ly,
-                                        origin.z + lz};
-                    if (live->get(lx, ly, lz) != generated.get(lx, ly, lz)) {
-                        outBlockEdits.push_back(
-                            {pos, blocks.at(live->get(lx, ly, lz)).name});
-                    }
-                    const std::uint8_t liveFl = live->fluidAt(lx, ly, lz);
-                    if (liveFl != generated.fluidAt(lx, ly, lz)) {
-                        outFluidEdits.push_back({pos, liveFl});
-                    }
-                }
-            }
+    } else {
+        // Phase 37: one job per chunk on a throwaway pool. The workers
+        // only read the world (findChunk) and call the pure generator —
+        // the streaming pool already runs it concurrently — so no World
+        // mutation. Each job appends to its own slice; the position sort
+        // below is a total order (one edit per cell), so the result is
+        // byte-identical to the serial path regardless of scheduling.
+        ThreadPool pool(workers);
+        std::vector<std::vector<SavedBlockEdit>> blockParts(positions.size());
+        std::vector<std::vector<SavedFluidEdit>> fluidParts(positions.size());
+        for (std::size_t i = 0; i < positions.size(); ++i) {
+            const ChunkPos cp = positions[i];
+            pool.post([&, i, cp] {
+                diffChunk(world, reference, blocks, cp, blockParts[i],
+                          fluidParts[i]);
+            });
+        }
+        pool.flush();
+        for (std::size_t i = 0; i < positions.size(); ++i) {
+            outBlockEdits.insert(
+                outBlockEdits.end(),
+                std::make_move_iterator(blockParts[i].begin()),
+                std::make_move_iterator(blockParts[i].end()));
+            outFluidEdits.insert(
+                outFluidEdits.end(),
+                std::make_move_iterator(fluidParts[i].begin()),
+                std::make_move_iterator(fluidParts[i].end()));
         }
     }
     std::sort(outBlockEdits.begin(), outBlockEdits.end(),

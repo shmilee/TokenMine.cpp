@@ -51,6 +51,7 @@
 // the whole save/load core is unit-testable headless.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -78,6 +79,16 @@ namespace mc {
 //      Format 1-4 files still load (saturation defaults to 0).
 inline constexpr int kSaveFormat = 5;
 inline constexpr int kSaveFormatMin = 1;
+
+// Phase 37: the world diff (P33 diagnosis: ~0.14 ms/chunk single-threaded —
+// a ~100k-chunk world took ~14 s to save at exit) runs on a throwaway pool
+// of this many workers when the world holds more than
+// kSaveDiffParallelMinChunks chunks.
+inline constexpr int kSaveDiffWorkers = 4;
+// Thread spawning costs more than the diff below this many chunks
+// (~0.14 ms/chunk over 4 workers vs a few ms of spawn) — small worlds keep
+// the serial path.
+inline constexpr std::size_t kSaveDiffParallelMinChunks = 256;
 
 // One cell whose block differs from generation ("air" = removed).
 struct SavedBlockEdit {
@@ -136,10 +147,16 @@ struct SaveGame {
 // with a fresh scratch Chunk per ChunkPos — the same pure generator the
 // World used at creation) and emits the cells that differ, sorted by
 // position. `blocks` resolves block ids to their data names.
+// `workers` (Phase 37): above kSaveDiffParallelMinChunks chunks the
+// per-chunk comparison runs one chunk per job on a throwaway pool of
+// `workers` threads; below it (or with workers <= 1) the serial loop runs.
+// The position-sorted output is a total order (one edit per cell), so the
+// result is byte-identical in both paths.
 Result<void> diffWorld(const World& world, const World::ChunkGenerator& reference,
                        const BlockRegistry& blocks,
                        std::vector<SavedBlockEdit>& outBlockEdits,
-                       std::vector<SavedFluidEdit>& outFluidEdits);
+                       std::vector<SavedFluidEdit>& outFluidEdits,
+                       int workers = 1);
 
 // Replays the saved cell edits onto a freshly generated `world`: block
 // edits first (a placement displaces any fluid in the cell), then fluid

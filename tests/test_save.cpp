@@ -752,6 +752,79 @@ TEST(SaveWorldDiffTest, DiffWorldOfUntouchedWorldIsEmpty) {
     EXPECT_TRUE(fluidEdits.empty());
 }
 
+// Phase 37: above the parallel threshold the diff runs one chunk per job
+// on a throwaway pool — the position-sorted output must be identical to
+// the serial path.
+TEST(SaveWorldDiffTest, ParallelDiffMatchesSerialDiff) {
+    Fixture f;
+    const BlockID stone = f.blocks.idForName("stone");
+    const BlockID dirt = f.blocks.idForName("dirt");
+    // 16 x 17 = 272 chunks > kSaveDiffParallelMinChunks (256).
+    World world;
+    world.setChunkGenerator(referenceGenerator(stone));
+    for (int x = 0; x < 16; ++x) {
+        for (int z = 0; z < 17; ++z) {
+            world.getOrCreateChunk({x, 0, z});
+        }
+    }
+    // Edits spread over three different chunks, plus a fluid thinning.
+    ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID::air()));
+    ASSERT_TRUE(world.setBlock(8 * 16, 3, 8 * 16, dirt));
+    ASSERT_TRUE(world.setBlock(15 * 16 + 15, 5, 16 * 16 + 15, stone));
+    ASSERT_TRUE(world.setFluid(1, 5, 0, 3));
+
+    std::vector<SavedBlockEdit> serialBlocks;
+    std::vector<SavedFluidEdit> serialFluids;
+    auto r = diffWorld(world, referenceGenerator(stone), f.blocks,
+                       serialBlocks, serialFluids);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    ASSERT_EQ(serialBlocks.size(), 3u);
+    ASSERT_EQ(serialFluids.size(), 1u); // only the thinned (1,5,0) differs
+
+    std::vector<SavedBlockEdit> parallelBlocks;
+    std::vector<SavedFluidEdit> parallelFluids;
+    auto p = diffWorld(world, referenceGenerator(stone), f.blocks,
+                       parallelBlocks, parallelFluids, kSaveDiffWorkers);
+    ASSERT_TRUE(p.ok()) << p.error().message;
+    ASSERT_EQ(parallelBlocks.size(), serialBlocks.size());
+    for (std::size_t i = 0; i < serialBlocks.size(); ++i) {
+        EXPECT_EQ(parallelBlocks[i].pos, serialBlocks[i].pos);
+        EXPECT_EQ(parallelBlocks[i].blockName, serialBlocks[i].blockName);
+    }
+    ASSERT_EQ(parallelFluids.size(), serialFluids.size());
+    for (std::size_t i = 0; i < serialFluids.size(); ++i) {
+        EXPECT_EQ(parallelFluids[i].pos, serialFluids[i].pos);
+        EXPECT_EQ(parallelFluids[i].level, serialFluids[i].level);
+    }
+}
+
+// Phase 37: workers > 1 on a small world must fall back to the serial
+// path and still produce the correct diff.
+TEST(SaveWorldDiffTest, SmallWorldIgnoresTheWorkerCount) {
+    Fixture f;
+    const BlockID stone = f.blocks.idForName("stone");
+    const BlockID dirt = f.blocks.idForName("dirt");
+    World world = makeWorld(stone);
+    ASSERT_TRUE(world.setBlock(2, 5, 0, dirt));
+
+    std::vector<SavedBlockEdit> single;
+    std::vector<SavedFluidEdit> singleFluids;
+    auto r = diffWorld(world, referenceGenerator(stone), f.blocks, single,
+                       singleFluids);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    ASSERT_EQ(single.size(), 1u);
+
+    std::vector<SavedBlockEdit> multi;
+    std::vector<SavedFluidEdit> multiFluids;
+    auto p = diffWorld(world, referenceGenerator(stone), f.blocks, multi,
+                       multiFluids, kSaveDiffWorkers);
+    ASSERT_TRUE(p.ok()) << p.error().message;
+    ASSERT_EQ(multi.size(), 1u);
+    EXPECT_EQ(multi[0].pos, single[0].pos);
+    EXPECT_EQ(multi[0].blockName, single[0].blockName);
+    EXPECT_TRUE(multiFluids.empty());
+}
+
 TEST(SaveWorldDiffTest, ApplyRestoresTheModifiedWorld) {
     Fixture f;
     const BlockID stone = f.blocks.idForName("stone");
