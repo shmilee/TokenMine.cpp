@@ -90,3 +90,53 @@ TEST(EatChannelTest, ConstantsMatchMinecraft) {
     EXPECT_DOUBLE_EQ(kEatDurationSeconds, 1.6);
     EXPECT_FLOAT_EQ(kSaturationFactor, 2.0f);
 }
+
+// -- drinkable channel (Phase 43: the data-driven duration) ------------------
+
+TEST(EatChannelTest, CustomDurationRunsAtItsOwnClock) {
+    // A drinkable container arms the shared channel with its DATA-DRIVEN
+    // drink_time (here 0.5 s): it completes at its own duration, not the
+    // eat's 1.6 s. 0.5 s is 30 frames mathematically, but the IEEE-double
+    // sum of 30 steps of (1/60) lands a hair SHORT of the double 0.5, so
+    // the boundary crosses on the 31st update (the 97th-frame phenomenon
+    // of the eat test, pinned the same way).
+    EatChannel c;
+    c.start(0.5);
+    ASSERT_TRUE(c.active);
+    for (int i = 1; i < 31; ++i) {
+        EXPECT_EQ(c.update(kDt, true), EatEvent::None) << "frame " << i;
+    }
+    EXPECT_EQ(c.update(kDt, true), EatEvent::Completed);
+    EXPECT_FALSE(c.active);
+}
+
+TEST(EatChannelTest, CustomDurationProgressNormalizesByOwnTotal) {
+    // progress() divides by the channel's OWN duration (`total`): halfway
+    // through a 0.5 s drink is ~0.5, not ~0.15 of the eat clock.
+    EatChannel c;
+    c.start(0.5);
+    for (int i = 0; i < 15; ++i) { // 15 frames = 0.25 s
+        c.update(kDt, true);
+    }
+    EXPECT_GT(c.progress(), 0.48f);
+    EXPECT_LT(c.progress(), 0.52f);
+}
+
+TEST(EatChannelTest, CustomDurationEarlyReleaseStillCancels) {
+    EatChannel c;
+    c.start(0.5);
+    for (int i = 1; i < 15; ++i) {
+        EXPECT_EQ(c.update(kDt, true), EatEvent::None);
+    }
+    EXPECT_EQ(c.update(kDt, false), EatEvent::Cancelled);
+    EXPECT_FALSE(c.active);
+    EXPECT_EQ(c.update(kDt, false), EatEvent::None); // terminal, fired once
+}
+
+TEST(EatChannelTest, DefaultStartIsStillTheEatDuration) {
+    // Backward compatibility: start() with no argument is the 1.6 s eat
+    // (the existing tests pin the 97th-frame boundary).
+    EatChannel c;
+    c.start();
+    EXPECT_DOUBLE_EQ(c.total, kEatDurationSeconds);
+}

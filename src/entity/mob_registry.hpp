@@ -147,6 +147,16 @@ struct MobProperties {
     float retreatDistance = 0.0f;
     float shootSpeed = 0.0f;
     std::string ammoItem;
+    // Milking (Phase 43, cow): `milkWith` is the item the player must
+    // hold and `milkGives` is the item a right-click ON the mob returns
+    // (one held consumed, one given; the mob is NOT affected — no damage,
+    // death, drop or cooldown in v1). Both fields must be present
+    // together (a lone field is a typo, rejected — the dye_base /
+    // dye_color pairing discipline); both item names are cross-checked
+    // against the ItemRegistry at game init (the ammo pattern). Empty =
+    // not milkable (every pre-Phase-43 mob).
+    std::string milkWith;
+    std::string milkGives;
     // Drops (Phase 28): the item list the mob drops on death — one entry
     // per dropped item, spawned in list order. Empty = no drops.
     std::vector<MobDrop> drops;

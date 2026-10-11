@@ -9,6 +9,8 @@
     "attack_cooldown": 1.0,
     "wander_interval": 3.0,
     "spawn_max_light": 15,
+    "milk_with": "bucket",
+    "milk_gives": "milk_bucket",
     "drops": [
       { "item": "leather", "count": 1 },
       { "item": "beef", "count": 1 }

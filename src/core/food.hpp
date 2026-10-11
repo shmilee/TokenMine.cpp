@@ -29,16 +29,20 @@ enum class EatEvent {
     Cancelled, // the right button was released early: eat nothing
 };
 
-// The channel state. `start()` arms it with a full clock; `update()`
-// advances it in real dt while `rightHeld` is true and reports the
-// terminal event exactly once.
+// The channel state. `start()` arms it with a full clock (the default
+// duration is kEatDurationSeconds, the eat; a drinkable container passes
+// its data-driven drink_time, Phase 43); `update()` advances it in real
+// dt while `rightHeld` is true and reports the terminal event exactly
+// once.
 struct EatChannel {
     bool active = false;
     double remaining = 0.0;
+    double total = kEatDurationSeconds;
 
-    void start() {
+    void start(double duration = kEatDurationSeconds) {
         active = true;
-        remaining = kEatDurationSeconds;
+        total = duration;
+        remaining = duration;
     }
 
     void reset() {
@@ -65,13 +69,15 @@ struct EatChannel {
     }
 
     // Channel progress in [0, 1] (0 = just started, 1 = would complete):
-    // the held-item pull indicator (Phase 28 render).
+    // the held-item pull indicator (Phase 28 render). Normalized by the
+    // channel's own duration (`total` — the data-driven drink_time for
+    // drinkables, Phase 43).
     float progress() const {
         if (!active) {
             return 0.0f;
         }
-        const float p = 1.0f -
-                        static_cast<float>(remaining / kEatDurationSeconds);
+        const float p =
+            1.0f - static_cast<float>(remaining / total);
         return p < 0.0f ? 0.0f : (p > 1.0f ? 1.0f : p);
     }
 };

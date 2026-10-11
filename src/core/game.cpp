@@ -513,6 +513,13 @@ Result<void> Game::buildScene() {
             return MC_FAIL("item '" + item.name + "' references unknown "
                            "smelting product '" + item.smeltableTo + "'");
         }
+        // Phase 43: the drinkable's returned container (same cross-check
+        // pattern — the container may be defined in a later file).
+        if (!item.returnsItem.empty() &&
+            m_items.findByName(item.returnsItem) == nullptr) {
+            return MC_FAIL("item '" + item.name + "' references unknown "
+                           "container item '" + item.returnsItem + "'");
+        }
     }
 
     // -- mob arrow ammo (Phase 42): a ranged mob's 'ammo' field names the
@@ -525,6 +532,21 @@ Result<void> Game::buildScene() {
             return MC_FAIL("mob '" + def.name + "' references unknown "
                            "arrow ammo item '" + def.properties.ammoItem +
                            "'");
+        }
+        // Phase 43: the milking pair (both names must exist — the parsing
+        // guarantees the pair is complete, only the names are checked
+        // here, the ammo pattern).
+        if (!def.properties.milkWith.empty()) {
+            if (m_items.findByName(def.properties.milkWith) == nullptr) {
+                return MC_FAIL("mob '" + def.name + "' milking pair "
+                               "references unknown item '" +
+                               def.properties.milkWith + "'");
+            }
+            if (m_items.findByName(def.properties.milkGives) == nullptr) {
+                return MC_FAIL("mob '" + def.name + "' milking pair "
+                               "references unknown item '" +
+                               def.properties.milkGives + "'");
+            }
         }
     }
 
@@ -1452,6 +1474,15 @@ void Game::handleInteraction(double dt) {
         if (tryEat()) {
             return;
         }
+        // Drinkable container (Phase 43): a selected item with a
+        // 'drink_time' is DRUNK, not used — the same hold channel as the
+        // eat (data-driven duration); completing it consumes one, returns
+        // the empty container and clears the status effects (v1: the hurt
+        // flash). The click is consumed either way (no interact, no
+        // placement — a milk bucket in hand never places).
+        if (tryDrink()) {
+            return;
+        }
         // Launcher (Phase 24): the right button is the DRAW. Starting it
         // consumes the click entirely (no interact, no placement — a bow
         // in hand never places). The draw starts only when ammo is
@@ -1462,6 +1493,15 @@ void Game::handleInteraction(double dt) {
                 m_bowDrawSeconds = 0.0;
                 m_sound.play("bow");
             }
+            return;
+        }
+        // Milking (Phase 43): a mob whose data pairs 'milk_with' with the
+        // selected item's name, under the crosshair (melee targeting:
+        // kReach + block occlusion), is MILKED — one held item consumed,
+        // one 'milk_gives' item added, the mob unharmed (v1: no damage,
+        // death, drop or cooldown). The click is consumed either way
+        // (no interact, no placement).
+        if (tryMilk()) {
             return;
         }
         // Data-driven interaction (Phase 17): a block whose `interact`
@@ -1938,6 +1978,103 @@ bool Game::tryEat() {
     return true;
 }
 
+bool Game::tryDrink() {
+    // Drinkable container (Phase 43): only the selected slot can feed
+    // the player (Minecraft). The item is drinkable when its data marks
+    // drink_time (Item::drinkTime > 0); there is no hardcoded item list.
+    if (!m_player || m_player->isDead()) {
+        return false;
+    }
+    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    if (stack.empty()) {
+        return false;
+    }
+    const Item& item = m_items.at(stack.item);
+    if (item.drinkTime <= 0.0f) {
+        return false; // not drinkable: fall through to the normal right-click
+    }
+    // A drinkable is selected: the click is consumed either way. No room
+    // for the returned container (Minecraft: you cannot drink when the
+    // empty bucket would have nowhere to go): a no-op, click consumed.
+    // isFull(item) = "not even one more unit fits" (a partial stack of
+    // the item or an empty slot exists = false), the exact probe add(1)
+    // needs.
+    if (!item.returnsItem.empty()) {
+        const ItemID ret = m_items.idForName(item.returnsItem);
+        if (ret.valid() && m_inventory.isFull(ret, m_items)) {
+            return true; // no room for the container: no-op (no sound)
+        }
+    }
+    // Drink channel (Phase 43): the shared eat channel armed with the
+    // item's DATA-DRIVEN duration (updateEatChannel owns the completion:
+    // consume + return container + clear status effects). An extra press
+    // while channeling is ignored (the drink continues). The "milk"
+    // sound plays on START (Minecraft: the glug is up front, even when
+    // the drink is cancelled — same as the bow draw sound).
+    if (m_eatChannel.active) {
+        return true;
+    }
+    m_eatChannel.start(static_cast<double>(item.drinkTime));
+    m_eatSlot = m_selectedSlot;
+    m_eatItem = stack.item;
+    m_eatStartHealth = m_player->health();
+    m_sound.play("milk");
+    return true;
+}
+
+bool Game::tryMilk() {
+    // Milking (Phase 43, cow): the crosshair must be ON a milkable mob
+    // (mob data 'milk_with' == the selected item's name; melee targeting
+    // — kReach with block occlusion, see targetMob) and the player must
+    // hold the mob's 'milk_with' item. One held item is consumed and one
+    // 'milk_gives' item is added; the mob is NOT affected (no damage,
+    // death, drop or cooldown — the v1 rule, see docs/KNOWN_ISSUES). The
+    // click is consumed whenever the crosshair is on the mob (Minecraft:
+    // a failed milk — e.g. a full inventory — still eats the click).
+    if (!m_player || m_player->isDead()) {
+        return false;
+    }
+    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    if (stack.empty()) {
+        return false;
+    }
+    const Item& item = m_items.at(stack.item);
+    const std::optional<MobHit> mob = targetMob();
+    if (!mob) {
+        return false;
+    }
+    const MobProperties& props = mob->mob->def().properties;
+    if (props.milkWith.empty() || props.milkWith != item.name) {
+        return false; // not a milkable mob, or the wrong item in hand
+    }
+    // Init cross-checks guarantee the exists; the guard is a defensive
+    // no-op.
+    const ItemID gives = m_items.idForName(props.milkGives);
+    if (!gives.valid()) {
+        return true;
+    }
+    if (m_inventory.isFull(gives, m_items)) {
+        return true; // full: no milk, click consumed (Minecraft)
+    }
+    m_inventory.take(m_selectedSlot, 1);
+    m_inventory.add(gives, 1, m_items);
+    m_sound.play("milk");
+    MC_LOG_DEBUG("milked mob '" + mob->mob->def().name + "' (" +
+                 item.name + " -> " + props.milkGives + ")");
+    return true;
+}
+
+void Game::clearStatusEffects() {
+    // Phase 43: the state-effect system does not exist yet — this is the
+    // extension point where a drinkable container's "clear negative
+    // effects" (Minecraft milk) will call into it. The v1 effect set:
+    // reset the red damage veil (m_hurtFlash). The fall-damage tracking
+    // (Player::fallStartY) is deliberately NOT touched — Minecraft's fall
+    // damage is not a status effect, so drinking mid-air must not reduce
+    // the fall damage owed on landing.
+    m_hurtFlash = 0.0;
+}
+
 void Game::updateEatChannel(double dt) {
     if (!m_eatChannel.active) {
         return;
@@ -1956,15 +2093,31 @@ void Game::updateEatChannel(double dt) {
     const EatEvent ev =
         m_eatChannel.update(dt, m_input.isDown(MouseButton::Right));
     if (ev == EatEvent::Completed) {
-        // The channel finished: eat one from the captured slot (its
-        // validity was just re-checked) — hunger plus the hidden
-        // saturation buffer (core/food.hpp), then the eat sound.
+        // The channel finished: consume one from the captured slot (its
+        // validity was just re-checked). Food restores hunger plus the
+        // hidden saturation buffer (core/food.hpp) and plays the eat
+        // sound; a drinkable container (Phase 43) returns its empty
+        // container to the inventory (start checked the capacity — the
+        // add cannot fail) and clears the player's status effects (the
+        // v1 set: the hurt flash; see clearStatusEffects).
         const Item& item = m_items.at(m_eatItem);
         m_inventory.take(m_eatSlot, 1);
-        m_player->restoreHunger(static_cast<float>(item.restoreHunger));
-        m_player->restoreSaturation(
-            static_cast<float>(item.restoreHunger) * kSaturationFactor);
-        m_sound.play("eat");
+        if (item.restoreHunger > 0) {
+            m_player->restoreHunger(static_cast<float>(item.restoreHunger));
+            m_player->restoreSaturation(
+                static_cast<float>(item.restoreHunger) * kSaturationFactor);
+            m_sound.play("eat");
+        } else {
+            if (!item.returnsItem.empty()) {
+                m_inventory.add(m_items.idForName(item.returnsItem), 1,
+                                m_items);
+            }
+            clearStatusEffects();
+            MC_LOG_DEBUG("drank '" + item.name + "'" +
+                         (item.returnsItem.empty()
+                              ? std::string()
+                              : " (returned '" + item.returnsItem + "')"));
+        }
         resetEatChannel();
     } else if (ev == EatEvent::Cancelled) {
         // Early release: nothing is consumed, no sound.

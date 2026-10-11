@@ -254,6 +254,39 @@
   - **染色即换块**：走 `setBlock` 脏标记管线（下一帧重网格）+
     `Lighting::updateLocal`（染色前后都是 opaque，光不变）；无存档格式变更
     （diff 按块名存，format 6 不变）
+- **饮用 / 挤奶**（Phase 43，全数据驱动）：
+  - **可饮用容器**：物品可选字段 `drink_time`（秒，(0,10]；present = 可饮用，
+    **与 `restore_hunger` 互斥**——一个物品不能既是食物又是可饮用）；
+    当前唯一：`milk_bucket`（material，max_stack 1，`drink_time 1.6` = MC
+    牛奶时长，`returns_item: "bucket"`）
+  - **返还容器**：物品可选字段 `returns_item`（非空物品名，**要求
+    `drink_time` 存在**；init 对 ItemRegistry 交叉校验 = ammo 模式）——
+    饮用完成时返还 1 个该容器到背包（开始饮用时已探明有空位/可并入堆，
+    见下）
+  - **饮用通道**：复用进食状态机（`core/food.hpp` `EatChannel::start(
+    duration)` 泛化——通道时长按物品 `drink_time` 数据驱动，progress()
+    按通道自身 total 归一）；**开始**时播 "milk" 音效（MC 一致：咕嘟声在
+    前，取消也响过）；**完成**时消耗 1 个 + 返还容器 +
+    `clearStatusEffects()`（v1 效果集 = 清红闪 `m_hurtFlash`；坠落起点
+    刻意不清——MC 坠落伤害非状态效果）。中断/取消语义与进食完全相同
+    （提前松开/受击/死亡/解锁/开面板/换格）
+  - **满背包 no-op**：开始饮用前探测 `returns_item` 的 `isFull`（count-1
+    可加探针）= 无空位且无未满同物堆 → 不开始（no-op）但**吞点击**
+    （MC 一致：空桶没处放时喝不了）
+  - **挤奶**（mob 字段，成对校验 = dye_base/dye_color 纪律）：mob 可选
+    字段 `milk_with`（手持物品名）+ `milk_gives`（产出物品名），必须同时
+    给、非空字符串，init 交叉校验两物品存在。当前：cow（`bucket` →
+    `milk_bucket`）
+  - **右键顺序**（Phase 43 更新）：食物 → **饮用** → launcher → **挤奶**
+    → interact → 染色 → 放置。挤奶 = 准星命中（近战目标：kReach 5 + 方块
+    遮挡，复用 `targetMob`）`milk_with` == 选中物品名的 mob：消耗 1 个手持
+    + 产出 1 个 `milk_gives` + "milk" 音效 + **mob 不受任何影响**（无伤害/
+    死亡/掉落/冷却——v1 规则，MC 有 5 分钟挤奶冷却，见 KNOWN_ISSUES）；
+    背包满 = 不产出但吞点击。选中非 `milk_with` 物品或准星无 mob = 落空
+    继续后续（不吞）
+  - **物品**：`bucket`（material，max_stack 16 = MC 值，2D 图标）；配方
+    `bucket`（shaped `I I`/` I `，I = iron_ingot，3 铁锭 = MC 配方）；
+    新内容均不进默认 hotbar / 世界生成
 - **游泳**（Phase 9）：玩家包围盒与任何水体格相交即进入水中状态——水中重力减半
   （12 vs 32）、终端速度 4、水平速度降为 3.1（冲刺无效）、`Space` 随时上浮（4.5）；
   浅水（头在水面上）可以"蹚水走"，深水可以游
@@ -264,7 +297,9 @@
     进度清零。raycast 把水体当 air 穿过——可以隔水破坏湖底/水下的方块
     （水会被破坏排水、随后流体模拟把它补回）
   - `右键`（锁定时）：**先试食物**（选中食物 = 开始进食通道，点击被吞）
-    再试 launcher（弓蓄力）再试 interact——命中格有 `interact` 属性
+    再试**饮用**（选中可饮用容器 = 开始饮用通道，点击被吞，Phase 43）
+    再试 launcher（弓蓄力）再试**挤奶**（准星命中可挤 mob + 手持其
+    `milk_with` 物品，Phase 43）再试 interact——命中格有 `interact` 属性
     （工作台/炉子）则打开对应面板、不放置——再试**染色**（选中染料 +
     命中 dye 家族方块，见「染色」）；否则在命中面的邻格放置
     **当前选中格**的方块物品，
@@ -324,7 +359,8 @@
   per-block 差异）——破坏（按住时每 0.3s 一个 dig tick + 完成时的 break）、
   放置、拾取（含 Q 丢弃）、脚步（移动 + 贴地 + 锁定 + 背包关闭时每 0.4s）、
   背包开/关、合成成功、受伤/死亡（Phase 16）、射箭（Phase 21）、拉弓弦音
-  （Phase 24）、进食（Phase 23）。13 个程序化 WAV
+  （Phase 24）、进食（Phase 23）、染色布料声（Phase 41）、牛奶咕嘟声
+  （Phase 43，饮用开始 + 挤奶共用）。15 个程序化 WAV
   （`tools/generate_sounds.py`，44.1kHz 16-bit
   单声道），音量
   `config audio.volume`（默认 0.7）

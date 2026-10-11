@@ -21,6 +21,8 @@ blocks, not per-material — see docs/KNOWN_ISSUES). Files:
   shoot.wav    descending whoosh (arrow release, Phase 21)
   bow.wav      string twang (bow draw start, Phase 24)
   eat.wav      muffled chewing (food eaten, Phase 23)
+  cloth.wav    soft rustle (dye recolor, Phase 41)
+  milk.wav     liquid glug (milk drink start / cow milking, Phase 43)
 """
 import math
 import os
@@ -214,6 +216,23 @@ def cloth():
     return lowpass3(sound(dur, f))
 
 
+def milk():
+    """Liquid glug (milk: drink start + cow milking, Phase 43): two low
+    sine blips (the swallowed bubbles) with a quiet lowpassed noise
+    splash under them, ending in a clean release."""
+    lcg = Lcg(0x0CC0)
+    dur = 0.28
+
+    def f(t, _):
+        # Two glug pulses: a ~7 Hz gate sharpened to two short bumps.
+        gate = max(0.0, math.sin(2 * math.pi * 3.5 * t - math.pi / 2)) ** 3
+        # Low, wobbling bubble tone under each glug.
+        tone = math.sin(2 * math.pi * (150.0 - 180.0 * t) * t) * 0.5
+        # Quiet splash of liquid noise.
+        return (tone + lcg.next() * 0.4) * gate * env(t, dur, 8.0) * 0.7
+    return lowpass3(sound(dur, f))
+
+
 SOUNDS = {
     "dig": dig,
     "place": place,
@@ -229,6 +248,7 @@ SOUNDS = {
     "bow": bow,
     "eat": eat,
     "cloth": cloth,
+    "milk": milk,
 }
 
 

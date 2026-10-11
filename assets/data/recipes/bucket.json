@@ -1,0 +1,12 @@
+{
+  "id": "bucket",
+  "type": "shaped",
+  "output": { "item": "bucket", "count": 1 },
+  "pattern": [
+    "I I",
+    " I "
+  ],
+  "key": {
+    "I": "iron_ingot"
+  }
+}

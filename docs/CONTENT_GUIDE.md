@@ -52,7 +52,9 @@
   "ammo": "arrow",                  // 可选（Phase 24）：发射器弹药物品名（须存在，init 交叉校验）；发射消耗 1 个
   "smeltable_to": "cooked_x",       // 可选（Phase 40）：炉子产物物品名（须存在，init 交叉校验）；存在=可熔炼
   "smelt_time": 10.0,               // 可选（Phase 40）：单格熔炼秒数，(0,100]，默认 10（MC 炉子时长）；仅可熔炼时有意义
-  "fuel_time": 80.0                 // 可选（Phase 40）：单格燃料燃烧秒数，(0,1000]；缺省=非燃料（显式 0 拒绝）
+  "fuel_time": 80.0,                // 可选（Phase 40）：单格燃料燃烧秒数，(0,1000]；缺省=非燃料（显式 0 拒绝）
+  "drink_time": 1.6,                // 可选（Phase 43）：饮用通道秒数，(0,10]；present=可饮用容器（与 restore_hunger 互斥）
+  "returns_item": "bucket"          // 可选（Phase 43）：喝完返还的容器物品名（须存在，init 交叉校验）；要求 drink_time 存在
   "max_stack": 1,                   // 1..64，默认 64
   "icon": "wooden_pickaxe"          // UI 图标（Phase 15）：assets/textures/items/<icon>.png
 }
@@ -193,6 +195,11 @@ iron_pickaxe（III/.S./.S.）。
    ((0,100]，远攻必填)、`ammo`（Phase 42：**非空字符串** = 该 mob 射出的箭
    插墙后被玩家拾取时返还的弹药物品名；远攻必填 + init 对 ItemRegistry
    交叉校验物品存在，显式空串/非字符串拒绝；近战 mob 不给 = 无远攻）、
+   挤奶（Phase 43）可选字段：`milk_with`（手持物品名）+ `milk_gives`
+   （产出物品名）——**必须成对**（只给一边 = 报错，dye_base/dye_color
+   纪律）、非空字符串、init 对 ItemRegistry 交叉校验两物品存在；
+   手持 `milk_with` 右键该 mob = 消耗 1 个 + 产出 1 个 `milk_gives`
+   （mob 不受影响、无冷却，见 KNOWN_ISSUES）；不给 = 不可挤、
    `drops` 每条目：`count` ∈ [1,64] 或
     `count_min`/`count_max` ∈ [0,64] 且 min ≤ max（Phase 38 随机区间：两者
     必须成对、与 `count` 混用/只给一边 = 报错）、box 越界/缺纹理名

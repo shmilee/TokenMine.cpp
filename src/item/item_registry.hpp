@@ -93,6 +93,14 @@ private:
     // (a color name; presence marks the item as a dye — block dye
     // colors are cross-checked against the dye items at game init).
     static Result<void> parseDye(const Json& def, Item& out);
+    // Parse the optional drinkable fields (Phase 43) into `out`:
+    // `drink_time` ((0, 10] s; presence marks the item as a drinkable
+    // container — the consume channel's duration) and `returns_item`
+    // (a non-empty item name returned on a completed drink; only valid
+    // together with `drink_time`, the product's existence is
+    // cross-checked at game init). `drink_time` and `restore_hunger`
+    // are mutually exclusive (an item is food OR a drinkable).
+    static Result<void> parseDrink(const Json& def, Item& out);
     // Parse the tool fields (`tool.break_speed` + `max_stack`) into `out`.
     static Result<void> parseTool(const Json& def, Item& out);
 

@@ -9,35 +9,37 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 42 完成时）
+## 现状（Phase 43 完成时）
 
-- 功能阶段 P0–P42 全部完成并提交；P40 = 炉子/熔炼（P28 遗留
+- 功能阶段 P0–P43 全部完成并提交；P40 = 炉子/熔炼（P28 遗留
   "熟肉"）：`furnace` 方块 + 物品字段 `smeltable_to`/`smelt_time`/`fuel_time`
   + 3 熟肉 + 燃料 + **单个全局 `FurnaceState`**（每帧 1/60 子步 + 整数字步
   倒计时）+ 存档 format 6、P41 = wool 后续（P12/P20 遗留"wool 无用途/
   无染色"）：9 wool 方块（`wool` 白 base + 8 染色变体 `wool_<color>`）+ 9
   染料物品 `dye_<color>` + 9 shapeless 配方 + 方块属性
   `dye_base`/`dye_color`；atlas 4×8→8×8（**所有既有 UV 移位 →
-  base18 于 P41 重锚**）、**P42 = 弓后续 2**（P21/P24 遗留）：**3D 手持
-  手部**（`drawHeldHand`，仅指针锁定时渲染 → 无输入基线结构性免疫；块物品
-  = 3D 方块体 + atlas 光照、图标物品 = 2D 图标贴 3D 平面恒亮；拉弓 = 手部
-  后拉 + 弓体后仰、进食 = 抬向面部；2D 图标拉移删除）+ **插墙箭寿命
-  `kStuckMaxAge = 100s`**（飞行箭仍 30s，上限按**当前**状态取）+ **方块
-  变更释放箭**（`Game::setBlock` 收口；判定 = 箭盒**触**卡住格面且中心在
-  面外，非重叠）+ **插墙箭拾取**（stuck 箭距玩家底心 ≤ 1.0 → 返还发射器
-  `ammo` 物品；飞行箭不可拾取）+ **击退随蓄力**（`arrowKnockback` 纯函数
-  4.0×power / 2.5×power，power 1 = 旧常数逐位）+ **mob `ammo` 字段**
-  （远攻必填 + init 校验物品存在，skeleton = arrow）。
-- 测试 **769/769**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+  base18 于 P41 重锚**）、P42 = 弓后续 2（P21/P24 遗留）：3D 手持手部 /
+  插墙箭 100s 寿命 / 方块变更释放箭 / 插墙箭拾取 / 击退随蓄力 / mob
+  `ammo` 字段、**P43 = 新食物剩余：牛奶桶最小项**（P23/P28 遗留
+  "牛奶桶"，用户确认 v1 = 容器框架 + 清红闪/受伤计时）：物品字段
+  `drink_time`（(0,10]，present = 可饮用，**与 restore_hunger 互斥**）+
+  `returns_item`（要求 drink_time，init 交叉校验）+ mob 字段
+  `milk_with`/`milk_gives`（成对校验，cow = bucket → milk_bucket）+
+  `bucket`/`milk_bucket` 物品 + 3 铁锭 bucket 配方 + **饮用通道**
+  （进食状态机 `start(duration)` 数据驱动时长；完成 = 消耗 + 返还容器 +
+  `clearStatusEffects()`【v1 效果集 = 清红闪，坠落起点刻意不清】）+
+  **挤奶**（`tryMilk` 右键序 launcher 后；mob 零影响、无冷却 = 文档化
+  v1）+ "milk" 音效 + 2 图标。
+- 测试 **781/781**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
 - 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P41 重锚【atlas
-  8×8】，P42 过门 = 第 16 次结构性免疫、无重锚）。
+  8×8】，P42/P43 过门 = 第 16/17 次结构性免疫、无重锚）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 
 ## 命令
 
 ```bash
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build  # 构建（0 警告）
-./build/bin/minecraft_tests                                                 # 测试（762）
+./build/bin/minecraft_tests                                                 # 测试（781）
 ./build/bin/minecraft                                                       # 运行（ESC 退出）
 ./build/bin/minecraft --frames N [--screenshot /abs.png] [--save slot] [--new] [--config path]
 ```

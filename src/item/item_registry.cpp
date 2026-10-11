@@ -197,6 +197,48 @@ Result<void> ItemRegistry::parseDye(const Json& def, Item& out) {
     return {};
 }
 
+Result<void> ItemRegistry::parseDrink(const Json& def, Item& out) {
+    // Optional 'drink_time' (Phase 43): seconds of HELD right button for
+    // a full drink (Minecraft's milk: 1.6 s). Presence (a number in
+    // (0, 10]) marks the item as a DRINKABLE container; the absent field
+    // is the "not drinkable" default, so an explicit 0 is rejected as a
+    // typo (the restore_hunger discipline).
+    if (const Json* dt = def.find("drink_time")) {
+        if (!dt->isNumber()) {
+            return MC_FAIL("'drink_time' must be a number");
+        }
+        out.drinkTime = static_cast<float>(dt->asDouble());
+        if (out.drinkTime <= 0.0f || out.drinkTime > 10.0f) {
+            return MC_FAIL("'drink_time' must be in (0, 10], got " +
+                           std::to_string(out.drinkTime));
+        }
+    }
+    // Optional 'returns_item' (Phase 43): the container a completed
+    // drink returns to the inventory (milk_bucket -> bucket). Presence
+    // (a non-empty string) is valid only on a drinkable item — a
+    // returns_item without a drink_time is a dead field, rejected (the
+    // dye_base/dye_color pairing discipline). The name is resolved
+    // against the ItemRegistry at game init (the ammo pattern).
+    if (const Json* ri = def.find("returns_item")) {
+        if (!ri->isString() || ri->asString().empty()) {
+            return MC_FAIL("'returns_item' must be a non-empty item name");
+        }
+        out.returnsItem = ri->asString();
+    }
+    if (!out.returnsItem.empty() && out.drinkTime <= 0.0f) {
+        return MC_FAIL("'returns_item' requires a 'drink_time' "
+                       "(only a drinkable item returns a container)");
+    }
+    // Food and drinkable are mutually exclusive channels: one item cannot
+    // be both (the restore_hunger/drink_time fields would fight over the
+    // same right-button hold channel and the same completion path).
+    if (out.restoreHunger > 0 && out.drinkTime > 0.0f) {
+        return MC_FAIL("an item cannot be both food ('restore_hunger') "
+                       "and a drinkable ('drink_time')");
+    }
+    return {};
+}
+
 Result<void> ItemRegistry::parseTool(const Json& def, Item& out) {
     if (const Json* tool = def.find("tool")) {
         if (!tool->isObject()) {
@@ -257,7 +299,9 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
             key != "shoot_speed" && key != "shoot_damage" &&
             key != "restore_hunger" && key != "ammo" &&
             key != "smeltable_to" && key != "smelt_time" &&
-            key != "fuel_time" && key != "dye_color" && key != "icon") {
+            key != "fuel_time" && key != "dye_color" &&
+            key != "drink_time" && key != "returns_item" &&
+            key != "icon") {
             MC_LOG_WARN("Item '" + name + "': unknown field '" + key +
                         "' ignored");
         }
@@ -279,6 +323,8 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     r = parseFurnace(def, item);
     MC_TRY(r);
     r = parseDye(def, item);
+    MC_TRY(r);
+    r = parseDrink(def, item); // after parseFood: the exclusivity check
     MC_TRY(r);
 
     // Optional 2D icon (Phase 15 UI): a texture file name under

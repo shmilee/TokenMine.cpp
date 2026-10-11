@@ -106,6 +106,20 @@ struct Item {
     // game-init cross-check keeps the family complete — see
     // Game::init).
     std::string dyeColor;
+    // Phase 43: drinkable container (optional data field 'drink_time').
+    // drinkTime (seconds, (0, 10]) > 0 marks the item as DRINKABLE:
+    // right-clicking it selected starts the shared consume channel (the
+    // eat channel, generalized to a data-driven duration); completing it
+    // consumes one, plays the "milk" sound, returns `returnsItem` to the
+    // inventory (when set) and clears the player's status effects (v1:
+    // the hurt flash). Mutually exclusive with 'restore_hunger' (an item
+    // is either food or a drinkable, not both).
+    float drinkTime = 0.0f;
+    // Phase 43: the container a completed drink RETURNS to the inventory
+    // (optional data field 'returns_item', a non-empty item name). Only
+    // valid on a drinkable item (rejected otherwise); the name's
+    // existence is cross-checked at game init (the ammo pattern).
+    std::string returnsItem;
     // Phase 15 UI: the item's 2D icon texture name (a file under
     // assets/textures/items/, validated against the filesystem at game
     // init). Empty for block items, which render a 3D block cube instead.

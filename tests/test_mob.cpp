@@ -435,6 +435,8 @@ TEST(MobRegistryTest, ParsesPassiveMob) {
         "attack_cooldown": 1.0,
         "wander_interval": 3.0,
         "spawn_max_light": 15,
+        "milk_with": "bucket",
+        "milk_gives": "milk_bucket",
         "drops": [{"item": "leather", "count": 1},
                   {"item": "beef", "count": 1}]
       },
@@ -453,6 +455,9 @@ TEST(MobRegistryTest, ParsesPassiveMob) {
     EXPECT_FLOAT_EQ(mob.properties.attackRange, 0.0f);
     EXPECT_FLOAT_EQ(mob.properties.attackDamage, 0.0f);
     EXPECT_EQ(mob.properties.spawnMaxLight, 15);
+    // Phase 43: the milking pair (hold a bucket, get a milk bucket).
+    EXPECT_EQ(mob.properties.milkWith, "bucket");
+    EXPECT_EQ(mob.properties.milkGives, "milk_bucket");
     // Phase 28: the drop LIST (leather + the new beef food).
     ASSERT_EQ(mob.properties.drops.size(), 2u);
     EXPECT_EQ(mob.properties.drops[0].item, "leather");
@@ -659,6 +664,67 @@ TEST(MobRegistryTest, RejectsRangedFieldErrors) {
     EXPECT_FALSE(noAmmoMobs.registerMob(parseJson(noAmmo)).ok());
     MobRegistry meleeMobs;
     EXPECT_TRUE(meleeMobs.registerMob(parseJson(kZombieDef)).ok());
+}
+
+// -- milking (Phase 43: cow) --------------------------------------------------
+
+TEST(MobRegistryTest, MilkingPairAbsentByDefault) {
+    // No milk fields: not milkable (every pre-Phase-43 mob, e.g. the
+    // zombie def).
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(kZombieDef));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(mobs.at(*r).properties.milkWith.empty());
+    EXPECT_TRUE(mobs.at(*r).properties.milkGives.empty());
+}
+
+TEST(MobRegistryTest, RejectsBadMilkingPair) {
+    // The pair must be complete (a lone field is a typo — the
+    // dye_base / dye_color discipline) and both names non-empty strings
+    // (the ammo discipline).
+    struct Case {
+        const char* broken;
+    };
+    const Case cases[] = {
+        // A lone milk_with (no milk_gives).
+        {"\"milk_with\": \"bucket\",\n    "},
+        // A lone milk_gives (no milk_with).
+        {"\"milk_gives\": \"milk_bucket\",\n    "},
+        // Explicit empty = a typo.
+        {"\"milk_with\": \"\",\n    \"milk_gives\": \"milk_bucket\",\n    "},
+        // Non-string = a typo.
+        {"\"milk_with\": 7,\n    \"milk_gives\": \"milk_bucket\",\n    "},
+    };
+    // Build a base def (the cow shape) with NO milk fields, then insert
+    // the broken fragment after "spawn_max_light".
+    const char* anchor = "\"spawn_max_light\": 15,\n    ";
+    for (const Case& c : cases) {
+        std::string def = R"({
+      "id": "cow",
+      "properties": {
+        "health": 10,
+        "speed": 0.5,
+        "detect_radius": 0,
+        "attack_range": 0,
+        "attack_damage": 0,
+        "attack_cooldown": 1.0,
+        "wander_interval": 3.0,
+        "spawn_max_light": 15,
+        "drops": []
+      },
+      "model": {
+        "width": 1.2,
+        "height": 1.5,
+        "boxes": [
+          {"pos": [0.0, 0.9, 0.0], "size": [0.8, 0.7, 1.1], "texture": "a"}
+        ]
+      }
+    })";
+        def.replace(def.find(anchor), std::strlen(anchor),
+                    std::string(anchor) + c.broken);
+        MobRegistry mobs;
+        EXPECT_FALSE(mobs.registerMob(parseJson(def)).ok()) << c.broken;
+    }
 }
 
 // -- spawning config ----------------------------------------------------------

@@ -168,6 +168,30 @@ Result<void> MobRegistry::parseProperties(const Json& def,
         return MC_FAIL("mob properties: 'shoot_range' > 0 requires 'ammo' "
                        "(the item its stuck arrows return on pickup)");
     }
+    // Optional milking pair (string, Phase 43, cow): 'milk_with' is the
+    // item the player must hold, 'milk_gives' the item a right-click on
+    // the mob returns. The two must be present TOGETHER (a lone field is
+    // a typo — the dye_base / dye_color pairing discipline); explicit
+    // empty is rejected (the ammo discipline). The game cross-checks
+    // both item names' existence at init.
+    if (const Json* mw = def.find("milk_with")) {
+        if (!mw->isString() || mw->asString().empty()) {
+            return MC_FAIL("mob properties: 'milk_with' must be a "
+                           "non-empty string (item name)");
+        }
+        out.milkWith = mw->asString();
+    }
+    if (const Json* mg = def.find("milk_gives")) {
+        if (!mg->isString() || mg->asString().empty()) {
+            return MC_FAIL("mob properties: 'milk_gives' must be a "
+                           "non-empty string (item name)");
+        }
+        out.milkGives = mg->asString();
+    }
+    if (out.milkWith.empty() != out.milkGives.empty()) {
+        return MC_FAIL("mob properties: 'milk_with' and 'milk_gives' "
+                       "must be given together");
+    }
 
     // Migration guard (Phase 28): the single-drop schema
     // ("drops": "item" + "drops_count") is gone — the count now lives

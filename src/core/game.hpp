@@ -231,11 +231,36 @@ private:
     // including the no-op case at full hunger), so the caller skips the
     // normal right-click (interact/place) behavior for that click.
     bool tryEat();
-    // Advances the eat channel in real dt (Phase 28): interrupts (damage,
-    // death, unlock, panel, selection change) and the terminal events
-    // (complete = consume + restore + sound, early release = cancel).
+    // Drinks one from the selected hotbar slot when it holds a drinkable
+    // container (Phase 43, item data 'drink_time'): arms the shared eat
+    // channel with the item's DATA-DRIVEN duration. Completing it consumes
+    // one, returns the item's 'returns_item' container to the inventory
+    // and clears the player's status effects (v1: the hurt flash). The
+    // drink starts only when the returned container would fit (a full
+    // inventory is a no-op, the click is still consumed). Returns true
+    // when the click was consumed by drinking.
+    bool tryDrink();
+    // Milks a milkable mob (Phase 43, mob data 'milk_with' / 'milk_gives'):
+    // the crosshair must be on a mob whose 'milk_with' names the selected
+    // item (melee targeting: kReach + block occlusion). Consumes one held
+    // item, adds one 'milk_gives' item; the mob is unharmed (v1). Returns
+    // true when the click was consumed (crosshair on the mob, including
+    // the no-milk case of a full inventory).
+    bool tryMilk();
+    // Advances the eat/drink channel in real dt (Phase 28, drinkable
+    // extension Phase 43): interrupts (damage, death, unlock, panel,
+    // selection change) and the terminal events (complete = consume +
+    // food restore OR drink return-container + clear status effects,
+    // early release = cancel).
     void updateEatChannel(double dt);
     void resetEatChannel();
+    // Clears the player's status effects on a completed drink (Phase 43).
+    // The state-effect system does not exist yet — this is the extension
+    // point where milk's "clear negative effects" will call into; the v1
+    // effect set resets the red damage veil (m_hurtFlash). Fall damage is
+    // deliberately NOT cleared (Minecraft parity: it is not a status
+    // effect).
+    void clearStatusEffects();
     // Cycles the hotbar selection; resets break progress (the selected
     // tool changed, Minecraft behavior).
     void cycleHotbar();

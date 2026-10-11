@@ -644,3 +644,87 @@ TEST(ItemRegistryTest, RejectsBadDyeColor) {
                          R"({"id":"b","type":"material","dye_color":["red"]})"))
                      .ok());
 }
+
+// -- drinkable container (Phase 43: milk_bucket) -----------------------------
+
+TEST(ItemRegistryTest, ParsesDrinkableFields) {
+    // The milk bucket: drink_time marks the item drinkable (the consume
+    // channel's DATA-DRIVEN duration); returns_item names the empty
+    // container a completed drink returns.
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"milk_bucket","type":"material","max_stack":1,
+                      "drink_time":1.6,"returns_item":"bucket"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Item& it = items.at(*r);
+    EXPECT_FLOAT_EQ(it.drinkTime, 1.6f);
+    EXPECT_EQ(it.returnsItem, "bucket");
+}
+
+TEST(ItemRegistryTest, DrinkableDefaultsToAbsent) {
+    // No drink fields: not drinkable (every pre-Phase-43 item).
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(R"({"id":"gem","type":"material"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FLOAT_EQ(items.at(*r).drinkTime, 0.0f);
+    EXPECT_TRUE(items.at(*r).returnsItem.empty());
+}
+
+TEST(ItemRegistryTest, DrinkTimeWithoutReturnsIsLegal) {
+    // A drinkable without a container (a future water-bucket-less drink):
+    // returns_item is optional on a drinkable.
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"juice","type":"material","drink_time":0.5})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FLOAT_EQ(items.at(*r).drinkTime, 0.5f);
+    EXPECT_TRUE(items.at(*r).returnsItem.empty());
+}
+
+TEST(ItemRegistryTest, RejectsBadDrinkTime) {
+    ItemRegistry items;
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","drink_time":0})"))
+                     .ok()); // explicit 0 = a typo (ABSENT is the default)
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","drink_time":-1})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","drink_time":11})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","drink_time":"slow"})"))
+                     .ok());
+}
+
+TEST(ItemRegistryTest, RejectsBadReturnsItem) {
+    ItemRegistry items;
+    // Explicit empty / non-string = a typo (the ammo discipline).
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","returns_item":""})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","returns_item":5})"))
+                     .ok());
+    // returns_item WITHOUT drink_time = a dead field (the pairing
+    // discipline).
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","returns_item":"x"})"))
+                     .ok());
+}
+
+TEST(ItemRegistryTest, FoodAndDrinkableAreMutuallyExclusive) {
+    ItemRegistry items;
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","restore_hunger":3,
+                             "drink_time":1.6})"))
+                     .ok());
+}

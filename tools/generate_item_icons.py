@@ -485,6 +485,47 @@ def arrow():
     return px
 
 
+def bucket(milk=False, salt=55):
+    """A metal bucket (Phase 43): a trapezoid WIDER at the top (the rim)
+    and narrower at the bottom, iron-gray with a brighter rim band.
+    `milk` fills the opening with a white milk surface (milk_bucket)."""
+    px = blank()
+    c_base = (168, 168, 176)
+    c_rim = (212, 212, 220)
+    for y in range(9, 27):
+        t = (y - 9) / 17.0  # 0 top .. 1 bottom
+        half_top, half_bot = 10.0, 6.0
+        half = half_top + (half_bot - half_top) * t
+        x0 = max(0, int(15.0 - half + 0.5))
+        x1 = min(31, int(15.0 + half + 0.5))
+        for x in range(x0, x1 + 1):
+            if y < 11:
+                setpx(px, x, y, c_rim, salt=salt)
+            else:
+                setpx(px, x, y, c_base, salt=salt + 1)
+    if milk:
+        # The milk surface: a white ellipse inside the opening.
+        for y in range(9, 12):
+            for x in range(7, 24):
+                nx = (x - 15.0) / 7.5
+                ny = (y - 10.0) / 1.6
+                if nx * nx + ny * ny <= 1.0:
+                    setpx(px, x, y, (250, 250, 250), salt=salt + 2)
+    # Bottom shadow line.
+    for x in range(9, 23):
+        setpx(px, x, 26, (tuple(int(v * 0.7) for v in c_base)),
+              salt=salt + 3, amount=4)
+    return px
+
+
+def bucket_icon():
+    return bucket(milk=False, salt=55)
+
+
+def milk_bucket_icon():
+    return bucket(milk=True, salt=57)
+
+
 ITEMS = {
     "planks": planks,
     "stick": stick,
@@ -507,6 +548,8 @@ ITEMS = {
     "cooked_beef": cooked_beef,
     "cooked_mutton": cooked_mutton,
     "cooked_chicken": cooked_chicken,
+    "bucket": bucket_icon,
+    "milk_bucket": milk_bucket_icon,
 }
 
 
