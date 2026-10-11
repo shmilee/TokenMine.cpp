@@ -487,6 +487,13 @@ Result<void> Game::buildScene() {
             return MC_FAIL("item '" + item.name + "' references unknown "
                            "ammo item '" + item.ammo + "'");
         }
+        // Phase 40: the furnace product (same cross-check pattern as the
+        // ammo — the product may be defined in a later file).
+        if (!item.smeltableTo.empty() &&
+            m_items.findByName(item.smeltableTo) == nullptr) {
+            return MC_FAIL("item '" + item.name + "' references unknown "
+                           "smelting product '" + item.smeltableTo + "'");
+        }
     }
 
     // -- recipes (Phase 12): data-driven crafting (UI/trigger = Phase 15) --
@@ -885,6 +892,8 @@ Result<SaveGame> Game::collectSave() const {
         save.invGrid.push_back(m_inventoryGrid.at(i));
         save.tableGrid.push_back(m_tableGrid.at(i));
     }
+    // The furnace (format 6; Phase 40): the single smelting state.
+    save.furnace = m_furnace;
     for (const std::unique_ptr<Entity>& e : m_entities) {
         // Persisted entities are ItemEntities. Mobs (Phase 20) and arrows
         // (Phase 21) are EPHEMERAL by design — the save format expresses
@@ -1017,6 +1026,9 @@ Result<void> Game::applySave(const SaveGame& save) {
             m_tableGrid.setSlot(i, save.tableGrid[static_cast<std::size_t>(i)]);
         }
     }
+    // 4c) The furnace (format 6; format 1-5 saves load it empty).
+    m_furnace = save.furnace;
+    m_furnace.deriveProgressFor();
     // 5) Dropped items (with their lifetime/pickup timers restored).
     for (const SavedItemEntity& e : save.entities) {
         const Item& item = m_items.at(m_items.idForName(e.item));
@@ -1237,6 +1249,12 @@ void Game::update(double dt) {
     // headless runs byte-reproducible.
     m_dayCycle.update(kDayStepPerFrame);
 
+    // Furnace (Phase 40): one fixed 1/60 substep per frame (the
+    // day-cycle class — integer substep counters, byte-reproducible).
+    // No-op on an empty furnace; runs in every pointer/panel state (the
+    // world keeps ticking while the panel is open, as in Minecraft).
+    tickFurnace(m_furnace, m_items);
+
     // Phase 15 UI keys: F3/F5 work in any pointer state; E opens the
     // inventory (releasing the pointer) or closes it.
     handleUiKeys();
@@ -1371,6 +1389,10 @@ void Game::handleInteraction(double dt) {
                                  hit->block.z));
             if (b.properties.interact == kInteractCraftingTable) {
                 openPanel(OpenPanel::Table);
+                return;
+            }
+            if (b.properties.interact == kInteractFurnace) {
+                openPanel(OpenPanel::Furnace);
                 return;
             }
         }
@@ -2442,11 +2464,32 @@ std::vector<const Recipe*> Game::shapelessRecipes() const {
 
 void Game::handlePanelClicks() {
     // The layout and the mouse hit tests both live in UI pixels (Phase
-    // 34): InventoryLayout is pure geometry, so passing the UI space
-    // scales the panel identically to the rendered one.
+    // 34): InventoryLayout / FurnaceLayout are pure geometry, so passing
+    // the UI space scales the panel identically to the rendered one.
     const UiSize space = uiSize();
     const int w = space.width;
     const int h = space.height;
+
+    // Phase 40: the furnace panel. Same click model as the crafting
+    // panels: the layout hit tests are disjoint (at most one of a
+    // 27-slot / input / fuel / output is active; a left click with all of
+    // them inactive drops the carry). No craft action — the output fills
+    // by itself.
+    if (m_openPanel == OpenPanel::Furnace) {
+        const FurnaceLayout layout = FurnaceLayout::compute(w, h);
+        const std::pair<int, int> mp = uiMouse();
+        const int slot = layout.slotAt(mp.first, mp.second);
+        const int fslot = layout.furnaceSlotAt(mp.first, mp.second);
+        if (m_input.wasPressed(MouseButton::Left)) {
+            m_furnaceUi.leftClick(slot, fslot);
+            return;
+        }
+        if (m_input.wasPressed(MouseButton::Right)) {
+            m_furnaceUi.rightClick(slot, fslot);
+        }
+        return;
+    }
+
     const bool table = m_openPanel == OpenPanel::Table;
     const PanelKind kind =
         table ? PanelKind::CraftingTable : PanelKind::Inventory;
@@ -2943,9 +2986,123 @@ void Game::renderUi() {
                 h / 2 + 12, 1.0, kText);
     }
 
+    // -- furnace panel (Phase 40): the smelting GUI (right-clicked
+    // furnace). The 27 inventory slots + the smelting section (input,
+    // progress bar, output, fuel). No crafting of any kind happens here —
+    // the output fills by itself (the furnace tick).
+    if (m_openPanel == OpenPanel::Furnace) {
+        const FurnaceLayout layout = FurnaceLayout::compute(w, h);
+        const double s = layout.scale;
+        const auto L = [s](int v) {
+            return static_cast<int>(std::lround(v * s));
+        };
+        const int slotIcon = L(34); // icons inside slot-sized rects
+        const int titleOffset = L(4); // 24 px title text in the 40 px row
+
+        // Panel background + title.
+        addQuad(batchFor(kPanel, false, nullptr), layout.panel.x,
+                layout.panel.y, layout.panel.w, layout.panel.h);
+        addText("Furnace", layout.title.x, layout.title.y + titleOffset,
+                InventoryLayout::kTitleFontScale * s, kText);
+
+        const int hoverSlot = layout.slotAt(mx, my);
+        const int hoverFslot = layout.furnaceSlotAt(mx, my);
+
+        // The 27 inventory slots (drawn like the crafting panels').
+        for (std::size_t i = 0; i < layout.slots.size(); ++i) {
+            const UIRect& r = layout.slots[i];
+            addQuad(batchFor(kSlotBg, false, nullptr), r.x, r.y, r.w, r.h);
+            if (i == m_selectedSlot) {
+                addBorder(batchFor(kSelected, false, nullptr), r, 2);
+            } else if (static_cast<int>(i) == hoverSlot) {
+                addBorder(batchFor(kHover, false, nullptr), r, 2);
+            } else {
+                addBorder(batchFor(kBorder, false, nullptr), r, 1);
+            }
+            const ItemStack& stack = m_inventory.at(i);
+            drawIcon(stack, static_cast<float>(r.x + r.w / 2),
+                     static_cast<float>(r.y + r.h / 2), slotIcon);
+            if (!stack.empty() &&
+                stack.count < m_items.at(stack.item).maxStack) {
+                const std::string count = std::to_string(stack.count);
+                addText(count,
+                        r.x + r.w - L(4) - static_cast<int>(textWidth(count, s)),
+                        r.y + r.h - L(4) - L(kGlyphSize), s, kText);
+            }
+        }
+
+        // The smelting section slots (0=input, 1=fuel, 2=output).
+        const UIRect* frects[3] = {&layout.input, &layout.fuel,
+                                   &layout.output};
+        const ItemStack* fslots[3] = {&m_furnace.input, &m_furnace.fuel,
+                                      &m_furnace.output};
+        for (int i = 0; i < 3; ++i) {
+            const UIRect& r = *frects[i];
+            addQuad(batchFor(kSlotBg, false, nullptr), r.x, r.y, r.w, r.h);
+            if (i == hoverFslot) {
+                addBorder(batchFor(kHover, false, nullptr), r, 2);
+            } else {
+                addBorder(batchFor(kBorder, false, nullptr), r, 1);
+            }
+            const ItemStack& stack = *fslots[i];
+            drawIcon(stack, static_cast<float>(r.x + r.w / 2),
+                     static_cast<float>(r.y + r.h / 2), slotIcon);
+            if (!stack.empty() &&
+                stack.count < m_items.at(stack.item).maxStack) {
+                const std::string count = std::to_string(stack.count);
+                addText(count,
+                        r.x + r.w - L(4) - static_cast<int>(textWidth(count, s)),
+                        r.y + r.h - L(4) - L(kGlyphSize), s, kText);
+            }
+        }
+
+        // The progress bar (Minecraft's arrow): a dark track + a fill
+        // proportional to the current smelt progress (0 when the input is
+        // empty / not smeltable — the tick keeps it that way).
+        {
+            const UIRect& r = layout.progress;
+            addQuad(batchFor(kSlotBg, false, nullptr), r.x, r.y, r.w, r.h);
+            addBorder(batchFor(kBorder, false, nullptr), r, 1);
+            double frac = 0.0;
+            if (!m_furnace.input.empty() &&
+                !m_items.at(m_furnace.input.item).smeltableTo.empty()) {
+                const int total =
+                    smeltSubstepsFor(m_items.at(m_furnace.input.item));
+                if (total > 0) {
+                    frac = static_cast<double>(m_furnace.progressSubsteps) /
+                           static_cast<double>(total);
+                }
+            }
+            const int fill = static_cast<int>(std::lround(r.w * frac));
+            if (fill > 0) {
+                addQuad(batchFor(kText, false, nullptr), r.x, r.y, fill,
+                        r.h);
+            }
+        }
+
+        // The hovered slot's item name + the carried stack at the cursor +
+        // the close hint.
+        if (hoverSlot >= 0) {
+            const ItemStack& stack = m_inventory.at(hoverSlot);
+            if (!stack.empty()) {
+                addText(m_items.at(stack.item).name, mx + L(12), my + L(12),
+                        s, kText);
+            }
+        }
+        if (m_furnaceUi.carrying()) {
+            drawIcon(m_furnaceUi.carry(), static_cast<float>(mx),
+                     static_cast<float>(my), slotIcon);
+        }
+        const std::string hint = "E to close";
+        addText(hint,
+                layout.panel.x + static_cast<int>(std::lround(
+                    (layout.panel.w - textWidth(hint, s)) / 2.0)),
+                layout.panel.y + layout.panel.h - L(20), s, kTextDim);
+    }
+
     // -- crafting panel (while open): the E inventory (2x2 grid + the
     // shapeless recipe list) or the crafting table (3x3 grid). ---------------
-    if (panelOpen()) {
+    if (panelOpen() && m_openPanel != OpenPanel::Furnace) {
         const bool table = m_openPanel == OpenPanel::Table;
         const PanelKind kind =
             table ? PanelKind::CraftingTable : PanelKind::Inventory;

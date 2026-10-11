@@ -314,6 +314,43 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         root["table_grid"] = std::move(*tableGrid);
     }
 
+    // Format 6: the furnace (Phase 40): the single smelting state — three
+    // slot entries + the two integer 1/60-substep counters. Always written
+    // (the game owns one furnace state even when empty).
+    {
+        auto slotJson = [&](const ItemStack& s, const char* what)
+            -> Result<Json> {
+            Json e = Json::object();
+            if (s.empty()) {
+                e["item"] = Json(std::string(""));
+                e["count"] = Json(0);
+            } else {
+                const Item* item = items.find(s.item);
+                if (item == nullptr) {
+                    return MC_FAIL(std::string(what) +
+                                   " holds an unregistered item id " +
+                                   std::to_string(s.item.value));
+                }
+                e["item"] = Json(item->name);
+                e["count"] = Json(s.count);
+            }
+            return e;
+        };
+        Json fz = Json::object();
+        auto inSlot = slotJson(save.furnace.input, "the furnace input");
+        MC_TRY(inSlot);
+        fz["input"] = std::move(*inSlot);
+        auto fuelSlot = slotJson(save.furnace.fuel, "the furnace fuel");
+        MC_TRY(fuelSlot);
+        fz["fuel"] = std::move(*fuelSlot);
+        auto outSlot = slotJson(save.furnace.output, "the furnace output");
+        MC_TRY(outSlot);
+        fz["output"] = std::move(*outSlot);
+        fz["progress_substeps"] = Json(save.furnace.progressSubsteps);
+        fz["fuel_substeps"] = Json(save.furnace.fuelSubsteps);
+        root["furnace"] = std::move(fz);
+    }
+
     Json entities = Json::array();
     for (const SavedItemEntity& e : save.entities) {
         Json jpos = Json::array();
@@ -365,8 +402,8 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     }
     const std::set<std::string> topLevel {"format", "seed", "time", "player",
                                           "inventory", "inv_grid",
-                                          "table_grid", "entities", "blocks",
-                                          "fluids"};
+                                          "table_grid", "furnace",
+                                          "entities", "blocks", "fluids"};
     MC_TRY(rejectUnknownFields(def, topLevel, "save file"));
 
     const Json* fmt = def.find("format");
@@ -516,6 +553,66 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                def.find("table_grid") != nullptr) {
         return MC_FAIL("save grids ('inv_grid'/'table_grid') require "
                        "format 3 (got " + std::to_string(fmtVersion) + ")");
+    }
+
+    // -- furnace (format 6; Phase 40) ----------------------------------------
+    // Absent in format 1-5 files: the furnace loads empty. Required and
+    // strictly validated in format 6.
+    if (fmtVersion >= 6) {
+        const Json* fz = def.find("furnace");
+        if (fz == nullptr || !fz->isObject()) {
+            return MC_FAIL("save format 6 requires a 'furnace' object");
+        }
+        const std::set<std::string> fzFields {"input", "fuel", "output",
+                                              "progress_substeps",
+                                              "fuel_substeps"};
+        MC_TRY(rejectUnknownFields(*fz, fzFields, "save 'furnace'"));
+        const char* slotNames[] = {"input", "fuel", "output"};
+        ItemStack* slotPtrs[] = {&save.furnace.input, &save.furnace.fuel,
+                                 &save.furnace.output};
+        for (int i = 0; i < 3; ++i) {
+            const Json* slot = fz->find(slotNames[i]);
+            if (slot == nullptr) {
+                return MC_FAIL("save 'furnace' requires a '" +
+                               std::string(slotNames[i]) + "' slot entry");
+            }
+            MC_TRY(parseSlotEntry(*slot, items, std::string("save 'furnace.") +
+                                       slotNames[i] + "'", *slotPtrs[i]));
+        }
+        // The two integer 1/60-substep counters (bounds: the max smelt /
+        // fuel times the item data allows — see save.hpp).
+        const Json* prog = fz->find("progress_substeps");
+        if (prog == nullptr || !prog->isNumber() ||
+            prog->asDouble() != std::floor(prog->asDouble()) ||
+            prog->asDouble() < 0.0 ||
+            prog->asDouble() > kFurnaceMaxProgressSubsteps) {
+            return MC_FAIL("save 'furnace.progress_substeps' must be an "
+                           "integer in [0, " +
+                           std::to_string(kFurnaceMaxProgressSubsteps) + "]");
+        }
+        save.furnace.progressSubsteps = static_cast<int>(prog->asDouble());
+        const Json* fuel = fz->find("fuel_substeps");
+        if (fuel == nullptr || !fuel->isNumber() ||
+            fuel->asDouble() != std::floor(fuel->asDouble()) ||
+            fuel->asDouble() < 0.0 || fuel->asDouble() > kFurnaceMaxFuelSubsteps) {
+            return MC_FAIL("save 'furnace.fuel_substeps' must be an "
+                           "integer in [0, " +
+                           std::to_string(kFurnaceMaxFuelSubsteps) + "]");
+        }
+        save.furnace.fuelSubsteps = static_cast<int>(fuel->asDouble());
+        // The progress invariant (see furnace.hpp): progress > 0 implies a
+        // smeltable input — a save violating it would resurrect progress
+        // the tick/UI rules say was lost.
+        if (save.furnace.progressSubsteps > 0 &&
+            (save.furnace.input.empty() ||
+             items.at(save.furnace.input.item).smeltableTo.empty())) {
+            return MC_FAIL("save 'furnace' has smelt progress but its "
+                           "input is empty or not smeltable");
+        }
+        save.furnace.deriveProgressFor();
+    } else if (def.find("furnace") != nullptr) {
+        return MC_FAIL("save 'furnace' requires format 6 (got " +
+                       std::to_string(fmtVersion) + ")");
     }
 
     // -- entities ------------------------------------------------------------------

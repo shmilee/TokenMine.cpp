@@ -30,6 +30,8 @@
     "chicken_body": [1, 6],
     "chicken_head": [2, 6],
     "skeleton_body": [3, 6],
-    "skeleton_head": [0, 7]
+    "skeleton_head": [0, 7],
+    "furnace_side": [1, 7],
+    "furnace_top": [2, 7]
   }
 }

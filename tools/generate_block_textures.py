@@ -203,6 +203,29 @@ def crafting_table_side(x, y):
     return planks(x, y)
 
 
+def furnace_top(x, y):
+    # Stone-like top (Minecraft's furnace top is a stone brick face).
+    return stone(x, y)
+
+
+def furnace_side(x, y):
+    # Stone + a dark firebox mouth in the lower middle, glowing embers at
+    # the bottom of the mouth, a darker stone rim around it.
+    if 3 <= x <= 12 and 8 <= y <= 14:
+        if y >= 13 and 5 <= x <= 10:
+            glow = h2(x, y, 58) % 40
+            return (clamp(240 - glow), clamp(130 - glow),
+                    clamp(48 - glow // 2), 255)
+        if y >= 13:
+            return (70, 45, 32, 255)
+        return (38 + noise(x, y, 59, 8), 33 + noise(x, y, 60, 8),
+                30 + noise(x, y, 61, 8), 255)
+    if 2 <= x <= 13 and 7 <= y <= 15:
+        v = 100 + noise(x, y, 62, 8)
+        return (v, v, v, 255)
+    return stone(x, y)
+
+
 TEXTURES = {
     "stone": stone,
     "dirt": dirt,
@@ -223,6 +246,8 @@ TEXTURES = {
     "planks": planks,
     "crafting_table_top": crafting_table_top,
     "crafting_table_side": crafting_table_side,
+    "furnace_top": furnace_top,
+    "furnace_side": furnace_side,
 }
 
 

@@ -54,6 +54,7 @@
 #include "ui/font.hpp"
 #include "ui/inventory_ui.hpp"
 #include "item/crafting_grid.hpp"
+#include "item/furnace.hpp"
 #include "item/inventory.hpp"
 #include "item/item_registry.hpp"
 #include "item/recipe.hpp"
@@ -100,13 +101,16 @@ public:
         None,      // no panel
         Inventory, // E: 2x2 grid + the shapeless recipe list
         Table,     // right-clicked crafting table: the 3x3 grid
+        Furnace,   // Phase 40: right-clicked furnace: the smelting GUI
     };
 
-    // The crafting UIs (Phase 15/17) hold references to the inventory,
-    // the crafting grids and the registries, so they are constructed here
-    // (after all of them, in declaration order).
+    // The crafting UIs (Phase 15/17) + the furnace UI (Phase 40) hold
+    // references to the inventory, the crafting grids, the furnace state
+    // and the registries, so they are constructed here (after all of
+    // them, in declaration order).
     Game() : m_inventoryUi(m_inventory, m_inventoryGrid, m_items, m_recipes),
-             m_tableUi(m_inventory, m_tableGrid, m_items, m_recipes) {}
+             m_tableUi(m_inventory, m_tableGrid, m_items, m_recipes),
+             m_furnaceUi(m_inventory, m_furnace, m_items) {}
     ~Game();
 
     Result<void> init(const GameArgs& args);
@@ -506,6 +510,12 @@ private:
     InventoryUI m_tableUi;
     OpenPanel m_openPanel = OpenPanel::None;
     bool panelOpen() const { return m_openPanel != OpenPanel::None; }
+
+    // Phase 40 furnace: the single smelting state (the single-container
+    // v1 rule — shared by every furnace block; saved in format 6) and
+    // its panel UI.
+    FurnaceState m_furnace;
+    FurnaceUI m_furnaceUi;
 
     // Phase 15 particles + audio: the break bursts (deterministic seeds:
     // world seed mixed with an increasing per-break counter) and the sound

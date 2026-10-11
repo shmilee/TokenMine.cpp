@@ -9,32 +9,25 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 39 完成时）
+## 现状（Phase 40 完成时）
 
-- 功能阶段 P0–P39 全部完成并提交；P31 = 饥饿节奏 MC 对齐、P32 = 玩家参数
-  配置化、P33 = 死亡时暂停流式加载、P34 = UI 坐标空间 + `ui.scale`
-  （高分屏 UI 缩放）、P35 = 高分 UI 素材（16×16 字体 + 32×32 物品图标）
-  + 面板自适应（`InventoryLayout::scale` 贴合系数，长度 double 运算仅
-  rect 边界 lround；文字/图标随系数等比缩放）、P36 = UI 着色器文字着色
-  修复（textured 分支 `texel.rgb × u_color.rgb`，死亡屏红字生效）+ 读档
-  坠落追踪重钉（`Player::restorePosition`，空中读档不再绕过坠落伤害）、
-  P37 = 并行化存档 diff（`diffWorld` >256 chunk 时每 chunk 一个 job 跑在
-  临时 4-worker 池，位置排序输出是全序 → 与串行逐字节相同；~9600-chunk
-  退出 diff 1.3 s → 0.35 s，A/B 对 P36 串行构建存档字节一致）、
-  P38 = skeleton 后续三项（① 射击 LOS 门 `hasLineOfSight`（blocked 不发、
-  冷却照常消耗整间隔重试）② 掉落随机区间 `count_min`/`count_max` + 新
-  `bone` 物品（skeleton 掉 bone 0–2 + arrow 1，`rollDropCount` 走该 mob
-  种子流、固定 count 不推进流）③ 箭目标预判 `computeAimDirection`
-  （静止目标逐位复现 P27 瞄法，移动目标被预判））、
-  P39 = 生成权重按类型（`mob_spawning.json` 的 `mobs` = `{"id","weight"?}`
-  对象，weight 1..10000 缺省 1、旧纯字符串形式 = 迁移防护拒绝；类型抽取 =
-  每次 1 次流值映射进 [0, Σweight) + 累计权重走名单序，全 weight 1 与旧
-  `pick % 名单长度` 逐位相同 → 已发行数据全 1 = 零行为变化）。
-- 测试 **718/718**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
-- 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P39 = 第 14 次结构性
-  免疫——60f 基线无 mob（first_spawn_frame=60），schema/抽取改动只在生成
-  尝试路径内运行；参考图于 P36 经 P35 代码参考构建 A/B 逐字节重锚，
-  P37/P38/P39 直接复用未重锚）。
+- 功能阶段 P0–P40 全部完成并提交；P36 = UI 着色器文字着色修复（死亡屏
+  红字）+ 读档坠落重钉、P37 = 并行化存档 diff、P38 = skeleton 后续三项
+  （LOS 门/掉落区间+bone/箭预判）、P39 = 生成权重按类型（`{"id","weight"?}`
+  对象 schema，全 weight 1 与旧抽取逐位相同 = 零行为变化）、
+  P40 = 炉子/熔炼（P28 遗留"熟肉"）：`furnace` 方块（`interact: "furnace"`
+  开面板，27 格 + input/进度条/output/fuel）+ 物品数据字段 `smeltable_to` /
+  `smelt_time`（(0,100] s 缺省 10）/ `fuel_time`（(0,1000] s）；
+  3 熟肉（cooked_beef +8 / cooked_mutton +6 / cooked_chicken +6，MC 数值）+
+  燃料 coal 80 s / planks 7.5 s / stick 5 s（消费 P12 遗留"coal 无用途"）；
+  熔炼状态 = **单个全局 `FurnaceState`**（工作台网格同款 v1 规则），
+  每帧固定 1/60 子步 + **整数子步倒计时**（昼夜同类，无输入字节可复现），
+  存档 format 6（`furnace` 三槽 + 两个整数字步字段 + 进度不变量严格校验）。
+- 测试 **751/751**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+- 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P40 = 第 15 次结构性
+  免疫——新世界无炉子方块（非 worldgen 产出）、空炉 tick = no-op、无输入
+  无面板；atlas 新增 tile 落在空位不扰既有 UV；参考图于 P36 经 P35 代码
+  参考构建 A/B 逐字节重锚，P37–P40 直接复用未重锚）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 
 ## 命令

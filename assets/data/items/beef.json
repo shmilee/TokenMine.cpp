@@ -3,5 +3,6 @@
   "type": "material",
   "max_stack": 64,
   "icon": "beef",
-  "restore_hunger": 3
+  "restore_hunger": 3,
+  "smeltable_to": "cooked_beef"
 }

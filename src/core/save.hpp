@@ -60,6 +60,7 @@
 #include "core/error.hpp"
 #include "core/json.hpp"
 #include "core/math/vec3.hpp"
+#include "item/furnace.hpp"
 #include "item/inventory.hpp"
 #include "world/coordinates.hpp"
 #include "world/world.hpp"
@@ -77,8 +78,20 @@ namespace mc {
 //      (hunger defaults to full).
 //   5: the player's saturation (Phase 28, the hidden satiety buffer).
 //      Format 1-4 files still load (saturation defaults to 0).
-inline constexpr int kSaveFormat = 5;
+//   6: the furnace state (Phase 40) — "furnace": the single smelting
+//      state (the single-container v1 rule, see item/furnace.hpp) as
+//      three slot entries + "progress_substeps" + "fuel_substeps"
+//      (non-negative integer 1/60-substep counters). Format 1-5 files
+//      still load (the furnace defaults to empty); writes are always
+//      format 6.
+inline constexpr int kSaveFormat = 6;
 inline constexpr int kSaveFormatMin = 1;
+
+// Phase 40: the furnace save-field bounds — the max smelt/fuel times the
+// item data allows (smelt_time ≤ 100 s, fuel_time ≤ 1000 s; see
+// ItemRegistry::parseFurnace) in 1/60 substeps.
+inline constexpr int kFurnaceMaxProgressSubsteps = 100 * 60;
+inline constexpr int kFurnaceMaxFuelSubsteps = 1000 * 60;
 
 // Phase 37: the world diff (P33 diagnosis: ~0.14 ms/chunk single-threaded —
 // a ~100k-chunk world took ~14 s to save at exit) runs on a throwaway pool
@@ -138,6 +151,9 @@ struct SaveGame {
     // Empty for format 1/2 saves (the game leaves the grids empty).
     std::vector<ItemStack> invGrid;
     std::vector<ItemStack> tableGrid;
+    // The furnace (format 6; Phase 40): the single smelting state. Empty
+    // for format 1-5 saves (the game leaves the furnace empty).
+    FurnaceState furnace;
     std::vector<SavedItemEntity> entities;
     std::vector<SavedBlockEdit> blockEdits; // sorted by pos
     std::vector<SavedFluidEdit> fluidEdits; // sorted by pos

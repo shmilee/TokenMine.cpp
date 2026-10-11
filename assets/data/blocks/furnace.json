@@ -1,0 +1,15 @@
+{
+  "id": "furnace",
+  "properties": {
+    "hardness": 3.5,
+    "drops": "furnace",
+    "interact": "furnace"
+  },
+  "model": {
+    "textures": {
+      "top": "furnace_top",
+      "side": "furnace_side",
+      "bottom": "furnace_top"
+    }
+  }
+}

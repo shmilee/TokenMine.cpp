@@ -85,6 +85,19 @@ struct Item {
     // food (every pre-Phase-23 item; explicit 0 is rejected as a typo,
     // the absent field is the "not food" default).
     int restoreHunger = 0;
+    // Phase 40: furnace smelting (optional data fields 'smeltable_to' /
+    // 'smelt_time'). smeltableTo non-empty marks the item as SMELTABLE:
+    // it names the product item (cross-checked against the ItemRegistry
+    // at game init — the ammo pattern). smeltTime (seconds, (0, 100]) is
+    // how long one unit takes; default 10.0 (Minecraft's furnace time),
+    // only meaningful when smeltable.
+    std::string smeltableTo;
+    float smeltTime = 10.0f;
+    // Phase 40: furnace fuel (optional data field 'fuel_time'). fuelTime
+    // (seconds, (0, 1000]) is how long one unit burns; 0 = not fuel (the
+    // absent-field default; an explicit 0 is rejected as a typo, the
+    // restore_hunger discipline).
+    float fuelTime = 0.0f;
     // Phase 15 UI: the item's 2D icon texture name (a file under
     // assets/textures/items/, validated against the filesystem at game
     // init). Empty for block items, which render a 3D block cube instead.

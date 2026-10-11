@@ -83,6 +83,12 @@ private:
     // ammo). The name's existence is cross-checked at game init (the
     // ammo item may be defined in a later file).
     static Result<void> parseAmmo(const Json& def, Item& out);
+    // Parse the optional furnace fields (Phase 40) into `out`:
+    // `smeltable_to` (an item name; presence marks the item as
+    // smeltable — the product's existence is cross-checked at game init),
+    // `smelt_time` ((0, 100] s, default 10.0) and `fuel_time` ((0, 1000]
+    // s; 0 = not fuel).
+    static Result<void> parseFurnace(const Json& def, Item& out);
     // Parse the tool fields (`tool.break_speed` + `max_stack`) into `out`.
     static Result<void> parseTool(const Json& def, Item& out);
 

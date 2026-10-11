@@ -46,6 +46,7 @@
 #include <vector>
 
 #include "item/crafting_grid.hpp"
+#include "item/furnace.hpp"
 #include "item/inventory.hpp"
 #include "item/item_registry.hpp"
 #include "item/recipe.hpp"
@@ -116,6 +117,66 @@ struct InventoryLayout {
     int gridCellAt(int px, int py) const;   // gridCells index or -1
     int recipeRowAt(int px, int py) const;  // row index or -1
     bool inOutput(int px, int py) const { return output.contains(px, py); }
+};
+
+// Phase 40: the furnace panel — the smelting GUI, opened by right-clicking
+// a furnace in the world. Same panel chrome as the inventory screen: the
+// 27 inventory slots + the smelting section in Minecraft's arrangement
+// (input top-left, output top-right with the progress bar between, fuel
+// bottom-left). No crafting of any kind happens here — the output fills
+// by itself (the furnace tick) and is taken with an ordinary slot click.
+struct FurnaceLayout {
+    // The progress bar (Minecraft's arrow): native width; the fill is
+    // progressSubsteps / smeltSubsteps of the width.
+    static constexpr int kProgressWidth = 56;
+    static constexpr int kProgressHeight = 12;
+
+    double scale = 1.0;
+    std::vector<UIRect> slots; // 27 rects in slot-index order (0..26)
+    UIRect panel;
+    UIRect title;
+    // The smelting section slots, in furnaceSlotAt order (0=input,
+    // 1=fuel, 2=output).
+    UIRect input;
+    UIRect fuel;
+    UIRect output;
+    UIRect progress; // the progress bar (between input and output)
+
+    static FurnaceLayout compute(int windowWidth, int windowHeight);
+    int slotAt(int px, int py) const;        // slot index or -1
+    int furnaceSlotAt(int px, int py) const; // 0=input, 1=fuel, 2=output, -1
+};
+
+// The pick-and-place state machine over the player inventory and the
+// furnace's three slots — the InventoryUI cell semantics (see the file
+// header) with no output action (the output slot is an ordinary slot).
+// A click that changes the INPUT item resets the smelt progress (the
+// furnace.hpp progress invariant).
+class FurnaceUI {
+public:
+    FurnaceUI(Inventory& inventory, FurnaceState& furnace,
+              const ItemRegistry& items)
+        : m_inv(inventory), m_furnace(furnace), m_items(items) {}
+
+    // slot: 0..26 or -1; furnaceSlot: 0..2 or -1 (the layout hit tests
+    // are disjoint: at most one is active).
+    void leftClick(int slot, int furnaceSlot);
+    void rightClick(int slot, int furnaceSlot);
+
+    const ItemStack& carry() const { return m_carry; }
+    bool carrying() const { return !m_carry.empty(); }
+
+private:
+    void leftClickCell(ItemStack& cell);
+    void rightClickCell(ItemStack& cell);
+    ItemStack& cellAt(int furnaceSlot);
+    // Reset the progress when the input's item changes (furnace.hpp).
+    void inputChanged(const ItemStack& before);
+
+    Inventory& m_inv;
+    FurnaceState& m_furnace;
+    const ItemRegistry& m_items;
+    ItemStack m_carry;
 };
 
 // The pick-and-place + craft state machine over one inventory and one

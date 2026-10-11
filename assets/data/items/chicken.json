@@ -3,5 +3,6 @@
   "type": "material",
   "max_stack": 64,
   "icon": "chicken",
-  "restore_hunger": 2
+  "restore_hunger": 2,
+  "smeltable_to": "cooked_chicken"
 }

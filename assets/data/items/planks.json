@@ -1,5 +1,6 @@
 {
   "id": "planks",
   "type": "material",
-  "icon": "planks"
+  "icon": "planks",
+  "fuel_time": 7.5
 }

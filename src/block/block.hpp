@@ -27,6 +27,8 @@ namespace mc {
 // BlockRegistry) — a block can only declare an interaction the game
 // implements.
 inline constexpr std::string_view kInteractCraftingTable = "crafting_table";
+// Phase 40: opens the furnace panel (the smelting GUI).
+inline constexpr std::string_view kInteractFurnace = "furnace";
 
 // Stable handle into a BlockRegistry. Invalid until assigned.
 //

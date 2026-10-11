@@ -119,11 +119,12 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
         return MC_FAIL("'light_emission' must be in [0, 15], got " +
                        std::to_string(out.lightEmission));
     }
-    if (!out.interact.empty() &&
-        out.interact != kInteractCraftingTable) {
+    if (!out.interact.empty() && out.interact != kInteractCraftingTable &&
+        out.interact != kInteractFurnace) {
         return MC_FAIL("block property 'interact' is unsupported: '" +
                        out.interact + "' (only '" +
-                       std::string(kInteractCraftingTable) + "' exists)");
+                       std::string(kInteractCraftingTable) + "' and '" +
+                       std::string(kInteractFurnace) + "' exist)");
     }
     if (out.opaque && out.transparent) {
         return MC_FAIL("block cannot be both 'opaque' and 'transparent'");

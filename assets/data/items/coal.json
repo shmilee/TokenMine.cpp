@@ -1,5 +1,6 @@
 {
   "id": "coal",
   "type": "material",
-  "icon": "coal"
+  "icon": "coal",
+  "fuel_time": 80
 }

@@ -55,6 +55,21 @@ struct Fixture {
         if (!t.ok()) {
             ADD_FAILURE() << t.error().message;
         }
+        // Phase 40: the furnace test items (beef is smeltable -> cooked;
+        // coal is fuel).
+        const struct {
+            const char* def;
+        } furnaceDefs[] = {
+            {R"({"id":"beef","type":"material","smeltable_to":"cooked"})"},
+            {R"({"id":"cooked","type":"material","max_stack":64})"},
+            {R"({"id":"coal","type":"material","fuel_time":80})"},
+        };
+        for (const auto& d : furnaceDefs) {
+            auto fr = items.registerItem(parseJson(d.def));
+            if (!fr.ok()) {
+                ADD_FAILURE() << d.def << ": " << fr.error().message;
+            }
+        }
     }
 };
 
@@ -145,10 +160,10 @@ TEST(SaveRoundTripTest, SerializeRejectsUnregisteredSlotItem) {
 
 TEST(SaveParseTest, RejectsUnknownOrMissingFormat) {
     Fixture f;
-    // Format 6 is a future version this build cannot read; a missing
-    // format is a corrupt file. (Formats 1-5 are all accepted —
+    // Format 7 is a future version this build cannot read; a missing
+    // format is a corrupt file. (Formats 1-6 are all accepted —
     // see FormatOneLoadsWithoutHealth.)
-    Json root = parseJson(R"({"format":6,"seed":42,"time":0.25,"player":{},"inventory":{},"entities":[],"blocks":[],"fluids":[]})");
+    Json root = parseJson(R"({"format":7,"seed":42,"time":0.25,"player":{},"inventory":{},"entities":[],"blocks":[],"fluids":[]})");
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
     EXPECT_FALSE(parseSave(withoutKey(root, "format"), f.items, f.blocks, 42).ok());
 }
@@ -165,8 +180,8 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     s.tableGrid[8] = ItemStack {f.items.idForName("stone"), 64};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Format 5 writes are always format 5.
-    EXPECT_EQ(j->find("format")->asInt(), 5);
+    // Format 6 writes are always format 6.
+    EXPECT_EQ(j->find("format")->asInt(), 6);
     auto out = parseSave(*j, f.items, f.blocks, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -208,6 +223,7 @@ TEST(SaveParseTest, FormatTwoLoadsWithEmptyGrids) {
     root["format"] = Json(2);
     root = withoutKey(root, "inv_grid");
     root = withoutKey(root, "table_grid");
+    root = withoutKey(root, "furnace"); // format 2 predates the furnace
     auto out = parseSave(root, f.items, f.blocks, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->invGrid.empty());
@@ -304,6 +320,7 @@ TEST(SaveParseTest, FormatOneLoadsWithoutHealth) {
     root["format"] = Json(1);
     root = withoutKey(root, "inv_grid"); // format 1 predates the grids
     root = withoutKey(root, "table_grid");
+    root = withoutKey(root, "furnace"); // format 1 predates the furnace
     auto out = parseSave(root, f.items, f.blocks, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerHealth, -1.0f);
@@ -347,6 +364,7 @@ TEST(SaveParseTest, FormatThreeLoadsWithoutHunger) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["format"] = Json(3);
+    root = withoutKey(root, "furnace"); // format 3 predates the furnace
     ASSERT_EQ(root["player"].find("hunger"), nullptr);
     auto out = parseSave(root, f.items, f.blocks, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
@@ -390,6 +408,7 @@ TEST(SaveParseTest, FormatFourLoadsWithoutSaturation) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["format"] = Json(4);
+    root = withoutKey(root, "furnace"); // format 4 predates the furnace
     ASSERT_EQ(root["player"].find("saturation"), nullptr);
     auto out = parseSave(root, f.items, f.blocks, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
@@ -879,4 +898,127 @@ TEST(SaveWorldDiffTest, ApplyFailsWhenTheChunkDoesNotExist) {
     save.fluidEdits = {{BlockPos {64, 5, 0}, 3}};
     auto r = applyWorldEdits(save, f.blocks, world);
     EXPECT_FALSE(r.ok());
+}
+
+// -- furnace (format 6; Phase 40) --------------------------------------------
+
+TEST(SaveRoundTripTest, FurnaceRoundTrips) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.furnace.input = ItemStack {f.items.idForName("beef"), 3};
+    s.furnace.fuel = ItemStack {f.items.idForName("coal"), 1};
+    s.furnace.output = ItemStack {f.items.idForName("cooked"), 2};
+    s.furnace.progressSubsteps = 300;
+    s.furnace.fuelSubsteps = 1234;
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    EXPECT_EQ(j->find("format")->asInt(), 6);
+    auto out = parseSave(*j, f.items, f.blocks, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_EQ(out->furnace.input, s.furnace.input);
+    EXPECT_EQ(out->furnace.fuel, s.furnace.fuel);
+    EXPECT_EQ(out->furnace.output, s.furnace.output);
+    EXPECT_EQ(out->furnace.progressSubsteps, 300);
+    EXPECT_EQ(out->furnace.fuelSubsteps, 1234);
+}
+
+TEST(SaveRoundTripTest, EmptyFurnaceRoundTrips) {
+    Fixture f;
+    const SaveGame s = makeSave(f); // no furnace set
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    auto out = parseSave(*j, f.items, f.blocks, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_TRUE(out->furnace.empty());
+}
+
+TEST(SaveParseTest, FormatFiveLoadsWithEmptyFurnace) {
+    // A format-5 file (Phase 39, pre-furnace) still loads: the furnace
+    // stays empty (the old saves predate it).
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.furnace.input = ItemStack {f.items.idForName("beef"), 3};
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["format"] = Json(5);
+    root = withoutKey(root, "furnace"); // format 5 predates the furnace
+    auto out = parseSave(root, f.items, f.blocks, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_TRUE(out->furnace.empty());
+}
+
+TEST(SaveParseTest, RejectsFurnaceFieldInOldFormat) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["format"] = Json(5); // keeps the "furnace" field
+    EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+}
+
+TEST(SaveParseTest, RejectsProgressWithoutSmeltableInput) {
+    // The progress invariant (furnace.hpp): progress > 0 implies the
+    // input is a smeltable item — a save violating it would resurrect
+    // progress the tick/UI rules say was lost.
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.furnace.progressSubsteps = 10;
+    s.furnace.input =
+        ItemStack {f.items.idForName("stone"), 1}; // not smeltable
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    EXPECT_FALSE(parseSave(*j, f.items, f.blocks, 42).ok());
+    s.furnace.input = ItemStack {}; // and with an empty input
+    j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    EXPECT_FALSE(parseSave(*j, f.items, f.blocks, 42).ok());
+}
+
+TEST(SaveParseTest, RejectsBadFurnaceFields) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.furnace.input = ItemStack {f.items.idForName("beef"), 3};
+    s.furnace.progressSubsteps = 10;
+    auto base = serializeSave(s, f.items);
+    ASSERT_TRUE(base.ok());
+    // A format-6 file without the furnace object.
+    {
+        Json root = withoutKey(*base, "furnace");
+        EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+    }
+    // An unknown field inside the furnace object.
+    {
+        Json root = *base;
+        root["furnace"]["extra"] = Json(1);
+        EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+    }
+    // Out-of-range / non-integer counters.
+    {
+        Json root = *base;
+        root["furnace"]["progress_substeps"] = Json(-1);
+        EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+    }
+    {
+        Json root = *base;
+        root["furnace"]["progress_substeps"] = Json(100.0 * 60.0 + 1);
+        EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+    }
+    {
+        Json root = *base;
+        root["furnace"]["fuel_substeps"] = Json(1000.0 * 60.0 + 1);
+        EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+    }
+    {
+        Json root = *base;
+        root["furnace"]["fuel_substeps"] = Json(0.5);
+        EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+    }
+    // A missing slot.
+    {
+        Json root = *base;
+        root["furnace"] = withoutKey(root["furnace"], "fuel");
+        EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+    }
 }

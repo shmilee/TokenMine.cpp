@@ -241,6 +241,63 @@ def chicken():
     return px
 
 
+def cooked_beef():
+    """Cooked beef (Phase 40): a seared brown steak with char marks."""
+    px = blank()
+    base = (139, 82, 58)
+    char = (74, 45, 32)
+    # Chunk: the raw beef's blob, browned.
+    for y in range(8, 28):
+        for x in range(4, 28):
+            d = ((x - 15.0) ** 2) / 200.0 + ((y - 17.0) ** 2) / 128.0
+            if d < 1.0 + (h2(x, y, 89) % 3) * 0.3:
+                setpx(px, x, y, base, salt=89)
+    # Char marks: the fat-marl positions, now dark.
+    for (x0, y0, x1) in ((8, 14, 14), (14, 20, 20), (10, 24, 12),
+                         (18, 12, 22)):
+        for x in range(x0, x1 + 1):
+            setpx(px, x, y0, char, salt=90, amount=4)
+    return px
+
+
+def cooked_mutton():
+    """Cooked mutton (Phase 40): a browned slab, fat cap crisped."""
+    px = blank()
+    meat = (156, 96, 72)
+    fat = (222, 186, 148)
+    # Slab: the raw mutton's shape, browned.
+    for y in range(10, 26):
+        for x in range(4, 28):
+            if (x in (4, 27)) and (y in (10, 25)):
+                continue
+            if y < 14:
+                setpx(px, x, y, fat, salt=91)
+            else:
+                setpx(px, x, y, meat, salt=92)
+    # Seam between the fat cap and the meat.
+    for x in range(4, 28):
+        setpx(px, x, 14, (110, 66, 50), salt=93, amount=4)
+    return px
+
+
+def cooked_chicken():
+    """Cooked chicken (Phase 40): a golden-brown drumstick on a bone."""
+    px = blank()
+    meat = (188, 134, 84)
+    bone = (250, 246, 236)
+    # Meat: the raw chicken's circle, browned.
+    for y in range(SIZE):
+        for x in range(SIZE):
+            d = ((x - 16) ** 2 + (y - 12) ** 2) ** 0.5
+            if d < 8.4 + (h2(x, y, 94) % 2) * 0.6:
+                setpx(px, x, y, meat, salt=94)
+    # Bone: a 4-px shaft under the meat, knobbed at the end.
+    line(px, 16, 18, 16, 26, bone, salt=95, width=4)
+    for (x, y) in ((7, 13), (7, 14), (10, 13), (10, 14)):
+        setpx2(px, x, y, bone, salt=96, amount=4)
+    return px
+
+
 def diamond():
     return gem((100, 225, 235), (170, 245, 250), (58, 175, 190), salt=29)
 
@@ -425,6 +482,9 @@ ITEMS = {
     "beef": beef,
     "mutton": mutton,
     "chicken": chicken,
+    "cooked_beef": cooked_beef,
+    "cooked_mutton": cooked_mutton,
+    "cooked_chicken": cooked_chicken,
 }
 
 

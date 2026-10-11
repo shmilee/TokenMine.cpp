@@ -1,0 +1,7 @@
+{
+  "id": "cooked_mutton",
+  "type": "material",
+  "max_stack": 64,
+  "icon": "cooked_mutton",
+  "restore_hunger": 6
+}

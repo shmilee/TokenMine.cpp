@@ -49,7 +49,10 @@
   "shoot_speed": 15.0,              // 可选（Phase 21）：发射器速度，(0, 100]；>0 = 投射物发射器（弓）
   "shoot_damage": 5.0,              // 可选（Phase 21）：箭矢命中伤害，[0, 100]，默认 0
   "restore_hunger": 4,              // 可选（Phase 23）：食物恢复饥饿，整数 [1,20]；缺省=非食物
-  "ammo": "arrow"                   // 可选（Phase 24）：发射器弹药物品名（须存在，init 交叉校验）；发射消耗 1 个
+  "ammo": "arrow",                  // 可选（Phase 24）：发射器弹药物品名（须存在，init 交叉校验）；发射消耗 1 个
+  "smeltable_to": "cooked_x",       // 可选（Phase 40）：炉子产物物品名（须存在，init 交叉校验）；存在=可熔炼
+  "smelt_time": 10.0,               // 可选（Phase 40）：单格熔炼秒数，(0,100]，默认 10（MC 炉子时长）；仅可熔炼时有意义
+  "fuel_time": 80.0                 // 可选（Phase 40）：单格燃料燃烧秒数，(0,1000]；缺省=非燃料（显式 0 拒绝）
   "max_stack": 1,                   // 1..64，默认 64
   "icon": "wooden_pickaxe"          // UI 图标（Phase 15）：assets/textures/items/<icon>.png
 }
@@ -81,8 +84,8 @@
    ```
 
    属性缺省即默认值（solid/opaque/destroyable=true, hardness=1.0, light_emission=0, drops 为空=不掉落, drops_count=1）。
-   可选 `interact: "crafting_table"`（Phase 17）：锁定时右键命中该方块打开
-   工作台面板而非放置——值必须来自已知交互集（当前仅 `crafting_table`，
+   可选 `interact`（Phase 17/40）：锁定时右键命中该方块打开对应面板而非
+   放置——值必须来自已知交互集（`crafting_table` 工作台、`furnace` 炉子，
    其他值 = 启动报错）。
    校验严格：类型错误、越界值、重复 id、缺失纹理面都会报明确错误；未知字段警告但不拒绝。
    `drops` 是**物品名**（游戏启动时对 ItemRegistry 严格校验，未知名=启动报错）——

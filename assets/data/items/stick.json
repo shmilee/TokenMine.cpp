@@ -1,5 +1,6 @@
 {
   "id": "stick",
   "type": "material",
-  "icon": "stick"
+  "icon": "stick",
+  "fuel_time": 5
 }

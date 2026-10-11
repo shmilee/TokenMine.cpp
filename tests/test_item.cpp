@@ -546,3 +546,66 @@ TEST(ItemRegistryTest, RejectsBadRestoreHunger) {
                          R"({"id":"b","type":"material","restore_hunger":"a lot"})"))
                      .ok());
 }
+
+// -- furnace (Phase 40: smelting + fuel) ------------------------------------
+
+TEST(ItemRegistryTest, ParsesFurnaceFields) {
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(
+        R"({"id":"beef","type":"material","smeltable_to":"cooked_beef",
+            "smelt_time":10.5,"fuel_time":7.5})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Item& it = items.at(*r);
+    EXPECT_EQ(it.smeltableTo, "cooked_beef");
+    EXPECT_FLOAT_EQ(it.smeltTime, 10.5f);
+    EXPECT_FLOAT_EQ(it.fuelTime, 7.5f);
+}
+
+TEST(ItemRegistryTest, FurnaceFieldsDefaultToAbsent) {
+    // No furnace fields: not smeltable, the smelt time is the Minecraft
+    // 10 s default (only meaningful when smeltable), not fuel.
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(R"({"id":"gem","type":"material"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(items.at(*r).smeltableTo.empty());
+    EXPECT_FLOAT_EQ(items.at(*r).smeltTime, 10.0f);
+    EXPECT_FLOAT_EQ(items.at(*r).fuelTime, 0.0f);
+}
+
+TEST(ItemRegistryTest, RejectsBadFurnaceFields) {
+    ItemRegistry items;
+    // An explicit empty smeltable_to is a typo (ABSENT is the default,
+    // the ammo discipline).
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","smeltable_to":""})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","smeltable_to":5})"))
+                     .ok());
+    // smelt_time must be a number in (0, 100].
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material","smelt_time":0})"))
+                     .ok()); // explicit 0 = a typo (ABSENT is the default)
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material","smelt_time":-3})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material","smelt_time":100.5})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","smelt_time":"fast"})"))
+                     .ok());
+    // fuel_time must be a number in (0, 1000] (explicit 0 = a typo).
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material","fuel_time":0})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material","fuel_time":-5})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material","fuel_time":1001})"))
+                     .ok());
+}

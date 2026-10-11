@@ -376,6 +376,16 @@ TEST(BlockRegistryTest, InteractParsesCraftingTable) {
     EXPECT_EQ(reg.at(*r).properties.interact, kInteractCraftingTable);
 }
 
+TEST(BlockRegistryTest, InteractParsesFurnace) {
+    // Phase 40: the furnace opens the smelting GUI.
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"furnace","properties":{"interact":"furnace"},"model")"
+        R"(:{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).properties.interact, kInteractFurnace);
+}
+
 TEST(BlockRegistryTest, RejectsUnknownInteract) {
     const std::string model =
         R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})";

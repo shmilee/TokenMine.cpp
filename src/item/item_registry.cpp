@@ -137,6 +137,50 @@ Result<void> ItemRegistry::parseAmmo(const Json& def, Item& out) {
     return {};
 }
 
+Result<void> ItemRegistry::parseFurnace(const Json& def, Item& out) {
+    // Optional 'smeltable_to' (Phase 40): the furnace product item name.
+    // Presence (a non-empty string) marks the item as SMELTABLE; the
+    // absent field is the "not smeltable" default, so an explicit empty
+    // string is rejected as a typo (the ammo discipline). The name is
+    // resolved against the ItemRegistry at game init (the product may be
+    // defined in a later file).
+    if (const Json* st = def.find("smeltable_to")) {
+        if (!st->isString() || st->asString().empty()) {
+            return MC_FAIL("'smeltable_to' must be a non-empty item name");
+        }
+        out.smeltableTo = st->asString();
+    }
+    // Optional 'smelt_time' (Phase 40): seconds per unit in the furnace,
+    // a number in (0, 100] (Minecraft's 10 s default).
+    if (const Json* stt = def.find("smelt_time")) {
+        if (!stt->isNumber()) {
+            return MC_FAIL("'smelt_time' must be a number");
+        }
+        const double d = stt->asDouble();
+        out.smeltTime = static_cast<float>(d);
+        if (out.smeltTime <= 0.0f || out.smeltTime > 100.0f) {
+            return MC_FAIL("'smelt_time' must be in (0, 100], got " +
+                           std::to_string(out.smeltTime));
+        }
+    }
+    // Optional 'fuel_time' (Phase 40): seconds one unit burns in the
+    // furnace, a number in (0, 1000]. The absent field (or fuelTime 0)
+    // means "not fuel"; an explicit 0 is rejected as a typo (the
+    // restore_hunger discipline).
+    if (const Json* ft = def.find("fuel_time")) {
+        if (!ft->isNumber()) {
+            return MC_FAIL("'fuel_time' must be a number");
+        }
+        const double d = ft->asDouble();
+        out.fuelTime = static_cast<float>(d);
+        if (out.fuelTime <= 0.0f || out.fuelTime > 1000.0f) {
+            return MC_FAIL("'fuel_time' must be in (0, 1000], got " +
+                           std::to_string(out.fuelTime));
+        }
+    }
+    return {};
+}
+
 Result<void> ItemRegistry::parseTool(const Json& def, Item& out) {
     if (const Json* tool = def.find("tool")) {
         if (!tool->isObject()) {
@@ -195,7 +239,9 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
         if (key != "id" && key != "type" && key != "tool" &&
             key != "max_stack" && key != "attack_damage" &&
             key != "shoot_speed" && key != "shoot_damage" &&
-            key != "restore_hunger" && key != "ammo" && key != "icon") {
+            key != "restore_hunger" && key != "ammo" &&
+            key != "smeltable_to" && key != "smelt_time" &&
+            key != "fuel_time" && key != "icon") {
             MC_LOG_WARN("Item '" + name + "': unknown field '" + key +
                         "' ignored");
         }
@@ -213,6 +259,8 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     r = parseFood(def, item);
     MC_TRY(r);
     r = parseAmmo(def, item);
+    MC_TRY(r);
+    r = parseFurnace(def, item);
     MC_TRY(r);
 
     // Optional 2D icon (Phase 15 UI): a texture file name under
