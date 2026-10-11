@@ -1,0 +1,16 @@
+{
+  "id": "wool",
+  "properties": {
+    "hardness": 0.8,
+    "drops": "wool",
+    "dye_base": "wool",
+    "dye_color": "white"
+  },
+  "model": {
+    "textures": {
+      "top": "wool",
+      "side": "wool",
+      "bottom": "wool"
+    }
+  }
+}

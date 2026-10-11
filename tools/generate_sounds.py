@@ -203,6 +203,17 @@ def eat():
     return lowpass3(sound(dur, f))
 
 
+def cloth():
+    """Soft cloth rustle (dye recolor, Phase 41): a short, quiet lowpassed
+    noise burst — softer than dig (recolored wool, not mined stone)."""
+    lcg = Lcg(0xC107)
+    dur = 0.10
+
+    def f(t, _):
+        return lcg.next() * env(t, dur, 25.0) * 0.35
+    return lowpass3(sound(dur, f))
+
+
 SOUNDS = {
     "dig": dig,
     "place": place,
@@ -217,6 +228,7 @@ SOUNDS = {
     "shoot": shoot,
     "bow": bow,
     "eat": eat,
+    "cloth": cloth,
 }
 
 

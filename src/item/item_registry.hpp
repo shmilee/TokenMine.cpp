@@ -89,6 +89,10 @@ private:
     // `smelt_time` ((0, 100] s, default 10.0) and `fuel_time` ((0, 1000]
     // s; 0 = not fuel).
     static Result<void> parseFurnace(const Json& def, Item& out);
+    // Parse the optional dye field `dye_color` (Phase 41) into `out`
+    // (a color name; presence marks the item as a dye — block dye
+    // colors are cross-checked against the dye items at game init).
+    static Result<void> parseDye(const Json& def, Item& out);
     // Parse the tool fields (`tool.break_speed` + `max_stack`) into `out`.
     static Result<void> parseTool(const Json& def, Item& out);
 

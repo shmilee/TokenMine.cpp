@@ -127,6 +127,34 @@ iron_pickaxe（III/.S./.S.）。
 `craft()`（Phase 15；可合成的配方白色高亮、不可合成的灰色）；或放置并右键
 工作台打开 3×3 面板，按形状放料后取输出格（Phase 17）。
 
+## 新增一个染料 / 染色方块（无需改核心代码，Phase 41）
+
+颜色名白名单（`item_registry` 的 `dye_color` 解析 + `block_registry` 的
+`dye_color` 解析共用 9 个名字）：`white`/`black`/`brown`/`red`/`yellow`/
+`orange`/`pink`/`gray`/`silver`。**加新颜色名 = 改白名单（代码）**；在白名单
+内加内容 = 纯数据：
+
+1. **染料物品** `assets/data/items/dye_<color>.json`：
+   `{"id", "type": "material", "max_stack": 64, "icon": "dye_<color>",
+   "dye_color": "<color>"}`；图标 `assets/textures/items/dye_<color>.png`
+   （16×16，`tools/generate_item_icons.py` 的 `DYE_PALETTE` 同款确定性生成）。
+   显式 `"dye_color": ""` 拒绝。
+2. **染色变体方块** `assets/data/blocks/<base>_<color>.json`（white 特例 =
+   `<base>.json` 本身，名字不加后缀）：
+   `properties` 加 `"dye_base": "<base>", "dye_color": "<color>"`（两者必须
+   同时给；`dye_base` 与 `interact` 互斥）；纹理 tile 加进
+   `assets/data/textures/block_atlas.json`（atlas 满 8×8 格前直接加行；
+   **网格扩容会移位所有既有 UV → 无输入基线门必须重锚**，见 PITS）。
+3. **合成配方** `assets/data/recipes/dye_<color>.json`（shapeless；当前 9 条
+   见 GAMEPLAY「染色」）。
+4. **init 交叉校验**（启动即检查，报错点名）：每个 dyeable 块的 `dye_color`
+   必须有同色染料物品；**每个 (dye_base, 白名单颜色) 组合的变体块必须存在**
+   ——所以加一个新颜色时，**所有** dye 家族都要补变体块（当前 = wool 家族
+   9 个）；加一个新 dye 家族 = 9 个变体块。
+
+交互规则见 MECHANICS「染色」：选中染料右键 dye 家族方块 = 换块 + 消耗 1；
+同色重复不消耗（v1 规则）。
+
 ## 新增一个 Mob（无需改核心代码，Phase 20）
 
 1. `assets/textures/mobs/<tile>.png` —— 16×16 RGBA 纹理（`tools/generate_mob_textures.py`

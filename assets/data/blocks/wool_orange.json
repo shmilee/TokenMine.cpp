@@ -1,0 +1,16 @@
+{
+  "id": "wool_orange",
+  "properties": {
+    "hardness": 0.8,
+    "drops": "wool_orange",
+    "dye_base": "wool",
+    "dye_color": "orange"
+  },
+  "model": {
+    "textures": {
+      "top": "wool_orange",
+      "side": "wool_orange",
+      "bottom": "wool_orange"
+    }
+  }
+}

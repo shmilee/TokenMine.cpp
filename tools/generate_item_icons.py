@@ -369,18 +369,40 @@ def leather():
     return px
 
 
-def wool():
-    """A square of wool (Phase 26): a white fluffy slab, same silhouette
-    logic as the leather hide but white, with a slightly darker rim."""
-    px = blank()
-    base = (232, 230, 224)
-    rim = (190, 188, 180)
-    for y in range(SIZE):
-        for x in range(SIZE):
-            d = max(abs(x - 15.0), abs(y - 15.0))
-            if d < 11.0 + (h2(x, y, 61) % 3) * 2 - 2:
-                setpx(px, x, y, rim if d > 8.4 else base, salt=61)
-    return px
+# Phase 41: the wool item became the implicit BLOCK item (the "wool" block)
+# and renders as a 3D block cube — its 2D slab icon is gone. The dyes take
+# the slab silhouette: one plate per color, same palette as the dyed wool
+# blocks (generate_block_textures.py WOOL_PALETTE).
+DYE_PALETTE = {
+    "dye_white": (232, 230, 224),
+    "dye_red": (185, 54, 64),
+    "dye_yellow": (232, 199, 60),
+    "dye_orange": (240, 118, 19),
+    "dye_pink": (234, 138, 195),
+    "dye_brown": (119, 81, 51),
+    "dye_gray": (62, 68, 71),
+    "dye_black": (25, 23, 25),
+    "dye_silver": (142, 142, 147),
+}
+
+
+def make_dye_icon(name: str):
+    """A plate of dye (Phase 41): the old wool-slab silhouette in the dye's
+    color, with a darker rim for depth."""
+    (cr, cg, cb) = DYE_PALETTE[name]
+    salt = 70 + sorted(DYE_PALETTE).index(name)
+    rim = (cr * 7 // 10, cg * 7 // 10, cb * 7 // 10)
+
+    def icon():
+        px = blank()
+        for y in range(SIZE):
+            for x in range(SIZE):
+                d = max(abs(x - 15.0), abs(y - 15.0))
+                if d < 11.0 + (h2(x, y, salt) % 3) * 2 - 2:
+                    setpx(px, x, y, rim if d > 8.4 else DYE_PALETTE[name],
+                          salt=salt)
+        return px
+    return icon
 
 
 def bone():
@@ -476,7 +498,7 @@ ITEMS = {
     "bow": bow,
     "arrow": arrow,
     "leather": leather,
-    "wool": wool,
+    **{name: make_dye_icon(name) for name in DYE_PALETTE},
     "bone": bone,
     "feather": feather,
     "beef": beef,

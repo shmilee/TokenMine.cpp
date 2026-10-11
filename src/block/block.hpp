@@ -30,6 +30,22 @@ inline constexpr std::string_view kInteractCraftingTable = "crafting_table";
 // Phase 40: opens the furnace panel (the smelting GUI).
 inline constexpr std::string_view kInteractFurnace = "furnace";
 
+// Phase 41: the dye color of a dye-family base block. A dyed variant is
+// named "<dye_base>_<color>" — EXCEPT white, which IS the base block
+// (no suffix). The naming convention is a single pure function (below),
+// shared by the recolor interaction and the game-init cross-check.
+inline constexpr std::string_view kDyeColorWhite = "white";
+
+// The block name of a dye-family variant for a base family and a dye
+// color: "<base>_<color>", white mapping to the base name itself.
+inline std::string dyeVariantName(std::string_view base,
+                                  std::string_view color) {
+    if (color == kDyeColorWhite) {
+        return std::string(base);
+    }
+    return std::string(base) + "_" + std::string(color);
+}
+
 // Stable handle into a BlockRegistry. Invalid until assigned.
 //
 // Convention: BlockID{0} is the reserved "air" sentinel — the absence of a
@@ -68,7 +84,17 @@ struct BlockProperties {
     // Right-click interaction (Phase 17): kInteractCraftingTable opens the
     // crafting-table GUI instead of placing a block. Empty (the default) =
     // no special interaction. Validated against the known set at data load.
+    // Mutually exclusive with dyeBase (a block either opens a GUI or is
+    // dyed, never both).
     std::string interact;
+    // Dye family (Phase 41): when non-empty, this block is a dyeable
+    // variant of the named family (e.g. "wool"). The family's base block
+    // is the one with dyeColor "white" (the base NAME, no suffix); dyed
+    // variants are named dyeVariantName(dyeBase, dyeColor).
+    std::string dyeBase;
+    // Dye color (Phase 41): only with a non-empty dyeBase. Must name an
+    // existing dye item's color (game-init cross-check).
+    std::string dyeColor;
 };
 
 // Which texture name is applied to each face group.

@@ -9,32 +9,32 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 40 完成时）
+## 现状（Phase 41 完成时）
 
-- 功能阶段 P0–P40 全部完成并提交；P36 = UI 着色器文字着色修复（死亡屏
-  红字）+ 读档坠落重钉、P37 = 并行化存档 diff、P38 = skeleton 后续三项
-  （LOS 门/掉落区间+bone/箭预判）、P39 = 生成权重按类型（`{"id","weight"?}`
-  对象 schema，全 weight 1 与旧抽取逐位相同 = 零行为变化）、
-  P40 = 炉子/熔炼（P28 遗留"熟肉"）：`furnace` 方块（`interact: "furnace"`
-  开面板，27 格 + input/进度条/output/fuel）+ 物品数据字段 `smeltable_to` /
-  `smelt_time`（(0,100] s 缺省 10）/ `fuel_time`（(0,1000] s）；
-  3 熟肉（cooked_beef +8 / cooked_mutton +6 / cooked_chicken +6，MC 数值）+
-  燃料 coal 80 s / planks 7.5 s / stick 5 s（消费 P12 遗留"coal 无用途"）；
-  熔炼状态 = **单个全局 `FurnaceState`**（工作台网格同款 v1 规则），
-  每帧固定 1/60 子步 + **整数子步倒计时**（昼夜同类，无输入字节可复现），
-  存档 format 6（`furnace` 三槽 + 两个整数字步字段 + 进度不变量严格校验）。
-- 测试 **751/751**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
-- 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P40 = 第 15 次结构性
-  免疫——新世界无炉子方块（非 worldgen 产出）、空炉 tick = no-op、无输入
-  无面板；atlas 新增 tile 落在空位不扰既有 UV；参考图于 P36 经 P35 代码
-  参考构建 A/B 逐字节重锚，P37–P40 直接复用未重锚）。
+- 功能阶段 P0–P41 全部完成并提交；P38 = skeleton 后续三项（LOS 门/掉落
+  区间+bone/箭预判）、P39 = 生成权重按类型（`{"id","weight"?}` 对象 schema，
+  全 weight 1 与旧抽取逐位相同 = 零行为变化）、P40 = 炉子/熔炼（P28 遗留
+  "熟肉"）：`furnace` 方块 + 物品字段 `smeltable_to`/`smelt_time`/`fuel_time`
+  + 3 熟肉 + 燃料 + **单个全局 `FurnaceState`**（每帧 1/60 子步 + 整数字步
+  倒计时）+ 存档 format 6、**P41 = wool 后续**（P12/P20 遗留"wool 无用途/
+  无染色"）：9 wool 方块（`wool` 白 base + 8 染色变体 `wool_<color>`）+ 9
+  染料物品 `dye_<color>`（物品字段 `dye_color`，白名单 9 色）+ 9 shapeless
+  配方 + 方块属性 `dye_base`/`dye_color`（与 `interact` 互斥）；
+  命名 `dyeVariantName(base, color)` = `"<base>_<color>"`、white 特例 =
+  base 名本身；染色交互 = 右键顺序 interact 后、placeBlock 前（换块 + 消耗
+  1 + cloth 音效，同色重复 no-op）；init 交叉校验含"每个 (base, 颜色) 变体
+  必须存在"；atlas 4×8→8×8（**所有既有 UV 移位 → base18 于 P41 重锚**）。
+- 测试 **762/762**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+- 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P41 为**重锚阶段**
+  ——atlas 4×8→8×8 全 UV 缩放变化，重锚链经 P40 代码参考构建 A/B 逐字节
+  验证后 `cp`，P18/P36 先例；P42 若过门 = 第 16 次结构性免疫）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 
 ## 命令
 
 ```bash
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build  # 构建（0 警告）
-./build/bin/minecraft_tests                                                 # 测试（718）
+./build/bin/minecraft_tests                                                 # 测试（762）
 ./build/bin/minecraft                                                       # 运行（ESC 退出）
 ./build/bin/minecraft --frames N [--screenshot /abs.png] [--save slot] [--new] [--config path]
 ```
@@ -119,7 +119,7 @@ KNOWN_ISSUES、SESSION_CONTEXT）→ 6. **显式路径列表** git commit（永�
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（~55 条，都踩过） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（~62 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃）+ 已修复存档索引 | 阶段验收前后 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phase 0–29 规划 + 细节存档索引 | 了解历史 |
 | [docs/archive/phase-NN.md](docs/archive/) | 单阶段细节存档（阶段报告 + 会话存档） | 深挖某阶段 |

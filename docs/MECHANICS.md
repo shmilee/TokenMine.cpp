@@ -212,6 +212,26 @@
     运行逐字节可复现；存档 format 6 `furnace` 存整数 `progress_substeps` /
     `fuel_substeps`）；炉子状态是**单个全局容器**（任何炉子共享，同工作台
     网格 v1 规则，见 KNOWN_ISSUES）
+- **染色**（Phase 41，全数据驱动）：
+  - **染料物品**：物品可选字段 `dye_color`（白名单颜色名：white/black/brown/
+    red/yellow/orange/pink/gray/silver；显式空串拒绝）；当前 9 种
+    `dye_<color>`（material，max_stack 64，2D 图标）
+  - **可染方块**：方块可选属性 `dye_base` + `dye_color`（必须同时给；
+    `dye_base` 与 `interact` 互斥）。变体名 = `dyeVariantName(base, color)` =
+    `"<base>_<color>"`，**white 特例 = base 名本身**（`wool_white` 不存在，
+    白色就是 `wool`）。当前家族：`wool`（白）+ 8 个染色变体 `wool_<color>`
+    （hardness 0.8，掉自身，6 面同 tile）
+  - **交互**（右键顺序：食物 → launcher → interact → **染色** → 放置）：
+    选中染料右键命中 dye 家族方块 = 该方块立即转为目标颜色变体 + 消耗 1 个
+    染料 + "cloth" 音效 + **点击被吞**（染料不是方块物品，不放置）。**同色
+    重复 = no-op 不消耗不拦截**（点击落到 placeBlock 无操作——文档化的 v1
+    规则，Minecraft 会消耗）
+  - **init 交叉校验**（ammo/smelt 同款模式）：dyeable 块必须有 `dye_color`；
+    块的 `dye_color` 必须是某个染料物品的颜色；**每个 (dye_base, 颜色) 组合
+    的变体块必须存在**（缺 = 死染料，启动报错）
+  - **染色即换块**：走 `setBlock` 脏标记管线（下一帧重网格）+
+    `Lighting::updateLocal`（染色前后都是 opaque，光不变）；无存档格式变更
+    （diff 按块名存，format 6 不变）
 - **游泳**（Phase 9）：玩家包围盒与任何水体格相交即进入水中状态——水中重力减半
   （12 vs 32）、终端速度 4、水平速度降为 3.1（冲刺无效）、`Space` 随时上浮（4.5）；
   浅水（头在水面上）可以"蹚水走"，深水可以游
@@ -223,7 +243,8 @@
     （水会被破坏排水、随后流体模拟把它补回）
   - `右键`（锁定时）：**先试食物**（选中食物 = 开始进食通道，点击被吞）
     再试 launcher（弓蓄力）再试 interact——命中格有 `interact` 属性
-    （工作台/炉子）则打开对应面板、不放置；否则在命中面的邻格放置
+    （工作台/炉子）则打开对应面板、不放置——再试**染色**（选中染料 +
+    命中 dye 家族方块，见「染色」）；否则在命中面的邻格放置
     **当前选中格**的方块物品，
     并**消耗 1 个**（方块不再无限——背包是方块的来源；工具不可放置）；不能
     放进 solid 方块或玩家自身包围盒内

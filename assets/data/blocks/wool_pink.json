@@ -1,0 +1,16 @@
+{
+  "id": "wool_pink",
+  "properties": {
+    "hardness": 0.8,
+    "drops": "wool_pink",
+    "dye_base": "wool",
+    "dye_color": "pink"
+  },
+  "model": {
+    "textures": {
+      "top": "wool_pink",
+      "side": "wool_pink",
+      "bottom": "wool_pink"
+    }
+  }
+}

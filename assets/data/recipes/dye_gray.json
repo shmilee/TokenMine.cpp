@@ -1,0 +1,17 @@
+{
+  "id": "dye_gray",
+  "output": {
+    "item": "dye_gray",
+    "count": 1
+  },
+  "ingredients": [
+    {
+      "item": "dye_white",
+      "count": 1
+    },
+    {
+      "item": "dye_black",
+      "count": 1
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "dye_brown",
+  "output": {
+    "item": "dye_brown",
+    "count": 2
+  },
+  "ingredients": [
+    {
+      "item": "rotten_flesh",
+      "count": 1
+    }
+  ]
+}

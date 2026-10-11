@@ -1,0 +1,7 @@
+{
+  "id": "dye_gray",
+  "type": "material",
+  "max_stack": 64,
+  "icon": "dye_gray",
+  "dye_color": "gray"
+}

@@ -1,0 +1,17 @@
+{
+  "id": "dye_pink",
+  "output": {
+    "item": "dye_pink",
+    "count": 1
+  },
+  "ingredients": [
+    {
+      "item": "dye_red",
+      "count": 1
+    },
+    {
+      "item": "dye_white",
+      "count": 1
+    }
+  ]
+}

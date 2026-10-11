@@ -181,6 +181,22 @@ Result<void> ItemRegistry::parseFurnace(const Json& def, Item& out) {
     return {};
 }
 
+Result<void> ItemRegistry::parseDye(const Json& def, Item& out) {
+    // Optional 'dye_color' (Phase 41): the dye's color name (e.g.
+    // "red"). Presence (a non-empty string) marks the item as a DYE; the
+    // absent field is the "not a dye" default, so an explicit empty
+    // string is rejected as a typo (the ammo discipline). The color
+    // vocabulary is data-defined (dye items name the colors); block dye
+    // colors are cross-checked against it at game init.
+    if (const Json* dc = def.find("dye_color")) {
+        if (!dc->isString() || dc->asString().empty()) {
+            return MC_FAIL("'dye_color' must be a non-empty color name");
+        }
+        out.dyeColor = dc->asString();
+    }
+    return {};
+}
+
 Result<void> ItemRegistry::parseTool(const Json& def, Item& out) {
     if (const Json* tool = def.find("tool")) {
         if (!tool->isObject()) {
@@ -241,7 +257,7 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
             key != "shoot_speed" && key != "shoot_damage" &&
             key != "restore_hunger" && key != "ammo" &&
             key != "smeltable_to" && key != "smelt_time" &&
-            key != "fuel_time" && key != "icon") {
+            key != "fuel_time" && key != "dye_color" && key != "icon") {
             MC_LOG_WARN("Item '" + name + "': unknown field '" + key +
                         "' ignored");
         }
@@ -261,6 +277,8 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     r = parseAmmo(def, item);
     MC_TRY(r);
     r = parseFurnace(def, item);
+    MC_TRY(r);
+    r = parseDye(def, item);
     MC_TRY(r);
 
     // Optional 2D icon (Phase 15 UI): a texture file name under

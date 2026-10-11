@@ -1,0 +1,16 @@
+{
+  "id": "wool_silver",
+  "properties": {
+    "hardness": 0.8,
+    "drops": "wool_silver",
+    "dye_base": "wool",
+    "dye_color": "silver"
+  },
+  "model": {
+    "textures": {
+      "top": "wool_silver",
+      "side": "wool_silver",
+      "bottom": "wool_silver"
+    }
+  }
+}

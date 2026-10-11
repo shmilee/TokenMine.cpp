@@ -1,0 +1,17 @@
+{
+  "id": "dye_orange",
+  "output": {
+    "item": "dye_orange",
+    "count": 1
+  },
+  "ingredients": [
+    {
+      "item": "dye_red",
+      "count": 1
+    },
+    {
+      "item": "dye_yellow",
+      "count": 1
+    }
+  ]
+}

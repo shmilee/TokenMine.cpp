@@ -98,6 +98,14 @@ struct Item {
     // absent-field default; an explicit 0 is rejected as a typo, the
     // restore_hunger discipline).
     float fuelTime = 0.0f;
+    // Phase 41: dye (optional data field 'dye_color'). dyeColor non-empty
+    // marks the item as a DYE of that color: right-clicking it on a
+    // dye-family block (BlockProperties::dyeBase) recolors the block to
+    // dyeVariantName(base, color) and consumes one dye. The color must
+    // exist as a dye item color for every dye-family base block (the
+    // game-init cross-check keeps the family complete — see
+    // Game::init).
+    std::string dyeColor;
     // Phase 15 UI: the item's 2D icon texture name (a file under
     // assets/textures/items/, validated against the filesystem at game
     // init). Empty for block items, which render a 3D block cube instead.

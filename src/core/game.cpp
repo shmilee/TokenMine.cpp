@@ -496,6 +496,57 @@ Result<void> Game::buildScene() {
         }
     }
 
+    // -- dye families (Phase 41): the recolor interaction resolves its
+    // target block purely by NAME (dyeVariantName), so the data must be
+    // COMPLETE: every dyeable block names an existing dye item color,
+    // and for every dye family (distinct 'dye_base' values) every dye
+    // item color has its variant block (a missing variant would be a
+    // dead dye — same cross-check pattern as the ammo/smelt product).
+    {
+        std::vector<std::string> dyeItemColors;
+        for (const ItemID id : m_items.allIds()) {
+            if (!m_items.at(id).dyeColor.empty()) {
+                dyeItemColors.push_back(m_items.at(id).dyeColor);
+            }
+        }
+        std::vector<std::string> dyeBases;
+        for (const BlockID id : m_blocks.allIds()) {
+            const BlockProperties& p = m_blocks.at(id).properties;
+            if (p.dyeBase.empty()) {
+                continue;
+            }
+            dyeBases.push_back(p.dyeBase);
+            if (p.dyeColor.empty()) {
+                return MC_FAIL("dyeable block '" +
+                               m_blocks.at(id).name + "' (dye_base '" +
+                               p.dyeBase + "') requires a 'dye_color' "
+                               "property");
+            }
+            bool colorKnown = false;
+            for (const std::string& c : dyeItemColors) {
+                if (c == p.dyeColor) {
+                    colorKnown = true;
+                    break;
+                }
+            }
+            if (!colorKnown) {
+                return MC_FAIL("dyeable block '" + m_blocks.at(id).name +
+                               "' has dye color '" + p.dyeColor +
+                               "' but no dye item of that color exists");
+            }
+        }
+        for (const std::string& base : dyeBases) {
+            for (const std::string& color : dyeItemColors) {
+                const std::string variant = dyeVariantName(base, color);
+                if (m_blocks.findByName(variant) == nullptr) {
+                    return MC_FAIL("dye family '" + base + "' is missing "
+                                   "the variant block '" + variant +
+                                   "' (dye color '" + color + "')");
+                }
+            }
+        }
+    }
+
     // -- recipes (Phase 12): data-driven crafting (UI/trigger = Phase 15) --
     auto recipesLoad = m_recipes.loadDirectory(m_assets, m_items,
                                                "data/recipes");
@@ -1394,6 +1445,42 @@ void Game::handleInteraction(double dt) {
             if (b.properties.interact == kInteractFurnace) {
                 openPanel(OpenPanel::Furnace);
                 return;
+            }
+        }
+        // Dye recoloring (Phase 41): a selected dye item right-clicked on
+        // a dye-family block converts the block to the dyed variant
+        // (dyeVariantName) and consumes one dye — instant (no channel,
+        // Minecraft) and the click is consumed (no placement). A block
+        // already in that color is left alone and the click falls through
+        // (the dye is not a block item, so placeBlock is a no-op — the
+        // documented v1 rule: a duplicate dye is not consumed).
+        if (const std::optional<BlockHit> hit = targetBlock(); hit) {
+            const Block& b = m_blocks.at(
+                m_world.getBlock(hit->block.x, hit->block.y,
+                                 hit->block.z));
+            if (!b.properties.dyeBase.empty()) {
+                const ItemStack& held = m_inventory.at(m_selectedSlot);
+                if (!held.empty() &&
+                    !m_items.at(held.item).dyeColor.empty()) {
+                    const std::string variant =
+                        dyeVariantName(b.properties.dyeBase,
+                                       m_items.at(held.item).dyeColor);
+                    if (variant != b.name) {
+                        // Game init (family completeness) guarantees the
+                        // variant block exists; the null guard is a
+                        // defensive no-op.
+                        if (const Block* v = m_blocks.findByName(variant);
+                            v != nullptr) {
+                            m_world.setBlock(hit->block.x, hit->block.y,
+                                             hit->block.z, v->id);
+                            Lighting::updateLocal(m_world, m_blocks,
+                                                  hit->block);
+                            m_inventory.take(m_selectedSlot, 1);
+                            m_sound.play("cloth");
+                        }
+                        return;
+                    }
+                }
             }
         }
         placeBlock();

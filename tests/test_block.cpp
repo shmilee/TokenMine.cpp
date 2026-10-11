@@ -399,3 +399,88 @@ TEST(BlockRegistryTest, RejectsUnknownInteract) {
                          R"({"id":"a","properties":{"interact":7},)" + model))
                      .ok());
 }
+
+// -- dye family (Phase 41) ---------------------------------------------------
+
+TEST(BlockRegistryTest, DyeFieldsDefaultToEmpty) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(minimalDef("stone")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(reg.at(*r).properties.dyeBase.empty());
+    EXPECT_TRUE(reg.at(*r).properties.dyeColor.empty());
+}
+
+TEST(BlockRegistryTest, ParsesDyeFamily) {
+    // Phase 41: the wool block — a dye family base (white).
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"wool","properties":{"dye_base":"wool","dye_color":"white"},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const BlockProperties& p = reg.at(*r).properties;
+    EXPECT_EQ(p.dyeBase, "wool");
+    EXPECT_EQ(p.dyeColor, "white");
+}
+
+TEST(BlockRegistryTest, ParsesDyedVariant) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"wool_red","properties":{"dye_base":"wool","dye_color":"red"},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const BlockProperties& p = reg.at(*r).properties;
+    EXPECT_EQ(p.dyeBase, "wool");
+    EXPECT_EQ(p.dyeColor, "red");
+}
+
+TEST(BlockRegistryTest, RejectsDyeColorWithoutBase) {
+    const std::string model =
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})";
+    EXPECT_FALSE(BlockRegistry()
+                     .registerBlock(parseDef(
+                         R"({"id":"a","properties":{"dye_color":"red"},)" +
+                         model))
+                     .ok());
+}
+
+TEST(BlockRegistryTest, RejectsEmptyDyeFields) {
+    // An explicit empty string is a typo — ABSENT is the "not dyeable"
+    // default (the ammo discipline).
+    const std::string model =
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})";
+    EXPECT_FALSE(BlockRegistry()
+                     .registerBlock(parseDef(
+                         R"({"id":"a","properties":{"dye_base":""},)" + model))
+                     .ok());
+    EXPECT_FALSE(BlockRegistry()
+                     .registerBlock(parseDef(
+                         R"({"id":"a","properties":{"dye_base":"wool",)"
+                         R"("dye_color":""},)" + model))
+                     .ok());
+    EXPECT_FALSE(BlockRegistry()
+                     .registerBlock(parseDef(
+                         R"({"id":"a","properties":{"dye_base":7},)" + model))
+                     .ok());
+}
+
+TEST(BlockRegistryTest, RejectsDyeableWithInteract) {
+    // A block either opens a GUI or is dyed — never both.
+    const std::string model =
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})";
+    EXPECT_FALSE(BlockRegistry()
+                     .registerBlock(parseDef(
+                         R"({"id":"a","properties":{"dye_base":"wool",)"
+                         R"("interact":"furnace"},)" + model))
+                     .ok());
+}
+
+TEST(BlockRegistryTest, DyeVariantNameWhiteIsTheBase) {
+    // The naming convention: white maps to the base name (no suffix).
+    EXPECT_EQ(dyeVariantName("wool", kDyeColorWhite), "wool");
+}
+
+TEST(BlockRegistryTest, DyeVariantNameAppendsTheColor) {
+    EXPECT_EQ(dyeVariantName("wool", "red"), "wool_red");
+    EXPECT_EQ(dyeVariantName("wool", "silver"), "wool_silver");
+    EXPECT_EQ(dyeVariantName("carpet", "black"), "carpet_black");
+}

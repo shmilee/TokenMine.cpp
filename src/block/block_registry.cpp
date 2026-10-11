@@ -101,6 +101,12 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "interact", "string",
                    [&](const Json& v) { out.interact = v.asString(); });
     MC_TRY(r);
+    r = checkField(*p, "dye_base", "string",
+                   [&](const Json& v) { out.dyeBase = v.asString(); });
+    MC_TRY(r);
+    r = checkField(*p, "dye_color", "string",
+                   [&](const Json& v) { out.dyeColor = v.asString(); });
+    MC_TRY(r);
 
     if (out.dropsCount < 1 || out.dropsCount > 64) {
         return MC_FAIL("'drops_count' must be in [1, 64], got " +
@@ -125,6 +131,33 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
                        out.interact + "' (only '" +
                        std::string(kInteractCraftingTable) + "' and '" +
                        std::string(kInteractFurnace) + "' exist)");
+    }
+    // Dye family (Phase 41): both fields are optional; an EXPLICIT empty
+    // string is a typo (ABSENT is the "not dyeable" default — the ammo
+    // discipline). dye_color requires dye_base; a dyeable block cannot
+    // also open a GUI.
+    if (const Json* db = p->find("dye_base")) {
+        if (db->asString().empty()) {
+            return MC_FAIL("block property 'dye_base' must be a non-empty "
+                           "family name (omit it when the block is not "
+                           "dyeable)");
+        }
+    }
+    if (const Json* dc = p->find("dye_color")) {
+        if (dc->asString().empty()) {
+            return MC_FAIL("block property 'dye_color' must be a non-empty "
+                           "color name (omit it when the block has no dye "
+                           "color)");
+        }
+    }
+    if (!out.dyeColor.empty() && out.dyeBase.empty()) {
+        return MC_FAIL("block property 'dye_color' requires 'dye_base' "
+                       "(got '" + out.dyeColor + "')");
+    }
+    if (!out.dyeBase.empty() && !out.interact.empty()) {
+        return MC_FAIL("a block cannot be both dyeable ('dye_base: '" +
+                       out.dyeBase + "') and interactive ('interact: '" +
+                       out.interact + "')");
     }
     if (out.opaque && out.transparent) {
         return MC_FAIL("block cannot be both 'opaque' and 'transparent'");

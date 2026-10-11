@@ -226,7 +226,37 @@ def furnace_side(x, y):
     return stone(x, y)
 
 
+# --- dyed wool family (Phase 41) --------------------------------------------
+# The Minecraft dyed-wool palette — the nine colors that have an in-world
+# dye source (the remaining seven MC colors await material sources —
+# lapis/cactus/flowers — see docs/KNOWN_ISSUES). Same fluff as the sheep
+# body: one per-pixel noise on all channels (hue constant, brightness
+# varies). White is the family base block ("wool", no color suffix).
+WOOL_PALETTE = {
+    "wool": (232, 230, 224),
+    "wool_red": (185, 54, 64),
+    "wool_yellow": (232, 199, 60),
+    "wool_orange": (240, 118, 19),
+    "wool_pink": (234, 138, 195),
+    "wool_brown": (119, 81, 51),
+    "wool_gray": (62, 68, 71),
+    "wool_black": (25, 23, 25),
+    "wool_silver": (142, 142, 147),
+}
+
+
+def make_wool_tile(name: str):
+    (br, bg, bb) = WOOL_PALETTE[name]
+    salt = 100 + sorted(WOOL_PALETTE).index(name)
+
+    def tile(x, y):
+        n = noise(x, y, salt, 12)
+        return (clamp(br + n), clamp(bg + n), clamp(bb + n), 255)
+    return tile
+
+
 TEXTURES = {
+    **{name: make_wool_tile(name) for name in WOOL_PALETTE},
     "stone": stone,
     "dirt": dirt,
     "grass_top": grass_top,

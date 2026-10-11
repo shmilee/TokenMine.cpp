@@ -609,3 +609,38 @@ TEST(ItemRegistryTest, RejectsBadFurnaceFields) {
                      parseJson(R"({"id":"b","type":"material","fuel_time":1001})"))
                      .ok());
 }
+
+// -- dye (Phase 41) ----------------------------------------------------------
+
+TEST(ItemRegistryTest, ParsesDyeColor) {
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(
+        R"({"id":"red_dye","type":"material","dye_color":"red"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(items.at(*r).dyeColor, "red");
+}
+
+TEST(ItemRegistryTest, DyeColorAbsentByDefault) {
+    // No dye field: not a dye (the absent field is the default, so an
+    // explicit empty string is a typo — the ammo discipline).
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(R"({"id":"gem","type":"material"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(items.at(*r).dyeColor.empty());
+}
+
+TEST(ItemRegistryTest, RejectsBadDyeColor) {
+    ItemRegistry items;
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","dye_color":""})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","dye_color":5})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material","dye_color":["red"]})"))
+                     .ok());
+}

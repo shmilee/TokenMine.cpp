@@ -1,0 +1,7 @@
+{
+  "id": "dye_silver",
+  "type": "material",
+  "max_stack": 64,
+  "icon": "dye_silver",
+  "dye_color": "silver"
+}

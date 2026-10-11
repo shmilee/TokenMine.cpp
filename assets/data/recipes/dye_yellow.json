@@ -1,0 +1,13 @@
+{
+  "id": "dye_yellow",
+  "output": {
+    "item": "dye_yellow",
+    "count": 2
+  },
+  "ingredients": [
+    {
+      "item": "gold_ingot",
+      "count": 1
+    }
+  ]
+}

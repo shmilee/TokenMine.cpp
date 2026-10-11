@@ -1,0 +1,13 @@
+{
+  "id": "dye_red",
+  "output": {
+    "item": "dye_red",
+    "count": 1
+  },
+  "ingredients": [
+    {
+      "item": "beef",
+      "count": 1
+    }
+  ]
+}

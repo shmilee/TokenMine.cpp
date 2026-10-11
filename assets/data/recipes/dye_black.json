@@ -1,0 +1,13 @@
+{
+  "id": "dye_black",
+  "output": {
+    "item": "dye_black",
+    "count": 2
+  },
+  "ingredients": [
+    {
+      "item": "coal",
+      "count": 1
+    }
+  ]
+}

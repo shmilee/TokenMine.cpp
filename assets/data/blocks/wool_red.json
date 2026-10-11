@@ -1,0 +1,16 @@
+{
+  "id": "wool_red",
+  "properties": {
+    "hardness": 0.8,
+    "drops": "wool_red",
+    "dye_base": "wool",
+    "dye_color": "red"
+  },
+  "model": {
+    "textures": {
+      "top": "wool_red",
+      "side": "wool_red",
+      "bottom": "wool_red"
+    }
+  }
+}
