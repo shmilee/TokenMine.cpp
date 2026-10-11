@@ -319,7 +319,8 @@ TEST(FurnaceUiTest, LeftClickPickAndPlace) {
     Fixture f;
     Inventory inv;
     FurnaceState fz;
-    FurnaceUI ui(inv, fz, f.items);
+    FurnaceUI ui(inv, f.items);
+    ui.bind(fz);
     inv.setSlot(0, ItemStack {f.id("beef"), 3});
     ui.leftClick(0, -1);
     EXPECT_EQ(ui.carry(), stk(f.id("beef"), 3));
@@ -333,7 +334,8 @@ TEST(FurnaceUiTest, LeftClickSwapsDifferentItems) {
     Fixture f;
     Inventory inv;
     FurnaceState fz;
-    FurnaceUI ui(inv, fz, f.items);
+    FurnaceUI ui(inv, f.items);
+    ui.bind(fz);
     fz.input = ItemStack {f.id("coal"), 1};
     inv.setSlot(0, ItemStack {f.id("beef"), 2});
     ui.leftClick(0, -1); // pick the beef
@@ -349,7 +351,8 @@ TEST(FurnaceUiTest, LeftClickMergesSameItem) {
     Fixture f;
     Inventory inv;
     FurnaceState fz;
-    FurnaceUI ui(inv, fz, f.items);
+    FurnaceUI ui(inv, f.items);
+    ui.bind(fz);
     fz.input = ItemStack {f.id("cooked"), 10};
     inv.setSlot(0, ItemStack {f.id("cooked"), 60});
     ui.leftClick(0, -1); // pick the 60
@@ -363,7 +366,8 @@ TEST(FurnaceUiTest, RightClickMovesOne) {
     Fixture f;
     Inventory inv;
     FurnaceState fz;
-    FurnaceUI ui(inv, fz, f.items);
+    FurnaceUI ui(inv, f.items);
+    ui.bind(fz);
     inv.setSlot(0, ItemStack {f.id("beef"), 3});
     ui.rightClick(0, -1);
     EXPECT_EQ(ui.carry(), stk(f.id("beef"), 1));
@@ -377,7 +381,8 @@ TEST(FurnaceUiTest, RightClickIntoDifferentItemNoop) {
     Fixture f;
     Inventory inv;
     FurnaceState fz;
-    FurnaceUI ui(inv, fz, f.items);
+    FurnaceUI ui(inv, f.items);
+    ui.bind(fz);
     fz.input = ItemStack {f.id("coal"), 1};
     inv.setSlot(0, ItemStack {f.id("beef"), 1});
     ui.rightClick(0, -1); // pick the beef
@@ -390,7 +395,8 @@ TEST(FurnaceUiTest, InputChangeResetsProgress) {
     Fixture f;
     Inventory inv;
     FurnaceState fz;
-    FurnaceUI ui(inv, fz, f.items);
+    FurnaceUI ui(inv, f.items);
+    ui.bind(fz);
     fz.input = ItemStack {f.id("beef"), 3};
     fz.progressSubsteps = 100;
     // Same item, partial removal: the progress is kept.
@@ -410,7 +416,8 @@ TEST(FurnaceUiTest, InputSwapResetsProgress) {
     Fixture f;
     Inventory inv;
     FurnaceState fz;
-    FurnaceUI ui(inv, fz, f.items);
+    FurnaceUI ui(inv, f.items);
+    ui.bind(fz);
     fz.input = ItemStack {f.id("beef"), 1};
     fz.progressSubsteps = 50;
     inv.setSlot(0, ItemStack {f.id("coal"), 1});
@@ -425,7 +432,8 @@ TEST(FurnaceUiTest, ClickOutsideDropsCarry) {
     Fixture f;
     Inventory inv;
     FurnaceState fz;
-    FurnaceUI ui(inv, fz, f.items);
+    FurnaceUI ui(inv, f.items);
+    ui.bind(fz);
     inv.setSlot(0, ItemStack {f.id("beef"), 3});
     ui.leftClick(0, -1);
     ui.leftClick(-1, -1);

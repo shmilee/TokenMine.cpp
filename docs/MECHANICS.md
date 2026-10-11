@@ -217,10 +217,15 @@
     不放置方块；网格内容容器语义（关面板保留、入存档）
   - **E 背包面板**：2×2 合成格 = 共享 3×3 网格模型的左上 4 格（放不进 shaped
     配方）；右侧配方列表**只显示 shapeless 配方**（shaped 必须用工作台）
-- **熔炼 / 炉子**（Phase 40，全数据驱动）：
+- **熔炼 / 炉子**（Phase 40，全数据驱动；per-block 状态 Phase 44）：
   - **炉子方块**：数据驱动方块（`"interact": "furnace"` 属性，破坏掉自身）；
-    **锁定时右键命中它 = 打开炉子面板**（27 格背包 + input/进度条/output +
-    fuel 槽，Minecraft 排布；无任何合成动作——output 自己填满，点击取走）
+    **锁定时右键命中它 = 打开该炉子的面板**（27 格背包 + input/进度条/output
+    + fuel 槽，Minecraft 排布；无任何合成动作——output 自己填满，点击取走）。
+    **每个炉子方块有独立的熔炼状态**（Phase 44：`Game` 持
+    `std::map<BlockPos, FurnaceState>`，位置序 → 逐帧 tick 迭代确定；放置时
+    建空态、方块被换/破时删态——`Game::setBlock` 收口；面板 UI 打开时绑定到
+    所点方块的状态，面板期间块交互暂停 → 绑定态稳定）。各炉独立点火/熔炼，
+    互不干扰（A 满 output 不会暂停 B）
   - **可熔炼**：物品可选字段 `smeltable_to`（产物物品名，init 时交叉校验）
     标记可熔炼 + `smelt_time`（秒，(0,100]，缺省 10 = MC 炉子时长）；
     当前：beef→cooked_beef、mutton→cooked_mutton、chicken→cooked_chicken
@@ -230,10 +235,13 @@
     时间授予该 tick）；烧着 + 输入可熔炼 + output 有空（空或同产物未满）
     才推进进度；进度满 `smelt_time` → 输入 −1、output +1；**output 满 =
     暂停进度但火继续烧**；**输入物品变更（含取空/换非熔炼物）= 进度清零**
-  - **计时**：每帧固定 1/60 子步 + **整数子步倒计时**（与昼夜同类：无输入
-    运行逐字节可复现；存档 format 6 `furnace` 存整数 `progress_substeps` /
-    `fuel_substeps`）；炉子状态是**单个全局容器**（任何炉子共享，同工作台
-    网格 v1 规则，见 KNOWN_ISSUES）
+  - **计时**：每状态每帧固定 1/60 子步 + **整数子步倒计时**（与昼夜同类：
+    无输入运行逐字节可复现；`std::map` 位置序 → 多炉 tick 顺序确定）
+  - **存档**：format 7 `furnaces` 数组——**每炉子块一条目**（`pos` + 三槽 +
+    整数 `progress_substeps` / `fuel_substeps`），位置排序，与方块差集
+    **双向**交叉校验（entry 无块 / 块无 entry 均拒绝）。format 6（单个全局
+    `furnace`）仍可加载：恰 1 个炉子块 → 状态归属它，0/多个 → 丢弃
+    （见 KNOWN_ISSUES）
 - **染色**（Phase 41，全数据驱动）：
   - **染料物品**：物品可选字段 `dye_color`（白名单颜色名：white/black/brown/
     red/yellow/orange/pink/gray/silver；显式空串拒绝）；当前 9 种

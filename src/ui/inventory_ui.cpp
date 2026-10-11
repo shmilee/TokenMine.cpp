@@ -428,11 +428,11 @@ void FurnaceUI::rightClickCell(ItemStack& cell) {
 ItemStack& FurnaceUI::cellAt(int furnaceSlot) {
     switch (furnaceSlot) {
         case 0:
-            return m_furnace.input;
+            return m_furnace->input;
         case 1:
-            return m_furnace.fuel;
+            return m_furnace->fuel;
         default:
-            return m_furnace.output;
+            return m_furnace->output;
     }
 }
 
@@ -440,14 +440,14 @@ void FurnaceUI::inputChanged(const ItemStack& before) {
     // The progress belongs to the input's item: a changed item (including
     // removal) loses the progress (the furnace.hpp invariant — the tick
     // re-establishes progressFor on the next substep).
-    if (before.item != m_furnace.input.item) {
-        m_furnace.progressSubsteps = 0;
+    if (before.item != m_furnace->input.item) {
+        m_furnace->progressSubsteps = 0;
     }
 }
 
 void FurnaceUI::leftClick(int slot, int furnaceSlot) {
     if (furnaceSlot >= 0) {
-        const ItemStack before = m_furnace.input;
+        const ItemStack before = m_furnace->input;
         leftClickCell(cellAt(furnaceSlot));
         if (furnaceSlot == 0) {
             inputChanged(before);
@@ -463,7 +463,7 @@ void FurnaceUI::leftClick(int slot, int furnaceSlot) {
 
 void FurnaceUI::rightClick(int slot, int furnaceSlot) {
     if (furnaceSlot >= 0) {
-        const ItemStack before = m_furnace.input;
+        const ItemStack before = m_furnace->input;
         rightClickCell(cellAt(furnaceSlot));
         if (furnaceSlot == 0) {
             inputChanged(before);

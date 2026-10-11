@@ -105,6 +105,61 @@ Result<void> parseGrid(const Json& arr, const ItemRegistry& items,
     return {};
 }
 
+// One furnace STATE object — the shared shape of the format-6 "furnace"
+// field and each format-7 "furnaces" entry (minus the format-7 "pos"):
+// three slot entries + the two integer 1/60-substep counters, plus the
+// progress invariant (furnace.hpp: progress > 0 implies a smeltable
+// input — a save violating it would resurrect progress the tick/UI
+// rules say was lost).
+Result<void> parseFurnaceState(const Json& fz, const ItemRegistry& items,
+                               const std::string& what,
+                               FurnaceState& out) {
+    const std::set<std::string> fzFields {"input", "fuel", "output",
+                                          "progress_substeps",
+                                          "fuel_substeps"};
+    MC_TRY(rejectUnknownFields(fz, fzFields, what));
+    const char* slotNames[] = {"input", "fuel", "output"};
+    ItemStack* slotPtrs[] = {&out.input, &out.fuel, &out.output};
+    for (int i = 0; i < 3; ++i) {
+        const Json* slot = fz.find(slotNames[i]);
+        if (slot == nullptr) {
+            return MC_FAIL(what + " requires a '" +
+                           std::string(slotNames[i]) + "' slot entry");
+        }
+        MC_TRY(parseSlotEntry(*slot, items,
+                              what + " '" + slotNames[i] + "'", *slotPtrs[i]));
+    }
+    // The two integer 1/60-substep counters (bounds: the max smelt /
+    // fuel times the item data allows — see save.hpp).
+    const Json* prog = fz.find("progress_substeps");
+    if (prog == nullptr || !prog->isNumber() ||
+        prog->asDouble() != std::floor(prog->asDouble()) ||
+        prog->asDouble() < 0.0 ||
+        prog->asDouble() > kFurnaceMaxProgressSubsteps) {
+        return MC_FAIL(what + " 'progress_substeps' must be an integer in "
+                           "[0, " + std::to_string(kFurnaceMaxProgressSubsteps) +
+                           "]");
+    }
+    out.progressSubsteps = static_cast<int>(prog->asDouble());
+    const Json* fuel = fz.find("fuel_substeps");
+    if (fuel == nullptr || !fuel->isNumber() ||
+        fuel->asDouble() != std::floor(fuel->asDouble()) ||
+        fuel->asDouble() < 0.0 || fuel->asDouble() > kFurnaceMaxFuelSubsteps) {
+        return MC_FAIL(what + " 'fuel_substeps' must be an integer in "
+                           "[0, " + std::to_string(kFurnaceMaxFuelSubsteps) +
+                           "]");
+    }
+    out.fuelSubsteps = static_cast<int>(fuel->asDouble());
+    if (out.progressSubsteps > 0 &&
+        (out.input.empty() ||
+         items.at(out.input.item).smeltableTo.empty())) {
+        return MC_FAIL(what + " has smelt progress but its input is empty "
+                           "or not smeltable");
+    }
+    out.deriveProgressFor();
+    return {};
+}
+
 } // namespace
 
 // -- world diff / apply -------------------------------------------------------
@@ -314,9 +369,11 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         root["table_grid"] = std::move(*tableGrid);
     }
 
-    // Format 6: the furnace (Phase 40): the single smelting state — three
-    // slot entries + the two integer 1/60-substep counters. Always written
-    // (the game owns one furnace state even when empty).
+    // Format 7: the per-block furnace states (Phase 44): one entry per
+    // furnace block (position-sorted — the game's map order), each an
+    // object with the block position + the three slot entries + the two
+    // integer 1/60-substep counters. Always written (possibly empty — a
+    // world without furnace blocks).
     {
         auto slotJson = [&](const ItemStack& s, const char* what)
             -> Result<Json> {
@@ -336,19 +393,28 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
             }
             return e;
         };
-        Json fz = Json::object();
-        auto inSlot = slotJson(save.furnace.input, "the furnace input");
-        MC_TRY(inSlot);
-        fz["input"] = std::move(*inSlot);
-        auto fuelSlot = slotJson(save.furnace.fuel, "the furnace fuel");
-        MC_TRY(fuelSlot);
-        fz["fuel"] = std::move(*fuelSlot);
-        auto outSlot = slotJson(save.furnace.output, "the furnace output");
-        MC_TRY(outSlot);
-        fz["output"] = std::move(*outSlot);
-        fz["progress_substeps"] = Json(save.furnace.progressSubsteps);
-        fz["fuel_substeps"] = Json(save.furnace.fuelSubsteps);
-        root["furnace"] = std::move(fz);
+        Json furnaces = Json::array();
+        for (const SavedFurnace& sf : save.furnaces) {
+            Json fz = Json::object();
+            Json pos = Json::array();
+            pos.push_back(Json(sf.pos.x));
+            pos.push_back(Json(sf.pos.y));
+            pos.push_back(Json(sf.pos.z));
+            fz["pos"] = pos;
+            auto inSlot = slotJson(sf.state.input, "the furnace input");
+            MC_TRY(inSlot);
+            fz["input"] = std::move(*inSlot);
+            auto fuelSlot = slotJson(sf.state.fuel, "the furnace fuel");
+            MC_TRY(fuelSlot);
+            fz["fuel"] = std::move(*fuelSlot);
+            auto outSlot = slotJson(sf.state.output, "the furnace output");
+            MC_TRY(outSlot);
+            fz["output"] = std::move(*outSlot);
+            fz["progress_substeps"] = Json(sf.state.progressSubsteps);
+            fz["fuel_substeps"] = Json(sf.state.fuelSubsteps);
+            furnaces.push_back(std::move(fz));
+        }
+        root["furnaces"] = std::move(furnaces);
     }
 
     Json entities = Json::array();
@@ -400,10 +466,14 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     if (!def.isObject()) {
         return MC_FAIL("save file must be a JSON object");
     }
+    // "furnace" (format 6) and "furnaces" (format 7) are BOTH known keys —
+    // which one a file may carry is enforced per format below (a format-6
+    // file must still parse for the Phase 44 migration).
     const std::set<std::string> topLevel {"format", "seed", "time", "player",
                                           "inventory", "inv_grid",
                                           "table_grid", "furnace",
-                                          "entities", "blocks", "fluids"};
+                                          "furnaces", "entities", "blocks",
+                                          "fluids"};
     MC_TRY(rejectUnknownFields(def, topLevel, "save file"));
 
     const Json* fmt = def.find("format");
@@ -555,65 +625,10 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                        "format 3 (got " + std::to_string(fmtVersion) + ")");
     }
 
-    // -- furnace (format 6; Phase 40) ----------------------------------------
-    // Absent in format 1-5 files: the furnace loads empty. Required and
-    // strictly validated in format 6.
-    if (fmtVersion >= 6) {
-        const Json* fz = def.find("furnace");
-        if (fz == nullptr || !fz->isObject()) {
-            return MC_FAIL("save format 6 requires a 'furnace' object");
-        }
-        const std::set<std::string> fzFields {"input", "fuel", "output",
-                                              "progress_substeps",
-                                              "fuel_substeps"};
-        MC_TRY(rejectUnknownFields(*fz, fzFields, "save 'furnace'"));
-        const char* slotNames[] = {"input", "fuel", "output"};
-        ItemStack* slotPtrs[] = {&save.furnace.input, &save.furnace.fuel,
-                                 &save.furnace.output};
-        for (int i = 0; i < 3; ++i) {
-            const Json* slot = fz->find(slotNames[i]);
-            if (slot == nullptr) {
-                return MC_FAIL("save 'furnace' requires a '" +
-                               std::string(slotNames[i]) + "' slot entry");
-            }
-            MC_TRY(parseSlotEntry(*slot, items, std::string("save 'furnace.") +
-                                       slotNames[i] + "'", *slotPtrs[i]));
-        }
-        // The two integer 1/60-substep counters (bounds: the max smelt /
-        // fuel times the item data allows — see save.hpp).
-        const Json* prog = fz->find("progress_substeps");
-        if (prog == nullptr || !prog->isNumber() ||
-            prog->asDouble() != std::floor(prog->asDouble()) ||
-            prog->asDouble() < 0.0 ||
-            prog->asDouble() > kFurnaceMaxProgressSubsteps) {
-            return MC_FAIL("save 'furnace.progress_substeps' must be an "
-                           "integer in [0, " +
-                           std::to_string(kFurnaceMaxProgressSubsteps) + "]");
-        }
-        save.furnace.progressSubsteps = static_cast<int>(prog->asDouble());
-        const Json* fuel = fz->find("fuel_substeps");
-        if (fuel == nullptr || !fuel->isNumber() ||
-            fuel->asDouble() != std::floor(fuel->asDouble()) ||
-            fuel->asDouble() < 0.0 || fuel->asDouble() > kFurnaceMaxFuelSubsteps) {
-            return MC_FAIL("save 'furnace.fuel_substeps' must be an "
-                           "integer in [0, " +
-                           std::to_string(kFurnaceMaxFuelSubsteps) + "]");
-        }
-        save.furnace.fuelSubsteps = static_cast<int>(fuel->asDouble());
-        // The progress invariant (see furnace.hpp): progress > 0 implies a
-        // smeltable input — a save violating it would resurrect progress
-        // the tick/UI rules say was lost.
-        if (save.furnace.progressSubsteps > 0 &&
-            (save.furnace.input.empty() ||
-             items.at(save.furnace.input.item).smeltableTo.empty())) {
-            return MC_FAIL("save 'furnace' has smelt progress but its "
-                           "input is empty or not smeltable");
-        }
-        save.furnace.deriveProgressFor();
-    } else if (def.find("furnace") != nullptr) {
-        return MC_FAIL("save 'furnace' requires format 6 (got " +
-                       std::to_string(fmtVersion) + ")");
-    }
+    // -- furnace states (format 6/7) -----------------------------------------
+    // Parsed AFTER the block edits (below): the format-7 entries are
+    // cross-checked against the world's furnace blocks, and the format-6
+    // migration (the single global state) needs the same set.
 
     // -- entities ------------------------------------------------------------------
     const Json* ents = def.find("entities");
@@ -783,6 +798,144 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         }
         fluidCells.insert(pos);
         save.fluidEdits.push_back({pos, static_cast<std::uint8_t>(li)});
+    }
+
+    // -- furnace states (format 6/7; Phase 40/44) ------------------------------
+    // A "furnace block" = a block whose `interact` property names the
+    // furnace GUI (data-driven — no block-id switch). World generation
+    // never emits furnaces, so the block edits are the complete source of
+    // truth for which cells hold one.
+    auto isFurnaceBlock = [&](const std::string& name) {
+        const BlockID id = blocks.idForName(name);
+        return id.valid() &&
+               blocks.at(id).properties.interact == kInteractFurnace;
+    };
+    std::set<BlockPos> furnaceCells;
+    for (const SavedBlockEdit& e : save.blockEdits) {
+        if (isFurnaceBlock(e.blockName)) {
+            furnaceCells.insert(e.pos);
+        }
+    }
+    const Json* fzKey = def.find("furnace");
+    const Json* fzArr = def.find("furnaces");
+    if (fmtVersion >= 7) {
+        // Format 7: per-block states, cross-checked against the world's
+        // furnace blocks in BOTH directions (an entry without a block or a
+        // block without an entry would desync the game's invariant: every
+        // furnace block owns a state).
+        if (fzKey != nullptr) {
+            return MC_FAIL("save format 7 carries the format-6 'furnace' "
+                           "field (replaced by the per-block 'furnaces' "
+                           "array)");
+        }
+        if (fzArr == nullptr || !fzArr->isArray()) {
+            return MC_FAIL("save format 7 requires a 'furnaces' array");
+        }
+        std::set<BlockPos> entryPos;
+        for (std::size_t i = 0; i < fzArr->size(); ++i) {
+            const Json& e = fzArr->at(i);
+            const std::string what =
+                "save 'furnaces' entry #" + std::to_string(i);
+            if (!e.isObject()) {
+                return MC_FAIL(what + " must be an object");
+            }
+            const std::set<std::string> eFields {
+                "pos", "input", "fuel", "output", "progress_substeps",
+                "fuel_substeps"};
+            MC_TRY(rejectUnknownFields(e, eFields, what));
+            const Json* pos = e.find("pos");
+            if (pos == nullptr || !pos->isArray() || pos->size() != 3) {
+                return MC_FAIL(what + " requires a 'pos' [x, y, z] array");
+            }
+            double x, y, z;
+            if (!isInt(pos->at(0), &x) || !isInt(pos->at(1), &y) ||
+                !isInt(pos->at(2), &z)) {
+                return MC_FAIL(what + " 'pos' entries must be integers");
+            }
+            const int yi = static_cast<int>(y);
+            if (!isWorldYValid(yi)) {
+                return MC_FAIL(what + " has y=" + std::to_string(yi) +
+                               " outside the world height [0, " +
+                               std::to_string(kWorldHeight) + ")");
+            }
+            const BlockPos bpos {static_cast<int>(x), yi,
+                                 static_cast<int>(z)};
+            if (entryPos.count(bpos) != 0) {
+                return MC_FAIL(what + " duplicates the furnace position " +
+                               posStr(bpos));
+            }
+            entryPos.insert(bpos);
+            SavedFurnace sf {bpos, FurnaceState {}};
+            // The state fields (the entry minus its "pos").
+            Json stateObj = Json::object();
+            for (const auto& [k, v] : e.members()) {
+                if (k != "pos") {
+                    stateObj[k] = v;
+                }
+            }
+            MC_TRY(parseFurnaceState(stateObj, items, what, sf.state));
+            save.furnaces.push_back(std::move(sf));
+        }
+        if (entryPos != furnaceCells) {
+            for (const BlockPos& p : entryPos) {
+                if (furnaceCells.count(p) == 0) {
+                    return MC_FAIL("save 'furnaces' has an entry at " +
+                                   posStr(p) +
+                                   " which is not a furnace block in the "
+                                   "world's block edits");
+                }
+            }
+            for (const BlockPos& p : furnaceCells) {
+                if (entryPos.count(p) == 0) {
+                    return MC_FAIL("the furnace block at " + posStr(p) +
+                                   " has no 'furnaces' entry (every "
+                                   "furnace block owns a state, empty "
+                                   "included)");
+                }
+            }
+            return MC_FAIL("save 'furnaces' does not match the world's "
+                           "furnace blocks");
+        }
+    } else if (fmtVersion >= 6) {
+        // Format 6: the ONE global state (the Phase 40 single-container
+        // v1 rule). Phase 44 migration: it belonged to the world's
+        // (single) furnace — with exactly one furnace block it is
+        // assigned there; with zero or several blocks the owner is
+        // unknowable, so the state is DISCARDED (all states load empty).
+        if (fzArr != nullptr) {
+            return MC_FAIL("save format 6 carries the format-7 'furnaces' "
+                           "field");
+        }
+        if (fzKey == nullptr || !fzKey->isObject()) {
+            return MC_FAIL("save format 6 requires a 'furnace' object");
+        }
+        FurnaceState global;
+        MC_TRY(parseFurnaceState(*fzKey, items, "save 'furnace'", global));
+        for (const BlockPos& p : furnaceCells) {
+            save.furnaces.push_back(
+                furnaceCells.size() == 1 ? SavedFurnace {p, global}
+                                         : SavedFurnace {p, FurnaceState {}});
+        }
+        // furnaceCells is a set: already position-sorted.
+    } else if (fzKey != nullptr || fzArr != nullptr) {
+        return MC_FAIL("save 'furnace'/'furnaces' requires format 6 or "
+                       "newer (got " + std::to_string(fmtVersion) + ")");
+    }
+    // The game's invariant after ANY load: every furnace block in the
+    // world owns a state entry. Format 7 guarantees it (the cross-check),
+    // format 6 adds it (the migration), formats 1-5 carry no entries at
+    // all — add the empty ones.
+    for (const BlockPos& p : furnaceCells) {
+        bool have = false;
+        for (const SavedFurnace& sf : save.furnaces) {
+            if (sf.pos == p) {
+                have = true;
+                break;
+            }
+        }
+        if (!have) {
+            save.furnaces.push_back({p, FurnaceState {}});
+        }
     }
     return save;
 }

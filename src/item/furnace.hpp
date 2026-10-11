@@ -1,11 +1,11 @@
 // Phase 40: the furnace — the smelting state and its pure per-substep
-// tick.
-//
-// Single-container v1 rule (same as the crafting-table grid, Phase 17):
-// ONE furnace state shared by every furnace block in the world, owned by
-// the game and saved in the world save (format 6). Minecraft keeps
-// per-furnace state; the simplification is documented in
-// docs/KNOWN_ISSUES.md (furnace section).
+// tick. Phase 44: PER-BLOCK states — the game owns one FurnaceState per
+// furnace block (std::map<BlockPos, FurnaceState>, position-ordered so
+// the per-frame ticks are deterministic) and saves them in the world save
+// (format 7, one entry per furnace block). The Phase 40 single-container
+// v1 rule (ONE state shared by every block) is gone; format-6 saves
+// migrate it (exactly one furnace block: assigned there; otherwise:
+// discarded — see save.hpp).
 //
 // Timing: the furnace advances one fixed 1/60 substep per frame (the
 // day-cycle class — world state that must stay byte-reproducible in

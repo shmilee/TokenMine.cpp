@@ -997,8 +997,12 @@ Result<SaveGame> Game::collectSave() const {
         save.invGrid.push_back(m_inventoryGrid.at(i));
         save.tableGrid.push_back(m_tableGrid.at(i));
     }
-    // The furnace (format 6; Phase 40): the single smelting state.
-    save.furnace = m_furnace;
+    // The per-block furnace states (format 7; Phase 44): map iteration is
+    // position-sorted (the save's order); every furnace block has an entry
+    // (the setBlock invariant), empty states included.
+    for (const auto& [pos, st] : m_furnaces) {
+        save.furnaces.push_back({pos, st});
+    }
     for (const std::unique_ptr<Entity>& e : m_entities) {
         // Persisted entities are ItemEntities. Mobs (Phase 20) and arrows
         // (Phase 21) are EPHEMERAL by design — the save format expresses
@@ -1131,9 +1135,15 @@ Result<void> Game::applySave(const SaveGame& save) {
             m_tableGrid.setSlot(i, save.tableGrid[static_cast<std::size_t>(i)]);
         }
     }
-    // 4c) The furnace (format 6; format 1-5 saves load it empty).
-    m_furnace = save.furnace;
-    m_furnace.deriveProgressFor();
+    // 4c) The per-block furnace states (format 7; Phase 44). Format-6
+    // saves load their ONE global state already migrated (exactly one
+    // furnace block: assigned there; otherwise: discarded — save.cpp);
+    // format 1-5 load no entries at all. The parser derived progressFor
+    // on each state; the copy keeps it.
+    m_furnaces.clear();
+    for (const SavedFurnace& sf : save.furnaces) {
+        m_furnaces.emplace(sf.pos, sf.state);
+    }
     // 5) Dropped items (with their lifetime/pickup timers restored).
     for (const SavedItemEntity& e : save.entities) {
         const Item& item = m_items.at(m_items.idForName(e.item));
@@ -1354,11 +1364,15 @@ void Game::update(double dt) {
     // headless runs byte-reproducible.
     m_dayCycle.update(kDayStepPerFrame);
 
-    // Furnace (Phase 40): one fixed 1/60 substep per frame (the
-    // day-cycle class — integer substep counters, byte-reproducible).
-    // No-op on an empty furnace; runs in every pointer/panel state (the
-    // world keeps ticking while the panel is open, as in Minecraft).
-    tickFurnace(m_furnace, m_items);
+    // Furnaces (Phase 40, per-block Phase 44): one fixed 1/60 substep per
+    // frame, per state (the day-cycle class — integer substep counters,
+    // byte-reproducible). std::map iteration is position-sorted: the tick
+    // order is deterministic. No-op on an empty state; runs in every
+    // pointer/panel state (the world keeps ticking while the panel is
+    // open, as in Minecraft).
+    for (auto& [pos, st] : m_furnaces) {
+        tickFurnace(st, m_items);
+    }
 
     // Phase 15 UI keys: F3/F5 work in any pointer state; E opens the
     // inventory (releasing the pointer) or closes it.
@@ -1515,7 +1529,8 @@ void Game::handleInteraction(double dt) {
                 return;
             }
             if (b.properties.interact == kInteractFurnace) {
-                openPanel(OpenPanel::Furnace);
+                // Phase 44: the panel is bound to THIS block's state.
+                openFurnacePanel(hit->block);
                 return;
             }
         }
@@ -1818,7 +1833,21 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
     // arrow hung on the changed cell is released (Minecraft: arrows fall
     // out when their block is broken or replaced) — it rejoins flight
     // physics with zero velocity (gravity) and its cumulative age.
+    // Phase 44: the per-block furnace state follows the cell — a furnace
+    // block always owns a state (created on placement, empty), and a
+    // cell that stops holding a furnace drops its state (the invariant
+    // the format-7 save cross-checks against the block edits).
     m_world.setBlock(x, y, z, id);
+    {
+        const BlockPos fpos {x, y, z};
+        const bool furnace =
+            m_blocks.at(id).properties.interact == kInteractFurnace;
+        if (furnace) {
+            m_furnaces.emplace(fpos, FurnaceState {});
+        } else {
+            m_furnaces.erase(fpos);
+        }
+    }
     const float half = Projectile::kSize * 0.5f;
     for (auto& entity : m_entities) {
         auto* arrow = dynamic_cast<Projectile*>(entity.get());
@@ -2944,6 +2973,25 @@ void Game::closePanel() {
     m_sound.play("ui_close");
 }
 
+// Phase 44: the furnace panel opens for ONE block — bind the UI to that
+// block's state (the setBlock invariant guarantees a furnace block owns
+// one; furnaceAt's default-construct is defensive). The state is stable
+// while the panel is open: block interaction is paused and no other code
+// path mutates or removes a furnace block in the meantime.
+void Game::openFurnacePanel(const BlockPos& pos) {
+    m_openFurnacePos = pos;
+    m_furnaceUi.bind(furnaceAt(pos));
+    openPanel(OpenPanel::Furnace);
+}
+
+FurnaceState& Game::furnaceAt(const BlockPos& pos) {
+    auto it = m_furnaces.find(pos);
+    if (it == m_furnaces.end()) {
+        it = m_furnaces.emplace(pos, FurnaceState {}).first;
+    }
+    return it->second;
+}
+
 // The shapeless recipes in registry order: the E panel's craft list
 // (shaped recipes are crafted in the grids, not from the list).
 std::vector<const Recipe*> Game::shapelessRecipes() const {
@@ -3462,11 +3510,13 @@ void Game::renderUi() {
                 h / 2 + 12, 1.0, kText);
     }
 
-    // -- furnace panel (Phase 40): the smelting GUI (right-clicked
-    // furnace). The 27 inventory slots + the smelting section (input,
-    // progress bar, output, fuel). No crafting of any kind happens here —
-    // the output fills by itself (the furnace tick).
+    // -- furnace panel (Phase 40/44): the smelting GUI (right-clicked
+    // furnace) — rendering the ONE furnace block the panel is bound to
+    // (its per-block state). The 27 inventory slots + the smelting
+    // section (input, progress bar, output, fuel). No crafting of any
+    // kind happens here — the output fills by itself (the furnace tick).
     if (m_openPanel == OpenPanel::Furnace) {
+        const FurnaceState& f = furnaceAt(m_openFurnacePos);
         const FurnaceLayout layout = FurnaceLayout::compute(w, h);
         const double s = layout.scale;
         const auto L = [s](int v) {
@@ -3510,8 +3560,8 @@ void Game::renderUi() {
         // The smelting section slots (0=input, 1=fuel, 2=output).
         const UIRect* frects[3] = {&layout.input, &layout.fuel,
                                    &layout.output};
-        const ItemStack* fslots[3] = {&m_furnace.input, &m_furnace.fuel,
-                                      &m_furnace.output};
+        const ItemStack* fslots[3] = {&f.input, &f.fuel,
+                                      &f.output};
         for (int i = 0; i < 3; ++i) {
             const UIRect& r = *frects[i];
             addQuad(batchFor(kSlotBg, false, nullptr), r.x, r.y, r.w, r.h);
@@ -3540,12 +3590,12 @@ void Game::renderUi() {
             addQuad(batchFor(kSlotBg, false, nullptr), r.x, r.y, r.w, r.h);
             addBorder(batchFor(kBorder, false, nullptr), r, 1);
             double frac = 0.0;
-            if (!m_furnace.input.empty() &&
-                !m_items.at(m_furnace.input.item).smeltableTo.empty()) {
+            if (!f.input.empty() &&
+                !m_items.at(f.input.item).smeltableTo.empty()) {
                 const int total =
-                    smeltSubstepsFor(m_items.at(m_furnace.input.item));
+                    smeltSubstepsFor(m_items.at(f.input.item));
                 if (total > 0) {
-                    frac = static_cast<double>(m_furnace.progressSubsteps) /
+                    frac = static_cast<double>(f.progressSubsteps) /
                            static_cast<double>(total);
                 }
             }

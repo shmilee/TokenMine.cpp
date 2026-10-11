@@ -147,16 +147,23 @@ struct FurnaceLayout {
     int furnaceSlotAt(int px, int py) const; // 0=input, 1=fuel, 2=output, -1
 };
 
-// The pick-and-place state machine over the player inventory and the
+// The pick-and-place state machine over the player inventory and ONE
 // furnace's three slots — the InventoryUI cell semantics (see the file
 // header) with no output action (the output slot is an ordinary slot).
 // A click that changes the INPUT item resets the smelt progress (the
-// furnace.hpp progress invariant).
+// furnace.hpp progress invariant). Phase 44: the furnace is BINDABLE —
+// the game binds the state of the block the panel was opened on
+// (per-block furnace states).
 class FurnaceUI {
 public:
-    FurnaceUI(Inventory& inventory, FurnaceState& furnace,
-              const ItemRegistry& items)
-        : m_inv(inventory), m_furnace(furnace), m_items(items) {}
+    FurnaceUI(Inventory& inventory, const ItemRegistry& items)
+        : m_inv(inventory), m_items(items) {}
+
+    // Bind the furnace state this panel operates on (the game calls this
+    // when the furnace panel opens; the bound state is stable for the
+    // life of the panel — block interaction is paused while a panel is
+    // open).
+    void bind(FurnaceState& furnace) { m_furnace = &furnace; }
 
     // slot: 0..26 or -1; furnaceSlot: 0..2 or -1 (the layout hit tests
     // are disjoint: at most one is active).
@@ -174,7 +181,9 @@ private:
     void inputChanged(const ItemStack& before);
 
     Inventory& m_inv;
-    FurnaceState& m_furnace;
+    // The bound furnace state (see bind). Non-null while the furnace panel
+    // is open.
+    FurnaceState* m_furnace = nullptr;
     const ItemRegistry& m_items;
     ItemStack m_carry;
 };

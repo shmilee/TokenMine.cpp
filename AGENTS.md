@@ -9,12 +9,16 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 43 完成时）
+## 现状（Phase 44 完成时）
 
-- 功能阶段 P0–P43 全部完成并提交；P40 = 炉子/熔炼（P28 遗留
+- 功能阶段 P0–P44 全部完成并提交；P44 = per-block 炉子状态（P40 遗留
+  "单个全局 FurnaceState"）：`Game` 每炉子块独立 `FurnaceState`
+  （`std::map<BlockPos, FurnaceState>` 位置序）+ setBlock 收口创建/删除
+  + 面板绑定所点方块 + 存档 format 7（`furnaces` 双向交叉校验 +
+  format 6 迁移：sole 归属/其余丢弃）；P40 = 炉子/熔炼（P28 遗留
   "熟肉"）：`furnace` 方块 + 物品字段 `smeltable_to`/`smelt_time`/`fuel_time`
-  + 3 熟肉 + 燃料 + **单个全局 `FurnaceState`**（每帧 1/60 子步 + 整数字步
-  倒计时）+ 存档 format 6、P41 = wool 后续（P12/P20 遗留"wool 无用途/
+  + 3 熟肉 + 燃料 + 炉子状态（每帧 1/60 子步 + 整数字步倒计时；P44 起
+  per-block，原单个全局态 + format 6 已被取代）、P41 = wool 后续（P12/P20 遗留"wool 无用途/
   无染色"）：9 wool 方块（`wool` 白 base + 8 染色变体 `wool_<color>`）+ 9
   染料物品 `dye_<color>` + 9 shapeless 配方 + 方块属性
   `dye_base`/`dye_color`；atlas 4×8→8×8（**所有既有 UV 移位 →
@@ -30,16 +34,16 @@
   `clearStatusEffects()`【v1 效果集 = 清红闪，坠落起点刻意不清】）+
   **挤奶**（`tryMilk` 右键序 launcher 后；mob 零影响、无冷却 = 文档化
   v1）+ "milk" 音效 + 2 图标。
-- 测试 **781/781**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+- 测试 **788/788**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
 - 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P41 重锚【atlas
-  8×8】，P42/P43 过门 = 第 16/17 次结构性免疫、无重锚）。
+  8×8】，P42/P43/P44 过门 = 第 16/17/18 次结构性免疫、无重锚）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 
 ## 命令
 
 ```bash
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build  # 构建（0 警告）
-./build/bin/minecraft_tests                                                 # 测试（781）
+./build/bin/minecraft_tests                                                 # 测试（788）
 ./build/bin/minecraft                                                       # 运行（ESC 退出）
 ./build/bin/minecraft --frames N [--screenshot /abs.png] [--save slot] [--new] [--config path]
 ```

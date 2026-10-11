@@ -173,11 +173,16 @@
 
 ## 炉子 / 熔炼（Phase 40）
 
-- **炉子状态是单个全局容器** — `Game` 持有单个 `FurnaceState`（input/fuel/
-  output + 两个整数子步计数器）：右键打开的**任何**炉子看到的是同一份熔炼
-  状态（工作台网格同款 v1 规则，见「工作台 / 形状合成」），状态写入存档
-  （format 6 `furnace`）。MC 里每个炉子有独立容器；per-block 容器需要
-  per-instance 状态（见「数据 / 内容」）。`[Phase 40]`
+- ~~**炉子状态是单个全局容器**~~ — Phase 40 的 v1：`Game` 持有单个
+  `FurnaceState`（input/fuel/output + 两个整数子步计数器），右键打开的**任何**
+  炉子看到的是同一份熔炼状态（存档 format 6 `furnace`）。`[Phase 40]`，
+  `[Phase 44]` 已修复：每炉子方块独立状态（`Game` 持
+  `std::map<BlockPos, FurnaceState>`，位置序 → 逐帧 tick 确定；`setBlock`
+  收口创建/销毁）+ 右键面板绑定所点方块（`FurnaceUI::bind`）+ 存档
+  format 7 `furnaces`（每炉子块一条目、位置排序、与方块差集**双向**交叉
+  校验）。format 6 加载**按规则迁移**：世界恰有 1 个炉子方块 → 全局状态
+  归属它；0 个或多个 → 归属不可知，**丢弃**（所有炉子状态空载）——迁移在
+  纯解析器（save.cpp）内完成，单测覆盖三分支。
 - **炉子外观四个侧面共用同一纹理** — 带炉口/余火的前脸与其余三侧同纹理
   （BlockModel 只有 top/side/bottom 三面组）；顶/底面是石质纹理。
   `[Phase 40]`

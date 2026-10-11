@@ -82,9 +82,17 @@ namespace mc {
 //      state (the single-container v1 rule, see item/furnace.hpp) as
 //      three slot entries + "progress_substeps" + "fuel_substeps"
 //      (non-negative integer 1/60-substep counters). Format 1-5 files
-//      still load (the furnace defaults to empty); writes are always
+//      still load (the furnace defaults to empty); writes were always
 //      format 6.
-inline constexpr int kSaveFormat = 6;
+//   7: the per-block furnace states (Phase 44) — "furnaces": one entry
+//      per FURNACE BLOCK in the world (position-sorted), each with its
+//      position + the same state fields as the format-6 "furnace"
+//      object. Format-6 files still load: the ONE global state is
+//      migrated to the sole furnace block of the world, or discarded
+//      (all entries empty) when the world holds zero or several
+//      furnace blocks (which one owned the shared state is unknowable);
+//      writes are always format 7.
+inline constexpr int kSaveFormat = 7;
 inline constexpr int kSaveFormatMin = 1;
 
 // Phase 40: the furnace save-field bounds — the max smelt/fuel times the
@@ -113,6 +121,15 @@ struct SavedBlockEdit {
 struct SavedFluidEdit {
     BlockPos pos;
     std::uint8_t level;
+};
+
+// One furnace block's smelting state (format 7; Phase 44). The game keeps
+// an entry for EVERY furnace block in the world (empty states included) —
+// the save cross-checks the entries against the block edits in both
+// directions.
+struct SavedFurnace {
+    BlockPos pos;
+    FurnaceState state;
 };
 
 // One dropped-item entity (the only entity kind the game spawns).
@@ -151,9 +168,11 @@ struct SaveGame {
     // Empty for format 1/2 saves (the game leaves the grids empty).
     std::vector<ItemStack> invGrid;
     std::vector<ItemStack> tableGrid;
-    // The furnace (format 6; Phase 40): the single smelting state. Empty
-    // for format 1-5 saves (the game leaves the furnace empty).
-    FurnaceState furnace;
+    // The per-block furnace states (format 7; Phase 44): one entry per
+    // furnace block in the world (position-sorted; the game's map order).
+    // Empty when the world holds no furnace blocks; a format-6 load is
+    // migrated into this (see kSaveFormat).
+    std::vector<SavedFurnace> furnaces;
     std::vector<SavedItemEntity> entities;
     std::vector<SavedBlockEdit> blockEdits; // sorted by pos
     std::vector<SavedFluidEdit> fluidEdits; // sorted by pos

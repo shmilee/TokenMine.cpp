@@ -105,12 +105,13 @@ public:
     };
 
     // The crafting UIs (Phase 15/17) + the furnace UI (Phase 40) hold
-    // references to the inventory, the crafting grids, the furnace state
-    // and the registries, so they are constructed here (after all of
-    // them, in declaration order).
+    // references to the inventory, the crafting grids and the registries,
+    // so they are constructed here (after all of them, in declaration
+    // order). Phase 44: the furnace UI binds its state per panel opening
+    // (per-block furnace states — see openFurnacePanel).
     Game() : m_inventoryUi(m_inventory, m_inventoryGrid, m_items, m_recipes),
              m_tableUi(m_inventory, m_tableGrid, m_items, m_recipes),
-             m_furnaceUi(m_inventory, m_furnace, m_items) {}
+             m_furnaceUi(m_inventory, m_items) {}
     ~Game();
 
     Result<void> init(const GameArgs& args);
@@ -330,6 +331,13 @@ private:
     // Opens the given panel (releasing the pointer) / closes the open one.
     void openPanel(OpenPanel panel);
     void closePanel();
+    // Phase 44: opens the furnace panel for the block at `pos` — binds the
+    // panel's UI to that block's state (created on demand; a furnace block
+    // always owns one — see setBlock).
+    void openFurnacePanel(const BlockPos& pos);
+    // The state of the furnace block at `pos` (default-constructs one when
+    // absent — defensive: the setBlock invariant makes that unreachable).
+    FurnaceState& furnaceAt(const BlockPos& pos);
     // Footstep sound timer (moving + on ground, pointer captured).
     void updateSoundTimers(double dt);
     // Phase 16 survival polling: a health drop drives the hurt flash +
@@ -558,10 +566,15 @@ private:
     OpenPanel m_openPanel = OpenPanel::None;
     bool panelOpen() const { return m_openPanel != OpenPanel::None; }
 
-    // Phase 40 furnace: the single smelting state (the single-container
-    // v1 rule — shared by every furnace block; saved in format 6) and
-    // its panel UI.
-    FurnaceState m_furnace;
+    // Phase 40/44 furnace: PER-BLOCK smelting states — one FurnaceState
+    // per furnace block in the world (created on placement, dropped when
+    // the cell stops holding a furnace; the invariant the format-7 save
+    // cross-checks). std::map: position-sorted, so the per-frame ticks
+    // iterate deterministically. m_openFurnacePos is valid while
+    // m_openPanel == OpenPanel::Furnace (the panel's UI is bound to its
+    // state).
+    std::map<BlockPos, FurnaceState> m_furnaces;
+    BlockPos m_openFurnacePos {};
     FurnaceUI m_furnaceUi;
 
     // Phase 15 particles + audio: the break bursts (deterministic seeds:
