@@ -423,9 +423,10 @@ Result<void> Game::buildScene() {
         m_config.getString("mobs.difficulty", "normal"));
     MC_TRY(difficulty);
     m_difficulty = *difficulty;
-    for (const std::string& name : m_spawnConfig.mobs) {
-        if (m_mobTypes.findByName(name) == nullptr) {
-            return MC_FAIL("mob_spawning.json: unknown mob '" + name + "'");
+    for (const SpawnMobEntry& entry : m_spawnConfig.mobs) {
+        if (m_mobTypes.findByName(entry.id) == nullptr) {
+            return MC_FAIL("mob_spawning.json: unknown mob '" + entry.id +
+                           "'");
         }
     }
     for (const MobID mid : m_mobTypes.allIds()) {
@@ -2144,19 +2145,25 @@ void Game::attemptMobSpawn() {
                      " live), attempt skipped");
         return;
     }
-    // Deterministic type pick among the data-listed mobs (the seed mixes
-    // the world seed with the frame, so the choice is a pure function of
-    // the run). Note: the pick happens BEFORE the light gate, so an
-    // attempt whose type cannot spawn at the current light is simply
-    // wasted (e.g. a zombie pick by day) — the cadence, not the type,
-    // decides when attempts happen.
+    // Deterministic weighted type pick among the data-listed mobs (the
+    // seed mixes the world seed with the frame, so the choice is a pure
+    // function of the run). ONE stream value per attempt, reduced into
+    // the total-weight domain and walked over the cumulative list (the
+    // Phase 39 weights; all weights 1 — the shipped data — is exactly
+    // the legacy pick % list.size()). Note: the pick happens BEFORE the
+    // light gate, so an attempt whose type cannot spawn at the current
+    // light is simply wasted (e.g. a zombie pick by day) — the cadence,
+    // not the type, decides when attempts happen.
     const std::uint64_t pick =
         splitmix64(static_cast<std::uint64_t>(m_generator->seed()) ^
                    (std::uint64_t{0x9E3779B97F4A7C15} *
                     static_cast<std::uint64_t>(m_frameCount)));
-    const Mob& def = m_mobTypes.at(
-        m_mobTypes.idForName(m_spawnConfig.mobs[static_cast<std::size_t>(
-            pick % m_spawnConfig.mobs.size())]));
+    const Mob& def = m_mobTypes.at(m_mobTypes.idForName(
+        m_spawnConfig
+            .mobs[m_spawnConfig.pickIndex(pick %
+                                          static_cast<std::uint64_t>(
+                                              m_spawnConfig.totalWeight()))]
+            .id));
 
     // Player anchor: the player's column + the floor block under its feet
     // (the highest solid cell at or below the feet in that column).

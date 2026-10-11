@@ -462,3 +462,17 @@
   （720 子步 = 12 s 游戏时间，与墙钟无关）。对策：输入运行的时间预算按
   **子步时间**（frames/60）估游戏内时刻、按**墙钟**（frames/fps，fps 可能
   <60）估 xdotool 序列长度——两者都要留足；断言别用墙钟反推帧号。
+- **A/B 参考构建与数据 schema 迁移：参考侧必须从自己的 worktree cwd 运行（P39）**：
+  本阶段迁移了 `mob_spawning.json` 的 schema（字符串列表 → 对象条目），仓库
+  assets 已是新格式——P38 参考构建若像以前一样从**仓库 cwd** 启动，会加载
+  新格式数据被旧解析器的迁移防护直接拒绝（`'mobs[0]' must be a non-empty
+  string`，init 失败、窗口秒退，表象 = "game window not found"）。迁移防护
+  本身在正常工作（这正是它该干的），但 A/B 的参考侧必须 `cd` 到 worktree
+  目录（那里是旧 schema 的 assets + 自己的 `data/saves/`）再启动。
+- **游戏启动辅助函数里 `cd <gdir>` 会让相对二进制路径失效（P39）**：
+  P39 批脚本给 `launch()` 加了 scratch-cwd 能力（加权场景在临时目录跑，
+  assets 是副本 + 改过的 `mob_spawning.json`），`(cd $gdir && exec "$bin")`
+  之下 `BIN=./build/bin/minecraft` 相对路径指向 scratch 目录 → "没有那个
+  文件或目录"（表象是 "game window not found"，误导）。对策：批脚本里
+  二进制恒用绝对路径（`BIN=$PWD/build/bin/minecraft`，脚本顶部 `cd` 仓库
+  后取值）。

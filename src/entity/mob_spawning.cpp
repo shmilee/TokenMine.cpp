@@ -86,17 +86,76 @@ Result<MobSpawningConfig> MobSpawningConfig::parse(const Json& def) {
     if (mobsJson == nullptr || !mobsJson->isArray() ||
         mobsJson->size() == 0) {
         return MC_FAIL("mob spawning: 'mobs' is required and must be a "
-                       "non-empty array of mob names");
+                       "non-empty array of {\"id\", \"weight\"?} objects");
     }
     for (std::size_t i = 0; i < mobsJson->size(); ++i) {
         const Json& m = mobsJson->at(i);
-        if (!m.isString() || m.asString().empty()) {
+        // Phase 39: the legacy plain-string form is rejected (migration
+        // guard, the Phase 28 drops precedent) — entries are objects.
+        if (m.isString()) {
             return MC_FAIL("mob spawning: 'mobs[" + std::to_string(i) +
-                           "]' must be a non-empty string");
+                           "]' is a plain string — the Phase 39 schema "
+                           "requires an object {\"id\": \"...\"}");
         }
-        out.mobs.push_back(m.asString());
+        if (!m.isObject()) {
+            return MC_FAIL("mob spawning: 'mobs[" + std::to_string(i) +
+                           "]' must be an object {\"id\", \"weight\"?}");
+        }
+        for (const auto& [key, value] : m.members()) {
+            if (key != "id" && key != "weight") {
+                MC_LOG_WARN("mob spawning: unknown field 'mobs[" +
+                            std::to_string(i) + "]." + key + "' ignored");
+            }
+        }
+        const Json* id = m.find("id");
+        if (id == nullptr || !id->isString() || id->asString().empty()) {
+            return MC_FAIL("mob spawning: 'mobs[" + std::to_string(i) +
+                           "].id' is required and must be a non-empty "
+                           "string");
+        }
+        SpawnMobEntry entry;
+        entry.id = id->asString();
+        const Json* weight = m.find("weight");
+        if (weight != nullptr) {
+            if (!weight->isNumber() || weight->asDouble() !=
+                                            std::floor(weight->asDouble()) ||
+                weight->asDouble() < 1.0 || weight->asDouble() > 10000.0) {
+                return MC_FAIL("mob spawning: 'mobs[" + std::to_string(i) +
+                               "].weight' must be an integer in [1, 10000]");
+            }
+            entry.weight = static_cast<int>(weight->asDouble());
+        }
+        for (const SpawnMobEntry& prev : out.mobs) {
+            if (prev.id == entry.id) {
+                return MC_FAIL("mob spawning: duplicate mob id '" +
+                               entry.id + "' in 'mobs'");
+            }
+        }
+        out.mobs.push_back(std::move(entry));
     }
     return out;
+}
+
+int MobSpawningConfig::totalWeight() const {
+    int total = 0;
+    for (const SpawnMobEntry& e : mobs) {
+        total += e.weight;
+    }
+    return total;
+}
+
+std::size_t MobSpawningConfig::pickIndex(std::uint64_t v) const {
+    // Walk the cumulative weights: entry i owns the half-open range
+    // [sum_{<i}, sum_{<=i}). With all weights 1 this is exactly v (the
+    // caller reduced v < list.size()), i.e. the legacy pick % size.
+    std::uint64_t cum = 0;
+    for (std::size_t i = 0; i < mobs.size(); ++i) {
+        cum += static_cast<std::uint64_t>(mobs[i].weight);
+        if (v < cum) {
+            return i;
+        }
+    }
+    return mobs.size() - 1; // unreachable for v < totalWeight()
 }
 
 int currentSpawnLight(const World& world, int x, int y, int z,

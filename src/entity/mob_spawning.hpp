@@ -10,7 +10,10 @@
 //   "min_radius": 4,           // horizontal spawn ring, from the player
 //   "max_radius": 6,           //   column (Euclidean)
 //   "despawn_distance": 40,    // mobs farther than this (3D) despawn
-//   "mobs": ["zombie"]         // mob names (registry cross-check at init)
+//   "mobs": [                  // Phase 39: {id, weight} entries (registry
+//     {"id": "zombie",         //   cross-check at init; weight = relative
+//      "weight": 10}           //   spawn probability, 1..10000, default 1)
+//   ]
 // }
 //
 // The scan is a pure function of (world, player anchor, config): the same
@@ -39,6 +42,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -52,6 +56,17 @@
 
 namespace mc {
 
+// One entry of the 'mobs' list (Phase 39): a registry name + its relative
+// spawn weight. The deterministic type pick draws ONE stream value per
+// attempt, reduces it into [0, totalWeight), and walks the cumulative
+// weights in list order. With every weight 1 the walk is exactly the legacy
+// pick % list.size() (Phases 22-27), so the shipped all-1 data changes no
+// behavior.
+struct SpawnMobEntry {
+    std::string id;
+    int weight = 1;
+};
+
 struct MobSpawningConfig {
     int checkEveryFrames = 30;
     int firstSpawnFrame = 60;
@@ -59,7 +74,14 @@ struct MobSpawningConfig {
     float minRadius = 4.0f;
     float maxRadius = 6.0f;
     float despawnDistance = 40.0f;
-    std::vector<std::string> mobs;
+    std::vector<SpawnMobEntry> mobs;
+
+    // The sum of all entry weights — the pick's domain size.
+    int totalWeight() const;
+
+    // The pure weighted pick: v must be < totalWeight(). Returns the first
+    // entry whose cumulative weight exceeds v.
+    std::size_t pickIndex(std::uint64_t v) const;
 
     // Strict: wrong types / out-of-range values produce errors naming the
     // field; unknown fields are warned about and ignored.

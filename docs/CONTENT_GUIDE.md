@@ -167,8 +167,12 @@ iron_pickaxe（III/.S./.S.）。
    用该 mob 的种子流掷一次，0 = 该条目不掉）；每条目物品名 init 时对
    ItemRegistry 交叉校验；缺省/`[]` = 不掉落；旧的单字符串 + `drops_count`
    schema 被显式拒绝——迁移防护）。
-3. 生成名单：`assets/data/mob_spawning.json` 的 `mobs` 数组加入该 id
-   （生成节奏/环半径/上限/离玩家消散距离都在这个文件里，全部数据驱动）。
+3. 生成名单：`assets/data/mob_spawning.json` 的 `mobs` 数组加入条目
+   `{"id": <id>, "weight": <1..10000>}`——weight = 相对生成概率（每次尝试
+   抽中该类型的权重占比），缺省或 1 = 与其他 weight 1 条目等概率；调高某
+   类型 weight 即可让它更常出现（Phase 39）。旧纯字符串条目被显式拒绝
+   （迁移防护）；重复 id / 越界 / 非整数 weight = 加载失败。生成
+   节奏/环半径/上限/离玩家消散距离都在这个文件里，全部数据驱动。
 
 v1 数据有 zombie（敌对：绿色、只在黑暗生成（`spawn_max_light` 0））与
 cow（被动：棕白斑毛、`detect_radius`/`attack_range`/`attack_damage` 全 0、

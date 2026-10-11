@@ -9,9 +9,9 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 38 完成时）
+## 现状（Phase 39 完成时）
 
-- 功能阶段 P0–P38 全部完成并提交；P31 = 饥饿节奏 MC 对齐、P32 = 玩家参数
+- 功能阶段 P0–P39 全部完成并提交；P31 = 饥饿节奏 MC 对齐、P32 = 玩家参数
   配置化、P33 = 死亡时暂停流式加载、P34 = UI 坐标空间 + `ui.scale`
   （高分屏 UI 缩放）、P35 = 高分 UI 素材（16×16 字体 + 32×32 物品图标）
   + 面板自适应（`InventoryLayout::scale` 贴合系数，长度 double 运算仅
@@ -25,19 +25,23 @@
   冷却照常消耗整间隔重试）② 掉落随机区间 `count_min`/`count_max` + 新
   `bone` 物品（skeleton 掉 bone 0–2 + arrow 1，`rollDropCount` 走该 mob
   种子流、固定 count 不推进流）③ 箭目标预判 `computeAimDirection`
-  （静止目标逐位复现 P27 瞄法，移动目标被预判））。
-- 测试 **713/713**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
-- 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P38 = 第 13 次结构性
-  免疫——60f 基线无 mob（first_spawn_frame=60）、bone 图标只被 UI 采样、
-  LOS/预判/掉落路径全部需要 skeleton 在场；参考图于 P36 经 P35 代码参考
-  构建 A/B 逐字节重锚，P37/P38 直接复用未重锚）。
+  （静止目标逐位复现 P27 瞄法，移动目标被预判））、
+  P39 = 生成权重按类型（`mob_spawning.json` 的 `mobs` = `{"id","weight"?}`
+  对象，weight 1..10000 缺省 1、旧纯字符串形式 = 迁移防护拒绝；类型抽取 =
+  每次 1 次流值映射进 [0, Σweight) + 累计权重走名单序，全 weight 1 与旧
+  `pick % 名单长度` 逐位相同 → 已发行数据全 1 = 零行为变化）。
+- 测试 **718/718**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+- 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P39 = 第 14 次结构性
+  免疫——60f 基线无 mob（first_spawn_frame=60），schema/抽取改动只在生成
+  尝试路径内运行；参考图于 P36 经 P35 代码参考构建 A/B 逐字节重锚，
+  P37/P38/P39 直接复用未重锚）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 
 ## 命令
 
 ```bash
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build  # 构建（0 警告）
-./build/bin/minecraft_tests                                                 # 测试（698）
+./build/bin/minecraft_tests                                                 # 测试（718）
 ./build/bin/minecraft                                                       # 运行（ESC 退出）
 ./build/bin/minecraft --frames N [--screenshot /abs.png] [--save slot] [--new] [--config path]
 ```

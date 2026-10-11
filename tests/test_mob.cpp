@@ -654,7 +654,7 @@ TEST(MobSpawningConfigTest, ParsesValid) {
       "min_radius": 4,
       "max_radius": 6,
       "despawn_distance": 40,
-      "mobs": ["zombie"]
+      "mobs": [{"id": "zombie"}]
     })"));
     ASSERT_TRUE(r.ok()) << r.error().message;
     EXPECT_EQ((*r).checkEveryFrames, 30);
@@ -664,13 +664,16 @@ TEST(MobSpawningConfigTest, ParsesValid) {
     EXPECT_FLOAT_EQ((*r).maxRadius, 6.0f);
     EXPECT_FLOAT_EQ((*r).despawnDistance, 40.0f);
     ASSERT_EQ((*r).mobs.size(), 1);
-    EXPECT_EQ((*r).mobs[0], "zombie");
+    EXPECT_EQ((*r).mobs[0].id, "zombie");
+    EXPECT_EQ((*r).mobs[0].weight, 1);  // weight omitted = default 1
+    EXPECT_EQ((*r).totalWeight(), 1);
 }
 
 TEST(MobSpawningConfigTest, ParsesFourMobList) {
     // Phase 26: the data list grew to four types (zombie, cow, sheep,
-    // chicken). List order is significant — the deterministic type pick is
-    // pick % list.size() with this exact order (game.cpp attemptMobSpawn).
+    // chicken). List order is significant — the deterministic type pick
+    // walks the cumulative weights in this exact order (Phase 39; all
+    // weights 1 = the legacy pick % list.size()).
     auto r = MobSpawningConfig::parse(parseJson(R"({
       "check_every_frames": 30,
       "first_spawn_frame": 60,
@@ -678,19 +681,21 @@ TEST(MobSpawningConfigTest, ParsesFourMobList) {
       "min_radius": 4,
       "max_radius": 6,
       "despawn_distance": 40,
-      "mobs": ["zombie", "cow", "sheep", "chicken"]
+      "mobs": [{"id": "zombie"}, {"id": "cow"}, {"id": "sheep"},
+               {"id": "chicken"}]
     })"));
     ASSERT_TRUE(r.ok()) << r.error().message;
     ASSERT_EQ((*r).mobs.size(), 4u);
-    EXPECT_EQ((*r).mobs[0], "zombie");
-    EXPECT_EQ((*r).mobs[1], "cow");
-    EXPECT_EQ((*r).mobs[2], "sheep");
-    EXPECT_EQ((*r).mobs[3], "chicken");
+    EXPECT_EQ((*r).mobs[0].id, "zombie");
+    EXPECT_EQ((*r).mobs[1].id, "cow");
+    EXPECT_EQ((*r).mobs[2].id, "sheep");
+    EXPECT_EQ((*r).mobs[3].id, "chicken");
 }
 
 TEST(MobSpawningConfigTest, ParsesFiveMobList) {
     // Phase 27: the list grows to five (the skeleton, the first ranged
-    // hostile). The deterministic type pick is pick % 5 with this order.
+    // hostile). The deterministic type pick is the cumulative walk with
+    // this order (Phase 39; all weights 1 = pick % 5).
     auto r = MobSpawningConfig::parse(parseJson(R"({
       "check_every_frames": 30,
       "first_spawn_frame": 60,
@@ -698,18 +703,136 @@ TEST(MobSpawningConfigTest, ParsesFiveMobList) {
       "min_radius": 4,
       "max_radius": 6,
       "despawn_distance": 40,
-      "mobs": ["zombie", "cow", "sheep", "chicken", "skeleton"]
+      "mobs": [{"id": "zombie"}, {"id": "cow"}, {"id": "sheep"},
+               {"id": "chicken"}, {"id": "skeleton"}]
     })"));
     ASSERT_TRUE(r.ok()) << r.error().message;
     ASSERT_EQ((*r).mobs.size(), 5u);
-    EXPECT_EQ((*r).mobs[4], "skeleton");
+    EXPECT_EQ((*r).mobs[4].id, "skeleton");
+}
+
+// Phase 39: the weighted list ({"id", "weight"} entries).
+TEST(MobSpawningConfigTest, ParsesWeightedMobList) {
+    auto r = MobSpawningConfig::parse(parseJson(R"({
+      "check_every_frames": 30,
+      "first_spawn_frame": 60,
+      "max_mobs": 4,
+      "min_radius": 4,
+      "max_radius": 6,
+      "despawn_distance": 40,
+      "mobs": [{"id": "zombie", "weight": 1}, {"id": "skeleton",
+                "weight": 10}]
+    })"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    ASSERT_EQ((*r).mobs.size(), 2u);
+    EXPECT_EQ((*r).mobs[0].id, "zombie");
+    EXPECT_EQ((*r).mobs[0].weight, 1);
+    EXPECT_EQ((*r).mobs[1].id, "skeleton");
+    EXPECT_EQ((*r).mobs[1].weight, 10);
+    EXPECT_EQ((*r).totalWeight(), 11);
+}
+
+TEST(MobSpawningConfigTest, RejectsBadMobListEntries) {
+    const char* variants[] = {
+        // the legacy plain-string form (migration guard)
+        R"("mobs": ["zombie"])",
+        // a non-object entry
+        R"("mobs": [7])",
+        // missing / empty id
+        R"("mobs": [{"weight": 1}])",
+        R"("mobs": [{"id": ""}])",
+        // bad weights: 0, negative, fractional, out of range
+        R"("mobs": [{"id": "zombie", "weight": 0}])",
+        R"("mobs": [{"id": "zombie", "weight": -1}])",
+        R"("mobs": [{"id": "zombie", "weight": 1.5}])",
+        R"("mobs": [{"id": "zombie", "weight": 10001}])",
+        // duplicate id
+        R"("mobs": [{"id": "zombie"}, {"id": "zombie"}])",
+    };
+    for (const char* variant : variants) {
+        const std::string def = std::string(R"({
+      "check_every_frames": 30,
+      "first_spawn_frame": 60,
+      "max_mobs": 4,
+      "min_radius": 4,
+      "max_radius": 6,
+      "despawn_distance": 40,
+      )") + variant + "\n    }";
+        auto r = MobSpawningConfig::parse(parseJson(def));
+        EXPECT_FALSE(r.ok()) << variant;
+    }
+}
+
+TEST(MobSpawningConfigTest, WeightedPickUniformMatchesLegacyMod) {
+    // All weights 1: the cumulative walk is exactly v % size — the legacy
+    // behavior the shipped data relies on.
+    auto r = MobSpawningConfig::parse(parseJson(R"({
+      "check_every_frames": 30,
+      "first_spawn_frame": 60,
+      "max_mobs": 4,
+      "min_radius": 4,
+      "max_radius": 6,
+      "despawn_distance": 40,
+      "mobs": [{"id": "zombie"}, {"id": "cow"}, {"id": "sheep"},
+               {"id": "chicken"}, {"id": "skeleton"}]
+    })"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const MobSpawningConfig& cfg = *r;
+    for (std::uint64_t v = 0; v < 5; ++v) {
+        EXPECT_EQ(cfg.pickIndex(v), v);
+    }
+    // The caller reduces the raw stream value; a few large values:
+    EXPECT_EQ(cfg.pickIndex(123456789ULL % 5), 123456789ULL % 5);
+    EXPECT_EQ(cfg.pickIndex(99999999999ULL % 5), 99999999999ULL % 5);
+}
+
+TEST(MobSpawningConfigTest, WeightedPickCoversRangesDeterministically) {
+    // Weights [1,1,1,1,10] (total 14): entry i owns [sum_{<i}, sum_{<=i})
+    // — entries 0..3 own singletons, entry 4 owns [4, 14).
+    auto r = MobSpawningConfig::parse(parseJson(R"({
+      "check_every_frames": 30,
+      "first_spawn_frame": 60,
+      "max_mobs": 4,
+      "min_radius": 4,
+      "max_radius": 6,
+      "despawn_distance": 40,
+      "mobs": [{"id": "zombie"}, {"id": "cow"}, {"id": "sheep"},
+               {"id": "chicken"}, {"id": "skeleton", "weight": 10}]
+    })"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const MobSpawningConfig& cfg = *r;
+    EXPECT_EQ(cfg.totalWeight(), 14);
+    EXPECT_EQ(cfg.pickIndex(0), 0);
+    EXPECT_EQ(cfg.pickIndex(1), 1);
+    EXPECT_EQ(cfg.pickIndex(2), 2);
+    EXPECT_EQ(cfg.pickIndex(3), 3);
+    EXPECT_EQ(cfg.pickIndex(4), 4);   // the heavy entry starts at 4
+    EXPECT_EQ(cfg.pickIndex(7), 4);
+    EXPECT_EQ(cfg.pickIndex(13), 4);  // and runs to total-1
+}
+
+TEST(MobSpawningConfigTest, WeightedPickSingleEntry) {
+    auto r = MobSpawningConfig::parse(parseJson(R"({
+      "check_every_frames": 30,
+      "first_spawn_frame": 60,
+      "max_mobs": 4,
+      "min_radius": 4,
+      "max_radius": 6,
+      "despawn_distance": 40,
+      "mobs": [{"id": "zombie", "weight": 5}]
+    })"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ((*r).totalWeight(), 5);
+    for (std::uint64_t v = 0; v < 5; ++v) {
+        EXPECT_EQ((*r).pickIndex(v), 0);
+    }
 }
 
 TEST(MobSpawningConfigTest, RejectsInvertedRadii) {
     auto r = MobSpawningConfig::parse(parseJson(R"({
       "check_every_frames": 30, "first_spawn_frame": 60, "max_mobs": 4,
       "min_radius": 6, "max_radius": 4, "despawn_distance": 40,
-      "mobs": ["zombie"]
+      "mobs": [{"id": "zombie"}]
     })"));
     EXPECT_FALSE(r.ok());
 }
@@ -727,7 +850,7 @@ TEST(MobSpawningConfigTest, RejectsDespawnInsideRing) {
     auto r = MobSpawningConfig::parse(parseJson(R"({
       "check_every_frames": 30, "first_spawn_frame": 60, "max_mobs": 4,
       "min_radius": 4, "max_radius": 6, "despawn_distance": 6,
-      "mobs": ["zombie"]
+      "mobs": [{"id": "zombie"}]
     })"));
     EXPECT_FALSE(r.ok());
 }

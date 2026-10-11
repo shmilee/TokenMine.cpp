@@ -5,5 +5,11 @@
   "min_radius": 4,
   "max_radius": 6,
   "despawn_distance": 40,
-  "mobs": ["zombie", "cow", "sheep", "chicken", "skeleton"]
+  "mobs": [
+    {"id": "zombie", "weight": 1},
+    {"id": "cow", "weight": 1},
+    {"id": "sheep", "weight": 1},
+    {"id": "chicken", "weight": 1},
+    {"id": "skeleton", "weight": 1}
+  ]
 }
