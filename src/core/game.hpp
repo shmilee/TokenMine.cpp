@@ -213,6 +213,11 @@ private:
     void fireBow();
     // Cancels an in-progress draw (item switch, unlock, panel, ...).
     void resetBowDraw();
+    // The single choke point for every in-game block change (break,
+    // place, dye recolor): the raw world setBlock (which marks the chunk
+    // dirty) plus, Phase 42, releasing any STUCK arrow whose box overlaps
+    // the changed cell (it falls out and rejoins flight physics).
+    void setBlock(int x, int y, int z, BlockID id);
     // Performs the break: air + relight + data-driven drop (ItemEntity).
     // The caller guarantees the hit is destroyable.
     void breakBlock(const BlockHit& hit);
@@ -271,6 +276,19 @@ private:
     // (u_useTexture 0).
     void drawArrows(const Mat4& view, const Mat4& projection);
     const Mesh& arrowMesh();
+
+    // 3D held hand (Phase 42, the Minecraft hand): while the pointer is
+    // locked and no panel is open, the selected item renders as a view-
+    // anchored 3D model in the bottom-right of the frustum — the block
+    // cube for block items (the dropped-item cube mesh, atlas-lit), a
+    // flat icon quad for the other icon items (always bright). While the
+    // bow is drawn the hand pulls back with the charge (the draw
+    // indicator, replacing the Phase 24 2D icon pull); while food is
+    // being eaten it rises toward the face with the eat progress. Pure
+    // rendering — no state, and gated on the pointer lock, so a no-input
+    // run renders the pre-Phase-42 image (byte-identical baseline).
+    void drawHeldHand(const Mat4& view, const Mat4& projection);
+    const Mesh& handIconMesh();
 
     // -- Phase 15 UI / audio / particles ------------------------------------
     // E/F3/F5 handling (F3 + F5 work in any pointer state; E opens the
@@ -422,6 +440,10 @@ private:
     std::vector<std::unique_ptr<Entity>> m_entities;
     // Dropped-item meshes: one full-cube mesh per block id (built lazily).
     std::unordered_map<BlockID, Mesh, BlockIDHash> m_itemMeshes;
+    // 3D held-hand icon quad (Phase 42): the shared flat unit quad the
+    // non-block items' 2D icons render through (built lazily, one for all
+    // items — the per-item texture is bound at draw time).
+    Mesh m_handIconMesh;
 
     // Mobs (Phase 20): the data-driven types (assets/data/mobs) + the
     // spawn config (assets/data/mob_spawning.json), the enable flag

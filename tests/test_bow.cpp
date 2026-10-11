@@ -35,3 +35,50 @@ TEST(BowChargeTest, OverchargeIsCapped) {
     // Holding past the full-draw time stays at full power.
     EXPECT_FLOAT_EQ(bowPower(kBowFullDrawSeconds * 10.0), 1.0f);
 }
+
+// -- arrow mob-hit knockback (Phase 42) ---------------------------------------
+
+TEST(ArrowKnockbackTest, FullPowerMatchesLegacyConstantsBitExactly) {
+    // A full-power shot (power 1.0) reproduces the Phase 21/27 melee-style
+    // constants (4.0 horizontal along the arrow, 2.5 lift) — 16.0 keeps
+    // the normalization exact in binary (4 / 16 = 0.25).
+    const Vec3 kb = arrowKnockback({16.0f, -3.0f, 0.0f}, 1.0f);
+    EXPECT_FLOAT_EQ(kb.x, kArrowKnockbackSpeed);
+    EXPECT_FLOAT_EQ(kb.y, kArrowKnockbackLift);
+    EXPECT_FLOAT_EQ(kb.z, 0.0f); // the vertical component is dropped
+}
+
+TEST(ArrowKnockbackTest, ScalesWithChargePower) {
+    // A half-power shot knocks back at half the impulse in both axes
+    // (Minecraft: knockback grows with the shot's strength).
+    const Vec3 kb = arrowKnockback({16.0f, 0.0f, 0.0f}, 0.5f);
+    EXPECT_FLOAT_EQ(kb.x, 2.0f);
+    EXPECT_FLOAT_EQ(kb.y, 1.25f);
+    const Vec3 quarter = arrowKnockback({16.0f, 0.0f, 0.0f}, 0.25f);
+    EXPECT_FLOAT_EQ(quarter.x, 1.0f);
+    EXPECT_FLOAT_EQ(quarter.y, 0.625f);
+}
+
+TEST(ArrowKnockbackTest, PushesAlongHorizontalTravelDirection) {
+    // The horizontal push follows the arrow's horizontal velocity
+    // (normalized to the constant magnitude); a diagonal shot splits it.
+    // (3, 4) normalizes to (0.6, 0.8): 4 * 0.6 = 2.4, 4 * 0.8 = 3.2.
+    const Vec3 kb = arrowKnockback({3.0f, 9.0f, 4.0f}, 1.0f);
+    EXPECT_NEAR(kb.x, 2.4f, 1e-5f);
+    EXPECT_NEAR(kb.z, 3.2f, 1e-5f);
+    EXPECT_FLOAT_EQ(kb.y, kArrowKnockbackLift);
+    // A shot heading in -x pushes in -x.
+    const Vec3 back = arrowKnockback({-16.0f, 0.0f, 0.0f}, 1.0f);
+    EXPECT_FLOAT_EQ(back.x, -kArrowKnockbackSpeed);
+}
+
+TEST(ArrowKnockbackTest, StraightDownKeepsLiftOnly) {
+    // A (near-)vertically falling arrow has no horizontal push — the
+    // lift stays (the 1e-4 guard mirrors the Phase 21 code).
+    const Vec3 kb = arrowKnockback({0.0f, -12.0f, 0.0f}, 1.0f);
+    EXPECT_FLOAT_EQ(kb.x, 0.0f);
+    EXPECT_FLOAT_EQ(kb.z, 0.0f);
+    EXPECT_FLOAT_EQ(kb.y, kArrowKnockbackLift);
+    const Vec3 half = arrowKnockback({0.0f, -12.0f, 0.0f}, 0.5f);
+    EXPECT_FLOAT_EQ(half.y, 1.25f);
+}

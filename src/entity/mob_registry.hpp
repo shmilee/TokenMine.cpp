@@ -138,10 +138,15 @@ struct MobProperties {
     // fires arrows (one per `attackCooldown`) instead of closing in, and
     // backs away at full speed while the player is inside `retreatDistance`
     // (0 = never back away). `shootSpeed` is the arrow launch speed.
-    // Melee mobs leave all three at 0 (absent in data).
+    // Melee mobs leave all three at 0 (absent in data). `ammoItem`
+    // (Phase 42): the item a stuck arrow shot by this mob returns to the
+    // player's inventory on pickup (the game cross-checks the item's
+    // existence at init). A ranged mob (shootRange > 0) must define it;
+    // melee mobs leave it empty.
     float shootRange = 0.0f;
     float retreatDistance = 0.0f;
     float shootSpeed = 0.0f;
+    std::string ammoItem;
     // Drops (Phase 28): the item list the mob drops on death — one entry
     // per dropped item, spawned in list order. Empty = no drops.
     std::vector<MobDrop> drops;

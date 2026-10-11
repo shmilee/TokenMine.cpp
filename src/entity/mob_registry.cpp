@@ -152,6 +152,22 @@ Result<void> MobRegistry::parseProperties(const Json& def,
         return MC_FAIL("mob properties: 'shoot_range' > 0 requires "
                        "'shoot_speed' in (0, 100]");
     }
+    // Optional 'ammo' (string, Phase 42): the item a stuck arrow shot by
+    // this mob returns to the player on pickup. Explicit empty is
+    // rejected (ammo discipline, like the item field); the game
+    // cross-checks the item's existence at init. A ranged mob (shoot
+    // range > 0) must define it — its arrows are pickable by design.
+    if (const Json* am = def.find("ammo")) {
+        if (!am->isString() || am->asString().empty()) {
+            return MC_FAIL("mob properties: 'ammo' must be a non-empty "
+                           "string (item name)");
+        }
+        out.ammoItem = am->asString();
+    }
+    if (out.shootRange > 0.0f && out.ammoItem.empty()) {
+        return MC_FAIL("mob properties: 'shoot_range' > 0 requires 'ammo' "
+                       "(the item its stuck arrows return on pickup)");
+    }
 
     // Migration guard (Phase 28): the single-drop schema
     // ("drops": "item" + "drops_count") is gone — the count now lives

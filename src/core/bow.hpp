@@ -17,6 +17,8 @@
 
 #include <algorithm>
 
+#include "core/math/vec3.hpp"
+
 namespace mc {
 
 // Seconds of draw for a full-power shot (Minecraft: 1.6 s).
@@ -30,6 +32,26 @@ inline float bowPower(double drawSeconds) {
     const double t = drawSeconds / kBowFullDrawSeconds;
     return static_cast<float>(
         std::clamp(t, static_cast<double>(kBowMinPower), 1.0));
+}
+
+// Mob-hit knockback (Phase 42): a melee-style impulse along the arrow's
+// horizontal velocity (constant magnitude) + a vertical lift, scaled by
+// the shot's charge power. A full-power shot (power 1.0) reproduces the
+// Phase 21/27 constants bit-exactly. `arrowVelocity` is the arrow's live
+// velocity at impact; a (near-)horizontal-zero velocity keeps the lift
+// and drops the horizontal push.
+inline constexpr float kArrowKnockbackSpeed = 4.0f; // horizontal (blocks/s)
+inline constexpr float kArrowKnockbackLift = 2.5f;  // vertical (blocks/s)
+
+inline Vec3 arrowKnockback(const Vec3& arrowVelocity, float power) {
+    Vec3 kb {arrowVelocity.x, 0.0f, arrowVelocity.z};
+    const float len = std::sqrt(kb.x * kb.x + kb.z * kb.z);
+    if (len > 1e-4f) {
+        kb.x *= kArrowKnockbackSpeed * power / len;
+        kb.z *= kArrowKnockbackSpeed * power / len;
+    }
+    kb.y = kArrowKnockbackLift * power;
+    return kb;
 }
 
 } // namespace mc

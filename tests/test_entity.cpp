@@ -407,8 +407,10 @@ TEST(ProjectileTest, StuckArrowKeepsIncomingDirection) {
 }
 
 TEST(ProjectileTest, StuckArrowDoesNotMoveAndAgesOut) {
-    // A stuck arrow is static (no physics) but keeps aging: it despawns
-    // when the age reaches kMaxAge, like any other arrow.
+    // A stuck arrow is static (no physics) but keeps aging. Phase 42: a
+    // stuck arrow ages out at kStuckMaxAge (100 s, Minecraft's stuck
+    // arrow), NOT the 30 s kMaxAge of flying arrows — it must survive
+    // the flight cap and despawn only past the stuck cap.
     Fixture f;
     f.wallX(12, 0, 20, -16, 16);
     Projectile arrow(f.world, f.blocks, {8.5f, 5.0f, 8.5f}, {1.0f, 0.0f, 0.0f});
@@ -419,10 +421,74 @@ TEST(ProjectileTest, StuckArrowDoesNotMoveAndAgesOut) {
     f.run(arrow, 120); // 2 s more: a flying arrow would travel ~30 blocks
     EXPECT_EQ(arrow.position(), stuckAt); // but this one did not move
     EXPECT_FALSE(arrow.shouldDespawn());  // 2 s < 30 s
-    f.run(arrow, static_cast<int>(Projectile::kMaxAge / kDt) + 60);
+    // Past the FLYING cap (age > kMaxAge): a flying arrow would be gone
+    // by now; the stuck one keeps aging.
+    f.run(arrow,
+          static_cast<int>((Projectile::kMaxAge - ageAtStuck) / kDt) + 120);
+    EXPECT_FALSE(arrow.dead());
+    EXPECT_FALSE(arrow.shouldDespawn()); // ~kMaxAge + 2 s < kStuckMaxAge
+    // ... and despawns once the STUCK cap is reached.
+    f.run(arrow,
+          static_cast<int>((Projectile::kStuckMaxAge - arrow.age()) / kDt) +
+              60);
     EXPECT_FALSE(arrow.dead());            // it aged out, it was not killed
     EXPECT_TRUE(arrow.shouldDespawn());
-    EXPECT_GE(arrow.age(), ageAtStuck + Projectile::kMaxAge - 0.1);
+    EXPECT_GE(arrow.age(), ageAtStuck + Projectile::kStuckMaxAge - 0.1);
+}
+
+TEST(ProjectileTest, ReleasedStuckArrowFallsAndRejoinsFlight) {
+    // Phase 42: the game releases a stuck arrow when the block it hangs
+    // in is broken or replaced (Game::setBlock -> release()): the arrow
+    // drops from where it hung with ZERO velocity and rejoins flight
+    // physics (gravity + collision), sticking again on the next solid.
+    Fixture f;
+    f.wallX(12, 0, 20, -16, 16);
+    Projectile arrow(f.world, f.blocks, {8.5f, 5.0f, 8.5f}, {1.0f, 0.0f, 0.0f});
+    f.run(arrow, 30);
+    ASSERT_TRUE(arrow.stuck());
+    const Vec3 stuckAt = arrow.position();
+    arrow.release(); // what Game::setBlock does for the broken cell
+    EXPECT_FALSE(arrow.stuck());
+    const Vec3 zero = {0.0f, 0.0f, 0.0f};
+    EXPECT_EQ(arrow.velocity(), zero); // it drops
+    EXPECT_EQ(arrow.position(), stuckAt); // release does not move it
+    f.run(arrow, 30); // 0.5 s of free fall: y drops ~0.5 * 20 * 0.25 = 2.5
+    EXPECT_LT(arrow.position().y, stuckAt.y);
+    EXPECT_GT(arrow.position().y, 1.0f); // not yet on the floor
+    // Flight physics is live again: it sticks on the floor like any
+    // other impact (Phase 24).
+    f.run(arrow, 120);
+    EXPECT_TRUE(arrow.stuck());
+    EXPECT_FLOAT_EQ(arrow.position().y, 1.0f);
+}
+
+TEST(ProjectileTest, ReleaseIsANoopWhenNotStuck) {
+    // Phase 42: release() only acts on stuck arrows (a flying arrow's
+    // velocity and motion are untouched).
+    Fixture f;
+    f.wallX(12, 0, 20, -16, 16);
+    Projectile arrow(f.world, f.blocks, {8.5f, 5.0f, 8.5f}, {1.0f, 0.0f, 0.0f});
+    f.run(arrow, 5); // mid-flight
+    EXPECT_FALSE(arrow.stuck());
+    const Vec3 v = arrow.velocity();
+    arrow.release();
+    EXPECT_EQ(arrow.velocity(), v);
+}
+
+TEST(ProjectileTest, PowerAndAmmoItemRideWithTheArrow) {
+    // Phase 42: the shot's charge (power — scales the mob-hit knockback)
+    // and the launcher's ammo item name (stuck-arrow pickup returns it)
+    // ride with the arrow. Defaults: full power, not pickable (the
+    // Phase 10 bare projectile).
+    Fixture f;
+    Projectile plain(f.world, f.blocks, {0.5f, 5.0f, 0.5f}, {1.0f, 0.0f, 0.0f});
+    EXPECT_FLOAT_EQ(plain.power(), 1.0f);
+    EXPECT_TRUE(plain.ammoItem().empty());
+    Projectile shot(f.world, f.blocks, {0.5f, 5.0f, 0.5f}, {1.0f, 0.0f, 0.0f},
+                    15.0f * 0.4f, 5.0f * 0.4f, /*hurtPlayer=*/false, 0.4f,
+                    "arrow");
+    EXPECT_FLOAT_EQ(shot.power(), 0.4f);
+    EXPECT_EQ(shot.ammoItem(), "arrow");
 }
 
 TEST(ProjectileTest, DespawnBelowKillPlaneNotOnImpact) {

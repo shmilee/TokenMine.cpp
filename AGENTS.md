@@ -9,25 +9,28 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 41 完成时）
+## 现状（Phase 42 完成时）
 
-- 功能阶段 P0–P41 全部完成并提交；P38 = skeleton 后续三项（LOS 门/掉落
-  区间+bone/箭预判）、P39 = 生成权重按类型（`{"id","weight"?}` 对象 schema，
-  全 weight 1 与旧抽取逐位相同 = 零行为变化）、P40 = 炉子/熔炼（P28 遗留
+- 功能阶段 P0–P42 全部完成并提交；P40 = 炉子/熔炼（P28 遗留
   "熟肉"）：`furnace` 方块 + 物品字段 `smeltable_to`/`smelt_time`/`fuel_time`
   + 3 熟肉 + 燃料 + **单个全局 `FurnaceState`**（每帧 1/60 子步 + 整数字步
-  倒计时）+ 存档 format 6、**P41 = wool 后续**（P12/P20 遗留"wool 无用途/
+  倒计时）+ 存档 format 6、P41 = wool 后续（P12/P20 遗留"wool 无用途/
   无染色"）：9 wool 方块（`wool` 白 base + 8 染色变体 `wool_<color>`）+ 9
-  染料物品 `dye_<color>`（物品字段 `dye_color`，白名单 9 色）+ 9 shapeless
-  配方 + 方块属性 `dye_base`/`dye_color`（与 `interact` 互斥）；
-  命名 `dyeVariantName(base, color)` = `"<base>_<color>"`、white 特例 =
-  base 名本身；染色交互 = 右键顺序 interact 后、placeBlock 前（换块 + 消耗
-  1 + cloth 音效，同色重复 no-op）；init 交叉校验含"每个 (base, 颜色) 变体
-  必须存在"；atlas 4×8→8×8（**所有既有 UV 移位 → base18 于 P41 重锚**）。
-- 测试 **762/762**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
-- 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P41 为**重锚阶段**
-  ——atlas 4×8→8×8 全 UV 缩放变化，重锚链经 P40 代码参考构建 A/B 逐字节
-  验证后 `cp`，P18/P36 先例；P42 若过门 = 第 16 次结构性免疫）。
+  染料物品 `dye_<color>` + 9 shapeless 配方 + 方块属性
+  `dye_base`/`dye_color`；atlas 4×8→8×8（**所有既有 UV 移位 →
+  base18 于 P41 重锚**）、**P42 = 弓后续 2**（P21/P24 遗留）：**3D 手持
+  手部**（`drawHeldHand`，仅指针锁定时渲染 → 无输入基线结构性免疫；块物品
+  = 3D 方块体 + atlas 光照、图标物品 = 2D 图标贴 3D 平面恒亮；拉弓 = 手部
+  后拉 + 弓体后仰、进食 = 抬向面部；2D 图标拉移删除）+ **插墙箭寿命
+  `kStuckMaxAge = 100s`**（飞行箭仍 30s，上限按**当前**状态取）+ **方块
+  变更释放箭**（`Game::setBlock` 收口；判定 = 箭盒**触**卡住格面且中心在
+  面外，非重叠）+ **插墙箭拾取**（stuck 箭距玩家底心 ≤ 1.0 → 返还发射器
+  `ammo` 物品；飞行箭不可拾取）+ **击退随蓄力**（`arrowKnockback` 纯函数
+  4.0×power / 2.5×power，power 1 = 旧常数逐位）+ **mob `ammo` 字段**
+  （远攻必填 + init 校验物品存在，skeleton = arrow）。
+- 测试 **769/769**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+- 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P41 重锚【atlas
+  8×8】，P42 过门 = 第 16 次结构性免疫、无重锚）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 
 ## 命令
@@ -83,7 +86,7 @@ KNOWN_ISSUES、SESSION_CONTEXT）→ 6. **显式路径列表** git commit（永�
 永不提交 `SESSION_CONTEXT.md`（本地））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
-## 坑位 Top 8（全文 docs/PITS.md，~55 条）
+## 坑位 Top 8（全文 docs/PITS.md，~98 条）
 
 1. **SDL grab delta**（P28）：输入 E2E 全帧字节一致不保证——存档 yaw/pitch 为漂移
    探测器；驱动 warp 用实际窗口原点（实测 (4,64)）+ (632,352)。
@@ -119,7 +122,7 @@ KNOWN_ISSUES、SESSION_CONTEXT）→ 6. **显式路径列表** git commit（永�
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（~62 条，都踩过） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（~98 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃）+ 已修复存档索引 | 阶段验收前后 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phase 0–29 规划 + 细节存档索引 | 了解历史 |
 | [docs/archive/phase-NN.md](docs/archive/) | 单阶段细节存档（阶段报告 + 会话存档） | 深挖某阶段 |

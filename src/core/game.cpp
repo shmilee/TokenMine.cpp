@@ -90,18 +90,24 @@ constexpr int kVerticalChunksPerColumn = kWorldHeight / kChunkSize;
 // How far the crosshair raycast reaches (blocks; Minecraft's reach).
 constexpr float kReach = 5.0f;
 
-// Mobs (Phase 20): the player's attack cadence + the knockback a hit
+// Mobs (Phase 20): the player's attack cadence + the knockback a MELEE hit
 // applies (the horizontal speed along the aim + a vertical lift; the
-// MobEntity's knockback window decays it).
+// MobEntity's knockback window decays it). Phase 42: an ARROW hit knocks
+// back with core/bow.hpp arrowKnockback — the same base values, scaled by
+// the shot's charge power.
 constexpr double kSwingInterval = 0.25;  // seconds between attack hits
 constexpr float kKnockbackSpeed = 4.0f;  // horizontal knockback (blocks/s)
 constexpr float kKnockbackLift = 2.5f;   // vertical knockback (blocks/s)
 
 // Bow (Phase 21): the arrow spawns this far in front of the eye (the
-// launch origin never sits inside the camera near plane), and a hit arrow
-// knocks back with the melee constants above (along the arrow's horizontal
-// velocity).
+// launch origin never sits inside the camera near plane).
 constexpr float kArrowSpawnOffset = 0.3f;
+
+// Arrow pickup (Phase 42): a STUCK arrow within this radius of the
+// player's bottom-center returns to the inventory as the launcher's ammo
+// item (Minecraft: walk up to a stuck arrow to pick it up; flying arrows
+// are not pickable).
+constexpr float kArrowPickupRadius = 1.0f;
 
 // A dropped item is picked up when its bottom-center is within this
 // distance of the player's bottom-center (and past the item's pickup
@@ -125,9 +131,22 @@ constexpr int kHotbarBottomMargin = 8;
 constexpr int kHotbarIconPx = 30;
 constexpr int kHeldIconPx = 76;
 constexpr int kHeldIconOffset = 72; // center of the held icon from the corner
-// Bow draw (Phase 24): the held icon is pulled this many pixels toward
-// the screen center at full charge (the v1 draw indicator).
-constexpr float kBowDrawPullPx = 64.0f;
+// 3D held hand (Phase 42): the view-anchored hand model constants (see
+// drawHeldHand). The offset is in the CAMERA frame (x = right, y = up,
+// z = behind the eye), so the hand sits low-right in front of the eye.
+constexpr Vec3 kHandOffset {0.42f, -0.38f, -0.85f};
+constexpr float kHandCubeScale = 0.28f; // block-cube hand size
+constexpr float kHandIconScale = 0.5f;  // icon-quad hand size
+constexpr float kHandSpinX = -0.35f; // tilt the top toward the camera
+constexpr float kHandSpinY = 0.6f;   // turn a corner toward the camera
+// Bow draw (Phase 42, replaces the Phase 24 2D icon pull): the hand pulls
+// back toward the face and the bow tilts back with the charge power.
+constexpr float kHandDrawPullZ = 0.3f;
+constexpr float kHandDrawSpinX = 0.9f;
+// Eat channel (Phase 42): the hand rises toward the face with the eat
+// progress (replaces the Phase 28 2D icon pull).
+constexpr float kHandEatLiftY = 0.35f;
+constexpr float kHandEatPullZ = 0.35f;
 constexpr int kF3Margin = 8;
 constexpr int kF3LineHeight = 18; // 16 px glyph (Phase 35) + 2 px gap
 constexpr int kCrackStages = 5;
@@ -493,6 +512,19 @@ Result<void> Game::buildScene() {
             m_items.findByName(item.smeltableTo) == nullptr) {
             return MC_FAIL("item '" + item.name + "' references unknown "
                            "smelting product '" + item.smeltableTo + "'");
+        }
+    }
+
+    // -- mob arrow ammo (Phase 42): a ranged mob's 'ammo' field names the
+    // item a stuck arrow returns to the player's inventory on pickup (the
+    // same cross-check pattern as the launcher ammo above).
+    for (const MobID id : m_mobTypes.allIds()) {
+        const Mob& def = m_mobTypes.at(id);
+        if (!def.properties.ammoItem.empty() &&
+            m_items.findByName(def.properties.ammoItem) == nullptr) {
+            return MC_FAIL("mob '" + def.name + "' references unknown "
+                           "arrow ammo item '" + def.properties.ammoItem +
+                           "'");
         }
     }
 
@@ -1471,8 +1503,10 @@ void Game::handleInteraction(double dt) {
                         // defensive no-op.
                         if (const Block* v = m_blocks.findByName(variant);
                             v != nullptr) {
-                            m_world.setBlock(hit->block.x, hit->block.y,
-                                             hit->block.z, v->id);
+                            // Game::setBlock (Phase 42): also releases any
+                            // arrow stuck in the recolored cell.
+                            setBlock(hit->block.x, hit->block.y,
+                                     hit->block.z, v->id);
                             Lighting::updateLocal(m_world, m_blocks,
                                                   hit->block);
                             m_inventory.take(m_selectedSlot, 1);
@@ -1723,9 +1757,12 @@ void Game::fireBow() {
     const float power = bowPower(m_bowDrawSeconds);
     const Vec3 f = m_camera.forward();
     const Vec3 o = m_camera.position + f * kArrowSpawnOffset;
+    // Phase 42: the arrow carries the shot's charge (power — scales the
+    // mob-hit knockback) and the launcher's ammo item (a stuck arrow
+    // picked up returns it to the inventory).
     m_entities.push_back(std::make_unique<Projectile>(
         m_world, m_blocks, o, f, item.shootSpeed * power,
-        item.shootDamage * power));
+        item.shootDamage * power, /*hurtPlayer=*/false, power, item.ammo));
     m_sound.play("shoot");
     resetBowDraw();
 }
@@ -1735,11 +1772,57 @@ void Game::resetBowDraw() {
     m_bowDrawSeconds = 0.0;
 }
 
+void Game::setBlock(int x, int y, int z, BlockID id) {
+    // The single choke point for every in-game block change (break, place,
+    // dye recolor). Phase 42: in addition to the raw setBlock, any STUCK
+    // arrow hung on the changed cell is released (Minecraft: arrows fall
+    // out when their block is broken or replaced) — it rejoins flight
+    // physics with zero velocity (gravity) and its cumulative age.
+    m_world.setBlock(x, y, z, id);
+    const float half = Projectile::kSize * 0.5f;
+    for (auto& entity : m_entities) {
+        auto* arrow = dynamic_cast<Projectile*>(entity.get());
+        if (arrow == nullptr || !arrow->stuck()) {
+            continue;
+        }
+        const Vec3 p = arrow->position();
+        const float fx = static_cast<float>(x);
+        const float fy = static_cast<float>(y);
+        const float fz = static_cast<float>(z);
+        // The collision resolver clamps a stuck arrow EXACTLY onto the
+        // face it struck: its box touches the STUCK cell's boundary and
+        // its center sits strictly outside that face. The stuck cell is
+        // the changed cell iff, per axis, the box range meets the cell's
+        // closed range (inAxis) and in at least one axis the box touches
+        // a face from the OUTSIDE (touchAxis — the center strictly beyond
+        // the face). A cell the box merely occupies from inside (no face
+        // contact) does not qualify, so placing into the air cell around
+        // a wall-stuck arrow does not release it.
+        const auto inAxis = [half](float c, float lo, float hi) {
+            return c - half <= hi && c + half >= lo;
+        };
+        const auto touchAxis = [half](float c, float lo, float hi) {
+            return (c + half >= lo && c < lo) ||
+                   (c - half <= hi && c > hi);
+        };
+        if (inAxis(p.x, fx, fx + 1.0f) && inAxis(p.y, fy, fy + 1.0f) &&
+            inAxis(p.z, fz, fz + 1.0f) &&
+            (touchAxis(p.x, fx, fx + 1.0f) ||
+             touchAxis(p.y, fy, fy + 1.0f) ||
+             touchAxis(p.z, fz, fz + 1.0f))) {
+            arrow->release();
+            MC_LOG_DEBUG("arrow released from changed block at (" +
+                         std::to_string(p.x) + ", " + std::to_string(p.y) +
+                         ", " + std::to_string(p.z) + ")");
+        }
+    }
+}
+
 void Game::breakBlock(const BlockHit& hit) {
     const BlockID id = m_world.getBlock(hit.block.x, hit.block.y, hit.block.z);
     // setBlock marks the chunk (and face-sharing neighbors) dirty; the mesh
     // rebuild happens on the next frame.
-    m_world.setBlock(hit.block.x, hit.block.y, hit.block.z, BlockID::air());
+    setBlock(hit.block.x, hit.block.y, hit.block.z, BlockID::air());
     // Relight the region around the change (a broken occluder lets light
     // in; the broken cell stops blocking).
     Lighting::updateLocal(m_world, m_blocks, hit.block);
@@ -1810,7 +1893,9 @@ void Game::placeBlock() {
                     m_player->aabbMax())) {
         return;
     }
-    m_world.setBlock(target.x, target.y, target.z, item.block);
+    // Game::setBlock (Phase 42): also releases any arrow stuck in the
+    // newly occupied cell (placing into a cell an arrow hangs in).
+    setBlock(target.x, target.y, target.z, item.block);
     // Relight the region around the change (a placed occluder blocks light;
     // a placed glowstone is a new light source).
     Lighting::updateLocal(m_world, m_blocks, target);
@@ -1986,9 +2071,10 @@ void Game::updateEntities(double dt) {
     // with the per-step displacement as the direction, where t in [0, 1]
     // is a hit inside this step (t = 0: the arrow starts inside the mob).
     // The first mob hit (entity index order) takes the launcher's data
-    // damage + the melee-style knockback along the arrow's horizontal
-    // velocity, and the arrow is consumed (the despawn pass removes it
-    // this frame). Arrows fly through the player and every other entity
+    // damage + the charge-scaled knockback along the arrow's horizontal
+    // velocity (Phase 42, core/bow.hpp arrowKnockback), and the arrow is
+    // consumed (the despawn pass removes it this frame). Arrows fly
+    // through the player and every other entity
     // (collidesWithEntities = false) and never damage the player
     // (single-player v1, docs/KNOWN_ISSUES.md).
     for (auto& [arrow, prev] : arrowSteps) {
@@ -2025,15 +2111,11 @@ void Game::updateEntities(double dt) {
                 continue;
             }
             mob->damage(arrow->damage());
-            const Vec3 v = arrow->velocity();
-            Vec3 kb {v.x, 0.0f, v.z};
-            const float len = std::sqrt(kb.x * kb.x + kb.z * kb.z);
-            if (len > 1e-4f) {
-                kb.x *= kKnockbackSpeed / len;
-                kb.z *= kKnockbackSpeed / len;
-            }
-            kb.y = kKnockbackLift;
-            mob->addKnockback(kb);
+            // Phase 42: the knockback scales with the shot's charge
+            // (arrowKnockback in core/bow.hpp — a full-power shot
+            // reproduces the legacy melee-style constants bit-exactly).
+            mob->addKnockback(arrowKnockback(arrow->velocity(),
+                                             arrow->power()));
             m_sound.play("hurt");
             arrow->kill();
             break;
@@ -2106,6 +2188,44 @@ void Game::updateEntities(double dt) {
         }
         gone[i] = true;
         m_sound.play("pickup");
+    }
+    // Arrow pickup (Phase 42): a STUCK arrow within kArrowPickupRadius of
+    // the player's bottom-center returns to the inventory as the
+    // launcher's ammo item (Minecraft: walk up to a stuck arrow to pick
+    // it up). Flying arrows are not pickable (they are in the air). Same
+    // deterministic index order as the item pickup above; if the
+    // inventory has no room the arrow stays stuck and is retried next
+    // frame.
+    {
+        const float arrowPickupSq =
+            kArrowPickupRadius * kArrowPickupRadius;
+        for (std::size_t i = 0; i < n; ++i) {
+            if (gone[i]) {
+                continue;
+            }
+            auto* arrow = dynamic_cast<Projectile*>(m_entities[i].get());
+            if (arrow == nullptr || !arrow->stuck() ||
+                arrow->ammoItem().empty()) {
+                continue;
+            }
+            const Vec3 d = arrow->position() - playerPos;
+            if (lengthSq(d) > arrowPickupSq) {
+                continue;
+            }
+            // Validity is guaranteed: the ammo item exists (init
+            // cross-check, the launcher's 'ammo' field / the mob's 'ammo').
+            const ItemID aid = m_items.idForName(arrow->ammoItem());
+            if (m_inventory.add(aid, 1, m_items) < 0) {
+                continue; // inventory full: the arrow stays stuck
+            }
+            gone[i] = true;
+            m_sound.play("pickup");
+            const Vec3 p = arrow->position();
+            MC_LOG_DEBUG("picked up stuck arrow (" +
+                         arrow->ammoItem() + ") at (" +
+                         std::to_string(p.x) + ", " + std::to_string(p.y) +
+                         ", " + std::to_string(p.z) + ")");
+        }
     }
     // Despawn: merged-away / picked-up + aged-out / impact / below the
     // kill plane + dead mobs (Phase 20: their data-defined drops spawn
@@ -2347,8 +2467,14 @@ void Game::attemptMobSpawn() {
     if (def.properties.shootRange > 0.0f) {
         const float arrowDamage = def.properties.attackDamage * damageScale;
         const float arrowSpeed = def.properties.shootSpeed;
+        // Phase 42: the mob's arrows are full-power shots (power 1.0 =
+        // the legacy knockback constants) and return the mob's data 'ammo'
+        // item when a stuck one is picked up (registry: a ranged mob must
+        // define it; init: the item exists).
+        const std::string arrowAmmo = def.properties.ammoItem;
         MobEntity* raw = mob.get();
-        mob->setShootCallback([this, raw, arrowSpeed, arrowDamage]() {
+        mob->setShootCallback(
+            [this, raw, arrowSpeed, arrowDamage, arrowAmmo]() {
             if (m_player->isDead() || raw->dead()) {
                 return;
             }
@@ -2382,7 +2508,8 @@ void Game::attemptMobSpawn() {
                                                  arrowSpeed);
             auto arrow = std::make_unique<Projectile>(
                 m_world, m_blocks, eye + dir * kArrowSpawnOffset, dir,
-                arrowSpeed, arrowDamage, /*hurtPlayer=*/true);
+                arrowSpeed, arrowDamage, /*hurtPlayer=*/true,
+                /*power=*/1.0f, arrowAmmo);
             arrow->setSource(raw);  // the hit test skips its shooter
             m_entities.push_back(std::move(arrow));
             m_sound.play("shoot");
@@ -2491,6 +2618,133 @@ const Mesh& Game::arrowMesh() {
         MC_LOG_ERROR("Arrow mesh build failed: " + r.error().describe());
     }
     return m_arrowMesh;
+}
+
+const Mesh& Game::handIconMesh() {
+    if (m_handIconMesh.valid()) {
+        return m_handIconMesh;
+    }
+    // A unit quad in the local XY plane (z = 0), +Z-facing, CCW from the
+    // front. Full-texture UVs (the per-item icon is bound at draw time);
+    // the top edge (y = +0.5) is v = 0 so the icon is NOT flipped relative
+    // to the 2D UI icon (the UI quad maps its top screen row to v = 0).
+    // skyLight = blockLight = 1: the shader's light is
+    // max(sky*dayFactor, block) = 1, so the icon stays fully bright at any
+    // time of day (like the 2D icon). The normal is +Y (NOT the geometric
+    // +Z): the vertex shader derives faceShade from the model-rotated
+    // normal, and +Y keeps it in the top-face bucket (1.0) through every
+    // hand spin state — a geometric +Z normal would land in the 0.6 bucket
+    // and dim the icon to 61 %.
+    MeshVertex tl;
+    tl.position = {-0.5f, 0.5f, 0.0f};
+    tl.normal = {0.0f, 1.0f, 0.0f};
+    tl.uv = {0.0f, 0.0f};
+    tl.skyLight = 1.0f;
+    tl.blockLight = 1.0f;
+    MeshVertex tr;
+    tr.position = {0.5f, 0.5f, 0.0f};
+    tr.normal = {0.0f, 1.0f, 0.0f};
+    tr.uv = {1.0f, 0.0f};
+    tr.skyLight = 1.0f;
+    tr.blockLight = 1.0f;
+    MeshVertex br;
+    br.position = {0.5f, -0.5f, 0.0f};
+    br.normal = {0.0f, 1.0f, 0.0f};
+    br.uv = {1.0f, 1.0f};
+    br.skyLight = 1.0f;
+    br.blockLight = 1.0f;
+    MeshVertex bl;
+    bl.position = {-0.5f, -0.5f, 0.0f};
+    bl.normal = {0.0f, 1.0f, 0.0f};
+    bl.uv = {0.0f, 1.0f};
+    bl.skyLight = 1.0f;
+    bl.blockLight = 1.0f;
+    std::vector<MeshVertex> verts = {tl, tr, br, bl};
+    std::vector<std::uint32_t> idx = {0, 3, 2, 0, 2, 1}; // CCW from +Z
+    auto r = m_handIconMesh.upload(verts, idx);
+    if (!r.ok()) {
+        MC_LOG_ERROR("Hand icon mesh build failed: " + r.error().describe());
+    }
+    return m_handIconMesh;
+}
+
+void Game::drawHeldHand(const Mat4& view, const Mat4& projection) {
+    // Phase 42: the 3D held-item hand (the Minecraft hand). Rendered only
+    // while the pointer is locked and no panel is open (the same gate as
+    // the hotbar/held icon) — a no-input run is never locked, so it renders
+    // the pre-Phase-42 image (byte-identical baseline). Pure rendering: it
+    // reads the selected slot + the bow/eat channel state and draws one
+    // model; it mutates nothing.
+    if (!m_window.relativeMouseMode() || panelOpen()) {
+        return;
+    }
+    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    if (stack.empty()) {
+        return; // empty hand: nothing to hold
+    }
+    const Item& it = m_items.at(stack.item);
+    bool isBlock = it.type == ItemType::Block;
+    std::size_t iconIdx = static_cast<std::size_t>(stack.item.value);
+    const bool hasIcon =
+        !isBlock && iconIdx < m_itemIcons.size() &&
+        m_itemIcons[iconIdx].valid();
+    if (!isBlock && !hasIcon) {
+        return; // no hand model for this item (v1: no per-item 3D)
+    }
+    const float scale = isBlock ? kHandCubeScale : kHandIconScale;
+    // Animation offsets (camera frame): the bow draw pulls the hand back
+    // and tilts the bow toward the face with the charge; the eat channel
+    // raises the hand toward the face with the progress.
+    Vec3 offset = kHandOffset;
+    float spinX = kHandSpinX;
+    if (m_bowDrawing) {
+        const float p = bowPower(m_bowDrawSeconds);
+        offset.z += kHandDrawPullZ * p;
+        spinX += kHandDrawSpinX * p;
+    } else if (m_eatChannel.active) {
+        const float p = m_eatChannel.progress();
+        offset.y += kHandEatLiftY * p;
+        offset.z += kHandEatPullZ * p;
+    }
+    // Camera -> world (yaw-then-pitch FPS convention, see Camera::forward):
+    // C = T(pos) * Ry(yaw) * Rx(pitch). The hand sits in the camera frame
+    // (x = right, y = up, z = behind the eye), spun + tilted, then scaled.
+    const Mat4 item = Mat4::multiply(
+        Mat4::rotateX(spinX),
+        Mat4::multiply(Mat4::rotateY(kHandSpinY), Mat4::scale(scale)));
+    const Mat4 place = Mat4::multiply(Mat4::translate(offset), item);
+    const Mat4 cam = Mat4::multiply(
+        Mat4::translate(m_camera.position),
+        Mat4::multiply(Mat4::rotateY(m_camera.yaw),
+                       Mat4::rotateX(m_camera.pitch)));
+    const Mat4 model = Mat4::multiply(cam, place);
+
+    // The basic shader's texture state is set at the top of the render
+    // pass (atlas bound, u_useTexture = 1, u_dayFactor = world light). The
+    // block-cube hand uses the atlas as-is; the icon hand binds its per-item
+    // texture (and the atlas is restored for the passes that follow).
+    // The program must be BIND first: Renderer::draw unbinds the program
+    // after every draw, and a uniform call on an unbound program is
+    // GL_INVALID_OPERATION (the residual error then poisons the lazy
+    // mesh-upload's glGetError — same pattern as drawArrows).
+    m_basicShader.bind();
+    m_basicShader.setUniform1i("u_useTexture", 1);
+    // Blending is enabled for the hand: the opaque pass runs with blending
+    // off, but the icon texture carries transparent (alpha 0) pixels —
+    // unblended they would draw as an opaque black square behind the icon
+    // (translucent tiles such as glass cubes need it too).
+    m_renderer.enableBlending();
+    if (isBlock) {
+        m_atlas.texture().bind();
+        m_renderer.draw(itemMesh(it.block), m_basicShader, view, projection,
+                        model);
+    } else {
+        m_itemIcons[iconIdx].bind();
+        m_renderer.draw(handIconMesh(), m_basicShader, view, projection,
+                        model);
+        m_atlas.texture().bind(); // restore for the passes that follow
+    }
+    m_renderer.disableBlending();
 }
 
 // ---------------------------------------------------------------------------
@@ -3030,30 +3284,12 @@ void Game::renderUi() {
         UiBatch& cross = batchFor(kCrosshair, false, nullptr);
         addQuad(cross, w / 2 - 5, h / 2 - 1, 11, 2);
         addQuad(cross, w / 2 - 1, h / 2 - 5, 2, 11);
-        // Held item: a large icon in the bottom-right corner. While the
-        // bow is drawn (Phase 24) the icon is pulled toward the screen
-        // center by the charge power; while food is being eaten (Phase 28)
-        // by the eat channel's progress — the v1 draw/eat indicators (no
-        // 3D hand model; see docs/KNOWN_ISSUES.md).
-        float heldX = static_cast<float>(w - kHeldIconOffset);
-        float heldY = static_cast<float>(h - kHeldIconOffset);
-        float heldPull = 0.0f;
-        if (m_bowDrawing) {
-            heldPull = bowPower(m_bowDrawSeconds);
-        } else if (m_eatChannel.active) {
-            heldPull = m_eatChannel.progress();
-        }
-        if (heldPull > 0.0f) {
-            const Vec2 toCenter {static_cast<float>(w / 2) - heldX,
-                                 static_cast<float>(h / 2) - heldY};
-            const float len =
-                std::sqrt(toCenter.x * toCenter.x + toCenter.y * toCenter.y);
-            if (len > 1e-4f) {
-                const float pull = kBowDrawPullPx * heldPull;
-                heldX += toCenter.x / len * pull;
-                heldY += toCenter.y / len * pull;
-            }
-        }
+        // Held item: a large icon in the bottom-right corner. Phase 42:
+        // the icon stays put — the draw/eat animation is the 3D hand
+        // (drawHeldHand), which pulls back / rises with the charge (the
+        // Phase 24/28 2D icon pull is gone).
+        const float heldX = static_cast<float>(w - kHeldIconOffset);
+        const float heldY = static_cast<float>(h - kHeldIconOffset);
         drawIcon(m_inventory.at(m_selectedSlot), heldX, heldY, kHeldIconPx);
     }
 
@@ -3493,6 +3729,11 @@ void Game::render() {
     drawMobs(view, projection);
     // Arrows (Phase 21): the bow's in-flight projectiles, solid color.
     drawArrows(view, projection);
+    // 3D held hand (Phase 42): the selected item's view model, in the
+    // opaque pass (the depth test occludes it behind terrain like
+    // everything else). No-op unless the pointer is locked and no panel is
+    // open (a no-input run never renders it — baseline byte-identical).
+    drawHeldHand(view, projection);
     // Opaque break particles (Phase 15) belong to the opaque pass so the
     // transparent geometry blends over them.
     drawParticles(view, projection, false);

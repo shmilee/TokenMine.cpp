@@ -188,7 +188,12 @@ iron_pickaxe（III/.S./.S.）。
    `detect_radius`/`attack_range`/`attack_damage` 允许 0 = 被动/无害，负数
    拒绝）、`spawn_max_light` 为 0..15 的整数（默认 0，光照门——见上）、
    `hostile` 为可选布尔（默认 false；难度系统的数据开关——保护环 + 伤害
-   缩放，非布尔拒绝）、`drops` 每条目：`count` ∈ [1,64] 或
+   缩放，非布尔拒绝）、远攻 mob（Phase 27）可选字段：`shoot_range` /
+   `retreat_distance`（≥0，`shoot_range > 0` = 远攻者）、`shoot_speed`
+   ((0,100]，远攻必填)、`ammo`（Phase 42：**非空字符串** = 该 mob 射出的箭
+   插墙后被玩家拾取时返还的弹药物品名；远攻必填 + init 对 ItemRegistry
+   交叉校验物品存在，显式空串/非字符串拒绝；近战 mob 不给 = 无远攻）、
+   `drops` 每条目：`count` ∈ [1,64] 或
     `count_min`/`count_max` ∈ [0,64] 且 min ≤ max（Phase 38 随机区间：两者
     必须成对、与 `count` 混用/只给一边 = 报错）、box 越界/缺纹理名
    = 明确报错；未知字段警告。

@@ -102,6 +102,7 @@ const char* kSkeletonDef = R"({
     "shoot_range": 14,
     "retreat_distance": 3,
     "shoot_speed": 15,
+    "ammo": "arrow",
     "wander_interval": 2.5,
     "spawn_max_light": 0,
     "hostile": true,
@@ -606,6 +607,9 @@ TEST(MobRegistryTest, ParsesSkeleton) {
     EXPECT_FLOAT_EQ(mob.properties.shootRange, 14.0f);
     EXPECT_FLOAT_EQ(mob.properties.retreatDistance, 3.0f);
     EXPECT_FLOAT_EQ(mob.properties.shootSpeed, 15.0f);
+    // Phase 42: the ranged mob's 'ammo' item (a stuck arrow shot by it
+    // returns it to the player's inventory on pickup).
+    EXPECT_EQ(mob.properties.ammoItem, "arrow");
     EXPECT_FLOAT_EQ(mob.properties.attackRange, 0.0f);
     EXPECT_FLOAT_EQ(mob.properties.attackDamage, 2.0f);
     EXPECT_TRUE(mob.properties.hostile);
@@ -629,6 +633,9 @@ TEST(MobRegistryTest, RejectsRangedFieldErrors) {
         {"\"retreat_distance\": 3", "\"retreat_distance\": -0.5"},
         {"\"shoot_speed\": 15", "\"shoot_speed\": 0"},
         {"\"shoot_speed\": 15", "\"shoot_speed\": 101"},
+        // Phase 42: 'ammo' must be a non-empty string (item name).
+        {"\"ammo\": \"arrow\"", "\"ammo\": \"\""},
+        {"\"ammo\": \"arrow\"", "\"ammo\": 7"},
     };
     for (const Case& c : cases) {
         std::string def = kSkeletonDef;
@@ -642,6 +649,16 @@ TEST(MobRegistryTest, RejectsRangedFieldErrors) {
     def.replace(def.find(speed), std::strlen(speed), "");
     MobRegistry mobs;
     EXPECT_FALSE(mobs.registerMob(parseJson(def)).ok());
+    // Cross-field (Phase 42): a RANGED mob without 'ammo' is rejected
+    // (its stuck arrows would be unpickable); a melee mob with no ammo
+    // at all is fine (the zombie def).
+    std::string noAmmo = kSkeletonDef;
+    const char* ammo = "\"ammo\": \"arrow\",\n    ";
+    noAmmo.replace(noAmmo.find(ammo), std::strlen(ammo), "");
+    MobRegistry noAmmoMobs;
+    EXPECT_FALSE(noAmmoMobs.registerMob(parseJson(noAmmo)).ok());
+    MobRegistry meleeMobs;
+    EXPECT_TRUE(meleeMobs.registerMob(parseJson(kZombieDef)).ok());
 }
 
 // -- spawning config ----------------------------------------------------------

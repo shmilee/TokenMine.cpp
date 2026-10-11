@@ -532,3 +532,49 @@
   手滑写成 `red_dye` → init 报 `save slot #0 holds unknown item 'red_dye'`
   （`ItemRegistry::idForName` 精确查名字，注册日志里明明是 id=40）。
   手工构造存档里的物品/方块名一律从注册日志或数据文件抄，不要凭约定猜。
+- **Renderer::draw 每次 draw 后解绑程序 → setUniform 必须先 bind（P42）**：
+  `drawHeldHand` 里在两次 draw 之间直接 `setUniform1i` → 程序未绑定 =
+  GL_INVALID_OPERATION (1282)；该**残留错误**被懒建网格上传的 `glGetError`
+  捞走 → "GL error during mesh upload" **每帧重复**（手部网格永远建不成、
+  手永远不渲染、无崩溃、无其他报错——纯静默）。模式同 `drawArrows`：先
+  `m_basicShader.bind()` 再设 uniform（uniform 持久在程序对象上，后续 draw
+  重新绑定不影响）。
+- **不透明段 blending 关 → 带透明像素的纹理 quad 渲成不透明黑方（P42）**：
+  图标 PNG 的透明像素是 (0,0,0,0)，不透明段 GL_BLEND 关闭时 alpha 被丢弃、
+  rgb 原样写出 = 黑方块垫底。3D 手部（图标 quad / 玻璃类方块体）必须在
+  draw 前后 `enableBlending()/disableBlending()`（标准 SRC_ALPHA 混合，深度
+  写入保持开着即可）。
+- **faceShade 是顶点着色器从模型旋转后的法线推导的（P42）**：MeshVertex
+  **没有** faceShade 字段——`basic.vert` 对 `mat3(u_model) * a_normal` 分桶：
+  +Y→1.0、−Y→0.5、|X|>0.5→0.8、其余→0.6。手部图标 quad 的几何 +Z 法线
+  经手部自旋（Rx·Ry）后落入 0.6 桶 = 图标暗到 61%。技巧：顶点法线取
+  **+Y**（所有自旋态下 n.y 仍 >0.5 → 恒 1.0 桶、恒亮）——法线在 shader 里
+  无其他用途，此 hack 安全。箭/方块体不受影响（各面法线随面正确旋转）。
+- **插墙箭的碰撞盒只"触及"卡住格的面、不重叠（P42）**：碰撞解算器把箭
+  **精确 clamp 到面上**（盒最大坐标 = 面平面，如 x=12.0 而非 12.0001）→
+  严格重叠判定（`>`/`<`）的"方块变更释放箭"检查**永远不触发**；但纯非严格
+  "触任意面"又有假阳性（玩家往箭盒所在的空气格放块也会释放）。正确判定 =
+  每轴盒区间与格闭区间相交（inAxis）且**至少一轴**盒从**外侧**触面
+  （touchAxis：中心严格在面外）——`Game::setBlock` 内两个 lambda。
+- **发射器选中的左键永不挖掘（P42）**：选中 bow 时左键 = 仅近战（"弓是
+  武器不是工具"设计）——E2E"持弓破方块"场景**静默无效**（存档方块纹丝
+  不动、无报错）。破块前先 Tab 换到空/材料槽。附带两坑：① 热栏**没有
+  数字键绑定**（`Input::mapKey` 只有 WASD/Space/Shift/Ctrl/Alt/Tab/Esc/
+  Q/E/F3/F5/R），换槽只能 Tab 循环；② `wasPressed` 是**每帧**语义——
+  xdotool 连发多个 Tab 若落在同一帧 = 只循环一次，脚本里相邻 key 事件
+  间隔必须 >1 帧（≥50ms 稳）。
+- **3D 手部可能整个在 solid 块内（P42）**：手部偏移 = 相机前方 0.85 格——
+  墙面前缘距玩家 0.5 格的近墙场景里手部世界坐标落在块内，被块面深度完全
+  遮挡（**0 像素、无报错**）。场景设计：手要可见需前面 ~1 格以上无障碍；
+  近墙场景的像素断言不要包含手部（S4 近墙 = 无手部断言，手部证据由 S3
+  远墙场景承担）。
+- **gtest EXPECT_EQ 不接受花括号初始化列表（P42）**：
+  `EXPECT_EQ(x, Vec3{0.0f, 0.0f, 0.0f})` 编译失败（"EXPECT_EQ not declared
+  in this scope"——宏无法对 braced-init 临时对象推导类型/比较）。用具名
+  变量：`const Vec3 zero = {0,0,0}; EXPECT_EQ(x, zero);`。
+- **纹理噪声是逐通道独立的——像素颜色分类器必须逐通道独立偏移（P42）**：
+  程序化纹理（wool 等）的 ±12 噪声对 r/g/b **各自独立**掷。分类器若用同一
+  偏移 n 扫三通道（`for n: (r+n, g+n, b+n)`）会漏掉大部分噪声像素
+  （(140,138,135) 对 base (142,141,137) 不在集内）→ S4 204k 像素误判
+  bad。正确 = 三通道独立 dr/dg/db（S3 分类器的 `fam()` 一开始就是对的，
+  S4 的 `with_noise` 抄歪了）。
