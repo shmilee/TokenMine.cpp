@@ -420,6 +420,54 @@ TEST(MobRegistryTest, RejectsNonBoolHostile) {
     }
 }
 
+// -- on_hit_effect (Phase 46, the spider's poison) ---------------------------
+
+TEST(MobRegistryTest, HitEffectDefaultsToNone) {
+    // kZombieDef has no 'on_hit_effect': every pre-Phase-46 mob is
+    // unaffected.
+    MobRegistry mobs = makeMobRegistry();
+    const auto& p = mobs.at(MobID{0}).properties;
+    EXPECT_TRUE(p.hitEffectName.empty());
+    EXPECT_DOUBLE_EQ(p.hitEffectDuration, 0.0);
+}
+
+TEST(MobRegistryTest, ParsesOnHitEffect) {
+    MobRegistry mobs;
+    std::string def = kZombieDef;
+    const std::string key = "\"wander_interval\": 2.5";
+    def.replace(def.find(key), key.size(),
+                std::string("\"wander_interval\": 2.5, \"on_hit_effect\": ") +
+                    "{\"name\": \"poison\", \"duration\": 15.0}");
+    auto r = mobs.registerMob(parseJson(def));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const auto& p = mobs.at(*r).properties;
+    EXPECT_EQ(p.hitEffectName, "poison");
+    EXPECT_DOUBLE_EQ(p.hitEffectDuration, 15.0);
+}
+
+TEST(MobRegistryTest, RejectsBadOnHitEffect) {
+    const std::vector<std::string> bad = {
+        "1",                                     // not an object
+        R"({"name": "poison"})",                 // missing duration
+        R"({"duration": 15.0})",                 // missing name
+        R"({"name": "", "duration": 15.0})",     // empty name
+        R"({"name": "poison", "duration": 0})",  // duration 0
+        R"({"name": "poison", "duration": -1})", // duration < 0
+        R"({"name": "poison", "duration": "15"})",  // non-number
+        R"({"name": "poison", "extra": 1})",     // unknown field
+    };
+    for (const std::string& value : bad) {
+        MobRegistry mobs;
+        std::string def = kZombieDef;
+        const std::string key = "\"wander_interval\": 2.5";
+        def.replace(def.find(key), key.size(),
+                    std::string("\"wander_interval\": 2.5, "
+                                "\"on_hit_effect\": ") + value);
+        auto r = mobs.registerMob(parseJson(def));
+        EXPECT_FALSE(r.ok()) << "accepted on_hit_effect: " << value;
+    }
+}
+
 TEST(MobRegistryTest, ParsesPassiveMob) {
     // A passive mob (Phase 22): zero detect/attack values are valid data
     // ("never chases / never attacks / harmless"), not typos.

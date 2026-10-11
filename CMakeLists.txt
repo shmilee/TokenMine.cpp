@@ -36,6 +36,7 @@ add_library(mc_core STATIC
     src/core/png.cpp
     src/core/save.cpp
     src/core/sound.cpp
+    src/core/status_effect.cpp
     src/core/thread_pool.cpp
     src/core/game.cpp
     src/block/block_registry.cpp
@@ -121,6 +122,7 @@ add_executable(minecraft_tests
     tests/test_crafting_grid.cpp
     tests/test_furnace.cpp
     tests/test_save.cpp
+    tests/test_status_effect.cpp
     tests/test_thread_pool.cpp
     tests/test_chunk_streaming.cpp
     tests/test_font.cpp

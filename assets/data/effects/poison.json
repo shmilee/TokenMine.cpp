@@ -1,0 +1,9 @@
+{
+  "id": "poison",
+  "tick_type": "damage",
+  "tick_amount": 1.0,
+  "tick_interval": 2.5,
+  "min_health": 1.0,
+  "negative": true,
+  "icon": 0
+}

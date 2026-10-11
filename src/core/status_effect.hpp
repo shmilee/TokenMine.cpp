@@ -1,0 +1,156 @@
+// Phase 46: the status-effect system — data-driven effect definitions
+// (assets/data/effects/*.json) and the player's active effect instances.
+//
+// An effect is a DATA object (the core never switches on an effect id):
+//   - `tick_type`: "damage" (poison) or "heal" (regeneration) — every
+//     `tick_interval` seconds the effect fires one `tick_amount` HP of
+//     damage (never below `min_health`, the Minecraft poison floor) or
+//     healing (clamped at max health). Absent = the effect has no ticks
+//     (a modifier effect like weakness).
+//   - `melee_penalty`: attack points subtracted from the player's melee
+//     damage while active (weakness; clamped at 0 — a weakened bare hand
+//     deals no damage).
+//   - `negative`: the effect is cleared by drinking a milk container
+//     (Minecraft clears NEGATIVE effects; regeneration survives the milk).
+//   - `icon`: the 16 px tile index in assets/textures/effects.png the HUD
+//     draws for the effect (cross-checked against the texture at init).
+//
+// Timing: the durations and tick accumulators run on REAL dt (the survival
+// timer class, like hunger and the eat channel — hard rule 8). The events
+// that APPLY an effect (a mob's landed melee hit) are frame-determined, so
+// headless runs stay byte-reproducible (the remaining seconds in a save are
+// real-dt values, like the hunger level).
+//
+// v1 scope: effects live on the PLAYER only (mobs cannot be affected —
+// there is no item/mob source that applies one to a mob). Sources: a mob's
+// `on_hit_effect` (its landed melee hit applies the effect — the spider's
+// poison) and save injection (the E2E scenes; weakness/regeneration have
+// no in-game source in v1, their Minecraft sources — potions and the
+// golden apple — are not built yet).
+#pragma once
+
+#include <cstddef>
+#include <functional>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include "core/error.hpp"
+#include "core/json.hpp"
+
+namespace mc {
+
+class AssetManager;
+
+// One data-driven effect definition (a loaded data/effects/*.json file).
+struct Effect {
+    int id = -1;
+    std::string name;
+    // The periodic action (None = a modifier effect, no ticks).
+    enum class Tick {
+        None,
+        Damage,
+        Heal,
+    } tick = Tick::None;
+    // One tick's HP (damage or healing); valid when tick != None.
+    float tickAmount = 0.0f;
+    // Seconds between ticks (REAL dt); valid when tick != None.
+    float tickInterval = 0.0f;
+    // The health floor a damage tick must not cross (the MC poison
+    // semantics): 0 = no floor (the damage may kill) or 1 = the player
+    // is kept at >= 1 HP (the effect never kills). Valid only for
+    // Tick::Damage (a heal tick cannot floor health).
+    float minHealth = 0.0f;
+    // Attack points subtracted from the player's melee damage (weakness).
+    float meleePenalty = 0.0f;
+    // Cleared by drinking a milk container (negative effects).
+    bool negative = false;
+    // The effects.png 16 px tile the HUD draws for this effect.
+    int icon = 0;
+};
+
+// Registry of the effect definitions (data/effects/*.json). Same shape as
+// the block/item/mob registries: strict field validation, name uniqueness,
+// sorted directory load, id/name lookups.
+class EffectRegistry {
+public:
+    EffectRegistry() = default;
+
+    // Parse and register one effect. Assigns the next free id.
+    Result<int> registerEffect(const Json& def);
+
+    // Load and register every *.json file in `relativeDir` under the asset
+    // root (sorted for determinism). Non-const: text loading updates the
+    // AssetManager cache.
+    Result<void> loadDirectory(AssetManager& assets,
+                               const std::string& relativeDir =
+                                   "data/effects");
+
+    // -- lookups --------------------------------------
+    const Effect& at(int id) const;      // asserts valid id
+    const Effect* find(int id) const;
+    const Effect* findByName(const std::string& name) const;
+    int idForName(const std::string& name) const; // -1 when absent
+    std::size_t count() const { return m_effects.size(); }
+    std::vector<int> allIds() const;
+
+    void clear();
+
+    // Pure parse helper (unit-testable without a registry).
+    static Result<void> parseEffect(const Json& def, Effect& out);
+
+private:
+    std::vector<Effect> m_effects;
+    std::unordered_map<std::string, int> m_names;
+};
+
+// One ACTIVE effect instance on the player. `effect` indexes the
+// EffectRegistry; `remaining` is the real-dt countdown; `accum` is the
+// tick-phase accumulator (live state, NOT saved — a reload restarts the
+// tick phase at 0, the next tick lands at the full interval).
+struct ActiveEffect {
+    int effect = -1;
+    double remaining = 0.0;
+    double accum = 0.0;
+};
+
+// The player's active status effects (Phase 46). Deterministic order:
+// effects are appended in application order and never reordered; removal
+// (expiry) keeps the survivors' order. The game owns the instance and the
+// registry; this class is pure (no game/GL dependency — unit-testable).
+class StatusEffects {
+public:
+    StatusEffects() = default;
+
+    // Apply `effect` for `duration` seconds. An already-active instance is
+    // RESET to the new duration (Minecraft's re-application semantics,
+    // without amplifiers); its tick phase is kept.
+    void apply(int effect, double duration);
+
+    // Remove every NEGATIVE effect (drinking a milk container — the
+    // positive effects, like regeneration, survive).
+    void clearNegative(const EffectRegistry& effects);
+
+    // Remove everything (the death/respawn path).
+    void clearAll();
+
+    // Advance by dt REAL seconds. Each instance counts `remaining` down
+    // and removes at <= 0; a tick effect also accumulates and fires one
+    // `onTick(effect)` per interval crossed (a large dt can cross several).
+    // `onTick` receives the effect definition (the game applies the HP
+    // change against the player there — the floor/max checks need the
+    // player's current health). `effects` resolves the definitions.
+    void update(double dt, const EffectRegistry& effects,
+                const std::function<void(const Effect&)>& onTick);
+
+    // The total melee penalty (sum over the active instances' definitions).
+    float totalMeleePenalty(const EffectRegistry& effects) const;
+
+    std::size_t count() const { return m_active.size(); }
+    const std::vector<ActiveEffect>& list() const { return m_active; }
+
+private:
+    std::vector<ActiveEffect> m_active;
+};
+
+} // namespace mc

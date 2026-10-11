@@ -307,6 +307,24 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     if (save.playerSaturation >= 0.0f) {
         player["saturation"] = Json(save.playerSaturation);
     }
+    // Format 8: the player's active status effects (Phase 46), name-
+    // sorted. The key is ALWAYS written (an empty array is valid — the
+    // format-8 loader requires it, the furnaces-key discipline).
+    {
+        std::vector<SavedEffect> effSorted = save.playerEffects;
+        std::sort(effSorted.begin(), effSorted.end(),
+                  [](const SavedEffect& a, const SavedEffect& b) {
+                      return a.name < b.name;
+                  });
+        Json effectsArr = Json::array();
+        for (const SavedEffect& e : effSorted) {
+            Json eObj = Json::object();
+            eObj["name"] = Json(e.name);
+            eObj["remaining"] = Json(e.remaining);
+            effectsArr.push_back(std::move(eObj));
+        }
+        player["effects"] = std::move(effectsArr);
+    }
     root["player"] = player;
 
     Json slots = Json::array();
@@ -462,6 +480,7 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
 
 Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                            const BlockRegistry& blocks,
+                           const EffectRegistry& effects,
                            std::int64_t expectedSeed) {
     if (!def.isObject()) {
         return MC_FAIL("save file must be a JSON object");
@@ -519,7 +538,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     }
     const std::set<std::string> playerFields {"pos", "yaw", "pitch",
                                               "health", "hunger",
-                                              "saturation"};
+                                              "saturation", "effects"};
     MC_TRY(rejectUnknownFields(*player, playerFields, "save 'player'"));
     const Json* ppos = player->find("pos");
     if (ppos == nullptr || !ppos->isArray() || ppos->size() != 3) {
@@ -571,6 +590,56 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
             return MC_FAIL("save 'player.saturation' must be a number >= 0");
         }
         save.playerSaturation = static_cast<float>(saturation->asDouble());
+    }
+    // Status effects (format 8; Phase 46): absent in format 1-7 files
+    // (the effects did not exist — they load empty). Format 8 REQUIRES
+    // the "effects" array (an empty array is valid — the furnaces-key
+    // discipline): entries {name, remaining}, each name registered,
+    // remaining > 0, no duplicate name. The entries are normalized to
+    // name-sorted order (the serializer's write order).
+    if (def.find("format")->asInt() >= 8) {
+        const Json* effArr = player->find("effects");
+        if (effArr == nullptr || !effArr->isArray()) {
+            return MC_FAIL("save format 8 requires a 'player.effects' "
+                           "array (empty when the player had no active "
+                           "effects)");
+        }
+        std::set<std::string> seen;
+        for (std::size_t i = 0; i < effArr->size(); ++i) {
+            const Json& e = effArr->at(i);
+            const std::string what = "save 'player.effects'[" +
+                                     std::to_string(i) + "]";
+            if (!e.isObject()) {
+                return MC_FAIL(what + " must be an object "
+                               "{\"name\": ..., \"remaining\": ...}");
+            }
+            const std::set<std::string> effFields {"name", "remaining"};
+            MC_TRY(rejectUnknownFields(e, effFields, what));
+            const Json* nm = e.find("name");
+            const Json* rem = e.find("remaining");
+            if (nm == nullptr || !nm->isString() || nm->asString().empty()) {
+                return MC_FAIL(what + " requires a non-empty string "
+                               "'name' (effect id)");
+            }
+            if (rem == nullptr || !rem->isNumber() ||
+                rem->asDouble() <= 0.0) {
+                return MC_FAIL(what + " requires 'remaining' (seconds) > 0");
+            }
+            if (effects.findByName(nm->asString()) == nullptr) {
+                return MC_FAIL(what + " holds the unregistered effect '" +
+                               nm->asString() + "'");
+            }
+            if (!seen.insert(nm->asString()).second) {
+                return MC_FAIL(what + " holds the effect '" +
+                               nm->asString() + "' twice");
+            }
+            save.playerEffects.push_back(
+                SavedEffect {nm->asString(), rem->asDouble()});
+        }
+        std::sort(save.playerEffects.begin(), save.playerEffects.end(),
+                  [](const SavedEffect& a, const SavedEffect& b) {
+                      return a.name < b.name;
+                  });
     }
 
     // -- inventory ---------------------------------------------------------------

@@ -225,6 +225,11 @@ light_gray）。加一个颜色 = 纯数据四步：
    纪律）、非空字符串、init 对 ItemRegistry 交叉校验两物品存在；
    手持 `milk_with` 右键该 mob = 消耗 1 个 + 产出 1 个 `milk_gives`
    （mob 不受影响、无冷却，见 KNOWN_ISSUES）；不给 = 不可挤、
+   命中效果（Phase 46）可选字段：`on_hit_effect` =
+   `{"name": <效果名>, "duration": <秒>}`——**两键必填成对**（缺一 /
+   未知内键 / 类型错 = 报错）、duration ∈ (0,100]、name 非空字符串 +
+   init 对 EffectRegistry 交叉校验（= ammo/挤奶模式）；该 mob 的
+   **近战命中落定**时对玩家施加效果（远程箭不施加）；不给 = 无效果、
    `drops` 每条目：`count` ∈ [1,64] 或
     `count_min`/`count_max` ∈ [0,64] 且 min ≤ max（Phase 38 随机区间：两者
     必须成对、与 `count` 混用/只给一边 = 报错）、box 越界/缺纹理名
@@ -242,10 +247,58 @@ light_gray）。加一个颜色 = 纯数据四步：
    （迁移防护）；重复 id / 越界 / 非整数 weight = 加载失败。生成
    节奏/环半径/上限/离玩家消散距离都在这个文件里，全部数据驱动。
 
-v1 数据有 zombie（敌对：绿色、只在黑暗生成（`spawn_max_light` 0））与
-cow（被动：棕白斑毛、`detect_radius`/`attack_range`/`attack_damage` 全 0、
-`spawn_max_light` 15 任何时间可生成、掉 `leather`）；两者都不游泳不拆方块
-无动画——见 docs/KNOWN_ISSUES.md 的 Mob 章节。
+v1 数据有 6 种：zombie（敌对：绿色、只在黑暗生成）、skeleton（远攻：
+`shoot_range` 14 + `ammo: "arrow"`，只在黑暗生成）、spider（敌对：
+近战命中施加 `poison` 15 s = 首个 `on_hit_effect` mob，只在黑暗生成、
+无掉落）与 cow / sheep / chicken（被动：攻击全 0、`spawn_max_light` 15
+任何时间可生成；cow 掉 `leather` + `beef` 且可挤奶（`bucket` →
+`milk_bucket`），sheep 掉 `wool` + `mutton`，chicken 掉 `feather` +
+`chicken`）；全都不游泳不拆方块无动画——见 docs/KNOWN_ISSUES.md 的
+Mob 章节。
+
+## 新增一个状态效果（无需改核心代码，Phase 46）
+
+1. 图标：`assets/textures/effects.png` 是 16px/tile 的透明底条带
+   （当前 48×16 = 3 tile）。加新效果 = 条带加宽一格（`tools/
+   generate_effect_icons.py` 同款：确定性噪声 + 简单图元）；init 对
+   每个效果的 `icon` 交叉校验 < tile 数，纹理宽度保持 16 的整数倍
+2. `assets/data/effects/<id>.json`：
+
+   ```json
+   {
+     "id": "slowness",
+     "properties": {
+       "melee_penalty": 0,
+       "negative": true,
+       "icon": 3
+     }
+   }
+   ```
+
+   字段（严格解析 = 注册表纪律，未知键拒绝）：`tick_type`（`"damage"`
+   / `"heal"`；**缺省 = 无 tick** 的纯修饰效果，如上面的 slowness 骨架
+   ——但注意 v1 核心只消费 `tick_*`/`min_health`/`melee_penalty` 语义，
+   纯修饰效果目前只影响 HUD/存档/牛奶清除）+ `tick_amount`（每次 tick
+   的 HP，(0,10]，有 tick 必填）+ `tick_interval`（秒，(0,100]，有 tick
+   必填）+ `min_health`（**仅 damage**：0 = 无地板可致死 / 1 = 保持
+   ≥1 HP 永不致死 = MC 中毒地板）+ `melee_penalty`（近战扣除攻击点，
+   [0,100]）+ `negative`（bool，缺省 false；牛奶只清负面）+ `icon`
+   （条带 tile 索引，必填）。**no-op 拒绝**：无 tick 且
+   `melee_penalty` = 0 = 报错。id 非空且唯一
+3. 来源（v1 两条）：
+   - **mob 命中**：`assets/data/mobs/<id>.json` 加 `on_hit_effect`
+     （见 Mob 章节）——近战命中施加
+   - **存档注入**：`player.effects: [{"name": "<id>", "remaining": <秒>}]`
+     （format 8；E2E 场景用）
+4. 机制自动生效，无需改核心：真实 dt 倒计时 + 每跨 interval 结算一次
+   （damage 走玩家受伤路径含 min_health 地板、heal 走 `Player::heal`
+   clamp 上限）、HUD 图标行（按施加顺序）、F3 `effects` 行、牛奶清
+   负面、死亡清空、存档 format 8 自动序列化/校验。语义细节见
+   `docs/MECHANICS.md` 的「状态效果」。
+
+当前 3 种：`poison`（damage 1 / 2.5 s、min_health 1、负面——spider
+近战命中 15 s 毒源）、`weakness`（melee_penalty 4、负面——v1 无游戏内
+来源）、`regeneration`（heal 1 / 4.5 s、正面——v1 无游戏内来源）。
 
 ## 调节玩家参数（config/config.json `player.*`，Phase 32）
 

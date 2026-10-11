@@ -224,11 +224,11 @@
 
 ## 牛奶桶 / 饮用（Phase 43）
 
-- **状态效果系统不存在：喝奶效果集 = 清红闪一项** — 饮用完成调
-  `Game::clearStatusEffects()`（v1 扩展点 = 重置 `m_hurtFlash` 红色受击
-  纱幕）；MC 牛奶的「清除负面效果」无对应（无中毒/虚弱/经验等效果可清）。
-  坠落伤害起点（`fallStartY`）**刻意不清**——MC 坠落伤害不是状态效果，
-  空中喝奶不减坠落伤害。`[Phase 43]`
+- ~~**状态效果系统不存在：喝奶效果集 = 清红闪一项**~~ — `[Phase 46]` 已修复：
+  数据驱动状态效果系统（poison/weakness/regeneration，见下「状态效果」
+  章节）；喝奶完成 = 清红闪 + **清除全部负面效果**（MC 语义，正面再生
+  保留）。坠落伤害起点（`fallStartY`）仍**刻意不清**——MC 坠落伤害不是
+  状态效果，空中喝奶不减坠落伤害。`[Phase 43]`
 - **喝奶不恢复饥饿** — MC 牛奶饥饿值 = 0：饮用通道只做「消耗 + 返还容器
   + 清效果」，不走 `restoreHunger` 路径；`drink_time` 与 `restore_hunger`
   互斥（同一右键按住通道，一个物品不能既是食物又是可饮用）。`[Phase 43]`
@@ -266,6 +266,11 @@
 - ~~**skeleton 掉落固定 1 个 `arrow`**~~ — `[Phase 38]` 已修复：新 material 物品 `bone`（图标 = 白色对角骨，generate_item_icons.py 新 salt 63，既有 17 图标零变化）+ skeleton `drops` = bone 0–2（随机区间）+ `arrow` 1。掷落用该 mob 自己的种子流（`rollDropCount`；固定 count 不推进流 → P38 前的精确流保留）；E2E 输入击杀 → 存档 entities = arrow×1 + bone×2。（Minecraft skeleton 还掉 0–2 箭；本项目箭保持固定 1。）
 - ~~**skeleton 箭提前量只补偿重力、不预判位移**~~ — `[Phase 38]` 已修复：`computeAimDirection`（projectile.hpp 自由函数）——“目标位置 + 速度×飞行时间”迭代 2 次 + 0.5·g·t² 弧线提前量；静止目标（速度 0）与 Phase 27 瞄法逐位相同（回归锚：E2E 射击场景 P37/P38 存档逐字节一致），移动目标被预判（单测：侧向/逃离目标最近接近距离严格小于无预判）——细节见 `archive/phase-38.md`。
 
+- **spider 无掉落** — MC 的 spider 掉 string/spider_eye 0–2，两物品未做
+  （string 无用途、spider_eye 无用途）；`drops: []`。spider 是首个
+  `on_hit_effect` mob（poison 15 s，近战命中落定施加，见「状态效果」）。
+  `[Phase 46]`
+
 ## 弓 / 箭（Phase 21 + Phase 24 + Phase 42）
 
 - **箭不入存档** — 瞬态实体（同 mob）：保存时跳过（存档守卫对已知瞬态种类跳过、其他未知种类仍报错），读档后飞行中/插墙上的箭消失。`[Phase 21]`
@@ -278,6 +283,23 @@
 - **释放箭共享累计寿命** — 释放的箭（卡住格被破坏/替换）以零速度落回飞行物理（重力 + 碰撞 + 可再命中 mob），寿命上限切回 30s 飞行上限、age 不重置（插墙 >30s 的箭释放即消亡——与 MC 的总寿命语义有分歧，已文档化）。`[Phase 42]`
 - **弹药消耗 = 槽序升序第一个持有槽** — 发射消耗 1 个 `ammo` 物品，取自槽序升序第一个持有它的槽位（hotbar 先于背包）；Minecraft 同样全库存取箭（语义接近）；无 `ammo` 字段的发射器 = 无限箭（Phase 21 前语义）。`[Phase 24]`
 - **发射器右键恒为拉弓** — 选中发射器时右键不交互工作台/不放置/不打开任何 GUI（Minecraft 弓语义）；无弹药时该次右键被吞（不能起拉、不放置）。`[Phase 24]`
+
+## 状态效果（Phase 46）
+
+- **weakness / regeneration 无游戏内来源** — MC 来源是药水（虚弱）与金
+  苹果/信标（再生），均未做；v1 来源仅 mob `on_hit_effect`（当前 spider =
+  poison 15 s）与存档注入（E2E 场景）。`[Phase 46]`
+- **中毒无独立紫色 tint** — 毒 tick 复用玩家正常受伤路径（红纱 +
+  "hurt" 音）；MC 的紫色屏幕 tint 未实现（需新的全屏 tint 通道）。
+  `[Phase 46]`
+- **tick 相位不存** — 存档只写 `{name, remaining}`；重载后下一 tick 从
+  整 interval 起算（相位重置，秒级内无感）。`[Phase 46]`
+- **效果只作用于玩家（v1）** — mob 不持效果（无凋灵/中毒 mob 等）；
+  `on_hit_effect` 仅**近战命中**施加（远程箭不施加）；无 amplifier/
+  时长档位（同效果重施加 = 重置 duration，tick 相位保留）。`[Phase 46]`
+- **no-op 效果被注册表拒绝** — 无 tick 且 `melee_penalty` = 0 的效果
+  JSON 加载失败（纯装饰效果 v1 无消费方，留了 schema 位但未开放语义）。
+  `[Phase 46]`
 
 ## 数据 / 内容
 

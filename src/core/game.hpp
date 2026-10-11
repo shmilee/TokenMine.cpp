@@ -40,6 +40,7 @@
 #include "core/logger.hpp"
 #include "core/save.hpp"
 #include "core/sound.hpp"
+#include "core/status_effect.hpp"
 #include "core/thread_pool.hpp"
 #include "core/window.hpp"
 #include "entity/entity.hpp"
@@ -255,13 +256,19 @@ private:
     // early release = cancel).
     void updateEatChannel(double dt);
     void resetEatChannel();
-    // Clears the player's status effects on a completed drink (Phase 43).
-    // The state-effect system does not exist yet — this is the extension
-    // point where milk's "clear negative effects" will call into; the v1
-    // effect set resets the red damage veil (m_hurtFlash). Fall damage is
-    // deliberately NOT cleared (Minecraft parity: it is not a status
-    // effect).
+    // Clears the player's status effects on a completed drink (Phase 43,
+    // completed by the Phase 46 system): resets the red damage veil
+    // (m_hurtFlash) and removes every NEGATIVE active effect (Minecraft
+    // milk; the positive effects, like regeneration, survive). Fall
+    // damage is deliberately NOT cleared (Minecraft parity: it is not a
+    // status effect).
     void clearStatusEffects();
+    // Advances the player's active status effects by REAL dt (Phase 46,
+    // the survival-timer class): durations count down, tick effects fire
+    // their damage (the min_health floor — poison never kills) / healing
+    // per interval, and expired effects are removed. A no-op while the
+    // player is dead or has no active effects.
+    void updateEffects(double dt);
     // Cycles the hotbar selection; resets break progress (the selected
     // tool changed, Minecraft behavior).
     void cycleHotbar();
@@ -595,6 +602,15 @@ private:
     // the health strip). The player owns the hunger; the game only draws it
     // and feeds it (tryEat).
     Texture m_hungerTexture;
+    // Phase 46 status effects: the data-driven definitions
+    // (assets/data/effects) + the player's active instances (core/
+    // status_effect.hpp) + the 16 px icon strip (assets/textures/
+    // effects.png; the effect's 'icon' field indexes its tile). The game
+    // owns the instances and their real-dt tick; the HUD draws one icon
+    // per active effect (left-aligned on the heart row).
+    EffectRegistry m_effects;
+    StatusEffects m_playerEffects;
+    Texture m_effectTexture;
 
     ShaderProgram m_basicShader;
 

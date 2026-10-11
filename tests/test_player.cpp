@@ -654,6 +654,19 @@ TEST(PlayerTest, RegenAfterDelay) {
     EXPECT_FLOAT_EQ(p.health(), p.maxHealth());
 }
 
+TEST(PlayerTest, HealAddsAndClampsAtMax) {
+    // Phase 46: the regeneration effect's heal entry point (the natural
+    // hunger-based regen is separate — see RegenAfterDelay).
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    p.damage(5.0f); // health 15
+    p.heal(2.0f);
+    EXPECT_FLOAT_EQ(p.health(), 17.0f);
+    // Clamped at max health (a heal cannot exceed it).
+    p.heal(100.0f);
+    EXPECT_FLOAT_EQ(p.health(), p.maxHealth());
+}
+
 // -- hunger (Phase 23) -------------------------------------------------------
 
 // Note on the timings below: the accumulators add the double 1/60 per

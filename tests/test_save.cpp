@@ -13,6 +13,7 @@
 #include "block/block_registry.hpp"
 #include "core/json.hpp"
 #include "core/save.hpp"
+#include "core/status_effect.hpp"
 #include "item/crafting_grid.hpp"
 #include "item/item_registry.hpp"
 #include "world/world.hpp"
@@ -46,9 +47,32 @@ BlockRegistry makeBlocks() {
     return blocks;
 }
 
+// The shipped effect set (data/effects/*.json): the format-8 save
+// cross-checks effect names against this registry.
+EffectRegistry makeEffects() {
+    EffectRegistry effects;
+    const struct {
+        const char* def;
+    } defs[] = {
+        {R"({"id":"poison","tick_type":"damage","tick_amount":1.0,
+            "tick_interval":2.5,"min_health":1.0,"negative":true,"icon":0})"},
+        {R"({"id":"weakness","melee_penalty":4.0,"negative":true,"icon":1})"},
+        {R"({"id":"regeneration","tick_type":"heal","tick_amount":1.0,
+            "tick_interval":4.5,"negative":false,"icon":2})"},
+    };
+    for (const auto& d : defs) {
+        auto r = effects.registerEffect(parseJson(d.def));
+        if (!r.ok()) {
+            ADD_FAILURE() << d.def << ": " << r.error().message;
+        }
+    }
+    return effects;
+}
+
 struct Fixture {
     BlockRegistry blocks = makeBlocks();
     ItemRegistry items;
+    EffectRegistry effects = makeEffects();
 
     Fixture() {
         auto r = items.buildBlockItems(blocks);
@@ -120,7 +144,7 @@ TEST(SaveRoundTripTest, SerializeParsePreservesEverything) {
     ASSERT_TRUE(serialized.ok()) << serialized.error().message;
     auto parsed = Json::parse(serialized->dump(2));
     ASSERT_TRUE(parsed.ok()) << parsed.error().message;
-    auto out = parseSave(*parsed, f.items, f.blocks, 42);
+    auto out = parseSave(*parsed, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
 
     EXPECT_EQ(out->seed, in.seed);
@@ -169,8 +193,8 @@ TEST(SaveParseTest, RejectsUnknownOrMissingFormat) {
     // format is a corrupt file. (Formats 1-7 are all accepted —
     // see FormatOneLoadsWithoutHealth.)
     Json root = parseJson(R"({"format":8,"seed":42,"time":0.25,"player":{},"inventory":{},"entities":[],"blocks":[],"fluids":[]})");
-    EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
-    EXPECT_FALSE(parseSave(withoutKey(root, "format"), f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
+    EXPECT_FALSE(parseSave(withoutKey(root, "format"), f.items, f.blocks, f.effects, 42).ok());
 }
 
 // -- crafting grids (format 3; Phase 17) ------------------------------------------
@@ -185,9 +209,9 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     s.tableGrid[8] = ItemStack {f.items.idForName("stone"), 64};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Phase 44: writes are always format 7.
-    EXPECT_EQ(j->find("format")->asInt(), 7);
-    auto out = parseSave(*j, f.items, f.blocks, 42);
+    // Phase 46: writes are always format 8.
+    EXPECT_EQ(j->find("format")->asInt(), 8);
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
     ASSERT_EQ(out->tableGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -206,7 +230,7 @@ TEST(SaveRoundTripTest, EmptyGridsRoundTrip) {
     const SaveGame s = makeSave(f); // no grids set
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    auto out = parseSave(*j, f.items, f.blocks, 42);
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     // Format 3 always carries both grids (here: all 9 cells empty).
     EXPECT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -229,7 +253,7 @@ TEST(SaveParseTest, FormatTwoLoadsWithEmptyGrids) {
     root = withoutKey(root, "inv_grid");
     root = withoutKey(root, "table_grid");
     root = withoutKey(root, "furnaces"); // format 2 predates the furnace
-    auto out = parseSave(root, f.items, f.blocks, 42);
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->invGrid.empty());
     EXPECT_TRUE(out->tableGrid.empty());
@@ -242,10 +266,10 @@ TEST(SaveParseTest, FormatThreeRequiresBothGrids) {
     ASSERT_TRUE(j.ok());
     Json missingInv = *j;
     missingInv = withoutKey(missingInv, "inv_grid");
-    EXPECT_FALSE(parseSave(missingInv, f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(missingInv, f.items, f.blocks, f.effects, 42).ok());
     Json missingTable = *j;
     missingTable = withoutKey(missingTable, "table_grid");
-    EXPECT_FALSE(parseSave(missingTable, f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(missingTable, f.items, f.blocks, f.effects, 42).ok());
 }
 
 TEST(SaveParseTest, RejectsBadCraftingGrid) {
@@ -267,7 +291,7 @@ TEST(SaveParseTest, RejectsBadCraftingGrid) {
             e["count"] = Json(0);
             shortGrid.push_back(std::move(e));
         }
-        EXPECT_FALSE(parseSave(withGrid(shortGrid), f.items, f.blocks, 42).ok());
+        EXPECT_FALSE(parseSave(withGrid(shortGrid), f.items, f.blocks, f.effects, 42).ok());
     }
     // Unknown item in a cell.
     {
@@ -283,7 +307,7 @@ TEST(SaveParseTest, RejectsBadCraftingGrid) {
             rebuilt.push_back(cells.at(i));
         }
         bad["inv_grid"] = std::move(rebuilt);
-        EXPECT_FALSE(parseSave(bad, f.items, f.blocks, 42).ok());
+        EXPECT_FALSE(parseSave(bad, f.items, f.blocks, f.effects, 42).ok());
     }
     // Count above the tool's max stack (1).
     {
@@ -298,7 +322,7 @@ TEST(SaveParseTest, RejectsBadCraftingGrid) {
             rebuilt.push_back(cells.at(i));
         }
         bad["table_grid"] = std::move(rebuilt);
-        EXPECT_FALSE(parseSave(bad, f.items, f.blocks, 42).ok());
+        EXPECT_FALSE(parseSave(bad, f.items, f.blocks, f.effects, 42).ok());
     }
 }
 
@@ -308,7 +332,7 @@ TEST(SaveRoundTripTest, HealthRoundTrips) {
     s.playerHealth = 13.5f;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    auto out = parseSave(*j, f.items, f.blocks, 42);
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerHealth, 13.5f);
 }
@@ -326,7 +350,7 @@ TEST(SaveParseTest, FormatOneLoadsWithoutHealth) {
     root = withoutKey(root, "inv_grid"); // format 1 predates the grids
     root = withoutKey(root, "table_grid");
     root = withoutKey(root, "furnaces"); // format 1 predates the furnace
-    auto out = parseSave(root, f.items, f.blocks, 42);
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerHealth, -1.0f);
     EXPECT_TRUE(out->invGrid.empty());
@@ -341,7 +365,7 @@ TEST(SaveParseTest, RejectsNegativeHealth) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["player"]["health"] = Json(-1.0);
-    EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
 
 // -- hunger (format 4; Phase 23) --------------------------------------------------
@@ -352,7 +376,7 @@ TEST(SaveRoundTripTest, HungerRoundTrips) {
     s.playerHunger = 7.0f;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    auto out = parseSave(*j, f.items, f.blocks, 42);
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerHunger, 7.0f);
 }
@@ -371,7 +395,7 @@ TEST(SaveParseTest, FormatThreeLoadsWithoutHunger) {
     root["format"] = Json(3);
     root = withoutKey(root, "furnaces"); // format 3 predates the furnace
     ASSERT_EQ(root["player"].find("hunger"), nullptr);
-    auto out = parseSave(root, f.items, f.blocks, 42);
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerHunger, -1.0f);
     EXPECT_FLOAT_EQ(out->playerHealth, 12.0f);
@@ -385,7 +409,7 @@ TEST(SaveParseTest, RejectsNegativeHunger) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["player"]["hunger"] = Json(-1.0);
-    EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
 
 // -- saturation (format 5; Phase 28) --------------------------------------------
@@ -396,7 +420,7 @@ TEST(SaveRoundTripTest, SaturationRoundTrips) {
     s.playerSaturation = 6.0f;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    auto out = parseSave(*j, f.items, f.blocks, 42);
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerSaturation, 6.0f);
 }
@@ -415,7 +439,7 @@ TEST(SaveParseTest, FormatFourLoadsWithoutSaturation) {
     root["format"] = Json(4);
     root = withoutKey(root, "furnaces"); // format 4 predates the furnace
     ASSERT_EQ(root["player"].find("saturation"), nullptr);
-    auto out = parseSave(root, f.items, f.blocks, 42);
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerSaturation, -1.0f);
     EXPECT_FLOAT_EQ(out->playerHunger, 14.0f);
@@ -429,7 +453,7 @@ TEST(SaveParseTest, RejectsNegativeSaturation) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["player"]["saturation"] = Json(-0.5);
-    EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
 
 TEST(SaveParseTest, RejectsSeedMismatch) {
@@ -437,7 +461,7 @@ TEST(SaveParseTest, RejectsSeedMismatch) {
     const SaveGame s = makeSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    EXPECT_FALSE(parseSave(*j, f.items, f.blocks, 43).ok());
+    EXPECT_FALSE(parseSave(*j, f.items, f.blocks, f.effects, 43).ok());
 }
 
 TEST(SaveParseTest, RejectsUnknownTopLevelField) {
@@ -447,7 +471,7 @@ TEST(SaveParseTest, RejectsUnknownTopLevelField) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["extra"] = Json(1);
-    EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
 
 TEST(SaveParseTest, RejectsMissingRequiredFields) {
@@ -458,7 +482,7 @@ TEST(SaveParseTest, RejectsMissingRequiredFields) {
     for (const char* key :
          {"seed", "time", "player", "inventory", "entities", "blocks", "fluids"}) {
         EXPECT_FALSE(
-            parseSave(withoutKey(*j, key), f.items, f.blocks, 42).ok())
+            parseSave(withoutKey(*j, key), f.items, f.blocks, f.effects, 42).ok())
             << "missing '" << key << "' must be rejected";
     }
 }
@@ -470,13 +494,13 @@ TEST(SaveParseTest, RejectsBadTime) {
     ASSERT_TRUE(j.ok());
     Json bad = *j;
     bad["time"] = Json(1.0);
-    EXPECT_FALSE(parseSave(bad, f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(bad, f.items, f.blocks, f.effects, 42).ok());
     bad = *j;
     bad["time"] = Json(-0.1);
-    EXPECT_FALSE(parseSave(bad, f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(bad, f.items, f.blocks, f.effects, 42).ok());
     bad = *j;
     bad["time"] = Json(std::string("noon"));
-    EXPECT_FALSE(parseSave(bad, f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(bad, f.items, f.blocks, f.effects, 42).ok());
 }
 
 TEST(SaveParseTest, RejectsBadPlayer) {
@@ -489,10 +513,10 @@ TEST(SaveParseTest, RejectsBadPlayer) {
     shortPos.push_back(Json(1.0));
     shortPos.push_back(Json(2.0));
     bad["player"]["pos"] = shortPos;
-    EXPECT_FALSE(parseSave(bad, f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(bad, f.items, f.blocks, f.effects, 42).ok());
     bad = *j;
     bad["player"] = withoutKey(bad["player"], "yaw");
-    EXPECT_FALSE(parseSave(bad, f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(bad, f.items, f.blocks, f.effects, 42).ok());
 }
 
 TEST(SaveParseTest, RejectsBadInventory) {
@@ -514,12 +538,12 @@ TEST(SaveParseTest, RejectsBadInventory) {
         e["count"] = Json(0);
         slots26.push_back(e);
     }
-    EXPECT_FALSE(parseSave(withSlots(slots26), f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(withSlots(slots26), f.items, f.blocks, f.effects, 42).ok());
 
     // selected must be a hotbar index.
     Json bad = *j;
     bad["inventory"]["selected"] = Json(9);
-    EXPECT_FALSE(parseSave(bad, f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(bad, f.items, f.blocks, f.effects, 42).ok());
 
     // The specific slot rejections need a FULL 27-slot array with only
     // slot 0 bad (a short array is rejected for its size, not its slot).
@@ -541,13 +565,13 @@ TEST(SaveParseTest, RejectsBadInventory) {
     // Unknown item, zero count with an item, count above the item's max
     // stack (the tool's is 1), empty item with a count.
     EXPECT_FALSE(
-        parseSave(withSlots(slotsWith("nope", 1)), f.items, f.blocks, 42).ok());
+        parseSave(withSlots(slotsWith("nope", 1)), f.items, f.blocks, f.effects, 42).ok());
     EXPECT_FALSE(
-        parseSave(withSlots(slotsWith("stone", 0)), f.items, f.blocks, 42).ok());
+        parseSave(withSlots(slotsWith("stone", 0)), f.items, f.blocks, f.effects, 42).ok());
     EXPECT_FALSE(
-        parseSave(withSlots(slotsWith("pick", 2)), f.items, f.blocks, 42).ok());
+        parseSave(withSlots(slotsWith("pick", 2)), f.items, f.blocks, f.effects, 42).ok());
     EXPECT_FALSE(
-        parseSave(withSlots(slotsWith("", 3)), f.items, f.blocks, 42).ok());
+        parseSave(withSlots(slotsWith("", 3)), f.items, f.blocks, f.effects, 42).ok());
     // A slot that is not an object.
     {
         Json slots = slotsWith("stone", 1);
@@ -558,7 +582,7 @@ TEST(SaveParseTest, RejectsBadInventory) {
         for (std::size_t i = 1; i < slots.size(); ++i) {
             rebuilt.push_back(slots.at(i));
         }
-        EXPECT_FALSE(parseSave(withSlots(rebuilt), f.items, f.blocks, 42).ok());
+        EXPECT_FALSE(parseSave(withSlots(rebuilt), f.items, f.blocks, f.effects, 42).ok());
     }
 }
 
@@ -591,31 +615,31 @@ TEST(SaveParseTest, RejectsBadEntity) {
         return e;
     };
     EXPECT_FALSE(parseSave(withEntity(entity("projectile", "dirt", 1, 1.0, 0.1)),
-                           f.items, f.blocks, 42)
+                           f.items, f.blocks, f.effects, 42)
                      .ok());
     EXPECT_FALSE(
         parseSave(withEntity(entity("item", "nope", 1, 1.0, 0.1)), f.items,
-                  f.blocks, 42)
+                  f.blocks, f.effects, 42)
             .ok());
     EXPECT_FALSE(
         parseSave(withEntity(entity("item", "dirt", 0, 1.0, 0.1)), f.items,
-                  f.blocks, 42)
+                  f.blocks, f.effects, 42)
             .ok());
     EXPECT_FALSE(
         parseSave(withEntity(entity("item", "dirt", 65, 1.0, 0.1)), f.items,
-                  f.blocks, 42)
+                  f.blocks, f.effects, 42)
             .ok());
     EXPECT_FALSE(
         parseSave(withEntity(entity("item", "pick", 2, 1.0, 0.1)), f.items,
-                  f.blocks, 42)
+                  f.blocks, f.effects, 42)
             .ok()); // above the tool's max stack
     EXPECT_FALSE(
         parseSave(withEntity(entity("item", "dirt", 1, 120.0, 0.1)), f.items,
-                  f.blocks, 42)
+                  f.blocks, f.effects, 42)
             .ok()); // at the despawn age
     EXPECT_FALSE(
         parseSave(withEntity(entity("item", "dirt", 1, 1.0, 0.6)), f.items,
-                  f.blocks, 42)
+                  f.blocks, f.effects, 42)
             .ok()); // beyond the pickup delay
 }
 
@@ -640,15 +664,15 @@ TEST(SaveParseTest, RejectsBadBlockEdit) {
         a.push_back(Json(name));
         return a;
     };
-    EXPECT_FALSE(parseSave(withBlock(edit(0, 128, 0, "stone")), f.items, f.blocks, 42).ok());
-    EXPECT_FALSE(parseSave(withBlock(edit(0, -1, 0, "stone")), f.items, f.blocks, 42).ok());
-    EXPECT_FALSE(parseSave(withBlock(edit(0, 10, 0, "nope")), f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(withBlock(edit(0, 128, 0, "stone")), f.items, f.blocks, f.effects, 42).ok());
+    EXPECT_FALSE(parseSave(withBlock(edit(0, -1, 0, "stone")), f.items, f.blocks, f.effects, 42).ok());
+    EXPECT_FALSE(parseSave(withBlock(edit(0, 10, 0, "nope")), f.items, f.blocks, f.effects, 42).ok());
     {
         Json shortEdit = Json::array();
         shortEdit.push_back(Json(0));
         shortEdit.push_back(Json(10));
         shortEdit.push_back(Json(0));
-        EXPECT_FALSE(parseSave(withBlock(shortEdit), f.items, f.blocks, 42).ok());
+        EXPECT_FALSE(parseSave(withBlock(shortEdit), f.items, f.blocks, f.effects, 42).ok());
     }
     {
         // Duplicate positions.
@@ -657,7 +681,7 @@ TEST(SaveParseTest, RejectsBadBlockEdit) {
         arr.push_back(edit(1, 10, 1, "stone"));
         arr.push_back(edit(1, 10, 1, "dirt"));
         root["blocks"] = std::move(arr);
-        EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+        EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
     }
 }
 
@@ -685,13 +709,13 @@ TEST(SaveParseTest, RejectsBadFluidEdit) {
         return a;
     };
     EXPECT_FALSE(
-        parseSave(withFluids({edit(0, 10, 0, Json(9))}), f.items, f.blocks, 42).ok());
+        parseSave(withFluids({edit(0, 10, 0, Json(9))}), f.items, f.blocks, f.effects, 42).ok());
     EXPECT_FALSE(parseSave(withFluids({edit(0, 10, 0, Json(2.5))}), f.items,
-                          f.blocks, 42)
+                          f.blocks, f.effects, 42)
                      .ok());
     EXPECT_FALSE(
         parseSave(withFluids({edit(1, 10, 1, Json(3)), edit(1, 10, 1, Json(4))}),
-                  f.items, f.blocks, 42)
+                  f.items, f.blocks, f.effects, 42)
             .ok()); // duplicate cell
     // A block edit and a fluid edit on the same cell: a block displaces
     // fluid, so the save would be corrupt.
@@ -702,7 +726,7 @@ TEST(SaveParseTest, RejectsBadFluidEdit) {
         root["blocks"] = std::move(barr);
         root["fluids"] =
             withFluids({edit(1, 10, 1, Json(3))})["fluids"];
-        EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+        EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
     }
 }
 
@@ -935,8 +959,9 @@ TEST(SaveRoundTripTest, FurnacesRoundTrip) {
     s.furnaces[0].state.fuelSubsteps = 1234;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 7);
-    auto out = parseSave(*j, f.items, f.blocks, 42);
+    // Phase 46: writes are always format 8.
+    EXPECT_EQ(j->find("format")->asInt(), 8);
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
     const BlockPos p1 {1, 53, 1};
@@ -959,7 +984,7 @@ TEST(SaveRoundTripTest, EmptyFurnacesRoundTrip) {
     // Always written (here: the empty array).
     ASSERT_TRUE(j->find("furnaces") != nullptr);
     EXPECT_EQ(j->find("furnaces")->size(), 0u);
-    auto out = parseSave(*j, f.items, f.blocks, 42);
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->furnaces.empty());
 }
@@ -975,7 +1000,7 @@ TEST(SaveParseTest, FormatFiveLoadsWithEmptyFurnaces) {
     Json root = *j;
     root["format"] = Json(5);
     root = withoutKey(root, "furnaces"); // format 5 predates the furnace
-    auto out = parseSave(root, f.items, f.blocks, 42);
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u); // the blocks' entries, empty states
     EXPECT_TRUE(out->furnaces[0].state.empty());
@@ -999,7 +1024,7 @@ TEST(SaveParseTest, FormatSixMigratesStateToSoleFurnace) {
     root["format"] = Json(6);
     root["furnace"] = withoutKey(root["furnaces"].at(0), "pos");
     root = withoutKey(root, "furnaces");
-    auto out = parseSave(root, f.items, f.blocks, 42);
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 1u);
     const BlockPos sole {1, 53, 1};
@@ -1025,7 +1050,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
     root["format"] = Json(6);
     root["furnace"] = withoutKey(root["furnaces"].at(0), "pos");
     root = withoutKey(root, "furnaces");
-    auto out = parseSave(root, f.items, f.blocks, 42);
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
     EXPECT_TRUE(out->furnaces[0].state.empty());
@@ -1051,7 +1076,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
         fz["progress_substeps"] = Json(300);
         fz["fuel_substeps"] = Json(0);
         root2["furnace"] = fz;
-        auto out2 = parseSave(root2, f.items, f.blocks, 42);
+        auto out2 = parseSave(root2, f.items, f.blocks, f.effects, 42);
         ASSERT_TRUE(out2.ok()) << out2.error().message;
         EXPECT_TRUE(out2->furnaces.empty());
     }
@@ -1064,7 +1089,7 @@ TEST(SaveParseTest, RejectsFurnaceFieldInOldFormat) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(5); // keeps the "furnaces" field
-    EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
 
 TEST(SaveParseTest, RejectsFurnaceFieldInFormatSeven) {
@@ -1076,7 +1101,7 @@ TEST(SaveParseTest, RejectsFurnaceFieldInFormatSeven) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["furnace"] = withoutKey(root["furnaces"].at(0), "pos");
-    EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
 
 TEST(SaveParseTest, RejectsFurnacesFieldInFormatSix) {
@@ -1087,7 +1112,7 @@ TEST(SaveParseTest, RejectsFurnacesFieldInFormatSix) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(6); // keeps the "furnaces" field
-    EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
 
 TEST(SaveParseTest, RejectsFurnaceEntryBlockMismatch) {
@@ -1100,14 +1125,14 @@ TEST(SaveParseTest, RejectsFurnaceEntryBlockMismatch) {
         s.furnaces.push_back({BlockPos {5, 53, 5}, FurnaceState {}});
         auto j = serializeSave(s, f.items);
         ASSERT_TRUE(j.ok());
-        EXPECT_FALSE(parseSave(*j, f.items, f.blocks, 42).ok());
+        EXPECT_FALSE(parseSave(*j, f.items, f.blocks, f.effects, 42).ok());
     }
     {
         SaveGame s = makeFurnaceSave(f);
         s.furnaces.pop_back(); // the second block has no entry
         auto j = serializeSave(s, f.items);
         ASSERT_TRUE(j.ok());
-        EXPECT_FALSE(parseSave(*j, f.items, f.blocks, 42).ok());
+        EXPECT_FALSE(parseSave(*j, f.items, f.blocks, f.effects, 42).ok());
     }
 }
 
@@ -1119,7 +1144,7 @@ TEST(SaveParseTest, RejectsDuplicateFurnaceEntries) {
     s.furnaces.push_back({BlockPos {1, 53, 1}, FurnaceState {}});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    EXPECT_FALSE(parseSave(*j, f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(*j, f.items, f.blocks, f.effects, 42).ok());
 }
 
 TEST(SaveParseTest, RejectsBadFurnacePos) {
@@ -1137,7 +1162,7 @@ TEST(SaveParseTest, RejectsBadFurnacePos) {
         Json bad = parseJson(
             std::string(emptyEntry).replace(11, 2, "200"));
         root["furnaces"] = bad;
-        EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+        EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
     }
     // A non-integer coordinate (the x at index 9).
     {
@@ -1145,7 +1170,7 @@ TEST(SaveParseTest, RejectsBadFurnacePos) {
         Json bad = parseJson(
             std::string(emptyEntry).replace(9, 1, "1.5"));
         root["furnaces"] = bad;
-        EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+        EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
     }
     // The wrong arity.
     {
@@ -1153,7 +1178,7 @@ TEST(SaveParseTest, RejectsBadFurnacePos) {
         Json bad = parseJson(
             R"([{"pos":[1,53],"input":{"item":"","count":0},"fuel":{"item":"","count":0},"output":{"item":"","count":0},"progress_substeps":0,"fuel_substeps":0}])");
         root["furnaces"] = bad;
-        EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+        EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
     }
 }
 
@@ -1170,11 +1195,11 @@ TEST(SaveParseTest, RejectsProgressWithoutSmeltableInput) {
         ItemStack {f.items.idForName("stone"), 1}; // not smeltable
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    EXPECT_FALSE(parseSave(*j, f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(*j, f.items, f.blocks, f.effects, 42).ok());
     s.furnaces[0].state.input = ItemStack {}; // and with an empty input
     j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    EXPECT_FALSE(parseSave(*j, f.items, f.blocks, 42).ok());
+    EXPECT_FALSE(parseSave(*j, f.items, f.blocks, f.effects, 42).ok());
 }
 
 TEST(SaveParseTest, RejectsBadFurnaceFields) {
@@ -1189,7 +1214,7 @@ TEST(SaveParseTest, RejectsBadFurnaceFields) {
     // A format-7 file without the "furnaces" array.
     {
         Json root = withoutKey(*base, "furnaces");
-        EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+        EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
     }
     // An unknown field inside a furnace entry.
     {
@@ -1199,7 +1224,7 @@ TEST(SaveParseTest, RejectsBadFurnaceFields) {
         Json arr = Json::array();
         arr.push_back(std::move(entry));
         root["furnaces"] = std::move(arr);
-        EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+        EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
     }
     // Out-of-range / non-integer counters.
     const struct {
@@ -1218,7 +1243,7 @@ TEST(SaveParseTest, RejectsBadFurnaceFields) {
         Json arr = Json::array();
         arr.push_back(std::move(entry));
         root["furnaces"] = std::move(arr);
-        EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok()) << c.field;
+        EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok()) << c.field;
     }
     // A missing slot.
     {
@@ -1226,6 +1251,136 @@ TEST(SaveParseTest, RejectsBadFurnaceFields) {
         Json arr = Json::array();
         arr.push_back(withoutKey(root["furnaces"].at(0), "fuel"));
         root["furnaces"] = std::move(arr);
-        EXPECT_FALSE(parseSave(root, f.items, f.blocks, 42).ok());
+        EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
+    }
+}
+
+// -- format 8: the player's active status effects (Phase 46) ---------------
+
+TEST(SaveFormat8Test, EffectsRoundTripNameSorted) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    // Unsorted input: the serializer writes name-sorted, and the parse
+    // normalizes to the same order (bit-exact round trip).
+    s.playerEffects = {{"regeneration", 12.5},
+                       {"poison", 3.25},
+                       {"weakness", 30.0}};
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    const Json& arr = *j->find("player")->find("effects");
+    ASSERT_EQ(arr.size(), 3u);
+    EXPECT_EQ(arr.at(0).find("name")->asString(), "poison");
+    EXPECT_EQ(arr.at(1).find("name")->asString(), "regeneration");
+    EXPECT_EQ(arr.at(2).find("name")->asString(), "weakness");
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    ASSERT_EQ(out->playerEffects.size(), 3u);
+    EXPECT_EQ(out->playerEffects[0].name, "poison");
+    EXPECT_DOUBLE_EQ(out->playerEffects[0].remaining, 3.25);
+    EXPECT_EQ(out->playerEffects[1].name, "regeneration");
+    EXPECT_DOUBLE_EQ(out->playerEffects[1].remaining, 12.5);
+    EXPECT_EQ(out->playerEffects[2].name, "weakness");
+    EXPECT_DOUBLE_EQ(out->playerEffects[2].remaining, 30.0);
+}
+
+TEST(SaveFormat8Test, EmptyEffectsArrayIsValid) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    ASSERT_TRUE(j->find("player")->find("effects") != nullptr);
+    EXPECT_EQ(j->find("player")->find("effects")->size(), 0u);
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_TRUE(out->playerEffects.empty());
+}
+
+TEST(SaveFormat8Test, FormatSevenFileWithoutEffectsLoads) {
+    // Format 1-7 files predate the effects: the key is ABSENT (not
+    // required) and the effects load empty.
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerEffects = {{"poison", 5.0}};
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["format"] = Json(7);
+    root["player"] = withoutKey(*j->find("player"), "effects");
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_TRUE(out->playerEffects.empty());
+}
+
+TEST(SaveFormat8Test, FormatEightRequiresTheEffectsKey) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["player"] = withoutKey(*j->find("player"), "effects");
+    EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
+}
+
+TEST(SaveFormat8Test, RejectsBadEffectEntries) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerEffects = {{"poison", 5.0}};
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+
+    auto withEffect = [&](Json entry) {
+        Json root = *j;
+        Json arr = Json::array();
+        arr.push_back(std::move(entry));
+        root["player"]["effects"] = std::move(arr);
+        return root;
+    };
+    const auto entry = [&]() {
+        Json e = Json::object();
+        e["name"] = Json(std::string("poison"));
+        e["remaining"] = Json(5.0);
+        return e;
+    };
+    // An unregistered effect name.
+    {
+        Json e = entry();
+        e["name"] = Json(std::string("nope"));
+        EXPECT_FALSE(
+            parseSave(withEffect(std::move(e)), f.items, f.blocks,
+                      f.effects, 42)
+                .ok());
+    }
+    // remaining <= 0.
+    for (double rem : {0.0, -1.0}) {
+        Json e = entry();
+        e["remaining"] = Json(rem);
+        EXPECT_FALSE(
+            parseSave(withEffect(std::move(e)), f.items, f.blocks,
+                      f.effects, 42)
+                .ok()) << rem;
+    }
+    // A duplicate name.
+    {
+        Json root = *j;
+        Json arr = Json::array();
+        arr.push_back(entry());
+        arr.push_back(entry());
+        root["player"]["effects"] = std::move(arr);
+        EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
+    }
+    // An unknown field inside the entry.
+    {
+        Json e = entry();
+        e["extra"] = Json(1);
+        EXPECT_FALSE(
+            parseSave(withEffect(std::move(e)), f.items, f.blocks,
+                      f.effects, 42)
+                .ok());
+    }
+    // A non-object entry.
+    {
+        EXPECT_FALSE(
+            parseSave(withEffect(Json(1)), f.items, f.blocks, f.effects, 42)
+                .ok());
     }
 }

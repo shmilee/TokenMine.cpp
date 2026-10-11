@@ -209,6 +209,12 @@ public:
         m_dead = m_health <= 0.0f;
     }
 
+    // Heal `amount` HP (Phase 46's regeneration effect; the natural
+    // hunger-based regen calls this too). Clamped at max health.
+    void heal(float amount) {
+        m_health = std::clamp(m_health + amount, 0.0f, m_params.maxHealth);
+    }
+
     // Entity separation (Phases 16/19): the player is immovable — entities
     // are pushed out of the player (Minecraft's behavior), never the other
     // way around.

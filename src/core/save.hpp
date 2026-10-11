@@ -16,7 +16,9 @@
 //   "player": { "pos": [0.5, 53.0, 0.5], "yaw": 0.0, "pitch": -0.25,
 //               "health": 20.0,              // format 2+ (format 1: full)
 //               "hunger": 20.0,              // format 4+ (older: full)
-//               "saturation": 6.0 },         // format 5+ (older: 0)
+//               "saturation": 6.0,           // format 5+ (older: 0)
+//               "effects": [                 // format 8+ (older: none)
+//                 { "name": "poison", "remaining": 12.5 } ] },
 //   "inventory": {
 //     "selected": 0,
 //     "slots": [ { "item": "stone", "count": 64 }, { "item": "", "count": 0 } ]
@@ -60,6 +62,7 @@
 #include "core/error.hpp"
 #include "core/json.hpp"
 #include "core/math/vec3.hpp"
+#include "core/status_effect.hpp"
 #include "item/furnace.hpp"
 #include "item/inventory.hpp"
 #include "world/coordinates.hpp"
@@ -91,8 +94,16 @@ namespace mc {
 //      migrated to the sole furnace block of the world, or discarded
 //      (all entries empty) when the world holds zero or several
 //      furnace blocks (which one owned the shared state is unknowable);
-//      writes are always format 7.
-inline constexpr int kSaveFormat = 7;
+//      writes were always format 7.
+//   8: the player's active status effects (Phase 46) — "player":
+//      { ..., "effects": [ { "name": ..., "remaining": ... } ] },
+//      name-sorted, `remaining` in (0, ...] seconds (the real-dt
+//      countdown; the tick phase is NOT saved — a reload restarts it at
+//      the full interval). Format-7 and older files still load (no
+//      effects); format-8 files REQUIRE the "effects" key (an empty
+//      array is valid — the furnaces-key discipline); writes are always
+//      format 8.
+inline constexpr int kSaveFormat = 8;
 inline constexpr int kSaveFormatMin = 1;
 
 // Phase 40: the furnace save-field bounds — the max smelt/fuel times the
@@ -130,6 +141,15 @@ struct SavedFluidEdit {
 struct SavedFurnace {
     BlockPos pos;
     FurnaceState state;
+};
+
+// One active player status effect (format 8; Phase 46): the effect NAME
+// (registry-resolved on load) + the real-dt seconds remaining. The tick
+// phase is deliberately not saved (a reload restarts the next tick at
+// the full interval).
+struct SavedEffect {
+    std::string name;
+    double remaining = 0.0;
 };
 
 // One dropped-item entity (the only entity kind the game spawns).
@@ -173,6 +193,9 @@ struct SaveGame {
     // Empty when the world holds no furnace blocks; a format-6 load is
     // migrated into this (see kSaveFormat).
     std::vector<SavedFurnace> furnaces;
+    // The player's active status effects (format 8; Phase 46), name-
+    // sorted. Empty for format 1-7 loads (the effects did not exist).
+    std::vector<SavedEffect> playerEffects;
     std::vector<SavedItemEntity> entities;
     std::vector<SavedBlockEdit> blockEdits; // sorted by pos
     std::vector<SavedFluidEdit> fluidEdits; // sorted by pos
@@ -205,12 +228,13 @@ Result<void> applyWorldEdits(const SaveGame& save, const BlockRegistry& blocks,
 // slot ItemIDs back to names.
 Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items);
 
-// Parses and strictly validates a save file, cross-checking item/block
-// names and stack bounds against the registries. `expectedSeed` is the
-// seed the world was generated with (a mismatch is an error — the edits
-// would apply to the wrong terrain).
+// Parses and strictly validates a save file, cross-checking item/block/
+// effect names and stack bounds against the registries. `expectedSeed`
+// is the seed the world was generated with (a mismatch is an error — the
+// edits would apply to the wrong terrain).
 Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                            const BlockRegistry& blocks,
+                           const EffectRegistry& effects,
                            std::int64_t expectedSeed);
 
 } // namespace mc

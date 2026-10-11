@@ -33,7 +33,7 @@ TEST(DebugOverlayTest, LinesFormat) {
     info.maxHunger = 20.0;
     info.difficulty = "hard";
     const auto lines = debugOverlayLines(info);
-    ASSERT_EQ(lines.size(), 11u);
+    ASSERT_EQ(lines.size(), 12u);
     EXPECT_EQ(lines[0], "MineCraft v0.0.1 (Phase 25)");
     EXPECT_EQ(lines[1], "60 FPS | frame 1234");
     EXPECT_EQ(lines[2], "chunks 2312 | draws 45 | verts 987654");
@@ -45,6 +45,17 @@ TEST(DebugOverlayTest, LinesFormat) {
     EXPECT_EQ(lines[8], "health 17.0 / 20.0");
     EXPECT_EQ(lines[9], "hunger 14 / 20");
     EXPECT_EQ(lines[10], "difficulty hard");
+    // Phase 46: no active effects -> the baseline "(none)" line.
+    EXPECT_EQ(lines[11], "effects (none)");
+}
+
+TEST(DebugOverlayTest, ActiveEffectsLine) {
+    // Phase 46: the active status effects render as "name 12.3s; ..."
+    // (application order, one decimal place).
+    DebugInfo info;
+    info.effects = "poison 12.3s; regeneration 4.5s";
+    const auto lines = debugOverlayLines(info);
+    EXPECT_EQ(lines.back(), "effects poison 12.3s; regeneration 4.5s");
 }
 
 TEST(DebugOverlayTest, EngagedStreamingAndOpenInventory) {

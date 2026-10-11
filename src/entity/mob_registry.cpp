@@ -282,6 +282,36 @@ Result<void> MobRegistry::parseProperties(const Json& def,
             out.drops.push_back(std::move(drop));
         }
     }
+    // Optional 'on_hit_effect' (Phase 46, spider): the status effect this
+    // mob's landed MELEE hit applies to the player —
+    // {"name": "poison", "duration": 15.0}. Both keys are required
+    // (pair discipline); the effect name is cross-checked against the
+    // EffectRegistry at game init (the ammo/milk pattern). Absent = no
+    // effect (every pre-Phase-46 mob).
+    if (const Json* oh = def.find("on_hit_effect")) {
+        if (!oh->isObject()) {
+            return MC_FAIL("mob properties: 'on_hit_effect' must be an "
+                           "object {\"name\": ..., \"duration\": ...}");
+        }
+        for (const auto& [key, value] : oh->members()) {
+            if (key != "name" && key != "duration") {
+                return MC_FAIL("mob properties: 'on_hit_effect' has an "
+                               "unknown field '" + key + "'");
+            }
+        }
+        const Json* nm = oh->find("name");
+        if (nm == nullptr || !nm->isString() || nm->asString().empty()) {
+            return MC_FAIL("mob properties: 'on_hit_effect' requires a "
+                           "non-empty string 'name' (effect id)");
+        }
+        const Json* du = oh->find("duration");
+        if (du == nullptr || !du->isNumber() || du->asDouble() <= 0.0) {
+            return MC_FAIL("mob properties: 'on_hit_effect' requires "
+                           "'duration' (seconds) > 0");
+        }
+        out.hitEffectName = nm->asString();
+        out.hitEffectDuration = du->asDouble();
+    }
     return {};
 }
 

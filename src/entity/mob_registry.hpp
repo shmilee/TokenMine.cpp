@@ -157,6 +157,14 @@ struct MobProperties {
     // not milkable (every pre-Phase-43 mob).
     std::string milkWith;
     std::string milkGives;
+    // Status effect on hit (Phase 46, spider): when this mob's landed
+    // MELEE attack hits the player, the named status effect is applied
+    // for `hitEffectDuration` seconds (data/effects/*.json; the game
+    // cross-checks the effect's existence at init). Ranged attacks (the
+    // skeleton's arrows) never apply it. Empty name = no effect (every
+    // pre-Phase-46 mob).
+    std::string hitEffectName;
+    double hitEffectDuration = 0.0;
     // Drops (Phase 28): the item list the mob drops on death — one entry
     // per dropped item, spawned in list order. Empty = no drops.
     std::vector<MobDrop> drops;

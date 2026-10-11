@@ -20,7 +20,8 @@
     `view_distance` 继续填满半径方，大半径下 = 数小时 CPU + 数 GB 内存），
     `R` 重生 = 回出生点 + 满血 + **满饥饿** + **满饱和度**（= 一顿饱饭）
     + 速度清零（**背包保留**）
-  - **自然回复**：脱离受伤状态 `regenDelay=10s` 后，每 `regenInterval=4s` 回 1 HP；
+  - **自然回复**：脱离受伤状态 `regenDelay=10s` 后，每 `regenInterval=4s` 回 1 HP（与 Phase 46 的 `regeneration` 状态效果
+     **独立并存**，各自计时）；
     **饥饿门控**（Phase 23，Minecraft 规则：饥饿 < 6 无自然回复）——门控关闭时
     累加器暂停（不重置），吃饱后继续
   - **饥饿**（Phase 23，Phase 28，Phase 31，`maxHunger=20`，10 只鸡腿每只 2 点）：
@@ -107,7 +108,8 @@
     使追/击条件永不成立，被动 mob 只有 Wander 状态，纯数据表达，AI 代码无特判
   - **玩家攻击**：左键命中 mob（射线先比方块距离——**方块遮挡**：方块更近则打
     方块）= 挥击，按住时每 `0.25s` 一击：伤害取**选中物品的 `attack_damage`**
-    数据（徒手/方块/材料=1.0，工具见 `data/items/*.json`，木镐 2 / 铁镐 3）+
+    数据（徒手/方块/材料=1.0，工具见 `data/items/*.json`，木镐 2 / 铁镐 3）− 活跃虚弱效果 `melee_penalty` 总和（Phase 46，
+    clamp ≥0）+
     沿瞄准方向击退（水平 4 + 抬升 2.5，0.3s 击退窗口内 AI 不接管速度）
   - **死亡**：HP 归零 → 掉落 `drops` 数据定义的**物品列表**（Phase 28：
     每条目 `{item, count}`；Phase 38：或 `{item, count_min, count_max}`
@@ -284,6 +286,10 @@
     `clearStatusEffects()`（v1 效果集 = 清红闪 `m_hurtFlash`；坠落起点
     刻意不清——MC 坠落伤害非状态效果）。中断/取消语义与进食完全相同
     （提前松开/受击/死亡/解锁/开面板/换格）
+  - **清状态效果（Phase 46 补全）**：饮用完成 `clearStatusEffects()` =
+    清红闪 `m_hurtFlash` + **移除全部负面（`negative: true`）状态效果**
+    （MC 牛奶语义：正面的再生保留）。注意**受击会中断饮用通道**（P28
+    规则）——中毒状态下开喝，2.5 s 毒 tick 会打断它（MC 一致）
   - **满背包 no-op**：开始饮用前探测 `returns_item` 的 `isFull`（count-1
     可加探针）= 无空位且无未满同物堆 → 不开始（no-op）但**吞点击**
     （MC 一致：空桶没处放时喝不了）
@@ -301,6 +307,52 @@
   - **物品**：`bucket`（material，max_stack 16 = MC 值，2D 图标）；配方
     `bucket`（shaped `I I`/` I `，I = iron_ingot，3 铁锭 = MC 配方）；
     新内容均不进默认 hotbar / 世界生成
+- **状态效果**（Phase 46，数据驱动，`core/status_effect.{hpp,cpp}` +
+  `assets/data/effects/*.json`；效果只作用于玩家，v1 mob 不持效果）：
+  - **效果 = 数据**：`data/effects/` 每效果一个 JSON（严格解析 =
+    方块/物品/mob 注册表纪律：未知键拒绝、名字唯一、**no-op 拒绝**
+    ——必须有 tick 或正 `melee_penalty`）：`tick_type`（`"damage"` /
+    `"heal"`；缺省 = 无 tick 的纯修饰效果）+ `tick_amount`（每次 tick 的
+    HP，(0,10]，tick 必填）+ `tick_interval`（秒，(0,100]，tick 必填）+
+    `min_health`（仅 damage：0 = 无地板可致死 / 1 = 保持 ≥1 HP 永不致死
+    = MC 中毒地板）+ `melee_penalty`（近战扣除攻击点，[0,100]）+
+    `negative`（bool；牛奶只清负面）+ `icon`（effects.png 条带 tile
+    索引，init 对纹理宽度交叉校验）。当前 3 种：`poison`（damage 1 /
+    2.5 s，min_health 1，负面，icon 0）、`weakness`（melee_penalty 4，
+    负面，icon 1）、`regeneration`（heal 1 / 4.5 s，正面，icon 2）
+  - **来源（v1）**：① **mob `on_hit_effect`**（`{"name", "duration"}`，
+    成对必填严格解析，init 对 EffectRegistry 交叉校验 = ammo/挤奶
+    模式）——该 mob 的**近战命中落定**时施加（远程箭**不**施加）；
+    当前：spider（`poison` 15 s = MC normal 难度值）；② 存档注入
+    （E2E 场景）。weakness/regeneration v1 无游戏内来源（MC 来源 =
+    药水/金苹果，未做）
+  - **tick（真实 dt，生存计时器类，硬规则 8）**：`Game::updateEffects`
+    （每帧 `updateSurvival` 后）：`remaining -= dt`、≤0 移除；tick 效果
+    `accum += dt`、**每跨过一个 interval 结算一次**（大 dt 可跨多次）。
+    damage tick 的 min_health 地板**在游戏侧执行**（`health − amount <
+    min_health` 跳过——地板让中毒永不致死）；heal tick 走
+    `Player::heal`（clamp maxHealth）。毒伤走正常受伤路径（红闪/音效
+    复用；**无独立紫闪**，见 KNOWN_ISSUES）。同一效果再次施加 = 重置
+    duration（MC 语义，无 amplifier；tick 相位保留）
+  - **虚弱**：`selectedAttackDamage()` 减去活跃效果 `melee_penalty` 总和
+    （clamp ≥0——虚弱的空手打不出伤害）；只影响玩家→mob 近战
+  - **死亡**：效果随玩家死亡清空（重生 = 干净状态，MC 一致）
+  - **存档（format 8）**：`player.effects = [{name, remaining}]` 名字序
+    （`remaining` = 真实 dt 秒数；**tick 相位不存**——重载后下一 tick
+    从整 interval 起算；fmt 1-7 文件加载为空；fmt 8 文件**必填**该键 =
+    furnaces 键纪律；名字对 EffectRegistry 交叉校验、重复/非注册拒绝）
+  - **HUD**：效果图标条与心带**同行**、hotbar 左缘左对齐（MC 布局）：
+    每个活跃效果一个 `assets/textures/effects.png` 的 16px tile
+    （48×16，3 tile：紫骷髅 / 蓝下箭 / 绿上箭，
+    `tools/generate_effect_icons.py` 确定性生成），按施加顺序排列；
+    只在游玩态（锁定 + 无面板）绘制——无输入运行结构性免疫。F3 调试
+    层显示 `effects poison 12.3s; ...`（无效果 = `effects (none)`）
+  - **spider**（Phase 46，MC 标准毒源）：16 HP、speed 1.0（比 zombie
+    快）、攻击 2（normal 基线，走难度缩放）、近战 1.6 / 冷却 1.0、
+    探测 16、只在黑暗生成（`spawn_max_light` 0）、**无掉落**（MC 的
+    string/spider_eye 物品未做）、模型 AABB 1.4×0.9（身 1.3×0.7×0.9 +
+    头 0.5³，宽扁低趴）、纹理深灰褐几丁质 + 头部前双面红眼、生成表
+    weight 1（与其他 5 种等概率）
 - **游泳**（Phase 9）：玩家包围盒与任何水体格相交即进入水中状态——水中重力减半
   （12 vs 32）、终端速度 4、水平速度降为 3.1（冲刺无效）、`Space` 随时上浮（4.5）；
   浅水（头在水面上）可以"蹚水走"，深水可以游

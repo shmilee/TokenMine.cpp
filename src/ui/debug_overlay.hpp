@@ -38,6 +38,9 @@ struct DebugInfo {
     double hunger = 0.0;    // Phase 23
     double maxHunger = 0.0;
     std::string difficulty; // Phase 25: "easy" | "normal" | "hard"
+    // Phase 46: the active status effects, "name 12.3s; ..." (application
+    // order) or "" when the player has none.
+    std::string effects;
 };
 
 // One line per entry, top to bottom.

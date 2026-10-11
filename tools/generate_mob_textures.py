@@ -163,6 +163,24 @@ def skeleton_tile(salt: int, base, skull=False) -> list:
     return pixels
 
 
+def spider_tile(salt: int, base, eyes=False) -> list:
+    """Spider chitin (Phase 46): dark gray-brown base + noise; the head's
+    front face gets two glowing red eyes (rows 5-6, the Minecraft spider
+    silhouette)."""
+    (br, bg, bb) = base
+    pixels = []
+    for y in range(SIZE):
+        row = []
+        for x in range(SIZE):
+            n = noise(x, y, salt, 10)
+            r, g, b = clamp(br + n), clamp(bg + n), clamp(bb + n)
+            if eyes and 5 <= y <= 6 and (3 <= x <= 5 or 10 <= x <= 12):
+                (r, g, b) = (168, 40, 40)
+            row.append((r, g, b, 255))
+        pixels.append(row)
+    return pixels
+
+
 def shirt_tile(salt: int, base) -> list:
     (br, bg, bb) = base
     pixels = []
@@ -205,6 +223,12 @@ def main() -> None:
               skeleton_tile(0x5C11, (205, 203, 193)))
     write_png(os.path.join(OUT_DIR, "skeleton_head.png"),
               skeleton_tile(0x5C12, (222, 220, 210), skull=True))
+    # Dark gray-brown spider chitin (Phase 46; red eyes on the head's
+    # front face).
+    write_png(os.path.join(OUT_DIR, "spider_body.png"),
+              spider_tile(0x5D11, (74, 66, 56)))
+    write_png(os.path.join(OUT_DIR, "spider_head.png"),
+              spider_tile(0x5D12, (58, 52, 44), eyes=True))
 
 
 if __name__ == "__main__":

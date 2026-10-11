@@ -9,9 +9,19 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 45 完成时）
+## 现状（Phase 46 完成时）
 
-- 功能阶段 P0–P45 全部完成并提交；P45 = 染色补全 + 十字植物渲染（P41/P12/
+- 功能阶段 P0–P46 全部完成并提交；P46 = 状态效果系统（代理自定案范围：
+  poison/weakness/regeneration 数据驱动效果 + **spider** 毒源 + 效果图标
+  HUD + 牛奶清负面补全 + 存档 format 8）：**效果纯数据**（`assets/data/
+  effects/*.json` 严格解析 + no-op 拒绝；真实 dt 倒计时 + 跨 interval
+  tick、min_health 地板、melee_penalty、negative 标志）+ **spider**
+  （首个 `on_hit_effect` mob：近战命中施加 poison 15 s、只在黑暗、
+  无掉落）+ 效果图标行（心行左对齐 x0=434、仅 locked && !panelOpen、
+  无效果不绘制 = 结构性免疫）+ 牛奶 = 清红闪 + **清全部负面效果**
+  （正面 regen 保留 = MC 语义）+ format 8（`player.effects` 名字序、
+  tick 相位不保存、`parseSave` 加 `EffectRegistry` 第 4 参）；P45 =
+  染色补全 + 十字植物渲染（P41/P12/
   P20/P23 遗留"无蓝/绿/紫来源"）：**颜色词汇表纯数据化**（dye item
   `dye_color` 命名，加颜色**零代码**改动）+ 补 6 色 blue/green/purple/
   magenta/light_blue/cyan（项目 silver 位 = MC light_gray → **15 染料全**）
@@ -28,16 +38,17 @@
   （P28 遗留"熟肉"）、P41 = wool 染色框架（P12/P20 遗留"wool 无用途/无
   染色"；atlas 4×8→8×8 → base18 于 P41 重锚）、P42 = 弓后续 2、P43 =
   牛奶桶最小项（饮用通道 + 挤奶）。
-- 测试 **813/813**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+- 测试 **835/835**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
 - 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P41 重锚【atlas
-  8×8】，P42/P43/P44/P45 过门 = 第 16/17/18/19 次结构性免疫、无重锚）。
+  8×8】，P42/P43/P44/P45/P46 过门 = 第 16/17/18/19/20 次结构性免疫、
+  无重锚）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 
 ## 命令
 
 ```bash
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build  # 构建（0 警告）
-./build/bin/minecraft_tests                                                 # 测试（788）
+./build/bin/minecraft_tests                                                 # 测试（835）
 ./build/bin/minecraft                                                       # 运行（ESC 退出）
 ./build/bin/minecraft --frames N [--screenshot /abs.png] [--save slot] [--new] [--config path]
 ```

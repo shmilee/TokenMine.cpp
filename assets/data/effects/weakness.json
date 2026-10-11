@@ -1,0 +1,6 @@
+{
+  "id": "weakness",
+  "melee_penalty": 4.0,
+  "negative": true,
+  "icon": 1
+}

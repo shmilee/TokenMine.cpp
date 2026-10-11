@@ -10,6 +10,7 @@
     {"id": "cow", "weight": 1},
     {"id": "sheep", "weight": 1},
     {"id": "chicken", "weight": 1},
-    {"id": "skeleton", "weight": 1}
+    {"id": "skeleton", "weight": 1},
+    {"id": "spider", "weight": 1}
   ]
 }

@@ -1,0 +1,8 @@
+{
+  "id": "regeneration",
+  "tick_type": "heal",
+  "tick_amount": 1.0,
+  "tick_interval": 4.5,
+  "negative": false,
+  "icon": 2
+}

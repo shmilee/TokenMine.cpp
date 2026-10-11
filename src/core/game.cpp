@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <numbers>
@@ -250,6 +251,16 @@ Result<void> Game::buildScene() {
     MC_TRY(hungerTex);
     m_hungerTexture = std::move(*hungerTex);
 
+    // Status effect icon strip (Phase 46): 16 px tiles (tile t occupies u
+    // in [t/N, (t+1)/N]); the effect data's 'icon' field indexes a tile
+    // (cross-checked against this texture's width at init, with the
+    // registry loaded).
+    auto effectPath = m_assets.resolve("textures/effects.png");
+    MC_TRY(effectPath);
+    auto effectTex = Texture::loadPng(*effectPath);
+    MC_TRY(effectTex);
+    m_effectTexture = std::move(*effectTex);
+
     // Target-block outline: a slightly enlarged unit cube as 24 line
     // vertices (12 edges x 2 endpoints), centered on the origin.
     {
@@ -471,6 +482,33 @@ Result<void> Game::buildScene() {
                                "' but its max stack is " +
                                std::to_string(m_items.at(dropId).maxStack));
             }
+        }
+    }
+
+    // -- status effects (Phase 46) ------------------------------------------
+    // The data-driven effect definitions (data/effects/*.json) + the
+    // cross-checks: a mob's on_hit_effect must name a registered effect
+    // (the ammo/milk pattern) and every effect's icon must be a valid
+    // tile of the effects.png strip (the block-texture pattern).
+    MC_TRY(m_effects.loadDirectory(m_assets, "data/effects"));
+    const int effectTiles =
+        static_cast<int>(m_effectTexture.width() / TextureAtlas::kTileSize);
+    for (const int effId : m_effects.allIds()) {
+        const Effect& eff = m_effects.at(effId);
+        if (eff.icon < 0 || eff.icon >= effectTiles) {
+            return MC_FAIL("effect '" + eff.name + "' icon " +
+                           std::to_string(eff.icon) + " is outside the "
+                           "effects.png tile range [0, " +
+                           std::to_string(effectTiles - 1) + "]");
+        }
+    }
+    for (const MobID mid : m_mobTypes.allIds()) {
+        const Mob& mob = m_mobTypes.at(mid);
+        if (!mob.properties.hitEffectName.empty() &&
+            m_effects.findByName(mob.properties.hitEffectName) == nullptr) {
+            return MC_FAIL("mob '" + mob.name + "' on_hit_effect references "
+                           "the unregistered effect '" +
+                           mob.properties.hitEffectName + "'");
         }
     }
 
@@ -1003,6 +1041,14 @@ Result<SaveGame> Game::collectSave() const {
     for (const auto& [pos, st] : m_furnaces) {
         save.furnaces.push_back({pos, st});
     }
+    // The player's active status effects (format 8; Phase 46): names +
+    // the real-dt seconds remaining (the serializer name-sorts; the tick
+    // phase is deliberately not saved — a reload restarts the next tick
+    // at the full interval).
+    for (const ActiveEffect& a : m_playerEffects.list()) {
+        save.playerEffects.push_back(
+            SavedEffect {m_effects.at(a.effect).name, a.remaining});
+    }
     for (const std::unique_ptr<Entity>& e : m_entities) {
         // Persisted entities are ItemEntities. Mobs (Phase 20) and arrows
         // (Phase 21) are EPHEMERAL by design — the save format expresses
@@ -1080,7 +1126,8 @@ Result<SaveGame> Game::readSaveFile(const std::filesystem::path& path) const {
         return MC_FAIL("invalid JSON in save file '" + path.string() + "': " +
                        parsed.error().message);
     }
-    auto save = parseSave(*parsed, m_items, m_blocks, m_generator->seed());
+    auto save =
+        parseSave(*parsed, m_items, m_blocks, m_effects, m_generator->seed());
     if (!save.ok()) {
         return MC_FAIL("save file '" + path.string() + "': " +
                        save.error().message);
@@ -1143,6 +1190,14 @@ Result<void> Game::applySave(const SaveGame& save) {
     m_furnaces.clear();
     for (const SavedFurnace& sf : save.furnaces) {
         m_furnaces.emplace(sf.pos, sf.state);
+    }
+    // 4d) The player's active status effects (format 8; Phase 46). The
+    // names are parse-validated against the registry (idForName cannot
+    // fail); the tick phase starts at 0 (it is not saved — the next tick
+    // lands at the full interval).
+    m_playerEffects.clearAll();
+    for (const SavedEffect& se : save.playerEffects) {
+        m_playerEffects.apply(m_effects.idForName(se.name), se.remaining);
     }
     // 5) Dropped items (with their lifetime/pickup timers restored).
     for (const SavedItemEntity& e : save.entities) {
@@ -1427,6 +1482,12 @@ void Game::update(double dt) {
     // a drop drives the hurt flash + sound, a death releases the pointer,
     // R (while dead) respawns. Runs even while paused so the flash decays.
     updateSurvival(dt);
+    // Status-effect ticks (Phase 46): the real-dt durations + the periodic
+    // damage/heal (see updateEffects). Runs after the survival poll so a
+    // lethal tick's death is handled on the NEXT frame's poll (a poison
+    // tick cannot kill — its min_health floor — so the one-frame delay is
+    // only reachable by a future floor-less damage effect).
+    updateEffects(dt);
 
     // Other entities (Phase 10): per-entity physics, then item merging and
     // despawn (see updateEntities).
@@ -1730,10 +1791,13 @@ void Game::updateAttacking(double dt, MobEntity& mob) {
 
 float Game::selectedAttackDamage() const {
     const ItemStack& stack = m_inventory.at(m_selectedSlot);
-    if (stack.empty()) {
-        return 1.0f;  // bare hand
-    }
-    return m_items.at(stack.item).attackDamage;  // data (default 1.0)
+    const float base =
+        stack.empty() ? 1.0f  // bare hand
+                      : m_items.at(stack.item).attackDamage;  // data (1.0)
+    // Phase 46: the active weakness effects subtract their melee penalty
+    // (clamped at 0 — a weakened bare hand deals no damage).
+    return std::max(0.0f, base -
+                               m_playerEffects.totalMeleePenalty(m_effects));
 }
 
 float Game::selectedShootSpeed() const {
@@ -2094,14 +2158,39 @@ bool Game::tryMilk() {
 }
 
 void Game::clearStatusEffects() {
-    // Phase 43: the state-effect system does not exist yet — this is the
-    // extension point where a drinkable container's "clear negative
-    // effects" (Minecraft milk) will call into it. The v1 effect set:
-    // reset the red damage veil (m_hurtFlash). The fall-damage tracking
-    // (Player::fallStartY) is deliberately NOT touched — Minecraft's fall
-    // damage is not a status effect, so drinking mid-air must not reduce
-    // the fall damage owed on landing.
+    // Phase 43 (completed by Phase 46): a completed drinkable container
+    // resets the red damage veil (m_hurtFlash) and removes every NEGATIVE
+    // active status effect — Minecraft's milk semantics (the positive
+    // effects, like regeneration, survive the drink). The fall-damage
+    // tracking (Player::fallStartY) is deliberately NOT touched —
+    // Minecraft's fall damage is not a status effect, so drinking
+    // mid-air must not reduce the fall damage owed on landing.
     m_hurtFlash = 0.0;
+    m_playerEffects.clearNegative(m_effects);
+}
+
+void Game::updateEffects(double dt) {
+    if (m_player->isDead() || m_playerEffects.count() == 0) {
+        return;
+    }
+    // The ticks are REAL dt (the survival-timer class, like hunger and
+    // the eat channel). The HP changes apply against the player HERE
+    // (not in StatusEffects): the damage tick respects the effect's
+    // min_health floor (poison keeps the player at >= 1 HP and never
+    // kills — a plain damage effect with floor 0 may), the heal tick
+    // clamps at max health. A poison tick that drops health shows the
+    // red hurt veil like any other damage (updateSurvival polls the
+    // health each frame; the v1 has no separate poison tint).
+    m_playerEffects.update(
+        dt, m_effects, [this](const Effect& def) {
+            if (def.tick == Effect::Tick::Damage) {
+                if (m_player->health() - def.tickAmount >= def.minHealth) {
+                    m_player->damage(def.tickAmount);
+                }
+            } else if (def.tick == Effect::Tick::Heal) {
+                m_player->heal(def.tickAmount);
+            }
+        });
 }
 
 void Game::updateEatChannel(double dt) {
@@ -2633,9 +2722,20 @@ void Game::attemptMobSpawn() {
     const float damageScale = def.properties.hostile
         ? hostileDamageScale(m_difficulty)
         : 1.0f;
-    mob->setHitCallback([this, damageScale](float amount) {
-        if (!m_player->isDead()) {
-            m_player->damage(amount * damageScale);
+    // Phase 46: a landed melee hit also applies the mob's on_hit_effect
+    // (the spider's poison) — the effect name is init-cross-checked, so
+    // idForName cannot fail here (the dead check guards both).
+    const std::string hitEffectName = def.properties.hitEffectName;
+    const double hitEffectDuration = def.properties.hitEffectDuration;
+    mob->setHitCallback([this, damageScale, hitEffectName,
+                         hitEffectDuration](float amount) {
+        if (m_player->isDead()) {
+            return;
+        }
+        m_player->damage(amount * damageScale);
+        if (!hitEffectName.empty()) {
+            m_playerEffects.apply(m_effects.idForName(hitEffectName),
+                                  hitEffectDuration);
         }
     });
     // Ranged mobs (Phase 27, the skeleton): the AI's shot spawns an arrow
@@ -3120,8 +3220,11 @@ void Game::updateSurvival(double dt) {
     if (dead && m_prevHealth >= 0.0f && m_prevHealth > 0.0f) {
         // Alive -> dead transition: the death screen owns the input, so
         // release the pointer (it was locked while the fall happened).
+        // Phase 46: the active status effects die with the player (the
+        // respawn starts clean — Minecraft parity).
         m_window.setRelativeMouseMode(false);
         m_sound.play("death");
+        m_playerEffects.clearAll();
     }
     m_prevHealth = hp;
     if (dead && m_input.wasPressed(GameKey::R)) {
@@ -3480,6 +3583,27 @@ void Game::renderUi() {
             };
             drawStrip(hx0, heartIcons, m_healthTexture, m_player->health());
             drawStrip(gx0, hungerIcons, m_hungerTexture, m_player->hunger());
+            // Status effect icons (Phase 46): left-aligned on the heart
+            // row (the Minecraft layout), one 16 px effects.png tile per
+            // ACTIVE effect in application order (tile t occupies u in
+            // [t/N, (t+1)/N]; the width gives N). No effects = nothing
+            // drawn (the no-input baseline is untouched).
+            if (m_playerEffects.count() > 0) {
+                const int n = static_cast<int>(
+                    m_effectTexture.width() / kIconPx);
+                UiBatch& batch =
+                    batchFor(Vec4 {1.0f, 1.0f, 1.0f, 1.0f}, true,
+                             &m_effectTexture);
+                int ex = x0; // left-aligned on the hotbar's left edge (MC)
+                for (const ActiveEffect& a : m_playerEffects.list()) {
+                    const Effect& def = m_effects.at(a.effect);
+                    addQuadUv(batch, ex, hy, kIconPx, kIconPx,
+                              Vec2 {static_cast<float>(def.icon) / n, 0.0f},
+                              Vec2 {static_cast<float>(def.icon + 1) / n,
+                                    1.0f});
+                    ex += kIconPx + kIconGap;
+                }
+            }
         }
         // Crosshair: a 2px thin cross at the screen center.
         UiBatch& cross = batchFor(kCrosshair, false, nullptr);
@@ -3828,6 +3952,18 @@ void Game::renderUi() {
             info.maxHunger = m_player->maxHunger();
         }
         info.difficulty = difficultyName(m_difficulty);
+        // Phase 46: the active status effects, "name 12.3s; name 4.5s"
+        // (application order); empty when the player has none.
+        for (const ActiveEffect& a : m_playerEffects.list()) {
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "%s %.1fs",
+                          m_effects.at(a.effect).name.c_str(),
+                          a.remaining);
+            if (!info.effects.empty()) {
+                info.effects += "; ";
+            }
+            info.effects += buf;
+        }
         int y = kF3Margin;
         for (const std::string& line : debugOverlayLines(info)) {
             addText(line, kF3Margin, y, 1, kText);
