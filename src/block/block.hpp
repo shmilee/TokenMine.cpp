@@ -97,17 +97,25 @@ struct BlockProperties {
     std::string dyeColor;
 };
 
-// Which texture name is applied to each face group.
+// Which texture name is applied to each face group (full_cube shapes) — or
+// the single cross texture (cross shapes; Phase 45).
 struct BlockTexture {
     std::string top;
     std::string side;
     std::string bottom;
+    // Cross plants (shape "cross", Phase 45): the single texture drawn on
+    // both crossing quads. Only used when model.shape == Shape::Cross.
+    std::string cross;
 };
 
 // Rendering shape + face textures.
 struct BlockModel {
     enum class Shape {
         FullCube, // 1x1x1
+        Cross,    // Phase 45: two crossing vertical quads (cross plants —
+                  // flowers). Rendered in the transparent (blended,
+                  // unculled) pass with the cell's own light; never
+                  // greedy-merged (no cube faces are emitted).
     };
 
     Shape shape = Shape::FullCube;

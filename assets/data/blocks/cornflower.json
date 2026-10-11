@@ -1,0 +1,14 @@
+{
+  "id": "cornflower",
+  "properties": {
+    "hardness": 0.0,
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "drops": "cornflower"
+  },
+  "model": {
+    "shape": "cross",
+    "textures": { "cross": "cornflower" }
+  }
+}

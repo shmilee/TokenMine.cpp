@@ -126,6 +126,16 @@ private:
                    const BlockPos& origin, int lx, int ly, int lz,
                    std::uint8_t level) const;
 
+    // Emit the cross-plant geometry of one cell (Phase 45): two crossing
+    // vertical quads (the two cell diagonals) into the transparent
+    // sub-mesh — full texture width on each quad, the cell's own light
+    // baked in, no neighbor culling (the quads sit inside the cell; the
+    // depth test against opaque neighbors handles visibility, as in
+    // Minecraft). Drawn in the unculled blending pass, so each quad is
+    // visible from both sides.
+    void emitCross(ChunkMeshData& out, const Block& block,
+                   const BlockPos& origin, int lx, int ly, int lz) const;
+
     const World& m_world;
     const BlockRegistry& m_blocks;
     const AtlasLayout& m_layout;

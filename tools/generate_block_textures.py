@@ -226,12 +226,12 @@ def furnace_side(x, y):
     return stone(x, y)
 
 
-# --- dyed wool family (Phase 41) --------------------------------------------
-# The Minecraft dyed-wool palette — the nine colors that have an in-world
-# dye source (the remaining seven MC colors await material sources —
-# lapis/cactus/flowers — see docs/KNOWN_ISSUES). Same fluff as the sheep
-# body: one per-pixel noise on all channels (hue constant, brightness
-# varies). White is the family base block ("wool", no color suffix).
+# --- dyed wool family (Phase 41, six colors added in Phase 45) --------------
+# The Minecraft dyed-wool palette. Phase 45 completes the set: the six
+# colors whose MC dye sources are in-world content added the same phase
+# (lapis ore / cactus / allium / tulip / cornflower). Same fluff as the
+# sheep body: one per-pixel noise on all channels (hue constant,
+# brightness varies). White is the family base block ("wool", no suffix).
 WOOL_PALETTE = {
     "wool": (232, 230, 224),
     "wool_red": (185, 54, 64),
@@ -242,16 +242,87 @@ WOOL_PALETTE = {
     "wool_gray": (62, 68, 71),
     "wool_black": (25, 23, 25),
     "wool_silver": (142, 142, 147),
+    "wool_blue": (61, 90, 180),
+    "wool_green": (117, 194, 74),
+    "wool_purple": (154, 80, 192),
+    "wool_magenta": (206, 82, 213),
+    "wool_light_blue": (126, 174, 245),
+    "wool_cyan": (74, 196, 197),
 }
+
+
+# Stable per-name salt (Phase 45): an EXPLICIT map. The original
+# `100 + sorted(palette).index(name)` scheme shifted the salt of existing
+# colors when the palette grew (silently changing their committed
+# textures); new colors take the next free slots.
+WOOL_SALT = {
+    "wool": 100,
+    "wool_black": 101,
+    "wool_brown": 102,
+    "wool_gray": 103,
+    "wool_orange": 104,
+    "wool_pink": 105,
+    "wool_red": 106,
+    "wool_silver": 107,
+    "wool_yellow": 108,
+    "wool_blue": 109,
+    "wool_green": 110,
+    "wool_purple": 111,
+    "wool_magenta": 112,
+    "wool_light_blue": 113,
+    "wool_cyan": 114,
+}
+assert set(WOOL_SALT) == set(WOOL_PALETTE), "WOOL_SALT must cover every palette color"
 
 
 def make_wool_tile(name: str):
     (br, bg, bb) = WOOL_PALETTE[name]
-    salt = 100 + sorted(WOOL_PALETTE).index(name)
+    salt = WOOL_SALT[name]
 
     def tile(x, y):
         n = noise(x, y, salt, 12)
         return (clamp(br + n), clamp(bg + n), clamp(bb + n), 255)
+    return tile
+
+
+# --- Phase 45: new material sources ------------------------------------------
+# Lapis ore (blue dye source): stone with blue speckles.
+def lapis_ore(x, y):
+    return ore(x, y, 61, (58, 88, 210), 14)
+
+
+# Cactus (green dye source): a full cube, green base with darker vertical
+# ridges (the Minecraft cactus side look).
+def cactus(x, y):
+    n = noise(x, y, 62, 8)
+    if x % 4 == 0:  # vertical ridge
+        c = (58, 98, 40)
+    else:
+        c = (84, 134, 58)
+    return (clamp(c[0] + n), clamp(c[1] + n), clamp(c[2] + n), 255)
+
+
+# Cross-plant flowers (purple/magenta/light-blue dye sources). Each is a
+# flower head over a green stem on a TRANSPARENT background; the mesher
+# draws it as two crossing quads in the blending pass (alpha cutout via
+# the standard src-alpha blend). The same texture is used on both quads.
+def make_flower(petal, salt):
+    stem = (66, 120, 48)
+
+    def tile(x, y):
+        # Stem: a 2-px green column from just below the head to the base.
+        if 7 <= x <= 8 and 9 <= y <= 15:
+            n = noise(x, y, salt, 8)
+            return (clamp(stem[0] + n), clamp(stem[1] + n),
+                    clamp(stem[2] + n), 255)
+        # Flower head: a soft blob centred on (7.5, 4.5).
+        dx = x - 7.5
+        dy = y - 4.5
+        if dx * dx + dy * dy <= 8.0:  # radius ~2.8
+            n = noise(x, y, salt + 1, 10)
+            return (clamp(petal[0] + n), clamp(petal[1] + n),
+                    clamp(petal[2] + n), 255)
+        return (0, 0, 0, 0)  # transparent
     return tile
 
 
@@ -272,6 +343,11 @@ TEXTURES = {
     "iron_ore": iron_ore,
     "gold_ore": gold_ore,
     "diamond_ore": diamond_ore,
+    "lapis_ore": lapis_ore,
+    "cactus": cactus,
+    "allium": make_flower((154, 80, 192), 63),
+    "tulip": make_flower((206, 82, 213), 64),
+    "cornflower": make_flower((126, 174, 245), 65),
     "glowstone": glowstone,
     "planks": planks,
     "crafting_table_top": crafting_table_top,

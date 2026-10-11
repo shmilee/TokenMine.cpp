@@ -1,0 +1,5 @@
+{
+  "id": "dye_blue",
+  "output": { "item": "dye_blue", "count": 1 },
+  "ingredients": [ { "item": "lapis", "count": 1 } ]
+}

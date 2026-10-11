@@ -1,0 +1,5 @@
+{
+  "id": "dye_light_blue",
+  "output": { "item": "dye_light_blue", "count": 1 },
+  "ingredients": [ { "item": "cornflower", "count": 1 } ]
+}

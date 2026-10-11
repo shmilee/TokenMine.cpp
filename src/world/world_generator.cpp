@@ -23,6 +23,8 @@ constexpr std::int64_t kSaltBiome = 0x1A2B3C4D5E6F7A02LL;
 constexpr std::int64_t kSaltCave = 0x1A2B3C4D5E6F7A03LL;
 constexpr std::int64_t kSaltOre = 0x1A2B3C4D5E6F7A04LL;
 constexpr std::int64_t kSaltTree = 0x1A2B3C4D5E6F7A05LL;
+// Phase 45: surface decorations (independent of the tree rolls).
+constexpr std::int64_t kSaltDecoration = 0x1A2B3C4D5E6F7A06LL;
 
 // Per-feature mixing constant (per ore type, per vein-walk step).
 constexpr std::uint64_t kFeatureStep = 0x9E3779B97F4A7C15ULL;
@@ -79,6 +81,18 @@ Result<WorldGenerator> WorldGenerator::create(std::int64_t seed,
             return MC_FAIL("biome '" + b.name +
                            "': unknown subsurface block '" + b.subsurface +
                            "'");
+        }
+        // Surface decorations (Phase 45): resolve each block name.
+        for (const BiomeDecoration& d : b.decorations) {
+            ResolvedDecoration rd;
+            rd.probability = d.probability;
+            rd.block = blocks.idForName(d.block);
+            if (!rd.block.valid()) {
+                return MC_FAIL("biome '" + b.name +
+                               "': unknown decoration block '" + d.block +
+                               "'");
+            }
+            rb.decorations.push_back(std::move(rd));
         }
         gen.m_totalWeight += rb.weight;
         gen.m_biomes.push_back(std::move(rb));
@@ -184,6 +198,7 @@ void WorldGenerator::generateChunk(Chunk& chunk, const ChunkPos& pos) const {
     carveCaves(chunk, pos, heights);
     placeOres(chunk, pos);
     placeTrees(chunk, pos);
+    placeDecorations(chunk, pos); // Phase 45: after trees (trunks win)
 }
 
 void WorldGenerator::fillTerrain(Chunk& chunk, const ChunkPos& pos,
@@ -379,6 +394,65 @@ void WorldGenerator::placeTrees(Chunk& chunk, const ChunkPos& pos) const {
                         placeIfAir(chunk, pos, wx + dx, hgt + dy, wz + dz,
                                    m_leaves);
                     }
+                }
+            }
+        }
+    }
+}
+
+void WorldGenerator::placeDecorations(Chunk& chunk, const ChunkPos& pos) const {
+    const int s = m_params.treeLattice;
+    const int ox = pos.x * kChunkSize;
+    const int oz = pos.z * kChunkSize;
+    // Decorations occupy exactly one cell (no margin), so lattice candidates
+    // are the cells of this chunk itself.
+    const int wx0 = floorDiv(ox, s) * s;
+    const int wz0 = floorDiv(oz, s) * s;
+    const int limit = ox + kChunkSize;
+
+    for (int wx = wx0; wx < limit; wx += s) {
+        for (int wz = wz0; wz < limit; wz += s) {
+            const ResolvedBiome& b = resolvedBiomeAt(wx, wz);
+            if (b.decorations.empty()) {
+                continue;
+            }
+            const int hgt = heightAt(wx, wz);
+            if (hgt <= m_params.seaLevel) {
+                continue; // no decorations underwater (trees' rule)
+            }
+            // The decoration lands one ABOVE the surface cell. That surface
+            // cell must still hold the biome's own surface block: carveCaves
+            // may have eaten it (a flower would float over the hole), and a
+            // different surface (e.g. sand at a biome edge) is not this
+            // biome's ground. The surface cell is in the same column, so it
+            // is in this chunk exactly when the decoration cell is — except
+            // when hgt+1 leaves the chunk's y range, which placeIfAir
+            // rejects anyway (documented: a decoration straddling a chunk's
+            // top y boundary is dropped, like the topmost tree-ring cells).
+            const int lsy = hgt - pos.y * kChunkSize;
+            const int lsx = wx - ox;
+            const int lsz = wz - oz;
+            if (lsy < 0 || lsy >= kChunkSize || lsx < 0 || lsx >= kChunkSize ||
+                lsz < 0 || lsz >= kChunkSize) {
+                continue;
+            }
+            if (chunk.get(lsx, lsy, lsz) != b.surface) {
+                continue; // cave opening / not this biome's ground
+            }
+            // One independent roll per (cell, entry) pair: the entry index
+            // is a third hash input (hash3), the salt is dedicated, so
+            // decoration rolls never track the tree rolls.
+            for (std::size_t i = 0; i < b.decorations.size(); ++i) {
+                const std::uint64_t h =
+                    hash3(static_cast<std::uint64_t>(wx),
+                          static_cast<std::uint64_t>(wz),
+                          static_cast<std::uint64_t>(i),
+                          static_cast<std::uint64_t>(
+                              m_seed ^ kSaltDecoration));
+                if (static_cast<float>(h >> 40) * kLattice24Scale <
+                    b.decorations[i].probability) {
+                    placeIfAir(chunk, pos, wx, hgt + 1, wz,
+                               b.decorations[i].block);
                 }
             }
         }

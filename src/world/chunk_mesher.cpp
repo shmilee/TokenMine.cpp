@@ -69,6 +69,25 @@ ChunkMeshData ChunkMesher::mesh(const ChunkPos& pos) const {
         }
     }
 
+    // Cross plants (Phase 45): two crossing quads per cell, fixed cell
+    // order (the vertex order is deterministic across runs). No neighbor
+    // culling — the quads are strictly inside the cell, and the depth test
+    // against already-drawn opaque geometry hides buried ones.
+    for (int ly = 0; ly < kChunkSize; ++ly) {
+        for (int lz = 0; lz < kChunkSize; ++lz) {
+            for (int lx = 0; lx < kChunkSize; ++lx) {
+                const BlockID id = chunk->get(lx, ly, lz);
+                if (id == BlockID::air()) {
+                    continue;
+                }
+                const Block& block = m_blocks.at(id);
+                if (block.model.shape == BlockModel::Shape::Cross) {
+                    emitCross(out, block, origin, lx, ly, lz);
+                }
+            }
+        }
+    }
+
     // Block faces: greedy meshing, one direction at a time (fixed order —
     // the vertex order is deterministic across runs).
     for (int f = 0; f < 6; ++f) {
@@ -106,6 +125,10 @@ void ChunkMesher::meshFaceDirection(ChunkMeshData& out, const Chunk& chunk,
                 const Block& block = m_blocks.at(id);
                 if (block.properties.fluid) {
                     continue; // a fluid block is stored as a fluid level
+                }
+                if (block.model.shape == BlockModel::Shape::Cross) {
+                    continue; // cross plants emit no cube faces (the
+                              // cross pass in mesh() owns their geometry)
                 }
                 const BlockID neighbor = m_world.getBlock(
                     origin.x + c[0] + face.dx, origin.y + c[1] + face.dy,
@@ -337,6 +360,58 @@ void ChunkMesher::emitFluid(ChunkMeshData& out, const Block& fluidBlock,
                 static_cast<float>(lz + face.corner[i][2])};
             v.normal = face.normal;
             v.uv = faceUv[i];
+            v.skyLight = skyF;
+            v.blockLight = blockF;
+            verts.push_back(v);
+        }
+        indices.insert(indices.end(),
+                       {first, first + 1, first + 2, first, first + 2,
+                        first + 3});
+    }
+}
+
+void ChunkMesher::emitCross(ChunkMeshData& out, const Block& block,
+                            const BlockPos& origin, int lx, int ly, int lz)
+    const {
+    const Vec2 u0 = AtlasLayout::uvMin(m_layout, block.model.textures.cross);
+    const Vec2 u1 = AtlasLayout::uvMax(m_layout, block.model.textures.cross);
+    // The cell's own light (Minecraft lights cross plants with the cell's
+    // light; no face shading — the normal is up, so the vertex shader's
+    // face-shade table yields 1.0).
+    const int wx = origin.x + lx;
+    const int wy = origin.y + ly;
+    const int wz = origin.z + lz;
+    const float skyF =
+        static_cast<float>(m_world.getSkyLight(wx, wy, wz)) /
+        static_cast<float>(kMaxLight);
+    const float blockF =
+        static_cast<float>(m_world.getBlockLight(wx, wy, wz)) /
+        static_cast<float>(kMaxLight);
+    // Registry invariant: a cross shape is always transparent (validated
+    // at data load), so both quads go to the transparent sub-mesh.
+    std::vector<MeshVertex>& verts = out.transparentVertices;
+    std::vector<std::uint32_t>& indices = out.transparentIndices;
+
+    // Each quad spans one cell diagonal, bottom edge first: corner order
+    // (bottom-start, bottom-end, top-end, top-start), u along the
+    // diagonal, v with the texture upright (bottom -> tile v1, like the
+    // fluid/cube face convention).
+    const float corners[2][4][3] = {
+        {{0, 0, 0}, {1, 0, 1}, {1, 1, 1}, {0, 1, 0}},
+        {{1, 0, 0}, {0, 0, 1}, {0, 1, 1}, {1, 1, 0}},
+    };
+    const Vec2 uv[4] = {
+        {u0.x, u1.y}, {u1.x, u1.y}, {u1.x, u0.y}, {u0.x, u0.y},
+    };
+    for (const auto& quad : corners) {
+        const std::uint32_t first = static_cast<std::uint32_t>(verts.size());
+        for (int i = 0; i < 4; ++i) {
+            MeshVertex v;
+            v.position = {static_cast<float>(lx + quad[i][0]),
+                          static_cast<float>(ly + quad[i][1]),
+                          static_cast<float>(lz + quad[i][2])};
+            v.normal = {0.0f, 1.0f, 0.0f}; // full-brightness face shade
+            v.uv = uv[i];
             v.skyLight = skyF;
             v.blockLight = blockF;
             verts.push_back(v);

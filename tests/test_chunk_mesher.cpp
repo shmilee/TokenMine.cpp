@@ -641,3 +641,114 @@ TEST(ChunkMesherTest, PerFaceTextureSelection) {
         }
     }
 }
+
+// -- cross plants (Phase 45) ---------------------------------------------------
+
+// A registry with a cross-plant block (non-solid, non-opaque, transparent —
+// the combination the block registry enforces for the cross shape).
+BlockRegistry makeCrossRegistry() {
+    BlockRegistry reg = makeRegistry();
+    auto flower = reg.registerBlock(parseDef(
+        R"({"id":"flower","properties":{"solid":false,"opaque":false,)"
+        R"("transparent":true},"model":{"shape":"cross",)"
+        R"("textures":{"cross":"f"}}})"));
+    if (!flower.ok()) {
+        ADD_FAILURE() << flower.error().message;
+    }
+    return reg;
+}
+
+TEST(ChunkMesherTest, CrossBlockEmitsTwoQuadsToTransparentPass) {
+    BlockRegistry reg = makeCrossRegistry();
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("flower"));
+    const AtlasLayout layout = makeLayout({"t", "f"});
+    const auto data = ChunkMesher(world, reg, layout).mesh({0, 0, 0});
+    // Two quads: 8 vertices, 12 indices — all in the transparent pass.
+    EXPECT_TRUE(data.opaqueEmpty());
+    EXPECT_EQ(data.transparentVertices.size(), 8u);
+    EXPECT_EQ(data.transparentIndices.size(), 12u);
+}
+
+// The quad corners are the two cell diagonals (chunk-local):
+//   quad A: (0,0,0) (1,0,1) (1,1,1) (0,1,0)
+//   quad B: (1,0,0) (0,0,1) (0,1,1) (1,1,0)
+TEST(ChunkMesherTest, CrossQuadCornersAreCellDiagonals) {
+    BlockRegistry reg = makeCrossRegistry();
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("flower"));
+    const auto data = ChunkMesher(world, reg, makeLayout({"t", "f"}))
+                          .mesh({0, 0, 0});
+    const std::vector<Vec3> expected = {
+        {8, 4, 8},  {9, 4, 9},  {9, 5, 9},  {8, 5, 8},
+        {9, 4, 8},  {8, 4, 9},  {8, 5, 9},  {9, 5, 8},
+    };
+    ASSERT_EQ(data.transparentVertices.size(), expected.size());
+    for (std::size_t i = 0; i < expected.size(); ++i) {
+        EXPECT_EQ(data.transparentVertices[i].position, expected[i]);
+    }
+}
+
+// The cross texture spans the full tile on every vertex (u covers the tile
+// width, v the tile height — the texture is upright: v1 at the bottom).
+TEST(ChunkMesherTest, CrossUvCoversTheTile) {
+    BlockRegistry reg = makeCrossRegistry();
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("flower"));
+    const AtlasLayout layout = makeLayout({"t", "f"});
+    const auto data = ChunkMesher(world, reg, layout).mesh({0, 0, 0});
+    const Vec2 f0 = AtlasLayout::uvMin(layout, "f");
+    const Vec2 f1 = AtlasLayout::uvMax(layout, "f");
+    ASSERT_FALSE(data.transparentVertices.empty());
+    for (const MeshVertex& v : data.transparentVertices) {
+        EXPECT_TRUE(v.uv.x == f0.x || v.uv.x == f1.x);
+        EXPECT_TRUE(v.uv.y == f0.y || v.uv.y == f1.y);
+    }
+    // Bottom corners carry the tile's v1 (upright texture).
+    int bottom = 0;
+    for (const MeshVertex& v : data.transparentVertices) {
+        if (v.position.y == 4.0f) {
+            EXPECT_FLOAT_EQ(v.uv.y, f1.y);
+            ++bottom;
+        }
+    }
+    EXPECT_EQ(bottom, 4);
+}
+
+// The cross cell is lit by its own light (like the fluid cells), not the
+// neighbor's.
+TEST(ChunkMesherTest, CrossBakesOwnCellLight) {
+    BlockRegistry reg = makeCrossRegistry();
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("flower"));
+    Chunk& chunk = world.getOrCreateChunk({0, 0, 0});
+    chunk.setSkyLightAt(8, 4, 8, 5);  // the cross cell
+    chunk.setSkyLightAt(8, 5, 8, 15); // the air above (a different value)
+    const auto data =
+        ChunkMesher(world, reg, makeLayout({"t", "f"})).mesh({0, 0, 0});
+    ASSERT_EQ(data.transparentVertices.size(), 8u);
+    for (const MeshVertex& v : data.transparentVertices) {
+        EXPECT_FLOAT_EQ(v.skyLight, 5.0f / 15.0f);
+    }
+}
+
+// The cross quad normals are up (full-brightness face shade) and the
+// non-opaque cross block never culls an adjacent cube face.
+TEST(ChunkMesherTest, CrossBlockDoesNotCullNeighborFace) {
+    BlockRegistry reg = makeCrossRegistry();
+    World world;
+    world.setBlock(7, 4, 8, reg.idForName("stone"));
+    world.setBlock(8, 4, 8, reg.idForName("flower"));
+    const auto data =
+        ChunkMesher(world, reg, makeLayout({"t", "f"})).mesh({0, 0, 0});
+    // The stone's +X face (toward the cross) is still emitted ...
+    int plusX = 0;
+    for (const MeshVertex& v : data.opaqueVertices) {
+        if (v.normal == Vec3{1.0f, 0.0f, 0.0f}) {
+            ++plusX;
+        }
+    }
+    EXPECT_EQ(plusX, 4);
+    // ... and the cross still emits its two quads.
+    EXPECT_EQ(data.transparentVertices.size(), 8u);
+}

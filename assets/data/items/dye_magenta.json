@@ -1,0 +1,7 @@
+{
+  "id": "dye_magenta",
+  "type": "material",
+  "max_stack": 64,
+  "icon": "dye_magenta",
+  "dye_color": "magenta"
+}

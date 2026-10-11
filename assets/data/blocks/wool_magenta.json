@@ -1,0 +1,16 @@
+{
+  "id": "wool_magenta",
+  "properties": {
+    "hardness": 0.8,
+    "drops": "wool_magenta",
+    "dye_base": "wool",
+    "dye_color": "magenta"
+  },
+  "model": {
+    "textures": {
+      "top": "wool_magenta",
+      "side": "wool_magenta",
+      "bottom": "wool_magenta"
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "wool_blue",
+  "properties": {
+    "hardness": 0.8,
+    "drops": "wool_blue",
+    "dye_base": "wool",
+    "dye_color": "blue"
+  },
+  "model": {
+    "textures": {
+      "top": "wool_blue",
+      "side": "wool_blue",
+      "bottom": "wool_blue"
+    }
+  }
+}

@@ -5,5 +5,11 @@
   "subsurface": "sand",
   "subsurface_depth": 4,
   "tree_density": 0.0,
-  "height_scale": 0.9
+  "height_scale": 0.9,
+  "decorations": [
+    {
+      "block": "cactus",
+      "probability": 0.03
+    }
+  ]
 }

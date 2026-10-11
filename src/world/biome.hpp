@@ -24,6 +24,16 @@
 
 namespace mc {
 
+// One surface decoration (Phase 45): a block placed on the biome's own
+// surface (the top terrain layer) at a per-lattice-cell probability.
+// Shared by all decoration entries: the tree lattice (worldgen's
+// "trees.lattice"), a dedicated salt (independent of the tree rolls), and
+// one roll per (cell, entry) pair.
+struct BiomeDecoration {
+    std::string block;         // block name (resolved at generation setup)
+    float probability = 0.0f;  // per-lattice-cell chance, [0, 1]
+};
+
 struct Biome {
     std::string name;
     int weight = 1;                 // relative selection weight (>= 1)
@@ -32,6 +42,9 @@ struct Biome {
     int subsurfaceDepth = 3;        // layers below the surface, [1, 16]
     float treeDensity = 0.0f;       // per-tree-lattice-cell chance, [0, 1]
     float heightScale = 1.0f;       // terrain height variation multiplier
+    // Optional surface decorations (Phase 45): cactus (desert), flowers
+    // (grass biomes). Absent = no decorations.
+    std::vector<BiomeDecoration> decorations;
 };
 
 class BiomeRegistry {

@@ -242,15 +242,21 @@
     **双向**交叉校验（entry 无块 / 块无 entry 均拒绝）。format 6（单个全局
     `furnace`）仍可加载：恰 1 个炉子块 → 状态归属它，0/多个 → 丢弃
     （见 KNOWN_ISSUES）
-- **染色**（Phase 41，全数据驱动）：
-  - **染料物品**：物品可选字段 `dye_color`（白名单颜色名：white/black/brown/
-    red/yellow/orange/pink/gray/silver；显式空串拒绝）；当前 9 种
-    `dye_<color>`（material，max_stack 64，2D 图标）
+- **染色**（Phase 41，Phase 45 补全颜色，全数据驱动）：
+  - **染料物品**：物品可选字段 `dye_color`（颜色名 = 纯数据词汇表：任何
+    `dye_<color>` 物品注册即扩展词汇表，**加颜色零代码改动**；显式空串
+    拒绝）；当前 15 种 `dye_<color>`（material，max_stack 64，2D 图标）：
+    white/black/brown/red/yellow/orange/pink/gray/silver（P41）+
+    blue/green/purple/magenta/light_blue/cyan（P45；项目 silver 位 = MC
+    light_gray，MC 的 16 色位一一对应）。来源配方（MC 1.14+ 同款）：
+    白←骨头、黑←煤炭、棕←腐肉、红←生牛肉、黄←金锭、灰/橙/粉/银←混色、
+    **蓝←lapis、绿←cactus、紫←allium、品红←tulip、浅蓝←cornflower、
+    青←lapis+绿**（来源块见「世界生成」的 biome 装饰/矿脉）
   - **可染方块**：方块可选属性 `dye_base` + `dye_color`（必须同时给；
     `dye_base` 与 `interact` 互斥）。变体名 = `dyeVariantName(base, color)` =
     `"<base>_<color>"`，**white 特例 = base 名本身**（`wool_white` 不存在，
-    白色就是 `wool`）。当前家族：`wool`（白）+ 8 个染色变体 `wool_<color>`
-    （hardness 0.8，掉自身，6 面同 tile）
+    白色就是 `wool`）。当前家族：`wool`（白）+ 14 个染色变体
+    `wool_<color>`（hardness 0.8，掉自身，6 面同 tile）
   - **交互**（右键顺序：食物 → launcher → interact → **染色** → 放置）：
     选中染料右键命中 dye 家族方块 = 该方块立即转为目标颜色变体 + 消耗 1 个
     染料 + "cloth" 音效 + **点击被吞**（染料不是方块物品，不放置）。**同色
@@ -447,10 +453,20 @@
   - **水**：低于海平面（y=34）的柱体填充流体水（fluid level 8）到海平面；
     生成即处于平衡态（游戏内 20Hz 流体 tick 不会扰动湖面）
   - **洞穴**：3D 噪声阈值雕刻，保留表层 4 格与底层 2 格的壳
-  - **矿脉**：世界空间格网 + 随机游走（coal/iron/gold/diamond，`max_y` 分层限制），
+  - **矿脉**：世界空间格网 + 随机游走（coal/iron/gold/diamond/**lapis**，
+    `max_y` 分层限制；lapis：probability 0.08 / vein 6 / max_y 32），
     跨 chunk 无缝；只替换 stone（不破坏洞穴）
   - **树木**：世界空间格网候选 + 数据驱动的树密度；树干 4~7 格 + 两层树冠 + 顶帽；
     跨 chunk 边界由邻接 chunk 各自补齐（边际格网机制），只写入 air（不破坏地形）
+  - **表面装饰**（Phase 45，biome 数据驱动）：biome JSON 可选
+    `decorations: [{block, probability}]`（严格校验：未知键拒绝、probability
+    ∈ [0,1]、block 名在生成 setup 对 BlockRegistry 解析，未知 = 启动报错）；
+    放置走**树的同一格网**（`trees.lattice`，专用 salt `kSaltDecoration`，
+    每 (格, 条目) 对一次独立 hash3 roll——装饰 roll 与树 roll 不相关）；
+    落在表面格**正上方一格**，前置条件：高于海平面 + 表面格仍是该 biome
+    的 surface 块（洞穴啃掉的表面不放，防悬空）；在 `placeTrees` **之后**
+    跑（树干/树冠占格时 `placeIfAir` 让位，装饰丢弃）。当前内容：沙漠
+    cactus（probability 0.03）、草原 3 花（各 0.02）、森林 3 花（各 0.012）
 - **演示区 + 流式扩展**：启动时同步生成 4×4 chunk 列（64×64 方块）；玩家按
   seed 自动出生在干燥陆地上（候选列需满足：高于海平面 + 出生包围盒内无方块，
   避开树干/树冠）。走出演示区后世界按流式加载（上一项）继续扩展——X/Z 真正
@@ -470,6 +486,19 @@
 - **Face Culling 网格化**：只渲染暴露给 air/非 opaque 邻居的面；跨 chunk 边界通过
   `World` 查询邻居剔除；每个 chunk 输出 opaque + transparent 两个 mesh，
   渲染顺序不透明 → alpha 混合（leaves/glass/water）
+- **十字植物渲染**（Phase 45，`BlockModel::Shape::Cross`）：方块 JSON
+  `model: {shape: "cross", textures: {cross: <tile>}}`（严格：cross 形状只收
+  单个 `cross` 纹理键，cube 的 top/side/bottom 拒绝；注册时强制
+  solid=false + opaque=false + transparent=true——十字植物可穿过、不遮光、
+  走混合通道）。`ChunkMesher` 面循环跳过 Cross 块（不出 cube 面），另跑一个
+  固定格序的 cross 通道：每格 2 条交叉竖直面片（格的 2 条对角线，全纹理宽，
+  纹理正立），**无邻居剔除**（面片在格内，被埋时深度测试自然遮挡），烘焙
+  **自身格**的光，法线朝上 = 面 shade 1.0（MC 十字植物全亮）；进
+  transparent 子网格，透明 pass 关 culling（双面可见）。物品 3D 图标
+  （`makeItemCubeGeometry`）对 Cross 块输出同款中心对齐的两面片（花/
+  仙人掌掉落物 + hotbar 图标；UI/hand 路径 blend 已开）。alpha cutout 无
+  discard：透明纹素混合到透明（视觉正确）但仍写深度——与 leaves/glass
+  同类既有简化（见 KNOWN_ISSUES 渲染）
 - **脏标记增量重网格**：`setBlock` 标记本 chunk（及共享面的邻居 chunk）dirty，
   下一帧只重建 dirty chunk 的 GPU mesh
 - **光照（Sky/Block Light 0-15）**：每个 chunk 两个 16³ 字节数组；天空光由列顶扫描

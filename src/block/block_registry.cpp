@@ -174,18 +174,47 @@ Result<void> BlockRegistry::parseModel(const Json& def, BlockModel& out) {
         return MC_FAIL("'model' must be an object");
     }
 
-    // Shape is optional: full_cube is the default.
+    // Shape is optional: full_cube is the default. Phase 45: "cross" =
+    // two crossing vertical quads (cross plants, e.g. flowers).
     if (const Json* s = m->find("shape")) {
-        if (!s->isString() || s->asString() != "full_cube") {
+        if (!s->isString() || (s->asString() != "full_cube" &&
+                               s->asString() != "cross")) {
             return MC_FAIL(std::string("'model.shape' is unsupported: '") +
-                           s->asString() + "' (only 'full_cube' exists)");
+                           s->asString() +
+                           "' (only 'full_cube' and 'cross' exist)");
         }
-        out.shape = BlockModel::Shape::FullCube;
+        out.shape = (s->asString() == "cross") ? BlockModel::Shape::Cross
+                                               : BlockModel::Shape::FullCube;
     }
 
     const Json* t = m->find("textures");
     if (t == nullptr || !t->isObject()) {
-        return MC_FAIL("block requires 'model.textures' with top/side/bottom");
+        return MC_FAIL("block requires a 'model.textures' object");
+    }
+    if (out.shape == BlockModel::Shape::Cross) {
+        // Cross shapes: exactly one texture key ("cross"). The cube face
+        // keys would be dead data (no cube faces are emitted), so they are
+        // rejected (the ammo discipline).
+        const Json* c = t->find("cross");
+        if (c == nullptr || !c->isString() || c->asString().empty()) {
+            return MC_FAIL("model.textures.cross is required for shape "
+                           "'cross' and must be a non-empty string");
+        }
+        for (const char* face : {"top", "side", "bottom"}) {
+            if (t->find(face) != nullptr) {
+                return MC_FAIL(std::string("model.textures.") + face +
+                               " is not valid for shape 'cross' (use a "
+                               "single 'cross' texture)");
+            }
+        }
+        out.textures.cross = c->asString();
+        return {};
+    }
+    // Full cubes: exactly the three face-group keys (an explicit "cross"
+    // key is a typo for a cross shape — rejected, not ignored).
+    if (t->find("cross") != nullptr) {
+        return MC_FAIL("model.textures.cross is only valid for shape "
+                       "'cross' (full cubes use top/side/bottom)");
     }
     for (const char* face : {"top", "side", "bottom"}) {
         const Json* v = t->find(face);
@@ -230,6 +259,28 @@ Result<BlockID> BlockRegistry::registerBlock(const Json& def) {
     MC_TRY(r);
     r = parseModel(def, block.model);
     MC_TRY(r);
+
+    // Cross plants (Phase 45): they render as two blended quads in the
+    // transparent pass and are walk-through, so the property combination is
+    // forced (an opaque/solid cross would occlude faces/light it does not
+    // visually cover).
+    if (block.model.shape == BlockModel::Shape::Cross) {
+        if (block.properties.opaque) {
+            return MC_FAIL("cross-plant block '" + name +
+                           "' must not be 'opaque' (it renders as two "
+                           "blended quads)");
+        }
+        if (block.properties.solid) {
+            return MC_FAIL("cross-plant block '" + name +
+                           "' must not be 'solid' (cross plants are "
+                           "walk-through)");
+        }
+        if (!block.properties.transparent) {
+            return MC_FAIL("cross-plant block '" + name +
+                           "' must be 'transparent' (it renders in the "
+                           "blending pass)");
+        }
+    }
 
     block.id = BlockID{static_cast<int>(m_blocks.size())};
     m_names.emplace(name, block.id.value);
@@ -333,6 +384,9 @@ std::set<std::string> BlockRegistry::requiredTextures() const {
         }
         if (!b.model.textures.bottom.empty()) {
             names.insert(b.model.textures.bottom);
+        }
+        if (!b.model.textures.cross.empty()) {
+            names.insert(b.model.textures.cross);
         }
     }
     return names;

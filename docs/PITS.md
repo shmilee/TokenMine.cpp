@@ -616,3 +616,28 @@
   校验。P39 的 own-cwd 硬错误只发生在**旧代码无法注册/解析**的新数据
   （如配方输出一个旧注册表结构装不下的物品）。跨构建 ref 跑批前先想
   一遍新数据文件在旧解析器下的命运，别默认要 worktree。
+- **……但严格枚举值的新数据 = ref 必须 own worktree（P45，P43 条目的反面
+  案例）**：P45 给方块模型加了 `shape: "cross"`——旧（P44）parseModel 把
+  未知 shape 值当**硬错误**（`'model.shape' is unsupported`，启动失败），
+  不像未知 JSON 字段那样容忍。ref 从新资产 cwd 启动 → init 失败 →
+  "game window not found"。判别：新数据触发的是旧代码的"未知键容忍"
+  路径还是"枚举/结构严格校验"路径，后者 ref 必须从自己 worktree 跑
+  （`shot <gdir=worktree> ...`）。
+- **红心检查的语义按运行类型分（P45）**：HUD（心/饥饿/hotbar/面板）只在
+  **指针锁定**时渲染——无输入运行 0 红像素（>50 = 污染废拍）；**输入运行**
+  锁指针后 HUD 才出现 = 满血 10 颗红心 670 红像素（>50 = 输入生效的
+  **正向**信号）。对照（同存档无输入）截图**完全没有 HUD**——与输入运行
+  做像素差时 HUD 区差异是预期的，别当回归。
+- **format 7 场景存档必须带 `furnaces` 键（即使空数组）（P45）**：fmt 7
+  解析严格——缺 `furnaces` = 启动报错（"save format 7 requires a
+  'furnaces' array"）。从旧格式源（p27far = fmt 5）派生场景存档时手动
+  升 format 7 的要同时补 `"furnaces": []`（场景无炉子块 = 空数组合法，
+  双向交叉校验通过）。
+- **纹理/图标工具的 salt 不能按调色板排序索引算（P45）**：
+  `salt = 100 + sorted(PALETTE).index(name)` 在调色板**加项**时让既有
+  颜色的 salt 移位 → 重新生成后**既有已提交 PNG 静默改变**（P45 首次
+  重生成改了 7 个 wool + 8 个 dye 图标；基线门没抓到——出生点视野无
+  wool/dye = 结构性免疫掩盖了回归；但旧存档里的 wool 块外观会变）。
+  修复 = 显式 per-name salt 表（既有色保持原值、新色取后续空位）+
+  `assert set(salt) == set(palette)`。教训：改数据驱动生成器后
+  `git status` 必须**零既有文件修改**才算干净。

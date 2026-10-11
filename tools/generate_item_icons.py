@@ -133,6 +133,23 @@ def stick():
     return px
 
 
+def lapis():
+    """A pile of lapis lazuli (Phase 45, blue dye source): a cluster of
+    deep-blue gems with bright glints, the Minecraft lapis item look."""
+    px = blank()
+    base = (48, 74, 178)
+    for y in range(SIZE):
+        for x in range(SIZE):
+            # A rounded gem pile, eroded by the hash (irregular outline).
+            d = max(abs(x - 15.0), abs(y - 15.0))
+            if d < 9.0 + (h2(x, y, 58) % 3) * 2 - 2:
+                setpx(px, x, y, base, salt=56)
+    # Bright glints (the sparkle of the stone).
+    for (x, y) in ((10, 9), (16, 12), (13, 18), (19, 8), (8, 15)):
+        setpx2(px, x, y, (110, 140, 235), salt=59, amount=4)
+    return px
+
+
 def coal():
     px = blank()
     base = (46, 46, 52)
@@ -383,14 +400,46 @@ DYE_PALETTE = {
     "dye_gray": (62, 68, 71),
     "dye_black": (25, 23, 25),
     "dye_silver": (142, 142, 147),
+    # Phase 45: the six completed colors (same palette as the dyed wool
+    # blocks — generate_block_textures.py WOOL_PALETTE).
+    "dye_blue": (61, 90, 180),
+    "dye_green": (117, 194, 74),
+    "dye_purple": (154, 80, 192),
+    "dye_magenta": (206, 82, 213),
+    "dye_light_blue": (126, 174, 245),
+    "dye_cyan": (74, 196, 197),
 }
+
+# Stable per-name icon salt (Phase 45; see make_dye_icon).
+DYE_SALT = {
+    "dye_black": 70,
+    "dye_brown": 71,
+    "dye_gray": 72,
+    "dye_orange": 73,
+    "dye_pink": 74,
+    "dye_red": 75,
+    "dye_silver": 76,
+    "dye_white": 77,
+    "dye_yellow": 78,
+    "dye_blue": 79,
+    "dye_green": 80,
+    "dye_purple": 81,
+    "dye_magenta": 82,
+    "dye_light_blue": 83,
+    "dye_cyan": 84,
+}
+assert set(DYE_SALT) == set(DYE_PALETTE), "DYE_SALT must cover every palette color"
 
 
 def make_dye_icon(name: str):
     """A plate of dye (Phase 41): the old wool-slab silhouette in the dye's
     color, with a darker rim for depth."""
     (cr, cg, cb) = DYE_PALETTE[name]
-    salt = 70 + sorted(DYE_PALETTE).index(name)
+    # Stable per-name salt (Phase 45): an EXPLICIT map — the original
+    # `70 + sorted(palette).index(name)` shifted the salt of existing
+    # colors when the palette grew (silently changing their committed
+    # icons); new colors take the next free slots.
+    salt = DYE_SALT[name]
     rim = (cr * 7 // 10, cg * 7 // 10, cb * 7 // 10)
 
     def icon():
@@ -530,6 +579,7 @@ ITEMS = {
     "planks": planks,
     "stick": stick,
     "rotten_flesh": rotten_flesh,
+    "lapis": lapis,
     "coal": coal,
     "diamond": diamond,
     "gold_ingot": gold_ingot,

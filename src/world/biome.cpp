@@ -51,7 +51,8 @@ Result<void> BiomeRegistry::registerBiome(const Json& def) {
     for (const auto& [key, value] : def.members()) {
         if (key != "id" && key != "weight" && key != "surface" &&
             key != "subsurface" && key != "subsurface_depth" &&
-            key != "tree_density" && key != "height_scale") {
+            key != "tree_density" && key != "height_scale" &&
+            key != "decorations") {
             MC_LOG_WARN("Biome '" + name + "': unknown field '" + key +
                         "' ignored");
         }
@@ -79,6 +80,48 @@ Result<void> BiomeRegistry::registerBiome(const Json& def) {
                    [&](const Json& v) { biome.heightScale = v.asDouble(); });
     MC_TRY(r);
 
+    // Optional 'decorations' (Phase 45): an array of { "block",
+    // "probability" } entries. Strict per entry (unknown keys are typos);
+    // the block NAME is validated against the BlockRegistry at generation
+    // setup (the biome file loads before the registry is cross-checked).
+    if (const Json* decos = def.find("decorations")) {
+        if (!decos->isArray()) {
+            return MC_FAIL("biome '" + name +
+                           "': 'decorations' must be an array");
+        }
+        for (std::size_t i = 0; i < decos->size(); ++i) {
+            const Json& de = decos->at(i);
+            const std::string label = "biome '" + name +
+                                      "' decorations[" + std::to_string(i) +
+                                      "]";
+            if (!de.isObject()) {
+                return MC_FAIL(label + " must be an object");
+            }
+            for (const auto& [key, value] : de.members()) {
+                if (key != "block" && key != "probability") {
+                    return MC_FAIL(label + " has unknown field '" + key +
+                                   "' (only 'block' and 'probability' "
+                                   "exist)");
+                }
+            }
+            const Json* blk = de.find("block");
+            if (blk == nullptr || !blk->isString() ||
+                blk->asString().empty()) {
+                return MC_FAIL(label + " requires a non-empty string "
+                                   "'block'");
+            }
+            BiomeDecoration deco;
+            deco.block = blk->asString();
+            const Json* prob = de.find("probability");
+            if (prob == nullptr || !prob->isNumber()) {
+                return MC_FAIL(label + " requires a numeric "
+                                   "'probability'");
+            }
+            deco.probability = static_cast<float>(prob->asDouble());
+            biome.decorations.push_back(std::move(deco));
+        }
+    }
+
     if (biome.weight < 1) {
         return MC_FAIL("biome '" + name + "': 'weight' must be >= 1, got " +
                        std::to_string(biome.weight));
@@ -99,6 +142,14 @@ Result<void> BiomeRegistry::registerBiome(const Json& def) {
     if (biome.heightScale <= 0.0f || biome.heightScale > 5.0f) {
         return MC_FAIL("biome '" + name + "': 'height_scale' must be in "
                        "(0, 5], got " + std::to_string(biome.heightScale));
+    }
+    for (std::size_t i = 0; i < biome.decorations.size(); ++i) {
+        const float p = biome.decorations[i].probability;
+        if (p < 0.0f || p > 1.0f) {
+            return MC_FAIL("biome '" + name + "' decorations[" +
+                           std::to_string(i) + "] 'probability' must be "
+                           "in [0, 1], got " + std::to_string(p));
+        }
     }
 
     m_biomes.push_back(std::move(biome));

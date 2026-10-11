@@ -161,6 +161,50 @@
     "wool_silver": [
       7,
       1
+    ],
+    "lapis_ore": [
+      4,
+      2
+    ],
+    "cactus": [
+      4,
+      3
+    ],
+    "allium": [
+      4,
+      4
+    ],
+    "tulip": [
+      4,
+      5
+    ],
+    "cornflower": [
+      4,
+      6
+    ],
+    "wool_blue": [
+      4,
+      7
+    ],
+    "wool_green": [
+      5,
+      2
+    ],
+    "wool_purple": [
+      5,
+      3
+    ],
+    "wool_magenta": [
+      5,
+      4
+    ],
+    "wool_light_blue": [
+      5,
+      5
+    ],
+    "wool_cyan": [
+      5,
+      6
     ]
   }
 }

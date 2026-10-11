@@ -8,6 +8,41 @@ namespace mc {
 ItemMeshGeometry makeItemCubeGeometry(const Block& block,
                                       const AtlasLayout& layout) {
     ItemMeshGeometry out;
+    if (block.model.shape == BlockModel::Shape::Cross) {
+        // Cross plants (Phase 45): the icon is the same two crossing quads
+        // as the world cross pass (block_mesh), centered on the item cube —
+        // no cube faces exist for a cross block. Full sky light, like the
+        // cube path.
+        const Vec2 u0 = AtlasLayout::uvMin(layout, block.model.textures.cross);
+        const Vec2 u1 = AtlasLayout::uvMax(layout, block.model.textures.cross);
+        const float h = ItemEntity::kSize * 0.5f;
+        const Vec2 faceUv[4] = {
+            {u0.x, u1.y}, {u1.x, u1.y}, {u1.x, u0.y}, {u0.x, u0.y},
+        };
+        const float corners[2][4][3] = {
+            {{-h, -h, -h}, {h, -h, h}, {h, h, h}, {-h, h, -h}},
+            {{h, -h, -h}, {-h, -h, h}, {-h, h, h}, {h, h, -h}},
+        };
+        out.vertices.reserve(8);
+        out.indices.reserve(12);
+        for (const auto& quad : corners) {
+            const std::uint32_t first =
+                static_cast<std::uint32_t>(out.vertices.size());
+            for (int i = 0; i < 4; ++i) {
+                MeshVertex v;
+                v.position = {quad[i][0], quad[i][1], quad[i][2]};
+                v.normal = {0.0f, 1.0f, 0.0f}; // full-brightness face shade
+                v.uv = faceUv[i];
+                v.skyLight = 1.0f;
+                v.blockLight = 0.0f;
+                out.vertices.push_back(v);
+            }
+            out.indices.insert(out.indices.end(),
+                               {first, first + 1, first + 2, first,
+                                first + 2, first + 3});
+        }
+        return out;
+    }
     out.vertices.reserve(24);
     out.indices.reserve(36);
     for (const CubeFace& face : kCubeFaces) {

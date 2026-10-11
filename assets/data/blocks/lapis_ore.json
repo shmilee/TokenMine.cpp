@@ -1,0 +1,10 @@
+{
+  "id": "lapis_ore",
+  "properties": {
+    "hardness": 3.0,
+    "drops": "lapis"
+  },
+  "model": {
+    "textures": { "top": "lapis_ore", "side": "lapis_ore", "bottom": "lapis_ore" }
+  }
+}

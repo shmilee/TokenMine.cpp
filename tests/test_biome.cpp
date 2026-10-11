@@ -215,3 +215,66 @@ TEST(BiomeTest, LoadDirectoryMissingDirIsEmpty) {
     EXPECT_EQ(reg.count(), 0u);
     std::filesystem::remove_all(root);
 }
+
+// -- surface decorations (Phase 45) ------------------------------------------
+
+TEST(BiomeTest, ParsesDecorations) {
+    const std::string def =
+        R"J({"id":"plains","surface":"grass","subsurface":"dirt",)J"
+        R"J("decorations":[)J"
+        R"J({"block":"allium","probability":0.02},)J"
+        R"J({"block":"cactus","probability":0.3}]})J";
+    BiomeRegistry reg;
+    auto r = reg.registerBiome(parseJson(def));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Biome& b = reg.all().front();
+    ASSERT_EQ(b.decorations.size(), 2u);
+    EXPECT_EQ(b.decorations[0].block, "allium");
+    EXPECT_FLOAT_EQ(b.decorations[0].probability, 0.02f);
+    EXPECT_EQ(b.decorations[1].block, "cactus");
+    EXPECT_FLOAT_EQ(b.decorations[1].probability, 0.3f);
+}
+
+TEST(BiomeTest, DecorationsDefaultToEmpty) {
+    BiomeRegistry reg;
+    auto r = reg.registerBiome(
+        parseJson(R"({"id":"x","surface":"sand","subsurface":"sand"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(reg.all().front().decorations.empty());
+}
+
+TEST(BiomeTest, RejectsDecorationNotAnArray) {
+    BiomeRegistry reg;
+    auto r = reg.registerBiome(parseJson(
+        R"({"id":"x","surface":"s","subsurface":"s",)"
+        R"("decorations":{"block":"c"}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("array"), std::string::npos);
+}
+
+TEST(BiomeTest, RejectsDecorationUnknownKey) {
+    BiomeRegistry reg;
+    auto r = reg.registerBiome(parseJson(
+        R"({"id":"x","surface":"s","subsurface":"s",)"
+        R"("decorations":[{"block":"c","probability":0.1,"extra":1}]})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("extra"), std::string::npos);
+}
+
+TEST(BiomeTest, RejectsDecorationMissingBlock) {
+    BiomeRegistry reg;
+    auto r = reg.registerBiome(parseJson(
+        R"({"id":"x","surface":"s","subsurface":"s",)"
+        R"("decorations":[{"probability":0.1}]})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("block"), std::string::npos);
+}
+
+TEST(BiomeTest, RejectsDecorationBadProbability) {
+    BiomeRegistry reg;
+    auto r = reg.registerBiome(parseJson(
+        R"({"id":"x","surface":"s","subsurface":"s",)"
+        R"("decorations":[{"block":"c","probability":1.5}]})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("probability"), std::string::npos);
+}

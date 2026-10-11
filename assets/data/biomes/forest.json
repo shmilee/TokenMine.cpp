@@ -5,5 +5,19 @@
   "subsurface": "dirt",
   "subsurface_depth": 3,
   "tree_density": 0.12,
-  "height_scale": 1.1
+  "height_scale": 1.1,
+  "decorations": [
+    {
+      "block": "allium",
+      "probability": 0.012
+    },
+    {
+      "block": "tulip",
+      "probability": 0.012
+    },
+    {
+      "block": "cornflower",
+      "probability": 0.012
+    }
+  ]
 }

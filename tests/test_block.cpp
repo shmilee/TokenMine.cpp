@@ -484,3 +484,107 @@ TEST(BlockRegistryTest, DyeVariantNameAppendsTheColor) {
     EXPECT_EQ(dyeVariantName("wool", "silver"), "wool_silver");
     EXPECT_EQ(dyeVariantName("carpet", "black"), "carpet_black");
 }
+
+// -- cross-plant shape (Phase 45) --------------------------------------------
+
+// A cross plant: non-solid, non-opaque, transparent (the registry enforces
+// exactly this combination), one "cross" texture.
+const std::string kCrossProps =
+    R"({"solid":false,"opaque":false,"transparent":true})";
+
+std::string crossDef(const std::string& id, const std::string& model) {
+    return std::string("{\"id\":\"") + id + "\",\"properties\":" + kCrossProps +
+           ",\"model\":" + model + "}";
+}
+
+TEST(BlockRegistryTest, ParsesCrossShape) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(crossDef(
+            "allium",
+            R"({"shape":"cross","textures":{"cross":"allium"}})")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Block& b = reg.at(*r);
+    EXPECT_EQ(b.model.shape, BlockModel::Shape::Cross);
+    EXPECT_EQ(b.model.textures.cross, "allium");
+    EXPECT_TRUE(b.model.textures.top.empty());
+    auto textures = reg.requiredTextures();
+    EXPECT_EQ(textures.size(), 1u);
+    EXPECT_TRUE(textures.count("allium"));
+}
+
+TEST(BlockRegistryTest, CrossShapeIsExplicit) {
+    // The default shape stays full_cube; "cross" must be spelled out.
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(minimalDef("stone")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).model.shape, BlockModel::Shape::FullCube);
+}
+
+TEST(BlockRegistryTest, RejectsUnsupportedShapeValue) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(crossDef(
+            "x", R"({"shape":"slab","textures":{"cross":"x"}})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("'model.shape'"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, CrossRequiresCrossTexture) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(crossDef("x", R"({"shape":"cross","textures":{}})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("model.textures.cross"),
+              std::string::npos);
+}
+
+TEST(BlockRegistryTest, CrossRejectsCubeFaceKeys) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(crossDef(
+            "x", R"({"shape":"cross","textures":{"cross":"x","top":"x"}})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("'cross'"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, FullCubeRejectsCrossKey) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(R"({"id":"x","model":{"textures":{"top":"x","side":"x",)"
+                 R"("bottom":"x","cross":"x"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("model.textures.cross"),
+              std::string::npos);
+}
+
+// A cross shape forces the walk-through blended property combination.
+TEST(BlockRegistryTest, CrossRejectsOpaque) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(R"({"id":"x","properties":{"solid":false,"opaque":true,)"
+                 R"("transparent":false},"model":{"shape":"cross",)"
+                 R"("textures":{"cross":"x"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("opaque"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, CrossRejectsSolid) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(R"({"id":"x","properties":{"solid":true,"opaque":false,)"
+                 R"("transparent":true},"model":{"shape":"cross",)"
+                 R"("textures":{"cross":"x"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("solid"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, CrossRequiresTransparent) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(R"({"id":"x","properties":{"solid":false,"opaque":false,)"
+                 R"("transparent":false},"model":{"shape":"cross",)"
+                 R"("textures":{"cross":"x"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("transparent"), std::string::npos);
+}

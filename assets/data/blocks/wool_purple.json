@@ -1,0 +1,16 @@
+{
+  "id": "wool_purple",
+  "properties": {
+    "hardness": 0.8,
+    "drops": "wool_purple",
+    "dye_base": "wool",
+    "dye_color": "purple"
+  },
+  "model": {
+    "textures": {
+      "top": "wool_purple",
+      "side": "wool_purple",
+      "bottom": "wool_purple"
+    }
+  }
+}

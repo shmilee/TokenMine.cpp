@@ -1,0 +1,16 @@
+{
+  "id": "wool_cyan",
+  "properties": {
+    "hardness": 0.8,
+    "drops": "wool_cyan",
+    "dye_base": "wool",
+    "dye_color": "cyan"
+  },
+  "model": {
+    "textures": {
+      "top": "wool_cyan",
+      "side": "wool_cyan",
+      "bottom": "wool_cyan"
+    }
+  }
+}

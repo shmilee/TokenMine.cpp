@@ -7,7 +7,8 @@
 
 ## 新增一个生物群系 / 矿石（无需改核心代码）
 
-1. 生物群系：`assets/data/biomes/<name>.json` —— 权重/表层/次表层/深度/树密度/高度系数：
+1. 生物群系：`assets/data/biomes/<name>.json` —— 权重/表层/次表层/深度/树密度/高度系数，
+   可选 `decorations`（Phase 45 表面装饰，见下）：
 
    ```json
    {
@@ -17,10 +18,20 @@
      "subsurface": "dirt",
      "subsurface_depth": 3,
      "tree_density": 0.08,
-     "height_scale": 0.8
+     "height_scale": 0.8,
+     "decorations": [
+       { "block": "tulip", "probability": 0.02 }
+     ]
    }
    ```
 
+   **表面装饰**（Phase 45）：`decorations` = 数组，每条 `{block, probability}`
+   （严格校验：未知键拒绝、block 非空串、probability ∈ [0,1]；block 名在
+   世界生成 setup 对 BlockRegistry 解析，**未知块名 = 启动报错**）。放置
+   规则：树的同一格网（`trees.lattice`）、每 (格, 条目) 独立 roll、落表面
+   格正上方一格、只在该 biome 的 surface 块上、高于海平面、树占格让位。
+   装饰块建议用可穿过的十字植物（花）或低硬度实心块（仙人掌）——实心高
+   硬度块会挡 mob 生成/路径。
 2. 矿石：`assets/data/worldgen.json` 的 `ores.veins` 数组加一项（方块需已注册）：
 
    ```json
@@ -28,6 +39,10 @@
    ```
 
 地形/洞穴/树木参数同样在 `assets/data/worldgen.json`（缺省=默认值，类型错误=启动报错）。
+**注意：改 worldgen.json / biome JSON 会改变生成的世界 → 无输入基线门
+（`/tmp/opencode/base18.png`）需要按 E2E 协议重锚或论证结构性免疫**
+（P45 先例：lapis 矿脉 + 表面装饰进了数据，但出生点视野内无变化 →
+第 19 次结构性免疫，免重锚）。
 
 ## 调整初始 hotbar / 新增工具与材料
 
@@ -96,6 +111,14 @@
    是单次破坏的掉落数量，须 ≤ 掉落物品的 max_stack（init 交叉校验）。
    `hardness` 驱动破坏耗时（按住左键，`1.5s × hardness ÷ 选中物品 break speed`，
    hardness ≤0 且可破坏=即时破坏）。
+   **十字植物形状**（Phase 45）：`model` 加 `"shape": "cross"`，`textures`
+   只给单个 `"cross"` 键（cube 的 top/side/bottom 与 cross 形状互斥，给了 =
+   启动报错）；注册时强制 `solid=false, opaque=false, transparent=true`
+   （属性给错 = 启动报错）。纹理 = 透明背景 + 植物剪影（alpha cutout，
+   16×16 RGBA，参考 `tools/generate_block_textures.py` 的 `make_flower`）。
+   渲染 = 格内 2 条交叉竖直面片（混合 pass、双面、自身格光照），详见
+   MECHANICS「十字植物渲染」。掉落走 `drops`（= 自身块名的 block item，
+   UI/手持/掉落物图标 = 同款两面片 3D 体）。
 
 ## 新增一个配方（无需改核心代码）
 
@@ -129,30 +152,32 @@ iron_pickaxe（III/.S./.S.）。
 `craft()`（Phase 15；可合成的配方白色高亮、不可合成的灰色）；或放置并右键
 工作台打开 3×3 面板，按形状放料后取输出格（Phase 17）。
 
-## 新增一个染料 / 染色方块（无需改核心代码，Phase 41）
+## 新增一个染料 / 染色方块（无需改核心代码，Phase 41；Phase 45 起颜色零代码）
 
-颜色名白名单（`item_registry` 的 `dye_color` 解析 + `block_registry` 的
-`dye_color` 解析共用 9 个名字）：`white`/`black`/`brown`/`red`/`yellow`/
-`orange`/`pink`/`gray`/`silver`。**加新颜色名 = 改白名单（代码）**；在白名单
-内加内容 = 纯数据：
+颜色名是**纯数据词汇表**（Phase 45 起）：`dye_<color>` 物品注册即扩展
+词汇表，**加新颜色名 = 零代码改动**。当前 15 色：`white`/`black`/`brown`/
+`red`/`yellow`/`orange`/`pink`/`gray`/`silver`（P41）+ `blue`/`green`/
+`purple`/`magenta`/`light_blue`/`cyan`（P45；项目 silver 位 = MC
+light_gray）。加一个颜色 = 纯数据四步：
 
 1. **染料物品** `assets/data/items/dye_<color>.json`：
    `{"id", "type": "material", "max_stack": 64, "icon": "dye_<color>",
    "dye_color": "<color>"}`；图标 `assets/textures/items/dye_<color>.png`
-   （16×16，`tools/generate_item_icons.py` 的 `DYE_PALETTE` 同款确定性生成）。
-   显式 `"dye_color": ""` 拒绝。
+   （32×32，`tools/generate_item_icons.py` 的 `DYE_PALETTE` 同款确定性
+   生成——调色板加一行即可）。显式 `"dye_color": ""` 拒绝。
 2. **染色变体方块** `assets/data/blocks/<base>_<color>.json`（white 特例 =
    `<base>.json` 本身，名字不加后缀）：
    `properties` 加 `"dye_base": "<base>", "dye_color": "<color>"`（两者必须
    同时给；`dye_base` 与 `interact` 互斥）；纹理 tile 加进
    `assets/data/textures/block_atlas.json`（atlas 满 8×8 格前直接加行；
    **网格扩容会移位所有既有 UV → 无输入基线门必须重锚**，见 PITS）。
-3. **合成配方** `assets/data/recipes/dye_<color>.json`（shapeless；当前 9 条
-   见 GAMEPLAY「染色」）。
+3. **合成配方** `assets/data/recipes/dye_<color>.json`（shapeless；当前 15 条
+   见 GAMEPLAY「染色」；来源块 = 世界内容：lapis 矿脉 / 仙人掌 / 十字花，
+   见「新增一个方块」+ biome `decorations`）。
 4. **init 交叉校验**（启动即检查，报错点名）：每个 dyeable 块的 `dye_color`
-   必须有同色染料物品；**每个 (dye_base, 白名单颜色) 组合的变体块必须存在**
+   必须有同色染料物品；**每个 (dye_base, 已有染料颜色) 组合的变体块必须存在**
    ——所以加一个新颜色时，**所有** dye 家族都要补变体块（当前 = wool 家族
-   9 个）；加一个新 dye 家族 = 9 个变体块。
+   15 个）；加一个新 dye 家族 = 15 个变体块。
 
 交互规则见 MECHANICS「染色」：选中染料右键 dye 家族方块 = 换块 + 消耗 1；
 同色重复不消耗（v1 规则）。

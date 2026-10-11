@@ -9,34 +9,28 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 44 完成时）
+## 现状（Phase 45 完成时）
 
-- 功能阶段 P0–P44 全部完成并提交；P44 = per-block 炉子状态（P40 遗留
-  "单个全局 FurnaceState"）：`Game` 每炉子块独立 `FurnaceState`
-  （`std::map<BlockPos, FurnaceState>` 位置序）+ setBlock 收口创建/删除
-  + 面板绑定所点方块 + 存档 format 7（`furnaces` 双向交叉校验 +
-  format 6 迁移：sole 归属/其余丢弃）；P40 = 炉子/熔炼（P28 遗留
-  "熟肉"）：`furnace` 方块 + 物品字段 `smeltable_to`/`smelt_time`/`fuel_time`
-  + 3 熟肉 + 燃料 + 炉子状态（每帧 1/60 子步 + 整数字步倒计时；P44 起
-  per-block，原单个全局态 + format 6 已被取代）、P41 = wool 后续（P12/P20 遗留"wool 无用途/
-  无染色"）：9 wool 方块（`wool` 白 base + 8 染色变体 `wool_<color>`）+ 9
-  染料物品 `dye_<color>` + 9 shapeless 配方 + 方块属性
-  `dye_base`/`dye_color`；atlas 4×8→8×8（**所有既有 UV 移位 →
-  base18 于 P41 重锚**）、P42 = 弓后续 2（P21/P24 遗留）：3D 手持手部 /
-  插墙箭 100s 寿命 / 方块变更释放箭 / 插墙箭拾取 / 击退随蓄力 / mob
-  `ammo` 字段、**P43 = 新食物剩余：牛奶桶最小项**（P23/P28 遗留
-  "牛奶桶"，用户确认 v1 = 容器框架 + 清红闪/受伤计时）：物品字段
-  `drink_time`（(0,10]，present = 可饮用，**与 restore_hunger 互斥**）+
-  `returns_item`（要求 drink_time，init 交叉校验）+ mob 字段
-  `milk_with`/`milk_gives`（成对校验，cow = bucket → milk_bucket）+
-  `bucket`/`milk_bucket` 物品 + 3 铁锭 bucket 配方 + **饮用通道**
-  （进食状态机 `start(duration)` 数据驱动时长；完成 = 消耗 + 返还容器 +
-  `clearStatusEffects()`【v1 效果集 = 清红闪，坠落起点刻意不清】）+
-  **挤奶**（`tryMilk` 右键序 launcher 后；mob 零影响、无冷却 = 文档化
-  v1）+ "milk" 音效 + 2 图标。
-- 测试 **788/788**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+- 功能阶段 P0–P45 全部完成并提交；P45 = 染色补全 + 十字植物渲染（P41/P12/
+  P20/P23 遗留"无蓝/绿/紫来源"）：**颜色词汇表纯数据化**（dye item
+  `dye_color` 命名，加颜色**零代码**改动）+ 补 6 色 blue/green/purple/
+  magenta/light_blue/cyan（项目 silver 位 = MC light_gray → **15 染料全**）
+  + `BlockModel::Shape::Cross`（2 交叉竖直面片，透明 pass 双面、无邻居
+  剔除、自身格光、面 shade 1.0）+ biome `decorations` 表面装饰（树的格网
+  + 专用 salt + 每(格,条目)独立 roll，落表面格正上方、洞穴啃掉不放、
+  树干让位）+ 内容全 JSON：5 方块（`lapis_ore`/`cactus`/`allium`/`tulip`/
+  `cornflower`）+ `lapis` 物品 + 6 染料 + 6 wool 变体 + 6 配方（青←lapis+绿
+  MC 1.14+）+ 11 atlas tile（空位，无 UV 移位）+ lapis 矿脉；P44 =
+  per-block 炉子状态（P40 遗留"单个全局 FurnaceState"）：`Game` 每炉子块
+  独立 `FurnaceState`（`std::map<BlockPos, FurnaceState>` 位置序）+
+  setBlock 收口创建/删除 + 面板绑定所点方块 + 存档 format 7（`furnaces`
+  双向交叉校验 + format 6 迁移：sole 归属/其余丢弃）；P40 = 炉子/熔炼
+  （P28 遗留"熟肉"）、P41 = wool 染色框架（P12/P20 遗留"wool 无用途/无
+  染色"；atlas 4×8→8×8 → base18 于 P41 重锚）、P42 = 弓后续 2、P43 =
+  牛奶桶最小项（饮用通道 + 挤奶）。
+- 测试 **813/813**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
 - 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P41 重锚【atlas
-  8×8】，P42/P43/P44 过门 = 第 16/17/18 次结构性免疫、无重锚）。
+  8×8】，P42/P43/P44/P45 过门 = 第 16/17/18/19 次结构性免疫、无重锚）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 
 ## 命令

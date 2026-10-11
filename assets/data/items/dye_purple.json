@@ -1,0 +1,7 @@
+{
+  "id": "dye_purple",
+  "type": "material",
+  "max_stack": 64,
+  "icon": "dye_purple",
+  "dye_color": "purple"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "tulip",
+  "properties": {
+    "hardness": 0.0,
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "drops": "tulip"
+  },
+  "model": {
+    "shape": "cross",
+    "textures": { "cross": "tulip" }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "cactus",
+  "properties": {
+    "hardness": 0.4,
+    "drops": "cactus"
+  },
+  "model": {
+    "textures": { "top": "cactus", "side": "cactus", "bottom": "cactus" }
+  }
+}

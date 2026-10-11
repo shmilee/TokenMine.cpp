@@ -1,0 +1,5 @@
+{
+  "id": "dye_green",
+  "output": { "item": "dye_green", "count": 1 },
+  "ingredients": [ { "item": "cactus", "count": 1 } ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "wool_green",
+  "properties": {
+    "hardness": 0.8,
+    "drops": "wool_green",
+    "dye_base": "wool",
+    "dye_color": "green"
+  },
+  "model": {
+    "textures": {
+      "top": "wool_green",
+      "side": "wool_green",
+      "bottom": "wool_green"
+    }
+  }
+}

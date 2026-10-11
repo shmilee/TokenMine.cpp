@@ -66,6 +66,11 @@ public:
     const WorldgenParams& params() const { return m_params; }
 
 private:
+    // A biome decoration entry with its block resolved to an id (Phase 45).
+    struct ResolvedDecoration {
+        BlockID block = BlockID::invalid();
+        float probability = 0.0f;
+    };
     struct ResolvedBiome {
         std::string name;
         int weight = 1;
@@ -74,6 +79,8 @@ private:
         int subsurfaceDepth = 3;
         float treeDensity = 0.0f;
         float heightScale = 1.0f;
+        // Surface decorations (Phase 45): resolved block names -> ids.
+        std::vector<ResolvedDecoration> decorations;
     };
     struct ResolvedOre {
         BlockID block = BlockID::invalid();
@@ -96,6 +103,13 @@ private:
     void placeOre(Chunk& chunk, const ChunkPos& pos, int wx, int wy, int wz,
                   const ResolvedOre& ore) const;
     void placeTrees(Chunk& chunk, const ChunkPos& pos) const;
+    // Surface decorations (Phase 45): per-lattice-cell rolls on the tree
+    // lattice, one independent roll per (cell, entry) pair; a decoration
+    // lands one above the surface cell — only when that cell still holds
+    // the biome's surface block (caves may have eaten it) and it is above
+    // sea level. Runs AFTER placeTrees, so trunks/canopies win collisions
+    // (placeIfAir never overwrites).
+    void placeDecorations(Chunk& chunk, const ChunkPos& pos) const;
     void placeIfAir(Chunk& chunk, const ChunkPos& pos, int wx, int wy, int wz,
                     BlockID id) const;
 

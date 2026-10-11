@@ -1,0 +1,5 @@
+{
+  "id": "dye_magenta",
+  "output": { "item": "dye_magenta", "count": 1 },
+  "ingredients": [ { "item": "tulip", "count": 1 } ]
+}

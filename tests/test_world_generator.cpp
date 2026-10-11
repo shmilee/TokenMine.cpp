@@ -33,7 +33,9 @@ BlockRegistry makeBlocks() {
     BlockRegistry reg;
     for (const char* name :
          {"stone", "dirt", "grass", "sand", "water", "wood", "leaves",
-          "bedrock", "coal_ore", "iron_ore", "gold_ore", "diamond_ore"}) {
+          "bedrock", "coal_ore", "iron_ore", "gold_ore", "diamond_ore",
+          // Phase 45: decoration sources + the lapis ore vein.
+          "lapis_ore", "cactus", "allium", "tulip", "cornflower"}) {
         auto r = reg.registerBlock(parseJson(blockDef(name)));
         if (!r.ok()) {
             ADD_FAILURE() << "block '" << name << "': " << r.error().message;
@@ -47,12 +49,21 @@ BiomeRegistry makeBiomes() {
     // Registration order mimics the sorted asset file order (desert,
     // forest, plains) and is what cumulative-weight selection walks.
     for (const char* def : {
+             // Phase 45: surface decorations (deliberately dense so the
+             // tests see them in a 32x32 region).
              R"({"id":"desert","weight":2,"surface":"sand","subsurface":"sand",)"
-             R"("subsurface_depth":4,"tree_density":0.0,"height_scale":0.9})",
+             R"("subsurface_depth":4,"tree_density":0.0,"height_scale":0.9,)"
+             R"("decorations":[{"block":"cactus","probability":0.35}]})",
              R"({"id":"forest","weight":4,"surface":"grass","subsurface":"dirt",)"
-             R"("subsurface_depth":3,"tree_density":0.12,"height_scale":1.1})",
+             R"("subsurface_depth":3,"tree_density":0.12,"height_scale":1.1,)"
+             R"("decorations":[{"block":"allium","probability":0.35},)"
+             R"({"block":"tulip","probability":0.35},)"
+             R"({"block":"cornflower","probability":0.35}]})",
              R"({"id":"plains","weight":4,"surface":"grass","subsurface":"dirt",)"
-             R"("subsurface_depth":3,"tree_density":0.03,"height_scale":1.0})",
+             R"("subsurface_depth":3,"tree_density":0.03,"height_scale":1.0,)"
+             R"("decorations":[{"block":"allium","probability":0.35},)"
+             R"({"block":"tulip","probability":0.35},)"
+             R"({"block":"cornflower","probability":0.35}]})",
          }) {
         auto r = reg.registerBiome(parseJson(def));
         if (!r.ok()) {
@@ -76,7 +87,13 @@ WorldgenParams makeParams() {
     iron.probability = 0.3f;
     iron.veinSize = 8;
     iron.maxY = 56;
-    p.ores = {coal, iron};
+    // Phase 45: the lapis vein (mirrors the asset's max_y 32).
+    OreConfig lapis;
+    lapis.block = "lapis_ore";
+    lapis.probability = 0.08f;
+    lapis.veinSize = 6;
+    lapis.maxY = 32;
+    p.ores = {coal, iron, lapis};
     return p;
 }
 
@@ -612,4 +629,128 @@ TEST(WorldGeneratorTest, CavesCanBeDisabled) {
         }
     }
     EXPECT_EQ(airPockets, 0);
+}
+
+// -- surface decorations (Phase 45) ------------------------------------------
+
+// Scan the region for decoration cells and verify the placement contract:
+// exactly one above the surface cell, on the biome's own surface block,
+// above sea level, on the tree lattice.
+TEST(WorldGeneratorTest, DecorationsSitOnBiomeSurface) {
+    Region r(42);
+    const BlockID cactusId = r.setup.blocks.idForName("cactus");
+    const BlockID alliumId = r.setup.blocks.idForName("allium");
+    const BlockID tulipId = r.setup.blocks.idForName("tulip");
+    const BlockID cornflowerId =
+        r.setup.blocks.idForName("cornflower");
+    int flowers = 0;
+    for (int x = 0; x < 32; ++x) {
+        for (int z = 0; z < 32; ++z) {
+            for (int y = 1; y < kWorldHeight; ++y) {
+                const BlockID id = r.at(x, y, z);
+                if (id == cactusId) {
+                    continue; // the desert is covered by its own test
+                }
+                if (id != alliumId && id != tulipId && id != cornflowerId) {
+                    continue;
+                }
+                // The cell below is the biome's own surface block ...
+                const Biome* biome =
+                    r.setup.biomes.findByName(r.gen->biomeNameAt(x, z));
+                ASSERT_NE(biome, nullptr);
+                EXPECT_EQ(r.at(x, y - 1, z),
+                          r.setup.blocks.idForName(biome->surface));
+                // ... and sits above sea level (no underwater decorations).
+                EXPECT_GT(y - 1, r.setup.params.seaLevel);
+                // ... and the decoration cell itself is on the tree lattice.
+                EXPECT_EQ(x % r.setup.params.treeLattice, 0);
+                EXPECT_EQ(z % r.setup.params.treeLattice, 0);
+                ++flowers;
+            }
+        }
+    }
+    EXPECT_GT(flowers, 0);
+}
+
+// Seed 28 carries a large dry desert in the 32x32 region (the seed-42
+// region has no desert columns at all), so the cactus path gets its own
+// coverage: cacti appear, and only on sand.
+TEST(WorldGeneratorTest, CactusGrowsOnDesertSurface) {
+    Region r(28);
+    const BlockID cactusId = r.setup.blocks.idForName("cactus");
+    const BlockID sandId = r.setup.blocks.idForName("sand");
+    int cactus = 0;
+    for (int x = 0; x < 32; ++x) {
+        for (int z = 0; z < 32; ++z) {
+            for (int y = 1; y < kWorldHeight; ++y) {
+                if (r.at(x, y, z) != cactusId) {
+                    continue;
+                }
+                EXPECT_EQ(r.at(x, y - 1, z), sandId);
+                EXPECT_EQ(y, r.gen->surfaceHeight(x, z) + 1);
+                ++cactus;
+            }
+        }
+    }
+    EXPECT_GT(cactus, 0);
+}
+
+// A decoration is exactly ONE above the terrain surface height (h+1) —
+// never floating higher. Trees win the h+1 cell (placeTrees runs first,
+// placeIfAir never overwrites), so a trunk column simply has no
+// decoration.
+TEST(WorldGeneratorTest, DecorationsAreExactlyOneAboveSurface) {
+    Region r(42);
+    const BlockID cactusId = r.setup.blocks.idForName("cactus");
+    const BlockID alliumId = r.setup.blocks.idForName("allium");
+    const BlockID tulipId = r.setup.blocks.idForName("tulip");
+    const BlockID cornflowerId = r.setup.blocks.idForName("cornflower");
+    int checked = 0;
+    for (int x = 0; x < 32; ++x) {
+        for (int z = 0; z < 32; ++z) {
+            for (int y = 1; y < kWorldHeight; ++y) {
+                const BlockID id = r.at(x, y, z);
+                if (id != cactusId && id != alliumId && id != tulipId &&
+                    id != cornflowerId) {
+                    continue;
+                }
+                EXPECT_EQ(y, r.gen->surfaceHeight(x, z) + 1);
+                ++checked;
+            }
+        }
+    }
+    EXPECT_GT(checked, 0);
+}
+
+TEST(WorldGeneratorTest, LapisOresAppearAndRespectMaxY) {
+    Region r(42);
+    const BlockID lapisId = r.setup.blocks.idForName("lapis_ore");
+    int lapis = 0;
+    int aboveMax = 0;
+    for (int x = 0; x < 32; ++x) {
+        for (int z = 0; z < 32; ++z) {
+            for (int y = 1; y < kWorldHeight; ++y) {
+                if (r.at(x, y, z) == lapisId) {
+                    ++lapis;
+                    if (y > 32) {
+                        ++aboveMax;
+                    }
+                }
+            }
+        }
+    }
+    EXPECT_GT(lapis, 0);
+    EXPECT_EQ(aboveMax, 0);
+}
+
+TEST(WorldGeneratorTest, CreateFailsOnUnknownDecorationBlock) {
+    BiomeRegistry biomes;
+    auto r = biomes.registerBiome(parseJson(
+        R"({"id":"x","surface":"grass","subsurface":"dirt",)"
+        R"("decorations":[{"block":"nope","probability":0.1}]})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    auto created =
+        WorldGenerator::create(42, makeParams(), biomes, makeBlocks());
+    ASSERT_FALSE(created.ok());
+    EXPECT_NE(created.error().message.find("nope"), std::string::npos);
 }
