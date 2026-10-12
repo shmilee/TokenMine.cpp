@@ -63,6 +63,16 @@ struct BlockID {
     static constexpr BlockID air() { return {0}; }
 };
 
+// One entry of a `chance_drops` list (Phase 52): the strict triple
+// {item, count, chance} — the same shape as the single `chance_drop`
+// (Phase 49). Defaults are the "unfilled" values; the parser validates the
+// triple is complete and in range before the entry is used.
+struct ChanceDrop {
+    std::string item; // the extra item name (non-empty once validated)
+    int count = 0;    // how many (1..64, fits one stack once validated)
+    double chance = 0.0; // per-break probability in (0, 1] once validated
+};
+
 // Behavioral properties. All fields have sensible defaults; JSON files only
 // need to override what differs.
 struct BlockProperties {
@@ -109,6 +119,16 @@ struct BlockProperties {
     std::string chanceDropItem;
     int chanceDropCount = 0;
     double chanceDropChance = 0.0;
+    // Chance secondary drop LIST (Phase 52): an OPTIONAL array of extra
+    // drops, each rolled INDEPENDENTLY per break (the entry-indexed salt
+    // keeps the entries decorrelated — see block/chance_drop). Each entry is
+    // the same strict triple as the single `chance_drop`. MUTUALLY EXCLUSIVE
+    // with the single `chance_drop` (a block has either 0 or one of the two
+    // systems, never both — validated at data load). Empty (the default) =
+    // no list. Every entry is validated at data load (triple + range) and at
+    // game init (the item must exist and its max stack fit the count — the
+    // drops discipline).
+    std::vector<ChanceDrop> chanceDrops;
     // Right-click interaction (Phase 17): kInteractCraftingTable opens the
     // crafting-table GUI instead of placing a block. Empty (the default) =
     // no special interaction. Validated against the known set at data load.

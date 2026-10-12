@@ -21,4 +21,14 @@ namespace mc {
 // callers can pass raw data without re-validating).
 bool rollChanceDrop(std::uint64_t seed, int x, int y, int z, double chance);
 
+// Phase 52: the same contract for entry `entryIndex` (0-based) of a
+// `chance_drops` LIST. Each entry rolls INDEPENDENTLY of the others: the
+// per-entry salt is derived from a list-dedicated base salt finalized with
+// the entry index, so two entries at the same cell (and the single-entry
+// chance_drop roll) never track each other. The roll is still a pure
+// function of (seed, position, entryIndex, chance): the same cell broken in
+// the same world always gives the same result per entry.
+bool rollChanceDropEntry(std::uint64_t seed, int x, int y, int z,
+                         int entryIndex, double chance);
+
 } // namespace mc

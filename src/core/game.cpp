@@ -492,21 +492,43 @@ Result<void> Game::buildScene() {
     // discipline — a typo in the extra-drop name fails init loudly).
     for (const BlockID id : m_blocks.allIds()) {
         const Block& b = m_blocks.at(id);
-        if (b.properties.chanceDropItem.empty()) {
+        if (b.properties.chanceDropItem.empty() &&
+            b.properties.chanceDrops.empty()) {
             continue;
         }
-        const ItemID cdId = m_items.idForName(b.properties.chanceDropItem);
-        if (!cdId.valid()) {
-            return MC_FAIL("block '" + b.name + "' chance_drop names unknown "
-                           "item '" + b.properties.chanceDropItem + "'");
+        if (!b.properties.chanceDropItem.empty()) {
+            const ItemID cdId = m_items.idForName(b.properties.chanceDropItem);
+            if (!cdId.valid()) {
+                return MC_FAIL("block '" + b.name + "' chance_drop names unknown "
+                               "item '" + b.properties.chanceDropItem + "'");
+            }
+            if (b.properties.chanceDropCount > m_items.at(cdId).maxStack) {
+                return MC_FAIL("block '" + b.name + "' chance_drop yields " +
+                               std::to_string(b.properties.chanceDropCount) +
+                               " of '" + b.properties.chanceDropItem +
+                               "' but its max stack is " +
+                               std::to_string(m_items.at(cdId).maxStack));
+            }
         }
-        if (b.properties.chanceDropCount > m_items.at(cdId).maxStack) {
-            return MC_FAIL("block '" + b.name + "' chance_drop yields " +
-                           std::to_string(b.properties.chanceDropCount) +
-                           " of '" + b.properties.chanceDropItem +
-                           "' but its max stack is " +
-                           std::to_string(m_items.at(cdId).maxStack));
+        // Phase 52: the chance_drops LIST — the same discipline per entry
+        // (the item must exist and its max stack fit the entry's count).
+        for (std::size_t i = 0; i < b.properties.chanceDrops.size(); ++i) {
+            const ChanceDrop& e = b.properties.chanceDrops[i];
+            const ItemID id2 = m_items.idForName(e.item);
+            if (!id2.valid()) {
+                return MC_FAIL("block '" + b.name + "' chance_drops[" +
+                               std::to_string(i) + "] names unknown item '" +
+                               e.item + "'");
+            }
+            if (e.count > m_items.at(id2).maxStack) {
+                return MC_FAIL("block '" + b.name + "' chance_drops[" +
+                               std::to_string(i) + "] yields " +
+                               std::to_string(e.count) + " of '" + e.item +
+                               "' but its max stack is " +
+                               std::to_string(m_items.at(id2).maxStack));
+            }
         }
+        continue;
     }
 
     // -- mobs (Phase 20): data-driven types + spawn config ------------------
@@ -2198,6 +2220,20 @@ void Game::breakBlock(const BlockHit& hit) {
             m_entities.push_back(std::make_unique<ItemEntity>(
                 m_world, m_blocks, cdItem.name, cdItem.maxStack,
                 block.properties.chanceDropCount, dropPos));
+        }
+    }
+    // Chance secondary drop LIST (Phase 52): each entry rolls independently
+    // (the entry-indexed salt keeps them decorrelated — block/chance_drop)
+    // and each passing entry spawns its own item at the block center.
+    for (std::size_t i = 0; i < block.properties.chanceDrops.size(); ++i) {
+        const ChanceDrop& cd = block.properties.chanceDrops[i];
+        if (rollChanceDropEntry(static_cast<std::uint64_t>(m_generator->seed()),
+                                hit.block.x, hit.block.y, hit.block.z,
+                                static_cast<int>(i), cd.chance)) {
+            const Item& cdItem = m_items.at(m_items.idForName(cd.item));
+            m_entities.push_back(std::make_unique<ItemEntity>(
+                m_world, m_blocks, cdItem.name, cdItem.maxStack,
+                cd.count, dropPos));
         }
     }
 

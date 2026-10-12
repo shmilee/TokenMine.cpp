@@ -860,6 +860,146 @@ TEST(BlockRegistryTest, ChanceDropChanceOutOfRange) {
 }
 
 // ---------------------------------------------------------------------------
+// Chance drop LIST (Phase 52): chance_drops is an array of the same strict
+// triples, mutually exclusive with the single chance_drop.
+// ---------------------------------------------------------------------------
+
+TEST(BlockRegistryTest, ParsesChanceDrops) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(propsDef(
+        R"({"drops":"dirt","chance_drops":[
+            {"item":"wheat_1","count":1,"chance":0.125},
+            {"item":"apple","count":2,"chance":0.5}]})")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Block& b = reg.at(*r);
+    EXPECT_EQ(b.properties.drops, "dirt");
+    ASSERT_EQ(b.properties.chanceDrops.size(), 2u);
+    EXPECT_EQ(b.properties.chanceDrops[0].item, "wheat_1");
+    EXPECT_EQ(b.properties.chanceDrops[0].count, 1);
+    EXPECT_DOUBLE_EQ(b.properties.chanceDrops[0].chance, 0.125);
+    EXPECT_EQ(b.properties.chanceDrops[1].item, "apple");
+    EXPECT_EQ(b.properties.chanceDrops[1].count, 2);
+    EXPECT_DOUBLE_EQ(b.properties.chanceDrops[1].chance, 0.5);
+}
+
+TEST(BlockRegistryTest, ChanceDropsAbsentByDefault) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(minimalDef("stone")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(reg.at(*r).properties.chanceDrops.empty());
+}
+
+TEST(BlockRegistryTest, ChanceDropsMustBeArray) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(propsDef(R"({"chance_drops":{"item":"apple","count":1,
+                           "chance":0.5}})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("must be an array"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, ChanceDropsRejectsEmptyArray) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(propsDef(R"({"chance_drops":[]})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("must not be an empty array"),
+              std::string::npos);
+}
+
+TEST(BlockRegistryTest, ChanceDropsRejectsNonObjectEntry) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(propsDef(R"({"chance_drops":["apple"]})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("chance_drops[0]"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, ChanceDropsRejectsUnknownField) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        propsDef(R"({"chance_drops":[{"item":"apple","count":1,
+                                      "chance":0.5,"foo":1}]})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("unknown field"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, ChanceDropsRequiresItem) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(propsDef(R"({"chance_drops":[{"count":1,"chance":0.5}]})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("non-empty"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, ChanceDropsRequiresCount) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(propsDef(R"({"chance_drops":[{"item":"apple","chance":0.5}]})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("[1, 64]"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, ChanceDropsRequiresChance) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(propsDef(R"({"chance_drops":[{"item":"apple","count":1}]})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("(0, 1]"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, ChanceDropsCountOutOfRange) {
+    auto badLo = parseDef(propsDef(
+        R"({"chance_drops":[{"item":"apple","count":0,"chance":0.5}]})"));
+    BlockRegistry regLo;
+    auto rLo = regLo.registerBlock(badLo);
+    ASSERT_FALSE(rLo.ok());
+    EXPECT_NE(rLo.error().message.find("[1, 64]"), std::string::npos);
+    auto badHi = parseDef(propsDef(
+        R"({"chance_drops":[{"item":"apple","count":65,"chance":0.5}]})"));
+    BlockRegistry regHi;
+    auto rHi = regHi.registerBlock(badHi);
+    ASSERT_FALSE(rHi.ok());
+    EXPECT_NE(rHi.error().message.find("[1, 64]"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, ChanceDropsChanceOutOfRange) {
+    auto zero = parseDef(propsDef(
+        R"({"chance_drops":[{"item":"apple","count":1,"chance":0}]})"));
+    BlockRegistry regZero;
+    auto rZero = regZero.registerBlock(zero);
+    ASSERT_FALSE(rZero.ok());
+    EXPECT_NE(rZero.error().message.find("(0, 1]"), std::string::npos);
+    auto big = parseDef(propsDef(
+        R"({"chance_drops":[{"item":"apple","count":1,"chance":1.5}]})"));
+    BlockRegistry regBig;
+    auto rBig = regBig.registerBlock(big);
+    ASSERT_FALSE(rBig.ok());
+    EXPECT_NE(rBig.error().message.find("(0, 1]"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, ChanceDropsValidatesEveryEntry) {
+    // A bad SECOND entry must be caught too (not just the first).
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        propsDef(R"({"chance_drops":[{"item":"apple","count":1,"chance":0.5},
+                                      {"item":"","count":1,"chance":0.5}]})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("chance_drops[1]"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, ChanceDropsMutuallyExclusiveWithChanceDrop) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        propsDef(R"({"chance_drop":{"item":"apple","count":1,"chance":0.5},
+                     "chance_drops":[{"item":"wheat_1","count":1,
+                                      "chance":0.125}]})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("mutually exclusive"),
+              std::string::npos);
+}
+
+// ---------------------------------------------------------------------------
 // Crop environment fields (Phase 50): grows_on / growth_light / dry_slowdown
 // are optional growth-condition fields (absent = no requirement).
 // ---------------------------------------------------------------------------

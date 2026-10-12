@@ -175,6 +175,49 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
                        [&](const Json& v) { out.chanceDropChance = v.asDouble(); });
         MC_TRY(r);
     }
+    // Chance secondary drop LIST (Phase 52): an OPTIONAL array of the same
+    // strict triples as the single `chance_drop` above. Each entry rolls
+    // independently (the entry-indexed salt — block/chance_drop). The array
+    // is mutually exclusive with the single `chance_drop` (checked in the
+    // validation pass, where both are known); an empty array is a no-op and
+    // rejected (the ammo discipline).
+    if (const Json* cdl = p->find("chance_drops")) {
+        if (!cdl->isArray()) {
+            return MC_FAIL("block property 'chance_drops' must be an array "
+                           "of {\"item\": ..., \"count\": ..., \"chance\": ...} "
+                           "objects");
+        }
+        if (cdl->size() == 0) {
+            return MC_FAIL("block property 'chance_drops' must not be an "
+                           "empty array (omit it when the block has no "
+                           "chance drops)");
+        }
+        for (std::size_t i = 0; i < cdl->size(); ++i) {
+            const Json& entry = cdl->at(i);
+            const std::string at =
+                "block property 'chance_drops[" + std::to_string(i) + "]'";
+            if (!entry.isObject()) {
+                return MC_FAIL(at + " must be an object {\"item\": ..., "
+                                   "\"count\": ..., \"chance\": ...}");
+            }
+            for (const auto& [key, value] : entry.members()) {
+                if (key != "item" && key != "count" && key != "chance") {
+                    return MC_FAIL(at + " has an unknown field '" + key + "'");
+                }
+            }
+            ChanceDrop cdEntry;
+            r = checkField(entry, "item", "string",
+                           [&](const Json& v) { cdEntry.item = v.asString(); });
+            MC_TRY(r);
+            r = checkField(entry, "count", "number",
+                           [&](const Json& v) { cdEntry.count = v.asInt(); });
+            MC_TRY(r);
+            r = checkField(entry, "chance", "number",
+                           [&](const Json& v) { cdEntry.chance = v.asDouble(); });
+            MC_TRY(r);
+            out.chanceDrops.push_back(std::move(cdEntry));
+        }
+    }
     // Water reaction (Phase 51): an OPTIONAL object
     // {"source": <block name>, "flowing": <block name>} — the blocks a cell
     // of this fluid converts into when 6-adjacent to a water cell (see
@@ -319,6 +362,34 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
             return MC_FAIL("block property 'chance_drop.chance' must be in "
                            "(0, 1], got " +
                            std::to_string(out.chanceDropChance));
+        }
+    }
+    // Chance drop list (Phase 52): MUTUALLY EXCLUSIVE with the single
+    // 'chance_drop' (a block has at most one chance-drop system), and each
+    // entry is the same strict triple — item (non-empty), count ([1,64]),
+    // chance ((0,1]). (The items' existence + max-stack fit are
+    // cross-checked at game init, the drops discipline.)
+    if (p->find("chance_drops") != nullptr) {
+        if (p->find("chance_drop") != nullptr) {
+            return MC_FAIL("block 'chance_drops' (the list) is mutually "
+                           "exclusive with 'chance_drop' (the single entry): "
+                           "write exactly one of the two");
+        }
+        for (std::size_t i = 0; i < out.chanceDrops.size(); ++i) {
+            const ChanceDrop& e = out.chanceDrops[i];
+            const std::string at = "block property 'chance_drops[" +
+                                   std::to_string(i) + "].";
+            if (e.item.empty()) {
+                return MC_FAIL(at + "item' must be a non-empty item name");
+            }
+            if (e.count < 1 || e.count > 64) {
+                return MC_FAIL(at + "count' must be in [1, 64], got " +
+                               std::to_string(e.count));
+            }
+            if (e.chance <= 0.0 || e.chance > 1.0) {
+                return MC_FAIL(at + "chance' must be in (0, 1], got " +
+                               std::to_string(e.chance));
+            }
         }
     }
     // Soil requirement (Phase 50): an EXPLICIT empty grows_on is a typo

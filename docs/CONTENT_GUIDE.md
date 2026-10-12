@@ -126,6 +126,25 @@
    `rollChanceDrop(world_seed, x, y, z, chance)`（`src/block/chance_drop`，
    splitmix64 + 位置 hash3 + 专用 salt，纯函数）：**同一世界同一格每次破坏
    结果相同**（无 per-instance RNG、无墙钟），无输入运行字节可复现。
+   **概率次级掉落列表**（Phase 52）：可选 `chance_drops` **数组**，元素是
+   与上面**相同的严格三元组**；与单条目 `chance_drop` **互斥**（同时写 =
+   解析拒绝，二选一）：
+
+   ```json
+   "chance_drops": [
+     { "item": "wheat_1", "count": 1, "chance": 0.125 },
+     { "item": "apple",   "count": 2, "chance": 0.5 }
+   ]
+   ```
+
+   每个条目**独立 roll**（`rollChanceDropEntry(seed, x, y, z, entryIndex,
+   chance)`，条目索引去相关 salt——同格各条目互不追踪、也不追踪单条目
+   roll），每条目至多 1 个掉落实体；空数组 / 任一元素非对象 / 未知键 /
+   缺三元组 / 越界均拒绝（逐条目点名 `chance_drops[i]`）；init 每条目
+   复用 drops 纪律（物品存在 + `count` ≤ max_stack）。首个使用者 =
+   `grass`（`drops: dirt` + `chance_drops: [wheat_1 ×1 @ 0.125]` = MC 草
+   掉泥土 + 偶尔种子，0.125 = MC 基础概率）。
+
    `hardness` 驱动破坏耗时（按住左键，`1.5s × hardness ÷ 选中物品 break speed`，
    hardness ≤0 且可破坏=即时破坏）。
    **十字植物形状**（Phase 45）：`model` 加 `"shape": "cross"`，`textures`
@@ -448,8 +467,9 @@ Phase 49）。
    首个使用者 = `leaves` 的 `"chance_drop": { "item": "apple", "count": 1,
    "chance": 0.0078125 }`（1/128，Minecraft 橡树叶掉苹果 ~0.5% 同款量级）。
    加"某方块偶尔掉 X" = 在该方块 JSON 加一个 `chance_drop` 对象 + 物品
-   JSON/图标，零核心代码。每格至多一个次级掉落（v1；加权多掉落列表未
-   引入——见 KNOWN_ISSUES）。
+   JSON/图标，零核心代码。需要**多个**偶尔掉落（各自概率、独立 roll）=
+   改用 `chance_drops` 数组（Phase 52，与 `chance_drop` 互斥；首个使用者
+   = `grass` 的 `[wheat_1 ×1 @ 0.125]`）。
 2. **吃时给效果的食物**（物品字段 `grants_effect`，见上方物品模板）：
    首个使用者 = `golden_apple`（`"grants_effect": { "name": "regeneration",
    "duration": 10.0 }`）。进食通道完整吃下（1.6 s）时在恢复饥饿的同一处

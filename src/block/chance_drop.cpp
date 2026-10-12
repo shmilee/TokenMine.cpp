@@ -11,6 +11,18 @@ namespace {
 // tree/decoration separation).
 constexpr std::uint64_t kChanceDropSalt = 0x01B3E0D5E77C2A93ULL;
 
+// Phase 52: the chance_drops LIST gets its own base salt (distinct from the
+// single-entry salt above, so the two systems never track each other). The
+// per-ENTRY salt finalizes the base salt with the entry index — the index
+// makes the input vary per entry, which decorrelates the entries' rolls at
+// the same cell (PITS #4: splitmix64 is a pure finalizer; the input must
+// vary, and the index guarantees that).
+constexpr std::uint64_t kChanceDropsSalt = 0x7A1C0E5B3F9D2E46ULL;
+
+// The golden-ratio 64-bit constant (the growth-roll convention) advances the
+// base salt per entry index.
+constexpr std::uint64_t kGolden64 = 0x9E3779B97F4A7C15ULL;
+
 // Reinterpret an (possibly negative) int as 64 bits for hashing (two's
 // complement is a bijection — the worldgen/growth convention).
 std::uint64_t asU64(int v) {
@@ -30,6 +42,26 @@ bool rollChanceDrop(std::uint64_t seed, int x, int y, int z, double chance) {
     // precision), compared against the chance. Deterministic per cell.
     const std::uint64_t h =
         splitmix64(seed + hash3(asU64(x), asU64(y), asU64(z), kChanceDropSalt));
+    const double r = static_cast<double>(h >> 11) *
+                     (1.0 / 9007199254740992.0); // 2^-53
+    return r < chance;
+}
+
+bool rollChanceDropEntry(std::uint64_t seed, int x, int y, int z,
+                         int entryIndex, double chance) {
+    if (chance <= 0.0) {
+        return false;
+    }
+    if (chance >= 1.0) {
+        return true;
+    }
+    // The per-entry salt (see the constants above), then the same
+    // position-hash + finalizer chain as the single-entry roll.
+    const std::uint64_t entrySalt =
+        splitmix64(kChanceDropsSalt +
+                   static_cast<std::uint64_t>(entryIndex) * kGolden64);
+    const std::uint64_t h = splitmix64(
+        seed + hash3(asU64(x), asU64(y), asU64(z), entrySalt));
     const double r = static_cast<double>(h >> 11) *
                      (1.0 / 9007199254740992.0); // 2^-53
     return r < chance;

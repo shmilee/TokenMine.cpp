@@ -9,30 +9,33 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 51 完成时）
+## 现状（Phase 52 完成时）
 
-- 功能阶段 P0–P51 全部完成并提交；P51 = 熔岩流体系统（用户"按候选顺序
-   继续后面两个 phase" = 候选 1，代理定案最小完整版 = 熔岩第二流体种类
-   + 水/熔岩反应 + 熔岩桶 + format 9，加权多掉落留后续）：**chunk 流体
-   字节双种类**（0=干 / 1..8=水 level / 9..16=熔岩 level，一格至多一种，
-   `setFluid` 正 level 替换异种、0 只清本种）+ **FluidSim tick = 反应
-   pass**（快照扫熔岩格 6-邻有水 → setBlock 为 lava 块 `water_reaction`
-   产物【邻水含 L8 源 → obsidian / 流动水 → stone】；水不消耗、无蒸汽
-   = v1）→ 水 → 熔岩（每 simulateType 自含快照，异种格当方块 = 先到的
-   挡后到的，稳态 = 无 6-邻接水-熔岩对）+ **反应表纯数据**（lava 块
-   `water_reaction {source,flowing}` 严格配对 + init 双名存在校验；
-   无 = 惰性）+ **流体块 light_emission**（lava 15 发光池）+ **桶 MC
-   语义双种类化**（`collects_fluid` = 名称数组、`collects_becomes` 废除
-   = `fullBucketFor(fluid, empty)` 推导、init 每流体恰 1 满桶倒回 + 对称；
-   舀 = raycastFluid L8 源【墙遮挡】/ 倒 = raycastBlock 受击面邻格）+
-   **存档 format 9**（流体编辑 5 元素 `[x,y,z,level,"water"|"lava"]`，
-   format<9 全迁 water）+ 内容：`lava`（fluid/lava、emission 15、
-   water_reaction、不可破坏）/ `obsidian`（hardness 10）/ `lava_bucket`
-   + bucket.json `["water","lava"]` + atlas 空位 lava [7,6] / obsidian
-   [7,7]（无 UV 移位）+ 1 图标 + 2 纹理；**v1 边界**：worldgen 无熔岩、
-   无燃烧/下沉/蒸汽、湿润判定含熔岩、obsidian 仅反应可得、isInWater
-   仅水；921/921（+12）、`-Werror` 0 警告、base18 **第 25 次结构性免疫**
-   【worldgen 未动、atlas 落空位】；
+- 功能阶段 P0–P52 全部完成并提交；P52 = 加权多掉落列表（用户"按候选顺序
+   继续后面两个 phase" = 候选 2，代理定案最小完整版 = `chance_drops`
+   多条目独立 roll + grass 改 MC 语义，放置限制/熔岩后续留后续）：
+   **`chance_drops` 纯数据**（block 可选数组，元素 = 与 P49 单条目
+   `chance_drop` **相同的严格三元组** `{item,count,chance}`；与
+   `chance_drop` **互斥**【同时写 = 解析拒绝】；空数组/非对象元素/未知键/
+   缺三元组/越界逐条目点名 `chance_drops[i]` 拒绝）+ **每条目独立
+   roll**（`rollChanceDropEntry(seed,x,y,z,entryIndex,chance)` 纯函数：
+   列表专用 base salt + 条目索引 golden-ratio 推进 + splitmix64 finalize，
+   同格各条目互不追踪、也不追踪单条目 roll；per-cell 确定性 = P49 同款
+   刻意代价）+ breakBlock 循环条目、每条目至多 1 掉落实体 + init 每条目
+   复用 drops 纪律（物品存在 + count ≤ max_stack，点名 `chance_drops[i]`）
+   + 内容：`grass` 改 **MC 语义**（`drops: wheat_1` → `drops: dirt` +
+   `chance_drops: [wheat_1 ×1 @ 0.125]` = 草掉泥土 + 偶尔种子，0.125 =
+   MC 基础概率；种子来源 = 草概率掉 + 未熟作物掉落）；`leaves` 保留单条目
+   `chance_drop` = 两字段并存示范。**无 format 变更**（format 9，掉落 =
+   实体走既有 `entities`）；942/942（+21：block 解析 13 + entry roll 8）、
+   `-Werror` 0 警告、base18 **第 26 次结构性免疫**【grass drops 变数组不改
+   worldgen/atlas = 无输入零活动】；
+   P51 = 熔岩流体系统（用户"按候选顺序继续后面两个 phase" = 候选 1，
+   代理定案最小完整版 = 熔岩第二流体种类 + 水/熔岩反应 + 熔岩桶 + format
+   9，加权多掉落留 P52）：chunk 流体字节双种类（0=干 / 1..8=水 / 9..16=
+   熔岩）+ FluidSim 反应 pass（水/熔岩 6-邻 → obsidian/stone）+ 桶双种类
+   化 + format 9 + lava/obsidian/lava_bucket 内容；921/921（+12）、第 25 次
+   结构性免疫；
    P50 = 耕地·水·光照生长条件（用户"按建议继续下两个阶段" = 建议 2，
    代理定案最小完整版 = `farmland` 方块【dirt 合成】+ 生长引擎三道数据
    驱动环境门，加权多掉落/熔岩/放置限制留后续）：**作物侧三个可选环境
@@ -111,10 +114,10 @@
   （P28 遗留"熟肉"）、P41 = wool 染色框架（P12/P20 遗留"wool 无用途/无
   染色"；atlas 4×8→8×8 → base18 于 P41 重锚）、P42 = 弓后续 2、P43 =
   牛奶桶最小项（饮用通道 + 挤奶）。
-- 测试 **921/921**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+- 测试 **942/942**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
 - 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P41 重锚【atlas
-  8×8】，P42/P43/P44/P45/P46/P47/P48/P49/P50/P51 过门 = 第 16/17/18/19/20/
-  21/22/23/24/25 次结构性免疫、无重锚）。
+  8×8】，P42/P43/P44/P45/P46/P47/P48/P49/P50/P51/P52 过门 = 第 16/17/18/
+  19/20/21/22/23/24/25/26 次结构性免疫、无重锚）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 
 ## 命令

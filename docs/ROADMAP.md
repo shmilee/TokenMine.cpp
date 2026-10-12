@@ -124,6 +124,32 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
  **瞄面中心半格纪律 + raycastBlock 探针先验证再跑输入 E2E**）；KNOWN_ISSUES 桶节双种类化 +
  新"熔岩 / 流体双种类"节 6 条（worldgen 无熔岩 / 无燃烧·下沉 / 无蒸汽·水不消耗 / 湿润判定含
  熔岩 / obsidian 无其他用途 / isInWater 仅水）。
+ - [x] **Phase 52** — 加权多掉落列表（用户"按候选顺序继续后面两个 phase" = 候选 2，代理定案最小完整版：
+  `chance_drops` 多条目独立 roll + grass 改 MC 语义，放置限制/熔岩后续留后续）。**`chance_drops` 纯数据**：
+  block 可选**数组**，元素 = 与 P49 单条目 `chance_drop` **相同的严格三元组** `{item, count, chance}`；
+  与 `chance_drop` **互斥**（同时写 = 解析拒绝，二选一）；空数组 / 任一元素非对象 / 未知键 / 缺三元组 /
+  越界均**逐条目点名** `chance_drops[i]` 拒绝（ammo 纪律）。**每条目独立 roll**：
+  `rollChanceDropEntry(seed, x, y, z, entryIndex, chance)` 确定性纯函数（`src/block/chance_drop`）——
+  列表**专用 base salt**（与单条目 salt 分离，两套系统互不追踪）+ 条目索引 golden-ratio 推进 +
+  splitmix64 finalize（PITS #4：纯 finalizer，索引保证输入按条目变化 = 同格各条目去相关）；
+  **per-cell 确定性** = P49 同款刻意代价（同世界同格每次破坏每条目同果，无输入字节可复现）。
+  breakBlock 循环条目、每条目至多 1 掉落实体（与 `drops` 主掉落独立）；**init 每条目复用 drops 纪律**
+  （物品存在 + `count` ≤ max_stack，typo 点名 `chance_drops[i]` 拒启）。**内容**：`grass` 改 **MC 语义**
+  ——`drops: wheat_1` → **`drops: dirt`** + `chance_drops: [{wheat_1, 1, 0.125}]`（草掉泥土 + 偶尔种子，
+  0.125 = MC 基础概率；关闭 P48 已知问题"草掉种子非泥土"）；种子来源 = 草概率掉 + 未熟作物掉落；
+  `leaves` 保留单条目 `chance_drop` = **两字段并存示范**。**无 format 变更**（format 9；掉落 = 实体走
+  既有 `entities`）。942/942（+21：block 解析 13 + entry roll 8）；`-Wall -Wextra -Wpedantic -Werror`
+  恒 0 警告。E2E（批跑，**全绿**）：**S1 base18 门**：P52 ×2 字节一致 + == base18 → **第 26 次结构性
+  免疫（免重锚）**【grass drops 变数组不改 worldgen/atlas = 无输入零活动】+ 红心 0；**S2 破坏草输入**
+  （300f，预瞄准存档 + 按住左键 1.2s @ 帧时 2.9s 锚定 `Entering main loop`；草 (22,46,−5) + 4 格射线
+  走廊 air，瞄 yaw 0 / pitch atan2(−0.12,5) = −0.0239954，**真实 raycastBlock 探针 p52ray 先验证**
+  hit=(22,46,−5) n=(0,0,1) dist 4.501；`chance_drops[0]` roll 在 (22,46,−5) seed 9 **PASS**【C++ 探针
+  p52roll 预计算】）：存档 ×2 **归一化一致**（剥实体 age = 真实 dt，确定性权威）+ 存档精确（草消失 +
+  **dirt ×1 + wheat_1 ×1** 落 (22.625/22.375, 45, −4.5) = 确定性 ±0.125 散布）+ 无输入 ctl ×2
+  一致（草存续、零实体）；**S3 init 失败 ×2**（scratch 资产副本）：`chance_drops` + `chance_drop`
+  同时写 → rc=1 + "mutually exclusive"、`chance_drops[0].item = "nope"` → rc=1 + "chance_drops[0]
+  names unknown item"。KNOWN_ISSUES 关闭 2（草掉种子非泥土 / 概率次级掉落单条目）。
+
 
 ## 细节存档索引（docs/archive/）
 
@@ -175,5 +201,6 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 49** — `archive/phase-49.md`
 - **Phase 50** — `archive/phase-50.md`
 - **Phase 51** — `archive/phase-51.md`
+- **Phase 52** — `archive/phase-52.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。
