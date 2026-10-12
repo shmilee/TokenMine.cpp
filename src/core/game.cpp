@@ -20,6 +20,7 @@
 #include "entity/item_entity.hpp"
 #include "entity/mob_entity.hpp"
 #include "entity/mob_mesh.hpp"
+#include "world/growth.hpp"
 #include "world/noise.hpp"
 #include "ui/font.hpp"
 #include "ui/inventory_ui.hpp"
@@ -411,7 +412,9 @@ Result<void> Game::buildScene() {
     MC_TRY(itemsLoad);
     // Strict data check: a block's drops must name a registered item whose
     // max stack fits dropsCount (block items cover the usual case, e.g.
-    // grass -> dirt; ores drop material items, e.g. iron_ore -> iron_ingot).
+    // grass -> wheat_1 seed; ores drop material items, e.g.
+    // iron_ore -> iron_ingot; mature crops drop a harvest material, e.g.
+    // wheat_7 -> wheat x2).
     for (const BlockID id : m_blocks.allIds()) {
         const Block& b = m_blocks.at(id);
         if (b.properties.drops.empty()) {
@@ -428,6 +431,22 @@ Result<void> Game::buildScene() {
                            " of '" + b.properties.drops +
                            "' but its max stack is " +
                            std::to_string(m_items.at(dropId).maxStack));
+        }
+    }
+
+    // Strict data check (Phase 48): a block's grows_to must name an
+    // EXISTING block (the next growth stage). The pairing + range are
+    // enforced at data load; this is the existence cross-check (a typo in
+    // the target name fails init loudly — the ammo discipline).
+    for (const BlockID id : m_blocks.allIds()) {
+        const Block& b = m_blocks.at(id);
+        if (b.properties.growsTo.empty()) {
+            continue;
+        }
+        const BlockID toId = m_blocks.idForName(b.properties.growsTo);
+        if (!toId.valid()) {
+            return MC_FAIL("block '" + b.name + "' grows to unknown block '" +
+                           b.properties.growsTo + "'");
         }
     }
 
@@ -793,6 +812,11 @@ Result<void> Game::buildScene() {
     // generated terrain, and the saved player/inventory/entities/time win
     // over the fresh ones (--time only affects fresh worlds).
     MC_TRY(tryLoadSave());
+
+    // Crop-growth tracking set (Phase 48): rebuilt from the world after
+    // the save load (block edits restored the planted crops). A fresh
+    // world scans to nothing — worldgen places no crops (v1).
+    rescanCrops();
 
     // The lighting pipeline has covered every chunk that exists now (the
     // fresh demo area, or the loaded save's world — applySave ends with a
@@ -1265,6 +1289,40 @@ Result<void> Game::tryLoadSave() {
     return {};
 }
 
+void Game::rescanCrops() {
+    // Rebuild the growth tracking set from the world: every cell whose
+    // block carries a non-empty growsTo. The block id IS the stage, so a
+    // full rescan is exact (no per-instance state to restore). Runs at the
+    // end of buildScene — a fresh world finds nothing (worldgen places no
+    // crops), a loaded save finds the player's planted ones (restored by
+    // the block edits).
+    m_crops.clear();
+    for (const ChunkPos& cp : m_world.chunkPositions()) {
+        const Chunk* chunk = m_world.findChunk(cp);
+        if (chunk == nullptr) {
+            continue;
+        }
+        // A chunk is 16x16x16 (kChunkSize on every axis); the world's
+        // height is stacked across ChunkPos.y (see FluidSim's origin math).
+        // Local coordinates are [0, kChunkSize) on all three axes.
+        const int baseX = cp.x * kChunkSize;
+        const int baseY = cp.y * kChunkSize;
+        const int baseZ = cp.z * kChunkSize;
+        for (int ly = 0; ly < kChunkSize; ++ly) {
+            for (int lz = 0; lz < kChunkSize; ++lz) {
+                for (int lx = 0; lx < kChunkSize; ++lx) {
+                    const BlockID id = chunk->get(lx, ly, lz);
+                    if (m_blocks.at(id).properties.growsTo.empty()) {
+                        continue;
+                    }
+                    const BlockPos wp {baseX + lx, baseY + ly, baseZ + lz};
+                    m_crops[wp] = id;
+                }
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Init / main loop
 // ---------------------------------------------------------------------------
@@ -1459,6 +1517,27 @@ void Game::update(double dt) {
     // open, as in Minecraft).
     for (auto& [pos, st] : m_furnaces) {
         tickFurnace(st, m_items);
+    }
+
+    // Crop growth (Phase 48): one fixed 1/60 substep per frame (the
+    // day-cycle class — byte-reproducible). The pure roll lives in
+    // world/growth (hash of world seed + frame + position); the position-
+    // ordered set makes the step list deterministic. Advances go through
+    // setBlock (chunk dirty marking + tracking-set maintenance). Runs in
+    // every pointer/panel state (the world keeps ticking while a panel is
+    // open, as in Minecraft).
+    {
+        const std::vector<GrowthStep> steps = cropGrowthSteps(
+            m_world, m_blocks, m_crops,
+            static_cast<std::uint64_t>(m_generator->seed()),
+            static_cast<std::uint64_t>(m_frameCount));
+        for (const GrowthStep& s : steps) {
+            setBlock(s.pos.x, s.pos.y, s.pos.z, s.to);
+            // Cross-shaped crops are non-opaque: the light field is
+            // unchanged, but the local update is a harmless no-op kept for
+            // consistency with every other block change.
+            Lighting::updateLocal(m_world, m_blocks, s.pos);
+        }
     }
 
     // Phase 15 UI keys: F3/F5 work in any pointer state; E opens the
@@ -1950,6 +2029,18 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
             m_furnaces.emplace(fpos, FurnaceState {});
         } else {
             m_furnaces.erase(fpos);
+        }
+    }
+    // Phase 48: the crop-growth tracking set follows the cell (like the
+    // furnace states): a block with a non-empty growsTo is tracked, a cell
+    // that stops holding one drops out — maturity included (the final
+    // stage has no growsTo and never rolls again).
+    {
+        const BlockPos cpos {x, y, z};
+        if (!m_blocks.at(id).properties.growsTo.empty()) {
+            m_crops[cpos] = id;
+        } else {
+            m_crops.erase(cpos);
         }
     }
     const float half = Projectile::kSize * 0.5f;

@@ -588,3 +588,99 @@ TEST(BlockRegistryTest, CrossRequiresTransparent) {
     ASSERT_FALSE(r.ok());
     EXPECT_NE(r.error().message.find("transparent"), std::string::npos);
 }
+
+// ---------------------------------------------------------------------------
+// Crop growth fields (Phase 48): grows_to + growth_ticks are a strict pair.
+// ---------------------------------------------------------------------------
+
+// A cross-shaped crop def (cross requires solid=false, opaque=false,
+// transparent=true) parameterized by id and the growth pair (props may be
+// empty — then no trailing comma).
+std::string cropDef(const std::string& id, const std::string& props) {
+    std::string s = "{\"id\":\"" + id +
+                    "\",\"properties\":{\"solid\":false,\"opaque\":false,"
+                    "\"transparent\":true";
+    if (!props.empty()) {
+        s += "," + props;
+    }
+    s += "},\"model\":{\"shape\":\"cross\",\"textures\":{\"cross\":\"" + id +
+         "\"}}}";
+    return s;
+}
+
+TEST(BlockRegistryTest, ParsesGrowthPair) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        cropDef("wheat_1", R"("grows_to":"wheat_2","growth_ticks":360)")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Block& b = reg.at(*r);
+    EXPECT_EQ(b.properties.growsTo, "wheat_2");
+    EXPECT_EQ(b.properties.growthTicks, 360);
+}
+
+TEST(BlockRegistryTest, MatureBlockHasNoGrowthFields) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(cropDef("wheat_7", "")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Block& b = reg.at(*r);
+    EXPECT_TRUE(b.properties.growsTo.empty());
+    EXPECT_EQ(b.properties.growthTicks, 0);
+}
+
+TEST(BlockRegistryTest, GrowsToRequiresGrowthTicks) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(cropDef("x", R"("grows_to":"y")")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("growth_ticks"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, GrowthTicksRequiresGrowsTo) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(cropDef("x", R"("growth_ticks":100)")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("grows_to"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, GrowsToRejectsExplicitEmpty) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(cropDef("x", R"("grows_to":"","growth_ticks":100)")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("non-empty"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, GrowsToRejectsSelfReference) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(cropDef("x", R"("grows_to":"x","growth_ticks":100)")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("itself"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, GrowthTicksRejectsOutOfRange) {
+    BlockRegistry reg;
+    // 0 is out of [1, 1'000'000].
+    auto r0 = reg.registerBlock(
+        parseDef(cropDef("x", R"("grows_to":"y","growth_ticks":0)")));
+    ASSERT_FALSE(r0.ok());
+    EXPECT_NE(r0.error().message.find("1000000"), std::string::npos);
+    // > 1'000'000 is out of range.
+    BlockRegistry reg2;
+    auto rBig = reg2.registerBlock(
+        parseDef(cropDef("x", R"("grows_to":"y","growth_ticks":1000001)")));
+    ASSERT_FALSE(rBig.ok());
+    EXPECT_NE(rBig.error().message.find("1000000"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, GrowthTicksBoundaryValuesAccepted) {
+    BlockRegistry reg;
+    auto rLo = reg.registerBlock(
+        parseDef(cropDef("a", R"("grows_to":"b","growth_ticks":1)")));
+    ASSERT_TRUE(rLo.ok()) << rLo.error().message;
+    BlockRegistry reg2;
+    auto rHi = reg2.registerBlock(
+        parseDef(cropDef("a", R"("grows_to":"b","growth_ticks":1000000)")));
+    ASSERT_TRUE(rHi.ok()) << rHi.error().message;
+}

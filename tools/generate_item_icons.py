@@ -589,6 +589,51 @@ def water_bucket_icon():
     return bucket(water=True, salt=59)
 
 
+def wheat():
+    """Wheat (Phase 48, the ripe-crop harvest): a golden grain head on a
+    green stem — the Minecraft wheat item look."""
+    px = blank()
+    stem = (104, 158, 56)
+    gold = (226, 190, 78)
+    gold_hi = (242, 216, 122)
+    # Stem: a green column from just below the head to the base.
+    for y in range(6, 15):
+        setpx2(px, 7, y, stem, salt=71)
+        setpx2(px, 8, y, stem, salt=71, amount=8)
+    # Grain head: a vertical cluster of golden bulges (design y 1..6).
+    for y in range(1, 7):
+        half = 2 if y in (2, 3, 4) else 1
+        for x in range(7 - half, 8 + half):
+            setpx2(px, x, y, gold, salt=72)
+    # Bright glints on the head (the shine of the ripe grain).
+    for (x, y) in ((6, 2), (9, 3), (7, 5)):
+        setpx2(px, x, y, gold_hi, salt=73, amount=5)
+    return px
+
+
+def bread():
+    """Bread (Phase 48): a golden-brown loaf with a pale scoring band —
+    the Minecraft bread item look."""
+    px = blank()
+    crust = (178, 118, 58)
+    crust_dark = (146, 92, 44)
+    top = (226, 172, 98)
+    # Loaf body: a rounded rectangle (design x 2..13, y 6..13).
+    for y in range(6, 14):
+        for x in range(2, 14):
+            edge = (x in (2, 13)) or (y in (6, 13))
+            corner = (x in (2, 13)) and (y in (6, 13))
+            if corner:
+                continue  # cut the corners for a round loaf
+            setpx2(px, x, y, crust_dark if edge else crust, salt=74)
+    # Pale top band with diagonal scoring lines.
+    for x in range(3, 13):
+        setpx2(px, x, 7, top, salt=75)
+    for x in (5, 8, 11):
+        setpx2(px, x, 6, top, salt=76, amount=4)
+    return px
+
+
 ITEMS = {
     "planks": planks,
     "stick": stick,
@@ -615,6 +660,8 @@ ITEMS = {
     "bucket": bucket_icon,
     "milk_bucket": milk_bucket_icon,
     "water_bucket": water_bucket_icon,
+    "wheat": wheat,
+    "bread": bread,
 }
 
 

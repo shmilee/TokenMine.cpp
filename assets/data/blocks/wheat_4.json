@@ -1,0 +1,16 @@
+{
+  "id": "wheat_4",
+  "properties": {
+    "hardness": 0.0,
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "drops": "wheat_1",
+    "grows_to": "wheat_5",
+    "growth_ticks": 360
+  },
+  "model": {
+    "shape": "cross",
+    "textures": { "cross": "wheat_4" }
+  }
+}

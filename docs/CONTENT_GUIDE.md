@@ -337,6 +337,58 @@ v1 只有一种流体（**水** = 项目唯一模拟流体，流体名词汇表 
 
 当前唯一对：`bucket`（max_stack 16）⇄ `water_bucket`（max_stack 1）。
 
+## 新增一个可生长作物（无需改核心代码，Phase 48）
+
+作物 = 一串 cross 形状方块，用 `grows_to` 链成生长序列；**生长状态就是
+方块 id 本身**（`wheat_N` 的 N = 阶段），无 per-instance 状态、无存档
+字段。核心生长引擎（`src/world/growth.{hpp,cpp}` + `Game::m_crops`）
+是纯数据驱动——加一种新作物 = 加方块 JSON + 纹理 + 物品/配方，不改核心。
+
+1. **生长阶段方块**（每阶一个 `assets/data/blocks/<name>_<n>.json`）：
+
+   ```json
+   {
+     "id": "wheat_1",
+     "properties": {
+       "hardness": 0.0, "solid": false, "opaque": false, "transparent": true,
+       "drops": "wheat_1",              // 未熟掉种子（可再种）
+       "grows_to": "wheat_2",           // 指向下一阶（成熟阶留空 = 停止）
+       "growth_ticks": 360              // 平均多少 tick（1/60s 帧）进一阶
+     },
+     "model": { "shape": "cross", "textures": { "cross": "wheat_1" } }
+   }
+   ```
+
+   `grows_to` 与 `growth_ticks` 是**严格配对**（缺一 = 解析拒绝；
+   `growth_ticks` ∈ [1, 1'000'000]；显式空串 = 笔误拒绝；自引用拒绝）；
+   **init 硬校验** `grows_to` 必须指向存在的方块（typo = 启动失败点名）。
+   成熟阶（链尾）**不写** `grows_to`（不 roll、不再长），`drops` 指向
+   收获物（如 `wheat_7` → `wheat` ×2）。cross 形状要求
+   `solid=false, opaque=false, transparent=true`（解析强制）。
+2. **生长引擎**（自动）：`Game::m_crops`（`map<BlockPos,BlockID>`，位置序）
+   追踪所有带 `grows_to` 的格——`setBlock` 收口维护（放作物=入集，
+   破坏/成熟=出集，炉子同款模式），**读档后 `rescanCrops()` 全量扫描
+   已加载 chunk 重建**（无存档字段，方块 id 即阶段）。每帧（固定 1/60
+   步长，昼夜类——无输入运行字节可复现）对每格 roll 一个确定性哈希
+   `splitmix64(seed + frame×GOLDEN + hash3(x,y,z,salt)) % growth_ticks == 0`
+   → 进一阶（概率 1/growth_ticks）。位置哈希让两株作物不同步；世界 seed
+   让世界间去相关。
+3. **种子 = 隐式 block 物品**：`wheat_1` 方块自动有同名 block 物品
+   （右键 = 放置 = 种植），无需新物品。种子来源 = 某方块的 `drops`
+   （本项目 `grass` → `wheat_1`，见 KNOWN_ISSUES）。
+4. **收获物 + 食物**：`assets/data/items/<name>.json`（如 `wheat` 材料、
+   `bread` 带 `restore_hunger`）；配方 `assets/data/recipes/<name>.json`
+   （shapeless = 只写 `ingredients`，**同一物品合并成一条 count**——
+   重复项解析拒绝）。
+5. **纹理**：每阶一个 cross 纹理（`tools/generate_block_textures.py` 加
+   函数 + TEXTURES 表项）+ `block_atlas.json` 空位加一行（不挪已有 UV）；
+   物品图标（`tools/generate_item_icons.py`）。
+6. **世界生成不放作物**（v1）：自然界的作物只来自玩家种植，`rescanCrops`
+   对新生世界扫到空集。
+
+当前唯一作物：`wheat_1`→…→`wheat_7`（growth_ticks 360，约 36s 成熟），
+收获 `wheat`（3 wheat → 1 bread，bread `restore_hunger` 5）。
+
 ## 调节玩家参数（config/config.json `player.*`，Phase 32）
 
 玩家运动/生存模型的全部数值在 `Player::Params`，可在 `config/config.json`

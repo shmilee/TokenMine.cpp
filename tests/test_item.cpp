@@ -514,6 +514,23 @@ TEST(ItemRegistryTest, ParsesMobMeatFoods) {
     }
 }
 
+TEST(ItemRegistryTest, ParsesBreadAndWheat) {
+    // Phase 48: bread is food (+5, the Minecraft value); wheat is the
+    // mature-crop harvest material (not food, crafting input only).
+    ItemRegistry items;
+    auto bread = items.registerItem(
+        parseJson(R"({"id":"bread","type":"material","max_stack":64,
+                      "restore_hunger":5})"));
+    ASSERT_TRUE(bread.ok()) << bread.error().message;
+    EXPECT_EQ(items.at(*bread).restoreHunger, 5);
+    EXPECT_EQ(items.at(*bread).maxStack, 64);
+    auto wheat = items.registerItem(
+        parseJson(R"({"id":"wheat","type":"material","max_stack":64})"));
+    ASSERT_TRUE(wheat.ok()) << wheat.error().message;
+    EXPECT_EQ(items.at(*wheat).restoreHunger, 0); // not food
+    EXPECT_EQ(items.at(*wheat).maxStack, 64);
+}
+
 TEST(ItemRegistryTest, FoodDefaultsToNotFood) {
     // No restore_hunger: not food (every pre-Phase-23 item).
     ItemRegistry items;

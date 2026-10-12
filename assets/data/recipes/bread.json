@@ -1,0 +1,7 @@
+{
+  "id": "bread",
+  "output": { "item": "bread", "count": 1 },
+  "ingredients": [
+    { "item": "wheat", "count": 3 }
+  ]
+}

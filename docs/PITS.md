@@ -704,3 +704,23 @@
   最终帧 S2=518 / S3=5473，streaming 只会收缩不会染红；WM 过期红纱帧
   把天空染 ~+30 R → 计数塌到 ~0）——对 streaming 收缩稳健、对过期帧
   敏感。
+- **chunk 是 16×16×16，不是 16×16×128——世界高度沿 ChunkPos.y 堆叠（P48）**：
+  遍历 chunk 本地坐标时三个轴都在 [0, kChunkSize=16)；世界高度 128 =
+  8 层 chunk（`ChunkPos.y` × 16）。误以为"一个 chunk 高 128"在单 chunk
+  内遍历 `ly ∈ [0,128)` → `Chunk::get` 的 `assert(inBounds)` 在
+  **Release（NDEBUG）下被裁掉** → 越界读 `m_blocks` → **segfault**
+  （gdb 定位到遍历函数，栈无 assert）。正确范式见 `FluidSim::tick` 的
+  origin 换算：`baseY = cp.y * kChunkSize`，本地 `ly ∈ [0,16)`，
+  世界 y = `baseY + ly`。任何"全 chunk 扫描"（rescan/统计/光照）都照此。
+- **配方同一物品重复项被拒绝——合并成一条 count（P48）**：
+  `RecipeRegistry` 严格校验「duplicate ingredient item」——3 个小麦
+  要写 `{"item":"wheat","count":3}`（一条），不是 3 条 `count:1`。
+  shapeless 配方的 `ingredients` 是"物品→需求数"的 bag，同物品必须
+  合并。单测用同一条 parse 路径能提前抓到（本坑正是单测先红）。
+- **测试里拼 JSON 字符串：闭合引号/逗号最易漏，用显式拼接别用 R"()（P48）**：
+  用 `R"({"id":"wheat_)" + std::to_string(n) + ...` 拼 JSON，数字后
+  的闭合引号极易漏（`"wheat_1,` 而非 `"wheat_1",`）→ parse 在**奇怪
+  列号**报 "expected ':' after object key"（逐字符数才定位到）。
+  参数化的测试 def 用**显式 `+` 拼接**（每段引号/逗号都看得见）比
+  跨多个 `R"()"` 段安全得多；写完先用 python `json.loads` 验一遍拼接
+  结果再进 C++（1 分钟省 10 分钟）。

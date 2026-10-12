@@ -1,0 +1,6 @@
+{
+  "id": "wheat",
+  "type": "material",
+  "max_stack": 64,
+  "icon": "wheat"
+}

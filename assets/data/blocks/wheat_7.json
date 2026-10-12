@@ -1,0 +1,15 @@
+{
+  "id": "wheat_7",
+  "properties": {
+    "hardness": 0.0,
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "drops": "wheat",
+    "drops_count": 2
+  },
+  "model": {
+    "shape": "cross",
+    "textures": { "cross": "wheat_7" }
+  }
+}

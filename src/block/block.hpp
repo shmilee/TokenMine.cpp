@@ -95,6 +95,17 @@ struct BlockProperties {
     // Dye color (Phase 41): only with a non-empty dyeBase. Must name an
     // existing dye item's color (game-init cross-check).
     std::string dyeColor;
+    // Crop growth (Phase 48): when non-empty, this block is a growing crop
+    // step — it names the NEXT stage block (the mature stage has an empty
+    // growsTo). Requires growthTicks. The growth engine (world/growth)
+    // rolls a deterministic per-tick hash (seed + frame + position) and
+    // advances the cell one step when it passes (probability 1/growthTicks
+    // per 1/60 frame). Validated at data load (pairing + range) and at
+    // game init (the target must name an existing block).
+    std::string growsTo;
+    // Mean ticks (1/60 s frames) between growth steps (1..1'000'000); only
+    // meaningful with a non-empty growsTo (a lone growthTicks is rejected).
+    int growthTicks = 0;
 };
 
 // Which texture name is applied to each face group (full_cube shapes) — or

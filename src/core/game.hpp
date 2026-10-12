@@ -418,6 +418,11 @@ private:
     // No-op unless --save is set, the slot is not --new, and the file
     // exists; then reads + applies it.
     Result<void> tryLoadSave();
+    // Rebuilds the crop-growth tracking set from the world: every cell
+    // whose block has a non-empty growsTo (Phase 48). Runs at the end of
+    // buildScene — after a save load, whose block edits restore the
+    // planted crops (no save-format field: the block id IS the stage).
+    void rescanCrops();
     // The pure generator as a World chunk callback — used at world
     // creation AND as the generation reference for save diffs.
     World::ChunkGenerator makeChunkGenerator() const;
@@ -596,6 +601,14 @@ private:
     std::map<BlockPos, FurnaceState> m_furnaces;
     BlockPos m_openFurnacePos {};
     FurnaceUI m_furnaceUi;
+
+    // Phase 48 crop growth: the cells holding a block with a non-empty
+    // growsTo property (the growth stage is the block id itself — no
+    // per-instance state, no save field). Maintained through the setBlock
+    // choke point (like the furnace states) and rebuilt from the world by
+    // rescanCrops() after load. std::map: position-sorted, so the per-
+    // frame growth ticks iterate deterministically.
+    std::map<BlockPos, BlockID> m_crops;
 
     // Phase 15 particles + audio: the break bursts (deterministic seeds:
     // world seed mixed with an increasing per-break counter) and the sound

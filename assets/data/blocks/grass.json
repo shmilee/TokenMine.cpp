@@ -2,7 +2,7 @@
   "id": "grass",
   "properties": {
     "hardness": 0.6,
-    "drops": "dirt"
+    "drops": "wheat_1"
   },
   "model": {
     "textures": { "top": "grass_top", "side": "grass_side", "bottom": "dirt" }

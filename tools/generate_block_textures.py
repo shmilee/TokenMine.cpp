@@ -326,8 +326,35 @@ def make_flower(petal, salt):
     return tile
 
 
+def make_wheat(stage: int, salt: int):
+    # Wheat crop (Phase 48): a central stem that grows taller with the
+    # stage (1..7). Stages 1..6 are green (unripe); stage 7 is the golden
+    # ripe head. The head is a small vertical cluster atop the stem.
+    stem_green = (104, 158, 56)
+    ripe = (226, 190, 78)
+    stem_top = 16 - stage - 1      # stage 1 -> 14 (short), stage 7 -> 8 (tall)
+    head_color = ripe if stage >= 7 else (140, 190, 84)
+
+    def tile(x, y):
+        # Stem: a 2-px green column from just below the head to the base.
+        if 7 <= x <= 8 and stem_top + 1 <= y <= 15:
+            n = noise(x, y, salt, 7)
+            return (clamp(stem_green[0] + n), clamp(stem_green[1] + n),
+                    clamp(stem_green[2] + n), 255)
+        # Head: a soft vertical cluster centred on (7.5, stem_top - 1).
+        dx = x - 7.5
+        dy = y - (stem_top - 1)
+        if dx * dx * 1.6 + dy * dy * 0.7 <= 5.5:
+            n = noise(x, y, salt + 1, 9)
+            return (clamp(head_color[0] + n), clamp(head_color[1] + n),
+                    clamp(head_color[2] + n), 255)
+        return (0, 0, 0, 0)  # transparent
+    return tile
+
+
 TEXTURES = {
     **{name: make_wool_tile(name) for name in WOOL_PALETTE},
+    **{f"wheat_{s}": make_wheat(s, 70 + s) for s in range(1, 8)},
     "stone": stone,
     "dirt": dirt,
     "grass_top": grass_top,

@@ -327,3 +327,73 @@ TEST(ConsumeGridTest, ShapelessConsumesLowestSlotFirst) {
     EXPECT_TRUE(grid.isEmpty(2));
     EXPECT_EQ(grid.at(7), (ItemStack {f.planks, 2}));
 }
+
+// -- Phase 48: bread (3 wheat -> 1 bread, shapeless) --------------------------------
+
+namespace {
+
+struct BreadFixture {
+    ItemRegistry items;
+    RecipeRegistry recipes;
+    ItemID wheat;
+    ItemID bread;
+
+    BreadFixture() {
+        auto r = items.registerItem(parseJson(
+            R"({"id":"wheat","type":"material"})"));
+        if (!r.ok()) {
+            ADD_FAILURE() << r.error().message;
+        }
+        r = items.registerItem(parseJson(
+            R"({"id":"bread","type":"material","restore_hunger":5})"));
+        if (!r.ok()) {
+            ADD_FAILURE() << r.error().message;
+        }
+        wheat = items.idForName("wheat");
+        bread = items.idForName("bread");
+        auto rr = recipes.registerRecipe(
+            parseJson(R"({"id":"bread","output":{"item":"bread","count":1},
+                          "ingredients":[{"item":"wheat","count":3}]})"),
+            items);
+        if (!rr.ok()) {
+            ADD_FAILURE() << rr.error().message;
+        }
+    }
+};
+
+} // namespace
+
+TEST(BreadRecipeTest, ThreeWheatMatchesAndCraftsOneBread) {
+    BreadFixture f;
+    // 3 wheat split across cells -> the shapeless bag matches.
+    CraftingGrid grid;
+    grid.setSlot(0, (ItemStack {f.wheat, 1}));
+    grid.setSlot(4, (ItemStack {f.wheat, 2}));
+    const GridMatch m = matchGridRecipe(grid, f.recipes);
+    ASSERT_TRUE(m.matched());
+    EXPECT_EQ(m.recipe->id, "bread");
+    EXPECT_EQ(m.recipe->output, f.bread);
+    EXPECT_EQ(m.recipe->outputCount, 1);
+    consumeGrid(grid, m);
+    // Exactly 3 wheat consumed (all of them); nothing left.
+    EXPECT_TRUE(grid.empty());
+}
+
+TEST(BreadRecipeTest, ShortageDoesNotMatch) {
+    BreadFixture f;
+    CraftingGrid grid;
+    grid.setSlot(0, (ItemStack {f.wheat, 2})); // only 2 of the 3 needed
+    const GridMatch m = matchGridRecipe(grid, f.recipes);
+    EXPECT_FALSE(m.matched());
+}
+
+TEST(BreadRecipeTest, ExtraWheatSurvives) {
+    BreadFixture f;
+    // 5 wheat: the recipe needs 3 — the 2 extras stay.
+    CraftingGrid grid;
+    grid.setSlot(0, (ItemStack {f.wheat, 5}));
+    const GridMatch m = matchGridRecipe(grid, f.recipes);
+    ASSERT_TRUE(m.matched());
+    consumeGrid(grid, m);
+    EXPECT_EQ(grid.at(0), (ItemStack {f.wheat, 2}));
+}

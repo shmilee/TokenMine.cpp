@@ -9,9 +9,21 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 47 完成时）
+## 现状（Phase 48 完成时）
 
-- 功能阶段 P0–P47 全部完成并提交；P47 = 水桶（流体桶 v1；用户"按排序
+- 功能阶段 P0–P48 全部完成并提交；P48 = 面包（小麦种植系统 v1；用户
+   "继续建议1" = 第一候选，代理定案最小完整版 = 作物 + 生长引擎 + 收获 +
+   面包配方/食物，金苹果/熔岩留后续）：**生长纯数据**（block `grows_to`
+   下一阶 + `growth_ticks` 平均 tick 进一阶，严格配对 + init 硬校验指向
+   存在方块；**生长状态 = 方块 id 本身**，无 per-instance 状态/存档字段）
+   + 生长引擎（`world/growth.{hpp,cpp}` 纯函数 + `Game::m_crops` map
+   位置序，setBlock 收口维护 + 读档后 `rescanCrops` 全量重建；每帧 1/60
+   固定步长确定性哈希 roll）+ 内容：7 方块 `wheat_1`→…→`wheat_7`
+   （cross，未熟掉种子可再种 / 成熟掉 `wheat`×2）+ `wheat`/`bread`
+   （`restore_hunger` 5）+ 配方 `bread`（shapeless 3 wheat，同物品合并
+   count）+ 7 atlas tile（空位无 UV 移位）+ 2 图标 + 7 cross 纹理 +
+   **grass drops 改 `wheat_1`**（v1 种子来源）；**无 format 变更**
+   （format 8，作物 = 方块编辑）；P47 = 水桶（流体桶 v1；用户"按排序
   继续"= 第一候选，代理定案最小完整版 = 水，熔岩/面包/金苹果留后续）：
   **桶对纯数据**（item `collects_fluid`+`collects_becomes` 空桶侧 /
   `pours_fluid`+`pours_becomes` 满桶侧；流体名 v1 词汇表 = 仅 "water"；
@@ -49,9 +61,9 @@
   （P28 遗留"熟肉"）、P41 = wool 染色框架（P12/P20 遗留"wool 无用途/无
   染色"；atlas 4×8→8×8 → base18 于 P41 重锚）、P42 = 弓后续 2、P43 =
   牛奶桶最小项（饮用通道 + 挤奶）。
-- 测试 **847/847**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+- 测试 **866/866**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
 - 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P41 重锚【atlas
-  8×8】，P42/P43/P44/P45/P46/P47 过门 = 第 16/17/18/19/20/21 次结构性
+  8×8】，P42/P43/P44/P45/P46/P47/P48 过门 = 第 16/17/18/19/20/21/22 次结构性
   免疫、无重锚）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 

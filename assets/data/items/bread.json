@@ -1,0 +1,7 @@
+{
+  "id": "bread",
+  "type": "material",
+  "max_stack": 64,
+  "icon": "bread",
+  "restore_hunger": 5
+}

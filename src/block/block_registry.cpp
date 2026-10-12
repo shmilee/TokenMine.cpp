@@ -107,6 +107,12 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "dye_color", "string",
                    [&](const Json& v) { out.dyeColor = v.asString(); });
     MC_TRY(r);
+    r = checkField(*p, "grows_to", "string",
+                   [&](const Json& v) { out.growsTo = v.asString(); });
+    MC_TRY(r);
+    r = checkField(*p, "growth_ticks", "number",
+                   [&](const Json& v) { out.growthTicks = v.asInt(); });
+    MC_TRY(r);
 
     if (out.dropsCount < 1 || out.dropsCount > 64) {
         return MC_FAIL("'drops_count' must be in [1, 64], got " +
@@ -161,6 +167,35 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     }
     if (out.opaque && out.transparent) {
         return MC_FAIL("block cannot be both 'opaque' and 'transparent'");
+    }
+    // Crop growth (Phase 48): both fields are optional; an EXPLICIT empty
+    // growsTo is a typo (ABSENT is the "not a crop" default — the ammo
+    // discipline). The two fields are a strict pair: each one requires
+    // the other (the game init cross-checks that growsTo names an existing
+    // block; here the pairing + range + no self-reference are enforced).
+    if (const Json* gt = p->find("grows_to")) {
+        if (gt->asString().empty()) {
+            return MC_FAIL("block property 'grows_to' must be a non-empty "
+                           "block name (omit it when the block is mature "
+                           "or not a crop)");
+        }
+        const Json* id = def.find("id");
+        if (id != nullptr && id->isString() &&
+            id->asString() == out.growsTo) {
+            return MC_FAIL("block property 'grows_to' must not reference "
+                           "the block itself ('" + out.growsTo + "')");
+        }
+    }
+    if (out.growsTo.empty() && out.growthTicks != 0) {
+        return MC_FAIL("'growth_ticks' without 'grows_to' is meaningless "
+                       "(got " +
+                       std::to_string(out.growthTicks) + ")");
+    }
+    if (!out.growsTo.empty() &&
+        (out.growthTicks < 1 || out.growthTicks > 1000000)) {
+        return MC_FAIL("'grows_to' requires 'growth_ticks' in [1, 1000000], "
+                       "got " +
+                       std::to_string(out.growthTicks));
     }
     return {};
 }
