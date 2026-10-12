@@ -749,19 +749,21 @@ TEST(ItemRegistryTest, FoodAndDrinkableAreMutuallyExclusive) {
 // -- Fluid buckets (Phase 47) -----------------------------------------------
 
 TEST(ItemRegistryTest, ParsesFluidBucketPair) {
-    // The water bucket pair: the EMPTY side collects, the FULL side pours.
-    // The companion NAMES are cross-checked (existence + symmetry) at game
-    // init, not here (the ammo pattern).
+    // The bucket pair (Phase 51): the EMPTY side names every fluid it
+    // scoops (an array — one bucket scoops water AND lava), the FULL side
+    // pours its fluid back into the empty one. The full bucket a scoop
+    // yields is DERIVED (fullBucketFor); the pair symmetry is
+    // cross-checked at game init, not here (the ammo pattern).
     ItemRegistry items;
     auto r = items.registerItem(
         parseJson(R"({"id":"bucket","type":"material","max_stack":16,
                       "icon":"bucket",
-                      "collects_fluid":"water",
-                      "collects_becomes":"water_bucket"})"));
+                      "collects_fluid":["water","lava"]})"));
     ASSERT_TRUE(r.ok()) << r.error().message;
     const Item& b = items.at(*r);
-    EXPECT_EQ(b.collectsFluid, "water");
-    EXPECT_EQ(b.collectsBecomes, "water_bucket");
+    ASSERT_EQ(b.collectsFluids.size(), 2u);
+    EXPECT_EQ(b.collectsFluids[0], "water");
+    EXPECT_EQ(b.collectsFluids[1], "lava");
     EXPECT_TRUE(b.poursFluid.empty());
     EXPECT_TRUE(b.poursBecomes.empty());
     r = items.registerItem(
@@ -773,7 +775,22 @@ TEST(ItemRegistryTest, ParsesFluidBucketPair) {
     const Item& w = items.at(*r);
     EXPECT_EQ(w.poursFluid, "water");
     EXPECT_EQ(w.poursBecomes, "bucket");
-    EXPECT_TRUE(w.collectsFluid.empty());
+    EXPECT_TRUE(w.collectsFluids.empty());
+    r = items.registerItem(
+        parseJson(R"({"id":"lava_bucket","type":"material","max_stack":1,
+                      "icon":"lava_bucket",
+                      "pours_fluid":"lava",
+                      "pours_becomes":"bucket"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    // The derived companion: scoop water -> water_bucket, scoop lava ->
+    // lava_bucket.
+    const Item* fullWater = items.fullBucketFor("water", "bucket");
+    const Item* fullLava = items.fullBucketFor("lava", "bucket");
+    ASSERT_NE(fullWater, nullptr);
+    ASSERT_NE(fullLava, nullptr);
+    EXPECT_EQ(fullWater->name, "water_bucket");
+    EXPECT_EQ(fullLava->name, "lava_bucket");
+    EXPECT_EQ(items.fullBucketFor("water", "other"), nullptr);
 }
 
 TEST(ItemRegistryTest, FluidBucketFieldsDefaultToEmpty) {
@@ -783,37 +800,52 @@ TEST(ItemRegistryTest, FluidBucketFieldsDefaultToEmpty) {
         parseJson(R"({"id":"gem","type":"material"})"));
     ASSERT_TRUE(r.ok()) << r.error().message;
     const Item& it = items.at(*r);
-    EXPECT_TRUE(it.collectsFluid.empty());
-    EXPECT_TRUE(it.collectsBecomes.empty());
+    EXPECT_TRUE(it.collectsFluids.empty());
     EXPECT_TRUE(it.poursFluid.empty());
     EXPECT_TRUE(it.poursBecomes.empty());
 }
 
 TEST(ItemRegistryTest, RejectsUnknownFluidName) {
-    // v1 vocabulary: the only simulated fluid is "water" (a different
-    // name is a typo or a future feature).
+    // Two-kind vocabulary: "water" and "lava" (any other name is a typo
+    // or an unimplemented fluid).
     ItemRegistry items;
     EXPECT_FALSE(items.registerItem(
                      parseJson(
                          R"({"id":"b","type":"material",
-                             "collects_fluid":"lava",
-                             "collects_becomes":"x"})"))
+                             "collects_fluid":["slime"]})"))
                      .ok());
     EXPECT_FALSE(items.registerItem(
                      parseJson(
                          R"({"id":"b","type":"material",
                              "pours_fluid":"","pours_becomes":"x"})"))
                      .ok());
+    // The collect side is an ARRAY: a bare name is a type error.
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material",
+                             "collects_fluid":"water"})"))
+                     .ok());
+    // Empty array / duplicate entry are data errors.
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material",
+                             "collects_fluid":[]})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material",
+                             "collects_fluid":["water","water"]})"))
+                     .ok());
 }
 
 TEST(ItemRegistryTest, RejectsBecomesWithoutFluid) {
-    // A `*_becomes` without its `*_fluid` pair is a dead field (the
-    // dye_base/dye_color pairing discipline).
+    // A `pours_becomes` without its `pours_fluid` pair is a dead field
+    // (the dye_base/dye_color pairing discipline).
     ItemRegistry items;
     EXPECT_FALSE(items.registerItem(
                      parseJson(
                          R"({"id":"b","type":"material",
-                             "collects_becomes":"x"})"))
+                             "pours_becomes":"x"})"))
                      .ok());
     EXPECT_FALSE(items.registerItem(
                      parseJson(
@@ -828,8 +860,7 @@ TEST(ItemRegistryTest, BucketSidesAreMutuallyExclusive) {
     EXPECT_FALSE(items.registerItem(
                      parseJson(
                          R"({"id":"b","type":"material",
-                             "collects_fluid":"water",
-                             "collects_becomes":"a",
+                             "collects_fluid":["water"],
                              "pours_fluid":"water",
                              "pours_becomes":"c"})"))
                      .ok());
@@ -843,8 +874,7 @@ TEST(ItemRegistryTest, BucketConflictsWithFoodAndDrinkable) {
     EXPECT_FALSE(items.registerItem(
                      parseJson(
                          R"({"id":"b","type":"material",
-                             "collects_fluid":"water",
-                             "collects_becomes":"a",
+                             "collects_fluid":["water"],
                              "restore_hunger":3})"))
                      .ok());
     EXPECT_FALSE(items.registerItem(

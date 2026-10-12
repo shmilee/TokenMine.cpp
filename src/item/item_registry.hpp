@@ -60,6 +60,15 @@ public:
     const Item* find(ItemID id) const;
     const Item* findByName(const std::string& name) const;
     ItemID idForName(const std::string& name) const; // invalid() when absent
+    // The FULL bucket that pours `fluidName` (e.g. "lava") back into the
+    // EMPTY item named `emptyName` — the derived companion of a collect
+    // (Phase 51: the empty bucket's 'collects_becomes' field was removed,
+    // the pair resolves from the full side). nullptr when absent; the
+    // game-init cross-check guarantees exactly one for every fluid an
+    // empty bucket names. A small-registry linear scan (per click, never
+    // in a hot loop).
+    const Item* fullBucketFor(const std::string& fluidName,
+                              const std::string& emptyName) const;
 
     std::size_t count() const { return m_items.size(); }
     std::vector<ItemID> allIds() const;
@@ -101,14 +110,16 @@ private:
     // cross-checked at game init). `drink_time` and `restore_hunger`
     // are mutually exclusive (an item is food OR a drinkable).
     static Result<void> parseDrink(const Json& def, Item& out);
-    // Parse the optional fluid-bucket fields (Phase 47) into `out`:
-    // `collects_fluid` + `collects_becomes` (empty -> full bucket) and
-    // `pours_fluid` + `pours_becomes` (full -> empty bucket). The fluid
-    // name is restricted to the v1 vocabulary ("water", the project's
-    // single simulated fluid); the `*_becomes` name is a non-empty item
-    // name (its existence + pair symmetry are cross-checked at game
-    // init). The two sides are mutually exclusive, as is any bucket side
-    // with food/drinkable (the right-click channel owner).
+    // Parse the optional fluid-bucket fields (Phase 47, kinds in
+    // Phase 51) into `out`: `collects_fluid` (a non-empty array of fluid
+    // names — the EMPTY side; the full bucket a scoop yields is derived
+    // from the full side, see fullBucketFor) and `pours_fluid` +
+    // `pours_becomes` (the FULL side). Fluid names are restricted to the
+    // two-kind vocabulary ("water", "lava"); `pours_becomes` is a
+    // non-empty item name (its existence + pair symmetry are
+    // cross-checked at game init). The two sides are mutually exclusive,
+    // as is any bucket side with food/drinkable (the right-click channel
+    // owner).
     static Result<void> parseFluidBucket(const Json& def, Item& out);
     // Parse the optional 'grants_effect' field (Phase 49) into `out`: the
     // status effect granted when a full eat completes (golden apple ->

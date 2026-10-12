@@ -6,6 +6,7 @@
 #include <filesystem>
 
 #include "core/logger.hpp"
+#include "world/chunk.hpp" // fluidKindForName (the fluid vocabulary)
 
 namespace mc {
 
@@ -84,8 +85,8 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "destroyable", "boolean",
                    [&](const Json& v) { out.destroyable = v.asBool(); });
     MC_TRY(r);
-    r = checkField(*p, "fluid", "boolean",
-                   [&](const Json& v) { out.fluid = v.asBool(); });
+    r = checkField(*p, "fluid", "string",
+                   [&](const Json& v) { out.fluidName = v.asString(); });
     MC_TRY(r);
     r = checkField(*p, "hardness", "number",
                    [&](const Json& v) { out.hardness = v.asDouble(); });
@@ -174,6 +175,44 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
                        [&](const Json& v) { out.chanceDropChance = v.asDouble(); });
         MC_TRY(r);
     }
+    // Water reaction (Phase 51): an OPTIONAL object
+    // {"source": <block name>, "flowing": <block name>} — the blocks a cell
+    // of this fluid converts into when 6-adjacent to a water cell (see
+    // world/fluid). A strict pair of non-empty names on a fluid block; the
+    // names are cross-checked at game init (the ammo pattern).
+    if (const Json* wr = p->find("water_reaction")) {
+        if (!wr->isObject()) {
+            return MC_FAIL("block property 'water_reaction' must be an "
+                           "object {\"source\": ..., \"flowing\": ...}");
+        }
+        for (const auto& [key, value] : wr->members()) {
+            if (key != "source" && key != "flowing") {
+                return MC_FAIL("block property 'water_reaction' has an "
+                               "unknown field '" + key + "'");
+            }
+        }
+        r = checkField(*wr, "source", "string",
+                       [&](const Json& v) {
+                           out.waterReactionSource = v.asString();
+                       });
+        MC_TRY(r);
+        r = checkField(*wr, "flowing", "string",
+                       [&](const Json& v) {
+                           out.waterReactionFlowing = v.asString();
+                       });
+        MC_TRY(r);
+        if (out.waterReactionSource.empty() ||
+            out.waterReactionFlowing.empty()) {
+            return MC_FAIL("block property 'water_reaction' requires both a "
+                           "non-empty 'source' and 'flowing' block name "
+                           "(a strict pair)");
+        }
+        if (out.fluidName.empty()) {
+            return MC_FAIL("block property 'water_reaction' requires the "
+                           "block to be a fluid ('fluid' property) — only a "
+                           "fluid cell reacts to water");
+        }
+    }
 
     if (out.dropsCount < 1 || out.dropsCount > 64) {
         return MC_FAIL("'drops_count' must be in [1, 64], got " +
@@ -183,6 +222,10 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
         return MC_FAIL("'drops_count' without 'drops' is meaningless "
                        "(got " +
                        std::to_string(out.dropsCount) + ")");
+    }
+    if (!out.fluidName.empty() && !fluidKindForName(out.fluidName)) {
+        return MC_FAIL("block property 'fluid' has an unknown fluid name '" +
+                       out.fluidName + "' (vocabulary: \"water\", \"lava\")");
     }
     if (out.hardness < 0.0) {
         return MC_FAIL("'hardness' must be >= 0, got " +
@@ -475,11 +518,14 @@ BlockID BlockRegistry::idForName(const std::string& name) const {
     return it == m_names.end() ? BlockID::invalid() : BlockID{it->second};
 }
 
-std::optional<BlockID> BlockRegistry::fluidBlock() const {
-    // The air sentinel is first; the first fluid property block wins (the
-    // game defines exactly one).
+std::optional<BlockID> BlockRegistry::fluidBlock(
+    const std::string& fluidName) const {
+    // The reference block of a fluid KIND (properties.fluid names the
+    // kind): its textures light the mesher's fluid faces and its
+    // light_emission makes cells of that kind glow (see world/lighting).
+    // nullopt = the kind has no reference block.
     for (const Block& b : m_blocks) {
-        if (b.properties.fluid) {
+        if (b.properties.fluidName == fluidName) {
             return b.id;
         }
     }

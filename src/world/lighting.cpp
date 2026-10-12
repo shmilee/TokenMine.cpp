@@ -15,16 +15,31 @@ const BlockPos kDirections[6] = {
     {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
 };
 
-// The cost of entering the target cell (a fluid cell attenuates in every
+// The cost of entering the target cell (a fluid cell — of EITHER kind,
+// both attenuate like water — costs kFluidLightAttenuation in every
 // direction; air keeps the per-type costs: sky light is free vertically,
 // block light costs 1 everywhere).
 int enterCost(const Chunk* chunk, int lx, int ly, int lz, bool sky,
               bool vertical) {
     const BlockID id = chunk->get(lx, ly, lz);
-    if (id == BlockID::air() && chunk->fluidAt(lx, ly, lz) > 0) {
+    if (id == BlockID::air() && chunk->fluidAt(lx, ly, lz) != 0) {
         return kFluidLightAttenuation;
     }
     return vertical ? (sky ? 0 : 1) : 1;
+}
+
+// A fluid cell is a block-light source when its KIND's reference block
+// declares light_emission (data-driven: the lava fluid block glows at 15
+// like glowstone — the value comes from the fluid block's property, never
+// from the cell). 0 for dry cells or kinds whose reference block does not
+// glow (water).
+int fluidEmission(const BlockRegistry& blocks, std::uint8_t code) {
+    if (code == 0) {
+        return 0;
+    }
+    const std::optional<BlockID> id =
+        blocks.fluidBlock(fluidKindName(fluidKindOf(code)));
+    return id ? blocks.at(*id).properties.lightEmission : 0;
 }
 
 // The BFS core, shared by both light types and all entry points.
@@ -187,7 +202,12 @@ void Lighting::propagateAll(World& world, const BlockRegistry& blocks) {
             for (int lz = 0; lz < kChunkSize; ++lz) {
                 for (int lx = 0; lx < kChunkSize; ++lx) {
                     const Block& b = blocks.at(chunk->get(lx, ly, lz));
-                    const int emission = b.properties.lightEmission;
+                    int emission = b.properties.lightEmission;
+                    if (emission == 0) {
+                        // A fluid cell of a glowing kind (lava).
+                        emission =
+                            fluidEmission(blocks, chunk->fluidAt(lx, ly, lz));
+                    }
                     if (emission > 0) {
                         chunk->setBlockLightAt(lx, ly, lz,
                                                static_cast<std::uint8_t>(emission));
@@ -316,9 +336,14 @@ void Lighting::updateRegion(World& world, const BlockRegistry& blocks,
                     continue;
                 }
                 const BlockPos local = worldToChunkLocal(worldToChunk(p), p);
-                const int emission =
+                int emission =
                     blocks.at(chunk->get(local.x, local.y, local.z))
                         .properties.lightEmission;
+                if (emission == 0) {
+                    // A fluid cell of a glowing kind (lava).
+                    emission = fluidEmission(
+                        blocks, chunk->fluidAt(local.x, local.y, local.z));
+                }
                 const std::uint8_t target =
                     static_cast<std::uint8_t>(emission);
                 const std::uint8_t current =

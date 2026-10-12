@@ -70,9 +70,25 @@ struct BlockProperties {
     bool opaque = true;          // fully occludes adjacent faces + blocks light
     bool transparent = false;    // rendered in the blending pass
     bool destroyable = true;     // can be broken by the player
-    bool fluid = false;          // simulated as a fluid (Phase 9)
+    // Simulated as a fluid (Phase 9; KINDED in Phase 51): the fluid's name
+    // (vocabulary: "water", "lava" — validated at data load). Empty = not
+    // a fluid. A fluid block is stored as a fluid level in the chunk's
+    // fluid array (never as a placed block); it is the texture/lighting
+    // reference for cells of that kind (see BlockRegistry::fluidBlock).
+    std::string fluidName;
     float hardness = 1.0f;       // base break time in seconds (tools refine it)
     int lightEmission = 0;       // block light 0..15 (Phase 7)
+    // Water reaction (Phase 51), only on a fluid block: when a cell of
+    // THIS fluid sits 6-adjacent to a water cell, the fluid cell is
+    // converted to a block (the fluid is consumed, the water is not —
+    // see world/fluid). `waterReactionSource` is the block for a SOURCE
+    // (level 8) water neighbor, `waterReactionFlowing` for any flowing
+    // water neighbor; a source neighbor wins. Strictly paired (both set or
+    // both empty) and the names are cross-checked at game init (the ammo
+    // pattern). Empty pair = the fluid is inert toward water (the default
+    // for any fluid without the field).
+    std::string waterReactionSource;
+    std::string waterReactionFlowing;
 
     // Item dropped on break, addressed by item NAME (validated against the
     // ItemRegistry at game init — block items share the block's name, so

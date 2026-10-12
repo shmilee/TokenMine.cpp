@@ -38,7 +38,7 @@ mine-craft/
 │                    # World、ChunkMesher（按面烘焙光照）、day_cycle（昼夜循环：时间/
 │                    # dayFactor/天空色/日月方位/确定性星空）、raycast（DDA 体素射线+放置校验）、
 │                    # lighting（Sky/Block Light 0-15 传播与局部更新，水每格衰减 3）、
-│                    # fluid（FluidSim：0-8 等级水模拟——下落/扩散/吸收/补满）、
+│                    # fluid（FluidSim：水/熔岩双种类 level 1..8 模拟——反应 pass + 下落/扩散/吸收/补满）、
 │                    # noise（确定性
 │                    # value noise/fBm）、BiomeRegistry、WorldgenParams（worldgen.json）、
 │                    # WorldGenerator（Seed 可复现生成）
@@ -54,7 +54,8 @@ src/core/    logger / error(Result) / json / config(点号键) / asset_manager(�
              window / input(SDL 事件唯一消费者→GameKey) / camera / png / math(Vec3/Mat4)
              save(P13)：SaveGame 数据模型 + diffWorld/applyWorldEdits（World+生成器回调+BlockRegistry，
              无 GL 依赖）+ serializeSave/parseSave（严格 JSON 层）——存档=seed+diff+状态，文件
-             data/saves/<slot>.json（format 1）
+             data/saves/<slot>.json（format 9；fluids 编辑 =
+             [x,y,z,level,"water"|"lava"] 五元素，format<9 的 4 元素全迁 water）
              thread_pool(P14)：固定 N worker（游戏里 4）、post(job)/flush()（帧同步点：等所有
              已 post 的 job 完成）、job 异常首个存 exception_ptr、在 flush 重抛（池不坏）、
              析构 stopped+先跑完 pending job 再 join；worker 只在 post→flush 窗口运行（帧管线
@@ -67,7 +68,8 @@ src/block/   Block 纯数据(properties/model) + BlockRegistry
 src/world/   coordinates.hpp：kChunkSize=16, kWorldHeight=128, BlockPos/ChunkPos,
              floorDiv(负坐标正确), worldToChunk/chunkOrigin/chunkLocalToWorld/worldToChunkLocal
              Chunk：16^3 BlockID 数组 + skyLight/blockLight 两个 16^3 字节数组(0-15)
-             + fluid 16^3 字节数组(0-8；8=满/源 1-7 流动；cell 里水与方块互斥)
+             + fluid 16^3 字节数组(0=干 1-8=水 level 9-16=熔岩 level【P51 双种类，
+               kMaxFluidLevel=8 为界；一格至多一种】；8=满/源 1-7 流动；cell 里流体与方块互斥)
              + dirty（新 chunk 即 dirty）；raw 访问 data()/skyLightData()/blockLightData()/
              fluidData()；skyLightAt/blockLightAt/fluidAt 读接口
              World：chunk map；getBlock 越界/缺失→air；getSkyLight 缺失/世界上方→15、
@@ -94,7 +96,10 @@ src/world/   coordinates.hpp：kChunkSize=16, kWorldHeight=128, BlockPos/ChunkPo
              （区域外紧邻的旧光值作只读边界源）；BFS 规则：opaque 不可入、sky 垂直 0/
              水平 1、block 全方向 1、严格增才写+重入队；**水衰减（P9）**：列顶扫描遇水
              每格 -3（enterCost），sky BFS 入水格额外 -3——深水湖底随深度变暗
-             fluid：FluidSim::tick（world/fluid.{hpp,cpp}，P9）——快照式确定性水模拟：
+             fluid：FluidSim::tick（world/fluid.{hpp,cpp}，P9，P51 双种类）——
+             tick = ①反应 pass（快照扫熔岩格：6-邻有水 → setBlock 为该块
+             water_reaction 产物【源水→source/流动水→flowing】；水不消耗）→
+             ②水模拟 → ③熔岩模拟；每种类的快照式确定性模拟：
              逐列下落扫描（下方空/下方流动→falling；falling=传送带：下方吃本级、本级吃上方）；
              静止在方块上：水平扩散 L-1 到 4 邻居（L=1 终端；邻居是方块/同级/更高则挡）；
              静止在流体上：满格稳定；**坐在满水上→补满到 8**（source 托底的柱是满的，

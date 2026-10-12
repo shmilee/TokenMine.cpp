@@ -48,7 +48,7 @@ BlockRegistry makeRegistry() {
                          R"({"top":"t","side":"t","bottom":"t"})")));
     auto r2 = reg.registerBlock(parseDef(
         cubeDef("water",
-                R"({"opaque":false,"transparent":true,"solid":false,"fluid":true})",
+                R"({"opaque":false,"transparent":true,"solid":false,"fluid":"water"})",
                 R"({"top":"t","side":"t","bottom":"t"})")));
     auto r3 = reg.registerBlock(
         parseDef(cubeDef("glowstone", R"({"light_emission":15})",
@@ -227,7 +227,7 @@ TEST(LightingTest, WaterAttenuatesSkyLightVertically) {
     fillBox(world, 7, 1, 7, 9, 5, 9, stone); // a sealed box (open top)
     for (int y = 1; y <= 5; ++y) {
         world.setBlock(8, y, 8, BlockID::air()); // hollow out the column
-        ASSERT_TRUE(world.setFluid(8, y, 8, kMaxFluidLevel));
+        ASSERT_TRUE(world.setFluid(8, y, 8, FluidKind::Water, kMaxFluidLevel));
     }
     Lighting::propagateAll(world, reg);
     EXPECT_EQ(world.getSkyLight(8, 5, 8), 12); // 15 - 3
@@ -245,7 +245,7 @@ TEST(LightingTest, WaterSideEntryRaisesColumn) {
     World world;
     world.setBlock(8, 0, 8, idOf(reg, "stone"));
     for (int y = 1; y <= 5; ++y) {
-        ASSERT_TRUE(world.setFluid(8, y, 8, kMaxFluidLevel));
+        ASSERT_TRUE(world.setFluid(8, y, 8, FluidKind::Water, kMaxFluidLevel));
     }
     Lighting::propagateAll(world, reg);
     for (int y = 1; y <= 5; ++y) {
@@ -268,7 +268,7 @@ TEST(LightingTest, BlockLightThroughWater) {
         world.setBlock(x, 0, 9, idOf(reg, "stone")); // light can't route
     }                                                     // around
     for (int x = 9; x <= 12; ++x) {
-        ASSERT_TRUE(world.setFluid(x, 0, 8, kMaxFluidLevel));
+        ASSERT_TRUE(world.setFluid(x, 0, 8, FluidKind::Water, kMaxFluidLevel));
     }
     Lighting::propagateAll(world, reg);
     EXPECT_EQ(world.getBlockLight(8, 0, 8), 15); // the source keeps its value
@@ -451,7 +451,7 @@ TEST(LightingTest, UpdateRegionAfterFluidChange) {
         for (int x = 6; x <= 9; ++x) {
             for (int z = 6; z <= 9; ++z) {
                 for (int y = 1; y <= 3; ++y) {
-                    ASSERT_TRUE(w.setFluid(x, y, z, kMaxFluidLevel));
+                    ASSERT_TRUE(w.setFluid(x, y, z, FluidKind::Water, kMaxFluidLevel));
                 }
             }
         }
@@ -473,10 +473,10 @@ TEST(LightingTest, UpdateRegionAfterFluidChange) {
 
     // Two fluid changes: drain the pool's bottom center, add a shallow
     // puddle cell at the pool's corner. The bounding box spans both.
-    local.setFluid(8, 1, 8, 0);
-    local.setFluid(6, 3, 6, 5);
-    full.setFluid(8, 1, 8, 0);
-    full.setFluid(6, 3, 6, 5);
+    local.setFluid(8, 1, 8, FluidKind::Water, 0);
+    local.setFluid(6, 3, 6, FluidKind::Water, 5);
+    full.setFluid(8, 1, 8, FluidKind::Water, 0);
+    full.setFluid(6, 3, 6, FluidKind::Water, 5);
     local.findChunkMut({0, 0, 0})->clearDirty();
     local.findChunkMut({3, 0, 0})->clearDirty();
     Lighting::updateRegion(local, reg, {6, 1, 6}, {8, 3, 8});

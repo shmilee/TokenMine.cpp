@@ -470,7 +470,9 @@ bool Player::isInWater() const {
                 if (!(mn.z < z + 1 && mx.z > z)) {
                     continue;
                 }
-                if (m_world.getFluid(x, y, z) > 0) {
+                // WATER only (Phase 51): the player swims in water; lava
+                // has no swim/burn behavior in v1 (see KNOWN_ISSUES).
+                if (m_world.getFluidOfKind(x, y, z, FluidKind::Water) > 0) {
                     return true;
                 }
             }

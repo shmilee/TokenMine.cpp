@@ -42,7 +42,7 @@ BlockRegistry makeRegistry() {
                 R"({"top":"t","side":"t","bottom":"t"})")));
     auto water = reg.registerBlock(parseDef(
         cubeDef("water",
-                R"({"opaque":false,"transparent":true,"solid":false,"fluid":true})",
+                R"({"opaque":false,"transparent":true,"solid":false,"fluid":"water"})",
                 R"({"top":"t","side":"t","bottom":"t"})")));
     if (!stone.ok() || !glass.ok() || !water.ok()) {
         ADD_FAILURE() << "test registry failed to build";
@@ -309,7 +309,7 @@ TEST(ChunkMesherTest, FluidNeighborDoesNotCull) {
     BlockRegistry reg = makeRegistry();
     World world;
     world.setBlock(8, 4, 8, reg.idForName("stone"));
-    world.setFluid(8, 5, 8, kMaxFluidLevel); // water on top of stone
+    world.setFluid(8, 5, 8, FluidKind::Water, kMaxFluidLevel); // water on top of stone
     const auto data = mesh(world, reg, {0, 0, 0});
     // Stone keeps all 6 faces (fluid does not occlude).
     EXPECT_EQ(data.opaqueVertices.size(), 24u);
@@ -321,8 +321,8 @@ TEST(ChunkMesherTest, FluidToFluidFacesCulled) {
     BlockRegistry reg = makeRegistry();
     World world;
     world.getOrCreateChunk({0, 0, 0});
-    world.setFluid(8, 4, 8, kMaxFluidLevel);
-    world.setFluid(9, 4, 8, kMaxFluidLevel);
+    world.setFluid(8, 4, 8, FluidKind::Water, kMaxFluidLevel);
+    world.setFluid(9, 4, 8, FluidKind::Water, kMaxFluidLevel);
     const auto data = mesh(world, reg, {0, 0, 0});
     // Two full cells: 6 + 6 faces, minus the shared face from each side
     // (fluid-to-fluid is culled, unlike same-kind non-opaque blocks).
@@ -340,7 +340,7 @@ TEST(ChunkMesherTest, FluidTopFaceAtLevelHeight) {
     BlockRegistry reg = makeRegistry();
     World world;
     world.getOrCreateChunk({0, 0, 0});
-    world.setFluid(8, 4, 8, 4);
+    world.setFluid(8, 4, 8, FluidKind::Water, 4);
     const auto data = mesh(world, reg, {0, 0, 0});
     // All 6 faces (isolated cell: even the bottom toward empty air).
     EXPECT_EQ(data.transparentVertices.size(), 24u);
@@ -368,7 +368,7 @@ TEST(ChunkMesherTest, OpaqueBlockAboveCullsFluidTopFace) {
     BlockRegistry reg = makeRegistry();
     World world;
     world.setBlock(8, 5, 8, reg.idForName("stone"));
-    world.setFluid(8, 4, 8, kMaxFluidLevel);
+    world.setFluid(8, 4, 8, FluidKind::Water, kMaxFluidLevel);
     const auto data = mesh(world, reg, {0, 0, 0});
     // Fluid: top culled (opaque above); 4 sides + bottom (empty below).
     EXPECT_EQ(data.transparentVertices.size(), 20u);
@@ -385,7 +385,7 @@ TEST(ChunkMesherTest, FluidFaceBakesOwnCellLight) {
     BlockRegistry reg = makeRegistry();
     World world;
     world.getOrCreateChunk({0, 0, 0});
-    world.setFluid(8, 4, 8, kMaxFluidLevel);
+    world.setFluid(8, 4, 8, FluidKind::Water, kMaxFluidLevel);
     Chunk& chunk = world.getOrCreateChunk({0, 0, 0});
     chunk.setSkyLightAt(8, 4, 8, 5);  // the fluid cell
     chunk.setSkyLightAt(8, 5, 8, 15); // the air above (a different value)
@@ -407,7 +407,7 @@ TEST(ChunkMesherTest, FluidFaceWindingIsCounterClockwiseFromOutside) {
     BlockRegistry reg = makeRegistry();
     World world;
     world.getOrCreateChunk({0, 0, 0});
-    world.setFluid(8, 4, 8, 4); // partial height: sides are 0.5 tall
+    world.setFluid(8, 4, 8, FluidKind::Water, 4); // partial height: sides are 0.5 tall
     const auto data = mesh(world, reg, {0, 0, 0});
 
     const std::vector<Vec3> axes = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0},
@@ -467,7 +467,7 @@ TEST(ChunkMesherTest, MixedBlockTypesSplitByPass) {
     BlockRegistry reg = makeRegistry();
     World world;
     world.setBlock(7, 4, 8, reg.idForName("stone"));
-    world.setFluid(8, 4, 8, kMaxFluidLevel); // water directly next to the stone
+    world.setFluid(8, 4, 8, FluidKind::Water, kMaxFluidLevel); // water directly next to the stone
     const auto data = mesh(world, reg, {0, 0, 0});
     // Stone: 6 faces (the fluid neighbor does not occlude). Water: 5 faces
     // (the west face is culled by the opaque stone).

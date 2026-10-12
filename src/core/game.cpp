@@ -466,6 +466,27 @@ Result<void> Game::buildScene() {
         }
     }
 
+    // Strict data check (Phase 51): a fluid block's water_reaction names
+    // two EXISTING blocks (the source-water and flowing-water products of
+    // the reaction — the ammo discipline; a typo fails init loudly). The
+    // pairing is enforced at data load; this is the existence check.
+    for (const BlockID id : m_blocks.allIds()) {
+        const Block& b = m_blocks.at(id);
+        if (b.properties.waterReactionSource.empty()) {
+            continue;
+        }
+        const BlockID sourceId =
+            m_blocks.idForName(b.properties.waterReactionSource);
+        const BlockID flowingId =
+            m_blocks.idForName(b.properties.waterReactionFlowing);
+        if (!sourceId.valid() || !flowingId.valid()) {
+            return MC_FAIL("block '" + b.name + "' water_reaction names "
+                           "unknown block(s) '" +
+                           b.properties.waterReactionSource + "' / '" +
+                           b.properties.waterReactionFlowing + "'");
+        }
+    }
+
     // Strict data check (Phase 49): a block's chance_drop item must name a
     // registered item whose max stack fits chanceDropCount (the drops
     // discipline — a typo in the extra-drop name fails init loudly).
@@ -623,36 +644,46 @@ Result<void> Game::buildScene() {
             return MC_FAIL("item '" + item.name + "' references unknown "
                            "container item '" + item.returnsItem + "'");
         }
-        // Phase 47: the fluid-bucket PAIR (the ammo pattern extended to
-        // pairs): the companion must exist AND be the opposite side
-        // pointing back at this item (same fluid, becomes == this name).
-        // A one-sided or mismatched pair is a dead field — the parse
-        // keeps each side locally consistent, only the round trip needs
-        // both files.
-        if (!item.collectsBecomes.empty()) {
-            const Item* other = m_items.findByName(item.collectsBecomes);
-            if (other == nullptr ||
-                other->poursFluid != item.collectsFluid ||
-                other->poursBecomes != item.name) {
-                return MC_FAIL("item '" + item.name + "' collects into '" +
-                               item.collectsBecomes +
-                               "', but that item does not pour back to '" +
-                               item.name + "' (a bucket pair must be "
-                               "symmetric: same fluid, becomes == this "
-                               "item)");
+        // Phase 47 (kinds in Phase 51): the fluid-bucket PAIR (the ammo
+        // pattern extended to pairs). The EMPTY side's companion is
+        // DERIVED per named fluid: there must be exactly ONE full bucket
+        // that pours that fluid back into this item (the parse keeps each
+        // side locally consistent; only the round trip needs both files).
+        // The FULL side's companion must exist and be an empty bucket
+        // that collects this fluid.
+        for (const std::string& fluid : item.collectsFluids) {
+            // Exactly ONE full bucket must pour this fluid back into this
+            // item (zero = a dead field, two = an ambiguous scoop target).
+            int matches = 0;
+            for (const ItemID otherId : m_items.allIds()) {
+                const Item& other = m_items.at(otherId);
+                if (other.poursFluid == fluid &&
+                    other.poursBecomes == item.name) {
+                    ++matches;
+                }
+            }
+            if (matches != 1) {
+                return MC_FAIL("item '" + item.name + "' collects fluid '" +
+                               fluid + "' with " + std::to_string(matches) +
+                               " full bucket(s) pouring it back (exactly "
+                               "one is required — the scoop target must "
+                               "be unique)");
             }
         }
         if (!item.poursBecomes.empty()) {
             const Item* other = m_items.findByName(item.poursBecomes);
-            if (other == nullptr ||
-                other->collectsFluid != item.poursFluid ||
-                other->collectsBecomes != item.name) {
+            const bool collectsThisFluid =
+                other != nullptr &&
+                std::find(other->collectsFluids.begin(),
+                          other->collectsFluids.end(),
+                          item.poursFluid) != other->collectsFluids.end();
+            if (other == nullptr || !collectsThisFluid) {
                 return MC_FAIL("item '" + item.name + "' pours back to '" +
                                item.poursBecomes +
-                               "', but that item does not collect from '" +
-                               item.name + "' (a bucket pair must be "
-                               "symmetric: same fluid, becomes == this "
-                               "item)");
+                               "', but that item does not collect fluid '" +
+                               item.poursFluid +
+                               "' (a bucket pair must be symmetric: the "
+                               "empty bucket names this fluid)");
             }
         }
     }
@@ -1602,7 +1633,8 @@ void Game::update(double dt) {
     // levels shift the light (water attenuates it), so re-light the touched
     // region before meshing; a settled world changes nothing.
     if (m_frameCount % kFluidTickEveryNFrames == 0) {
-        const std::vector<BlockPos> changed = FluidSim::tick(m_world);
+        const std::vector<BlockPos> changed =
+            FluidSim::tick(m_world, m_blocks);
         if (!changed.empty()) {
             BlockPos min = changed.front();
             BlockPos max = changed.front();
@@ -2351,20 +2383,22 @@ bool Game::tryMilk() {
 }
 
 bool Game::tryFluidBucket() {
-    // Fluid bucket (Phase 47, water — the project's single fluid). The
+    // Fluid bucket (Phase 47; kinds in Phase 51 — water and lava). The
     // selected item must be a bucket side (item data 'collects_fluid' or
     // 'pours_fluid'; the pair symmetry is cross-checked at init). The
     // COLLECT side: the bucket-target ray (kReach; the first cell that is
     // a non-air block or carries fluid — a wall occludes, Minecraft) must
-    // land on a level-8 (source) cell: the source is removed and one held
-    // item is swapped for the companion (the full bucket). The POUR side:
-    // the placement-target cell (the face neighbor of the first non-air
-    // block) must be air without fluid and not overlap the player: a
-    // level-8 source is placed and the item swaps to the empty bucket.
-    // Both play "splash" and consume the click (a bucket never places a
-    // block); a no-action case falls through to the normal right-click
-    // (placeBlock is a no-op for a material — nothing happens, e.g. on a
-    // flowing cell or an occupied target).
+    // land on a level-8 (source) cell of a fluid the bucket names: the
+    // source is removed and one held item is swapped for the full bucket
+    // of THAT fluid (the unique item that pours it back — derived, the
+    // init cross-check). The POUR side: the placement-target cell (the
+    // face neighbor of the first non-air block) must be air without fluid
+    // and not overlap the player: a level-8 source of the item's fluid is
+    // placed and the item swaps to the empty bucket. Both play "splash"
+    // and consume the click (a bucket never places a block); a no-action
+    // case falls through to the normal right-click (placeBlock is a
+    // no-op for a material — nothing happens, e.g. on a flowing cell, a
+    // source of a fluid the bucket does not name, or an occupied target).
     if (!m_player || m_player->isDead()) {
         return false;
     }
@@ -2373,16 +2407,64 @@ bool Game::tryFluidBucket() {
         return false;
     }
     const Item& item = m_items.at(stack.item);
-    if (item.collectsFluid.empty() && item.poursFluid.empty()) {
+    if (item.collectsFluids.empty() && item.poursFluid.empty()) {
         return false; // not a bucket side: fall through
     }
-    const bool collect = !item.collectsFluid.empty();
-    // The companion exists (init cross-check); the guard is a defensive
-    // no-op.
-    const ItemID becomes = m_items.idForName(
-        collect ? item.collectsBecomes : item.poursBecomes);
-    if (!becomes.valid()) {
+    const bool collect = !item.collectsFluids.empty();
+    if (collect) {
+        const std::optional<BlockPos> cell =
+            raycastFluid(m_world, m_camera.position, m_camera.forward(),
+                         kReach);
+        // A source cell is level kMaxFluidLevel (flowing cells are lower
+        // and cannot be collected, Minecraft). A block cell reads dry.
+        const std::optional<FluidKind> kind =
+            cell ? m_world.getFluidKind(cell->x, cell->y, cell->z)
+                 : std::nullopt;
+        const bool isSource =
+            kind &&
+            m_world.getFluidOfKind(cell->x, cell->y, cell->z, *kind) ==
+                kMaxFluidLevel;
+        // The source's fluid must be one the bucket names (Minecraft: one
+        // empty bucket scoops every fluid it names).
+        const std::string kindName =
+            kind ? fluidKindName(*kind) : std::string();
+        const bool named =
+            kind && std::find(item.collectsFluids.begin(),
+                              item.collectsFluids.end(),
+                              kindName) != item.collectsFluids.end();
+        if (!cell || !isSource || !named) {
+            return false; // no named source in reach: fall through
+        }
+        // The full bucket of that fluid (init guarantees exactly one).
+        const Item* full = m_items.fullBucketFor(kindName, item.name);
+        if (full == nullptr) {
+            return true; // defensive (init cross-check); consume the click
+        }
+        const ItemID becomes = full->id;
+        if (m_inventory.isFull(becomes, m_items)) {
+            return true; // no room: nothing happens (Minecraft)
+        }
+        auto finish = [&]() {
+            m_inventory.take(m_selectedSlot, 1);
+            m_inventory.add(becomes, 1, m_items);
+            m_sound.play("splash");
+        };
+        m_world.setFluid(cell->x, cell->y, cell->z, *kind, 0);
+        Lighting::updateLocal(m_world, m_blocks, *cell);
+        finish();
+        MC_LOG_DEBUG("scooped " + kindName + " at (" +
+                     std::to_string(cell->x) + ", " +
+                     std::to_string(cell->y) + ", " +
+                     std::to_string(cell->z) + ") (" + item.name + " -> " +
+                     full->name + ")");
         return true;
+    }
+    // The pour side: the item's fluid kind (init guarantees the name is
+    // in the vocabulary).
+    const FluidKind kind = *fluidKindForName(item.poursFluid);
+    const ItemID becomes = m_items.idForName(item.poursBecomes);
+    if (!becomes.valid()) {
+        return true; // defensive (init cross-check); consume the click
     }
     if (m_inventory.isFull(becomes, m_items)) {
         return true; // no room for the companion: nothing happens (Minecraft)
@@ -2392,25 +2474,6 @@ bool Game::tryFluidBucket() {
         m_inventory.add(becomes, 1, m_items);
         m_sound.play("splash");
     };
-    if (collect) {
-        const std::optional<BlockPos> cell =
-            raycastFluid(m_world, m_camera.position, m_camera.forward(),
-                         kReach);
-        // A source cell is level kMaxFluidLevel (flowing cells are lower
-        // and cannot be collected, Minecraft). A block cell reads 0.
-        if (!cell ||
-            m_world.getFluid(cell->x, cell->y, cell->z) != kMaxFluidLevel) {
-            return false; // no source in reach: fall through
-        }
-        m_world.setFluid(cell->x, cell->y, cell->z, 0);
-        Lighting::updateLocal(m_world, m_blocks, *cell);
-        finish();
-        MC_LOG_DEBUG("scooped water at (" + std::to_string(cell->x) + ", " +
-                     std::to_string(cell->y) + ", " +
-                     std::to_string(cell->z) + ") (" + item.name + " -> " +
-                     item.collectsBecomes + ")");
-        return true;
-    }
     const std::optional<BlockHit> hit = targetBlock();
     if (!hit) {
         return false; // no block face to pour against: fall through
@@ -2430,12 +2493,14 @@ bool Game::tryFluidBucket() {
         m_world.getFluid(target.x, target.y, target.z) != 0) {
         return false;
     }
-    m_world.setFluid(target.x, target.y, target.z, kMaxFluidLevel);
+    m_world.setFluid(target.x, target.y, target.z, kind, kMaxFluidLevel);
     Lighting::updateLocal(m_world, m_blocks, target);
     finish();
-    MC_LOG_DEBUG("poured water at (" + std::to_string(target.x) + ", " +
-                 std::to_string(target.y) + ", " + std::to_string(target.z) +
-                 ") (" + item.name + " -> " + item.poursBecomes + ")");
+    MC_LOG_DEBUG("poured " + item.poursFluid + " at (" +
+                 std::to_string(target.x) + ", " +
+                 std::to_string(target.y) + ", " +
+                 std::to_string(target.z) + ") (" + item.name + " -> " +
+                 item.poursBecomes + ")");
     return true;
 }
 

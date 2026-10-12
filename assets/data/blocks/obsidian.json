@@ -1,0 +1,11 @@
+{
+  "id": "obsidian",
+  "properties": {
+    "hardness": 10,
+    "drops": "obsidian"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "obsidian", "side": "obsidian", "bottom": "obsidian" }
+  }
+}

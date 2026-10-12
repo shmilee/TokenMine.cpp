@@ -118,11 +118,34 @@ SaveGame makeSave(const Fixture& f) {
     s.entities.push_back({"dirt", 2, {0.5f, 52.5f, 0.5f}, 12.5, 0.25});
     s.blockEdits = {{BlockPos {0, 53, 0}, "air"},
                     {BlockPos {0, 54, -1}, "dirt"}};
-    s.fluidEdits = {{BlockPos {4, 50, 4}, 5}};
+    s.fluidEdits = {{BlockPos {4, 50, 4}, FluidKind::Water, 5}};
     return s;
 }
 
 // Copies a JSON object minus one key (Json has no erase).
+// A genuine pre-Phase-51 file carries FOUR-element fluid edits; when a
+// test downgrades the format of a serialized (format-9) save, the fluid
+// edits are rewritten to the old shape (the parser is strict about the
+// element count per format — a five-element edit in a format-8 file is
+// corrupt).
+Json downgradeFluids(const Json& root) {
+    Json arr = Json::array();
+    const Json* fls = root.find("fluids");
+    if (fls == nullptr || !fls->isArray()) {
+        return arr;
+    }
+    for (std::size_t i = 0; i < fls->size(); ++i) {
+        const Json& e = fls->at(i);
+        Json a = Json::array();
+        a.push_back(e.at(0));
+        a.push_back(e.at(1));
+        a.push_back(e.at(2));
+        a.push_back(e.at(3));
+        arr.push_back(std::move(a));
+    }
+    return arr;
+}
+
 Json withoutKey(const Json& root, const std::string& key) {
     Json out = Json::object();
     for (const auto& [k, v] : root.members()) {
@@ -209,8 +232,8 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     s.tableGrid[8] = ItemStack {f.items.idForName("stone"), 64};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Phase 46: writes are always format 8.
-    EXPECT_EQ(j->find("format")->asInt(), 8);
+    // Phase 51: writes are always format 9.
+    EXPECT_EQ(j->find("format")->asInt(), 9);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -250,6 +273,7 @@ TEST(SaveParseTest, FormatTwoLoadsWithEmptyGrids) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(2);
+    root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "inv_grid");
     root = withoutKey(root, "table_grid");
     root = withoutKey(root, "furnaces"); // format 2 predates the furnace
@@ -347,6 +371,7 @@ TEST(SaveParseTest, FormatOneLoadsWithoutHealth) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["format"] = Json(1);
+    root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "inv_grid"); // format 1 predates the grids
     root = withoutKey(root, "table_grid");
     root = withoutKey(root, "furnaces"); // format 1 predates the furnace
@@ -393,6 +418,7 @@ TEST(SaveParseTest, FormatThreeLoadsWithoutHunger) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["format"] = Json(3);
+    root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 3 predates the furnace
     ASSERT_EQ(root["player"].find("hunger"), nullptr);
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
@@ -437,6 +463,7 @@ TEST(SaveParseTest, FormatFourLoadsWithoutSaturation) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["format"] = Json(4);
+    root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 4 predates the furnace
     ASSERT_EQ(root["player"].find("saturation"), nullptr);
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
@@ -700,12 +727,14 @@ TEST(SaveParseTest, RejectsBadFluidEdit) {
         root["fluids"] = std::move(arr);
         return root;
     };
-    auto edit = [](int x, int y, int z, Json level) {
+    auto edit = [](int x, int y, int z, Json level,
+                   const std::string& kind = "water") {
         Json a = Json::array();
         a.push_back(Json(x));
         a.push_back(Json(y));
         a.push_back(Json(z));
         a.push_back(std::move(level));
+        a.push_back(Json(kind));
         return a;
     };
     EXPECT_FALSE(
@@ -717,6 +746,34 @@ TEST(SaveParseTest, RejectsBadFluidEdit) {
         parseSave(withFluids({edit(1, 10, 1, Json(3)), edit(1, 10, 1, Json(4))}),
                   f.items, f.blocks, f.effects, 42)
             .ok()); // duplicate cell
+    // Format 9: a four-element edit (the pre-Phase-51 shape) is a size
+    // error, an unknown fluid name is a vocabulary error, and a
+    // non-string kind is a type error.
+    {
+        Json shortEdit = Json::array();
+        shortEdit.push_back(Json(1));
+        shortEdit.push_back(Json(10));
+        shortEdit.push_back(Json(1));
+        shortEdit.push_back(Json(3));
+        EXPECT_FALSE(parseSave(withFluids({shortEdit}), f.items, f.blocks,
+                               f.effects, 42)
+                         .ok());
+    }
+    EXPECT_FALSE(
+        parseSave(withFluids({edit(1, 10, 1, Json(3), "slime")}), f.items,
+                  f.blocks, f.effects, 42)
+            .ok());
+    {
+        Json badKind = Json::array();
+        badKind.push_back(Json(1));
+        badKind.push_back(Json(10));
+        badKind.push_back(Json(1));
+        badKind.push_back(Json(3));
+        badKind.push_back(Json(7)); // a number, not a kind name
+        EXPECT_FALSE(parseSave(withFluids({badKind}), f.items, f.blocks,
+                               f.effects, 42)
+                         .ok());
+    }
     // A block edit and a fluid edit on the same cell: a block displaces
     // fluid, so the save would be corrupt.
     {
@@ -728,6 +785,53 @@ TEST(SaveParseTest, RejectsBadFluidEdit) {
             withFluids({edit(1, 10, 1, Json(3))})["fluids"];
         EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
     }
+}
+
+TEST(SaveParseTest, FluidEditKindRoundTripsAndMigrates) {
+    // Phase 51: the fluid kind on fluid edits (format 9). A lava edit
+    // survives the round trip (five elements, kind named); a format-8
+    // four-element edit migrates to water (the only simulated fluid
+    // before Phase 51).
+    Fixture f;
+    const SaveGame s = makeSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+
+    Json root = *j;
+    Json lavaEdit = Json::array();
+    lavaEdit.push_back(Json(2));
+    lavaEdit.push_back(Json(10));
+    lavaEdit.push_back(Json(2));
+    lavaEdit.push_back(Json(5));
+    lavaEdit.push_back(Json("lava"));
+    Json arr = Json::array();
+    arr.push_back(std::move(lavaEdit));
+    root["fluids"] = std::move(arr);
+    auto parsed = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+    ASSERT_EQ(parsed->fluidEdits.size(), 1u);
+    EXPECT_EQ(parsed->fluidEdits[0].kind, FluidKind::Lava);
+    EXPECT_EQ(parsed->fluidEdits[0].level, 5);
+    auto reser = serializeSave(*parsed, f.items);
+    ASSERT_TRUE(reser.ok());
+    const Json& out = reser->find("fluids")->at(0);
+    ASSERT_EQ(out.size(), 5u);
+    EXPECT_EQ(out.at(4).asString(), "lava");
+
+    root["format"] = Json(8);
+    Json waterEdit = Json::array();
+    waterEdit.push_back(Json(3));
+    waterEdit.push_back(Json(10));
+    waterEdit.push_back(Json(3));
+    waterEdit.push_back(Json(4));
+    Json arr2 = Json::array();
+    arr2.push_back(std::move(waterEdit));
+    root["fluids"] = std::move(arr2);
+    auto migrated = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(migrated.ok()) << migrated.error().message;
+    ASSERT_EQ(migrated->fluidEdits.size(), 1u);
+    EXPECT_EQ(migrated->fluidEdits[0].kind, FluidKind::Water);
+    EXPECT_EQ(migrated->fluidEdits[0].level, 4);
 }
 
 // -- world diff / apply -------------------------------------------------------------
@@ -744,8 +848,8 @@ World::ChunkGenerator referenceGenerator(BlockID stone) {
                 }
             }
         }
-        c.setFluidAt(0, 5, 0, kMaxFluidLevel);
-        c.setFluidAt(1, 5, 0, kMaxFluidLevel);
+        c.setFluidAt(0, 5, 0, fluidCode(FluidKind::Water, kMaxFluidLevel));
+        c.setFluidAt(1, 5, 0, fluidCode(FluidKind::Water, kMaxFluidLevel));
     };
 }
 
@@ -767,8 +871,8 @@ TEST(SaveWorldDiffTest, DiffWorldDetectsExactlyTheChanges) {
     // water cell, drain the other.
     ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID::air()));
     ASSERT_TRUE(world.setBlock(2, 5, 0, dirt));
-    ASSERT_TRUE(world.setFluid(0, 5, 0, 3));
-    ASSERT_TRUE(world.setFluid(1, 5, 0, 0));
+    ASSERT_TRUE(world.setFluid(0, 5, 0, FluidKind::Water, 3));
+    ASSERT_TRUE(world.setFluid(1, 5, 0, FluidKind::Water, 0));
 
     std::vector<SavedBlockEdit> blockEdits;
     std::vector<SavedFluidEdit> fluidEdits;
@@ -782,8 +886,10 @@ TEST(SaveWorldDiffTest, DiffWorldDetectsExactlyTheChanges) {
     EXPECT_EQ(blockEdits[1].blockName, "dirt");
     ASSERT_EQ(fluidEdits.size(), 2u);
     EXPECT_EQ(fluidEdits[0].pos, (BlockPos {0, 5, 0}));
+    EXPECT_EQ(fluidEdits[0].kind, FluidKind::Water);
     EXPECT_EQ(fluidEdits[0].level, 3);
     EXPECT_EQ(fluidEdits[1].pos, (BlockPos {1, 5, 0}));
+    EXPECT_EQ(fluidEdits[1].kind, FluidKind::Water);
     EXPECT_EQ(fluidEdits[1].level, 0);
 }
 
@@ -819,7 +925,7 @@ TEST(SaveWorldDiffTest, ParallelDiffMatchesSerialDiff) {
     ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID::air()));
     ASSERT_TRUE(world.setBlock(8 * 16, 3, 8 * 16, dirt));
     ASSERT_TRUE(world.setBlock(15 * 16 + 15, 5, 16 * 16 + 15, stone));
-    ASSERT_TRUE(world.setFluid(1, 5, 0, 3));
+    ASSERT_TRUE(world.setFluid(1, 5, 0, FluidKind::Water, 3));
 
     std::vector<SavedBlockEdit> serialBlocks;
     std::vector<SavedFluidEdit> serialFluids;
@@ -842,6 +948,7 @@ TEST(SaveWorldDiffTest, ParallelDiffMatchesSerialDiff) {
     ASSERT_EQ(parallelFluids.size(), serialFluids.size());
     for (std::size_t i = 0; i < serialFluids.size(); ++i) {
         EXPECT_EQ(parallelFluids[i].pos, serialFluids[i].pos);
+        EXPECT_EQ(parallelFluids[i].kind, serialFluids[i].kind);
         EXPECT_EQ(parallelFluids[i].level, serialFluids[i].level);
     }
 }
@@ -880,8 +987,8 @@ TEST(SaveWorldDiffTest, ApplyRestoresTheModifiedWorld) {
     World world = makeWorld(stone);
     ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID::air()));
     ASSERT_TRUE(world.setBlock(2, 5, 0, dirt));
-    ASSERT_TRUE(world.setFluid(0, 5, 0, 3));
-    ASSERT_TRUE(world.setFluid(1, 5, 0, 0));
+    ASSERT_TRUE(world.setFluid(0, 5, 0, FluidKind::Water, 3));
+    ASSERT_TRUE(world.setFluid(1, 5, 0, FluidKind::Water, 0));
 
     SaveGame save;
     save.seed = 42;
@@ -912,7 +1019,7 @@ TEST(SaveWorldDiffTest, ApplyFailsWhenFluidCellIsOccupied) {
     World world = makeWorld(stone);
     SaveGame save;
     // (0, 2, 0) is generated stone — a fluid edit there cannot apply.
-    save.fluidEdits = {{BlockPos {0, 2, 0}, 5}};
+    save.fluidEdits = {{BlockPos {0, 2, 0}, FluidKind::Water, 5}};
     auto r = applyWorldEdits(save, f.blocks, world);
     EXPECT_FALSE(r.ok());
 }
@@ -924,7 +1031,7 @@ TEST(SaveWorldDiffTest, ApplyFailsWhenTheChunkDoesNotExist) {
     SaveGame save;
     // x=64 is chunk (4, 0, 0) — never created, and no block edit creates
     // it either.
-    save.fluidEdits = {{BlockPos {64, 5, 0}, 3}};
+    save.fluidEdits = {{BlockPos {64, 5, 0}, FluidKind::Water, 3}};
     auto r = applyWorldEdits(save, f.blocks, world);
     EXPECT_FALSE(r.ok());
 }
@@ -959,8 +1066,8 @@ TEST(SaveRoundTripTest, FurnacesRoundTrip) {
     s.furnaces[0].state.fuelSubsteps = 1234;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Phase 46: writes are always format 8.
-    EXPECT_EQ(j->find("format")->asInt(), 8);
+    // Phase 51: writes are always format 9.
+    EXPECT_EQ(j->find("format")->asInt(), 9);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
@@ -999,6 +1106,7 @@ TEST(SaveParseTest, FormatFiveLoadsWithEmptyFurnaces) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(5);
+    root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 5 predates the furnace
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
@@ -1022,6 +1130,7 @@ TEST(SaveParseTest, FormatSixMigratesStateToSoleFurnace) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(6);
+    root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["furnace"] = withoutKey(root["furnaces"].at(0), "pos");
     root = withoutKey(root, "furnaces");
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
@@ -1048,6 +1157,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(6);
+    root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["furnace"] = withoutKey(root["furnaces"].at(0), "pos");
     root = withoutKey(root, "furnaces");
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
@@ -1062,6 +1172,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
         ASSERT_TRUE(j2.ok());
         Json root2 = *j2;
         root2["format"] = Json(6);
+        root2["fluids"] = downgradeFluids(root2); // pre-Phase-51 shape
         root2 = withoutKey(root2, "furnaces");
         Json fz = Json::object();
         Json in = Json::object();
@@ -1089,6 +1200,7 @@ TEST(SaveParseTest, RejectsFurnaceFieldInOldFormat) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(5); // keeps the "furnaces" field
+    root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
 
@@ -1112,6 +1224,7 @@ TEST(SaveParseTest, RejectsFurnacesFieldInFormatSix) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(6); // keeps the "furnaces" field
+    root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
 
@@ -1305,6 +1418,7 @@ TEST(SaveFormat8Test, FormatSevenFileWithoutEffectsLoads) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(7);
+    root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["player"] = withoutKey(*j->find("player"), "effects");
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;

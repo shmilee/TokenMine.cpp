@@ -1,0 +1,15 @@
+{
+  "id": "lava",
+  "properties": {
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "fluid": "lava",
+    "destroyable": false,
+    "light_emission": 15,
+    "water_reaction": { "source": "obsidian", "flowing": "stone" }
+  },
+  "model": {
+    "textures": { "top": "lava", "side": "lava", "bottom": "lava" }
+  }
+}

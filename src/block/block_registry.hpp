@@ -54,10 +54,11 @@ public:
     const Block* find(BlockID id) const;
     const Block* findByName(const std::string& name) const;
     BlockID idForName(const std::string& name) const; // invalid() when absent
-    // The block that carries the simulated fluid (properties.fluid). The
-    // game simulates one fluid (water); the mesher uses this block's
-    // textures for every fluid face. nullopt when no fluid block is defined.
-    std::optional<BlockID> fluidBlock() const;
+    // The reference block of a fluid kind (properties.fluid names it):
+    // the mesher textures its fluid faces from it, and lighting makes its
+    // cells glow when its light_emission is > 0. nullopt when no block
+    // references the kind.
+    std::optional<BlockID> fluidBlock(const std::string& fluidName) const;
 
     std::size_t count() const { return m_blocks.size(); }
     std::vector<BlockID> allIds() const;

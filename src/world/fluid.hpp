@@ -1,12 +1,15 @@
-// FluidSim: tick-based water simulation over all loaded chunks.
+// FluidSim: tick-based simulation of the project's two fluids (water and
+// lava) over all loaded chunks.
 //
-// Storage: each chunk owns a per-cell fluid level array (0..kMaxFluidLevel,
-// see Chunk). A cell holds fluid XOR a block (World::setBlock displaces
-// fluid; World::setFluid only fills air cells). The game simulates one
-// fluid (water); the level 8 (kMaxFluidLevel) is the full/source state.
+// Storage: each chunk owns a per-cell ENCODED fluid array (see Chunk:
+// 0 = dry, water level 1..8, lava level 9..16). A cell holds fluid XOR a
+// block (World::setBlock displaces fluid; World::setFluid only fills air
+// cells and replaces the other fluid kind). Level 8 (kMaxFluidLevel) is
+// the full/source state for both kinds.
 //
 // Model (simplified Minecraft, deterministic, snapshot-based — all changes
 // are computed from the start-of-tick state and applied at the end):
+//  - Per KIND (water and lava are simulated independently, same rules):
 //  - A cell is FALLING when the cell below it is empty, or the cell below
 //    is itself falling. A falling chain shifts down one cell per tick:
 //    each cell takes the fluid level of the cell above it (the chain's top
@@ -22,8 +25,18 @@
 //  - Deliberate deviation from Minecraft: full cells fall when unsupported
 //    (a MC source floats), so water drains into a broken lake floor.
 //  - Conflicting targets (two spreads into one cell) resolve to the max
-//    level. Water volume is not conserved (sources create water), like
+//    level. Fluid volume is not conserved (sources create fluid), like
 //    Minecraft's basic behavior.
+//
+// Water-lava interaction (Phase 51): BEFORE the per-kind simulation, a
+// snapshot pass converts every LAVA cell that is 6-adjacent to a WATER
+// cell: the lava cell becomes the block named by the lava fluid block's
+// 'water_reaction' data — 'source' when any water neighbor is a level-8
+// source, 'flowing' otherwise. The water is NOT consumed (Minecraft's
+// steam particles are a v1 deviation). A lava fluid block without
+// water_reaction is inert toward water. After the pass no lava cell has a
+// water neighbor, so the two kinds are 6-neighborhood-disjoint and each
+// kind simulates exactly as if the other did not exist.
 //
 // The tick is O(loaded cells): the per-chunk scan reads raw arrays; the six
 // neighbor chunks are cached per chunk so cross-boundary cell reads cost no
@@ -32,6 +45,7 @@
 
 #include <vector>
 
+#include "block/block_registry.hpp"
 #include "world/coordinates.hpp"
 #include "world/world.hpp"
 
@@ -39,13 +53,17 @@ namespace mc {
 
 class FluidSim {
 public:
-    // Advance one tick over all loaded chunks. Returns the cells whose
-    // fluid level changed (world coordinates, sorted); empty when nothing
-    // moved (a settled world). Changed cells are marked dirty through
-    // World::setFluid, so their chunks (and face-sharing neighbors) are
-    // re-meshed; the caller must also re-light the touched region (fluid
-    // levels change the light attenuation — see Lighting::updateRegion).
-    static std::vector<BlockPos> tick(World& world);
+    // Advance one tick over all loaded chunks: first the water-lava
+    // reaction pass, then the per-kind simulation (water, then lava).
+    // Returns the cells whose state changed (world coordinates, sorted and
+    // de-duplicated; both reaction-converted blocks and fluid-level
+    // changes); empty when nothing moved (a settled world). Changed cells
+    // are marked dirty through World::setBlock/World::setFluid, so their
+    // chunks (and face-sharing neighbors) are re-meshed; the caller must
+    // also re-light the touched region (fluid levels change the light
+    // attenuation and emission — see Lighting::updateRegion).
+    static std::vector<BlockPos> tick(World& world,
+                                      const BlockRegistry& blocks);
 };
 
 } // namespace mc

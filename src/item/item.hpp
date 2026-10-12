@@ -130,18 +130,18 @@ struct Item {
     // also grant one (mutual exclusion enforced at parse).
     std::string grantsEffect;
     double grantsEffectDuration = 0.0;
-    // Phase 47: fluid bucket, COLLECT side (optional data fields
-    // 'collects_fluid' + 'collects_becomes'). collectsFluid non-empty
-    // marks the item as an EMPTY bucket of the named fluid (v1
-    // vocabulary: "water" — the project's single simulated fluid):
-    // right-clicking a level-8 (source) fluid cell in reach removes the
-    // source and swaps one held item for one 'collectsBecomes' item (the
-    // full bucket). The companion must be a pourer pointing back (the
-    // pair is cross-checked at game init, the ammo pattern). Mutually
-    // exclusive with poursFluid (one item is one side of the pair) and
-    // with food/drinkable (the right-click channel owner).
-    std::string collectsFluid;
-    std::string collectsBecomes;
+    // Phase 47 (kinds in Phase 51): fluid bucket, COLLECT side (optional
+    // data field 'collects_fluid', a non-empty ARRAY of fluid names —
+    // vocabulary: "water", "lava"). Non-empty marks the item as an EMPTY
+    // bucket that scoops each named fluid: right-clicking a level-8
+    // (source) cell of one of those fluids in reach removes the source and
+    // swaps one held item for the FULL bucket of that fluid — the unique
+    // item that pours the fluid back into this one (derived; the pair is
+    // cross-checked at game init, the ammo pattern). One empty bucket
+    // therefore scoops every fluid it names (Minecraft semantics).
+    // Mutually exclusive with poursFluid (one item is one side of the
+    // pair) and with food/drinkable (the right-click channel owner).
+    std::vector<std::string> collectsFluids;
     // Phase 47: fluid bucket, POUR side (optional data fields
     // 'pours_fluid' + 'pours_becomes'). poursFluid non-empty marks the
     // item as a FULL bucket of the named fluid: right-clicking a valid

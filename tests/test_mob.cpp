@@ -1022,7 +1022,7 @@ TEST(MobSpawnCellTest, SkipsCellWithBlockedHeadroom) {
 
 TEST(MobSpawnCellTest, SkipsCellInFluid) {
     Fixture f;
-    f.world.setFluid(0, 1, -6, 1);
+    f.world.setFluid(0, 1, -6, FluidKind::Water, 1);
     auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
                                  0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax, {});
     ASSERT_TRUE(cell.has_value());

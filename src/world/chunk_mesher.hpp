@@ -33,17 +33,20 @@
 // per-face mesh. All other producers (item cube, particles, cracks, UI)
 // also keep `tiled = 0` and their atlas-space UVs.
 //
-// Fluids (water): a cell's fluid level (0..kMaxFluidLevel, see Chunk) is
-// meshed as a cube scaled to a height of level/kMaxFluidLevel — a full
-// level is the ordinary cube. Culling is fluid-aware: a face is hidden by
-// an equal-or-higher fluid neighbor (so water-to-water faces are culled),
-// a top face by an opaque block above, a bottom face by any fluid below.
-// A fluid face is lit by its own cell's light (the water darkens with
-// depth, see lighting). The fluid's textures come from the registry's
-// fluid block (BlockRegistry::fluidBlock, properties.fluid). A fluid block
-// stored in the block array is a data error and is skipped (fluids live in
-// the fluid array, not the block array). Fluid surfaces stay per-face
-// (level-scaled geometry, not merged).
+// Fluids (water and lava): a cell's fluid level (0..kMaxFluidLevel, see
+// Chunk) is meshed as a cube scaled to a height of level/kMaxFluidLevel —
+// a full level is the ordinary cube. Culling is fluid-aware per KIND: a
+// face is hidden by an equal-or-higher neighbor of the SAME kind (so
+// water-to-water and lava-to-lava faces are culled; the other kind never
+// hides a face), a top face by an opaque block above, a bottom face by any
+// same-kind fluid below. A fluid face is lit by its own cell's light (the
+// fluid darkens with depth, see lighting; a glowing kind — lava — carries
+// its block light). The fluid's textures come from the registry's
+// reference block of the cell's kind (BlockRegistry::fluidBlock,
+// properties.fluid names the kind). A fluid block stored in the block
+// array is a data error and is skipped (fluids live in the fluid array,
+// not the block array). Fluid surfaces stay per-face (level-scaled
+// geometry, not merged).
 //
 // Output: two sub-meshes per chunk so the renderer can draw all opaque
 // geometry first and the transparent (blended) geometry second:
@@ -121,10 +124,11 @@ private:
 
     // Emit the fluid surface of one cell (level > 0) into the transparent
     // sub-mesh: the unit-cube faces scaled to level/kMaxFluidLevel, with
-    // fluid-aware culling and the cell's own light baked in.
+    // same-KIND fluid-aware culling (a neighbor of the other kind never
+    // hides a face) and the cell's own light baked in.
     void emitFluid(ChunkMeshData& out, const Block& fluidBlock,
                    const BlockPos& origin, int lx, int ly, int lz,
-                   std::uint8_t level) const;
+                   std::uint8_t level, FluidKind kind) const;
 
     // Emit the cross-plant geometry of one cell (Phase 45): two crossing
     // vertical quads (the two cell diagonals) into the transparent

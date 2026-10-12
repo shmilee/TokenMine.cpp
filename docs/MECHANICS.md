@@ -308,15 +308,18 @@
   - **物品**：`bucket`（material，max_stack 16 = MC 值，2D 图标）；配方
     `bucket`（shaped `I I`/` I `，I = iron_ingot，3 铁锭 = MC 配方）；
     新内容均不进默认 hotbar / 世界生成
-- **流体桶**（Phase 47，水 = 项目唯一流体，全数据驱动）：
-  - **桶对 = 数据**：物品可选字段 `collects_fluid` + `collects_becomes`
-    （空桶侧：舀水 → 满桶）与 `pours_fluid` + `pours_becomes`（满桶侧：
-    倒水 → 空桶）。流体名 v1 词汇表 = 仅 `"water"`（项目只模拟一种流体，
-    其他名 = 拼写错误/未来特性，解析拒绝）。`*_becomes` 是物品名（init
-    交叉校验 + **对偶对称**：伴侣必须存在且反向指回——同流体、
-    becomes == 本物品名，单边/错配 = init 失败）。两侧互斥（一个物品
-    只是一对的一侧），且与食物/可饮用互斥（右键通道归属）。当前唯一对：
-    `bucket` ⇄ `water_bucket`（material，max_stack 1）
+- **流体桶**（Phase 47，Phase 51 双种类，全数据驱动）：
+  - **桶对 = 数据**：物品可选字段 `collects_fluid`（空桶侧：**流体名
+    数组**，一个空桶舀所有命名流体 = MC）与 `pours_fluid` +
+    `pours_becomes`（满桶侧：倒 → 空桶；每种流体一个满桶）。流体种类
+    词汇表在代码中（`FluidKind`：`"water"`/`"lava"`，其他名解析拒绝）。
+    **满桶由空桶侧按流体推导**（`fullBucketFor`，无 `collects_becomes`
+    字段）。init 交叉校验：空桶命名的每种流体**恰有 1 个**满桶倒回
+    （0 = dead field / 2 = 歧义，都拒绝）+ 满桶伴侣必须收集该流体
+    （对称，错配 = init 失败点名）。两侧互斥（一个物品只是一对的一
+    侧），且与食物/可饮用互斥（右键通道归属）。当前对：`bucket`
+    （`["water","lava"]`）⇄ `water_bucket` + `lava_bucket`（各
+    material，max_stack 1）
   - **舀（collect）**：选中空桶侧，**桶目标射线**（`raycastFluid`：DDA
     首个「非 air 方块 **或** 携带流体」的格——与 `raycastBlock` 共享
     遍历骨架，差异 = 墙壁**遮挡**（MC：桶用方块目标，不能隔墙舀；普通
@@ -333,8 +336,28 @@
   - **吞点击语义**：舀/倒成功 = 吞点击（桶永不放方块）；背包满（伴侣
     无空位）= 无操作但吞点击（MC 一致）；落空（无源/目标无效）= 不吞
     继续后续（实际效果 = no-op，material 不可放置）
-  - **存档**：物品按名序列化（`water_bucket` 直接可读）、流体格走既有
-    `fluids` 编辑数组——**无 format 变更**（仍是 format 8）
+  - **存档**：物品按名序列化（`water_bucket`/`lava_bucket` 直接可读）、
+    流体格走 `fluids` 编辑数组——format 9 起编辑带种类名
+    `[x, y, z, level, "water"|"lava"]`（format 8 的 4 元素编辑加载时
+    全部迁移为 water）
+- **熔岩 / 流体双种类**（Phase 51，数据驱动 + 反应表在方块上）：
+  - **编码**：chunk 流体字节 0=干、1..8=水 level、9..16=熔岩 level
+    （一格至多一种，`setFluid` 正 level 替换异种、0 只清本种）
+  - **模拟**：`FluidSim::tick` = ①**反应 pass**（快照扫所有熔岩格：
+    6-邻域任有水 → 该熔岩格 `setBlock` 为熔岩块 `water_reaction` 的
+    产物——邻水含 level 8 源 → `source`（黑曜石），否则 `flowing`
+    （石头）；水不消耗、无蒸汽 = v1 文档化偏离；无 `water_reaction`
+    的惰性熔岩不反应）→ ②水模拟 → ③熔岩模拟（各自快照规则与 P9
+    水模拟完全相同，按种过滤；**异种流体格按"方块"处理** = 支撑 +
+    挡扩散，防惰性配置下跨种替换振荡）。稳态不变量：无 6-邻接的
+    水-熔岩对（反应必收敛出石头/黑曜石墙）
+  - **光照**：流体格光 = 该种类参考块的 `light_emission`（熔岩 15 =
+    发光池）；衰减（每格 −3）两种相同
+  - **玩家**：`isInWater` 仅水（熔岩无游泳/燃烧 = v1）；mob 在任一流
+    体中不生成（不变）
+  - **内容**：`lava`（fluid、发光 15、`water_reaction {obsidian,
+    stone}`、不可破坏）/ `obsidian`（hardness 10、掉自身）/
+    `lava_bucket`（倒 → `bucket`）/ `bucket`（`["water","lava"]`）
 - **状态效果**（Phase 46，数据驱动，`core/status_effect.{hpp,cpp}` +
   `assets/data/effects/*.json`；效果只作用于玩家，v1 mob 不持效果）：
   - **效果 = 数据**：`data/effects/` 每效果一个 JSON（严格解析 =

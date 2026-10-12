@@ -283,7 +283,7 @@ struct EnvScene {
             world.findChunkMut({0, 0, 0})->setSkyLightAt(8, 2, 8, light);
         }
         if (waterDx.has_value() && *waterDx != 0) {
-            world.setFluid(8 + *waterDx, 1, 8, 8);
+            world.setFluid(8 + *waterDx, 1, 8, FluidKind::Water, 8);
         }
     }
 
@@ -383,7 +383,7 @@ TEST(GrowthEnvTest, WaterAtOtherYDoesNotCount) {
     world.getOrCreateChunk({0, 0, 0});
     world.setBlock(8, 2, 8, reg.idForName("crop_a"));
     world.setBlock(8, 1, 8, reg.idForName("soil"));
-    world.setFluid(10, 2, 8, 8); // y = 2 = the crop's y, not the soil's y=1
+    world.setFluid(10, 2, 8, FluidKind::Water, 8); // y = 2 = the crop's y, not the soil's y=1
     std::map<BlockPos, BlockID> crops;
     crops[{8, 2, 8}] = reg.idForName("crop_a");
     int nSteps = 0;

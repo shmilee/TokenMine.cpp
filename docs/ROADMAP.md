@@ -84,6 +84,47 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 【update 在 ++m_frameCount 前，N 帧 = frame 0..N-1】；FluidSim 水扩散到曼哈顿距离 7 > 湿润半径 4——干对照须 MD≥8
 或换 y 层 = 结构性干燥）；KNOWN_ISSUES +2 / 更新 2（耕地无湿润视觉状态·不变回泥土 / 湿润判定简化几何【任一流体层级·
 同 y·切比雪夫 4】；P48 耕地条目关闭 / 放置条目更新【生长已受限、放置未限】）。
+- [x] **Phase 51** — 熔岩流体系统（用户"按候选顺序继续后面两个 phase" = 候选 1，代理定案最小完整版：
+ 熔岩 = 第二流体种类 + 水/熔岩反应 + 熔岩桶 + 存档 format 9，加权多掉落留后续）。**chunk 流体字节双种类**：
+ 0=干、1..8=水 level、**9..16=熔岩 level**（`kMaxFluidLevel`=8 为界），一格至多一种，`setFluid(kind,正 level)`
+ 替换异种、0 只清本种（本种不在 = no-op）；`FluidKind{Water,Lava}` + 编码 helper 内联 chunk.hpp。
+ **FluidSim tick = 反应 pass → 水 → 熔岩**：反应 pass 快照扫熔岩格，6-邻有水 → setBlock 为 lava 块
+ `water_reaction` 产物（**邻水含 L8 源 → `.source`（黑曜石）/ 流动水 → `.flowing`（石头）**；水不消耗、
+ 无蒸汽 = 文档化 v1 偏离）；每个 simulateType **自含快照**（异种流体格当方块 = 先到的种类挡后到的，
+ 稳态不变量 = 无 6-邻接水-熔岩对）。**反应表纯数据**：lava 块 `water_reaction {source, flowing}`
+ 严格配对 + 两侧须指流体块 + init 双名存在交叉校验（typo 点名拒启；无 water_reaction = 惰性熔岩）。
+ **流体块 light_emission**（lava 15 发光池；光照 step4 + updateRegion 重播种）。**桶 MC 语义（双种类化）**：
+ `collects_fluid` = 流体名**数组**（v1 词汇表 water/lava）、`collects_becomes` **废除**（满桶侧由
+ `fullBucketFor(fluid, empty)` 推导）、init = 每个点名流体**恰 1 个**满桶倒回 + 对偶对称；舀 =
+ raycastFluid 命中 L8 源（墙壁遮挡 = MC），倒 = raycastBlock 首个非 air 方块受击面邻格
+ （air、无流体、不重叠玩家）。**存档 format 9**：流体编辑 5 元素 `[x,y,z,level,"water"|"lava"]`，
+ format<9 的 4 元素全迁 water。**内容**（全 JSON + 纹理）：`lava`（fluid/lava、emission 15、
+ water_reaction、不可破坏）/ `obsidian`（hardness 10）/ `lava_bucket` + bucket.json
+ `collects_fluid ["water","lava"]` + atlas 空位 lava [7,6] / obsidian [7,7]（无 UV 移位；
+ 曾与 wool_blue 撞 [4,7] = E2E 兜出的真 bug）+ 1 图标 + 2 方块纹理。**v1 边界**：worldgen 无熔岩、
+ 无燃烧/下沉/蒸汽、湿润判定含熔岩、obsidian 仅反应可得、isInWater 仅水。921/921（+12）；
+ `-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。E2E（批跑，**全绿**）：**S1 base18 门**：P51 ×2
+ 字节一致 + == base18 → **第 25 次结构性免疫（免重锚）**【worldgen 未动、atlas 落空位、熔岩仅存档
+ 编辑可见】+ skygate + 红心 0；**S2 三室熔岩场景**（2400f 正午 still mobs off 无输入；场景 = p27far
+ 派生 + 3 密封石室【A 水+熔岩反应 / B 水-熔岩竞速【水先到挡熔岩】/ C 纯熔岩池】，稳态经 C++ 探针
+ p51scenesim ground truth）：存档 ×2 **全字节一致（确定性权威）** + 分室终态断言（A = obsidian
+ (23,46,−3) + 8 格水膜 / B = 3 石 + 6 格水膜【(23,46,−9) 留水】/ C = 9 格熔岩池）+ hunger ≥18
+ 【本机 ~33fps → 2400f 墙钟 >72s = 2 次 36s 衰减，×2 同桶】+ 截图橙像素 20,862 + 红心 0；
+ **S3a 舀熔岩**（240f 输入，预瞄准存档 + 单次右键 @ 帧时 2.9s 锚定 `Entering main loop`）：
+ slot0 = **lava_bucket** + 源 (24,46,−18) → L7【被邻源回填】+ "scooped lava at (24, 46, -18)"
+ 日志 + 存档 ×2 字节一致 + 无输入 ctl ×2 一致（源存续 L8）；**S3b 倒熔岩**（同范式，瞄支撑块
+ (28,46,−18) **西面面心**【面心 z = −17.5 非 −18.5——错半格射线擦西北棱漏过 = PITS 新坑，
+ raycastBlock 探针先验证 hit=(28,46,−18) n=(−1,0,0)】）：slot0 = **bucket** + L8 落 (27,43,−18)
+ seed-9 地面 + **13 格 y=43 池**（探针 ground truth 逐格 level）+ "poured lava at (27, 46, -18)"
+ 日志 + 存档 ×2 字节一致 + ctl ×2 一致（无倒）；**S4 init 失败 ×3**（scratch 资产副本，仓库未动）：
+ water_reaction 未知块名 → rc≠0 + "water_reaction names unknown block"、bucket 不收集 lava
+ 【lava_bucket 无对偶】→ rc≠0 + 对偶校验点名、未知流体名 → rc≠0 + "unknown fluid"。**PITS +5**
+ （raw string `)"` 终止符拼 JSON 尾部连踩 3 次 / 双流体 apply 顺序【断言稳态不变量不 assert 瞬态
+ 赢家】/ `git checkout --` 还原未提交工作 / 桶射线墙遮挡 + 倒 = 方块受击面邻格【孤立空格不可倒】/
+ **瞄面中心半格纪律 + raycastBlock 探针先验证再跑输入 E2E**）；KNOWN_ISSUES 桶节双种类化 +
+ 新"熔岩 / 流体双种类"节 6 条（worldgen 无熔岩 / 无燃烧·下沉 / 无蒸汽·水不消耗 / 湿润判定含
+ 熔岩 / obsidian 无其他用途 / isInWater 仅水）。
+
 ## 细节存档索引（docs/archive/）
 
 - **Phase 3** — `archive/phase-3.md`
@@ -133,5 +174,6 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 48** — `archive/phase-48.md`
 - **Phase 49** — `archive/phase-49.md`
 - **Phase 50** — `archive/phase-50.md`
+- **Phase 51** — `archive/phase-51.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

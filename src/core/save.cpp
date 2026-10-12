@@ -190,7 +190,11 @@ void diffChunk(const World& world, const World::ChunkGenerator& reference,
                 }
                 const std::uint8_t liveFl = live->fluidAt(lx, ly, lz);
                 if (liveFl != generated.fluidAt(lx, ly, lz)) {
-                    outFluidEdits.push_back({pos, liveFl});
+                    // Encoded comparison (kind + level in one byte); the
+                    // edit carries the LIVE cell's kind and level (0 =
+                    // drained, either kind).
+                    outFluidEdits.push_back(
+                        {pos, fluidKindOf(liveFl), fluidLevelOf(liveFl)});
                 }
             }
         }
@@ -267,7 +271,7 @@ Result<void> applyWorldEdits(const SaveGame& save, const BlockRegistry& blocks,
         }
     }
     for (const SavedFluidEdit& e : save.fluidEdits) {
-        if (!world.setFluid(e.pos.x, e.pos.y, e.pos.z, e.level)) {
+        if (!world.setFluid(e.pos.x, e.pos.y, e.pos.z, e.kind, e.level)) {
             return MC_FAIL("cannot apply save fluid edit at " +
                            posStr(e.pos) + " (no chunk, cell occupied, or "
                            "level unchanged)");
@@ -470,6 +474,8 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         a.push_back(Json(e.pos.y));
         a.push_back(Json(e.pos.z));
         a.push_back(Json(static_cast<int>(e.level)));
+        // Format 9: the fluid kind as its data name (five elements).
+        a.push_back(Json(fluidKindName(e.kind)));
         fluidEdits.push_back(std::move(a));
     }
     root["fluids"] = fluidEdits;
@@ -832,9 +838,14 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     }
     for (std::size_t i = 0; i < fls->size(); ++i) {
         const Json& e = fls->at(i);
-        if (!e.isArray() || e.size() != 4) {
+        // Format 9 names the fluid kind (five elements); format 8 and
+        // earlier carry four — those edits were water (the only simulated
+        // fluid before Phase 51), the migration.
+        const bool named = fmt->asInt() >= 9;
+        if (!e.isArray() || e.size() != (named ? 5u : 4u)) {
             return MC_FAIL("save fluid edit #" + std::to_string(i) +
-                           " must be [x, y, z, level]");
+                           (named ? " must be [x, y, z, level, fluid]"
+                                  : " must be [x, y, z, level]"));
         }
         double x, y, z, level;
         if (!isInt(e.at(0), &x) || !isInt(e.at(1), &y) || !isInt(e.at(2), &z) ||
@@ -856,6 +867,23 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                            " is out of range [0, " +
                            std::to_string(kMaxFluidLevel) + "]");
         }
+        // The kind: named in format 9 (vocabulary-checked), water in
+        // format 8 and earlier (the migration).
+        FluidKind kind = FluidKind::Water;
+        if (named) {
+            const Json& f = e.at(4);
+            if (!f.isString()) {
+                return MC_FAIL("save fluid edit #" + std::to_string(i) +
+                               ": the fluid kind must be a name string");
+            }
+            const std::optional<FluidKind> k = fluidKindForName(f.asString());
+            if (!k) {
+                return MC_FAIL("save fluid edit #" + std::to_string(i) +
+                               " has unknown fluid '" + f.asString() +
+                               "' (vocabulary: \"water\", \"lava\")");
+            }
+            kind = *k;
+        }
         const BlockPos pos {static_cast<int>(x), yi, static_cast<int>(z)};
         if (blockCells.count(pos) != 0) {
             return MC_FAIL("save has a block edit and a fluid edit at the "
@@ -866,7 +894,8 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
             return MC_FAIL("save has duplicate fluid edits at " + posStr(pos));
         }
         fluidCells.insert(pos);
-        save.fluidEdits.push_back({pos, static_cast<std::uint8_t>(li)});
+        save.fluidEdits.push_back(
+            {pos, kind, static_cast<std::uint8_t>(li)});
     }
 
     // -- furnace states (format 6/7; Phase 40/44) ------------------------------

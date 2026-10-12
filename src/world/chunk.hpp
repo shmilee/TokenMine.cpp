@@ -16,6 +16,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
+#include <string>
 
 #include "block/block.hpp"
 #include "world/coordinates.hpp"
@@ -23,9 +25,43 @@
 namespace mc {
 
 // Fluid level range: 0 = no fluid, 1..7 = flowing, 8 = full/source.
-// The game simulates one fluid (water); a level > 0 means the cell holds
-// that much fluid and no block (a block displaces fluid, see World).
+// The project simulates TWO fluids (water and lava); the encoded array
+// value separates them (below). A level > 0 means the cell holds that
+// much fluid and no block (a block displaces fluid, see World).
 inline constexpr std::uint8_t kMaxFluidLevel = 8;
+
+// Fluid kind vocabulary (core, like the BlockID::air sentinel): the two
+// simulated fluids, with the names data files carry (the block's 'fluid'
+// property, the bucket item fields) and save files persist.
+enum class FluidKind : std::uint8_t { Water = 1, Lava = 2 };
+
+// Encoded fluid byte (Chunk::m_fluid): 0 = no fluid;
+// 1..kMaxFluidLevel = water level 1..8;
+// kMaxFluidLevel+1..2*kMaxFluidLevel = lava level 1..8. A cell holds at
+// most ONE kind (World::setFluid replaces the other kind in the cell).
+inline std::uint8_t fluidCode(FluidKind kind, std::uint8_t level) {
+    return level == 0 ? 0
+                      : (kind == FluidKind::Water ? level
+                                                  : kMaxFluidLevel + level);
+}
+inline std::uint8_t fluidLevelOf(std::uint8_t code) {
+    return code <= kMaxFluidLevel ? code : code - kMaxFluidLevel;
+}
+inline FluidKind fluidKindOf(std::uint8_t code) {
+    return code <= kMaxFluidLevel ? FluidKind::Water : FluidKind::Lava;
+}
+inline const char* fluidKindName(FluidKind kind) {
+    return kind == FluidKind::Water ? "water" : "lava";
+}
+inline std::optional<FluidKind> fluidKindForName(const std::string& name) {
+    if (name == "water") {
+        return FluidKind::Water;
+    }
+    if (name == "lava") {
+        return FluidKind::Lava;
+    }
+    return std::nullopt;
+}
 
 class Chunk {
 public:
@@ -53,10 +89,11 @@ public:
     void clearSkyLight();
     void clearBlockLight();
 
-    // -- Fluid (0..kMaxFluidLevel; written by the fluid simulation, --------
-    // read by the mesher/lighting/player). A fresh chunk is dry.
+    // -- Fluid (encoded byte, see fluidCode: 0 = dry, water 1..8, --------
+    // lava 9..16; written by the fluid simulation, read by the
+    // mesher/lighting/player). A fresh chunk is dry.
     std::uint8_t fluidAt(int x, int y, int z) const;
-    void setFluidAt(int x, int y, int z, std::uint8_t level); // marks dirty
+    void setFluidAt(int x, int y, int z, std::uint8_t code); // marks dirty
     void clearFluid();
     const std::uint8_t* fluidData() const { return m_fluid.data(); }
 
@@ -74,7 +111,7 @@ private:
     std::array<BlockID, kVolume> m_blocks;
     std::array<std::uint8_t, kVolume> m_skyLight {};
     std::array<std::uint8_t, kVolume> m_blockLight {};
-    std::array<std::uint8_t, kVolume> m_fluid {};
+    std::array<std::uint8_t, kVolume> m_fluid {}; // encoded (see fluidCode)
     bool m_dirty = true;
 };
 

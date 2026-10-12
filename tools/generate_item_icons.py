@@ -534,11 +534,12 @@ def arrow():
     return px
 
 
-def bucket(milk=False, water=False, salt=55):
+def bucket(milk=False, water=False, lava=False, salt=55):
     """A metal bucket (Phase 43): a trapezoid WIDER at the top (the rim)
     and narrower at the bottom, iron-gray with a brighter rim band.
     `milk` fills the opening with a white milk surface (milk_bucket);
-    `water` fills it with a blue water surface (water_bucket, Phase 47)."""
+    `water` fills it with a blue water surface (water_bucket, Phase 47);
+    `lava` fills it with an orange lava surface (lava_bucket, Phase 51)."""
     px = blank()
     c_base = (168, 168, 176)
     c_rim = (212, 212, 220)
@@ -570,6 +571,15 @@ def bucket(milk=False, water=False, salt=55):
                 ny = (y - 10.0) / 1.6
                 if nx * nx + ny * ny <= 1.0:
                     setpx(px, x, y, (70, 140, 220), salt=salt + 2)
+    if lava:
+        # The lava surface: an orange ellipse inside the opening (the
+        # in-game lava tint family).
+        for y in range(9, 12):
+            for x in range(7, 24):
+                nx = (x - 15.0) / 7.5
+                ny = (y - 10.0) / 1.6
+                if nx * nx + ny * ny <= 1.0:
+                    setpx(px, x, y, (235, 110, 20), salt=salt + 2)
     # Bottom shadow line.
     for x in range(9, 23):
         setpx(px, x, 26, (tuple(int(v * 0.7) for v in c_base)),
@@ -587,6 +597,10 @@ def milk_bucket_icon():
 
 def water_bucket_icon():
     return bucket(water=True, salt=59)
+
+
+def lava_bucket_icon():
+    return bucket(lava=True, salt=61)
 
 
 def wheat():
@@ -725,6 +739,7 @@ ITEMS = {
     "bucket": bucket_icon,
     "milk_bucket": milk_bucket_icon,
     "water_bucket": water_bucket_icon,
+    "lava_bucket": lava_bucket_icon,
     "wheat": wheat,
     "bread": bread,
     "apple": apple,

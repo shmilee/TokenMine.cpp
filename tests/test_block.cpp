@@ -41,7 +41,9 @@ TEST(BlockRegistryTest, MinimalDefUsesDefaults) {
     EXPECT_TRUE(b.properties.opaque);
     EXPECT_FALSE(b.properties.transparent);
     EXPECT_TRUE(b.properties.destroyable);
-    EXPECT_FALSE(b.properties.fluid);
+    EXPECT_TRUE(b.properties.fluidName.empty());
+    EXPECT_TRUE(b.properties.waterReactionSource.empty());
+    EXPECT_TRUE(b.properties.waterReactionFlowing.empty());
     EXPECT_FLOAT_EQ(b.properties.hardness, 1.0f);
     EXPECT_EQ(b.properties.lightEmission, 0);
     EXPECT_EQ(b.properties.drops, ""); // empty = drops nothing (explicit)
@@ -70,25 +72,85 @@ TEST(BlockRegistryTest, FullDefinition) {
     EXPECT_TRUE(textures.count("dirt"));
 }
 
-TEST(BlockRegistryTest, FluidBlockLookup) {
+TEST(BlockRegistryTest, FluidBlockLookupByKind) {
     BlockRegistry reg;
-    // No fluid block yet (air is not one).
-    EXPECT_FALSE(reg.fluidBlock().has_value());
+    // No fluid blocks yet (air is not one).
+    EXPECT_FALSE(reg.fluidBlock("water").has_value());
+    EXPECT_FALSE(reg.fluidBlock("lava").has_value());
     ASSERT_TRUE(reg.registerBlock(parseDef(minimalDef("stone"))).ok());
-    EXPECT_FALSE(reg.fluidBlock().has_value());
+    EXPECT_FALSE(reg.fluidBlock("water").has_value());
     const std::string waterDef =
-        R"({"id":"water","properties":{"fluid":true},"model":{"textures":{"top":)"
-        R"("t","side":"t","bottom":"t"}}})";
+        R"({"id":"water","properties":{"fluid":"water"},"model":{"textures")"
+        R"(:{"top":"t","side":"t","bottom":"t"}}})";
+    const std::string lavaDef =
+        R"({"id":"lava","properties":{"fluid":"lava",)"
+        R"("water_reaction":{"source":"obsidian","flowing":"stone"},)"
+        R"("light_emission":15},"model":{"textures":{"top":"t","side":"t",)"
+        R"("bottom":"t"}}})";
     auto r = reg.registerBlock(parseDef(waterDef));
     ASSERT_TRUE(r.ok()) << r.error().message;
-    ASSERT_TRUE(reg.fluidBlock().has_value());
-    EXPECT_EQ(*reg.fluidBlock(), *r);
-    // The first fluid block wins (the game defines exactly one).
-    const std::string lavaDef =
-        R"({"id":"lava","properties":{"fluid":true},"model":{"textures":{"top":)"
-        R"("t","side":"t","bottom":"t"}}})";
-    ASSERT_TRUE(reg.registerBlock(parseDef(lavaDef)).ok());
-    EXPECT_EQ(*reg.fluidBlock(), *r);
+    ASSERT_TRUE(reg.fluidBlock("water").has_value());
+    EXPECT_EQ(*reg.fluidBlock("water"), *r);
+    EXPECT_FALSE(reg.fluidBlock("lava").has_value());
+    r = reg.registerBlock(parseDef(lavaDef));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    ASSERT_TRUE(reg.fluidBlock("lava").has_value());
+    EXPECT_EQ(*reg.fluidBlock("lava"), *r);
+    const Block& lava = reg.at(*r);
+    EXPECT_EQ(lava.properties.fluidName, "lava");
+    EXPECT_EQ(lava.properties.waterReactionSource, "obsidian");
+    EXPECT_EQ(lava.properties.waterReactionFlowing, "stone");
+    EXPECT_EQ(lava.properties.lightEmission, 15);
+    // The water kind is untouched by the lava block.
+    EXPECT_EQ(*reg.fluidBlock("water"),
+              reg.idForName("water"));
+}
+
+TEST(BlockRegistryTest, RejectsUnknownFluidName) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(R"({"id":"x","properties":{"fluid":"slime"},)"
+                 R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    EXPECT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("unknown fluid name"),
+              std::string::npos);
+    // A boolean fluid (pre-Phase-51 schema) is a type error.
+    r = reg.registerBlock(
+        parseDef(R"({"id":"y","properties":{"fluid":true},)"
+                 R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    EXPECT_FALSE(r.ok());
+}
+
+TEST(BlockRegistryTest, WaterReactionIsStrictlyPaired) {
+    // Half a pair (missing "flowing") is rejected.
+    auto r = BlockRegistry{}.registerBlock(
+        parseDef(R"({"id":"a","properties":{"fluid":"lava","water_reaction":)"
+                 R"({"source":"obsidian"}})"
+                 R"(,"model":{"textures":{"top":"t","side":"t",)"
+                 R"("bottom":"t"}}})"));
+    EXPECT_FALSE(r.ok());
+    // An empty name in the pair is rejected (ABSENT is the default).
+    r = BlockRegistry{}.registerBlock(
+        parseDef(R"({"id":"b","properties":{"fluid":"lava","water_reaction":)"
+                 R"({"source":"obsidian","flowing":""}})"
+                 R"(,"model":{"textures":{"top":"t","side":"t",)"
+                 R"("bottom":"t"}}})"));
+    EXPECT_FALSE(r.ok());
+    // Unknown field inside the object is rejected.
+    r = BlockRegistry{}.registerBlock(
+        parseDef(R"({"id":"c","properties":{"fluid":"lava","water_reaction":)"
+                 R"({"source":"obsidian","flowing":"stone","x":1}})"
+                 R"(,"model":{"textures":{"top":"t","side":"t",)"
+                 R"("bottom":"t"}}})"));
+    EXPECT_FALSE(r.ok());
+    // water_reaction requires a fluid block.
+    r = BlockRegistry{}.registerBlock(
+        parseDef(R"({"id":"d","properties":{"water_reaction":)"
+                 R"({"source":"obsidian","flowing":"stone"}})"
+                 R"(,"model":{"textures":{"top":"t","side":"t",)"
+                 R"("bottom":"t"}}})"));
+    EXPECT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("requires the"), std::string::npos);
 }
 
 TEST(BlockRegistryTest, RejectsDuplicateId) {

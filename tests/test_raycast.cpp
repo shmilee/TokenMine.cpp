@@ -31,7 +31,7 @@ BlockRegistry makeBlocks() {
         ADD_FAILURE() << r.error().message;
     }
     r = blocks.registerBlock(parseJson(
-        R"({"id":"water","properties":{"solid":false,"opaque":false,"fluid":true,"destroyable":false},)"
+        R"({"id":"water","properties":{"solid":false,"opaque":false,"fluid":"water","destroyable":false},)"
         R"("model":{"textures":{"top":"w","side":"w","bottom":"w"}}})"));
     if (!r.ok()) {
         ADD_FAILURE() << r.error().message;
@@ -246,7 +246,7 @@ TEST(RaycastTest, RaycastPassesThroughFluid) {
     BlockRegistry blocks = makeBlocks();
     World world;
     world.getOrCreateChunk({0, 0, 0});
-    ASSERT_TRUE(world.setFluid(0, 0, 0, kMaxFluidLevel));
+    ASSERT_TRUE(world.setFluid(0, 0, 0, FluidKind::Water, kMaxFluidLevel));
     ASSERT_TRUE(world.setBlock(0, 0, -1, BlockID{1}));
     auto hit = raycastBlock(world, {0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, -1.0f},
                             kInfT);
@@ -286,7 +286,7 @@ TEST(RaycastTest, CanPlaceIntoFluidCell) {
     BlockRegistry blocks = makeBlocks();
     World world;
     world.getOrCreateChunk({0, 0, -1}); // z=-2 floors to chunk -1
-    ASSERT_TRUE(world.setFluid(0, 1, -2, kMaxFluidLevel));
+    ASSERT_TRUE(world.setFluid(0, 1, -2, FluidKind::Water, kMaxFluidLevel));
     EXPECT_TRUE(canPlaceAt(world, blocks, {0, 1, -2}, kPlayerMin, kPlayerMax));
 }
 
@@ -401,7 +401,7 @@ TEST(RaycastFluidTest, HitsFluidCellInOpenSpace) {
     // so one block creates it (off the ray's path).
     World world;
     ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID{1}));
-    ASSERT_TRUE(world.setFluid(5, 3, 2, 8));
+    ASSERT_TRUE(world.setFluid(5, 3, 2, FluidKind::Water, 8));
     const auto hit = raycastFluid(world, {0.5f, 3.5f, 2.5f},
                                   {1.0f, 0.0f, 0.0f}, 20.0f);
     ASSERT_TRUE(hit.has_value());
@@ -417,7 +417,7 @@ TEST(RaycastFluidTest, BlockOccludesTheRay) {
     // nothing.
     World world;
     ASSERT_TRUE(world.setBlock(3, 3, 0, BlockID{1}));
-    ASSERT_TRUE(world.setFluid(6, 3, 0, 8));
+    ASSERT_TRUE(world.setFluid(6, 3, 0, FluidKind::Water, 8));
     const auto hit = raycastFluid(world, {0.5f, 3.5f, 0.5f},
                                   {1.0f, 0.0f, 0.0f}, 20.0f);
     ASSERT_TRUE(hit.has_value());
@@ -429,7 +429,7 @@ TEST(RaycastFluidTest, StopsAtFirstOccluder) {
     // Fluid BEFORE the block: the fluid cell wins (it is nearer).
     World world;
     ASSERT_TRUE(world.setBlock(4, 1, 1, BlockID{1})); // creates the chunk
-    ASSERT_TRUE(world.setFluid(2, 1, 1, 7)); // flowing (not a source)
+    ASSERT_TRUE(world.setFluid(2, 1, 1, FluidKind::Water, 7)); // flowing (not a source)
     const auto hit = raycastFluid(world, {0.5f, 1.5f, 1.5f},
                                   {1.0f, 0.0f, 0.0f}, 20.0f);
     ASSERT_TRUE(hit.has_value());
@@ -440,7 +440,7 @@ TEST(RaycastFluidTest, StopsAtFirstOccluder) {
 TEST(RaycastFluidTest, BeyondReachNoHit) {
     World world;
     ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID{1})); // creates the chunk
-    ASSERT_TRUE(world.setFluid(9, 1, 1, 8));
+    ASSERT_TRUE(world.setFluid(9, 1, 1, FluidKind::Water, 8));
     EXPECT_FALSE(raycastFluid(world, {0.5f, 1.5f, 1.5f},
                               {1.0f, 0.0f, 0.0f}, 5.0f)
                      .has_value());
@@ -459,8 +459,8 @@ TEST(RaycastFluidTest, OriginCellFluidIsSkipped) {
     // ahead is not.
     World world;
     ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID{1})); // creates the chunk
-    ASSERT_TRUE(world.setFluid(0, 1, 1, 8));  // the origin cell
-    ASSERT_TRUE(world.setFluid(3, 1, 1, 8));
+    ASSERT_TRUE(world.setFluid(0, 1, 1, FluidKind::Water, 8));  // the origin cell
+    ASSERT_TRUE(world.setFluid(3, 1, 1, FluidKind::Water, 8));
     const auto hit = raycastFluid(world, {0.5f, 1.5f, 1.5f},
                                   {1.0f, 0.0f, 0.0f}, 20.0f);
     ASSERT_TRUE(hit.has_value());

@@ -149,6 +149,38 @@ def water(x, y):
             clamp(189 + noise(x, y, 23, 10)), 200)
 
 
+def lava(x, y):
+    # Glowing orange with bright hot spots (the Minecraft lava look; the
+    # in-game glow comes from light_emission, not the texture).
+    h = h2(x, y, 100)
+    if h % 100 < 12:
+        # Hot spot: yellow-white.
+        return (clamp(250 + noise(x, y, 101, 5)),
+                clamp(220 + noise(x, y, 102, 15)),
+                clamp(60 + noise(x, y, 103, 30)), 255)
+    if h % 100 < 30:
+        # Bright orange.
+        return (clamp(235 + noise(x, y, 104, 10)),
+                clamp(120 + noise(x, y, 105, 20)),
+                clamp(10 + noise(x, y, 106, 20)), 255)
+    # Base: deep orange-red.
+    return (clamp(190 + noise(x, y, 107, 25)),
+            clamp(60 + noise(x, y, 108, 25)),
+            clamp(noise(x, y, 109, 15)), 255)
+
+
+def obsidian(x, y):
+    # Near-black with a faint violet sheen and rare lighter flecks (the
+    # Minecraft obsidian look).
+    h = h2(x, y, 116)
+    if h % 100 < 6:
+        return (clamp(70 + noise(x, y, 117, 15)),
+                clamp(40 + noise(x, y, 118, 12)),
+                clamp(75 + noise(x, y, 119, 15)), 255)
+    v = clamp(16 + noise(x, y, 120, 10))
+    return (v + 6, v, v + 8, 255)
+
+
 def bedrock(x, y):
     # Dark, high-contrast mottling.
     v = clamp(52 + noise(x, y, 44, 30))
@@ -385,6 +417,8 @@ TEXTURES = {
     "leaves": leaves,
     "glass": glass,
     "water": water,
+    "lava": lava,
+    "obsidian": obsidian,
     "bedrock": bedrock,
     "coal_ore": coal_ore,
     "iron_ore": iron_ore,

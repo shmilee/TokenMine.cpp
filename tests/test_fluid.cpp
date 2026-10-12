@@ -6,8 +6,12 @@
 // so any non-air BlockID works as "solid" for the floors.
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <string>
 #include <vector>
 
+#include "block/block_registry.hpp"
+#include "core/json.hpp"
 #include "world/fluid.hpp"
 
 using namespace mc;
@@ -25,11 +29,19 @@ void floor(World& world, int x0, int x1, int z0, int z1, int y = 0) {
     }
 }
 
+// The empty registry: no fluid reference blocks, so the water-lava
+// reaction pass is inert — the pure per-kind simulation (the historical
+// single-fluid behavior).
+const BlockRegistry& emptyBlocks() {
+    static BlockRegistry reg;
+    return reg;
+}
+
 // Runs `n` ticks; returns the last tick's changed cells.
 std::vector<BlockPos> runTicks(World& world, int n) {
     std::vector<BlockPos> changed;
     for (int i = 0; i < n; ++i) {
-        changed = FluidSim::tick(world);
+        changed = FluidSim::tick(world, emptyBlocks());
     }
     return changed;
 }
@@ -56,9 +68,9 @@ void buildScenario(World& world) {
     world.getOrCreateChunk({0, 0, 0});
     floor(world, 0, 15, 0, 15, 0);
     world.setBlock(8, 0, 8, BlockID::air()); // the hole (drains to the void)
-    world.setFluid(8, 1, 8, kMaxFluidLevel); // a full cell above the hole
-    world.setFluid(3, 1, 3, kMaxFluidLevel); // a source at the corner
-    world.setFluid(12, 1, 12, 5);            // a flowing cell mid-floor
+    world.setFluid(8, 1, 8, FluidKind::Water, kMaxFluidLevel); // a full cell above the hole
+    world.setFluid(3, 1, 3, FluidKind::Water, kMaxFluidLevel); // a source at the corner
+    world.setFluid(12, 1, 12, FluidKind::Water, 5);            // a flowing cell mid-floor
 }
 
 } // namespace
@@ -66,7 +78,7 @@ void buildScenario(World& world) {
 TEST(FluidTest, FullCellRestsOnSolidAndSpreads) {
     World world;
     floor(world, 4, 12, 4, 12, 0);
-    ASSERT_TRUE(world.setFluid(8, 1, 8, kMaxFluidLevel));
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, kMaxFluidLevel));
 
     const std::vector<BlockPos> changed = runTicks(world, 1);
     // The source stays; the four orthogonal neighbors get level 7 (the
@@ -90,7 +102,7 @@ TEST(FluidTest, FullCellRestsOnSolidAndSpreads) {
 TEST(FluidTest, LevelOneIsTerminal) {
     World world;
     floor(world, 4, 12, 4, 12, 0);
-    ASSERT_TRUE(world.setFluid(8, 1, 8, 1));
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, 1));
     const std::vector<BlockPos> changed = runTicks(world, 3);
     EXPECT_TRUE(changed.empty());
     EXPECT_EQ(world.getFluid(8, 1, 8), 1);
@@ -104,8 +116,8 @@ TEST(FluidTest, FlowingColumnFallsIntoHoleAndRests) {
     world.setBlock(8, 1, 8, BlockID::air()); // the hole in the upper floor
 
     // A 2-cell flowing column above the hole.
-    ASSERT_TRUE(world.setFluid(8, 2, 8, 7));
-    ASSERT_TRUE(world.setFluid(8, 3, 8, 7));
+    ASSERT_TRUE(world.setFluid(8, 2, 8, FluidKind::Water, 7));
+    ASSERT_TRUE(world.setFluid(8, 3, 8, FluidKind::Water, 7));
 
     runTicks(world, 1);
     // The whole chain shifted down one cell (the top emptied).
@@ -127,7 +139,7 @@ TEST(FluidTest, FullCellFallsWhenUnsupported) {
     floor(world, 6, 10, 6, 10, 0);
     world.setBlock(8, 0, 8, BlockID::air()); // the hole reaches the void
 
-    ASSERT_TRUE(world.setFluid(8, 1, 8, kMaxFluidLevel));
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, kMaxFluidLevel));
     runTicks(world, 1);
     // The full cell fell into the hole (unlike Minecraft, a source does not
     // float — this is what drains water into a broken lake floor).
@@ -146,7 +158,7 @@ TEST(FluidTest, FullLakeIsStable) {
     for (int y = 1; y <= 2; ++y) {
         for (int x = 6; x <= 10; ++x) {
             for (int z = 6; z <= 10; ++z) {
-                ASSERT_TRUE(world.setFluid(x, y, z, kMaxFluidLevel));
+                ASSERT_TRUE(world.setFluid(x, y, z, FluidKind::Water, kMaxFluidLevel));
             }
         }
     }
@@ -162,7 +174,7 @@ TEST(FluidTest, FullLakeIsStable) {
     }
 
     for (int i = 0; i < 5; ++i) {
-        const std::vector<BlockPos> changed = FluidSim::tick(world);
+        const std::vector<BlockPos> changed = FluidSim::tick(world, emptyBlocks());
         EXPECT_TRUE(changed.empty()) << "tick " << i;
     }
     // Every cell is still full.
@@ -178,8 +190,8 @@ TEST(FluidTest, FullLakeIsStable) {
 TEST(FluidTest, ShallowFilmAbsorbedIntoDeeperPool) {
     World world;
     floor(world, 4, 12, 4, 12, 0);
-    ASSERT_TRUE(world.setFluid(8, 1, 8, 5)); // the pool (flowing, not full)
-    ASSERT_TRUE(world.setFluid(8, 2, 8, 3)); // a shallow film above it
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, 5)); // the pool (flowing, not full)
+    ASSERT_TRUE(world.setFluid(8, 2, 8, FluidKind::Water, 3)); // a shallow film above it
 
     runTicks(world, 1);
     // The shallower film (3 < 5) is absorbed into the flowing pool; the
@@ -203,8 +215,8 @@ TEST(FluidTest, FilmAboveFullWaterRefillsToFull) {
         ASSERT_TRUE(world.setBlock(d, 1, 8, kStone));
         ASSERT_TRUE(world.setBlock(8, 1, d, kStone));
     }
-    ASSERT_TRUE(world.setFluid(8, 1, 8, kMaxFluidLevel)); // the fallen cell
-    ASSERT_TRUE(world.setFluid(8, 2, 8, 7));             // the neighbor film
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, kMaxFluidLevel)); // the fallen cell
+    ASSERT_TRUE(world.setFluid(8, 2, 8, FluidKind::Water, 7));             // the neighbor film
 
     runTicks(world, 1);
     EXPECT_EQ(world.getFluid(8, 2, 8), kMaxFluidLevel); // refilled to full
@@ -225,7 +237,7 @@ TEST(FluidTest, BrokenLakeFloorRefillsAndSettles) {
     floor(world, 5, 11, 5, 11, 1); // the floor is two slabs thick
     for (int x = 6; x <= 10; ++x) {
         for (int z = 6; z <= 10; ++z) {
-            ASSERT_TRUE(world.setFluid(x, 2, z, kMaxFluidLevel));
+            ASSERT_TRUE(world.setFluid(x, 2, z, FluidKind::Water, kMaxFluidLevel));
         }
     }
     for (int x = 5; x <= 11; ++x) {
@@ -240,7 +252,7 @@ TEST(FluidTest, BrokenLakeFloorRefillsAndSettles) {
 
     std::vector<BlockPos> changed;
     for (int i = 0; i < 60; ++i) {
-        changed = FluidSim::tick(world);
+        changed = FluidSim::tick(world, emptyBlocks());
     }
     EXPECT_TRUE(changed.empty()); // equilibrium reached
     // The broken column refilled to full: the lake surface is restored.
@@ -261,8 +273,8 @@ TEST(FluidTest, BrokenLakeFloorRefillsAndSettles) {
 TEST(FluidTest, FlowingRaisesPoolBelow) {
     World world;
     floor(world, 0, 15, 0, 15, 0);
-    ASSERT_TRUE(world.setFluid(8, 1, 8, 3)); // a shallow pool on the floor
-    ASSERT_TRUE(world.setFluid(8, 2, 8, 5)); // a deeper flow resting on it
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, 3)); // a shallow pool on the floor
+    ASSERT_TRUE(world.setFluid(8, 2, 8, FluidKind::Water, 5)); // a deeper flow resting on it
 
     runTicks(world, 1);
     // The flow stays and raises the pool to its own level.
@@ -273,7 +285,7 @@ TEST(FluidTest, FlowingRaisesPoolBelow) {
     // the floor and settles (the level-1 ring is terminal).
     std::vector<BlockPos> changed;
     for (int i = 0; i < 40; ++i) {
-        changed = FluidSim::tick(world);
+        changed = FluidSim::tick(world, emptyBlocks());
     }
     EXPECT_TRUE(changed.empty());
     EXPECT_EQ(world.getFluid(8, 1, 8), 5);
@@ -286,7 +298,7 @@ TEST(FluidTest, FlowingRaisesPoolBelow) {
 TEST(FluidTest, DoesNotSpreadIntoBlocks) {
     World world;
     floor(world, 4, 12, 4, 12, 0);
-    ASSERT_TRUE(world.setFluid(8, 1, 8, kMaxFluidLevel));
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, kMaxFluidLevel));
     world.setBlock(9, 1, 8, kStone); // a wall to the east
 
     runTicks(world, 1);
@@ -302,7 +314,7 @@ TEST(FluidTest, DoesNotSpreadIntoBlocks) {
 TEST(FluidTest, WaterDrainsOutOfWorldAtBottom) {
     World world;
     world.getOrCreateChunk({0, 0, 0});
-    ASSERT_TRUE(world.setFluid(8, 0, 8, kMaxFluidLevel)); // at y=0, void below
+    ASSERT_TRUE(world.setFluid(8, 0, 8, FluidKind::Water, kMaxFluidLevel)); // at y=0, void below
 
     runTicks(world, 1);
     EXPECT_EQ(world.getFluid(8, 0, 8), 0);
@@ -313,8 +325,8 @@ TEST(FluidTest, FallingChainCrossesChunkBoundary) {
     world.getOrCreateChunk({0, 0, 0});
     world.getOrCreateChunk({0, 1, 0});
     // A 2-cell falling chain straddling the y=15/16 chunk boundary.
-    ASSERT_TRUE(world.setFluid(8, 15, 8, 7));
-    ASSERT_TRUE(world.setFluid(8, 16, 8, 7));
+    ASSERT_TRUE(world.setFluid(8, 15, 8, FluidKind::Water, 7));
+    ASSERT_TRUE(world.setFluid(8, 16, 8, FluidKind::Water, 7));
 
     runTicks(world, 1);
     // The chain shifted down one cell across the boundary.
@@ -327,14 +339,14 @@ TEST(FluidTest, DeterministicAcrossRuns) {
     World a;
     buildScenario(a);
     for (int i = 0; i < 100; ++i) {
-        FluidSim::tick(a);
+        FluidSim::tick(a, emptyBlocks());
     }
     const auto stateA = snapshot(a);
 
     World b;
     buildScenario(b);
     for (int i = 0; i < 100; ++i) {
-        FluidSim::tick(b);
+        FluidSim::tick(b, emptyBlocks());
     }
     const auto stateB = snapshot(b);
 
@@ -342,4 +354,267 @@ TEST(FluidTest, DeterministicAcrossRuns) {
     // The scenario actually moved water (the source spread, the hole drained
     // and refilled): the final state is not the initial one.
     EXPECT_GT(stateA.size(), 4u);
+}
+
+// -- Phase 51: two kinds (water and lava) + the water-lava reaction --------
+
+namespace {
+
+Json parseDef(const std::string& text) {
+    auto r = Json::parse(text);
+    if (!r.ok()) {
+        ADD_FAILURE() << "parse failed: " << r.error().message;
+        return Json::object();
+    }
+    return *r;
+}
+
+std::string blockDef(const std::string& id, const std::string& extra = "") {
+    return "{\"id\":\"" + id + "\",\"properties\":" + (extra.empty()
+                                                          ? std::string("{}")
+                                                          : std::string("{") +
+                                                                extra + "}") +
+           ",\"model\":{\"textures\":{\"top\":\"t\",\"side\":\"t\","
+           "\"bottom\":\"t\"}}}";
+}
+
+// A registry with the full Phase-51 fluid set: water, lava (with the
+// water_reaction + emission), stone and obsidian.
+BlockRegistry buildReactionRegistry() {
+    BlockRegistry reg;
+    (void)reg.registerBlock(parseDef(blockDef("stone")));
+    (void)reg.registerBlock(parseDef(blockDef("obsidian")));
+    (void)reg.registerBlock(
+        parseDef(blockDef("water", R"("fluid":"water")")));
+    (void)reg.registerBlock(parseDef(
+        blockDef("lava", R"("fluid":"lava","light_emission":15,)"
+                        R"("water_reaction":{"source":"obsidian",)"
+                        R"("flowing":"stone"})")));
+    return reg;
+}
+
+} // namespace
+
+TEST(FluidKindTest, EncodingRoundTrip) {
+    // Dry.
+    EXPECT_EQ(fluidCode(FluidKind::Water, 0), 0);
+    EXPECT_EQ(fluidCode(FluidKind::Lava, 0), 0);
+    EXPECT_EQ(fluidLevelOf(0), 0);
+    // Water 1..8, lava 1..8 (offset 9).
+    for (std::uint8_t l = 1; l <= kMaxFluidLevel; ++l) {
+        EXPECT_EQ(fluidLevelOf(fluidCode(FluidKind::Water, l)), l);
+        EXPECT_EQ(fluidKindOf(fluidCode(FluidKind::Water, l)),
+                  FluidKind::Water);
+        EXPECT_EQ(fluidLevelOf(fluidCode(FluidKind::Lava, l)), l);
+        EXPECT_EQ(fluidKindOf(fluidCode(FluidKind::Lava, l)), FluidKind::Lava);
+    }
+    EXPECT_EQ(fluidLevelOf(8), 8);   // water full
+    EXPECT_EQ(fluidLevelOf(9), 1);   // lava film
+    EXPECT_EQ(fluidLevelOf(16), 8);  // lava full
+    EXPECT_STREQ(fluidKindName(FluidKind::Water), "water");
+    EXPECT_STREQ(fluidKindName(FluidKind::Lava), "lava");
+    EXPECT_EQ(fluidKindForName("water"), FluidKind::Water);
+    EXPECT_EQ(fluidKindForName("lava"), FluidKind::Lava);
+    EXPECT_FALSE(fluidKindForName("slime").has_value());
+}
+
+TEST(FluidTest, SetFluidReplacesOtherKind) {
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, 5));
+    // Placing lava into the water cell replaces it (one kind per cell).
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Lava, 3));
+    EXPECT_EQ(world.getFluid(8, 1, 8), 3);
+    EXPECT_EQ(world.getFluidKind(8, 1, 8), FluidKind::Lava);
+    EXPECT_EQ(world.getFluidOfKind(8, 1, 8, FluidKind::Water), 0);
+    EXPECT_EQ(world.getFluidOfKind(8, 1, 8, FluidKind::Lava), 3);
+    // Clearing WATER (not present) is a no-op that leaves the lava.
+    EXPECT_FALSE(world.setFluid(8, 1, 8, FluidKind::Water, 0));
+    EXPECT_EQ(world.getFluidKind(8, 1, 8), FluidKind::Lava);
+    // Same kind, same level: no change.
+    EXPECT_FALSE(world.setFluid(8, 1, 8, FluidKind::Lava, 3));
+    // Clearing the lava empties the cell.
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Lava, 0));
+    EXPECT_FALSE(world.getFluidKind(8, 1, 8).has_value());
+}
+
+TEST(FluidTest, KindsSimulateIndependently) {
+    World world;
+    floor(world, 0, 15, 0, 15, 0);
+    ASSERT_TRUE(world.setFluid(3, 1, 3, FluidKind::Water, kMaxFluidLevel));
+    ASSERT_TRUE(world.setFluid(12, 1, 12, FluidKind::Lava, kMaxFluidLevel));
+
+    runTicks(world, 1);
+    // Each source spreads its own kind's level-7 ring; the other kind is
+    // invisible to the scan.
+    EXPECT_EQ(world.getFluidOfKind(3, 1, 3, FluidKind::Water),
+              kMaxFluidLevel);
+    EXPECT_EQ(world.getFluidOfKind(2, 1, 3, FluidKind::Water), 7);
+    EXPECT_EQ(world.getFluidOfKind(4, 1, 3, FluidKind::Water), 7);
+    EXPECT_EQ(world.getFluidOfKind(3, 1, 2, FluidKind::Water), 7);
+    EXPECT_EQ(world.getFluidOfKind(3, 1, 4, FluidKind::Water), 7);
+    EXPECT_EQ(world.getFluidOfKind(12, 1, 12, FluidKind::Lava),
+              kMaxFluidLevel);
+    EXPECT_EQ(world.getFluidOfKind(11, 1, 12, FluidKind::Lava), 7);
+    EXPECT_EQ(world.getFluidOfKind(13, 1, 12, FluidKind::Lava), 7);
+    EXPECT_EQ(world.getFluidOfKind(12, 1, 11, FluidKind::Lava), 7);
+    EXPECT_EQ(world.getFluidOfKind(12, 1, 13, FluidKind::Lava), 7);
+    // No cross-contamination: the other kind's ring cells hold nothing.
+    EXPECT_EQ(world.getFluid(2, 1, 12), 0);
+    EXPECT_EQ(world.getFluid(12, 1, 3), 0);
+}
+
+TEST(FluidTest, LavaBesideSourceWaterBecomesObsidian) {
+    const BlockRegistry blocks = buildReactionRegistry();
+    World world;
+    floor(world, 4, 12, 4, 12, 0);
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Lava, kMaxFluidLevel));
+    ASSERT_TRUE(world.setFluid(9, 1, 8, FluidKind::Water, kMaxFluidLevel));
+
+    const std::vector<BlockPos> changed =
+        FluidSim::tick(world, blocks);
+    bool converted = std::any_of(changed.begin(), changed.end(),
+                                 [](const BlockPos& p) {
+                                     return p == BlockPos {8, 1, 8};
+                                 });
+    EXPECT_TRUE(converted);
+    // The lava cell became obsidian; the water source is untouched.
+    EXPECT_EQ(world.getBlock(8, 1, 8), blocks.idForName("obsidian"));
+    EXPECT_EQ(world.getFluidOfKind(9, 1, 8, FluidKind::Water),
+              kMaxFluidLevel);
+    EXPECT_EQ(world.getFluidOfKind(8, 1, 8, FluidKind::Lava), 0);
+}
+
+TEST(FluidTest, LavaBesideFlowingWaterBecomesStone) {
+    const BlockRegistry blocks = buildReactionRegistry();
+    World world;
+    floor(world, 4, 12, 4, 12, 0);
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Lava, kMaxFluidLevel));
+    // A source two cells away: tick 1 spreads level 7 into (9,1,8) (no
+    // reaction yet — the snapshot had no water neighbor), tick 2 reacts
+    // with the flowing film.
+    ASSERT_TRUE(world.setFluid(10, 1, 8, FluidKind::Water, kMaxFluidLevel));
+
+    FluidSim::tick(world, blocks);
+    EXPECT_EQ(world.getFluidOfKind(9, 1, 8, FluidKind::Water), 7);
+    EXPECT_NE(world.getBlock(8, 1, 8), blocks.idForName("stone"));
+    FluidSim::tick(world, blocks);
+    EXPECT_EQ(world.getBlock(8, 1, 8), blocks.idForName("stone"));
+    EXPECT_EQ(world.getFluidOfKind(8, 1, 8, FluidKind::Lava), 0);
+}
+
+TEST(FluidTest, SourceWaterNeighborWinsOverFlowing) {
+    const BlockRegistry blocks = buildReactionRegistry();
+    World world;
+    floor(world, 4, 12, 4, 12, 0);
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Lava, 4)); // flowing lava
+    ASSERT_TRUE(world.setFluid(7, 1, 8, FluidKind::Water, kMaxFluidLevel));
+    ASSERT_TRUE(world.setFluid(9, 1, 8, FluidKind::Water, 3)); // flowing
+
+    FluidSim::tick(world, blocks);
+    // A source neighbor exists -> obsidian (even though a flowing
+    // neighbor is closer in the fixed order).
+    EXPECT_EQ(world.getBlock(8, 1, 8), blocks.idForName("obsidian"));
+}
+
+TEST(FluidTest, InertLavaDoesNotReact) {
+    // A lava fluid block WITHOUT water_reaction is inert: adjacent water
+    // never converts it. The kinds stay apart (the other kind blocks the
+    // spread and supports).
+    BlockRegistry blocks;
+    (void)blocks.registerBlock(parseDef(blockDef("stone")));
+    (void)blocks.registerBlock(
+        parseDef(blockDef("water", R"("fluid":"water")")));
+    (void)blocks.registerBlock(
+        parseDef(blockDef("lava", R"("fluid":"lava")")));
+    World world;
+    floor(world, 4, 12, 4, 12, 0);
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Lava, kMaxFluidLevel));
+    ASSERT_TRUE(world.setFluid(9, 1, 8, FluidKind::Water, kMaxFluidLevel));
+
+    for (int i = 0; i < 20; ++i) {
+        FluidSim::tick(world, blocks);
+    }
+    EXPECT_EQ(world.getFluidOfKind(8, 1, 8, FluidKind::Lava),
+              kMaxFluidLevel);
+    EXPECT_EQ(world.getFluidOfKind(9, 1, 8, FluidKind::Water),
+              kMaxFluidLevel);
+    EXPECT_EQ(world.getBlock(8, 1, 8), BlockID::air());
+    // The water spread stops at the lava cell (an occupied cell).
+    EXPECT_EQ(world.getFluidOfKind(8, 1, 8, FluidKind::Water), 0);
+}
+
+TEST(FluidTest, SettledWorldHasNoAdjacentKinds) {
+    // After the reaction pass separates the kinds, a settled world
+    // (changed == {}) has no lava cell 6-adjacent to a water cell.
+    const BlockRegistry blocks = buildReactionRegistry();
+    World world;
+    floor(world, 0, 15, 0, 15, 0);
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Lava, kMaxFluidLevel));
+    ASSERT_TRUE(world.setFluid(8, 1, 10, FluidKind::Water, kMaxFluidLevel));
+    std::vector<BlockPos> changed;
+    for (int i = 0; i < 120; ++i) {
+        changed = FluidSim::tick(world, blocks);
+        if (changed.empty()) {
+            break;
+        }
+    }
+    EXPECT_TRUE(changed.empty()); // settled
+    // No lava cell is 6-adjacent (the reaction's neighborhood) to a water
+    // cell; diagonal corner contact is a stable settled state.
+    const BlockPos kSix[6] = {
+        {1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}, {0, 1, 0}, {0, -1, 0},
+    };
+    for (int x = 0; x < kChunkSize; ++x) {
+        for (int z = 0; z < kChunkSize; ++z) {
+            if (world.getFluidOfKind(x, 1, z, FluidKind::Lava) == 0) {
+                continue;
+            }
+            for (const BlockPos& d : kSix) {
+                const int nx = x + d.x, ny = 1 + d.y, nz = z + d.z;
+                if (nx < 0 || nx >= kChunkSize || nz < 0 || nz >= kChunkSize ||
+                    ny < 0 || ny >= kWorldHeight) {
+                    continue;
+                }
+                EXPECT_EQ(world.getFluidOfKind(nx, ny, nz, FluidKind::Water),
+                          0)
+                    << "adjacent water at " << nx << "," << ny << "," << nz;
+            }
+        }
+    }
+}
+
+TEST(FluidTest, ReactionIsDeterministicAcrossRuns) {
+    const BlockRegistry blocks = buildReactionRegistry();
+    auto build = [](World& world) {
+        floor(world, 0, 15, 0, 15, 0);
+        (void)world.setFluid(8, 1, 8, FluidKind::Lava, kMaxFluidLevel);
+        (void)world.setFluid(9, 1, 8, FluidKind::Lava, kMaxFluidLevel);
+        (void)world.setFluid(10, 1, 8, FluidKind::Lava, kMaxFluidLevel);
+        (void)world.setFluid(8, 2, 8, FluidKind::Lava, kMaxFluidLevel);
+        (void)world.setFluid(8, 1, 11, FluidKind::Water, kMaxFluidLevel);
+        (void)world.setFluid(10, 1, 11, FluidKind::Water, 5);
+    };
+    World a, b;
+    build(a);
+    build(b);
+    for (int i = 0; i < 100; ++i) {
+        FluidSim::tick(a, blocks);
+        FluidSim::tick(b, blocks);
+    }
+    EXPECT_EQ(snapshot(a), snapshot(b));
+    // The lava's z=9 spread row converted to stone the moment the water
+    // front reached it — a wall between the two kinds. The lava ROW itself
+    // (and the lava above it) is never 6-adjacent to water, so it
+    // survives; the water diamond fills the z >= 10 side of the wall.
+    EXPECT_EQ(a.getBlock(8, 1, 9), blocks.idForName("stone"));
+    EXPECT_EQ(a.getBlock(9, 1, 9), blocks.idForName("stone"));
+    EXPECT_EQ(a.getBlock(10, 1, 9), blocks.idForName("stone"));
+    EXPECT_EQ(a.getFluidOfKind(8, 1, 8, FluidKind::Lava), kMaxFluidLevel);
+    EXPECT_EQ(a.getFluidOfKind(9, 1, 8, FluidKind::Lava), kMaxFluidLevel);
+    EXPECT_EQ(a.getFluidOfKind(10, 1, 8, FluidKind::Lava), kMaxFluidLevel);
+    EXPECT_EQ(a.getFluidOfKind(8, 2, 8, FluidKind::Lava), kMaxFluidLevel);
+    EXPECT_EQ(a.getFluidOfKind(8, 1, 10, FluidKind::Water), 7);
+    EXPECT_EQ(a.getFluidOfKind(8, 1, 11, FluidKind::Water),
+              kMaxFluidLevel);
 }

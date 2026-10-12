@@ -6,6 +6,7 @@
 #include <filesystem>
 
 #include "core/logger.hpp"
+#include "world/chunk.hpp" // fluidKindForName (the fluid vocabulary)
 
 namespace mc {
 
@@ -240,43 +241,55 @@ Result<void> ItemRegistry::parseDrink(const Json& def, Item& out) {
 }
 
 Result<void> ItemRegistry::parseFluidBucket(const Json& def, Item& out) {
-    // Phase 47: fluid buckets. `collects_fluid` / `collects_becomes` mark
-    // the EMPTY side of a pair (scoop a source -> the full bucket) and
-    // `pours_fluid` / `pours_becomes` the FULL side (pour a source -> the
-    // empty bucket). The `*_becomes` values are item NAMES (resolved at
-    // game init, the ammo pattern); the fluid name is a v1 vocabulary
-    // check: the project simulates a single fluid, water (a different
-    // name is a typo or a future feature, rejected like an unknown dye
-    // family color).
+    // Phase 47 (extended Phase 51): fluid buckets. `collects_fluid` (a
+    // non-empty ARRAY of fluid names) marks the EMPTY side: the bucket
+    // scoops every named fluid (Minecraft: one empty bucket scoops both
+    // water and lava). The full bucket a scoop yields is DERIVED — the
+    // unique item that pours that fluid back into this one (cross-checked
+    // at game init, the ammo pattern). `pours_fluid` / `pours_becomes`
+    // mark the FULL side (pour a source -> the empty bucket); the
+    // `pours_becomes` value is an item NAME (resolved at game init). Fluid
+    // names are checked against the two-kind core vocabulary ("water",
+    // "lava" — any other name is a typo or an unimplemented fluid).
     auto parseFluidName = [](const char* key, const Json& value,
-                             std::string& out) -> Result<void> {
+                             std::string& outName) -> Result<void> {
         if (!value.isString() || value.asString().empty()) {
             return MC_FAIL(std::string("'") + key +
                            "' must be a non-empty fluid name");
         }
         const std::string name = value.asString();
-        if (name != "water") {
+        if (!fluidKindForName(name)) {
             return MC_FAIL(std::string("'") + key + "': unknown fluid '" +
-                           name + "' (v1: the only simulated fluid is "
-                                 "'water')");
+                           name + "' (vocabulary: \"water\", \"lava\")");
         }
-        out = name;
+        outName = name;
         return {};
     };
     auto parseBecomes = [](const char* key, const Json& value,
-                           std::string& out) -> Result<void> {
+                           std::string& outName) -> Result<void> {
         if (!value.isString() || value.asString().empty()) {
             return MC_FAIL(std::string("'") + key +
                            "' must be a non-empty item name");
         }
-        out = value.asString();
+        outName = value.asString();
         return {};
     };
     if (const Json* cf = def.find("collects_fluid")) {
-        MC_TRY(parseFluidName("collects_fluid", *cf, out.collectsFluid));
-    }
-    if (const Json* cb = def.find("collects_becomes")) {
-        MC_TRY(parseBecomes("collects_becomes", *cb, out.collectsBecomes));
+        if (!cf->isArray() || cf->size() == 0) {
+            return MC_FAIL("'collects_fluid' must be a non-empty array of "
+                           "fluid names");
+        }
+        for (std::size_t i = 0; i < cf->size(); ++i) {
+            std::string name;
+            MC_TRY(parseFluidName("collects_fluid", cf->at(i), name));
+            for (const std::string& other : out.collectsFluids) {
+                if (other == name) {
+                    return MC_FAIL("'collects_fluid' lists the fluid '" +
+                                   name + "' twice");
+                }
+            }
+            out.collectsFluids.push_back(name);
+        }
     }
     if (const Json* pf = def.find("pours_fluid")) {
         MC_TRY(parseFluidName("pours_fluid", *pf, out.poursFluid));
@@ -286,17 +299,13 @@ Result<void> ItemRegistry::parseFluidBucket(const Json& def, Item& out) {
     }
     // The `*_becomes` field is a dead field without its `*_fluid` pair
     // (the dye_base/dye_color pairing discipline).
-    if (!out.collectsBecomes.empty() && out.collectsFluid.empty()) {
-        return MC_FAIL("'collects_becomes' requires a 'collects_fluid' "
-                       "(a bucket side names the fluid it holds)");
-    }
     if (!out.poursBecomes.empty() && out.poursFluid.empty()) {
         return MC_FAIL("'pours_becomes' requires a 'pours_fluid' "
                        "(a bucket side names the fluid it holds)");
     }
     // One item is ONE side of the pair: a collector does not also pour
     // (the two fields would fight over the same right-click action).
-    if (!out.collectsFluid.empty() && !out.poursFluid.empty()) {
+    if (!out.collectsFluids.empty() && !out.poursFluid.empty()) {
         return MC_FAIL("an item cannot both collect ('collects_fluid') "
                        "and pour ('pours_fluid') (one bucket item is one "
                        "side of the pair)");
@@ -304,7 +313,7 @@ Result<void> ItemRegistry::parseFluidBucket(const Json& def, Item& out) {
     // A bucket side owns the right-click: it cannot also be food or a
     // drinkable (the eat/drink channels would consume the click before
     // the bucket ever runs — a dead field, the food/drink discipline).
-    if ((!out.collectsFluid.empty() || !out.poursFluid.empty()) &&
+    if ((!out.collectsFluids.empty() || !out.poursFluid.empty()) &&
         (out.restoreHunger > 0 || out.drinkTime > 0.0f)) {
         return MC_FAIL("a fluid-bucket item ('collects_fluid' / "
                        "'pours_fluid') cannot be food or a drinkable "
@@ -414,7 +423,7 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
             key != "smeltable_to" && key != "smelt_time" &&
             key != "fuel_time" && key != "dye_color" &&
             key != "drink_time" && key != "returns_item" &&
-            key != "collects_fluid" && key != "collects_becomes" &&
+            key != "collects_fluid" &&
             key != "pours_fluid" && key != "pours_becomes" &&
             key != "grants_effect" &&
             key != "icon") {
@@ -529,6 +538,16 @@ const Item* ItemRegistry::findByName(const std::string& name) const {
 ItemID ItemRegistry::idForName(const std::string& name) const {
     const auto it = m_names.find(name);
     return it == m_names.end() ? ItemID::invalid() : ItemID{it->second};
+}
+
+const Item* ItemRegistry::fullBucketFor(const std::string& fluidName,
+                                        const std::string& emptyName) const {
+    for (const Item& item : m_items) {
+        if (item.poursFluid == fluidName && item.poursBecomes == emptyName) {
+            return &item;
+        }
+    }
+    return nullptr;
 }
 
 std::vector<ItemID> ItemRegistry::allIds() const {

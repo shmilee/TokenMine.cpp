@@ -43,16 +43,25 @@ public:
     // chunk sharing a face with the edited block — dirty.
     bool setBlock(int x, int y, int z, BlockID id);
 
-    // Fluid level (0..kMaxFluidLevel). y outside [0, kWorldHeight) or a
-    // chunk that was never created reads 0 (the void is dry).
+    // Fluid level of EITHER kind (0..kMaxFluidLevel; 0 = no fluid). y
+    // outside [0, kWorldHeight) or a chunk that was never created reads 0
+    // (the void is dry).
     std::uint8_t getFluid(int x, int y, int z) const;
-    // Sets the fluid level of an existing chunk. Returns false (and changes
-    // nothing) when y is out of range, the level is out of range, the chunk
-    // was never created (the void is never created here), the cell holds a
-    // block (fluid only fills air cells — a block displaces fluid instead),
-    // or the level is unchanged. Marks the target chunk and face-sharing
-    // neighbors dirty, like setBlock.
-    bool setFluid(int x, int y, int z, std::uint8_t level);
+    // Fluid level of ONE kind (0 when the cell is dry or holds the other
+    // kind). Same coordinate conventions as getFluid.
+    std::uint8_t getFluidOfKind(int x, int y, int z, FluidKind kind) const;
+    // The kind present in the cell, or nullopt (dry). Same conventions.
+    std::optional<FluidKind> getFluidKind(int x, int y, int z) const;
+    // Sets the fluid of ONE kind in an existing chunk. Returns false (and
+    // changes nothing) when y is out of range, the level is out of range,
+    // the chunk was never created (the void is never created here), a
+    // positive level targets a cell that holds a block (fluid only fills
+    // air cells — a block displaces fluid instead), or the kind's level is
+    // unchanged. A positive level REPLACES any other kind in the cell; a
+    // zero level clears only this kind (the other kind, if any, stays).
+    // Marks the target chunk and face-sharing neighbors dirty, like
+    // setBlock.
+    bool setFluid(int x, int y, int z, FluidKind kind, std::uint8_t level);
 
     // Light queries (0..15), same coordinate conventions as getBlock.
     // Above the world (y >= kWorldHeight) and around the world (a chunk

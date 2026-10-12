@@ -329,8 +329,8 @@ namespace {
 void buildPool(Fixture& f, int x0, int x1, int z0, int z1) {
     for (int x = x0; x <= x1; ++x) {
         for (int z = z0; z <= z1; ++z) {
-            f.world.setFluid(x, 1, z, kMaxFluidLevel);
-            f.world.setFluid(x, 2, z, kMaxFluidLevel);
+            f.world.setFluid(x, 1, z, FluidKind::Water, kMaxFluidLevel);
+            f.world.setFluid(x, 2, z, FluidKind::Water, kMaxFluidLevel);
         }
     }
 }
@@ -589,7 +589,7 @@ TEST(PlayerTest, FallDamageClearedByWater) {
     // is a FLUID level (isInWater reads the fluid layer, not the block).
     for (int x = 8; x < 20; ++x) {
         for (int z = 8; z < 10; ++z) {
-            f.world.setFluid(x, 1, z, kMaxFluidLevel); // pool: top at y=2
+            f.world.setFluid(x, 1, z, FluidKind::Water, kMaxFluidLevel); // pool: top at y=2
         }
     }
     for (int x = 8; x < 10; ++x) {

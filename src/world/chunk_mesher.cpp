@@ -50,21 +50,31 @@ ChunkMeshData ChunkMesher::mesh(const ChunkPos& pos) const {
     const BlockPos origin = chunkOrigin(pos);
 
     // Fluids: per-cell level-scaled cubes (not merged — see the header).
-    // Fluid faces are textured from the registry's fluid block
-    // (properties.fluid); without one, fluid cells render nothing.
-    const std::optional<BlockID> fluidId = m_blocks.fluidBlock();
+    // Fluid faces are textured from the registry's reference block of the
+    // cell's KIND (properties.fluid names the kind); a kind without one
+    // renders nothing.
+    const std::optional<BlockID> waterId =
+        m_blocks.fluidBlock(fluidKindName(FluidKind::Water));
+    const std::optional<BlockID> lavaId =
+        m_blocks.fluidBlock(fluidKindName(FluidKind::Lava));
     for (int ly = 0; ly < kChunkSize; ++ly) {
         for (int lz = 0; lz < kChunkSize; ++lz) {
             for (int lx = 0; lx < kChunkSize; ++lx) {
                 if (chunk->get(lx, ly, lz) != BlockID::air()) {
                     continue;
                 }
-                const std::uint8_t level = chunk->fluidAt(lx, ly, lz);
-                if (level == 0 || fluidId == std::nullopt) {
+                const std::uint8_t code = chunk->fluidAt(lx, ly, lz);
+                if (code == 0) {
+                    continue;
+                }
+                const FluidKind kind = fluidKindOf(code);
+                const std::optional<BlockID> fluidId =
+                    (kind == FluidKind::Water) ? waterId : lavaId;
+                if (fluidId == std::nullopt) {
                     continue;
                 }
                 emitFluid(out, m_blocks.at(*fluidId), origin, lx, ly, lz,
-                          level);
+                          fluidLevelOf(code), kind);
             }
         }
     }
@@ -123,7 +133,7 @@ void ChunkMesher::meshFaceDirection(ChunkMeshData& out, const Chunk& chunk,
                     continue;
                 }
                 const Block& block = m_blocks.at(id);
-                if (block.properties.fluid) {
+                if (!block.properties.fluidName.empty()) {
                     continue; // a fluid block is stored as a fluid level
                 }
                 if (block.model.shape == BlockModel::Shape::Cross) {
@@ -299,7 +309,7 @@ void ChunkMesher::emitMergedQuad(ChunkMeshData& out, const CubeFace& face,
 
 void ChunkMesher::emitFluid(ChunkMeshData& out, const Block& fluidBlock,
                             const BlockPos& origin, int lx, int ly, int lz,
-                            std::uint8_t level) const {
+                            std::uint8_t level, FluidKind kind) const {
     // The unit-cube faces scaled to the fluid height (level 8 = full cube).
     const float h =
         static_cast<float>(level) / static_cast<float>(kMaxFluidLevel);
@@ -315,7 +325,11 @@ void ChunkMesher::emitFluid(ChunkMeshData& out, const Block& fluidBlock,
             m_blocks.at(neighbor).properties.opaque) {
             continue; // fully occluded
         }
-        const std::uint8_t neighborFluid = m_world.getFluid(nx, ny, nz);
+        // Same-kind fluid neighbor only (the other kind never hides a
+        // face — the reaction pass keeps the kinds apart, but a
+        // transient pre-tick state must still render both).
+        const std::uint8_t neighborFluid =
+            m_world.getFluidOfKind(nx, ny, nz, kind);
         if (face.dy > 0) {
             // Top face: hidden by an equal-or-higher fluid above.
             if (neighborFluid >= level) {

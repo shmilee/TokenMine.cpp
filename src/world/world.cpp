@@ -79,10 +79,43 @@ std::uint8_t World::getFluid(int x, int y, int z) const {
         return 0; // void is dry
     }
     const BlockPos local = worldToChunkLocal(cp, p);
-    return it->second.fluidAt(local.x, local.y, local.z);
+    return fluidLevelOf(it->second.fluidAt(local.x, local.y, local.z));
 }
 
-bool World::setFluid(int x, int y, int z, std::uint8_t level) {
+std::uint8_t World::getFluidOfKind(int x, int y, int z,
+                                   FluidKind kind) const {
+    if (!isWorldYValid(y)) {
+        return 0;
+    }
+    const BlockPos p{x, y, z};
+    const ChunkPos cp = worldToChunk(p);
+    const auto it = m_chunks.find(cp);
+    if (it == m_chunks.end()) {
+        return 0; // void is dry
+    }
+    const BlockPos local = worldToChunkLocal(cp, p);
+    const std::uint8_t code = it->second.fluidAt(local.x, local.y, local.z);
+    return fluidKindOf(code) == kind ? fluidLevelOf(code) : 0;
+}
+
+std::optional<FluidKind> World::getFluidKind(int x, int y, int z) const {
+    if (!isWorldYValid(y)) {
+        return std::nullopt;
+    }
+    const BlockPos p{x, y, z};
+    const ChunkPos cp = worldToChunk(p);
+    const auto it = m_chunks.find(cp);
+    if (it == m_chunks.end()) {
+        return std::nullopt; // void is dry
+    }
+    const BlockPos local = worldToChunkLocal(cp, p);
+    const std::uint8_t code = it->second.fluidAt(local.x, local.y, local.z);
+    return code == 0 ? std::optional<FluidKind>()
+                     : std::optional<FluidKind>(fluidKindOf(code));
+}
+
+bool World::setFluid(int x, int y, int z, FluidKind kind,
+                     std::uint8_t level) {
     if (!isWorldYValid(y) || level > kMaxFluidLevel) {
         return false;
     }
@@ -93,13 +126,24 @@ bool World::setFluid(int x, int y, int z, std::uint8_t level) {
         return false; // no chunk: the void stays dry (never created here)
     }
     const BlockPos local = worldToChunkLocal(cp, p);
-    if (chunk->get(local.x, local.y, local.z) != BlockID::air()) {
-        return false; // a block occupies the cell
+    const std::uint8_t code = chunk->fluidAt(local.x, local.y, local.z);
+    if (level == 0) {
+        // A zero level clears ONLY this kind (the other kind, if any,
+        // stays). A no-op when this kind is not present at a positive
+        // level.
+        if (code == 0 || fluidKindOf(code) != kind) {
+            return false;
+        }
+    } else {
+        if (chunk->get(local.x, local.y, local.z) != BlockID::air()) {
+            return false; // a block occupies the cell
+        }
+        if (fluidKindOf(code) == kind && fluidLevelOf(code) == level) {
+            return false; // this kind's level is unchanged
+        }
+        // A positive level replaces any other kind in the cell.
     }
-    if (chunk->fluidAt(local.x, local.y, local.z) == level) {
-        return false; // no change
-    }
-    chunk->setFluidAt(local.x, local.y, local.z, level);
+    chunk->setFluidAt(local.x, local.y, local.z, fluidCode(kind, level));
     markNeighborChunksDirty(local.x, local.y, local.z, cp);
     return true;
 }

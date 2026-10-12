@@ -29,8 +29,9 @@
 //                   "pos": [0.5, 52.5, 0.5], "age": 12.5,
 //                   "pickup_delay": 0.25 } ], // grid (same slot entries)
 //   "blocks": [ [0, 53, 0, "air"] ],          // cell edits vs generation
-//   "fluids": [ [4, 50, 4, 5] ]               // (name "air" = block removed)
-// }
+//   "fluids": [ [4, 50, 4, 5, "water"] ]      // (name "air" = block
+// }                                            // removed; format 9: the
+//                                              // fluid kind is named)
 //
 // Validation on load is STRICT (the file is machine-generated, so an
 // unexpected field means corruption or a version mismatch — unlike
@@ -103,7 +104,12 @@ namespace mc {
 //      effects); format-8 files REQUIRE the "effects" key (an empty
 //      array is valid — the furnaces-key discipline); writes are always
 //      format 8.
-inline constexpr int kSaveFormat = 8;
+//   9: the fluid KIND on every fluid edit (Phase 51, lava) — "fluids":
+//      [ [x, y, z, level, "water"|"lava"] ] (five elements; the kind is a
+//      fluid NAME from the two-kind vocabulary). Format-8 and older files
+//      still load: their four-element edits migrate to water (the only
+//      simulated fluid before Phase 51); writes are always format 9.
+inline constexpr int kSaveFormat = 9;
 inline constexpr int kSaveFormatMin = 1;
 
 // Phase 40: the furnace save-field bounds — the max smelt/fuel times the
@@ -128,9 +134,12 @@ struct SavedBlockEdit {
     std::string blockName; // block NAME (registry-resolved on load)
 };
 
-// One cell whose fluid level differs from generation (0 = drained).
+// One cell whose fluid differs from generation (level 0 = drained). The
+// KIND is the fluid's name-bearing enum (Phase 51, format 9: format-8 and
+// older files migrate to Water — the only simulated fluid then).
 struct SavedFluidEdit {
     BlockPos pos;
+    FluidKind kind;
     std::uint8_t level;
 };
 

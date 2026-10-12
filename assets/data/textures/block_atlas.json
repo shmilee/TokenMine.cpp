@@ -249,6 +249,14 @@
     "farmland_side": [
       7,
       5
+    ],
+    "lava": [
+      7,
+      6
+    ],
+    "obsidian": [
+      7,
+      7
     ]
   }
 }

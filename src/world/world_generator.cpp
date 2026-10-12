@@ -227,7 +227,9 @@ void WorldGenerator::fillTerrain(Chunk& chunk, const ChunkPos& pos,
                     // The column is underwater: fill the full fluid level up
                     // to the sea level (water lives in the fluid array; the
                     // block stays air).
-                    chunk.setFluidAt(lx, ly, lz, kMaxFluidLevel);
+                    chunk.setFluidAt(lx, ly, lz,
+                                     fluidCode(FluidKind::Water,
+                                               kMaxFluidLevel));
                 }
             }
         }
