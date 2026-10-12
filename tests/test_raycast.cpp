@@ -392,3 +392,77 @@ TEST(RaycastTest, LineOfSightCoincidentPoints) {
     EXPECT_TRUE(hasLineOfSight(world, {0.5f, 0.5f, 0.5f},
                                {0.5f, 0.5f, 0.5f}));
 }
+
+// -- raycastFluid (Phase 47, the bucket's target ray) ------------------------
+
+TEST(RaycastFluidTest, HitsFluidCellInOpenSpace) {
+    // The first cell carrying fluid is returned (an otherwise empty
+    // world). setFluid requires an existing chunk (the void stays dry),
+    // so one block creates it (off the ray's path).
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID{1}));
+    ASSERT_TRUE(world.setFluid(5, 3, 2, 8));
+    const auto hit = raycastFluid(world, {0.5f, 3.5f, 2.5f},
+                                  {1.0f, 0.0f, 0.0f}, 20.0f);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->x, 5);
+    EXPECT_EQ(hit->y, 3);
+    EXPECT_EQ(hit->z, 2);
+}
+
+TEST(RaycastFluidTest, BlockOccludesTheRay) {
+    // A solid wall between the origin and the water returns the BLOCK
+    // cell (Minecraft: the bucket uses block targeting — you cannot
+    // scoop through a wall). The caller then sees fluid level 0 and does
+    // nothing.
+    World world;
+    ASSERT_TRUE(world.setBlock(3, 3, 0, BlockID{1}));
+    ASSERT_TRUE(world.setFluid(6, 3, 0, 8));
+    const auto hit = raycastFluid(world, {0.5f, 3.5f, 0.5f},
+                                  {1.0f, 0.0f, 0.0f}, 20.0f);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->x, 3);
+    EXPECT_EQ(world.getFluid(3, 3, 0), 0); // the block cell: no fluid
+}
+
+TEST(RaycastFluidTest, StopsAtFirstOccluder) {
+    // Fluid BEFORE the block: the fluid cell wins (it is nearer).
+    World world;
+    ASSERT_TRUE(world.setBlock(4, 1, 1, BlockID{1})); // creates the chunk
+    ASSERT_TRUE(world.setFluid(2, 1, 1, 7)); // flowing (not a source)
+    const auto hit = raycastFluid(world, {0.5f, 1.5f, 1.5f},
+                                  {1.0f, 0.0f, 0.0f}, 20.0f);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->x, 2);
+    EXPECT_EQ(world.getFluid(2, 1, 1), 7);
+}
+
+TEST(RaycastFluidTest, BeyondReachNoHit) {
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID{1})); // creates the chunk
+    ASSERT_TRUE(world.setFluid(9, 1, 1, 8));
+    EXPECT_FALSE(raycastFluid(world, {0.5f, 1.5f, 1.5f},
+                              {1.0f, 0.0f, 0.0f}, 5.0f)
+                     .has_value());
+}
+
+TEST(RaycastFluidTest, EmptyWorldNoHit) {
+    World world;
+    EXPECT_FALSE(raycastFluid(world, {0.5f, 1.5f, 1.5f},
+                              {1.0f, 0.0f, 0.0f}, 20.0f)
+                     .has_value());
+}
+
+TEST(RaycastFluidTest, OriginCellFluidIsSkipped) {
+    // The ray never hits the cell it starts in (the raycastBlock
+    // convention): water around the eye is transparent, water further
+    // ahead is not.
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID{1})); // creates the chunk
+    ASSERT_TRUE(world.setFluid(0, 1, 1, 8));  // the origin cell
+    ASSERT_TRUE(world.setFluid(3, 1, 1, 8));
+    const auto hit = raycastFluid(world, {0.5f, 1.5f, 1.5f},
+                                  {1.0f, 0.0f, 0.0f}, 20.0f);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->x, 3);
+}

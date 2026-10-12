@@ -2,5 +2,7 @@
   "id": "bucket",
   "type": "material",
   "max_stack": 16,
-  "icon": "bucket"
+  "icon": "bucket",
+  "collects_fluid": "water",
+  "collects_becomes": "water_bucket"
 }

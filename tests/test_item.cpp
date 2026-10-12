@@ -728,3 +728,113 @@ TEST(ItemRegistryTest, FoodAndDrinkableAreMutuallyExclusive) {
                              "drink_time":1.6})"))
                      .ok());
 }
+
+// -- Fluid buckets (Phase 47) -----------------------------------------------
+
+TEST(ItemRegistryTest, ParsesFluidBucketPair) {
+    // The water bucket pair: the EMPTY side collects, the FULL side pours.
+    // The companion NAMES are cross-checked (existence + symmetry) at game
+    // init, not here (the ammo pattern).
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"bucket","type":"material","max_stack":16,
+                      "icon":"bucket",
+                      "collects_fluid":"water",
+                      "collects_becomes":"water_bucket"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Item& b = items.at(*r);
+    EXPECT_EQ(b.collectsFluid, "water");
+    EXPECT_EQ(b.collectsBecomes, "water_bucket");
+    EXPECT_TRUE(b.poursFluid.empty());
+    EXPECT_TRUE(b.poursBecomes.empty());
+    r = items.registerItem(
+        parseJson(R"({"id":"water_bucket","type":"material","max_stack":1,
+                      "icon":"water_bucket",
+                      "pours_fluid":"water",
+                      "pours_becomes":"bucket"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Item& w = items.at(*r);
+    EXPECT_EQ(w.poursFluid, "water");
+    EXPECT_EQ(w.poursBecomes, "bucket");
+    EXPECT_TRUE(w.collectsFluid.empty());
+}
+
+TEST(ItemRegistryTest, FluidBucketFieldsDefaultToEmpty) {
+    // No bucket fields: every pre-Phase-47 item is untouched.
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"gem","type":"material"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Item& it = items.at(*r);
+    EXPECT_TRUE(it.collectsFluid.empty());
+    EXPECT_TRUE(it.collectsBecomes.empty());
+    EXPECT_TRUE(it.poursFluid.empty());
+    EXPECT_TRUE(it.poursBecomes.empty());
+}
+
+TEST(ItemRegistryTest, RejectsUnknownFluidName) {
+    // v1 vocabulary: the only simulated fluid is "water" (a different
+    // name is a typo or a future feature).
+    ItemRegistry items;
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material",
+                             "collects_fluid":"lava",
+                             "collects_becomes":"x"})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material",
+                             "pours_fluid":"","pours_becomes":"x"})"))
+                     .ok());
+}
+
+TEST(ItemRegistryTest, RejectsBecomesWithoutFluid) {
+    // A `*_becomes` without its `*_fluid` pair is a dead field (the
+    // dye_base/dye_color pairing discipline).
+    ItemRegistry items;
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material",
+                             "collects_becomes":"x"})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material",
+                             "pours_becomes":5})"))
+                     .ok());
+}
+
+TEST(ItemRegistryTest, BucketSidesAreMutuallyExclusive) {
+    // One item is ONE side of the pair: a collector does not also pour.
+    ItemRegistry items;
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material",
+                             "collects_fluid":"water",
+                             "collects_becomes":"a",
+                             "pours_fluid":"water",
+                             "pours_becomes":"c"})"))
+                     .ok());
+}
+
+TEST(ItemRegistryTest, BucketConflictsWithFoodAndDrinkable) {
+    // A bucket side owns the right-click: it cannot also be food or a
+    // drinkable (the eat/drink channels would eat the click first — a
+    // dead field, the food/drink discipline).
+    ItemRegistry items;
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material",
+                             "collects_fluid":"water",
+                             "collects_becomes":"a",
+                             "restore_hunger":3})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"b","type":"material",
+                             "pours_fluid":"water",
+                             "pours_becomes":"a",
+                             "drink_time":1.6})"))
+                     .ok());
+}

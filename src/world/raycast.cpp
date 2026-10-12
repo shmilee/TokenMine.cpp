@@ -1,6 +1,7 @@
 #include "world/raycast.hpp"
 
 #include <cmath>
+#include <functional>
 #include <limits>
 
 #include "block/block.hpp"
@@ -11,10 +12,24 @@ namespace mc {
 
 namespace {
 constexpr float kInf = std::numeric_limits<float>::infinity();
-} // namespace
 
-std::optional<BlockHit> raycastBlock(const World& world, Vec3 origin,
-                                     Vec3 direction, float maxDistance) {
+// A DDA walk result: the first cell where the test fired, the axis of
+// the grid plane last crossed (it selects the hit-face normal), and the
+// ray parameter t of that crossing.
+struct DdaHit {
+    BlockPos cell;
+    int axis;
+    float t;
+};
+
+// Shared DDA walk (Amanatides & Woo, 1987): the first cell, after the
+// one containing the origin, where `test(cell)` is true within
+// maxDistance. Out-of-range Y and missing chunks read as air/no-fluid
+// through World, so the walk simply flies out of the world without a
+// hit. `direction` must be a unit vector.
+std::optional<DdaHit> ddaFirstCell(
+        Vec3 origin, Vec3 direction, float maxDistance,
+        const std::function<bool(BlockPos)>& test) {
     if (maxDistance <= 0.0f) {
         return std::nullopt;
     }
@@ -93,20 +108,62 @@ std::optional<BlockHit> raycastBlock(const World& world, Vec3 origin,
             return std::nullopt;
         }
 
-        if (world.getBlock(x, y, z) != BlockID::air()) {
-            Vec3 normal = Vec3::zero();
-            // The hit face points back at the ray: opposite to the travel
-            // direction on the crossed axis.
-            if (axis == 0) {
-                normal.x = static_cast<float>(-stepX);
-            } else if (axis == 1) {
-                normal.y = static_cast<float>(-stepY);
-            } else {
-                normal.z = static_cast<float>(-stepZ);
-            }
-            return BlockHit {{x, y, z}, normal, t};
+        if (test({x, y, z})) {
+            return DdaHit {{x, y, z}, axis, t};
         }
     }
+}
+
+} // namespace
+
+std::optional<BlockHit> raycastBlock(const World& world, Vec3 origin,
+                                     Vec3 direction, float maxDistance) {
+    // The first NON-AIR block (the original semantics: fluids are
+    // transparent to the block ray).
+    const std::optional<DdaHit> hit = ddaFirstCell(
+        origin, direction, maxDistance,
+        [&](BlockPos c) {
+            return world.getBlock(c.x, c.y, c.z) != BlockID::air();
+        });
+    if (!hit) {
+        return std::nullopt;
+    }
+    Vec3 normal = Vec3::zero();
+    // The hit face points back at the ray: opposite to the travel
+    // direction on the crossed axis (the walk only crosses that axis
+    // when the direction component is non-zero).
+    const float d =
+        hit->axis == 0 ? direction.x : hit->axis == 1 ? direction.y
+                                                       : direction.z;
+    if (hit->axis == 0) {
+        normal.x = d > 0.0f ? -1.0f : 1.0f;
+    } else if (hit->axis == 1) {
+        normal.y = d > 0.0f ? -1.0f : 1.0f;
+    } else {
+        normal.z = d > 0.0f ? -1.0f : 1.0f;
+    }
+    return BlockHit {hit->cell, normal, hit->t};
+}
+
+std::optional<BlockPos> raycastFluid(const World& world, Vec3 origin,
+                                     Vec3 direction, float maxDistance) {
+    // The bucket's target ray (Phase 47): the first cell that is a
+    // non-air BLOCK or carries a fluid level — a wall occludes the ray
+    // (Minecraft: the bucket uses block targeting, you cannot scoop
+    // through one), while the plain block ray passes through fluids. The
+    // caller reads the returned cell's fluid level: kMaxFluidLevel (8)
+    // is the scoopable source, anything else is "no action" (a block
+    // face or flowing water).
+    const std::optional<DdaHit> hit = ddaFirstCell(
+        origin, direction, maxDistance,
+        [&](BlockPos c) {
+            return world.getBlock(c.x, c.y, c.z) != BlockID::air() ||
+                   world.getFluid(c.x, c.y, c.z) > 0;
+        });
+    if (!hit) {
+        return std::nullopt;
+    }
+    return hit->cell;
 }
 
 bool canPlaceAt(const World& world, const BlockRegistry& blocks, BlockPos cell,

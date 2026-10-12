@@ -300,6 +300,43 @@ Mob 章节。
 近战命中 15 s 毒源）、`weakness`（melee_penalty 4、负面——v1 无游戏内
 来源）、`regeneration`（heal 1 / 4.5 s、正面——v1 无游戏内来源）。
 
+## 新增一个流体桶（无需改核心代码，Phase 47）
+
+v1 只有一种流体（**水** = 项目唯一模拟流体，流体名词汇表 = `"water"`，
+其他名解析拒绝）。桶 = 一对物品（空桶 ⇄ 满桶），字段成对出现：
+
+1. **空桶侧**（舀水 → 满桶）：
+
+   ```json
+   { "collects_fluid": "water", "collects_becomes": "<满桶物品名>" }
+   ```
+
+2. **满桶侧**（倒水 → 空桶）：
+
+   ```json
+   { "pours_fluid": "water", "pours_becomes": "<空桶物品名>" }
+   ```
+
+3. **对偶对称 = init 硬校验**：伴侣必须存在，且反向指回——同流体名、
+   `*_becomes` == 本物品名（单边/错配 = 游戏启动失败，错误信息点名
+   双方）。一个物品**只能是一侧**（`collects_fluid` 与 `pours_fluid`
+   互斥），且桶侧**不能同时是食物/可饮用**（右键通道归属，解析拒绝）。
+   `*_becomes` 缺 `*_fluid` = dead field，拒绝（dye 配对纪律）
+4. **图标**：满桶物品要 `icon`（`tools/generate_item_icons.py` 加一个
+   函数 + ITEMS 表项，如 `water_bucket` = 蓝色水面的桶）
+5. 机制自动生效：舀 = 桶目标射线（首个「非 air 方块**或**带流体」的
+   格，墙壁遮挡）命中 **level 8 源**格 → 移除源 + 换物品 + "splash"
+   音；倒 = 放置目标格（受击面邻格）为 air 无流体且不重叠玩家 → 放
+   level 8 源 + 换物品。倒下的源走正常 FluidSim（下落/扩散）。存档
+   自动（物品按名 + 流体走 `fluids` 编辑，无 format 变更）
+6. **舀的视线约束**（MC 行为，场景设计注意）：源格每 tick 向四向邻格
+   补 level 7 水——**远处的玩家永远隔着自己源头的扩散水**（L7 ≠ 8，
+   舀不到）；要舀源，玩家必须站在源旁 1 格、从**上方**斜视源的顶面
+   （射线从源的上方格直接进入源格）。E2E 场景见 PITS「流体桶 E2E
+   视线」
+
+当前唯一对：`bucket`（max_stack 16）⇄ `water_bucket`（max_stack 1）。
+
 ## 调节玩家参数（config/config.json `player.*`，Phase 32）
 
 玩家运动/生存模型的全部数值在 `Player::Params`，可在 `config/config.json`

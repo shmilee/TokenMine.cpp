@@ -101,6 +101,15 @@ private:
     // cross-checked at game init). `drink_time` and `restore_hunger`
     // are mutually exclusive (an item is food OR a drinkable).
     static Result<void> parseDrink(const Json& def, Item& out);
+    // Parse the optional fluid-bucket fields (Phase 47) into `out`:
+    // `collects_fluid` + `collects_becomes` (empty -> full bucket) and
+    // `pours_fluid` + `pours_becomes` (full -> empty bucket). The fluid
+    // name is restricted to the v1 vocabulary ("water", the project's
+    // single simulated fluid); the `*_becomes` name is a non-empty item
+    // name (its existence + pair symmetry are cross-checked at game
+    // init). The two sides are mutually exclusive, as is any bucket side
+    // with food/drinkable (the right-click channel owner).
+    static Result<void> parseFluidBucket(const Json& def, Item& out);
     // Parse the tool fields (`tool.break_speed` + `max_stack`) into `out`.
     static Result<void> parseTool(const Json& def, Item& out);
 

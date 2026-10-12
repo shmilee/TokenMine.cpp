@@ -23,6 +23,7 @@ blocks, not per-material — see docs/KNOWN_ISSUES). Files:
   eat.wav      muffled chewing (food eaten, Phase 23)
   cloth.wav    soft rustle (dye recolor, Phase 41)
   milk.wav     liquid glug (milk drink start / cow milking, Phase 43)
+  splash.wav   water splash (bucket fill / pour, Phase 47)
 """
 import math
 import os
@@ -233,6 +234,19 @@ def milk():
     return lowpass3(sound(dur, f))
 
 
+def splash():
+    """Water splash (Phase 47, bucket fill/pour): a short bright noise
+    burst with a quick exponential decay over a soft descending water
+    tone — the same lowpass chain as the other noise taps."""
+    lcg = Lcg(0xA511)
+    dur = 0.22
+
+    def f(t, _):
+        tone = math.sin(2 * math.pi * (340.0 - 220.0 * (t / dur)) * t) * 0.18
+        return (lcg.next() * 0.5 + tone) * env(t, dur, 22.0) * 0.8
+    return lowpass3(sound(dur, f))
+
+
 SOUNDS = {
     "dig": dig,
     "place": place,
@@ -249,6 +263,7 @@ SOUNDS = {
     "eat": eat,
     "cloth": cloth,
     "milk": milk,
+    "splash": splash,
 }
 
 

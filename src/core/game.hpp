@@ -249,6 +249,19 @@ private:
     // true when the click was consumed (crosshair on the mob, including
     // the no-milk case of a full inventory).
     bool tryMilk();
+    // Fluid bucket (Phase 47): when the selected slot holds a bucket side
+    // (item data 'collects_fluid' or 'pours_fluid'; the pair is
+    // cross-checked at init): COLLECT — the bucket-target ray (kReach,
+    // first non-air-block-or-fluid cell) must land on a level-8 (source)
+    // fluid cell: the source is removed and one held item is swapped for
+    // the companion (the full bucket). POUR — the placement-target cell
+    // (face neighbor of the hit block) must be air without fluid and not
+    // overlapping the player: a level-8 source is placed and the item
+    // swaps to the empty bucket. Both play the "splash" sound and consume
+    // the click (a bucket never places a block); a no-action case
+    // (flowing water, occupied cell, no target) falls through to the
+    // normal right-click (placeBlock is a no-op for a material).
+    bool tryFluidBucket();
     // Advances the eat/drink channel in real dt (Phase 28, drinkable
     // extension Phase 43): interrupts (damage, death, unlock, panel,
     // selection change) and the terminal events (complete = consume +

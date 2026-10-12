@@ -9,9 +9,20 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 46 完成时）
+## 现状（Phase 47 完成时）
 
-- 功能阶段 P0–P46 全部完成并提交；P46 = 状态效果系统（代理自定案范围：
+- 功能阶段 P0–P47 全部完成并提交；P47 = 水桶（流体桶 v1；用户"按排序
+  继续"= 第一候选，代理定案最小完整版 = 水，熔岩/面包/金苹果留后续）：
+  **桶对纯数据**（item `collects_fluid`+`collects_becomes` 空桶侧 /
+  `pours_fluid`+`pours_becomes` 满桶侧；流体名 v1 词汇表 = 仅 "water"；
+  两侧互斥 + 与食物/可饮用互斥；**init 对偶对称硬校验** = 伴侣存在且
+  反向指回）+ `raycastFluid`（桶目标射线：首个「非 air 方块或带流体」
+  格，**墙壁遮挡** = MC；与 raycastBlock 共享 DDA 骨架）+
+  `tryFluidBucket`（舀 = 命中 **level 8 源** → 移除源 + 换物品 +
+  "splash"；倒 = 放置目标格 air 无流体不重叠玩家 → 放 L8 源 + 换物品；
+  右键顺序在 interact 之后 = 手持桶对炉子仍开面板；倒下的源走正常
+  FluidSim）+ 内容：`water_bucket` + 蓝水面桶图标 + `splash.wav`；
+  **无 format 变更**（format 8）；P46 = 状态效果系统（代理自定案范围：
   poison/weakness/regeneration 数据驱动效果 + **spider** 毒源 + 效果图标
   HUD + 牛奶清负面补全 + 存档 format 8）：**效果纯数据**（`assets/data/
   effects/*.json` 严格解析 + no-op 拒绝；真实 dt 倒计时 + 跨 interval
@@ -38,10 +49,10 @@
   （P28 遗留"熟肉"）、P41 = wool 染色框架（P12/P20 遗留"wool 无用途/无
   染色"；atlas 4×8→8×8 → base18 于 P41 重锚）、P42 = 弓后续 2、P43 =
   牛奶桶最小项（饮用通道 + 挤奶）。
-- 测试 **835/835**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+- 测试 **847/847**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
 - 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P41 重锚【atlas
-  8×8】，P42/P43/P44/P45/P46 过门 = 第 16/17/18/19/20 次结构性免疫、
-  无重锚）。
+  8×8】，P42/P43/P44/P45/P46/P47 过门 = 第 16/17/18/19/20/21 次结构性
+  免疫、无重锚）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 
 ## 命令

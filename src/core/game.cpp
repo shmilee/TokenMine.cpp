@@ -558,6 +558,38 @@ Result<void> Game::buildScene() {
             return MC_FAIL("item '" + item.name + "' references unknown "
                            "container item '" + item.returnsItem + "'");
         }
+        // Phase 47: the fluid-bucket PAIR (the ammo pattern extended to
+        // pairs): the companion must exist AND be the opposite side
+        // pointing back at this item (same fluid, becomes == this name).
+        // A one-sided or mismatched pair is a dead field — the parse
+        // keeps each side locally consistent, only the round trip needs
+        // both files.
+        if (!item.collectsBecomes.empty()) {
+            const Item* other = m_items.findByName(item.collectsBecomes);
+            if (other == nullptr ||
+                other->poursFluid != item.collectsFluid ||
+                other->poursBecomes != item.name) {
+                return MC_FAIL("item '" + item.name + "' collects into '" +
+                               item.collectsBecomes +
+                               "', but that item does not pour back to '" +
+                               item.name + "' (a bucket pair must be "
+                               "symmetric: same fluid, becomes == this "
+                               "item)");
+            }
+        }
+        if (!item.poursBecomes.empty()) {
+            const Item* other = m_items.findByName(item.poursBecomes);
+            if (other == nullptr ||
+                other->collectsFluid != item.poursFluid ||
+                other->collectsBecomes != item.name) {
+                return MC_FAIL("item '" + item.name + "' pours back to '" +
+                               item.poursBecomes +
+                               "', but that item does not collect from '" +
+                               item.name + "' (a bucket pair must be "
+                               "symmetric: same fluid, becomes == this "
+                               "item)");
+            }
+        }
     }
 
     // -- mob arrow ammo (Phase 42): a ranged mob's 'ammo' field names the
@@ -1633,6 +1665,14 @@ void Game::handleInteraction(double dt) {
                 }
             }
         }
+        // Fluid bucket (Phase 47): a selected bucket side collects a
+        // source cell or pours one — the click is consumed either way
+        // (a bucket never places a block). Runs AFTER the block
+        // interactions: a furnace or crafting table under the crosshair
+        // still opens its panel even when a bucket is selected (Minecraft).
+        if (tryFluidBucket()) {
+            return;
+        }
         placeBlock();
     }
     if (m_input.wasPressed(GameKey::Tab)) {
@@ -2154,6 +2194,95 @@ bool Game::tryMilk() {
     m_sound.play("milk");
     MC_LOG_DEBUG("milked mob '" + mob->mob->def().name + "' (" +
                  item.name + " -> " + props.milkGives + ")");
+    return true;
+}
+
+bool Game::tryFluidBucket() {
+    // Fluid bucket (Phase 47, water — the project's single fluid). The
+    // selected item must be a bucket side (item data 'collects_fluid' or
+    // 'pours_fluid'; the pair symmetry is cross-checked at init). The
+    // COLLECT side: the bucket-target ray (kReach; the first cell that is
+    // a non-air block or carries fluid — a wall occludes, Minecraft) must
+    // land on a level-8 (source) cell: the source is removed and one held
+    // item is swapped for the companion (the full bucket). The POUR side:
+    // the placement-target cell (the face neighbor of the first non-air
+    // block) must be air without fluid and not overlap the player: a
+    // level-8 source is placed and the item swaps to the empty bucket.
+    // Both play "splash" and consume the click (a bucket never places a
+    // block); a no-action case falls through to the normal right-click
+    // (placeBlock is a no-op for a material — nothing happens, e.g. on a
+    // flowing cell or an occupied target).
+    if (!m_player || m_player->isDead()) {
+        return false;
+    }
+    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    if (stack.empty()) {
+        return false;
+    }
+    const Item& item = m_items.at(stack.item);
+    if (item.collectsFluid.empty() && item.poursFluid.empty()) {
+        return false; // not a bucket side: fall through
+    }
+    const bool collect = !item.collectsFluid.empty();
+    // The companion exists (init cross-check); the guard is a defensive
+    // no-op.
+    const ItemID becomes = m_items.idForName(
+        collect ? item.collectsBecomes : item.poursBecomes);
+    if (!becomes.valid()) {
+        return true;
+    }
+    if (m_inventory.isFull(becomes, m_items)) {
+        return true; // no room for the companion: nothing happens (Minecraft)
+    }
+    auto finish = [&]() {
+        m_inventory.take(m_selectedSlot, 1);
+        m_inventory.add(becomes, 1, m_items);
+        m_sound.play("splash");
+    };
+    if (collect) {
+        const std::optional<BlockPos> cell =
+            raycastFluid(m_world, m_camera.position, m_camera.forward(),
+                         kReach);
+        // A source cell is level kMaxFluidLevel (flowing cells are lower
+        // and cannot be collected, Minecraft). A block cell reads 0.
+        if (!cell ||
+            m_world.getFluid(cell->x, cell->y, cell->z) != kMaxFluidLevel) {
+            return false; // no source in reach: fall through
+        }
+        m_world.setFluid(cell->x, cell->y, cell->z, 0);
+        Lighting::updateLocal(m_world, m_blocks, *cell);
+        finish();
+        MC_LOG_DEBUG("scooped water at (" + std::to_string(cell->x) + ", " +
+                     std::to_string(cell->y) + ", " +
+                     std::to_string(cell->z) + ") (" + item.name + " -> " +
+                     item.collectsBecomes + ")");
+        return true;
+    }
+    const std::optional<BlockHit> hit = targetBlock();
+    if (!hit) {
+        return false; // no block face to pour against: fall through
+    }
+    // The pour cell is the face neighbor of the hit block (the
+    // placement-target convention): air, without fluid (setFluid only
+    // fills air cells), inside the Y range and not overlapping the
+    // player (canPlaceAt's tests; a material item is not placeable, so
+    // the solid-block rejection there is irrelevant here).
+    const BlockPos target {
+        hit->block.x + static_cast<int>(hit->normal.x),
+        hit->block.y + static_cast<int>(hit->normal.y),
+        hit->block.z + static_cast<int>(hit->normal.z)};
+    if (!canPlaceAt(m_world, m_blocks, target, m_player->aabbMin(),
+                    m_player->aabbMax()) ||
+        m_world.getBlock(target.x, target.y, target.z) != BlockID::air() ||
+        m_world.getFluid(target.x, target.y, target.z) != 0) {
+        return false;
+    }
+    m_world.setFluid(target.x, target.y, target.z, kMaxFluidLevel);
+    Lighting::updateLocal(m_world, m_blocks, target);
+    finish();
+    MC_LOG_DEBUG("poured water at (" + std::to_string(target.x) + ", " +
+                 std::to_string(target.y) + ", " + std::to_string(target.z) +
+                 ") (" + item.name + " -> " + item.poursBecomes + ")");
     return true;
 }
 

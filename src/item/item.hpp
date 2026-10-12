@@ -120,6 +120,27 @@ struct Item {
     // valid on a drinkable item (rejected otherwise); the name's
     // existence is cross-checked at game init (the ammo pattern).
     std::string returnsItem;
+    // Phase 47: fluid bucket, COLLECT side (optional data fields
+    // 'collects_fluid' + 'collects_becomes'). collectsFluid non-empty
+    // marks the item as an EMPTY bucket of the named fluid (v1
+    // vocabulary: "water" — the project's single simulated fluid):
+    // right-clicking a level-8 (source) fluid cell in reach removes the
+    // source and swaps one held item for one 'collectsBecomes' item (the
+    // full bucket). The companion must be a pourer pointing back (the
+    // pair is cross-checked at game init, the ammo pattern). Mutually
+    // exclusive with poursFluid (one item is one side of the pair) and
+    // with food/drinkable (the right-click channel owner).
+    std::string collectsFluid;
+    std::string collectsBecomes;
+    // Phase 47: fluid bucket, POUR side (optional data fields
+    // 'pours_fluid' + 'pours_becomes'). poursFluid non-empty marks the
+    // item as a FULL bucket of the named fluid: right-clicking a valid
+    // air cell (the placement-target face cell, no fluid, not
+    // overlapping the player) places a level-8 source and swaps one held
+    // item for one 'poursBecomes' item (the empty bucket). Same
+    // exclusivity as the collect side.
+    std::string poursFluid;
+    std::string poursBecomes;
     // Phase 15 UI: the item's 2D icon texture name (a file under
     // assets/textures/items/, validated against the filesystem at game
     // init). Empty for block items, which render a 3D block cube instead.

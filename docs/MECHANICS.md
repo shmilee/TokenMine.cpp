@@ -297,16 +297,44 @@
     字段 `milk_with`（手持物品名）+ `milk_gives`（产出物品名），必须同时
     给、非空字符串，init 交叉校验两物品存在。当前：cow（`bucket` →
     `milk_bucket`）
-  - **右键顺序**（Phase 43 更新）：食物 → **饮用** → launcher → **挤奶**
-    → interact → 染色 → 放置。挤奶 = 准星命中（近战目标：kReach 5 + 方块
-    遮挡，复用 `targetMob`）`milk_with` == 选中物品名的 mob：消耗 1 个手持
-    + 产出 1 个 `milk_gives` + "milk" 音效 + **mob 不受任何影响**（无伤害/
-    死亡/掉落/冷却——v1 规则，MC 有 5 分钟挤奶冷却，见 KNOWN_ISSUES）；
-    背包满 = 不产出但吞点击。选中非 `milk_with` 物品或准星无 mob = 落空
-    继续后续（不吞）
+  - **右键顺序**（Phase 47 更新）：食物 → **饮用** → launcher → **挤奶**
+    → interact → 染色 → **流体桶** → 放置。挤奶 = 准星命中（近战目标：
+    kReach 5 + 方块遮挡，复用 `targetMob`）`milk_with` == 选中物品名的
+    mob：消耗 1 个手持 + 产出 1 个 `milk_gives` + "milk" 音效 + **mob
+    不受任何影响**（无伤害/死亡/掉落/冷却——v1 规则，MC 有 5 分钟挤奶
+    冷却，见 KNOWN_ISSUES）；背包满 = 不产出但吞点击。选中非
+    `milk_with` 物品或准星无 mob = 落空继续后续（不吞）。流体桶在
+    interact **之后**：准星对着炉子/工作台时即使手持水桶也开面板（MC）
   - **物品**：`bucket`（material，max_stack 16 = MC 值，2D 图标）；配方
     `bucket`（shaped `I I`/` I `，I = iron_ingot，3 铁锭 = MC 配方）；
     新内容均不进默认 hotbar / 世界生成
+- **流体桶**（Phase 47，水 = 项目唯一流体，全数据驱动）：
+  - **桶对 = 数据**：物品可选字段 `collects_fluid` + `collects_becomes`
+    （空桶侧：舀水 → 满桶）与 `pours_fluid` + `pours_becomes`（满桶侧：
+    倒水 → 空桶）。流体名 v1 词汇表 = 仅 `"water"`（项目只模拟一种流体，
+    其他名 = 拼写错误/未来特性，解析拒绝）。`*_becomes` 是物品名（init
+    交叉校验 + **对偶对称**：伴侣必须存在且反向指回——同流体、
+    becomes == 本物品名，单边/错配 = init 失败）。两侧互斥（一个物品
+    只是一对的一侧），且与食物/可饮用互斥（右键通道归属）。当前唯一对：
+    `bucket` ⇄ `water_bucket`（material，max_stack 1）
+  - **舀（collect）**：选中空桶侧，**桶目标射线**（`raycastFluid`：DDA
+    首个「非 air 方块 **或** 携带流体」的格——与 `raycastBlock` 共享
+    遍历骨架，差异 = 墙壁**遮挡**（MC：桶用方块目标，不能隔墙舀；普通
+    方块射线穿水而过））落在 **level 8（源）** 格：移除该源 + 手持 1
+    个换成伴侣（满桶）+ "splash" 音效 + `Lighting::updateLocal`（水格
+    光照衰减变化）。流动水（level < 8）**不能舀**（MC 一致）→ 落空
+    继续后续（placeBlock 对 material 是 no-op = 什么都不发生）
+  - **倒（pour）**：选中满桶侧，**放置目标格**（首个非 air 方块的受击
+    面邻格 = `placeBlock` 的同一约定）必须为 air、无流体、不重叠玩家
+    AABB（`canPlaceAt` 的测试）：放一个 level 8 源 + 手持 1 个换成伴侣
+    （空桶）+ "splash" + `Lighting::updateLocal`。倒在水面上/实心格上
+    = 落空 no-op。倒下的源随后走正常的 **FluidSim**（20 Hz 帧确定性：
+    悬空下落、落地四向扩散 level 递减——放出的水与生成湖同一套模拟）
+  - **吞点击语义**：舀/倒成功 = 吞点击（桶永不放方块）；背包满（伴侣
+    无空位）= 无操作但吞点击（MC 一致）；落空（无源/目标无效）= 不吞
+    继续后续（实际效果 = no-op，material 不可放置）
+  - **存档**：物品按名序列化（`water_bucket` 直接可读）、流体格走既有
+    `fluids` 编辑数组——**无 format 变更**（仍是 format 8）
 - **状态效果**（Phase 46，数据驱动，`core/status_effect.{hpp,cpp}` +
   `assets/data/effects/*.json`；效果只作用于玩家，v1 mob 不持效果）：
   - **效果 = 数据**：`data/effects/` 每效果一个 JSON（严格解析 =

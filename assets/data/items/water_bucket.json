@@ -1,0 +1,8 @@
+{
+  "id": "water_bucket",
+  "type": "material",
+  "max_stack": 1,
+  "icon": "water_bucket",
+  "pours_fluid": "water",
+  "pours_becomes": "bucket"
+}

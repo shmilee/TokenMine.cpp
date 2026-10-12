@@ -39,6 +39,18 @@ struct BlockHit {
 std::optional<BlockHit> raycastBlock(const World& world, Vec3 origin,
                                      Vec3 direction, float maxDistance);
 
+// DDA traversal for the FLUID-BUCKET target (Phase 47): the first cell
+// that is a non-air BLOCK or carries a fluid level. Same convention as
+// raycastBlock (the origin cell is not tested, hits at exactly
+// maxDistance count, a zero direction never hits) with one difference:
+// a solid wall OCCLUDES the ray (Minecraft: the bucket uses block
+// targeting — you cannot scoop through a wall), while raycastBlock
+// passes through fluids. The caller then reads the returned cell's
+// fluid level: kMaxFluidLevel (8, a source) is the scoop, anything else
+// (a block, or a flowing cell) means "no action".
+std::optional<BlockPos> raycastFluid(const World& world, Vec3 origin,
+                                     Vec3 direction, float maxDistance);
+
 // Can a block be placed at `cell`?
 //   - the cell must be inside the world's Y range [0, kWorldHeight);
 //   - the cell must not already contain a solid block (air and non-solid
