@@ -9,9 +9,24 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 48 完成时）
+## 现状（Phase 49 完成时）
 
-- 功能阶段 P0–P48 全部完成并提交；P48 = 面包（小麦种植系统 v1；用户
+- 功能阶段 P0–P49 全部完成并提交；P49 = 金苹果（概率掉落 + 吃时给效果；
+   用户"按建议继续下两个阶段" = 建议 1，代理定案最小完整版 = 概率次级
+   掉落系统 + 苹果 + 金苹果，耕地/多掉落留后续）：**概率次级掉落**
+   （block `chance_drop` `{item,count,chance}` 严格三元组，与 `drops`
+   独立【一次破坏最多两个掉落实体】；是否掉出 = `rollChanceDrop(seed,
+   x,y,z,chance)` 确定性纯函数 `block/chance_drop`——位置哈希 + 专用 salt，
+   同世界同格每次破坏同果）+ **吃时给效果**（item `grants_effect`
+   `{name,duration}` 严格配对，**仅食物**【可饮用清效果、通道互斥】；
+   进食通道完整吃下时经 P46 `StatusEffects::apply` 施加，与 mob
+   `on_hit_effect` 同路径）+ init 双硬校验（chance_drop 物品存在 +
+   max_stack / grants_effect 效果名注册）+ 内容：`leaves` 1/128 掉
+   `apple` + `apple`（`restore_hunger` 4 = MC）+ `golden_apple`
+   （`restore_hunger` 4 + 吃给 regeneration 10 s）+ 配方
+   `golden_apple`（shaped GGG/GAG/GGG，MC 镶金）+ 2 图标；**无 format
+   变更**（format 8：实体走既有 `entities`、效果走既有 `player.effects`）；
+   P48 = 面包（小麦种植系统 v1；用户
    "继续建议1" = 第一候选，代理定案最小完整版 = 作物 + 生长引擎 + 收获 +
    面包配方/食物，金苹果/熔岩留后续）：**生长纯数据**（block `grows_to`
    下一阶 + `growth_ticks` 平均 tick 进一阶，严格配对 + init 硬校验指向
@@ -61,10 +76,10 @@
   （P28 遗留"熟肉"）、P41 = wool 染色框架（P12/P20 遗留"wool 无用途/无
   染色"；atlas 4×8→8×8 → base18 于 P41 重锚）、P42 = 弓后续 2、P43 =
   牛奶桶最小项（饮用通道 + 挤奶）。
-- 测试 **866/866**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+- 测试 **891/891**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
 - 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P41 重锚【atlas
-  8×8】，P42/P43/P44/P45/P46/P47/P48 过门 = 第 16/17/18/19/20/21/22 次结构性
-  免疫、无重锚）。
+  8×8】，P42/P43/P44/P45/P46/P47/P48/P49 过门 = 第 16/17/18/19/20/21/22/23
+  次结构性免疫、无重锚）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 
 ## 命令

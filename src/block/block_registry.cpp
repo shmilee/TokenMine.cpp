@@ -113,6 +113,31 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "growth_ticks", "number",
                    [&](const Json& v) { out.growthTicks = v.asInt(); });
     MC_TRY(r);
+    // Chance secondary drop (Phase 49): an OPTIONAL object
+    // {"item": <name>, "count": N, "chance": (0,1]} — an extra drop rolled
+    // per break, independent of the primary `drops`. Parsed field-by-field
+    // below (the three keys are a strict triple, validated after the loop).
+    if (const Json* cd = p->find("chance_drop")) {
+        if (!cd->isObject()) {
+            return MC_FAIL("block property 'chance_drop' must be an object "
+                           "{\"item\": ..., \"count\": ..., \"chance\": ...}");
+        }
+        for (const auto& [key, value] : cd->members()) {
+            if (key != "item" && key != "count" && key != "chance") {
+                return MC_FAIL("block property 'chance_drop' has an unknown "
+                               "field '" + key + "'");
+            }
+        }
+        r = checkField(*cd, "item", "string",
+                       [&](const Json& v) { out.chanceDropItem = v.asString(); });
+        MC_TRY(r);
+        r = checkField(*cd, "count", "number",
+                       [&](const Json& v) { out.chanceDropCount = v.asInt(); });
+        MC_TRY(r);
+        r = checkField(*cd, "chance", "number",
+                       [&](const Json& v) { out.chanceDropChance = v.asDouble(); });
+        MC_TRY(r);
+    }
 
     if (out.dropsCount < 1 || out.dropsCount > 64) {
         return MC_FAIL("'drops_count' must be in [1, 64], got " +
@@ -196,6 +221,26 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
         return MC_FAIL("'grows_to' requires 'growth_ticks' in [1, 1000000], "
                        "got " +
                        std::to_string(out.growthTicks));
+    }
+    // Chance secondary drop (Phase 49): a present 'chance_drop' object is a
+    // strict TRIPLE — item (non-empty), count ([1,64]), chance ((0,1]).
+    // (The item's existence + max-stack fit are cross-checked at game init,
+    // the drops discipline.)
+    if (p->find("chance_drop") != nullptr) {
+        if (out.chanceDropItem.empty()) {
+            return MC_FAIL("block property 'chance_drop.item' must be a "
+                           "non-empty item name");
+        }
+        if (out.chanceDropCount < 1 || out.chanceDropCount > 64) {
+            return MC_FAIL("block property 'chance_drop.count' must be in "
+                           "[1, 64], got " +
+                           std::to_string(out.chanceDropCount));
+        }
+        if (out.chanceDropChance <= 0.0 || out.chanceDropChance > 1.0) {
+            return MC_FAIL("block property 'chance_drop.chance' must be in "
+                           "(0, 1], got " +
+                           std::to_string(out.chanceDropChance));
+        }
     }
     return {};
 }

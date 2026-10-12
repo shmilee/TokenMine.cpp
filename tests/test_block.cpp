@@ -684,3 +684,115 @@ TEST(BlockRegistryTest, GrowthTicksBoundaryValuesAccepted) {
         parseDef(cropDef("a", R"("grows_to":"b","growth_ticks":1000000)")));
     ASSERT_TRUE(rHi.ok()) << rHi.error().message;
 }
+
+// ---------------------------------------------------------------------------
+// Chance secondary drop (Phase 49): chance_drop is a strict triple
+// (item + count + chance); absent = no chance drop (the default).
+// ---------------------------------------------------------------------------
+
+// A default block def parameterized by the full `properties` object text.
+std::string propsDef(const std::string& props) {
+    return "{\"id\":\"leaves\",\"properties\":" + props +
+           ",\"model\":{\"textures\":{\"top\":\"t\",\"side\":\"t\","
+           "\"bottom\":\"t\"}}}";
+}
+
+TEST(BlockRegistryTest, ParsesChanceDrop) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(propsDef(
+        R"({"drops":"leaves","chance_drop":{"item":"apple","count":1,
+           "chance":0.0078125}})")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Block& b = reg.at(*r);
+    EXPECT_EQ(b.properties.drops, "leaves");
+    EXPECT_EQ(b.properties.chanceDropItem, "apple");
+    EXPECT_EQ(b.properties.chanceDropCount, 1);
+    EXPECT_DOUBLE_EQ(b.properties.chanceDropChance, 0.0078125);
+}
+
+TEST(BlockRegistryTest, ChanceDropAbsentByDefault) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(minimalDef("stone")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Block& b = reg.at(*r);
+    EXPECT_TRUE(b.properties.chanceDropItem.empty());
+    EXPECT_EQ(b.properties.chanceDropCount, 0);
+    EXPECT_DOUBLE_EQ(b.properties.chanceDropChance, 0.0);
+}
+
+TEST(BlockRegistryTest, ChanceDropMustBeObject) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(propsDef(R"({"chance_drop":"apple"})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("must be an object"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, ChanceDropRejectsUnknownField) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(propsDef(
+        R"({"chance_drop":{"item":"apple","count":1,"chance":0.5,"foo":1}})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("unknown field"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, ChanceDropRequiresItem) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        propsDef(R"({"chance_drop":{"count":1,"chance":0.5}})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("non-empty"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, ChanceDropRequiresCount) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        propsDef(R"({"chance_drop":{"item":"apple","chance":0.5}})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("[1, 64]"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, ChanceDropRequiresChance) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        propsDef(R"({"chance_drop":{"item":"apple","count":1}})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("(0, 1]"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, ChanceDropCountOutOfRange) {
+    auto badLo = parseDef(
+        propsDef(R"({"chance_drop":{"item":"apple","count":0,"chance":0.5}})"));
+    BlockRegistry regLo;
+    auto rLo = regLo.registerBlock(badLo);
+    ASSERT_FALSE(rLo.ok());
+    EXPECT_NE(rLo.error().message.find("[1, 64]"), std::string::npos);
+    auto badHi = parseDef(
+        propsDef(R"({"chance_drop":{"item":"apple","count":65,"chance":0.5}})"));
+    BlockRegistry regHi;
+    auto rHi = regHi.registerBlock(badHi);
+    ASSERT_FALSE(rHi.ok());
+    EXPECT_NE(rHi.error().message.find("[1, 64]"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, ChanceDropChanceOutOfRange) {
+    auto zero = parseDef(
+        propsDef(R"({"chance_drop":{"item":"apple","count":1,"chance":0}})"));
+    BlockRegistry regZero;
+    auto rZero = regZero.registerBlock(zero);
+    ASSERT_FALSE(rZero.ok());
+    EXPECT_NE(rZero.error().message.find("(0, 1]"), std::string::npos);
+    auto big = parseDef(
+        propsDef(R"({"chance_drop":{"item":"apple","count":1,"chance":1.5}})"));
+    BlockRegistry regBig;
+    auto rBig = regBig.registerBlock(big);
+    ASSERT_FALSE(rBig.ok());
+    EXPECT_NE(rBig.error().message.find("(0, 1]"), std::string::npos);
+    // The inclusive upper boundary 1.0 is accepted (a guaranteed drop).
+    auto one = parseDef(
+        propsDef(R"({"chance_drop":{"item":"apple","count":1,"chance":1.0}})"));
+    BlockRegistry regOne;
+    auto rOne = regOne.registerBlock(one);
+    ASSERT_TRUE(rOne.ok()) << rOne.error().message;
+    EXPECT_DOUBLE_EQ(regOne.at(*rOne).properties.chanceDropChance, 1.0);
+}

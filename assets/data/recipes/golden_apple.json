@@ -1,0 +1,14 @@
+{
+  "id": "golden_apple",
+  "type": "shaped",
+  "output": { "item": "golden_apple", "count": 1 },
+  "pattern": [
+    "GGG",
+    "GAG",
+    "GGG"
+  ],
+  "key": {
+    "G": "gold_ingot",
+    "A": "apple"
+  }
+}

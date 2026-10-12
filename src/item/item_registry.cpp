@@ -313,6 +313,45 @@ Result<void> ItemRegistry::parseFluidBucket(const Json& def, Item& out) {
     return {};
 }
 
+Result<void> ItemRegistry::parseGrant(const Json& def, Item& out) {
+    // Optional 'grants_effect' (Phase 49, golden apple): the status effect
+    // granted when a full EAT completes — {"name": <effect>, "duration":
+    // <seconds>}. Both keys are required (the on_hit_effect pair discipline);
+    // the effect name is cross-checked against the EffectRegistry at game
+    // init (the ammo pattern). Only FOOD grants an effect on eat (a
+    // drinkable CLEARS effects on drink, so the channels are exclusive).
+    if (const Json* ge = def.find("grants_effect")) {
+        if (!ge->isObject()) {
+            return MC_FAIL("'grants_effect' must be an object "
+                           "{\"name\": ..., \"duration\": ...}");
+        }
+        for (const auto& [key, value] : ge->members()) {
+            if (key != "name" && key != "duration") {
+                return MC_FAIL("'grants_effect' has an unknown field '" +
+                               key + "'");
+            }
+        }
+        const Json* nm = ge->find("name");
+        if (nm == nullptr || !nm->isString() || nm->asString().empty()) {
+            return MC_FAIL("'grants_effect' requires a non-empty string "
+                           "'name' (effect id)");
+        }
+        const Json* du = ge->find("duration");
+        if (du == nullptr || !du->isNumber() || du->asDouble() <= 0.0) {
+            return MC_FAIL("'grants_effect' requires 'duration' (seconds) > 0");
+        }
+        // Only food grants an effect on eat (the drinkable clears effects,
+        // so the two channels are mutually exclusive).
+        if (out.restoreHunger <= 0) {
+            return MC_FAIL("'grants_effect' requires 'restore_hunger' (only "
+                           "food grants an effect on eat)");
+        }
+        out.grantsEffect = nm->asString();
+        out.grantsEffectDuration = du->asDouble();
+    }
+    return {};
+}
+
 Result<void> ItemRegistry::parseTool(const Json& def, Item& out) {
     if (const Json* tool = def.find("tool")) {
         if (!tool->isObject()) {
@@ -377,6 +416,7 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
             key != "drink_time" && key != "returns_item" &&
             key != "collects_fluid" && key != "collects_becomes" &&
             key != "pours_fluid" && key != "pours_becomes" &&
+            key != "grants_effect" &&
             key != "icon") {
             MC_LOG_WARN("Item '" + name + "': unknown field '" + key +
                         "' ignored");
@@ -401,6 +441,8 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     r = parseDye(def, item);
     MC_TRY(r);
     r = parseDrink(def, item); // after parseFood: the exclusivity check
+    MC_TRY(r);
+    r = parseGrant(def, item); // after parseFood/parseDrink: food-only check
     MC_TRY(r);
     r = parseFluidBucket(def, item); // after parseFood/parseDrink: the
                                      // channel-ownership exclusivity

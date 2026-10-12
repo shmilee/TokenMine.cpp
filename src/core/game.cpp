@@ -20,6 +20,7 @@
 #include "entity/item_entity.hpp"
 #include "entity/mob_entity.hpp"
 #include "entity/mob_mesh.hpp"
+#include "block/chance_drop.hpp"
 #include "world/growth.hpp"
 #include "world/noise.hpp"
 #include "ui/font.hpp"
@@ -450,6 +451,28 @@ Result<void> Game::buildScene() {
         }
     }
 
+    // Strict data check (Phase 49): a block's chance_drop item must name a
+    // registered item whose max stack fits chanceDropCount (the drops
+    // discipline — a typo in the extra-drop name fails init loudly).
+    for (const BlockID id : m_blocks.allIds()) {
+        const Block& b = m_blocks.at(id);
+        if (b.properties.chanceDropItem.empty()) {
+            continue;
+        }
+        const ItemID cdId = m_items.idForName(b.properties.chanceDropItem);
+        if (!cdId.valid()) {
+            return MC_FAIL("block '" + b.name + "' chance_drop names unknown "
+                           "item '" + b.properties.chanceDropItem + "'");
+        }
+        if (b.properties.chanceDropCount > m_items.at(cdId).maxStack) {
+            return MC_FAIL("block '" + b.name + "' chance_drop yields " +
+                           std::to_string(b.properties.chanceDropCount) +
+                           " of '" + b.properties.chanceDropItem +
+                           "' but its max stack is " +
+                           std::to_string(m_items.at(cdId).maxStack));
+        }
+    }
+
     // -- mobs (Phase 20): data-driven types + spawn config ------------------
     // Types come from data/mobs/*.json (one file per mob); the spawn
     // cadence/ring/cap from data/mob_spawning.json; the enable flag from
@@ -528,6 +551,14 @@ Result<void> Game::buildScene() {
             return MC_FAIL("mob '" + mob.name + "' on_hit_effect references "
                            "the unregistered effect '" +
                            mob.properties.hitEffectName + "'");
+        }
+    }
+    for (const ItemID iid : m_items.allIds()) {
+        const Item& it = m_items.at(iid);
+        if (!it.grantsEffect.empty() &&
+            m_effects.findByName(it.grantsEffect) == nullptr) {
+            return MC_FAIL("item '" + it.name + "' grants_effect references "
+                           "the unregistered effect '" + it.grantsEffect + "'");
         }
     }
 
@@ -2096,15 +2127,31 @@ void Game::breakBlock(const BlockHit& hit) {
     // center with zero velocity, so its rest position is exact and headless
     // runs stay byte-reproducible (see ItemEntity).
     const Block& block = m_blocks.at(id);
+    const Vec3 dropPos {static_cast<float>(hit.block.x) + 0.5f,
+                        static_cast<float>(hit.block.y) + 0.5f,
+                        static_cast<float>(hit.block.z) + 0.5f};
     if (!block.properties.drops.empty()) {
         const Item& dropItem = m_items.at(m_items.idForName(block.properties.drops));
-        const Vec3 dropPos {static_cast<float>(hit.block.x) + 0.5f,
-                            static_cast<float>(hit.block.y) + 0.5f,
-                            static_cast<float>(hit.block.z) + 0.5f};
         // dropsCount (validated at init to fit the item's max stack).
         m_entities.push_back(std::make_unique<ItemEntity>(
             m_world, m_blocks, dropItem.name, dropItem.maxStack,
             block.properties.dropsCount, dropPos));
+    }
+    // Chance secondary drop (Phase 49): an OPTIONAL extra item rolled per
+    // break, independent of (and in addition to) the primary drop. The roll
+    // is a pure function of (world seed, position, chance) — headless
+    // byte-reproducible (no wall-clock, no per-instance RNG). Spawns at the
+    // same block center (the deterministic rest position, like the primary).
+    if (!block.properties.chanceDropItem.empty()) {
+        if (rollChanceDrop(static_cast<std::uint64_t>(m_generator->seed()),
+                           hit.block.x, hit.block.y, hit.block.z,
+                           block.properties.chanceDropChance)) {
+            const Item& cdItem =
+                m_items.at(m_items.idForName(block.properties.chanceDropItem));
+            m_entities.push_back(std::make_unique<ItemEntity>(
+                m_world, m_blocks, cdItem.name, cdItem.maxStack,
+                block.properties.chanceDropCount, dropPos));
+        }
     }
 
     // Break particles (Phase 15): a deterministic burst (world seed mixed
@@ -2444,6 +2491,14 @@ void Game::updateEatChannel(double dt) {
             m_player->restoreHunger(static_cast<float>(item.restoreHunger));
             m_player->restoreSaturation(
                 static_cast<float>(item.restoreHunger) * kSaturationFactor);
+            // Food that grants a status effect on a full eat (Phase 49,
+            // golden apple): applied exactly where the mob melee-hit effect
+            // is (name resolved against the EffectRegistry, cross-checked
+            // at init — the ammo pattern).
+            if (!item.grantsEffect.empty()) {
+                m_playerEffects.apply(m_effects.idForName(item.grantsEffect),
+                                      item.grantsEffectDuration);
+            }
             m_sound.play("eat");
         } else {
             if (!item.returnsItem.empty()) {

@@ -855,3 +855,103 @@ TEST(ItemRegistryTest, BucketConflictsWithFoodAndDrinkable) {
                              "drink_time":1.6})"))
                      .ok());
 }
+
+// -- Status-effect grant on eat (Phase 49: golden_apple) ---------------------
+
+TEST(ItemRegistryTest, ParsesGrantEffect) {
+    // The golden apple: food (+4, the Minecraft value) that grants
+    // regeneration for 10 s when a full eat completes. The effect NAME
+    // existence is cross-checked against the EffectRegistry at game init
+    // (the ammo pattern), not here.
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"golden_apple","type":"material","max_stack":64,
+                      "icon":"golden_apple","restore_hunger":4,
+                      "grants_effect":{"name":"regeneration","duration":10.0}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Item& it = items.at(*r);
+    EXPECT_EQ(it.grantsEffect, "regeneration");
+    EXPECT_DOUBLE_EQ(it.grantsEffectDuration, 10.0);
+}
+
+TEST(ItemRegistryTest, GrantEffectAbsentByDefault) {
+    // Every pre-Phase-49 item grants nothing on eat.
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"bread","type":"material","restore_hunger":5})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Item& it = items.at(*r);
+    EXPECT_TRUE(it.grantsEffect.empty());
+    EXPECT_DOUBLE_EQ(it.grantsEffectDuration, 0.0);
+}
+
+TEST(ItemRegistryTest, GrantEffectMustBeObject) {
+    ItemRegistry items;
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material",
+                                   "restore_hunger":3,"grants_effect":"x"})"))
+                     .ok());
+}
+
+TEST(ItemRegistryTest, GrantEffectRejectsUnknownField) {
+    ItemRegistry items;
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material",
+                                   "restore_hunger":3,
+                                   "grants_effect":{"name":"x","duration":5,
+                                                    "potency":2}})"))
+                     .ok());
+}
+
+TEST(ItemRegistryTest, GrantEffectRequiresName) {
+    ItemRegistry items;
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material",
+                                   "restore_hunger":3,
+                                   "grants_effect":{"duration":5}})"))
+                     .ok());
+    // An explicit empty name is a typo (the on_hit_effect discipline).
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material",
+                                   "restore_hunger":3,
+                                   "grants_effect":{"name":"","duration":5}})"))
+                     .ok());
+}
+
+TEST(ItemRegistryTest, GrantEffectRequiresPositiveDuration) {
+    ItemRegistry items;
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material",
+                                   "restore_hunger":3,
+                                   "grants_effect":{"name":"x"}})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material",
+                                   "restore_hunger":3,
+                                   "grants_effect":{"name":"x","duration":0}})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material",
+                                   "restore_hunger":3,
+                                   "grants_effect":{"name":"x","duration":-3}})"))
+                     .ok());
+}
+
+TEST(ItemRegistryTest, GrantEffectRequiresFood) {
+    // Only FOOD grants an effect on eat: a drinkable CLEARS effects on
+    // drink, and a non-food has no eat channel at all (the grant would be
+    // a dead field).
+    ItemRegistry items;
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material",
+                                   "grants_effect":{"name":"x","duration":5}})"))
+                     .ok());
+    // A drinkable with the grant: rejected (the food/drink exclusivity
+    // fires first; either way the item cannot be registered).
+    ItemRegistry items2;
+    EXPECT_FALSE(items2.registerItem(
+                     parseJson(R"({"id":"c","type":"material",
+                                   "drink_time":1.6,
+                                   "grants_effect":{"name":"x","duration":5}})"))
+                     .ok());
+}

@@ -1,0 +1,8 @@
+{
+  "id": "golden_apple",
+  "type": "material",
+  "max_stack": 64,
+  "icon": "golden_apple",
+  "restore_hunger": 4,
+  "grants_effect": { "name": "regeneration", "duration": 10.0 }
+}

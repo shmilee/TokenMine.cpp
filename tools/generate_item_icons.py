@@ -634,6 +634,71 @@ def bread():
     return px
 
 
+def apple():
+    """Apple (Phase 49, the rare leaf chance-drop): a red fruit with a
+    brown stem and a green leaf — the Minecraft apple item look."""
+    px = blank()
+    red = (202, 54, 54)
+    red_hi = (238, 92, 92)
+    brown = (122, 82, 48)
+    green = (96, 158, 54)
+    # Body: a circle centered at design (8, 10) (y 5..14).
+    for y in range(5, 15):
+        for x in range(3, 13):
+            nx = (x - 7.5) / 4.2
+            ny = (y - 9.5) / 4.6
+            if nx * nx + ny * ny <= 1.0:
+                setpx2(px, x, y, red, salt=81)
+    # Bright glints on the upper-left (the shine of the ripe skin).
+    for (x, y) in ((5, 7), (5, 8), (6, 8)):
+        setpx2(px, x, y, red_hi, salt=82, amount=5)
+    # Stem: a short brown column above the body.
+    setpx2(px, 7, 3, brown, salt=83)
+    setpx2(px, 7, 4, brown, salt=83)
+    # Leaf: green to the right of the stem.
+    setpx2(px, 8, 3, green, salt=84)
+    setpx2(px, 9, 3, green, salt=84, amount=6)
+    setpx2(px, 9, 4, green, salt=84, amount=6)
+    return px
+
+
+def golden_apple():
+    """Golden apple (Phase 49, the crafted food that grants regeneration
+    on eat): the apple shape in gold with bright glints — the Minecraft
+    golden apple item look."""
+    px = blank()
+    gold = (228, 188, 74)
+    gold_hi = (248, 226, 148)
+    gold_dark = (196, 152, 54)
+    brown = (122, 82, 48)
+    green = (96, 158, 54)
+    # Body: a gold circle, the same geometry as the red apple (y 5..14).
+    for y in range(5, 15):
+        for x in range(3, 13):
+            nx = (x - 7.5) / 4.2
+            ny = (y - 9.5) / 4.6
+            if nx * nx + ny * ny <= 1.0:
+                setpx2(px, x, y, gold, salt=91)
+    # A darker rim along the bottom edge (the gold catching less light).
+    for y in range(5, 15):
+        for x in range(3, 13):
+            nx = (x - 7.5) / 4.2
+            ny = (y - 9.5) / 4.6
+            if 1.0 <= nx * nx + ny * ny <= 1.18 and y >= 11:
+                setpx2(px, x, y, gold_dark, salt=92, amount=6)
+    # Bright glints on the upper-left (the shine of the polished gold).
+    for (x, y) in ((5, 7), (5, 8), (6, 8)):
+        setpx2(px, x, y, gold_hi, salt=93, amount=5)
+    # Stem: a short brown column above the body (same as the apple).
+    setpx2(px, 7, 3, brown, salt=94)
+    setpx2(px, 7, 4, brown, salt=94)
+    # Leaf: green to the right of the stem.
+    setpx2(px, 8, 3, green, salt=95)
+    setpx2(px, 9, 3, green, salt=95, amount=6)
+    setpx2(px, 9, 4, green, salt=95, amount=6)
+    return px
+
+
 ITEMS = {
     "planks": planks,
     "stick": stick,
@@ -662,6 +727,8 @@ ITEMS = {
     "water_bucket": water_bucket_icon,
     "wheat": wheat,
     "bread": bread,
+    "apple": apple,
+    "golden_apple": golden_apple,
 }
 
 

@@ -397,3 +397,90 @@ TEST(BreadRecipeTest, ExtraWheatSurvives) {
     consumeGrid(grid, m);
     EXPECT_EQ(grid.at(0), (ItemStack {f.wheat, 2}));
 }
+
+// -- Phase 49: golden apple (8 gold ingots around 1 apple, shaped) -----------
+
+namespace {
+
+struct GoldenAppleFixture {
+    ItemRegistry items;
+    RecipeRegistry recipes;
+    ItemID apple;
+    ItemID gold;
+    ItemID goldenApple;
+
+    GoldenAppleFixture() {
+        auto r = items.registerItem(
+            parseJson(R"({"id":"apple","type":"material","restore_hunger":4})"));
+        if (!r.ok()) {
+            ADD_FAILURE() << r.error().message;
+        }
+        r = items.registerItem(
+            parseJson(R"({"id":"gold_ingot","type":"material"})"));
+        if (!r.ok()) {
+            ADD_FAILURE() << r.error().message;
+        }
+        r = items.registerItem(parseJson(
+            R"({"id":"golden_apple","type":"material","restore_hunger":4,
+                "grants_effect":{"name":"regeneration","duration":10.0}})"));
+        if (!r.ok()) {
+            ADD_FAILURE() << r.error().message;
+        }
+        apple = items.idForName("apple");
+        gold = items.idForName("gold_ingot");
+        goldenApple = items.idForName("golden_apple");
+        auto rr = recipes.registerRecipe(
+            parseJson(R"({"id":"golden_apple","type":"shaped",
+                          "output":{"item":"golden_apple","count":1},
+                          "pattern":["GGG","GAG","GGG"],
+                          "key":{"G":"gold_ingot","A":"apple"}})"),
+            items);
+        if (!rr.ok()) {
+            ADD_FAILURE() << rr.error().message;
+        }
+    }
+};
+
+} // namespace
+
+TEST(GoldenAppleRecipeTest, EightGoldAroundAppleMatches) {
+    GoldenAppleFixture f;
+    CraftingGrid grid;
+    grid.setSlot(4, (ItemStack {f.apple, 1})); // the center
+    for (int i = 0; i < 9; ++i) {
+        if (i != 4) {
+            grid.setSlot(i, (ItemStack {f.gold, 1}));
+        }
+    }
+    const GridMatch m = matchGridRecipe(grid, f.recipes);
+    ASSERT_TRUE(m.matched());
+    EXPECT_EQ(m.recipe->id, "golden_apple");
+    EXPECT_EQ(m.recipe->output, f.goldenApple);
+    consumeGrid(grid, m);
+    EXPECT_TRUE(grid.empty()); // all 9 inputs consumed
+}
+
+TEST(GoldenAppleRecipeTest, GoldShortageDoesNotMatch) {
+    GoldenAppleFixture f;
+    // Only 7 of the 8 surrounding ingots (slots 0 and 8 missing).
+    CraftingGrid grid;
+    grid.setSlot(4, (ItemStack {f.apple, 1}));
+    for (int i = 1; i < 8; ++i) {
+        grid.setSlot(i, (ItemStack {f.gold, 1}));
+    }
+    const GridMatch m = matchGridRecipe(grid, f.recipes);
+    EXPECT_FALSE(m.matched());
+}
+
+TEST(GoldenAppleRecipeTest, AppleNotInCenterDoesNotMatch) {
+    GoldenAppleFixture f;
+    // The apple in the corner, gold filling the rest: the shape requires
+    // the apple at the pattern center (slot 4).
+    CraftingGrid grid;
+    grid.setSlot(0, (ItemStack {f.apple, 1}));
+    for (int i = 1; i < 9; ++i) {
+        grid.setSlot(i, (ItemStack {f.gold, 1}));
+    }
+    const GridMatch m = matchGridRecipe(grid, f.recipes);
+    EXPECT_FALSE(m.matched());
+}

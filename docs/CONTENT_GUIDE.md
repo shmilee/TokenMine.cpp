@@ -69,7 +69,11 @@
   "smelt_time": 10.0,               // 可选（Phase 40）：单格熔炼秒数，(0,100]，默认 10（MC 炉子时长）；仅可熔炼时有意义
   "fuel_time": 80.0,                // 可选（Phase 40）：单格燃料燃烧秒数，(0,1000]；缺省=非燃料（显式 0 拒绝）
   "drink_time": 1.6,                // 可选（Phase 43）：饮用通道秒数，(0,10]；present=可饮用容器（与 restore_hunger 互斥）
-  "returns_item": "bucket"          // 可选（Phase 43）：喝完返还的容器物品名（须存在，init 交叉校验）；要求 drink_time 存在
+  "returns_item": "bucket",         // 可选（Phase 43）：喝完返还的容器物品名（须存在，init 交叉校验）；要求 drink_time 存在
+  "grants_effect": {                // 可选（Phase 49）：完整吃下时施加的状态效果——仅食物（restore_hunger > 0）
+    "name": "regeneration",         //   可给（可饮用物品喝下会清效果，通道互斥；非食物带 grants_effect = 解析拒绝）。
+    "duration": 10.0                //   name+duration 严格配对（on_hit_effect 纪律），name = 已注册效果名
+  }                                 //   （init 交叉校验），duration > 0
   "max_stack": 1,                   // 1..64，默认 64
   "icon": "wooden_pickaxe"          // UI 图标（Phase 15）：assets/textures/items/<icon>.png
 }
@@ -109,6 +113,19 @@
    block item 与方块同名，所以 `grass → "dirt"` 表示破坏 grass 掉 dirt；
    矿石掉材料物品（`iron_ore → "iron_ingot"`）。`drops_count`（1..64，默认 1）
    是单次破坏的掉落数量，须 ≤ 掉落物品的 max_stack（init 交叉校验）。
+   **概率次级掉落**（Phase 49）：可选 `chance_drop` 对象，与 `drops` **独立**
+   （一次破坏最多产生两个掉落物实体）：
+
+   ```json
+   "chance_drop": { "item": "apple", "count": 1, "chance": 0.0078125 }
+   ```
+
+   `item`+`count`+`chance` 是**严格三元组**（缺一 = 解析拒绝；`count` 1..64；
+   `chance` ∈ (0,1]，1 = 保底掉落）；`item` 须是已注册物品且 `count` ≤ 其
+   max_stack（init 交叉校验，drops 纪律）。是否掉出由**确定性哈希**决定——
+   `rollChanceDrop(world_seed, x, y, z, chance)`（`src/block/chance_drop`，
+   splitmix64 + 位置 hash3 + 专用 salt，纯函数）：**同一世界同一格每次破坏
+   结果相同**（无 per-instance RNG、无墙钟），无输入运行字节可复现。
    `hardness` 驱动破坏耗时（按住左键，`1.5s × hardness ÷ 选中物品 break speed`，
    hardness ≤0 且可破坏=即时破坏）。
    **十字植物形状**（Phase 45）：`model` 加 `"shape": "cross"`，`textures`
@@ -285,9 +302,11 @@ Mob 章节。
    [0,100]）+ `negative`（bool，缺省 false；牛奶只清负面）+ `icon`
    （条带 tile 索引，必填）。**no-op 拒绝**：无 tick 且
    `melee_penalty` = 0 = 报错。id 非空且唯一
-3. 来源（v1 两条）：
+3. 来源（v1 三条）：
    - **mob 命中**：`assets/data/mobs/<id>.json` 加 `on_hit_effect`
      （见 Mob 章节）——近战命中施加
+   - **进食施加**（Phase 49）：物品加 `grants_effect`（见物品模板）——
+     完整吃下时施加（金苹果 → regeneration 10 s）
    - **存档注入**：`player.effects: [{"name": "<id>", "remaining": <秒>}]`
      （format 8；E2E 场景用）
 4. 机制自动生效，无需改核心：真实 dt 倒计时 + 每跨 interval 结算一次
@@ -298,7 +317,8 @@ Mob 章节。
 
 当前 3 种：`poison`（damage 1 / 2.5 s、min_health 1、负面——spider
 近战命中 15 s 毒源）、`weakness`（melee_penalty 4、负面——v1 无游戏内
-来源）、`regeneration`（heal 1 / 4.5 s、正面——v1 无游戏内来源）。
+来源）、`regeneration`（heal 1 / 4.5 s、正面——金苹果吃时给 10 s，
+Phase 49）。
 
 ## 新增一个流体桶（无需改核心代码，Phase 47）
 
@@ -386,8 +406,33 @@ v1 只有一种流体（**水** = 项目唯一模拟流体，流体名词汇表 
 6. **世界生成不放作物**（v1）：自然界的作物只来自玩家种植，`rescanCrops`
    对新生世界扫到空集。
 
-当前唯一作物：`wheat_1`→…→`wheat_7`（growth_ticks 360，约 36s 成熟），
+当前唯一作物：`wheat_1`→…→`wheat_7`（growth_ticks 360，约 36 s 成熟），
 收获 `wheat`（3 wheat → 1 bread，bread `restore_hunger` 5）。
+
+## 概率掉落与"吃时给效果"的食物（Phase 49）
+
+两个独立的小扩展，都是纯数据 + 注册表严格校验，不改核心玩法逻辑：
+
+1. **概率次级掉落**（方块属性 `chance_drop`，见上方「新增一个方块」）：
+   首个使用者 = `leaves` 的 `"chance_drop": { "item": "apple", "count": 1,
+   "chance": 0.0078125 }`（1/128，Minecraft 橡树叶掉苹果 ~0.5% 同款量级）。
+   加"某方块偶尔掉 X" = 在该方块 JSON 加一个 `chance_drop` 对象 + 物品
+   JSON/图标，零核心代码。每格至多一个次级掉落（v1；加权多掉落列表未
+   引入——见 KNOWN_ISSUES）。
+2. **吃时给效果的食物**（物品字段 `grants_effect`，见上方物品模板）：
+   首个使用者 = `golden_apple`（`"grants_effect": { "name": "regeneration",
+   "duration": 10.0 }`）。进食通道完整吃下（1.6 s）时在恢复饥饿的同一处
+   施加效果（与 mob `on_hit_effect` 同一条 `StatusEffects::apply` 路径）——
+   效果名/时长全数据驱动，效果本体在 `assets/data/effects/*.json`（Phase
+   46 框架）。加"吃了给某效果"的食物 = 物品 JSON 加 `grants_effect`（须
+   是食物），零核心代码。
+3. **内容**：`apple`（材料，restore_hunger 4 = MC，max_stack 64）+
+   `golden_apple`（材料，restore_hunger 4 + 吃给 regeneration 10 s）+
+   shaped 配方 `GGG/GAG/GGG`（G=gold_ingot，A=apple，MC 同款 3×3 镶金）。
+   纹理：2 个物品图标（`tools/generate_item_icons.py` 的 `apple` /
+   `golden_apple`）。
+4. **无 format 变更**（format 8：掉落物实体走既有 `entities`，效果走既有
+   `player.effects`）。
 
 ## 调节玩家参数（config/config.json `player.*`，Phase 32）
 

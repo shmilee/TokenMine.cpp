@@ -81,6 +81,18 @@ struct BlockProperties {
     // How many of the drop item one break yields (1..64, must fit in one
     // stack of the drop item — cross-checked at game init).
     int dropsCount = 1;
+    // Chance secondary drop (Phase 49): an OPTIONAL extra drop rolled per
+    // break — INDEPENDENT of (and in addition to) the primary `drops`.
+    // `chanceDropItem` names the extra item (empty = no chance drop, the
+    // default); `chanceDropCount` how many (1..64, fits one stack);
+    // `chanceDropChance` the per-break probability in (0, 1] (a break spawns
+    // the extra item when a deterministic hash of world-seed + position
+    // passes — see block/chance_drop; headless byte-reproducible). Validated
+    // at data load (pairing + range) and at game init (the item must exist
+    // and its max stack fit the count — the drops discipline).
+    std::string chanceDropItem;
+    int chanceDropCount = 0;
+    double chanceDropChance = 0.0;
     // Right-click interaction (Phase 17): kInteractCraftingTable opens the
     // crafting-table GUI instead of placing a block. Empty (the default) =
     // no special interaction. Validated against the known set at data load.

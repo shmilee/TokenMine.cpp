@@ -40,6 +40,7 @@ add_library(mc_core STATIC
     src/core/thread_pool.cpp
     src/core/game.cpp
     src/block/block_registry.cpp
+    src/block/chance_drop.cpp
     src/entity/arrow_mesh.cpp
     src/entity/entity.cpp
     src/entity/item_entity.cpp
@@ -112,6 +113,7 @@ add_executable(minecraft_tests
     tests/test_day_cycle.cpp
     tests/test_fluid.cpp
     tests/test_growth.cpp
+    tests/test_chance_drop.cpp
     tests/test_lighting.cpp
     tests/test_arrow.cpp
     tests/test_bow.cpp

@@ -120,6 +120,16 @@ struct Item {
     // valid on a drinkable item (rejected otherwise); the name's
     // existence is cross-checked at game init (the ammo pattern).
     std::string returnsItem;
+    // Phase 49: status effect granted when a full EAT completes (optional
+    // data field 'grants_effect', an object {"name": <effect>, "duration":
+    // <seconds>} — the on_hit_effect pair discipline). grantsEffect non-empty
+    // marks the item as granting that effect on eat (the golden apple grants
+    // regeneration). The effect name is cross-checked against the
+    // EffectRegistry at game init (the ammo pattern). Only valid on FOOD
+    // (restoreHunger > 0): a drinkable CLEARS effects on drink, so it cannot
+    // also grant one (mutual exclusion enforced at parse).
+    std::string grantsEffect;
+    double grantsEffectDuration = 0.0;
     // Phase 47: fluid bucket, COLLECT side (optional data fields
     // 'collects_fluid' + 'collects_becomes'). collectsFluid non-empty
     // marks the item as an EMPTY bucket of the named fluid (v1
