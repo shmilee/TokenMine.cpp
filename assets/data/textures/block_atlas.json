@@ -241,6 +241,14 @@
     "wheat_7": [
       7,
       3
+    ],
+    "farmland_top": [
+      7,
+      4
+    ],
+    "farmland_side": [
+      7,
+      5
     ]
   }
 }

@@ -118,6 +118,22 @@ struct BlockProperties {
     // Mean ticks (1/60 s frames) between growth steps (1..1'000'000); only
     // meaningful with a non-empty growsTo (a lone growthTicks is rejected).
     int growthTicks = 0;
+    // Crop environment (Phase 50), all optional growth-condition fields
+    // (empty/0/1 defaults = no requirement — pre-Phase-50 crops keep their
+    // old behavior): `growsOn` names the block the cell BELOW the crop must
+    // hold (the soil; the growth engine skips the roll otherwise — the
+    // hard gate). Validated at game init (the name must reference an
+    // existing block, the grows_to discipline).
+    std::string growsOn;
+    // Minimum light level (0..15) at the CROP cell, max(sky, block), for
+    // the roll to run (0 = no requirement; 9 = the Minecraft crop value).
+    int growthLight = 0;
+    // Growth slowdown factor when NO water is near the soil cell (any fluid
+    // level within Chebyshev radius 4, same y — see world/growth): 1 = no
+    // slowdown, 2 = half pace (the Minecraft dry-farmland value). The roll
+    // modulus is growthTicks × drySlowdown, so dry passes are a strict
+    // subset of wet passes (deterministic, exactly 1/drySlowdown as often).
+    int drySlowdown = 1;
 };
 
 // Which texture name is applied to each face group (full_cube shapes) — or

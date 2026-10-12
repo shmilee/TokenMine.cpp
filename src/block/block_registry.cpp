@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <filesystem>
 
 #include "core/logger.hpp"
@@ -113,6 +114,41 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "growth_ticks", "number",
                    [&](const Json& v) { out.growthTicks = v.asInt(); });
     MC_TRY(r);
+    r = checkField(*p, "grows_on", "string",
+                   [&](const Json& v) { out.growsOn = v.asString(); });
+    MC_TRY(r);
+    // Crop environment (Phase 50): integer fields with explicit
+    // integer-ness + range checks (the restore_hunger discipline).
+    if (const Json* gl = p->find("growth_light")) {
+        if (!gl->isNumber()) {
+            return MC_FAIL("block property 'growth_light' must be a number");
+        }
+        const double d = gl->asDouble();
+        if (d != std::floor(d)) {
+            return MC_FAIL("block property 'growth_light' must be an "
+                           "integer (0..15)");
+        }
+        out.growthLight = static_cast<int>(d);
+        if (out.growthLight < 0 || out.growthLight > 15) {
+            return MC_FAIL("block property 'growth_light' must be in "
+                           "[0, 15], got " + std::to_string(out.growthLight));
+        }
+    }
+    if (const Json* ds = p->find("dry_slowdown")) {
+        if (!ds->isNumber()) {
+            return MC_FAIL("block property 'dry_slowdown' must be a number");
+        }
+        const double d = ds->asDouble();
+        if (d != std::floor(d)) {
+            return MC_FAIL("block property 'dry_slowdown' must be an "
+                           "integer (1..64)");
+        }
+        out.drySlowdown = static_cast<int>(d);
+        if (out.drySlowdown < 1 || out.drySlowdown > 64) {
+            return MC_FAIL("block property 'dry_slowdown' must be in "
+                           "[1, 64], got " + std::to_string(out.drySlowdown));
+        }
+    }
     // Chance secondary drop (Phase 49): an OPTIONAL object
     // {"item": <name>, "count": N, "chance": (0,1]} — an extra drop rolled
     // per break, independent of the primary `drops`. Parsed field-by-field
@@ -241,6 +277,14 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
                            "(0, 1], got " +
                            std::to_string(out.chanceDropChance));
         }
+    }
+    // Soil requirement (Phase 50): an EXPLICIT empty grows_on is a typo
+    // (ABSENT is the "no soil requirement" default — the ammo discipline);
+    // the non-empty name is cross-checked at game init (it must reference
+    // an existing block, the grows_to discipline).
+    if (p->find("grows_on") != nullptr && out.growsOn.empty()) {
+        return MC_FAIL("block property 'grows_on' must be a non-empty block "
+                       "name (omit it when the crop needs no specific soil)");
     }
     return {};
 }

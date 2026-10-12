@@ -373,7 +373,10 @@ v1 只有一种流体（**水** = 项目唯一模拟流体，流体名词汇表 
        "hardness": 0.0, "solid": false, "opaque": false, "transparent": true,
        "drops": "wheat_1",              // 未熟掉种子（可再种）
        "grows_to": "wheat_2",           // 指向下一阶（成熟阶留空 = 停止）
-       "growth_ticks": 360              // 平均多少 tick（1/60s 帧）进一阶
+       "growth_ticks": 360,             // 平均多少 tick（1/60s 帧）进一阶
+       "grows_on": "farmland",          // 下方须为该土壤（Phase 50；缺省 = 无要求）
+       "growth_light": 9,               // 作物格最低光照 max(sky,block)（9 = MC 值）
+       "dry_slowdown": 2                // 无水时 roll 模数倍数（2 = MC 干耕地）
      },
      "model": { "shape": "cross", "textures": { "cross": "wheat_1" } }
    }
@@ -381,18 +384,23 @@ v1 只有一种流体（**水** = 项目唯一模拟流体，流体名词汇表 
 
    `grows_to` 与 `growth_ticks` 是**严格配对**（缺一 = 解析拒绝；
    `growth_ticks` ∈ [1, 1'000'000]；显式空串 = 笔误拒绝；自引用拒绝）；
-   **init 硬校验** `grows_to` 必须指向存在的方块（typo = 启动失败点名）。
-   成熟阶（链尾）**不写** `grows_to`（不 roll、不再长），`drops` 指向
-   收获物（如 `wheat_7` → `wheat` ×2）。cross 形状要求
-   `solid=false, opaque=false, transparent=true`（解析强制）。
+   **init 硬校验** `grows_to` 与 `grows_on` 都必须指向存在的方块
+   （typo = 启动失败点名）。成熟阶（链尾）**不写** `grows_to`（不 roll、
+   不再长），`drops` 指向收获物（如 `wheat_7` → `wheat` ×2）。cross 形状
+   要求 `solid=false, opaque=false, transparent=true`（解析强制）。
+   三个环境字段（Phase 50，均**可选**，缺省 = 无要求 = 旧行为）：
+   `grows_on`（土壤名，显式空串 = 笔误拒绝）、`growth_light`（整数
+   [0,15]，0 = 无要求，非整数拒绝）、`dry_slowdown`（整数 [1,64]，
+   1 = 无减速，非整数拒绝）。
 2. **生长引擎**（自动）：`Game::m_crops`（`map<BlockPos,BlockID>`，位置序）
    追踪所有带 `grows_to` 的格——`setBlock` 收口维护（放作物=入集，
    破坏/成熟=出集，炉子同款模式），**读档后 `rescanCrops()` 全量扫描
    已加载 chunk 重建**（无存档字段，方块 id 即阶段）。每帧（固定 1/60
-   步长，昼夜类——无输入运行字节可复现）对每格 roll 一个确定性哈希
-   `splitmix64(seed + frame×GOLDEN + hash3(x,y,z,salt)) % growth_ticks == 0`
-   → 进一阶（概率 1/growth_ticks）。位置哈希让两株作物不同步；世界 seed
-   让世界间去相关。
+   步长，昼夜类——无输入运行字节可复现）先过三道**环境门**（Phase 50，
+   全数据驱动，见下方「耕地与作物环境条件」），再 roll 确定性哈希
+   `splitmix64(seed + frame×GOLDEN + hash3(x,y,z,salt)) % ticks == 0`
+   → 进一阶（概率 1/ticks；`ticks` = `growth_ticks` × 干时减速）。
+   位置哈希让两株作物不同步；世界 seed 让世界间去相关。
 3. **种子 = 隐式 block 物品**：`wheat_1` 方块自动有同名 block 物品
    （右键 = 放置 = 种植），无需新物品。种子来源 = 某方块的 `drops`
    （本项目 `grass` → `wheat_1`，见 KNOWN_ISSUES）。
@@ -433,6 +441,36 @@ v1 只有一种流体（**水** = 项目唯一模拟流体，流体名词汇表 
    `golden_apple`）。
 4. **无 format 变更**（format 8：掉落物实体走既有 `entities`，效果走既有
    `player.effects`）。
+
+## 耕地与作物环境条件（Phase 50）
+
+消费 P48 遗留"作物无耕地/水/光照要求"：生长引擎在 roll 前过三道门，
+全部**纯数据 + 纯函数**（`src/world/growth.{hpp,cpp}`），无 per-instance
+状态、无存档字段、无输入运行零活动（结构性免疫，base18 免重锚）：
+
+1. **土壤硬门**（`grows_on`，作物侧字段）：作物**下方一格**必须是指名
+   方块，否则不 roll（`""` 缺省 = 无要求）。首个使用者 = 小麦
+   `wheat_1..6` 的 `"grows_on": "farmland"`。土壤块本身是普通方块
+   （`assets/data/blocks/farmland.json`：solid cube、hardness 0.5 = MC、
+   `drops` 回 `dirt` = MC 语义）。
+2. **光照门**（`growth_light`）：作物格 `max(天空光, 方块光)`（与渲染
+   同款组合）≥ 阈值才 roll（0 = 无要求；小麦 = 9 = MC 值）。光照是
+   世界状态（chunk 光照数组），读档/生成后稳定 → 确定性。
+3. **干湿地**（`dry_slowdown`）：土壤格（作物下方）同 y、切比雪夫半径
+   4（= MC 耕地湿润半径）内有**任一流体**（level ≥1）= 湿润 → roll
+   模数 = `growth_ticks`；否则模数 × `dry_slowdown`（小麦 = 2 = MC 干
+   耕地半速）。模数加倍不改变 roll 值 → **干时通过帧是湿时通过帧的
+   严格子集**（恰好 1/dry_slowdown 频率，确定性可离线预计算）。
+   水桶（Phase 47）在土壤层倒下的源就在同 y → 浇水工作流直接可用。
+
+**内容**（全 JSON + 纹理）：`farmland` 方块（顶面 = 犁过的深色垄纹
+`farmland_top`、侧面 `farmland_side`、底面复用 `dirt`；atlas 空位 (7,4)/
+(7,5)，无 UV 移位）+ 配方 `farmland`（shapeless 1 dirt → 1 farmland）+
+`wheat_1..6` 加三个环境字段。**无 format 变更**（format 8）。
+
+**已知简化**（见 KNOWN_ISSUES）：作物可种在任意表面（放置不受限，
+只是没有合格土壤就不长）；`dry_slowdown` 参照格永远是作物下方一格
+（即使 `grows_on` 缺省）；水 = 任一流体层级（不区分源/流动）。
 
 ## 调节玩家参数（config/config.json `player.*`，Phase 32）
 

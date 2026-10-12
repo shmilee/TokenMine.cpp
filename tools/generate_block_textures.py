@@ -70,6 +70,24 @@ def dirt(x, y):
             clamp(67 + noise(x, y, 4, 10)), 255)
 
 
+def farmland_top(x, y):
+    # Tilled soil (Phase 50): darker than dirt, with horizontal furrow
+    # ridges (a darker band every 4 rows — the Minecraft farmland look).
+    r = clamp(110 + noise(x, y, 90, 10))
+    g = clamp(78 + noise(x, y, 91, 10))
+    b = clamp(52 + noise(x, y, 92, 8))
+    if y % 4 == 0:
+        r, g, b = int(r * 0.72), int(g * 0.72), int(b * 0.72)
+    return (r, g, b, 255)
+
+
+def farmland_side(x, y):
+    # Dirt sides with the tilled top band along the top edge.
+    if y < 3:
+        return farmland_top(x, y)
+    return dirt(x, y + 3)
+
+
 def grass_top(x, y):
     return (clamp(95 + noise(x, y, 5, 12)),
             clamp(159 + noise(x, y, 6, 12)),
@@ -357,6 +375,8 @@ TEXTURES = {
     **{f"wheat_{s}": make_wheat(s, 70 + s) for s in range(1, 8)},
     "stone": stone,
     "dirt": dirt,
+    "farmland_top": farmland_top,
+    "farmland_side": farmland_side,
     "grass_top": grass_top,
     "grass_side": grass_side,
     "sand": sand,

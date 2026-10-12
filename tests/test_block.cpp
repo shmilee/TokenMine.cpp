@@ -796,3 +796,86 @@ TEST(BlockRegistryTest, ChanceDropChanceOutOfRange) {
     ASSERT_TRUE(rOne.ok()) << rOne.error().message;
     EXPECT_DOUBLE_EQ(regOne.at(*rOne).properties.chanceDropChance, 1.0);
 }
+
+// ---------------------------------------------------------------------------
+// Crop environment fields (Phase 50): grows_on / growth_light / dry_slowdown
+// are optional growth-condition fields (absent = no requirement).
+// ---------------------------------------------------------------------------
+
+TEST(BlockRegistryTest, CropEnvironmentDefaultsAbsent) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(minimalDef("stone")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Block& b = reg.at(*r);
+    EXPECT_TRUE(b.properties.growsOn.empty());
+    EXPECT_EQ(b.properties.growthLight, 0);
+    EXPECT_EQ(b.properties.drySlowdown, 1);
+}
+
+TEST(BlockRegistryTest, ParsesCropEnvironment) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(cropDef(
+        "wheat_1",
+        R"("grows_to":"wheat_2","growth_ticks":360,"grows_on":"farmland","growth_light":9,"dry_slowdown":2)")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Block& b = reg.at(*r);
+    EXPECT_EQ(b.properties.growsOn, "farmland");
+    EXPECT_EQ(b.properties.growthLight, 9);
+    EXPECT_EQ(b.properties.drySlowdown, 2);
+}
+
+TEST(BlockRegistryTest, GrowsOnRejectsExplicitEmpty) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(cropDef("x", R"("grows_on":"")")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("non-empty"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, GrowthLightRange) {
+    // 0 and 15 are the inclusive boundaries (0 = no requirement).
+    BlockRegistry reg;
+    auto rLo = reg.registerBlock(
+        parseDef(cropDef("a", R"("growth_light":0)")));
+    ASSERT_TRUE(rLo.ok()) << rLo.error().message;
+    BlockRegistry reg2;
+    auto rHi = reg2.registerBlock(
+        parseDef(cropDef("a", R"("growth_light":15)")));
+    ASSERT_TRUE(rHi.ok()) << rHi.error().message;
+    BlockRegistry reg3;
+    auto rNeg = reg3.registerBlock(
+        parseDef(cropDef("a", R"("growth_light":-1)")));
+    ASSERT_FALSE(rNeg.ok());
+    EXPECT_NE(rNeg.error().message.find("[0, 15]"), std::string::npos);
+    BlockRegistry reg4;
+    auto rBig = reg4.registerBlock(
+        parseDef(cropDef("a", R"("growth_light":16)")));
+    ASSERT_FALSE(rBig.ok());
+    EXPECT_NE(rBig.error().message.find("[0, 15]"), std::string::npos);
+    BlockRegistry reg5;
+    auto rFloat = reg5.registerBlock(
+        parseDef(cropDef("a", R"("growth_light":2.5)")));
+    ASSERT_FALSE(rFloat.ok());
+    EXPECT_NE(rFloat.error().message.find("integer"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, DrySlowdownRange) {
+    BlockRegistry reg;
+    auto rOne = reg.registerBlock(
+        parseDef(cropDef("a", R"("dry_slowdown":1)")));
+    ASSERT_TRUE(rOne.ok()) << rOne.error().message;
+    BlockRegistry reg2;
+    auto rHi = reg2.registerBlock(
+        parseDef(cropDef("a", R"("dry_slowdown":64)")));
+    ASSERT_TRUE(rHi.ok()) << rHi.error().message;
+    BlockRegistry reg3;
+    auto rZero = reg3.registerBlock(
+        parseDef(cropDef("a", R"("dry_slowdown":0)")));
+    ASSERT_FALSE(rZero.ok());
+    EXPECT_NE(rZero.error().message.find("[1, 64]"), std::string::npos);
+    BlockRegistry reg4;
+    auto rBig = reg4.registerBlock(
+        parseDef(cropDef("a", R"("dry_slowdown":65)")));
+    ASSERT_FALSE(rBig.ok());
+    EXPECT_NE(rBig.error().message.find("[1, 64]"), std::string::npos);
+}

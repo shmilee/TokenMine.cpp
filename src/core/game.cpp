@@ -451,6 +451,21 @@ Result<void> Game::buildScene() {
         }
     }
 
+    // Strict data check (Phase 50): a block's grows_on must name an
+    // EXISTING block (the soil the crop needs below it) — the same
+    // existence cross-check as grows_to (a typo fails init loudly).
+    for (const BlockID id : m_blocks.allIds()) {
+        const Block& b = m_blocks.at(id);
+        if (b.properties.growsOn.empty()) {
+            continue;
+        }
+        const BlockID onId = m_blocks.idForName(b.properties.growsOn);
+        if (!onId.valid()) {
+            return MC_FAIL("block '" + b.name + "' grows on unknown block '" +
+                           b.properties.growsOn + "'");
+        }
+    }
+
     // Strict data check (Phase 49): a block's chance_drop item must name a
     // registered item whose max stack fits chanceDropCount (the drops
     // discipline — a typo in the extra-drop name fails init loudly).

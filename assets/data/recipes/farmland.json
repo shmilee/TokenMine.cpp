@@ -1,0 +1,7 @@
+{
+  "id": "farmland",
+  "output": { "item": "farmland", "count": 1 },
+  "ingredients": [
+    { "item": "dirt", "count": 1 }
+  ]
+}

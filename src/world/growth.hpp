@@ -16,6 +16,13 @@
 //    finalizer — a constant input yields a constant stream). The per-cell
 //    position hash decorrelates crops from each other (two plants do not
 //    advance in lockstep); the world seed decorrelates across worlds.
+//  - Environment gates (Phase 50, all data-driven per crop block): a
+//    non-empty `grows_on` requires the cell below to hold that block (the
+//    soil — hard gate); `growth_light` (0..15, 0 = none) requires
+//    max(sky, block) light at the crop cell; the roll modulus is
+//    growthTicks x drySlowdown (1 = none) when no water is within
+//    Chebyshev radius 4 of the soil cell at the soil's y (dry farmland
+//    grows slower — the Minecraft value is 2).
 //  - The tracked set is position-ordered (std::map), so iteration and the
 //    returned step list are deterministic.
 #pragma once

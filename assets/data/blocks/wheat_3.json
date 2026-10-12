@@ -7,7 +7,10 @@
     "transparent": true,
     "drops": "wheat_1",
     "grows_to": "wheat_4",
-    "growth_ticks": 360
+    "growth_ticks": 360,
+    "grows_on": "farmland",
+    "growth_light": 9,
+    "dry_slowdown": 2
   },
   "model": {
     "shape": "cross",

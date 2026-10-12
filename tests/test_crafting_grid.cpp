@@ -484,3 +484,68 @@ TEST(GoldenAppleRecipeTest, AppleNotInCenterDoesNotMatch) {
     const GridMatch m = matchGridRecipe(grid, f.recipes);
     EXPECT_FALSE(m.matched());
 }
+
+// -- Phase 50: farmland (1 dirt -> 1 farmland, shapeless) ---------------------
+
+namespace {
+
+struct FarmlandFixture {
+    ItemRegistry items;
+    RecipeRegistry recipes;
+    ItemID dirt;
+    ItemID farmland;
+
+    FarmlandFixture() {
+        auto r = items.registerItem(
+            parseJson(R"({"id":"dirt","type":"material"})"));
+        if (!r.ok()) {
+            ADD_FAILURE() << r.error().message;
+        }
+        r = items.registerItem(
+            parseJson(R"({"id":"farmland","type":"material"})"));
+        if (!r.ok()) {
+            ADD_FAILURE() << r.error().message;
+        }
+        dirt = items.idForName("dirt");
+        farmland = items.idForName("farmland");
+        auto rr = recipes.registerRecipe(
+            parseJson(R"({"id":"farmland","output":{"item":"farmland","count":1},
+                          "ingredients":[{"item":"dirt","count":1}]})"),
+            items);
+        if (!rr.ok()) {
+            ADD_FAILURE() << rr.error().message;
+        }
+    }
+};
+
+} // namespace
+
+TEST(FarmlandRecipeTest, OneDirtMatchesAndCraftsOneFarmland) {
+    FarmlandFixture f;
+    CraftingGrid grid;
+    grid.setSlot(0, (ItemStack {f.dirt, 1}));
+    const GridMatch m = matchGridRecipe(grid, f.recipes);
+    ASSERT_TRUE(m.matched());
+    EXPECT_EQ(m.recipe->id, "farmland");
+    EXPECT_EQ(m.recipe->output, f.farmland);
+    consumeGrid(grid, m);
+    EXPECT_TRUE(grid.empty()); // the single dirt is consumed
+}
+
+TEST(FarmlandRecipeTest, ExtraDirtSurvives) {
+    FarmlandFixture f;
+    // 3 dirt: the recipe needs 1 — the 2 extras stay.
+    CraftingGrid grid;
+    grid.setSlot(0, (ItemStack {f.dirt, 3}));
+    const GridMatch m = matchGridRecipe(grid, f.recipes);
+    ASSERT_TRUE(m.matched());
+    consumeGrid(grid, m);
+    EXPECT_EQ(grid.at(0), (ItemStack {f.dirt, 2}));
+}
+
+TEST(FarmlandRecipeTest, EmptyGridDoesNotMatch) {
+    FarmlandFixture f;
+    CraftingGrid grid;
+    const GridMatch m = matchGridRecipe(grid, f.recipes);
+    EXPECT_FALSE(m.matched());
+}

@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -205,4 +206,191 @@ TEST(GrowthTest, TwoCropsDecorrelate) {
         }
     }
     EXPECT_TRUE(sawAsymmetric);
+}
+
+// ---------------------------------------------------------------------------
+// Environment conditions (Phase 50): soil / light / water proximity.
+// growth_ticks = 1 in these fixtures so the roll passes every frame the
+// environment allows — the condition under test is the only variable.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// A plain cube def (soil / stand-in blocks).
+std::string cubeDef(const std::string& id) {
+    return std::string("{\"id\":\"") + id +
+           "\",\"properties\":{\"hardness\":1.0},"
+           "\"model\":{\"textures\":{\"top\":\"t\",\"side\":\"t\","
+           "\"bottom\":\"t\"}}}";
+}
+
+// A 2-stage crop chain crop_a -> crop_b (b mature) with the Phase 50
+// environment fields: soil ("" = no requirement), minLight (0 = none),
+// slowdown (1 = none).
+BlockRegistry envRegistry(const std::string& soil, int minLight,
+                          int slowdown) {
+    BlockRegistry reg;
+    auto soilR = reg.registerBlock(parseDef(cubeDef("soil")));
+    if (!soilR.ok()) {
+        throw std::runtime_error(soilR.error().message);
+    }
+    std::string a = std::string("{\"id\":\"crop_a\",\"properties\":{") +
+        "\"hardness\":0.0,\"grows_to\":\"crop_b\",\"growth_ticks\":1";
+    if (!soil.empty()) {
+        a += ",\"grows_on\":\"" + soil + "\"";
+    }
+    if (minLight > 0) {
+        a += ",\"growth_light\":" + std::to_string(minLight);
+    }
+    if (slowdown > 1) {
+        a += ",\"dry_slowdown\":" + std::to_string(slowdown);
+    }
+    a += "},\"model\":{\"textures\":{\"top\":\"t\",\"side\":\"t\","
+         "\"bottom\":\"t\"}}}";
+    auto aR = reg.registerBlock(parseDef(a));
+    if (!aR.ok()) {
+        throw std::runtime_error(aR.error().message);
+    }
+    auto bR = reg.registerBlock(
+        parseDef(std::string("{\"id\":\"crop_b\",\"properties\":{") +
+                 "\"hardness\":0.0"
+                 "},\"model\":{\"textures\":{\"top\":\"t\",\"side\":\"t\","
+                 "\"bottom\":\"t\"}}}"));
+    if (!bR.ok()) {
+        throw std::runtime_error(bR.error().message);
+    }
+    return reg;
+}
+
+// One crop at (8,2,8); soil (if any) at (8,1,8); sky light `light` at the
+// crop cell; `waterAt` optional (dx from the soil cell, same soil y).
+struct EnvScene {
+    World world;
+    std::map<BlockPos, BlockID> crops;
+    BlockID a;
+    BlockID b;
+
+    EnvScene(BlockRegistry reg, const std::string& soilName, int light,
+             std::optional<int> waterDx = std::nullopt)
+        : a(reg.idForName("crop_a")), b(reg.idForName("crop_b")) {
+        world.getOrCreateChunk({0, 0, 0});
+        world.setBlock(8, 2, 8, a);
+        crops[{8, 2, 8}] = a;
+        if (!soilName.empty()) {
+            world.setBlock(8, 1, 8, reg.idForName(soilName));
+        }
+        if (light > 0) {
+            world.findChunkMut({0, 0, 0})->setSkyLightAt(8, 2, 8, light);
+        }
+        if (waterDx.has_value() && *waterDx != 0) {
+            world.setFluid(8 + *waterDx, 1, 8, 8);
+        }
+    }
+
+    // Count the steps the pure function yields over frames [0, n) WITHOUT
+    // applying them (the crop stays at stage a — the roll is stage-blind).
+    int stepsOver(const BlockRegistry& reg, std::uint64_t seed, int n) {
+        int nSteps = 0;
+        for (int f = 0; f < n; ++f) {
+            nSteps += static_cast<int>(
+                cropGrowthSteps(world, reg, crops, seed,
+                                static_cast<std::uint64_t>(f)).size());
+        }
+        return nSteps;
+    }
+};
+
+} // namespace
+
+TEST(GrowthEnvTest, AbsentEnvironmentKeepsOldBehavior) {
+    // No environment fields (pre-Phase-50 data): air below, no light,
+    // no water — the crop still rolls exactly as before.
+    const BlockRegistry reg = envRegistry("", 0, 1);
+    EnvScene s(reg, "", 0);
+    EXPECT_EQ(s.stepsOver(reg, 42, 20), 20); // ticks 1 -> every frame
+}
+
+TEST(GrowthEnvTest, MissingSoilBlocksGrowth) {
+    const BlockRegistry reg = envRegistry("soil", 0, 1);
+    EnvScene s(reg, "", 0); // soil REQUIRED, but the cell below is air
+    EXPECT_EQ(s.stepsOver(reg, 42, 20), 0);
+}
+
+TEST(GrowthEnvTest, WrongSoilBlocksGrowth) {
+    const BlockRegistry reg = envRegistry("soil", 0, 1);
+    EnvScene s(reg, "crop_b", 0); // below holds crop_b, not the required soil
+    EXPECT_EQ(s.stepsOver(reg, 42, 20), 0);
+}
+
+TEST(GrowthEnvTest, CorrectSoilAllowsGrowth) {
+    const BlockRegistry reg = envRegistry("soil", 0, 1);
+    EnvScene s(reg, "soil", 0);
+    EXPECT_EQ(s.stepsOver(reg, 42, 20), 20);
+}
+
+TEST(GrowthEnvTest, LightBelowThresholdBlocksGrowth) {
+    const BlockRegistry reg = envRegistry("soil", 9, 1);
+    EnvScene s(reg, "soil", 8); // 8 < 9
+    EXPECT_EQ(s.stepsOver(reg, 42, 20), 0);
+}
+
+TEST(GrowthEnvTest, LightAtThresholdAllowsGrowth) {
+    const BlockRegistry reg = envRegistry("soil", 9, 1);
+    EnvScene s(reg, "soil", 9); // exactly 9
+    EXPECT_EQ(s.stepsOver(reg, 42, 20), 20);
+}
+
+TEST(GrowthEnvTest, BlockLightCountsThroughMax) {
+    // max(sky, block): sky 5 + block 12 passes a 9 threshold.
+    const BlockRegistry reg = envRegistry("soil", 9, 1);
+    EnvScene s(reg, "soil", 5);
+    s.world.findChunkMut({0, 0, 0})->setBlockLightAt(8, 2, 8, 12);
+    EXPECT_EQ(s.stepsOver(reg, 42, 20), 20);
+    // And max(5, 5) = 5 < 9 still blocks.
+    const BlockRegistry reg2 = envRegistry("soil", 9, 1);
+    EnvScene s2(reg2, "soil", 5);
+    s2.world.findChunkMut({0, 0, 0})->setBlockLightAt(8, 2, 8, 5);
+    EXPECT_EQ(s2.stepsOver(reg2, 42, 20), 0);
+}
+
+TEST(GrowthEnvTest, WaterNearSoilRemovesSlowdown) {
+    const BlockRegistry reg = envRegistry("soil", 0, 2);
+    // Dry (no water): the roll modulus is 2 — strictly fewer passes.
+    EnvScene dry(reg, "soil", 0);
+    const int drySteps = dry.stepsOver(reg, 42, 200);
+    // Wet (water 2 from the soil, same y): full pace, every frame.
+    EnvScene wet(reg, "soil", 0, 2);
+    const int wetSteps = wet.stepsOver(reg, 42, 200);
+    EXPECT_EQ(wetSteps, 200);
+    EXPECT_GT(drySteps, 0);
+    EXPECT_LT(drySteps, wetSteps);
+}
+
+TEST(GrowthEnvTest, WaterBoundaryAtRadius4) {
+    const BlockRegistry reg = envRegistry("soil", 0, 2);
+    // Chebyshev distance 4 from the soil cell => still water (wet pace).
+    EnvScene at4(reg, "soil", 0, 4);
+    EXPECT_EQ(at4.stepsOver(reg, 42, 200), 200);
+    // Distance 5 => dry pace.
+    EnvScene at5(reg, "soil", 0, 5);
+    EXPECT_LT(at5.stepsOver(reg, 42, 200), 200);
+}
+
+TEST(GrowthEnvTest, WaterAtOtherYDoesNotCount) {
+    const BlockRegistry reg = envRegistry("soil", 0, 2);
+    // Water at the CROP's y (soil y + 1), 2 away: not the soil level.
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    world.setBlock(8, 2, 8, reg.idForName("crop_a"));
+    world.setBlock(8, 1, 8, reg.idForName("soil"));
+    world.setFluid(10, 2, 8, 8); // y = 2 = the crop's y, not the soil's y=1
+    std::map<BlockPos, BlockID> crops;
+    crops[{8, 2, 8}] = reg.idForName("crop_a");
+    int nSteps = 0;
+    for (int f = 0; f < 200; ++f) {
+        nSteps += static_cast<int>(
+            cropGrowthSteps(world, reg, crops, 42,
+                            static_cast<std::uint64_t>(f)).size());
+    }
+    EXPECT_LT(nSteps, 200); // dry pace — the water is at the wrong level
 }
