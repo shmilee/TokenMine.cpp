@@ -1,0 +1,14 @@
+{
+  "id": "fire",
+  "properties": {
+    "hardness": 0.0,
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "light_emission": 15
+  },
+  "model": {
+    "shape": "cross",
+    "textures": { "cross": "fire" }
+  }
+}

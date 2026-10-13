@@ -439,6 +439,26 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         root["furnaces"] = std::move(furnaces);
     }
 
+    // The burning fire blocks (format 10; Phase 64): one entry per fire
+    // block (position-sorted — the game's map order), each an object with
+    // the block position + the real-dt seconds remaining (the burn-out
+    // countdown; a reload continues burning). Always written (possibly
+    // empty — a world without fire).
+    {
+        Json fires = Json::array();
+        for (const SavedFire& sf : save.fires) {
+            Json fe = Json::object();
+            Json pos = Json::array();
+            pos.push_back(Json(sf.pos.x));
+            pos.push_back(Json(sf.pos.y));
+            pos.push_back(Json(sf.pos.z));
+            fe["pos"] = pos;
+            fe["remaining"] = Json(sf.remainingSeconds);
+            fires.push_back(std::move(fe));
+        }
+        root["fires"] = std::move(fires);
+    }
+
     Json entities = Json::array();
     for (const SavedItemEntity& e : save.entities) {
         Json jpos = Json::array();
@@ -497,8 +517,8 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     const std::set<std::string> topLevel {"format", "seed", "time", "player",
                                           "inventory", "inv_grid",
                                           "table_grid", "furnace",
-                                          "furnaces", "entities", "blocks",
-                                          "fluids"};
+                                          "furnaces", "fires", "entities",
+                                          "blocks", "fluids"};
     MC_TRY(rejectUnknownFields(def, topLevel, "save file"));
 
     const Json* fmt = def.find("format");
@@ -1035,6 +1055,97 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
             save.furnaces.push_back({p, FurnaceState {}});
         }
     }
+
+    // -- burning fires (format 10; Phase 64) ------------------------------
+    // A "fire block" = the block named "fire" — the burn target of the
+    // Phase 64 burn semantics (the single named reference the init
+    // cross-check enforces: a flamable block in the registry requires the
+    // fire block to exist). World generation never emits fire, so the
+    // block edits are the complete source of truth for which cells hold
+    // one — exactly like the furnace cells above.
+    std::set<BlockPos> fireCells;
+    for (const SavedBlockEdit& e : save.blockEdits) {
+        if (e.blockName == "fire") {
+            fireCells.insert(e.pos);
+        }
+    }
+    const Json* fireArr = def.find("fires");
+    if (fmtVersion >= 10) {
+        // Format 10: cross-checked against the world's fire blocks in BOTH
+        // directions (an entry without a block or a block without an entry
+        // would desync the game's invariant: every fire block owns a
+        // remaining-life entry).
+        if (fireArr == nullptr || !fireArr->isArray()) {
+            return MC_FAIL("save format 10 requires a 'fires' array");
+        }
+        std::set<BlockPos> entryPos;
+        for (std::size_t i = 0; i < fireArr->size(); ++i) {
+            const Json& e = fireArr->at(i);
+            const std::string what =
+                "save 'fires' entry #" + std::to_string(i);
+            if (!e.isObject()) {
+                return MC_FAIL(what + " must be an object");
+            }
+            const std::set<std::string> eFields {"pos", "remaining"};
+            MC_TRY(rejectUnknownFields(e, eFields, what));
+            const Json* pos = e.find("pos");
+            if (pos == nullptr || !pos->isArray() || pos->size() != 3) {
+                return MC_FAIL(what + " requires a 'pos' [x, y, z] array");
+            }
+            double x, y, z;
+            if (!isInt(pos->at(0), &x) || !isInt(pos->at(1), &y) ||
+                !isInt(pos->at(2), &z)) {
+                return MC_FAIL(what + " 'pos' entries must be integers");
+            }
+            const int yi = static_cast<int>(y);
+            if (!isWorldYValid(yi)) {
+                return MC_FAIL(what + " has y=" + std::to_string(yi) +
+                               " outside the world height [0, " +
+                               std::to_string(kWorldHeight) + ")");
+            }
+            const BlockPos bpos {static_cast<int>(x), yi,
+                                 static_cast<int>(z)};
+            if (entryPos.count(bpos) != 0) {
+                return MC_FAIL(what + " duplicates the fire position " +
+                               posStr(bpos));
+            }
+            entryPos.insert(bpos);
+            const Json* rem = e.find("remaining");
+            if (rem == nullptr || !rem->isNumber() ||
+                rem->asDouble() <= 0.0) {
+                return MC_FAIL(what + " requires 'remaining' (seconds) > 0");
+            }
+            save.fires.push_back(SavedFire {bpos, rem->asDouble()});
+        }
+        if (entryPos != fireCells) {
+            for (const BlockPos& p : entryPos) {
+                if (fireCells.count(p) == 0) {
+                    return MC_FAIL("save 'fires' has an entry at " +
+                                   posStr(p) +
+                                   " which is not a fire block in the "
+                                   "world's block edits");
+                }
+            }
+            for (const BlockPos& p : fireCells) {
+                if (entryPos.count(p) == 0) {
+                    return MC_FAIL("the fire block at " + posStr(p) +
+                                   " has no 'fires' entry (every fire "
+                                   "block owns a remaining-life entry)");
+                }
+            }
+            return MC_FAIL("save 'fires' does not match the world's fire "
+                           "blocks");
+        }
+    } else if (fireArr != nullptr) {
+        return MC_FAIL("save 'fires' requires format 10 or newer (got " +
+                       std::to_string(fmtVersion) + ")");
+    }
+    // The game's invariant after ANY load: every fire block in the world
+    // owns a remaining-life entry. Format 10 guarantees it (the
+    // cross-check); format 9 and earlier carry no entries at all (the fire
+    // block did not exist — a hand-edited fire edit in an old file is
+    // possible) — the game adds the full-lifetime entries on load (like
+    // the empty furnace states).
     return save;
 }
 

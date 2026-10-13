@@ -266,6 +266,39 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
     block+fluid / L1 膜 = 稳定地面流体场景 / 物品 rest 位置确定性
     （零初速 + 位置式分离）/ pgrep 前缀误匹配 minecraft_tests / 裸
     截图无窗口稳定化 = 错尺寸假失败）。
+  - [x] **Phase 64** — 火视觉 v1：fire 方块（用户"按建议顺序，继续完成
+    下两个" = 建议 1，代理定案最小完整版 = **fire 方块**：可燃物烧成
+    发光火焰而非 air，定时燃尽、水浇灭，**format 10**；粒子/蔓延超出
+    最小范围【KNOWN_ISSUES】）：**`fire` 块**（cross 模型 + 火焰纹理
+    atlas 空位 [10,0] 免重锚、`light_emission 15` = MC、hardness 0 瞬
+    破、**无 drops** = 烧尽无炭、非 flamable = 燃烧终态）+ **燃烧目
+    标改 fire**（点燃器 P60 + 熔岩燃烧 pass P58 的 `setBlock(air)` →
+    `setBlock(fire)`；registry 无 fire 块时回落 air = 单测 fixture 语
+    义）+ **`Game::m_fires` 剩余寿命 map**（setBlock 收口创建/删除 =
+    P44 炉子范式；real-dt 倒计时 = 生存计时器类；熔岩 pass 走
+    world.setBlock 绕过收口 → FluidSim::tick 的 changed 列表补注册）+
+    **水浇灭**（fire 6-邻任一流水格 → 瞬灭；水胜火 = P57 规则；熔岩
+    不浇灭 = 火是熔岩的产物）+ **config `fire.lifetime_seconds`**（默
+    认 4.0，>0 硬校验）+ **init 交叉校验**（registry 有 flamable 块必
+    须有 fire 块，点名拒绝）+ **format 10 `fires`**（{pos, remaining}
+    位置序、remaining > 0、与块编辑双向交叉校验 = 炉子键纪律、format
+    9 迁移 = 空 + 手编旧文件补满寿命条目）。**无 worldgen 变更**。
+    1034/1034（+11：fire 内容钉死 1 / 烧成 fire 1 / fires 存档 9）、
+    `-Werror` 恒 0 警告、base18 **第 37 次结构性免疫**【fire 块永不生
+    成（worldgen 未动）+ fresh 零熔岩 = 燃烧 pass 惰性 + 默认背包无点
+    燃器 + atlas 空位无 UV 移位】；E2E 全绿（S2 点燃器烧 wood →
+    **fire 活体终态**【MOV lifetime 300 = P57 模式，remaining ∈
+    (250,300]，×2 savenorm 剥 fires remaining】/ S3 燃尽【场景 fire
+    remaining 4.0 + 默认 config，600f = 10..26.1 s > 4.0 = fps 无关终
+    态 air，×2 RAW】/ S4 水浇灭【**高架水**：石台 L8 水 + 四侧石封
+    边 + 火在正上方——首轮裸 L8 水源横向漫灌高原【**水 flow 7 vs 熔岩
+    1，"L8 源静态"是熔岩专属规则，PITS】+ (23,45,-5) 生成装饰格非
+    air【diff 出 "air" 条目】，×2 RAW】/ S5 夜间渲染+光【**600f**——
+    60f `--save` 跑可视 chunk 流送未竟 = 地面缺失 worker 竞态【PITS】，
+    火场景 ≠ 无火场景 + 火焰色像素断言（月/星蓝白过不了 b<140 滤）+
+    ×2 各 + pair 级重试【8px WM 黑条环境性】/ S2ctl 无输入 ×2 RAW /
+    S6 init 失败 ×2【删 fire.json → 交叉校验点名 / lifetime 0 → config
+    校验】）；**PITS +2**（L8 水漫灌 / --save 短帧截图 chunk 竞态）。
   - [x] **Phase 63** — flamable 内容扩展：MC 天然可燃三块（用户"先建议
     2,再建议1" = 建议 1，代理定案最小完整版 = 纯数据 `flamable` 扩展
     **wood/leaves/grass**，火视觉/引燃 Mob 超出本 phase 范围）：三块加
@@ -540,6 +573,7 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 56** — `archive/phase-56.md`
 - **Phase 57** — `archive/phase-57.md`
 - **Phase 58** — `archive/phase-58.md`
+- **Phase 64** — `archive/phase-64.md`
 - **Phase 63** — `archive/phase-63.md`
 - **Phase 62** — `archive/phase-62.md`
 - **Phase 61** — `archive/phase-61.md`

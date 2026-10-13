@@ -31,6 +31,12 @@ namespace mc {
 
 namespace {
 
+// Phase 64: the six face-adjacent offsets — the fire extinguish's
+// "water 6-adjacent" scan (the same neighborhood the fluid sim uses).
+constexpr BlockPos kFireNeighbors[6] = {
+    {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
+};
+
 constexpr float kFovDegrees = 70.0f;
 constexpr float kNear = 0.1f;
 constexpr float kFar = 1000.0f;
@@ -675,6 +681,34 @@ Result<void> Game::buildScene() {
         }
     }
 
+    // -- fire (Phase 64, the fire visuals): the burn target --------------
+    // The ignition (Phase 60) and the lava burn pass (Phase 58) burn a
+    // `flamable` block into the FIRE block (a light source that burns out
+    // after fire.lifetime_seconds and is extinguished by water) — not air.
+    // A registry with ANY flamable block must therefore provide the
+    // "fire" block (the single named reference — without it the burn
+    // consumers would have no target). Zero flamable blocks (a stripped
+    // asset set) is legal: the burn paths stay inert and the fire block
+    // is optional.
+    bool anyFlamable = false;
+    for (const BlockID bid : m_blocks.allIds()) {
+        if (m_blocks.at(bid).properties.flamable) {
+            anyFlamable = true;
+            break;
+        }
+    }
+    m_fireId = m_blocks.idForName("fire");
+    if (anyFlamable && !m_fireId.valid()) {
+        return MC_FAIL("the flamable blocks require the 'fire' block (the "
+                       "burn target of the ignition and the lava burn "
+                       "pass) — register it in data/blocks");
+    }
+    m_fireLifetime = m_config.getDouble("fire.lifetime_seconds", 4.0);
+    if (m_fireLifetime <= 0.0) {
+        return MC_FAIL("config fire.lifetime_seconds must be > 0 (got " +
+                       std::to_string(m_fireLifetime) + ")");
+    }
+
     // -- item icons (Phase 15 UI) ------------------------------------------
     // Each explicit item may name a 2D icon under assets/textures/items/
     // (strict: the file must exist — same cross-check pattern as the block
@@ -1251,6 +1285,12 @@ Result<SaveGame> Game::collectSave() const {
     for (const auto& [pos, st] : m_furnaces) {
         save.furnaces.push_back({pos, st});
     }
+    // The burning fire blocks (format 10; Phase 64): positions + the
+    // real-dt seconds remaining (the map is position-sorted — the
+    // serializer's write order; a reload continues burning).
+    for (const auto& [pos, remaining] : m_fires) {
+        save.fires.push_back(SavedFire {pos, remaining});
+    }
     // The player's active status effects (format 8; Phase 46): names +
     // the real-dt seconds remaining (the serializer name-sorts; the tick
     // phase is deliberately not saved — a reload restarts the next tick
@@ -1397,6 +1437,25 @@ Result<void> Game::applySave(const SaveGame& save) {
     m_furnaces.clear();
     for (const SavedFurnace& sf : save.furnaces) {
         m_furnaces.emplace(sf.pos, sf.state);
+    }
+    // 4c-bis) The burning fire blocks (format 10; Phase 64): positions +
+    // the real-dt seconds remaining (a reload continues burning — like
+    // the player's fire effect). The entries are parse-validated
+    // (remaining > 0, one per fire block).
+    m_fires.clear();
+    for (const SavedFire& sf : save.fires) {
+        m_fires.emplace(sf.pos, sf.remainingSeconds);
+    }
+    // Migration (format 9 and earlier): a fire block in the world's block
+    // edits WITHOUT a fires entry is only possible in a hand-edited old
+    // file (the fire block did not exist before format 10) — it starts at
+    // the full lifetime (the empty-furnace-state migration pattern).
+    if (m_fireId.valid()) {
+        for (const SavedBlockEdit& e : save.blockEdits) {
+            if (e.blockName == "fire") {
+                m_fires.emplace(e.pos, m_fireLifetime);
+            }
+        }
     }
     // 4d) The player's active status effects (format 8; Phase 46). The
     // names are parse-validated against the registry (idForName cannot
@@ -1720,6 +1779,19 @@ void Game::update(double dt) {
     if (m_frameCount % kFluidTickEveryNFrames == 0) {
         const std::vector<BlockPos> changed =
             FluidSim::tick(m_world, m_blocks);
+        // Phase 64: the burn pass (inside the tick above) turns flamable
+        // blocks into FIRE blocks via world.setBlock — it bypasses the
+        // Game setBlock choke point, so register the changed cells that
+        // now hold fire with their full lifetime here (emplace keeps an
+        // existing countdown; the registry without the fire block makes
+        // this a no-op).
+        if (m_fireId.valid()) {
+            for (const BlockPos& p : changed) {
+                if (m_world.getBlock(p.x, p.y, p.z) == m_fireId) {
+                    m_fires.emplace(p, m_fireLifetime);
+                }
+            }
+        }
         if (!changed.empty()) {
             BlockPos min = changed.front();
             BlockPos max = changed.front();
@@ -1734,6 +1806,13 @@ void Game::update(double dt) {
             Lighting::updateRegion(m_world, m_blocks, min, max);
         }
     }
+    // Fire (Phase 64): the per-frame real-dt burn-out countdown (a fire
+    // at zero becomes air — no char, like the Phase 58 lava burn) + the
+    // water extinguish. Runs AFTER the fluids tick so the newly burned
+    // cells are registered and the new water is visible; the block changes
+    // it makes are meshed on the next frame (the effects' setBlock
+    // pattern). A no-op while the world holds no fire.
+    updateFires(dt);
 
     const auto meshes = updateChunkMeshes();
     if (!meshes.ok()) {
@@ -1915,14 +1994,17 @@ void Game::handleInteraction(double dt) {
         if (tryFluidBucket()) {
             return;
         }
-        // Ignition (Phase 60): a selected item with the 'ignites_flamable'
-        // flag burns the `flamable` block under the crosshair —
-        // setBlock(air), NO drops (the Phase 58 lava-burn semantics) —
-        // and is NOT consumed (Minecraft: the flint and steel survives
-        // its uses). Runs AFTER the panel interactions: a furnace or
-        // crafting table under the crosshair still opens its panel even
-        // when an igniter is selected. Non-flammable targets fall
-        // through (the item is a material, so placeBlock is a no-op).
+        // Ignition (Phase 60, fire visuals Phase 64): a selected item
+        // with the 'ignites_flamable' flag burns the `flamable` block
+        // under the crosshair — setBlock(FIRE), NO drops (the Phase 58
+        // lava-burn semantics) — and is NOT consumed (Minecraft: the
+        // flint and steel survives its uses). The fire block is a light
+        // source that burns out after fire.lifetime_seconds (the setBlock
+        // choke point starts its countdown) and is put out by water.
+        // Runs AFTER the panel interactions: a furnace or crafting table
+        // under the crosshair still opens its panel even when an igniter
+        // is selected. Non-flammable targets fall through (the item is a
+        // material, so placeBlock is a no-op).
         if (const ItemStack& held = m_inventory.at(m_selectedSlot);
             !held.empty() && m_items.at(held.item).ignitesFlamable) {
             if (const std::optional<BlockHit> hit = targetBlock(); hit) {
@@ -1930,8 +2012,11 @@ void Game::handleInteraction(double dt) {
                     m_world.getBlock(hit->block.x, hit->block.y,
                                      hit->block.z));
                 if (b.properties.flamable) {
+                    // m_fireId is valid here: a flamable target exists,
+                    // and the init cross-check requires the fire block
+                    // whenever the registry holds one.
                     setBlock(hit->block.x, hit->block.y, hit->block.z,
-                             BlockID::air());
+                             m_fireId);
                     Lighting::updateLocal(m_world, m_blocks, hit->block);
                     m_sound.play("ignite");
                 }
@@ -2226,6 +2311,22 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
             m_crops[cpos] = id;
         } else {
             m_crops.erase(cpos);
+        }
+    }
+    // Phase 64: the fire remaining life follows the cell (like the
+    // furnace states): a cell that holds a fire block always owns a life
+    // (created with the FULL lifetime on placement/burn — emplace keeps
+    // an existing countdown, so a same-block re-set never resets it), and
+    // a cell that stops holding a fire drops its life (the invariant the
+    // format-10 save cross-checks). m_fireId is invalid only in an asset
+    // set without the fire block (then this is a no-op, like the other
+    // registry-keyed bookkeeping).
+    {
+        const BlockPos ppos {x, y, z};
+        if (m_fireId.valid() && id == m_fireId) {
+            m_fires.emplace(ppos, m_fireLifetime);
+        } else {
+            m_fires.erase(ppos);
         }
     }
     const float half = Projectile::kSize * 0.5f;
@@ -2647,6 +2748,48 @@ void Game::clearStatusEffects() {
     m_hurtFlash = 0.0;
     m_playerEffects.clearNegative(m_effects);
     syncAbsorption(true); // Phase 56 (the bonus can only shrink here)
+}
+
+void Game::updateFires(double dt) {
+    if (m_fires.empty()) {
+        return;
+    }
+    // std::map iteration is position-sorted: the put-out order is
+    // deterministic. The countdown is a REAL-dt timer (hard rule 8, the
+    // survival-timer class — like the player's fire effect): a headless
+    // run at a fixed frame rate is byte-reproducible, and the burn-out
+    // moment is wall-clock-stable.
+    std::vector<BlockPos> putOut;
+    for (auto& [pos, remaining] : m_fires) {
+        remaining -= dt;
+        if (remaining <= 0.0) {
+            putOut.push_back(pos);
+            continue;
+        }
+        // Water extinguish (Phase 64): a fire with a WATER fluid (any
+        // level) in one of its 6 neighbors is put out instantly — water
+        // beats fire (the Phase 57 water-beats-lava rule). Lava does not
+        // extinguish: the fire beside the pool is the lava's product and
+        // keeps burning (Minecraft — fire and lava coexist).
+        bool wet = false;
+        for (const BlockPos& d : kFireNeighbors) {
+            if (m_world.getFluidOfKind(pos.x + d.x, pos.y + d.y,
+                                       pos.z + d.z, FluidKind::Water) > 0) {
+                wet = true;
+                break;
+            }
+        }
+        if (wet) {
+            putOut.push_back(pos);
+        }
+    }
+    // Apply (AFTER the iteration — the setBlock calls below erase the
+    // entries through the choke point; never iterate a map while it is
+    // being structurally modified).
+    for (const BlockPos& pos : putOut) {
+        setBlock(pos.x, pos.y, pos.z, BlockID::air());
+        Lighting::updateLocal(m_world, m_blocks, pos);
+    }
 }
 
 void Game::updateEffects(double dt) {

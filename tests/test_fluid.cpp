@@ -649,6 +649,33 @@ TEST(FluidBurnTest, LavaBurnsFlamableNeighbor) {
     EXPECT_EQ(world.getFluidOfKind(9, 1, 8, FluidKind::Lava), kMaxFluidLevel);
 }
 
+// Phase 64: when the registry PROVIDES the "fire" block, the burn target
+// is FIRE (not air) — the light source that burns out. The game's init
+// cross-check guarantees the fire block whenever a flamable exists, so
+// the in-game registry always burns to fire; the air fallback above stays
+// for registries without it (the Phase 58 semantics).
+TEST(FluidBurnTest, BurnsToFireWhenRegistryHasFire) {
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    floor(world, 0, 15, 0, 15, 0);
+    BlockRegistry blocks = buildBurnRegistry();
+    (void)blocks.registerBlock(parseDef(blockDef(
+        "fire",
+        R"("solid":false,"opaque":false,"transparent":true,"light_emission":15)")));
+    const BlockID fire = blocks.idForName("fire");
+    ASSERT_TRUE(fire.valid());
+    world.setBlock(8, 1, 8, blocks.idForName("wheat"));
+    world.setFluid(9, 1, 8, FluidKind::Lava, kMaxFluidLevel);
+    std::vector<BlockPos> changed = FluidSim::tick(world, blocks);
+    EXPECT_EQ(world.getBlock(8, 1, 8), fire); // burned to FIRE (Phase 64)
+    EXPECT_NE(std::find(changed.begin(), changed.end(), BlockPos{8, 1, 8}),
+              changed.end());
+    // The fire is not flamable: a second tick does not re-burn it (the
+    // cell stays fire — the burn path is inert on its own product).
+    (void)FluidSim::tick(world, blocks);
+    EXPECT_EQ(world.getBlock(8, 1, 8), fire);
+}
+
 TEST(FluidBurnTest, OnlyDirectNeighborsBurn) {
     World world;
     world.getOrCreateChunk({0, 0, 0});

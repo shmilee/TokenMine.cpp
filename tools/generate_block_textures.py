@@ -428,6 +428,36 @@ def make_wheat(stage: int, salt: int):
     return tile
 
 
+def fire(x, y):
+    """Phase 64: the flame tile (the `fire` block, a cross model). A
+    teardrop flame rising from the base: a deep-red rim, an orange body,
+    a yellow core and a near-white heart at the bottom centre. The
+    centreline leans with a deterministic per-row hash (a stylised
+    flicker, static like every other texture). Transparent elsewhere."""
+    if y > 15:
+        return (0, 0, 0, 0)
+    t = min((15 - y) / 13.0, 1.0)  # 0 at the base row, 1 at the tip
+    lean = (h2(0, y, 901) % 5 - 2) * 0.35 * t  # -1.05..+1.05 px at the tip
+    cx = 7.5 + lean
+    half = 5.5 * (1.0 - t) ** 0.85  # narrows to a point at the tip
+    if half <= 0.1:
+        return (0, 0, 0, 0)
+    dx = abs(x + 0.5 - cx)
+    if dx >= half:
+        return (0, 0, 0, 0)
+    d = dx / half
+    n = noise(x, y, 902, 14)
+    if d < 0.32:  # the near-white heart (only near the base)
+        base = (255, 236, 170) if t < 0.45 else (255, 214, 110)
+    elif d < 0.62:
+        base = (255, 204, 64)
+    elif d < 0.85:
+        base = (242, 122, 30)
+    else:
+        base = (196, 58, 22)
+    return (clamp(base[0] + n), clamp(base[1] + n), clamp(base[2] + n), 255)
+
+
 TEXTURES = {
     **{name: make_wool_tile(name) for name in WOOL_PALETTE},
     **{f"wheat_{s}": make_wheat(s, 70 + s) for s in range(1, 8)},
@@ -458,6 +488,7 @@ TEXTURES = {
     "tulip": make_flower((206, 82, 213), 64),
     "cornflower": make_flower((126, 174, 245), 65),
     "glowstone": glowstone,
+    "fire": fire,
     "planks": planks,
     "crafting_table_top": crafting_table_top,
     "crafting_table_side": crafting_table_side,

@@ -44,6 +44,10 @@ BlockRegistry makeBlocks() {
     // format-7 save cross-check.
     blocks.registerBlock(parseJson(
         R"({"id":"furnace","properties":{"interact":"furnace"},"model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    // Phase 64: the fire block — the block edits that reference "fire"
+    // need it registered for the format-10 fires cross-check.
+    blocks.registerBlock(parseJson(
+        R"({"id":"fire","properties":{"solid":false,"opaque":false,"transparent":true},"model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
     return blocks;
 }
 
@@ -237,8 +241,8 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     s.tableGrid[8] = ItemStack {f.items.idForName("stone"), 64};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Phase 51: writes are always format 9.
-    EXPECT_EQ(j->find("format")->asInt(), 9);
+    // Phase 64: writes are always format 10.
+    EXPECT_EQ(j->find("format")->asInt(), 10);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -278,6 +282,7 @@ TEST(SaveParseTest, FormatTwoLoadsWithEmptyGrids) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(2);
+    root = withoutKey(root, "fires"); // format 2 predates the fire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "inv_grid");
     root = withoutKey(root, "table_grid");
@@ -376,6 +381,7 @@ TEST(SaveParseTest, FormatOneLoadsWithoutHealth) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["format"] = Json(1);
+    root = withoutKey(root, "fires"); // format 1 predates the fire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "inv_grid"); // format 1 predates the grids
     root = withoutKey(root, "table_grid");
@@ -423,6 +429,7 @@ TEST(SaveParseTest, FormatThreeLoadsWithoutHunger) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["format"] = Json(3);
+    root = withoutKey(root, "fires"); // format 3 predates the fire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 3 predates the furnace
     ASSERT_EQ(root["player"].find("hunger"), nullptr);
@@ -468,6 +475,7 @@ TEST(SaveParseTest, FormatFourLoadsWithoutSaturation) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["format"] = Json(4);
+    root = withoutKey(root, "fires"); // format 4 predates the fire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 4 predates the furnace
     ASSERT_EQ(root["player"].find("saturation"), nullptr);
@@ -824,6 +832,7 @@ TEST(SaveParseTest, FluidEditKindRoundTripsAndMigrates) {
     EXPECT_EQ(out.at(4).asString(), "lava");
 
     root["format"] = Json(8);
+    root = withoutKey(root, "fires"); // format 8 predates the fire
     Json waterEdit = Json::array();
     waterEdit.push_back(Json(3));
     waterEdit.push_back(Json(10));
@@ -1071,8 +1080,8 @@ TEST(SaveRoundTripTest, FurnacesRoundTrip) {
     s.furnaces[0].state.fuelSubsteps = 1234;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Phase 51: writes are always format 9.
-    EXPECT_EQ(j->find("format")->asInt(), 9);
+    // Phase 64: writes are always format 10.
+    EXPECT_EQ(j->find("format")->asInt(), 10);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
@@ -1111,6 +1120,7 @@ TEST(SaveParseTest, FormatFiveLoadsWithEmptyFurnaces) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(5);
+    root = withoutKey(root, "fires"); // format 5 predates the fire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 5 predates the furnace
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
@@ -1135,6 +1145,7 @@ TEST(SaveParseTest, FormatSixMigratesStateToSoleFurnace) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(6);
+    root = withoutKey(root, "fires"); // format 6 predates the fire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["furnace"] = withoutKey(root["furnaces"].at(0), "pos");
     root = withoutKey(root, "furnaces");
@@ -1162,6 +1173,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(6);
+    root = withoutKey(root, "fires"); // format 6 predates the fire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["furnace"] = withoutKey(root["furnaces"].at(0), "pos");
     root = withoutKey(root, "furnaces");
@@ -1177,6 +1189,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
         ASSERT_TRUE(j2.ok());
         Json root2 = *j2;
         root2["format"] = Json(6);
+        root2 = withoutKey(root2, "fires"); // format 6 predates the fire
         root2["fluids"] = downgradeFluids(root2); // pre-Phase-51 shape
         root2 = withoutKey(root2, "furnaces");
         Json fz = Json::object();
@@ -1205,6 +1218,7 @@ TEST(SaveParseTest, RejectsFurnaceFieldInOldFormat) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(5); // keeps the "furnaces" field
+    root = withoutKey(root, "fires"); // the rejection under test is "furnaces"
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
@@ -1229,6 +1243,7 @@ TEST(SaveParseTest, RejectsFurnacesFieldInFormatSix) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(6); // keeps the "furnaces" field
+    root = withoutKey(root, "fires"); // the rejection under test is "furnaces"
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
@@ -1373,6 +1388,155 @@ TEST(SaveParseTest, RejectsBadFurnaceFields) {
     }
 }
 
+// -- burning fires (format 10; Phase 64) ------------------------------------
+//
+// makeSave has no fire blocks; these tests add them. The format-10
+// cross-check is BIDIRECTIONAL, exactly like the furnace states: exactly
+// one entry per fire block in the block edits (entries without a block and
+// blocks without an entry are both rejected).
+
+// A save with two fire blocks (position-sorted, as the game's map writes
+// them) and the matching entries.
+SaveGame makeFireSave(const Fixture& f) {
+    SaveGame s = makeSave(f);
+    s.blockEdits.push_back({BlockPos {1, 53, 1}, "fire"});
+    s.blockEdits.push_back({BlockPos {2, 53, 1}, "fire"});
+    s.fires.push_back({BlockPos {1, 53, 1}, 2.5});
+    s.fires.push_back({BlockPos {2, 53, 1}, 4.0});
+    return s;
+}
+
+TEST(SaveRoundTripTest, FiresRoundTrip) {
+    Fixture f;
+    SaveGame s = makeFireSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    // Phase 64: writes are always format 10.
+    EXPECT_EQ(j->find("format")->asInt(), 10);
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    ASSERT_EQ(out->fires.size(), 2u);
+    EXPECT_EQ(out->fires[0].pos, (BlockPos{1, 53, 1}));
+    EXPECT_DOUBLE_EQ(out->fires[0].remainingSeconds, 2.5);
+    EXPECT_EQ(out->fires[1].pos, (BlockPos{2, 53, 1}));
+    EXPECT_DOUBLE_EQ(out->fires[1].remainingSeconds, 4.0);
+}
+
+TEST(SaveRoundTripTest, EmptyFiresRoundTrip) {
+    // A world without fire blocks still carries the (empty) key — the
+    // format-10 discipline (a missing key in a format-10 file is corrupt).
+    Fixture f;
+    SaveGame s = makeSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    ASSERT_NE(j->find("fires"), nullptr);
+    EXPECT_EQ(j->find("fires")->size(), 0u);
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_TRUE(out->fires.empty());
+}
+
+TEST(SaveParseTest, FormatNineLoadsWithoutFires) {
+    // A format-9 file (fires did not exist) loads with no entries.
+    Fixture f;
+    SaveGame s = makeSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["format"] = Json(9);
+    root = withoutKey(root, "fires"); // format 9 predates the fire
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_TRUE(out->fires.empty());
+}
+
+TEST(SaveParseTest, FormatNineFireEditMigratesEmpty) {
+    // A hand-edited format-9 file with a fire block edit: the parse keeps
+    // the entry list EMPTY (the game adds the full-lifetime entries on
+    // load, like the empty furnace states).
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.blockEdits.push_back({BlockPos {1, 53, 1}, "fire"});
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["format"] = Json(9);
+    root = withoutKey(root, "fires"); // format 9 predates the fire
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_TRUE(out->fires.empty());
+}
+
+TEST(SaveParseTest, RejectsFiresFieldInFormatNine) {
+    Fixture f;
+    SaveGame s = makeFireSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["format"] = Json(9); // keeps the "fires" field
+    EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
+}
+
+TEST(SaveParseTest, RejectsFireEntryBlockMismatch) {
+    // The bidirectional cross-check: an entry whose position holds no fire
+    // block, or a fire block with no entry.
+    Fixture f;
+    {
+        SaveGame s = makeSave(f);
+        s.blockEdits.push_back({BlockPos {1, 53, 1}, "fire"});
+        s.fires.push_back({BlockPos {5, 53, 5}, 2.0});
+        auto j = serializeSave(s, f.items);
+        ASSERT_TRUE(j.ok());
+        EXPECT_FALSE(parseSave(*j, f.items, f.blocks, f.effects, 42).ok());
+    }
+    {
+        SaveGame s = makeFireSave(f);
+        s.fires.pop_back(); // the second block has no entry
+        auto j = serializeSave(s, f.items);
+        ASSERT_TRUE(j.ok());
+        EXPECT_FALSE(parseSave(*j, f.items, f.blocks, f.effects, 42).ok());
+    }
+}
+
+TEST(SaveParseTest, RejectsDuplicateFireEntries) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.blockEdits.push_back({BlockPos {1, 53, 1}, "fire"});
+    s.fires.push_back({BlockPos {1, 53, 1}, 2.0});
+    s.fires.push_back({BlockPos {1, 53, 1}, 3.0});
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    EXPECT_FALSE(parseSave(*j, f.items, f.blocks, f.effects, 42).ok());
+}
+
+TEST(SaveParseTest, RejectsFireEntryBadRemaining) {
+    // remaining must be a number in (0, ...]: the countdown is the save's
+    // whole reason to exist (0 or negative would burn out on load).
+    Fixture f;
+    for (const double bad : {0.0, -1.5}) {
+        SaveGame s = makeFireSave(f);
+        s.fires[0].remainingSeconds = bad;
+        auto j = serializeSave(s, f.items);
+        ASSERT_TRUE(j.ok());
+        EXPECT_FALSE(parseSave(*j, f.items, f.blocks, f.effects, 42).ok());
+    }
+}
+
+TEST(SaveParseTest, RejectsFireEntryMissingRemaining) {
+    // The "remaining" field is required (the countdown is the entry's
+    // whole reason to exist).
+    Fixture f;
+    SaveGame s = makeFireSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    Json arr = Json::array();
+    arr.push_back(withoutKey(root["fires"].at(0), "remaining"));
+    arr.push_back(root["fires"].at(1));
+    root["fires"] = std::move(arr);
+    EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
+}
+
 // -- format 8: the player's active status effects (Phase 46) ---------------
 
 TEST(SaveFormat8Test, EffectsRoundTripNameSorted) {
@@ -1423,6 +1587,7 @@ TEST(SaveFormat8Test, FormatSevenFileWithoutEffectsLoads) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(7);
+    root = withoutKey(root, "fires"); // format 7 predates the fire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["player"] = withoutKey(*j->find("player"), "effects");
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);

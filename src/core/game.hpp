@@ -282,6 +282,15 @@ private:
     // per interval, and expired effects are removed. A no-op while the
     // player is dead or has no active effects.
     void updateEffects(double dt);
+    // Phase 64 fire: the real-dt burn-out countdown for every burning
+    // fire block (a fire that reaches zero becomes air — the burn leaves
+    // no char, like the Phase 58 lava burn) + the water extinguish (a
+    // fire with a water fluid 6-adjacent is put out instantly — water
+    // beats fire, the Phase 57 water-beats-lava rule). Runs every frame
+    // after the fluids tick (so the newly burned cells from the Phase 58
+    // pass are registered and the new water is visible). A no-op when
+    // the world holds no fire.
+    void updateFires(double dt);
     // Phase 56: sync the player's absorption layer to the active effects
     // (sum of `absorb_hp`). Called at every effect change (eat-grant, mob
     // on_hit_effect, expiry in updateEffects, milk clear, death clear,
@@ -607,6 +616,18 @@ private:
     std::map<BlockPos, FurnaceState> m_furnaces;
     BlockPos m_openFurnacePos {};
     FurnaceUI m_furnaceUi;
+
+    // Phase 64 fire: the remaining real-dt life of EVERY burning fire
+    // block in the world (created on placement/burn, dropped when the cell
+    // stops holding a fire; the invariant the format-10 save
+    // cross-checks). std::map: position-sorted, so the per-frame burn-out
+    // countdown iterates deterministically. m_fireId is the registry id of
+    // the "fire" block (the burn target; the init cross-check guarantees
+    // it whenever a flamable block exists); m_fireLifetime is the
+    // config-driven burn-out duration (fire.lifetime_seconds, default 4).
+    std::map<BlockPos, double> m_fires;
+    BlockID m_fireId = BlockID::invalid();
+    double m_fireLifetime = 4.0;
 
     // Phase 48 crop growth: the cells holding a block with a non-empty
     // growsTo property (the growth stage is the block id itself — no

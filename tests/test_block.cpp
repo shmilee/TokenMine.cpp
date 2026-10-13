@@ -1352,3 +1352,32 @@ TEST(BlockRegistryTest, Phase63FlamableContent) {
                                            "wheat_7", "wood"};
     EXPECT_EQ(flamables, want);
 }
+
+// Fire block (Phase 64, the fire visuals): the burn TARGET of the igniter
+// (Phase 60) and the lava burn pass (Phase 58) — a light source that burns
+// out after fire.lifetime_seconds and is extinguished by water. Pins the
+// ACTUAL asset file: a non-solid, non-opaque transparent cross (the plant
+// combination the registry enforces), full light 15 (the Minecraft fire
+// value), instant break (hardness 0), NO drops (a burned char drops
+// nothing, like the Phase 58 burn) and NOT flamable (fire does not burn —
+// it is the end state of the burn).
+// ---------------------------------------------------------------------------
+
+TEST(BlockRegistryTest, Phase64FireBlockContent) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* b = reg.findByName("fire");
+    ASSERT_TRUE(b != nullptr);
+    EXPECT_FALSE(b->properties.solid);
+    EXPECT_FALSE(b->properties.opaque);
+    EXPECT_TRUE(b->properties.transparent);
+    EXPECT_EQ(b->properties.lightEmission, 15);  // the Minecraft fire value
+    EXPECT_FLOAT_EQ(b->properties.hardness, 0.0f);  // instant break
+    EXPECT_TRUE(b->properties.drops.empty());  // the burn leaves no char
+    EXPECT_FALSE(b->properties.flamable);  // fire is the burn's end state
+    EXPECT_EQ(b->model.shape, BlockModel::Shape::Cross);
+    EXPECT_EQ(b->model.textures.cross, "fire");
+}

@@ -81,7 +81,7 @@
       "duration": 5.0 }             //   仅食物 + init 逐条目交叉校验效果名（ammo 模式）。
   ],
   "ignites_flamable": true          // 可选（Phase 60）：严格 bool，缺省 false。true = 点燃器——
-                                    //   右键烧 `flamable` 块（setBlock air、**无掉落**、**不消耗**）；
+                                    //   右键烧 `flamable` 块（setBlock fire、**无掉落**、**不消耗**）；
                                     //   与五个右键通道互斥（food/drink/launcher/dye/fluid bucket，
                                     //   通道所有权纪律）；非 bool 点名拒绝（P60）。
   "max_stack": 1,                   // 1..64，默认 64
@@ -458,7 +458,7 @@ Phase 56；HUD 红心带 = 心带左侧 2 颗红心）。
        "plant_on": ["farmland"],        // 放置时下方须为之一（Phase 53；缺省 = 不限）
        "growth_light": 9,               // 作物格最低光照 max(sky,block)（9 = MC 值）
        "dry_slowdown": 2,               // 无水时 roll 模数倍数（2 = MC 干耕地）
-       "flamable": true                 // 熔岩 6-邻接触即烧成 air（Phase 58）
+       "flamable": true                 // 熔岩 6-邻接触即烧成 fire（Phase 58/64）
      },
      "model": { "shape": "cross", "textures": { "cross": "wheat_1" } }
    }
@@ -482,10 +482,14 @@ Phase 56；HUD 红心带 = 心带左侧 2 颗红心）。
    土壤 X 上却只在土壤 Y 上生长（本项目两者同值 = farmland）。
    可燃字段（Phase 58，**可选**）：`flamable`（bool，非 bool 点名
    拒绝）——该方块的任意格被**熔岩 6-邻**接触时，FluidSim 燃烧 pass
-   每帧把它烧成 air（**无掉落**；水不烧）。内容 = wheat_1..7 全
+   每帧把它烧成 **fire 块**（Phase 64：燃烧目标 = registry 有 `fire`
+   块时 fire、否则 air；**无掉落**；水不烧）。内容 = wheat_1..7 全
    7 阶 + wood/leaves/grass（Phase 63 = MC 天然可燃三块，纯数据；
-   点燃器 Phase 60 同款生效）；加可燃方块 = 一行 `"flamable": true`，
-   零代码。v1 不燃：羊毛/高草/火把（见 KNOWN_ISSUES）。
+   点燃器 Phase 60 同款生效）。**init 交叉校验**（Phase 64）：registry
+   有**任何** flamable 块则**必须**有 `fire` 块（删 `data/blocks/
+   fire.json` = 启动报错点名）；零 flamable 的资产集合法。加可燃方块
+   = 一行 `"flamable": true`，零代码。v1 不燃：羊毛/高草/火把（见
+   KNOWN_ISSUES）。
 2. **生长引擎**（自动）：`Game::m_crops`（`map<BlockPos,BlockID>`，位置序）
    追踪所有带 `grows_to` 的格——`setBlock` 收口维护（放作物=入集，
    破坏/成熟=出集，炉子同款模式），**读档后 `rescanCrops()` 全量扫描

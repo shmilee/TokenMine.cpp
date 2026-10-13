@@ -109,7 +109,15 @@ namespace mc {
 //      fluid NAME from the two-kind vocabulary). Format-8 and older files
 //      still load: their four-element edits migrate to water (the only
 //      simulated fluid before Phase 51); writes are always format 9.
-inline constexpr int kSaveFormat = 9;
+//   10: the burning fire blocks (Phase 64, the fire visuals) — "fires":
+//      [ { "pos": [x, y, z], "remaining": ... } ] (position-sorted), one
+//      entry per FIRE BLOCK in the world, `remaining` in (0, ...] seconds
+//      (the real-dt burn-out countdown; a reload continues burning —
+//      like the player's fire effect). Format-9 and older files still
+//      load (no fires — the fire block did not exist); format-10 files
+//      REQUIRE the "fires" key (an empty array is valid — the furnaces-
+//      key discipline); writes are always format 10.
+inline constexpr int kSaveFormat = 10;
 inline constexpr int kSaveFormatMin = 1;
 
 // Phase 40: the furnace save-field bounds — the max smelt/fuel times the
@@ -150,6 +158,15 @@ struct SavedFluidEdit {
 struct SavedFurnace {
     BlockPos pos;
     FurnaceState state;
+};
+
+// One burning fire block's remaining life (format 10; Phase 64). The game
+// keeps an entry for EVERY fire block in the world (the map is the single
+// source of truth) — the save cross-checks the entries against the block
+// edits in both directions, exactly like the furnace states.
+struct SavedFire {
+    BlockPos pos;
+    double remainingSeconds = 0.0; // real-dt seconds left before burn-out
 };
 
 // One active player status effect (format 8; Phase 46): the effect NAME
@@ -202,6 +219,11 @@ struct SaveGame {
     // Empty when the world holds no furnace blocks; a format-6 load is
     // migrated into this (see kSaveFormat).
     std::vector<SavedFurnace> furnaces;
+    // The burning fire blocks (format 10; Phase 64): one entry per fire
+    // block in the world (position-sorted; the game's map order), each with
+    // its real-dt remaining life. Empty when the world holds no fire; a
+    // format-9 load migrates into this empty (fires did not exist).
+    std::vector<SavedFire> fires;
     // The player's active status effects (format 8; Phase 46), name-
     // sorted. Empty for format 1-7 loads (the effects did not exist).
     std::vector<SavedEffect> playerEffects;

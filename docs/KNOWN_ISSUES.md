@@ -42,7 +42,8 @@
 - ~~**概率次级掉落每方块至多一个条目**~~ — `[Phase 52]` 已修复：新增 `chance_drops`（`{item, count, chance}` 严格三元组数组，与单条目 `chance_drop` **互斥**【同时写拒绝】）。各条目**独立 roll**（`rollChanceDropEntry`，条目索引去相关 salt），breakBlock 循环条目、每条目至多 1 掉落实体；init 每条目复用 drops 纪律（物品存在 + max_stack）。单条目 `chance_drop` 保留（系统 + 单测覆盖；`[Phase 55]` leaves 迁入列表后一度**无现役内容使用者**，`[Phase 59]` gravel→flint（10%，MC 值）重新使用它）。`[Phase 49]`（多掉落列表 `[Phase 52]` 已就位；内容扩展 `[Phase 55]`、`[Phase 59]`）
 - **概率掉落是 per-cell 确定性（无重 roll）** — 同一世界同一格每次破坏结果相同（splitmix64(seed + 位置哈希)）：破坏-重种同一格树叶，苹果结果不变；这是无输入字节可复现的刻意代价（MC 是真随机）。位置哈希 + 专用 salt 保证相邻格去相关（单测有实证率断言）。`[Phase 49]`
 - ~~**flint 无用途（v1 文档化偏离）**~~ — `[Phase 60]` 已解决：**箭头配方 = shapeless flint+stick+feather → 4 箭（MC 1.14+）**，**替换**了旧的 2 木棍竖排 → 2 箭配方（内容契约变更：早期箭现需 flint + feather = MC 同款闭环，gravel→flint、chicken→feather、树→stick）+ **flint_and_steel**（flint+iron_ingot 合成；`ignites_flamable` = 右键烧 `flamable` 块、无掉落、不消耗）。flint 的两个用途 = MC 的主用途。`[Phase 59]` → `[Phase 60]`
-- **燧石与钢 v1 范围（文档化偏离）** — 点燃器**只作用于块**（`flamable` 集 = wheat_1..7 + wood/leaves/grass，`[Phase 63]` 扩到 MC 天然可燃）：Mob 点燃仍只来自熔岩（`[Phase 58]`），玩家/Mob 不可被点燃；**无火视觉**（烧 = 直接移除，与熔岩烧同款语义、无火焰块/粒子）；不引燃流体。`[Phase 60]` → `[Phase 63]`
+- **燧石与钢 v1 范围（文档化偏离）** — 点燃器**只作用于块**（`flamable` 集 = wheat_1..7 + wood/leaves/grass，`[Phase 63]` 扩到 MC 天然可燃）：Mob 点燃仍只来自熔岩（`[Phase 58]`），玩家/Mob 不可被点燃；不引燃流体。**火视觉**（烧 = 生成 `fire` 块）`[Phase 64]` 已解决。`[Phase 60]` → `[Phase 63]` → `[Phase 64]`
+- **火 v1 范围（文档化偏离）** — `fire` 块（`[Phase 64]`）的边界：**无粒子**（燃烧/燃尽/浇灭都没有火焰粒子特效，表现 = 静态 cross 纹理 + 光 15）；**无蔓延**（火不会像 MC 一样引燃相邻可燃块——fire 非 flamable，燃烧 pass 只认熔岩邻接，点燃器只认单次右键目标）；fire 块**可放置**（block item 自动存在：放一个 = 临时营火，燃尽回 air、无掉落）；光的**强度恒定 15 无闪烁**（纹理静态、light 不随时间变）。`[Phase 64]`
 - **stone→cobblestone 材料链（Phase 61 内容契约变更 + 熔炼偏离）** — 挖天然 stone 现掉 **cobblestone**（MC 材料循环）：stone 只能经 **4 cobblestone → 1 stone 合成**（MC 1.14+）回来。文档化偏离：**cobblestone 不能熔炼回 stone**——`smeltable_to` 是物品字段而 block item 无独立 JSON（隐式生成、无 item 数据），给 block item 加数据 = 核心改动，超出本 phase 最小范围；合成路线已覆盖转换。`[Phase 61]`
 - **无斧类工具（Phase 62 范围注记）** — 本项目的工具型只有镐（wooden/stone/iron pickaxe）+ 弓；"石头工具线" v1 = **石镐**（镐路线中档：break_speed 木 2 → 石 3 → 铁 4、攻击 2 → 2.5 → 3，项目压缩刻度恰居中）。MC 还有石斧/木斧/铁斧——引入斧 = 新工具型（用途语义：对树/肉的倍率），超出内容 phase 最小范围；石镐已消费 P61 的 cobblestone（首个工具用途）。`[Phase 62]`
 
@@ -114,7 +115,7 @@
 
 ## 生存（Phase 16）
 
-- **伤害来源：坠落、虚空与 mob 攻击（Phase 20 起）** — 无岩浆/火/窒息伤害、无 mob 攻击以外的接触伤害。`fallDamage = max(0, 净下落格数 − fallDamageOffset)`（offset 默认 3），从离地帧的 `fallStartY` 到落地点的净竖直距离结算；落入水中的落地取消伤害。无护甲/摔落缓冲机制。`[Phase 16]`（mob 攻击 `[Phase 20]` 已解决）
+- **伤害来源：坠落、虚空、mob 攻击、熔岩灼烧与燃烧效果** — 无窒息伤害、无 mob 攻击以外的接触伤害（`fire` 块非 solid、无接触伤害 = 火 v1 范围）。`fallDamage = max(0, 净下落格数 − fallDamageOffset)`（offset 默认 3），从离地帧的 `fallStartY` 到落地点的净竖直距离结算；落入水中的落地取消伤害。无护甲/摔落缓冲机制。`[Phase 16]`（mob 攻击 `[Phase 20]`、熔岩灼烧 `[Phase 54]`、燃烧效果 `[Phase 57]` 已解决）
 - ~~**存档加载到空中位置时坠落伤害被绕过**~~ — `[Phase 33]` 发现（P33 E2E 探针实证：46–59 格自由落体满血落地），`[Phase 36]` 已修复：`Player::restorePosition`（= `teleportTo` + `fallStartY = pos.y` 重钉），`applySave` 改走该路径 + 单测 ×2（空中 10 格 → 精确 7 HP；地面读档零伤害）+ E2E（存档 pos y=62 加载 → 8 格坠落 → health 15 精确）——细节见 `archive/phase-36.md`。
 - **生命 HUD 是 10 心三态，半心按 0.5 HP 粒度渲染** — 每颗心 2 HP，填充 = `clamp(hp − 2i, 0, 2)`（2=满/1=半/0=空），贴图是 3 个固定状态（满/半/空），无更细粒度（如 0.5 HP 的四分之心）；MC 的心是 10 颗每颗 1 HP 且支持 0.5 增量。`[Phase 16]`
 - **无死亡分数/死亡统计** — 死亡只显示 "You died! / Press R"，无得分、无死亡次数、无 Game Over 统计屏；重生保留背包与全部物品（无死亡掉落）。`[Phase 16]`

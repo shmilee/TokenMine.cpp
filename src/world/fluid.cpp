@@ -232,18 +232,24 @@ std::vector<BlockPos> reactLavaWithWater(World& world,
     return changed;
 }
 
-// -- Flamable burn pass (Phase 58) ------------------------------------------
+// -- Flamable burn pass (Phase 58, the burn target Phase 64) ---------------
 //
 // Snapshot scan: every BLOCK cell 6-adjacent to a LAVA cell whose data is
-// `flamable` burns to air (Minecraft: lava burns crops; the shipped data
-// flags the wheat crop stages only). The lava is not consumed and there is
-// NO drop (a burned crop is gone, like Minecraft's char). Inert when no
-// registered block is flamable. A cell adjacent to several lava cells is
-// collected once per lava neighbor — the sorted apply + the setBlock
-// "changed" return de-duplicate it.
-// Returns the destroyed cells (they are air now — re-light + re-mesh).
+// `flamable` burns to `burnTo` (Minecraft: lava burns crops; the shipped
+// data flags the crop stages + the natural flammables). The lava is not
+// consumed and there is NO drop (a burned crop is gone, like Minecraft's
+// char). Inert when no registered block is flamable. A cell adjacent to
+// several lava cells is collected once per lava neighbor — the sorted
+// apply + the setBlock "changed" return de-duplicate it.
+// `burnTo` is the FIRE block in the game (Phase 64: the burn leaves a
+// light source that burns out — the init cross-check guarantees the fire
+// block whenever a flamable exists) or air in a registry without the
+// fire block (unit-test fixtures; the Phase 58 semantics).
+// Returns the destroyed cells (they hold `burnTo` now — re-light +
+// re-mesh).
 std::vector<BlockPos> burnFlamableNeighbors(World& world,
-                                            const BlockRegistry& blocks) {
+                                            const BlockRegistry& blocks,
+                                            BlockID burnTo) {
     // Fast exit: no flamable block in the registry -> nothing to burn.
     bool anyFlamable = false;
     for (const BlockID id : blocks.allIds()) {
@@ -295,12 +301,12 @@ std::vector<BlockPos> burnFlamableNeighbors(World& world,
     }
 
     // Apply (sorted for a deterministic order; a cell collected twice
-    // burns once — the second setBlock(air) reports no change).
+    // burns once — the second setBlock reports no change).
     std::sort(destroyed.begin(), destroyed.end(),
               [](const BlockPos& a, const BlockPos& b) { return a < b; });
     std::vector<BlockPos> changed;
     for (const BlockPos& p : destroyed) {
-        if (world.setBlock(p.x, p.y, p.z, BlockID::air())) {
+        if (world.setBlock(p.x, p.y, p.z, burnTo)) {
             changed.push_back(p);
         }
     }
@@ -511,11 +517,19 @@ std::vector<BlockPos> FluidSim::tick(World& world,
     // Reaction first: it separates the kinds (a converted cell becomes a
     // block), so the per-kind scans that follow see 6-disjoint fluids.
     std::vector<BlockPos> changed = reactLavaWithWater(world, blocks);
-    // Then the flamable burn (Phase 58): it destroys neighbor BLOCKS
-    // without touching the fluids, so its position relative to the
-    // per-kind scans is behavior-neutral — the reaction goes first so the
-    // converted cells (blocks now) are visible to it.
-    for (const BlockPos& p : burnFlamableNeighbors(world, blocks)) {
+    // Then the flamable burn (Phase 58, target Phase 64): it destroys
+    // neighbor BLOCKS without touching the fluids, so its position
+    // relative to the per-kind scans is behavior-neutral — the reaction
+    // goes first so the converted cells (blocks now) are visible to it.
+    // The burn target is the "fire" block whenever the registry provides
+    // it (the game's init cross-check guarantees this whenever a flamable
+    // exists); without it the Phase 58 air semantics stay (test
+    // fixtures).
+    const BlockID burnTarget =
+        blocks.idForName("fire").valid() ? blocks.idForName("fire")
+                                         : BlockID::air();
+    for (const BlockPos& p :
+         burnFlamableNeighbors(world, blocks, burnTarget)) {
         changed.push_back(p);
     }
     for (const FluidKind kind : {FluidKind::Water, FluidKind::Lava}) {
