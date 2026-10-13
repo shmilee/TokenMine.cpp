@@ -642,6 +642,11 @@ private:
     // per active effect (left-aligned on the heart row).
     EffectRegistry m_effects;
     StatusEffects m_playerEffects;
+    // Phase 57: the ignites_on_lava effect (the fire) — its id, or -1
+    // when no registered effect carries the flag (init cross-checks that
+    // AT MOST ONE does). (Re-)applied every frame while the player is in
+    // the lava; cleared by water (the extinguished_by_water flag).
+    int m_fireEffectId = -1;
     Texture m_effectTexture;
 
     ShaderProgram m_basicShader;

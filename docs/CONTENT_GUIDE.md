@@ -306,7 +306,8 @@ Mob 章节。
 ## 新增一个状态效果（无需改核心代码，Phase 46）
 
 1. 图标：`assets/textures/effects.png` 是 16px/tile 的透明底条带
-   （当前 64×16 = 4 tile）。加新效果 = 条带加宽一格（`tools/
+   （当前 80×16 = 5 tile：poison / weakness / regeneration /
+   absorption / fire）。加新效果 = 条带加宽一格（`tools/
    generate_effect_icons.py` 同款：确定性噪声 + 简单图元）；init 对
    每个效果的 `icon` 交叉校验 < tile 数，纹理宽度保持 16 的整数倍
 2. `assets/data/effects/<id>.json`（**扁平 JSON**，无 properties 包裹）：
@@ -316,28 +317,39 @@ Mob 章节。
      "id": "slowness",
      "melee_penalty": 0,
      "negative": true,
-     "icon": 4
+     "icon": 5
    }
    ```
 
    字段（严格解析 = 注册表纪律，未知键拒绝）：`tick_type`（`"damage"`
    / `"heal"`；**缺省 = 无 tick** 的纯修饰效果，如上面的 slowness 骨架
    ——但注意 v1 核心只消费 `tick_*`/`min_health`/`melee_penalty`/
-   `absorb_hp` 语义，纯修饰效果目前只影响 HUD/存档/牛奶清除）+
-   `tick_amount`（每次 tick 的 HP，(0,10]，有 tick 必填）+
+   `absorb_hp`/火系统标志 语义，纯修饰效果目前只影响 HUD/存档/牛奶清除）
+   + `tick_amount`（每次 tick 的 HP，(0,10]，有 tick 必填）+
    `tick_interval`（秒，(0,100]，有 tick 必填）+ `min_health`（**仅
    damage**：0 = 无地板可致死 / 1 = 保持 ≥1 HP 永不致死 = MC 中毒地板）
    + `melee_penalty`（近战扣除攻击点，[0,100]）+ `absorb_hp`（Phase
    56：激活期间的**临时 max HP** 点数，整数 [1,64]——吸收层，见
    `docs/MECHANICS.md`「状态效果」）+ `negative`（bool，缺省 false；
-   牛奶只清负面）+ `icon`（条带 tile 索引，必填）。**no-op 拒绝**：无
-   tick 且 `melee_penalty` = 0 且 `absorb_hp` = 0 = 报错。id 非空且唯一
-3. 来源（v1 四条）：
+   牛奶只清负面——fire 取 false = 牛奶不灭火）+
+   `ignites_on_lava`（Phase 57：bool，缺省 false——玩家**在熔岩内**时
+   每帧重施加本效果（duration 重置 = 熔岩内持续燃烧；离熔岩后继续
+   countdown 至到期）。**至多一个**注册效果可带此标志（init 交叉校验，
+   两个 = 启动失败；零个合法 = 无火系统的资产集））+
+   `extinguished_by_water`（Phase 57：bool，缺省 false——玩家**在水内**
+   时本效果被瞬时移除（在 tick 之前执行 = 水内零伤害）；水胜熔岩：
+   两流体并存时先点燃后灭火 = 无火）+ `icon`（条带 tile 索引，必填）。
+   **no-op 拒绝**：无 tick 且 `melee_penalty` = 0 且 `absorb_hp` = 0
+   = 报错。id 非空且唯一
+3. 来源（v1 五条）：
    - **mob 命中**：`assets/data/mobs/<id>.json` 加 `on_hit_effect`
      （见 Mob 章节）——近战命中施加
    - **进食施加**（Phase 49/56）：物品加 `grants_effect`（单条）或
      `grants_effects`（列表，按序施加；两字段互斥，见物品模板）——
      完整吃下时施加（金苹果 → regeneration 10 s + absorption 5 s）
+   - **熔岩点燃**（Phase 57）：效果带 `ignites_on_lava` 即自动成为熔岩
+     点燃源（当前 = `fire`；时长走 config `player.fire_duration_seconds`，
+     默认 8 s = MC Normal，(0,100]）
    - **存档注入**：`player.effects: [{"name": "<id>", "remaining": <秒>}]`
      （format 8；E2E 场景用）
    - **吸收层读档**（Phase 56）：效果含 `absorb_hp` 时，存档 health 可
@@ -577,6 +589,7 @@ config 其余部分的前向兼容一致）。种子配置（首次运行生成�
 | `sprint_hunger_decay_factor` | 2 | 疾跑衰减加速因子（间隔 ÷ 因子）；>0 |
 | `lava_damage_interval_seconds` | 1.0 | 站在熔岩格里每间隔受 `lava_damage` HP 灼烧（Minecraft：4 HP/s，真实 dt 生存计时器；离熔岩重置未到期 tick）；>0（Phase 54） |
 | `lava_damage` | 4 | 每次灼烧的 HP（Minecraft：4）；0 < v ≤ `max_health`（Phase 54） |
+| `fire_duration_seconds` | 8 | 熔岩点燃的 `ignites_on_lava` 效果时长（Minecraft Normal：8 s；熔岩内每帧重施加 = 持续燃烧，离熔岩后 countdown 至到期）；0 < v ≤ 100（Phase 57） |
 
 运动/几何全套键（同样可覆盖，均 >0）：`width`（0.6）、`height`（1.8）、
 `eye_height`（1.62，须 < `height`）、`walk_speed`（4.3）、`sprint_speed`（5.6）、

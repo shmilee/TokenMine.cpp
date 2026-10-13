@@ -39,6 +39,10 @@ EffectRegistry makeRegistry() {
         {R"({"id":"regeneration","tick_type":"heal","tick_amount":1.0,
             "tick_interval":4.5,"negative":false,"icon":2})"},
         {R"({"id":"absorption","absorb_hp":4,"negative":false,"icon":3})"},
+        {R"({"id":"fire","tick_type":"damage","tick_amount":1.0,
+            "tick_interval":0.2,"min_health":0.0,"negative":false,
+            "extinguished_by_water":true,"ignites_on_lava":true,
+            "icon":4})"},
     };
     for (const auto& d : defs) {
         auto r = reg.registerEffect(parseJson(d.def));
@@ -200,6 +204,79 @@ TEST(StatusEffects, TotalAbsorption) {
     EXPECT_FLOAT_EQ(se.totalAbsorption(reg), 0.0f);
 }
 
+// -- Phase 57: the fire system (lava ignition + water extinguish) --------
+
+TEST(EffectParse, ValidFire) {
+    // The shipped fire effect (data/effects/fire.json): the burn tick
+    // (Minecraft's 1 HP / 0.2 s, may kill), extinguished by water,
+    // ignites the player from the lava.
+    Effect e;
+    auto r = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"fire","tick_type":"damage","tick_amount":1.0,
+                     "tick_interval":0.2,"min_health":0.0,"negative":false,
+                     "extinguished_by_water":true,"ignites_on_lava":true,
+                     "icon":4})"),
+        e);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(e.tick, Effect::Tick::Damage);
+    EXPECT_FLOAT_EQ(e.tickAmount, 1.0f);
+    EXPECT_FLOAT_EQ(e.tickInterval, 0.2f);
+    EXPECT_FLOAT_EQ(e.minHealth, 0.0f); // no floor: the burn may kill
+    EXPECT_FALSE(e.negative);           // milk does NOT put out a fire
+    EXPECT_TRUE(e.ignitesOnLava);
+    EXPECT_TRUE(e.extinguishedByWater);
+    EXPECT_EQ(e.icon, 4);
+}
+
+TEST(EffectParse, FireFlagsDefaultFalse) {
+    // Pre-Phase-57 effect files carry no flags: both default to false
+    // (poison does not ignite from lava, nothing is water-extinguished).
+    const EffectRegistry reg = makeRegistry();
+    const Effect& poison = *reg.findByName("poison");
+    EXPECT_FALSE(poison.ignitesOnLava);
+    EXPECT_FALSE(poison.extinguishedByWater);
+    const Effect& fire = *reg.findByName("fire");
+    EXPECT_TRUE(fire.ignitesOnLava);
+    EXPECT_TRUE(fire.extinguishedByWater);
+}
+
+TEST(EffectParse, FireFlagsNonBoolRejected) {
+    const std::vector<std::string> bad = {
+        R"({"id":"x","tick_type":"damage","tick_amount":1,
+            "tick_interval":1,"ignites_on_lava":"yes","icon":0})",
+        R"({"id":"x","tick_type":"damage","tick_amount":1,
+            "tick_interval":1,"extinguished_by_water":1,"icon":0})",
+    };
+    for (const std::string& def : bad) {
+        Effect e;
+        auto r = EffectRegistry::parseEffect(parseJson(def), e);
+        EXPECT_FALSE(r.ok()) << def;
+        EXPECT_NE(r.error().message.find("must be a boolean"),
+                  std::string::npos)
+            << def << ": " << r.error().message;
+    }
+}
+
+TEST(StatusEffects, ClearExtinguishable) {
+    const EffectRegistry reg = makeRegistry();
+    StatusEffects se;
+    se.apply(reg.idForName("poison"), 15.0);
+    se.apply(reg.idForName("fire"), 8.0);
+    se.apply(reg.idForName("regeneration"), 10.0);
+    EXPECT_EQ(se.count(), 3u);
+    // Water puts out the fire, keeps the poison and the regeneration.
+    se.clearExtinguishable(reg);
+    ASSERT_EQ(se.count(), 2u);
+    const int fireId = reg.idForName("fire");
+    for (const ActiveEffect& a : se.list()) {
+        EXPECT_NE(a.effect, fireId)
+            << "the fire must be gone after clearExtinguishable";
+    }
+    // A second pass is a no-op.
+    se.clearExtinguishable(reg);
+    EXPECT_EQ(se.count(), 2u);
+}
+
 TEST(EffectRegistry, DuplicateIdRejected) {
     EffectRegistry reg;
     auto r1 = reg.registerEffect(
@@ -213,11 +290,12 @@ TEST(EffectRegistry, DuplicateIdRejected) {
 
 TEST(EffectRegistry, Lookups) {
     const EffectRegistry reg = makeRegistry();
-    EXPECT_EQ(reg.count(), 4u);
+    EXPECT_EQ(reg.count(), 5u);
     EXPECT_EQ(reg.idForName("poison"), 0);
     EXPECT_EQ(reg.idForName("weakness"), 1);
     EXPECT_EQ(reg.idForName("regeneration"), 2);
     EXPECT_EQ(reg.idForName("absorption"), 3);
+    EXPECT_EQ(reg.idForName("fire"), 4);
     EXPECT_EQ(reg.idForName("nope"), -1);
     EXPECT_NE(reg.findByName("poison"), nullptr);
     EXPECT_EQ(reg.find(-1), nullptr);

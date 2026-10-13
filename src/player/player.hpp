@@ -99,10 +99,17 @@ public:
         // of real dt (a survival timer like starvation — a real-dt
         // accumulator in Player::update, through the normal damage path so
         // the hurt flash/sound and death handling all fire). Leaving the
-        // lava resets the pending tick (no lingering fire in v1, see
-        // KNOWN_ISSUES).
+        // lava resets the pending DIRECT-lava tick (the LINGERING burn
+        // after leaving is the Phase 57 fire effect — a different system).
         double lavaDamageIntervalSeconds = 1.0;
         float lavaDamage = 4.0f; // must be <= maxHealth (fromConfig check)
+        // Fire duration (Phase 57, Minecraft's 8 s on Normal): the seconds
+        // the ignites_on_lava effect is (re-)applied while the player is
+        // in the lava. While in the lava it re-applies every frame (the
+        // duration resets = continuous burn); after leaving, the effect
+        // counts down this duration and burns (1 HP / 0.2 s) until it
+        // expires or water extinguishes it.
+        double fireDurationSeconds = 8.0; // (0, 100] (fromConfig check)
 
         // Build the parameters from the config's `player.*` keys (Phase 32):
         // a missing key keeps the struct default, a present key must be a
@@ -111,9 +118,9 @@ public:
         // Rejected: non-numeric values, non-positive values (only
         // fall_damage_offset and regen_hunger_threshold may be 0),
         // eye_height >= height, crouch_height >= height,
-        // regen_hunger_threshold > max_hunger, and lava_damage >
-        // max_health. Unknown player.* keys are tolerated (config
-        // forward-compat, like the rest of the config).
+        // regen_hunger_threshold > max_hunger, lava_damage > max_health,
+        // and fire_duration_seconds > 100. Unknown player.* keys are
+        // tolerated (config forward-compat, like the rest of the config).
         static Result<Params> fromConfig(const Config& config);
 
         friend bool operator==(const Params&, const Params&) = default;
@@ -196,6 +203,11 @@ public:
     void setAbsorptionBonus(float bonus, bool healOnIncrease);
     bool isCrouching() const { return m_crouching; }
     double timeSinceDamage() const { return m_timeSinceDamage; }
+    // Fluid immersion (Phase 54 tick state, exposed in Phase 57 for the
+    // game's fire system: lava ignites, water extinguishes): the AABB
+    // overlaps at least one water / lava cell.
+    bool inWater() const { return m_inWater; }
+    bool inLava() const { return m_inLava; }
 
     // -- hunger (Phase 23) -----------------------------------------------------
     float hunger() const { return m_hunger; }

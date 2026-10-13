@@ -1,0 +1,11 @@
+{
+  "id": "fire",
+  "tick_type": "damage",
+  "tick_amount": 1.0,
+  "tick_interval": 0.2,
+  "min_health": 0.0,
+  "negative": false,
+  "extinguished_by_water": true,
+  "ignites_on_lava": true,
+  "icon": 4
+}

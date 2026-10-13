@@ -19,6 +19,13 @@
 //     the player's health by the added amount (the layer appears full).
 //   - `negative`: the effect is cleared by drinking a milk container
 //     (Minecraft clears NEGATIVE effects; regeneration survives the milk).
+//   - `ignites_on_lava` (Phase 57): the effect is (re-)applied EVERY frame
+//     while the player is in the lava (the fire: continuous burn in the
+//     lava, and the lingering burn after leaving it — Minecraft). At most
+//     ONE effect may carry the flag (init cross-check).
+//   - `extinguished_by_water` (Phase 57): the effect is removed INSTANTLY
+//     while the player is in water (the fire in water — Minecraft; water
+//     beats lava: in both, no fire).
 //   - `icon`: the 16 px tile index in assets/textures/effects.png the HUD
 //     draws for the effect (cross-checked against the texture at init).
 //
@@ -31,9 +38,9 @@
 // v1 scope: effects live on the PLAYER only (mobs cannot be affected —
 // there is no item/mob source that applies one to a mob). Sources: a mob's
 // `on_hit_effect` (its landed melee hit applies the effect — the spider's
-// poison) and save injection (the E2E scenes; weakness/regeneration have
-// no in-game source in v1, their Minecraft sources — potions and the
-// golden apple — are not built yet).
+// poison), the LAVA (the `ignites_on_lava` effect, Phase 57 — the fire),
+// and save injection (the E2E scenes; weakness has no in-game source in
+// v1, its Minecraft source — potions — is not built yet).
 #pragma once
 
 #include <cstddef>
@@ -75,6 +82,11 @@ struct Effect {
     float absorbHp = 0.0f;
     // Cleared by drinking a milk container (negative effects).
     bool negative = false;
+    // (Re-)applied every frame while the player is in the lava (the fire,
+    // Phase 57). At most one registered effect may carry this flag.
+    bool ignitesOnLava = false;
+    // Removed instantly while the player is in water (the fire, Phase 57).
+    bool extinguishedByWater = false;
     // The effects.png 16 px tile the HUD draws for this effect.
     int icon = 0;
 };
@@ -140,6 +152,10 @@ public:
     // Remove every NEGATIVE effect (drinking a milk container — the
     // positive effects, like regeneration, survive).
     void clearNegative(const EffectRegistry& effects);
+
+    // Remove every effect flagged `extinguished_by_water` (the player in
+    // water, Phase 57 — the fire is extinguished instantly).
+    void clearExtinguishable(const EffectRegistry& effects);
 
     // Remove everything (the death/respawn path).
     void clearAll();

@@ -78,6 +78,7 @@ Result<Player::Params> Player::Params::fromConfig(const Config& config) {
     MC_TRY(read("lava_damage_interval_seconds", p.lavaDamageIntervalSeconds,
                 false));
     MC_TRY(read("lava_damage", p.lavaDamage, false));
+    MC_TRY(read("fire_duration_seconds", p.fireDurationSeconds, false));
     // Cross-field sanity (the defaults satisfy all four).
     if (p.eyeHeight >= p.height) {
         return MC_FAIL("config player.eye_height must be < player.height");
@@ -92,6 +93,9 @@ Result<Player::Params> Player::Params::fromConfig(const Config& config) {
     if (p.lavaDamage > p.maxHealth) {
         return MC_FAIL("config player.lava_damage must be <= "
                        "player.max_health");
+    }
+    if (p.fireDurationSeconds > 100.0) {
+        return MC_FAIL("config player.fire_duration_seconds must be <= 100");
     }
     return p;
 }

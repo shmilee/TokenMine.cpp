@@ -53,7 +53,9 @@ Result<void> EffectRegistry::parseEffect(const Json& def, Effect& out) {
                                                 "min_health",
                                                 "melee_penalty",
                                                 "absorb_hp",
-                                                "negative", "icon"};
+                                                "negative", "icon",
+                                                "ignites_on_lava",
+                                                "extinguished_by_water"};
     for (const auto& [key, value] : def.members()) {
         if (kFields.count(key) == 0) {
             return MC_FAIL("effect '" + out.name + "' has an unknown field "
@@ -129,6 +131,24 @@ Result<void> EffectRegistry::parseEffect(const Json& def, Effect& out) {
                            "boolean");
         }
         out.negative = neg->asBool();
+    }
+
+    // Phase 57: the fire-system flags (optional booleans, default false).
+    const Json* ig = def.find("ignites_on_lava");
+    if (ig != nullptr) {
+        if (!ig->isBool()) {
+            return MC_FAIL("effect '" + out.name + "': 'ignites_on_lava' "
+                           "must be a boolean");
+        }
+        out.ignitesOnLava = ig->asBool();
+    }
+    const Json* ew = def.find("extinguished_by_water");
+    if (ew != nullptr) {
+        if (!ew->isBool()) {
+            return MC_FAIL("effect '" + out.name + "': "
+                           "'extinguished_by_water' must be a boolean");
+        }
+        out.extinguishedByWater = ew->asBool();
     }
 
     const Json* icon = def.find("icon");
@@ -260,6 +280,15 @@ void StatusEffects::clearNegative(const EffectRegistry& effects) {
         std::remove_if(m_active.begin(), m_active.end(),
                        [&](const ActiveEffect& a) {
                            return effects.at(a.effect).negative;
+                       }),
+        m_active.end());
+}
+
+void StatusEffects::clearExtinguishable(const EffectRegistry& effects) {
+    m_active.erase(
+        std::remove_if(m_active.begin(), m_active.end(),
+                       [&](const ActiveEffect& a) {
+                           return effects.at(a.effect).extinguishedByWater;
                        }),
         m_active.end());
 }

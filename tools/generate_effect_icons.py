@@ -6,21 +6,23 @@ output is stable across runs and platforms. Re-run after editing this file
 to refresh assets/textures/effects.png.
 
 The HUD effect row (left-aligned on the heart row) renders one 16x16 tile
-from the 64x16 strip per ACTIVE effect; the effect data's 'icon' field
-indexes the tile (tile i occupies u in [i/4, (i+1)/4]):
+from the 80x16 strip per ACTIVE effect; the effect data's 'icon' field
+indexes the tile (tile i occupies u in [i/5, (i+1)/5]):
   0: poison (purple skull with dark eye sockets — the Minecraft poison
      icon silhouette)
   1: weakness (dark blue down arrow)
   2: regeneration (green up arrow)
   3: absorption (Phase 56, red heart with a white plus — the Minecraft
      absorption silhouette)
+  4: fire (Phase 57, orange flame with a yellow core — the Minecraft
+     fire icon silhouette)
 The background is transparent (the HUD draws over the world).
 """
 import os
 import struct
 import zlib
 
-W, H = 64, 16
+W, H = 80, 16
 OUT = os.path.join(os.path.dirname(__file__), "..", "assets",
                    "textures", "effects.png")
 
@@ -62,6 +64,26 @@ WEAKNESS = (44, 72, 184)
 REGEN = (96, 208, 88)
 ABSORB = (216, 40, 48)
 ABSORB_PLUS = (240, 240, 240)
+FLAME = (240, 120, 24)
+FLAME_CORE = (252, 216, 72)
+
+# Flame silhouette (8x12) for the fire icon, tile-local offset (4, 2); a
+# yellow core overwrites the lower center (the Minecraft fire mark).
+FLAME_SHAPE = [
+    "....X...",
+    "...XX...",
+    "...X.X..",
+    "..XXX.X.",
+    "..XXXXX.",
+    ".XXXXXX.",
+    ".XXXXXXX",
+    "XXXXXXXX",
+    ".XXXXXXX",
+    ".XXXXXX.",
+    "..XXXX..",
+    "...XX...",
+]
+FLAME_OX, FLAME_OY = 4, 2
 
 # Heart silhouette (9x7) for the absorption icon, tile-local offset (3, 4);
 # a white plus overwrites its center (the Minecraft absorption mark).
@@ -170,10 +192,25 @@ def tile_absorption() -> list:
     return px
 
 
+def tile_flame() -> list:
+    px = [[(0, 0, 0, 0)] * 16 for _ in range(16)]
+    for ty in range(16):
+        for tx in range(16):
+            if not in_shape(FLAME_SHAPE, FLAME_OX, FLAME_OY, tx, ty):
+                continue
+            gy, gx = ty - FLAME_OY, tx - FLAME_OX
+            # The yellow core: the lower-center block of the flame.
+            on_core = (5 <= gy <= 9 and 2 <= gx <= 5)
+            setpx(px, tx, ty, FLAME_CORE if on_core else FLAME,
+                  salt=800 + ty * 16 + tx)
+    return px
+
+
 def main() -> None:
     px = [[(0, 0, 0, 0)] * W for _ in range(H)]
     for kind, tile in enumerate((tile_poison(), tile_arrow(False),
-                                 tile_arrow(True), tile_absorption())):
+                                 tile_arrow(True), tile_absorption(),
+                                 tile_flame())):
         for y in range(16):
             for x in range(16):
                 px[y][kind * 16 + x] = tile[y][x]

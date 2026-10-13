@@ -616,6 +616,20 @@ Result<void> Game::buildScene() {
                            std::to_string(effectTiles - 1) + "]");
         }
     }
+    // Phase 57: at most ONE effect may ignite the player from the lava
+    // (the fire). Zero is legal (no fire system in a modded asset set).
+    for (const int effId : m_effects.allIds()) {
+        const Effect& eff = m_effects.at(effId);
+        if (!eff.ignitesOnLava) {
+            continue;
+        }
+        if (m_fireEffectId != -1) {
+            return MC_FAIL("only one effect may have 'ignites_on_lava' "
+                           "(found '" + m_effects.at(m_fireEffectId).name +
+                           "' and '" + eff.name + "')");
+        }
+        m_fireEffectId = effId;
+    }
     for (const MobID mid : m_mobTypes.allIds()) {
         const Mob& mob = m_mobTypes.at(mid);
         if (!mob.properties.hitEffectName.empty() &&
@@ -2598,7 +2612,27 @@ void Game::clearStatusEffects() {
 }
 
 void Game::updateEffects(double dt) {
-    if (m_player->isDead() || m_playerEffects.count() == 0) {
+    if (m_player->isDead()) {
+        return;
+    }
+    // Phase 57: the fire system (the data-flagged effect, resolved at
+    // init). Runs EVEN with no active effects — the ignition is a source:
+    // while the player is in the lava the fire is (re-)applied EVERY
+    // frame (the duration resets, the tick phase is kept — standing in
+    // the lava burns continuously, Minecraft); after leaving, the effect
+    // counts down fireDurationSeconds and burns until it expires. Water
+    // EXTINGUISHES instantly (and beats lava: in both fluids, no fire).
+    if (m_fireEffectId != -1) {
+        if (m_player->inLava()) {
+            m_playerEffects.apply(
+                m_fireEffectId,
+                m_player->params().fireDurationSeconds);
+        }
+        if (m_player->inWater()) {
+            m_playerEffects.clearExtinguishable(m_effects);
+        }
+    }
+    if (m_playerEffects.count() == 0) {
         return;
     }
     // The ticks are REAL dt (the survival-timer class, like hunger and

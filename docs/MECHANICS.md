@@ -288,7 +288,8 @@
     （提前松开/受击/死亡/解锁/开面板/换格）
   - **清状态效果（Phase 46 补全）**：饮用完成 `clearStatusEffects()` =
     清红闪 `m_hurtFlash` + **移除全部负面（`negative: true`）状态效果**
-    （MC 牛奶语义：正面的再生保留）。注意**受击会中断饮用通道**（P28
+    （MC 牛奶语义：正面的再生保留；**火 `negative: false` = 牛奶不灭火**，
+    Phase 57，MC 一致——灭火只有水）。注意**受击会中断饮用通道**（P28
     规则）——中毒状态下开喝，2.5 s 毒 tick 会打断它（MC 一致）
   - **满背包 no-op**：开始饮用前探测 `returns_item` 的 `isFull`（count-1
     可加探针）= 无空位且无未满同物堆 → 不开始（no-op）但**吞点击**
@@ -368,18 +369,24 @@
     `min_health`（仅 damage：0 = 无地板可致死 / 1 = 保持 ≥1 HP 永不致死
     = MC 中毒地板）+ `melee_penalty`（近战扣除攻击点，[0,100]）+
     `absorb_hp`（Phase 56：激活期间的**临时 max HP**，整数 [1,64]——
-    吸收层；0/缺省 = 无层）+ `negative`（bool；牛奶只清负面）+ `icon`
-    （effects.png 条带 tile 索引，init 对纹理宽度交叉校验）。当前 4 种：
+    吸收层；0/缺省 = 无层）+ `negative`（bool；牛奶只清负面）+
+    `ignites_on_lava`（Phase 57：bool，缺省 false——在熔岩内每帧重施加
+    本效果；**至多一个**注册效果可带此标志，init 交叉校验）+
+    `extinguished_by_water`（Phase 57：bool，缺省 false——玩家在水内时
+    瞬时移除本效果）+ `icon`（effects.png 条带 tile 索引，init 对纹理
+    宽度交叉校验）。当前 5 种：
     `poison`（damage 1 / 2.5 s，min_health 1，负面，icon 0）、
     `weakness`（melee_penalty 4，负面，icon 1）、`regeneration`
     （heal 1 / 4.5 s，正面，icon 2）、`absorption`（absorb_hp 4，正面，
-    icon 3）
+    icon 3）、`fire`（damage 1 / 0.2 s，min_health 0 可致死，**正面**
+    【`negative: false` = 牛奶不灭火，MC 语义】，两数据标志皆 true，
+    icon 4）
   - **来源（v1）**：① **mob `on_hit_effect`**（`{"name", "duration"}`，
     成对必填严格解析，init 对 EffectRegistry 交叉校验 = ammo/挤奶
     模式）——该 mob 的**近战命中落定**时施加（远程箭**不**施加）；
-    当前：spider（`poison` 15 s = MC normal 难度值）；② 存档注入
-    （E2E 场景）。weakness/regeneration v1 无游戏内来源（MC 来源 =
-    药水/金苹果，未做）
+    当前：spider（`poison` 15 s = MC normal 难度值）；② **熔岩点燃**
+    （Phase 57，见下"火系统"）；③ 存档注入（E2E 场景）。weakness
+    v1 无游戏内来源（MC 来源 = 药水，未做）
   - **tick（真实 dt，生存计时器类，硬规则 8）**：`Game::updateEffects`
     （每帧 `updateSurvival` 后）：`remaining -= dt`、≤0 移除；tick 效果
     `accum += dt`、**每跨过一个 interval 结算一次**（大 dt 可跨多次）。
@@ -401,6 +408,23 @@
     读档（`healOnIncrease = false`）不重复提升——存档 health 已含层，
     且 health 必须在层应用**之后**设置（`applySave` 4d/4e 顺序）。
     金苹果 = 首个来源（吸收 4 / 5 s，正面——牛奶保留）
+  - **火系统（Phase 57，残留燃烧）**：`fire` 效果（1 HP / 0.2 s = MC
+    燃烧节奏，min_health 0 可致死）+ 两个数据标志：
+    ① **熔岩点燃**（`ignites_on_lava`，init 解析出唯一点火效果 id，
+    `Game::m_fireEffectId`）：`Game::updateEffects` **每帧**（即使无活跃
+    效果）检查玩家流体状态——`inLava()` 为真时**重施加** fire（duration
+    = `player.fire_duration_seconds`，默认 8 s = MC Normal；重施加 =
+    duration 重置 + tick 相位保留 → 站在熔岩里 = 持续燃烧，MC 语义）；
+    ② **水灭火**（`extinguished_by_water`，`StatusEffects::clearExtinguishable`）：
+    `inWater()` 为真时瞬时移除（在 tick 之前执行 → 水内零燃烧伤害）。
+    **水胜熔岩**（两流体并存时先点燃后灭火 = 无火，P54 熔岩优先的
+    游泳状态不受影响）。离熔岩后 fire **继续 countdown** 8 s 烧至到期
+    = 残留燃烧（MC 核心行为）。燃烧 tick 走正常受伤路径（红闪/音效
+    复用，**无独立火焰表现**，见 KNOWN_ISSUES；每秒 5 次）。牛奶**不**
+    灭火（`negative: false`，MC 语义——只清负面）。熔岩内还有 P54 的
+    直接灼烧（4 HP/s）与火 tick（5 HP/s）**叠加**（MC 同款：熔岩内
+    ~9 HP/s）。死亡/重生照旧清空（fire 不残留于重生）；存档照旧
+    （`player.effects` 含 fire，读档续烧）
   - **死亡**：效果随玩家死亡清空（重生 = 干净状态，MC 一致）
   - **存档（format 8）**：`player.effects = [{name, remaining}]` 名字序
     （`remaining` = 真实 dt 秒数；**tick 相位不存**——重载后下一 tick
@@ -408,8 +432,9 @@
     furnaces 键纪律；名字对 EffectRegistry 交叉校验、重复/非注册拒绝）
   - **HUD**：效果图标条与心带**同行**、hotbar 左缘左对齐（MC 布局）：
     每个活跃效果一个 `assets/textures/effects.png` 的 16px tile
-    （64×16，4 tile：紫骷髅 / 蓝下箭 / 绿上箭 / 红心+白十字【吸收】，
-    `tools/generate_effect_icons.py` 确定性生成），按施加顺序排列；
+    （80×16，5 tile：紫骷髅 / 蓝下箭 / 绿上箭 / 红心+白十字【吸收】/
+    橙火焰+黄芯【火】，`tools/generate_effect_icons.py` 确定性生成；
+    tile 数 = 纹理宽度 / 16，UV 动态），按施加顺序排列；
     只在游玩态（锁定 + 无面板）绘制——无输入运行结构性免疫。**吸收红
     心**（Phase 56）：层激活时正常心带**左侧**多出 `ceil(层/2)` 颗
     红色心（正常心带位置不动 = 无层时逐位相同；红心显示 health 超出

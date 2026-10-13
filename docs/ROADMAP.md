@@ -183,6 +183,45 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
    失败 ×3（两字段互斥 / grants_effects[0] 未注册效果 / absorb_hp 0）。
    **PITS +2**（读档 health 必须在层后 + 读档不重复提升 / saturation =
    真实 dt 字段，场景存档比对须剥）。
+  - [x] **Phase 57** — 脱离熔岩残留火：火系统 v1（用户"按你的建议，继续
+   下一phase" = 建议 1，代理定案最小完整版 = 玩家点燃 + 残留燃烧 + 水
+   灭火，消费 P54 遗留"脱离熔岩无残留燃烧"；熔岩烧 Mob/作物留后续）。
+   **效果数据标志**（`assets/data/effects/*.json` 两个可选 bool，缺省
+   false，非 bool 点名拒绝）：`ignites_on_lava`（**至多一个**注册效果
+   可带，init 交叉校验两个 = 启动失败）+ `extinguished_by_water`
+   （`StatusEffects::clearExtinguishable` 纯函数，clearNegative 同款
+   erase-remove）+ **`Game::updateEffects` 重构**：点燃/灭火在
+   `count() == 0` 早退**之前**每帧执行（点火 = 源，无活跃效果也要跑）；
+   `inLava()` → 每帧重施加（duration 重置 = 熔岩内持续燃烧、tick 相位
+   保留 = MC 语义）；`inWater()` → 瞬时灭火（先于 tick = 水内零伤害；
+   水胜熔岩：两流体并存无火）+ **Player 公开访问器** `inWater()/inLava()`
+   （P54 tick 状态暴露给游戏侧）+ **config `player.fire_duration_seconds`**
+   （默认 8 = MC Normal，(0,100]，P54 lava_damage 通道）+ **内容**：
+   `fire` 效果（damage 1 / 0.2 s = MC 燃烧节奏、min_health 0 可致死、
+   `negative: false` = **牛奶不灭火**【MC 语义】、两标志皆 true、icon
+   4）+ **effects.png 64→80**（第 5 tile = 橙火焰+黄芯，生成器扩展；
+   HUD UV 动态 = 纹理宽度/16，零代码）+ 熔岩内 P54 直接灼烧（4 HP/s）
+   与火 tick（5 HP/s）**叠加**（MC 同款 ~9 HP/s）。**无 format 变更**
+   （format 9；fire 照 `player.effects` 存，读档续烧）。989/989（+7：
+   效果 4 + config 2 + 存档 1）；`-Werror` 恒 0 警告。**E2E 全绿**：S1
+   第 **31** 次结构性免疫【fresh 世界零熔岩（P54）零效果 = 点火源永不
+   触发】/ S2 熔岩内复合烧死（池内无输入 360f：9 HP/s → 死，尸体冻结
+   池底，×2 **字节**）/ **S2b 纯点燃**（mov config 熔岩直伤拉 300 s =
+   禁用 → **唯一伤害源 = 火效果**：20 tick × 1 HP 烧死；无 P57 则玩家
+   **活着**停 20 HP → DEAD 终态 = 点燃证明，×2 字节）/ S3 水灭火（水
+   池 + 注入 fire 3 s 无输入：帧 1 先灭后 tick = 零伤害 health 20，
+   ×2 字节）/ S4 干地燃烧（干地 + 注入 fire 3 s 无输入：**14** tick【到
+   期帧不 tick，P46 语义】→ health 6，×2 字节 = 燃烧 tick 只被水停）/
+   S5 点燃+游泳+纯火死于 P54 墙（P54 S3 游泳场景原样：W 从 +1.0 s 按住
+   到结束 = 贴墙终态【几何钳制 fps 无关】；mov config 唯一伤害源 = 火：
+   掉池点燃 → 沿池底漂到熔岩墙 → **死于贴墙处** (22.5,45,−3.3)；无 P57
+   则活着贴墙 = P54 S3 终态 → DEAD 终态 = 火证明，×2 字节）/ S6 init
+   失败 ×3（两 ignites_on_lava / fire_duration_seconds 0 / 非 bool 标志）。
+   **PITS +4**（输入锚定须早于最早死亡时刻 / 输入场景确定性终态 = 持续
+   顶着的几何钳制 / 到期帧不 tick / 熔岩内 Space=上浮 W=水平漂移）。
+   残留燃烧的 E2E 证据链：S2b/S5（点燃）+ S4（离熔岩后效果照常烧 =
+   源无关）+ S3（只有水停它）+ 接线结构（离熔岩无任何清除路径，仅
+   到期/水/死亡）——见 archive。
   - [x] **Phase 55** — 多掉落内容扩展（用户"熔岩湖不着急，先记录下来，留到很久的
    未来。下一步先进行建议2的扩展。" = 建议 2，代理定案最小完整版：3 方块 MC 语义
    内容扩展、**零代码**，消费 P52 遗留"多掉落内容扩展"；worldgen 熔岩湖 = 用户
@@ -334,5 +373,6 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 54** — `archive/phase-54.md`
 - **Phase 55** — `archive/phase-55.md`
 - **Phase 56** — `archive/phase-56.md`
+- **Phase 57** — `archive/phase-57.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

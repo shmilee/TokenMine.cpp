@@ -321,6 +321,15 @@
   画到吸收红心区（现役内容可触发：spider 毒 + 金苹果 = 毒/再生/吸收
   3 个）。纯视觉（两者都可读性尚可），默认 20+4 几何下 2 个效果不
   重叠。`[Phase 56]`
+- **燃烧无独立音效/火焰 tint** — fire 效果的 tick 走玩家正常受伤路径
+  （P46 模式，与中毒同款）：每 0.2 s 一次 "hurt" 音 + 红纱（每秒 5
+  次，无独立火焰噼啪音、无火焰 tint）。机制本身（熔岩点燃 + 离熔岩
+  残留 8 s + 水灭火）`[Phase 57]` 已解决，表现层简化留此。`[Phase 57]`
+- **火时长走 config 而非效果 JSON** — 点燃源是熔岩流体（代码词汇，无
+  数据文件），时长 `player.fire_duration_seconds`（默认 8 = MC Normal）
+  走 config 通道（P54 `lava_damage` 同款）；效果 JSON 只带
+  `ignites_on_lava`/`extinguished_by_water` 两个数据标志。加第二个
+  点燃源（如 MC 的火/岩浆怪）时需再定案。`[Phase 57]`
 
 ## 流体桶（Phase 47，Phase 51 双种类更新）
 
@@ -352,10 +361,16 @@
   `lava_damage` 4 HP，Minecraft 4 HP/s，走正常伤害路径）+ 落入熔岩取消
   坠落伤害 + 熔岩内抑制疾跑/下蹲速度。Mob 在任一流体中不生成
   （P20 行为不变）。`[Phase 51]`（燃烧/减速 `[Phase 54]` 已解决）
-- **脱离熔岩无残留燃烧** — Minecraft 离开熔岩会燃烧数秒（火系统）；
-  v1 无火系统：离熔岩即停（灼烧计时器重置，未到期 tick 作废）。
-  熔岩也**不烧 Mob 与作物**（MC 会烧）——Mob 无灼伤、作物不会被烧掉。
-  `[Phase 54]`
+- ~~**脱离熔岩无残留燃烧**~~ — `[Phase 57]` 已解决：`fire` 效果
+  （1 HP / 0.2 s、可致死）——在熔岩内**每帧重施加**（duration 重置 =
+  熔岩内持续燃烧、tick 相位保留；离熔岩后 countdown `fire_duration_seconds`
+  8 s 继续烧至到期），水内**瞬时熄灭**（`extinguished_by_water`；水胜
+  熔岩：两流体并存时无火），牛奶不灭火（`negative: false`，MC 语义）。
+  表现层简化见"燃烧无独立音效/火焰 tint"条。熔岩不烧 Mob 与作物，见下
+  条。`[Phase 54]`（`[Phase 57]` 已解决）
+- **熔岩不烧 Mob 与作物** — 火系统（Phase 57）只作用于玩家：Mob 无灼伤
+  （效果只作用于玩家，见状态效果节 Phase 46 条）、作物不会被熔岩烧掉
+  （MC 会烧）。`[Phase 54]`
 - **水+熔岩反应 = v1 最小规则** — 反应表数据驱动在熔岩块上
   （`water_reaction {source, flowing}` 严格配对）：熔岩格 6-邻域任有
   水 → 该熔岩格变方块（邻水含 level 8 源 → 黑曜石，否则石头）。

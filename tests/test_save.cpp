@@ -60,6 +60,10 @@ EffectRegistry makeEffects() {
         {R"({"id":"regeneration","tick_type":"heal","tick_amount":1.0,
             "tick_interval":4.5,"negative":false,"icon":2})"},
         {R"({"id":"absorption","absorb_hp":4,"negative":false,"icon":3})"},
+        {R"({"id":"fire","tick_type":"damage","tick_amount":1.0,
+            "tick_interval":0.2,"min_health":0.0,"negative":false,
+            "extinguished_by_water":true,"ignites_on_lava":true,
+            "icon":4})"},
     };
     for (const auto& d : defs) {
         auto r = effects.registerEffect(parseJson(d.def));
@@ -1520,4 +1524,24 @@ TEST(SaveFormat8Test, HealthAboveBaseWithAbsorptionLayerRoundTrips) {
     ASSERT_EQ(out->playerEffects.size(), 1u);
     EXPECT_EQ(out->playerEffects[0].name, "absorption");
     EXPECT_DOUBLE_EQ(out->playerEffects[0].remaining, 3.25);
+}
+
+// -- Phase 57: the fire effect in a save ------------------------------------
+
+TEST(SaveFormat8Test, FireEffectRoundTrips) {
+    // A save taken while burning stores the fire like any effect; the
+    // reload continues the burn (the remaining counts down from the saved
+    // value — the lingering burn survives a save/load).
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerHealth = 13.0f;
+    s.playerEffects = {{"fire", 2.5}};
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_FLOAT_EQ(out->playerHealth, 13.0f);
+    ASSERT_EQ(out->playerEffects.size(), 1u);
+    EXPECT_EQ(out->playerEffects[0].name, "fire");
+    EXPECT_DOUBLE_EQ(out->playerEffects[0].remaining, 2.5);
 }

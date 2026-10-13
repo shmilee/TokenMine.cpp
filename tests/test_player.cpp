@@ -1223,6 +1223,37 @@ TEST(PlayerParamsConfigTest, RejectsLavaDamageAboveMaxHealth) {
     EXPECT_TRUE(Player::Params::fromConfig(equal).ok());
 }
 
+// -- Phase 57: the fire duration -------------------------------------------
+
+TEST(PlayerParamsConfigTest, FireDurationDefaultsToEight) {
+    // Minecraft's burn duration on Normal (8 s).
+    Config cfg;
+    auto r = Player::Params::fromConfig(cfg);
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    EXPECT_DOUBLE_EQ(r->fireDurationSeconds, 8.0);
+}
+
+TEST(PlayerParamsConfigTest, FireDurationRange) {
+    // (0, 100]: 0 is rejected (the generic positive check), >100 by the
+    // cross-field check.
+    Config zero;
+    zero.set("player.fire_duration_seconds", Json(0.0));
+    EXPECT_FALSE(Player::Params::fromConfig(zero).ok());
+
+    Config above;
+    above.set("player.fire_duration_seconds", Json(100.5));
+    auto r = Player::Params::fromConfig(above);
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("fire_duration_seconds"),
+              std::string::npos);
+
+    Config atMax;
+    atMax.set("player.fire_duration_seconds", Json(100.0));
+    auto ok = Player::Params::fromConfig(atMax);
+    ASSERT_TRUE(ok.ok()) << ok.error().describe();
+    EXPECT_DOUBLE_EQ(ok->fireDurationSeconds, 100.0);
+}
+
 TEST(PlayerParamsConfigTest, UnknownPlayerKeysAreTolerated) {
     Config cfg;
     cfg.set("player.floating_pointy_hat", Json(1.0));
