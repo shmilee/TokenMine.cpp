@@ -42,7 +42,7 @@
 - ~~**概率次级掉落每方块至多一个条目**~~ — `[Phase 52]` 已修复：新增 `chance_drops`（`{item, count, chance}` 严格三元组数组，与单条目 `chance_drop` **互斥**【同时写拒绝】）。各条目**独立 roll**（`rollChanceDropEntry`，条目索引去相关 salt），breakBlock 循环条目、每条目至多 1 掉落实体；init 每条目复用 drops 纪律（物品存在 + max_stack）。单条目 `chance_drop` 保留（系统 + 单测覆盖；`[Phase 55]` leaves 迁入列表后一度**无现役内容使用者**，`[Phase 59]` gravel→flint（10%，MC 值）重新使用它）。`[Phase 49]`（多掉落列表 `[Phase 52]` 已就位；内容扩展 `[Phase 55]`、`[Phase 59]`）
 - **概率掉落是 per-cell 确定性（无重 roll）** — 同一世界同一格每次破坏结果相同（splitmix64(seed + 位置哈希)）：破坏-重种同一格树叶，苹果结果不变；这是无输入字节可复现的刻意代价（MC 是真随机）。位置哈希 + 专用 salt 保证相邻格去相关（单测有实证率断言）。`[Phase 49]`
 - ~~**flint 无用途（v1 文档化偏离）**~~ — `[Phase 60]` 已解决：**箭头配方 = shapeless flint+stick+feather → 4 箭（MC 1.14+）**，**替换**了旧的 2 木棍竖排 → 2 箭配方（内容契约变更：早期箭现需 flint + feather = MC 同款闭环，gravel→flint、chicken→feather、树→stick）+ **flint_and_steel**（flint+iron_ingot 合成；`ignites_flamable` = 右键烧 `flamable` 块、无掉落、不消耗）。flint 的两个用途 = MC 的主用途。`[Phase 59]` → `[Phase 60]`
-- **燧石与钢 v1 范围（文档化偏离）** — 点燃器**只作用于块**（`flamable` = 当前仅 wheat_1..7）：Mob 点燃仍只来自熔岩（`[Phase 58]`），玩家/Mob 不可被点燃；**无火视觉**（烧 = 直接移除，与熔岩烧同款语义、无火焰块/粒子）；不引燃流体。后续可扩展 `flamable` 内容（树/草）= 纯数据。`[Phase 60]`
+- **燧石与钢 v1 范围（文档化偏离）** — 点燃器**只作用于块**（`flamable` 集 = wheat_1..7 + wood/leaves/grass，`[Phase 63]` 扩到 MC 天然可燃）：Mob 点燃仍只来自熔岩（`[Phase 58]`），玩家/Mob 不可被点燃；**无火视觉**（烧 = 直接移除，与熔岩烧同款语义、无火焰块/粒子）；不引燃流体。`[Phase 60]` → `[Phase 63]`
 - **stone→cobblestone 材料链（Phase 61 内容契约变更 + 熔炼偏离）** — 挖天然 stone 现掉 **cobblestone**（MC 材料循环）：stone 只能经 **4 cobblestone → 1 stone 合成**（MC 1.14+）回来。文档化偏离：**cobblestone 不能熔炼回 stone**——`smeltable_to` 是物品字段而 block item 无独立 JSON（隐式生成、无 item 数据），给 block item 加数据 = 核心改动，超出本 phase 最小范围；合成路线已覆盖转换。`[Phase 61]`
 - **无斧类工具（Phase 62 范围注记）** — 本项目的工具型只有镐（wooden/stone/iron pickaxe）+ 弓；"石头工具线" v1 = **石镐**（镐路线中档：break_speed 木 2 → 石 3 → 铁 4、攻击 2 → 2.5 → 3，项目压缩刻度恰居中）。MC 还有石斧/木斧/铁斧——引入斧 = 新工具型（用途语义：对树/肉的倍率），超出内容 phase 最小范围；石镐已消费 P61 的 cobblestone（首个工具用途）。`[Phase 62]`
 
@@ -391,10 +391,13 @@
   3×3 L1 熔岩膜 + 被动游荡；S2ctl 水膜对照 = 无光 → hostile 生成杀
   玩家、零点燃，隔离熔岩）。MC 同款几何（hostile 也要黑暗生成），但
   MC 玩家可引怪入熔岩——本项目无输入运行没有这一手。`[Phase 58]`
-- **v1 flammable = 小麦 7 阶** — `flamable` 内容只覆盖 wheat_1..7；
-  MC 会烧的木头/树叶/高草/羊毛/火把在本项目不燃（v1 范围 = 作物）。
-  数据通道已就位：加可燃方块 = 一行 `flamable: true`，零代码。
-  `[Phase 58]`
+- ~~**v1 flammable = 小麦 7 阶**~~ — `[Phase 63]` 已扩展：`flamable`
+  集 = **wheat_1..7 + wood/leaves/grass**（MC 天然可燃三块加入，纯
+  数据 = 两消费者——点燃器 `[Phase 60]` 与熔岩燃烧 pass `[Phase 58]`
+  ——立即生效；fresh 世界零熔岩 = 无输入下仍惰性）。仍不燃的 MC 可燃
+  物：**羊毛**（文档化偏离：染色产物保留不可燃，见
+  Phase63FlamableContent 的精确集断言）、高草/火把（未实现）。
+  `[Phase 58]` → `[Phase 63]`
 - **ignites 效果的 tick_interval 必须整帧** — init 交叉校验：
   ignites_on_lava 效果的 `tick_interval × 60` 必须是整帧数（容差
   1e-4 帧；float 0.2f×60 = 12.00000018 过、0.33 s = 19.8 帧点名

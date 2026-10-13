@@ -483,8 +483,9 @@ Phase 56；HUD 红心带 = 心带左侧 2 颗红心）。
    可燃字段（Phase 58，**可选**）：`flamable`（bool，非 bool 点名
    拒绝）——该方块的任意格被**熔岩 6-邻**接触时，FluidSim 燃烧 pass
    每帧把它烧成 air（**无掉落**；水不烧）。内容 = wheat_1..7 全
-   7 阶（MC 小麦会烧）；加可燃方块 = 一行 `"flamable": true`，
-   零代码。v1 不燃：木头/树叶/高草/羊毛/火把（见 KNOWN_ISSUES）。
+   7 阶 + wood/leaves/grass（Phase 63 = MC 天然可燃三块，纯数据；
+   点燃器 Phase 60 同款生效）；加可燃方块 = 一行 `"flamable": true`，
+   零代码。v1 不燃：羊毛/高草/火把（见 KNOWN_ISSUES）。
 2. **生长引擎**（自动）：`Game::m_crops`（`map<BlockPos,BlockID>`，位置序）
    追踪所有带 `grows_to` 的格——`setBlock` 收口维护（放作物=入集，
    破坏/成熟=出集，炉子同款模式），**读档后 `rescanCrops()` 全量扫描

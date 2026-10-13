@@ -373,7 +373,8 @@
     产物——邻水含 level 8 源 → `source`（黑曜石），否则 `flowing`
     （石头）；水不消耗、无蒸汽 = v1 文档化偏离；无 `water_reaction`
     的惰性熔岩不反应）→ ②**燃烧 pass**（Phase 58：快照扫所有熔岩格
-    6-邻 **BLOCK** 格，`flamable: true`（可选 bool 属性，wheat_1..7）
+    6-邻 **BLOCK** 格，`flamable: true`（可选 bool 属性；内容 =
+    wheat_1..7 + wood/leaves/grass，Phase 63 扩到 MC 天然可燃面）
     → 收集排序后 `setBlock(air)`，**无掉落**；注册表无 flamable 块 =
     fast-exit）→ ③水模拟 → ④熔岩模拟（各自快照规则与 P9 水模拟完全
     相同，按种过滤；**异种流体格按"方块"处理** = 支撑 + 挡扩散，防

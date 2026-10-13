@@ -2,7 +2,8 @@
   "id": "wood",
   "properties": {
     "hardness": 2.0,
-    "drops": "wood"
+    "drops": "wood",
+    "flamable": true
   },
   "model": {
     "textures": { "top": "wood_top", "side": "wood_side", "bottom": "wood_top" }

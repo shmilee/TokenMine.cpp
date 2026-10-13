@@ -1,8 +1,10 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <vector>
 
 #include <unistd.h>
 
@@ -1245,14 +1247,16 @@ TEST(BlockRegistryTest, Phase58WheatCropFlamableContent) {
     BlockRegistry reg;
     ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
     // The whole crop line (Minecraft: every wheat stage burns in lava) is
-    // flagged, and the flag is NOT sprinkled on the non-crop blocks
-    // (wood/leaves/wool do not burn in v1 — see KNOWN_ISSUES).
+    // flagged, and the flag is NOT sprinkled on the non-flammable blocks.
+    // Phase 63 EXPANDED the set with the natural surface flammables
+    // (wood/leaves/grass — see Phase63FlamableContent for the exact set);
+    // the negative list here keeps the never-flammable blocks.
     for (int i = 1; i <= 7; ++i) {
         const Block* b = reg.findByName("wheat_" + std::to_string(i));
         ASSERT_TRUE(b != nullptr) << "wheat_" << i;
         EXPECT_TRUE(b->properties.flamable) << "wheat_" << i;
     }
-    for (const char* name : {"stone", "wood", "leaves", "wool", "sand"}) {
+    for (const char* name : {"stone", "wool", "sand"}) {
         const Block* b = reg.findByName(name);
         ASSERT_TRUE(b != nullptr) << name;
         EXPECT_FALSE(b->properties.flamable) << name;
@@ -1311,4 +1315,40 @@ TEST(BlockRegistryTest, Phase61CobblestoneContent) {
     const Block* s = reg.findByName("stone");
     ASSERT_TRUE(s != nullptr);
     EXPECT_EQ(s->properties.drops, "cobblestone");
+}
+
+// Flamable expansion (Phase 63): the three NATURAL surface flammables
+// (wood / leaves / grass) join the wheat stages (Phase 58) as
+// `flamable: true` — Minecraft's natural flammables, pure data (both
+// consumers, the igniter [Phase 60] and the lava burn pass [Phase 58],
+// read the flag). Pins the set EXACTLY: wood/leaves/grass + wheat_1..7,
+// nothing else (a stray flamable would silently expand the burn surface).
+// ---------------------------------------------------------------------------
+
+TEST(BlockRegistryTest, Phase63FlamableContent) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    for (const char* name : {"wood", "leaves", "grass"}) {
+        const Block* b = reg.findByName(name);
+        ASSERT_TRUE(b != nullptr) << name;
+        EXPECT_TRUE(b->properties.flamable) << name;
+    }
+    // The complete flamable set = 3 + 7 = 10 blocks, nothing else.
+    std::vector<std::string> flamables;
+    for (std::size_t i = 0; i < reg.count(); ++i) {
+        const Block& b = reg.at(BlockID{static_cast<int>(i)});
+        if (b.properties.flamable) {
+            flamables.push_back(b.name);
+        }
+    }
+    std::sort(flamables.begin(), flamables.end());
+    EXPECT_EQ(flamables.size(), 10u);
+    const std::vector<std::string> want = {"grass", "leaves",
+                                           "wheat_1", "wheat_2", "wheat_3",
+                                           "wheat_4", "wheat_5", "wheat_6",
+                                           "wheat_7", "wood"};
+    EXPECT_EQ(flamables, want);
 }

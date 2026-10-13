@@ -266,6 +266,24 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
     block+fluid / L1 膜 = 稳定地面流体场景 / 物品 rest 位置确定性
     （零初速 + 位置式分离）/ pgrep 前缀误匹配 minecraft_tests / 裸
     截图无窗口稳定化 = 错尺寸假失败）。
+  - [x] **Phase 63** — flamable 内容扩展：MC 天然可燃三块（用户"先建议
+    2,再建议1" = 建议 1，代理定案最小完整版 = 纯数据 `flamable` 扩展
+    **wood/leaves/grass**，火视觉/引燃 Mob 超出本 phase 范围）：三块加
+    `flamable: true`（与 P58 的 wheat_1..7 合起来 = 自然世界可燃面；两
+    个消费者——点燃器（P60）与熔岩燃烧 pass（P58）——立即生效，**零
+    核心代码**）。**无 format 变更**（format 9）。1023/1023（+1：
+    可燃集**精确集断言** = 恰 10 块；P58 测试负清单同步 = wood/leaves
+    移出【契约演进，非弱化】）；`-Werror` 恒 0 警告；base18 **第 36 次
+    结构性免疫**【flamable = JSON 属性无视觉 + fresh 世界零熔岩 = 燃烧
+    pass 惰性 + 默认背包无点燃器】无重锚；E2E 全绿（S1 第 36 次免疫 /
+    S2 点燃器烧 wood【wood 放 (22,46,−5) P52 几何、单次右键 → air、
+    **无掉落**【破坏会掉 wood = 可区分】，420f ×2 savenorm 字节一致 +
+    save EXACT】/ S3 熔岩烧 wood【P58 池几何 + **4 石质衬砌**（池底
+    2 + 草墙 2）——P58 凹穴底/墙是草，P63 不衬砌则池底被烧穿、熔岩
+    漫入 y44 洞穴烧穿整层草（未修补跑实测证明），240f ×2 RAW：wood →
+    air + 空位收 L7、池保 L8、衬砌全完好】/ S2ctl 无输入【×2 RAW、
+    wood 保留】/ S6 init 失败 ×2【flamable "yes" / 1 → "block property
+    'flamable' must be a boolean"】）。
   - [x] **Phase 62** — 石头工具线 v1：石镐（用户"先建议2,再建议1" =
     建议 2，代理定案最小完整版 = 镐路线中档 **stone_pickaxe**，纯数据；
     项目**无斧类工具** → "石斧" = 新工具型超出最小范围【文档化偏离】）：
@@ -522,6 +540,7 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 56** — `archive/phase-56.md`
 - **Phase 57** — `archive/phase-57.md`
 - **Phase 58** — `archive/phase-58.md`
+- **Phase 63** — `archive/phase-63.md`
 - **Phase 62** — `archive/phase-62.md`
 - **Phase 61** — `archive/phase-61.md`
 - **Phase 60** — `archive/phase-60.md`

@@ -5,7 +5,8 @@
     "drops": "dirt",
     "chance_drops": [
       { "item": "wheat_1", "count": 1, "chance": 0.125 }
-    ]
+    ],
+    "flamable": true
   },
   "model": {
     "textures": { "top": "grass_top", "side": "grass_side", "bottom": "dirt" }

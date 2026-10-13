@@ -9,7 +9,8 @@
     "chance_drops": [
       { "item": "stick", "count": 1, "chance": 0.02 },
       { "item": "apple", "count": 1, "chance": 0.0078125 }
-    ]
+    ],
+    "flamable": true
   },
   "model": {
     "textures": { "top": "leaves", "side": "leaves", "bottom": "leaves" }
