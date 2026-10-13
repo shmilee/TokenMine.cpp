@@ -1,0 +1,7 @@
+{
+  "id": "stone",
+  "output": { "item": "stone", "count": 1 },
+  "ingredients": [
+    { "item": "cobblestone", "count": 4 }
+  ]
+}

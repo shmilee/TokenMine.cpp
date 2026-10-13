@@ -728,3 +728,19 @@ TEST(RecipeRegistryTest, Phase60FlintAndSteelRecipeContent) {
     expectIngredients(rec->ingredients, f.items,
                       {{"flint", 1}, {"iron_ingot", 1}});
 }
+
+// Phase 61: the 4-cobblestone → 1 stone recipe (Minecraft 1.14+; the
+// only stone source after the drops contract change — block items carry
+// no item data, so cobblestone cannot be smelted back, documented
+// deviation in KNOWN_ISSUES).
+TEST(RecipeRegistryTest, Phase61StoneRecipeContent) {
+    RealAssets f;
+    ASSERT_TRUE(f);
+    const Recipe* rec = f.recipes.find("stone");
+    ASSERT_NE(rec, nullptr);
+    EXPECT_EQ(rec->type, RecipeType::Shapeless);
+    EXPECT_EQ(rec->output, f.items.idForName("stone"));
+    EXPECT_EQ(rec->outputCount, 1);
+    ASSERT_EQ(rec->ingredients.size(), 1u);
+    expectIngredients(rec->ingredients, f.items, {{"cobblestone", 4}});
+}

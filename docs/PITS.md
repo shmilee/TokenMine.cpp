@@ -1031,3 +1031,9 @@
   只发 part1，第二行被当命令执行（command not found，rc 127，脚本
   继续但日志行截断）。P59 脚本的同款写法带 ` \` 续行；跨行字符串
   要么每行尾加反斜杠，要么单行写完。
+- **json.dump 改资产文件 = 整体重序列化（P61）**：python one-liner
+  给 JSON 资产加一个键时，`json.dump` 用**自己的** indent 重排整个
+  文件——indent 与仓库文件不一致（本项目 = indent 2）= 全文件 diff
+  污染（534 行变动，实际只有 4 行语义）。改前先看原文件缩进
+  （`head` 或 `git show`），dump 用同款 indent，提交前
+  `git diff --stat` 核对"改动行数 ≈ 语义改动行数"。

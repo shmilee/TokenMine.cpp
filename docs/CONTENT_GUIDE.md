@@ -200,7 +200,7 @@ shapeless、配方按文件名字典序。当前配方链：wood→4 planks→(2
 stick）、2×2 planks→crafting_table、wooden_pickaxe（PPP/.S./.S.）、
 iron_pickaxe（III/.S./.S.）、arrow（flint+stick+feather→4，Phase 60
 替换 P24 的 2 木棍竖排→2）、flint_and_steel（flint+iron_ingot，
-Phase 60）。
+Phase 60）、stone（4 cobblestone→1，Phase 61 = MC 材料循环的回程）。
 游戏内触发：`E` 背包面板右侧的配方列表（仅 shapeless），点击配方行执行
 `craft()`（Phase 15；可合成的配方白色高亮、不可合成的灰色）；或放置并右键
 工作台打开 3×3 面板，按形状放料后取输出格（Phase 17）。
@@ -222,8 +222,8 @@ light_gray）。加一个颜色 = 纯数据四步：
    `<base>.json` 本身，名字不加后缀）：
    `properties` 加 `"dye_base": "<base>", "dye_color": "<color>"`（两者必须
    同时给；`dye_base` 与 `interact` 互斥）；纹理 tile 加进
-   `assets/data/textures/block_atlas.json`（atlas = 16×8 网格，Phase 59 后
-   已用 65 格；有空位直接加 `[col, row]` 条目。**网格扩容会移位所有既有
+   `assets/data/textures/block_atlas.json`（atlas = 16×8 网格，Phase 61 后
+   已用 66 格；有空位直接加 `[col, row]` 条目。**网格扩容会移位所有既有
    UV（u = col/列数）→ 无输入基线门必须重锚**——Phase 59 的 gravel tile 是
    第 65 格，8×8 已满 → 扩 16×8 → base18 重锚（P41 同款先例），见 PITS）。
 3. **合成配方** `assets/data/recipes/dye_<color>.json`（shapeless；当前 15 条
@@ -241,7 +241,7 @@ light_gray）。加一个颜色 = 纯数据四步：
 
 1. `assets/textures/mobs/<tile>.png` —— 16×16 RGBA 纹理（`tools/generate_mob_textures.py`
    同款：splitmix64 确定性噪声 + 简单五官）；并在 `data/textures/block_atlas.json`
-   的 `tiles` 里给它一个空位 `[col, row]`（16×8 网格，Phase 59 后已用 65 tile，勿动已有条目）
+   的 `tiles` 里给它一个空位 `[col, row]`（16×8 网格，Phase 61 后已用 66 tile，勿动已有条目）
 2. `assets/data/mobs/<id>.json` —— mob 定义（行为参数 + box 模型，每箱一个
    atlas tile；box 必须在 `width × height` 的 AABB 内）：
 

@@ -266,6 +266,30 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
     block+fluid / L1 膜 = 稳定地面流体场景 / 物品 rest 位置确定性
     （零初速 + 位置式分离）/ pgrep 前缀误匹配 minecraft_tests / 裸
     截图无窗口稳定化 = 错尺寸假失败）。
+  - [x] **Phase 61** — stone→cobblestone 材料链（用户"下两个 phase，请
+    继续建议1 和建议2" = 建议 2，代理定案最小完整版 = cobblestone 块 +
+    stone 自掉变更【**内容契约变更**】+ 4 锻石配方，MC 材料循环；
+    熔炼回 stone = 文档化偏离【block item 无 item 数据，见
+    KNOWN_ISSUES】）：**`cobblestone`**（hardness 2.0 = MC、自掉、
+    纹理 = stone 底 + 深色裂纹缝【交错 5px 缝格、块心提亮，salt
+    91..92】）+ **stone.json `drops: stone → cobblestone`**（MC：挖
+    天然石得锻石；stone 只能经合成回来 = 材料循环）+ 配方
+    `stone`（shapeless 4 cobblestone → 1 stone = MC 1.14+）+ **atlas
+    空位 [9,0]**（65→66/128、grid 16 不变 = **无 UV 移位 = 无重锚**）。
+    **零核心代码**（drops/配方/atlas 全既有机制；审计：无配方以
+    stone 为原料、只有 stone.json 掉 stone = 契约变更不破坏链）。
+    **无 format 变更**（format 9）。1020/1020（+2：块钉死 1【含
+    stone drops 变更断言】+ 配方钉死 1）；`-Werror` 恒 0 警告。
+    **E2E 全绿**：S1 **第 34 次结构性免疫**【空位 tile 无 UV 移位 +
+    drops 变更只在破坏时生效 → fresh 60f ×2 + == base18 字节一致，
+    无重锚】/ S2 掉落变更（stone 放 (22,46,−5) P52 几何瞄准锚定存档
+    = 零鼠标移动、铁镐按住 1.0 s【1.5×1.5/4 = 0.5625 s】→ 掉
+    **cobblestone×1 而非 stone×1**【(22.5,45,−4.5) 落地 = P59 证明
+    位置、diff = {} = 目标格恢复生成态 air】，420f ×2 savenorm 字节
+    一致 + save EXACT）/ S2ctl 无输入（×2 RAW、stone 保留）/ S6 init
+    失败 ×2（cobblestone.json 删除 → "block 'stone' drops unknown item
+    'cobblestone'" = P49 物品存在性校验点名契约依赖 / 配方
+    cobblestone→cobblestonne → "uses unknown ingredient item"）。
   - [x] **Phase 60** — flint 用途：箭头 + 燧石与钢（用户"下两个 phase，
     请继续建议1 和建议2" = 建议 1，代理定案最小完整版 = MC 1.14+ 箭头
     配方【**替换** P24 两木棍配方 = 内容契约变更】+ flint_and_steel 物品
@@ -478,6 +502,7 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 56** — `archive/phase-56.md`
 - **Phase 57** — `archive/phase-57.md`
 - **Phase 58** — `archive/phase-58.md`
+- **Phase 61** — `archive/phase-61.md`
 - **Phase 60** — `archive/phase-60.md`
 - **Phase 59** — `archive/phase-59.md`
 

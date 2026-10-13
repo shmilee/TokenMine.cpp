@@ -64,6 +64,20 @@ def stone(x, y):
     return (v, v, v, 255)
 
 
+def cobblestone(x, y):
+    # Cobble (Phase 61): rounded cobbles separated by dark crack seams —
+    # a staggered 5px grid (the Minecraft cobblestone look); the base is
+    # slightly darker than bare stone, each cobble lightest at its centre.
+    v = 108 + noise(x, y, 91, 12)
+    cx = (x + (y // 5) * 2) % 5
+    cy = y % 5
+    if cy == 4 or cx == 0:
+        v = 72 + noise(x, y, 92, 8)      # crack seam
+    else:
+        v += (2 - abs(cx - 2)) * 3 + (2 - abs(cy - 2)) * 3
+    return (clamp(v), clamp(v), clamp(v), 255)
+
+
 def dirt(x, y):
     return (clamp(134 + noise(x, y, 2, 12)),
             clamp(96 + noise(x, y, 3, 12)),
@@ -418,6 +432,7 @@ TEXTURES = {
     **{name: make_wool_tile(name) for name in WOOL_PALETTE},
     **{f"wheat_{s}": make_wheat(s, 70 + s) for s in range(1, 8)},
     "stone": stone,
+    "cobblestone": cobblestone,
     "dirt": dirt,
     "farmland_top": farmland_top,
     "farmland_side": farmland_side,

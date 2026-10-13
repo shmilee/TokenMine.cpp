@@ -1,0 +1,11 @@
+{
+  "id": "cobblestone",
+  "properties": {
+    "hardness": 2.0,
+    "drops": "cobblestone"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "cobblestone", "side": "cobblestone", "bottom": "cobblestone" }
+  }
+}

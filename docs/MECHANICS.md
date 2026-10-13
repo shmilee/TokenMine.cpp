@@ -221,6 +221,11 @@
     不放置方块；网格内容容器语义（关面板保留、入存档）
   - **E 背包面板**：2×2 合成格 = 共享 3×3 网格模型的左上 4 格（放不进 shaped
     配方）；右侧配方列表**只显示 shapeless 配方**（shaped 必须用工作台）
+  - **stone→cobblestone 材料链**（Phase 61，全数据）：`stone.json`
+    `drops: "cobblestone"`（挖天然石得锻石，MC 材料循环）；配方
+    `stone`（shapeless 4 cobblestone → 1 stone = MC 1.14+ 的回程）。
+    **cobblestone 不能熔炼回 stone**——`smeltable_to` 是物品字段而
+    block item 无独立 JSON（文档化偏离，见 KNOWN_ISSUES）
 - **熔炼 / 炉子**（Phase 40，全数据驱动；per-block 状态 Phase 44）：
   - **炉子方块**：数据驱动方块（`"interact": "furnace"` 属性，破坏掉自身）；
     **锁定时右键命中它 = 打开该炉子的面板**（27 格背包 + input/进度条/output

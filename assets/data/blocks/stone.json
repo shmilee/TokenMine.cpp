@@ -2,7 +2,7 @@
   "id": "stone",
   "properties": {
     "hardness": 1.5,
-    "drops": "stone"
+    "drops": "cobblestone"
   },
   "model": {
     "shape": "full_cube",

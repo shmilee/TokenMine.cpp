@@ -1284,3 +1284,31 @@ TEST(BlockRegistryTest, Phase59GravelDropContent) {
     EXPECT_TRUE(b->properties.chanceDrops.empty());
     EXPECT_FALSE(b->properties.flamable);  // gravel does not burn (v1)
 }
+
+// Cobble content (Phase 61): the stone→cobblestone material chain. Pins
+// the ACTUAL asset files: cobblestone drops itself, and STONE (natural
+// stone) now drops cobblestone — the Minecraft material cycle (the stone
+// self-drop change is the documented content-contract change of the
+// phase). A typo'd drops name parses fine, so the registry-level
+// assertion is the unit-level guard.
+// ---------------------------------------------------------------------------
+
+TEST(BlockRegistryTest, Phase61CobblestoneContent) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* c = reg.findByName("cobblestone");
+    ASSERT_TRUE(c != nullptr);
+    EXPECT_FLOAT_EQ(c->properties.hardness, 2.0f);  // Minecraft value
+    EXPECT_EQ(c->properties.drops, "cobblestone");  // the block item
+    EXPECT_EQ(c->properties.dropsCount, 1);
+    EXPECT_FALSE(c->properties.flamable);
+    // The contract change: natural stone drops COBBLESTONE (Minecraft:
+    // mining stone yields cobble; stone comes back via the 4-cobble
+    // recipe, Phase 61).
+    const Block* s = reg.findByName("stone");
+    ASSERT_TRUE(s != nullptr);
+    EXPECT_EQ(s->properties.drops, "cobblestone");
+}
