@@ -3,7 +3,12 @@
   "properties": {
     "hardness": 0.3,
     "light_emission": 15,
-    "drops": "glowstone"
+    "drops": "glowstone",
+    "drops_count": 2,
+    "chance_drops": [
+      { "item": "glowstone", "count": 1, "chance": 0.5 },
+      { "item": "glowstone", "count": 1, "chance": 0.5 }
+    ]
   },
   "model": {
     "shape": "full_cube",

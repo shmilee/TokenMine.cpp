@@ -864,3 +864,23 @@
   截图只做 notblack + skygate 健全性（PROTOCOL.md 已加场景例外条款）；
   若确需场景截图 ×2，把 pitch 压到视野不含地平线流送边界列（≈ −0.8
   以内，视野顶缘 = pitch + 半 FOV 仍低于水平线）。
+
+- **zsh 未引用变量不做词切分（P55）**：`FILES="$a.json $b.json"; for f in $FILES`
+  在 zsh 里只循环**一次**（整个字符串当单个词）——P55 首版 E2E 的
+  scene_check 把两个存档路径拼进一个字符串遍历，python 收到 "a.json b.json"
+  当一个文件名 → FileNotFoundError。对策 = 用数组 `FILES=("$a" "$b")` +
+  `for f in "${FILES[@]}"`（或 `${=FILES}` 强制切分）。bash 脚本没有
+  这个坑，但本项目 E2E 脚本全是 zsh。
+- **E2E 脚本必须显式 `export DISPLAY=:0`（P55）**：代理会话的 shell 不
+  继承桌面会话的 DISPLAY——P55 首版批跑全部 run "SDL_Init(VIDEO) failed:
+  No available video device"（窗口搜索 10 s 超时，日志在**游戏自己的**
+  log 里而不是批跑 log，批跑只看到 "game window not found"）。P54/P52
+  的脚本在当时的会话里恰好有 DISPLAY 才没暴露。对策 = 每个 E2E 脚本头
+  `export DISPLAY=:0`；排查"窗口未找到"先看 `$T/<tag>.log`（游戏日志）
+  的 ERROR 行。
+- **同物品掉落会合并——断言掉落用"实体数 × count"（P55）**：掉落实体
+  同物品且底中心距 < kMergeDistance（0.75）时每帧合并进先到的实体
+  （count 相加，受 max_stack 限）。`lapis_ore` 破坏 = 主掉落 count 2 +
+  roll 条目 count 1 **同物品同位置**（方块中心零速度生成）→ 合并成
+  **1 个实体 count 3**，不是 3 个实体。E2E/单测断言掉落数量必须按
+  "实体 count 之和"算；不同物品不合并（leaves×1 + stick×1 = 2 实体）。

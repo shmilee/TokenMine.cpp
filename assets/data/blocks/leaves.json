@@ -6,7 +6,10 @@
     "transparent": true,
     "hardness": 0.2,
     "drops": "leaves",
-    "chance_drop": { "item": "apple", "count": 1, "chance": 0.0078125 }
+    "chance_drops": [
+      { "item": "stick", "count": 1, "chance": 0.02 },
+      { "item": "apple", "count": 1, "chance": 0.0078125 }
+    ]
   },
   "model": {
     "textures": { "top": "leaves", "side": "leaves", "bottom": "leaves" }

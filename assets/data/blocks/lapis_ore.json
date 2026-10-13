@@ -2,7 +2,12 @@
   "id": "lapis_ore",
   "properties": {
     "hardness": 3.0,
-    "drops": "lapis"
+    "drops": "lapis",
+    "drops_count": 2,
+    "chance_drops": [
+      { "item": "lapis", "count": 1, "chance": 0.5 },
+      { "item": "lapis", "count": 1, "chance": 0.5 }
+    ]
   },
   "model": {
     "textures": { "top": "lapis_ore", "side": "lapis_ore", "bottom": "lapis_ore" }

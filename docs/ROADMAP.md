@@ -149,6 +149,33 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
   一致（草存续、零实体）；**S3 init 失败 ×2**（scratch 资产副本）：`chance_drops` + `chance_drop`
   同时写 → rc=1 + "mutually exclusive"、`chance_drops[0].item = "nope"` → rc=1 + "chance_drops[0]
   names unknown item"。KNOWN_ISSUES 关闭 2（草掉种子非泥土 / 概率次级掉落单条目）。
+  - [x] **Phase 55** — 多掉落内容扩展（用户"熔岩湖不着急，先记录下来，留到很久的
+   未来。下一步先进行建议2的扩展。" = 建议 2，代理定案最小完整版：3 方块 MC 语义
+   内容扩展、**零代码**，消费 P52 遗留"多掉落内容扩展"；worldgen 熔岩湖 = 用户
+   明示"留到很久的未来"）。**纯数据**：`leaves` 单条目 `chance_drop`（apple）→
+   `chance_drops: [{stick,1,0.02},{apple,1,0.0078125}]`（Minecraft 1.14+：橡木树叶
+   掉木棍 2% + 苹果；本项目无 sapling = 文档化偏离，苹果保留 P49 项目值 1/128）；
+   `lapis_ore` 加 `drops_count: 2` + `chance_drops: [{lapis,1,0.5}×2]` → 2..4 均匀
+   = MC 青金石矿同款数量分布；`glowstone` 同款 → 2..4（物品 = block item，无粉尘）。
+   **3 个内容钉死单测**（加载真实 `assets/data/blocks`，断言字段精确值——概率笔误
+   如 0.2 vs 0.02 能过解析与 init，只有内容级断言能抓）。**无 format 变更**
+   （format 9）；967/967（+3 内容）；`-Wall -Wextra -Wpedantic -Werror` 恒 0
+   警告。E2E（批跑，**全绿**）：**S1 base18 门**：P55 ×2 字节一致 + == base18 →
+   **第 29 次结构性免疫（免重锚）**【掉落只作用于破坏，fresh 世界无输入零破坏 =
+   无输入零活动】+ 红心 0；**S2/S3/S4 三破坏输入**（P52 已验证瞄准几何复用——
+   玩家 (22.5,45,0.5) yaw 0 pitch atan2(−0.12,5)，p55scan 真实 raycastBlock 复验
+   3 目标全 HIT (22,46,−5) +z 面 dist 4.5013 < reach 5；目标格天然 air【列顶
+   y=44】= 场景存档 block diff 放置；玩家持 iron_pickaxe【break_speed 4】）：
+   真实 `rollChanceDropEntry` 预计算（seed 9，cell (22,46,−5)）：entry0@0.5 PASS /
+   entry1@0.5 FAIL → **lapis×3 / glowstone×3**（同物品合并 = 单实体 count 3）；
+   entry0@0.02 PASS / entry1@1/128 FAIL → **leaves×1 + stick×1**（两实体）。
+   按住时长按 `1.5×hardness÷4` + ~0.55 s 余量（lapis 1.125→1.7 s / glowstone
+   0.1125→0.7 s / leaves 0.075→0.6 s；破坏后射线到 reach 限内只余 air = 余量不
+   误破）。每场景：无输入对照 ×2 字节一致（目标完好 + 零实体）+ 输入 ×2 归一化
+   存档一致【剥实体 age = 真实 dt，确定性权威】+ 存档精确（目标格消失 + 实体
+   列表与预计算逐项相等，落点列 (22.5±0.3, 44.9..46.6, −4.5±0.05)）。
+   **PITS +3**（zsh 未引用变量不词切分 / E2E 脚本须显式 `export DISPLAY` /
+   同物品掉落合并——断言用实体数×count）。
   - [x] **Phase 54** — 熔岩后续（用户"好的.按建议继续。" = 建议 1，代理定案最小完整版：
    熔岩游泳状态 + 灼烧伤害 + 下沉减速 + 熔岩不湿润耕地，消费 P51 遗留"熔岩无燃烧/减速"
    + "湿润判定把熔岩也算水"，worldgen 熔岩湖/脱离残留火/熔岩烧 Mob 与作物留后续）。
@@ -271,5 +298,6 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 52** — `archive/phase-52.md`
 - **Phase 53** — `archive/phase-53.md`
 - **Phase 54** — `archive/phase-54.md`
+- **Phase 55** — `archive/phase-55.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

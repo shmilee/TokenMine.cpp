@@ -141,9 +141,14 @@
    chance)`，条目索引去相关 salt——同格各条目互不追踪、也不追踪单条目
    roll），每条目至多 1 个掉落实体；空数组 / 任一元素非对象 / 未知键 /
    缺三元组 / 越界均拒绝（逐条目点名 `chance_drops[i]`）；init 每条目
-   复用 drops 纪律（物品存在 + `count` ≤ max_stack）。首个使用者 =
-   `grass`（`drops: dirt` + `chance_drops: [wheat_1 ×1 @ 0.125]` = MC 草
-   掉泥土 + 偶尔种子，0.125 = MC 基础概率）。
+   复用 drops 纪律（物品存在 + `count` ≤ max_stack）。使用者（含
+   `[Phase 55]` 内容扩展）：`grass`（`drops: dirt` +
+   `chance_drops: [wheat_1 ×1 @ 0.125]` = MC 草掉泥土 + 偶尔种子）；
+   `leaves`（`[stick ×1 @ 0.02, apple ×1 @ 1/128]` = MC 1.14+ 树叶掉
+   木棍 2% + 苹果；无 sapling = 文档化偏离）；`lapis_ore` /
+   `glowstone`（`drops_count: 2` + 两个 50% 条目 = 2..4 均匀，MC 同款
+   数量分布）。同物品掉落会合并（`kMergeDistance`）——断言/统计掉落时
+   数**实体数 × count**，不是实体个数。
 
    `hardness` 驱动破坏耗时（按住左键，`1.5s × hardness ÷ 选中物品 break speed`，
    hardness ≤0 且可破坏=即时破坏）。

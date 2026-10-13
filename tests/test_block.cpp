@@ -1135,3 +1135,74 @@ TEST(BlockRegistryTest, DrySlowdownRange) {
     ASSERT_FALSE(rBig.ok());
     EXPECT_NE(rBig.error().message.find("[1, 64]"), std::string::npos);
 }
+
+// ---------------------------------------------------------------------------
+// Drop content (Phase 55): multi-drop content expansion. These pin the
+// ACTUAL asset files (not a synthetic copy): the expansion values are the
+// content contract (Minecraft semantics), and a typo'd chance (0.2 instead
+// of 0.02) parses fine, so the registry-level check is the unit-level guard.
+// The tests must run from the repository root (the game's resource paths
+// are relative, same contract).
+// ---------------------------------------------------------------------------
+
+TEST(BlockRegistryTest, Phase55LeavesDropContent) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* b = reg.findByName("leaves");
+    ASSERT_TRUE(b != nullptr);
+    // The single chance_drop migrated to the list (Phase 55); the field is
+    // gone, the list holds the stick entry (Minecraft 1.14+: 2%) in front
+    // of the Phase 49 apple entry (1/128, the project value, kept).
+    EXPECT_EQ(b->properties.drops, "leaves");
+    EXPECT_TRUE(b->properties.chanceDropItem.empty());
+    ASSERT_EQ(b->properties.chanceDrops.size(), 2u);
+    EXPECT_EQ(b->properties.chanceDrops[0].item, "stick");
+    EXPECT_EQ(b->properties.chanceDrops[0].count, 1);
+    EXPECT_DOUBLE_EQ(b->properties.chanceDrops[0].chance, 0.02);
+    EXPECT_EQ(b->properties.chanceDrops[1].item, "apple");
+    EXPECT_EQ(b->properties.chanceDrops[1].count, 1);
+    EXPECT_DOUBLE_EQ(b->properties.chanceDrops[1].chance, 0.0078125);
+}
+
+TEST(BlockRegistryTest, Phase55LapisOreDropContent) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* b = reg.findByName("lapis_ore");
+    ASSERT_TRUE(b != nullptr);
+    // 2..4 lapis, uniform: base 2 + two independent 50% rolls = the
+    // Minecraft lapis-ore quantity distribution.
+    EXPECT_EQ(b->properties.drops, "lapis");
+    EXPECT_EQ(b->properties.dropsCount, 2);
+    ASSERT_EQ(b->properties.chanceDrops.size(), 2u);
+    for (const ChanceDrop& e : b->properties.chanceDrops) {
+        EXPECT_EQ(e.item, "lapis");
+        EXPECT_EQ(e.count, 1);
+        EXPECT_DOUBLE_EQ(e.chance, 0.5);
+    }
+}
+
+TEST(BlockRegistryTest, Phase55GlowstoneDropContent) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* b = reg.findByName("glowstone");
+    ASSERT_TRUE(b != nullptr);
+    // 2..4 glowstone: the Minecraft quantity, item = the block item (this
+    // project has no glowstone dust).
+    EXPECT_EQ(b->properties.drops, "glowstone");
+    EXPECT_EQ(b->properties.dropsCount, 2);
+    ASSERT_EQ(b->properties.chanceDrops.size(), 2u);
+    for (const ChanceDrop& e : b->properties.chanceDrops) {
+        EXPECT_EQ(e.item, "glowstone");
+        EXPECT_EQ(e.count, 1);
+        EXPECT_DOUBLE_EQ(e.chance, 0.5);
+    }
+}
