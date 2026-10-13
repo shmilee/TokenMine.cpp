@@ -394,3 +394,20 @@ TEST(GrowthEnvTest, WaterAtOtherYDoesNotCount) {
     }
     EXPECT_LT(nSteps, 200); // dry pace — the water is at the wrong level
 }
+
+TEST(GrowthEnvTest, LavaNearSoilDoesNotWet) {
+    // Phase 54: the wet-pace counts WATER only. Lava beside the soil
+    // (Minecraft: it would burn the crop, not water it) keeps the dry
+    // pace — EXACTLY the no-fluid scene's step count (same modulus).
+    const BlockRegistry reg = envRegistry("soil", 0, 2);
+    EnvScene dry(reg, "soil", 0);
+    const int drySteps = dry.stepsOver(reg, 42, 200);
+    ASSERT_GT(drySteps, 0);
+    ASSERT_LT(drySteps, 200); // sanity: the dry pace is slower here
+    EnvScene lava(reg, "soil", 0);
+    lava.world.setFluid(10, 1, 8, FluidKind::Lava, 8); // 2 from the soil, same y
+    EXPECT_EQ(lava.stepsOver(reg, 42, 200), drySteps);
+    // And water at the same spot DOES wet (the wet path stays alive).
+    EnvScene wet(reg, "soil", 0, 2);
+    EXPECT_GT(wet.stepsOver(reg, 42, 200), drySteps);
+}

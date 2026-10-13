@@ -81,6 +81,11 @@ ctest --test-dir build --output-on-failure
 - **无输入运行**：×2 全帧字节一致 + skygate（FRESH = 天空模式色正午 (120,181,242) /
   黄昏 (130,63,38)，采样中心区像素众数）+ **base 门** `/tmp/opencode/base18.png`
   字节一致（无输入基线；新系统需论证"无输入下零活动 = 结构性免疫"，P26 起惯例）。
+  **场景存档无输入运行例外（P54 起）**：玩家置于场景、视野含流送边界列时，
+  远列的 pop-in 帧与墙钟相关（P14：光照 job 每帧至多 1 个、worker 吞吐按
+  墙钟——240f 两跑差 10 ms 即可让地平线树冠碎片在终帧有无翻转）→
+  **截图 ×2 字节一致对场景跑不是有效断言**；权威 = **存档 ×2 字节一致**
+  （全量世界状态）+ notblack + skygate，与输入跑同款纪律（P53 ctl 先例）。
 - **输入驱动运行（xdotool 脚本）**：**存档状态（含 yaw/pitch）是确定性权威证据**；
   全帧字节一致受 SDL 指针锁定 grab delta 环境限制（P28 条：xdotool XWarpPointer 只移
   虚拟光标，进相对模式时 SDL 报一次性 motion delta ≈ warp 位置 − SDL 计算的窗口中心

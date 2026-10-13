@@ -9,9 +9,26 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 53 完成时）
+## 现状（Phase 54 完成时）
 
-- 功能阶段 P0–P53 全部完成并提交；P53 = 作物放置限制（用户"按你建议
+- 功能阶段 P0–P54 全部完成并提交；P54 = 熔岩后续（用户"好的.按建议
+   继续。" = 建议 1，代理定案最小完整版 = 熔岩游泳状态 + 灼烧伤害 +
+   下沉减速 + 熔岩不湿润耕地，消费 P51 遗留"熔岩无燃烧/减速" + "湿润
+   判定把熔岩也算水"，worldgen 熔岩湖/脱离残留火/熔岩烧 Mob 与作物
+   留后续）：**熔岩 = 同款游泳状态 + 熔岩节奏 + 灼烧**（`isInLava`
+   AABB 扫描，水/熔岩并存时熔岩优先；`lava_swim_speed` 1.9 / 上浮 1.5 /
+   重力 4 / 终端 2，config 可覆盖，比值对齐 MC 运动系数比
+   0.014/0.0231）+ **灼烧伤害**（真实 dt 生存计时器：每
+   `lava_damage_interval_seconds` 1.0 s 受 `lava_damage` 4 HP = MC
+   4 HP/s，走正常伤害路径；离熔岩重置未到期 tick = v1 无残留火）+ 落入
+   熔岩取消坠落伤害 + 熔岩内抑制疾跑/下蹲 + **`cropIsWet` 只算水**
+   （熔岩旁耕地 = 干节奏）；6 个新 `player.*` config 键（默认 = MC 值，
+   `lava_damage` ≤ `max_health` 交叉校验）；**无 format 变更**（format
+   9）；964/964（+10：物理 7 + config 2 + growth 1）、`-Werror` 0 警告、
+   base18 **第 28 次结构性免疫**【熔岩只存在于场景（桶/放置），fresh
+   世界零熔岩零作物 = 无输入零活动】；E2E 场景池 = seed-9 天然 2×1 空穴
+   + 3 石块编辑围墙【存档禁止同格 block+fluid 编辑，PITS 已收录】；
+   P53 = 作物放置限制（用户"按你建议
    继续：候选1"，代理定案最小完整版 = `plant_on` 数据驱动放置土壤门，
    消费 P48/P50 遗留"放置不受限"，熔岩后续/多掉落内容扩展留后续）：
    **`plant_on` 纯数据**（block 可选**数组**（方块名）——放置时目标格
@@ -130,17 +147,17 @@
   （P28 遗留"熟肉"）、P41 = wool 染色框架（P12/P20 遗留"wool 无用途/无
   染色"；atlas 4×8→8×8 → base18 于 P41 重锚）、P42 = 弓后续 2、P43 =
   牛奶桶最小项（饮用通道 + 挤奶）。
-- 测试 **954/954**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+- 测试 **964/964**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
 - 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P41 重锚【atlas
-  8×8】，P42/P43/P44/P45/P46/P47/P48/P49/P50/P51/P52/P53 过门 = 第
-  16/17/18/19/20/21/22/23/24/25/26/27 次结构性免疫、无重锚）。
+  8×8】，P42/P43/P44/P45/P46/P47/P48/P49/P50/P51/P52/P53/P54 过门 =
+  第 16/17/18/19/20/21/22/23/24/25/26/27/28 次结构性免疫、无重锚）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 
 ## 命令
 
 ```bash
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build  # 构建（0 警告）
-./build/bin/minecraft_tests                                                 # 测试（954）
+./build/bin/minecraft_tests                                                 # 测试（964）
 ./build/bin/minecraft                                                       # 运行（ESC 退出）
 ./build/bin/minecraft --frames N [--screenshot /abs.png] [--save slot] [--new] [--config path]
 ```

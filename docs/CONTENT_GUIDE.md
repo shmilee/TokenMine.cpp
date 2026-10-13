@@ -559,11 +559,16 @@ config 其余部分的前向兼容一致）。种子配置（首次运行生成�
 | `starve_damage_interval_seconds` | 20 | 饥饿 = 0 时每间隔受 1 HP 饥饿伤害（Minecraft normal：400 tick）；>0 |
 | `regen_hunger_threshold` | 6 | 低于该饥饿值无自然回复（Minecraft 规则）；0 ≤ v ≤ `max_hunger` |
 | `sprint_hunger_decay_factor` | 2 | 疾跑衰减加速因子（间隔 ÷ 因子）；>0 |
+| `lava_damage_interval_seconds` | 1.0 | 站在熔岩格里每间隔受 `lava_damage` HP 灼烧（Minecraft：4 HP/s，真实 dt 生存计时器；离熔岩重置未到期 tick）；>0（Phase 54） |
+| `lava_damage` | 4 | 每次灼烧的 HP（Minecraft：4）；0 < v ≤ `max_health`（Phase 54） |
 
 运动/几何全套键（同样可覆盖，均 >0）：`width`（0.6）、`height`（1.8）、
 `eye_height`（1.62，须 < `height`）、`walk_speed`（4.3）、`sprint_speed`（5.6）、
 `jump_speed`（8.5）、`gravity`（32）、`terminal_velocity`（38）、`swim_speed`（3.1）、
 `swim_up_speed`（4.5）、`water_gravity`（12）、`water_terminal_velocity`（4）、
+`lava_swim_speed`（1.9）、`lava_swim_up_speed`（1.5）、`lava_gravity`（4）、
+`lava_terminal_velocity`（2）（Phase 54：熔岩里的游泳节奏——比水更慢/更沉，
+比值对齐 Minecraft 的运动系数比 0.014/0.0231）、
 `mouse_sensitivity`（0.0025）、`crouch_height`（1.6，须 < `height`）、
 `crouch_speed_scale`（0.3）。
 

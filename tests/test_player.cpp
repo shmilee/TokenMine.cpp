@@ -326,11 +326,12 @@ TEST(PlayerTest, WalksThroughWater) {
 namespace {
 
 // A 2-deep pool of full fluid (y=1..2) on the fixture's floor.
-void buildPool(Fixture& f, int x0, int x1, int z0, int z1) {
+void buildPool(Fixture& f, int x0, int x1, int z0, int z1,
+               FluidKind kind = FluidKind::Water) {
     for (int x = x0; x <= x1; ++x) {
         for (int z = z0; z <= z1; ++z) {
-            f.world.setFluid(x, 1, z, FluidKind::Water, kMaxFluidLevel);
-            f.world.setFluid(x, 2, z, FluidKind::Water, kMaxFluidLevel);
+            f.world.setFluid(x, 1, z, kind, kMaxFluidLevel);
+            f.world.setFluid(x, 2, z, kind, kMaxFluidLevel);
         }
     }
 }
@@ -391,6 +392,111 @@ TEST(PlayerTest, SwimSpeedIsReduced) {
     // swimSpeed (3.1) x 0.5 s — clearly below walk speed (4.3 x 0.5 = 2.15).
     EXPECT_NEAR(p.position().x - x0, 1.55f, 0.1f);
     EXPECT_TRUE(p.onGround());
+}
+
+// -- swimming in lava (Phase 54): the burn + the slow --------------------------
+
+TEST(PlayerTest, LavaBurnsAtTheConfiguredRate) {
+    Fixture f;
+    buildPool(f, 6, 10, 6, 10, FluidKind::Lava);
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f}); // feet in the lava
+    Input idle = heldInput({});
+    // 1.5 s: exactly one 1.0 s burn tick (the 1/60 accumulation crosses
+    // 1.0 at frame 61, the 2.0 crossing is frame ~121 — 90 frames is in
+    // between). 20 - 4 = 16.
+    run(p, 90, idle);
+    EXPECT_FLOAT_EQ(p.health(), 16.0f);
+    EXPECT_FALSE(p.isDead());
+}
+
+TEST(PlayerTest, LavaBurnKills) {
+    Fixture f;
+    buildPool(f, 6, 10, 6, 10, FluidKind::Lava);
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    // 20 HP / 4 per tick = 5 ticks; the fifth crossing is frame ~301.
+    run(p, 320, idle);
+    EXPECT_TRUE(p.isDead());
+    EXPECT_FLOAT_EQ(p.health(), 0.0f);
+}
+
+TEST(PlayerTest, LavaBurnResetsOnExit) {
+    Fixture f;
+    buildPool(f, 6, 10, 6, 10, FluidKind::Lava);
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(p, 90, idle); // tick 1 (frame 61)
+    p.restorePosition({2.5f, 1.0f, 8.5f}); // dry land: the pending tick resets
+    run(p, 60, idle);
+    EXPECT_FLOAT_EQ(p.health(), 16.0f); // no tick while out of the lava
+    p.restorePosition({8.5f, 1.0f, 8.5f}); // back in: a fresh 1.0 s starts
+    run(p, 59, idle); // 0.98 s: not yet
+    EXPECT_FLOAT_EQ(p.health(), 16.0f);
+    run(p, 5, idle); // crosses 1.0 s of fresh submersion
+    EXPECT_FLOAT_EQ(p.health(), 12.0f);
+}
+
+TEST(PlayerTest, MovesSlowerInLavaThanWater) {
+    Fixture f;
+    buildPool(f, 6, 20, 6, 10, FluidKind::Lava);
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(p, 5, idle);
+    p.yaw = -kPi / 2.0f; // facing +X
+    Input walk = heldInput({GameKey::W});
+    const float x0 = p.position().x;
+    run(p, 30, walk); // 0.5 s
+    // lavaSwimSpeed (1.9) x 0.5 s — clearly below water (3.1 x 0.5 = 1.55).
+    EXPECT_NEAR(p.position().x - x0, 0.95f, 0.1f);
+    // One-frame exact pace: the velocity is the lava swim speed.
+    p.restorePosition({8.5f, 1.0f, 8.5f});
+    run(p, 1, walk);
+    EXPECT_FLOAT_EQ(p.velocity().x, p.params().lavaSwimSpeed);
+}
+
+TEST(PlayerTest, SwimUpInLavaUsesTheLavaPace) {
+    Fixture f;
+    buildPool(f, 6, 10, 6, 10, FluidKind::Lava);
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(p, 5, idle);
+    Input up = heldInput({GameKey::Space});
+    run(p, 1, up);
+    EXPECT_FLOAT_EQ(p.velocity().y, p.params().lavaSwimUpSpeed);
+}
+
+TEST(PlayerTest, SprintSuppressedInLava) {
+    Fixture f;
+    buildPool(f, 6, 20, 6, 10, FluidKind::Lava);
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(p, 5, idle);
+    p.yaw = -kPi / 2.0f; // facing +X
+    Input sprint = heldInput({GameKey::W, GameKey::LeftShift});
+    const float x0 = p.position().x;
+    run(p, 30, sprint); // 0.5 s: the sprint pace (5.6) must NOT apply
+    EXPECT_NEAR(p.position().x - x0, 0.95f, 0.1f);
+    EXPECT_FLOAT_EQ(p.velocity().x, p.params().lavaSwimSpeed);
+}
+
+TEST(PlayerTest, FallDamageCancelledInLava) {
+    Fixture f;
+    // A SHALLOW (1-deep) lava pool: the landing-to-run-end submersion stays
+    // under one 1.0 s burn tick, so this isolates the fall cancellation
+    // from the burn (a 2-deep pool's 1 s fall-through would add a tick).
+    for (int x = 6; x <= 10; ++x) {
+        for (int z = 6; z <= 10; ++z) {
+            f.world.setFluid(x, 1, z, FluidKind::Lava, kMaxFluidLevel);
+        }
+    }
+    Player p = f.makePlayer({8.5f, 12.0f, 8.5f}); // 10 blocks above the floor
+    Input idle = heldInput({});
+    run(p, 90, idle); // the fall settles on the pool floor (~frame 77)
+    // A 10-block fall would deal 10 - 3 = 7 HP in the air; the lava
+    // landing cancels it (like water).
+    EXPECT_FLOAT_EQ(p.health(), 20.0f);
+    EXPECT_TRUE(p.onGround());
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f);
 }
 
 // -- movement direction / speed ----------------------------------------------
@@ -954,6 +1060,10 @@ TEST(PlayerParamsConfigTest, ExplicitValuesOverride) {
     cfg.set("player.swim_up_speed", Json(4.0));
     cfg.set("player.water_gravity", Json(10.0));
     cfg.set("player.water_terminal_velocity", Json(3.0));
+    cfg.set("player.lava_swim_speed", Json(1.5));
+    cfg.set("player.lava_swim_up_speed", Json(1.0));
+    cfg.set("player.lava_gravity", Json(3.0));
+    cfg.set("player.lava_terminal_velocity", Json(1.5));
     cfg.set("player.mouse_sensitivity", Json(0.002));
     cfg.set("player.max_health", Json(30.0));
     cfg.set("player.fall_damage_offset", Json(2.0));
@@ -966,6 +1076,8 @@ TEST(PlayerParamsConfigTest, ExplicitValuesOverride) {
     cfg.set("player.starve_damage_interval_seconds", Json(10.0));
     cfg.set("player.regen_hunger_threshold", Json(8.0));
     cfg.set("player.sprint_hunger_decay_factor", Json(3.0));
+    cfg.set("player.lava_damage_interval_seconds", Json(2.0));
+    cfg.set("player.lava_damage", Json(6.0));
     auto r = Player::Params::fromConfig(cfg);
     ASSERT_TRUE(r.ok()) << r.error().describe();
     const Player::Params& p = *r;
@@ -981,6 +1093,10 @@ TEST(PlayerParamsConfigTest, ExplicitValuesOverride) {
     EXPECT_FLOAT_EQ(p.swimUpSpeed, 4.0f);
     EXPECT_FLOAT_EQ(p.waterGravity, 10.0f);
     EXPECT_FLOAT_EQ(p.waterTerminalVelocity, 3.0f);
+    EXPECT_FLOAT_EQ(p.lavaSwimSpeed, 1.5f);
+    EXPECT_FLOAT_EQ(p.lavaSwimUpSpeed, 1.0f);
+    EXPECT_FLOAT_EQ(p.lavaGravity, 3.0f);
+    EXPECT_FLOAT_EQ(p.lavaTerminalVelocity, 1.5f);
     EXPECT_FLOAT_EQ(p.mouseSensitivity, 0.002f);
     EXPECT_FLOAT_EQ(p.maxHealth, 30.0f);
     EXPECT_FLOAT_EQ(p.fallDamageOffset, 2.0f);
@@ -993,6 +1109,8 @@ TEST(PlayerParamsConfigTest, ExplicitValuesOverride) {
     EXPECT_DOUBLE_EQ(p.starveDamageIntervalSeconds, 10.0);
     EXPECT_FLOAT_EQ(p.regenHungerThreshold, 8.0f);
     EXPECT_DOUBLE_EQ(p.sprintHungerDecayFactor, 3.0);
+    EXPECT_DOUBLE_EQ(p.lavaDamageIntervalSeconds, 2.0);
+    EXPECT_FLOAT_EQ(p.lavaDamage, 6.0f);
 }
 
 TEST(PlayerParamsConfigTest, MissingKeysKeepPerKeyDefaults) {
@@ -1073,6 +1191,35 @@ TEST(PlayerParamsConfigTest, RejectsThresholdAboveMaxHunger) {
     // Equal to the max is allowed (regen never fires, but is not broken).
     Config equal;
     equal.set("player.regen_hunger_threshold", Json(20.0));
+    EXPECT_TRUE(Player::Params::fromConfig(equal).ok());
+}
+
+TEST(PlayerParamsConfigTest, RejectsZeroLavaDamageInterval) {
+    Config cfg;
+    cfg.set("player.lava_damage_interval_seconds", Json(0.0));
+    auto r = Player::Params::fromConfig(cfg);
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("lava_damage_interval_seconds"),
+              std::string::npos);
+    // A negative lava swim speed is rejected too (the generic positive
+    // check on the movement keys).
+    Config neg;
+    neg.set("player.lava_swim_speed", Json(-1.0));
+    auto rn = Player::Params::fromConfig(neg);
+    ASSERT_FALSE(rn.ok());
+    EXPECT_NE(rn.error().message.find("lava_swim_speed"),
+              std::string::npos);
+}
+
+TEST(PlayerParamsConfigTest, RejectsLavaDamageAboveMaxHealth) {
+    Config above;
+    above.set("player.lava_damage", Json(21.0)); // > the default max_health
+    auto r = Player::Params::fromConfig(above);
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("lava_damage"), std::string::npos);
+    // Equal to the max is allowed (one tick is lethal, but is not broken).
+    Config equal;
+    equal.set("player.lava_damage", Json(20.0));
     EXPECT_TRUE(Player::Params::fromConfig(equal).ok());
 }
 

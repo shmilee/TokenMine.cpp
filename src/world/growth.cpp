@@ -14,10 +14,12 @@ namespace {
 constexpr std::uint64_t kCropRollSalt = 0xC1B1D57E7AE0C9A1ULL;
 
 // Water proximity for the dry/wet pace (Phase 50, the Minecraft
-// farmland value): any fluid level within this CHEBYSHEV radius of the
+// farmland value): any WATER level within this CHEBYSHEV radius of the
 // soil cell (the cell below the crop), at the soil cell's y, counts as
 // water. A poured bucket's source sits on the same level as the farmland,
-// so the bucket workflow works.
+// so the bucket workflow works. LAVA does not wet (Phase 54, Minecraft:
+// lava burns crops instead — the crop burn is a known gap; counting lava
+// would let dry fields beside lava grow at full pace).
 constexpr int kWetWaterRadius = 4;
 
 // True when water is near the crop's soil cell (see kWetWaterRadius).
@@ -25,7 +27,8 @@ bool cropIsWet(const World& world, const BlockPos& cropPos) {
     const int soilY = cropPos.y - 1;
     for (int dx = -kWetWaterRadius; dx <= kWetWaterRadius; ++dx) {
         for (int dz = -kWetWaterRadius; dz <= kWetWaterRadius; ++dz) {
-            if (world.getFluid(cropPos.x + dx, soilY, cropPos.z + dz) > 0) {
+            if (world.getFluidOfKind(cropPos.x + dx, soilY, cropPos.z + dz,
+                                     FluidKind::Water) > 0) {
                 return true;
             }
         }

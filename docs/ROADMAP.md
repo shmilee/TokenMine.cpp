@@ -149,6 +149,46 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
   一致（草存续、零实体）；**S3 init 失败 ×2**（scratch 资产副本）：`chance_drops` + `chance_drop`
   同时写 → rc=1 + "mutually exclusive"、`chance_drops[0].item = "nope"` → rc=1 + "chance_drops[0]
   names unknown item"。KNOWN_ISSUES 关闭 2（草掉种子非泥土 / 概率次级掉落单条目）。
+  - [x] **Phase 54** — 熔岩后续（用户"好的.按建议继续。" = 建议 1，代理定案最小完整版：
+   熔岩游泳状态 + 灼烧伤害 + 下沉减速 + 熔岩不湿润耕地，消费 P51 遗留"熔岩无燃烧/减速"
+   + "湿润判定把熔岩也算水"，worldgen 熔岩湖/脱离残留火/熔岩烧 Mob 与作物留后续）。
+   **熔岩 = 同款游泳状态 + 熔岩节奏 + 灼烧**：`Player::isInLava()`（与 `isInWater`
+   共享的 AABB 流体扫描，水/熔岩并存时熔岩优先）→ 速度选择 `lava_swim_speed` 1.9 /
+   上浮 `lava_swim_up_speed` 1.5 / 重力 `lava_gravity` 4 / 终端
+   `lava_terminal_velocity` 2（config 可覆盖，比值对齐 Minecraft 运动系数比
+   0.014/0.0231）；**灼烧伤害** = 真实 dt 生存计时器（`m_lavaAccum`，与饥饿同款
+   累加器）：浸没每 `lava_damage_interval_seconds` 1.0 s 受 `lava_damage` 4 HP
+   （Minecraft 4 HP/s），走正常 `damage()` 路径（红闪/音效/死亡全触发）；**离熔岩
+   重置未到期 tick**（v1 无残留火 = KNOWN_ISSUES 新增）；落入熔岩取消坠落伤害
+   （与水同款）；熔岩内抑制疾跑与下蹲速度缩放。**`cropIsWet` 只算水**
+   （`getFluidOfKind(..., Water)`——熔岩旁耕地 = 干节奏，MC 熔岩不湿润；烧作物
+   仍是遗留）。6 个新 `player.*` config 键（缺键 = 默认、越界拒启；
+   `lava_damage` ≤ `max_health` 交叉校验）。**无 format 变更**（format 9）。
+   964/964（+10：灼烧速率/致死/离熔岩重置/熔岩更慢/上浮节奏/疾跑抑制/坠落取消
+   7 + config 2 + growth 熔岩不湿润 1）；`-Wall -Wextra -Wpedantic -Werror` 恒 0
+   警告。E2E（批跑，**全绿**）：**S1 base18 门**：P54 ×2 字节一致 + == base18 →
+   **第 28 次结构性免疫（免重锚）**【熔岩只存在于场景（桶/放置），fresh 世界
+   零熔岩零作物 = 无输入零活动】+ 红心 0；**S2 灼烧致死**（无输入 600f，池 =
+   seed-9 **天然 2×1 空穴 (22,45,−5/−4) + 3 石块编辑围墙**（p54terr 地形探针定案；
+   **存档禁止同格 block+fluid 编辑** → 首版"挖坑灌岩"被 parseSave 拒，PITS +1），
+   玩家站在熔岩里 max_health 4【首 tick 即致死 = 布尔断言，fps 无关】）：存档
+   ×2 字节一致（**场景跑确定性权威**——水平视野跨流送边界列，截图 ×2 非有效
+   断言【pop-in 完成帧与墙钟相关，P14 类；240f 两跑差 10 ms 树冠碎片翻转，
+   PROTOCOL 场景例外条款 + PITS 收录】）+ 存档精确（**health 0** + 位置不变
+   + 池完好 + 零实体）+ 截图 notblack/skygate 健全性；
+   **S3 熔岩游泳**（输入 900f，mov config 灼烧间隔 300 s 隔离伤害【首版 30 s 被
+   26 fps 的 34 s 实跑反超打 1 tick——隔离参数须盖住整次运行，PITS +1】，玩家从
+   池上方 (22.5,47,−4.5) 面朝 +Z 落入，W 按住 @ 2.9s 锚定至运行结束）：存档 ×2
+   字节一致 + 存档精确（**终端状态 = 贴 +Z 墙 (22.5, 45, −3.3)**——到达 ~3.7 s ≪
+   900f 最短实跑 5.1 s = fps 无关 + health 20 无灼烧）；**S4 水回归**（无输入
+   240f，同池灌水）：存档 ×2 字节一致 + health 20 + 位置不变（水不受
+   熔岩改动影响）+ 截图健全性；**S5 init 失败 ×2**（config）：
+   `lava_damage_interval_seconds: 0` → rc=1 + "must be positive"、
+   `lava_damage: 100` → rc=1 + "must be <= player.max_health"。
+   KNOWN_ISSUES 关闭 2（熔岩无燃烧/减速、湿润判定把熔岩算水）+ 新增 1
+   （脱离熔岩无残留燃烧 + 熔岩不烧 Mob 与作物）。**PITS +3**（同格
+   block+fluid 编辑 / 隔离参数盖住整跑 / 场景截图 ×2 流送边界）。
+
   - [x] **Phase 53** — 作物放置限制（用户"按你建议继续：候选1"，代理定案最小完整版：
    `plant_on` 数据驱动放置土壤门，消费 P48/P50 遗留"放置不受限"）。**`plant_on` 纯数据**：
    block 可选**数组**（方块名）——放置该方块时目标格**正下方**须为列表之一；缺省 = 不限
@@ -230,5 +270,6 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 51** — `archive/phase-51.md`
 - **Phase 52** — `archive/phase-52.md`
 - **Phase 53** — `archive/phase-53.md`
+- **Phase 54** — `archive/phase-54.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

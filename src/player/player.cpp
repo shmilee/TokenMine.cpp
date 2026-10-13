@@ -57,6 +57,10 @@ Result<Player::Params> Player::Params::fromConfig(const Config& config) {
     MC_TRY(read("swim_up_speed", p.swimUpSpeed, false));
     MC_TRY(read("water_gravity", p.waterGravity, false));
     MC_TRY(read("water_terminal_velocity", p.waterTerminalVelocity, false));
+    MC_TRY(read("lava_swim_speed", p.lavaSwimSpeed, false));
+    MC_TRY(read("lava_swim_up_speed", p.lavaSwimUpSpeed, false));
+    MC_TRY(read("lava_gravity", p.lavaGravity, false));
+    MC_TRY(read("lava_terminal_velocity", p.lavaTerminalVelocity, false));
     MC_TRY(read("mouse_sensitivity", p.mouseSensitivity, false));
     MC_TRY(read("max_health", p.maxHealth, false));
     MC_TRY(read("fall_damage_offset", p.fallDamageOffset, true));
@@ -71,7 +75,10 @@ Result<Player::Params> Player::Params::fromConfig(const Config& config) {
     MC_TRY(read("regen_hunger_threshold", p.regenHungerThreshold, true));
     MC_TRY(read("sprint_hunger_decay_factor", p.sprintHungerDecayFactor,
                 false));
-    // Cross-field sanity (the defaults satisfy all three).
+    MC_TRY(read("lava_damage_interval_seconds", p.lavaDamageIntervalSeconds,
+                false));
+    MC_TRY(read("lava_damage", p.lavaDamage, false));
+    // Cross-field sanity (the defaults satisfy all four).
     if (p.eyeHeight >= p.height) {
         return MC_FAIL("config player.eye_height must be < player.height");
     }
@@ -81,6 +88,10 @@ Result<Player::Params> Player::Params::fromConfig(const Config& config) {
     if (p.regenHungerThreshold > p.maxHunger) {
         return MC_FAIL("config player.regen_hunger_threshold must be <= "
                        "player.max_hunger");
+    }
+    if (p.lavaDamage > p.maxHealth) {
+        return MC_FAIL("config player.lava_damage must be <= "
+                       "player.max_health");
     }
     return p;
 }
@@ -149,9 +160,12 @@ void Player::update(double dt) {
     const Vec3 fwd = normalized(flatFwd);
     const Vec3 right {fwd.z * -1.0f, 0.0f, fwd.x};
 
-    // 2a. Water state: while the AABB overlaps a fluid cell the player
-    // swims (reduced gravity/sink, reduced speed, Space swims up).
+    // 2a. Fluid state: while the AABB overlaps a fluid cell the player
+    // swims (reduced gravity/sink, reduced speed, Space swims up). Lava
+    // (Phase 54) is the same swim state with the lava pace + the burn
+    // timer; when the AABB straddles both kinds, lava wins.
     m_inWater = isInWater();
+    m_inLava = isInLava();
 
     // 2b. Crouch (LeftControl): the height state machine runs before the
     // speed computation (crouch scales the speed) and before the edge
@@ -177,15 +191,17 @@ void Player::update(double dt) {
     // pace further down (Minecraft's 40 s -> 20 s relative shape).
     const bool sprinting =
         m_input->isDown(GameKey::LeftShift) && lengthSq(wish) > 0.0f &&
-        !m_inWater;
+        !m_inWater && !m_inLava; // no sprint in any fluid (lava, Phase 54)
     Vec3 dir {0.0f, 0.0f, 0.0f};
     if (lengthSq(wish) > 0.0f) {
-        float speed = m_inWater
-                          ? m_params.swimSpeed
-                          : (m_input->isDown(GameKey::LeftShift)
-                                  ? m_params.sprintSpeed
-                                  : m_params.walkSpeed);
-        if (m_crouching && !m_inWater) {
+        float speed = m_inLava
+                          ? m_params.lavaSwimSpeed
+                          : (m_inWater
+                                  ? m_params.swimSpeed
+                                  : (m_input->isDown(GameKey::LeftShift)
+                                          ? m_params.sprintSpeed
+                                          : m_params.walkSpeed));
+        if (m_crouching && !m_inWater && !m_inLava) {
             speed *= m_params.crouchSpeedScale;
         }
         dir = normalized(wish);
@@ -203,13 +219,17 @@ void Player::update(double dt) {
     // 3. Sub-step the tick (see Entity::moveInSubsteps); the peak-speed
     //    estimate uses this tick's post-gravity vertical velocity.
     const float vyAfter =
-        m_inWater
-            ? std::max(m_velocity.y - m_params.waterGravity *
+        m_inLava
+            ? std::max(m_velocity.y - m_params.lavaGravity *
                                       static_cast<float>(dt),
-                       -m_params.waterTerminalVelocity)
-            : std::max(m_velocity.y - m_params.gravity *
-                           static_cast<float>(dt),
-                       -m_params.terminalVelocity);
+                       -m_params.lavaTerminalVelocity)
+            : (m_inWater
+                   ? std::max(m_velocity.y - m_params.waterGravity *
+                                     static_cast<float>(dt),
+                              -m_params.waterTerminalVelocity)
+                   : std::max(m_velocity.y - m_params.gravity *
+                                  static_cast<float>(dt),
+                              -m_params.terminalVelocity));
     const float maxSpeed =
         std::max({std::abs(m_velocity.x), std::abs(vyAfter),
                   std::abs(m_velocity.z)});
@@ -235,7 +255,9 @@ void Player::update(double dt) {
         // player enters a 1-deep pool one tick after the last airborne
         // sample, so the tick state would miss the landing-in-water.
         const float fall = m_fallStartY - m_position.y;
-        if (fall > m_params.fallDamageOffset && !isInWater()) {
+        // ANY fluid cancels the fall (Phase 54: lava like water — the
+        // burn replaces the fall damage).
+        if (fall > m_params.fallDamageOffset && !isInWater() && !isInLava()) {
             damage(fall - m_params.fallDamageOffset);
         }
         m_fallStartY = m_position.y;
@@ -293,6 +315,25 @@ void Player::update(double dt) {
         }
     }
 
+    // Lava burn (Phase 54, Minecraft's 4 HP/s): while the AABB overlaps a
+    // lava cell, take lavaDamage HP every lavaDamageIntervalSeconds of
+    // real dt — a survival timer like starvation, through the normal
+    // damage path so the hurt flash/sound and death handling all fire.
+    // Leaving the lava resets the pending tick (no lingering fire in v1,
+    // see KNOWN_ISSUES).
+    if (m_inLava && !m_dead) {
+        m_lavaAccum += dt;
+        while (m_lavaAccum >= m_params.lavaDamageIntervalSeconds) {
+            m_lavaAccum -= m_params.lavaDamageIntervalSeconds;
+            damage(m_params.lavaDamage);
+            if (m_dead) {
+                break;
+            }
+        }
+    } else {
+        m_lavaAccum = 0.0;
+    }
+
     // Fell out of the world (the world's edge is void): death.
     if (belowKillPlane()) {
         damage(m_params.maxHealth * 1000.0f); // instant, always lethal
@@ -324,6 +365,7 @@ void Player::respawn() {
     m_saturation = m_params.maxHunger;
     m_hungerAccum = 0.0;
     m_starveAccum = 0.0;
+    m_lavaAccum = 0.0; // respawn out of the lava (spawn is dry land)
     m_wasOnGround = false;
     m_fallStartY = m_spawnPos.y;
     teleportTo(m_spawnPos);
@@ -424,7 +466,17 @@ bool Player::isSolidCell(int x, int y, int z) const {
 }
 
 void Player::integrate(float h) {
-    if (m_inWater) {
+    if (m_inLava) {
+        // Swim in lava (Phase 54): the same swim state, the lava pace
+        // (lighter, slower sink; a much weaker swim-up).
+        m_velocity.y -= m_params.lavaGravity * h;
+        if (m_velocity.y < -m_params.lavaTerminalVelocity) {
+            m_velocity.y = -m_params.lavaTerminalVelocity;
+        }
+        if (m_input->isDown(GameKey::Space)) {
+            m_velocity.y = m_params.lavaSwimUpSpeed;
+        }
+    } else if (m_inWater) {
         // Swim: reduced gravity, a low sink cap, and Space raises the
         // player (also from the ground — a shallow pool floor does not
         // jump, it surfaces).
@@ -449,9 +501,13 @@ void Player::integrate(float h) {
     }
 }
 
-bool Player::isInWater() const {
-    const Vec3 mn = aabbMin();
-    const Vec3 mx = aabbMax();
+namespace {
+
+// True when the player AABB strictly overlaps at least one cell holding a
+// fluid of `kind` (the same per-axis strict convention as the collision
+// code: min < c+1 && max > c).
+bool aabbOverlapsFluid(const World& world, const Vec3& mn, const Vec3& mx,
+                       FluidKind kind) {
     const int x0 = static_cast<int>(std::floorf(mn.x));
     const int x1 = static_cast<int>(std::floorf(mx.x));
     const int y0 = static_cast<int>(std::floorf(mn.y));
@@ -470,15 +526,25 @@ bool Player::isInWater() const {
                 if (!(mn.z < z + 1 && mx.z > z)) {
                     continue;
                 }
-                // WATER only (Phase 51): the player swims in water; lava
-                // has no swim/burn behavior in v1 (see KNOWN_ISSUES).
-                if (m_world.getFluidOfKind(x, y, z, FluidKind::Water) > 0) {
+                if (world.getFluidOfKind(x, y, z, kind) > 0) {
                     return true;
                 }
             }
         }
     }
     return false;
+}
+
+} // namespace
+
+bool Player::isInWater() const {
+    return aabbOverlapsFluid(m_world, aabbMin(), aabbMax(), FluidKind::Water);
+}
+
+bool Player::isInLava() const {
+    // LAVA (Phase 54): the swim state with the lava pace + the burn timer
+    // run while this is true (Minecraft's "slow + burn").
+    return aabbOverlapsFluid(m_world, aabbMin(), aabbMax(), FluidKind::Lava);
 }
 
 } // namespace mc

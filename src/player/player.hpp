@@ -50,6 +50,16 @@ public:
         float swimUpSpeed = 4.5f;       // vertical velocity while swimming up
         float waterGravity = 12.0f;     // downward acceleration in water (blocks/s^2)
         float waterTerminalVelocity = 4.0f; // max sink speed in water (blocks/s)
+        // Swimming in LAVA (Phase 54, the Minecraft "slow + burn" pair):
+        // while the AABB overlaps a lava cell the player is in the same
+        // swim state with the lava pace — a slower horizontal speed, a
+        // much weaker swim-up, and a lighter, slower sink. The lava/water
+        // ratios mirror Minecraft's motion-factor ratio (0.014/0.0231 ~
+        // 0.6 for the horizontal pace) and its much weaker lava buoyancy.
+        float lavaSwimSpeed = 1.9f;          // horizontal speed in lava (blocks/s)
+        float lavaSwimUpSpeed = 1.5f;        // vertical velocity swimming up in lava
+        float lavaGravity = 4.0f;            // downward acceleration in lava (blocks/s^2)
+        float lavaTerminalVelocity = 2.0f;   // max sink speed in lava (blocks/s)
         float mouseSensitivity = 0.0025f; // radians / pixel
         // Survival (Phase 16): health and fall damage. No fall damage for
         // the first `fallDamageOffset` blocks (Minecraft: 3 are safe), then
@@ -84,6 +94,15 @@ public:
         double starveDamageIntervalSeconds = 20.0;
         float regenHungerThreshold = 6.0f;
         double sprintHungerDecayFactor = 2.0;
+        // Lava burn (Phase 54, Minecraft's 4 HP/s): while the AABB overlaps
+        // a lava cell, take lavaDamage HP every lavaDamageIntervalSeconds
+        // of real dt (a survival timer like starvation — a real-dt
+        // accumulator in Player::update, through the normal damage path so
+        // the hurt flash/sound and death handling all fire). Leaving the
+        // lava resets the pending tick (no lingering fire in v1, see
+        // KNOWN_ISSUES).
+        double lavaDamageIntervalSeconds = 1.0;
+        float lavaDamage = 4.0f; // must be <= maxHealth (fromConfig check)
 
         // Build the parameters from the config's `player.*` keys (Phase 32):
         // a missing key keeps the struct default, a present key must be a
@@ -91,9 +110,10 @@ public:
         // default on a type mismatch, so this reads the raw values).
         // Rejected: non-numeric values, non-positive values (only
         // fall_damage_offset and regen_hunger_threshold may be 0),
-        // eye_height >= height, crouch_height >= height, and
-        // regen_hunger_threshold > max_hunger. Unknown player.* keys are
-        // tolerated (config forward-compat, like the rest of the config).
+        // eye_height >= height, crouch_height >= height,
+        // regen_hunger_threshold > max_hunger, and lava_damage >
+        // max_health. Unknown player.* keys are tolerated (config
+        // forward-compat, like the rest of the config).
         static Result<Params> fromConfig(const Config& config);
 
         friend bool operator==(const Params&, const Params&) = default;
@@ -225,8 +245,9 @@ private:
     // jump. `look`/`inWater` are tick state, consumed per sub-step.
     void integrate(float h) override;
 
-    // The AABB overlaps at least one fluid cell (water).
+    // The AABB overlaps at least one fluid cell (water / lava, Phase 54).
     bool isInWater() const;
+    bool isInLava() const;
 
     // Crouch height state machine: shrink to crouchHeight while the key is
     // held (even mid-air); grow back only when the headroom fits the full
@@ -257,6 +278,10 @@ private:
     const Input* m_input = nullptr;
     bool m_lookEnabled = false;
     bool m_inWater = false;
+    // This tick's lava state (Phase 54): the AABB overlaps a lava cell.
+    // Lava wins over water when both are true (an AABB can straddle a
+    // water cell and a lava cell — the burn pace applies).
+    bool m_inLava = false;
     // Crouch state this tick (set in update before the speed computation).
     bool m_crouching = false;
     // Survival: health, the damage clock (regen delay), the regen
@@ -275,6 +300,10 @@ private:
     float m_saturation = 0.0f;
     double m_hungerAccum = 0.0;
     double m_starveAccum = 0.0;
+    // Lava burn (Phase 54): the real-dt accumulator for the pending burn
+    // tick (only runs while the AABB overlaps a lava cell; leaving the
+    // lava resets it — no lingering fire in v1).
+    double m_lavaAccum = 0.0;
 
     static constexpr float kMaxPitch = 1.5533f; // ~89 deg
     // The crouch edge guard / step-up treat an AABB face as "flush" with a
