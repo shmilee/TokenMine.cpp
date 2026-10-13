@@ -1,0 +1,14 @@
+{
+  "id": "stone_pickaxe",
+  "type": "shaped",
+  "output": { "item": "stone_pickaxe", "count": 1 },
+  "pattern": [
+    "CCC",
+    " S ",
+    " S "
+  ],
+  "key": {
+    "C": "cobblestone",
+    "S": "stick"
+  }
+}

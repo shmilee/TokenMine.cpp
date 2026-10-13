@@ -198,9 +198,11 @@ shaped（Phase 17）：`pattern` 1..3 行、行长 ≤3、空格=空位、非空
 pattern 偏移扫描（任意左上偏移放进 3×3、空格对应格必须为空），先 shaped 后
 shapeless、配方按文件名字典序。当前配方链：wood→4 planks→(2 planks→4
 stick）、2×2 planks→crafting_table、wooden_pickaxe（PPP/.S./.S.）、
-iron_pickaxe（III/.S./.S.）、arrow（flint+stick+feather→4，Phase 60
-替换 P24 的 2 木棍竖排→2）、flint_and_steel（flint+iron_ingot，
-Phase 60）、stone（4 cobblestone→1，Phase 61 = MC 材料循环的回程）。
+iron_pickaxe（III/.S./.S.）、stone_pickaxe（CCC/.S./.S.，C =
+cobblestone，Phase 62 = MC 配方、cobblestone 首个工具用途）、arrow
+（flint+stick+feather→4，Phase 60 替换 P24 的 2 木棍竖排→2）、
+flint_and_steel（flint+iron_ingot，Phase 60）、stone（4
+cobblestone→1，Phase 61 = MC 材料循环的回程）。
 游戏内触发：`E` 背包面板右侧的配方列表（仅 shapeless），点击配方行执行
 `craft()`（Phase 15；可合成的配方白色高亮、不可合成的灰色）；或放置并右键
 工作台打开 3×3 面板，按形状放料后取输出格（Phase 17）。

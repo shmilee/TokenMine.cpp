@@ -266,6 +266,26 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
     block+fluid / L1 膜 = 稳定地面流体场景 / 物品 rest 位置确定性
     （零初速 + 位置式分离）/ pgrep 前缀误匹配 minecraft_tests / 裸
     截图无窗口稳定化 = 错尺寸假失败）。
+  - [x] **Phase 62** — 石头工具线 v1：石镐（用户"先建议2,再建议1" =
+    建议 2，代理定案最小完整版 = 镐路线中档 **stone_pickaxe**，纯数据；
+    项目**无斧类工具** → "石斧" = 新工具型超出最小范围【文档化偏离】）：
+    **`stone_pickaxe`**（tool、max_stack 1、`break_speed 3.0` /
+    `attack_damage 2.5` = 项目压缩刻度上**恰居中**于木镐 2.0/2 与
+    铁镐 4.0/3；图标 = 共用 `pickaxe()` 的锻灰色调）+ 配方
+    `stone_pickaxe`（shaped **CCC/.S./.S.**，C = cobblestone = MC 配方——
+    **cobblestone 首个工具用途**：P61 材料链闭环 = 挖石→锻石→石镐→
+    更快挖铁）；**零核心代码**（tool 字段/shaped 配方/图标全既有机制）。
+    **无 format 变更**（format 9）。1022/1022（+2：物品钉死 1【居中值
+    精确断言】+ 配方钉死 1【pattern + key 逐格】）；`-Werror` 恒 0
+    警告。**E2E 全绿**：S1 **第 35 次结构性免疫**【工具物品不在默认
+    背包 + 配方只在 UI + 图标不采样 = 零世界状态 → fresh 60f ×2 + ==
+    base18 字节一致，无重锚】/ S2 工具实战（stone 放 (22,46,−5) P52
+    几何瞄准锚定存档 = 零鼠标移动、slot0 = stone_pickaxe 左键按住
+    1.0 s【1.5×1.5/3 = 0.75 s】→ 掉 cobblestone×1【P61 掉落链 + 新
+    工具 = (22.5,45,−4.5) 落地】，420f ×2 savenorm 字节一致 + save
+    EXACT）/ S2ctl 无输入（×2 RAW、stone 保留）/ S6 init 失败 ×2
+    （break_speed "fast" → "'tool.break_speed' must be a number" / 配方
+    key C→cobblestonne → "key entry 'C' uses unknown item"）。
   - [x] **Phase 61** — stone→cobblestone 材料链（用户"下两个 phase，请
     继续建议1 和建议2" = 建议 2，代理定案最小完整版 = cobblestone 块 +
     stone 自掉变更【**内容契约变更**】+ 4 锻石配方，MC 材料循环；
@@ -502,6 +522,7 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 56** — `archive/phase-56.md`
 - **Phase 57** — `archive/phase-57.md`
 - **Phase 58** — `archive/phase-58.md`
+- **Phase 62** — `archive/phase-62.md`
 - **Phase 61** — `archive/phase-61.md`
 - **Phase 60** — `archive/phase-60.md`
 - **Phase 59** — `archive/phase-59.md`

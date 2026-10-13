@@ -1163,3 +1163,28 @@ TEST(ItemRegistryTest, Phase60FlintAndSteelItemContent) {
     EXPECT_TRUE(it->ignitesFlamable);
     EXPECT_EQ(it->icon, "flint_and_steel");
 }
+
+// Phase 62 content pin: stone_pickaxe is the MIDDLE tier of the pickaxe
+// tool line (break speed 2.0 -> 3.0 -> 4.0, attack 2 -> 2.5 -> 3 on the
+// project's compressed scale — exactly between the committed wooden and
+// iron values). Crafted from 3 cobblestone + 2 sticks (Minecraft), giving
+// Phase 61's cobblestone its first tool use.
+// ---------------------------------------------------------------------------
+
+TEST(ItemRegistryTest, Phase62StonePickaxeItemContent) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry blocks;
+    ASSERT_TRUE(blocks.loadDirectory(assets, "data/blocks").ok());
+    ItemRegistry items;
+    ASSERT_TRUE(items.buildBlockItems(blocks).ok());
+    ASSERT_TRUE(items.loadDirectory(assets, "data/items").ok());
+    const Item* it = items.findByName("stone_pickaxe");
+    ASSERT_NE(it, nullptr);
+    EXPECT_EQ(it->type, ItemType::Tool);
+    EXPECT_EQ(it->maxStack, 1);
+    EXPECT_FLOAT_EQ(it->breakSpeed, 3.0f);   // wooden 2.0 < stone < iron 4.0
+    EXPECT_FLOAT_EQ(it->attackDamage, 2.5f); // wooden 2 < stone < iron 3
+    EXPECT_EQ(it->icon, "stone_pickaxe");
+}

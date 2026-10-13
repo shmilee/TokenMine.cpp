@@ -744,3 +744,23 @@ TEST(RecipeRegistryTest, Phase61StoneRecipeContent) {
     ASSERT_EQ(rec->ingredients.size(), 1u);
     expectIngredients(rec->ingredients, f.items, {{"cobblestone", 4}});
 }
+
+// Phase 62: the stone_pickaxe recipe — shaped CCC/.S./.S. with C =
+// cobblestone (the Minecraft pattern; the first tool use of Phase 61's
+// cobblestone).
+TEST(RecipeRegistryTest, Phase62StonePickaxeRecipeContent) {
+    RealAssets f;
+    ASSERT_TRUE(f);
+    const Recipe* rec = f.recipes.find("stone_pickaxe");
+    ASSERT_NE(rec, nullptr);
+    EXPECT_EQ(rec->type, RecipeType::Shaped);
+    EXPECT_EQ(rec->output, f.items.idForName("stone_pickaxe"));
+    EXPECT_EQ(rec->outputCount, 1);
+    ASSERT_EQ(rec->pattern.size(), 3u);
+    EXPECT_EQ(rec->pattern[0], "CCC");
+    EXPECT_EQ(rec->pattern[1], " S ");
+    EXPECT_EQ(rec->pattern[2], " S ");
+    ASSERT_EQ(rec->key.size(), 2u);
+    EXPECT_EQ(f.items.at(rec->key.at('C')).name, "cobblestone");
+    EXPECT_EQ(f.items.at(rec->key.at('S')).name, "stick");
+}

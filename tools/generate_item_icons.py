@@ -413,6 +413,10 @@ def iron_pickaxe():
     return pickaxe((206, 206, 212), (238, 238, 244), salt=53)
 
 
+def stone_pickaxe():
+    return pickaxe((140, 140, 146), (178, 178, 184), salt=55)
+
+
 def leather():
     """A piece of leather hide: a tan irregular slab with a darker rim and
     a few crease lines."""
@@ -769,6 +773,7 @@ ITEMS = {
     "gold_ingot": gold_ingot,
     "iron_ingot": iron_ingot,
     "wooden_pickaxe": wooden_pickaxe,
+    "stone_pickaxe": stone_pickaxe,
     "iron_pickaxe": iron_pickaxe,
     "bow": bow,
     "arrow": arrow,
