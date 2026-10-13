@@ -216,8 +216,10 @@ light_gray）。加一个颜色 = 纯数据四步：
    `<base>.json` 本身，名字不加后缀）：
    `properties` 加 `"dye_base": "<base>", "dye_color": "<color>"`（两者必须
    同时给；`dye_base` 与 `interact` 互斥）；纹理 tile 加进
-   `assets/data/textures/block_atlas.json`（atlas 满 8×8 格前直接加行；
-   **网格扩容会移位所有既有 UV → 无输入基线门必须重锚**，见 PITS）。
+   `assets/data/textures/block_atlas.json`（atlas = 16×8 网格，Phase 59 后
+   已用 65 格；有空位直接加 `[col, row]` 条目。**网格扩容会移位所有既有
+   UV（u = col/列数）→ 无输入基线门必须重锚**——Phase 59 的 gravel tile 是
+   第 65 格，8×8 已满 → 扩 16×8 → base18 重锚（P41 同款先例），见 PITS）。
 3. **合成配方** `assets/data/recipes/dye_<color>.json`（shapeless；当前 15 条
    见 GAMEPLAY「染色」；来源块 = 世界内容：lapis 矿脉 / 仙人掌 / 十字花，
    见「新增一个方块」+ biome `decorations`）。
@@ -233,7 +235,7 @@ light_gray）。加一个颜色 = 纯数据四步：
 
 1. `assets/textures/mobs/<tile>.png` —— 16×16 RGBA 纹理（`tools/generate_mob_textures.py`
    同款：splitmix64 确定性噪声 + 简单五官）；并在 `data/textures/block_atlas.json`
-   的 `tiles` 里给它一个空位 `[col, row]`（4×8 网格，现有 21 tile，勿动已有条目）
+   的 `tiles` 里给它一个空位 `[col, row]`（16×8 网格，Phase 59 后已用 65 tile，勿动已有条目）
 2. `assets/data/mobs/<id>.json` —— mob 定义（行为参数 + box 模型，每箱一个
    atlas tile；box 必须在 `width × height` 的 AABB 内）：
 

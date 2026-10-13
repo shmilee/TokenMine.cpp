@@ -1,5 +1,5 @@
 {
-  "columns": 8,
+  "columns": 16,
   "rows": 8,
   "tiles": {
     "bedrock": [
@@ -257,6 +257,10 @@
     "obsidian": [
       7,
       7
+    ],
+    "gravel": [
+      8,
+      0
     ]
   }
 }

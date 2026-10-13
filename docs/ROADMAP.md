@@ -266,6 +266,34 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
     block+fluid / L1 膜 = 稳定地面流体场景 / 物品 rest 位置确定性
     （零初速 + 位置式分离）/ pgrep 前缀误匹配 minecraft_tests / 裸
     截图无窗口稳定化 = 错尺寸假失败）。
+  - [x] **Phase 59** — 多掉落内容再扩展：gravel + flint（用户"按你的建议
+    继续下两个phase" = 建议 2，代理定案最小完整版 = gravel worldgen 矿脉
+    + flint 物品 + gravel 10% 概率掉落 + 内容钉死单测；排除 stone→
+    cobblestone 材料链（文档化偏离），flint v1 无用途（文档化偏离））。
+    **零核心代码**（vein block 的 init 交叉校验已在 WorldGenerator::create；
+    `air` 哨兵已注册 = 场景 diff 能清走廊）。**内容**：`gravel`（hardness
+    0.6，自掉 + `chance_drop: {flint, 1, 0.1}` = MC 值；P55 后单条目
+    chance_drop 的首个现役内容使用者）+ `flint` 物品（material、64 叠、
+    图标 = 3 片燧石碎块）+ worldgen `ores.veins` + gravel（probability
+    0.25 / vein 4 / max_y 80 = 常见石替换脉）+ **atlas 8×8 → 16×8**
+    （64/64 已满，gravel = 第 65 tile → 所有既有 UV 移位 u=col/8→col/16
+    → **base18 重锚**，P41 先例）。**3 个内容钉死单测**（真实 assets：
+    gravel 字段精确值 / worldgen gravel 脉精确值 / flint 物品注册）。
+    **无 format 变更**（format 9）。1010/1010（+3）；`-Werror` 恒 0 警告。
+    **E2E 全绿**：S1 重锚（fresh 60f ×2 字节一致 + 重锚，二跑稳定）/
+    S2 flint 掉落（gravel 放 roll-PASS 格 (21,46,−1)【真实 rollChanceDrop
+    预计算 + 真实 raycastBlock 复验】，yaw=π/4 瞄准锚定存档 = 零鼠标
+    移动；**45° 射线沿格网角点穿过 → DDA tie-break 命中对角固块**【首跑
+    连破 3 块对角 dirt、数量 fps 相关】→ 场景 diff 显式清 3 角点格【真实
+    raycast 模拟定序列 = 目标唯一】：破坏掉 gravel×1 + flint×1【x 向
+    0.25 分离、y46 落地】，420f ×2 savenorm 字节一致 + save EXACT）/
+    S2b 无 flint 对照（roll-FAIL 格 (22,46,−5)、P52 几何：只掉
+    gravel×1 = 隔离 per-cell 确定性 roll）/ S2ctl 无输入（×2 RAW 字节
+    一致、零实体）/ S6 init 失败 ×2（vein 块名 typo "worldgen ore:
+    unknown block" / flint.json 删除 "chance_drop names unknown item"）。
+    **PITS +4**（45° 角点射线 → DDA tie-break / block diff 可写 "air"
+    【注册哨兵、air 编辑保留终态 diff】/ zsh `$(cat file)` = 执行输出
+    【用 eval】/ run_break 输入必须发在 wait 之前）。
   - [x] **Phase 55** — 多掉落内容扩展（用户"熔岩湖不着急，先记录下来，留到很久的
    未来。下一步先进行建议2的扩展。" = 建议 2，代理定案最小完整版：3 方块 MC 语义
    内容扩展、**零代码**，消费 P52 遗留"多掉落内容扩展"；worldgen 熔岩湖 = 用户
@@ -419,5 +447,6 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 56** — `archive/phase-56.md`
 - **Phase 57** — `archive/phase-57.md`
 - **Phase 58** — `archive/phase-58.md`
+- **Phase 59** — `archive/phase-59.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

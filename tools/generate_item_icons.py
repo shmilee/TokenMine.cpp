@@ -150,6 +150,27 @@ def lapis():
     return px
 
 
+def flint():
+    """A pile of flint (Phase 59, gravel's chance drop): three knapped
+    gray shards — sharp triangles tapering to points, the Minecraft
+    flint look (16x16 design space, doubled)."""
+    px = blank()
+    base = (118, 118, 124)
+    # Shards: (centre-x, base-y, half-width at base, height).
+    for (cx, by, hw, hgt) in ((5, 12, 2, 6), (10, 11, 2, 5),
+                              (8, 13, 2, 4)):
+        tip = by - hgt
+        for y in range(tip, by + 1):
+            t = (y - tip) / float(hgt)          # 0 at the tip -> 1 at the base
+            w = int(hw * t) + 1
+            for x in range(cx - w, cx + w + 1):
+                setpx2(px, x, y, base, salt=31)
+    # Bright knapping highlights.
+    for (x, y) in ((5, 8), (5, 10), (10, 8), (8, 11)):
+        setpx2(px, x, y, (160, 160, 168), salt=33, amount=3)
+    return px
+
+
 def coal():
     px = blank()
     base = (46, 46, 52)
@@ -718,6 +739,7 @@ ITEMS = {
     "stick": stick,
     "rotten_flesh": rotten_flesh,
     "lapis": lapis,
+    "flint": flint,
     "coal": coal,
     "diamond": diamond,
     "gold_ingot": gold_ingot,

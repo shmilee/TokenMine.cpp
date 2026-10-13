@@ -1258,3 +1258,29 @@ TEST(BlockRegistryTest, Phase58WheatCropFlamableContent) {
         EXPECT_FALSE(b->properties.flamable) << name;
     }
 }
+
+// ---------------------------------------------------------------------------
+// Gravel content (Phase 59): the multi-drop content re-expansion. Pins the
+// ACTUAL asset file: gravel drops itself (the block item) plus a 10% chance
+// of one flint (the Minecraft value) — a typo'd chance (0.1 vs 0.01) parses
+// fine, so the registry-level check is the unit-level guard.
+// ---------------------------------------------------------------------------
+
+TEST(BlockRegistryTest, Phase59GravelDropContent) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* b = reg.findByName("gravel");
+    ASSERT_TRUE(b != nullptr);
+    EXPECT_FLOAT_EQ(b->properties.hardness, 0.6f);  // Minecraft value
+    EXPECT_EQ(b->properties.drops, "gravel");       // the block item
+    EXPECT_EQ(b->properties.dropsCount, 1);
+    // The single-entry chance drop (mutually exclusive with the list).
+    EXPECT_EQ(b->properties.chanceDropItem, "flint");
+    EXPECT_EQ(b->properties.chanceDropCount, 1);
+    EXPECT_DOUBLE_EQ(b->properties.chanceDropChance, 0.1);
+    EXPECT_TRUE(b->properties.chanceDrops.empty());
+    EXPECT_FALSE(b->properties.flamable);  // gravel does not burn (v1)
+}

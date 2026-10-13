@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "block/block_registry.hpp"
+#include "core/asset_manager.hpp"
 #include "core/json.hpp"
 #include "item/inventory.hpp"
 #include "item/item.hpp"
@@ -1066,4 +1067,27 @@ TEST(ItemRegistryTest, GrantEffectsEntryIndexedInErrors) {
     EXPECT_NE(r.error().message.find("grants_effects[1]"),
               std::string::npos)
         << r.error().message;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 59 content pin: flint is the gravel chance-drop item — a plain
+// material (no use in v1, documented deviation; see KNOWN_ISSUES).
+// ---------------------------------------------------------------------------
+
+TEST(ItemRegistryTest, Phase59FlintItemContent) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry blocks;
+    ASSERT_TRUE(blocks.loadDirectory(assets, "data/blocks").ok());
+    ItemRegistry items;
+    ASSERT_TRUE(items.buildBlockItems(blocks).ok());
+    ASSERT_TRUE(items.loadDirectory(assets, "data/items").ok());
+    const Item* it = items.findByName("flint");
+    ASSERT_TRUE(it != nullptr);
+    EXPECT_EQ(it->type, ItemType::Material);
+    EXPECT_EQ(it->maxStack, 64);
+    // The block item side: gravel is placeable and drops itself.
+    EXPECT_NE(items.findByName("gravel"), nullptr);
+    EXPECT_EQ(items.findByName("gravel")->type, ItemType::Block);
 }

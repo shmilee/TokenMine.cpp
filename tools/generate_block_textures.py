@@ -187,6 +187,18 @@ def bedrock(x, y):
     return (v, v, v, 255)
 
 
+def gravel(x, y):
+    # Gravel (Phase 59): a stone-like gray base with scattered pebbles —
+    # darker 2x2 clusters and lighter flecks (the Minecraft gravel look).
+    v = 105 + noise(x, y, 93, 8)
+    bx, by = x // 2, y // 2
+    if h2(bx, by, 94) % 10 < 3:      # dark pebble
+        v -= 22 + noise(x, y, 95, 5)
+    elif h2(bx, by, 96) % 14 < 2:    # light fleck
+        v += 12 + noise(x, y, 97, 4)
+    return (clamp(v), clamp(v), clamp(v), 255)
+
+
 def ore(x, y, salt, color, density):
     # Stone base with colored speckles (ore lumps).
     if h2(x, y, salt) % 100 < density:
@@ -420,6 +432,7 @@ TEXTURES = {
     "lava": lava,
     "obsidian": obsidian,
     "bedrock": bedrock,
+    "gravel": gravel,
     "coal_ore": coal_ore,
     "iron_ore": iron_ore,
     "gold_ore": gold_ore,

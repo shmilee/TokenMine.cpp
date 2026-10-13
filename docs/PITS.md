@@ -998,3 +998,31 @@
   `--screenshot`：截到的是 WM 初始平铺窗口（实测 1272×1552）→ 与
   base18（1280×720）cmp 假失败。游戏截图 = 窗口 framebuffer 尺寸，
   一切截图 E2E 必须先稳定化并校验 `([0-9]+x[0-9]+) == 1280x720`。
+- **45° 瞄准射线沿格网角点穿过 → DDA tie-break 命中对角固块（P59）**：
+  yaw 恰为 π/4 时破坏射线 |dx|=|dz|，x/z 边界**同一 t 同时跨越**
+  （射线过每格角点），DDA 的角点 tie-break 选中**对角**单元格 →
+  射线实际穿过的格序列与手算的"逐格平移"不同（P59 首跑：目标
+  (21,46,−1) 后，射线在角点 tie 进 (19,46,−2) 而非 (19,46,−3)，
+  连破 3 块对角 dirt，数量随 fps 变 = ×2 终态不一致）。对策：
+  (a) 选 yaw-0 走廊目标（P52 几何，射线正面穿格无角点）；(b) 场景
+  diff 显式清掉**真实 raycastBlock 模拟**（放目标→raycast→setBlock
+  air→再 raycast 循环）给出的角点格 → 序列 = 目标唯一、fps 无关。
+  P59 S2 = (b) + 3 格走廊。
+- **block diff 可写 "air"（P59）**：`air` 是 BlockRegistry 注册哨兵
+  （`findByName("air")` 恒有效，无 air.json）→ 存档 block diff 能
+  表达"生成固块 → air"（场景清走廊/挖坑）。注意终态：被破坏的
+  **场景放置块**恢复生成态 air = diff 条目**消失**；**走廊 air
+  编辑保留**在 diff（生成固块 ≠ air）→ 断言必须写终态 diff 的
+  **精确集合**（set 比对，非顺序）。
+- **zsh 里 `$(cat file)` 独立成行 = 执行输出而非定义（P59）**：
+  助手函数块（`name() { ... }`）想"引入"脚本时，`$(cat helpers.zsh)`
+  会把输出当命令执行（command not found）——用
+  `eval "$(cat helpers.zsh)"`。姊妹坑：外层 `python3 - << 'EOF'`
+  的补丁内容若含恰好一行的 `EOF`（比如内嵌 zsh heredoc 的结束
+  标记），外层 heredoc 提前终止、补丁半截——换外层标记名。
+- **run_break 输入必须发在 `wait $game` 之前（P59）**：launch() 在
+  窗口稳定化后**立即返回**，游戏还在后台跑（--frames 420 ≈ 7..18 s
+  墙钟）；输入锚（t_ml + 2.9 s 读日志 + mousedown/hold/up）必须全部
+  落在 wait 之前（P55 模式）——先 wait = 游戏已退出，输入发空。
+  每跑终态存档必须 wait 后**立即 cp** 走（下一跑的源副本会覆盖
+  data/saves/<tag>.json，P15 陷阱的 E2E 对跑形态）。

@@ -626,9 +626,12 @@
   - **水**：低于海平面（y=34）的柱体填充流体水（fluid level 8）到海平面；
     生成即处于平衡态（游戏内 20Hz 流体 tick 不会扰动湖面）
   - **洞穴**：3D 噪声阈值雕刻，保留表层 4 格与底层 2 格的壳
-  - **矿脉**：世界空间格网 + 随机游走（coal/iron/gold/diamond/**lapis**，
-    `max_y` 分层限制；lapis：probability 0.08 / vein 6 / max_y 32），
-    跨 chunk 无缝；只替换 stone（不破坏洞穴）
+  - **矿脉**：世界空间格网 + 随机游走（coal/iron/gold/diamond/lapis/
+    **gravel**，`max_y` 分层限制；lapis：probability 0.08 / vein 6 /
+    max_y 32；gravel：probability 0.25 / vein 4 / max_y 80，Phase 59 的
+    常见石替换脉 = 唯一的非矿石"矿脉"），跨 chunk 无缝；只替换 stone
+    （不破坏洞穴）；脉的 block 名在生成 setup 对 BlockRegistry 解析，
+    未知 = 启动报错
   - **树木**：世界空间格网候选 + 数据驱动的树密度；树干 4~7 格 + 两层树冠 + 顶帽；
     跨 chunk 边界由邻接 chunk 各自补齐（边际格网机制），只写入 air（不破坏地形）
   - **表面装饰**（Phase 45，biome 数据驱动）：biome JSON 可选

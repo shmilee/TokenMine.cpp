@@ -25,7 +25,8 @@
       { "block": "iron_ore", "probability": 0.25, "vein_size": 8, "max_y": 56 },
       { "block": "gold_ore", "probability": 0.12, "vein_size": 7, "max_y": 36 },
       { "block": "diamond_ore", "probability": 0.05, "vein_size": 5, "max_y": 20 },
-      { "block": "lapis_ore", "probability": 0.08, "vein_size": 6, "max_y": 32 }
+      { "block": "lapis_ore", "probability": 0.08, "vein_size": 6, "max_y": 32 },
+      { "block": "gravel", "probability": 0.25, "vein_size": 4, "max_y": 80 }
     ]
   },
   "trees": {

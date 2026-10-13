@@ -1,0 +1,15 @@
+{
+  "id": "gravel",
+  "properties": {
+    "hardness": 0.6,
+    "drops": "gravel",
+    "chance_drop": {
+      "item": "flint",
+      "count": 1,
+      "chance": 0.1
+    }
+  },
+  "model": {
+    "textures": { "top": "gravel", "side": "gravel", "bottom": "gravel" }
+  }
+}

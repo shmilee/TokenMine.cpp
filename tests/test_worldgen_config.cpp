@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "core/asset_manager.hpp"
 #include "world/worldgen_config.hpp"
 
 using namespace mc;
@@ -177,4 +178,30 @@ TEST(WorldgenConfigTest, RejectsOctavesOutOfRange) {
         parseJson(R"({"terrain":{"height_octaves":9}})"));
     ASSERT_FALSE(r.ok());
     EXPECT_NE(r.error().message.find("height_octaves"), std::string::npos);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 59 content pin: the ACTUAL worldgen.json must include the gravel
+// vein (a stone-replacing gravel patch, the Minecraft gravel source). The
+// values are the content contract; a typo'd probability/size parses fine,
+// so this is the unit-level guard.
+// ---------------------------------------------------------------------------
+
+TEST(WorldgenConfigTest, Phase59GravelVeinContent) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    auto r = WorldgenParams::load(assets);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const WorldgenParams& p = *r;
+    const OreConfig* gravel = nullptr;
+    for (const OreConfig& o : p.ores) {
+        if (o.block == "gravel") {
+            gravel = &o;
+        }
+    }
+    ASSERT_TRUE(gravel != nullptr) << "no gravel vein in worldgen.json";
+    EXPECT_FLOAT_EQ(gravel->probability, 0.25f);
+    EXPECT_EQ(gravel->veinSize, 4);
+    EXPECT_EQ(gravel->maxY, 80);
 }
