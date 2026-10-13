@@ -149,6 +149,40 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
   一致（草存续、零实体）；**S3 init 失败 ×2**（scratch 资产副本）：`chance_drops` + `chance_drop`
   同时写 → rc=1 + "mutually exclusive"、`chance_drops[0].item = "nope"` → rc=1 + "chance_drops[0]
   names unknown item"。KNOWN_ISSUES 关闭 2（草掉种子非泥土 / 概率次级掉落单条目）。
+  - [x] **Phase 56** — 金苹果后续：吸收层（用户"金苹果后续，为下一阶段。"，
+   代理定案最小完整版 = 吸收层 HP 概念 + `grants_effects` 列表 + 金苹果
+   再生+吸收，消费 P49 遗留"金苹果只有再生（无吸收）"）。**效果字段
+   `absorb_hp`**（整数 [1,64]，独立于 tick/melee_penalty；no-op 规则
+   更新 = 三者皆无才拒绝）+ **`StatusEffects::totalAbsorption`** 纯函数
+   + **`Player` 有效 max health**（`maxHealth() = base + 层`；
+   `setAbsorptionBonus(bonus, healOnIncrease)`：层增大且 healOnIncrease
+   = health 提升增量【层显示为满】；层缩小 = 超出 base 的 health
+   **无声掉下**【无红闪/音效/伤害计时】；heal 可填进层；respawn 清层）
+   + **`Game::syncAbsorption` 收口**（进食/mob 命中/每帧到期/牛奶清/
+   死亡清/读档六调用点；读档 `healOnIncrease = false` 且不重复提升，
+   **health 必须在层之后设置** = applySave 4d/4e 重排）+ **物品字段
+   `grants_effects`**（同一严格 {name,duration} 配对数组；与
+   `grants_effect` **互斥**【P52 chance_drops 模式】；空数组/逐条目
+   点名 `grants_effects[i]` 拒绝；仅食物；init 逐条目交叉校验）+
+   **内容**：`absorption` 效果（absorb_hp 4 = MC 吸收 II、正面——牛奶
+   保留、icon 3）+ `golden_apple` 改 `grants_effects: [regeneration
+   10 s, absorption 5 s]`（再生 10 s 保留项目值）+ **effects.png
+   48→64**（第 4 图标 = 红心+白十字，生成器扩展）+ **HUD 吸收红心**
+   （层激活时正常心带**左侧** `ceil(层/2)` 颗红心【tint (1,0.35,0.35)】，
+   显示 `health − base`；正常心带位置不动 = 无层逐位相同；≥3 效果图标
+   行可视觉重叠 = 新增 KNOWN_ISSUES）。**无 format 变更**（format 9；
+   health 24 + 层读档合法 = 层先于 health 生效）。**E2E 全绿**：S1 第
+   30 次结构性免疫【无输入零效果 = 红心带零绘制】/ S2 金苹果吃（1200f
+   = 19.4..46 s > 再生 14.5 s 到期 @ 一切观测 fps → **fps 无关终态**：
+   slot0 空 + 饥饿 16【饱度缓冲吸掉 36 s 衰减 tick】+ health 20【层到期
+   无声钳制】+ 效果 []，×2 savenorm【新增剥 saturation = 真实 dt 字段】
+   + 精确断言）/ S3 层激活（场景 health 24 + 吸收 100 s，锁定单跑：存档
+   health 24 合法 + 效果 [absorption] ×2 savenorm + 截图红心带像素
+   存在 x[511,545] y[646,662]）/ S4 到期钳制（health 24+3 s 无输入 →
+   20，×2 **字节**一致）/ S5 到期不过扣（18 → 18，×2 字节）/ S6 init
+   失败 ×3（两字段互斥 / grants_effects[0] 未注册效果 / absorb_hp 0）。
+   **PITS +2**（读档 health 必须在层后 + 读档不重复提升 / saturation =
+   真实 dt 字段，场景存档比对须剥）。
   - [x] **Phase 55** — 多掉落内容扩展（用户"熔岩湖不着急，先记录下来，留到很久的
    未来。下一步先进行建议2的扩展。" = 建议 2，代理定案最小完整版：3 方块 MC 语义
    内容扩展、**零代码**，消费 P52 遗留"多掉落内容扩展"；worldgen 熔岩湖 = 用户
@@ -299,5 +333,6 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 53** — `archive/phase-53.md`
 - **Phase 54** — `archive/phase-54.md`
 - **Phase 55** — `archive/phase-55.md`
+- **Phase 56** — `archive/phase-56.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

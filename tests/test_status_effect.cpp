@@ -38,6 +38,7 @@ EffectRegistry makeRegistry() {
         {R"({"id":"weakness","melee_penalty":4.0,"negative":true,"icon":1})"},
         {R"({"id":"regeneration","tick_type":"heal","tick_amount":1.0,
             "tick_interval":4.5,"negative":false,"icon":2})"},
+        {R"({"id":"absorption","absorb_hp":4,"negative":false,"icon":3})"},
     };
     for (const auto& d : defs) {
         auto r = reg.registerEffect(parseJson(d.def));
@@ -129,6 +130,76 @@ TEST(EffectParse, Rejections) {
     }
 }
 
+// -- Phase 56: the absorption layer (absorb_hp) --------------------------------
+
+TEST(EffectParse, ValidAbsorption) {
+    Effect e;
+    auto r = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"absorption","absorb_hp":4,"negative":false,
+                     "icon":3})"),
+        e);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(e.tick, Effect::Tick::None);   // a modifier (no ticks)
+    EXPECT_FLOAT_EQ(e.absorbHp, 4.0f);
+    EXPECT_FALSE(e.negative);                // survives the milk
+    EXPECT_EQ(e.icon, 3);
+}
+
+TEST(EffectParse, AbsorbHpRange) {
+    const std::vector<std::string> bad = {
+        R"({"id":"x","absorb_hp":0,"icon":3})",        // below 1
+        R"({"id":"x","absorb_hp":65,"icon":3})",       // above 64
+        R"({"id":"x","absorb_hp":1.5,"icon":3})",      // not an integer
+        R"({"id":"x","absorb_hp":"4","icon":3})",      // not a number
+    };
+    for (const std::string& def : bad) {
+        Effect e;
+        auto r = EffectRegistry::parseEffect(parseJson(def), e);
+        EXPECT_FALSE(r.ok()) << def;
+        EXPECT_NE(r.error().message.find("[1, 64]"), std::string::npos)
+            << def << ": " << r.error().message;
+    }
+    // The boundaries themselves are legal.
+    Effect lo, hi;
+    EXPECT_TRUE(EffectRegistry::parseEffect(
+        parseJson(R"({"id":"x","absorb_hp":1,"icon":3})"), lo).ok());
+    EXPECT_TRUE(EffectRegistry::parseEffect(
+        parseJson(R"({"id":"x","absorb_hp":64,"icon":3})"), hi).ok());
+}
+
+TEST(EffectParse, AbsorbHpAloneIsNotNoOp) {
+    // A layer-only effect (no ticks, no penalty) is a valid effect — the
+    // no-op rejection must not fire.
+    Effect e;
+    auto r = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"x","absorb_hp":4,"icon":3})"), e);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    // ...but an effect with NONE of the three actions still is a no-op.
+    Effect noop;
+    auto rNoop = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"x","icon":3})"), noop);
+    ASSERT_FALSE(rNoop.ok());
+    EXPECT_NE(rNoop.error().message.find("no-op"), std::string::npos);
+    EXPECT_NE(rNoop.error().message.find("absorb_hp"), std::string::npos);
+}
+
+TEST(StatusEffects, TotalAbsorption) {
+    const EffectRegistry reg = makeRegistry();
+    StatusEffects se;
+    EXPECT_FLOAT_EQ(se.totalAbsorption(reg), 0.0f);
+    se.apply(reg.idForName("absorption"), 5.0);
+    EXPECT_FLOAT_EQ(se.totalAbsorption(reg), 4.0f);
+    // Poison/regeneration contribute 0 to the layer.
+    se.apply(reg.idForName("poison"), 15.0);
+    se.apply(reg.idForName("regeneration"), 10.0);
+    EXPECT_FLOAT_EQ(se.totalAbsorption(reg), 4.0f);
+    // Re-application resets the duration, not the layer.
+    se.apply(reg.idForName("absorption"), 8.0);
+    EXPECT_FLOAT_EQ(se.totalAbsorption(reg), 4.0f);
+    se.clearAll();
+    EXPECT_FLOAT_EQ(se.totalAbsorption(reg), 0.0f);
+}
+
 TEST(EffectRegistry, DuplicateIdRejected) {
     EffectRegistry reg;
     auto r1 = reg.registerEffect(
@@ -142,10 +213,11 @@ TEST(EffectRegistry, DuplicateIdRejected) {
 
 TEST(EffectRegistry, Lookups) {
     const EffectRegistry reg = makeRegistry();
-    EXPECT_EQ(reg.count(), 3u);
+    EXPECT_EQ(reg.count(), 4u);
     EXPECT_EQ(reg.idForName("poison"), 0);
     EXPECT_EQ(reg.idForName("weakness"), 1);
     EXPECT_EQ(reg.idForName("regeneration"), 2);
+    EXPECT_EQ(reg.idForName("absorption"), 3);
     EXPECT_EQ(reg.idForName("nope"), -1);
     EXPECT_NE(reg.findByName("poison"), nullptr);
     EXPECT_EQ(reg.find(-1), nullptr);

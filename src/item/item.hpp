@@ -130,6 +130,17 @@ struct Item {
     // also grant one (mutual exclusion enforced at parse).
     std::string grantsEffect;
     double grantsEffectDuration = 0.0;
+    // Phase 56: the LIST form of the eat-grant (optional data field
+    // 'grants_effects', an array of the same strict {"name", "duration"}
+    // pairs). Mutually exclusive with the single 'grants_effect' (the P52
+    // chance_drops pattern); the entries are applied IN ORDER when a full
+    // eat completes (the golden apple: regeneration + absorption). Same
+    // food-only and init cross-check disciplines as the single field.
+    struct GrantEffect {
+        std::string name;
+        double duration = 0.0;
+    };
+    std::vector<GrantEffect> grantsEffects;
     // Phase 47 (kinds in Phase 51): fluid bucket, COLLECT side (optional
     // data field 'collects_fluid', a non-empty ARRAY of fluid names —
     // vocabulary: "water", "lava"). Non-empty marks the item as an EMPTY

@@ -176,8 +176,24 @@ public:
 
     // -- survival (Phase 16) --------------------------------------------------
     float health() const { return m_health; }
-    float maxHealth() const { return m_params.maxHealth; }
+    // The EFFECTIVE max health (Phase 56): the configured max plus the
+    // active absorption layer. damage()/heal()/setHealth() clamp against
+    // this value, and the HUD draws the layer as extra (red) hearts.
+    float maxHealth() const { return m_params.maxHealth + m_absorptionBonus; }
     bool isDead() const { return m_dead; }
+
+    // The absorption layer (Phase 56): `bonus` is the sum of `absorb_hp`
+    // over the player's active effects (the game syncs this at every
+    // effect change and on save load).
+    //   - An INCREASE (a new/refreshed layer) RAISES the health by the
+    //     added amount (clamped at the new max) when `healOnIncrease` —
+    //     the layer appears full, like Minecraft's.
+    //   - A DECREASE (expiry/clear/load) drops the excess SILENTLY
+    //     (health is clamped down to the new max — no damage flash, no
+    //     sound, no damage clock: the layer is not real HP).
+    //   - `healOnIncrease = false` is the SAVE-LOAD mode: the saved
+    //     health already includes the layer, so loading must not heal.
+    void setAbsorptionBonus(float bonus, bool healOnIncrease);
     bool isCrouching() const { return m_crouching; }
     double timeSinceDamage() const { return m_timeSinceDamage; }
 
@@ -222,17 +238,19 @@ public:
     // (Minecraft-Java keep-inventory respawn).
     void respawn();
 
-    // Restore health (save load): clamped to [0, max]; 0 sets the dead
-    // state (a dead save reloads dead).
+    // Restore health (save load): clamped to [0, max] (the EFFECTIVE max,
+    // base + absorption layer — Phase 56); 0 sets the dead state (a dead
+    // save reloads dead).
     void setHealth(float h) {
-        m_health = std::clamp(h, 0.0f, m_params.maxHealth);
+        m_health = std::clamp(h, 0.0f, maxHealth());
         m_dead = m_health <= 0.0f;
     }
 
     // Heal `amount` HP (Phase 46's regeneration effect; the natural
-    // hunger-based regen calls this too). Clamped at max health.
+    // hunger-based regen calls this too). Clamped at the effective max
+    // (Phase 56: regeneration can fill INTO the absorption layer).
     void heal(float amount) {
-        m_health = std::clamp(m_health + amount, 0.0f, m_params.maxHealth);
+        m_health = std::clamp(m_health + amount, 0.0f, maxHealth());
     }
 
     // Entity separation (Phases 16/19): the player is immovable — entities
@@ -288,6 +306,10 @@ private:
     // accumulator (only runs after the delay), the fall tracking (net drop
     // since the last leave-the-ground), and the death state.
     float m_health = Params {}.maxHealth;
+    // The absorption layer (Phase 56): temporary max-health points from
+    // active effects (0 = none). The game owns the value (synced from the
+    // StatusEffects); the player only clamps against it.
+    float m_absorptionBonus = 0.0f;
     double m_timeSinceDamage = 0.0;
     double m_regenAccum = 0.0;
     bool m_wasOnGround = false;

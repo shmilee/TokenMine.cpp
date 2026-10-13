@@ -358,6 +358,54 @@ Result<void> ItemRegistry::parseGrant(const Json& def, Item& out) {
         out.grantsEffect = nm->asString();
         out.grantsEffectDuration = du->asDouble();
     }
+    // Phase 56: the LIST form — an array of the same strict pairs,
+    // mutually exclusive with the single field (the P52 chance_drops
+    // pattern), applied IN ORDER on a full eat.
+    if (const Json* gel = def.find("grants_effects")) {
+        if (!gel->isArray()) {
+            return MC_FAIL("'grants_effects' must be an array of "
+                           "{\"name\": ..., \"duration\": ...} pairs");
+        }
+        if (gel->size() == 0) {
+            return MC_FAIL("'grants_effects' must not be an empty array");
+        }
+        if (!out.grantsEffect.empty()) {
+            return MC_FAIL("'grants_effects' is mutually exclusive with "
+                           "'grants_effect' (pick one)");
+        }
+        // Only food grants an effect on eat (same as the single field).
+        if (out.restoreHunger <= 0) {
+            return MC_FAIL("'grants_effects' requires 'restore_hunger' "
+                           "(only food grants an effect on eat)");
+        }
+        for (std::size_t i = 0; i < gel->size(); ++i) {
+            const Json& e = gel->at(i);
+            if (!e.isObject()) {
+                return MC_FAIL("'grants_effects[" + std::to_string(i) +
+                               "]' must be an object");
+            }
+            for (const auto& [key, value] : e.members()) {
+                if (key != "name" && key != "duration") {
+                    return MC_FAIL("'grants_effects[" + std::to_string(i) +
+                                   "]' has an unknown field '" + key + "'");
+                }
+            }
+            const Json* nm = e.find("name");
+            if (nm == nullptr || !nm->isString() || nm->asString().empty()) {
+                return MC_FAIL("'grants_effects[" + std::to_string(i) +
+                               "]' requires a non-empty string 'name'");
+            }
+            const Json* du = e.find("duration");
+            if (du == nullptr || !du->isNumber() || du->asDouble() <= 0.0) {
+                return MC_FAIL("'grants_effects[" + std::to_string(i) +
+                               "]' requires 'duration' (seconds) > 0");
+            }
+            Item::GrantEffect g;
+            g.name = nm->asString();
+            g.duration = du->asDouble();
+            out.grantsEffects.push_back(std::move(g));
+        }
+    }
     return {};
 }
 

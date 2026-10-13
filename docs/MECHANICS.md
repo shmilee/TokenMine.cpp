@@ -367,10 +367,13 @@
     HP，(0,10]，tick 必填）+ `tick_interval`（秒，(0,100]，tick 必填）+
     `min_health`（仅 damage：0 = 无地板可致死 / 1 = 保持 ≥1 HP 永不致死
     = MC 中毒地板）+ `melee_penalty`（近战扣除攻击点，[0,100]）+
-    `negative`（bool；牛奶只清负面）+ `icon`（effects.png 条带 tile
-    索引，init 对纹理宽度交叉校验）。当前 3 种：`poison`（damage 1 /
-    2.5 s，min_health 1，负面，icon 0）、`weakness`（melee_penalty 4，
-    负面，icon 1）、`regeneration`（heal 1 / 4.5 s，正面，icon 2）
+    `absorb_hp`（Phase 56：激活期间的**临时 max HP**，整数 [1,64]——
+    吸收层；0/缺省 = 无层）+ `negative`（bool；牛奶只清负面）+ `icon`
+    （effects.png 条带 tile 索引，init 对纹理宽度交叉校验）。当前 4 种：
+    `poison`（damage 1 / 2.5 s，min_health 1，负面，icon 0）、
+    `weakness`（melee_penalty 4，负面，icon 1）、`regeneration`
+    （heal 1 / 4.5 s，正面，icon 2）、`absorption`（absorb_hp 4，正面，
+    icon 3）
   - **来源（v1）**：① **mob `on_hit_effect`**（`{"name", "duration"}`，
     成对必填严格解析，init 对 EffectRegistry 交叉校验 = ammo/挤奶
     模式）——该 mob 的**近战命中落定**时施加（远程箭**不**施加）；
@@ -387,6 +390,17 @@
     duration（MC 语义，无 amplifier；tick 相位保留）
   - **虚弱**：`selectedAttackDamage()` 减去活跃效果 `melee_penalty` 总和
     （clamp ≥0——虚弱的空手打不出伤害）；只影响玩家→mob 近战
+  - **吸收层（Phase 56）**：玩家**有效 max health = base + Σ活跃层
+    `absorb_hp`**（`Player::setAbsorptionBonus`，`Game::syncAbsorption`
+    在每个效果变化点收口——进食施加 / mob 命中 / 每帧到期 / 牛奶清 /
+    死亡清 / 读档）。**施加（层增大）时 health 提升增量**（层显示为满，
+    clamp 新上限）；**层缩小/消失时超出 base max 的 health 无声掉下**
+    （无红闪/音效/伤害计时器——层不是真 HP）；heal（再生）可**填进**层
+    （clamp 有效上限）；`damage()` 从总 health 扣（health ≥ base 区间
+    与 MC 逐位一致：先掉红心——受伤状态下的偏离见 KNOWN_ISSUES）。
+    读档（`healOnIncrease = false`）不重复提升——存档 health 已含层，
+    且 health 必须在层应用**之后**设置（`applySave` 4d/4e 顺序）。
+    金苹果 = 首个来源（吸收 4 / 5 s，正面——牛奶保留）
   - **死亡**：效果随玩家死亡清空（重生 = 干净状态，MC 一致）
   - **存档（format 8）**：`player.effects = [{name, remaining}]` 名字序
     （`remaining` = 真实 dt 秒数；**tick 相位不存**——重载后下一 tick
@@ -394,10 +408,13 @@
     furnaces 键纪律；名字对 EffectRegistry 交叉校验、重复/非注册拒绝）
   - **HUD**：效果图标条与心带**同行**、hotbar 左缘左对齐（MC 布局）：
     每个活跃效果一个 `assets/textures/effects.png` 的 16px tile
-    （48×16，3 tile：紫骷髅 / 蓝下箭 / 绿上箭，
+    （64×16，4 tile：紫骷髅 / 蓝下箭 / 绿上箭 / 红心+白十字【吸收】，
     `tools/generate_effect_icons.py` 确定性生成），按施加顺序排列；
-    只在游玩态（锁定 + 无面板）绘制——无输入运行结构性免疫。F3 调试
-    层显示 `effects poison 12.3s; ...`（无效果 = `effects (none)`）
+    只在游玩态（锁定 + 无面板）绘制——无输入运行结构性免疫。**吸收红
+    心**（Phase 56）：层激活时正常心带**左侧**多出 `ceil(层/2)` 颗
+    红色心（正常心带位置不动 = 无层时逐位相同；红心显示 health 超出
+    base max 的部分，`health − base`）；层 = 0 时零绘制。F3 调试层
+    显示 `effects poison 12.3s; ...`（无效果 = `effects (none)`）
   - **spider**（Phase 46，MC 标准毒源）：16 HP、speed 1.0（比 zombie
     快）、攻击 2（normal 基线，走难度缩放）、近战 1.6 / 冷却 1.0、
     探测 16、只在黑暗生成（`spawn_max_light` 0）、**无掉落**（MC 的

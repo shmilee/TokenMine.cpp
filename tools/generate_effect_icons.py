@@ -6,19 +6,21 @@ output is stable across runs and platforms. Re-run after editing this file
 to refresh assets/textures/effects.png.
 
 The HUD effect row (left-aligned on the heart row) renders one 16x16 tile
-from the 48x16 strip per ACTIVE effect; the effect data's 'icon' field
-indexes the tile (tile i occupies u in [i/3, (i+1)/3]):
+from the 64x16 strip per ACTIVE effect; the effect data's 'icon' field
+indexes the tile (tile i occupies u in [i/4, (i+1)/4]):
   0: poison (purple skull with dark eye sockets — the Minecraft poison
      icon silhouette)
   1: weakness (dark blue down arrow)
   2: regeneration (green up arrow)
+  3: absorption (Phase 56, red heart with a white plus — the Minecraft
+     absorption silhouette)
 The background is transparent (the HUD draws over the world).
 """
 import os
 import struct
 import zlib
 
-W, H = 48, 16
+W, H = 64, 16
 OUT = os.path.join(os.path.dirname(__file__), "..", "assets",
                    "textures", "effects.png")
 
@@ -58,6 +60,21 @@ POISON = (168, 56, 216)
 POISON_EYE = (44, 12, 56)
 WEAKNESS = (44, 72, 184)
 REGEN = (96, 208, 88)
+ABSORB = (216, 40, 48)
+ABSORB_PLUS = (240, 240, 240)
+
+# Heart silhouette (9x7) for the absorption icon, tile-local offset (3, 4);
+# a white plus overwrites its center (the Minecraft absorption mark).
+HEART = [
+    ".XX...XX.",
+    "XXXX.XXXX",
+    "XXXXXXXXX",
+    "XXXXXXXXX",
+    ".XXXXXXX.",
+    "..XXXXX..",
+    "...XXX...",
+]
+HEART_OX, HEART_OY = 3, 4
 
 
 def splitmix64(x: int) -> int:
@@ -138,10 +155,25 @@ def tile_arrow(up: bool) -> list:
     return px
 
 
+def tile_absorption() -> list:
+    px = [[(0, 0, 0, 0)] * 16 for _ in range(16)]
+    for ty in range(16):
+        for tx in range(16):
+            if not in_shape(HEART, HEART_OX, HEART_OY, tx, ty):
+                continue
+            gy, gx = ty - HEART_OY, tx - HEART_OX
+            # The plus: vertical bar (center column, 3 rows) + horizontal
+            # bar (center row, 5 columns).
+            on_plus = (gx == 4 and 2 <= gy <= 4) or (gy == 3 and 2 <= gx <= 6)
+            setpx(px, tx, ty, ABSORB_PLUS if on_plus else ABSORB,
+                  salt=400 + ty * 16 + tx)
+    return px
+
+
 def main() -> None:
     px = [[(0, 0, 0, 0)] * W for _ in range(H)]
     for kind, tile in enumerate((tile_poison(), tile_arrow(False),
-                                 tile_arrow(True))):
+                                 tile_arrow(True), tile_absorption())):
         for y in range(16):
             for x in range(16):
                 px[y][kind * 16 + x] = tile[y][x]

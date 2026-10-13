@@ -10,6 +10,13 @@
 //   - `melee_penalty`: attack points subtracted from the player's melee
 //     damage while active (weakness; clamped at 0 — a weakened bare hand
 //     deals no damage).
+//   - `absorb_hp`: (Phase 56) temporary max-health points added while the
+//     effect is active (the "absorption layer" — the golden apple's red
+//     hearts). The player's effective max health is
+//     `max_health + sum(absorb_hp over active instances)`; health above
+//     the base max vanishes SILENTLY when the layer shrinks (no damage
+//     flash/sound — the layer is not real HP). Applying an increase RAISES
+//     the player's health by the added amount (the layer appears full).
 //   - `negative`: the effect is cleared by drinking a milk container
 //     (Minecraft clears NEGATIVE effects; regeneration survives the milk).
 //   - `icon`: the 16 px tile index in assets/textures/effects.png the HUD
@@ -63,6 +70,9 @@ struct Effect {
     float minHealth = 0.0f;
     // Attack points subtracted from the player's melee damage (weakness).
     float meleePenalty = 0.0f;
+    // Temporary max-health points while active (the absorption layer,
+    // Phase 56). 0 = no layer.
+    float absorbHp = 0.0f;
     // Cleared by drinking a milk container (negative effects).
     bool negative = false;
     // The effects.png 16 px tile the HUD draws for this effect.
@@ -145,6 +155,10 @@ public:
 
     // The total melee penalty (sum over the active instances' definitions).
     float totalMeleePenalty(const EffectRegistry& effects) const;
+
+    // The total absorption layer (Phase 56): the sum of `absorb_hp` over
+    // the active instances' definitions (0 when none grant a layer).
+    float totalAbsorption(const EffectRegistry& effects) const;
 
     std::size_t count() const { return m_active.size(); }
     const std::vector<ActiveEffect>& list() const { return m_active; }

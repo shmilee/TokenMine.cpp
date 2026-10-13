@@ -59,6 +59,7 @@ EffectRegistry makeEffects() {
         {R"({"id":"weakness","melee_penalty":4.0,"negative":true,"icon":1})"},
         {R"({"id":"regeneration","tick_type":"heal","tick_amount":1.0,
             "tick_interval":4.5,"negative":false,"icon":2})"},
+        {R"({"id":"absorption","absorb_hp":4,"negative":false,"icon":3})"},
     };
     for (const auto& d : defs) {
         auto r = effects.registerEffect(parseJson(d.def));
@@ -1497,4 +1498,26 @@ TEST(SaveFormat8Test, RejectsBadEffectEntries) {
             parseSave(withEffect(Json(1)), f.items, f.blocks, f.effects, 42)
                 .ok());
     }
+}
+
+// -- Phase 56: the absorption layer and the saved health ----------------------
+
+TEST(SaveFormat8Test, HealthAboveBaseWithAbsorptionLayerRoundTrips) {
+    // A save taken while the absorption layer is active stores a health
+    // ABOVE the base max (24 with the 4-HP layer). The parse accepts it
+    // (save.cpp has no upper bound; the GAME clamps against the effective
+    // max after applying the layer — see Game::applySave 4e); the
+    // round trip must preserve the value.
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerHealth = 24.0f;
+    s.playerEffects = {{"absorption", 3.25}};
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_FLOAT_EQ(out->playerHealth, 24.0f);
+    ASSERT_EQ(out->playerEffects.size(), 1u);
+    EXPECT_EQ(out->playerEffects[0].name, "absorption");
+    EXPECT_DOUBLE_EQ(out->playerEffects[0].remaining, 3.25);
 }

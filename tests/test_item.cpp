@@ -985,3 +985,85 @@ TEST(ItemRegistryTest, GrantEffectRequiresFood) {
                                    "grants_effect":{"name":"x","duration":5}})"))
                      .ok());
 }
+
+// -- Status-effect grant LIST on eat (Phase 56: grants_effects) --------------
+
+TEST(ItemRegistryTest, ParsesGrantEffectsList) {
+    // The Phase 56 golden apple: regeneration + absorption, applied IN
+    // ORDER on a full eat.
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"golden_apple","type":"material","max_stack":64,
+                      "icon":"golden_apple","restore_hunger":4,
+                      "grants_effects":[
+                        {"name":"regeneration","duration":10.0},
+                        {"name":"absorption","duration":5.0}]})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Item& it = items.at(*r);
+    EXPECT_TRUE(it.grantsEffect.empty());
+    ASSERT_EQ(it.grantsEffects.size(), 2u);
+    EXPECT_EQ(it.grantsEffects[0].name, "regeneration");
+    EXPECT_DOUBLE_EQ(it.grantsEffects[0].duration, 10.0);
+    EXPECT_EQ(it.grantsEffects[1].name, "absorption");
+    EXPECT_DOUBLE_EQ(it.grantsEffects[1].duration, 5.0);
+}
+
+TEST(ItemRegistryTest, GrantEffectsMutuallyExclusiveWithSingle) {
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"b","type":"material","restore_hunger":3,
+                      "grants_effect":{"name":"x","duration":5},
+                      "grants_effects":[{"name":"y","duration":5}]})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("mutually exclusive"),
+              std::string::npos);
+}
+
+TEST(ItemRegistryTest, GrantEffectsRejections) {
+    const std::vector<std::string> bad = {
+        // not an array / empty array
+        R"({"id":"b","type":"material","restore_hunger":3,"grants_effects":[]})",
+        R"({"id":"b","type":"material","restore_hunger":3,
+            "grants_effects":{"name":"x","duration":5}})",
+        // a non-object entry
+        R"({"id":"b","type":"material","restore_hunger":3,
+            "grants_effects":["x"]})",
+        // an entry with an unknown field
+        R"({"id":"b","type":"material","restore_hunger":3,
+            "grants_effects":[{"name":"x","duration":5,"potency":2}]})",
+        // a missing / empty name
+        R"({"id":"b","type":"material","restore_hunger":3,
+            "grants_effects":[{"duration":5}]})",
+        R"({"id":"b","type":"material","restore_hunger":3,
+            "grants_effects":[{"name":"","duration":5}]})",
+        // a missing / non-positive duration
+        R"({"id":"b","type":"material","restore_hunger":3,
+            "grants_effects":[{"name":"x"}]})",
+        R"({"id":"b","type":"material","restore_hunger":3,
+            "grants_effects":[{"name":"x","duration":0}]})",
+    };
+    for (const std::string& def : bad) {
+        ItemRegistry items;
+        EXPECT_FALSE(items.registerItem(parseJson(def)).ok()) << def;
+    }
+    // Only FOOD grants effects on eat (same as the single field).
+    ItemRegistry noFood;
+    EXPECT_FALSE(noFood.registerItem(
+                     parseJson(R"({"id":"b","type":"material",
+                                   "grants_effects":[{"name":"x","duration":5}]})"))
+                     .ok());
+}
+
+TEST(ItemRegistryTest, GrantEffectsEntryIndexedInErrors) {
+    // A bad SECOND entry is named grants_effects[1] (the chance_drops[i]
+    // pattern).
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"b","type":"material","restore_hunger":3,
+                      "grants_effects":[{"name":"ok","duration":5},
+                                        {"duration":5}]})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("grants_effects[1]"),
+              std::string::npos)
+        << r.error().message;
+}

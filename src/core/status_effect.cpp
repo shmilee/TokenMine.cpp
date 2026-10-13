@@ -52,6 +52,7 @@ Result<void> EffectRegistry::parseEffect(const Json& def, Effect& out) {
                                                 "tick_interval",
                                                 "min_health",
                                                 "melee_penalty",
+                                                "absorb_hp",
                                                 "negative", "icon"};
     for (const auto& [key, value] : def.members()) {
         if (kFields.count(key) == 0) {
@@ -108,6 +109,19 @@ Result<void> EffectRegistry::parseEffect(const Json& def, Effect& out) {
         MC_TRY(r);
     }
 
+    const Json* ah = def.find("absorb_hp");
+    if (ah != nullptr) {
+        // Integer HP points in [1, 64] (the layer is whole hearts/HP; a
+        // fractional layer would fight the 2-HP-per-icon HUD strip).
+        if (!ah->isNumber() || ah->asDouble() != std::floor(ah->asDouble()) ||
+            ah->asDouble() < 1.0 || ah->asDouble() > 64.0) {
+            return MC_FAIL("effect '" + out.name + "': 'absorb_hp' must be "
+                           "an integer in [1, 64], got " +
+                           std::to_string(ah->asDouble()));
+        }
+        out.absorbHp = static_cast<float>(ah->asDouble());
+    }
+
     const Json* neg = def.find("negative");
     if (neg != nullptr) {
         if (!neg->isBool()) {
@@ -126,10 +140,13 @@ Result<void> EffectRegistry::parseEffect(const Json& def, Effect& out) {
     }
     out.icon = static_cast<int>(icon->asDouble());
 
-    // An effect must DO something: a tick action or a melee penalty.
-    if (out.tick == Effect::Tick::None && out.meleePenalty <= 0.0f) {
+    // An effect must DO something: a tick action, a melee penalty, or an
+    // absorption layer.
+    if (out.tick == Effect::Tick::None && out.meleePenalty <= 0.0f &&
+        out.absorbHp <= 0.0f) {
         return MC_FAIL("effect '" + out.name + "' is a no-op: give it a "
-                       "'tick_type' or a positive 'melee_penalty'");
+                       "'tick_type', a positive 'melee_penalty', or a "
+                       "positive 'absorb_hp'");
     }
     return {};
 }
@@ -278,6 +295,14 @@ float StatusEffects::totalMeleePenalty(const EffectRegistry& effects) const {
     float sum = 0.0f;
     for (const ActiveEffect& a : m_active) {
         sum += effects.at(a.effect).meleePenalty;
+    }
+    return sum;
+}
+
+float StatusEffects::totalAbsorption(const EffectRegistry& effects) const {
+    float sum = 0.0f;
+    for (const ActiveEffect& a : m_active) {
+        sum += effects.at(a.effect).absorbHp;
     }
     return sum;
 }

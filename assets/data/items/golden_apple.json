@@ -4,5 +4,8 @@
   "max_stack": 64,
   "icon": "golden_apple",
   "restore_hunger": 4,
-  "grants_effect": { "name": "regeneration", "duration": 10.0 }
+  "grants_effects": [
+    { "name": "regeneration", "duration": 10.0 },
+    { "name": "absorption", "duration": 5.0 }
+  ]
 }

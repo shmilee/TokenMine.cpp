@@ -354,8 +354,28 @@ bool Player::damage(float amount) {
     return true;
 }
 
+void Player::setAbsorptionBonus(float bonus, bool healOnIncrease) {
+    const float oldBonus = m_absorptionBonus;
+    m_absorptionBonus = bonus;
+    if (healOnIncrease && bonus > oldBonus) {
+        // The layer appears full: raise the health by the added amount
+        // (clamped at the new effective max).
+        m_health = std::clamp(m_health + (bonus - oldBonus), 0.0f,
+                              maxHealth());
+    }
+    // A shrunk/vanished layer drops the excess SILENTLY (no damage
+    // flash/sound, no damage-clock reset: the layer is not real HP).
+    if (m_health > maxHealth()) {
+        m_health = maxHealth();
+    }
+}
+
 void Player::respawn() {
     m_dead = false;
+    // Respawn starts clean (Phase 56): the layer dies with the player
+    // (the game clears the effects on death), so the bonus is 0 and the
+    // health refills to the BASE max.
+    m_absorptionBonus = 0.0f;
     m_health = m_params.maxHealth;
     m_timeSinceDamage = 0.0;
     m_regenAccum = 0.0;

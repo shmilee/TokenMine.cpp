@@ -632,6 +632,17 @@ Result<void> Game::buildScene() {
             return MC_FAIL("item '" + it.name + "' grants_effect references "
                            "the unregistered effect '" + it.grantsEffect + "'");
         }
+        // Phase 56: the list form, entry by entry (indexed name, the
+        // chance_drops[i] pattern).
+        for (std::size_t i = 0; i < it.grantsEffects.size(); ++i) {
+            const Item::GrantEffect& g = it.grantsEffects[i];
+            if (m_effects.findByName(g.name) == nullptr) {
+                return MC_FAIL("item '" + it.name + "' grants_effects[" +
+                               std::to_string(i) +
+                               "] references the unregistered effect '" +
+                               g.name + "'");
+            }
+        }
     }
 
     // -- item icons (Phase 15 UI) ------------------------------------------
@@ -1319,11 +1330,6 @@ Result<void> Game::applySave(const SaveGame& save) {
     m_player->restorePosition(save.playerPos);
     m_player->yaw = save.playerYaw;
     m_player->pitch = save.playerPitch;
-    // Health (Phase 16): a format-1 save has none (-1 = full); a saved 0
-    // reloads the player dead (the death screen offers R).
-    m_player->setHealth(save.playerHealth < 0.0f
-                            ? m_player->maxHealth()
-                            : save.playerHealth);
     // Hunger (Phase 23): format 1-3 saves have none (-1 = full).
     m_player->setHunger(save.playerHunger < 0.0f
                             ? m_player->maxHunger()
@@ -1331,7 +1337,9 @@ Result<void> Game::applySave(const SaveGame& save) {
     // Saturation (Phase 28): format 1-4 saves have none (-1 = no buffer).
     m_player->setSaturation(
         save.playerSaturation < 0.0f ? 0.0f : save.playerSaturation);
-    m_prevHealth = m_player->health(); // no hurt event from the load itself
+    // Health is applied in 4e) AFTER the status effects: the Phase 56
+    // absorption layer raises the effective max, and a saved health above
+    // the BASE max is legal exactly when the saved effects carry a layer.
     m_camera.position = m_player->eyePosition();
     m_camera.yaw = m_player->yaw;
     m_camera.pitch = m_player->pitch;
@@ -1368,6 +1376,17 @@ Result<void> Game::applySave(const SaveGame& save) {
     for (const SavedEffect& se : save.playerEffects) {
         m_playerEffects.apply(m_effects.idForName(se.name), se.remaining);
     }
+    // 4e) The player's health (Phase 16; moved here in Phase 56). A
+    // format-1 save has none (-1 = full); a saved 0 reloads the player
+    // dead (the death screen offers R). The clamp now runs against the
+    // EFFECTIVE max: the absorption layer (4d) is applied first, and
+    // healOnIncrease = false — the saved health already includes the
+    // layer, so loading must not heal on top of it.
+    syncAbsorption(false);
+    m_player->setHealth(save.playerHealth < 0.0f
+                            ? m_player->maxHealth()
+                            : save.playerHealth);
+    m_prevHealth = m_player->health(); // no hurt event from the load itself
     // 5) Dropped items (with their lifetime/pickup timers restored).
     for (const SavedItemEntity& e : save.entities) {
         const Item& item = m_items.at(m_items.idForName(e.item));
@@ -2575,6 +2594,7 @@ void Game::clearStatusEffects() {
     // mid-air must not reduce the fall damage owed on landing.
     m_hurtFlash = 0.0;
     m_playerEffects.clearNegative(m_effects);
+    syncAbsorption(true); // Phase 56 (the bonus can only shrink here)
 }
 
 void Game::updateEffects(double dt) {
@@ -2599,6 +2619,14 @@ void Game::updateEffects(double dt) {
                 m_player->heal(def.tickAmount);
             }
         });
+    // Phase 56: an absorption layer that just expired shrinks the effective
+    // max — the excess health vanishes silently (the sync clamps).
+    syncAbsorption(true);
+}
+
+void Game::syncAbsorption(bool healOnIncrease) {
+    m_player->setAbsorptionBonus(m_playerEffects.totalAbsorption(m_effects),
+                                 healOnIncrease);
 }
 
 void Game::updateEatChannel(double dt) {
@@ -2633,13 +2661,18 @@ void Game::updateEatChannel(double dt) {
             m_player->restoreSaturation(
                 static_cast<float>(item.restoreHunger) * kSaturationFactor);
             // Food that grants a status effect on a full eat (Phase 49,
-            // golden apple): applied exactly where the mob melee-hit effect
-            // is (name resolved against the EffectRegistry, cross-checked
-            // at init — the ammo pattern).
+            // golden apple; the list form Phase 56): applied exactly where
+            // the mob melee-hit effect is (name resolved against the
+            // EffectRegistry, cross-checked at init — the ammo pattern).
+            // The list entries apply IN ORDER (the data's order).
             if (!item.grantsEffect.empty()) {
                 m_playerEffects.apply(m_effects.idForName(item.grantsEffect),
                                       item.grantsEffectDuration);
             }
+            for (const Item::GrantEffect& g : item.grantsEffects) {
+                m_playerEffects.apply(m_effects.idForName(g.name), g.duration);
+            }
+            syncAbsorption(true);
             m_sound.play("eat");
         } else {
             if (!item.returnsItem.empty()) {
@@ -3152,6 +3185,7 @@ void Game::attemptMobSpawn() {
         if (!hitEffectName.empty()) {
             m_playerEffects.apply(m_effects.idForName(hitEffectName),
                                   hitEffectDuration);
+            syncAbsorption(true); // Phase 56 (the layer can only grow)
         }
     });
     // Ranged mobs (Phase 27, the skeleton): the AI's shot spawns an arrow
@@ -3641,6 +3675,7 @@ void Game::updateSurvival(double dt) {
         m_window.setRelativeMouseMode(false);
         m_sound.play("death");
         m_playerEffects.clearAll();
+        syncAbsorption(false); // Phase 56: the layer dies with the player
     }
     m_prevHealth = hp;
     if (dead && m_input.wasPressed(GameKey::R)) {
@@ -3966,23 +4001,36 @@ void Game::renderUi() {
         {
             constexpr int kIconPx = 16;
             constexpr int kIconGap = 2;
-            constexpr int kStripGap = 6; // between the hearts and hunger
+            constexpr int kStripGap = 6; // between the strips
+            const float baseMaxHealth = m_player->params().maxHealth;
             const int heartIcons =
-                static_cast<int>(std::ceil(m_player->maxHealth() / 2.0f));
+                static_cast<int>(std::ceil(baseMaxHealth / 2.0f));
             const int hungerIcons =
                 static_cast<int>(std::ceil(m_player->maxHunger() / 2.0f));
             const int heartW =
                 heartIcons * kIconPx + (heartIcons - 1) * kIconGap;
-            // The hearts stay centered (the Phase 16 layout); the hunger
-            // strip starts just past their right edge.
+            // The (BASE) hearts stay centered (the Phase 16 layout); the
+            // hunger strip starts just past their right edge.
             const int hx0 = (w - heartW) / 2;
             const int gx0 = hx0 + heartW + kStripGap;
             const int hy = y0 - kIconPx - 6;
+            // The absorption layer (Phase 56, the golden apple): extra
+            // RED hearts just LEFT of the normal strip (the Minecraft
+            // layout). No layer = nothing drawn (the no-input baseline is
+            // bit-identical). The strip shows the health ABOVE the base
+            // max — with the shared single health value, damage empties
+            // it only once the normal hearts are (see KNOWN_ISSUES).
+            const float absorbTotal =
+                m_playerEffects.totalAbsorption(m_effects);
+            const int absIcons = absorbTotal > 0.0f
+                ? static_cast<int>(std::ceil(absorbTotal / 2.0f))
+                : 0;
+            const int absW =
+                absIcons * kIconPx + (absIcons - 1) * kIconGap;
             // One pass per strip: tile t occupies u in [t/3, (t+1)/3].
             auto drawStrip = [&](int x0, int icons, const Texture& tex,
-                                 float value) {
-                UiBatch& batch =
-                    batchFor(Vec4 {1.0f, 1.0f, 1.0f, 1.0f}, true, &tex);
+                                 float value, const Vec4& tint) {
+                UiBatch& batch = batchFor(tint, true, &tex);
                 for (int i = 0; i < icons; ++i) {
                     // Icon i covers the interval [2i, 2i+2); three states
                     // (a sub-half fill renders as half — see docs/KNOWN_ISSUES).
@@ -3997,8 +4045,17 @@ void Game::renderUi() {
                                     1.0f});
                 }
             };
-            drawStrip(hx0, heartIcons, m_healthTexture, m_player->health());
-            drawStrip(gx0, hungerIcons, m_hungerTexture, m_player->hunger());
+            if (absIcons > 0) {
+                // The layer strip: red-tinted hearts, value = the health
+                // above the base max (0..absorbTotal).
+                drawStrip(hx0 - kStripGap - absW, absIcons, m_healthTexture,
+                          m_player->health() - baseMaxHealth,
+                          Vec4 {1.0f, 0.35f, 0.35f, 1.0f});
+            }
+            drawStrip(hx0, heartIcons, m_healthTexture, m_player->health(),
+                      Vec4 {1.0f, 1.0f, 1.0f, 1.0f});
+            drawStrip(gx0, hungerIcons, m_hungerTexture, m_player->hunger(),
+                      Vec4 {1.0f, 1.0f, 1.0f, 1.0f});
             // Status effect icons (Phase 46): left-aligned on the heart
             // row (the Minecraft layout), one 16 px effects.png tile per
             // ACTIVE effect in application order (tile t occupies u in

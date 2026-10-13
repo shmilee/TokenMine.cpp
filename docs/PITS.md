@@ -884,3 +884,21 @@
   roll 条目 count 1 **同物品同位置**（方块中心零速度生成）→ 合并成
   **1 个实体 count 3**，不是 3 个实体。E2E/单测断言掉落数量必须按
   "实体 count 之和"算；不同物品不合并（leaves×1 + stick×1 = 2 实体）。
+- **读档：health 必须在吸收层之后设置，且读档不重复提升（P56）**：
+  吸收激活时存档 health 可高于 base max（24 = 20 + 4 层）。若
+  `applySave` 先 setHealth（此时层未应用，上限 20）→ 24 被钳成 20，
+  层白读。正确顺序 = 4d 应用效果 → 4e `syncAbsorption(false)` →
+  setHealth（对**有效**上限钳制）→ m_prevHealth。`healOnIncrease =
+  false` 是读档专用模式——存档 health 已含层，若用 true 会在 24 上再
+  抬 4 = 28（钳到 24 看似无害，但 22 会被抬到 24 = 读档白送血）。
+  每个层变化点（进食/mob 命中/到期/牛奶/死亡/读档）都要 sync，漏一处
+  = "bonus ≠ Σ层" 静默漂移。
+- **saturation 是真实 dt 字段——场景存档比对必须剥（P56）**：隐藏饱度
+  缓冲按 `hunger_decay_seconds`（36 s）**真实 dt** 衰减 tick 扣减
+  （先扣饱度再扣饥饿）→ 同一场景两次跑（fps 不同 = 墙钟不同）跨的
+  tick 数可能不同 → 存档 saturation 不同 → 字节 ×2 假失败。判定标准
+  = 该字段是否随**真实 dt** 累积（实体 age、效果 remaining、saturation
+  是；health/hunger 在"无 tick 跨过"窗口内稳定，但依赖场景设计）。
+  P56 的 savenorm 剥 {age, remaining, saturation}；场景设计若能让
+  终态无真实 dt 字段（如 P56 S4/S5 层在跑内到期 = 效果清空），直接用
+  字节 ×2（更强）。

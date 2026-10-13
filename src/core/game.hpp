@@ -282,6 +282,12 @@ private:
     // per interval, and expired effects are removed. A no-op while the
     // player is dead or has no active effects.
     void updateEffects(double dt);
+    // Phase 56: sync the player's absorption layer to the active effects
+    // (sum of `absorb_hp`). Called at every effect change (eat-grant, mob
+    // on_hit_effect, expiry in updateEffects, milk clear, death clear,
+    // save load) — `healOnIncrease` is false only on save load (the saved
+    // health already includes the layer).
+    void syncAbsorption(bool healOnIncrease);
     // Cycles the hotbar selection; resets break progress (the selected
     // tool changed, Minecraft behavior).
     void cycleHotbar();

@@ -73,7 +73,13 @@
   "grants_effect": {                // 可选（Phase 49）：完整吃下时施加的状态效果——仅食物（restore_hunger > 0）
     "name": "regeneration",         //   可给（可饮用物品喝下会清效果，通道互斥；非食物带 grants_effect = 解析拒绝）。
     "duration": 10.0                //   name+duration 严格配对（on_hit_effect 纪律），name = 已注册效果名
-  }                                 //   （init 交叉校验），duration > 0
+  },                                //   （init 交叉校验），duration > 0
+  "grants_effects": [               // 可选（Phase 56）：grants_effect 的列表形式——同一严格配对的数组，
+    { "name": "regeneration",       //   完整吃下时**按数据顺序**依次施加（金苹果 = 再生 + 吸收）。
+      "duration": 10.0 },           //   与单字段 grants_effect **互斥**（同写 = 解析拒绝，P52 chance_drops 模式）；
+    { "name": "absorption",         //   空数组/非对象元素/缺三元组/未知键逐条目点名 grants_effects[i] 拒绝；
+      "duration": 5.0 }             //   仅食物 + init 逐条目交叉校验效果名（ammo 模式）。
+  ]
   "max_stack": 1,                   // 1..64，默认 64
   "icon": "wooden_pickaxe"          // UI 图标（Phase 15）：assets/textures/items/<icon>.png
 }
@@ -300,49 +306,54 @@ Mob 章节。
 ## 新增一个状态效果（无需改核心代码，Phase 46）
 
 1. 图标：`assets/textures/effects.png` 是 16px/tile 的透明底条带
-   （当前 48×16 = 3 tile）。加新效果 = 条带加宽一格（`tools/
+   （当前 64×16 = 4 tile）。加新效果 = 条带加宽一格（`tools/
    generate_effect_icons.py` 同款：确定性噪声 + 简单图元）；init 对
    每个效果的 `icon` 交叉校验 < tile 数，纹理宽度保持 16 的整数倍
-2. `assets/data/effects/<id>.json`：
+2. `assets/data/effects/<id>.json`（**扁平 JSON**，无 properties 包裹）：
 
    ```json
    {
      "id": "slowness",
-     "properties": {
-       "melee_penalty": 0,
-       "negative": true,
-       "icon": 3
-     }
+     "melee_penalty": 0,
+     "negative": true,
+     "icon": 4
    }
    ```
 
    字段（严格解析 = 注册表纪律，未知键拒绝）：`tick_type`（`"damage"`
    / `"heal"`；**缺省 = 无 tick** 的纯修饰效果，如上面的 slowness 骨架
-   ——但注意 v1 核心只消费 `tick_*`/`min_health`/`melee_penalty` 语义，
-   纯修饰效果目前只影响 HUD/存档/牛奶清除）+ `tick_amount`（每次 tick
-   的 HP，(0,10]，有 tick 必填）+ `tick_interval`（秒，(0,100]，有 tick
-   必填）+ `min_health`（**仅 damage**：0 = 无地板可致死 / 1 = 保持
-   ≥1 HP 永不致死 = MC 中毒地板）+ `melee_penalty`（近战扣除攻击点，
-   [0,100]）+ `negative`（bool，缺省 false；牛奶只清负面）+ `icon`
-   （条带 tile 索引，必填）。**no-op 拒绝**：无 tick 且
-   `melee_penalty` = 0 = 报错。id 非空且唯一
-3. 来源（v1 三条）：
+   ——但注意 v1 核心只消费 `tick_*`/`min_health`/`melee_penalty`/
+   `absorb_hp` 语义，纯修饰效果目前只影响 HUD/存档/牛奶清除）+
+   `tick_amount`（每次 tick 的 HP，(0,10]，有 tick 必填）+
+   `tick_interval`（秒，(0,100]，有 tick 必填）+ `min_health`（**仅
+   damage**：0 = 无地板可致死 / 1 = 保持 ≥1 HP 永不致死 = MC 中毒地板）
+   + `melee_penalty`（近战扣除攻击点，[0,100]）+ `absorb_hp`（Phase
+   56：激活期间的**临时 max HP** 点数，整数 [1,64]——吸收层，见
+   `docs/MECHANICS.md`「状态效果」）+ `negative`（bool，缺省 false；
+   牛奶只清负面）+ `icon`（条带 tile 索引，必填）。**no-op 拒绝**：无
+   tick 且 `melee_penalty` = 0 且 `absorb_hp` = 0 = 报错。id 非空且唯一
+3. 来源（v1 四条）：
    - **mob 命中**：`assets/data/mobs/<id>.json` 加 `on_hit_effect`
      （见 Mob 章节）——近战命中施加
-   - **进食施加**（Phase 49）：物品加 `grants_effect`（见物品模板）——
-     完整吃下时施加（金苹果 → regeneration 10 s）
+   - **进食施加**（Phase 49/56）：物品加 `grants_effect`（单条）或
+     `grants_effects`（列表，按序施加；两字段互斥，见物品模板）——
+     完整吃下时施加（金苹果 → regeneration 10 s + absorption 5 s）
    - **存档注入**：`player.effects: [{"name": "<id>", "remaining": <秒>}]`
      （format 8；E2E 场景用）
+   - **吸收层读档**（Phase 56）：效果含 `absorb_hp` 时，存档 health 可
+     高于 base max（上限 = base + 层，读档时层先于 health 生效）
 4. 机制自动生效，无需改核心：真实 dt 倒计时 + 每跨 interval 结算一次
    （damage 走玩家受伤路径含 min_health 地板、heal 走 `Player::heal`
-   clamp 上限）、HUD 图标行（按施加顺序）、F3 `effects` 行、牛奶清
-   负面、死亡清空、存档 format 8 自动序列化/校验。语义细节见
+   clamp 有效上限【可填进吸收层】）、HUD 图标行（按施加顺序）+ 吸收
+   红心带（正常心带左侧）、F3 `effects` 行、牛奶清负面（吸收 = 正面，
+   保留）、死亡清空、存档 format 8 自动序列化/校验。语义细节见
    `docs/MECHANICS.md` 的「状态效果」。
 
-当前 3 种：`poison`（damage 1 / 2.5 s、min_health 1、负面——spider
+当前 4 种：`poison`（damage 1 / 2.5 s、min_health 1、负面——spider
 近战命中 15 s 毒源）、`weakness`（melee_penalty 4、负面——v1 无游戏内
 来源）、`regeneration`（heal 1 / 4.5 s、正面——金苹果吃时给 10 s，
-Phase 49）。
+Phase 49）、`absorption`（absorb_hp 4、正面——金苹果吃时给 5 s，
+Phase 56；HUD 红心带 = 心带左侧 2 颗红心）。
 
 ## 新增一个流体桶（无需改核心代码，Phase 47，Phase 51 双种类）
 
