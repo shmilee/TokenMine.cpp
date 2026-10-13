@@ -2,6 +2,7 @@
   "id": "wheat_7",
   "properties": {
     "hardness": 0.0,
+    "flamable": true,
     "solid": false,
     "opaque": false,
     "transparent": true,

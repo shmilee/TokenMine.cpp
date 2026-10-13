@@ -447,7 +447,8 @@ Phase 56；HUD 红心带 = 心带左侧 2 颗红心）。
        "grows_on": "farmland",          // 下方须为该土壤（Phase 50；缺省 = 无要求）
        "plant_on": ["farmland"],        // 放置时下方须为之一（Phase 53；缺省 = 不限）
        "growth_light": 9,               // 作物格最低光照 max(sky,block)（9 = MC 值）
-       "dry_slowdown": 2                // 无水时 roll 模数倍数（2 = MC 干耕地）
+       "dry_slowdown": 2,               // 无水时 roll 模数倍数（2 = MC 干耕地）
+       "flamable": true                 // 熔岩 6-邻接触即烧成 air（Phase 58）
      },
      "model": { "shape": "cross", "textures": { "cross": "wheat_1" } }
    }
@@ -469,6 +470,11 @@ Phase 56；HUD 红心带 = 心带左侧 2 颗红心）。
    拒绝；init 每条目必须指向存在的方块，grows_on 同款纪律）。
    `plant_on`（放置门）与 `grows_on`（生长门）**相互独立**：可以放在
    土壤 X 上却只在土壤 Y 上生长（本项目两者同值 = farmland）。
+   可燃字段（Phase 58，**可选**）：`flamable`（bool，非 bool 点名
+   拒绝）——该方块的任意格被**熔岩 6-邻**接触时，FluidSim 燃烧 pass
+   每帧把它烧成 air（**无掉落**；水不烧）。内容 = wheat_1..7 全
+   7 阶（MC 小麦会烧）；加可燃方块 = 一行 `"flamable": true`，
+   零代码。v1 不燃：木头/树叶/高草/羊毛/火把（见 KNOWN_ISSUES）。
 2. **生长引擎**（自动）：`Game::m_crops`（`map<BlockPos,BlockID>`，位置序）
    追踪所有带 `grows_to` 的格——`setBlock` 收口维护（放作物=入集，
    破坏/成熟=出集，炉子同款模式），**读档后 `rescanCrops()` 全量扫描

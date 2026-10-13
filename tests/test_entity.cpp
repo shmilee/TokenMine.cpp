@@ -915,3 +915,35 @@ TEST(SeparationTest, ParticipationFlags) {
     EXPECT_FALSE(arrow.collidesWithEntities()); // arrows pass through
     EXPECT_TRUE(arrow.pushableByEntities());
 }
+
+// -- fluid overlap (Phase 58: shared by the player's swim/lava burn and
+//     the mob fire system) ----------------------------------------------------
+
+TEST(EntityTest, OverlapsFluidStrictly) {
+    Fixture f;
+    ItemEntity e = f.makeItem({5.5f, 1.0f, 5.5f}); // AABB [5.375,5.625]x[1,1.25]
+    EXPECT_FALSE(e.overlapsFluid(FluidKind::Water));
+    EXPECT_FALSE(e.overlapsFluid(FluidKind::Lava));
+    // A fluid cell BELOW the item (the face rests exactly on the boundary).
+    f.world.setFluid(5, 0, 5, FluidKind::Water, kMaxFluidLevel);
+    EXPECT_FALSE(e.overlapsFluid(FluidKind::Water));
+    // A fluid cell at the item's own level: strict overlap.
+    f.world.setFluid(5, 1, 5, FluidKind::Water, kMaxFluidLevel);
+    EXPECT_TRUE(e.overlapsFluid(FluidKind::Water));
+    EXPECT_FALSE(e.overlapsFluid(FluidKind::Lava)); // kind-specific
+    // setFluid replaces the other kind: now lava, no water.
+    f.world.setFluid(5, 1, 5, FluidKind::Lava, kMaxFluidLevel);
+    EXPECT_TRUE(e.overlapsFluid(FluidKind::Lava));
+    EXPECT_FALSE(e.overlapsFluid(FluidKind::Water));
+}
+
+TEST(EntityTest, OverlapsFluidStrictOnCellFaces) {
+    Fixture f;
+    // x-max exactly on the x=6 boundary: cell x=6 is NOT overlapped (the
+    // strict convention), cell x=5 is.
+    ItemEntity e = f.makeItem({5.875f, 1.0f, 5.5f}); // AABB x [5.75, 6.0]
+    f.world.setFluid(6, 1, 5, FluidKind::Lava, kMaxFluidLevel);
+    EXPECT_FALSE(e.overlapsFluid(FluidKind::Lava));
+    f.world.setFluid(5, 1, 5, FluidKind::Lava, kMaxFluidLevel);
+    EXPECT_TRUE(e.overlapsFluid(FluidKind::Lava));
+}

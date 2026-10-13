@@ -525,50 +525,14 @@ void Player::integrate(float h) {
     }
 }
 
-namespace {
-
-// True when the player AABB strictly overlaps at least one cell holding a
-// fluid of `kind` (the same per-axis strict convention as the collision
-// code: min < c+1 && max > c).
-bool aabbOverlapsFluid(const World& world, const Vec3& mn, const Vec3& mx,
-                       FluidKind kind) {
-    const int x0 = static_cast<int>(std::floorf(mn.x));
-    const int x1 = static_cast<int>(std::floorf(mx.x));
-    const int y0 = static_cast<int>(std::floorf(mn.y));
-    const int y1 = static_cast<int>(std::floorf(mx.y));
-    const int z0 = static_cast<int>(std::floorf(mn.z));
-    const int z1 = static_cast<int>(std::floorf(mx.z));
-    for (int x = x0; x <= x1; ++x) {
-        for (int y = y0; y <= y1; ++y) {
-            for (int z = z0; z <= z1; ++z) {
-                if (!(mn.x < x + 1 && mx.x > x)) {
-                    continue;
-                }
-                if (!(mn.y < y + 1 && mx.y > y)) {
-                    continue;
-                }
-                if (!(mn.z < z + 1 && mx.z > z)) {
-                    continue;
-                }
-                if (world.getFluidOfKind(x, y, z, kind) > 0) {
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
-}
-
-} // namespace
-
 bool Player::isInWater() const {
-    return aabbOverlapsFluid(m_world, aabbMin(), aabbMax(), FluidKind::Water);
+    return overlapsFluid(FluidKind::Water);
 }
 
 bool Player::isInLava() const {
     // LAVA (Phase 54): the swim state with the lava pace + the burn timer
     // run while this is true (Minecraft's "slow + burn").
-    return aabbOverlapsFluid(m_world, aabbMin(), aabbMax(), FluidKind::Lava);
+    return overlapsFluid(FluidKind::Lava);
 }
 
 } // namespace mc

@@ -85,6 +85,14 @@ public:
     // (Phase 19) never moves a body into a position this rejects.
     bool hasRoomAt(Vec3 pos) const;
 
+    // Does the AABB strictly overlap at least one cell holding a fluid of
+    // `kind` (the same per-axis strict convention as the collision scan: a
+    // face resting exactly on a cell boundary is not an overlap)? The
+    // player uses this for the swim state + the lava burn (Phase 54/57);
+    // the mobs use it for the fire system (Phase 58: lava ignites, water
+    // extinguishes).
+    bool overlapsFluid(FluidKind kind) const;
+
     // Entity-vs-entity collision (Phase 19): does this entity participate
     // in the separation pass at all? Projectiles fly through every entity
     // (Minecraft arrows) and opt out.

@@ -85,6 +85,9 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "destroyable", "boolean",
                    [&](const Json& v) { out.destroyable = v.asBool(); });
     MC_TRY(r);
+    r = checkField(*p, "flamable", "boolean",
+                   [&](const Json& v) { out.flamable = v.asBool(); });
+    MC_TRY(r);
     r = checkField(*p, "fluid", "string",
                    [&](const Json& v) { out.fluidName = v.asString(); });
     MC_TRY(r);

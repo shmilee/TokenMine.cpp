@@ -38,6 +38,15 @@
 // water neighbor, so the two kinds are 6-neighborhood-disjoint and each
 // kind simulates exactly as if the other did not exist.
 //
+// Flamable burn (Phase 58, the fire system v2): after the reaction pass a
+// second snapshot pass burns every BLOCK cell 6-adjacent to a LAVA cell
+// whose data is `flamable` (the shipped data flags the wheat crop stages
+// — Minecraft's lava burns crops): the block becomes air, with NO drop
+// (a burned crop is gone, like Minecraft's char). The lava is not
+// consumed. Inert when no registered block is flamable. Deliberate v1
+// simplification: only DIRECT (6-) neighbors burn — Minecraft's fire
+// spreads cell by cell over time.
+//
 // The tick is O(loaded cells): the per-chunk scan reads raw arrays; the six
 // neighbor chunks are cached per chunk so cross-boundary cell reads cost no
 // map lookups.
@@ -54,10 +63,12 @@ namespace mc {
 class FluidSim {
 public:
     // Advance one tick over all loaded chunks: first the water-lava
-    // reaction pass, then the per-kind simulation (water, then lava).
+    // reaction pass, then the flamable burn pass (Phase 58), then the
+    // per-kind simulation (water, then lava).
     // Returns the cells whose state changed (world coordinates, sorted and
-    // de-duplicated; both reaction-converted blocks and fluid-level
-    // changes); empty when nothing moved (a settled world). Changed cells
+    // de-duplicated; reaction-converted blocks, burned-to-air blocks and
+    // fluid-level changes); empty when nothing moved (a settled world).
+    // Changed cells
     // are marked dirty through World::setBlock/World::setFluid, so their
     // chunks (and face-sharing neighbors) are re-meshed; the caller must
     // also re-light the touched region (fluid levels change the light

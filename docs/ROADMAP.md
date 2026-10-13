@@ -222,6 +222,50 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
    残留燃烧的 E2E 证据链：S2b/S5（点燃）+ S4（离熔岩后效果照常烧 =
    源无关）+ S3（只有水停它）+ 接线结构（离熔岩无任何清除路径，仅
    到期/水/死亡）——见 archive。
+  - [x] **Phase 58** — 火系统 v2：熔岩烧 Mob 与作物（用户"按你的建议继续
+    下两个phase" = 建议 1，代理定案最小完整版 = Mob 点燃 + 熔岩烧作物，
+    **全量消费** P54 遗留"熔岩不烧 Mob 与作物"条目）。**块属性
+    `flamable`**（可选 bool 缺省 false，非 bool 点名拒绝；内容 =
+    wheat_1..7 全 7 阶）+ **FluidSim 燃烧 pass**
+    `burnFlamableNeighbors`（扫所有 LAVA 格 6-邻 BLOCK 格，flamable →
+    快照收集排序后 setBlock(air)，**无掉落**；注册表无 flamable 块 =
+    fast-exit；并入 `FluidSim::tick` changed，在反应 pass 后）+
+    **Mob 燃烧 = 整数帧格**（关键修正：0.2 s tick 的 double 累加相位
+    实测 off-by-one，改 int 帧计数——tick k 精确落在第 12k 个燃烧步；
+    `armFire` 算 `llround(interval*60)`）：`MobEntity::armFire`
+    （interval/amount/duration 参数；无 fire 效果的资产集 = 全部 mob
+    结构不燃）+ `update()` 在 moveInSubsteps 后：inLava →
+    remaining=duration（**相位不清零** = 熔岩内持续燃烧）；inWater →
+    remaining=0 + 相位重置（先于 tick，水胜熔岩）；remaining−=dt 后
+    `>0` 才 ++frames+tick（到期帧不 tick，P46 语义）+
+    **`Entity::overlapsFluid(FluidKind)` 上移**自 player.cpp 文件本地
+    函数（Player::isInWater/isInLava 改调基类，行为不变）+
+    **init 交叉校验**：ignites_on_lava 效果的 tick_interval×60 必须是
+    整帧数（容差 **1e-4 帧**——Effect::tickInterval 是 float，
+    0.2f×60 = 12.00000018，1e-9 会拒掉自带 fire）+ **顺手修复**：
+    P56 `grants_effects` unknown-field 白名单一行漏列（仅 WARN 噪声，
+    解析正常）。**无 format 变更**（format 9）。1007/1007（+18：
+    entity 2 + mob 7 + block 4 + fluid 5）；`-Werror` 恒 0 警告。
+    **E2E 全绿**：S1 第 **32** 次结构性免疫【fresh 世界零熔岩（P54）、
+    零 flammable 块（wheat 只玩家种）、60f 内零 mob = 两条燃烧路径皆
+    惰性】/ S2 熔岩膜（3×3 **level-1** 熔岩膜铺地面 y46，fluid-only
+    场景：L1 = 终止膜零扩散、上方天然坑格首 tick 灌入坑内；mob 无需
+    下坠——**走过即燃**（AABB y [46,47.8] × 膜 [46,47) 重叠）：10 只
+    被动 mob【4 cow / 3 chicken / 3 sheep】烧死 = 18 个 item 实体【2
+    对堆叠】，膜光 15 挡 hostile 光门 → 玩家 20 HP 恒定；2400f ×2
+    savenorm【剥 {hunger, saturation, remaining, age}】字节一致 +
+    全断言）/ **S2ctl 水对照**（同形水膜：无光 → hostile 于暗处生成
+    杀死无输入玩家【health 0】，但零 mob 烧死【entities []】= 隔离
+    熔岩为唯一点燃源）/ S4 作物燃烧（P54 2×1 L8 池 + wheat_3 贴池
+    6-邻：帧 1 燃烧 pass 销毁小麦【无掉落】、池向该 air 格扩散 +1 L7
+    【终端：其余邻格 solid/rim】、rim 完好；240f ×2 **RAW** 字节）/
+    S6 init 失败 ×2（flamable "yes" 非 bool / fire tick_interval 0.33
+    = 19.8 帧）。**PITS +9**（float tick 相位漂移 → 整数帧格 / 1e-9
+    容差拒自带 fire / 熔岩光门挡 hostile 生成 / 自然游走不可信横穿
+    小目标 + 0.9 AABB 入不了 1 宽缝（不可坠口袋）/ 存档禁同格
+    block+fluid / L1 膜 = 稳定地面流体场景 / 物品 rest 位置确定性
+    （零初速 + 位置式分离）/ pgrep 前缀误匹配 minecraft_tests / 裸
+    截图无窗口稳定化 = 错尺寸假失败）。
   - [x] **Phase 55** — 多掉落内容扩展（用户"熔岩湖不着急，先记录下来，留到很久的
    未来。下一步先进行建议2的扩展。" = 建议 2，代理定案最小完整版：3 方块 MC 语义
    内容扩展、**零代码**，消费 P52 遗留"多掉落内容扩展"；worldgen 熔岩湖 = 用户
@@ -374,5 +418,6 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 55** — `archive/phase-55.md`
 - **Phase 56** — `archive/phase-56.md`
 - **Phase 57** — `archive/phase-57.md`
+- **Phase 58** — `archive/phase-58.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

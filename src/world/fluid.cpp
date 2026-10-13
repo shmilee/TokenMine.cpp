@@ -232,6 +232,81 @@ std::vector<BlockPos> reactLavaWithWater(World& world,
     return changed;
 }
 
+// -- Flamable burn pass (Phase 58) ------------------------------------------
+//
+// Snapshot scan: every BLOCK cell 6-adjacent to a LAVA cell whose data is
+// `flamable` burns to air (Minecraft: lava burns crops; the shipped data
+// flags the wheat crop stages only). The lava is not consumed and there is
+// NO drop (a burned crop is gone, like Minecraft's char). Inert when no
+// registered block is flamable. A cell adjacent to several lava cells is
+// collected once per lava neighbor — the sorted apply + the setBlock
+// "changed" return de-duplicate it.
+// Returns the destroyed cells (they are air now — re-light + re-mesh).
+std::vector<BlockPos> burnFlamableNeighbors(World& world,
+                                            const BlockRegistry& blocks) {
+    // Fast exit: no flamable block in the registry -> nothing to burn.
+    bool anyFlamable = false;
+    for (const BlockID id : blocks.allIds()) {
+        if (blocks.at(id).properties.flamable) {
+            anyFlamable = true;
+            break;
+        }
+    }
+    if (!anyFlamable) {
+        return {};
+    }
+
+    std::vector<BlockPos> destroyed;
+    const std::vector<ChunkPos> positions = world.chunkPositions();
+    for (const ChunkPos& cp : positions) {
+        const Chunk* c = world.findChunk(cp);
+        const std::uint8_t* fluid = c->fluidData();
+        const NeighborCache n = neighborCache(world, cp);
+        const CellReader reader(c, n.below, n.above, n.west, n.east,
+                                n.south, n.north);
+        const int ox = cp.x * kChunkSize;
+        const int oy = cp.y * kChunkSize;
+        const int oz = cp.z * kChunkSize;
+        for (int ly = 0; ly < kChunkSize; ++ly) {
+            for (int lz = 0; lz < kChunkSize; ++lz) {
+                for (int lx = 0; lx < kChunkSize; ++lx) {
+                    const std::uint8_t code =
+                        fluid[Chunk::index(lx, ly, lz)];
+                    if (fluidKindOf(code) != FluidKind::Lava ||
+                        fluidLevelOf(code) == 0) {
+                        continue;
+                    }
+                    // Any 6-neighbor flamable BLOCK cell (snapshot reads).
+                    for (const BlockPos& d : kSixNeighbors) {
+                        const auto [tb, twater, tlava] =
+                            reader.cellAt(lx + d.x, ly + d.y, lz + d.z);
+                        (void)twater;
+                        (void)tlava;
+                        if (tb == BlockID::air() ||
+                            !blocks.at(tb).properties.flamable) {
+                            continue;
+                        }
+                        destroyed.push_back(
+                            {ox + lx + d.x, oy + ly + d.y, oz + lz + d.z});
+                    }
+                }
+            }
+        }
+    }
+
+    // Apply (sorted for a deterministic order; a cell collected twice
+    // burns once — the second setBlock(air) reports no change).
+    std::sort(destroyed.begin(), destroyed.end(),
+              [](const BlockPos& a, const BlockPos& b) { return a < b; });
+    std::vector<BlockPos> changed;
+    for (const BlockPos& p : destroyed) {
+        if (world.setBlock(p.x, p.y, p.z, BlockID::air())) {
+            changed.push_back(p);
+        }
+    }
+    return changed;
+}
+
 // -- Per-kind simulation -------------------------------------------------------
 //
 // One KIND of fluid over all loaded chunks (the other kind is invisible to
@@ -436,6 +511,13 @@ std::vector<BlockPos> FluidSim::tick(World& world,
     // Reaction first: it separates the kinds (a converted cell becomes a
     // block), so the per-kind scans that follow see 6-disjoint fluids.
     std::vector<BlockPos> changed = reactLavaWithWater(world, blocks);
+    // Then the flamable burn (Phase 58): it destroys neighbor BLOCKS
+    // without touching the fluids, so its position relative to the
+    // per-kind scans is behavior-neutral — the reaction goes first so the
+    // converted cells (blocks now) are visible to it.
+    for (const BlockPos& p : burnFlamableNeighbors(world, blocks)) {
+        changed.push_back(p);
+    }
     for (const FluidKind kind : {FluidKind::Water, FluidKind::Lava}) {
         for (const BlockPos& p : simulateType(world, kind)) {
             changed.push_back(p);

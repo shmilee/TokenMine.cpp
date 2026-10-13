@@ -1655,3 +1655,215 @@ TEST(MobItemsTest, RejectsNonPositiveAttackDamage) {
     })"));
     EXPECT_FALSE(r.ok());
 }
+
+// -- fire system v2 (Phase 58): the lava ignites mobs -----------------------
+
+// The tanky test def (Phase 58): HP 100 so the burn tests can observe past
+// the 8-second lingering window (the zombie's 20 HP would run out in 4 s).
+const char* kTankDef = R"({
+  "id": "tank",
+  "properties": {
+    "health": 100,
+    "speed": 0.8,
+    "detect_radius": 16,
+    "attack_range": 1.6,
+    "attack_damage": 3,
+    "attack_cooldown": 1.0,
+    "wander_interval": 2.5
+  },
+  "model": {
+    "width": 0.6,
+    "height": 1.8,
+    "boxes": [
+      {"pos": [0.0, 1.25, 0.0], "size": [0.5, 0.5, 0.5], "texture": "a"},
+      {"pos": [0.0, 0.5, 0.0], "size": [0.5, 1.0, 0.3], "texture": "b"}
+    ]
+  }
+})";
+
+MobRegistry makeTankRegistry() {
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(kTankDef));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    return mobs;
+}
+
+// The fixture floor (x,z in [-16,16)) covered in 2-deep fluid (y=1..2):
+// big enough that a wandering mob (<= ~0.4 b/s) cannot leave it within a
+// test window, so the fluid state is independent of the wander path.
+void fillFloor(Fixture& f, FluidKind kind) {
+    for (int x = -16; x < 16; ++x) {
+        for (int z = -16; z < 16; ++z) {
+            f.world.setFluid(x, 1, z, kind, kMaxFluidLevel);
+            f.world.setFluid(x, 2, z, kind, kMaxFluidLevel);
+        }
+    }
+}
+
+void clearFloor(Fixture& f, FluidKind kind) {
+    for (int x = -16; x < 16; ++x) {
+        for (int z = -16; z < 16; ++z) {
+            f.world.setFluid(x, 1, z, kind, 0);
+            f.world.setFluid(x, 2, z, kind, 0);
+        }
+    }
+}
+
+// The shipped fire effect's parameters (fire.json: 1 HP / 0.2 s) + the
+// config default duration (player.fire_duration_seconds = 8 s).
+void armShippedFire(MobEntity& mob) {
+    mob.armFire(0.2, 1.0f, 8.0);
+}
+
+TEST(MobFireTest, BurnsInLavaAtTheFireRate) {
+    Fixture f;
+    fillFloor(f, FluidKind::Lava);
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false); // pure wander
+    armShippedFire(mob);
+    EXPECT_FALSE(mob.burning());
+    for (int i = 0; i < 120; ++i) { // 2 s = exactly 10 ticks (12 frames each)
+        mob.update(kDt);
+    }
+    EXPECT_TRUE(mob.burning());
+    EXPECT_FALSE(mob.dead());
+    EXPECT_FLOAT_EQ(mob.health(), 10.0f); // 20 - 10
+}
+
+TEST(MobFireTest, BurnKillsTheMob) {
+    Fixture f;
+    fillFloor(f, FluidKind::Lava);
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    armShippedFire(mob);
+    for (int i = 0; i < 239; ++i) {
+        mob.update(kDt);
+    }
+    EXPECT_FALSE(mob.dead());
+    EXPECT_FLOAT_EQ(mob.health(), 1.0f); // 19 ticks landed
+    mob.update(kDt); // frame 240 = t 4.0 s = the 20th tick
+    EXPECT_TRUE(mob.dead());
+}
+
+TEST(MobFireTest, BurnLingersAfterLeavingLava) {
+    Fixture f;
+    fillFloor(f, FluidKind::Lava);
+    MobRegistry mobs = makeTankRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    armShippedFire(mob);
+    for (int i = 0; i < 60; ++i) { // 1 s in the lava: 5 ticks
+        mob.update(kDt);
+    }
+    EXPECT_FLOAT_EQ(mob.health(), 95.0f);
+    EXPECT_TRUE(mob.burning());
+    clearFloor(f, FluidKind::Lava); // dry land: the ~8 s left count down
+    for (int i = 0; i < 420; ++i) {
+        mob.update(kDt);
+    }
+    // 40 ticks landed (burn frames 12..480). The lingering burn is STILL
+    // running: its countdown started from 8 s minus one frame at the lava
+    // exit (the re-ignitation reset loses the step's dt), so it expires
+    // one frame AFTER t = 8 s of pure countdown (dry frame 480).
+    EXPECT_TRUE(mob.burning());
+    EXPECT_FLOAT_EQ(mob.health(), 60.0f); // 100 - 40
+    for (int i = 0; i < 60; ++i) { // through the expiry (dry frame 480)
+        mob.update(kDt);
+    }
+    EXPECT_FALSE(mob.burning()); // expired (the expiry step does not tick)
+    EXPECT_FLOAT_EQ(mob.health(), 56.0f); // 100 - 44 (tick 45 is due on
+                                          // the expiry frame itself)
+    for (int i = 0; i < 120; ++i) { // no further damage after the expiry
+        mob.update(kDt);
+    }
+    EXPECT_FLOAT_EQ(mob.health(), 56.0f);
+    EXPECT_FALSE(mob.dead());
+}
+
+TEST(MobFireTest, ExtinguishedInWater) {
+    Fixture f;
+    fillFloor(f, FluidKind::Lava);
+    MobRegistry mobs = makeTankRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    armShippedFire(mob);
+    for (int i = 0; i < 60; ++i) {
+        mob.update(kDt);
+    }
+    EXPECT_FLOAT_EQ(mob.health(), 95.0f);
+    EXPECT_TRUE(mob.burning());
+    clearFloor(f, FluidKind::Lava);
+    fillFloor(f, FluidKind::Water); // the water extinguishes instantly
+    mob.update(kDt);
+    EXPECT_FALSE(mob.burning());
+    for (int i = 0; i < 600; ++i) { // 10 s: no burn damage in the water
+        mob.update(kDt);
+    }
+    EXPECT_FLOAT_EQ(mob.health(), 95.0f);
+    EXPECT_FALSE(mob.dead());
+}
+
+TEST(MobFireTest, StayingInLavaReignites) {
+    Fixture f;
+    fillFloor(f, FluidKind::Lava);
+    MobRegistry mobs = makeTankRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    armShippedFire(mob);
+    for (int i = 0; i < 540; ++i) { // 9 s: past the 8 s window
+        mob.update(kDt);
+    }
+    // A single 8 s application would have expired at frame 480 (40 ticks,
+    // HP 60). The re-ignition keeps the burn alive: 45 ticks -> HP 55.
+    EXPECT_TRUE(mob.burning());
+    EXPECT_FALSE(mob.dead());
+    EXPECT_FLOAT_EQ(mob.health(), 55.0f);
+}
+
+TEST(MobFireTest, UnarmedMobDoesNotBurn) {
+    Fixture f;
+    fillFloor(f, FluidKind::Lava);
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    for (int i = 0; i < 600; ++i) { // 10 s in the lava, no fire armed
+        mob.update(kDt);
+    }
+    EXPECT_FALSE(mob.burning());
+    EXPECT_FALSE(mob.dead());
+    EXPECT_FLOAT_EQ(mob.health(), 20.0f);
+}
+
+TEST(MobFireTest, WaterBeatsLava) {
+    Fixture f;
+    // Water below, lava above (the mob's 1.8-tall AABB spans both cells):
+    // the re-ignition and the extinguish both fire every step, and the
+    // extinguish runs last -> zero burn (the P57 water-wins rule).
+    fillFloor(f, FluidKind::Water);
+    for (int x = -16; x < 16; ++x) {
+        for (int z = -16; z < 16; ++z) {
+            f.world.setFluid(x, 2, z, FluidKind::Lava, kMaxFluidLevel);
+        }
+    }
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    armShippedFire(mob);
+    for (int i = 0; i < 300; ++i) {
+        mob.update(kDt);
+    }
+    EXPECT_FALSE(mob.burning());
+    EXPECT_FALSE(mob.dead());
+    EXPECT_FLOAT_EQ(mob.health(), 20.0f);
+}

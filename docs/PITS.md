@@ -932,3 +932,69 @@
   设计熔岩池轨迹时"按住 W 上浮"是错的——P54 S3 的贴墙终态 = W 沿池底
   水平漂移顶墙（不是上浮）；要离池必须 Space 上浮到脚 y46（出流体，
   严格不等式）再走。
+- **float tick 相位漂移 → 整数帧格（P58）**：Mob 燃烧首版用 double 累加
+  0.2 s tick（P46 玩家效果同款）：float 0.2f 累加 + 1/60 double 步进
+  实测**相位 off-by-one**（tick 帧跨边界漂移，致死帧/到期帧算不准，
+  单测里暴露）。修正 = **int 帧计数**：`armFire` 算
+  `m_fireIntervalFrames = llround(interval*60)`，tick k **精确**落在第
+  12k 个燃烧步；remaining 仍用 double（到期判定），但 tick 只由帧计数
+  推进。教训：凡是"tick 时刻必须是整帧的整数倍"的机制（init 交叉校验
+  也依赖它），帧计数用 int、时长用 double 分开存，别用一个 double
+  累加器同时扛两职。
+- **1e-9 容差拒自带 fire（P58）**：init 整帧校验首版容差 1e-9：
+  Effect::tickInterval 是 **float**，0.2f×60 = 12.00000018… → 自带的
+  fire.json（0.2 s）也被拒，游戏启动失败。教训：float 字段换算成帧的
+  容差按 float 误差量级取（1e-4 帧），不按"严格"取；容差职责 =
+  吸收 float 误差 + 拒绝真离格值（0.33 s = 19.8 帧，偏 0.2 帧，1e-4
+  照样拒）。
+- **熔岩光门挡 hostile 生成（P58）**：熔岩方块光 15 **level 无关**
+  （fluidEmission 取参考块的 light_emission，L1 薄膜也 15）+ hostile
+  `spawn_max_light` 0 → 任何熔岩格 ~15 块内 hostile 永不生成（ring
+  4-6 全被光门挡）。后果：无输入运行 hostile 永远进不了熔岩（池边连
+  生成都不能，且不寻路）——E2E 的 mob 点燃场景只能靠**被动 mob 游荡
+  入**；反向地，同一光门也保护了场景里的玩家（ring 内 hostile 不能
+  生成 = 零攻击）。S2ctl 水膜对照（水光 0）= hostile 生成杀玩家 +
+  零点燃，正好隔离出熔岩。
+- **自然游走不可信横穿小目标 + 0.9 AABB 入不了 1 宽缝（P58）**：E2E
+  首版 = 2×1 熔岩池等被动 mob 游荡掉入：3600f 零横穿（随机游走 +
+  cap 4：rim 出生的 mob 游走后不再回来，cap 满后 rim 空了）；扩到
+  5 格池仍零横穿（cow/chicken 就站在池边 rim 上 40 s 也不下水——游走
+  朝向均匀随机，不保证朝向池）。即便真踏出边缘：0.9 宽 AABB 跨
+  "solid + 熔岩"两格时**总有 solid 一半支撑** → 永不坠落；被 solid
+  夹住的 1 格宽口袋（如 (21,−5)：北 (21,−6) solid、南 (21,−4)
+  solid）结构上**不可坠**。终解 = **地面 level-1 膜**：无需下坠，
+  走过即燃（AABB y [46,47.8] × 膜 [46,47) 重叠），目标 3×3、mob
+  生成在膜边 → 2400f 内 10 只烧死。教训：E2E 要"mob 进入危险区"
+  必须设计成**几何必然**（地面膜/独木桥），不能赌随机游走。
+- **存档禁同格 block+fluid 编辑（P58）**：`Game::loadSave` 校验：
+  同一格既有 block edit 又有 fluid edit = 启动失败（"a block
+  displaces fluid"，语义不可表示）→ "挖洞 + 注水/熔岩"无法在单个
+  存档表达；两跑存档也不行（第二份存档仍含同格双编辑，parse 即拒）。
+  场景替代：用**天然腔体**（seed-9 y45 腔体：4 格 top 44）或
+  **地面膜**（y46 air 格，纯 fluid 编辑，零 block 编辑）。
+- **level-1 膜 = 稳定地面流体场景（P58）**：支撑在块上的流体格 L>1
+  才扩散（**L1 = 终止膜，零扩散**）→ 3×3 L1 膜铺地面从第一 tick 起
+  惰性，无需 rim（对比 L8 池必须石 rim 封邻格防扩散）。副作用：膜格
+  **下方是坑**（air）时首 tick 灌入坑内（传送带下落语义）→ 最终流体
+  状态 = 膜残留 + 坑内 L1，断言必须写**终态**（P58 E2E S2 首版按
+  场景态写：以为 3 个坑，实际 4 个——(23,−4) 也是天然坑 top 44）。
+- **物品 rest 位置确定性（零初速 + 位置式分离）（P58）**：掉落物品
+  以**零初速**在 mob 死亡位生成（破坏块同款约定）→ x/z 永不因物理
+  变化（只有 y 下落，落地 snap 整数地面）；分离 pass 是**位置投影**
+  （setPosition，不注入速度），单帧内解析完 → 物品终位 = 死亡位 +
+  有限次位置推移 = 固定步轨迹的纯函数 = ×2 字节稳。真实 dt 字段只
+  有 age / pickup_delay（长跑恒 0）/ 玩家 hunger / saturation →
+  savenorm 剥 {hunger, saturation, remaining, age}，**物品位置保留**
+  （它正是断言）。反例：若物品带初速滑动，rest 位置 = real-dt 积分，
+  字节比对必须连位置一起剥（P52 破坏掉落无初速 = 同性质）。
+- **pgrep 前缀误匹配 minecraft_tests（P58）**：E2E 守卫
+  `pgrep -f "[b]uild/bin/minecraft"` 会**前缀误匹配**
+  `build/bin/minecraft_tests` → 探针脚本先跑测试（或用户并行跑
+  测试）时守卫 FATAL "a minecraft process is already running"。
+  守卫模式加 `$` 锚（`[b]uild/bin/minecraft$`）或核对 comm；探针
+  脚本别在同一脚本里跑测试再跑游戏。
+- **裸截图无窗口稳定化 = 错尺寸假失败（P58）**：不经过 launch() 窗口
+  稳定化（unmap_covers + move/raise/focus + 1280×720 校验）直接
+  `--screenshot`：截到的是 WM 初始平铺窗口（实测 1272×1552）→ 与
+  base18（1280×720）cmp 假失败。游戏截图 = 窗口 framebuffer 尺寸，
+  一切截图 E2E 必须先稳定化并校验 `([0-9]+x[0-9]+) == 1280x720`。

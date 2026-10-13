@@ -97,6 +97,25 @@ public:
     // Knockback impulse; suppresses AI steering for kKnockbackTime.
     void addKnockback(Vec3 impulse);
 
+    // Fire system (Phase 58, v2: the fire reaches mobs — Minecraft's lava
+    // ignites every entity). The game arms the mob at spawn from the SAME
+    // fire definition + config duration as the player (the ignites_on_lava
+    // effect + player.fire_duration_seconds); an unarmed mob — an asset
+    // set without the fire effect — never burns (structural, the P57
+    // pattern). While in the lava the burn re-ignites (the duration resets
+    // every step = a continuous burn); after leaving, the remaining time
+    // counts down (the lingering burn). Water extinguishes instantly,
+    // BEFORE the tick (zero burn damage in water; water beats lava, the
+    // P57 rule). The burn ticks run on the fixed mob step (deterministic
+    // — hard rule 8: mobs tick at the fixed 1/60 frame step) with the
+    // Phase 46 effect semantics (the expiry step does not tick). Because
+    // the step is the exact 1/60 frame grid, the tick cadence is kept in
+    // INTEGER frame units (tick k lands on burning frame k * interval*60 —
+    // no float phase drift; the game init validates the ignites effect's
+    // interval is a whole number of frames so this is exact).
+    void armFire(double tickInterval, float tickAmount, double duration);
+    bool burning() const { return m_fireRemaining > 0.0; }
+
     // Per-frame player state; the game sets it right before update()
     // (bottom-center position + whether the player can be attacked).
     void setPlayer(Vec3 pos, bool alive) {
@@ -148,6 +167,19 @@ private:
     std::uint64_t m_rng = 0;        // splitmix64 state (per-mob)
     std::function<void(float)> m_hitPlayer;
     std::function<void()> m_shootPlayer;  // ranged fire (Phase 27)
+
+    // Fire system (Phase 58) state: armed by the game at spawn (the fire
+    // effect's tick parameters + the config duration). `remaining` counts
+    // down the lingering burn; the tick phase is on the integer frame grid
+    // (`frames` = burning steps so far, `due` = the next tick's frame,
+    // `intervalFrames` = frames per tick — exact, init-validated).
+    bool m_fireArmed = false;
+    float m_fireAmount = 0.0f;
+    double m_fireDuration = 0.0;
+    double m_fireRemaining = 0.0;
+    int m_fireIntervalFrames = 0;
+    int m_fireFrames = 0;
+    int m_fireDueFrames = 0;
 
     // Shared fall (same numbers as dropped items / player).
     static constexpr float kGravity = 32.0f;

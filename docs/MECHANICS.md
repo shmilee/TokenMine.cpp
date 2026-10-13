@@ -348,14 +348,19 @@
     6-邻域任有水 → 该熔岩格 `setBlock` 为熔岩块 `water_reaction` 的
     产物——邻水含 level 8 源 → `source`（黑曜石），否则 `flowing`
     （石头）；水不消耗、无蒸汽 = v1 文档化偏离；无 `water_reaction`
-    的惰性熔岩不反应）→ ②水模拟 → ③熔岩模拟（各自快照规则与 P9
-    水模拟完全相同，按种过滤；**异种流体格按"方块"处理** = 支撑 +
-    挡扩散，防惰性配置下跨种替换振荡）。稳态不变量：无 6-邻接的
-    水-熔岩对（反应必收敛出石头/黑曜石墙）
+    的惰性熔岩不反应）→ ②**燃烧 pass**（Phase 58：快照扫所有熔岩格
+    6-邻 **BLOCK** 格，`flamable: true`（可选 bool 属性，wheat_1..7）
+    → 收集排序后 `setBlock(air)`，**无掉落**；注册表无 flamable 块 =
+    fast-exit）→ ③水模拟 → ④熔岩模拟（各自快照规则与 P9 水模拟完全
+    相同，按种过滤；**异种流体格按"方块"处理** = 支撑 + 挡扩散，防
+    惰性配置下跨种替换振荡）。稳态不变量：无 6-邻接的水-熔岩对
+    （反应必收敛出石头/黑曜石墙）、熔岩 6-邻无 flamable 块（烧 pass
+    收敛）
   - **光照**：流体格光 = 该种类参考块的 `light_emission`（熔岩 15 =
     发光池）；衰减（每格 −3）两种相同
-  - **玩家**：`isInWater` 仅水（熔岩无游泳/燃烧 = v1）；mob 在任一流
-    体中不生成（不变）
+  - **玩家**：`isInWater` 仅水；熔岩 = 同款游泳状态 + 灼烧（Phase 54）
+    + 点燃火效果（Phase 57，见"火系统"）；**mob** 燃烧 = Phase 58
+    （见"火系统 v2"）；mob 在任一流体中不生成（不变）
   - **内容**：`lava`（fluid、发光 15、`water_reaction {obsidian,
     stone}`、不可破坏）/ `obsidian`（hardness 10、掉自身）/
     `lava_bucket`（倒 → `bucket`）/ `bucket`（`["water","lava"]`）
@@ -425,6 +430,29 @@
     直接灼烧（4 HP/s）与火 tick（5 HP/s）**叠加**（MC 同款：熔岩内
     ~9 HP/s）。死亡/重生照旧清空（fire 不残留于重生）；存档照旧
     （`player.effects` 含 fire，读档续烧）
+  - **火系统 v2（Phase 58，熔岩烧 Mob 与作物）**：
+    ① **Mob 点燃**：`Game::attemptMobSpawn` 在 `make_unique` 后对每只
+    mob `MobEntity::armFire(interval, amount, duration)`（参数 = 点火
+    效果的 `tick_interval`/`tick_amount` + config
+    `fire_duration_seconds`——与玩家同源）；无 fire 效果的资产集 =
+    全部 mob 结构不燃。燃烧 = **整数帧格**（`m_fireFrames` int 计数，
+    `m_fireIntervalFrames = llround(interval×60)`）：`update()` 在
+    `moveInSubsteps` 后——`inLava`（`Entity::overlapsFluid(Lava)`，
+    AABB 重叠熔岩格）→ remaining 重置 = duration（**相位不清零** =
+    熔岩内持续燃烧）；`inWater` → remaining = 0 + 相位重置（**先于
+    tick 执行 = 水内零伤害、水胜熔岩**）；remaining −= dt 后 `> 0`
+    才 ++frames，每跨一个 interval 帧结算 1 次 damage tick（走
+    `MobEntity::damage` 正常路径，**可致死**；**到期帧不 tick**，
+    P46 语义）。fire 0.2 s / 1 HP → 5 HP/s，cow 10 HP = 2 s 烧死；
+    熔岩内 remaining 每帧重置 = 离熔岩才 countdown 8 s（残留）。
+    **无火焰视觉**（纯 HP 通道，见 KNOWN_ISSUES）。
+    ② **作物/方块燃烧**：FluidSim 燃烧 pass（见上"熔岩 / 流体双
+    种类·模拟"②）——`flamable` 块被熔岩 6-邻接触即烧成 air（无
+    掉落；水不烧）。内容 = wheat_1..7。
+    ③ **init 交叉校验**：点火效果的 `tick_interval × 60` 必须是
+    **整帧数**（容差 1e-4 帧——float 0.2f×60 = 12.00000018 过；
+    0.33 s = 19.8 帧点名拒绝"not a whole number of 1/60 s frames"；
+    `flamable` 非 bool 点名拒绝）。
   - **死亡**：效果随玩家死亡清空（重生 = 干净状态，MC 一致）
   - **存档（format 8）**：`player.effects = [{name, remaining}]` 名字序
     （`remaining` = 真实 dt 秒数；**tick 相位不存**——重载后下一 tick

@@ -618,6 +618,10 @@ Result<void> Game::buildScene() {
     }
     // Phase 57: at most ONE effect may ignite the player from the lava
     // (the fire). Zero is legal (no fire system in a modded asset set).
+    // Phase 58: the MOB burn ticks on the fixed 1/60 frame grid (hard rule
+    // 8), so the ignites effect's tick interval must be a whole number of
+    // frames (the shipped fire: 0.2 s = 12 frames) — a non-grid interval
+    // would silently quantize the mob's burn rate.
     for (const int effId : m_effects.allIds()) {
         const Effect& eff = m_effects.at(effId);
         if (!eff.ignitesOnLava) {
@@ -627,6 +631,18 @@ Result<void> Game::buildScene() {
             return MC_FAIL("only one effect may have 'ignites_on_lava' "
                            "(found '" + m_effects.at(m_fireEffectId).name +
                            "' and '" + eff.name + "')");
+        }
+        // The tolerance is in FRAME units (1e-4 frames = 1.7 us per tick):
+        // the float interval 0.2f * 60 lands at 12.00000018, while any
+        // genuinely non-grid interval (0.33 s = 19.8 frames) misses by a
+        // large fraction of a frame.
+        const double frames = eff.tickInterval * 60.0;
+        if (frames < 1.0 ||
+            std::abs(frames - std::round(frames)) > 1e-4) {
+            return MC_FAIL("effect '" + eff.name +
+                           "' has 'ignites_on_lava' but its tick_interval "
+                           "is not a whole number of 1/60 s frames (the "
+                           "mob burn grid)");
         }
         m_fireEffectId = effId;
     }
@@ -3198,6 +3214,15 @@ void Game::attemptMobSpawn() {
         (std::uint64_t{0x9E3779B97F4A7C15} * m_spawnCounter);
     auto mob = std::make_unique<MobEntity>(m_world, m_blocks, def, spawn,
                                            seed);
+    // Phase 58: the fire system reaches the mobs (Minecraft's lava ignites
+    // every entity). Arm from the SAME fire definition + config duration
+    // as the player's ignition; an asset set without the fire effect
+    // leaves every mob inert (structural, the P57 pattern).
+    if (m_fireEffectId != -1) {
+        const Effect& fire = m_effects.at(m_fireEffectId);
+        mob->armFire(fire.tickInterval, fire.tickAmount,
+                     m_player->params().fireDurationSeconds);
+    }
     // The AI's landed attacks damage the player (Phase 16's damage path
     // owns the flash/sound/death — updateSurvival polls the health).
     // Hostile damage is scaled by the difficulty (Phase 25); passive mobs

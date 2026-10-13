@@ -366,11 +366,36 @@
   熔岩内持续燃烧、tick 相位保留；离熔岩后 countdown `fire_duration_seconds`
   8 s 继续烧至到期），水内**瞬时熄灭**（`extinguished_by_water`；水胜
   熔岩：两流体并存时无火），牛奶不灭火（`negative: false`，MC 语义）。
-  表现层简化见"燃烧无独立音效/火焰 tint"条。熔岩不烧 Mob 与作物，见下
-  条。`[Phase 54]`（`[Phase 57]` 已解决）
-- **熔岩不烧 Mob 与作物** — 火系统（Phase 57）只作用于玩家：Mob 无灼伤
-  （效果只作用于玩家，见状态效果节 Phase 46 条）、作物不会被熔岩烧掉
-  （MC 会烧）。`[Phase 54]`
+  表现层简化见"燃烧无独立音效/火焰 tint"条。`[Phase 54]`
+  （`[Phase 57]` 已解决）
+- ~~**熔岩不烧 Mob 与作物**~~ — `[Phase 58]` 已解决：**Mob 点燃**
+  （生成时 `MobEntity::armFire` 从 ignites_on_lava 效果 + config
+  `fire_duration_seconds` 取参武装；**整数帧燃烧格**：1 HP / 0.2 s、
+  熔岩内每帧重置 duration【相位保留】、离熔岩烧 8 s、水瞬时熄灭且胜
+  熔岩）+ **`flamable` 块属性**（wheat_1..7 全 7 阶）+ **FluidSim 燃烧
+  pass**（熔岩格 6-邻 flammable 块烧成 air，无掉落，快照确定性）。
+  Mob 无火焰视觉等 v1 限制见下三条新增条目。`[Phase 54]`
+  （`[Phase 58]` 已解决）
+- **Mob 燃烧无火焰视觉** — mob 的燃烧是纯 HP 通道：无火焰贴图/粒子、
+  无红闪、无音效、无 HP 条——视觉上完全不可见（玩家燃烧有红闪 +
+  "hurt" 音，Phase 57）。Minecraft 的 mob 身上有火焰粒子。
+  `[Phase 58]`
+- **hostile 光门与熔岩互斥** — hostile `spawn_max_light` 0 对熔岩方块
+  光 15（level 无关，L1 膜也是 15）：任何熔岩格 ~15 块内 hostile 永不
+  生成 → 无输入运行中 hostile 永远进不了熔岩（池边连生成都不行，且不
+  寻路）；mob 点燃在自然场景只可能来自**被动 mob 游荡入**（E2E S2 =
+  3×3 L1 熔岩膜 + 被动游荡；S2ctl 水膜对照 = 无光 → hostile 生成杀
+  玩家、零点燃，隔离熔岩）。MC 同款几何（hostile 也要黑暗生成），但
+  MC 玩家可引怪入熔岩——本项目无输入运行没有这一手。`[Phase 58]`
+- **v1 flammable = 小麦 7 阶** — `flamable` 内容只覆盖 wheat_1..7；
+  MC 会烧的木头/树叶/高草/羊毛/火把在本项目不燃（v1 范围 = 作物）。
+  数据通道已就位：加可燃方块 = 一行 `flamable: true`，零代码。
+  `[Phase 58]`
+- **ignites 效果的 tick_interval 必须整帧** — init 交叉校验：
+  ignites_on_lava 效果的 `tick_interval × 60` 必须是整帧数（容差
+  1e-4 帧；float 0.2f×60 = 12.00000018 过、0.33 s = 19.8 帧点名
+  拒绝）。mob 整数帧燃烧格依赖此性质；将来需要非整帧 interval 的
+  点燃效果时须重新设计格。`[Phase 58]`
 - **水+熔岩反应 = v1 最小规则** — 反应表数据驱动在熔岩块上
   （`water_reaction {source, flowing}` 严格配对）：熔岩格 6-邻域任有
   水 → 该熔岩格变方块（邻水含 level 8 源 → 黑曜石，否则石头）。
@@ -384,7 +409,8 @@
   边界收敛为石头/黑曜石墙。`[Phase 51]`
 - ~~**湿润判定把熔岩也算"水"**~~ — `[Phase 54]` 已修复：`cropIsWet` 改
   `getFluidOfKind(..., Water)`——只算**水**（熔岩旁的耕地 = 干节奏；
-  MC 熔岩不湿润，且会烧掉作物——烧是遗留，见上"脱离熔岩无残留燃烧"条）。
+  MC 熔岩不湿润，且会烧掉作物——烧 `[Phase 58]` 已解决，见"熔岩 /
+  流体双种类"节）。
   `[Phase 51]`（`[Phase 54]` 已解决）
 - **黑曜石只能靠反应获得** — 无自然生成（worldgen 无熔岩 → 无反应
   场所）、无合成配方（MC 获取方式 = 水浇熔岩，本项目同款反应）。

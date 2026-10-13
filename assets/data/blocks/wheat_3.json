@@ -5,6 +5,7 @@
     "solid": false,
     "opaque": false,
     "transparent": true,
+    "flamable": true,
     "drops": "wheat_1",
     "grows_to": "wheat_4",
     "growth_ticks": 360,

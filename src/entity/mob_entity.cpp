@@ -55,6 +55,46 @@ void MobEntity::update(double dt) {
         std::max({std::abs(m_velocity.x), std::abs(vyAfter),
                   std::abs(m_velocity.z)});
     moveInSubsteps(dt, maxSpeed);
+
+    // Fire system (Phase 58): the lava ignites the mob with the player's
+    // fire (same effect definition + config duration — the game arms it at
+    // spawn; an unarmed mob never burns). The fluid checks use the FINAL
+    // position of this step (the AI + physics ran above). While in the
+    // lava the burn re-ignites (the duration resets = continuous burn);
+    // water extinguishes instantly BEFORE the tick (zero burn damage in
+    // water; water beats lava, the P57 rule). The countdown + tick run
+    // after leaving (the lingering burn), with the Phase 46 effect
+    // semantics (the expiry step does not tick).
+    if (m_fireArmed) {
+        const bool inLava = overlapsFluid(FluidKind::Lava);
+        const bool inWater = overlapsFluid(FluidKind::Water);
+        if (inLava) {
+            m_fireRemaining = m_fireDuration;
+        }
+        if (inWater) {
+            m_fireRemaining = 0.0;
+            m_fireFrames = 0;
+            m_fireDueFrames = m_fireIntervalFrames;
+        }
+        if (m_fireRemaining > 0.0) {
+            m_fireRemaining -= dt;
+            if (m_fireRemaining > 0.0) {
+                // Tick on the integer frame grid: tick k lands on burning
+                // frame k * intervalFrames (exact — no float phase drift).
+                ++m_fireFrames;
+                while (m_fireFrames >= m_fireDueFrames) {
+                    m_fireDueFrames += m_fireIntervalFrames;
+                    if (damage(m_fireAmount)) {
+                        break;
+                    }
+                }
+            } else {
+                // Expired: clean the tick phase for the next ignition.
+                m_fireFrames = 0;
+                m_fireDueFrames = m_fireIntervalFrames;
+            }
+        }
+    }
 }
 
 void MobEntity::integrate(float h) {
@@ -188,6 +228,20 @@ bool MobEntity::damage(float amount) {
 void MobEntity::addKnockback(Vec3 impulse) {
     m_velocity += impulse;
     m_knockbackTime = kKnockbackTime;
+}
+
+void MobEntity::armFire(double tickInterval, float tickAmount,
+                        double duration) {
+    m_fireArmed = true;
+    m_fireAmount = tickAmount;
+    m_fireDuration = duration;
+    // The mob steps on the fixed 1/60 frame grid (hard rule 8), so the
+    // cadence is exact in integer frame units: interval * 60 (the game
+    // init validates the ignites effect's interval is a whole number of
+    // frames — for the shipped fire, 0.2 s = 12 frames — so the rounding
+    // is exact and tick k lands on burning frame k * intervalFrames).
+    m_fireIntervalFrames = static_cast<int>(std::llround(tickInterval * 60.0));
+    m_fireDueFrames = m_fireIntervalFrames;
 }
 
 } // namespace mc

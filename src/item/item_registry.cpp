@@ -474,6 +474,7 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
             key != "collects_fluid" &&
             key != "pours_fluid" && key != "pours_becomes" &&
             key != "grants_effect" &&
+            key != "grants_effects" &&
             key != "icon") {
             MC_LOG_WARN("Item '" + name + "': unknown field '" + key +
                         "' ignored");

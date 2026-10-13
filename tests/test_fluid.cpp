@@ -618,3 +618,93 @@ TEST(FluidTest, ReactionIsDeterministicAcrossRuns) {
     EXPECT_EQ(a.getFluidOfKind(8, 1, 11, FluidKind::Water),
               kMaxFluidLevel);
 }
+
+// -- flamable burn pass (Phase 58, the fire system v2) ----------------------
+
+// A registry with a non-flamable stone and a flamable wheat (the burn
+// pass's only registry dependency; no lava fluid block -> the water-lava
+// reaction pass stays inert, the burn pass works off the raw lava bytes).
+BlockRegistry buildBurnRegistry() {
+    BlockRegistry reg;
+    (void)reg.registerBlock(parseDef(blockDef("stone")));
+    (void)reg.registerBlock(parseDef(blockDef(
+        "wheat",
+        R"("solid":false,"opaque":false,"transparent":true,"flamable":true)")));
+    return reg;
+}
+
+TEST(FluidBurnTest, LavaBurnsFlamableNeighbor) {
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    floor(world, 0, 15, 0, 15, 0);
+    BlockRegistry blocks = buildBurnRegistry();
+    const BlockID wheat = blocks.idForName("wheat");
+    world.setBlock(8, 1, 8, wheat);                  // the crop
+    world.setFluid(9, 1, 8, FluidKind::Lava, kMaxFluidLevel); // 6-adjacent
+    std::vector<BlockPos> changed = FluidSim::tick(world, blocks);
+    EXPECT_EQ(world.getBlock(8, 1, 8), BlockID::air()); // burned to air
+    EXPECT_NE(std::find(changed.begin(), changed.end(), BlockPos{8, 1, 8}),
+              changed.end());
+    // The lava is not consumed by the burn.
+    EXPECT_EQ(world.getFluidOfKind(9, 1, 8, FluidKind::Lava), kMaxFluidLevel);
+}
+
+TEST(FluidBurnTest, OnlyDirectNeighborsBurn) {
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    floor(world, 0, 15, 0, 15, 0);
+    BlockRegistry blocks = buildBurnRegistry();
+    const BlockID wheat = blocks.idForName("wheat");
+    world.setBlock(8, 1, 8, wheat);  // diagonal to the lava
+    world.setBlock(10, 1, 8, wheat); // two cells away (air in between)
+    world.setFluid(9, 1, 9, FluidKind::Lava, kMaxFluidLevel);
+    (void)FluidSim::tick(world, blocks);
+    EXPECT_EQ(world.getBlock(8, 1, 8), wheat);  // diagonal: safe
+    EXPECT_EQ(world.getBlock(10, 1, 8), wheat); // two away: safe (v1: no
+                                                // fire spread over time)
+}
+
+TEST(FluidBurnTest, NonFlamableNeighborSurvives) {
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    floor(world, 0, 15, 0, 15, 0);
+    BlockRegistry blocks = buildBurnRegistry();
+    const BlockID stone = blocks.idForName("stone");
+    world.setBlock(9, 1, 8, stone);
+    world.setFluid(8, 1, 8, FluidKind::Lava, kMaxFluidLevel);
+    (void)FluidSim::tick(world, blocks);
+    EXPECT_EQ(world.getBlock(9, 1, 8), stone);   // the neighbor block
+    EXPECT_EQ(world.getBlock(8, 0, 8), stone);   // the floor below
+}
+
+TEST(FluidBurnTest, InertWithoutFlamableBlock) {
+    // A registry with NO flamable block: the pass fast-exits, even though
+    // lava sits next to blocks (the raw-id floor of the registry-free
+    // tests is fine — the fast exit happens before any registry read).
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    floor(world, 0, 15, 0, 15, 0);
+    world.setBlock(9, 1, 8, kStone);
+    world.setFluid(8, 1, 8, FluidKind::Lava, kMaxFluidLevel);
+    (void)FluidSim::tick(world, emptyBlocks());
+    EXPECT_EQ(world.getBlock(9, 1, 8), kStone);
+}
+
+TEST(FluidBurnTest, TwoLavaNeighborsBurnTheCellOnce) {
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    floor(world, 0, 15, 0, 15, 0);
+    BlockRegistry blocks = buildBurnRegistry();
+    world.setBlock(8, 1, 8, blocks.idForName("wheat"));
+    world.setFluid(7, 1, 8, FluidKind::Lava, kMaxFluidLevel);
+    world.setFluid(9, 1, 8, FluidKind::Lava, kMaxFluidLevel);
+    std::vector<BlockPos> changed = FluidSim::tick(world, blocks);
+    EXPECT_EQ(world.getBlock(8, 1, 8), BlockID::air());
+    int hits = 0;
+    for (const BlockPos& p : changed) {
+        if (p == BlockPos{8, 1, 8}) {
+            ++hits;
+        }
+    }
+    EXPECT_EQ(hits, 1); // collected twice, burned once
+}

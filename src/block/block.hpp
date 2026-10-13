@@ -80,6 +80,13 @@ struct BlockProperties {
     bool opaque = true;          // fully occludes adjacent faces + blocks light
     bool transparent = false;    // rendered in the blending pass
     bool destroyable = true;     // can be broken by the player
+    // Burns to air when 6-adjacent to a LAVA cell (Phase 58, the fire
+    // system v2 — Minecraft's lava burns crops). The fluid sim's burn pass
+    // (world/fluid) checks this every tick; the shipped data flags the
+    // wheat crop stages only (wood/leaves/wool do not burn in v1 — see
+    // KNOWN_ISSUES). No drop on burn (a burned crop is gone, like
+    // Minecraft's char).
+    bool flamable = false;
     // Simulated as a fluid (Phase 9; KINDED in Phase 51): the fluid's name
     // (vocabulary: "water", "lava" — validated at data load). Empty = not
     // a fluid. A fluid block is stored as a fluid level in the chunk's

@@ -1206,3 +1206,55 @@ TEST(BlockRegistryTest, Phase55GlowstoneDropContent) {
         EXPECT_DOUBLE_EQ(e.chance, 0.5);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Flamable burn (Phase 58, the fire system v2): the block flag + the wheat
+// crop content pin.
+// ---------------------------------------------------------------------------
+
+TEST(BlockRegistryTest, FlamableDefaultsFalse) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(minimalDef("stone")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FALSE(reg.at(reg.idForName("stone")).properties.flamable);
+}
+
+TEST(BlockRegistryTest, FlamableParses) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(R"({"id":"wheat_3","properties":{"flamable":true,)"
+                 R"("solid":false,"opaque":false,"transparent":true},)"
+                 R"("model":{"shape":"cross","textures":{"cross":"w"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(reg.at(reg.idForName("wheat_3")).properties.flamable);
+}
+
+TEST(BlockRegistryTest, FlamableNonBoolRejected) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(R"({"id":"x","properties":{"flamable":"yes"},)"
+                 R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("must be a boolean"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, Phase58WheatCropFlamableContent) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    // The whole crop line (Minecraft: every wheat stage burns in lava) is
+    // flagged, and the flag is NOT sprinkled on the non-crop blocks
+    // (wood/leaves/wool do not burn in v1 — see KNOWN_ISSUES).
+    for (int i = 1; i <= 7; ++i) {
+        const Block* b = reg.findByName("wheat_" + std::to_string(i));
+        ASSERT_TRUE(b != nullptr) << "wheat_" << i;
+        EXPECT_TRUE(b->properties.flamable) << "wheat_" << i;
+    }
+    for (const char* name : {"stone", "wood", "leaves", "wool", "sand"}) {
+        const Block* b = reg.findByName(name);
+        ASSERT_TRUE(b != nullptr) << name;
+        EXPECT_FALSE(b->properties.flamable) << name;
+    }
+}
