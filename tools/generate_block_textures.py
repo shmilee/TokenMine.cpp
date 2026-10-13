@@ -458,6 +458,40 @@ def fire(x, y):
     return (clamp(base[0] + n), clamp(base[1] + n), clamp(base[2] + n), 255)
 
 
+def torch(x, y):
+    """Phase 65: the torch tile (the `torch` block, a cross model). A
+    brown stick (2-px column, rows 6..15) topped by a small flame (rows
+    1..5): a yellow core, an orange body and a deep-red rim. The flame's
+    centreline leans with a deterministic per-row hash (a stylised
+    flicker, static like every other texture). Transparent elsewhere."""
+    # Stick: a 2-px brown column; the base rows are slightly darker.
+    if 6 <= y <= 15 and 7 <= x <= 8:
+        n = noise(x, y, 910, 7)
+        base = (152, 106, 62) if y <= 13 else (130, 90, 52)
+        return (clamp(base[0] + n), clamp(base[1] + n),
+                clamp(base[2] + n), 255)
+    # Flame: a small teardrop above the stick (the stick top is row 6).
+    if 1 <= y <= 5:
+        t = min((5 - y) / 4.0, 1.0)  # 0 at the base row, 1 at the tip
+        lean = (h2(0, y, 911) % 3 - 1) * 0.3 * t  # -0.3..+0.3 px at the tip
+        cx = 7.5 + lean
+        half = 2.4 * (1.0 - t) ** 0.8 + 0.5  # narrows toward the tip
+        dx = abs(x + 0.5 - cx)
+        if dx >= half:
+            return (0, 0, 0, 0)
+        d = dx / half
+        n = noise(x, y, 912, 10)
+        if d < 0.4:
+            base = (255, 224, 120)
+        elif d < 0.75:
+            base = (248, 150, 40)
+        else:
+            base = (210, 84, 24)
+        return (clamp(base[0] + n), clamp(base[1] + n),
+                clamp(base[2] + n), 255)
+    return (0, 0, 0, 0)  # transparent
+
+
 TEXTURES = {
     **{name: make_wool_tile(name) for name in WOOL_PALETTE},
     **{f"wheat_{s}": make_wheat(s, 70 + s) for s in range(1, 8)},
@@ -489,6 +523,7 @@ TEXTURES = {
     "cornflower": make_flower((126, 174, 245), 65),
     "glowstone": glowstone,
     "fire": fire,
+    "torch": torch,
     "planks": planks,
     "crafting_table_top": crafting_table_top,
     "crafting_table_side": crafting_table_side,

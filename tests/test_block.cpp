@@ -1381,3 +1381,31 @@ TEST(BlockRegistryTest, Phase64FireBlockContent) {
     EXPECT_EQ(b->model.shape, BlockModel::Shape::Cross);
     EXPECT_EQ(b->model.textures.cross, "fire");
 }
+
+// Torch (Phase 65, the torch content): a placeable light source — the
+// first crafting use of coal (the recipe, pinned in test_recipe). Pins
+// the ACTUAL asset file: the plant combination (non-solid, non-opaque,
+// transparent), full-minus-one light 14 (the Minecraft torch value),
+// instant break (hardness 0), drops ITSELF (the torch is reusable —
+// unlike fire, which leaves nothing) and NOT flamable (a torch is a
+// tool, not fuel for the burn pass).
+// ---------------------------------------------------------------------------
+
+TEST(BlockRegistryTest, Phase65TorchBlockContent) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* b = reg.findByName("torch");
+    ASSERT_TRUE(b != nullptr);
+    EXPECT_FALSE(b->properties.solid);
+    EXPECT_FALSE(b->properties.opaque);
+    EXPECT_TRUE(b->properties.transparent);
+    EXPECT_EQ(b->properties.lightEmission, 14);  // the Minecraft torch value
+    EXPECT_FLOAT_EQ(b->properties.hardness, 0.0f);  // instant break
+    EXPECT_EQ(b->properties.drops, "torch");  // the torch drops itself
+    EXPECT_FALSE(b->properties.flamable);  // a torch is not fuel
+    EXPECT_EQ(b->model.shape, BlockModel::Shape::Cross);
+    EXPECT_EQ(b->model.textures.cross, "torch");
+}

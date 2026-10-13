@@ -1,0 +1,8 @@
+{
+  "id": "torch",
+  "output": { "item": "torch", "count": 4 },
+  "ingredients": [
+    { "item": "coal", "count": 1 },
+    { "item": "stick", "count": 1 }
+  ]
+}

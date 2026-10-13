@@ -4023,8 +4023,15 @@ void Game::drawParticles(const Mat4& view, const Mat4& projection,
             continue;
         }
         for (const CubeFace& face : kCubeFaces) {
+            // Cross blocks (Phase 45) carry no cube faces: the particle
+            // cube uses the cross texture on every face (the same
+            // single-lookup the item-mesh and chunk-mesher cross branches
+            // use — cubeFaceTexture would return the empty top/side/bottom
+            // name and the atlas lookup would throw).
             const std::string& tex =
-                cubeFaceTexture(block, face.textureSlot);
+                block.model.shape == BlockModel::Shape::Cross
+                    ? block.model.textures.cross
+                    : cubeFaceTexture(block, face.textureSlot);
             const Vec2 u0 = AtlasLayout::uvMin(m_atlas.layout(), tex);
             const Vec2 u1 = AtlasLayout::uvMax(m_atlas.layout(), tex);
             const Vec2 faceUv[4] = {

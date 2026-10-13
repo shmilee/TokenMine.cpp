@@ -44,6 +44,7 @@
 - ~~**flint 无用途（v1 文档化偏离）**~~ — `[Phase 60]` 已解决：**箭头配方 = shapeless flint+stick+feather → 4 箭（MC 1.14+）**，**替换**了旧的 2 木棍竖排 → 2 箭配方（内容契约变更：早期箭现需 flint + feather = MC 同款闭环，gravel→flint、chicken→feather、树→stick）+ **flint_and_steel**（flint+iron_ingot 合成；`ignites_flamable` = 右键烧 `flamable` 块、无掉落、不消耗）。flint 的两个用途 = MC 的主用途。`[Phase 59]` → `[Phase 60]`
 - **燧石与钢 v1 范围（文档化偏离）** — 点燃器**只作用于块**（`flamable` 集 = wheat_1..7 + wood/leaves/grass，`[Phase 63]` 扩到 MC 天然可燃）：Mob 点燃仍只来自熔岩（`[Phase 58]`），玩家/Mob 不可被点燃；不引燃流体。**火视觉**（烧 = 生成 `fire` 块）`[Phase 64]` 已解决。`[Phase 60]` → `[Phase 63]` → `[Phase 64]`
 - **火 v1 范围（文档化偏离）** — `fire` 块（`[Phase 64]`）的边界：**无粒子**（燃烧/燃尽/浇灭都没有火焰粒子特效，表现 = 静态 cross 纹理 + 光 15）；**无蔓延**（火不会像 MC 一样引燃相邻可燃块——fire 非 flamable，燃烧 pass 只认熔岩邻接，点燃器只认单次右键目标）；fire 块**可放置**（block item 自动存在：放一个 = 临时营火，燃尽回 air、无掉落）；光的**强度恒定 15 无闪烁**（纹理静态、light 不随时间变）。`[Phase 64]`
+- **火把 v1 范围（文档化偏离）** — `torch` 块（`[Phase 65]`）的边界：**无点燃/蔓延**（火把是光源不是火源——不引燃相邻 flamable，火源语义仍归 `[Phase 64]` fire 块与点燃器/熔岩 pass）；**无支撑要求**（通用 placeBlock 规则：任意实心面可贴，含方块底面——MC 火把需要支撑，本项目无支撑语义）；光**恒定 14 无闪烁**（静态纹理）；hardness 0 **瞬破且掉自己**（与 fire 相反：fire 无掉落）；配方 shapeless coal+stick → 4（MC，coal 首个合成用途）。**无 campfire**（新交互语义超出内容 phase 最小范围，P62 无斧类工具同款偏离）。`[Phase 65]`
 - **stone→cobblestone 材料链（Phase 61 内容契约变更 + 熔炼偏离）** — 挖天然 stone 现掉 **cobblestone**（MC 材料循环）：stone 只能经 **4 cobblestone → 1 stone 合成**（MC 1.14+）回来。文档化偏离：**cobblestone 不能熔炼回 stone**——`smeltable_to` 是物品字段而 block item 无独立 JSON（隐式生成、无 item 数据），给 block item 加数据 = 核心改动，超出本 phase 最小范围；合成路线已覆盖转换。`[Phase 61]`
 - **无斧类工具（Phase 62 范围注记）** — 本项目的工具型只有镐（wooden/stone/iron pickaxe）+ 弓；"石头工具线" v1 = **石镐**（镐路线中档：break_speed 木 2 → 石 3 → 铁 4、攻击 2 → 2.5 → 3，项目压缩刻度恰居中）。MC 还有石斧/木斧/铁斧——引入斧 = 新工具型（用途语义：对树/肉的倍率），超出内容 phase 最小范围；石镐已消费 P61 的 cobblestone（首个工具用途）。`[Phase 62]`
 
@@ -66,7 +67,7 @@
 ## 合成（Phase 12）
 
 - **配方只有 shapeless** — 无 shaped（3×3 网格按位置）配方、无催化剂/"需要工作台"类别、无多配方消歧（同原料不同产物不可能出现——`craft` 按 id 精确执行一个配方，未来 UI 负责让玩家选配方，系统不负责猜）。`[Phase 12]`
-- **部分材料暂无用途** — `gold_ingot`/`diamond` 可从对应矿石挖得，但没有配方消费它们（无火把/饰品）；`coal`/`planks`/`stick` 在 Phase 40 起是炉子燃料（数据字段 `fuel_time`）；`planks`/`stick`/`iron_ingot` 已在配方链中。`[Phase 12]`（coal 用途 `[Phase 40]` 已解决）
+- **部分材料暂无用途** — `gold_ingot`/`diamond` 可从对应矿石挖得，但没有配方消费它们（无饰品；火把用 coal，不用金/钻石）；`coal`/`planks`/`stick` 在 Phase 40 起是炉子燃料（数据字段 `fuel_time`）；`coal` 另进火把配方（Phase 65，coal 首个合成用途）；`planks`/`stick`/`iron_ingot` 已在配方链中。`[Phase 12]`（coal 用途 `[Phase 40]`、合成用途 `[Phase 65]` 已解决）
 - **矿石掉落改为材料（行为变化，刻意）** — 4 种矿石现在掉材料物品（coal_ore→coal、iron_ore→iron_ingot、gold_ore→gold_ingot、diamond_ore→diamond，MC 同款），**矿方块物品不能再从采矿获得**（数据仍在、可放置，只是无产出途径）；wood 仍掉 wood 本身（它是木板配方的原料，若改掉 planks 则配方链断）。`[Phase 12]`
 
 ## 存档（Phase 13）
@@ -109,6 +110,7 @@
 - **背包打开不暂停世界模拟** — 打开背包只暂停**玩家物理与方块交互**；世界/昼夜/流体/实体/流式加载照常 tick（与 MC 的"暂停菜单"不同，更接近"边看背包边看世界"）。`[Phase 15]`
 - **F3 FPS 显示为整数** — `m_fpsSmoothed`（真实 dt 平滑）取整显示，vsync 稳定时恒 60；无小数帧率、无帧时间直方图/分位数（Minecraft F3 有 1% / 0.1% lows）。`[Phase 15]`
 - **粒子是逐帧动态 mesh、无碰撞** — 每帧重建一个动态 indexed mesh（0.12 格小立方体），粒子之间/粒子与世界无碰撞（穿模），无风/阻力，半隐式 Euler（先速后位）；上限 256、每爆发 16、寿命 0.45~0.75s。spawn 时烘焙光照（渲染是只读窗口，不能读光数组）。`[Phase 15]`
+- ~~**破坏 cross 块（作物/花/火把）崩溃：粒子纹理查找 `unordered_map::at`**~~ — `[Phase 65]` 发现并修复：`Game::drawParticles` 对所有块的粒子用 `cubeFaceTexture`（top/side/bottom 槽）查纹理——cross 模型（`[Phase 45]` 引入）没有这三项纹理（只有 `cross`）→ 空名 → `AtlasLayout::uvMin` 直接抛 `unordered_map::out_of_range`。`[Phase 45]` 起的潜在 bug（此前无任何 E2E 破坏过 cross 块），由 P65 火把破坏 E2E 首次暴露（gdb 回溯定位 `drawParticles → uvMin`）。修复 = `drawParticles` 加 cross 分支：粒子立方体六面全用 `cross` 纹理（与 item_mesh / chunk_mesher 既有的两个 cross 分支同款单一查找）；E2E S4（火把破坏 → 粒子帧渲染 → 无崩溃 + ×2 savenorm）为回归证据。`[Phase 65]`
 - **字体无中文字形与字重渐变** — `tools/generate_font.py` 生成 256×512 字形 atlas（32px cell、16×16 glyph 8px 偏移；Phase 35：8×8 → 16×16，字形表一次性从 DejaVu Sans Bold em16 提取（基线 row 12、阈值 128）后静态嵌入生成器——纯 stdlib、确定性输出），仅 ASCII 可打印（非 ASCII → `?`）；无字重渐变（缩放支持 double scale——Phase 35 起面板自适应分数缩放，`textWidth/makeTextVertices` 均 double）；无中文字形。`[Phase 15]`（8×8 低细节 `[Phase 35]` 已解决：16×16 字形 + 32×32 物品图标）
 - **物品名 tooltip 只有名字** — 悬停格显示物品名（无数量/描述/工具耐久/附魔文本）。`[Phase 15]`
 - ~~**"You died!" 死亡屏幕文字实际是白色（颜色参数被忽略）**~~ — `[Phase 33]` 发现，`[Phase 36]` 已修复：`ui.frag` textured 分支改 `texel.rgb × u_color.rgb`（所有 textured 绘制的 u_color.rgb 均为白，白字/图标/心带逐位不变，只死亡屏红字生效）+ E2E 重像素验证（红字 bbox A (488,320,282,24)/B 恰好 2×，hint 白字 bbox 不变）——细节见 `archive/phase-36.md`。

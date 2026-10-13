@@ -266,7 +266,34 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
     block+fluid / L1 膜 = 稳定地面流体场景 / 物品 rest 位置确定性
     （零初速 + 位置式分离）/ pgrep 前缀误匹配 minecraft_tests / 裸
     截图无窗口稳定化 = 错尺寸假失败）。
-  - [x] **Phase 64** — 火视觉 v1：fire 方块（用户"按建议顺序，继续完成
+  - [x] **Phase 65** — 火把内容：torch 方块（用户"按建议顺序，继续完成
+    下两个" = 建议 2，代理定案最小完整版 = **torch 方块**：可放置光
+    源，光 14 = MC、cross、瞬破、掉自己；coal+stick 配方 = coal 首个
+    合成用途；campfire/火蔓延超出最小内容范围【KNOWN_ISSUES 火把 v1
+    条】）：**`torch` 块**（cross 模型 + 火把纹理 atlas 空位 [11,0] 免
+    重锚、`light_emission 14` = MC、hardness 0 瞬破、**drops torch**
+    = 可复用【与 fire 相反：fire 无掉落】、非 flamable = 光源不是火
+    源）+ **配方 shapeless coal+stick → 4 火把**（MC；coal = P40 炉子
+    燃料 → P65 真材料）+ **bug 修复：破坏 cross 块崩溃**（P45 潜在：
+    `Game::drawParticles` 对全部块粒子用 `cubeFaceTexture`（top/side/
+    bottom 槽）查纹理——cross 模型无这三项纹理（只有 `cross`）→ 空名
+    → `AtlasLayout::uvMin` 抛 `unordered_map::at`；本 phase 火把破坏
+    E2E 首次暴露 + gdb 回溯定位；修复 = cross 分支：粒子立方体六面全
+    用 `cross` 纹理，与 item_mesh / chunk_mesher 既有两分支同款）。
+    **无 format 变更**（format 10，torch = 块编辑）。1036/1036（+2：
+    torch 内容钉死 1 / 配方钉死 1）、`-Werror` 恒 0 警告、base18 **第
+    38 次结构性免疫**【torch 块永不生成（worldgen 未动）+ 只经合成、
+    默认背包无 + atlas 空位无 UV 移位】；E2E 全绿（S2 放置【石块锚点
+    (22,45,-4) 顶面瞄准 pitch -atan2(0.62,4.0)——路径全程 y46 已验证
+    空位；torch 立顶面 (22,46,-4)、物品消耗、fires []【火把非 fire
+    块：无寿命条目】，×2 RAW】/ S3 夜间渲染+光【午夜 600f，torch 场
+    景 ≠ 无 torch 场景 + 火焰色像素 + ×2 各】/ S4 破坏 → 掉 torch 物
+    品【**左键按住** = 破坏【PITS】、hardness 0 首帧即破、掉落物停
+    锚点上 ×2 savenorm】/ S2ctl 无输入 ×2 RAW / S6 init 失败 ×2【
+    light_emission 16 → 越界点名 / 配方原料 coall → 未知原料点名】；
+    **PITS +3**【瞄准 pitch 正 = 朝上 / 破坏 = 左键按住、右键 = 放置
+    交互链 / awesomeWM float toggle 是 TOGGLE + 60f 跑 ~1.85 s 预算】）。
+- [x] **Phase 64** — 火视觉 v1：fire 方块（用户"按建议顺序，继续完成
     下两个" = 建议 1，代理定案最小完整版 = **fire 方块**：可燃物烧成
     发光火焰而非 air，定时燃尽、水浇灭，**format 10**；粒子/蔓延超出
     最小范围【KNOWN_ISSUES】）：**`fire` 块**（cross 模型 + 火焰纹理
@@ -573,6 +600,7 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 56** — `archive/phase-56.md`
 - **Phase 57** — `archive/phase-57.md`
 - **Phase 58** — `archive/phase-58.md`
+- **Phase 65** — `archive/phase-65.md`
 - **Phase 64** — `archive/phase-64.md`
 - **Phase 63** — `archive/phase-63.md`
 - **Phase 62** — `archive/phase-62.md`

@@ -1,0 +1,15 @@
+{
+  "id": "torch",
+  "properties": {
+    "hardness": 0.0,
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "light_emission": 14,
+    "drops": "torch"
+  },
+  "model": {
+    "shape": "cross",
+    "textures": { "cross": "torch" }
+  }
+}

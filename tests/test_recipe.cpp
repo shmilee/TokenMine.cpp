@@ -764,3 +764,19 @@ TEST(RecipeRegistryTest, Phase62StonePickaxeRecipeContent) {
     EXPECT_EQ(f.items.at(rec->key.at('C')).name, "cobblestone");
     EXPECT_EQ(f.items.at(rec->key.at('S')).name, "stick");
 }
+
+// Phase 65: the torch recipe — shapeless coal + stick → 4 torches (the
+// Minecraft pattern; the first CRAFTING use of coal — it was furnace
+// fuel only since Phase 40 — and of the torch block item).
+TEST(RecipeRegistryTest, Phase65TorchRecipeContent) {
+    RealAssets f;
+    ASSERT_TRUE(f);
+    const Recipe* rec = f.recipes.find("torch");
+    ASSERT_NE(rec, nullptr);
+    EXPECT_EQ(rec->type, RecipeType::Shapeless);
+    EXPECT_EQ(rec->output, f.items.idForName("torch"));
+    EXPECT_EQ(rec->outputCount, 4); // one craft yields 4 torches (MC)
+    ASSERT_EQ(rec->ingredients.size(), 2u);
+    expectIngredients(rec->ingredients, f.items,
+                      {{"coal", 1}, {"stick", 1}});
+}
