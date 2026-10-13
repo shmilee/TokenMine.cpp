@@ -153,7 +153,9 @@
     `data/recipes/bow.json`）；material 物品 `bow`（`data/items/bow.json`，
     `max_stack 1`，图标 `bow.png`，`ammo: arrow`，`attack_damage: 1`）；
     **箭 = material 物品 `arrow`**（`max_stack 64`，图标 `arrow.png`）+
-    shaped 配方 **2 stick（竖排）→ 2 arrow**（`data/recipes/arrow.json`）
+    shapeless 配方 **flint + stick + feather → 4 arrow**（`data/recipes/
+    arrow.json`，Phase 60，MC 1.14+；**替换** P24 的 2 stick 竖排 → 2 =
+    内容契约变更：早期箭现需燧石 + 羽毛，MC 同款闭环）
   - **发射（蓄力）**：选中 `shoot_speed > 0` 的物品（发射器）时**右键 =
     拉弓**——按下即开始蓄力（该次右键被吞：不交互工作台/不放置方块；
     需有弹药才能起拉；播放 "bow" 弦音），按住累加拉弓时间（真实 dt，封顶
@@ -298,8 +300,8 @@
     字段 `milk_with`（手持物品名）+ `milk_gives`（产出物品名），必须同时
     给、非空字符串，init 交叉校验两物品存在。当前：cow（`bucket` →
     `milk_bucket`）
-  - **右键顺序**（Phase 47 更新）：食物 → **饮用** → launcher → **挤奶**
-    → interact → 染色 → **流体桶** → 放置。挤奶 = 准星命中（近战目标：
+  - **右键顺序**（Phase 60 更新）：食物 → **饮用** → launcher → **挤奶**
+    → interact → 染色 → **流体桶** → **点燃器** → 放置。挤奶 = 准星命中（近战目标：
     kReach 5 + 方块遮挡，复用 `targetMob`）`milk_with` == 选中物品名的
     mob：消耗 1 个手持 + 产出 1 个 `milk_gives` + "milk" 音效 + **mob
     不受任何影响**（无伤害/死亡/掉落/冷却——v1 规则，MC 有 5 分钟挤奶
@@ -341,6 +343,23 @@
     流体格走 `fluids` 编辑数组——format 9 起编辑带种类名
     `[x, y, z, level, "water"|"lava"]`（format 8 的 4 元素编辑加载时
     全部迁移为 water）
+- **点燃 / 燧石与钢**（Phase 60，数据驱动）：
+  - **字段**：物品可选字段 `ignites_flamable`（严格 bool，缺省 false）；
+    true = 点燃器。与五个右键通道**互斥**（`restore_hunger` /
+    `drink_time` / `shoot_speed > 0` / `dye_color` / 桶对字段——通道
+    所有权纪律，P47 范式）；非 bool 点名拒绝；init 白名单（P58 教训）
+  - **语义**：选中点燃器**右键**（`wasPressed` 单点击、无通道）：准星
+    目标块（`targetBlock`，reach 5）**`flamable`** = true → `setBlock`
+    air + `Lighting::updateLocal` + "ignite" 音——**无掉落**（Phase 58
+    熔岩烧语义：烧掉的作物不掉落）、**不消耗**（MC：燧石与钢用不坏）。
+    非 flamable 目标 / 无目标 = 落空不吞（material 的 placeBlock =
+    no-op）；在 interact **之后**：准星对着炉子/工作台仍开面板（MC）
+  - **内容**：`flint_and_steel`（material，64 叠，图标 = 钢杆 + 燧石
+    尖）+ 配方 `flint_and_steel`（shapeless flint + iron_ingot，MC 配方）。
+    v1 范围（文档化偏离）：只作用于块（Mob 点燃仍只来自熔岩 Phase 58）、
+    无火视觉（烧 = 直接移除）
+  - **确定性**：单点击边缘事件、无计时器、无随机——同存档同点击帧 =
+    同结果
 - **熔岩 / 流体双种类**（Phase 51，数据驱动 + 反应表在方块上）：
   - **编码**：chunk 流体字节 0=干、1..8=水 level、9..16=熔岩 level
     （一格至多一种，`setFluid` 正 level 替换异种、0 只清本种）

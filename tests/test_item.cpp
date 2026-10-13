@@ -1091,3 +1091,75 @@ TEST(ItemRegistryTest, Phase59FlintItemContent) {
     EXPECT_NE(items.findByName("gravel"), nullptr);
     EXPECT_EQ(items.findByName("gravel")->type, ItemType::Block);
 }
+
+// ---------------------------------------------------------------------------
+// Ignition (Phase 60): the 'ignites_flamable' field — a strict bool that
+// marks an item as an IGNITER (right-click burns `flamable` blocks to air,
+// no drops, the item is not consumed). Channel-ownership exclusivity with
+// every other right-click channel (food / drinkable / launcher / dye /
+// fluid bucket).
+// ---------------------------------------------------------------------------
+
+TEST(ItemRegistryTest, IgnitesFlamableDefaultsFalse) {
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"x","type":"material"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FALSE(items.at(*r).ignitesFlamable);
+}
+
+TEST(ItemRegistryTest, IgnitesFlamableAcceptsBool) {
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"x","type":"material","ignites_flamable":true})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(items.at(*r).ignitesFlamable);
+}
+
+TEST(ItemRegistryTest, IgnitesFlamableRejectsNonBool) {
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"x","type":"material","ignites_flamable":"yes"})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("ignites_flamable"), std::string::npos);
+    EXPECT_NE(r.error().message.find("boolean"), std::string::npos);
+}
+
+TEST(ItemRegistryTest, IgnitesFlamableRejectsFood) {
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(
+        R"({"id":"x","type":"material","restore_hunger":4,"ignites_flamable":true})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("one item owns one right-click channel"),
+              std::string::npos);
+}
+
+TEST(ItemRegistryTest, IgnitesFlamableRejectsLauncher) {
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(
+        R"({"id":"x","type":"material","shoot_speed":30,"ignites_flamable":true})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("launcher"), std::string::npos);
+}
+
+// Phase 60 content pin: flint_and_steel is the igniter — a plain material
+// with the 'ignites_flamable' flag (the flint uses: arrows + flint and
+// steel, replacing the Phase 24 stick-only arrow recipe, MC 1.14+).
+// ---------------------------------------------------------------------------
+
+TEST(ItemRegistryTest, Phase60FlintAndSteelItemContent) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry blocks;
+    ASSERT_TRUE(blocks.loadDirectory(assets, "data/blocks").ok());
+    ItemRegistry items;
+    ASSERT_TRUE(items.buildBlockItems(blocks).ok());
+    ASSERT_TRUE(items.loadDirectory(assets, "data/items").ok());
+    const Item* it = items.findByName("flint_and_steel");
+    ASSERT_NE(it, nullptr);
+    EXPECT_EQ(it->type, ItemType::Material);
+    EXPECT_EQ(it->maxStack, 64);
+    EXPECT_TRUE(it->ignitesFlamable);
+    EXPECT_EQ(it->icon, "flint_and_steel");
+}

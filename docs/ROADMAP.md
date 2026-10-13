@@ -266,6 +266,37 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
     block+fluid / L1 膜 = 稳定地面流体场景 / 物品 rest 位置确定性
     （零初速 + 位置式分离）/ pgrep 前缀误匹配 minecraft_tests / 裸
     截图无窗口稳定化 = 错尺寸假失败）。
+  - [x] **Phase 60** — flint 用途：箭头 + 燧石与钢（用户"下两个 phase，
+    请继续建议1 和建议2" = 建议 1，代理定案最小完整版 = MC 1.14+ 箭头
+    配方【**替换** P24 两木棍配方 = 内容契约变更】+ flint_and_steel 物品
+    + 点燃交互 + 内容钉死单测；stone→cobblestone 材料链 = 建议 2 →
+    Phase 61）：**箭头配方替换**（shapeless flint+stick+feather → **4
+    箭** = MC 1.14+；旧 2 木棍竖排 → 2 箭 = 弓 phase 时代无 flint 的
+    替代设计；flint 成为真材料：gravel→flint、chicken→feather、树→
+    stick = MC 闭环）+ **`flint_and_steel`**（material、64 叠、图标 =
+    钢杆 + 燧石尖）+ 配方（shapeless flint+iron_ingot）+ **物品字段
+    `ignites_flamable`**（严格 bool、缺省 false、非 bool 点名拒绝；与
+    **五个右键通道互斥** food/drink/launcher/dye/fluid bucket = 通道
+    所有权纪律 P47 范式；init 白名单 = P58 教训）+ **右键链点燃分支**
+    （interact/bucket 之后、placeBlock 之前：目标块 flamable →
+    setBlock(air) **无掉落**【P58 熔岩烧语义】、**不消耗**【MC：燧石
+    与钢用不坏】；目标 = 炉子/工作台仍开面板；非 flamable fall
+    through = material 的 placeBlock no-op）+ **`ignite` 声音**（爆裂
+    噪声 burst、generate_sounds）。**核心** = 1 字段 + 1 parse 函数 +
+    1 分支 + 1 声音；**无 format 变更**（format 9）。1018/1018（+8：
+    字段解析 5 + 物品钉死 1 + 配方钉死 2）；`-Werror` 恒 0 警告。
+    **E2E 全绿**：S1 **第 33 次结构性免疫**【无 block / 无 worldgen /
+    默认场景纹理零改动 → fresh 60f ×2 + == base18 字节一致，**无重锚**
+    = P59 重锚后首次过门】/ S2 点燃（wheat_3 放 (22,46,−5) P52 几何
+    瞄准锚定存档 = 零鼠标移动、slot0 = flint_and_steel、**单次右键**
+    → 块烧成生成 air【diff = {}】**零掉落**【entities = []；若是破坏
+    会掉 wheat_1 种子 = 可区分】，420f ×2 savenorm 字节一致 + save
+    EXACT；下方格 = 草 ≠ farmland = 生长门失败 = 场景全静态）/ S2b 非
+    可燃隔离（同格 stone、同物品、同点击 → stone 保留、零实体）/ S2ctl
+    无输入（×2 RAW、wheat 保留）/ S6 init 失败 ×2（ignites_flamable:
+    "yes" → "must be a boolean" / 箭配方 flint→flintt → "uses unknown
+    ingredient item"）。**PITS +1**（zsh 多行 echo 续行需反斜杠 = 日志
+    PASS 行截断，脚本不受阻）。
   - [x] **Phase 59** — 多掉落内容再扩展：gravel + flint（用户"按你的建议
     继续下两个phase" = 建议 2，代理定案最小完整版 = gravel worldgen 矿脉
     + flint 物品 + gravel 10% 概率掉落 + 内容钉死单测；排除 stone→
@@ -447,6 +478,7 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 56** — `archive/phase-56.md`
 - **Phase 57** — `archive/phase-57.md`
 - **Phase 58** — `archive/phase-58.md`
+- **Phase 60** — `archive/phase-60.md`
 - **Phase 59** — `archive/phase-59.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

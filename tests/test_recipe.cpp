@@ -599,9 +599,9 @@ TEST(ShapedRecipeTest, ShapelessRejectsPatternAndKey) {
 
 TEST(ShapedRecipeTest, RegistersVerticalSingleColumnPattern) {
     Fixture f;
-    // The arrow recipe's shape (Phase 24): a 1-char-wide, 2-row pattern.
-    // 1..3 chars per row is legal, and the pattern matches the grid at
-    // any horizontal offset.
+    // The former arrow recipe's shape (Phase 24, replaced in Phase 60 by
+    // the flint recipe): a 1-char-wide, 2-row pattern. 1..3 chars per row
+    // is legal, and the pattern matches the grid at any horizontal offset.
     auto r = f.recipes.registerRecipe(
         parseJson(R"({"id":"arrow","type":"shaped",
                       "output":{"item":"ingot","count":2},
@@ -631,4 +631,100 @@ TEST(ShapedRecipeTest, ShapedPatternWithHole) {
     const Recipe* rec = f.recipes.find("t");
     ASSERT_NE(rec, nullptr);
     EXPECT_EQ(rec->pattern[1], " I ");
+}
+
+// ---------------------------------------------------------------------------
+// Content pin (Phase 60): the ACTUAL arrow / flint_and_steel recipes. The
+// arrow recipe was REPLACED (the Phase 24 stick-only shaped recipe -> the
+// MC 1.14+ shapeless flint + stick + feather -> 4 arrows; flint becomes a
+// real material). These pin the exact fields to guard against count typos.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// The real assets (the Phase 55/59 content-pin pattern): blocks + items +
+// the full recipe directory, cross-validated at load.
+struct RealAssets {
+    bool ok = true;
+    AssetManager assets;
+    BlockRegistry blocks;
+    ItemRegistry items;
+    RecipeRegistry recipes;
+
+    explicit operator bool() const { return ok; }
+
+    RealAssets() {
+        if (!assets.setRoot("assets").ok()) {
+            ok = false;
+            ADD_FAILURE() << "run the tests from the repository root";
+            return;
+        }
+        auto b = blocks.loadDirectory(assets, "data/blocks");
+        if (!b.ok()) {
+            ok = false;
+            ADD_FAILURE() << b.error().message;
+            return;
+        }
+        auto i = items.buildBlockItems(blocks);
+        if (!i.ok()) {
+            ok = false;
+            ADD_FAILURE() << i.error().message;
+            return;
+        }
+        auto li = items.loadDirectory(assets, "data/items");
+        if (!li.ok()) {
+            ok = false;
+            ADD_FAILURE() << li.error().message;
+            return;
+        }
+        auto r = recipes.loadDirectory(assets, items);
+        if (!r.ok()) {
+            ok = false;
+            ADD_FAILURE() << r.error().message;
+        }
+    }
+};
+
+// Every (name, count) pair in `want` must appear in `have` (order-
+// independent, the shapeless semantics).
+void expectIngredients(const std::vector<std::pair<ItemID, int>>& have,
+                       const ItemRegistry& items,
+                       const std::vector<std::pair<const char*, int>>& want) {
+    for (const auto& [name, count] : want) {
+        bool found = false;
+        for (const auto& [id, n] : have) {
+            if (items.at(id).name == name && n == count) {
+                found = true;
+            }
+        }
+        EXPECT_TRUE(found) << "missing ingredient " << name << " x" << count;
+    }
+}
+
+} // namespace
+
+TEST(RecipeRegistryTest, Phase60ArrowRecipeContent) {
+    RealAssets f;
+    ASSERT_TRUE(f);
+    const Recipe* rec = f.recipes.find("arrow");
+    ASSERT_NE(rec, nullptr);
+    EXPECT_EQ(rec->type, RecipeType::Shapeless);
+    EXPECT_EQ(rec->output, f.items.idForName("arrow"));
+    EXPECT_EQ(rec->outputCount, 4); // MC 1.14+: one craft yields 4 arrows
+    ASSERT_EQ(rec->ingredients.size(), 3u);
+    expectIngredients(rec->ingredients, f.items,
+                      {{"flint", 1}, {"stick", 1}, {"feather", 1}});
+}
+
+TEST(RecipeRegistryTest, Phase60FlintAndSteelRecipeContent) {
+    RealAssets f;
+    ASSERT_TRUE(f);
+    const Recipe* rec = f.recipes.find("flint_and_steel");
+    ASSERT_NE(rec, nullptr);
+    EXPECT_EQ(rec->type, RecipeType::Shapeless);
+    EXPECT_EQ(rec->output, f.items.idForName("flint_and_steel"));
+    EXPECT_EQ(rec->outputCount, 1);
+    ASSERT_EQ(rec->ingredients.size(), 2u);
+    expectIngredients(rec->ingredients, f.items,
+                      {{"flint", 1}, {"iron_ingot", 1}});
 }

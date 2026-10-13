@@ -1,0 +1,6 @@
+{
+  "id": "flint_and_steel",
+  "type": "material",
+  "icon": "flint_and_steel",
+  "ignites_flamable": true
+}

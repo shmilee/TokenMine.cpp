@@ -247,6 +247,20 @@ def splash():
     return lowpass3(sound(dur, f))
 
 
+def ignite():
+    """Fire ignition (Phase 60, flint and steel on a flammable block):
+    a short CRACKLING burst — bright noise with a fast exponential
+    decay over a high descending pop, pitched higher than the water
+    splash (the same lowpass chain as the other noise taps)."""
+    lcg = Lcg(0xF1DE)
+    dur = 0.18
+
+    def f(t, _):
+        tone = math.sin(2 * math.pi * (920.0 - 560.0 * (t / dur)) * t) * 0.12
+        return (lcg.next() * 0.72 + tone) * env(t, dur, 30.0) * 0.7
+    return lowpass3(sound(dur, f))
+
+
 SOUNDS = {
     "dig": dig,
     "place": place,
@@ -264,6 +278,7 @@ SOUNDS = {
     "cloth": cloth,
     "milk": milk,
     "splash": splash,
+    "ignite": ignite,
 }
 
 

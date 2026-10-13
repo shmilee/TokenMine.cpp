@@ -162,6 +162,16 @@ struct Item {
     // exclusivity as the collect side.
     std::string poursFluid;
     std::string poursBecomes;
+    // Phase 60: flammable ignition (optional data field
+    // 'ignites_flamable', a strict bool, default false). true marks the
+    // item as an IGNITER: right-clicking a `flamable` block under the
+    // crosshair burns it to air (NO drops — the Phase 58 lava-burn
+    // semantics) and the item is NOT consumed (Minecraft: the flint and
+    // steel survives its uses). Mutually exclusive with every other
+    // right-click channel (food / drinkable / launcher / dye / fluid
+    // bucket — the channel-ownership discipline). v1 scope: blocks only
+    // (mobs still ignite from lava alone, Phase 58).
+    bool ignitesFlamable = false;
     // Phase 15 UI: the item's 2D icon texture name (a file under
     // assets/textures/items/, validated against the filesystem at game
     // init). Empty for block items, which render a 3D block cube instead.

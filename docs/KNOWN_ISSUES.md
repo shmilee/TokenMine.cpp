@@ -41,7 +41,8 @@
 - **卸载/未加载 chunk 的作物不持久** — 作物 = 方块编辑（随存档），但玩家离开后 chunk 若被驱逐再重新生成，该格回到世界生成态（v1 世界生成不放作物 = 作物消失）。与"未加载区域不保存玩家方块编辑"同一既有性质，非作物特有。`[Phase 48]`
 - ~~**概率次级掉落每方块至多一个条目**~~ — `[Phase 52]` 已修复：新增 `chance_drops`（`{item, count, chance}` 严格三元组数组，与单条目 `chance_drop` **互斥**【同时写拒绝】）。各条目**独立 roll**（`rollChanceDropEntry`，条目索引去相关 salt），breakBlock 循环条目、每条目至多 1 掉落实体；init 每条目复用 drops 纪律（物品存在 + max_stack）。单条目 `chance_drop` 保留（系统 + 单测覆盖；`[Phase 55]` leaves 迁入列表后一度**无现役内容使用者**，`[Phase 59]` gravel→flint（10%，MC 值）重新使用它）。`[Phase 49]`（多掉落列表 `[Phase 52]` 已就位；内容扩展 `[Phase 55]`、`[Phase 59]`）
 - **概率掉落是 per-cell 确定性（无重 roll）** — 同一世界同一格每次破坏结果相同（splitmix64(seed + 位置哈希)）：破坏-重种同一格树叶，苹果结果不变；这是无输入字节可复现的刻意代价（MC 是真随机）。位置哈希 + 专用 salt 保证相邻格去相关（单测有实证率断言）。`[Phase 49]`
-- **flint 无用途（v1 文档化偏离）** — flint = gravel 的唯一次级掉落（10%，MC 值）：gravel 来自世界矿脉（`ores.veins` 石替换脉，常见）或放置后破坏；Minecraft 的 flint 进箭头/燧石与钢合成链，本项目箭是直接物品、无箭头链 → flint 是纯收集材料（图标 + 背包，无配方/燃料/交互用途）。给 flint 加用途 = 数据（配方）零核心代码。`[Phase 59]`
+- ~~**flint 无用途（v1 文档化偏离）**~~ — `[Phase 60]` 已解决：**箭头配方 = shapeless flint+stick+feather → 4 箭（MC 1.14+）**，**替换**了旧的 2 木棍竖排 → 2 箭配方（内容契约变更：早期箭现需 flint + feather = MC 同款闭环，gravel→flint、chicken→feather、树→stick）+ **flint_and_steel**（flint+iron_ingot 合成；`ignites_flamable` = 右键烧 `flamable` 块、无掉落、不消耗）。flint 的两个用途 = MC 的主用途。`[Phase 59]` → `[Phase 60]`
+- **燧石与钢 v1 范围（文档化偏离）** — 点燃器**只作用于块**（`flamable` = 当前仅 wheat_1..7）：Mob 点燃仍只来自熔岩（`[Phase 58]`），玩家/Mob 不可被点燃；**无火视觉**（烧 = 直接移除，与熔岩烧同款语义、无火焰块/粒子）；不引燃流体。后续可扩展 `flamable` 内容（树/草）= 纯数据。`[Phase 60]`
 
 ## 实体（Phase 10）
 

@@ -79,7 +79,11 @@
       "duration": 10.0 },           //   与单字段 grants_effect **互斥**（同写 = 解析拒绝，P52 chance_drops 模式）；
     { "name": "absorption",         //   空数组/非对象元素/缺三元组/未知键逐条目点名 grants_effects[i] 拒绝；
       "duration": 5.0 }             //   仅食物 + init 逐条目交叉校验效果名（ammo 模式）。
-  ]
+  ],
+  "ignites_flamable": true          // 可选（Phase 60）：严格 bool，缺省 false。true = 点燃器——
+                                    //   右键烧 `flamable` 块（setBlock air、**无掉落**、**不消耗**）；
+                                    //   与五个右键通道互斥（food/drink/launcher/dye/fluid bucket，
+                                    //   通道所有权纪律）；非 bool 点名拒绝（P60）。
   "max_stack": 1,                   // 1..64，默认 64
   "icon": "wooden_pickaxe"          // UI 图标（Phase 15）：assets/textures/items/<icon>.png
 }
@@ -193,8 +197,10 @@ shaped（Phase 17）：`pattern` 1..3 行、行长 ≤3、空格=空位、非空
 产物是原料之一的配方也正确）。网格配方（Phase 17）另走 `CraftingGrid` 匹配：
 pattern 偏移扫描（任意左上偏移放进 3×3、空格对应格必须为空），先 shaped 后
 shapeless、配方按文件名字典序。当前配方链：wood→4 planks→(2 planks→4
-stick)、2×2 planks→crafting_table、wooden_pickaxe（PPP/.S./.S.）、
-iron_pickaxe（III/.S./.S.）。
+stick）、2×2 planks→crafting_table、wooden_pickaxe（PPP/.S./.S.）、
+iron_pickaxe（III/.S./.S.）、arrow（flint+stick+feather→4，Phase 60
+替换 P24 的 2 木棍竖排→2）、flint_and_steel（flint+iron_ingot，
+Phase 60）。
 游戏内触发：`E` 背包面板右侧的配方列表（仅 shapeless），点击配方行执行
 `craft()`（Phase 15；可合成的配方白色高亮、不可合成的灰色）；或放置并右键
 工作台打开 3×3 面板，按形状放料后取输出格（Phase 17）。

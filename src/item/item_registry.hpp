@@ -121,6 +121,13 @@ private:
     // as is any bucket side with food/drinkable (the right-click channel
     // owner).
     static Result<void> parseFluidBucket(const Json& def, Item& out);
+    // Parse the optional 'ignites_flamable' field (Phase 60) into `out`:
+    // a strict bool (default false; non-bool rejected by name). true
+    // marks the item as an IGNITER (right-click burns `flamable` blocks
+    // to air, no drops, the item is not consumed). Mutually exclusive
+    // with every other right-click channel (food / drinkable / launcher
+    // / dye / fluid bucket — the channel-ownership discipline).
+    static Result<void> parseIgnites(const Json& def, Item& out);
     // Parse the optional 'grants_effect' field (Phase 49) into `out`: the
     // status effect granted when a full eat completes (golden apple ->
     // regeneration). A strict {name, duration} pair (the on_hit_effect

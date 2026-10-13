@@ -171,6 +171,29 @@ def flint():
     return px
 
 
+def flint_and_steel():
+    """Flint and steel (Phase 60, crafted from flint + iron ingot): a
+    steel rod with a knapped flint tip, diagonal — the Minecraft
+    flint-and-steel look (16x16 design space, doubled)."""
+    px = blank()
+    steel = (172, 172, 178)
+    steel_lo = (148, 148, 155)
+    flint_hi = (104, 104, 110)
+    flint_lo = (84, 84, 90)
+    # Steel rod: a 2-design-px diagonal from bottom-left to top-right.
+    for (x, y) in ((4, 13), (5, 12), (6, 11), (7, 10), (8, 9), (9, 8)):
+        setpx2(px, x, y, steel, salt=41)
+        setpx2(px, x + 1, y, steel_lo, salt=42)
+    # Flint tip: a short dark segment continuing the diagonal upward.
+    for (x, y) in ((10, 7), (11, 6)):
+        setpx2(px, x, y, flint_hi, salt=43)
+        setpx2(px, x + 1, y, flint_lo, salt=44)
+    # Bright glints on the rod (the polished steel).
+    setpx2(px, 5, 12, (206, 206, 212), salt=45, amount=3)
+    setpx2(px, 7, 10, (206, 206, 212), salt=45, amount=3)
+    return px
+
+
 def coal():
     px = blank()
     base = (46, 46, 52)
@@ -740,6 +763,7 @@ ITEMS = {
     "rotten_flesh": rotten_flesh,
     "lapis": lapis,
     "flint": flint,
+    "flint_and_steel": flint_and_steel,
     "coal": coal,
     "diamond": diamond,
     "gold_ingot": gold_ingot,

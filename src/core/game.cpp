@@ -1915,6 +1915,28 @@ void Game::handleInteraction(double dt) {
         if (tryFluidBucket()) {
             return;
         }
+        // Ignition (Phase 60): a selected item with the 'ignites_flamable'
+        // flag burns the `flamable` block under the crosshair —
+        // setBlock(air), NO drops (the Phase 58 lava-burn semantics) —
+        // and is NOT consumed (Minecraft: the flint and steel survives
+        // its uses). Runs AFTER the panel interactions: a furnace or
+        // crafting table under the crosshair still opens its panel even
+        // when an igniter is selected. Non-flammable targets fall
+        // through (the item is a material, so placeBlock is a no-op).
+        if (const ItemStack& held = m_inventory.at(m_selectedSlot);
+            !held.empty() && m_items.at(held.item).ignitesFlamable) {
+            if (const std::optional<BlockHit> hit = targetBlock(); hit) {
+                const Block& b = m_blocks.at(
+                    m_world.getBlock(hit->block.x, hit->block.y,
+                                     hit->block.z));
+                if (b.properties.flamable) {
+                    setBlock(hit->block.x, hit->block.y, hit->block.z,
+                             BlockID::air());
+                    Lighting::updateLocal(m_world, m_blocks, hit->block);
+                    m_sound.play("ignite");
+                }
+            }
+        }
         placeBlock();
     }
     if (m_input.wasPressed(GameKey::Tab)) {

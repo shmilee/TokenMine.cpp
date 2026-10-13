@@ -9,9 +9,9 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 59 完成时）
+## 现状（Phase 60 完成时）
 
-- 功能阶段 P0–P59 全部完成并提交；P59 = 多掉落内容再扩展：gravel + flint（用户"按你的建议继续下两个phase" = 建议 2，代理定案最小完整版 = gravel worldgen 矿脉 + flint 物品 + gravel 10% 概率掉落 + 内容钉死单测，**零核心代码**）：**`gravel`**（hardness 0.6、自掉 + `chance_drop: {flint, 1, 0.1}` = MC 值）+ **`flint` 物品**（material、64 叠、图标 = 3 片碎块）+ worldgen `ores.veins` + gravel（probability 0.25 / vein 4 / max_y 80 = 常见石替换脉）+ **atlas 8×8 → 16×8**【64/64 已满、gravel = 第 65 tile → 所有既有 UV 移位 → base18 重锚（P41 先例）】；flint v1 无用途、排除 stone→cobblestone 链（文档化偏离）；**无 format 变更**（format 9）；1010/1010（+3）、`-Werror` 0 警告、base18 **重锚**【atlas 扩容移位所有 UV，第 33 次过门 = Phase 60】；E2E 全绿（S2 flint 掉落【roll-PASS 格 (21,46,−1)、yaw=π/4 瞄准锚定存档 = 零鼠标、场景 diff 清 3 角点格【45° 射线沿格网角点穿过 → DDA tie-break 命中对角固块，PITS】：gravel×1 + flint×1，×2 savenorm 字节一致】/ S2b 无 flint 对照【roll-FAIL 格 (22,46,−5)：只掉 gravel = per-cell 确定性 roll 隔离】/ S2ctl 无输入 ×2 RAW / S6 init 失败 ×2）；P58 = 火系统 v2：熔岩烧 Mob 与作物（用户"按你的建议继续下两个phase" = 建议 1，代理定案最小完整版 = Mob 点燃 + 熔岩烧作物，**全量消费** P54 遗留"熔岩不烧 Mob 与作物"）：**块属性 `flamable`**（可选 bool 缺省 false，非 bool 点名拒绝；内容 = wheat_1..7 全 7 阶）+ **FluidSim 燃烧 pass**（扫所有 LAVA 格 6-邻 flammable BLOCK 格 → 收集排序后 setBlock(air)，**无掉落**，快照确定性，注册表无 flamable 块 = fast-exit）+ **Mob 点燃**（生成时 `armFire` 从 ignites_on_lava 效果 + config `fire_duration_seconds` 取参；**整数帧燃烧格**【0.2 s tick 的 double 累加实测相位 off-by-one，改 int 帧计数】：1 HP/0.2 s = 5 HP/s 可致死、熔岩内每帧重置 duration【相位保留】、离熔岩烧 8 s 残留、水瞬时熄灭且先于 tick 【水胜熔岩】）+ **init 交叉校验**（ignites 效果 tick_interval×60 必须整帧数，容差 1e-4 帧——float 0.2f×60=12.00000018 过、0.33 s 拒） + `Entity::overlapsFluid` 自 player.cpp 上移 + 顺手修复 P56 `grants_effects` 白名单一行漏列；**无 format 变更**（format 9）；1007/1007（+18）、`-Werror` 0 警告、base18 **第 32 次结构性免疫** 【fresh 世界零熔岩（P54）、零 flammable 块（wheat 只玩家种）、60f 内零 mob = 两条燃烧路径皆惰性】；E2E 全绿（S2 熔岩膜【3×3 level-1 膜铺地面：走过即燃，10 只被动 mob 烧死 = 18 item 实体，膜光 15 挡 hostile 光门 → 玩家 20 HP 恒定，2400f ×2 savenorm 字节一致】/ S2ctl 水膜对照【hostile 杀玩家 health 0、零点燃 = 隔离熔岩】/ S4 作物燃烧【wheat_3 贴池 → air、池 +1 L7、×2 RAW 字节】/ S6 init 失败 ×2）；P57 = 脱离熔岩残留火：火系统 v1
+- 功能阶段 P0–P60 全部完成并提交；P60 = flint 用途：箭头 + 燧石与钢（用户"下两个 phase，请继续建议1 和建议2" = 建议 1，代理定案最小完整版 = MC 1.14+ 箭头配方【**替换** P24 两木棍配方 = 内容契约变更】+ flint_and_steel + 点燃交互，消费 P59 遗留"flint v1 无用途"）：**箭头配方替换**（shapeless flint+stick+feather → 4 箭 = MC 1.14+；flint 成真材料：gravel→flint、chicken→feather、树→stick = MC 闭环）+ **`flint_and_steel`**（material、64 叠、图标 = 钢杆 + 燧石尖）+ 配方（flint+iron_ingot）+ **物品字段 `ignites_flamable`**（严格 bool、缺省 false、非 bool 点名拒绝；与**五个右键通道互斥** food/drink/launcher/dye/fluid bucket = 通道所有权纪律；init 白名单 = P58 教训）+ **右键链点燃分支**（interact/bucket 之后、placeBlock 之前：目标 `flamable` 块 → setBlock(air) **无掉落**【P58 熔岩烧语义】、**不消耗**【MC：燧石与钢用不坏】；炉子/工作台仍开面板；非 flamable fall through）+ **`ignite` 声音**；**无 format 变更**（format 9）；1018/1018（+8）、`-Werror` 0 警告、base18 **第 33 次结构性免疫**【无 block / 无 worldgen / 默认场景纹理零改动 = P59 重锚后首次过门、**无重锚**】；E2E 全绿（S2 点燃【wheat_3 放 (22,46,−5) P52 几何、瞄准锚定存档 = 零鼠标移动、单次右键 → 块烧成生成 air【diff = {}】**零掉落**【entities = []，破坏会掉 wheat_1 种子 = 可区分】，420f ×2 savenorm 字节一致 + save EXACT；下方草 ≠ farmland = 生长门失败 = 场景全静态】/ S2b 非可燃隔离【同格 stone、同物品、同点击 → stone 保留】/ S2ctl 无输入 ×2 RAW / S6 init 失败 ×2）；P59 = 多掉落内容再扩展：gravel + flint（用户"按你的建议继续下两个phase" = 建议 2，代理定案最小完整版 = gravel worldgen 矿脉 + flint 物品 + gravel 10% 概率掉落 + 内容钉死单测，**零核心代码**）：**`gravel`**（hardness 0.6、自掉 + `chance_drop: {flint, 1, 0.1}` = MC 值）+ **`flint` 物品**（material、64 叠、图标 = 3 片碎块）+ worldgen `ores.veins` + gravel（probability 0.25 / vein 4 / max_y 80 = 常见石替换脉）+ **atlas 8×8 → 16×8**【64/64 已满、gravel = 第 65 tile → 所有既有 UV 移位 → base18 重锚（P41 先例）】；flint v1 无用途、排除 stone→cobblestone 链（文档化偏离）；**无 format 变更**（format 9）；1010/1010（+3）、`-Werror` 0 警告、base18 **重锚**【atlas 扩容移位所有 UV，第 33 次过门 = Phase 60】；E2E 全绿（S2 flint 掉落【roll-PASS 格 (21,46,−1)、yaw=π/4 瞄准锚定存档 = 零鼠标、场景 diff 清 3 角点格【45° 射线沿格网角点穿过 → DDA tie-break 命中对角固块，PITS】：gravel×1 + flint×1，×2 savenorm 字节一致】/ S2b 无 flint 对照【roll-FAIL 格 (22,46,−5)：只掉 gravel = per-cell 确定性 roll 隔离】/ S2ctl 无输入 ×2 RAW / S6 init 失败 ×2）；P58 = 火系统 v2：熔岩烧 Mob 与作物（用户"按你的建议继续下两个phase" = 建议 1，代理定案最小完整版 = Mob 点燃 + 熔岩烧作物，**全量消费** P54 遗留"熔岩不烧 Mob 与作物"）：**块属性 `flamable`**（可选 bool 缺省 false，非 bool 点名拒绝；内容 = wheat_1..7 全 7 阶）+ **FluidSim 燃烧 pass**（扫所有 LAVA 格 6-邻 flammable BLOCK 格 → 收集排序后 setBlock(air)，**无掉落**，快照确定性，注册表无 flamable 块 = fast-exit）+ **Mob 点燃**（生成时 `armFire` 从 ignites_on_lava 效果 + config `fire_duration_seconds` 取参；**整数帧燃烧格**【0.2 s tick 的 double 累加实测相位 off-by-one，改 int 帧计数】：1 HP/0.2 s = 5 HP/s 可致死、熔岩内每帧重置 duration【相位保留】、离熔岩烧 8 s 残留、水瞬时熄灭且先于 tick 【水胜熔岩】）+ **init 交叉校验**（ignites 效果 tick_interval×60 必须整帧数，容差 1e-4 帧——float 0.2f×60=12.00000018 过、0.33 s 拒） + `Entity::overlapsFluid` 自 player.cpp 上移 + 顺手修复 P56 `grants_effects` 白名单一行漏列；**无 format 变更**（format 9）；1007/1007（+18）、`-Werror` 0 警告、base18 **第 32 次结构性免疫** 【fresh 世界零熔岩（P54）、零 flammable 块（wheat 只玩家种）、60f 内零 mob = 两条燃烧路径皆惰性】；E2E 全绿（S2 熔岩膜【3×3 level-1 膜铺地面：走过即燃，10 只被动 mob 烧死 = 18 item 实体，膜光 15 挡 hostile 光门 → 玩家 20 HP 恒定，2400f ×2 savenorm 字节一致】/ S2ctl 水膜对照【hostile 杀玩家 health 0、零点燃 = 隔离熔岩】/ S4 作物燃烧【wheat_3 贴池 → air、池 +1 L7、×2 RAW 字节】/ S6 init 失败 ×2）；P57 = 脱离熔岩残留火：火系统 v1
    （用户"按你的建议，继续下一phase" = 建议 1，代理定案最小完整版 =
    玩家点燃 + 残留燃烧 + 水灭火，消费 P54 遗留"脱离熔岩无残留燃烧"）：
    **效果两数据标志**（`ignites_on_lava` 至多一个注册效果可带【init
@@ -200,11 +200,12 @@
   （P28 遗留"熟肉"）、P41 = wool 染色框架（P12/P20 遗留"wool 无用途/无
   染色"；atlas 4×8→8×8 → base18 于 P41 重锚）、P42 = 弓后续 2、P43 =
   牛奶桶最小项（饮用通道 + 挤奶）。
-- 测试 **1010/1010**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+- 测试 **1018/1018**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
 - 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P41 重锚【atlas
   8×8】、P59 重锚【atlas 16×8】，P42/P43/P44/P45/P46/P47/P48/P49/P50/P51/P52/P53/P54/P55/P56
   /P57/P58 过门 = 第 16/17/18/19/20/21/22/23/24/25/26/27/28/29/30/31/
-  32 次结构性免疫、无重锚；P59 重锚，第 33 次过门 = Phase 60）。
+  32 次结构性免疫、无重锚；P59 重锚；P60 过门 = 第 33 次结构性免疫、
+  无重锚，第 34 次过门 = Phase 61）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 
 ## 命令
@@ -260,7 +261,7 @@ KNOWN_ISSUES、SESSION_CONTEXT）→ 6. **显式路径列表** git commit（永�
 永不提交 `SESSION_CONTEXT.md`（本地））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
-## 坑位 Top 8（全文 docs/PITS.md，~98 条）
+## 坑位 Top 8（全文 docs/PITS.md，~107 条）
 
 1. **SDL grab delta**（P28）：输入 E2E 全帧字节一致不保证——存档 yaw/pitch 为漂移
    探测器；驱动 warp 用实际窗口原点（实测 (4,64)）+ (632,352)。
@@ -296,7 +297,7 @@ KNOWN_ISSUES、SESSION_CONTEXT）→ 6. **显式路径列表** git commit（永�
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（~98 条，都踩过） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（~107 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃）+ 已修复存档索引 | 阶段验收前后 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phase 0–29 规划 + 细节存档索引 | 了解历史 |
 | [docs/archive/phase-NN.md](docs/archive/) | 单阶段细节存档（阶段报告 + 会话存档） | 深挖某阶段 |

@@ -1,12 +1,9 @@
 {
   "id": "arrow",
-  "type": "shaped",
-  "output": { "item": "arrow", "count": 2 },
-  "pattern": [
-    "S",
-    "S"
-  ],
-  "key": {
-    "S": "stick"
-  }
+  "output": { "item": "arrow", "count": 4 },
+  "ingredients": [
+    { "item": "flint", "count": 1 },
+    { "item": "stick", "count": 1 },
+    { "item": "feather", "count": 1 }
+  ]
 }

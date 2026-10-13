@@ -322,6 +322,56 @@ Result<void> ItemRegistry::parseFluidBucket(const Json& def, Item& out) {
     return {};
 }
 
+Result<void> ItemRegistry::parseIgnites(const Json& def, Item& out) {
+    // Optional 'ignites_flamable' (Phase 60): a strict bool (default
+    // false; the absent field is the "not an igniter" default, the
+    // flamable-block-flag discipline). true marks the item as an IGNITER
+    // (right-click burns `flamable` blocks to air, no drops, not
+    // consumed). The field is a RIGHT-CLICK channel, so it is mutually
+    // exclusive with every other channel owner (the fluid-bucket
+    // exclusivity pattern) — the checks run after the other channels
+    // parsed (the parse flow order).
+    if (const Json* ig = def.find("ignites_flamable")) {
+        if (!ig->isBool()) {
+            return MC_FAIL("'ignites_flamable' must be a boolean");
+        }
+        out.ignitesFlamable = ig->asBool();
+    }
+    if (out.ignitesFlamable) {
+        if (out.restoreHunger > 0) {
+            return MC_FAIL("an item cannot both ignite flammable blocks "
+                           "('ignites_flamable') and be food "
+                           "('restore_hunger'): one item owns one "
+                           "right-click channel");
+        }
+        if (out.drinkTime > 0.0f) {
+            return MC_FAIL("an item cannot both ignite flammable blocks "
+                           "('ignites_flamable') and be a drinkable "
+                           "('drink_time'): one item owns one right-click "
+                           "channel");
+        }
+        if (out.shootSpeed > 0.0f) {
+            return MC_FAIL("an item cannot both ignite flammable blocks "
+                           "('ignites_flamable') and be a launcher "
+                           "('shoot_speed'): one item owns one right-click "
+                           "channel");
+        }
+        if (!out.dyeColor.empty()) {
+            return MC_FAIL("an item cannot both ignite flammable blocks "
+                           "('ignites_flamable') and be a dye "
+                           "('dye_color'): one item owns one right-click "
+                           "channel");
+        }
+        if (!out.collectsFluids.empty() || !out.poursFluid.empty()) {
+            return MC_FAIL("an item cannot both ignite flammable blocks "
+                           "('ignites_flamable') and be a fluid bucket "
+                           "('collects_fluid' / 'pours_fluid'): one item "
+                           "owns one right-click channel");
+        }
+    }
+    return {};
+}
+
 Result<void> ItemRegistry::parseGrant(const Json& def, Item& out) {
     // Optional 'grants_effect' (Phase 49, golden apple): the status effect
     // granted when a full EAT completes — {"name": <effect>, "duration":
@@ -475,6 +525,7 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
             key != "pours_fluid" && key != "pours_becomes" &&
             key != "grants_effect" &&
             key != "grants_effects" &&
+            key != "ignites_flamable" &&
             key != "icon") {
             MC_LOG_WARN("Item '" + name + "': unknown field '" + key +
                         "' ignored");
@@ -504,6 +555,9 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     MC_TRY(r);
     r = parseFluidBucket(def, item); // after parseFood/parseDrink: the
                                      // channel-ownership exclusivity
+    MC_TRY(r);
+    r = parseIgnites(def, item); // last: the channel-ownership exclusivity
+                                 // checks need every other channel parsed
     MC_TRY(r);
 
     // Optional 2D icon (Phase 15 UI): a texture file name under

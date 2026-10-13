@@ -1,0 +1,8 @@
+{
+  "id": "flint_and_steel",
+  "output": { "item": "flint_and_steel", "count": 1 },
+  "ingredients": [
+    { "item": "flint", "count": 1 },
+    { "item": "iron_ingot", "count": 1 }
+  ]
+}
