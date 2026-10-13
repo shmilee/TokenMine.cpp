@@ -324,6 +324,54 @@ TEST(RaycastTest, CanPlaceAdjacentToPlayer) {
     EXPECT_TRUE(canPlaceAt(world, blocks, {0, 3, 0}, kPlayerMin, kPlayerMax));
 }
 
+// -- planting placement restriction (Phase 53) -------------------------------
+
+TEST(RaycastTest, CanPlantOnListedSoil) {
+    BlockRegistry blocks = makeBlocks();
+    const BlockID stone = blocks.idForName("stone");
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, stone)); // soil below target (0,1,0)
+    EXPECT_TRUE(canPlantAt(world, blocks, {0, 1, 0}, {"stone"}));
+}
+
+TEST(RaycastTest, CannotPlantOnWrongSoil) {
+    BlockRegistry blocks = makeBlocks();
+    const BlockID glass = blocks.idForName("glass");
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, glass));
+    EXPECT_FALSE(canPlantAt(world, blocks, {0, 1, 0}, {"stone"}));
+}
+
+TEST(RaycastTest, CanPlantWithMultipleSoils) {
+    BlockRegistry blocks = makeBlocks();
+    const BlockID glass = blocks.idForName("glass");
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, glass));
+    // Matches the SECOND entry of the list.
+    EXPECT_TRUE(canPlantAt(world, blocks, {0, 1, 0}, {"stone", "glass"}));
+}
+
+TEST(RaycastTest, EmptyPlantOnUnrestricted) {
+    BlockRegistry blocks = makeBlocks();
+    World world;
+    // Nothing below (air) — an empty list is still unrestricted.
+    EXPECT_TRUE(canPlantAt(world, blocks, {0, 5, 0}, {}));
+}
+
+TEST(RaycastTest, CannotPlantWithAirBelow) {
+    BlockRegistry blocks = makeBlocks();
+    World world;
+    // Nothing below (0,1,0) -> air, which is not "stone".
+    EXPECT_FALSE(canPlantAt(world, blocks, {0, 1, 0}, {"stone"}));
+}
+
+TEST(RaycastTest, CannotPlantBelowBottomRow) {
+    BlockRegistry blocks = makeBlocks();
+    World world;
+    // Target at y=0: below is y=-1 (out of range, reads as air) -> rejected.
+    EXPECT_FALSE(canPlantAt(world, blocks, {0, 0, 0}, {"stone"}));
+}
+
 TEST(RaycastTest, CannotPlaceInCellPlayerIsWalkingInto) {
     BlockRegistry blocks = makeBlocks();
     World world;

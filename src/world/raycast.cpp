@@ -190,6 +190,24 @@ bool canPlaceAt(const World& world, const BlockRegistry& blocks, BlockPos cell,
     return true;
 }
 
+bool canPlantAt(const World& world, const BlockRegistry& blocks, BlockPos cell,
+                const std::vector<std::string>& plantOn) {
+    if (plantOn.empty()) {
+        return true; // unrestricted (the generic placeBlock rule)
+    }
+    // The cell directly below the placement target must hold one of the
+    // listed soil blocks. Out-of-range Y (cell.y == 0 -> below is -1) reads
+    // as air through World::getBlock, so a bottom-row placement is rejected
+    // (air is never in the list).
+    const BlockID below = world.getBlock(cell.x, cell.y - 1, cell.z);
+    for (const std::string& soil : plantOn) {
+        if (below == blocks.idForName(soil)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 float raycastAabb(Vec3 origin, Vec3 dir, Vec3 boxMin, Vec3 boxMax) {
     // Standard slab method: each axis contributes an interval of ray
     // parameters that pierce its slab; the intersection of the three is

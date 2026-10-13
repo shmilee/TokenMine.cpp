@@ -170,6 +170,16 @@ struct BlockProperties {
     // modulus is growthTicks × drySlowdown, so dry passes are a strict
     // subset of wet passes (deterministic, exactly 1/drySlowdown as often).
     int drySlowdown = 1;
+    // Planting placement restriction (Phase 53): an OPTIONAL list of block
+    // names. When non-empty, a placement of this block is allowed only when
+    // the cell DIRECTLY BELOW the target holds one of the listed blocks (the
+    // soil) — a placement-time gate, INDEPENDENT of the growth-time `growsOn`
+    // gate (Phase 50): a block can be placeable on soil X yet require soil Y
+    // to grow. Empty (the default) = unrestricted (the pre-Phase-53 behavior,
+    // the generic placeBlock rule). An explicit empty array is rejected at
+    // data load (the ammo discipline); each name is cross-checked at game
+    // init (it must reference an existing block, the grows_on discipline).
+    std::vector<std::string> plantOn;
 };
 
 // Which texture name is applied to each face group (full_cube shapes) — or

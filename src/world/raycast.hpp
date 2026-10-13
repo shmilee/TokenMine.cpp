@@ -10,6 +10,8 @@
 #pragma once
 
 #include <optional>
+#include <string>
+#include <vector>
 
 #include "core/math/vec3.hpp"
 #include "world/coordinates.hpp"
@@ -61,6 +63,16 @@ std::optional<BlockPos> raycastFluid(const World& world, Vec3 origin,
 //     cell below, but a player whose feet are inside the cell does.
 bool canPlaceAt(const World& world, const BlockRegistry& blocks, BlockPos cell,
                 const Vec3& playerMin, const Vec3& playerMax);
+
+// Planting placement restriction (Phase 53): true when the cell DIRECTLY
+// BELOW `cell` holds one of the blocks named in `plantOn` (the soil). An
+// empty `plantOn` is UNRESTRICTED (returns true) — the caller only invokes
+// it for placeable blocks, but the empty case is safe by construction. This
+// is a placement-time gate, independent of the growth-time `grows_on` gate
+// (Phase 50). The names are resolved through the registry at call time
+// (placement is not a hot path — one per right-click).
+bool canPlantAt(const World& world, const BlockRegistry& blocks, BlockPos cell,
+                const std::vector<std::string>& plantOn);
 
 // Slab test of a ray against an axis-aligned box (Phase 20, mob targeting).
 // Returns the ray parameter t at ENTRY, or -1 for a miss. `dir` does not

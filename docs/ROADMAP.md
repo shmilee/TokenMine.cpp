@@ -149,7 +149,34 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
   一致（草存续、零实体）；**S3 init 失败 ×2**（scratch 资产副本）：`chance_drops` + `chance_drop`
   同时写 → rc=1 + "mutually exclusive"、`chance_drops[0].item = "nope"` → rc=1 + "chance_drops[0]
   names unknown item"。KNOWN_ISSUES 关闭 2（草掉种子非泥土 / 概率次级掉落单条目）。
-
+  - [x] **Phase 53** — 作物放置限制（用户"按你建议继续：候选1"，代理定案最小完整版：
+   `plant_on` 数据驱动放置土壤门，消费 P48/P50 遗留"放置不受限"）。**`plant_on` 纯数据**：
+   block 可选**数组**（方块名）——放置该方块时目标格**正下方**须为列表之一；缺省 = 不限
+   （通用 placeBlock 规则）；空数组 = no-op 拒绝（ammo 纪律）；逐条目点名 `plant_on[i]`
+   拒绝；**init 每条目存在性校验**（grows_on 同款纪律，typo 拒启）。**门 = 纯函数
+   `canPlantAt`**（`src/world/raycast.{hpp,cpp}`，`canPlaceAt` 同款可单测）：下方格持列表
+   之一 → 放行；空列表恒真（不限）；下方越界（目标 y=0）读 air → 拒。`placeBlock` 在
+   canPlaceAt 之后加门；**拒绝 = 静默 no-op**（不消耗物品、无音效，与任何被拒放置一致）。
+   **`plant_on`（放置门）与 `grows_on`（生长门）相互独立**（可放 X 只长 Y；本项目同值）。
+   **内容**：`wheat_1..6` 加 `"plant_on": ["farmland"]`（与 `grows_on` 同值 = Minecraft
+   耕地约束落地；wheat_7 成熟阶不可放置不写）。**无 format 变更**（format 9）。
+   954/954（+12：block 解析 6 + canPlantAt 6）；`-Wall -Wextra -Wpedantic -Werror` 恒 0
+   警告。E2E（批跑，**全绿**）：**S1 base18 门**：P53 ×2 字节一致 + == base18 → **第 27 次
+   结构性免疫（免重锚）**【plant_on 只影响放置，fresh 世界零放置 = 无输入零活动】+ 红心 0；
+   **S2a 放置成功输入**（240f，预瞄准存档 + 单次右键 @ 2.9s 锚定 `Entering main loop`；
+   耕地 (22,44,−2) 顶面 y=45，瞄 yaw 0 / pitch atan2(−1.62,2) = −0.680809，**真实
+   raycastBlock 探针 p53ray 先验证** hit=(22,44,−2) n=(0,1,0) dist 2.574 → 放置目标
+   (22,45,−2) air、below=耕地；**场景选位 = p53scan 预计算**：调真实 `cropGrowthSteps`
+   扫 z∈{−4..−1}，唯 z=−2/−1 在 [0,240) 无生长通过帧【z=−3/−4 各 1 帧且与 fps 相关
+   点击帧赛跑 → 弃】→ 作物全程保持 wheat_1 = **fps 无关断言**）：存档 ×2 字节一致
+   （无实体 = 全字节即权威）+ 存档精确（**wheat_1 落在 (22,45,−2) + 槽 0 消耗** +
+   耕地完好【锁定 click 未破坏土壤】+ 零实体）+ 无输入 ctl ×2 字节一致（未放置、槽完好）；
+   **S2b 放置拒绝输入**（同几何，土壤 = 石头）：存档 ×2 字节一致 + 存档精确（**wheat_1
+   未放置 + 槽 0 不消耗** = 拒绝语义 + 石头完好）；**S3 init 失败 ×2**（scratch 资产
+   副本）：`plant_on: ["nope"]` → rc=1 + "plant_on names unknown block"、`plant_on: []`
+   → rc=1 + "must not be an empty array"。KNOWN_ISSUES 关闭 1（作物可种在任何朝向的表面）。
+   **PITS +1**（E2E 输入跑中的放置物会被生长引擎继续推进 = 断言须预计算生长通过帧或选
+   无通过帧场景位，点击帧 = 2.9s × 实测 fps 与通过帧赛跑）。
 
 ## 细节存档索引（docs/archive/）
 
@@ -202,5 +229,6 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 50** — `archive/phase-50.md`
 - **Phase 51** — `archive/phase-51.md`
 - **Phase 52** — `archive/phase-52.md`
+- **Phase 53** — `archive/phase-53.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

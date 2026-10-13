@@ -417,6 +417,7 @@ Phase 49）。
        "grows_to": "wheat_2",           // 指向下一阶（成熟阶留空 = 停止）
        "growth_ticks": 360,             // 平均多少 tick（1/60s 帧）进一阶
        "grows_on": "farmland",          // 下方须为该土壤（Phase 50；缺省 = 无要求）
+       "plant_on": ["farmland"],        // 放置时下方须为之一（Phase 53；缺省 = 不限）
        "growth_light": 9,               // 作物格最低光照 max(sky,block)（9 = MC 值）
        "dry_slowdown": 2                // 无水时 roll 模数倍数（2 = MC 干耕地）
      },
@@ -434,6 +435,12 @@ Phase 49）。
    `grows_on`（土壤名，显式空串 = 笔误拒绝）、`growth_light`（整数
    [0,15]，0 = 无要求，非整数拒绝）、`dry_slowdown`（整数 [1,64]，
    1 = 无减速，非整数拒绝）。
+   放置字段（Phase 53，**可选**）：`plant_on`（方块名**数组**——放置该
+   方块时，目标格**正下方**须为列表之一；缺省 = 不限 = 通用 placeBlock
+   规则；空数组 = no-op 拒绝（ammo 纪律）；逐条目点名 `plant_on[i]`
+   拒绝；init 每条目必须指向存在的方块，grows_on 同款纪律）。
+   `plant_on`（放置门）与 `grows_on`（生长门）**相互独立**：可以放在
+   土壤 X 上却只在土壤 Y 上生长（本项目两者同值 = farmland）。
 2. **生长引擎**（自动）：`Game::m_crops`（`map<BlockPos,BlockID>`，位置序）
    追踪所有带 `grows_to` 的格——`setBlock` 收口维护（放作物=入集，
    破坏/成熟=出集，炉子同款模式），**读档后 `rescanCrops()` 全量扫描
@@ -511,9 +518,27 @@ Phase 49）。
 (7,5)，无 UV 移位）+ 配方 `farmland`（shapeless 1 dirt → 1 farmland）+
 `wheat_1..6` 加三个环境字段。**无 format 变更**（format 8）。
 
-**已知简化**（见 KNOWN_ISSUES）：作物可种在任意表面（放置不受限，
-只是没有合格土壤就不长）；`dry_slowdown` 参照格永远是作物下方一格
-（即使 `grows_on` 缺省）；水 = 任一流体层级（不区分源/流动）。
+**已知简化**（见 KNOWN_ISSUES）：`dry_slowdown` 参照格永远是作物下方
+一格（即使 `grows_on` 缺省）；水 = 任一流体层级（不区分源/流动）。
+（"作物可种在任意表面" = Phase 53 已解决：`plant_on` 放置门。）
+
+## 作物放置限制（Phase 53）
+
+消费 P48/P50 遗留"放置不受限"：`placeBlock` 在通用规则（受击面邻格
+air + 不重叠玩家）之后加一道**数据驱动土壤门**：
+
+1. **门**（纯函数 `canPlantAt`，`src/world/raycast.{hpp,cpp}`，
+   `canPlaceAt` 同款可单测）：放置目标格**正下方**一格须持有
+   `plant_on` 列表之一；列表空 = 不限（恒真）。下方越界（目标 y=0）
+   读作 air → 拒绝。
+2. **拒绝语义**：土壤不符 = **静默 no-op**（不消耗物品、无音效——与
+   任何被拒放置一致，右键顺序在 eat/drink/bow/milk/interact/dye/
+   bucket 之后，`placeBlock` 内 canPlaceAt 之后）。
+3. **首个使用者**：`wheat_1..6` 的 `"plant_on": ["farmland"]`（与
+   `grows_on` 同值；wheat_7 成熟阶不可放置，不写）。
+   加"某方块只能种在某土壤上" = 该方块 JSON 加 `plant_on` 数组，
+   零核心代码。
+4. **无 format 变更**（format 9）。
 
 ## 调节玩家参数（config/config.json `player.*`，Phase 32）
 

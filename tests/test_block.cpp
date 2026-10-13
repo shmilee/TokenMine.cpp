@@ -1000,6 +1000,60 @@ TEST(BlockRegistryTest, ChanceDropsMutuallyExclusiveWithChanceDrop) {
 }
 
 // ---------------------------------------------------------------------------
+// Planting placement restriction (Phase 53): plant_on is an OPTIONAL array
+// of block names (the soil the block may be placed on). Absent = no
+// restriction; an empty array is rejected (the ammo discipline).
+// ---------------------------------------------------------------------------
+
+TEST(BlockRegistryTest, ParsesPlantOn) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(propsDef(
+        R"({"grows_on":"farmland","plant_on":["farmland","dirt"]})")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Block& b = reg.at(*r);
+    ASSERT_EQ(b.properties.plantOn.size(), 2u);
+    EXPECT_EQ(b.properties.plantOn[0], "farmland");
+    EXPECT_EQ(b.properties.plantOn[1], "dirt");
+}
+
+TEST(BlockRegistryTest, PlantOnAbsentByDefault) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(minimalDef("stone")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(reg.at(*r).properties.plantOn.empty());
+}
+
+TEST(BlockRegistryTest, PlantOnMustBeArray) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(propsDef(R"({"plant_on":"farmland"})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("must be an array"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, PlantOnRejectsEmptyArray) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(propsDef(R"({"plant_on":[]})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("must not be an empty array"),
+              std::string::npos);
+}
+
+TEST(BlockRegistryTest, PlantOnRejectsNonStringEntry) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(propsDef(R"({"plant_on":[1]})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("plant_on[0]"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, PlantOnRejectsEmptyStringEntry) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(propsDef(R"({"plant_on":[""]})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("plant_on[0]"), std::string::npos);
+}
+
+// ---------------------------------------------------------------------------
 // Crop environment fields (Phase 50): grows_on / growth_light / dry_slowdown
 // are optional growth-condition fields (absent = no requirement).
 // ---------------------------------------------------------------------------

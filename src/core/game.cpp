@@ -466,6 +466,20 @@ Result<void> Game::buildScene() {
         }
     }
 
+    // Strict data check (Phase 53): each plant_on name must reference an
+    // EXISTING block (the soil the block can be placed on) — the same
+    // existence cross-check as grows_on (a typo fails init loudly).
+    for (const BlockID id : m_blocks.allIds()) {
+        const Block& b = m_blocks.at(id);
+        for (const std::string& soil : b.properties.plantOn) {
+            const BlockID onId = m_blocks.idForName(soil);
+            if (!onId.valid()) {
+                return MC_FAIL("block '" + b.name + "' plant_on names "
+                               "unknown block '" + soil + "'");
+            }
+        }
+    }
+
     // Strict data check (Phase 51): a fluid block's water_reaction names
     // two EXISTING blocks (the source-water and flowing-water products of
     // the reaction — the ammo discipline; a typo fails init loudly). The
@@ -2285,6 +2299,17 @@ void Game::placeBlock() {
         hit->block.z + static_cast<int>(hit->normal.z)};
     if (!canPlaceAt(m_world, m_blocks, target, m_player->aabbMin(),
                     m_player->aabbMax())) {
+        return;
+    }
+    // Planting placement restriction (Phase 53): if the placed block names a
+    // plant_on soil list, the cell DIRECTLY BELOW the target must hold one of
+    // the listed blocks (the soil). Absent = unrestricted (the generic
+    // placeBlock rule). This is a placement-time gate, independent of the
+    // growth-time grows_on gate (Phase 50). A wrong-soil placement is a
+    // silent no-op (the block is not consumed, no sound — same as any other
+    // rejected placement).
+    if (!canPlantAt(m_world, m_blocks, target,
+                    m_blocks.at(item.block).properties.plantOn)) {
         return;
     }
     // Game::setBlock (Phase 42): also releases any arrow stuck in the

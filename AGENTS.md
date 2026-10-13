@@ -9,9 +9,25 @@
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（Phase 52 完成时）
+## 现状（Phase 53 完成时）
 
-- 功能阶段 P0–P52 全部完成并提交；P52 = 加权多掉落列表（用户"按候选顺序
+- 功能阶段 P0–P53 全部完成并提交；P53 = 作物放置限制（用户"按你建议
+   继续：候选1"，代理定案最小完整版 = `plant_on` 数据驱动放置土壤门，
+   消费 P48/P50 遗留"放置不受限"，熔岩后续/多掉落内容扩展留后续）：
+   **`plant_on` 纯数据**（block 可选**数组**（方块名）——放置时目标格
+   **正下方**须为列表之一；缺省 = 不限 = 通用 placeBlock 规则；空数组
+   no-op 拒绝【ammo 纪律】、逐条目点名 `plant_on[i]` 拒绝）+ **门 = 纯
+   函数 `canPlantAt`**（`world/raycast`，`canPlaceAt` 同款可单测；下方
+   越界读 air → 拒）+ `placeBlock` 在 canPlaceAt 后加门（土壤不符 =
+   静默 no-op，不消耗物品）+ **init 每条目存在性校验**（grows_on 纪律）
+   + **`plant_on`（放置门）与 `grows_on`（生长门）相互独立**（本项目同值
+   farmland = Minecraft 耕地约束落地）+ 内容：`wheat_1..6` 加
+   `plant_on: ["farmland"]`。**无 format 变更**（format 9）；954/954
+   （+12：block 解析 6 + canPlantAt 6）、`-Werror` 0 警告、base18 **第
+   27 次结构性免疫**【plant_on 只影响放置，fresh 世界零放置 = 无输入零
+   活动】；E2E 场景选位 = p53scan 探针调真实 `cropGrowthSteps` 预计算
+   【选 [0,240) 无生长通过帧的格 = fps 无关断言，见 PITS P53 条】；
+   P52 = 加权多掉落列表（用户"按候选顺序
    继续后面两个 phase" = 候选 2，代理定案最小完整版 = `chance_drops`
    多条目独立 roll + grass 改 MC 语义，放置限制/熔岩后续留后续）：
    **`chance_drops` 纯数据**（block 可选数组，元素 = 与 P49 单条目
@@ -114,17 +130,17 @@
   （P28 遗留"熟肉"）、P41 = wool 染色框架（P12/P20 遗留"wool 无用途/无
   染色"；atlas 4×8→8×8 → base18 于 P41 重锚）、P42 = 弓后续 2、P43 =
   牛奶桶最小项（饮用通道 + 挤奶）。
-- 测试 **942/942**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
+- 测试 **954/954**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告。
 - 无输入基线门：`/tmp/opencode/base18.png`（字节一致；P41 重锚【atlas
-  8×8】，P42/P43/P44/P45/P46/P47/P48/P49/P50/P51/P52 过门 = 第 16/17/18/
-  19/20/21/22/23/24/25/26 次结构性免疫、无重锚）。
+  8×8】，P42/P43/P44/P45/P46/P47/P48/P49/P50/P51/P52/P53 过门 = 第
+  16/17/18/19/20/21/22/23/24/25/26/27 次结构性免疫、无重锚）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`SESSION_CONTEXT.md`「下一步」。
 
 ## 命令
 
 ```bash
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build  # 构建（0 警告）
-./build/bin/minecraft_tests                                                 # 测试（835）
+./build/bin/minecraft_tests                                                 # 测试（954）
 ./build/bin/minecraft                                                       # 运行（ESC 退出）
 ./build/bin/minecraft --frames N [--screenshot /abs.png] [--save slot] [--new] [--config path]
 ```

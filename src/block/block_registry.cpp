@@ -118,6 +118,34 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "grows_on", "string",
                    [&](const Json& v) { out.growsOn = v.asString(); });
     MC_TRY(r);
+    // Planting placement restriction (Phase 53): an OPTIONAL array of block
+    // names. When present, a placement of this block is allowed only when
+    // the cell DIRECTLY BELOW the target holds one of the listed blocks (the
+    // soil) — a placement-time gate, independent of the growth-time grows_on
+    // gate (Phase 50). Absent = unrestricted (the pre-Phase-53 behavior); an
+    // empty array is a no-op and rejected (the ammo discipline). Each name
+    // must be a non-empty string (the block-existence cross-check happens at
+    // game init, the grows_on discipline).
+    if (const Json* po = p->find("plant_on")) {
+        if (!po->isArray()) {
+            return MC_FAIL("block property 'plant_on' must be an array of "
+                           "block names");
+        }
+        if (po->size() == 0) {
+            return MC_FAIL("block property 'plant_on' must not be an empty "
+                           "array (omit it when the block can be placed "
+                           "anywhere)");
+        }
+        for (std::size_t i = 0; i < po->size(); ++i) {
+            const Json& v = po->at(i);
+            if (!v.isString() || v.asString().empty()) {
+                return MC_FAIL("block property 'plant_on[" +
+                               std::to_string(i) + "]' must be a non-empty "
+                               "block name string");
+            }
+            out.plantOn.push_back(v.asString());
+        }
+    }
     // Crop environment (Phase 50): integer fields with explicit
     // integer-ness + range checks (the restore_hunger discipline).
     if (const Json* gl = p->find("growth_light")) {

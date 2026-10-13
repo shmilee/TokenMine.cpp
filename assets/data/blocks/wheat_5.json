@@ -9,6 +9,7 @@
     "grows_to": "wheat_6",
     "growth_ticks": 360,
     "grows_on": "farmland",
+    "plant_on": ["farmland"],
     "growth_light": 9,
     "dry_slowdown": 2
   },
