@@ -17,6 +17,8 @@
 - **Token**：这座矿是 token 一行行"挖"出来的——整个项目由本地 LLM 编写；
 - **Mine**：Minecraft 的"挖矿"，也是英语的 "my"（这座矿是我的）；
 - **.cpp**：程序员圈的命名梗，"X.cpp" 即 "X 的 C++ 重写版"。
+- **起源**：P0 之前的《开发总提示词》（ChatGPT 起草，1164 行原始文本未做任何改动）
+  见 [initial-chatgpt-prompt.md](initial-chatgpt-prompt.md)。
 
 ## 技术栈
 
