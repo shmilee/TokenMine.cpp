@@ -241,8 +241,8 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     s.tableGrid[8] = ItemStack {f.items.idForName("stone"), 64};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Phase 64: writes are always format 10.
-    EXPECT_EQ(j->find("format")->asInt(), 10);
+    // Phase 71: writes are always format 11.
+    EXPECT_EQ(j->find("format")->asInt(), 11);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -283,6 +283,7 @@ TEST(SaveParseTest, FormatTwoLoadsWithEmptyGrids) {
     Json root = *j;
     root["format"] = Json(2);
     root = withoutKey(root, "fires"); // format 2 predates the fire
+    root = withoutKey(root, "campfires"); // format 2 predates the campfire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "inv_grid");
     root = withoutKey(root, "table_grid");
@@ -382,6 +383,7 @@ TEST(SaveParseTest, FormatOneLoadsWithoutHealth) {
     Json root = *j;
     root["format"] = Json(1);
     root = withoutKey(root, "fires"); // format 1 predates the fire
+    root = withoutKey(root, "campfires"); // format 1 predates the campfire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "inv_grid"); // format 1 predates the grids
     root = withoutKey(root, "table_grid");
@@ -430,6 +432,7 @@ TEST(SaveParseTest, FormatThreeLoadsWithoutHunger) {
     Json root = *j;
     root["format"] = Json(3);
     root = withoutKey(root, "fires"); // format 3 predates the fire
+    root = withoutKey(root, "campfires"); // format 3 predates the campfire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 3 predates the furnace
     ASSERT_EQ(root["player"].find("hunger"), nullptr);
@@ -476,6 +479,7 @@ TEST(SaveParseTest, FormatFourLoadsWithoutSaturation) {
     Json root = *j;
     root["format"] = Json(4);
     root = withoutKey(root, "fires"); // format 4 predates the fire
+    root = withoutKey(root, "campfires"); // format 4 predates the campfire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 4 predates the furnace
     ASSERT_EQ(root["player"].find("saturation"), nullptr);
@@ -833,6 +837,7 @@ TEST(SaveParseTest, FluidEditKindRoundTripsAndMigrates) {
 
     root["format"] = Json(8);
     root = withoutKey(root, "fires"); // format 8 predates the fire
+    root = withoutKey(root, "campfires"); // format 8 predates the campfire
     Json waterEdit = Json::array();
     waterEdit.push_back(Json(3));
     waterEdit.push_back(Json(10));
@@ -1080,8 +1085,8 @@ TEST(SaveRoundTripTest, FurnacesRoundTrip) {
     s.furnaces[0].state.fuelSubsteps = 1234;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Phase 64: writes are always format 10.
-    EXPECT_EQ(j->find("format")->asInt(), 10);
+    // Phase 71: writes are always format 11.
+    EXPECT_EQ(j->find("format")->asInt(), 11);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
@@ -1121,6 +1126,7 @@ TEST(SaveParseTest, FormatFiveLoadsWithEmptyFurnaces) {
     Json root = *j;
     root["format"] = Json(5);
     root = withoutKey(root, "fires"); // format 5 predates the fire
+    root = withoutKey(root, "campfires"); // format 5 predates the campfire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 5 predates the furnace
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
@@ -1146,6 +1152,7 @@ TEST(SaveParseTest, FormatSixMigratesStateToSoleFurnace) {
     Json root = *j;
     root["format"] = Json(6);
     root = withoutKey(root, "fires"); // format 6 predates the fire
+    root = withoutKey(root, "campfires"); // format 6 predates the campfire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["furnace"] = withoutKey(root["furnaces"].at(0), "pos");
     root = withoutKey(root, "furnaces");
@@ -1174,6 +1181,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
     Json root = *j;
     root["format"] = Json(6);
     root = withoutKey(root, "fires"); // format 6 predates the fire
+    root = withoutKey(root, "campfires"); // format 6 predates the campfire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["furnace"] = withoutKey(root["furnaces"].at(0), "pos");
     root = withoutKey(root, "furnaces");
@@ -1190,6 +1198,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
         Json root2 = *j2;
         root2["format"] = Json(6);
         root2 = withoutKey(root2, "fires"); // format 6 predates the fire
+        root2 = withoutKey(root2, "campfires"); // format 6 predates the campfire
         root2["fluids"] = downgradeFluids(root2); // pre-Phase-51 shape
         root2 = withoutKey(root2, "furnaces");
         Json fz = Json::object();
@@ -1219,6 +1228,7 @@ TEST(SaveParseTest, RejectsFurnaceFieldInOldFormat) {
     Json root = *j;
     root["format"] = Json(5); // keeps the "furnaces" field
     root = withoutKey(root, "fires"); // the rejection under test is "furnaces"
+    root = withoutKey(root, "campfires"); // format older predates the campfire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
@@ -1244,6 +1254,7 @@ TEST(SaveParseTest, RejectsFurnacesFieldInFormatSix) {
     Json root = *j;
     root["format"] = Json(6); // keeps the "furnaces" field
     root = withoutKey(root, "fires"); // the rejection under test is "furnaces"
+    root = withoutKey(root, "campfires"); // format older predates the campfire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
@@ -1411,8 +1422,8 @@ TEST(SaveRoundTripTest, FiresRoundTrip) {
     SaveGame s = makeFireSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Phase 64: writes are always format 10.
-    EXPECT_EQ(j->find("format")->asInt(), 10);
+    // Phase 71: writes are always format 11.
+    EXPECT_EQ(j->find("format")->asInt(), 11);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->fires.size(), 2u);
@@ -1445,6 +1456,7 @@ TEST(SaveParseTest, FormatNineLoadsWithoutFires) {
     Json root = *j;
     root["format"] = Json(9);
     root = withoutKey(root, "fires"); // format 9 predates the fire
+    root = withoutKey(root, "campfires"); // format 9 predates the campfire
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->fires.empty());
@@ -1462,6 +1474,7 @@ TEST(SaveParseTest, FormatNineFireEditMigratesEmpty) {
     Json root = *j;
     root["format"] = Json(9);
     root = withoutKey(root, "fires"); // format 9 predates the fire
+    root = withoutKey(root, "campfires"); // format 9 predates the campfire
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->fires.empty());
@@ -1588,6 +1601,7 @@ TEST(SaveFormat8Test, FormatSevenFileWithoutEffectsLoads) {
     Json root = *j;
     root["format"] = Json(7);
     root = withoutKey(root, "fires"); // format 7 predates the fire
+    root = withoutKey(root, "campfires"); // format 7 predates the campfire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["player"] = withoutKey(*j->find("player"), "effects");
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);

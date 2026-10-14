@@ -251,6 +251,34 @@
     **双向**交叉校验（entry 无块 / 块无 entry 均拒绝）。format 6（单个全局
     `furnace`）仍可加载：恰 1 个炉子块 → 状态归属它，0/多个 → 丢弃
     （见 KNOWN_ISSUES）
+ - **营火 / 烤食物**（Phase 71，数据驱动 + per-block 状态，炉子 P44 范式）：
+   - **营火方块**：`"interact": "campfire"` 属性（第三交互词汇表值）、cross
+     模型、光 **15**、hardness 0.5、**破坏掉自己**（可复用）、非 flamable
+     （是火源外观，不是可燃物）；配方 shaped `SSS/LCL/LLL`（3 木棍 +
+     5 wood 块 + 1 coal = MC 营火配方）
+   - **单槽烤制**：每营火块一个 `CampfireCookState`（`std::map<BlockPos,
+     CampfireCookState>`，setBlock 收口创建/删除，位置序 = 确定性 tick 序）；
+     **槽至多 1 个物品**——手持**可熔炼**物品（`smeltable_to` 非空 =
+     数据驱动门）右键空槽 = 放上 1 个（消耗 1，"place" 音）；**空手**右键 =
+     取回（生熟均可，"pickup" 音，MC 空手规则）；其余组合 no-op。右键链中
+     营火分支**先于进食通道**（MC 语义：手持食物右键营火 = 放上火上，不开
+     吃——项目全部可熔炼物品都是食物，无此前置则烤槽永远填不上；炉子/工作台
+     保留既有进食优先行为）
+   - **计时**：每状态每帧固定 1/60 子步 + 整数 `progressSubsteps`（与炉子
+     同类：无输入运行逐字节可复现）；速度 = **炉子节奏**（复用物品
+     `smelt_time` 数据、`smeltSubstepsFor`——无独立 config）；**无燃料**
+     （营火自燃 = v1 文档化偏离）；产物非可熔炼 → 熟品在槽中静置
+   - **烤制中渲染**：槽非空时物品图标以 0.5 大小交叉 quad 悬浮在格上半部
+     （cross 块惯例：视角无关、opaque pass、深度遮挡；+Y 假法线 = 顶面亮度
+     档）
+   - **座位**：crouch（LeftControl）+ 贴地 + 玩家 AABB 严格重叠 campfire 格
+     → `isSitting`（每 tick 由按键 + 世界重算，**不入存档**）：锁定移动 +
+     跳跃（松 crouch 或脱离重叠 = 站起）；crouch 高度即坐姿（无独立坐姿 =
+     v1 文档化偏离）
+   - **存档**：format 11 `campfires` 数组——**每 campfire 块一条目**（`pos`
+     + `item`/`count` + 整数 `progress_substeps`），位置排序，与方块差集
+     **双向**交叉校验 + **进度不变量**（progress > 0 ⇒ 槽恰 1 个可熔炼物）。
+     format 10 及以下可加载：无条目，手编旧文件的 campfire 块编辑 → 空状态
 - **染色**（Phase 41，Phase 45 补全颜色，全数据驱动）：
   - **染料物品**：物品可选字段 `dye_color`（颜色名 = 纯数据词汇表：任何
     `dye_<color>` 物品注册即扩展词汇表，**加颜色零代码改动**；显式空串

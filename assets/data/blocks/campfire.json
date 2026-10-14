@@ -1,0 +1,16 @@
+{
+  "id": "campfire",
+  "properties": {
+    "hardness": 0.5,
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "light_emission": 15,
+    "interact": "campfire",
+    "drops": "campfire"
+  },
+  "model": {
+    "shape": "cross",
+    "textures": { "cross": "campfire" }
+  }
+}

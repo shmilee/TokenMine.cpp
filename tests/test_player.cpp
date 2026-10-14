@@ -48,6 +48,15 @@ BlockRegistry makeBlocks() {
     if (!r.ok()) {
         ADD_FAILURE() << r.error().message;
     }
+    // The campfire block (Phase 71): non-solid like the real content — the
+    // sitting test needs the player's AABB to overlap it (the campfire id
+    // the player resolves by name in its constructor).
+    r = blocks.registerBlock(parseJson(
+        R"({"id":"campfire","properties":{"solid":false,"opaque":false,)"
+        R"("transparent":true},"model":{"textures":{"top":"c","side":"c","bottom":"c"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
     return blocks;
 }
 
@@ -59,11 +68,13 @@ struct Fixture {
     BlockID stone;
     BlockID water;
     BlockID fire;
+    BlockID campfire;
 
     Fixture() {
         stone = blocks.idForName("stone");
         water = blocks.idForName("water");
         fire = blocks.idForName("fire");
+        campfire = blocks.idForName("campfire");
         for (int x = -16; x < 16; ++x) {
             for (int z = -16; z < 16; ++z) {
                 world.setBlock(x, 0, z, stone);
@@ -1497,4 +1508,77 @@ TEST(PlayerParamsConfigTest, RejectsFireDamageAboveMaxHealth) {
     auto r = Player::Params::fromConfig(cfg);
     ASSERT_FALSE(r.ok());
     EXPECT_NE(r.error().message.find("fire_damage"), std::string::npos);
+}
+
+// -- Sitting (Phase 71): crouch on the ground, overlapping a campfire -------
+
+TEST(PlayerTest, SittingOnCampfireLocksMovement) {
+    Fixture f;
+    f.world.setBlock(8, 1, 8, f.campfire); // the cell at the player's feet
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f}); // the AABB overlaps it
+    Input idle = heldInput({});
+    run(p, 10, idle); // settle on the ground (m_onGround from last tick)
+    ASSERT_FALSE(p.isSitting()); // standing (not crouching) is not sitting
+    Input sit = heldInput({GameKey::W, GameKey::LeftControl});
+    run(p, 1, sit); // crouch while overlapping: sitting engages
+    ASSERT_TRUE(p.isSitting());
+    const Vec3 at = p.position();
+    run(p, 120, sit); // 2 s of holding W + crouch: no movement at all
+    EXPECT_TRUE(p.isSitting());
+    EXPECT_DOUBLE_EQ(at.x, p.position().x);
+    EXPECT_DOUBLE_EQ(at.y, p.position().y);
+    EXPECT_DOUBLE_EQ(at.z, p.position().z);
+}
+
+TEST(PlayerTest, CrouchWalkWithoutCampfireStillMoves) {
+    // The control: the same crouch-walk input with NO campfire — the
+    // player walks (sitting is the only thing that locks the movement).
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(p, 10, idle);
+    Input walk = heldInput({GameKey::W, GameKey::LeftControl});
+    run(p, 60, walk); // 1 s of crouch-walking (yaw 0 = -Z)
+    EXPECT_FALSE(p.isSitting());
+    EXPECT_LT(p.position().z, 8.4);
+}
+
+TEST(PlayerTest, UncrouchStandsUp) {
+    Fixture f;
+    f.world.setBlock(8, 1, 8, f.campfire);
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(p, 10, idle);
+    Input sit = heldInput({GameKey::LeftControl});
+    run(p, 30, sit);
+    ASSERT_TRUE(p.isSitting());
+    Input walk = heldInput({GameKey::W}); // the crouch is released
+    run(p, 1, walk);
+    EXPECT_FALSE(p.isSitting()); // standing up
+    const Vec3 at = p.position();
+    run(p, 60, walk);
+    EXPECT_LT(p.position().z, at.z); // the movement is back
+}
+
+TEST(PlayerTest, SittingBlocksJump) {
+    Fixture f;
+    f.world.setBlock(8, 1, 8, f.campfire);
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(p, 10, idle);
+    Input sit = heldInput({GameKey::Space, GameKey::LeftControl});
+    run(p, 60, sit); // holding Space while sitting: no jump
+    ASSERT_TRUE(p.isSitting());
+    EXPECT_DOUBLE_EQ(1.0, p.position().y); // never left the ground
+}
+
+TEST(PlayerTest, SittingNeedsGround) {
+    // Mid-air over the campfire column (overlapping the cell while
+    // falling): the on-ground condition keeps the player from sitting.
+    Fixture f;
+    f.world.setBlock(8, 5, 8, f.campfire); // a campfire at the spawn height
+    Player p = f.makePlayer({8.5f, 5.0f, 8.5f}); // the AABB overlaps it
+    Input sit = heldInput({GameKey::LeftControl});
+    run(p, 1, sit); // the first tick: still airborne (m_onGround = false)
+    EXPECT_FALSE(p.isSitting());
 }

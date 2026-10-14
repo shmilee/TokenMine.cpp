@@ -1131,3 +1131,19 @@
   E2E 断言掉落位置要用**已证明的落点常量**（精确值 + 1e-6 容差），
   不要按"格中心下方"的几何直觉推范围——P67 首轮按中心 z∈(-6,-5)
   断言，实测 -4.5 出界 FAIL（机制本身全对，×2 savenorm 字节一致）。
+- **xdotool 键名：`Left_Control` 非法、且失败是静默的（P71）**：
+  `xdotool keydown Left_Control` 只打一行 `(symbol) No such key name
+  'Left_Control'. Ignoring it.` 到 stderr 然后**忽略**——输入被静默丢弃，
+  E2E 失败表现为行为断言错（玩家该坐着却走掉了），而不是输入错误。合法
+  名 = X11 keysym（`Control_L`）或 xdotool 别名（`ctrl`/`shift`/`alt`/
+  `super`）+ 单字符（`w`）。口诀：**新按键先 `xdotool key <name> &` 冒烟
+  看 stderr 有没有 "No such key name"**；E2E 脚本里 `2>/dev/null` 会吞掉
+  这个警告——键输入动作（act_*）不要静默 stderr。
+- **键组合的 keydown 顺序 = 确定性变量（P71）**：多键输入里，"状态
+  建立键"必须**先于**"移动键"落下。P71 座位 E2E 首轮 `keydown w` 后
+  `keydown ctrl`：W 在 ctrl 落帧前的 1–2 帧以正常速度走出 ~0.09 格，
+  漂移帧数取决于按键与帧边界的相位 → 两次运行存档不同（savenorm
+  ×2 失败），且终态 pos 不 EXACT。修 = `keydown ctrl; sleep 0.1;
+  keydown w`：坐位（清零 wish）在 W 首帧前建立，所有帧序交错下移动
+  恒 0。口诀：**输入组合若含"锁/状态 + 动作"两键，锁先发**；断言
+  EXACT 的输入跑先审 keydown 顺序。

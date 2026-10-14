@@ -458,6 +458,50 @@ def fire(x, y):
     return (clamp(base[0] + n), clamp(base[1] + n), clamp(base[2] + n), 255)
 
 
+def campfire(x, y):
+    """Phase 71: the campfire tile (the `campfire` block, a cross model).
+    A ring of logs (rows 12..15: a horizontal log pair with dark ends)
+    under a teardrop flame (rows 1..11) — the same layered palette as the
+    bare `fire` tile (deep-red rim, orange body, yellow core, a near-white
+    heart at the base). The flame's centreline leans with a deterministic
+    per-row hash (a stylised flicker, static like every other texture).
+    Transparent elsewhere."""
+    # Logs: two stacked horizontal bars across the base; the left/right
+    # ends are darker (log cut faces) with a per-pixel bark jitter.
+    if 12 <= y <= 15:
+        n = noise(x, y, 920, 9)
+        if x in (1, 2, 13, 14):
+            base = (96, 64, 36)
+        else:
+            base = (152, 106, 62) if y <= 13 else (130, 90, 52)
+        return (clamp(base[0] + n), clamp(base[1] + n),
+                clamp(base[2] + n), 255)
+    # Flame: a teardrop rising from the log row (the log top is row 12).
+    if 1 <= y <= 11:
+        t = min((11 - y) / 10.0, 1.0)  # 0 at the base row, 1 at the tip
+        lean = (h2(0, y, 921) % 5 - 2) * 0.3 * t  # -0.6..+0.6 px at the tip
+        cx = 7.5 + lean
+        half = 4.6 * (1.0 - t) ** 0.85  # narrows to a point at the tip
+        if half <= 0.1:
+            return (0, 0, 0, 0)
+        dx = abs(x + 0.5 - cx)
+        if dx >= half:
+            return (0, 0, 0, 0)
+        d = dx / half
+        n = noise(x, y, 922, 12)
+        if d < 0.32:  # the near-white heart (only near the base)
+            base = (255, 236, 170) if t < 0.45 else (255, 214, 110)
+        elif d < 0.62:
+            base = (255, 204, 64)
+        elif d < 0.85:
+            base = (242, 122, 30)
+        else:
+            base = (196, 58, 22)
+        return (clamp(base[0] + n), clamp(base[1] + n),
+                clamp(base[2] + n), 255)
+    return (0, 0, 0, 0)  # transparent
+
+
 def torch(x, y):
     """Phase 65: the torch tile (the `torch` block, a cross model). A
     brown stick (2-px column, rows 6..15) topped by a small flame (rows
@@ -523,6 +567,7 @@ TEXTURES = {
     "cornflower": make_flower((126, 174, 245), 65),
     "glowstone": glowstone,
     "fire": fire,
+    "campfire": campfire,
     "torch": torch,
     "planks": planks,
     "crafting_table_top": crafting_table_top,

@@ -222,6 +222,12 @@ public:
     // Fire immersion (Phase 70): the AABB overlaps a fire block cell (the
     // contact-damage source).
     bool inFire() const { return m_inFire; }
+    // Sitting (Phase 71): crouching on the ground while the AABB overlaps
+    // a campfire block cell — movement and jumping are locked (the crouch
+    // height is the sitting pose — documented v1 deviation: no separate
+    // sit pose). Recomputed every tick from the crouch key + world, so it
+    // is not saved.
+    bool isSitting() const { return m_sitting; }
 
     // -- hunger (Phase 23) -----------------------------------------------------
     float hunger() const { return m_hunger; }
@@ -369,6 +375,13 @@ private:
     // (registry name "fire" — the fluid.cpp fallback pattern): invalid =
     // no fire block registered (a test fixture) = isInFire is false.
     BlockID m_fireBlockId = BlockID::invalid();
+    // Phase 71: the campfire block id, resolved once in the constructor
+    // (the registry is static after init). An unknown name leaves the id
+    // invalid = the player can never sit (a test fixture without the
+    // campfire block — the m_fireBlockId pattern).
+    BlockID m_campfireBlockId = BlockID::invalid();
+    // Phase 71: the sitting state this tick (see isSitting()).
+    bool m_sitting = false;
 
     static constexpr float kMaxPitch = 1.5533f; // ~89 deg
     // The crouch edge guard / step-up treat an AABB face as "flush" with a

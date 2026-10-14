@@ -22,7 +22,9 @@ Player::Player(const World& world, const BlockRegistry& blocks, Vec3 spawnPos,
       // after init). An unknown name leaves the id invalid = isInFire is
       // always false (a test fixture without the fire block — the
       // fluid.cpp fallback pattern).
-      m_fireBlockId(blocks.idForName("fire")) {
+      m_fireBlockId(blocks.idForName("fire")),
+      // Phase 71: the campfire id the same way (unknown = never sitting).
+      m_campfireBlockId(blocks.idForName("campfire")) {
     teleportTo(spawnPos);
 }
 
@@ -191,6 +193,19 @@ void Player::update(double dt) {
     m_crouching = m_input->isDown(GameKey::LeftControl);
     updateCrouchHeight();
 
+    // Sitting (Phase 71): crouching ON THE GROUND while the AABB overlaps
+    // a campfire cell (the campfire is a non-solid cross block — the
+    // player stands in it, like the fire contact above). Sitting locks
+    // the movement (the wish below is zeroed) and the jump (integrate);
+    // the crouch height IS the sitting pose. m_onGround is the previous
+    // sub-step's result (the edge-guard convention) — a player mid-air
+    // next to the fire does not sit.
+    m_sitting =
+        m_crouching && m_onGround &&
+        (m_campfireBlockId.valid()
+             ? overlapsBlock(m_campfireBlockId)
+             : false);
+
     Vec3 wish {0.0f, 0.0f, 0.0f};
     if (m_input->isDown(GameKey::W)) {
         wish += fwd;
@@ -203,6 +218,11 @@ void Player::update(double dt) {
     }
     if (m_input->isDown(GameKey::A)) {
         wish -= right;
+    }
+    // Sitting (Phase 71): the movement is locked (the sprint condition
+    // below also falls out — it requires a non-zero wish).
+    if (m_sitting) {
+        wish = Vec3 {0.0f, 0.0f, 0.0f};
     }
     // Sprinting (Phase 28): the exact condition that selects sprintSpeed
     // (Shift + moving, out of water) — it also doubles the hunger decay
@@ -551,8 +571,10 @@ void Player::integrate(float h) {
             m_velocity.y = -m_params.terminalVelocity;
         }
         // Jump: only from the ground (m_onGround is the previous
-        // sub-step's result, so one press cannot re-trigger mid-air).
-        if (m_input->isDown(GameKey::Space) && m_onGround) {
+        // sub-step's result, so one press cannot re-trigger mid-air) and
+        // never while sitting (Phase 71 — standing up is uncrouching, not
+        // jumping).
+        if (m_input->isDown(GameKey::Space) && m_onGround && !m_sitting) {
             m_velocity.y = m_params.jumpSpeed;
         }
     }

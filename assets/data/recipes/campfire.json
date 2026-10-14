@@ -1,0 +1,15 @@
+{
+  "id": "campfire",
+  "type": "shaped",
+  "output": { "item": "campfire", "count": 1 },
+  "pattern": [
+    "SSS",
+    "LCL",
+    "LLL"
+  ],
+  "key": {
+    "S": "stick",
+    "L": "wood",
+    "C": "coal"
+  }
+}

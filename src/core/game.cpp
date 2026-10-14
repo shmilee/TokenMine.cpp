@@ -1334,6 +1334,12 @@ Result<SaveGame> Game::collectSave() const {
     for (const auto& [pos, remaining] : m_fires) {
         save.fires.push_back(SavedFire {pos, remaining});
     }
+    // The campfire cooking states (format 11; Phase 71): map iteration is
+    // position-sorted (the save's order); every campfire block has an
+    // entry (the setBlock invariant), empty states included.
+    for (const auto& [pos, st] : m_campfires) {
+        save.campfires.push_back({pos, st});
+    }
     // The player's active status effects (format 8; Phase 46): names +
     // the real-dt seconds remaining (the serializer name-sorts; the tick
     // phase is deliberately not saved — a reload restarts the next tick
@@ -1498,6 +1504,23 @@ Result<void> Game::applySave(const SaveGame& save) {
             if (e.blockName == "fire") {
                 m_fires.emplace(e.pos, m_fireLifetime);
             }
+        }
+    }
+    // 4c-ter) The campfire cooking states (format 11; Phase 71). Format-
+    // 11 saves carry one entry per campfire block (parse-validated,
+    // cross-checked in both directions); format 10 and earlier carry none.
+    m_campfires.clear();
+    for (const SavedCampfire& sc : save.campfires) {
+        m_campfires.emplace(sc.pos, sc.state);
+    }
+    // Migration (format 10 and earlier): a campfire block in the world's
+    // block edits WITHOUT a campfires entry is only possible in a
+    // hand-edited old file (the campfire block did not exist before
+    // format 11) — it starts empty (the empty-furnace-state migration
+    // pattern).
+    for (const SavedBlockEdit& e : save.blockEdits) {
+        if (e.blockName == "campfire" && m_campfires.count(e.pos) == 0) {
+            m_campfires.emplace(e.pos, CampfireCookState {});
         }
     }
     // 4d) The player's active status effects (format 8; Phase 46). The
@@ -1783,6 +1806,15 @@ void Game::update(double dt) {
         tickFurnace(st, m_items);
     }
 
+    // Campfires (Phase 71): one fixed 1/60 substep per frame, per state
+    // (the day-cycle class — integer substep counter, byte-reproducible;
+    // the furnace pace via smeltSubstepsFor). std::map iteration is
+    // position-sorted: the tick order is deterministic. No-op on an empty
+    // state; runs in every pointer/panel state (the world keeps ticking).
+    for (auto& [pos, st] : m_campfires) {
+        tickCampfireCook(st, m_items);
+    }
+
     // Crop growth (Phase 48): one fixed 1/60 substep per frame (the
     // day-cycle class — byte-reproducible). The pure roll lives in
     // world/growth (hash of world seed + frame + position); the position-
@@ -1944,6 +1976,22 @@ void Game::handleInteraction(double dt) {
         return;
     }
     if (m_input.wasPressed(MouseButton::Right)) {
+        // Campfire cooking (Phase 71): a campfire under the crosshair
+        // owns the click BEFORE the item channels — Minecraft places the
+        // held food on the fire instead of starting to eat (essential:
+        // every smeltable item in this project is a food, so without the
+        // precedence the cooking slot could never be filled). The click
+        // is consumed either way (a campfire never places through the
+        // right button).
+        if (const std::optional<BlockHit> hit = targetBlock(); hit) {
+            const Block& b = m_blocks.at(
+                m_world.getBlock(hit->block.x, hit->block.y,
+                                 hit->block.z));
+            if (b.properties.interact == kInteractCampfire) {
+                tryCampfireCook(hit->block);
+                return;
+            }
+        }
         // Food (Phase 23): a selected food item is EATEN, not used — the
         // click is consumed (no interact, no placement). At full hunger the
         // eat is a no-op but the click is still consumed (Minecraft: you
@@ -1996,6 +2044,8 @@ void Game::handleInteraction(double dt) {
                 openFurnacePanel(hit->block);
                 return;
             }
+            // The campfire (Phase 71) is handled at the TOP of this
+            // handler, before the item channels (see above).
         }
         // Dye recoloring (Phase 41): a selected dye item right-clicked on
         // a dye-family block converts the block to the dyed variant
@@ -2376,6 +2426,19 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
             m_fires.emplace(ppos, m_fireLifetime);
         } else {
             m_fires.erase(ppos);
+        }
+    }
+    // Phase 71: the campfire cooking state follows the cell (like the
+    // furnace states): a campfire block always owns a state (created on
+    // placement, empty), and a cell that stops holding a campfire drops
+    // its state (the invariant the format-11 save cross-checks against
+    // the block edits).
+    {
+        const BlockPos cpos {x, y, z};
+        if (m_blocks.at(id).properties.interact == kInteractCampfire) {
+            m_campfires.emplace(cpos, CampfireCookState {});
+        } else {
+            m_campfires.erase(cpos);
         }
     }
     const float half = Projectile::kSize * 0.5f;
@@ -3766,6 +3829,48 @@ const Mesh& Game::handIconMesh() {
     return m_handIconMesh;
 }
 
+void Game::drawCampfireCookItems(const Mat4& view, const Mat4& projection) {
+    // Phase 71: the item cooking on each campfire. No cooking slot is
+    // non-empty: nothing draws (a no-input run has no campfire at all —
+    // worldgen never emits one — and a placed-but-empty campfire draws
+    // nothing either: baseline byte-identical).
+    for (const auto& [pos, st] : m_campfires) {
+        if (st.slot.empty()) {
+            continue;
+        }
+        const std::size_t iconIdx =
+            static_cast<std::size_t>(st.slot.item.value);
+        if (iconIdx >= m_itemIcons.size() || !m_itemIcons[iconIdx].valid()) {
+            continue; // cannot happen (item data is validated at init)
+        }
+        // The icon floats in the upper half of the cell (the campfire is a
+        // cross block — the food sits above the flame). Crossed quads (the
+        // cross-block convention: view-independent; culling stays ON, so
+        // from any horizontal angle at least one quad's front face shows).
+        // The quad's +Y normal keeps it in the top-face brightness bucket
+        // through the 90° cross rotation (the handIconMesh convention).
+        const Vec3 center {
+            static_cast<float>(pos.x) + 0.5f,
+            static_cast<float>(pos.y) + 0.75f,
+            static_cast<float>(pos.z) + 0.5f};
+        const Mat4 base =
+            Mat4::multiply(Mat4::translate(center), Mat4::scale(0.5f));
+        // The icon texture carries transparent pixels (the drawHeldHand
+        // pattern): blending on for the two draws, atlas restored after.
+        m_basicShader.bind();
+        m_basicShader.setUniform1i("u_useTexture", 1);
+        m_renderer.enableBlending();
+        m_itemIcons[iconIdx].bind();
+        m_renderer.draw(handIconMesh(), m_basicShader, view, projection,
+                        base);
+        m_renderer.draw(handIconMesh(), m_basicShader, view, projection,
+                        Mat4::multiply(
+                            base, Mat4::rotateY(0.5f * std::numbers::pi)));
+        m_atlas.texture().bind(); // restore for the passes that follow
+        m_renderer.disableBlending();
+    }
+}
+
 void Game::drawHeldHand(const Mat4& view, const Mat4& projection) {
     // Phase 42: the 3D held-item hand (the Minecraft hand). Rendered only
     // while the pointer is locked and no panel is open (the same gate as
@@ -3906,6 +4011,45 @@ FurnaceState& Game::furnaceAt(const BlockPos& pos) {
         it = m_furnaces.emplace(pos, FurnaceState {}).first;
     }
     return it->second;
+}
+
+CampfireCookState& Game::campfireAt(const BlockPos& pos) {
+    auto it = m_campfires.find(pos);
+    if (it == m_campfires.end()) {
+        it = m_campfires.emplace(pos, CampfireCookState {}).first;
+    }
+    return it->second;
+}
+
+void Game::tryCampfireCook(const BlockPos& pos) {
+    // The click is ALWAYS consumed (the caller returns) — a campfire is
+    // never placed through this branch, whatever the hand holds.
+    CampfireCookState& st = campfireAt(pos);
+    const ItemStack& held = m_inventory.at(m_selectedSlot);
+    if (!held.empty()) {
+        const Item& it = m_items.at(held.item);
+        if (!it.smeltableTo.empty() && st.slot.empty()) {
+            // Place one unit on the fire (Minecraft: a smeltable item on
+            // an empty campfire slot). One is consumed from the hand; the
+            // cooking starts at the next tick.
+            st.slot = ItemStack {held.item, 1};
+            st.progressSubsteps = 0;
+            m_inventory.take(m_selectedSlot, 1);
+            m_sound.play("place");
+        }
+        // A held item with a non-empty slot (or a non-smeltable item)
+        // does nothing: the slot holds at most one unit (v1), and the
+        // take needs a FREE hand (Minecraft).
+        return;
+    }
+    // Empty hand: take the slot's item back (smelted or not) — the
+    // selected slot is empty, so the write is a direct set.
+    if (!st.slot.empty()) {
+        m_inventory.setSlot(m_selectedSlot, st.slot);
+        st.slot = ItemStack {};
+        st.progressSubsteps = 0;
+        m_sound.play("pickup");
+    }
 }
 
 // The shapeless recipes in registry order: the E panel's craft list
@@ -4928,6 +5072,10 @@ void Game::render() {
     // everything else). No-op unless the pointer is locked and no panel is
     // open (a no-input run never renders it — baseline byte-identical).
     drawHeldHand(view, projection);
+    // Campfire cooking items (Phase 71): the item icon floating above each
+    // campfire with a non-empty slot — opaque pass, depth-occluded. No-op
+    // without a cooking campfire (baseline byte-identical).
+    drawCampfireCookItems(view, projection);
     // Opaque break particles (Phase 15) belong to the opaque pass so the
     // transparent geometry blends over them.
     drawParticles(view, projection, false);

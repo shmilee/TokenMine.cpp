@@ -56,6 +56,7 @@ add_library(mc_core STATIC
     src/item/recipe.cpp
     src/item/crafting_grid.cpp
     src/item/furnace.cpp
+    src/item/campfire.cpp
     src/player/player.cpp
     src/world/chunk.cpp
     src/world/raycast.cpp
@@ -127,6 +128,7 @@ add_executable(minecraft_tests
     tests/test_recipe.cpp
     tests/test_crafting_grid.cpp
     tests/test_furnace.cpp
+    tests/test_campfire.cpp
     tests/test_save.cpp
     tests/test_status_effect.cpp
     tests/test_thread_pool.cpp

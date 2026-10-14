@@ -64,6 +64,7 @@
 #include "core/json.hpp"
 #include "core/math/vec3.hpp"
 #include "core/status_effect.hpp"
+#include "item/campfire.hpp"
 #include "item/furnace.hpp"
 #include "item/inventory.hpp"
 #include "world/coordinates.hpp"
@@ -117,7 +118,19 @@ namespace mc {
 //      load (no fires — the fire block did not exist); format-10 files
 //      REQUIRE the "fires" key (an empty array is valid — the furnaces-
 //      key discipline); writes are always format 10.
-inline constexpr int kSaveFormat = 10;
+//   11: the campfire cooking states (Phase 71) — "campfires":
+//      [ { "pos": [x, y, z], "item": ..., "count": ...,
+//      "progress_substeps": ... } ] (position-sorted), one entry per
+//      CAMPFIRE BLOCK in the world (an empty slot is an entry with
+//      "item": "" / "count": 0 / "progress_substeps": 0). The cross-checks
+//      run in BOTH directions (the furnaces-key discipline) plus the
+//      progress invariant: progress_substeps > 0 requires the entry to
+//      hold exactly ONE smeltable item (the item/campfire.hpp tick
+//      maintains it). Format-10 and older files still load (no campfires
+//      — the campfire block did not exist); a format-11 file REQUIREs the
+//      "campfires" key (an empty array is valid); writes are always
+//      format 11.
+inline constexpr int kSaveFormat = 11;
 inline constexpr int kSaveFormatMin = 1;
 
 // Phase 40: the furnace save-field bounds — the max smelt/fuel times the
@@ -167,6 +180,15 @@ struct SavedFurnace {
 struct SavedFire {
     BlockPos pos;
     double remainingSeconds = 0.0; // real-dt seconds left before burn-out
+};
+
+// One campfire block's cooking state (format 11; Phase 71). The game
+// keeps an entry for EVERY campfire block in the world (empty states
+// included) — the save cross-checks the entries against the block edits
+// in both directions (the furnaces-key discipline).
+struct SavedCampfire {
+    BlockPos pos;
+    CampfireCookState state;
 };
 
 // One active player status effect (format 8; Phase 46): the effect NAME
@@ -224,6 +246,12 @@ struct SaveGame {
     // its real-dt remaining life. Empty when the world holds no fire; a
     // format-9 load migrates into this empty (fires did not exist).
     std::vector<SavedFire> fires;
+    // The campfire cooking states (format 11; Phase 71): one entry per
+    // campfire block in the world (position-sorted; the game's map order),
+    // empty states included. Empty when the world holds no campfire; a
+    // format-10 load migrates into this empty (the campfire block did not
+    // exist).
+    std::vector<SavedCampfire> campfires;
     // The player's active status effects (format 8; Phase 46), name-
     // sorted. Empty for format 1-7 loads (the effects did not exist).
     std::vector<SavedEffect> playerEffects;

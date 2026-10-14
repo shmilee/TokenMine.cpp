@@ -310,11 +310,13 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
                        std::to_string(out.lightEmission));
     }
     if (!out.interact.empty() && out.interact != kInteractCraftingTable &&
-        out.interact != kInteractFurnace) {
+        out.interact != kInteractFurnace &&
+        out.interact != kInteractCampfire) {
         return MC_FAIL("block property 'interact' is unsupported: '" +
                        out.interact + "' (only '" +
-                       std::string(kInteractCraftingTable) + "' and '" +
-                       std::string(kInteractFurnace) + "' exist)");
+                       std::string(kInteractCraftingTable) + "', '" +
+                       std::string(kInteractFurnace) + "' and '" +
+                       std::string(kInteractCampfire) + "' exist)");
     }
     // Dye family (Phase 41): both fields are optional; an EXPLICIT empty
     // string is a typo (ABSENT is the "not dyeable" default — the ammo

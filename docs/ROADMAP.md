@@ -74,6 +74,7 @@
 - [x] **Phase 68** — 铲类工具（纯内容、零核心代码，P67 机制）：wooden/stone/iron_shovel（fast_against [dirt, grass, sand, gravel] ×2.0 = 项目土类全集【无 clay/sandstone/snow】、基础手速 1.0 = MC 铲对石 1×、attack 2.5/3/3.5 = MC 精确值）/3 配方（shaped 竖列 M/S/S = MC 铲）/3 图标；1061/1061
 - [x] **Phase 69** — 镐分类（纯内容、零核心代码）：3 镐各加 `fast_against` [stone, cobblestone, coal_ore, iron_ore, gold_ore, diamond_ore, lapis_ore, glowstone]（**项目石矿类全集**）+ ×2.0（MC 镐对石类/矿类 2×）；**obsidian 刻意排除**（MC 铁镐不能破黑曜石、项目无钻石镐 = 保留 flat 镐速 3.75s（铁）= 文档化偏离）；flat 档 2/3/4 不变 → 石矿类有效 4/6/8；1063/1063
 - [x] **Phase 70** — 火接触伤害：玩家 AABB 重叠 fire 块格时每 `player.fire_damage_interval_seconds`（默认 0.2 = MC 1 HP/0.2s）受 `player.fire_damage` HP（默认 1、**0 = 关**、`≤ max_health` 交叉校验）——real-dt 生存计时器（P54 熔岩模式：在火里累积、离开重置、正常 damage 路径）/`Entity::overlapsBlock(BlockID)`（mirror `overlapsFluid` 严格不等式 AABB 扫描、caller 传 id = 数据驱动）/fire 块 id 构造时解析一次（registry 无 = 永不）/**mob 火接触 = 文档化偏离**（v3 范围）；1072/1072
+- [x] **Phase 71** — 营火（campfire = 烤食物 + 座位）：`campfire` 块（cross、光 15 = MC、hardness 0.5、自掉、`interact: "campfire"` = 第三交互词汇表值、非 flamable）+ 配方 shaped `SSS/LCL/LLL`（MC 配方）+ 纹理（atlas 空位 [12,0] 免重锚）；**单槽烤制**（per-block `CampfireCookState` = 炉子 P44 范式：setBlock 收口 + `std::map` 位置序）——手持可熔炼（`smeltable_to` 非空 = 数据驱动门）右键空槽放 1 / **空手**右键取回（生熟均可 = MC 空手规则）；固定 1/60 子步 + 整数 `progressSubsteps`（**炉子节奏** = 复用 `smelt_time`、无燃料 = MC 自燃、无 config）；**右键链中营火分支先于进食通道**（MC 语义——全部可熔炼物品都是食物，无此前置则烤槽填不上；炉子/工作台既有行为不变）；烤制中物品 = 0.5 交叉图标 quad 悬浮格上半部（cross 惯例、opaque pass、+Y 假法线）；**座位** = crouch + 贴地 + AABB 严格重叠 campfire 格 → 锁移动/跳（复用 crouch 高度 = 文档化偏离：无独立坐姿；不入存档）；**format 11** `campfires`（每 campfire 块一条目、双向交叉校验 + 进度不变量 progress>0 ⇒ 槽恰 1 可熔炼、format 10 迁移 = 空）；1092/1092（+20：tick 4 + 存档 7 + interact 2 + 座位 5 + 内容钉死 2）
 
 ## 细节存档索引（docs/archive/）
 
@@ -144,5 +145,6 @@
 - **Phase 68** — `archive/phase-68.md`
 - **Phase 69** — `archive/phase-69.md`
 - **Phase 70** — `archive/phase-70.md`
+- **Phase 71** — `archive/phase-71.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

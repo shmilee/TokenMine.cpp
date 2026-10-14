@@ -22,13 +22,16 @@
 namespace mc {
 
 // Right-click interaction kinds (Phase 17). A block whose
-// BlockProperties.interact names one of these opens the corresponding GUI
-// instead of placing a block. The set is validated at data load (see
-// BlockRegistry) — a block can only declare an interaction the game
-// implements.
+// BlockProperties.interact names one of these gets the corresponding
+// right-click behavior (a GUI for the first two) instead of placing a
+// block. The set is validated at data load (see BlockRegistry) — a block
+// can only declare an interaction the game implements.
 inline constexpr std::string_view kInteractCraftingTable = "crafting_table";
 // Phase 40: opens the furnace panel (the smelting GUI).
 inline constexpr std::string_view kInteractFurnace = "furnace";
+// Phase 71: the campfire cooking interaction (place/take the single
+// smelting slot — no panel; see item/campfire.hpp).
+inline constexpr std::string_view kInteractCampfire = "campfire";
 
 // Phase 41: the dye color of a dye-family base block. A dyed variant is
 // named "<dye_base>_<color>" — EXCEPT white, which IS the base block

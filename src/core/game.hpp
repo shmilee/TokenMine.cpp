@@ -54,6 +54,7 @@
 #include "ui/debug_overlay.hpp"
 #include "ui/font.hpp"
 #include "ui/inventory_ui.hpp"
+#include "item/campfire.hpp"
 #include "item/crafting_grid.hpp"
 #include "item/furnace.hpp"
 #include "item/inventory.hpp"
@@ -363,6 +364,12 @@ private:
     // run renders the pre-Phase-42 image (byte-identical baseline).
     void drawHeldHand(const Mat4& view, const Mat4& projection);
     const Mesh& handIconMesh();
+    // Phase 71: the item cooking on each campfire (the non-empty slots)
+    // as a small crossed icon quad above the block (the cross-block
+    // convention — view-independent, opaque pass, depth-occluded like
+    // everything else). No-op without a cooking campfire (a no-input run
+    // never renders it — baseline byte-identical).
+    void drawCampfireCookItems(const Mat4& view, const Mat4& projection);
 
     // -- Phase 15 UI / audio / particles ------------------------------------
     // E/F3/F5 handling (F3 + F5 work in any pointer state; E opens the
@@ -386,6 +393,18 @@ private:
     // The state of the furnace block at `pos` (default-constructs one when
     // absent — defensive: the setBlock invariant makes that unreachable).
     FurnaceState& furnaceAt(const BlockPos& pos);
+    // Phase 71: the right-click campfire cooking interaction (the
+    // kInteractCampfire branch of the right-click chain): a selected
+    // smeltable item places one unit on an EMPTY slot (consumed from the
+    // hand); an empty hand takes the slot's item back (Minecraft: the take
+    // needs a free hand); every other combination is a no-op. The click is
+    // consumed either way (a campfire is never placed through this
+    // branch).
+    void tryCampfireCook(const BlockPos& pos);
+    // The state of the campfire block at `pos` (default-constructs one
+    // when absent — defensive: the setBlock invariant makes that
+    // unreachable).
+    CampfireCookState& campfireAt(const BlockPos& pos);
     // Footstep sound timer (moving + on ground, pointer captured).
     void updateSoundTimers(double dt);
     // Phase 16 survival polling: a health drop drives the hurt flash +
@@ -650,6 +669,13 @@ private:
     int m_fireSpreadInterval = 6;
     double m_fireSpreadChance = 0.05;
     bool m_fireParticles = true;
+
+    // Phase 71 campfire: PER-BLOCK cooking states — one CampfireCookState
+    // per campfire block in the world (created on placement, dropped when
+    // the cell stops holding a campfire; the invariant the format-11 save
+    // cross-checks, exactly like the furnace states). std::map:
+    // position-sorted, so the per-frame ticks iterate deterministically.
+    std::map<BlockPos, CampfireCookState> m_campfires;
 
     // Phase 48 crop growth: the cells holding a block with a non-empty
     // growsTo property (the growth stage is the block id itself — no
