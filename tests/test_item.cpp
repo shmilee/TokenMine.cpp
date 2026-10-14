@@ -1363,3 +1363,63 @@ TEST(ItemRegistryTest, Phase68ShovelItemContent) {
         EXPECT_EQ(it->icon, name) << name;
     }
 }
+
+// Phase 69: the pickaxes gain the stone/ore category — the project's
+// FULL set (MC: the pickaxe is 2x on stone, the ores and glowstone).
+// obsidian is deliberately EXCLUDED (Minecraft: an iron pickaxe cannot
+// break obsidian at all; this project has no diamond pickaxe, so the
+// exclusion keeps obsidian at the plain pickaxe pace — 3.75 s for
+// iron — the closest analog to "needs a better pickaxe").
+TEST(ItemRegistryTest, Phase69PickaxeFastAgainstContent) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry blocks;
+    ASSERT_TRUE(blocks.loadDirectory(assets, "data/blocks").ok());
+    ItemRegistry items;
+    ASSERT_TRUE(items.buildBlockItems(blocks).ok());
+    ASSERT_TRUE(items.loadDirectory(assets, "data/items").ok());
+    const std::vector<std::pair<std::string, float>> want = {
+        {"wooden_pickaxe", 2.0f}, {"stone_pickaxe", 3.0f},
+        {"iron_pickaxe", 4.0f}};
+    const std::vector<std::string> list = {
+        "stone", "cobblestone", "coal_ore", "iron_ore", "gold_ore",
+        "diamond_ore", "lapis_ore", "glowstone"};
+    for (const auto& [name, speed] : want) {
+        const Item* it = items.findByName(name);
+        ASSERT_NE(it, nullptr) << name;
+        EXPECT_FLOAT_EQ(it->breakSpeed, speed) << name; // the flat tiers are unchanged
+        EXPECT_EQ(it->fastAgainst, list) << name;
+        EXPECT_FLOAT_EQ(it->fastAgainstMultiplier, 2.0f) << name; // MC: 2x on stone/ores
+    }
+}
+
+// Phase 69: the effectiveBreakSpeed pure function on the REAL pickaxe
+// content — 2x on the stone/ore family, the flat tier on everything
+// else (wood stays at the pickaxe's own speed; obsidian = the
+// documented exclusion).
+TEST(ItemRegistryTest, Phase69PickaxeEffectiveBreakSpeed) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry blocks;
+    ASSERT_TRUE(blocks.loadDirectory(assets, "data/blocks").ok());
+    ItemRegistry items;
+    ASSERT_TRUE(items.buildBlockItems(blocks).ok());
+    ASSERT_TRUE(items.loadDirectory(assets, "data/items").ok());
+    const Item* iron = items.findByName("iron_pickaxe");
+    const Item* wooden = items.findByName("wooden_pickaxe");
+    ASSERT_NE(iron, nullptr);
+    ASSERT_NE(wooden, nullptr);
+    const auto blk = [&](const char* n) {
+        return blocks.at(blocks.idForName(n));
+    };
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("stone")), 8.0f);
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("cobblestone")), 8.0f);
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("diamond_ore")), 8.0f);
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("glowstone")), 8.0f);
+    // Off-list: the flat tier (no multiplier leak).
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("wood")), 4.0f);
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("obsidian")), 4.0f);
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(*wooden, blk("stone")), 4.0f);
+}

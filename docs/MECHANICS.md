@@ -556,8 +556,12 @@
     纯函数**（Phase 67）：tool = 其 `tool.break_speed` ×（目标块在物品
     的 `fast_against` 块名列表内 ? `fast_against_multiplier` : 1）——
     分块工具类别 = 三把斧对 wood/leaves ×2（MC 斧对木 2×）+ Phase 68
-    三把铲对 dirt/grass/sand/gravel ×2（MC 铲对土 2×，项目土类全集）；
-    两者对清单外块 = 基础手速 1×（MC 斧/铲对石 1×）；
+    三把铲对 dirt/grass/sand/gravel ×2（MC 铲对土 2×，项目土类全集）+
+    Phase 69 三把镐对 stone/cobblestone/5 矿/glowstone ×2（MC 镐对石
+    类/矿类 2×，项目石矿类全集；**obsidian 排除**——MC 铁镐不能破黑
+    曜石、项目无钻石镐，黑曜石保持平镐速）；清单外块 = 工具自身
+    break_speed（斧/铲 = 手速 1× = MC 斧/铲对石 1×；镐 = 其 2/3/4
+    flat 档）；
     `fast_against` 与 `fast_against_multiplier` 是
     严格配对字段（缺一/空列表/非 tool 均解析拒绝，init 逐条目交叉
     校验块名存在 = grows_on 同款）。准星移开/松键/换工具
