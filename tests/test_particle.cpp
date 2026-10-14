@@ -149,3 +149,66 @@ TEST(ParticleTest, ClearEmpties) {
     p.clear();
     EXPECT_TRUE(p.empty());
 }
+
+// Phase 66 (Fire v2): the fire-ember emission (spawnFire — few particles,
+// short life, NEGATIVE gravity so they rise).
+
+TEST(ParticleTest, SpawnFireIsDeterministicForTheSameSeed) {
+    ParticleSystem a, b;
+    a.spawnFire(3, 4, 5, BlockID {7}, 0.0f, 1.0f, 0xDEAD);
+    b.spawnFire(3, 4, 5, BlockID {7}, 0.0f, 1.0f, 0xDEAD);
+    ASSERT_EQ(a.size(), static_cast<std::size_t>(ParticleSystem::kFireEmissionCount));
+    ASSERT_EQ(a.size(), b.size());
+    const auto& pa = a.particles();
+    const auto& pb = b.particles();
+    for (std::size_t i = 0; i < pa.size(); ++i) {
+        EXPECT_EQ(pa[i].position, pb[i].position);
+        EXPECT_EQ(pa[i].velocity, pb[i].velocity);
+        EXPECT_FLOAT_EQ(pa[i].life, pb[i].life);
+        EXPECT_FLOAT_EQ(pa[i].gravity, pb[i].gravity);
+        EXPECT_EQ(pa[i].block, pb[i].block);
+    }
+}
+
+TEST(ParticleTest, SpawnFireEmbersRiseAndLiveBriefly) {
+    ParticleSystem p;
+    p.spawnFire(8, 1, 8, BlockID {9}, 0.0f, 1.0f, 0x5EED);
+    ASSERT_EQ(p.size(), static_cast<std::size_t>(ParticleSystem::kFireEmissionCount));
+    for (const Particle& part : p.particles()) {
+        // The ember parameters: negative gravity (rising), a gentle
+        // upward start velocity, a short life, and a start inside the
+        // fire cell (the flame body — tighter than a break burst).
+        EXPECT_FLOAT_EQ(part.gravity, ParticleSystem::kFireGravity);
+        EXPECT_LT(part.gravity, 0.0f);
+        EXPECT_GT(part.velocity.y, 0.0f);
+        EXPECT_GE(part.life, ParticleSystem::kFireMinLife);
+        EXPECT_LE(part.life, ParticleSystem::kFireMaxLife);
+        EXPECT_FLOAT_EQ(part.blockLight, 1.0f); // baked at spawn
+        EXPECT_GT(part.position.x, 7.5f);
+        EXPECT_LT(part.position.x, 8.5f);
+        EXPECT_GE(part.position.y, 0.5f);
+        EXPECT_LE(part.position.y, 1.5f);
+    }
+}
+
+TEST(ParticleTest, UpdateRisesFireEmbersInsteadOfDroppingThem) {
+    ParticleSystem p;
+    p.spawnFire(8, 1, 8, BlockID {9}, 0.0f, 1.0f, 0x5EED);
+    // Copy BY VALUE: update() replaces the internal vector (a reference
+    // would dangle across the move).
+    const std::vector<Particle> before = p.particles();
+    p.update(0.2); // inside every ember's life (<= kFireMaxLife)
+    ASSERT_EQ(p.size(), before.size());
+    for (std::size_t i = 0; i < p.size(); ++i) {
+        EXPECT_GT(p.particles()[i].position.y, before[i].position.y);
+    }
+}
+
+TEST(ParticleTest, BreakDebrisKeepsTheDefaultGravity) {
+    ParticleSystem p;
+    p.spawnBreak(0, 0, 0, BlockID {1}, 1.0f, 0.0f, 1);
+    ASSERT_FALSE(p.empty());
+    for (const Particle& part : p.particles()) {
+        EXPECT_FLOAT_EQ(part.gravity, ParticleSystem::kGravity);
+    }
+}

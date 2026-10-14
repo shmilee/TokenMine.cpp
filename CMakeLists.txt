@@ -64,6 +64,7 @@ add_library(mc_core STATIC
     src/world/chunk_streaming.cpp
     src/world/day_cycle.cpp
     src/world/fluid.cpp
+    src/world/fire_spread.cpp
     src/world/growth.cpp
     src/world/lighting.cpp
     src/world/noise.cpp
@@ -112,6 +113,7 @@ add_executable(minecraft_tests
     tests/test_chunk_mesher.cpp
     tests/test_day_cycle.cpp
     tests/test_fluid.cpp
+    tests/test_fire_spread.cpp
     tests/test_growth.cpp
     tests/test_chance_drop.cpp
     tests/test_lighting.cpp

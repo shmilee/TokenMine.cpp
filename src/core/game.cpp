@@ -22,6 +22,7 @@
 #include "entity/mob_mesh.hpp"
 #include "block/chance_drop.hpp"
 #include "world/growth.hpp"
+#include "world/fire_spread.hpp"
 #include "world/noise.hpp"
 #include "ui/font.hpp"
 #include "ui/inventory_ui.hpp"
@@ -72,6 +73,20 @@ constexpr double kProjectileStepPerFrame = 1.0 / 60.0;
 // The fluid simulation ticks every Nth frame (20 ticks/s at 60 FPS); the
 // fixed frame step keeps headless runs byte-reproducible.
 constexpr int kFluidTickEveryNFrames = 3;
+// Fire v2 (Phase 66): the ember emission per live fire cell runs every
+// Nth frame (0.1 s = the Minecraft tick rhythm); the fixed frame step
+// keeps headless runs byte-reproducible.
+constexpr int kFireParticleEveryNFrames = 6;
+// Dedicated salt for the fire ember seeds (same discipline as the
+// growth/chance-drop salt separation, Phase 45/49): ember emissions
+// never track any other deterministic stream in the world.
+constexpr std::uint64_t kFireParticleRollSalt = 0xE4B6F1C2D9A83574ULL;
+
+// Reinterpret an (possibly negative) int as 64 bits for hashing (the
+// worldgen's u64 — two's-complement is a bijection).
+std::uint64_t asU64(int v) {
+    return static_cast<std::uint64_t>(static_cast<std::int64_t>(v));
+}
 
 // Demo area: 4x4 chunk columns covering world x,z in [-32, 32).
 constexpr int kDemoChunkMin = -2;
@@ -708,6 +723,22 @@ Result<void> Game::buildScene() {
         return MC_FAIL("config fire.lifetime_seconds must be > 0 (got " +
                        std::to_string(m_fireLifetime) + ")");
     }
+    // Fire v2 (Phase 66): the spread roll cadence + per-neighbor chance
+    // (Minecraft values: the 0.1 s tick rhythm, the normal-difficulty
+    // per-neighbor 5%) and the ember-emission gate.
+    m_fireSpreadInterval =
+        m_config.getInt("fire.spread_interval_frames", 6);
+    if (m_fireSpreadInterval < 1) {
+        return MC_FAIL("config fire.spread_interval_frames must be >= 1 "
+                       "(got " +
+                       std::to_string(m_fireSpreadInterval) + ")");
+    }
+    m_fireSpreadChance = m_config.getDouble("fire.spread_chance", 0.05);
+    if (m_fireSpreadChance < 0.0 || m_fireSpreadChance > 1.0) {
+        return MC_FAIL("config fire.spread_chance must be in [0, 1] (got " +
+                       std::to_string(m_fireSpreadChance) + ")");
+    }
+    m_fireParticles = m_config.getBool("fire.particles", true);
 
     // -- item icons (Phase 15 UI) ------------------------------------------
     // Each explicit item may name a 2D icon under assets/textures/items/
@@ -1813,6 +1844,12 @@ void Game::update(double dt) {
     // it makes are meshed on the next frame (the effects' setBlock
     // pattern). A no-op while the world holds no fire.
     updateFires(dt);
+    // Phase 66 (Fire v2): the spread roll (fixed frame step, every
+    // fire.spread_interval_frames frames). Runs AFTER the countdown so a
+    // fire that just burned out does not spread on its last frame, and
+    // the new fires' lights/meshes land on the next frame like any other
+    // setBlock. A no-op while the world holds no fire.
+    updateFireSpread();
 
     const auto meshes = updateChunkMeshes();
     if (!meshes.ok()) {
@@ -2785,9 +2822,101 @@ void Game::updateFires(double dt) {
     }
     // Apply (AFTER the iteration — the setBlock calls below erase the
     // entries through the choke point; never iterate a map while it is
-    // being structurally modified).
+    // being structurally modified). Phase 66 (Fire v2): each death
+    // (burn-out or water extinguish) spawns one break-style burst of the
+    // FIRE texture — the puff of a dying fire (the Phase 65 cross-branch
+    // fix renders it). The seed rides the shared per-break counter, so an
+    // identical input sequence gets an identical burst.
     for (const BlockPos& pos : putOut) {
         setBlock(pos.x, pos.y, pos.z, BlockID::air());
+        Lighting::updateLocal(m_world, m_blocks, pos);
+        const Chunk* chunk = m_world.findChunk(worldToChunk(pos));
+        float sky = 0.0f;
+        float blockLight = 1.0f; // the fire's own emission dominates
+        if (chunk != nullptr) {
+            const BlockPos local =
+                worldToChunkLocal(worldToChunk(pos), pos);
+            sky = static_cast<float>(chunk->skyLightAt(local.x, local.y,
+                                                       local.z)) /
+                  15.0f;
+            blockLight = static_cast<float>(
+                             chunk->blockLightAt(local.x, local.y, local.z)) /
+                         15.0f;
+        }
+        const std::uint64_t rngSeed =
+            m_generator->seed() +
+            (++m_particleBreakCounter) * 0x9E3779B97F4A7C15ULL;
+        m_particles.spawnBreak(pos.x, pos.y, pos.z, m_fireId, sky, blockLight,
+                               rngSeed);
+    }
+    // Phase 66 (Fire v2): the ember emission. FIXED-frame step (hard rule
+    // 8, the day-cycle class — the spawn is a pure function of the world
+    // seed, the cell and the frame; the motion then integrates the real
+    // dt like every other particle, so a run with LIVE embers is
+    // screenshot-identical only after they have died — the E2E scene
+    // either waits that out or uses the fire.particles control). Only
+    // fires that SURVIVED this frame's countdown emit; the put-outs got
+    // their death burst above. Position-sorted map iteration ->
+    // deterministic emission order.
+    if (m_fireParticles && m_frameCount % kFireParticleEveryNFrames == 0) {
+        for (const auto& [pos, remaining] : m_fires) {
+            (void)remaining;
+            const Chunk* chunk = m_world.findChunk(worldToChunk(pos));
+            float sky = 0.0f;
+            float blockLight = 1.0f; // the fire's own emission dominates
+            if (chunk != nullptr) {
+                const BlockPos local =
+                    worldToChunkLocal(worldToChunk(pos), pos);
+                sky = static_cast<float>(
+                          chunk->skyLightAt(local.x, local.y, local.z)) /
+                      15.0f;
+                blockLight = static_cast<float>(
+                                 chunk->blockLightAt(local.x, local.y,
+                                                     local.z)) /
+                             15.0f;
+            }
+            // The seed advances with the frame (PITS #4: splitmix64 is a
+            // pure finalizer) and is per-cell via the position hash (a
+            // dedicated salt — the emission stream never tracks any other
+            // deterministic roll in the world).
+            const std::uint64_t rngSeed =
+                m_generator->seed() +
+                hash3(asU64(pos.x), asU64(pos.y), asU64(pos.z),
+                      kFireParticleRollSalt) +
+                static_cast<std::uint64_t>(m_frameCount) *
+                    0x9E3779B97F4A7C15ULL;
+            m_particles.spawnFire(pos.x, pos.y, pos.z, m_fireId, sky,
+                                  blockLight, rngSeed);
+        }
+    }
+}
+
+void Game::updateFireSpread() {
+    // Phase 66 (Fire v2): the spread roll runs every
+    // fire.spread_interval_frames frame (the fixed frame step, hard rule
+    // 8) — no fires, no fire block (a stripped asset set), or a chance of
+    // 0 all fast-exit inside fireSpreadIgnitions.
+    if (m_fires.empty() || !m_fireId.valid() ||
+        m_frameCount % m_fireSpreadInterval != 0) {
+        return;
+    }
+    // Position-ordered fire list (the m_fires map keys, std::map order).
+    std::vector<BlockPos> firePositions;
+    firePositions.reserve(m_fires.size());
+    for (const auto& [pos, remaining] : m_fires) {
+        (void)remaining;
+        firePositions.push_back(pos);
+    }
+    const std::vector<BlockPos> ignitions = fireSpreadIgnitions(
+        m_world, m_blocks, firePositions, m_generator->seed(),
+        static_cast<std::uint64_t>(m_frameCount), m_fireSpreadChance);
+    // Apply (AFTER the roll — setBlock erases nothing here, but it
+    // EMPLACES the new fires' full lives through the choke point; never
+    // feed a map into a pure function while mutating it). No sound: a
+    // spreading fire line would otherwise spam the one-shot "ignite"
+    // (documented Fire v2 scope).
+    for (const BlockPos& pos : ignitions) {
+        setBlock(pos.x, pos.y, pos.z, m_fireId);
         Lighting::updateLocal(m_world, m_blocks, pos);
     }
 }
@@ -4048,7 +4177,16 @@ void Game::drawParticles(const Mat4& view, const Mat4& projection,
                         (static_cast<float>(face.corner[i][1]) - 0.5f) * 2.0f * half,
                     p.position.z +
                         (static_cast<float>(face.corner[i][2]) - 0.5f) * 2.0f * half};
-                v.normal = face.normal;
+                // Cross particles (the fire embers, Phase 66) take the
+                // full-brightness face shade, like every other cross
+                // rendering (the chunk-mesher and item-mesh cross
+                // branches): the cube face normals would darken the
+                // side faces to 0.6x and the embers would read as dim
+                // specks against the bright flame body.
+                v.normal =
+                    block.model.shape == BlockModel::Shape::Cross
+                        ? Vec3 {0.0f, 1.0f, 0.0f}
+                        : face.normal;
                 v.uv = faceUv[i];
                 v.skyLight = p.skyLight;
                 v.blockLight = p.blockLight;

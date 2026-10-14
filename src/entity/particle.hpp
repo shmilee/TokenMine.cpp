@@ -22,6 +22,10 @@
 
 namespace mc {
 
+// The shared default for break debris (a named constant — spawnBreak and
+// anything without a reason to differ).
+inline constexpr float kDefaultGravity = 16.0f;
+
 struct Particle {
     Vec3 position {0.0f, 0.0f, 0.0f};
     Vec3 velocity {0.0f, 0.0f, 0.0f};
@@ -32,21 +36,40 @@ struct Particle {
     // world light arrays — the worker lighting jobs may be running).
     float skyLight = 1.0f;   // 0..1
     float blockLight = 0.0f; // 0..1
+    // Per-particle gravity (Phase 66): break debris falls under
+    // kDefaultGravity; fire embers carry a NEGATIVE gravity (they rise,
+    // like Minecraft's fire particles).
+    float gravity = kDefaultGravity;
 };
 
 class ParticleSystem {
 public:
     static constexpr std::size_t kMaxParticles = 256;
     static constexpr int kBreakBurstCount = 16;
-    static constexpr float kGravity = 16.0f; // blocks/s^2 (lighter than the player)
+    static constexpr float kGravity = kDefaultGravity; // blocks/s^2 (lighter than the player)
     static constexpr float kMinLife = 0.45f; // seconds
     static constexpr float kMaxLife = 0.75f;
+    // Fire embers (Phase 66): a small per-tick emission per live fire
+    // cell — few particles, short life, and a NEGATIVE gravity so they
+    // rise like Minecraft's fire particles instead of falling.
+    static constexpr int kFireEmissionCount = 2;
+    static constexpr float kFireGravity = -2.0f; // blocks/s^2 (rising)
+    static constexpr float kFireMinLife = 0.3f;  // seconds
+    static constexpr float kFireMaxLife = 0.5f;  // seconds
 
     // Spawns a deterministic burst around the center of cell (cx, cy,
     // cz). rngSeed must differ per burst (the game passes the world seed
     // mixed with an increasing per-break counter).
     void spawnBreak(int cx, int cy, int cz, BlockID id, float skyLight,
                     float blockLight, std::uint64_t rngSeed);
+
+    // Spawns a deterministic fire-ember emission around the center of
+    // cell (cx, cy, cz) (kFireEmissionCount particles, rising). Same
+    // seed contract as spawnBreak: the game mixes the world seed with a
+    // position hash and the frame, so an identical run emits identical
+    // particles.
+    void spawnFire(int cx, int cy, int cz, BlockID id, float skyLight,
+                   float blockLight, std::uint64_t rngSeed);
 
     // Integrates gravity + motion and culls expired particles.
     void update(double dt);

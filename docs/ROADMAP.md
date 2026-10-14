@@ -266,7 +266,41 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
     block+fluid / L1 膜 = 稳定地面流体场景 / 物品 rest 位置确定性
     （零初速 + 位置式分离）/ pgrep 前缀误匹配 minecraft_tests / 裸
     截图无窗口稳定化 = 错尺寸假失败）。
-  - [x] **Phase 65** — 火把内容：torch 方块（用户"按建议顺序，继续完成
+  - [x] **Phase 66** — 火 v2：粒子 + 蔓延（用户"下两个阶段是 建议1 和
+    建议3" = 建议 1，代理定案最小完整版 = **火 v2**：火焰余烬粒子 +
+    蔓延引燃相邻可燃块，全量消费 P64 火 v1 遗留"无粒子/无蔓延"）：
+    **蔓延引擎**（`world/fire_spread.{hpp,cpp}` 纯函数，镜像 P48 生长
+    引擎范式：每 `fire.spread_interval_frames` 帧【默认 6 = 0.1 s MC
+    tick 节奏】，每活体火对 **5 邻**（水平 4 + 上，**不向下** = MC）
+    的 `flamable` 格独立 roll（`fire.spread_chance` 默认 0.05 = MC
+    normal 值；roll 输入 = 世界种子 + 帧推进 + 位置哈希 + 邻序推进，
+    专用 salt = P45/P49 分离纪律）→ 过则 `setBlock(fire)`【收口自动
+    注册满寿命】；无火/无 fire 块/无 flamable/chance 0 全 fast-exit）
+    + **余烬粒子**（`spawnFire`：2 粒/0.1 s/火格、负重力 −2 上升、
+    寿命 0.3–0.5 s；发射走固定帧步 `m_frameCount % 6`、种子 = 世界种
+    子 ⊕ 位置哈希 ⊕ 帧推进；**燃尽/浇灭死亡爆发** = 复用 `spawnBreak`
+    16 粒火焰纹理【P65 cross 分支渲染】）+ **`Particle.gravity` 逐粒
+    字段**（破碎残渣 = kGravity 下落、余烬 = 负值上升）+ **config
+    3 键**（`fire.spread_interval_frames` ≥1 / `fire.spread_chance`
+    [0,1] / `fire.particles` bool = mobs.enabled 范式 E2E 对照组）+
+    **渲染修复**：cross 粒子面原走 cube 面法线 → ±Z 面 shade 0.6 偏
+    暗（E2E 火焰像素 A<C 暴露）→ 改假法线 (0,1,0) 满亮，与
+    chunk_mesher/item_mesh 既有两 cross 分支一致【PITS】。**无 format
+    变更**（format 10，蔓延新火走既有 fires 条目）、无 atlas/内容变更
+    （无重锚）。1048/1048（+12：fire_spread 8 / spawnFire 4）、
+    `-Werror` 0 警告、base18 **第 39 次结构性免疫**【无 block/无
+    worldgen/无 atlas + 新 config 只作用于持 fire 块的格 = fresh 世界
+    m_fires 恒空、双引擎 fast-exit】；E2E 全绿（S2 蔓延【场景 fire +
+    +Z 木 + 下方木，MOV 寿命 300，420f：roll 确定性 = 探针预计算**帧
+    102** 点燃 +Z 木、**下方木存活**【不向下蔓延】、fires = 2 条目，
+    ×2 savenorm】/ S3 余烬【午夜 600f，A 默认 vs C fire.particles
+    false：A≠C + 火焰像素 A=2426/2452 > C=2383 + C×2 字节 + A×2
+    savenorm【活余烬 = real-dt 运动，截图不可字节比 = P54 场景条款】】
+    / S4 燃尽 + 死亡爆发【remaining 4.0 < 任何 600f 跑 = fps 无关终态
+    air、粒子全灭后截图 ×2 RAW】/ S6 init 失败 ×2【interval 0 /
+    chance 1.5 越界点名】；**PITS +2**【cross 粒子须假法线满亮 /
+    活粒子截图不可字节比 + config 键作 A/C 对照组】）。
+- [x] **Phase 65** — 火把内容：torch 方块（用户"按建议顺序，继续完成
     下两个" = 建议 2，代理定案最小完整版 = **torch 方块**：可放置光
     源，光 14 = MC、cross、瞬破、掉自己；coal+stick 配方 = coal 首个
     合成用途；campfire/火蔓延超出最小内容范围【KNOWN_ISSUES 火把 v1
@@ -600,6 +634,7 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 56** — `archive/phase-56.md`
 - **Phase 57** — `archive/phase-57.md`
 - **Phase 58** — `archive/phase-58.md`
+- **Phase 66** — `archive/phase-66.md`
 - **Phase 65** — `archive/phase-65.md`
 - **Phase 64** — `archive/phase-64.md`
 - **Phase 63** — `archive/phase-63.md`

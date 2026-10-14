@@ -1105,3 +1105,23 @@
   无副作用）。长帧跑（240f+）预算充足。WM 桌面/布局随用户活动变化
   （P65 批 3 中途从正常桌面切到 tiling 桌面 = 同脚本行为突变），
   稳定化失败先查 `xprop -root _NET_CURRENT_DESKTOP` 与窗口几何。
+- **cross 粒子必须假法线 (0,1,0) 满亮，勿走 cube 面法线（P66）**：
+  粒子立方体六面若用 `face.normal`，shader 按法线给面光（±Z 面 0.6）
+  → cross 块（火/火把/植物）的粒子侧脸偏暗 40%。P66 余烬首轮 E2E 的
+  签名：火焰像素滤镜（r>180）计数**开粒子 < 关粒子**（2355 < 2383）
+  ——暗色余烬像素盖住火体亮像素 + 自身过不了滤镜。chunk_mesher 与
+  item_mesh 的既有 cross 分支都用 `v.normal = {0,1,0}`（"full-brightness
+  face shade"）= cross 渲染的项目约定；`drawParticles` cross 分支同
+  款（P66 修复）。排查口诀：**新渲染路径的 cross 内容先对齐既有两分支
+  的法线/UV 约定**。
+- **活粒子（real-dt 运动）的截图不可字节比；config 键作 A/C 对照组（P66）**：
+  粒子发射是固定帧步（确定性）但**运动积分 real dt**（P15 约定，同
+  实体）→ 有活体粒子的帧截图跨运行**永不**字节一致（P54 场景截图
+  条款的粒子实例）。断言降级为：存档 ×2（savenorm 剥 fires remaining
+  等 real-dt 字段）+ 像素**计数 margin**（非字节）+ A≠C。对照组
+  范式 = `fire.particles: false` config（mobs.enabled 同款）：C 组
+  无粒子 = 静态世界 = 截图 ×2 字节可比，A 组火焰像素计数须**两跑都**
+  超 C + margin（单跑可能撞相位低谷）。另：`ParticleSystem::update`
+  内部 `m_particles = std::move(alive)` 替换 vector → 测试里跨 update
+  持 `const auto&` 引用 = 悬空（UB，实测读到"更新后"的值造成假
+  等值）；before 快照必须**按值拷贝**。

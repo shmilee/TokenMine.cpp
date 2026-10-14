@@ -69,6 +69,51 @@ void ParticleSystem::spawnBreak(int cx, int cy, int cz, BlockID id,
     }
 }
 
+void ParticleSystem::spawnFire(int cx, int cy, int cz, BlockID id,
+                               float skyLight, float blockLight,
+                               std::uint64_t rngSeed) {
+    std::uint64_t state = rngSeed;
+    for (int i = 0; i < kFireEmissionCount; ++i) {
+        Particle p;
+        p.block = id;
+        p.skyLight = skyLight;
+        p.blockLight = blockLight;
+        p.gravity = kFireGravity; // rising ember
+
+        // Start near the flame body: a tight offset in x/z ([-0.15,
+        // 0.15]) and slightly below the cell center (the flame base),
+        // so the embers read as coming out of the fire, not around it.
+        const float ox =
+            static_cast<float>(uniform01(state) - 0.5) * 0.3f;
+        const float oy =
+            static_cast<float>(uniform01(state) - 0.5) * 0.2f - 0.1f;
+        const float oz =
+            static_cast<float>(uniform01(state) - 0.5) * 0.3f;
+        p.position = {static_cast<float>(cx) + 0.5f + ox,
+                      static_cast<float>(cy) + 0.5f + oy,
+                      static_cast<float>(cz) + 0.5f + oz};
+
+        // Velocity: a gentle upward drift (0.6..1.4 blocks/s) plus a
+        // small horizontal wander; the negative gravity does the rest.
+        const float vx =
+            static_cast<float>(uniform01(state) - 0.5) * 0.5f;
+        const float vy =
+            static_cast<float>(0.6 + 0.8 * uniform01(state));
+        const float vz =
+            static_cast<float>(uniform01(state) - 0.5) * 0.5f;
+        p.velocity = {vx, vy, vz};
+
+        p.life = static_cast<float>(kFireMinLife +
+                                    (kFireMaxLife - kFireMinLife) *
+                                        uniform01(state));
+
+        if (m_particles.size() >= kMaxParticles) {
+            m_particles.erase(m_particles.begin()); // drop the oldest
+        }
+        m_particles.push_back(std::move(p));
+    }
+}
+
 void ParticleSystem::update(double dt) {
     if (m_particles.empty()) {
         return;
@@ -76,7 +121,9 @@ void ParticleSystem::update(double dt) {
     const float h = static_cast<float>(dt);
     for (Particle& p : m_particles) {
         p.age += h;
-        p.velocity.y -= kGravity * h;
+        // Per-particle gravity (Phase 66): break debris falls, fire
+        // embers rise (negative gravity).
+        p.velocity.y -= p.gravity * h;
         p.position = p.position + p.velocity * h;
     }
     // Compact out the expired (order-preserving).

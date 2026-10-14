@@ -365,7 +365,7 @@
     v1 范围（文档化偏离）：只作用于块（Mob 点燃仍只来自熔岩 Phase 58）
   - **确定性**：单点击边缘事件、无计时器、无随机——同存档同点击帧 =
     同结果
-- **火 / fire 块**（Phase 64，火视觉 v1）：
+- **火 / fire 块**（Phase 64 火视觉 v1；Phase 66 粒子 + 蔓延）：
   - **块**：`fire` = cross 模型 + 火焰纹理（atlas [10,0]）、
     `light_emission 15`（MC 值，夜间可见的光源）、`hardness 0`
     （瞬破）、**无 drops**（破坏/燃尽都不掉东西）、非 solid/opaque、
@@ -373,7 +373,24 @@
   - **来源**：① 点燃器右键 flamable 块（上）；② 熔岩燃烧 pass
     （Phase 58：熔岩 6-邻 flamable 块 → fire，pass 的燃烧目标 =
     registry 有 `fire` 块时 fire、否则 air【单测 fixture 语义】）；
-    ③ **玩家放置**（fire 有隐式 block item：放一个 = 临时营火）
+    ③ **玩家放置**（fire 有隐式 block item：放一个 = 临时营火）；
+    ④ **蔓延**（Phase 66，下）
+  - **蔓延**（Phase 66，`world/fire_spread` 纯函数，镜像生长引擎）：
+    每 `fire.spread_interval_frames` 帧（默认 6 = 0.1 s，MC tick 节奏；
+    固定帧步、`m_frameCount % interval` 门控），每活体火对 **5 邻**
+    （水平 4 + **上**；**不向下**——MC：地火不烧地板）的 `flamable`
+    格独立 roll：`u = splitmix64(世界种子 + 帧×GOLDEN + 位置哈希 +
+    邻序×GOLDEN2) < fire.spread_chance`（默认 0.05 = MC normal 值）→
+    过则 `setBlock(fire)`（收口注册满寿命 = 新火继续蔓延）+ 局部光照。
+    一格邻多火 = 每火各 roll、**只点燃一次**（输出位置序去重）；
+    无火/无 fire 块/无 flamable/chance 0 全 fast-exit；**无音效**
+    （文档化偏离，防刷屏）
+  - **余烬粒子**（Phase 66，`fire.particles` 默认开）：每
+    `kFireParticleEveryNFrames = 6` 帧每活体火发 **2 粒**（0.12 立方
+    体、火焰纹理、**负重力 −2 上升**、寿命 0.3–0.5 s、种子 = 世界种子
+    ⊕ 位置哈希 ⊕ 帧推进）；**燃尽/浇灭**再发一次 16 粒死亡爆发
+    （复用 `spawnBreak`）。发射 = 固定帧步（确定性）、运动 = real dt
+    （P15 约定 → 活余烬截图不可字节比，见 PITS）
   - **燃尽**：`Game::m_fires` map（位置 → 剩余秒，setBlock 收口创建/
     删除 = 炉子范式）；**real-dt** 倒计时（生存计时器类），
     `config fire.lifetime_seconds`（默认 4.0，>0 硬校验）归零 →
@@ -387,10 +404,13 @@
   - **init 交叉校验**：registry 有**任何** flamable 块则**必须**有
     `fire` 块（燃烧目标缺失 = 点名拒绝）；零 flamable 的资产集合法
     （燃烧路径全惰性、fire 块可选）
-  - **v1 范围（文档化偏离）**：无粒子、无蔓延（火不引燃相邻可燃块）、
-    光强度恒定 15 无闪烁、无接触伤害（见 KNOWN_ISSUES 火 v1 条）
+  - **v2 范围（文档化偏离）**：余烬 = v1 视觉（2 粒/0.1 s、单材质
+    上升火星）、蔓延引燃无声、蔓延无难度/风/湿度调制、光强度恒定 15
+    无闪烁、无接触伤害（见 KNOWN_ISSUES 火 v2 条）
   - **确定性**：倒计时 real-dt（同帧率跑字节可复现、燃尽时刻墙钟
-    稳定）；浇灭/燃尽的 setBlock 走主线程写窗口、map 迭代位置序
+    稳定）；浇灭/燃尽的 setBlock 走主线程写窗口、map 迭代位置序；
+    蔓延 roll = 固定帧步纯函数（同种子同帧同格 = 同结果，跨世界/帧
+    去相关）；余烬发射 = 固定帧步（种子纯函数）、运动 real dt
 - **熔岩 / 流体双种类**（Phase 51，数据驱动 + 反应表在方块上）：
   - **编码**：chunk 流体字节 0=干、1..8=水 level、9..16=熔岩 level
     （一格至多一种，`setFluid` 正 level 替换异种、0 只清本种）

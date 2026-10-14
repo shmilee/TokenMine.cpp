@@ -289,8 +289,18 @@ private:
     // beats fire, the Phase 57 water-beats-lava rule). Runs every frame
     // after the fluids tick (so the newly burned cells from the Phase 58
     // pass are registered and the new water is visible). A no-op when
-    // the world holds no fire.
+    // the world holds no fire. Phase 66 adds, on the same pass: the
+    // per-tick fire-ember particle emission (fixed-frame step, gated on
+    // m_fireParticles) and the death burst on burn-out/water extinguish.
     void updateFires(double dt);
+    // Phase 66 fire spread (Fire v2): every fire.spread_interval_frames
+    // frame, each live fire cell rolls its 5 spread neighbors (4
+    // horizontal + above — never downward, Minecraft) for a `flamable`
+    // block (fire.spread_chance per roll, world/fire_spread) and ignites
+    // the passes with setBlock(FIRE) (the choke point registers the new
+    // fire's full life). Runs every frame after updateFires; a no-op
+    // without fires or without the fire block.
+    void updateFireSpread();
     // Phase 56: sync the player's absorption layer to the active effects
     // (sum of `absorb_hp`). Called at every effect change (eat-grant, mob
     // on_hit_effect, expiry in updateEffects, milk clear, death clear,
@@ -628,6 +638,15 @@ private:
     std::map<BlockPos, double> m_fires;
     BlockID m_fireId = BlockID::invalid();
     double m_fireLifetime = 4.0;
+    // Phase 66 fire spread + embers (Fire v2): the spread roll cadence
+    // (fire.spread_interval_frames, default 6 = the 0.1 s Minecraft tick
+    // rhythm) and per-neighbor chance (fire.spread_chance, default 0.05
+    // = the Minecraft normal value); m_fireParticles gates the ember
+    // emission (fire.particles, default true — a no-input run without
+    // fires is inert either way, and it is the E2E control).
+    int m_fireSpreadInterval = 6;
+    double m_fireSpreadChance = 0.05;
+    bool m_fireParticles = true;
 
     // Phase 48 crop growth: the cells holding a block with a non-empty
     // growsTo property (the growth stage is the block id itself — no
