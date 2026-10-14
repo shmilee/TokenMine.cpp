@@ -694,6 +694,18 @@ Result<void> Game::buildScene() {
                                g.name + "'");
             }
         }
+        // Phase 67: the fast_against list, entry by entry (the grows_on
+        // discipline: a typo must fail init loudly, not silently break
+        // at the normal speed).
+        for (std::size_t i = 0; i < it.fastAgainst.size(); ++i) {
+            const std::string& bn = it.fastAgainst[i];
+            if (!m_blocks.idForName(bn).valid()) {
+                return MC_FAIL("item '" + it.name + "' fast_against[" +
+                               std::to_string(i) +
+                               "] references the unknown block '" + bn +
+                               "'");
+            }
+        }
     }
 
     // -- fire (Phase 64, the fire visuals): the burn target --------------
@@ -2142,8 +2154,8 @@ void Game::updateBreaking(double dt) {
         m_breakTarget = hit->block;
         m_breakProgress = 0.0;
     }
-    const double duration =
-        breakDurationSeconds(block.properties.hardness, selectedBreakSpeed());
+    const double duration = breakDurationSeconds(
+        block.properties.hardness, selectedBreakSpeed(block));
     if (duration <= 0.0) {
         // Data-driven instant break (hardness 0 while destroyable).
         breakBlock(*hit);
@@ -3074,13 +3086,14 @@ void Game::dropSelectedItem() {
     m_sound.play("pickup");
 }
 
-float Game::selectedBreakSpeed() const {
+float Game::selectedBreakSpeed(const Block& target) const {
     const ItemStack& stack = m_inventory.at(m_selectedSlot);
     if (stack.empty()) {
         return 1.0f; // bare hands
     }
-    const Item& item = m_items.at(stack.item);
-    return item.type == ItemType::Tool ? item.breakSpeed : 1.0f;
+    // Phase 67: the fast_against list (axes vs wood) is part of the
+    // item's data — effectiveBreakSpeed applies it against `target`.
+    return effectiveBreakSpeed(m_items.at(stack.item), target);
 }
 
 // ---------------------------------------------------------------------------
@@ -4102,7 +4115,7 @@ void Game::drawWorldOverlay(const Mat4& view, const Mat4& projection) {
         const Block& block =
             m_blocks.at(m_world.getBlock(b.x, b.y, b.z));
         const double duration = breakDurationSeconds(
-            block.properties.hardness, selectedBreakSpeed());
+            block.properties.hardness, selectedBreakSpeed(block));
         const int stage =
             duration > 0.0
                 ? std::clamp(

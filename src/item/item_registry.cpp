@@ -478,6 +478,53 @@ Result<void> ItemRegistry::parseTool(const Json& def, Item& out) {
     return parseMaxStack(def, out);
 }
 
+Result<void> ItemRegistry::parseFastAgainst(const Json& def, bool isTool,
+                                            Item& out) {
+    // Optional 'fast_against' (Phase 67, per-block tool efficiency): a
+    // non-empty array of block names the tool breaks fast, paired with
+    // 'fast_against_multiplier' (the speed factor for those blocks).
+    // Minecraft: axes chop wood 2x faster — the first per-block tool
+    // category in this project.
+    const Json* list = def.find("fast_against");
+    const Json* mult = def.find("fast_against_multiplier");
+    if (list == nullptr && mult == nullptr) {
+        return {}; // absent = not fast against anything (the default)
+    }
+    if (list == nullptr || mult == nullptr) {
+        return MC_FAIL("'fast_against' and 'fast_against_multiplier' are a "
+                       "strict pair (both are required when either is "
+                       "present)");
+    }
+    if (!isTool) {
+        return MC_FAIL("'fast_against' is only valid for type \"tool\" "
+                       "(the break-speed channel; a material never breaks "
+                       "faster)");
+    }
+    if (!list->isArray() || list->size() == 0) {
+        return MC_FAIL("'fast_against' must be a non-empty array of block "
+                       "names (the empty list is a no-op and rejected)");
+    }
+    for (std::size_t i = 0; i < list->size(); ++i) {
+        const Json& e = list->at(i);
+        if (!e.isString() || e.asString().empty()) {
+            return MC_FAIL("'fast_against[" + std::to_string(i) +
+                           "]' must be a non-empty string block name");
+        }
+    }
+    if (!mult->isNumber() || mult->asDouble() <= 0.0) {
+        return MC_FAIL("'fast_against_multiplier' must be a number > 0" +
+                       (mult->isNumber()
+                            ? ", got " + std::to_string(mult->asDouble())
+                            : std::string()));
+    }
+    out.fastAgainst.reserve(list->size());
+    for (std::size_t i = 0; i < list->size(); ++i) {
+        out.fastAgainst.push_back(list->at(i).asString());
+    }
+    out.fastAgainstMultiplier = static_cast<float>(mult->asDouble());
+    return {};
+}
+
 Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     if (!def.isObject()) {
         return MC_FAIL("item definition must be a JSON object");
@@ -526,6 +573,8 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
             key != "grants_effect" &&
             key != "grants_effects" &&
             key != "ignites_flamable" &&
+            key != "fast_against" &&
+            key != "fast_against_multiplier" &&
             key != "icon") {
             MC_LOG_WARN("Item '" + name + "': unknown field '" + key +
                         "' ignored");
@@ -538,6 +587,8 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     auto r = isTool ? parseTool(def, item) : parseMaxStack(def, item);
     MC_TRY(r);
     r = parseAttackDamage(def, item);
+    MC_TRY(r);
+    r = parseFastAgainst(def, isTool, item); // Phase 67: tool-only pair
     MC_TRY(r);
     r = parseShoot(def, item);
     MC_TRY(r);

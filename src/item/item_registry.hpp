@@ -137,6 +137,15 @@ private:
     static Result<void> parseGrant(const Json& def, Item& out);
     // Parse the tool fields (`tool.break_speed` + `max_stack`) into `out`.
     static Result<void> parseTool(const Json& def, Item& out);
+    // Parse the optional 'fast_against' + 'fast_against_multiplier' pair
+    // (Phase 67, per-block tool efficiency) into `out`: a non-empty array
+    // of block names + a number > 0, a STRICT pair (one without the other
+    // rejected, the empty list rejected), only valid on type "tool"
+    // (the break-speed channel — a material holding the fields is a
+    // typo). The block names' existence is cross-checked at game init
+    // (the grows_on discipline).
+    static Result<void> parseFastAgainst(const Json& def, bool isTool,
+                                         Item& out);
 
     std::deque<Item> m_items; // deque: stable references on push
     std::unordered_map<std::string, int> m_names;

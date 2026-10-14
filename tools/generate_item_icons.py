@@ -417,6 +417,37 @@ def stone_pickaxe():
     return pickaxe((140, 140, 146), (178, 178, 184), salt=55)
 
 
+def axe(head_color, head_bevel, salt):
+    """An axe (Phase 67): a chunky head slab in the upper left (the
+    brighter bevel strip on its left = the cutting edge) + a 4px diagonal
+    handle from the head to the bottom-right (the Minecraft silhouette,
+    the pickaxe's handle style)."""
+    px = blank()
+    for y in range(3, 15):
+        for x in range(2, 13):
+            # Rounded corners (one diagonal cut each).
+            if (x - 2) + (y - 3) < 1 or (12 - x) + (14 - y) < 1:
+                continue
+            if x <= 4:
+                setpx(px, x, y, head_bevel, salt=salt)
+            else:
+                setpx(px, x, y, head_color, salt=salt + 1)
+    line(px, 12, 10, 26, 26, (146, 110, 62), salt=salt + 2, width=4)
+    return px
+
+
+def wooden_axe():
+    return axe((150, 114, 66), (190, 152, 96), salt=57)
+
+
+def iron_axe():
+    return axe((206, 206, 212), (238, 238, 244), salt=59)
+
+
+def stone_axe():
+    return axe((140, 140, 146), (178, 178, 184), salt=61)
+
+
 def leather():
     """A piece of leather hide: a tan irregular slab with a darker rim and
     a few crease lines."""
@@ -775,6 +806,9 @@ ITEMS = {
     "wooden_pickaxe": wooden_pickaxe,
     "stone_pickaxe": stone_pickaxe,
     "iron_pickaxe": iron_pickaxe,
+    "wooden_axe": wooden_axe,
+    "stone_axe": stone_axe,
+    "iron_axe": iron_axe,
     "bow": bow,
     "arrow": arrow,
     "leather": leather,

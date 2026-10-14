@@ -1,0 +1,14 @@
+{
+  "id": "wooden_axe",
+  "type": "shaped",
+  "output": { "item": "wooden_axe", "count": 1 },
+  "pattern": [
+    "PP",
+    "PX",
+    " X"
+  ],
+  "key": {
+    "P": "planks",
+    "X": "stick"
+  }
+}

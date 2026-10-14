@@ -550,8 +550,15 @@
   浅水（头在水面上）可以"蹚水走"，深水可以游
 - **方块交互**（DDA 体素 raycast，reach 5 格）：
   - `左键`（锁定时，**按住**）：破坏准星指向的方块，耗时数据驱动
-    （`1.5s × properties.hardness ÷ 当前选中物品的 break speed`，徒手=1.0；
-    `properties.destroyable` 数据驱动，基岩不可破坏）。准星移开/松键/换工具
+    （`1.5s × properties.hardness ÷ 当前选中物品对目标块的 effective
+    break speed`，徒手/方块/材料=1.0；`properties.destroyable` 数据驱动，
+    基岩不可破坏）。**有效速度 = `effectiveBreakSpeed(item, block)`
+    纯函数**（Phase 67）：tool = 其 `tool.break_speed` ×（目标块在物品
+    的 `fast_against` 块名列表内 ? `fast_against_multiplier` : 1）——
+    首个分块工具类别 = 三把斧对 wood/leaves ×2（MC 斧对木 2×，对其它
+    块 = 基础手速 1×）；`fast_against` 与 `fast_against_multiplier` 是
+    严格配对字段（缺一/空列表/非 tool 均解析拒绝，init 逐条目交叉
+    校验块名存在 = grows_on 同款）。准星移开/松键/换工具
     进度清零。raycast 把水体当 air 穿过——可以隔水破坏湖底/水下的方块
     （水会被破坏排水、随后流体模拟把它补回）
   - `右键`（锁定时）：**先试食物**（选中食物 = 开始进食通道，点击被吞）

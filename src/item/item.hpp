@@ -172,6 +172,21 @@ struct Item {
     // bucket — the channel-ownership discipline). v1 scope: blocks only
     // (mobs still ignite from lava alone, Phase 58).
     bool ignitesFlamable = false;
+    // Phase 67: per-block break efficiency (optional data fields
+    // 'fast_against', a non-empty ARRAY of block names, +
+    // 'fast_against_multiplier', a number > 0 — a STRICT pair: one
+    // without the other is rejected, as is the empty list, and the
+    // fields are only valid on type "tool"). Non-empty fastAgainst
+    // marks the tool as FAST AGAINST the named blocks: breaking one of
+    // them takes 1/fastAgainstMultiplier of the tool's normal break
+    // time (Minecraft: axes chop wood 2x faster — the first per-block
+    // tool category in this project, the KNOWN_ISSUES "no axe tools"
+    // + "no per-block tool efficiency" entries). fastAgainst empty =
+    // not fast against anything (every pre-Phase-67 item). Each name's
+    // existence is cross-checked against the BlockRegistry at game
+    // init (the grows_on discipline — a typo fails init loudly).
+    std::vector<std::string> fastAgainst;
+    float fastAgainstMultiplier = 0.0f;
     // Phase 15 UI: the item's 2D icon texture name (a file under
     // assets/textures/items/, validated against the filesystem at game
     // init). Empty for block items, which render a 3D block cube instead.
@@ -196,8 +211,33 @@ struct ItemStack {
 // instantly.
 //
 // Minecraft refines this with per-block-type tool effectiveness (pickaxes
-// vs stone, ...); the flat multiplier is the v1 — see docs/KNOWN_ISSUES.md.
+// vs stone, axes vs wood, ...): Phase 67 adds the data-driven
+// fast_against list (an item multiplies its breakSpeed for the blocks it
+// names); the per-category rules beyond that (shovel vs dirt, the
+// "inefficient tool is 10x slower" rule) are still the v1 — see
+// docs/KNOWN_ISSUES.md.
 inline constexpr double kBreakBaseSeconds = 1.5;
+
+// The effective break-speed multiplier of `item` against `target`
+// (Phase 67): 1.0 for the hand, block items and materials; for a tool,
+// its own breakSpeed — times the fast_against multiplier when the target
+// block is one the tool is fast against (Minecraft axes chop wood and
+// leaves 2x faster; pickaxes stay flat).
+inline float effectiveBreakSpeed(const Item& item, const Block& target) {
+    if (item.type != ItemType::Tool) {
+        return 1.0f;
+    }
+    float speed = item.breakSpeed;
+    if (item.fastAgainstMultiplier > 0.0f) {
+        for (const std::string& name : item.fastAgainst) {
+            if (name == target.name) {
+                speed *= item.fastAgainstMultiplier;
+                break;
+            }
+        }
+    }
+    return speed;
+}
 
 inline double breakDurationSeconds(float hardness, float breakSpeed) {
     if (hardness <= 0.0f) {

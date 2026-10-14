@@ -1,0 +1,14 @@
+{
+  "id": "iron_axe",
+  "type": "shaped",
+  "output": { "item": "iron_axe", "count": 1 },
+  "pattern": [
+    "II",
+    "IX",
+    " X"
+  ],
+  "key": {
+    "I": "iron_ingot",
+    "X": "stick"
+  }
+}

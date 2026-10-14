@@ -266,7 +266,38 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
     block+fluid / L1 膜 = 稳定地面流体场景 / 物品 rest 位置确定性
     （零初速 + 位置式分离）/ pgrep 前缀误匹配 minecraft_tests / 裸
     截图无窗口稳定化 = 错尺寸假失败）。
-  - [x] **Phase 66** — 火 v2：粒子 + 蔓延（用户"下两个阶段是 建议1 和
+  - [x] **Phase 67** — 斧类工具（用户"下两个阶段是 建议1 和 建议3" =
+    建议 3，代理定案最小完整版 = **斧 = 数据驱动分块效率工具型**，
+    全量消费 P62 遗留"无斧类工具" + 部分消费 P11"工具无分块类型
+    效率"）：**物品可选字段 `fast_against`（非空块名数组）+
+    `fast_against_multiplier`（>0 数）严格配对**（缺一拒绝 / 空数组
+    拒绝 = no-op 纪律 / **仅 type tool** = 通道所有权纪律 / 元素非
+    字符串逐条目点名；**init 交叉校验**每条目必须指向存在的方块 =
+    grows_on 同款）+ **`effectiveBreakSpeed(item, block)` 纯函数**
+    （item.hpp，breakDurationSeconds 旁：非 tool = 1.0；tool =
+    breakSpeed ×（目标块在 fast_against 内 ? 倍率 : 1））+
+    `selectedBreakSpeed(const Block&)` 两调用点传目标块 + **内容
+    wooden/stone/iron_axe**（fast_against [wood, leaves] **×2.0 = MC
+    斧对木 2×**、break_speed 缺省 **1.0 = 手速**【MC 斧对石 1×】、
+    attack_damage **3/3.5/4** = 各比同档镐 +1 的项目压缩刻度【MC
+    斧 > 镐】、max_stack 1）+ **3 配方**（shaped **PP/PX/ X** L 形 =
+    MC 斧：木 = planks、石 = cobblestone【P61 第二个工具用途】、铁 =
+    iron_ingot；各 +2 stick）+ **3 图标**（generate_item_icons.py 加
+    `axe()`；图标 = 每物品独立 PNG，**无共享 atlas = 无重锚**）。
+    **无 format 变更**（format 10，纯物品/配方内容）。1059/1059
+    （+11：解析 6 / 纯函数 3 / 物品钉死 1 / 配方钉死 1）、`-Werror`
+    0 警告、base18 **第 40 次结构性免疫**【轴不在默认背包 + 配方只在
+    UI = 零世界状态 = P62 镐同款论证；block atlas 未动】；E2E 全绿
+    （S2 铁斧破木【wood@(22,46,-5) P52 几何 + slot0 铁斧 + 左键
+    hold **1.6 s**：有效速度 1.0×2.0 = 2.0 → **1.5 s < 1.6 s 破**，
+    掉落 wood×1 停 P59/P61 证明落点 (22.5,45,-4.5)，420f ×2
+    savenorm】/ S2b 铁斧对石对照【同格同 hold：石 2.25 s > 1.6 s
+    **不破** = 倍率不越 fast_against 清单【若误套 2× = 1.125 s 会破
+    = 可区分】，终态零 real-dt 字段 → 存档 + 截图 **×2 RAW 字节**】
+    / S6 init 失败 ×2【fast_against ["woodz"] → 未知方块点名 / 材料
+    物品带 fast_against → "only valid for type" 点名】；**PITS +1**
+    【掉落静止位 ≠ 被破格中心：用已证明落点常量断言】）。
+- [x] **Phase 66** — 火 v2：粒子 + 蔓延（用户"下两个阶段是 建议1 和
     建议3" = 建议 1，代理定案最小完整版 = **火 v2**：火焰余烬粒子 +
     蔓延引燃相邻可燃块，全量消费 P64 火 v1 遗留"无粒子/无蔓延"）：
     **蔓延引擎**（`world/fire_spread.{hpp,cpp}` 纯函数，镜像 P48 生长
@@ -634,6 +665,7 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 56** — `archive/phase-56.md`
 - **Phase 57** — `archive/phase-57.md`
 - **Phase 58** — `archive/phase-58.md`
+- **Phase 67** — `archive/phase-67.md`
 - **Phase 66** — `archive/phase-66.md`
 - **Phase 65** — `archive/phase-65.md`
 - **Phase 64** — `archive/phase-64.md`

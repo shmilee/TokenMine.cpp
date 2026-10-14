@@ -1,0 +1,9 @@
+{
+  "id": "iron_axe",
+  "type": "tool",
+  "fast_against": ["wood", "leaves"],
+  "fast_against_multiplier": 2.0,
+  "attack_damage": 4,
+  "max_stack": 1,
+  "icon": "iron_axe"
+}

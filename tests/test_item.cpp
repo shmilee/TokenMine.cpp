@@ -1188,3 +1188,143 @@ TEST(ItemRegistryTest, Phase62StonePickaxeItemContent) {
     EXPECT_FLOAT_EQ(it->attackDamage, 2.5f); // wooden 2 < stone < iron 3
     EXPECT_EQ(it->icon, "stone_pickaxe");
 }
+
+// ---------------------------------------------------------------------------
+// Phase 67: per-block tool efficiency ('fast_against' +
+// 'fast_against_multiplier', the first per-block tool category: axes chop
+// wood 2x faster — the KNOWN_ISSUES "no axe tools" entry consumed).
+// ---------------------------------------------------------------------------
+
+TEST(ItemRegistryTest, FastAgainstAcceptsToolPair) {
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(
+        R"({"id":"x","type":"tool","fast_against":["wood","leaves"],"fast_against_multiplier":2.0})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Item* it = items.findByName("x");
+    ASSERT_NE(it, nullptr);
+    EXPECT_EQ(it->fastAgainst,
+              (std::vector<std::string>{"wood", "leaves"}));
+    EXPECT_FLOAT_EQ(it->fastAgainstMultiplier, 2.0f);
+}
+
+TEST(ItemRegistryTest, FastAgainstDefaultsAbsent) {
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(R"({"id":"x","type":"tool"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Item& it = items.at(*r);
+    EXPECT_TRUE(it.fastAgainst.empty());
+    EXPECT_FLOAT_EQ(it.fastAgainstMultiplier, 0.0f);
+}
+
+TEST(ItemRegistryTest, FastAgainstRejectsMissingPartner) {
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"x","type":"tool","fast_against":["wood"]})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("strict pair"), std::string::npos);
+    auto r2 = items.registerItem(
+        parseJson(R"({"id":"y","type":"tool","fast_against_multiplier":2.0})"));
+    ASSERT_FALSE(r2.ok());
+    EXPECT_NE(r2.error().message.find("strict pair"), std::string::npos);
+}
+
+TEST(ItemRegistryTest, FastAgainstRejectsEmptyList) {
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(
+        R"({"id":"x","type":"tool","fast_against":[],"fast_against_multiplier":2.0})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("non-empty array"), std::string::npos);
+}
+
+TEST(ItemRegistryTest, FastAgainstRejectsBadEntryAndMultiplier) {
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(
+        R"({"id":"x","type":"tool","fast_against":["wood",42],"fast_against_multiplier":2.0})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("fast_against[1]"), std::string::npos);
+    auto r2 = items.registerItem(parseJson(
+        R"({"id":"y","type":"tool","fast_against":["wood"],"fast_against_multiplier":0})"));
+    ASSERT_FALSE(r2.ok());
+    EXPECT_NE(r2.error().message.find("fast_against_multiplier"),
+              std::string::npos);
+}
+
+TEST(ItemRegistryTest, FastAgainstRejectsMaterial) {
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(
+        R"({"id":"x","type":"material","fast_against":["wood"],"fast_against_multiplier":2.0})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("only valid for type"),
+              std::string::npos);
+}
+
+namespace {
+// A data axe for the pure-function tests (the shipped content pins are
+// separate — Phase67AxeItemContent).
+Item axeItem() {
+    Item it;
+    it.type = ItemType::Tool;
+    it.breakSpeed = 1.0f;
+    it.fastAgainst = {"wood", "leaves"};
+    it.fastAgainstMultiplier = 2.0f;
+    return it;
+}
+
+Block blockNamed(const char* name) {
+    Block b;
+    b.name = name;
+    return b;
+}
+} // namespace
+
+TEST(ItemRegistryTest, EffectiveBreakSpeedFastAgainstNamedBlocksOnly) {
+    const Item axe = axeItem();
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(axe, blockNamed("wood")), 2.0f);
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(axe, blockNamed("leaves")), 2.0f);
+    // Off-list: the multiplier does not apply (the axe = hand speed).
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(axe, blockNamed("stone")), 1.0f);
+}
+
+TEST(ItemRegistryTest, EffectiveBreakSpeedFlatToolStaysFlat) {
+    Item pick;
+    pick.type = ItemType::Tool;
+    pick.breakSpeed = 4.0f;
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(pick, blockNamed("wood")), 4.0f);
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(pick, blockNamed("stone")), 4.0f);
+}
+
+TEST(ItemRegistryTest, EffectiveBreakSpeedNonToolsAreOne) {
+    Item hand; // the default (block-item type): never a tool
+    Item mat;
+    mat.type = ItemType::Material;
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(hand, blockNamed("wood")), 1.0f);
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(mat, blockNamed("wood")), 1.0f);
+}
+
+// Pins the ACTUAL axe content (Minecraft values: 2x on wood/leaves, 1x
+// elsewhere = the bare-hand pace, attack one point above the matching
+// pickaxe — the project's compressed tier scale).
+TEST(ItemRegistryTest, Phase67AxeItemContent) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry blocks;
+    ASSERT_TRUE(blocks.loadDirectory(assets, "data/blocks").ok());
+    ItemRegistry items;
+    ASSERT_TRUE(items.buildBlockItems(blocks).ok());
+    ASSERT_TRUE(items.loadDirectory(assets, "data/items").ok());
+    const std::vector<std::pair<std::string, float>> want = {
+        {"wooden_axe", 3.0f}, {"stone_axe", 3.5f}, {"iron_axe", 4.0f}};
+    for (const auto& [name, atk] : want) {
+        const Item* it = items.findByName(name);
+        ASSERT_NE(it, nullptr) << name;
+        EXPECT_EQ(it->type, ItemType::Tool) << name;
+        EXPECT_EQ(it->maxStack, 1) << name;
+        EXPECT_FLOAT_EQ(it->breakSpeed, 1.0f) << name; // MC: the axe = 1x vs stone
+        EXPECT_EQ(it->fastAgainst,
+                  (std::vector<std::string>{"wood", "leaves"})) << name;
+        EXPECT_FLOAT_EQ(it->fastAgainstMultiplier, 2.0f) << name; // MC: 2x vs wood
+        EXPECT_FLOAT_EQ(it->attackDamage, atk) << name;
+        EXPECT_EQ(it->icon, name) << name;
+    }
+}

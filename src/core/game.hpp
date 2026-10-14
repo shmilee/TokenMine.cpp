@@ -312,9 +312,12 @@ private:
     void cycleHotbar();
     // Drops one from the selected hotbar slot at the player's feet (Q).
     void dropSelectedItem();
-    // Break speed of the selected item: tools use their data break_speed,
-    // hand (empty slot) and block items break at 1.0.
-    float selectedBreakSpeed() const;
+    // Effective break speed of the selected item against `target`
+    // (Phase 67): tools use their data break_speed — times the
+    // fast_against multiplier when the target block is one the tool is
+    // fast against (effectiveBreakSpeed); hand (empty slot) and block
+    // items break at 1.0.
+    float selectedBreakSpeed(const Block& target) const;
 
     // Entity simulation (Phase 10): per-entity physics, then the item merge
     // pass and despawn (removal is deferred so the merge order — and

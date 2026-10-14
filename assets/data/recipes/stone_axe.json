@@ -1,0 +1,14 @@
+{
+  "id": "stone_axe",
+  "type": "shaped",
+  "output": { "item": "stone_axe", "count": 1 },
+  "pattern": [
+    "SS",
+    "SX",
+    " X"
+  ],
+  "key": {
+    "S": "cobblestone",
+    "X": "stick"
+  }
+}

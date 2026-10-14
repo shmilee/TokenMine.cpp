@@ -46,7 +46,7 @@
 - **火 v2 范围（文档化偏离）** — `fire` 块（`[Phase 64]`）+ 粒子/蔓延（`[Phase 66]`）的边界：**余烬粒子 = v1 视觉**（2 粒/0.1 s/火格、0.12 立方体、寿命 0.3–0.5 s——MC 的火粒子更密且分火焰/烟两层，本项目单材质上升火星；`fire.particles` 可关）；**蔓延引燃无声**（蔓延走 `setBlock(fire)` 但不播 `ignite` 音效——一片蔓延火会刷屏一次性音效；点燃器单次引燃仍有声）；**蔓延无难度/风/湿度调制**（chance 固定 config 值，无 MC 的 difficulty 缩放/风场/湿度）；fire 块**可放置**（block item 自动存在：放一个 = 临时营火，燃尽回 air、无掉落）；光的**强度恒定 15 无闪烁**（纹理静态、light 不随时间变）；**无接触伤害**（见「伤害来源」条）。`[Phase 64]` → `[Phase 66]`
 - **火把 v1 范围（文档化偏离）** — `torch` 块（`[Phase 65]`）的边界：**无点燃/蔓延**（火把是光源不是火源——不引燃相邻 flamable，火源语义仍归 `[Phase 64]` fire 块与点燃器/熔岩 pass）；**无支撑要求**（通用 placeBlock 规则：任意实心面可贴，含方块底面——MC 火把需要支撑，本项目无支撑语义）；光**恒定 14 无闪烁**（静态纹理）；hardness 0 **瞬破且掉自己**（与 fire 相反：fire 无掉落）；配方 shapeless coal+stick → 4（MC，coal 首个合成用途）。**无 campfire**（新交互语义超出内容 phase 最小范围，P62 无斧类工具同款偏离）。`[Phase 65]`
 - **stone→cobblestone 材料链（Phase 61 内容契约变更 + 熔炼偏离）** — 挖天然 stone 现掉 **cobblestone**（MC 材料循环）：stone 只能经 **4 cobblestone → 1 stone 合成**（MC 1.14+）回来。文档化偏离：**cobblestone 不能熔炼回 stone**——`smeltable_to` 是物品字段而 block item 无独立 JSON（隐式生成、无 item 数据），给 block item 加数据 = 核心改动，超出本 phase 最小范围；合成路线已覆盖转换。`[Phase 61]`
-- **无斧类工具（Phase 62 范围注记）** — 本项目的工具型只有镐（wooden/stone/iron pickaxe）+ 弓；"石头工具线" v1 = **石镐**（镐路线中档：break_speed 木 2 → 石 3 → 铁 4、攻击 2 → 2.5 → 3，项目压缩刻度恰居中）。MC 还有石斧/木斧/铁斧——引入斧 = 新工具型（用途语义：对树/肉的倍率），超出内容 phase 最小范围；石镐已消费 P61 的 cobblestone（首个工具用途）。`[Phase 62]`
+- **斧 v1 范围（文档化偏离）** — 三把斧（`wooden/stone/iron_axe`，`[Phase 67]`）的边界：`fast_against` 只覆盖 **wood/leaves ×2**（MC 斧对木 2×；对其它块 = 基础手速 1× = MC 斧对石 1×）；**无"肉/战斗"倍率**（对 mob 就是平值 attack_damage 3/3.5/4 = 各比同档镐 +1 的项目压缩刻度，MC 斧对生物无特殊倍率）；**无耐久**（项目无耐久系统）。引入斧同时消费了 `[Phase 62]` 的"无斧类工具"注记（新工具型 = 数据驱动 `fast_against` 列表 + `effectiveBreakSpeed` 纯函数，不加新 ItemType）。`[Phase 62]` → `[Phase 67]`
 
 ## 实体（Phase 10）
 
@@ -59,7 +59,7 @@
 
 ## 物品 / 背包（Phase 11）
 
-- **工具无分块类型效率** — 工具的 `break_speed` 是 flat 乘数（对任何方块生效）；Minecraft 有镐/铲/斧分类 × 方块类别（石类对镐、土类对铲）+ 无效率工具慢 10× 的规则。v1 只有 flat 乘数，加分类需给方块数据加类别字段并改破坏耗时公式。`[Phase 11]`
+- **工具无完整分块类型效率** — 工具效率 = flat `break_speed` + Phase 67 起的**物品侧 `fast_against` 块名列表 × 倍率**（首个分块类别 = 斧对 wood/leaves 2×，物品数据驱动、init 逐条目交叉校验）。仍缺：MC 的镐/铲分类（石类对镐、土类对铲——本项目连铲都没有）与"无效率工具慢 10×"规则；方块侧无类别字段（分类知识在物品侧的块名列表里）。`[Phase 11]` → `[Phase 67]`
 - **非 block 物品的掉落物在 world 中不可见** — 工具/材料的**掉落物**（Q 丢出或挖出）没有 in-world 实体表示（`drawItemEntities` 跳过非 block 物品——物理/拾取/合并/消亡照常工作）；UI 侧（背包/hotbar/手持/合成产物）Phase 15 起已有图标（`Item.icon` 32×32 纹理，Phase 35）。`[Phase 11]`（UI 部分 `[Phase 15]` 已解决）
 - **拾取是固定 1.0 格半径，无磁力** — 玩家底心距掉落物底心 <1.0 且过 0.5s 拾取延迟即整堆入包；Minecraft 会随时间逐渐把物品拉向玩家。`[Phase 11]`
 - **放置消耗库存（行为变化，非缺陷）** — Phase 11 起方块不再是无限的：初始 hotbar 每格满堆栈（block 64/工具 1，`hotbar.json` 定义），放置消耗 1 个；hotbar 与背包都空时右键无效。`[Phase 11]`

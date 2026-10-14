@@ -780,3 +780,37 @@ TEST(RecipeRegistryTest, Phase65TorchRecipeContent) {
     expectIngredients(rec->ingredients, f.items,
                       {{"coal", 1}, {"stick", 1}});
 }
+
+// Phase 67: the axe recipes — the Minecraft L shape (head head / head
+// handle / . handle): wood from planks, stone from cobblestone (a second
+// crafting use of P61's material), iron from iron ingots. One output each.
+TEST(RecipeRegistryTest, Phase67AxeRecipeContent) {
+    RealAssets f;
+    ASSERT_TRUE(f);
+    const std::vector<std::tuple<std::string, std::string, std::string>>
+        want = {
+            {"wooden_axe", "wooden_axe", "planks"},
+            {"stone_axe", "stone_axe", "cobblestone"},
+            {"iron_axe", "iron_axe", "iron_ingot"},
+        };
+    for (const auto& [id, outName, headName] : want) {
+        const Recipe* rec = f.recipes.find(id);
+        ASSERT_NE(rec, nullptr) << id;
+        EXPECT_EQ(rec->type, RecipeType::Shaped) << id;
+        EXPECT_EQ(rec->output, f.items.idForName(outName)) << id;
+        EXPECT_EQ(rec->outputCount, 1) << id;
+        ASSERT_EQ(rec->pattern.size(), 3u) << id;
+        // The L shape: row 0 = two head cells, row 1 = head + handle,
+        // row 2 = space + handle (the handle column is the 2nd).
+        ASSERT_EQ(rec->pattern[0].size(), 2u) << id;
+        EXPECT_EQ(rec->pattern[0][0], rec->pattern[0][1]) << id;
+        EXPECT_EQ(rec->pattern[1][0], rec->pattern[0][0]) << id;
+        EXPECT_EQ(rec->pattern[1][1], rec->pattern[2][1]) << id;
+        EXPECT_EQ(rec->pattern[2][0], ' ') << id;
+        ASSERT_EQ(rec->key.size(), 2u) << id;
+        const char headCh = rec->pattern[0][0];
+        const char stickCh = rec->pattern[1][1];
+        EXPECT_EQ(f.items.at(rec->key.at(headCh)).name, headName) << id;
+        EXPECT_EQ(f.items.at(rec->key.at(stickCh)).name, "stick") << id;
+    }
+}
