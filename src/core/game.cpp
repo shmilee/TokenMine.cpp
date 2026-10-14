@@ -3969,54 +3969,70 @@ const Mesh& Game::handIconMesh() {
     return m_handIconMesh;
 }
 
+// Phase 78: the four-slot icon row (Minecraft shows every cooking item
+// on the campfire). One 0.35 icon per occupied slot, 0.3 apart in a 1x4
+// row across the cell's upper half (total span 1.25 — a 0.5 icon leaves
+// no room for four, so the icons shrink to fit; the small neighbour
+// overlap is intentional adjacency).
+inline constexpr float kCampfireIconScale = 0.35f;
+inline constexpr float kCampfireIconSpacing = 0.3f;
+
 void Game::drawCampfireCookItems(const Mat4& view, const Mat4& projection) {
-    // Phase 71 (the first-occupied-slot rule in Phase 75): the item
-    // cooking on each campfire. No occupied slot: nothing draws (a
-    // no-input run has no campfire at all — worldgen never emits one —
-    // and a placed-but-empty campfire draws nothing either: baseline
-    // byte-identical). Of the four slots only the FIRST occupied one
-    // renders (documented v1 simplification — Minecraft shows all four;
-    // the icons would overlap in one cell).
+    // Phase 71 (all four slots render in Phase 78): the items cooking on
+    // each campfire. No occupied slot: nothing draws (a no-input run has
+    // no campfire at all — worldgen never emits one — and a placed-but-
+    // empty campfire draws nothing either: baseline byte-identical).
     for (const auto& [pos, st] : m_campfires) {
-        std::size_t occupied = kCampfireSlotCount;
-        for (std::size_t i = 0; i < kCampfireSlotCount; ++i) {
-            if (!st.slots[i].empty()) {
-                occupied = i;
+        bool any = false;
+        for (const ItemStack& slot : st.slots) {
+            if (!slot.empty()) {
+                any = true;
                 break;
             }
         }
-        if (occupied == kCampfireSlotCount) {
+        if (!any) {
             continue;
         }
-        const ItemStack& slot = st.slots[occupied];
-        const std::size_t iconIdx =
-            static_cast<std::size_t>(slot.item.value);
-        if (iconIdx >= m_itemIcons.size() || !m_itemIcons[iconIdx].valid()) {
-            continue; // cannot happen (item data is validated at init)
-        }
-        // The icon floats in the upper half of the cell (the campfire is a
-        // cross block — the food sits above the flame). Crossed quads (the
-        // cross-block convention: view-independent; culling stays ON, so
-        // from any horizontal angle at least one quad's front face shows).
-        // The quad's +Y normal keeps it in the top-face brightness bucket
-        // through the 90° cross rotation (the handIconMesh convention).
-        const Vec3 center {
-            static_cast<float>(pos.x) + 0.5f,
-            static_cast<float>(pos.y) + 0.75f,
-            static_cast<float>(pos.z) + 0.5f};
-        const Mat4 base =
-            Mat4::multiply(Mat4::translate(center), Mat4::scale(0.5f));
-        // The icon texture carries transparent pixels (the drawHeldHand
-        // pattern): blending on for the two draws, atlas restored after.
+        // The icons float in the upper half of the cell (the campfire is
+        // a cross block — the food sits above the flame). Crossed quads
+        // (the cross-block convention: view-independent; culling stays
+        // ON, so from any horizontal angle at least one quad's front
+        // face shows). The quad's +Y normal keeps it in the top-face
+        // brightness bucket through the 90° cross rotation (the
+        // handIconMesh convention). Slot i is centred at the cell centre
+        // + (i - 1.5) * the spacing.
         m_basicShader.bind();
         m_basicShader.setUniform1i("u_useTexture", 1);
         m_renderer.enableBlending();
-        m_itemIcons[iconIdx].bind();
-        m_renderer.draw(handIconMesh(), m_basicShader, view, projection,
-                        base);
-        m_renderer.draw(handIconMesh(), m_basicShader, view, projection,
-                        Mat4::multiply(
-                            base, Mat4::rotateY(0.5f * std::numbers::pi)));
+        for (std::size_t i = 0; i < kCampfireSlotCount; ++i) {
+            const ItemStack& slot = st.slots[i];
+            if (slot.empty()) {
+                continue;
+            }
+            const std::size_t iconIdx =
+                static_cast<std::size_t>(slot.item.value);
+            if (iconIdx >= m_itemIcons.size() ||
+                !m_itemIcons[iconIdx].valid()) {
+                continue; // cannot happen (item data is validated at init)
+            }
+            const float dx =
+                (static_cast<float>(i) - 1.5f) * kCampfireIconSpacing;
+            const Vec3 center {static_cast<float>(pos.x) + 0.5f + dx,
+                               static_cast<float>(pos.y) + 0.75f,
+                               static_cast<float>(pos.z) + 0.5f};
+            const Mat4 base =
+                Mat4::multiply(Mat4::translate(center),
+                               Mat4::scale(kCampfireIconScale));
+            // The icon texture carries transparent pixels (the
+            // drawHeldHand pattern): blending on for the two draws, the
+            // atlas restored after the row.
+            m_itemIcons[iconIdx].bind();
+            m_renderer.draw(handIconMesh(), m_basicShader, view, projection,
+                            base);
+            m_renderer.draw(handIconMesh(), m_basicShader, view, projection,
+                            Mat4::multiply(
+                                base, Mat4::rotateY(0.5f * std::numbers::pi)));
+        }
         m_atlas.texture().bind(); // restore for the passes that follow
         m_renderer.disableBlending();
     }
