@@ -119,6 +119,22 @@ def sand(x, y):
             clamp(207 + noise(x, y, 9, 8)),
             clamp(163 + noise(x, y, 10, 8)), 255)
 
+def sandstone(x, y):
+    """Phase 80: sandstone (compressed sand — the P61 material-chain
+    pattern, 3 sand -> 1 sandstone). The sand palette in THREE
+    horizontal layers (Minecraft's classic cut) separated by darker
+    bedding lines; slightly warmer/denser than the loose sand block.
+    New salts 923/924, every existing texture pixel-identical."""
+    if y in (4, 5, 10, 11):  # the bedding lines between the layers
+        base = (198, 183, 141)
+    else:
+        base = (222, 209, 168)
+    n = noise(x, y, 923, 8)
+    n2 = noise(x, y, 924, 4)
+    return (clamp(base[0] + n + n2), clamp(base[1] + n + n2),
+            clamp(base[2] + n + n2), 255)
+
+
 
 def wood_side(x, y):
     # Vertical bark stripes with noise.
@@ -563,6 +579,7 @@ TEXTURES = {
     "grass_top": grass_top,
     "grass_side": grass_side,
     "sand": sand,
+    "sandstone": sandstone,
     "wood_side": wood_side,
     "wood_top": wood_top,
     "leaves": leaves,

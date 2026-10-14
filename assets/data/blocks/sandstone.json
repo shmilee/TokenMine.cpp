@@ -1,0 +1,14 @@
+{
+  "id": "sandstone",
+  "properties": {
+    "hardness": 1.5,
+    "drops": "sandstone"
+  },
+  "model": {
+    "textures": {
+      "top": "sandstone",
+      "side": "sandstone",
+      "bottom": "sandstone"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "id": "sandstone",
+  "output": {
+    "item": "sandstone",
+    "count": 1
+  },
+  "ingredients": [
+    {
+      "item": "sand",
+      "count": 3
+    }
+  ]
+}

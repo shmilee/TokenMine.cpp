@@ -4,7 +4,17 @@
   "tool": {
     "break_speed": 4.0
   },
-  "fast_against": ["stone", "cobblestone", "coal_ore", "iron_ore", "gold_ore", "diamond_ore", "lapis_ore", "glowstone"],
+  "fast_against": [
+    "stone",
+    "cobblestone",
+    "coal_ore",
+    "iron_ore",
+    "gold_ore",
+    "diamond_ore",
+    "lapis_ore",
+    "glowstone",
+    "sandstone"
+  ],
   "fast_against_multiplier": 2.0,
   "attack_damage": 3,
   "max_stack": 1,

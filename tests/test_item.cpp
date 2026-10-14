@@ -652,6 +652,62 @@ TEST(ItemRegistryTest, BowEnhancementRecipesPinned) {
     }
 }
 
+// -- Phase 80: sandstone (the P61 material-chain pattern) -------------
+
+TEST(BlockContentTest, SandstoneBlockContentPinned) {
+    // The real asset: sandstone (compressed sand). The values are the
+    // contract (hardness 1.5 — between sand 0.5 and stone 2.0; the
+    // classic cut; it drops ITSELF, the P61 "stone needs a recipe to
+    // come back" pattern: sand -> sandstone one way, no smelting back).
+    BlockRegistry blocks;
+    FILE* fp = std::fopen("assets/data/blocks/sandstone.json", "rb");
+    ASSERT_NE(fp, nullptr) << "run from the repo root";
+    std::string text;
+    char buf[4096];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+        text.append(buf, n);
+    }
+    std::fclose(fp);
+    auto parsed = Json::parse(text);
+    ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+    auto reg = blocks.registerBlock(*parsed);
+    ASSERT_TRUE(reg.ok()) << reg.error().message;
+    const Block& b = blocks.at(*reg);
+    EXPECT_EQ(b.name, "sandstone");
+    EXPECT_DOUBLE_EQ(b.properties.hardness, 1.5);
+    EXPECT_TRUE(b.properties.solid);
+    EXPECT_TRUE(b.properties.opaque);
+    EXPECT_FALSE(b.properties.transparent);
+    EXPECT_EQ(b.properties.lightEmission, 0);
+    EXPECT_FALSE(b.properties.flamable);
+    EXPECT_EQ(b.properties.drops, "sandstone"); // drops itself
+    EXPECT_EQ(b.model.shape, BlockModel::Shape::FullCube);
+}
+
+TEST(BlockContentTest, SandstoneRecipeContentPinned) {
+    // The shipped recipe: shapeless 3 sand -> 1 sandstone (the P61
+    // stone pattern — the material chain's first link).
+    FILE* fp = std::fopen("assets/data/recipes/sandstone.json", "rb");
+    ASSERT_NE(fp, nullptr) << "run from the repo root";
+    std::string text;
+    char buf[4096];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+        text.append(buf, n);
+    }
+    std::fclose(fp);
+    auto parsed = Json::parse(text);
+    ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+    const Json& def = *parsed;
+    EXPECT_EQ(def.find("output")->find("item")->asString(), "sandstone");
+    EXPECT_EQ(def.find("output")->find("count")->asInt(), 1);
+    const Json& ing = *def.find("ingredients");
+    ASSERT_EQ(ing.size(), 1u);
+    EXPECT_EQ(ing.at(0).find("item")->asString(), "sand");
+    EXPECT_EQ(ing.at(0).find("count")->asInt(), 3);
+}
+
 TEST(ItemRegistryTest, InfiniteBowRecipePinned) {
     // The shipped recipe: shapeless bow + diamond -> 1 (the enchantment's
     // craftable stand-in; diamond = the project's top material).
@@ -1576,9 +1632,11 @@ TEST(ItemRegistryTest, Phase69PickaxeFastAgainstContent) {
     const std::vector<std::pair<std::string, float>> want = {
         {"wooden_pickaxe", 2.0f}, {"stone_pickaxe", 3.0f},
         {"iron_pickaxe", 4.0f}};
+    // Phase 80: sandstone joins the family (MC: the pickaxe works on
+    // sandstone — unlike obsidian, no tool-tier gap exists for it).
     const std::vector<std::string> list = {
         "stone", "cobblestone", "coal_ore", "iron_ore", "gold_ore",
-        "diamond_ore", "lapis_ore", "glowstone"};
+        "diamond_ore", "lapis_ore", "glowstone", "sandstone"};
     for (const auto& [name, speed] : want) {
         const Item* it = items.findByName(name);
         ASSERT_NE(it, nullptr) << name;
@@ -1612,6 +1670,7 @@ TEST(ItemRegistryTest, Phase69PickaxeEffectiveBreakSpeed) {
     EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("cobblestone")), 8.0f);
     EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("diamond_ore")), 8.0f);
     EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("glowstone")), 8.0f);
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("sandstone")), 8.0f);
     // Off-list: the flat tier (no multiplier leak).
     EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("wood")), 4.0f);
     EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("obsidian")), 4.0f);
