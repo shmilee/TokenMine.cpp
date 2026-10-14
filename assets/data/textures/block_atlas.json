@@ -285,6 +285,10 @@
   "sandstone": [
    14,
    0
+  ],
+  "smooth_sandstone": [
+   15,
+   0
   ]
  }
 }

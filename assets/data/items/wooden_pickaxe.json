@@ -13,7 +13,8 @@
     "diamond_ore",
     "lapis_ore",
     "glowstone",
-    "sandstone"
+    "sandstone",
+    "smooth_sandstone"
   ],
   "fast_against_multiplier": 2.0,
   "attack_damage": 2,

@@ -136,6 +136,20 @@ def sandstone(x, y):
 
 
 
+def smooth_sandstone(x, y):
+    """Phase 81: smooth sandstone (the P80 chain's polished step,
+    2 sandstone -> 1 smooth_sandstone, Minecraft 1.14+). The sandstone
+    palette WITHOUT the bedding lines — a flat, polished surface, slightly
+    lighter/uniform than the cut block. New salts 925/926, every existing
+    texture pixel-identical."""
+    base = (228, 216, 178)  # a touch lighter + smoother than sandstone
+    n = noise(x, y, 925, 6)
+    n2 = noise(x, y, 926, 3)
+    return (clamp(base[0] + n + n2), clamp(base[1] + n + n2),
+            clamp(base[2] + n + n2), 255)
+
+
+
 def wood_side(x, y):
     # Vertical bark stripes with noise.
     stripe = 10 if (x // 3) % 2 == 0 else 0
@@ -580,6 +594,7 @@ TEXTURES = {
     "grass_side": grass_side,
     "sand": sand,
     "sandstone": sandstone,
+    "smooth_sandstone": smooth_sandstone,
     "wood_side": wood_side,
     "wood_top": wood_top,
     "leaves": leaves,
