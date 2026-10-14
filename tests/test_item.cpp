@@ -769,6 +769,68 @@ TEST(BlockContentTest, SmoothSandstoneRecipeContentPinned) {
     EXPECT_EQ(ing.at(0).find("count")->asInt(), 2);
 }
 
+// -- Phase 82: the Master bow (the three enhancements combined) -------
+
+TEST(ItemRegistryTest, MasterBowContentPinned) {
+    // The real asset: the Master bow (power + speed + infinite, the
+    // data-driven capstone). It carries ALL THREE of the separate bows'
+    // enhancements: shoot_damage 8 (power), shoot_speed 20 (speed), and
+    // infinite (it still needs >=1 arrow to fire, and consumes none —
+    // the P77 rule, now on the combined bow).
+    ItemRegistry items;
+    FILE* fp = std::fopen("assets/data/items/master_bow.json", "rb");
+    ASSERT_NE(fp, nullptr) << "run from the repo root";
+    std::string text;
+    char buf[4096];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+        text.append(buf, n);
+    }
+    std::fclose(fp);
+    auto parsed = Json::parse(text);
+    ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+    auto reg = items.registerItem(*parsed);
+    ASSERT_TRUE(reg.ok()) << reg.error().message;
+    const Item& b = items.at(*reg);
+    EXPECT_EQ(b.name, "master_bow");
+    EXPECT_EQ(b.maxStack, 1);
+    EXPECT_FLOAT_EQ(b.shootSpeed, 20.0f); // the speed bow's value
+    EXPECT_FLOAT_EQ(b.shootDamage, 8.0f); // the power bow's value
+    EXPECT_EQ(b.attackDamage, 1.0f);
+    EXPECT_EQ(b.ammo, "arrow");
+    EXPECT_TRUE(b.infinite); // the infinite bow's flag
+    EXPECT_EQ(b.icon, "master_bow");
+}
+
+TEST(ItemRegistryTest, MasterBowRecipePinned) {
+    // The shipped recipe: shapeless power_bow + speed_bow + infinite_bow
+    // -> 1 master_bow (the three separate enhanced bows combine into the
+    // capstone — giving them a purpose, the P61 material-chain pattern).
+    FILE* fp = std::fopen("assets/data/recipes/master_bow.json", "rb");
+    ASSERT_NE(fp, nullptr) << "run from the repo root";
+    std::string text;
+    char buf[4096];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+        text.append(buf, n);
+    }
+    std::fclose(fp);
+    auto parsed = Json::parse(text);
+    ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+    const Json& def = *parsed;
+    EXPECT_EQ(def.find("output")->find("item")->asString(), "master_bow");
+    EXPECT_EQ(def.find("output")->find("count")->asInt(), 1);
+    const Json& ing = *def.find("ingredients");
+    ASSERT_EQ(ing.size(), 3u);
+    const std::vector<std::string> want = {
+        "power_bow", "speed_bow", "infinite_bow"};
+    for (std::size_t i = 0; i < want.size(); i++) {
+        SCOPED_TRACE(want[i]);
+        EXPECT_EQ(ing.at(i).find("item")->asString(), want[i]);
+        EXPECT_EQ(ing.at(i).find("count")->asInt(), 1);
+    }
+}
+
 TEST(ItemRegistryTest, InfiniteBowRecipePinned) {
     // The shipped recipe: shapeless bow + diamond -> 1 (the enchantment's
     // craftable stand-in; diamond = the project's top material).

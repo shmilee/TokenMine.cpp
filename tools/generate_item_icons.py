@@ -666,6 +666,36 @@ def speed_bow():
     return px
 
 
+def master_bow():
+    """Phase 82: the Master bow (the three P77/P79 enhancements combined
+    into one — power + speed + infinite, the data-driven capstone; the
+    recipe is shapeless power_bow + speed_bow + infinite_bow -> 1, giving
+    the three separate enhanced bows a purpose). The bow unchanged, with
+    all THREE marks: an ORANGE-RED spark at the heart (power), a BLUE
+    diamond above it (infinite), and a CYAN line trailing below (speed) —
+    new salts 101-104, every existing icon pixel-identical."""
+    px = bow()
+    # power mark: orange-red spark at the heart (the P79 power pattern)
+    spark = (232, 92, 40)
+    spark_dark = (168, 52, 20)
+    for (x, y) in ((15, 14), (16, 13), (16, 14), (17, 14), (14, 15)):
+        setpx2(px, x, y, spark, salt=101)
+    setpx2(px, 17, 15, spark_dark, salt=101)
+    # infinite mark: a blue diamond just above the heart (the P77 pattern)
+    diamond = (96, 198, 234)
+    diamond_dark = (52, 140, 190)
+    for (x, y) in ((13, 11), (14, 11), (14, 12), (13, 12)):
+        setpx2(px, x, y, diamond, salt=102)
+    setpx2(px, 14, 13, diamond_dark, salt=102)
+    # speed mark: a cyan line trailing below the stave (the P79 pattern)
+    line = (120, 210, 240)
+    line_dark = (60, 160, 210)
+    for x in range(8, 14):
+        setpx2(px, x, 17, line, salt=103)
+    setpx2(px, 14, 17, line_dark, salt=104)
+    return px
+
+
 def arrow():
     """An arrow: a 4px diagonal shaft from the bottom-left to the
     top-right, a steel tip at the top end and light fletching at the
@@ -890,6 +920,7 @@ ITEMS = {
     "infinite_bow": infinite_bow,
     "power_bow": power_bow,
     "speed_bow": speed_bow,
+    "master_bow": master_bow,
     "arrow": arrow,
     "leather": leather,
     **{name: make_dye_icon(name) for name in DYE_PALETTE},

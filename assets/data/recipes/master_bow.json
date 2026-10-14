@@ -1,0 +1,9 @@
+{
+  "id": "master_bow",
+  "output": { "item": "master_bow", "count": 1 },
+  "ingredients": [
+    { "item": "power_bow", "count": 1 },
+    { "item": "speed_bow", "count": 1 },
+    { "item": "infinite_bow", "count": 1 }
+  ]
+}
