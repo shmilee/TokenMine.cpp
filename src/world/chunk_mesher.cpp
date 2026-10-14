@@ -98,6 +98,25 @@ ChunkMeshData ChunkMesher::mesh(const ChunkPos& pos) const {
         }
     }
 
+    // Slabs (Phase 85): bottom half-blocks, one pass in fixed cell order
+    // (the vertex order is deterministic across runs). A slab's geometry is
+    // its own (emitSlab scales the unit-cube faces to y 0..0.5) — it is NOT
+    // a full cube, so the greedy block-face pass below skips it.
+    for (int ly = 0; ly < kChunkSize; ++ly) {
+        for (int lz = 0; lz < kChunkSize; ++lz) {
+            for (int lx = 0; lx < kChunkSize; ++lx) {
+                const BlockID id = chunk->get(lx, ly, lz);
+                if (id == BlockID::air()) {
+                    continue;
+                }
+                const Block& block = m_blocks.at(id);
+                if (block.model.shape == BlockModel::Shape::Slab) {
+                    emitSlab(out, block, origin, lx, ly, lz);
+                }
+            }
+        }
+    }
+
     // Block faces: greedy meshing, one direction at a time (fixed order —
     // the vertex order is deterministic across runs).
     for (int f = 0; f < 6; ++f) {
@@ -139,6 +158,10 @@ void ChunkMesher::meshFaceDirection(ChunkMeshData& out, const Chunk& chunk,
                 if (block.model.shape == BlockModel::Shape::Cross) {
                     continue; // cross plants emit no cube faces (the
                               // cross pass in mesh() owns their geometry)
+                }
+                if (block.model.shape == BlockModel::Shape::Slab) {
+                    continue; // a slab is a half-block (the slab pass in
+                              // mesh() owns its geometry, not full-cube faces)
                 }
                 const BlockID neighbor = m_world.getBlock(
                     origin.x + c[0] + face.dx, origin.y + c[1] + face.dy,
@@ -426,6 +449,69 @@ void ChunkMesher::emitCross(ChunkMeshData& out, const Block& block,
                           static_cast<float>(lz + quad[i][2])};
             v.normal = {0.0f, 1.0f, 0.0f}; // full-brightness face shade
             v.uv = uv[i];
+            v.skyLight = skyF;
+            v.blockLight = blockF;
+            verts.push_back(v);
+        }
+        indices.insert(indices.end(),
+                       {first, first + 1, first + 2, first, first + 2,
+                        first + 3});
+    }
+}
+
+void ChunkMesher::emitSlab(ChunkMeshData& out, const Block& block,
+                           const BlockPos& origin, int lx, int ly, int lz)
+    const {
+    // Phase 85: the unit-cube faces scaled to the bottom half (y 0..0.5) —
+    // a flat step you can stand on (the player's feet rest at y + 0.5). The
+    // unit-cube corner Y is scaled by 0.5 (emitFluid's h pattern). The top
+    // face is ALWAYS emitted (the cell's top half is air, so nothing above
+    // occludes it within the cell); the bottom + side faces are culled by an
+    // opaque neighbor (which covers their y 0..0.5 extent). Opaque sub-mesh
+    // (a slab is solid, not glass).
+    const float h = 0.5f;
+    const int wx = origin.x + lx;
+    const int wy = origin.y + ly;
+    const int wz = origin.z + lz;
+    for (const CubeFace& face : kCubeFaces) {
+        if (face.dy < 0) {
+            // Bottom + side faces: hidden by an opaque neighbor (which spans
+            // the slab's y 0..0.5). The TOP face (face.dy > 0) is never
+            // occluded (the cell's top half is air) — always emitted.
+            const BlockID neighbor = m_world.getBlock(wx + face.dx,
+                                                       wy + face.dy,
+                                                       wz + face.dz);
+            if (neighbor != BlockID::air() &&
+                m_blocks.at(neighbor).properties.opaque) {
+                continue;
+            }
+        }
+        const Vec2 u0 = AtlasLayout::uvMin(
+            m_layout, cubeFaceTexture(block, face.textureSlot));
+        const Vec2 u1 = AtlasLayout::uvMax(
+            m_layout, cubeFaceTexture(block, face.textureSlot));
+        const Vec2 faceUv[4] = {{u0.x, u1.y}, {u1.x, u1.y},
+                                {u1.x, u0.y}, {u0.x, u0.y}};
+        // Per-face light: sample the cell the face borders (the blocky-light
+        // convention, like the greedy cube faces).
+        const std::uint8_t faceSky = m_world.getSkyLight(
+            wx + face.dx, wy + face.dy, wz + face.dz);
+        const std::uint8_t faceBlock = m_world.getBlockLight(
+            wx + face.dx, wy + face.dy, wz + face.dz);
+        const float skyF =
+            static_cast<float>(faceSky) / static_cast<float>(kMaxLight);
+        const float blockF =
+            static_cast<float>(faceBlock) / static_cast<float>(kMaxLight);
+        std::vector<MeshVertex>& verts = out.opaqueVertices;
+        std::vector<std::uint32_t>& indices = out.opaqueIndices;
+        const std::uint32_t first = static_cast<std::uint32_t>(verts.size());
+        for (int i = 0; i < 4; ++i) {
+            MeshVertex v;
+            v.position = {static_cast<float>(lx + face.corner[i][0]),
+                          static_cast<float>(ly + face.corner[i][1] * h),
+                          static_cast<float>(lz + face.corner[i][2])};
+            v.normal = face.normal;
+            v.uv = faceUv[i];
             v.skyLight = skyF;
             v.blockLight = blockF;
             verts.push_back(v);

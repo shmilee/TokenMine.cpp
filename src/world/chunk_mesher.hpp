@@ -139,6 +139,12 @@ private:
     // visible from both sides.
     void emitCross(ChunkMeshData& out, const Block& block,
                    const BlockPos& origin, int lx, int ly, int lz) const;
+    // Phase 85 slab: the unit-cube faces scaled to the bottom half (y 0..0.5)
+    // — the top face is always emitted (the cell's top half is air); the
+    // bottom/side faces are culled by an opaque neighbor (like emitFluid,
+    // but into the OPAQUE sub-mesh and the top is never occluded).
+    void emitSlab(ChunkMeshData& out, const Block& block,
+                  const BlockPos& origin, int lx, int ly, int lz) const;
 
     const World& m_world;
     const BlockRegistry& m_blocks;

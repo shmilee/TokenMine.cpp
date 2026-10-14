@@ -235,6 +235,10 @@ struct BlockTexture {
 struct BlockModel {
     enum class Shape {
         FullCube, // 1x1x1
+        Slab,     // Phase 85: a bottom half-block (y 0..0.5 of the cell) —
+                  // a flat step you can stand on top of (feet at y + 0.5);
+                  // the cell is solid in its lower half only (height-aware
+                  // collision). Uses the cube face textures.
         Cross,    // Phase 45: two crossing vertical quads (cross plants —
                   // flowers). Rendered in the transparent (blended,
                   // unculled) pass with the cell's own light; never

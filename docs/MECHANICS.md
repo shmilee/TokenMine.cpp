@@ -665,6 +665,17 @@
     均匀亮，等级越高柱越长【64 + 等级×32 格】）。`beacon.beam` 可关
     （E2E 对照）。**光束不入光照**（不照亮周围），信标块本身
     `light_emission 0`。
+- **台阶 slab（Phase 85，首个新块模型类型）**：
+  - **`Shape::Slab`**（block.hpp）：底部半块（cell 的 y 0..0.5 实心），复用
+    cube 纹理（top/side/bottom）。v1 只有底部 slab（无顶部 slab/叠合/斜向）。
+  - **mesh**（chunk mesher `emitSlab`）：单位立方 6 面 Y 缩 0.5（emitFluid 的
+    h 范式）——**顶面恒绘**（cell 顶半格是空气，无遮挡）、底/侧面邻 opaque
+    剔除；贪婪满块路径**跳过 slab**（slab 不是满格几何）。局限：slab 邻满块
+    同层侧面贪婪 mesh 不能"半面剔除"→ v1 Z-fight/缺面（见 KNOWN_ISSUES）。
+  - **高度感知碰撞**（entity.cpp）：`Entity::solidTopOffset(id)` 返回实心区
+    顶（air/非实心 = 0、slab = 0.5、满块 = 1.0）；`moveAxis` + `hasRoomAt`
+    对**实心区 [y, y+top]**（非整格）判重叠——玩家站 slab 顶（feet y+0.5）、
+    不进 slab 体；**满块 top=1 复现旧的整格行为（backward-compat）**。
 - **游泳**（Phase 9）：玩家包围盒与任何水体格相交即进入水中状态——水中重力减半
   （12 vs 32）、终端速度 4、水平速度降为 3.1（冲刺无效）、`Space` 随时上浮（4.5）；
   浅水（头在水面上）可以"蹚水走"，深水可以游

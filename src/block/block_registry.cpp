@@ -480,13 +480,18 @@ Result<void> BlockRegistry::parseModel(const Json& def, BlockModel& out) {
     // two crossing vertical quads (cross plants, e.g. flowers).
     if (const Json* s = m->find("shape")) {
         if (!s->isString() || (s->asString() != "full_cube" &&
+                               s->asString() != "slab" &&
                                s->asString() != "cross")) {
             return MC_FAIL(std::string("'model.shape' is unsupported: '") +
                            s->asString() +
-                           "' (only 'full_cube' and 'cross' exist)");
+                           "' (only 'full_cube', 'slab' and 'cross' "
+                           "exist)");
         }
-        out.shape = (s->asString() == "cross") ? BlockModel::Shape::Cross
-                                               : BlockModel::Shape::FullCube;
+        out.shape = (s->asString() == "cross")
+                        ? BlockModel::Shape::Cross
+                        : (s->asString() == "slab"
+                               ? BlockModel::Shape::Slab
+                               : BlockModel::Shape::FullCube);
     }
 
     const Json* t = m->find("textures");

@@ -460,6 +460,17 @@
   `beacon.range_blocks`（默认 50）即生效（MC 是球状范围；立方是项目简化，
   文档化偏离）。`[Phase 83]`
 
+## 台阶 slab（Phase 85）
+
+- **slab = 仅下半块** — v1 只有**底部 slab**（y 0..0.5 实心，顶面站立）；MC
+  的顶部 slab / 双 slab 叠合 / 斜向 = 无。`[Phase 85]`
+- **slab 邻满块的同层侧面可能 Z-fight / 缺面** — 贪婪 mesh 不能做"半面剔
+  除"：满块贴着 slab 时，满块的侧面要么整面绘制（slab 半区经深度测试遮挡，
+  半重合面 Z-fight）要么整面剔除（顶部半区露洞）。shipped stone_slab 放在
+  空邻居场景（E2E）无此问题；相邻满块是 v1 已知局限。`[Phase 85]`
+- **slab 光照按满块不透明** — slab 顶半格是空气（光本应透过），但 v1 按
+  `opaque: true` 处理（挡光如满块）；简化偏离。`[Phase 85]`
+
 ## 数据 / 内容
 
 - **方块无 per-instance 状态** — BlockState 概念未引入（朝向、附属、流体等级等需要时再设计）。`[Phase 2]`

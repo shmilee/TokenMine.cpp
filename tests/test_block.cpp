@@ -590,9 +590,11 @@ TEST(BlockRegistryTest, CrossShapeIsExplicit) {
 
 TEST(BlockRegistryTest, RejectsUnsupportedShapeValue) {
     BlockRegistry reg;
+    // Phase 85: only full_cube / slab / cross are supported — "stairs" and
+    // "wall" are not (the minimal slab is the v1 partial-block shape).
     auto r = reg.registerBlock(
         parseDef(crossDef(
-            "x", R"({"shape":"slab","textures":{"cross":"x"}})")));
+            "x", R"({"shape":"stairs","textures":{"cross":"x"}})")));
     ASSERT_FALSE(r.ok());
     EXPECT_NE(r.error().message.find("'model.shape'"), std::string::npos);
 }
@@ -1535,6 +1537,42 @@ TEST(BlockRegistryTest, Phase83IronBlockContent) {
     EXPECT_EQ(b->properties.drops, "iron_block"); // drops itself
     EXPECT_TRUE(b->properties.beaconBase);
     EXPECT_EQ(b->model.shape, BlockModel::Shape::FullCube);
+}
+
+TEST(BlockRegistryTest, Phase85StoneSlabContent) {
+    // The shipped stone slab (Phase 85): the bottom half-block shape, reusing
+    // the stone texture (no new atlas tile), hardness 2.0, drops itself,
+    // solid + opaque (it occludes light like a full block, a v1 simplification).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* b = reg.findByName("stone_slab");
+    ASSERT_TRUE(b != nullptr);
+    EXPECT_EQ(b->model.shape, BlockModel::Shape::Slab);
+    EXPECT_TRUE(b->properties.solid);
+    EXPECT_TRUE(b->properties.opaque);
+    EXPECT_EQ(b->properties.lightEmission, 0);
+    EXPECT_FLOAT_EQ(b->properties.hardness, 2.0f);
+    EXPECT_EQ(b->properties.drops, "stone_slab"); // drops itself
+    EXPECT_EQ(b->model.textures.top, "stone"); // reuses the stone texture
+    EXPECT_EQ(b->model.textures.side, "stone");
+    EXPECT_EQ(b->model.textures.bottom, "stone");
+}
+
+TEST(BlockRegistryTest, Phase85SlabShapeRequiresCubeTextures) {
+    // A slab uses the cube face textures (top/side/bottom), like a full cube
+    // (the "cross" texture is rejected — a slab is not a cross plant).
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"s","model":{"shape":"slab","textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).model.shape, BlockModel::Shape::Slab);
+    // A "cross" texture key on a slab is a typo (slabs use cube textures).
+    auto bad = reg.registerBlock(parseDef(
+        R"({"id":"s2","model":{"shape":"slab","textures":{"cross":"t"}}})"));
+    ASSERT_FALSE(bad.ok());
 }
 
 TEST(BlockRegistryTest, Phase83IronBlockRecipeContent) {

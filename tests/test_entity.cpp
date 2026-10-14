@@ -53,6 +53,13 @@ BlockRegistry makeBlocks() {
     if (!r.ok()) {
         ADD_FAILURE() << r.error().message;
     }
+    // Phase 85: a bottom slab (solid in its lower half only).
+    r = blocks.registerBlock(parseJson(
+        R"({"id":"slab","model":{"shape":"slab","textures":)"
+        R"({"top":"t","side":"t","bottom":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
     return blocks;
 }
 
@@ -946,4 +953,37 @@ TEST(EntityTest, OverlapsFluidStrictOnCellFaces) {
     EXPECT_FALSE(e.overlapsFluid(FluidKind::Lava));
     f.world.setFluid(5, 1, 5, FluidKind::Lava, kMaxFluidLevel);
     EXPECT_TRUE(e.overlapsFluid(FluidKind::Lava));
+}
+
+// -- Phase 85: the slab (bottom half-block) height-aware collision ---------
+
+TEST(EntityTest, Phase85ItemRestsOnSlabTop) {
+    Fixture f;
+    const BlockID slab = f.blocks.idForName("slab");
+    // A slab at y=2 (solid region 2..2.5) above the fixture's stone floor
+    // (top y=1, with air at y=1 between them). An item dropped above the
+    // slab rests on the SLAB TOP (feet at y=2.5) — not the cell top (3.0,
+    // which would be the full-block collision) and not inside the slab.
+    f.world.setBlock(8, 2, 8, slab);
+    ItemEntity item = f.makeItem({8.5f, 4.0f, 8.5f});
+    f.run(item, 300);
+    EXPECT_FLOAT_EQ(item.position().y, 2.5f);
+}
+
+TEST(EntityTest, Phase85SlabHasRoom) {
+    Fixture f;
+    const BlockID slab = f.blocks.idForName("slab");
+    f.world.setBlock(8, 2, 8, slab); // solid region y 2..2.5
+    f.world.setBlock(9, 2, 8, f.stone); // solid region y 2..3
+    const ItemEntity item = f.makeItem({8.5f, 10.0f, 8.5f});
+    // On the slab's TOP (AABB bottom at y=2.5 = the solid top): the AABB
+    // [2.5, 2.5+size] does not overlap the solid region [2, 2.5] -> has room
+    // (a face resting exactly on the slab top is not an overlap).
+    EXPECT_TRUE(item.hasRoomAt(Vec3{8.5f, 2.5f, 8.5f}));
+    // INSIDE the slab's solid region (AABB bottom at y=2.0): overlap -> no
+    // room (you cannot occupy the slab's body).
+    EXPECT_FALSE(item.hasRoomAt(Vec3{8.5f, 2.0f, 8.5f}));
+    // The full stone block: the solid region is the whole cell [2, 3].
+    EXPECT_TRUE(item.hasRoomAt(Vec3{9.5f, 3.0f, 8.5f})); // on its top
+    EXPECT_FALSE(item.hasRoomAt(Vec3{9.5f, 2.5f, 8.5f})); // inside it
 }

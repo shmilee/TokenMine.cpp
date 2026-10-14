@@ -20,6 +20,25 @@ bool Entity::isSolid(BlockID id) const {
     return m_blocks.at(id).properties.solid;
 }
 
+float Entity::solidTopOffset(BlockID id) const {
+    // Phase 85: the top of the cell's SOLID region, in cell-local units
+    // (0 = not solid, 0.5 = a bottom slab, 1.0 = a full solid block). The
+    // collision (moveAxis / hasRoomAt) tests overlap against this region,
+    // not the whole cell — so an entity can stand on a slab's top (its feet
+    // at y + 0.5) without the AABB counting as "inside" the slab.
+    if (id == BlockID::air() || !id.valid()) {
+        return 0.0f;
+    }
+    const Block& b = m_blocks.at(id);
+    if (!b.properties.solid) {
+        return 0.0f;
+    }
+    if (b.model.shape == BlockModel::Shape::Slab) {
+        return 0.5f;
+    }
+    return 1.0f;
+}
+
 bool Entity::hasRoomAt(Vec3 pos) const {
     // The same strict cell scan as the axis resolve in moveAxis: a face
     // resting exactly on a block boundary is not an overlap.
@@ -42,13 +61,15 @@ bool Entity::hasRoomAt(Vec3 pos) const {
                 if (!(x0f < x + 1 && x1f > x)) {
                     continue;
                 }
-                if (!(y0f < y + 1 && y1f > y)) {
-                    continue;
-                }
                 if (!(z0f < z + 1 && z1f > z)) {
                     continue;
                 }
-                if (isSolid(m_world.getBlock(x, y, z))) {
+                // Phase 85: overlap against the cell's SOLID region [y,
+                // y+top], not the whole cell — a slab's top half is air, so
+                // standing on a slab's top (feet at y+0.5) leaves room.
+                const float top =
+                    solidTopOffset(m_world.getBlock(x, y, z));
+                if (top > 0.0f && (y0f < y + top && y1f > y)) {
                     return false;
                 }
             }
@@ -371,21 +392,29 @@ bool Entity::moveAxis(int axis, float delta) {
                 if (!(mn.x < x + 1 && mx.x > x)) {
                     continue;
                 }
-                if (!(mn.y < y + 1 && mx.y > y)) {
-                    continue;
-                }
                 if (!(mn.z < z + 1 && mx.z > z)) {
                     continue;
                 }
-                if (!isSolid(m_world.getBlock(x, y, z))) {
+                // Phase 85: overlap against the cell's SOLID region [y,
+                // y+top], not the whole cell (a slab is solid in its bottom
+                // half only). A face resting exactly on the region's top is
+                // not an overlap (the strict convention).
+                const float top = solidTopOffset(m_world.getBlock(x, y, z));
+                if (top <= 0.0f) {
                     continue;
                 }
-                // The face of this cell opposing the travel direction.
+                if (!(mn.y < y + top && mx.y > y)) {
+                    continue;
+                }
+                // The face of this cell opposing the travel direction. For
+                // Y travel the limit is the slab's TOP (feet landing,
+                // delta < 0) or BOTTOM (head bumping, delta > 0); a full
+                // block (top = 1.0) reproduces the old y / y+1 faces.
                 const float face =
                     (axis == 0)
                         ? static_cast<float>(delta > 0 ? x : x + 1)
                     : (axis == 1)
-                          ? static_cast<float>(delta > 0 ? y : y + 1)
+                          ? static_cast<float>(delta > 0 ? y : y + top)
                           : static_cast<float>(delta > 0 ? z : z + 1);
                 if (!hit) {
                     hit = true;

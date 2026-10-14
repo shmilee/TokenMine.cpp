@@ -1,0 +1,7 @@
+{
+  "id": "stone_slab",
+  "type": "shaped",
+  "output": { "item": "stone_slab", "count": 6 },
+  "pattern": [ "SSS" ],
+  "key": { "S": "stone" }
+}

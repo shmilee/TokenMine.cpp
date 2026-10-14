@@ -172,6 +172,10 @@ protected:
 private:
     // Solid = registered block with properties.solid (air is never solid).
     bool isSolid(BlockID id) const;
+    // Phase 85: the top of the cell's SOLID region in cell-local units (0 =
+    // not solid, 0.5 = bottom slab, 1.0 = full block) — the collision tests
+    // overlap against this region, not the whole cell.
+    float solidTopOffset(BlockID id) const;
 };
 
 // -- entity-vs-entity separation (Phase 19) ----------------------------------
