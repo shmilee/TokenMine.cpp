@@ -98,21 +98,25 @@ public:
     void addKnockback(Vec3 impulse);
 
     // Fire system (Phase 58, v2: the fire reaches mobs — Minecraft's lava
-    // ignites every entity). The game arms the mob at spawn from the SAME
-    // fire definition + config duration as the player (the ignites_on_lava
-    // effect + player.fire_duration_seconds); an unarmed mob — an asset
-    // set without the fire effect — never burns (structural, the P57
-    // pattern). While in the lava the burn re-ignites (the duration resets
-    // every step = a continuous burn); after leaving, the remaining time
-    // counts down (the lingering burn). Water extinguishes instantly,
-    // BEFORE the tick (zero burn damage in water; water beats lava, the
-    // P57 rule). The burn ticks run on the fixed mob step (deterministic
-    // — hard rule 8: mobs tick at the fixed 1/60 frame step) with the
-    // Phase 46 effect semantics (the expiry step does not tick). Because
-    // the step is the exact 1/60 frame grid, the tick cadence is kept in
-    // INTEGER frame units (tick k lands on burning frame k * interval*60 —
-    // no float phase drift; the game init validates the ignites effect's
-    // interval is a whole number of frames so this is exact).
+    // ignites every entity; Phase 73, v3: the FIRE BLOCK does too — the
+    // block twin of the lava ignition). The game arms the mob at spawn
+    // from the SAME fire definition + config duration as the player (the
+    // ignites_on_lava effect + player.fire_duration_seconds); an unarmed
+    // mob — an asset set without the fire effect — never burns
+    // (structural, the P57 pattern). While in the lava OR strictly
+    // overlapping a fire-block cell (the constructor-resolved id, the
+    // P70 player pattern — no fire block registered = structurally
+    // inert) the burn re-ignites (the duration resets every step = a
+    // continuous burn); after leaving, the remaining time counts down
+    // (the lingering burn). Water extinguishes instantly, BEFORE the tick
+    // (zero burn damage in water; water beats both, the P57 rule). The
+    // burn ticks run on the fixed mob step (deterministic — hard rule 8:
+    // mobs tick at the fixed 1/60 frame step) with the Phase 46 effect
+    // semantics (the expiry step does not tick). Because the step is the
+    // exact 1/60 frame grid, the tick cadence is kept in INTEGER frame
+    // units (tick k lands on burning frame k * interval*60 — no float
+    // phase drift; the game init validates the ignites effect's interval
+    // is a whole number of frames so this is exact).
     void armFire(double tickInterval, float tickAmount, double duration);
     bool burning() const { return m_fireRemaining > 0.0; }
 
@@ -173,6 +177,10 @@ private:
     // down the lingering burn; the tick phase is on the integer frame grid
     // (`frames` = burning steps so far, `due` = the next tick's frame,
     // `intervalFrames` = frames per tick — exact, init-validated).
+    // `m_fireBlockId` (Phase 73): the fire block, constructor-resolved
+    // (BlockID::invalid when the asset set has none — the contact check
+    // is then structurally inert, the P70 player pattern).
+    BlockID m_fireBlockId = BlockID::invalid();
     bool m_fireArmed = false;
     float m_fireAmount = 0.0f;
     double m_fireDuration = 0.0;

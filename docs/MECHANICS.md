@@ -547,7 +547,8 @@
     直接灼烧（4 HP/s）与火 tick（5 HP/s）**叠加**（MC 同款：熔岩内
     ~9 HP/s）。死亡/重生照旧清空（fire 不残留于重生）；存档照旧
     （`player.effects` 含 fire，读档续烧）
-  - **火系统 v2（Phase 58，熔岩烧 Mob 与作物）**：
+  - **火系统 v2（Phase 58，熔岩烧 Mob 与作物；Phase 73 火 v3：火块
+    同样点燃 Mob——`inLava || inFire` 同一点火路径）**：
     ① **Mob 点燃**：`Game::attemptMobSpawn` 在 `make_unique` 后对每只
     mob `MobEntity::armFire(interval, amount, duration)`（参数 = 点火
     效果的 `tick_interval`/`tick_amount` + config
@@ -555,14 +556,17 @@
     全部 mob 结构不燃。燃烧 = **整数帧格**（`m_fireFrames` int 计数，
     `m_fireIntervalFrames = llround(interval×60)`）：`update()` 在
     `moveInSubsteps` 后——`inLava`（`Entity::overlapsFluid(Lava)`，
-    AABB 重叠熔岩格）→ remaining 重置 = duration（**相位不清零** =
-    熔岩内持续燃烧）；`inWater` → remaining = 0 + 相位重置（**先于
+    AABB 重叠熔岩格）**或 `inFire`（Phase 73 火 v3：
+    `Entity::overlapsBlock`，AABB 严格重叠 fire 块格——块的 id 构造
+    时从注册表解析，无 fire 块 = invalid = 结构惰性，P70 玩家同款
+    容错）**→ remaining 重置 = duration（**相位不清零** =
+    火源内持续燃烧）；`inWater` → remaining = 0 + 相位重置（**先于
     tick 执行 = 水内零伤害、水胜熔岩**）；remaining −= dt 后 `> 0`
     才 ++frames，每跨一个 interval 帧结算 1 次 damage tick（走
     `MobEntity::damage` 正常路径，**可致死**；**到期帧不 tick**，
     P46 语义）。fire 0.2 s / 1 HP → 5 HP/s，cow 10 HP = 2 s 烧死；
-    熔岩内 remaining 每帧重置 = 离熔岩才 countdown 8 s（残留）。
-    **无火焰视觉**（纯 HP 通道，见 KNOWN_ISSUES）。
+    熔岩/火块内 remaining 每帧重置 = 离开火源才 countdown 8 s
+    （残留）。**无火焰视觉**（纯 HP 通道，见 KNOWN_ISSUES）。
     ② **作物/方块燃烧**：FluidSim 燃烧 pass（见上"熔岩 / 流体双
     种类·模拟"②）——`flamable` 块被熔岩 6-邻接触即烧成 air（无
     掉落；水不烧）。内容 = wheat_1..7。

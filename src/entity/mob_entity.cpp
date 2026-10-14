@@ -30,7 +30,11 @@ MobEntity::MobEntity(const World& world, const BlockRegistry& blocks,
     : Entity(world, blocks, pos, def.model.width, def.model.height),
       m_def(&def),
       m_health(def.properties.health),
-      m_rng(rngSeed) {}
+      m_rng(rngSeed),
+      // Fire v3 (Phase 73): the fire-block contact source, resolved once
+      // (invalid = no fire block registered = structurally inert, the
+      // P70 player pattern).
+      m_fireBlockId(blocks.idForName("fire")) {}
 
 void MobEntity::update(double dt) {
     if (m_dead || dt <= 0.0) {
@@ -56,19 +60,25 @@ void MobEntity::update(double dt) {
                   std::abs(m_velocity.z)});
     moveInSubsteps(dt, maxSpeed);
 
-    // Fire system (Phase 58): the lava ignites the mob with the player's
-    // fire (same effect definition + config duration — the game arms it at
-    // spawn; an unarmed mob never burns). The fluid checks use the FINAL
-    // position of this step (the AI + physics ran above). While in the
-    // lava the burn re-ignites (the duration resets = continuous burn);
-    // water extinguishes instantly BEFORE the tick (zero burn damage in
-    // water; water beats lava, the P57 rule). The countdown + tick run
-    // after leaving (the lingering burn), with the Phase 46 effect
-    // semantics (the expiry step does not tick).
+    // Fire system (Phase 58, v3 in Phase 73): the lava AND the fire
+    // block ignite the mob with the player's fire (same effect
+    // definition + config duration — the game arms it at spawn; an
+    // unarmed mob never burns). The checks use the FINAL position of
+    // this step (the AI + physics ran above). While in the lava or
+    // overlapping a fire block the burn re-ignites (the duration resets
+    // = continuous burn); water extinguishes instantly BEFORE the tick
+    // (zero burn damage in water; water beats both, the P57 rule). The
+    // countdown + tick run after leaving (the lingering burn), with the
+    // Phase 46 effect semantics (the expiry step does not tick).
     if (m_fireArmed) {
         const bool inLava = overlapsFluid(FluidKind::Lava);
+        // Fire v3 (Phase 73): the block twin of the lava ignition — the
+        // strict AABB overlap of a fire-block cell (the cross-model fire,
+        // never a fluid; the invalid id = never, resolved at
+        // construction).
+        const bool inFire = overlapsBlock(m_fireBlockId);
         const bool inWater = overlapsFluid(FluidKind::Water);
-        if (inLava) {
+        if (inLava || inFire) {
             m_fireRemaining = m_fireDuration;
         }
         if (inWater) {

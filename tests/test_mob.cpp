@@ -1867,3 +1867,180 @@ TEST(MobFireTest, WaterBeatsLava) {
     EXPECT_FALSE(mob.dead());
     EXPECT_FLOAT_EQ(mob.health(), 20.0f);
 }
+// -- fire system v3 (Phase 73): the fire block ignites mobs -------------------
+
+// The fire-block twin of the fixture: the same stone floor + a "fire" block
+// registered (the MobEntity constructor resolves its id; a fixture WITHOUT
+// it — the plain Fixture — pins the structurally-inert invalid-id path).
+BlockRegistry makeFireBlocks() {
+    BlockRegistry blocks = makeBlocks();
+    // NON-SOLID (the real fire.json: the cross-model fire — a solid fire
+    // cell would push the mob ON TOP of the patch and kill the overlap).
+    auto r = blocks.registerBlock(parseJson(
+        R"({"id":"fire","properties":{"solid":false},"model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    return blocks;
+}
+
+struct FireFixture {
+    BlockRegistry blocks = makeFireBlocks();
+    World world;
+    BlockID stone;
+    BlockID fire;
+
+    FireFixture() {
+        stone = blocks.idForName("stone");
+        fire = blocks.idForName("fire");
+        for (int x = -16; x < 16; ++x) {
+            for (int z = -16; z < 16; ++z) {
+                world.setBlock(x, 0, z, stone);
+            }
+        }
+    }
+};
+
+MobEntity makeFireMob(const FireFixture& f, const Mob& def, Vec3 pos,
+                      std::uint64_t seed = 42) {
+    return MobEntity(f.world, f.blocks, def, pos, seed);
+}
+
+// The 3x3 fire patch at feet level (y=1, the air cells above the floor):
+// the mob's 1.8-tall AABB strictly overlaps the patch cells. Big enough
+// that a wandering mob (<= 0.8 b/s * 2 s = 1.6 blocks in one direction,
+// the wander re-decision at 2.5 s is past the test windows) cannot leave
+// it, so the contact state is independent of the wander path.
+void fillFirePatch(FireFixture& f) {
+    for (int x = 7; x <= 9; ++x) {
+        for (int z = 7; z <= 9; ++z) {
+            f.world.setBlock(x, 1, z, f.fire);
+        }
+    }
+}
+
+void clearFirePatch(FireFixture& f) {
+    for (int x = 7; x <= 9; ++x) {
+        for (int z = 7; z <= 9; ++z) {
+            f.world.setBlock(x, 1, z, BlockID::air());
+        }
+    }
+}
+
+void fillWaterFloor(FireFixture& f) {
+    for (int x = -16; x < 16; ++x) {
+        for (int z = -16; z < 16; ++z) {
+            f.world.setFluid(x, 1, z, FluidKind::Water, kMaxFluidLevel);
+            f.world.setFluid(x, 2, z, FluidKind::Water, kMaxFluidLevel);
+        }
+    }
+}
+
+TEST(MobFireContactTest, BurnsInFireAtTheFireRate) {
+    FireFixture f;
+    fillFirePatch(f);
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeFireMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false); // pure wander
+    armShippedFire(mob);
+    EXPECT_FALSE(mob.burning());
+    for (int i = 0; i < 120; ++i) { // 2 s = exactly 10 ticks (12 frames each)
+        mob.update(kDt);
+    }
+    EXPECT_TRUE(mob.burning());
+    EXPECT_FALSE(mob.dead());
+    EXPECT_FLOAT_EQ(mob.health(), 10.0f); // 20 - 10
+}
+
+TEST(MobFireContactTest, BurnLingersAfterLeavingFire) {
+    FireFixture f;
+    fillFirePatch(f);
+    MobRegistry mobs = makeTankRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeFireMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    armShippedFire(mob);
+    for (int i = 0; i < 60; ++i) { // 1 s in the fire: 5 ticks
+        mob.update(kDt);
+    }
+    EXPECT_FLOAT_EQ(mob.health(), 95.0f);
+    EXPECT_TRUE(mob.burning());
+    clearFirePatch(f); // dry land: the ~8 s left count down
+    for (int i = 0; i < 420; ++i) {
+        mob.update(kDt);
+    }
+    // Same expiry arithmetic as the lava test: 40 ticks landed (burn
+    // frames 12..480), the lingering burn is STILL running (it expires
+    // one frame after t = 8 s of pure countdown, dry frame 480).
+    EXPECT_TRUE(mob.burning());
+    EXPECT_FLOAT_EQ(mob.health(), 60.0f); // 100 - 40
+    for (int i = 0; i < 60; ++i) { // through the expiry (dry frame 480)
+        mob.update(kDt);
+    }
+    EXPECT_FALSE(mob.burning()); // expired (the expiry step does not tick)
+    EXPECT_FLOAT_EQ(mob.health(), 56.0f); // 100 - 44 (tick 45 is due on
+                                          // the expiry frame itself)
+    for (int i = 0; i < 120; ++i) { // no further damage after the expiry
+        mob.update(kDt);
+    }
+    EXPECT_FLOAT_EQ(mob.health(), 56.0f);
+    EXPECT_FALSE(mob.dead());
+}
+
+TEST(MobFireContactTest, ExtinguishedInWater) {
+    FireFixture f;
+    fillFirePatch(f);
+    MobRegistry mobs = makeTankRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeFireMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    armShippedFire(mob);
+    for (int i = 0; i < 60; ++i) {
+        mob.update(kDt);
+    }
+    EXPECT_FLOAT_EQ(mob.health(), 95.0f);
+    EXPECT_TRUE(mob.burning());
+    clearFirePatch(f);
+    fillWaterFloor(f); // the water extinguishes instantly
+    mob.update(kDt);
+    EXPECT_FALSE(mob.burning());
+    for (int i = 0; i < 600; ++i) { // 10 s: no burn damage in the water
+        mob.update(kDt);
+    }
+    EXPECT_FLOAT_EQ(mob.health(), 95.0f);
+    EXPECT_FALSE(mob.dead());
+}
+
+TEST(MobFireContactTest, UnarmedMobDoesNotBurnInFire) {
+    FireFixture f;
+    fillFirePatch(f);
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeFireMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    for (int i = 0; i < 600; ++i) { // 10 s in the fire, no fire armed
+        mob.update(kDt);
+    }
+    EXPECT_FALSE(mob.burning());
+    EXPECT_FALSE(mob.dead());
+    EXPECT_FLOAT_EQ(mob.health(), 20.0f);
+}
+
+TEST(MobFireContactTest, NoFireBlockRegisteredIsInert) {
+    // The plain fixture's registry has no "fire" block: the
+    // constructor-resolved id is invalid, the contact check is
+    // structurally inert (the P70 player pattern) — an armed mob on dry
+    // land never burns.
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    armShippedFire(mob);
+    for (int i = 0; i < 300; ++i) {
+        mob.update(kDt);
+    }
+    EXPECT_FALSE(mob.burning());
+    EXPECT_FLOAT_EQ(mob.health(), 20.0f);
+}

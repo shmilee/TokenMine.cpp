@@ -3233,7 +3233,18 @@ void Game::updateEntities(double dt) {
             arrowSteps.push_back({arrow, arrow->position()});
         }
     }
-    for (auto& entity : m_entities) {
+    // Phase 73: INDEX loop (not range-for): the skeleton's shoot
+    // callback (invoked inside mob->update) pushes a new arrow into
+    // m_entities — a vector reallocation would DANGLE the range-for's
+    // reference (latent P27 UB, exposed the first time a skeleton
+    // finally got an unobstructed line of sight). The index re-fetches
+    // m_entities[i] from the current storage every iteration, so the
+    // deferred arrow is reached and takes its spawn-frame step — the
+    // original intent. (No pass ERASES from m_entities mid-loop, so the
+    // index is stable enough; removals run in the post-loop despawn
+    // pass.)
+    for (std::size_t i = 0; i < m_entities.size(); ++i) {
+        auto& entity = m_entities[i];
         if (auto* mob = dynamic_cast<MobEntity*>(entity.get())) {
             mob->setPlayer(playerPos, playerAlive);
             mob->update(kMobStepPerFrame);

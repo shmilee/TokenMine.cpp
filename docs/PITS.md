@@ -1165,3 +1165,15 @@
   5.2 s @23fps，落地 ~40 帧后有 80 帧余量）。口诀：**EXACT 断言伤害
   终态 health 的 E2E，先算 run 真实时长上界（帧数 ÷ 最低合理 fps）
   < regen_delay，否则 scene config 关再生或 hunger 压到阈值下**。
+- **range-for 遍历的 vector 被回调 push_back = 悬空引用（P27 潜伏，P73
+  暴露）**：`Game::updateEntities` 原用 `for (auto& entity :
+  m_entities)` 跑实体更新；skeleton 射击回调（在 `mob->update()` 内
+  被调）里 `m_entities.push_back(arrow)`——vector 一旦重分配，循环的
+  `entity` 引用悬空 → SIGSEGV（rc=139）。**潜伏 P27 至今**：P58 水膜
+  对照里水挡视线，骨架从未射出成功的箭；P73 火把膜（光 14 缺口环 →
+  敌对生成）让骨架首次拿到无遮挡视线，首帧即崩。修 = **索引循环**
+  （`for (i < m_entities.size()) { auto& e = m_entities[i]; ... }`）：
+  每轮从当前存储重取引用，延迟的箭同帧被走到（原意图语义）。口诀：
+  **回调/lambda 里改容器，调用方遍历该容器 = 重分配即 UB；要么索引
+  重取、要么延迟到循环外**。崩溃定位 = 日志最后一行就是肇事回调
+  （"skeleton shot: ..." 之后无输出）。
