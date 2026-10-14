@@ -87,6 +87,41 @@ bool Entity::overlapsFluid(FluidKind kind) const {
     return false;
 }
 
+bool Entity::overlapsBlock(BlockID id) const {
+    // The block-cell twin of overlapsFluid (Phase 70): same AABB, same
+    // strict per-axis convention, same early exit.
+    if (!id.valid()) {
+        return false;
+    }
+    const Vec3 mn = aabbMin();
+    const Vec3 mx = aabbMax();
+    const int x0 = static_cast<int>(std::floorf(mn.x));
+    const int x1 = static_cast<int>(std::floorf(mx.x));
+    const int y0 = static_cast<int>(std::floorf(mn.y));
+    const int y1 = static_cast<int>(std::floorf(mx.y));
+    const int z0 = static_cast<int>(std::floorf(mn.z));
+    const int z1 = static_cast<int>(std::floorf(mx.z));
+    for (int x = x0; x <= x1; ++x) {
+        for (int y = y0; y <= y1; ++y) {
+            for (int z = z0; z <= z1; ++z) {
+                if (!(mn.x < x + 1 && mx.x > x)) {
+                    continue;
+                }
+                if (!(mn.y < y + 1 && mx.y > y)) {
+                    continue;
+                }
+                if (!(mn.z < z + 1 && mx.z > z)) {
+                    continue;
+                }
+                if (m_world.getBlock(x, y, z) == id) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 // -- entity-vs-entity separation (Phase 19) ----------------------------------
 
 EntitySeparation computeEntitySeparation(const Vec3& aMin, const Vec3& aMax,

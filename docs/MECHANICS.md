@@ -398,6 +398,16 @@
   - **浇灭**：fire 的 6-邻任一格有**水**（任一级）→ 当帧瞬灭；
     水胜火（Phase 57 规则）；**熔岩不浇灭**（池边的火是熔岩的产物，
     继续烧——MC 同款共存）
+  - **接触伤害**（Phase 70）：玩家 AABB **严格重叠**任一 fire 块格时，
+    每 `player.fire_damage_interval_seconds`（默认 0.2 = MC 火节奏
+    5 HP/s）受 `player.fire_damage` HP（默认 1；**0 = 关**；
+    `≤ player.max_health` 交叉校验）——**real-dt 生存计时器**
+    （P54 熔岩灼烧的块版：在火里累积、离开重置未到期 tick、走正常
+    伤害路径 = 红闪/音效/死亡处理全触发）。fire 块 id 在 Player 构造
+    时解析一次（registry 无 fire 块 = 永不，单测 fixture 语义，
+    fluid.cpp 回落同款）；重叠判定 = `Entity::overlapsBlock`
+    （与 `overlapsFluid` 同款 AABB 严格不等式扫描，caller 传 id =
+    数据驱动）。**Mob 站火里不受伤害**（v3 范围）
   - **存档**：format 10 的 `fires` 数组（{pos, remaining}，位置序；
     remaining > 0；与块编辑**双向**交叉校验 = 炉子键纪律；format 9
     读档 = 空 + 手编的旧文件 fire 块补满寿命条目）

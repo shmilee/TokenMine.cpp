@@ -93,6 +93,14 @@ public:
     // extinguishes).
     bool overlapsFluid(FluidKind kind) const;
 
+    // Does the AABB strictly overlap at least one cell holding the BLOCK
+    // `id` (the same per-axis strict convention as overlapsFluid)? The
+    // caller passes the id — the method never names a block (the player
+    // uses it for the fire contact damage, Phase 70, with the game
+    // init's resolved fire id). An invalid id means "never" (a test
+    // fixture without that block, the fluid.cpp fallback).
+    bool overlapsBlock(BlockID id) const;
+
     // Entity-vs-entity collision (Phase 19): does this entity participate
     // in the separation pass at all? Projectiles fly through every entity
     // (Minecraft arrows) and opt out.

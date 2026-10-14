@@ -16,7 +16,13 @@ Player::Player(const World& world, const BlockRegistry& blocks, Vec3 spawnPos)
 Player::Player(const World& world, const BlockRegistry& blocks, Vec3 spawnPos,
                Params params)
     : Entity(world, blocks, spawnPos, params.width, params.height),
-      m_params(params), m_spawnPos(spawnPos) {
+      m_params(params),
+      m_spawnPos(spawnPos),
+      // Phase 70: resolve the fire block id once (the registry is static
+      // after init). An unknown name leaves the id invalid = isInFire is
+      // always false (a test fixture without the fire block — the
+      // fluid.cpp fallback pattern).
+      m_fireBlockId(blocks.idForName("fire")) {
     teleportTo(spawnPos);
 }
 
@@ -78,6 +84,9 @@ Result<Player::Params> Player::Params::fromConfig(const Config& config) {
     MC_TRY(read("lava_damage_interval_seconds", p.lavaDamageIntervalSeconds,
                 false));
     MC_TRY(read("lava_damage", p.lavaDamage, false));
+    MC_TRY(read("fire_damage_interval_seconds",
+                p.fireDamageIntervalSeconds, false));
+    MC_TRY(read("fire_damage", p.fireDamage, true)); // 0 = off (allowed)
     MC_TRY(read("fire_duration_seconds", p.fireDurationSeconds, false));
     // Cross-field sanity (the defaults satisfy all four).
     if (p.eyeHeight >= p.height) {
@@ -92,6 +101,10 @@ Result<Player::Params> Player::Params::fromConfig(const Config& config) {
     }
     if (p.lavaDamage > p.maxHealth) {
         return MC_FAIL("config player.lava_damage must be <= "
+                       "player.max_health");
+    }
+    if (p.fireDamage > p.maxHealth) {
+        return MC_FAIL("config player.fire_damage must be <= "
                        "player.max_health");
     }
     if (p.fireDurationSeconds > 100.0) {
@@ -170,6 +183,7 @@ void Player::update(double dt) {
     // timer; when the AABB straddles both kinds, lava wins.
     m_inWater = isInWater();
     m_inLava = isInLava();
+    m_inFire = isInFire(); // Phase 70: the fire block (contact damage)
 
     // 2b. Crouch (LeftControl): the height state machine runs before the
     // speed computation (crouch scales the speed) and before the edge
@@ -336,6 +350,25 @@ void Player::update(double dt) {
         }
     } else {
         m_lavaAccum = 0.0;
+    }
+
+    // Fire contact (Phase 70, Minecraft's 1 HP / 0.2 s): while the AABB
+    // overlaps a FIRE BLOCK cell, take fireDamage HP every
+    // fireDamageIntervalSeconds of real dt — the lava-burn pattern,
+    // through the normal damage path (hurt flash/sound/death all fire).
+    // Leaving the fire resets the pending tick. fireDamage 0 disables the
+    // damage entirely (the config off-switch).
+    if (m_inFire && !m_dead && m_params.fireDamage > 0.0f) {
+        m_fireAccum += dt;
+        while (m_fireAccum >= m_params.fireDamageIntervalSeconds) {
+            m_fireAccum -= m_params.fireDamageIntervalSeconds;
+            damage(m_params.fireDamage);
+            if (m_dead) {
+                break;
+            }
+        }
+    } else {
+        m_fireAccum = 0.0;
     }
 
     // Fell out of the world (the world's edge is void): death.
@@ -533,6 +566,14 @@ bool Player::isInLava() const {
     // LAVA (Phase 54): the swim state with the lava pace + the burn timer
     // run while this is true (Minecraft's "slow + burn").
     return overlapsFluid(FluidKind::Lava);
+}
+
+bool Player::isInFire() const {
+    // FIRE (Phase 70): the contact-damage source. The fire is a BLOCK
+    // (the cross-model fire, never a fluid), so this scans block cells
+    // for the constructor-resolved fire id; an invalid id (no fire block
+    // registered) means "never in fire".
+    return overlapsBlock(m_fireBlockId);
 }
 
 } // namespace mc

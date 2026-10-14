@@ -266,7 +266,31 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
     block+fluid / L1 膜 = 稳定地面流体场景 / 物品 rest 位置确定性
     （零初速 + 位置式分离）/ pgrep 前缀误匹配 minecraft_tests / 裸
     截图无窗口稳定化 = 错尺寸假失败）。
-  - [x] **Phase 69** — 镐分类（用户"按建议，继续下两个 Phase" = 建议 1，
+  - [x] **Phase 70** — 火接触伤害（用户"按建议，继续下两个 Phase" = 建议 2，
+    代理定案最小完整版 = **玩家站 fire 块里受伤**，消费火 v2 条
+    "无接触伤害"遗留；**mob 火接触 = 文档化偏离**【v3 范围】）：
+    **config 2 键** `player.fire_damage`（默认 1 = MC 1 HP/0.2 s；
+    **0 = 关**；`≤ max_health` 交叉校验）+ `player.fire_damage_
+    interval_seconds`（默认 0.2，>0 硬校验）——mirror P54 熔岩键；
+    **`Entity::overlapsBlock(BlockID)`**（mirror `overlapsFluid` 的
+    AABB 严格不等式扫描，caller 传 id = 数据驱动）+ Player `isInFire()`
+    （fire 块 id 构造时 `blocks.idForName("fire")` 解析一次，
+    fluid.cpp 回落 air 同款容错：registry 无 fire 块 = 永不）+
+    `m_fireAccum` **real-dt 计时器**（Player::update 里 mirror 熔岩块：
+    在火里累积、离开重置、走正常 damage 路径 = 红闪/音效/死亡全触发；
+    fireDamage 0 = fast-exit）；**无 format 变更**（10）。1072/1072
+    （+9：行为 5【速率/烧死/离开重置/0 关闭/面接触不算重叠】+
+    config 4【默认/interval 0 拒/0 合法/超 max 拒】）、`-Werror` 0
+    警告、base18 **第 43 次结构性免疫**【fresh 世界零 fire 块
+    （worldgen 永不生成）= 接触路径惰性 = P58 同款论证】；E2E 全绿
+    （全 no-input：S2 玩家烧死【场景 fire@(22,45,0) fires 条目
+    remaining 8.0 + spread_chance 0 config，600f：1 HP/0.2 s =
+    **4.0 s 死**（real-dt fps 无关）+ fires []（8 s < 10 s 最短跑
+    margin 2 s）+ blocks {} + 零实体【无玩家死亡掉落】，×2 savenorm】/
+    S2b fire_damage 0 对照【存活 health 20、fires []、零 real-dt
+    字段 → 存档+截图 **×2 RAW**】/ S6 config 失败 ×2【interval 0
+    点名 / damage 21 > max 点名】）。
+- [x] **Phase 69** — 镐分类（用户"按建议，继续下两个 Phase" = 建议 1，
     代理定案最小完整版 = **镐 = 石类/矿类分块效率**，消费 P68 演进后
     P11 条的镐分类遗留；**零核心代码** = 纯内容，P62/P68 同款路径）：
     3 镐各加 `fast_against` **[stone, cobblestone, coal_ore, iron_ore,
@@ -710,6 +734,7 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 56** — `archive/phase-56.md`
 - **Phase 57** — `archive/phase-57.md`
 - **Phase 58** — `archive/phase-58.md`
+- **Phase 70** — `archive/phase-70.md`
 - **Phase 69** — `archive/phase-69.md`
 - **Phase 68** — `archive/phase-68.md`
 - **Phase 67** — `archive/phase-67.md`
