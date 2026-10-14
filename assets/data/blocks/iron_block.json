@@ -1,0 +1,15 @@
+{
+  "id": "iron_block",
+  "properties": {
+    "hardness": 5.0,
+    "drops": "iron_block",
+    "beacon_base": true
+  },
+  "model": {
+    "textures": {
+      "top": "iron_block",
+      "side": "iron_block",
+      "bottom": "iron_block"
+    }
+  }
+}

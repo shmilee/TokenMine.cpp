@@ -200,6 +200,24 @@ struct BlockProperties {
     // data load (the ammo discipline); each name is cross-checked at game
     // init (it must reference an existing block, the grows_on discipline).
     std::vector<std::string> plantOn;
+    // Beacon pyramid base (Phase 83): when true, a cell of THIS block
+    // counts as one unit of the mineral base a beacon (the block with a
+    // non-empty beaconEffect) scans below it to determine its power level
+    // (a full 3x3 / 5x5 / 7x7 / 9x9 layer = levels 1..4, Minecraft). The
+    // shipped data flags iron_block (the canonical Minecraft beacon
+    // material). A pure data flag — the core reads the property, it never
+    // switches on a block id (hard rule 3).
+    bool beaconBase = false;
+    // Beacon effect (Phase 83): when non-empty, this block is a BEACON —
+    // each frame, if its power level (see beaconBase) is >= 1, it applies
+    // the NAMED effect to every player within the beacon range (the
+    // duration is refreshed while the player stays in range, the fire-
+    // source pattern). Shipped data names "absorption" (the beacon's
+    // Minecraft effect, the project's second absorption source after the
+    // golden apple). Existence cross-checked at game init (the grows_to /
+    // ignites_to discipline); an explicit empty string is rejected at data
+    // load (the ammo discipline). Empty (the default) = not a beacon.
+    std::string beaconEffect;
 };
 
 // Which texture name is applied to each face group (full_cube shapes) — or

@@ -23,6 +23,7 @@
 #include "block/chance_drop.hpp"
 #include "world/growth.hpp"
 #include "world/fire_spread.hpp"
+#include "world/beacon.hpp"
 #include "world/noise.hpp"
 #include "ui/font.hpp"
 #include "ui/inventory_ui.hpp"
@@ -81,6 +82,25 @@ constexpr int kFireParticleEveryNFrames = 6;
 // growth/chance-drop salt separation, Phase 45/49): ember emissions
 // never track any other deterministic stream in the world.
 constexpr std::uint64_t kFireParticleRollSalt = 0xE4B6F1C2D9A83574ULL;
+
+// Phase 83 beacon: the refresh DURATION the beacon applies to its effect
+// every frame (the fire-source pattern — standing in range resets it, so
+// it only matters once the player leaves: the effect then counts down this
+// long before expiring). 0.5 s = the Minecraft beacon re-application rhythm.
+constexpr double kBeaconEffectDurationSeconds = 0.5;
+// Phase 83 beacon beam: the translucent column geometry — a thin box
+// (kBeaconBeamHalfWidth on x/z) from y=0 to y=1, scaled up to
+// kBeaconBeamBaseHeight + level * kBeaconBeamLevelHeight per active beacon
+// (the beam is taller at higher pyramid levels, Minecraft).
+constexpr float kBeaconBeamHalfWidth = 0.15f;
+constexpr float kBeaconBeamBaseHeight = 64.0f;
+constexpr float kBeaconBeamLevelHeight = 32.0f;
+// Phase 83 beacon beam color (bright cyan-white, the classic beam) and its
+// translucency (the beam is a light column, not a solid pillar).
+constexpr float kBeaconBeamR = 0.6f;
+constexpr float kBeaconBeamG = 0.95f;
+constexpr float kBeaconBeamB = 1.0f;
+constexpr float kBeaconBeamAlpha = 0.5f;
 
 // Reinterpret an (possibly negative) int as 64 bits for hashing (the
 // worldgen's u64 — two's-complement is a bijection).
@@ -305,6 +325,46 @@ Result<void> Game::buildScene() {
             verts.push_back(v);
         }
         auto up = m_outlineMesh.upload(verts, {}, MeshMode::Lines);
+        MC_TRY(up);
+    }
+
+    // Phase 83 beacon beam: a thin translucent column (half-width on x/z,
+    // unit height on y) — scaled + positioned per active beacon by the model
+    // matrix in drawBeaconBeams. All 8 corners share normal +Y (so every face
+    // gets the top-face shade = a uniform bright column, independent of
+    // orientation) and blockLight 1.0 (full brightness regardless of world
+    // lighting). Culling is disabled for the beam draw, so the winding only
+    // needs to trace each quad (both faces render, alpha-blended).
+    {
+        const float h = kBeaconBeamHalfWidth;
+        const Vec3 kCorners[8] = {
+            {-h, 0.0f, -h}, {h, 0.0f, -h}, {h, 0.0f, h}, {-h, 0.0f, h},
+            {-h, 1.0f, -h}, {h, 1.0f, -h}, {h, 1.0f, h}, {-h, 1.0f, h},
+        };
+        const std::uint32_t kIndices[36] = {
+            0, 1, 5, 0, 5, 4,  // -Z
+            2, 3, 7, 2, 7, 6,  // +Z
+            3, 0, 4, 3, 4, 7,  // -X
+            1, 2, 6, 1, 6, 5,  // +X
+            0, 3, 2, 0, 2, 1,  // -Y
+            4, 5, 6, 4, 6, 7,  // +Y
+        };
+        std::vector<MeshVertex> verts;
+        verts.reserve(8);
+        for (const Vec3& p : kCorners) {
+            MeshVertex v;
+            v.position = p;
+            v.normal = {0.0f, 1.0f, 0.0f};
+            v.uv = {0.0f, 0.0f};
+            v.skyLight = 0.0f;
+            v.blockLight = 1.0f;
+            v.uvLocal = {0.0f, 0.0f};
+            v.tiled = 0.0f;
+            verts.push_back(v);
+        }
+        std::vector<std::uint32_t> indices(kIndices, kIndices + 36);
+        auto up =
+            m_beaconBeamMesh.upload(verts, indices, MeshMode::Triangles);
         MC_TRY(up);
     }
 
@@ -689,6 +749,24 @@ Result<void> Game::buildScene() {
         }
         m_fireEffectId = effId;
     }
+    // Strict data check (Phase 83): a block's beacon_effect must name an
+    // EXISTING effect (the beacon applies it to in-range players). The
+    // empty-string rejection is at data load; this is the existence
+    // cross-check (a typo in the effect name fails init loudly — the
+    // grows_to / on_hit_effect discipline). The effect must not be
+    // negative-removable-irrelevant: any registered effect is a valid beacon
+    // target (the shipped data uses "absorption").
+    for (const BlockID id : m_blocks.allIds()) {
+        const Block& b = m_blocks.at(id);
+        if (b.properties.beaconEffect.empty()) {
+            continue;
+        }
+        if (m_effects.findByName(b.properties.beaconEffect) == nullptr) {
+            return MC_FAIL("block '" + b.name + "' beacon_effect names "
+                           "unknown effect '" + b.properties.beaconEffect +
+                           "'");
+        }
+    }
     for (const MobID mid : m_mobTypes.allIds()) {
         const Mob& mob = m_mobTypes.at(mid);
         if (!mob.properties.hitEffectName.empty() &&
@@ -773,6 +851,18 @@ Result<void> Game::buildScene() {
                        std::to_string(m_fireSpreadChance) + ")");
     }
     m_fireParticles = m_config.getBool("fire.particles", true);
+
+    // Phase 83 beacon: the effect range (Chebyshev blocks from the beacon
+    // cell; the Minecraft beacon reaches the whole build area, 50 is a
+    // generous default) and the beam visibility gate (the E2E control, the
+    // fire.particles pattern — a no-input run without beacons is inert
+    // either way).
+    m_beaconRange = m_config.getInt("beacon.range_blocks", 50);
+    if (m_beaconRange <= 0) {
+        return MC_FAIL("config beacon.range_blocks must be > 0 (got " +
+                       std::to_string(m_beaconRange) + ")");
+    }
+    m_beaconBeam = m_config.getBool("beacon.beam", true);
 
     // -- item icons (Phase 15 UI) ------------------------------------------
     // Each explicit item may name a 2D icon under assets/textures/items/
@@ -1070,6 +1160,7 @@ Result<void> Game::buildScene() {
     // the save load (block edits restored the planted crops). A fresh
     // world scans to nothing — worldgen places no crops (v1).
     rescanCrops();
+    rescanBeacons();
 
     // The lighting pipeline has covered every chunk that exists now (the
     // fresh demo area, or the loaded save's world — applySave ends with a
@@ -1663,6 +1754,36 @@ void Game::rescanCrops() {
     }
 }
 
+void Game::rescanBeacons() {
+    // Phase 83: rebuild the beacon tracking set from the world — every cell
+    // whose block carries a non-empty beaconEffect. A fresh world finds
+    // nothing (worldgen places no beacons); a loaded save finds the
+    // player's placed ones (restored by the block edits). No per-instance
+    // state: the power level is re-derived from the world each frame.
+    m_beacons.clear();
+    for (const ChunkPos& cp : m_world.chunkPositions()) {
+        const Chunk* chunk = m_world.findChunk(cp);
+        if (chunk == nullptr) {
+            continue;
+        }
+        const int baseX = cp.x * kChunkSize;
+        const int baseY = cp.y * kChunkSize;
+        const int baseZ = cp.z * kChunkSize;
+        for (int ly = 0; ly < kChunkSize; ++ly) {
+            for (int lz = 0; lz < kChunkSize; ++lz) {
+                for (int lx = 0; lx < kChunkSize; ++lx) {
+                    const BlockID id = chunk->get(lx, ly, lz);
+                    if (m_blocks.at(id).properties.beaconEffect.empty()) {
+                        continue;
+                    }
+                    const BlockPos wp {baseX + lx, baseY + ly, baseZ + lz};
+                    m_beacons[wp] = id;
+                }
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Init / main loop
 // ---------------------------------------------------------------------------
@@ -2011,6 +2132,13 @@ void Game::update(double dt) {
     // a drop drives the hurt flash + sound, a death releases the pointer,
     // R (while dead) respawns. Runs even while paused so the flash decays.
     updateSurvival(dt);
+    // Phase 83 beacon: re-derive every beacon's power level and refresh the
+    // NAMED effect on the player while in range (BEFORE the effect ticks,
+    // so the absorption pool — a pure function of the effect total at the
+    // sync points inside updateEffects — sees the beacon's freshly applied
+    // layer this frame, the fire-source refresh pattern). No-op without a
+    // beacon (structural immunity).
+    updateBeacons();
     // Status-effect ticks (Phase 46): the real-dt durations + the periodic
     // damage/heal (see updateEffects). Runs after the survival poll so a
     // lethal tick's death is handled on the NEXT frame's poll (a poison
@@ -2527,6 +2655,18 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
             m_crops[cpos] = id;
         } else {
             m_crops.erase(cpos);
+        }
+    }
+    // Phase 83: the beacon tracking set follows the cell (like the crops):
+    // a block with a non-empty beaconEffect is a beacon (tracked; its power
+    // level is re-derived from the world each frame, so no per-instance
+    // state is stored), a cell that stops holding one drops out.
+    {
+        const BlockPos bpos {x, y, z};
+        if (!m_blocks.at(id).properties.beaconEffect.empty()) {
+            m_beacons[bpos] = id;
+        } else {
+            m_beacons.erase(bpos);
         }
     }
     // Phase 64: the fire remaining life follows the cell (like the
@@ -3110,6 +3250,57 @@ void Game::updateFireSpread() {
     for (const BlockPos& pos : ignitions) {
         setBlock(pos.x, pos.y, pos.z, m_fireId);
         Lighting::updateLocal(m_world, m_blocks, pos);
+    }
+}
+
+void Game::updateBeacons() {
+    // Phase 83: re-derive the power level of every tracked beacon and
+    // refresh its NAMED effect on the player while the player is in range.
+    // The level is a pure function of the world (world/beacon) — no stored
+    // state. A no-op (fast-exit) while the world holds no beacon OR the
+    // player is dead (structural immunity: a fresh no-input world has no
+    // beacon, so m_beacons is empty and this never runs its body).
+    m_beaconActive.clear();
+    if (m_beacons.empty() || m_player->isDead()) {
+        return;
+    }
+    // The absorption pool is a pure function of the effect total at the
+    // sync points. updateEffects only detects a change if the total moves
+    // DURING its own ticks; the beacon applies its effect HERE (before
+    // updateEffects), so capture the total around the applies and sync the
+    // pool if the beacon raised it (the fire-source pattern: standing in
+    // range keeps the layer at its full total; damage still drains it
+    // between sync points, Phase 72).
+    const float absorbBefore = m_playerEffects.totalAbsorption(m_effects);
+    const Vec3 feet = m_player->position();
+    for (const auto& [pos, bid] : m_beacons) {
+        const int level = beaconLevel(m_world, m_blocks, pos.x, pos.y, pos.z);
+        if (level < 1) {
+            continue;
+        }
+        // An active beacon feeds the beam renderer (drawn in the blending
+        // pass; the beam is gated on the `beacon.beam` config there).
+        m_beaconActive.push_back(BeaconBeam {pos.x, pos.y, pos.z, level});
+        // In range? Chebyshev distance from the player's feet to the beacon
+        // cell's centre (the voxel-cube "within N blocks" rule).
+        const float dx = feet.x - (pos.x + 0.5f);
+        const float dy = feet.y - (pos.y + 0.5f);
+        const float dz = feet.z - (pos.z + 0.5f);
+        const float dist = std::max(std::fabs(dx),
+                                    std::max(std::fabs(dy), std::fabs(dz)));
+        if (dist > static_cast<float>(m_beaconRange)) {
+            continue;
+        }
+        // Apply the beacon's NAMED effect (init-validated to exist). The
+        // duration refreshes every frame while in range (the fire-source
+        // pattern — standing in the beam keeps the effect alive).
+        const int eff = m_effects.idForName(m_blocks.at(bid).properties.beaconEffect);
+        if (eff != -1) {
+            m_playerEffects.apply(eff, kBeaconEffectDurationSeconds);
+        }
+    }
+    if (m_playerEffects.totalAbsorption(m_effects) != absorbBefore) {
+        syncAbsorption();
     }
 }
 
@@ -3880,6 +4071,7 @@ void Game::drawArrows(const Mat4& view, const Mat4& projection) {
     m_basicShader.setUniform1i("u_useTexture", 0);
     m_basicShader.setUniform3f("u_color", kArrowColorR, kArrowColorG,
                                kArrowColorB);
+    m_basicShader.setUniform1f("u_alpha", 1.0f); // arrows are opaque
     for (const auto& entity : m_entities) {
         const Projectile* arrow =
             dynamic_cast<const Projectile*>(entity.get());
@@ -4036,6 +4228,42 @@ void Game::drawCampfireCookItems(const Mat4& view, const Mat4& projection) {
         m_atlas.texture().bind(); // restore for the passes that follow
         m_renderer.disableBlending();
     }
+}
+
+void Game::drawBeaconBeams(const Mat4& view, const Mat4& projection) {
+    // Phase 83: the translucent light column rising from every ACTIVE
+    // (level>=1) beacon to the sky. Drawn in the blending pass (the depth
+    // test occludes it behind terrain like the other world geometry). A
+    // no-input run has no beacon -> m_beaconActive empty -> this is a no-op
+    // (baseline byte-identical, structural immunity); the `beacon.beam`
+    // config gate is the E2E control (the fire.particles pattern). Culling
+    // is off for the beam (both faces of each quad render, alpha-blended).
+    if (!m_beaconBeam || m_beaconActive.empty()) {
+        return;
+    }
+    m_basicShader.bind();
+    m_basicShader.setUniform1i("u_useTexture", 0);
+    m_basicShader.setUniform3f("u_color", kBeaconBeamR, kBeaconBeamG,
+                               kBeaconBeamB);
+    m_basicShader.setUniform1f("u_alpha", kBeaconBeamAlpha);
+    m_basicShader.setUniform1f("u_dayFactor", m_dayCycle.dayFactor());
+    m_renderer.enableBlending();
+    m_renderer.setCulling(false);
+    for (const BeaconBeam& b : m_beaconActive) {
+        // The unit-height beam box, scaled to the level's height and
+        // positioned on the beacon cell's top face (y = cell y + 1).
+        const float height =
+            kBeaconBeamBaseHeight + b.level * kBeaconBeamLevelHeight;
+        const Mat4 model = Mat4::multiply(
+            Mat4::translate(static_cast<float>(b.x) + 0.5f,
+                            static_cast<float>(b.y) + 1.0f,
+                            static_cast<float>(b.z) + 0.5f),
+            Mat4::scale(1.0f, height, 1.0f));
+        m_renderer.draw(m_beaconBeamMesh, m_basicShader, view, projection,
+                        model);
+    }
+    m_renderer.setCulling(true);
+    m_renderer.disableBlending();
 }
 
 void Game::drawHeldHand(const Mat4& view, const Mat4& projection) {
@@ -5243,6 +5471,9 @@ void Game::render() {
     m_basicShader.setUniform1i("u_texture", 0);
     m_basicShader.setUniform1i("u_useTexture", 1);
     m_basicShader.setUniform1f("u_dayFactor", m_dayCycle.dayFactor());
+    // Solid-color alpha default 1.0 (opaque world + arrows; the beacon beam
+    // lowers it for its own draws — Phase 83). The textured path ignores it.
+    m_basicShader.setUniform1f("u_alpha", 1.0f);
     // One atlas tile in UV space, for the tiled greedy chunk quads
     // (Phase 18). Unread on the legacy (tiled = 0) path.
     m_basicShader.setUniform2f(
@@ -5299,6 +5530,10 @@ void Game::render() {
     }
     drawItemEntities(view, projection, true);
     drawParticles(view, projection, true);
+    // Beacon beams (Phase 83): the translucent light columns from active
+    // beacons, blended + depth-occluded like the other world geometry.
+    // No-op without an active beacon (baseline byte-identical).
+    drawBeaconBeams(view, projection);
     // The break crack + target outline (Phase 15): world-space, blended,
     // depth test still on (the overlay cubes sit just outside the block).
     drawWorldOverlay(view, projection);

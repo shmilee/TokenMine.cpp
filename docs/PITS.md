@@ -1225,3 +1225,9 @@
   限**（同弹道 ≤150，真位移 ≥100 可分）。口诀：**real-dt 锚定的发射
   类输入，终态截图里会动的实体位置带 ≤1 帧抖动——像素恒等断言改"抖
   动界 + 位移界"双界关系式**。
+- **信标吸收池须在 updateBeacons 内同步（P83）**：吸收池 = 效果总和的纯函
+  数只在同步点更新（P72），`updateEffects` 的"帧内总和变化才同步"检测**看
+  不到**信标的 apply（信标在 updateEffects 之前施加）——首轮 E2E 池 = 0
+  但 effects 含 absorption（施加了却没同步池）。修复：`updateBeacons` 捕获
+  施加前后 `totalAbsorption`，变化即 `syncAbsorption()`。口诀：**凡在
+  updateEffects 之外改效果总和的路径，须自带前后总和比对 + 同步**。

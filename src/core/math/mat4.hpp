@@ -75,6 +75,15 @@ public:
         result.set(2, 2, s);
         return result;
     }
+    // Non-uniform scale (Phase 83 beacon beam: a unit column stretched in
+    // Y to the level's height, x/z at 1.0).
+    static Mat4 scale(float sx, float sy, float sz) {
+        Mat4 result {};
+        result.set(0, 0, sx);
+        result.set(1, 1, sy);
+        result.set(2, 2, sz);
+        return result;
+    }
 
     static Mat4 translate(float x, float y, float z) {
         Mat4 result {};

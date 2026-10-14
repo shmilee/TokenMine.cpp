@@ -10,6 +10,10 @@ in float v_faceShade;
 uniform sampler2D u_texture;
 uniform int u_useTexture;
 uniform vec3 u_color;
+// Solid-color (u_useTexture == 0) alpha: 1.0 for the opaque draws (arrows,
+// the Phase 1+ world), lowered for the translucent beacon beam (Phase 83).
+// The textured path always uses the texture's per-pixel alpha.
+uniform float u_alpha;
 // Day/night scale for sky light (1 = day, 0 = deep night). Block light is
 // intentionally unaffected — glowstone shines at night.
 uniform float u_dayFactor;
@@ -34,7 +38,7 @@ void main() {
     }
     vec4 texel = texture(u_texture, sampleUv);
     vec3 base = (u_useTexture != 0) ? texel.rgb : u_color;
-    float alpha = (u_useTexture != 0) ? texel.a : 1.0;
+    float alpha = (u_useTexture != 0) ? texel.a : u_alpha;
     // Lightmap lighting: the brighter of day-scaled sky light and block
     // light (each 0..1), with per-face shading and a small ambient floor so
     // fully dark areas stay distinguishable from the void background.

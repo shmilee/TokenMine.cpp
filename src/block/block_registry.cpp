@@ -88,6 +88,11 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "flamable", "boolean",
                    [&](const Json& v) { out.flamable = v.asBool(); });
     MC_TRY(r);
+    // Beacon pyramid base flag (Phase 83): a pure data flag (the core reads
+    // the property, never a block id — hard rule 3).
+    r = checkField(*p, "beacon_base", "boolean",
+                   [&](const Json& v) { out.beaconBase = v.asBool(); });
+    MC_TRY(r);
     r = checkField(*p, "fluid", "string",
                    [&](const Json& v) { out.fluidName = v.asString(); });
     MC_TRY(r);
@@ -131,6 +136,20 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
         if (it->asString().empty()) {
             return MC_FAIL("block property 'ignites_to' must be a non-empty "
                            "block name (omit it for a plain block)");
+        }
+    }
+    r = checkField(*p, "beacon_effect", "string",
+                   [&](const Json& v) { out.beaconEffect = v.asString(); });
+    MC_TRY(r);
+    // Beacon effect (Phase 83): an EXPLICIT empty beacon_effect is a no-op
+    // typo (ABSENT is the "not a beacon" default — the ammo discipline, the
+    // ignites_to pattern). The effect-name existence cross-check happens at
+    // game init (the grows_to discipline).
+    if (const Json* be = p->find("beacon_effect")) {
+        if (be->asString().empty()) {
+            return MC_FAIL("block property 'beacon_effect' must be a "
+                           "non-empty effect name (omit it for a plain "
+                           "block)");
         }
     }
     // Planting placement restriction (Phase 53): an OPTIONAL array of block

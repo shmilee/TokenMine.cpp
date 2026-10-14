@@ -633,6 +633,30 @@
     string/spider_eye 物品未做）、模型 AABB 1.4×0.9（身 1.3×0.7×0.9 +
     头 0.5³，宽扁低趴）、纹理深灰褐几丁质 + 头部前双面红眼、生成表
     weight 1（与其他 5 种等概率）
+- **信标**（Phase 83，数据驱动 + 纯函数 + 每帧 pass，**零 format**）：
+  - **数据**：`beacon` 块带 `beacon_effect: "absorption"`（指向效果名，
+    init 交叉校验效果存在——grows_to 纪律）；`iron_block` 块带
+    `beacon_base: true`（基座标记）。两块皆自掉、不发光、不生成（只经
+    放置/合成）。
+  - **功率等级**（`world/beacon` 纯函数）：信标正下方连续完整基座层数
+    ——3×3（紧挨信标下）= 等级 1、5×5 = 2、7×7 = 3、9×9 = 4；**第一层
+    缺角即停**（金字塔从上往下连续完整）。等级**每帧重算、无 per-
+    instance 状态**（生长 P48 的"块 id 即状态"同款）→ **零 format
+    变更**。
+  - **施加**：`Game::m_beacons`（setBlock 收口 + 读档 `rescanBeacons`，
+    生长同款）每帧遍历；等级 ≥1 且**玩家脚到信标格 Chebyshev 距离 ≤
+    `beacon.range_blocks`**（默认 50）→ `m_playerEffects.apply(effect,
+    0.5s)` **刷新**（火源范式——站范围内效果常驻、离开 0.5 s 到期）。
+  - **吸收池同步**（PITS）：信标的 apply 在 `updateEffects` **之前**，
+    其"帧内总和变化才同步"检测看不到 → `updateBeacons` **捕获施加前后
+    `totalAbsorption`、变化即 `syncAbsorption`**（首轮 E2E 池 = 0 但
+    effects 含 absorption 暴露）。
+  - **光束**：半透明薄柱（`basic.frag` 加 `u_alpha` 默认 1.0——纹理路径
+    用 texel.a 不受影响，纯色路径【箭/光束】用它；薄柱 mesh 在透明 pass
+    关裁剪绘制，顶点 blockLight 1.0 = 常亮、法线全 +Y = 面 shade 恒 1.0
+    均匀亮，等级越高柱越长【64 + 等级×32 格】）。`beacon.beam` 可关
+    （E2E 对照）。**光束不入光照**（不照亮周围），信标块本身
+    `light_emission 0`。
 - **游泳**（Phase 9）：玩家包围盒与任何水体格相交即进入水中状态——水中重力减半
   （12 vs 32）、终端速度 4、水平速度降为 3.1（冲刺无效）、`Space` 随时上浮（4.5）；
   浅水（头在水面上）可以"蹚水走"，深水可以游

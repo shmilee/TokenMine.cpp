@@ -149,6 +149,36 @@ def smooth_sandstone(x, y):
             clamp(base[2] + n + n2), 255)
 
 
+def iron_block(x, y):
+    """Phase 83: the iron block (the canonical beacon pyramid material,
+    Minecraft). A bright, uniform metallic silver with a faint brushed
+    noise. New salts 927/928, every existing texture pixel-identical."""
+    base = (212, 212, 216)  # the Minecraft iron-block silver
+    n = noise(x, y, 927, 5)
+    n2 = noise(x, y, 928, 3)
+    v = n + n2
+    return (clamp(base[0] + v), clamp(base[1] + v),
+            clamp(base[2] + v + 2), 255)
+
+
+def beacon(x, y):
+    """Phase 83: the beacon block (the effect source). A cyan-glass frame
+    with a bright glowing centre — the classic beacon crystal look. New
+    salts 929/930/931/932, every existing texture pixel-identical."""
+    # A bright white-cyan core (the nether-star light) in the centre.
+    cx, cy = abs(x - 7.5), abs(y - 7.5)
+    if cx <= 2 and cy <= 2:
+        base = (220, 255, 255)
+    elif cx <= 3.5 or cy <= 3.5:
+        base = (120, 220, 235)  # the glowing ring
+    else:
+        base = (60, 150, 175)   # the glass frame edge
+    n = noise(x, y, 929, 4)
+    n2 = noise(x, y, 930, 3)
+    v = n + n2
+    return (clamp(base[0] + v), clamp(base[1] + v), clamp(base[2] + v), 255)
+
+
 
 def wood_side(x, y):
     # Vertical bark stripes with noise.
@@ -595,6 +625,8 @@ TEXTURES = {
     "sand": sand,
     "sandstone": sandstone,
     "smooth_sandstone": smooth_sandstone,
+    "iron_block": iron_block,
+    "beacon": beacon,
     "wood_side": wood_side,
     "wood_top": wood_top,
     "leaves": leaves,

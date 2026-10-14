@@ -289,6 +289,14 @@
   "smooth_sandstone": [
    15,
    0
+  ],
+  "iron_block": [
+   8,
+   1
+  ],
+  "beacon": [
+   9,
+   1
   ]
  }
 }

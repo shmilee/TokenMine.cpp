@@ -302,6 +302,15 @@ private:
     // fire's full life). Runs every frame after updateFires; a no-op
     // without fires or without the fire block.
     void updateFireSpread();
+    // Phase 83 beacon: re-derive the power level of EVERY tracked beacon
+    // (world/beacon — a pure pyramid scan of the `beacon_base` layers
+    // below it) and, for each level >= 1, apply its NAMED effect to the
+    // player while the player is within `beaconRange` blocks of the
+    // beacon (the duration refreshes every frame, the fire-source pattern
+    // — standing in range keeps it active). Also fills `m_beaconActive`
+    // (the level>=1 beacons) for the beam renderer. A no-op while the
+    // world holds no beacon (structural immunity).
+    void updateBeacons();
     // Phase 72 (the two-component model): set the player's absorption
     // pool to the active effects' total `absorb_hp`. The pool is a pure
     // function of the effects AT EVERY SYNC POINT (a refreshed layer
@@ -375,6 +384,13 @@ private:
     // everything else). No-op without a cooking campfire (a no-input run
     // never renders it — baseline byte-identical).
     void drawCampfireCookItems(const Mat4& view, const Mat4& projection);
+    // Phase 83 beacon beam: the translucent light column rising from every
+    // ACTIVE (level>=1) beacon to the sky, drawn in the blending pass (the
+    // depth test occludes it behind terrain like the other world geometry).
+    // A no-op without an active beacon (baseline byte-identical); gated on
+    // the `beacon.beam` config (the E2E control, the fire.particles
+    // pattern).
+    void drawBeaconBeams(const Mat4& view, const Mat4& projection);
 
     // -- Phase 15 UI / audio / particles ------------------------------------
     // E/F3/F5 handling (F3 + F5 work in any pointer state; E opens the
@@ -475,6 +491,11 @@ private:
     // buildScene — after a save load, whose block edits restore the
     // planted crops (no save-format field: the block id IS the stage).
     void rescanCrops();
+    // Phase 83 beacon: rebuilds the beacon tracking set from the world —
+    // every cell whose block has a non-empty beaconEffect. Runs at the end
+    // of buildScene (like rescanCrops; no save-format field: the block is
+    // a beacon, the level is derived each frame).
+    void rescanBeacons();
     // The pure generator as a World chunk callback — used at world
     // creation AND as the generation reference for save diffs.
     World::ChunkGenerator makeChunkGenerator() const;
@@ -696,6 +717,37 @@ private:
     // rescanCrops() after load. std::map: position-sorted, so the per-
     // frame growth ticks iterate deterministically.
     std::map<BlockPos, BlockID> m_crops;
+
+    // Phase 83 beacon: the cells holding a block with a non-empty
+    // beaconEffect property (a beacon — the growth P48 pattern: maintained
+    // through the setBlock choke point, rebuilt by rescanBeacons() after
+    // load). The power level is NOT stored here — it is re-derived from
+    // the world every frame (world/beacon), so there is no save-format
+    // field. std::map: position-sorted, so the per-frame pass iterates
+    // deterministically.
+    std::map<BlockPos, BlockID> m_beacons;
+    // Phase 83 beacon: this frame's ACTIVE beacons (level >= 1), filled by
+    // updateBeacons() and read by drawBeaconBeams() — the (x, y, z) of the
+    // beacon block plus its power level (the beam is taller at higher
+    // levels, Minecraft).
+    struct BeaconBeam {
+        int x, y, z, level;
+    };
+    std::vector<BeaconBeam> m_beaconActive;
+    // Phase 83 beacon config: the effect range in blocks
+    // (beacon.range_blocks, default 50, >0 — a player within Chebyshev
+    // distance <= range of the beacon cell receives the effect) and the
+    // beam visibility gate (beacon.beam, default true — a no-input run
+    // without beacons is inert either way, the E2E control the fire.
+    // particles pattern).
+    int m_beaconRange = 50;
+    bool m_beaconBeam = true;
+    // Phase 83 beacon: the shared translucent beam column mesh (a thin box
+    // from y=0 to y=1, scaled + positioned per beacon by the model matrix)
+    // and its resolved effect id (init; -1 = no beacon effect, the path is
+    // structurally inert — the m_fireEffectId pattern).
+    Mesh m_beaconBeamMesh;
+    int m_beaconEffectId = -1;
 
     // Phase 15 particles + audio: the break bursts (deterministic seeds:
     // world seed mixed with an increasing per-break counter) and the sound

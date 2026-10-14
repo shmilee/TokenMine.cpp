@@ -1,0 +1,16 @@
+{
+  "id": "iron_block",
+  "type": "shaped",
+  "output": {
+    "item": "iron_block",
+    "count": 1
+  },
+  "pattern": [
+    "III",
+    "III",
+    "III"
+  ],
+  "key": {
+    "I": "iron_ingot"
+  }
+}

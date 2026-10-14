@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -51,6 +52,8 @@ TEST(BlockRegistryTest, MinimalDefUsesDefaults) {
     EXPECT_EQ(b.properties.drops, ""); // empty = drops nothing (explicit)
     EXPECT_EQ(b.model.shape, BlockModel::Shape::FullCube);
     EXPECT_EQ(b.model.textures.top, "t");
+    EXPECT_FALSE(b.properties.beaconBase); // not a beacon base (Phase 83)
+    EXPECT_TRUE(b.properties.beaconEffect.empty()); // not a beacon
 }
 
 TEST(BlockRegistryTest, FullDefinition) {
@@ -1444,4 +1447,117 @@ TEST(BlockRegistryTest, Phase65TorchBlockContent) {
     EXPECT_FALSE(b->properties.flamable);  // a torch is not fuel
     EXPECT_EQ(b->model.shape, BlockModel::Shape::Cross);
     EXPECT_EQ(b->model.textures.cross, "torch");
+}
+
+// ---------------------------------------------------------------------------
+// Phase 83 beacon: the two data-driven properties + the shipped content.
+// ---------------------------------------------------------------------------
+
+// A block def with a single extra property injected into "properties".
+std::string propDef(const std::string& id, const std::string& extra) {
+    return "{\"id\":\"" + id + "\",\"properties\":{" + extra +
+           "},\"model\":{\"textures\":{\"top\":\"t\",\"side\":\"t\","
+           "\"bottom\":\"t\"}}}";
+}
+
+TEST(BlockRegistryTest, BeaconBaseIsStrictlyBoolean) {
+    // The beacon_base flag is a strict boolean (the flamable discipline).
+    EXPECT_TRUE(
+        BlockRegistry{}.registerBlock(parseDef(propDef("iron",
+                                                       "\"beacon_base\":true")))
+            .ok());
+    // A non-boolean (the "yes" typo) is rejected and named.
+    auto bad = BlockRegistry{}.registerBlock(parseDef(
+        propDef("iron", "\"beacon_base\":\"yes\"")));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("beacon_base"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, BeaconBaseFlagIsStored) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(propDef("iron", "\"beacon_base\":true")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(reg.at(*r).properties.beaconBase);
+}
+
+TEST(BlockRegistryTest, BeaconEffectIsAString) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(propDef("beacon", "\"beacon_effect\":\"absorption\"")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).properties.beaconEffect, "absorption");
+}
+
+TEST(BlockRegistryTest, BeaconEffectExplicitEmptyRejected) {
+    // An EXPLICIT empty beacon_effect is a no-op typo (the ammo discipline,
+    // the ignites_to pattern); ABSENT is the "not a beacon" default.
+    auto bad = BlockRegistry{}.registerBlock(
+        parseDef(propDef("beacon", "\"beacon_effect\":\"\"")));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("beacon_effect"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, Phase83BeaconBlockContent) {
+    // The shipped beacon: hardness 8 (Minecraft), drops itself, and names
+    // the "absorption" effect (the project's second absorption source).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* b = reg.findByName("beacon");
+    ASSERT_TRUE(b != nullptr);
+    EXPECT_TRUE(b->properties.solid);
+    EXPECT_TRUE(b->properties.opaque);
+    EXPECT_EQ(b->properties.lightEmission, 0);
+    EXPECT_FLOAT_EQ(b->properties.hardness, 8.0f);
+    EXPECT_EQ(b->properties.drops, "beacon"); // drops itself
+    EXPECT_EQ(b->properties.beaconEffect, "absorption");
+    EXPECT_FALSE(b->properties.beaconBase);
+    EXPECT_EQ(b->model.shape, BlockModel::Shape::FullCube);
+}
+
+TEST(BlockRegistryTest, Phase83IronBlockContent) {
+    // The shipped iron block: the canonical beacon base (beacon_base true),
+    // hardness 5 (Minecraft), drops itself.
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* b = reg.findByName("iron_block");
+    ASSERT_TRUE(b != nullptr);
+    EXPECT_TRUE(b->properties.solid);
+    EXPECT_TRUE(b->properties.opaque);
+    EXPECT_EQ(b->properties.lightEmission, 0);
+    EXPECT_FLOAT_EQ(b->properties.hardness, 5.0f);
+    EXPECT_EQ(b->properties.drops, "iron_block"); // drops itself
+    EXPECT_TRUE(b->properties.beaconBase);
+    EXPECT_EQ(b->model.shape, BlockModel::Shape::FullCube);
+}
+
+TEST(BlockRegistryTest, Phase83IronBlockRecipeContent) {
+    // The shipped iron block recipe: shaped 3x3 iron_ingot -> 1 (the
+    // Minecraft pattern — the beacon base is crafted from the ingot).
+    FILE* fp = std::fopen("assets/data/recipes/iron_block.json", "rb");
+    ASSERT_NE(fp, nullptr) << "run from the repo root";
+    std::string text;
+    char buf[4096];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+        text.append(buf, n);
+    }
+    std::fclose(fp);
+    auto parsed = Json::parse(text);
+    ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+    const Json& def = *parsed;
+    EXPECT_EQ(def.find("output")->find("item")->asString(), "iron_block");
+    EXPECT_EQ(def.find("output")->find("count")->asInt(), 1);
+    const Json& pattern = *def.find("pattern");
+    ASSERT_EQ(pattern.size(), 3u);
+    for (std::size_t i = 0; i < pattern.size(); ++i) {
+        EXPECT_EQ(pattern.at(i).asString(), "III");
+    }
+    EXPECT_EQ(def.find("key")->find("I")->asString(), "iron_ingot");
 }

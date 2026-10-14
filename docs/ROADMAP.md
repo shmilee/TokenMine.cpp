@@ -86,6 +86,7 @@
 - [x] **Phase 80** — 砂岩（内容扩展线，P61 材料链范式纯内容）：**`sandstone` 块**（hardness 1.5、自掉、经典三层纹理【salt 923/924】、atlas 空位 [14,0] 免重锚）+ 配方 shapeless **3 sand → 1**（P61 锻石同款单向材料链）+ **3 镐 fast_against 加 sandstone**（石类家族 = MC 镐对砂岩有效；P69 8 块精确集 → 9 块契约演进，obsidian 排除条款不受影响）；1114/1114（+2：内容钉死 2 + P69 集演进）
 - [x] **Phase 81** — 光滑砂岩（P80 砂岩链的抛光步，MC 1.14+，P61/P80 材料链范式纯内容）：**`smooth_sandstone` 块**（hardness 1.5、自掉、平滑纹理无三层切线【salt 925/926、既有纹理确定性再生零变化】、**atlas 空位 [15,0] 免重锚**）+ 配方 shapeless **2 sandstone → 1**（单向链延伸 sand → sandstone → smooth_sandstone）+ **3 镐 fast_against 加 smooth_sandstone**（石类家族，P69 9 块精确集 → **10 块契约演进**）；**零核心代码**；1116/1116（+2：内容钉死 2 + P69 集演进 + effectiveBreakSpeed 加断言）
 - [x] **Phase 82** — 弓 v5：大师弓（P77/P79 弓强化线的三合一顶点，纯内容零核心代码）：**`master_bow`**（bow 同款数据 + `shoot_damage` 8【力量】+ `shoot_speed` 20【速度】+ `infinite`【无限】三叠加）+ 配方 shapeless **power_bow + speed_bow + infinite_bow → 1**（三把强化弓合成 = MC 附魔台替身，给三弓用途，P61 材料链范式）+ 图标 = 弓 + 三色标记【盐 101-104、既有图标零变化】；不在默认 hotbar；**零 format**（无限/力量/速度字段全既有）；1118/1118（+2：内容钉死 2）
+- [x] **Phase 83** — 信标：吸收第二来源（`beacon_effect` 数据驱动指向吸收效果 + `beacon_base` 金字塔基座 + 半透明光束）：**`beacon` 块**（hardness 8、自掉、青色玻璃纹理、atlas [9,1]）+ **`iron_block`**（hardness 5、自掉、`beacon_base: true`、金属纹理、atlas [8,1]、shaped 3×3 iron_ingot → 1）+ **`world/beacon` 纯函数**（3×3/5×5/7×7/9×9 连续完整基座层 = 等级 1..4，每帧重算无 per-instance 状态）+ **`Game::m_beacons`** setBlock 收口（生长 P48 同款）+ **每帧 pass**（等级 ≥1 且玩家在 `beacon.range_blocks`【Chebyshev，默认 50】内 → 刷新施加信标效果 = 吸收，火源刷新范式）+ **半透明光束**（`basic.frag` 加 `u_alpha` 默认 1.0、薄柱 mesh 透明 pass 关裁剪、`beacon.beam` 可关 = E2E 对照）+ config 2 键 + init 交叉校验（beacon_effect 效果存在 / range >0）；**零 format**；1132/1132（+14：beaconLevel 7 + 属性解析 4 + 内容钉死 3）
 
 ## 细节存档索引（docs/archive/）
 
@@ -168,5 +169,6 @@
 - **Phase 80** — `archive/phase-80.md`
 - **Phase 81** — `archive/phase-81.md`
 - **Phase 82** — `archive/phase-82.md`
+- **Phase 83** — `archive/phase-83.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

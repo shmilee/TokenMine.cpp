@@ -1,0 +1,15 @@
+{
+  "id": "beacon",
+  "properties": {
+    "hardness": 8.0,
+    "drops": "beacon",
+    "beacon_effect": "absorption"
+  },
+  "model": {
+    "textures": {
+      "top": "beacon",
+      "side": "beacon",
+      "bottom": "beacon"
+    }
+  }
+}

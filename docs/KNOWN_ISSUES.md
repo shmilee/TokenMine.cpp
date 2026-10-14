@@ -444,9 +444,25 @@
   场所）、无合成配方（MC 获取方式 = 水浇熔岩，本项目同款反应）。
   `[Phase 51]`
 
+## 信标（Phase 83）
+
+- **信标效果 = 仅吸收** — 数据驱动 `beacon_effect`（shipped = `absorption`，
+  项目第二吸收来源，金苹果 P49 之外）；其它 MC 信标效果（速度/力量/抗性/急
+  速）= 无。`[Phase 83]`
+- **信标基座 = 仅 iron_block** — `beacon_base` 布尔属性（shipped 只 iron_block
+  带）；MC 的 gold/diamond/netherite 块基座 = 无（项目无这些金属块）。金字塔
+  等级 = 3×3/5×5/7×7/9×9 连续完整层（`world/beacon` 纯函数）。`[Phase 83]`
+- **光束不入光照** — 信标光束是半透明渲染柱（`beacon.beam` 可关），**不提供
+  方块光**（MC 光束照亮周围）；信标块本身 `light_emission 0`。`[Phase 83]`
+- **信标范围 = Chebyshev 立方** — 玩家脚到信标格的切比雪夫距离 ≤
+  `beacon.range_blocks`（默认 50）即生效（MC 是球状范围；立方是项目简化，
+  文档化偏离）。`[Phase 83]`
+
 ## 数据 / 内容
 
 - **方块无 per-instance 状态** — BlockState 概念未引入（朝向、附属、流体等级等需要时再设计）。`[Phase 2]`
+  例外：信标（Phase 83）的**功率等级**不入状态——它是 `world/beacon` 纯函数
+  每帧从基座重算（生长 P48 的"块 id 即状态"同款：无 per-instance 存档字段）。
 ## 已修复（归档）→ 细节存档
 
 各阶段的修复条目已移入 `docs/archive/phase-NN.md`（「阶段报告」= 原归档条目；
