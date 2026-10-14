@@ -1,0 +1,14 @@
+{
+  "id": "wooden_shovel",
+  "type": "shaped",
+  "output": { "item": "wooden_shovel", "count": 1 },
+  "pattern": [
+    "M",
+    "S",
+    "S"
+  ],
+  "key": {
+    "M": "planks",
+    "S": "stick"
+  }
+}

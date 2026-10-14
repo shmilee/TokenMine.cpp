@@ -814,3 +814,37 @@ TEST(RecipeRegistryTest, Phase67AxeRecipeContent) {
         EXPECT_EQ(f.items.at(rec->key.at(stickCh)).name, "stick") << id;
     }
 }
+
+// Phase 68: the shovel recipes — the Minecraft single column (one head
+// material on top + two sticks below): wood from planks, stone from
+// cobblestone, iron from iron ingots. One output each.
+TEST(RecipeRegistryTest, Phase68ShovelRecipeContent) {
+    RealAssets f;
+    ASSERT_TRUE(f);
+    const std::vector<std::tuple<std::string, std::string, std::string>>
+        want = {
+            {"wooden_shovel", "wooden_shovel", "planks"},
+            {"stone_shovel", "stone_shovel", "cobblestone"},
+            {"iron_shovel", "iron_shovel", "iron_ingot"},
+        };
+    for (const auto& [id, outName, headName] : want) {
+        const Recipe* rec = f.recipes.find(id);
+        ASSERT_NE(rec, nullptr) << id;
+        EXPECT_EQ(rec->type, RecipeType::Shaped) << id;
+        EXPECT_EQ(rec->output, f.items.idForName(outName)) << id;
+        EXPECT_EQ(rec->outputCount, 1) << id;
+        // The single column: row 0 = the head material, rows 1..2 = the
+        // two sticks (the first column is the whole recipe).
+        ASSERT_EQ(rec->pattern.size(), 3u) << id;
+        ASSERT_EQ(rec->pattern[0].size(), 1u) << id;
+        ASSERT_EQ(rec->pattern[1].size(), 1u) << id;
+        ASSERT_EQ(rec->pattern[2].size(), 1u) << id;
+        EXPECT_EQ(rec->pattern[1][0], rec->pattern[2][0]) << id;
+        EXPECT_NE(rec->pattern[0][0], rec->pattern[1][0]) << id;
+        ASSERT_EQ(rec->key.size(), 2u) << id;
+        const char headCh = rec->pattern[0][0];
+        const char stickCh = rec->pattern[1][0];
+        EXPECT_EQ(f.items.at(rec->key.at(headCh)).name, headName) << id;
+        EXPECT_EQ(f.items.at(rec->key.at(stickCh)).name, "stick") << id;
+    }
+}

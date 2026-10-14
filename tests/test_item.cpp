@@ -1328,3 +1328,38 @@ TEST(ItemRegistryTest, Phase67AxeItemContent) {
         EXPECT_EQ(it->icon, name) << name;
     }
 }
+
+// Phase 68: the shovel content — the second fast_against category (the
+// dirt family: dirt/grass/sand/gravel x2 = the Minecraft shovel's
+// effective set, the project's subset — no clay/sandstone/snow here).
+// Same shape as the axes: break_speed 1.0 (the bare-hand pace — the
+// Minecraft shovel is 1x vs stone), attack 2.5/3/3.5 = the Minecraft
+// values exactly (the Minecraft delta of +0.5 over the matching
+// pickaxe tier, kept by the project's compressed pickaxe scale).
+TEST(ItemRegistryTest, Phase68ShovelItemContent) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry blocks;
+    ASSERT_TRUE(blocks.loadDirectory(assets, "data/blocks").ok());
+    ItemRegistry items;
+    ASSERT_TRUE(items.buildBlockItems(blocks).ok());
+    ASSERT_TRUE(items.loadDirectory(assets, "data/items").ok());
+    const std::vector<std::pair<std::string, float>> want = {
+        {"wooden_shovel", 2.5f}, {"stone_shovel", 3.0f},
+        {"iron_shovel", 3.5f}};
+    for (const auto& [name, atk] : want) {
+        const Item* it = items.findByName(name);
+        ASSERT_NE(it, nullptr) << name;
+        EXPECT_EQ(it->type, ItemType::Tool) << name;
+        EXPECT_EQ(it->maxStack, 1) << name;
+        EXPECT_FLOAT_EQ(it->breakSpeed, 1.0f) << name; // MC: the shovel = 1x vs stone
+        EXPECT_EQ(
+            it->fastAgainst,
+            (std::vector<std::string>{
+                "dirt", "grass", "sand", "gravel"})) << name;
+        EXPECT_FLOAT_EQ(it->fastAgainstMultiplier, 2.0f) << name; // MC: 2x vs dirt
+        EXPECT_FLOAT_EQ(it->attackDamage, atk) << name;
+        EXPECT_EQ(it->icon, name) << name;
+    }
+}

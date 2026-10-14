@@ -59,7 +59,7 @@
 
 ## 物品 / 背包（Phase 11）
 
-- **工具无完整分块类型效率** — 工具效率 = flat `break_speed` + Phase 67 起的**物品侧 `fast_against` 块名列表 × 倍率**（首个分块类别 = 斧对 wood/leaves 2×，物品数据驱动、init 逐条目交叉校验）。仍缺：MC 的镐/铲分类（石类对镐、土类对铲——本项目连铲都没有）与"无效率工具慢 10×"规则；方块侧无类别字段（分类知识在物品侧的块名列表里）。`[Phase 11]` → `[Phase 67]`
+- **工具无完整分块类型效率** — 工具效率 = flat `break_speed` + Phase 67 起的**物品侧 `fast_against` 块名列表 × 倍率**（首个分块类别 = 斧对 wood/leaves 2×，Phase 68 = 铲对 dirt/grass/sand/gravel 2×【项目土类全集——无 clay/sandstone/snow】，物品数据驱动、init 逐条目交叉校验）。仍缺：镐分类（本项目镐 = flat 乘数，MC 镐对石类/矿类 2×）与"无效率工具慢 10×"规则；方块侧无类别字段（分类知识在物品侧的块名列表里）。`[Phase 11]` → `[Phase 67]` → `[Phase 68]`
 - **非 block 物品的掉落物在 world 中不可见** — 工具/材料的**掉落物**（Q 丢出或挖出）没有 in-world 实体表示（`drawItemEntities` 跳过非 block 物品——物理/拾取/合并/消亡照常工作）；UI 侧（背包/hotbar/手持/合成产物）Phase 15 起已有图标（`Item.icon` 32×32 纹理，Phase 35）。`[Phase 11]`（UI 部分 `[Phase 15]` 已解决）
 - **拾取是固定 1.0 格半径，无磁力** — 玩家底心距掉落物底心 <1.0 且过 0.5s 拾取延迟即整堆入包；Minecraft 会随时间逐渐把物品拉向玩家。`[Phase 11]`
 - **放置消耗库存（行为变化，非缺陷）** — Phase 11 起方块不再是无限的：初始 hotbar 每格满堆栈（block 64/工具 1，`hotbar.json` 定义），放置消耗 1 个；hotbar 与背包都空时右键无效。`[Phase 11]`

@@ -555,8 +555,10 @@
     基岩不可破坏）。**有效速度 = `effectiveBreakSpeed(item, block)`
     纯函数**（Phase 67）：tool = 其 `tool.break_speed` ×（目标块在物品
     的 `fast_against` 块名列表内 ? `fast_against_multiplier` : 1）——
-    首个分块工具类别 = 三把斧对 wood/leaves ×2（MC 斧对木 2×，对其它
-    块 = 基础手速 1×）；`fast_against` 与 `fast_against_multiplier` 是
+    分块工具类别 = 三把斧对 wood/leaves ×2（MC 斧对木 2×）+ Phase 68
+    三把铲对 dirt/grass/sand/gravel ×2（MC 铲对土 2×，项目土类全集）；
+    两者对清单外块 = 基础手速 1×（MC 斧/铲对石 1×）；
+    `fast_against` 与 `fast_against_multiplier` 是
     严格配对字段（缺一/空列表/非 tool 均解析拒绝，init 逐条目交叉
     校验块名存在 = grows_on 同款）。准星移开/松键/换工具
     进度清零。raycast 把水体当 air 穿过——可以隔水破坏湖底/水下的方块

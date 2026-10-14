@@ -448,6 +448,36 @@ def stone_axe():
     return axe((140, 140, 146), (178, 178, 184), salt=61)
 
 
+def shovel(blade_color, blade_bevel, salt):
+    """A shovel (Phase 68): a wide flat scoop blade across the top (the
+    brighter bevel on its outer columns = the scoop rim, the bottom row
+    cut short at the corners = the rounded blade) + a 4px vertical handle
+    from the blade's middle to the bottom (the Minecraft silhouette)."""
+    px = blank()
+    for y in range(4, 15):
+        for x in range(7, 25):
+            if y == 14 and (x < 10 or x > 21):
+                continue
+            if x in (7, 24):
+                setpx(px, x, y, blade_bevel, salt=salt)
+            else:
+                setpx(px, x, y, blade_color, salt=salt + 1)
+    line(px, 16, 14, 16, 28, (146, 110, 62), salt=salt + 2, width=4)
+    return px
+
+
+def wooden_shovel():
+    return shovel((150, 114, 66), (190, 152, 96), salt=63)
+
+
+def stone_shovel():
+    return shovel((140, 140, 146), (178, 178, 184), salt=65)
+
+
+def iron_shovel():
+    return shovel((206, 206, 212), (238, 238, 244), salt=67)
+
+
 def leather():
     """A piece of leather hide: a tan irregular slab with a darker rim and
     a few crease lines."""
@@ -809,6 +839,9 @@ ITEMS = {
     "wooden_axe": wooden_axe,
     "stone_axe": stone_axe,
     "iron_axe": iron_axe,
+    "wooden_shovel": wooden_shovel,
+    "stone_shovel": stone_shovel,
+    "iron_shovel": iron_shovel,
     "bow": bow,
     "arrow": arrow,
     "leather": leather,

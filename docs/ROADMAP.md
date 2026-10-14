@@ -266,7 +266,32 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
     block+fluid / L1 膜 = 稳定地面流体场景 / 物品 rest 位置确定性
     （零初速 + 位置式分离）/ pgrep 前缀误匹配 minecraft_tests / 裸
     截图无窗口稳定化 = 错尺寸假失败）。
-  - [x] **Phase 67** — 斧类工具（用户"下两个阶段是 建议1 和 建议3" =
+  - [x] **Phase 68** — 铲类工具（用户"好的,下一阶段完成建议1" = 建议 1，
+    代理定案最小完整版 = **铲 = 土类分块效率**，消费 P67 铺好的
+    `fast_against` 机制 + 部分消费 P11"工具无分块类型效率"的铲分类
+    遗留；**零核心代码** = 纯内容，P62 石镐同款路径）：内容
+    **wooden/stone/iron_shovel**（`fast_against` [dirt, grass, sand,
+    gravel] **×2.0** = MC 铲对土 2×【**项目土类全集**——本项目无
+    clay/sandstone/snow】、break_speed 缺省 **1.0 = 手速**【MC 铲对石
+    1×】、attack_damage **2.5/3/3.5 = MC 精确值**【同档 = 镐 +0.5 = MC
+    增量同款】、max_stack 1）+ **3 配方**（shaped 竖列 **M/S/S** = MC
+    铲：木 = planks / 石 = cobblestone【P61 第三个工具用途】/ 铁 =
+    iron_ingot，各 +2 stick；单列 pattern = 解析器 1..3 字符行合法）+
+    **3 图标**（generate_item_icons.py 加 `shovel()`；图标 = 每物品独立
+    PNG，**无共享 atlas = 无重锚**）。**无 format 变更**（format 10，
+    纯物品/配方内容）、**无核心代码变更**（机制 = P67）。1061/1061
+    （+2：物品钉死 1 / 配方钉死 1——解析/纯函数 P67 已覆盖）、
+    `-Werror` 0 警告、base18 **第 41 次结构性免疫**【铲不在默认背包 +
+    配方只在 UI = 零世界状态；block atlas 未动】；E2E 全绿（S2 铁铲破
+    dirt【dirt@(22,46,-5) P52 几何 + slot0 铁铲 + 左键 hold 1.6 s：
+    有效速度 1.0×2.0 = 2.0 → 1.5×0.5/2.0 = **0.375 s << hold** 破
+    【real-dt 计时 fps 无关】；破后余量 1.2 s 射线越过 reach 5 = 无
+    PITS-7 续破；掉 dirt×1 停 P59/P61/P67 证明落点 (22.5,45,-4.5)，
+    420f ×2 savenorm】/ S2b 石对照【2.25 s > hold **不破** = 倍率不越
+    清单，存档+截图 **×2 RAW 字节**】/ S6 init 失败 ×2【未知块点名 /
+    材料带 fast_against 点名】；批 1 失败 = E2E 脚本漏建 helpers 文件
+    【非项目缺陷，修复后整批重跑】）。
+- [x] **Phase 67** — 斧类工具（用户"下两个阶段是 建议1 和 建议3" =
     建议 3，代理定案最小完整版 = **斧 = 数据驱动分块效率工具型**，
     全量消费 P62 遗留"无斧类工具" + 部分消费 P11"工具无分块类型
     效率"）：**物品可选字段 `fast_against`（非空块名数组）+
@@ -665,6 +690,7 @@ A (22,46,−3) 耕地+水 (24,45,−3) → **wheat_7**（湿 + 光 15，快长�
 - **Phase 56** — `archive/phase-56.md`
 - **Phase 57** — `archive/phase-57.md`
 - **Phase 58** — `archive/phase-58.md`
+- **Phase 68** — `archive/phase-68.md`
 - **Phase 67** — `archive/phase-67.md`
 - **Phase 66** — `archive/phase-66.md`
 - **Phase 65** — `archive/phase-65.md`

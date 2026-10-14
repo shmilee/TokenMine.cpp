@@ -1,0 +1,14 @@
+{
+  "id": "iron_shovel",
+  "type": "shaped",
+  "output": { "item": "iron_shovel", "count": 1 },
+  "pattern": [
+    "M",
+    "S",
+    "S"
+  ],
+  "key": {
+    "M": "iron_ingot",
+    "S": "stick"
+  }
+}

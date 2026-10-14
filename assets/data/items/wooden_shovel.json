@@ -1,0 +1,9 @@
+{
+  "id": "wooden_shovel",
+  "type": "tool",
+  "fast_against": ["dirt", "grass", "sand", "gravel"],
+  "fast_against_multiplier": 2.0,
+  "attack_damage": 2.5,
+  "max_stack": 1,
+  "icon": "wooden_shovel"
+}
