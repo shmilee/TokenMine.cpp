@@ -82,6 +82,7 @@
 - [x] **Phase 76** — 营火 v3：再点燃（全量消费 P75 遗留"水浇灭后无再点燃"偏离）：**新块属性 `ignites_to`**（严格字符串、显式空串拒绝【ammo 纪律】、init 存在性交叉校验【grows_to 纪律】）+ 内容 `campfire_extinguished.ignites_to = "campfire"`——燧石与钢右键未点燃营火 = **原位再点燃**（光 0→15 局部重光照、"ignite" 音、物品不消耗 = P60 语义、烤制状态保留续烤）；交互在**营火分支内**处理（该分支先于通用点火器分支消费点击——首轮 E2E 点击被截获暴露）；通用点火器分支的 `ignites_to` 路径对非营火家族块同样生效（数据驱动统一语义）；**零 format、零新物品/纹理/配方**；1104/1104（+3：属性解析 2 + 内容钉死改写 1）
 - [x] **Phase 77** — 弓 v3：无限弓（全量消费 P42 遗留"无箭矢强化"的 Infinity 部分）：**物品字段 `infinite`**（严格 bool、缺省 false、**要求 `ammo` 非空**——无 ammo 的发射器本就无限，flag = no-op 拒绝【ammo 纪律】）+ **内容 `infinite_bow`**（bow 同款数据 + `infinite: true`、shapeless 配方 bow + diamond → 1【Infinity 附魔的可合成替身】、图标 = 弓 + 蓝色钻石微光【新 salt 91/92、既有图标零变化】）；**发射语义**（`fireBow`）：`infinite` 发射器仍须持有**至少 1 个** ammo 才能射（1 支箭永不耗尽 = MC Infinity 规则）、命中发射**不消耗**；普通弓路径不变；**零 format**（箭不入存档 = 既有，物品入档走既有 slots）；1109/1109（+5：解析 3 + 内容钉死 2）
 - [x] **Phase 78** — 营火 v4：四槽图标全渲染（全量消费 P75 遗留"只渲染第一个非空槽图标"偏离）：**每个非空槽** 0.35 图标、0.3 间距 **1×4 横排**悬浮格上半部（槽 i 中心 = 格中心 + (i−1.5)×0.3；P71 的 0.5 单图标 4 槽排不下 = 缩小为行布局，MC 展示全部烤位）；纯渲染层——无状态/存档/交互变更，无输入基线免疫保持（无营火 = 零绘制）；1109/1109（0 新——渲染由 E2E 钉死）
+- [x] **Phase 79** — 弓 v4：力量弓 + 速度弓（全量消费 P42 遗留"无箭矢强化"的力量/速度部分）：**纯内容零核心代码**（`shoot_speed`/`shoot_damage` 本就是数据驱动参数——新弓 = 不同数据的新物品，`infinite` 字段范式 P77）：**`power_bow`**（`shoot_damage` 8 = 弓的 5 +3，shapeless bow + 2 diamond → 1，图标 = 弓 + 橙红迸裂【salt 97/98】）+ **`speed_bow`**（`shoot_speed` 20 = 弓的 15 +5，shapeless bow + gold_ingot → 1，图标 = 弓 + 青色速度线【salt 99/100】）；不在默认 hotbar；**无组合弓/附魔等级**（项目无附魔系统，文档化偏离）；1112/1112（+3：内容钉死 3）
 
 ## 细节存档索引（docs/archive/）
 
@@ -160,5 +161,6 @@
 - **Phase 76** — `archive/phase-76.md`
 - **Phase 77** — `archive/phase-77.md`
 - **Phase 78** — `archive/phase-78.md`
+- **Phase 79** — `archive/phase-79.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

@@ -638,6 +638,34 @@ def infinite_bow():
     return px
 
 
+def power_bow():
+    """Phase 79: the Power bow (Minecraft's Power enchantment, the
+    data-driven twin — shoot_damage 8 vs the bow's 5). The bow
+    unchanged, with an ORANGE-RED burst at the bow's heart (the damage
+    mark) — new salts 97/98, every existing icon pixel-identical."""
+    px = bow()
+    spark = (232, 92, 40)
+    spark_dark = (168, 52, 20)
+    for (x, y) in ((15, 14), (16, 13), (16, 14), (17, 14), (14, 15)):
+        setpx2(px, x, y, spark, salt=97)
+    setpx2(px, 17, 15, spark_dark, salt=98)
+    return px
+
+
+def speed_bow():
+    """Phase 79: the Speed bow (the arrow-velocity twin — shoot_speed
+    20 vs the bow's 15). The bow unchanged, with a CYAN horizontal
+    speed line trailing the centre of the string (the velocity mark) —
+    new salts 99/100, every existing icon pixel-identical."""
+    px = bow()
+    line = (96, 198, 234)
+    line_dark = (52, 140, 190)
+    for x in range(8, 15):
+        setpx2(px, x, 15, line, salt=99)
+    setpx2(px, 15, 15, line_dark, salt=100)
+    return px
+
+
 def arrow():
     """An arrow: a 4px diagonal shaft from the bottom-left to the
     top-right, a steel tip at the top end and light fletching at the
@@ -860,6 +888,8 @@ ITEMS = {
     "iron_shovel": iron_shovel,
     "bow": bow,
     "infinite_bow": infinite_bow,
+    "power_bow": power_bow,
+    "speed_bow": speed_bow,
     "arrow": arrow,
     "leather": leather,
     **{name: make_dye_icon(name) for name in DYE_PALETTE},

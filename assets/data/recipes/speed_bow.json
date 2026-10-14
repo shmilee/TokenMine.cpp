@@ -1,0 +1,8 @@
+{
+  "id": "speed_bow",
+  "output": { "item": "speed_bow", "count": 1 },
+  "ingredients": [
+    { "item": "bow", "count": 1 },
+    { "item": "gold_ingot", "count": 1 }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "id": "power_bow",
+  "type": "material",
+  "max_stack": 1,
+  "icon": "power_bow",
+  "shoot_speed": 15.0,
+  "shoot_damage": 8.0,
+  "attack_damage": 1.0,
+  "ammo": "arrow"
+}

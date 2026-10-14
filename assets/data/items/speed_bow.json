@@ -1,0 +1,10 @@
+{
+  "id": "speed_bow",
+  "type": "material",
+  "max_stack": 1,
+  "icon": "speed_bow",
+  "shoot_speed": 20.0,
+  "shoot_damage": 5.0,
+  "attack_damage": 1.0,
+  "ammo": "arrow"
+}

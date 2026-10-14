@@ -1,0 +1,8 @@
+{
+  "id": "power_bow",
+  "output": { "item": "power_bow", "count": 1 },
+  "ingredients": [
+    { "item": "bow", "count": 1 },
+    { "item": "diamond", "count": 2 }
+  ]
+}

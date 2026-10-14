@@ -154,7 +154,11 @@
     `max_stack 1`，图标 `bow.png`，`ammo: arrow`，`attack_damage: 1`）+
     **`infinite_bow`**（Phase 77：同款数据 + `infinite: true`；shapeless
     配方 bow + diamond → 1——Infinity 附魔的可合成替身，diamond = 项目
-    顶级材料；图标 = 弓 + 蓝色钻石微光）；
+    顶级材料；图标 = 弓 + 蓝色钻石微光）+ **`power_bow` / `speed_bow`**
+    （Phase 79：弓强化线的数据驱动双生——bow 同款数据 + `shoot_damage`
+    8 / `shoot_speed` 20；shapeless bow + 2 diamond / bow + gold_ingot →
+    1；力量 = 箭伤害 +3、速度 = 箭初速 +5【弹道更远，E2E 像素判别钉
+    死】；无组合弓，见 KNOWN_ISSUES）；
     **箭 = material 物品 `arrow`**（`max_stack 64`，图标 `arrow.png`）+
     shapeless 配方 **flint + stick + feather → 4 arrow**（`data/recipes/
     arrow.json`，Phase 60，MC 1.14+；**替换** P24 的 2 stick 竖排 → 2 =

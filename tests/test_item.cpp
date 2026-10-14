@@ -552,6 +552,106 @@ TEST(ItemRegistryTest, InfiniteBowContentPinned) {
     EXPECT_EQ(b.icon, "infinite_bow");
 }
 
+// -- Phase 79: the Power / Speed bows (the bow enhancement line) --------
+
+TEST(ItemRegistryTest, PowerBowContentPinned) {
+    // The real asset: the Power bow (Minecraft's Power enchantment, the
+    // data-driven twin — the same launcher data with a HIGHER
+    // shoot_damage; no new field: shoot_speed/shoot_damage already are
+    // the data-driven parameters).
+    ItemRegistry items;
+    FILE* fp = std::fopen("assets/data/items/power_bow.json", "rb");
+    ASSERT_NE(fp, nullptr) << "run from the repo root";
+    std::string text;
+    char buf[4096];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+        text.append(buf, n);
+    }
+    std::fclose(fp);
+    auto parsed = Json::parse(text);
+    ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+    auto reg = items.registerItem(*parsed);
+    ASSERT_TRUE(reg.ok()) << reg.error().message;
+    const Item& b = items.at(*reg);
+    EXPECT_EQ(b.name, "power_bow");
+    EXPECT_EQ(b.maxStack, 1);
+    EXPECT_FLOAT_EQ(b.shootSpeed, 15.0f); // the bow's speed unchanged
+    EXPECT_FLOAT_EQ(b.shootDamage, 8.0f); // +3 over the bow's 5 (Power III)
+    EXPECT_EQ(b.attackDamage, 1.0f);
+    EXPECT_EQ(b.ammo, "arrow");
+    EXPECT_FALSE(b.infinite);
+    EXPECT_EQ(b.icon, "power_bow");
+}
+
+TEST(ItemRegistryTest, SpeedBowContentPinned) {
+    // The real asset: the Speed bow (the arrow-velocity twin — the same
+    // launcher data with a HIGHER shoot_speed).
+    ItemRegistry items;
+    FILE* fp = std::fopen("assets/data/items/speed_bow.json", "rb");
+    ASSERT_NE(fp, nullptr) << "run from the repo root";
+    std::string text;
+    char buf[4096];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+        text.append(buf, n);
+    }
+    std::fclose(fp);
+    auto parsed = Json::parse(text);
+    ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+    auto reg = items.registerItem(*parsed);
+    ASSERT_TRUE(reg.ok()) << reg.error().message;
+    const Item& b = items.at(*reg);
+    EXPECT_EQ(b.name, "speed_bow");
+    EXPECT_EQ(b.maxStack, 1);
+    EXPECT_FLOAT_EQ(b.shootSpeed, 20.0f); // +5 over the bow's 15
+    EXPECT_FLOAT_EQ(b.shootDamage, 5.0f); // the bow's damage unchanged
+    EXPECT_EQ(b.attackDamage, 1.0f);
+    EXPECT_EQ(b.ammo, "arrow");
+    EXPECT_FALSE(b.infinite);
+    EXPECT_EQ(b.icon, "speed_bow");
+}
+
+TEST(ItemRegistryTest, BowEnhancementRecipesPinned) {
+    // The shipped recipes: power = bow + 2 diamond (the top material,
+    // like the Infinity bow), speed = bow + gold ingot (shapeless, the
+    // flint_and_steel pattern).
+    const struct {
+        const char* path;
+        const char* ingredient0;
+        int count0;
+        const char* ingredient1;
+        int count1;
+    } cases[] = {
+        {"assets/data/recipes/power_bow.json", "bow", 1, "diamond", 2},
+        {"assets/data/recipes/speed_bow.json", "bow", 1, "gold_ingot", 1},
+    };
+    for (const auto& c : cases) {
+        SCOPED_TRACE(c.path);
+        FILE* fp = std::fopen(c.path, "rb");
+        ASSERT_NE(fp, nullptr) << "run from the repo root";
+        std::string text;
+        char buf[4096];
+        std::size_t n;
+        while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+            text.append(buf, n);
+        }
+        std::fclose(fp);
+        auto parsed = Json::parse(text);
+        ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+        const Json& def = *parsed;
+        EXPECT_EQ(def.find("output")->find("item")->asString(),
+                  std::string(c.path).substr(std::string(c.path).find_last_of('/') + 1, std::string(c.path).find_last_of('.') - std::string(c.path).find_last_of('/') - 1));
+        EXPECT_EQ(def.find("output")->find("count")->asInt(), 1);
+        const Json& ing = *def.find("ingredients");
+        ASSERT_EQ(ing.size(), 2u);
+        EXPECT_EQ(ing.at(0).find("item")->asString(), c.ingredient0);
+        EXPECT_EQ(ing.at(0).find("count")->asInt(), c.count0);
+        EXPECT_EQ(ing.at(1).find("item")->asString(), c.ingredient1);
+        EXPECT_EQ(ing.at(1).find("count")->asInt(), c.count1);
+    }
+}
+
 TEST(ItemRegistryTest, InfiniteBowRecipePinned) {
     // The shipped recipe: shapeless bow + diamond -> 1 (the enchantment's
     // craftable stand-in; diamond = the project's top material).
