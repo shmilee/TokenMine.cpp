@@ -526,13 +526,21 @@
     本效果；**至多一个**注册效果可带此标志，init 交叉校验）+
     `extinguished_by_water`（Phase 57：bool，缺省 false——玩家在水内时
     瞬时移除本效果）+ `icon`（effects.png 条带 tile 索引，init 对纹理
-    宽度交叉校验）。当前 5 种：
+    宽度交叉校验）+ Phase 84 三个修饰字段：`speed_multiplier`（移动速度倍
+    数，(1,3]，乘算）、`melee_bonus`（近战伤害加成，[0,100]，加算，
+    melee_penalty 的相反项）、`damage_reduction`（受伤减免，[0,1)，取最高
+    单值）。当前 8 种：
     `poison`（damage 1 / 2.5 s，min_health 1，负面，icon 0）、
     `weakness`（melee_penalty 4，负面，icon 1）、`regeneration`
     （heal 1 / 4.5 s，正面，icon 2）、`absorption`（absorb_hp 4，正面，
     icon 3）、`fire`（damage 1 / 0.2 s，min_health 0 可致死，**正面**
     【`negative: false` = 牛奶不灭火，MC 语义】，两数据标志皆 true，
-    icon 4）
+    icon 4）、`speed`（speed_multiplier 1.2 = MC 速度 I，icon 5）、
+    `strength`（melee_bonus 2，icon 6）、`resistance`（damage_reduction
+    0.2 = MC 抗性 I，icon 7）——后三者 = Phase 84 信标效果（数据驱动，信标
+    机制通用 = `beacon_effect` 指向即可），`resistance` 减免在
+    `Player::damage` 内（吸收池之前）、`speed` 在移动内、`strength` 在
+    `selectedAttackDamage` 内
   - **来源（v1）**：① **mob `on_hit_effect`**（`{"name", "duration"}`，
     成对必填严格解析，init 对 EffectRegistry 交叉校验 = ammo/挤奶
     模式）——该 mob 的**近战命中落定**时施加（远程箭**不**施加）；

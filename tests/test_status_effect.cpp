@@ -8,6 +8,7 @@
 // lives in test_save.cpp; the mob on_hit_effect parse in test_mob.cpp.
 #include <gtest/gtest.h>
 
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -401,4 +402,95 @@ TEST(StatusEffects, TotalMeleePenalty) {
     // Poison/regeneration contribute 0.
     se.apply(reg.idForName("poison"), 15.0);
     EXPECT_FLOAT_EQ(se.totalMeleePenalty(reg), 4.0f);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 84: the beacon's other primary effects (speed / strength /
+// resistance) — the modifier fields on the effect data.
+// ---------------------------------------------------------------------------
+
+TEST(StatusEffectParse, Phase84ModifierFields) {
+    Effect e;
+    // speed_multiplier in (1.0, 3.0]; melee_bonus in [0, 100];
+    // damage_reduction in [0.0, 1.0).
+    ASSERT_TRUE(EffectRegistry::parseEffect(
+        parseJson(R"({"id":"s","speed_multiplier":1.2,"icon":0})"), e).ok());
+    EXPECT_FLOAT_EQ(e.speedMultiplier, 1.2f);
+    ASSERT_TRUE(EffectRegistry::parseEffect(
+        parseJson(R"({"id":"s","melee_bonus":2.0,"icon":0})"), e).ok());
+    EXPECT_FLOAT_EQ(e.meleeBonus, 2.0f);
+    ASSERT_TRUE(EffectRegistry::parseEffect(
+        parseJson(R"({"id":"s","damage_reduction":0.2,"icon":0})"), e).ok());
+    EXPECT_FLOAT_EQ(e.damageReduction, 0.2f);
+    // Out-of-range values are rejected and named.
+    EXPECT_FALSE(EffectRegistry::parseEffect(
+        parseJson(R"({"id":"s","speed_multiplier":1.0,"icon":0})"), e).ok());
+    EXPECT_FALSE(EffectRegistry::parseEffect(
+        parseJson(R"({"id":"s","speed_multiplier":3.5,"icon":0})"), e).ok());
+    EXPECT_FALSE(EffectRegistry::parseEffect(
+        parseJson(R"({"id":"s","melee_bonus":-1.0,"icon":0})"), e).ok());
+    EXPECT_FALSE(EffectRegistry::parseEffect(
+        parseJson(R"({"id":"s","damage_reduction":1.0,"icon":0})"), e).ok());
+    EXPECT_FALSE(EffectRegistry::parseEffect(
+        parseJson(R"({"id":"s","damage_reduction":-0.1,"icon":0})"), e).ok());
+}
+
+TEST(StatusEffectParse, Phase84NoOpRule) {
+    // A speed-only effect (no tick/penalty/absorption) is valid (it does
+    // something: the speed multiplier).
+    Effect e;
+    EXPECT_TRUE(EffectRegistry::parseEffect(
+        parseJson(R"({"id":"s","speed_multiplier":1.5,"icon":0})"), e).ok());
+    // But a field at its no-effect value is still a no-op (speed 1.0 = no
+    // change; the old rule still fires).
+    EXPECT_FALSE(EffectRegistry::parseEffect(
+        parseJson(R"({"id":"s","speed_multiplier":1.0,"icon":0})"), e).ok());
+}
+
+TEST(StatusEffects, Phase84Totals) {
+    EffectRegistry reg;
+    const struct {
+        const char* def;
+    } defs[] = {
+        {R"({"id":"spd","speed_multiplier":1.2,"icon":0})"},
+        {R"({"id":"str","melee_bonus":2.0,"icon":1})"},
+        {R"({"id":"res","damage_reduction":0.2,"icon":2})"},
+    };
+    for (const auto& d : defs) {
+        ASSERT_TRUE(reg.registerEffect(parseJson(d.def)).ok()) << d.def;
+    }
+    StatusEffects se;
+    // Identity / zero when no such effect is active.
+    EXPECT_FLOAT_EQ(se.totalSpeedMultiplier(reg), 1.0f);
+    EXPECT_FLOAT_EQ(se.totalMeleeBonus(reg), 0.0f);
+    EXPECT_FLOAT_EQ(se.totalDamageReduction(reg), 0.0f);
+    // speed multiplies (product), strength adds (sum), resistance is the
+    // highest (max).
+    se.apply(reg.idForName("spd"), 15.0);
+    EXPECT_FLOAT_EQ(se.totalSpeedMultiplier(reg), 1.2f);
+    se.apply(reg.idForName("str"), 15.0);
+    EXPECT_FLOAT_EQ(se.totalMeleeBonus(reg), 2.0f);
+    se.apply(reg.idForName("res"), 15.0);
+    EXPECT_FLOAT_EQ(se.totalDamageReduction(reg), 0.2f);
+}
+
+TEST(StatusEffectContent, Phase83BeaconEffectsPinned) {
+    // The shipped beacon effects (data/effects/*.json): the exact values
+    // are the contract (speed 1.2 = MC speed I, strength +2 melee,
+    // resistance 0.2 = MC resistance I).
+    FILE* fp = std::fopen("assets/data/effects/speed.json", "rb");
+    ASSERT_NE(fp, nullptr) << "run from the repo root";
+    std::string text;
+    char buf[4096];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+        text.append(buf, n);
+    }
+    std::fclose(fp);
+    Effect e;
+    ASSERT_TRUE(EffectRegistry::parseEffect(parseJson(text), e).ok());
+    EXPECT_EQ(e.name, "speed");
+    EXPECT_FLOAT_EQ(e.speedMultiplier, 1.2f);
+    EXPECT_FALSE(e.negative);
+    EXPECT_EQ(e.icon, 5);
 }

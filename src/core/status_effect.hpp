@@ -80,6 +80,21 @@ struct Effect {
     // Temporary max-health points while active (the absorption layer,
     // Phase 56). 0 = no layer.
     float absorbHp = 0.0f;
+    // Phase 84 beacon effects: the modifier fields (the Minecraft beacon's
+    // other primary effects, data-driven like melee_penalty/absorb_hp).
+    // Movement speed multiplier while active (the "speed" effect). 1.0 =
+    // no change; > 1.0 = faster (Minecraft speed I ~ 1.2). Combined
+    // multiplicatively over active instances.
+    float speedMultiplier = 1.0f;
+    // Melee attack points ADDED while active (the "strength" effect) — the
+    // bonus counterpart of melee_penalty (weakness). 0 = no bonus. Combined
+    // additively over active instances.
+    float meleeBonus = 0.0f;
+    // Incoming damage fraction reduced while active (the "resistance"
+    // effect): 0 = no reduction, < 1.0 (Minecraft resistance I ~ 0.2).
+    // Combined as the single HIGHEST active reduction (the player has one
+    // effective resistance, not stacked fractions).
+    float damageReduction = 0.0f;
     // Cleared by drinking a milk container (negative effects).
     bool negative = false;
     // (Re-)applied every frame while the player is in the lava (the fire,
@@ -175,6 +190,17 @@ public:
     // The total absorption layer (Phase 56): the sum of `absorb_hp` over
     // the active instances' definitions (0 when none grant a layer).
     float totalAbsorption(const EffectRegistry& effects) const;
+
+    // Phase 84: the total movement speed multiplier (the PRODUCT of
+    // `speed_multiplier` over the active instances; 1.0 when none grant
+    // speed — the multiplicative identity).
+    float totalSpeedMultiplier(const EffectRegistry& effects) const;
+    // Phase 84: the total melee bonus (the SUM of `melee_bonus` over the
+    // active instances; 0 when none grant strength).
+    float totalMeleeBonus(const EffectRegistry& effects) const;
+    // Phase 84: the total damage reduction (the MAX of `damage_reduction`
+    // over the active instances; 0 when none grant resistance).
+    float totalDamageReduction(const EffectRegistry& effects) const;
 
     std::size_t count() const { return m_active.size(); }
     const std::vector<ActiveEffect>& list() const { return m_active; }

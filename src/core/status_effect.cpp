@@ -55,7 +55,12 @@ Result<void> EffectRegistry::parseEffect(const Json& def, Effect& out) {
                                                 "absorb_hp",
                                                 "negative", "icon",
                                                 "ignites_on_lava",
-                                                "extinguished_by_water"};
+                                                "extinguished_by_water",
+                                                // Phase 84: the beacon's
+                                                // other primary effects.
+                                                "speed_multiplier",
+                                                "melee_bonus",
+                                                "damage_reduction"};
     for (const auto& [key, value] : def.members()) {
         if (kFields.count(key) == 0) {
             return MC_FAIL("effect '" + out.name + "' has an unknown field "
@@ -124,6 +129,33 @@ Result<void> EffectRegistry::parseEffect(const Json& def, Effect& out) {
         out.absorbHp = static_cast<float>(ah->asDouble());
     }
 
+    // Phase 84: the modifier fields (the beacon's other primary effects).
+    const Json* sm = def.find("speed_multiplier");
+    if (sm != nullptr) {
+        if (!sm->isNumber() || sm->asDouble() <= 1.0 || sm->asDouble() > 3.0) {
+            return MC_FAIL("effect '" + out.name + "': 'speed_multiplier' "
+                           "must be a number in (1.0, 3.0], got " +
+                           std::to_string(sm->asDouble()));
+        }
+        out.speedMultiplier = static_cast<float>(sm->asDouble());
+    }
+    const Json* mb = def.find("melee_bonus");
+    if (mb != nullptr) {
+        auto r = readNumber(def, "melee_bonus", 100.0, out.meleeBonus,
+                            "effect '" + out.name + "'", true);
+        MC_TRY(r);
+    }
+    const Json* dr = def.find("damage_reduction");
+    if (dr != nullptr) {
+        if (!dr->isNumber() || dr->asDouble() < 0.0 ||
+            dr->asDouble() >= 1.0) {
+            return MC_FAIL("effect '" + out.name + "': 'damage_reduction' "
+                           "must be a number in [0.0, 1.0), got " +
+                           std::to_string(dr->asDouble()));
+        }
+        out.damageReduction = static_cast<float>(dr->asDouble());
+    }
+
     const Json* neg = def.find("negative");
     if (neg != nullptr) {
         if (!neg->isBool()) {
@@ -160,13 +192,15 @@ Result<void> EffectRegistry::parseEffect(const Json& def, Effect& out) {
     }
     out.icon = static_cast<int>(icon->asDouble());
 
-    // An effect must DO something: a tick action, a melee penalty, or an
-    // absorption layer.
+    // An effect must DO something: a tick action, a melee penalty/bonus, an
+    // absorption layer, speed, or resistance.
     if (out.tick == Effect::Tick::None && out.meleePenalty <= 0.0f &&
-        out.absorbHp <= 0.0f) {
+        out.absorbHp <= 0.0f && out.speedMultiplier <= 1.0f &&
+        out.meleeBonus <= 0.0f && out.damageReduction <= 0.0f) {
         return MC_FAIL("effect '" + out.name + "' is a no-op: give it a "
-                       "'tick_type', a positive 'melee_penalty', or a "
-                       "positive 'absorb_hp'");
+                       "'tick_type', a positive 'melee_penalty', a positive "
+                       "'absorb_hp', a 'speed_multiplier' > 1, a positive "
+                       "'melee_bonus', or a 'damage_reduction' > 0");
     }
     return {};
 }
@@ -334,6 +368,35 @@ float StatusEffects::totalAbsorption(const EffectRegistry& effects) const {
         sum += effects.at(a.effect).absorbHp;
     }
     return sum;
+}
+
+float StatusEffects::totalSpeedMultiplier(const EffectRegistry& effects) const {
+    // Multiplicative (each active speed effect scales the move speed); the
+    // identity 1.0 when none grant speed.
+    float product = 1.0f;
+    for (const ActiveEffect& a : m_active) {
+        product *= effects.at(a.effect).speedMultiplier;
+    }
+    return product;
+}
+
+float StatusEffects::totalMeleeBonus(const EffectRegistry& effects) const {
+    float sum = 0.0f;
+    for (const ActiveEffect& a : m_active) {
+        sum += effects.at(a.effect).meleeBonus;
+    }
+    return sum;
+}
+
+float StatusEffects::totalDamageReduction(
+    const EffectRegistry& effects) const {
+    // The single highest active reduction (the player has one effective
+    // resistance, not stacked fractions).
+    float maxr = 0.0f;
+    for (const ActiveEffect& a : m_active) {
+        maxr = std::max(maxr, effects.at(a.effect).damageReduction);
+    }
+    return maxr;
 }
 
 } // namespace mc

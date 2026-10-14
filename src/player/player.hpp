@@ -206,6 +206,13 @@ public:
     void setAbsorption(float a) {
         m_absorption = std::clamp(a, 0.0f, kAbsorptionMax);
     }
+    // Phase 84 (the beacon's speed / resistance effects): the move-speed
+    // multiplier + the incoming-damage reduction the game pushes each frame
+    // from the active effects (identity 1.0 / 0.0 when none are active).
+    void setSpeedMultiplier(float m) { m_speedMultiplier = m; }
+    void setDamageReduction(float r) {
+        m_damageReduction = std::clamp(r, 0.0f, 1.0f);
+    }
     bool isCrouching() const { return m_crouching; }
     double timeSinceDamage() const { return m_timeSinceDamage; }
     // Fluid immersion (Phase 54 tick state, exposed in Phase 57 for the
@@ -342,6 +349,10 @@ private:
     // the StatusEffects at every effect change, or from the format-12
     // save); the player only clamps it to [0, kAbsorptionMax].
     float m_absorption = 0.0f;
+    // Phase 84: the effect-derived move-speed multiplier + damage reduction
+    // (set by the game each frame from the active effects).
+    float m_speedMultiplier = 1.0f;
+    float m_damageReduction = 0.0f;
     double m_timeSinceDamage = 0.0;
     double m_regenAccum = 0.0;
     bool m_wasOnGround = false;

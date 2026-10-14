@@ -22,7 +22,7 @@ import os
 import struct
 import zlib
 
-W, H = 80, 16
+W, H = 128, 16
 OUT = os.path.join(os.path.dirname(__file__), "..", "assets",
                    "textures", "effects.png")
 
@@ -97,6 +97,50 @@ HEART = [
     "...XXX...",
 ]
 HEART_OX, HEART_OY = 3, 4
+
+# Phase 84 beacon-effect icons: speed (cyan up-diamond), strength (red
+# power block), resistance (blue shield).
+SPEED_DIAMOND = [
+    "...XX...",
+    "..XXXX..",
+    ".XXXXXX.",
+    "XXXXXXXX",
+    ".XXXXXX.",
+    "..XXXX..",
+    "...XX...",
+]
+SPEED_OX, SPEED_OY = 4, 4
+STRENGTH_BLOCK = [
+    "XXXXXX",
+    "XXXXXX",
+    "XXXXXX",
+    "XXXXXX",
+    "XXXXXX",
+    "XXXXXX",
+]
+STRENGTH_OX, STRENGTH_OY = 5, 5
+RESISTANCE_SHIELD = [
+    "XXXXXXXX",
+    "XXXXXXXX",
+    "XXXXXXXX",
+    ".XXXXXX.",
+    ".XXXXXX.",
+    "..XXXX..",
+    "...XX...",
+]
+RESISTANCE_OX, RESISTANCE_OY = 4, 4
+
+POISON = (168, 56, 216)
+POISON_EYE = (44, 12, 56)
+WEAKNESS = (44, 72, 184)
+REGEN = (96, 208, 88)
+ABSORB = (216, 40, 48)
+ABSORB_PLUS = (240, 240, 240)
+FLAME = (240, 120, 24)
+FLAME_CORE = (252, 216, 72)
+SPEED = (120, 200, 255)
+STRENGTH = (220, 60, 60)
+RESISTANCE = (90, 120, 220)
 
 
 def splitmix64(x: int) -> int:
@@ -206,11 +250,40 @@ def tile_flame() -> list:
     return px
 
 
+def tile_speed() -> list:
+    px = [[(0, 0, 0, 0)] * 16 for _ in range(16)]
+    for ty in range(16):
+        for tx in range(16):
+            if in_shape(SPEED_DIAMOND, SPEED_OX, SPEED_OY, tx, ty):
+                setpx(px, tx, ty, SPEED, salt=900 + ty * 16 + tx)
+    return px
+
+
+def tile_strength() -> list:
+    px = [[(0, 0, 0, 0)] * 16 for _ in range(16)]
+    for ty in range(16):
+        for tx in range(16):
+            if in_shape(STRENGTH_BLOCK, STRENGTH_OX, STRENGTH_OY, tx, ty):
+                setpx(px, tx, ty, STRENGTH, salt=1000 + ty * 16 + tx)
+    return px
+
+
+def tile_resistance() -> list:
+    px = [[(0, 0, 0, 0)] * 16 for _ in range(16)]
+    for ty in range(16):
+        for tx in range(16):
+            if in_shape(RESISTANCE_SHIELD, RESISTANCE_OX, RESISTANCE_OY,
+                        tx, ty):
+                setpx(px, tx, ty, RESISTANCE, salt=1100 + ty * 16 + tx)
+    return px
+
+
 def main() -> None:
     px = [[(0, 0, 0, 0)] * W for _ in range(H)]
     for kind, tile in enumerate((tile_poison(), tile_arrow(False),
                                  tile_arrow(True), tile_absorption(),
-                                 tile_flame())):
+                                 tile_flame(), tile_speed(),
+                                 tile_strength(), tile_resistance())):
         for y in range(16):
             for x in range(16):
                 px[y][kind * 16 + x] = tile[y][x]

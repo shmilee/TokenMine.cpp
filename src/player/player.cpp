@@ -241,6 +241,9 @@ void Player::update(double dt) {
         if (m_crouching && !m_inWater && !m_inLava) {
             speed *= m_params.crouchSpeedScale;
         }
+        // Phase 84: the beacon's speed effect (the game pushes the
+        // effect-derived multiplier each frame; 1.0 when none is active).
+        speed *= m_speedMultiplier;
         dir = normalized(wish);
         m_velocity.x = dir.x * speed;
         m_velocity.z = dir.z * speed;
@@ -385,6 +388,13 @@ void Player::update(double dt) {
 
 bool Player::damage(float amount) {
     if (m_dead || amount <= 0.0f) {
+        return false;
+    }
+    // Phase 84: the beacon's resistance effect reduces the incoming damage
+    // BEFORE the absorption pool drains it (the game pushes the effect-
+    // derived reduction each frame; 0.0 when none is active).
+    amount *= 1.0f - m_damageReduction;
+    if (amount <= 0.0f) {
         return false;
     }
     // Phase 72 (the two-component model, Minecraft): the absorption pool

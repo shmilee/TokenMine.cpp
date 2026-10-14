@@ -2521,10 +2521,13 @@ float Game::selectedAttackDamage() const {
     const float base =
         stack.empty() ? 1.0f  // bare hand
                       : m_items.at(stack.item).attackDamage;  // data (1.0)
-    // Phase 46: the active weakness effects subtract their melee penalty
-    // (clamped at 0 — a weakened bare hand deals no damage).
+    // Phase 46: the active weakness effects subtract their melee penalty;
+    // Phase 84: the strength effects ADD their melee bonus (the pair — the
+    // net is clamped at 0, so a fully weakened hand deals no damage even
+    // with no strength).
     return std::max(0.0f, base -
-                               m_playerEffects.totalMeleePenalty(m_effects));
+                               m_playerEffects.totalMeleePenalty(m_effects) +
+                               m_playerEffects.totalMeleeBonus(m_effects));
 }
 
 float Game::selectedShootSpeed() const {
@@ -3305,6 +3308,14 @@ void Game::updateBeacons() {
 }
 
 void Game::updateEffects(double dt) {
+    // Phase 84: push the effect-derived move-speed + damage-reduction onto
+    // the player every frame (the player's movement + damage read them; the
+    // identity 1.0 / 0.0 when no such effect is active). Runs even for a
+    // dead player so the values reset cleanly on respawn.
+    m_player->setSpeedMultiplier(
+        m_playerEffects.totalSpeedMultiplier(m_effects));
+    m_player->setDamageReduction(
+        m_playerEffects.totalDamageReduction(m_effects));
     if (m_player->isDead()) {
         return;
     }

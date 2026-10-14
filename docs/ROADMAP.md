@@ -87,6 +87,7 @@
 - [x] **Phase 81** — 光滑砂岩（P80 砂岩链的抛光步，MC 1.14+，P61/P80 材料链范式纯内容）：**`smooth_sandstone` 块**（hardness 1.5、自掉、平滑纹理无三层切线【salt 925/926、既有纹理确定性再生零变化】、**atlas 空位 [15,0] 免重锚**）+ 配方 shapeless **2 sandstone → 1**（单向链延伸 sand → sandstone → smooth_sandstone）+ **3 镐 fast_against 加 smooth_sandstone**（石类家族，P69 9 块精确集 → **10 块契约演进**）；**零核心代码**；1116/1116（+2：内容钉死 2 + P69 集演进 + effectiveBreakSpeed 加断言）
 - [x] **Phase 82** — 弓 v5：大师弓（P77/P79 弓强化线的三合一顶点，纯内容零核心代码）：**`master_bow`**（bow 同款数据 + `shoot_damage` 8【力量】+ `shoot_speed` 20【速度】+ `infinite`【无限】三叠加）+ 配方 shapeless **power_bow + speed_bow + infinite_bow → 1**（三把强化弓合成 = MC 附魔台替身，给三弓用途，P61 材料链范式）+ 图标 = 弓 + 三色标记【盐 101-104、既有图标零变化】；不在默认 hotbar；**零 format**（无限/力量/速度字段全既有）；1118/1118（+2：内容钉死 2）
 - [x] **Phase 83** — 信标：吸收第二来源（`beacon_effect` 数据驱动指向吸收效果 + `beacon_base` 金字塔基座 + 半透明光束）：**`beacon` 块**（hardness 8、自掉、青色玻璃纹理、atlas [9,1]）+ **`iron_block`**（hardness 5、自掉、`beacon_base: true`、金属纹理、atlas [8,1]、shaped 3×3 iron_ingot → 1）+ **`world/beacon` 纯函数**（3×3/5×5/7×7/9×9 连续完整基座层 = 等级 1..4，每帧重算无 per-instance 状态）+ **`Game::m_beacons`** setBlock 收口（生长 P48 同款）+ **每帧 pass**（等级 ≥1 且玩家在 `beacon.range_blocks`【Chebyshev，默认 50】内 → 刷新施加信标效果 = 吸收，火源刷新范式）+ **半透明光束**（`basic.frag` 加 `u_alpha` 默认 1.0、薄柱 mesh 透明 pass 关裁剪、`beacon.beam` 可关 = E2E 对照）+ config 2 键 + init 交叉校验（beacon_effect 效果存在 / range >0）；**零 format**；1132/1132（+14：beaconLevel 7 + 属性解析 4 + 内容钉死 3）
+- [x] **Phase 84** — 状态效果系统 v2：信标的其它主效果（速度/力量/抗性）——**效果数据 3 修饰字段**（`speed_multiplier` (1,3] 乘算 / `melee_bonus` [0,100] 加算 / `damage_reduction` [0,1) 取最高）+ **3 新效果内容**（speed 1.2 = MC 速度 I / strength +2 / resistance 0.2 = MC 抗性 I）+ **整合**（speed 在 `Player` 移动、strength 在 `selectedAttackDamage`、resistance 在 `Player::damage`【吸收池之前】；`updateEffects` 每帧推 speed/reduction 到玩家）+ **effects.png 80→128**（3 新图标，既有 5 确定性再生零变化）+ no-op 规则扩到 3 字段；信标机制本身通用（P83 `beacon_effect` 指向任意效果）= 效果词汇表即信标能力；1136/1136（+4：解析/no-op/3 访问器/内容钉死）
 
 ## 细节存档索引（docs/archive/）
 
@@ -170,5 +171,6 @@
 - **Phase 81** — `archive/phase-81.md`
 - **Phase 82** — `archive/phase-82.md`
 - **Phase 83** — `archive/phase-83.md`
+- **Phase 84** — `archive/phase-84.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

@@ -1,0 +1,6 @@
+{
+  "id": "speed",
+  "speed_multiplier": 1.2,
+  "negative": false,
+  "icon": 5
+}
