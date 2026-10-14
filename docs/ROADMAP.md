@@ -78,6 +78,7 @@
 - [x] **Phase 72** — 吸收两分量模型（P56 遗留大改）：**health（0..base max）+ absorption 池（0..64，`kAbsorptionMax`）独立池**——`damage()` **先扣池**（池单独不能致死）、`heal()`/`setHealth()` 只钳 base max（heal 永不填池）；池 = 效果 `absorb_hp` 总和的纯函数**只在同步点**（进食/mob 命中/到期或水熄灭【效果总和变化才同步】/牛奶/死亡——刷新恢复满层 = MC 属性重算；**读档不同步** = 存值权威，池 < 总和合法【同步点间伤害持续】）；**format 12** `player.absorption`（键纪律：12 必需 / ≤11 带键拒绝 / [0,64] / ≤ 效果总和不变量）+ **format ≤11 迁移**（共享 health 按 base max 拆分 22→20+2）；HUD 吸收红心改从**池**派生（池 0 = 零绘制 = 结构性免疫保持）+ F3 调试行；1097/1097（player 5→7 语义改写 + save 套件 5 新 + 适配 15 处降级剥键）
 - [x] **Phase 73** — 火 v3：Mob 火接触点燃（全量消费 P70 遗留"Mob 站火里不受伤害"）：**火块 = P58 熔岩点燃的块版**——`MobEntity::update` 点火条件 `inLava || inFire`（`inFire` = `Entity::overlapsBlock`，fire 块 id 构造时注册表解析、无 fire 块 = invalid = 结构惰性【P70 玩家同款容错】）；同一 fire 效果同一节奏（1 HP/0.2 s = 5 HP/s、可致死）、火块内每帧重点燃（持续燃烧）、离火残留 8 s、水瞬时熄灭（P57 规则）——**零新 config、零 format、零内容**（全走 P58 既有路径）；**顺带修复 P27 潜伏 UB**：skeleton 射击回调在实体 range-for 内 `m_entities.push_back` = 重分配悬空引用（P73 火把膜对照场景首次触发 SIGSEGV）→ 实体更新循环改索引循环（PITS +1）；1102/1102（+5：火块点燃速率/残留/水灭/未武装惰性/无 fire 块惰性）
 - [x] **Phase 74** — 火 v4：玩家火块点燃（全量消费 P70"直接接触伤害"非 MC 语义 + 消掉 P73 记录的"玩家/mob 火接触不对称"偏离）：**`Game::updateEffects` 点火门 `inLava() || isInFire()`**——fire 块点燃玩家 = 熔岩同款（P57 既有路径：重施加 duration 重置 + tick 相位保留、离开火源残留 8 s、水瞬时熄灭）；**P70 直伤机制整体退役**（`m_fireAccum` real-dt 计时器 + `player.fire_damage` / `player.fire_damage_interval_seconds` config 键 + 交叉校验删除——旧 config 仍启动 = 未知键容忍，单测钉死）；`isInFire()` 改公开（原经 `inFire()` 暴露）；**零 format、零内容**；1095/1095（P70 直伤 8 测试删除 + AABB 谓词改写 + 退役 config 容忍 1 新）
+- [x] **Phase 75** — 营火 v2：四槽 + 水浇灭（全量消费 P71 遗留"单槽" + "无水浇灭"偏离）：**4 个独立烤位**（`CampfireCookState` = `slots[4]` + `progressSubsteps[4]` 各自 1/60 整数计时 = 炉子节奏；放 = 第一个空槽 / 取 = 第一个非空槽【索引序确定性，无面板 = v1 简化】；只有点燃的烤；只渲染第一个非空槽图标）+ **水浇灭**（点燃营火 6-邻任意水 → 瞬时变**新块 `campfire_extinguished`**【光 0、同 interact、掉自己、非 flamable、atlas 空位 [13,0] 免重锚】——P64 fire 块浇灭同款规则；**烤制状态保留**【物品还在、时钟暂停、空手可取回】；**v2 无再点燃** = 文档化偏离）+ **座位扩到未点燃**（MC：柴堆没变）+ **format 13** `campfires`（恰 4 槽对象、家族双向交叉校验【点燃 + 未点燃】、每槽进度不变量、format 11/12 单槽形状 → 槽 0 迁移、旧形状带 slots 键 = 版本谎报拒绝）；1101/1101（tick 4 测试改写四槽 + tick 独立 1 + save 3 + 座位 1 + 内容钉死 1）
 
 ## 细节存档索引（docs/archive/）
 
@@ -152,5 +153,6 @@
 - **Phase 72** — `archive/phase-72.md`
 - **Phase 73** — `archive/phase-73.md`
 - **Phase 74** — `archive/phase-74.md`
+- **Phase 75** — `archive/phase-75.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

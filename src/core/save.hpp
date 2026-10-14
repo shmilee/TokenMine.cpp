@@ -140,7 +140,24 @@ namespace mc {
 //      base max becomes the pool, the health keeps the base part);
 //      writes are always format 12 (the field is always written — the
 //      pool is 0 when no layer is active).
-inline constexpr int kSaveFormat = 12;
+//   13: the campfire's FOUR slots + the extinguished block (Phase 75) —
+//      "campfires" entries gain "slots": an array of EXACTLY 4 objects
+//      [ { "item", "count", "progress_substeps" } ] (the per-slot rules
+//      are the format-11 entry's: count 0 with "item" "" or count 1 with
+//      a registered item; the progress invariant holds PER SLOT —
+//      progress > 0 requires that slot to hold exactly one smeltable
+//      item). The bidirectional cross-check runs against the CAMPFIRE
+//      FAMILY: a "campfire" (lit) OR "campfire_extinguished" (water put
+//      it out, Phase 75) block edit requires an entry, and an entry
+//      requires a family block. Format-11/12 files carry the OLD single-
+//      slot entry shape (no "slots" key — carrying it is a version lie,
+//      rejected by the per-format field whitelist) and load via the
+//      SINGLE-SLOT MIGRATION (the old item/count/progress land in slot 0,
+//      the other three slots are empty); their cross-check is the
+//      lit-only one (the extinguished block did not exist). A
+//      format-13 file requires the new shape (an old-shape entry is
+//      rejected); writes are always format 13.
+inline constexpr int kSaveFormat = 13;
 inline constexpr int kSaveFormatMin = 1;
 
 // Phase 40: the furnace save-field bounds — the max smelt/fuel times the

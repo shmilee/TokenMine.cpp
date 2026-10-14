@@ -675,12 +675,19 @@ private:
     double m_fireSpreadChance = 0.05;
     bool m_fireParticles = true;
 
-    // Phase 71 campfire: PER-BLOCK cooking states — one CampfireCookState
-    // per campfire block in the world (created on placement, dropped when
-    // the cell stops holding a campfire; the invariant the format-11 save
+    // Phase 71 campfire (the family in Phase 75): PER-BLOCK cooking
+    // states — one CampfireCookState per campfire-FAMILY block in the
+    // world (lit or extinguished: water puts the lit one out into the
+    // extinguished block, which KEEPS its state — the items stay on the
+    // unlit logs; created on placement, dropped when the cell stops
+    // holding a family block; the invariant the format-13 save
     // cross-checks, exactly like the furnace states). std::map:
     // position-sorted, so the per-frame ticks iterate deterministically.
     std::map<BlockPos, CampfireCookState> m_campfires;
+    // Phase 75: the campfire family ids (init-resolved; invalid = the
+    // family-dependent paths are structurally inert, the P70 pattern).
+    BlockID m_campfireLitId = BlockID::invalid();
+    BlockID m_campfireExtId = BlockID::invalid();
 
     // Phase 48 crop growth: the cells holding a block with a non-empty
     // growsTo property (the growth stage is the block id itself — no

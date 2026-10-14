@@ -1,0 +1,16 @@
+{
+  "id": "campfire_extinguished",
+  "properties": {
+    "hardness": 0.5,
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "light_emission": 0,
+    "interact": "campfire",
+    "drops": "campfire_extinguished"
+  },
+  "model": {
+    "shape": "cross",
+    "textures": { "cross": "campfire_extinguished" }
+  }
+}

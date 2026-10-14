@@ -242,8 +242,8 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     s.tableGrid[8] = ItemStack {f.items.idForName("stone"), 64};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Phase 72: writes are always format 12.
-    EXPECT_EQ(j->find("format")->asInt(), 12);
+    // Phase 75: writes are always format 13.
+    EXPECT_EQ(j->find("format")->asInt(), 13);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -1091,8 +1091,8 @@ TEST(SaveRoundTripTest, FurnacesRoundTrip) {
     s.furnaces[0].state.fuelSubsteps = 1234;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Phase 72: writes are always format 12.
-    EXPECT_EQ(j->find("format")->asInt(), 12);
+    // Phase 75: writes are always format 13.
+    EXPECT_EQ(j->find("format")->asInt(), 13);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
@@ -1434,8 +1434,8 @@ TEST(SaveRoundTripTest, FiresRoundTrip) {
     SaveGame s = makeFireSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Phase 72: writes are always format 12.
-    EXPECT_EQ(j->find("format")->asInt(), 12);
+    // Phase 75: writes are always format 13.
+    EXPECT_EQ(j->find("format")->asInt(), 13);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->fires.size(), 2u);

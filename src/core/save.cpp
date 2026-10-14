@@ -466,11 +466,12 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         root["fires"] = std::move(fires);
     }
 
-    // The campfire cooking states (format 11; Phase 71): one entry per
-    // campfire block (position-sorted — the game's map order), each an
-    // object with the block position, the slot's item/count and the
-    // integer 1/60-substep cooking counter. Always written (possibly
-    // empty — a world without campfire blocks).
+    // The campfire cooking states (format 13; Phase 71, the four-slot
+    // family shape in Phase 75): one entry per campfire-FAMILY block
+    // (lit or extinguished — position-sorted, the game's map order),
+    // each an object with the block position + "slots": EXACTLY 4 slot
+    // objects (item/count/progress_substeps — empty slots are ""/0/0).
+    // Always written (possibly empty — a world without campfire blocks).
     {
         Json campfires = Json::array();
         for (const SavedCampfire& sc : save.campfires) {
@@ -480,20 +481,28 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
             pos.push_back(Json(sc.pos.y));
             pos.push_back(Json(sc.pos.z));
             ce["pos"] = pos;
-            if (sc.state.slot.empty()) {
-                ce["item"] = Json(std::string(""));
-                ce["count"] = Json(0);
-            } else {
-                const Item* item = items.find(sc.state.slot.item);
-                if (item == nullptr) {
-                    return MC_FAIL("save campfire at " + posStr(sc.pos) +
-                                   " holds an unregistered item id " +
-                                   std::to_string(sc.state.slot.item.value));
+            Json slotsArr = Json::array();
+            for (std::size_t s = 0; s < kCampfireSlotCount; ++s) {
+                const ItemStack& slot = sc.state.slots[s];
+                Json se = Json::object();
+                if (slot.empty()) {
+                    se["item"] = Json(std::string(""));
+                    se["count"] = Json(0);
+                } else {
+                    const Item* item = items.find(slot.item);
+                    if (item == nullptr) {
+                        return MC_FAIL("save campfire at " + posStr(sc.pos) +
+                                       " slot " + std::to_string(s) +
+                                       " holds an unregistered item id " +
+                                       std::to_string(slot.item.value));
+                    }
+                    se["item"] = Json(item->name);
+                    se["count"] = Json(slot.count);
                 }
-                ce["item"] = Json(item->name);
-                ce["count"] = Json(sc.state.slot.count);
+                se["progress_substeps"] = Json(sc.state.progressSubsteps[s]);
+                slotsArr.push_back(std::move(se));
             }
-            ce["progress_substeps"] = Json(sc.state.progressSubsteps);
+            ce["slots"] = slotsArr;
             campfires.push_back(std::move(ce));
         }
         root["campfires"] = std::move(campfires);
@@ -1226,22 +1235,170 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // possible) — the game adds the full-lifetime entries on load (like
     // the empty furnace states).
 
-    // -- campfire cooking states (format 11; Phase 71) -------------------
+    // -- campfire cooking states (format 11; Phase 71; the four-slot
+    // family shape in Phase 75) -------------------
     // A "campfire block" = the block named "campfire" (the Phase 71
     // cooking block — the interact property names the game behavior, the
     // NAME is the save's reference, exactly like the furnace cells).
-    std::set<BlockPos> campfireCells;
+    // Phase 75 adds the extinguished twin ("campfire_extinguished" —
+    // water put the lit campfire out): it owns the same cooking state,
+    // so the format-13+ cross-check runs against the whole FAMILY.
+    std::set<BlockPos> litCells;    // "campfire" — the format 11-12 check
+    std::set<BlockPos> familyCells; // lit + extinguished — the format 13+ check
     for (const SavedBlockEdit& e : save.blockEdits) {
         if (e.blockName == "campfire") {
-            campfireCells.insert(e.pos);
+            litCells.insert(e.pos);
+            familyCells.insert(e.pos);
+        } else if (e.blockName == "campfire_extinguished") {
+            familyCells.insert(e.pos);
         }
     }
     const Json* campfireArr = def.find("campfires");
-    if (fmtVersion >= 11) {
-        // Format 11: cross-checked against the world's campfire blocks in
-        // BOTH directions (an entry without a block or a block without an
-        // entry would desync the game's invariant: every campfire block
-        // owns a cooking-state entry).
+    // The per-slot rules (Phase 75 — shared by both entry shapes): the
+    // strict triple "item" (string, "" = empty) / "count" (numeric, 0
+    // when empty, 1..maxStack otherwise) / "progress_substeps" (numeric,
+    // [0, the furnace cap]) + the per-slot progress invariant (progress
+    // > 0 requires the slot to hold EXACTLY ONE smeltable item — a save
+    // violating it would resurrect progress the tick cannot have
+    // produced, the Phase 40 furnace invariant).
+    const auto parseCampfireSlot =
+        [&items](const Json& s, const std::string& what, ItemStack& slot,
+                 int& prog) -> Result<void> {
+        const std::set<std::string> sFields {"item", "count",
+                                             "progress_substeps"};
+        MC_TRY(rejectUnknownFields(s, sFields, what));
+        const Json* name = s.find("item");
+        const Json* count = s.find("count");
+        if (name == nullptr || !name->isString() || count == nullptr ||
+            !count->isNumber()) {
+            return MC_FAIL(what + " requires string 'item' and numeric "
+                           "'count'");
+        }
+        const int n = count->asInt();
+        slot = ItemStack {};
+        if (name->asString().empty()) {
+            if (n != 0) {
+                return MC_FAIL(what + " is empty ('item' = "") but has "
+                               "count " + std::to_string(n));
+            }
+        } else {
+            const ItemID id = items.idForName(name->asString());
+            if (!id.valid()) {
+                return MC_FAIL(what + " holds unknown item '" +
+                               name->asString() + "'");
+            }
+            if (n < 1 || n > items.at(id).maxStack) {
+                return MC_FAIL(what + " count " + std::to_string(n) +
+                               " is out of range for '" + name->asString() +
+                               "' (max stack " +
+                               std::to_string(items.at(id).maxStack) + ")");
+            }
+            slot = ItemStack {id, n};
+        }
+        const Json* pr = s.find("progress_substeps");
+        if (pr == nullptr || !pr->isNumber()) {
+            return MC_FAIL(what + " requires numeric 'progress_substeps'");
+        }
+        prog = pr->asInt();
+        if (prog < 0 || prog > kFurnaceMaxProgressSubsteps) {
+            return MC_FAIL(what + " progress_substeps " + std::to_string(prog) +
+                           " is out of range [0, " +
+                           std::to_string(kFurnaceMaxProgressSubsteps) +
+                           "]");
+        }
+        if (prog > 0 &&
+            (slot.count != 1 ||
+             items.at(slot.item).smeltableTo.empty())) {
+            return MC_FAIL(what + " has progress_substeps " +
+                           std::to_string(prog) +
+                           " but its slot holds no smeltable item of "
+                           "count 1");
+        }
+        return {};
+    };
+    if (fmtVersion >= 13) {
+        // Phase 75: the four-slot entry. Cross-checked against the whole
+        // CAMPFIRE FAMILY (an entry without a family block, or a family
+        // block without an entry, would desync the game's invariant:
+        // every campfire-family block owns a cooking-state entry).
+        if (campfireArr == nullptr || !campfireArr->isArray()) {
+            return MC_FAIL("save format 13 requires a 'campfires' array");
+        }
+        std::set<BlockPos> entryPos;
+        for (std::size_t i = 0; i < campfireArr->size(); ++i) {
+            const Json& e = campfireArr->at(i);
+            const std::string what =
+                "save 'campfires' entry #" + std::to_string(i);
+            if (!e.isObject()) {
+                return MC_FAIL(what + " must be an object");
+            }
+            const std::set<std::string> eFields {"pos", "slots"};
+            MC_TRY(rejectUnknownFields(e, eFields, what));
+            const Json* pos = e.find("pos");
+            if (pos == nullptr || !pos->isArray() || pos->size() != 3) {
+                return MC_FAIL(what + " requires a 'pos' [x, y, z] array");
+            }
+            double x, y, z;
+            if (!isInt(pos->at(0), &x) || !isInt(pos->at(1), &y) ||
+                !isInt(pos->at(2), &z)) {
+                return MC_FAIL(what + " 'pos' entries must be integers");
+            }
+            const int yi = static_cast<int>(y);
+            if (!isWorldYValid(yi)) {
+                return MC_FAIL(what + " has y=" + std::to_string(yi) +
+                               " outside the world height [0, " +
+                               std::to_string(kWorldHeight) + ")");
+            }
+            const BlockPos bpos {static_cast<int>(x), yi,
+                                 static_cast<int>(z)};
+            if (entryPos.count(bpos) != 0) {
+                return MC_FAIL(what + " duplicates the campfire position " +
+                               posStr(bpos));
+            }
+            entryPos.insert(bpos);
+            const Json* slotsArr = e.find("slots");
+            if (slotsArr == nullptr || !slotsArr->isArray() ||
+                slotsArr->size() != kCampfireSlotCount) {
+                return MC_FAIL(what + " requires a 'slots' array of "
+                               "exactly " + std::to_string(kCampfireSlotCount) +
+                               " slot objects");
+            }
+            CampfireCookState st;
+            for (std::size_t s = 0; s < kCampfireSlotCount; ++s) {
+                const std::string sw =
+                    what + " slot #" + std::to_string(s);
+                MC_TRY(parseCampfireSlot(slotsArr->at(s), sw, st.slots[s],
+                                         st.progressSubsteps[s]));
+            }
+            save.campfires.push_back(SavedCampfire {bpos, st});
+        }
+        if (entryPos != familyCells) {
+            for (const BlockPos& p : entryPos) {
+                if (familyCells.count(p) == 0) {
+                    return MC_FAIL("save 'campfires' has an entry at " +
+                                   posStr(p) +
+                                   " which is not a campfire-family "
+                                   "block in the world's block edits");
+                }
+            }
+            for (const BlockPos& p : familyCells) {
+                if (entryPos.count(p) == 0) {
+                    return MC_FAIL("the campfire-family block at " +
+                                   posStr(p) +
+                                   " has no 'campfires' entry (every "
+                                   "campfire block, lit or extinguished, "
+                                   "owns a cooking-state entry)");
+                }
+            }
+            return MC_FAIL("save 'campfires' does not match the world's "
+                           "campfire blocks");
+        }
+    } else if (fmtVersion >= 11) {
+        // Format 11/12: the OLD single-slot entry shape (no "slots" key —
+        // carrying one is a version lie, rejected by the field whitelist
+        // below). The entry lands in slot 0 on load (the single-slot
+        // migration, Phase 75); the cross-check is lit-only (the
+        // extinguished block did not exist).
         if (campfireArr == nullptr || !campfireArr->isArray()) {
             return MC_FAIL("save format 11 requires a 'campfires' array");
         }
@@ -1278,73 +1435,33 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                                posStr(bpos));
             }
             entryPos.insert(bpos);
-            const Json* name = e.find("item");
-            const Json* count = e.find("count");
-            if (name == nullptr || !name->isString() || count == nullptr ||
-                !count->isNumber()) {
-                return MC_FAIL(what + " requires string 'item' and numeric "
-                               "'count'");
-            }
-            const int n = count->asInt();
+            // The slot parser's whitelist is {item, count,
+            // progress_substeps} — feed it the entry MINUS "pos" (the
+            // whitelist above already rejected any other field).
+            Json slotView = Json::object();
+            slotView["item"] = *e.find("item");
+            slotView["count"] = *e.find("count");
+            slotView["progress_substeps"] = *e.find("progress_substeps");
             ItemStack slot;
-            if (name->asString().empty()) {
-                if (n != 0) {
-                    return MC_FAIL(what + " is empty ('item' = \"\") but has "
-                                   "count " + std::to_string(n));
-                }
-            } else {
-                const ItemID id = items.idForName(name->asString());
-                if (!id.valid()) {
-                    return MC_FAIL(what + " holds unknown item '" +
-                                   name->asString() + "'");
-                }
-                if (n < 1 || n > items.at(id).maxStack) {
-                    return MC_FAIL(what + " count " + std::to_string(n) +
-                                   " is out of range for '" +
-                                   name->asString() + "' (max stack " +
-                                   std::to_string(items.at(id).maxStack) +
-                                   ")");
-                }
-                slot = ItemStack {id, n};
-            }
-            const Json* prog = e.find("progress_substeps");
-            if (prog == nullptr || !prog->isNumber()) {
-                return MC_FAIL(what + " requires numeric "
-                               "'progress_substeps'");
-            }
-            const int p = prog->asInt();
-            if (p < 0 || p > kFurnaceMaxProgressSubsteps) {
-                return MC_FAIL(what + " progress_substeps " + std::to_string(p) +
-                               " is out of range [0, " +
-                               std::to_string(kFurnaceMaxProgressSubsteps) +
-                               "]");
-            }
-            // The progress invariant (item/campfire.hpp): progress > 0
-            // requires the slot to hold EXACTLY ONE smeltable item — a save
-            // violating it would resurrect progress the tick cannot have
-            // produced (the furnace invariant, Phase 40).
-            if (p > 0) {
-                if (slot.count != 1 ||
-                    items.at(slot.item).smeltableTo.empty()) {
-                    return MC_FAIL(what + " has progress_substeps " +
-                                   std::to_string(p) +
-                                   " but its slot holds no smeltable item "
-                                   "of count 1");
-                }
-            }
-            save.campfires.push_back(SavedCampfire {
-                bpos, CampfireCookState {slot, p}});
+            int prog = 0;
+            MC_TRY(parseCampfireSlot(slotView, what, slot, prog));
+            // The single-slot migration (Phase 75): the old shape lands
+            // in slot 0; the other three slots stay empty.
+            CampfireCookState st;
+            st.slots[0] = slot;
+            st.progressSubsteps[0] = prog;
+            save.campfires.push_back(SavedCampfire {bpos, st});
         }
-        if (entryPos != campfireCells) {
+        if (entryPos != litCells) {
             for (const BlockPos& p : entryPos) {
-                if (campfireCells.count(p) == 0) {
+                if (litCells.count(p) == 0) {
                     return MC_FAIL("save 'campfires' has an entry at " +
                                    posStr(p) +
                                    " which is not a campfire block in the "
                                    "world's block edits");
                 }
             }
-            for (const BlockPos& p : campfireCells) {
+            for (const BlockPos& p : litCells) {
                 if (entryPos.count(p) == 0) {
                     return MC_FAIL("the campfire block at " + posStr(p) +
                                    " has no 'campfires' entry (every "

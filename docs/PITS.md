@@ -1184,3 +1184,10 @@
   = 守卫条件覆盖**全部**场景文件，或无条件生成（python 生成幂等，几
   ms）。口诀：**幂等生成块不要加"存在即跳过"守卫——冒烟残留是最常见
   的误判来源**。
+- **Json 数组没有元素变异 API——`arr[i] = x` 运行期炸（P75 实测）**：
+  给存档测试的 JSON 换数组里一个元素时写了 `slots[0] = slot`（编译
+  通过！运行期抛 "basic_string: construction from null is not valid"
+  ——误导性的异常，完全看不出是 Json 的问题）。Json 数组只读接口 =
+  `at(i)` / `size()`，写 = `push_back`。口诀：**要换数组元素 = 重建整个
+  数组**（逐项 `at` 出来、改第 i 个、`push_back` 进新数组）——P75 测试
+  的 `withSlot` lambda 范式。

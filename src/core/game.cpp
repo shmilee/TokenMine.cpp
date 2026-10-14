@@ -400,6 +400,13 @@ Result<void> Game::buildScene() {
     auto blocksLoad = m_blocks.loadDirectory(m_assets, "data/blocks");
     MC_TRY(blocksLoad);
 
+    // Phase 75: the campfire FAMILY ids (lit + extinguished), resolved
+    // once (the registry is static after init; an absent name leaves the
+    // id invalid = the family-dependent paths are structurally inert —
+    // the P70 fire/campfire id pattern).
+    m_campfireLitId = m_blocks.idForName("campfire");
+    m_campfireExtId = m_blocks.idForName("campfire_extinguished");
+
     // -- texture atlas (16x16 tiles from assets/textures/blocks/*.png) --------
     // The layout is data (data/textures/block_atlas.json): explicit cells
     // per tile on a power-of-two grid, so adding a texture never moves an
@@ -1516,13 +1523,15 @@ Result<void> Game::applySave(const SaveGame& save) {
     for (const SavedCampfire& sc : save.campfires) {
         m_campfires.emplace(sc.pos, sc.state);
     }
-    // Migration (format 10 and earlier): a campfire block in the world's
-    // block edits WITHOUT a campfires entry is only possible in a
-    // hand-edited old file (the campfire block did not exist before
-    // format 11) — it starts empty (the empty-furnace-state migration
-    // pattern).
+    // Migration (format 10 and earlier): a campfire-FAMILY block in the
+    // world's block edits WITHOUT a campfires entry is only possible in
+    // a hand-edited old file (the campfire block did not exist before
+    // format 11, the extinguished one before format 13) — it starts
+    // empty (the empty-furnace-state migration pattern).
     for (const SavedBlockEdit& e : save.blockEdits) {
-        if (e.blockName == "campfire" && m_campfires.count(e.pos) == 0) {
+        if ((e.blockName == "campfire" ||
+             e.blockName == "campfire_extinguished") &&
+            m_campfires.count(e.pos) == 0) {
             m_campfires.emplace(e.pos, CampfireCookState {});
         }
     }
@@ -1835,12 +1844,54 @@ void Game::update(double dt) {
         tickFurnace(st, m_items);
     }
 
-    // Campfires (Phase 71): one fixed 1/60 substep per frame, per state
-    // (the day-cycle class — integer substep counter, byte-reproducible;
-    // the furnace pace via smeltSubstepsFor). std::map iteration is
-    // position-sorted: the tick order is deterministic. No-op on an empty
-    // state; runs in every pointer/panel state (the world keeps ticking).
+    // Campfire water extinguish (Phase 75): a LIT campfire with a WATER
+    // fluid (any level) in one of its 6 neighbors goes out instantly —
+    // water beats fire (the Phase 57/64 rule, the fire-block twin). The
+    // cooking state SURVIVES (the items stay on the unlit logs: the
+    // take-back works, the clocks pause); there is no re-light in v2
+    // (documented deviation). A frame-state check (deterministic; the
+    // fluid state is world state), run BEFORE the cook tick so an
+    // extinguished campfire does not cook on its extinguish frame.
+    // Fast-exit: a no-input run has no campfires (worldgen never emits
+    // one) and the fresh world has no water next to one.
+    if (!m_campfires.empty() && m_campfireLitId.valid() &&
+        m_campfireExtId.valid()) {
+        std::vector<BlockPos> goOut;
+        for (const auto& entry : m_campfires) {
+            const BlockPos& pos = entry.first;
+            if (m_world.getBlock(pos.x, pos.y, pos.z) != m_campfireLitId) {
+                continue; // already out (or the family id is stale)
+            }
+            for (const BlockPos& d : kFireNeighbors) {
+                if (m_world.getFluidOfKind(pos.x + d.x, pos.y + d.y,
+                                           pos.z + d.z,
+                                           FluidKind::Water) > 0) {
+                    goOut.push_back(pos);
+                    break;
+                }
+            }
+        }
+        // Apply AFTER the scan (setBlock touches the world state the scan
+        // reads — the snapshot discipline, like the fire put-out pass).
+        for (const BlockPos& pos : goOut) {
+            setBlock(pos.x, pos.y, pos.z, m_campfireExtId);
+            // Light 15 -> 0: re-light the touched region (the P64
+            // fire-put-out pattern).
+            Lighting::updateLocal(m_world, m_blocks, pos);
+        }
+    }
+
+    // Campfires (Phase 71, the four-slot tick in Phase 75): one fixed
+    // 1/60 substep per frame, per state (the day-cycle class — integer
+    // substep counters, byte-reproducible; the furnace pace via
+    // smeltSubstepsFor). std::map iteration is position-sorted: the tick
+    // order is deterministic. Only LIT campfires cook (an extinguished
+    // one holds its items, no progress). No-op on an empty state; runs
+    // in every pointer/panel state (the world keeps ticking).
     for (auto& [pos, st] : m_campfires) {
+        if (m_world.getBlock(pos.x, pos.y, pos.z) != m_campfireLitId) {
+            continue;
+        }
         tickCampfireCook(st, m_items);
     }
 
@@ -3882,16 +3933,27 @@ const Mesh& Game::handIconMesh() {
 }
 
 void Game::drawCampfireCookItems(const Mat4& view, const Mat4& projection) {
-    // Phase 71: the item cooking on each campfire. No cooking slot is
-    // non-empty: nothing draws (a no-input run has no campfire at all —
-    // worldgen never emits one — and a placed-but-empty campfire draws
-    // nothing either: baseline byte-identical).
+    // Phase 71 (the first-occupied-slot rule in Phase 75): the item
+    // cooking on each campfire. No occupied slot: nothing draws (a
+    // no-input run has no campfire at all — worldgen never emits one —
+    // and a placed-but-empty campfire draws nothing either: baseline
+    // byte-identical). Of the four slots only the FIRST occupied one
+    // renders (documented v1 simplification — Minecraft shows all four;
+    // the icons would overlap in one cell).
     for (const auto& [pos, st] : m_campfires) {
-        if (st.slot.empty()) {
+        std::size_t occupied = kCampfireSlotCount;
+        for (std::size_t i = 0; i < kCampfireSlotCount; ++i) {
+            if (!st.slots[i].empty()) {
+                occupied = i;
+                break;
+            }
+        }
+        if (occupied == kCampfireSlotCount) {
             continue;
         }
+        const ItemStack& slot = st.slots[occupied];
         const std::size_t iconIdx =
-            static_cast<std::size_t>(st.slot.item.value);
+            static_cast<std::size_t>(slot.item.value);
         if (iconIdx >= m_itemIcons.size() || !m_itemIcons[iconIdx].valid()) {
             continue; // cannot happen (item data is validated at init)
         }
@@ -4077,30 +4139,45 @@ void Game::tryCampfireCook(const BlockPos& pos) {
     // The click is ALWAYS consumed (the caller returns) — a campfire is
     // never placed through this branch, whatever the hand holds.
     CampfireCookState& st = campfireAt(pos);
+    // Phase 75: only a LIT campfire cooks — placing food on the unlit
+    // logs does nothing (the fire must be there, Minecraft); the
+    // take-back works on EITHER (the items are in the unlit campfire
+    // too). There is no panel (v1): the slot choice is by index — first
+    // empty (place) / first occupied (take), deterministic.
+    const bool lit =
+        m_world.getBlock(pos.x, pos.y, pos.z) == m_campfireLitId;
     const ItemStack& held = m_inventory.at(m_selectedSlot);
     if (!held.empty()) {
         const Item& it = m_items.at(held.item);
-        if (!it.smeltableTo.empty() && st.slot.empty()) {
-            // Place one unit on the fire (Minecraft: a smeltable item on
-            // an empty campfire slot). One is consumed from the hand; the
-            // cooking starts at the next tick.
-            st.slot = ItemStack {held.item, 1};
-            st.progressSubsteps = 0;
-            m_inventory.take(m_selectedSlot, 1);
-            m_sound.play("place");
+        if (lit && !it.smeltableTo.empty()) {
+            for (std::size_t i = 0; i < kCampfireSlotCount; ++i) {
+                if (st.slots[i].empty()) {
+                    // Place one unit in the slot (Minecraft: a smeltable
+                    // item on an empty campfire spot). One is consumed
+                    // from the hand; the cooking starts at the next tick.
+                    st.slots[i] = ItemStack {held.item, 1};
+                    st.progressSubsteps[i] = 0;
+                    m_inventory.take(m_selectedSlot, 1);
+                    m_sound.play("place");
+                    break;
+                }
+            }
+            // All four slots full (or a non-smeltable / unlit target):
+            // nothing happens (documented v1 simplification — no panel).
         }
-        // A held item with a non-empty slot (or a non-smeltable item)
-        // does nothing: the slot holds at most one unit (v1), and the
-        // take needs a FREE hand (Minecraft).
+        // The take needs a FREE hand (Minecraft).
         return;
     }
-    // Empty hand: take the slot's item back (smelted or not) — the
-    // selected slot is empty, so the write is a direct set.
-    if (!st.slot.empty()) {
-        m_inventory.setSlot(m_selectedSlot, st.slot);
-        st.slot = ItemStack {};
-        st.progressSubsteps = 0;
-        m_sound.play("pickup");
+    // Empty hand: take the first occupied slot back (smelted or not) —
+    // the selected slot is empty, so the write is a direct set.
+    for (std::size_t i = 0; i < kCampfireSlotCount; ++i) {
+        if (!st.slots[i].empty()) {
+            m_inventory.setSlot(m_selectedSlot, st.slots[i]);
+            st.slots[i] = ItemStack {};
+            st.progressSubsteps[i] = 0;
+            m_sound.play("pickup");
+            break;
+        }
     }
 }
 

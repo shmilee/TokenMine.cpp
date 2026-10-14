@@ -366,8 +366,11 @@ private:
     // Phase 71: the campfire block id, resolved once in the constructor
     // (the registry is static after init). An unknown name leaves the id
     // invalid = the player can never sit (a test fixture without the
-    // campfire block — the m_fireBlockId pattern).
+    // campfire block — the m_fireBlockId pattern). Phase 75: the
+    // extinguished twin joins the seat (Minecraft: the unlit campfire is
+    // still a seat — the logs are unchanged).
     BlockID m_campfireBlockId = BlockID::invalid();
+    BlockID m_campfireExtId = BlockID::invalid();
     // Phase 71: the sitting state this tick (see isSitting()).
     bool m_sitting = false;
 

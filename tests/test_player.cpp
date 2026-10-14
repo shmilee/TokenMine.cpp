@@ -57,6 +57,13 @@ BlockRegistry makeBlocks() {
     if (!r.ok()) {
         ADD_FAILURE() << r.error().message;
     }
+    // Phase 75: the extinguished twin (the seat works on it too).
+    r = blocks.registerBlock(parseJson(
+        R"({"id":"campfire_extinguished","properties":{"solid":false,)"
+        R"("opaque":false,"transparent":true},"model":{"textures":{"top":"c","side":"c","bottom":"c"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
     return blocks;
 }
 
@@ -69,12 +76,14 @@ struct Fixture {
     BlockID water;
     BlockID fire;
     BlockID campfire;
+    BlockID campfireExt;
 
     Fixture() {
         stone = blocks.idForName("stone");
         water = blocks.idForName("water");
         fire = blocks.idForName("fire");
         campfire = blocks.idForName("campfire");
+        campfireExt = blocks.idForName("campfire_extinguished");
         for (int x = -16; x < 16; ++x) {
             for (int z = -16; z < 16; ++z) {
                 world.setBlock(x, 0, z, stone);
@@ -1438,6 +1447,26 @@ TEST(PlayerTest, SittingOnCampfireLocksMovement) {
     Input idle = heldInput({});
     run(p, 10, idle); // settle on the ground (m_onGround from last tick)
     ASSERT_FALSE(p.isSitting()); // standing (not crouching) is not sitting
+    Input sit = heldInput({GameKey::W, GameKey::LeftControl});
+    run(p, 1, sit); // crouch while overlapping: sitting engages
+    ASSERT_TRUE(p.isSitting());
+    const Vec3 at = p.position();
+    run(p, 120, sit); // 2 s of holding W + crouch: no movement at all
+    EXPECT_TRUE(p.isSitting());
+    EXPECT_DOUBLE_EQ(at.x, p.position().x);
+    EXPECT_DOUBLE_EQ(at.y, p.position().y);
+    EXPECT_DOUBLE_EQ(at.z, p.position().z);
+}
+
+TEST(PlayerTest, SittingOnExtinguishedCampfireLocksMovement) {
+    // Phase 75: the unlit campfire is still a seat (Minecraft — the logs
+    // are unchanged; only the flame is out).
+    Fixture f;
+    f.world.setBlock(8, 1, 8, f.campfireExt); // the cell at the player's feet
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f}); // the AABB overlaps it
+    Input idle = heldInput({});
+    run(p, 10, idle); // settle on the ground (m_onGround from last tick)
+    ASSERT_FALSE(p.isSitting());
     Input sit = heldInput({GameKey::W, GameKey::LeftControl});
     run(p, 1, sit); // crouch while overlapping: sitting engages
     ASSERT_TRUE(p.isSitting());

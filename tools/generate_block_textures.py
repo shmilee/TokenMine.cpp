@@ -502,6 +502,22 @@ def campfire(x, y):
     return (0, 0, 0, 0)  # transparent
 
 
+def campfire_extinguished(x, y):
+    """Phase 75: the unlit campfire tile (the `campfire_extinguished`
+    block, a cross model). The SAME log ring as the lit tile (rows
+    12..15, identical pixel data — the physical logs are unchanged when
+    the flame goes out), no flame. Transparent elsewhere."""
+    if 12 <= y <= 15:
+        n = noise(x, y, 920, 9)
+        if x in (1, 2, 13, 14):
+            base = (96, 64, 36)
+        else:
+            base = (152, 106, 62) if y <= 13 else (130, 90, 52)
+        return (clamp(base[0] + n), clamp(base[1] + n),
+                clamp(base[2] + n), 255)
+    return (0, 0, 0, 0)  # transparent
+
+
 def torch(x, y):
     """Phase 65: the torch tile (the `torch` block, a cross model). A
     brown stick (2-px column, rows 6..15) topped by a small flame (rows
@@ -568,6 +584,7 @@ TEXTURES = {
     "glowstone": glowstone,
     "fire": fire,
     "campfire": campfire,
+    "campfire_extinguished": campfire_extinguished,
     "torch": torch,
     "planks": planks,
     "crafting_table_top": crafting_table_top,

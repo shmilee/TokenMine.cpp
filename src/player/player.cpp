@@ -25,7 +25,9 @@ Player::Player(const World& world, const BlockRegistry& blocks, Vec3 spawnPos,
       // pattern).
       m_fireBlockId(blocks.idForName("fire")),
       // Phase 71: the campfire id the same way (unknown = never sitting).
-      m_campfireBlockId(blocks.idForName("campfire")) {
+      // Phase 75: the extinguished twin joins the seat.
+      m_campfireBlockId(blocks.idForName("campfire")),
+      m_campfireExtId(blocks.idForName("campfire_extinguished")) {
     teleportTo(spawnPos);
 }
 
@@ -200,9 +202,8 @@ void Player::update(double dt) {
     // next to the fire does not sit.
     m_sitting =
         m_crouching && m_onGround &&
-        (m_campfireBlockId.valid()
-             ? overlapsBlock(m_campfireBlockId)
-             : false);
+        (overlapsBlock(m_campfireBlockId) ||
+         overlapsBlock(m_campfireExtId)); // both invalid-safe (P70)
 
     Vec3 wish {0.0f, 0.0f, 0.0f};
     if (m_input->isDown(GameKey::W)) {
