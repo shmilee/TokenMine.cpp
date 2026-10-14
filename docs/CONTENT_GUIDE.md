@@ -671,5 +671,9 @@ config 其余部分的前向兼容一致）。种子配置（首次运行生成�
 - 洞穴：阈值 0.68 / scale 0.06 / minY 2 / 表面保护 4。
 - 矿脉：lattice 8；coal .4/size9/maxY80, iron .25/8/56, gold .12/7/36, diamond .05/5/20。
 - 树：lattice 4，树干 4+0..3，两层 r2 树冠 + r1 顶帽。
+- 熔岩湖（Phase 86）：`lava_lake` 段——固定位置 (center_x, center_z)、半径
+  `radius`（盆地 (2R+1)²）、`depth`（盆底 = 区域最低地形 − depth）、`fill`
+  （盆底上满熔岩层数）。`enabled: false` 关。熔岩被盆地围住（四周地形更高）
+  = 静态湖；放出生点 -Z 视野外 → 无输入基线门不受影响。
 - 验证基线：默认 seed 123456789 → 128 chunks、spawn (0,0) surface y=53 forest；
   同 seed 截图逐字节一致（像素级复现已验证）。

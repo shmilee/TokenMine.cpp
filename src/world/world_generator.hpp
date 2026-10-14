@@ -110,6 +110,13 @@ private:
     // sea level. Runs AFTER placeTrees, so trunks/canopies win collisions
     // (placeIfAir never overwrites).
     void placeDecorations(Chunk& chunk, const ChunkPos& pos) const;
+    // Phase 86 lava lake: a contained pool of lava carved into the terrain at
+    // a fixed location. The basin floor is the region's lowest terrain minus
+    // `depth` (a pure heightAt read — deterministic); the terrain above the
+    // floor in the region is carved to air and the lowest `fill` levels are
+    // poured full lava. The surrounding terrain (outside the region) is >= the
+    // region min, so the basin walls always rise above the lava (contained).
+    void placeLavaLake(Chunk& chunk, const ChunkPos& pos) const;
     void placeIfAir(Chunk& chunk, const ChunkPos& pos, int wx, int wy, int wz,
                     BlockID id) const;
 

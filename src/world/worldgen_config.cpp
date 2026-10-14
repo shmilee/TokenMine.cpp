@@ -204,7 +204,46 @@ Result<WorldgenParams> WorldgenParams::parse(const Json& def) {
         MC_TRY(r);
     }
 
+    // -- lava lake (Phase 86) --------------------------------------------
+    if (const Json* ll = def.find("lava_lake")) {
+        if (!ll->isObject()) {
+            return MC_FAIL("'lava_lake' must be an object");
+        }
+        warnUnknown(*ll, "lava_lake",
+                    {"enabled", "center_x", "center_z", "radius",
+                     "depth", "fill"});
+        auto r = readField(*ll, "lava_lake", "enabled", "bool",
+                           [&](const Json& v) {
+                               p.lavaLakeEnabled = v.asBool();
+                           });
+        MC_TRY(r);
+        r = readField(*ll, "lava_lake", "center_x", "number",
+                      [&](const Json& v) { p.lavaLakeCenterX = v.asInt(); });
+        MC_TRY(r);
+        r = readField(*ll, "lava_lake", "center_z", "number",
+                      [&](const Json& v) { p.lavaLakeCenterZ = v.asInt(); });
+        MC_TRY(r);
+        r = readField(*ll, "lava_lake", "radius", "number",
+                      [&](const Json& v) { p.lavaLakeRadius = v.asInt(); });
+        MC_TRY(r);
+        r = readField(*ll, "lava_lake", "depth", "number",
+                      [&](const Json& v) { p.lavaLakeDepth = v.asInt(); });
+        MC_TRY(r);
+        r = readField(*ll, "lava_lake", "fill", "number",
+                      [&](const Json& v) { p.lavaLakeFill = v.asInt(); });
+        MC_TRY(r);
+    }
+
     // -- cross-field validation -----------------------------------------
+    if (p.lavaLakeRadius < 0 || p.lavaLakeRadius > 16) {
+        return MC_FAIL("'lava_lake.radius' must be in [0, 16]");
+    }
+    if (p.lavaLakeDepth < 1 || p.lavaLakeDepth > 16) {
+        return MC_FAIL("'lava_lake.depth' must be in [1, 16]");
+    }
+    if (p.lavaLakeFill < 0 || p.lavaLakeFill > 8) {
+        return MC_FAIL("'lava_lake.fill' must be in [0, 8]");
+    }
     if (p.baseHeight < 1 || p.baseHeight > 120) {
         return MC_FAIL("'terrain.base_height' must be in [1, 120]");
     }

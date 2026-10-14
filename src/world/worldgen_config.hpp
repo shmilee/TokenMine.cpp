@@ -58,6 +58,23 @@ struct WorldgenParams {
     int treeMinHeight = 4; // trunk height in blocks
     int treeHeightRange = 3; // trunk height varies by +0..this
 
+    // Lava lake (section "lava_lake", Phase 86): a contained pool of lava
+    // carved into the terrain at a fixed location — a (2R+1)^2 square basin
+    // centred at (centerX, centerZ), the terrain below the floor carved to
+    // air and `fill` full-lava levels poured on the floor. The lake sits at
+    // a FIXED floor Y (independent of the local terrain) so it is
+    // deterministic; the surrounding terrain (surface ~ baseHeight) is
+    // higher, so the lava is contained. Placed OUTSIDE the spawn's default
+    // facing so the no-input baseline is unaffected.
+    bool lavaLakeEnabled = true;
+    int lavaLakeCenterX = 40;
+    int lavaLakeCenterZ = 40;
+    int lavaLakeRadius = 4; // the basin is (2R+1)^2 = 9x9 at R=4
+    int lavaLakeDepth = 4;  // the basin floor is this far below the region's
+                            // lowest terrain (heightAt), so the basin walls
+                            // (the surrounding terrain) are always higher
+    int lavaLakeFill = 2;   // full-lava levels poured on the basin floor
+
     // Parse a worldgen definition. Strict about types, permissive about
     // missing keys (defaults above).
     static Result<WorldgenParams> parse(const Json& def);

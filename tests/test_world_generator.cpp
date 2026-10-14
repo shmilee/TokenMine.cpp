@@ -754,3 +754,122 @@ TEST(WorldGeneratorTest, CreateFailsOnUnknownDecorationBlock) {
     ASSERT_FALSE(created.ok());
     EXPECT_NE(created.error().message.find("nope"), std::string::npos);
 }
+
+// Phase 86: the lava lake — a contained pool of lava carved into the terrain
+// at a fixed location. The region min-height floor (depth below) is carved to
+// air, `fill` full-lava levels are poured on the floor, and the surrounding
+// terrain (outside the region) stays solid (no lava) — the basin is
+// contained. Deterministic (pure heightAt).
+TEST(WorldGeneratorTest, Phase86LavaLakeIsContained) {
+    GenSetup setup;
+    // A lake inside the 2x2 region (x,z in [0,32)): centre (20,20), radius 3.
+    setup.params.lavaLakeEnabled = true;
+    setup.params.lavaLakeCenterX = 20;
+    setup.params.lavaLakeCenterZ = 20;
+    setup.params.lavaLakeRadius = 3; // region x 17..23, z 17..23
+    setup.params.lavaLakeDepth = 4;
+    setup.params.lavaLakeFill = 2;
+
+    auto res = WorldGenerator::create(7, setup.params, setup.biomes,
+                                      setup.blocks);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    WorldGenerator gen = std::move(*res);
+    std::map<ChunkPos, Chunk> chunks;
+    for (int cx = 0; cx <= 1; ++cx) {
+        for (int cz = 0; cz <= 1; ++cz) {
+            for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy) {
+                gen.generateChunk(chunks[{cx, cy, cz}], {cx, cy, cz});
+            }
+        }
+    }
+    auto fluidAt = [&](int x, int y, int z) -> std::uint8_t {
+        const BlockPos p {x, y, z};
+        const ChunkPos cp = worldToChunk(p);
+        const auto it = chunks.find(cp);
+        if (it == chunks.end()) {
+            return 0;
+        }
+        const BlockPos local = worldToChunkLocal(cp, p);
+        return it->second.fluidAt(local.x, local.y, local.z);
+    };
+    auto blockAt = [&](int x, int y, int z) -> BlockID {
+        const BlockPos p {x, y, z};
+        const ChunkPos cp = worldToChunk(p);
+        const auto it = chunks.find(cp);
+        if (it == chunks.end()) {
+            return BlockID::air();
+        }
+        const BlockPos local = worldToChunkLocal(cp, p);
+        return it->second.get(local.x, local.y, local.z);
+    };
+
+    // (1) There IS lava in the lake region.
+    int lavaCells = 0;
+    for (int x = 17; x <= 23; ++x) {
+        for (int z = 17; z <= 23; ++z) {
+            for (int y = 1; y < kWorldHeight; ++y) {
+                if (fluidKindOf(fluidAt(x, y, z)) == FluidKind::Lava) {
+                    ++lavaCells;
+                }
+            }
+        }
+    }
+    EXPECT_GT(lavaCells, 0) << "the lake should contain lava";
+
+    // (2) The lava is CONTAINED: no lava outside the region (a ring just
+    // outside the 17..23 basin).
+    int outsideLava = 0;
+    for (int x = 15; x <= 25; ++x) {
+        for (int z = 15; z <= 25; ++z) {
+            if (x >= 17 && x <= 23 && z >= 17 && z <= 23) {
+                continue; // inside the region
+            }
+            for (int y = 1; y < kWorldHeight; ++y) {
+                if (fluidKindOf(fluidAt(x, y, z)) == FluidKind::Lava) {
+                    ++outsideLava;
+                }
+            }
+        }
+    }
+    EXPECT_EQ(outsideLava, 0) << "the basin walls contain the lava";
+
+    // (3) Determinism: a second generation has the lava in the SAME cells.
+    std::map<ChunkPos, Chunk> chunks2;
+    for (int cx = 0; cx <= 1; ++cx) {
+        for (int cz = 0; cz <= 1; ++cz) {
+            for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy) {
+                gen.generateChunk(chunks2[{cx, cy, cz}], {cx, cy, cz});
+            }
+        }
+    }
+    bool same = true;
+    for (int x = 15; x <= 25; ++x) {
+        for (int z = 15; z <= 25; ++z) {
+            for (int y = 1; y < kWorldHeight; ++y) {
+                const BlockPos p {x, y, z};
+                const ChunkPos cp = worldToChunk(p);
+                const BlockPos local = worldToChunkLocal(cp, p);
+                const std::uint8_t a = chunks.at(cp).fluidAt(local.x, local.y,
+                                                             local.z);
+                const std::uint8_t b = chunks2.at(cp).fluidAt(local.x, local.y,
+                                                              local.z);
+                if (a != b) {
+                    same = false;
+                }
+            }
+        }
+    }
+    EXPECT_TRUE(same) << "the lake is deterministic";
+
+    // (4) In the centre column, the cell just above the topmost lava is air
+    // (the carved basin headspace).
+    int topLavaY = -1;
+    for (int y = 1; y < kWorldHeight; ++y) {
+        if (fluidKindOf(fluidAt(20, y, 20)) == FluidKind::Lava) {
+            topLavaY = y;
+        }
+    }
+    ASSERT_GE(topLavaY, 0) << "the centre column should hold lava";
+    EXPECT_EQ(blockAt(20, topLavaY + 1, 20), BlockID::air())
+        << "the basin headspace above the lava is carved to air";
+}
