@@ -3037,13 +3037,16 @@ void Game::updateEffects(double dt) {
     const float absorptionBefore = m_playerEffects.totalAbsorption(m_effects);
     // Phase 57: the fire system (the data-flagged effect, resolved at
     // init). Runs EVEN with no active effects — the ignition is a source:
-    // while the player is in the lava the fire is (re-)applied EVERY
-    // frame (the duration resets, the tick phase is kept — standing in
-    // the lava burns continuously, Minecraft); after leaving, the effect
-    // counts down fireDurationSeconds and burns until it expires. Water
-    // EXTINGUISHES instantly (and beats lava: in both fluids, no fire).
+    // while the player is in the lava OR overlapping a fire block
+    // (Phase 74: the fire block ignites the player the way the lava
+    // does — the P70 direct contact damage is gone; both sources share
+    // this one gate) the fire is (re-)applied EVERY frame (the duration
+    // resets, the tick phase is kept — standing in the fire source burns
+    // continuously, Minecraft); after leaving, the effect counts down
+    // fireDurationSeconds and burns until it expires. Water
+    // EXTINGUISHES instantly (and beats both: in water, no fire).
     if (m_fireEffectId != -1) {
-        if (m_player->inLava()) {
+        if (m_player->inLava() || m_player->isInFire()) {
             m_playerEffects.apply(
                 m_fireEffectId,
                 m_player->params().fireDurationSeconds);

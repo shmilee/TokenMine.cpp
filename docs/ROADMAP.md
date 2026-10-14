@@ -77,6 +77,7 @@
 - [x] **Phase 71** — 营火（campfire = 烤食物 + 座位）：`campfire` 块（cross、光 15 = MC、hardness 0.5、自掉、`interact: "campfire"` = 第三交互词汇表值、非 flamable）+ 配方 shaped `SSS/LCL/LLL`（MC 配方）+ 纹理（atlas 空位 [12,0] 免重锚）；**单槽烤制**（per-block `CampfireCookState` = 炉子 P44 范式：setBlock 收口 + `std::map` 位置序）——手持可熔炼（`smeltable_to` 非空 = 数据驱动门）右键空槽放 1 / **空手**右键取回（生熟均可 = MC 空手规则）；固定 1/60 子步 + 整数 `progressSubsteps`（**炉子节奏** = 复用 `smelt_time`、无燃料 = MC 自燃、无 config）；**右键链中营火分支先于进食通道**（MC 语义——全部可熔炼物品都是食物，无此前置则烤槽填不上；炉子/工作台既有行为不变）；烤制中物品 = 0.5 交叉图标 quad 悬浮格上半部（cross 惯例、opaque pass、+Y 假法线）；**座位** = crouch + 贴地 + AABB 严格重叠 campfire 格 → 锁移动/跳（复用 crouch 高度 = 文档化偏离：无独立坐姿；不入存档）；**format 11** `campfires`（每 campfire 块一条目、双向交叉校验 + 进度不变量 progress>0 ⇒ 槽恰 1 可熔炼、format 10 迁移 = 空）；1092/1092（+20：tick 4 + 存档 7 + interact 2 + 座位 5 + 内容钉死 2）
 - [x] **Phase 72** — 吸收两分量模型（P56 遗留大改）：**health（0..base max）+ absorption 池（0..64，`kAbsorptionMax`）独立池**——`damage()` **先扣池**（池单独不能致死）、`heal()`/`setHealth()` 只钳 base max（heal 永不填池）；池 = 效果 `absorb_hp` 总和的纯函数**只在同步点**（进食/mob 命中/到期或水熄灭【效果总和变化才同步】/牛奶/死亡——刷新恢复满层 = MC 属性重算；**读档不同步** = 存值权威，池 < 总和合法【同步点间伤害持续】）；**format 12** `player.absorption`（键纪律：12 必需 / ≤11 带键拒绝 / [0,64] / ≤ 效果总和不变量）+ **format ≤11 迁移**（共享 health 按 base max 拆分 22→20+2）；HUD 吸收红心改从**池**派生（池 0 = 零绘制 = 结构性免疫保持）+ F3 调试行；1097/1097（player 5→7 语义改写 + save 套件 5 新 + 适配 15 处降级剥键）
 - [x] **Phase 73** — 火 v3：Mob 火接触点燃（全量消费 P70 遗留"Mob 站火里不受伤害"）：**火块 = P58 熔岩点燃的块版**——`MobEntity::update` 点火条件 `inLava || inFire`（`inFire` = `Entity::overlapsBlock`，fire 块 id 构造时注册表解析、无 fire 块 = invalid = 结构惰性【P70 玩家同款容错】）；同一 fire 效果同一节奏（1 HP/0.2 s = 5 HP/s、可致死）、火块内每帧重点燃（持续燃烧）、离火残留 8 s、水瞬时熄灭（P57 规则）——**零新 config、零 format、零内容**（全走 P58 既有路径）；**顺带修复 P27 潜伏 UB**：skeleton 射击回调在实体 range-for 内 `m_entities.push_back` = 重分配悬空引用（P73 火把膜对照场景首次触发 SIGSEGV）→ 实体更新循环改索引循环（PITS +1）；1102/1102（+5：火块点燃速率/残留/水灭/未武装惰性/无 fire 块惰性）
+- [x] **Phase 74** — 火 v4：玩家火块点燃（全量消费 P70"直接接触伤害"非 MC 语义 + 消掉 P73 记录的"玩家/mob 火接触不对称"偏离）：**`Game::updateEffects` 点火门 `inLava() || isInFire()`**——fire 块点燃玩家 = 熔岩同款（P57 既有路径：重施加 duration 重置 + tick 相位保留、离开火源残留 8 s、水瞬时熄灭）；**P70 直伤机制整体退役**（`m_fireAccum` real-dt 计时器 + `player.fire_damage` / `player.fire_damage_interval_seconds` config 键 + 交叉校验删除——旧 config 仍启动 = 未知键容忍，单测钉死）；`isInFire()` 改公开（原经 `inFire()` 暴露）；**零 format、零内容**；1095/1095（P70 直伤 8 测试删除 + AABB 谓词改写 + 退役 config 容忍 1 新）
 
 ## 细节存档索引（docs/archive/）
 
@@ -150,5 +151,6 @@
 - **Phase 71** — `archive/phase-71.md`
 - **Phase 72** — `archive/phase-72.md`
 - **Phase 73** — `archive/phase-73.md`
+- **Phase 74** — `archive/phase-74.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

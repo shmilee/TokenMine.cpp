@@ -1394,121 +1394,40 @@ TEST(PlayerTest, RespawnClearsTheAbsorptionPool) {
     EXPECT_FLOAT_EQ(p.health(), p.params().maxHealth);
 }
 
-// -- Fire contact (Phase 70): the burn, the reset, the off-switch -----------
-
-TEST(PlayerTest, FireBurnsAtTheConfiguredRate) {
-    Fixture f;
-    f.world.setBlock(8, 1, 8, f.fire); // the fire cell at the player's feet
-    Player p = f.makePlayer({8.5f, 1.0f, 8.5f}); // the AABB is in the fire
-    Input idle = heldInput({});
-    run(p, 1, idle);
-    ASSERT_TRUE(p.inFire());
-    // 13 frames: the 1/60 double accumulation crosses 0.2 at frame 13
-    // (the P58 off-by-one lesson — never assert on the nominal 12): one
-    // 1-HP tick (Minecraft's fire pace).
-    run(p, 12, idle);
-    EXPECT_FLOAT_EQ(p.health(), 19.0f);
-    EXPECT_FALSE(p.isDead());
-}
-
-TEST(PlayerTest, FireBurnKills) {
-    Fixture f;
-    f.world.setBlock(8, 1, 8, f.fire);
-    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
-    Input idle = heldInput({});
-    // 20 HP / 1 per tick: the first crossing is frame 13, the twentieth
-    // frame ~241.
-    run(p, 250, idle);
-    EXPECT_TRUE(p.isDead());
-    EXPECT_FLOAT_EQ(p.health(), 0.0f);
-}
-
-TEST(PlayerTest, FireBurnResetsOnExit) {
-    Fixture f;
-    f.world.setBlock(8, 1, 8, f.fire);
-    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
-    Input idle = heldInput({});
-    run(p, 13, idle); // tick 1 (frame 13)
-    EXPECT_FLOAT_EQ(p.health(), 19.0f);
-    p.restorePosition({2.5f, 1.0f, 8.5f}); // dry land: the pending tick resets
-    run(p, 60, idle); // 1 s away: no damage without the fire
-    EXPECT_FLOAT_EQ(p.health(), 19.0f);
-    ASSERT_FALSE(p.inFire());
-    p.restorePosition({8.5f, 1.0f, 8.5f}); // back in: a FRESH 0.2 s
-    run(p, 11, idle); // 0.183 s: not yet
-    EXPECT_FLOAT_EQ(p.health(), 19.0f);
-    run(p, 2, idle); // the 13th frame: tick 2
-    EXPECT_FLOAT_EQ(p.health(), 18.0f);
-}
-
-TEST(PlayerTest, FireDamageZeroDisables) {
-    Fixture f;
-    f.world.setBlock(8, 1, 8, f.fire);
-    Player::Params params;
-    params.fireDamage = 0.0f; // the config off-switch
-    Player p = f.makePlayer({8.5f, 1.0f, 8.5f}, params);
-    Input idle = heldInput({});
-    run(p, 1, idle);
-    ASSERT_TRUE(p.inFire()); // the state is computed even when off
-    run(p, 249, idle); // well past 20 ticks
-    EXPECT_FALSE(p.isDead());
-    EXPECT_FLOAT_EQ(p.health(), 20.0f);
-}
+// -- Fire block (Phase 70; the ignition source since Phase 74) ------------
+// The fire block does NOT deal direct contact damage anymore (the P70
+// real-dt timer is gone): Game::updateEffects re-applies the Phase 57
+// fire effect while Player::isInFire (the inLava || isInFire gate) — the
+// burn rate, the 8 s lingering burn after leaving, and the water
+// extinguish are the effect path's, pinned by the E2E (S2 burn-out / S2b
+// the lingering-kill contrast). Pinned HERE: the AABB predicate (the
+// strict face convention) and the retired-config tolerance.
 
 TEST(PlayerTest, FireFaceTouchIsNotOverlap) {
     Fixture f;
     f.world.setBlock(8, 1, 8, f.fire); // the cell [8, 9) x [1, 2) x [8, 9)
-    Input idle = heldInput({});
     // The AABB max.x EXACTLY on the cell's x=8 face (7.7 + 0.3 = 8.0):
     // the strict per-axis convention says NOT in the fire.
     Player touch = f.makePlayer({7.7f, 1.0f, 8.5f});
-    run(touch, 1, idle);
-    EXPECT_FALSE(touch.inFire());
+    EXPECT_FALSE(touch.isInFire());
     // One float step inside: the AABB crosses the face -> in the fire.
     Player inside = f.makePlayer({7.8f, 1.0f, 8.5f});
-    run(inside, 1, idle);
-    EXPECT_TRUE(inside.inFire());
+    EXPECT_TRUE(inside.isInFire());
 }
 
-// -- Phase 70: the fire contact config ---------------------------------------
-
-TEST(PlayerParamsConfigTest, FireContactDefaults) {
-    // Minecraft: 1 HP every 0.2 s while standing in the fire.
+TEST(PlayerParamsConfigTest, RetiredFireDamageKeysAreTolerated) {
+    // Phase 74 retired player.fire_damage / fire_damage_interval_seconds
+    // (the fire block ignites the player — the effect path — instead of
+    // the direct contact damage). A pre-Phase-74 config carrying them
+    // still boots: unknown player.* keys are tolerated (config
+    // forward-compat, the fromConfig contract).
     Config cfg;
+    cfg.set("player.fire_damage", Json(1.0));
+    cfg.set("player.fire_damage_interval_seconds", Json(0.2));
     auto r = Player::Params::fromConfig(cfg);
     ASSERT_TRUE(r.ok()) << r.error().describe();
-    EXPECT_FLOAT_EQ(r->fireDamage, 1.0f);
-    EXPECT_DOUBLE_EQ(r->fireDamageIntervalSeconds, 0.2);
 }
 
-TEST(PlayerParamsConfigTest, RejectsZeroFireDamageInterval) {
-    Config cfg;
-    cfg.set("player.fire_damage_interval_seconds", Json(0.0));
-    auto r = Player::Params::fromConfig(cfg);
-    ASSERT_FALSE(r.ok());
-    EXPECT_NE(r.error().message.find("fire_damage_interval_seconds"),
-              std::string::npos);
-}
-
-TEST(PlayerParamsConfigTest, FireDamageZeroIsTheOffSwitch) {
-    Config cfg;
-    cfg.set("player.fire_damage", Json(0.0));
-    auto r = Player::Params::fromConfig(cfg);
-    ASSERT_TRUE(r.ok()) << r.error().describe();
-    EXPECT_FLOAT_EQ(r->fireDamage, 0.0f);
-    // Equal to the max health is allowed (one tick is lethal, not broken).
-    Config equal;
-    equal.set("player.fire_damage", Json(20.0));
-    EXPECT_TRUE(Player::Params::fromConfig(equal).ok());
-}
-
-TEST(PlayerParamsConfigTest, RejectsFireDamageAboveMaxHealth) {
-    Config cfg;
-    cfg.set("player.fire_damage", Json(21.0)); // > the default max_health
-    auto r = Player::Params::fromConfig(cfg);
-    ASSERT_FALSE(r.ok());
-    EXPECT_NE(r.error().message.find("fire_damage"), std::string::npos);
-}
 
 // -- Sitting (Phase 71): crouch on the ground, overlapping a campfire -------
 

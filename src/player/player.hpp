@@ -103,22 +103,15 @@ public:
         // after leaving is the Phase 57 fire effect — a different system).
         double lavaDamageIntervalSeconds = 1.0;
         float lavaDamage = 4.0f; // must be <= maxHealth (fromConfig check)
-        // Fire contact (Phase 70, Minecraft's 1 HP / 0.2 s): while the
-        // AABB overlaps a FIRE block cell, take fireDamage HP every
-        // fireDamageIntervalSeconds of real dt (a survival timer like
-        // the lava burn — the accumulator in Player::update, through the
-        // normal damage path so the hurt flash/sound and death handling
-        // all fire). Leaving the fire resets the pending tick. 0 disables
-        // the damage (the config off-switch, like mobs.enabled). Must be
-        // <= maxHealth (fromConfig check).
-        double fireDamageIntervalSeconds = 0.2;
-        float fireDamage = 1.0f; // 0 = off; must be <= maxHealth (fromConfig check)
         // Fire duration (Phase 57, Minecraft's 8 s on Normal): the seconds
         // the ignites_on_lava effect is (re-)applied while the player is
-        // in the lava. While in the lava it re-applies every frame (the
-        // duration resets = continuous burn); after leaving, the effect
-        // counts down this duration and burns (1 HP / 0.2 s) until it
-        // expires or water extinguishes it.
+        // in the lava OR overlapping a fire block (Phase 74: the fire
+        // block ignites the player the way the lava does — the P70
+        // direct contact damage was replaced by the ignition). While in
+        // the fire source it re-applies every frame (the duration resets
+        // = continuous burn); after leaving, the effect counts down this
+        // duration and burns (1 HP / 0.2 s) until it expires or water
+        // extinguishes it.
         double fireDurationSeconds = 8.0; // (0, 100] (fromConfig check)
 
         // Build the parameters from the config's `player.*` keys (Phase 32):
@@ -126,12 +119,13 @@ public:
         // JSON number (the Config getters would silently fall back to the
         // default on a type mismatch, so this reads the raw values).
         // Rejected: non-numeric values, non-positive values (only
-        // fall_damage_offset, regen_hunger_threshold and fire_damage —
-        // 0 = the damage off-switch — may be 0), eye_height >= height,
-        // crouch_height >= height, regen_hunger_threshold > max_hunger,
-        // lava_damage > max_health, fire_damage > max_health, and
-        // fire_duration_seconds > 100. Unknown player.* keys are
-        // tolerated (config forward-compat, like the rest of the config).
+        // fall_damage_offset and regen_hunger_threshold may be 0),
+        // eye_height >= height, crouch_height >= height,
+        // regen_hunger_threshold > max_hunger, lava_damage > max_health,
+        // and fire_duration_seconds > 100. Unknown player.* keys are
+        // tolerated (config forward-compat, like the rest of the config —
+        // a pre-Phase-74 config with the retired player.fire_damage*
+        // keys still boots).
         static Result<Params> fromConfig(const Config& config);
 
         friend bool operator==(const Params&, const Params&) = default;
@@ -219,9 +213,13 @@ public:
     // overlaps at least one water / lava cell.
     bool inWater() const { return m_inWater; }
     bool inLava() const { return m_inLava; }
-    // Fire immersion (Phase 70): the AABB overlaps a fire block cell (the
-    // contact-damage source).
-    bool inFire() const { return m_inFire; }
+    // The AABB overlaps at least one fire block cell (Phase 70; the
+    // ignition source since Phase 74 — Game::updateEffects re-applies
+    // the fire effect while this is true, the lava pattern). The fire id
+    // is resolved once in the constructor (the registry is static after
+    // init); an unresolved id means "never in fire" (a test fixture
+    // without the fire block — the fluid.cpp fallback).
+    bool isInFire() const;
     // Sitting (Phase 71): crouching on the ground while the AABB overlaps
     // a campfire block cell — movement and jumping are locked (the crouch
     // height is the sitting pose — documented v1 deviation: no separate
@@ -300,13 +298,6 @@ private:
     // The AABB overlaps at least one fluid cell (water / lava, Phase 54).
     bool isInWater() const;
     bool isInLava() const;
-    // The AABB overlaps at least one fire block cell (Phase 70, the
-    // contact damage). The fire id is resolved once in the constructor
-    // (the registry is static after init); an unresolved id means "never
-    // in fire" (a test fixture without the fire block — the fluid.cpp
-    // fallback).
-    bool isInFire() const;
-
     // Crouch height state machine: shrink to crouchHeight while the key is
     // held (even mid-air); grow back only when the headroom fits the full
     // height. The feet never move (position is the bottom center).
@@ -340,9 +331,6 @@ private:
     // Lava wins over water when both are true (an AABB can straddle a
     // water cell and a lava cell — the burn pace applies).
     bool m_inLava = false;
-    // This tick's fire state (Phase 70): the AABB overlaps a fire block
-    // cell (the contact-damage source — blocks, not the fluid layer).
-    bool m_inFire = false;
     // Crouch state this tick (set in update before the speed computation).
     bool m_crouching = false;
     // Survival: health, the damage clock (regen delay), the regen
@@ -370,13 +358,10 @@ private:
     // tick (only runs while the AABB overlaps a lava cell; leaving the
     // lava resets it — no lingering fire in v1).
     double m_lavaAccum = 0.0;
-    // Fire contact (Phase 70): the real-dt accumulator for the pending
-    // burn tick (only runs while the AABB overlaps a fire cell AND
-    // fireDamage > 0; leaving the fire resets it).
-    double m_fireAccum = 0.0;
-    // The fire block id (Phase 70), resolved once in the constructor
-    // (registry name "fire" — the fluid.cpp fallback pattern): invalid =
-    // no fire block registered (a test fixture) = isInFire is false.
+    // The fire block id (Phase 70; the ignition source since Phase 74),
+    // resolved once in the constructor (registry name "fire" — the
+    // fluid.cpp fallback pattern): invalid = no fire block registered
+    // (a test fixture) = isInFire is false.
     BlockID m_fireBlockId = BlockID::invalid();
     // Phase 71: the campfire block id, resolved once in the constructor
     // (the registry is static after init). An unknown name leaves the id

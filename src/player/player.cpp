@@ -18,10 +18,11 @@ Player::Player(const World& world, const BlockRegistry& blocks, Vec3 spawnPos,
     : Entity(world, blocks, spawnPos, params.width, params.height),
       m_params(params),
       m_spawnPos(spawnPos),
-      // Phase 70: resolve the fire block id once (the registry is static
-      // after init). An unknown name leaves the id invalid = isInFire is
-      // always false (a test fixture without the fire block — the
-      // fluid.cpp fallback pattern).
+      // Phase 70 (the ignition source since Phase 74): resolve the fire
+      // block id once (the registry is static after init). An unknown
+      // name leaves the id invalid = isInFire is always false (a test
+      // fixture without the fire block — the fluid.cpp fallback
+      // pattern).
       m_fireBlockId(blocks.idForName("fire")),
       // Phase 71: the campfire id the same way (unknown = never sitting).
       m_campfireBlockId(blocks.idForName("campfire")) {
@@ -86,9 +87,11 @@ Result<Player::Params> Player::Params::fromConfig(const Config& config) {
     MC_TRY(read("lava_damage_interval_seconds", p.lavaDamageIntervalSeconds,
                 false));
     MC_TRY(read("lava_damage", p.lavaDamage, false));
-    MC_TRY(read("fire_damage_interval_seconds",
-                p.fireDamageIntervalSeconds, false));
-    MC_TRY(read("fire_damage", p.fireDamage, true)); // 0 = off (allowed)
+    // Phase 74: the retired player.fire_damage /
+    // fire_damage_interval_seconds keys are no longer read — the fire
+    // block ignites the player (the P57 effect path) instead of doing
+    // direct contact damage. A pre-Phase-74 config carrying them still
+    // boots (unknown player.* keys are tolerated).
     MC_TRY(read("fire_duration_seconds", p.fireDurationSeconds, false));
     // Cross-field sanity (the defaults satisfy all four).
     if (p.eyeHeight >= p.height) {
@@ -103,10 +106,6 @@ Result<Player::Params> Player::Params::fromConfig(const Config& config) {
     }
     if (p.lavaDamage > p.maxHealth) {
         return MC_FAIL("config player.lava_damage must be <= "
-                       "player.max_health");
-    }
-    if (p.fireDamage > p.maxHealth) {
-        return MC_FAIL("config player.fire_damage must be <= "
                        "player.max_health");
     }
     if (p.fireDurationSeconds > 100.0) {
@@ -185,7 +184,6 @@ void Player::update(double dt) {
     // timer; when the AABB straddles both kinds, lava wins.
     m_inWater = isInWater();
     m_inLava = isInLava();
-    m_inFire = isInFire(); // Phase 70: the fire block (contact damage)
 
     // 2b. Crouch (LeftControl): the height state machine runs before the
     // speed computation (crouch scales the speed) and before the edge
@@ -372,24 +370,11 @@ void Player::update(double dt) {
         m_lavaAccum = 0.0;
     }
 
-    // Fire contact (Phase 70, Minecraft's 1 HP / 0.2 s): while the AABB
-    // overlaps a FIRE BLOCK cell, take fireDamage HP every
-    // fireDamageIntervalSeconds of real dt — the lava-burn pattern,
-    // through the normal damage path (hurt flash/sound/death all fire).
-    // Leaving the fire resets the pending tick. fireDamage 0 disables the
-    // damage entirely (the config off-switch).
-    if (m_inFire && !m_dead && m_params.fireDamage > 0.0f) {
-        m_fireAccum += dt;
-        while (m_fireAccum >= m_params.fireDamageIntervalSeconds) {
-            m_fireAccum -= m_params.fireDamageIntervalSeconds;
-            damage(m_params.fireDamage);
-            if (m_dead) {
-                break;
-            }
-        }
-    } else {
-        m_fireAccum = 0.0;
-    }
+    // Fire contact (Phase 70) was REPLACED in Phase 74: the fire block
+    // now IGNITES the player through the Phase 57 effect path
+    // (Game::updateEffects re-applies the fire effect while
+    // Player::isInFire — the lingering 8 s burn after leaving, water
+    // extinguishes). No direct damage here.
 
     // Fell out of the world (the world's edge is void): death.
     if (belowKillPlane()) {

@@ -540,8 +540,8 @@
     ② **水灭火**（`extinguished_by_water`，`StatusEffects::clearExtinguishable`）：
     `inWater()` 为真时瞬时移除（在 tick 之前执行 → 水内零燃烧伤害）。
     **水胜熔岩**（两流体并存时先点燃后灭火 = 无火，P54 熔岩优先的
-    游泳状态不受影响）。离熔岩后 fire **继续 countdown** 8 s 烧至到期
-    = 残留燃烧（MC 核心行为）。燃烧 tick 走正常受伤路径（红闪/音效
+    游泳状态不受影响）。离开火源后 fire **继续 countdown** 8 s 烧至
+    到期 = 残留燃烧（MC 核心行为——Phase 74 起 fire 块接触同款）。燃烧 tick 走正常受伤路径（红闪/音效
     复用，**无独立火焰表现**，见 KNOWN_ISSUES；每秒 5 次）。牛奶**不**
     灭火（`negative: false`，MC 语义——只清负面）。熔岩内还有 P54 的
     直接灼烧（4 HP/s）与火 tick（5 HP/s）**叠加**（MC 同款：熔岩内
