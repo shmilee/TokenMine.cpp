@@ -151,7 +151,10 @@
   物品数据驱动 + P10 `Projectile`）：
   - **获取**：shaped 配方 `bow`（工作台：3 stick + 1 planks 的 C 形，
     `data/recipes/bow.json`）；material 物品 `bow`（`data/items/bow.json`，
-    `max_stack 1`，图标 `bow.png`，`ammo: arrow`，`attack_damage: 1`）；
+    `max_stack 1`，图标 `bow.png`，`ammo: arrow`，`attack_damage: 1`）+
+    **`infinite_bow`**（Phase 77：同款数据 + `infinite: true`；shapeless
+    配方 bow + diamond → 1——Infinity 附魔的可合成替身，diamond = 项目
+    顶级材料；图标 = 弓 + 蓝色钻石微光）；
     **箭 = material 物品 `arrow`**（`max_stack 64`，图标 `arrow.png`）+
     shapeless 配方 **flint + stick + feather → 4 arrow**（`data/recipes/
     arrow.json`，Phase 60，MC 1.14+；**替换** P24 的 2 stick 竖排 → 2 =
@@ -170,7 +173,11 @@
   - **弹药**：发射消耗 1 个发射器 `ammo` 数据字段点名的物品（**槽序升序
     第一个持有它的槽位**）；无弹药不能起拉，拉弓中途耗尽则松键取消
     （无箭不射）；`ammo` 缺席的发射器 = 无限箭（Phase 21 前语义），
-    字段名在 init 时经 ItemRegistry 交叉校验
+    字段名在 init 时经 ItemRegistry 交叉校验。**Infinity**（Phase 77，
+    物品字段 `infinite`，严格 bool、要求 `ammo` 非空——MC 弓的 Infinity
+    附魔的数据驱动版，本项目无附魔系统 = 独立物品 `infinite_bow`）：
+    发射**不消耗**弹药，但仍须持有**至少 1 个** ammo 物品（1 支箭永不
+    被耗尽）
   - **箭**（P10 `Projectile` 实体）：重力 20 b/s²（MC 箭 0.05/格/tick²）、
     终端 38、**撞 solid = 插住**（stuck：留在命中处、保留撞击方向
     `stuckDir` 供渲染——碰撞解算器会清零速度的碰撞轴，`stuckDir` 在

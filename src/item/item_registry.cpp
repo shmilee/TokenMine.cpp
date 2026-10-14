@@ -135,6 +135,22 @@ Result<void> ItemRegistry::parseAmmo(const Json& def, Item& out) {
         }
         out.ammo = am->asString();
     }
+    // Optional 'infinite' (Phase 77): a strict bool (default false) — the
+    // launcher's Infinity (Minecraft's bow enchantment, data-driven here):
+    // firing consumes NO ammo while the inventory holds at least one
+    // `ammo` item. REQUIRES a non-empty 'ammo' — a launcher without ammo
+    // already fires unlimited (the pre-Phase-24 default), so the flag on
+    // it is a no-op typo (the ammo discipline).
+    if (const Json* inf = def.find("infinite")) {
+        if (!inf->isBool()) {
+            return MC_FAIL("'infinite' must be a boolean");
+        }
+        if (inf->asBool() && out.ammo.empty()) {
+            return MC_FAIL("'infinite' requires 'ammo' (a launcher without "
+                           "ammo already fires unlimited)");
+        }
+        out.infinite = inf->asBool();
+    }
     return {};
 }
 

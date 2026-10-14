@@ -78,6 +78,14 @@ struct Item {
     // Game::fireBow). The name is cross-checked against the ItemRegistry
     // at game init (same pattern as the icon file check).
     std::string ammo;
+    // Phase 77: the launcher's INFINITY (optional data field 'infinite',
+    // a strict bool, default false; parse requires a non-empty 'ammo' —
+    // without one, firing already consumes nothing, so the flag would be
+    // a no-op typo). Minecraft's bow Infinity enchantment, data-driven
+    // here: firing consumes NO ammo while the inventory holds at least
+    // one `ammo` item (the shot is still gated on holding one — the one
+    // arrow is never spent, see Game::fireBow).
+    bool infinite = false;
     // Phase 23: food (optional data field 'restore_hunger', integer in
     // [1, 20]). restoreHunger > 0 marks the item as FOOD: while it is
     // selected, the right button eats one (restores this much hunger and

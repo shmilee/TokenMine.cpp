@@ -80,6 +80,7 @@
 - [x] **Phase 74** — 火 v4：玩家火块点燃（全量消费 P70"直接接触伤害"非 MC 语义 + 消掉 P73 记录的"玩家/mob 火接触不对称"偏离）：**`Game::updateEffects` 点火门 `inLava() || isInFire()`**——fire 块点燃玩家 = 熔岩同款（P57 既有路径：重施加 duration 重置 + tick 相位保留、离开火源残留 8 s、水瞬时熄灭）；**P70 直伤机制整体退役**（`m_fireAccum` real-dt 计时器 + `player.fire_damage` / `player.fire_damage_interval_seconds` config 键 + 交叉校验删除——旧 config 仍启动 = 未知键容忍，单测钉死）；`isInFire()` 改公开（原经 `inFire()` 暴露）；**零 format、零内容**；1095/1095（P70 直伤 8 测试删除 + AABB 谓词改写 + 退役 config 容忍 1 新）
 - [x] **Phase 75** — 营火 v2：四槽 + 水浇灭（全量消费 P71 遗留"单槽" + "无水浇灭"偏离）：**4 个独立烤位**（`CampfireCookState` = `slots[4]` + `progressSubsteps[4]` 各自 1/60 整数计时 = 炉子节奏；放 = 第一个空槽 / 取 = 第一个非空槽【索引序确定性，无面板 = v1 简化】；只有点燃的烤；只渲染第一个非空槽图标）+ **水浇灭**（点燃营火 6-邻任意水 → 瞬时变**新块 `campfire_extinguished`**【光 0、同 interact、掉自己、非 flamable、atlas 空位 [13,0] 免重锚】——P64 fire 块浇灭同款规则；**烤制状态保留**【物品还在、时钟暂停、空手可取回】；**v2 无再点燃** = 文档化偏离）+ **座位扩到未点燃**（MC：柴堆没变）+ **format 13** `campfires`（恰 4 槽对象、家族双向交叉校验【点燃 + 未点燃】、每槽进度不变量、format 11/12 单槽形状 → 槽 0 迁移、旧形状带 slots 键 = 版本谎报拒绝）；1101/1101（tick 4 测试改写四槽 + tick 独立 1 + save 3 + 座位 1 + 内容钉死 1）
 - [x] **Phase 76** — 营火 v3：再点燃（全量消费 P75 遗留"水浇灭后无再点燃"偏离）：**新块属性 `ignites_to`**（严格字符串、显式空串拒绝【ammo 纪律】、init 存在性交叉校验【grows_to 纪律】）+ 内容 `campfire_extinguished.ignites_to = "campfire"`——燧石与钢右键未点燃营火 = **原位再点燃**（光 0→15 局部重光照、"ignite" 音、物品不消耗 = P60 语义、烤制状态保留续烤）；交互在**营火分支内**处理（该分支先于通用点火器分支消费点击——首轮 E2E 点击被截获暴露）；通用点火器分支的 `ignites_to` 路径对非营火家族块同样生效（数据驱动统一语义）；**零 format、零新物品/纹理/配方**；1104/1104（+3：属性解析 2 + 内容钉死改写 1）
+- [x] **Phase 77** — 弓 v3：无限弓（全量消费 P42 遗留"无箭矢强化"的 Infinity 部分）：**物品字段 `infinite`**（严格 bool、缺省 false、**要求 `ammo` 非空**——无 ammo 的发射器本就无限，flag = no-op 拒绝【ammo 纪律】）+ **内容 `infinite_bow`**（bow 同款数据 + `infinite: true`、shapeless 配方 bow + diamond → 1【Infinity 附魔的可合成替身】、图标 = 弓 + 蓝色钻石微光【新 salt 91/92、既有图标零变化】）；**发射语义**（`fireBow`）：`infinite` 发射器仍须持有**至少 1 个** ammo 才能射（1 支箭永不耗尽 = MC Infinity 规则）、命中发射**不消耗**；普通弓路径不变；**零 format**（箭不入存档 = 既有，物品入档走既有 slots）；1109/1109（+5：解析 3 + 内容钉死 2）
 
 ## 细节存档索引（docs/archive/）
 
@@ -156,5 +157,6 @@
 - **Phase 74** — `archive/phase-74.md`
 - **Phase 75** — `archive/phase-75.md`
 - **Phase 76** — `archive/phase-76.md`
+- **Phase 77** — `archive/phase-77.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

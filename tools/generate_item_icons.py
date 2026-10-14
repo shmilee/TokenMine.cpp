@@ -622,6 +622,22 @@ def bow():
     return px
 
 
+def infinite_bow():
+    """Phase 77: the Infinity bow (Minecraft's bow enchantment, the
+    data-driven twin of the bow). The bow unchanged, with a small blue
+    DIAMOND sparkle where the string meets the centre (the enchantment's
+    mark) — new salts 91/92, every existing icon pixel-identical."""
+    px = bow()
+    diamond = (96, 198, 234)
+    diamond_dark = (52, 140, 190)
+    # A 3x3 sparkle at the bow's heart (the string is at x=22, the stave
+    # arc at x=4..12: the open centre is around x=14..18, y=12..18).
+    for (x, y) in ((15, 14), (16, 13), (16, 14), (17, 14), (16, 15)):
+        setpx2(px, x, y, diamond, salt=91)
+    setpx2(px, 17, 15, diamond_dark, salt=92)
+    return px
+
+
 def arrow():
     """An arrow: a 4px diagonal shaft from the bottom-left to the
     top-right, a steel tip at the top end and light fletching at the
@@ -843,6 +859,7 @@ ITEMS = {
     "stone_shovel": stone_shovel,
     "iron_shovel": iron_shovel,
     "bow": bow,
+    "infinite_bow": infinite_bow,
     "arrow": arrow,
     "leather": leather,
     **{name: make_dye_icon(name) for name in DYE_PALETTE},

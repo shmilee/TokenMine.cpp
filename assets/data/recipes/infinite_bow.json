@@ -1,0 +1,8 @@
+{
+  "id": "infinite_bow",
+  "output": { "item": "infinite_bow", "count": 1 },
+  "ingredients": [
+    { "item": "bow", "count": 1 },
+    { "item": "diamond", "count": 1 }
+  ]
+}

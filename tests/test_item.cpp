@@ -483,6 +483,100 @@ TEST(ItemRegistryTest, RejectsBadAmmo) {
                      .ok());
 }
 
+// -- infinite (Phase 77, the bow's Infinity) --------------------------------
+
+TEST(ItemRegistryTest, ParsesInfinite) {
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"ibow","type":"material","max_stack":1,
+                      "shoot_speed":15.0,"shoot_damage":5.0,
+                      "ammo":"arrow","infinite":true})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(items.at(*r).infinite);
+}
+
+TEST(ItemRegistryTest, InfiniteDefaultsToFalse) {
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"bow","type":"material","max_stack":1,
+                      "shoot_speed":15.0,"shoot_damage":5.0,
+                      "ammo":"arrow"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FALSE(items.at(*r).infinite);
+}
+
+TEST(ItemRegistryTest, RejectsBadInfinite) {
+    ItemRegistry items;
+    // Non-bool.
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material",
+                                  "shoot_speed":10.0,"ammo":"a",
+                                  "infinite":"yes"})"))
+                     .ok());
+    // A launcher WITHOUT ammo already fires unlimited (the pre-Phase-24
+    // default): the flag is a no-op typo.
+    auto r = items.registerItem(
+        parseJson(R"({"id":"b","type":"material","shoot_speed":10.0,
+                      "infinite":true})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("infinite"), std::string::npos)
+        << r.error().message;
+}
+
+TEST(ItemRegistryTest, InfiniteBowContentPinned) {
+    // The real asset (Phase 77): the Infinity bow. The values are the
+    // contract (the bow's data unchanged + 'infinite' true; max_stack 1;
+    // the ammo names the item the player must hold at least one of).
+    ItemRegistry items;
+    FILE* fp = std::fopen("assets/data/items/infinite_bow.json", "rb");
+    ASSERT_NE(fp, nullptr) << "run from the repo root";
+    std::string text;
+    char buf[4096];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+        text.append(buf, n);
+    }
+    std::fclose(fp);
+    auto parsed = Json::parse(text);
+    ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+    auto reg = items.registerItem(*parsed);
+    ASSERT_TRUE(reg.ok()) << reg.error().message;
+    const Item& b = items.at(*reg);
+    EXPECT_EQ(b.name, "infinite_bow");
+    EXPECT_EQ(b.maxStack, 1);
+    EXPECT_FLOAT_EQ(b.shootSpeed, 15.0f);
+    EXPECT_FLOAT_EQ(b.shootDamage, 5.0f);
+    EXPECT_EQ(b.attackDamage, 1.0f);
+    EXPECT_EQ(b.ammo, "arrow");
+    EXPECT_TRUE(b.infinite);
+    EXPECT_EQ(b.icon, "infinite_bow");
+}
+
+TEST(ItemRegistryTest, InfiniteBowRecipePinned) {
+    // The shipped recipe: shapeless bow + diamond -> 1 (the enchantment's
+    // craftable stand-in; diamond = the project's top material).
+    FILE* fp = std::fopen("assets/data/recipes/infinite_bow.json", "rb");
+    ASSERT_NE(fp, nullptr) << "run from the repo root";
+    std::string text;
+    char buf[4096];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+        text.append(buf, n);
+    }
+    std::fclose(fp);
+    auto parsed = Json::parse(text);
+    ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+    const Json& def = *parsed;
+    EXPECT_EQ(def.find("output")->find("item")->asString(), "infinite_bow");
+    EXPECT_EQ(def.find("output")->find("count")->asInt(), 1);
+    const Json& ing = *def.find("ingredients");
+    ASSERT_EQ(ing.size(), 2u);
+    EXPECT_EQ(ing.at(0).find("item")->asString(), "bow");
+    EXPECT_EQ(ing.at(0).find("count")->asInt(), 1);
+    EXPECT_EQ(ing.at(1).find("item")->asString(), "diamond");
+    EXPECT_EQ(ing.at(1).find("count")->asInt(), 1);
+}
+
 // -- food (Phase 23) --------------------------------------------------------
 
 TEST(ItemRegistryTest, ParsesFood) {

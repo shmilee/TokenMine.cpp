@@ -2450,6 +2450,10 @@ void Game::fireBow() {
     // Ammo (Phase 24): one from the lowest-index slot that holds the
     // launcher's data 'ammo' item. The inventory can run out between the
     // draw start and the release — then the shot is cancelled silently.
+    // Phase 77 (Infinity): an `infinite` launcher is still gated on
+    // holding at least one (found below) but consumes NONE — the one
+    // arrow is never spent (Minecraft's bow Infinity enchantment,
+    // data-driven here).
     if (!item.ammo.empty()) {
         const ItemID ammo = m_items.idForName(item.ammo);
         int slot = -1;
@@ -2463,7 +2467,9 @@ void Game::fireBow() {
             resetBowDraw();
             return;
         }
-        m_inventory.take(static_cast<std::size_t>(slot), 1);
+        if (!item.infinite) {
+            m_inventory.take(static_cast<std::size_t>(slot), 1);
+        }
     }
     // The arrow spawns in front of the eye along the aim (the launch
     // origin never sits inside the near plane), at the item's data

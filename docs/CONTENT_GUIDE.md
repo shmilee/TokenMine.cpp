@@ -65,6 +65,10 @@
   "shoot_damage": 5.0,              // 可选（Phase 21）：箭矢命中伤害，[0, 100]，默认 0
   "restore_hunger": 4,              // 可选（Phase 23）：食物恢复饥饿，整数 [1,20]；缺省=非食物
   "ammo": "arrow",                  // 可选（Phase 24）：发射器弹药物品名（须存在，init 交叉校验）；发射消耗 1 个
+  "infinite": true,                 // 可选（Phase 77）：严格 bool，缺省 false；要求 'ammo' 非空——发射器的
+                                    //   Infinity（MC 弓附魔的数据驱动版）：发射**不消耗**弹药（仍须持有
+                                    //   至少 1 个 ammo 物品才能射；1 支箭永不被耗尽）；非 bool / 无 ammo
+                                    //   点名拒绝（ammo 纪律）
   "smeltable_to": "cooked_x",       // 可选（Phase 40）：炉子产物物品名（须存在，init 交叉校验）；存在=可熔炼
   "smelt_time": 10.0,               // 可选（Phase 40）：单格熔炼秒数，(0,100]，默认 10（MC 炉子时长）；仅可熔炼时有意义
   "fuel_time": 80.0,                // 可选（Phase 40）：单格燃料燃烧秒数，(0,1000]；缺省=非燃料（显式 0 拒绝）
