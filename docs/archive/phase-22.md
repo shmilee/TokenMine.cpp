@@ -75,7 +75,7 @@
   ∧ 色差<30；zombie 绿 = G≥R+25（沿用）。
 
 ### 本会话踩坑（E2E 排查，重要）
-1. **驱动相对路径陷阱**：`p22_e2e.zsh` 内部 `cd /home/shmilee/mine-craft`，
+1. **驱动相对路径陷阱**：`p22_e2e.zsh` 内部 `cd /home/shmilee/project/TokenMine.cpp`，
    调用方传**相对路径** out 时截图写进**仓库根目录**（/tmp/opencode 里剩旧文件
    → 新旧图比对得出错误结论，且仓库目录被污染）。修法：调用一律传绝对路径；
    跑完 `git status` 核对无 stray 文件。

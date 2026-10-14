@@ -640,8 +640,8 @@ config 其余部分的前向兼容一致）。种子配置（首次运行生成�
 ## 使用存档（Phase 13）
 
 ```bash
-./build/bin/minecraft --save myworld      # 首次：新游戏；此后：读档
-./build/bin/minecraft --save myworld --new  # 推倒重来（退出时覆盖 myworld 槽）
+./build/bin/tokenmine --save myworld      # 首次：新游戏；此后：读档
+./build/bin/tokenmine --save myworld --new  # 推倒重来（退出时覆盖 myworld 槽）
 ```
 
 - 存档槽名只允许字母/数字/`_`/`-`（防路径穿越）；文件在 `data/saves/<slot>.json`

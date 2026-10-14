@@ -5,7 +5,8 @@
 
 ## 项目一句话
 
-可运行、可扩展的 Minecraft 风格 3D 体素沙盒：C++20 / SDL3 / OpenGL 3.3 core，
+**TokenMine.cpp**——本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒，
+C++20 / SDL3 / OpenGL 3.3 core，
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
@@ -213,9 +214,9 @@
 
 ```bash
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build  # 构建（0 警告）
-./build/bin/minecraft_tests                                                 # 测试（964）
-./build/bin/minecraft                                                       # 运行（ESC 退出）
-./build/bin/minecraft --frames N [--screenshot /abs.png] [--save slot] [--new] [--config path]
+./build/bin/tokenmine_tests                                                 # 测试（964）
+./build/bin/tokenmine                                                       # 运行（ESC 退出）
+./build/bin/tokenmine --frames N [--screenshot /abs.png] [--save slot] [--new] [--config path]
 ```
 
 游戏必须从仓库 cwd 启动（资源相对路径）；独立测试程序链接

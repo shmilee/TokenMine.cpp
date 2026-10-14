@@ -6,11 +6,11 @@
 ## 目录结构
 
 ```
-mine-craft/
+tokenmine/
 ├── assets/          # 游戏资源（textures/ models/ shaders/ sounds/ data/）
 ├── config/          # 用户配置（config.json，不存在时自动生成默认值）
 ├── data/            # 存档目录（data/saves/<slot>.json，Phase 13）
-├── logs/            # 运行日志（logs/mine-craft.log）
+├── logs/            # 运行日志（logs/tokenmine.log）
 ├── src/
 │   ├── block/       # 数据驱动方块系统：Block 数据模型 + BlockRegistry（JSON 加载/校验）
 │   ├── core/        # 核心框架：日志、错误处理、JSON、配置、资源、窗口、输入、相机、PNG、

@@ -1779,7 +1779,7 @@ int Game::run() {
         // Refresh the title (shows live FPS) at most twice per second.
         if (frameStart - m_lastTitleUpdate >= 0.5) {
             m_lastTitleUpdate = frameStart;
-            m_window.setTitle("MineCraft — " +
+            m_window.setTitle("TokenMine.cpp — " +
                               std::to_string(static_cast<int>(
                                   std::lround(m_fpsSmoothed))) +
                               " FPS | " + std::to_string(m_renderer.stats().drawCalls) +

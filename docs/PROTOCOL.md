@@ -9,8 +9,8 @@
 ```bash
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build  # 构建（0 警告要求）
 ctest --test-dir build --output-on-failure                                  # 测试
-./build/bin/minecraft --frames 60 --screenshot /tmp/opencode/shot.png       # 自动化验证（退出码 0）
-./build/bin/minecraft --seed 999 ...                                        # 换种子
+./build/bin/tokenmine --frames 60 --screenshot /tmp/opencode/shot.png       # 自动化验证（退出码 0）
+./build/bin/tokenmine --seed 999 ...                                        # 换种子
 magick shot.png -format "%[pixel:p{x,y}]" info:                             # 像素采样
 ```
 
@@ -68,7 +68,7 @@ C++20、CMake+Ninja、SDL3、OpenGL 3.3 core（GLEW）、GTest、zlib。**无网
 ```bash
 ctest --test-dir build --output-on-failure
 # 或直接运行
-./build/bin/minecraft_tests
+./build/bin/tokenmine_tests
 ```
 ## E2E 协议（截图/确定性验证）
 

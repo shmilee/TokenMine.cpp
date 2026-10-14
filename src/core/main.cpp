@@ -1,4 +1,4 @@
-// MineCraft entry point: argument parsing, logging setup, game bootstrap.
+// TokenMine.cpp entry point: argument parsing, logging setup, game bootstrap.
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -13,8 +13,8 @@ namespace {
 
 void printUsage() {
     std::printf(
-        "MineCraft (Minecraft-like voxel sandbox)\n"
-        "Usage: minecraft [options]\n"
+        "TokenMine.cpp (Minecraft-like voxel sandbox, written by a local LLM)\n"
+        "Usage: tokenmine [options]\n"
         "  --config <path>   Config file (default: config/config.json)\n"
         "  --seed <n>        Override world seed\n"
         "  --time <0..1>     Start time of day (0 = pre-dawn, 0.25 = noon,\n"
@@ -139,8 +139,8 @@ int main(int argc, char** argv) {
     std::filesystem::create_directories("logs", ec);
     std::filesystem::create_directories("data", ec);
 
-    Logger::instance().init("logs/mine-craft.log", args.logLevel);
-    MC_LOG_INFO("=== MineCraft v0.0.1 (Phase 0: project foundation) ===");
+    Logger::instance().init("logs/tokenmine.log", args.logLevel);
+    MC_LOG_INFO("=== TokenMine.cpp v0.0.1 (Phase 0: project foundation) ===");
 
     Game game;
     auto st = game.init(args);

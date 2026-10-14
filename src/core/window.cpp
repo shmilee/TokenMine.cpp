@@ -21,7 +21,7 @@ Window::~Window() {
 }
 
 Result<void> Window::init(const Config& config) {
-    m_title = config.getString("window.title", "MineCraft");
+    m_title = config.getString("window.title", "TokenMine.cpp");
     m_width = config.getInt("window.width", 1280);
     m_height = config.getInt("window.height", 720);
     const bool fullscreen = config.getBool("window.fullscreen", false);

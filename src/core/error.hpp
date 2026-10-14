@@ -1,4 +1,4 @@
-// Minimal error-handling utilities for MineCraft.
+// Minimal error-handling utilities for TokenMine.cpp.
 //
 // Design: a function either succeeds and returns its value, or fails with an
 // Error carrying a message plus the source location where the failure was

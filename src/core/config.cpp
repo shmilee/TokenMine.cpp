@@ -128,7 +128,7 @@ void Config::set(const std::string& key, Json value) {
 std::string Config::defaultConfigJson() {
     const Json cfg = Json::parse(R"({
     "window": {
-        "title": "MineCraft",
+        "title": "TokenMine.cpp",
         "width": 1280,
         "height": 720,
         "fullscreen": false

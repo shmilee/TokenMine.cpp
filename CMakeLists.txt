@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(MineCraft VERSION 0.0.1 LANGUAGES CXX)
+project(TokenMine VERSION 0.0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -89,14 +89,14 @@ target_link_libraries(mc_core PUBLIC SDL3::SDL3 PkgConfig::GLEW
 # ---------------------------------------------------------------------------
 # Game executable
 # ---------------------------------------------------------------------------
-add_executable(minecraft src/core/main.cpp)
-target_link_libraries(minecraft PRIVATE mc_core)
+add_executable(tokenmine src/core/main.cpp)
+target_link_libraries(tokenmine PRIVATE mc_core)
 
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 enable_testing()
-add_executable(minecraft_tests
+add_executable(tokenmine_tests
     tests/test_json.cpp
     tests/test_config.cpp
     tests/test_asset_manager.cpp
@@ -145,7 +145,7 @@ add_executable(minecraft_tests
     tests/test_worldgen_config.cpp
     tests/test_world_generator.cpp
 )
-target_compile_definitions(minecraft_tests PRIVATE
+target_compile_definitions(tokenmine_tests PRIVATE
     MC_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data")
-target_link_libraries(minecraft_tests PRIVATE mc_core GTest::gtest_main)
-add_test(NAME unit_tests COMMAND minecraft_tests)
+target_link_libraries(tokenmine_tests PRIVATE mc_core GTest::gtest_main)
+add_test(NAME unit_tests COMMAND tokenmine_tests)

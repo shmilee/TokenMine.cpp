@@ -46,7 +46,7 @@ TEST_F(ConfigTest, MissingKeysFallBackToDefaults) {
     auto r = Config::load(m_path);
     ASSERT_TRUE(r.ok());
     EXPECT_EQ(r->getInt("window.width", 1280), 1280);
-    EXPECT_EQ(r->getString("window.title", "MineCraft"), "MineCraft");
+    EXPECT_EQ(r->getString("window.title", "TokenMine.cpp"), "TokenMine.cpp");
     EXPECT_EQ(r->getDouble("audio.volume", 1.0), 1.0);
     EXPECT_EQ(r->getBool("window.fullscreen", true), true);
 }
@@ -115,7 +115,7 @@ TEST_F(ConfigTest, DefaultConfigIsValidJson) {
     ASSERT_TRUE(parsed.ok());
     ASSERT_TRUE(parsed->isObject());
     EXPECT_EQ(parsed->find("window")->find("width")->asInt(), 1280);
-    EXPECT_EQ(parsed->find("window")->find("title")->asString(), "MineCraft");
+    EXPECT_EQ(parsed->find("window")->find("title")->asString(), "TokenMine.cpp");
     EXPECT_TRUE(parsed->find("render")->contains("vsync"));
     EXPECT_TRUE(parsed->find("world")->contains("seed"));
     EXPECT_TRUE(parsed->find("world")->contains("view_distance"));

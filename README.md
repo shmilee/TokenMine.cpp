@@ -1,6 +1,7 @@
-# MineCraft
+# TokenMine.cpp
 
-一个可运行、可扩展的 Minecraft 风格 3D 体素沙盒（C++20 / SDL3 / OpenGL 3.3 core，
+本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒
+（C++20 / SDL3 / OpenGL 3.3 core，
 自研 Result/JSON/PNG，内容全数据驱动）。**确定性是项目一级要求**：无输入运行逐帧
 字节可复现。30 个阶段（Phase 0–29 功能 + Phase 30 文档整理）全部完成并提交，
 测试 669/669。
@@ -8,6 +9,14 @@
 > 文档已按主题分块（Phase 30）：**新会话先读 [AGENTS.md](AGENTS.md)**（代理快速
 > 接收），再按需读下表中的文件。原文档（README 765 行 / KNOWN_ISSUES / 本地
 > SESSION_CONTEXT 2355 行）已拆分，历史细节全部在 `docs/archive/`。
+
+## 项目名
+
+**TokenMine.cpp** —— 一语三关：
+
+- **Token**：这座矿是 token 一行行"挖"出来的——整个项目由本地 LLM 编写；
+- **Mine**：Minecraft 的"挖矿"，也是英语的 "my"（这座矿是我的）；
+- **.cpp**：程序员圈的命名梗，"X.cpp" 即 "X 的 C++ 重写版"。
 
 ## 技术栈
 
@@ -29,24 +38,24 @@ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 
 # 运行（打开窗口，ESC 或关闭窗口退出）
-./build/bin/minecraft
+./build/bin/tokenmine
 
 # 运行 120 帧后自动退出（可用于自动化验证）
-./build/bin/minecraft --frames 120
+./build/bin/tokenmine --frames 120
 
 # 运行 300 帧并保存最后一帧截图
-./build/bin/minecraft --frames 300 --screenshot shot.png
+./build/bin/tokenmine --frames 300 --screenshot shot.png
 
 # 其他参数
-./build/bin/minecraft --config config/config.json --seed 42 --log-level debug
+./build/bin/tokenmine --config config/config.json --seed 42 --log-level debug
 
 # 从指定时刻开始（0 = 黎明前, 0.25 = 正午, 0.5 = 日落, 0.75 = 午夜）
-./build/bin/minecraft --time 0.75
+./build/bin/tokenmine --time 0.75
 
 # 存档槽（Phase 13）：启动时加载 data/saves/<slot>.json（若存在），干净退出时写回
-./build/bin/minecraft --save myworld
+./build/bin/tokenmine --save myworld
 # 忽略现有存档、从全新世界开始（退出时覆盖该槽）
-./build/bin/minecraft --save myworld --new
+./build/bin/tokenmine --save myworld --new
 ```
 
 **窗口**：大小由 `config/config.json` 的 `window.width`/`window.height` 决定（默认
