@@ -673,6 +673,9 @@ TEST(CampfireTest, CampfireExtinguishedBlockContentPinned) {
                                                   // + the seat survive
     EXPECT_EQ(b.properties.drops, "campfire_extinguished");
     EXPECT_FALSE(b.properties.flamable);
+    // Phase 76: the relight target (flint and steel sets "campfire" in
+    // place — its cooking state survives).
+    EXPECT_EQ(b.properties.ignitesTo, "campfire");
     EXPECT_EQ(b.model.shape, BlockModel::Shape::Cross);
 }
 

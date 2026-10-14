@@ -121,6 +121,18 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "grows_on", "string",
                    [&](const Json& v) { out.growsOn = v.asString(); });
     MC_TRY(r);
+    r = checkField(*p, "ignites_to", "string",
+                   [&](const Json& v) { out.ignitesTo = v.asString(); });
+    MC_TRY(r);
+    // Igniter target (Phase 76): an EXPLICIT empty ignites_to is a no-op
+    // typo (ABSENT is the default — the ammo discipline, the grows_to
+    // pattern).
+    if (const Json* it = p->find("ignites_to")) {
+        if (it->asString().empty()) {
+            return MC_FAIL("block property 'ignites_to' must be a non-empty "
+                           "block name (omit it for a plain block)");
+        }
+    }
     // Planting placement restriction (Phase 53): an OPTIONAL array of block
     // names. When present, a placement of this block is allowed only when
     // the cell DIRECTLY BELOW the target holds one of the listed blocks (the

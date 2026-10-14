@@ -508,6 +508,21 @@ Result<void> Game::buildScene() {
         }
     }
 
+    // Strict data check (Phase 76): a block's ignites_to must name an
+    // EXISTING block (the relight target) — the same existence
+    // cross-check as grows_on (a typo fails init loudly).
+    for (const BlockID id : m_blocks.allIds()) {
+        const Block& b = m_blocks.at(id);
+        if (b.properties.ignitesTo.empty()) {
+            continue;
+        }
+        const BlockID toId = m_blocks.idForName(b.properties.ignitesTo);
+        if (!toId.valid()) {
+            return MC_FAIL("block '" + b.name + "' ignites_to names unknown "
+                           "block '" + b.properties.ignitesTo + "'");
+        }
+    }
+
     // Strict data check (Phase 51): a fluid block's water_reaction names
     // two EXISTING blocks (the source-water and flowing-water products of
     // the reaction — the ammo discipline; a typo fails init loudly). The
@@ -2173,27 +2188,43 @@ void Game::handleInteraction(double dt) {
         if (tryFluidBucket()) {
             return;
         }
-        // Ignition (Phase 60, fire visuals Phase 64): a selected item
-        // with the 'ignites_flamable' flag burns the `flamable` block
-        // under the crosshair — setBlock(FIRE), NO drops (the Phase 58
-        // lava-burn semantics) — and is NOT consumed (Minecraft: the
-        // flint and steel survives its uses). The fire block is a light
-        // source that burns out after fire.lifetime_seconds (the setBlock
-        // choke point starts its countdown) and is put out by water.
-        // Runs AFTER the panel interactions: a furnace or crafting table
-        // under the crosshair still opens its panel even when an igniter
-        // is selected. Non-flammable targets fall through (the item is a
-        // material, so placeBlock is a no-op).
+        // Ignition (Phase 60, fire visuals Phase 64, the relight target
+        // Phase 76): a selected item with the 'ignites_flamable' flag
+        // acts on the block under the crosshair — (a) a block with a
+        // non-empty `ignites_to` is set to THAT block in place (the
+        // RELIGHT: campfire_extinguished -> campfire, its cooking state
+        // survives the setBlock choke point and resumes — Minecraft:
+        // flint and steel relights an unlit campfire), (b) otherwise a
+        // `flamable` block burns — setBlock(FIRE), NO drops (the Phase 58
+        // lava-burn semantics). Neither consumes the item (Minecraft: the
+        // flint and steel survives its uses) and both play "ignite". The
+        // fire block is a light source that burns out after
+        // fire.lifetime_seconds (the setBlock choke point starts its
+        // countdown) and is put out by water. Runs AFTER the panel
+        // interactions: a furnace or crafting table under the crosshair
+        // still opens its panel even when an igniter is selected. Other
+        // targets fall through (the item is a material, so placeBlock is
+        // a no-op).
         if (const ItemStack& held = m_inventory.at(m_selectedSlot);
             !held.empty() && m_items.at(held.item).ignitesFlamable) {
             if (const std::optional<BlockHit> hit = targetBlock(); hit) {
                 const Block& b = m_blocks.at(
                     m_world.getBlock(hit->block.x, hit->block.y,
                                      hit->block.z));
-                if (b.properties.flamable) {
-                    // m_fireId is valid here: a flamable target exists,
-                    // and the init cross-check requires the fire block
-                    // whenever the registry holds one.
+                if (!b.properties.ignitesTo.empty()) {
+                    // (a) the relight target (Phase 76): set the named
+                    // block in place. The name is init-validated (the
+                    // grows_to discipline), so idForName cannot fail.
+                    const BlockID toId =
+                        m_blocks.idForName(b.properties.ignitesTo);
+                    setBlock(hit->block.x, hit->block.y, hit->block.z,
+                             toId);
+                    Lighting::updateLocal(m_world, m_blocks, hit->block);
+                    m_sound.play("ignite");
+                } else if (b.properties.flamable) {
+                    // (b) m_fireId is valid here: a flamable target
+                    // exists, and the init cross-check requires the fire
+                    // block whenever the registry holds one.
                     setBlock(hit->block.x, hit->block.y, hit->block.z,
                              m_fireId);
                     Lighting::updateLocal(m_world, m_blocks, hit->block);
@@ -4139,6 +4170,29 @@ void Game::tryCampfireCook(const BlockPos& pos) {
     // The click is ALWAYS consumed (the caller returns) — a campfire is
     // never placed through this branch, whatever the hand holds.
     CampfireCookState& st = campfireAt(pos);
+    const ItemStack& held = m_inventory.at(m_selectedSlot);
+    // Phase 76: the relight — an ignites_flamable item (the flint and
+    // steel) on a campfire-family block with an `ignites_to` target sets
+    // the target in place (unlit -> lit: the cooking state survives the
+    // setBlock choke point and resumes; light 0 -> 15, local re-light).
+    // It runs HERE because this branch consumes the click BEFORE the
+    // general igniter branch; the item is NOT consumed (the P60
+    // semantics) and the "ignite" sound plays. An igniter on a LIT
+    // campfire (no ignites_to) falls into the place/take logic below and
+    // no-ops (it is not smeltable).
+    if (!held.empty() && m_items.at(held.item).ignitesFlamable) {
+        const Block& b = m_blocks.at(
+            m_world.getBlock(pos.x, pos.y, pos.z));
+        if (!b.properties.ignitesTo.empty()) {
+            // The name is init-validated (the grows_to discipline), so
+            // idForName cannot fail.
+            const BlockID toId = m_blocks.idForName(b.properties.ignitesTo);
+            setBlock(pos.x, pos.y, pos.z, toId);
+            Lighting::updateLocal(m_world, m_blocks, pos);
+            m_sound.play("ignite");
+        }
+        return;
+    }
     // Phase 75: only a LIT campfire cooks — placing food on the unlit
     // logs does nothing (the fire must be there, Minecraft); the
     // take-back works on EITHER (the items are in the unlit campfire
@@ -4146,7 +4200,6 @@ void Game::tryCampfireCook(const BlockPos& pos) {
     // empty (place) / first occupied (take), deterministic.
     const bool lit =
         m_world.getBlock(pos.x, pos.y, pos.z) == m_campfireLitId;
-    const ItemStack& held = m_inventory.at(m_selectedSlot);
     if (!held.empty()) {
         const Item& it = m_items.at(held.item);
         if (lit && !it.smeltableTo.empty()) {

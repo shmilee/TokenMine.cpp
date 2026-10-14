@@ -1240,6 +1240,42 @@ TEST(BlockRegistryTest, FlamableNonBoolRejected) {
     EXPECT_NE(r.error().message.find("must be a boolean"), std::string::npos);
 }
 
+TEST(BlockRegistryTest, IgnitesToIsAccepted) {
+    // Phase 76: the igniter's relight target (a block name).
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(R"({"id":"unlit","properties":{"ignites_to":"lit"},)"
+                 R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).properties.ignitesTo, "lit");
+    // Absent = the default empty (no relight target).
+    auto r2 = reg.registerBlock(
+        parseDef(R"({"id":"plain","model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r2.ok()) << r2.error().message;
+    EXPECT_TRUE(reg.at(*r2).properties.ignitesTo.empty());
+}
+
+TEST(BlockRegistryTest, IgnitesToNonStringRejected) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(R"({"id":"x","properties":{"ignites_to":7},)"
+                 R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("string"), std::string::npos)
+        << r.error().message;
+}
+
+TEST(BlockRegistryTest, IgnitesToEmptyStringRejected) {
+    // An EXPLICIT empty ignites_to is a no-op typo (the ammo discipline).
+    BlockRegistry reg;
+    auto r = reg.registerBlock(
+        parseDef(R"({"id":"x","properties":{"ignites_to":""},)"
+                 R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("non-empty"), std::string::npos)
+        << r.error().message;
+}
+
 TEST(BlockRegistryTest, Phase58WheatCropFlamableContent) {
     AssetManager assets;
     ASSERT_TRUE(assets.setRoot("assets").ok())

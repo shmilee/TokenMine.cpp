@@ -171,6 +171,16 @@ struct BlockProperties {
     // hard gate). Validated at game init (the name must reference an
     // existing block, the grows_to discipline).
     std::string growsOn;
+    // Igniter target (Phase 76): when non-empty, a right-click with an
+    // `ignites_flamable` item (the flint and steel) sets this block IN
+    // PLACE (no drops, the item is not consumed, the "ignite" sound —
+    // the Phase 60 igniter semantics). The relight use: the extinguished
+    // campfire names "campfire" (Minecraft: flint and steel relights an
+    // unlit campfire). Takes precedence over `flamable` (deterministic
+    // order). Existence cross-checked at game init (the grows_to
+    // discipline); an explicit empty string is rejected at data load (the
+    // ammo discipline).
+    std::string ignitesTo;
     // Minimum light level (0..15) at the CROP cell, max(sky, block), for
     // the roll to run (0 = no requirement; 9 = the Minecraft crop value).
     int growthLight = 0;

@@ -7,7 +7,8 @@
     "transparent": true,
     "light_emission": 0,
     "interact": "campfire",
-    "drops": "campfire_extinguished"
+    "drops": "campfire_extinguished",
+    "ignites_to": "campfire"
   },
   "model": {
     "shape": "cross",

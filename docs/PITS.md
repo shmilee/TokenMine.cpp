@@ -1191,3 +1191,14 @@
   `at(i)` / `size()`，写 = `push_back`。口诀：**要换数组元素 = 重建整个
   数组**（逐项 `at` 出来、改第 i 个、`push_back` 进新数组）——P75 测试
   的 `withSlot` lambda 范式。
+- **项目改名后 xdotool 按名搜索误匹配终端窗口（P76）**：E2E helpers 用
+  `xdotool search --name "游戏标题"` 找游戏窗口——`search --name` 是
+  **子串**匹配。项目从 mine-craft 改名 TokenMine.cpp 后，用户终端的窗
+  口标题 `user@host:~/project/TokenMine.cpp` **包含**游戏标题子串 →
+  `tail -1` 可能取到终端窗口：状态机对终端"稳定化"（它本来就
+  1280×720 在目标位 = 直接 winok，日志里**没有 stabilizing 行**这一
+  特征可辨），真正的游戏窗口被 awesomeWM 平铺成 1272×1552，截图尺寸
+  检查失败且 3 次重试全中同一假窗。修 = **锚定正则** `--name
+  "^TokenMine.cpp$"`（xdotool search --name 接受 regex）。口诀：**窗
+  口搜索名必须锚定首尾——标题是短词时，终端路径/项目名极易形成子串
+  包含**。
