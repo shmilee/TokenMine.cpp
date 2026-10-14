@@ -75,6 +75,7 @@
 - [x] **Phase 69** — 镐分类（纯内容、零核心代码）：3 镐各加 `fast_against` [stone, cobblestone, coal_ore, iron_ore, gold_ore, diamond_ore, lapis_ore, glowstone]（**项目石矿类全集**）+ ×2.0（MC 镐对石类/矿类 2×）；**obsidian 刻意排除**（MC 铁镐不能破黑曜石、项目无钻石镐 = 保留 flat 镐速 3.75s（铁）= 文档化偏离）；flat 档 2/3/4 不变 → 石矿类有效 4/6/8；1063/1063
 - [x] **Phase 70** — 火接触伤害：玩家 AABB 重叠 fire 块格时每 `player.fire_damage_interval_seconds`（默认 0.2 = MC 1 HP/0.2s）受 `player.fire_damage` HP（默认 1、**0 = 关**、`≤ max_health` 交叉校验）——real-dt 生存计时器（P54 熔岩模式：在火里累积、离开重置、正常 damage 路径）/`Entity::overlapsBlock(BlockID)`（mirror `overlapsFluid` 严格不等式 AABB 扫描、caller 传 id = 数据驱动）/fire 块 id 构造时解析一次（registry 无 = 永不）/**mob 火接触 = 文档化偏离**（v3 范围）；1072/1072
 - [x] **Phase 71** — 营火（campfire = 烤食物 + 座位）：`campfire` 块（cross、光 15 = MC、hardness 0.5、自掉、`interact: "campfire"` = 第三交互词汇表值、非 flamable）+ 配方 shaped `SSS/LCL/LLL`（MC 配方）+ 纹理（atlas 空位 [12,0] 免重锚）；**单槽烤制**（per-block `CampfireCookState` = 炉子 P44 范式：setBlock 收口 + `std::map` 位置序）——手持可熔炼（`smeltable_to` 非空 = 数据驱动门）右键空槽放 1 / **空手**右键取回（生熟均可 = MC 空手规则）；固定 1/60 子步 + 整数 `progressSubsteps`（**炉子节奏** = 复用 `smelt_time`、无燃料 = MC 自燃、无 config）；**右键链中营火分支先于进食通道**（MC 语义——全部可熔炼物品都是食物，无此前置则烤槽填不上；炉子/工作台既有行为不变）；烤制中物品 = 0.5 交叉图标 quad 悬浮格上半部（cross 惯例、opaque pass、+Y 假法线）；**座位** = crouch + 贴地 + AABB 严格重叠 campfire 格 → 锁移动/跳（复用 crouch 高度 = 文档化偏离：无独立坐姿；不入存档）；**format 11** `campfires`（每 campfire 块一条目、双向交叉校验 + 进度不变量 progress>0 ⇒ 槽恰 1 可熔炼、format 10 迁移 = 空）；1092/1092（+20：tick 4 + 存档 7 + interact 2 + 座位 5 + 内容钉死 2）
+- [x] **Phase 72** — 吸收两分量模型（P56 遗留大改）：**health（0..base max）+ absorption 池（0..64，`kAbsorptionMax`）独立池**——`damage()` **先扣池**（池单独不能致死）、`heal()`/`setHealth()` 只钳 base max（heal 永不填池）；池 = 效果 `absorb_hp` 总和的纯函数**只在同步点**（进食/mob 命中/到期或水熄灭【效果总和变化才同步】/牛奶/死亡——刷新恢复满层 = MC 属性重算；**读档不同步** = 存值权威，池 < 总和合法【同步点间伤害持续】）；**format 12** `player.absorption`（键纪律：12 必需 / ≤11 带键拒绝 / [0,64] / ≤ 效果总和不变量）+ **format ≤11 迁移**（共享 health 按 base max 拆分 22→20+2）；HUD 吸收红心改从**池**派生（池 0 = 零绘制 = 结构性免疫保持）+ F3 调试行；1097/1097（player 5→7 语义改写 + save 套件 5 新 + 适配 15 处降级剥键）
 
 ## 细节存档索引（docs/archive/）
 
@@ -146,5 +147,6 @@
 - **Phase 69** — `archive/phase-69.md`
 - **Phase 70** — `archive/phase-70.md`
 - **Phase 71** — `archive/phase-71.md`
+- **Phase 72** — `archive/phase-72.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

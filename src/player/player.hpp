@@ -194,24 +194,24 @@ public:
 
     // -- survival (Phase 16) --------------------------------------------------
     float health() const { return m_health; }
-    // The EFFECTIVE max health (Phase 56): the configured max plus the
-    // active absorption layer. damage()/heal()/setHealth() clamp against
-    // this value, and the HUD draws the layer as extra (red) hearts.
-    float maxHealth() const { return m_params.maxHealth + m_absorptionBonus; }
+    // The BASE max health (Phase 72: the absorption pool is a SEPARATE
+    // value — see absorption()). damage()/heal()/setHealth() clamp the
+    // health against this value only.
+    float maxHealth() const { return m_params.maxHealth; }
     bool isDead() const { return m_dead; }
 
-    // The absorption layer (Phase 56): `bonus` is the sum of `absorb_hp`
-    // over the player's active effects (the game syncs this at every
-    // effect change and on save load).
-    //   - An INCREASE (a new/refreshed layer) RAISES the health by the
-    //     added amount (clamped at the new max) when `healOnIncrease` —
-    //     the layer appears full, like Minecraft's.
-    //   - A DECREASE (expiry/clear/load) drops the excess SILENTLY
-    //     (health is clamped down to the new max — no damage flash, no
-    //     sound, no damage clock: the layer is not real HP).
-    //   - `healOnIncrease = false` is the SAVE-LOAD mode: the saved
-    //     health already includes the layer, so loading must not heal.
-    void setAbsorptionBonus(float bonus, bool healOnIncrease);
+    // The absorption pool (Phase 72, the two-component model): HP points
+    // ABOVE the health that damage drains FIRST before any health is
+    // touched (Minecraft). The game sets this to the sum of `absorb_hp`
+    // over the player's active effects at every effect change (a
+    // refreshed layer restores the pool to the full sum — Minecraft's
+    // attribute-recalculation semantics); healing NEVER fills it (heal()
+    // clamps at the base max). Clamped to [0, kAbsorptionMax].
+    static constexpr float kAbsorptionMax = 64.0f;
+    float absorption() const { return m_absorption; }
+    void setAbsorption(float a) {
+        m_absorption = std::clamp(a, 0.0f, kAbsorptionMax);
+    }
     bool isCrouching() const { return m_crouching; }
     double timeSinceDamage() const { return m_timeSinceDamage; }
     // Fluid immersion (Phase 54 tick state, exposed in Phase 57 for the
@@ -270,17 +270,19 @@ public:
     // (Minecraft-Java keep-inventory respawn).
     void respawn();
 
-    // Restore health (save load): clamped to [0, max] (the EFFECTIVE max,
-    // base + absorption layer — Phase 56); 0 sets the dead state (a dead
-    // save reloads dead).
+    // Restore health (save load): clamped to [0, base max] (Phase 72: the
+    // absorption pool is SEPARATE — it is restored via setAbsorption, the
+    // two pools of the format-12 save); 0 sets the dead state (a dead save
+    // reloads dead).
     void setHealth(float h) {
         m_health = std::clamp(h, 0.0f, maxHealth());
         m_dead = m_health <= 0.0f;
     }
 
     // Heal `amount` HP (Phase 46's regeneration effect; the natural
-    // hunger-based regen calls this too). Clamped at the effective max
-    // (Phase 56: regeneration can fill INTO the absorption layer).
+    // hunger-based regen calls this too). Clamped at the BASE max —
+    // Phase 72: healing NEVER fills the absorption pool (Minecraft:
+    // the pool is set only by the active `absorb_hp` effects).
     void heal(float amount) {
         m_health = std::clamp(m_health + amount, 0.0f, maxHealth());
     }
@@ -347,10 +349,11 @@ private:
     // accumulator (only runs after the delay), the fall tracking (net drop
     // since the last leave-the-ground), and the death state.
     float m_health = Params {}.maxHealth;
-    // The absorption layer (Phase 56): temporary max-health points from
-    // active effects (0 = none). The game owns the value (synced from the
-    // StatusEffects); the player only clamps against it.
-    float m_absorptionBonus = 0.0f;
+    // The absorption pool (Phase 72): HP points ABOVE the health that
+    // damage drains first (0 = none). The game owns the value (set from
+    // the StatusEffects at every effect change, or from the format-12
+    // save); the player only clamps it to [0, kAbsorptionMax].
+    float m_absorption = 0.0f;
     double m_timeSinceDamage = 0.0;
     double m_regenAccum = 0.0;
     bool m_wasOnGround = false;

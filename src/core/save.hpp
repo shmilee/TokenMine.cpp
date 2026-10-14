@@ -130,7 +130,17 @@ namespace mc {
 //      — the campfire block did not exist); a format-11 file REQUIREs the
 //      "campfires" key (an empty array is valid); writes are always
 //      format 11.
-inline constexpr int kSaveFormat = 11;
+//   12: the two-component absorption (Phase 72) — "player" gains
+//      "absorption" (a number in [0, 64], the pool's hard cap; the value
+//      may sit BELOW the saved effects' total `absorb_hp` — damage
+//      drains the pool between effect-change sync points — but may never
+//      exceed it). A format-11 file carrying the key is rejected (the
+//      new-key discipline); format-11 and older files load via the
+//      SHARED-HEALTH MIGRATION in Game::applySave (the excess above the
+//      base max becomes the pool, the health keeps the base part);
+//      writes are always format 12 (the field is always written — the
+//      pool is 0 when no layer is active).
+inline constexpr int kSaveFormat = 12;
 inline constexpr int kSaveFormatMin = 1;
 
 // Phase 40: the furnace save-field bounds — the max smelt/fuel times the
@@ -220,8 +230,16 @@ struct SaveGame {
     float playerPitch = 0.0f;
     // Health (Phase 16). -1 = "unspecified" (format-1 files): the game
     // applies the player's max health. A saved 0 means the player was
-    // dead when the file was written.
+    // dead when the file was written. Phase 72: this is the BASE-pool
+    // value only (<= the base max); the absorption pool is separate
+    // (playerAbsorption).
     float playerHealth = -1.0f;
+    // Absorption (Phase 72, the two-component model). -1 = "unspecified"
+    // (format 1-11 files): the game migrates the shared P56 health in
+    // applySave (the excess above the base max becomes the pool). A
+    // format-12 file REQUIREs the field (parse-validated: [0, 64] and
+    // <= the saved effects' total `absorb_hp`).
+    float playerAbsorption = -1.0f;
     // Hunger (Phase 23). -1 = "unspecified" (format 1-3 files): the game
     // applies the player's max hunger on load.
     float playerHunger = -1.0f;

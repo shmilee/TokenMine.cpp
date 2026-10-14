@@ -119,6 +119,7 @@ SaveGame makeSave(const Fixture& f) {
     s.playerPos = {1.5f, 53.25f, -2.75f};
     s.playerYaw = 0.785f;
     s.playerPitch = -0.4f;
+    s.playerAbsorption = 0.0f; // Phase 72 (no layer in the fixture)
     s.selectedSlot = 3;
     s.slots.resize(Inventory::kTotalSize);
     s.slots[0] = ItemStack {f.items.idForName("stone"), 64};
@@ -241,8 +242,8 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     s.tableGrid[8] = ItemStack {f.items.idForName("stone"), 64};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Phase 71: writes are always format 11.
-    EXPECT_EQ(j->find("format")->asInt(), 11);
+    // Phase 72: writes are always format 12.
+    EXPECT_EQ(j->find("format")->asInt(), 12);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -284,6 +285,7 @@ TEST(SaveParseTest, FormatTwoLoadsWithEmptyGrids) {
     root["format"] = Json(2);
     root = withoutKey(root, "fires"); // format 2 predates the fire
     root = withoutKey(root, "campfires"); // format 2 predates the campfire
+    root["player"] = withoutKey(root["player"], "absorption"); // format 2 predates the absorption pool
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "inv_grid");
     root = withoutKey(root, "table_grid");
@@ -384,6 +386,7 @@ TEST(SaveParseTest, FormatOneLoadsWithoutHealth) {
     root["format"] = Json(1);
     root = withoutKey(root, "fires"); // format 1 predates the fire
     root = withoutKey(root, "campfires"); // format 1 predates the campfire
+    root["player"] = withoutKey(root["player"], "absorption"); // format 1 predates the absorption pool
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "inv_grid"); // format 1 predates the grids
     root = withoutKey(root, "table_grid");
@@ -433,6 +436,7 @@ TEST(SaveParseTest, FormatThreeLoadsWithoutHunger) {
     root["format"] = Json(3);
     root = withoutKey(root, "fires"); // format 3 predates the fire
     root = withoutKey(root, "campfires"); // format 3 predates the campfire
+    root["player"] = withoutKey(root["player"], "absorption"); // format 3 predates the absorption pool
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 3 predates the furnace
     ASSERT_EQ(root["player"].find("hunger"), nullptr);
@@ -480,6 +484,7 @@ TEST(SaveParseTest, FormatFourLoadsWithoutSaturation) {
     root["format"] = Json(4);
     root = withoutKey(root, "fires"); // format 4 predates the fire
     root = withoutKey(root, "campfires"); // format 4 predates the campfire
+    root["player"] = withoutKey(root["player"], "absorption"); // format 4 predates the absorption pool
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 4 predates the furnace
     ASSERT_EQ(root["player"].find("saturation"), nullptr);
@@ -838,6 +843,7 @@ TEST(SaveParseTest, FluidEditKindRoundTripsAndMigrates) {
     root["format"] = Json(8);
     root = withoutKey(root, "fires"); // format 8 predates the fire
     root = withoutKey(root, "campfires"); // format 8 predates the campfire
+    root["player"] = withoutKey(root["player"], "absorption"); // format 8 predates the absorption pool
     Json waterEdit = Json::array();
     waterEdit.push_back(Json(3));
     waterEdit.push_back(Json(10));
@@ -1085,8 +1091,8 @@ TEST(SaveRoundTripTest, FurnacesRoundTrip) {
     s.furnaces[0].state.fuelSubsteps = 1234;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Phase 71: writes are always format 11.
-    EXPECT_EQ(j->find("format")->asInt(), 11);
+    // Phase 72: writes are always format 12.
+    EXPECT_EQ(j->find("format")->asInt(), 12);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
@@ -1127,6 +1133,7 @@ TEST(SaveParseTest, FormatFiveLoadsWithEmptyFurnaces) {
     root["format"] = Json(5);
     root = withoutKey(root, "fires"); // format 5 predates the fire
     root = withoutKey(root, "campfires"); // format 5 predates the campfire
+    root["player"] = withoutKey(root["player"], "absorption"); // format 5 predates the absorption pool
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 5 predates the furnace
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
@@ -1153,6 +1160,7 @@ TEST(SaveParseTest, FormatSixMigratesStateToSoleFurnace) {
     root["format"] = Json(6);
     root = withoutKey(root, "fires"); // format 6 predates the fire
     root = withoutKey(root, "campfires"); // format 6 predates the campfire
+    root["player"] = withoutKey(root["player"], "absorption"); // format 6 predates the absorption pool
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["furnace"] = withoutKey(root["furnaces"].at(0), "pos");
     root = withoutKey(root, "furnaces");
@@ -1182,6 +1190,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
     root["format"] = Json(6);
     root = withoutKey(root, "fires"); // format 6 predates the fire
     root = withoutKey(root, "campfires"); // format 6 predates the campfire
+    root["player"] = withoutKey(root["player"], "absorption"); // format 6 predates the absorption pool
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["furnace"] = withoutKey(root["furnaces"].at(0), "pos");
     root = withoutKey(root, "furnaces");
@@ -1199,6 +1208,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
         root2["format"] = Json(6);
         root2 = withoutKey(root2, "fires"); // format 6 predates the fire
         root2 = withoutKey(root2, "campfires"); // format 6 predates the campfire
+        root2["player"] = withoutKey(root2["player"], "absorption"); // format 6 predates the absorption pool
         root2["fluids"] = downgradeFluids(root2); // pre-Phase-51 shape
         root2 = withoutKey(root2, "furnaces");
         Json fz = Json::object();
@@ -1229,6 +1239,7 @@ TEST(SaveParseTest, RejectsFurnaceFieldInOldFormat) {
     root["format"] = Json(5); // keeps the "furnaces" field
     root = withoutKey(root, "fires"); // the rejection under test is "furnaces"
     root = withoutKey(root, "campfires"); // format older predates the campfire
+    root["player"] = withoutKey(root["player"], "absorption"); // format 5 predates the absorption pool
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
@@ -1255,6 +1266,7 @@ TEST(SaveParseTest, RejectsFurnacesFieldInFormatSix) {
     root["format"] = Json(6); // keeps the "furnaces" field
     root = withoutKey(root, "fires"); // the rejection under test is "furnaces"
     root = withoutKey(root, "campfires"); // format older predates the campfire
+    root["player"] = withoutKey(root["player"], "absorption"); // format 6 predates the absorption pool
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
@@ -1422,8 +1434,8 @@ TEST(SaveRoundTripTest, FiresRoundTrip) {
     SaveGame s = makeFireSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Phase 71: writes are always format 11.
-    EXPECT_EQ(j->find("format")->asInt(), 11);
+    // Phase 72: writes are always format 12.
+    EXPECT_EQ(j->find("format")->asInt(), 12);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->fires.size(), 2u);
@@ -1457,6 +1469,7 @@ TEST(SaveParseTest, FormatNineLoadsWithoutFires) {
     root["format"] = Json(9);
     root = withoutKey(root, "fires"); // format 9 predates the fire
     root = withoutKey(root, "campfires"); // format 9 predates the campfire
+    root["player"] = withoutKey(root["player"], "absorption"); // format 9 predates the absorption pool
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->fires.empty());
@@ -1475,6 +1488,7 @@ TEST(SaveParseTest, FormatNineFireEditMigratesEmpty) {
     root["format"] = Json(9);
     root = withoutKey(root, "fires"); // format 9 predates the fire
     root = withoutKey(root, "campfires"); // format 9 predates the campfire
+    root["player"] = withoutKey(root["player"], "absorption"); // format 9 predates the absorption pool
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->fires.empty());
@@ -1604,6 +1618,7 @@ TEST(SaveFormat8Test, FormatSevenFileWithoutEffectsLoads) {
     root = withoutKey(root, "campfires"); // format 7 predates the campfire
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["player"] = withoutKey(*j->find("player"), "effects");
+    root["player"] = withoutKey(root["player"], "absorption"); // format 7 predates the absorption pool
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->playerEffects.empty());
@@ -1683,26 +1698,78 @@ TEST(SaveFormat8Test, RejectsBadEffectEntries) {
     }
 }
 
-// -- Phase 56: the absorption layer and the saved health ----------------------
+// -- Phase 72: the absorption pool (two components) and the saved health ---
 
-TEST(SaveFormat8Test, HealthAboveBaseWithAbsorptionLayerRoundTrips) {
-    // A save taken while the absorption layer is active stores a health
-    // ABOVE the base max (24 with the 4-HP layer). The parse accepts it
-    // (save.cpp has no upper bound; the GAME clamps against the effective
-    // max after applying the layer — see Game::applySave 4e); the
-    // round trip must preserve the value.
+TEST(SaveFormat12Test, AbsorptionPoolRoundTrips) {
+    // A save taken while the absorption layer is active stores the BASE
+    // health + the SEPARATE pool (16 + 2 of 4: the player already took
+    // damage — the pool may sit BELOW the effects' total, the parse
+    // accepts it; the game-level rejection of health > base max runs in
+    // applySave). The round trip must preserve both pools.
     Fixture f;
     SaveGame s = makeSave(f);
-    s.playerHealth = 24.0f;
+    s.playerHealth = 16.0f;
+    s.playerAbsorption = 2.0f;
     s.playerEffects = {{"absorption", 3.25}};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
-    EXPECT_FLOAT_EQ(out->playerHealth, 24.0f);
+    EXPECT_FLOAT_EQ(out->playerHealth, 16.0f);
+    EXPECT_FLOAT_EQ(out->playerAbsorption, 2.0f);
     ASSERT_EQ(out->playerEffects.size(), 1u);
     EXPECT_EQ(out->playerEffects[0].name, "absorption");
     EXPECT_DOUBLE_EQ(out->playerEffects[0].remaining, 3.25);
+}
+
+TEST(SaveFormat12Test, Format12RequiresTheAbsorptionKey) {
+    Fixture f;
+    SaveGame s = makeSave(f); // playerAbsorption 0 -> the key IS written
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["player"] = withoutKey(root["player"], "absorption");
+    EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
+}
+
+TEST(SaveFormat12Test, Format11RejectsTheAbsorptionKey) {
+    // The new-key discipline: a format-11 file carrying the pool is a
+    // version lie (the shared-health migration reads it instead).
+    Fixture f;
+    SaveGame s = makeSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["format"] = Json(11); // the "absorption" key stays -> rejected
+    EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
+    // The same file WITHOUT the key loads (the format-11 migration path;
+    // the sentinel stays -1 for Game::applySave).
+    root["player"] = withoutKey(root["player"], "absorption");
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_FLOAT_EQ(out->playerAbsorption, -1.0f);
+}
+
+TEST(SaveFormat12Test, AbsorptionAboveTheEffectsTotalRejected) {
+    // The pool never exceeds the layer (damage only drains it): 8 > the
+    // single 4-HP absorption effect's total.
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerAbsorption = 8.0f;
+    s.playerEffects = {{"absorption", 3.25}};
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    EXPECT_FALSE(parseSave(*j, f.items, f.blocks, f.effects, 42).ok());
+}
+
+TEST(SaveFormat12Test, AbsorptionAboveTheCapRejected) {
+    // The attribute cap (Minecraft): 65 > 64.
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerAbsorption = 65.0f;
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    EXPECT_FALSE(parseSave(*j, f.items, f.blocks, f.effects, 42).ok());
 }
 
 // -- Phase 57: the fire effect in a save ------------------------------------

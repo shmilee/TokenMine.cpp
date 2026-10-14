@@ -302,12 +302,17 @@ private:
     // fire's full life). Runs every frame after updateFires; a no-op
     // without fires or without the fire block.
     void updateFireSpread();
-    // Phase 56: sync the player's absorption layer to the active effects
-    // (sum of `absorb_hp`). Called at every effect change (eat-grant, mob
-    // on_hit_effect, expiry in updateEffects, milk clear, death clear,
-    // save load) — `healOnIncrease` is false only on save load (the saved
-    // health already includes the layer).
-    void syncAbsorption(bool healOnIncrease);
+    // Phase 72 (the two-component model): set the player's absorption
+    // pool to the active effects' total `absorb_hp`. The pool is a pure
+    // function of the effects AT EVERY SYNC POINT (a refreshed layer
+    // restores the full sum — Minecraft's attribute-recalculation
+    // semantics); between sync points damage drains it (the drain
+    // persists until the next sync point or the expiry). Called at every
+    // effect change (eat-grant, mob on_hit_effect, expiry in
+    // updateEffects, milk clear, death clear). The SAVE LOAD does not
+    // call this: the format-12 pool is authoritative (it may sit below
+    // the total) and the format-11 migration derives it (applySave).
+    void syncAbsorption();
     // Cycles the hotbar selection; resets break progress (the selected
     // tool changed, Minecraft behavior).
     void cycleHotbar();

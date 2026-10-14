@@ -29,6 +29,7 @@ TEST(DebugOverlayTest, LinesFormat) {
     info.entities = 3;
     info.health = 17.0;
     info.maxHealth = 20.0;
+    info.absorption = 4.0;
     info.hunger = 14.0;
     info.maxHunger = 20.0;
     info.difficulty = "hard";
@@ -42,7 +43,7 @@ TEST(DebugOverlayTest, LinesFormat) {
     EXPECT_EQ(lines[5], "time 0.333  day 1.00  locked");
     EXPECT_EQ(lines[6], "streaming idle  pending 0  radius 8");
     EXPECT_EQ(lines[7], "inventory closed  particles 7  entities 3");
-    EXPECT_EQ(lines[8], "health 17.0 / 20.0");
+    EXPECT_EQ(lines[8], "health 17.0 / 20.0  absorption 4.0");
     EXPECT_EQ(lines[9], "hunger 14 / 20");
     EXPECT_EQ(lines[10], "difficulty hard");
     // Phase 46: no active effects -> the baseline "(none)" line.

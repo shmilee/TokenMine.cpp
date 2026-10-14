@@ -298,9 +298,16 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     player["pitch"] = Json(save.playerPitch);
     // Format 2: the player's health. -1 (unspecified) omits the field —
     // a missing health loads as full, so this stays a valid file either
-    // way. The game always writes the real value (0..max).
+    // way. The game always writes the real value (Phase 72: the
+    // BASE-pool value only, 0..base max).
     if (save.playerHealth >= 0.0f) {
         player["health"] = Json(save.playerHealth);
+    }
+    // Format 12: the player's absorption pool (Phase 72, always written
+    // — a format-12 file REQUIREs the key; the game always has the real
+    // value, 0 when no layer is active).
+    if (save.playerAbsorption >= 0.0f) {
+        player["absorption"] = Json(save.playerAbsorption);
     }
     // Format 4: the player's hunger (same omit-when-unspecified pattern).
     if (save.playerHunger >= 0.0f) {
@@ -596,8 +603,9 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         return MC_FAIL("save file requires a 'player' object");
     }
     const std::set<std::string> playerFields {"pos", "yaw", "pitch",
-                                              "health", "hunger",
-                                              "saturation", "effects"};
+                                              "health", "absorption",
+                                              "hunger", "saturation",
+                                              "effects"};
     MC_TRY(rejectUnknownFields(*player, playerFields, "save 'player'"));
     const Json* ppos = player->find("pos");
     if (ppos == nullptr || !ppos->isArray() || ppos->size() != 3) {
@@ -699,6 +707,44 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                   [](const SavedEffect& a, const SavedEffect& b) {
                       return a.name < b.name;
                   });
+    }
+    // Absorption pool (format 12; Phase 72, the two-component model).
+    // Absent in format 1-11 files (the SHARED health carried the layer —
+    // the game migrates it in applySave; the -1 sentinel stays). A
+    // format-11 file carrying the key is rejected (the new-key
+    // discipline). Format 12 REQUIREs the field (the effects-key
+    // discipline): a number in [0, 64] (the pool's hard cap) and
+    // <= the saved effects' total `absorb_hp` (the pool never exceeds
+    // the layer — damage only drains it, so it may sit BELOW the total;
+    // the registry is available here, so the invariant is enforced at
+    // parse time).
+    if (def.find("format")->asInt() >= 12) {
+        const Json* absorption = player->find("absorption");
+        if (absorption == nullptr || !absorption->isNumber()) {
+            return MC_FAIL("save format 12 requires 'player.absorption' "
+                           "(a number; 0 when no layer is active)");
+        }
+        const double a = absorption->asDouble();
+        if (a < 0.0 || a > 64.0) {
+            return MC_FAIL("save 'player.absorption' must be a number in "
+                           "[0, 64], got " + std::to_string(a));
+        }
+        double total = 0.0;
+        for (const SavedEffect& se : save.playerEffects) {
+            if (const Effect* e = effects.findByName(se.name)) {
+                total += e->absorbHp;
+            }
+        }
+        if (a > total + 1e-4) {
+            return MC_FAIL("save 'player.absorption' (" + std::to_string(a) +
+                           ") exceeds the effects' absorption total (" +
+                           std::to_string(total) + ")");
+        }
+        save.playerAbsorption = static_cast<float>(a);
+    } else if (player->find("absorption") != nullptr) {
+        return MC_FAIL("save 'player.absorption' requires format 12 or "
+                       "newer (got " +
+                       std::to_string(def.find("format")->asInt()) + ")");
     }
 
     // -- inventory ---------------------------------------------------------------

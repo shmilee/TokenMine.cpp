@@ -1309,6 +1309,9 @@ Result<SaveGame> Game::collectSave() const {
     save.playerYaw = m_player->yaw;
     save.playerPitch = m_player->pitch;
     save.playerHealth = m_player->health();
+    // Phase 72: the absorption pool (format 12; 0 when no layer is
+    // active — the game never writes a pool without its effects).
+    save.playerAbsorption = m_player->absorption();
     save.playerHunger = m_player->hunger();
     save.playerSaturation = m_player->saturation();
     save.selectedSlot = static_cast<int>(m_selectedSlot);
@@ -1531,16 +1534,42 @@ Result<void> Game::applySave(const SaveGame& save) {
     for (const SavedEffect& se : save.playerEffects) {
         m_playerEffects.apply(m_effects.idForName(se.name), se.remaining);
     }
-    // 4e) The player's health (Phase 16; moved here in Phase 56). A
-    // format-1 save has none (-1 = full); a saved 0 reloads the player
-    // dead (the death screen offers R). The clamp now runs against the
-    // EFFECTIVE max: the absorption layer (4d) is applied first, and
-    // healOnIncrease = false — the saved health already includes the
-    // layer, so loading must not heal on top of it.
-    syncAbsorption(false);
-    m_player->setHealth(save.playerHealth < 0.0f
-                            ? m_player->maxHealth()
-                            : save.playerHealth);
+    // 4e) The player's health + absorption (Phase 16; the two SEPARATE
+    // pools are set here in Phase 72, AFTER the effects of 4d). A
+    // format-1 save has no health (-1 = full); a saved 0 reloads the
+    // player dead (the death screen offers R). No syncAbsorption here:
+    //   - a format-12 save carries BOTH pools, parse-validated (health
+    //     in range, absorption in [0, 64] and <= the effects' total) and
+    //     authoritative — the pool may sit BELOW the total (damage
+    //     drains it between sync points; reloading must keep the drain);
+    //   - a format <= 11 save holds the SHARED P56 health (the value
+    //     included the layer): the migration splits it — the excess
+    //     above the base max becomes the pool (it is <= the effects'
+    //     total by the old model's own invariant), the health keeps the
+    //     base part. A hand-edited format-11 health above base + total
+    //     is a contract violation, named and rejected.
+    const float baseMax = m_player->maxHealth();
+    const float effectsTotal = m_playerEffects.totalAbsorption(m_effects);
+    if (save.playerAbsorption < 0.0f) {
+        const float h =
+            save.playerHealth < 0.0f ? baseMax : save.playerHealth;
+        if (h > baseMax + effectsTotal + 1e-4f) {
+            return MC_FAIL("save 'player.health' is above the base max plus "
+                           "the effects' absorption total (format 11 and "
+                           "below: a hand-edited shared health)");
+        }
+        m_player->setAbsorption(std::max(0.0f, h - baseMax));
+        m_player->setHealth(std::min(h, baseMax));
+    } else {
+        if (save.playerHealth >= 0.0f &&
+            save.playerHealth > baseMax + 1e-4f) {
+            return MC_FAIL("save 'player.health' is above the base max "
+                           "(format 12: the absorption is a separate pool)");
+        }
+        m_player->setAbsorption(save.playerAbsorption);
+        m_player->setHealth(save.playerHealth < 0.0f ? baseMax
+                                                     : save.playerHealth);
+    }
     m_prevHealth = m_player->health(); // no hurt event from the load itself
     // 5) Dropped items (with their lifetime/pickup timers restored).
     for (const SavedItemEntity& e : save.entities) {
@@ -2859,7 +2888,7 @@ void Game::clearStatusEffects() {
     // mid-air must not reduce the fall damage owed on landing.
     m_hurtFlash = 0.0;
     m_playerEffects.clearNegative(m_effects);
-    syncAbsorption(true); // Phase 56 (the bonus can only shrink here)
+    syncAbsorption(); // Phase 72: the pool drops with the cleared effects
 }
 
 void Game::updateFires(double dt) {
@@ -3000,6 +3029,12 @@ void Game::updateEffects(double dt) {
     if (m_player->isDead()) {
         return;
     }
+    // Phase 72: the absorption pool is synced only when the effects'
+    // total ACTUALLY changes this frame (an expiry, a water extinguish).
+    // A per-frame SET would fight the damage drain: the pool must persist
+    // between sync points (the Phase 56 bonus sync was idempotent, the
+    // pool is not — damage lowers it below the total).
+    const float absorptionBefore = m_playerEffects.totalAbsorption(m_effects);
     // Phase 57: the fire system (the data-flagged effect, resolved at
     // init). Runs EVEN with no active effects — the ignition is a source:
     // while the player is in the lava the fire is (re-)applied EVERY
@@ -3038,14 +3073,17 @@ void Game::updateEffects(double dt) {
                 m_player->heal(def.tickAmount);
             }
         });
-    // Phase 56: an absorption layer that just expired shrinks the effective
-    // max — the excess health vanishes silently (the sync clamps).
-    syncAbsorption(true);
+    // Phase 72: an expired (or extinguished) absorption layer drops the
+    // pool to the remaining total (the health is untouched — the pool is
+    // not HP). Unchanged totals leave the pool alone (the drain since
+    // the last sync point persists).
+    if (m_playerEffects.totalAbsorption(m_effects) != absorptionBefore) {
+        syncAbsorption();
+    }
 }
 
-void Game::syncAbsorption(bool healOnIncrease) {
-    m_player->setAbsorptionBonus(m_playerEffects.totalAbsorption(m_effects),
-                                 healOnIncrease);
+void Game::syncAbsorption() {
+    m_player->setAbsorption(m_playerEffects.totalAbsorption(m_effects));
 }
 
 void Game::updateEatChannel(double dt) {
@@ -3091,7 +3129,7 @@ void Game::updateEatChannel(double dt) {
             for (const Item::GrantEffect& g : item.grantsEffects) {
                 m_playerEffects.apply(m_effects.idForName(g.name), g.duration);
             }
-            syncAbsorption(true);
+            syncAbsorption(); // Phase 72: the pool takes the new total
             m_sound.play("eat");
         } else {
             if (!item.returnsItem.empty()) {
@@ -3614,7 +3652,7 @@ void Game::attemptMobSpawn() {
         if (!hitEffectName.empty()) {
             m_playerEffects.apply(m_effects.idForName(hitEffectName),
                                   hitEffectDuration);
-            syncAbsorption(true); // Phase 56 (the layer can only grow)
+            syncAbsorption(); // Phase 72 (the pool takes the new total)
         }
     });
     // Ranged mobs (Phase 27, the skeleton): the AI's shot spawns an arrow
@@ -4185,7 +4223,7 @@ void Game::updateSurvival(double dt) {
         m_window.setRelativeMouseMode(false);
         m_sound.play("death");
         m_playerEffects.clearAll();
-        syncAbsorption(false); // Phase 56: the layer dies with the player
+        syncAbsorption(); // Phase 72: the pool dies with the player
     }
     m_prevHealth = hp;
     if (dead && m_input.wasPressed(GameKey::R)) {
@@ -4540,16 +4578,15 @@ void Game::renderUi() {
             const int hx0 = (w - heartW) / 2;
             const int gx0 = hx0 + heartW + kStripGap;
             const int hy = y0 - kIconPx - 6;
-            // The absorption layer (Phase 56, the golden apple): extra
+            // The absorption pool (Phase 72, the golden apple): extra
             // RED hearts just LEFT of the normal strip (the Minecraft
-            // layout). No layer = nothing drawn (the no-input baseline is
-            // bit-identical). The strip shows the health ABOVE the base
-            // max — with the shared single health value, damage empties
-            // it only once the normal hearts are (see KNOWN_ISSUES).
-            const float absorbTotal =
-                m_playerEffects.totalAbsorption(m_effects);
-            const int absIcons = absorbTotal > 0.0f
-                ? static_cast<int>(std::ceil(absorbTotal / 2.0f))
+            // layout). The strip shows the POOL itself — damage empties
+            // it before any normal heart is (the two-component model).
+            // Pool 0 = nothing drawn (the no-input baseline is
+            // bit-identical: a fresh run has no effects, hence no pool).
+            const float absorbPool = m_player->absorption();
+            const int absIcons = absorbPool > 0.0f
+                ? static_cast<int>(std::ceil(absorbPool / 2.0f))
                 : 0;
             const int absW =
                 absIcons * kIconPx + (absIcons - 1) * kIconGap;
@@ -4572,11 +4609,10 @@ void Game::renderUi() {
                 }
             };
             if (absIcons > 0) {
-                // The layer strip: red-tinted hearts, value = the health
-                // above the base max (0..absorbTotal).
+                // The pool strip: red-tinted hearts, value = the pool
+                // (0..the effects' total; a drained pool draws no strip).
                 drawStrip(hx0 - kStripGap - absW, absIcons, m_healthTexture,
-                          m_player->health() - baseMaxHealth,
-                          Vec4 {1.0f, 0.35f, 0.35f, 1.0f});
+                          absorbPool, Vec4 {1.0f, 0.35f, 0.35f, 1.0f});
             }
             drawStrip(hx0, heartIcons, m_healthTexture, m_player->health(),
                       Vec4 {1.0f, 1.0f, 1.0f, 1.0f});
@@ -4947,6 +4983,7 @@ void Game::renderUi() {
         if (m_player) {
             info.health = m_player->health();
             info.maxHealth = m_player->maxHealth();
+            info.absorption = m_player->absorption();
             info.hunger = m_player->hunger();
             info.maxHunger = m_player->maxHunger();
         }

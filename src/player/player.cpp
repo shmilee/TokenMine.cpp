@@ -401,7 +401,15 @@ bool Player::damage(float amount) {
     if (m_dead || amount <= 0.0f) {
         return false;
     }
-    m_health -= amount;
+    // Phase 72 (the two-component model, Minecraft): the absorption pool
+    // drains FIRST — the health is touched only by the remainder. The pool
+    // alone can never kill (the death comes from the health).
+    const float absorbed = std::min(m_absorption, amount);
+    m_absorption -= absorbed;
+    amount -= absorbed;
+    if (amount > 0.0f) {
+        m_health -= amount;
+    }
     m_timeSinceDamage = 0.0;
     m_regenAccum = 0.0;
     if (m_health <= 0.0f) {
@@ -411,28 +419,12 @@ bool Player::damage(float amount) {
     return true;
 }
 
-void Player::setAbsorptionBonus(float bonus, bool healOnIncrease) {
-    const float oldBonus = m_absorptionBonus;
-    m_absorptionBonus = bonus;
-    if (healOnIncrease && bonus > oldBonus) {
-        // The layer appears full: raise the health by the added amount
-        // (clamped at the new effective max).
-        m_health = std::clamp(m_health + (bonus - oldBonus), 0.0f,
-                              maxHealth());
-    }
-    // A shrunk/vanished layer drops the excess SILENTLY (no damage
-    // flash/sound, no damage-clock reset: the layer is not real HP).
-    if (m_health > maxHealth()) {
-        m_health = maxHealth();
-    }
-}
-
 void Player::respawn() {
     m_dead = false;
-    // Respawn starts clean (Phase 56): the layer dies with the player
-    // (the game clears the effects on death), so the bonus is 0 and the
-    // health refills to the BASE max.
-    m_absorptionBonus = 0.0f;
+    // Respawn starts clean (Phase 72): the pool dies with the player
+    // (the game clears the effects on death), so the absorption is 0 and
+    // the health refills to the base max.
+    m_absorption = 0.0f;
     m_health = m_params.maxHealth;
     m_timeSinceDamage = 0.0;
     m_regenAccum = 0.0;

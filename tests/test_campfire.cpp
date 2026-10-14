@@ -187,6 +187,7 @@ SaveGame makeSave(const SaveFixture& f) {
     s.playerPos = {1.5f, 53.25f, -2.75f};
     s.playerYaw = 0.785f;
     s.playerPitch = -0.4f;
+    s.playerAbsorption = 0.0f; // Phase 72 (no layer in the fixture)
     s.selectedSlot = 0;
     s.slots.resize(Inventory::kTotalSize);
     s.slots[0] = ItemStack {f.items.idForName("stone"), 64};
@@ -216,7 +217,7 @@ Json withoutKey(const Json& root, const std::string& key) {
     return out;
 }
 
-TEST(CampfireSaveTest, FormatIsElevenAndRoundTrips) {
+TEST(CampfireSaveTest, FormatIsTwelveAndRoundTrips) {
     SaveFixture f;
     CampfireCookState cooking;
     cooking.slot = stk(f.items.idForName("beef"), 1);
@@ -227,7 +228,8 @@ TEST(CampfireSaveTest, FormatIsElevenAndRoundTrips) {
     s.campfires.push_back({BlockPos {3, 53, 3}, CampfireCookState {}});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 11);
+    // Phase 72: writes are always format 12.
+    EXPECT_EQ(j->find("format")->asInt(), 12);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->campfires.size(), 2u);
@@ -249,6 +251,7 @@ TEST(CampfireSaveTest, FormatTenLoadsWithoutCampfires) {
     Json root = *j;
     root["format"] = Json(10);
     root = withoutKey(root, "campfires"); // format 10 predates the campfire
+    root["player"] = withoutKey(root["player"], "absorption"); // format 10 predates the absorption pool
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->campfires.empty());
@@ -266,6 +269,7 @@ TEST(CampfireSaveTest, FormatTenCampfireEditMigratesEmpty) {
     Json root = *j;
     root["format"] = Json(10);
     root = withoutKey(root, "campfires"); // format 10 predates the campfire
+    root["player"] = withoutKey(root["player"], "absorption"); // format 10 predates the absorption pool
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->campfires.empty());
@@ -278,6 +282,7 @@ TEST(CampfireSaveTest, RejectsCampfiresFieldInFormatTen) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(10); // keeps the "campfires" field
+    root["player"] = withoutKey(root["player"], "absorption"); // the rejection under test is "campfires"
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("format 11"), std::string::npos)

@@ -511,16 +511,24 @@
     duration（MC 语义，无 amplifier；tick 相位保留）
   - **虚弱**：`selectedAttackDamage()` 减去活跃效果 `melee_penalty` 总和
     （clamp ≥0——虚弱的空手打不出伤害）；只影响玩家→mob 近战
-  - **吸收层（Phase 56）**：玩家**有效 max health = base + Σ活跃层
-    `absorb_hp`**（`Player::setAbsorptionBonus`，`Game::syncAbsorption`
-    在每个效果变化点收口——进食施加 / mob 命中 / 每帧到期 / 牛奶清 /
-    死亡清 / 读档）。**施加（层增大）时 health 提升增量**（层显示为满，
-    clamp 新上限）；**层缩小/消失时超出 base max 的 health 无声掉下**
-    （无红闪/音效/伤害计时器——层不是真 HP）；heal（再生）可**填进**层
-    （clamp 有效上限）；`damage()` 从总 health 扣（health ≥ base 区间
-    与 MC 逐位一致：先掉红心——受伤状态下的偏离见 KNOWN_ISSUES）。
-    读档（`healOnIncrease = false`）不重复提升——存档 health 已含层，
-    且 health 必须在层应用**之后**设置（`applySave` 4d/4e 顺序）。
+  - **吸收池（Phase 56 引入，Phase 72 改两分量模型）**：玩家
+    **health（0..base max）+ absorption 池（0..64，`kAbsorptionMax`）
+    两个独立池**（`Player::absorption` / `setAbsorption`；
+    `Game::syncAbsorption` 纯 SET 到 `totalAbsorption`）。**同步点** =
+    效果集合真正变化处：进食施加 / mob 命中 / `updateEffects` 内到期
+    或水熄灭（效果总和变化才同步——每帧同步会与伤害扣减相抗）/ 牛奶清
+    / 死亡清；**读档不同步**（存值权威）。池是效果总和的纯函数**只在
+    同步点**——刷新恢复满层（MC 属性重算语义）；**同步点之间伤害把池
+    扣减的部分持久保留**（池 < 总和合法）。`damage()` **先扣池再扣
+    health**（池单独不能致死——死亡只来自 health）；`heal()`/
+    `setHealth()` 只钳制到 **base max**（heal 永不填池——池只由效果
+    设置）。层到期/清除 = 池随效果总和掉下（health 不动——池不是 HP，
+    无红闪/音效/伤害计时器）。**format 12** `player.absorption`
+    （parse 校验：格式 12 必需 / ≤11 带键拒绝 / [0,64] / **≤ 存档效果
+    `absorb_hp` 总和**）；**format ≤11 迁移**（`applySave` 4e）：共享
+    health 按 base max 拆分（超出 → 池，health 取 base 部分；22 →
+    20+2）。HUD 吸收红心从**池**派生（`ceil(池/2)` 颗、strip 值 = 池，
+    池 0 = 零绘制 = 无输入结构性免疫）；F3 调试层显示 `absorption`。
     金苹果 = 首个来源（吸收 4 / 5 s，正面——牛奶保留）
   - **火系统（Phase 57，残留燃烧）**：`fire` 效果（1 HP / 0.2 s = MC
     燃烧节奏，min_health 0 可致死）+ 两个数据标志：

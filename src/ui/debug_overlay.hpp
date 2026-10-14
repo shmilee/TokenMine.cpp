@@ -35,6 +35,7 @@ struct DebugInfo {
     std::size_t entities = 0; // Phase 19: the entity list (dropped items...)
     double health = 0.0;    // Phase 16
     double maxHealth = 0.0;
+    double absorption = 0.0; // Phase 72 (the separate pool)
     double hunger = 0.0;    // Phase 23
     double maxHunger = 0.0;
     std::string difficulty; // Phase 25: "easy" | "normal" | "hard"

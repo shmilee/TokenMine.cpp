@@ -1298,99 +1298,99 @@ TEST(PlayerParamsConfigTest, ConfiguredParamsReachThePlayer) {
     EXPECT_FLOAT_EQ(p.hunger(), 19.0f);
 }
 
-// -- absorption layer (Phase 56) ----------------------------------------------
-// The effective max health is base + layer; applying an increase RAISES the
-// health (the layer appears full); a decrease drops the excess SILENTLY.
+// -- absorption pool (Phase 72, the two-component model) ----------------------
+// The pool is SEPARATE from the health: damage drains it FIRST (the pool
+// alone can never kill), healing NEVER fills it (heal clamps at the base
+// max), and the game sets it from the active absorb_hp effects (a refresh
+// restores the full sum — Minecraft's attribute recalculation).
 
-TEST(PlayerTest, AbsorptionBonusRaisesEffectiveMax) {
+TEST(PlayerTest, AbsorptionPoolIsIndependent) {
     Fixture f;
     Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
-    ASSERT_FLOAT_EQ(p.maxHealth(), p.params().maxHealth); // no layer
-    p.setAbsorptionBonus(4.0f, true);
-    EXPECT_FLOAT_EQ(p.maxHealth(), p.params().maxHealth + 4.0f);
-    p.setAbsorptionBonus(0.0f, true);
-    EXPECT_FLOAT_EQ(p.maxHealth(), p.params().maxHealth);
+    ASSERT_FLOAT_EQ(p.maxHealth(), p.params().maxHealth); // base only
+    ASSERT_FLOAT_EQ(p.absorption(), 0.0f);
+    p.setAbsorption(4.0f);
+    EXPECT_FLOAT_EQ(p.absorption(), 4.0f);
+    EXPECT_FLOAT_EQ(p.health(), 20.0f); // the pool never touches the health
+    EXPECT_FLOAT_EQ(p.maxHealth(), 20.0f); // and never raises the max
+    p.setAbsorption(0.0f);
+    EXPECT_FLOAT_EQ(p.absorption(), 0.0f);
 }
 
-TEST(PlayerTest, AbsorptionIncreaseRaisesHealth) {
+TEST(PlayerTest, AbsorptionClampsAtTheCap) {
     Fixture f;
     Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
-    // Full health (20) + a 4-HP layer (healOnIncrease) -> 24.
-    p.setAbsorptionBonus(4.0f, true);
-    EXPECT_FLOAT_EQ(p.health(), 24.0f);
-    // A wounded player gains the ADDED amount (18 -> 22), clamped at the
-    // new max.
-    Player p2 = f.makePlayer({8.5f, 1.0f, 8.5f});
-    p2.damage(2.0f); // 18
-    p2.setAbsorptionBonus(4.0f, true);
-    EXPECT_FLOAT_EQ(p2.health(), 22.0f);
-    // A second increase stacks the raise (22 -> 26, max 28).
-    p2.setAbsorptionBonus(8.0f, true);
-    EXPECT_FLOAT_EQ(p2.health(), 26.0f);
-    // The same bonus re-applied does NOT heal again.
-    p2.setAbsorptionBonus(8.0f, true);
-    EXPECT_FLOAT_EQ(p2.health(), 26.0f);
+    p.setAbsorption(100.0f);
+    EXPECT_FLOAT_EQ(p.absorption(), Player::kAbsorptionMax); // 64
+    p.setAbsorption(-3.0f);
+    EXPECT_FLOAT_EQ(p.absorption(), 0.0f);
 }
 
-TEST(PlayerTest, AbsorptionDecreaseDropsExcessSilently) {
+TEST(PlayerTest, DamageDrainsAbsorptionFirst) {
     Fixture f;
     Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
-    p.setAbsorptionBonus(4.0f, true); // 24
-    // Expiry: the excess (above the base max) vanishes, the base part
-    // stays.
-    p.setAbsorptionBonus(0.0f, true);
+    p.setAbsorption(4.0f);
+    // A hit smaller than the pool: the health is untouched.
+    ASSERT_TRUE(p.damage(3.0f));
+    EXPECT_FLOAT_EQ(p.absorption(), 1.0f);
     EXPECT_FLOAT_EQ(p.health(), 20.0f);
-    // No overkill: a health at or below the base max is untouched.
-    Player p2 = f.makePlayer({8.5f, 1.0f, 8.5f});
-    p2.damage(2.0f); // 18
-    p2.setAbsorptionBonus(4.0f, true); // 22
-    p2.damage(4.0f); // 18 (back at the base max)
-    p2.setAbsorptionBonus(0.0f, true);
-    EXPECT_FLOAT_EQ(p2.health(), 18.0f);
-    EXPECT_FALSE(p2.isDead());
+    // A hit larger than the pool: the remainder reaches the health.
+    ASSERT_TRUE(p.damage(5.0f)); // pool 1 -> 0, health 20 -> 16
+    EXPECT_FLOAT_EQ(p.absorption(), 0.0f);
+    EXPECT_FLOAT_EQ(p.health(), 16.0f);
+    EXPECT_FALSE(p.isDead());
 }
 
-TEST(PlayerTest, AbsorptionLoadModeDoesNotHeal) {
-    // Save load: the saved health already includes the layer, so the
-    // load-mode sync (healOnIncrease=false) must not heal on top of it.
+TEST(PlayerTest, AbsorptionAloneCannotKill) {
     Fixture f;
     Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
-    p.damage(2.0f); // 18 (the "saved" health, with a 4-HP layer active)
-    p.setAbsorptionBonus(4.0f, false);
-    EXPECT_FLOAT_EQ(p.health(), 18.0f);
-    EXPECT_FLOAT_EQ(p.maxHealth(), 24.0f);
+    p.setAbsorption(4.0f);
+    // A hit of exactly the pool size: the health is full, the player
+    // lives (the P56 shared model would have shown 20 of 24 here).
+    ASSERT_TRUE(p.damage(4.0f));
+    EXPECT_FLOAT_EQ(p.absorption(), 0.0f);
+    EXPECT_FLOAT_EQ(p.health(), 20.0f);
+    EXPECT_FALSE(p.isDead());
+    // The death comes only from the health.
+    ASSERT_TRUE(p.damage(20.0f));
+    EXPECT_TRUE(p.isDead());
+    EXPECT_FLOAT_EQ(p.health(), 0.0f);
 }
 
-TEST(PlayerTest, DamageAndHealClampAtEffectiveMax) {
+TEST(PlayerTest, HealNeverFillsThePool) {
     Fixture f;
     Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
-    p.setAbsorptionBonus(4.0f, true); // 24, max 24
-    // setHealth may store ABOVE the base max while the layer is active
-    // (the save round trip), and heals clamp at the EFFECTIVE max
-    // (regeneration fills INTO the layer).
-    p.damage(3.0f); // 21
-    p.setHealth(24.0f);
-    EXPECT_FLOAT_EQ(p.health(), 24.0f);
-    p.damage(1.0f); // 23
+    p.damage(2.0f); // 18
+    p.setAbsorption(4.0f);
     p.heal(100.0f);
-    EXPECT_FLOAT_EQ(p.health(), 24.0f);
-    // The layer expires: the stored excess vanishes silently.
-    p.setAbsorptionBonus(0.0f, true);
-    EXPECT_FLOAT_EQ(p.health(), 20.0f);
-    // Without the layer, setHealth clamps back at the base max.
-    p.setHealth(24.0f);
-    EXPECT_FLOAT_EQ(p.health(), 20.0f);
+    EXPECT_FLOAT_EQ(p.health(), 20.0f); // clamped at the BASE max (the P56
+    EXPECT_FLOAT_EQ(p.absorption(), 4.0f); // model would have shown 24)
 }
 
-TEST(PlayerTest, RespawnClearsAbsorptionBonus) {
+TEST(PlayerTest, SetHealthClampsAtTheBaseMax) {
     Fixture f;
     Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
-    p.setAbsorptionBonus(4.0f, true); // 24
-    p.damage(24.0f); // dead
+    p.setAbsorption(4.0f);
+    // Format 12: the saved health is the base-pool value only — a value
+    // above the base max is clamped on load (and rejected at the game
+    // level for format-12 files).
+    p.setHealth(24.0f);
+    EXPECT_FLOAT_EQ(p.health(), 20.0f);
+    p.setAbsorption(0.0f);
+    p.setHealth(18.0f);
+    EXPECT_FLOAT_EQ(p.health(), 18.0f);
+    EXPECT_FALSE(p.isDead());
+}
+
+TEST(PlayerTest, RespawnClearsTheAbsorptionPool) {
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    p.setAbsorption(4.0f);
+    p.damage(24.0f); // dead (pool 4 + health 20)
     ASSERT_TRUE(p.isDead());
     p.respawn();
     EXPECT_FALSE(p.isDead());
-    EXPECT_FLOAT_EQ(p.maxHealth(), p.params().maxHealth); // bonus is 0
+    EXPECT_FLOAT_EQ(p.absorption(), 0.0f);
     EXPECT_FLOAT_EQ(p.health(), p.params().maxHealth);
 }
 
