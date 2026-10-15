@@ -200,7 +200,7 @@ void WorldGenerator::generateChunk(Chunk& chunk, const ChunkPos& pos) const {
     placeOres(chunk, pos);
     placeTrees(chunk, pos);
     placeDecorations(chunk, pos); // Phase 45: after trees (trunks win)
-    placeLavaLake(chunk, pos); // Phase 86: the contained lava pool
+    placeLavaLakes(chunk, pos); // Phase 86/88: the contained lava pool(s)
 }
 
 void WorldGenerator::fillTerrain(Chunk& chunk, const ChunkPos& pos,
@@ -478,51 +478,54 @@ void WorldGenerator::placeIfAir(Chunk& chunk, const ChunkPos& pos, int wx,
     }
 }
 
-void WorldGenerator::placeLavaLake(Chunk& chunk, const ChunkPos& pos) const {
-    if (!m_params.lavaLakeEnabled) {
-        return;
-    }
-    const int R = m_params.lavaLakeRadius;
-    const int x0 = m_params.lavaLakeCenterX - R;
-    const int x1 = m_params.lavaLakeCenterX + R;
-    const int z0 = m_params.lavaLakeCenterZ - R;
-    const int z1 = m_params.lavaLakeCenterZ + R;
-    // The basin floor: the region's lowest terrain minus `depth` (a pure
-    // heightAt read — deterministic across runs and consistent across the
-    // chunks the region spans). The surrounding terrain (outside the region)
-    // is >= the region min, so the basin walls always rise above the lava.
-    int minH = INT_MAX;
-    for (int x = x0; x <= x1; ++x) {
-        for (int z = z0; z <= z1; ++z) {
-            minH = std::min(minH, heightAt(x, z));
+void WorldGenerator::placeLavaLakes(Chunk& chunk, const ChunkPos& pos) const {
+    // Phase 88: loop over every configured lake (Phase 86 shipped a single
+    // lake; the list generalizes it). Each lake is independent (its own
+    // region/floor); overlapping lakes carve the same cells (deterministic).
+    for (const auto& lake : m_params.lavaLakes) {
+        if (!lake.enabled) {
+            continue;
         }
-    }
-    const int floorY = minH - m_params.lavaLakeDepth;
-    const int ox = pos.x * kChunkSize;
-    const int oz = pos.z * kChunkSize;
-    const int y0 = pos.y * kChunkSize;
-    for (int lx = 0; lx < kChunkSize; ++lx) {
-        for (int lz = 0; lz < kChunkSize; ++lz) {
-            const int wx = ox + lx;
-            const int wz = oz + lz;
-            if (wx < x0 || wx > x1 || wz < z0 || wz > z1) {
-                continue;
+        const int x0 = lake.centerX - lake.radius;
+        const int x1 = lake.centerX + lake.radius;
+        const int z0 = lake.centerZ - lake.radius;
+        const int z1 = lake.centerZ + lake.radius;
+        // The basin floor: the region's lowest terrain minus `depth` (a pure
+        // heightAt read — deterministic across runs and consistent across the
+        // chunks the region spans). The surrounding terrain (outside the
+        // region) is >= the region min, so the basin walls rise above lava.
+        int minH = INT_MAX;
+        for (int x = x0; x <= x1; ++x) {
+            for (int z = z0; z <= z1; ++z) {
+                minH = std::min(minH, heightAt(x, z));
             }
-            for (int ly = 0; ly < kChunkSize; ++ly) {
-                const int wy = y0 + ly;
-                if (wy <= floorY) {
-                    continue; // below the floor: keep the terrain (the basin
-                              // bottom)
+        }
+        const int floorY = minH - lake.depth;
+        const int ox = pos.x * kChunkSize;
+        const int oz = pos.z * kChunkSize;
+        const int y0 = pos.y * kChunkSize;
+        for (int lx = 0; lx < kChunkSize; ++lx) {
+            for (int lz = 0; lz < kChunkSize; ++lz) {
+                const int wx = ox + lx;
+                const int wz = oz + lz;
+                if (wx < x0 || wx > x1 || wz < z0 || wz > z1) {
+                    continue;
                 }
-                // Carve the terrain above the floor to air (the basin).
-                if (chunk.get(lx, ly, lz) != BlockID::air()) {
-                    chunk.set(lx, ly, lz, BlockID::air());
-                }
-                // Pour full lava in the lowest `fill` levels above the floor.
-                if (wy <= floorY + m_params.lavaLakeFill) {
-                    chunk.setFluidAt(lx, ly, lz,
-                                     fluidCode(FluidKind::Lava,
-                                               kMaxFluidLevel));
+                for (int ly = 0; ly < kChunkSize; ++ly) {
+                    const int wy = y0 + ly;
+                    if (wy <= floorY) {
+                        continue; // below the floor: keep the terrain
+                    }
+                    // Carve the terrain above the floor to air (the basin).
+                    if (chunk.get(lx, ly, lz) != BlockID::air()) {
+                        chunk.set(lx, ly, lz, BlockID::air());
+                    }
+                    // Pour full lava in the lowest `fill` levels on the floor.
+                    if (wy <= floorY + lake.fill) {
+                        chunk.setFluidAt(lx, ly, lz,
+                                         fluidCode(FluidKind::Lava,
+                                                   kMaxFluidLevel));
+                    }
                 }
             }
         }

@@ -762,13 +762,22 @@ TEST(WorldGeneratorTest, CreateFailsOnUnknownDecorationBlock) {
 // contained. Deterministic (pure heightAt).
 TEST(WorldGeneratorTest, Phase86LavaLakeIsContained) {
     GenSetup setup;
-    // A lake inside the 2x2 region (x,z in [0,32)): centre (20,20), radius 3.
-    setup.params.lavaLakeEnabled = true;
-    setup.params.lavaLakeCenterX = 20;
-    setup.params.lavaLakeCenterZ = 20;
-    setup.params.lavaLakeRadius = 3; // region x 17..23, z 17..23
-    setup.params.lavaLakeDepth = 4;
-    setup.params.lavaLakeFill = 2;
+    // Phase 88: a LIST of lakes inside the 2x2 region (x,z in [0,32)): lake 0
+    // centre (20,20) radius 3 (region 17..23), lake 1 centre (10,10) radius 2
+    // (region 8..12). Both must be present + contained (the multi-lake list).
+    WorldgenParams::LavaLake a;
+    a.centerX = 20;
+    a.centerZ = 20;
+    a.radius = 3;
+    a.depth = 4;
+    a.fill = 2;
+    WorldgenParams::LavaLake b;
+    b.centerX = 10;
+    b.centerZ = 10;
+    b.radius = 2;
+    b.depth = 3;
+    b.fill = 2;
+    setup.params.lavaLakes = {a, b};
 
     auto res = WorldGenerator::create(7, setup.params, setup.biomes,
                                       setup.blocks);
@@ -872,4 +881,18 @@ TEST(WorldGeneratorTest, Phase86LavaLakeIsContained) {
     ASSERT_GE(topLavaY, 0) << "the centre column should hold lava";
     EXPECT_EQ(blockAt(20, topLavaY + 1, 20), BlockID::air())
         << "the basin headspace above the lava is carved to air";
+
+    // (5) Phase 88 multi-lake: the SECOND lake (centre (10,10), region 8..12)
+    // also holds lava — the list places every configured lake.
+    int lake2Lava = 0;
+    for (int x = 8; x <= 12; ++x) {
+        for (int z = 8; z <= 12; ++z) {
+            for (int y = 1; y < kWorldHeight; ++y) {
+                if (fluidKindOf(fluidAt(x, y, z)) == FluidKind::Lava) {
+                    ++lake2Lava;
+                }
+            }
+        }
+    }
+    EXPECT_GT(lake2Lava, 0) << "the second lake should also contain lava";
 }

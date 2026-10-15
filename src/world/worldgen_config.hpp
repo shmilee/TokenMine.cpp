@@ -58,22 +58,25 @@ struct WorldgenParams {
     int treeMinHeight = 4; // trunk height in blocks
     int treeHeightRange = 3; // trunk height varies by +0..this
 
-    // Lava lake (section "lava_lake", Phase 86): a contained pool of lava
-    // carved into the terrain at a fixed location — a (2R+1)^2 square basin
-    // centred at (centerX, centerZ), the terrain below the floor carved to
-    // air and `fill` full-lava levels poured on the floor. The lake sits at
-    // a FIXED floor Y (independent of the local terrain) so it is
-    // deterministic; the surrounding terrain (surface ~ baseHeight) is
-    // higher, so the lava is contained. Placed OUTSIDE the spawn's default
-    // facing so the no-input baseline is unaffected.
-    bool lavaLakeEnabled = true;
-    int lavaLakeCenterX = 40;
-    int lavaLakeCenterZ = 40;
-    int lavaLakeRadius = 4; // the basin is (2R+1)^2 = 9x9 at R=4
-    int lavaLakeDepth = 4;  // the basin floor is this far below the region's
-                            // lowest terrain (heightAt), so the basin walls
-                            // (the surrounding terrain) are always higher
-    int lavaLakeFill = 2;   // full-lava levels poured on the basin floor
+    // Lava lakes (section "lava_lakes", Phase 86 single lake, Phase 88
+    // multi-lake list): each is a contained pool of lava carved into the
+    // terrain at a fixed location — a (2R+1)^2 square basin centred at
+    // (centerX, centerZ), the terrain below the floor carved to air and
+    // `fill` full-lava levels poured on the floor. The lake sits at a FIXED
+    // floor Y (the region's lowest terrain minus depth, independent of the
+    // local surface) so it is deterministic; the surrounding terrain is
+    // higher, so the lava is contained. Lakes are placed OUTSIDE the spawn's
+    // default facing so the no-input baseline is unaffected.
+    struct LavaLake {
+        bool enabled = true;
+        int centerX = 0;
+        int centerZ = 0;
+        int radius = 4;   // the basin is (2R+1)^2 = 9x9 at R=4
+        int depth = 4;    // the basin floor is this far below the region's
+                          // lowest terrain (heightAt)
+        int fill = 2;     // full-lava levels poured on the basin floor
+    };
+    std::vector<LavaLake> lavaLakes;
 
     // Parse a worldgen definition. Strict about types, permissive about
     // missing keys (defaults above).

@@ -204,45 +204,56 @@ Result<WorldgenParams> WorldgenParams::parse(const Json& def) {
         MC_TRY(r);
     }
 
-    // -- lava lake (Phase 86) --------------------------------------------
-    if (const Json* ll = def.find("lava_lake")) {
-        if (!ll->isObject()) {
-            return MC_FAIL("'lava_lake' must be an object");
+    // -- lava lakes (Phase 86 single, Phase 88 list) ----------------------
+    if (const Json* lls = def.find("lava_lakes")) {
+        if (!lls->isArray()) {
+            return MC_FAIL("'lava_lakes' must be an array of lake objects");
         }
-        warnUnknown(*ll, "lava_lake",
-                    {"enabled", "center_x", "center_z", "radius",
-                     "depth", "fill"});
-        auto r = readField(*ll, "lava_lake", "enabled", "bool",
-                           [&](const Json& v) {
-                               p.lavaLakeEnabled = v.asBool();
-                           });
-        MC_TRY(r);
-        r = readField(*ll, "lava_lake", "center_x", "number",
-                      [&](const Json& v) { p.lavaLakeCenterX = v.asInt(); });
-        MC_TRY(r);
-        r = readField(*ll, "lava_lake", "center_z", "number",
-                      [&](const Json& v) { p.lavaLakeCenterZ = v.asInt(); });
-        MC_TRY(r);
-        r = readField(*ll, "lava_lake", "radius", "number",
-                      [&](const Json& v) { p.lavaLakeRadius = v.asInt(); });
-        MC_TRY(r);
-        r = readField(*ll, "lava_lake", "depth", "number",
-                      [&](const Json& v) { p.lavaLakeDepth = v.asInt(); });
-        MC_TRY(r);
-        r = readField(*ll, "lava_lake", "fill", "number",
-                      [&](const Json& v) { p.lavaLakeFill = v.asInt(); });
-        MC_TRY(r);
+        for (std::size_t i = 0; i < lls->size(); ++i) {
+            const Json& ll = lls->at(i);
+            const std::string label = "lava_lakes[" + std::to_string(i) + "]";
+            if (!ll.isObject()) {
+                return MC_FAIL("'" + label + "' must be an object");
+            }
+            warnUnknown(ll, label.c_str(),
+                        {"enabled", "center_x", "center_z", "radius",
+                         "depth", "fill"});
+            WorldgenParams::LavaLake lake; // defaults: enabled, 0,0,4,4,2
+            auto r = readField(ll, label.c_str(), "enabled", "bool",
+                               [&](const Json& v) { lake.enabled = v.asBool(); });
+            MC_TRY(r);
+            r = readField(ll, label.c_str(), "center_x", "number",
+                          [&](const Json& v) { lake.centerX = v.asInt(); });
+            MC_TRY(r);
+            r = readField(ll, label.c_str(), "center_z", "number",
+                          [&](const Json& v) { lake.centerZ = v.asInt(); });
+            MC_TRY(r);
+            r = readField(ll, label.c_str(), "radius", "number",
+                          [&](const Json& v) { lake.radius = v.asInt(); });
+            MC_TRY(r);
+            r = readField(ll, label.c_str(), "depth", "number",
+                          [&](const Json& v) { lake.depth = v.asInt(); });
+            MC_TRY(r);
+            r = readField(ll, label.c_str(), "fill", "number",
+                          [&](const Json& v) { lake.fill = v.asInt(); });
+            MC_TRY(r);
+            p.lavaLakes.push_back(std::move(lake));
+        }
     }
 
     // -- cross-field validation -----------------------------------------
-    if (p.lavaLakeRadius < 0 || p.lavaLakeRadius > 16) {
-        return MC_FAIL("'lava_lake.radius' must be in [0, 16]");
-    }
-    if (p.lavaLakeDepth < 1 || p.lavaLakeDepth > 16) {
-        return MC_FAIL("'lava_lake.depth' must be in [1, 16]");
-    }
-    if (p.lavaLakeFill < 0 || p.lavaLakeFill > 8) {
-        return MC_FAIL("'lava_lake.fill' must be in [0, 8]");
+    for (std::size_t i = 0; i < p.lavaLakes.size(); ++i) {
+        const auto& lake = p.lavaLakes[i];
+        const std::string label = "lava_lakes[" + std::to_string(i) + "]";
+        if (lake.radius < 0 || lake.radius > 16) {
+            return MC_FAIL("'" + label + ".radius' must be in [0, 16]");
+        }
+        if (lake.depth < 1 || lake.depth > 16) {
+            return MC_FAIL("'" + label + ".depth' must be in [1, 16]");
+        }
+        if (lake.fill < 0 || lake.fill > 8) {
+            return MC_FAIL("'" + label + ".fill' must be in [0, 8]");
+        }
     }
     if (p.baseHeight < 1 || p.baseHeight > 120) {
         return MC_FAIL("'terrain.base_height' must be in [1, 120]");

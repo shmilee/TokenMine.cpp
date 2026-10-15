@@ -66,12 +66,22 @@
   "min_height": 4,
   "height_range": 3
  },
- "lava_lake": {
-  "enabled": true,
-  "center_x": 40,
-  "center_z": 40,
-  "radius": 4,
-  "depth": 4,
-  "fill": 2
- }
+ "lava_lakes": [
+  {
+   "enabled": true,
+   "center_x": 40,
+   "center_z": 40,
+   "radius": 4,
+   "depth": 4,
+   "fill": 2
+  },
+  {
+   "enabled": true,
+   "center_x": 55,
+   "center_z": 45,
+   "radius": 3,
+   "depth": 3,
+   "fill": 2
+  }
+ ]
 }
