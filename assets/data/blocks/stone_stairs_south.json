@@ -1,0 +1,16 @@
+{
+  "id": "stone_stairs_south",
+  "properties": {
+    "hardness": 1.5,
+    "drops": "stone_stairs_south"
+  },
+  "model": {
+    "shape": "stairs",
+    "stair_facing": 2,
+    "textures": {
+      "top": "stone",
+      "side": "stone",
+      "bottom": "stone"
+    }
+  }
+}

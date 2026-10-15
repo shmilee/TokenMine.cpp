@@ -174,12 +174,15 @@ private:
     bool isSolid(BlockID id) const;
     // Phase 85: the top of the cell's SOLID region in cell-local units (0 =
     // not solid, 0.5 = bottom slab, 1.0 = full block) — the collision tests
-    // overlap against this region, not the whole cell. Phase 87 stairs: the
-    // height varies across the cell with z (a slope), so `mxLocalZ` is the
-    // AABB's +Z edge in cell-local [0,1] — the effective blocking height is
-    // the slope at that edge (1 - mxLocalZ for a north-facing stair). A slab
-    // / full cube ignore mxLocalZ (a fixed height).
-    float solidTopHeight(BlockID id, float mxLocalZ) const;
+    // overlap against this region, not the whole cell. Phase 87/89 stairs:
+    // the height varies across the cell along the stair's facing axis (a
+    // slope); `mn`/`mx` are the AABB's world corners and `cell` the cell's
+    // origin, so the effective blocking height is the slope at the AABB's LOW
+    // end on the facing axis (north: 1 - mxLocalZ, south: mnLocalZ, east:
+    // mnLocalX, west: 1 - mxLocalX). A slab / full cube ignore the AABB (a
+    // fixed height).
+    float solidTopHeight(BlockID id, const Vec3& mn, const Vec3& mx,
+                         const BlockPos& cell) const;
 };
 
 // -- entity-vs-entity separation (Phase 19) ----------------------------------

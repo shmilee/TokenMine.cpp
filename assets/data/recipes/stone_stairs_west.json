@@ -1,0 +1,16 @@
+{
+  "id": "stone_stairs_west",
+  "type": "shaped",
+  "output": {
+    "item": "stone_stairs_west",
+    "count": 4
+  },
+  "pattern": [
+    "S  ",
+    "SS ",
+    "SSS"
+  ],
+  "key": {
+    "S": "stone"
+  }
+}

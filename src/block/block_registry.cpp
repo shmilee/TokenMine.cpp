@@ -496,6 +496,15 @@ Result<void> BlockRegistry::parseModel(const Json& def, BlockModel& out) {
                                       ? BlockModel::Shape::Stairs
                                       : BlockModel::Shape::FullCube));
     }
+    // Phase 89: the stair facing (0..3; only meaningful for shape "stairs").
+    if (const Json* sf = m->find("stair_facing")) {
+        if (!sf->isNumber() || sf->asDouble() != std::floor(sf->asDouble()) ||
+            sf->asDouble() < 0.0 || sf->asDouble() > 3.0) {
+            return MC_FAIL("model.stair_facing must be an integer in [0, 3], "
+                           "got " + sf->asString());
+        }
+        out.stairFacing = static_cast<int>(sf->asDouble());
+    }
 
     const Json* t = m->find("textures");
     if (t == nullptr || !t->isObject()) {

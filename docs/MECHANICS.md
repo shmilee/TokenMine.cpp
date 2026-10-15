@@ -677,15 +677,19 @@
     对**实心区 [y, y+top]**（非整格）判重叠——玩家站 slab 顶（feet y+0.5）、
     不进 slab 体；**满块 top=1 复现旧的整格行为（backward-compat）**。
 - **楼梯 stairs（Phase 87，第二个新块模型类型）**：
-  - **`Shape::Stairs`**（block.hpp）：朝北斜面（-Z 端满高、+Z 端落地），复用
-    cube 纹理。v1 只有朝北一个固定朝向（无 4 旋转——项目方块无朝向状态）。
-  - **mesh**（chunk mesher `emitStairs`）：楔形——**斜顶面**（恒绘，法线
-    (0,1,1) 顶面亮度）、-Z 背墙（满高）、±X 侧三角（楔形）、底面；侧/背/底
-    邻 opaque 剔除；贪婪满块路径**跳过 stairs**。
-  - **斜面碰撞**（entity.cpp）：`Entity::solidTopHeight(id, mxLocalZ)`——楼梯
-    实心高度随 z 变化（`1 - mxLocalZ`，mxLocalZ = AABB 的 +Z 边在格内的
-    local 位置），玩家脚落在其 +Z 边处的斜面高度；slab/满块忽略 mxLocalZ
-    （固定高度，backward-compat）。`moveAxis` + `hasRoomAt` 传入 mxLocalZ。
+  - **`Shape::Stairs`**（block.hpp）：斜面（一端满高、另一端落地），朝向由
+    `model.stair_facing`（0-3：north/east/south/west）数据驱动——4 个楼梯块
+    变体（stone_stairs[_east/_south/_west]），**无 per-block 朝向状态**（4 块
+    变体替代 MC 的同块旋转）。复用 cube 纹理。
+  - **mesh**（chunk mesher `emitStairs`）：楔形（斜顶恒绘 + 高端墙 + 两侧
+    三角 + 底面），**按 `stair_facing` 旋转**（north 楔形面的 corner/normal/
+    cull 方向绕 Y 转 facing×90°）；侧/背/底邻 opaque 剔除；贪婪满块路径跳过
+    stairs。
+  - **斜面碰撞**（entity.cpp）：`Entity::solidTopHeight(id, mn, mx, cell)`
+    按 facing 沿对应轴取 **AABB 覆盖的最高斜面点**（north = 1−mnLocalZ、south
+    = mxLocalZ、east = mxLocalX、west = 1−mnLocalX），玩家脚落在斜面高端——
+    Phase 89 修正 P87 用低端边（会切入楼梯高端）的 bug；slab/满块忽略 AABB
+    （固定高度，backward-compat）。`moveAxis` + `hasRoomAt` 传 mn/mx/cell。
 - **游泳**（Phase 9）：玩家包围盒与任何水体格相交即进入水中状态——水中重力减半
   （12 vs 32）、终端速度 4、水平速度降为 3.1（冲刺无效）、`Space` 随时上浮（4.5）；
   浅水（头在水面上）可以"蹚水走"，深水可以游

@@ -92,6 +92,7 @@
 - [x] **Phase 86** — 熔岩湖 worldgen（数据驱动 `lava_lake` 段 + 固定位置静态满熔岩池）：**`placeLavaLake`**（世界生成器，盆地 (2R+1)² @ (center_x,center_z)、盆底 = 区域最低地形 − depth【纯 heightAt 确定性】、盆底上 fill 层满熔岩、四周地形更高 = 被围静态湖）+ **WorldgenParams 6 字段**（enabled/center_x/center_z/radius/depth/fill，worldgen.json `lava_lake` 段 + 校验 radius [0,16] / depth [1,16] / fill [0,8]）；shipped 湖 (40,40) R4 放出生点 -Z 视野外 → **base18 免重锚**；1141/1141（+1：Phase86LavaLakeIsContained【存在+被围+确定性+headspace】）
 - [x] **Phase 87** — 楼梯 stairs：第二个新块模型类型（`Shape::Stairs` 朝北斜面 + 斜面高度感知碰撞）：**`stone_stairs`**（shape stairs、hardness 1.5、自掉、**复用 stone 纹理无新 atlas**、shaped S/SS/SSS → 4）+ **`BlockModel::Shape::Stairs`** + **chunk mesher `emitStairs`**（楔形：斜顶恒绘 + 背墙 + 两侧三角 + 底面，邻 opaque 剔除，贪婪路径跳过）+ **斜面碰撞**（`Entity::solidTopHeight` 加 AABB +Z 边 localZ 参数 → 楼梯高 = 1 − localZ，P85 slab/满块忽略该参数 backward-compat）；1144/1144（+3：内容钉死 2 + 斜面碰撞 1）
 - [x] **Phase 88** — 熔岩湖扩展：多湖（P86 单湖 → 数据驱动**湖列表** `lava_lakes`）：WorldgenParams `lava_lake` 单字段 → **`std::vector<LavaLake>` 列表**（每湖 enabled/center_x/center_z/radius/depth/fill，逐条校验 radius [0,16] / depth [1,16] / fill [0,8] 点名 `lava_lakes[i]`）+ `placeLavaLakes` 循环所有 enabled 湖（各自独立 region/floor）；shipped **2 湖**（(40,40) R4 + (55,45) R3，皆出生点 -Z 视野外 → **base18 免重锚**）；1144/1144（Phase86LavaLakeIsContained 演进为多湖：2 湖皆有熔岩 + 被围 + 确定性）
+- [x] **Phase 89** — 楼梯 4 朝向（P87 朝北 stairs → 数据驱动 4 块变体，无 per-block 状态）：**`stair_facing`** 块属性（model，0-3 校验点名）+ **4 楼梯块**（stone_stairs 朝北 0 / _east 1 / _south 2 / _west 3，复用 stone 纹理 + 各 1 配方 S/SS/SSS → 4）+ **`solidTopHeight` 改签名**（AABB mn/mx + cell + 朝向，取 AABB 覆盖**最高**斜面点——修正 P87 低端边切入 bug）+ **`emitStairs` 4 向**（north 楔形面 + 按 facing 旋转 corner/normal/cull）；1147/1147（+3：facing 解析/4 变体内容钉死/南斜面相反）
 
 ## 细节存档索引（docs/archive/）
 
@@ -180,5 +181,6 @@
 - **Phase 86** — `archive/phase-86.md`
 - **Phase 87** — `archive/phase-87.md`
 - **Phase 88** — `archive/phase-88.md`
+- **Phase 89** — `archive/phase-89.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

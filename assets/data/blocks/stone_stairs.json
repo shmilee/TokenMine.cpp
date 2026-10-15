@@ -6,6 +6,11 @@
   },
   "model": {
     "shape": "stairs",
-    "textures": { "top": "stone", "side": "stone", "bottom": "stone" }
+    "textures": {
+      "top": "stone",
+      "side": "stone",
+      "bottom": "stone"
+    },
+    "stair_facing": 0
   }
 }

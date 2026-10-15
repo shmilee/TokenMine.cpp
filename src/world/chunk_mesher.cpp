@@ -537,6 +537,7 @@ void ChunkMesher::emitStairs(ChunkMeshData& out, const Block& block,
     // TRIANGLES (the wedge), and the BOTTOM. The +Z front is at floor level
     // (degenerate, no face). Side/back/bottom are culled by an opaque neighbor
     // (like the slab); the slope top is always exposed.
+    const int f = block.model.stairFacing;
     const int wx = origin.x + lx;
     const int wy = origin.y + ly;
     const int wz = origin.z + lz;
@@ -591,32 +592,76 @@ void ChunkMesher::emitStairs(ChunkMeshData& out, const Block& block,
                                  {first, first + 1, first + 2});
     };
 
+    // The NORTH wedge's 5 faces (corners + outward normal + the neighbor
+    // offset that culls it; the slope top is never culled). Each is rotated
+    // around Y by facing*90° for the other facings: corner points via `rot`
+    // (affine, around the cell centre), normals + cull offsets via `rotDir`
+    // (linear).
+    const auto rot = [&](float x, float y, float z) -> Vec3 {
+        switch (f) {
+            case 1: return {1.0f - z, y, x};
+            case 2: return {1.0f - x, y, 1.0f - z};
+            case 3: return {z, y, 1.0f - x};
+            default: return {x, y, z};
+        }
+    };
+    const auto rotDir = [&](float dx, float dy, float dz) -> Vec3 {
+        switch (f) {
+            case 1: return {-dz, dy, dx};
+            case 2: return {-dx, dy, -dz};
+            case 3: return {dz, dy, -dx};
+            default: return {dx, dy, dz};
+        }
+    };
+    auto emitQuadR = [&](const std::array<Vec3, 4>& c, const Vec3& n, int slot,
+                         const Vec3* cull) {
+        if (cull != nullptr) {
+            const Vec3 cc = rotDir(cull->x, cull->y, cull->z);
+            if (opaque(cc.x, cc.y, cc.z)) {
+                return;
+            }
+        }
+        std::array<Vec3, 4> rc {};
+        for (int i = 0; i < 4; ++i) {
+            rc[i] = rot(c[i].x, c[i].y, c[i].z);
+        }
+        emitQuad(rc, rotDir(n.x, n.y, n.z), slot);
+    };
+    auto emitTriR = [&](const std::array<Vec3, 3>& c, const Vec3& n, int slot,
+                        const Vec3* cull) {
+        if (cull != nullptr) {
+            const Vec3 cc = rotDir(cull->x, cull->y, cull->z);
+            if (opaque(cc.x, cc.y, cc.z)) {
+                return;
+            }
+        }
+        std::array<Vec3, 3> rc {};
+        for (int i = 0; i < 3; ++i) {
+            rc[i] = rot(c[i].x, c[i].y, c[i].z);
+        }
+        emitTri(rc, rotDir(n.x, n.y, n.z), slot);
+    };
+
+    const Vec3 cullHigh {0, 0, -1};   // north high-end (-Z)
+    const Vec3 cullLeft {-1, 0, 0};   // north -X side
+    const Vec3 cullRight {1, 0, 0};   // north +X side
+    const Vec3 cullBottom {0, -1, 0}; // north below (-Y; rotDir leaves it)
     // Slanted top (always drawn): the back edge at y=1 (z=0) to the front
     // edge at y=0 (z=1). Wound so the outward normal is up (0,1,1).
-    emitQuad(std::array<Vec3, 4>{{{0, 1, 0}, {0, 0, 1}, {1, 0, 1}, {1, 1, 0}}},
-             {0, 1, 1}, 0);
-    // -Z back wall (full height), kCubeFaces -Z winding; culled by an opaque
-    // -Z neighbor.
-    if (!opaque(0, 0, -1)) {
-        emitQuad(std::array<Vec3, 4>{{{1, 0, 0}, {0, 0, 0}, {0, 1, 0},
-                                      {1, 1, 0}}},
-                 {0, 0, -1}, 1);
-    }
+    emitQuadR(std::array<Vec3, 4>{{{0, 1, 0}, {0, 0, 1}, {1, 0, 1}, {1, 1, 0}}},
+              {0, 1, 1}, 0, nullptr);
+    // High-end wall (full height, at the -Z end for north); culled by an
+    // opaque neighbor in the (rotated) high-end direction.
+    emitQuadR(std::array<Vec3, 4>{{{1, 0, 0}, {0, 0, 0}, {0, 1, 0}, {1, 1, 0}}},
+              {0, 0, -1}, 1, &cullHigh);
     // Side triangles (the wedge) — culled by an opaque side neighbor.
-    if (!opaque(-1, 0, 0)) {
-        emitTri(std::array<Vec3, 3>{{{0, 0, 0}, {0, 0, 1}, {0, 1, 0}}},
-                {-1, 0, 0}, 1);
-    }
-    if (!opaque(1, 0, 0)) {
-        emitTri(std::array<Vec3, 3>{{{1, 0, 0}, {1, 1, 0}, {1, 0, 1}}},
-                {1, 0, 0}, 1);
-    }
-    // Bottom (kCubeFaces -Y winding) — culled by an opaque below neighbor.
-    if (!opaque(0, -1, 0)) {
-        emitQuad(std::array<Vec3, 4>{{{0, 0, 1}, {0, 0, 0}, {1, 0, 0},
-                                      {1, 0, 1}}},
-                 {0, -1, 0}, 2);
-    }
+    emitTriR(std::array<Vec3, 3>{{{0, 0, 0}, {0, 0, 1}, {0, 1, 0}}},
+             {-1, 0, 0}, 1, &cullLeft);
+    emitTriR(std::array<Vec3, 3>{{{1, 0, 0}, {1, 1, 0}, {1, 0, 1}}},
+             {1, 0, 0}, 1, &cullRight);
+    // Bottom — culled by an opaque below neighbor (rotDir leaves -Y unchanged).
+    emitQuadR(std::array<Vec3, 4>{{{0, 0, 1}, {0, 0, 0}, {1, 0, 0}, {1, 0, 1}}},
+              {0, -1, 0}, 2, &cullBottom);
 }
 
 } // namespace mc

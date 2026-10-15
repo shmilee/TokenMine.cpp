@@ -1597,6 +1597,52 @@ TEST(BlockRegistryTest, Phase87StairsShapeRequiresCubeTextures) {
     ASSERT_FALSE(bad.ok());
 }
 
+TEST(BlockRegistryTest, Phase89StairFacingParsed) {
+    // The stair_facing field (0..3) is parsed; out-of-range is rejected and
+    // named. A default (absent) facing is 0 (north).
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"st","model":{"shape":"stairs","stair_facing":2,)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).model.stairFacing, 2); // south
+    auto r0 = reg.registerBlock(parseDef(
+        R"({"id":"st0","model":{"shape":"stairs",)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r0.ok());
+    EXPECT_EQ(reg.at(*r0).model.stairFacing, 0); // default north
+    auto bad = reg.registerBlock(parseDef(
+        R"({"id":"stb","model":{"shape":"stairs","stair_facing":4,)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("stair_facing"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, Phase89StairVariantsContent) {
+    // The 4 shipped stair variants (north/east/south/west) reuse the stone
+    // texture and differ only in stair_facing (0/1/2/3).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const struct {
+        const char* name;
+        int facing;
+    } want[] = {
+        {"stone_stairs", 0}, {"stone_stairs_east", 1},
+        {"stone_stairs_south", 2}, {"stone_stairs_west", 3},
+    };
+    for (const auto& w : want) {
+        const Block* b = reg.findByName(w.name);
+        ASSERT_TRUE(b != nullptr) << w.name;
+        EXPECT_EQ(b->model.shape, BlockModel::Shape::Stairs);
+        EXPECT_EQ(b->model.stairFacing, w.facing);
+        EXPECT_EQ(b->model.textures.top, "stone");
+        EXPECT_EQ(b->properties.drops, w.name);
+    }
+}
+
 TEST(BlockRegistryTest, Phase85SlabShapeRequiresCubeTextures) {
     // A slab uses the cube face textures (top/side/bottom), like a full cube
     // (the "cross" texture is rejected — a slab is not a cross plant).

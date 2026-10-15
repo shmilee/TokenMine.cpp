@@ -68,6 +68,14 @@ BlockRegistry makeBlocks() {
     if (!r.ok()) {
         ADD_FAILURE() << r.error().message;
     }
+    // Phase 89: a south-facing stair (full at the +Z end, zero at -Z) — the
+    // opposite slope, for the 4-direction test.
+    r = blocks.registerBlock(parseJson(
+        R"({"id":"stairs_south","model":{"shape":"stairs","stair_facing":2,)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
     return blocks;
 }
 
@@ -990,8 +998,26 @@ TEST(EntityTest, Phase87StairSlopeRestsByZ) {
     f.run(front, 300);
     EXPECT_GT(back.position().y, front.position().y)
         << "the back of the stair is higher than the front (the slope)";
-    EXPECT_GE(back.position().y, 2.5f); // near the full-height (-Z) end
-    EXPECT_LE(front.position().y, 2.4f); // lower, toward the +Z end
+    // Phase 89: the blocking height is the HIGHEST slope point under the
+    // AABB (the high-end edge), so the back item (AABB touching the -Z high
+    // end) rests at ~3.0 and the front item (AABB at localZ ~0.5) at ~2.5.
+    EXPECT_GE(back.position().y, 2.9f); // near the full-height (-Z) end
+    EXPECT_LE(front.position().y, 2.6f); // lower, toward the +Z end
+}
+
+TEST(EntityTest, Phase89SouthStairSlopeIsOpposite) {
+    Fixture f;
+    const BlockID south = f.blocks.idForName("stairs_south");
+    f.world.setBlock(8, 2, 8, south); // south: full at the +Z end, low at -Z
+    // The OPPOSITE of the north stair: the +Z end is now HIGH, the -Z end
+    // LOW. An item at the +Z end (z~8.9) settles higher than one at the -Z
+    // end (z~8.1).
+    ItemEntity plusZ = f.makeItem({8.5f, 4.0f, 8.9f});
+    f.run(plusZ, 300);
+    ItemEntity minusZ = f.makeItem({8.5f, 4.0f, 8.1f});
+    f.run(minusZ, 300);
+    EXPECT_GT(plusZ.position().y, minusZ.position().y)
+        << "a south stair is high at +Z (opposite the north stair)";
 }
 
 TEST(EntityTest, Phase85SlabHasRoom) {

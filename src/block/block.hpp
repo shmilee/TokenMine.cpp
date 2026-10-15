@@ -239,11 +239,12 @@ struct BlockModel {
                   // a flat step you can stand on top of (feet at y + 0.5);
                   // the cell is solid in its lower half only (height-aware
                   // collision). Uses the cube face textures.
-        Stairs,   // Phase 87: a step you climb — a wedge from full height at
-                  // the -Z end to zero at the +Z end (fixed "north" facing, v1).
-                  // The solid height varies across the cell with z: the
-                  // collision (Entity::solidTopHeight) uses the AABB's +Z edge
-                  // so the player's feet rest on the slope at that position.
+        Stairs,   // Phase 87 (4-directional in Phase 89): a step you climb —
+                  // a wedge from full height at one end to zero at the other,
+                  // oriented by `stairFacing`. The solid height varies across
+                  // the cell along the facing axis: the collision
+                  // (Entity::solidTopHeight) uses the AABB's low end on that
+                  // axis so the feet rest on the slope at that position.
                   // Uses the cube face textures.
         Cross,    // Phase 45: two crossing vertical quads (cross plants —
                   // flowers). Rendered in the transparent (blended,
@@ -253,6 +254,13 @@ struct BlockModel {
 
     Shape shape = Shape::FullCube;
     BlockTexture textures;
+    // Phase 89: the stair's facing (only meaningful when shape == Stairs).
+    // 0 = north (high at -Z, low at +Z), 1 = east (high at +X), 2 = south
+    // (high at +Z), 3 = west (high at -X). Data-driven: each stair block
+    // variant (stone_stairs / _east / _south / _west) sets its own facing —
+    // the project keeps NO per-block facing state (4 block variants instead,
+    // like the dye/wool family). Default 0 (north).
+    int stairFacing = 0;
 };
 
 struct Block {

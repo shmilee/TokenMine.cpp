@@ -482,12 +482,14 @@
 
 ## 楼梯 stairs（Phase 87）
 
-- **楼梯 = 固定朝向（朝北）** — v1 只有朝北斜面（-Z 高、+Z 矮）；MC 的 4
-  朝向（东南西北）= 无（项目"方块无 per-instance 状态"→ 无法存朝向；加朝
-  向需 per-block 状态）。`[Phase 87]`
-- **楼梯碰撞 = 斜面（AABB +Z 边高度）** — 玩家脚高度随其 AABB +Z 边在楼梯
-  格内的位置变化（1 − localZ）；2 级台阶/完整斜面之外的更细粒度（如 MC 的
-  亚像素斜面碰撞）= 无。`[Phase 87]`
+- **楼梯 4 朝向 = 4 块变体（非 per-block 状态）** — v1 用 4 个楼梯块
+  （stone_stairs[_east/_south/_west]，`stair_facing` 0-3）表达朝向，而非
+  MC 的"同一块 + per-block 旋转状态"（项目无 per-instance 状态）。玩家放置
+  哪个朝向块 = 该朝向（无自动旋转）。`[Phase 87]` → `[Phase 89]`
+- **楼梯碰撞 = 斜面（AABB 高端边高度）** — 玩家脚高度随其 AABB 在斜面高端
+  的位置（取 AABB 覆盖的**最高**斜面点，Phase 89 修正 P87 的低端边 bug——
+  原会切入楼梯高端）；沿 facing 轴（north/south 用 z、east/west 用 x）；MC
+  亚像素斜面碰撞之外的更细粒度 = 无。`[Phase 87]` → `[Phase 89]`
 
 ## 数据 / 内容
 
