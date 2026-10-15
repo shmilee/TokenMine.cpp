@@ -82,6 +82,14 @@
    "radius": 3,
    "depth": 3,
    "fill": 2
+  },
+  {
+   "enabled": true,
+   "center_x": 24,
+   "center_z": 26,
+   "radius": 1,
+   "depth": 2,
+   "fill": 2
   }
  ]
 }

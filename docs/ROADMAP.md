@@ -93,6 +93,7 @@
 - [x] **Phase 87** — 楼梯 stairs：第二个新块模型类型（`Shape::Stairs` 朝北斜面 + 斜面高度感知碰撞）：**`stone_stairs`**（shape stairs、hardness 1.5、自掉、**复用 stone 纹理无新 atlas**、shaped S/SS/SSS → 4）+ **`BlockModel::Shape::Stairs`** + **chunk mesher `emitStairs`**（楔形：斜顶恒绘 + 背墙 + 两侧三角 + 底面，邻 opaque 剔除，贪婪路径跳过）+ **斜面碰撞**（`Entity::solidTopHeight` 加 AABB +Z 边 localZ 参数 → 楼梯高 = 1 − localZ，P85 slab/满块忽略该参数 backward-compat）；1144/1144（+3：内容钉死 2 + 斜面碰撞 1）
 - [x] **Phase 88** — 熔岩湖扩展：多湖（P86 单湖 → 数据驱动**湖列表** `lava_lakes`）：WorldgenParams `lava_lake` 单字段 → **`std::vector<LavaLake>` 列表**（每湖 enabled/center_x/center_z/radius/depth/fill，逐条校验 radius [0,16] / depth [1,16] / fill [0,8] 点名 `lava_lakes[i]`）+ `placeLavaLakes` 循环所有 enabled 湖（各自独立 region/floor）；shipped **2 湖**（(40,40) R4 + (55,45) R3，皆出生点 -Z 视野外 → **base18 免重锚**）；1144/1144（Phase86LavaLakeIsContained 演进为多湖：2 湖皆有熔岩 + 被围 + 确定性）
 - [x] **Phase 89** — 楼梯 4 朝向（P87 朝北 stairs → 数据驱动 4 块变体，无 per-block 状态）：**`stair_facing`** 块属性（model，0-3 校验点名）+ **4 楼梯块**（stone_stairs 朝北 0 / _east 1 / _south 2 / _west 3，复用 stone 纹理 + 各 1 配方 S/SS/SSS → 4）+ **`solidTopHeight` 改签名**（AABB mn/mx + cell + 朝向，取 AABB 覆盖**最高**斜面点——修正 P87 低端边切入 bug）+ **`emitStairs` 4 向**（north 楔形面 + 按 facing 旋转 corner/normal/cull）；1147/1147（+3：facing 解析/4 变体内容钉死/南斜面相反）
+- [x] **Phase 90** — 熔岩湖燃烧周围（P88 湖列表加**表面湖**，消费 P86"静态池不燃烧"偏离）：shipped `lava_lakes` 2 深湖 + **1 表面湖 (24,26) R1 `depth==fill==2`**（y=52 草高原，熔岩顶=区域最低高度，与草 rim 同高）→ **P58 燃烧 pass**（既有）把 6-邻可燃 rim（12 草格）点燃 = 草→火→焦土环 + 地表熔岩**沿下坡溢出盆地**（FluidSim 流动，流缘再点燃）= MC 熔岩湖"流动 + 燃烧周围"落地；**零核心代码**（燃烧/流动/湖生成皆既有，纯 worldgen.json 内容）；1148/1148（+1：表面湖 lava 顶=区域最低 / 埋湖顶<最低对照）；base18 **第 63 次结构性免疫**【表面湖 + 焦土 + 溢出在 (24,26) 出生点 -Z 视野外（+Z 后方）】；E2E 全绿（无输入：S1 第 63 次过门 / S2 燃烧【seed9 600f spread0：12/12 rim 焦黑 air + 56 溢出流体格 + 深湖不燃对照】）；**偏离**：表面湖非静态（溢出 + 燃烧改世界，确定性但非静止），溢出形态取决于地形坡度
 
 ## 细节存档索引（docs/archive/）
 
@@ -182,5 +183,6 @@
 - **Phase 87** — `archive/phase-87.md`
 - **Phase 88** — `archive/phase-88.md`
 - **Phase 89** — `archive/phase-89.md`
+- **Phase 90** — `archive/phase-90.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

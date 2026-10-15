@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <climits>
 #include <map>
 #include <optional>
 #include <set>
@@ -895,4 +896,107 @@ TEST(WorldGeneratorTest, Phase86LavaLakeIsContained) {
         }
     }
     EXPECT_GT(lake2Lava, 0) << "the second lake should also contain lava";
+}
+
+// Phase 90: a SURFACE lava lake (depth == fill) puts its lava top at the
+// region's minimum ORIGINAL terrain height (minH) — flush with the rim, so
+// the P58 burn pass scorches the flammable rim at runtime. A buried lake
+// (depth > fill) puts the lava top BELOW minH (sealed under headspace), so
+// its rim is not 6-adjacent to the lava and does not burn. This test pins
+// the surface property: the topmost lava == the region's original min height.
+TEST(WorldGeneratorTest, Phase90SurfaceLakeLavaTopAtRegionMin) {
+    // World A: the original terrain (no lake) over the 2x2 region.
+    Region rA(7);
+    const int x0 = 8, x1 = 12, z0 = 8, z1 = 12; // lake region (centre 10,10 R2)
+    auto surfA = [&](int x, int z) {
+        for (int y = kWorldHeight - 1; y >= 1; --y) {
+            const BlockID b = rA.at(x, y, z);
+            if (b.valid() && b != BlockID::air() &&
+                rA.setup.blocks.at(b).properties.solid) {
+                return y;
+            }
+        }
+        return -1;
+    };
+    int minH = INT_MAX;
+    for (int x = x0; x <= x1; ++x)
+        for (int z = z0; z <= z1; ++z) minH = std::min(minH, surfA(x, z));
+    ASSERT_GE(minH, 1) << "the region should have terrain";
+
+    // World B: the same terrain + a SURFACE lake (depth == fill == 2).
+    GenSetup setupB;
+    WorldgenParams::LavaLake s;
+    s.enabled = true;
+    s.centerX = 10;
+    s.centerZ = 10;
+    s.radius = 2;
+    s.depth = 2;
+    s.fill = 2; // depth == fill -> surface lake
+    setupB.params.lavaLakes = {s};
+    auto resB = WorldGenerator::create(7, setupB.params, setupB.biomes,
+                                       setupB.blocks);
+    ASSERT_TRUE(resB.ok()) << resB.error().message;
+    std::map<ChunkPos, Chunk> b;
+    for (int cx = 0; cx <= 1; ++cx)
+        for (int cz = 0; cz <= 1; ++cz)
+            for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy)
+                resB->generateChunk(b[{cx, cy, cz}], {cx, cy, cz});
+    auto lavaTopB = [&](int x, int z) {
+        int top = -1;
+        for (int y = 1; y < kWorldHeight; ++y) {
+            const auto it = b.find(worldToChunk(BlockPos {x, y, z}));
+            if (it == b.end()) continue;
+            const BlockPos local = worldToChunkLocal(it->first, BlockPos {x, y, z});
+            if (fluidKindOf(it->second.fluidAt(local.x, local.y, local.z)) ==
+                FluidKind::Lava) {
+                top = y;
+            }
+        }
+        return top;
+    };
+    int hTop = -1;
+    for (int x = x0; x <= x1; ++x)
+        for (int z = z0; z <= z1; ++z) hTop = std::max(hTop, lavaTopB(x, z));
+    ASSERT_GE(hTop, 1) << "the surface lake should hold lava";
+    EXPECT_EQ(hTop, minH)
+        << "a surface lake (depth == fill) puts its lava top at the region's "
+           "original minimum height (flush with the rim, so the P58 burn "
+           "pass scorches it)";
+
+    // Control: a BURIED lake (depth > fill) puts the lava top BELOW minH.
+    GenSetup setupC;
+    WorldgenParams::LavaLake buried;
+    buried.enabled = true;
+    buried.centerX = 10;
+    buried.centerZ = 10;
+    buried.radius = 2;
+    buried.depth = 4;
+    buried.fill = 2; // depth > fill -> buried (lava top below minH)
+    setupC.params.lavaLakes = {buried};
+    auto resC = WorldGenerator::create(7, setupC.params, setupC.biomes,
+                                       setupC.blocks);
+    ASSERT_TRUE(resC.ok()) << resC.error().message;
+    std::map<ChunkPos, Chunk> c;
+    for (int cx = 0; cx <= 1; ++cx)
+        for (int cz = 0; cz <= 1; ++cz)
+            for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy)
+                resC->generateChunk(c[{cx, cy, cz}], {cx, cy, cz});
+    int cTop = -1;
+    for (int x = x0; x <= x1; ++x)
+        for (int z = z0; z <= z1; ++z) {
+            for (int y = 1; y < kWorldHeight; ++y) {
+                const auto it = c.find(worldToChunk(BlockPos {x, y, z}));
+                if (it == c.end()) continue;
+                const BlockPos local =
+                    worldToChunkLocal(it->first, BlockPos {x, y, z});
+                if (fluidKindOf(it->second.fluidAt(local.x, local.y, local.z)) ==
+                    FluidKind::Lava) {
+                    cTop = std::max(cTop, y);
+                }
+            }
+        }
+    ASSERT_GE(cTop, 1) << "the buried lake should hold lava";
+    EXPECT_LT(cTop, minH)
+        << "a buried lake (depth > fill) puts its lava top below the region "
+           "minimum (sealed, rim not adjacent to the lava)";
 }
