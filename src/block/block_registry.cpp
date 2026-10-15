@@ -152,6 +152,41 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
                            "block)");
         }
     }
+    // Phase 91: the beacon's EFFECT LIST (the "enchanting table" — multiple
+    // effects on the same beacon). An optional non-empty array of effect
+    // names; an empty array is a no-op and rejected (the ammo discipline).
+    // Mutually exclusive with the single `beacon_effect` (both present =
+    // rejected, the grants_effect / grants_effects discipline). Each name
+    // must be non-empty (the ammo discipline); existence is cross-checked
+    // at game init (the grows_to discipline).
+    if (const Json* bes = p->find("beacon_effects")) {
+        if (!bes->isArray()) {
+            return MC_FAIL("block property 'beacon_effects' must be an "
+                           "array of effect names");
+        }
+        if (bes->size() == 0) {
+            return MC_FAIL("block property 'beacon_effects' must be a "
+                           "non-empty array of effect names (omit it for a "
+                           "plain block)");
+        }
+        for (std::size_t i = 0; i < bes->size(); ++i) {
+            const Json& e = bes->at(i);
+            if (!e.isString() || e.asString().empty()) {
+                return MC_FAIL("beacon_effects[" + std::to_string(i) +
+                               "] must be a non-empty effect name");
+            }
+            out.beaconEffects.push_back(e.asString());
+        }
+    }
+    if (!out.beaconEffect.empty() && !out.beaconEffects.empty()) {
+        return MC_FAIL("a block cannot have both 'beacon_effect' (single) "
+                       "and 'beacon_effects' (list)");
+    }
+    // Merge the single `beacon_effect` into the authoritative list (the
+    // backward-compat 1-element beacon). The core reads `beaconEffects`.
+    if (out.beaconEffects.empty() && !out.beaconEffect.empty()) {
+        out.beaconEffects = {out.beaconEffect};
+    }
     // Planting placement restriction (Phase 53): an OPTIONAL array of block
     // names. When present, a placement of this block is allowed only when
     // the cell DIRECTLY BELOW the target holds one of the listed blocks (the

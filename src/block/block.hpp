@@ -208,16 +208,26 @@ struct BlockProperties {
     // material). A pure data flag — the core reads the property, it never
     // switches on a block id (hard rule 3).
     bool beaconBase = false;
-    // Beacon effect (Phase 83): when non-empty, this block is a BEACON —
-    // each frame, if its power level (see beaconBase) is >= 1, it applies
-    // the NAMED effect to every player within the beacon range (the
-    // duration is refreshed while the player stays in range, the fire-
-    // source pattern). Shipped data names "absorption" (the beacon's
-    // Minecraft effect, the project's second absorption source after the
-    // golden apple). Existence cross-checked at game init (the grows_to /
-    // ignites_to discipline); an explicit empty string is rejected at data
-    // load (the ammo discipline). Empty (the default) = not a beacon.
+    // Beacon effect (Phase 83, a LIST in Phase 91): when non-empty, this
+    // block is a BEACON — each frame, if its power level (see beaconBase)
+    // is >= 1, it applies its effect to every player within the beacon
+    // range (the duration is refreshed while the player stays in range, the
+    // fire-source pattern). Existence cross-checked at game init (the
+    // grows_to / ignites_to discipline); an explicit empty name is rejected
+    // at data load (the ammo discipline). Empty (the default) = not a
+    // beacon.
+    // Phase 83 shipped "absorption" (the beacon's Minecraft effect, the
+    // project's second absorption source after the golden apple).
     std::string beaconEffect;
+    // Phase 91: the beacon's EFFECT LIST — the "enchanting table" (multiple
+    // effects on the same beacon, like Minecraft's primary + secondary
+    // effect). This is the authoritative field the core reads. `beacon_
+    // effects` (a non-empty array of effect names) takes precedence;
+    // `beacon_effect` (a single name) is the backward-compat 1-element
+    // list. The two are mutually exclusive (both present = rejected at
+    // data load, the grants_effect / grants_effects discipline). Merged
+    // into this list at parse time.
+    std::vector<std::string> beaconEffects;
 };
 
 // Which texture name is applied to each face group (full_cube shapes) — or

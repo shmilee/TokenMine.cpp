@@ -1502,8 +1502,10 @@ TEST(BlockRegistryTest, BeaconEffectExplicitEmptyRejected) {
 }
 
 TEST(BlockRegistryTest, Phase83BeaconBlockContent) {
-    // The shipped beacon: hardness 8 (Minecraft), drops itself, and names
-    // the "absorption" effect (the project's second absorption source).
+    // The shipped beacon: hardness 8 (Minecraft), drops itself, and applies
+    // its effect list (Phase 83 "absorption"; Phase 91 ["absorption",
+    // "speed"] — the multi-effect "enchanting table", MC primary +
+    // secondary).
     AssetManager assets;
     ASSERT_TRUE(assets.setRoot("assets").ok())
         << "run the tests from the repository root";
@@ -1516,9 +1518,58 @@ TEST(BlockRegistryTest, Phase83BeaconBlockContent) {
     EXPECT_EQ(b->properties.lightEmission, 0);
     EXPECT_FLOAT_EQ(b->properties.hardness, 8.0f);
     EXPECT_EQ(b->properties.drops, "beacon"); // drops itself
-    EXPECT_EQ(b->properties.beaconEffect, "absorption");
+    EXPECT_EQ(b->properties.beaconEffects,
+              (std::vector<std::string>{"absorption", "speed"}));
     EXPECT_FALSE(b->properties.beaconBase);
     EXPECT_EQ(b->model.shape, BlockModel::Shape::FullCube);
+}
+
+TEST(BlockRegistryTest, Phase91BeaconEffectsListParsed) {
+    // The beacon_effects LIST is parsed (a non-empty array of names); the
+    // single beacon_effect is the backward-compat 1-element list; an empty
+    // array is rejected (the ammo discipline); each entry must be a
+    // non-empty string (named).
+    BlockRegistry reg;
+    // A non-empty list parses into beaconEffects.
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"b1","properties":{"beacon_effects":["a","b"]},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).properties.beaconEffects,
+              (std::vector<std::string>{"a", "b"}));
+    // Backward compat: the single beacon_effect becomes a 1-element list.
+    auto r0 = reg.registerBlock(parseDef(
+        R"({"id":"b0","properties":{"beacon_effect":"a"},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r0.ok()) << r0.error().message;
+    EXPECT_EQ(reg.at(*r0).properties.beaconEffects,
+              (std::vector<std::string>{"a"}));
+    // An empty list is a no-op typo (rejected).
+    auto rEmpty = reg.registerBlock(parseDef(
+        R"({"id":"be","properties":{"beacon_effects":[]},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(rEmpty.ok());
+    EXPECT_NE(rEmpty.error().message.find("beacon_effects"),
+              std::string::npos);
+    // A non-string / empty entry is rejected (named).
+    auto rBad = reg.registerBlock(parseDef(
+        R"({"id":"bb","properties":{"beacon_effects":["a",""]},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(rBad.ok());
+    EXPECT_NE(rBad.error().message.find("beacon_effects[1]"),
+              std::string::npos);
+}
+
+TEST(BlockRegistryTest, Phase91BeaconEffectMutuallyExclusive) {
+    // beacon_effect (single) and beacon_effects (list) are mutually
+    // exclusive (both present = rejected, the grants_effect /
+    // grants_effects discipline).
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"bm","properties":{"beacon_effect":"a",)"
+        R"("beacon_effects":["a"]}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("both"), std::string::npos);
 }
 
 TEST(BlockRegistryTest, Phase83IronBlockContent) {

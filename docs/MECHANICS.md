@@ -641,9 +641,12 @@
     string/spider_eye 物品未做）、模型 AABB 1.4×0.9（身 1.3×0.7×0.9 +
     头 0.5³，宽扁低趴）、纹理深灰褐几丁质 + 头部前双面红眼、生成表
     weight 1（与其他 5 种等概率）
-- **信标**（Phase 83，数据驱动 + 纯函数 + 每帧 pass，**零 format**）：
-  - **数据**：`beacon` 块带 `beacon_effect: "absorption"`（指向效果名，
-    init 交叉校验效果存在——grows_to 纪律）；`iron_block` 块带
+- **信标**（Phase 83，数据驱动 + 纯函数 + 每帧 pass，**零 format**；Phase
+    91 多效果列表）：
+  - **数据**：`beacon` 块带 `beacon_effects: ["absorption", "speed"]`（指向**
+    多个**效果名 = MC 主 + 副效果 / "附魔台"替身；init 交叉校验**每条目**
+    效果存在——grows_to 纪律；`beacon_effect` 单值 = 向后兼容 1 元素列表，
+    两字段互斥【都写 = 拒绝，grants_effect 纪律】）；`iron_block` 块带
     `beacon_base: true`（基座标记）。两块皆自掉、不发光、不生成（只经
     放置/合成）。
   - **功率等级**（`world/beacon` 纯函数）：信标正下方连续完整基座层数
@@ -653,8 +656,9 @@
     变更**。
   - **施加**：`Game::m_beacons`（setBlock 收口 + 读档 `rescanBeacons`，
     生长同款）每帧遍历；等级 ≥1 且**玩家脚到信标格 Chebyshev 距离 ≤
-    `beacon.range_blocks`**（默认 50）→ `m_playerEffects.apply(effect,
-    0.5s)` **刷新**（火源范式——站范围内效果常驻、离开 0.5 s 到期）。
+    `beacon.range_blocks`**（默认 50）→ **循环 `beacon_effects` 列表**，
+    对每效果 `m_playerEffects.apply(effect, 0.5s)` **刷新**（火源范式——站
+    范围内**全部**效果常驻、离开 0.5 s 到期）。
   - **吸收池同步**（PITS）：信标的 apply 在 `updateEffects` **之前**，
     其"帧内总和变化才同步"检测看不到 → `updateBeacons` **捕获施加前后
     `totalAbsorption`、变化即 `syncAbsorption`**（首轮 E2E 池 = 0 但

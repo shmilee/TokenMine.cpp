@@ -3,7 +3,7 @@
   "properties": {
     "hardness": 8.0,
     "drops": "beacon",
-    "beacon_effect": "absorption"
+    "beacon_effects": ["absorption", "speed"]
   },
   "model": {
     "textures": {

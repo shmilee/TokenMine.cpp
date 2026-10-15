@@ -749,22 +749,21 @@ Result<void> Game::buildScene() {
         }
         m_fireEffectId = effId;
     }
-    // Strict data check (Phase 83): a block's beacon_effect must name an
-    // EXISTING effect (the beacon applies it to in-range players). The
-    // empty-string rejection is at data load; this is the existence
-    // cross-check (a typo in the effect name fails init loudly — the
-    // grows_to / on_hit_effect discipline). The effect must not be
-    // negative-removable-irrelevant: any registered effect is a valid beacon
-    // target (the shipped data uses "absorption").
+    // Strict data check (Phase 83, a list in Phase 91): every effect a
+    // block's beacon applies must name an EXISTING effect (the beacon
+    // applies them to in-range players). The empty-string rejection is at
+    // data load; this is the existence cross-check (a typo in an effect
+    // name fails init loudly — the grows_to / on_hit_effect discipline).
+    // Any registered effect is a valid beacon target (the shipped data uses
+    // ["absorption", "speed"] — Phase 91's multi-effect "enchanting
+    // table").
     for (const BlockID id : m_blocks.allIds()) {
         const Block& b = m_blocks.at(id);
-        if (b.properties.beaconEffect.empty()) {
-            continue;
-        }
-        if (m_effects.findByName(b.properties.beaconEffect) == nullptr) {
-            return MC_FAIL("block '" + b.name + "' beacon_effect names "
-                           "unknown effect '" + b.properties.beaconEffect +
-                           "'");
+        for (const std::string& effName : b.properties.beaconEffects) {
+            if (m_effects.findByName(effName) == nullptr) {
+                return MC_FAIL("block '" + b.name + "' beacon_effects names "
+                               "unknown effect '" + effName + "'");
+            }
         }
     }
     for (const MobID mid : m_mobTypes.allIds()) {
@@ -1773,7 +1772,7 @@ void Game::rescanBeacons() {
             for (int lz = 0; lz < kChunkSize; ++lz) {
                 for (int lx = 0; lx < kChunkSize; ++lx) {
                     const BlockID id = chunk->get(lx, ly, lz);
-                    if (m_blocks.at(id).properties.beaconEffect.empty()) {
+                    if (m_blocks.at(id).properties.beaconEffects.empty()) {
                         continue;
                     }
                     const BlockPos wp {baseX + lx, baseY + ly, baseZ + lz};
@@ -2660,13 +2659,14 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
             m_crops.erase(cpos);
         }
     }
-    // Phase 83: the beacon tracking set follows the cell (like the crops):
-    // a block with a non-empty beaconEffect is a beacon (tracked; its power
-    // level is re-derived from the world each frame, so no per-instance
-    // state is stored), a cell that stops holding one drops out.
+    // Phase 83 (a list in Phase 91): the beacon tracking set follows the
+    // cell (like the crops): a block with a non-empty beaconEffects list is
+    // a beacon (tracked; its power level is re-derived from the world each
+    // frame, so no per-instance state is stored), a cell that stops holding
+    // one drops out.
     {
         const BlockPos bpos {x, y, z};
-        if (!m_blocks.at(id).properties.beaconEffect.empty()) {
+        if (!m_blocks.at(id).properties.beaconEffects.empty()) {
             m_beacons[bpos] = id;
         } else {
             m_beacons.erase(bpos);
@@ -3294,12 +3294,17 @@ void Game::updateBeacons() {
         if (dist > static_cast<float>(m_beaconRange)) {
             continue;
         }
-        // Apply the beacon's NAMED effect (init-validated to exist). The
-        // duration refreshes every frame while in range (the fire-source
-        // pattern — standing in the beam keeps the effect alive).
-        const int eff = m_effects.idForName(m_blocks.at(bid).properties.beaconEffect);
-        if (eff != -1) {
-            m_playerEffects.apply(eff, kBeaconEffectDurationSeconds);
+        // Apply the beacon's EFFECT LIST (Phase 91; each name is
+        // init-validated to exist). The duration of every effect refreshes
+        // each frame while in range (the fire-source pattern — standing in
+        // the beam keeps the effects alive). A single-effect beacon (the
+        // Phase 83 `beacon_effect`) is a 1-element list.
+        for (const std::string& effName :
+             m_blocks.at(bid).properties.beaconEffects) {
+            const int eff = m_effects.idForName(effName);
+            if (eff != -1) {
+                m_playerEffects.apply(eff, kBeaconEffectDurationSeconds);
+            }
         }
     }
     if (m_playerEffects.totalAbsorption(m_effects) != absorbBefore) {

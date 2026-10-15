@@ -446,11 +446,13 @@
 
 ## 信标（Phase 83）
 
-- **信标效果 = 数据驱动单一效果** — `beacon_effect` 指向一个效果（shipped
-  = `absorption`，项目第二吸收来源，金苹果 P49 之外）。效果词汇表 = 速度/
-  力量/抗性/吸收（Phase 84 加 speed/strength/resistance 到状态效果系统，信标
-  机制本身通用 = 指向任意效果皆可）；MC 信标的**同时双效果**（主 + 副）=
-  无（信标只施加 `beacon_effect` 那一个）。`[Phase 83]` → `[Phase 84]`
+- **信标效果 = 数据驱动效果列表（多效果同信标，"附魔台"替身）** —
+  `beacon_effects`（非空数组，shipped = `["absorption", "speed"]`）指向**多个
+  效果**，信标同时施加全部 = MC 信标"主 + 副效果"的落地（项目范式 = 叠加
+  多效果于同一对象，即附魔台替身；"多效果同弓" = master_bow P82 已做，
+  "多效果同信标" = 本条）。`beacon_effect`（单个）= 向后兼容 1 元素列表；两
+  字段互斥（都写 = 拒绝）。效果词汇表 = 速度/力量/抗性/吸收（Phase 84 加
+  speed/strength/resistance）。`[Phase 83]` → `[Phase 84]` → `[Phase 91]`
 - **信标基座 = 仅 iron_block** — `beacon_base` 布尔属性（shipped 只 iron_block
   带）；MC 的 gold/diamond/netherite 块基座 = 无（项目无这些金属块）。金字塔
   等级 = 3×3/5×5/7×7/9×9 连续完整层（`world/beacon` 纯函数）。`[Phase 83]`
