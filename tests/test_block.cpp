@@ -227,8 +227,9 @@ TEST(BlockRegistryTest, RejectsMissingModel) {
 
 TEST(BlockRegistryTest, RejectsUnknownShape) {
     BlockRegistry reg;
+    // Phase 87: only full_cube / slab / stairs / cross exist — "wall" is not.
     auto r = reg.registerBlock(parseDef(
-        R"({"id":"stone","model":{"shape":"stairs","textures":{"top":"t","side":"t",)"
+        R"({"id":"stone","model":{"shape":"wall","textures":{"top":"t","side":"t",)"
         R"("bottom":"t"}}})"));
     ASSERT_FALSE(r.ok());
     EXPECT_NE(r.error().message.find("shape"), std::string::npos);
@@ -590,11 +591,11 @@ TEST(BlockRegistryTest, CrossShapeIsExplicit) {
 
 TEST(BlockRegistryTest, RejectsUnsupportedShapeValue) {
     BlockRegistry reg;
-    // Phase 85: only full_cube / slab / cross are supported — "stairs" and
-    // "wall" are not (the minimal slab is the v1 partial-block shape).
+    // Phase 87: only full_cube / slab / stairs / cross are supported —
+    // "wall" is not (the v1 partial-block shapes are slab + stairs).
     auto r = reg.registerBlock(
         parseDef(crossDef(
-            "x", R"({"shape":"stairs","textures":{"cross":"x"}})")));
+            "x", R"({"shape":"wall","textures":{"cross":"x"}})")));
     ASSERT_FALSE(r.ok());
     EXPECT_NE(r.error().message.find("'model.shape'"), std::string::npos);
 }
@@ -1559,6 +1560,41 @@ TEST(BlockRegistryTest, Phase85StoneSlabContent) {
     EXPECT_EQ(b->model.textures.top, "stone"); // reuses the stone texture
     EXPECT_EQ(b->model.textures.side, "stone");
     EXPECT_EQ(b->model.textures.bottom, "stone");
+}
+
+TEST(BlockRegistryTest, Phase87StoneStairsContent) {
+    // The shipped stone stairs (Phase 87): the north-facing wedge shape,
+    // reusing the stone texture (no new atlas tile), hardness 1.5, drops
+    // itself, solid + opaque.
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* b = reg.findByName("stone_stairs");
+    ASSERT_TRUE(b != nullptr);
+    EXPECT_EQ(b->model.shape, BlockModel::Shape::Stairs);
+    EXPECT_TRUE(b->properties.solid);
+    EXPECT_TRUE(b->properties.opaque);
+    EXPECT_EQ(b->properties.lightEmission, 0);
+    EXPECT_FLOAT_EQ(b->properties.hardness, 1.5f);
+    EXPECT_EQ(b->properties.drops, "stone_stairs"); // drops itself
+    EXPECT_EQ(b->model.textures.top, "stone"); // reuses the stone texture
+    EXPECT_EQ(b->model.textures.side, "stone");
+    EXPECT_EQ(b->model.textures.bottom, "stone");
+}
+
+TEST(BlockRegistryTest, Phase87StairsShapeRequiresCubeTextures) {
+    // A stairs uses the cube face textures (like a slab); a "cross" texture
+    // is rejected (a stair is a solid wedge, not a cross plant).
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"st","model":{"shape":"stairs","textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).model.shape, BlockModel::Shape::Stairs);
+    auto bad = reg.registerBlock(parseDef(
+        R"({"id":"st2","model":{"shape":"stairs","textures":{"cross":"t"}}})"));
+    ASSERT_FALSE(bad.ok());
 }
 
 TEST(BlockRegistryTest, Phase85SlabShapeRequiresCubeTextures) {

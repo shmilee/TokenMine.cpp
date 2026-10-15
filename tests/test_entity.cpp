@@ -60,6 +60,14 @@ BlockRegistry makeBlocks() {
     if (!r.ok()) {
         ADD_FAILURE() << r.error().message;
     }
+    // Phase 87: a north-facing stair (solid height varies with z: full at
+    // the -Z end, zero at the +Z end).
+    r = blocks.registerBlock(parseJson(
+        R"({"id":"stairs","model":{"shape":"stairs","textures":)"
+        R"({"top":"t","side":"t","bottom":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
     return blocks;
 }
 
@@ -968,6 +976,22 @@ TEST(EntityTest, Phase85ItemRestsOnSlabTop) {
     ItemEntity item = f.makeItem({8.5f, 4.0f, 8.5f});
     f.run(item, 300);
     EXPECT_FLOAT_EQ(item.position().y, 2.5f);
+}
+
+TEST(EntityTest, Phase87StairSlopeRestsByZ) {
+    Fixture f;
+    const BlockID stairs = f.blocks.idForName("stairs");
+    f.world.setBlock(8, 2, 8, stairs); // north-facing: -Z high, +Z low
+    // An item dropped at the BACK (-Z, z~8.1) settles HIGH on the slope; one
+    // at the FRONT (z~8.6) settles LOWER (the solid height varies with z).
+    ItemEntity back = f.makeItem({8.5f, 4.0f, 8.1f});
+    f.run(back, 300);
+    ItemEntity front = f.makeItem({8.5f, 4.0f, 8.6f});
+    f.run(front, 300);
+    EXPECT_GT(back.position().y, front.position().y)
+        << "the back of the stair is higher than the front (the slope)";
+    EXPECT_GE(back.position().y, 2.5f); // near the full-height (-Z) end
+    EXPECT_LE(front.position().y, 2.4f); // lower, toward the +Z end
 }
 
 TEST(EntityTest, Phase85SlabHasRoom) {

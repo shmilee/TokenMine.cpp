@@ -481,17 +481,20 @@ Result<void> BlockRegistry::parseModel(const Json& def, BlockModel& out) {
     if (const Json* s = m->find("shape")) {
         if (!s->isString() || (s->asString() != "full_cube" &&
                                s->asString() != "slab" &&
+                               s->asString() != "stairs" &&
                                s->asString() != "cross")) {
             return MC_FAIL(std::string("'model.shape' is unsupported: '") +
                            s->asString() +
-                           "' (only 'full_cube', 'slab' and 'cross' "
-                           "exist)");
+                           "' (only 'full_cube', 'slab', 'stairs' and "
+                           "'cross' exist)");
         }
         out.shape = (s->asString() == "cross")
                         ? BlockModel::Shape::Cross
                         : (s->asString() == "slab"
                                ? BlockModel::Shape::Slab
-                               : BlockModel::Shape::FullCube);
+                               : (s->asString() == "stairs"
+                                      ? BlockModel::Shape::Stairs
+                                      : BlockModel::Shape::FullCube));
     }
 
     const Json* t = m->find("textures");

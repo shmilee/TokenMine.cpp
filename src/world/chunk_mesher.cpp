@@ -1,5 +1,7 @@
 #include "world/chunk_mesher.hpp"
 
+#include <array>
+
 #include "block/cube_face_table.hpp"
 #include "core/math/vec3.hpp"
 #include "world/lighting.hpp"
@@ -112,6 +114,8 @@ ChunkMeshData ChunkMesher::mesh(const ChunkPos& pos) const {
                 const Block& block = m_blocks.at(id);
                 if (block.model.shape == BlockModel::Shape::Slab) {
                     emitSlab(out, block, origin, lx, ly, lz);
+                } else if (block.model.shape == BlockModel::Shape::Stairs) {
+                    emitStairs(out, block, origin, lx, ly, lz);
                 }
             }
         }
@@ -159,9 +163,11 @@ void ChunkMesher::meshFaceDirection(ChunkMeshData& out, const Chunk& chunk,
                     continue; // cross plants emit no cube faces (the
                               // cross pass in mesh() owns their geometry)
                 }
-                if (block.model.shape == BlockModel::Shape::Slab) {
-                    continue; // a slab is a half-block (the slab pass in
-                              // mesh() owns its geometry, not full-cube faces)
+                if (block.model.shape == BlockModel::Shape::Slab ||
+                    block.model.shape == BlockModel::Shape::Stairs) {
+                    continue; // partial blocks (slab / stairs) — the slab
+                              // pass in mesh() owns their geometry, not
+                              // full-cube faces
                 }
                 const BlockID neighbor = m_world.getBlock(
                     origin.x + c[0] + face.dx, origin.y + c[1] + face.dy,
@@ -519,6 +525,97 @@ void ChunkMesher::emitSlab(ChunkMeshData& out, const Block& block,
         indices.insert(indices.end(),
                        {first, first + 1, first + 2, first, first + 2,
                         first + 3});
+    }
+}
+
+void ChunkMesher::emitStairs(ChunkMeshData& out, const Block& block,
+                             const BlockPos& origin, int lx, int ly, int lz)
+    const {
+    // Phase 87: a north-facing stair wedge — the -Z end is full height (y=1),
+    // the +Z end is at the floor (y=0). Faces: a slanted TOP (always drawn —
+    // the exposed slope), the -Z BACK wall (full height), the -X/+X side
+    // TRIANGLES (the wedge), and the BOTTOM. The +Z front is at floor level
+    // (degenerate, no face). Side/back/bottom are culled by an opaque neighbor
+    // (like the slab); the slope top is always exposed.
+    const int wx = origin.x + lx;
+    const int wy = origin.y + ly;
+    const int wz = origin.z + lz;
+    const float skyF =
+        static_cast<float>(m_world.getSkyLight(wx, wy, wz)) /
+        static_cast<float>(kMaxLight);
+    const float blockF =
+        static_cast<float>(m_world.getBlockLight(wx, wy, wz)) /
+        static_cast<float>(kMaxLight);
+    const auto opaque = [&](int dx, int dy, int dz) {
+        const BlockID n = m_world.getBlock(wx + dx, wy + dy, wz + dz);
+        return n != BlockID::air() && m_blocks.at(n).properties.opaque;
+    };
+    auto emitQuad = [&](const std::array<Vec3, 4>& c, const Vec3& normal,
+                        int slot) {
+        const Vec2 u0 = AtlasLayout::uvMin(m_layout, cubeFaceTexture(block, slot));
+        const Vec2 u1 = AtlasLayout::uvMax(m_layout, cubeFaceTexture(block, slot));
+        const Vec2 uv[4] = {{u0.x, u1.y}, {u1.x, u1.y},
+                            {u1.x, u0.y}, {u0.x, u0.y}};
+        const std::uint32_t first =
+            static_cast<std::uint32_t>(out.opaqueVertices.size());
+        for (int i = 0; i < 4; ++i) {
+            MeshVertex v;
+            v.position = {lx + c[i].x, ly + c[i].y, lz + c[i].z};
+            v.normal = normal;
+            v.uv = uv[i];
+            v.skyLight = skyF;
+            v.blockLight = blockF;
+            out.opaqueVertices.push_back(v);
+        }
+        out.opaqueIndices.insert(out.opaqueIndices.end(),
+                                 {first, first + 1, first + 2, first,
+                                  first + 2, first + 3});
+    };
+    auto emitTri = [&](const std::array<Vec3, 3>& c, const Vec3& normal,
+                       int slot) {
+        const Vec2 u0 = AtlasLayout::uvMin(m_layout, cubeFaceTexture(block, slot));
+        const Vec2 u1 = AtlasLayout::uvMax(m_layout, cubeFaceTexture(block, slot));
+        const Vec2 uv[3] = {{u0.x, u1.y}, {u1.x, u1.y}, {u0.x, u0.y}};
+        const std::uint32_t first =
+            static_cast<std::uint32_t>(out.opaqueVertices.size());
+        for (int i = 0; i < 3; ++i) {
+            MeshVertex v;
+            v.position = {lx + c[i].x, ly + c[i].y, lz + c[i].z};
+            v.normal = normal;
+            v.uv = uv[i];
+            v.skyLight = skyF;
+            v.blockLight = blockF;
+            out.opaqueVertices.push_back(v);
+        }
+        out.opaqueIndices.insert(out.opaqueIndices.end(),
+                                 {first, first + 1, first + 2});
+    };
+
+    // Slanted top (always drawn): the back edge at y=1 (z=0) to the front
+    // edge at y=0 (z=1). Wound so the outward normal is up (0,1,1).
+    emitQuad(std::array<Vec3, 4>{{{0, 1, 0}, {0, 0, 1}, {1, 0, 1}, {1, 1, 0}}},
+             {0, 1, 1}, 0);
+    // -Z back wall (full height), kCubeFaces -Z winding; culled by an opaque
+    // -Z neighbor.
+    if (!opaque(0, 0, -1)) {
+        emitQuad(std::array<Vec3, 4>{{{1, 0, 0}, {0, 0, 0}, {0, 1, 0},
+                                      {1, 1, 0}}},
+                 {0, 0, -1}, 1);
+    }
+    // Side triangles (the wedge) — culled by an opaque side neighbor.
+    if (!opaque(-1, 0, 0)) {
+        emitTri(std::array<Vec3, 3>{{{0, 0, 0}, {0, 0, 1}, {0, 1, 0}}},
+                {-1, 0, 0}, 1);
+    }
+    if (!opaque(1, 0, 0)) {
+        emitTri(std::array<Vec3, 3>{{{1, 0, 0}, {1, 1, 0}, {1, 0, 1}}},
+                {1, 0, 0}, 1);
+    }
+    // Bottom (kCubeFaces -Y winding) — culled by an opaque below neighbor.
+    if (!opaque(0, -1, 0)) {
+        emitQuad(std::array<Vec3, 4>{{{0, 0, 1}, {0, 0, 0}, {1, 0, 0},
+                                      {1, 0, 1}}},
+                 {0, -1, 0}, 2);
     }
 }
 

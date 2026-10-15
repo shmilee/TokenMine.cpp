@@ -145,6 +145,12 @@ private:
     // but into the OPAQUE sub-mesh and the top is never occluded).
     void emitSlab(ChunkMeshData& out, const Block& block,
                   const BlockPos& origin, int lx, int ly, int lz) const;
+    // Phase 87 stair: a north-facing wedge (-Z end full height, +Z end at the
+    // floor). A slanted top (always drawn) + the -Z back wall + the -X/+X side
+    // triangles + the bottom; the +Z front is at floor level (no face). Side /
+    // back / bottom faces are culled by an opaque neighbor (like the slab).
+    void emitStairs(ChunkMeshData& out, const Block& block,
+                    const BlockPos& origin, int lx, int ly, int lz) const;
 
     const World& m_world;
     const BlockRegistry& m_blocks;

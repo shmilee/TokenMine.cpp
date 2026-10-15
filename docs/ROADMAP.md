@@ -90,6 +90,7 @@
 - [x] **Phase 84** — 状态效果系统 v2：信标的其它主效果（速度/力量/抗性）——**效果数据 3 修饰字段**（`speed_multiplier` (1,3] 乘算 / `melee_bonus` [0,100] 加算 / `damage_reduction` [0,1) 取最高）+ **3 新效果内容**（speed 1.2 = MC 速度 I / strength +2 / resistance 0.2 = MC 抗性 I）+ **整合**（speed 在 `Player` 移动、strength 在 `selectedAttackDamage`、resistance 在 `Player::damage`【吸收池之前】；`updateEffects` 每帧推 speed/reduction 到玩家）+ **effects.png 80→128**（3 新图标，既有 5 确定性再生零变化）+ no-op 规则扩到 3 字段；信标机制本身通用（P83 `beacon_effect` 指向任意效果）= 效果词汇表即信标能力；1136/1136（+4：解析/no-op/3 访问器/内容钉死）
 - [x] **Phase 85** — 台阶 slab：首个新块模型类型（`Shape::Slab`，底部半块，高度感知碰撞）：**`stone_slab`**（shape slab、hardness 2.0、自掉、**复用 stone 纹理无新 atlas tile**、shaped SSS → 6）+ **`BlockModel::Shape::Slab`**（block.hpp）+ **chunk mesher `emitSlab`**（单位立方 6 面 Y 缩 0.5，顶面恒绘、底/侧面邻 opaque 剔除，贪婪路径跳过 slab）+ **高度感知碰撞**（`Entity::solidTopOffset` 0/0.5/1.0 + `moveAxis`/`hasRoomAt` 对实心区 [y,y+top] 而非整格判重叠 → 玩家站 slab 顶 feet y+0.5、不进 slab 体，满块 top=1 复现旧行为 backward-compat）；1140/1140（+4：slab 内容/shape 解析/坠落停顶/hasRoomAt）
 - [x] **Phase 86** — 熔岩湖 worldgen（数据驱动 `lava_lake` 段 + 固定位置静态满熔岩池）：**`placeLavaLake`**（世界生成器，盆地 (2R+1)² @ (center_x,center_z)、盆底 = 区域最低地形 − depth【纯 heightAt 确定性】、盆底上 fill 层满熔岩、四周地形更高 = 被围静态湖）+ **WorldgenParams 6 字段**（enabled/center_x/center_z/radius/depth/fill，worldgen.json `lava_lake` 段 + 校验 radius [0,16] / depth [1,16] / fill [0,8]）；shipped 湖 (40,40) R4 放出生点 -Z 视野外 → **base18 免重锚**；1141/1141（+1：Phase86LavaLakeIsContained【存在+被围+确定性+headspace】）
+- [x] **Phase 87** — 楼梯 stairs：第二个新块模型类型（`Shape::Stairs` 朝北斜面 + 斜面高度感知碰撞）：**`stone_stairs`**（shape stairs、hardness 1.5、自掉、**复用 stone 纹理无新 atlas**、shaped S/SS/SSS → 4）+ **`BlockModel::Shape::Stairs`** + **chunk mesher `emitStairs`**（楔形：斜顶恒绘 + 背墙 + 两侧三角 + 底面，邻 opaque 剔除，贪婪路径跳过）+ **斜面碰撞**（`Entity::solidTopHeight` 加 AABB +Z 边 localZ 参数 → 楼梯高 = 1 − localZ，P85 slab/满块忽略该参数 backward-compat）；1144/1144（+3：内容钉死 2 + 斜面碰撞 1）
 
 ## 细节存档索引（docs/archive/）
 
@@ -176,5 +177,6 @@
 - **Phase 84** — `archive/phase-84.md`
 - **Phase 85** — `archive/phase-85.md`
 - **Phase 86** — `archive/phase-86.md`
+- **Phase 87** — `archive/phase-87.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

@@ -239,6 +239,12 @@ struct BlockModel {
                   // a flat step you can stand on top of (feet at y + 0.5);
                   // the cell is solid in its lower half only (height-aware
                   // collision). Uses the cube face textures.
+        Stairs,   // Phase 87: a step you climb — a wedge from full height at
+                  // the -Z end to zero at the +Z end (fixed "north" facing, v1).
+                  // The solid height varies across the cell with z: the
+                  // collision (Entity::solidTopHeight) uses the AABB's +Z edge
+                  // so the player's feet rest on the slope at that position.
+                  // Uses the cube face textures.
         Cross,    // Phase 45: two crossing vertical quads (cross plants —
                   // flowers). Rendered in the transparent (blended,
                   // unculled) pass with the cell's own light; never

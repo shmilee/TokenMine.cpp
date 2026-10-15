@@ -20,12 +20,16 @@ bool Entity::isSolid(BlockID id) const {
     return m_blocks.at(id).properties.solid;
 }
 
-float Entity::solidTopOffset(BlockID id) const {
+float Entity::solidTopHeight(BlockID id, float mxLocalZ) const {
     // Phase 85: the top of the cell's SOLID region, in cell-local units
     // (0 = not solid, 0.5 = a bottom slab, 1.0 = a full solid block). The
     // collision (moveAxis / hasRoomAt) tests overlap against this region,
     // not the whole cell — so an entity can stand on a slab's top (its feet
     // at y + 0.5) without the AABB counting as "inside" the slab.
+    // Phase 87: a stair's height varies across the cell with z (a slope from
+    // full at the -Z end to zero at the +Z end, fixed "north" facing). The
+    // effective blocking height is the slope at the AABB's +Z edge
+    // (mxLocalZ), so the feet rest on the slope at that position.
     if (id == BlockID::air() || !id.valid()) {
         return 0.0f;
     }
@@ -35,6 +39,10 @@ float Entity::solidTopOffset(BlockID id) const {
     }
     if (b.model.shape == BlockModel::Shape::Slab) {
         return 0.5f;
+    }
+    if (b.model.shape == BlockModel::Shape::Stairs) {
+        const float l = std::clamp(mxLocalZ, 0.0f, 1.0f);
+        return 1.0f - l; // full at -Z (l=0), zero at +Z (l=1)
     }
     return 1.0f;
 }
@@ -67,8 +75,11 @@ bool Entity::hasRoomAt(Vec3 pos) const {
                 // Phase 85: overlap against the cell's SOLID region [y,
                 // y+top], not the whole cell — a slab's top half is air, so
                 // standing on a slab's top (feet at y+0.5) leaves room.
+                // Phase 87: a stair's top varies with z; use the AABB's +Z
+                // edge in this cell (mxLocalZ) for the slope height.
+                const float mxLocalZ = std::clamp(z1f - z, 0.0f, 1.0f);
                 const float top =
-                    solidTopOffset(m_world.getBlock(x, y, z));
+                    solidTopHeight(m_world.getBlock(x, y, z), mxLocalZ);
                 if (top > 0.0f && (y0f < y + top && y1f > y)) {
                     return false;
                 }
@@ -398,8 +409,11 @@ bool Entity::moveAxis(int axis, float delta) {
                 // Phase 85: overlap against the cell's SOLID region [y,
                 // y+top], not the whole cell (a slab is solid in its bottom
                 // half only). A face resting exactly on the region's top is
-                // not an overlap (the strict convention).
-                const float top = solidTopOffset(m_world.getBlock(x, y, z));
+                // not an overlap (the strict convention). Phase 87: a stair's
+                // top varies with z — use the AABB's +Z edge in this cell.
+                const float mxLocalZ = std::clamp(mx.z - z, 0.0f, 1.0f);
+                const float top =
+                    solidTopHeight(m_world.getBlock(x, y, z), mxLocalZ);
                 if (top <= 0.0f) {
                     continue;
                 }
