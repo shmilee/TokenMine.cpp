@@ -4883,11 +4883,16 @@ void Game::drawParticles(const Mat4& view, const Mat4& projection,
             // cube uses the cross texture on every face (the same
             // single-lookup the item-mesh and chunk-mesher cross branches
             // use — cubeFaceTexture would return the empty top/side/bottom
-            // name and the atlas lookup would throw).
+            // name and the atlas lookup would throw). Fence / glass pane
+            // (Phase 98/99) are the same rule for the thin side-only
+            // shapes: their top/bottom names are empty by design.
             const std::string& tex =
                 block.model.shape == BlockModel::Shape::Cross
                     ? block.model.textures.cross
-                    : cubeFaceTexture(block, face.textureSlot);
+                    : (block.model.shape == BlockModel::Shape::Fence ||
+                       block.model.shape == BlockModel::Shape::GlassPane)
+                          ? block.model.textures.side
+                          : cubeFaceTexture(block, face.textureSlot);
             const Vec2 u0 = AtlasLayout::uvMin(m_atlas.layout(), tex);
             const Vec2 u1 = AtlasLayout::uvMax(m_atlas.layout(), tex);
             const Vec2 faceUv[4] = {

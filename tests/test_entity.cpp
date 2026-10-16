@@ -727,6 +727,42 @@ TEST(ItemMeshTest, UvCornersStayInsideTheFaceTile) {
     }
 }
 
+TEST(ItemMeshTest, FenceAndPaneDropsUseTheSideTextureOnEveryFace) {
+    // Phase 98/99: fence / glass pane blocks carry exactly ONE texture
+    // ("side"; top/bottom are rejected at parse). The drop-icon cube must
+    // paint every face with the side tile — cubeFaceTexture would return
+    // the empty top name and the atlas lookup would throw (the Phase 65
+    // cross-particle crash, thin-shape edition). Two distinct rows keep a
+    // top/side mix-up detectable.
+    for (const char* shape : {"fence", "glass_pane"}) {
+        BlockRegistry reg;
+        // The glass pane also enforces its light properties (Phase 99:
+        // forced non-opaque / transparent); the fence defaults are fine.
+        std::string json = std::string(R"({"id":")") + shape +
+                           R"(","model":{"shape":")" + shape +
+                           R"(","textures":{"side":"side"}})";
+        if (std::string(shape) == "glass_pane") {
+            json += R"(,"properties":{"opaque":false,"transparent":true})";
+        }
+        json += "}";
+        auto r = reg.registerBlock(parseJson(json));
+        ASSERT_TRUE(r.ok()) << r.error().message;
+        const AtlasLayout layout = makeLayout({"top", "side"});
+        ItemMeshGeometry g;
+        ASSERT_NO_THROW(g = makeItemCubeGeometry(
+            reg.at(reg.idForName(shape)), layout));
+        EXPECT_EQ(g.vertices.size(), 24u);
+        const Vec2 s0 = AtlasLayout::uvMin(layout, "side");
+        const Vec2 s1 = AtlasLayout::uvMax(layout, "side");
+        for (const MeshVertex& v : g.vertices) {
+            EXPECT_GE(v.uv.x, s0.x - 1e-6f);
+            EXPECT_LE(v.uv.x, s1.x + 1e-6f);
+            EXPECT_GE(v.uv.y, s0.y - 1e-6f);
+            EXPECT_LE(v.uv.y, s1.y + 1e-6f);
+        }
+    }
+}
+
 // -- entity-vs-entity separation (Phase 19) ----------------------------------
 
 namespace {

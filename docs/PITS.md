@@ -1250,3 +1250,16 @@
   计入 maxSpeed → 长帧切 2 子步，顶点 ≈1.16 稳定 <1.5。口诀：**子步内
   才会 SET 的冲量（跳跃/游泳上涌）必须计入 maxSpeed 估计，否则长帧退
   化成单子步、冲量帧全位移**。
+- **薄片形状（fence/glass_pane）破坏崩溃——P65 模式的第二次出现（99.1 定
+  位）**：破坏栅栏/玻璃板时游戏 terminate（`unordered_map::at`）。这两类
+  形状**恰有一个纹理**（`side`；top/bottom 空串是设计——init 校验强制
+  cross 纪律），而破坏的**两条渲染路径**都读 cube 面：破碎粒子
+  （drawParticles 的 `cubeFaceTexture` 分支只 guard 了 Cross）+ 掉落物
+  的 item cube（makeItemCubeGeometry 同款）→ `uvMin("")` → 抛异常。
+  P98/P99 的 E2E 只放置/走进、从不破坏这两个块 → 路径从未被测。排查
+  弯路：地形内容全部审计干净（76 纹理名 vs atlas/磁盘全对、全环流送
+  两跑无崩溃）后，才从"崩溃只发生在有用户交互的 run"锁定交互路径。
+  修复：两路径对 Fence/GlassPane 用 side 纹理（cross 规则同款）+ 单测
+  （side/top 分行判别）+ 破坏 E2E ×2 形状。口诀：**新块模型形状必须
+  配"破坏"场景的 E2E——破坏路径（粒子 + 掉落物渲染）的纹理契约与
+  chunk mesh 独立，放置/走进测不到**。

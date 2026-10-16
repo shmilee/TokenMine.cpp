@@ -45,8 +45,20 @@ ItemMeshGeometry makeItemCubeGeometry(const Block& block,
     }
     out.vertices.reserve(24);
     out.indices.reserve(36);
+    // Fence / glass pane (Phase 98/99): the world geometry is a thin
+    // structure carried by the single 'side' texture (top/bottom are
+    // absent by design — the init cross-check enforces exactly that).
+    // The drop icon cube uses the side texture on every face, the Phase 65
+    // cross-particle rule for shapes without cube faces (cubeFaceTexture
+    // would return the empty top/bottom name and the atlas lookup would
+    // throw).
+    const bool thinSideOnly =
+        block.model.shape == BlockModel::Shape::Fence ||
+        block.model.shape == BlockModel::Shape::GlassPane;
     for (const CubeFace& face : kCubeFaces) {
-        const std::string& tex = cubeFaceTexture(block, face.textureSlot);
+        const std::string& tex =
+            thinSideOnly ? block.model.textures.side
+                         : cubeFaceTexture(block, face.textureSlot);
         const Vec2 u0 = AtlasLayout::uvMin(layout, tex);
         const Vec2 u1 = AtlasLayout::uvMax(layout, tex);
         // Corner UVs follow the corner order: (u0,v1),(u1,v1),(u1,v0),(u0,v0)
