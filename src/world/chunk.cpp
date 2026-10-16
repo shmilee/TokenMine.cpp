@@ -62,12 +62,24 @@ std::uint8_t Chunk::fluidAt(int x, int y, int z) const {
 void Chunk::setFluidAt(int x, int y, int z, std::uint8_t level) {
     assert(inBounds(x) && inBounds(y) && inBounds(z));
     assert(level <= kMaxFluidLevel);
+    const std::uint8_t old = m_fluid[index(x, y, z)];
     m_fluid[index(x, y, z)] = level;
     m_dirty = true;
+    // Fluid activity (Phase 99.8): a cell change heats BOTH the old and
+    // the new kind (the neighbor flows of either may change next tick).
+    if (level != old) {
+        if (old != 0) {
+            m_fluidHot[static_cast<std::size_t>(fluidKindOf(old))] = true;
+        }
+        if (level != 0) {
+            m_fluidHot[static_cast<std::size_t>(fluidKindOf(level))] = true;
+        }
+    }
 }
 
 void Chunk::clearFluid() {
     std::fill(m_fluid.begin(), m_fluid.end(), 0);
+    m_fluidHot = {true, true, true}; // everything that flowed is stale
 }
 
 std::uint8_t Chunk::stairFacingAt(int x, int y, int z) const {

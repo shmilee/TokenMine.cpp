@@ -134,6 +134,28 @@ TEST(FluidTest, FlowingColumnFallsIntoHoleAndRests) {
     EXPECT_EQ(world.getFluid(8, 2, 8), 7);
 }
 
+// Phase 99.8 regression: a SETTLED level-1 film (cold chunk — the
+// activity gate skips it) must still fall when its support is broken:
+// World::setBlock forces one fluid walk of the affected chunks
+// (walk-pending), so the gate cannot freeze a static sheet in mid-air.
+TEST(FluidTest, SettledFilmFallsWhenSupportBroken) {
+    World world;
+    floor(world, 4, 12, 4, 12, 0);
+    // A level-1 water film resting on the floor (terminal — it will not
+    // spread; after one tick the chunks are cold).
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, 1));
+    runTicks(world, 2);
+    EXPECT_EQ(world.getFluid(8, 1, 8), 1);
+    // Break the floor under the film: the cold chunk must be forced
+    // through a walk and the film falls into the hole.
+    ASSERT_TRUE(world.setBlock(8, 0, 8, BlockID::air()));
+    runTicks(world, 1);
+    EXPECT_EQ(world.getFluid(8, 1, 8), 0);
+    // The film then drains out of the world through the void.
+    runTicks(world, 2);
+    EXPECT_EQ(world.getFluid(8, 0, 8), 0);
+}
+
 TEST(FluidTest, FullCellFallsWhenUnsupported) {
     World world;
     floor(world, 6, 10, 6, 10, 0);

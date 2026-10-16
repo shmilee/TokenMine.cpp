@@ -97,6 +97,37 @@ public:
     void clearFluid();
     const std::uint8_t* fluidData() const { return m_fluid.data(); }
 
+    // -- Fluid activity flags (Phase 99.8) -------------------------------
+    // The fluid simulation walks a chunk only while it is HOT (one of its
+    // cells' fluid changed on the last applied tick — a moving front, a
+    // fresh source spreading) or PENDING (a block change under/beside it
+    // may have unstuck settled fluid, e.g. support removed). A settled
+    // fluid (a static pool, a static flow gradient) changes nothing, so
+    // it goes cold and costs zero per tick — the Minecraft cell-queue
+    // property at chunk granularity. The walk CONSUMES the hot flag
+    // (changes applied after the walk re-heat via the next setFluid).
+    bool fluidHot(FluidKind kind) const {
+        return m_fluidHot[static_cast<std::size_t>(kind)];
+    }
+    void setFluidHot(FluidKind kind) {
+        m_fluidHot[static_cast<std::size_t>(kind)] = true;
+    }
+    void clearFluidHot(FluidKind kind) {
+        m_fluidHot[static_cast<std::size_t>(kind)] = false;
+    }
+    bool fluidWalkPending(FluidKind kind) const {
+        return m_fluidWalkPending[static_cast<std::size_t>(kind)];
+    }
+    void clearFluidWalkPending(FluidKind kind) {
+        m_fluidWalkPending[static_cast<std::size_t>(kind)] = false;
+    }
+    // Force one fluid-simulation walk of this chunk (even cold): a block
+    // change may have unstuck settled fluid (support removed under a
+    // sheet).
+    void invalidateFluidWalk(FluidKind kind) {
+        m_fluidWalkPending[static_cast<std::size_t>(kind)] = true;
+    }
+
     // -- Stair facing (Phase 94): the per-instance orientation of a stair
     // block (0-3: north/east/south/west). This is the project's first
     // PER-BLOCK STATE (a breakthrough of the "no per-instance state"
@@ -128,6 +159,10 @@ private:
     std::array<std::uint8_t, kVolume> m_fluid {}; // encoded (see fluidCode)
     std::array<std::uint8_t, kVolume> m_stairFacing {}; // Phase 94 (0-3)
     bool m_dirty = true;
+    // Fluid activity flags (Phase 99.8), indexed by FluidKind (slot 0
+    // unused: Water = 1, Lava = 2).
+    std::array<bool, 3> m_fluidHot {false, false, false};
+    std::array<bool, 3> m_fluidWalkPending {false, false, false};
 };
 
 } // namespace mc

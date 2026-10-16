@@ -158,7 +158,7 @@ private:
     void addFluidChunk(const ChunkPos& pos, FluidKind kind);
     void pruneFluidChunk(const Chunk& chunk, const ChunkPos& pos,
                          FluidKind kind);
-    void scanFluidChunks(const Chunk& chunk, const ChunkPos& pos);
+    void scanFluidChunks(Chunk& chunk, const ChunkPos& pos);
 
     std::unordered_map<ChunkPos, Chunk> m_chunks;
     // Chunks marked dirty (a mirror of each Chunk's own flag — the mesh

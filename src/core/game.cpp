@@ -31,6 +31,7 @@
 
 namespace mc {
 
+
 namespace {
 
 // Phase 64: the six face-adjacent offsets — the fire extinguish's
@@ -118,10 +119,16 @@ constexpr int kDemoChunkMax = 1;
 // as the player approaches the edge of the loaded area.
 // Worker count of the streaming pool (generation + lighting jobs).
 constexpr int kStreamWorkerCount = 4;
-// Columns posted for generation per frame (the main thread then meshes
-// and integrates them; 1 keeps the main-thread work well under the frame
-// budget while the pool stays pipelined a few columns deep).
-constexpr int kStreamColumnsPerFrame = 1;
+// Columns posted for generation per frame. 2 = two of the four worker
+// threads generate in parallel (the 99.8 multi-core fix: at 1 the pool
+// idled ~75% of the time while the ring filled — generation of one
+// column is ~1.6 ms, far below one frame). The per-frame LIGHTING job
+// (one job, boxes run sequentially inside it — adjacent boxes overlap
+// by kLightUpdateRadius and must never race) carries 2 boxes per
+// integrated pair: the amortized flush cost per streamed column is
+// unchanged (~1 box/frame), only the generation throughput doubles.
+// kMaxStreamBacklog bounds the queue either way.
+constexpr int kStreamColumnsPerFrame = 2;
 // Streaming engages when the player's column is within this many columns
 // (Chebyshev) of a missing one inside the radius ring. 1 = the player
 // must reach the edge of the loaded area; an idle player in the center of
@@ -1195,6 +1202,7 @@ Result<void> Game::buildScene() {
     // world scans to nothing — worldgen places no crops (v1).
     rescanCrops();
     rescanBeacons();
+    rescanFlammableChunks();
 
     // The loaded columns mirror (streaming + unload decide on this set,
     // not per-frame chunk scans). The lighting pipeline has covered every
@@ -1229,6 +1237,7 @@ Result<void> Game::buildScene() {
 // (kStreamColumnsPerFrame) bounds its per-frame cost to a few chunks
 // (measured ~0.01 ms/chunk on this machine).
 // ---------------------------------------------------------------------------
+
 
 Result<void> Game::updateChunkMeshes() {
     // Re-mesh at most kRemeshBudgetPerFrame dirty chunks per frame,
@@ -1325,8 +1334,20 @@ void Game::integrateStreamedColumns() {
             continue;
         }
         for (int cy = 0; cy < kVerticalChunksPerColumn; ++cy) {
-            m_world.insertChunk({job->column.x, cy, job->column.z},
-                                std::move(job->chunks[cy]));
+            const ChunkPos cpos {job->column.x, cy, job->column.z};
+            m_world.insertChunk(cpos, std::move(job->chunks[cy]));
+            // Burn-pass gate (Phase 99.8): a freshly generated column can
+            // carry flamables (wood, leaves, grass) — note the chunks.
+            const Chunk* c = m_world.findChunk(cpos);
+            if (c != nullptr) {
+                const BlockID* blocks = c->data();
+                for (int i = 0; i < Chunk::kVolume; ++i) {
+                    if (m_blocks.at(blocks[i]).properties.flamable) {
+                        m_flammableChunks.insert(cpos);
+                        break;
+                    }
+                }
+            }
         }
         m_streamPending.erase(job->column);
         m_loadedColumns.insert(job->column);
@@ -1425,6 +1446,7 @@ void Game::unloadFarColumns() {
     for (const ChunkPos& pos : toErase) {
         m_chunkMeshes.erase(pos); // frees the GL buffers (the Mesh destructor)
         m_world.eraseChunk(pos); // marks the boundary neighbors dirty
+        m_flammableChunks.erase(pos);
     }
     for (const ChunkPos& pos : toErase) {
         m_loadedColumns.erase({pos.x, pos.z});
@@ -1490,6 +1512,19 @@ void Game::streamChunks() {
                     std::to_string(m_streamRadius) + " columns)");
     } else if (nearestMissing > m_streamRadius) {
         m_streamingEngaged = false; // the radius ring is fully loaded
+        // One explicit completion line: after this, streaming is quiet
+        // (no per-frame work) until the player reaches the loaded edge
+        // again — silence in the log = the ring is full, not a stall.
+        MC_LOG_INFO("Streaming complete: " +
+                    std::to_string(m_loadedColumns.size()) + "/" +
+                    std::to_string(static_cast<std::size_t>(
+                                       2 * m_streamRadius + 1) *
+                                   (2 * m_streamRadius + 1)) +
+                    " columns (" + std::to_string(m_world.chunkCount()) +
+                    " chunks, " +
+                    std::to_string(m_unloadedColumnsTotal) +
+                    " unloaded) — quiet until the player reaches the "
+                    "loaded edge");
     }
 
     // Backlog cap: the per-frame flush() at the top of update waits for
@@ -2008,6 +2043,24 @@ void Game::rescanCrops() {
     }
 }
 
+void Game::rescanFlammableChunks() {
+    // The burn pass's gate: every chunk that holds a flamable block.
+    m_flammableChunks.clear();
+    for (const ChunkPos& cp : m_world.chunkPositions()) {
+        const Chunk* c = m_world.findChunk(cp);
+        if (c == nullptr) {
+            continue;
+        }
+        const BlockID* blocks = c->data();
+        for (int i = 0; i < Chunk::kVolume; ++i) {
+            if (m_blocks.at(blocks[i]).properties.flamable) {
+                m_flammableChunks.insert(cp);
+                break;
+            }
+        }
+    }
+}
+
 void Game::rescanBeacons() {
     // Phase 83: rebuild the beacon tracking set from the world — every cell
     // whose block carries a non-empty beaconEffect. A fresh world finds
@@ -2329,7 +2382,7 @@ void Game::update(double dt) {
     // region before meshing; a settled world changes nothing.
     if (m_frameCount % kFluidTickEveryNFrames == 0) {
         const std::vector<BlockPos> changed =
-            FluidSim::tick(m_world, m_blocks);
+            FluidSim::tick(m_world, m_blocks, &m_flammableChunks);
         // Phase 64: the burn pass (inside the tick above) turns flamable
         // blocks into FIRE blocks via world.setBlock — it bypasses the
         // Game setBlock choke point, so register the changed cells that
@@ -2944,6 +2997,12 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
     // cell that stops holding a furnace drops its state (the invariant
     // the format-7 save cross-checks against the block edits).
     m_world.setBlock(x, y, z, id);
+    // Burn-pass gate (Phase 99.8): a flamable placement/rotation makes the
+    // chunk "ever held a flamable" (over-approximation — removals do not
+    // prune; see m_flammableChunks).
+    if (m_blocks.at(id).properties.flamable) {
+        m_flammableChunks.insert(cp);
+    }
     // The column now DIFFERS from pristine generated terrain (break /
     // place / rotate / growth / burn / campfire — everything goes through
     // this choke point): the save records the diff, so the column's chunks

@@ -153,6 +153,20 @@ std::vector<ChunkPos> simulateTypeChunks(const World& world,
                                          FluidKind kind) {
     std::set<ChunkPos> visit;
     for (const ChunkPos& cp : world.fluidChunks(kind)) {
+        const Chunk* c = world.findChunk(cp);
+        if (c == nullptr) {
+            continue; // cannot happen (the set is chunk-maintained)
+        }
+        // Activity gate (Phase 99.8): a chunk is walked only while HOT
+        // (a cell's fluid changed on the last applied tick: a moving
+        // front, a fresh source spreading) or PENDING (a block change
+        // under/beside it may have unstuck settled fluid). A settled
+        // fluid — static pools AND static flow gradients — changes
+        // nothing, goes cold, and costs zero per tick (the Minecraft
+        // cell-queue property at chunk granularity).
+        if (!c->fluidHot(kind) && !c->fluidWalkPending(kind)) {
+            continue;
+        }
         visit.insert(cp);
         visit.insert({cp.x - 1, cp.y, cp.z});
         visit.insert({cp.x + 1, cp.y, cp.z});
@@ -211,7 +225,26 @@ std::vector<BlockPos> reactLavaWithWater(World& world,
     // Phase 51 vintage is the fluid-set scan.
     const std::vector<ChunkPos> positions =
         world.fluidChunkPositions(FluidKind::Lava);
+    // A lava cell converts only next to a water cell, so a lava chunk
+    // with no water in itself or its six face neighbors cannot convert
+    // this tick (Phase 99.8: a settled lava sheet far from water — e.g.
+    // the Phase 90 lake overflow — is skipped entirely).
+    const std::set<ChunkPos>& waterChunks = world.fluidChunks(FluidKind::Water);
+    const auto hasWaterNear = [&world, &waterChunks](const ChunkPos& cp) {
+        if (waterChunks.count(cp) != 0) {
+            return true;
+        }
+        const auto near = [&](const ChunkPos& q) {
+            return waterChunks.count(q) != 0;
+        };
+        return near({cp.x - 1, cp.y, cp.z}) || near({cp.x + 1, cp.y, cp.z}) ||
+               near({cp.x, cp.y - 1, cp.z}) || near({cp.x, cp.y + 1, cp.z}) ||
+               near({cp.x, cp.y, cp.z - 1}) || near({cp.x, cp.y, cp.z + 1});
+    };
     for (const ChunkPos& cp : positions) {
+        if (!hasWaterNear(cp)) {
+            continue;
+        }
         const Chunk* c = world.findChunk(cp);
         const std::uint8_t* fluid = c->fluidData();
         const NeighborCache n = neighborCache(world, cp);
@@ -286,7 +319,8 @@ std::vector<BlockPos> reactLavaWithWater(World& world,
 // re-mesh).
 std::vector<BlockPos> burnFlamableNeighbors(World& world,
                                             const BlockRegistry& blocks,
-                                            BlockID burnTo) {
+                                            BlockID burnTo,
+                                            const std::set<ChunkPos>* flamm) {
     // Fast exit: no flamable block in the registry -> nothing to burn.
     bool anyFlamable = false;
     for (const BlockID id : blocks.allIds()) {
@@ -304,7 +338,31 @@ std::vector<BlockPos> burnFlamableNeighbors(World& world,
     // flamable neighbor is read across the boundary): the fluid-set scan.
     const std::vector<ChunkPos> positions =
         world.fluidChunkPositions(FluidKind::Lava);
+    // Flamable gate (Phase 99.8): a lava chunk can only burn a flamable
+    // block in ITSELF or a face neighbor. The set is an over-approximation
+    // (chunks that ever held a flamable block — a burn removes flammability
+    // without pruning the entry): exact on the safe side (a miss would be
+    // an unburned neighbor). Null = the legacy walk of every lava chunk
+    // (unit tests).
     for (const ChunkPos& cp : positions) {
+        if (flamm != nullptr) {
+            bool nearFlamable = flamm->count(cp) != 0;
+            const auto near = [flamm](const ChunkPos& q) {
+                return flamm->count(q) != 0;
+            };
+            if (!nearFlamable) {
+                nearFlamable =
+                    near({cp.x - 1, cp.y, cp.z}) ||
+                    near({cp.x + 1, cp.y, cp.z}) ||
+                    near({cp.x, cp.y - 1, cp.z}) ||
+                    near({cp.x, cp.y + 1, cp.z}) ||
+                    near({cp.x, cp.y, cp.z - 1}) ||
+                    near({cp.x, cp.y, cp.z + 1});
+            }
+            if (!nearFlamable) {
+                continue;
+            }
+        }
         const Chunk* c = world.findChunk(cp);
         const std::uint8_t* fluid = c->fluidData();
         const NeighborCache n = neighborCache(world, cp);
@@ -403,6 +461,12 @@ std::vector<BlockPos> simulateType(World& world, FluidKind kind) {
 
     for (const ChunkPos& cp : positions) {
         const Chunk* c = world.findChunk(cp);
+        // Consume the activity flags: they forced this walk; changes the
+        // walk APPLIES (end-of-tick, via setFluid) re-heat the affected
+        // chunks for the next tick (snapshot semantics).
+        Chunk* self = world.findChunkMut(cp);
+        self->clearFluidHot(kind);
+        self->clearFluidWalkPending(kind);
         const BlockID* blocks = c->data();
         const std::uint8_t* fluid = c->fluidData();
         const NeighborCache n = neighborCache(world, cp);
@@ -557,7 +621,8 @@ std::vector<BlockPos> simulateType(World& world, FluidKind kind) {
 } // namespace
 
 std::vector<BlockPos> FluidSim::tick(World& world,
-                                     const BlockRegistry& blocks) {
+                                     const BlockRegistry& blocks,
+                                     const std::set<ChunkPos>* flammable) {
     // Reaction first: it separates the kinds (a converted cell becomes a
     // block), so the per-kind scans that follow see 6-disjoint fluids.
     std::vector<BlockPos> changed = reactLavaWithWater(world, blocks);
@@ -573,7 +638,7 @@ std::vector<BlockPos> FluidSim::tick(World& world,
         blocks.idForName("fire").valid() ? blocks.idForName("fire")
                                          : BlockID::air();
     for (const BlockPos& p :
-         burnFlamableNeighbors(world, blocks, burnTarget)) {
+         burnFlamableNeighbors(world, blocks, burnTarget, flammable)) {
         changed.push_back(p);
     }
     for (const FluidKind kind : {FluidKind::Water, FluidKind::Lava}) {

@@ -66,6 +66,27 @@ bool World::setBlock(int x, int y, int z, BlockID id) {
         chunk.setFluidAt(local.x, local.y, local.z, 0);
         pruneFluidChunk(chunk, cp, fluidKindOf(displaced));
     }
+    // A block change can UNSTICK fluid: support removed under a settled
+    // (cold) sheet must still fall — force the target and its six
+    // face-sharing chunks (the ones that hold fluid) through one
+    // fluid-simulation walk on the next tick (Phase 99.8 activity gating).
+    for (FluidKind kind : {FluidKind::Water, FluidKind::Lava}) {
+        chunk.invalidateFluidWalk(kind);
+        const auto invalidate = [this, kind](const ChunkPos& q) {
+            if (m_fluidChunks[static_cast<std::size_t>(kind)].count(q) != 0) {
+                auto it = m_chunks.find(q);
+                if (it != m_chunks.end()) {
+                    it->second.invalidateFluidWalk(kind);
+                }
+            }
+        };
+        invalidate({cp.x - 1, cp.y, cp.z});
+        invalidate({cp.x + 1, cp.y, cp.z});
+        invalidate({cp.x, cp.y - 1, cp.z});
+        invalidate({cp.x, cp.y + 1, cp.z});
+        invalidate({cp.x, cp.y, cp.z - 1});
+        invalidate({cp.x, cp.y, cp.z + 1});
+    }
     markNeighborChunksDirty(local.x, local.y, local.z, cp);
     return true;
 }
@@ -351,7 +372,7 @@ void World::pruneFluidChunk(const Chunk& chunk, const ChunkPos& pos,
     m_fluidChunks[static_cast<std::size_t>(kind)].erase(pos);
 }
 
-void World::scanFluidChunks(const Chunk& chunk, const ChunkPos& pos) {
+void World::scanFluidChunks(Chunk& chunk, const ChunkPos& pos) {
     const std::uint8_t* fluid = chunk.fluidData();
     bool water = false;
     bool lava = false;
@@ -367,9 +388,11 @@ void World::scanFluidChunks(const Chunk& chunk, const ChunkPos& pos) {
     }
     if (water) {
         addFluidChunk(pos, FluidKind::Water);
+        chunk.setFluidHot(FluidKind::Water); // never simulated: first tick walks it
     }
     if (lava) {
         addFluidChunk(pos, FluidKind::Lava);
+        chunk.setFluidHot(FluidKind::Lava); // never simulated: first tick walks it
     }
 }
 

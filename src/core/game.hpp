@@ -509,6 +509,9 @@ private:
     // buildScene — after a save load, whose block edits restore the
     // planted crops (no save-format field: the block id IS the stage).
     void rescanCrops();
+    // Rebuilds m_flammableChunks from the world (end of buildScene: the
+    // generated demo area, or the save's restored chunks).
+    void rescanFlammableChunks();
     // Phase 83 beacon: rebuilds the beacon tracking set from the world —
     // every cell whose block has a non-empty beaconEffect. Runs at the end
     // of buildScene (like rescanCrops; no save-format field: the block is
@@ -613,6 +616,12 @@ private:
     // Total columns unloaded since session start (the periodic INFO
     // progress line reports it — proof the unload pass is working).
     std::size_t m_unloadedColumnsTotal = 0;
+    // Chunks that (ever, since load/integration) hold a FLAMABLE block —
+    // the burn pass's gate (Phase 99.8): a lava chunk walks only when it
+    // or a face neighbor is in this set. Over-approximation by design:
+    // a burn removes flammability without pruning the entry (exact on the
+    // safe side — a miss would leave a neighbor unburned).
+    std::set<ChunkPos> m_flammableChunks;
     // Columns that appeared since the last postLightJobs (integrated or
     // first-touch created): each gets one worker lighting job for its
     // full column box. Consumed (cleared) by postLightJobs. Replaces the

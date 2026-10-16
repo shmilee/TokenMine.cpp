@@ -52,6 +52,7 @@
 // map lookups.
 #pragma once
 
+#include <set>
 #include <vector>
 
 #include "block/block_registry.hpp"
@@ -74,7 +75,9 @@ public:
     // also re-light the touched region (fluid levels change the light
     // attenuation and emission — see Lighting::updateRegion).
     static std::vector<BlockPos> tick(World& world,
-                                      const BlockRegistry& blocks);
+                                      const BlockRegistry& blocks,
+                                      const std::set<ChunkPos>* flammable =
+                                          nullptr);
 };
 
 } // namespace mc
