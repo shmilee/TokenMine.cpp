@@ -154,6 +154,10 @@ private:
     // post* methods run last in update, after every main-thread World
     // write: from then on until the next flush the workers own the window.
     void integrateStreamedColumns();
+    // Collects the completed lighting jobs (after the pool flush): their
+    // columns leave m_unlitColumns, so the next updateChunkMeshes builds
+    // their meshes with the propagated light (the one-and-only mesh).
+    void collectLitColumns();
     // Decides the columns to stream around the player (trigger + radius,
     // see chunk_streaming) and posts up to kStreamColumnsPerFrame
     // generation jobs to the pool.
@@ -564,6 +568,25 @@ private:
     // In-flight generation jobs (deque: the heap-allocated StreamJob never
     // moves, so worker lambdas may capture it by raw pointer).
     std::deque<std::unique_ptr<StreamJob>> m_streamJobs;
+    // One lighting job per frame (the region boxes of every new column,
+    // run sequentially inside the job — adjacent boxes overlap and must
+    // not run concurrently). The done flag + columns let the main thread
+    // clear m_unlitColumns at the next flush (see collectLitColumns).
+    struct LightJob {
+        std::vector<std::array<BlockPos, 2>> boxes;
+        std::set<ColumnPos> columns;
+        bool done = false;
+    };
+    std::deque<std::unique_ptr<LightJob>> m_lightJobs;
+    // Columns whose light has NOT propagated yet (integrated this session
+    // or first-touch created, their lighting job still in flight). Their
+    // chunks are NOT meshed until the job completes: the old design meshed
+    // them at light 0 (black faces) and re-meshed after the light landed —
+    // with the remesh budget that re-mesh could lag by the whole dirty
+    // backlog, so freshly loaded terrain showed black faces for seconds
+    // (99.2 walking-run report). Meshing once, lit (pop-in), is also
+    // half the remesh work.
+    std::set<ColumnPos> m_unlitColumns;
     // Columns with a generation job in flight (not yet in the World).
     std::set<ColumnPos> m_streamPending;
     // Columns the player has MODIFIED (the setBlock choke point — break /

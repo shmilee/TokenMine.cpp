@@ -1245,7 +1245,20 @@ Result<void> Game::updateChunkMeshes() {
     if (dirtySet.empty()) {
         return {};
     }
-    std::vector<ChunkPos> dirty(dirtySet.begin(), dirtySet.end());
+    std::vector<ChunkPos> dirty;
+    for (const ChunkPos& pos : dirtySet) {
+        // Columns whose lighting job has not completed are meshed
+        // EXACTLY ONCE, after the light lands (m_unlitColumns): a
+        // light-0 first mesh would show black faces and cost a second
+        // (budget-delayed) re-mesh. They stay dirty until then.
+        if (m_unlitColumns.count({pos.x, pos.z}) != 0) {
+            continue;
+        }
+        dirty.push_back(pos);
+    }
+    if (dirty.empty()) {
+        return {};
+    }
     const Vec3 p = m_player ? m_player->position() : Vec3{0.0, 0.0, 0.0};
     const int px = floorDiv(static_cast<int>(std::floor(p.x)), kChunkSize);
     const int pz = floorDiv(static_cast<int>(std::floor(p.z)), kChunkSize);
@@ -1318,14 +1331,38 @@ void Game::integrateStreamedColumns() {
         m_streamPending.erase(job->column);
         m_loadedColumns.insert(job->column);
         // New terrain needs light propagation (the old m_litChunks full
-        // scan detected it; the explicit column set replaces it).
+        // scan detected it; the explicit column set replaces it) — and
+        // stays UNMESHED until that light lands (m_unlitColumns: the
+        // chunk meshes once, lit, instead of dark-then-re-meshed).
         m_lightPendingColumns.insert(job->column);
+        m_unlitColumns.insert(job->column);
         MC_LOG_INFO("Streamed column (" + std::to_string(job->column.x) +
                     ", " + std::to_string(job->column.z) +
                     ") integrated (" + std::to_string(m_world.chunkCount()) +
                     " chunks loaded)");
     }
     m_streamJobs = std::move(inFlight);
+}
+
+void Game::collectLitColumns() {
+    if (m_lightJobs.empty()) {
+        return;
+    }
+    // Runs right after pool->flush(): done jobs have finished writing
+    // light (happens-before via the pool's mutex), so their columns can
+    // be meshed this frame with the propagated light. Undone jobs stay
+    // in the deque (their columns stay unlit/unmeshed).
+    std::deque<std::unique_ptr<LightJob>> inFlight;
+    for (auto& job : m_lightJobs) {
+        if (!job->done) {
+            inFlight.push_back(std::move(job));
+            continue;
+        }
+        for (const ColumnPos& col : job->columns) {
+            m_unlitColumns.erase(col);
+        }
+    }
+    m_lightJobs = std::move(inFlight);
 }
 
 void Game::unloadFarColumns() {
@@ -1388,6 +1425,10 @@ void Game::unloadFarColumns() {
     }
     for (const ChunkPos& pos : toErase) {
         m_loadedColumns.erase({pos.x, pos.z});
+        // Defensive: an unlit column cannot be unloaded (it is either
+        // inside the ring, edited, or in flight — all protected above),
+        // but the set must not leak entries for dead columns.
+        m_unlitColumns.erase({pos.x, pos.z});
     }
     MC_LOG_INFO("Unloaded " +
                 std::to_string(toErase.size() / kVerticalChunksPerColumn) +
@@ -1499,28 +1540,33 @@ void Game::postLightJobs() {
     if (m_lightPendingColumns.empty()) {
         return;
     }
-    std::vector<std::array<BlockPos, 2>> jobBoxes;
-    jobBoxes.reserve(m_lightPendingColumns.size());
-    for (const ColumnPos& col : m_lightPendingColumns) {
-        const BlockPos lo{col.x * kChunkSize, 0, col.z * kChunkSize};
-        const BlockPos hi{lo.x + kChunkSize - 1, kWorldHeight - 1,
-                          lo.z + kChunkSize - 1};
-        jobBoxes.push_back({lo, hi});
-    }
-    m_lightPendingColumns.clear();
     // ONE job per frame, running the region updates sequentially. The
     // region of one box overlaps the region of an adjacent new column
     // (each expands by kLightUpdateRadius), so two lighting jobs must
     // never run concurrently — they would race on the shared light
     // arrays. A single job is serialized by the pool and stays in the
     // worker window (the main thread only reads the World until the next
-    // flush). The worker writes light arrays and the dirty flag, which
-    // the main thread re-reads at the next frame's meshing (after the
-    // flush).
-    m_pool->post([this, jobBoxes = std::move(jobBoxes)] {
-        for (const auto& box : jobBoxes) {
+    // flush). The job writes light arrays and marks the changed chunks
+    // dirty (World::markChunkDirty); it also carries its COLUMNS and a
+    // done flag: at the next flush, collectLitColumns drops them from
+    // m_unlitColumns so their chunks mesh once, lit.
+    auto job = std::make_unique<LightJob>();
+    job->columns = m_lightPendingColumns;
+    m_lightPendingColumns.clear();
+    job->boxes.reserve(job->columns.size());
+    for (const ColumnPos& col : job->columns) {
+        const BlockPos lo{col.x * kChunkSize, 0, col.z * kChunkSize};
+        const BlockPos hi{lo.x + kChunkSize - 1, kWorldHeight - 1,
+                          lo.z + kChunkSize - 1};
+        job->boxes.push_back({lo, hi});
+    }
+    LightJob* rawJob = job.get();
+    m_lightJobs.push_back(std::move(job));
+    m_pool->post([this, rawJob] {
+        for (const auto& box : rawJob->boxes) {
             Lighting::updateRegion(m_world, m_blocks, box[0], box[1]);
         }
+        rawJob->done = true;
     });
 }
 
@@ -2150,6 +2196,7 @@ void Game::update(double dt) {
     if (m_pool) {
         m_pool->flush();
     }
+    collectLitColumns();
     integrateStreamedColumns();
     unloadFarColumns();
 
@@ -2859,6 +2906,7 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
         m_world.ensureColumn(cp.x, cp.z);
         m_loadedColumns.insert({cp.x, cp.z});
         m_lightPendingColumns.insert({cp.x, cp.z});
+        m_unlitColumns.insert({cp.x, cp.z});
     }
     // The single choke point for every in-game block change (break, place,
     // dye recolor). Phase 42: in addition to the raw setBlock, any STUCK
