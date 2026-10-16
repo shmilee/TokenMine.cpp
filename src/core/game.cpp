@@ -5231,6 +5231,31 @@ void Game::renderUi() {
                          batchFor(color, true, &m_fontTexture).vertices);
     };
 
+    // Fluid overlay (Phase 99.5): when the camera's cell holds a fluid,
+    // the fluid geometry around the eye self-culls (same-kind faces hide
+    // each other — a level-8 cell in a deep pool has no faces at all), so
+    // a fully submerged player saw "air" (the 99.x user report). A flat
+    // translucent tint under the HUD — Minecraft's fluid overlay —
+    // restores the submerged read. This is the FIRST batch (drawn first =
+    // under every HUD element). No-op out of fluid (the no-input baseline
+    // camera is in air: byte-identical).
+    {
+        const Vec3 eye = m_camera.position;
+        const std::optional<FluidKind> submerged = m_world.getFluidKind(
+            static_cast<int>(std::floor(eye.x)),
+            static_cast<int>(std::floor(eye.y)),
+            static_cast<int>(std::floor(eye.z)));
+        if (submerged) {
+            // Visual tuning constants (overlay strength + hue): water ≈
+            // MC's blue depth tint, lava ≈ its orange glow.
+            const Vec4 tint = *submerged == FluidKind::Water
+                ? (Vec4 {0.20f, 0.42f, 0.85f, 0.45f})
+                : (Vec4 {0.95f, 0.42f, 0.05f, 0.60f});
+            auto& b = batchFor(tint, false, nullptr);
+            addQuad(b, 0, 0, w, h);
+        }
+    }
+
     // Item icons: 2D textures (tools, materials) are batched quads like
     // everything else; block items render a lit 3D cube, which is
     // RECORDED and drawn only after all 2D batches — the slot backgrounds
