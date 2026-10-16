@@ -227,9 +227,10 @@ TEST(BlockRegistryTest, RejectsMissingModel) {
 
 TEST(BlockRegistryTest, RejectsUnknownShape) {
     BlockRegistry reg;
-    // Phase 87: only full_cube / slab / stairs / cross exist — "wall" is not.
+    // Phase 95: only full_cube / slab / stairs / cross / wall exist —
+    // "fence" is not (a candidate future shape, kept rejected).
     auto r = reg.registerBlock(parseDef(
-        R"({"id":"stone","model":{"shape":"wall","textures":{"top":"t","side":"t",)"
+        R"({"id":"stone","model":{"shape":"fence","textures":{"top":"t","side":"t",)"
         R"("bottom":"t"}}})"));
     ASSERT_FALSE(r.ok());
     EXPECT_NE(r.error().message.find("shape"), std::string::npos);
@@ -591,11 +592,11 @@ TEST(BlockRegistryTest, CrossShapeIsExplicit) {
 
 TEST(BlockRegistryTest, RejectsUnsupportedShapeValue) {
     BlockRegistry reg;
-    // Phase 87: only full_cube / slab / stairs / cross are supported —
-    // "wall" is not (the v1 partial-block shapes are slab + stairs).
+    // Phase 95: only full_cube / slab / stairs / cross / wall are supported —
+    // "fence" is not.
     auto r = reg.registerBlock(
         parseDef(crossDef(
-            "x", R"({"shape":"wall","textures":{"cross":"x"}})")));
+            "x", R"({"shape":"fence","textures":{"cross":"x"}})")));
     ASSERT_FALSE(r.ok());
     EXPECT_NE(r.error().message.find("'model.shape'"), std::string::npos);
 }
@@ -1608,6 +1609,38 @@ TEST(BlockRegistryTest, Phase85StoneSlabContent) {
     EXPECT_EQ(b->properties.lightEmission, 0);
     EXPECT_FLOAT_EQ(b->properties.hardness, 2.0f);
     EXPECT_EQ(b->properties.drops, "stone_slab"); // drops itself
+    EXPECT_EQ(b->model.textures.top, "stone"); // reuses the stone texture
+    EXPECT_EQ(b->model.textures.side, "stone");
+    EXPECT_EQ(b->model.textures.bottom, "stone");
+}
+
+TEST(BlockRegistryTest, Phase95WallShapeParsed) {
+    // The "wall" shape (Phase 95, the third new block model type) is parsed;
+    // it uses the cube face textures (like the slab).
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"w","model":{"shape":"wall","textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).model.shape, BlockModel::Shape::Wall);
+}
+
+TEST(BlockRegistryTest, Phase95StoneWallContent) {
+    // The shipped stone wall (Phase 95): the 1.5-block-tall pillar shape,
+    // reusing the stone texture (no new atlas tile), hardness 1.5 (Minecraft),
+    // drops itself, solid + opaque.
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* b = reg.findByName("stone_wall");
+    ASSERT_TRUE(b != nullptr);
+    EXPECT_EQ(b->model.shape, BlockModel::Shape::Wall);
+    EXPECT_TRUE(b->properties.solid);
+    EXPECT_TRUE(b->properties.opaque);
+    EXPECT_EQ(b->properties.lightEmission, 0);
+    EXPECT_FLOAT_EQ(b->properties.hardness, 1.5f);
+    EXPECT_EQ(b->properties.drops, "stone_wall"); // drops itself
     EXPECT_EQ(b->model.textures.top, "stone"); // reuses the stone texture
     EXPECT_EQ(b->model.textures.side, "stone");
     EXPECT_EQ(b->model.textures.bottom, "stone");

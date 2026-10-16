@@ -41,6 +41,12 @@ float Entity::solidTopHeight(BlockID id, const Vec3& mn, const Vec3& mx,
     if (b.model.shape == BlockModel::Shape::Slab) {
         return 0.5f;
     }
+    // Phase 95: a wall is solid in y 0..1.5 (a full block + a half cap on
+    // top). A barrier: the player cannot pass through (the AABB overlaps the
+    // solid region) nor jump over it (the jump is ~1.25 < 1.5).
+    if (b.model.shape == BlockModel::Shape::Wall) {
+        return 1.5f;
+    }
     if (b.model.shape == BlockModel::Shape::Stairs) {
         // The AABB's local range on each axis (clamped to the cell). The
         // blocking height is the slope at the AABB's LOW end on the facing
@@ -88,8 +94,14 @@ bool Entity::hasRoomAt(Vec3 pos) const {
     const int y1 = static_cast<int>(std::floorf(y1f));
     const int z0 = static_cast<int>(std::floorf(z0f));
     const int z1 = static_cast<int>(std::floorf(z1f));
+    // Phase 95: the wall's solid region extends ABOVE its cell (the cap,
+    // y 0..1.5). So a cell BELOW the AABB's bottom (y0-1) might hold a wall
+    // whose cap reaches into the AABB — extend the y scan to y0-1 (clamped
+    // to the world floor). A non-wall cell below has top <= 1, so its solid
+    // region does not reach the AABB (a no-op).
+    const int y0ext = std::max(0, y0 - 1);
     for (int x = x0; x <= x1; ++x) {
-        for (int y = y0; y <= y1; ++y) {
+        for (int y = y0ext; y <= y1; ++y) {
             for (int z = z0; z <= z1; ++z) {
                 if (!(x0f < x + 1 && x1f > x)) {
                     continue;
@@ -422,11 +434,17 @@ bool Entity::moveAxis(int axis, float delta) {
     const int y1 = static_cast<int>(std::floorf(mx.y));
     const int z0 = static_cast<int>(std::floorf(mn.z));
     const int z1 = static_cast<int>(std::floorf(mx.z));
+    // Phase 95: the wall's solid region extends ABOVE its cell (the cap,
+    // y 0..1.5). So a cell BELOW the AABB's bottom (y0-1) might hold a wall
+    // whose cap reaches into the AABB — extend the y scan to y0-1 (clamped
+    // to the world floor). A non-wall cell below has top <= 1, so its solid
+    // region does not reach the AABB (a no-op).
+    const int y0ext = std::max(0, y0 - 1);
 
     float limit = 0.0f;
     bool hit = false;
     for (int x = x0; x <= x1; ++x) {
-        for (int y = y0; y <= y1; ++y) {
+        for (int y = y0ext; y <= y1; ++y) {
             for (int z = z0; z <= z1; ++z) {
                 if (!(mn.x < x + 1 && mx.x > x)) {
                     continue;

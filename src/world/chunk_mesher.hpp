@@ -151,6 +151,12 @@ private:
     // back / bottom faces are culled by an opaque neighbor (like the slab).
     void emitStairs(ChunkMeshData& out, const Block& block,
                     const BlockPos& origin, int lx, int ly, int lz) const;
+    // Phase 95 wall: a 1.5-block-tall pillar (the cell + a half cap above).
+    // The bottom + top cap faces are culled by an opaque neighbor; the side
+    // faces are always emitted (the wall extends above the cell — the
+    // conservative approach accepts the Z-fighting, like the slab).
+    void emitWall(ChunkMeshData& out, const Block& block,
+                  const BlockPos& origin, int lx, int ly, int lz) const;
 
     const World& m_world;
     const BlockRegistry& m_blocks;

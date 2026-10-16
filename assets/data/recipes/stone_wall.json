@@ -1,0 +1,13 @@
+{
+ "id": "stone_wall",
+ "output": {
+  "item": "stone_wall",
+  "count": 4
+ },
+ "ingredients": [
+  {
+   "item": "stone",
+   "count": 6
+  }
+ ]
+}

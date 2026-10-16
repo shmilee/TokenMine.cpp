@@ -116,6 +116,8 @@ ChunkMeshData ChunkMesher::mesh(const ChunkPos& pos) const {
                     emitSlab(out, block, origin, lx, ly, lz);
                 } else if (block.model.shape == BlockModel::Shape::Stairs) {
                     emitStairs(out, block, origin, lx, ly, lz);
+                } else if (block.model.shape == BlockModel::Shape::Wall) {
+                    emitWall(out, block, origin, lx, ly, lz);
                 }
             }
         }
@@ -164,9 +166,10 @@ void ChunkMesher::meshFaceDirection(ChunkMeshData& out, const Chunk& chunk,
                               // cross pass in mesh() owns their geometry)
                 }
                 if (block.model.shape == BlockModel::Shape::Slab ||
-                    block.model.shape == BlockModel::Shape::Stairs) {
-                    continue; // partial blocks (slab / stairs) — the slab
-                              // pass in mesh() owns their geometry, not
+                    block.model.shape == BlockModel::Shape::Stairs ||
+                    block.model.shape == BlockModel::Shape::Wall) {
+                    continue; // partial blocks (slab / stairs / wall) — the
+                              // slab pass in mesh() owns their geometry, not
                               // full-cube faces
                 }
                 const BlockID neighbor = m_world.getBlock(
@@ -500,6 +503,70 @@ void ChunkMesher::emitSlab(ChunkMeshData& out, const Block& block,
                                 {u1.x, u0.y}, {u0.x, u0.y}};
         // Per-face light: sample the cell the face borders (the blocky-light
         // convention, like the greedy cube faces).
+        const std::uint8_t faceSky = m_world.getSkyLight(
+            wx + face.dx, wy + face.dy, wz + face.dz);
+        const std::uint8_t faceBlock = m_world.getBlockLight(
+            wx + face.dx, wy + face.dy, wz + face.dz);
+        const float skyF =
+            static_cast<float>(faceSky) / static_cast<float>(kMaxLight);
+        const float blockF =
+            static_cast<float>(faceBlock) / static_cast<float>(kMaxLight);
+        std::vector<MeshVertex>& verts = out.opaqueVertices;
+        std::vector<std::uint32_t>& indices = out.opaqueIndices;
+        const std::uint32_t first = static_cast<std::uint32_t>(verts.size());
+        for (int i = 0; i < 4; ++i) {
+            MeshVertex v;
+            v.position = {static_cast<float>(lx + face.corner[i][0]),
+                          static_cast<float>(ly + face.corner[i][1] * h),
+                          static_cast<float>(lz + face.corner[i][2])};
+            v.normal = face.normal;
+            v.uv = faceUv[i];
+            v.skyLight = skyF;
+            v.blockLight = blockF;
+            verts.push_back(v);
+        }
+        indices.insert(indices.end(),
+                       {first, first + 1, first + 2, first, first + 2,
+                        first + 3});
+    }
+}
+
+void ChunkMesher::emitWall(ChunkMeshData& out, const Block& block,
+                           const BlockPos& origin, int lx, int ly, int lz)
+    const {
+    // Phase 95: a 1.5-block-tall pillar (the cell + a half cap above). The
+    // unit-cube corner Y is scaled by 1.5 (the wall's height) — the cap
+    // (y 1..1.5) extends into the cell above. The bottom face (dy<0, the
+    // cube's -Y face) is culled by an opaque neighbor below; the top face
+    // (the cap, dy>0) is culled by an opaque neighbor above (the cap is
+    // within the cell above); the SIDE faces (dy==0) are always emitted —
+    // the wall extends above the cell (the y 1..1.5 part is exposed), so
+    // the conservative approach accepts the Z-fighting on the y 0..1 part
+    // (like the slab's side-face limitation). Opaque sub-mesh (a wall is
+    // solid, not glass).
+    const float h = 1.5f;
+    const int wx = origin.x + lx;
+    const int wy = origin.y + ly;
+    const int wz = origin.z + lz;
+    for (const CubeFace& face : kCubeFaces) {
+        if (face.dy != 0) {
+            // The bottom (dy<0) + top cap (dy>0) faces: hidden by an opaque
+            // neighbor (which spans their extent). The side faces (dy==0)
+            // are always emitted (the wall extends above the cell).
+            const BlockID neighbor = m_world.getBlock(wx + face.dx,
+                                                      wy + face.dy,
+                                                      wz + face.dz);
+            if (neighbor != BlockID::air() &&
+                m_blocks.at(neighbor).properties.opaque) {
+                continue;
+            }
+        }
+        const Vec2 u0 = AtlasLayout::uvMin(
+            m_layout, cubeFaceTexture(block, face.textureSlot));
+        const Vec2 u1 = AtlasLayout::uvMax(
+            m_layout, cubeFaceTexture(block, face.textureSlot));
+        const Vec2 faceUv[4] = {{u0.x, u1.y}, {u1.x, u1.y},
+                                {u1.x, u0.y}, {u0.x, u0.y}};
         const std::uint8_t faceSky = m_world.getSkyLight(
             wx + face.dx, wy + face.dy, wz + face.dz);
         const std::uint8_t faceBlock = m_world.getBlockLight(

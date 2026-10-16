@@ -1,0 +1,15 @@
+{
+  "id": "stone_wall",
+  "properties": {
+    "hardness": 1.5,
+    "drops": "stone_wall"
+  },
+  "model": {
+    "shape": "wall",
+    "textures": {
+      "top": "stone",
+      "side": "stone",
+      "bottom": "stone"
+    }
+  }
+}

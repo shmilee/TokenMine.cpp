@@ -60,6 +60,13 @@ BlockRegistry makeBlocks() {
     if (!r.ok()) {
         ADD_FAILURE() << r.error().message;
     }
+    // Phase 95: a wall (solid in y 0..1.5, a 1.5-block-tall barrier).
+    r = blocks.registerBlock(parseJson(
+        R"({"id":"wall","model":{"shape":"wall","textures":)"
+        R"({"top":"t","side":"t","bottom":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
     // Phase 87: a north-facing stair (solid height varies with z: full at
     // the -Z end, zero at the +Z end).
     r = blocks.registerBlock(parseJson(
@@ -1077,4 +1084,25 @@ TEST(EntityTest, Phase85SlabHasRoom) {
     // The full stone block: the solid region is the whole cell [2, 3].
     EXPECT_TRUE(item.hasRoomAt(Vec3{9.5f, 3.0f, 8.5f})); // on its top
     EXPECT_FALSE(item.hasRoomAt(Vec3{9.5f, 2.5f, 8.5f})); // inside it
+}
+
+// Phase 95: the wall is a 1.5-block-tall barrier. The solid region is
+// [y, y+1.5] (the cell + a half cap above). An item can rest on the wall's
+// top (AABB bottom at y+1.5) but NOT occupy the wall's body (AABB bottom in
+// [y, y+1.5]) — a barrier the player cannot pass through nor jump over.
+TEST(EntityTest, Phase95WallIsABarrier) {
+    Fixture f;
+    const BlockID wall = f.blocks.idForName("wall");
+    f.world.setBlock(8, 2, 8, wall); // solid region y 2..3.5
+    const ItemEntity item = f.makeItem({8.5f, 10.0f, 8.5f});
+    // On the wall's TOP (AABB bottom at y=3.5 = the solid top): the AABB
+    // [3.5, 3.5+size] does not overlap the solid region [2, 3.5] -> has room
+    // (a face resting exactly on the wall top is not an overlap).
+    EXPECT_TRUE(item.hasRoomAt(Vec3{8.5f, 3.5f, 8.5f}));
+    // INSIDE the wall's body (AABB bottom at y=3.0, in [2, 3.5]): overlap ->
+    // no room (you cannot occupy the wall's body — the barrier).
+    EXPECT_FALSE(item.hasRoomAt(Vec3{8.5f, 3.0f, 8.5f}));
+    // In the CAP (AABB bottom at y=3.4, in [2, 3.5] but above the cell top
+    // y=3): still inside the wall's solid region -> no room (the cap is solid).
+    EXPECT_FALSE(item.hasRoomAt(Vec3{8.5f, 3.4f, 8.5f}));
 }

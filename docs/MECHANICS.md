@@ -704,6 +704,21 @@
      format 13 迁移空）。P89 的 4 块变体保留为默认朝向、P92 的 `stair_rotates_to`
      保留解析但不再用于旋转。这是项目首个 **per-block 状态**（突破"无
      per-instance 状态"哲学，需 format 变更）。
+- **墙 wall（Phase 95，第三个新块模型类型）**：
+  - **`Shape::Wall`**（block.hpp）：1.5 格高柱（cell 的 y 0..1.5 实心 =
+    满块 + 顶 0.5 帽），复用 cube 纹理（top/side/bottom 校验同 slab）。
+    v1 无 MC 的墙连接（贴块延伸/栅栏顶/铁栏杆/玻璃板变体）。
+  - **mesh**（chunk mesher `emitWall`）：单位立方 6 面 Y 缩 1.5（帽伸进上方
+    格）——底面/顶帽邻 opaque 剔除、**侧面恒绘**（帽伸出格外无法半面剔除，
+    邻满块 y 0..1 段 Z-fight = 同 slab v1 保守取舍）；贪婪满块路径跳过
+    wall。光照按满块不透明（帽是空气但挡光 = v1 简化）。
+  - **barrier 碰撞**（entity.cpp）：`solidTopHeight` = 1.5——玩家**不能穿过**
+    （AABB 与实心区 [y, y+1.5] 重叠）也**不能跳过**（跳跃 ~1.25 < 1.5）。
+    **帽伸进上方格**：`hasRoomAt`/`moveAxis` 的 y 扫描扩到 **y0-1**（AABB
+    在 y+1 格时查 y 格的墙帽；非墙格 top≤1 时实心区到不了 AABB = no-op
+    backward-compat）。
+  - **内容**：`stone_wall`（hardness 1.5 = MC、自掉、复用 stone 纹理无新
+    atlas）+ 配方 shapeless 6 stone → 4（MC）；不在默认背包。
 - **游泳**（Phase 9）：玩家包围盒与任何水体格相交即进入水中状态——水中重力减半
   （12 vs 32）、终端速度 4、水平速度降为 3.1（冲刺无效）、`Space` 随时上浮（4.5）；
   浅水（头在水面上）可以"蹚水走"，深水可以游

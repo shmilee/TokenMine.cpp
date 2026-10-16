@@ -530,11 +530,12 @@ Result<void> BlockRegistry::parseModel(const Json& def, BlockModel& out) {
         if (!s->isString() || (s->asString() != "full_cube" &&
                                s->asString() != "slab" &&
                                s->asString() != "stairs" &&
-                               s->asString() != "cross")) {
+                               s->asString() != "cross" &&
+                               s->asString() != "wall")) {
             return MC_FAIL(std::string("'model.shape' is unsupported: '") +
                            s->asString() +
-                           "' (only 'full_cube', 'slab', 'stairs' and "
-                           "'cross' exist)");
+                           "' (only 'full_cube', 'slab', 'stairs', 'cross' "
+                           "and 'wall' exist)");
         }
         out.shape = (s->asString() == "cross")
                         ? BlockModel::Shape::Cross
@@ -542,7 +543,9 @@ Result<void> BlockRegistry::parseModel(const Json& def, BlockModel& out) {
                                ? BlockModel::Shape::Slab
                                : (s->asString() == "stairs"
                                       ? BlockModel::Shape::Stairs
-                                      : BlockModel::Shape::FullCube));
+                                      : (s->asString() == "wall"
+                                             ? BlockModel::Shape::Wall
+                                             : BlockModel::Shape::FullCube)));
     }
     // Phase 89: the stair facing (0..3; only meaningful for shape "stairs").
     if (const Json* sf = m->find("stair_facing")) {

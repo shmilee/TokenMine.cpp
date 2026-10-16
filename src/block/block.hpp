@@ -269,6 +269,13 @@ struct BlockModel {
                   // flowers). Rendered in the transparent (blended,
                   // unculled) pass with the cell's own light; never
                   // greedy-merged (no cube faces are emitted).
+        Wall,     // Phase 95: a 1.5-block-tall pillar (Minecraft's wall) —
+                  // the cell is solid in y 0..1.5 (a full block + a half
+                  // cap on top). A barrier: the collision (height-aware,
+                  // solidTopHeight = 1.5) blocks the player, who cannot
+                  // jump over it (the jump is ~1.25 < 1.5). Uses the cube
+                  // face textures. The third new block model type (after the
+                  // slab Phase 85 + the stairs Phase 87).
     };
 
     Shape shape = Shape::FullCube;
