@@ -181,6 +181,15 @@ struct BlockProperties {
     // discipline); an explicit empty string is rejected at data load (the
     // ammo discipline).
     std::string ignitesTo;
+    // Stair rotation (Phase 92): when non-empty, a SNEAKING right-click on
+    // this block rotates it IN PLACE — setBlock to the named variant (the
+    // "next facing" of the stair family). The orientation IS the block id
+    // (the 4 stair variants from Phase 89, `stair_facing` 0-3) — the project
+    // keeps NO per-block rotation state (the "state = block id" philosophy,
+    // like the crop stages), so there is NO format change. The named variant
+    // is init-cross-checked to exist (the grows_to / ignites_to discipline);
+    // an explicit empty string is rejected at data load (the ammo discipline).
+    std::string stairRotatesTo;
     // Minimum light level (0..15) at the CROP cell, max(sky, block), for
     // the roll to run (0 = no requirement; 9 = the Minecraft crop value).
     int growthLight = 0;

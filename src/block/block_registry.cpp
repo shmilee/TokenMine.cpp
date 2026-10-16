@@ -138,6 +138,19 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
                            "block name (omit it for a plain block)");
         }
     }
+    // Stair rotation target (Phase 92): an EXPLICIT empty stair_rotates_to
+    // is a no-op typo (ABSENT is the default — the ammo discipline, the
+    // grows_to / ignites_to pattern). The target block's existence is
+    // cross-checked at game init.
+    r = checkField(*p, "stair_rotates_to", "string",
+                   [&](const Json& v) { out.stairRotatesTo = v.asString(); });
+    MC_TRY(r);
+    if (const Json* sr = p->find("stair_rotates_to")) {
+        if (sr->asString().empty()) {
+            return MC_FAIL("block property 'stair_rotates_to' must be a "
+                           "non-empty block name (omit it for a plain block)");
+        }
+    }
     r = checkField(*p, "beacon_effect", "string",
                    [&](const Json& v) { out.beaconEffect = v.asString(); });
     MC_TRY(r);

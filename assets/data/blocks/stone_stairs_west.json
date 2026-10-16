@@ -2,7 +2,8 @@
   "id": "stone_stairs_west",
   "properties": {
     "hardness": 1.5,
-    "drops": "stone_stairs_west"
+    "drops": "stone_stairs_west",
+    "stair_rotates_to": "stone_stairs"
   },
   "model": {
     "shape": "stairs",

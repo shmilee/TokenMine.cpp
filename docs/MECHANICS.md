@@ -694,6 +694,11 @@
     = mxLocalZ、east = mxLocalX、west = 1−mnLocalX），玩家脚落在斜面高端——
     Phase 89 修正 P87 用低端边（会切入楼梯高端）的 bug；slab/满块忽略 AABB
     （固定高度，backward-compat）。`moveAxis` + `hasRoomAt` 传 mn/mx/cell。
+   - **旋转**（Phase 92，`stair_rotates_to` 数据属性）：4 楼梯块变体成环
+     （N→E→S→W→N，各块 `stair_rotates_to` 指向下一朝向）。**潜行 + 右键**一
+     个楼梯 = 原地 setBlock 到下一朝向变体（朝向即块 id，"状态=块 id"哲学——
+     无 per-block 状态、无 format 变更），"place" 音、点击被消费（不放置）。
+     init 交叉校验 `stair_rotates_to` 指向存在的块（grows_to/ignites_to 纪律）。
 - **游泳**（Phase 9）：玩家包围盒与任何水体格相交即进入水中状态——水中重力减半
   （12 vs 32）、终端速度 4、水平速度降为 3.1（冲刺无效）、`Space` 随时上浮（4.5）；
   浅水（头在水面上）可以"蹚水走"，深水可以游

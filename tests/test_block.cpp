@@ -1694,6 +1694,55 @@ TEST(BlockRegistryTest, Phase89StairVariantsContent) {
     }
 }
 
+TEST(BlockRegistryTest, Phase92StairRotatesToParsed) {
+    // stair_rotates_to (the next facing variant) is parsed; an EXPLICIT
+    // empty string is a no-op typo (rejected, the ammo discipline).
+    const std::string model =
+        R"("model":{"shape":"stairs","textures":{"top":"t","side":"t","bottom":"t"}})";
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        std::string(R"({"id":"st","properties":{"stair_rotates_to":"ste"},)") +
+        model + "}"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).properties.stairRotatesTo, "ste");
+    auto rEmpty = reg.registerBlock(parseDef(
+        std::string(R"({"id":"ste","properties":{"stair_rotates_to":""},)") +
+        model + "}"));
+    ASSERT_FALSE(rEmpty.ok());
+    EXPECT_NE(rEmpty.error().message.find("stair_rotates_to"),
+              std::string::npos);
+}
+
+TEST(BlockRegistryTest, Phase92StairRotationCycle) {
+    // The 4 shipped stair variants form a closed rotation cycle (north ->
+    // east -> south -> west -> north): each variant's stair_rotates_to names
+    // the NEXT facing, and the cycle closes back to stone_stairs.
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const struct {
+        const char* name;
+        const char* next;
+        int nextFacing;
+    } cycle[] = {
+        {"stone_stairs", "stone_stairs_east", 1},
+        {"stone_stairs_east", "stone_stairs_south", 2},
+        {"stone_stairs_south", "stone_stairs_west", 3},
+        {"stone_stairs_west", "stone_stairs", 0}, // closes the cycle
+    };
+    for (const auto& c : cycle) {
+        const Block* b = reg.findByName(c.name);
+        ASSERT_TRUE(b != nullptr) << c.name;
+        EXPECT_EQ(b->properties.stairRotatesTo, c.next);
+        // The named next variant exists and has the next facing.
+        const Block* n = reg.findByName(c.next);
+        ASSERT_TRUE(n != nullptr) << c.next;
+        EXPECT_EQ(n->model.stairFacing, c.nextFacing);
+    }
+}
+
 TEST(BlockRegistryTest, Phase85SlabShapeRequiresCubeTextures) {
     // A slab uses the cube face textures (top/side/bottom), like a full cube
     // (the "cross" texture is rejected — a slab is not a cross plant).

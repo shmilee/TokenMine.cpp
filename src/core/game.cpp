@@ -583,6 +583,22 @@ Result<void> Game::buildScene() {
         }
     }
 
+    // Strict data check (Phase 92): a block's stair_rotates_to must name an
+    // EXISTING block (the next stair facing variant) — the same existence
+    // cross-check as grows_on / ignites_to (a typo fails init loudly).
+    for (const BlockID id : m_blocks.allIds()) {
+        const Block& b = m_blocks.at(id);
+        if (b.properties.stairRotatesTo.empty()) {
+            continue;
+        }
+        const BlockID toId = m_blocks.idForName(b.properties.stairRotatesTo);
+        if (!toId.valid()) {
+            return MC_FAIL("block '" + b.name + "' stair_rotates_to names "
+                           "unknown block '" + b.properties.stairRotatesTo +
+                           "'");
+        }
+    }
+
     // Strict data check (Phase 51): a fluid block's water_reaction names
     // two EXISTING blocks (the source-water and flowing-water products of
     // the reaction — the ammo discipline; a typo fails init loudly). The
@@ -2356,6 +2372,32 @@ void Game::handleInteraction(double dt) {
                              m_fireId);
                     Lighting::updateLocal(m_world, m_blocks, hit->block);
                     m_sound.play("ignite");
+                }
+            }
+        }
+        // Stair rotation (Phase 92): a SNEAKING right-click on a block with a
+        // non-empty `stair_rotates_to` rotates it IN PLACE — setBlock to the
+        // named variant (the next facing). The orientation IS the block id
+        // (the 4 stair variants, Phase 89) — no per-block state, no format
+        // change. The click is consumed (no placement). Minecraft: sneak +
+        // right-click rotates a stair. Runs AFTER the item channels + panel
+        // interactions: a furnace/crafting table under the crosshair still
+        // opens its panel; a stair (no panel) rotates.
+        if (m_player->isCrouching()) {
+            if (const std::optional<BlockHit> hit = targetBlock(); hit) {
+                const Block& b = m_blocks.at(
+                    m_world.getBlock(hit->block.x, hit->block.y,
+                                     hit->block.z));
+                if (!b.properties.stairRotatesTo.empty()) {
+                    const BlockID toId =
+                        m_blocks.idForName(b.properties.stairRotatesTo);
+                    if (toId.valid()) {
+                        setBlock(hit->block.x, hit->block.y, hit->block.z,
+                                 toId);
+                        Lighting::updateLocal(m_world, m_blocks, hit->block);
+                        m_sound.play("place");
+                    }
+                    return; // the rotation consumes the click (no placement)
                 }
             }
         }
