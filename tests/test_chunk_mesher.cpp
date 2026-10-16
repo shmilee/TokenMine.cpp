@@ -50,7 +50,12 @@ BlockRegistry makeRegistry() {
     // Phase 98: a fence (the crossed-posts shape, single side texture).
     auto fence = reg.registerBlock(parseDef(
         R"({"id":"fence","model":{"shape":"fence","textures":{"side":"t"}}})"));
-    if (!stone.ok() || !glass.ok() || !water.ok() || !wall.ok() || !fence.ok()) {
+    // Phase 99: a glass pane (the thin sheet, non-opaque + transparent).
+    auto pane = reg.registerBlock(parseDef(
+        R"({"id":"glass_pane","properties":{"opaque":false,"transparent":true},)"
+        R"("model":{"shape":"glass_pane","textures":{"side":"t"}}})"));
+    if (!stone.ok() || !glass.ok() || !water.ok() || !wall.ok() ||
+        !fence.ok() || !pane.ok()) {
         ADD_FAILURE() << "test registry failed to build";
     }
     return reg;
@@ -918,4 +923,51 @@ TEST(ChunkMesherTest, Phase98FenceNoBarTowardWall) {
     world.setBlock(9, 4, 8, reg.idForName("wall"));
     const auto data = mesh(world, reg, {0, 0, 0});
     EXPECT_EQ(data.opaqueVertices.size(), 72u);
+}
+
+// ============================================================================
+//   Phase 99 — glass pane (the 1/16-thick sheet)
+// ============================================================================
+
+TEST(ChunkMesherTest, Phase99LoneGlassPaneEmitsSheetAndRims) {
+    // A lone pane: the two sheet sides + four rim slivers = 6 quads = 24
+    // vertices, all in the TRANSPARENT sub-mesh (blended, double-sided).
+    BlockRegistry reg = makeRegistry();
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("glass_pane"));
+    const auto data = mesh(world, reg, {0, 0, 0});
+    EXPECT_TRUE(data.opaqueEmpty());
+    EXPECT_EQ(data.transparentVertices.size(), 24u);
+    // The sheet sides carry the +-Z normals, full 1x1 extent at the
+    // z-centered plane (z 8.46875 / 8.53125 for the cell at z=8).
+    const std::vector<MeshVertex> plusZ =
+        verticesWithNormal(data.transparentVertices, {0.0f, 0.0f, 1.0f});
+    ASSERT_EQ(plusZ.size(), 4u);
+    for (const MeshVertex& v : plusZ) {
+        EXPECT_FLOAT_EQ(v.position.z, 8.53125f);
+    }
+}
+
+TEST(ChunkMesherTest, Phase99GlassPanePairCullsSharedRim) {
+    // Two panes in an X row: each emits its 2 sheet sides + 3 rim slivers
+    // (the shared boundary rim is culled — the transparent version of the
+    // Phase 96 connection culling: two coplanar blended rims would
+    // double-draw a darker seam) = 5 quads each -> 10 quads = 40 vertices.
+    BlockRegistry reg = makeRegistry();
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("glass_pane"));
+    world.setBlock(9, 4, 8, reg.idForName("glass_pane"));
+    const auto data = mesh(world, reg, {0, 0, 0});
+    EXPECT_TRUE(data.opaqueEmpty());
+    EXPECT_EQ(data.transparentVertices.size(), 40u);
+    // The shared boundary (x=9.0) carries NO +-X rim verts: the only +-X
+    // rims are the two outer ends (x=8.0 and x=10.0), 4 + 4 = 8 verts.
+    int sideRims = 0;
+    for (const MeshVertex& v : data.transparentVertices) {
+        if (v.normal == Vec3{1.0f, 0.0f, 0.0f} ||
+            v.normal == Vec3{-1.0f, 0.0f, 0.0f}) {
+            ++sideRims;
+        }
+    }
+    EXPECT_EQ(sideRims, 8);
 }

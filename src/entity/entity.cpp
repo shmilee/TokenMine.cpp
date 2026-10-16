@@ -53,6 +53,12 @@ float Entity::solidTopHeight(BlockID id, const Vec3& mn, const Vec3& mx,
     if (b.model.shape == BlockModel::Shape::Fence) {
         return 1.5f;
     }
+    // Phase 99: a glass pane is a full-cell solid (y 0..1) — the 1/16
+    // sheet is mesh-only, the collision is the whole cell. JUMPABLE (the
+    // jump is ~1.125 > 1.0), unlike the wall/fence 1.5 barrier.
+    if (b.model.shape == BlockModel::Shape::GlassPane) {
+        return 1.0f;
+    }
     if (b.model.shape == BlockModel::Shape::Stairs) {
         // The AABB's local range on each axis (clamped to the cell). The
         // blocking height is the slope at the AABB's LOW end on the facing

@@ -284,6 +284,14 @@ struct BlockModel {
                   // single "side" texture (the top/bottom cube keys are
                   // rejected, the cross discipline). The fourth new block
                   // model type.
+        GlassPane, // Phase 99: Minecraft's glass pane — a 1/16-thick 1x1
+                  // glass SHEET (full cell height, the z-centered plane) +
+                  // thin rim slivers on the four edges (culled against a
+                  // pane neighbor — the seam where two rows of panes meet).
+                  // A JUMPABLE solid (solidTopHeight = 1.0, the jump is
+                  // ~1.125 > 1.0). Blended in the transparent pass, light
+                  // passes through (non-opaque). Uses a single "side"
+                  // texture (the pane). The fifth new block model type.
     };
 
     Shape shape = Shape::FullCube;

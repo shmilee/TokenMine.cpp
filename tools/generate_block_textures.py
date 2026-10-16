@@ -320,6 +320,17 @@ def planks(x, y):
             clamp(82 + v), 255)
 
 
+def glass_pane(x, y):
+    # Phase 99: the glass pane — a 1px border frame + a translucent interior
+    # (alpha 90, unlike the full glass block's alpha 0) + two highlight
+    # streaks. Flat by construction (no salt needed).
+    if x == 0 or y == 0 or x == TILE - 1 or y == TILE - 1:
+        return (210, 235, 255, 255)
+    if (x == y and 2 <= x <= 6) or (x + y == TILE - 3 and 6 <= x <= 9):
+        return (255, 255, 255, 200)
+    return (200, 225, 255, 90)
+
+
 def fence(x, y):
     # Wooden plank base (salt 933) + a dark X brace along both diagonals
     # (salt 934). Phase 98, the fence block; every existing texture is
@@ -664,6 +675,7 @@ TEXTURES = {
     "campfire_extinguished": campfire_extinguished,
     "torch": torch,
     "fence": fence,
+    "glass_pane": glass_pane,
     "planks": planks,
     "crafting_table_top": crafting_table_top,
     "crafting_table_side": crafting_table_side,

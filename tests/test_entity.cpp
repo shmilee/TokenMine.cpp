@@ -74,6 +74,15 @@ BlockRegistry makeBlocks() {
     if (!r.ok()) {
         ADD_FAILURE() << r.error().message;
     }
+    // Phase 99: a glass pane (a full-cell solid 1.0 — the 1/16 sheet is
+    // mesh-only; JUMPABLE, unlike the wall/fence 1.5 barrier). Non-opaque +
+    // transparent are FORCED by the shape (light passes through the sheet).
+    r = blocks.registerBlock(parseJson(
+        R"({"id":"glass_pane","properties":{"opaque":false,"transparent":true},)"
+        R"("model":{"shape":"glass_pane","textures":{"side":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
     // Phase 87: a north-facing stair (solid height varies with z: full at
     // the -Z end, zero at the +Z end).
     r = blocks.registerBlock(parseJson(
@@ -1112,6 +1121,25 @@ TEST(EntityTest, Phase95WallIsABarrier) {
     // In the CAP (AABB bottom at y=3.4, in [2, 3.5] but above the cell top
     // y=3): still inside the wall's solid region -> no room (the cap is solid).
     EXPECT_FALSE(item.hasRoomAt(Vec3{8.5f, 3.4f, 8.5f}));
+}
+
+// Phase 99: the glass pane is a JUMPABLE solid (y 0..1, the full cell — the
+// 1/16 sheet is mesh-only). Unlike the wall/fence 1.5 barrier, the player
+// can jump over it (the jump is ~1.125 > 1.0): the solid region tops out at
+// exactly 1.0, so an item resting on top sits at y+1.0 (not y+1.5).
+TEST(EntityTest, Phase99GlassPaneIsJumpableSolid) {
+    Fixture f;
+    const BlockID pane = f.blocks.idForName("glass_pane");
+    f.world.setBlock(8, 2, 8, pane); // solid region y 2..3
+    const ItemEntity item = f.makeItem({8.5f, 10.0f, 8.5f});
+    // On the pane's TOP (AABB bottom at y=3.0): no overlap -> has room.
+    EXPECT_TRUE(item.hasRoomAt(Vec3{8.5f, 3.0f, 8.5f}));
+    // INSIDE the pane's body (AABB bottom at y=2.9, in [2, 3]): no room.
+    EXPECT_FALSE(item.hasRoomAt(Vec3{8.5f, 2.9f, 8.5f}));
+    // Halfway up (y=2.5): no room (the sheet is mesh-only, the collision is
+    // the full cell). The resting point is 3.0 — 0.5 LOWER than the
+    // wall/fence's 3.5: the jumpable height (the jump ~1.125 clears 1.0).
+    EXPECT_FALSE(item.hasRoomAt(Vec3{8.5f, 2.5f, 8.5f}));
 }
 
 // Phase 98: the fence is a barrier with the SAME solid region as the wall

@@ -1673,6 +1673,71 @@ TEST(BlockRegistryTest, Phase98FenceContent) {
     EXPECT_EQ(b->model.textures.side, "fence"); // single side texture
 }
 
+TEST(BlockRegistryTest, Phase99GlassPaneShapeParsed) {
+    // The "glass_pane" shape (Phase 99, the fifth new block model type)
+    // uses a single "side" texture (the pane sheet + rim slivers).
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"gp","properties":{"opaque":false,"transparent":true},"model":{"shape":"glass_pane","textures":{"side":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).model.shape, BlockModel::Shape::GlassPane);
+    EXPECT_EQ(reg.at(*r).model.textures.side, "t");
+}
+
+TEST(BlockRegistryTest, Phase99GlassPaneRequiresSideTexture) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"gp","properties":{"opaque":false,"transparent":true},"model":{"shape":"glass_pane","textures":{"top":"t"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("model.textures.side"),
+              std::string::npos);
+}
+
+TEST(BlockRegistryTest, Phase99GlassPaneForcesNonOpaque) {
+    // A pane must not be opaque (light passes through the sheet — the
+    // property combination is forced, the cross discipline). opaque:true +
+    // transparent:false passes the generic pair check and hits the forced
+    // rule.
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"gp","properties":{"opaque":true,"transparent":false},"model":{"shape":"glass_pane","textures":{"side":"t"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("must not be 'opaque'"),
+              std::string::npos);
+}
+
+TEST(BlockRegistryTest, Phase99GlassPaneForcesTransparent) {
+    // A pane must be transparent (it renders in the blending pass).
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"gp","properties":{"opaque":false,"transparent":false},"model":{"shape":"glass_pane","textures":{"side":"t"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("must be 'transparent'"),
+              std::string::npos);
+}
+
+TEST(BlockRegistryTest, Phase99GlassPaneContent) {
+    // The shipped glass pane (Phase 99): the pane shape, a single
+    // "glass_pane" texture, hardness 0.3 (Minecraft's glass), drops itself,
+    // non-opaque + transparent (light passes through), solid (it blocks
+    // movement — jumpable at 1.0).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* b = reg.findByName("glass_pane");
+    ASSERT_TRUE(b != nullptr);
+    EXPECT_EQ(b->model.shape, BlockModel::Shape::GlassPane);
+    EXPECT_TRUE(b->properties.solid);
+    EXPECT_FALSE(b->properties.opaque);
+    EXPECT_TRUE(b->properties.transparent);
+    EXPECT_EQ(b->properties.lightEmission, 0);
+    EXPECT_FLOAT_EQ(b->properties.hardness, 0.3f);
+    EXPECT_EQ(b->properties.drops, "glass_pane"); // drops itself
+    EXPECT_EQ(b->model.textures.side, "glass_pane"); // single side texture
+}
+
 TEST(BlockRegistryTest, Phase97StairFacingFromYaw) {
     // Phase 97: placement auto-orientation — the stair's low side faces
     // where the player looks (facing = the HIGH side). yaw 0 = facing -Z.

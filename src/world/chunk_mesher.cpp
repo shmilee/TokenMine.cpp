@@ -120,6 +120,9 @@ ChunkMeshData ChunkMesher::mesh(const ChunkPos& pos) const {
                     emitWall(out, block, origin, lx, ly, lz);
                 } else if (block.model.shape == BlockModel::Shape::Fence) {
                     emitFence(out, block, origin, lx, ly, lz);
+                } else if (block.model.shape ==
+                           BlockModel::Shape::GlassPane) {
+                    emitGlassPane(out, block, origin, lx, ly, lz);
                 }
             }
         }
@@ -170,10 +173,11 @@ void ChunkMesher::meshFaceDirection(ChunkMeshData& out, const Chunk& chunk,
                 if (block.model.shape == BlockModel::Shape::Slab ||
                     block.model.shape == BlockModel::Shape::Stairs ||
                     block.model.shape == BlockModel::Shape::Wall ||
-                    block.model.shape == BlockModel::Shape::Fence) {
-                    continue; // partial blocks (slab / stairs / wall / fence)
-                              // — the slab pass in mesh() owns their
-                              // geometry, not full-cube faces
+                    block.model.shape == BlockModel::Shape::Fence ||
+                    block.model.shape == BlockModel::Shape::GlassPane) {
+                    continue; // partial blocks (slab / stairs / wall / fence
+                              // / glass pane) — the slab pass in mesh() owns
+                              // their geometry, not full-cube faces
                 }
                 const BlockID neighbor = m_world.getBlock(
                     origin.x + c[0] + face.dx, origin.y + c[1] + face.dy,
@@ -773,6 +777,91 @@ void ChunkMesher::emitFence(ChunkMeshData& out, const Block& block,
     }
     if (barNeighbor(0, -1)) {
         emitBarZ(0.0f, lo);
+    }
+}
+
+void ChunkMesher::emitGlassPane(ChunkMeshData& out, const Block& block,
+                                const BlockPos& origin, int lx, int ly,
+                                int lz) const {
+    // Phase 99: a 1/16-thick 1x1 glass sheet, centered in the cell's Z
+    // (z 0.46875..0.53125, y 0..1) + thin rim slivers on the four edges.
+    // Blended in the TRANSPARENT sub-mesh (both sheet sides — you see the
+    // pane from either end). The rim sliver toward a PANE neighbor is
+    // culled (the neighbor's opposite rim is coplanar — two blended rims
+    // would double-draw a darker seam where the rows meet, the transparent
+    // version of the Phase 96 connection culling); toward an OPAQUE
+    // neighbor the top/bottom rims are hidden too. The sheet is 1/16 thin,
+    // so a pane row along X reads as one continuous sheet (each pane's
+    // full-width sheet is coplanar with its neighbor's). The cell's own
+    // light on every face (the cross convention).
+    constexpr float kHalf = 0.03125f; // the sheet half-thickness (1/16 / 2)
+    const float z0 = 0.5f - kHalf;
+    const float z1 = 0.5f + kHalf;
+    const int wx = origin.x + lx;
+    const int wy = origin.y + ly;
+    const int wz = origin.z + lz;
+    const auto paneNeighbor = [&](int dx, int dy, int dz) {
+        const BlockID n = m_world.getBlock(wx + dx, wy + dy, wz + dz);
+        return n != BlockID::air() &&
+               m_blocks.at(n).model.shape == BlockModel::Shape::GlassPane;
+    };
+    const auto opaqueNeighbor = [&](int dx, int dy, int dz) {
+        const BlockID n = m_world.getBlock(wx + dx, wy + dy, wz + dz);
+        return n != BlockID::air() && m_blocks.at(n).properties.opaque;
+    };
+    const Vec2 u0 =
+        AtlasLayout::uvMin(m_layout, block.model.textures.side);
+    const Vec2 u1 = AtlasLayout::uvMax(m_layout, block.model.textures.side);
+    const float skyF =
+        static_cast<float>(m_world.getSkyLight(wx, wy, wz)) /
+        static_cast<float>(kMaxLight);
+    const float blockF =
+        static_cast<float>(m_world.getBlockLight(wx, wy, wz)) /
+        static_cast<float>(kMaxLight);
+    std::vector<MeshVertex>& verts = out.transparentVertices;
+    std::vector<std::uint32_t>& indices = out.transparentIndices;
+    auto emitQuad = [&](const Vec3& nrm, const Vec3& a, const Vec3& b,
+                        const Vec3& c2, const Vec3& d2) {
+        const std::uint32_t first = static_cast<std::uint32_t>(verts.size());
+        const Vec2 uv[4] = {{u0.x, u1.y}, {u1.x, u1.y},
+                            {u1.x, u0.y}, {u0.x, u0.y}};
+        const Vec3 pts[4] = {a, b, c2, d2};
+        for (int i = 0; i < 4; ++i) {
+            MeshVertex v;
+            v.position = {static_cast<float>(lx + pts[i].x),
+                          static_cast<float>(ly + pts[i].y),
+                          static_cast<float>(lz + pts[i].z)};
+            v.normal = nrm;
+            v.uv = uv[i];
+            v.skyLight = skyF;
+            v.blockLight = blockF;
+            verts.push_back(v);
+        }
+        indices.insert(indices.end(),
+                       {first, first + 1, first + 2, first, first + 2,
+                        first + 3});
+    };
+    // The two sheet sides (always — double-sided, like the cross).
+    emitQuad({0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, z1}, {1.0f, 0.0f, z1},
+             {1.0f, 1.0f, z1}, {0.0f, 1.0f, z1});
+    emitQuad({0.0f, 0.0f, -1.0f}, {1.0f, 0.0f, z0}, {0.0f, 0.0f, z0},
+             {0.0f, 1.0f, z0}, {1.0f, 1.0f, z0});
+    // The rim slivers (culled per neighbor, see above).
+    if (!paneNeighbor(1, 0, 0)) {
+        emitQuad({1.0f, 0.0f, 0.0f}, {1.0f, 0.0f, z1}, {1.0f, 0.0f, z0},
+                 {1.0f, 1.0f, z0}, {1.0f, 1.0f, z1});
+    }
+    if (!paneNeighbor(-1, 0, 0)) {
+        emitQuad({-1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, z0}, {0.0f, 0.0f, z1},
+                 {0.0f, 1.0f, z1}, {0.0f, 1.0f, z0});
+    }
+    if (!paneNeighbor(0, 1, 0) && !opaqueNeighbor(0, 1, 0)) {
+        emitQuad({0.0f, 1.0f, 0.0f}, {0.0f, 1.0f, z0}, {0.0f, 1.0f, z1},
+                 {1.0f, 1.0f, z1}, {1.0f, 1.0f, z0});
+    }
+    if (!paneNeighbor(0, -1, 0) && !opaqueNeighbor(0, -1, 0)) {
+        emitQuad({0.0f, -1.0f, 0.0f}, {0.0f, 0.0f, z1}, {0.0f, 0.0f, z0},
+                 {1.0f, 0.0f, z0}, {1.0f, 0.0f, z1});
     }
 }
 

@@ -172,6 +172,8 @@ protected:
 private:
     // Solid = registered block with properties.solid (air is never solid).
     bool isSolid(BlockID id) const;
+
+protected:
     // Phase 85: the top of the cell's SOLID region in cell-local units (0 =
     // not solid, 0.5 = bottom slab, 1.0 = full block) — the collision tests
     // overlap against this region, not the whole cell. Phase 87/89 stairs:
@@ -180,7 +182,9 @@ private:
     // origin, so the effective blocking height is the slope at the AABB's LOW
     // end on the facing axis (north: 1 - mxLocalZ, south: mnLocalZ, east:
     // mnLocalX, west: 1 - mxLocalX). A slab / full cube ignore the AABB (a
-    // fixed height).
+    // fixed height). Phase 99: also 1.5 for the wall / fence barrier.
+    // Protected (not private): Player::stepUp needs the same solid-region
+    // height to distinguish a TRUE 1-block step from the wall/fence cap.
     float solidTopHeight(BlockID id, const Vec3& mn, const Vec3& mx,
                          const BlockPos& cell) const;
 };

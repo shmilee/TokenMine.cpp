@@ -745,6 +745,23 @@
   - **内容**：`fence`（hardness 2.0 = MC、自掉、fence 纹理 salt 933/934、
     atlas 空位 [8,2] 免重锚）+ 配方 shaped **PSP/PSP**（4 planks + 2 stick
     → 3 = MC）；不在默认背包。
+- **玻璃板 glass_pane（Phase 99，第五个新块模型类型）**：
+  - **`Shape::GlassPane`**（block.hpp）：z 居中 **1/16 厚 1×1 玻璃片**
+    （双面透明 pass）+ 四条边细 rim；**强制非 opaque + 透明**（光透过，
+    cross 纪律同款强制属性）；单 side 纹理（rim 简化 = 全纹理压扁）。
+  - **连接（透明版 Phase 96）**：rim 朝**玻璃板邻居**剔除（两片共面 rim
+    双绘 = 透明 pass 暗缝）；X 方向板排每片全宽共面 = 连续单片。
+  - **碰撞**（entity.cpp）：`solidTopHeight` = **1.0（整格实心、可跳**——
+    跳高 ~1.129 > 1.0；墙/栅栏 1.5 不可跳）。
+  - **内容**：`glass_pane`（hardness 0.3 = MC 玻璃、自掉、1px 框 + 半透明
+    芯纹理、atlas 空位 [8,3] 免重锚）+ 配方 shapeless **8 glass → 16**
+    （MC）；不在默认背包。
+- **跳跃/踏步物理加固（Phase 99）**：
+  - **stepUp "真 1 格台阶"门**：前方格 `solidTopHeight ≤ 1.0` 才可踏步
+    （原格 solid 属性判定会踏上墙/栅栏 1.5 实心区的帽 = 翻越隐患）。
+  - **跳跃冲量计入子步 maxSpeed**：pending 跳跃（onGround + space + 非
+    流体）时 maxSpeed ≥ jumpSpeed——长帧（流送卡顿）仍切多子步，跳高
+    帧率无关（原实现长帧顶点可膨胀到 ~1.65 翻过 1.5 barrier）。
 - **游泳**（Phase 9）：玩家包围盒与任何水体格相交即进入水中状态——水中重力减半
   （12 vs 32）、终端速度 4、水平速度降为 3.1（冲刺无效）、`Space` 随时上浮（4.5）；
   浅水（头在水面上）可以"蹚水走"，深水可以游

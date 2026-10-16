@@ -1,3 +1,4 @@
+
 #include "player/player.hpp"
 
 #include <algorithm>
@@ -270,9 +271,21 @@ void Player::update(double dt) {
                    : std::max(m_velocity.y - m_params.gravity *
                                   static_cast<float>(dt),
                               -m_params.terminalVelocity));
-    const float maxSpeed =
+    float maxSpeed =
         std::max({std::abs(m_velocity.x), std::abs(vyAfter),
                   std::abs(m_velocity.z)});
+    // Phase 99: a jump impulse happens INSIDE the sub-steps (integrate), so
+    // the vyAfter estimate above (pre-impulse) under-counts it: on a long
+    // frame (a streaming hiccup, dt ~0.08 s) the tick would take a SINGLE
+    // sub-step and displace the full frame at jump speed (0.73 blocks > the
+    // 0.4 sub-step cap) — the jump apex balloons to ~1.65 and CLEARS the
+    // 1.5 wall/fence barrier (frame-rate-dependent physics; the Phase 99
+    // E2E wall-contrast exposed it). Account for the pending impulse so the
+    // sub-step split stays tunnel-safe and the jump height is dt-robust.
+    if (m_onGround && !m_sitting && !m_inWater && !m_inLava &&
+        m_input->isDown(GameKey::Space)) {
+        maxSpeed = std::max(maxSpeed, m_params.jumpSpeed);
+    }
     // The tick's horizontal speed before the sub-steps (a clamped axis
     // zeroes its velocity inside the sub-steps; stepUp needs the value).
     const float preMoveSpeed =
@@ -507,9 +520,20 @@ void Player::stepUp(const Vec3& wishDir, float distPerTick) {
         const int cx = axis == 0 ? front : fx0;
         const int cz = axis == 1 ? front : fz0;
         // The step exists (solid at foot level) and the lifted player
-        // fits (the two cells above the step are free).
-        if (!isSolidCell(cx, fy, cz) || isSolidCell(cx, fy + 1, cz) ||
-            isSolidCell(cx, fy + 2, cz)) {
+        // fits (the two cells above the step are free). Phase 99: the
+        // step must also be a TRUE 1-block step — the front cell's solid
+        // region tops out at <= 1.0. A wall/fence (solid y 0..1.5, Phase
+        // 95/98, the cell above EMPTY) used to pass the isSolidCell check:
+        // the +1.0 foot lift landed INSIDE the barrier's cap, and a jump
+        // from there (the ~1.125 lift from foot 46) CLEARED the 1.5
+        // barrier (the E2E S3b wall-contrast exposed it). Stairs/slabs
+        // (top < 1.0) still step as before.
+        const BlockID frontId = m_world.getBlock(cx, fy, cz);
+        const float frontTop =
+            solidTopHeight(frontId, m_position, m_position,
+                           BlockPos {cx, fy, cz});
+        if (frontTop <= 0.0f || frontTop > 1.0f + 1e-6f ||
+            isSolidCell(cx, fy + 1, cz) || isSolidCell(cx, fy + 2, cz)) {
             continue;
         }
         m_position.y += 1.0f;

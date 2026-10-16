@@ -163,6 +163,12 @@ private:
     // neighbor above / below (a fence stacked on a fence).
     void emitFence(ChunkMeshData& out, const Block& block,
                    const BlockPos& origin, int lx, int ly, int lz) const;
+    // Phase 99 glass pane: a 1/16-thick 1x1 sheet (z-centered, double-sided,
+    // transparent sub-mesh) + rim slivers (culled against a pane neighbor —
+    // the transparent version of the Phase 96 connection culling; the top /
+    // bottom rims also against an opaque neighbor).
+    void emitGlassPane(ChunkMeshData& out, const Block& block,
+                       const BlockPos& origin, int lx, int ly, int lz) const;
 
     const World& m_world;
     const BlockRegistry& m_blocks;

@@ -1,0 +1,13 @@
+{
+  "id": "glass_pane",
+  "output": {
+    "item": "glass_pane",
+    "count": 16
+  },
+  "ingredients": [
+    {
+      "item": "glass",
+      "count": 8
+    }
+  ]
+}

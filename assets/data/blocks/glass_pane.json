@@ -1,0 +1,13 @@
+{
+  "id": "glass_pane",
+  "properties": {
+    "opaque": false,
+    "transparent": true,
+    "hardness": 0.3,
+    "drops": "glass_pane"
+  },
+  "model": {
+    "shape": "glass_pane",
+    "textures": { "side": "glass_pane" }
+  }
+}
