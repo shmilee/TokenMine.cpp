@@ -284,3 +284,92 @@ TEST(WorldTest, InsertChunkMarksFaceNeighborsDirty) {
     world.getOrCreateChunk({0, -1, 0}).clearDirty();
     EXPECT_FALSE(world.getOrCreateChunk({0, -1, 0}).dirty());
 }
+
+// -- eraseChunk (the streaming unload pass: drop far columns, re-mesh the
+//    boundary) ----------------------------------------------------------------
+
+TEST(WorldTest, EraseChunkDropsContent) {
+    World world;
+    Chunk c;
+    c.set(3, 4, 5, BlockID{7});
+    ASSERT_TRUE(world.insertChunk({0, 0, 0}, std::move(c)));
+    ASSERT_TRUE(world.eraseChunk({0, 0, 0}));
+    EXPECT_EQ(world.chunkCount(), 0u);
+    EXPECT_FALSE(world.hasChunk({0, 0, 0}));
+    // A missing chunk reads air (the void): the content is gone.
+    EXPECT_EQ(world.getBlock(3, 4, 5), BlockID::air());
+    // Erasing a missing chunk is a no-op.
+    EXPECT_FALSE(world.eraseChunk({0, 0, 0}));
+}
+
+TEST(WorldTest, EraseChunkMarksFaceNeighborsDirty) {
+    World world;
+    const ChunkPos pos{1, 0, 1};
+    const ChunkPos neighbors[6] = {
+        {0, 0, 1}, {2, 0, 1},
+        {1, -1, 1}, {1, 1, 1},
+        {1, 0, 0}, {1, 0, 2}};
+    for (const ChunkPos& n : neighbors) {
+        Chunk c;
+        ASSERT_TRUE(world.insertChunk(n, std::move(c)));
+        world.getOrCreateChunk(n).clearDirty();
+    }
+    Chunk c;
+    ASSERT_TRUE(world.insertChunk(pos, std::move(c)));
+    world.getOrCreateChunk(pos).clearDirty();
+    ASSERT_TRUE(world.eraseChunk(pos));
+    // Every face-sharing SURVIVING neighbor re-exposes its boundary face:
+    // it must be re-meshed (the inverse of insertChunk's marking).
+    for (const ChunkPos& n : neighbors) {
+        EXPECT_TRUE(world.getOrCreateChunk(n).dirty());
+    }
+}
+
+TEST(WorldTest, EnsureColumnTopsUpAPartialColumn) {
+    // A single-chunk creation (the placement path, a save edit) leaves a
+    // PARTIAL column; the streaming loader counts any-chunk columns as
+    // loaded, so the column must be completed to its full height or the
+    // missing chunks stay void forever (a hole around the edit).
+    World world;
+    int genCalls = 0;
+    world.setChunkGenerator([&](Chunk&, const ChunkPos&) { ++genCalls; });
+    EXPECT_FALSE(world.columnComplete(0, 0));
+    // The single-chunk creation a first-touch setBlock performs.
+    world.getOrCreateChunk({0, 3, 0});
+    EXPECT_EQ(world.chunkCount(), 1u);
+    EXPECT_FALSE(world.columnComplete(0, 0));
+    world.ensureColumn(0, 0);
+    EXPECT_TRUE(world.columnComplete(0, 0));
+    EXPECT_EQ(world.chunkCount(), static_cast<std::size_t>(kWorldHeight /
+                                                            kChunkSize));
+    EXPECT_EQ(genCalls, kWorldHeight / kChunkSize);
+    // Idempotent: a second pass costs lookups only, no regeneration.
+    world.ensureColumn(0, 0);
+    EXPECT_EQ(genCalls, kWorldHeight / kChunkSize);
+    // Other columns are untouched.
+    EXPECT_FALSE(world.columnComplete(1, 0));
+    EXPECT_FALSE(world.columnComplete(0, 1));
+}
+
+TEST(WorldTest, MarkChunkDirtyReachesTheWorldDirtySet) {
+    // The lighting pipeline writes light arrays straight into chunks
+    // (findChunkMut) and signals the re-mesh with markChunkDirty. A bare
+    // chunk-level markDirty is invisible to the set-driven mesh pass —
+    // the chunk keeps its light-0 mesh (black faces on freshly lit
+    // terrain, the 99.2 walking-run report). Flag and set must move
+    // together.
+    World world;
+    Chunk c;
+    ASSERT_TRUE(world.insertChunk({0, 0, 0}, std::move(c)));
+    world.clearChunkDirty({0, 0, 0}); // settle the insert-time dirt
+    EXPECT_TRUE(world.dirtyChunks().empty());
+    world.markChunkDirty({0, 0, 0});
+    EXPECT_EQ(world.dirtyChunks().size(), 1u);
+    EXPECT_TRUE(world.getOrCreateChunk({0, 0, 0}).dirty());
+    world.clearChunkDirty({0, 0, 0});
+    EXPECT_TRUE(world.dirtyChunks().empty());
+    EXPECT_FALSE(world.getOrCreateChunk({0, 0, 0}).dirty());
+    // A missing chunk is not flagged (there is no mesh to rebuild).
+    world.markChunkDirty({5, 0, 5});
+    EXPECT_TRUE(world.dirtyChunks().empty());
+}

@@ -19,7 +19,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <array>
 #include <functional>
+#include <set>
 #include <unordered_map>
 #include <vector>
 
@@ -92,11 +94,55 @@ public:
     // changes their cull decision (the reverse direction is correct from
     // the start because the new chunk meshes after insertion).
     bool insertChunk(const ChunkPos& pos, Chunk&& chunk);
+    // The inverse of insertChunk: drop an existing chunk (false when absent)
+    // and mark the six face-sharing SURVIVING neighbors dirty — their
+    // boundary faces were culled against the chunk that is now void (a
+    // missing chunk reads air). Only safe when no worker job is in flight
+    // (the streaming unload pass runs right after the pool flush, where the
+    // main thread is the sole World writer).
+    bool eraseChunk(const ChunkPos& pos);
     const Chunk* findChunk(const ChunkPos& pos) const;
     // Non-const access to an existing chunk WITHOUT creating it (the
     // lighting system writes light arrays into chunks it does not create).
     Chunk* findChunkMut(const ChunkPos& pos);
     bool hasChunk(const ChunkPos& pos) const;
+    // Chunks that currently hold FLUID of the given kind (any level).
+    // The fluid simulation's four per-frame passes (reaction, burn,
+    // water, lava) iterate THESE instead of every chunk: a full-ring
+    // world holds ~9k-200k chunks of which only a few dozen contain
+    // fluid, and the all-chunk scans were the dominant frame cost.
+    // Maintained by setFluid / setBlock (drain) / insertChunk /
+    // eraseChunk / getOrCreateChunk (generation places sea water and
+    // lava lakes) / clear.
+    const std::set<ChunkPos>& fluidChunks(FluidKind kind) const {
+        return m_fluidChunks[static_cast<std::size_t>(kind)];
+    }
+    // Sorted, like chunkPositions (deterministic iteration order).
+    std::vector<ChunkPos> fluidChunkPositions(FluidKind kind) const;
+    // Chunks currently marked dirty (content changed, mesh pending). The
+    // mesh pass iterates THIS set instead of every chunk (a full-ring
+    // world is ~9k-200k chunks; the dirty set is player-scale).
+    const std::set<ChunkPos>& dirtyChunks() const { return m_dirtyChunks; }
+    // The mesh pass calls this after rebuilding the chunk's mesh (clears
+    // the chunk's own flag AND drops it from the set).
+    void clearChunkDirty(const ChunkPos& pos);
+    // Marks an existing chunk dirty through BOTH the chunk's own flag and
+    // the World's dirty set. The lighting pipeline writes light arrays
+    // into chunks directly (findChunkMut) and signals the re-mesh with
+    // this — a bare chunk markDirty would be invisible to the set-driven
+    // mesh pass (the chunk keeps its light-0 mesh: black faces on freshly
+    // lit terrain).
+    void markChunkDirty(const ChunkPos& pos);
+    // True when the column holds ALL its chunks. Streaming loads and
+    // integrates complete columns; a single-chunk creation (the
+    // placement path, a save edit) must be topped up to keep the column
+    // complete — the streaming loader counts a column as loaded when ANY
+    // chunk exists, so a partial column's missing chunks are never
+    // generated (a permanent void hole around the edit).
+    bool columnComplete(int cx, int cz) const;
+    // Creates (running the generator) every missing chunk of the column.
+    // Idempotent: a complete column costs 8 map lookups and nothing else.
+    void ensureColumn(int cx, int cz);
     std::size_t chunkCount() const { return m_chunks.size(); }
     // Sorted, for deterministic iteration (rendering, saving, meshing).
     std::vector<ChunkPos> chunkPositions() const;
@@ -106,8 +152,20 @@ public:
 
 private:
     void markNeighborChunksDirty(int lx, int ly, int lz, const ChunkPos& pos);
+    // Fluid-set maintenance: add the chunk (it now holds the kind), or
+    // prune it when the last cell of the kind left (a kVolume scan, only
+    // on drains — rare).
+    void addFluidChunk(const ChunkPos& pos, FluidKind kind);
+    void pruneFluidChunk(const Chunk& chunk, const ChunkPos& pos,
+                         FluidKind kind);
+    void scanFluidChunks(const Chunk& chunk, const ChunkPos& pos);
 
     std::unordered_map<ChunkPos, Chunk> m_chunks;
+    // Chunks marked dirty (a mirror of each Chunk's own flag — the mesh
+    // pass iterates this instead of every chunk).
+    std::set<ChunkPos> m_dirtyChunks;
+    // Indexed by FluidKind (Water = 1, Lava = 2; slot 0 unused).
+    std::array<std::set<ChunkPos>, 3> m_fluidChunks;
     ChunkGenerator m_generator;
 };
 

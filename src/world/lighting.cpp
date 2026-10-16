@@ -222,7 +222,7 @@ void Lighting::propagateAll(World& world, const BlockRegistry& blocks) {
 
     // 5. Full recompute: every chunk's light is considered touched.
     for (const ChunkPos& pos : positions) {
-        world.findChunkMut(pos)->markDirty();
+        world.markChunkDirty(pos);
     }
 }
 
@@ -385,13 +385,17 @@ void Lighting::updateRegion(World& world, const BlockRegistry& blocks,
 
     // Light is baked into mesh vertices: rebuild only the chunks whose
     // light actually changed (net, compared against the saved copy).
+    // Through the World API (flag AND dirty set): a bare chunk markDirty
+    // is invisible to the set-driven mesh pass — the chunk would keep its
+    // light-0 mesh (black faces on freshly lit terrain, 99.2 user report
+    // from the walking perf run).
     for (const SavedLight& s : saved) {
         Chunk* chunk = world.findChunkMut(s.pos);
         if (std::memcmp(s.sky.data(), chunk->skyLightData(), Chunk::kVolume) !=
                 0 ||
             std::memcmp(s.block.data(), chunk->blockLightData(),
                         Chunk::kVolume) != 0) {
-            chunk->markDirty();
+            world.markChunkDirty(s.pos);
         }
     }
 }

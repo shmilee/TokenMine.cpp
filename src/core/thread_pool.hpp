@@ -59,12 +59,20 @@ public:
 
     std::size_t size() const { return m_workers.size(); }
 
+    // Jobs posted but not yet finished (queued + running). The streaming
+    // loop bounds the backlog with this so the per-frame flush() — which
+    // waits for EVERY in-flight job — stays inside the frame budget.
+    std::size_t pendingCount() const {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return static_cast<std::size_t>(m_inFlight);
+    }
+
 private:
     void workerLoop();
 
     std::vector<std::thread> m_workers;
 
-    std::mutex m_mutex;
+    mutable std::mutex m_mutex;
     std::condition_variable m_cv;
     std::deque<std::function<void()>> m_queue;
     int m_inFlight = 0; // posted but not yet finished

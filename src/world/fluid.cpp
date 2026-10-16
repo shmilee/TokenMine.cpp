@@ -4,6 +4,7 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <set>
 #include <tuple>
 #include <unordered_map>
 #include <vector>
@@ -140,6 +141,38 @@ NeighborCache neighborCache(const World& world, const ChunkPos& cp) {
     };
 }
 
+// The chunks a per-kind SIMULATION pass must visit this tick: every chunk
+// that holds the kind (a snapshot — the set only GROWS during the tick)
+// plus their face neighbors. A flow write crosses at most one chunk
+// boundary per tick, so a chunk dry at the tick's start can only become
+// wet from a fluid neighbor — visiting the neighbors keeps the same-tick
+// propagation the old all-chunk scan provided (a newly wetted neighbor is
+// read live, like the chunks past it in the sorted order were before),
+// while the ~9k-200k dry chunks of a full-ring world are skipped.
+std::vector<ChunkPos> simulateTypeChunks(const World& world,
+                                         FluidKind kind) {
+    std::set<ChunkPos> visit;
+    for (const ChunkPos& cp : world.fluidChunks(kind)) {
+        visit.insert(cp);
+        visit.insert({cp.x - 1, cp.y, cp.z});
+        visit.insert({cp.x + 1, cp.y, cp.z});
+        visit.insert({cp.x, cp.y - 1, cp.z});
+        visit.insert({cp.x, cp.y + 1, cp.z});
+        visit.insert({cp.x, cp.y, cp.z - 1});
+        visit.insert({cp.x, cp.y, cp.z + 1});
+    }
+    // Only chunks that EXIST (a neighbor of a fluid chunk is often void;
+    // a void neighbor reads air/dry and can be created only by the game's
+    // synchronous paths, never here).
+    std::vector<ChunkPos> out;
+    for (const ChunkPos& cp : visit) {
+        if (world.hasChunk(cp)) {
+            out.push_back(cp);
+        }
+    }
+    return out;
+}
+
 // -- Water-lava reaction pass (Phase 51) -------------------------------------
 //
 // Snapshot scan: every LAVA cell 6-adjacent to a WATER cell converts to the
@@ -173,7 +206,11 @@ std::vector<BlockPos> reactLavaWithWater(World& world,
         BlockID to;
     };
     std::vector<Conversion> conversions;
-    const std::vector<ChunkPos> positions = world.chunkPositions();
+    // Only chunks that HOLD lava can contain a reacting cell (the water
+    // neighbor is read across the boundary): the all-chunk scan of the
+    // Phase 51 vintage is the fluid-set scan.
+    const std::vector<ChunkPos> positions =
+        world.fluidChunkPositions(FluidKind::Lava);
     for (const ChunkPos& cp : positions) {
         const Chunk* c = world.findChunk(cp);
         const std::uint8_t* fluid = c->fluidData();
@@ -263,7 +300,10 @@ std::vector<BlockPos> burnFlamableNeighbors(World& world,
     }
 
     std::vector<BlockPos> destroyed;
-    const std::vector<ChunkPos> positions = world.chunkPositions();
+    // Only chunks that HOLD lava contain burning source cells (the
+    // flamable neighbor is read across the boundary): the fluid-set scan.
+    const std::vector<ChunkPos> positions =
+        world.fluidChunkPositions(FluidKind::Lava);
     for (const ChunkPos& cp : positions) {
         const Chunk* c = world.findChunk(cp);
         const std::uint8_t* fluid = c->fluidData();
@@ -320,7 +360,11 @@ std::vector<BlockPos> burnFlamableNeighbors(World& world,
 // is exact). The same snapshot-based model as the historical single-fluid
 // tick; returns the cells whose level changed.
 std::vector<BlockPos> simulateType(World& world, FluidKind kind) {
-    const std::vector<ChunkPos> positions = world.chunkPositions();
+    // Fluid chunks + their face neighbors (see simulateTypeChunks): a
+    // flow write crosses at most one boundary per tick, so this is exactly
+    // the set of chunks the tick can touch — the ~9k-200k dry chunks of a
+    // full-ring world are skipped.
+    const std::vector<ChunkPos> positions = simulateTypeChunks(world, kind);
     if (positions.empty()) {
         return {};
     }

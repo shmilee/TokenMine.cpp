@@ -164,6 +164,20 @@ private:
     // the correct light the frame after the job completes (deterministic,
     // frame-locked by the flush).
     void postLightJobs();
+    // Unloads the loaded columns far behind the player (the memory leak
+    // fix: streaming only ever ADDED chunks — a radius-80 session grew to
+    // 11k+ chunks / several GB and kept rising). Runs right after
+    // integrateStreamedColumns (the pool is flushed: no worker in flight),
+    // the same safe main-thread-writer point. A column survives when it is
+    // within view_distance + kUnloadHysteresis, part of the protected 4x4
+    // demo area (respawn safety), player-edited (m_editedColumns — the
+    // save records its diff and must keep the chunks), tracked by per-block
+    // state (furnace/campfire/crop/beacon/fire — the save cross-checks
+    // those entries against the block edits), or awaiting a generation job
+    // (m_streamPending). Unloading erases the chunks (eraseChunk re-meshes
+    // the boundary neighbors), frees the GL mesh buffers, and drops the lit
+    // set entries.
+    void unloadFarColumns();
     Result<void> takeScreenshot(const std::filesystem::path& path);
 
     // Draw the sun, moon and starfield (unlit billboarded quads, blended).
@@ -552,6 +566,11 @@ private:
     std::deque<std::unique_ptr<StreamJob>> m_streamJobs;
     // Columns with a generation job in flight (not yet in the World).
     std::set<ColumnPos> m_streamPending;
+    // Columns the player has MODIFIED (the setBlock choke point — break /
+    // place / rotate / growth / burn / campfire, plus the fluid-bucket
+    // scoop and pour paths). Their diff is recorded in the save, so the
+    // chunks must survive until the save is written: never unloaded.
+    std::set<ColumnPos> m_editedColumns;
     // Streaming hysteresis (see chunk_streaming): engaged when the player
     // reaches the edge of the loaded area, disengaged when the player is
     // deep inside it again. While engaged, the full radius ring around
@@ -559,11 +578,21 @@ private:
     bool m_streamingEngaged = false;
     // The streaming radius in chunk columns (config world.view_distance).
     int m_streamRadius = 8;
-    // Every chunk the lighting pipeline has covered (all chunks at scene
-    // build time, integrated or created since). A chunk appearing outside
-    // this set is new this frame (streamed-in or placed into) and gets a
-    // worker lighting job for its column box.
-    std::set<ChunkPos> m_litChunks;
+    // The loaded columns (incremental mirror of the World's chunk map —
+    // streaming decides on THIS instead of scanning every chunk: the
+    // scan is ~9k-200k map entries + a sort per frame at full ring).
+    // Maintained by buildScene (initial), integrateStreamedColumns (+),
+    // unloadFarColumns (-), and the setBlock choke point (+ a column it
+    // completed for a first-touch edit). A column is "loaded" when ANY
+    // chunk of it exists — the ensureColumn invariant makes "any" and
+    // "all" equivalent.
+    std::set<ColumnPos> m_loadedColumns;
+    // Columns that appeared since the last postLightJobs (integrated or
+    // first-touch created): each gets one worker lighting job for its
+    // full column box. Consumed (cleared) by postLightJobs. Replaces the
+    // old m_litChunks "every covered chunk" set, whose only job was
+    // detecting new chunks by a full per-frame scan.
+    std::set<ColumnPos> m_lightPendingColumns;
 
     // Non-player entities (Phase 10): dropped items + projectiles. The
     // game is the sole owner — it updates them each frame, merges items,

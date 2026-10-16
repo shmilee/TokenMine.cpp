@@ -61,8 +61,10 @@ bool World::setBlock(int x, int y, int z, BlockID id) {
     const BlockPos local = worldToChunkLocal(cp, p);
     chunk.set(local.x, local.y, local.z, id);
     // A block displaces any fluid in the cell (placing into water).
-    if (chunk.fluidAt(local.x, local.y, local.z) != 0) {
+    const std::uint8_t displaced = chunk.fluidAt(local.x, local.y, local.z);
+    if (displaced != 0) {
         chunk.setFluidAt(local.x, local.y, local.z, 0);
+        pruneFluidChunk(chunk, cp, fluidKindOf(displaced));
     }
     markNeighborChunksDirty(local.x, local.y, local.z, cp);
     return true;
@@ -144,6 +146,11 @@ bool World::setFluid(int x, int y, int z, FluidKind kind,
         // A positive level replaces any other kind in the cell.
     }
     chunk->setFluidAt(local.x, local.y, local.z, fluidCode(kind, level));
+    if (level > 0) {
+        addFluidChunk(cp, kind);
+    } else {
+        pruneFluidChunk(*chunk, cp, kind);
+    }
     markNeighborChunksDirty(local.x, local.y, local.z, cp);
     return true;
 }
@@ -187,9 +194,14 @@ Chunk& World::getOrCreateChunk(const ChunkPos& pos) {
         return it->second;
     }
     Chunk& chunk = m_chunks.emplace(pos, Chunk()).first->second;
+    // A fresh chunk is dirty by construction: the mesh pass must visit it.
+    m_dirtyChunks.insert(pos);
     if (m_generator) {
         m_generator(chunk, pos);
     }
+    // Generated terrain can carry fluid (sea water, lava lakes):
+    // register the new chunk for the fluid simulation's chunk sets.
+    scanFluidChunks(chunk, pos);
     return chunk;
 }
 
@@ -198,14 +210,19 @@ bool World::insertChunk(const ChunkPos& pos, Chunk&& chunk) {
     if (!result.second) {
         return false; // the chunk already exists; nothing was inserted
     }
+    // The incoming chunk may carry fluid (generated sea water, a lava
+    // lake): register it for the fluid simulation's chunk sets.
+    scanFluidChunks(result.first->second, pos);
     // The chunk (a fresh Chunk is dirty by construction) and every
     // face-sharing existing neighbor need a re-mesh: the neighbors'
     // boundary faces were decided against the void before the new chunk
     // existed.
+    m_dirtyChunks.insert(pos);
     const auto mark = [this](const ChunkPos& p) {
         auto it = m_chunks.find(p);
         if (it != m_chunks.end()) {
             it->second.markDirty();
+            m_dirtyChunks.insert(p);
         }
     };
     mark({pos.x - 1, pos.y, pos.z});
@@ -214,6 +231,35 @@ bool World::insertChunk(const ChunkPos& pos, Chunk&& chunk) {
     mark({pos.x, pos.y + 1, pos.z});
     mark({pos.x, pos.y, pos.z - 1});
     mark({pos.x, pos.y, pos.z + 1});
+    return true;
+}
+
+bool World::eraseChunk(const ChunkPos& pos) {
+    auto it = m_chunks.find(pos);
+    if (it == m_chunks.end()) {
+        return false; // nothing to drop
+    }
+    // The chunk leaves the fluid simulation's chunk sets (its fluid, if
+    // any, is dropped with it).
+    m_fluidChunks[static_cast<std::size_t>(FluidKind::Water)].erase(pos);
+    m_fluidChunks[static_cast<std::size_t>(FluidKind::Lava)].erase(pos);
+    // The six face-sharing SURVIVING neighbors re-expose their boundary
+    // faces (the erased chunk now reads as the air void): re-mesh them.
+    const auto mark = [this](const ChunkPos& p) {
+        auto jt = m_chunks.find(p);
+        if (jt != m_chunks.end()) {
+            jt->second.markDirty();
+            m_dirtyChunks.insert(p);
+        }
+    };
+    mark({pos.x - 1, pos.y, pos.z});
+    mark({pos.x + 1, pos.y, pos.z});
+    mark({pos.x, pos.y - 1, pos.z});
+    mark({pos.x, pos.y + 1, pos.z});
+    mark({pos.x, pos.y, pos.z - 1});
+    mark({pos.x, pos.y, pos.z + 1});
+    m_chunks.erase(it);
+    m_dirtyChunks.erase(pos);
     return true;
 }
 
@@ -231,6 +277,23 @@ bool World::hasChunk(const ChunkPos& pos) const {
     return m_chunks.count(pos) != 0;
 }
 
+bool World::columnComplete(int cx, int cz) const {
+    constexpr int kVertical = kWorldHeight / kChunkSize;
+    for (int cy = 0; cy < kVertical; ++cy) {
+        if (m_chunks.find({cx, cy, cz}) == m_chunks.end()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void World::ensureColumn(int cx, int cz) {
+    constexpr int kVertical = kWorldHeight / kChunkSize;
+    for (int cy = 0; cy < kVertical; ++cy) {
+        getOrCreateChunk({cx, cy, cz});
+    }
+}
+
 std::vector<ChunkPos> World::chunkPositions() const {
     std::vector<ChunkPos> positions;
     positions.reserve(m_chunks.size());
@@ -241,16 +304,88 @@ std::vector<ChunkPos> World::chunkPositions() const {
     return positions;
 }
 
-void World::clear() { m_chunks.clear(); }
+void World::clear() {
+    m_chunks.clear();
+    m_fluidChunks = {};
+    m_dirtyChunks.clear();
+}
+
+void World::clearChunkDirty(const ChunkPos& pos) {
+    auto it = m_chunks.find(pos);
+    if (it != m_chunks.end()) {
+        it->second.clearDirty();
+    }
+    m_dirtyChunks.erase(pos);
+}
+
+void World::markChunkDirty(const ChunkPos& pos) {
+    auto it = m_chunks.find(pos);
+    if (it == m_chunks.end()) {
+        return; // a missing chunk is not meshed; nothing to flag
+    }
+    it->second.markDirty();
+    m_dirtyChunks.insert(pos);
+}
+
+std::vector<ChunkPos> World::fluidChunkPositions(FluidKind kind) const {
+    const std::set<ChunkPos>& s =
+        m_fluidChunks[static_cast<std::size_t>(kind)];
+    return {s.begin(), s.end()};
+}
+
+void World::addFluidChunk(const ChunkPos& pos, FluidKind kind) {
+    m_fluidChunks[static_cast<std::size_t>(kind)].insert(pos);
+}
+
+void World::pruneFluidChunk(const Chunk& chunk, const ChunkPos& pos,
+                            FluidKind kind) {
+    // The cell that just lost the kind is known (the caller drained it);
+    // the question is whether ANY other cell still holds it. A kVolume
+    // scan on drains only (rare; a few microseconds).
+    const std::uint8_t* fluid = chunk.fluidData();
+    for (int i = 0; i < Chunk::kVolume; ++i) {
+        if (fluidKindOf(fluid[i]) == kind && fluidLevelOf(fluid[i]) > 0) {
+            return; // the chunk still holds the kind
+        }
+    }
+    m_fluidChunks[static_cast<std::size_t>(kind)].erase(pos);
+}
+
+void World::scanFluidChunks(const Chunk& chunk, const ChunkPos& pos) {
+    const std::uint8_t* fluid = chunk.fluidData();
+    bool water = false;
+    bool lava = false;
+    for (int i = 0; i < Chunk::kVolume; ++i) {
+        if (fluid[i] == 0) {
+            continue;
+        }
+        if (fluidKindOf(fluid[i]) == FluidKind::Water) {
+            water = true;
+        } else {
+            lava = true;
+        }
+    }
+    if (water) {
+        addFluidChunk(pos, FluidKind::Water);
+    }
+    if (lava) {
+        addFluidChunk(pos, FluidKind::Lava);
+    }
+}
 
 // A block sitting on a chunk face shares that face with the neighbor
 // chunk; the neighbor's mesh may have culling decisions that now change.
 void World::markNeighborChunksDirty(int lx, int ly, int lz,
                                     const ChunkPos& pos) {
+    // The edited chunk itself (every caller wrote to it first) plus the
+    // face-sharing neighbors on chunk edges — all into the dirty set the
+    // mesh pass iterates.
+    m_dirtyChunks.insert(pos);
     const auto mark = [this](const ChunkPos& p) {
         auto it = m_chunks.find(p);
         if (it != m_chunks.end()) {
             it->second.markDirty();
+            m_dirtyChunks.insert(p);
         }
     };
     const int edge = kChunkSize - 1;

@@ -1263,3 +1263,49 @@
   （side/top 分行判别）+ 破坏 E2E ×2 形状。口诀：**新块模型形状必须
   配"破坏"场景的 E2E——破坏路径（粒子 + 掉落物渲染）的纹理契约与
   chunk mesh 独立，放置/走进测不到**。
+- **部分列 = 永久虚空洞 + "engaged 但零 post"停摆（99.2 定位）**：单
+  chunk 创建（存档流体编辑列 / 放置首触）留下缺 7 chunk 的列；流送
+  loader 把"有任何 chunk 的列"计为 loaded → 缺的 chunk 永不生成；
+  同时 missingColumns 排除它（算 loaded）而 nearestMissing 计入它
+  （算 missing）→ 永久 engaged + missing 列表为空 + 池空 = "流送
+  停摆"（误诊方向：worker/积压上限/isDead 全部排查过）。修复 =
+  列完整性不变式：`World::ensureColumn`/`columnComplete`，每个单
+  chunk 创建点（setBlock 收口 + applyWorldEdits）补全整列。口诀：
+  **流送的单位是列，chunk 创建的单位也必须是列——任何单 chunk 创建
+  路径要顶格补全，否则"loaded 判定"与"缺失判定"用两个真相源**。
+- **存档 time 覆盖 config + 夜间 mob 杀死静止玩家 → streamChunks 的
+  isDead 停摆（99.2 排查弯路）**：无输入性能跑用存档场景，以为从
+  config 的正午 0.25 开始，实际存档 `time=0.541`（夜，优先于
+  --time/config）→ 敌对 mob 生成 ~60 s 内杀死静止玩家 → 流送停
+  （isDead 停 post 是**设计**：死亡界面拥有输入）→ "零集成"被误诊
+  为 worker/积压 bug。判别器 = **R 键**：玩家死则 R 重生且流送立
+  刻恢复；R 无效才怀疑代码。口诀：**带存档的长跑先核存档 time
+  （它赢过 config）；"流送停了"先 R 测 isDead，再怀疑流送代码**。
+- **环满时 4 次流体全扫描是主成本 + 限扫描集要含"同 tick 可写入的邻
+  域"（99.2 定位，插桩实测）**：reaction/burn/water/lava 每 pass
+  各 `chunkPositions()`（全量拷贝+排序）+ 32K 格遍历——8712 chunk 环
+  满 + 活熔岩湖时 update=151 ms/帧（~6-7 FPS，worker 池空闲、CPU
+  仅 1.1 核 = 主线程扫描瓶颈）。修复：World 维护 per-kind 流体 chunk
+  集（setFluid/setBlock 排空/insert/erase/生成 五处维护），simulate
+  迭代"流体 chunk + 六邻"（**flow 写入每 tick 至多跨一个 chunk 边界
+  ——邻域必访才保住同 tick 传播语义**；只访流体 chunk 会把跨块前沿
+  延迟 1 tick/边界 = 改变 E2E 帧时序），reaction/burn 只访 lava 集。
+  配套：重 mesh 帧预算 8（最近优先，消 100-400 ms 集成卡顿）、worker
+  积压上限 8（flush 全队列等待的有界化）、World 脏列集 + 增量
+  loadedColumns + 显式 lightPendingColumns（替 4 次游戏全扫描）。
+  实测：环满 update 151→21 ms（~35+ FPS）；走路跑 RSS 平台
+  470-474 MB（修复前无限增长）。口诀：**每帧扫描单位 = 受影响集
+  （流体 chunk/脏 chunk/loaded 列），不是全 chunk 表；模拟限集必须
+  包含该 tick 可写入的全部目标（含邻块），否则传播时序变 = E2E 帧
+  断言变**。
+- **光照写 chunk 只设标志、绕开 World 脏集 → 新列永久黑面（99.2 走路跑
+  用户发现）**：把重 mesh 工作表从"每帧全 chunk 扫标志"换成 World 脏
+  集后，`Lighting::updateRegion`（worker）/`propagateAll` 对光变 chunk
+  的 `findChunkMut(pos)->markDirty()` 只设了 chunk 自身标志——脏集看不
+  到 → 该 chunk 永不重 mesh → 刚光照的列保持光 0 mesh = 地表黑面
+  （旧代码靠全扫描兜底所以从未暴露）。修复：`World::markChunkDirty`
+  （标志 + 脏集一体），光照两处改走 World API；单测钉死标志/集合同步
+  + 缺失 chunk no-op。口诀：**脏性只允许一个真相源（World 脏集）——
+  任何直写 chunk 的子系统（光照 worker 等）改完必须经 World API 报
+  脏；把"全量扫描兜底"换成"显式集合"时，先 grep 出所有绕过集合直写
+  底层状态的路径**。
