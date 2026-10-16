@@ -12,6 +12,7 @@
 // real consumer (chunk storage).
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -288,6 +289,23 @@ struct BlockModel {
     // like the dye/wool family). Default 0 (north).
     int stairFacing = 0;
 };
+
+// Phase 97: the stair's PER-INSTANCE facing when a player PLACES it, from
+// the camera yaw (Minecraft: the stair's low side faces where the player
+// looks). yaw 0 = facing -Z, positive turns left (the Camera/Player
+// convention). facing = the HIGH side, so a player facing -Z (yaw 0) places
+// a stair high at +Z (facing 2 / south), facing -X (yaw +pi/2) places it
+// high at +X (facing 1 / east), facing +Z (yaw pi) high at -Z (facing 0 /
+// north), facing +X (yaw 3pi/2) high at -X (facing 3 / west). A 45-degree
+// tie resolves to the X axis (deterministic). Pure function (unit-tested).
+inline int stairFacingFromYaw(float yaw) {
+    const float fx = -std::sin(yaw); // the camera's forward X component
+    const float fz = -std::cos(yaw); // the camera's forward Z component
+    if (std::fabs(fx) >= std::fabs(fz)) {
+        return fx >= 0.0f ? 3 : 1; // facing +X -> west; facing -X -> east
+    }
+    return fz >= 0.0f ? 0 : 2; // facing +Z -> north; facing -Z -> south
+}
 
 struct Block {
     BlockID id = BlockID::invalid();

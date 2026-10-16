@@ -704,6 +704,13 @@
      format 13 迁移空）。P89 的 4 块变体保留为默认朝向、P92 的 `stair_rotates_to`
      保留解析但不再用于旋转。这是项目首个 **per-block 状态**（突破"无
      per-instance 状态"哲学，需 format 变更）。
+    - **放置自动朝向**（Phase 97，Minecraft 规则）：玩家放置楼梯（任意
+      stair 形状块）时，per-instance 朝向 = `stairFacingFromYaw(玩家 yaw)`
+      纯函数——楼梯**低端朝玩家视线方向**（yaw 0 朝 -Z → 朝南/高端 +Z；
+      yaw +90° 朝 -X → 朝东；yaw 180° → 朝北；yaw 270° → 朝西；45° 平局
+      取 X 轴 = 确定性）。setBlock 收口先设块 stair_facing 默认，
+      placeBlock 再按 yaw 覆写；P89 变体的 baked 朝向对玩家放置失效
+      （变体 id 仅存档/非游戏上下文保留）。
 - **墙 wall（Phase 95，第三个新块模型类型）**：
   - **`Shape::Wall`**（block.hpp）：1.5 格高柱（cell 的 y 0..1.5 实心 =
     满块 + 顶 0.5 帽），复用 cube 纹理（top/side/bottom 校验同 slab）。

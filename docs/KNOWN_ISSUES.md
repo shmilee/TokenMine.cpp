@@ -522,8 +522,12 @@
   P89 的 4 块变体（stair_facing 0-3）保留为**默认朝向**（放置时 per-instance
   朝向初始化为块的 stair_facing；未设置时碰撞/mesh 回落块 stair_facing = 单
   测无需改）；P92 的 `stair_rotates_to`（块 id 环）保留解析但**不再用于旋转**
-  （旋转改设 per-instance 朝向）。无自动旋转（放置 = 块默认朝向，要旋转须潜
-  行右键）。`[Phase 87]` → `[Phase 89]` → `[Phase 92]` → `[Phase 94]`
+  （旋转改设 per-instance 朝向）。**放置自动朝向**（Minecraft 规则）
+  `[Phase 97]`：玩家放置楼梯时 per-instance 朝向 = `stairFacingFromYaw(玩家
+  yaw)`（低端朝玩家视线方向；纯函数，45° 平局取 X 轴）——P89 变体的 baked
+  stair_facing 对玩家放置失效（朝向以 yaw 为准，变体 id 仅存档/非游戏上下文
+  保留）。`[Phase 87]` → `[Phase 89]` → `[Phase 92]` → `[Phase 94]` →
+  `[Phase 97]`
 - **楼梯碰撞 = 斜面（AABB 高端边高度）** — 玩家脚高度随其 AABB 在斜面高端
   的位置（取 AABB 覆盖的**最高**斜面点，Phase 89 修正 P87 的低端边 bug——
   原会切入楼梯高端）；沿 facing 轴（north/south 用 z、east/west 用 x）；MC

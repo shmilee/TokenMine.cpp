@@ -1624,6 +1624,30 @@ TEST(BlockRegistryTest, Phase95WallShapeParsed) {
     EXPECT_EQ(reg.at(*r).model.shape, BlockModel::Shape::Wall);
 }
 
+TEST(BlockRegistryTest, Phase97StairFacingFromYaw) {
+    // Phase 97: placement auto-orientation — the stair's low side faces
+    // where the player looks (facing = the HIGH side). yaw 0 = facing -Z.
+    const float pi = 3.14159265358979323846f;
+    // The four cardinal placements (Minecraft's rule).
+    EXPECT_EQ(stairFacingFromYaw(0.0f), 2); // facing -Z -> high +Z (south)
+    EXPECT_EQ(stairFacingFromYaw(pi / 2), 1); // facing -X -> high +X (east)
+    EXPECT_EQ(stairFacingFromYaw(pi), 0); // facing +Z -> high -Z (north)
+    EXPECT_EQ(stairFacingFromYaw(3 * pi / 2), 3); // facing +X -> high -X
+    // Quadrant robustness: a yaw within a 45-degree window of a cardinal
+    // snaps to that cardinal.
+    EXPECT_EQ(stairFacingFromYaw(0.3f), 2);
+    EXPECT_EQ(stairFacingFromYaw(-0.3f), 2);
+    EXPECT_EQ(stairFacingFromYaw(pi / 2 - 0.3f), 1);
+    EXPECT_EQ(stairFacingFromYaw(pi / 2 + 0.3f), 1);
+    EXPECT_EQ(stairFacingFromYaw(pi - 0.3f), 0);
+    EXPECT_EQ(stairFacingFromYaw(pi + 0.3f), 0);
+    EXPECT_EQ(stairFacingFromYaw(3 * pi / 2 - 0.3f), 3);
+    EXPECT_EQ(stairFacingFromYaw(3 * pi / 2 + 0.3f), 3);
+    // The exact 45-degree tie resolves to the X axis (deterministic).
+    EXPECT_EQ(stairFacingFromYaw(pi / 4), 1); // fx=fz<0 -> east
+    EXPECT_EQ(stairFacingFromYaw(5 * pi / 4), 3); // fx<0, fz>0 -> west
+}
+
 TEST(BlockRegistryTest, Phase95StoneWallContent) {
     // The shipped stone wall (Phase 95): the 1.5-block-tall pillar shape,
     // reusing the stone texture (no new atlas tile), hardness 1.5 (Minecraft),

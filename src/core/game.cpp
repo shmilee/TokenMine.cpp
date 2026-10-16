@@ -2969,6 +2969,18 @@ void Game::placeBlock() {
     // Game::setBlock (Phase 42): also releases any arrow stuck in the
     // newly occupied cell (placing into a cell an arrow hangs in).
     setBlock(target.x, target.y, target.z, item.block);
+    // Phase 97: stair placement AUTO-ORIENTS (Minecraft): the per-instance
+    // facing (Phase 94) is set from the player's yaw — the stair's low side
+    // faces where the player looks. setBlock above seeded the facing with
+    // the block's stair_facing default; this overrides it for stairs. Any
+    // stair-shaped block (the base stone_stairs or a Phase-89 variant) gets
+    // the same placement rule (the variant's baked facing only matters
+    // outside the game, e.g. unit fixtures).
+    if (m_blocks.at(item.block).model.shape == BlockModel::Shape::Stairs) {
+        m_world.setStairFacing(target.x, target.y, target.z,
+                               static_cast<std::uint8_t>(
+                                   stairFacingFromYaw(m_player->yaw)));
+    }
     // Relight the region around the change (a placed occluder blocks light;
     // a placed glowstone is a new light source).
     Lighting::updateLocal(m_world, m_blocks, target);
