@@ -217,6 +217,18 @@ def main() -> None:
               chicken_tile(0xC1C1, (238, 236, 226)))
     write_png(os.path.join(OUT_DIR, "chicken_head.png"),
               chicken_tile(0xC1C2, (238, 236, 226), face=True))
+    # Orange chicken legs + beak (Phase 99.7: the Minecraft chicken's
+    # legs/beak are orange, not plumage).
+    write_png(os.path.join(OUT_DIR, "chicken_legs.png"),
+              chicken_tile(0xC1C3, (228, 148, 44)))
+    # Dark brown cow legs (Phase 99.7: the Minecraft cow's legs are a
+    # darker shade than the body fur).
+    write_png(os.path.join(OUT_DIR, "cow_legs.png"),
+              cow_fur_tile(0xC0F3, (94, 62, 42)))
+    # Near-black sheep legs (Phase 99.7: the Minecraft sheep's legs are
+    # black; the wool body stays white).
+    write_png(os.path.join(OUT_DIR, "sheep_legs.png"),
+              sheep_wool_tile(0x5EE3, (45, 42, 40)))
     # Bone-white skeleton (Phase 27; skull sockets on the head's front
     # face).
     write_png(os.path.join(OUT_DIR, "skeleton_body.png"),

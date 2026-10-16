@@ -305,6 +305,18 @@
   "glass_pane": [
    8,
    3
+  ],
+  "chicken_legs": [
+   8,
+   4
+  ],
+  "cow_legs": [
+   8,
+   5
+  ],
+  "sheep_legs": [
+   8,
+   6
   ]
  }
 }

@@ -8,10 +8,12 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <algorithm>
 #include <string>
 #include <vector>
 
 #include "block/block_registry.hpp"
+#include "core/asset_manager.hpp"
 #include "core/json.hpp"
 #include "entity/mob_entity.hpp"
 #include "entity/mob_mesh.hpp"
@@ -2043,4 +2045,46 @@ TEST(MobFireContactTest, NoFireBlockRegisteredIsInert) {
     }
     EXPECT_FALSE(mob.burning());
     EXPECT_FLOAT_EQ(mob.health(), 20.0f);
+}
+
+// ---------------------------------------------------------------------------
+// 99.7 content pin: the shipped quadrupeds have legs. The Phase 10 models
+// were body + head only (the animals floated — the user's walking-run
+// report); the legs are thin ground-reaching boxes reusing the body
+// texture. The humanoids (zombie/skeleton) already carry full-height body
+// boxes (y 0-1.0) — that box IS the legs. Walking leg SWING is the
+// documented v1 deviation (the per-type mesh is a static cache; per-
+// instance limb animation is a future phase).
+// ---------------------------------------------------------------------------
+
+TEST(MobRegistryTest, ShippedModelsReachTheGroundWithLegs) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.loadDirectory(assets, "data/mobs").ok());
+    const struct {
+        const char* name;
+        std::size_t boxes; // expected total box count
+    } cases[] = {
+        {"chicken", 7},   // body + 2 legs + 2 wings + head + beak
+        {"cow", 6},       // body + 4 legs + head
+        {"sheep", 6},     // body + 4 legs + head
+        {"spider", 10},   // body + 8 legs + head
+        {"zombie", 2},    // full-height body (0-1.0) + head
+        {"skeleton", 2}   // full-height body (0-1.0) + head
+    };
+    for (const auto& c : cases) {
+        const MobID id = mobs.idForName(c.name);
+        ASSERT_TRUE(id.valid()) << c.name;
+        const Mob& m = mobs.at(id);
+        EXPECT_EQ(m.model.boxes.size(), c.boxes) << c.name;
+        // Every model touches the ground: the lowest box bottom == 0
+        // (quadrupeds via the legs, humanoids via the full-height body).
+        float lowest = 1e9f;
+        for (const MobBox& b : m.model.boxes) {
+            lowest = std::min(lowest, b.center.y - b.size.y / 2.0f);
+        }
+        EXPECT_NEAR(lowest, 0.0f, 1e-6f) << c.name;
+    }
 }
