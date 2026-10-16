@@ -1,0 +1,11 @@
+{
+  "id": "fence",
+  "properties": {
+    "hardness": 2.0,
+    "drops": "fence"
+  },
+  "model": {
+    "shape": "fence",
+    "textures": { "side": "fence" }
+  }
+}

@@ -227,10 +227,10 @@ TEST(BlockRegistryTest, RejectsMissingModel) {
 
 TEST(BlockRegistryTest, RejectsUnknownShape) {
     BlockRegistry reg;
-    // Phase 95: only full_cube / slab / stairs / cross / wall exist —
-    // "fence" is not (a candidate future shape, kept rejected).
+    // Phase 98: full_cube / slab / stairs / cross / wall / fence exist —
+    // "pane" is not (a candidate future shape, kept rejected).
     auto r = reg.registerBlock(parseDef(
-        R"({"id":"stone","model":{"shape":"fence","textures":{"top":"t","side":"t",)"
+        R"({"id":"stone","model":{"shape":"pane","textures":{"top":"t","side":"t",)"
         R"("bottom":"t"}}})"));
     ASSERT_FALSE(r.ok());
     EXPECT_NE(r.error().message.find("shape"), std::string::npos);
@@ -592,11 +592,11 @@ TEST(BlockRegistryTest, CrossShapeIsExplicit) {
 
 TEST(BlockRegistryTest, RejectsUnsupportedShapeValue) {
     BlockRegistry reg;
-    // Phase 95: only full_cube / slab / stairs / cross / wall are supported —
-    // "fence" is not.
+    // Phase 98: full_cube / slab / stairs / cross / wall / fence are
+    // supported — "pane" is not (a candidate future shape, kept rejected).
     auto r = reg.registerBlock(
         parseDef(crossDef(
-            "x", R"({"shape":"fence","textures":{"cross":"x"}})")));
+            "x", R"({"shape":"pane","textures":{"cross":"x"}})")));
     ASSERT_FALSE(r.ok());
     EXPECT_NE(r.error().message.find("'model.shape'"), std::string::npos);
 }
@@ -1622,6 +1622,55 @@ TEST(BlockRegistryTest, Phase95WallShapeParsed) {
         R"({"id":"w","model":{"shape":"wall","textures":{"top":"t","side":"t","bottom":"t"}}})"));
     ASSERT_TRUE(r.ok()) << r.error().message;
     EXPECT_EQ(reg.at(*r).model.shape, BlockModel::Shape::Wall);
+}
+
+TEST(BlockRegistryTest, Phase98FenceShapeParsed) {
+    // The "fence" shape (Phase 98, the fourth new block model type) uses a
+    // single "side" texture (the posts + bars all draw it).
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"f","model":{"shape":"fence","textures":{"side":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).model.shape, BlockModel::Shape::Fence);
+    EXPECT_EQ(reg.at(*r).model.textures.side, "t");
+}
+
+TEST(BlockRegistryTest, Phase98FenceRequiresSideTexture) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"f","model":{"shape":"fence","textures":{"top":"t"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("model.textures.side"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, Phase98FenceRejectsCubeTextureKeys) {
+    // The cube face keys are dead data for a fence (no cube faces) —
+    // rejected (the cross discipline).
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"f","model":{"shape":"fence","textures":{"side":"t","top":"t"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("model.textures.top"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, Phase98FenceContent) {
+    // The shipped wooden fence (Phase 98): the fence shape, a single
+    // "fence" texture, hardness 2.0 (Minecraft), drops itself, opaque (it
+    // blocks light like a full block).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* b = reg.findByName("fence");
+    ASSERT_TRUE(b != nullptr);
+    EXPECT_EQ(b->model.shape, BlockModel::Shape::Fence);
+    EXPECT_TRUE(b->properties.solid);
+    EXPECT_TRUE(b->properties.opaque);
+    EXPECT_EQ(b->properties.lightEmission, 0);
+    EXPECT_FLOAT_EQ(b->properties.hardness, 2.0f);
+    EXPECT_EQ(b->properties.drops, "fence"); // drops itself
+    EXPECT_EQ(b->model.textures.side, "fence"); // single side texture
 }
 
 TEST(BlockRegistryTest, Phase97StairFacingFromYaw) {

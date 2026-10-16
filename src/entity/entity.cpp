@@ -47,6 +47,12 @@ float Entity::solidTopHeight(BlockID id, const Vec3& mn, const Vec3& mx,
     if (b.model.shape == BlockModel::Shape::Wall) {
         return 1.5f;
     }
+    // Phase 98: a fence is a barrier with the SAME solid region as the wall
+    // (y 0..1.5 — the crossed posts + bars span the full height); only the
+    // meshing differs (the thin posts, not a full pillar).
+    if (b.model.shape == BlockModel::Shape::Fence) {
+        return 1.5f;
+    }
     if (b.model.shape == BlockModel::Shape::Stairs) {
         // The AABB's local range on each axis (clamped to the cell). The
         // blocking height is the slope at the AABB's LOW end on the facing

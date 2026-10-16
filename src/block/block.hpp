@@ -277,6 +277,13 @@ struct BlockModel {
                   // jump over it (the jump is ~1.25 < 1.5). Uses the cube
                   // face textures. The third new block model type (after the
                   // slab Phase 85 + the stairs Phase 87).
+        Fence,    // Phase 98: Minecraft's fence — two crossed 1/8-thick
+                  // vertical posts (y 0..1.5, like the wall) + a connecting
+                  // BAR toward each horizontal fence / full opaque block
+                  // neighbor. A barrier (solidTopHeight = 1.5). Uses a
+                  // single "side" texture (the top/bottom cube keys are
+                  // rejected, the cross discipline). The fourth new block
+                  // model type.
     };
 
     Shape shape = Shape::FullCube;

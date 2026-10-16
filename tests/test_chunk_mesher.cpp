@@ -47,7 +47,10 @@ BlockRegistry makeRegistry() {
     // Phase 95: a wall (the 1.5-tall pillar shape).
     auto wall = reg.registerBlock(parseDef(
         R"({"id":"wall","model":{"shape":"wall","textures":{"top":"t","side":"t","bottom":"t"}}})"));
-    if (!stone.ok() || !glass.ok() || !water.ok() || !wall.ok()) {
+    // Phase 98: a fence (the crossed-posts shape, single side texture).
+    auto fence = reg.registerBlock(parseDef(
+        R"({"id":"fence","model":{"shape":"fence","textures":{"side":"t"}}})"));
+    if (!stone.ok() || !glass.ok() || !water.ok() || !wall.ok() || !fence.ok()) {
         ADD_FAILURE() << "test registry failed to build";
     }
     return reg;
@@ -852,4 +855,67 @@ TEST(ChunkMesherTest, Phase96WallFullBlockEmitsCapBandOnly) {
     EXPECT_EQ(wallBand, 4);
     EXPECT_EQ(bandMinY, 5.0f); // the lower band (y 0..1) is internal
     EXPECT_EQ(bandMaxY, 5.5f);
+}
+
+// ============================================================================
+//   Phase 98 — fence (crossed posts + connection bars)
+// ============================================================================
+
+TEST(ChunkMesherTest, Phase98LoneFenceEmitsPosts) {
+    // A lone fence: two crossed posts, 6 faces each (4 sides + top + bottom,
+    // no opaque neighbors) = 12 quads = 48 vertices, all in the opaque
+    // sub-mesh.
+    BlockRegistry reg = makeRegistry();
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("fence"));
+    const auto data = mesh(world, reg, {0, 0, 0});
+    EXPECT_TRUE(data.transparentEmpty());
+    EXPECT_EQ(data.opaqueVertices.size(), 48u);
+}
+
+TEST(ChunkMesherTest, Phase98FencePairEmitsBars) {
+    // Two adjacent fences (an X line): each emits its posts (12 quads) +
+    // one connection bar toward its neighbor (4 quads — the open-ended box)
+    // = 16 quads each -> 32 quads = 128 vertices.
+    BlockRegistry reg = makeRegistry();
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("fence"));
+    world.setBlock(9, 4, 8, reg.idForName("fence"));
+    const auto data = mesh(world, reg, {0, 0, 0});
+    EXPECT_EQ(data.opaqueVertices.size(), 128u);
+}
+
+TEST(ChunkMesherTest, Phase98FenceBesideBlockKeepsBlockFace) {
+    // A fence beside a full block: the fence emits a bar toward the block,
+    // and the block's face toward the fence is NOT culled (the fence is thin
+    // — Phase 98 greedy fix: only opaque NON-fence neighbors occlude).
+    BlockRegistry reg = makeRegistry();
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("fence"));
+    world.setBlock(9, 4, 8, reg.idForName("stone"));
+    const auto data = mesh(world, reg, {0, 0, 0});
+    // Fence: 12 post quads + 1 bar (4 quads) = 16 quads = 64 vertices;
+    // stone: 6 faces = 24 vertices. 22 quads = 88 vertices. (If the stone's
+    // -X face were wrongly culled by the thin fence, the total would be 84.)
+    EXPECT_EQ(data.opaqueVertices.size(), 88u);
+    // The stone's -X face (toward the fence) survives: 4 verts at x=9.
+    int stoneMinusX = 0;
+    for (const MeshVertex& v : data.opaqueVertices) {
+        if (v.normal == Vec3{-1.0f, 0.0f, 0.0f} && v.position.x == 9.0f) {
+            ++stoneMinusX;
+        }
+    }
+    EXPECT_EQ(stoneMinusX, 4);
+}
+
+TEST(ChunkMesherTest, Phase98FenceNoBarTowardWall) {
+    // A fence beside a WALL: no bar (the bar only reaches a fence / full
+    // block — the wall pillar covers the gap) -> the fence keeps its 12
+    // post quads; the wall keeps its 6 faces: 18 quads = 72 vertices.
+    BlockRegistry reg = makeRegistry();
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("fence"));
+    world.setBlock(9, 4, 8, reg.idForName("wall"));
+    const auto data = mesh(world, reg, {0, 0, 0});
+    EXPECT_EQ(data.opaqueVertices.size(), 72u);
 }

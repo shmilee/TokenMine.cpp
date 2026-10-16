@@ -67,6 +67,13 @@ BlockRegistry makeBlocks() {
     if (!r.ok()) {
         ADD_FAILURE() << r.error().message;
     }
+    // Phase 98: a fence (the SAME solid region as the wall — the thin posts
+    // are mesh-only; the collision is a full 1.5 barrier).
+    r = blocks.registerBlock(parseJson(
+        R"({"id":"fence","model":{"shape":"fence","textures":{"side":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
     // Phase 87: a north-facing stair (solid height varies with z: full at
     // the -Z end, zero at the +Z end).
     r = blocks.registerBlock(parseJson(
@@ -1104,5 +1111,21 @@ TEST(EntityTest, Phase95WallIsABarrier) {
     EXPECT_FALSE(item.hasRoomAt(Vec3{8.5f, 3.0f, 8.5f}));
     // In the CAP (AABB bottom at y=3.4, in [2, 3.5] but above the cell top
     // y=3): still inside the wall's solid region -> no room (the cap is solid).
+    EXPECT_FALSE(item.hasRoomAt(Vec3{8.5f, 3.4f, 8.5f}));
+}
+
+// Phase 98: the fence is a barrier with the SAME solid region as the wall
+// (y 0..1.5) — the thin crossed posts are mesh-only; the collision does not
+// care (Minecraft's fence blocks exactly like the wall).
+TEST(EntityTest, Phase98FenceIsABarrier) {
+    Fixture f;
+    const BlockID fence = f.blocks.idForName("fence");
+    f.world.setBlock(8, 2, 8, fence); // solid region y 2..3.5
+    const ItemEntity item = f.makeItem({8.5f, 10.0f, 8.5f});
+    // On the fence's TOP (AABB bottom at y=3.5): no overlap -> has room.
+    EXPECT_TRUE(item.hasRoomAt(Vec3{8.5f, 3.5f, 8.5f}));
+    // INSIDE the fence body (AABB bottom at y=3.0): no room (the barrier).
+    EXPECT_FALSE(item.hasRoomAt(Vec3{8.5f, 3.0f, 8.5f}));
+    // In the CAP (AABB bottom at y=3.4, above the cell top y=3): no room.
     EXPECT_FALSE(item.hasRoomAt(Vec3{8.5f, 3.4f, 8.5f}));
 }

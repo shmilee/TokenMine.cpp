@@ -531,11 +531,12 @@ Result<void> BlockRegistry::parseModel(const Json& def, BlockModel& out) {
                                s->asString() != "slab" &&
                                s->asString() != "stairs" &&
                                s->asString() != "cross" &&
-                               s->asString() != "wall")) {
+                               s->asString() != "wall" &&
+                               s->asString() != "fence")) {
             return MC_FAIL(std::string("'model.shape' is unsupported: '") +
                            s->asString() +
-                           "' (only 'full_cube', 'slab', 'stairs', 'cross' "
-                           "and 'wall' exist)");
+                           "' (only 'full_cube', 'slab', 'stairs', 'cross', "
+                           "'wall' and 'fence' exist)");
         }
         out.shape = (s->asString() == "cross")
                         ? BlockModel::Shape::Cross
@@ -545,7 +546,10 @@ Result<void> BlockRegistry::parseModel(const Json& def, BlockModel& out) {
                                       ? BlockModel::Shape::Stairs
                                       : (s->asString() == "wall"
                                              ? BlockModel::Shape::Wall
-                                             : BlockModel::Shape::FullCube)));
+                                             : (s->asString() == "fence"
+                                                    ? BlockModel::Shape::Fence
+                                                    : BlockModel::Shape::
+                                                          FullCube))));
     }
     // Phase 89: the stair facing (0..3; only meaningful for shape "stairs").
     if (const Json* sf = m->find("stair_facing")) {
@@ -578,6 +582,26 @@ Result<void> BlockRegistry::parseModel(const Json& def, BlockModel& out) {
             }
         }
         out.textures.cross = c->asString();
+        return {};
+    }
+    if (out.shape == BlockModel::Shape::Fence) {
+        // Phase 98: fence shapes use exactly one texture key ("side") — the
+        // posts + the connection bars all draw it. The other keys would be
+        // dead data (no cube faces are emitted), so they are rejected (the
+        // cross discipline).
+        const Json* sd = t->find("side");
+        if (sd == nullptr || !sd->isString() || sd->asString().empty()) {
+            return MC_FAIL("model.textures.side is required for shape "
+                           "'fence' and must be a non-empty string");
+        }
+        for (const char* face : {"top", "bottom", "cross"}) {
+            if (t->find(face) != nullptr) {
+                return MC_FAIL(std::string("model.textures.") + face +
+                               " is not valid for shape 'fence' (use a "
+                               "single 'side' texture)");
+            }
+        }
+        out.textures.side = sd->asString();
         return {};
     }
     // Full cubes: exactly the three face-group keys (an explicit "cross"

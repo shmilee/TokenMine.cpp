@@ -1,0 +1,16 @@
+{
+  "id": "fence",
+  "type": "shaped",
+  "output": {
+    "item": "fence",
+    "count": 3
+  },
+  "pattern": [
+    "PSP",
+    "PSP"
+  ],
+  "key": {
+    "P": "planks",
+    "S": "stick"
+  }
+}

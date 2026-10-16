@@ -157,6 +157,12 @@ private:
     // conservative approach accepts the Z-fighting, like the slab).
     void emitWall(ChunkMeshData& out, const Block& block,
                   const BlockPos& origin, int lx, int ly, int lz) const;
+    // Phase 98 fence: two crossed 1/8-thick posts (y 0..1.5) + a connection
+    // bar (open ends) toward each horizontal fence / full opaque block
+    // neighbor. The post top / bottom faces are culled by an opaque
+    // neighbor above / below (a fence stacked on a fence).
+    void emitFence(ChunkMeshData& out, const Block& block,
+                   const BlockPos& origin, int lx, int ly, int lz) const;
 
     const World& m_world;
     const BlockRegistry& m_blocks;

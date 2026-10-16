@@ -118,6 +118,8 @@ ChunkMeshData ChunkMesher::mesh(const ChunkPos& pos) const {
                     emitStairs(out, block, origin, lx, ly, lz);
                 } else if (block.model.shape == BlockModel::Shape::Wall) {
                     emitWall(out, block, origin, lx, ly, lz);
+                } else if (block.model.shape == BlockModel::Shape::Fence) {
+                    emitFence(out, block, origin, lx, ly, lz);
                 }
             }
         }
@@ -167,16 +169,23 @@ void ChunkMesher::meshFaceDirection(ChunkMeshData& out, const Chunk& chunk,
                 }
                 if (block.model.shape == BlockModel::Shape::Slab ||
                     block.model.shape == BlockModel::Shape::Stairs ||
-                    block.model.shape == BlockModel::Shape::Wall) {
-                    continue; // partial blocks (slab / stairs / wall) — the
-                              // slab pass in mesh() owns their geometry, not
-                              // full-cube faces
+                    block.model.shape == BlockModel::Shape::Wall ||
+                    block.model.shape == BlockModel::Shape::Fence) {
+                    continue; // partial blocks (slab / stairs / wall / fence)
+                              // — the slab pass in mesh() owns their
+                              // geometry, not full-cube faces
                 }
                 const BlockID neighbor = m_world.getBlock(
                     origin.x + c[0] + face.dx, origin.y + c[1] + face.dy,
                     origin.z + c[2] + face.dz);
+                // Phase 98: a FENCE neighbor does NOT occlude — its posts +
+                // bars are thin (1/8), so a full block's face toward the
+                // fence stays visible (culled only by opaque FULL neighbors;
+                // the slab's half-face residual is the P85 documented limit).
                 if (neighbor != BlockID::air() &&
-                    m_blocks.at(neighbor).properties.opaque) {
+                    m_blocks.at(neighbor).properties.opaque &&
+                    m_blocks.at(neighbor).model.shape !=
+                        BlockModel::Shape::Fence) {
                     continue; // fully occluded
                 }
 
@@ -616,6 +625,154 @@ void ChunkMesher::emitWall(ChunkMeshData& out, const Block& block,
         indices.insert(indices.end(),
                        {first, first + 1, first + 2, first, first + 2,
                         first + 3});
+    }
+}
+
+void ChunkMesher::emitFence(ChunkMeshData& out, const Block& block,
+                            const BlockPos& origin, int lx, int ly, int lz)
+    const {
+    // Phase 98: Minecraft's fence — two crossed 1/8-thick posts (y 0..1.5,
+    // like the wall's solid region) + a connecting BAR toward each
+    // horizontal FENCE or FULL opaque block neighbor (a fence line reads as
+    // a continuous rail; a fence against a block "hooks" onto it). The bars
+    // are 1/8 thick, full height, and run from the post's outer face to the
+    // cell boundary; their boundary end is OPEN (the neighbor's bar meets it
+    // — two coplanar end caps would double-draw) and their post end is
+    // internal (meets the post face). The posts' top (y 1.5) / bottom (y 0)
+    // are culled by an opaque neighbor above / below (a fence stacked on a
+    // fence). Opaque sub-mesh (a fence is opaque for light, like the wall);
+    // the cell's own light on every face (the cross-plant convention — the
+    // posts are thin, neighbor light would flicker at line seams).
+    constexpr float kHalfWidth = 0.0625f; // the post/bar half-thickness (1/8 / 2)
+    constexpr float kCenter = 0.5f;
+    constexpr float kTop = 1.5f;
+    const float lo = kCenter - kHalfWidth;
+    const float hi = kCenter + kHalfWidth;
+    const int wx = origin.x + lx;
+    const int wy = origin.y + ly;
+    const int wz = origin.z + lz;
+    const bool aboveOpaque = [&] {
+        const BlockID n = m_world.getBlock(wx, wy + 1, wz);
+        return n != BlockID::air() && m_blocks.at(n).properties.opaque;
+    }();
+    const bool belowOpaque = [&] {
+        const BlockID n = m_world.getBlock(wx, wy - 1, wz);
+        return n != BlockID::air() && m_blocks.at(n).properties.opaque;
+    }();
+    const auto barNeighbor = [&](int dx, int dz) {
+        const BlockID n = m_world.getBlock(wx + dx, wy, wz + dz);
+        if (n == BlockID::air()) {
+            return false;
+        }
+        const Block& nb = m_blocks.at(n);
+        return nb.model.shape == BlockModel::Shape::Fence ||
+               (nb.properties.opaque &&
+                nb.model.shape == BlockModel::Shape::FullCube);
+    };
+    const Vec2 u0 =
+        AtlasLayout::uvMin(m_layout, block.model.textures.side);
+    const Vec2 u1 = AtlasLayout::uvMax(m_layout, block.model.textures.side);
+    const float skyF =
+        static_cast<float>(m_world.getSkyLight(wx, wy, wz)) /
+        static_cast<float>(kMaxLight);
+    const float blockF =
+        static_cast<float>(m_world.getBlockLight(wx, wy, wz)) /
+        static_cast<float>(kMaxLight);
+    std::vector<MeshVertex>& verts = out.opaqueVertices;
+    std::vector<std::uint32_t>& indices = out.opaqueIndices;
+    // One quad, kCubeFaces winding/UV convention (a/b bottom, c/d top;
+    // u follows the a->b edge, v the b->c edge).
+    auto emitQuad = [&](const Vec3& nrm, const Vec3& a, const Vec3& b,
+                        const Vec3& c2, const Vec3& d2) {
+        const std::uint32_t first = static_cast<std::uint32_t>(verts.size());
+        const Vec2 uv[4] = {{u0.x, u1.y}, {u1.x, u1.y},
+                            {u1.x, u0.y}, {u0.x, u0.y}};
+        const Vec3 pts[4] = {a, b, c2, d2};
+        for (int i = 0; i < 4; ++i) {
+            MeshVertex v;
+            v.position = {static_cast<float>(lx + pts[i].x),
+                          static_cast<float>(ly + pts[i].y),
+                          static_cast<float>(lz + pts[i].z)};
+            v.normal = nrm;
+            v.uv = uv[i];
+            v.skyLight = skyF;
+            v.blockLight = blockF;
+            verts.push_back(v);
+        }
+        indices.insert(indices.end(),
+                       {first, first + 1, first + 2, first, first + 2,
+                        first + 3});
+    };
+    // An axis-aligned box (cell-local ranges), the 6 kCubeFaces windings;
+    // the top / bottom faces are optional (the culling hooks).
+    auto emitBox = [&](float x0, float x1, float y0, float y1, float z0,
+                       float z1, bool top, bool bottom) {
+        emitQuad({0.0f, 0.0f, 1.0f}, {x0, y0, z1}, {x1, y0, z1},
+                 {x1, y1, z1}, {x0, y1, z1});
+        emitQuad({0.0f, 0.0f, -1.0f}, {x1, y0, z0}, {x0, y0, z0},
+                 {x0, y1, z0}, {x1, y1, z0});
+        emitQuad({1.0f, 0.0f, 0.0f}, {x1, y0, z1}, {x1, y0, z0},
+                 {x1, y1, z0}, {x1, y1, z1});
+        emitQuad({-1.0f, 0.0f, 0.0f}, {x0, y0, z0}, {x0, y0, z1},
+                 {x0, y1, z1}, {x0, y1, z0});
+        if (top) {
+            emitQuad({0.0f, 1.0f, 0.0f}, {x0, y1, z0}, {x0, y1, z1},
+                     {x1, y1, z1}, {x1, y1, z0});
+        }
+        if (bottom) {
+            emitQuad({0.0f, -1.0f, 0.0f}, {x0, y0, z1}, {x0, y0, z0},
+                     {x1, y0, z0}, {x1, y0, z1});
+        }
+    };
+    // The two crossed posts (always the full y 0..1.5; the thin side faces
+    // are never coplanar with a neighbor's, so no side culling).
+    emitBox(lo, hi, 0.0f, kTop, 0.0f, 1.0f, !aboveOpaque, !belowOpaque);
+    emitBox(0.0f, 1.0f, 0.0f, kTop, lo, hi, !aboveOpaque, !belowOpaque);
+    // A connection bar along X (x0..x1, z lo..hi, y 0..kTop): the two long
+    // faces + top + bottom only — BOTH ENDS OPEN (the boundary end meets the
+    // neighbor's bar end, the post end is internal against the post face;
+    // capped ends would be coplanar double-draws in the opaque pass). The
+    // top / bottom share the post culling.
+    auto emitBarX = [&](float x0, float x1) {
+        emitQuad({0.0f, 0.0f, 1.0f}, {x0, 0.0f, hi}, {x1, 0.0f, hi},
+                 {x1, kTop, hi}, {x0, kTop, hi});
+        emitQuad({0.0f, 0.0f, -1.0f}, {x1, 0.0f, lo}, {x0, 0.0f, lo},
+                 {x0, kTop, lo}, {x1, kTop, lo});
+        if (!aboveOpaque) {
+            emitQuad({0.0f, 1.0f, 0.0f}, {x0, kTop, lo}, {x0, kTop, hi},
+                     {x1, kTop, hi}, {x1, kTop, lo});
+        }
+        if (!belowOpaque) {
+            emitQuad({0.0f, -1.0f, 0.0f}, {x0, 0.0f, hi}, {x0, 0.0f, lo},
+                     {x1, 0.0f, lo}, {x1, 0.0f, hi});
+        }
+    };
+    // The Z mirror of emitBarX (the long faces are the +-X sides).
+    auto emitBarZ = [&](float z0, float z1) {
+        emitQuad({1.0f, 0.0f, 0.0f}, {hi, 0.0f, z1}, {hi, 0.0f, z0},
+                 {hi, kTop, z0}, {hi, kTop, z1});
+        emitQuad({-1.0f, 0.0f, 0.0f}, {lo, 0.0f, z0}, {lo, 0.0f, z1},
+                 {lo, kTop, z1}, {lo, kTop, z0});
+        if (!aboveOpaque) {
+            emitQuad({0.0f, 1.0f, 0.0f}, {lo, kTop, z0}, {lo, kTop, z1},
+                     {hi, kTop, z1}, {hi, kTop, z0});
+        }
+        if (!belowOpaque) {
+            emitQuad({0.0f, -1.0f, 0.0f}, {lo, 0.0f, z1}, {lo, 0.0f, z0},
+                     {hi, 0.0f, z0}, {hi, 0.0f, z1});
+        }
+    };
+    if (barNeighbor(1, 0)) {
+        emitBarX(hi, 1.0f);
+    }
+    if (barNeighbor(-1, 0)) {
+        emitBarX(0.0f, lo);
+    }
+    if (barNeighbor(0, 1)) {
+        emitBarZ(hi, 1.0f);
+    }
+    if (barNeighbor(0, -1)) {
+        emitBarZ(0.0f, lo);
     }
 }
 

@@ -731,6 +731,20 @@
     backward-compat）。
   - **内容**：`stone_wall`（hardness 1.5 = MC、自掉、复用 stone 纹理无新
     atlas）+ 配方 shapeless 6 stone → 4（MC）；不在默认背包。
+- **栅栏 fence（Phase 98，第四个新块模型类型）**：
+  - **`Shape::Fence`**（block.hpp）：两根 1/8 厚交叉柱（y 0..1.5，同墙的
+    实心区）+ 朝**栅栏/满不透明块**邻居的连接横杆（1/8 厚、全高、开两端——
+    边界端与邻居横杆在格边界相接成连续栏杆，柱端在柱面内部）；**单 side
+    纹理**（top/bottom/cross 键拒绝 = cross 纪律）；opaque（挡光如满块）。
+    v1 木质单纹理（无 MC 的黑曜石/链/苔石栅栏族）、无 MC 栅栏顶放置规则。
+  - **barrier 碰撞**（entity.cpp）：`solidTopHeight` = 1.5——**与墙同款**
+    （细柱只是 mesh，整格 1.5 实心：不能穿过也不能跳过）。
+  - **贪婪剔面修正**：满块面**不因栅栏邻居被剔**（细柱不能遮挡整面——
+    P85 slab 同款"半面"问题的反向处理：slab opaque 剔面留上半洞、栅栏不
+    剔保面）。栅栏自身走 emitFence（贪婪路径跳过）。
+  - **内容**：`fence`（hardness 2.0 = MC、自掉、fence 纹理 salt 933/934、
+    atlas 空位 [8,2] 免重锚）+ 配方 shaped **PSP/PSP**（4 planks + 2 stick
+    → 3 = MC）；不在默认背包。
 - **游泳**（Phase 9）：玩家包围盒与任何水体格相交即进入水中状态——水中重力减半
   （12 vs 32）、终端速度 4、水平速度降为 3.1（冲刺无效）、`Space` 随时上浮（4.5）；
   浅水（头在水面上）可以"蹚水走"，深水可以游

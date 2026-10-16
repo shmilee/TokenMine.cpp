@@ -320,6 +320,19 @@ def planks(x, y):
             clamp(82 + v), 255)
 
 
+def fence(x, y):
+    # Wooden plank base (salt 933) + a dark X brace along both diagonals
+    # (salt 934). Phase 98, the fence block; every existing texture is
+    # pixel-identical (new salts only).
+    v = noise(x, y, 933, 8)
+    r, g, b = clamp(150 + v), clamp(118 + v), clamp(74 + v)
+    if x == y or x + y == TILE - 1:
+        w = noise(x, y, 934, 6)
+        return (clamp(r - 40 + w), clamp(g - 40 + w),
+                clamp(b - 40 + w), 255)
+    return (r, g, b, 255)
+
+
 def crafting_table_top(x, y):
     # Planks + the 2x2 work surface: a 2px frame border and a center cross.
     border = x in (0, 1, 14, 15) or y in (0, 1, 14, 15)
@@ -650,6 +663,7 @@ TEXTURES = {
     "campfire": campfire,
     "campfire_extinguished": campfire_extinguished,
     "torch": torch,
+    "fence": fence,
     "planks": planks,
     "crafting_table_top": crafting_table_top,
     "crafting_table_side": crafting_table_side,
