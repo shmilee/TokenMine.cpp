@@ -1332,3 +1332,12 @@
   列在画面里），世界区零纯黑像素 + x2 RAW（旧代码该窗口内必黑）。
   口诀：**"先画错的再修"的两段式更新，一旦第二段被帧预算排队，错误
   就可见化——要么让第二段免预算，要么根本别画第一段（pop-in）**。
+- **SDL X11 静默拒绝非 ASCII 窗口标题 → FPS 仪表从未显示过（99.6）**：
+  标题串含 em dash "—" 时 SDL_SetWindowTitle 返回 false（"Failed to
+  convert title to UTF8"——SDL3 的 X11 编码转换对该字符失败），游戏
+  代码忽略返回值，窗口名永远是初始 "TokenMine.cpp"，标题里的
+  "N FPS | M draw calls" 仪表**从未生效**（多个阶段的 E2E harness
+  靠标题轮询 FPS 全部拿到 0，当时以为是 harness 问题）。最小复现：
+  SDL3 + X11 + 含 U+2014 的 SetWindowTitle → false；ASCII 连字符 →
+  true。口诀：**SDL 的 setter（SetWindowTitle 等）返回 bool——忽略
+  返回值 = 静默功能死亡；窗口标题/WM 属性只用 ASCII**。

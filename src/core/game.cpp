@@ -1336,10 +1336,13 @@ void Game::integrateStreamedColumns() {
         // chunk meshes once, lit, instead of dark-then-re-meshed).
         m_lightPendingColumns.insert(job->column);
         m_unlitColumns.insert(job->column);
-        MC_LOG_INFO("Streamed column (" + std::to_string(job->column.x) +
-                    ", " + std::to_string(job->column.z) +
-                    ") integrated (" + std::to_string(m_world.chunkCount()) +
-                    " chunks loaded)");
+        // Per-column detail at DEBUG (a radius-80 session logs 25921 of
+        // these lines; the periodic INFO progress line in streamChunks is
+        // the human-readable signal).
+        MC_LOG_DEBUG("Streamed column (" + std::to_string(job->column.x) +
+                     ", " + std::to_string(job->column.z) +
+                     ") integrated (" + std::to_string(m_world.chunkCount()) +
+                     " chunks loaded)");
     }
     m_streamJobs = std::move(inFlight);
 }
@@ -1430,10 +1433,15 @@ void Game::unloadFarColumns() {
         // but the set must not leak entries for dead columns.
         m_unlitColumns.erase({pos.x, pos.z});
     }
-    MC_LOG_INFO("Unloaded " +
-                std::to_string(toErase.size() / kVerticalChunksPerColumn) +
-                " far columns (" + std::to_string(m_world.chunkCount()) +
-                " chunks loaded)");
+    m_unloadedColumnsTotal +=
+        static_cast<std::size_t>(toErase.size() / kVerticalChunksPerColumn);
+    // Per-event detail at DEBUG (walking at radius 80 produces one of
+    // these every ~4 s; the periodic INFO progress line carries the
+    // count).
+    MC_LOG_DEBUG("Unloaded " +
+                 std::to_string(toErase.size() / kVerticalChunksPerColumn) +
+                 " far columns (" + std::to_string(m_world.chunkCount()) +
+                 " chunks loaded)");
 }
 
 void Game::streamChunks() {
@@ -1523,6 +1531,20 @@ void Game::streamChunks() {
             rawJob->done = true;
         });
         ++posted;
+    }
+    // Periodic INFO progress (the per-column lines are DEBUG): every
+    // 300 frames while streaming is engaged — the human-readable
+    // "is it still loading / did it stop" signal for a long session.
+    // Frame-based (deterministic cadence).
+    if (m_frameCount % 300 == 0) {
+        const int ring = 2 * m_streamRadius + 1;
+        MC_LOG_INFO("Streaming: " +
+                    std::to_string(m_loadedColumns.size()) + "/" +
+                    std::to_string(static_cast<std::size_t>(ring) * ring) +
+                    " columns (" + std::to_string(m_world.chunkCount()) +
+                    " chunks, " +
+                    std::to_string(m_unloadedColumnsTotal) +
+                    " unloaded since session start)");
     }
 }
 
@@ -2144,10 +2166,14 @@ int Game::run() {
             }
         }
 
-        // Refresh the title (shows live FPS) at most twice per second.
+        // Refresh the title (shows live FPS + draw calls) at most twice
+        // per second. ASCII only: SDL's X11 backend silently REFUSES
+        // non-ASCII titles ("Failed to convert title to UTF8") and the
+        // meter would never appear (the em dash used to be here — the
+        // FPS display was dead for every release).
         if (frameStart - m_lastTitleUpdate >= 0.5) {
             m_lastTitleUpdate = frameStart;
-            m_window.setTitle("TokenMine.cpp — " +
+            m_window.setTitle("TokenMine.cpp - " +
                               std::to_string(static_cast<int>(
                                   std::lround(m_fpsSmoothed))) +
                               " FPS | " + std::to_string(m_renderer.stats().drawCalls) +

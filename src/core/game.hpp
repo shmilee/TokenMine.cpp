@@ -610,6 +610,9 @@ private:
     // chunk of it exists — the ensureColumn invariant makes "any" and
     // "all" equivalent.
     std::set<ColumnPos> m_loadedColumns;
+    // Total columns unloaded since session start (the periodic INFO
+    // progress line reports it — proof the unload pass is working).
+    std::size_t m_unloadedColumnsTotal = 0;
     // Columns that appeared since the last postLightJobs (integrated or
     // first-touch created): each gets one worker lighting job for its
     // full column box. Consumed (cleared) by postLightJobs. Replaces the
