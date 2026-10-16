@@ -43,8 +43,12 @@
 //     and loads it at 0); the seed must equal the seed the world was
 //     generated with; every item/block name must be registered; counts
 //     respect the item data (1..maxStack, entity cap 64); y in [0, 128);
-//     no duplicate edit position, and a block edit and a fluid edit can
-//     never share a cell (a block displaces fluid).
+//     no duplicate edit position, and a block edit and a fluid edit share
+//     a cell only when the implied live state is a single occupant (an
+//     "air" block edit + positive fluid = the fluid flowed into the
+//     burned/broken cell; a non-air block edit + level-0 fluid = the
+//     block displaced the generated fluid). A solid block and a positive
+//     fluid in one cell is rejected.
 //
 // diffWorld() compares every existing chunk against the reference
 // generation (the same pure generator the World itself used) and emits

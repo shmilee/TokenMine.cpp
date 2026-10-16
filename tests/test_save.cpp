@@ -806,16 +806,61 @@ TEST(SaveParseTest, RejectsBadFluidEdit) {
                                f.effects, 42)
                          .ok());
     }
-    // A block edit and a fluid edit on the same cell: a block displaces
-    // fluid, so the save would be corrupt.
+    // A block edit and a fluid edit on the same cell: a solid block and
+    // a positive fluid in one cell is an impossible live state (a block
+    // displaces fluid), so the save is corrupt.
+    auto blockEdit = [](int x, int y, int z, const std::string& name) {
+        Json a = Json::array();
+        a.push_back(Json(x));
+        a.push_back(Json(y));
+        a.push_back(Json(z));
+        a.push_back(Json(name));
+        return a;
+    };
     {
         Json root = *j;
         Json barr = Json::array();
-        barr.push_back(edit(1, 10, 1, "stone"));
+        barr.push_back(blockEdit(1, 10, 1, "stone"));
         root["blocks"] = std::move(barr);
         root["fluids"] =
             withFluids({edit(1, 10, 1, Json(3))})["fluids"];
-        EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
+        auto parsed = parseSave(root, f.items, f.blocks, f.effects, 42);
+        EXPECT_FALSE(parsed.ok());
+        if (!parsed.ok()) {
+            EXPECT_NE(parsed.error().message.find("same cell"), std::string::npos);
+        }
+    }
+    // The legal pairs (the Phase 90 lava-lake burn round trip): the diff
+    // records the LIVE state's occupants. An "air" block edit (the
+    // generated block was burned and the fluid then flowed in) may share
+    // a cell with a positive fluid edit — the live cell is fluid-only.
+    {
+        Json root = *j;
+        Json barr = Json::array();
+        barr.push_back(blockEdit(1, 10, 1, "air"));
+        root["blocks"] = std::move(barr);
+        root["fluids"] =
+            withFluids({edit(1, 10, 1, Json(3))})["fluids"];
+        auto parsed = parseSave(root, f.items, f.blocks, f.effects, 42);
+        ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+        ASSERT_EQ(parsed->blockEdits.size(), 1u);
+        EXPECT_EQ(parsed->blockEdits[0].blockName, "air");
+        ASSERT_EQ(parsed->fluidEdits.size(), 1u);
+        EXPECT_EQ(parsed->fluidEdits[0].level, 3);
+    }
+    // Likewise a non-air block edit with a LEVEL-0 fluid edit: the block
+    // (or the water/lava reaction) displaced the generated fluid — the
+    // live cell is block-only.
+    {
+        Json root = *j;
+        Json barr = Json::array();
+        barr.push_back(blockEdit(1, 10, 1, "stone"));
+        root["blocks"] = std::move(barr);
+        Json fl = Json::array();
+        fl.push_back(edit(1, 10, 1, Json(0), "lava"));
+        root["fluids"] = std::move(fl);
+        auto parsed = parseSave(root, f.items, f.blocks, f.effects, 42);
+        ASSERT_TRUE(parsed.ok()) << parsed.error().message;
     }
 }
 
@@ -1021,6 +1066,9 @@ TEST(SaveWorldDiffTest, ApplyRestoresTheModifiedWorld) {
     const BlockID stone = f.blocks.idForName("stone");
     const BlockID dirt = f.blocks.idForName("dirt");
     World world = makeWorld(stone);
+    // A full column (the game's load state: the streaming loader works in
+    // whole columns; applyWorldEdits tops edited columns up to the same).
+    world.ensureColumn(0, 0);
     ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID::air()));
     ASSERT_TRUE(world.setBlock(2, 5, 0, dirt));
     ASSERT_TRUE(world.setFluid(0, 5, 0, FluidKind::Water, 3));
@@ -1060,7 +1108,12 @@ TEST(SaveWorldDiffTest, ApplyFailsWhenFluidCellIsOccupied) {
     EXPECT_FALSE(r.ok());
 }
 
-TEST(SaveWorldDiffTest, ApplyFailsWhenTheChunkDoesNotExist) {
+TEST(SaveWorldDiffTest, FluidEditInANeverLoadedColumnCreatesTheChunk) {
+    // The Phase 90 lava-lake burn round trip: the diff can hold a fluid
+    // edit in a column with no block edit (the lava overflowed past the
+    // loaded area). applyWorldEdits must ensure the chunk (synchronous
+    // generation in the game; the fixture world has no generator, so an
+    // empty chunk) and apply the edit instead of failing the load.
     Fixture f;
     const BlockID stone = f.blocks.idForName("stone");
     World world = makeWorld(stone); // only chunk (0, 0, 0)
@@ -1069,7 +1122,21 @@ TEST(SaveWorldDiffTest, ApplyFailsWhenTheChunkDoesNotExist) {
     // it either.
     save.fluidEdits = {{BlockPos {64, 5, 0}, FluidKind::Water, 3}};
     auto r = applyWorldEdits(save, f.blocks, world);
-    EXPECT_FALSE(r.ok());
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(world.getFluidOfKind(64, 5, 0, FluidKind::Water), 3);
+}
+
+// A level-0 fluid edit (the generated fluid was drained) on a dry cell
+// must apply as a no-op, not a failure.
+TEST(SaveWorldDiffTest, FluidDrainEditOnADryCellIsANoOp) {
+    Fixture f;
+    const BlockID stone = f.blocks.idForName("stone");
+    World world = makeWorld(stone);
+    SaveGame save;
+    save.fluidEdits = {{BlockPos {64, 5, 0}, FluidKind::Lava, 0}};
+    auto r = applyWorldEdits(save, f.blocks, world);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(world.getFluidOfKind(64, 5, 0, FluidKind::Lava), 0);
 }
 
 // -- per-block furnace states (format 7; Phase 44) ----------------------------

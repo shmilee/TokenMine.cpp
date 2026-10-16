@@ -3,12 +3,14 @@
 
 #include <algorithm>
 #include <iterator>
+#include <map>
 #include <set>
 #include <string>
 #include <utility>
 
 #include "entity/item_entity.hpp"
 #include "item/crafting_grid.hpp"
+#include "world/chunk_streaming.hpp"
 
 namespace mc {
 
@@ -271,11 +273,43 @@ Result<void> applyWorldEdits(const SaveGame& save, const BlockRegistry& blocks,
         }
     }
     for (const SavedFluidEdit& e : save.fluidEdits) {
+        // A save can hold a fluid edit in a column with no block edit
+        // (lava that overflowed past the demo area into generated
+        // terrain, for example): setFluid writes existing chunks only,
+        // so ensure the chunk first — the synchronous generation the
+        // placement path uses (the generated cells under the edit are
+        // exactly the cells the save diffed against).
+        world.getOrCreateChunk(worldToChunk(e.pos));
+        // A level-0 edit on an already-dry cell is a no-op the diff
+        // records when the generated fluid was displaced (a placed block
+        // or the water/lava reaction took the cell). The block edits were
+        // applied first, so the cell is dry: skip instead of failing.
+        if (e.level == 0 &&
+            world.getFluidOfKind(e.pos.x, e.pos.y, e.pos.z, e.kind) == 0) {
+            continue;
+        }
         if (!world.setFluid(e.pos.x, e.pos.y, e.pos.z, e.kind, e.level)) {
             return MC_FAIL("cannot apply save fluid edit at " +
-                           posStr(e.pos) + " (no chunk, cell occupied, or "
-                           "level unchanged)");
+                           posStr(e.pos) + " (cell occupied or level "
+                           "unchanged)");
         }
+    }
+    // Top up every edited column to a COMPLETE column. The edits above
+    // create only their target chunks; the streaming loader counts a
+    // column as loaded when ANY chunk exists, so a partial column's
+    // remaining chunks would stay void forever (a hole around the
+    // restored edits).
+    std::set<ColumnPos> editedColumns;
+    for (const SavedBlockEdit& e : save.blockEdits) {
+        const ChunkPos cp = worldToChunk(e.pos);
+        editedColumns.insert({cp.x, cp.z});
+    }
+    for (const SavedFluidEdit& e : save.fluidEdits) {
+        const ChunkPos cp = worldToChunk(e.pos);
+        editedColumns.insert({cp.x, cp.z});
+    }
+    for (const ColumnPos& c : editedColumns) {
+        world.ensureColumn(c.x, c.z);
     }
     return {};
 }
@@ -918,7 +952,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     }
 
     // -- cell edits ------------------------------------------------------------------
-    std::set<BlockPos> blockCells;
+    std::map<BlockPos, std::string> blockCells;
     const Json* blks = def.find("blocks");
     if (blks == nullptr || !blks->isArray()) {
         return MC_FAIL("save file requires a 'blocks' array");
@@ -954,7 +988,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         if (blockCells.count(pos) != 0) {
             return MC_FAIL("save has duplicate block edits at " + posStr(pos));
         }
-        blockCells.insert(pos);
+        blockCells.emplace(pos, name);
         save.blockEdits.push_back({pos, name});
     }
 
@@ -1012,7 +1046,15 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
             kind = *k;
         }
         const BlockPos pos {static_cast<int>(x), yi, static_cast<int>(z)};
-        if (blockCells.count(pos) != 0) {
+        // A cell edit pair is legal when the implied LIVE state is a single
+        // occupant: an "air" block edit (the generated block was burned or
+        // broken and the fluid then flowed in — the Phase 90 lava-lake
+        // burn) co-locating with a positive fluid level, or a non-air block
+        // edit co-locating with a level-0 (drained) fluid edit (the block
+        // displaced the generated fluid). The one impossible live state is
+        // a solid block AND a positive fluid in the same cell.
+        const auto bit = blockCells.find(pos);
+        if (bit != blockCells.end() && bit->second != "air" && li > 0) {
             return MC_FAIL("save has a block edit and a fluid edit at the "
                            "same cell " +
                            posStr(pos) + " (a block displaces fluid)");
