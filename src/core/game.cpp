@@ -1471,6 +1471,45 @@ Result<SaveGame> Game::collectSave() const {
     for (const auto& [pos, st] : m_campfires) {
         save.campfires.push_back({pos, st});
     }
+    // The per-instance stair facings (format 14; Phase 94): scan the world
+    // for the stair cells (the block is Shape::Stairs) + record their
+    // per-instance facing (the World's per-cell byte — the project's first
+    // per-block state). Position-sorted (the chunk/scan order). Every stair
+    // block has an entry (the setBlock invariant sets the facing on
+    // placement).
+    for (const ChunkPos& cp : m_world.chunkPositions()) {
+        const Chunk* chunk = m_world.findChunk(cp);
+        if (chunk == nullptr) {
+            continue;
+        }
+        const int bx = cp.x * kChunkSize;
+        const int by = cp.y * kChunkSize;
+        const int bz = cp.z * kChunkSize;
+        for (int ly = 0; ly < kChunkSize; ++ly) {
+            for (int lz = 0; lz < kChunkSize; ++lz) {
+                for (int lx = 0; lx < kChunkSize; ++lx) {
+                    const BlockID id = chunk->get(lx, ly, lz);
+                    if (id == BlockID::air() ||
+                        m_blocks.at(id).model.shape !=
+                            BlockModel::Shape::Stairs) {
+                        continue;
+                    }
+                    const std::uint8_t facing =
+                        chunk->stairFacingAt(lx, ly, lz);
+                    const BlockPos p {bx + lx, by + ly, bz + lz};
+                    // The facing is always set for a placed stair (the
+                    // setBlock invariant); the sentinel (unset) is a
+                    // hand-edited stair in a format-13 file — fall back to
+                    // the block's stair_facing default.
+                    const std::uint8_t f =
+                        (facing <= 3) ? facing
+                                      : static_cast<std::uint8_t>(
+                                            m_blocks.at(id).model.stairFacing);
+                    save.stairs.push_back(SavedStair {p, f});
+                }
+            }
+        }
+    }
     // The player's active status effects (format 8; Phase 46): names +
     // the real-dt seconds remaining (the serializer name-sorts; the tick
     // phase is deliberately not saved — a reload restarts the next tick
@@ -1655,6 +1694,14 @@ Result<void> Game::applySave(const SaveGame& save) {
             m_campfires.count(e.pos) == 0) {
             m_campfires.emplace(e.pos, CampfireCookState {});
         }
+    }
+    // 4c-quater) The per-instance stair facings (format 14; Phase 94).
+    // Format-14 saves carry one entry per stair block (parse-validated,
+    // cross-checked in both directions); format 13 and earlier carry none
+    // (the per-instance facing did not exist — the setBlock invariant set
+    // the stair_facing default on load, so no migration is needed).
+    for (const SavedStair& ss : save.stairs) {
+        m_world.setStairFacing(ss.pos.x, ss.pos.y, ss.pos.z, ss.facing);
     }
     // 4d) The player's active status effects (format 8; Phase 46). The
     // names are parse-validated against the registry (idForName cannot
@@ -2375,28 +2422,31 @@ void Game::handleInteraction(double dt) {
                 }
             }
         }
-        // Stair rotation (Phase 92): a SNEAKING right-click on a block with a
-        // non-empty `stair_rotates_to` rotates it IN PLACE — setBlock to the
-        // named variant (the next facing). The orientation IS the block id
-        // (the 4 stair variants, Phase 89) — no per-block state, no format
-        // change. The click is consumed (no placement). Minecraft: sneak +
-        // right-click rotates a stair. Runs AFTER the item channels + panel
-        // interactions: a furnace/crafting table under the crosshair still
-        // opens its panel; a stair (no panel) rotates.
+        // Stair rotation (Phase 92, per-instance in Phase 94): a SNEAKING
+        // right-click on a stair (Shape::Stairs) rotates it IN PLACE — the
+        // per-instance facing (the World's per-cell byte, the project's first
+        // per-block state) advances (facing + 1) % 4. The click is consumed
+        // (no placement). Minecraft: sneak + right-click rotates a stair. Runs
+        // AFTER the item channels + panel interactions: a furnace/crafting
+        // table under the crosshair still opens its panel; a stair (no panel)
+        // rotates. (Phase 92 used the block-ID ring — the 4 variants; Phase
+        // 94 replaces it with the per-instance facing.)
         if (m_player->isCrouching()) {
             if (const std::optional<BlockHit> hit = targetBlock(); hit) {
                 const Block& b = m_blocks.at(
                     m_world.getBlock(hit->block.x, hit->block.y,
                                      hit->block.z));
-                if (!b.properties.stairRotatesTo.empty()) {
-                    const BlockID toId =
-                        m_blocks.idForName(b.properties.stairRotatesTo);
-                    if (toId.valid()) {
-                        setBlock(hit->block.x, hit->block.y, hit->block.z,
-                                 toId);
-                        Lighting::updateLocal(m_world, m_blocks, hit->block);
-                        m_sound.play("place");
-                    }
+                if (b.model.shape == BlockModel::Shape::Stairs) {
+                    const int cur = m_world.getStairFacing(hit->block.x,
+                                                           hit->block.y,
+                                                           hit->block.z);
+                    const int f =
+                        (cur <= 3) ? cur : b.model.stairFacing;
+                    m_world.setStairFacing(hit->block.x, hit->block.y,
+                                           hit->block.z,
+                                           static_cast<std::uint8_t>(
+                                               (f + 1) % 4));
+                    m_sound.play("place");
                     return; // the rotation consumes the click (no placement)
                 }
             }
@@ -2741,6 +2791,24 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
             m_campfires.emplace(cpos, CampfireCookState {});
         } else {
             m_campfires.erase(cpos);
+        }
+    }
+    // Phase 94: the per-instance stair facing follows the cell (the project's
+    // first per-block state, a breakthrough of the "no per-instance state"
+    // philosophy). A stair (Shape::Stairs) owns a facing — set to the
+    // block's stair_facing DEFAULT on placement (the placeBlock override
+    // sets it to the placement direction afterward), and a cell that stops
+    // holding a stair drops its facing (the sentinel). The collision
+    // (solidTopHeight) + the mesh (emitStairs) read it from the World.
+    {
+        const bool stair =
+            m_blocks.at(id).model.shape == BlockModel::Shape::Stairs;
+        if (stair) {
+            m_world.setStairFacing(x, y, z,
+                                   static_cast<std::uint8_t>(
+                                       m_blocks.at(id).model.stairFacing));
+        } else {
+            m_world.setStairFacing(x, y, z, Chunk::kStairFacingUnset);
         }
     }
     const float half = Projectile::kSize * 0.5f;

@@ -148,6 +148,39 @@ bool World::setFluid(int x, int y, int z, FluidKind kind,
     return true;
 }
 
+std::uint8_t World::getStairFacing(int x, int y, int z) const {
+    if (!isWorldYValid(y)) {
+        return Chunk::kStairFacingUnset; // the void reads "unset"
+    }
+    const BlockPos p{x, y, z};
+    const ChunkPos cp = worldToChunk(p);
+    const auto it = m_chunks.find(cp);
+    if (it == m_chunks.end()) {
+        return Chunk::kStairFacingUnset; // uncreated reads "unset"
+    }
+    const BlockPos local = worldToChunkLocal(cp, p);
+    return it->second.stairFacingAt(local.x, local.y, local.z);
+}
+
+bool World::setStairFacing(int x, int y, int z, std::uint8_t facing) {
+    if (!isWorldYValid(y) || facing > 3) {
+        return false;
+    }
+    const BlockPos p{x, y, z};
+    const ChunkPos cp = worldToChunk(p);
+    Chunk* chunk = findChunkMut(cp);
+    if (chunk == nullptr) {
+        return false; // no chunk (the void is never created here)
+    }
+    const BlockPos local = worldToChunkLocal(cp, p);
+    if (chunk->stairFacingAt(local.x, local.y, local.z) == facing) {
+        return false; // unchanged
+    }
+    chunk->setStairFacing(local.x, local.y, local.z, facing);
+    markNeighborChunksDirty(local.x, local.y, local.z, cp);
+    return true;
+}
+
 Chunk& World::getOrCreateChunk(const ChunkPos& pos) {
     auto it = m_chunks.find(pos);
     if (it != m_chunks.end()) {

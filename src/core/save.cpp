@@ -508,6 +508,24 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         root["campfires"] = std::move(campfires);
     }
 
+    // Always written (possibly empty — a world without stair blocks).
+    // Phase 94: the per-instance stair facings (the project's first per-
+    // block state).
+    {
+        Json stairs = Json::array();
+        for (const SavedStair& ss : save.stairs) {
+            Json se = Json::object();
+            Json pos = Json::array();
+            pos.push_back(Json(ss.pos.x));
+            pos.push_back(Json(ss.pos.y));
+            pos.push_back(Json(ss.pos.z));
+            se["pos"] = pos;
+            se["facing"] = Json(static_cast<int>(ss.facing));
+            stairs.push_back(std::move(se));
+        }
+        root["stairs"] = std::move(stairs);
+    }
+
     Json entities = Json::array();
     for (const SavedItemEntity& e : save.entities) {
         Json jpos = Json::array();
@@ -567,7 +585,8 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                                           "inventory", "inv_grid",
                                           "table_grid", "furnace",
                                           "furnaces", "fires", "campfires",
-                                          "entities", "blocks", "fluids"};
+                                          "stairs", "entities", "blocks",
+                                          "fluids"};
     MC_TRY(rejectUnknownFields(def, topLevel, "save file"));
 
     const Json* fmt = def.find("format");
@@ -1476,12 +1495,99 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         return MC_FAIL("save 'campfires' requires format 11 or newer (got " +
                        std::to_string(fmtVersion) + ")");
     }
-    // The game's invariant after ANY load: every campfire block in the
-    // world owns a cooking-state entry. Format 11 guarantees it (the
-    // cross-check); format 10 and earlier carry no entries at all (the
-    // campfire block did not exist — a hand-edited campfire edit in an old
-    // file is possible) — the game adds the empty states on load (like the
-    // empty furnace states).
+
+    // -- per-instance stair facings (format 14; Phase 94) ----------------
+    // A "stair cell" = a block edit whose block is Shape::Stairs (the block
+    // registry resolves the name). The save cross-checks the facing entries
+    // against the stair cells in both directions (every stair cell owns a
+    // facing, every facing is a stair cell — the furnaces-key discipline).
+    // Format 14 REQUIREs the "stairs" array (an empty array is valid). A
+    // format-13 (and older) file carrying "stairs" is a version lie,
+    // rejected; it migrates into this empty (the per-instance facing did
+    // not exist — the stair block's stair_facing default is used on load).
+    std::set<BlockPos> stairCells;
+    for (const SavedBlockEdit& e : save.blockEdits) {
+        const Block* b = blocks.findByName(e.blockName);
+        if (b != nullptr &&
+            b->model.shape == BlockModel::Shape::Stairs) {
+            stairCells.insert(e.pos);
+        }
+    }
+    const Json* stairArr = def.find("stairs");
+    if (fmtVersion >= 14) {
+        if (stairArr == nullptr || !stairArr->isArray()) {
+            return MC_FAIL("save format 14 requires a 'stairs' array");
+        }
+        std::set<BlockPos> entryPos;
+        for (std::size_t i = 0; i < stairArr->size(); ++i) {
+            const Json& e = stairArr->at(i);
+            const std::string what =
+                "save 'stairs' entry #" + std::to_string(i);
+            if (!e.isObject()) {
+                return MC_FAIL(what + " must be an object");
+            }
+            const std::set<std::string> eFields {"pos", "facing"};
+            MC_TRY(rejectUnknownFields(e, eFields, what));
+            const Json* pos = e.find("pos");
+            if (pos == nullptr || !pos->isArray() || pos->size() != 3) {
+                return MC_FAIL(what + " requires a 'pos' [x, y, z] array");
+            }
+            double x, y, z;
+            if (!isInt(pos->at(0), &x) || !isInt(pos->at(1), &y) ||
+                !isInt(pos->at(2), &z)) {
+                return MC_FAIL(what + " 'pos' entries must be integers");
+            }
+            const int yi = static_cast<int>(y);
+            if (!isWorldYValid(yi)) {
+                return MC_FAIL(what + " has y=" + std::to_string(yi) +
+                               " outside the world height [0, " +
+                               std::to_string(kWorldHeight) + ")");
+            }
+            const BlockPos bpos {static_cast<int>(x), yi, static_cast<int>(z)};
+            if (entryPos.count(bpos) != 0) {
+                return MC_FAIL(what + " duplicates the stair position " +
+                               posStr(bpos));
+            }
+            entryPos.insert(bpos);
+            const Json* f = e.find("facing");
+            if (f == nullptr || !f->isNumber()) {
+                return MC_FAIL(what + " requires numeric 'facing'");
+            }
+            const int fi = f->asInt();
+            if (fi < 0 || fi > 3) {
+                return MC_FAIL(what + " facing " + std::to_string(fi) +
+                               " is out of range [0, 3]");
+            }
+            save.stairs.push_back(SavedStair {bpos, static_cast<std::uint8_t>(fi)});
+        }
+        if (entryPos != stairCells) {
+            for (const BlockPos& p : entryPos) {
+                if (stairCells.count(p) == 0) {
+                    return MC_FAIL("save 'stairs' has an entry at " +
+                                   posStr(p) +
+                                   " which is not a stair block in the "
+                                   "world's block edits");
+                }
+            }
+            for (const BlockPos& p : stairCells) {
+                if (entryPos.count(p) == 0) {
+                    return MC_FAIL("the stair block at " + posStr(p) +
+                                   " has no 'stairs' entry (every stair "
+                                   "block owns a per-instance facing)");
+                }
+            }
+            return MC_FAIL("save 'stairs' does not match the world's "
+                           "stair blocks");
+        }
+    } else if (stairArr != nullptr) {
+        return MC_FAIL("save 'stairs' requires format 14 or newer (got " +
+                       std::to_string(fmtVersion) + ")");
+    }
+    // The game's invariant after ANY load: every stair block in the world
+    // owns a per-instance facing entry. Format 14 guarantees it (the
+    // cross-check); format 13 and earlier carry no entries at all (the
+    // per-instance facing did not exist — a hand-edited stair in an old
+    // file is possible) — the game sets the stair_facing default on load.
     return save;
 }
 

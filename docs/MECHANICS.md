@@ -694,11 +694,16 @@
     = mxLocalZ、east = mxLocalX、west = 1−mnLocalX），玩家脚落在斜面高端——
     Phase 89 修正 P87 用低端边（会切入楼梯高端）的 bug；slab/满块忽略 AABB
     （固定高度，backward-compat）。`moveAxis` + `hasRoomAt` 传 mn/mx/cell。
-   - **旋转**（Phase 92，`stair_rotates_to` 数据属性）：4 楼梯块变体成环
-     （N→E→S→W→N，各块 `stair_rotates_to` 指向下一朝向）。**潜行 + 右键**一
-     个楼梯 = 原地 setBlock 到下一朝向变体（朝向即块 id，"状态=块 id"哲学——
-     无 per-block 状态、无 format 变更），"place" 音、点击被消费（不放置）。
-     init 交叉校验 `stair_rotates_to` 指向存在的块（grows_to/ignites_to 纪律）。
+   - **旋转 + per-instance 朝向**（Phase 92 块 id 环，Phase 94 per-instance）：
+     朝向 = **World 每格 byte**（per-instance facing 0-3，chunk `m_stairFacing`
+     数组，哨兵 255=未设置）。**碰撞 `solidTopHeight` / mesh `emitStairs` 直接
+     从 World 读**（哨兵时回落块 `stair_facing` 默认）。**setBlock 收口**：楼梯
+     放置→设块默认朝向，移除→清哨兵。**潜行 + 右键**一个楼梯（stair 形状门控）
+     = 原地旋转 per-instance 朝向 `(f+1)%4`（块 id **不变**，"place" 音、点击
+     消费）。**存档 format 14**（`stairs` 数组 {pos,facing}，双向交叉校验 +
+     format 13 迁移空）。P89 的 4 块变体保留为默认朝向、P92 的 `stair_rotates_to`
+     保留解析但不再用于旋转。这是项目首个 **per-block 状态**（突破"无
+     per-instance 状态"哲学，需 format 变更）。
 - **游泳**（Phase 9）：玩家包围盒与任何水体格相交即进入水中状态——水中重力减半
   （12 vs 32）、终端速度 4、水平速度降为 3.1（冲刺无效）、`Space` 随时上浮（4.5）；
   浅水（头在水面上）可以"蹚水走"，深水可以游

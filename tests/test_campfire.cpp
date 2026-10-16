@@ -285,8 +285,8 @@ TEST(CampfireSaveTest, FormatIsThirteenAndRoundTrips) {
     s.campfires.push_back({BlockPos {4, 53, 4}, unlit});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Phase 75: writes are always format 13.
-    EXPECT_EQ(j->find("format")->asInt(), 13);
+    // Phase 94: writes are always format 14.
+    EXPECT_EQ(j->find("format")->asInt(), 14);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->campfires.size(), 3u);
@@ -313,6 +313,7 @@ TEST(CampfireSaveTest, FormatTwelveOldShapeMigratesToSlotZero) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(12);
+    root = withoutKey(root, "stairs"); // format 12 predates the stair facing
     // Rewrite the entry to the OLD single-slot shape.
     Json oldEntry = Json::object();
     Json posArr = Json::array();
@@ -348,6 +349,7 @@ TEST(CampfireSaveTest, FormatTwelveEntryWithSlotsKeyRejected) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(12);
+    root = withoutKey(root, "stairs"); // format 12 predates the stair facing
     Json e = root.find("campfires")->at(0);
     Json oldEntry = Json::object();
     oldEntry["pos"] = e.find("pos");
@@ -397,6 +399,7 @@ TEST(CampfireSaveTest, FormatTenLoadsWithoutCampfires) {
     Json root = *j;
     root["format"] = Json(10);
     root = withoutKey(root, "campfires"); // format 10 predates the campfire
+    root = withoutKey(root, "stairs"); // format 10 predates the stair facing
     root["player"] = withoutKey(root["player"], "absorption"); // format 10 predates the absorption pool
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
@@ -415,6 +418,7 @@ TEST(CampfireSaveTest, FormatTenCampfireEditMigratesEmpty) {
     Json root = *j;
     root["format"] = Json(10);
     root = withoutKey(root, "campfires"); // format 10 predates the campfire
+    root = withoutKey(root, "stairs"); // format 10 predates the stair facing
     root["player"] = withoutKey(root["player"], "absorption"); // format 10 predates the absorption pool
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
@@ -429,6 +433,7 @@ TEST(CampfireSaveTest, RejectsCampfiresFieldInFormatTen) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(10); // keeps the "campfires" field
+    root = withoutKey(root, "stairs"); // isolate the "campfires" rejection
     root["player"] = withoutKey(root["player"], "absorption"); // the rejection under test is "campfires"
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());

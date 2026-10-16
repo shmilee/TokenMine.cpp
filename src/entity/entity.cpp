@@ -54,7 +54,15 @@ float Entity::solidTopHeight(BlockID id, const Vec3& mn, const Vec3& mx,
         const float mxlx = std::clamp(mx.x - cell.x, 0.0f, 1.0f);
         const float mnlz = std::clamp(mn.z - cell.z, 0.0f, 1.0f);
         const float mxlz = std::clamp(mx.z - cell.z, 0.0f, 1.0f);
-        switch (b.model.stairFacing) {
+        // Phase 94: the per-instance facing (the World's per-cell byte — the
+        // project's first per-block state). The game sets it when the stair
+        // is placed (to the block's stair_facing default) + on rotation.
+        // Unset (the sentinel, e.g. unit tests without a game) falls back to
+        // the block's stair_facing (the default).
+        const int pf = m_world.getStairFacing(cell.x, cell.y, cell.z);
+        const int facing =
+            (pf <= 3) ? pf : b.model.stairFacing;
+        switch (facing) {
             case 0: return 1.0f - mnlz; // north: high at -Z (the AABB's -Z edge)
             case 2: return mxlz;        // south: high at +Z (the AABB's +Z edge)
             case 1: return mxlx;        // east:  high at +X (the AABB's +X edge)

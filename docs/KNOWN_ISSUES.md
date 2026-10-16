@@ -494,14 +494,16 @@
 
 ## 楼梯 stairs（Phase 87）
 
-- **楼梯 4 朝向 = 4 块变体（非 per-block 状态）+ 旋转** — v1 用 4 个楼梯块
-  （stone_stairs[_east/_south/_west]，`stair_facing` 0-3）表达朝向，而非 MC
-  的"同一块 + per-block 旋转状态"（项目无 per-instance 状态）。`[Phase 92]`
-  加 **`stair_rotates_to`**（指向下一朝向变体，4 块成环 N→E→S→W→N）：**潜
-  行 + 右键**一个楼梯 = 原地旋转到下一朝向（setBlock 改块 id，朝向即块 id =
-  "状态=块 id"哲学，无 per-block 状态、无 format 变更）。无自动旋转（放置哪
-  个朝向块 = 该朝向，要旋转须潜行右键）。`[Phase 87]` → `[Phase 89]` →
-  `[Phase 92]`
+- **楼梯朝向 = per-instance 状态（真 per-block 旋转）** — `[Phase 94]` 突破
+  "无 per-instance 状态"哲学：朝向是 **World 的每格 byte**（per-instance
+  facing，0-3），碰撞（solidTopHeight）+ mesh（emitStairs）直接从 World 读，
+  **存档 format 14**（`stairs` 数组 {pos, facing}）。**潜行 + 右键**一个楼梯
+  = 原地旋转 per-instance 朝向 `(f+1)%4`（块 id **不变**，仍 stone_stairs）。
+  P89 的 4 块变体（stair_facing 0-3）保留为**默认朝向**（放置时 per-instance
+  朝向初始化为块的 stair_facing；未设置时碰撞/mesh 回落块 stair_facing = 单
+  测无需改）；P92 的 `stair_rotates_to`（块 id 环）保留解析但**不再用于旋转**
+  （旋转改设 per-instance 朝向）。无自动旋转（放置 = 块默认朝向，要旋转须潜
+  行右键）。`[Phase 87]` → `[Phase 89]` → `[Phase 92]` → `[Phase 94]`
 - **楼梯碰撞 = 斜面（AABB 高端边高度）** — 玩家脚高度随其 AABB 在斜面高端
   的位置（取 AABB 覆盖的**最高**斜面点，Phase 89 修正 P87 的低端边 bug——
   原会切入楼梯高端）；沿 facing 轴（north/south 用 z、east/west 用 x）；MC

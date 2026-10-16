@@ -97,6 +97,20 @@ public:
     void clearFluid();
     const std::uint8_t* fluidData() const { return m_fluid.data(); }
 
+    // -- Stair facing (Phase 94): the per-instance orientation of a stair
+    // block (0-3: north/east/south/west). This is the project's first
+    // PER-BLOCK STATE (a breakthrough of the "no per-instance state"
+    // philosophy): the orientation lives in the World (a per-cell byte), so
+    // the collision (Entity) + the mesh (ChunkMesher) — which read World —
+    // can see it. A fresh cell is kStairFacingUnset (255) — the collision
+    // / mesh fall back to the block's stair_facing (the default) when unset.
+    // Written by the game (the setBlock choke point, the placement, the
+    // rotation), read by the collision + mesh.
+    static constexpr std::uint8_t kStairFacingUnset = 255;
+    std::uint8_t stairFacingAt(int x, int y, int z) const;
+    void setStairFacing(int x, int y, int z, std::uint8_t facing); // dirty
+    void clearStairFacing();
+
     // Raw array access (kVolume bytes each) for bulk readers/comparators.
     const std::uint8_t* skyLightData() const { return m_skyLight.data(); }
     const std::uint8_t* blockLightData() const { return m_blockLight.data(); }
@@ -112,6 +126,7 @@ private:
     std::array<std::uint8_t, kVolume> m_skyLight {};
     std::array<std::uint8_t, kVolume> m_blockLight {};
     std::array<std::uint8_t, kVolume> m_fluid {}; // encoded (see fluidCode)
+    std::array<std::uint8_t, kVolume> m_stairFacing {}; // Phase 94 (0-3)
     bool m_dirty = true;
 };
 

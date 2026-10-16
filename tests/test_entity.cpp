@@ -1020,6 +1020,47 @@ TEST(EntityTest, Phase89SouthStairSlopeIsOpposite) {
         << "a south stair is high at +Z (opposite the north stair)";
 }
 
+// Phase 94: the PER-INSTANCE facing (the World's per-cell byte — the
+// project's first per-block state) OVERRIDES the block's stair_facing
+// (the default). A north stair (stair_facing 0) with the per-instance facing
+// set to south (2) behaves like a south stair (high at +Z).
+TEST(EntityTest, Phase94PerInstanceFacingOverridesBlockDefault) {
+    Fixture f;
+    const BlockID north = f.blocks.idForName("stairs"); // stair_facing 0
+    f.world.setBlock(8, 2, 8, north);
+    // Set the per-instance facing to SOUTH (2) — overriding the block's
+    // north default. Now the +Z end is HIGH (south), not the -Z end.
+    f.world.setStairFacing(8, 2, 8, 2);
+    // An item at the +Z end (z~8.9) settles HIGHER than one at the -Z end
+    // (z~8.1) — the OPPOSITE of a north stair (the per-instance south facing
+    // overrides the block's north default).
+    ItemEntity plusZ = f.makeItem({8.5f, 4.0f, 8.9f});
+    f.run(plusZ, 300);
+    ItemEntity minusZ = f.makeItem({8.5f, 4.0f, 8.1f});
+    f.run(minusZ, 300);
+    EXPECT_GT(plusZ.position().y, minusZ.position().y)
+        << "the per-instance south facing overrides the block's north "
+           "default (high at +Z, opposite a north stair)";
+}
+
+// Phase 94: when the per-instance facing is UNSET (the sentinel), the
+// collision falls back to the block's stair_facing (the default) — the
+// pre-Phase-94 behavior (the unit tests without a game are unchanged).
+TEST(EntityTest, Phase94UnsetFacingFallsBackToBlockDefault) {
+    Fixture f;
+    const BlockID north = f.blocks.idForName("stairs"); // stair_facing 0
+    f.world.setBlock(8, 2, 8, north);
+    // The per-instance facing is UNSET (the sentinel) — the collision falls
+    // back to the block's north default. The -Z end is HIGH (north).
+    ItemEntity minusZ = f.makeItem({8.5f, 4.0f, 8.1f});
+    f.run(minusZ, 300);
+    ItemEntity plusZ = f.makeItem({8.5f, 4.0f, 8.6f});
+    f.run(plusZ, 300);
+    EXPECT_GT(minusZ.position().y, plusZ.position().y)
+        << "an unset per-instance facing falls back to the block's north "
+           "default (high at -Z)";
+}
+
 TEST(EntityTest, Phase85SlabHasRoom) {
     Fixture f;
     const BlockID slab = f.blocks.idForName("slab");

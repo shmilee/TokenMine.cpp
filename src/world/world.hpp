@@ -63,6 +63,18 @@ public:
     // setBlock.
     bool setFluid(int x, int y, int z, FluidKind kind, std::uint8_t level);
 
+    // Stair facing (Phase 94): the per-instance orientation of a stair cell
+    // (0-3: north/east/south/west). Same coordinate conventions as getFluid:
+    // y outside [0, kWorldHeight) or a chunk that was never created reads 0
+    // (the void / uncreated reads the default north). Written by the game
+    // (the setBlock choke point, the placement, the rotation); read by the
+    // collision (Entity::solidTopHeight) + the mesh (emitStairs).
+    std::uint8_t getStairFacing(int x, int y, int z) const;
+    // Sets the facing in an existing chunk. Returns false (and changes
+    // nothing) when y is out of range, the facing is out of range, or the
+    // chunk was never created. Marks the target chunk dirty (a mesh rebuild).
+    bool setStairFacing(int x, int y, int z, std::uint8_t facing);
+
     // Light queries (0..15), same coordinate conventions as getBlock.
     // Above the world (y >= kWorldHeight) and around the world (a chunk
     // that was never created) the void is open sky: sky 15, block 0.

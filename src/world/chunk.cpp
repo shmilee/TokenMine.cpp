@@ -22,6 +22,7 @@ void Chunk::set(int x, int y, int z, BlockID id) {
 void Chunk::fill(BlockID id) {
     std::fill(m_blocks.begin(), m_blocks.end(), id);
     clearFluid(); // a cell holds a block XOR fluid
+    clearStairFacing(); // a fresh cell holds no per-instance facing
     m_dirty = true;
 }
 
@@ -67,6 +68,24 @@ void Chunk::setFluidAt(int x, int y, int z, std::uint8_t level) {
 
 void Chunk::clearFluid() {
     std::fill(m_fluid.begin(), m_fluid.end(), 0);
+}
+
+std::uint8_t Chunk::stairFacingAt(int x, int y, int z) const {
+    assert(inBounds(x) && inBounds(y) && inBounds(z));
+    return m_stairFacing[index(x, y, z)];
+}
+
+void Chunk::setStairFacing(int x, int y, int z, std::uint8_t facing) {
+    assert(inBounds(x) && inBounds(y) && inBounds(z));
+    assert(facing <= 3);
+    m_stairFacing[index(x, y, z)] = facing;
+    m_dirty = true;
+}
+
+void Chunk::clearStairFacing() {
+    // A fresh cell holds no per-instance facing (the sentinel). The
+    // collision / mesh fall back to the block's stair_facing when unset.
+    std::fill(m_stairFacing.begin(), m_stairFacing.end(), kStairFacingUnset);
 }
 
 std::size_t Chunk::index(int x, int y, int z) {

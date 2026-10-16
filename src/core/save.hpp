@@ -157,7 +157,16 @@ namespace mc {
 //      lit-only one (the extinguished block did not exist). A
 //      format-13 file requires the new shape (an old-shape entry is
 //      rejected); writes are always format 13.
-inline constexpr int kSaveFormat = 13;
+//  14: the per-instance stair facings (Phase 94) — "stairs": an array of
+//      {x, y, z, facing} (position-sorted), one entry per stair block in
+//      the world (the project's first per-block state; the facing is the
+//      World's per-cell byte). A format-14 file REQUIREs the "stairs" key
+//      (an empty array is valid); a format-13 load migrates into this
+//      empty (the per-instance facing did not exist; the stair block's
+//      stair_facing default is used on load). The entries are cross-checked
+//      against the block edits in both directions (every stair cell has a
+//      facing, every facing is a stair cell). Writes are always format 14.
+inline constexpr int kSaveFormat = 14;
 inline constexpr int kSaveFormatMin = 1;
 
 // Phase 40: the furnace save-field bounds — the max smelt/fuel times the
@@ -216,6 +225,18 @@ struct SavedFire {
 struct SavedCampfire {
     BlockPos pos;
     CampfireCookState state;
+};
+
+// One stair block's per-instance facing (format 14; Phase 94) — the
+// project's first per-block STATE (a breakthrough of the "no per-instance
+// state" philosophy). The game keeps an entry for EVERY stair block in the
+// world (the facing is the World's per-cell byte), cross-checked against
+// the block edits in both directions (the furnaces-key discipline). A
+// format-13 load migrates into this empty (the per-instance facing did not
+// exist; the stair block's stair_facing default is used on load).
+struct SavedStair {
+    BlockPos pos;
+    std::uint8_t facing = 0; // 0-3: north/east/south/west
 };
 
 // One active player status effect (format 8; Phase 46): the effect NAME
@@ -287,6 +308,11 @@ struct SaveGame {
     // format-10 load migrates into this empty (the campfire block did not
     // exist).
     std::vector<SavedCampfire> campfires;
+    // The per-instance stair facings (format 14; Phase 94): one entry per
+    // stair block in the world (position-sorted; the World's per-cell byte
+    // order). Empty when the world holds no stair; a format-13 load
+    // migrates into this empty (the per-instance facing did not exist).
+    std::vector<SavedStair> stairs;
     // The player's active status effects (format 8; Phase 46), name-
     // sorted. Empty for format 1-7 loads (the effects did not exist).
     std::vector<SavedEffect> playerEffects;
