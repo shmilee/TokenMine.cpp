@@ -535,30 +535,53 @@ void ChunkMesher::emitWall(ChunkMeshData& out, const Block& block,
                            const BlockPos& origin, int lx, int ly, int lz)
     const {
     // Phase 95: a 1.5-block-tall pillar (the cell + a half cap above). The
-    // unit-cube corner Y is scaled by 1.5 (the wall's height) — the cap
-    // (y 1..1.5) extends into the cell above. The bottom face (dy<0, the
-    // cube's -Y face) is culled by an opaque neighbor below; the top face
-    // (the cap, dy>0) is culled by an opaque neighbor above (the cap is
-    // within the cell above); the SIDE faces (dy==0) are always emitted —
-    // the wall extends above the cell (the y 1..1.5 part is exposed), so
-    // the conservative approach accepts the Z-fighting on the y 0..1 part
-    // (like the slab's side-face limitation). Opaque sub-mesh (a wall is
-    // solid, not glass).
-    const float h = 1.5f;
+    // bottom face (dy<0) is culled by an opaque neighbor below; the top cap
+    // (dy>0) by an opaque neighbor above (the cap is within the cell above).
+    // Phase 96 (wall connection): the SIDE faces (dy==0) against a neighbor:
+    //   - a WALL neighbor: the shared face is fully internal (both pillars
+    //     span y 0..1.5) -> culled (a merged wall line, no coplanar
+    //     double-emit);
+    //   - a FULL opaque block (solid y 0..1): its face toward the wall is
+    //     already culled (the wall is opaque), so the wall's lower band
+    //     (y 0..1) is internal too -> emit only the exposed cap band
+    //     (y 1..1.5, above the neighbor's top), the full side texture
+    //     squashed into the band (the emitSlab h pattern);
+    //   - otherwise (air, partial slab/stairs, transparent glass): the lower
+    //     band may be exposed (a slab covers only y 0..0.5; glass is blended
+    //     in the transparent pass) -> the conservative full side (y 0..1.5).
+    // Opaque sub-mesh (a wall is solid, not glass).
     const int wx = origin.x + lx;
     const int wy = origin.y + ly;
     const int wz = origin.z + lz;
     for (const CubeFace& face : kCubeFaces) {
+        // The face's vertical range in cell-local units: [yBase,
+        // yBase + yScale] (corner y 0/1 maps to the range ends; the bottom
+        // and top-cap faces sit at a single Y, so yScale is moot for them).
+        float yBase = 0.0f;
+        float yScale = 1.5f;
         if (face.dy != 0) {
             // The bottom (dy<0) + top cap (dy>0) faces: hidden by an opaque
-            // neighbor (which spans their extent). The side faces (dy==0)
-            // are always emitted (the wall extends above the cell).
+            // neighbor (which spans their extent).
             const BlockID neighbor = m_world.getBlock(wx + face.dx,
                                                       wy + face.dy,
                                                       wz + face.dz);
             if (neighbor != BlockID::air() &&
                 m_blocks.at(neighbor).properties.opaque) {
                 continue;
+            }
+        } else {
+            const BlockID neighbor = m_world.getBlock(wx + face.dx, wy,
+                                                      wz + face.dz);
+            if (neighbor != BlockID::air()) {
+                const Block& nb = m_blocks.at(neighbor);
+                if (nb.model.shape == BlockModel::Shape::Wall) {
+                    continue; // merged wall: the shared face is internal
+                }
+                if (nb.properties.opaque &&
+                    nb.model.shape == BlockModel::Shape::FullCube) {
+                    yBase = 1.0f; // the lower band is internal (see above)
+                    yScale = 0.5f;
+                }
             }
         }
         const Vec2 u0 = AtlasLayout::uvMin(
@@ -581,7 +604,8 @@ void ChunkMesher::emitWall(ChunkMeshData& out, const Block& block,
         for (int i = 0; i < 4; ++i) {
             MeshVertex v;
             v.position = {static_cast<float>(lx + face.corner[i][0]),
-                          static_cast<float>(ly + face.corner[i][1] * h),
+                          static_cast<float>(ly + yBase +
+                                             face.corner[i][1] * yScale),
                           static_cast<float>(lz + face.corner[i][2])};
             v.normal = face.normal;
             v.uv = faceUv[i];

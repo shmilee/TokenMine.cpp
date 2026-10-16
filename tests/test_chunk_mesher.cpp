@@ -44,7 +44,10 @@ BlockRegistry makeRegistry() {
         cubeDef("water",
                 R"({"opaque":false,"transparent":true,"solid":false,"fluid":"water"})",
                 R"({"top":"t","side":"t","bottom":"t"})")));
-    if (!stone.ok() || !glass.ok() || !water.ok()) {
+    // Phase 95: a wall (the 1.5-tall pillar shape).
+    auto wall = reg.registerBlock(parseDef(
+        R"({"id":"wall","model":{"shape":"wall","textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!stone.ok() || !glass.ok() || !water.ok() || !wall.ok()) {
         ADD_FAILURE() << "test registry failed to build";
     }
     return reg;
@@ -751,4 +754,102 @@ TEST(ChunkMesherTest, CrossBlockDoesNotCullNeighborFace) {
     EXPECT_EQ(plusX, 4);
     // ... and the cross still emits its two quads.
     EXPECT_EQ(data.transparentVertices.size(), 8u);
+}
+
+// ============================================================================
+//   Phase 96 — wall connection (the seamless merged wall geometry)
+// ============================================================================
+
+TEST(ChunkMesherTest, Phase96WallAirKeepsFullSideFaces) {
+    // A lone wall: every side face spans the full wall height (y 0..1.5) —
+    // the conservative baseline (no neighbor to share with).
+    BlockRegistry reg = makeRegistry();
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("wall"));
+    const auto data = mesh(world, reg, {0, 0, 0});
+    EXPECT_TRUE(data.transparentEmpty());
+    EXPECT_EQ(data.opaqueVertices.size(), 24u);
+    // The +Z side (air neighbor) reaches both the bottom (y=4) and the cap
+    // top (y=5.5).
+    const std::vector<MeshVertex> plusZ =
+        verticesWithNormal(data.opaqueVertices, {0.0f, 0.0f, 1.0f});
+    ASSERT_EQ(plusZ.size(), 4u);
+    float minY = 99.0f, maxY = -99.0f;
+    for (const MeshVertex& v : plusZ) {
+        minY = v.position.y < minY ? v.position.y : minY;
+        maxY = v.position.y > maxY ? v.position.y : maxY;
+    }
+    EXPECT_EQ(minY, 4.0f);
+    EXPECT_EQ(maxY, 5.5f);
+}
+
+TEST(ChunkMesherTest, Phase96WallWallCullsSharedFace) {
+    // Two adjacent walls: the shared side faces are fully internal (both
+    // pillars span y 0..1.5) -> culled from BOTH (the merged wall line).
+    BlockRegistry reg = makeRegistry();
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("wall"));
+    world.setBlock(9, 4, 8, reg.idForName("wall"));
+    const auto data = mesh(world, reg, {0, 0, 0});
+    // 24 + 24 - 8 (one shared side face dropped from each) = 40.
+    EXPECT_EQ(data.opaqueVertices.size(), 40u);
+    // The only -X face left is the x=8 wall's AIR side (the x=9 wall's -X
+    // toward it is culled); symmetric for +X.
+    const std::vector<MeshVertex> minusX =
+        verticesWithNormal(data.opaqueVertices, {-1.0f, 0.0f, 0.0f});
+    ASSERT_EQ(minusX.size(), 4u);
+    for (const MeshVertex& v : minusX) {
+        EXPECT_EQ(v.position.x, 8.0f);
+    }
+    const std::vector<MeshVertex> plusX =
+        verticesWithNormal(data.opaqueVertices, {1.0f, 0.0f, 0.0f});
+    ASSERT_EQ(plusX.size(), 4u);
+    for (const MeshVertex& v : plusX) {
+        EXPECT_EQ(v.position.x, 10.0f);
+    }
+}
+
+TEST(ChunkMesherTest, Phase96WallFullBlockEmitsCapBandOnly) {
+    // A wall beside a full opaque block: the block's face toward the wall
+    // is culled (the wall is opaque), so the wall's lower band (y 0..1) on
+    // that side is internal too -> the wall emits only the exposed cap band
+    // (y 1..1.5, above the block's top).
+    BlockRegistry reg = makeRegistry();
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("wall"));
+    world.setBlock(9, 4, 8, reg.idForName("stone"));
+    const auto data = mesh(world, reg, {0, 0, 0});
+    // The wall keeps 6 faces (its block-side is one cap-band quad, 4 verts)
+    // + the stone keeps 5 (its -X is culled): 24 + 20 = 44.
+    EXPECT_EQ(data.opaqueVertices.size(), 44u);
+    // The stone's -X face is gone: the only -X verts are the wall's air
+    // side (x=8), still the FULL height.
+    const std::vector<MeshVertex> minusX =
+        verticesWithNormal(data.opaqueVertices, {-1.0f, 0.0f, 0.0f});
+    ASSERT_EQ(minusX.size(), 4u);
+    float minY = 99.0f, maxY = -99.0f;
+    for (const MeshVertex& v : minusX) {
+        EXPECT_EQ(v.position.x, 8.0f);
+        minY = v.position.y < minY ? v.position.y : minY;
+        maxY = v.position.y > maxY ? v.position.y : maxY;
+    }
+    EXPECT_EQ(minY, 4.0f);
+    EXPECT_EQ(maxY, 5.5f);
+    // The wall's +X side (toward the stone) is the CAP BAND only: 4 verts,
+    // all y in [5.0, 5.5] at x=9 (the stone's own +X at x=10 is full).
+    const std::vector<MeshVertex> plusX =
+        verticesWithNormal(data.opaqueVertices, {1.0f, 0.0f, 0.0f});
+    ASSERT_EQ(plusX.size(), 8u);
+    int wallBand = 0;
+    float bandMinY = 99.0f, bandMaxY = -99.0f;
+    for (const MeshVertex& v : plusX) {
+        if (v.position.x == 9.0f) {
+            ++wallBand;
+            bandMinY = v.position.y < bandMinY ? v.position.y : bandMinY;
+            bandMaxY = v.position.y > bandMaxY ? v.position.y : bandMaxY;
+        }
+    }
+    EXPECT_EQ(wallBand, 4);
+    EXPECT_EQ(bandMinY, 5.0f); // the lower band (y 0..1) is internal
+    EXPECT_EQ(bandMaxY, 5.5f);
 }
