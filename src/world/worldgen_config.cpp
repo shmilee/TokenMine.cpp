@@ -241,7 +241,85 @@ Result<WorldgenParams> WorldgenParams::parse(const Json& def) {
         }
     }
 
+    // -- procedural lava lakes (Phase 93) ---------------------------------
+    if (const Json* proc = def.find("lava_lakes_procedural")) {
+        const std::string label = "lava_lakes_procedural";
+        if (!proc->isObject()) {
+            return MC_FAIL("'" + label + "' must be an object");
+        }
+        warnUnknown(*proc, label.c_str(),
+                    {"enabled", "count", "min_radius", "max_radius",
+                     "min_depth", "max_depth", "min_fill", "max_fill",
+                     "region_min_x", "region_min_z", "region_max_x",
+                     "region_max_z"});
+        auto& pd = p.lavaLakesProcedural;
+        auto r = readField(*proc, label.c_str(), "enabled", "bool",
+                           [&](const Json& v) { pd.enabled = v.asBool(); });
+        MC_TRY(r);
+        r = readField(*proc, label.c_str(), "count", "number",
+                      [&](const Json& v) { pd.count = v.asInt(); });
+        MC_TRY(r);
+        r = readField(*proc, label.c_str(), "min_radius", "number",
+                      [&](const Json& v) { pd.minRadius = v.asInt(); });
+        MC_TRY(r);
+        r = readField(*proc, label.c_str(), "max_radius", "number",
+                      [&](const Json& v) { pd.maxRadius = v.asInt(); });
+        MC_TRY(r);
+        r = readField(*proc, label.c_str(), "min_depth", "number",
+                      [&](const Json& v) { pd.minDepth = v.asInt(); });
+        MC_TRY(r);
+        r = readField(*proc, label.c_str(), "max_depth", "number",
+                      [&](const Json& v) { pd.maxDepth = v.asInt(); });
+        MC_TRY(r);
+        r = readField(*proc, label.c_str(), "min_fill", "number",
+                      [&](const Json& v) { pd.minFill = v.asInt(); });
+        MC_TRY(r);
+        r = readField(*proc, label.c_str(), "max_fill", "number",
+                      [&](const Json& v) { pd.maxFill = v.asInt(); });
+        MC_TRY(r);
+        r = readField(*proc, label.c_str(), "region_min_x", "number",
+                      [&](const Json& v) { pd.regionMinX = v.asInt(); });
+        MC_TRY(r);
+        r = readField(*proc, label.c_str(), "region_min_z", "number",
+                      [&](const Json& v) { pd.regionMinZ = v.asInt(); });
+        MC_TRY(r);
+        r = readField(*proc, label.c_str(), "region_max_x", "number",
+                      [&](const Json& v) { pd.regionMaxX = v.asInt(); });
+        MC_TRY(r);
+        r = readField(*proc, label.c_str(), "region_max_z", "number",
+                      [&](const Json& v) { pd.regionMaxZ = v.asInt(); });
+        MC_TRY(r);
+    }
+
     // -- cross-field validation -----------------------------------------
+    if (p.lavaLakesProcedural.enabled) {
+        const auto& pd = p.lavaLakesProcedural;
+        if (pd.count < 0 || pd.count > 64) {
+            return MC_FAIL("'lava_lakes_procedural.count' must be in [0, 64]");
+        }
+        if (pd.minRadius < 0 || pd.maxRadius > 16 || pd.minRadius > pd.maxRadius) {
+            return MC_FAIL("'lava_lakes_procedural' radius range must satisfy "
+                           "0 <= min_radius <= max_radius <= 16");
+        }
+        if (pd.minDepth < 1 || pd.maxDepth > 16 || pd.minDepth > pd.maxDepth) {
+            return MC_FAIL("'lava_lakes_procedural' depth range must satisfy "
+                           "1 <= min_depth <= max_depth <= 16");
+        }
+        if (pd.minFill < 0 || pd.maxFill > 8 || pd.minFill > pd.maxFill) {
+            return MC_FAIL("'lava_lakes_procedural' fill range must satisfy "
+                           "0 <= min_fill <= max_fill <= 8");
+        }
+        if (pd.regionMinX > pd.regionMaxX || pd.regionMinZ > pd.regionMaxZ) {
+            return MC_FAIL("'lava_lakes_procedural' region bounds must satisfy "
+                           "region_min_x <= region_max_x and region_min_z <= "
+                           "region_max_z");
+        }
+        if (pd.regionMaxX - pd.regionMinX > 4096 ||
+            pd.regionMaxZ - pd.regionMinZ > 4096) {
+            return MC_FAIL("'lava_lakes_procedural' region must be at most "
+                           "4096 wide per axis");
+        }
+    }
     for (std::size_t i = 0; i < p.lavaLakes.size(); ++i) {
         const auto& lake = p.lavaLakes[i];
         const std::string label = "lava_lakes[" + std::to_string(i) + "]";

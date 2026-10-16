@@ -91,5 +91,19 @@
    "depth": 2,
    "fill": 2
   }
- ]
+ ],
+ "lava_lakes_procedural": {
+  "enabled": true,
+  "count": 5,
+  "min_radius": 1,
+  "max_radius": 3,
+  "min_depth": 2,
+  "max_depth": 4,
+  "min_fill": 1,
+  "max_fill": 2,
+  "region_min_x": 60,
+  "region_min_z": 60,
+  "region_max_x": 90,
+  "region_max_z": 90
+ }
 }

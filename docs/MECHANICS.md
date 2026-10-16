@@ -898,6 +898,13 @@
        界，确定性但非静止），溢出形态取决于地形坡度。
      两深湖 + 一表面湖皆放出生点默认 -Z 视野外（+Z 后方）→ 无输入基线门不
      受影响（免重锚）。熔岩会烧（P58 接触伤害）。
+     - **程序化分布**（`[Phase 93]`，`lava_lakes_procedural` 段）：`count` 个
+       湖在区域 [region_min_x, region_max_x]×[region_min_z, region_max_z] 内
+       **确定性随机**分布（`WorldGenerator::computeProceduralLakes` 构造时从
+       seed 派生：splitmix64 + kSaltLavaLake + 金步推进，PITS #4 纪律；每湖
+       radius/depth/fill 各取 [min,max] 范围内随机值 = MC 熔岩湖散布世界）。
+       跨 run/chunk 一致（纯 seed 函数）。shipped 区域 [60,90] 在出生点 -Z
+       视野外（+Z 后方）+ 视图距离内（流送但不入基线视图）→ 免重锚。
 - **演示区 + 流式扩展**：启动时同步生成 4×4 chunk 列（64×64 方块）；玩家按
   seed 自动出生在干燥陆地上（候选列需满足：高于海平面 + 出生包围盒内无方块，
   避开树干/树冠）。走出演示区后世界按流式加载（上一项）继续扩展——X/Z 真正

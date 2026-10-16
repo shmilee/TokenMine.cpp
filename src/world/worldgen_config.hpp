@@ -78,6 +78,26 @@ struct WorldgenParams {
     };
     std::vector<LavaLake> lavaLakes;
 
+    // Phase 93: the PROCEDURAL lake distribution (in addition to the fixed
+    // list above). When enabled, `count` lakes are placed at deterministic
+    // (seeded) pseudo-random positions within the region, each with a random
+    // radius/depth/fill drawn from the ranges — the project's "random
+    // distribution" for the lava lakes (Minecraft scatters lava lakes across
+    // the world). The region is kept OUTSIDE the spawn's default facing so
+    // the no-input baseline is unaffected (the deterministic positions are
+    // seed-derived, so a given seed always yields the same lakes).
+    struct LavaLakeProcedural {
+        bool enabled = false;
+        int count = 0;             // number of procedural lakes (0..64)
+        int minRadius = 1, maxRadius = 4;
+        int minDepth = 1, maxDepth = 4;
+        int minFill = 1, maxFill = 2;
+        // The placement region (world x/z bounds, inclusive).
+        int regionMinX = 0, regionMinZ = 0;
+        int regionMaxX = 0, regionMaxZ = 0;
+    };
+    LavaLakeProcedural lavaLakesProcedural;
+
     // Parse a worldgen definition. Strict about types, permissive about
     // missing keys (defaults above).
     static Result<WorldgenParams> parse(const Json& def);

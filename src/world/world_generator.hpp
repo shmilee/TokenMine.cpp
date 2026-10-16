@@ -117,10 +117,18 @@ private:
     // the region is carved to air and the lowest `fill` levels are poured
     // full lava. The surrounding terrain (outside the region) is >= the region
     // min, so the basin walls always rise above the lava (contained). This
-    // loops over every enabled lake in WorldgenParams::lavaLakes.
+    // loops over every enabled lake in WorldgenParams::lavaLakes. Phase 93:
+    // it ALSO places the procedural lakes (m_proceduralLakes, computed in
+    // the constructor from the seed — deterministic pseudo-random positions
+    // within the configured region).
     void placeLavaLakes(Chunk& chunk, const ChunkPos& pos) const;
     void placeIfAir(Chunk& chunk, const ChunkPos& pos, int wx, int wy, int wz,
                     BlockID id) const;
+    // Phase 93: derive the procedural lakes (m_proceduralLakes) from the
+    // seed + WorldgenParams::lavaLakesProcedural. Called once in the
+    // constructor (a pure function of the seed, so the lakes are the same
+    // across runs + chunks).
+    void computeProceduralLakes();
 
     std::int64_t m_seed = 0;
     WorldgenParams m_params;
@@ -133,6 +141,11 @@ private:
     BlockID m_deep = BlockID::invalid();
     BlockID m_trunk = BlockID::invalid();
     BlockID m_leaves = BlockID::invalid();
+
+    // Phase 93: the procedural lakes (computed in the constructor from the
+    // seed + WorldgenParams::lavaLakesProcedural). placeLavaLakes places them
+    // in addition to the fixed list (m_params.lavaLakes).
+    std::vector<WorldgenParams::LavaLake> m_proceduralLakes;
 };
 
 } // namespace mc

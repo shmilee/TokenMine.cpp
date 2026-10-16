@@ -1000,3 +1000,66 @@ TEST(WorldGeneratorTest, Phase90SurfaceLakeLavaTopAtRegionMin) {
         << "a buried lake (depth > fill) puts its lava top below the region "
            "minimum (sealed, rim not adjacent to the lava)";
 }
+
+// Phase 93: the PROCEDURAL lake distribution — `count` lakes placed at
+// deterministic (seeded) pseudo-random positions within the region. The
+// lakes are generated (lava present in the region), deterministic (two
+// generations -> same positions), and seed-dependent (different seeds ->
+// different positions).
+TEST(WorldGeneratorTest, Phase93ProceduralLakesAreDeterministic) {
+    auto lavaCols = [&](std::int64_t seed) -> std::set<int> {
+        GenSetup setup;
+        WorldgenParams::LavaLakeProcedural pd;
+        pd.enabled = true;
+        pd.count = 5;
+        pd.minRadius = 1;
+        pd.maxRadius = 2;
+        pd.minDepth = 2;
+        pd.maxDepth = 3;
+        pd.minFill = 1;
+        pd.maxFill = 2;
+        pd.regionMinX = 4;
+        pd.regionMinZ = 4;
+        pd.regionMaxX = 20;
+        pd.regionMaxZ = 20;
+        setup.params.lavaLakesProcedural = pd;
+        auto res = WorldGenerator::create(seed, setup.params, setup.biomes,
+                                          setup.blocks);
+        if (!res.ok()) {
+            ADD_FAILURE() << res.error().message;
+            return {};
+        }
+        std::map<ChunkPos, Chunk> ch;
+        for (int cx = 0; cx <= 1; ++cx)
+            for (int cz = 0; cz <= 1; ++cz)
+                for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy)
+                    res->generateChunk(ch[{cx, cy, cz}], {cx, cy, cz});
+        std::set<int> cols;
+        for (int x = 0; x < 32; ++x)
+            for (int z = 0; z < 32; ++z)
+                for (int y = 1; y < kWorldHeight; ++y) {
+                    const auto it = ch.find(worldToChunk(BlockPos {x, y, z}));
+                    if (it == ch.end()) continue;
+                    const BlockPos local =
+                        worldToChunkLocal(it->first, BlockPos {x, y, z});
+                    if (fluidKindOf(it->second.fluidAt(local.x, local.y,
+                                                        local.z)) ==
+                        FluidKind::Lava) {
+                        cols.insert(x * 32 + z);
+                        break;
+                    }
+                }
+        return cols;
+    };
+    // (1) The lakes are generated (lava present in the region).
+    const std::set<int> colsA = lavaCols(7);
+    EXPECT_GE(colsA.size(), 3)
+        << "the procedural lakes should generate (>=3 lava columns)";
+    // (2) Deterministic: a second generation (same seed) -> same columns.
+    const std::set<int> colsB = lavaCols(7);
+    EXPECT_EQ(colsA, colsB) << "the procedural lakes are deterministic";
+    // (3) Seed-dependent: a different seed -> different columns.
+    const std::set<int> colsC = lavaCols(9);
+    EXPECT_NE(colsA, colsC)
+        << "the procedural lakes are seed-derived (different across seeds)";
+}

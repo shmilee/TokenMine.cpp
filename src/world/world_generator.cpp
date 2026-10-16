@@ -26,6 +26,8 @@ constexpr std::int64_t kSaltOre = 0x1A2B3C4D5E6F7A04LL;
 constexpr std::int64_t kSaltTree = 0x1A2B3C4D5E6F7A05LL;
 // Phase 45: surface decorations (independent of the tree rolls).
 constexpr std::int64_t kSaltDecoration = 0x1A2B3C4D5E6F7A06LL;
+// Phase 93: procedural lava lakes (independent of the other feature rolls).
+constexpr std::int64_t kSaltLavaLake = 0x1A2B3C4D5E6F7A07LL;
 
 // Per-feature mixing constant (per ore type, per vein-walk step).
 constexpr std::uint64_t kFeatureStep = 0x9E3779B97F4A7C15ULL;
@@ -129,6 +131,9 @@ Result<WorldGenerator> WorldGenerator::create(std::int64_t seed,
                            ": unknown block '" + f.name + "'");
         }
     }
+    // Phase 93: derive the procedural lakes (a pure function of the seed, so
+    // they are the same across runs + chunks).
+    gen.computeProceduralLakes();
     return gen;
 }
 
@@ -478,13 +483,58 @@ void WorldGenerator::placeIfAir(Chunk& chunk, const ChunkPos& pos, int wx,
     }
 }
 
+void WorldGenerator::computeProceduralLakes() {
+    // Phase 93: derive the procedural lakes from the seed. A state-advancing
+    // splitmix64 stream (PITS #4: advance with the golden step, then mix)
+    // yields, for each lake i, a deterministic (x, z, radius, depth, fill)
+    // drawn from the configured ranges. The lakes are the same across runs +
+    // chunks (a pure function of the seed).
+    m_proceduralLakes.clear();
+    const auto& pd = m_params.lavaLakesProcedural;
+    if (!pd.enabled || pd.count <= 0) {
+        return;
+    }
+    const std::uint64_t base =
+        static_cast<std::uint64_t>(m_seed) ^
+        static_cast<std::uint64_t>(kSaltLavaLake);
+    const int xSpan = pd.regionMaxX - pd.regionMinX + 1;
+    const int zSpan = pd.regionMaxZ - pd.regionMinZ + 1;
+    const int rSpan = pd.maxRadius - pd.minRadius + 1;
+    const int dSpan = pd.maxDepth - pd.minDepth + 1;
+    const int fSpan = pd.maxFill - pd.minFill + 1;
+    for (int i = 0; i < pd.count; ++i) {
+        // A fresh state per lake (seed-advanced by i * golden), then 5
+        // advances for (x, z, radius, depth, fill).
+        std::uint64_t state = splitmix64(base + std::uint64_t(i) * kFeatureStep);
+        WorldgenParams::LavaLake lake;
+        lake.enabled = true;
+        lake.centerX = pd.regionMinX +
+                       static_cast<int>((splitmix64(state += kFeatureStep) >> 32) %
+                                        std::uint64_t(xSpan));
+        lake.centerZ = pd.regionMinZ +
+                       static_cast<int>((splitmix64(state += kFeatureStep) >> 32) %
+                                        std::uint64_t(zSpan));
+        lake.radius = pd.minRadius +
+                      static_cast<int>((splitmix64(state += kFeatureStep) >> 40) %
+                                       std::uint64_t(rSpan));
+        lake.depth = pd.minDepth +
+                     static_cast<int>((splitmix64(state += kFeatureStep) >> 40) %
+                                      std::uint64_t(dSpan));
+        lake.fill = pd.minFill +
+                    static_cast<int>((splitmix64(state += kFeatureStep) >> 40) %
+                                     std::uint64_t(fSpan));
+        m_proceduralLakes.push_back(lake);
+    }
+}
+
 void WorldGenerator::placeLavaLakes(Chunk& chunk, const ChunkPos& pos) const {
     // Phase 88: loop over every configured lake (Phase 86 shipped a single
-    // lake; the list generalizes it). Each lake is independent (its own
+    // lake; the list generalizes it). Phase 93: the procedural lakes are
+    // placed in addition to the fixed list. Each lake is independent (its own
     // region/floor); overlapping lakes carve the same cells (deterministic).
-    for (const auto& lake : m_params.lavaLakes) {
+    const auto placeOne = [&](const WorldgenParams::LavaLake& lake) {
         if (!lake.enabled) {
-            continue;
+            return;
         }
         const int x0 = lake.centerX - lake.radius;
         const int x1 = lake.centerX + lake.radius;
@@ -529,6 +579,12 @@ void WorldGenerator::placeLavaLakes(Chunk& chunk, const ChunkPos& pos) const {
                 }
             }
         }
+    };
+    for (const auto& lake : m_params.lavaLakes) {
+        placeOne(lake);
+    }
+    for (const auto& lake : m_proceduralLakes) {
+        placeOne(lake);
     }
 }
 
