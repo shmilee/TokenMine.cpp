@@ -214,9 +214,10 @@ C++20 / SDL3 / OpenGL 3.3 core，
 
 ```bash
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build  # 构建（0 警告）
-./build/bin/tokenmine_tests                                                 # 测试（964）
+./build/bin/tokenmine_tests                                                 # 测试（1195）
 ./build/bin/tokenmine                                                       # 运行（ESC 退出）
 ./build/bin/tokenmine --frames N [--screenshot /abs.png] [--save slot] [--new] [--config path]
+./build/bin/tokenmine --seed 42 --time 0.75 --log-level info                # 其它参数（--help 看全部）
 ```
 
 游戏必须从仓库 cwd 启动（资源相对路径）；独立测试程序链接

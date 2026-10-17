@@ -3,8 +3,8 @@
 本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒
 （C++20 / SDL3 / OpenGL 3.3 core，
 自研 Result/JSON/PNG，内容全数据驱动）。**确定性是项目一级要求**：无输入运行逐帧
-字节可复现。30 个阶段（Phase 0–29 功能 + Phase 30 文档整理）全部完成并提交，
-测试 669/669。
+字节可复现。功能阶段 P0–P99 + 性能审计系列 99.x 全部完成并提交，测试
+1195/1195。
 
 > 文档已按主题分块（Phase 30）：**新会话先读 [AGENTS.md](AGENTS.md)**（代理快速
 > 接收），再按需读下表中的文件。原文档（README 765 行 / KNOWN_ISSUES / 本地
@@ -30,7 +30,7 @@
 | 构建 | CMake + Ninja | |
 | 窗口/输入 | SDL3 | |
 | 图形 | OpenGL 3.3 Core (GLEW) | |
-| 音频 | SDL3 Audio（`SoundBank`，SDL 内置音频后端） | Phase 15 引入，8 个程序化 WAV |
+| 音频 | SDL3 Audio（`SoundBank`，SDL 内置音频后端） | Phase 15 引入，17 个程序化 WAV |
 | 图像 | 内置 PNG 编解码器（`src/core/png.hpp`，zlib） | 8/16 位 RGB/RGBA/灰度/调色板，全 filter，CRC 校验 |
 | 测试 | GoogleTest | |
 | JSON | 内置实现（`src/core/json.hpp`） | 无外部依赖 |
@@ -77,7 +77,7 @@ cmake --build build
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（~55 条，都踩过） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（193 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃）+ 已修复存档索引 | 阶段验收前后 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phase 0–29 规划 + 细节存档索引 | 了解历史 |
 | [docs/archive/phase-NN.md](docs/archive/) | 单阶段细节存档（阶段报告 + 会话存档） | 深挖某阶段 |
