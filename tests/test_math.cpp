@@ -2,6 +2,7 @@
 
 #include <cmath>
 
+#include "core/math/frustum.hpp"
 #include "core/math/mat4.hpp"
 #include "core/math/vec3.hpp"
 #include "core/math/vec4.hpp"
@@ -235,4 +236,70 @@ TEST(Vec4Test, FromVec3) {
     const Vec4 v = Vec4::fromVec3((Vec3{1, 2, 3}), 2.0f);
     EXPECT_EQ(v.w, 2.0f);
     EXPECT_EQ(v.toVec3(), (Vec3{1, 2, 3}));
+}
+
+// ---------------------------------------------------------------------------
+// Frustum (Phase 99.9)
+// ---------------------------------------------------------------------------
+
+namespace {
+// The game's chunk-pass camera: eye at the origin looking down -Z
+// (yaw 0 / pitch 0), the project's default view.
+Frustum defaultFrustum() {
+    const Mat4 projection =
+        Mat4::perspective(70.0f * kPi / 180.0f, 16.0f / 9.0f, 0.1f, 256.0f);
+    const Mat4 view = Mat4::lookAt(Vec3{0, 0, 0}, Vec3{0, 0, -1},
+                                   Vec3{0, 1, 0});
+    return Frustum::fromMVP(Mat4::multiply(projection, view));
+}
+} // namespace
+
+TEST(FrustumTest, IdentityMVPUsesNdcBounds) {
+    const Frustum f = Frustum::fromMVP(Mat4::identity());
+    // Identity MVP: clip space is NDC (w = 1), so the view volume is the
+    // cube [-1, 1]^3.
+    EXPECT_TRUE(f.intersectsAabb(Vec3{-0.5f, -0.5f, -0.5f},
+                                 Vec3{0.5f, 0.5f, 0.5f}));
+    EXPECT_FALSE(f.intersectsAabb(Vec3{2.0f, -0.5f, -0.5f},
+                                  Vec3{3.0f, 0.5f, 0.5f}));
+    EXPECT_FALSE(f.intersectsAabb(Vec3{-0.5f, 2.0f, -0.5f},
+                                  Vec3{0.5f, 3.0f, 0.5f}));
+    EXPECT_FALSE(f.intersectsAabb(Vec3{-0.5f, -0.5f, 2.0f},
+                                  Vec3{0.5f, 0.5f, 3.0f}));
+}
+
+TEST(FrustumTest, CameraLookingDownNegativeZ) {
+    const Frustum f = defaultFrustum();
+    // Forward: a box down the view axis, well inside the 70-degree FOV.
+    EXPECT_TRUE(f.intersectsAabb(Vec3{-1, -1, -10}, Vec3{1, 1, -8}));
+    // Behind the camera: the near plane culls it.
+    EXPECT_FALSE(f.intersectsAabb(Vec3{-1, -1, 5}, Vec3{1, 1, 8}));
+    // Beyond the far plane.
+    EXPECT_FALSE(f.intersectsAabb(Vec3{-1, -1, -300}, Vec3{1, 1, -290}));
+    // Far left / right of the view cone.
+    EXPECT_FALSE(f.intersectsAabb(Vec3{-40, -1, -10}, Vec3{-38, 1, -8}));
+    EXPECT_FALSE(f.intersectsAabb(Vec3{38, -1, -10}, Vec3{40, 1, -8}));
+    // Far above / below the view cone (70-degree vertical FOV).
+    EXPECT_FALSE(f.intersectsAabb(Vec3{-1, 40, -10}, Vec3{1, 42, -8}));
+    EXPECT_FALSE(f.intersectsAabb(Vec3{-1, -42, -10}, Vec3{1, -40, -8}));
+    // A box straddling the left plane is kept (conservative).
+    EXPECT_TRUE(f.intersectsAabb(Vec3{-40, -1, -10}, Vec3{0, 1, -8}));
+    // A box straddling the near plane is kept (conservative).
+    EXPECT_TRUE(f.intersectsAabb(Vec3{-1, -1, -0.2f}, Vec3{1, 1, 0.2f}));
+    // A box entirely behind the near plane (it hugs the eye) is culled —
+    // the GPU would clip it to zero coverage, so nothing is lost.
+    EXPECT_FALSE(f.intersectsAabb(Vec3{-0.01f, -0.01f, -0.01f},
+                                  Vec3{0.01f, 0.01f, 0.01f}));
+}
+
+TEST(FrustumTest, RotatedCameraCullsTheOldForward) {
+    // Looking down -X (yaw +90 degrees): the -Z box is now to the side.
+    const Mat4 projection =
+        Mat4::perspective(70.0f * kPi / 180.0f, 16.0f / 9.0f, 0.1f, 256.0f);
+    const Mat4 view = Mat4::lookAt(Vec3{0, 0, 0}, Vec3{-1, 0, 0},
+                                   Vec3{0, 1, 0});
+    const Frustum f = Frustum::fromMVP(Mat4::multiply(projection, view));
+    EXPECT_TRUE(f.intersectsAabb(Vec3{-10, -1, -1}, Vec3{-8, 1, 1}));
+    // The old forward (-Z) is now outside the 70-degree cone.
+    EXPECT_FALSE(f.intersectsAabb(Vec3{-1, -1, -10}, Vec3{1, 1, -8}));
 }

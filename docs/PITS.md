@@ -1353,3 +1353,32 @@
   活动门控必须锚定"最近被写入"，不能锚定状态值**。排查手法：给
   simulateType 加"实际遍历 chunk 数 / 流体 chunk 总数"计数——59/17
   恒定不动 = 门控形同虚设，一眼看出（状态对比 + 计数双证据）。
+- **列主存矩阵取"行"：m.m+4k 是第 k 列不是第 k 行（99.9 视锥裁剪首测
+  全挂）**：Gribb-Hartmann 视锥提取要 MVP 的 row0..row3；列主存里
+  row k = 步长访问 (m[k], m[4+k], m[8+k], m[12+k])，而 `m.m + 4*k`
+  是第 k 列。写成连续指针后 6 个平面全错，**identity 测试却过**
+  （identity 行=列，bug 被掩盖）——矩阵布局的测试必须用非对称矩阵
+  （perspective×lookAt）才暴露行列混淆。口诀：**列主存取行要步长 4；
+  identity 单测测不出转置类 bug**。
+- **单增 worklist BFS 只能从"入队"的格子传播光——种子集不是
+  "变化格+壳"，是"区域内全部有光格"（99.9 两轮回归）**：第一版把
+  天空光种子减成"rescan 写过的格子 + region 外壳"→ InsertedColumn
+  测试 6712 格差：天花板下的新列整列天生暗（rescan 0→0 零写入），
+  侧邻列的 15 光必须流入，但侧邻格"未变化"→ 未入队 → 永远传不进
+  来（worklist 不经过的格子不转发）。第二版把种子减成"rescan 列 +
+  壳"仍挂：rescan footprint 缩到 box 自身列后，±R 内"穿过 void 借光"
+  的旧列保持陈旧高光（rescan 不复扫→不清除），且邻列种子缺失。
+  教训：**重光照的 region（±R）和 rescan footprint 都是语义必需的**
+  （void→terrain 改变 region 内任意列的光场），能省的只有"查找成本"
+  （chunk 级扫描 + BFS last-chunk 缓存：12→~7 ms/box）与"无事可做"
+  的整段跳过（rescan 零写入 且 非新地形 → 跳过天空 BFS；**新地形必须
+  强制传播** = `newTerrain` 参数，单测钉死）。
+- **给帧管线插桩时把 `m_pool->flush()` 连同注释一起替换掉了（99.9
+  首测 SIGSEGV）**：插桩脚本的 old/new 文本把 flush 块包进替换范围、
+  新文本忘写回 → 每帧不再等 worker → 主线程 insertChunk 与 worker
+  光照读 unordered_map 并发 → core 里三线程同碰一个 hash map
+  （main=insert，两 worker=findChunkMut）。core 回溯 + 时序推理定位
+  （"pipeline 契约下不可能"的状态出现 = 先怀疑本次改动，再怀疑
+  契约）。口诀：**插桩/重构帧管线后，第一件事 = 确认 flush 还在、
+  post 还在窗口内；"不可能"的崩溃快照 = 窗口被打破，不是竞态
+  概率事件**。

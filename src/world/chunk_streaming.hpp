@@ -63,3 +63,21 @@ bool streamingActive(const ColumnPos& player,
                      int triggerDistance);
 
 } // namespace mc
+
+// Deterministic mixing (the coordinates.hpp ChunkPos/BlockPos style).
+namespace std {
+
+template <> struct hash<mc::ColumnPos> {
+    std::size_t operator()(const mc::ColumnPos& p) const noexcept {
+        std::size_t h = 0;
+        const auto mix = [&h](int v) {
+            h ^= std::hash<int> {}(v) + 0x9e3779b97f4a7c15ULL + (h << 6) +
+                 (h >> 2);
+        };
+        mix(p.x);
+        mix(p.z);
+        return h;
+    }
+};
+
+} // namespace std

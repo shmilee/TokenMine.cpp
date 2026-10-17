@@ -649,7 +649,8 @@ TEST(LightingTest, InsertedColumnRelightMatchesFullPropagation) {
     // exactly as the streaming pipeline does.
     ASSERT_TRUE(incremental.insertChunk({2, 0, 0},
                                         buildThirdColumnChunk(reg)));
-    Lighting::updateRegion(incremental, reg, {32, 0, 0}, {47, 15, 15});
+    Lighting::updateRegion(incremental, reg, {32, 0, 0}, {47, 15, 15},
+                           /*newTerrain=*/true);
     expectSameLight(incremental, full);
 }
 
@@ -691,6 +692,7 @@ TEST(LightingTest, InsertedTwoChunkColumnRelightMatchesFullPropagation) {
     }
     ASSERT_TRUE(incremental.insertChunk({2, 0, 0}, std::move(lower)));
     ASSERT_TRUE(incremental.insertChunk({2, 1, 0}, std::move(upper)));
-    Lighting::updateRegion(incremental, reg, {32, 0, 0}, {47, 31, 15});
+    Lighting::updateRegion(incremental, reg, {32, 0, 0}, {47, 31, 15},
+                           /*newTerrain=*/true);
     expectSameLight(incremental, full);
 }

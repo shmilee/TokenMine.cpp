@@ -53,15 +53,40 @@ int fluidEmission(const BlockRegistry& blocks, std::uint8_t code) {
 // vertically in air and -1 per horizontal air step, block light -1 per air
 // step in every direction, fluid cells cost kFluidLightAttenuation in every
 // direction; a cell is updated (and re-queued) only on a strict increase.
+//
+// The worklist algorithm converges to the same light field regardless of
+// queue order (monotone strict-increase updates), so seeding a chunk-level
+// scan (Phase 99.9) is result-identical to the old block-level scan.
+//
+// Hot path: a BFS neighbor stays in the same chunk 15 of 16 times, so the
+// World's chunk lookup is cached (last-chunk) — the per-cell unordered_map
+// find of the pre-99.9 code was the dominant cost of a lighting box.
 void propagateBFS(World& world, const BlockRegistry& blocks, bool sky,
                   std::deque<BlockPos>& queue,
                   const std::function<bool(int, int, int)>& inRegion) {
+    Chunk* last = nullptr;
+    ChunkPos lastCp {-2000000000, -1, -2000000000};
+    const auto chunkAt = [&](const BlockPos& p) -> Chunk* {
+        const ChunkPos cp = worldToChunk(p);
+        if (cp == lastCp) {
+            return last;
+        }
+        last = world.findChunkMut(cp);
+        lastCp = cp;
+        return last;
+    };
     while (!queue.empty()) {
         const BlockPos p = queue.front();
         queue.pop_front();
+        const ChunkPos cp = worldToChunk(p);
+        const BlockPos local = worldToChunkLocal(cp, p);
+        Chunk* chunk = chunkAt(p);
+        if (chunk == nullptr) {
+            continue;
+        }
         const std::uint8_t value =
-            sky ? world.getSkyLight(p.x, p.y, p.z)
-                : world.getBlockLight(p.x, p.y, p.z);
+            sky ? chunk->skyLightAt(local.x, local.y, local.z)
+                : chunk->blockLightAt(local.x, local.y, local.z);
         if (value == 0) {
             continue;
         }
@@ -73,32 +98,31 @@ void propagateBFS(World& world, const BlockRegistry& blocks, bool sky,
                 continue;
             }
             const BlockPos np{nx, ny, nz};
-            const ChunkPos cp = worldToChunk(np);
-            Chunk* chunk = world.findChunkMut(cp);
-            if (chunk == nullptr) {
+            Chunk* nchunk = chunkAt(np);
+            if (nchunk == nullptr) {
                 continue; // void: read as open sky / dark, never written
             }
-            const BlockPos local = worldToChunkLocal(cp, np);
-            const BlockID id = chunk->get(local.x, local.y, local.z);
+            const BlockPos nlocal = worldToChunkLocal(worldToChunk(np), np);
+            const BlockID id = nchunk->get(nlocal.x, nlocal.y, nlocal.z);
             if (id != BlockID::air() && blocks.at(id).properties.opaque) {
                 continue;
             }
             const int next = value -
-                             enterCost(chunk, local.x, local.y, local.z, sky,
-                                       d.y != 0);
+                             enterCost(nchunk, nlocal.x, nlocal.y, nlocal.z,
+                                       sky, d.y != 0);
             if (next <= 0) {
                 continue;
             }
             const std::uint8_t current =
-                sky ? chunk->skyLightAt(local.x, local.y, local.z)
-                    : chunk->blockLightAt(local.x, local.y, local.z);
+                sky ? nchunk->skyLightAt(nlocal.x, nlocal.y, nlocal.z)
+                    : nchunk->blockLightAt(nlocal.x, nlocal.y, nlocal.z);
             if (current < static_cast<std::uint8_t>(next)) {
                 if (sky) {
-                    chunk->setSkyLightAt(local.x, local.y, local.z,
-                                         static_cast<std::uint8_t>(next));
+                    nchunk->setSkyLightAt(nlocal.x, nlocal.y, nlocal.z,
+                                          static_cast<std::uint8_t>(next));
                 } else {
-                    chunk->setBlockLightAt(local.x, local.y, local.z,
-                                           static_cast<std::uint8_t>(next));
+                    nchunk->setBlockLightAt(nlocal.x, nlocal.y, nlocal.z,
+                                            static_cast<std::uint8_t>(next));
                 }
                 queue.push_back(np);
             }
@@ -232,7 +256,8 @@ void Lighting::updateLocal(World& world, const BlockRegistry& blocks,
 }
 
 void Lighting::updateRegion(World& world, const BlockRegistry& blocks,
-                            const BlockPos& min, const BlockPos& max) {
+                            const BlockPos& min, const BlockPos& max,
+                            bool newTerrain) {
     const int R = kLightUpdateRadius;
     // Region shapes: sky light travels vertically without air attenuation,
     // so the sky re-scan covers FULL COLUMNS over the X/Z footprint (the
@@ -286,26 +311,118 @@ void Lighting::updateRegion(World& world, const BlockRegistry& blocks,
     // Sky light travels vertically without attenuation, so one block can
     // change an entire column (a broken ceiling lights every block below
     // it) — the re-light must rescan and re-propagate whole columns, not a
-    // box around the change.
-    for (int x = sx0; x <= sx1; ++x) {
-        for (int z = sz0; z <= sz1; ++z) {
-            rescanColumn(world, blocks, x, z);
+    // box around the change. The rescan covers the FULL ±R region (the
+    // original semantics): a column whose pre-insertion light rode a path
+    // THROUGH the now-filled void keeps a stale high value unless its
+    // column is re-asserted to its vertical-only value here (the box
+    // footprint alone regressed InsertedTwoChunkColumnRelight — the dark
+    // region beyond the box never got its sources re-seeded). Chunk-level
+    // scan (Phase 99.9): one chunk lookup per 16x16x16 cell block instead
+    // of one per CELL (the old rescanColumn did a findChunkMut per cell,
+    // ~12 ms/box). Per-column state (open run, running light) carries
+    // across the Y-chunk layers exactly as before, so the per-cell
+    // sequence — and the result — is identical.
+    long rescanWrites = 0; // Phase 99.9: zero writes -> skip the sky BFS
+    {
+        constexpr int kLayers = kWorldHeight / kChunkSize;
+        const int fcx0 = floorDiv(sx0, kChunkSize), fcx1 = floorDiv(sx1, kChunkSize);
+        const int fcz0 = floorDiv(sz0, kChunkSize), fcz1 = floorDiv(sz1, kChunkSize);
+        for (int cx = fcx0; cx <= fcx1; ++cx) {
+            for (int cz = fcz0; cz <= fcz1; ++cz) {
+                for (int lx = 0; lx < kChunkSize; ++lx) {
+                    for (int lz = 0; lz < kChunkSize; ++lz) {
+                        const int wx = cx * kChunkSize + lx;
+                        const int wz = cz * kChunkSize + lz;
+                        if (wx < sx0 || wx > sx1 || wz < sz0 || wz > sz1) {
+                            continue; // outside the ±R footprint: untouched
+                        }
+                        bool open = true;
+                        int light = kMaxLight; // sky light just above y top
+                        for (int cy = kLayers - 1; cy >= 0; --cy) {
+                            const Chunk* chunk = world.findChunk({cx, cy, cz});
+                            if (chunk == nullptr) {
+                                continue; // void: open run continues, no write
+                            }
+                            for (int ly = kChunkSize - 1; ly >= 0; --ly) {
+                                std::uint8_t target = 0;
+                                if (open) {
+                                    const BlockID id = chunk->get(lx, ly, lz);
+                                    if (id != BlockID::air() &&
+                                        blocks.at(id).properties.opaque) {
+                                        open = false; // opaque reads 0
+                                    } else {
+                                        if (id == BlockID::air() &&
+                                            chunk->fluidAt(lx, ly, lz) > 0) {
+                                            light = std::max(
+                                                0, light - kFluidLightAttenuation);
+                                        }
+                                        target = static_cast<std::uint8_t>(light);
+                                    }
+                                }
+                                const std::uint8_t current =
+                                    chunk->skyLightAt(lx, ly, lz);
+                                if (current != target) {
+                                    const_cast<Chunk*>(chunk)->setSkyLightAt(
+                                        lx, ly, lz, target);
+                                    ++rescanWrites;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
-    {
+    if (rescanWrites == 0 && !newTerrain) {
+        // No-op skip (Phase 99.9): the rescan re-asserted every column's
+        // vertical values and found them unchanged, and the box holds no
+        // freshly inserted terrain. No cell's sky light differs from the
+        // old fixed point, and a change to EXISTING terrain can only LOWER
+        // sky values, so no horizontal propagation can raise any cell —
+        // the seed scan + BFS would be pure re-proof. (newTerrain forces
+        // the propagation: a new column can be born dark — under a
+        // ceiling — and still need light FLOWED IN from its lit neighbor
+        // columns, even though its own rescan wrote nothing.)
+    } else {
         std::deque<BlockPos> queue;
-        // Seed: lit cells inside the footprint plus the adjacent column
-        // shell. The shell keeps its old (still correct) values and acts as
-        // the boundary source for horizontal propagation.
-        for (int x = sx0 - 1; x <= sx1 + 1; ++x) {
-            for (int z = sz0 - 1; z <= sz1 + 1; ++z) {
-                for (int y = 0; y < kWorldHeight; ++y) {
-                    const BlockPos p{x, y, z};
-                    if (!world.hasChunk(worldToChunk(p))) {
+        // Seed: EVERY lit cell of the ±R region (the original semantics,
+        // chunk-level since Phase 99.9 — one lookup per 16^3 block). The
+        // worklist BFS propagates only from QUEUED cells, and a box
+        // change can invalidate the light of any column within the
+        // propagation distance (the pre-insertion field may have ridden
+        // paths through the now-filled void), so the full lit region is
+        // the required source set — reduced seeds (changed cells + shell)
+        // left darkened regions unre-lit (test regression). The seed
+        // ORDER differs from the pre-99.9 block loop; the BFS is a
+        // monotone strict-increase worklist, so the converged field is
+        // identical regardless of order.
+        constexpr int kLayers = kWorldHeight / kChunkSize;
+        const int scx0 = floorDiv(sx0, kChunkSize),
+                  scx1 = floorDiv(sx1, kChunkSize);
+        const int scz0 = floorDiv(sz0, kChunkSize),
+                  scz1 = floorDiv(sz1, kChunkSize);
+        for (int cx = scx0; cx <= scx1; ++cx) {
+            for (int cz = scz0; cz <= scz1; ++cz) {
+                for (int cy = 0; cy < kLayers; ++cy) {
+                    const Chunk* chunk = world.findChunk({cx, cy, cz});
+                    if (chunk == nullptr) {
                         continue;
                     }
-                    if (world.getSkyLight(x, y, z) > 0) {
-                        queue.push_back(p);
+                    for (int ly = 0; ly < kChunkSize; ++ly) {
+                        for (int lz = 0; lz < kChunkSize; ++lz) {
+                            for (int lx = 0; lx < kChunkSize; ++lx) {
+                                const int wx = cx * kChunkSize + lx;
+                                const int wz = cz * kChunkSize + lz;
+                                if (wx < sx0 || wx > sx1 || wz < sz0 ||
+                                    wz > sz1) {
+                                    continue;
+                                }
+                                if (chunk->skyLightAt(lx, ly, lz) > 0) {
+                                    queue.push_back(
+                                        {wx, cy * kChunkSize + ly, wz});
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -327,52 +444,89 @@ void Lighting::updateRegion(World& world, const BlockRegistry& blocks,
     std::deque<BlockPos> queue;
 
     // Clear the box; re-seed emission sources (a placed/broken glowstone).
-    for (int y = y0; y <= y1; ++y) {
-        for (int x = x0; x <= x1; ++x) {
-            for (int z = z0; z <= z1; ++z) {
-                const BlockPos p{x, y, z};
-                Chunk* chunk = world.findChunkMut(worldToChunk(p));
-                if (chunk == nullptr) {
-                    continue;
-                }
-                const BlockPos local = worldToChunkLocal(worldToChunk(p), p);
-                int emission =
-                    blocks.at(chunk->get(local.x, local.y, local.z))
-                        .properties.lightEmission;
-                if (emission == 0) {
-                    // A fluid cell of a glowing kind (lava).
-                    emission = fluidEmission(
-                        blocks, chunk->fluidAt(local.x, local.y, local.z));
-                }
-                const std::uint8_t target =
-                    static_cast<std::uint8_t>(emission);
-                const std::uint8_t current =
-                    chunk->blockLightAt(local.x, local.y, local.z);
-                if (current != target) {
-                    chunk->setBlockLightAt(local.x, local.y, local.z, target);
-                }
-                if (target > 0) {
-                    queue.push_back(p);
+    // Chunk-level scan (Phase 99.9): one lookup per 16^3 cell block, then
+    // direct array access — the old loop did a findChunkMut per cell.
+    {
+        const int bcx0 = floorDiv(x0, kChunkSize), bcx1 = floorDiv(x1, kChunkSize);
+        const int bcy0 = floorDiv(y0, kChunkSize), bcy1 = floorDiv(y1, kChunkSize);
+        const int bcz0 = floorDiv(z0, kChunkSize), bcz1 = floorDiv(z1, kChunkSize);
+        for (int cx = bcx0; cx <= bcx1; ++cx) {
+            for (int cy = bcy0; cy <= bcy1; ++cy) {
+                for (int cz = bcz0; cz <= bcz1; ++cz) {
+                    Chunk* chunk = world.findChunkMut({cx, cy, cz});
+                    if (chunk == nullptr) {
+                        continue;
+                    }
+                    for (int ly = 0; ly < kChunkSize; ++ly) {
+                        for (int lz = 0; lz < kChunkSize; ++lz) {
+                            for (int lx = 0; lx < kChunkSize; ++lx) {
+                                const int wx = cx * kChunkSize + lx;
+                                const int wy = cy * kChunkSize + ly;
+                                const int wz = cz * kChunkSize + lz;
+                                if (wx < x0 || wx > x1 || wy < y0 ||
+                                    wy > y1 || wz < z0 || wz > z1) {
+                                    continue;
+                                }
+                                int emission =
+                                    blocks.at(chunk->get(lx, ly, lz))
+                                        .properties.lightEmission;
+                                if (emission == 0) {
+                                    // A fluid cell of a glowing kind (lava).
+                                    emission = fluidEmission(
+                                        blocks, chunk->fluidAt(lx, ly, lz));
+                                }
+                                const std::uint8_t target =
+                                    static_cast<std::uint8_t>(emission);
+                                const std::uint8_t current =
+                                    chunk->blockLightAt(lx, ly, lz);
+                                if (current != target) {
+                                    chunk->setBlockLightAt(lx, ly, lz, target);
+                                }
+                                if (target > 0) {
+                                    queue.push_back({wx, wy, wz});
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
-    // Shell: lit cells just outside the box (boundary source).
-    for (int y = std::max(0, y0 - 1); y <= std::min(kWorldHeight - 1, y1 + 1);
-         ++y) {
-        for (int x = x0 - 1; x <= x1 + 1; ++x) {
-            for (int z = z0 - 1; z <= z1 + 1; ++z) {
-                const bool inside = x >= x0 && x <= x1 && y >= y0 && y <= y1 &&
-                                    z >= z0 && z <= z1;
-                if (inside) {
-                    continue;
-                }
-                const BlockPos p{x, y, z};
-                if (!world.hasChunk(worldToChunk(p))) {
-                    continue;
-                }
-                if (world.getBlockLight(x, y, z) > 0) {
-                    queue.push_back(p);
+    // Shell: lit cells just outside the box (boundary source). Chunk-level
+    // (Phase 99.9) — the box chunk range plus one layer in each direction.
+    {
+        const int hcx0 = floorDiv(x0 - 1, kChunkSize),
+                  hcx1 = floorDiv(x1 + 1, kChunkSize);
+        const int hcy0 = floorDiv(std::max(0, y0 - 1), kChunkSize),
+                  hcy1 =
+                      floorDiv(std::min(kWorldHeight - 1, y1 + 1), kChunkSize);
+        const int hcz0 = floorDiv(z0 - 1, kChunkSize),
+                  hcz1 = floorDiv(z1 + 1, kChunkSize);
+        for (int cx = hcx0; cx <= hcx1; ++cx) {
+            for (int cy = hcy0; cy <= hcy1; ++cy) {
+                for (int cz = hcz0; cz <= hcz1; ++cz) {
+                    const Chunk* chunk = world.findChunk({cx, cy, cz});
+                    if (chunk == nullptr) {
+                        continue;
+                    }
+                    for (int ly = 0; ly < kChunkSize; ++ly) {
+                        for (int lz = 0; lz < kChunkSize; ++lz) {
+                            for (int lx = 0; lx < kChunkSize; ++lx) {
+                                const int wx = cx * kChunkSize + lx;
+                                const int wy = cy * kChunkSize + ly;
+                                const int wz = cz * kChunkSize + lz;
+                                const bool inside =
+                                    wx >= x0 && wx <= x1 && wy >= y0 &&
+                                    wy <= y1 && wz >= z0 && wz <= z1;
+                                if (inside) {
+                                    continue;
+                                }
+                                if (chunk->blockLightAt(lx, ly, lz) > 0) {
+                                    queue.push_back({wx, wy, wz});
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

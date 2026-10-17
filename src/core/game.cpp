@@ -16,6 +16,7 @@
 #include "core/png.hpp"
 #include "core/bow.hpp"
 #include "core/difficulty.hpp"
+#include "core/math/frustum.hpp"
 #include "entity/arrow_mesh.hpp"
 #include "entity/item_entity.hpp"
 #include "entity/mob_entity.hpp"
@@ -243,10 +244,12 @@ double nowSeconds() {
            SDL_GetPerformanceFrequency();
 }
 
-Mat4 chunkModel(const ChunkPos& pos) {
-    const BlockPos o = chunkOrigin(pos);
-    return Mat4::translate({static_cast<float>(o.x), static_cast<float>(o.y),
-                            static_cast<float>(o.z)});
+// The column's model matrix: vertex positions bake each chunk's LAYER
+// offset (y), so the model translates the column origin in X/Z only
+// (baking X/Z into the vertices as well would double-apply it).
+Mat4 columnModel(const ColumnPos& col) {
+    return Mat4::translate({static_cast<float>(col.x * kChunkSize), 0.0f,
+                            static_cast<float>(col.z * kChunkSize)});
 }
 
 } // namespace
@@ -1250,71 +1253,135 @@ Result<void> Game::updateChunkMeshes() {
     // set) simply persists on the chunks that do not fit this frame's
     // budget. The set — not a full chunk scan — is the worklist: a
     // full-ring world is ~9k-200k chunks, the dirty set is player-scale.
+    // Phase 99.9: the chunk mesh lands in CPU storage (m_chunkMeshData);
+    // the GL upload happens in the COLUMNS' merged-mesh rebuild below
+    // (one draw per column instead of one per chunk — the per-chunk
+    // submission was ~10-30 us/draw on the Intel iGPU and grew with the
+    // view-distance ring).
     const std::set<ChunkPos>& dirtySet = m_world.dirtyChunks();
-    if (dirtySet.empty()) {
-        return {};
-    }
-    std::vector<ChunkPos> dirty;
-    for (const ChunkPos& pos : dirtySet) {
-        // Columns whose lighting job has not completed are meshed
-        // EXACTLY ONCE, after the light lands (m_unlitColumns): a
-        // light-0 first mesh would show black faces and cost a second
-        // (budget-delayed) re-mesh. They stay dirty until then.
-        if (m_unlitColumns.count({pos.x, pos.z}) != 0) {
-            continue;
+    if (!dirtySet.empty()) {
+        std::vector<ChunkPos> dirty;
+        for (const ChunkPos& pos : dirtySet) {
+            // Columns whose lighting job has not completed are meshed
+            // EXACTLY ONCE, after the light lands (m_unlitColumns): a
+            // light-0 first mesh would show black faces and cost a second
+            // (budget-delayed) re-mesh. They stay dirty until then.
+            if (m_unlitColumns.count({pos.x, pos.z}) != 0) {
+                continue;
+            }
+            dirty.push_back(pos);
         }
-        dirty.push_back(pos);
-    }
-    if (dirty.empty()) {
-        return {};
-    }
-    const Vec3 p = m_player ? m_player->position() : Vec3{0.0, 0.0, 0.0};
-    const int px = floorDiv(static_cast<int>(std::floor(p.x)), kChunkSize);
-    const int pz = floorDiv(static_cast<int>(std::floor(p.z)), kChunkSize);
-    std::sort(dirty.begin(), dirty.end(),
-              [px, pz](const ChunkPos& a, const ChunkPos& b) {
-                  const int da = std::max(std::abs(a.x - px),
-                                          std::abs(a.z - pz));
-                  const int db = std::max(std::abs(b.x - px),
-                                          std::abs(b.z - pz));
-                  if (da != db) {
-                      return da < db;
-                  }
-                  if (a.x != b.x) {
-                      return a.x < b.x;
-                  }
-                  if (a.y != b.y) {
-                      return a.y < b.y;
-                  }
-                  return a.z < b.z;
-              });
-    const std::size_t limit =
-        std::min(dirty.size(),
-                 static_cast<std::size_t>(kRemeshBudgetPerFrame));
-    const ChunkMesher mesher(m_world, m_blocks, m_atlas.layout());
-    for (std::size_t i = 0; i < limit; ++i) {
-        const ChunkPos& pos = dirty[i];
-        const ChunkMeshData data = mesher.mesh(pos);
-
-        ChunkMesh& cm = m_chunkMeshes[pos];
-        cm.opaque.reset();
-        cm.transparent.reset();
-        if (!data.opaqueEmpty()) {
-            cm.opaque.emplace();
-            auto r = cm.opaque->upload(data.opaqueVertices, data.opaqueIndices);
-            MC_TRY(r);
+        if (!dirty.empty()) {
+            const Vec3 p =
+                m_player ? m_player->position() : Vec3{0.0, 0.0, 0.0};
+            const int px =
+                floorDiv(static_cast<int>(std::floor(p.x)), kChunkSize);
+            const int pz =
+                floorDiv(static_cast<int>(std::floor(p.z)), kChunkSize);
+            std::sort(dirty.begin(), dirty.end(),
+                      [px, pz](const ChunkPos& a, const ChunkPos& b) {
+                          const int da =
+                              std::max(std::abs(a.x - px), std::abs(a.z - pz));
+                          const int db =
+                              std::max(std::abs(b.x - px), std::abs(b.z - pz));
+                          if (da != db) {
+                              return da < db;
+                          }
+                          if (a.x != b.x) {
+                              return a.x < b.x;
+                          }
+                          if (a.y != b.y) {
+                              return a.y < b.y;
+                          }
+                          return a.z < b.z;
+                      });
+            const std::size_t limit = std::min(
+                dirty.size(),
+                static_cast<std::size_t>(kRemeshBudgetPerFrame));
+            const ChunkMesher mesher(m_world, m_blocks, m_atlas.layout());
+            for (std::size_t i = 0; i < limit; ++i) {
+                const ChunkPos& pos = dirty[i];
+                m_chunkMeshData[pos] = mesher.mesh(pos);
+                m_columnRebuildPending.insert({pos.x, pos.z});
+                m_world.clearChunkDirty(pos);
+            }
         }
-        if (!data.transparentEmpty()) {
-            cm.transparent.emplace();
-            auto r = cm.transparent->upload(data.transparentVertices,
-                                             data.transparentIndices);
-            MC_TRY(r);
-        }
-        m_world.clearChunkDirty(pos);
     }
+    // Rebuild the merged GL mesh of every column this frame's chunk
+    // meshes touched (plus columns still pending from a budget-deferred
+    // frame — their chunk data exists, the column upload was what lagged).
+    for (const ColumnPos& col : m_columnRebuildPending) {
+        MC_TRY(rebuildColumnMesh(col));
+    }
+    m_columnRebuildPending.clear();
     return {};
 }
 
+Result<void> Game::rebuildColumnMesh(const ColumnPos& col) {
+    // Concatenate the column's chunk geometries. Each chunk's Y offset
+    // (its layer in the column) is baked into the vertex positions; the
+    // X/Z column origin stays in the model matrix (columnModel) — baking
+    // it there too would double-apply the translation. Chunks without
+    // CPU geometry (unlit, or not meshed yet) are simply absent — the same
+    // visibility the old per-chunk loop had.
+    std::vector<MeshVertex> opaqueVerts;
+    std::vector<std::uint32_t> opaqueIdx;
+    std::vector<MeshVertex> transparentVerts;
+    std::vector<std::uint32_t> transparentIdx;
+    for (int cy = 0; cy < kVerticalChunksPerColumn; ++cy) {
+        const ChunkPos cp{col.x, cy, col.z};
+        const auto it = m_chunkMeshData.find(cp);
+        if (it == m_chunkMeshData.end()) {
+            continue;
+        }
+        const ChunkMeshData& d = it->second;
+        const float oy = static_cast<float>(cy * kChunkSize);
+        if (!d.opaqueEmpty()) {
+            const std::uint32_t base =
+                static_cast<std::uint32_t>(opaqueVerts.size());
+            opaqueVerts.reserve(opaqueVerts.size() + d.opaqueVertices.size());
+            for (const MeshVertex& v : d.opaqueVertices) {
+                MeshVertex w = v;
+                w.position.y += oy;
+                opaqueVerts.push_back(std::move(w));
+            }
+            opaqueIdx.reserve(opaqueIdx.size() + d.opaqueIndices.size());
+            for (const std::uint32_t i : d.opaqueIndices) {
+                opaqueIdx.push_back(i + base);
+            }
+        }
+        if (!d.transparentEmpty()) {
+            const std::uint32_t base =
+                static_cast<std::uint32_t>(transparentVerts.size());
+            transparentVerts.reserve(
+                transparentVerts.size() + d.transparentVertices.size());
+            for (const MeshVertex& v : d.transparentVertices) {
+                MeshVertex w = v;
+                w.position.y += oy;
+                transparentVerts.push_back(std::move(w));
+            }
+            transparentIdx.reserve(
+                transparentIdx.size() + d.transparentIndices.size());
+            for (const std::uint32_t i : d.transparentIndices) {
+                transparentIdx.push_back(i + base);
+            }
+        }
+    }
+    ColumnMesh& cm = m_columnMeshes[col];
+    cm.opaque.reset();
+    cm.transparent.reset();
+    if (!opaqueIdx.empty()) {
+        cm.opaque.emplace();
+        auto r = cm.opaque->upload(opaqueVerts, opaqueIdx);
+        MC_TRY(r);
+    }
+    if (!transparentIdx.empty()) {
+        cm.transparent.emplace();
+        auto r = cm.transparent->upload(transparentVerts, transparentIdx);
+        MC_TRY(r);
+    }
+    return {};
+}
 // ---------------------------------------------------------------------------
 // Chunk streaming (Phase 14): worker-generated columns around the player
 // ---------------------------------------------------------------------------
@@ -1443,10 +1510,20 @@ void Game::unloadFarColumns() {
     if (toErase.empty()) {
         return;
     }
+    // The unloaded COLUMNS (toErase holds all eight chunks of each — the
+    // merged column mesh and every member's CPU geometry go with them).
+    std::set<ColumnPos> columns;
     for (const ChunkPos& pos : toErase) {
-        m_chunkMeshes.erase(pos); // frees the GL buffers (the Mesh destructor)
+        columns.insert({pos.x, pos.z});
+    }
+    for (const ChunkPos& pos : toErase) {
+        m_chunkMeshData.erase(pos);
         m_world.eraseChunk(pos); // marks the boundary neighbors dirty
         m_flammableChunks.erase(pos);
+    }
+    for (const ColumnPos& col : columns) {
+        m_columnMeshes.erase(col); // frees the GL buffers (Mesh destructor)
+        m_columnRebuildPending.erase(col);
     }
     for (const ChunkPos& pos : toErase) {
         m_loadedColumns.erase({pos.x, pos.z});
@@ -1621,7 +1698,11 @@ void Game::postLightJobs() {
     m_lightJobs.push_back(std::move(job));
     m_pool->post([this, rawJob] {
         for (const auto& box : rawJob->boxes) {
-            Lighting::updateRegion(m_world, m_blocks, box[0], box[1]);
+            // newTerrain = true: the boxes cover freshly inserted columns
+            // — the sky propagation must run even when the rescan writes
+            // nothing (a column born dark still receives light from its
+            // lit neighbors).
+            Lighting::updateRegion(m_world, m_blocks, box[0], box[1], true);
         }
         rawJob->done = true;
     });
@@ -5939,17 +6020,48 @@ void Game::render() {
 
     m_atlas.texture().bind();
 
-    // Chunk passes: all opaque geometry first, then the transparent
+    // Frustum culling (Phase 99.9): the chunk passes must not submit draw
+    // calls for chunks the camera cannot see. At view distance 80 the
+    // loaded ring holds ~200k chunks while the frustum covers a few
+    // hundred; drawing them all is what collapsed the vd80 frame to
+    // seconds. The test is conservative (a box is culled only when fully
+    // outside one plane), so a culled chunk had zero screen coverage —
+    // the rendered pixels are unchanged for any camera (byte-identical
+    // no-input baseline). Entities/particles are player-scale and stay
+    // unculled here (their own draw calls are few).
+    const Mat4 mvp = Mat4::multiply(projection, view);
+    const Frustum frustum = Frustum::fromMVP(mvp);
+    const auto columnVisible = [&frustum](const ColumnPos& col) {
+        const float x0 = static_cast<float>(col.x * kChunkSize);
+        const float z0 = static_cast<float>(col.z * kChunkSize);
+        return frustum.intersectsAabb(
+            Vec3{x0, 0.0f, z0},
+            Vec3{x0 + kChunkSize, static_cast<float>(kWorldHeight),
+                 z0 + kChunkSize});
+    };
+
+    // Column passes: all opaque geometry first, then the transparent
     // (blended) geometry, so blending composites over the opaque scene.
-    const std::vector<ChunkPos> positions = m_world.chunkPositions();
-    for (const ChunkPos& pos : positions) {
-        const auto it = m_chunkMeshes.find(pos);
-        if (it == m_chunkMeshes.end() || !it->second.opaque.has_value()) {
+    // Phase 99.9: one merged mesh per COLUMN (its eight chunks) instead of
+    // one per chunk — the per-chunk submission was ~10-30 us/draw on the
+    // Intel iGPU and grew with the view-distance ring (the vd80 render
+    // collapse). The column list is m_loadedColumns (the incremental
+    // mirror): no per-frame chunkPositions() snapshot + sort of the ~200k
+    // loaded chunks.
+    const std::vector<ColumnPos> columns(m_loadedColumns.begin(),
+                                         m_loadedColumns.end());
+    for (const ColumnPos& col : columns) {
+        if (!columnVisible(col)) {
+            continue;
+        }
+        const auto it = m_columnMeshes.find(col);
+        if (it == m_columnMeshes.end() || !it->second.opaque.has_value()) {
             continue;
         }
         m_renderer.draw(*it->second.opaque, m_basicShader, view, projection,
-                        chunkModel(pos));
+                        columnModel(col));
     }
+
     // Dropped items (Phase 10): the opaque ones with the chunk pass; the
     // transparent ones (leaves, glass) join the blending pass below.
     drawItemEntities(view, projection, false);
@@ -5977,13 +6089,17 @@ void Game::render() {
     // before the transparent pass (they never overlap chunk geometry in
     // depth — they sit behind everything in the demo area).
     drawSkyObjects(view, projection, h);
-    for (const ChunkPos& pos : positions) {
-        const auto it = m_chunkMeshes.find(pos);
-        if (it == m_chunkMeshes.end() || !it->second.transparent.has_value()) {
+    for (const ColumnPos& col : columns) {
+        if (!columnVisible(col)) {
+            continue;
+        }
+        const auto it = m_columnMeshes.find(col);
+        if (it == m_columnMeshes.end() ||
+            !it->second.transparent.has_value()) {
             continue;
         }
         m_renderer.draw(*it->second.transparent, m_basicShader, view,
-                        projection, chunkModel(pos));
+                        projection, columnModel(col));
     }
     drawItemEntities(view, projection, true);
     drawParticles(view, projection, true);

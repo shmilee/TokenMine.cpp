@@ -63,8 +63,18 @@ public:
     // cell changes inside the [min, max] box (a fluid tick passes the
     // bounding box of its changed cells; a single cell is min == max).
     // Same net-change dirty semantics as updateLocal.
+    //
+    // `newTerrain` (Phase 99.9): true when the box covers a freshly
+    // INSERTED chunk (the streaming pipeline's column job). Then the sky
+    // propagation always runs, even if the rescan's vertical re-assert
+    // wrote nothing (a new column can be dark from the start — under a
+    // ceiling — and still need its light FLOWED IN from the lit neighbor
+    // columns). False (the default: fluid relights, block edits) enables
+    // the no-op skip: rescan wrote nothing => the sky field is at its old
+    // fixed point => the seed scan + BFS are pure re-proof.
     static void updateRegion(World& world, const BlockRegistry& blocks,
-                             const BlockPos& min, const BlockPos& max);
+                             const BlockPos& min, const BlockPos& max,
+                             bool newTerrain = false);
 };
 
 } // namespace mc

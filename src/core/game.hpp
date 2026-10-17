@@ -125,8 +125,16 @@ public:
     const World& world() const { return m_world; }
 
 private:
-    // GPU geometry of one chunk: opaque + transparent (blended) sub-meshes.
-    struct ChunkMesh {
+    // CPU geometry of one chunk (the mesher's output, kept in CPU memory
+    // so a column's merged GL mesh can be rebuilt when any of its eight
+    // chunks re-meshes). Phase 99.9.
+    // GPU geometry of one COLUMN (all eight vertical chunks merged into
+    // one opaque + one transparent sub-mesh). 8x fewer draw calls and
+    // buffer objects than per-chunk meshes: at view distance 80 the
+    // per-chunk submission was ~10-30 us/draw on the Intel iGPU and grew
+    // with the ring (the vd80 render collapse). Vertices bake the chunk's
+    // world offset, so the column model translates in X/Z only.
+    struct ColumnMesh {
         std::optional<Mesh> opaque;
         std::optional<Mesh> transparent;
     };
@@ -145,7 +153,15 @@ private:
     void update(double dt);
     void render();
     // Rebuilds the GPU mesh of every dirty (or never-meshed) chunk.
+    // Phase 99.9: the chunk's CPU geometry (m_chunkMeshData) is refreshed
+    // within the per-frame budget, then the touched COLUMNS' merged GL
+    // meshes are rebuilt (rebuildColumnMesh) — the render loop draws one
+    // mesh per column, not per chunk.
     Result<void> updateChunkMeshes();
+    // Concatenates the column's chunk geometries (baking each chunk's
+    // world offset into the vertices, remapping the indices) and uploads
+    // the merged opaque + transparent sub-meshes.
+    Result<void> rebuildColumnMesh(const ColumnPos& col);
 
     // Chunk streaming (Phase 14). integrateStreamedColumns runs after the
     // pool flush: worker-generated columns are inserted into the World
@@ -537,7 +553,12 @@ private:
 
     // Voxel world + per-chunk GPU meshes.
     World m_world;
-    std::unordered_map<ChunkPos, ChunkMesh> m_chunkMeshes;
+    std::unordered_map<ChunkPos, ChunkMeshData> m_chunkMeshData;
+    std::unordered_map<ColumnPos, ColumnMesh> m_columnMeshes;
+    // Columns whose merged GL mesh is stale (a chunk re-meshed): rebuilt
+    // at the end of updateChunkMeshes (after the frame's budget of chunk
+    // meshes landed).
+    std::set<ColumnPos> m_columnRebuildPending;
 
     // Seeded world generator (built in buildScene). Optional: the game only
     // touches it after init succeeded.
