@@ -202,5 +202,6 @@
 - **Phase 97** — `archive/phase-97.md`
 - **Phase 98** — `archive/phase-98.md`
 - **Phase 99** — `archive/phase-99.md`
+- **Phase 99.x（性能系列）** — `archive/phase-99.x.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。
