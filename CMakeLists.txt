@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 0.0.1 LANGUAGES CXX)
+project(TokenMine VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -84,6 +84,10 @@ add_library(mc_core STATIC
     src/ui/ui_scale.cpp
 )
 target_include_directories(mc_core PUBLIC ${CMAKE_SOURCE_DIR}/src)
+# Single source of truth for the version string (project VERSION above):
+# the startup log (main.cpp) and the F3 overlay first line (debug_overlay.cpp)
+# both consume TM_VERSION, so a version bump touches CMakeLists only.
+target_compile_definitions(mc_core PUBLIC TM_VERSION="${PROJECT_VERSION}")
 target_link_libraries(mc_core PUBLIC SDL3::SDL3 PkgConfig::GLEW
                         PkgConfig::ZLIB Threads::Threads)
 

@@ -20,7 +20,7 @@ std::string fmt(const char* format, ...) {
 
 std::vector<std::string> debugOverlayLines(const DebugInfo& info) {
     return {
-        "TokenMine.cpp v0.0.1 (Phase 25)",
+        "TokenMine.cpp v" TM_VERSION,
         fmt("%d FPS | frame %d", info.fps, info.frame),
         fmt("chunks %d | draws %u | verts %llu", info.chunks, info.drawCalls,
             info.vertices),

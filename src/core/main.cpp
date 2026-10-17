@@ -140,7 +140,7 @@ int main(int argc, char** argv) {
     std::filesystem::create_directories("data", ec);
 
     Logger::instance().init("logs/tokenmine.log", args.logLevel);
-    MC_LOG_INFO("=== TokenMine.cpp v0.0.1 (Phase 0: project foundation) ===");
+    MC_LOG_INFO("=== TokenMine.cpp v" TM_VERSION " ===");
 
     Game game;
     auto st = game.init(args);

@@ -35,7 +35,9 @@ TEST(DebugOverlayTest, LinesFormat) {
     info.difficulty = "hard";
     const auto lines = debugOverlayLines(info);
     ASSERT_EQ(lines.size(), 12u);
-    EXPECT_EQ(lines[0], "TokenMine.cpp v0.0.1 (Phase 25)");
+    // Pinned literal (deliberately NOT the TM_VERSION macro): a version
+    // bump must force a conscious update of this pin.
+    EXPECT_EQ(lines[0], "TokenMine.cpp v0.1.0");
     EXPECT_EQ(lines[1], "60 FPS | frame 1234");
     EXPECT_EQ(lines[2], "chunks 2312 | draws 45 | verts 987654");
     EXPECT_EQ(lines[3], "pos 0.50, 54.00, -34.70  yaw 0.00  pitch -0.25");

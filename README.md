@@ -67,6 +67,33 @@ cmake --build build
 视口、投影纵横比与屏幕 UI 布局每帧读取窗口当前像素尺寸，缩放后场景立即跟随
 （最小尺寸 320×200）；设为 `false` 则锁定在配置尺寸。
 
+## 构建依赖
+
+**平台**：Linux 验证（Arch；CMake 3.25+ / Ninja）。macOS / Windows 未测试
+（SDL3 与 GLEW 在对应平台的可用性未验证）。
+
+| 依赖 | 用途 | Arch 安装 |
+|---|---|---|
+| CMake ≥ 3.25 + Ninja | 构建 | `sudo pacman -S cmake ninja` |
+| SDL3 | 窗口/输入/音频 | `sudo pacman -S sdl3` |
+| GLEW + OpenGL 3.3 | 图形（需驱动，Intel iGPU 验证） | `sudo pacman -S mesa libglvnd-glew` |
+| zlib | 内置 PNG 解码 | 系统自带 |
+| GTest | 单元测试 | `sudo pacman -S googletest` |
+
+其他发行版：装齐上表五项即可（`find_package`/`pkg_check_modules` 自动发现）。
+
+## 版本与发布
+
+- **v0.1.0**（2026-10-17，首个公开版）：功能阶段 P0–P99 + 性能系列 99.x
+  全部完成；1195/1195 测试、`-Werror` 0 警告。
+- **0.x 承诺**：可玩、可扩展、确定性运行；但**不承诺稳定**——存档格式
+  （现为 format 14，向前迁移）与内容数据格式仍可能随阶段演进，旧存档
+  通常可读但请定期备份。已知限制见 `docs/KNOWN_ISSUES.md`。
+- 许可证：MIT（见 `LICENSE`）。
+- **内存提示**：默认 `config/config.json` 为 `view_distance: 80`（方形环
+  满环 ~207k chunk ≈ 12 GB，会随探索持续加载）。内存 <16 GB 的机器建议
+  改为 16–32（`world.view_distance`，16 ≈ 2 GB 量级）。
+
 ## 文档地图
 
 | 文档 | 内容 | 何时读 |
