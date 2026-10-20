@@ -45,7 +45,7 @@
 - **湿润判定是简化几何** — "土壤格（作物下方）同 y、切比雪夫半径 4 内有任一**水**（level ≥1；`[Phase 54]` 起只算水，熔岩不湿润）"：不区分源/流动水（流动水膜也算湿润）、不检查水是否可达（4 格外隔墙的水也算）、半径/层级规则与 Minecraft 的"4 格内水源"不完全一致。`[Phase 50]`
 - **未熟作物掉种子（非 MC 的"不掉"）** — 破坏 `wheat_1..wheat_6` 掉 1 个种子（可再种，玩家友好）；Minecraft 破坏未熟作物不掉任何东西。`[Phase 48]`
 - **`wheat_2..wheat_7` 有隐式 block 物品但不可获得** — 每个数据方块自动有同名 block 物品（可放置）；`wheat_2..wheat_7` 的物品没有掉落/合成来源，实际拿不到（`wheat_1` 是种子来源）。无害，但物品表里有 7 个小麦 block 物品。`[Phase 48]`
-- **卸载/未加载 chunk 的作物不持久** — 作物 = 方块编辑（随存档），但玩家离开后 chunk 若被驱逐再重新生成，该格回到世界生成态（v1 世界生成不放作物 = 作物消失）。与"未加载区域不保存玩家方块编辑"同一既有性质，非作物特有。`[Phase 48]`
+- ~~**卸载/未加载 chunk 的作物不持久**~~ — `[99.2]` 已解决：**含作物列永不卸载**。作物放置/生长/被烧/破坏全走 `setBlock` 收口 → 所在列入 `m_editedColumns`（**insert-only 无修剪**，"player-edited columns are never dropped"）且未熟作物另在 `m_crops`——`unloadFarColumns` 对编辑列 + 五类 per-block 状态列（炉子/营火/**作物**/信标/火）双重豁免（见「Chunk 流式」99.2 条）。作物 = 方块编辑随存档（无独立 crops 键），读档重放编辑 + `rescanCrops` 全量重建；生长每帧 tick 与玩家距离无关。唯一相关残余 = 仅流体模拟改动（无 tracked state）的远端列卸载后回生成态（99.2 残余①），**不适用于作物**（作物格恒为编辑）。`[Phase 48]`（`[99.2]` 已解决）
 - ~~**概率次级掉落每方块至多一个条目**~~ — `[Phase 52]` 已修复：新增 `chance_drops`（`{item, count, chance}` 严格三元组数组，与单条目 `chance_drop` **互斥**【同时写拒绝】）。各条目**独立 roll**（`rollChanceDropEntry`，条目索引去相关 salt），breakBlock 循环条目、每条目至多 1 掉落实体；init 每条目复用 drops 纪律（物品存在 + max_stack）。单条目 `chance_drop` 保留（系统 + 单测覆盖；`[Phase 55]` leaves 迁入列表后一度**无现役内容使用者**，`[Phase 59]` gravel→flint（10%，MC 值）重新使用它）。`[Phase 49]`（多掉落列表 `[Phase 52]` 已就位；内容扩展 `[Phase 55]`、`[Phase 59]`）
 - **概率掉落是 per-cell 确定性（无重 roll）** — 同一世界同一格每次破坏结果相同（splitmix64(seed + 位置哈希)）：破坏-重种同一格树叶，苹果结果不变；这是无输入字节可复现的刻意代价（MC 是真随机）。位置哈希 + 专用 salt 保证相邻格去相关（单测有实证率断言）。`[Phase 49]`
 - ~~**flint 无用途（v1 文档化偏离）**~~ — `[Phase 60]` 已解决：**箭头配方 = shapeless flint+stick+feather → 4 箭（MC 1.14+）**，**替换**了旧的 2 木棍竖排 → 2 箭配方（内容契约变更：早期箭现需 flint + feather = MC 同款闭环，gravel→flint、chicken→feather、树→stick）+ **flint_and_steel**（flint+iron_ingot 合成；`ignites_flamable` = 右键烧 `flamable` 块、无掉落、不消耗）。flint 的两个用途 = MC 的主用途。`[Phase 59]` → `[Phase 60]`
@@ -76,8 +76,8 @@
 
 ## 合成（Phase 12）
 
-- **配方只有 shapeless** — 无 shaped（3×3 网格按位置）配方、无催化剂/"需要工作台"类别、无多配方消歧（同原料不同产物不可能出现——`craft` 按 id 精确执行一个配方，未来 UI 负责让玩家选配方，系统不负责猜）。`[Phase 12]`
-- **部分材料暂无用途** — `gold_ingot`/`diamond` 可从对应矿石挖得，但没有配方消费它们（无饰品；火把用 coal，不用金/钻石）；`coal`/`planks`/`stick` 在 Phase 40 起是炉子燃料（数据字段 `fuel_time`）；`coal` 另进火把配方（Phase 65，coal 首个合成用途）；`planks`/`stick`/`iron_ingot` 已在配方链中。`[Phase 12]`（coal 用途 `[Phase 40]`、合成用途 `[Phase 65]` 已解决）
+- **配方 = shapeless + shaped（`[Phase 17]` 起）** — shaped（`pattern` + `key`，1..3 行 × 1..3 列；shaped 禁用 `ingredients`）`[Phase 17]` 实装（shipped 21 个：工具 / 营火 SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作台 / 弓 / 桶）；网格匹配 **shaped 先、shapeless 后，首个命中即成**（注册表加载序）。**"需要工作台" = de facto 网格尺寸门**：E 面板只暴露 2×2（共享 3×3 左上，见「工作台 / 形状合成」节 E 面板条），宽/高 3 的 pattern 只能在工作台摆出（与 MC 一致）。**无多配方消歧仍成立**：`craft` 按 id 精确执行；shipped 31 个 shapeless 原料集互不重复——若将来重复 = 加载序首个命中，系统不猜。`[Phase 12]`（shaped + 工作台门 `[Phase 17]` 已解决）
+- **部分材料暂无用途** — **`gold_ingot`/`diamond` 用途已解决**：gold_ingot = 金苹果（shaped 镶金，`[Phase 49]`）/ 黄色染料（`[Phase 45]`）/ 速度弓（`[Phase 79]`）；diamond = 无限弓（`[Phase 77]`）/ 力量弓（`[Phase 79]` ×2），大师弓（`[Phase 82]`）间接。**仍无配方消费的材料 = 仅 `leather`**（见「Mob」节）。无饰品、火把用 coal（金/钻石不用于火把 = 偏离不变）；`coal`/`planks`/`stick` 在 Phase 40 起是炉子燃料（`fuel_time`）；`coal` 另进火把配方（Phase 65）；`planks`/`stick`/`iron_ingot` 已在配方链中。`[Phase 12]`（coal `[Phase 40/65]`、gold/diamond `[Phase 45]`→`[Phase 49]`→`[Phase 77]`→`[Phase 79]` 已解决）
 - **矿石掉落改为材料（行为变化，刻意）** — 4 种矿石现在掉材料物品（coal_ore→coal、iron_ore→iron_ingot、gold_ore→gold_ingot、diamond_ore→diamond，MC 同款），**矿方块物品不能再从采矿获得**（数据仍在、可放置，只是无产出途径）；wood 仍掉 wood 本身（它是木板配方的原料，若改掉 planks 则配方链断）。`[Phase 12]`
 
 ## 存档（Phase 13）
@@ -89,7 +89,7 @@
 - **实体 `age` 按真实 dt 累积（墙钟）** — 与玩家/物理一致（非固定步长），所以含实体的存档文件在 age 字段上跨运行差 ±1-2 帧；渲染不依赖 age（掉落物动画由帧计数器驱动），截图确定性不受影响。昼夜 `time` 是固定步长（位精确）。`[Phase 13]`
 - **`DayCycle::setTimeOfDay` 至多 1 ulp 偏差** — 存 timeOfDay [0,1)，恢复时解出 totalSeconds；对远离配置 start_time 的值，`startTime + delta` 的浮点往返可能差 1 ulp（~1e-16）。昼夜渐变段是常量/平滑的，呈现无影响。`[Phase 13]`
 - **演示区外的编辑会带上"生成的 chunk"** — 在演示区外放置方块会同步生成该 chunk（既有行为），存档 diff 覆盖它；读档时 `setBlock` 重建同样生成该 chunk——一致，但读档后的世界含全新世界没有的 chunk（读档后 `propagateAll` 全量重传播，之后新出现的 chunk 由 Phase 14 的 worker 光照 job 处理）。`[Phase 13]`
-- **存档无迁移机制** — 只读 format 1–3（各按其字段集加载：format 1 无 health、format 1/2 无合成网格），无自动迁移；未知字段=报错（机器生成文件的损坏/版本检测，与用户数据文件的"警告容忍"相反）。`[Phase 13]`（`[Phase 16/17]` 起 format 2/3 可加载）
+- ~~**存档无迁移机制**~~ — 当前 **format 14**（save.hpp `kSaveFormat=14` / `kSaveFormatMin=1`），**format 1..14 全部可加载**（各按其字段集 + 逐 format 白名单），含 4 处规则式迁移：6→7 炉子（sole 归属/丢弃，见「炉子 / 熔炼」节）、≤11→12 吸收（共享 health 按 base max 拆分）、11/12→13 营火（单槽→槽 0）、13→14 stairs（迁移为空；旧 format 带新键 = 版本谎报拒绝）。写入恒 format 14。**"未知字段=报错"（机器生成文件的损坏/版本检测，与用户数据文件的"警告容忍"相反）保持**（rejectUnknownFields）。`[Phase 13]`（`[Phase 16/17]` 起 format 2/3 可加载，其后逐 format 追加）
 
 ## Chunk 流式（Phase 14）
 
@@ -133,7 +133,7 @@
 - **生命 HUD 是 10 心三态，半心按 0.5 HP 粒度渲染** — 每颗心 2 HP，填充 = `clamp(hp − 2i, 0, 2)`（2=满/1=半/0=空），贴图是 3 个固定状态（满/半/空），无更细粒度（如 0.5 HP 的四分之心）；MC 的心是 10 颗每颗 1 HP 且支持 0.5 增量。`[Phase 16]`
 - **无死亡分数/死亡统计** — 死亡只显示 "You died! / Press R"，无得分、无死亡次数、无 Game Over 统计屏；重生保留背包与全部物品（无死亡掉落）。`[Phase 16]`
 - **自然回复是定时 + 饥饿门控（Phase 23 起）** — 脱离受伤 `regenDelay=10s` 后每 `regenInterval=4s` 回 1 HP，且要求饥饿 ≥ 6（Minecraft 规则：低于 6 无自然回复）；门控关闭时累加器暂停（不重置），吃饱后继续累计。回复本身不消耗饥饿点（无 MC 的"回复花饥饿"），饥饿只按时间衰减。`[Phase 16]`（饥饿门控 `[Phase 23]`）
-- **潜行缩高在纯整数方块世界无通行效果** — 潜行把身高 1.8→1.6（脚底不动、眼高 1.62→1.42）。整数方块世界的头顶空间恒为 ≥2.0（站立可过）或 ≤1.0（潜行也不可过），1.6 不改变可通行集合；潜行当前只影响速度（×0.3）与禁用 step-up，"钻 1.8 门框" 的效果要等出现非整数高度（半块/实体头顶）才有意义。`[Phase 16]`
+- **潜行缩高：钻 1 格缝隙仍未实现，楼梯几何下 1.6/1.8 有通行差异** — 潜行把身高 1.8→1.6（脚底不动、眼高降 0.2），速度 ×0.3、禁用 step-up、1 格崖缘 guard（`[Phase 16]` 原状）。**`[Phase 16]` 时"纯整数世界 1.6 无通行差异"的前提已被消费**：`[Phase 85/87]` 半块/楼梯带来非整数头顶空间——但**最大缝隙 = slab 上方 1.5 < 潜行 1.6**，"钻 1 格高缝隙"仍未实现；唯一 1.6/1.8 改变可通行集合的几何 = 楼梯斜面（如楼梯排上方 2 格高走廊：站立需 AABB 覆盖最高斜点 ≤0.2、潜行 ≤0.4，窄边缘情形）。**潜行其它用途**：营火坐姿（`[Phase 71/75]`：crouch + 贴地 + AABB 重叠 campfire 格 = 锁移动/跳）、楼梯旋转键（`[Phase 94]`：潜行 + 右键）、低顶陷阱（`updateCrouchHeight`：头顶空间 <1.8 时松开键不站起）。`[Phase 16]`（半块/楼梯 `[Phase 85/87]` 已就位；缝隙通行仍未实现）
 - **step-up 只抬升 1 格、每 tick 至多一次** — 条件：非潜行 + 贴地 + 身体贴住整数块面（`kFaceEps=1e-4`）+ 面前脚位 solid + 其上方 2 格空；X 轴优先于 Z 轴（固定顺序），一次 update 只抬一次。2 格及以上仍须跳跃。`[Phase 16]`
 
 ## 饥饿 / 食物（Phase 23，Phase 28，Phase 31）
@@ -162,13 +162,14 @@
   放置/交互（对齐 MC "满条时不能放置"）；该次点击被静默消耗。`[Phase 23]`
 - **食物不直接回血** — `restore_hunger` 只加饥饿点；HP 恢复只走（门控后的）
   自然回复与饥饿=0 的扣血，无"吃牛排直接 +4 HP"类食物。`[Phase 23]`
-- **食物共 7 种：4 生肉/腐肉 + 3 熟肉** — Phase 28 起：`rotten_flesh`（+4，zombie）、
+- **食物共 10 种：4 生肉/腐肉 + 3 熟肉 + 面包/苹果/金苹果** — Phase 28 起：`rotten_flesh`（+4，zombie）、
   `beef`（+3，cow）、`mutton`（+2，sheep）、`chicken`（+2，chicken）；
   Phase 40 起：`cooked_beef`（+8）、`cooked_mutton`（+6）、`cooked_chicken`（+6）
-  —— 由炉子熔炼对应生肉得到（MC 数值：牛排 8 / 熟羊肉 6 / 熟鸡肉 6）。
+  —— 由炉子熔炼对应生肉得到（MC 数值：牛排 8 / 熟羊肉 6 / 熟鸡肉 6）；
+  **`bread`（+5，shapeless 3 wheat，`[Phase 48]`）**、**`apple`（+4，leaves 1/128 概率掉，`[Phase 49]`）**、
+  **`golden_apple`（+4，shaped 镶金，`[Phase 49]`；`[Phase 56]` 起 grants_effects = regeneration 10 s + absorption 5 s）**。
   `leather`/`wool`/`feather` 刻意**不是**食物（对齐 MC 的收集品定位）。
-  未做：面包（无小麦/种植系统）、金苹果（无苹果系统）。
-  `[Phase 23/28]`（熟肉 `[Phase 40]` 已解决、牛奶桶 `[Phase 43]` 已解决）
+  `[Phase 23/28]`（熟肉 `[Phase 40]`、面包 `[Phase 48]`、苹果/金苹果 `[Phase 49]`、金苹果效果 `[Phase 56]`、牛奶桶 `[Phase 43]` 已解决）
 - **饥饿 HUD 在极窄窗口会被裁剪** — 心带居中（178px）+ 饥饿带在心带右侧
   （+6px 间距、178px），合计约 362px；窗口宽度 < ~380px 时饥饿带右端超出
   屏幕被裁剪（UI 是像素正交、越界即裁，无回退布局）。E2E/基线窗口 1280×720
@@ -263,9 +264,10 @@
   = 1 桶 → 1 奶桶（瞬时）：cow 不受伤害、不死、不掉落、无 5 分钟挤奶
   冷却（MC 有）、可无限连续挤；背包满时不产出但点击被吞（MC 一致）。
   挤奶音效与饮用开始共用 "milk"。`[Phase 43]`
-- **唯一可饮用物品 = 牛奶桶** — 无水瓶/熔岩桶（需流体物品设计，超范围）；
+- **唯一可饮用物品 = 牛奶桶** — 水/熔岩桶（`[Phase 47/51]`）是**流体容器**
+  （`collects_fluid`/`pours_fluid` 舀倒，见「流体桶」节），**不可饮用**（无 `drink_time`，与 MC 一致——原"无水瓶/熔岩桶（需流体物品设计，超范围）"注记已被消费）；
   `returns_item` 容器框架 + `drink_time` 数据字段已支持未来可饮容器
-  （无容器 = 喝完直接消失，`returns_item` 可选）。`[Phase 43]`
+  （无容器 = 喝完直接消失，`returns_item` 可选）。`[Phase 43]`（水桶 `[Phase 47]`、熔岩桶 `[Phase 51]` 已就位 = 流体容器非饮品）
 - **"milk" 音效在饮用开始时播放** — 与 MC 一致（咕嘟声在前，即使提前松开
   取消饮用也响过；同弓弦声在拉弓开始时播放的纪律）。`[Phase 43]`
 
@@ -382,9 +384,7 @@
 
 ## 熔岩 / 流体双种类（Phase 51）
 
-- **worldgen 不生成熔岩** — 无天然熔岩池/熔岩湖：熔岩只能靠熔岩桶
-  放置（或水+熔岩反应的副产物环境），世界生成从不放熔岩。
-  `[Phase 51]`
+- ~~**worldgen 不生成熔岩**~~ — `[Phase 86/88/90/93]` 已解决：worldgen 现生成熔岩湖——shipped `lava_lakes` 3 湖（(40,40) R4 深湖 / (55,45) R3 深湖 / (24,26) R1 表面湖）+ `lava_lakes_procedural` 5 个 seed 派生随机湖（region [60,90]²），详见「熔岩湖（Phase 86）」节。`[Phase 51]`
 - ~~**熔岩无燃烧/减速**~~ — `[Phase 54]` 已修复：玩家 AABB 重叠熔岩格时
   进**同款游泳状态**（`isInLava`，水/熔岩并存时熔岩优先）+ 熔岩节奏
   （`lava_swim_speed` 1.9 / 上浮 1.5 / 重力 4 / 终端 2，config 可覆盖）+
@@ -446,9 +446,8 @@
   MC 熔岩不湿润，且会烧掉作物——烧 `[Phase 58]` 已解决，见"熔岩 /
   流体双种类"节）。
   `[Phase 51]`（`[Phase 54]` 已解决）
-- **黑曜石只能靠反应获得** — 无自然生成（worldgen 无熔岩 → 无反应
-  场所）、无合成配方（MC 获取方式 = 水浇熔岩，本项目同款反应）。
-  `[Phase 51]`
+- **黑曜石只能靠反应获得** — 无自然生成（worldgen 现生成熔岩湖、反应场所天然存在——如向表面湖倒水，但生成不放黑曜石）、无合成配方（MC 获取方式 = 水浇熔岩，本项目同款反应）。
+  `[Phase 51]`（"worldgen 无熔岩"前提 `[Phase 86/88/90/93]` 已失效）
 
 ## 信标（Phase 83）
 
@@ -574,9 +573,13 @@
 
 ## 数据 / 内容
 
-- **方块无 per-instance 状态** — BlockState 概念未引入（朝向、附属、流体等级等需要时再设计）。`[Phase 2]`
-  例外：信标（Phase 83）的**功率等级**不入状态——它是 `world/beacon` 纯函数
-  每帧从基座重算（生长 P48 的"块 id 即状态"同款：无 per-instance 存档字段）。
+- **方块 per-instance 状态 = 仅楼梯朝向一种** — BlockState 概念仍未引入（附属、流体等级等需要时再设计）。`[Phase 2]`
+  **`[Phase 94]` 起唯一例外 = 楼梯朝向**：World 每格 byte（chunk `m_stairFacing`，哨兵 255 = 未设置 →
+  碰撞/mesh 回落块 `stair_facing` 默认），setBlock 收口维护（放置按块默认、潜行右键旋转、移除清哨兵），
+  碰撞（solidTopHeight）+ mesh（emitStairs）直接读，存档 format 14 `stairs` 数组双向交叉校验——
+  **范围仅限 stair 形状块**（详见「楼梯 stairs」节）。次级例外（既有）：信标（Phase 83）的**功率等级**不入状态
+  ——`world/beacon` 纯函数每帧从基座重算；炉子/营火/火的 per-position 状态在 Game 的 map 里
+  （format 7/11/10，非 World 每格字段，见各节）。
 ## 已修复（归档）→ 细节存档
 
 各阶段的修复条目已移入 `docs/archive/phase-NN.md`（「阶段报告」= 原归档条目；
