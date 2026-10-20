@@ -580,7 +580,7 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
         if (key != "id" && key != "type" && key != "tool" &&
             key != "max_stack" && key != "attack_damage" &&
             key != "shoot_speed" && key != "shoot_damage" &&
-            key != "restore_hunger" && key != "ammo" &&
+            key != "restore_hunger" && key != "ammo" && key != "infinite" &&
             key != "smeltable_to" && key != "smelt_time" &&
             key != "fuel_time" && key != "dye_color" &&
             key != "drink_time" && key != "returns_item" &&

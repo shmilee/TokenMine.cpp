@@ -131,14 +131,36 @@ constexpr int kStreamWorkerCount = 4;
 // kMaxStreamBacklog bounds the queue either way.
 constexpr int kStreamColumnsPerFrame = 2;
 // Streaming engages when the player's column is within this many columns
-// (Chebyshev) of a missing one inside the radius ring. 1 = the player
-// must reach the edge of the loaded area; an idle player in the center of
-// the 4x4 demo area (2 columns from its edge) never engages.
+// (squared Euclidean, STRM-1: columnDistanceSq <= trigger², i.e. the
+// player's own column + the four axis-adjacent ones — a diagonal missing
+// column at distanceSq 2 does NOT engage) of a missing one inside the
+// radius disk. 1 = the player must reach the edge of the loaded area; an
+// idle player in the center of the 4x4 demo area (2 columns from its
+// edge) never engages.
 constexpr int kStreamTriggerDistance = 1;
-// Unload hysteresis: a loaded column is dropped only when it is strictly
-// FARTHER than view_distance + 1 from the player (Chebyshev). The +1 band
-// stops the edge columns from ping-ponging (load at distance R, unload at
-// distance R) as the player's column ticks across a boundary.
+// Far-plane cap on the stream disk radius (STRM-1): the effective radius
+// is min(config world.view_distance, kStreamCapRadius). The cap is a
+// property of the renderer (kFar), not of the user's view — no config
+// key.
+//
+// Derivation (per-lattice-point check against kFar = 1000 blocks = 62.5
+// columns): in a quadrant, a column at integer offset (dx, dz) (both >=
+// 1) is potentially renderable iff its nearest corner can reach the eye
+// — worst case the eye at the corner of its own column facing the target
+// — 16*sqrt((dx-1)² + (dz-1)²) < kFar, i.e. (dx-1)² + (dz-1)² < 62.5².
+// Verified over the lattice: every potentially-renderable column has
+// d = sqrt(dx²+dz²) < 64 (continuous maximum sqrt(2) + 62.5 = 63.91;
+// lattice maximum 63.89, the (41, 49) family), and every column with
+// d > 64 keeps its nearest corner more than kFar from the eye (closest:
+// 1002.01 blocks, the (40, 50) family) — it can never be drawn, so
+// streaming it is pure memory waste. Cap 64: a radius-80 config streams
+// the 12853-column disk instead of the old 25921-column square.
+constexpr int kStreamCapRadius = 64;
+// Unload hysteresis: a loaded column is dropped only when its squared
+// distance from the player is strictly FARTHER than (view_distance + 1)²
+// (STRM-1). The +1 band stops the edge columns from ping-ponging (load
+// at distance R, unload at distance R) as the player's column ticks
+// across a boundary.
 constexpr int kUnloadHysteresis = 1;
 // Re-mesh budget: at most this many dirty chunks are rebuilt per frame,
 // nearest to the player first. One integrated column marks ~32 face-
@@ -150,9 +172,9 @@ constexpr int kRemeshBudgetPerFrame = 8;
 // generation + lighting jobs may be pending (queued or running) before
 // streamChunks skips its post for a frame. The per-frame flush() drains
 // the whole queue, so an unbounded backlog turns into unbounded
-// main-thread blocking (FPS decay the longer the ring takes to fill —
-// e.g. a radius-80 ring is ~207k chunks). 8 = two frames of posts at
-// the 4-worker pool's depth.
+// main-thread blocking (FPS decay the longer the disk takes to fill —
+// e.g. the capped radius-64 disk is ~103k chunks). 8 = two frames of
+// posts at the 4-worker pool's depth.
 constexpr std::size_t kMaxStreamBacklog = 8;
 
 // A column is the full world height: kWorldHeight / kChunkSize chunks.
@@ -1139,8 +1161,10 @@ Result<void> Game::buildScene() {
     // get a worker lighting job for their column box (postLightJobs).
     Lighting::propagateAll(m_world, m_blocks);
 
-    // Chunk streaming (Phase 14): the worker pool and the radius (config
-    // world.view_distance, in chunk columns around the player).
+    // Chunk streaming (Phase 14, STRM-1): the worker pool and the radius
+    // (config world.view_distance, in chunk columns around the player).
+    // The raw config value is kept here for reporting; the geometric
+    // consumers clamp it to kStreamCapRadius (far-plane cap).
     m_pool = std::make_unique<ThreadPool>(kStreamWorkerCount);
     m_streamRadius = m_config.getInt("world.view_distance", 8);
 
@@ -1467,7 +1491,13 @@ void Game::unloadFarColumns() {
     const ColumnPos player{
         floorDiv(static_cast<int>(std::floor(p.x)), kChunkSize),
         floorDiv(static_cast<int>(std::floor(p.z)), kChunkSize)};
-    const int keepDist = m_streamRadius + kUnloadHysteresis;
+    const int keepRadius = std::min(m_streamRadius, kStreamCapRadius);
+    const int keepDist = keepRadius + kUnloadHysteresis;
+    // The unload predicate is squared Euclidean (STRM-1): a column
+    // survives while its distanceSq is <= (keepRadius + 1)² — the +1
+    // hysteresis band around the capped disk.
+    const std::int64_t keepDistSq =
+        static_cast<std::int64_t>(keepDist) * keepDist;
     // The per-block state maps (furnace/campfire/crop/beacon/fire) are
     // keyed by BlockPos: their COLUMNS must survive (the save records the
     // states and cross-checks them against the block edits — an unloaded
@@ -1491,8 +1521,8 @@ void Game::unloadFarColumns() {
     // The loaded COLUMNS (the incremental mirror), not a full chunk scan:
     // a full-ring world is ~9k-200k chunks, the column set is ~2k-26k.
     for (const ColumnPos& col : m_loadedColumns) {
-        if (columnDistance(player, col) <= keepDist) {
-            continue; // inside the loaded ring (1-column hysteresis band)
+        if (columnDistanceSq(player, col) <= keepDistSq) {
+            continue; // inside the loaded disk (1-column hysteresis band)
         }
         // The 4x4 demo area is protected: respawn teleports to the spawn
         // point inside it (an unloaded spawn column would read void).
@@ -1548,10 +1578,11 @@ void Game::streamChunks() {
         return;
     }
     // While the player is dead the body is frozen and the death screen
-    // owns the input: stop requesting new columns. The radius square
-    // around the corpse would otherwise keep filling to view_distance
-    // (a radius-80 square holds ~200k chunks: hours of streaming and
-    // several GB of allocations behind the death veil). In-flight jobs
+    // owns the input: stop requesting new columns. The radius disk
+    // around the corpse would otherwise keep filling to the capped view
+    // distance (the radius-64 disk holds 12853 columns ≈ 103k chunks:
+    // hours of streaming and several GB of allocations behind the death
+    // veil). In-flight jobs
     // (at most kStreamColumnsPerFrame) still drain through the
     // post->flush window and get lit by postLightJobs as usual, and the
     // preserved hysteresis state resumes the fill on respawn (R).
@@ -1572,31 +1603,34 @@ void Game::streamChunks() {
 
     // Hysteresis (see chunk_streaming): engage when the player reaches
     // the edge of the loaded area; while engaged, keep filling the full
-    // radius ring (an exploring player ends up with view_distance of
-    // terrain around them); disengage only when the ring around the
-    // player is fully loaded (nearestMissingDistance returns the radius
-    // + 1 sentinel). A never-engaged idle player in the center of the
-    // loaded area stays job-free (keeps headless baselines
-    // byte-reproducible).
-    const int nearestMissing =
-        nearestMissingDistance(player, loaded, m_streamRadius);
+    // radius disk (an exploring player ends up with the capped
+    // view_distance of terrain around them); disengage only when the
+    // disk around the player is fully loaded (nearestMissingDistanceSq
+    // returns the (radius + 1)² sentinel). A never-engaged idle player
+    // in the center of the loaded area stays job-free (keeps headless
+    // baselines byte-reproducible). The effective radius is the config
+    // clamped to the far-plane cap (kStreamCapRadius); m_streamRadius
+    // itself keeps the raw config value for the logs and the F3 overlay.
+    const int radius = std::min(m_streamRadius, kStreamCapRadius);
+    const std::int64_t nearestMissingSq =
+        nearestMissingDistanceSq(player, loaded, radius);
     if (!m_streamingEngaged) {
-        if (nearestMissing > kStreamTriggerDistance) {
+        const std::int64_t triggerSq = static_cast<std::int64_t>(
+            kStreamTriggerDistance) * kStreamTriggerDistance;
+        if (nearestMissingSq > triggerSq) {
             return;
         }
         m_streamingEngaged = true;
         MC_LOG_INFO("Chunk streaming engaged (radius " +
                     std::to_string(m_streamRadius) + " columns)");
-    } else if (nearestMissing > m_streamRadius) {
-        m_streamingEngaged = false; // the radius ring is fully loaded
+    } else if (nearestMissingSq >= missingSentinelDistanceSq(radius)) {
+        m_streamingEngaged = false; // the radius disk is fully loaded
         // One explicit completion line: after this, streaming is quiet
         // (no per-frame work) until the player reaches the loaded edge
-        // again — silence in the log = the ring is full, not a stall.
+        // again — silence in the log = the disk is full, not a stall.
         MC_LOG_INFO("Streaming complete: " +
                     std::to_string(m_loadedColumns.size()) + "/" +
-                    std::to_string(static_cast<std::size_t>(
-                                       2 * m_streamRadius + 1) *
-                                   (2 * m_streamRadius + 1)) +
+                    std::to_string(diskColumnCount(radius)) +
                     " columns (" + std::to_string(m_world.chunkCount()) +
                     " chunks, " +
                     std::to_string(m_unloadedColumnsTotal) +
@@ -1617,7 +1651,7 @@ void Game::streamChunks() {
     }
     int posted = 0;
     const std::vector<ColumnPos> missing =
-        missingColumns(player, loaded, m_streamRadius);
+        missingColumns(player, loaded, radius);
     for (const ColumnPos& col : missing) {
         if (posted >= kStreamColumnsPerFrame) {
             break;
@@ -1649,10 +1683,9 @@ void Game::streamChunks() {
     // "is it still loading / did it stop" signal for a long session.
     // Frame-based (deterministic cadence).
     if (m_frameCount % 300 == 0) {
-        const int ring = 2 * m_streamRadius + 1;
         MC_LOG_INFO("Streaming: " +
                     std::to_string(m_loadedColumns.size()) + "/" +
-                    std::to_string(static_cast<std::size_t>(ring) * ring) +
+                    std::to_string(diskColumnCount(radius)) +
                     " columns (" + std::to_string(m_world.chunkCount()) +
                     " chunks, " +
                     std::to_string(m_unloadedColumnsTotal) +
@@ -2576,6 +2609,10 @@ void Game::handleInteraction(double dt) {
         // respawns first).
         if (!m_player->isDead() && m_input.wasPressed(MouseButton::Left)) {
             m_window.setRelativeMouseMode(true);
+            // Debug line: the E2E input scripts verify the capture landed
+            // by waiting for this (a covering window can steal the click
+            // silently — P25-class pollution, 2026-10-21 STRM-1 E2E).
+            MC_LOG_DEBUG("Pointer captured");
         }
         resetBreaking();
         m_swingCooldown = 0.0;

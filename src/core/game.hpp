@@ -620,10 +620,14 @@ private:
     std::set<ColumnPos> m_editedColumns;
     // Streaming hysteresis (see chunk_streaming): engaged when the player
     // reaches the edge of the loaded area, disengaged when the player is
-    // deep inside it again. While engaged, the full radius ring around
-    // the player is filled (view_distance becomes visible terrain).
+    // deep inside it again. While engaged, the full radius disk around
+    // the player is filled (the capped view_distance becomes visible
+    // terrain).
     bool m_streamingEngaged = false;
-    // The streaming radius in chunk columns (config world.view_distance).
+    // The streaming radius in chunk columns (config world.view_distance),
+    // UNCLAMPED: the logs and the F3 overlay report this raw value; the
+    // geometric consumers (stream disk, unload band) clamp it to
+    // kStreamCapRadius (STRM-1 far-plane cap).
     int m_streamRadius = 8;
     // The loaded columns (incremental mirror of the World's chunk map —
     // streaming decides on THIS instead of scanning every chunk: the

@@ -1,24 +1,36 @@
-// Chunk streaming (Phase 14): the pure decision logic for which chunk
-// columns to generate as the player explores beyond the pre-generated
-// area. No World, no threads — the Game wires the results into the
-// thread pool and the World.
+// Chunk streaming (Phase 14, STRM-1): the pure decision logic for which
+// chunk columns to generate as the player explores beyond the
+// pre-generated area. No World, no threads — the Game wires the results
+// into the thread pool and the World.
 //
 // A "column" is a vertical stack of the kVerticalChunksPerColumn chunks
 // sharing one (x, z) chunk coordinate. Streaming loads whole columns so a
 // terrain column either exists or it does not (no partial-column cliffs).
 //
-// Hysteresis (see nearestMissingDistance): the Game engages streaming
-// when the player comes within kStreamTriggerDistance (1) of a missing
-// column inside the radius ring, and disengages only when the full
-// radius ring around the player is loaded (the distance sentinel).
+// The stream ring is a DISK (STRM-1): the columns whose squared
+// Euclidean offset from the player's column is dx² + dz² <= radius² —
+// not the old (2R+1)² Chebyshev square. The square wasted memory in the
+// corners beyond the renderer's far plane (kFar = 1000 blocks); the Game
+// clamps the radius to kStreamCapRadius (64), the exact disk that covers
+// every potentially-renderable column (per-lattice-point derivation on
+// the constant in core/game.cpp). All distances here are SQUARED and
+// pure integer (no floating point) so the predicate stays deterministic
+// and cheap.
+//
+// Hysteresis (see nearestMissingDistanceSq): the Game engages streaming
+// when the player comes within kStreamTriggerDistance squared (1²) of a
+// missing column inside the disk, and disengages only when the full
+// disk around the player is loaded (the (radius+1)² sentinel).
 // While engaged it keeps posting the nearest missing columns — so an
-// exploring player ends up with the view_distance ring around them,
-// while an idle player in the center of the loaded area (2 columns from
-// its edge) never engages. That keeps the initial area and every
-// stationary run job-free, which keeps headless baselines
+// exploring player ends up with the capped view_distance disk around
+// them, while an idle player in the center of the loaded area (2
+// columns from its edge) never engages. That keeps the initial area and
+// every stationary run job-free, which keeps headless baselines
 // byte-reproducible.
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <vector>
 
 namespace mc {
@@ -38,26 +50,38 @@ struct ColumnPos {
     }
 };
 
-// Chebyshev distance between columns (square rings).
-int columnDistance(const ColumnPos& a, const ColumnPos& b);
+// Squared Euclidean distance between columns: dx² + dz² (pure integer —
+// no floating point; comparing squares needs no sqrt).
+std::int64_t columnDistanceSq(const ColumnPos& a, const ColumnPos& b);
 
-// The columns to stream: every column inside `radius` (Chebyshev,
-// inclusive) of `player` that is not in `loaded`, sorted by
-// (distance, x, z) — nearest first, deterministic.
+// The "whole disk loaded" sentinel: (radius + 1)² — strictly greater
+// than the largest in-disk squared distance (radius²), so it can never
+// be confused with a real missing column.
+std::int64_t missingSentinelDistanceSq(int radius);
+
+// The columns to stream: every column inside `radius` (squared
+// Euclidean, inclusive: dx² + dz² <= radius²) of `player` that is not in
+// `loaded`, sorted by (distanceSq, x, z) — nearest first, deterministic.
 std::vector<ColumnPos> missingColumns(const ColumnPos& player,
                                       const std::vector<ColumnPos>& loaded,
                                       int radius);
 
-// The Chebyshev distance from `player` to the nearest column that is
-// missing and inside the radius ring; radius + 1 (the sentinel) when the
-// whole ring is loaded. The hysteresis input: engage at distance <=
-// kStreamTriggerDistance, disengage at the sentinel.
-int nearestMissingDistance(const ColumnPos& player,
-                           const std::vector<ColumnPos>& loaded, int radius);
+// The squared distance from `player` to the nearest column that is
+// missing and inside the disk; missingSentinelDistanceSq(radius) when
+// the whole disk is loaded. The hysteresis input: engage at distanceSq
+// <= trigger², disengage at the sentinel.
+std::int64_t nearestMissingDistanceSq(const ColumnPos& player,
+                                      const std::vector<ColumnPos>& loaded,
+                                      int radius);
+
+// Exact number of columns in the disk of `radius`: the count of integer
+// (dx, dz) pairs with dx² + dz² <= radius². The log "N/M" total and the
+// memory-budget math (a radius-64 disk is 12853 columns).
+std::size_t diskColumnCount(int radius);
 
 // True when a not-yet-engaged streamer should engage: at least one
-// missing column inside the radius ring is within `triggerDistance`
-// (Chebyshev, inclusive) of the player's column.
+// missing column inside the disk is within `triggerDistance` squared
+// (dx² + dz² <= triggerDistance²) of the player's column.
 bool streamingActive(const ColumnPos& player,
                      const std::vector<ColumnPos>& loaded, int radius,
                      int triggerDistance);

@@ -1382,3 +1382,48 @@
   契约）。口诀：**插桩/重构帧管线后，第一件事 = 确认 flush 还在、
   post 还在窗口内；"不可能"的崩溃快照 = 窗口被打破，不是竞态
   概率事件**。
+- **away-mode 桌面偷点击/隐藏窗口（STRM-1 E2E，2026-10-21 夜）**：用户 awesome
+  的 "Away" 组件（壁纸+天气，5 分钟周期）在无值守过夜运行时**隐藏客户窗口
+  （~10-30 s/周期，窗口对 X 消失但进程存活）** + 移动桌面 → 指针落在
+  **root 窗**上，XTest 点击**静默丢失**（键盘事件路由不同、部分时刻不受
+  影响）；启动时的 unmap_covers 无效（跑中会再发生）。注意：用户 10-21 夜
+  只修了壁纸切换，**窗口隐藏整夜持续**（用户其他窗口亦 IsUnviewable）。
+  修复 = 多重防线：① `tm_window_guard` 后台（IsUnviewable/IsUnMapped →
+  windowmap + raise + 必要时重 stabilize）② 点击前指针目标检查
+  （`getmouselocation` 必须报游戏窗）+ windowraise ③ 点击对游戏
+  `"Pointer captured"` DEBUG 日志行验证（已锁时盲目重试点击 = 挖块）。
+  **夜间长跑变体 = 小环**（TM_S4WALK_R=8 scratch config：填充 ~3 s +
+  走路 12 s 塞进窗口存活安全窗；TM_S4WALK_NOLOCK=1 跳点击——移动键不受
+  指针锁定门控，输入有效性 = 自校准 k 证明；A6 红心降 informational）。
+  本 xdotool 版**无 getwindowdesktop 命令**（"Unknown command"，stderr
+  吞掉后静默空值 = 桌面修复分支从未生效过一次）。口诀：**输入 E2E
+  "锁不上/走了又没走" = 先查指针下是哪个窗口 + 游戏窗 Map State +
+  窗口是否还对 X 可见，别假设"窗口还在"；用户会话的 away/隐私组件是
+  无值守 E2E 的头号敌人。**
+- **XTest 假输入不重置 X screensaver 计时器（STRM-1 E2E）**：`xset q`
+  timeout 600——X server 只计**真实设备输入**，xdotool/XTest 事件不重置
+  → 过夜 E2E 显示被 saver 黑屏、间歇干扰输入/回读。修复 = 批次开始
+  `xset s off; xset -dpms; xset s reset`，收工恢复（用户原状 = 600/600 +
+  DPMS enabled）。
+- **unmap_covers 豁免自己窗口须双重检查（STRM-1 E2E）**：`xwininfo -root
+  -tree` 输出窗口 id 是 **hex**（0x3420017）、`xdotool search` 输出
+  **decimal**（54526007）——直接比较豁免静默失败（被平铺成 1272×1552@(4,44)
+  的游戏窗满足 cover 谓词 → 把自己的游戏窗 unmap → 点击落 root）。豁免 =
+  `id == $TM_WID` + `_NET_WM_PID == $TM_PID` 双保险。口诀：**写"豁免自己"
+  白名单先验证两边 id 格式一致。**
+- **real-dt 火 + 含活跃熔岩湖焦土的场景存档（STRM-1 E2E）**：火寿命 =
+  real-dt（P64 设计）；600f（~10-17 s）场景跑跨越燃尽边界 → 两跑存档帧
+  的**火集合**不同（实测：对角火格互换 + fluids 17 vs 16 + blocks
+  air vs fire），存档 ×2 不可字节比。修复 = 含活跃火的场景跑须越过 P90
+  静态终态窗（3600f ≈ 2-3 min，实测存档 ×2 字节一致）；截图仍差（流送
+  pop-in）→ P54 条款（存档 ×2 + notblack + skygate）。
+- **合成器全黑回读（STRM-1 E2E）**：窗口跑中被遮挡/unmapped 时 picom 停
+  更新 drawable → 进程内 `glReadPixels` 截图 = **整屏纯黑** 1280×720
+  （PNG 显示 "Depth: 8/1-bit"、游戏日志完全正常、尺寸守卫抓不到）。修复
+  = 尺寸守卫 + 全黑守卫（`notblack ≥ 800000 = 废拍重试`，P25 陈旧弃跑
+  先例）。
+- **zsh 函数前缀赋值不持久（STRM-1 E2E）**：`TM_OUT="$log" wait_game_window
+  ...`——函数内可见，**返回后恢复原值（空）**→ 后续 `lock_pointer` 的
+  `${TM_OUT:-}` 看到空 = 静默跳过验证分支（报"成功"但没捕获，连跑 3 次
+  才发现）。修复 = 调用前独立持久赋值行 `TM_OUT="$log"`。口诀：**函数要
+  下游读的环境变量用持久赋值，不用前缀。**

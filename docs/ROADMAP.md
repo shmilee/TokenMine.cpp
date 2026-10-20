@@ -203,5 +203,6 @@
 - **Phase 98** — `archive/phase-98.md`
 - **Phase 99** — `archive/phase-99.md`
 - **Phase 99.x（性能系列）** — `archive/phase-99.x.md`
+- **STRM-1（v1.0 任务表：环形状）** — `archive/phase-strm1.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。
