@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <array>
 #include <functional>
+#include <optional>
 #include <set>
 #include <unordered_map>
 #include <vector>
@@ -30,6 +31,26 @@
 #include "world/coordinates.hpp"
 
 namespace mc {
+
+// Cell mutation (PIPE-2, the save journal): one cell a World-level writer
+// changed. The World is the SOLE choke point for post-generation cell
+// writes (every path — the game's setBlock choke point, the fluid sim
+// passes, the burn pass, the save replay — goes through World::setBlock /
+// setFluid; the generator and streaming inserts write FRESH content,
+// which is never a journal entry), so an observer on the World sees the
+// session's whole edit history.
+struct CellMutation {
+    BlockPos pos;
+    BlockID block = BlockID::invalid(); // invalid = no block change
+    // nullopt = no fluid change; otherwise the cell's fluid code AFTER
+    // the write (0 = drained). The displacement trap: a setBlock into a
+    // fluid cell drains it via the internal chunk.setFluidAt (which
+    // bypasses setFluid), so setBlock reports the drain HERE — the
+    // "double report" (block + level-0 fluid in one mutation).
+    std::optional<std::uint8_t> fluidCode;
+};
+
+using CellMutationObserver = std::function<void(const CellMutation&)>;
 
 class World {
 public:
@@ -160,6 +181,13 @@ public:
     std::vector<ChunkPos> chunkPositions() const;
 
     void setChunkGenerator(ChunkGenerator gen) { m_generator = std::move(gen); }
+    // PIPE-2: installs the cell-mutation observer (the m_generator
+    // callback paradigm; an empty observer = no notifications). Called
+    // at the TOP of buildScene — before the save load's replay — so the
+    // session's edit history (the save journal) is complete at exit.
+    void setCellMutationObserver(CellMutationObserver observer) {
+        m_observer = std::move(observer);
+    }
     void clear(); // drop all chunks (the generator is kept)
 
 private:
@@ -179,6 +207,7 @@ private:
     // Indexed by FluidKind (Water = 1, Lava = 2; slot 0 unused).
     std::array<std::set<ChunkPos>, 3> m_fluidChunks;
     ChunkGenerator m_generator;
+    CellMutationObserver m_observer;
 };
 
 } // namespace mc

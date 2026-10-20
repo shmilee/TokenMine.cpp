@@ -59,6 +59,7 @@ bool World::setBlock(int x, int y, int z, BlockID id) {
     const ChunkPos cp = worldToChunk(p);
     Chunk& chunk = getOrCreateChunk(cp);
     const BlockPos local = worldToChunkLocal(cp, p);
+    const BlockID before = chunk.get(local.x, local.y, local.z);
     chunk.set(local.x, local.y, local.z, id);
     // A block displaces any fluid in the cell (placing into water).
     const std::uint8_t displaced = chunk.fluidAt(local.x, local.y, local.z);
@@ -88,6 +89,23 @@ bool World::setBlock(int x, int y, int z, BlockID id) {
         invalidate({cp.x, cp.y, cp.z + 1});
     }
     markNeighborChunksDirty(local.x, local.y, local.z, cp);
+    // PIPE-2: the cell-mutation observer (the save journal's choke
+    // point). The block field is present only when the block value
+    // actually changed (setBlock on the same id still returns true —
+    // e.g. the air placement that drains a fluid cell); the fluid field
+    // reports the displacement (level 0) — the internal setFluidAt
+    // bypasses setFluid, so it is reported HERE (the double report).
+    if (m_observer) {
+        CellMutation mu;
+        mu.pos = p;
+        if (before != id) {
+            mu.block = id;
+        }
+        if (displaced != 0) {
+            mu.fluidCode = 0;
+        }
+        m_observer(mu);
+    }
     return true;
 }
 
@@ -173,6 +191,14 @@ bool World::setFluid(int x, int y, int z, FluidKind kind,
         pruneFluidChunk(*chunk, cp, kind);
     }
     markNeighborChunksDirty(local.x, local.y, local.z, cp);
+    // PIPE-2: the cell-mutation observer — only on success (the no-op
+    // returns above are silent: an unchanged cell is not a mutation).
+    if (m_observer) {
+        CellMutation mu;
+        mu.pos = p;
+        mu.fluidCode = chunk->fluidAt(local.x, local.y, local.z); // after
+        m_observer(mu);
+    }
     return true;
 }
 

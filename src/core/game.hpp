@@ -94,6 +94,11 @@ struct GameArgs {
     // --new: ignore an existing save for the slot (fresh world); the slot
     // is overwritten on exit. Requires saveSlot.
     bool newWorld = false;
+    // --save-full-diff (PIPE-2): force the legacy full-world diff at exit
+    // (diffWorld + the stair world scan) instead of the journal path —
+    // the in-process equivalence oracle and the escape hammer. A debug
+    // flag: no config key, no save-format effect.
+    bool saveFullDiff = false;
 };
 
 class Game {
@@ -553,7 +558,8 @@ private:
     // a beacon, the level is derived each frame).
     void rescanBeacons();
     // The pure generator as a World chunk callback — used at world
-    // creation AND as the generation reference for save diffs.
+    // creation AND as the generation reference for the save diffs (the
+    // full diffWorld and the PIPE-2 journalDiff).
     World::ChunkGenerator makeChunkGenerator() const;
 
     GameArgs m_args;
@@ -691,6 +697,16 @@ private:
     // Total columns unloaded since session start (the periodic INFO
     // progress line reports it — proof the unload pass is working).
     std::size_t m_unloadedColumnsTotal = 0;
+    // The save journal (PIPE-2): the session's cell-edit history as
+    // position sets, fed by the World's cell-mutation observer (installed
+    // at the top of buildScene — BEFORE tryLoadSave, so the save load's
+    // replay seeds it automatically) and evicted per column by
+    // unloadFarColumns. At exit the save diff (journalDiff) + the stair
+    // array derive from it instead of the O(N) world scans; when it is
+    // invalid (the kSaveJournalMaxEntries cap was exceeded) or
+    // --save-full-diff is set, collectSave falls back to the legacy
+    // full diffWorld + stair scan.
+    SaveJournal m_saveJournal;
     // Chunks that (ever, since load/integration) hold a FLAMABLE block —
     // the burn pass's gate (Phase 99.8): a lava chunk walks only when it
     // or a face neighbor is in this set. Over-approximation by design:

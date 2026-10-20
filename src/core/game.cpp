@@ -308,6 +308,29 @@ Game::~Game() {
 // ---------------------------------------------------------------------------
 
 Result<void> Game::buildScene() {
+    // PIPE-2: the save journal's observer, installed at the TOP of
+    // buildScene — before ANY cell-level write: the demo-area generation
+    // (the generator callback) writes fresh content (never a journal
+    // entry), and the save load's replay (tryLoadSave -> applySave ->
+    // applyWorldEdits -> World::setBlock/setFluid, below) seeds the
+    // journal automatically with zero extra code.
+    m_world.setCellMutationObserver([this](const CellMutation& mu) {
+        bool capped = false;
+        if (mu.block.valid()) {
+            capped = m_saveJournal.recordBlock(mu.pos);
+        }
+        // The displacement double report: a setBlock into a fluid cell
+        // also recorded the drained cell in the fluid table.
+        if (mu.fluidCode.has_value()) {
+            capped = capped || m_saveJournal.recordFluid(mu.pos);
+        }
+        if (capped) {
+            MC_LOG_INFO("Save journal exceeded kSaveJournalMaxEntries (" +
+                        std::to_string(kSaveJournalMaxEntries) +
+                        " entries) — the exit save falls back to the "
+                        "full world diff");
+        }
+    });
     // -- shaders -------------------------------------------------------------
     auto vertSrc = m_assets.loadText("shaders/basic.vert");
     MC_TRY(vertSrc);
@@ -1555,6 +1578,10 @@ void Game::unloadFarColumns() {
     for (const ColumnPos& col : columns) {
         m_columnMeshes.erase(col); // frees the GL buffers (Mesh destructor)
         m_columnRebuildPending.erase(col);
+        // PIPE-2: the journal entries of an unloaded column go with it
+        // (the column re-enters only as FRESH streamed terrain — its old
+        // edits are gone with the chunks).
+        m_saveJournal.evictColumn(col);
     }
     for (const ChunkPos& pos : toErase) {
         m_loadedColumns.erase({pos.x, pos.z});
@@ -1881,41 +1908,85 @@ Result<SaveGame> Game::collectSave() const {
     for (const auto& [pos, st] : m_campfires) {
         save.campfires.push_back({pos, st});
     }
-    // The per-instance stair facings (format 14; Phase 94): scan the world
-    // for the stair cells (the block is Shape::Stairs) + record their
-    // per-instance facing (the World's per-cell byte — the project's first
-    // per-block state). Position-sorted (the chunk/scan order). Every stair
-    // block has an entry (the setBlock invariant sets the facing on
-    // placement).
-    for (const ChunkPos& cp : m_world.chunkPositions()) {
-        const Chunk* chunk = m_world.findChunk(cp);
-        if (chunk == nullptr) {
-            continue;
+    // PIPE-2: the journal path is the default; it falls back to the
+    // legacy full-world path when the journal is invalid (the
+    // kSaveJournalMaxEntries cap was exceeded — logged at the crossing)
+    // or --save-full-diff was given (the in-process equivalence oracle
+    // and escape hammer). Both paths produce the same file format.
+    const bool journalSave = m_saveJournal.valid && !m_args.saveFullDiff;
+    // The per-instance stair facings (format 14; Phase 94).
+    if (journalSave) {
+        // PIPE-2: derived from the JOURNAL instead of the O(N) world
+        // scan: worldgen places no stair-shaped block (the content test
+        // pins it), so every stair cell was block-edited this session —
+        // it is in the block journal. The live facing read + the
+        // sentinel fallback are the same logic the old scan had; a
+        // journal cell whose live block is no longer a stair (broken
+        // again) is skipped, exactly as the old scan's shape gate.
+        std::vector<SavedStair> stairs;
+        for (const auto& entry : m_saveJournal.blocks) {
+            for (const BlockPos& p : entry.second) {
+                const BlockID id = m_world.getBlock(p.x, p.y, p.z);
+                if (id == BlockID::air() ||
+                    m_blocks.at(id).model.shape !=
+                        BlockModel::Shape::Stairs) {
+                    continue;
+                }
+                const std::uint8_t facing =
+                    m_world.getStairFacing(p.x, p.y, p.z);
+                // The facing is always set for a placed stair (the
+                // setBlock invariant); the sentinel (unset) is a
+                // hand-edited stair in a format-13 file — fall back to
+                // the block's stair_facing default.
+                const std::uint8_t f =
+                    (facing <= 3) ? facing
+                                  : static_cast<std::uint8_t>(
+                                        m_blocks.at(id).model.stairFacing);
+                stairs.push_back(SavedStair {p, f});
+            }
         }
-        const int bx = cp.x * kChunkSize;
-        const int by = cp.y * kChunkSize;
-        const int bz = cp.z * kChunkSize;
-        for (int ly = 0; ly < kChunkSize; ++ly) {
-            for (int lz = 0; lz < kChunkSize; ++lz) {
-                for (int lx = 0; lx < kChunkSize; ++lx) {
-                    const BlockID id = chunk->get(lx, ly, lz);
-                    if (id == BlockID::air() ||
-                        m_blocks.at(id).model.shape !=
-                            BlockModel::Shape::Stairs) {
-                        continue;
+        std::sort(stairs.begin(), stairs.end(),
+                  [](const SavedStair& a, const SavedStair& b) {
+                      return a.pos < b.pos;
+                  });
+        save.stairs = std::move(stairs);
+    } else {
+        // Legacy (pre-PIPE-2): scan the world for the stair cells (the
+        // block is Shape::Stairs) + record their per-instance facing
+        // (the World's per-cell byte — the project's first per-block
+        // state). Position-sorted (the chunk/scan order). Every stair
+        // block has an entry (the setBlock invariant sets the facing on
+        // placement).
+        for (const ChunkPos& cp : m_world.chunkPositions()) {
+            const Chunk* chunk = m_world.findChunk(cp);
+            if (chunk == nullptr) {
+                continue;
+            }
+            const int bx = cp.x * kChunkSize;
+            const int by = cp.y * kChunkSize;
+            const int bz = cp.z * kChunkSize;
+            for (int ly = 0; ly < kChunkSize; ++ly) {
+                for (int lz = 0; lz < kChunkSize; ++lz) {
+                    for (int lx = 0; lx < kChunkSize; ++lx) {
+                        const BlockID id = chunk->get(lx, ly, lz);
+                        if (id == BlockID::air() ||
+                            m_blocks.at(id).model.shape !=
+                                BlockModel::Shape::Stairs) {
+                            continue;
+                        }
+                        const std::uint8_t facing =
+                            chunk->stairFacingAt(lx, ly, lz);
+                        const BlockPos p {bx + lx, by + ly, bz + lz};
+                        // The facing is always set for a placed stair (the
+                        // setBlock invariant); the sentinel (unset) is a
+                        // hand-edited stair in a format-13 file — fall back
+                        // to the block's stair_facing default.
+                        const std::uint8_t f =
+                            (facing <= 3) ? facing
+                                          : static_cast<std::uint8_t>(
+                                                m_blocks.at(id).model.stairFacing);
+                        save.stairs.push_back(SavedStair {p, f});
                     }
-                    const std::uint8_t facing =
-                        chunk->stairFacingAt(lx, ly, lz);
-                    const BlockPos p {bx + lx, by + ly, bz + lz};
-                    // The facing is always set for a placed stair (the
-                    // setBlock invariant); the sentinel (unset) is a
-                    // hand-edited stair in a format-13 file — fall back to
-                    // the block's stair_facing default.
-                    const std::uint8_t f =
-                        (facing <= 3) ? facing
-                                      : static_cast<std::uint8_t>(
-                                            m_blocks.at(id).model.stairFacing);
-                    save.stairs.push_back(SavedStair {p, f});
                 }
             }
         }
@@ -1954,14 +2025,33 @@ Result<SaveGame> Game::collectSave() const {
         save.entities.push_back(std::move(se));
     }
     // The modifications: every cell that differs from what the seed
-    // generates (block + fluid), sorted by position. Phase 37: large
-    // worlds diff on kSaveDiffWorkers threads (P33: ~14 s exit on a
-    // ~100k-chunk world single-threaded); the position-sorted output is
-    // byte-identical either way.
-    auto diff = diffWorld(m_world, makeChunkGenerator(), m_blocks,
-                          save.blockEdits, save.fluidEdits, kSaveDiffWorkers);
-    if (!diff.ok()) {
-        return diff.error();
+    // generates (block + fluid), sorted by position.
+    if (journalSave) {
+        // PIPE-2: the incremental diff — only the journal's EXISTING
+        // chunks are regenerated + compared (the full-world O(N) scan is
+        // gone). Byte-identical to diffWorld for the same world (the
+        // equivalence the unit tests pin; --save-full-diff keeps the
+        // legacy path as the in-process oracle). Phase 37: large journal
+        // footprints diff on kSaveDiffWorkers threads.
+        auto diff = journalDiff(m_world, makeChunkGenerator(), m_blocks,
+                                m_saveJournal.blocks, m_saveJournal.fluids,
+                                save.blockEdits, save.fluidEdits,
+                                kSaveDiffWorkers);
+        if (!diff.ok()) {
+            return diff.error();
+        }
+    } else {
+        // Legacy (pre-PIPE-2, and the fallback/oracle path): the full
+        // world diff. Phase 37: large worlds diff on kSaveDiffWorkers
+        // threads (P33: ~14 s exit on a ~100k-chunk world single-
+        // threaded); the position-sorted output is byte-identical
+        // either way.
+        auto diff = diffWorld(m_world, makeChunkGenerator(), m_blocks,
+                              save.blockEdits, save.fluidEdits,
+                              kSaveDiffWorkers);
+        if (!diff.ok()) {
+            return diff.error();
+        }
     }
     return save;
 }

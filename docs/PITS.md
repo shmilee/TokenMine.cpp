@@ -1429,7 +1429,21 @@
   快照可能拍到同窗口被写的光 = 间歇性撕裂读（非确定像素、难复现）。口诀：**窗口内
   新增读 World 的 job 类型，先定它在 gen→mesh→light 序中的位置，写进
   thread_pool.hpp 契约。**
-- **PIPE-1 集成顺序 + 2 帧幽灵面（2026-10-21）**：`integrateMeshJobs` 必须**先于**
+- **PIPE-2 observer 安装时序（2026-10-21）**：存档 journal 的
+  World 层 observer 必须在 **buildScene 顶部、任何格级写之前**安装
+  （demo 区生成走生成器回调的 chunk 级直写 = 天然不触发；读档重放
+  applyWorldEdits 经 World::setBlock/setFluid = 自动播种，零额外代码）。
+  晚装（首帧 update 后 / tryLoadSave 后）= 静默丢编辑——退出存档缺编辑
+  但照常加载成功 = 数据丢失级且难发现。口诀：**"全量审计"机制
+  （journal/计数器/diff）的挂点 = 第一个写者之前，播种路径必须有单测
+  钉死（读档重放 → journal 含全部编辑）。**
+- **PIPE-2 位移陷阱（2026-10-21）**：`World::setBlock` 放块进流体格时
+  **内部** `chunk.setFluidAt(local, 0)` 排空流体（world.cpp:64-68）——
+  不走 setFluid。只挂 setFluid 的 observer 漏记排空格（diffWorld 会输出
+  level-0 编辑而 journal 漏 = 跨路径字节等价断言碎）。修复 = setBlock
+  成功点双上报（CellMutation.fluidCode=0）。口诀：**审计"全部写路径"
+  要逐行读收口点实现，别假设"流体写都走 setFluid"（99.2 残余① 同款
+  根源：FluidSim 三 pass 绕过 Game 收口直写 World）。**
   `integrateStreamedColumns`——stream insert 对邻居列的标脏若被 mesh 集成的
   clear-dirty 吞掉 = 新列网格永久 void 烘焙（幽灵面）。最坏 +2 帧收敛：列 C 已
   mesh、邻列 L 才 stream 进来 → C 边界面临时对 void 烘焙，C 在 L 的光照 job 期
@@ -1441,3 +1455,14 @@
   `${TM_OUT:-}` 看到空 = 静默跳过验证分支（报"成功"但没捕获，连跑 3 次
   才发现）。修复 = 调用前独立持久赋值行 `TM_OUT="$log"`。口诀：**函数要
   下游读的环境变量用持久赋值，不用前缀。**
+- **real-dt 火寿命 × 帧锁定蔓延 = fps 耦合焦土环（2026-10-21 PIPE-2 夜
+  E2E 发现，既有缺陷非 journal bug）**：火寿命 = real-dt 倒计时（P64
+  设计）× 蔓延 roll = 每 6 帧（P66 帧步）→ 一簇火寿命内的蔓延 roll 次数
+  = 4 s × fps——不同二进制（主线程负载不同 → fps 不同）roll 次数不同 →
+  P90 表面湖焦土环**跨二进制差几个边界格**（实测：两二进制 3600f 黄金
+  A/B 仅 (24,35,19) 一格差，fluids/stairs 全同；同二进制 ×2 同 fps 档
+  字节一致 = P90 E2E 先例）。后果：**跨 build 的存档字节 A/B 断言必须
+  消除 real-dt 蔓延变量**（scratch config `fire.spread_chance: 0` = P74
+  "spread0" 先例；直烧 = 帧锁定熔岩 burn pass，fps 无关），或接受边界
+  格差并逐一列明。口诀：**"帧锁定 roll + real-dt 寿命"的组合天生 fps
+  耦合——跨 build 确定性断言先查这个组合在不在场。**

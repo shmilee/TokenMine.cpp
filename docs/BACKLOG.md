@@ -18,7 +18,7 @@
 | 系统 | ① | ② | ③ | ④ | ⑤ | ⑥ |
 |---|---|---|---|---|---|---|
 | STRM 流送与内存 | ~~STRM-1 环形状~~ 完成 | | | | | |
-| PIPE 帧管线与并发 | ~~PIPE-1 worker网格化~~ 完成 | PIPE-2 存档增量 | | | | |
+| PIPE 帧管线与并发 | ~~PIPE-1 worker网格化~~ 完成 | ~~PIPE-2 存档增量~~ 完成 | | | | |
 | LGT 光照 | LGT-1 union-region | LGT-2 叶子光衰减 | | | | |
 | GEN 世界与生成 | GEN-1 面条洞穴 | GEN-2 树生长 | GEN-3 矿脉形态 | | | |
 | FLUID 流体 | FLUID-1 水量守恒 | FLUID-2 游泳划水 | | | | |
@@ -46,7 +46,7 @@
 
 ### PIPE 帧管线与并发
 - ~~**PIPE-1 worker 网格化**~~ — **完成（2026-10-21）**：mesher 计算 → 4 worker 快照 job（每帧 ≤2 列：3×3 邻域 72 chunk memcpy 进 job 私有临时 World，ChunkMesher **零改动**）+ `nextMeshColumns` 纯函数选择规则（unlit 排除【99.4 lit pop-in 承接】/ 光足迹 Chebyshev ≥2 排除 / 在途排除 / `columnDistanceSq` 最近优先）+ 主线程只留列合并 GL 上传（~1-3 ms/列不可搬走）+ post 顺序不变量 gen→mesh→light（thread_pool.hpp 契约）+ integrate 先于 stream-integrate（防 clear-dirty 吞标脏）；价值重测（step-0 插桩实测）= 主线程 remesh 填充期 7-11.3 ms/帧 + complete 后 2.8 min 拖尾（脏集峰值 45,895）→ 搬 worker；base18 第 82 次门（A/B 四对字节一致，论证措辞 = 无输入 worker 活动有界于启动 16 mesh job 帧 ≤10 完成）；帧时序：pop-in N+1→N+2（帧锁定）+ 最坏 +2 帧收敛（PITS）；99.x 残余 #3
-- **PIPE-2 存档增量** — 退出全量 diff → 增量编辑跟踪 O(编辑数)（P37 优化方向）
+- ~~**PIPE-2 存档增量**~~ — **完成（2026-10-21 夜）**：退出 O(环大小) 全量 diff → **O(会话编辑数)**：World 写收口（setBlock/setFluid）位置集 journal（`SaveJournal` 双表 + 位移陷阱双上报 + 软上限 262,144 越线降级 legacy）+ 退出按 journal 触及 ∧ 现存 chunk 重算 fresh（makeChunkGenerator 同一回调，generateChunk 纯函数）、仅 live≠fresh 输出（**与 diffWorld 字节等价**——9 类变更 fixture 双阶段 oracle 单测 + E2E 跨 build/进程内对照）；楼梯 O(N) 世界扫描一并转 journal 派生（不变式 = worldgen 永不生成楼梯，真实 assets 钉死）；读档重放自动播种（observer 先于 tryLoadSave 安装）；卸载按列驱逐；`--save-full-diff` CLI 旗 = 进程内 oracle + 逃生锤；format 一字未动（P37 优化方向落地）
 
 ### LGT 光照
 - **LGT-1 union-region** — 同帧 2 个相邻 box 合并并集 region，省 ~25% 光照 job（99.x 残余 #2）
@@ -127,3 +127,8 @@
   vd80 9.08→4.59 GB −49.5%；base18 第 81 次门）。
 - 2026-10-21：PIPE-1 完成（worker 快照网格化；step-0 重测定案做；base18
   第 82 次门）。
+- 2026-10-21：PIPE-2 完成（存档增量 journal；与 diffWorld 字节等价；
+  vd80 全环退出 6.2 s → **17 ms**（journal 路径；3600f 场景 legacy 对照
+  3.28 s ≈ 190×，退出成本 = O(会话编辑数)、与环大小脱钩））。PIPE 行 2/2
+  全清，v1.0 任务表
+  3/29 完成。

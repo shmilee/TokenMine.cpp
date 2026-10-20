@@ -27,6 +27,9 @@ void printUsage() {
         "                    save/load at all)\n"
         "  --new             Start a fresh world, ignoring an existing save;\n"
         "                    the slot is overwritten on exit (requires --save)\n"
+        "  --save-full-diff  Force the legacy full-world save diff at exit\n"
+        "                    (PIPE-2: the journal-path equivalence oracle /\n"
+        "                    escape hammer; no config key, no format effect)\n"
         "  --log-level <l>   trace|debug|info|warn|error\n"
         "  -h, --help        Show this help\n");
 }
@@ -100,6 +103,8 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
             args.saveSlot = std::move(slot);
         } else if (arg == "--new") {
             args.newWorld = true;
+        } else if (arg == "--save-full-diff") {
+            args.saveFullDiff = true;
         } else if (arg == "--log-level") {
             const char* v = nextValue(i, "--log-level");
             if (!v) return false;

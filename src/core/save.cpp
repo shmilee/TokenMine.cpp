@@ -256,6 +256,194 @@ Result<void> diffWorld(const World& world,
     return {};
 }
 
+// -- the save journal (PIPE-2) -------------------------------------------------
+
+bool SaveJournal::recordBlock(const BlockPos& pos) {
+    if (!valid) {
+        return false;
+    }
+    const ColumnPos col{floorDiv(pos.x, kChunkSize), floorDiv(pos.z, kChunkSize)};
+    if (!blocks[col].insert(pos).second) {
+        return false; // already recorded (idempotent)
+    }
+    ++entries;
+    if (entries > kSaveJournalMaxEntries) {
+        valid = false; // the exit save falls back to the legacy diffWorld
+        return true;
+    }
+    return false;
+}
+
+bool SaveJournal::recordFluid(const BlockPos& pos) {
+    if (!valid) {
+        return false;
+    }
+    const ColumnPos col{floorDiv(pos.x, kChunkSize), floorDiv(pos.z, kChunkSize)};
+    if (!fluids[col].insert(pos).second) {
+        return false; // already recorded (idempotent)
+    }
+    ++entries;
+    if (entries > kSaveJournalMaxEntries) {
+        valid = false; // the exit save falls back to the legacy diffWorld
+        return true;
+    }
+    return false;
+}
+
+void SaveJournal::evictColumn(const ColumnPos& col) {
+    const auto b = blocks.find(col);
+    if (b != blocks.end()) {
+        entries -= b->second.size();
+        blocks.erase(b);
+    }
+    const auto f = fluids.find(col);
+    if (f != fluids.end()) {
+        entries -= f->second.size();
+        fluids.erase(f);
+    }
+}
+
+// Compares one live chunk against a freshly generated reference chunk,
+// restricted to the journal cells (PIPE-2): the SAME per-cell comparison
+// as diffChunk (the encoded fluid byte — the fluidKindOf(0)=Water
+// level-0 special case included), so a journal cell that matches
+// generation emits nothing and the output is byte-identical to
+// diffWorld's for the same world.
+void journalDiffChunk(const World& world,
+                      const World::ChunkGenerator& reference,
+                      const BlockRegistry& blocks, const ChunkPos& cp,
+                      const std::vector<BlockPos>* blockCells,
+                      const std::vector<BlockPos>* fluidCells,
+                      std::vector<SavedBlockEdit>& outBlockEdits,
+                      std::vector<SavedFluidEdit>& outFluidEdits) {
+    const Chunk* live = world.findChunk(cp);
+    if (live == nullptr) {
+        return; // cannot happen: positions come from the world
+    }
+    Chunk generated;
+    reference(generated, cp);
+    const BlockPos origin = chunkOrigin(cp);
+    if (blockCells != nullptr) {
+        for (const BlockPos& pos : *blockCells) {
+            const int lx = pos.x - origin.x;
+            const int ly = pos.y - origin.y;
+            const int lz = pos.z - origin.z;
+            if (live->get(lx, ly, lz) != generated.get(lx, ly, lz)) {
+                outBlockEdits.push_back(
+                    {pos, blocks.at(live->get(lx, ly, lz)).name});
+            }
+        }
+    }
+    if (fluidCells != nullptr) {
+        for (const BlockPos& pos : *fluidCells) {
+            const int lx = pos.x - origin.x;
+            const int ly = pos.y - origin.y;
+            const int lz = pos.z - origin.z;
+            const std::uint8_t liveFl = live->fluidAt(lx, ly, lz);
+            if (liveFl != generated.fluidAt(lx, ly, lz)) {
+                outFluidEdits.push_back(
+                    {pos, fluidKindOf(liveFl), fluidLevelOf(liveFl)});
+            }
+        }
+    }
+}
+
+Result<void> journalDiff(const World& world,
+                         const World::ChunkGenerator& reference,
+                         const BlockRegistry& blocks,
+                         const std::map<ColumnPos, std::set<BlockPos>>&
+                             journalBlocks,
+                         const std::map<ColumnPos, std::set<BlockPos>>&
+                             journalFluids,
+                         std::vector<SavedBlockEdit>& outBlockEdits,
+                         std::vector<SavedFluidEdit>& outFluidEdits,
+                         int workers) {
+    // Group the journal cells by the chunk they live in (a journal
+    // COLUMN spans up to 8 chunks; the maps are position-sorted -> the
+    // grouping is deterministic).
+    std::map<ChunkPos, std::vector<BlockPos>> blockCellsByChunk;
+    for (const auto& entry : journalBlocks) {
+        for (const BlockPos& pos : entry.second) {
+            blockCellsByChunk[worldToChunk(pos)].push_back(pos);
+        }
+    }
+    std::map<ChunkPos, std::vector<BlockPos>> fluidCellsByChunk;
+    for (const auto& entry : journalFluids) {
+        for (const BlockPos& pos : entry.second) {
+            fluidCellsByChunk[worldToChunk(pos)].push_back(pos);
+        }
+    }
+    // K = the touched chunks that still EXIST: an unloaded column's
+    // chunks are gone (the journal's eviction dropped them too), matching
+    // diffWorld's "only existing chunks" semantics.
+    std::vector<ChunkPos> k;
+    for (const auto& entry : blockCellsByChunk) {
+        if (world.hasChunk(entry.first)) {
+            k.push_back(entry.first);
+        }
+    }
+    for (const auto& entry : fluidCellsByChunk) {
+        if (blockCellsByChunk.count(entry.first) == 0 &&
+            world.hasChunk(entry.first)) {
+            k.push_back(entry.first);
+        }
+    }
+    std::sort(k.begin(), k.end());
+    const auto runChunk = [&world, &reference, &blocks, &blockCellsByChunk,
+                           &fluidCellsByChunk](const ChunkPos& cp,
+                                               std::vector<SavedBlockEdit>& ob,
+                                               std::vector<SavedFluidEdit>& of) {
+        const auto bb = blockCellsByChunk.find(cp);
+        const auto ff = fluidCellsByChunk.find(cp);
+        journalDiffChunk(world, reference, blocks, cp,
+                         bb == blockCellsByChunk.end() ? nullptr : &bb->second,
+                         ff == fluidCellsByChunk.end() ? nullptr : &ff->second,
+                         ob, of);
+    };
+    if (workers <= 1 || k.size() <= kSaveDiffParallelMinChunks) {
+        for (const ChunkPos& cp : k) {
+            runChunk(cp, outBlockEdits, outFluidEdits);
+        }
+    } else {
+        // P37 reuse: one job per chunk on a throwaway pool. The workers
+        // only read the world (findChunk) + the grouped cell lists (the
+        // maps are not mutated after the posts) and call the pure
+        // generator — no World mutation. Each job appends to its own
+        // slice; the position sort below is a total order (one edit per
+        // cell per table), so the result is byte-identical to the serial
+        // path regardless of scheduling.
+        ThreadPool pool(workers);
+        std::vector<std::vector<SavedBlockEdit>> blockParts(k.size());
+        std::vector<std::vector<SavedFluidEdit>> fluidParts(k.size());
+        for (std::size_t i = 0; i < k.size(); ++i) {
+            const ChunkPos cp = k[i];
+            pool.post([&, i, cp] {
+                runChunk(cp, blockParts[i], fluidParts[i]);
+            });
+        }
+        pool.flush();
+        for (std::size_t i = 0; i < k.size(); ++i) {
+            outBlockEdits.insert(
+                outBlockEdits.end(),
+                std::make_move_iterator(blockParts[i].begin()),
+                std::make_move_iterator(blockParts[i].end()));
+            outFluidEdits.insert(
+                outFluidEdits.end(),
+                std::make_move_iterator(fluidParts[i].begin()),
+                std::make_move_iterator(fluidParts[i].end()));
+        }
+    }
+    std::sort(outBlockEdits.begin(), outBlockEdits.end(),
+              [](const SavedBlockEdit& a, const SavedBlockEdit& b) {
+                  return a.pos < b.pos;
+              });
+    std::sort(outFluidEdits.begin(), outFluidEdits.end(),
+              [](const SavedFluidEdit& a, const SavedFluidEdit& b) {
+                  return a.pos < b.pos;
+              });
+    return {};
+}
+
 Result<void> applyWorldEdits(const SaveGame& save, const BlockRegistry& blocks,
                              World& world) {
     // Blocks first: a placement displaces any fluid in its cell, so the

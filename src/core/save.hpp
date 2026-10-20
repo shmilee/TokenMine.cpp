@@ -60,6 +60,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -71,6 +73,7 @@
 #include "item/campfire.hpp"
 #include "item/furnace.hpp"
 #include "item/inventory.hpp"
+#include "world/chunk_streaming.hpp"
 #include "world/coordinates.hpp"
 #include "world/world.hpp"
 
@@ -188,6 +191,46 @@ inline constexpr int kSaveDiffWorkers = 4;
 // (~0.14 ms/chunk over 4 workers vs a few ms of spawn) — small worlds keep
 // the serial path.
 inline constexpr std::size_t kSaveDiffParallelMinChunks = 256;
+
+// PIPE-2: the save journal's soft cap on the TOTAL recorded cell count
+// (both tables). A normal session holds a few thousand entries (player
+// edits + the fluid/burn/growth paths they trigger); beyond the cap an
+// extreme session (a massive lava flood, a scripted world rebuild) marks
+// the journal invalid and the exit save falls back to the legacy full
+// diffWorld (the INFO log names it) — the journal must never grow
+// unbounded. 262144 = 256 x 1024 (the two round numbers).
+inline constexpr std::size_t kSaveJournalMaxEntries = 262144;
+
+// PIPE-2: the session's cell-edit JOURNAL as position sets. The exit save
+// is {existing cell c : c is in the journal AND live(c) != fresh(c)} —
+// byte-identical to the full diffWorld (see journalDiff) — because every
+// post-generation cell write goes through World::setBlock / setFluid (the
+// observer choke point), so a cell that differs from generation was
+// written this session and is recorded. VALUES are not stored (the value
+// is the live world at exit); the displacement trap (a setBlock into a
+// fluid cell drains it via the internal setFluidAt) is covered by the
+// observer's double report, which lands the cell in BOTH tables. The
+// column maps are position-sorted (deterministic iteration).
+struct SaveJournal {
+    // Per column: the cells whose BLOCK was written.
+    std::map<ColumnPos, std::set<BlockPos>> blocks;
+    // Per column: the cells whose FLUID was written.
+    std::map<ColumnPos, std::set<BlockPos>> fluids;
+    std::size_t entries = 0; // the total, both tables
+    bool valid = true;
+
+    // Records a written cell (idempotent per table). Returns true
+    // EXACTLY ONCE — when the total first exceeds kSaveJournalMaxEntries
+    // and the journal falls back to invalid (further records are no-ops;
+    // the exit save then uses the legacy diffWorld).
+    bool recordBlock(const BlockPos& pos);
+    bool recordFluid(const BlockPos& pos);
+    // Unload eviction (the Game's unloadFarColumns): a column that leaves
+    // the world re-enters only as FRESH streamed terrain (any edit it
+    // held is gone with it), so its entries are dropped and the total
+    // count stays bounded over a long wandering session.
+    void evictColumn(const ColumnPos& col);
+};
 
 // One cell whose block differs from generation ("air" = removed).
 struct SavedBlockEdit {
@@ -339,6 +382,30 @@ Result<void> diffWorld(const World& world, const World::ChunkGenerator& referenc
                        std::vector<SavedBlockEdit>& outBlockEdits,
                        std::vector<SavedFluidEdit>& outFluidEdits,
                        int workers = 1);
+
+// PIPE-2: the INCREMENTAL variant of diffWorld — byte-identical output
+// (same per-cell comparison, same encoded-fluid byte with the
+// fluidKindOf(0)=Water level-0 special case, same position total sort),
+// restricted to the journal: for each chunk that EXISTS and that the
+// journal touches, the reference is regenerated (the same pure
+// generator) and only the journal cells are compared; a journal cell
+// whose live value equals the fresh value emits nothing (a same-value
+// revert, a burned-then-regrown cell, a drained-then-refilled cell).
+// `workers` mirrors diffWorld (P37: above kSaveDiffParallelMinChunks
+// touched chunks the per-chunk comparison runs one chunk per job on a
+// throwaway pool — the workers read the world and run the pure
+// generator, no World mutation; the position-sorted output is a total
+// order, so both paths are byte-identical).
+Result<void> journalDiff(const World& world,
+                         const World::ChunkGenerator& reference,
+                         const BlockRegistry& blocks,
+                         const std::map<ColumnPos, std::set<BlockPos>>&
+                             journalBlocks,
+                         const std::map<ColumnPos, std::set<BlockPos>>&
+                             journalFluids,
+                         std::vector<SavedBlockEdit>& outBlockEdits,
+                         std::vector<SavedFluidEdit>& outFluidEdits,
+                         int workers = 1);
 
 // Replays the saved cell edits onto a freshly generated `world`: block
 // edits first (a placement displaces any fluid in the cell), then fluid
