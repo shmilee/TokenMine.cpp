@@ -25,6 +25,7 @@
 #include "world/growth.hpp"
 #include "world/fire_spread.hpp"
 #include "world/beacon.hpp"
+#include "world/mesh_job.hpp"
 #include "world/noise.hpp"
 #include "ui/font.hpp"
 #include "ui/inventory_ui.hpp"
@@ -114,11 +115,13 @@ std::uint64_t asU64(int v) {
 constexpr int kDemoChunkMin = -2;
 constexpr int kDemoChunkMax = 1;
 
-// Chunk streaming (Phase 14). The demo area is generated synchronously at
-// startup (keeps stationary runs job-free, so headless baselines stay
-// byte-reproducible); beyond it, columns are generated on worker threads
-// as the player approaches the edge of the loaded area.
-// Worker count of the streaming pool (generation + lighting jobs).
+// Chunk streaming (Phase 14) + worker meshing (PIPE-1). The demo area is
+// generated synchronously at startup; its 16 columns' initial meshing
+// goes through the worker path like everything else (postMeshJobs 2
+// columns/frame -> meshed within the first ~9 frames). Beyond the demo
+// area, columns are generated on worker threads as the player approaches
+// the edge of the loaded area.
+// Worker count of the streaming pool (generation + mesh + lighting jobs).
 constexpr int kStreamWorkerCount = 4;
 // Columns posted for generation per frame. 2 = two of the four worker
 // threads generate in parallel (the 99.8 multi-core fix: at 1 the pool
@@ -162,12 +165,27 @@ constexpr int kStreamCapRadius = 64;
 // at distance R, unload at distance R) as the player's column ticks
 // across a boundary.
 constexpr int kUnloadHysteresis = 1;
-// Re-mesh budget: at most this many dirty chunks are rebuilt per frame,
-// nearest to the player first. One integrated column marks ~32 face-
-// sharing neighbors dirty; without a budget they are all re-meshed in a
-// single frame (100-400 ms main-thread stall, the streaming hitches).
-// The dirty flag persists, so the remainder is picked up on later frames.
-constexpr int kRemeshBudgetPerFrame = 8;
+// Re-mesh budget (PIPE-1, was kRemeshBudgetPerFrame = 8 chunks on the
+// main thread): the mesher's compute moved to workers — up to this many
+// COLUMNS get a snapshot mesh job per frame (postMeshJobs), nearest first
+// (world/mesh_job.hpp selection). Each job meshes one whole column (8
+// chunks) on a worker against its private snapshot World; the main thread
+// keeps only the column-merged GL upload (updateChunkMeshes). Independent
+// deque (m_meshJobs) — NOT counted against kMaxStreamBacklog's generation
+// posts (the post order gen -> mesh -> light means streamChunks's
+// pendingCount check runs before the mesh posts).
+//
+// Queue timing (why the flush stays at the lighting floor, 4 workers,
+// FIFO): a fill frame posts 2 gen (~1.6 ms) + 2 mesh (<= 6 ms) + 1 light
+// (~13 ms). The gen jobs take 2 workers (0..1.6), the mesh jobs the other
+// 2 (0..6 — hiding under the light), and the light job (posted last)
+// starts when the first worker frees (1.6..14.6): flush = 13 + 1.6 ms —
+// the pre-existing LGT-1 lighting floor plus one gen slot of FIFO start
+// delay — while the main thread loses its remesh (step-0 measured up to
+// ~11.3 ms/frame during the fill + a multi-minute tail at 8 chunks/frame).
+// A non-streaming frame posts at most 2 mesh jobs: flush <= 6 ms, and the
+// same work no longer costs inside the frame.
+constexpr int kMaxMeshBacklog = 2;
 // Worker-pool backlog cap for the streaming posts: at most this many
 // generation + lighting jobs may be pending (queued or running) before
 // streamChunks skips its post for a frame. The per-frame flush() drains
@@ -1258,87 +1276,66 @@ Result<void> Game::buildScene() {
 }
 
 // ---------------------------------------------------------------------------
-// Chunk meshing (CPU geometry + GPU upload, game thread). Meshing stays on
-// the game thread in Phase 14: it reads the live World (face culling
-// across chunk boundaries), and the streaming budget
-// (kStreamColumnsPerFrame) bounds its per-frame cost to a few chunks
-// (measured ~0.01 ms/chunk on this machine).
+// Chunk meshing (PIPE-1): the mesher's COMPUTE runs on workers (postMeshJobs
+// snapshots a column's 3x3 neighborhood into a throwaway World; the worker
+// runs the UNCHANGED ChunkMesher against it — face culling across chunk
+// boundaries works identically because the snapshot IS the mesher's full
+// read set); integrateMeshJobs lands the results after the pool flush and
+// clears the dirty flags. The game thread keeps the column-merged GL
+// upload (rebuildColumnMesh — the GL context is main-thread only).
 // ---------------------------------------------------------------------------
 
 
 Result<void> Game::updateChunkMeshes() {
-    // Re-mesh at most kRemeshBudgetPerFrame dirty chunks per frame,
-    // NEAREST to the player first. One integrated column marks ~32
-    // face-sharing neighbors dirty; without the budget they were all
-    // rebuilt in a single frame (100-400 ms main-thread stall — the
-    // streaming hitches). Each chunk's mesh is a pure function of its
-    // own cells + the 6 neighbor columns' cells, so the remesh order
-    // does not change the result; the dirty flag (and the World's dirty
-    // set) simply persists on the chunks that do not fit this frame's
-    // budget. The set — not a full chunk scan — is the worklist: a
-    // full-ring world is ~9k-200k chunks, the dirty set is player-scale.
-    // Phase 99.9: the chunk mesh lands in CPU storage (m_chunkMeshData);
-    // the GL upload happens in the COLUMNS' merged-mesh rebuild below
-    // (one draw per column instead of one per chunk — the per-chunk
-    // submission was ~10-30 us/draw on the Intel iGPU and grew with the
-    // view-distance ring).
-    const std::set<ChunkPos>& dirtySet = m_world.dirtyChunks();
-    if (!dirtySet.empty()) {
-        std::vector<ChunkPos> dirty;
-        for (const ChunkPos& pos : dirtySet) {
-            // Columns whose lighting job has not completed are meshed
-            // EXACTLY ONCE, after the light lands (m_unlitColumns): a
-            // light-0 first mesh would show black faces and cost a second
-            // (budget-delayed) re-mesh. They stay dirty until then.
-            if (m_unlitColumns.count({pos.x, pos.z}) != 0) {
-                continue;
-            }
-            dirty.push_back(pos);
-        }
-        if (!dirty.empty()) {
-            const Vec3 p =
-                m_player ? m_player->position() : Vec3{0.0, 0.0, 0.0};
-            const int px =
-                floorDiv(static_cast<int>(std::floor(p.x)), kChunkSize);
-            const int pz =
-                floorDiv(static_cast<int>(std::floor(p.z)), kChunkSize);
-            std::sort(dirty.begin(), dirty.end(),
-                      [px, pz](const ChunkPos& a, const ChunkPos& b) {
-                          const int da =
-                              std::max(std::abs(a.x - px), std::abs(a.z - pz));
-                          const int db =
-                              std::max(std::abs(b.x - px), std::abs(b.z - pz));
-                          if (da != db) {
-                              return da < db;
-                          }
-                          if (a.x != b.x) {
-                              return a.x < b.x;
-                          }
-                          if (a.y != b.y) {
-                              return a.y < b.y;
-                          }
-                          return a.z < b.z;
-                      });
-            const std::size_t limit = std::min(
-                dirty.size(),
-                static_cast<std::size_t>(kRemeshBudgetPerFrame));
-            const ChunkMesher mesher(m_world, m_blocks, m_atlas.layout());
-            for (std::size_t i = 0; i < limit; ++i) {
-                const ChunkPos& pos = dirty[i];
-                m_chunkMeshData[pos] = mesher.mesh(pos);
-                m_columnRebuildPending.insert({pos.x, pos.z});
-                m_world.clearChunkDirty(pos);
-            }
-        }
-    }
-    // Rebuild the merged GL mesh of every column this frame's chunk
-    // meshes touched (plus columns still pending from a budget-deferred
-    // frame — their chunk data exists, the column upload was what lagged).
+    // The merged GL mesh of every column whose chunk meshes landed this
+    // frame (integrateMeshJobs) or earlier (a column can be pending across
+    // frames — its chunk data exists, the upload is what lags). Phase 99.9:
+    // one draw per column instead of one per chunk. Chunks without CPU
+    // geometry (unlit — their mesh job waits for the light — or not meshed
+    // yet) are simply absent from the merged column mesh: the same
+    // pop-in visibility the old main-thread budgeted path had.
     for (const ColumnPos& col : m_columnRebuildPending) {
         MC_TRY(rebuildColumnMesh(col));
     }
     m_columnRebuildPending.clear();
     return {};
+}
+
+void Game::integrateMeshJobs() {
+    if (m_meshJobs.empty()) {
+        return;
+    }
+    // Runs right after pool->flush() (happens-before via the pool's
+    // mutex) and BEFORE integrateStreamedColumns: a stream insert marks
+    // face-sharing neighbors dirty, and that re-dirtying must not be
+    // swallowed by a mesh integrate's clear-dirty (it re-queues the
+    // column with the new neighbor in the next frame's snapshot).
+    // The mesh is a pure function of the job's snapshot, so FIFO
+    // integration preserves the selection order (nearest first) —
+    // deterministic, frame-locked.
+    std::deque<std::unique_ptr<MeshJob>> inFlight;
+    for (auto& job : m_meshJobs) {
+        if (!job->done) {
+            inFlight.push_back(std::move(job));
+            continue;
+        }
+        for (std::size_t cy = 0; cy < job->meshes.size(); ++cy) {
+            const ChunkPos cpos{job->column.x,
+                                static_cast<int>(cy), job->column.z};
+            m_chunkMeshData[cpos] = std::move(job->meshes[cy]);
+            // Clear the dirty flag at INTEGRATE, not post: no main-thread
+            // World write can land between this frame's post and the next
+            // flush (the read-only worker window), and any edit AFTER
+            // this integrate re-marks the chunk and re-queues the column
+            // (self-healing).
+            m_world.clearChunkDirty(cpos);
+        }
+        m_columnRebuildPending.insert(job->column);
+        m_meshPending.erase(job->column);
+        MC_LOG_DEBUG("Meshed column (" + std::to_string(job->column.x) +
+                     ", " + std::to_string(job->column.z) + ") on worker");
+    }
+    m_meshJobs = std::move(inFlight);
 }
 
 Result<void> Game::rebuildColumnMesh(const ColumnPos& col) {
@@ -1504,6 +1501,10 @@ void Game::unloadFarColumns() {
     // column would break the load). The maps are player-scale (small).
     std::set<ColumnPos> protectedColumns = m_editedColumns;
     protectedColumns.insert(m_streamPending.begin(), m_streamPending.end());
+    // PIPE-1: in-flight MESH columns too (same paradigm — their
+    // integrate must find the column still loaded; unloading it would
+    // strand the 8 ChunkMeshData outputs in m_chunkMeshData).
+    protectedColumns.insert(m_meshPending.begin(), m_meshPending.end());
     const auto protectStates = [this, &protectedColumns](
                                    const auto& states) {
         for (const auto& [pos, st] : states) {
@@ -1716,7 +1717,8 @@ void Game::postLightJobs() {
     // flush). The job writes light arrays and marks the changed chunks
     // dirty (World::markChunkDirty); it also carries its COLUMNS and a
     // done flag: at the next flush, collectLitColumns drops them from
-    // m_unlitColumns so their chunks mesh once, lit.
+    // m_unlitColumns so their chunks get a mesh job once, lit (PIPE-1
+    // selection rule).
     auto job = std::make_unique<LightJob>();
     job->columns = m_lightPendingColumns;
     m_lightPendingColumns.clear();
@@ -1739,6 +1741,85 @@ void Game::postLightJobs() {
         }
         rawJob->done = true;
     });
+}
+
+void Game::postMeshJobs() {
+    // PIPE-1: worker meshing. Runs in update AFTER streamChunks (gen
+    // posts) and BEFORE postLightJobs — the post order gen -> mesh ->
+    // light is the contract: after this function's posts, the ONLY job
+    // that writes the live World in the coming window is this frame's
+    // lighting job, and nextMeshColumns's exclusions (unlit + its
+    // footprint) keep every snapshot's light final. The snapshot is
+    // taken NOW — after every main-thread World write of this frame
+    // (interaction, fluids, fire, growth), before the player's next
+    // move — so it is the frame's final state (a pure function of the
+    // World at this point).
+    if (!m_pool) {
+        return;
+    }
+    const std::set<ChunkPos>& dirtySet = m_world.dirtyChunks();
+    if (dirtySet.empty()) {
+        return;
+    }
+    // The column projection of the dirty set (the set is sorted -> the
+    // projection is deterministic before the distance sort).
+    std::set<ColumnPos> dirtyColumns;
+    for (const ChunkPos& pos : dirtySet) {
+        dirtyColumns.insert({pos.x, pos.z});
+    }
+    if (dirtyColumns.empty()) {
+        return;
+    }
+    const Vec3 p =
+        m_player ? m_player->position() : Vec3{0.0, 0.0, 0.0};
+    const ColumnPos player{
+        floorDiv(static_cast<int>(std::floor(p.x)), kChunkSize),
+        floorDiv(static_cast<int>(std::floor(p.z)), kChunkSize)};
+    const std::vector<ColumnPos> chosen = nextMeshColumns(
+        dirtyColumns, player, m_unlitColumns, m_lightPendingColumns,
+        m_meshPending, kMaxMeshBacklog);
+    for (const ColumnPos& col : chosen) {
+        auto job = std::make_unique<MeshJob>();
+        job->column = col;
+        job->meshes.resize(kVerticalChunksPerColumn);
+        // The snapshot: the column's 3x3 column neighborhood, all layers
+        // (the mesher's full read set — its faces cull and bake light
+        // against at most the 6 neighbor columns' cells). Missing
+        // neighbors stay missing: the snapshot World's void reads match
+        // the live world's bit-for-bit (the same World class).
+        // insertSnapshotChunk carries the cell content + light + fluid +
+        // stair facing with no live-World bookkeeping (the snapshot's
+        // indexes are never consulted).
+        for (int dx = -1; dx <= 1; ++dx) {
+            for (int dz = -1; dz <= 1; ++dz) {
+                for (int cy = 0; cy < kVerticalChunksPerColumn; ++cy) {
+                    const ChunkPos cp{col.x + dx, cy, col.z + dz};
+                    const Chunk* src = m_world.findChunk(cp);
+                    if (src != nullptr) {
+                        job->snap.insertSnapshotChunk(cp, *src);
+                    }
+                }
+            }
+        }
+        m_meshPending.insert(col);
+        MeshJob* rawJob = job.get();
+        m_meshJobs.push_back(std::move(job));
+        // The worker meshes the job's OWN snapshot (no live World touch —
+        // the generation-job pattern). m_blocks / m_atlas are immutable
+        // after init (the render pass reads them concurrently). The chunk
+        // mesh is a pure function of the snapshot, so the result is
+        // deterministic (frame-locked FIFO integration).
+        m_pool->post([this, rawJob] {
+            const ChunkMesher mesher(rawJob->snap, m_blocks,
+                                     m_atlas.layout());
+            for (std::size_t cy = 0; cy < rawJob->meshes.size(); ++cy) {
+                rawJob->meshes[cy] = mesher.mesh({rawJob->column.x,
+                                                  static_cast<int>(cy),
+                                                  rawJob->column.z});
+            }
+            rawJob->done = true;
+        });
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2380,16 +2461,22 @@ int Game::run() {
 }
 
 void Game::update(double dt) {
-    // Chunk streaming (Phase 14) — frame pipeline, the race-free part:
-    // every worker job from the previous frame (generation, lighting)
-    // completes at this flush; from here until the posts at the end of
-    // this function the main thread is the sole writer of the World, and
-    // after the posts the main thread only reads it (meshing already
-    // happened; rendering reads no World data beyond the chunk list).
+    // Chunk streaming (Phase 14) + worker meshing (PIPE-1) — frame
+    // pipeline, the race-free part: every worker job from the previous
+    // frame (generation, mesh, lighting) completes at this flush; from
+    // here until the posts at the end of this function the main thread is
+    // the sole writer of the World, and after the posts the main thread
+    // only reads it (the mesh COMPUTE already moved to the workers —
+    // updateChunkMeshes below does the GL upload only; rendering reads no
+    // World data beyond the chunk list).
+    // integrateMeshJobs runs BEFORE integrateStreamedColumns: a stream
+    // insert re-marks neighbor columns dirty, and that re-dirtying must
+    // survive the mesh integrate's clear-dirty (see integrateMeshJobs).
     if (m_pool) {
         m_pool->flush();
     }
     collectLitColumns();
+    integrateMeshJobs();
     integrateStreamedColumns();
     unloadFarColumns();
 
@@ -2538,9 +2625,14 @@ void Game::update(double dt) {
     // setBlock. A no-op while the world holds no fire.
     updateFireSpread();
 
-    const auto meshes = updateChunkMeshes();
-    if (!meshes.ok()) {
-        MC_LOG_ERROR("Chunk meshing failed: " + meshes.error().describe());
+    // Column-merged GL upload (PIPE-1: the mesher's compute runs on the
+    // workers — postMeshJobs / integrateMeshJobs feed m_chunkMeshData;
+    // this frame's integrates' clear-dirty is the only input here).
+    {
+        const auto meshes = updateChunkMeshes();
+        if (!meshes.ok()) {
+            MC_LOG_ERROR("Chunk meshing failed: " + meshes.error().describe());
+        }
     }
 
     // The player owns the first-person state; the camera is just its view
@@ -2588,6 +2680,11 @@ void Game::update(double dt) {
     // touch no shared state at all (pure generator into the job's own
     // scratch chunks).
     streamChunks();
+    // Worker meshing (PIPE-1): snapshot + post for the nearest eligible
+    // dirty columns. AFTER streamChunks and BEFORE postLightJobs — the
+    // post order gen -> mesh -> light keeps this frame's lighting job the
+    // only live-World writer after the snapshots (see postMeshJobs).
+    postMeshJobs();
     // Lighting for chunks that appeared this frame (streamed-in columns,
     // or the placement path's synchronous creation): one worker job
     // (adjacent regions overlap, so the updates run sequentially inside

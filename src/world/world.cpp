@@ -255,6 +255,13 @@ bool World::insertChunk(const ChunkPos& pos, Chunk&& chunk) {
     return true;
 }
 
+void World::insertSnapshotChunk(const ChunkPos& pos, const Chunk& chunk) {
+    // emplace (no scanFluidChunks / no dirty marking): the snapshot's
+    // maintenance indexes are never read (see the header). A pre-existing
+    // pos is left as-is (a snapshot is built once, from an empty World).
+    m_chunks.emplace(pos, chunk);
+}
+
 bool World::eraseChunk(const ChunkPos& pos) {
     auto it = m_chunks.find(pos);
     if (it == m_chunks.end()) {

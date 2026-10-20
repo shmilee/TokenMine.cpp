@@ -152,11 +152,12 @@ private:
     Result<void> buildScene();
     void update(double dt);
     void render();
-    // Rebuilds the GPU mesh of every dirty (or never-meshed) chunk.
-    // Phase 99.9: the chunk's CPU geometry (m_chunkMeshData) is refreshed
-    // within the per-frame budget, then the touched COLUMNS' merged GL
-    // meshes are rebuilt (rebuildColumnMesh) — the render loop draws one
-    // mesh per column, not per chunk.
+    // Rebuilds the GPU mesh of every column whose merged GL mesh is stale
+    // (m_columnRebuildPending). PIPE-1: the mesher's COMPUTE no longer runs
+    // here — worker mesh jobs (postMeshJobs / integrateMeshJobs) refresh
+    // the chunk's CPU geometry (m_chunkMeshData) against a private snapshot
+    // World; what remains on the main thread is the column-merged GL
+    // upload (rebuildColumnMesh — the GL context is main-thread only).
     Result<void> updateChunkMeshes();
     // Concatenates the column's chunk geometries (baking each chunk's
     // world offset into the vertices, remapping the indices) and uploads
@@ -184,6 +185,24 @@ private:
     // the correct light the frame after the job completes (deterministic,
     // frame-locked by the flush).
     void postLightJobs();
+    // PIPE-1: posts up to kMaxMeshBacklog worker mesh jobs for the nearest
+    // eligible dirty columns (selection: world/mesh_job.hpp). Each job
+    // snapshots the column's 3x3 column neighborhood into its own World
+    // (taken after every main-thread World write of this frame) and meshes
+    // the column's 8 chunks on a worker. Runs in update AFTER streamChunks
+    // (gen posts) and BEFORE postLightJobs — the post order gen -> mesh ->
+    // light is what keeps this frame's lighting job the only live-World
+    // writer after the snapshots (see the pipeline contract above).
+    void postMeshJobs();
+    // PIPE-1: collects the completed mesh jobs (after the pool flush,
+    // BEFORE integrateStreamedColumns — a stream insert marks neighbor
+    // columns dirty, which must not be swallowed by a mesh integrate's
+    // clear-dirty): the 8 ChunkMeshData outputs move into m_chunkMeshData
+    // (whole-column replace), the 8 chunks clear their dirty flag (at
+    // integrate, not post: an edit after this frame's integrate re-marks
+    // the chunk and re-queues it), and the column joins
+    // m_columnRebuildPending for the GL upload. FIFO = deterministic.
+    void integrateMeshJobs();
     // Unloads the loaded columns far behind the player (the memory leak
     // fix: streaming only ever ADDED chunks — a radius-80 session grew to
     // 11k+ chunks / several GB and kept rising). Runs right after
@@ -555,9 +574,9 @@ private:
     World m_world;
     std::unordered_map<ChunkPos, ChunkMeshData> m_chunkMeshData;
     std::unordered_map<ColumnPos, ColumnMesh> m_columnMeshes;
-    // Columns whose merged GL mesh is stale (a chunk re-meshed): rebuilt
-    // at the end of updateChunkMeshes (after the frame's budget of chunk
-    // meshes landed).
+    // Columns whose merged GL mesh is stale (a chunk mesh landed this
+    // frame — integrated from a worker mesh job, PIPE-1): rebuilt
+    // (GL upload) at the end of updateChunkMeshes.
     std::set<ColumnPos> m_columnRebuildPending;
 
     // Seeded world generator (built in buildScene). Optional: the game only
@@ -568,17 +587,27 @@ private:
     // it holds references to the world and the block registry).
     std::optional<Player> m_player;
 
-    // Chunk streaming (Phase 14): worker pool for out-of-area terrain. The
+    // Chunk streaming (Phase 14) + worker meshing (PIPE-1): worker pool
+    // for out-of-area terrain and off-main-thread remeshing. The
     // per-frame pipeline (see update) makes this race-free:
     //   flush -> integrate (main writes) -> interaction/fluids (main writes)
-    //   -> mesh + render (main reads only) -> post jobs (workers run until
-    //   the next flush). A job therefore touches shared state only while the
-    //   main thread is in its read-only window.
+    //   -> GL rebuild + render (main reads only) -> post jobs in the order
+    //   gen -> mesh -> light. Workers run from the posts until the next
+    //   flush; a job therefore touches shared state only while the main
+    //   thread is in its read-only window.
     //   - generation jobs touch no shared state at all (the generator is a
     //     pure function; results land in the job's own scratch chunks);
+    //   - mesh jobs touch no shared state at all (the mesher runs on the
+    //     job's OWN snapshot World — a private 3x3 column neighborhood
+    //     copied at post time, after every main-thread World write of the
+    //     frame and before the lighting job runs; results land in the
+    //     job's own ChunkMeshData outputs);
     //   - lighting jobs write light arrays + the dirty flag, which the main
-    //     thread never writes in its read-only window (meshing only reads
-    //     light, baking it into vertices).
+    //     thread never writes in its read-only window (the next frame's
+    //     mesh snapshot is taken after the light lands; the light job also
+    //     re-marks the chunks it changed dirty, so a mesh posted before the
+    //     light re-queues after it — the selection rules in
+    //     world/mesh_job.hpp).
     std::unique_ptr<ThreadPool> m_pool;
     // One in-flight generation job: a whole column
     // (kVerticalChunksPerColumn scratch chunks). `done` is written by the
@@ -602,14 +631,35 @@ private:
         bool done = false;
     };
     std::deque<std::unique_ptr<LightJob>> m_lightJobs;
+    // One in-flight MESH job (PIPE-1): the target column's 3x3 column
+    // neighborhood snapshotted into a throwaway World (insertSnapshotChunk,
+    // after every main-thread World write of the posting frame), plus the
+    // job's own 8 ChunkMeshData outputs (y-layer order). `done` is written
+    // by the worker and read by the main thread only after pool->flush()
+    // (happens-before via the pool's mutex). The worker never touches the
+    // live World (the generation-job pattern).
+    struct MeshJob {
+        World snap;
+        ColumnPos column;
+        std::vector<ChunkMeshData> meshes; // sized kVerticalChunksPerColumn
+        bool done = false;
+    };
+    // In-flight mesh jobs (deque: the heap-allocated MeshJob never moves,
+    // so worker lambdas may capture it by raw pointer).
+    std::deque<std::unique_ptr<MeshJob>> m_meshJobs;
+    // Columns whose mesh job is in flight (not yet integrated). Same
+    // paradigm as m_streamPending: they are excluded from re-posting
+    // (nextMeshColumns) and protected from unloading.
+    std::set<ColumnPos> m_meshPending;
     // Columns whose light has NOT propagated yet (integrated this session
     // or first-touch created, their lighting job still in flight). Their
     // chunks are NOT meshed until the job completes: the old design meshed
     // them at light 0 (black faces) and re-meshed after the light landed —
     // with the remesh budget that re-mesh could lag by the whole dirty
     // backlog, so freshly loaded terrain showed black faces for seconds
-    // (99.2 walking-run report). Meshing once, lit (pop-in), is also
-    // half the remesh work.
+    // (99.2 walking-run report). Meshing once, lit (pop-in), is also less
+    // work; PIPE-1 enforces the same rule in the worker selection (a
+    // column in this set never gets a mesh job).
     std::set<ColumnPos> m_unlitColumns;
     // Columns with a generation job in flight (not yet in the World).
     std::set<ColumnPos> m_streamPending;

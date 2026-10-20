@@ -1422,6 +1422,20 @@
   （PNG 显示 "Depth: 8/1-bit"、游戏日志完全正常、尺寸守卫抓不到）。修复
   = 尺寸守卫 + 全黑守卫（`notblack ≥ 800000 = 废拍重试`，P25 陈旧弃跑
   先例）。
+- **PIPE-1 post 顺序不变量（2026-10-21）**：post→flush 窗口内三类 job 的 post 顺序固定 =
+  streamChunks（gen，只写 scratch）→ postMeshJobs（**同步快照拷贝** + post）→
+  postLightJobs（窗口内唯一活 World 写者，最后 post）。快照拷贝一致性靠"拷贝时
+  唯一在跑的 worker 是 gen（不碰 World）"；任何重排（light 先于 mesh post）=
+  快照可能拍到同窗口被写的光 = 间歇性撕裂读（非确定像素、难复现）。口诀：**窗口内
+  新增读 World 的 job 类型，先定它在 gen→mesh→light 序中的位置，写进
+  thread_pool.hpp 契约。**
+- **PIPE-1 集成顺序 + 2 帧幽灵面（2026-10-21）**：`integrateMeshJobs` 必须**先于**
+  `integrateStreamedColumns`——stream insert 对邻居列的标脏若被 mesh 集成的
+  clear-dirty 吞掉 = 新列网格永久 void 烘焙（幽灵面）。最坏 +2 帧收敛：列 C 已
+  mesh、邻列 L 才 stream 进来 → C 边界面临时对 void 烘焙，C 在 L 的光照 job 期
+  被光足迹规则（Cheb ≥2）排除、L 插入后 2 帧 C 重 mesh（dirty 自愈）；幽灵面朝 L
+  内侧、玩家 2 帧内进不了新地形 = 实际不可见。口诀：**同窗内"清脏"操作必须排在
+  "新标脏"操作之前，否则标脏被静默吞。**
 - **zsh 函数前缀赋值不持久（STRM-1 E2E）**：`TM_OUT="$log" wait_game_window
   ...`——函数内可见，**返回后恢复原值（空）**→ 后续 `lock_pointer` 的
   `${TM_OUT:-}` 看到空 = 静默跳过验证分支（报"成功"但没捕获，连跑 3 次

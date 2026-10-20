@@ -6,18 +6,29 @@
 //                                complete; the main thread now owns all
 //                                writes...
 //   ...main-thread world writes (integrate, interaction, fluids)...
-//   ...mesh + render (main thread only READS the world)...
-//   post(gen/light jobs)     <- workers run from here on; the main thread
-//                                stops writing the world until the next
+//   ...GL rebuild + render (main thread only READS the world)...
+//   post(gen -> mesh -> light) <- workers run from here on; the main
+//                                thread stops writing the world until the
+//                                next flush
 //   (next frame) flush()     <- the workers' window ends before the next
 //                                write window opens.
 //
 // So a job touches shared state only while the main thread is in its
 // read-only window. Generation jobs touch no shared mutable state at all
-// (WorldGenerator::generateChunk is a pure function); lighting jobs write
-// only light arrays and the dirty flag, which the main thread does not
-// write concurrently (meshing bakes light into vertices but never writes
-// the arrays).
+// (WorldGenerator::generateChunk is a pure function); MESH jobs (PIPE-1)
+// also touch no shared mutable state — the mesher runs on the job's own
+// snapshot World, copied at post time (after every main-thread World
+// write of the frame, BEFORE the lighting post, which is why the post
+// order is gen -> mesh -> light); lighting jobs write only light arrays
+// and the dirty flag, which the main thread does not write concurrently
+// (the next frame's mesh snapshot is taken after the light lands).
+//
+// Flush budget (kStreamWorkerCount = 4, FIFO): a fill frame posts 2 gen
+// (~1.6 ms) + 2 mesh (<= 6 ms) + 1 light (~13 ms): the gen jobs take two
+// workers (0..1.6), the mesh jobs the other two (0..6), the light job
+// starts on the first freed worker (1.6..14.6) — flush = 13 + 1.6 ms
+// (the LGT-1 lighting floor + one gen slot of FIFO start delay), the
+// mesh jobs hide under it.
 //
 // Exception safety: game jobs cannot fail (the generator and lighting are
 // infallible). If a job did throw, the first exception is rethrown from

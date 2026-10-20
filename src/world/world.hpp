@@ -67,10 +67,11 @@ public:
 
     // Stair facing (Phase 94): the per-instance orientation of a stair cell
     // (0-3: north/east/south/west). Same coordinate conventions as getFluid:
-    // y outside [0, kWorldHeight) or a chunk that was never created reads 0
-    // (the void / uncreated reads the default north). Written by the game
-    // (the setBlock choke point, the placement, the rotation); read by the
-    // collision (Entity::solidTopHeight) + the mesh (emitStairs).
+    // y outside [0, kWorldHeight) or a chunk that was never created reads the
+    // sentinel 255 (kStairFacingUnset) — collision (solidTopHeight) and mesh
+    // (emitStairs) fall back to the block's `stair_facing` default. Written by
+    // the game (the setBlock choke point, the placement, the rotation); read by
+    // the collision + the mesh.
     std::uint8_t getStairFacing(int x, int y, int z) const;
     // Sets the facing in an existing chunk. Returns false (and changes
     // nothing) when y is out of range, the facing is out of range, or the
@@ -94,6 +95,17 @@ public:
     // changes their cull decision (the reverse direction is correct from
     // the start because the new chunk meshes after insertion).
     bool insertChunk(const ChunkPos& pos, Chunk&& chunk);
+    // Snapshot insertion (PIPE-1): place a pre-built chunk into a
+    // THROWAWAY snapshot World with none of the live-World bookkeeping —
+    // no fluid-set scan, no dirty marking, no neighbor marking. The
+    // snapshot holds the meshed column's 3x3 column neighborhood and is
+    // read by a worker mesher, then destroyed; none of the snapshot's
+    // indexes (dirty set, fluid sets) are ever consulted. The copy
+    // carries the cell content + light + fluid + stair facing
+    // bit-for-bit, so the mesher's reads (block/fluid/light/stair) are
+    // identical to the live world's; out-of-snapshot columns read the
+    // same void an empty live world reads (the same World class).
+    void insertSnapshotChunk(const ChunkPos& pos, const Chunk& chunk);
     // The inverse of insertChunk: drop an existing chunk (false when absent)
     // and mark the six face-sharing SURVIVING neighbors dirty — their
     // boundary faces were culled against the chunk that is now void (a

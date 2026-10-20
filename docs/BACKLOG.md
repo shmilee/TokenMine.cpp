@@ -18,7 +18,7 @@
 | 系统 | ① | ② | ③ | ④ | ⑤ | ⑥ |
 |---|---|---|---|---|---|---|
 | STRM 流送与内存 | ~~STRM-1 环形状~~ 完成 | | | | | |
-| PIPE 帧管线与并发 | PIPE-1 worker网格化 | PIPE-2 存档增量 | | | | |
+| PIPE 帧管线与并发 | ~~PIPE-1 worker网格化~~ 完成 | PIPE-2 存档增量 | | | | |
 | LGT 光照 | LGT-1 union-region | LGT-2 叶子光衰减 | | | | |
 | GEN 世界与生成 | GEN-1 面条洞穴 | GEN-2 树生长 | GEN-3 矿脉形态 | | | |
 | FLUID 流体 | FLUID-1 水量守恒 | FLUID-2 游泳划水 | | | | |
@@ -45,7 +45,7 @@
 - ~~**STRM-1 环形状**~~ — **完成（2026-10-21）**：方形 (2R+1)² → 圆盘 dx²+dz²≤R²（纯整数谓词）+ 远平面帽 R_eff=min(view_distance, 64)【用户定案选项 b：只装可绘制列，地平线视觉零下行】；vd80 实测 RSS 9.08→4.59 GB（−49.5%，原"12 GB"为估算、"~1/9"为半径问题非形状问题）；base18 第 81 次门（无输入结构性免疫）；原 ~1/9 目标 = R_eff=30（480 块地平线）一个常量可切换，用户暂不采用（99.x 残余 #1）
 
 ### PIPE 帧管线与并发
-- **PIPE-1 worker 网格化** — mesher 计算搬 worker、主线程只 GL 上传；快照式设计（光照 region 与 mesh 读竞争边界 = unlit 列 3×3 邻域）；价值待 STRM-1 后重测（99.x 残余 #3）
+- ~~**PIPE-1 worker 网格化**~~ — **完成（2026-10-21）**：mesher 计算 → 4 worker 快照 job（每帧 ≤2 列：3×3 邻域 72 chunk memcpy 进 job 私有临时 World，ChunkMesher **零改动**）+ `nextMeshColumns` 纯函数选择规则（unlit 排除【99.4 lit pop-in 承接】/ 光足迹 Chebyshev ≥2 排除 / 在途排除 / `columnDistanceSq` 最近优先）+ 主线程只留列合并 GL 上传（~1-3 ms/列不可搬走）+ post 顺序不变量 gen→mesh→light（thread_pool.hpp 契约）+ integrate 先于 stream-integrate（防 clear-dirty 吞标脏）；价值重测（step-0 插桩实测）= 主线程 remesh 填充期 7-11.3 ms/帧 + complete 后 2.8 min 拖尾（脏集峰值 45,895）→ 搬 worker；base18 第 82 次门（A/B 四对字节一致，论证措辞 = 无输入 worker 活动有界于启动 16 mesh job 帧 ≤10 完成）；帧时序：pop-in N+1→N+2（帧锁定）+ 最坏 +2 帧收敛（PITS）；99.x 残余 #3
 - **PIPE-2 存档增量** — 退出全量 diff → 增量编辑跟踪 O(编辑数)（P37 优化方向）
 
 ### LGT 光照
@@ -125,3 +125,5 @@
   括注，逐条代码复核；6 条标已解决 / 3 条改写为活条目 / ⑨ 复核 = 99.2 已解决）。
 - 2026-10-21：STRM-1 完成（用户定案选项 b：圆盘 + 远平面帽 R_eff=64；实测
   vd80 9.08→4.59 GB −49.5%；base18 第 81 次门）。
+- 2026-10-21：PIPE-1 完成（worker 快照网格化；step-0 重测定案做；base18
+  第 82 次门）。
