@@ -208,7 +208,7 @@ C++20 / SDL3 / OpenGL 3.3 core，
   32 次结构性免疫、无重锚；P59 重锚；P60/P61/P62/P63 过门 = 第
   33/34/35/36 次结构性免疫、无重锚，第 37/38/39/40/41/42/43 次过门 =
   Phase 64/65/66/67/68/69/70、第 44 次过门 = Phase 71、第 45 次过门 = Phase 72、第 46 次过门 = Phase 73、第 47 次过门 = Phase 74、第 48 次过门 = Phase 75、第 49 次过门 = Phase 76、第 50 次过门 = Phase 77、第 51 次过门 = Phase 78、第 52 次过门 = Phase 79、第 53 次过门 = Phase 80、第 54 次过门 = Phase 81、第 55 次过门 = Phase 82、第 56 次过门 = Phase 83、第 57 次过门 = Phase 84、第 58 次过门 = Phase 85、第 59 次过门 = Phase 86、第 60 次过门 = Phase 87、第 61 次过门 = Phase 88、第 62 次过门 = Phase 89、第 63 次过门 = Phase 90、第 64 次过门 = Phase 91、第 65 次过门 = Phase 92、第 66 次过门 = Phase 93、第 67 次过门 = Phase 94、第 68 次过门 = Phase 95、第 69 次过门 = Phase 96、第 70 次过门 = Phase 97、第 71 次过门 = Phase 98、第 72 次过门 = Phase 99；99.x 性能系列各提交逐次过门（99.5 覆盖层/99.7 腿纹理/99.9 裁剪+列合并 = 像素保持修复）至**第 80 次结构性免疫**。
-- 活跃已知问题：`docs/KNOWN_ISSUES.md`；下一阶段候选：`opencode-sessions/SESSION_CONTEXT.md`「下一步」。
+- 活跃已知问题：`docs/KNOWN_ISSUES.md`；**v1.0 任务表（执行权威）：`docs/BACKLOG.md`**（2026-10-20 用户定案：十大系统 63 项砍半至 29 项，此后任务只从本表取、不另列菜单，29 项全完成 = v1.0）；会话交接：`opencode-sessions/SESSION_CONTEXT.md`。
 
 ## 命令
 
@@ -303,5 +303,6 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/PITS.md](docs/PITS.md) | 坑位合集（193 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃）+ 已修复存档索引 | 阶段验收前后 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phase 0–29 规划 + 细节存档索引 | 了解历史 |
+| [docs/BACKLOG.md](docs/BACKLOG.md) | **v1.0 任务表（执行权威）**：十大系统 29 项（10-20 自 63 项砍半）+ 执行顺序/前置约束 + 砍掉清单 34 + 表外 | 取下一个任务 / 了解 1.0 范围 |
 | [docs/archive/phase-NN.md](docs/archive/) | 单阶段细节存档（阶段报告 + 会话存档） | 深挖某阶段 |
 | `opencode-sessions/SESSION_CONTEXT.md`（本地，不入库） | 会话交接：最新状态/提交列表/下一步（+ 同目录 SESSION_HISTORY 历史块 / LEGACY_STATUS_P30 遗留附录 / kickoff_prompt 新会话启动 prompt） | 任何"继续"会话 |

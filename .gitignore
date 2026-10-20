@@ -5,6 +5,7 @@ data/*.save
 data/chunks/
 data/saves/
 compile_commands.json
+opencode-sessions/
 .cache/
 .vscode/
 .idea/
