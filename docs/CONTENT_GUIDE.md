@@ -676,7 +676,13 @@ config 其余部分的前向兼容一致）。种子配置（首次运行生成�
 - 地形：base 40 / amplitude 24 / 海平面 34 / 高度噪声 0.02×4 octaves；y=0 bedrock。
 - Biomes：desert(w2, sand, tree 0, hs 0.9) / forest(w4, grass, tree 0.12, hs 1.1) /
   plains(w4, grass, tree 0.03, hs 1.0)；biome 噪声 0.02。
-- 洞穴：阈值 0.68 / scale 0.06 / minY 2 / 表面保护 4。
+- 洞穴（`[GEN-1]` 面条洞）：`caves` 段——`noise_scale 0.09` /
+  `tube_threshold 0.06`（两 3D 噪声中位带相交 = 管状隧道；0 拒、≥0.5 拒，
+  点名）/ `min_y 2` / `surface_guard 0`（0 = 允许洞口打穿表面 = shipped；
+  ≥1 = 表面 + guard 层壳保护 = 旧语义）/ `spawn_clear_columns 2`（原点
+  Chebyshev ≤N 列整列不挖 = 出生/演示区结构保护，[0,8] 点名）。每湖 lava
+  带排除盒（区域 x/z ±1 × [floorY−1, floorY+fill]）构造期预计算——洞穴不挖
+  湖带（保 P88/P90 熔岩湖静态被围契约）。
 - 矿脉：lattice 8；coal .4/size9/maxY80, iron .25/8/56, gold .12/7/36, diamond .05/5/20。
 - 树：lattice 4，树干 4+0..3，两层 r2 树冠 + r1 顶帽。
 - 熔岩湖（Phase 86 单湖，Phase 88 列表）：`lava_lakes` 段是一个**湖列表**，

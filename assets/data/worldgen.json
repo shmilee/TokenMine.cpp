@@ -13,10 +13,11 @@
  },
  "caves": {
   "enabled": true,
-  "noise_scale": 0.06,
-  "threshold": 0.68,
+  "noise_scale": 0.09,
+  "tube_threshold": 0.06,
   "min_y": 2,
-  "surface_guard": 4
+  "surface_guard": 0,
+  "spawn_clear_columns": 2
  },
  "ores": {
   "lattice": 8,

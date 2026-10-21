@@ -926,7 +926,13 @@
     各 biome 有自己的表层/次表层/树密度/高度系数
   - **水**：低于海平面（y=34）的柱体填充流体水（fluid level 8）到海平面；
     生成即处于平衡态（游戏内 20Hz 流体 tick 不会扰动湖面）
-  - **洞穴**：3D 噪声阈值雕刻，保留表层 4 格与底层 2 格的壳
+  - **洞穴**（`[GEN-1]`）：两独立 3D value-noise 中位带相交雕刻
+    （`|n1−0.5|<T ∧ |n2−0.5|<T`，MC spaghetti 同款管状隧道；n2 仅 n1 入带时
+    求值）；`surface_guard 0` = 洞口可达表面（shipped）；出生/演示区列
+    （原点 ±2 列）整列不挖（结构保护，任意 seed 出生点恒安全）；每湖 lava
+    带排除盒不挖（保熔岩湖静态被围）；矿脉只替换 stone（洞壁矿暴露 =
+    自然成立、不填 air）；树/装饰在洞之后跑（洞口悬树 = MC 同款视觉；
+    装饰表面被洞啃掉则让位 = 既有检查直接生效）
   - **矿脉**：世界空间格网 + 随机游走（coal/iron/gold/diamond/lapis/
     **gravel**，`max_y` 分层限制；lapis：probability 0.08 / vein 6 /
     max_y 32；gravel：probability 0.25 / vein 4 / max_y 80，Phase 59 的

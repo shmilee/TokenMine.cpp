@@ -120,6 +120,12 @@
   衰减（leaves −2/层）后，wheat `growth_light=9`：3 层冠下 = 9 临界仍过
   （可长）、叠冠/4 层+ = ≤7 停长。「树下种麦」玩法按 MC 语义收紧；wheat
   growth_light 保持 9（MC 值，不偏离）。
+- **面条洞穴行为注记（`[GEN-1]`，均 MC 一致/文档化偏离，非缺陷）**：
+  ① 洞口悬树（树干立于被打穿的表面列上，placeIfAir 不检查脚下 = MC 同款
+  视觉）② 海床洞穴一次性渗水（生成平衡态后静态，99.8 冷 chunk 零成本）
+  ③ 洞内 24/7 敌对生成（封闭袋 sky 0 = 敌对光门 0，昼夜无关 = MC 洞穴
+  语义；出生点 spawn protection circle 不变）④ 旧存档加载得新洞穴
+  （世界生成演进 = P86/88/93 先例；编辑保留、零 format）。
 - **`Chunk&` 引用会被 unordered_map rehash 失效** — `getOrCreateChunk` 返回的引用在后续可能 rehash 的 World 变更（其他 chunk 的 setBlock/getOrCreateChunk）后失效；已在 world.hpp 头部文档化，调用方须在一个逻辑操作内使用。`[Phase 3]`
 - **Greedy Meshing 已实现（Phase 18）** — 逐面片合并为同（纹理、sub-mesh、面光）run 的单 quad；200-chunk 实测总三角形 109,648 → 33,558（3.3×，不透明 3.5×）。剩余简化见「渲染 / 网格化（Phase 18）」。
 

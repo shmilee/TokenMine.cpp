@@ -159,6 +159,115 @@ TEST(WorldgenConfigTest, RejectsInvalidThreshold) {
     EXPECT_NE(r.error().message.find("threshold"), std::string::npos);
 }
 
+// ---------------------------------------------------------------------------
+// GEN-1 (spaghetti caves): the new cave tuning — tube_threshold (the mid-
+// band of the two-noise intersection), spawn_clear_columns (the spawn
+// protection), surface_guard 0 (openings reach the surface). The legacy
+// `threshold` key is retired: old configs WARN about it and load, the key
+// is still parsed + range-validated (legacy tolerance) but the generator
+// does not read it.
+// ---------------------------------------------------------------------------
+
+TEST(WorldgenConfigTest, ParsesCaveTuning) {
+    auto r = WorldgenParams::parse(parseJson(
+        R"({"caves":{"enabled":true,"noise_scale":0.09,"tube_threshold":0.06,)"
+        R"("min_y":2,"surface_guard":0,"spawn_clear_columns":2}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const WorldgenParams& p = *r;
+    EXPECT_FLOAT_EQ(p.caveNoiseScale, 0.09f);
+    EXPECT_FLOAT_EQ(p.caveTubeThreshold, 0.06f);
+    EXPECT_EQ(p.caveMinY, 2);
+    EXPECT_EQ(p.surfaceGuard, 0);
+    EXPECT_EQ(p.caveSpawnClearColumns, 2);
+}
+
+TEST(WorldgenConfigTest, CaveTuningDefaults) {
+    // Absent keys keep the documented defaults (the shipped values).
+    auto r = WorldgenParams::parse(parseJson(R"({"caves":{"enabled":true}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FLOAT_EQ(r->caveNoiseScale, 0.06f);
+    EXPECT_FLOAT_EQ(r->caveTubeThreshold, 0.06f);
+    EXPECT_EQ(r->surfaceGuard, 4);
+    EXPECT_EQ(r->caveSpawnClearColumns, 2);
+}
+
+TEST(WorldgenConfigTest, RejectsTubeThresholdOutOfRange) {
+    // 0.5 is the full mid-band (every noise value — degenerate); above it
+    // is impossible by definition.
+    auto hi = WorldgenParams::parse(
+        parseJson(R"({"caves":{"tube_threshold":0.51}})"));
+    ASSERT_FALSE(hi.ok());
+    EXPECT_NE(hi.error().message.find("tube_threshold"), std::string::npos);
+    auto lo = WorldgenParams::parse(
+        parseJson(R"({"caves":{"tube_threshold":-0.01}})"));
+    ASSERT_FALSE(lo.ok());
+    EXPECT_NE(lo.error().message.find("tube_threshold"), std::string::npos);
+    // The inclusive boundaries parse (0 = no caves, 0.5 = full band).
+    auto z = WorldgenParams::parse(parseJson(R"({"caves":{"tube_threshold":0}})"));
+    EXPECT_TRUE(z.ok());
+    auto f = WorldgenParams::parse(
+        parseJson(R"({"caves":{"tube_threshold":0.5}})"));
+    EXPECT_TRUE(f.ok());
+}
+
+TEST(WorldgenConfigTest, RejectsSpawnClearColumnsOutOfRange) {
+    auto lo = WorldgenParams::parse(
+        parseJson(R"({"caves":{"spawn_clear_columns":-1}})"));
+    ASSERT_FALSE(lo.ok());
+    EXPECT_NE(lo.error().message.find("spawn_clear_columns"),
+              std::string::npos);
+    auto hi = WorldgenParams::parse(
+        parseJson(R"({"caves":{"spawn_clear_columns":33}})"));
+    ASSERT_FALSE(hi.ok());
+    EXPECT_NE(hi.error().message.find("spawn_clear_columns"),
+              std::string::npos);
+}
+
+TEST(WorldgenConfigTest, RejectsNonNumberCaveTuning) {
+    auto r = WorldgenParams::parse(
+        parseJson(R"({"caves":{"tube_threshold":"six"}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("tube_threshold"), std::string::npos);
+}
+
+TEST(WorldgenConfigTest, OldThresholdKeyLoadsAndIsLegacy) {
+    // A pre-GEN-1 config: the retired `threshold` key WARNS (unknown field)
+    // but still loads, is still parsed (legacy tolerance), and coexists
+    // with the live `tube_threshold`. The generator reads only
+    // tube_threshold (pinned in the generator tests).
+    auto r = WorldgenParams::parse(parseJson(
+        R"({"caves":{"threshold":0.68,"tube_threshold":0.06}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FLOAT_EQ(r->caveThreshold, 0.68f); // legacy value, unread
+    EXPECT_FLOAT_EQ(r->caveTubeThreshold, 0.06f); // the live knob
+}
+
+// Content pin: the shipped worldgen.json carries the calibrated GEN-1 cave
+// tuning (noise_scale 0.09 / tube_threshold 0.06 / surface_guard 0 /
+// spawn_clear_columns 2) and NO retired `threshold` key.
+TEST(WorldgenConfigTest, Gen1ShippedCaveTuning) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    auto r = WorldgenParams::load(assets);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const WorldgenParams& p = *r;
+    EXPECT_TRUE(p.cavesEnabled);
+    EXPECT_FLOAT_EQ(p.caveNoiseScale, 0.09f);
+    EXPECT_FLOAT_EQ(p.caveTubeThreshold, 0.06f);
+    EXPECT_EQ(p.caveMinY, 2);
+    EXPECT_EQ(p.surfaceGuard, 0);
+    EXPECT_EQ(p.caveSpawnClearColumns, 2);
+    // Raw check: the retired `threshold` key is not shipped.
+    auto text = assets.loadText("data/worldgen.json");
+    ASSERT_TRUE(text.ok());
+    auto parsed = Json::parse(*text);
+    ASSERT_TRUE(parsed.ok());
+    const Json* c = parsed->find("caves");
+    ASSERT_TRUE(c != nullptr && c->isObject());
+    EXPECT_EQ(c->find("threshold"), nullptr);
+}
+
 TEST(WorldgenConfigTest, RejectsEmptyBottomBlock) {
     auto r = WorldgenParams::parse(
         parseJson(R"({"terrain":{"bottom_block":""}})"));

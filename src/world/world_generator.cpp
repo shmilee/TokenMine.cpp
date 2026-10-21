@@ -16,19 +16,6 @@ namespace mc {
 
 namespace {
 
-// Distinct salts keep the noise fields of independent features (height,
-// biome, caves, ores, trees) uncorrelated, so e.g. cave shape never tracks
-// the terrain height.
-constexpr std::int64_t kSaltHeight = 0x1A2B3C4D5E6F7A01LL;
-constexpr std::int64_t kSaltBiome = 0x1A2B3C4D5E6F7A02LL;
-constexpr std::int64_t kSaltCave = 0x1A2B3C4D5E6F7A03LL;
-constexpr std::int64_t kSaltOre = 0x1A2B3C4D5E6F7A04LL;
-constexpr std::int64_t kSaltTree = 0x1A2B3C4D5E6F7A05LL;
-// Phase 45: surface decorations (independent of the tree rolls).
-constexpr std::int64_t kSaltDecoration = 0x1A2B3C4D5E6F7A06LL;
-// Phase 93: procedural lava lakes (independent of the other feature rolls).
-constexpr std::int64_t kSaltLavaLake = 0x1A2B3C4D5E6F7A07LL;
-
 // Per-feature mixing constant (per ore type, per vein-walk step).
 constexpr std::uint64_t kFeatureStep = 0x9E3779B97F4A7C15ULL;
 
@@ -134,6 +121,10 @@ Result<WorldGenerator> WorldGenerator::create(std::int64_t seed,
     // Phase 93: derive the procedural lakes (a pure function of the seed, so
     // they are the same across runs + chunks).
     gen.computeProceduralLakes();
+    // GEN-1: resolve every enabled lake into an exclusion box + floor (the
+    // cave carve skips the basins; the lake pass reads the precomputed
+    // floor instead of rescanning the region per chunk).
+    gen.computeLakes();
     return gen;
 }
 
@@ -248,29 +239,81 @@ void WorldGenerator::carveCaves(Chunk& chunk, const ChunkPos& pos,
     if (!m_params.cavesEnabled) {
         return;
     }
+    // GEN-1: the spawn clear zone — a chunk whose column is within
+    // `spawn_clear_columns` of the world origin on BOTH axes is never
+    // carved (the spawn candidate columns, {-1,0}², must keep intact dry
+    // ground). A per-chunk early return: a chunk is wholly in or out of
+    // the zone (the zone is column-aligned).
+    if (std::abs(pos.x) <= m_params.caveSpawnClearColumns &&
+        std::abs(pos.z) <= m_params.caveSpawnClearColumns) {
+        return;
+    }
     const int ox = pos.x * kChunkSize;
     const int oz = pos.z * kChunkSize;
     const int y0 = pos.y * kChunkSize;
     const float cs = m_params.caveNoiseScale;
+    const float t = m_params.caveTubeThreshold;
+    // GEN-1: surface_guard 0 lifts the shell below the surface — cave
+    // openings may reach the surface cell itself (the shipped value, the
+    // Minecraft cave entrances). guard > 0 keeps the pre-GEN-1 band (never
+    // within `guard` layers of the surface, the surface cell excluded).
+    const int guard = m_params.surfaceGuard;
+    // GEN-1: the lava-lake exclusion boxes — the basin owns its carve (the
+    // lake pass, which runs LATER, carves the same region anyway; skipping
+    // it here keeps the basin geometry exact and is what makes the box
+    // observable: caves-on vs caves-off differ only OUTSIDE the box).
+    const auto inLakeBox = [&](int wx, int wy, int wz) {
+        for (const ResolvedLake& rl : m_lakes) {
+            if (wx >= rl.x0 && wx <= rl.x1 && wz >= rl.z0 && wz <= rl.z1 &&
+                wy > rl.floorY) {
+                return true;
+            }
+        }
+        return false;
+    };
     for (int lx = 0; lx < kChunkSize; ++lx) {
         for (int lz = 0; lz < kChunkSize; ++lz) {
             const int h =
                 heights[static_cast<std::size_t>(lx) * kChunkSize +
                         static_cast<std::size_t>(lz)];
+            const int topExclusive =
+                (guard > 0) ? (h - guard) : (h + 1);
+            const int wx = ox + lx;
+            const int wz = oz + lz;
             for (int ly = 0; ly < kChunkSize; ++ly) {
                 const int wy = y0 + ly;
-                // Keep a floor at the bottom and a shell under the surface.
-                if (wy < m_params.caveMinY ||
-                    wy >= h - m_params.surfaceGuard) {
+                // Keep a floor at the bottom and (guard > 0) a shell under
+                // the surface.
+                if (wy < m_params.caveMinY || wy >= topExclusive) {
                     continue;
                 }
-                const float n = valueNoise3(static_cast<float>(ox + lx) * cs,
-                                            static_cast<float>(wy) * cs,
-                                            static_cast<float>(oz + lz) * cs,
-                                            m_seed ^ kSaltCave);
-                if (n > m_params.caveThreshold) {
-                    chunk.set(lx, ly, lz, BlockID::air());
+                if (inLakeBox(wx, wy, wz)) {
+                    continue;
                 }
+                // GEN-1: the spaghetti-tube predicate — the intersection of
+                // TWO independent noise fields' mid-bands, |n - 0.5| < t on
+                // BOTH (the intersection of two thin 3D bands is a network
+                // of winding tubes, the Minecraft 1.18 cave shape — the old
+                // single-noise high-region produced blobs). The second field
+                // is evaluated ONLY when the first is in-band (same
+                // predicate, less work).
+                const float n1 =
+                    valueNoise3(static_cast<float>(wx) * cs,
+                                static_cast<float>(wy) * cs,
+                                static_cast<float>(wz) * cs,
+                                m_seed ^ kSaltCave);
+                if (std::fabs(n1 - 0.5f) >= t) {
+                    continue;
+                }
+                const float n2 =
+                    valueNoise3(static_cast<float>(wx) * cs,
+                                static_cast<float>(wy) * cs,
+                                static_cast<float>(wz) * cs,
+                                m_seed ^ kSaltCave2);
+                if (std::fabs(n2 - 0.5f) >= t) {
+                    continue;
+                }
+                chunk.set(lx, ly, lz, BlockID::air());
             }
         }
     }
@@ -527,33 +570,56 @@ void WorldGenerator::computeProceduralLakes() {
     }
 }
 
-void WorldGenerator::placeLavaLakes(Chunk& chunk, const ChunkPos& pos) const {
-    // Phase 88: loop over every configured lake (Phase 86 shipped a single
-    // lake; the list generalizes it). Phase 93: the procedural lakes are
-    // placed in addition to the fixed list. Each lake is independent (its own
-    // region/floor); overlapping lakes carve the same cells (deterministic).
-    const auto placeOne = [&](const WorldgenParams::LavaLake& lake) {
+void WorldGenerator::computeLakes() {
+    // GEN-1: resolve every enabled lake (the fixed list + the procedural
+    // ones) into its region box + basin floor. The floor is the region's
+    // lowest terrain minus `depth` — a pure heightAt read, computed ONCE
+    // here (placeLavaLakes previously recomputed it per chunk, and
+    // carveCaves' exclusion boxes need it without a rescan). The value is
+    // identical to the old per-chunk rescan (same pure function).
+    m_lakes.clear();
+    const auto resolve = [this](const WorldgenParams::LavaLake& lake) {
         if (!lake.enabled) {
             return;
         }
-        const int x0 = lake.centerX - lake.radius;
-        const int x1 = lake.centerX + lake.radius;
-        const int z0 = lake.centerZ - lake.radius;
-        const int z1 = lake.centerZ + lake.radius;
-        // The basin floor: the region's lowest terrain minus `depth` (a pure
-        // heightAt read — deterministic across runs and consistent across the
-        // chunks the region spans). The surrounding terrain (outside the
-        // region) is >= the region min, so the basin walls rise above lava.
+        ResolvedLake rl;
+        rl.lake = lake;
+        rl.x0 = lake.centerX - lake.radius;
+        rl.x1 = lake.centerX + lake.radius;
+        rl.z0 = lake.centerZ - lake.radius;
+        rl.z1 = lake.centerZ + lake.radius;
         int minH = INT_MAX;
-        for (int x = x0; x <= x1; ++x) {
-            for (int z = z0; z <= z1; ++z) {
+        for (int x = rl.x0; x <= rl.x1; ++x) {
+            for (int z = rl.z0; z <= rl.z1; ++z) {
                 minH = std::min(minH, heightAt(x, z));
             }
         }
-        const int floorY = minH - lake.depth;
-        const int ox = pos.x * kChunkSize;
-        const int oz = pos.z * kChunkSize;
-        const int y0 = pos.y * kChunkSize;
+        rl.floorY = minH - lake.depth;
+        m_lakes.push_back(std::move(rl));
+    };
+    for (const auto& lake : m_params.lavaLakes) {
+        resolve(lake);
+    }
+    for (const auto& lake : m_proceduralLakes) {
+        resolve(lake);
+    }
+}
+
+void WorldGenerator::placeLavaLakes(Chunk& chunk, const ChunkPos& pos) const {
+    // Phase 88: loop over every configured lake (Phase 86 shipped a single
+    // lake; the list generalizes it). Phase 93: the procedural lakes are
+    // placed in addition to the fixed list. Each lake is independent (its
+    // own region/floor); overlapping lakes carve the same cells
+    // (deterministic). GEN-1: the region box + floor come from m_lakes
+    // (precomputed in create — the same pure heightAt value the per-chunk
+    // rescan always recomputed).
+    const int ox = pos.x * kChunkSize;
+    const int oz = pos.z * kChunkSize;
+    const int y0 = pos.y * kChunkSize;
+    for (const ResolvedLake& rl : m_lakes) {
+        const WorldgenParams::LavaLake& lake = rl.lake;
+        const int x0 = rl.x0, x1 = rl.x1, z0 = rl.z0, z1 = rl.z1;
+        const int floorY = rl.floorY;
         for (int lx = 0; lx < kChunkSize; ++lx) {
             for (int lz = 0; lz < kChunkSize; ++lz) {
                 const int wx = ox + lx;
@@ -579,12 +645,6 @@ void WorldGenerator::placeLavaLakes(Chunk& chunk, const ChunkPos& pos) const {
                 }
             }
         }
-    };
-    for (const auto& lake : m_params.lavaLakes) {
-        placeOne(lake);
-    }
-    for (const auto& lake : m_proceduralLakes) {
-        placeOne(lake);
     }
 }
 

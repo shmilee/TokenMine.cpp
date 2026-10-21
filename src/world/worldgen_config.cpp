@@ -109,9 +109,15 @@ Result<WorldgenParams> WorldgenParams::parse(const Json& def) {
         if (!c->isObject()) {
             return MC_FAIL("'caves' must be an object");
         }
+        // GEN-1: "threshold" (the pre-GEN-1 single-noise rule) is retired:
+        // it is NO LONGER in the known set, so old configs warn about it
+        // ("unknown field 'threshold' ignored") while still loading. It is
+        // still parsed + range-validated below (legacy tolerance, the
+        // Phase 74 retired-config pattern) but the generator does not read
+        // it — "tube_threshold" is the live knob.
         warnUnknown(*c, "caves",
-                    {"enabled", "noise_scale", "threshold", "min_y",
-                     "surface_guard"});
+                    {"enabled", "noise_scale", "min_y", "surface_guard",
+                     "tube_threshold", "spawn_clear_columns"});
         auto r = readField(*c, "caves", "enabled", "bool",
                            [&](const Json& v) { p.cavesEnabled = v.asBool(); });
         MC_TRY(r);
@@ -121,11 +127,17 @@ Result<WorldgenParams> WorldgenParams::parse(const Json& def) {
         r = readField(*c, "caves", "threshold", "number",
                       [&](const Json& v) { p.caveThreshold = v.asDouble(); });
         MC_TRY(r);
+        r = readField(*c, "caves", "tube_threshold", "number",
+                      [&](const Json& v) { p.caveTubeThreshold = v.asDouble(); });
+        MC_TRY(r);
         r = readField(*c, "caves", "min_y", "number",
                       [&](const Json& v) { p.caveMinY = v.asInt(); });
         MC_TRY(r);
         r = readField(*c, "caves", "surface_guard", "number",
                       [&](const Json& v) { p.surfaceGuard = v.asInt(); });
+        MC_TRY(r);
+        r = readField(*c, "caves", "spawn_clear_columns", "number",
+                      [&](const Json& v) { p.caveSpawnClearColumns = v.asInt(); });
         MC_TRY(r);
     }
 
@@ -361,11 +373,19 @@ Result<WorldgenParams> WorldgenParams::parse(const Json& def) {
     if (p.caveThreshold < 0.0f || p.caveThreshold >= 1.0f) {
         return MC_FAIL("'caves.threshold' must be in [0, 1)");
     }
+    if (p.caveTubeThreshold < 0.0f || p.caveTubeThreshold > 0.5f) {
+        // 0.5 is the full mid-band (|n - 0.5| < 0.5 = every noise value,
+        // the world would carve hollow — degenerate, rejected by range).
+        return MC_FAIL("'caves.tube_threshold' must be in [0, 0.5]");
+    }
     if (p.caveMinY < 0 || p.caveMinY > 120) {
         return MC_FAIL("'caves.min_y' must be in [0, 120]");
     }
     if (p.surfaceGuard < 0 || p.surfaceGuard > 15) {
         return MC_FAIL("'caves.surface_guard' must be in [0, 15]");
+    }
+    if (p.caveSpawnClearColumns < 0 || p.caveSpawnClearColumns > 32) {
+        return MC_FAIL("'caves.spawn_clear_columns' must be in [0, 32]");
     }
     if (p.oreLattice < 1 || p.oreLattice > 32) {
         return MC_FAIL("'ores.lattice' must be in [1, 32]");

@@ -40,12 +40,28 @@ struct WorldgenParams {
     // Biome selection (section "biomes").
     float biomeNoiseScale = 0.02f;
 
-    // Caves (section "caves").
+    // Caves (section "caves"). GEN-1: spaghetti tubes — the intersection
+    // of two independent 3D noise mid-bands (|n - 0.5| < tubeThreshold on
+    // BOTH fields) yields thin winding tubes instead of the old
+    // single-noise blobs.
     bool cavesEnabled = true;
     float caveNoiseScale = 0.06f;
-    float caveThreshold = 0.68f; // carve where the 3D noise exceeds this
-    int caveMinY = 2;            // never carve below this Y
-    int surfaceGuard = 4;        // never carve within this many layers of surface
+    // LEGACY (pre-GEN-1 "carve where the 3D noise exceeds this"): still
+    // parsed and range-validated so old configs load, but the generator
+    // does NOT read it (the section warns about the retired key).
+    float caveThreshold = 0.68f;
+    // GEN-1: carve where |n - 0.5| < this on BOTH cave noise fields
+    // (0.04..0.12 are the typical spaghetti range; 0 = no caves).
+    float caveTubeThreshold = 0.06f;
+    int caveMinY = 2; // never carve below this Y
+    // 0 = cave openings may reach the surface (GEN-1: the shipped value,
+    // Minecraft cave entrances); > 0 = never carve within this many layers
+    // of the surface (the pre-GEN-1 behavior).
+    int surfaceGuard = 4;
+    // GEN-1: chunks whose column is within this many of the world origin on
+    // BOTH axes (|col.x| <= N && |col.z| <= N) are never carved — the
+    // spawn candidate columns ({-1,0}²) must keep intact dry ground.
+    int caveSpawnClearColumns = 2;
 
     // Ores (section "ores").
     int oreLattice = 8; // world-space lattice cell size for vein placement

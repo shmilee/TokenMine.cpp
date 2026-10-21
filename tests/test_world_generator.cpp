@@ -1,14 +1,17 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <climits>
 #include <map>
 #include <optional>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "block/block_registry.hpp"
 #include "world/biome.hpp"
+#include "world/noise.hpp"
 #include "world/world_generator.hpp"
 
 using namespace mc;
@@ -172,6 +175,76 @@ int findTrunkBase(const Region& r, int x, int z) {
     return -1;
 }
 
+// ---------------------------------------------------------------------------
+// GEN-1 (spaghetti caves) helpers.
+//
+// The origin Region (cols 0..1) sits INSIDE the spawn clear zone (|col| <=
+// 2) — uncarved by design — so the cave tests generate their own regions
+// at cols 4+ (world x,z >= 64), outside the zone.
+// ---------------------------------------------------------------------------
+
+// The shipped GEN-1 cave tuning (calibrated at seed 123456789: 5.38% of
+// the subsurface band carved, ~95 surface openings per 64x64, p90 straight
+// run width 6/5, clear zone + lake boxes unscathed, 1.18 ms/col).
+WorldgenParams calibratedCaveParams() {
+    WorldgenParams p = makeParams();
+    p.caveNoiseScale = 0.09f;
+    p.caveTubeThreshold = 0.06f;
+    p.surfaceGuard = 0;
+    p.caveSpawnClearColumns = 2;
+    return p;
+}
+
+// Generate all y-layers of the columns [cx0, cx1] x [cz0, cz1].
+std::map<ChunkPos, Chunk> genColumns(const WorldGenerator& gen, int cx0,
+                                     int cx1, int cz0, int cz1) {
+    std::map<ChunkPos, Chunk> chunks;
+    for (int cx = cx0; cx <= cx1; ++cx) {
+        for (int cz = cz0; cz <= cz1; ++cz) {
+            for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy) {
+                gen.generateChunk(chunks[{cx, cy, cz}], {cx, cy, cz});
+            }
+        }
+    }
+    return chunks;
+}
+
+BlockID blockAt(const std::map<ChunkPos, Chunk>& chunks, int x, int y,
+                int z) {
+    if (y < 0 || y >= kWorldHeight) {
+        return BlockID::air();
+    }
+    const ChunkPos cp = worldToChunk(BlockPos{x, y, z});
+    const auto it = chunks.find(cp);
+    if (it == chunks.end()) {
+        return BlockID::air();
+    }
+    const auto local = worldToChunkLocal(cp, BlockPos{x, y, z});
+    return it->second.get(local.x, local.y, local.z);
+}
+
+std::uint8_t fluidAt(const std::map<ChunkPos, Chunk>& chunks, int x, int y,
+                     int z) {
+    if (y < 0 || y >= kWorldHeight) {
+        return 0;
+    }
+    const ChunkPos cp = worldToChunk(BlockPos{x, y, z});
+    const auto it = chunks.find(cp);
+    if (it == chunks.end()) {
+        return 0;
+    }
+    const auto local = worldToChunkLocal(cp, BlockPos{x, y, z});
+    return it->second.fluidAt(local.x, local.y, local.z);
+}
+
+// A carved cell: air with no fluid (the open sky above the surface and the
+// underwater fill are air too, but callers restrict to the subsurface band
+// / dry columns where those do not occur).
+bool carvedAt(const std::map<ChunkPos, Chunk>& chunks, int x, int y, int z) {
+    return blockAt(chunks, x, y, z) == BlockID::air() &&
+           fluidAt(chunks, x, y, z) == 0;
+}
+
 } // namespace
 
 // -- seed reproducibility ----------------------------------------------------
@@ -331,25 +404,410 @@ TEST(WorldGeneratorTest, UnderwaterColumnsExist) {
 }
 
 TEST(WorldGeneratorTest, CavesCarveBelowSurface) {
-    Region r(42);
+    // GEN-1 migration: the pre-GEN-1 scan region [0,32)² lies INSIDE the
+    // spawn clear zone (|col| <= 2 — uncarved by design), so the scan moves
+    // to cols 4..5 (x,z in [64,96)), outside the zone. The band now runs
+    // up to the surface (surface_guard 0) and the assertions are
+    // recalibrated to the spaghetti density (~5% of the band).
+    GenSetup s;
+    s.params = calibratedCaveParams();
+    auto res = WorldGenerator::create(42, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    const WorldGenerator& gen = *res;
+    const auto chunks = genColumns(gen, 4, 5, 4, 5);
     int caveBlocks = 0;
     int belowSurface = 0;
-    for (int x = 0; x < 32; ++x) {
-        for (int z = 0; z < 32; ++z) {
-            const int h = r.gen->surfaceHeight(x, z);
-            for (int y = r.setup.params.caveMinY;
-                 y < h - r.setup.params.surfaceGuard; ++y) {
+    for (int x = 64; x < 96; ++x) {
+        for (int z = 64; z < 96; ++z) {
+            const int h = gen.surfaceHeight(x, z);
+            for (int y = s.params.caveMinY; y <= h; ++y) {
                 ++belowSurface;
-                if (r.at(x, y, z) == BlockID::air()) {
+                if (carvedAt(chunks, x, y, z)) {
                     ++caveBlocks;
                 }
             }
         }
     }
     EXPECT_GT(belowSurface, 1000);
-    // Caves are a meaningful fraction of the subsurface, not all of it.
-    EXPECT_GT(caveBlocks, 100);
-    EXPECT_LT(caveBlocks, belowSurface);
+    // Caves are a meaningful fraction of the subsurface band ...
+    EXPECT_GT(caveBlocks, 1000);
+    // ... but not all of it.
+    EXPECT_LT(caveBlocks, belowSurface / 2);
+}
+
+TEST(WorldGeneratorTest, CaveMatchesPurePredicate) {
+    // Per-bit pin: a cell at or below the surface is carved IFF it is in
+    // the band [caveMinY, h] (surface_guard 0 includes the surface cell),
+    // and BOTH noise mid-bands hold (|n - 0.5| < tube_threshold on the
+    // kSaltCave AND the kSaltCave2 fields). Chunk {4,0,0} (x 64..79,
+    // z 0..15) is outside the clear zone, and the fixture has no lakes, so
+    // the predicate is exactly the generator's carve decision.
+    GenSetup s;
+    s.params = calibratedCaveParams();
+    const std::int64_t seed = 123456789;
+    auto res = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    const WorldGenerator& gen = *res;
+    const ChunkPos pos{4, 0, 0};
+    Chunk chunk;
+    gen.generateChunk(chunk, pos);
+    const auto cellIsCarved = [&](int x, int y, int z) {
+        const auto local = worldToChunkLocal(pos, BlockPos{x, y, z});
+        return chunk.get(local.x, local.y, local.z) == BlockID::air() &&
+               chunk.fluidAt(local.x, local.y, local.z) == 0;
+    };
+    const float cs = s.params.caveNoiseScale;
+    const float t = s.params.caveTubeThreshold;
+    int checked = 0;
+    for (int lx = 0; lx < kChunkSize; ++lx) {
+        for (int lz = 0; lz < kChunkSize; ++lz) {
+            const int x = pos.x * kChunkSize + lx;
+            const int z = pos.z * kChunkSize + lz;
+            const int h = gen.surfaceHeight(x, z);
+            for (int ly = 0; ly < kChunkSize; ++ly) {
+                const int y = pos.y * kChunkSize + ly;
+                if (y > h) {
+                    continue; // open sky: out of scope
+                }
+                const int topExclusive = s.params.surfaceGuard > 0
+                                             ? h - s.params.surfaceGuard
+                                             : h + 1;
+                bool expectCarved = false;
+                if (y >= s.params.caveMinY && y < topExclusive) {
+                    const float n1 =
+                        valueNoise3(static_cast<float>(x) * cs,
+                                    static_cast<float>(y) * cs,
+                                    static_cast<float>(z) * cs,
+                                    seed ^ kSaltCave);
+                    const float n2 =
+                        valueNoise3(static_cast<float>(x) * cs,
+                                    static_cast<float>(y) * cs,
+                                    static_cast<float>(z) * cs,
+                                    seed ^ kSaltCave2);
+                    expectCarved = std::fabs(n1 - 0.5f) < t &&
+                                   std::fabs(n2 - 0.5f) < t;
+                }
+                const bool carved = cellIsCarved(x, y, z);
+                if (expectCarved) {
+                    EXPECT_TRUE(carved) << "x=" << x << " y=" << y << " z=" << z;
+                } else {
+                    EXPECT_FALSE(carved) << "x=" << x << " y=" << y << " z=" << z;
+                }
+                ++checked;
+            }
+        }
+    }
+    EXPECT_GT(checked, 4000);
+}
+
+TEST(WorldGeneratorTest, SpaghettiTubeWidth) {
+    // The carved runs are THIN tubes, not rooms: over the calibrated
+    // sample region (cols 4..8 x 0..4, the probe area) the straight carved
+    // runs have p90 <= 8 and a clear majority in [2, 8]. The occasional
+    // long straight stretch (max ~17, a tube running along the scan
+    // direction) is the spaghetti shape, not a blob.
+    GenSetup s;
+    s.params = calibratedCaveParams();
+    const std::int64_t seed = 123456789;
+    auto res = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    const WorldGenerator& gen = *res;
+    const auto chunks = genColumns(gen, 4, 8, 0, 4);
+    const int X0 = 64, X1 = 143, Z0 = 0, Z1 = 79;
+    std::vector<int> hRuns, vRuns;
+    for (int z = Z0; z <= Z1; ++z) {
+        for (int x = X0; x <= X1; ++x) {
+            const int h = gen.surfaceHeight(x, z);
+            if (h < s.params.seaLevel) {
+                continue; // dry columns only
+            }
+            int run = 0;
+            for (int y = s.params.caveMinY; y <= h; ++y) {
+                if (carvedAt(chunks, x, y, z)) {
+                    ++run;
+                } else if (run > 0) {
+                    vRuns.push_back(run);
+                    run = 0;
+                }
+            }
+            if (run > 0) {
+                vRuns.push_back(run);
+            }
+        }
+    }
+    const int kMaxBandY = kWorldHeight - 16; // heightAt's upper clamp
+    for (int y = s.params.caveMinY; y <= kMaxBandY; ++y) {
+        for (int z = Z0; z <= Z1; ++z) {
+            int run = 0;
+            for (int x = X0; x <= X1; ++x) {
+                const int h = gen.surfaceHeight(x, z);
+                const bool cand = h >= s.params.seaLevel && y <= h;
+                if (cand && carvedAt(chunks, x, y, z)) {
+                    ++run;
+                } else if (run > 0) {
+                    hRuns.push_back(run);
+                    run = 0;
+                }
+            }
+            if (run > 0) {
+                hRuns.push_back(run);
+            }
+        }
+    }
+    ASSERT_GE(hRuns.size(), 500u);
+    ASSERT_GE(vRuns.size(), 500u);
+    const auto p90 = [](const std::vector<int>& runs) {
+        std::vector<int> sorted = runs;
+        std::sort(sorted.begin(), sorted.end());
+        return sorted[sorted.size() * 9 / 10];
+    };
+    const auto fracInRange = [](const std::vector<int>& runs) {
+        long in = 0;
+        for (int r : runs) {
+            if (r >= 2 && r <= 8) {
+                ++in;
+            }
+        }
+        return 100.0 * static_cast<double>(in) / runs.size();
+    };
+    EXPECT_LE(p90(hRuns), 8);
+    EXPECT_LE(p90(vRuns), 8);
+    EXPECT_GE(fracInRange(hRuns), 50.0);
+    EXPECT_GE(fracInRange(vRuns), 50.0);
+}
+
+TEST(WorldGeneratorTest, SpawnClearZoneUnscathed) {
+    // The clear zone (|col| <= 2, the spawn candidate columns {-1,0}² plus
+    // margin) is NEVER carved: with caves on vs off the zone generates
+    // byte-identical (terrain/ores/trees/lakes run the same in both).
+    GenSetup s;
+    s.params = calibratedCaveParams();
+    const std::int64_t seed = 123456789;
+    auto onRes = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(onRes.ok()) << onRes.error().message;
+    WorldgenParams offParams = s.params;
+    offParams.cavesEnabled = false;
+    auto offRes =
+        WorldGenerator::create(seed, offParams, s.biomes, s.blocks);
+    ASSERT_TRUE(offRes.ok()) << offRes.error().message;
+    int diffs = 0;
+    for (int cx = -2; cx <= 2; ++cx) {
+        for (int cz = -2; cz <= 2; ++cz) {
+            for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy) {
+                Chunk a, b;
+                onRes->generateChunk(a, {cx, cy, cz});
+                offRes->generateChunk(b, {cx, cy, cz});
+                for (int i = 0; i < Chunk::kVolume; ++i) {
+                    if (a.data()[i] != b.data()[i]) {
+                        ++diffs;
+                    }
+                }
+            }
+        }
+    }
+    EXPECT_EQ(diffs, 0) << "the spawn clear zone must never be cave-carved";
+}
+
+TEST(WorldGeneratorTest, LavaLakeExclusion) {
+    // A lake's exclusion box (the region above its floor) is NEVER
+    // cave-carved: caves on vs off are byte-identical INSIDE the box,
+    // differ OUTSIDE it (caves still work around the lake), and the basin
+    // geometry matches the recomputed region-min-minus-depth (the
+    // precomputed ResolvedLake floor, the per-chunk rescan's value).
+    GenSetup s;
+    s.params = calibratedCaveParams();
+    WorldgenParams::LavaLake lake;
+    lake.centerX = 55;
+    lake.centerZ = 45;
+    lake.radius = 3;
+    lake.depth = 3;
+    lake.fill = 2;
+    s.params.lavaLakes = {lake};
+    const std::int64_t seed = 123456789;
+    auto onRes = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(onRes.ok()) << onRes.error().message;
+    WorldgenParams offParams = s.params;
+    offParams.cavesEnabled = false;
+    auto offRes =
+        WorldGenerator::create(seed, offParams, s.biomes, s.blocks);
+    ASSERT_TRUE(offRes.ok()) << offRes.error().message;
+
+    // The recomputed floor (region min heightAt - depth).
+    const WorldGenerator& gen = *onRes;
+    int minH = INT_MAX;
+    for (int x = 52; x <= 58; ++x) {
+        for (int z = 42; z <= 48; ++z) {
+            minH = std::min(minH, gen.surfaceHeight(x, z));
+        }
+    }
+    const int floorY = minH - lake.depth;
+    const auto inBox = [&](int x, int y, int z) {
+        return x >= 52 && x <= 58 && z >= 42 && z <= 48 && y > floorY;
+    };
+
+    // The lake spans cols 3 (x 48..63) x 2..3 (z 32..63); generate both.
+    const auto onChunks = genColumns(gen, 2, 3, 2, 3);
+    int boxDiff = 0, outsideDiff = 0;
+    for (const auto& [pos, a] : onChunks) {
+        Chunk b;
+        offRes->generateChunk(b, pos);
+        for (int i = 0; i < Chunk::kVolume; ++i) {
+            if (a.data()[i] == b.data()[i]) {
+                continue;
+            }
+            const int lx = i % kChunkSize;
+            const int lz = (i / kChunkSize) % kChunkSize;
+            const int ly = i / (kChunkSize * kChunkSize);
+            const int wx = pos.x * kChunkSize + lx;
+            const int wz = pos.z * kChunkSize + lz;
+            const int wy = pos.y * kChunkSize + ly;
+            if (inBox(wx, wy, wz)) {
+                ++boxDiff;
+            } else {
+                ++outsideDiff;
+            }
+        }
+    }
+    EXPECT_EQ(boxDiff, 0) << "no cave carving inside the lake exclusion box";
+    EXPECT_GT(outsideDiff, 100) << "caves still work outside the box";
+
+    // The basin: carved to air exactly above the recomputed floor ...
+    for (int x = 52; x <= 58; ++x) {
+        for (int z = 42; z <= 48; ++z) {
+            for (int y = floorY + 1; y <= minH; ++y) {
+                EXPECT_EQ(blockAt(onChunks, x, y, z), BlockID::air())
+                    << "x=" << x << " y=" << y << " z=" << z;
+            }
+        }
+    }
+    // ... and the topmost lava of the centre column sits `fill` levels up.
+    int topLava = -1;
+    for (int y = 1; y < kWorldHeight; ++y) {
+        if (fluidKindOf(fluidAt(onChunks, 55, y, 45)) == FluidKind::Lava) {
+            topLava = y;
+        }
+    }
+    EXPECT_EQ(topLava, floorY + lake.fill);
+}
+
+TEST(WorldGeneratorTest, CaveOpeningsReachSurface) {
+    // surface_guard 0: cave openings REACH the surface (carved surface
+    // cells) — over the calibrated sample region there are plenty.
+    // Control: the same chunk with surface_guard 4 (the pre-GEN-1 band,
+    // the surface cell excluded) carves no surface.
+    GenSetup s;
+    s.params = calibratedCaveParams();
+    const std::int64_t seed = 123456789;
+    auto res = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    const WorldGenerator& gen = *res;
+    const auto chunks = genColumns(gen, 4, 8, 0, 4);
+    int mouths = 0;
+    for (int x = 64; x <= 143; ++x) {
+        for (int z = 0; z <= 79; ++z) {
+            const int h = gen.surfaceHeight(x, z);
+            if (h < s.params.seaLevel) {
+                continue; // dry columns only
+            }
+            if (carvedAt(chunks, x, h, z)) {
+                ++mouths;
+            }
+        }
+    }
+    EXPECT_GE(mouths, 3) << "the calibrated region must open to the surface";
+
+    GenSetup s2;
+    s2.params = calibratedCaveParams();
+    s2.params.surfaceGuard = 4;
+    auto res2 = WorldGenerator::create(seed, s2.params, s2.biomes, s2.blocks);
+    ASSERT_TRUE(res2.ok()) << res2.error().message;
+    Chunk c;
+    res2->generateChunk(c, {4, 0, 0});
+    int surfaceCarved = 0;
+    for (int lx = 0; lx < kChunkSize; ++lx) {
+        for (int lz = 0; lz < kChunkSize; ++lz) {
+            const int x = 64 + lx;
+            const int h = res2->surfaceHeight(x, lz);
+            if (h < s2.params.seaLevel || h >= kChunkSize) {
+                continue; // dry + the surface cell is in this chunk
+            }
+            if (c.get(lx, h, lz) == BlockID::air()) {
+                ++surfaceCarved;
+            }
+        }
+    }
+    EXPECT_EQ(surfaceCarved, 0)
+        << "guard 4 never carves the surface cell (the pre-GEN-1 band)";
+}
+
+TEST(WorldGeneratorTest, CavesCrossSeedDifferSameSeedStable) {
+    // The cave field is seed-derived (like the lakes): the same seed
+    // regenerates the region byte-identically, a different seed changes
+    // the layout.
+    GenSetup s;
+    s.params = calibratedCaveParams();
+    const std::int64_t seed = 123456789;
+    auto aRes = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(aRes.ok()) << aRes.error().message;
+    auto bRes = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(bRes.ok()) << bRes.error().message;
+    auto cRes = WorldGenerator::create(seed + 1, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(cRes.ok()) << cRes.error().message;
+    const auto a = genColumns(*aRes, 4, 8, 0, 4);
+    const auto b = genColumns(*bRes, 4, 8, 0, 4);
+    const auto c = genColumns(*cRes, 4, 8, 0, 4);
+    int sameSeedDiff = 0, crossSeedDiff = 0;
+    for (const auto& [pos, chunk] : a) {
+        const Chunk& ob = b.at(pos);
+        const Chunk& oc = c.at(pos);
+        for (int i = 0; i < Chunk::kVolume; ++i) {
+            if (chunk.data()[i] != ob.data()[i]) {
+                ++sameSeedDiff;
+            }
+            if (chunk.data()[i] != oc.data()[i]) {
+                ++crossSeedDiff;
+            }
+        }
+    }
+    EXPECT_EQ(sameSeedDiff, 0) << "the same seed regenerates identical caves";
+    EXPECT_GT(crossSeedDiff, 500) << "a different seed changes the caves";
+}
+
+TEST(WorldGeneratorTest, OresUnaffectedByCaves) {
+    // Ores still replace deep stone only: with caves on, every ore cell is
+    // the SAME ore cell in the caves-off world (caves can only REMOVE ore
+    // sites where they carve air — never create or move them) — and the
+    // cave region still holds plenty of ore.
+    GenSetup s;
+    s.params = calibratedCaveParams();
+    const std::int64_t seed = 123456789;
+    auto onRes = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(onRes.ok()) << onRes.error().message;
+    WorldgenParams offParams = s.params;
+    offParams.cavesEnabled = false;
+    auto offRes =
+        WorldGenerator::create(seed, offParams, s.biomes, s.blocks);
+    ASSERT_TRUE(offRes.ok()) << offRes.error().message;
+    const auto on = genColumns(*onRes, 4, 8, 0, 4);
+    const auto off = genColumns(*offRes, 4, 8, 0, 4);
+    const BlockID coal = s.blocks.idForName("coal_ore");
+    const BlockID iron = s.blocks.idForName("iron_ore");
+    const BlockID lapis = s.blocks.idForName("lapis_ore");
+    int oreCells = 0, mismatched = 0;
+    for (const auto& [pos, chunk] : on) {
+        for (int i = 0; i < Chunk::kVolume; ++i) {
+            const BlockID id = chunk.data()[i];
+            if (id != coal && id != iron && id != lapis) {
+                continue;
+            }
+            ++oreCells;
+            if (off.at(pos).data()[i] != id) {
+                ++mismatched;
+            }
+        }
+    }
+    EXPECT_GT(oreCells, 1000) << "the cave region still holds plenty of ore";
+    EXPECT_EQ(mismatched, 0) << "no ore cell is created or moved by caves";
 }
 
 // -- ores --------------------------------------------------------------------
