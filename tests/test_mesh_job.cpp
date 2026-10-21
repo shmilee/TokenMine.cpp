@@ -77,8 +77,13 @@ BlockRegistry makeRegistry() {
     // Phase 87: stairs (cube textures, like the wall shape).
     auto stairs = reg.registerBlock(parseDef(
         R"({"id":"stairs","model":{"shape":"stairs","textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    // GEN-2: a stateful cross (the sapling: 8 stages, the stage visual
+    // scales the quads — the snapshot must carry the state byte).
+    auto sapling = reg.registerBlock(parseDef(
+        R"({"id":"sapling","properties":{"solid":false,"opaque":false,"transparent":true},)"
+        R"("model":{"shape":"cross","state_count":8,"state_default":0,"textures":{"cross":"t"}}})"));
     if (!stone.ok() || !glass.ok() || !water.ok() || !lava.ok() ||
-        !stairs.ok()) {
+        !stairs.ok() || !sapling.ok()) {
         ADD_FAILURE() << "test registry failed to build";
     }
     return reg;
@@ -188,6 +193,55 @@ TEST(MeshJobTest, SnapshotMeshMatchesLiveWorldMesh) {
         expectVerticesEqual(a.transparentVertices, b.transparentVertices);
         EXPECT_EQ(a.transparentIndices, b.transparentIndices);
     }
+}
+
+// Group 1b (GEN-2): the snapshot carries the per-instance STATE byte —
+// a staged sapling (the stateful cross) meshes bit-identically from the
+// snapshot and the live world (the worker mesher reads the stage through
+// the same World API; a snapshot that dropped the state array would mesh
+// the full-scale quad instead of the stage-scaled one).
+TEST(MeshJobTest, SnapshotCarriesSaplingStage) {
+    BlockRegistry reg = makeRegistry();
+    World live;
+    for (int dx = -1; dx <= 1; ++dx) {
+        for (int dz = -1; dz <= 1; ++dz) {
+            for (int cy = 0; cy < kVCols; ++cy) {
+                live.getOrCreateChunk({dx, cy, dz});
+            }
+        }
+    }
+    const BlockID sapling = reg.idForName("sapling");
+    // Stage 3 of 8 (scale 0.5) in the center column.
+    live.setBlock(8, 64, 8, sapling);
+    live.setBlockState(8, 64, 8, 3);
+    World snap;
+    for (int dx = -1; dx <= 1; ++dx) {
+        for (int dz = -1; dz <= 1; ++dz) {
+            for (int cy = 0; cy < kVCols; ++cy) {
+                const ChunkPos cp{dx, cy, dz};
+                const Chunk* c = live.findChunk(cp);
+                if (c != nullptr) {
+                    snap.insertSnapshotChunk(cp, *c);
+                }
+            }
+        }
+    }
+    const ChunkPos cp{0, 4, 0}; // layer 4 holds y = 64
+    const ChunkMeshData a = ChunkMesher(live, reg, kLayout()).mesh(cp);
+    const ChunkMeshData b = ChunkMesher(snap, reg, kLayout()).mesh(cp);
+    expectVerticesEqual(a.transparentVertices, b.transparentVertices);
+    EXPECT_EQ(a.transparentIndices, b.transparentIndices);
+    // And the stage actually scaled the quad (not the full cell): the
+    // center cell's quad corner sits at chunk-local (8.25, 0.25, 8.25) —
+    // the 0.5 scale around the cell centre (local (0.5, 0.5, 0.5)).
+    bool sawScaledCorner = false;
+    for (const MeshVertex& v : a.transparentVertices) {
+        if (v.position ==
+            Vec3 {8.25f, 0.25f, 8.25f}) {
+            sawScaledCorner = true;
+        }
+    }
+    EXPECT_TRUE(sawScaledCorner);
 }
 
 // Group 2: the snapshot World's void semantics — the six read faces

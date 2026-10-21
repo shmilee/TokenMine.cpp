@@ -43,6 +43,23 @@ struct GrowthStep {
     BlockID to;
 };
 
+// GEN-2: the action a sapling cell takes on a passed roll (the growth
+// stage IS the block's per-instance state — ENT-2; unlike a crop there is
+// no next block id to write, only the state byte / the tree).
+enum class SaplingAction {
+    Advance,  // stage < stateCount-1: bump the state byte to `stage`
+    Complete, // the final stage + the space fits: grow the tree of trunk
+              // height `height` (the game places the planTree cells)
+};
+
+// One sapling cell acting this frame (the cropGrowthSteps twin).
+struct SaplingStep {
+    BlockPos pos;
+    SaplingAction action;
+    int stage = 0;  // Advance: the NEW state (current + 1)
+    int height = 0; // Complete: the rolled trunk height (treeHeightRoll)
+};
+
 // The subset of `cropCells` whose current world block is a growth stage
 // (non-empty growsTo, matching the tracked id) and whose roll passed this
 // frame. A cell whose world block no longer matches the tracked id (stale
@@ -54,5 +71,36 @@ std::vector<GrowthStep> cropGrowthSteps(const World& world,
                                         const std::map<BlockPos, BlockID>& cropCells,
                                         std::uint64_t seed,
                                         std::uint64_t frame);
+
+// GEN-2: the SAPLING growth steps (the cropGrowthSteps twin over the
+// `m_saplings` tracked set — blocks with a `tree` object). Once per frame
+// (the same fixed 1/60 step the day cycle uses — a no-input run stays
+// byte-reproducible), each tracked cell, in position order:
+//   1. trust the world (the cell still holds the tracked sapling id — a
+//      stale entry yields no step, the crop guard);
+//   2. the soil gate: the cell BELOW holds one of the block's `plant_on`
+//      soils (the placement gate doubles as the growth gate — the design's
+//      one-growth-condition contract; absent list = unrestricted);
+//   3. the light gate: max(sky, block) at the sapling cell reaches the
+//      block's `growth_light` (0 = none);
+//   4. the roll: splitmix over (world seed + frame x golden step + the
+//      per-cell position hash, a dedicated salt — PITS #4's advancing
+//      state) passes when roll % growth_ticks == 0 (one stage every
+//      growth_ticks frames on average, the crop pace);
+//   5. the stage: the cell's per-instance state (the ENT-2 byte, the
+//      sentinel falling back to the block's state default) — below the
+//      final stage the step is an Advance (state + 1); at the final stage
+//      the rolled height (world/tree_shape treeHeightRoll — frame-
+//      INDEPENDENT, so a blocked retry re-checks the same tree) must FIT
+//      (every planTree cell air + dry + in-world, the root cell excepted
+//      — it holds the sapling) for the step to be a Complete; otherwise
+//      no step (the sapling waits, Minecraft's blocked-canopy rule).
+// Pure function of its arguments: same world + set + seed + frame ->
+// same steps.
+std::vector<SaplingStep> saplingGrowthSteps(const World& world,
+                                            const BlockRegistry& blocks,
+                                            const std::map<BlockPos, BlockID>& saplingCells,
+                                            std::uint64_t seed,
+                                            std::uint64_t frame);
 
 } // namespace mc

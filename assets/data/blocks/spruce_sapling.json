@@ -1,0 +1,28 @@
+{
+  "id": "spruce_sapling",
+  "properties": {
+    "hardness": 0.0,
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "flamable": true,
+    "drops": "spruce_sapling",
+    "plant_on": ["dirt", "grass"],
+    "growth_light": 9,
+    "growth_ticks": 120,
+    "tree": {
+      "trunk": "spruce_trunk",
+      "leaves": "spruce_leaves",
+      "min_height": 6,
+      "height_range": 3,
+      "leaf_radius": 2,
+      "shape": "spruce"
+    }
+  },
+  "model": {
+    "shape": "cross",
+    "state_count": 8,
+    "state_default": 0,
+    "textures": { "cross": "spruce_sapling" }
+  }
+}

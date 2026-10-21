@@ -1,0 +1,23 @@
+{
+  "id": "spruce_leaves",
+  "properties": {
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "light_opacity": 2,
+    "hardness": 0.2,
+    "drops": "spruce_leaves",
+    "chance_drops": [
+      { "item": "spruce_sapling", "count": 1, "chance": 0.05 },
+      { "item": "stick", "count": 1, "chance": 0.02 }
+    ],
+    "flamable": true
+  },
+  "model": {
+    "textures": {
+      "top": "spruce_leaves",
+      "side": "spruce_leaves",
+      "bottom": "spruce_leaves"
+    }
+  }
+}

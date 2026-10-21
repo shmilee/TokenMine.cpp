@@ -622,6 +622,37 @@
   （扫真实资产 3×3 列全区域 hasState=0）钉死；未来 bottom/deep 用 stateful
   名时该测试先暴露。`[ENT-2]`
 
+## 树生长（GEN-2）
+
+- **野外森林单橡种（MC 混生）** — 世界生成零触碰（worldgen trees 段 /
+  placeTrees / 生成器代码一行不改）：生成森林只有 wood+leaves 橡树，
+  spruce/birch 只经**种植**落地（树种差异 = 内容维度经 sapling，非
+  生成维度）。野外多树种 = 未来项（worldgen trees 段 species 数据 +
+  选择 roll + 演示区 clear 列强制橡 + **重锚门**——生成森林视觉变化
+  必然动基线）。`[GEN-2]`
+- **旧存档无 spruce/birch 来源** — starter 库存（hotbar.json `inventory`
+  段，槽 24/25/26 各 3 颗 sapling）只在**新世界**装载：读档整体替换
+  inventory（applySave 契约），旧存档的 27 槽是玩家的真实持有——
+  spruce/birch 在旧世界无来源（oak sapling 经既有 leaves 5% 掉落可达）。
+  有意为之：不向旧存档注入物品。`[GEN-2]`
+- **旋转副作用 = 潜行右键 sapling → stage+1 手工催熟** — ENT-2 旋转
+  泛化（任意 stateful 块 `(s+1)%stateCount`）在 sapling 上的表现：
+  潜行 + 右键 = 跳一阶段（stage 7 时回 0 = 重置）。**接受为特性**
+  （确定性，E2E/调试加速器）；不加 `state_rotates` 逃逸字段（YAGNI）。`[GEN-2]`
+- **斧对新木无效** — spruce/birch trunk 未加 3 镐/3 斧的
+  `fast_against` 清单（P67 契约精确集不变）：斧/镐对新木 = 基础
+  break_speed（hardness 2.0）。清单演进 = 独立未来项。`[GEN-2]`
+- **落树 = 一次性 updateRegion 主线程 ~5-8 ms** — 冠影重光照在
+  `placeGrownTree` 内 1 次过树 bbox（流体 tick 同款区域重光照，非逐格
+  updateLocal）：**玩家触发**（roll 过 + 阶段满 + 空间够），非每帧
+  成本；大视距下 bbox 跨 2-3 列 = 上限处可感知一帧填充，接受。
+  落树 ensureColumn：树跨入未加载列时收口同步补列（~1.6 ms/列既有
+  放置行为）。`[GEN-2]`
+- **sapling 土壤被挖不自毁** — MC 掉种子；项目 = 生长暂停等待
+  （土壤门失败 = 本帧无步，土壤恢复继续长）。`[GEN-2]`
+- **spruce/birch leaves 不掉苹果** — apple = oak 专属（既有 1/128 不动）；
+  新 leaves 的 chance_drops = 对应 sapling @ 0.05 + stick @ 0.02。`[GEN-2]`
+
 ## 数据 / 内容
 
 - **方块 per-instance 状态 = 仅楼梯朝向一种** — BlockState 概念仍未引入（附属、流体等级等需要时再设计）。`[Phase 2]`

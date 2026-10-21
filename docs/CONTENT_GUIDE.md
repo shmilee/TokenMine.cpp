@@ -53,7 +53,29 @@
 ```
 
 物品名必须已注册（未知名=启动报错）；列表不能为空、至多 9 项；每格初始为满堆栈
-（block 64 / 工具 1 / 材料 64）。新增工具或材料 = `assets/data/items/<name>.json`：
+（block 64 / 工具 1 / 材料 64）。
+
+**`inventory` 段（GEN-2，可选）**——初始**存储槽**填充（隐藏 starter：
+槽 [9, 26]，**非 hotbar = 无输入不渲染**）：
+
+```json
+{
+  "items": ["stone", "..."],
+  "inventory": [
+    { "slot": 24, "item": "oak_sapling", "count": 3 },
+    { "slot": 25, "item": "spruce_sapling", "count": 3 },
+    { "slot": 26, "item": "birch_sapling", "count": 3 }
+  ]
+}
+```
+
+条目**严格三元组 {slot, item, count}**（缺键/未知键点名拒）：slot ∈
+[9, 26]（hotbar 槽 = `items` 段的领地，越界点名）、item 已注册点名、
+count ∈ [1, maxStack] 点名、重复 slot 拒。缺省段 = 无 starter；
+**读档整体替换 inventory**（starter 只在新世界生效）。shipped =
+3 树种 sapling 各 3 颗（槽 24/25/26）。
+
+新增工具或材料 = `assets/data/items/<name>.json`：
 
 ```json
 {
@@ -617,6 +639,84 @@ air + 不重叠玩家）之后加一道**数据驱动土壤门**：
    加"某方块只能种在某土壤上" = 该方块 JSON 加 `plant_on` 数组，
    零核心代码。
 4. **无 format 变更**（format 9）。
+
+## 新增一个树种 / sapling（GEN-2，v1.0 任务表 8/29）
+
+树生长 = **可种植的 stateful sapling**（阶段 = ENT-2 的 per-instance
+状态 byte，非方块 id——与作物相反）+ `tree` 对象数据驱动落树。加一个
+树种 = 3 个方块 JSON（sapling + trunk + leaves）+ 纹理/atlas，不改核心
+（生长引擎/形状表/收口/rescan 全数据驱动）。
+
+1. **sapling 方块**（cross + 8 状态 + `tree` 对象）：
+
+   ```json
+   {
+     "id": "oak_sapling",
+     "properties": {
+       "hardness": 0.0, "solid": false, "opaque": false, "transparent": true,
+       "drops": "oak_sapling",          // 破坏掉自己（可再种）
+       "flamable": true,
+       "plant_on": ["dirt", "grass"],   // 放置门 + 生长门（一体，P53 字段复用）
+       "growth_light": 9,               // 光门（max(sky,block)，MC 值）
+       "growth_ticks": 120,             // 每阶段 roll 节奏（2 s/阶 ≈ 16 s/棵）
+       "tree": {                        // 严格 6 键（缺一/未知键/越域点名 tree.<key>）
+         "trunk": "wood",               //   树干块名（目录 load 后交叉校验存在）
+         "leaves": "leaves",            //   冠层块名（同上）
+         "min_height": 4,               //   树干高 [1,16]
+         "height_range": 3,             //   高差 [0,8]（roll ∈ [min, min+range]）
+         "leaf_radius": 2,              //   冠半径 [1,2]（仅 oak 形状表读）
+         "shape": "oak"                 //   ∈ {oak, spruce, birch}（形状表，见下）
+       }
+     },
+     "model": {
+       "shape": "cross",
+       "state_count": 8,                // tree 存在 ⇒ state_count ≥ 2（注册时点名拒）
+       "state_default": 0,              //   阶段 = 状态 byte 0..7（0 = 幼苗）
+       "textures": { "cross": "oak_sapling" }
+     }
+   }
+   ```
+
+   `growth_ticks` 与 `tree` 严格配对（tree 无 ticks = 点名拒；ticks 无
+   grows_to/tree = 无意义拒）。stage 视觉 = emitCross 按
+   `stateCount>0` 门控 quad 缩放 (stage+1)/stateCount（绕格心，MC
+   sapling 同款；无状态 cross 恒 scale 1 零变化）。
+2. **trunk 方块**：cube 实心 opaque（`hardness 2.0` = MC 原木、`drops`
+   自己、`flamable`）；**leaves 方块**：非 opaque 透明
+   （`light_opacity 2` = LGT-2 叶衰减、`hardness 0.2`、`drops` 自己、
+   `chance_drops` 含**对应 sapling** @ 0.05 + stick @ 0.02 = 种植闭环；
+   apple 保留 oak 专属）。
+3. **生长引擎**（自动，m_crops 四件套同款）：`Game::m_saplings`（
+   `map<BlockPos,BlockID>` 位置序）经 setBlock 收口维护 + 读档后
+   `rescanSaplings()` + 卸载保护。每帧（1/60 步长）纯函数
+   `saplingGrowthSteps`（world/growth，专用盐）：土壤门（plant_on）→
+   光门（growth_light）→ roll `% growth_ticks` → 阶段 < 7 =
+   `Advance`（`setBlockState` +1，**零光照成本**——状态不改光，ENT-2
+   约束）；阶段 = 7 = 高度 roll（`treeHeightRoll`，纯函数，**帧无关**
+   ——被挡重试滚同一棵树）+ fits（planTree 全格 air 无流体 y 界内）→
+   `Complete` = `placeGrownTree`（trunk 先冠后逐格 setBlock + **1 次
+   updateRegion** over 树 bbox = 冠影 LGT-2 可见）。放不下 = 本 roll
+   不完成等待重试（MC 天花板规则）。
+4. **形状表**（`world/tree_shape.{hpp,cpp}` 纯函数 `planTree`，
+   root = sapling 格 = trunk 底）：oak = (T-2,r),(T-1,r),(T,1)
+   **与 worldgen placeTrees 逐格同构**（单测钉死）/ spruce =
+   (T-2,2),(T-1,1),(T,1),(T+1,1) 下宽上尖锥 / birch =
+   (T-1,1),(T,1),(T+1,1) 细高小冠；(0,0) offset ≤ T-1 跳过（trunk 占位）、
+   半径 2 层圆角。**worldgen 零触碰**：野外森林保持单橡种（sapling
+   stateful ⇒ worldgen 放置源 init 不变量天然拒，多树种野外 = 未来项
+   需重锚）。
+5. **atlas 空位**（GEN-2 分配的 9 格，免重锚）：oak_sapling (10,1) /
+   spruce_sapling (11,1) / birch_sapling (12,1) / spruce_trunk_side
+   (13,1) / spruce_trunk_top (14,1) / birch_trunk_side (10,2) /
+   birch_trunk_top (11,2) / spruce_leaves (12,2) / birch_leaves (13,2)。
+   纹理 = generate_block_textures.py 新函数（salt 935-956，既有零变化）；
+   sapling 物品**无独立图标**（block item 以 3D cross 呈现，UI 惯例）。
+6. **存档**：sapling 格 = blockEdits + 阶段 = format 15 `states`
+   段（journal 派生直接覆盖：位置靠 block journal、值退出 live 读；
+   阶段推进零 block 写）；落树 = 纯 blockEdits 无 states。
+
+当前 shipped：oak（wood/leaves 复用）/ spruce / birch 三树种，starter
+库存各 3 颗（hotbar.json `inventory` 段，槽 24/25/26）。
 
 ## 调节玩家参数（config/config.json `player.*`，Phase 32）
 

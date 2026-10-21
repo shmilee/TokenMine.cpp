@@ -636,8 +636,106 @@ def torch(x, y):
     return (0, 0, 0, 0)  # transparent
 
 
+# --- GEN-2: the tree-growth content (3 saplings + 2 trunks x2 + 2 leaves) ----
+# New salts 935..956 (after the fence's 934); every existing texture stays
+# pixel-identical.
+
+def make_sapling(salt, leaf):
+    """GEN-2: a small sprout (the sapling cross tile): a 2-px green stem
+    from the base up to mid-tile, topped by three leaf blobs (left, right,
+    centre). Transparent elsewhere — the mesher draws it as two crossing
+    quads in the blending pass, the wheat/flower pattern."""
+    stem = (88, 128, 52)
+
+    def tile(x, y):
+        if 7 <= x <= 8 and 10 <= y <= 15:
+            n = noise(x, y, salt, 7)
+            return (clamp(stem[0] + n), clamp(stem[1] + n),
+                    clamp(stem[2] + n), 255)
+        for (cx, cy, r2) in ((4.5, 7.0, 5.0), (10.5, 7.0, 5.0),
+                             (7.5, 3.5, 4.5)):
+            dx, dy = x - cx, y - cy
+            if dx * dx + dy * dy <= r2:
+                n = noise(x, y, salt + 1, 9)
+                return (clamp(leaf[0] + n), clamp(leaf[1] + n),
+                        clamp(leaf[2] + n), 255)
+        return (0, 0, 0, 0)  # transparent
+    return tile
+
+
+def spruce_trunk_side(x, y):
+    """GEN-2: the spruce trunk side — the oak bark stripe pattern in a
+    darker, cooler brown (salts 941/942/943)."""
+    stripe = 8 if (x // 3) % 2 == 0 else 0
+    return (clamp(84 + stripe + noise(x, y, 941, 7)),
+            clamp(62 + stripe + noise(x, y, 942, 7)),
+            clamp(40 + stripe + noise(x, y, 943, 5)), 255)
+
+
+def spruce_trunk_top(x, y):
+    """GEN-2: the spruce trunk top — concentric growth rings, darker than
+    the oak rings (salts 944/945/946)."""
+    dx, dy = x - 7.5, y - 7.5
+    ring = int((dx * dx + dy * dy) ** 0.5)
+    light = 14 if ring % 2 == 0 else -10
+    return (clamp(104 + light + noise(x, y, 944, 5)),
+            clamp(78 + light + noise(x, y, 945, 5)),
+            clamp(48 + light + noise(x, y, 946, 5)), 255)
+
+
+def birch_trunk_side(x, y):
+    """GEN-2: the birch trunk side — pale white bark (salt 947) with dark
+    horizontal lenticel dashes (salts 948/949, a deterministic per-row
+    roll) — the Minecraft birch look."""
+    n = noise(x, y, 947, 6)
+    if h2(x // 4, y, 948) % 7 < 2 and 3 <= y <= 13:
+        m = noise(x, y, 949, 8)
+        return (clamp(120 + m), clamp(116 + m), clamp(108 + m), 255)
+    return (clamp(226 + n), clamp(222 + n), clamp(210 + n), 255)
+
+
+def birch_trunk_top(x, y):
+    """GEN-2: the birch trunk top — pale concentric rings
+    (salts 950/951/952)."""
+    dx, dy = x - 7.5, y - 7.5
+    ring = int((dx * dx + dy * dy) ** 0.5)
+    light = 8 if ring % 2 == 0 else -8
+    return (clamp(214 + light + noise(x, y, 950, 4)),
+            clamp(210 + light + noise(x, y, 951, 4)),
+            clamp(198 + light + noise(x, y, 952, 4)), 255)
+
+
+def spruce_leaves(x, y):
+    """GEN-2: the spruce leaves — the oak leaf pattern (salts 17/18/19/20)
+    in a darker green (salts 953/954)."""
+    if h2(x, y, 953) % 100 < 12:
+        return (0, 0, 0, 0)
+    return (clamp(44 + noise(x, y, 954, 12)),
+            clamp(96 + noise(x, y, 954, 12)),
+            clamp(48 + noise(x, y, 954, 10)), 255)
+
+
+def birch_leaves(x, y):
+    """GEN-2: the birch leaves — a lighter, yellow-er green
+    (salts 955/956)."""
+    if h2(x, y, 955) % 100 < 12:
+        return (0, 0, 0, 0)
+    return (clamp(96 + noise(x, y, 956, 12)),
+            clamp(170 + noise(x, y, 956, 12)),
+            clamp(72 + noise(x, y, 956, 10)), 255)
+
+
 TEXTURES = {
     **{name: make_wool_tile(name) for name in WOOL_PALETTE},
+    **{"oak_sapling": make_sapling(935, (110, 165, 60)),
+       "spruce_sapling": make_sapling(937, (72, 120, 52)),
+       "birch_sapling": make_sapling(939, (140, 185, 80)),
+       "spruce_trunk_side": spruce_trunk_side,
+       "spruce_trunk_top": spruce_trunk_top,
+       "birch_trunk_side": birch_trunk_side,
+       "birch_trunk_top": birch_trunk_top,
+       "spruce_leaves": spruce_leaves,
+       "birch_leaves": birch_leaves},
     **{f"wheat_{s}": make_wheat(s, 70 + s) for s in range(1, 8)},
     "stone": stone,
     "cobblestone": cobblestone,

@@ -1,0 +1,28 @@
+{
+  "id": "birch_sapling",
+  "properties": {
+    "hardness": 0.0,
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "flamable": true,
+    "drops": "birch_sapling",
+    "plant_on": ["dirt", "grass"],
+    "growth_light": 9,
+    "growth_ticks": 120,
+    "tree": {
+      "trunk": "birch_trunk",
+      "leaves": "birch_leaves",
+      "min_height": 5,
+      "height_range": 2,
+      "leaf_radius": 1,
+      "shape": "birch"
+    }
+  },
+  "model": {
+    "shape": "cross",
+    "state_count": 8,
+    "state_default": 0,
+    "textures": { "cross": "birch_sapling" }
+  }
+}

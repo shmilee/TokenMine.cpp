@@ -317,6 +317,42 @@
   "sheep_legs": [
    8,
    6
+  ],
+  "oak_sapling": [
+   10,
+   1
+  ],
+  "spruce_sapling": [
+   11,
+   1
+  ],
+  "birch_sapling": [
+   12,
+   1
+  ],
+  "spruce_trunk_side": [
+   13,
+   1
+  ],
+  "spruce_trunk_top": [
+   14,
+   1
+  ],
+  "birch_trunk_side": [
+   10,
+   2
+  ],
+  "birch_trunk_top": [
+   11,
+   2
+  ],
+  "spruce_leaves": [
+   12,
+   2
+  ],
+  "birch_leaves": [
+   13,
+   2
   ]
  }
 }

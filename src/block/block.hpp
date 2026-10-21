@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -75,6 +76,24 @@ struct ChanceDrop {
     std::string item; // the extra item name (non-empty once validated)
     int count = 0;    // how many (1..64, fits one stack once validated)
     double chance = 0.0; // per-break probability in (0, 1] once validated
+};
+
+// GEN-2: the data-driven tree a SAPLING grows into (the block's `tree`
+// object — a strict six-key nested object, the chance_drops-entry
+// precedent). All fields are validated at data load (pairing + range +
+// vocabulary, named `tree.<key>`); the trunk / leaves NAMES are
+// cross-checked against the registry at directory load (both must exist),
+// and a block with a `tree` object must be STATEFUL with at least two
+// states (state_count >= 2 — the growth stage IS the per-instance state,
+// ENT-2; rejected at registration). The game resolves the names to
+// BlockIDs into a world/tree_shape TreeSpec at init.
+struct TreeGrowData {
+    std::string trunk;      // the trunk block name (non-empty once validated)
+    std::string leaves;     // the canopy block name (non-empty once validated)
+    int minHeight = 0;      // [1, 16] once validated
+    int heightRange = 0;    // [0, 8] once validated
+    int leafRadius = 0;     // [1, 2] once validated (the Oak table reads it)
+    std::string shape;      // "oak" / "spruce" / "birch" once validated
 };
 
 // Behavioral properties. All fields have sensible defaults; JSON files only
@@ -249,6 +268,12 @@ struct BlockProperties {
     // data load, the grants_effect / grants_effects discipline). Merged
     // into this list at parse time.
     std::vector<std::string> beaconEffects;
+    // GEN-2: the tree this sapling grows into (the data `tree` object; see
+    // TreeGrowData). nullopt = not a sapling (the default). Requires
+    // growth_ticks (the per-stage roll pace — a `tree` block without it
+    // never completes) and state_count >= 2 (the stage IS the state,
+    // rejected at registration).
+    std::optional<TreeGrowData> tree;
 };
 
 // Which texture name is applied to each face group (full_cube shapes) — or
@@ -365,6 +390,9 @@ struct Block {
         return model.shape == BlockModel::Shape::Stairs ||
                model.stateCount > 0;
     }
+    // GEN-2: true when the block carries a `tree` object (a SAPLING — the
+    // growth engine tracks it, the game resolves its spec at init).
+    bool hasTree() const { return properties.tree.has_value(); }
     int stateCount() const {
         return model.shape == BlockModel::Shape::Stairs ? 4
                                                         : model.stateCount;

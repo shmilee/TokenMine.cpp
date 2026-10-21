@@ -1,0 +1,15 @@
+{
+  "id": "birch_trunk",
+  "properties": {
+    "hardness": 2.0,
+    "drops": "birch_trunk",
+    "flamable": true
+  },
+  "model": {
+    "textures": {
+      "top": "birch_trunk_top",
+      "side": "birch_trunk_side",
+      "bottom": "birch_trunk_top"
+    }
+  }
+}

@@ -55,6 +55,17 @@ BlockRegistry makeBlocks() {
     // count 4, default = stair_facing).
     blocks.registerBlock(parseJson(
         R"({"id":"stone_stairs","model":{"shape":"stairs","textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    // GEN-2: the first real stateful block — the oak sapling (8 stages,
+    // the tree object) + its tree references. The block edits / states
+    // cross-checks need them registered.
+    blocks.registerBlock(parseJson(
+        R"({"id":"wood","model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    blocks.registerBlock(parseJson(
+        R"({"id":"leaves","properties":{"solid":false,"opaque":false,"transparent":true},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    blocks.registerBlock(parseJson(
+        R"({"id":"oak_sapling","properties":{"solid":false,"opaque":false,"transparent":true,"growth_ticks":120,"tree":{"trunk":"wood","leaves":"leaves","min_height":4,"height_range":3,"leaf_radius":2,"shape":"oak"}},)"
+        R"("model":{"shape":"cross","state_count":8,"state_default":0,"textures":{"cross":"t"}}})"));
     return blocks;
 }
 
@@ -1211,6 +1222,67 @@ TEST(SaveRoundTripTest, StatesRoundTrip) {
     const BlockPos sp {3, 53, 1};
     EXPECT_EQ(out->states[0].pos, sp);
     EXPECT_EQ(out->states[0].state, 2); // south (the rotated facing)
+}
+
+// GEN-2: the sapling's growth stage rides the format-15 `states` segment
+// (the block edit carries the sapling, the state entry the stage — the
+// journal derivation reads the live value at exit, the load's cross-check
+// pins the entry set to the stateful block cells).
+TEST(SaveRoundTripTest, SaplingStageRoundTrip) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.blockEdits.push_back({BlockPos {5, 53, 5}, "oak_sapling"});
+    std::sort(s.blockEdits.begin(), s.blockEdits.end(),
+              [](const SavedBlockEdit& a, const SavedBlockEdit& b) {
+                  return a.pos < b.pos;
+              });
+    s.states.push_back({BlockPos {5, 53, 5}, 4}); // stage 4 of 8
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    ASSERT_EQ(out->states.size(), 1u);
+    const BlockPos sp {5, 53, 5};
+    EXPECT_EQ(out->states[0].pos, sp);
+    EXPECT_EQ(out->states[0].state, 4);
+    // The block edit survived too (the sapling IS the tracked cell).
+    bool found = false;
+    for (const auto& e : out->blockEdits) {
+        found = found || (e.pos == sp && e.blockName == "oak_sapling");
+    }
+    EXPECT_TRUE(found);
+}
+
+// GEN-2: a GROWN tree is pure block edits (trunk + leaves — no stateful
+// block among them) and carries NO states entry: the completion's cells
+// are non-stateful, so the save's state segment stays empty (the
+// cross-check would reject a stray entry for a non-stateful cell).
+TEST(SaveRoundTripTest, GrownTreeSaveCarriesNoStates) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    const BlockPos root {5, 53, 5};
+    // The oak T = 4 plan (a subset is enough — every cell non-stateful).
+    for (int i = 0; i < 4; ++i) {
+        s.blockEdits.push_back({BlockPos {root.x, root.y + i, root.z},
+                                "wood"});
+    }
+    s.blockEdits.push_back({BlockPos {root.x, root.y + 4, root.z},
+                            "leaves"});
+    s.blockEdits.push_back({BlockPos {root.x + 1, root.y + 3, root.z},
+                            "leaves"});
+    std::sort(s.blockEdits.begin(), s.blockEdits.end(),
+              [](const SavedBlockEdit& a, const SavedBlockEdit& b) {
+                  return a.pos < b.pos;
+              });
+    // No states entry — the grown tree is stateless.
+    ASSERT_TRUE(s.states.empty());
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    EXPECT_EQ(j->find("states")->size(), 0u); // the key, empty
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_TRUE(out->states.empty());
+    EXPECT_EQ(out->blockEdits.size(), s.blockEdits.size());
 }
 
 TEST(SaveParseTest, Format15RequiresStatesKey) {

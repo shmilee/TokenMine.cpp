@@ -971,3 +971,82 @@ TEST(ChunkMesherTest, Phase99GlassPanePairCullsSharedRim) {
     }
     EXPECT_EQ(sideRims, 8);
 }
+
+// -- GEN-2: the stageful cross (the sapling) scales with its state -------
+
+namespace {
+
+// A cross registry + a STATEFUL cross (the sapling fixture: 8 states,
+// default 0 — the shipped sapling pair).
+BlockRegistry makeSaplingRegistry() {
+    BlockRegistry reg = makeCrossRegistry();
+    auto sapling = reg.registerBlock(parseDef(
+        R"({"id":"sapling","properties":{"solid":false,"opaque":false,)"
+        R"("transparent":true},"model":{"shape":"cross","state_count":8,)"
+        R"("state_default":0,"textures":{"cross":"sap"}}})"));
+    if (!sapling.ok()) {
+        ADD_FAILURE() << sapling.error().message;
+    }
+    return reg;
+}
+
+} // namespace
+
+TEST(ChunkMesherTest, SaplingCrossScalesWithStage) {
+    // Stage 3 of 8: scale = (3+1)/8 = 0.5 — every quad corner re-anchored
+    // around the cell centre (8.5, 4.5, 8.5 for the cell at (8, 4, 8)):
+    // the unit diagonal shrinks to half, centred.
+    BlockRegistry reg = makeSaplingRegistry();
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("sapling"));
+    world.setBlockState(8, 4, 8, 3);
+    const auto data =
+        ChunkMesher(world, reg, makeLayout({"t", "f", "sap"})).mesh({0, 0, 0});
+    ASSERT_EQ(data.transparentVertices.size(), 8u);
+    // Quad A at half scale: (8.25,4.25,8.25) (8.75,4.25,8.75)
+    // (8.75,4.75,8.75) (8.25,4.75,8.25) — the cell centre (8.5,4.5,8.5)
+    // plus (corner - centre) x 0.5.
+    const std::vector<Vec3> expectedA = {
+        {8.25f, 4.25f, 8.25f}, {8.75f, 4.25f, 8.75f},
+        {8.75f, 4.75f, 8.75f}, {8.25f, 4.75f, 8.25f},
+    };
+    for (int i = 0; i < 4; ++i) {
+        EXPECT_EQ(data.transparentVertices[i].position, expectedA[i]);
+    }
+    // Stage 7 (the final): scale 1 — the full-cell diagonals again.
+    world.setBlockState(8, 4, 8, 7);
+    const auto full =
+        ChunkMesher(world, reg, makeLayout({"t", "f", "sap"})).mesh({0, 0, 0});
+    const std::vector<Vec3> expectedFull = {
+        {8, 4, 8},  {9, 4, 9},  {9, 5, 9},  {8, 5, 8},
+        {9, 4, 8},  {8, 4, 9},  {8, 5, 9},  {9, 5, 8},
+    };
+    ASSERT_EQ(full.transparentVertices.size(), expectedFull.size());
+    for (std::size_t i = 0; i < expectedFull.size(); ++i) {
+        EXPECT_EQ(full.transparentVertices[i].position, expectedFull[i]);
+    }
+}
+
+TEST(ChunkMesherTest, StatelessCrossRegressionScaleOne) {
+    // A cross WITHOUT a state pair (the wheat / torch / flower pattern)
+    // keeps the EXACT pre-GEN-2 positions: the cell diagonals, full cell
+    // — the structural-immunity contract (a fresh world is stateless, so
+    // the gate never fires). The sentinel state read must not perturb it.
+    BlockRegistry reg = makeCrossRegistry();
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("flower"));
+    // Even a stray state byte on the cell (impossible in a fresh world —
+    // the choke point never writes one to a stateless block) must not
+    // change the mesh: the gate is the block's stateCount, not the byte.
+    world.setBlockState(8, 4, 8, 3);
+    const auto data =
+        ChunkMesher(world, reg, makeLayout({"t", "f"})).mesh({0, 0, 0});
+    const std::vector<Vec3> expected = {
+        {8, 4, 8},  {9, 4, 9},  {9, 5, 9},  {8, 5, 8},
+        {9, 4, 8},  {8, 4, 9},  {8, 5, 9},  {9, 5, 8},
+    };
+    ASSERT_EQ(data.transparentVertices.size(), expected.size());
+    for (std::size_t i = 0; i < expected.size(); ++i) {
+        EXPECT_EQ(data.transparentVertices[i].position, expected[i]);
+    }
+}

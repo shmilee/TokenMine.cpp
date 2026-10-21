@@ -9,7 +9,8 @@
     "drops": "leaves",
     "chance_drops": [
       { "item": "stick", "count": 1, "chance": 0.02 },
-      { "item": "apple", "count": 1, "chance": 0.0078125 }
+      { "item": "apple", "count": 1, "chance": 0.0078125 },
+      { "item": "oak_sapling", "count": 1, "chance": 0.05 }
     ],
     "flamable": true
   },

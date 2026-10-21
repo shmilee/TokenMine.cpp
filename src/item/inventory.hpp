@@ -15,12 +15,35 @@
 #pragma once
 
 #include <cstddef>
+#include <string>
 #include <vector>
 
+#include "core/json.hpp"
 #include "item/item.hpp"
 #include "item/item_registry.hpp"
 
 namespace mc {
+
+// GEN-2: one starter-storage fill entry (hotbar.json's `inventory`
+// section): the resolved item + count for a STORAGE slot (the hidden-
+// starter pattern — the saplings sit in storage, not the hotbar, so a
+// no-input run renders nothing new).
+struct StarterSlot {
+    int slot = 0;    // [Inventory::kHotbarSize, Inventory::kTotalSize)
+    ItemID item;     // resolved against the registry
+    int count = 0;   // [1, the item's max stack]
+};
+
+// GEN-2: the strict parse of hotbar.json's `inventory` section (the
+// hotbar `items` fill's twin, storage-side). Absent section = an empty
+// fill (the pre-GEN-2 behavior). Every entry is the strict triple
+// {slot, item, count} (unknown fields / a missing key rejected by name):
+// slot in [kHotbarSize, kTotalSize) (a hotbar slot belongs to the `items`
+// fill — the ranges are disjoint, so no overwrite), item registered,
+// count in [1, maxStack], no duplicate slot. Pure function of its
+// arguments (unit-tested — the game applies the result to the inventory).
+Result<std::vector<StarterSlot>> parseStarterSlots(const Json& hotbar,
+                                                   const ItemRegistry& items);
 
 class Inventory {
 public:

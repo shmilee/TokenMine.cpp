@@ -74,6 +74,7 @@
 #include "world/fluid.hpp"
 #include "world/lighting.hpp"
 #include "world/raycast.hpp"
+#include "world/tree_shape.hpp"
 #include "world/world.hpp"
 #include "world/world_generator.hpp"
 
@@ -549,6 +550,21 @@ private:
     // buildScene — after a save load, whose block edits restore the
     // planted crops (no save-format field: the block id IS the stage).
     void rescanCrops();
+    // GEN-2: rebuilds the sapling tracking set from the world — every cell
+    // whose block carries a `tree` object (the rescanCrops twin; the
+    // stage is NOT rescanned, it lives in the world's state byte and
+    // survives in the format-15 save segment). Runs at the end of
+    // buildScene — after the save load, whose block edits restore the
+    // planted saplings.
+    void rescanSaplings();
+    // GEN-2: places a grown tree at a COMPLETED sapling cell: the
+    // planTree cells (the rolled trunk height) through the setBlock
+    // choke point — trunk column first (the sapling cell becomes the
+    // trunk base), canopy after — then ONE lighting updateRegion over the
+    // tree's bounding box (the canopy shadow, LGT-2 makes it visible) and
+    // the tracking entry drops (the choke point already erased it when
+    // the root cell became trunk — this is the defensive belt).
+    void placeGrownTree(const BlockPos& saplingPos, int height);
     // Rebuilds m_flammableChunks from the world (end of buildScene: the
     // generated demo area, or the save's restored chunks).
     void rescanFlammableChunks();
@@ -872,6 +888,21 @@ private:
     // rescanCrops() after load. std::map: position-sorted, so the per-
     // frame growth ticks iterate deterministically.
     std::map<BlockPos, BlockID> m_crops;
+
+    // GEN-2 tree growth: the cells holding a SAPLING (a block with a
+    // `tree` object — the growth P48 pattern, the m_crops twin: maintained
+    // through the setBlock choke point, rebuilt by rescanSaplings() after
+    // load). The GROWTH STAGE is NOT stored here — it is the cell's
+    // per-instance state (ENT-2, the format-15 `states` save segment);
+    // this set only tracks WHICH cells roll. std::map: position-sorted,
+    // so the per-frame sapling ticks iterate deterministically.
+    std::map<BlockPos, BlockID> m_saplings;
+    // GEN-2: the RESOLVED tree specs (the sapling's `tree` names ->
+    // BlockIDs, the init-resolved m_campfireLitId pattern — the registry
+    // load validates the names exist, so this map is the placement's
+    // fast path). Keyed by the sapling's block id; empty = no sapling
+    // content (the structurally-inert pattern).
+    std::map<BlockID, TreeSpec> m_treeSpecs;
 
     // Phase 83 beacon: the cells holding a block with a non-empty
     // beaconEffect property (a beacon — the growth P48 pattern: maintained

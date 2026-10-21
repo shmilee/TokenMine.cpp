@@ -20,7 +20,7 @@
 | STRM 流送与内存 | ~~STRM-1 环形状~~ 完成 | | | | | |
 | PIPE 帧管线与并发 | ~~PIPE-1 worker网格化~~ 完成 | ~~PIPE-2 存档增量~~ 完成 | | | | |
 | LGT 光照 | ~~LGT-1 union-region~~ 砍除 | ~~LGT-2 叶子光衰减~~ 完成 | | | | |
-| GEN 世界与生成 | ~~GEN-1 面条洞穴~~ 完成 | GEN-2 树生长 | GEN-3 矿脉形态 | | | |
+| GEN 世界与生成 | ~~GEN-1 面条洞穴~~ 完成 | ~~GEN-2 树生长~~ 完成 | GEN-3 矿脉形态 | | | |
 | FLUID 流体 | FLUID-1 水量守恒 | FLUID-2 游泳划水 | | | | |
 | ENT 实体/Mob/移动 | ENT-1 四肢摆动 | ~~ENT-2 BlockState★~~ 完成 | ENT-3 mob踏阶 | ENT-4 水体交互 | | |
 | SURV 生存/战斗/效果 | SURV-1 护甲 | SURV-2 氧气窒息 | SURV-3 耐久 | SURV-4 药水饮用 | SURV-5 mob效果 | |
@@ -54,7 +54,7 @@
 
 ### GEN 世界与生成
 - ~~**GEN-1 面条洞穴**~~ — **完成（2026-10-21 夜）**：单噪声奶酪洞 → **两 3D value-noise 中位带相交管状隧道**（`|n1−0.5|<T ∧ |n2−0.5|<T`，MC spaghetti 同款；valueNoise3 既有原语零新噪声代码、n2 嵌套短路仅 ~12% 格求值）+ **surface_guard 0 = 洞口**（显式改判，原表达式 guard 0 仍结构性排除表面格）+ **spawn_clear_columns 2**（原点 ±2 列整列不挖，per-chunk 早退 = 出生/演示区任意 seed 结构安全）+ **每湖 lava 带排除盒**（create() 预计算 ResolvedLake，placeLavaLakes 改读预存 floorY 顺带消 per-chunk 重扫）；标定（纯生成器探针，零调参轮定稿 0.09/0.06/0/2）：挖除 5.38% / 洞口 94.7·64×64⁻¹ / run 宽 p90 6·5 / clear+5 湖盒 A/B 零差；gen 1.17 ms/列（低于现状 1.6）；零 format（旧存档新洞 = P86/88/93 先例）；base18 第 84 门 = **结构性免疫不重锚**（新 ×2 与 gate 83 锚字节一致，A/B 1 px 远洞剪影 = clear 区外预期差异）；1240/1240（+14 新 + 1 迁移）；E2E：S2 洞口静态 ×2 RAW + A/B 73k px / S3 跨 seed + seed9 ×2 savenorm EXACT / S4a 深湖中心掩码零差（排除盒）/ S4b 表面湖 rim+盆盒恒等、每世界确定（跨世界溢出形态差 = 世界演进预期）/ S6 点名拒绝 / **S2b 进洞走路推迟**（用户在场补 ~2 min）
-- **GEN-2 树生长** — 树种类差异 + 生长阶段，**依赖 ENT-2**（世界条）
+- ~~**GEN-2 树生长**~~ — **完成（2026-10-22 夜）**：3 树种可种植 sapling（oak 复用 wood/leaves + spruce/birch 新块；块 id 路线，stateful cross 块 = ENT-2 state_count 8 即生长 stage）+ `tree` 对象 6 键严格解析（init 交叉校验含 tree⇒state_count≥2）+ **m_crops 平行生长引擎**（saplingGrowthSteps 纯函数：plant_on 土壤门 + growth_light 9 门 + roll%ticks 120 → Advance 状态+1 零光照成本 / 终阶段+fits → 落树）+ **`world/tree_shape` 纯几何**（planTree 3 形状表：oak 与 placeTrees 逐格同构【单测对照钉死】/ spruce 下宽上尖锥 / birch 细高小冠 + treeHeightRoll 新盐 PITS #4）+ **stage 视觉 = emitCross 绕格心缩放 (stage+1)/8**（无状态 cross 恒 scale 1 位级零变化）+ **落树 = placeGrownTree**（逐格 setBlock + 1 次 updateRegion bbox = LGT-2 冠影）+ 内容闭环（3 leaves chance_drops += sapling @0.05【oak = P55 演进】/ hotbar.json 新 `inventory` 段 3 sapling 各 3 颗入隐藏槽 24-26 = 不渲染）+ 9 新 block tile（salt 935 起 / 9 atlas 空位免重锚 / 既有 PNG 零变化）；**世界生成零触碰**（sapling stateful ⇒ ENT-2 init 不变量天然拒）；1285/1285（+25 新 + 2 内容演进【P55 掉落集 2→3 / P63 可燃 10→17】）；base18 **第 86 门 = 结构性免疫不重锚**（新 ×2 与门 84 锚字节一致）；E2E：gen2_scan 探针预计算选点（PITS #208 纪律）+ S2 落树场景 ×2 RAW + savenorm EXACT + 树 55 格与 planTree 逐格一致 + 截图树像素 / S3 推进对照 **stage 4 = 探针预计算逐帧一致** + A/B 324k px / S6 点名拒绝；**偏离**：野外森林单橡种（worldgen 多树种 = 未来项需重锚）/ 旧存档无 spruce-birch 来源（oak 经 leaves 可达）/ 潜旋 sapling = stage+1 手工催熟（接受为特性）/ 斧对新木无效；晨间输入三项推迟（放 sapling/潜旋催熟/破坏掉 self）。**GEN 行剩 GEN-3 = GEN-2 完成时 GEN 行 2/3**
 - **GEN-3 矿脉形态** — 随机游走脉 → MC 3×2×1 旋转椭球脉（世界条）
 
 ### FLUID 流体
@@ -153,3 +153,9 @@
   迁移 + init 不变量【worldgen 放置源禁 stateful】+ 双门控数据驱动
   state_count/state_default；1260/1240；门 85 结构性免疫不重锚；E2E A/B
   298k px = 朝向首次像素级验证；晨间潜旋回归推迟）。发布 **v0.3.0**。
+- 2026-10-22（夜，夜间自主推进）：GEN-2 完成（树生长：3 树种 sapling +
+  tree 对象 + m_crops 平行生长引擎 + tree_shape 纯几何 3 形状 + emitCross
+  stage 缩放 + 落树 placeGrownTree + 内容闭环 leaves 掉落/隐藏 starter；
+  1285/1260；门 86 结构性免疫不重锚；E2E 探针预计算选点 + 落树 ×2 RAW +
+  stage 4 逐帧一致 + A/B 324k px + S6 点名；世界生成零触碰）。发布
+  **v0.4.0**。GEN 行 2/3（剩 GEN-3 矿脉形态）。

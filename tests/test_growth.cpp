@@ -9,12 +9,15 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "block/block_registry.hpp"
 #include "world/growth.hpp"
 #include "world/lighting.hpp"
+#include "world/tree_shape.hpp"
 #include "world/world.hpp"
 
 using namespace mc;
@@ -520,4 +523,375 @@ TEST(GrowthEnvTest, LavaNearSoilDoesNotWet) {
     // And water at the same spot DOES wet (the wet path stays alive).
     EnvScene wet(reg, "soil", 0, 2);
     EXPECT_GT(wet.stepsOver(reg, 42, 200), drySteps);
+}
+
+// ---------------------------------------------------------------------------
+// GEN-2 sapling growth (saplingGrowthSteps): the cropGrowthSteps twin over
+// the `tree` blocks — the stage is the per-instance STATE (ENT-2), the
+// completion plans the tree (world/tree_shape).
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// A sapling definition: the cross + the 8-state stage pair + the soil
+// gate + the light gate + the tree object. `ticks` 1 makes the roll pass
+// every frame (the exact-sequence pattern); height_range 0 pins the
+// rolled height at minH (the fits tests need a deterministic plan).
+std::string saplingDef(int ticks, int minH, int range, int radius,
+                       const char* shape, int light) {
+    return std::string("{\"id\":\"sapling\",\"properties\":{\"hardness\":0.0,") +
+        "\"solid\":false,\"opaque\":false,\"transparent\":true,"
+        "\"plant_on\":[\"soil\"],\"growth_light\":" + std::to_string(light) +
+        ",\"growth_ticks\":" + std::to_string(ticks) +
+        ",\"tree\":{\"trunk\":\"trunkblk\",\"leaves\":\"leavesblk\","
+        "\"min_height\":" + std::to_string(minH) +
+        ",\"height_range\":" + std::to_string(range) +
+        ",\"leaf_radius\":" + std::to_string(radius) +
+        ",\"shape\":\"" + shape + "\"}" +
+        "},\"model\":{\"shape\":\"cross\",\"state_count\":8,"
+        "\"state_default\":0,\"textures\":{\"cross\":\"sap\"}}}";
+}
+
+BlockRegistry saplingRegistry(int ticks, int minH, int range, int radius,
+                              const char* shape, int light) {
+    BlockRegistry reg;
+    auto soil = reg.registerBlock(parseDef(cubeDef("soil")));
+    auto stone = reg.registerBlock(parseDef(cubeDef("stone")));
+    auto trunk = reg.registerBlock(parseDef(cubeDef("trunkblk")));
+    auto leaves = reg.registerBlock(parseDef(
+        R"({"id":"leavesblk","properties":{"solid":false,"opaque":false,"transparent":true},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    auto sapling = reg.registerBlock(parseDef(
+        saplingDef(ticks, minH, range, radius, shape, light)));
+    if (!soil.ok() || !stone.ok() || !trunk.ok() || !leaves.ok() ||
+        !sapling.ok()) {
+        throw std::runtime_error("fixture failed");
+    }
+    return reg;
+}
+
+// One sapling at (8, 2, 8) over soil (8, 1, 8), the light set at the
+// sapling cell. The tracking set mirrors the game's choke point.
+struct SaplingScene {
+    World world;
+    std::map<BlockPos, BlockID> saplings;
+    BlockID soil;
+    BlockID stone;
+    BlockID trunk;
+    BlockID leaves;
+    BlockID sapling;
+    const BlockPos pos {8, 2, 8};
+
+    SaplingScene(BlockRegistry reg, int light)
+        : soil(reg.idForName("soil")), stone(reg.idForName("stone")),
+          trunk(reg.idForName("trunkblk")),
+          leaves(reg.idForName("leavesblk")),
+          sapling(reg.idForName("sapling")) {
+        world.getOrCreateChunk({0, 0, 0});
+        world.setBlock(pos.x, pos.y - 1, pos.z, soil);
+        world.setBlock(pos.x, pos.y, pos.z, sapling);
+        world.setBlockState(pos.x, pos.y, pos.z, 0);
+        saplings[pos] = sapling;
+        if (light > 0) {
+            world.findChunkMut({0, 0, 0})->setSkyLightAt(pos.x, pos.y, pos.z,
+                                                          light);
+        }
+    }
+};
+
+// Apply one frame's steps like the game does (Advance -> setBlockState;
+// Complete -> the planTree cells through setBlock + the tracking drop).
+void saplingFrame(World& world, const BlockRegistry& reg,
+                  std::map<BlockPos, BlockID>& saplings, std::uint64_t seed,
+                  std::uint64_t frame, int& advances, int& completes,
+                  int& outHeight) {
+    const std::vector<SaplingStep> steps =
+        saplingGrowthSteps(world, reg, saplings, seed, frame);
+    for (const SaplingStep& s : steps) {
+        if (s.action == SaplingAction::Advance) {
+            world.setBlockState(s.pos.x, s.pos.y, s.pos.z,
+                                static_cast<std::uint8_t>(s.stage));
+            ++advances;
+        } else {
+            const BlockID id = saplings.at(s.pos);
+            const TreeSpec spec = treeSpecFromBlock(reg.at(id));
+            outHeight = s.height;
+            for (const TreeCell& c : planTree(s.height, spec)) {
+                world.setBlock(s.pos.x + c.offset.x, s.pos.y + c.offset.y,
+                               s.pos.z + c.offset.z,
+                               c.trunkCell ? reg.idForName("trunkblk")
+                                           : reg.idForName("leavesblk"));
+            }
+            saplings.erase(s.pos);
+            ++completes;
+        }
+    }
+}
+
+} // namespace
+
+TEST(SaplingGrowthTest, EmptyAndStaleSetsYieldNoSteps) {
+    const BlockRegistry reg = saplingRegistry(1, 4, 0, 2, "oak", 9);
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    std::map<BlockPos, BlockID> empty;
+    EXPECT_TRUE(saplingGrowthSteps(world, reg, empty, 42, 0).empty());
+    // Tracked, but the cell holds air (stale) -> no step.
+    std::map<BlockPos, BlockID> stale;
+    stale[{3, 4, 5}] = reg.idForName("sapling");
+    EXPECT_TRUE(saplingGrowthSteps(world, reg, stale, 42, 0).empty());
+}
+
+TEST(SaplingGrowthTest, SoilAndLightGates) {
+    // The soil gate (plant_on = ["soil"]): air below / the wrong block
+    // below -> no step; the soil below -> the step runs (ticks 1 = the
+    // roll always passes; light 15 = the light gate open).
+    {
+        const BlockRegistry reg = saplingRegistry(1, 4, 0, 2, "oak", 9);
+        SaplingScene s(reg, 15);
+        s.world.setBlock(s.pos.x, s.pos.y - 1, s.pos.z, BlockID::air());
+        EXPECT_TRUE(
+            saplingGrowthSteps(s.world, reg, s.saplings, 7, 0).empty());
+    }
+    {
+        const BlockRegistry reg = saplingRegistry(1, 4, 0, 2, "oak", 9);
+        SaplingScene s(reg, 15);
+        s.world.setBlock(s.pos.x, s.pos.y - 1, s.pos.z, s.stone);
+        EXPECT_TRUE(
+            saplingGrowthSteps(s.world, reg, s.saplings, 7, 0).empty());
+    }
+    {
+        const BlockRegistry reg = saplingRegistry(1, 4, 0, 2, "oak", 9);
+        SaplingScene s(reg, 15);
+        const auto steps = saplingGrowthSteps(s.world, reg, s.saplings, 7, 0);
+        ASSERT_EQ(steps.size(), 1u);
+        EXPECT_EQ(steps[0].pos, s.pos);
+    }
+    // The light gate (growth_light 9): 8 blocks, 9 passes, 11 passes
+    // (the under-canopy value a LGT-2 crown would leave).
+    {
+        const BlockRegistry reg = saplingRegistry(1, 4, 0, 2, "oak", 9);
+        SaplingScene s(reg, 8);
+        EXPECT_TRUE(
+            saplingGrowthSteps(s.world, reg, s.saplings, 7, 0).empty());
+    }
+    {
+        const BlockRegistry reg = saplingRegistry(1, 4, 0, 2, "oak", 9);
+        SaplingScene s(reg, 9);
+        EXPECT_FALSE(
+            saplingGrowthSteps(s.world, reg, s.saplings, 7, 0).empty());
+    }
+    {
+        const BlockRegistry reg = saplingRegistry(1, 4, 0, 2, "oak", 9);
+        SaplingScene s(reg, 11);
+        EXPECT_FALSE(
+            saplingGrowthSteps(s.world, reg, s.saplings, 7, 0).empty());
+    }
+}
+
+TEST(SaplingGrowthTest, MaturesThroughStagesAndCompletes) {
+    // Ticks 1: every frame the gates pass, the stage advances (0..7 =
+    // seven Advances), then the final stage completes (one Complete with
+    // the pinned height 4 — height_range 0). The stage IS the state byte:
+    // the world's state tracks the sapling through the run.
+    const BlockRegistry reg = saplingRegistry(1, 4, 0, 2, "oak", 9);
+    SaplingScene s(reg, 15);
+    int advances = 0, completes = 0, height = 0;
+    for (std::uint64_t f = 0; f < 30;
+         ++f, saplingFrame(s.world, reg, s.saplings, 42, f, advances,
+                           completes, height)) {
+        if (completes > 0) {
+            break;
+        }
+    }
+    EXPECT_EQ(advances, 7);
+    EXPECT_EQ(completes, 1);
+    EXPECT_EQ(height, 4);
+    // The grown tree: the exact planTree cells (oak T = 4 — the
+    // worldgen's placeTrees geometry), the root cell is the trunk base,
+    // the sapling is gone from the tracking set.
+    const TreeSpec spec = treeSpecFromBlock(reg.at(s.sapling));
+    const std::vector<TreeCell> plan = planTree(4, spec);
+    for (const TreeCell& c : plan) {
+        const BlockID want = c.trunkCell ? s.trunk : s.leaves;
+        EXPECT_EQ(
+            s.world.getBlock(s.pos.x + c.offset.x, s.pos.y + c.offset.y,
+                             s.pos.z + c.offset.z),
+            want)
+            << "(" << c.offset.x << "," << c.offset.y << "," << c.offset.z
+            << ")";
+    }
+    EXPECT_EQ(s.world.getBlock(s.pos.x, s.pos.y, s.pos.z), s.trunk);
+    EXPECT_TRUE(s.saplings.empty());
+    // Neighbors OUTSIDE the plan stayed untouched (the soil below the
+    // root; air three over — the plan reaches only to x + 2).
+    EXPECT_EQ(s.world.getBlock(s.pos.x, s.pos.y - 1, s.pos.z), s.soil);
+    EXPECT_EQ(s.world.getBlock(s.pos.x + 3, s.pos.y, s.pos.z),
+              BlockID::air());
+}
+
+TEST(SaplingGrowthTest, StochasticPaceAdvances) {
+    // The shipped pace (120): over a 20k-frame window the sapling
+    // advances all 7 stages and completes (the expected ~166 roll
+    // passes make this deterministic in practice — the exact sequence).
+    const BlockRegistry reg = saplingRegistry(120, 4, 0, 2, "oak", 9);
+    SaplingScene s(reg, 15);
+    int advances = 0, completes = 0, height = 0;
+    for (std::uint64_t f = 0; f < 20000 && completes == 0;
+         ++f, saplingFrame(s.world, reg, s.saplings, 999, f, advances,
+                           completes, height)) {
+    }
+    EXPECT_EQ(completes, 1);
+    EXPECT_EQ(advances, 7);
+    EXPECT_EQ(height, 4);
+    // Seed decorrelation: two FRESH scenes under different seeds take
+    // their first step on different frames (a lockstep bug would match).
+    const auto firstStepFrame = [](const BlockRegistry& reg2,
+                                   std::uint64_t seed) {
+        SaplingScene s2(reg2, 15);
+        for (std::uint64_t f = 0; f < 20000; ++f) {
+            const auto steps = saplingGrowthSteps(s2.world, reg2,
+                                                  s2.saplings, seed, f);
+            if (!steps.empty()) {
+                return std::optional<std::uint64_t> {f};
+            }
+        }
+        return std::optional<std::uint64_t> {};
+    };
+    const auto firstA = firstStepFrame(reg, 999);
+    const auto firstB = firstStepFrame(reg, 1234567);
+    ASSERT_TRUE(firstA.has_value());
+    ASSERT_TRUE(firstB.has_value());
+    EXPECT_NE(*firstA, *firstB);
+}
+
+TEST(SaplingGrowthTest, CompleteFitsExactCellsAndNoResidue) {
+    // The Complete's cell set is EXACT (a stray write would land a trunk
+    // or leaves where the plan has none — scan the whole 8x8x8 box
+    // around the root) and the sapling leaves NO stateful residue (the
+    // root holds the trunk — non-stateful; the world's state read on it
+    // is inert for the save derivation, which keys on the live block).
+    const BlockRegistry reg = saplingRegistry(1, 4, 0, 2, "oak", 9);
+    SaplingScene s(reg, 15);
+    s.world.setBlockState(8, 2, 8, 7); // final stage
+    int advances = 0, completes = 0, height = 0;
+    saplingFrame(s.world, reg, s.saplings, 42, 0, advances, completes,
+                 height);
+    ASSERT_EQ(completes, 1);
+    const TreeSpec spec = treeSpecFromBlock(reg.at(s.sapling));
+    const std::vector<TreeCell> plan = planTree(height, spec);
+    std::set<std::tuple<int, int, int>> planned;
+    for (const TreeCell& c : plan) {
+        planned.insert({c.offset.x, c.offset.y, c.offset.z});
+    }
+    for (int dx = -4; dx <= 4; ++dx) {
+        for (int dy = -1; dy <= 6; ++dy) {
+            for (int dz = -4; dz <= 4; ++dz) {
+                const BlockID got =
+                    s.world.getBlock(s.pos.x + dx, s.pos.y + dy,
+                                     s.pos.z + dz);
+                const bool plannedHere =
+                    planned.count({dx, dy, dz}) != 0;
+                if (plannedHere) {
+                    EXPECT_TRUE(got == s.trunk || got == s.leaves)
+                        << "(" << dx << "," << dy << "," << dz << ")";
+                } else {
+                    // Outside the plan: the original content (soil at
+                    // (0,-1,0), air elsewhere).
+                    const bool isSoil = (dx == 0 && dy == -1 && dz == 0);
+                    EXPECT_EQ(got, isSoil ? s.soil : BlockID::air())
+                        << "(" << dx << "," << dy << "," << dz << ")";
+                }
+            }
+        }
+    }
+    EXPECT_TRUE(s.saplings.empty());
+}
+
+TEST(SaplingGrowthTest, CeilingAndWaterBlockTheCompletion) {
+    // A canopy cell occupied (stone ceiling at the top cap) or wetted
+    // (water in a skirt cell) blocks the Complete: the final-stage sapling
+    // yields NO step (the wait-and-retry — the rolled height is
+    // frame-independent, so clearing the blocker completes with the SAME
+    // height). Ticks 1 = the roll always passes, so the blocker is the
+    // only variable.
+    const BlockRegistry reg = saplingRegistry(1, 4, 0, 2, "oak", 9);
+    {
+        SaplingScene s(reg, 15);
+        s.world.setBlockState(8, 2, 8, 7);
+        // The ceiling: the top cap centre (offset (0, 4, 0) = absolute
+        // (8, 6, 8)).
+        s.world.setBlock(8, 6, 8, s.stone);
+        EXPECT_TRUE(
+            saplingGrowthSteps(s.world, reg, s.saplings, 7, 0).empty());
+        // Clear the ceiling -> the Complete (height 4, the pinned roll).
+        s.world.setBlock(8, 6, 8, BlockID::air());
+        auto steps = saplingGrowthSteps(s.world, reg, s.saplings, 7, 0);
+        ASSERT_EQ(steps.size(), 1u);
+        EXPECT_EQ(steps[0].action, SaplingAction::Complete);
+        EXPECT_EQ(steps[0].height, 4);
+    }
+    {
+        SaplingScene s(reg, 15);
+        s.world.setBlockState(8, 2, 8, 7);
+        // Water in a skirt cell of the radius-2 layer (offset (-2, 2, 0)
+        // = absolute (6, 4, 8)).
+        s.world.setFluid(6, 4, 8, FluidKind::Water, 8);
+        EXPECT_TRUE(
+            saplingGrowthSteps(s.world, reg, s.saplings, 7, 0).empty());
+        s.world.setFluid(6, 4, 8, FluidKind::Water, 0);
+        auto steps = saplingGrowthSteps(s.world, reg, s.saplings, 7, 0);
+        ASSERT_EQ(steps.size(), 1u);
+        EXPECT_EQ(steps[0].action, SaplingAction::Complete);
+    }
+    // A mid-stage sapling under the ceiling still ADVANCES (the fits
+    // probe runs only at the final stage).
+    {
+        SaplingScene s(reg, 15);
+        s.world.setBlock(8, 6, 8, s.stone);
+        auto steps = saplingGrowthSteps(s.world, reg, s.saplings, 7, 0);
+        ASSERT_EQ(steps.size(), 1u);
+        EXPECT_EQ(steps[0].action, SaplingAction::Advance);
+        EXPECT_EQ(steps[0].stage, 1);
+    }
+}
+
+TEST(SaplingGrowthTest, CrossChunkTreeLandsInBothChunks) {
+    // A root near the chunk corner (14, 2, 14): the oak T = 4 plan spans
+    // x/z 12..16 — into the neighbor chunks (1, 0) and (0, 1). Every
+    // planned cell lands in whichever chunk holds it (the game's
+    // setBlock completes first-touch columns; here the test pre-creates
+    // them) and the chunks both go dirty.
+    const BlockRegistry reg = saplingRegistry(1, 4, 0, 2, "oak", 9);
+    World world;
+    for (int cx = 0; cx <= 1; ++cx) {
+        for (int cz = 0; cz <= 1; ++cz) {
+            world.getOrCreateChunk({cx, 0, cz});
+        }
+    }
+    const BlockID soil = reg.idForName("soil");
+    const BlockID sapling = reg.idForName("sapling");
+    world.setBlock(14, 1, 14, soil);
+    world.setBlock(14, 2, 14, sapling);
+    world.setBlockState(14, 2, 14, 7); // the final stage
+    world.findChunkMut({0, 0, 0})->setSkyLightAt(14, 2, 14, 15);
+    std::map<BlockPos, BlockID> saplings;
+    saplings[{14, 2, 14}] = sapling;
+    int advances = 0, completes = 0, height = 0;
+    saplingFrame(world, reg, saplings, 42, 0, advances, completes, height);
+    ASSERT_EQ(completes, 1);
+    const TreeSpec spec = treeSpecFromBlock(reg.at(sapling));
+    const std::vector<TreeCell> plan = planTree(height, spec);
+    int outside = 0;
+    for (const TreeCell& c : plan) {
+        const int wx = 14 + c.offset.x, wy = 2 + c.offset.y, wz = 14 + c.offset.z;
+        EXPECT_EQ(world.getBlock(wx, wy, wz),
+                  c.trunkCell ? reg.idForName("trunkblk")
+                              : reg.idForName("leavesblk"));
+        if (wx >= 16 || wz >= 16) {
+            ++outside;
+        }
+    }
+    EXPECT_GT(outside, 0); // the plan really crossed the boundary
+    EXPECT_TRUE(saplings.empty());
 }

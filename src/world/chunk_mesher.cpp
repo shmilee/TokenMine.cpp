@@ -462,13 +462,45 @@ void ChunkMesher::emitCross(ChunkMeshData& out, const Block& block,
     const Vec2 uv[4] = {
         {u0.x, u1.y}, {u1.x, u1.y}, {u1.x, u0.y}, {u0.x, u0.y},
     };
+    // GEN-2: the stage visual — a STATEFUL cross (the sapling, the ENT-2
+    // state_count pair) scales its two quads with the growth stage:
+    // scale = (stage + 1) / stateCount, every corner re-anchored around
+    // the CELL CENTER (the stage-0 sprout at 1/stateCount of the cell,
+    // the full cell at the final stage — the Minecraft sapling read).
+    // The state is the cell's per-instance byte (the sentinel falling
+    // back to the block's state default, the emitStairs rule). A
+    // stateless cross (wheat / torch / fire / campfire / the flowers)
+    // keeps scale 1 and the EXACT pre-GEN-2 positions (the regression
+    // test pins it: no stateful block in a fresh world, gate inert).
+    bool scaled = false;
+    float scale = 1.0f;
+    if (block.stateCount() > 0) {
+        int st = m_world.getBlockState(wx, wy, wz);
+        if (st == Chunk::kBlockStateUnset) {
+            st = block.stateDefault();
+        }
+        scale = static_cast<float>(st + 1) /
+                static_cast<float>(block.stateCount());
+        scaled = (scale != 1.0f);
+    }
     for (const auto& quad : corners) {
         const std::uint32_t first = static_cast<std::uint32_t>(verts.size());
         for (int i = 0; i < 4; ++i) {
             MeshVertex v;
-            v.position = {static_cast<float>(lx + quad[i][0]),
-                          static_cast<float>(ly + quad[i][1]),
-                          static_cast<float>(lz + quad[i][2])};
+            if (scaled) {
+                // Around the cell centre (0.5, 0.5, 0.5) in local coords.
+                v.position = {
+                    static_cast<float>(lx) +
+                        (0.5f + (quad[i][0] - 0.5f) * scale),
+                    static_cast<float>(ly) +
+                        (0.5f + (quad[i][1] - 0.5f) * scale),
+                    static_cast<float>(lz) +
+                        (0.5f + (quad[i][2] - 0.5f) * scale)};
+            } else {
+                v.position = {static_cast<float>(lx + quad[i][0]),
+                              static_cast<float>(ly + quad[i][1]),
+                              static_cast<float>(lz + quad[i][2])};
+            }
             v.normal = {0.0f, 1.0f, 0.0f}; // full-brightness face shade
             v.uv = uv[i];
             v.skyLight = skyF;

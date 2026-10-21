@@ -1,0 +1,23 @@
+{
+  "id": "birch_leaves",
+  "properties": {
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "light_opacity": 2,
+    "hardness": 0.2,
+    "drops": "birch_leaves",
+    "chance_drops": [
+      { "item": "birch_sapling", "count": 1, "chance": 0.05 },
+      { "item": "stick", "count": 1, "chance": 0.02 }
+    ],
+    "flamable": true
+  },
+  "model": {
+    "textures": {
+      "top": "birch_leaves",
+      "side": "birch_leaves",
+      "bottom": "birch_leaves"
+    }
+  }
+}

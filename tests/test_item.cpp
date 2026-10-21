@@ -1804,3 +1804,111 @@ TEST(ItemRegistryTest, Phase69PickaxeEffectiveBreakSpeed) {
     EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("obsidian")), 4.0f);
     EXPECT_FLOAT_EQ(effectiveBreakSpeed(*wooden, blk("stone")), 4.0f);
 }
+
+// ---------------------------------------------------------------------------
+// GEN-2: the starter-storage fill (hotbar.json's `inventory` section — the
+// strict {slot, item, count} parse, the hidden-sapling-starter pattern).
+// ---------------------------------------------------------------------------
+
+TEST(ItemRegistryTest, StarterSlotsAbsentSectionYieldsNoFill) {
+    InvFixture f;
+    const Json def = parseJson(
+        R"({"items":["stone","dirt"]})");
+    auto r = parseStarterSlots(def, f.items);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(r->empty());
+}
+
+TEST(ItemRegistryTest, StarterSlotsStrictParse) {
+    InvFixture f;
+    // A valid fill: two storage entries, resolved + count-checked.
+    {
+        const Json def = parseJson(
+            R"({"items":["stone"],"inventory":[)"
+            R"({"slot":9,"item":"dirt","count":1},)"
+            R"({"slot":26,"item":"stone","count":64}]})");
+        auto r = parseStarterSlots(def, f.items);
+        ASSERT_TRUE(r.ok()) << r.error().message;
+        ASSERT_EQ(r->size(), 2u);
+        EXPECT_EQ((*r)[0].slot, 9);
+        EXPECT_EQ((*r)[0].item, f.dirt);
+        EXPECT_EQ((*r)[0].count, 1);
+        EXPECT_EQ((*r)[1].slot, 26);
+        EXPECT_EQ((*r)[1].item, f.stone);
+        EXPECT_EQ((*r)[1].count, 64);
+    }
+    // The rejections (each named): a hotbar slot, an out-of-range slot,
+    // an unknown item, a zero count, an over-maxStack count, a duplicate
+    // slot, an unknown field, a missing key, a non-integer slot.
+    const struct {
+        const char* inventory;
+        const char* needle;
+    } bad[] = {
+        {R"([{"slot":8,"item":"dirt","count":1}])", "slot"},
+        {R"([{"slot":27,"item":"dirt","count":1}])", "slot"},
+        {R"([{"slot":9,"item":"diamondz","count":1}])", "unknown item"},
+        {R"([{"slot":9,"item":"dirt","count":0}])", "count"},
+        {R"([{"slot":9,"item":"dirt","count":65}])", "count"},
+        {R"([{"slot":9,"item":"dirt","count":1},{"slot":9,"item":"stone","count":1}])",
+         "duplicates"},
+        {R"([{"slot":9,"item":"dirt","count":1,"extra":2}])", "unknown field"},
+        {R"([{"slot":9,"item":"dirt"}])", "strict triple"},
+        {R"([{"slot":9.5,"item":"dirt","count":1}])", "slot"},
+        {R"([{"slot":9,"item":"dirt","count":"1"}])", "count"},
+    };
+    for (const auto& b : bad) {
+        const Json def = parseJson(std::string(
+            R"({"items":["stone"],"inventory":)") +
+            std::string(b.inventory) + "}");
+        auto r = parseStarterSlots(def, f.items);
+        ASSERT_FALSE(r.ok()) << b.inventory;
+        EXPECT_NE(r.error().message.find(b.needle), std::string::npos)
+            << r.error().message;
+    }
+    // A non-array section.
+    {
+        const Json def = parseJson(
+            R"({"items":["stone"],"inventory":{"slot":9}})");
+        auto r = parseStarterSlots(def, f.items);
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("'inventory' must be an array"),
+                  std::string::npos);
+    }
+}
+
+TEST(ItemRegistryTest, Gen2HotbarStarterPinned) {
+    // The SHIPPED hotbar.json: the three sapling starters, three each, in
+    // the hidden storage slots 24/25/26 (NOT the hotbar — the structural
+    // immunity of the no-input run).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry blocks;
+    ASSERT_TRUE(blocks.loadDirectory(assets, "data/blocks").ok());
+    ItemRegistry items;
+    ASSERT_TRUE(items.buildBlockItems(blocks).ok());
+    ASSERT_TRUE(items.loadDirectory(assets, "data/items").ok());
+    auto text = assets.loadText("data/hotbar.json");
+    ASSERT_TRUE(text.ok()) << text.error().message;
+    auto parsed = Json::parse(*text);
+    ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+    auto r = parseStarterSlots(*parsed, items);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    ASSERT_EQ(r->size(), 3u);
+    const struct {
+        int slot;
+        const char* item;
+    } want[] = {
+        {24, "oak_sapling"}, {25, "spruce_sapling"}, {26, "birch_sapling"},
+    };
+    for (std::size_t i = 0; i < r->size(); ++i) {
+        EXPECT_EQ((*r)[i].slot, want[i].slot);
+        EXPECT_EQ((*r)[i].item, items.idForName(want[i].item));
+        EXPECT_EQ((*r)[i].count, 3);
+    }
+    // The hotbar fill itself is unchanged (the 9 shipped items, slots
+    // 0..8 — no storage slot in the `items` list).
+    const Json* list = parsed->find("items");
+    ASSERT_TRUE(list != nullptr && list->isArray());
+    ASSERT_EQ(list->size(), 9u);
+}

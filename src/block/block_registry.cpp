@@ -7,6 +7,7 @@
 
 #include "core/logger.hpp"
 #include "world/chunk.hpp" // fluidKindForName (the fluid vocabulary)
+#include "world/tree_shape.hpp" // treeShapeValid (the JSON shape vocabulary)
 
 namespace mc {
 
@@ -351,6 +352,91 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
             out.chanceDrops.push_back(std::move(cdEntry));
         }
     }
+    // Tree growth (GEN-2): an OPTIONAL strict SIX-KEY object
+    // {"trunk", "leaves", "min_height", "height_range", "leaf_radius",
+    //  "shape"} — the tree a sapling grows into (the chance_drops-entry
+    // precedent: every key present and typed, unknown keys rejected by
+    // name, the `tree.<key>` addressing). The trunk / leaves NAMES are
+    // cross-checked at directory load (they may reference a block in a
+    // later file); the shape vocabulary + the integer ranges are checked
+    // here; `tree` requires state_count >= 2 (checked at registration —
+    // the model is parsed after the properties).
+    if (const Json* tr = p->find("tree")) {
+        if (!tr->isObject()) {
+            return MC_FAIL("block property 'tree' must be an object "
+                           "{\"trunk\": ..., \"leaves\": ..., "
+                           "\"min_height\": ..., \"height_range\": ..., "
+                           "\"leaf_radius\": ..., \"shape\": ...}");
+        }
+        for (const auto& [key, value] : tr->members()) {
+            if (key != "trunk" && key != "leaves" &&
+                key != "min_height" && key != "height_range" &&
+                key != "leaf_radius" && key != "shape") {
+                return MC_FAIL("block property 'tree' has an unknown field "
+                               "'" + key + "'");
+            }
+        }
+        // Strict six keys: every key present (a missing one is a no-op
+        // typo — the chance_drop-triple discipline, named).
+        for (const char* key : {"trunk", "leaves", "min_height",
+                                "height_range", "leaf_radius", "shape"}) {
+            if (tr->find(key) == nullptr) {
+                return MC_FAIL(std::string("block property 'tree.") + key +
+                               "' is required (a strict six-key object)");
+            }
+        }
+        TreeGrowData tree;
+        r = checkField(*tr, "trunk", "string",
+                       [&](const Json& v) { tree.trunk = v.asString(); });
+        MC_TRY(r);
+        r = checkField(*tr, "leaves", "string",
+                       [&](const Json& v) { tree.leaves = v.asString(); });
+        MC_TRY(r);
+        r = checkField(*tr, "shape", "string",
+                       [&](const Json& v) { tree.shape = v.asString(); });
+        MC_TRY(r);
+        // The three integer fields: explicit integer-ness + range (the
+        // growth_light discipline), addressed tree.<key>.
+        const struct { const char* key; int* out; int lo; int hi; } ints[] = {
+            {"min_height", &tree.minHeight, 1, 16},
+            {"height_range", &tree.heightRange, 0, 8},
+            {"leaf_radius", &tree.leafRadius, 1, 2},
+        };
+        for (const auto& f : ints) {
+            const Json* v = tr->find(f.key);
+            if (v == nullptr) {
+                return MC_FAIL(std::string("block property 'tree.'") + f.key +
+                               "' is required (a strict six-key object)");
+            }
+            if (!v->isNumber() || v->asDouble() != std::floor(v->asDouble())) {
+                return MC_FAIL(std::string("block property 'tree.'") + f.key +
+                               "' must be an integer in [" +
+                               std::to_string(f.lo) + ", " +
+                               std::to_string(f.hi) + "]");
+            }
+            *f.out = static_cast<int>(v->asDouble());
+            if (*f.out < f.lo || *f.out > f.hi) {
+                return MC_FAIL(std::string("block property 'tree.'") + f.key +
+                               "' must be in [" + std::to_string(f.lo) +
+                               ", " + std::to_string(f.hi) + "], got " +
+                               std::to_string(*f.out));
+            }
+        }
+        if (tree.trunk.empty()) {
+            return MC_FAIL("block property 'tree.trunk' must be a non-empty "
+                           "block name");
+        }
+        if (tree.leaves.empty()) {
+            return MC_FAIL("block property 'tree.leaves' must be a non-empty "
+                           "block name");
+        }
+        if (!treeShapeValid(tree.shape)) {
+            return MC_FAIL("block property 'tree.shape' is unsupported: '" +
+                           tree.shape +
+                           "' (only 'oak', 'spruce' and 'birch' exist)");
+        }
+        out.tree = std::move(tree);
+    }
     // Water reaction (Phase 51): an OPTIONAL object
     // {"source": <block name>, "flowing": <block name>} — the blocks a cell
     // of this fluid converts into when 6-adjacent to a water cell (see
@@ -472,16 +558,26 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
                            "the block itself ('" + out.growsTo + "')");
         }
     }
-    if (out.growsTo.empty() && out.growthTicks != 0) {
-        return MC_FAIL("'growth_ticks' without 'grows_to' is meaningless "
-                       "(got " +
-                       std::to_string(out.growthTicks) + ")");
-    }
+    // GEN-2: growth_ticks is ALSO the sapling's per-stage roll pace (a
+    // `tree` block has no grows_to — the stage is its per-instance state):
+    // it must accompany a growsTo OR a tree, and stay in range when it does.
     if (!out.growsTo.empty() &&
         (out.growthTicks < 1 || out.growthTicks > 1000000)) {
         return MC_FAIL("'grows_to' requires 'growth_ticks' in [1, 1000000], "
                        "got " +
                        std::to_string(out.growthTicks));
+    }
+    if (out.tree.has_value() &&
+        (out.growthTicks < 1 || out.growthTicks > 1000000)) {
+        return MC_FAIL("'tree' requires 'growth_ticks' in [1, 1000000] "
+                       "(the per-stage roll pace), got " +
+                       std::to_string(out.growthTicks));
+    }
+    if (out.growsTo.empty() && !out.tree.has_value() &&
+        out.growthTicks != 0) {
+        return MC_FAIL("'growth_ticks' without 'grows_to' (or 'tree') is "
+                       "meaningless (got " +
+                       std::to_string(out.growthTicks) + ")");
     }
     // Chance secondary drop (Phase 49): a present 'chance_drop' object is a
     // strict TRIPLE — item (non-empty), count ([1,64]), chance ((0,1]).
@@ -809,6 +905,18 @@ Result<BlockID> BlockRegistry::registerBlock(const Json& def) {
         }
     }
 
+    // GEN-2: a `tree` block is a SAPLING — its growth stage IS its
+    // per-instance state (ENT-2: state_count stages, the growth engine
+    // advances the state byte; completion rolls the tree out). Fewer than
+    // two states would leave no stage to advance to (a stage 0 sapling
+    // that is already "mature" — a contradiction, named).
+    if (block.properties.tree.has_value() && block.stateCount() < 2) {
+        return MC_FAIL("block '" + name +
+                       "' has a 'tree' object and requires "
+                       "'model.state_count' >= 2 (the growth stage is the "
+                       "per-instance state)");
+    }
+
     block.id = BlockID{static_cast<int>(m_blocks.size())};
     m_names.emplace(name, block.id.value);
     m_blocks.push_back(std::move(block));
@@ -850,6 +958,23 @@ Result<void> BlockRegistry::loadDirectory(AssetManager& assets,
         auto id = registerBlock(*parsed);
         if (!id.ok()) {
             return MC_FAIL("block file '" + rel + "': " + id.error().message);
+        }
+    }
+    // GEN-2: the tree-reference cross-check (block-to-block, so it can run
+    // only once EVERY file of the directory is registered — a sapling may
+    // reference a trunk defined in a later file alphabetically). A missing
+    // name fails the load loudly (the grows_to discipline).
+    for (const Block& b : m_blocks) {
+        if (!b.properties.tree.has_value()) {
+            continue;
+        }
+        if (m_names.count(b.properties.tree->trunk) == 0) {
+            return MC_FAIL("block '" + b.name + "' tree trunk names unknown "
+                           "block '" + b.properties.tree->trunk + "'");
+        }
+        if (m_names.count(b.properties.tree->leaves) == 0) {
+            return MC_FAIL("block '" + b.name + "' tree leaves names unknown "
+                           "block '" + b.properties.tree->leaves + "'");
         }
     }
     return {};

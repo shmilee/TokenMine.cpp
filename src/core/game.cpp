@@ -660,6 +660,28 @@ Result<void> Game::buildScene() {
         }
     }
 
+    // GEN-2: resolve the tree specs (the sapling `tree` names -> BlockIDs,
+    // the m_campfireLitId init-resolved pattern). The registry load
+    // already validated the trunk / leaves names EXIST and the parse
+    // validated the geometry, so the ids resolve (invalid would be a
+    // logic error — the defensive guard keeps the spec out of the cache).
+    m_treeSpecs.clear();
+    for (const BlockID id : m_blocks.allIds()) {
+        const Block& b = m_blocks.at(id);
+        if (!b.hasTree()) {
+            continue;
+        }
+        TreeSpec spec = treeSpecFromBlock(b);
+        spec.trunk = m_blocks.idForName(b.properties.tree->trunk);
+        spec.leaves = m_blocks.idForName(b.properties.tree->leaves);
+        if (!spec.trunk.valid() || !spec.leaves.valid()) {
+            return MC_FAIL("block '" + b.name + "' tree names unknown "
+                           "block(s) '" + b.properties.tree->trunk +
+                           "' / '" + b.properties.tree->leaves + "'");
+        }
+        m_treeSpecs[b.id] = std::move(spec);
+    }
+
     // Strict data check (Phase 76): a block's ignites_to must name an
     // EXISTING block (the relight target) — the same existence
     // cross-check as grows_on (a typo fails init loudly).
@@ -1177,6 +1199,19 @@ Result<void> Game::buildScene() {
         m_inventory.setSlot(i, ItemStack {iid, m_items.at(iid).maxStack});
     }
 
+    // GEN-2: the starter STORAGE fill (hotbar.json's `inventory` section,
+    // the strict parse in item/inventory — the hidden-starter pattern:
+    // the saplings sit in the storage, NOT the hotbar, so a no-input run
+    // renders nothing new; the slot ranges are disjoint, so no overwrite
+    // of the `items` fill is possible). A SAVE LOAD still replaces the
+    // whole inventory (the starter is a fresh-world gift — the applySave
+    // contract).
+    auto starterSlots = parseStarterSlots(*hotbarJson, m_items);
+    MC_TRY(starterSlots);
+    for (const StarterSlot& s : *starterSlots) {
+        m_inventory.setSlot(s.slot, ItemStack {s.item, s.count});
+    }
+
     // -- world generation (Phase 4: seeded, data-driven) ---------------------
     auto biomesLoad = m_biomes.loadDirectory(m_assets, "data/biomes");
     MC_TRY(biomesLoad);
@@ -1269,6 +1304,10 @@ Result<void> Game::buildScene() {
     // the save load (block edits restored the planted crops). A fresh
     // world scans to nothing — worldgen places no crops (v1).
     rescanCrops();
+    // GEN-2: the sapling tracking set (the rescanCrops twin): a fresh
+    // world scans to nothing — worldgen places no saplings (stateful
+    // blocks are rejected at generator init, the ENT-2 invariant).
+    rescanSaplings();
     rescanBeacons();
     rescanFlammableChunks();
 
@@ -1538,6 +1577,7 @@ void Game::unloadFarColumns() {
     protectStates(m_furnaces);
     protectStates(m_campfires);
     protectStates(m_crops);
+    protectStates(m_saplings);
     protectStates(m_beacons);
     protectStates(m_fires);
 
@@ -2334,6 +2374,75 @@ void Game::rescanCrops() {
     }
 }
 
+void Game::rescanSaplings() {
+    // GEN-2: the rescanCrops twin over the `tree` predicate. The STAGE is
+    // not rescanned — it is the world's per-instance state byte (the
+    // save's format-15 segment restored it with the block edits); this
+    // set only decides which cells the growth engine rolls.
+    m_saplings.clear();
+    for (const ChunkPos& cp : m_world.chunkPositions()) {
+        const Chunk* chunk = m_world.findChunk(cp);
+        if (chunk == nullptr) {
+            continue;
+        }
+        const int baseX = cp.x * kChunkSize;
+        const int baseY = cp.y * kChunkSize;
+        const int baseZ = cp.z * kChunkSize;
+        for (int ly = 0; ly < kChunkSize; ++ly) {
+            for (int lz = 0; lz < kChunkSize; ++lz) {
+                for (int lx = 0; lx < kChunkSize; ++lx) {
+                    const BlockID id = chunk->get(lx, ly, lz);
+                    if (!m_blocks.at(id).hasTree()) {
+                        continue;
+                    }
+                    const BlockPos wp {baseX + lx, baseY + ly, baseZ + lz};
+                    m_saplings[wp] = id;
+                }
+            }
+        }
+    }
+}
+
+void Game::placeGrownTree(const BlockPos& saplingPos, int height) {
+    // GEN-2: one completed sapling -> a grown tree. The pure geometry
+    // (planTree) was already FITS-probed by the growth step, so only
+    // verified cells are written — trunk column first (the root cell
+    // becomes the trunk base), canopy after. Every write goes through
+    // the setBlock choke point (journal + tracking sets + edited-column
+    // protection + the ENT-2 state seeding). The rolled height re-uses
+    // the step's value (frame-independent — the probe and the placement
+    // plan the SAME tree).
+    const BlockID saplingId = m_world.getBlock(saplingPos.x, saplingPos.y,
+                                               saplingPos.z);
+    const auto it = m_treeSpecs.find(saplingId);
+    if (it == m_treeSpecs.end()) {
+        return; // defensive: an untracked sapling id (a stale step)
+    }
+    const TreeSpec& spec = it->second;
+    int minX = saplingPos.x, minY = saplingPos.y, minZ = saplingPos.z;
+    int maxX = saplingPos.x, maxY = saplingPos.y, maxZ = saplingPos.z;
+    for (const TreeCell& c : planTree(height, spec)) {
+        const int wx = saplingPos.x + c.offset.x;
+        const int wy = saplingPos.y + c.offset.y;
+        const int wz = saplingPos.z + c.offset.z;
+        setBlock(wx, wy, wz, c.trunkCell ? spec.trunk : spec.leaves);
+        minX = std::min(minX, wx); maxX = std::max(maxX, wx);
+        minY = std::min(minY, wy); maxY = std::max(maxY, wy);
+        minZ = std::min(minZ, wz); maxZ = std::max(maxZ, wz);
+    }
+    // The choke point already dropped the tracking entry when the root
+    // cell became trunk (a non-`tree` block); the belt is deterministic.
+    m_saplings.erase(saplingPos);
+    // ONE relight over the tree's bounding box (the fluid-tick pattern,
+    // not per-cell updateLocal): the trunk column + the canopy shadow
+    // (LGT-2: the leaves' light_opacity 2 darkens what is under the
+    // crown). The player triggered this — a one-time main-thread cost,
+    // not a per-frame one (documented).
+    Lighting::updateRegion(m_world, m_blocks,
+                           BlockPos {minX, minY, minZ},
+                           BlockPos {maxX, maxY, maxZ});
+}
+
 void Game::rescanFlammableChunks() {
     // The burn pass's gate: every chunk that holds a flamable block.
     m_flammableChunks.clear();
@@ -2659,6 +2768,29 @@ void Game::update(double dt) {
             // unchanged, but the local update is a harmless no-op kept for
             // consistency with every other block change.
             Lighting::updateLocal(m_world, m_blocks, s.pos);
+        }
+    }
+
+    // GEN-2 sapling growth (the crop tick's twin, one fixed 1/60 substep
+    // per frame — the day-cycle class, byte-reproducible): the pure roll
+    // + gates live in world/growth (seed + frame + position); the steps
+    // are state-only (Advance — the ENT-2 byte: NO light update, a state
+    // change never alters the light, the documented constraint) or a full
+    // tree placement (Complete — placeGrownTree relights the bbox ONCE).
+    // Runs in every pointer/panel state, like the crops.
+    {
+        const std::vector<SaplingStep> steps = saplingGrowthSteps(
+            m_world, m_blocks, m_saplings,
+            static_cast<std::uint64_t>(m_generator->seed()),
+            static_cast<std::uint64_t>(m_frameCount));
+        for (const SaplingStep& s : steps) {
+            if (s.action == SaplingAction::Advance) {
+                m_world.setBlockState(s.pos.x, s.pos.y, s.pos.z,
+                                      static_cast<std::uint8_t>(s.stage));
+                continue; // the state change marks the chunk dirty (mesh);
+                // the light is untouched (the ENT-2 constraint).
+            }
+            placeGrownTree(s.pos, s.height);
         }
     }
 
@@ -3348,6 +3480,20 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
             m_crops[cpos] = id;
         } else {
             m_crops.erase(cpos);
+        }
+    }
+    // GEN-2: the sapling tracking set follows the cell (the m_crops twin,
+    // the `tree` predicate): a sapling placement/break registers/drops the
+    // cell; a GROWN tree's cells (trunk / leaves) never match, so the
+    // completion drops the entry through this same path (the root cell
+    // becoming the trunk). The stage is NOT touched here — the ENT-2
+    // block below it seeds/clears the state byte independently.
+    {
+        const BlockPos spos {x, y, z};
+        if (m_blocks.at(id).hasTree()) {
+            m_saplings[spos] = id;
+        } else {
+            m_saplings.erase(spos);
         }
     }
     // Phase 83 (a list in Phase 91): the beacon tracking set follows the

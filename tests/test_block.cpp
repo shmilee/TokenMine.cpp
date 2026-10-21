@@ -1164,16 +1164,21 @@ TEST(BlockRegistryTest, Phase55LeavesDropContent) {
     ASSERT_TRUE(b != nullptr);
     // The single chance_drop migrated to the list (Phase 55); the field is
     // gone, the list holds the stick entry (Minecraft 1.14+: 2%) in front
-    // of the Phase 49 apple entry (1/128, the project value, kept).
+    // of the Phase 49 apple entry (1/128, the project value, kept). GEN-2
+    // evolution: the oak sapling entry (the tree-growth loop, 5% — the
+    // spruce/birch leaves carry their own saplings) appends behind both.
     EXPECT_EQ(b->properties.drops, "leaves");
     EXPECT_TRUE(b->properties.chanceDropItem.empty());
-    ASSERT_EQ(b->properties.chanceDrops.size(), 2u);
+    ASSERT_EQ(b->properties.chanceDrops.size(), 3u);
     EXPECT_EQ(b->properties.chanceDrops[0].item, "stick");
     EXPECT_EQ(b->properties.chanceDrops[0].count, 1);
     EXPECT_DOUBLE_EQ(b->properties.chanceDrops[0].chance, 0.02);
     EXPECT_EQ(b->properties.chanceDrops[1].item, "apple");
     EXPECT_EQ(b->properties.chanceDrops[1].count, 1);
     EXPECT_DOUBLE_EQ(b->properties.chanceDrops[1].chance, 0.0078125);
+    EXPECT_EQ(b->properties.chanceDrops[2].item, "oak_sapling");
+    EXPECT_EQ(b->properties.chanceDrops[2].count, 1);
+    EXPECT_DOUBLE_EQ(b->properties.chanceDrops[2].chance, 0.05);
 }
 
 TEST(BlockRegistryTest, Phase55LapisOreDropContent) {
@@ -1366,6 +1371,9 @@ TEST(BlockRegistryTest, Phase61CobblestoneContent) {
 // consumers, the igniter [Phase 60] and the lava burn pass [Phase 58],
 // read the flag). Pins the set EXACTLY: wood/leaves/grass + wheat_1..7,
 // nothing else (a stray flamable would silently expand the burn surface).
+// GEN-2 evolution: the tree-growth content joins — 3 saplings + the
+// spruce/birch trunks + the spruce/birch leaves (the burn surface grows
+// with the plantable forest), 10 -> 17 blocks.
 // ---------------------------------------------------------------------------
 
 TEST(BlockRegistryTest, Phase63FlamableContent) {
@@ -1379,7 +1387,8 @@ TEST(BlockRegistryTest, Phase63FlamableContent) {
         ASSERT_TRUE(b != nullptr) << name;
         EXPECT_TRUE(b->properties.flamable) << name;
     }
-    // The complete flamable set = 3 + 7 = 10 blocks, nothing else.
+    // The complete flamable set = 10 (Phase 63) + 7 (GEN-2: 3 saplings,
+    // 2 trunks, 2 leaves) = 17 blocks, nothing else.
     std::vector<std::string> flamables;
     for (std::size_t i = 0; i < reg.count(); ++i) {
         const Block& b = reg.at(BlockID{static_cast<int>(i)});
@@ -1388,8 +1397,11 @@ TEST(BlockRegistryTest, Phase63FlamableContent) {
         }
     }
     std::sort(flamables.begin(), flamables.end());
-    EXPECT_EQ(flamables.size(), 10u);
-    const std::vector<std::string> want = {"grass", "leaves",
+    EXPECT_EQ(flamables.size(), 17u);
+    const std::vector<std::string> want = {"birch_leaves", "birch_sapling",
+                                           "birch_trunk", "grass", "leaves",
+                                           "oak_sapling", "spruce_leaves",
+                                           "spruce_sapling", "spruce_trunk",
                                            "wheat_1", "wheat_2", "wheat_3",
                                            "wheat_4", "wheat_5", "wheat_6",
                                            "wheat_7", "wood"};
@@ -2201,6 +2213,394 @@ TEST(BlockRegistryTest, Ent2StairVariantsStatePinned) {
     const Block* s = reg.findByName("stone");
     ASSERT_TRUE(s != nullptr);
     EXPECT_FALSE(s->hasState());
+}
+
+// ---------------------------------------------------------------------------
+// GEN-2 tree growth: the `tree` object (a strict six-key nested properties
+// object), its pairings (state_count >= 2, growth_ticks), its registry
+// references (trunk / leaves must exist at directory load), and the
+// shipped sapling / trunk / leaves content pins.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// A sapling definition: a cross block (the enforced combination) with the
+// per-instance stage pair + the tree object. `state` injects the model
+// state fields (,"state_count":8,"state_default":0 or a variant; empty =
+// none), `tree` the full tree object text (empty = none), `ticks` the
+// growth-pace line (empty = absent).
+std::string saplingDef(const std::string& id, const std::string& state,
+                       const std::string& tree, const std::string& ticks) {
+    return std::string("{\"id\":\"") + id +
+        "\",\"properties\":{\"hardness\":0.0,\"solid\":false,\"opaque\":"
+        "false,\"transparent\":true,\"drops\":\"" + id + "\"" +
+        (ticks.empty() ? std::string() : std::string(",") + ticks) +
+        (tree.empty() ? std::string() : std::string(",\"tree\":") + tree) +
+        "},\"model\":{\"shape\":\"cross\"" + state +
+        ",\"textures\":{\"cross\":\"" + id + "\"}}}";
+}
+
+const char* kTreeOk =
+    R"({"trunk":"wood","leaves":"leaves","min_height":4,"height_range":3,"leaf_radius":2,"shape":"oak"})";
+const char* kTicks = R"("growth_ticks":120)";
+
+} // namespace
+
+TEST(BlockRegistryTest, TreeObjectParsesAndAccessors) {
+    BlockRegistry reg;
+    // The referenced blocks must exist (the directory-load check runs
+    // only on loadDirectory; registerBlock alone keeps the names).
+    auto wood = reg.registerBlock(parseDef(
+        R"({"id":"wood","model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    auto leaves = reg.registerBlock(parseDef(
+        R"({"id":"leaves","properties":{"opaque":false,"solid":false,"transparent":true},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    auto r = reg.registerBlock(parseDef(
+        saplingDef("oak_sapling", R"(,"state_count":8,"state_default":0)",
+                   kTreeOk, kTicks)));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Block& b = reg.at(*r);
+    ASSERT_TRUE(b.hasTree());
+    const auto& t = *b.properties.tree;
+    EXPECT_EQ(t.trunk, "wood");
+    EXPECT_EQ(t.leaves, "leaves");
+    EXPECT_EQ(t.minHeight, 4);
+    EXPECT_EQ(t.heightRange, 3);
+    EXPECT_EQ(t.leafRadius, 2);
+    EXPECT_EQ(t.shape, "oak");
+    EXPECT_EQ(b.stateCount(), 8);
+    EXPECT_EQ(b.stateDefault(), 0);
+    // The other blocks are not saplings.
+    EXPECT_FALSE(reg.at(*wood).hasTree());
+    EXPECT_FALSE(reg.at(*leaves).hasTree());
+}
+
+TEST(BlockRegistryTest, TreeObjectStrictRejections) {
+    BlockRegistry reg;
+    const std::string model = R"(,"state_count":8,"state_default":0)";
+    // A missing key (each of the six, named tree.<key>).
+    const char* keys[] = {"trunk", "leaves", "min_height", "height_range",
+                          "leaf_radius", "shape"};
+    for (const char* key : keys) {
+        std::string tree = std::string(kTreeOk);
+        const std::string needle = std::string("\"") + key + "\"";
+        const std::size_t at = tree.find(needle);
+        ASSERT_NE(at, std::string::npos) << key;
+        // Cut the "key":value pair (value ends at the next ',' or '}').
+        std::size_t i = at + needle.size();
+        while (i < tree.size() && tree[i] != ':') {
+            ++i;
+        }
+        ++i; // the colon
+        if (i < tree.size() && tree[i] == '"') {
+            ++i; // past the opening quote
+            while (i < tree.size() && tree[i] != '"') {
+                ++i;
+            }
+            ++i; // past the closing quote
+        } else {
+            while (i < tree.size() && tree[i] != ',' && tree[i] != '}') {
+                ++i;
+            }
+        }
+        if (i < tree.size() && tree[i] == ',') {
+            tree.erase(at, i + 1 - at);
+        } else {
+            // The key was last: eat the PRECEDING comma instead.
+            std::size_t k = at;
+            while (k > 0 && tree[k - 1] != ',' && tree[k - 1] != '{') {
+                --k;
+            }
+            if (k > 0 && tree[k - 1] == ',') {
+                --k;
+            }
+            tree.erase(k, i - k);
+        }
+        auto r = reg.registerBlock(parseDef(
+            saplingDef(std::string("s_") + key, model, tree, kTicks)));
+        ASSERT_FALSE(r.ok()) << "missing " << key << " must fail";
+        EXPECT_NE(r.error().message.find(key), std::string::npos)
+            << r.error().message;
+    }
+    // An unknown key (named).
+    {
+        auto r = reg.registerBlock(parseDef(saplingDef(
+            "s_unknown", model,
+            std::string(R"({"trunk":"wood","leaves":"leaves","min_height":4,"height_range":3,"leaf_radius":2,"shape":"oak","extra":1})"),
+            kTicks)));
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("unknown field"), std::string::npos);
+        EXPECT_NE(r.error().message.find("extra"), std::string::npos);
+    }
+    // The shape vocabulary (named).
+    {
+        auto r = reg.registerBlock(parseDef(saplingDef(
+            "s_shape", model,
+            std::string(R"({"trunk":"wood","leaves":"leaves","min_height":4,"height_range":3,"leaf_radius":2,"shape":"pine"})"),
+            kTicks)));
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("tree.shape"), std::string::npos);
+        EXPECT_NE(r.error().message.find("pine"), std::string::npos);
+    }
+    // The integer ranges (named, boundary-out).
+    struct { const char* key; int value; } bad[] = {
+        {"min_height", 0}, {"min_height", 17}, {"height_range", -1},
+        {"height_range", 9}, {"leaf_radius", 0}, {"leaf_radius", 3},
+    };
+    for (const auto& b : bad) {
+        std::string tree = std::string(kTreeOk);
+        const std::string needle = std::string("\"") + b.key + "\":";
+        const std::size_t at = tree.find(needle);
+        ASSERT_NE(at, std::string::npos);
+        const std::size_t end = tree.find(',', at);
+        tree.replace(at + needle.size(), end - (at + needle.size()),
+                     std::to_string(b.value));
+        auto r = reg.registerBlock(parseDef(
+            saplingDef(std::string("s_") + b.key + std::to_string(b.value),
+                       model, tree, kTicks)));
+        ASSERT_FALSE(r.ok()) << b.key << " " << b.value << " must fail";
+        EXPECT_NE(r.error().message.find(b.key), std::string::npos)
+            << r.error().message;
+    }
+    // A non-integer value (named).
+    {
+        std::string tree = std::string(kTreeOk);
+        const std::size_t at = tree.find("\"min_height\":");
+        ASSERT_NE(at, std::string::npos);
+        const std::size_t end = tree.find(',', at);
+        tree.replace(at + std::string("\"min_height\":").size(),
+                     end - (at + std::string("\"min_height\":").size()),
+                     "4.5");
+        auto r = reg.registerBlock(parseDef(
+            saplingDef("s_frac", model, tree, kTicks)));
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("min_height"), std::string::npos);
+    }
+}
+
+TEST(BlockRegistryTest, TreeStateAndTicksPairing) {
+    // A `tree` block needs at least two states (the stage IS the state):
+    // absent and count-1 are rejected (named); count-2 passes.
+    auto noState = [&](const char* id) {
+        BlockRegistry reg;
+        return reg.registerBlock(parseDef(
+            saplingDef(id, "", kTreeOk, kTicks)));
+    };
+    auto oneState = [&](const char* id) {
+        BlockRegistry reg;
+        return reg.registerBlock(parseDef(saplingDef(
+            id, R"(,"state_count":1,"state_default":0)", kTreeOk, kTicks)));
+    };
+    auto twoState = [&](const char* id) {
+        BlockRegistry reg;
+        return reg.registerBlock(parseDef(saplingDef(
+            id, R"(,"state_count":2,"state_default":0)", kTreeOk, kTicks)));
+    };
+    ASSERT_FALSE(noState("t_nostate").ok());
+    EXPECT_NE(noState("t_nostate").error().message.find("state_count"),
+              std::string::npos);
+    ASSERT_FALSE(oneState("t_one").ok());
+    EXPECT_TRUE(twoState("t_two").ok());
+    // growth_ticks is REQUIRED with a tree (the per-stage roll pace) —
+    // absent / out-of-range rejected (named).
+    BlockRegistry reg;
+    auto rNoTicks = reg.registerBlock(parseDef(
+        saplingDef("t_noticks", R"(,"state_count":8,"state_default":0)",
+                   kTreeOk, "")));
+    ASSERT_FALSE(rNoTicks.ok());
+    EXPECT_NE(rNoTicks.error().message.find("tree"), std::string::npos);
+    EXPECT_NE(rNoTicks.error().message.find("growth_ticks"),
+              std::string::npos);
+    auto rZeroTicks = reg.registerBlock(parseDef(
+        saplingDef("t_zeroticks", R"(,"state_count":8,"state_default":0)",
+                   kTreeOk, R"("growth_ticks":0)")));
+    ASSERT_FALSE(rZeroTicks.ok());
+    // And the old rule stays: a growth_ticks WITHOUT a grows_to or a tree
+    // is still meaningless (named).
+    auto rLonely = reg.registerBlock(parseDef(
+        R"({"id":"t_lonely","properties":{"growth_ticks":120},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(rLonely.ok());
+    EXPECT_NE(rLonely.error().message.find("growth_ticks"),
+              std::string::npos);
+}
+
+TEST(BlockRegistryTest, TreeReferenceExistenceRejected) {
+    // A directory load cross-checks the tree references (block-to-block —
+    // checkable only once every file is registered): an unknown trunk or
+    // leaves name fails the load (named); a complete set passes.
+    const std::filesystem::path root =
+        std::filesystem::temp_directory_path() /
+        ("tm_tree_ref_" + std::to_string(::getpid()));
+    auto writeRefs = [&](const std::filesystem::path& r) {
+        {
+            std::ofstream f(r / "data/blocks" / "wood.json");
+            f << R"({"id":"wood","model":{"textures":{"top":"t","side":"t","bottom":"t"}}})";
+        }
+        {
+            std::ofstream f(r / "data/blocks" / "leaves.json");
+            f << R"({"id":"leaves","properties":{"opaque":false,"solid":false,"transparent":true},)"
+              R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})";
+        }
+    };
+    auto writeSapling = [&](const std::filesystem::path& r,
+                            const std::string& tree) {
+        std::ofstream f(r / "data/blocks" / "oak_sapling.json");
+        f << saplingDef("oak_sapling",
+                        R"(,"state_count":8,"state_default":0)", tree,
+                        kTicks);
+    };
+    // Unknown trunk.
+    {
+        std::filesystem::remove_all(root);
+        std::filesystem::create_directories(root / "data" / "blocks");
+        writeSapling(
+            root,
+            R"({"trunk":"woodz","leaves":"leaves","min_height":4,"height_range":3,"leaf_radius":2,"shape":"oak"})");
+        writeRefs(root);
+        AssetManager assets;
+        ASSERT_TRUE(assets.setRoot(root.string()).ok());
+        BlockRegistry reg;
+        auto r = reg.loadDirectory(assets, "data/blocks");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("tree trunk names unknown block"),
+                  std::string::npos);
+        EXPECT_NE(r.error().message.find("woodz"), std::string::npos);
+    }
+    // Unknown leaves.
+    {
+        std::filesystem::remove_all(root);
+        std::filesystem::create_directories(root / "data" / "blocks");
+        writeSapling(
+            root,
+            R"({"trunk":"wood","leaves":"leafsz","min_height":4,"height_range":3,"leaf_radius":2,"shape":"oak"})");
+        writeRefs(root);
+        AssetManager assets;
+        ASSERT_TRUE(assets.setRoot(root.string()).ok());
+        BlockRegistry reg;
+        auto r = reg.loadDirectory(assets, "data/blocks");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("tree leaves names unknown block"),
+                  std::string::npos);
+        EXPECT_NE(r.error().message.find("leafsz"), std::string::npos);
+    }
+    // A complete set loads (the sapling + its references).
+    {
+        std::filesystem::remove_all(root);
+        std::filesystem::create_directories(root / "data" / "blocks");
+        writeSapling(root, std::string(kTreeOk));
+        writeRefs(root);
+        AssetManager assets;
+        ASSERT_TRUE(assets.setRoot(root.string()).ok());
+        BlockRegistry reg;
+        ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+        EXPECT_TRUE(reg.findByName("oak_sapling")->hasTree());
+    }
+    std::filesystem::remove_all(root);
+}
+
+TEST(BlockRegistryTest, Gen2SaplingContentPinned) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const struct {
+        const char* id;
+        const char* trunk;
+        const char* leaves;
+        int minHeight;
+        int heightRange;
+        int leafRadius;
+        const char* shape;
+    } want[] = {
+        {"oak_sapling", "wood", "leaves", 4, 3, 2, "oak"},
+        {"spruce_sapling", "spruce_trunk", "spruce_leaves", 6, 3, 2, "spruce"},
+        {"birch_sapling", "birch_trunk", "birch_leaves", 5, 2, 1, "birch"},
+    };
+    for (const auto& w : want) {
+        const Block* b = reg.findByName(w.id);
+        ASSERT_TRUE(b != nullptr) << w.id;
+        ASSERT_TRUE(b->hasTree()) << w.id;
+        const auto& t = *b->properties.tree;
+        EXPECT_EQ(t.trunk, w.trunk) << w.id;
+        EXPECT_EQ(t.leaves, w.leaves) << w.id;
+        EXPECT_EQ(t.minHeight, w.minHeight) << w.id;
+        EXPECT_EQ(t.heightRange, w.heightRange) << w.id;
+        EXPECT_EQ(t.leafRadius, w.leafRadius) << w.id;
+        EXPECT_EQ(t.shape, w.shape) << w.id;
+        // The growth data: 8 stages from 0, the dirt/grass soil, light 9,
+        // the 120-tick pace, instant break, self-drop, flamable, cross.
+        EXPECT_EQ(b->model.shape, BlockModel::Shape::Cross) << w.id;
+        EXPECT_EQ(b->stateCount(), 8) << w.id;
+        EXPECT_EQ(b->stateDefault(), 0) << w.id;
+        ASSERT_EQ(b->properties.plantOn.size(), 2u) << w.id;
+        EXPECT_EQ(b->properties.plantOn[0], "dirt") << w.id;
+        EXPECT_EQ(b->properties.plantOn[1], "grass") << w.id;
+        EXPECT_EQ(b->properties.growthLight, 9) << w.id;
+        EXPECT_EQ(b->properties.growthTicks, 120) << w.id;
+        EXPECT_FLOAT_EQ(b->properties.hardness, 0.0f) << w.id;
+        EXPECT_EQ(b->properties.drops, std::string(w.id)) << w.id;
+        EXPECT_TRUE(b->properties.flamable) << w.id;
+        EXPECT_FALSE(b->properties.solid) << w.id;
+        EXPECT_TRUE(b->properties.transparent) << w.id;
+    }
+}
+
+TEST(BlockRegistryTest, Gen2TrunkLeavesContentPinned) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    // The trunks: opaque cubes, hardness 2.0 (Minecraft's log value),
+    // self-drop, flamable, the side/top texture pair.
+    for (const char* id : {"spruce_trunk", "birch_trunk"}) {
+        const Block* b = reg.findByName(id);
+        ASSERT_TRUE(b != nullptr) << id;
+        EXPECT_FALSE(b->hasTree()) << id;
+        EXPECT_TRUE(b->properties.opaque) << id;
+        EXPECT_TRUE(b->properties.solid) << id;
+        EXPECT_FALSE(b->properties.transparent) << id;
+        EXPECT_FLOAT_EQ(b->properties.hardness, 2.0f) << id;
+        EXPECT_TRUE(b->properties.flamable) << id;
+        EXPECT_EQ(b->properties.drops, std::string(id)) << id;
+        EXPECT_EQ(b->model.textures.side, std::string(id) + "_side") << id;
+        EXPECT_EQ(b->model.textures.top, std::string(id) + "_top") << id;
+        EXPECT_EQ(b->model.textures.bottom, std::string(id) + "_top") << id;
+    }
+    // The leaves: the oak leaves' data (non-opaque, light_opacity 2 —
+    // LGT-2's leaf attenuation, hardness 0.2, self-drop, flamable) + the
+    // chance-drop pair (the species' sapling @ 0.05 + stick @ 0.02; the
+    // oak apple entry stays oak-only — the documented deviation).
+    const struct {
+        const char* id;
+        const char* sapling;
+    } want[] = {
+        {"spruce_leaves", "spruce_sapling"},
+        {"birch_leaves", "birch_sapling"},
+    };
+    for (const auto& w : want) {
+        const Block* b = reg.findByName(w.id);
+        ASSERT_TRUE(b != nullptr) << w.id;
+        EXPECT_FALSE(b->properties.opaque) << w.id;
+        EXPECT_FALSE(b->properties.solid) << w.id;
+        EXPECT_TRUE(b->properties.transparent) << w.id;
+        EXPECT_EQ(b->properties.lightOpacity, 2) << w.id;
+        EXPECT_FLOAT_EQ(b->properties.hardness, 0.2f) << w.id;
+        EXPECT_TRUE(b->properties.flamable) << w.id;
+        EXPECT_EQ(b->properties.drops, std::string(w.id)) << w.id;
+        ASSERT_EQ(b->properties.chanceDrops.size(), 2u) << w.id;
+        EXPECT_EQ(b->properties.chanceDrops[0].item, w.sapling) << w.id;
+        EXPECT_EQ(b->properties.chanceDrops[0].count, 1) << w.id;
+        EXPECT_DOUBLE_EQ(b->properties.chanceDrops[0].chance, 0.05) << w.id;
+        EXPECT_EQ(b->properties.chanceDrops[1].item, "stick") << w.id;
+        EXPECT_EQ(b->properties.chanceDrops[1].count, 1) << w.id;
+        EXPECT_DOUBLE_EQ(b->properties.chanceDrops[1].chance, 0.02) << w.id;
+        // The single chance_drop field stays empty (the list is the
+        // system — the Phase 52 mutual exclusion).
+        EXPECT_TRUE(b->properties.chanceDropItem.empty()) << w.id;
+    }
 }
 
 TEST(BlockRegistryTest, Phase83IronBlockRecipeContent) {

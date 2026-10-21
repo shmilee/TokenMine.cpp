@@ -1,0 +1,15 @@
+{
+  "id": "spruce_trunk",
+  "properties": {
+    "hardness": 2.0,
+    "drops": "spruce_trunk",
+    "flamable": true
+  },
+  "model": {
+    "textures": {
+      "top": "spruce_trunk_top",
+      "side": "spruce_trunk_side",
+      "bottom": "spruce_trunk_top"
+    }
+  }
+}

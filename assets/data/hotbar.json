@@ -1,3 +1,8 @@
 {
-  "items": ["stone", "dirt", "grass", "sand", "wood", "leaves", "glass", "glowstone", "wooden_pickaxe"]
+  "items": ["stone", "dirt", "grass", "sand", "wood", "leaves", "glass", "glowstone", "wooden_pickaxe"],
+  "inventory": [
+    { "slot": 24, "item": "oak_sapling", "count": 3 },
+    { "slot": 25, "item": "spruce_sapling", "count": 3 },
+    { "slot": 26, "item": "birch_sapling", "count": 3 }
+  ]
 }

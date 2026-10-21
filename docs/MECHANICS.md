@@ -759,6 +759,49 @@
     面板——`Game` per-block map（P44/P71 范式，格式 7/11 独立段）。
     两类消费方集合**不相交** = 消费驱动的自然分界，非历史欠债；统一
     注册表 = 重写 format 7/11 + tick + 面板，无 v1.0 任务要求（YAGNI）。
+- **树生长（GEN-2，v1.0 任务表 8/29；消费 BlockState 的首个内容）**：
+  - **模型**：3 树种 sapling（oak/spruce/birch，各独立块 id = 树种是
+    内容维度非实例维度；oak 复用 wood/leaves）——cross + `state_count 8`
+    + `tree` 对象（严格 6 键：trunk/leaves 块名 + min_height [1,16] +
+    height_range [0,8] + leaf_radius [1,2] + shape 词汇 {oak,spruce,
+    birch}，逐键点名拒；**tree ⇒ state_count ≥ 2** 注册时点名拒；
+    trunk/leaves 存在 = 目录 load 后交叉校验点名）。**生长阶段 = ENT-2
+    状态 byte 0-7**（与作物"块 id 即阶段"相反——8 阶纹理超 atlas 预算，
+    项目 = 1 纹理缩放）。
+  - **引擎节奏**（`saplingGrowthSteps` 纯函数 + `Game::m_saplings`，
+    m_crops 四件套同款：收口注册/读档 rescan/卸载保护/每帧 tick）：
+    每帧固定 1/60 步（昼夜类，无输入字节可复现）先过三道门——① **土壤门**
+    （`plant_on` 复用：下方格 ∈ [dirt,grass]；**放置门 + 生长门一体**，
+    土壤被挖 = 生长暂停等待，不自毁——文档化偏离）② **光门**
+    （`growth_light 9` = max(sky,block)，LGT-2 叶冠下会真挡）③ **roll**
+    （`splitmix64(seed + frame×GOLDEN + hash3(pos, 专用盐)) % growth_ticks`
+    = 0，120 tick ≈ 2 s/阶 ≈ 16 s/棵 = 项目压缩先例；位置哈希去同步、
+    专用盐不与作物/世界生成同流）。
+  - **落树**（roll 过 + 阶段 = 7）：`treeHeightRoll(seed, pos)` 纯函数
+    滚高 ∈ [min, min+range]（**帧无关**——被挡重试滚同一棵）+
+    `planTree` 形状表（root = sapling 格 = trunk 底：oak (T-2,r),(T-1,r),
+    (T,1) **与 worldgen placeTrees 逐格同构**（单测钉死）/ spruce
+    (T-2,2),(T-1,1),(T,1),(T+1,1) 下宽上尖锥 / birch (T-1,1),(T,1),
+    (T+1,1) 细高小冠；(0,0) offset ≤ T-1 跳 trunk 占位、半径 2 层圆角）
+    → fits（全格 air 无流体 y ∈ [0,128)，sapling 格除外）→
+    `placeGrownTree`（trunk 先冠后逐格 setBlock 收口 + **1 次
+    updateRegion** over 树 bbox = 冠影 LGT-2 可见；玩家触发非每帧）。
+    **放不下 = 本 roll 不完成等待重试**（MC 天花板规则）。阶段推进 =
+    `setBlockState` **零光照成本**（状态不改光，ENT-2 约束）。
+  - **stage 视觉**：`emitCross` 门控 `stateCount() > 0` → quad 两对角线
+    4 角落绕**格心**缩放 (stage+1)/stateCount（MC sapling 同款；哨兵回落
+    stateDefault）；**无状态 cross（wheat/torch/fire/campfire/花）恒
+    scale 1 = 逐位零变化**（回归单测钉死；fresh 零 stateful = 门惰性）。
+  - **旋转泛化副作用（接受为特性）**：潜行 + 右键 sapling = ENT-2 旋转
+    路径 `(s+1)%8` = **stage+1 手工催熟**（确定性，E2E/调试加速器；
+    stage 7 时回 0；无逃逸字段——YAGNI）。
+  - **来源闭环**：leaves `chance_drops` 各 + 对应 sapling @ 0.05（oak
+    leaves = P55 集演进 +1 条目，apple 保留 oak 专属）+ starter 库存
+    （hotbar.json `inventory` 段，槽 24/25/26 各 3 颗，**非 hotbar =
+    无输入不渲染**）；破坏 sapling 掉自己（可再种）。
+  - **世界生成零触碰**：野外森林保持单橡种（worldgen trees 段/生成器
+    代码一行不改）；sapling stateful ⇒ worldgen 放置源 init 不变量
+    天然拒（多树种野外 = 未来项，需重锚）。
 - **墙 wall（Phase 95，第三个新块模型类型）**：
   - **`Shape::Wall`**（block.hpp）：1.5 格高柱（cell 的 y 0..1.5 实心 =
     满块 + 顶 0.5 帽），复用 cube 纹理（top/side/bottom 校验同 slab）。

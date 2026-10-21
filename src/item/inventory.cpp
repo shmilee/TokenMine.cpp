@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 
 namespace mc {
 
@@ -70,6 +71,80 @@ bool Inventory::isFull(ItemID item, const ItemRegistry& items) const {
         }
     }
     return true;
+}
+
+Result<std::vector<StarterSlot>> parseStarterSlots(const Json& hotbar,
+                                                   const ItemRegistry& items) {
+    std::vector<StarterSlot> out;
+    // Absent section = no starter (the pre-GEN-2 hotbar.json shape).
+    const Json* inv = hotbar.find("inventory");
+    if (inv == nullptr) {
+        return out;
+    }
+    if (!inv->isArray()) {
+        return MC_FAIL("hotbar.json: 'inventory' must be an array of "
+                       "{\"slot\": ..., \"item\": ..., \"count\": ...} "
+                       "entries");
+    }
+    std::vector<int> usedSlots;
+    for (std::size_t i = 0; i < inv->size(); ++i) {
+        const Json& e = inv->at(i);
+        const std::string at = "hotbar.json: inventory entry #" +
+                               std::to_string(i);
+        if (!e.isObject()) {
+            return MC_FAIL(at + " must be an object {\"slot\": ..., "
+                           "\"item\": ..., \"count\": ...}");
+        }
+        for (const auto& [key, value] : e.members()) {
+            if (key != "slot" && key != "item" && key != "count") {
+                return MC_FAIL(at + " has an unknown field '" + key + "'");
+            }
+        }
+        const Json* slotJson = e.find("slot");
+        const Json* itemJson = e.find("item");
+        const Json* countJson = e.find("count");
+        if (slotJson == nullptr || itemJson == nullptr ||
+            countJson == nullptr) {
+            return MC_FAIL(at + " requires the strict triple "
+                           "{slot, item, count}");
+        }
+        const bool slotInt = slotJson->isNumber() &&
+            slotJson->asDouble() == std::floor(slotJson->asDouble());
+        const int slot =
+            slotInt ? static_cast<int>(slotJson->asDouble()) : 0;
+        if (!slotInt || slot < Inventory::kHotbarSize ||
+            slot >= Inventory::kTotalSize) {
+            return MC_FAIL(at + " slot must be a storage slot in [" +
+                           std::to_string(Inventory::kHotbarSize) + ", " +
+                           std::to_string(Inventory::kTotalSize - 1) +
+                           "] (the hotbar slots are the 'items' fill)");
+        }
+        if (std::find(usedSlots.begin(), usedSlots.end(), slot) !=
+            usedSlots.end()) {
+            return MC_FAIL(at + " duplicates storage slot " +
+                           std::to_string(slot));
+        }
+        usedSlots.push_back(slot);
+        if (!itemJson->isString() || itemJson->asString().empty()) {
+            return MC_FAIL(at + " item must be a non-empty item name");
+        }
+        const ItemID iid = items.idForName(itemJson->asString());
+        if (!iid.valid()) {
+            return MC_FAIL(at + " names unknown item '" +
+                           itemJson->asString() + "'");
+        }
+        const bool countInt = countJson->isNumber() &&
+            countJson->asDouble() == std::floor(countJson->asDouble());
+        const int count =
+            countInt ? static_cast<int>(countJson->asDouble()) : 0;
+        if (!countInt || count < 1 || count > items.at(iid).maxStack) {
+            return MC_FAIL(at + " count must be in [1, " +
+                           std::to_string(items.at(iid).maxStack) +
+                           "] (the item's max stack)");
+        }
+        out.push_back(StarterSlot {slot, iid, count});
+    }
+    return out;
 }
 
 } // namespace mc
