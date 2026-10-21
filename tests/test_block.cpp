@@ -1928,6 +1928,145 @@ TEST(BlockRegistryTest, Phase85SlabShapeRequiresCubeTextures) {
     ASSERT_FALSE(bad.ok());
 }
 
+// ---------------------------------------------------------------------------
+// Light opacity (LGT-2, the leaf light attenuation): the `light_opacity`
+// field (0..15, the light lost when ENTERING the cell), the derivation
+// from `opaque` when the key is ABSENT (opaque -> 15, non-opaque -> 0 —
+// the bit-for-bit backward-compat contract), and the thin-model guards
+// (a cross / glass pane cannot fully block light, the opacity
+// contradiction).
+// ---------------------------------------------------------------------------
+
+TEST(BlockRegistryTest, LightOpacityParses) {
+    // 0 / 2 / 15 are the inclusive boundaries (0 = passes like air, 15 =
+    // fully blocks).
+    BlockRegistry reg;
+    auto r0 = reg.registerBlock(parseDef(propDef("a", "\"light_opacity\":0")));
+    ASSERT_TRUE(r0.ok()) << r0.error().message;
+    EXPECT_EQ(reg.at(*r0).properties.lightOpacity, 0);
+    BlockRegistry reg2;
+    auto r2 = reg2.registerBlock(parseDef(propDef("b", "\"light_opacity\":2")));
+    ASSERT_TRUE(r2.ok()) << r2.error().message;
+    EXPECT_EQ(reg2.at(*r2).properties.lightOpacity, 2);
+    BlockRegistry reg3;
+    auto r15 = reg3.registerBlock(parseDef(propDef("c", "\"light_opacity\":15")));
+    ASSERT_TRUE(r15.ok()) << r15.error().message;
+    EXPECT_EQ(reg3.at(*r15).properties.lightOpacity, 15);
+}
+
+TEST(BlockRegistryTest, LightOpacityRejectsOutOfRange) {
+    auto hi =
+        BlockRegistry{}.registerBlock(parseDef(propDef("a", "\"light_opacity\":16")));
+    ASSERT_FALSE(hi.ok());
+    EXPECT_NE(hi.error().message.find("light_opacity"), std::string::npos);
+    EXPECT_NE(hi.error().message.find("[0, 15]"), std::string::npos);
+    auto lo =
+        BlockRegistry{}.registerBlock(parseDef(propDef("b", "\"light_opacity\":-1")));
+    ASSERT_FALSE(lo.ok());
+    EXPECT_NE(lo.error().message.find("light_opacity"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, LightOpacityRejectsNonNumber) {
+    auto bad =
+        BlockRegistry{}.registerBlock(parseDef(propDef("a", "\"light_opacity\":\"two\"")));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("light_opacity"), std::string::npos);
+    EXPECT_NE(bad.error().message.find("number"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, LightOpacityDerivedFromOpaque) {
+    // (a) OPAQUE with NO field (even no properties object at all) -> 15
+    //     (the pre-LGT-2 behavior: opaque blocked light).
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(minimalDef("stone")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(reg.at(*r).properties.opaque);
+    EXPECT_EQ(reg.at(*r).properties.lightOpacity, 15);
+    // (b) NON-opaque, no field -> 0 (the pre-LGT-2 behavior: non-opaque
+    //     let light pass).
+    BlockRegistry reg2;
+    auto r2 = reg2.registerBlock(parseDef(
+        R"({"id":"x","properties":{"opaque":false,"transparent":true},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r2.ok()) << r2.error().message;
+    EXPECT_EQ(reg2.at(*r2).properties.lightOpacity, 0);
+    // (c) An EXPLICIT value overrides the derivation, in both directions:
+    //     an opaque block may thin out (2), a non-opaque full cube may
+    //     seal light (15 — only the THIN models are barred from it).
+    BlockRegistry reg3;
+    auto r3 = reg3.registerBlock(parseDef(propDef("y", "\"light_opacity\":2")));
+    ASSERT_TRUE(r3.ok()) << r3.error().message;
+    EXPECT_EQ(reg3.at(*r3).properties.lightOpacity, 2);
+    BlockRegistry reg4;
+    auto r4 = reg4.registerBlock(parseDef(
+        R"({"id":"z","properties":{"opaque":false,"transparent":true,"light_opacity":15},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r4.ok()) << r4.error().message;
+    EXPECT_EQ(reg4.at(*r4).properties.lightOpacity, 15);
+}
+
+TEST(BlockRegistryTest, CrossRejectsFullLightOpacity) {
+    // LGT-2: a cross plant renders two thin quads — it cannot fully block
+    // light (the same contradiction as opacity, which is forced off).
+    auto bad = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"x","properties":{"solid":false,"opaque":false,"transparent":true,"light_opacity":15},)"
+        R"("model":{"shape":"cross","textures":{"cross":"x"}}})"));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("light_opacity"), std::string::npos);
+    // A cross WITHOUT the field derives 0 (non-opaque) and passes.
+    BlockRegistry reg;
+    auto ok = reg.registerBlock(parseDef(
+        R"({"id":"y","properties":{"solid":false,"opaque":false,"transparent":true},)"
+        R"("model":{"shape":"cross","textures":{"cross":"y"}}})"));
+    ASSERT_TRUE(ok.ok()) << ok.error().message;
+    EXPECT_EQ(reg.at(*ok).properties.lightOpacity, 0);
+}
+
+TEST(BlockRegistryTest, GlassPaneRejectsFullLightOpacity) {
+    // LGT-2: the 1/16-thick pane sheet cannot fully block light either.
+    auto bad = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"gp","properties":{"opaque":false,"transparent":true,"light_opacity":15},)"
+        R"("model":{"shape":"glass_pane","textures":{"side":"t"}}})"));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("light_opacity"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, Lgt2LightOpacityContent) {
+    // The shipped light_opacity contract (Minecraft values): leaves 2,
+    // glass 1 — explicit; everything else DERIVES (opaque -> 15,
+    // non-opaque -> 0). A fluid cell never reads the field (the fixed
+    // kFluidLightAttenuation — water/lava derive 0 but cost 3).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    // The explicit Minecraft values.
+    const Block* l = reg.findByName("leaves");
+    ASSERT_TRUE(l != nullptr);
+    EXPECT_FALSE(l->properties.opaque);
+    EXPECT_EQ(l->properties.lightOpacity, 2);
+    const Block* g = reg.findByName("glass");
+    ASSERT_TRUE(g != nullptr);
+    EXPECT_FALSE(g->properties.opaque);
+    EXPECT_EQ(g->properties.lightOpacity, 1);
+    // Derived 15: opaque, no field.
+    for (const char* name : {"stone", "glowstone", "iron_block"}) {
+        const Block* b = reg.findByName(name);
+        ASSERT_TRUE(b != nullptr) << name;
+        EXPECT_TRUE(b->properties.opaque) << name;
+        EXPECT_EQ(b->properties.lightOpacity, 15) << name;
+    }
+    // Derived 0: non-opaque, no field (the plants, the pane, the fluids).
+    for (const char* name : {"wheat_1", "glass_pane", "torch",
+                             "campfire", "water", "lava"}) {
+        const Block* b = reg.findByName(name);
+        ASSERT_TRUE(b != nullptr) << name;
+        EXPECT_FALSE(b->properties.opaque) << name;
+        EXPECT_EQ(b->properties.lightOpacity, 0) << name;
+    }
+}
+
 TEST(BlockRegistryTest, Phase83IronBlockRecipeContent) {
     // The shipped iron block recipe: shaped 3x3 iron_ingot -> 1 (the
     // Minecraft pattern — the beacon base is crafted from the ingot).

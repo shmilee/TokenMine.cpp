@@ -14,6 +14,7 @@
 
 #include "block/block_registry.hpp"
 #include "world/growth.hpp"
+#include "world/lighting.hpp"
 #include "world/world.hpp"
 
 using namespace mc;
@@ -393,6 +394,115 @@ TEST(GrowthEnvTest, WaterAtOtherYDoesNotCount) {
                             static_cast<std::uint64_t>(f)).size());
     }
     EXPECT_LT(nSteps, 200); // dry pace — the water is at the wrong level
+}
+
+// ---------------------------------------------------------------------------
+// Light gate with REAL leaf propagation (LGT-2): the canopy's per-cell
+// opacity (leaves = 2) sets the sky light at the crop cell. The crop's
+// growth_light is 9 (the Minecraft wheat value): 3 canopy layers leave
+// exactly 9 (15 - 2*3 — the threshold, the roll runs) and 4 layers leave
+// 7 (15 - 2*4 — below, the growth stops). The enclosure (opaque stone
+// columns from the floor up past the canopy) makes the vertical rescan
+// path the ONLY light route into the crop cell.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// soil + stone (opaque, derived 15) + leaves (explicit 2) + the 2-stage
+// crop chain (growth_ticks 1, grows_on "soil", growth_light 9).
+BlockRegistry leafCrownRegistry() {
+    BlockRegistry reg;
+    auto soilR = reg.registerBlock(parseDef(
+        R"({"id":"soil","properties":{"hardness":1.0},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!soilR.ok()) {
+        throw std::runtime_error(soilR.error().message);
+    }
+    auto stoneR = reg.registerBlock(parseDef(
+        R"({"id":"stone","properties":{"hardness":1.0},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!stoneR.ok()) {
+        throw std::runtime_error(stoneR.error().message);
+    }
+    auto leavesR = reg.registerBlock(parseDef(
+        R"({"id":"leaves","properties":{"hardness":0.2,"solid":false,"opaque":false,"transparent":true,"light_opacity":2},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!leavesR.ok()) {
+        throw std::runtime_error(leavesR.error().message);
+    }
+    auto aR = reg.registerBlock(parseDef(
+        R"({"id":"crop_a","properties":{"hardness":0.0,"solid":false,"opaque":false,"transparent":true,"grows_to":"crop_b","growth_ticks":1,"grows_on":"soil","growth_light":9},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!aR.ok()) {
+        throw std::runtime_error(aR.error().message);
+    }
+    auto bR = reg.registerBlock(parseDef(
+        R"({"id":"crop_b","properties":{"hardness":0.0,"solid":false,"opaque":false,"transparent":true,"drops":"wheat","drops_count":2},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!bR.ok()) {
+        throw std::runtime_error(bR.error().message);
+    }
+    return reg;
+}
+
+// One crop at (8,2,8) under a leaf canopy of `layers` (y 3..2+layers),
+// fully propagated.
+struct LeafCrownScene {
+    World world;
+    std::map<BlockPos, BlockID> crops;
+    BlockID a;
+    int underCrownLight;
+
+    explicit LeafCrownScene(const BlockRegistry& reg, int layers)
+        : a(reg.idForName("crop_a")) {
+        const BlockID soil = reg.idForName("soil");
+        const BlockID stone = reg.idForName("stone");
+        const BlockID leaves = reg.idForName("leaves");
+        world.getOrCreateChunk({0, 0, 0});
+        world.setBlock(8, 1, 8, soil);
+        world.setBlock(8, 2, 8, a);
+        crops[{8, 2, 8}] = a;
+        const int top = 2 + layers;
+        for (int y = 3; y <= top; ++y) {
+            world.setBlock(8, y, 8, leaves);
+        }
+        // The enclosing opaque columns, from the floor up past the canopy.
+        for (int y = 0; y <= top; ++y) {
+            world.setBlock(7, y, 8, stone);
+            world.setBlock(9, y, 8, stone);
+            world.setBlock(8, y, 7, stone);
+            world.setBlock(8, y, 9, stone);
+        }
+        Lighting::propagateAll(world, reg);
+        underCrownLight = world.getSkyLight(8, 2, 8);
+    }
+
+    // Count the steps the pure function yields over frames [0, n) WITHOUT
+    // applying them (the crop stays at stage a — the roll is stage-blind).
+    int stepsOver(const BlockRegistry& reg, std::uint64_t seed, int n) {
+        int nSteps = 0;
+        for (int f = 0; f < n; ++f) {
+            nSteps += static_cast<int>(
+                cropGrowthSteps(world, reg, crops, seed,
+                                static_cast<std::uint64_t>(f)).size());
+        }
+        return nSteps;
+    }
+};
+
+} // namespace
+
+TEST(GrowthEnvTest, LeafCrownLightGateBoundary) {
+    const BlockRegistry reg = leafCrownRegistry();
+    // 3 layers: 15 - 2*3 = 9 = the threshold exactly -> the roll runs
+    // every frame (growth_ticks 1).
+    LeafCrownScene pass(reg, 3);
+    EXPECT_EQ(pass.underCrownLight, 9);
+    EXPECT_EQ(pass.stepsOver(reg, 42, 20), 20);
+    // 4 layers: 15 - 2*4 = 7 < 9 -> the light gate stops the growth.
+    LeafCrownScene stop(reg, 4);
+    EXPECT_EQ(stop.underCrownLight, 7);
+    EXPECT_EQ(stop.stepsOver(reg, 42, 20), 0);
 }
 
 TEST(GrowthEnvTest, LavaNearSoilDoesNotWet) {

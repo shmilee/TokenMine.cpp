@@ -111,7 +111,15 @@
   不受影响（shell 注入自愈）；确定性不受影响（每次 run 同结果）。修复形态 =
   单遍 union/整 footprint 单 region（LGT-1 形态，已砍除）或 sky BFS 加
   shell seed（改动面大，留 100+）；暴露面窄（仅骑跨边界的天花板地形），
-  暂留未修。
+  暂留未修。（`[LGT-2]` 交互：衰减语义下 clobber 后果从「stale-dark（0）」
+  扩到「stale-partial（垂直值 < 真值）」——部分衰减冠骑跨 footprint 边时，
+  前一 region 的水平流（穿冠 2/格）被后一 region rescan 覆写为纯垂直值且
+  sky BFS 无边界 seed 不自愈；暴露面量级不变（需同 job 双 box footprint
+  相交 = LGT-1 step-0 实测 0.1% 帧 + 冠骑跨边），修复形态同前。）
+- **叶冠下作物生长（`[LGT-2]` 行为变化，MC 一致，非缺陷）**：冠下光按层
+  衰减（leaves −2/层）后，wheat `growth_light=9`：3 层冠下 = 9 临界仍过
+  （可长）、叠冠/4 层+ = ≤7 停长。「树下种麦」玩法按 MC 语义收紧；wheat
+  growth_light 保持 9（MC 值，不偏离）。
 - **`Chunk&` 引用会被 unordered_map rehash 失效** — `getOrCreateChunk` 返回的引用在后续可能 rehash 的 World 变更（其他 chunk 的 setBlock/getOrCreateChunk）后失效；已在 world.hpp 头部文档化，调用方须在一个逻辑操作内使用。`[Phase 3]`
 - **Greedy Meshing 已实现（Phase 18）** — 逐面片合并为同（纹理、sub-mesh、面光）run 的单 quad；200-chunk 实测总三角形 109,648 → 33,558（3.3×，不透明 3.5×）。剩余简化见「渲染 / 网格化（Phase 18）」。
 

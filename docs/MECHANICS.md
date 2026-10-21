@@ -1003,8 +1003,11 @@
 - **脏标记增量重网格**：`setBlock` 标记本 chunk（及共享面的邻居 chunk）dirty，
   下一帧只重建 dirty chunk 的 GPU mesh
 - **光照（Sky/Block Light 0-15）**：每个 chunk 两个 16³ 字节数组；天空光由列顶扫描
-  （最高 opaque 方块上方=15）+ BFS 传播（垂直无衰减、水平每格 -1）；方块光由
-  `properties.light_emission` 源 BFS（全方向每格 -1）。破坏/放置后只重传播受影响区域
+  （最高 opaque 方块上方=15，其下每层扣该格 `light_opacity`【`[LGT-2]`】：15=全挡
+  （=opaque 不穿透）/ 0=air 同款垂直免费 / leaves 2、glass 1 / 流体固定 3）+ BFS
+  传播（**进入格成本**：流体 3，否则垂直天空光=O、其余方向=max(1,O)，O=15 不穿透；
+  emission 源格自身持值不受影响）；方块光由 `properties.light_emission` 源 BFS
+  （同款进入格成本）。破坏/放置后只重传播受影响区域
   （天空光按变化点 ±16 的整列——垂直天空光无距离限制；方块光按 ±16 盒），光值实际
   变化的 chunk 才重建 mesh。渲染：每个面烘焙"面后方一格"的光值到顶点（块状光照），
   shader 取 `max(sky, block)` × MC 经典面着色（顶 1.0 / 侧 0.8、0.6 / 底 0.5）+ 3%

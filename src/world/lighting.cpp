@@ -15,17 +15,31 @@ const BlockPos kDirections[6] = {
     {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
 };
 
-// The cost of entering the target cell (a fluid cell — of EITHER kind,
-// both attenuate like water — costs kFluidLightAttenuation in every
-// direction; air keeps the per-type costs: sky light is free vertically,
-// block light costs 1 everywhere).
-int enterCost(const Chunk* chunk, int lx, int ly, int lz, bool sky,
-              bool vertical) {
+// The light opacity of ONE cell — the single definition of the unified
+// attenuation (LGT-2, the leaf light attenuation): a fluid cell of EITHER
+// kind costs kFluidLightAttenuation in every direction (the reference
+// block's light_opacity is NOT read for fluids — the Phase 51 documented
+// simplification); a dry cell costs its block's light_opacity (derived
+// from opaque at data load: opaque -> 15, non-opaque -> 0, an explicit
+// `light_opacity` overrides — see BlockRegistry).
+int cellOpacity(const BlockRegistry& blocks, const Chunk* chunk, int lx,
+                int ly, int lz) {
     const BlockID id = chunk->get(lx, ly, lz);
     if (id == BlockID::air() && chunk->fluidAt(lx, ly, lz) != 0) {
         return kFluidLightAttenuation;
     }
-    return vertical ? (sky ? 0 : 1) : 1;
+    return blocks.at(id).properties.lightOpacity;
+}
+
+// The cost of entering the target cell (LGT-2, the unified attenuation):
+// the cell's opacity in the given direction — sky light is free ONLY
+// vertically through a zero-opacity cell (air); every other entry costs
+// at least 1 (glass 1, leaves 2, a fluid cell kFluidLightAttenuation in
+// every direction).
+int enterCost(const BlockRegistry& blocks, const Chunk* chunk, int lx,
+              int ly, int lz, bool sky, bool vertical) {
+    const int o = cellOpacity(blocks, chunk, lx, ly, lz);
+    return vertical ? (sky ? o : std::max(1, o)) : std::max(1, o);
 }
 
 // A fluid cell is a block-light source when its KIND's reference block
@@ -49,9 +63,12 @@ int fluidEmission(const BlockRegistry& blocks, std::uint8_t code) {
 // their stored light is already correct and must not be modified — but they
 // may still be seeded so their light can flow into the region.
 //
-// Rules: light cannot enter an opaque cell; sky light propagates free
-// vertically in air and -1 per horizontal air step, block light -1 per air
-// step in every direction, fluid cells cost kFluidLightAttenuation in every
+// Rules (LGT-2): light cannot enter a dry cell whose block fully blocks
+// light (light_opacity 15 — for content without an explicit field exactly
+// the opaque set); entering any other cell costs its opacity in the given
+// direction: sky light free vertically through a zero-opacity cell,
+// otherwise at least 1 per step (air horizontal 1, glass 1, leaves 2), a
+// fluid cell of either kind always kFluidLightAttenuation in every
 // direction; a cell is updated (and re-queued) only on a strict increase.
 //
 // The worklist algorithm converges to the same light field regardless of
@@ -104,12 +121,20 @@ void propagateBFS(World& world, const BlockRegistry& blocks, bool sky,
             }
             const BlockPos nlocal = worldToChunkLocal(worldToChunk(np), np);
             const BlockID id = nchunk->get(nlocal.x, nlocal.y, nlocal.z);
-            if (id != BlockID::air() && blocks.at(id).properties.opaque) {
+            // LGT-2: light cannot ENTER a dry cell whose block fully
+            // blocks light (opacity 15 — for content without an explicit
+            // field exactly the opaque set). The cell's OWN value is
+            // untouched (an emission source keeps it, the glowstone
+            // pattern); a fluid cell never blocks (its opacity is the
+            // fixed kFluidLightAttenuation).
+            if (id != BlockID::air() &&
+                cellOpacity(blocks, nchunk, nlocal.x, nlocal.y, nlocal.z) ==
+                    kMaxLight) {
                 continue;
             }
             const int next = value -
-                             enterCost(nchunk, nlocal.x, nlocal.y, nlocal.z,
-                                       sky, d.y != 0);
+                             enterCost(blocks, nchunk, nlocal.x, nlocal.y,
+                                       nlocal.z, sky, d.y != 0);
             if (next <= 0) {
                 continue;
             }
@@ -131,9 +156,10 @@ void propagateBFS(World& world, const BlockRegistry& blocks, bool sky,
 }
 
 // Sky-light column scan for one (x, z) column: the topmost contiguous run
-// of non-opaque cells is open to the sky and reads 15, attenuated by
-// kFluidLightAttenuation per fluid cell while scanning down (air carries
-// the running light unchanged); everything below the first opaque cell
+// of cells that do not fully block light (light_opacity < 15) is open to
+// the sky and reads 15, attenuated by each cell's OPACITY while scanning
+// down (LGT-2: air 0, glass 1, leaves 2, a fluid cell the fixed
+// kFluidLightAttenuation); everything below the first full-opacity cell
 // reads 0 until the BFS fills it from horizontal neighbors. Missing chunks
 // are air (the open run continues) and are never written.
 void rescanColumn(World& world, const BlockRegistry& blocks, int x, int z) {
@@ -149,14 +175,17 @@ void rescanColumn(World& world, const BlockRegistry& blocks, int x, int z) {
         const BlockPos local = worldToChunkLocal(cp, p);
         std::uint8_t target = 0;
         if (open) {
-            const BlockID id = chunk->get(local.x, local.y, local.z);
-            if (id != BlockID::air() && blocks.at(id).properties.opaque) {
-                open = false; // the opaque cell itself reads 0
+            // LGT-2: a full-opacity dry cell (15 — for content without an
+            // explicit field exactly the opaque set) cuts the open run and
+            // itself reads 0; every other cell attenuates by its opacity
+            // (a fluid cell: the fixed kFluidLightAttenuation — the
+            // pre-LGT-2 formula).
+            const int o =
+                cellOpacity(blocks, chunk, local.x, local.y, local.z);
+            if (o == kMaxLight) {
+                open = false; // the full-opacity cell itself reads 0
             } else {
-                if (id == BlockID::air() &&
-                    chunk->fluidAt(local.x, local.y, local.z) > 0) {
-                    light = std::max(0, light - kFluidLightAttenuation);
-                }
+                light = std::max(0, light - o);
                 target = static_cast<std::uint8_t>(light);
             }
         }
@@ -346,16 +375,18 @@ void Lighting::updateRegion(World& world, const BlockRegistry& blocks,
                             for (int ly = kChunkSize - 1; ly >= 0; --ly) {
                                 std::uint8_t target = 0;
                                 if (open) {
-                                    const BlockID id = chunk->get(lx, ly, lz);
-                                    if (id != BlockID::air() &&
-                                        blocks.at(id).properties.opaque) {
-                                        open = false; // opaque reads 0
+                                    // LGT-2: the same per-cell sequence as
+                                    // rescanColumn — a full-opacity dry
+                                    // cell cuts the run (reads 0), every
+                                    // other cell attenuates by its opacity
+                                    // (fluid: the fixed
+                                    // kFluidLightAttenuation).
+                                    const int o =
+                                        cellOpacity(blocks, chunk, lx, ly, lz);
+                                    if (o == kMaxLight) {
+                                        open = false; // full opacity reads 0
                                     } else {
-                                        if (id == BlockID::air() &&
-                                            chunk->fluidAt(lx, ly, lz) > 0) {
-                                            light = std::max(
-                                                0, light - kFluidLightAttenuation);
-                                        }
+                                        light = std::max(0, light - o);
                                         target = static_cast<std::uint8_t>(light);
                                     }
                                 }

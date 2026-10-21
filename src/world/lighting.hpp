@@ -1,19 +1,27 @@
 // Lighting: Minecraft-style 0..15 sky light and block light, stored per
 // chunk (see Chunk) and queried through World::getSkyLight/getBlockLight.
 //
-// Propagation model (simplified Minecraft):
-//  - A cell blocks light iff its block is properties.opaque. Air is free
-//    for sky light; a fluid cell (water) attenuates by
-//    kFluidLightAttenuation (Minecraft's water value) in every direction —
-//    a lake bottom is dim in proportion to the water depth.
-//  - Sky light: every column's topmost contiguous run of non-opaque cells
-//    reads 15 (open to the sky), attenuated per fluid cell while scanning
-//    down; light then propagates through non-opaque cells, free vertically
-//    in air, -1 per horizontal air step, -3 per fluid cell.
+// Propagation model (Minecraft light opacity, LGT-2 — the leaf light
+// attenuation):
+//  - Each DRY cell attenuates light by its block's `light_opacity` (0..15,
+//    Minecraft's scale: 15 = fully blocks light, 2 = leaves, 1 = glass,
+//    0 = air / non-opaque plants). The property is DERIVED from `opaque`
+//    at data load when the JSON key is absent (opaque -> 15, non-opaque ->
+//    0), so field-less content reproduces the pre-LGT-2 lighting bit-for-
+//    bit; an explicit `light_opacity` overrides the derivation. A FLUID
+//    cell of either kind ALWAYS costs kFluidLightAttenuation (Minecraft's
+//    water value) in every direction — the field is not read for fluids
+//    (a documented simplification) — a lake bottom is dim in proportion
+//    to the water depth.
+//  - Sky light: every column's topmost contiguous run of non-full-opacity
+//    cells reads 15 (open to the sky), attenuated per cell while scanning
+//    down; light then propagates through non-full-opacity cells — free
+//    vertically in a zero-opacity cell (air), otherwise at least 1 per
+//    step (the cell's opacity).
 //  - Block light: every block with properties.lightEmission > 0 is a
-//    source (its own cell holds the emission value, even if opaque);
-//    light propagates through non-opaque cells, -1 per air step, -3 per
-//    fluid cell, in all directions.
+//    source (its own cell holds the emission value, even if fully
+//    blocking — the glowstone pattern); light propagates with the same
+//    per-cell costs in all directions.
 //  - The void around the world is open sky (sky 15, block 0) and dry.
 //
 // Three entry points share one BFS core:

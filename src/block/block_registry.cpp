@@ -12,6 +12,14 @@ namespace mc {
 
 namespace {
 
+// LGT-2: the light opacity of a block WITHOUT an explicit `light_opacity`
+// key: an opaque block fully blocks light (15), a non-opaque block lets it
+// pass (0) — a bit-for-bit reproduction of the pre-LGT-2 lighting (which
+// keyed off `opaque` alone).
+int derivedLightOpacity(bool opaque) {
+    return opaque ? 15 : 0;
+}
+
 // The reserved air sentinel: id 0, "no block". Not data-driven (no JSON,
 // no textures) — chunk storage defaults to it and the mesher never emits
 // its faces. Registered in every BlockRegistry so at(BlockID::air()) and
@@ -67,7 +75,10 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
                                             BlockProperties& out) {
     const Json* p = def.find("properties");
     if (p == nullptr) {
-        return {}; // all defaults
+        // All defaults — the light opacity still derives from the
+        // (default) opaque flag (LGT-2).
+        out.lightOpacity = derivedLightOpacity(out.opaque);
+        return {};
     }
     if (!p->isObject()) {
         return MC_FAIL("'properties' must be an object");
@@ -101,6 +112,18 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     MC_TRY(r);
     r = checkField(*p, "light_emission", "number",
                    [&](const Json& v) { out.lightEmission = v.asInt(); });
+    MC_TRY(r);
+    // Light opacity (LGT-2, the leaf light attenuation): the light lost
+    // when ENTERING this block's cell (0 = passes like air, 15 = fully
+    // blocks). ABSENT = derived from the final opaque flag below (the
+    // bit-for-bit backward-compat contract); an explicit value overrides
+    // the derivation. A FLUID cell never reads the field (the fixed
+    // kFluidLightAttenuation — see world/lighting).
+    bool lightOpacitySet = false;
+    r = checkField(*p, "light_opacity", "number", [&](const Json& v) {
+        out.lightOpacity = v.asInt();
+        lightOpacitySet = true;
+    });
     MC_TRY(r);
     r = checkField(*p, "drops", "string",
                    [&](const Json& v) { out.drops = v.asString(); });
@@ -388,6 +411,10 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
         return MC_FAIL("'light_emission' must be in [0, 15], got " +
                        std::to_string(out.lightEmission));
     }
+    if (out.lightOpacity < 0 || out.lightOpacity > 15) {
+        return MC_FAIL("'light_opacity' must be in [0, 15], got " +
+                       std::to_string(out.lightOpacity));
+    }
     if (!out.interact.empty() && out.interact != kInteractCraftingTable &&
         out.interact != kInteractFurnace &&
         out.interact != kInteractCampfire) {
@@ -511,6 +538,14 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     if (p->find("grows_on") != nullptr && out.growsOn.empty()) {
         return MC_FAIL("block property 'grows_on' must be a non-empty block "
                        "name (omit it when the crop needs no specific soil)");
+    }
+    // LGT-2: an ABSENT light_opacity derives from the FINAL opaque flag
+    // (opaque -> 15, non-opaque -> 0 — the pre-LGT-2 lighting keyed off
+    // `opaque` alone, so field-less content is bit-for-bit unchanged).
+    // An explicit value overrides the derivation (checked above for
+    // range).
+    if (!lightOpacitySet) {
+        out.lightOpacity = derivedLightOpacity(out.opaque);
     }
     return {};
 }
@@ -691,6 +726,14 @@ Result<BlockID> BlockRegistry::registerBlock(const Json& def) {
                            "' must not be 'opaque' (it renders as two "
                            "blended quads)");
         }
+        // LGT-2: the two thin quads cannot fully block light either — the
+        // same contradiction as opacity (a full-opacity cross would seal
+        // light the mesh does not visually cover).
+        if (block.properties.lightOpacity == 15) {
+            return MC_FAIL("cross-plant block '" + name +
+                           "' must not have 'light_opacity' 15 (light "
+                           "passes through the two quads)");
+        }
         if (block.properties.solid) {
             return MC_FAIL("cross-plant block '" + name +
                            "' must not be 'solid' (cross plants are "
@@ -711,6 +754,14 @@ Result<BlockID> BlockRegistry::registerBlock(const Json& def) {
             return MC_FAIL("glass-pane block '" + name +
                            "' must not be 'opaque' (light passes through "
                            "the pane)");
+        }
+        // LGT-2: the 1/16-thick sheet cannot fully block light either —
+        // the same contradiction as opacity (the pane renders one thin
+        // blended sheet).
+        if (block.properties.lightOpacity == 15) {
+            return MC_FAIL("glass-pane block '" + name +
+                           "' must not have 'light_opacity' 15 (light "
+                           "passes through the pane)");
         }
         if (!block.properties.transparent) {
             return MC_FAIL("glass-pane block '" + name +

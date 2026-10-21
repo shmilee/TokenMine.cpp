@@ -40,7 +40,9 @@ std::string cubeDef(const std::string& id, const std::string& properties,
 }
 
 // stone=opaque; water=non-opaque; glowstone=opaque emission 15;
-// lantern=opaque emission 5.
+// lantern=opaque emission 5. LGT-2: leaves=non-opaque light_opacity 2
+// (the Minecraft leaf value); glass=non-opaque light_opacity 1 (the
+// Minecraft glass value).
 BlockRegistry makeRegistry() {
     BlockRegistry reg;
     auto r1 = reg.registerBlock(
@@ -56,7 +58,15 @@ BlockRegistry makeRegistry() {
     auto r4 = reg.registerBlock(
         parseDef(cubeDef("lantern", R"({"light_emission":5})",
                          R"({"top":"t","side":"t","bottom":"t"})")));
-    if (!r1.ok() || !r2.ok() || !r3.ok() || !r4.ok()) {
+    auto r5 = reg.registerBlock(parseDef(
+        cubeDef("leaves",
+                R"({"opaque":false,"transparent":true,"solid":false,"light_opacity":2})",
+                R"({"top":"t","side":"t","bottom":"t"})")));
+    auto r6 = reg.registerBlock(parseDef(
+        cubeDef("glass",
+                R"({"opaque":false,"transparent":true,"light_opacity":1})",
+                R"({"top":"t","side":"t","bottom":"t"})")));
+    if (!r1.ok() || !r2.ok() || !r3.ok() || !r4.ok() || !r5.ok() || !r6.ok()) {
         ADD_FAILURE() << "test registry failed to build";
     }
     return reg;
@@ -652,6 +662,206 @@ TEST(LightingTest, InsertedColumnRelightMatchesFullPropagation) {
     Lighting::updateRegion(incremental, reg, {32, 0, 0}, {47, 15, 15},
                            /*newTerrain=*/true);
     expectSameLight(incremental, full);
+}
+
+// -- LGT-2: per-block light opacity (the leaf light attenuation) ---------
+// A dry cell attenuates light by its block's light_opacity (0..15) — air
+// 0, glass 1, leaves 2, opaque 15 (derived) — and a full-opacity cell
+// cuts propagation; a fluid cell always costs kFluidLightAttenuation.
+// The "enclosed test cell" helper: a stone column (derived opacity 15)
+// around the column under test, from y=1 up past the canopy, so the ONLY
+// light path into the test cell (8,1,8) is vertical through the canopy
+// (no horizontal routing can raise it above the rescan value).
+
+namespace {
+
+// A canopy of `block` at (8, y, 8) for y = 2..2+layers-1, the enclosed
+// test cell at (8,1,8), full propagation. The stone enclosure runs from
+// the floor (y=0 — an open y=0 row would let light route underneath) up
+// past the canopy top, so the ONLY path into the test cell is vertical
+// through the canopy (the rescan value, no horizontal boost).
+int underCanopySky(const BlockRegistry& reg, const std::string& blockName,
+                   int layers) {
+    World world;
+    const BlockID stone = idOf(reg, "stone");
+    const BlockID block = idOf(reg, blockName);
+    const int top = 2 + layers;
+    for (int y = 0; y <= top; ++y) {
+        world.setBlock(7, y, 8, stone);
+        world.setBlock(9, y, 8, stone);
+        world.setBlock(8, y, 7, stone);
+        world.setBlock(8, y, 9, stone);
+    }
+    for (int y = 2; y < top; ++y) {
+        world.setBlock(8, y, 8, block);
+    }
+    Lighting::propagateAll(world, reg);
+    return world.getSkyLight(8, 1, 8);
+}
+
+} // namespace
+
+// 1. Sky light through a leaf canopy: -2 per layer vertically (15 - 2*n,
+// dead beyond 8 layers: 15 - 16 < 0).
+TEST(LightingTest, SkyVerticalThroughLeaves) {
+    const BlockRegistry reg = makeRegistry();
+    EXPECT_EQ(underCanopySky(reg, "leaves", 1), 13); // 15 - 2
+    EXPECT_EQ(underCanopySky(reg, "leaves", 2), 11); // 15 - 4
+    EXPECT_EQ(underCanopySky(reg, "leaves", 6), 3);  // 15 - 12
+    EXPECT_EQ(underCanopySky(reg, "leaves", 8), 0);  // 15 - 16 < 0: dead
+}
+
+// 2. Sky light through a 15-wide leaf WALL horizontally: -2 per cell from
+// the open source column; the 8th cell is dead (15 - 16 < 0).
+TEST(LightingTest, SkyHorizontalThroughLeafWall) {
+    const BlockRegistry reg = makeRegistry();
+    const BlockID stone = idOf(reg, "stone");
+    const BlockID leaves = idOf(reg, "leaves");
+    World world;
+    // The wall: x 0..14 at y=8, the FULL z extent (no side routing); a
+    // stone roof + floor seal the corridor over the wall region, the
+    // source column at x=15 stays open.
+    for (int z = 0; z < kChunkSize; ++z) {
+        for (int x = 0; x <= 14; ++x) {
+            world.setBlock(x, 8, z, leaves);
+            world.setBlock(x, 7, z, stone);
+            world.setBlock(x, 9, z, stone);
+        }
+    }
+    Lighting::propagateAll(world, reg);
+    EXPECT_EQ(world.getSkyLight(15, 8, 8), 15); // the open source column
+    EXPECT_EQ(world.getSkyLight(14, 8, 8), 13); // 15 - 2
+    EXPECT_EQ(world.getSkyLight(13, 8, 8), 11); // 15 - 4
+    EXPECT_EQ(world.getSkyLight(8, 8, 8), 1);   // 15 - 2*7
+    EXPECT_EQ(world.getSkyLight(7, 8, 8), 0);   // 15 - 2*8 < 0: dead
+    EXPECT_EQ(world.getSkyLight(0, 8, 8), 0);   // the far end: sealed
+}
+
+// 3. Block light through a leaf wall (glowstone 15 behind it): the far
+// wall cell reads 15 - 2*n — 1 layer 13, 3 layers 9, 6 layers 3, 8 layers
+// 0 (dead: 15 - 16 < 0); an OPAQUE wall of the same thickness is the 0
+// control. The wall is FULL-HEIGHT and full-z (a sealed corridor would
+// let the light route over the roof), so the y=8 row is the only cheap
+// path. The measurement cell is the wall's far (west) face cell — the
+// cell directly beyond it pays one more air step.
+TEST(LightingTest, BlockLightThroughLeaves) {
+    const BlockRegistry reg = makeRegistry();
+    const BlockID stone = idOf(reg, "stone");
+    const BlockID leaves = idOf(reg, "leaves");
+    const BlockID glowstone = idOf(reg, "glowstone");
+    const struct {
+        int layers;
+        bool opaque;
+        int farFace;
+        int beyond;
+    } cases[] = {
+        {1, false, 13, 12},  // beyond = 13 - 1 (one air step)
+        {3, false, 9, 8},    // 15 - 6
+        {6, false, 3, 2},    // 15 - 12
+        {8, false, 0, 0},    // 15 - 16 < 0: dead
+        {8, true, 0, 0},     // opaque control: sealed
+    };
+    for (const auto& c : cases) {
+        World world;
+        const int xWest = 16 - c.layers; // the wall: x xWest..15, all y
+        for (int z = 0; z < kChunkSize; ++z) {
+            for (int y = 0; y < kWorldHeight; ++y) {
+                for (int x = xWest; x <= 15; ++x) {
+                    world.setBlock(x, y, z, c.opaque ? stone : leaves);
+                }
+            }
+        }
+        world.setBlock(16, 8, 8, glowstone); // the source (holds its 15)
+        Lighting::propagateAll(world, reg);
+        EXPECT_EQ(world.getBlockLight(16, 8, 8), 15)
+            << "layers " << c.layers; // the source keeps its value
+        EXPECT_EQ(world.getBlockLight(xWest, 8, 8), c.farFace)
+            << "layers " << c.layers;
+        EXPECT_EQ(world.getBlockLight(xWest - 1, 8, 8), c.beyond)
+            << "layers " << c.layers;
+    }
+}
+
+// 4. Glass costs 1 per vertical sky step — the documented change point
+// from the pre-LGT-2 FREE vertical pass (which would read 15).
+TEST(LightingTest, GlassVerticalCostOne) {
+    const BlockRegistry reg = makeRegistry();
+    EXPECT_EQ(underCanopySky(reg, "glass", 1), 14); // 15 - 1
+    EXPECT_EQ(underCanopySky(reg, "glass", 3), 12); // 15 - 3
+}
+
+// 5. Regression: air stays free vertically / 1 horizontally, water keeps
+// the fixed 3 (the fluid path — the field is not read for fluids).
+TEST(LightingTest, AirAndWaterUnchanged) {
+    const BlockRegistry reg = makeRegistry();
+    const BlockID stone = idOf(reg, "stone");
+    // (a) Air: an enclosed empty column reads 15 at the test cell (the
+    //     canopy tests' geometry with no canopy).
+    EXPECT_EQ(underCanopySky(reg, "air", 0), 15);
+    // (b) Air horizontally: the sealed corridor (roof + floor over
+    //     x 0..14, open source column at x=15) reads 15 - (15 - x).
+    World corridor;
+    for (int z = 0; z < kChunkSize; ++z) {
+        for (int x = 0; x <= 14; ++x) {
+            corridor.setBlock(x, 7, z, stone);
+            corridor.setBlock(x, 9, z, stone);
+        }
+    }
+    Lighting::propagateAll(corridor, reg);
+    EXPECT_EQ(corridor.getSkyLight(15, 8, 8), 15);
+    EXPECT_EQ(corridor.getSkyLight(14, 8, 8), 14); // -1 per air step
+    EXPECT_EQ(corridor.getSkyLight(8, 8, 8), 8);
+    EXPECT_EQ(corridor.getSkyLight(0, 8, 8), 0);   // 15 - 15: dead at 0
+    // (c) Water vertically: the sealed column keeps the fixed 3 per cell
+    //     (the pre-LGT-2 formula).
+    World pool;
+    fillBox(pool, 7, 0, 7, 9, 0, 9, stone); // the floor
+    fillBox(pool, 7, 1, 7, 9, 5, 9, stone); // a sealed box (open top)
+    for (int y = 1; y <= 5; ++y) {
+        pool.setBlock(8, y, 8, BlockID::air());
+        ASSERT_TRUE(pool.setFluid(8, y, 8, FluidKind::Water, kMaxFluidLevel));
+    }
+    Lighting::propagateAll(pool, reg);
+    EXPECT_EQ(pool.getSkyLight(8, 5, 8), 12);
+    EXPECT_EQ(pool.getSkyLight(8, 4, 8), 9);
+    EXPECT_EQ(pool.getSkyLight(8, 3, 8), 6);
+    EXPECT_EQ(pool.getSkyLight(8, 2, 8), 3);
+    EXPECT_EQ(pool.getSkyLight(8, 1, 8), 0);
+}
+
+// 6. The key invariant with the new attenuation: a batch edit of leaf +
+// glass cells — the incremental updateRegion (the rescan with per-cell
+// opacity + the BFS) must produce EXACTLY the full-propagation light.
+TEST(LightingTest, UpdateRegionWithLeavesMatchesFullPropagation) {
+    const BlockRegistry reg = makeRegistry();
+    const BlockID stone = idOf(reg, "stone");
+    const BlockID leaves = idOf(reg, "leaves");
+    const BlockID glass = idOf(reg, "glass");
+    const BlockID glowstone = idOf(reg, "glowstone");
+    const auto buildBase = [&](World& w) {
+        w.getOrCreateChunk({0, 0, 0});
+        fillBox(w, 0, 0, 0, 15, 0, 15, stone); // ground
+        w.setBlock(4, 2, 4, glowstone);        // a source near the canopy
+    };
+    const auto applyEdit = [&](World& w) {
+        // A 4-layer leaf canopy at (8, y 1..4, 8) + a 2-layer glass
+        // column at (12, y 1..2, 12).
+        for (int y = 1; y <= 4; ++y) {
+            w.setBlock(8, y, 8, leaves);
+        }
+        for (int y = 1; y <= 2; ++y) {
+            w.setBlock(12, y, 12, glass);
+        }
+    };
+    World local, full;
+    buildBase(local);
+    buildBase(full);
+    applyEdit(full);
+    Lighting::propagateAll(local, reg);
+    Lighting::propagateAll(full, reg);
+    applyEdit(local);
+    Lighting::updateRegion(local, reg, {8, 1, 8}, {12, 4, 12});
+    expectSameLight(local, full);
 }
 
 TEST(LightingTest, InsertedTwoChunkColumnRelightMatchesFullPropagation) {

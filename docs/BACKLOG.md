@@ -19,7 +19,7 @@
 |---|---|---|---|---|---|---|
 | STRM 流送与内存 | ~~STRM-1 环形状~~ 完成 | | | | | |
 | PIPE 帧管线与并发 | ~~PIPE-1 worker网格化~~ 完成 | ~~PIPE-2 存档增量~~ 完成 | | | | |
-| LGT 光照 | ~~LGT-1 union-region~~ 砍除 | LGT-2 叶子光衰减 | | | | |
+| LGT 光照 | ~~LGT-1 union-region~~ 砍除 | ~~LGT-2 叶子光衰减~~ 完成 | | | | |
 | GEN 世界与生成 | GEN-1 面条洞穴 | GEN-2 树生长 | GEN-3 矿脉形态 | | | |
 | FLUID 流体 | FLUID-1 水量守恒 | FLUID-2 游泳划水 | | | | |
 | ENT 实体/Mob/移动 | ENT-1 四肢摆动 | ENT-2 BlockState★ | ENT-3 mob踏阶 | ENT-4 水体交互 | | |
@@ -50,7 +50,7 @@
 
 ### LGT 光照
 - ~~**LGT-1 union-region**~~ — **砍除（2026-10-21，step-0 翻转触发 + 用户确认）**：设计案（confluence 证明 + 合并判据 footprint 相交传递闭包 + 潜伏 sky rescan clobber bug 发现）已完成，但 step-0 插桩实测证伪前提——同帧选出的 2 列大多远隔（选列 (distSq,x,z) 序：同半径圆格点平局按位置序取前两点 = z=±z* 远隔对称对；vd80 静止填充 6418 帧中可合并 6 帧 = 0.1%，预期节省 **0.002 ms/帧** ≪ 1 ms 砍除线，500× 过线）；光照 job 下限 ~16.7 ms/帧（2 box × 8.37）保留 = 流送 fps 主下限，潜在方向 = 选列 tie-break 相邻化 + union（STRM 相邻变更，表外）；99.x 残余 #2
-- **LGT-2 叶子光衰减** — BlockProperties 加 0-15 opacity 字段 + 传播算法改（渲染条）
+- ~~**LGT-2 叶子光衰减**~~ — **完成（2026-10-21）**：`light_opacity` 0-15 字段（缺省**由 `opaque` 派生** opaque→15/非 opaque→0 = 未设字段内容逐位复现旧行为）+ 统一进入格成本（流体 3 / 垂直天空光=O / 其余=max(1,O)，O=15 不穿透、emission 源格自身持值）+ rescan 逐层减 O；内容 = **leaves 2 / glass 1**（MC 值；glass 垂直 0→1 = 顺手修复现状玻璃顶垂直免费穿过）+ cross/glass_pane 薄模型 O=15 init 守卫；「渲染条」= mesh 烘焙侧零代码（新光值走既有 dirty→PIPE-1 快照 mesh→GL 管线）；base18 **第 83 门 = 重锚**（基线视图含叶冠，首个「光值类」重锚：A/B diff 212,174 px 限定世界表面【stone-gray 96,497/leaf-green 72,957/dirt-brown 24,108/sky-blue 2】、仅暗化【亮化 40 px = AA】、天空像素数一致）；封盒场景：S3a（仅 glowstone）全帧新旧字节一致 = 派生 O 的 E2E 级证明、S3b（熔岩湖）零差 = 流体固定 3 不变、S2（叶探针）亮度带互斥（row A 13/row B 9/冠下 9/control 15）；1226/1226（+14，存量 1212 零改动）；S4 输入放置留用户在场补跑（away 模式偷 lock）
 
 ### GEN 世界与生成
 - **GEN-1 面条洞穴** — 单噪声奶酪洞 → 两 3D 噪声相交隧道（世界条）
@@ -137,3 +137,9 @@
   平局按位置序配对远隔列，设计前提被证伪；PIPE-1 先例翻转纪律触发，
   用户确认砍除；设计过程发现 1 个潜伏 sky rescan clobber bug 记 PITS；
   详见 `archive/phase-lgt1-flip.md`）。
+- 2026-10-21：LGT-2 完成（叶子光衰减：light_opacity 0-15 字段缺省由 opaque
+  派生 = 未设内容逐位复现旧行为 + 统一进入格成本 + leaves 2 / glass 1；
+  base18 第 83 门 = 重锚【首个光值类重锚，A/B diff 限定冠/冠下表面、天空
+  零变化】；封盒 S3a 全帧新旧字节一致 = 派生 O 的 E2E 级证明；1226/1212；
+  S4 输入放置留用户在场补跑）。LGT 行 2/2 全清（1 砍 1 完成），v1.0 任务表
+  推进至 GEN 行。

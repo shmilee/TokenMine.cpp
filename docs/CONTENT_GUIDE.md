@@ -119,6 +119,14 @@
    ```
 
    属性缺省即默认值（solid/opaque/destroyable=true, hardness=1.0, light_emission=0, drops 为空=不掉落, drops_count=1）。
+   `light_opacity`（`[LGT-2]`，0-15，越界点名拒绝；缺省**由 `opaque` 派生**：
+   opaque→15 / 非 opaque→0 = 未设字段的块逐位复现旧行为）：光**进入**该格
+   每格扣减（MC light_opacity 同款刻度）——15 = 全挡（= opaque 不穿透）、
+   0 = air 同款（垂直天空免费 / 水平与格光 1/步）、中间 = 每层扣 N
+   （shipped：leaves=2、glass=1）。**流体格不读本字段**（固定 3/格 = P51
+   文档化简化，water/lava JSON 无需设置）。cross/glass_pane 等薄模型禁止
+   15（init 点名，与 "must not be opaque" 同款矛盾类）。emission 源格自身
+   持值不受影响（15 只挡进入、不挡自身发光）。
    可选 `interact`（Phase 17/40）：锁定时右键命中该方块打开对应面板而非
    放置——值必须来自已知交互集（`crafting_table` 工作台、`furnace` 炉子，
    其他值 = 启动报错）。

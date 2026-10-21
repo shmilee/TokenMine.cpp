@@ -99,6 +99,17 @@ struct BlockProperties {
     std::string fluidName;
     float hardness = 1.0f;       // base break time in seconds (tools refine it)
     int lightEmission = 0;       // block light 0..15 (Phase 7)
+    // Light opacity (LGT-2, the leaf light attenuation): the light lost
+    // when ENTERING this block's cell, 0..15 (Minecraft's light scale:
+    // 15 = fully blocks light, 0 = passes like air, 2 = the leaf value,
+    // 1 = the glass value). JSON key `light_opacity` is OPTIONAL: when
+    // ABSENT the parser DERIVES it from the final opaque flag (opaque ->
+    // 15, non-opaque -> 0 — a bit-for-bit reproduction of the pre-LGT-2
+    // lighting for content without the field). A FLUID cell never reads
+    // this field (it costs the fixed kFluidLightAttenuation — see
+    // world/lighting). Struct default 0: the built-in air sentinel keeps
+    // it (air is non-opaque, the derived value anyway).
+    int lightOpacity = 0;
     // Water reaction (Phase 51), only on a fluid block: when a cell of
     // THIS fluid sits 6-adjacent to a water cell, the fluid cell is
     // converted to a block (the fluid is consumed, the water is not —

@@ -207,5 +207,6 @@
 - **PIPE-1（v1.0 任务表：worker 网格化）** — `archive/phase-pipe-1.md`
 - **PIPE-2（v1.0 任务表：存档增量）** — `archive/phase-pipe-2.md`
 - **LGT-1（v1.0 任务表：union-region，砍除记档）** — `archive/phase-lgt1-flip.md`
+- **LGT-2（v1.0 任务表：叶子光衰减）** — `archive/phase-lgt2.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。
