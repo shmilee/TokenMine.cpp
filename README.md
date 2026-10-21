@@ -84,6 +84,12 @@ cmake --build build
 
 ## 版本与发布
 
+- **v0.3.0**（2026-10-22）：v1.0 任务表第 7 项——**BlockState 通用 per-block
+  状态**（ENT-2）：楼梯朝向（每格 byte）泛化为数据驱动状态机制（块属性
+  `state_count`/`state_default` 双门控 + `World::get/setBlockState` +
+  init 不变量：世界生成不得放置 stateful 块）——树生长（GEN-2）/工作台分块
+  （CRAFT-1）/slab 叠合的前提。存档 format 14 → **15**（`states` 段，旧
+  存档加载值保真迁移、直接可读）。测试 1260/1260、`-Werror` 0 警告。
 - **v0.2.0**（2026-10-22）：v1.0 任务表前五项落地（29 项中的 5 完成 +
   1 经实测砍除记档）——
   - **流送环方形 → 圆盘 + 远平面帽**（STRM-1）：默认 view_distance 80 满环
@@ -103,7 +109,7 @@ cmake --build build
 - **v0.1.0**（2026-10-17，首个公开版）：功能阶段 P0–P99 + 性能系列 99.x
   全部完成；1195/1195 测试、`-Werror` 0 警告。
 - **0.x 承诺**：可玩、可扩展、确定性运行；但**不承诺稳定**——存档格式
-  （现为 format 14，向前迁移）与内容数据格式仍可能随阶段演进，旧存档
+  （现为 format 15，向前迁移）与内容数据格式仍可能随阶段演进，旧存档
   通常可读但请定期备份。已知限制见 `docs/KNOWN_ISSUES.md`。
 - 许可证：MIT（见 `LICENSE`）。
 - **内存提示**：默认 `config/config.json` 为 `view_distance: 80`（圆盘环
