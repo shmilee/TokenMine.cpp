@@ -1466,3 +1466,22 @@
   "spread0" 先例；直烧 = 帧锁定熔岩 burn pass，fps 无关），或接受边界
   格差并逐一列明。口诀：**"帧锁定 roll + real-dt 寿命"的组合天生 fps
   耦合——跨 build 确定性断言先查这个组合在不在场。**
+- **LGT-1 翻转：性能优化的相邻前提被选列策略实际分布证伪（2026-10-21）**：
+  union-region 设计案假设"同帧选出的 2 box 相邻（Δ 典型 (1,0)/(2,0)/(1,1)）"，
+  step-0 实测：选列 = (distSq,x,z) 序，同 distSq 平局时取同半径圆上位置序
+  最小的两点 = 左弧 z=±z* 远隔对称对（Δz = 2z* 典型 15-60 列）→ 可合并
+  （双轴 |Δ|≤2）帧仅 6/6418 = 0.1%，预期节省 0.002 ms/帧（≪ 1 ms 砍除线，
+  500× 过线）。口诀：**性能前提依赖某选择/调度策略的输出分布时，先跑
+  step-0 直方图再写设计，别用"最近 2 个 = 相邻"的几何直觉推 Δ。**
+- **sky rescan clobber（LGT-1 设计时发现，潜伏未修，2026-10-21）**：顺序
+  两次 region 光照传播中，天花板板骑跨 footprint 边界时，后一 region 的
+  rescan（sky = 纯地形函数重写）把边界格的前一 region 水平光流擦成 0，且
+  sky BFS 无边界 seed 无法自愈 = 1-2 格 stale-dark 暗带（block 光有 shell
+  注入自愈、不受影响；确定性不受影响）。修复形态 = 单遍 union（LGT-1 形态，
+  已砍除）或 sky shell seed（留 100+）。口诀：**"纯地形重写"式 rescan 跨
+  region 边界会丢水平流——region 化传播的测试要含骑跨边界的天花板 fixture。**
+- **step-0 插桩读 moved unique_ptr 空引用（LGT-1）**：postLightJobs 里
+  `m_lightJobs.push_back(std::move(job))` **之后**再读 `job->columns`——
+  unique_ptr move 后为 null = SIGSEGV（首跑死在第一个光照 job，EXIT=139；
+  构建 0 警告抓不到这类空引用）。插桩日志块必须放在 push_back 之前。
+  口诀：**`std::move` 之后任何对源句柄的读 = 空；统计/日志放 move 前。**

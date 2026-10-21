@@ -102,7 +102,16 @@
 ## 性能 / 架构
 
 - **Chunk 网格化 = worker 快照 job（`[PIPE-1]` 起）+ 主线程列合并 GL 上传** — `[99.2]` 的 `kRemeshBudgetPerFrame=8`（主线程预算 mesher）**已删除** → `[PIPE-1]`：**mesher 计算搬 4 worker**（每帧至多 `kMaxMeshBacklog=2` 个列快照 job：目标列 3×3 邻域 9 列 × 8 chunk memcpy 进 job 私有临时 World，worker 用**零改动的 ChunkMesher** 出 8 chunk 几何，次帧 flush 后主线程 move 进 `m_chunkMeshData` + 清脏 + 列合并 GL 上传【GL 上下文只在主线程，~1-3 ms/列 = 不可搬走部分】）。选择规则 = 脏列投影 ∩ 非 unlit（99.4 lit pop-in 承接）∩ 距当帧 light-pending 列 Chebyshev ≥2（光 footprint E±1 列会改 C 的光 = 本帧快照必陈旧；被排除列保持脏、下帧自动入选）∩ 非在途，`columnDistanceSq` 最近优先。**帧时序**：pop-in 晚 1 帧（render N+1→N+2，帧锁定确定）；已 mesh 列的邻列 stream 进来 = 最坏 +2 帧收敛（边界面临时对 void 烘焙，dirty 自愈，PITS 有录）。**启动演示区网格化**也走 worker（2 列/帧，帧 ≤10 完成——base18 论证措辞 = "无输入 worker 活动有界于启动 16 mesh job，其后零活动"；帧 60 终图像位级不变 = A/B 四对字节实证）。**实测**：vd80 step-0（插桩）主线程 remesh 填充期 7-11.3 ms/帧 + complete 后 **2.8 min 拖尾**（脏集峰值 45,895）→ `[PIPE-1]` 后主线程只留 GL 上传（step-0b 实测）；填充墙钟不变（gen/post-rate bound：vd16 A/B 8.1 s vs 8.0 s，存档 time/age 剥离后字节一致）。`[Phase 3]`（生成部分 `[Phase 14]` 已并行化；重 mesh 预算 `[99.2]`；列合并+裁剪 `[99.9]`；**worker 快照 mesh `[PIPE-1]`**）
-- **vd80 渲染管线（`[99.9]` 前是 2-30 FPS 坍缩，现已修）** — 三个实测根因：① 无视锥裁剪：207k 加载 chunk 全部提交 draw call（iGPU 每 draw ~10-30 µs + 小 VBO 页表开销，随环增长无上限）；② 光照 job 每格一次 `unordered_map` 查找（天空重扫+种子扫描+BFS ≈ 12 ms/box，流送 2 box/帧 = flush 恒等 25-30 ms）；③ 每 chunk 一个小 VBO。`[99.9]` 修复：视锥裁剪（列级保守 AABB）+ 列合并（draw ÷8）+ 光照 chunk 级重构（每 16³ 块一次查找 + BFS last-chunk 缓存 + 既有地形重扫零写入时跳过天空 BFS——**新地形必须强制传播**，`newTerrain` 参数：整列天生暗（天花板下）时重扫零写入，但侧邻列的光仍要流进来）。实测 vd80 流送中：render 37→1.5-2.5 ms/帧（不随环增长）、flush 25-30→13-17 ms、主线程 CPU 100%→40%（4 worker 各 16-23%，负载分布见 99.9 报告）。**残余**：~~方形环 12 GB~~（`[STRM-1]` 已解决：圆盘 + 远平面帽，实测 9.08→4.59 GB，见「Chunk 流式」99.2 条）、光照 union-region（同 job 的 2 个相邻 box 可合并成 1 个并集 region 省 ~25%，语义略变留待 100+ = LGT-1）、worker 网格化（`[PIPE-1]` 已完成：mesher 计算 → worker 快照 job，主线程只留 GL 上传，见「性能 / 架构」首条）。
+- **vd80 渲染管线（`[99.9]` 前是 2-30 FPS 坍缩，现已修）** — 三个实测根因：① 无视锥裁剪：207k 加载 chunk 全部提交 draw call（iGPU 每 draw ~10-30 µs + 小 VBO 页表开销，随环增长无上限）；② 光照 job 每格一次 `unordered_map` 查找（天空重扫+种子扫描+BFS ≈ 12 ms/box，流送 2 box/帧 = flush 恒等 25-30 ms）；③ 每 chunk 一个小 VBO。`[99.9]` 修复：视锥裁剪（列级保守 AABB）+ 列合并（draw ÷8）+ 光照 chunk 级重构（每 16³ 块一次查找 + BFS last-chunk 缓存 + 既有地形重扫零写入时跳过天空 BFS——**新地形必须强制传播**，`newTerrain` 参数：整列天生暗（天花板下）时重扫零写入，但侧邻列的光仍要流进来）。实测 vd80 流送中：render 37→1.5-2.5 ms/帧（不随环增长）、flush 25-30→13-17 ms、主线程 CPU 100%→40%（4 worker 各 16-23%，负载分布见 99.9 报告）。**残余**：~~方形环 12 GB~~（`[STRM-1]` 已解决：圆盘 + 远平面帽，实测 9.08→4.59 GB，见「Chunk 流式」99.2 条）、~~光照 union-region~~（`[LGT-1]` 砍除记档：step-0 实测同帧选列大多远隔（(distSq,x,z) 平局 → 位置序配对同半径圆远隔对称点），可合并 6/6418 = 0.1%、预期节省 0.002 ms/帧 ≪ 1 ms 砍除线；光照 job 下限 ~16.7 ms/帧保留 = 流送 fps 主下限，潜在方向 = 选列 tie-break 相邻化 + union（STRM 相邻变更）表外——见 `archive/phase-lgt1-flip.md`）、worker 网格化（`[PIPE-1]` 已完成：mesher 计算 → worker 快照 job，主线程只留 GL 上传，见「性能 / 架构」首条）。
+- **sky rescan clobber（潜伏，`[LGT-1]` 设计时发现，未修）**：天花板板骑跨
+  光照 footprint 边界（边界一侧开敞列、另一侧 opaque 天花板延伸）时，顺序
+  两次 region 传播中**后一 region 的 rescan** 把边界格 sky 重写为纯地形值
+  （0），sky BFS 无边界 seed、开敞列不在后一 region 内 → 前一 region 的
+  水平光流无法恢复 = **stale-dark 暗带**（1-2 格宽、天花板下）。block 光
+  不受影响（shell 注入自愈）；确定性不受影响（每次 run 同结果）。修复形态 =
+  单遍 union/整 footprint 单 region（LGT-1 形态，已砍除）或 sky BFS 加
+  shell seed（改动面大，留 100+）；暴露面窄（仅骑跨边界的天花板地形），
+  暂留未修。
 - **`Chunk&` 引用会被 unordered_map rehash 失效** — `getOrCreateChunk` 返回的引用在后续可能 rehash 的 World 变更（其他 chunk 的 setBlock/getOrCreateChunk）后失效；已在 world.hpp 头部文档化，调用方须在一个逻辑操作内使用。`[Phase 3]`
 - **Greedy Meshing 已实现（Phase 18）** — 逐面片合并为同（纹理、sub-mesh、面光）run 的单 quad；200-chunk 实测总三角形 109,648 → 33,558（3.3×，不透明 3.5×）。剩余简化见「渲染 / 网格化（Phase 18）」。
 

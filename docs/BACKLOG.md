@@ -19,7 +19,7 @@
 |---|---|---|---|---|---|---|
 | STRM 流送与内存 | ~~STRM-1 环形状~~ 完成 | | | | | |
 | PIPE 帧管线与并发 | ~~PIPE-1 worker网格化~~ 完成 | ~~PIPE-2 存档增量~~ 完成 | | | | |
-| LGT 光照 | LGT-1 union-region | LGT-2 叶子光衰减 | | | | |
+| LGT 光照 | ~~LGT-1 union-region~~ 砍除 | LGT-2 叶子光衰减 | | | | |
 | GEN 世界与生成 | GEN-1 面条洞穴 | GEN-2 树生长 | GEN-3 矿脉形态 | | | |
 | FLUID 流体 | FLUID-1 水量守恒 | FLUID-2 游泳划水 | | | | |
 | ENT 实体/Mob/移动 | ENT-1 四肢摆动 | ENT-2 BlockState★ | ENT-3 mob踏阶 | ENT-4 水体交互 | | |
@@ -49,7 +49,7 @@
 - ~~**PIPE-2 存档增量**~~ — **完成（2026-10-21 夜）**：退出 O(环大小) 全量 diff → **O(会话编辑数)**：World 写收口（setBlock/setFluid）位置集 journal（`SaveJournal` 双表 + 位移陷阱双上报 + 软上限 262,144 越线降级 legacy）+ 退出按 journal 触及 ∧ 现存 chunk 重算 fresh（makeChunkGenerator 同一回调，generateChunk 纯函数）、仅 live≠fresh 输出（**与 diffWorld 字节等价**——9 类变更 fixture 双阶段 oracle 单测 + E2E 跨 build/进程内对照）；楼梯 O(N) 世界扫描一并转 journal 派生（不变式 = worldgen 永不生成楼梯，真实 assets 钉死）；读档重放自动播种（observer 先于 tryLoadSave 安装）；卸载按列驱逐；`--save-full-diff` CLI 旗 = 进程内 oracle + 逃生锤；format 一字未动（P37 优化方向落地）
 
 ### LGT 光照
-- **LGT-1 union-region** — 同帧 2 个相邻 box 合并并集 region，省 ~25% 光照 job（99.x 残余 #2）
+- ~~**LGT-1 union-region**~~ — **砍除（2026-10-21，step-0 翻转触发 + 用户确认）**：设计案（confluence 证明 + 合并判据 footprint 相交传递闭包 + 潜伏 sky rescan clobber bug 发现）已完成，但 step-0 插桩实测证伪前提——同帧选出的 2 列大多远隔（选列 (distSq,x,z) 序：同半径圆格点平局按位置序取前两点 = z=±z* 远隔对称对；vd80 静止填充 6418 帧中可合并 6 帧 = 0.1%，预期节省 **0.002 ms/帧** ≪ 1 ms 砍除线，500× 过线）；光照 job 下限 ~16.7 ms/帧（2 box × 8.37）保留 = 流送 fps 主下限，潜在方向 = 选列 tie-break 相邻化 + union（STRM 相邻变更，表外）；99.x 残余 #2
 - **LGT-2 叶子光衰减** — BlockProperties 加 0-15 opacity 字段 + 传播算法改（渲染条）
 
 ### GEN 世界与生成
@@ -131,4 +131,9 @@
   vd80 全环退出 6.2 s → **17 ms**（journal 路径；3600f 场景 legacy 对照
   3.28 s ≈ 190×，退出成本 = O(会话编辑数)、与环大小脱钩））。PIPE 行 2/2
   全清，v1.0 任务表
-  3/29 完成。
+  3/29 完成）。
+- 2026-10-21：LGT-1 union-region **砍除记档**（step-0 实测：可合并帧
+  6/6418 = 0.1%、预期节省 0.002 ms/帧 ≪ 1 ms 砍除线——同帧选列 (distSq,x,z)
+  平局按位置序配对远隔列，设计前提被证伪；PIPE-1 先例翻转纪律触发，
+  用户确认砍除；设计过程发现 1 个潜伏 sky rescan clobber bug 记 PITS；
+  详见 `archive/phase-lgt1-flip.md`）。
