@@ -128,19 +128,22 @@ public:
         m_fluidWalkPending[static_cast<std::size_t>(kind)] = true;
     }
 
-    // -- Stair facing (Phase 94): the per-instance orientation of a stair
-    // block (0-3: north/east/south/west). This is the project's first
-    // PER-BLOCK STATE (a breakthrough of the "no per-instance state"
-    // philosophy): the orientation lives in the World (a per-cell byte), so
-    // the collision (Entity) + the mesh (ChunkMesher) — which read World —
-    // can see it. A fresh cell is kStairFacingUnset (255) — the collision
-    // / mesh fall back to the block's stair_facing (the default) when unset.
-    // Written by the game (the setBlock choke point, the placement, the
-    // rotation), read by the collision + mesh.
-    static constexpr std::uint8_t kStairFacingUnset = 255;
-    std::uint8_t stairFacingAt(int x, int y, int z) const;
-    void setStairFacing(int x, int y, int z, std::uint8_t facing); // dirty
-    void clearStairFacing();
+    // -- Per-block state (Phase 94 stair facing, generalized in ENT-2):
+    // the per-instance state of a stateful block (a stair's orientation:
+    // 0-3 north/east/south/west; any model.state_count block's state:
+    // 0..count-1). This is the project's first PER-BLOCK STATE (a
+    // breakthrough of the "no per-instance state" philosophy): the state
+    // lives in the World (a per-cell byte), so the collision (Entity) +
+    // the mesh (ChunkMesher) — which read World — can see it. A fresh cell
+    // is kBlockStateUnset (255 — the value the stateCount domain
+    // [1, 255] never reaches) — the collision / mesh / save derivation
+    // fall back to the block's state DEFAULT (Block::stateDefault) when
+    // unset. Written by the game (the setBlock choke point, the placement,
+    // the rotation), read by the collision + mesh + save.
+    static constexpr std::uint8_t kBlockStateUnset = 255;
+    std::uint8_t stateAt(int x, int y, int z) const;
+    void setState(int x, int y, int z, std::uint8_t state); // dirty
+    void clearState();
 
     // Raw array access (kVolume bytes each) for bulk readers/comparators.
     const std::uint8_t* skyLightData() const { return m_skyLight.data(); }
@@ -157,7 +160,7 @@ private:
     std::array<std::uint8_t, kVolume> m_skyLight {};
     std::array<std::uint8_t, kVolume> m_blockLight {};
     std::array<std::uint8_t, kVolume> m_fluid {}; // encoded (see fluidCode)
-    std::array<std::uint8_t, kVolume> m_stairFacing {}; // Phase 94 (0-3)
+    std::array<std::uint8_t, kVolume> m_blockState {}; // Phase 94 / ENT-2
     bool m_dirty = true;
     // Fluid activity flags (Phase 99.8), indexed by FluidKind (slot 0
     // unused: Water = 1, Lava = 2).

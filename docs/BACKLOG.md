@@ -22,7 +22,7 @@
 | LGT 光照 | ~~LGT-1 union-region~~ 砍除 | ~~LGT-2 叶子光衰减~~ 完成 | | | | |
 | GEN 世界与生成 | ~~GEN-1 面条洞穴~~ 完成 | GEN-2 树生长 | GEN-3 矿脉形态 | | | |
 | FLUID 流体 | FLUID-1 水量守恒 | FLUID-2 游泳划水 | | | | |
-| ENT 实体/Mob/移动 | ENT-1 四肢摆动 | ENT-2 BlockState★ | ENT-3 mob踏阶 | ENT-4 水体交互 | | |
+| ENT 实体/Mob/移动 | ENT-1 四肢摆动 | ~~ENT-2 BlockState★~~ 完成 | ENT-3 mob踏阶 | ENT-4 水体交互 | | |
 | SURV 生存/战斗/效果 | SURV-1 护甲 | SURV-2 氧气窒息 | SURV-3 耐久 | SURV-4 药水饮用 | SURV-5 mob效果 | |
 | CRAFT 物品/合成/面板 | CRAFT-1 工作台分块★ | CRAFT-2 物品3D模型 | CRAFT-3 材质音效 | | | |
 | SAVE 存档 | SAVE-1 自动存档 | | | | | |
@@ -63,7 +63,7 @@
 
 ### ENT 实体/Mob/移动
 - **ENT-1 四肢摆动** — mob 摆腿/摆臂动画，per-part 模型矩阵（99.x 残余 #4）
-- **ENT-2 BlockState★** — P94 楼梯朝向（World 每格 byte + format 14）泛化为通用 per-instance 状态机制；**CRAFT-1 / GEN-2 / slab 叠合 / 栅栏顶等的前提**
+- ~~**ENT-2 BlockState★**~~ — **完成（2026-10-22 夜）**：P94 楼梯朝向（World 每格 byte + format 14 `stairs`）泛化为**通用 per-instance 状态机制**：`Chunk::m_blockState` 换名 + 哨兵泛化 255 + 双门控数据驱动（Stairs 形状隐式 count 4 ∪ `model.state_count`[1,255]+`state_default` 严格配对，楼梯显式声明 = 矛盾拒）+ `World::get/setBlockState`（只验 <255，域由收口/旋转/parse 三处强制）+ Game 三写入点泛化（收口/旋转 `(s+1)%stateCount()`/P97 钩子）+ **format 15 `states` 段**（全量 + 逐条目域校验 + 双向交叉校验 + 键纪律三向 + 14→15 值保真迁移 + collectSave 两路 journal 派生）+ **init 不变量**（worldgen 5 类放置源 stateful 点名拒 = "stateful 格必 session 派生"结构化）；**四个 per-block map 不迁移**（byte/struct 两类状态消费者不相交 = YAGNI 定案，CRAFT-1 取 campfire 范式 + 纪律）；shipped 内容零字段改动；1260/1260（+20 新，存量换名适配语义不动）；base18 **第 85 门 = 结构性免疫不重锚**（新 ×2 与门 84 锚字节一致）；E2E：S2 预置状态场景 A/B **298,211 px = per-instance 朝向首次像素级验证**（P94 时代仅存证）+ round-trip 截图字节一致 + S3 迁移 shot 与 S2A 字节一致（值保真端到端背书）；晨间潜旋回归推迟（pent2_rot.zsh 就绪）；PITS +1（#208 场景几何探针纪律）
 - **ENT-3 mob 踏阶** — mob 1 格 step-up，修追逐卡台阶（Mob 条）
 - **ENT-4 水体交互** — mob/掉落物游泳、浮力（实体条）
 
@@ -148,3 +148,8 @@
   零调参轮定稿；gen 1.17 ms/列；1240/1226；门 84 结构性免疫不重锚【新 ×2
   与 gate 83 锚字节一致】；E2E 批按用户要求压缩 = S2b 进洞走路推迟，
   其余全过）。
+- 2026-10-22（夜，夜间自主推进）：ENT-2 完成（BlockState：P94 楼梯朝向
+  泛化为通用 per-instance 状态机制；format 15 states 段 + 14→15 值保真
+  迁移 + init 不变量【worldgen 放置源禁 stateful】+ 双门控数据驱动
+  state_count/state_default；1260/1240；门 85 结构性免疫不重锚；E2E A/B
+  298k px = 朝向首次像素级验证；晨间潜旋回归推迟）。发布 **v0.3.0**。

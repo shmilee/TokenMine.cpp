@@ -4,7 +4,8 @@
 // unload eviction, the soft cap fallback), the journalDiff equivalence
 // ORACLE against the legacy diffWorld (byte-identical for a mixed-edit
 // fixture, parallel == serial above the P37 threshold), and the real-
-// asset stair invariant the journal-derived stair array relies on.
+// asset state invariant the journal-derived state array relies on (ENT-2:
+// worldgen places no stateful block).
 //
 // Not unit-tested here (Game-level, E2E save-round-trip covered): the
 // observer installation in buildScene and the collectSave branch wiring
@@ -54,8 +55,9 @@ BlockRegistry makeBlocks() {
             ADD_FAILURE() << "block '" << name << "': " << r.error().message;
         }
     }
-    // Phase 94: the stair block (Shape::Stairs gates the per-instance
-    // facing; the journal's stair derivation reads it back).
+    // Phase 94 / ENT-2: the stair block (the Stairs shape gates the
+    // per-instance state — hasState(); the journal's state derivation
+    // reads it back).
     auto s = blocks.registerBlock(parseDef(
         R"({"id":"stone_stairs","model":{"shape":"stairs","textures":{"top":"t","side":"t","bottom":"t"}}})"));
     if (!s.ok()) {
@@ -285,10 +287,10 @@ TEST(SaveJournalTest, JournalDiffMatchesDiffWorld) {
     ASSERT_TRUE(world.setBlock(1, 5, 0, dirt));
     // 7) Burn cascade (a fresh wood cell -> air, the P58 burn target).
     ASSERT_TRUE(world.setBlock(8, 5, 8, BlockID::air()));
-    // 8) Stair placement + rotation (the facing is per-instance state —
-    //    it is NOT in the block/fluid diff; the block edit is).
+    // 8) Stair placement + rotation (the state is per-instance — it is
+    //    NOT in the block/fluid diff; the block edit is).
     ASSERT_TRUE(world.setBlock(2, 5, 2, stairs));
-    ASSERT_TRUE(world.setStairFacing(2, 5, 2, 2));
+    ASSERT_TRUE(world.setBlockState(2, 5, 2, 2));
     // 9) A FAR column that is edited and then UNLOADED (the chunks are
     //    gone; the journal is NOT evicted here — journalDiff's
     //    "existing chunks" filter must drop it on its own). Full column
@@ -390,11 +392,13 @@ TEST(SaveJournalTest, SoftCapFallback) {
                   kWorldHeight * kChunkSize * kChunkSize);
 }
 
-// Group 6: the real-asset stair invariant — worldgen places NO stair-
-// shaped block, so the journal-derived stair array is complete (every
-// stair cell was block-edited this session). Same content-pin family as
-// the P55/P80 tests: run from the repository root.
-TEST(SaveJournalTest, RealWorldgenPlacesNoStairBlock) {
+// Group 6: the real-asset STATE invariant — worldgen places NO stateful
+// block (hasState(): the Stairs shape or an explicit model.state_count —
+// the ENT-2 init cross-check + this empirical scan), so the journal-
+// derived state array is complete (every stateful cell was block-edited
+// this session). Same content-pin family as the P55/P80 tests: run from
+// the repository root.
+TEST(SaveJournalTest, RealWorldgenPlacesNoStatefulBlock) {
     AssetManager assets;
     ASSERT_TRUE(assets.setRoot("assets").ok())
         << "run the tests from the repository root";
@@ -407,11 +411,11 @@ TEST(SaveJournalTest, RealWorldgenPlacesNoStairBlock) {
     auto gen = WorldGenerator::create(7, *params, biomes, blocks);
     ASSERT_TRUE(gen.ok()) << gen.error().message;
     WorldGenerator generator = std::move(*gen);
-    // A 3x3 column region, all 8 layers (72 chunks) — the stair-shaped
-    // cell count must be ZERO (and the region must actually contain
-    // terrain, so the scan is not vacuous).
+    // A 3x3 column region, all 8 layers (72 chunks) — the stateful cell
+    // count must be ZERO (and the region must actually contain terrain,
+    // so the scan is not vacuous).
     std::size_t seenCells = 0;
-    std::size_t stairCells = 0;
+    std::size_t statefulCells = 0;
     for (int cx = 0; cx < 3; ++cx) {
         for (int cz = 0; cz < 3; ++cz) {
             for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy) {
@@ -425,9 +429,8 @@ TEST(SaveJournalTest, RealWorldgenPlacesNoStairBlock) {
                                 continue;
                             }
                             ++seenCells;
-                            if (blocks.at(id).model.shape ==
-                                BlockModel::Shape::Stairs) {
-                                ++stairCells;
+                            if (blocks.at(id).hasState()) {
+                                ++statefulCells;
                             }
                         }
                     }
@@ -436,7 +439,7 @@ TEST(SaveJournalTest, RealWorldgenPlacesNoStairBlock) {
         }
     }
     ASSERT_GT(seenCells, 1000u) << "the region is unexpectedly empty";
-    EXPECT_EQ(stairCells, 0u);
+    EXPECT_EQ(statefulCells, 0u);
 }
 
 // Group 7: parallel == serial above the P37 threshold — 16x17 = 272

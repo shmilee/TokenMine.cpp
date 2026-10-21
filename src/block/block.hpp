@@ -314,6 +314,21 @@ struct BlockModel {
     // the project keeps NO per-block facing state (4 block variants instead,
     // like the dye/wool family). Default 0 (north).
     int stairFacing = 0;
+    // ENT-2: the explicit per-instance state pair (JSON `model.state_count`
+    // / `model.state_default`), strictly paired (both present or both
+    // absent — one without the other is rejected). `stateCount` is the
+    // number of states [1, 255] (the chunk's state byte holds 0..count-1;
+    // 255 is the unset sentinel, so the count never reaches it);
+    // `stateDefault` is the default state [0, count) — what the game's
+    // setBlock choke point writes on placement and what the collision /
+    // mesh / save derivation fall back to when a cell's byte is unset.
+    // The Stairs shape does NOT use these fields: it carries an IMPLICIT
+    // state (count 4, default = stairFacing — the shipped content stays
+    // field-free), and an explicit state_count on a stair is a
+    // contradiction (rejected at data load). See Block::hasState /
+    // stateCount / stateDefault for the dual gate.
+    int stateCount = 0;
+    int stateDefault = 0;
 };
 
 // Phase 97: the stair's PER-INSTANCE facing when a player PLACES it, from
@@ -338,6 +353,26 @@ struct Block {
     std::string name;
     BlockProperties properties;
     BlockModel model;
+
+    // ENT-2: the per-instance state accessors (the DUAL gate). A block is
+    // stateful either through the Stairs shape (IMPLICIT: count 4, default
+    // = stair_facing — the shipped stair content carries no state fields)
+    // or through the explicit model.state_count/state_default pair (any
+    // shape). Pure data reads — the core switches on NONE of these (hard
+    // rule 3): the game's choke point, the rotation, the save and the
+    // consumers read these accessors.
+    bool hasState() const {
+        return model.shape == BlockModel::Shape::Stairs ||
+               model.stateCount > 0;
+    }
+    int stateCount() const {
+        return model.shape == BlockModel::Shape::Stairs ? 4
+                                                        : model.stateCount;
+    }
+    int stateDefault() const {
+        return model.shape == BlockModel::Shape::Stairs ? model.stairFacing
+                                                        : model.stateDefault;
+    }
 };
 
 // Hash for BlockID in unordered containers (identity hash).

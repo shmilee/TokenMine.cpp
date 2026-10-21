@@ -168,12 +168,30 @@ namespace mc {
 //      {x, y, z, facing} (position-sorted), one entry per stair block in
 //      the world (the project's first per-block state; the facing is the
 //      World's per-cell byte). A format-14 file REQUIREs the "stairs" key
-//      (an empty array is valid); a format-13 load migrates into this
-//      empty (the per-instance facing did not exist; the stair block's
-//      stair_facing default is used on load). The entries are cross-checked
-//      against the block edits in both directions (every stair cell has a
-//      facing, every facing is a stair cell). Writes are always format 14.
-inline constexpr int kSaveFormat = 14;
+//      (an empty array is valid) and rejects a "states" key (a version
+//      lie); a format-13 load migrates into this empty (the per-instance
+//      facing did not exist; the stair block's stair_facing default is
+//      used on load). The entries are cross-checked against the block
+//      edits in both directions (every stair cell has a facing, every
+//      facing is a stair cell). A format-14 file LOADS via the
+//      VALUE-PRESERVING MIGRATION into the format-15 states (facing ->
+//      state); a format-15 file never carries "stairs".
+//  15: the per-instance block states (ENT-2, the Phase 94 stair facing
+//      generalized to any stateful block — the Stairs shape OR an explicit
+//      model.state_count) — "states": an array of {x, y, z, state}
+//      (position-sorted), one entry per stateful block in the world. The
+//      state is validated per entry against the block at the entry's
+//      position (a block edit's name -> registry -> [0, stateCount())) and
+//      cross-checked against the block edits in both directions (every
+//      stateful cell has a state, every state is a stateful cell — the
+//      furnaces-key discipline, generalized). A format-15 file REQUIREs
+//      the "states" key (an empty array is valid) and rejects a "stairs"
+//      key (restricted to format 14, a version lie); a format-14 file
+//      loads via the value-preserving migration above, and a format-13
+//      load migrates into this empty (the per-instance state did not
+//      exist; the block's state default is used on load). Writes are
+//      always format 15.
+inline constexpr int kSaveFormat = 15;
 inline constexpr int kSaveFormatMin = 1;
 
 // Phase 40: the furnace save-field bounds — the max smelt/fuel times the
@@ -274,16 +292,20 @@ struct SavedCampfire {
     CampfireCookState state;
 };
 
-// One stair block's per-instance facing (format 14; Phase 94) — the
-// project's first per-block STATE (a breakthrough of the "no per-instance
-// state" philosophy). The game keeps an entry for EVERY stair block in the
-// world (the facing is the World's per-cell byte), cross-checked against
-// the block edits in both directions (the furnaces-key discipline). A
-// format-13 load migrates into this empty (the per-instance facing did not
-// exist; the stair block's stair_facing default is used on load).
-struct SavedStair {
+// One stateful block's per-instance state (format 15; Phase 94 stair
+// facing, generalized in ENT-2) — the project's first per-block STATE (a
+// breakthrough of the "no per-instance state" philosophy). A "stateful"
+// block is one whose Block::hasState() (the Stairs shape — count 4, the
+// facing 0-3 north/east/south/west — or an explicit model.state_count).
+// The game keeps an entry for EVERY stateful block in the world (the state
+// is the World's per-cell byte), cross-checked against the block edits in
+// both directions (the furnaces-key discipline). A format-14 load migrates
+// its "stairs" entries in VALUE-PRESERVING (facing -> state); a format-13
+// load migrates into this empty (the per-instance state did not exist; the
+// block's state default is used on load).
+struct SavedState {
     BlockPos pos;
-    std::uint8_t facing = 0; // 0-3: north/east/south/west
+    std::uint8_t state = 0; // [0, block.stateCount()); a stair: 0-3
 };
 
 // One active player status effect (format 8; Phase 46): the effect NAME
@@ -355,11 +377,13 @@ struct SaveGame {
     // format-10 load migrates into this empty (the campfire block did not
     // exist).
     std::vector<SavedCampfire> campfires;
-    // The per-instance stair facings (format 14; Phase 94): one entry per
-    // stair block in the world (position-sorted; the World's per-cell byte
-    // order). Empty when the world holds no stair; a format-13 load
-    // migrates into this empty (the per-instance facing did not exist).
-    std::vector<SavedStair> stairs;
+    // The per-instance block states (format 15; Phase 94 stair facing,
+    // generalized in ENT-2): one entry per stateful block in the world
+    // (position-sorted; the World's per-cell byte order). Empty when the
+    // world holds no stateful block; a format-14 load migrates its stairs
+    // in value-preserving, a format-13 load into this empty (the
+    // per-instance state did not exist).
+    std::vector<SavedState> states;
     // The player's active status effects (format 8; Phase 46), name-
     // sorted. Empty for format 1-7 loads (the effects did not exist).
     std::vector<SavedEffect> playerEffects;

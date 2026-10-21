@@ -86,18 +86,27 @@ public:
     // setBlock.
     bool setFluid(int x, int y, int z, FluidKind kind, std::uint8_t level);
 
-    // Stair facing (Phase 94): the per-instance orientation of a stair cell
-    // (0-3: north/east/south/west). Same coordinate conventions as getFluid:
-    // y outside [0, kWorldHeight) or a chunk that was never created reads the
-    // sentinel 255 (kStairFacingUnset) — collision (solidTopHeight) and mesh
-    // (emitStairs) fall back to the block's `stair_facing` default. Written by
-    // the game (the setBlock choke point, the placement, the rotation); read by
-    // the collision + the mesh.
-    std::uint8_t getStairFacing(int x, int y, int z) const;
-    // Sets the facing in an existing chunk. Returns false (and changes
-    // nothing) when y is out of range, the facing is out of range, or the
-    // chunk was never created. Marks the target chunk dirty (a mesh rebuild).
-    bool setStairFacing(int x, int y, int z, std::uint8_t facing);
+    // Per-block state (Phase 94 stair facing, generalized in ENT-2): the
+    // per-instance state of a stateful cell (a stair's orientation 0-3; any
+    // model.state_count block's state 0..count-1). Same coordinate
+    // conventions as getFluid: y outside [0, kWorldHeight) or a chunk that
+    // was never created reads the sentinel 255 (kBlockStateUnset) — the
+    // collision (solidTopHeight) + the mesh (emitStairs) + the save
+    // derivation fall back to the block's state default
+    // (Block::stateDefault). Written by the game (the setBlock choke point,
+    // the placement, the rotation); read by the collision + the mesh + the
+    // save.
+    std::uint8_t getBlockState(int x, int y, int z) const;
+    // Sets the state in an existing chunk. Returns false (and changes
+    // nothing) when y is out of range, the state is 255 (the UNSET
+    // sentinel — the World API never writes it; the sentinel is what a
+    // fresh cell holds), or the chunk was never created. This call
+    // validates < 255 + y + existence + no-change ONLY (the World holds no
+    // registry): the [0, stateCount) domain is enforced at the three
+    // writers — the game's setBlock choke point (the block's default), the
+    // rotation ((s+1) % stateCount) and the save parse (per-entry range
+    // against the registry). Marks the target chunk dirty (a mesh rebuild).
+    bool setBlockState(int x, int y, int z, std::uint8_t state);
 
     // Light queries (0..15), same coordinate conventions as getBlock.
     // Above the world (y >= kWorldHeight) and around the world (a chunk

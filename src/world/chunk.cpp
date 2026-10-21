@@ -22,7 +22,7 @@ void Chunk::set(int x, int y, int z, BlockID id) {
 void Chunk::fill(BlockID id) {
     std::fill(m_blocks.begin(), m_blocks.end(), id);
     clearFluid(); // a cell holds a block XOR fluid
-    clearStairFacing(); // a fresh cell holds no per-instance facing
+    clearState(); // a fresh cell holds no per-instance state
     m_dirty = true;
 }
 
@@ -82,22 +82,23 @@ void Chunk::clearFluid() {
     m_fluidHot = {true, true, true}; // everything that flowed is stale
 }
 
-std::uint8_t Chunk::stairFacingAt(int x, int y, int z) const {
+std::uint8_t Chunk::stateAt(int x, int y, int z) const {
     assert(inBounds(x) && inBounds(y) && inBounds(z));
-    return m_stairFacing[index(x, y, z)];
+    return m_blockState[index(x, y, z)];
 }
 
-void Chunk::setStairFacing(int x, int y, int z, std::uint8_t facing) {
+void Chunk::setState(int x, int y, int z, std::uint8_t state) {
     assert(inBounds(x) && inBounds(y) && inBounds(z));
-    assert(facing <= 3);
-    m_stairFacing[index(x, y, z)] = facing;
+    assert(state != kBlockStateUnset); // the sentinel is the UNSET value
+    m_blockState[index(x, y, z)] = state;
     m_dirty = true;
 }
 
-void Chunk::clearStairFacing() {
-    // A fresh cell holds no per-instance facing (the sentinel). The
-    // collision / mesh fall back to the block's stair_facing when unset.
-    std::fill(m_stairFacing.begin(), m_stairFacing.end(), kStairFacingUnset);
+void Chunk::clearState() {
+    // A fresh cell holds no per-instance state (the sentinel). The
+    // collision / mesh / save derivation fall back to the block's state
+    // default (Block::stateDefault) when unset.
+    std::fill(m_blockState.begin(), m_blockState.end(), kBlockStateUnset);
 }
 
 std::size_t Chunk::index(int x, int y, int z) {

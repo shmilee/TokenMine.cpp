@@ -730,22 +730,22 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         root["campfires"] = std::move(campfires);
     }
 
-    // Always written (possibly empty — a world without stair blocks).
-    // Phase 94: the per-instance stair facings (the project's first per-
-    // block state).
+    // Always written (possibly empty — a world without stateful blocks).
+    // ENT-2: the per-instance block states (format 15; Phase 94's stair
+    // facings generalized — the project's first per-block state).
     {
-        Json stairs = Json::array();
-        for (const SavedStair& ss : save.stairs) {
+        Json states = Json::array();
+        for (const SavedState& ss : save.states) {
             Json se = Json::object();
             Json pos = Json::array();
             pos.push_back(Json(ss.pos.x));
             pos.push_back(Json(ss.pos.y));
             pos.push_back(Json(ss.pos.z));
             se["pos"] = pos;
-            se["facing"] = Json(static_cast<int>(ss.facing));
-            stairs.push_back(std::move(se));
+            se["state"] = Json(static_cast<int>(ss.state));
+            states.push_back(std::move(se));
         }
-        root["stairs"] = std::move(stairs);
+        root["states"] = std::move(states);
     }
 
     Json entities = Json::array();
@@ -802,13 +802,16 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     }
     // "furnace" (format 6) and "furnaces" (format 7) are BOTH known keys —
     // which one a file may carry is enforced per format below (a format-6
-    // file must still parse for the Phase 44 migration).
+    // file must still parse for the Phase 44 migration). Likewise "stairs"
+    // (format 14) and "states" (format 15, ENT-2's generalization): both
+    // are known, the per-format key discipline below enforces which one a
+    // file may carry ("stairs" is restricted to 14, "states" to 15).
     const std::set<std::string> topLevel {"format", "seed", "time", "player",
                                           "inventory", "inv_grid",
                                           "table_grid", "furnace",
                                           "furnaces", "fires", "campfires",
-                                          "stairs", "entities", "blocks",
-                                          "fluids"};
+                                          "stairs", "states", "entities",
+                                          "blocks", "fluids"};
     MC_TRY(rejectUnknownFields(def, topLevel, "save file"));
 
     const Json* fmt = def.find("format");
@@ -1726,27 +1729,151 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                        std::to_string(fmtVersion) + ")");
     }
 
-    // -- per-instance stair facings (format 14; Phase 94) ----------------
-    // A "stair cell" = a block edit whose block is Shape::Stairs (the block
-    // registry resolves the name). The save cross-checks the facing entries
-    // against the stair cells in both directions (every stair cell owns a
-    // facing, every facing is a stair cell — the furnaces-key discipline).
-    // Format 14 REQUIREs the "stairs" array (an empty array is valid). A
-    // format-13 (and older) file carrying "stairs" is a version lie,
-    // rejected; it migrates into this empty (the per-instance facing did
-    // not exist — the stair block's stair_facing default is used on load).
-    std::set<BlockPos> stairCells;
+    // -- per-instance block states (format 14 "stairs" / format 15
+    //    "states"; Phase 94 stair facing, generalized in ENT-2) ---------
+    // A "state cell" = a block edit whose block has a per-instance state
+    // (hasState(): the Stairs shape or an explicit model.state_count — the
+    // block registry resolves the name). The save cross-checks the entries
+    // against the state cells in both directions (every stateful cell owns
+    // a state, every state is a stateful cell — the furnaces-key
+    // discipline, generalized).
+    //
+    // Key discipline (version-lie rejection): format 15 REQUIREs the
+    // "states" array (an empty array is valid) and rejects a "stairs" key
+    // (restricted to 14); format 14 REQUIREs the "stairs" array (an empty
+    // array is valid) and rejects a "states" key (requires 15 or newer);
+    // format 13 and earlier carry NEITHER (either key is a version lie).
+    //
+    // Migration: a format-14 file LOADS via the VALUE-PRESERVING migration
+    // ({pos, facing} -> {pos, state = facing}); format 13 and earlier
+    // migrate into this empty (the per-instance state did not exist — the
+    // consumers fall back to the block's state default on load).
+    std::set<BlockPos> stateCells;
+    std::map<BlockPos, std::string> stateCellBlock; // pos -> block name
     for (const SavedBlockEdit& e : save.blockEdits) {
         const Block* b = blocks.findByName(e.blockName);
-        if (b != nullptr &&
-            b->model.shape == BlockModel::Shape::Stairs) {
-            stairCells.insert(e.pos);
+        if (b != nullptr && b->hasState()) {
+            stateCells.insert(e.pos);
+            stateCellBlock[e.pos] = e.blockName;
         }
     }
+    const Json* statesArr = def.find("states");
     const Json* stairArr = def.find("stairs");
-    if (fmtVersion >= 14) {
+    // The entry's position: an [x, y, z] integer triple, y in the world
+    // height, no duplicates (shared by the 14/15 entry loops).
+    const auto parseEntryPos =
+        [&](const Json& e, const std::string& what,
+            std::set<BlockPos>& seen) -> Result<BlockPos> {
+        const Json* pos = e.find("pos");
+        if (pos == nullptr || !pos->isArray() || pos->size() != 3) {
+            return MC_FAIL(what + " requires a 'pos' [x, y, z] array");
+        }
+        double x, y, z;
+        if (!isInt(pos->at(0), &x) || !isInt(pos->at(1), &y) ||
+            !isInt(pos->at(2), &z)) {
+            return MC_FAIL(what + " 'pos' entries must be integers");
+        }
+        const int yi = static_cast<int>(y);
+        if (!isWorldYValid(yi)) {
+            return MC_FAIL(what + " has y=" + std::to_string(yi) +
+                           " outside the world height [0, " +
+                           std::to_string(kWorldHeight) + ")");
+        }
+        const BlockPos bpos {static_cast<int>(x), yi, static_cast<int>(z)};
+        if (seen.count(bpos) != 0) {
+            return MC_FAIL(what + " duplicates the state position " +
+                           posStr(bpos));
+        }
+        seen.insert(bpos);
+        return bpos;
+    };
+    if (fmtVersion >= 15) {
+        if (stairArr != nullptr) {
+            return MC_FAIL("save 'stairs' is restricted to format 14 (a "
+                           "format-15 file carries 'states')");
+        }
+        if (statesArr == nullptr || !statesArr->isArray()) {
+            return MC_FAIL("save format 15 requires a 'states' array");
+        }
+        std::set<BlockPos> entryPos;
+        for (std::size_t i = 0; i < statesArr->size(); ++i) {
+            const Json& e = statesArr->at(i);
+            const std::string what =
+                "save 'states' entry #" + std::to_string(i);
+            if (!e.isObject()) {
+                return MC_FAIL(what + " must be an object");
+            }
+            // Strict entry shape: exactly {pos, state}.
+            const std::set<std::string> eFields {"pos", "state"};
+            MC_TRY(rejectUnknownFields(e, eFields, what));
+            Result<BlockPos> pr = parseEntryPos(e, what, entryPos);
+            MC_TRY(pr);
+            const BlockPos& bpos = pr.value();
+            const Json* st = e.find("state");
+            if (st == nullptr || !st->isNumber()) {
+                return MC_FAIL(what + " requires numeric 'state'");
+            }
+            const int si = st->asInt();
+            if (si < 0) {
+                return MC_FAIL(what + " state " + std::to_string(si) +
+                               " is out of range (it must be >= 0)");
+            }
+            // The domain check against the block at the entry's position
+            // (block edit name -> registry -> stateCount): a stateful cell
+            // names its range; an entry at a NON-stateful position is
+            // caught by the cross-check below.
+            const auto cit = stateCellBlock.find(bpos);
+            if (cit != stateCellBlock.end()) {
+                const Block* cb = blocks.findByName(cit->second);
+                if (cb != nullptr && si >= cb->stateCount()) {
+                    return MC_FAIL(what + " state " + std::to_string(si) +
+                                   " is out of range [0, " +
+                                   std::to_string(cb->stateCount()) +
+                                   ") for the " + cit->second + " at " +
+                                   posStr(bpos));
+                }
+            }
+            save.states.push_back(
+                SavedState {bpos, static_cast<std::uint8_t>(si)});
+        }
+        if (entryPos != stateCells) {
+            for (const BlockPos& p : entryPos) {
+                if (stateCells.count(p) == 0) {
+                    return MC_FAIL("save 'states' has an entry at " +
+                                   posStr(p) +
+                                   " which is not a stateful block in the "
+                                   "world's block edits");
+                }
+            }
+            for (const BlockPos& p : stateCells) {
+                if (entryPos.count(p) == 0) {
+                    return MC_FAIL("the stateful block at " + posStr(p) +
+                                   " has no 'states' entry (every "
+                                   "stateful block owns a per-instance "
+                                   "state)");
+                }
+            }
+            return MC_FAIL("save 'states' does not match the world's "
+                           "stateful blocks");
+        }
+    } else if (fmtVersion == 14) {
+        if (statesArr != nullptr) {
+            return MC_FAIL("save 'states' requires format 15 or newer (got " +
+                           std::to_string(fmtVersion) + ")");
+        }
         if (stairArr == nullptr || !stairArr->isArray()) {
             return MC_FAIL("save format 14 requires a 'stairs' array");
+        }
+        // A format-14 file's state cells are the STAIR cells (the Stairs
+        // shape — the model state fields postdate format 14, so a 14 file
+        // can only carry stair states).
+        std::set<BlockPos> stairCells;
+        for (const SavedBlockEdit& e : save.blockEdits) {
+            const Block* b = blocks.findByName(e.blockName);
+            if (b != nullptr &&
+                b->model.shape == BlockModel::Shape::Stairs) {
+                stairCells.insert(e.pos);
+            }
         }
         std::set<BlockPos> entryPos;
         for (std::size_t i = 0; i < stairArr->size(); ++i) {
@@ -1758,27 +1885,9 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
             }
             const std::set<std::string> eFields {"pos", "facing"};
             MC_TRY(rejectUnknownFields(e, eFields, what));
-            const Json* pos = e.find("pos");
-            if (pos == nullptr || !pos->isArray() || pos->size() != 3) {
-                return MC_FAIL(what + " requires a 'pos' [x, y, z] array");
-            }
-            double x, y, z;
-            if (!isInt(pos->at(0), &x) || !isInt(pos->at(1), &y) ||
-                !isInt(pos->at(2), &z)) {
-                return MC_FAIL(what + " 'pos' entries must be integers");
-            }
-            const int yi = static_cast<int>(y);
-            if (!isWorldYValid(yi)) {
-                return MC_FAIL(what + " has y=" + std::to_string(yi) +
-                               " outside the world height [0, " +
-                               std::to_string(kWorldHeight) + ")");
-            }
-            const BlockPos bpos {static_cast<int>(x), yi, static_cast<int>(z)};
-            if (entryPos.count(bpos) != 0) {
-                return MC_FAIL(what + " duplicates the stair position " +
-                               posStr(bpos));
-            }
-            entryPos.insert(bpos);
+            Result<BlockPos> pr = parseEntryPos(e, what, entryPos);
+            MC_TRY(pr);
+            const BlockPos& bpos = pr.value();
             const Json* f = e.find("facing");
             if (f == nullptr || !f->isNumber()) {
                 return MC_FAIL(what + " requires numeric 'facing'");
@@ -1788,7 +1897,10 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                 return MC_FAIL(what + " facing " + std::to_string(fi) +
                                " is out of range [0, 3]");
             }
-            save.stairs.push_back(SavedStair {bpos, static_cast<std::uint8_t>(fi)});
+            // The VALUE-PRESERVING migration 14 -> 15: the facing becomes
+            // the state (a stair's state IS its facing).
+            save.states.push_back(
+                SavedState {bpos, static_cast<std::uint8_t>(fi)});
         }
         if (entryPos != stairCells) {
             for (const BlockPos& p : entryPos) {
@@ -1809,15 +1921,27 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
             return MC_FAIL("save 'stairs' does not match the world's "
                            "stair blocks");
         }
-    } else if (stairArr != nullptr) {
-        return MC_FAIL("save 'stairs' requires format 14 or newer (got " +
-                       std::to_string(fmtVersion) + ")");
+    } else {
+        // Format 13 and earlier: neither key may be present (a version
+        // lie); the states migrate into this empty (the per-instance state
+        // did not exist — the consumers fall back to the block's state
+        // default on load).
+        if (statesArr != nullptr) {
+            return MC_FAIL("save 'states' requires format 15 or newer (got " +
+                           std::to_string(fmtVersion) + ")");
+        }
+        if (stairArr != nullptr) {
+            return MC_FAIL("save 'stairs' requires format 14 or newer (got " +
+                           std::to_string(fmtVersion) + ")");
+        }
     }
-    // The game's invariant after ANY load: every stair block in the world
-    // owns a per-instance facing entry. Format 14 guarantees it (the
-    // cross-check); format 13 and earlier carry no entries at all (the
-    // per-instance facing did not exist — a hand-edited stair in an old
-    // file is possible) — the game sets the stair_facing default on load.
+    // The game's invariant after ANY load: every stateful block in the
+    // world owns a per-instance state entry. Format 15 guarantees it (the
+    // cross-check); format 14 migrates its stairs in value-preserving;
+    // format 13 and earlier carry no entries at all (the per-instance
+    // state did not exist — a hand-edited stateful block in an old file is
+    // possible) — the consumers fall back to the block's state default on
+    // load (the cells keep the sentinel).
     return save;
 }
 

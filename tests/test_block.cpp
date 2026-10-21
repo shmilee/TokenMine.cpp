@@ -2067,6 +2067,142 @@ TEST(BlockRegistryTest, Lgt2LightOpacityContent) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Per-block state (ENT-2, the Phase 94 stair facing generalized): the
+// dual gate — the Stairs shape carries an IMPLICIT state (count 4, default
+// = stair_facing; the shipped content stays field-free), any other shape
+// is stateful through the explicit model.state_count/state_default pair
+// (strictly paired, count [1, 255], default [0, count)).
+// ---------------------------------------------------------------------------
+
+TEST(BlockRegistryTest, ParsesStatePairAndAccessors) {
+    // An explicit state pair on a full cube: the accessors report it.
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"s","model":{"textures":{"top":"t","side":"t","bottom":"t"},)"
+        R"("state_count":3,"state_default":1}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Block& b = reg.at(*r);
+    EXPECT_TRUE(b.hasState());
+    EXPECT_EQ(b.stateCount(), 3);
+    EXPECT_EQ(b.stateDefault(), 1);
+    // A stateless block: the default shape, no fields.
+    BlockRegistry reg2;
+    auto r2 = reg2.registerBlock(parseDef(minimalDef("plain")));
+    ASSERT_TRUE(r2.ok()) << r2.error().message;
+    EXPECT_FALSE(reg2.at(*r2).hasState());
+    EXPECT_EQ(reg2.at(*r2).stateCount(), 0);
+    EXPECT_EQ(reg2.at(*r2).stateDefault(), 0);
+    // A STAIR (no explicit fields): the implicit state — count 4, the
+    // default is the stair_facing (the shipped behavior, unchanged).
+    BlockRegistry reg3;
+    auto r3 = reg3.registerBlock(parseDef(
+        R"({"id":"st","model":{"shape":"stairs","stair_facing":2,)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r3.ok()) << r3.error().message;
+    EXPECT_TRUE(reg3.at(*r3).hasState());
+    EXPECT_EQ(reg3.at(*r3).stateCount(), 4);
+    EXPECT_EQ(reg3.at(*r3).stateDefault(), 2); // the stair_facing
+}
+
+TEST(BlockRegistryTest, StatePairRejectsMissingOne) {
+    // One field without the other is a no-op typo (the ammo discipline,
+    // the fast_against strict-pair pattern) — rejected and named.
+    auto countOnly = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"a","model":{"textures":{"top":"t","side":"t","bottom":"t"},)"
+        R"("state_count":3}})"));
+    ASSERT_FALSE(countOnly.ok());
+    EXPECT_NE(countOnly.error().message.find("strict pair"),
+              std::string::npos);
+    auto defaultOnly = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"b","model":{"textures":{"top":"t","side":"t","bottom":"t"},)"
+        R"("state_default":1}})"));
+    ASSERT_FALSE(defaultOnly.ok());
+    EXPECT_NE(defaultOnly.error().message.find("strict pair"),
+              std::string::npos);
+}
+
+TEST(BlockRegistryTest, StateCountDomain) {
+    // [1, 255]: 0 and 256 (the sentinel's value) are rejected and named;
+    // both boundaries parse (with a valid default).
+    auto zero = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"a","model":{"textures":{"top":"t","side":"t","bottom":"t"},)"
+        R"("state_count":0,"state_default":0}})"));
+    ASSERT_FALSE(zero.ok());
+    EXPECT_NE(zero.error().message.find("state_count"), std::string::npos);
+    auto big = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"b","model":{"textures":{"top":"t","side":"t","bottom":"t"},)"
+        R"("state_count":256,"state_default":0}})"));
+    ASSERT_FALSE(big.ok());
+    EXPECT_NE(big.error().message.find("state_count"), std::string::npos);
+    auto lo = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"c","model":{"textures":{"top":"t","side":"t","bottom":"t"},)"
+        R"("state_count":1,"state_default":0}})"));
+    ASSERT_TRUE(lo.ok()) << lo.error().message;
+    BlockRegistry regHi;
+    auto hi = regHi.registerBlock(parseDef(
+        R"({"id":"d","model":{"textures":{"top":"t","side":"t","bottom":"t"},)"
+        R"("state_count":255,"state_default":254}})"));
+    ASSERT_TRUE(hi.ok()) << hi.error().message;
+    EXPECT_EQ(regHi.at(*hi).stateCount(), 255);
+    EXPECT_EQ(regHi.at(*hi).stateDefault(), 254);
+}
+
+TEST(BlockRegistryTest, StateDefaultDomain) {
+    // [0, state_count): the boundary count itself is rejected, as is a
+    // negative default.
+    auto eq = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"a","model":{"textures":{"top":"t","side":"t","bottom":"t"},)"
+        R"("state_count":3,"state_default":3}})"));
+    ASSERT_FALSE(eq.ok());
+    EXPECT_NE(eq.error().message.find("state_default"), std::string::npos);
+    auto neg = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"b","model":{"textures":{"top":"t","side":"t","bottom":"t"},)"
+        R"("state_count":3,"state_default":-1}})"));
+    ASSERT_FALSE(neg.ok());
+    EXPECT_NE(neg.error().message.find("state_default"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, StairRejectsExplicitStateCount) {
+    // A Stairs shape carries its implicit state (count 4, default =
+    // stair_facing) — an explicit state_count is a contradiction, named
+    // and rejected (the shipped stair content stays field-free).
+    auto bad = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"st","model":{"shape":"stairs","state_count":3,)"
+        R"("state_default":0,"textures":{"top":"t","side":"t",)"
+        R"("bottom":"t"}}})"));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("state_count"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, Ent2StairVariantsStatePinned) {
+    // The 4 shipped stair variants: the implicit state (count 4, the
+    // default is each variant's stair_facing 0/1/2/3) — and a plain
+    // opaque block (stone) stays stateless.
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const struct {
+        const char* name;
+        int facing;
+    } want[] = {
+        {"stone_stairs", 0}, {"stone_stairs_east", 1},
+        {"stone_stairs_south", 2}, {"stone_stairs_west", 3},
+    };
+    for (const auto& w : want) {
+        const Block* b = reg.findByName(w.name);
+        ASSERT_TRUE(b != nullptr) << w.name;
+        EXPECT_TRUE(b->hasState()) << w.name;
+        EXPECT_EQ(b->stateCount(), 4) << w.name;
+        EXPECT_EQ(b->stateDefault(), w.facing) << w.name;
+    }
+    const Block* s = reg.findByName("stone");
+    ASSERT_TRUE(s != nullptr);
+    EXPECT_FALSE(s->hasState());
+}
+
 TEST(BlockRegistryTest, Phase83IronBlockRecipeContent) {
     // The shipped iron block recipe: shaped 3x3 iron_ingot -> 1 (the
     // Minecraft pattern — the beacon base is crafted from the ingot).

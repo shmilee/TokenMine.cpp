@@ -54,6 +54,26 @@ Result<WorldGenerator> WorldGenerator::create(std::int64_t seed,
     gen.m_seed = seed;
     gen.m_params = params;
 
+    // ENT-2: the per-block state invariant — worldgen places NO stateful
+    // block. A per-instance state has no worldgen writer (the game's
+    // setBlock choke point is the only one), and the save journal derives
+    // the state array from the BLOCK journal on exactly this premise
+    // (every stateful cell was block-edited this session) — a generator
+    // that placed a stateful block would silently lose its state on a
+    // journal save. The placement sources: the biome surfaces /
+    // subsurfaces / decorations, the ore veins, the tree trunks / leaves
+    // (checked at each resolution below, named).
+    const auto rejectStateful = [&](const char* what, const std::string& name,
+                                    BlockID id) -> Result<void> {
+        if (blocks.at(id).hasState()) {
+            return MC_FAIL(std::string("worldgen ") + what + " '" + name +
+                           "' has a per-instance state — worldgen never "
+                           "writes state (the game's setBlock choke point "
+                           "is the only state writer)");
+        }
+        return {};
+    };
+
     for (const Biome& b : biomes.all()) {
         ResolvedBiome rb;
         rb.name = b.name;
@@ -66,12 +86,15 @@ Result<WorldGenerator> WorldGenerator::create(std::int64_t seed,
             return MC_FAIL("biome '" + b.name + "': unknown surface block '" +
                            b.surface + "'");
         }
+        MC_TRY(rejectStateful("biome surface block", b.surface, rb.surface));
         rb.subsurface = blocks.idForName(b.subsurface);
         if (!rb.subsurface.valid()) {
             return MC_FAIL("biome '" + b.name +
                            "': unknown subsurface block '" + b.subsurface +
                            "'");
         }
+        MC_TRY(rejectStateful("biome subsurface block", b.subsurface,
+                              rb.subsurface));
         // Surface decorations (Phase 45): resolve each block name.
         for (const BiomeDecoration& d : b.decorations) {
             ResolvedDecoration rd;
@@ -82,6 +105,8 @@ Result<WorldGenerator> WorldGenerator::create(std::int64_t seed,
                                "': unknown decoration block '" + d.block +
                                "'");
             }
+            MC_TRY(rejectStateful("biome decoration block", d.block,
+                                  rd.block));
             rb.decorations.push_back(std::move(rd));
         }
         gen.m_totalWeight += rb.weight;
@@ -97,6 +122,7 @@ Result<WorldGenerator> WorldGenerator::create(std::int64_t seed,
         if (!ro.block.valid()) {
             return MC_FAIL("worldgen ore: unknown block '" + o.block + "'");
         }
+        MC_TRY(rejectStateful("ore", o.block, ro.block));
         gen.m_ores.push_back(std::move(ro));
     }
 
@@ -118,6 +144,16 @@ Result<WorldGenerator> WorldGenerator::create(std::int64_t seed,
                            ": unknown block '" + f.name + "'");
         }
     }
+    // ENT-2: the tree trunks / leaves are worldgen placement sources too
+    // (the terrain fills — bottom / deep — are not listed among the
+    // stateful-feature sources by design: they are the world's bedrock and
+    // deep stone, which the project's stateful roadmap (facing / top-bottom
+    // / sapling stages) never puts there; the real-asset test
+    // SaveJournalTest.RealWorldgenPlacesNoStatefulBlock pins the whole
+    // generated region empirically).
+    MC_TRY(rejectStateful("tree trunk block", params.treeTrunk, gen.m_trunk));
+    MC_TRY(rejectStateful("tree leaves block", params.treeLeaves,
+                          gen.m_leaves));
     // Phase 93: derive the procedural lakes (a pure function of the seed, so
     // they are the same across runs + chunks).
     gen.computeProceduralLakes();

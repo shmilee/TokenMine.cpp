@@ -877,13 +877,14 @@ void ChunkMesher::emitStairs(ChunkMeshData& out, const Block& block,
     const int wx = origin.x + lx;
     const int wy = origin.y + ly;
     const int wz = origin.z + lz;
-    // Phase 94: the per-instance facing (the World's per-cell byte — the
-    // project's first per-block state). The game sets it when the stair is
-    // placed (to the block's stair_facing default) + on rotation. Unset (the
-    // sentinel, e.g. unit tests without a game) falls back to the block's
-    // stair_facing (the default).
-    const int pf = m_world.getStairFacing(wx, wy, wz);
-    const int f = (pf <= 3) ? pf : block.model.stairFacing;
+    // ENT-2: the per-instance state (the World's per-cell byte — the
+    // project's first per-block state; for a stair, the facing). The game
+    // sets it when the block is placed (to the block's state default) + on
+    // rotation. Unset (the sentinel, e.g. unit tests without a game) falls
+    // back to the block's state default.
+    const int st = m_world.getBlockState(wx, wy, wz);
+    const int f =
+        (st != Chunk::kBlockStateUnset) ? st : block.stateDefault();
     const float skyF =
         static_cast<float>(m_world.getSkyLight(wx, wy, wz)) /
         static_cast<float>(kMaxLight);

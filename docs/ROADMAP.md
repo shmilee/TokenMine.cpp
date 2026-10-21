@@ -209,5 +209,6 @@
 - **LGT-1（v1.0 任务表：union-region，砍除记档）** — `archive/phase-lgt1-flip.md`
 - **LGT-2（v1.0 任务表：叶子光衰减）** — `archive/phase-lgt2.md`
 - **GEN-1（v1.0 任务表：面条洞穴）** — `archive/phase-gen1.md`
+- **ENT-2（v1.0 任务表：BlockState per-block 状态泛化）** — `archive/phase-ent2.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

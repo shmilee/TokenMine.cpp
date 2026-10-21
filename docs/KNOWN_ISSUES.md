@@ -89,7 +89,7 @@
 - **实体 `age` 按真实 dt 累积（墙钟）** — 与玩家/物理一致（非固定步长），所以含实体的存档文件在 age 字段上跨运行差 ±1-2 帧；渲染不依赖 age（掉落物动画由帧计数器驱动），截图确定性不受影响。昼夜 `time` 是固定步长（位精确）。`[Phase 13]`
 - **`DayCycle::setTimeOfDay` 至多 1 ulp 偏差** — 存 timeOfDay [0,1)，恢复时解出 totalSeconds；对远离配置 start_time 的值，`startTime + delta` 的浮点往返可能差 1 ulp（~1e-16）。昼夜渐变段是常量/平滑的，呈现无影响。`[Phase 13]`
 - **演示区外的编辑会带上"生成的 chunk"** — 在演示区外放置方块会同步生成该 chunk（既有行为），存档 diff 覆盖它；读档时 `setBlock` 重建同样生成该 chunk——一致，但读档后的世界含全新世界没有的 chunk（读档后 `propagateAll` 全量重传播，之后新出现的 chunk 由 Phase 14 的 worker 光照 job 处理）。`[Phase 13]`
-- ~~**存档无迁移机制**~~ — 当前 **format 14**（save.hpp `kSaveFormat=14` / `kSaveFormatMin=1`），**format 1..14 全部可加载**（各按其字段集 + 逐 format 白名单），含 4 处规则式迁移：6→7 炉子（sole 归属/丢弃，见「炉子 / 熔炼」节）、≤11→12 吸收（共享 health 按 base max 拆分）、11/12→13 营火（单槽→槽 0）、13→14 stairs（迁移为空；旧 format 带新键 = 版本谎报拒绝）。写入恒 format 14。**"未知字段=报错"（机器生成文件的损坏/版本检测，与用户数据文件的"警告容忍"相反）保持**（rejectUnknownFields）。`[Phase 13]`（`[Phase 16/17]` 起 format 2/3 可加载，其后逐 format 追加）
+- ~~**存档无迁移机制**~~ — 当前 **format 15**（save.hpp `kSaveFormat=15` / `kSaveFormatMin=1`），**format 1..15 全部可加载**（各按其字段集 + 逐 format 白名单），含 5 处规则式迁移：6→7 炉子（sole 归属/丢弃，见「炉子 / 熔炼」节）、≤11→12 吸收（共享 health 按 base max 拆分）、11/12→13 营火（单槽→槽 0）、13→14 stairs（迁移为空；旧 format 带新键 = 版本谎报拒绝）、**14→15 states**（`stairs {pos,facing}` → `states {pos,state}` 值保真；ENT-2）。写入恒 format 15。`states` 键纪律：15 必需（空数组合法）/ ≤14 携带拒 / 15 携 `stairs` 拒；双向交叉校验 = stateful 格（hasState：Stairs 形状 ∨ `model.state_count`）↔ entry 逐格点名 + 域按块 stateCount。"未知字段=报错"（rejectUnknownFields）保持。`[Phase 13]`（`[Phase 16/17]` 起 format 2/3 可加载，其后逐 format 追加；ENT-2 format 15）
 
 ## Chunk 流式（Phase 14）
 
@@ -206,7 +206,7 @@
 
 ## 工作台 / 形状合成（Phase 17）
 
-- **全工作台的网格是同一个容器** — `Game` 持有单个 `m_tableGrid`（`CraftingGrid`）：右键打开的**任何**工作台的 3×3 网格都是它——内容跨关/重开保留、并写入存档（format 3 `table_grid`），但放第二个工作台再打开看到的是同一份内容。MC 里每个工作台有独立容器；per-block 容器需要 per-instance 状态（见「数据 / 内容」）。`[Phase 17]`
+- **全工作台的网格是同一个容器** — `Game` 持有单个 `m_tableGrid`（`CraftingGrid`）：右键打开的**任何**工作台的 3×3 网格都是它——内容跨关/重开保留、并写入存档（format 3 `table_grid`），但放第二个工作台再打开看到的是同一份内容。MC 里每个工作台有独立容器；per-block 容器需要 per-instance 状态（见「BlockState per-block 状态」节：`[ENT-2]` 已确定两类状态存储分界——工作台容器 = campfire map 范式 +1 map +1 格式段，CRAFT-1 执行）。`[Phase 17]`
 - **工作台面板无配方列表** — 表格面板只有 3×3 网格 + 输出格，无任何配方提示；配方提示只存在于 E 面板列表（且该列表仅 shapeless），shaped 配方的摆法没有游戏内指引。`[Phase 17]`
 - **E 面板 2×2 固定在共享 3×3 模型的左上** — E 面板合成格与表格面板共用同一个 `CraftingGrid` 3×3 模型，只暴露槽 {0,1,3,4}（左上 2×2）；宽度或高度为 3 的 pattern（如 pickaxe `PPP/.S./.S.`）无法摆入，E 里的 shaped 匹配只可能命中落在左上角的 pattern（2×2 工作台配方可在 E 摆出合成，与 MC 一致）。`[Phase 17]`
 - **E 配方列表只显示 shapeless 配方** — shaped 配方不出现在列表里，唯一入口是工作台面板。`[Phase 17]`
@@ -593,6 +593,34 @@
   的位置（取 AABB 覆盖的**最高**斜面点，Phase 89 修正 P87 的低端边 bug——
   原会切入楼梯高端）；沿 facing 轴（north/south 用 z、east/west 用 x）；MC
   亚像素斜面碰撞之外的更细粒度 = 无。`[Phase 87]` → `[Phase 89]`
+
+## BlockState per-block 状态（ENT-2）
+
+- **P94 楼梯朝向已泛化为通用 per-instance 状态机制** — `[ENT-2]`：`Chunk::m_blockState`
+  每格 byte（哨兵 255）+ 双门控数据驱动（`Shape::Stairs` 隐式 count 4/default=
+  stair_facing ∪ `model.state_count` [1,255] + `state_default` [0,count) 严格
+  配对，楼梯显式 state_count = 矛盾拒）+ `World::get/setBlockState`（只验
+  <255+y+存在+无变化；域 [0,stateCount) 由收口/旋转/parse 三处强制）+
+  **format 15 `states` 段**（全量、双向交叉校验、14→15 值保真迁移、journal
+  派生）+ **init 不变量**（worldgen 5 类放置源出现 stateful 块 = 点名拒——
+  "stateful 格必 session 派生" 从 P94 内容巧合升级为结构不变量）。
+  **旋转泛化**：潜行 + 右键 = 任意 stateful 块状态 `(s+1)%stateCount()`
+  （楼梯行为零变化；未来 sapling = stage +1 手工催熟，GEN-2 接受为特性）。
+  状态不改光属性（opaque/light_opacity 是 per-block 非 per-state，v1.0
+  消费者全满足）。shipped 内容零字段改动（Q2 定案）。
+- **两类 per-block 状态存储分界（YAGNI 定案，不统一）** — byte 状态
+  （mesh/collision/snapshot 读、O(1B/格) chunk 数组）vs struct 状态
+  （furnace/campfire 等 game-resident per-pos map、format 7/11 段）：
+  消费者集合不相交（struct 负载 ~50-80B/格进 chunk array = 数十 GB 不可行；
+  统一注册表 = 重写 format 7/11 + tick + 面板，无 v1.0 任务要求）。
+  **CRAFT-1 工作台分块 = 照 campfire map 范式**（+1 map + 1 格式段 + 收口
+  条目），从本相取纪律（收口不变量"stateful 块恒拥有状态/移除即清" +
+  存档段双向交叉校验）而非 byte 机制。
+- **init 校验边界** — 5 类枚举放置源（biome surface/subsurface/decorations、
+  ores.veins、trees trunk/leaves）；`bottom_block`/`deep_block`（terrain
+  fill）不在枚举内 = 边界以代码注释 + 经验测试 `RealWorldgenPlacesNoStatefulBlock`
+  （扫真实资产 3×3 列全区域 hasState=0）钉死；未来 bottom/deep 用 stateful
+  名时该测试先暴露。`[ENT-2]`
 
 ## 数据 / 内容
 

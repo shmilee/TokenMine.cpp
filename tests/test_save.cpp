@@ -49,9 +49,10 @@ BlockRegistry makeBlocks() {
     // need it registered for the format-10 fires cross-check.
     blocks.registerBlock(parseJson(
         R"({"id":"fire","properties":{"solid":false,"opaque":false,"transparent":true},"model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
-    // Phase 94: the stair block — the block edits that reference
-    // "stone_stairs" need it registered for the format-14 stairs
-    // cross-check (the Shape::Stairs is the per-instance facing's gate).
+    // Phase 94 / ENT-2: the stair block — the block edits that reference
+    // "stone_stairs" need it registered for the format-15 states cross-
+    // check (hasState(): the Stairs shape is the per-instance state's gate,
+    // count 4, default = stair_facing).
     blocks.registerBlock(parseJson(
         R"({"id":"stone_stairs","model":{"shape":"stairs","textures":{"top":"t","side":"t","bottom":"t"}}})"));
     return blocks;
@@ -248,8 +249,8 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     s.tableGrid[8] = ItemStack {f.items.idForName("stone"), 64};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Phase 75: writes are always format 14 (Phase 94).
-    EXPECT_EQ(j->find("format")->asInt(), 14);
+    // ENT-2: writes are always format 15 (Phase 94 was format 14).
+    EXPECT_EQ(j->find("format")->asInt(), 15);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -291,7 +292,7 @@ TEST(SaveParseTest, FormatTwoLoadsWithEmptyGrids) {
     root["format"] = Json(2);
     root = withoutKey(root, "fires"); // format 2 predates the fire
     root = withoutKey(root, "campfires"); // format 2 predates the campfire
-    root = withoutKey(root, "stairs"); // format 2 predates the stair facing
+    root = withoutKey(root, "states"); // format 2 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 2 predates the absorption pool
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "inv_grid");
@@ -393,7 +394,7 @@ TEST(SaveParseTest, FormatOneLoadsWithoutHealth) {
     root["format"] = Json(1);
     root = withoutKey(root, "fires"); // format 1 predates the fire
     root = withoutKey(root, "campfires"); // format 1 predates the campfire
-    root = withoutKey(root, "stairs"); // format 1 predates the stair facing
+    root = withoutKey(root, "states"); // format 1 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 1 predates the absorption pool
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "inv_grid"); // format 1 predates the grids
@@ -444,7 +445,7 @@ TEST(SaveParseTest, FormatThreeLoadsWithoutHunger) {
     root["format"] = Json(3);
     root = withoutKey(root, "fires"); // format 3 predates the fire
     root = withoutKey(root, "campfires"); // format 3 predates the campfire
-    root = withoutKey(root, "stairs"); // format 3 predates the stair facing
+    root = withoutKey(root, "states"); // format 3 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 3 predates the absorption pool
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 3 predates the furnace
@@ -493,7 +494,7 @@ TEST(SaveParseTest, FormatFourLoadsWithoutSaturation) {
     root["format"] = Json(4);
     root = withoutKey(root, "fires"); // format 4 predates the fire
     root = withoutKey(root, "campfires"); // format 4 predates the campfire
-    root = withoutKey(root, "stairs"); // format 4 predates the stair facing
+    root = withoutKey(root, "states"); // format 4 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 4 predates the absorption pool
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 4 predates the furnace
@@ -898,7 +899,7 @@ TEST(SaveParseTest, FluidEditKindRoundTripsAndMigrates) {
     root["format"] = Json(8);
     root = withoutKey(root, "fires"); // format 8 predates the fire
     root = withoutKey(root, "campfires"); // format 8 predates the campfire
-    root = withoutKey(root, "stairs"); // format 8 predates the stair facing
+    root = withoutKey(root, "states"); // format 8 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 8 predates the absorption pool
     Json waterEdit = Json::array();
     waterEdit.push_back(Json(3));
@@ -1157,95 +1158,249 @@ SaveGame makeFurnaceSave(const Fixture& f) {
     return s;
 }
 
-// Phase 94: a save with a stair block + its per-instance facing (the
-// project's first per-block state).
-SaveGame makeStairSave(const Fixture& f) {
+// Phase 94 / ENT-2: a save with a stair block + its per-instance state
+// (the project's first per-block state; for a stair, the facing).
+SaveGame makeStateSave(const Fixture& f) {
     SaveGame s = makeSave(f);
     s.blockEdits.push_back({BlockPos {3, 53, 1}, "stone_stairs"});
     std::sort(s.blockEdits.begin(), s.blockEdits.end(),
               [](const SavedBlockEdit& a, const SavedBlockEdit& b) {
                   return a.pos < b.pos;
               });
-    s.stairs.push_back({BlockPos {3, 53, 1}, 2}); // south-facing (rotated)
+    s.states.push_back({BlockPos {3, 53, 1}, 2}); // south-facing (rotated)
     return s;
 }
 
-TEST(SaveRoundTripTest, StairsRoundTrip) {
+// ENT-2: rewrite a serialized format-15 save into the format-14 shape —
+// the "states" array becomes "stairs" (each entry's "state" becomes
+// "facing") and the format is downgraded to 14. The format-14 parse path
+// (still supported for old files) is tested through this.
+Json downgradeToFormat14(const Json& root) {
+    Json out = withoutKey(root, "states");
+    out["format"] = Json(14);
+    const Json* states = root.find("states");
+    if (states == nullptr || !states->isArray()) {
+        ADD_FAILURE() << "no 'states' array to downgrade";
+        return out;
+    }
+    Json stairs = Json::array();
+    for (std::size_t i = 0; i < states->size(); ++i) {
+        const Json* st = states->at(i).find("state");
+        if (st == nullptr) {
+            ADD_FAILURE() << "state entry #" << i << " has no 'state'";
+            return out;
+        }
+        Json entry = withoutKey(states->at(i), "state");
+        entry["facing"] = *st;
+        stairs.push_back(std::move(entry));
+    }
+    out["stairs"] = std::move(stairs);
+    return out;
+}
+
+TEST(SaveRoundTripTest, StatesRoundTrip) {
     Fixture f;
-    SaveGame s = makeStairSave(f);
+    SaveGame s = makeStateSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 14);
+    // ENT-2: writes are always format 15.
+    EXPECT_EQ(j->find("format")->asInt(), 15);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
-    ASSERT_EQ(out->stairs.size(), 1u);
+    ASSERT_EQ(out->states.size(), 1u);
     const BlockPos sp {3, 53, 1};
-    EXPECT_EQ(out->stairs[0].pos, sp);
-    EXPECT_EQ(out->stairs[0].facing, 2); // south (the rotated facing)
+    EXPECT_EQ(out->states[0].pos, sp);
+    EXPECT_EQ(out->states[0].state, 2); // south (the rotated facing)
+}
+
+TEST(SaveParseTest, Format15RequiresStatesKey) {
+    // A format-15 file WITHOUT the "states" key is rejected (the key is
+    // required, an empty array is valid).
+    Fixture f;
+    SaveGame s = makeStateSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = withoutKey(*j, "states");
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    EXPECT_FALSE(out.ok());
+}
+
+TEST(SaveParseTest, RejectsStairsFieldInFormat15) {
+    // A format-15 file carrying "stairs" is a version lie (the key is
+    // restricted to format 14 — rejected even when a "states" array is
+    // present, and the entry shape mismatch is moot: the key itself is
+    // the lie).
+    Fixture f;
+    SaveGame s = makeStateSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = withoutKey(*j, "states");
+    root["stairs"] = Json::array(); // format 15 keeps carrying "stairs"
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    EXPECT_FALSE(out.ok());
 }
 
 TEST(SaveParseTest, Format14RequiresStairsKey) {
     // A format-14 file WITHOUT the "stairs" key is rejected (the key is
     // required, an empty array is valid).
     Fixture f;
-    SaveGame s = makeStairSave(f);
+    SaveGame s = makeStateSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    Json root = *j;
-    root = withoutKey(root, "stairs");
+    Json root = withoutKey(downgradeToFormat14(*j), "stairs");
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     EXPECT_FALSE(out.ok());
 }
 
-TEST(SaveParseTest, Format13LoadsEmptyStairs) {
-    // A format-13 file (no "stairs" key) still loads: the per-instance
-    // facing did not exist, the stair block's stair_facing default is used
-    // on load. The save's stairs field is empty.
+TEST(SaveParseTest, Format14To15MigrationValuePreserved) {
+    // A format-14 file LOADS: its "stairs" entries migrate into the
+    // states VALUE-PRESERVING (the facing becomes the state) — the
+    // rotated facing 2 (south) survives the load.
     Fixture f;
-    SaveGame s = makeStairSave(f);
+    SaveGame s = makeStateSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    Json root = *j;
-    root = withoutKey(root, "stairs");
+    Json root = downgradeToFormat14(*j);
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    ASSERT_EQ(out->states.size(), 1u);
+    EXPECT_EQ(out->states[0].pos, (BlockPos {3, 53, 1}));
+    EXPECT_EQ(out->states[0].state, 2); // the facing value, preserved
+}
+
+TEST(SaveParseTest, Format13LoadsEmptyStates) {
+    // A format-13 file (no "stairs"/"states" key) still loads: the
+    // per-instance state did not exist, the block's state default is used
+    // on load. The save's states field is empty.
+    Fixture f;
+    SaveGame s = makeStateSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = withoutKey(downgradeToFormat14(*j), "stairs");
     root["format"] = Json(13);
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
-    EXPECT_TRUE(out->stairs.empty());
+    EXPECT_TRUE(out->states.empty());
+}
+
+TEST(SaveParseTest, RejectsStatesFieldInFormat14) {
+    // A format-14 file carrying "states" is a version lie (rejected —
+    // the key requires format 15 or newer).
+    Fixture f;
+    SaveGame s = makeStateSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["format"] = Json(14); // downgrade but KEEP the "states" array
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    EXPECT_FALSE(out.ok());
 }
 
 TEST(SaveParseTest, RejectsStairsFieldInFormat13) {
     // A format-13 file carrying "stairs" is a version lie (rejected).
     Fixture f;
-    SaveGame s = makeStairSave(f);
+    SaveGame s = makeStateSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
     Json root = *j;
+    root = withoutKey(root, "states");
+    root["stairs"] = Json::array();
     root["format"] = Json(13); // downgrade but KEEP the "stairs" array
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     EXPECT_FALSE(out.ok());
 }
 
-TEST(SaveParseTest, RejectsStairEntryBlockMismatch) {
-    // A "stairs" entry at a position that is NOT a stair block is rejected.
+TEST(SaveParseTest, RejectsStatesFieldInFormat13) {
+    // A format-13 file carrying "states" is a version lie (rejected).
     Fixture f;
-    SaveGame s = makeStairSave(f);
+    SaveGame s = makeStateSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
     Json root = *j;
-    // Point the stair entry at a non-stair cell (the "dirt" edit at 0,54,-1).
-    const Json* stairs = root.find("stairs");
-    ASSERT_TRUE(stairs != nullptr && stairs->isArray() && stairs->size() == 1);
-    Json entry = stairs->at(0);
+    root["format"] = Json(13); // downgrade but KEEP the "states" array
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    EXPECT_FALSE(out.ok());
+}
+
+TEST(SaveParseTest, RejectsStateEntryBlockMismatch) {
+    // A "states" entry at a position that is NOT a stateful block is
+    // rejected (the cross-check, both directions).
+    Fixture f;
+    SaveGame s = makeStateSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    // Point the state entry at a non-stateful cell (the "dirt" edit at
+    // 0,54,-1).
+    const Json* states = root.find("states");
+    ASSERT_TRUE(states != nullptr && states->isArray() && states->size() == 1);
+    Json entry = states->at(0);
     Json pos = Json::array();
     pos.push_back(Json(0));
     pos.push_back(Json(54));
     pos.push_back(Json(-1));
     entry["pos"] = pos;
-    Json newStairs = Json::array();
-    newStairs.push_back(entry);
-    root["stairs"] = newStairs;
+    Json newStates = Json::array();
+    newStates.push_back(entry);
+    root["states"] = newStates;
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     EXPECT_FALSE(out.ok());
+}
+
+TEST(SaveParseTest, RejectsStateEntryDomain) {
+    // A "states" entry whose value is outside the block's state domain
+    // [0, stateCount) is rejected and named (a stair holds 0-3; 4 is
+    // out of range).
+    Fixture f;
+    SaveGame s = makeStateSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    const Json* states = root.find("states");
+    ASSERT_TRUE(states != nullptr && states->isArray() && states->size() == 1);
+    Json entry = states->at(0);
+    entry["state"] = Json(4); // a stair's state is 0-3
+    Json newStates = Json::array();
+    newStates.push_back(entry);
+    root["states"] = newStates;
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("state"), std::string::npos);
+    EXPECT_NE(out.error().message.find("4"), std::string::npos);
+}
+
+TEST(SaveParseTest, RejectsStateEntryUnknownField) {
+    // A "states" entry with an unknown field is rejected (the strict
+    // {pos, state} shape — the furnaces-key entry discipline).
+    Fixture f;
+    SaveGame s = makeStateSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    const Json* states = root.find("states");
+    ASSERT_TRUE(states != nullptr && states->isArray() && states->size() == 1);
+    Json entry = states->at(0);
+    entry["facing"] = Json(2); // a format-14 field, unknown to 15
+    Json newStates = Json::array();
+    newStates.push_back(entry);
+    root["states"] = newStates;
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    EXPECT_FALSE(out.ok());
+}
+
+TEST(SaveRoundTripTest, EmptyStatesArrayValid) {
+    // A world without stateful blocks serializes "states" as an empty
+    // array and round-trips (the key is required even when empty).
+    Fixture f;
+    SaveGame s = makeSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    const Json* states = j->find("states");
+    ASSERT_TRUE(states != nullptr && states->isArray());
+    EXPECT_EQ(states->size(), 0u);
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_TRUE(out->states.empty());
 }
 
 TEST(SaveRoundTripTest, FurnacesRoundTrip) {
@@ -1260,8 +1415,8 @@ TEST(SaveRoundTripTest, FurnacesRoundTrip) {
     s.furnaces[0].state.fuelSubsteps = 1234;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Phase 75: writes are always format 14 (Phase 94).
-    EXPECT_EQ(j->find("format")->asInt(), 14);
+    // ENT-2: writes are always format 15 (Phase 94 was format 14).
+    EXPECT_EQ(j->find("format")->asInt(), 15);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
@@ -1302,7 +1457,7 @@ TEST(SaveParseTest, FormatFiveLoadsWithEmptyFurnaces) {
     root["format"] = Json(5);
     root = withoutKey(root, "fires"); // format 5 predates the fire
     root = withoutKey(root, "campfires"); // format 5 predates the campfire
-    root = withoutKey(root, "stairs"); // format 5 predates the stair facing
+    root = withoutKey(root, "states"); // format 5 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 5 predates the absorption pool
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 5 predates the furnace
@@ -1330,7 +1485,7 @@ TEST(SaveParseTest, FormatSixMigratesStateToSoleFurnace) {
     root["format"] = Json(6);
     root = withoutKey(root, "fires"); // format 6 predates the fire
     root = withoutKey(root, "campfires"); // format 6 predates the campfire
-    root = withoutKey(root, "stairs"); // format 6 predates the stair facing
+    root = withoutKey(root, "states"); // format 6 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 6 predates the absorption pool
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["furnace"] = withoutKey(root["furnaces"].at(0), "pos");
@@ -1361,7 +1516,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
     root["format"] = Json(6);
     root = withoutKey(root, "fires"); // format 6 predates the fire
     root = withoutKey(root, "campfires"); // format 6 predates the campfire
-    root = withoutKey(root, "stairs"); // format 6 predates the stair facing
+    root = withoutKey(root, "states"); // format 6 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 6 predates the absorption pool
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["furnace"] = withoutKey(root["furnaces"].at(0), "pos");
@@ -1380,7 +1535,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
         root2["format"] = Json(6);
         root2 = withoutKey(root2, "fires"); // format 6 predates the fire
         root2 = withoutKey(root2, "campfires"); // format 6 predates the campfire
-        root2 = withoutKey(root2, "stairs"); // format 6 predates the stair facing
+        root2 = withoutKey(root2, "states"); // format 6 predates per-block state
         root2["player"] = withoutKey(root2["player"], "absorption"); // format 6 predates the absorption pool
         root2["fluids"] = downgradeFluids(root2); // pre-Phase-51 shape
         root2 = withoutKey(root2, "furnaces");
@@ -1412,7 +1567,7 @@ TEST(SaveParseTest, RejectsFurnaceFieldInOldFormat) {
     root["format"] = Json(5); // keeps the "furnaces" field
     root = withoutKey(root, "fires"); // the rejection under test is "furnaces"
     root = withoutKey(root, "campfires"); // format older predates the campfire
-    root = withoutKey(root, "stairs"); // format older predates the stair facing
+    root = withoutKey(root, "states"); // format older predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 5 predates the absorption pool
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
@@ -1440,7 +1595,7 @@ TEST(SaveParseTest, RejectsFurnacesFieldInFormatSix) {
     root["format"] = Json(6); // keeps the "furnaces" field
     root = withoutKey(root, "fires"); // the rejection under test is "furnaces"
     root = withoutKey(root, "campfires"); // format older predates the campfire
-    root = withoutKey(root, "stairs"); // format older predates the stair facing
+    root = withoutKey(root, "states"); // format older predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 6 predates the absorption pool
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
@@ -1609,8 +1764,8 @@ TEST(SaveRoundTripTest, FiresRoundTrip) {
     SaveGame s = makeFireSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // Phase 75: writes are always format 14 (Phase 94).
-    EXPECT_EQ(j->find("format")->asInt(), 14);
+    // ENT-2: writes are always format 15 (Phase 94 was format 14).
+    EXPECT_EQ(j->find("format")->asInt(), 15);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->fires.size(), 2u);
@@ -1644,7 +1799,7 @@ TEST(SaveParseTest, FormatNineLoadsWithoutFires) {
     root["format"] = Json(9);
     root = withoutKey(root, "fires"); // format 9 predates the fire
     root = withoutKey(root, "campfires"); // format 9 predates the campfire
-    root = withoutKey(root, "stairs"); // format 9 predates the stair facing
+    root = withoutKey(root, "states"); // format 9 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 9 predates the absorption pool
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
@@ -1664,7 +1819,7 @@ TEST(SaveParseTest, FormatNineFireEditMigratesEmpty) {
     root["format"] = Json(9);
     root = withoutKey(root, "fires"); // format 9 predates the fire
     root = withoutKey(root, "campfires"); // format 9 predates the campfire
-    root = withoutKey(root, "stairs"); // format 9 predates the stair facing
+    root = withoutKey(root, "states"); // format 9 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 9 predates the absorption pool
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
@@ -1793,7 +1948,7 @@ TEST(SaveFormat8Test, FormatSevenFileWithoutEffectsLoads) {
     root["format"] = Json(7);
     root = withoutKey(root, "fires"); // format 7 predates the fire
     root = withoutKey(root, "campfires"); // format 7 predates the campfire
-    root = withoutKey(root, "stairs"); // format 7 predates the stair facing
+    root = withoutKey(root, "states"); // format 7 predates per-block state
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["player"] = withoutKey(*j->find("player"), "effects");
     root["player"] = withoutKey(root["player"], "absorption"); // format 7 predates the absorption pool
@@ -1919,7 +2074,7 @@ TEST(SaveFormat12Test, Format11RejectsTheAbsorptionKey) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(11); // the "absorption" key stays -> rejected
-    root = withoutKey(root, "stairs"); // format 11 predates the stair facing
+    root = withoutKey(root, "states"); // format 11 predates per-block state
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
     // The same file WITHOUT the key loads (the format-11 migration path;
     // the sentinel stays -1 for Game::applySave).

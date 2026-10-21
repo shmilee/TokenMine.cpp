@@ -1087,9 +1087,10 @@ TEST(EntityTest, Phase94PerInstanceFacingOverridesBlockDefault) {
     Fixture f;
     const BlockID north = f.blocks.idForName("stairs"); // stair_facing 0
     f.world.setBlock(8, 2, 8, north);
-    // Set the per-instance facing to SOUTH (2) — overriding the block's
-    // north default. Now the +Z end is HIGH (south), not the -Z end.
-    f.world.setStairFacing(8, 2, 8, 2);
+    // Set the per-instance state (facing) to SOUTH (2) — overriding the
+    // block's north default. Now the +Z end is HIGH (south), not the -Z
+    // end.
+    f.world.setBlockState(8, 2, 8, 2);
     // An item at the +Z end (z~8.9) settles HIGHER than one at the -Z end
     // (z~8.1) — the OPPOSITE of a north stair (the per-instance south facing
     // overrides the block's north default).

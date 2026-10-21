@@ -1914,49 +1914,49 @@ Result<SaveGame> Game::collectSave() const {
     // or --save-full-diff was given (the in-process equivalence oracle
     // and escape hammer). Both paths produce the same file format.
     const bool journalSave = m_saveJournal.valid && !m_args.saveFullDiff;
-    // The per-instance stair facings (format 14; Phase 94).
+    // The per-instance block states (format 15; Phase 94 stair facing,
+    // generalized in ENT-2).
     if (journalSave) {
         // PIPE-2: derived from the JOURNAL instead of the O(N) world
-        // scan: worldgen places no stair-shaped block (the content test
-        // pins it), so every stair cell was block-edited this session —
-        // it is in the block journal. The live facing read + the
-        // sentinel fallback are the same logic the old scan had; a
-        // journal cell whose live block is no longer a stair (broken
-        // again) is skipped, exactly as the old scan's shape gate.
-        std::vector<SavedStair> stairs;
+        // scan: worldgen places no stateful block (the init cross-check in
+        // WorldGenerator::create + the content test pin it), so every
+        // stateful cell was block-edited this session — it is in the block
+        // journal. The live state read + the sentinel fallback are the same
+        // logic the old scan had; a journal cell whose live block is no
+        // longer stateful (broken again) is skipped, exactly as the old
+        // scan's hasState gate.
+        std::vector<SavedState> states;
         for (const auto& entry : m_saveJournal.blocks) {
             for (const BlockPos& p : entry.second) {
                 const BlockID id = m_world.getBlock(p.x, p.y, p.z);
-                if (id == BlockID::air() ||
-                    m_blocks.at(id).model.shape !=
-                        BlockModel::Shape::Stairs) {
+                if (id == BlockID::air() || !m_blocks.at(id).hasState()) {
                     continue;
                 }
-                const std::uint8_t facing =
-                    m_world.getStairFacing(p.x, p.y, p.z);
-                // The facing is always set for a placed stair (the
+                const std::uint8_t state =
+                    m_world.getBlockState(p.x, p.y, p.z);
+                // The state is always set for a placed stateful block (the
                 // setBlock invariant); the sentinel (unset) is a
-                // hand-edited stair in a format-13 file — fall back to
-                // the block's stair_facing default.
-                const std::uint8_t f =
-                    (facing <= 3) ? facing
-                                  : static_cast<std::uint8_t>(
-                                        m_blocks.at(id).model.stairFacing);
-                stairs.push_back(SavedStair {p, f});
+                // hand-edited stateful block in a format-13 file — fall
+                // back to the block's state default.
+                const std::uint8_t s =
+                    (state != Chunk::kBlockStateUnset)
+                        ? state
+                        : static_cast<std::uint8_t>(
+                              m_blocks.at(id).stateDefault());
+                states.push_back(SavedState {p, s});
             }
         }
-        std::sort(stairs.begin(), stairs.end(),
-                  [](const SavedStair& a, const SavedStair& b) {
+        std::sort(states.begin(), states.end(),
+                  [](const SavedState& a, const SavedState& b) {
                       return a.pos < b.pos;
                   });
-        save.stairs = std::move(stairs);
+        save.states = std::move(states);
     } else {
-        // Legacy (pre-PIPE-2): scan the world for the stair cells (the
-        // block is Shape::Stairs) + record their per-instance facing
-        // (the World's per-cell byte — the project's first per-block
-        // state). Position-sorted (the chunk/scan order). Every stair
-        // block has an entry (the setBlock invariant sets the facing on
-        // placement).
+        // Legacy (pre-PIPE-2): scan the world for the stateful cells (the
+        // block hasState()) + record their per-instance state (the World's
+        // per-cell byte — the project's first per-block state).
+        // Position-sorted (the chunk/scan order). Every stateful block has
+        // an entry (the setBlock invariant sets the state on placement).
         for (const ChunkPos& cp : m_world.chunkPositions()) {
             const Chunk* chunk = m_world.findChunk(cp);
             if (chunk == nullptr) {
@@ -1970,22 +1970,23 @@ Result<SaveGame> Game::collectSave() const {
                     for (int lx = 0; lx < kChunkSize; ++lx) {
                         const BlockID id = chunk->get(lx, ly, lz);
                         if (id == BlockID::air() ||
-                            m_blocks.at(id).model.shape !=
-                                BlockModel::Shape::Stairs) {
+                            !m_blocks.at(id).hasState()) {
                             continue;
                         }
-                        const std::uint8_t facing =
-                            chunk->stairFacingAt(lx, ly, lz);
+                        const std::uint8_t state =
+                            chunk->stateAt(lx, ly, lz);
                         const BlockPos p {bx + lx, by + ly, bz + lz};
-                        // The facing is always set for a placed stair (the
-                        // setBlock invariant); the sentinel (unset) is a
-                        // hand-edited stair in a format-13 file — fall back
-                        // to the block's stair_facing default.
-                        const std::uint8_t f =
-                            (facing <= 3) ? facing
-                                          : static_cast<std::uint8_t>(
-                                                m_blocks.at(id).model.stairFacing);
-                        save.stairs.push_back(SavedStair {p, f});
+                        // The state is always set for a placed stateful
+                        // block (the setBlock invariant); the sentinel
+                        // (unset) is a hand-edited stateful block in a
+                        // format-13 file — fall back to the block's state
+                        // default.
+                        const std::uint8_t s =
+                            (state != Chunk::kBlockStateUnset)
+                                ? state
+                                : static_cast<std::uint8_t>(
+                                      m_blocks.at(id).stateDefault());
+                        save.states.push_back(SavedState {p, s});
                     }
                 }
             }
@@ -2207,13 +2208,18 @@ Result<void> Game::applySave(const SaveGame& save) {
             m_campfires.emplace(e.pos, CampfireCookState {});
         }
     }
-    // 4c-quater) The per-instance stair facings (format 14; Phase 94).
-    // Format-14 saves carry one entry per stair block (parse-validated,
-    // cross-checked in both directions); format 13 and earlier carry none
-    // (the per-instance facing did not exist — the setBlock invariant set
-    // the stair_facing default on load, so no migration is needed).
-    for (const SavedStair& ss : save.stairs) {
-        m_world.setStairFacing(ss.pos.x, ss.pos.y, ss.pos.z, ss.facing);
+    // 4c-quater) The per-instance block states (format 15; Phase 94 stair
+    // facing, generalized in ENT-2). Format-15 saves carry one entry per
+    // stateful block (parse-validated, cross-checked in both directions);
+    // format 14 carries the "stairs" entries (parsed + migrated into the
+    // states, value-preserving); format 13 and earlier carry none (the
+    // per-instance state did not exist — the cells keep the sentinel, and
+    // the consumers fall back to the block's state default on load).
+    // The block/fluid replay above ran through the World (not the game's
+    // choke point), so the saved value is authoritative: it overwrites
+    // whatever the replay left.
+    for (const SavedState& ss : save.states) {
+        m_world.setBlockState(ss.pos.x, ss.pos.y, ss.pos.z, ss.state);
     }
     // 4d) The player's active status effects (format 8; Phase 46). The
     // names are parse-validated against the registry (idForName cannot
@@ -2978,30 +2984,37 @@ void Game::handleInteraction(double dt) {
                 }
             }
         }
-        // Stair rotation (Phase 92, per-instance in Phase 94): a SNEAKING
-        // right-click on a stair (Shape::Stairs) rotates it IN PLACE — the
-        // per-instance facing (the World's per-cell byte, the project's first
-        // per-block state) advances (facing + 1) % 4. The click is consumed
-        // (no placement). Minecraft: sneak + right-click rotates a stair. Runs
+        // Block-state rotation (Phase 92 stair ring, per-instance in
+        // Phase 94, generalized in ENT-2): a SNEAKING right-click on a
+        // stateful block (hasState()) rotates it IN PLACE — the per-instance
+        // state (the World's per-cell byte, the project's first per-block
+        // state) advances (state + 1) % stateCount (a stair: (facing + 1) %
+        // 4, the shipped behavior unchanged). The click is consumed (no
+        // placement). Minecraft: sneak + right-click rotates a stair. Runs
         // AFTER the item channels + panel interactions: a furnace/crafting
-        // table under the crosshair still opens its panel; a stair (no panel)
-        // rotates. (Phase 92 used the block-ID ring — the 4 variants; Phase
-        // 94 replaces it with the per-instance facing.)
+        // table under the crosshair still opens its panel; a stateful block
+        // (no panel) rotates. (Phase 92 used the block-ID ring — the 4
+        // variants; Phase 94 replaced it with the per-instance facing;
+        // ENT-2 generalizes the gate to hasState.)
         if (m_player->isCrouching()) {
             if (const std::optional<BlockHit> hit = targetBlock(); hit) {
                 const Block& b = m_blocks.at(
                     m_world.getBlock(hit->block.x, hit->block.y,
                                      hit->block.z));
-                if (b.model.shape == BlockModel::Shape::Stairs) {
-                    const int cur = m_world.getStairFacing(hit->block.x,
-                                                           hit->block.y,
-                                                           hit->block.z);
-                    const int f =
-                        (cur <= 3) ? cur : b.model.stairFacing;
-                    m_world.setStairFacing(hit->block.x, hit->block.y,
-                                           hit->block.z,
-                                           static_cast<std::uint8_t>(
-                                               (f + 1) % 4));
+                if (b.hasState()) {
+                    const int cur = m_world.getBlockState(hit->block.x,
+                                                          hit->block.y,
+                                                          hit->block.z);
+                    // Unset (the sentinel, e.g. a hand-edited load) falls
+                    // back to the block's state default — the same rule as
+                    // the collision / mesh consumers.
+                    const int s =
+                        (cur != Chunk::kBlockStateUnset) ? cur
+                                                         : b.stateDefault();
+                    m_world.setBlockState(hit->block.x, hit->block.y,
+                                          hit->block.z,
+                                          static_cast<std::uint8_t>(
+                                              (s + 1) % b.stateCount()));
                     m_sound.play("place");
                     return; // the rotation consumes the click (no placement)
                 }
@@ -3379,22 +3392,25 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
             m_campfires.erase(cpos);
         }
     }
-    // Phase 94: the per-instance stair facing follows the cell (the project's
-    // first per-block state, a breakthrough of the "no per-instance state"
-    // philosophy). A stair (Shape::Stairs) owns a facing — set to the
-    // block's stair_facing DEFAULT on placement (the placeBlock override
-    // sets it to the placement direction afterward), and a cell that stops
-    // holding a stair drops its facing (the sentinel). The collision
-    // (solidTopHeight) + the mesh (emitStairs) read it from the World.
+    // ENT-2: the per-instance block state follows the cell (the project's
+    // first per-block state — Phase 94's stair facing, generalized). A
+    // stateful block (hasState(): the Stairs shape or an explicit
+    // state_count) owns a state — set to the block's state DEFAULT on
+    // placement (the placeBlock override can set a placement-specific value
+    // afterward), and a cell that stops holding a stateful block keeps its
+    // byte (the World API rejects the sentinel write — no change, no dirty
+    // mark; the consumers are shape/state-gated, so the stale value is
+    // inert). The collision (solidTopHeight) + the mesh (emitStairs) + the
+    // save read it from the World.
     {
-        const bool stair =
-            m_blocks.at(id).model.shape == BlockModel::Shape::Stairs;
-        if (stair) {
-            m_world.setStairFacing(x, y, z,
-                                   static_cast<std::uint8_t>(
-                                       m_blocks.at(id).model.stairFacing));
+        const Block& b = m_blocks.at(id);
+        if (b.hasState()) {
+            m_world.setBlockState(x, y, z,
+                                  static_cast<std::uint8_t>(b.stateDefault()));
         } else {
-            m_world.setStairFacing(x, y, z, Chunk::kStairFacingUnset);
+            // No state: the sentinel write is rejected (World validates
+            // < 255) — zero change, zero dirty marks.
+            m_world.setBlockState(x, y, z, Chunk::kBlockStateUnset);
         }
     }
     const float half = Projectile::kSize * 0.5f;
@@ -3556,16 +3572,18 @@ void Game::placeBlock() {
     // newly occupied cell (placing into a cell an arrow hangs in).
     setBlock(target.x, target.y, target.z, item.block);
     // Phase 97: stair placement AUTO-ORIENTS (Minecraft): the per-instance
-    // facing (Phase 94) is set from the player's yaw — the stair's low side
-    // faces where the player looks. setBlock above seeded the facing with
-    // the block's stair_facing default; this overrides it for stairs. Any
-    // stair-shaped block (the base stone_stairs or a Phase-89 variant) gets
-    // the same placement rule (the variant's baked facing only matters
-    // outside the game, e.g. unit fixtures).
+    // facing (Phase 94, the state in ENT-2) is set from the player's yaw —
+    // the stair's low side faces where the player looks. setBlock above
+    // seeded the state with the block's state default; this overrides it
+    // for stairs. Any stair-shaped block (the base stone_stairs or a
+    // Phase-89 variant) gets the same placement rule (the variant's baked
+    // facing only matters outside the game, e.g. unit fixtures). This slot
+    // is the future placement-state-rule extension point (ENT-2): other
+    // stateful shapes keep the choke point's default.
     if (m_blocks.at(item.block).model.shape == BlockModel::Shape::Stairs) {
-        m_world.setStairFacing(target.x, target.y, target.z,
-                               static_cast<std::uint8_t>(
-                                   stairFacingFromYaw(m_player->yaw)));
+        m_world.setBlockState(target.x, target.y, target.z,
+                              static_cast<std::uint8_t>(
+                                  stairFacingFromYaw(m_player->yaw)));
     }
     // Relight the region around the change (a placed occluder blocks light;
     // a placed glowstone is a new light source).

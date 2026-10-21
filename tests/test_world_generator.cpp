@@ -45,6 +45,14 @@ BlockRegistry makeBlocks() {
             ADD_FAILURE() << "block '" << name << "': " << r.error().message;
         }
     }
+    // ENT-2: a STATEFUL block (the Stairs shape = hasState) — the init
+    // cross-check tests point a worldgen placement source at it. Nothing
+    // else references it (no behavior change for the existing tests).
+    auto s = reg.registerBlock(parseJson(
+        R"({"id":"stone_stairs","model":{"shape":"stairs","textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!s.ok()) {
+        ADD_FAILURE() << "block 'stone_stairs': " << s.error().message;
+    }
     return reg;
 }
 
@@ -1050,6 +1058,41 @@ TEST(WorldGeneratorTest, CreateFailsOnUnknownOreBlock) {
     auto r = WorldGenerator::create(1, s.params, s.biomes, s.blocks);
     ASSERT_FALSE(r.ok());
     EXPECT_NE(r.error().message.find("uranium_ore"), std::string::npos);
+}
+
+// ENT-2: the init cross-check — worldgen places NO stateful block (a
+// per-instance state has no worldgen writer: the game's setBlock choke
+// point is the only one, and the save journal derives the state array
+// from the block journal on exactly this premise). The placement sources
+// are named and rejected at create().
+
+TEST(WorldGeneratorTest, CreateFailsOnStatefulBiomeSurface) {
+    GenSetup s;
+    BiomeRegistry biomes;
+    ASSERT_TRUE(biomes.registerBiome(parseJson(
+        R"({"id":"x","surface":"stone_stairs","subsurface":"dirt"})"))
+                    .ok());
+    auto r = WorldGenerator::create(42, s.params, biomes, s.blocks);
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("stone_stairs"), std::string::npos);
+    EXPECT_NE(r.error().message.find("per-instance state"),
+              std::string::npos);
+}
+
+TEST(WorldGeneratorTest, CreateFailsOnStatefulOre) {
+    GenSetup s;
+    s.params.ores.clear();
+    OreConfig bad;
+    bad.block = "stone_stairs";
+    bad.probability = 0.1f;
+    bad.veinSize = 4;
+    bad.maxY = 16;
+    s.params.ores.push_back(bad);
+    auto r = WorldGenerator::create(42, s.params, s.biomes, s.blocks);
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("stone_stairs"), std::string::npos);
+    EXPECT_NE(r.error().message.find("per-instance state"),
+              std::string::npos);
 }
 
 TEST(WorldGeneratorTest, CavesCanBeDisabled) {

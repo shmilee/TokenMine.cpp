@@ -202,22 +202,26 @@ bool World::setFluid(int x, int y, int z, FluidKind kind,
     return true;
 }
 
-std::uint8_t World::getStairFacing(int x, int y, int z) const {
+std::uint8_t World::getBlockState(int x, int y, int z) const {
     if (!isWorldYValid(y)) {
-        return Chunk::kStairFacingUnset; // the void reads "unset"
+        return Chunk::kBlockStateUnset; // the void reads "unset"
     }
     const BlockPos p{x, y, z};
     const ChunkPos cp = worldToChunk(p);
     const auto it = m_chunks.find(cp);
     if (it == m_chunks.end()) {
-        return Chunk::kStairFacingUnset; // uncreated reads "unset"
+        return Chunk::kBlockStateUnset; // uncreated reads "unset"
     }
     const BlockPos local = worldToChunkLocal(cp, p);
-    return it->second.stairFacingAt(local.x, local.y, local.z);
+    return it->second.stateAt(local.x, local.y, local.z);
 }
 
-bool World::setStairFacing(int x, int y, int z, std::uint8_t facing) {
-    if (!isWorldYValid(y) || facing > 3) {
+bool World::setBlockState(int x, int y, int z, std::uint8_t state) {
+    // ENT-2: the World holds no registry, so this validates the STORE
+    // domain only (< 255 = not the unset sentinel) + y + existence +
+    // no-change; the [0, stateCount) range is the writers' job (the game's
+    // choke point / rotation / save parse — see world.hpp).
+    if (!isWorldYValid(y) || state >= Chunk::kBlockStateUnset) {
         return false;
     }
     const BlockPos p{x, y, z};
@@ -227,10 +231,10 @@ bool World::setStairFacing(int x, int y, int z, std::uint8_t facing) {
         return false; // no chunk (the void is never created here)
     }
     const BlockPos local = worldToChunkLocal(cp, p);
-    if (chunk->stairFacingAt(local.x, local.y, local.z) == facing) {
+    if (chunk->stateAt(local.x, local.y, local.z) == state) {
         return false; // unchanged
     }
-    chunk->setStairFacing(local.x, local.y, local.z, facing);
+    chunk->setState(local.x, local.y, local.z, state);
     markNeighborChunksDirty(local.x, local.y, local.z, cp);
     return true;
 }

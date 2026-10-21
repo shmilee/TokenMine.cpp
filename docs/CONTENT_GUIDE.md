@@ -183,6 +183,23 @@
    MECHANICS「十字植物渲染」。掉落走 `drops`（= 自身块名的 block item，
    UI/手持/掉落物图标 = 同款两面片 3D 体）。
 
+    **per-block 状态**（`[ENT-2]`，Phase 94 楼梯朝向泛化）：`model` 可选
+    **严格配对**字段 `state_count`（int [1,255]）+ `state_default`（int
+    [0,state_count)）——缺一 = 点名拒绝（fast_against 范式）。带状态的块
+    在 World 里每格一个 byte（chunk 的 `m_blockState` 数组，255 = 未设哨兵）：
+    放置时收口写 `state_default`，潜行右键原地轮换 `(s+1)%state_count`
+    （"place" 音、点击消费），存档 format 15 `states` 段全量持久化
+    （每个 stateful 格恰一条，含默认值）。消费方（碰撞/mesh/save 推导）
+    读 World byte、哨兵回落 `state_default`。**双门控**：`Shape::Stairs`
+    自带**隐式**状态（count 4、default = `stair_facing`——shipped 楼梯
+    内容**零字段**，行为逐位不变），楼梯形状显式写 `state_count` = 矛盾
+    点名拒绝。约束：**状态值不得改变块的光属性**（opaque/light_opacity
+    是 per-block 非 per-state——v1.0 全部消费者满足，per-state 光 = 未来
+    扩展）；**worldgen 放置源不得用 stateful 块**（biome surface/
+    subsurface/decorations、ores.veins、trees trunk/leaves——init 交叉
+    校验点名拒绝：per-instance 状态没有 worldgen 写入方，存档 journal 从
+    block 派生 states 依赖此不变量）。
+
 ## 新增一个配方（无需改核心代码）
 
 `assets/data/recipes/<id>.json`（shapeless：原料袋，顺序无关；产物必须装进一个

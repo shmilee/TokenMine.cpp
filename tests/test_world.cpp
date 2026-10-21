@@ -373,3 +373,59 @@ TEST(WorldTest, MarkChunkDirtyReachesTheWorldDirtySet) {
     world.markChunkDirty({5, 0, 5});
     EXPECT_TRUE(world.dirtyChunks().empty());
 }
+
+// -- per-block state (ENT-2: the Phase 94 stair facing generalized) ------
+
+TEST(WorldTest, BlockStateUnsetReadsSentinel) {
+    // Void (no chunks at all) reads the unset sentinel (255), like the
+    // void block/fluid reads.
+    World world;
+    EXPECT_EQ(world.getBlockState(0, 0, 0), Chunk::kBlockStateUnset);
+    EXPECT_EQ(world.getBlockState(1000, 64, -1000), Chunk::kBlockStateUnset);
+    // Out-of-range y also reads "unset".
+    world.getOrCreateChunk({0, 0, 0});
+    EXPECT_EQ(world.getBlockState(0, -1, 0), Chunk::kBlockStateUnset);
+    EXPECT_EQ(world.getBlockState(0, kWorldHeight, 0), Chunk::kBlockStateUnset);
+}
+
+TEST(WorldTest, BlockStateCreatedButUnsetReadsSentinel) {
+    // A CREATED cell that was never given a state reads "unset" (255) —
+    // the chunk fills its state array with the sentinel on creation.
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    EXPECT_EQ(world.getBlockState(8, 8, 8), Chunk::kBlockStateUnset);
+}
+
+TEST(WorldTest, BlockStateSetGetRoundTripAndDirty) {
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    // Set + read back.
+    ASSERT_TRUE(world.setBlockState(3, 5, 3, 2));
+    EXPECT_EQ(world.getBlockState(3, 5, 3), 2);
+    // The set marks the chunk dirty (a mesh rebuild).
+    EXPECT_TRUE(world.findChunk({0, 0, 0})->dirty());
+    // A no-change set returns false and changes nothing.
+    world.findChunkMut({0, 0, 0})->clearDirty();
+    EXPECT_FALSE(world.setBlockState(3, 5, 3, 2));
+    EXPECT_EQ(world.getBlockState(3, 5, 3), 2);
+}
+
+TEST(WorldTest, BlockStateSetRefusals) {
+    World world;
+    // y out of range: refused, nothing created.
+    EXPECT_FALSE(world.setBlockState(0, -1, 0, 1));
+    EXPECT_FALSE(world.setBlockState(0, kWorldHeight, 0, 1));
+    EXPECT_EQ(world.chunkCount(), 0u);
+    // The sentinel (255) is the UNSET value — the World API never writes
+    // it (Q1: < 255 only).
+    world.getOrCreateChunk({0, 0, 0});
+    EXPECT_FALSE(world.setBlockState(1, 1, 1, Chunk::kBlockStateUnset));
+    EXPECT_EQ(world.getBlockState(1, 1, 1), Chunk::kBlockStateUnset);
+    // A chunk that was never created: refused (the void is never created
+    // here).
+    EXPECT_FALSE(world.setBlockState(100, 5, 100, 1));
+    EXPECT_FALSE(world.hasChunk(worldToChunk(BlockPos{100, 5, 100})));
+    // 254 (the highest storable value) is accepted.
+    EXPECT_TRUE(world.setBlockState(2, 2, 2, 254));
+    EXPECT_EQ(world.getBlockState(2, 2, 2), 254);
+}

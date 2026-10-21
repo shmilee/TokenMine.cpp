@@ -694,16 +694,19 @@
     = mxLocalZ、east = mxLocalX、west = 1−mnLocalX），玩家脚落在斜面高端——
     Phase 89 修正 P87 用低端边（会切入楼梯高端）的 bug；slab/满块忽略 AABB
     （固定高度，backward-compat）。`moveAxis` + `hasRoomAt` 传 mn/mx/cell。
-   - **旋转 + per-instance 朝向**（Phase 92 块 id 环，Phase 94 per-instance）：
-     朝向 = **World 每格 byte**（per-instance facing 0-3，chunk `m_stairFacing`
-     数组，哨兵 255=未设置）。**碰撞 `solidTopHeight` / mesh `emitStairs` 直接
-     从 World 读**（哨兵时回落块 `stair_facing` 默认）。**setBlock 收口**：楼梯
-     放置→设块默认朝向，移除→清哨兵。**潜行 + 右键**一个楼梯（stair 形状门控）
-     = 原地旋转 per-instance 朝向 `(f+1)%4`（块 id **不变**，"place" 音、点击
-     消费）。**存档 format 14**（`stairs` 数组 {pos,facing}，双向交叉校验 +
-     format 13 迁移空）。P89 的 4 块变体保留为默认朝向、P92 的 `stair_rotates_to`
-     保留解析但不再用于旋转。这是项目首个 **per-block 状态**（突破"无
-     per-instance 状态"哲学，需 format 变更）。
+   - **旋转 + per-instance 朝向**（Phase 92 块 id 环，Phase 94 per-instance，
+     ENT-2 泛化为 BlockState——机制见下节）：朝向 = **World 每格 byte**
+     （per-instance facing 0-3，chunk `m_blockState` 数组【ENT-2 前名
+     `m_stairFacing`】，哨兵 255=未设置 `kBlockStateUnset`）。**碰撞
+     `solidTopHeight` / mesh `emitStairs` 直接从 World 读**（哨兵时回落块
+     `stair_facing` 默认 = `stateDefault()`）。**setBlock 收口**：楼梯放置→设
+     块默认朝向，移除→哨兵写被 World 拒（零变化零脏——消费者形状门控，陈旧
+     值无害）。**潜行 + 右键**一个楼梯（hasState 门控）= 原地旋转
+     `(f+1)%4`（块 id **不变**，"place" 音、点击消费）。**存档 format 14
+     `stairs` → format 15 `states`**（ENT-2 值保真迁移，见下节）。P89 的
+     4 块变体保留为默认朝向、P92 的 `stair_rotates_to` 保留解析但不再用于
+     旋转。这是项目首个 **per-block 状态**（突破"无 per-instance 状态"
+     哲学，需 format 变更）。
     - **放置自动朝向**（Phase 97，Minecraft 规则）：玩家放置楼梯（任意
       stair 形状块）时，per-instance 朝向 = `stairFacingFromYaw(玩家 yaw)`
       纯函数——楼梯**低端朝玩家视线方向**（yaw 0 朝 -Z → 朝南/高端 +Z；
@@ -711,6 +714,51 @@
       取 X 轴 = 确定性）。setBlock 收口先设块 stair_facing 默认，
       placeBlock 再按 yaw 覆写；P89 变体的 baked 朝向对玩家放置失效
       （变体 id 仅存档/非游戏上下文保留）。
+- **per-block 状态 BlockState（ENT-2，P94 楼梯朝向的泛化机制）**：
+  - **机制**：chunk `m_blockState`（每格 byte 数组，哨兵 255 =
+    `kBlockStateUnset` = "未设置"）+ World `get/setBlockState`（set 只验
+    <255 + y + chunk 存在 + 无变化——World 不持 registry；**[0,
+    stateCount) 值域由三个写入方强制**：收口写 default / 旋转 (s+1)%count /
+    存档 parse 按格块校验）。**双门控**（`Block::hasState/stateCount/
+    stateDefault` 三纯访问器）：`Shape::Stairs` **隐式**状态（count 4、
+    default = `stair_facing`——shipped 楼梯内容**零字段**，行为逐位不变）∪
+    任意形状显式 `model.state_count` [1,255] + `state_default` [0,count)
+    **严格配对**（缺一点名拒，fast_against 范式；楼梯显式写 state_count =
+    矛盾点名拒）。
+  - **写入点**（Game 三处）：① setBlock 收口——hasState → 写
+    `stateDefault()`，非 stateful → 哨兵写被 World 拒（**零变化零脏**）；
+    ② 潜行 + 右键——门 `hasState()`，`(s+1)%stateCount()`（stair = (f+1)%4
+    同值），"place" 音、点击消费；③ placeBlock 钩子——stair yaw 覆写（P97
+    语义不变，经 `setBlockState`；此槽 = 未来放置状态规则扩展点）。
+  - **消费方**：碰撞 `solidTopHeight` + mesh `emitStairs`（形状门 + 哨兵回落
+    `stateDefault()`）+ 存档推导（collectSave 两路）——**哨兵回落三处同一
+    规则**。
+  - **存档 format 15 `states` 段**（替 14 `stairs`）：`{pos, state}` 严格
+    字段、位置排序、**全量**（每个 stateful 格恰一条，**含默认值**——
+    避免"非默认才存"手改静默回落陷阱）；域校验按 entry 位置对应块
+    （blockEdits 名 → registry `stateCount()`）越界点名；**双向交叉校验**
+    （stateful cell ⟷ entry，逐格点名）；**键纪律**（版本谎报拒绝）：15
+    必需 `states`（空数组合法）+ 携 `stairs` 拒（限 14）/ 14 必需
+    `stairs` + 携 `states` 拒 / ≤13 携两者皆拒；**14→15 值保真迁移**
+    （{pos,facing} → {pos,state=facing}），≤13 加载 = states 空（消费者
+    回落 default）。collectSave 两路同构泛化：journal 派生（遍历
+    m_saveJournal.blocks → live 块 hasState → live 值，哨兵回落 default，
+    位置排序）+ legacy O(N) 扫描。
+  - **约束**：① 状态值**不得改变块的光属性**（opaque/light_opacity 是
+    per-block 非 per-state——v1.0 全部消费者满足；per-state 光 = 未来
+    扩展）；② **worldgen 放置源不得用 stateful 块**（biome
+    surface/subsurface/decorations、ores.veins、trees trunk/leaves——
+    `WorldGenerator::create()` init 交叉校验点名拒绝；真实资产全区域扫描
+    测试再钉）= journal 派生前提（stateful 格 ⊆ block journal）的
+    结构性保证。
+  - **两类状态存储的分界**（为何 per-block map 不迁移进 chunk 数组）：
+    **byte 状态**（facing 0-3 / top-bottom 0-1 / sapling stage 0-7 量级）
+    消费方 = 快照 mesher + 碰撞热路径——必须随 chunk 快照跨线程可读
+    （PIPE-1 快照拷贝零特判）→ chunk 数组；**struct 状态**（furnace
+    ~50-80B / campfire 4 槽）消费方 = game tick / interact / overlay
+    面板——`Game` per-block map（P44/P71 范式，格式 7/11 独立段）。
+    两类消费方集合**不相交** = 消费驱动的自然分界，非历史欠债；统一
+    注册表 = 重写 format 7/11 + tick + 面板，无 v1.0 任务要求（YAGNI）。
 - **墙 wall（Phase 95，第三个新块模型类型）**：
   - **`Shape::Wall`**（block.hpp）：1.5 格高柱（cell 的 y 0..1.5 实心 =
     满块 + 顶 0.5 帽），复用 cube 纹理（top/side/bottom 校验同 slab）。

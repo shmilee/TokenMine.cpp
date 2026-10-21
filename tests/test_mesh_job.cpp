@@ -132,12 +132,12 @@ TEST(MeshJobTest, SnapshotMeshMatchesLiveWorldMesh) {
     const BlockID glass = reg.idForName("glass");
     const BlockID stair = reg.idForName("stairs");
     // Content: boundary-crossing cubes, the transparent pass, a stair
-    // with a per-instance facing (3 = west, the block default is 0).
+    // with a per-instance state (facing 3 = west, the block default is 0).
     live.setBlock(15, 64, 15, stone); // a corner cell: touches 3 columns
     live.setBlock(16, 64, 0, stone);  // into column (1, 0)
     live.setBlock(8, 100, 8, glass);  // transparent pass, layer 6
     live.setBlock(0, 112, 0, stair);  // column (-1, 0), layer 7
-    live.setStairFacing(0, 112, 0, 3);
+    live.setBlockState(0, 112, 0, 3);
     // Fluids of both kinds (same-KIND culling reads the neighbor cell).
     live.setFluid(10, 60, 10, FluidKind::Water, 8);
     live.setFluid(20, 60, 10, FluidKind::Lava, 4);
@@ -191,7 +191,7 @@ TEST(MeshJobTest, SnapshotMeshMatchesLiveWorldMesh) {
 }
 
 // Group 2: the snapshot World's void semantics — the six read faces
-// (block / fluid both kinds / sky light / block light / stair facing)
+// (block / fluid both kinds / sky light / block light / block state)
 // match an empty live World at out-of-range, below-world and
 // above-world positions (the same World class, same void).
 TEST(MeshJobTest, SnapshotVoidMatchesEmptyWorld) {
@@ -219,8 +219,8 @@ TEST(MeshJobTest, SnapshotVoidMatchesEmptyWorld) {
         EXPECT_EQ(snap.getSkyLight(x, y, z), emptyLive.getSkyLight(x, y, z));
         EXPECT_EQ(snap.getBlockLight(x, y, z),
                   emptyLive.getBlockLight(x, y, z));
-        EXPECT_EQ(snap.getStairFacing(x, y, z),
-                  emptyLive.getStairFacing(x, y, z));
+        EXPECT_EQ(snap.getBlockState(x, y, z),
+                  emptyLive.getBlockState(x, y, z));
     }
     // The pinned void values themselves (implementation contract):
     EXPECT_EQ(emptyLive.getBlock(1000, 64, 0), BlockID::air());
@@ -228,15 +228,15 @@ TEST(MeshJobTest, SnapshotVoidMatchesEmptyWorld) {
     EXPECT_EQ(emptyLive.getBlockLight(8, kWorldHeight, 8), 0);
     EXPECT_EQ(emptyLive.getSkyLight(8, -1, 8), 0); // below the world
     EXPECT_EQ(emptyLive.getBlockLight(8, -1, 8), 0);
-    EXPECT_EQ(emptyLive.getStairFacing(1000, 64, 0),
-              Chunk::kStairFacingUnset); // uncreated reads "unset"
-    // A CREATED but unset stair cell reads "unset" (255) — the chunk
-    // fills it with kStairFacingUnset, so created-unset and void are the
+    EXPECT_EQ(emptyLive.getBlockState(1000, 64, 0),
+              Chunk::kBlockStateUnset); // uncreated reads "unset"
+    // A CREATED but unset stateful cell reads "unset" (255) — the chunk
+    // fills it with kBlockStateUnset, so created-unset and void are the
     // same read (the mesher falls back to the block default either way):
-    EXPECT_EQ(snap.getStairFacing(0, 0, 0), Chunk::kStairFacingUnset);
+    EXPECT_EQ(snap.getBlockState(0, 0, 0), Chunk::kBlockStateUnset);
     World emptyProbe;
     emptyProbe.getOrCreateChunk({0, 0, 0});
-    EXPECT_EQ(emptyProbe.getStairFacing(0, 0, 0), Chunk::kStairFacingUnset);
+    EXPECT_EQ(emptyProbe.getBlockState(0, 0, 0), Chunk::kBlockStateUnset);
 }
 
 // Group 3: the selection rules (world/mesh_job.hpp) — nearest first

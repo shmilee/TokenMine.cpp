@@ -602,6 +602,45 @@ Result<void> BlockRegistry::parseModel(const Json& def, BlockModel& out) {
         }
         out.stairFacing = static_cast<int>(sf->asDouble());
     }
+    // ENT-2: the explicit per-instance state pair (model.state_count /
+    // model.state_default): a STRICT pair (one without the other is a
+    // no-op typo — the ammo discipline, the fast_against pattern). The
+    // count is [1, 255] (the chunk's state byte holds 0..count-1; 255 is
+    // the unset sentinel the count must never reach); the default is
+    // [0, count). A STAIR shape never carries these fields: the Stairs
+    // shape already has its implicit state (count 4, default =
+    // stair_facing), so an explicit state_count on a stair is a
+    // contradiction (named and rejected — the shipped stair content stays
+    // field-free).
+    const bool hasStateCount = m->find("state_count") != nullptr;
+    const bool hasStateDefault = m->find("state_default") != nullptr;
+    if (hasStateCount != hasStateDefault) {
+        return MC_FAIL("model.state_count and model.state_default are a "
+                       "strict pair (both present or both absent)");
+    }
+    if (hasStateCount) {
+        const Json* sc = m->find("state_count");
+        const Json* sd = m->find("state_default");
+        if (!sc->isNumber() || sc->asDouble() != std::floor(sc->asDouble()) ||
+            sc->asDouble() < 1.0 || sc->asDouble() > 255.0) {
+            return MC_FAIL("model.state_count must be an integer in [1, "
+                           "255], got " + sc->asString());
+        }
+        const int count = static_cast<int>(sc->asDouble());
+        if (!sd->isNumber() || sd->asDouble() != std::floor(sd->asDouble()) ||
+            sd->asDouble() < 0.0 || sd->asDouble() >= count) {
+            return MC_FAIL("model.state_default must be an integer in [0, " +
+                           std::to_string(count) +
+                           ") (the state_count), got " + sd->asString());
+        }
+        if (out.shape == BlockModel::Shape::Stairs) {
+            return MC_FAIL("a 'stairs' model cannot set state_count: the "
+                           "Stairs shape carries its own state (count 4, "
+                           "default = stair_facing)");
+        }
+        out.stateCount = count;
+        out.stateDefault = static_cast<int>(sd->asDouble());
+    }
 
     const Json* t = m->find("textures");
     if (t == nullptr || !t->isObject()) {
