@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "core/logger.hpp"
+#include "world/ore_vein.hpp" // GEN-3: kMaxOreVeinClusters (vein_size domain)
 
 namespace mc {
 
@@ -180,8 +181,10 @@ Result<WorldgenParams> WorldgenParams::parse(const Json& def) {
                 if (ore.probability < 0.0f || ore.probability > 1.0f) {
                     return MC_FAIL(label + ": 'probability' must be in [0, 1]");
                 }
-                if (ore.veinSize < 1 || ore.veinSize > 32) {
-                    return MC_FAIL(label + ": 'vein_size' must be in [1, 32]");
+                if (ore.veinSize < 1 || ore.veinSize > kMaxOreVeinClusters) {
+                    return MC_FAIL(label + ": 'vein_size' must be in [1, " +
+                                   std::to_string(kMaxOreVeinClusters) +
+                                   "] (ellipsoid clusters, GEN-3)");
                 }
                 if (ore.maxY < 1 || ore.maxY > 127) {
                     return MC_FAIL(label + ": 'max_y' must be in [1, 127]");

@@ -1494,3 +1494,14 @@
   此容错。落体探针 = pstrm1_scene.sh construct --pos X,120,Z → 300f 跑 →
   ground 子命令。口诀：**复用历史场景坐标前必须 ground 探针实测当前地形；
   记载坐标是当时场景参数，不是地形事实。**
+- **旧二进制 A/B 必须跑旧版资产 scratch + TM_REPO 覆盖（GEN-3 E2E，
+  2026-10-22）**：内容契约演进是单向的——新内容 JSON（sapling 的
+  growth_ticks 配对依赖 tree 对象）被旧二进制的 registry 拒（init 失败）；
+  旧 A/B 跑直接读新仓 assets = 3 连 init 失败废拍。修复 = `git archive
+  v0.3.0 assets config | tar -x -C /tmp/scratch_oldcwd` + `TM_REPO=scratch
+  chamber 脚本`（wait_game_window 强制 `cd $TM_REPO` 启动游戏，TM_REPO 可
+  env 覆盖）。同次次坑：洞穴矿场景相机 pitch 必须按**真眼高（feet+1.62）**
+  算视线——选点探针用了 +0.62 误判，实际视线被上方一格石檐挡住（全帧石墙
+  diff=0）；另 GEN-1 深洞矿格光 ≈0（64 列区零 light ≥9 矿格）= 矿场景需
+  场景火把照明（同场景新旧公平）。口诀：**跨版本 A/B = 同场景 + 同照明 +
+  旧版资产 cwd；视线类选点探针的眼高公式要按玩家 AABB 复核。**

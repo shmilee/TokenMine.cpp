@@ -35,8 +35,30 @@
 2. 矿石：`assets/data/worldgen.json` 的 `ores.veins` 数组加一项（方块需已注册）：
 
    ```json
-   { "block": "diamond_ore", "probability": 0.05, "vein_size": 5, "max_y": 20 }
+   { "block": "diamond_ore", "probability": 0.0101, "vein_size": 1, "max_y": 20 }
    ```
+
+   - **`vein_size` = 椭球簇数 K ∈ [1, 8]**（`[GEN-3]`，`kMaxOreVeinClusters`）：
+     一条脉 = K 个 **MC 3×2×1 旋转椭球**（各 21 格，半轴 (3,2,1) 随机取向；
+     首球心 = 格网胞内均匀起点，后续球心在前球 ±2 内游走）。旧的"随机游走
+     步数"语义已废。**加矿/调密度时注意**：K=1 单球已是旧 ~2-3 球游走的
+     体量，密度主要由 `probability` 调（见下标定）。
+   - **`probability` = 格网命中概率**（每个 8³ 世界格网胞独立 roll，
+     `hash3 > probability` 才落脉）。**标定方法**（改 `probability`/`vein_size`
+     后用）：固定 seed（123456789）+ 固定采样区（列 4..11 × 0..7，64 列
+     全高，出生 clear 区外）跑 per-ore 格数探针（`WorldGenerator::create`
+     直连，见 `tests/test_world_generator.cpp` 的 `Gen3ShippedOreVeinCellCountsPinned`
+     钉死值 = 当前 shipped 标定终值），目标新/旧格数比 ∈ [0.8, 1.25]；
+     `probability_new = probability_old / 比值`（3 位整洁值），单轮定稿，
+     残留越带记档（当前残留：diamond 0.641×、lapis 0.732×，见
+     `docs/KNOWN_ISSUES`）。
+   - **`max_y`** 分层不变（脉只出现在 y ≤ max_y）。
+
+   当前 shipped 6 条（`[GEN-3]` 单轮标定终值，全 K=1）：coal 0.154 / max_y
+   80，iron 0.0855 / 56，gold 0.0376 / 36，diamond 0.0101 / 20，lapis
+   0.0208 / 32，**gravel** 0.0445 / 80（gravel = 唯一非矿石"矿脉"，石替换脉）。
+   矿脉只替换 deep stone（不破坏洞穴 = 洞壁矿暴露），跨 chunk 无缝（世界
+   坐标格网 + 世界坐标起点）。
 
 地形/洞穴/树木参数同样在 `assets/data/worldgen.json`（缺省=默认值，类型错误=启动报错）。
 **注意：改 worldgen.json / biome JSON 会改变生成的世界 → 无输入基线门

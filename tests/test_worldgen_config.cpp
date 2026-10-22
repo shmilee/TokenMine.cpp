@@ -55,7 +55,7 @@ TEST(WorldgenConfigTest, FullOverride) {
         R"("caves":{"enabled":false,"noise_scale":0.05,"threshold":0.7,)"
         R"("min_y":3,"surface_guard":6},)"
         R"("ores":{"lattice":12,"veins":[)"
-        R"({"block":"coal_ore","probability":0.5,"vein_size":9,"max_y":80},)"
+        R"({"block":"coal_ore","probability":0.5,"vein_size":8,"max_y":80},)"
         R"({"block":"diamond_ore","probability":0.1,"vein_size":5,"max_y":16}]},)"
         R"("trees":{"lattice":6,"trunk":"wood","leaves":"leaves",)"
         R"("min_height":5,"height_range":2}})";
@@ -76,9 +76,10 @@ TEST(WorldgenConfigTest, FullOverride) {
     ASSERT_EQ(p.ores.size(), 2u);
     EXPECT_EQ(p.ores[0].block, "coal_ore");
     EXPECT_FLOAT_EQ(p.ores[0].probability, 0.5f);
-    EXPECT_EQ(p.ores[0].veinSize, 9);
+    EXPECT_EQ(p.ores[0].veinSize, 8);
     EXPECT_EQ(p.ores[0].maxY, 80);
     EXPECT_EQ(p.ores[1].block, "diamond_ore");
+    EXPECT_EQ(p.ores[1].veinSize, 5);
     EXPECT_EQ(p.treeLattice, 6);
     EXPECT_EQ(p.treeMinHeight, 5);
     EXPECT_EQ(p.treeHeightRange, 2);
@@ -290,8 +291,10 @@ TEST(WorldgenConfigTest, RejectsOctavesOutOfRange) {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 59 content pin: the ACTUAL worldgen.json must include the gravel
-// vein (a stone-replacing gravel patch, the Minecraft gravel source). The
+// Phase 59 content pin (GEN-3 evolved): the ACTUAL worldgen.json must
+// include the gravel vein (a stone-replacing gravel patch, the Minecraft
+// gravel source). GEN-3: the ellipsoid cluster count is 1 (shipped all
+// K=1) and the probability is the single-round calibration value. The
 // values are the content contract; a typo'd probability/size parses fine,
 // so this is the unit-level guard.
 // ---------------------------------------------------------------------------
@@ -310,7 +313,72 @@ TEST(WorldgenConfigTest, Phase59GravelVeinContent) {
         }
     }
     ASSERT_TRUE(gravel != nullptr) << "no gravel vein in worldgen.json";
-    EXPECT_FLOAT_EQ(gravel->probability, 0.25f);
-    EXPECT_EQ(gravel->veinSize, 4);
+    EXPECT_FLOAT_EQ(gravel->probability, 0.0445f);
+    EXPECT_EQ(gravel->veinSize, 1);
     EXPECT_EQ(gravel->maxY, 80);
+}
+
+// GEN-3: the vein_size domain is the ELLIPSOID CLUSTER count [1, 8]
+// (kMaxOreVeinClusters) — the retired random-walk domain was [1, 32].
+TEST(WorldgenConfigTest, Gen3VeinSizeClusterDomain) {
+    // 0 is rejected (the pre-GEN-3 test keeps pinning this bound).
+    auto r0 = WorldgenParams::parse(parseJson(
+        R"({"ores":{"veins":[{"block":"coal_ore","probability":0.5,)"
+        R"("vein_size":0,"max_y":80}]}})"));
+    ASSERT_FALSE(r0.ok());
+    EXPECT_NE(r0.error().message.find("vein_size"), std::string::npos);
+    // 9 is rejected (the new upper bound — the old domain allowed it).
+    auto r9 = WorldgenParams::parse(parseJson(
+        R"({"ores":{"veins":[{"block":"coal_ore","probability":0.5,)"
+        R"("vein_size":9,"max_y":80}]}})"));
+    ASSERT_FALSE(r9.ok());
+    EXPECT_NE(r9.error().message.find("vein_size"), std::string::npos);
+    EXPECT_NE(r9.error().message.find("8"), std::string::npos);
+    // 1 and 8 are the bounds of the new domain (legal).
+    auto r1 = WorldgenParams::parse(parseJson(
+        R"({"ores":{"veins":[{"block":"coal_ore","probability":0.5,)"
+        R"("vein_size":1,"max_y":80}]}})"));
+    ASSERT_TRUE(r1.ok()) << r1.error().message;
+    EXPECT_EQ(r1->ores[0].veinSize, 1);
+    auto r8 = WorldgenParams::parse(parseJson(
+        R"({"ores":{"veins":[{"block":"coal_ore","probability":0.5,)"
+        R"("vein_size":8,"max_y":80}]}})"));
+    ASSERT_TRUE(r8.ok()) << r8.error().message;
+    EXPECT_EQ(r8->ores[0].veinSize, 8);
+}
+
+// GEN-3 calibration pin: the shipped six veins are ALL single-ellipsoid
+// (K = 1) with the one-round re-tuned probabilities (the probe's
+// new/old cell-count ratio pulled the density back to the old baseline —
+// see docs/KNOWN_ISSUES for the recorded diamond/lapis residuals). The
+// block names + max_y are unchanged by GEN-3 (the shape + density only).
+TEST(WorldgenConfigTest, Gen3ShippedOreVeinsPinned) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    auto r = WorldgenParams::load(assets);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const WorldgenParams& p = *r;
+    EXPECT_EQ(p.oreLattice, 8);
+    ASSERT_EQ(p.ores.size(), 6u);
+    const struct {
+        const char* block;
+        float probability;
+        int veinSize;
+        int maxY;
+    } want[] = {
+        {"coal_ore", 0.154f, 1, 80},
+        {"iron_ore", 0.0855f, 1, 56},
+        {"gold_ore", 0.0376f, 1, 36},
+        {"diamond_ore", 0.0101f, 1, 20},
+        {"lapis_ore", 0.0208f, 1, 32},
+        {"gravel", 0.0445f, 1, 80},
+    };
+    for (std::size_t i = 0; i < p.ores.size(); ++i) {
+        EXPECT_EQ(p.ores[i].block, want[i].block) << "vein " << i;
+        EXPECT_FLOAT_EQ(p.ores[i].probability, want[i].probability)
+            << "vein " << i;
+        EXPECT_EQ(p.ores[i].veinSize, want[i].veinSize) << "vein " << i;
+        EXPECT_EQ(p.ores[i].maxY, want[i].maxY) << "vein " << i;
+    }
 }

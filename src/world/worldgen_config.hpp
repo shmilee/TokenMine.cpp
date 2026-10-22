@@ -23,7 +23,7 @@ namespace mc {
 struct OreConfig {
     std::string block;       // block name (resolved against the registry)
     float probability = 0.2f; // fraction of lattice cells hosting a vein, [0, 1]
-    int veinSize = 8;         // blocks per vein, [1, 32]
+    int veinSize = 8;         // GEN-3: ellipsoid clusters K, [1, 8] (was walk steps [1,32])
     int maxY = 80;            // veins never appear above this world Y
 };
 

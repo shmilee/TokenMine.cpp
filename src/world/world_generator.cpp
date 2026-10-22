@@ -11,16 +11,11 @@
 
 #include "core/logger.hpp"
 #include "world/noise.hpp"
+#include "world/ore_vein.hpp" // GEN-3: planOreVein + the margin constants
 
 namespace mc {
 
 namespace {
-
-// Per-feature mixing constant (per ore type, per vein-walk step).
-constexpr std::uint64_t kFeatureStep = 0x9E3779B97F4A7C15ULL;
-
-// 2^24, the resolution of the 24-bit lattice values.
-constexpr float kLattice24Scale = 1.0f / 16777216.0f;
 
 // Trees extend at most this many blocks horizontally from their trunk.
 constexpr int kTreeLeafRadius = 2;
@@ -363,14 +358,18 @@ void WorldGenerator::placeOres(Chunk& chunk, const ChunkPos& pos) const {
     const int ox = pos.x * kChunkSize;
     const int oz = pos.z * kChunkSize;
     const int y0 = pos.y * kChunkSize;
-    // A vein started in a lattice cell can reach this chunk only if it
-    // starts within veinSize blocks of it (the walk is at most that long),
-    // so scan cells from `margin` = maxVeinSize + one cell past each edge.
-    int maxVeinSize = 0;
+    // GEN-3: a vein started in a lattice cell is K ellipsoid clusters —
+    // the first centred on the in-cell uniform start, each next within
+    // kOreVeinClusterSpread of the previous, and each ellipsoid reaching
+    // kOreVeinMaxAxis from its centre. So a vein can reach this chunk
+    // only if it starts within `margin` = lattice + max semi-axis +
+    // (K-1) cluster steps past each edge.
+    int maxClusters = 1;
     for (const ResolvedOre& ore : m_ores) {
-        maxVeinSize = std::max(maxVeinSize, ore.veinSize);
+        maxClusters = std::max(maxClusters, ore.veinSize);
     }
-    const int margin = maxVeinSize + s;
+    const int margin = s + kOreVeinMaxAxis +
+                       kOreVeinClusterSpread * (maxClusters - 1);
     const int xi0 = floorDiv(ox - margin, s);
     const int xi1 = floorDiv(ox + kChunkSize + margin - 1, s);
     const int yi0 = floorDiv(y0 - margin, s);
@@ -395,18 +394,19 @@ void WorldGenerator::placeOres(Chunk& chunk, const ChunkPos& pos) const {
                     int vx = i * s + static_cast<int>((h >> 12) % u64(s));
                     int vy = j * s + static_cast<int>((h >> 20) % u64(s));
                     int vz = k * s + static_cast<int>((h >> 28) % u64(s));
-                    // Random walk: each step is a pure function of the
-                    // previous state, so the whole vein is reproducible.
-                    std::uint64_t state = h;
-                    for (int step = 0; step < ore.veinSize; ++step) {
-                        state = splitmix64(state ^ kFeatureStep ^ u64(step));
-                        const int dx = static_cast<int>(state % 3u) - 1;
-                        const int dy = static_cast<int>((state >> 2) % 3u) - 1;
-                        const int dz = static_cast<int>((state >> 4) % 3u) - 1;
-                        placeOre(chunk, pos, vx, vy, vz, ore);
-                        vx += dx;
-                        vy += dy;
-                        vz += dz;
+                    // GEN-3: the vein is a cluster of MC 3x2x1 ellipsoids
+                    // (the retired 26-neighbor random walk): K = veinSize
+                    // ellipsoids planned by a pure function of the SAME
+                    // per-ore salt stream + the in-cell start (the PITS #4
+                    // advancing stream inside — a new vein-dedicated salt).
+                    // Every planned cell goes through the unchanged
+                    // placeOre (the y bounds / inside-chunk / deep-only
+                    // filters); the world-coordinate start keeps the
+                    // cross-chunk seam exact (each chunk plans the same
+                    // vein and writes only its own cells).
+                    for (const BlockPos& cell :
+                         planOreVein(salt, {vx, vy, vz}, ore.veinSize)) {
+                        placeOre(chunk, pos, cell.x, cell.y, cell.z, ore);
                     }
                 }
             }

@@ -62,6 +62,15 @@ inline constexpr std::int64_t kSaltLavaLake = 0x1A2B3C4D5E6F7A07LL;
 // GEN-1: the second spaghetti-cave noise field.
 inline constexpr std::int64_t kSaltCave2 = 0x1A2B3C4D5E6F7A08LL;
 
+// Per-feature mixing constant (the lattice walk's golden step; the per-
+// ore salt advance). Public so the unit tests can pin the generated ore
+// cells to the exact salt stream (the CaveMatchesPurePredicate pattern).
+inline constexpr std::uint64_t kFeatureStep = 0x9E3779B97F4A7C15ULL;
+
+// 2^24, the resolution of the 24-bit lattice values (the probability
+// gate's scale). Public for the same reason.
+inline constexpr float kLattice24Scale = 1.0f / 16777216.0f;
+
 class WorldGenerator {
 public:
     // Resolves every block name (biome surfaces/subsurfaces, ore and tree
@@ -107,7 +116,7 @@ private:
     struct ResolvedOre {
         BlockID block = BlockID::invalid();
         float probability = 0.0f;
-        int veinSize = 8;
+        int veinSize = 8; // GEN-3: ELLIPSOID CLUSTERS K, [1, 8] (was walk steps)
         int maxY = 80;
     };
     // GEN-1: a lava lake resolved at create() time: the lake's parameters +

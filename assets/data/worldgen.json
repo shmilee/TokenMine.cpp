@@ -24,38 +24,38 @@
   "veins": [
    {
     "block": "coal_ore",
-    "probability": 0.4,
-    "vein_size": 9,
+    "probability": 0.154,
+    "vein_size": 1,
     "max_y": 80
    },
    {
     "block": "iron_ore",
-    "probability": 0.25,
-    "vein_size": 8,
+    "probability": 0.0855,
+    "vein_size": 1,
     "max_y": 56
    },
    {
     "block": "gold_ore",
-    "probability": 0.12,
-    "vein_size": 7,
+    "probability": 0.0376,
+    "vein_size": 1,
     "max_y": 36
    },
    {
     "block": "diamond_ore",
-    "probability": 0.05,
-    "vein_size": 5,
+    "probability": 0.0101,
+    "vein_size": 1,
     "max_y": 20
    },
    {
     "block": "lapis_ore",
-    "probability": 0.08,
-    "vein_size": 6,
+    "probability": 0.0208,
+    "vein_size": 1,
     "max_y": 32
    },
    {
     "block": "gravel",
-    "probability": 0.25,
-    "vein_size": 4,
+    "probability": 0.0445,
+    "vein_size": 1,
     "max_y": 80
    }
   ]

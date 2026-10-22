@@ -1024,12 +1024,21 @@
     带排除盒不挖（保熔岩湖静态被围）；矿脉只替换 stone（洞壁矿暴露 =
     自然成立、不填 air）；树/装饰在洞之后跑（洞口悬树 = MC 同款视觉；
     装饰表面被洞啃掉则让位 = 既有检查直接生效）
-  - **矿脉**：世界空间格网 + 随机游走（coal/iron/gold/diamond/lapis/
-    **gravel**，`max_y` 分层限制；lapis：probability 0.08 / vein 6 /
-    max_y 32；gravel：probability 0.25 / vein 4 / max_y 80，Phase 59 的
-    常见石替换脉 = 唯一的非矿石"矿脉"），跨 chunk 无缝；只替换 stone
-    （不破坏洞穴）；脉的 block 名在生成 setup 对 BlockRegistry 解析，
-    未知 = 启动报错
+  - **矿脉**（`[GEN-3]`）：世界空间格网（lattice 8）+ **MC 3×2×1 旋转椭球
+    脉**（`world/ore_vein` 纯函数 `planOreVein`：整数椭球谓词
+    `4u²+9v²+36w²≤36` = 恰 21 格，半轴 (3,2,1) 按 6 轴置换定向，专用
+    salt + PITS #4 推进流；`vein_size` = **椭球簇数 K ∈ [1,8]**——首簇
+    中心 = 胞内均匀起点，后续簇中心在前簇 ±2 内游走；shipped 全 K=1）。
+    概率门 / 格内均匀起点 / 盐流逐位沿用旧机制；**gravel 同改椭球**
+    （Q1：石替换是替换目标属性非形状属性）。**密度标定**（单轮）：
+    探针 per-ore 新旧格数比 → probability re-tune（定稿 coal 0.154 /
+    iron 0.0855 / gold 0.0376 / diamond 0.0101 / lapis 0.0208 /
+    gravel 0.0445，maxY 不变）；**矿感 = 脉更大更稀**（21 格/脉 vs 旧
+    9 格游走、概率 ~÷2-5 = MC 1.18+ chunky sparse；diamond 单次收益
+    大）；残留越带：diamond 0.641×、lapis 0.732×（单轮纪律记档，
+    见 KNOWN_ISSUES）。跨 chunk 无缝（世界坐标格网 + 世界坐标起点）；
+    只替换 deep stone（不破坏洞穴 = 洞壁矿暴露契约不变）；脉的 block
+    名在生成 setup 对 BlockRegistry 解析，未知 = 启动报错
   - **树木**：世界空间格网候选 + 数据驱动的树密度；树干 4~7 格 + 两层树冠 + 顶帽；
     跨 chunk 边界由邻接 chunk 各自补齐（边际格网机制），只写入 air（不破坏地形）
   - **表面装饰**（Phase 45，biome 数据驱动）：biome JSON 可选
