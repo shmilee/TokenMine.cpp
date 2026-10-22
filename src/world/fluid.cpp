@@ -573,27 +573,44 @@ std::vector<BlockPos> simulateType(World& world, FluidKind kind) {
                             }
                         }
                     } else if (below > 0) {
-                        // Resting on fluid:
-                        //  - a full cell on anything is stable (sources
-                        //    never merge);
-                        //  - a cell resting on a FULL cell becomes full: a
-                        //    column backed by a source below refills to the
-                        //    top (this is what settles a broken lake floor —
-                        //    without it the refilled column oscillates
-                        //    level-7 / absorbed / level-7 forever);
-                        //  - a shallower film on a flowing (non-full) pool
-                        //    is absorbed (the pool keeps its level);
-                        //  - an equal or deeper flow stays and raises the
-                        //    pool below to its level.
+                        // Resting on a same-kind fluid of level B. The
+                        // pre-FLUID-1 rules: a full cell on anything is
+                        // stable; on a FULL cell, refill to full; a
+                        // shallower flow is absorbed into the deeper pool;
+                        // an equal or DEEPER flow stays and RAISED the pool
+                        // to its own level — that raise was the one
+                        // unaccounted volume-gain path (a pool gaining
+                        // volume with no source), and FLUID-1 route A
+                        // deletes it, replacing the raise with a no-op
+                        // static deposition:
+                        //  - B == 8 (source back): the cell becomes full.
+                        //    A column backed by a source below refills to
+                        //    the top — this is what settles a broken lake
+                        //    floor (without it the refilled column
+                        //    oscillates level-7 / absorbed / level-7
+                        //    forever);
+                        //  - 0 < B < 8 and L < B (shallower flow on a
+                        //    deeper pool): ABSORBED — the cell is removed,
+                        //    the pool keeps B;
+                        //  - 0 < B < 8 and L >= B (equal or deeper flow):
+                        //    STATIC DEPOSITION — the cell stays, the pool
+                        //    keeps B, and nothing is written. The old rule
+                        //    raised the pool to L here; that raise is the
+                        //    only way a pool could gain volume with no
+                        //    source, so deleting it makes pool levels
+                        //    monotonically non-increasing per cell while
+                        //    keeping the deposition stable (a cliff-fed
+                        //    film cascade settles into a static film stack
+                        //    instead of oscillating — the FLUID-1 step-0
+                        //    probe's flip-trigger finding).
                         if (L == kMaxFluidLevel) {
                             // Stable.
                         } else if (below == kMaxFluidLevel) {
                             propose(changes, wp, kMaxFluidLevel);
                         } else if (L < below) {
                             propose(changes, wp, 0); // absorbed
-                        } else {
-                            propose(changes, {wp.x, wp.y - 1, wp.z}, L);
                         }
+                        // else: L >= below — static deposition (no-op).
                     } else {
                         assert(false && "resting cell with empty cell below");
                     }

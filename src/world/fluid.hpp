@@ -13,20 +13,56 @@
 //  - A cell is FALLING when the cell below it is empty, or the cell below
 //    is itself falling. A falling chain shifts down one cell per tick:
 //    each cell takes the fluid level of the cell above it (the chain's top
-//    empties); a chain reaching y < 0 drains out of the world.
-//  - A cell resting on a block spreads to its four horizontal neighbors:
-//    an empty neighbor gets level L-1, a fluid neighbor below L-1 is raised
-//    to L-1. Level 1 is the terminal film and does not spread.
-//  - A cell resting on fluid: full cells (L == kMaxFluidLevel) are stable
-//    on any fluid and never merge; a shallower flowing film (L < L2) is
-//    absorbed into the deeper pool below (removed); an equal or deeper
-//    level (L >= L2) stays and raises the cell below to L (a landed flow
-//    keeps filling the cell below).
-//  - Deliberate deviation from Minecraft: full cells fall when unsupported
-//    (a MC source floats), so water drains into a broken lake floor.
+//    empties); a chain reaching y < 0 drains out of the world. The shift
+//    is a paired move — one level-token leaves the top and one arrives at
+//    the bottom — net-zero per tick except the boundary drain.
+//  - A cell resting on a block (or on the other fluid kind) spreads to
+//    its four horizontal neighbors: an empty neighbor gets level L-1, a
+//    fluid neighbor below L-1 is raised to L-1. Level 1 is the terminal
+//    film and does not spread.
+//  - A cell resting on a SAME-KIND fluid of level B (the unified pool
+//    rules):
+//      B == 8          the cell becomes full — a column backed by a source
+//                      below refills to the top (this is what settles a
+//                      broken lake floor; without it the refilled column
+//                      oscillates level-7 / absorbed / level-7 forever);
+//      0 < B < 8, L < B  the cell is ABSORBED into the pool (removed; the
+//                      pool keeps its level B);
+//      0 < B < 8, L >= B  STATIC DEPOSITION: the cell stays, the pool keeps
+//                      B, and nothing is written. The pre-FLUID-1 rule
+//                      raised the pool to L here; that raise was the only
+//                      way a pool could gain volume with no source — the
+//                      one unaccounted volume-gain path. Deleting it makes
+//                      pool levels monotonically non-increasing per cell
+//                      while keeping the deposition stable: a cliff-fed
+//                      film cascade settles into a static film stack
+//                      instead of oscillating (the FLUID-1 step-0 probe's
+//                      flip-trigger finding, route A).
+//  - Conservation (FLUID-1): "total volume ±0" is NOT the target — that
+//    is the wrong reading of Minecraft, where a spreading flow spawns
+//    level-(L-1) neighbors from nothing. Instead every per-tick cell
+//    change is accounted in one of four named event classes: the spread
+//    front σ (creating a flow in a dry cell and raising a shallower flow
+//    — the front's creations are what MC does), pool absorption α,
+//    source-back refill κ, and the y<0 boundary drain δ; conveyor falls
+//    are the paired net-zero moves. In a closed region the flow-cell
+//    count F (levels 1..7) and the source count S (level 8) obey
+//    F' = F + σ_c − α − κ − δ and S' = S + κ (σ_c = the spread
+//    creations; the raises do not change F), and a tick with no
+//    σ/α/κ/δ event at all conserves the total level sum.
+//  - Accepted standing rotation: cliff-fed film cascades and lake
+//    overflows run as permanent standing waterfalls — a bounded set of
+//    edge cells (sea-cliff films, the P90 surface-lake overflow)
+//    re-churns every tick (a period-2 film cascade). It is off-view in
+//    the shipped baselines, deterministic (byte-identical ×2 runs), and
+//    only those chunks stay fluid-hot (the 99.8 activity gate). See
+//    docs/KNOWN_ISSUES (fluid section).
+//  - Deliberate deviations from Minecraft: full cells fall when
+//    unsupported (a MC source floats), so water drains into a broken lake
+//    floor; the water-lava reaction does not consume the water; the burn
+//    pass does not consume the lava.
 //  - Conflicting targets (two spreads into one cell) resolve to the max
-//    level. Fluid volume is not conserved (sources create fluid), like
-//    Minecraft's basic behavior.
+//    level.
 //
 // Water-lava interaction (Phase 51): BEFORE the per-kind simulation, a
 // snapshot pass converts every LAVA cell that is 6-adjacent to a WATER

@@ -1,18 +1,26 @@
 // FluidSim tests: the deterministic water simulation (snapshot-based tick:
 // falling conveyor, horizontal spread with level decay, terminal level 1,
-// merge/absorb on fluid, cross-chunk chains, equilibrium stability).
+// the unified pool rules — refill/absorb/static deposition, FLUID-1 route
+// A — cross-chunk chains, equilibrium stability, the per-tick accounting
+// identity, and the two exact-constant fixtures (sealed box, P90 lake)).
 //
 // The simulation is registry-free (it only reads the block/fluid arrays),
 // so any non-air BlockID works as "solid" for the floors.
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
+#include <map>
 #include <string>
 #include <vector>
 
 #include "block/block_registry.hpp"
+#include "core/asset_manager.hpp"
 #include "core/json.hpp"
+#include "world/biome.hpp"
 #include "world/fluid.hpp"
+#include "world/world_generator.hpp"
+#include "world/worldgen_config.hpp"
 
 using namespace mc;
 
@@ -126,8 +134,9 @@ TEST(FluidTest, FlowingColumnFallsIntoHoleAndRests) {
     EXPECT_EQ(world.getFluid(8, 3, 8), 0);
 
     // Equilibrium: the bottom rests on the floor (its spreads are all
-    // blocked by the upper-floor stone), the top rests on it (equal level:
-    // stays, nothing to raise).
+    // blocked by the upper-floor stone), the top deposits statically on
+    // it (equal level: the pool keeps its level, nothing is written —
+    // FLUID-1 route A).
     const std::vector<BlockPos> changed = runTicks(world, 3);
     EXPECT_TRUE(changed.empty());
     EXPECT_EQ(world.getFluid(8, 1, 8), 7);
@@ -292,29 +301,38 @@ TEST(FluidTest, BrokenLakeFloorRefillsAndSettles) {
     }
 }
 
-TEST(FluidTest, FlowingRaisesPoolBelow) {
+TEST(FluidTest, FlowDepositsOnPoolWithoutRaising) {
+    // FLUID-1 route A (adaptation of the pre-FLUID-1
+    // FlowingRaisesPoolBelow): a deeper flow resting on a shallower flowing
+    // pool DEPOSITS — the flow stays, the pool keeps its level (the old
+    // rule raised the pool to the flow's level in one tick).
     World world;
     floor(world, 0, 15, 0, 15, 0);
     ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, 3)); // a shallow pool on the floor
     ASSERT_TRUE(world.setFluid(8, 2, 8, FluidKind::Water, 5)); // a deeper flow resting on it
 
     runTicks(world, 1);
-    // The flow stays and raises the pool to its own level.
+    // The flow stays deposited; the pool is NOT raised.
     EXPECT_EQ(world.getFluid(8, 2, 8), 5);
-    EXPECT_EQ(world.getFluid(8, 1, 8), 5);
+    EXPECT_EQ(world.getFluid(8, 1, 8), 3);
 
-    // Run to equilibrium: the pool now spreads a 5,4,3,2,1 gradient along
-    // the floor and settles (the level-1 ring is terminal).
+    // Run to equilibrium: the pool's own y=1 fan spreads 2s at the
+    // orthogonals and 1s around them (terminal — never back into the
+    // deeper pool), and the pool keeps 3 forever. The deposited flow
+    // itself never spreads (spreading requires block support, not fluid
+    // support), so there is no y=2 ring.
     std::vector<BlockPos> changed;
-    for (int i = 0; i < 40; ++i) {
+    for (int i = 0; i < 60; ++i) {
         changed = FluidSim::tick(world, emptyBlocks());
+        EXPECT_EQ(world.getFluid(8, 1, 8), 3) << "tick " << i;
     }
     EXPECT_TRUE(changed.empty());
-    EXPECT_EQ(world.getFluid(8, 1, 8), 5);
-    EXPECT_EQ(world.getFluid(7, 1, 8), 4);
-    EXPECT_EQ(world.getFluid(6, 1, 8), 3);
-    EXPECT_EQ(world.getFluid(5, 1, 8), 2);
-    EXPECT_EQ(world.getFluid(4, 1, 8), 1);
+    EXPECT_EQ(world.getFluid(8, 2, 8), 5); // the deposited flow
+    EXPECT_EQ(world.getFluid(7, 2, 8), 0); // no y=2 ring (see above)
+    EXPECT_EQ(world.getFluid(7, 1, 8), 2);
+    EXPECT_EQ(world.getFluid(6, 1, 8), 1); // terminal
+    EXPECT_EQ(world.getFluid(8, 1, 7), 2);
+    EXPECT_EQ(world.getFluid(8, 1, 6), 1);
 }
 
 TEST(FluidTest, DoesNotSpreadIntoBlocks) {
@@ -756,4 +774,655 @@ TEST(FluidBurnTest, TwoLavaNeighborsBurnTheCellOnce) {
         }
     }
     EXPECT_EQ(hits, 1); // collected twice, burned once
+}
+
+// -- FLUID-1: the unified pool rules (route A) + the accounting identity ---
+//
+// The pre-FLUID-1 rule RAISED the pool below to the level of the flow
+// resting on it — the only path by which a pool could gain volume with no
+// source (an unaccounted gain). Route A deletes that branch:
+//   B == 8, L < 8   -> L refills to 8 (source-back, κ);
+//   0 < B < 8, L < B -> L is absorbed into the pool (α);
+//   0 < B < 8, L >= B -> L DEPOSITS statically: nothing is written.
+// Every per-tick cell change is accounted in the four named event classes
+// σ/α/κ/δ (the model comment in src/world/fluid.hpp); these pins the rule
+// down and the two exact-constant fixtures (sealed box, P90 lake) pin the
+// accounting.
+
+namespace {
+
+// The number of flow cells (levels 1..7) in a single-chunk world.
+int flowCount(const World& world) {
+    int n = 0;
+    for (int y = 0; y < kChunkSize; ++y) {
+        for (int z = 0; z < kChunkSize; ++z) {
+            for (int x = 0; x < kChunkSize; ++x) {
+                const std::uint8_t l = world.getFluid(x, y, z);
+                if (l >= 1 && l <= 7) {
+                    ++n;
+                }
+            }
+        }
+    }
+    return n;
+}
+
+// The sealed box (the E2E S2 layout): a stone shell x[8,17] x y[40,46] x
+// z[8,17], interior air x[9,16] y[41,45] z[9,16], spanning the four
+// chunks (0..1, 2, 0..1). Water only.
+constexpr int kBoxX0 = 8, kBoxX1 = 17;
+constexpr int kBoxY0 = 40, kBoxY1 = 46;
+constexpr int kBoxZ0 = 8, kBoxZ1 = 17;
+
+bool boxInterior(int x, int y, int z) {
+    return x >= kBoxX0 + 1 && x <= kBoxX1 - 1 && y >= kBoxY0 + 1 &&
+        y <= kBoxY1 - 1 && z >= kBoxZ0 + 1 && z <= kBoxZ1 - 1;
+}
+
+bool boxSolid(int x, int y, int z) {
+    return x >= kBoxX0 && x <= kBoxX1 && y >= kBoxY0 && y <= kBoxY1 &&
+        z >= kBoxZ0 && z <= kBoxZ1 && !boxInterior(x, y, z);
+}
+
+void buildSealedBox(World& world) {
+    const BlockID stone{1};
+    for (int x = kBoxX0; x <= kBoxX1; ++x) {
+        for (int y = kBoxY0; y <= kBoxY1; ++y) {
+            for (int z = kBoxZ0; z <= kBoxZ1; ++z) {
+                if (!boxInterior(x, y, z)) {
+                    world.setBlock(x, y, z, stone);
+                }
+            }
+        }
+    }
+    world.setFluid(12, 44, 12, FluidKind::Water, kMaxFluidLevel); // the source
+    world.setFluid(13, 44, 13, FluidKind::Water, 7);              // diagonal column
+    world.setFluid(14, 44, 14, FluidKind::Water, 6);
+    world.setFluid(15, 44, 15, FluidKind::Water, 5);
+    world.setFluid(16, 44, 16, FluidKind::Water, 4);
+    for (int x = 9; x <= 11; ++x) {                               // the corner film
+        for (int z = 9; z <= 11; ++z) {
+            world.setFluid(x, 41, z, FluidKind::Water, 2);
+        }
+    }
+}
+
+// The box's exact final state: 64 cells, all on the y=41 floor. The final
+// state of a sealed region is rule-independent (the source lands, the
+// column falls, the film fans out — nothing else can happen), so the step-
+// 0 probe verified this table bit-identical under all three rule variants
+// (pre-FLUID-1 / unified absorption / route A).
+const std::vector<std::array<int, 4>>& sealedBoxFinal() {
+    static const std::vector<std::array<int, 4>> cells = {
+        {9, 41, 9, 2},  {9, 41, 10, 3}, {9, 41, 11, 4}, {9, 41, 12, 5},
+        {9, 41, 13, 4}, {9, 41, 14, 3}, {9, 41, 15, 2}, {9, 41, 16, 1},
+        {10, 41, 9, 3}, {10, 41, 10, 4}, {10, 41, 11, 5}, {10, 41, 12, 6},
+        {10, 41, 13, 5}, {10, 41, 14, 4}, {10, 41, 15, 3}, {10, 41, 16, 2},
+        {11, 41, 9, 4}, {11, 41, 10, 5}, {11, 41, 11, 6}, {11, 41, 12, 7},
+        {11, 41, 13, 6}, {11, 41, 14, 5}, {11, 41, 15, 4}, {11, 41, 16, 3},
+        {12, 41, 9, 5}, {12, 41, 10, 6}, {12, 41, 11, 7}, {12, 41, 12, 8},
+        {12, 41, 13, 7}, {12, 41, 14, 6}, {12, 41, 15, 5}, {12, 41, 16, 4},
+        {13, 41, 9, 4}, {13, 41, 10, 5}, {13, 41, 11, 6}, {13, 41, 12, 7},
+        {13, 41, 13, 7}, {13, 41, 14, 6}, {13, 41, 15, 5}, {13, 41, 16, 4},
+        {14, 41, 9, 3}, {14, 41, 10, 4}, {14, 41, 11, 5}, {14, 41, 12, 6},
+        {14, 41, 13, 6}, {14, 41, 14, 6}, {14, 41, 15, 5}, {14, 41, 16, 4},
+        {15, 41, 9, 2}, {15, 41, 10, 3}, {15, 41, 11, 4}, {15, 41, 12, 5},
+        {15, 41, 13, 5}, {15, 41, 14, 5}, {15, 41, 15, 5}, {15, 41, 16, 4},
+        {16, 41, 9, 1}, {16, 41, 10, 2}, {16, 41, 11, 3}, {16, 41, 12, 4},
+        {16, 41, 13, 4}, {16, 41, 14, 4}, {16, 41, 15, 4}, {16, 41, 16, 4},
+    };
+    return cells;
+}
+
+// A snapshot of the water levels inside the box (stone reads 0 — the fluid
+// XOR block invariant).
+struct BoxState {
+    std::array<std::uint8_t, 10 * 7 * 10> a{};
+    static std::size_t idx(int x, int y, int z) {
+        return (x - kBoxX0) + 10 * (y - kBoxY0) + 70 * (z - kBoxZ0);
+    }
+    std::uint8_t at(int x, int y, int z) const {
+        if (x < kBoxX0 || x > kBoxX1 || y < kBoxY0 || y > kBoxY1 ||
+            z < kBoxZ0 || z > kBoxZ1) {
+            return 0;
+        }
+        return a[idx(x, y, z)];
+    }
+    bool solid(int x, int y, int z) const {
+        return boxSolid(x, y, z);
+    }
+    void load(const World& world) {
+        a.fill(0);
+        for (int x = kBoxX0; x <= kBoxX1; ++x) {
+            for (int y = kBoxY0; y <= kBoxY1; ++y) {
+                for (int z = kBoxZ0; z <= kBoxZ1; ++z) {
+                    a[idx(x, y, z)] =
+                        world.getFluidOfKind(x, y, z, FluidKind::Water);
+                }
+            }
+        }
+    }
+    long flow() const {
+        long n = 0;
+        for (std::uint8_t l : a) {
+            if (l >= 1 && l <= 7) {
+                ++n;
+            }
+        }
+        return n;
+    }
+    long source() const {
+        long n = 0;
+        for (std::uint8_t l : a) {
+            if (l == kMaxFluidLevel) {
+                ++n;
+            }
+        }
+        return n;
+    }
+    long sum() const {
+        long n = 0;
+        for (std::uint8_t l : a) {
+            n += l;
+        }
+        return n;
+    }
+};
+
+// Re-derives the sim's falling flag (the model comment's column walk, kept
+// in lock-step with fluid.cpp on purpose — drift here fails the identity):
+// a water cell falls when the contiguous water run below it ends on dry
+// air (or y < 0), not on a block.
+bool isFalling(const BoxState& st, int x, int y, int z) {
+    for (int yy = y - 1; yy >= 0; --yy) {
+        if (st.solid(x, yy, z)) {
+            return false;
+        }
+        if (st.at(x, yy, z) == 0) {
+            return true;
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+TEST(FluidTest, PoolNeverRaised) {
+    // The route-A pin: a deeper flow on a shallower pool NEVER raises the
+    // pool (pre-FLUID-1: one tick, pool 3 -> 7). The flow deposits at y=2
+    // (and never spreads — fluid support, not block support); the y=1 fan
+    // the pool grows is shallower than the pool, so no horizontal spread
+    // reaches back into it either.
+    World world;
+    floor(world, 0, 15, 0, 15, 0);
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, 3));
+    ASSERT_TRUE(world.setFluid(8, 2, 8, FluidKind::Water, 7));
+    for (int i = 0; i < 20; ++i) {
+        FluidSim::tick(world, emptyBlocks());
+        EXPECT_EQ(world.getFluid(8, 1, 8), 3) << "tick " << i;
+    }
+    EXPECT_EQ(world.getFluid(8, 2, 8), 7);
+}
+
+TEST(FluidTest, FilmOnFilmDepositsNoRaise) {
+    // A level-2 flow on a level-1 film deposits (the film keeps 1 —
+    // pre-FLUID-1 the film would be raised to 2). The flow itself never
+    // spreads (fluid support, not block support) and the level-1 film is
+    // terminal — the pair is static from tick 1 (the flip-trigger case,
+    // where every other rule variant churned).
+    World world;
+    floor(world, 0, 15, 0, 15, 0);
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, 1));
+    ASSERT_TRUE(world.setFluid(8, 2, 8, FluidKind::Water, 2));
+    std::vector<BlockPos> changed;
+    for (int i = 0; i < 40; ++i) {
+        changed = FluidSim::tick(world, emptyBlocks());
+        EXPECT_EQ(world.getFluid(8, 1, 8), 1) << "tick " << i;
+        EXPECT_EQ(world.getFluid(8, 2, 8), 2) << "tick " << i;
+    }
+    EXPECT_TRUE(changed.empty());
+}
+
+TEST(FluidTest, EqualFilmDepositsStatic) {
+    // The flip-trigger pair in isolation: a level-2 flow on a level-2
+    // pool, walled so nothing spreads — ZERO changes on every tick (the
+    // deposition is a pure no-op; the pre-FLUID-1 rule wrote a no-op raise
+    // proposal here, and the absorbed-everything alternative would have
+    // consumed the flow — both would churn this cell every tick).
+    World world;
+    floor(world, 4, 12, 4, 12, 0);
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, 2));
+    ASSERT_TRUE(world.setFluid(8, 2, 8, FluidKind::Water, 2));
+    world.setBlock(7, 2, 8, kStone);
+    world.setBlock(9, 2, 8, kStone);
+    world.setBlock(8, 2, 7, kStone);
+    world.setBlock(8, 2, 9, kStone);
+    world.setBlock(7, 1, 8, kStone);
+    world.setBlock(9, 1, 8, kStone);
+    world.setBlock(8, 1, 7, kStone);
+    world.setBlock(8, 1, 9, kStone);
+    const std::vector<BlockPos> changed = runTicks(world, 30);
+    EXPECT_TRUE(changed.empty());
+    EXPECT_EQ(world.getFluid(8, 1, 8), 2);
+    EXPECT_EQ(world.getFluid(8, 2, 8), 2);
+}
+
+TEST(FluidTest, FilmMergesIntoPoolAccounted) {
+    // α: a shallower flow on a deeper pool is absorbed — the flow-cell
+    // count drops by exactly one, the pool keeps its level, and the pool's
+    // spread ring is the only creation (σ, +4).
+    World world;
+    floor(world, 0, 15, 0, 15, 0);
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, 5));
+    ASSERT_TRUE(world.setFluid(8, 2, 8, FluidKind::Water, 2));
+    const int before = flowCount(world); // 2
+    ASSERT_EQ(before, 2);
+    FluidSim::tick(world, emptyBlocks());
+    EXPECT_EQ(world.getFluid(8, 2, 8), 0);  // absorbed
+    EXPECT_EQ(world.getFluid(8, 1, 8), 5);  // pool unchanged
+    EXPECT_EQ(flowCount(world), before + 3); // −1 (α) +4 (σ ring)
+}
+
+TEST(FluidTest, LavaPoolNeverRaised) {
+    // The Q1 lava pin: the rule is per-kind — a deeper LAVA flow on a
+    // shallower lava pool deposits; the pool never raises.
+    World world;
+    floor(world, 0, 15, 0, 15, 0);
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Lava, 3));
+    ASSERT_TRUE(world.setFluid(8, 2, 8, FluidKind::Lava, 7));
+    for (int i = 0; i < 20; ++i) {
+        FluidSim::tick(world, emptyBlocks());
+        EXPECT_EQ(world.getFluidOfKind(8, 1, 8, FluidKind::Lava), 3)
+            << "tick " << i;
+    }
+    EXPECT_EQ(world.getFluidOfKind(8, 2, 8, FluidKind::Lava), 7);
+}
+
+TEST(FluidTest, LavaFilmAbsorbedIntoDeeperLava) {
+    // α for lava: a shallower lava film on a deeper lava pool is absorbed;
+    // the pool keeps its level.
+    World world;
+    floor(world, 0, 15, 0, 15, 0);
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Lava, 5));
+    ASSERT_TRUE(world.setFluid(8, 2, 8, FluidKind::Lava, 2));
+    FluidSim::tick(world, emptyBlocks());
+    EXPECT_EQ(world.getFluidOfKind(8, 2, 8, FluidKind::Lava), 0);
+    EXPECT_EQ(world.getFluidOfKind(8, 1, 8, FluidKind::Lava), 5);
+    EXPECT_EQ(world.getFluidOfKind(7, 1, 8, FluidKind::Lava), 4); // the ring
+}
+
+TEST(FluidTest, FallChainLevelsPreserved) {
+    // The conveyor is a paired net-zero move: a falling chain shifts as a
+    // whole (level sum and flow count unchanged), until it reaches the
+    // y<0 boundary drain (δ — the only loss term).
+    World world;
+    floor(world, 6, 10, 6, 10, 0);
+    world.setBlock(8, 0, 8, BlockID::air()); // the hole reaches the void
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, 7));
+    ASSERT_TRUE(world.setFluid(8, 2, 8, FluidKind::Water, 7));
+    ASSERT_TRUE(world.setFluid(8, 3, 8, FluidKind::Water, 7));
+
+    runTicks(world, 1);
+    // The whole chain shifted down one cell (the top emptied): Σlevel 21
+    // unchanged, F=3 unchanged.
+    EXPECT_EQ(world.getFluid(8, 0, 8), 7);
+    EXPECT_EQ(world.getFluid(8, 1, 8), 7);
+    EXPECT_EQ(world.getFluid(8, 2, 8), 7);
+    EXPECT_EQ(world.getFluid(8, 3, 8), 0);
+
+    runTicks(world, 1);
+    // The bottom now sits at y=0 over the void: the next fall drains a
+    // level-7 token out of the world (δ): Σlevel 21 -> 14, F 3 -> 2.
+    EXPECT_EQ(world.getFluid(8, 0, 8), 7);
+    EXPECT_EQ(world.getFluid(8, 1, 8), 7);
+    EXPECT_EQ(world.getFluid(8, 2, 8), 0);
+}
+
+TEST(FluidTest, WorldBottomDrainCounted) {
+    // δ: a flow at y=0 over the void drains out of the world — the level
+    // sum drops by the flow's level, the flow count by one.
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    ASSERT_TRUE(world.setFluid(8, 0, 8, FluidKind::Water, 7));
+    runTicks(world, 1);
+    EXPECT_EQ(world.getFluid(8, 0, 8), 0);
+    EXPECT_EQ(flowCount(world), 0);
+}
+
+TEST(FluidTest, ConflictMaxMergeApplied) {
+    // Two spreads into one dry cell merge to the MAX level (the 5 proposes
+    // 4, the 7 proposes 6 — the cell takes 6, not the first proposal).
+    World world;
+    floor(world, 0, 15, 0, 15, 0);
+    ASSERT_TRUE(world.setFluid(7, 1, 8, FluidKind::Water, 5));
+    ASSERT_TRUE(world.setFluid(9, 1, 8, FluidKind::Water, 7));
+    runTicks(world, 1);
+    EXPECT_EQ(world.getFluid(8, 1, 8), 6);
+}
+
+TEST(FluidTest, FlowOnlyFanSettlesCold) {
+    // 99.8 integration: a source-free flow fan settles and its chunk goes
+    // fluid-COLD (the activity gate then skips it — a settled pool keeps no
+    // chunk permanently hot).
+    World world;
+    floor(world, 0, 15, 0, 15, 0);
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, 5));
+    std::vector<BlockPos> changed;
+    int ticks = 0;
+    do {
+        changed = FluidSim::tick(world, emptyBlocks());
+        ++ticks;
+    } while (!changed.empty() && ticks < 60);
+    EXPECT_TRUE(changed.empty());
+    const Chunk* c = world.findChunk({0, 0, 0});
+    ASSERT_NE(c, nullptr);
+    EXPECT_FALSE(c->fluidHot(FluidKind::Water));
+    // The fan settled to the floor gradient (5 at the center, 1 at the
+    // edge — the level-1 ring is terminal).
+    EXPECT_EQ(world.getFluid(8, 1, 8), 5);
+    EXPECT_EQ(world.getFluid(7, 1, 8), 4);
+    EXPECT_EQ(world.getFluid(5, 1, 8), 2);
+    EXPECT_EQ(world.getFluid(4, 1, 8), 1);
+}
+
+TEST(FluidTest, FlowingLavaPoolBesideSourceWaterBecomesObsidian) {
+    // Regression guard: the reaction pass runs BEFORE the pool rules — a
+    // flowing (non-full) lava pool 6-adjacent to source water converts to
+    // obsidian (never to stone), and the water is not consumed.
+    const BlockRegistry blocks = buildReactionRegistry();
+    World world;
+    floor(world, 4, 12, 4, 12, 0);
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Lava, 3));
+    ASSERT_TRUE(world.setFluid(9, 1, 8, FluidKind::Water, kMaxFluidLevel));
+    FluidSim::tick(world, blocks);
+    EXPECT_EQ(world.getBlock(8, 1, 8), blocks.idForName("obsidian"));
+    EXPECT_EQ(world.getFluidOfKind(9, 1, 8, FluidKind::Water),
+              kMaxFluidLevel);
+}
+
+TEST(FluidTest, CrossChunkPoolDeposit) {
+    // The pool rule reads the cell below ACROSS the chunk seam: a flow
+    // above the seam pool deposits (no raise, no fall) and the whole
+    // structure settles with the pool level untouched.
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    world.getOrCreateChunk({1, 0, 0});
+    floor(world, 0, 31, 0, 15, 0); // spans both chunks
+    ASSERT_TRUE(world.setFluid(15, 1, 0, FluidKind::Water, 3)); // west chunk
+    ASSERT_TRUE(world.setFluid(16, 1, 0, FluidKind::Water, 3)); // east chunk (seam)
+    ASSERT_TRUE(world.setFluid(16, 2, 0, FluidKind::Water, 5)); // above the seam pool
+    runTicks(world, 1);
+    EXPECT_EQ(world.getFluid(16, 2, 0), 5); // deposited
+    EXPECT_EQ(world.getFluid(16, 1, 0), 3); // not raised
+    EXPECT_EQ(world.getFluid(15, 1, 0), 3); // the rest of the pool
+    std::vector<BlockPos> changed;
+    for (int i = 0; i < 40; ++i) {
+        changed = FluidSim::tick(world, emptyBlocks());
+        EXPECT_EQ(world.getFluid(16, 1, 0), 3) << "tick " << i;
+    }
+    EXPECT_TRUE(changed.empty());
+}
+
+TEST(FluidTest, SealedBoxSingleSourceExactFinal) {
+    // The sealed-box exact constant: a single source + a diagonal falling
+    // column + a corner film settle to exactly the 64-cell y=41 table (all
+    // three rule variants produce it bit-identically — the step-0 probe).
+    World world;
+    buildSealedBox(world);
+    std::vector<BlockPos> changed;
+    int settleTick = -1;
+    for (int t = 1; t <= 200; ++t) {
+        changed = FluidSim::tick(world, emptyBlocks());
+        if (changed.empty() && settleTick < 0) {
+            settleTick = t;
+        }
+    }
+    EXPECT_LE(settleTick, 20); // settles fast (the probe: tick 11)
+    EXPECT_TRUE(changed.empty());
+    for (const std::array<int, 4>& c : sealedBoxFinal()) {
+        EXPECT_EQ(world.getFluid(c[0], c[1], c[2]), c[3])
+            << c[0] << "," << c[1] << "," << c[2];
+    }
+    // And nothing else in the box is wet (it is sealed).
+    BoxState st;
+    st.load(world);
+    ASSERT_EQ(st.source(), 1);
+    ASSERT_EQ(st.flow(), 63);
+    ASSERT_EQ(st.sum(), 286);
+    for (int x = kBoxX0; x <= kBoxX1; ++x) {
+        for (int y = kBoxY0; y <= kBoxY1; ++y) {
+            for (int z = kBoxZ0; z <= kBoxZ1; ++z) {
+                bool inTable = false;
+                for (const std::array<int, 4>& c : sealedBoxFinal()) {
+                    if (c[0] == x && c[1] == y && c[2] == z) {
+                        inTable = true;
+                        break;
+                    }
+                }
+                if (!inTable) {
+                    EXPECT_EQ(st.at(x, y, z), 0) << x << "," << y << "," << z;
+                }
+            }
+        }
+    }
+}
+
+TEST(FluidTest, SealedBoxAccountingIdentity) {
+    // The FLUID-1 accounting identity, per tick: every cell change of the
+    // sealed box falls into one of the four named event classes (σ spread
+    // front / α absorption / κ source-back refill / δ boundary drain) or is
+    // a paired conveyor move — and the flow-cell count F and the source
+    // count S obey F' = F + σ_c − α − κ − δ, S' = S + κ; a tick with no
+    // σ/α/κ/δ event at all conserves the level sum (C3).
+    World world;
+    buildSealedBox(world);
+    BoxState st;
+    st.load(world);
+    long sigC = 0, sigR = 0, alpha = 0, kappa = 0, delta = 0, conv = 0;
+    for (int t = 1; t <= 200; ++t) {
+        const long F = st.flow(), S = st.source(), SUM = st.sum();
+        const std::vector<BlockPos> changed =
+            FluidSim::tick(world, emptyBlocks());
+        BoxState st2;
+        st2.load(world);
+        long sigc = 0, sigr = 0, al = 0, kp = 0, de = 0, cv = 0;
+        for (const BlockPos& p : changed) {
+            const std::uint8_t o = st.at(p.x, p.y, p.z);
+            const std::uint8_t n = st2.at(p.x, p.y, p.z);
+            if (o == n) {
+                ADD_FAILURE() << "tick " << t << ": no net change at "
+                              << p.x << "," << p.y << "," << p.z;
+                continue;
+            }
+            if (isFalling(st, p.x, p.y, p.z)) {
+                // Conveyor departure: the cell takes the level of the cell
+                // above. The box never feeds a spread into a falling cell
+                // (the columns fall through air), so the conveyor value is
+                // the only proposal.
+                EXPECT_EQ(n, st.at(p.x, p.y + 1, p.z)) << "tick " << t;
+                ++cv;
+                continue;
+            }
+            if (o > 0 && n == 0) {
+                EXPECT_EQ(st.at(p.x, p.y - 1, p.z), 0) << "tick " << t;
+                ++al; // α: absorbed into the deeper pool below
+            } else if (o > 0 && n == kMaxFluidLevel) {
+                EXPECT_EQ(st.at(p.x, p.y - 1, p.z), kMaxFluidLevel)
+                    << "tick " << t;
+                ++kp; // κ: source-back refill
+            } else if (o == 0 && n > 0) {
+                const std::uint8_t a = st.at(p.x, p.y + 1, p.z);
+                const bool aboveFalling =
+                    a > 0 && isFalling(st, p.x, p.y + 1, p.z);
+                if (aboveFalling && n <= a) {
+                    ++cv; // conveyor arrival (paired; a suppressed spread
+                          // below the falling level changes nothing)
+                } else if (n < kMaxFluidLevel) {
+                    ++sigc; // σ: spread creation
+                } else {
+                    ADD_FAILURE() << "tick " << t
+                                  << ": a source appeared without a "
+                                     "conveyor arrival at "
+                                  << p.x << "," << p.y << "," << p.z;
+                }
+            } else if (o > 0 && n > 0) {
+                EXPECT_LT(o, kMaxFluidLevel) << "tick " << t;
+                ++sigr; // σ-class: a spread raise (no count term)
+            }
+        }
+        EXPECT_EQ(st2.flow() - F, sigc - al - kp - de) << "tick " << t;
+        EXPECT_EQ(st2.source() - S, kp) << "tick " << t;
+        if (sigc + sigr + al + kp + de == 0) {
+            EXPECT_EQ(st2.sum(), SUM) << "tick " << t << " (C3)";
+        }
+        sigC += sigc;
+        sigR += sigr;
+        alpha += al;
+        kappa += kp;
+        delta += de;
+        conv += cv;
+        st = std::move(st2);
+    }
+    // The whole run: only the spread front (σ) and the paired conveyor
+    // falls (the diagonal column + the source dropping from y=44 to the
+    // floor) — the sealed box never absorbs, refills, or drains.
+    EXPECT_EQ(alpha, 0);
+    EXPECT_EQ(kappa, 0);
+    EXPECT_EQ(delta, 0);
+    EXPECT_GT(sigC, 0);
+    EXPECT_GT(sigR, 0); // the source's fan raises the film cells it meets
+    EXPECT_GT(conv, 0);
+    // The source count is constant: the source token only moves (its
+    // conveyor arrival/departure pair nets zero).
+    EXPECT_EQ(st.source(), 1);
+    EXPECT_EQ(st.flow(), 63);
+    EXPECT_EQ(st.sum(), 286);
+}
+
+TEST(FluidTest, P90OverflowExactFinal) {
+    // The P90 surface lake (seed 9, (24,26) R1 depth==fill==2) through the
+    // GAME's integration path (insertChunk: fluid registration + the hot
+    // first walk), 200 fluid ticks = the game's 600 frames, with the game's
+    // fire lifetime emulated (fire.lifetime_seconds 4.0 s = 80 fluid ticks;
+    // a fire cell turns to air at ignition + 81 — the first fluid tick
+    // after its 240th frame). Fire spread never runs (the game's separate
+    // pass; the P90 scene uses spread 0). The route-A constants (identical
+    // to the pre-FLUID-1 rule — this scene never triggered the deleted
+    // raise branch): the rim chars, the total/late edit counts, the single
+    // churn cell, and the final lava census.
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry blocks;
+    ASSERT_TRUE(blocks.loadDirectory(assets, "data/blocks").ok());
+    BiomeRegistry biomes;
+    ASSERT_TRUE(biomes.loadDirectory(assets, "data/biomes").ok());
+    auto params = WorldgenParams::load(assets);
+    ASSERT_TRUE(params.ok()) << params.error().message;
+    auto gen = WorldGenerator::create(9, *params, biomes, blocks);
+    ASSERT_TRUE(gen.ok()) << gen.error().message;
+    WorldGenerator generator = std::move(*gen);
+    World world;
+    // The disk of radius 3 around the lake's chunk (1,1), fully pre-loaded
+    // (the lake region is settled before tick 1; the overflow evolves into
+    // the hundreds of ticks, so the pre-load is behavior-neutral).
+    for (int cx = -1; cx <= 3; ++cx) {
+        for (int cz = -1; cz <= 3; ++cz) {
+            if ((cx - 1) * (cx - 1) + (cz - 1) * (cz - 1) > 9) {
+                continue;
+            }
+            for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy) {
+                const ChunkPos cp{cx, cy, cz};
+                if (world.hasChunk(cp)) {
+                    continue;
+                }
+                Chunk scratch;
+                generator.generateChunk(scratch, cp);
+                world.insertChunk(cp, std::move(scratch));
+            }
+        }
+    }
+    std::map<BlockPos, int> fireIgnition;
+    long rimChars = 0;
+    long total = 0;
+    long late = 0;
+    std::map<BlockPos, int> lateChanges;
+    for (int t = 1; t <= 200; ++t) {
+        // The fire countdown (before this tick's simulation):
+        for (auto it = fireIgnition.begin(); it != fireIgnition.end();) {
+            if (t >= it->second + 81) {
+                world.setBlock(it->first.x, it->first.y, it->first.z,
+                               BlockID::air());
+                it = fireIgnition.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        const std::vector<BlockPos> changed = FluidSim::tick(world, blocks);
+        total += static_cast<long>(changed.size());
+        if (t >= 150) {
+            late += static_cast<long>(changed.size());
+            for (const BlockPos& p : changed) {
+                ++lateChanges[p];
+            }
+        }
+        for (const BlockPos& p : changed) {
+            const BlockID b = world.getBlock(p.x, p.y, p.z);
+            if (b.valid() && blocks.at(b).name == "fire") {
+                if (fireIgnition.count(p) == 0) {
+                    ++rimChars; // each rim cell ignites once (spread 0)
+                }
+                fireIgnition[p] = t;
+            }
+        }
+    }
+    int churn = 0;
+    for (const auto& [p, n] : lateChanges) {
+        if (n >= 5) {
+            ++churn;
+        }
+    }
+    EXPECT_EQ(rimChars, 66);
+    EXPECT_EQ(total, 473L);
+    EXPECT_EQ(late, 171L);
+    EXPECT_EQ(churn, 1); // the accepted standing waterfall (the KNOWN_ISSUES
+                         // fluid-section churn class)
+    // The final lava census: basin vs overflow (the two buried lakes are
+    // static and excluded by their region boxes).
+    int basin = 0, buried = 0, overflow = 0;
+    for (int cx = -1; cx <= 3; ++cx) {
+        for (int cz = -1; cz <= 3; ++cz) {
+            if ((cx - 1) * (cx - 1) + (cz - 1) * (cz - 1) > 9) {
+                continue;
+            }
+            for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy) {
+                const Chunk* c = world.findChunk({cx, cy, cz});
+                if (c == nullptr) {
+                    continue;
+                }
+                for (int i = 0; i < Chunk::kVolume; ++i) {
+                    const std::uint8_t code = c->fluidData()[i];
+                    if (fluidKindOf(code) != FluidKind::Lava) {
+                        continue;
+                    }
+                    const int lx = static_cast<int>(i % kChunkSize);
+                    const int lz =
+                        static_cast<int>((i / kChunkSize) % kChunkSize);
+                    const int x = cx * kChunkSize + lx;
+                    const int z = cz * kChunkSize + lz;
+                    if (x >= 23 && x <= 25 && z >= 25 && z <= 27) {
+                        ++basin;
+                    } else if ((x >= 36 && x <= 44 && z >= 36 && z <= 44) ||
+                               (x >= 52 && x <= 58 && z >= 42 && z <= 48)) {
+                        ++buried;
+                    } else {
+                        ++overflow;
+                    }
+                }
+            }
+        }
+    }
+    EXPECT_EQ(basin, 18);
+    EXPECT_EQ(buried, 260);
+    EXPECT_EQ(overflow, 157);
 }

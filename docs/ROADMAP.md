@@ -212,5 +212,6 @@
 - **ENT-2（v1.0 任务表：BlockState per-block 状态泛化）** — `archive/phase-ent2.md`
 - **GEN-2（v1.0 任务表：树生长）** — `archive/phase-gen2.md`
 - **GEN-3（v1.0 任务表：矿脉形态）** — `archive/phase-gen3.md`
+- **FLUID-1（v1.0 任务表：水量守恒）** — `archive/phase-fluid1.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

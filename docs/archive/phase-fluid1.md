@@ -136,3 +136,44 @@ C4 源不可消失。明示：MC 状态机不守恒总流格数（流前缘创�
    分类逻辑与 sim 同文件同注释防漂移。
 7. -Werror：diff 极小（三目重构）。
 8. 并行零文件交集（fluid.* vs GEN-3 ore 区 / KNOWN_ISSUES 各动各节）。
+
+## 构建与验证结果（实现 + E2E）
+
+**实现（路线 A 定案，fixer 交付）**：
+- 翻转触发器**触发后回炉**（设计风险 #1 前置探针的预期功能）：统一吸收规则把
+  悬崖薄膜级联从静态沉积变成永久 period-2 棋盘翻转（环 24→196 churn 格、总
+  编辑 18.6k→118k/600tick、P90 1→74 churn）= 新增海水崖膜 churn 类，超出
+  Q3 授权范围 → **路线 A**（只删 `L>B → propose(下方,L)` 抬升一分支，`L≥B →
+  该格保留`静态沉积稳压器保留）：守恒目标完整达成（唯一无记账增益路径删除）
+  + churn 回旧规则水位。**净核心 diff = fluid.cpp 一分支**。
+- 路线 A probe 四组复验全绿：① 海崖 trace tick400≡401 静态薄膜柱恢复 ② 环
+  churn = 24 格且与旧规则 churn 集合 diff 为空（零新振荡）③ 封闭盒 64 格表
+  逐位一致（规则无关常量）④ P90 与旧规则完全一致（66/473/3.42 per tick/1
+  churn/157 溢出）。
+- 1312/1312（15 新 + 2 适配【FlowingRaisesPoolBelow → FlowDepositsOnPoolWithoutRaising】
+  + 存量 1295 零回归）、干净重建 0 警告、5 文件 +785/−49、scratch 探针全在
+  /tmp 零入库。游戏侧零代码、零 format。
+
+**E2E（夜间/上班时段无输入批，9 跑零白帧——用户在场 away 组件闲置 = 干净
+条件）**：
+- **S1 base18 门 88 = 结构性免疫（不重锚）**：fresh 60f ×2 全帧字节一致 +
+  **与门 84 锚（s1_l2c_r1.png）字节一致**（门 85-88 连锁）+ 红心 0 + skygate
+  75,348 严格。
+- **S2 封闭盒守恒场景**（石盒 x[8,17]×y[40,46]×z[8,17] + 14 格水初态 +
+  盒内玩家）：600f ×2 RAW 字节一致 + savenorm **EXACT**（剥 fires remaining
+  = real-dt，P57 先例）+ **盒内流体 64 格与 probe 精确终态表逐位一致**
+  （extra=0 missing=0，tick 11 达稳态）= 守恒核心断言 E2E 级。
+- **S4a P88 深湖静态**（既有场景 600f ×2 RAW 字节一致 = 静态被围契约保持，
+  全 L8 源湖不触发落池规则）。
+- **S4b P90 表面湖新旧等价**：新 ×2 RAW + savenorm EXACT + **新 vs 旧
+  （v0.3.0 二进制 + v0.3.0 资产 scratch，同 seed 9 spread0 fresh 600f）
+  core 逐段 identical**（blocks 30=30 / fluids 12=12）= "P90 场景从未触发
+  被删抬升分支"的 probe 级主张 E2E 确认。
+- 晨间输入项（桶判别 S3：舀流动格不命中 / 舀源命中）= 等输入 E2E 窗口。
+
+**遗留（输入 E2E 积压，环境原因）**：2026-10-22 上午用户 30 min 免键鼠窗口
+中，ENT-2 潜旋 lock 成功但点击落在 ROOT 窗口（重启后桌面态漂移）+ xdotool
+键名 `Left_Control` 重启后不认（已修 `Control_L`）+ lock 修复分支 xprop 回退
+（已修）——输入 E2E 全积压（ENT-2 潜旋 / GEN-2 放置+潜旋催熟 / GEN-1 进洞 /
+FLUID-1 桶判别 / 可选 LGT-2 放叶 / GEN-3 挖矿 / GEN-2 破坏），等桌面态稳定
++ 免键鼠窗口重跑。
