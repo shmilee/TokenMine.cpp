@@ -377,7 +377,10 @@ TEST(PlayerTest, SwimsUpWithSpace) {
     ASSERT_TRUE(p.onGround());
     Input swim = heldInput({GameKey::Space});
     const float y0 = p.position().y;
-    run(p, 30, swim); // 0.5 s: rises at 4.5, peaks at ~0.84, sinks slightly
+    // 0.5 s: rises at 4.5 (the swim-up); at the surface Space becomes the
+    // jump (FLUID-2, Q3) — the player ends up above the pool top either
+    // way.
+    run(p, 30, swim);
     EXPECT_GT(p.position().y, y0 + 0.5f); // surfaced out of the pool
 }
 
@@ -422,6 +425,325 @@ TEST(PlayerTest, SwimSpeedIsReduced) {
     // swimSpeed (3.1) x 0.5 s — clearly below walk speed (4.3 x 0.5 = 2.15).
     EXPECT_NEAR(p.position().x - x0, 1.55f, 0.1f);
     EXPECT_TRUE(p.onGround());
+}
+
+// -- FLUID-2 swim: passive rise, surface float, crouch-dive ---------------------
+//
+// Pool conventions: the fixture floor tops out at y=1; an n-cell L8 pool
+// (buildPoolDepth) has W' (the float plane) = 1 + n. The float terminal is
+// the geometric fixed point (y = W', vy = 0, onGround false) — an exact,
+// fps-independent assertion target.
+
+namespace {
+
+// An n-cell full (L8) water pool on the fixture floor (y=1..n): W' = 1+n.
+void buildPoolDepth(Fixture& f, int x0, int x1, int z0, int z1, int n) {
+    for (int x = x0; x <= x1; ++x) {
+        for (int z = z0; z <= z1; ++z) {
+            for (int y = 1; y <= n; ++y) {
+                f.world.setFluid(x, y, z, FluidKind::Water, kMaxFluidLevel);
+            }
+        }
+    }
+}
+
+// A player preset AT the surface of an n-cell pool (W' = 1+n), settled a
+// few idle ticks into the float fixed point.
+Player makeFloater(Fixture& f, int n) {
+    buildPoolDepth(f, 6, 10, 6, 10, n);
+    Player p = f.makePlayer({8.5f, 1.0f + static_cast<float>(n), 8.5f});
+    Input idle = heldInput({});
+    run(p, 5, idle);
+    return p;
+}
+
+} // namespace
+
+TEST(PlayerTest, RisesToSurfaceWithNoInput) {
+    // A submerged body with no input RISES and FLOATS at the surface
+    // (Minecraft — the Phase-9 "sink to the bottom" is retired).
+    Fixture f;
+    buildPoolDepth(f, 6, 10, 6, 10, 2); // W' = 3
+    Player p = f.makePlayer({8.5f, 1.5f, 8.5f}); // mid-pool, 1.5 below W'
+    Input idle = heldInput({});
+    run(p, 600, idle); // 10 s: the rise (~1.2 s) + the settle
+    // The geometric terminal: exact.
+    EXPECT_FLOAT_EQ(p.position().y, 3.0f);
+    EXPECT_EQ(p.velocity().y, 0.0f);
+    EXPECT_FALSE(p.onGround());
+}
+
+TEST(PlayerTest, FloatIsDepthIndependent) {
+    // The same pool, two preset depths (1.5 / 0.5 below W' = 3): the
+    // terminal is the same surface plane (the float is geometry, not a
+    // force balance).
+    for (float preset : {1.5f, 2.5f}) {
+        Fixture f;
+        buildPoolDepth(f, 6, 10, 6, 10, 2);
+        Player p = f.makePlayer({8.5f, preset, 8.5f});
+        Input idle = heldInput({});
+        run(p, 600, idle);
+        EXPECT_FLOAT_EQ(p.position().y, 3.0f);
+        EXPECT_EQ(p.velocity().y, 0.0f);
+        EXPECT_FALSE(p.onGround());
+    }
+}
+
+TEST(PlayerTest, StaysOnPoolFloorWhenNoInput) {
+    // Grounded in water (the pool floor): the body does NOT rise
+    // (Minecraft "stand on the bottom" — the rise is gated on
+    // !onGround).
+    Fixture f;
+    buildPoolDepth(f, 6, 10, 6, 10, 2); // W' = 3
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f}); // feet on the pool floor
+    Input idle = heldInput({});
+    run(p, 10, idle);
+    ASSERT_TRUE(p.onGround());
+    bool left = false;
+    for (int i = 0; i < 600; ++i) {
+        p.update(kDt, idle, false);
+        if (std::abs(p.position().y - 1.0f) > 1e-4f) {
+            left = true;
+        }
+    }
+    EXPECT_FALSE(left); // never left the floor (no auto-rise)
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f);
+    EXPECT_EQ(p.velocity().y, 0.0f);
+    EXPECT_TRUE(p.onGround());
+}
+
+TEST(PlayerTest, ShallowFlowFilmHasNoSurface) {
+    // A pure flow film (level 3, no level-8 support): no float plane
+    // (the L8-only W' contract — a Phase-47 source settles to L8 per
+    // FLUID-1, a flowing film does not). The player sinks to the bottom
+    // and stands (the Phase-9 behavior), and never rises to the film top.
+    Fixture f;
+    for (int x = 6; x <= 10; ++x) {
+        for (int z = 6; z <= 10; ++z) {
+            f.world.setFluid(x, 1, z, FluidKind::Water, 3); // an L3 film
+        }
+    }
+    Player p = f.makePlayer({8.5f, 4.0f, 8.5f}); // 2 above the film top
+    Input idle = heldInput({});
+    bool roseAtFilmTop = false;
+    for (int i = 0; i < 300; ++i) {
+        p.update(kDt, idle, false);
+        // A rise out of the film (unconditional buoyancy, the rejected
+        // variant) shows up as positive vy at/just below the film top.
+        if (p.position().y >= 1.9f && p.velocity().y > 0.0f) {
+            roseAtFilmTop = true;
+        }
+    }
+    EXPECT_FALSE(roseAtFilmTop);
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f); // on the bottom, standing
+    EXPECT_TRUE(p.onGround());
+    EXPECT_EQ(p.velocity().y, 0.0f);
+}
+
+TEST(PlayerTest, CrouchSinksInWater) {
+    // Crouch in water = dive: vy converges to -waterSinkSpeed (1.5), y
+    // descends monotonically, and the float never engages.
+    Fixture f;
+    buildPoolDepth(f, 6, 10, 6, 10, 2); // W' = 3
+    Player p = f.makePlayer({8.5f, 2.5f, 8.5f}); // 0.5 below the surface
+    Input crouch = heldInput({GameKey::LeftControl});
+    float prevY = p.position().y;
+    bool monotone = true;
+    for (int i = 0; i < 40; ++i) {
+        p.update(kDt, crouch, false);
+        if (p.position().y > prevY + 1e-4f) {
+            monotone = false;
+        }
+        prevY = p.position().y;
+    }
+    EXPECT_TRUE(monotone);
+    EXPECT_EQ(p.velocity().y, -p.params().waterSinkSpeed); // converged
+    EXPECT_LT(p.position().y, 2.5f); // descended
+    EXPECT_GT(p.position().y, 1.0f); // still mid-pool (not the floor yet)
+}
+
+TEST(PlayerTest, CrouchDivesOutOfSurface) {
+    // Crouch from the float: the dive breaks the float (y < W' - 0.05)
+    // and the player is submerged.
+    Fixture f;
+    Player p = makeFloater(f, 2); // W' = 3, resting at the float
+    ASSERT_FLOAT_EQ(p.position().y, 3.0f);
+    Input crouch = heldInput({GameKey::LeftControl});
+    run(p, 12, crouch); // 0.2 s
+    EXPECT_LT(p.position().y, 3.0f - 0.05f); // left the surface
+    EXPECT_TRUE(p.inWater()); // under the plane
+}
+
+TEST(PlayerTest, SpaceFromSurfaceJumps) {
+    // Space at the surface (no water overlap) = a normal jump at
+    // jumpSpeed (Q3: the breach is a jump, not a swim-up): the exact
+    // impulse, a peak that clears W' + 1.0, and the return terminal =
+    // standing on the pool floor (deep water — mutually exclusive with
+    // the float terminal of RisesToSurfaceWithNoInput).
+    Fixture f;
+    Player p = makeFloater(f, 2); // W' = 3
+    Input jump = heldInput({GameKey::Space});
+    p.update(kDt, jump, false);
+    EXPECT_EQ(p.velocity().y, p.params().jumpSpeed); // 8.5, not 4.5
+    // The peak (Space released): clears W' + 1.0.
+    Input idle = heldInput({});
+    float peak = p.position().y;
+    for (int i = 0; i < 120; ++i) {
+        p.update(kDt, idle, false);
+        peak = std::max(peak, p.position().y);
+    }
+    EXPECT_GE(peak, 3.0f + 1.0f);
+    // The return: sinks to the pool floor and stands.
+    run(p, 300, idle);
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f);
+    EXPECT_TRUE(p.onGround());
+    EXPECT_EQ(p.velocity().y, 0.0f);
+}
+
+TEST(PlayerTest, SpaceFromSubmergedUsesSwimUpSpeed) {
+    // Space while submerged (feet 1 cell below W') = the swim-up at
+    // swimUpSpeed — the branch choice (in water vs at the surface).
+    Fixture f;
+    buildPoolDepth(f, 6, 10, 6, 10, 2); // W' = 3
+    Player p = f.makePlayer({8.5f, 2.0f, 8.5f}); // 1 below the surface
+    Input swim = heldInput({GameKey::Space});
+    p.update(kDt, swim, false);
+    EXPECT_EQ(p.velocity().y, p.params().swimUpSpeed); // 4.5, not 8.5
+}
+
+TEST(PlayerTest, SurfaceWalkUsesSwimSpeed) {
+    // Walking at the float: the surface pace is the swim pace
+    // (3.1 x 0.5 = 1.55, not the ground pace 4.3 x 0.5 = 2.15).
+    Fixture f;
+    Player p = makeFloater(f, 2);
+    p.yaw = -kPi / 2.0f; // facing +X
+    Input walk = heldInput({GameKey::W});
+    const float x0 = p.position().x;
+    run(p, 30, walk); // 0.5 s
+    EXPECT_NEAR(p.position().x - x0, 1.55f, 0.1f);
+    // The walk keeps the float (the plane is maintained).
+    EXPECT_FLOAT_EQ(p.position().y, 3.0f);
+    EXPECT_FALSE(p.onGround());
+}
+
+TEST(PlayerTest, NoSprintAtSurface) {
+    // Sprint (Shift) is disabled at the surface (the any-fluid rule,
+    // extended by FLUID-2): the pace is the swim pace (1.55), not the
+    // sprint pace (2.8) — the mutual pair of SurfaceWalkUsesSwimSpeed.
+    Fixture f;
+    Player p = makeFloater(f, 2);
+    p.yaw = -kPi / 2.0f;
+    Input sprint = heldInput({GameKey::W, GameKey::LeftShift});
+    const float x0 = p.position().x;
+    run(p, 30, sprint); // 0.5 s
+    EXPECT_NEAR(p.position().x - x0, 1.55f, 0.1f);
+    EXPECT_EQ(p.velocity().x, p.params().swimSpeed);
+}
+
+TEST(PlayerTest, FallingIntoPoolSinksToFloor) {
+    // A fall THROUGH the surface (vy < 0): no float (the direction
+    // gate) — the entry-momentum clamp to -waterTerminalVelocity is
+    // kept (P9), and the terminal = standing on the pool floor (mutually
+    // exclusive with the float y = 3.0 of RisesToSurfaceWithNoInput).
+    Fixture f;
+    buildPoolDepth(f, 6, 10, 6, 10, 2); // W' = 3
+    Player p = f.makePlayer({8.5f, 5.0f, 8.5f}); // W' + 2
+    Input idle = heldInput({});
+    bool settled = false;
+    float minVy = 0.0f;
+    for (int i = 0; i < 240; ++i) {
+        p.update(kDt, idle, false);
+        if (p.inWater() && p.velocity().y < minVy) {
+            minVy = p.velocity().y;
+        }
+        if (p.inWater() && p.onGround()) {
+            settled = true;
+            break;
+        }
+    }
+    ASSERT_TRUE(settled);
+    EXPECT_GE(minVy, -p.params().waterTerminalVelocity - 1e-3f); // the clamp
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f); // the pool floor, not the float
+    EXPECT_EQ(p.velocity().y, 0.0f);
+}
+
+TEST(PlayerTest, LavaPoolNeverFloats) {
+    // W' counts only WATER: a lava column gives no float plane — the
+    // Phase-54 lava semantics (sink, burn) is unchanged. 59f < the first
+    // burn tick (the 1/60 accumulation crosses 1.0 at frame 60 — see
+    // LavaBurnsAtTheConfiguredRate): the health is intact.
+    Fixture f;
+    buildPool(f, 6, 10, 6, 10, FluidKind::Lava); // lava y=1..2, top y=3
+    Player p = f.makePlayer({8.5f, 2.0f, 8.5f}); // airborne in the lava
+    Input idle = heldInput({});
+    bool roseInLava = false;
+    for (int i = 0; i < 59; ++i) {
+        p.update(kDt, idle, false);
+        if (p.inLava() && p.velocity().y > 0.0f) {
+            roseInLava = true;
+        }
+    }
+    EXPECT_FALSE(roseInLava); // never a rise in the lava
+    EXPECT_LT(p.position().y, 3.0f - 0.5f); // not at the lava top (a float)
+    EXPECT_TRUE(p.onGround()); // on the pool floor
+    EXPECT_FLOAT_EQ(p.health(), 20.0f); // 59f < the first burn tick
+}
+
+TEST(PlayerTest, FloatTerminalIsDtIndependent) {
+    // The float terminal is a geometric clamp (the snap to W'), not an
+    // integral equilibrium: driving the same rise with 1/60 frames and
+    // 1/30 double frames lands on the same EXACT y (the fps-independent
+    // paradigm — a force-balance float would not).
+    for (int frames : {600, 300}) { // 10 s of physics either way
+        const double dt = 10.0 / frames; // 1/60 or 1/30
+        Fixture f;
+        buildPoolDepth(f, 6, 10, 6, 10, 2); // W' = 3
+        Player p = f.makePlayer({8.5f, 1.5f, 8.5f});
+        Input idle = heldInput({});
+        for (int i = 0; i < frames; ++i) {
+            p.update(dt, idle, false);
+        }
+        EXPECT_FLOAT_EQ(p.position().y, 3.0f);
+        EXPECT_EQ(p.velocity().y, 0.0f);
+        EXPECT_FALSE(p.onGround());
+    }
+}
+
+TEST(PlayerTest, EdgeBlockNoFloat) {
+    // Standing on a pool-edge block whose top = the pool surface W'
+    // (grounded at the surface): the float does not engage — the ground
+    // pace (4.3 x 0.5 = 2.15), not the swim pace (the !onGround gate of
+    // the surface state).
+    Fixture f;
+    buildPoolDepth(f, 6, 8, 6, 10, 2); // water x 6..8, W' = 3
+    for (int x = 9; x <= 12; ++x) {
+        for (int y = 1; y <= 2; ++y) {
+            for (int z = 6; z <= 10; ++z) {
+                f.world.setBlock(x, y, z, f.stone); // edge tops out at y=3
+            }
+        }
+    }
+    Player p = f.makePlayer({9.5f, 3.0f, 8.5f}); // on the edge top = W'
+    p.yaw = -kPi / 2.0f; // facing +X (away from the pool)
+    Input walk = heldInput({GameKey::W});
+    run(p, 30, walk); // 0.5 s
+    EXPECT_TRUE(p.onGround());
+    EXPECT_NEAR(p.position().x - 9.5f, 2.15f, 0.1f); // the ground pace
+}
+
+TEST(PlayerTest, OneDeepSourcePoolFloats) {
+    // A 1-deep L8 pool (a bucket-poured source, settled per FLUID-1): a
+    // submerged body rises to the film top and floats — the accepted Q2
+    // deviation (pinned here; if a depth gate is reconsidered, this
+    // test changes).
+    Fixture f;
+    buildPoolDepth(f, 6, 10, 6, 10, 1); // W' = 2
+    Player p = f.makePlayer({8.5f, 1.5f, 8.5f}); // feet G + 0.5 (G = 1)
+    Input idle = heldInput({});
+    run(p, 600, idle);
+    EXPECT_FLOAT_EQ(p.position().y, 2.0f);
+    EXPECT_EQ(p.velocity().y, 0.0f);
+    EXPECT_FALSE(p.onGround());
 }
 
 // -- swimming in lava (Phase 54): the burn + the slow --------------------------
@@ -1088,7 +1410,9 @@ TEST(PlayerParamsConfigTest, ExplicitValuesOverride) {
     cfg.set("player.terminal_velocity", Json(40.0));
     cfg.set("player.swim_speed", Json(3.0));
     cfg.set("player.swim_up_speed", Json(4.0));
-    cfg.set("player.water_gravity", Json(10.0));
+    cfg.set("player.water_buoyancy", Json(10.0));
+    cfg.set("player.water_rise_speed", Json(1.2));
+    cfg.set("player.water_sink_speed", Json(1.3));
     cfg.set("player.water_terminal_velocity", Json(3.0));
     cfg.set("player.lava_swim_speed", Json(1.5));
     cfg.set("player.lava_swim_up_speed", Json(1.0));
@@ -1121,7 +1445,9 @@ TEST(PlayerParamsConfigTest, ExplicitValuesOverride) {
     EXPECT_FLOAT_EQ(p.terminalVelocity, 40.0f);
     EXPECT_FLOAT_EQ(p.swimSpeed, 3.0f);
     EXPECT_FLOAT_EQ(p.swimUpSpeed, 4.0f);
-    EXPECT_FLOAT_EQ(p.waterGravity, 10.0f);
+    EXPECT_FLOAT_EQ(p.waterBuoyancy, 10.0f);
+    EXPECT_FLOAT_EQ(p.waterRiseSpeed, 1.2f);
+    EXPECT_FLOAT_EQ(p.waterSinkSpeed, 1.3f);
     EXPECT_FLOAT_EQ(p.waterTerminalVelocity, 3.0f);
     EXPECT_FLOAT_EQ(p.lavaSwimSpeed, 1.5f);
     EXPECT_FLOAT_EQ(p.lavaSwimUpSpeed, 1.0f);
@@ -1435,6 +1761,21 @@ TEST(PlayerParamsConfigTest, RetiredFireDamageKeysAreTolerated) {
     cfg.set("player.fire_damage_interval_seconds", Json(0.2));
     auto r = Player::Params::fromConfig(cfg);
     ASSERT_TRUE(r.ok()) << r.error().describe();
+}
+
+TEST(PlayerParamsConfigTest, RetiredWaterGravityKeyTolerated) {
+    // FLUID-2 retired player.water_gravity (the role flipped to
+    // water_buoyancy — the default value 12.0 carries over unchanged). A
+    // pre-FLUID-2 config carrying the key still boots: unknown player.*
+    // keys are tolerated (the Phase-74 fire_damage precedent), and the
+    // value is ignored (the buoyancy default stands).
+    Config cfg;
+    cfg.set("player.water_gravity", Json(12.0));
+    auto r = Player::Params::fromConfig(cfg);
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    EXPECT_FLOAT_EQ(r->waterBuoyancy, Player::Params {}.waterBuoyancy);
+    EXPECT_FLOAT_EQ(r->waterRiseSpeed, Player::Params {}.waterRiseSpeed);
+    EXPECT_FLOAT_EQ(r->waterSinkSpeed, Player::Params {}.waterSinkSpeed);
 }
 
 

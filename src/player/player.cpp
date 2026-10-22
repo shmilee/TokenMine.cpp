@@ -67,7 +67,13 @@ Result<Player::Params> Player::Params::fromConfig(const Config& config) {
     MC_TRY(read("terminal_velocity", p.terminalVelocity, false));
     MC_TRY(read("swim_speed", p.swimSpeed, false));
     MC_TRY(read("swim_up_speed", p.swimUpSpeed, false));
-    MC_TRY(read("water_gravity", p.waterGravity, false));
+    // FLUID-2: the retired player.water_gravity key is no longer read — the
+    // role flipped to buoyancy (the value 12.0 carries over as
+    // water_buoyancy). A pre-FLUID-2 config carrying it still boots (the
+    // Phase-74 fire_damage precedent: unknown player.* keys are tolerated).
+    MC_TRY(read("water_buoyancy", p.waterBuoyancy, false));
+    MC_TRY(read("water_rise_speed", p.waterRiseSpeed, false));
+    MC_TRY(read("water_sink_speed", p.waterSinkSpeed, false));
     MC_TRY(read("water_terminal_velocity", p.waterTerminalVelocity, false));
     MC_TRY(read("lava_swim_speed", p.lavaSwimSpeed, false));
     MC_TRY(read("lava_swim_up_speed", p.lavaSwimUpSpeed, false));
@@ -182,11 +188,38 @@ void Player::update(double dt) {
     const Vec3 right {fwd.z * -1.0f, 0.0f, fwd.x};
 
     // 2a. Fluid state: while the AABB overlaps a fluid cell the player
-    // swims (reduced gravity/sink, reduced speed, Space swims up). Lava
-    // (Phase 54) is the same swim state with the lava pace + the burn
-    // timer; when the AABB straddles both kinds, lava wins.
+    // swims (reduced sink, reduced speed, Space swims up). Lava (Phase 54)
+    // is the same swim state with the lava pace + the burn timer; when the
+    // AABB straddles both kinds, lava wins.
     m_inWater = isInWater();
     m_inLava = isInLava();
+    // 2a-fluid2. The water surface plane W' of the feet's center column:
+    // one above the topmost full (level-8) water cell at or below the feet
+    // (scanned down kSurfaceScanDepth cells), or -1 when none. In a
+    // continuous column W' tracks the feet one cell above (a transient
+    // local plane) and resolves to the true surface at the topmost cell —
+    // so the float only settles where the column ends. m_atSurface = the
+    // feet within the float band (kMaxSubstepMove: the max per-sub-step
+    // vertical displacement, so a sub-step that crosses the plane is
+    // always seen) and the player not grounded (a pool-edge stand at the
+    // surface keeps the ground pace — the onGround exclusion).
+    {
+        const int cx = static_cast<int>(std::floorf(m_position.x));
+        const int cz = static_cast<int>(std::floorf(m_position.z));
+        const int top = static_cast<int>(std::floorf(m_position.y));
+        m_surfaceY = -1.0f;
+        for (int y = top; y > top - kSurfaceScanDepth; --y) {
+            if (m_world.getFluidOfKind(cx, y, cz, FluidKind::Water) ==
+                kMaxFluidLevel) {
+                m_surfaceY = static_cast<float>(y) + 1.0f;
+                break;
+            }
+        }
+        m_atSurface =
+            m_surfaceY > 0.0f &&
+            std::abs(m_position.y - m_surfaceY) <= kMaxSubstepMove &&
+            !isRestingOnSolid();
+    }
 
     // 2b. Crouch (LeftControl): the height state machine runs before the
     // speed computation (crouch scales the speed) and before the edge
@@ -227,19 +260,21 @@ void Player::update(double dt) {
     // Sprinting (Phase 28): the exact condition that selects sprintSpeed
     // (Shift + moving, out of water) — it also doubles the hunger decay
     // pace further down (Minecraft's 40 s -> 20 s relative shape).
+    // No sprint in any fluid (lava, Phase 54) or on the water surface
+    // (FLUID-2: the surface pace is the swim pace).
     const bool sprinting =
         m_input->isDown(GameKey::LeftShift) && lengthSq(wish) > 0.0f &&
-        !m_inWater && !m_inLava; // no sprint in any fluid (lava, Phase 54)
+        !m_inWater && !m_atSurface && !m_inLava;
     Vec3 dir {0.0f, 0.0f, 0.0f};
     if (lengthSq(wish) > 0.0f) {
         float speed = m_inLava
                           ? m_params.lavaSwimSpeed
-                          : (m_inWater
-                                  ? m_params.swimSpeed
+                          : ((m_inWater || m_atSurface)
+                                  ? m_params.swimSpeed // surface swim, FLUID-2
                                   : (m_input->isDown(GameKey::LeftShift)
                                           ? m_params.sprintSpeed
                                           : m_params.walkSpeed));
-        if (m_crouching && !m_inWater && !m_inLava) {
+        if (m_crouching && !m_inWater && !m_atSurface && !m_inLava) {
             speed *= m_params.crouchSpeedScale;
         }
         // Phase 84: the beacon's speed effect (the game pushes the
@@ -259,18 +294,33 @@ void Player::update(double dt) {
 
     // 3. Sub-step the tick (see Entity::moveInSubsteps); the peak-speed
     //    estimate uses this tick's post-gravity vertical velocity.
+    // FLUID-2: the water/surface tiers are PEAK sets (the per-sub-step
+    // vertical motion is bounded by the caps, not by one gravity step), so
+    // the sub-step split stays tunnel-safe for the rise/sink/dive/jump
+    // speeds at any frame rate. The lava and air formulas are UNCHANGED
+    // (the resting air tier must not gain a sub-step — the P99 frame
+    // budget).
     const float vyAfter =
         m_inLava
             ? std::max(m_velocity.y - m_params.lavaGravity *
                                       static_cast<float>(dt),
                        -m_params.lavaTerminalVelocity)
             : (m_inWater
-                   ? std::max(m_velocity.y - m_params.waterGravity *
-                                     static_cast<float>(dt),
-                              -m_params.waterTerminalVelocity)
-                   : std::max(m_velocity.y - m_params.gravity *
-                                  static_cast<float>(dt),
-                              -m_params.terminalVelocity));
+                   ? std::max({std::abs(m_velocity.y),
+                               m_params.waterTerminalVelocity,
+                               m_params.waterRiseSpeed,
+                               m_params.waterSinkSpeed,
+                               m_input->isDown(GameKey::Space)
+                                   ? m_params.swimUpSpeed
+                                   : 0.0f})
+                   : (m_atSurface
+                          ? std::max(std::abs(m_velocity.y),
+                                     m_input->isDown(GameKey::Space)
+                                         ? m_params.jumpSpeed
+                                         : 0.0f)
+                          : std::max(m_velocity.y - m_params.gravity *
+                                        static_cast<float>(dt),
+                                     -m_params.terminalVelocity)));
     float maxSpeed =
         std::max({std::abs(m_velocity.x), std::abs(vyAfter),
                   std::abs(m_velocity.z)});
@@ -554,6 +604,46 @@ bool Player::isSolidCell(int x, int y, int z) const {
     return m_blocks.at(id).properties.solid;
 }
 
+bool Player::isRestingOnSolid() const {
+    const float half = m_width * 0.5f;
+    const int x0 = static_cast<int>(std::floorf(m_position.x - half));
+    const int x1 = static_cast<int>(std::floorf(m_position.x + half));
+    const int z0 = static_cast<int>(std::floorf(m_position.z - half));
+    const int z1 = static_cast<int>(std::floorf(m_position.z + half));
+    // The cell row the feet plane sits on (floor(feet - kFaceEps): a face
+    // resting exactly on a boundary is NOT in that cell) + the row below
+    // (a wall cap extends 0.5 above its cell — the Phase-95 extension).
+    const int ySupport =
+        static_cast<int>(std::floorf(m_position.y - kFaceEps));
+    for (int y = ySupport - 1; y <= ySupport; ++y) {
+        for (int x = x0; x <= x1; ++x) {
+            for (int z = z0; z <= z1; ++z) {
+                if (!(m_position.x - half < x + 1 &&
+                      m_position.x + half > x)) {
+                    continue;
+                }
+                if (!(m_position.z - half < z + 1 &&
+                      m_position.z + half > z)) {
+                    continue;
+                }
+                const BlockPos cell {x, y, z};
+                const Vec3 mn {m_position.x - half, m_position.y,
+                               m_position.z - half};
+                const Vec3 mx {m_position.x + half, m_position.y + m_height,
+                               m_position.z + half};
+                const float top =
+                    solidTopHeight(m_world.getBlock(x, y, z), mn, mx, cell);
+                if (top > 0.0f &&
+                    std::abs(m_position.y -
+                             (static_cast<float>(y) + top)) <= kFaceEps) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 void Player::integrate(float h) {
     if (m_inLava) {
         // Swim in lava (Phase 54): the same swim state, the lava pace
@@ -565,16 +655,72 @@ void Player::integrate(float h) {
         if (m_input->isDown(GameKey::Space)) {
             m_velocity.y = m_params.lavaSwimUpSpeed;
         }
-    } else if (m_inWater) {
-        // Swim: reduced gravity, a low sink cap, and Space raises the
-        // player (also from the ground — a shallow pool floor does not
-        // jump, it surfaces).
-        m_velocity.y -= m_params.waterGravity * h;
-        if (m_velocity.y < -m_params.waterTerminalVelocity) {
-            m_velocity.y = -m_params.waterTerminalVelocity;
-        }
+    } else if (m_inWater || m_atSurface) {
+        // Swim (Phase 9) + the FLUID-2 surface model. Priority:
+        // Space > crouch > float snap > passive rise > floor stand.
         if (m_input->isDown(GameKey::Space)) {
-            m_velocity.y = m_params.swimUpSpeed;
+            // Submerged: keep surfacing at swimUpSpeed (the Phase-9
+            // behavior, also from the ground — a shallow pool floor does
+            // not jump, it surfaces). At the surface (no water overlap):
+            // a normal jump (the player has breached — the jump height
+            // ~1.13 clears a 1-block rim, the Phase-99 barrier
+            // arithmetic).
+            m_velocity.y = m_inWater
+                ? m_params.swimUpSpeed
+                : m_params.jumpSpeed;
+        } else if (m_crouching) {
+            // Crouch-dive (FLUID-2, Minecraft): sink at waterSinkSpeed.
+            m_velocity.y =
+                std::max(m_velocity.y - m_params.waterBuoyancy * h,
+                         -m_params.waterSinkSpeed);
+        } else if (m_atSurface && !m_onGround && m_velocity.y >= 0.0f &&
+                   (m_position.y >= m_surfaceY - kFaceEps ||
+                    m_position.y + m_velocity.y * h >= m_surfaceY - kFaceEps) &&
+                   (m_position.y <= m_surfaceY + kFaceEps ||
+                    m_velocity.y <= m_params.waterRiseSpeed + kFaceEps)) {
+            // Float snap (FLUID-2): the geometric clamp to the surface
+            // plane. The crossing re-check: a sub-step's displacement (up
+            // to kMaxSubstepMove) skips the kFaceEps band, so the snap
+            // fires when the sub-step reaches the plane from below (or
+            // the feet are already at/above it); the rise-speed gate
+            // keeps the surface jump (vy up to jumpSpeed) from being
+            // pulled back. The terminal (y = W', vy = 0, onGround false)
+            // is a fixed point — no input re-snaps it every tick, so it
+            // is fps-independent.
+            m_position.y = m_surfaceY;
+            m_velocity.y = 0.0f;
+        } else if (m_inWater && !isRestingOnSolid() && m_surfaceY > 0.0f &&
+                   m_velocity.y >= 0.0f) {
+            // Passive rise (FLUID-2, Minecraft: a submerged body at rest
+            // or moving up surfaces slowly): buoyancy, capped at
+            // waterRiseSpeed. Gated on vy >= 0 — a FALLING body (the
+            // water entry with momentum, a jump returning) keeps sinking:
+            // the entry-momentum clamp to -waterTerminalVelocity is kept
+            // in the Phase-9 line below, bit-identical (the MC "dive"
+            // semantics: a falling body sinks to the bottom, a still
+            // body floats up). Also gated on resting-on-a-solid (a body
+            // on the pool bottom stands — the FRESH check, the tick
+            // m_onGround is the previous sub-step's result) and on a
+            // water surface in the column (a pure flow film gives no
+            // buoyancy).
+            m_velocity.y = std::min(m_velocity.y + m_params.waterBuoyancy * h,
+                                    m_params.waterRiseSpeed);
+        } else if (m_inWater) {
+            // The Phase-9 sink, bit-identical: grounded in water (pool
+            // floor, wading — the "stand on the bottom" case; the small
+            // downward drift is what the Y resolve re-clamps against the
+            // floor every sub-step, re-establishing onGround — a zeroed
+            // vy would never re-penetrate the face, the resting-air
+            // convention), falling (the entry momentum, clamped at the
+            // terminal), or in a column with no water surface (a pure
+            // flow film).
+            m_velocity.y -= m_params.waterBuoyancy * h;
+            if (m_velocity.y < -m_params.waterTerminalVelocity) {
+                m_velocity.y = -m_params.waterTerminalVelocity;
+            }
+        } else {
+            // Surface band, descending (diving) or in a jump above the
+            // plane: keep vy; the next tick's state re-resolves it.
         }
     } else {
         // Gravity, capped at terminal velocity.

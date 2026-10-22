@@ -13,10 +13,16 @@
 //      while onGround (or swim-up in water), then the X/Z/Y collision moves
 //   4. below the kill plane: respawn at spawn
 //
-// Swimming (Phase 9, while the AABB overlaps a fluid cell): reduced gravity
-// and sink speed, reduced horizontal speed, and Space swims upward instead
-// of jumping (also from the ground — a shallow pool floor does not jump, it
-// surfaces).
+// Swimming (Phase 9, while the AABB overlaps a fluid cell): a low sink cap,
+// reduced horizontal speed, and Space swims upward instead of jumping (also
+// from the ground — a shallow pool floor does not jump, it surfaces).
+// FLUID-2 (the swim overhaul): with no input the player RISES passively
+// (buoyancy, capped at waterRiseSpeed) and FLOATS on the water surface —
+// the geometric plane one above the topmost full (level-8) water cell of
+// the feet's center column, clamped exactly (fps-independent terminal).
+// Crouch DIVES (crouch-sink at waterSinkSpeed). Space at the surface is a
+// normal jump (the player has breached, Minecraft-style). A pure flow film
+// (no level-8 support) gives no surface and no rise — the Phase-9 sink.
 //
 // The World + BlockRegistry are the sole source of solid/air (via Entity):
 // the player reads properties.solid and never switches on block identity.
@@ -43,12 +49,20 @@ public:
         float jumpSpeed = 8.5f;      // initial vertical velocity (blocks/s)
         float gravity = 32.0f;       // downward acceleration (blocks/s^2)
         float terminalVelocity = 38.0f; // max fall speed (blocks/s)
-        // Swimming (while the AABB overlaps a fluid cell): reduced gravity
-        // and sink speed, a lower horizontal speed, and Space swims upward
-        // instead of jumping (Minecraft-style values).
+        // Swimming (while the AABB overlaps a fluid cell): a lower
+        // horizontal speed and Space swims upward instead of jumping
+        // (Minecraft-style values). FLUID-2: the vertical model is
+        // buoyancy + surface float + crouch-dive (see the header comment);
+        // waterBuoyancy is the rise/sink acceleration (the Phase-9
+        // water_gravity value, the role flipped), waterRiseSpeed the
+        // passive-rise cap, waterSinkSpeed the crouch-dive cap. The
+        // retired player.water_gravity key is no longer read (tolerated in
+        // old configs, the Phase-74 fire_damage precedent).
         float swimSpeed = 3.1f;         // horizontal speed in water (blocks/s)
         float swimUpSpeed = 4.5f;       // vertical velocity while swimming up
-        float waterGravity = 12.0f;     // downward acceleration in water (blocks/s^2)
+        float waterBuoyancy = 12.0f;    // rise/sink acceleration in water (blocks/s^2)
+        float waterRiseSpeed = 1.5f;    // passive-rise speed cap (blocks/s)
+        float waterSinkSpeed = 1.5f;    // crouch-dive speed cap (blocks/s)
         float waterTerminalVelocity = 4.0f; // max sink speed in water (blocks/s)
         // Swimming in LAVA (Phase 54, the Minecraft "slow + burn" pair):
         // while the AABB overlaps a lava cell the player is in the same
@@ -125,7 +139,8 @@ public:
         // and fire_duration_seconds > 100. Unknown player.* keys are
         // tolerated (config forward-compat, like the rest of the config —
         // a pre-Phase-74 config with the retired player.fire_damage*
-        // keys still boots).
+        // keys, or a pre-FLUID-2 config with the retired
+        // player.water_gravity key, still boots).
         static Result<Params> fromConfig(const Config& config);
 
         friend bool operator==(const Params&, const Params&) = default;
@@ -298,8 +313,11 @@ public:
     bool pushableByEntities() const override { return false; }
 
 private:
-    // One physics sub-step (Entity::integrate): swim/air gravity + the
-    // jump. `look`/`inWater` are tick state, consumed per sub-step.
+    // One physics sub-step (Entity::integrate): the lava / water-surface /
+    // air force model (FLUID-2: the water branch is the swim state
+    // machine — Space > crouch-dive > float snap > passive rise > floor
+    // stand) + the jump. `look`/`inWater`/`atSurface` are tick state,
+    // consumed per sub-step.
     void integrate(float h) override;
 
     // The AABB overlaps at least one fluid cell (water / lava, Phase 54).
@@ -326,6 +344,16 @@ private:
     // A world cell is solid (air and unregistered ids are not).
     bool isSolidCell(int x, int y, int z) const;
 
+    // FLUID-2 (the rise gate, the FRESH grounded check): a solid that the
+    // Y resolve would clamp against right now (a solid-region top at the
+    // feet, within kFaceEps) — the same scan as moveAxis (the strict
+    // footprint overlap + solidTopHeight), the cell row at and one below
+    // the feet plane (the wall-cap extension, Phase 95). FRESH because the
+    // tick m_onGround is the previous sub-step's result: a player preset
+    // at — or restored onto — a pool floor has no collision history yet
+    // and would otherwise pop off into the passive rise.
+    bool isRestingOnSolid() const;
+
     Params m_params;
     Vec3 m_spawnPos {0.0f, 0.0f, 0.0f};
     // Tick state for update()/integrate(): the polled input, the look
@@ -338,6 +366,22 @@ private:
     // Lava wins over water when both are true (an AABB can straddle a
     // water cell and a lava cell — the burn pace applies).
     bool m_inLava = false;
+    // FLUID-2 (the surface float): the water surface plane of the feet's
+    // center column — one above the topmost full (level-8) water cell at or
+    // below the feet (scanned down kSurfaceScanDepth cells from the feet),
+    // or -1 when none (no float plane). Tick state like m_inWater: computed
+    // once per update, consumed per sub-step. Only WATER counts (a lava
+    // column never floats — the Phase-54 semantics), and only level-8 cells
+    // (a pure flow film supports no surface — the Phase-47 bucket source
+    // settles to level 8 per FLUID-1, a flowing film does not).
+    float m_surfaceY = -1.0f;
+    // FLUID-2: this tick's surface state — the feet are within the float
+    // band (kMaxSubstepMove, the max per-sub-step vertical displacement, so
+    // a sub-step that crosses the plane is always seen) of m_surfaceY and
+    // the player is NOT resting on a solid (a player standing on a
+    // pool-edge block at the surface keeps the ground pace — the
+    // isRestingOnSolid exclusion).
+    bool m_atSurface = false;
     // Crouch state this tick (set in update before the speed computation).
     bool m_crouching = false;
     // Survival: health, the damage clock (regen delay), the regen
@@ -390,6 +434,13 @@ private:
     // block face within this tolerance (the collision clamp is exact, so
     // this only guards float round-trips).
     static constexpr float kFaceEps = 1e-4f;
+    // FLUID-2: how many cells the surface scan (m_surfaceY) descends from
+    // the feet. 32 covers the shipped water columns (ocean depth is
+    // sea_level 34 - base_height 40 + amplitude 24 >= 16 => <= 18 cells;
+    // the lava lakes are <= 4 deep) — a column deeper than this gives no
+    // float plane (documented: a diver far below a 32+-deep column keeps
+    // rising until within 32 of the surface).
+    static constexpr int kSurfaceScanDepth = 32;
 };
 
 } // namespace mc
