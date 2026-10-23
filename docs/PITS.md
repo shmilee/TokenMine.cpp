@@ -1505,3 +1505,73 @@
   diff=0）；另 GEN-1 深洞矿格光 ≈0（64 列区零 light ≥9 矿格）= 矿场景需
   场景火把照明（同场景新旧公平）。口诀：**跨版本 A/B = 同场景 + 同照明 +
   旧版资产 cwd；视线类选点探针的眼高公式要按玩家 AABB 复核。**
+- **xsecurelock 锁屏持有输入 grab = 全量输入 E2E 静默失败（T450 会话，
+  2026-10-23）**：机器离桌被 away/锁屏拉起 xsecurelock（全屏密码框 +
+  键盘/指针 active grab）→ 后续一切 xdotool XTest 输入被锁吞掉：pointer
+  lock 6 连败、"Pointer captured" 永不出现、xterm 里 type 无反应、
+  awesome client 键无效——**但** `xinput test` 设备层仍见事件（假阴性！）、
+  窗口结构事件（map/focus/_NET_ACTIVE_WINDOW）全正常 → 极易被误诊为
+  WM/几何/harness 问题（本次连环误诊：toggle 失败→focus 失步→菜单 grab）。
+  杂字符还会漏进锁屏密码框（用户解锁前需 Backspace 清除）。诊断：
+  **输入 E2E 连败先 `import -window root` 截图看屏面**（锁屏/黑屏/
+  异桌面一眼可见）+ `pgrep -ax xsecurelock`；开批前断言锁不存在。
+  附带事实：`xinput test` 只收**设备名**不收 ID（传 ID = usage 报错静默
+  零输出）；XTest 假输入只在 "Virtual core XTEST keyboard/pointer" 设备
+  流里可见（监听物理键盘设备 = 0 事件假阴性）；`xdotool search --name
+  'awesome'` 命中 awesome 内部窗口（drawin 等 ~50+）≠ 菜单打开（勿据
+  窗口数判菜单）。
+- **本机 awesome 两行为漂移：floating 保留平铺几何 + client 键作用于
+  WM 自身焦点记录（T450 会话，2026-10-23）**：① 窗口置 floating 时
+  **保留当前（平铺）几何**（旧机 re-center 回 1280x720）→
+  stabilize_window 循环每轮都看见非 1280x720 → 反复 toggle（其实每次都
+  生效！679x744↔tiled 振荡）→ 15 次"did not reach stable floating"。
+  修复 = toggle 后立即 `windowsize 1280 720` + `windowmove 0 60`
+  （floating 则 resize 生效、循环收敛；tiled 则被忽略、下轮重试）。
+  ② client 键（Super+ctrl+space = floating toggle）作用于 **awesome 内部
+  焦点记录**而非 X 输入焦点：`xdotool windowfocus`（裸 XSetInputFocus）
+  不更新 WM 记录 → toggle 打到陈旧/错误客户端 → 看似无效（全局键不受
+  影响，任何焦点下都生效 = 判别器）。修复 = `windowactivate --sync`
+  （EWMH _NET_ACTIVE_WINDOW 请求，WM 自更新记录）。口诀：**换机器先测
+  "floating 是否保留几何"与"activate 是否更新 WM 焦点记录"两行为；
+  toggle 看似无效先怀疑振荡（几何不变 ≠ 键没生效）与焦点记录失步（全局
+  键有效 + client 键无效 = 记录失步指纹）。** 附带：游戏被 SIGTERM =
+  干净 "Exit requested" 退出 + 写存档（非崩溃）；`--screenshot` 只在帧数
+  到达时截图（SIGTERM 早退 = 无截图 = harness INVALID TAKE，即使存档
+  数据有效）；lock_pointer 无 TM_LOCK_VERIFY 时点击不验证 capture
+  （"LOCK 成功"≠ 已锁定，旋转未生效要查存档 states 而非信脚本输出）。
+- **输入 E2E 批处理与并发重 CPU 互斥（T450 会话，2026-10-23）**：14 跑批
+  与 fixer 的 `rm -rf build && ninja`（4 线程全占）+ 65 s 测试并跑 → 批
+  前 3 项 14 拍全废（黑帧 ×8 + LOCK FAILED ×12；游戏 fps 2.0→~0.5，窗口
+  状态机各步 xdotool/xwininfo 节奏在 CPU 饥饿下竞态失步）。同场景零争抢
+  单跑全绿（view/wtag/mapstate 全程钉死 + 旋转生效 + 截图 0% 黑）。
+  口诀：**输入 E2E 批 = 独占机；批跑期间禁 build/测试/重子代理；批与批
+  之间留 CPU 冷却。** 附带事实：`xdotool windowmove --desktop N` 直写
+  _NET_WM_DESKTOP 属性 = WM 不可见（窗口真实 tag 不动、属性说谎 → 后续
+  按属性修视图 = 把视图拉离窗口真 tag = 永久 IsUnviewable 振荡）——换
+  tag 用 EWMH 请求（windowactivate 自带视图跟随）或 wmctrl -t。SDL3
+  X11 每游戏进程还建一个**无任何属性的 1280x720 辅助窗**（与主窗同位、
+  无 name/WM_CLASS/_NET_WM_PID）= 覆盖判据命中 → 误 unmap 后游戏自身
+  可见性状态紊乱（黑帧/IsUnviewable）——排除规则 = "游戏启动前不
+  存在"（快照比对），class/pid 匹配对它无效。
+- **i915/Mesa GLX 间歇黑相 + 三个连带假信号（T450 会话，2026-10-23）**：
+  游戏 in-process 截图间歇性 100% 黑（同流程 5 连跑 3 绿 2 黑、分钟级
+  相位周期），而 X 级窗口内容（import -window）看起来正常（picom 旧
+  pixmap 缓存 = 具迷惑性）。已排除：CPU 争抢 / 窗口隐藏（marker 151/151
+  IsViewable）/ 键盘指针 grab（276 采样全 free）/ DPMS（watchdog 强制
+  Disabled 下仍黑；但有东西 <30 s 周期重开 DPMS，atb 已排除，身份未
+  定）/ picom 实例（重启无效）/ 盖子（open）/ 背光（852/852）。**黑帧跑
+  的输入与存档完全有效**（hcorr 跑：捕获 ✓ 旋转 states 1→2 ✓ 帧满 ✓）
+  → 输入驱动跑按协议以**存档为确定性权威**：take 门放宽为"帧满
+  （Frame limit reached）+ 存档存在"（截图黑帧只降级为支撑证据，记
+  BLACK-SHOT save-authority）。连带假信号三则：① **LOCK FAILED = 场景
+  init 失败假信号**——场景存档 format 错（format 14 缺 stairs / format 14
+  带 states 键 = 版本谎报）→ 游戏 init 秒退 → 窗口销毁 → harness 对死窗
+  xwininfo 查询全空（tm_geom 静默 return 1）→ stabilize/lock 全静默失败
+  （无任何诊断行！）——**LOCK FAILED 且零诊断行 = 先查场景 init**（grep
+  游戏日志 "Initialization failed"）。② 场景键纪律：format 15 必须有
+  states 且禁 stairs 键；format 14 必须有 stairs 且禁 states 键
+  （save.cpp 版本谎报拒绝）。③ 2fps 慢机的输入时长 = 墙钟 hold × fps →
+  游戏内位移按帧缩放（60fps 设计的 2.5 s hold 在 2fps 只走 1/24 距离）；
+  ×2 savenorm 含实体/玩家 pos 时，墙钟 hold 的帧数抖动 = ×2 天然不稳
+  （60fps 机才稳）。口诀：**黑帧先信存档不信像素；LOCK FAILED 零诊断
+  行先查场景 format；慢机 hold 时长按 fps 折算。**
