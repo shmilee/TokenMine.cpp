@@ -179,16 +179,26 @@ private:
     void integrateStreamedColumns();
     // Collects the completed lighting jobs (after the pool flush): their
     // columns leave m_unlitColumns, so the next updateChunkMeshes builds
-    // their meshes with the propagated light (the one-and-only mesh).
+    // their meshes with the propagated light (the one-and-only mesh);
+    // their net-changed chunks (collected job-locally by the workers,
+    // 99.10) join the World's dirty set here — the main-thread-writer
+    // window, no worker in flight.
     void collectLitColumns();
     // Decides the columns to stream around the player (trigger + radius,
     // see chunk_streaming) and posts up to kStreamColumnsPerFrame
     // generation jobs to the pool.
     void streamChunks();
     // Finds chunks that appeared this frame (streamed-in or created by the
-    // placement path) and posts one worker lighting job per affected
-    // column box. The chunks render one frame dark and are re-meshed with
-    // the correct light the frame after the job completes (deterministic,
+    // placement path) and posts their worker lighting jobs (99.10): up to
+    // TWO per frame — two pending columns whose light regions are
+    // bit-level independent (planLightJobs, world/light_job.hpp: the
+    // write footprint is the column box ±kLightUpdateRadius and the
+    // block-light BFS reads one more column ring, so a column gap >=
+    // kLightParallelColumnGap on either axis separates them) get one job
+    // each and run in parallel on two workers; a dependent pair (or 3+
+    // columns) stays one job, boxes sequential (the pre-99.10 behavior).
+    // The chunks render one frame dark and are re-meshed with the
+    // correct light the frame after the job completes (deterministic,
     // frame-locked by the flush).
     void postLightJobs();
     // PIPE-1: posts up to kMaxMeshBacklog worker mesh jobs for the nearest
@@ -643,13 +653,23 @@ private:
     // In-flight generation jobs (deque: the heap-allocated StreamJob never
     // moves, so worker lambdas may capture it by raw pointer).
     std::deque<std::unique_ptr<StreamJob>> m_streamJobs;
-    // One lighting job per frame (the region boxes of every new column,
-    // run sequentially inside the job — adjacent boxes overlap and must
-    // not run concurrently). The done flag + columns let the main thread
-    // clear m_unlitColumns at the next flush (see collectLitColumns).
+    // Up to two in-flight lighting jobs per frame (99.10): the pending
+    // columns are partitioned by planLightJobs — two columns whose light
+    // regions are bit-level independent (write footprint + the
+    // block-light boundary-read ring, world/light_job.hpp) get one job
+    // EACH and run in parallel on two workers; a dependent pair (or 3+
+    // columns) falls back to ONE job running its boxes sequentially (the
+    // pre-99.10 behavior, bit-identical). The jobs write light arrays of
+    // DISJOINT chunks only, and collect their net-changed chunk
+    // positions in `dirtyChunks` instead of mutating the World's shared
+    // dirty set (two parallel markChunkDirty calls would race);
+    // collectLitColumns applies them at the next flush. The done flag +
+    // columns let the main thread clear m_unlitColumns there (see
+    // collectLitColumns).
     struct LightJob {
         std::vector<std::array<BlockPos, 2>> boxes;
         std::set<ColumnPos> columns;
+        std::set<ChunkPos> dirtyChunks;
         bool done = false;
     };
     std::deque<std::unique_ptr<LightJob>> m_lightJobs;

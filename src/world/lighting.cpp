@@ -286,7 +286,7 @@ void Lighting::updateLocal(World& world, const BlockRegistry& blocks,
 
 void Lighting::updateRegion(World& world, const BlockRegistry& blocks,
                             const BlockPos& min, const BlockPos& max,
-                            bool newTerrain) {
+                            bool newTerrain, std::set<ChunkPos>* dirtyOut) {
     const int R = kLightUpdateRadius;
     // Region shapes: sky light travels vertically without air attenuation,
     // so the sky re-scan covers FULL COLUMNS over the X/Z footprint (the
@@ -573,14 +573,21 @@ void Lighting::updateRegion(World& world, const BlockRegistry& blocks,
     // Through the World API (flag AND dirty set): a bare chunk markDirty
     // is invisible to the set-driven mesh pass — the chunk would keep its
     // light-0 mesh (black faces on freshly lit terrain, 99.2 user report
-    // from the walking perf run).
+    // from the walking perf run). 99.10: the worker path collects the
+    // positions in `dirtyOut` instead — two parallel lighting jobs must
+    // not mutate the shared dirty set concurrently; the main thread
+    // applies them via markChunkDirty after the pool flush.
     for (const SavedLight& s : saved) {
         Chunk* chunk = world.findChunkMut(s.pos);
         if (std::memcmp(s.sky.data(), chunk->skyLightData(), Chunk::kVolume) !=
                 0 ||
             std::memcmp(s.block.data(), chunk->blockLightData(),
                         Chunk::kVolume) != 0) {
-            world.markChunkDirty(s.pos);
+            if (dirtyOut != nullptr) {
+                dirtyOut->insert(s.pos);
+            } else {
+                world.markChunkDirty(s.pos);
+            }
         }
     }
 }

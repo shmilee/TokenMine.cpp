@@ -71,6 +71,7 @@ add_library(mc_core STATIC
     src/world/ore_vein.cpp
     src/world/beacon.cpp
     src/world/mesh_job.cpp
+    src/world/light_job.cpp
     src/world/lighting.cpp
     src/world/noise.cpp
     src/world/biome.cpp
@@ -128,6 +129,7 @@ add_executable(tokenmine_tests
     tests/test_ore_vein.cpp
     tests/test_beacon.cpp
     tests/test_mesh_job.cpp
+    tests/test_light_job.cpp
     tests/test_chance_drop.cpp
     tests/test_lighting.cpp
     tests/test_arrow.cpp

@@ -9,7 +9,9 @@
 //   ...GL rebuild + render (main thread only READS the world)...
 //   post(gen -> mesh -> light) <- workers run from here on; the main
 //                                thread stops writing the world until the
-//                                next flush
+//                                next flush (99.10: up to TWO lighting
+//                                jobs, parallel only for bit-level-
+//                                independent regions — planLightJobs)
 //   (next frame) flush()     <- the workers' window ends before the next
 //                                write window opens.
 //
@@ -20,15 +22,22 @@
 // snapshot World, copied at post time (after every main-thread World
 // write of the frame, BEFORE the lighting post, which is why the post
 // order is gen -> mesh -> light); lighting jobs write only light arrays
-// and the dirty flag, which the main thread does not write concurrently
-// (the next frame's mesh snapshot is taken after the light lands).
+// of DISJOINT chunks (99.10: at most two per frame, parallel only when
+// their regions share no chunk — write footprint AND the block-light
+// boundary-read ring) and collect their net-changed chunk positions
+// job-locally — the World's shared dirty set is main-thread-only
+// (applied at collectLitColumns after the flush), which the main thread
+// does not write concurrently (the next frame's mesh snapshot is taken
+// after the light lands).
 //
 // Flush budget (kStreamWorkerCount = 4, FIFO): a fill frame posts 2 gen
-// (~1.6 ms) + 2 mesh (<= 6 ms) + 1 light (~13 ms): the gen jobs take two
-// workers (0..1.6), the mesh jobs the other two (0..6), the light job
-// starts on the first freed worker (1.6..14.6) — flush = 13 + 1.6 ms
-// (the LGT-1 lighting floor + one gen slot of FIFO start delay), the
-// mesh jobs hide under it.
+// (~1.6 ms) + 2 mesh (<= 6 ms) + up to 2 light (one box each, ~8.4 ms):
+// 6 jobs > 4 workers — the gen jobs take two workers (0..1.6), the mesh
+// jobs the other two (0..6), and the two light jobs (posted last) start
+// on the first two freed workers (~1.6) and run IN PARALLEL (1.6..10) —
+// flush ≈ 8.4 + 1.6 ms (was 13 + 1.6 with the single sequential 2-box
+// job: the LGT-1 lighting floor halved). A queued job only adds latency,
+// never a wrong result: flush() waits for EVERY posted job.
 //
 // Exception safety: game jobs cannot fail (the generator and lighting are
 // infallible). If a job did throw, the first exception is rethrown from

@@ -39,6 +39,8 @@
 //    light actually changed (net) are marked dirty.
 #pragma once
 
+#include <set>
+
 #include "block/block_registry.hpp"
 #include "world/coordinates.hpp"
 #include "world/world.hpp"
@@ -80,9 +82,19 @@ public:
     // columns). False (the default: fluid relights, block edits) enables
     // the no-op skip: rescan wrote nothing => the sky field is at its old
     // fixed point => the seed scan + BFS are pure re-proof.
+    //
+    // `dirtyOut` (99.10): when non-null, the net-changed chunk positions
+    // are collected here INSTEAD of marking the World's shared dirty set
+    // (markChunkDirty). The streaming lighting jobs run two such regions
+    // in parallel on two workers — concurrent markChunkDirty calls would
+    // race on the shared set — and the main thread applies the collected
+    // positions after the pool flush (Game::collectLitColumns). Null
+    // (the default: fluid relights, block edits, tree growth) marks the
+    // World exactly as before.
     static void updateRegion(World& world, const BlockRegistry& blocks,
                              const BlockPos& min, const BlockPos& max,
-                             bool newTerrain = false);
+                             bool newTerrain = false,
+                             std::set<ChunkPos>* dirtyOut = nullptr);
 };
 
 } // namespace mc

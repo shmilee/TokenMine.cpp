@@ -25,6 +25,7 @@
 #include "world/growth.hpp"
 #include "world/fire_spread.hpp"
 #include "world/beacon.hpp"
+#include "world/light_job.hpp"
 #include "world/mesh_job.hpp"
 #include "world/noise.hpp"
 #include "ui/font.hpp"
@@ -126,11 +127,13 @@ constexpr int kStreamWorkerCount = 4;
 // Columns posted for generation per frame. 2 = two of the four worker
 // threads generate in parallel (the 99.8 multi-core fix: at 1 the pool
 // idled ~75% of the time while the ring filled — generation of one
-// column is ~1.6 ms, far below one frame). The per-frame LIGHTING job
-// (one job, boxes run sequentially inside it — adjacent boxes overlap
-// by kLightUpdateRadius and must never race) carries 2 boxes per
-// integrated pair: the amortized flush cost per streamed column is
-// unchanged (~1 box/frame), only the generation throughput doubles.
+// column is ~1.6 ms, far below one frame). The per-frame lighting jobs
+// (99.10: up to TWO — two new columns whose light regions are
+// bit-level independent run in parallel on two workers, one box each,
+// ~8.4 ms per LGT-1 step-0; a dependent pair falls back to one job,
+// boxes sequential — planLightJobs, world/light_job.hpp) amortize to
+// the same ~1 box per streamed column: the flush floor drops from the
+// sequential 2-box ~16.7 ms to one box plus the FIFO start delay.
 // kMaxStreamBacklog bounds the queue either way.
 constexpr int kStreamColumnsPerFrame = 2;
 // Streaming engages when the player's column is within this many columns
@@ -175,21 +178,29 @@ constexpr int kUnloadHysteresis = 1;
 // posts (the post order gen -> mesh -> light means streamChunks's
 // pendingCount check runs before the mesh posts).
 //
-// Queue timing (why the flush stays at the lighting floor, 4 workers,
-// FIFO): a fill frame posts 2 gen (~1.6 ms) + 2 mesh (<= 6 ms) + 1 light
-// (~13 ms). The gen jobs take 2 workers (0..1.6), the mesh jobs the other
-// 2 (0..6 — hiding under the light), and the light job (posted last)
-// starts when the first worker frees (1.6..14.6): flush = 13 + 1.6 ms —
-// the pre-existing LGT-1 lighting floor plus one gen slot of FIFO start
-// delay — while the main thread loses its remesh (step-0 measured up to
-// ~11.3 ms/frame during the fill + a multi-minute tail at 8 chunks/frame).
-// A non-streaming frame posts at most 2 mesh jobs: flush <= 6 ms, and the
-// same work no longer costs inside the frame.
+// Queue timing (why the flush stays at the per-box light floor, 4
+// workers, FIFO): a fill frame posts 2 gen (~1.6 ms) + 2 mesh (<= 6 ms)
+// + up to 2 light (99.10: one box each ~8.4 ms when the pair is
+// independent). Worst case = 6 jobs > 4 workers: the gen jobs take two
+// workers (0..1.6), the mesh jobs the other two (0..6 — hiding under
+// the light), and the two light jobs (posted last) start on the first
+// two freed workers (~1.6) and run IN PARALLEL (1.6..10): flush ≈
+// 8.4 + 1.6 ms — the LGT-1 per-box floor plus one gen slot of FIFO
+// start delay (was 13 + 1.6 with the single sequential 2-box job). The
+// queue only adds latency, never a wrong result: flush() waits for
+// EVERY posted job (thread_pool), and planLightJobs proves the two
+// light jobs write disjoint chunks. A dependent pair posts ONE 2-box
+// job instead (flush ≈ 16.7 + 1.6, the pre-99.10 behavior — the rare
+// close pairs, |Δx| ≤ 3 AND |Δz| ≤ 3; the LGT-1 dominant streaming
+// pairs have |Δz| 15..60 and are independent). A non-streaming frame
+// posts at most 2 mesh jobs: flush <= 6 ms, and the same work no longer
+// costs inside the frame.
 constexpr int kMaxMeshBacklog = 2;
 // Worker-pool backlog cap for the streaming posts: at most this many
-// generation + lighting jobs may be pending (queued or running) before
-// streamChunks skips its post for a frame. The per-frame flush() drains
-// the whole queue, so an unbounded backlog turns into unbounded
+// pool jobs (generation + mesh + lighting — the whole queue, 99.10: up
+// to 2 of each kind per frame) may be pending (queued or running)
+// before streamChunks skips its post for a frame. The per-frame flush()
+// drains the whole queue, so an unbounded backlog turns into unbounded
 // main-thread blocking (FPS decay the longer the disk takes to fill —
 // e.g. the capped radius-64 disk is ~103k chunks). 8 = two frames of
 // posts at the 4-worker pool's depth.
@@ -1535,6 +1546,13 @@ void Game::collectLitColumns() {
         for (const ColumnPos& col : job->columns) {
             m_unlitColumns.erase(col);
         }
+        // 99.10: apply the workers' net-changed chunks to the World's
+        // dirty set HERE (the main-thread-writer window — no worker is
+        // in flight): the jobs collected them job-locally, because two
+        // parallel light jobs would race on the shared set.
+        for (const ChunkPos& pos : job->dirtyChunks) {
+            m_world.markChunkDirty(pos);
+        }
     }
     m_lightJobs = std::move(inFlight);
 }
@@ -1709,8 +1727,8 @@ void Game::streamChunks() {
     // Backlog cap: the per-frame flush() at the top of update waits for
     // EVERY in-flight pool job, so an unbounded queue makes the main
     // thread block longer and longer (FPS decay while the ring fills).
-    // Generation is the heavy post; the single per-column lighting job
-    // stays uncapped (it is cheap and one per integrated column).
+    // Generation is the heavy post; the per-frame lighting jobs (<= 2,
+    // 99.10) stay uncapped (one box each — cheap per integrated column).
     // Skipping the post this frame (not the column) is safe: the loop
     // re-runs next frame and m_streamPending only holds actually-posted
     // columns.
@@ -1775,39 +1793,58 @@ void Game::postLightJobs() {
     if (m_lightPendingColumns.empty()) {
         return;
     }
-    // ONE job per frame, running the region updates sequentially. The
-    // region of one box overlaps the region of an adjacent new column
-    // (each expands by kLightUpdateRadius), so two lighting jobs must
-    // never run concurrently — they would race on the shared light
-    // arrays. A single job is serialized by the pool and stays in the
-    // worker window (the main thread only reads the World until the next
-    // flush). The job writes light arrays and marks the changed chunks
-    // dirty (World::markChunkDirty); it also carries its COLUMNS and a
+    // 99.10 (hard rule 7, revised): up to TWO lighting jobs per frame —
+    // and only when the two pending columns' light regions are bit-level
+    // independent (planLightJobs: the WRITE footprint is the column box
+    // ±kLightUpdateRadius = ±1 column, and the block-light BFS READS one
+    // more column ring as its boundary seed, so a column gap >=
+    // kLightParallelColumnGap on either axis separates write from write
+    // AND write from read). Two independent jobs run in parallel on two
+    // workers and touch DISJOINT chunks only — the post->flush window
+    // contract holds (the main thread only reads the World in it, and no
+    // other job writes the live World after the mesh snapshots). The
+    // confluence half: independent regions cannot influence each other
+    // in either order, so the final light is a pure function of the
+    // pre-insertion world regardless of which job finishes first.
+    //
+    // A dependent pair (or 3+ pending columns) posts ONE job running its
+    // boxes sequentially in set order — the pre-99.10 behavior,
+    // bit-identical (the latent sky-rescan clobber of OVERLAPPING
+    // regions is unchanged by design — LGT-1 disposition, its fix left
+    // for 100+).
+    //
+    // The jobs collect their net-changed chunk positions in
+    // LightJob::dirtyChunks instead of calling World::markChunkDirty:
+    // two parallel markChunkDirty calls would race on the World's shared
+    // dirty set; collectLitColumns applies them at the next flush (the
+    // main-thread-writer window). The job also carries its COLUMNS and a
     // done flag: at the next flush, collectLitColumns drops them from
     // m_unlitColumns so their chunks get a mesh job once, lit (PIPE-1
     // selection rule).
-    auto job = std::make_unique<LightJob>();
-    job->columns = m_lightPendingColumns;
+    const LightJobPlan plan = planLightJobs(m_lightPendingColumns);
     m_lightPendingColumns.clear();
-    job->boxes.reserve(job->columns.size());
-    for (const ColumnPos& col : job->columns) {
-        const BlockPos lo{col.x * kChunkSize, 0, col.z * kChunkSize};
-        const BlockPos hi{lo.x + kChunkSize - 1, kWorldHeight - 1,
-                          lo.z + kChunkSize - 1};
-        job->boxes.push_back({lo, hi});
-    }
-    LightJob* rawJob = job.get();
-    m_lightJobs.push_back(std::move(job));
-    m_pool->post([this, rawJob] {
-        for (const auto& box : rawJob->boxes) {
-            // newTerrain = true: the boxes cover freshly inserted columns
-            // — the sky propagation must run even when the rescan writes
-            // nothing (a column born dark still receives light from its
-            // lit neighbors).
-            Lighting::updateRegion(m_world, m_blocks, box[0], box[1], true);
+    for (const std::vector<ColumnPos>& columns : plan.jobs) {
+        auto job = std::make_unique<LightJob>();
+        job->columns = std::set<ColumnPos>(columns.begin(), columns.end());
+        job->boxes.reserve(columns.size());
+        for (const ColumnPos& col : columns) {
+            job->boxes.push_back(columnLightBox(col));
         }
-        rawJob->done = true;
-    });
+        LightJob* rawJob = job.get();
+        m_lightJobs.push_back(std::move(job));
+        m_pool->post([this, rawJob] {
+            for (const auto& box : rawJob->boxes) {
+                // newTerrain = true: the boxes cover freshly inserted
+                // columns — the sky propagation must run even when the
+                // rescan writes nothing (a column born dark still
+                // receives light from its lit neighbors). dirtyOut: the
+                // net change is collected job-locally (see above).
+                Lighting::updateRegion(m_world, m_blocks, box[0], box[1],
+                                       true, &rawJob->dirtyChunks);
+            }
+            rawJob->done = true;
+        });
+    }
 }
 
 void Game::postMeshJobs() {
@@ -2914,11 +2951,13 @@ void Game::update(double dt) {
     // only live-World writer after the snapshots (see postMeshJobs).
     postMeshJobs();
     // Lighting for chunks that appeared this frame (streamed-in columns,
-    // or the placement path's synchronous creation): one worker job
-    // (adjacent regions overlap, so the updates run sequentially inside
-    // it). The affected chunks render one frame dark (light 0) and are
-    // re-meshed with the correct light the frame after the job completes
-    // — deterministic, frame-locked by the flush.
+    // or the placement path's synchronous creation): up to two worker
+    // jobs (99.10) — two bit-level-independent column boxes run in
+    // parallel (planLightJobs), a dependent pair stays one job with the
+    // boxes sequential (the pre-99.10 behavior). The affected chunks
+    // render one frame dark (light 0) and are re-meshed with the correct
+    // light the frame after the jobs complete — deterministic,
+    // frame-locked by the flush.
     postLightJobs();
 }
 
