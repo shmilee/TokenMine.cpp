@@ -21,6 +21,7 @@
 #include "entity/item_entity.hpp"
 #include "entity/mob_entity.hpp"
 #include "entity/mob_mesh.hpp"
+#include "entity/mob_swing.hpp"
 #include "block/chance_drop.hpp"
 #include "world/growth.hpp"
 #include "world/fire_spread.hpp"
@@ -804,6 +805,10 @@ Result<void> Game::buildScene() {
     MC_TRY(spawnCfg);
     m_spawnConfig = *spawnCfg;
     m_mobsEnabled = m_config.getBool("mobs.enabled", true);
+    // ENT-1: the limb-swing enable flag (config mobs.limb_swing, default
+    // true; false = the v0.9.0 static gait — the mobs.enabled pattern,
+    // the E2E control group). Pure render layer: it gates nothing else.
+    m_limbSwing = m_config.getBool("mobs.limb_swing", true);
     // Difficulty (Phase 25): strict — an unknown value fails init with a
     // message naming the field (the config default is "normal", which is
     // also the no-behavior-change baseline: scales 1.0 / cadence base).
@@ -4807,6 +4812,12 @@ void Game::updateEntities(double dt) {
     for (std::size_t i = 0; i < n; ++i) {
         if (!gone[i]) {
             kept.push_back(std::move(m_entities[i]));
+        } else if (auto* mob = dynamic_cast<MobEntity*>(m_entities[i].get())) {
+            // ENT-1: free the mob's dynamic swing mesh (if it ever swung
+            // — the key is absent otherwise) so its GL buffers die with
+            // the entity. The pointer key is valid here: the pointee is
+            // destroyed only AFTER this rebuild (unique_ptr move).
+            m_swingMeshes.erase(mob);
         }
     }
     m_entities = std::move(kept);
@@ -5073,13 +5084,25 @@ void Game::drawMobs(const Mat4& view, const Mat4& projection) {
     // Mobs are always opaque (the model boxes carry no transparency), so
     // they draw with the opaque item pass. Dead mobs are removed in the
     // same frame's update, so a dead one is never rendered.
+    //
+    // ENT-1: an actively swinging mob (config on + the type has swing
+    // data + the phase != 0) draws its per-entity DYNAMIC mesh (the
+    // frame's vertices — the swing parts rotated, the rest verbatim);
+    // every other mob takes the STATIC per-type cache (the fast path =
+    // structural immunity: phase 0 is the identity pose, so the static
+    // mesh is byte-identical to a phase-0 frame).
     for (const auto& entity : m_entities) {
         const MobEntity* mob =
             dynamic_cast<const MobEntity*>(entity.get());
         if (mob == nullptr) {
             continue;
         }
-        const Mesh& mesh = mobMesh(mob->typeId());
+        const Mob& def = m_mobTypes.at(mob->typeId());
+        const Mesh& mesh =
+            limbSwingActive(m_limbSwing, !def.model.swings.empty(),
+                            mob->swingPhase())
+                ? swingMobMesh(*mob, def)
+                : mobMesh(mob->typeId());
         if (!mesh.valid()) {
             continue;
         }
@@ -5105,6 +5128,36 @@ const Mesh& Game::mobMesh(MobID id) {
                      m_mobTypes.at(id).name + "': " + r.error().describe());
     }
     return mesh;
+}
+
+const Mesh& Game::swingMobMesh(const MobEntity& mob, const Mob& def) {
+    // The per-type swing geometry (built once, lazily) + this frame's
+    // vertices (the pure buildSwingFrame into the shared scratch) + the
+    // per-entity dynamic mesh (allocated on the first swing frame; its
+    // VBO is rewritten every frame afterwards — the topology is static,
+    // so the IBO/VAO are never touched again).
+    const SwingModel& sm = swingModel(def.id);
+    buildSwingFrame(sm, mob.swingPhase(), m_swingFrameVerts);
+    Mesh& mesh = m_swingMeshes[&mob];
+    if (!mesh.valid()) {
+        auto r = mesh.uploadDynamic(sm.base, sm.indices);
+        if (!r.ok()) {
+            MC_LOG_ERROR("Mob swing mesh build failed for mob '" + def.name +
+                         "': " + r.error().describe());
+        }
+    }
+    mesh.updateVertices(m_swingFrameVerts);
+    return mesh;
+}
+
+const SwingModel& Game::swingModel(MobID id) {
+    auto it = m_swingModels.find(id);
+    if (it != m_swingModels.end()) {
+        return it->second;
+    }
+    SwingModel& sm = m_swingModels[id];
+    sm = buildSwingModel(m_mobTypes.at(id).model, m_atlas.layout());
+    return sm;
 }
 
 void Game::drawArrows(const Mat4& view, const Mat4& projection) {

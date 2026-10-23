@@ -319,6 +319,14 @@ Result<void> MobRegistry::parseModel(const Json& def, MobModel& out) {
     if (!def.isObject()) {
         return MC_FAIL("mob 'model' must be a JSON object");
     }
+    // ENT-1: the model object is strict (the top-level def keeps the
+    // warn-and-ignore forward compatibility).
+    for (const auto& [key, value] : def.members()) {
+        if (key != "width" && key != "height" && key != "boxes" &&
+            key != "swings") {
+            return MC_FAIL("mob model has unknown field '" + key + "'");
+        }
+    }
     auto r = readPositiveNumber(def, "width", out.width, "mob model");
     MC_TRY(r);
     r = readPositiveNumber(def, "height", out.height, "mob model");
@@ -338,6 +346,15 @@ Result<void> MobRegistry::parseModel(const Json& def, MobModel& out) {
         if (!bj.isObject()) {
             return MC_FAIL(what + " must be a JSON object");
         }
+        // ENT-1: strict box fields (the swing spec references parts by
+        // their `name`, so a stray key is a typo, not forward
+        // compatibility).
+        for (const auto& [key, value] : bj.members()) {
+            if (key != "pos" && key != "size" && key != "texture" &&
+                key != "name") {
+                return MC_FAIL(what + " has unknown field '" + key + "'");
+            }
+        }
         MobBox box;
         auto pos = readVec3(*bj.find("pos"), what + ": 'pos'");
         MC_TRY(pos);
@@ -354,6 +371,22 @@ Result<void> MobRegistry::parseModel(const Json& def, MobModel& out) {
                            "non-empty string (atlas tile name)");
         }
         box.texture = tex->asString();
+        // ENT-1: the optional part name — non-empty, unique among the
+        // model's boxes (a swing entry references it).
+        if (const Json* nm = bj.find("name")) {
+            if (!nm->isString() || nm->asString().empty()) {
+                return MC_FAIL(what + ": 'name' must be a non-empty "
+                                "string (part name)");
+            }
+            box.name = nm->asString();
+            for (std::size_t j = 0; j < out.boxes.size(); ++j) {
+                if (out.boxes[j].name == box.name) {
+                    return MC_FAIL(what + " duplicate part name '" +
+                                   box.name + "' (box " +
+                                   std::to_string(j) + ")");
+                }
+            }
+        }
 
         // The box must lie inside the model AABB (bottom-center origin):
         // x/z within [-width/2, width/2], y within [0, height].
@@ -366,7 +399,87 @@ Result<void> MobRegistry::parseModel(const Json& def, MobModel& out) {
                            std::to_string(out.width) + "x" +
                            std::to_string(out.height) + " model AABB");
         }
-        out.boxes.push_back(box);
+        out.boxes.push_back(std::move(box));
+    }
+
+    // ENT-1: the optional swing list (absent/[] = no limb animation).
+    // Each entry references a part NAME (the existence cross-check — the
+    // grows_to discipline — the reference is file-local, so it is
+    // validated here, not at game init), with a data amplitude (radians,
+    // (0, 1]) and a half-cycle phase group (0/1).
+    out.swings.clear();
+    if (const Json* swingsJson = def.find("swings")) {
+        if (!swingsJson->isArray()) {
+            return MC_FAIL("mob model: 'swings' must be an array");
+        }
+        for (std::size_t i = 0; i < swingsJson->size(); ++i) {
+            const Json& e = swingsJson->at(i);
+            const std::string what = "mob model swings[" +
+                                     std::to_string(i) + "]";
+            if (!e.isObject()) {
+                return MC_FAIL(what + " must be a JSON object "
+                                   "{\"part\": ..., \"amplitude\": ..., "
+                                   "\"group\": ...}");
+            }
+            for (const auto& [key, value] : e.members()) {
+                if (key != "part" && key != "amplitude" && key != "group") {
+                    return MC_FAIL(what + " has unknown field '" + key +
+                                   "'");
+                }
+            }
+            const Json* part = e.find("part");
+            if (part == nullptr || !part->isString() ||
+                part->asString().empty()) {
+                return MC_FAIL(what + " requires a non-empty string "
+                                "'part' (box name)");
+            }
+            MobSwing swing;
+            const Json* amp = e.find("amplitude");
+            if (amp == nullptr || !amp->isNumber()) {
+                return MC_FAIL(what + " requires a number 'amplitude' "
+                                "(radians)");
+            }
+            swing.amplitude = static_cast<float>(amp->asDouble());
+            if (swing.amplitude <= 0.0f || swing.amplitude > 1.0f) {
+                return MC_FAIL(what + ": 'amplitude' must be in (0, 1] "
+                                "radians (the limb-swing range), got " +
+                                std::to_string(swing.amplitude));
+            }
+            const Json* grp = e.find("group");
+            if (grp == nullptr || !grp->isNumber() ||
+                grp->asDouble() != std::floor(grp->asDouble())) {
+                return MC_FAIL(what + " requires an integer 'group' "
+                                "(0 or 1)");
+            }
+            swing.group = static_cast<int>(grp->asDouble());
+            if (swing.group != 0 && swing.group != 1) {
+                return MC_FAIL(what + ": 'group' must be 0 or 1, got " +
+                               std::to_string(swing.group));
+            }
+            // Part existence: the name must be a box of THIS model.
+            int boxIndex = -1;
+            for (std::size_t b = 0; b < out.boxes.size(); ++b) {
+                if (out.boxes[b].name == part->asString()) {
+                    boxIndex = static_cast<int>(b);
+                    break;
+                }
+            }
+            if (boxIndex < 0) {
+                return MC_FAIL(what + " references unknown part '" +
+                               part->asString() + "'");
+            }
+            // No two swings may claim one part.
+            for (std::size_t j = 0; j < out.swings.size(); ++j) {
+                if (out.swings[j].boxIndex == boxIndex) {
+                    return MC_FAIL(what + " swings part '" +
+                                   part->asString() +
+                                   "' already claimed by swings[" +
+                                   std::to_string(j) + "]");
+                }
+            }
+            swing.boxIndex = boxIndex;
+            out.swings.push_back(swing);
+        }
     }
     return {};
 }

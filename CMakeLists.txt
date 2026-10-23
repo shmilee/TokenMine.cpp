@@ -49,6 +49,7 @@ add_library(mc_core STATIC
     src/entity/mob_mesh.cpp
     src/entity/mob_registry.cpp
     src/entity/mob_spawning.cpp
+    src/entity/mob_swing.cpp
     src/entity/particle.cpp
     src/entity/projectile.cpp
     src/item/item_registry.cpp

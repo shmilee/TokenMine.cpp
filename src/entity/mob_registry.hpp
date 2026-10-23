@@ -35,8 +35,15 @@
 //     "boxes": [
 //       { "pos": [0, 1.25, 0], "size": [0.5, 0.5, 0.5],
 //         "texture": "zombie_head" },
+//       { "name": "leg", "pos": [0, 0.25, 0], "size": [0.3, 0.5, 0.3],
+//         "texture": "zombie_body" },
 //       ...
-//     ]
+//     ],
+//     "swings": [                 // ENT-1: optional limb animation (absent
+//       { "part": "leg",          // or [] = no swing parts — the static
+//         "amplitude": 0.5,       //   v0.9.0 gait; amplitude in radians,
+//         "group": 0 }            //   (0, 1]; group 0/1 = half-cycle
+//     ]                           //   phase offset (see MobSwing))
 //   }
 // }
 //
@@ -46,10 +53,19 @@
 // relative to the mob's bottom-center position. Every box must lie inside
 // the width x height AABB.
 //
+// ENT-1 limb swing: a box may carry an optional unique `name` (part
+// name), and the model may carry a `swings` list whose entries reference
+// part names — the referenced part rotates about its pivot (the box
+// top-center, the local X axis) while the mob walks (see mob_swing.hpp
+// for the integer/frame-locked math). A swing entry's `part` must name an
+// existing box (rejected, named, otherwise) and no two entries may claim
+// one part.
+//
 // Validation is strict (same discipline as the block/item registries):
-// wrong types, out-of-range values, boxes outside the AABB and duplicate
-// ids all produce descriptive errors naming the mob. Unknown fields are
-// warned about and ignored (forward compatibility).
+// wrong types, out-of-range values, boxes outside the AABB, duplicate
+// ids, unknown box/model/swing fields and dangling swing part references
+// all produce descriptive errors naming the mob. Unknown TOP-LEVEL
+// fields are warned about and ignored (forward compatibility).
 //
 // Cross-checks against the other systems (model textures exist in the
 // atlas, drops resolve in the ItemRegistry, the spawning list resolves
@@ -89,12 +105,33 @@ struct MobBox {
     Vec3 center = Vec3::zero();  // box center, relative to bottom-center
     Vec3 size = Vec3::zero();    // full extent per axis
     std::string texture;         // atlas tile name (all six faces)
+    // ENT-1: the optional part NAME (empty = unnamed; unique among the
+    // model's boxes). A name is required for a box a 'swings' entry
+    // references; unnamed boxes simply never swing.
+    std::string name;
+};
+
+// One limb-swing spec of a mob model (ENT-1, see mob_swing.hpp for the
+// math): the named part rotates about its pivot (the box top-center, the
+// local X axis) by ±amplitude radians (the data range (0, 1], the
+// ~57-degree walk-stride cap) on a half-cycle phase offset: group 0
+// swings with the mob's swing phase, group 1 with (phase + N/2) % N
+// (the diagonal gait — chicken's opposite legs, quadruped diagonal leg
+// pairs, spider even/odd leg rows). `boxIndex` is the resolved part
+// (the existence cross-check — the grows_to discipline — runs at parse
+// time: the part must name a box of THIS model, and no two swings may
+// claim one part).
+struct MobSwing {
+    int boxIndex = -1;
+    float amplitude = 0.0f; // radians, (0, 1]
+    int group = 0;          // 0 or 1
 };
 
 struct MobModel {
     float width = 0.0f;   // AABB width (x and z)
     float height = 0.0f;  // AABB height
     std::vector<MobBox> boxes;
+    std::vector<MobSwing> swings; // ENT-1: empty = no limb animation
 };
 
 // One entry of a mob's drop list (Phase 28; Phase 38 random range).

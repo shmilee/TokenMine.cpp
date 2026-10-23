@@ -2,6 +2,7 @@
 
 #include <GL/glew.h>
 
+#include <cassert>
 #include <cstddef>
 
 #include "core/logger.hpp"
@@ -106,7 +107,31 @@ Result<void> Mesh::upload(const std::vector<MeshVertex>& vertices,
     glBufferData(GL_ARRAY_BUFFER,
                  static_cast<GLsizeiptr>(vertices.size() * kVertexSize),
                  vertices.data(), GL_STATIC_DRAW);
+    setupAttributes();
 
+    if (indexed) {
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ibo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(indices.size() *
+                                             sizeof(std::uint32_t)),
+                     indices.data(), GL_STATIC_DRAW);
+    }
+
+    glBindVertexArray(0);
+
+    m_vertexCount = vertices.size();
+    m_indexCount = indexed ? indices.size() : 0;
+
+    const GLenum glErr = glGetError();
+    if (glErr != GL_NO_ERROR) {
+        destroy();
+        return MC_FAIL("GL error during mesh upload: " +
+                       std::to_string(static_cast<unsigned>(glErr)));
+    }
+    return {};
+}
+
+void Mesh::setupAttributes() {
     // location 0: position
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(kVertexSize),
@@ -135,6 +160,45 @@ Result<void> Mesh::upload(const std::vector<MeshVertex>& vertices,
     glEnableVertexAttribArray(6);
     glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(kVertexSize),
                           reinterpret_cast<const void*>(offsetof(MeshVertex, tiled)));
+}
+
+Result<void> Mesh::uploadDynamic(const std::vector<MeshVertex>& vertices,
+                                 const std::vector<std::uint32_t>& indices) {
+    if (vertices.empty()) {
+        return MC_FAIL("mesh upload with empty vertex data");
+    }
+    for (const std::uint32_t idx : indices) {
+        if (idx >= vertices.size()) {
+            return MC_FAIL("mesh index " + std::to_string(idx) +
+                           " out of range (" +
+                           std::to_string(vertices.size()) + " vertices)");
+        }
+    }
+
+    destroy();
+    m_mode = MeshMode::Triangles;
+    const bool indexed = !indices.empty();
+
+    glGenVertexArrays(1, &m_vao);
+    glGenBuffers(1, &m_vbo);
+    if (indexed) {
+        glGenBuffers(1, &m_ibo);
+    }
+    if (m_vao == 0 || m_vbo == 0 || (indexed && m_ibo == 0)) {
+        destroy();
+        return MC_FAIL("GL buffer/VAO generation failed");
+    }
+
+    glBindVertexArray(m_vao);
+
+    // The vertices are rewritten every frame (glBufferSubData) by the
+    // limb-swing build — DYNAMIC; the indices are fixed topology —
+    // STATIC.
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+                 static_cast<GLsizeiptr>(vertices.size() * kVertexSize),
+                 vertices.data(), GL_DYNAMIC_DRAW);
+    setupAttributes();
 
     if (indexed) {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ibo);
@@ -156,6 +220,19 @@ Result<void> Mesh::upload(const std::vector<MeshVertex>& vertices,
                        std::to_string(static_cast<unsigned>(glErr)));
     }
     return {};
+}
+
+void Mesh::updateVertices(const std::vector<MeshVertex>& vertices) {
+    // The swing remaps the vertices, it never changes the count — a
+    // mismatch is a programming error, not a GL condition.
+    assert(m_vbo != 0 && vertices.size() == m_vertexCount);
+    if (m_vbo == 0 || vertices.size() != m_vertexCount) {
+        return;
+    }
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 0,
+                    static_cast<GLsizeiptr>(vertices.size() * kVertexSize),
+                    vertices.data());
 }
 
 void Mesh::bind() const {

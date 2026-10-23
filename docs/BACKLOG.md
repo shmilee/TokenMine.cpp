@@ -22,7 +22,7 @@
 | LGT 光照 | ~~LGT-1 union-region~~ 砍除 | ~~LGT-2 叶子光衰减~~ 完成 | | | | |
 | GEN 世界与生成 | ~~GEN-1 面条洞穴~~ 完成 | ~~GEN-2 树生长~~ 完成 | ~~GEN-3 矿脉形态~~ 完成 | | | |
 | FLUID 流体 | ~~FLUID-1 水量守恒~~ 完成 | ~~FLUID-2 游泳划水~~ 完成 | | | | |
-| ENT 实体/Mob/移动 | ENT-1 四肢摆动 | ~~ENT-2 BlockState★~~ 完成 | ENT-3 mob踏阶 | ENT-4 水体交互 | | |
+| ENT 实体/Mob/移动 | ~~ENT-1 四肢摆动~~ 完成 | ~~ENT-2 BlockState★~~ 完成 | ENT-3 mob踏阶 | ENT-4 水体交互 | | |
 | SURV 生存/战斗/效果 | SURV-1 护甲 | SURV-2 氧气窒息 | SURV-3 耐久 | SURV-4 药水饮用 | SURV-5 mob效果 | |
 | CRAFT 物品/合成/面板 | CRAFT-1 工作台分块★ | CRAFT-2 物品3D模型 | CRAFT-3 材质音效 | | | |
 | SAVE 存档 | SAVE-1 自动存档 | | | | | |
@@ -72,7 +72,7 @@
   录）。发布 **v0.7.0**。FLUID 行 2/2 全清。
 
 ### ENT 实体/Mob/移动
-- **ENT-1 四肢摆动** — mob 摆腿/摆臂动画，per-part 模型矩阵（99.x 残余 #4）
+- ~~**ENT-1 四肢摆动**~~ — **完成（2026-10-24 夜）**：mob 摆腿动画（99.x 残余 #4）：**swing 相位 = per-mob 整数**（`MobEntity::m_swingPhase` 0..63，移动帧 +2【整周期 32 帧 = 0.533 s】/ 静止帧 −4 衰减到 0【16 帧收步】，「移动」= 帧边界水平位移严格不等式【不读 AI 意图】；纯渲染层 = 不入存档【mob 本 ephemeral】+ 无 swing 数据类型恒 0 结构性惰性）+ **constexpr 16.16 定点正弦表**（64 条、编译期 14 项 Taylor 生成、零运行期 libm【std::sin 跨平台位级不稳定】；余数界 x²⁹/29! ≤ 9.2e-9 ≪ 半量子）+ **数据驱动 `swings` 段**（box 可选 `name` + 模型 `swings: [{part, amplitude (0,1] 弧度, group 0/1}]` 严格解析、part 存在性解析期交叉校验【grows_to 纪律、文件内引用】、未知键/重名/重复认领点名拒）+ **CPU 逐帧顶点变换**（pivot = box 顶面中心纯函数、绕 mob 局部 X 轴【yaw 前】、定点 sin/cos 整数 Taylor 每部件预计算、法线同旋【face shade 桶跟随】、phase 0 = 位级恒等 = 静态 fast path 结构性免疫）+ **per-mob 动态 VBO**（`Mesh::uploadDynamic`/`updateVertices` GL_DYNAMIC_DRAW、首摆帧分配、updateEntities 拆除 pass 释放）+ **config `mobs.limb_swing`**（默认 true、false = v0.9.0 静态基线 E2E 对照组）+ **内容**（chicken 2 腿 0.5 rad 半周相位 / cow·sheep 4 腿 0.7 rad 对角步态 / spider 8 腿 0.9 rad 偶奇分组；**zombie/skeleton 无独立 arm part = 不造几何记档**）；**AI/物理/存档零改动**；1367/1367（+17）、0 警告；base18 门 = 结构性免疫（基线帧无 mob = 99.7 先例）；偏离：翅不摆（MC 只飞行时扇翅）/ zombie·skeleton 无臂 / 相位不入档 / 幅度上限 1 rad
 - ~~**ENT-2 BlockState★**~~ — **完成（2026-10-22 夜）**：P94 楼梯朝向（World 每格 byte + format 14 `stairs`）泛化为**通用 per-instance 状态机制**：`Chunk::m_blockState` 换名 + 哨兵泛化 255 + 双门控数据驱动（Stairs 形状隐式 count 4 ∪ `model.state_count`[1,255]+`state_default` 严格配对，楼梯显式声明 = 矛盾拒）+ `World::get/setBlockState`（只验 <255，域由收口/旋转/parse 三处强制）+ Game 三写入点泛化（收口/旋转 `(s+1)%stateCount()`/P97 钩子）+ **format 15 `states` 段**（全量 + 逐条目域校验 + 双向交叉校验 + 键纪律三向 + 14→15 值保真迁移 + collectSave 两路 journal 派生）+ **init 不变量**（worldgen 5 类放置源 stateful 点名拒 = "stateful 格必 session 派生"结构化）；**四个 per-block map 不迁移**（byte/struct 两类状态消费者不相交 = YAGNI 定案，CRAFT-1 取 campfire 范式 + 纪律）；shipped 内容零字段改动；1260/1260（+20 新，存量换名适配语义不动）；base18 **第 85 门 = 结构性免疫不重锚**（新 ×2 与门 84 锚字节一致）；E2E：S2 预置状态场景 A/B **298,211 px = per-instance 朝向首次像素级验证**（P94 时代仅存证）+ round-trip 截图字节一致 + S3 迁移 shot 与 S2A 字节一致（值保真端到端背书）；晨间潜旋回归推迟（pent2_rot.zsh 就绪）；PITS +1（#208 场景几何探针纪律）
 - **ENT-3 mob 踏阶** — mob 1 格 step-up，修追逐卡台阶（Mob 条）
 - **ENT-4 水体交互** — mob/掉落物游泳、浮力（实体条）
@@ -204,3 +204,8 @@
   免疫不重锚【与门 88 状态锚字节一致】；S2/S2b y==47 深度无关 ×2
   EXACT、S2c y==42 互斥 ×2 EXACT【场景预置修正】；S3 输入三项留新
   机器）。发布 **v0.7.0**。FLUID 行 2/2 全清，v1.0 任务表 11/29。
+- 2026-10-24（夜）：ENT-1 四肢摆动完成（swing 相位 per-mob 整数 +
+  constexpr 16.16 定点正弦表零运行期 libm + `swings` 数据段严格解析 +
+  CPU 逐帧顶点变换 per-mob 动态 VBO + config mobs.limb_swing；chicken
+  2/cow 4/sheep 4/spider 8 腿，zombie·skeleton 无臂记档；AI/物理/存档
+  零改动；1367/1350 +17、0 警告）。ENT 行 1/4，v1.0 任务表 12/29。

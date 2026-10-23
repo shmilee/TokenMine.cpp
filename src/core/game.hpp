@@ -449,9 +449,18 @@ private:
     // the data cadence (see mob_spawning) and pushes one MobEntity at the
     // deterministic scan's cell; it is a no-op unless the spawn config
     // allows it (cap, cadence, first frame, enabled flag).
+    //
+    // ENT-1 limb swing: a mob that is actively swinging (config on + the
+    // type has swing data + the phase != 0) draws a per-entity DYNAMIC
+    // mesh instead: the frame's vertices (the swing parts rotated about
+    // their pivots, the rest verbatim — buildSwingFrame) rewrite the VBO
+    // (glBufferSubData); phase 0 / no swing data / config off take the
+    // STATIC per-type cache (the fast path = structural immunity).
     void attemptMobSpawn();
     void drawMobs(const Mat4& view, const Mat4& projection);
     const Mesh& mobMesh(MobID id);
+    const Mesh& swingMobMesh(const MobEntity& mob, const Mob& def);
+    const SwingModel& swingModel(MobID id);
 
     // Arrow rendering (Phase 21): the arrows (the P10 Projectiles the bow
     // launches) draw after the mobs in the opaque pass with the shared
@@ -840,6 +849,20 @@ private:
     Difficulty m_difficulty = Difficulty::Normal;
     Vec3 m_spawnPoint {0.5f, 0.0f, 0.5f};
     std::unordered_map<MobID, Mesh, MobIDHash> m_mobMeshes;
+    // ENT-1: the limb-swing config (mobs.limb_swing, default true; false
+    // = the v0.9.0 static-gait baseline — the mobs.enabled pattern) + the
+    // per-type swing geometry (built lazily on a swinging type's first
+    // frame: the CPU copy of the static mesh + the per-part phase
+    // sin/cos) + the per-entity dynamic meshes (allocated on the mob's
+    // first swing frame, freed in the updateEntities despawn rebuild —
+    // the entity pointer is stable: m_entities holds unique_ptrs, and
+    // neither push_back nor the erase-rebuild moves the pointees) + the
+    // frame-vertex scratch (one buffer shared by all mobs: drawMobs is
+    // single-threaded on the game/GL thread).
+    bool m_limbSwing = true;
+    std::unordered_map<MobID, SwingModel, MobIDHash> m_swingModels;
+    std::unordered_map<const MobEntity*, Mesh> m_swingMeshes;
+    std::vector<MeshVertex> m_swingFrameVerts;
     std::uint64_t m_spawnCounter = 0;
     // Swing cooldown (seconds; Phase 20): one attack hit per
     // kSwingInterval while the left button is held on a mob. Reset to 0

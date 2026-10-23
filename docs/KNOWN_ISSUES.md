@@ -62,7 +62,7 @@
 
 ## 实体（Phase 10）
 
-- **Mob 模型 v1 = 原版比例 + 静态四肢，无行走摆腿/手臂动画** — Phase 10 的模型只有躯干 + 头两个 box（动物悬浮，99.7 用户报告）；`[99.7]` 按原版几何数据（Minecraft bedrock geometry 镜像）重做：chicken 7 box（体/2 橙腿/2 翅/头/喙）、cow/sheep 6 box（直立体 + 4 条深色腿）、spider 10 box（体/头/8 细腿）；zombie/skeleton 躯干 box 本已通地。腿 = 独立纹理 tile（chicken_legs 橙 / cow_legs 深褐 / sheep_legs 黑，atlas 空位 [8,4-6] 免重锚）。**摆腿/摆臂动画未做**：per-type mesh 是静态缓存（`m_mobMeshes`），逐实例肢体动画需要每帧每 mob 重建几何或按部件模型矩阵（未来阶段）。`[Phase 10]`（腿 `[99.7]` 已补；动画留后续）
+- ~~**Mob 无行走摆腿/手臂动画**~~ — `[ENT-1]` 已解决：swing 相位 = per-mob 整数（移动帧 +2、静止帧 −4 衰减到 0、帧边界水平位移严格不等式判定、纯渲染层不入存档）+ constexpr 16.16 定点正弦表（编译期 Taylor、零运行期 libm）+ mob 模型 `swings` 数据段（box `name` + `part`/`amplitude` (0,1] 弧度/`group` 0/1 半周相位组，严格解析 + part 存在性交叉校验）+ CPU 逐帧顶点变换（pivot = box 顶面中心、绕局部 X 轴、法线同旋、phase 0 位级恒等 = 静态 fast path 结构性免疫）+ per-mob 动态 VBO（`Mesh::uploadDynamic`/`updateVertices`）+ config `mobs.limb_swing`（默认 true、false = 静态基线）。内容：chicken 2 腿 0.5 rad 半周相位、cow/sheep 4 腿 0.7 rad 对角步态、spider 8 腿 0.9 rad 偶奇分组。**残余（文档化偏离）**：zombie/skeleton 无独立 arm part（99.7 几何 = 头 + 躯干两 box，`[ENT-1]` 不造几何）；翅不摆（MC 只飞行时扇翅）；swing 相位 session-local（读档/生成 = 0，mob 本 ephemeral 不入档）。`[Phase 10]`（腿 `[99.7]` 已补；动画 `[ENT-1]` 已解决）
 
 - **掉落物不受本地光照、也不遮挡光** — 掉落物顶点烘焙满天空光（sky=1.0、block=0），shader 只乘 dayFactor，不采样所在位置的方块光：洞穴/树荫下的掉落物和空地上一样亮（夜间同步变暗）；反过来掉落物也不参与光传播/网格化（不挡光）。需要按物品位置读世界光数组、并让掉落物参与遮挡。`[Phase 10]`
 - **掉落物动画由帧计数器驱动（非墙钟）** — 上下浮动（1.5s 周期）/自转（4s 周期）取自 `m_frameCount`，保证无输入/自动化运行逐字节可复现；代价是非 60Hz 显示器上动画速度随帧率变化（与昼夜时间同一权衡）。`[Phase 10]`

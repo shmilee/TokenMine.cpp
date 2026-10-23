@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstring>
 #include <algorithm>
+#include <numbers>
 #include <string>
 #include <vector>
 
@@ -19,6 +20,7 @@
 #include "entity/mob_mesh.hpp"
 #include "entity/mob_registry.hpp"
 #include "entity/mob_spawning.hpp"
+#include "entity/mob_swing.hpp"
 #include "item/item_registry.hpp"
 #include "renderer/texture_atlas.hpp"
 #include "world/raycast.hpp"
@@ -2087,4 +2089,576 @@ TEST(MobRegistryTest, ShippedModelsReachTheGroundWithLegs) {
         }
         EXPECT_NEAR(lowest, 0.0f, 1e-6f) << c.name;
     }
+}
+
+// ---------------------------------------------------------------------------
+// ENT-1: mob limb swing. The pure integer / fixed-point pipeline (the
+// compile-time sine table, the per-frame phase advance, the pivot
+// derivation, the limb-angle rotation) + the strict 'swings' data schema
+// + the shipped content + the MobEntity's phase bookkeeping (render-only,
+// never saved — mobs are ephemeral).
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// A two-legged synthetic walker: body + two IDENTICAL leg boxes (same
+// geometry, so the group-antiphase cross-frame equality below is exact),
+// leg_a group 0 / leg_b group 1 (the half-cycle offset).
+const char* kTwoLegDef = R"({
+  "id": "walker",
+  "properties": {
+    "health": 4,
+    "speed": 0.5,
+    "detect_radius": 0,
+    "attack_range": 0,
+    "attack_damage": 0,
+    "attack_cooldown": 1.0,
+    "wander_interval": 2.0
+  },
+  "model": {
+    "width": 1.0,
+    "height": 1.0,
+    "boxes": [
+      {"name": "body", "pos": [0.0, 0.75, 0.0], "size": [0.5, 0.5, 0.5],
+       "texture": "a"},
+      {"name": "leg_a", "pos": [0.0, 0.25, 0.0], "size": [0.2, 0.5, 0.2],
+       "texture": "b"},
+      {"name": "leg_b", "pos": [0.0, 0.25, 0.0], "size": [0.2, 0.5, 0.2],
+       "texture": "b"}
+    ],
+    "swings": [
+      {"part": "leg_a", "amplitude": 0.5, "group": 0},
+      {"part": "leg_b", "amplitude": 0.5, "group": 1}
+    ]
+  }
+})";
+
+// The base schema for the strict-parse error table: one named body + one
+// named leg, the leg swinging group 0 at 0.5 rad.
+const char* kSwingBaseDef = R"({
+  "id": "swingy",
+  "properties": {
+    "health": 4,
+    "speed": 0.5,
+    "detect_radius": 0,
+    "attack_range": 0,
+    "attack_damage": 0,
+    "attack_cooldown": 1.0,
+    "wander_interval": 2.0
+  },
+  "model": {
+    "width": 1.0,
+    "height": 1.0,
+    "boxes": [
+      {"name": "body", "pos": [0.0, 0.75, 0.0], "size": [0.5, 0.5, 0.5],
+       "texture": "a"},
+      {"name": "leg", "pos": [0.0, 0.25, 0.0], "size": [0.3, 0.5, 0.3],
+       "texture": "b"}
+    ],
+    "swings": [
+      {"part": "leg", "amplitude": 0.5, "group": 0}
+    ]
+  }
+})";
+
+// The zombie def WITH swing data (the MobEntity phase tests need a type
+// that advances; the fixture kZombieDef is swing-less by design).
+const char* kSwingZombieDef = R"({
+  "id": "zombie",
+  "properties": {
+    "health": 20,
+    "speed": 0.8,
+    "detect_radius": 16,
+    "attack_range": 1.6,
+    "attack_damage": 3,
+    "attack_cooldown": 1.0,
+    "wander_interval": 2.5
+  },
+  "model": {
+    "width": 0.6,
+    "height": 1.8,
+    "boxes": [
+      {"pos": [0.0, 1.25, 0.0], "size": [0.5, 0.5, 0.5], "texture": "a"},
+      {"name": "torso", "pos": [0.0, 0.5, 0.0], "size": [0.5, 1.0, 0.3],
+       "texture": "b"}
+    ],
+    "swings": [
+      {"part": "torso", "amplitude": 0.5, "group": 0}
+    ]
+  }
+})";
+
+MobRegistry makeTwoLegRegistry() {
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(kTwoLegDef));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    return mobs;
+}
+
+SwingModel makeTwoLegSwingModel() {
+    const MobRegistry mobs = makeTwoLegRegistry();
+    return buildSwingModel(mobs.at(MobID{0}).model, makeMobLayout());
+}
+
+} // namespace
+
+TEST(MobSwingTest, SinTableMatchesDocumentedSine) {
+    // The compile-time Taylor table must equal the documented formula
+    // round(2^16 * sin(2*pi*i/N)) for every entry (the double reference
+    // is a test-only oracle — the shipped path never calls libm).
+    for (int i = 0; i < kSwingPhaseCount; ++i) {
+        const double expect =
+            std::sin(2.0 * std::numbers::pi * i / kSwingPhaseCount) *
+            65536.0;
+        EXPECT_LE(std::abs(static_cast<double>(kSwingSinTable[i]) - expect),
+                  1.0)
+            << "entry " << i;
+        EXPECT_GE(kSwingSinTable[i], -65536);
+        EXPECT_LE(kSwingSinTable[i], 65536);
+    }
+    // Exact pins (the cardinal angles are representable exactly).
+    EXPECT_EQ(kSwingSinTable[0], 0);
+    EXPECT_EQ(kSwingSinTable[kSwingPhaseCount / 8], 46341); // sin(pi/4)
+    EXPECT_EQ(kSwingSinTable[kSwingPhaseCount / 4], 65536); // sin(pi/2)
+    EXPECT_EQ(kSwingSinTable[kSwingPhaseCount / 2], 0);     // sin(pi)
+    EXPECT_EQ(kSwingSinTable[3 * kSwingPhaseCount / 4], -65536);
+    // Half-cycle antipodality (the group-1 offset's correctness):
+    // table[(i + N/2) % N] == -table[i] exactly.
+    for (int i = 0; i < kSwingPhaseCount; ++i) {
+        EXPECT_EQ(kSwingSinTable[(i + kSwingHalf) % kSwingPhaseCount],
+                  -kSwingSinTable[i])
+            << "entry " << i;
+    }
+    // Monotone rise on the first quarter (no wobble = no formula error).
+    for (int i = 1; i < kSwingPhaseCount / 4; ++i) {
+        EXPECT_GT(kSwingSinTable[i], kSwingSinTable[i - 1]) << "entry " << i;
+    }
+}
+
+TEST(MobSwingTest, PhaseAdvanceMovingAndResting) {
+    // Moving: forward kSwingStep per frame, wrapping at N.
+    EXPECT_EQ(advanceSwingPhase(0, true), kSwingStep);
+    EXPECT_EQ(advanceSwingPhase(kSwingPhaseCount - 1, true),
+              (kSwingPhaseCount - 1 + kSwingStep) % kSwingPhaseCount); // 63 -> 1
+    EXPECT_EQ(advanceSwingPhase(kSwingPhaseCount - 2, true), 0); // 62 -> 0
+    // Resting: decay kSwingDecay toward 0 (clamped), a full phase rests in
+    // 16 frames (63/4), 0 is a fixed point.
+    EXPECT_EQ(advanceSwingPhase(0, false), 0);
+    EXPECT_EQ(advanceSwingPhase(2, false), 0); // below the decay: to 0
+    EXPECT_EQ(advanceSwingPhase(5, false), 1); // 5 - 4
+    EXPECT_EQ(advanceSwingPhase(63, false), 59);
+    int p = 63;
+    int frames = 0;
+    while (p != 0) {
+        p = advanceSwingPhase(p, false);
+        ++frames;
+    }
+    EXPECT_EQ(frames, 16); // the smooth step-off (~15-20 frame target)
+    // Moving dominates a full cycle: 32 steps return to the start.
+    int q = 0;
+    for (int i = 0; i < kSwingPhaseCount / kSwingStep; ++i) {
+        q = advanceSwingPhase(q, true);
+    }
+    EXPECT_EQ(q, 0);
+}
+
+TEST(MobSwingTest, LimbSwingActiveGate) {
+    // The render fast path: config off, a swing-less type, or the rest
+    // phase (0 = the identity pose) all take the static mesh.
+    EXPECT_FALSE(limbSwingActive(false, true, 7));   // config off
+    EXPECT_FALSE(limbSwingActive(true, false, 7));    // no swing data
+    EXPECT_FALSE(limbSwingActive(true, true, 0));     // rest pose
+    EXPECT_TRUE(limbSwingActive(true, true, 1));      // swinging
+    EXPECT_TRUE(limbSwingActive(true, true, 63));     // swinging (decay)
+}
+
+TEST(MobSwingTest, PivotIsBoxTopCenter) {
+    // The formula (binary-exact inputs: a pin the float cannot fudge).
+    const MobBox exact {Vec3 {0.0f, 0.5f, 0.0f}, Vec3 {0.5f, 1.0f, 0.3f},
+                        "t", "leg"};
+    const Vec3 pe = swingPivot(exact);
+    EXPECT_FLOAT_EQ(pe.x, 0.0f);
+    EXPECT_FLOAT_EQ(pe.y, 1.0f); // 0.5 + 1.0/2, exact in binary
+    EXPECT_FLOAT_EQ(pe.z, 0.0f);
+    // The shipped chicken leg (the JSON floats, near-tolerance).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.loadDirectory(assets, "data/mobs").ok());
+    const Mob& chicken = mobs.at(mobs.idForName("chicken"));
+    const MobBox& leg = chicken.model.boxes[1]; // "leg_l" (the content pin
+    ASSERT_EQ(leg.name, "leg_l");                // below re-checks this)
+    const Vec3 p = swingPivot(leg);
+    EXPECT_NEAR(p.x, -0.094f, 1e-6f);
+    EXPECT_NEAR(p.y, 0.31f, 1e-6f); // 0.155 + 0.31/2 = the leg's top
+    EXPECT_NEAR(p.z, 0.0f, 1e-6f);
+    // The pivot sits INSIDE the body box (body bottom 0.25 < 0.31): the
+    // joint is never visible at rest or mid-swing.
+    const MobBox& body = chicken.model.boxes[0];
+    EXPECT_GT(p.y, body.center.y - body.size.y / 2.0f - 1e-6f);
+}
+
+TEST(MobSwingTest, RotateZeroAngleIsBitExactIdentity) {
+    // (s, c) = (0, 2^16) must reproduce the input BYTE for byte — the
+    // phase-0 frame equals the static mesh (the fast-path contract).
+    const Vec3 v {1.25f, -0.375f, 0.75f};
+    const Vec3 pivot {0.5f, 1.0f, -0.25f};
+    const Vec3 n {-1.0f, 0.0f, 0.0f};
+    const Vec3 rv = swingRotateVertex(v, pivot, 0.0f, 1.0f);
+    const Vec3 rn = swingRotateNormal(n, 0.0f, 1.0f);
+    ASSERT_EQ(rv.x, v.x);
+    ASSERT_EQ(rv.y, v.y);
+    ASSERT_EQ(rv.z, v.z);
+    ASSERT_EQ(rn.x, n.x);
+    ASSERT_EQ(rn.y, n.y);
+    ASSERT_EQ(rn.z, n.z);
+}
+
+TEST(MobSwingTest, RotateKnownAngles) {
+    // The integer limb-angle Taylor at 1.0 rad (2^16 x 2^16 fixed): pin
+    // the exact deterministic values + the double reference bound.
+    std::int32_t s16 = 0;
+    std::int32_t c16 = 0;
+    swingSinCosFixed(65536, s16, c16);
+    EXPECT_EQ(s16, 55147);  // sin(1 rad) * 2^16 (exact integer result)
+    EXPECT_EQ(c16, 35408);  // cos(1 rad) * 2^16 (1 ulp under the true 35409)
+    EXPECT_NEAR(static_cast<double>(s16) / 65536.0, std::sin(1.0), 3e-5);
+    EXPECT_NEAR(static_cast<double>(c16) / 65536.0, std::cos(1.0), 3e-5);
+    // Odd/even: sin(-t) == -sin(t) exactly (the alternating series),
+    // cos(-t) == cos(t) exactly.
+    std::int32_t sn16 = 0;
+    std::int32_t cn16 = 0;
+    swingSinCosFixed(-65536, sn16, cn16);
+    EXPECT_EQ(sn16, -55147);
+    EXPECT_EQ(cn16, 35408);
+    // The data amplitude 0.5 rad quantizes to exactly 2^15 (binary).
+    EXPECT_EQ(swingFixedFromRadian(0.5f), 32768);
+    EXPECT_EQ(swingFixedFromRadian(1.0f), 65536);
+    // A leg tip one unit below the pivot, swung by +1 rad: the tip lands
+    // at (-cos, -sin) — toward -Z = the mob's front (the documented
+    // sign convention).
+    const float s = static_cast<float>(s16) / 65536.0f;
+    const float c = static_cast<float>(c16) / 65536.0f;
+    const Vec3 tip = swingRotateVertex({0.0f, -1.0f, 0.0f},
+                                       {0.0f, 0.0f, 0.0f}, s, c);
+    EXPECT_NEAR(tip.y, -std::cos(1.0f), 5e-5);
+    EXPECT_NEAR(tip.z, -std::sin(1.0f), 5e-5);
+    EXPECT_FLOAT_EQ(tip.x, 0.0f); // the X-axis rotation never touches x
+    // The same tip at the HALF-CYCLE phase (the group-1 offset, -1 rad):
+    // the z displacement flips sign, the y stays.
+    const float sn = static_cast<float>(sn16) / 65536.0f;
+    const Vec3 tipNeg = swingRotateVertex({0.0f, -1.0f, 0.0f},
+                                          {0.0f, 0.0f, 0.0f}, sn, cn16 / 65536.0f);
+    EXPECT_NEAR(tipNeg.z, +std::sin(1.0f), 5e-5);
+    EXPECT_NEAR(tipNeg.y, -std::cos(1.0f), 5e-5);
+    // Normals rotate rigidly with the vertices: the +Y face normal at
+    // +1 rad tilts toward +Z (the leg tip swings forward -Z, so the top
+    // face leans back — its shade bucket follows, basic.vert).
+    const Vec3 ny = swingRotateNormal({0.0f, 1.0f, 0.0f}, s, c);
+    EXPECT_NEAR(ny.y, std::cos(1.0f), 5e-5);
+    EXPECT_NEAR(ny.z, std::sin(1.0f), 5e-5);
+}
+
+TEST(MobSwingTest, SwingModelPartsPinned) {
+    // The two-leg walker: 3 boxes x 24 = 72 base vertices, 108 indices,
+    // two parts at boxes 1/2 with the data amplitude quantized (0.5 rad
+    // = exactly 32768) and the half-cycle groups.
+    const SwingModel sm = makeTwoLegSwingModel();
+    ASSERT_TRUE(sm.active());
+    EXPECT_EQ(sm.base.size(), 72u);
+    EXPECT_EQ(sm.indices.size(), 108u);
+    ASSERT_EQ(sm.parts.size(), 2u);
+    EXPECT_EQ(sm.parts[0].boxIndex, 1);
+    EXPECT_EQ(sm.parts[0].vertexStart, 24); // box 1 * 24
+    EXPECT_EQ(sm.parts[0].amplitudeFixed, 32768);
+    EXPECT_EQ(sm.parts[0].group, 0);
+    EXPECT_EQ(sm.parts[1].boxIndex, 2);
+    EXPECT_EQ(sm.parts[1].vertexStart, 48);
+    EXPECT_EQ(sm.parts[1].group, 1);
+    // The pivots: both legs' top-center (the boxes are identical: y 0..0.5
+    // -> pivot y 0.5).
+    EXPECT_FLOAT_EQ(sm.parts[0].pivot.y, 0.5f);
+    EXPECT_FLOAT_EQ(sm.parts[1].pivot.y, 0.5f);
+    // The per-phase (sin, cos) precompute: eff 0 is the identity, eff N/4
+    // is the full amplitude (0.5 rad).
+    EXPECT_FLOAT_EQ(sm.parts[0].sinCos[0], 0.0f);
+    EXPECT_FLOAT_EQ(sm.parts[0].sinCos[1], 1.0f);
+    const std::int32_t tQuarter = fmul(32768, kSwingSinTable[kSwingPhaseCount / 4]);
+    std::int32_t s16 = 0;
+    std::int32_t c16 = 0;
+    swingSinCosFixed(tQuarter, s16, c16);
+    EXPECT_FLOAT_EQ(sm.parts[0].sinCos[kSwingPhaseCount / 2],
+                    static_cast<float>(s16) / 65536.0f);
+    EXPECT_FLOAT_EQ(sm.parts[0].sinCos[kSwingPhaseCount / 2 + 1],
+                    static_cast<float>(c16) / 65536.0f);
+    // A type without swing data: base mesh only, no parts (zombie).
+    MobRegistry mobs = makeMobRegistry();
+    const SwingModel zm = buildSwingModel(mobs.at(MobID{0}).model,
+                                          makeMobLayout());
+    EXPECT_FALSE(zm.active());
+    EXPECT_EQ(zm.base.size(), 48u);
+}
+
+TEST(MobSwingTest, SwingFramePhaseZeroEqualsStatic) {
+    // The rest pose is the identity for EVERY part (the table's 0 and
+    // N/2 entries are exactly 0): the phase-0 frame == the base, byte
+    // for byte (the fast-path contract: the static mesh is a valid
+    // phase-0 render).
+    const SwingModel sm = makeTwoLegSwingModel();
+    std::vector<MeshVertex> f0;
+    buildSwingFrame(sm, 0, f0);
+    ASSERT_EQ(f0.size(), sm.base.size());
+    for (std::size_t i = 0; i < f0.size(); ++i) {
+        ASSERT_EQ(f0[i].position.x, sm.base[i].position.x) << i;
+        ASSERT_EQ(f0[i].position.y, sm.base[i].position.y) << i;
+        ASSERT_EQ(f0[i].position.z, sm.base[i].position.z) << i;
+        ASSERT_EQ(f0[i].normal.x, sm.base[i].normal.x) << i;
+        ASSERT_EQ(f0[i].normal.y, sm.base[i].normal.y) << i;
+        ASSERT_EQ(f0[i].normal.z, sm.base[i].normal.z) << i;
+        ASSERT_EQ(f0[i].uv.x, sm.base[i].uv.x) << i;
+        ASSERT_EQ(f0[i].uv.y, sm.base[i].uv.y) << i;
+    }
+}
+
+TEST(MobSwingTest, SwingFrameOnlyTouchesSwingParts) {
+    // Mid-swing (phase 8): the non-swing body vertices stay bit-identical
+    // to the base; the leg vertices move (and their normals tilt).
+    const SwingModel sm = makeTwoLegSwingModel();
+    std::vector<MeshVertex> f;
+    buildSwingFrame(sm, 8, f);
+    ASSERT_EQ(f.size(), sm.base.size());
+    for (int i = 0; i < kBoxVertexCount; ++i) { // the body (box 0)
+        const MeshVertex& b = sm.base[static_cast<std::size_t>(i)];
+        const MeshVertex& v = f[static_cast<std::size_t>(i)];
+        ASSERT_EQ(v.position.x, b.position.x) << i;
+        ASSERT_EQ(v.position.y, b.position.y) << i;
+        ASSERT_EQ(v.position.z, b.position.z) << i;
+        ASSERT_EQ(v.normal.x, b.normal.x) << i;
+    }
+    bool moved = false;
+    bool normalsTilted = false;
+    for (const SwingPart& p : sm.parts) { // both legs (boxes 1, 2)
+        for (int i = 0; i < kBoxVertexCount; ++i) {
+            const std::size_t idx =
+                static_cast<std::size_t>(p.vertexStart + i);
+            const MeshVertex& b = sm.base[idx];
+            const MeshVertex& v = f[idx];
+            if (v.position != b.position) {
+                moved = true;
+            }
+            if (v.normal != b.normal) {
+                normalsTilted = true;
+            }
+        }
+    }
+    EXPECT_TRUE(moved);
+    EXPECT_TRUE(normalsTilted);
+}
+
+TEST(MobSwingTest, SwingFrameGroupsAreAntiphase) {
+    // The half-cycle offset, made visible: the identical legs at phases
+    // p and p + N/2 exchange roles — leg_a(p + N/2) == leg_b(p) vertex
+    // for vertex, for every p (the group-1 offset is exactly a half
+    // cycle, the diagonal gait).
+    const SwingModel sm = makeTwoLegSwingModel();
+    ASSERT_EQ(sm.parts.size(), 2u);
+    std::vector<MeshVertex> fa;
+    std::vector<MeshVertex> fb;
+    for (int p = 0; p < kSwingPhaseCount; ++p) {
+        buildSwingFrame(sm, p, fa);
+        buildSwingFrame(sm, (p + kSwingHalf) % kSwingPhaseCount, fb);
+        // leg_a is parts[0] at frame fa; leg_b is parts[1] at frame fb
+        // only when p' = p + N/2 puts leg_b at eff p... check the direct
+        // statement: leg_b(p) has the pose leg_a(p + N/2) has.
+        for (int i = 0; i < kBoxVertexCount; ++i) {
+            const std::size_t ia =
+                static_cast<std::size_t>(sm.parts[0].vertexStart + i);
+            const std::size_t ib =
+                static_cast<std::size_t>(sm.parts[1].vertexStart + i);
+            ASSERT_EQ(fa[ib].position.x, fb[ia].position.x) << p << i;
+            ASSERT_EQ(fa[ib].position.y, fb[ia].position.y) << p << i;
+            ASSERT_EQ(fa[ib].position.z, fb[ia].position.z) << p << i;
+        }
+    }
+    // And at a mid-swing phase the two legs are actually DIFFERENT
+    // (the antiphase, not a shared pose): the z displacements oppose.
+    buildSwingFrame(sm, 8, fa);
+    const std::size_t ia =
+        static_cast<std::size_t>(sm.parts[0].vertexStart + 20);
+    const std::size_t ib =
+        static_cast<std::size_t>(sm.parts[1].vertexStart + 20);
+    EXPECT_NE(fa[ia].position.z, fa[ib].position.z);
+}
+
+TEST(MobRegistryTest, ParsesSwingSpecs) {
+    // The full valid schema: named boxes + the swing list, resolved to
+    // box indices; a swing-less model (the legacy zombie) parses with an
+    // empty list (the v0.9.0 content).
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(kSwingBaseDef));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Mob& m = mobs.at(*r);
+    EXPECT_EQ(m.model.boxes[0].name, "body");
+    EXPECT_EQ(m.model.boxes[1].name, "leg");
+    ASSERT_EQ(m.model.swings.size(), 1u);
+    EXPECT_EQ(m.model.swings[0].boxIndex, 1);
+    EXPECT_FLOAT_EQ(m.model.swings[0].amplitude, 0.5f);
+    EXPECT_EQ(m.model.swings[0].group, 0);
+    MobRegistry legacy = makeMobRegistry(); // the plain zombie (no swings)
+    EXPECT_TRUE(legacy.at(MobID{0}).model.swings.empty());
+    EXPECT_EQ(legacy.at(MobID{0}).model.boxes[0].name, ""); // unnamed
+}
+
+TEST(MobRegistryTest, RejectsSwingSchemaErrors) {
+    // The strict-parse table: every error names the offending field.
+    const struct {
+        const char* anchor;
+        const char* broken;
+        const char* expect; // message substring
+    } cases[] = {
+        {"\"part\": \"leg\"", "\"part\": \"nope\"", "unknown part"},
+        {"\"part\": \"leg\"", "\"part\": \"\"", "non-empty"},
+        {"\"amplitude\": 0.5", "\"amplitude\": 0", "(0, 1]"},
+        {"\"amplitude\": 0.5", "\"amplitude\": 1.5", "(0, 1]"},
+        {"\"amplitude\": 0.5", "\"amplitude\": \"wide\"", "amplitude"},
+        {"\"group\": 0}", "\"group\": 2}", "0 or 1"},
+        {"\"group\": 0}", "\"group\": 0.5}", "integer"},
+        {"\"group\": 0}", "\"group\": 0, \"amp\": 1}", "unknown field"},
+        {"\"texture\": \"b\"}", "\"texture\": \"b\", \"foo\": 1}",
+         "unknown field"},
+        {"\"name\": \"leg\"", "\"name\": \"body\"", "duplicate part name"},
+        {"\"swings\": [",
+         "\"swings\": [{\"part\": \"leg\", \"amplitude\": 0.5, "
+         "\"group\": 0},",
+         "already claimed"},
+    };
+    for (const auto& c : cases) {
+        std::string def = kSwingBaseDef;
+        const std::size_t p = def.find(c.anchor);
+        ASSERT_NE(p, std::string::npos) << c.broken;
+        // The "already claimed" case opens the swings array with an extra
+        // entry for the same part; the rest replace in place.
+        def.replace(p, std::strlen(c.anchor), c.broken);
+        MobRegistry mobs;
+        auto r = mobs.registerMob(parseJson(def));
+        EXPECT_FALSE(r.ok()) << c.broken;
+        if (!r.ok()) {
+            EXPECT_NE(r.error().message.find(c.expect), std::string::npos)
+                << r.error().message << " <- " << c.broken;
+        }
+    }
+}
+
+TEST(MobSwingTest, ShippedMobsSwingContentPinned) {
+    // The 99.7 content + the ENT-1 swing spec: the legs (and only the
+    // legs) swing. chicken 2 legs (half-cycle), cow/sheep 4 legs
+    // (diagonal), spider 8 legs (even/odd rows), zombie/skeleton no limb
+    // parts at all (head + torso — the documented deviation: no
+    // fabricated arm geometry).
+    struct Exp {
+        const char* part;
+        float amplitude;
+        int group;
+    };
+    const Exp chicken[] = {{"leg_l", 0.5f, 0}, {"leg_r", 0.5f, 1}};
+    const Exp quadruped[] = {{"leg_fl", 0.7f, 0}, {"leg_fr", 0.7f, 1},
+                             {"leg_rl", 0.7f, 1}, {"leg_rr", 0.7f, 0}};
+    const Exp spider[] = {{"leg_1", 0.9f, 0}, {"leg_2", 0.9f, 1},
+                          {"leg_3", 0.9f, 0}, {"leg_4", 0.9f, 1},
+                          {"leg_5", 0.9f, 0}, {"leg_6", 0.9f, 1},
+                          {"leg_7", 0.9f, 0}, {"leg_8", 0.9f, 1}};
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.loadDirectory(assets, "data/mobs").ok());
+    auto expectSwings = [&mobs](const char* mobName, const Exp* exp, int n) {
+        const Mob& m = mobs.at(mobs.idForName(mobName));
+        ASSERT_EQ(static_cast<int>(m.model.swings.size()), n) << mobName;
+        for (int i = 0; i < n; ++i) {
+            const MobSwing& s = m.model.swings[static_cast<std::size_t>(i)];
+            const std::string part =
+                m.model.boxes[static_cast<std::size_t>(s.boxIndex)].name;
+            EXPECT_EQ(part, exp[i].part) << mobName << " swing " << i;
+            EXPECT_FLOAT_EQ(s.amplitude, exp[i].amplitude)
+                << mobName << " swing " << i;
+            EXPECT_EQ(s.group, exp[i].group) << mobName << " swing " << i;
+        }
+    };
+    expectSwings("chicken", chicken, 2);
+    expectSwings("cow", quadruped, 4);
+    expectSwings("sheep", quadruped, 4);
+    expectSwings("spider", spider, 8);
+    EXPECT_TRUE(mobs.at(mobs.idForName("zombie")).model.swings.empty());
+    EXPECT_TRUE(mobs.at(mobs.idForName("skeleton")).model.swings.empty());
+    // The non-swinging boxes of a swinging mob stay unnamed-free or
+    // unnamed-and-ignored: every swung box is a leg (the wings, body and
+    // head of the chicken never swing).
+    const Mob& ck = mobs.at(mobs.idForName("chicken"));
+    for (const MobSwing& s : ck.model.swings) {
+        EXPECT_EQ(
+            ck.model.boxes[static_cast<std::size_t>(s.boxIndex)].texture,
+            "chicken_legs");
+    }
+}
+
+TEST(MobEntityTest, SwingPhaseAdvancesWhileChasing) {
+    // The phase advances kSwingStep per MOVING frame: a chasing zombie
+    // (strict horizontal displacement every frame) at 10 frames has
+    // swung exactly 10 * 2 = 20.
+    Fixture f;
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.registerMob(parseJson(kSwingZombieDef)).ok());
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 5.5f});
+    mob.setPlayer({8.5f, 1.0f, 8.5f}, true); // 3 away: chase, not attack
+    for (int i = 0; i < 10; ++i) {
+        mob.setPlayer({8.5f, 1.0f, 8.5f}, true);
+        mob.update(kDt);
+        ASSERT_EQ(mob.state(), MobState::Chase) << "frame " << i;
+    }
+    EXPECT_EQ(mob.swingPhase(), 10 * kSwingStep);
+}
+
+TEST(MobEntityTest, SwingPhaseDecaysToZeroWhenStopped) {
+    // Chase 5 frames (phase 10), then the player steps into attack range:
+    // the mob stands still and the phase decays 4/frame to the rest pose
+    // (10 -> 6 -> 2 -> 0) exactly three frames later.
+    Fixture f;
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.registerMob(parseJson(kSwingZombieDef)).ok());
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 5.5f});
+    for (int i = 0; i < 5; ++i) {
+        mob.setPlayer({8.5f, 1.0f, 8.5f}, true);
+        mob.update(kDt);
+    }
+    ASSERT_EQ(mob.swingPhase(), 5 * kSwingStep);
+    // The player is now 1.0 away horizontally (inside attack range 1.6):
+    // the mob stands still and swings its attack (zero displacement).
+    for (int i = 0; i < 3; ++i) {
+        mob.setPlayer({8.5f, 1.0f, 6.5f}, true);
+        mob.update(kDt);
+    }
+    EXPECT_EQ(mob.state(), MobState::Attack);
+    EXPECT_EQ(mob.swingPhase(), 0); // the rest pose, exactly
+}
+
+TEST(MobEntityTest, SwingPhaseInertWithoutSwingData) {
+    // The structural gate: a swing-less type (the legacy zombie) NEVER
+    // advances — its phase stays 0 (the identity pose) even while
+    // walking, so its render path is the static mesh (immunity).
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry(); // no 'swings' in the model
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 5.5f});
+    for (int i = 0; i < 20; ++i) {
+        mob.setPlayer({8.5f, 1.0f, 8.5f}, true);
+        mob.update(kDt);
+    }
+    EXPECT_EQ(mob.state(), MobState::Chase);
+    EXPECT_EQ(mob.swingPhase(), 0);
 }

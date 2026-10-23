@@ -71,6 +71,20 @@ public:
                         const std::vector<std::uint32_t>& indices = {},
                         MeshMode mode = MeshMode::Triangles);
 
+    // ENT-1: upload the same geometry as a DYNAMIC mesh — the VBO is
+    // GL_DYNAMIC_DRAW because the CPU rewrites the WHOLE vertex buffer
+    // every frame (the mob limb-swing: the swing parts' vertices rotate
+    // about their pivots, the rest is copied verbatim). The indices are
+    // static (the swing never changes the topology). Triangles mode only.
+    Result<void> uploadDynamic(const std::vector<MeshVertex>& vertices,
+                               const std::vector<std::uint32_t>& indices);
+
+    // ENT-1: rewrite the whole dynamic vertex buffer (the frame's swing
+    // pose). The count must equal the upload's (the swing remaps
+    // vertices, it never adds or removes them) — a mismatch is a
+    // programming error (assert), not a GL condition.
+    void updateVertices(const std::vector<MeshVertex>& vertices);
+
     bool valid() const { return m_vao != 0; }
     std::size_t vertexCount() const { return m_vertexCount; }
     std::size_t indexCount() const { return m_indexCount; }
@@ -81,6 +95,10 @@ public:
 
 private:
     void destroy();
+    // The seven attribute pointers for the fixed MeshVertex layout —
+    // called with the VAO and the VBO bound (shared by upload() and
+    // uploadDynamic()).
+    void setupAttributes();
 
     std::uint32_t m_vao = 0;
     std::uint32_t m_vbo = 0;

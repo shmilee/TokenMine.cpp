@@ -40,6 +40,10 @@ void MobEntity::update(double dt) {
     if (m_dead || dt <= 0.0) {
         return;
     }
+    // ENT-1: captured BEFORE the AI + physics so the "moving" decision
+    // is the strict frame-boundary horizontal displacement (see below).
+    const float prevX = position().x;
+    const float prevZ = position().z;
     if (m_attackCooldown > 0.0) {
         m_attackCooldown = std::max(0.0, m_attackCooldown - dt);
     }
@@ -59,6 +63,19 @@ void MobEntity::update(double dt) {
         std::max({std::abs(m_velocity.x), std::abs(vyAfter),
                   std::abs(m_velocity.z)});
     moveInSubsteps(dt, maxSpeed);
+
+    // ENT-1: advance the limb-swing phase (render-only, never saved —
+    // mobs are ephemeral). "Moving" = the STRICT frame-boundary
+    // horizontal displacement (hard rule 8: frame-locked, no AI intent
+    // and no real dt read — a knocked-back or falling-straight-down mob
+    // swings or rests exactly as its position says). Only types with
+    // swing data advance (structural gate: a swing-less model's phase
+    // stays 0 forever = its render fast path is the static mesh).
+    if (!m_def->model.swings.empty()) {
+        const Vec3 pos = position();
+        const bool moving = pos.x != prevX || pos.z != prevZ;
+        m_swingPhase = advanceSwingPhase(m_swingPhase, moving);
+    }
 
     // Fire system (Phase 58, v3 in Phase 73): the lava AND the fire
     // block ignite the mob with the player's fire (same effect

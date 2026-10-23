@@ -57,6 +57,7 @@
 
 #include "entity/entity.hpp"
 #include "entity/mob_registry.hpp"
+#include "entity/mob_swing.hpp"
 
 namespace mc {
 
@@ -91,6 +92,15 @@ public:
     // Facing in the camera yaw convention (0 = -Z); the render model
     // rotates by this.
     float facingYaw() const { return m_yaw; }
+
+    // ENT-1: the limb-swing phase (0..kSwingPhaseCount-1) — a pure
+    // render-layer cosmetic state (session-local, NEVER saved: mobs are
+    // ephemeral, see the file head). Advanced once per update() frame
+    // (frame-locked, hard rule 8): kSwingStep while the mob has strict
+    // horizontal displacement this frame, kSwingDecay toward 0 (the
+    // identity pose) while standing. Types without swing data never
+    // advance (structural: their render path stays the static mesh).
+    int swingPhase() const { return m_swingPhase; }
 
     // Subtract damage; returns true when THIS hit killed the mob.
     bool damage(float amount);
@@ -161,6 +171,9 @@ private:
     const Mob* m_def;
     float m_health = 0.0f;
     bool m_dead = false;
+    // ENT-1: the limb-swing phase (see swingPhase()). Spawn = 0 (the
+    // identity pose); render-only, never saved.
+    int m_swingPhase = 0;
     Vec3 m_playerPos = Vec3::zero();
     bool m_playerAlive = true;
     MobState m_state = MobState::Wander;

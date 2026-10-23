@@ -2197,3 +2197,25 @@ TEST(SaveFormat8Test, FireEffectRoundTrips) {
     EXPECT_EQ(out->playerEffects[0].name, "fire");
     EXPECT_DOUBLE_EQ(out->playerEffects[0].remaining, 2.5);
 }
+
+// -- ENT-1: the mob limb-swing phase is not a save surface -----------------
+
+TEST(SaveSchemaTest, NoSwingPhaseSurfaceInTheSave) {
+    // The swing phase is a render-layer cosmetic state (session-local,
+    // like the item bob) and mobs are ephemeral by design (Phase 20): it
+    // never enters the save. Two pins: the serialized save is still
+    // format kSaveFormat (no new field crept in), and the player
+    // object's key whitelist rejects a swing field (a future writer that
+    // tried to persist the phase would fail the strict load).
+    Fixture f;
+    const SaveGame in = makeSave(f);
+    auto j = serializeSave(in, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    ASSERT_EQ(j->find("format")->asInt(), kSaveFormat);
+    Json root = *j;
+    root["player"]["swing_phase"] = Json(3);
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("swing_phase"), std::string::npos)
+        << out.error().message;
+}

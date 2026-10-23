@@ -26,21 +26,25 @@
         "texture": "cow_body"
       },
       {
+        "name": "leg_fl",
         "pos": [-0.25, 0.375, -0.3125],
         "size": [0.25, 0.75, 0.25],
         "texture": "cow_legs"
       },
       {
+        "name": "leg_fr",
         "pos": [0.25, 0.375, -0.3125],
         "size": [0.25, 0.75, 0.25],
         "texture": "cow_legs"
       },
       {
+        "name": "leg_rl",
         "pos": [-0.25, 0.375, 0.35],
         "size": [0.25, 0.75, 0.25],
         "texture": "cow_legs"
       },
       {
+        "name": "leg_rr",
         "pos": [0.25, 0.375, 0.35],
         "size": [0.25, 0.75, 0.25],
         "texture": "cow_legs"
@@ -50,6 +54,12 @@
         "size": [0.5, 0.5, 0.5],
         "texture": "cow_head"
       }
+    ],
+    "swings": [
+      { "part": "leg_fl", "amplitude": 0.7, "group": 0 },
+      { "part": "leg_fr", "amplitude": 0.7, "group": 1 },
+      { "part": "leg_rl", "amplitude": 0.7, "group": 1 },
+      { "part": "leg_rr", "amplitude": 0.7, "group": 0 }
     ]
   }
 }
