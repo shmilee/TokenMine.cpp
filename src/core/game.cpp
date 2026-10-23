@@ -1544,12 +1544,30 @@ void Game::collectLitColumns() {
             continue;
         }
         for (const ColumnPos& col : job->columns) {
-            m_unlitColumns.erase(col);
+            if (job->fluid) {
+                // 99.11: the fluid catch-up's bookkeeping. The column
+                // already left m_fluidLightPending at POST time (the
+                // budget must not re-take an in-flight column) — and
+                // this frame's fluid tick runs AFTER this reap, so no
+                // re-churn can have re-added it: the erase is the
+                // contract belt (a processed column never lingers).
+                // Fluid columns are NOT unlit columns (they were lit
+                // long before the fluid touched them): m_unlitColumns —
+                // the streaming lit-gate — is not touched.
+                m_fluidLightPending.erase(col);
+            } else {
+                m_unlitColumns.erase(col);
+            }
         }
         // 99.10: apply the workers' net-changed chunks to the World's
         // dirty set HERE (the main-thread-writer window — no worker is
         // in flight): the jobs collected them job-locally, because two
-        // parallel light jobs would race on the shared set.
+        // parallel light jobs would race on the shared set. 99.11:
+        // markChunkDirty silently skips a missing chunk (World
+        // contract) — the defensive path for a fluid job whose column
+        // was unloaded in the meantime (timing keeps it unreachable:
+        // the flush barrier completes every job before this frame's
+        // unloadFarColumns runs).
         for (const ChunkPos& pos : job->dirtyChunks) {
             m_world.markChunkDirty(pos);
         }
@@ -1647,6 +1665,15 @@ void Game::unloadFarColumns() {
         // inside the ring, edited, or in flight — all protected above),
         // but the set must not leak entries for dead columns.
         m_unlitColumns.erase({pos.x, pos.z});
+        // 99.11: the fluid catch-up pending set must not accumulate
+        // entries for dead columns either (a coast tick's changed cell
+        // can outlive its column's unload window while the budget lags
+        // behind the churn): evict them here, the same no-leak belt. An
+        // in-flight fluid job of an unloaded column cannot exist at
+        // this point (the flush barrier completed it before the reap
+        // above); its reap applied dirtyOut while the chunks still
+        // existed, and markChunkDirty skips any that did not.
+        m_fluidLightPending.erase({pos.x, pos.z});
     }
     m_unloadedColumnsTotal +=
         static_cast<std::size_t>(toErase.size() / kVerticalChunksPerColumn);
@@ -1847,17 +1874,90 @@ void Game::postLightJobs() {
     }
 }
 
+void Game::postFluidLightJobs() {
+    if (!m_pool) {
+        return;
+    }
+    if (m_fluidLightPending.empty()) {
+        return; // a settled world: the fast exit (structural immunity)
+    }
+    // The streaming job columns of THIS window (postLightJobs ran
+    // earlier in the frame; the previous window's jobs — of either kind
+    // — were reaped at the top after the flush barrier, so nothing is in
+    // flight when this runs). Window exclusivity (see the header
+    // comment + the 99.11 note in world/light_job.hpp): a fluid column
+    // whose light region is not lightRegionsIndependent of one of these
+    // columns is skipped this frame — it stays pending and is retried
+    // next frame. The 99.10 parallel safety is per-plan; a shared
+    // window would let two workers write one chunk's light arrays.
+    std::set<ColumnPos> streaming;
+    for (const std::unique_ptr<LightJob>& job : m_lightJobs) {
+        if (!job->fluid) {
+            streaming.insert(job->columns.begin(), job->columns.end());
+        }
+    }
+    const LightJobPlan plan =
+        planFluidLightJobs(m_fluidLightPending, streaming);
+    if (plan.jobs.empty()) {
+        return; // every candidate was blocked: nothing to post
+    }
+    // The taken columns leave the pending set at POST time — before the
+    // jobs run — so the budget never re-takes an in-flight column. A
+    // re-churn of the column (the next fluid tick) re-adds it after the
+    // job lands: a new world state, a new re-light, correctly sequenced
+    // by the flush barrier.
+    for (const std::vector<ColumnPos>& columns : plan.jobs) {
+        for (const ColumnPos& col : columns) {
+            m_fluidLightPending.erase(col);
+        }
+    }
+    for (const std::vector<ColumnPos>& columns : plan.jobs) {
+        auto job = std::make_unique<LightJob>();
+        job->fluid = true;
+        job->columns = std::set<ColumnPos>(columns.begin(), columns.end());
+        job->boxes.reserve(columns.size());
+        for (const ColumnPos& col : columns) {
+            job->boxes.push_back(columnLightBox(col));
+        }
+        LightJob* rawJob = job.get();
+        m_lightJobs.push_back(std::move(job));
+        m_pool->post([this, rawJob] {
+            for (const auto& box : rawJob->boxes) {
+                // newTerrain = true: unlike the old synchronous fluid
+                // re-light (default false), the catch-up forces the sky
+                // propagation even when the rescan writes nothing — the
+                // 99.9 no-op skip would strand a fluid-opened horizontal
+                // light path dark (a cave film's vertical values are
+                // unchanged while its attenuation path changes). The
+                // streaming jobs pay the same cost (99.10).
+                // dirtyOut: job-local net-changed collection — the fluid
+                // columns' chunks are re-meshed with the new light at
+                // the next flush (collectLitColumns), the 99.4
+                // lit-pop-in discipline.
+                Lighting::updateRegion(m_world, m_blocks, box[0], box[1],
+                                       true, &rawJob->dirtyChunks);
+            }
+            rawJob->done = true;
+        });
+    }
+}
+
 void Game::postMeshJobs() {
     // PIPE-1: worker meshing. Runs in update AFTER streamChunks (gen
-    // posts) and BEFORE postLightJobs — the post order gen -> mesh ->
-    // light is the contract: after this function's posts, the ONLY job
-    // that writes the live World in the coming window is this frame's
-    // lighting job, and nextMeshColumns's exclusions (unlit + its
-    // footprint) keep every snapshot's light final. The snapshot is
-    // taken NOW — after every main-thread World write of this frame
-    // (interaction, fluids, fire, growth), before the player's next
-    // move — so it is the frame's final state (a pure function of the
-    // World at this point).
+    // posts) and BEFORE the light posts (99.11: postLightJobs THEN
+    // postFluidLightJobs) — the post order gen -> mesh -> light is the
+    // contract: after this function's posts, the ONLY jobs that write
+    // the live World in the coming window are this frame's lighting
+    // jobs (streaming + fluid catch-up), and nextMeshColumns's
+    // exclusions (unlit + its footprint) keep every snapshot's light
+    // final for the streaming ones; a fluid re-light of a column whose
+    // mesh was snapshotted this frame re-marks the chunk dirty through
+    // its dirtyOut at the next flush, so the mesh re-queues after it
+    // (self-healing — one frame of stale light, the 99.4 pattern). The
+    // snapshot is taken NOW — after every main-thread World write of
+    // this frame (interaction, fluids, fire, growth), before the
+    // player's next move — so it is the frame's final block/fluid
+    // state (a pure function of the World at this point).
     if (!m_pool) {
         return;
     }
@@ -2844,8 +2944,22 @@ void Game::update(double dt) {
     }
 
     // Fluids tick at 20/s (every third frame at 60fps). Changed fluid
-    // levels shift the light (water attenuates it), so re-light the touched
-    // region before meshing; a settled world changes nothing.
+    // levels shift the light (water attenuates it). 99.11: the Phase 64
+    // pattern — one SYNCHRONOUS updateRegion over the bounding box of
+    // all changed cells, on the main thread — was the deep root of the
+    // walking stutter: in the shipped ocean the coast film cascade
+    // scatters 713 -> 918 -> 1357 changed cells per tick over hundreds
+    // of columns, and that box's rescan cost 130 -> 396 -> 661 s per
+    // 300-frame window while the tick itself was 20-38 ms (step-0
+    // instrumentation: 99% of the fluid section's cost was the re-light).
+    // Now each changed column is queued for the budgeted worker catch-up
+    // (postFluidLightJobs: kFluidLightColumnsPerFrame per frame on the
+    // 99.10 job infrastructure): the main-thread cost drops to set
+    // inserts, and the light lands with a bounded per-column lag (the
+    // convergence argument in world/light_job.hpp — each re-light fixes
+    // its column exactly, so the drained set equals the full
+    // propagation). A settled world changes nothing (the fast exit is
+    // unchanged).
     if (m_frameCount % kFluidTickEveryNFrames == 0) {
         const std::vector<BlockPos> changed =
             FluidSim::tick(m_world, m_blocks, &m_flammableChunks);
@@ -2862,18 +2976,12 @@ void Game::update(double dt) {
                 }
             }
         }
-        if (!changed.empty()) {
-            BlockPos min = changed.front();
-            BlockPos max = changed.front();
-            for (const BlockPos& p : changed) {
-                min.x = std::min(min.x, p.x);
-                min.y = std::min(min.y, p.y);
-                min.z = std::min(min.z, p.z);
-                max.x = std::max(max.x, p.x);
-                max.y = std::max(max.y, p.y);
-                max.z = std::max(max.z, p.z);
-            }
-            Lighting::updateRegion(m_world, m_blocks, min, max);
+        // The burn pass's fire cells ride the SAME `changed` vector: a
+        // fire is a light-15 source, so its column needs the re-light
+        // just like a shifted fluid level (changedCellColumns merges
+        // every cell of one column into one entry).
+        for (const ColumnPos& col : changedCellColumns(changed)) {
+            m_fluidLightPending.insert(col);
         }
     }
     // Fire (Phase 64): the per-frame real-dt burn-out countdown (a fire
@@ -2959,6 +3067,17 @@ void Game::update(double dt) {
     // light the frame after the jobs complete — deterministic,
     // frame-locked by the flush.
     postLightJobs();
+    // 99.11: the fluid catch-up light jobs — the budgeted worker drain
+    // of m_fluidLightPending (filled by the fluid tick above; the old
+    // synchronous bounding-box re-light there was the frame's entire
+    // cost in the shipped ocean, step-0: 130..661 s per 300-frame
+    // window). LAST of the posts: it reads the streaming job columns of
+    // this window from m_lightJobs for the cross-kind exclusion, and
+    // posts nothing while a candidate is not lightRegionsIndependent of
+    // them (the 99.10 parallel safety is per-plan). The reap + the
+    // dirtyOut application land at the next frame's collectLitColumns —
+    // the fluid columns' chunks re-mesh with the new light then (99.4).
+    postFluidLightJobs();
 }
 
 // ---------------------------------------------------------------------------

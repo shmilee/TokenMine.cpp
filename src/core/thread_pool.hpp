@@ -31,12 +31,17 @@
 // after the light lands).
 //
 // Flush budget (kStreamWorkerCount = 4, FIFO): a fill frame posts 2 gen
-// (~1.6 ms) + 2 mesh (<= 6 ms) + up to 2 light (one box each, ~8.4 ms):
-// 6 jobs > 4 workers — the gen jobs take two workers (0..1.6), the mesh
-// jobs the other two (0..6), and the two light jobs (posted last) start
-// on the first two freed workers (~1.6) and run IN PARALLEL (1.6..10) —
-// flush ≈ 8.4 + 1.6 ms (was 13 + 1.6 with the single sequential 2-box
-// job: the LGT-1 lighting floor halved). A queued job only adds latency,
+// (~1.6 ms) + 2 mesh (<= 6 ms) + up to 2 streaming light (one box each,
+// ~8.4 ms) + up to 2 fluid catch-up light (99.11, one box each, ~8.4 ms
+// — posted only when every fluid candidate is lightRegionsIndependent
+// of every streaming column, so all four light jobs' regions are
+// pairwise chunk-disjoint and parallel-safe): 8 jobs > 4 workers — the
+// gen jobs take two workers (0..1.6), the mesh jobs the other two
+// (0..6), and the four light jobs (posted last) run on the freed
+// workers in two waves (~1.6..10 and ~6..14.4) — flush ≈ 14.4 ms when
+// a fill frame coincides with active coast churn (the 99.10 floor
+// ~10 ms holds in streaming-quiet frames; pre-99.10 was 13 + 1.6 with
+// the single sequential 2-box job). A queued job only adds latency,
 // never a wrong result: flush() waits for EVERY posted job.
 //
 // Exception safety: game jobs cannot fail (the generator and lighting are

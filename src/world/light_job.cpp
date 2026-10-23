@@ -39,4 +39,45 @@ LightJobPlan planLightJobs(const std::set<ColumnPos>& pending) {
     return plan;
 }
 
+std::set<ColumnPos> changedCellColumns(const std::vector<BlockPos>& changed) {
+    std::set<ColumnPos> columns;
+    for (const BlockPos& p : changed) {
+        columns.insert({floorDiv(p.x, kChunkSize),
+                        floorDiv(p.z, kChunkSize)});
+    }
+    return columns;
+}
+
+LightJobPlan planFluidLightJobs(const std::set<ColumnPos>& pending,
+                                const std::set<ColumnPos>& streaming) {
+    if (pending.empty()) {
+        return LightJobPlan{};
+    }
+    std::set<ColumnPos> taken;
+    for (const ColumnPos& col : pending) {
+        if (taken.size() >=
+            static_cast<std::size_t>(kFluidLightColumnsPerFrame)) {
+            break; // the budget is full; the rest stays pending
+        }
+        // Window exclusivity (99.11 header note): a candidate whose light
+        // region is not independent of a streaming job's column cannot be
+        // posted into the same worker window (the 99.10 parallel safety
+        // is per-plan). It stays pending for a later frame.
+        bool sharesWindow = false;
+        for (const ColumnPos& s : streaming) {
+            if (!lightRegionsIndependent(col, s)) {
+                sharesWindow = true;
+                break;
+            }
+        }
+        if (!sharesWindow) {
+            taken.insert(col);
+        }
+    }
+    // The taken subset has at most kFluidLightColumnsPerFrame columns, so
+    // planLightJobs' partition applies unchanged (0 -> none, 1 -> one job,
+    // 2 -> two parallel jobs iff independent, else one sequential job).
+    return planLightJobs(taken);
+}
+
 } // namespace mc

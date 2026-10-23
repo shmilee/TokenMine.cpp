@@ -130,6 +130,7 @@ add_executable(tokenmine_tests
     tests/test_beacon.cpp
     tests/test_mesh_job.cpp
     tests/test_light_job.cpp
+    tests/test_fluid_light.cpp
     tests/test_chance_drop.cpp
     tests/test_lighting.cpp
     tests/test_arrow.cpp

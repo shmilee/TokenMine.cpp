@@ -235,12 +235,18 @@ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build  # 构
 6. **玩家物理**：position = AABB 底面中心；重叠判定**严格不等式**（无 epsilon）；
    防穿透 = 子步化（每子步 ≤0.4 块、≤64 子步）+ 终端速度 38。
 7. **chunk streaming**：worker job 只在 **post→flush 窗口**运行（窗口内主线程只读
-   World）；**光照 job 每帧至多 2 个**（99.10：仅当两 pending 列的光照 region
-   位级独立 = 写 reach ±1 列 + block 光 BFS 读环 +1 列双向不相交，判据
-   `lightRegionsIndependent` gap≥4 任轴，`world/light_job.hpp` 纯函数；依赖对
-   回退 ≤1 个 = pre-99.10 逐位行为；confluence 证明 =
-   `docs/archive/phase-lgt1-flip.md`；worker 不共享写：净变 chunk 走 job-local
-   `dirtyOut`，flush 后主线程统一 markChunkDirty）。
+   World）；**光照 job：流送与流体追赶两类各至多 2 个/帧，同窗内两两位级独立**
+   （99.10：判据
+   `lightRegionsIndependent` = 写 reach ±1 列 + block 光 BFS 读环 +1 列双向不相交
+   （gap≥4 任轴），`world/light_job.hpp` 纯函数；依赖对回退单 job 顺序 =
+   pre-99.10 逐位行为；confluence 证明 =
+   `docs/archive/phase-lgt1-flip.md`；99.11：流体 tick 的 changed 格 → 列粒度
+   待集 `m_fluidLightPending`（`changedCellColumns` 合并同列），
+   `planFluidLightJobs` 按 set 序取至多 `kFluidLightColumnsPerFrame = 2` 列/帧
+   发 worker job（newTerrain=true 强制天空传播 = 99.9 跳过的流体洞修正），
+   跨类同窗仅当对每个流送 job 列都独立（失败候选跳过留待下帧）；净变 chunk 走
+   job-local `dirtyOut`，flush 后主线程统一 markChunkDirty → 流体列重烘
+   （99.4 纪律）；卸载驱逐待集死列防无界增长）。
 8. **确定性**：昼夜/Mob/箭/粒子 = 固定 1/60 帧步长；生存计时器（饥饿/进食/破坏/
    坠落/实体 age）= 真实 dt；截图只在帧边界字节一致。
 9. **面表绕序**有回归测试守护（`FaceWindingIsCounterClockwiseFromOutside`），勿改

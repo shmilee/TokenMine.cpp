@@ -177,12 +177,16 @@ private:
     // post* methods run last in update, after every main-thread World
     // write: from then on until the next flush the workers own the window.
     void integrateStreamedColumns();
-    // Collects the completed lighting jobs (after the pool flush): their
-    // columns leave m_unlitColumns, so the next updateChunkMeshes builds
-    // their meshes with the propagated light (the one-and-only mesh);
-    // their net-changed chunks (collected job-locally by the workers,
-    // 99.10) join the World's dirty set here — the main-thread-writer
-    // window, no worker in flight.
+    // Collects the completed lighting jobs (after the pool flush):
+    // STREAMING job columns (LightJob::fluid = false) leave
+    // m_unlitColumns, so the next updateChunkMeshes builds their meshes
+    // with the propagated light (the one-and-only mesh); FLUID catch-up
+    // job columns (99.11, fluid = true) leave m_fluidLightPending (the
+    // set was already drained at post time — the reap's erase is the
+    // contract belt, and m_unlitColumns is never touched: fluid columns
+    // are not unlit columns). Every job's net-changed chunks (collected
+    // job-locally by the workers, 99.10) join the World's dirty set
+    // here — the main-thread-writer window, no worker in flight.
     void collectLitColumns();
     // Decides the columns to stream around the player (trigger + radius,
     // see chunk_streaming) and posts up to kStreamColumnsPerFrame
@@ -201,6 +205,29 @@ private:
     // correct light the frame after the job completes (deterministic,
     // frame-locked by the flush).
     void postLightJobs();
+    // 99.11: posts the budgeted fluid catch-up light jobs (the worker
+    // twin of the old synchronous bounding-box re-light in the fluid
+    // tick — that call was the frame's entire cost in the shipped ocean,
+    // step-0: 130..661 s per 300-frame window). Runs LAST in update,
+    // after postLightJobs: the budget (planFluidLightJobs: at most
+    // kFluidLightColumnsPerFrame columns per frame from
+    // m_fluidLightPending in set order, skipping any candidate whose
+    // light region is not lightRegionsIndependent of a streaming job's
+    // column — the 99.10 parallel safety is per-plan, and a shared
+    // window would let two workers touch one chunk's light arrays) is
+    // partitioned like planLightJobs (independent pair -> two parallel
+    // jobs, dependent pair -> one sequential job). The taken columns
+    // leave m_fluidLightPending at POST time (an in-flight column is
+    // never re-taken; a re-churn re-adds it after the job lands). Each
+    // job runs updateRegion(columnLightBox) with newTerrain = true
+    // (the 99.9 no-op skip would strand a fluid-opened horizontal light
+    // path dark — the streaming jobs pay the same cost) and collects
+    // its net-changed chunks job-locally (dirtyOut; collectLitColumns
+    // applies them at the flush — the fluid columns' chunks get
+    // re-meshed with the new light, the 99.4 lit-pop-in discipline).
+    // A settled world changes nothing: the pending set stays empty and
+    // this function is a no-op (structural immunity for the base gate).
+    void postFluidLightJobs();
     // PIPE-1: posts up to kMaxMeshBacklog worker mesh jobs for the nearest
     // eligible dirty columns (selection: world/mesh_job.hpp). Each job
     // snapshots the column's 3x3 column neighborhood into its own World
@@ -671,6 +698,17 @@ private:
         std::set<ColumnPos> columns;
         std::set<ChunkPos> dirtyChunks;
         bool done = false;
+        // 99.11: the job's kind — false = a streaming job (its columns
+        // leave m_unlitColumns at reap: the lit-gate is new-terrain
+        // only), true = a fluid catch-up job (its columns are already
+        // lit and left m_fluidLightPending at POST time; the reap's
+        // erase is the contract belt — see collectLitColumns). The two
+        // kinds never touch each other's bookkeeping: a newly integrated
+        // column can have its fluid churned before its streaming job
+        // lands, and the streaming reap must NOT drop that fluid pending
+        // entry (its re-light would be lost); a fluid reap must not
+        // touch m_unlitColumns (fluid columns are not unlit).
+        bool fluid = false;
     };
     std::deque<std::unique_ptr<LightJob>> m_lightJobs;
     // One in-flight MESH job (PIPE-1): the target column's 3x3 column
@@ -755,6 +793,25 @@ private:
     // old m_litChunks "every covered chunk" set, whose only job was
     // detecting new chunks by a full per-frame scan.
     std::set<ColumnPos> m_lightPendingColumns;
+    // 99.11: columns whose fluid tick changed cells since the last
+    // fluid catch-up post (the coast film cascade: the old code re-lit
+    // the bounding box of ALL changed cells synchronously on the main
+    // thread — step-0: 130..661 s per 300-frame window in the shipped
+    // ocean). The set merges every changed cell of a column into one
+    // entry (changedCellColumns); the budget (postFluidLightJobs:
+    // kFluidLightColumnsPerFrame per frame, worker jobs on the 99.10
+    // infrastructure) drains it in set order — frame-locked, and the
+    // per-column convergence argument (light_job.hpp) bounds the lag:
+    // the coast churn rate exceeds the budget, so the set saturates at
+    // the coast column count. Unloaded columns are evicted by
+    // unloadFarColumns (no unbounded growth). A column may briefly sit
+    // in BOTH this set and m_unlitColumns (a freshly integrated column
+    // whose fluid churns before its streaming job lands) — the sets are
+    // independent bookkeeping (the LightJob::fluid flag at reap: each
+    // job drains only its own set), and window exclusivity (a fluid
+    // candidate never independent of a streaming column is skipped this
+    // frame) keeps the two re-light passes serialized, never parallel.
+    std::set<ColumnPos> m_fluidLightPending;
 
     // Non-player entities (Phase 10): dropped items + projectiles. The
     // game is the sole owner — it updates them each frame, merges items,
