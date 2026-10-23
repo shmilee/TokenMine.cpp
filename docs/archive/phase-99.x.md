@@ -166,6 +166,46 @@ FPS 直接砍半）。
 80 次字节一致**（裁剪 + 列合并 + 光照重构全保像素）、pblack（pop-in
 零黑面）+ plegs（mob 确定性）E2E 全过。
 
+## 99.10 光照 job 并行（`78e0155`，2026-10-24，用户点单：走路流送卡顿治本）
+
+用户报告"走一段路后晃镜头很卡，FPS 三十多也卡"。本机复现铁证 =
+burst-stall（标题 13 FPS EMA 恒显 vs 日志 300 帧 = 152 s 实际均速
+2 fps）：主线程 pool-flush 同步等光照 worker，流送期光照 job
+**16.7 ms/帧硬下限**（LGT-1 step-0：单 worker 顺序跑 2 box，per-box
+~8.37 ms）+ CPU 争抢时 worker 调度延迟 ms→s = 秒级尖峰。治本 =
+99.10：LGT-1 已证 99.9% 流送帧的 2 列**远隔**（|Δz| 主导 15..60）→
+两 region 位级独立时拆 2 个 job 双 worker **并行**，flush 下限
+16.7 → ~10 ms（per-box + FIFO 启动延迟）。
+
+**判据（`world/light_job.{hpp,cpp}` 纯函数，mesh_job 同款模式）**：
+写 reach = 列 box ±kLightUpdateRadius = ±1 列；block 光 BFS 边界种子环
+再 **+1 列读 reach**（LGT-1 的 footprint 判据只覆盖写 reach，gap 3
+写不相交但读环相交 = 并行竞态 → 修正为 `kLightParallelColumnGap =
+2·(reach+1) = 4`：任轴 gap≥4 = 写/写 + 写/读双向零共享 chunk）。
+`planLightJobs`：恰 2 列且独立 → 2 job；依赖对/3+ 列 → 1 job 顺序
+（pre-99.10 逐位不变，含 LGT-1 定案不修的 overlap clobber 语义）。
+
+**并发写竞态**：两并行 job 不能同时 `World::markChunkDirty`（共享
+std::set）→ `updateRegion` 加 `dirtyOut` 默认 nullptr 参数（worker
+job-local 收集净变 chunk；`collectLitColumns` 在 flush 后主线程写窗口
+统一 apply）——其余光照路径（流体/编辑/树生长）默认参数逐位不变。
+硬规则 7 修订：≤1/帧 → **≤2/帧且仅位级独立**（AGENTS/PROTOCOL 同步）。
+
+**位级等价**：confluence（LGT-1 证明：独立 region 最终光 = 插入前世界
+的纯函数，完成顺序无关）+ 单测 `DisjointPairPathsBitIdentical`
+（2 job 序/逆序/强制单 job 三轨全光值逐位一致，逆序轨 = 并行完成
+顺序无关证明）+ `DisjointPairMatchesFullPropagation`（propagateAll
+oracle）+ `DependentPairSequentialUnchanged`（回退轨钉死）。
+验证：1339/1339（+11）、`-Werror` 0 警告、门 90（无输入出生点惰性
+= 对锚字节一致 + 流送场景 ×2 确定 + **新旧二进制 300f 流送 A/B
+字节一致 = confluence 的 E2E 级证明**）。
+性能 A/B（vd16 冷填充墙钟，T450）：旧 253.3 s → 新 244.7 s（−3.4%）
+——**本机 CPU 饥饿下收益被 burst-stall（worker 调度秒级尖峰，PITS 有
+录）吞没**：16.7→~10 ms 的下限削减只占实际帧时（~500 ms）的零头。
+用户实机（30 fps、CPU 余量大）该下限占比高，预期收益大于本机测量；
+本机实感的深层卡顿源 = 99.11 剖析对象（step-0 四路插桩 + 走路/扫
+镜头工作负载）。发布 v0.8.0。
+
 ## 系列横向数据
 
 - 测试 1184 → **1195**（+11：thin-shape 纹理回退 / 列完整性 / 存档

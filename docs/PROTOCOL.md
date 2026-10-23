@@ -60,8 +60,14 @@ C++20、CMake+Ninja、SDL3、OpenGL 3.3 core（GLEW）、GTest、zlib。**无网
     只读 World——render 只读 chunkPositions+GPU mesh，截图只读 framebuffer）。
     生成 job 不碰 World（纯 generator 写 job 自己的 scratch chunk）；光照 job
     （updateRegion）写光数组+dirty，主线程在只读窗口不写光数组（meshing 只读光、
-    烘焙进顶点）；**光照 job 每帧至多 1 个**（相邻列的 updateRegion 区域重叠 ±16，
-    并发=数据竞争——单 job 内顺序执行多个 box）。主线程写 World（集成/交互/流体）
+    烘焙进顶点）；**光照 job 每帧至多 2 个**（99.10：仅当两列 region 位级独立
+    ——写 reach = 列 box ±kLightUpdateRadius = ±1 列，block 光 BFS 边界种子环再
+    +1 列读 reach，`kLightParallelColumnGap = 2·(reach+1) = 4`：任轴 gap≥4 则
+    写/写与写/读双向零共享 chunk；依赖对（双轴 gap≤3）或 3+ 列回退单 job 顺序
+    执行 = pre-99.10 逐位不变，含 LGT-1 定案不修的 overlap clobber 语义。confluence
+    证明：独立 region 的最终光是插入前世界的纯函数，完成顺序无关 = 并行安全。
+    并行 job 的净变 chunk 走 job-local 收集（dirtyOut），flush 后主线程统一
+    markChunkDirty——共享 dirty set 无并发写）。主线程写 World（集成/交互/流体）
     只发生在 flush 之后、post 之前。
 ## 测试
 

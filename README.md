@@ -84,6 +84,19 @@ cmake --build build
 
 ## 版本与发布
 
+- **v0.8.0**（2026-10-24）：**99.10 光照 job 并行**（用户实感卡顿的
+  流送期 CPU 下限修复）：流送填充期每帧 2 个新列的光照由单 worker 顺序
+  2 box（16.7 ms/帧硬下限，LGT-1 实测）改为位级独立时拆 2 个 job 双
+  worker 并行（flush 下限 → ~10 ms）；依赖对（双轴 gap≤3）/3+ 列回退
+  单 job 顺序 = 逐位不变（含 LGT-1 定案不修的 overlap clobber 语义）。
+  判据 = `lightRegionsIndependent` 纯函数（写 reach ±1 列 + block 光 BFS
+  读环 +1 列，gap≥4 任轴）；并行 job 净变 chunk 走 job-local `dirtyOut`
+  解共享写竞态。硬规则 7 修订（≤1 → ≤2 且仅位级独立）。1339/1339
+  （+11，含三轨位级等价 + propagateAll oracle）、`-Werror` 0 警告、
+  门 90 全绿（出生点对锚字节一致 + 流送 ×2 确定 + **新旧二进制 300f
+  A/B 字节一致 = confluence 的 E2E 级证明**）。性能 A/B（T450 vd16
+  冷填充）253.3→244.7 s（本机 CPU 饥饿下 burst-stall 主导，深层剖析
+  = 99.11 立项）。
 - **v0.7.0**（2026-10-24）：v1.0 任务表第 11 项——**游泳划水**（FLUID-2）：
   水下物理对齐 MC——无输入**被动上浮**（浮力，cap 1.5 b/s）并**漂浮**在水面
   （L8 水柱顶 +1 的几何钳制，fps 无关终态）；**潜行下沉**（1.5 b/s 潜水）；
