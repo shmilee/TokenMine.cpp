@@ -206,6 +206,54 @@ oracle）+ `DependentPairSequentialUnchanged`（回退轨钉死）。
 本机实感的深层卡顿源 = 99.11 剖析对象（step-0 四路插桩 + 走路/扫
 镜头工作负载）。发布 v0.8.0。
 
+## 99.11 流体光照异步化（`86c8d31`，2026-10-24 夜，用户"找深层次卡顿原因"授权）
+
+step-0 四路插桩（帧三段/flush 直方图/六组件细段/tick 墙钟+churn 规模）
+定案根因：流体 tick 后对**全部 changed 格的主包围盒**做一次主线程同步
+`Lighting::updateRegion`。shipped 海洋世界（seed 123456789）海岸线 film
+period-2 级联（FLUID-1 定案的接受现状，海岸线尺度）= 713→918→1357
+格/tick 且增长，散布几百列跨度 → 巨型 box 重扫 = 每 300 帧窗口 fluid 段
+**130s→396s→661s**（tick 本体仅 20-38 ms，**99% 成本在 re-light**）→
+update() p95/max = 2.3-8.1 s 帧、双峰分布（med ~50 ms vs p95 秒级）。
+其它组件全部排除（fires 851 ms/300f、stream 1.1-1.8 s/300f、player 3 ms、
+flush 等待全 <100 ms——原"burst-stall/worker 调度"假设被数据证伪）。
+= 用户"跑一段距离后转摄像头很卡、FPS 三十多也卡"的深层根因（每 3 帧
+一次秒级主线程尖峰；标题 FPS = 0.95 EMA 均值吞尖峰）。
+
+**修复 = 光的传导路径异步化**（FluidSim/燃烧/光照本体零改动）：
+列粒度待集 `m_fluidLightPending`（`changedCellColumns` 同列合并，burn
+pass 的 fire 格同入集 = 光 15 源）+ 每帧至多
+`kFluidLightColumnsPerFrame = 2` 列的 worker 追赶 job（复用 99.10
+`columnLightBox`/`planLightJobs`/`dirtyOut` 基础设施）+ 删除巨型同步调用。
+机制级补充（fixer 审查确认）：① 跨类同窗排除（流体 job 与流送 job 同窗
+必须两两位级独立，否则共写光数组 UB；阻断候选不耗预算留待下帧）②
+fluid job 用 `newTerrain=true`（修正 99.9 no-op 跳过在洞内水膜的暗面
+漏光）③ POST 时取列（防预算重取 in-flight 列 = 同列双 job 竞态）④
+`LightJob.fluid` 标志分账（两类收割互不触碰对方簿记）⑤ 卸载驱逐待集
+死列防无界增长。
+**确定性/收敛论证**（`light_job.hpp` 头 + 单测 oracle）：每列 re-light
+自足（rescan 严格重置竖直 + 单调 strict-increase BFS 升 stale-low，
+存储值永不超真值）→ 待集排空 == `propagateAll` 全量；海岸 churn
+（~100-170 列/tick）≫ B=2/帧 → 待集饱和于海岸列数（有界）→ 光滞后
+有界、逐列收敛；period-2 film 光值近乎不变 = 滞后视觉零差（文档化
+偏离：流体光从 tick 同步变 ≤2 列/帧追赶，99.4 pop-in 先例）。
+硬规则 7 修订：光照 job = 流送与流体追赶两类各至多 2/帧、同窗两两位级
+独立（AGENTS/PROTOCOL 同步）。
+**PIPE-4 记档不立项**：step-0 render med 0.5 ms + 扫镜头 draw calls
+150→150 无跳变 = GPU 侧数据不支持（99.11 即完整修复）。
+验证：1350/1350（+11：预算/合并/B 截断/跨类阻断/收敛 oracle/顺序无关
+confluence/burn 列）、`-Werror` 0 警告、门 91 全绿：A 出生点 60f ×2
+对 gate88 锚**字节一致**（结构性免疫：出生点 dry highland、无输入零
+流体 churn）/ B 流送 300f ×2 字节一致 + **状态 vs v0.8.0 逐位相同**
+（FluidSim 本体未动的直接证据）/ **C 新旧二进制 300f 像素 diff = 0**
+（追赶 vs 同步 re-light 视觉零差实证）。
+性能（发布前测试）：vd16 冷填充 **244.7 s → 44.6 s（5.5×）**；同世界
+900f 静置三窗口 402 s/405 s/644 s → **15.5 s/15.5 s/16.2 s（~26×
+实时）**、fluid 段 130/396/661 s → **1.0/1.9/2.9 s**（残余 = set 插入）、
+update med/p95/max 52/2075/2564 ms → **50/72-92/90-167 ms**（秒级尖峰
+消除）；churn 规模（71326/91766/135654 格）与修复前逐 tick 一致 =
+流体行为零变更。发布 v0.9.0。
+
 ## 系列横向数据
 
 - 测试 1184 → **1195**（+11：thin-shape 纹理回退 / 列完整性 / 存档
