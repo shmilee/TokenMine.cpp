@@ -84,6 +84,23 @@ cmake --build build
 
 ## 版本与发布
 
+- **v0.12.0**（2026-10-25）：**ENT-4 水体交互**（v1.0 任务表 14/29，
+  ENT 行 4/4 收尾）：mob/掉落物游泳 + 浮力——玩家 FLUID-2 的无输入
+  孪生（`refreshFluidState`/`integrateFluid`/`isRestingOnSolid` 上提
+  `Entity` 共享）：
+  - mob：被动上浮（buoyancy 12 帽 1.5，vy≥0 门 = 带动量入水沉底
+    MC dive 语义）+ 水面漂浮几何钳制（W' = 中心列最高 L8 +1，fps
+    无关不动点）+ 涉水/水下水平 ×0.6 + 水下禁 step-up；AI 状态机
+    零改动（追逐/游走照常，只改物理）；站立 mob 不上浮（同 MC）
+  - 掉落物：同款浮力（预置静水浮面静止无漂移 = MC 简化；带动量
+    坠水沉底站立互斥）+ 熔岩对称同浮力（记档偏离：player 熔岩弱节奏）
+  - 陆上行为逐位不变（存量 1389 零回归 + 双 inert 锚单测）；箭穿过
+    水不动（投射物边界记档）；零 format/config/内容
+  - 1400/1400（+11）、`-Werror` 0 警告、门 94 全绿（base 对 gate88
+    锚 + item 浮面 39.0/沉底 36.0 exact 互斥 + 涉水三态互斥
+    【new+膜 卡面 hp20 Δ3.80 / old+膜 跨越击杀 hp0 / new 无膜 击杀
+    hp0】+ ×2 RAW + savenorm EXACT）；性能（插桩 A/B v0.11.0）
+    render med 0.41-0.72 ms / ents 2.7-3.4 ms/300f = 成本可忽略
 - **v0.11.0**（2026-10-25）：**ENT-3 mob 踏阶**（v1.0 任务表 13/29）+
   **ENT-1b 模型修复**（用户实机反馈）：
   - ENT-3：step-up 纯几何上提 `Entity::stepUp`（player 行为逐位不变 =

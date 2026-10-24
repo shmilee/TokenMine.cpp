@@ -1629,3 +1629,45 @@
   跑后再验一次**（gate93sw5 三验协议后一次通过 = 157,158 world px）。
   判别特征：on/off diff = 0 且两跑 savenorm EXACT 时，**先验 config
   内容再怀疑产品**。
+- **E2E 生成环审计必须用完整生成条件；墙/高台顶永远是生成平台**——10-25
+  门 94 三态场景三轮失效，根因链：① 审计按"石=不生成"跳过墙列 →
+  zombie 生成在 3 高墙顶（level 41 + 头顶自然空气 ≥2 格 = **可生成**）
+  被墙封死（三态全 hp20）；② 墙列石填到 y42 想"无头空" → **y42 之上
+  是未编辑的自然空气**（补丁只清到 y42）→ 墙顶 level 43 仍是生成平台
+  （zombie 又生成在 y43 墙顶）；③ 环格 d 审计用中心点 [5,6] → 实际
+  生成位置带 ±0.4 jitter，**环边界要按 [min−0.5, max+0.5] 审计**
+  （墙顶格中心 d=6.4 看似环外，jitter 后 6.0 环内实生成）。**纪律**：
+  环内（扩边界）**任何** floor + ≥2 格头空 + 非流体 + 暗 + 保护圈外的
+  格皆是生成候选——高台/墙顶无法靠"加高+封顶"消除（自然空气无限）→
+  正确设计 = **环内只留水膜（不生成）+ 唯一干通道（预期生成格）**，
+  不放任何墙/岛缘平台（岛格中心距须 < min−0.5 出环）；生成场景后
+  **程序化枚举全部合法生成格并断言"皆在预期接近道"** 才跑。判别特征：
+  探针终位全态相同且远离玩家 = 生成格选错，先查生成环再怀疑产品。
+- **存档 blocks 段随墙钟漂移 ±13 格 = shipped 表面熔岩湖的真实 dt 火
+  （非 worldgen 非确定性，P90 内容 + P64 火寿命）**——10-25 门 94：
+  同二进制+同场景+无输入 600f 的存档 block diff 数 974/975/988 波动，
+  波及场景外 chunk (1,1) 洞穴格。backtrace 实证写入者 =
+  `FluidSim::tick → World::setBlock`（帧 0 点燃表面湖 (24,26)【demo 区
+  内 shipped 内容】周边可燃物；火寿命 4.0 s = real dt → 600f 时火已燃尽
+  与否随墙钟变 → live 世界在湖周边 ±13-14 格真实不同 → diff 不同）。
+  判别实验：`fire.lifetime_seconds=9999` 对照 ×2 → blocks 段字节 EXACT
+  （924/924）。generateChunk 本身纯（valueNoise3 逐格哈希，无跨调用
+  状态；PIPE-2 流送写不走 setBlock 收口 = journal 无 worldgen 条目）。
+  **纪律**：跨墙钟比存档（savenorm EXACT）的场景跑须 `fire.lifetime
+  =9999`（或比对时剔除湖周边区）；`--save-full-diff`（legacy 全 diff）
+  与 journal 路径在火活体期输出不同 = 预期，不是回归。
+- **`--new` 必须配 `--save <slot>`；notblack 须 fail-safe**——10-25 门
+  94 S1 首跑：base 门 fresh 跑漏 `--save` → "Argument error: --new
+  requires --save" 静默退出无截图；notblack 的 python 对缺失文件抛异常
+  → 无 stdout → `awk '{exit !($1==1)}'` 空输入**执行 0 行 = exit 0 = 假
+  GREEN**（两拍"通过"实为全废）。纪律：截图判定先 `[[ -f $png ]]`；
+  notblack 的 python 用 try/except 恒打印 0/1。
+- **E2E 效率协议（门 94 定案）：场景跑前必过 `tm_scene_check.py`，黑相用
+  1 帧探针判恢复**——10-25 门 94 实证：① S3 场景设计连错 3 轮（墙顶生成
+  /岛缘生成/环 jitter），每轮烧 6 跑 ~30 min；`tm_scene_check.py`（/tmp/
+  opencode，生成环全条件枚举【扩 d±0.5 jitter 边】+ 未编辑自然地形=潜在
+  生成平台必 FAIL + 全生成格到玩家 BFS 可达性）对 3 个失败场景均能在
+  秒级拦下（负例验证过）。② GLX 黑相期整帧重试太贵（900f 跑 60-110 s/
+  拍 ×45 s 等待）：改 **1 帧探针跑**（~15 s/拍，截图非黑才发全帧数）——
+  黑相 8 拍 ~20 min → ~6 min。标准库 = `/tmp/opencode/tm_run_lib.zsh`
+  （run2/scenecheck/notblack/savenorm）。
