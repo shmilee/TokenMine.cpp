@@ -84,6 +84,19 @@ cmake --build build
 
 ## 版本与发布
 
+- **v0.13.0**（2026-10-26）：**SURV-1 护甲**（v1.0 任务表 15/29）：
+  12 件护甲（leather/iron/diamond × 头盔/胸甲/护腿/靴子 = MC 精确值
+  1/3/2/1、2/6/5/1、3/8/6/3）+ MC 整数 floor 减伤（全伤害源生效，
+  含坠落 = 摔落缓冲）+ 右键穿戴/交换/脱下（热栏 Tab 间槽脱整套）+
+  存档 format 16 `player.armor` + HUD 心行上方护甲排（无甲零绘制）：
+  - 内容：12 物品（max_stack 1）+ 12 配方（MC 1.14+ 图案）+ 12 图标；
+    材质档 = leather → iron → diamond 三链
+  - 减伤：`floor(amount × (100 − 4×点数)) / 100`，次序 armor →
+    resistance → 吸收池；点数 0 = 位级恒等（无甲时代零回归）
+  - 交互：持护甲右键 = 穿上（占位槽 = 交换）；空手右键 = 按
+    head→chest→legs→feet 序脱到选中槽
+  - 已知偏离：chain 无材料、float HP 无半心量化（1.0 伤×3 点 = 0.88）、
+    窒息未实现（SURV-2，届时按 MC 规则豁免护甲）、无耐久（SURV-3）
 - **v0.12.0**（2026-10-25）：**ENT-4 水体交互**（v1.0 任务表 14/29，
   ENT 行 4/4 收尾）：mob/掉落物游泳 + 浮力——玩家 FLUID-2 的无输入
   孪生（`refreshFluidState`/`integrateFluid`/`isRestingOnSolid` 上提
