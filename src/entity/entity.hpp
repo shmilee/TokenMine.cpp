@@ -168,6 +168,20 @@ protected:
 
     static constexpr float kMaxSubstepMove = 0.4f; // blocks per physics sub-step
     static constexpr int kMaxSubsteps = 64;
+    // The step-up / crouch edge guard treat an AABB face as "flush" with a
+    // block face within this tolerance (the collision clamp is exact, so
+    // this only guards float round-trips). Phase 16; moved from Player in
+    // ENT-3 with the step-up it serves — the value is unchanged.
+    static constexpr float kFaceEps = 1e-4f;
+    // Step-up: a wish component below this magnitude is not "walking into"
+    // that axis (no step attempt on it). Phase 16 (the player's value,
+    // unchanged by the ENT-3 lift).
+    static constexpr float kStepUpMinWish = 0.01f;
+    // Step-up (Phase 99): the front cell's solid region must top out at
+    // <= 1.0 + this tolerance for a TRUE 1-block step (a wall / fence
+    // caps at 1.5 — not step-able, the jump-over fix). The player's
+    // literal, named in the ENT-3 lift.
+    static constexpr float kStepUpTopTol = 1e-6f;
 
 private:
     // Solid = registered block with properties.solid (air is never solid).
@@ -183,10 +197,30 @@ protected:
     // end on the facing axis (north: 1 - mxLocalZ, south: mnLocalZ, east:
     // mnLocalX, west: 1 - mxLocalX). A slab / full cube ignore the AABB (a
     // fixed height). Phase 99: also 1.5 for the wall / fence barrier.
-    // Protected (not private): Player::stepUp needs the same solid-region
-    // height to distinguish a TRUE 1-block step from the wall/fence cap.
+    // Protected (not private): stepUp (below) and the player's resting
+    // check need the same solid-region height to distinguish a TRUE
+    // 1-block step from the wall/fence cap.
     float solidTopHeight(BlockID id, const Vec3& mn, const Vec3& mx,
                          const BlockPos& cell) const;
+
+    // Step up 1 block when flush against a TRUE 1-block step (Phase 16, the
+    // player's auto step-up; ENT-3: the mobs share it — the same geometry,
+    // the same judgment, so a step that is crossable for the player is
+    // crossable for a mob and vice versa). At most one step per call (x
+    // axis first, then z): the AABB face along the wish axis must be flush
+    // with a block face (within kFaceEps — the collision clamp is exact),
+    // the front cell solid at foot level with its SOLID-REGION top within
+    // 1.0 + kStepUpTopTol (a slab / full block / glass pane — NOT the
+    // wall / fence 1.5 barrier, Phase 99), and the two cells above the
+    // step free (every shipped actor is at most 1.8 tall, so the +1.0 lift
+    // fits). On success the body is lifted by exactly 1.0 and this tick's
+    // horizontal move is re-applied along the stepped axis (the sub-steps
+    // consumed it, clamped against the step face; the per-tick distance is
+    // under 1.0 at the shipped speeds — the mob steps on the fixed 1/60
+    // frame, the player's sprint is 5.6 — so one moveAxis call is
+    // tunnel-safe, hard rule 6). Pure geometry: frame-locked, no real dt,
+    // no randomness.
+    void stepUp(const Vec3& wishDir, float distPerTick);
 };
 
 // -- entity-vs-entity separation (Phase 19) ----------------------------------

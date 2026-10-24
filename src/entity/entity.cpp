@@ -528,4 +528,58 @@ bool Entity::moveAxis(int axis, float delta) {
     return true;
 }
 
+void Entity::stepUp(const Vec3& wishDir, float distPerTick) {
+    const float half = m_width * 0.5f;
+    const int fx0 = static_cast<int>(std::floorf(m_position.x));
+    const int fy = static_cast<int>(std::floorf(m_position.y));
+    const int fz0 = static_cast<int>(std::floorf(m_position.z));
+    // x axis first, then z (fixed order); at most one step per call.
+    for (int axis = 0; axis < 2; ++axis) {
+        const float w = axis == 0 ? wishDir.x : wishDir.z;
+        if (std::abs(w) <= kStepUpMinWish) {
+            continue;
+        }
+        // Only a body flush against a block face can be blocked by a step;
+        // the face position is exact after the collision clamp.
+        const float face = axis == 0
+            ? m_position.x + (w > 0.0f ? 1.0f : -1.0f) * half
+            : m_position.z + (w > 0.0f ? 1.0f : -1.0f) * half;
+        const float snapped = std::roundf(face);
+        if (std::abs(face - snapped) > kFaceEps) {
+            continue;
+        }
+        const int front = static_cast<int>(snapped) + (w > 0.0f ? 1 : -1);
+        // axis 0 is X, axis 1 is Z (the loop index, NOT the moveAxis
+        // numbering 0=x, 1=y, 2=z — that mapping is applied at the
+        // moveAxis call below).
+        const int cx = axis == 0 ? front : fx0;
+        const int cz = axis == 1 ? front : fz0;
+        // The step exists (solid at foot level) and the lifted body fits
+        // (the two cells above the step are free). Phase 99: the step must
+        // also be a TRUE 1-block step — the front cell's solid region tops
+        // out at <= 1.0. A wall/fence (solid y 0..1.5, Phase 95/98, the
+        // cell above EMPTY) used to pass the isSolidCell check: the +1.0
+        // foot lift landed INSIDE the barrier's cap, and a jump from there
+        // (the ~1.125 lift from foot 46) CLEARED the 1.5 barrier (the
+        // Phase-99 E2E wall-contrast exposed it). Stairs/slabs
+        // (top < 1.0) still step as before.
+        const BlockID frontId = m_world.getBlock(cx, fy, cz);
+        const float frontTop =
+            solidTopHeight(frontId, m_position, m_position,
+                           BlockPos {cx, fy, cz});
+        if (frontTop <= 0.0f || frontTop > 1.0f + kStepUpTopTol ||
+            isSolid(m_world.getBlock(cx, fy + 1, cz)) ||
+            isSolid(m_world.getBlock(cx, fy + 2, cz))) {
+            continue;
+        }
+        m_position.y += 1.0f;
+        // Re-apply this tick's horizontal move along the stepped axis: the
+        // sub-steps consumed it, clamped against the step face. The
+        // per-tick distance (speed*dt, well under 1.0 at the shipped
+        // speeds) is tunnel-safe as a single moveAxis call.
+        moveAxis(axis == 0 ? 0 : 2, w * distPerTick);
+        return;
+    }
+}
+
 } // namespace mc

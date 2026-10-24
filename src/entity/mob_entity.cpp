@@ -62,7 +62,26 @@ void MobEntity::update(double dt) {
     const float maxSpeed =
         std::max({std::abs(m_velocity.x), std::abs(vyAfter),
                   std::abs(m_velocity.z)});
+    // ENT-3: the pre-substep horizontal motion (a clamped axis zeroes its
+    // velocity inside the sub-steps — the step-up needs the pre-move value,
+    // the player's pattern). It covers chase / wander / retreat steering
+    // AND a knockback slide: whatever is driving the horizontal move, a
+    // 1-block step in its way is crossed, not climbed.
+    const Vec3 preMove {m_velocity.x, 0.0f, m_velocity.z};
+    const float preMoveSpeed =
+        std::max(std::abs(m_velocity.x), std::abs(m_velocity.z));
     moveInSubsteps(dt, maxSpeed);
+
+    // ENT-3: step up 1 block when flush against a step (on the ground,
+    // moving horizontally) — the shared Entity::stepUp, the Player's
+    // geometry and the Phase-99 TRUE-1-block judgment (solid-region top
+    // <= 1.0: a slab / full block / a glass pane — NOT the wall / fence
+    // 1.5 barrier). This is the fix for the chase getting permanently
+    // stuck on 1-block terrain steps. Pure geometry: frame-locked, no real
+    // dt, no randomness (hard rule 8).
+    if (m_onGround && lengthSq(preMove) > 0.0f) {
+        stepUp(normalized(preMove), preMoveSpeed * static_cast<float>(dt));
+    }
 
     // ENT-1: advance the limb-swing phase (render-only, never saved —
     // mobs are ephemeral). "Moving" = the STRICT frame-boundary

@@ -335,12 +335,6 @@ private:
     // solid or the axis's velocity is zeroed.
     void applyCrouchEdgeGuard(const Vec3& dir, double dt);
 
-    // Step up 1 block when flush against a 1-block step (not crouching, on
-    // the ground, step cell solid, the two cells above it free). On success
-    // the player is lifted and this tick's horizontal move is re-applied
-    // along the stepped axis (x axis first, then z; one step per tick).
-    void stepUp(const Vec3& wishDir, float distPerTick);
-
     // A world cell is solid (air and unregistered ids are not).
     bool isSolidCell(int x, int y, int z) const;
 
@@ -430,10 +424,6 @@ private:
     bool m_sitting = false;
 
     static constexpr float kMaxPitch = 1.5533f; // ~89 deg
-    // The crouch edge guard / step-up treat an AABB face as "flush" with a
-    // block face within this tolerance (the collision clamp is exact, so
-    // this only guards float round-trips).
-    static constexpr float kFaceEps = 1e-4f;
     // FLUID-2: how many cells the surface scan (m_surfaceY) descends from
     // the feet. 32 covers the shipped water columns (ocean depth is
     // sea_level 34 - base_height 40 + amplitude 24 >= 16 => <= 18 cells;

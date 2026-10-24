@@ -41,11 +41,32 @@ Json parseJson(const std::string& text) {
     return *r;
 }
 
-// stone: one solid block (floors + roofs in the spawn tests).
+// stone: one solid block (floors + roofs in the spawn tests). ENT-3: the
+// step-up shape set — a slab (solid-region top 0.5), a wall (1.5 barrier)
+// and a fence (1.5 barrier) — the same shapes the shared step-up's
+// Phase-99 TRUE-1-block judgment must accept / reject.
 BlockRegistry makeBlocks() {
     BlockRegistry blocks;
     auto r = blocks.registerBlock(parseJson(
         R"({"id":"stone","model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    r = blocks.registerBlock(parseJson(
+        R"({"id":"slab","model":{"shape":"slab",)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    r = blocks.registerBlock(parseJson(
+        R"({"id":"wall","model":{"shape":"wall",)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    r = blocks.registerBlock(parseJson(
+        R"({"id":"fence","model":{"shape":"fence",)"
+        R"("textures":{"side":"t"}}})"));
     if (!r.ok()) {
         ADD_FAILURE() << r.error().message;
     }
@@ -57,9 +78,15 @@ struct Fixture {
     BlockRegistry blocks = makeBlocks();
     World world;
     BlockID stone;
+    BlockID slab;
+    BlockID wall;
+    BlockID fence;
 
     Fixture() {
         stone = blocks.idForName("stone");
+        slab = blocks.idForName("slab");
+        wall = blocks.idForName("wall");
+        fence = blocks.idForName("fence");
         for (int x = -16; x < 16; ++x) {
             for (int z = -16; z < 16; ++z) {
                 world.setBlock(x, 0, z, stone);
@@ -135,6 +162,14 @@ MobRegistry makeMobRegistry() {
 MobEntity makeMob(const Fixture& f, const Mob& def, Vec3 pos,
                   std::uint64_t seed = 42) {
     return MobEntity(f.world, f.blocks, def, pos, seed);
+}
+
+// Advance the mob n frames on the fixed 1/60 step (the game's
+// kMobStepPerFrame — hard rule 8: frame-locked mob time).
+void runMob(MobEntity& mob, int n) {
+    for (int i = 0; i < n; ++i) {
+        mob.update(kDt);
+    }
 }
 
 // The player AABB of a 0.6x1.8 body standing at (0.5, 1, 0.5) on the
@@ -1542,6 +1577,241 @@ TEST(MobAiTest, RangedMobRetreatsWhenClose) {
     EXPECT_GT(distH, 3.0f);  // kited the player past the retreat distance
     EXPECT_GE(shots, 1);     // kept firing while retreating
     EXPECT_EQ(hits, 0);
+}
+
+// -- ENT-3: mob step-up (the player's 1-block step, shared) --------------------
+//
+// The mobs now step up one-block terrain steps exactly like the player:
+// the shared Entity::stepUp (Phase-16 geometry, Phase-99 TRUE-1-block
+// judgment — solid-region top <= 1.0: a slab / full block / a glass pane,
+// NOT the wall / fence 1.5 barrier). All scenarios are chase-driven
+// (the zombie def: speed 0.8, detect 16, attack range 1.6) on the fixture
+// floor (surface y=1); a chase over a step crosses it, and the stop point
+// is attack-range-center (player center +/- 1.6).
+
+TEST(MobStepUpTest, ChasesUpOneBlockStep) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    // One-block ledge at x in [10, 12), z in [8, 10) (TWO cells wide in
+    // +X: the shared judgment's +X front check looks at snapped+1 — the
+    // player's exact latent quirk, pinned by
+    // DoesNotStepSingleCellStepPlusX below — so a one-cell step in +X is
+    // not step-up-able for either actor).
+    for (int x = 10; x < 12; ++x) {
+        for (int z = 8; z < 10; ++z) {
+            f.world.setBlock(x, 1, z, f.stone);
+        }
+    }
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({13.9f, 1.0f, 8.5f}, true); // beyond the step
+    runMob(mob, 400);
+    // Crossed the step (far end x=12) and stopped in attack range
+    // (13.9 - 1.6 = 12.3). Without the step-up it stays clamped at 9.7 in
+    // the chase state (distH 4.2 > 1.6) — mutually exclusive.
+    EXPECT_EQ(mob.state(), MobState::Attack);
+    EXPECT_NEAR(mob.position().x, 12.3f, 0.02f);
+    EXPECT_FLOAT_EQ(mob.position().y, 1.0f);
+    EXPECT_TRUE(mob.onGround());
+}
+
+TEST(MobStepUpTest, StepsUpSlabAndRestsOnSlabTop) {
+    // A slab step (solid-region top 0.5) is a TRUE 1-block step: the mob
+    // steps up and its feet SETTLE on the slab's top (y = 1.5, flush —
+    // not floating at the +1.0 lift), the Phase-85 standing-on-slab
+    // behavior the player has. The player sits beyond the far end of the
+    // slab, so the stop point is ON the slab: a single final state pins
+    // both the crossing and the vertical rest.
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    for (int x = 10; x < 20; ++x) {
+        for (int z = 8; z < 10; ++z) {
+            f.world.setBlock(x, 1, z, f.slab);
+        }
+    }
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({18.4f, 1.0f, 8.5f}, true); // stop 18.4 - 1.6 = 16.8
+    runMob(mob, 900);
+    EXPECT_EQ(mob.state(), MobState::Attack);
+    // The stop is the first frame-start with distH <= 1.6 (within one
+    // chase frame of 16.8); the range also covers the player-shared
+    // mid-air hop (a face flush by coincidence while the feet are at the
+    // NON-integer slab-top level 1.5 lifts 1.0 and falls back — it can
+    // shift the stop frame through the attack vertical band, see the
+    // KNOWN_ISSUES 生存 step-up 条).
+    EXPECT_GE(mob.position().x, 16.8f);
+    EXPECT_LE(mob.position().x, 16.9f);
+    EXPECT_FLOAT_EQ(mob.position().y, 1.5f); // feet flush on the slab top
+    EXPECT_TRUE(mob.onGround());
+}
+
+TEST(MobStepUpTest, DoesNotStepUpWall) {
+    // The Phase-99 judgment is shared verbatim: a wall (solid-region top
+    // 1.5, the barrier) is NOT a 1-block step — the mob stays clamped at
+    // its face, forever (the player's E2E S3b wall-contrast twin).
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    for (int x = 10; x < 12; ++x) {
+        for (int z = 8; z < 10; ++z) {
+            f.world.setBlock(x, 1, z, f.wall);
+        }
+    }
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({13.9f, 1.0f, 8.5f}, true);
+    runMob(mob, 300);
+    EXPECT_EQ(mob.state(), MobState::Chase);
+    EXPECT_FLOAT_EQ(mob.position().x, 10.0f - 0.3f); // clamped at the wall
+    EXPECT_FLOAT_EQ(mob.position().y, 1.0f);         // never stepped up
+    EXPECT_TRUE(mob.onGround());
+}
+
+TEST(MobStepUpTest, DoesNotStepUpFence) {
+    // The fence is the wall's barrier twin (the same 1.5 solid region):
+    // no step-up either.
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    for (int x = 10; x < 12; ++x) {
+        for (int z = 8; z < 10; ++z) {
+            f.world.setBlock(x, 1, z, f.fence);
+        }
+    }
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({13.9f, 1.0f, 8.5f}, true);
+    runMob(mob, 300);
+    EXPECT_EQ(mob.state(), MobState::Chase);
+    EXPECT_FLOAT_EQ(mob.position().x, 10.0f - 0.3f);
+    EXPECT_FLOAT_EQ(mob.position().y, 1.0f);
+    EXPECT_TRUE(mob.onGround());
+}
+
+TEST(MobStepUpTest, DoesNotStepTwoBlockStep) {
+    // Two cells high (no headroom above the step): the lifted mob would
+    // embed in the second cell — no step (the player's
+    // StepUpBlockedByLowHeadroom twin).
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    for (int x = 10; x < 12; ++x) {
+        for (int z = 8; z < 10; ++z) {
+            f.world.setBlock(x, 1, z, f.stone);
+            f.world.setBlock(x, 2, z, f.stone);
+        }
+    }
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({13.9f, 1.0f, 8.5f}, true);
+    runMob(mob, 300);
+    EXPECT_EQ(mob.state(), MobState::Chase);
+    EXPECT_FLOAT_EQ(mob.position().x, 10.0f - 0.3f);
+    EXPECT_FLOAT_EQ(mob.position().y, 1.0f);
+    EXPECT_TRUE(mob.onGround());
+}
+
+TEST(MobStepUpTest, ChaseOverStepIsFrameLockedDeterministic) {
+    // Hard rule 8: the step-up frame is pure geometry — two
+    // independently-constructed mobs (same seed, same world, same player
+    // path) run bit-identical positions through the whole chase-over-step
+    // sequence (the 20-frame checkpoints cover the step-up frame itself).
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    for (int x = 10; x < 12; ++x) {
+        for (int z = 8; z < 10; ++z) {
+            f.world.setBlock(x, 1, z, f.stone);
+        }
+    }
+    const Vec3 player {13.9f, 1.0f, 8.5f};
+    MobEntity a = makeMob(f, def, {8.5f, 1.0f, 8.5f}, 777);
+    MobEntity b = makeMob(f, def, {8.5f, 1.0f, 8.5f}, 777);
+    a.setPlayer(player, true);
+    b.setPlayer(player, true);
+    for (int i = 0; i < 400; ++i) {
+        a.update(kDt);
+        b.update(kDt);
+        if (i % 20 == 0) {
+            EXPECT_FLOAT_EQ(a.position().x, b.position().x);
+            EXPECT_FLOAT_EQ(a.position().y, b.position().y);
+            EXPECT_FLOAT_EQ(a.position().z, b.position().z);
+            EXPECT_FLOAT_EQ(a.facingYaw(), b.facingYaw());
+        }
+    }
+}
+
+TEST(MobStepUpTest, KnockbackIntoStepDoesNotTunnel) {
+    // Hard rule 6: a fast knockback slide into the step is sub-stepped
+    // (the clamp zeroes the velocity) and the step-up's re-applied move
+    // is ONE moveAxis call with distPerTick = preMoveSpeed*dt — under 1.0
+    // at the fixed 1/60 mob step (the terminal 38 gives 0.633) — so it
+    // cannot skip the front cell. The whole sequence must never embed the
+    // AABB in a solid (hasRoomAt at every checkpoint).
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    for (int x = 10; x < 12; ++x) {
+        for (int z = 8; z < 10; ++z) {
+            f.world.setBlock(x, 1, z, f.stone);
+        }
+    }
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({13.9f, 1.0f, 8.5f}, true);
+    mob.addKnockback({30.0f, 0.0f, 0.0f});
+    for (int i = 0; i < 300; ++i) {
+        mob.update(kDt);
+        if (i % 5 == 0) {
+            EXPECT_TRUE(mob.hasRoomAt(mob.position()));
+        }
+    }
+    // The knockback carried it into the step, the step-up crossed it, the
+    // resumed chase stopped in attack range — the same terminal state as
+    // the plain walk (ChasesUpOneBlockStep).
+    EXPECT_EQ(mob.state(), MobState::Attack);
+    EXPECT_NEAR(mob.position().x, 12.3f, 0.02f);
+    EXPECT_FLOAT_EQ(mob.position().y, 1.0f);
+}
+
+TEST(MobStepUpTest, StepsUpSingleCellStepMinusX) {
+    // The -X direction's front check (snapped-1) looks at the cell the
+    // body is flush against, so even a SINGLE-cell step is step-up-able in
+    // -X — the exact same asymmetry the player has (the +X twin is pinned
+    // by DoesNotStepSingleCellStepPlusX).
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    for (int z = 8; z < 10; ++z) {
+        f.world.setBlock(10, 1, z, f.stone); // one cell only
+    }
+    MobEntity mob = makeMob(f, def, {12.5f, 1.0f, 8.5f});
+    mob.setPlayer({7.1f, 1.0f, 8.5f}, true); // chase -X, stop 7.1 + 1.6
+    runMob(mob, 400);
+    EXPECT_EQ(mob.state(), MobState::Attack);
+    EXPECT_NEAR(mob.position().x, 8.7f, 0.02f);
+    EXPECT_FLOAT_EQ(mob.position().y, 1.0f);
+    EXPECT_TRUE(mob.onGround());
+}
+
+TEST(MobStepUpTest, DoesNotStepSingleCellStepPlusX) {
+    // The SHARED judgment's +X front check (snapped+1) looks at the cell
+    // BEYOND the one the body is flush against — a single-cell step in +X
+    // is not step-up-able. This pins the EXACT player behavior (the
+    // player walks +X into a one-cell step and stays clamped at 9.7 —
+    // probe-verified, the latent quirk documented in KNOWN_ISSUES 生存
+    // step-up 条). Fixing it changes the player's step-up and is its own
+    // phase — the mob must keep matching the player either way.
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    for (int z = 8; z < 10; ++z) {
+        f.world.setBlock(10, 1, z, f.stone); // one cell only
+    }
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({13.9f, 1.0f, 8.5f}, true);
+    runMob(mob, 300);
+    EXPECT_EQ(mob.state(), MobState::Chase); // stuck: distH 4.2 > 1.6
+    EXPECT_FLOAT_EQ(mob.position().x, 10.0f - 0.3f);
+    EXPECT_FLOAT_EQ(mob.position().y, 1.0f);
+    EXPECT_TRUE(mob.onGround());
 }
 
 // -- combat ----------------------------------------------------------------------
