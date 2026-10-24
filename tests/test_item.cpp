@@ -1741,8 +1741,8 @@ TEST(ItemRegistryTest, ArmorExcludesEveryOtherChannel) {
 
 TEST(ItemRegistryTest, ArmorContentPinned) {
     // The real assets (SURV-1): the 12 pieces — the three material
-    // chains, the Minecraft values exactly (leather 1/3/2/1, iron 2/4/3/
-    // 1, diamond 3/6/3/2 per head/chest/legs/feet), max_stack 1 (armor
+    // chains, the Minecraft values exactly (leather 1/3/2/1, iron 2/6/5/
+    // 1, diamond 3/8/6/3 per head/chest/legs/feet), max_stack 1 (armor
     // never stacks), the icon = the item name.
     AssetManager assets;
     ASSERT_TRUE(assets.setRoot("assets").ok())
@@ -1755,10 +1755,10 @@ TEST(ItemRegistryTest, ArmorContentPinned) {
     const std::vector<std::tuple<std::string, std::string, int>> want = {
         {"leather_helmet", "head", 1}, {"leather_chestplate", "chest", 3},
         {"leather_leggings", "legs", 2}, {"leather_boots", "feet", 1},
-        {"iron_helmet", "head", 2}, {"iron_chestplate", "chest", 4},
-        {"iron_leggings", "legs", 3}, {"iron_boots", "feet", 1},
-        {"diamond_helmet", "head", 3}, {"diamond_chestplate", "chest", 6},
-        {"diamond_leggings", "legs", 3}, {"diamond_boots", "feet", 2},
+        {"iron_helmet", "head", 2}, {"iron_chestplate", "chest", 6},
+        {"iron_leggings", "legs", 5}, {"iron_boots", "feet", 1},
+        {"diamond_helmet", "head", 3}, {"diamond_chestplate", "chest", 8},
+        {"diamond_leggings", "legs", 6}, {"diamond_boots", "feet", 3},
     };
     for (const auto& [name, slot, pts] : want) {
         const Item* it = items.findByName(name);
