@@ -84,6 +84,24 @@ cmake --build build
 
 ## 版本与发布
 
+- **v0.10.0**（2026-10-25）：**ENT-1 mob 四肢摆动**（v1.0 任务表 12/29，
+  消费 99.x 残余 #4）：mob 行走摆腿动画 = **纯渲染层**（AI/物理/存档零
+  改动）——per-mob 整数 swing 相位（帧边界水平位移严格不等式判移动，
+  +2/帧 整周期 0.533 s / −4/帧 16 帧收步，从不入档）+ constexpr 16.16
+  定点正弦表（编译期 Taylor，零运行期 libm = 位级确定）+ mob JSON
+  `swings` 数据段（amplitude (0,1] 弧度 + 半周相位组；三级未知键拒绝、
+  part 存在性解析期交叉校验）+ CPU 逐帧部件顶点变换（pivot = box 顶面
+  中心、绕局部 X 轴、法线同旋；phase 0 位级恒等 = 静态 fast path）+
+  per-mob 动态 VBO + config `mobs.limb_swing`（off = v0.9.0 静态对照）。
+  内容 = chicken 2 腿 / cow·sheep 4 腿对角步态（FL+RR·FR+RL = MC 四足）/
+  spider 8 腿偶奇分组；翅不摆（MC 只飞行扇翅）；zombie/skeleton 99.7
+  几何无独立 arm part = 不造几何（记档）。1367/1367（+17）、`-Werror`
+  0 警告、门 92 全绿（出生点对 gate88 锚 = 结构性免疫 + 白天 240f
+  on×2/off×2 字节一致 + on/off 像素 diff 11,749 world px 隔离（sky 3 =
+  AA / hud 24 = 饥饿饱和度 real-dt）+ savenorm EXACT + 夜间 N120 diff
+  8,060 px（sky 0 / hud 0）+ S6 init 点名）。性能（插桩 900f dense mob
+  场景）：render med 0.46-0.56 ms / ents 10-22 ms/300f / update p95
+  <82 ms（流送期）= 动画成本可忽略。
 - **v0.9.0**（2026-10-24）：**99.11 流体光照异步化**（用户实感"跑一段距离后
   转摄像头很卡、FPS 均值正常"的深层根因修复）：流体 tick 后对全部变更格主
   包围盒的**主线程同步 re-light**（shipped 海洋海岸线 film 级联 713→918→

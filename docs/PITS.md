@@ -1575,3 +1575,21 @@
   ×2 savenorm 含实体/玩家 pos 时，墙钟 hold 的帧数抖动 = ×2 天然不稳
   （60fps 机才稳）。口诀：**黑帧先信存档不信像素；LOCK FAILED 零诊断
   行先查场景 format；慢机 hold 时长按 fps 折算。**
+- **`--config <不存在的文件>` = 游戏静默种子默认配置**（game.cpp init：
+  `Config not found at '...'` INFO 一行 + 写入 `Config::defaultConfigJson()`
+  = vd8/day240/scale1/无 mobs 段）→ 该路径此后所有跑全部用默认值。
+  10-24 ENT-1 门夜坑：scratch config 生成 python 有语法错（关键字参数
+  `f(x, mobs.limb_swing=False)` 不是合法 Python = SyntaxError，脚本无
+  set -e 静默继续）→ config 从未创建 → 游戏种子默认 → **"on/off 对照组"
+  实际两跑同为默认 on** → 像素 diff 恒 0 连错三轮 E2E（~40 个游戏跑
+  全部无效）。判别特征：种子 config 的流送 = **197 列（vd8）** 而非
+  12853（vd80）；日志有 "Config not found" 行。**纪律**：scratch config
+  生成后**回读 assert 关键值**（vd/mobs/limb_swing）；每跑完 grep 日志
+  "Config not found" = 种子哨兵；on/off 类对照先验证 off 侧真的 off
+  （diff=0 且 savenorm EXACT 不等于"对照成立"，可能两组同配置）。
+- **zsh `[[ "$x" == "*(1280, 720)*" ]]` 引号内 RHS = 字面串（不 glob）**
+  → 尺寸检查恒 false（10-24 ENT-1 门 gate92c 整轮 8 跑全误判 "bad"
+  重试，截图其实全绿）。正确写法 `[[ "$x" == *"(1280, 720)"* ]]`
+  （通配符在引号外）。连带教训：`if a && b; then ...; fi` 之后
+  `echo $?` = if 语句退出码（恒 0），**不能当失败原因诊断用**——
+  失败分支里要分别测 `a`/`b`。
