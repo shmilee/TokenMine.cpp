@@ -1593,3 +1593,39 @@
   （通配符在引号外）。连带教训：`if a && b; then ...; fi` 之后
   `echo $?` = if 语句退出码（恒 0），**不能当失败原因诊断用**——
   失败分支里要分别测 `a`/`b`。
+- **敌对 mob 生成保护圈 = 世界出生点 (0,0) 半径 12（normal）**——fresh
+  世界玩家就站在世界出生点上 → 4-6 块生成环**整圈在保护圈内** → 敌对
+  mob（spawn_max_light 0）永远 "found no valid cell"（被动 mob 豁免保护
+  = 照样生成，极具迷惑性）。E2E 要生成敌对 mob 必须用**玩家距 (0,0) >
+  16 块的场景**（ent2 场景 (22,38) = 44 块 ✓；fresh --new 不行）。
+  保护半径在 core/difficulty.hpp（easy 8 / normal 12 / hard 16）。
+- **场景存档的 `time` 字段覆盖 config 的 start_time_of_day**（load 时
+  `m_dayCycle.setTimeOfDay(save.time)` 在 config 之后生效；`--time` CLI
+  同样被压过）——给"白天存的场景"配夜间 config 无效（zombie 光门
+  恒不过 = 上面保护圈坑的连带假象）。夜间 E2E 场景 = **编辑存档的
+  time 字段**（0.75）而非改 config。判别特征：日志只有 "no valid cell"
+  且全是 hostile pick = 先查 ① 场景 time 是否真夜间 ② 玩家是否在世界
+  出生点保护圈内。
+- **夜间（表面光 0）场景截图 = 世界区合法纯黑**（texture×light 0 =
+  (0,0,0)），"全图黑像素 < 800k"的 notblack 门槛把合法夜景误诊为 GLX
+  黑相 → 整轮重试浪费（10-25 ENT-3 门：s1a 有效截图被当黑帧弃 8 次）。
+  判别器 = **HUD 带（底 100 px）恒绘制**（UI pass 不依赖光照）：GLX 黑相
+  = 100% 纯黑含 HUD；合法夜景 = HUD 带非黑。黑相判定用双条件
+  （全图黑 < 800k **或** HUD 带非黑 > 50k）。
+- **E2E 台阶场景须绕开 P16 已记 quirk**：1 格厚（接近方向）台阶 +
+  **从 +X/+Z 侧接近 = 踏不过**（front 格查 snapped+1，player/mob 共享
+  行为，ENT-3 记档）——zombie 沿 +Z 追逐 1 格厚 barrier 恒卡（10-25
+  ENT-3 门 s1a hp=20 真因：spawn 正确、step-up 被 quirk 吞）。解法 =
+  barrier 用 **2 格厚**台阶（或 −X/−Z 侧接近）；断言 hp 前先看 DEBUG
+  "mob spawn" 行确认 zombie 真的出生（info 级日志无 spawn 事件，
+  全灭时易误判为生成问题）。
+- **E2E 对照 config 会被静默篡改（limb_swing 消失 = off 变 on）**——10-25
+  ENT-1 门：`gate93_day_off.json` 创建时含 `mobs.limb_swing=false`（回读
+  assert 通过），数小时后键消失（文件仍在、其余内容原样）→ 所有 "off"
+  跑实为 on → 摆动 on/off 像素 diff 恒 0 连错 ~6 轮（含死亡画面/夜间
+  不可见等干扰项叠加，定位耗半天）。篡改者身份未定（游戏实证不改写
+  config——1 帧跑前后字节一致；疑为并发脚本/手误覆盖）。**纪律**：
+  on/off 类对照的 config = **每次跑前即时重建 + 回读断言关键键 +
+  跑后再验一次**（gate93sw5 三验协议后一次通过 = 157,158 world px）。
+  判别特征：on/off diff = 0 且两跑 savenorm EXACT 时，**先验 config
+  内容再怀疑产品**。

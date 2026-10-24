@@ -22,7 +22,7 @@
 | LGT 光照 | ~~LGT-1 union-region~~ 砍除 | ~~LGT-2 叶子光衰减~~ 完成 | | | | |
 | GEN 世界与生成 | ~~GEN-1 面条洞穴~~ 完成 | ~~GEN-2 树生长~~ 完成 | ~~GEN-3 矿脉形态~~ 完成 | | | |
 | FLUID 流体 | ~~FLUID-1 水量守恒~~ 完成 | ~~FLUID-2 游泳划水~~ 完成 | | | | |
-| ENT 实体/Mob/移动 | ~~ENT-1 四肢摆动~~ 完成 | ~~ENT-2 BlockState★~~ 完成 | ENT-3 mob踏阶 | ENT-4 水体交互 | | |
+| ENT 实体/Mob/移动 | ~~ENT-1 四肢摆动~~ 完成 | ~~ENT-2 BlockState★~~ 完成 | ~~ENT-3 mob踏阶~~ 完成 | ENT-4 水体交互 | | |
 | SURV 生存/战斗/效果 | SURV-1 护甲 | SURV-2 氧气窒息 | SURV-3 耐久 | SURV-4 药水饮用 | SURV-5 mob效果 | |
 | CRAFT 物品/合成/面板 | CRAFT-1 工作台分块★ | CRAFT-2 物品3D模型 | CRAFT-3 材质音效 | | | |
 | SAVE 存档 | SAVE-1 自动存档 | | | | | |
@@ -74,7 +74,7 @@
 ### ENT 实体/Mob/移动
 - ~~**ENT-1 四肢摆动**~~ — **完成（2026-10-24 夜）**：mob 摆腿动画（99.x 残余 #4）：**swing 相位 = per-mob 整数**（`MobEntity::m_swingPhase` 0..63，移动帧 +2【整周期 32 帧 = 0.533 s】/ 静止帧 −4 衰减到 0【16 帧收步】，「移动」= 帧边界水平位移严格不等式【不读 AI 意图】；纯渲染层 = 不入存档【mob 本 ephemeral】+ 无 swing 数据类型恒 0 结构性惰性）+ **constexpr 16.16 定点正弦表**（64 条、编译期 14 项 Taylor 生成、零运行期 libm【std::sin 跨平台位级不稳定】；余数界 x²⁹/29! ≤ 9.2e-9 ≪ 半量子）+ **数据驱动 `swings` 段**（box 可选 `name` + 模型 `swings: [{part, amplitude (0,1] 弧度, group 0/1}]` 严格解析、part 存在性解析期交叉校验【grows_to 纪律、文件内引用】、未知键/重名/重复认领点名拒）+ **CPU 逐帧顶点变换**（pivot = box 顶面中心纯函数、绕 mob 局部 X 轴【yaw 前】、定点 sin/cos 整数 Taylor 每部件预计算、法线同旋【face shade 桶跟随】、phase 0 = 位级恒等 = 静态 fast path 结构性免疫）+ **per-mob 动态 VBO**（`Mesh::uploadDynamic`/`updateVertices` GL_DYNAMIC_DRAW、首摆帧分配、updateEntities 拆除 pass 释放）+ **config `mobs.limb_swing`**（默认 true、false = v0.9.0 静态基线 E2E 对照组）+ **内容**（chicken 2 腿 0.5 rad 半周相位 / cow·sheep 4 腿 0.7 rad 对角步态 / spider 8 腿 0.9 rad 偶奇分组；**zombie/skeleton 无独立 arm part = 不造几何记档**）；**AI/物理/存档零改动**；1367/1367（+17）、0 警告；base18 门 = 结构性免疫（基线帧无 mob = 99.7 先例）；偏离：翅不摆（MC 只飞行时扇翅）/ zombie·skeleton 无臂 / 相位不入档 / 幅度上限 1 rad
 - ~~**ENT-2 BlockState★**~~ — **完成（2026-10-22 夜）**：P94 楼梯朝向（World 每格 byte + format 14 `stairs`）泛化为**通用 per-instance 状态机制**：`Chunk::m_blockState` 换名 + 哨兵泛化 255 + 双门控数据驱动（Stairs 形状隐式 count 4 ∪ `model.state_count`[1,255]+`state_default` 严格配对，楼梯显式声明 = 矛盾拒）+ `World::get/setBlockState`（只验 <255，域由收口/旋转/parse 三处强制）+ Game 三写入点泛化（收口/旋转 `(s+1)%stateCount()`/P97 钩子）+ **format 15 `states` 段**（全量 + 逐条目域校验 + 双向交叉校验 + 键纪律三向 + 14→15 值保真迁移 + collectSave 两路 journal 派生）+ **init 不变量**（worldgen 5 类放置源 stateful 点名拒 = "stateful 格必 session 派生"结构化）；**四个 per-block map 不迁移**（byte/struct 两类状态消费者不相交 = YAGNI 定案，CRAFT-1 取 campfire 范式 + 纪律）；shipped 内容零字段改动；1260/1260（+20 新，存量换名适配语义不动）；base18 **第 85 门 = 结构性免疫不重锚**（新 ×2 与门 84 锚字节一致）；E2E：S2 预置状态场景 A/B **298,211 px = per-instance 朝向首次像素级验证**（P94 时代仅存证）+ round-trip 截图字节一致 + S3 迁移 shot 与 S2A 字节一致（值保真端到端背书）；晨间潜旋回归推迟（pent2_rot.zsh 就绪）；PITS +1（#208 场景几何探针纪律）
-- **ENT-3 mob 踏阶** — mob 1 格 step-up，修追逐卡台阶（Mob 条）
+- ~~**ENT-3 mob 踏阶**~~ — **完成（2026-10-25）**：step-up 纯几何从 Player 上提为 `Entity::stepUp`（受保护，player 行为**逐位不变** = `test_player.cpp` 零改动全过钉死）+ MobEntity 在 `moveInSubsteps` 前后镜像调用（pre-substep 水平速度捕获【被 clamp 轴子步内清零】+ `onGround` 门 + `normalized(preMove)` + 本 tick 距离重放 ≤ 终端速度 38/60 ≈ 0.633 < 1.0 无穿透 = 硬规则 6 共存）——判定与 player **同一个函数**：P99 TRUE-1-block（solid 区顶高 ≤ 1.0+1e-6：slab 0.5/满块 1.0/玻璃板 1.0 可踏，墙/栅栏 1.5 帽不可踏，楼梯 = 脚位点采样）+ front 格上方 2 格空 + face 贴整数 ±1e-4 + X 先 Z 后每 tick 至多一次；AI/速度/子步节奏零改动、零 format/config/内容（mob ephemeral）；帧锁定纯几何（无 real dt/无随机 = 硬规则 8）。1376/1367（+9：踏满块/踏 slab 贴顶 1.5 exact/不踏墙/不踏栅栏/不踏 2 格高/帧锁定双体位级一致/击退入阶 hasRoomAt 全程/单格 −X 可踏/+X 钉死 quirk）、`-Werror` 0 警告；门 93：竞技场（12×12 平坦 + 3 高墙封闭 + 满宽 2 格厚 barrier——**2 格厚 = 绕开 +Z 1 格宽 quirk**，PITS）三态互斥 PASS【new+台阶 zombie 追逐 7.8 块对角路径**踏阶跨越**至攻击位连击击杀 idle 玩家（hp<20）/ old v0.10.0 二进制+同场景 hp=20 卡台阶 / new+全墙 barrier hp=20 不可踏；×2 RAW 字节一致 + savenorm EXACT】+ 摆动可见性（on/off 157,158 world px 隔离，config 三验协议）+ base 门对 gate88 锚（结构性免疫：基线帧无 mob）+ 插桩性能（render med 0.47-0.60 ms / ents 11-26 ms/300f = 成本可忽略）。**顺带记档 2 个 P16 潜伏 quirk**（探针实证 + player 同款：① +X/+Z 方向 front 格查 snapped+1 → 恰 1 格宽台阶踏不过（−X/−Z 正常）② 非整数脚高行走 face 巧合对齐整数 → 凭空抬升 1.0 再落回——均为共享几何的既有行为，修复 = **player 行为变更**单独立项，本 phase 只记档不修）。
 - **ENT-4 水体交互** — mob/掉落物游泳、浮力（实体条）
 
 ### SURV 生存/战斗/状态效果
@@ -209,3 +209,23 @@
   CPU 逐帧顶点变换 per-mob 动态 VBO + config mobs.limb_swing；chicken
   2/cow 4/sheep 4/spider 8 腿，zombie·skeleton 无臂记档；AI/物理/存档
   零改动；1367/1350 +17、0 警告）。ENT 行 1/4，v1.0 任务表 12/29。
+- 2026-10-24（夜，补记）：99.10 光照 job 并行 + 99.11 流体光照异步化
+  发布（性能系列，非任务表项；99.11 = 用户卡顿深层根因修复——流体 tick
+  巨盒主线程同步 re-light → 列粒度待集 + 每帧 2 列预算 worker 追赶；
+  vd16 填充 244.7→44.6 s 5.5×、静置 26× 实时、update p95 7.6 s→80 ms）。
+  发布 **v0.8.0 / v0.9.0**。
+- 2026-10-25：ENT-1b 模型修复（用户实机反馈：四足 body 长>高对齐 MC
+  比例带 + 关节出体 + 摆幅下调 + 蜘蛛腿加长外移 + 穿模谓词
+  checkSwingClip 全相位 896 验收；zombie·skeleton 人形未动）。
+- 2026-10-25：ENT-3 mob 踏阶完成（step-up 纯几何上提 Entity::stepUp，
+  player 行为逐位不变 = test_player 零改动钉死；mob 镜像调用
+  pre-substep 捕获 + onGround 门 + 本 tick 距离重放 ≤0.633 无穿透；
+  判定与 player 完全一致 = P99 TRUE-1-block：slab 0.5/满块 1.0/玻璃板
+  可踏、墙/栅栏 1.5 不可踏；帧锁定纯几何无 real dt；零 format/config/
+  内容；1376/1367 +9、0 警告；门 93 竞技场三态互斥【new+台阶 zombie
+  跨越击杀玩家 hp<20 / old v0.10.0+台阶 hp=20 卡住 / new+墙 hp=20
+  不可踏；×2 字节一致 + savenorm EXACT】+ 摆动可见性 157,158 world px
+  on/off 隔离 + base 门对锚 + 插桩性能 render med 0.47-0.60 ms）。
+  记档 2 个 P16 潜伏 quirk（+X/+Z 恰 1 格宽台阶踏不过 / slab face
+  巧合抬升——player/mob 共享，修复 = player 行为变更单独立项）。
+  ENT 行 2/4，v1.0 任务表 13/29。发布 **v0.11.0**（含 ENT-1b）。

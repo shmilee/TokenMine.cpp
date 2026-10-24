@@ -2565,8 +2565,9 @@ TEST(MobSwingTest, PivotIsBoxTopCenter) {
     EXPECT_NEAR(p.x, -0.094f, 1e-6f);
     EXPECT_NEAR(p.y, 0.31f, 1e-6f); // 0.155 + 0.31/2 = the leg's top
     EXPECT_NEAR(p.z, 0.0f, 1e-6f);
-    // The pivot sits INSIDE the body box (body bottom 0.25 < 0.31): the
-    // joint is never visible at rest or mid-swing.
+    // The pivot sits FLUSH at the body bottom (body bottom 0.31 = 0.485
+    // − 0.35/2, ENT-1b joint-out-of-body geometry): the joint is never
+    // visible and the swing cannot clip the body side.
     const MobBox& body = chicken.model.boxes[0];
     EXPECT_GT(p.y, body.center.y - body.size.y / 2.0f - 1e-6f);
 }
@@ -2833,13 +2834,13 @@ TEST(MobSwingTest, ShippedMobsSwingContentPinned) {
         float amplitude;
         int group;
     };
-    const Exp chicken[] = {{"leg_l", 0.5f, 0}, {"leg_r", 0.5f, 1}};
-    const Exp quadruped[] = {{"leg_fl", 0.7f, 0}, {"leg_fr", 0.7f, 1},
-                             {"leg_rl", 0.7f, 1}, {"leg_rr", 0.7f, 0}};
-    const Exp spider[] = {{"leg_1", 0.9f, 0}, {"leg_2", 0.9f, 1},
-                          {"leg_3", 0.9f, 0}, {"leg_4", 0.9f, 1},
-                          {"leg_5", 0.9f, 0}, {"leg_6", 0.9f, 1},
-                          {"leg_7", 0.9f, 0}, {"leg_8", 0.9f, 1}};
+    const Exp chicken[] = {{"leg_l", 0.4f, 0}, {"leg_r", 0.4f, 1}};
+    const Exp quadruped[] = {{"leg_fl", 0.5f, 0}, {"leg_fr", 0.5f, 1},
+                             {"leg_rl", 0.5f, 1}, {"leg_rr", 0.5f, 0}};
+    const Exp spider[] = {{"leg_1", 0.45f, 0}, {"leg_2", 0.45f, 1},
+                          {"leg_3", 0.45f, 0}, {"leg_4", 0.45f, 1},
+                          {"leg_5", 0.45f, 0}, {"leg_6", 0.45f, 1},
+                          {"leg_7", 0.45f, 0}, {"leg_8", 0.45f, 1}};
     AssetManager assets;
     ASSERT_TRUE(assets.setRoot("assets").ok())
         << "run the tests from the repository root";

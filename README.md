@@ -84,6 +84,24 @@ cmake --build build
 
 ## 版本与发布
 
+- **v0.11.0**（2026-10-25）：**ENT-3 mob 踏阶**（v1.0 任务表 13/29）+
+  **ENT-1b 模型修复**（用户实机反馈）：
+  - ENT-3：step-up 纯几何上提 `Entity::stepUp`（player 行为逐位不变 =
+    test_player 零改动钉死）+ mob 同款镜像调用——判定与 player 完全一致
+    （slab 0.5/满块 1.0/玻璃板可踏，墙/栅栏 1.5 不可踏 = P99 TRUE-1-block），
+    修追逐/游走卡 1 格台阶；帧锁定纯几何、零 format/config/内容；
+    门 93 竞技场三态互斥（new+台阶 zombie 跨越击杀 / old+台阶卡住 /
+    new+墙不可踏）。记档 2 个 P16 潜伏 quirk（player/mob 共享，修复 =
+    player 行为变更单独立项）。
+  - ENT-1b：四足身体比例修正（身长>身高 = MC 比例带：cow 1.9:1 /
+    sheep 1.73:1 / chicken 1.43:1，纯数据）+ 关节出体（pivot = 身体底
+    缘）+ 摆幅下调（0.5/0.4/0.45 rad）+ spider 腿加长加细外移 + 新穿
+    模谓词 `checkSwingClip`（旋转腿∩body 相交体积 + 插地检查，4 mob ×
+    14 部件 × 64 相位 = 896 验收单测）。zombie/skeleton 人形未动。
+  - 1389/1389（+22）、`-Werror` 0 警告、门 93 全绿（base 对锚 + 三态
+    互斥 + 模型 A/B 40,703 world px + 摆动 on/off 157,158 world px +
+    ×2 确定性 + savenorm EXACT）；性能（插桩）render med 0.47-0.60 ms
+    / ents 11-26 ms/300f = 动画+踏阶成本可忽略。
 - **v0.10.0**（2026-10-25）：**ENT-1 mob 四肢摆动**（v1.0 任务表 12/29，
   消费 99.x 残余 #4）：mob 行走摆腿动画 = **纯渲染层**（AI/物理/存档零
   改动）——per-mob 整数 swing 相位（帧边界水平位移严格不等式判移动，
