@@ -551,46 +551,6 @@ bool Player::isSolidCell(int x, int y, int z) const {
     return m_blocks.at(id).properties.solid;
 }
 
-bool Player::isRestingOnSolid() const {
-    const float half = m_width * 0.5f;
-    const int x0 = static_cast<int>(std::floorf(m_position.x - half));
-    const int x1 = static_cast<int>(std::floorf(m_position.x + half));
-    const int z0 = static_cast<int>(std::floorf(m_position.z - half));
-    const int z1 = static_cast<int>(std::floorf(m_position.z + half));
-    // The cell row the feet plane sits on (floor(feet - kFaceEps): a face
-    // resting exactly on a boundary is NOT in that cell) + the row below
-    // (a wall cap extends 0.5 above its cell — the Phase-95 extension).
-    const int ySupport =
-        static_cast<int>(std::floorf(m_position.y - kFaceEps));
-    for (int y = ySupport - 1; y <= ySupport; ++y) {
-        for (int x = x0; x <= x1; ++x) {
-            for (int z = z0; z <= z1; ++z) {
-                if (!(m_position.x - half < x + 1 &&
-                      m_position.x + half > x)) {
-                    continue;
-                }
-                if (!(m_position.z - half < z + 1 &&
-                      m_position.z + half > z)) {
-                    continue;
-                }
-                const BlockPos cell {x, y, z};
-                const Vec3 mn {m_position.x - half, m_position.y,
-                               m_position.z - half};
-                const Vec3 mx {m_position.x + half, m_position.y + m_height,
-                               m_position.z + half};
-                const float top =
-                    solidTopHeight(m_world.getBlock(x, y, z), mn, mx, cell);
-                if (top > 0.0f &&
-                    std::abs(m_position.y -
-                             (static_cast<float>(y) + top)) <= kFaceEps) {
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
-}
-
 void Player::integrate(float h) {
     if (m_inLava) {
         // Swim in lava (Phase 54): the same swim state, the lava pace

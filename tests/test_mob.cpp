@@ -2933,3 +2933,280 @@ TEST(MobEntityTest, SwingPhaseInertWithoutSwingData) {
     EXPECT_EQ(mob.state(), MobState::Chase);
     EXPECT_EQ(mob.swingPhase(), 0);
 }
+
+// -- ENT-4: the underwater behavior (the fluid immersion model) ------------
+//
+// The input-free twin of the player's FLUID-2 swim (same constants, same
+// formulas, same branch order — Entity::refreshFluidState /
+// Entity::integrateFluid): a submerged mob RISES (the buoyancy 12, capped
+// 1.5) and FLOATS at W' (the geometric plane one above the topmost level-8
+// cell of the feet's center column — the exact, fps-independent terminal
+// state); a falling mob sinks (the entry-momentum clamp) to the pool floor
+// and STANDS (the fresh resting gate); the horizontal speed is gated ×0.6
+// (kUnderwaterSpeedFactor); the ENT-3 step-up is forbidden in fluid. The
+// fire system (P57/58/73) is untouched — the MobFireTest lava scenarios
+// above pin that a burning mob on the lava floor still stands and ticks
+// at the same rate.
+//
+// Pool conventions: the fixture floor tops out at y=1; an n-cell L8 pool
+// (y=1..n) has W' = 1+n. fillFloor (the fire-section helper) covers the
+// whole fixture floor in 2-deep fluid — a wandering mob (<= 0.4 b/s,
+// gated 0.24 in fluid) cannot leave it within a test window, so the float
+// tests do not depend on the wander path.
+
+namespace {
+
+// An n-cell full (L8) pool on the fixture floor. `kind` defaults to water;
+// the symmetric lava float (the documented ENT-4 extension) is a test.
+void buildMobPool(Fixture& f, int x0, int x1, int z0, int z1, int n,
+                  FluidKind kind = FluidKind::Water) {
+    for (int x = x0; x <= x1; ++x) {
+        for (int z = z0; z <= z1; ++z) {
+            for (int y = 1; y <= n; ++y) {
+                f.world.setFluid(x, y, z, kind, kMaxFluidLevel);
+            }
+        }
+    }
+}
+
+// A 1-cell L8 film across the whole fixture floor (the wade case: W' = 2,
+// the feet on the pool floor — a step-up would lift out of the water).
+void buildMobFilm(Fixture& f, int x1) {
+    for (int x = -16; x <= x1; ++x) {
+        for (int z = -16; z < 16; ++z) {
+            f.world.setFluid(x, 1, z, FluidKind::Water, kMaxFluidLevel);
+        }
+    }
+}
+
+} // namespace
+
+TEST(MobFluidTest, DetectsFootBodyLavaAndDry) {
+    // The in-fluid state = the strict AABB overlap of at least one water
+    // OR lava cell (the player's isInWater/isInLava union scan): the feet
+    // cell (a wading mob on a 1-cell film), the BODY cell (a submerged
+    // mob whose feet clear the water), lava (the symmetric path), and DRY
+    // (no pool — the state is inert).
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+
+    // Feet cell: a 1-cell pool (the water at y=1), the mob's feet on the
+    // pool floor (y=1) — the AABB [1, 2.8] strictly overlaps the cell
+    // [1, 2) and nothing else.
+    buildMobPool(f, 6, 10, 6, 10, 1);
+    MobEntity feet = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    feet.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    feet.update(kDt);
+    EXPECT_TRUE(feet.inFluid());
+
+    // Body cell: a 2-cell pool, the mob's feet at y=2 (the AABB [2, 3.8]
+    // strictly overlaps ONLY the body water cell [2, 3) — the feet cell
+    // [1, 2) is not overlapped).
+    buildMobPool(f, -14, -10, 6, 10, 2);
+    MobEntity body = makeMob(f, def, {-12.5f, 2.0f, 8.5f});
+    body.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    body.update(kDt);
+    EXPECT_TRUE(body.inFluid());
+    EXPECT_TRUE(body.overlapsFluid(FluidKind::Water));
+
+    // Lava: the symmetric in-fluid path (P58's burn is untouched — the
+    // fire system's FRESH checks run as before). The pool stays inside
+    // the fixture floor's chunk region (setFluid on an unloaded chunk
+    // would fail — the P54 void-stays-dry rule).
+    buildMobPool(f, 14, 15, 6, 10, 1, FluidKind::Lava);
+    MobEntity lava = makeMob(f, def, {14.5f, 1.0f, 8.5f});
+    lava.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    lava.update(kDt);
+    EXPECT_TRUE(lava.inFluid());
+
+    // Dry: the same floor with no pool under the mob — inert.
+    MobEntity dry = makeMob(f, def, {0.5f, 1.0f, 0.5f});
+    dry.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    dry.update(kDt);
+    EXPECT_FALSE(dry.inFluid());
+}
+
+TEST(MobFluidTest, SubmergedMobRisesAndFloatsAtSurface) {
+    // A submerged body with no input RISES (the buoyancy, capped at 1.5)
+    // and FLOATS at W' = 3 (the 2-deep floor pool) — the geometric
+    // terminal (exact, fps-independent; the assertion point).
+    Fixture f;
+    fillFloor(f, FluidKind::Water); // W' = 3 everywhere on the floor
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 2.0f, 8.5f}); // 1 below W', vy 0
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false); // pure wander (stays in)
+    bool rose = false;
+    for (int i = 0; i < 180; ++i) {
+        mob.update(kDt);
+        if (mob.position().y > 2.1f) {
+            rose = true;
+        }
+        // The rise never exceeds the plane (the snap clamps the crossing
+        // sub-step to W' exactly).
+        EXPECT_LE(mob.position().y, 3.0f) << "frame " << i;
+    }
+    EXPECT_TRUE(rose); // it did rise (not the pre-ENT-4 sink-to-bottom)
+    // The geometric terminal: exact (the float is geometry, not a force
+    // balance).
+    EXPECT_FLOAT_EQ(mob.position().y, 3.0f);
+    EXPECT_EQ(mob.velocity().y, 0.0f);
+    EXPECT_FALSE(mob.onGround());
+    // The fixed point: more frames keep it (the fps-independent terminal
+    // — the E2E assertion point).
+    runMob(mob, 240);
+    EXPECT_FLOAT_EQ(mob.position().y, 3.0f);
+    EXPECT_EQ(mob.velocity().y, 0.0f);
+    EXPECT_FALSE(mob.onGround());
+}
+
+TEST(MobFluidTest, FallingMobSinksToPoolFloor) {
+    // Entry momentum: a fast-falling mob (the vy >= 0 rise gate excluded)
+    // sinks at the water terminal (-4) to the pool floor, where it STANDS
+    // (the fresh resting gate — the player's "stand on the bottom").
+    Fixture f;
+    fillFloor(f, FluidKind::Water); // the floor y=1, W' = 3
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 8.0f, 8.5f});
+    mob.setVelocity({0.0f, -30.0f, 0.0f}); // a fast entry
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    runMob(mob, 600); // 10 s: the air fall + the sink + the settle
+    EXPECT_FLOAT_EQ(mob.position().y, 1.0f); // the pool floor
+    EXPECT_TRUE(mob.onGround());
+    EXPECT_EQ(mob.velocity().y, 0.0f);
+    // It sank, it did not rise (mutually exclusive with the terminal of
+    // SubmergedMobRisesAndFloatsAtSurface on the same pool).
+    EXPECT_NE(mob.position().y, 3.0f);
+}
+
+TEST(MobFluidTest, WadesSlowerInWaterThanOnLand) {
+    // The horizontal gate: a chasing mob's per-frame displacement is
+    // speed × 0.6 / 60 in the wade (the feet on the 1-cell film) and
+    // speed / 60 on land (the identical fixture minus the film). The
+    // chase is exactly +X (the player ahead at the same height), so the
+    // per-frame dx is the raw gated speed (no normalization residue).
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+
+    Fixture f;
+    buildMobFilm(f, 15); // the 1-cell film: W' = 2, the wade case
+    MobEntity inWater = makeMob(f, def, {6.5f, 1.0f, 9.5f});
+    inWater.setPlayer({15.5f, 1.0f, 9.5f}, true); // chase +X
+    Fixture g; // the same floor, DRY
+    MobEntity onLand = makeMob(g, def, {6.5f, 1.0f, 9.5f});
+    onLand.setPlayer({15.5f, 1.0f, 9.5f}, true);
+    runMob(inWater, 15); // 0.25 s — well inside the detect radius
+    runMob(onLand, 15);
+    const float dxWater = inWater.position().x - 6.5f;
+    const float dxLand = onLand.position().x - 6.5f;
+    EXPECT_NEAR(dxWater, 15.0 * 0.8f * 0.6f / 60.0, 1e-5f);
+    EXPECT_NEAR(dxLand, 15.0 * 0.8f / 60.0, 1e-5f);
+    EXPECT_NEAR(dxWater / dxLand, 0.6f, 1e-4f); // the gate ratio, pinned
+    // The wade stays on the pool floor (the fresh resting gate: no rise
+    // off the bottom — the float is at W' = 2, one block up, unreachable
+    // for a grounded body).
+    EXPECT_FLOAT_EQ(inWater.position().y, 1.0f);
+    EXPECT_TRUE(inWater.onGround());
+}
+
+TEST(MobFluidTest, NoStepUpInWater) {
+    // The ENT-3 step-up is forbidden in fluid (!m_inFluid gate): the same
+    // 1-block step (two cells wide in +X — the shared judgment's +X
+    // front-check quirk, the DoesNotStepSingleCellStepPlusX twin) is
+    // CROSSED on land (the ChasesUpOneBlockStep twin) but NOT in the
+    // wading film (the step face clamps the mob at the pool level — the
+    // float terminal is untouched).
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+
+    Fixture f;
+    // The step: x 10..11 (two cells in +X), z 8..10, top y=2.
+    for (int x = 10; x < 12; ++x) {
+        for (int z = 8; z < 10; ++z) {
+            f.world.setBlock(x, 1, z, f.stone);
+        }
+    }
+    // The wading film: up to the step face (the step cell itself is solid
+    // — setFluid on it would fail, the block-occupies-cell rule).
+    buildMobFilm(f, 9);
+    MobEntity inWater = makeMob(f, def, {8.5f, 1.0f, 9.5f});
+    inWater.setPlayer({13.9f, 1.0f, 9.5f}, true); // beyond the step
+
+    Fixture g;
+    for (int x = 10; x < 12; ++x) {
+        for (int z = 8; z < 10; ++z) {
+            g.world.setBlock(x, 1, z, g.stone);
+        }
+    }
+    MobEntity onLand = makeMob(g, def, {8.5f, 1.0f, 9.5f});
+    onLand.setPlayer({13.9f, 1.0f, 9.5f}, true);
+
+    runMob(inWater, 400);
+    runMob(onLand, 400);
+    // On land: crossed the step (and fell back to the far floor — the
+    // ChasesUpOneBlockStep twin's stop point 13.9 - 1.6 = 12.3, y = 1).
+    EXPECT_EQ(onLand.state(), MobState::Attack);
+    EXPECT_NEAR(onLand.position().x, 12.3f, 0.02f);
+    EXPECT_FLOAT_EQ(onLand.position().y, 1.0f);
+    // In water: clamped at the step face (10 - 0.3 = 9.7), still on the
+    // pool floor (y = 1) — the mutually exclusive outcome (chase forever,
+    // the step never crossed).
+    EXPECT_EQ(inWater.state(), MobState::Chase);
+    EXPECT_NEAR(inWater.position().x, 9.7f, 0.02f);
+    EXPECT_FLOAT_EQ(inWater.position().y, 1.0f);
+    EXPECT_TRUE(inWater.onGround());
+}
+
+TEST(MobFluidTest, SubmergedRiseIsFrameLockedDeterministic) {
+    // Two identical mobs (the same seed — the wander stream), preset
+    // MID-POOL (the rise + the float transition inside the run): every
+    // frame's state is bit-identical (hard rule 8: the fixed 1/60 step,
+    // no real dt, no randomness beyond the shared stream).
+    Fixture f;
+    fillFloor(f, FluidKind::Water); // W' = 3
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity a = makeMob(f, def, {8.5f, 2.0f, 8.5f});
+    MobEntity b = makeMob(f, def, {8.5f, 2.0f, 8.5f});
+    const Vec3 far {30.0f, 1.0f, 30.0f};
+    a.setPlayer(far, false);
+    b.setPlayer(far, false);
+    for (int i = 0; i < 300; ++i) {
+        a.update(kDt);
+        b.update(kDt);
+        EXPECT_EQ(a.position().x, b.position().x) << "frame " << i;
+        EXPECT_EQ(a.position().y, b.position().y) << "frame " << i;
+        EXPECT_EQ(a.position().z, b.position().z) << "frame " << i;
+        EXPECT_EQ(a.velocity().x, b.velocity().x) << "frame " << i;
+        EXPECT_EQ(a.velocity().y, b.velocity().y) << "frame " << i;
+        EXPECT_EQ(a.velocity().z, b.velocity().z) << "frame " << i;
+    }
+    // Both settled at the exact float terminal (the fps-independent
+    // assertion point).
+    EXPECT_FLOAT_EQ(a.position().y, 3.0f);
+    EXPECT_FLOAT_EQ(b.position().y, 3.0f);
+    EXPECT_EQ(a.velocity().y, 0.0f);
+    EXPECT_EQ(b.velocity().y, 0.0f);
+}
+
+TEST(MobFluidTest, OnLandMobIsFluidInert) {
+    // The on-land regression anchor: a DRY run never enters the fluid
+    // model — the state stays inert (inFluid false, no surface plane) and
+    // the fall is the plain gravity model (the on-land trajectory
+    // bit-identical to the pre-ENT-4 code — the whole existing mob suite
+    // pins it: chase / wander / knockback / step-up).
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 10.0f, 8.5f});
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    for (int i = 0; i < 60; ++i) {
+        mob.update(kDt);
+        EXPECT_FALSE(mob.inFluid()) << "frame " << i;
+    }
+    EXPECT_TRUE(mob.onGround());
+    EXPECT_FLOAT_EQ(mob.position().y, 1.0f);
+    EXPECT_EQ(mob.velocity().y, 0.0f);
+}

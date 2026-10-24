@@ -340,13 +340,9 @@ private:
 
     // FLUID-2 (the rise gate, the FRESH grounded check): a solid that the
     // Y resolve would clamp against right now (a solid-region top at the
-    // feet, within kFaceEps) — the same scan as moveAxis (the strict
-    // footprint overlap + solidTopHeight), the cell row at and one below
-    // the feet plane (the wall-cap extension, Phase 95). FRESH because the
-    // tick m_onGround is the previous sub-step's result: a player preset
-    // at — or restored onto — a pool floor has no collision history yet
-    // and would otherwise pop off into the passive rise.
-    bool isRestingOnSolid() const;
+    // feet, within kFaceEps) — ENT-4: lifted to the Entity base (see
+    // entity.hpp) so the mob + item share it; the player inherits it,
+    // unchanged.
 
     Params m_params;
     Vec3 m_spawnPos {0.0f, 0.0f, 0.0f};

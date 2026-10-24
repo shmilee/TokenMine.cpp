@@ -55,10 +55,27 @@ void MobEntity::update(double dt) {
     if (m_knockbackTime <= 0.0) {
         runAi(dt);
     }
-    // Peak-speed estimate for the sub-step count: this tick's post-gravity
-    // vertical velocity (the horizontal one only decays or is reset).
-    const float vyAfter = std::max(
-        m_velocity.y - kGravity * static_cast<float>(dt), -kTerminalVelocity);
+    // ENT-4: the fluid tick state (once per update, the player's FLUID-2
+    // pattern — consumed per sub-step by integrate) + the underwater
+    // horizontal gate (×kUnderwaterSpeedFactor on whatever drives the
+    // move this tick — the AI steering AND the knockback slide). The AI
+    // state machine is untouched: chase / wander steer as usual, only the
+    // physics changes.
+    refreshFluidState();
+    if (m_inFluid || m_atSurface) {
+        m_velocity.x *= kUnderwaterSpeedFactor;
+        m_velocity.z *= kUnderwaterSpeedFactor;
+    }
+    // Peak-speed estimate for the sub-step count: in fluid (or at its
+    // surface) the vertical motion is bounded by the rise/sink caps (the
+    // player's FLUID-2 peak set, input-free — a peak SET, not one gravity
+    // step); in air, this tick's post-gravity vertical velocity (UNCHANGED
+    // — the on-land trajectory stays bit-identical to the pre-ENT-4
+    // model; the horizontal one only decays or is reset).
+    const float vyAfter = m_inFluid || m_atSurface
+        ? std::max(std::abs(m_velocity.y), kWaterTerminalVelocity)
+        : std::max(m_velocity.y - kGravity * static_cast<float>(dt),
+                   -kTerminalVelocity);
     const float maxSpeed =
         std::max({std::abs(m_velocity.x), std::abs(vyAfter),
                   std::abs(m_velocity.z)});
@@ -78,8 +95,10 @@ void MobEntity::update(double dt) {
     // <= 1.0: a slab / full block / a glass pane — NOT the wall / fence
     // 1.5 barrier). This is the fix for the chase getting permanently
     // stuck on 1-block terrain steps. Pure geometry: frame-locked, no real
-    // dt, no randomness (hard rule 8).
-    if (m_onGround && lengthSq(preMove) > 0.0f) {
+    // dt, no randomness (hard rule 8). ENT-4: forbidden in fluid — a
+    // step-up in water is meaningless (no ground pace) and would break
+    // the pool-floor stand / the W' float terminal.
+    if (m_onGround && !m_inFluid && lengthSq(preMove) > 0.0f) {
         stepUp(normalized(preMove), preMoveSpeed * static_cast<float>(dt));
     }
 
@@ -144,14 +163,25 @@ void MobEntity::update(double dt) {
 }
 
 void MobEntity::integrate(float h) {
-    // Gravity, capped at terminal velocity. No ground friction: the AI
-    // sets the exact data speed every frame (a friction decay would make
-    // the walking speed a function of the sub-step count). During the
-    // knockback window the impulse decays exponentially instead.
-    m_velocity.y -= kGravity * h;
-    if (m_velocity.y < -kTerminalVelocity) {
-        m_velocity.y = -kTerminalVelocity;
+    if (m_inFluid || m_atSurface) {
+        // ENT-4: the fluid force model (the player's FLUID-2 integrate,
+        // the input branches removed — a mob has no Space / crouch: it
+        // rises or sinks, it does not dive or swim-up). No gravity in
+        // fluid; the at-surface branch keeps the W' float terminal a
+        // fixed point after the feet clear the water cells.
+        integrateFluid(h);
+    } else {
+        // Gravity, capped at terminal velocity.
+        m_velocity.y -= kGravity * h;
+        if (m_velocity.y < -kTerminalVelocity) {
+            m_velocity.y = -kTerminalVelocity;
+        }
     }
+    // No ground friction: the AI sets the exact data speed every frame (a
+    // friction decay would make the walking speed a function of the
+    // sub-step count). During the knockback window the impulse decays
+    // exponentially instead (in fluid too — the water damps the slide as
+    // the gate damps the steer).
     if (m_knockbackTime > 0.0) {
         const float f = std::exp(-kKnockbackDamping * h);
         m_velocity.x *= f;

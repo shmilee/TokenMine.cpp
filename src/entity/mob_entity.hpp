@@ -4,7 +4,14 @@
 // sub-stepped axis moves). Unlike dropped items there is NO ground
 // friction: the AI sets the horizontal velocity every frame (exact data
 // speed), and knockback decays with its own damping while the knockback
-// window is open.
+// window is open. ENT-4: while the AABB overlaps a water OR lava cell
+// (or the body rests at the fluid's surface) the physics switches to the
+// shared fluid model (Entity::refreshFluidState + integrateFluid — the
+// input-free twin of the player's FLUID-2 swim: passive rise, the
+// geometric W' float, the sink / pool-floor stand), the horizontal speed
+// is gated by kUnderwaterSpeedFactor, and the step-up (ENT-3) is
+// forbidden in fluid. The AI state machine is untouched — chase / wander
+// steer as usual underwater.
 //
 // AI (deterministic: the same seed + input sequence yields the same
 // trajectory). The game steps mobs with a FIXED per-frame dt (the day
@@ -101,6 +108,12 @@ public:
     // identity pose) while standing. Types without swing data never
     // advance (structural: their render path stays the static mesh).
     int swingPhase() const { return m_swingPhase; }
+
+    // ENT-4: this tick's fluid state (the strict AABB overlap of at least
+    // one water OR lava cell — the player's inWater()/inLava() union; the
+    // fire system's checks below stay FRESH per the P57 pattern, a
+    // different read). Exposed for tests and the debug overlay.
+    bool inFluid() const { return m_inFluid; }
 
     // Subtract damage; returns true when THIS hit killed the mob.
     bool damage(float amount);
@@ -216,6 +229,13 @@ private:
     static constexpr float kKnockbackDamping = 6.0f;
     // The ranged-shot origin as a fraction of the model height (the head).
     static constexpr float kEyeHeightFraction = 0.8f;
+    // ENT-4: the underwater horizontal speed gate — the AI steering AND
+    // the knockback slide are multiplied by this while in fluid (or at
+    // its surface, the player's m_atSurface swim-pace analog). A named
+    // constant, not a per-mob data field (documented YAGNI deviation:
+    // every mob swims at the same pace, like the player's single
+    // swimSpeed).
+    static constexpr float kUnderwaterSpeedFactor = 0.6f;
 };
 
 } // namespace mc

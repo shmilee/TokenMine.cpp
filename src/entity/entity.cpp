@@ -582,4 +582,122 @@ void Entity::stepUp(const Vec3& wishDir, float distPerTick) {
     }
 }
 
+void Entity::refreshFluidState() {
+    const bool inWater = overlapsFluid(FluidKind::Water);
+    const bool inLava = overlapsFluid(FluidKind::Lava);
+    m_inFluid = inWater || inLava;
+    // The scan kind: WATER while a water cell is overlapped (the
+    // player's convention — a lava column never floats over water), LAVA
+    // while only in lava (the symmetric extension); the kind is
+    // REMEMBERED while the body is in the air — the float terminal (the
+    // feet cleared the fluid cells) is maintained by the at-surface band
+    // alone (the player's pattern: its scan runs unconditionally, always
+    // with the water kind).
+    if (inWater) {
+        m_surfaceKind = FluidKind::Water;
+    } else if (inLava) {
+        m_surfaceKind = FluidKind::Lava;
+    }
+    m_restingOnSolid = isRestingOnSolid();
+    // The W' surface plane of the feet's center column (the player's
+    // FLUID-2 scan, verbatim): one above the topmost full (level-8) cell
+    // at or below the feet, or -1 when none (no float plane). In a
+    // continuous column W' tracks the feet one cell above (a transient
+    // local plane) and resolves to the true surface at the topmost cell —
+    // so the float only settles where the column ends.
+    const int cx = static_cast<int>(std::floorf(m_position.x));
+    const int cz = static_cast<int>(std::floorf(m_position.z));
+    const int top = static_cast<int>(std::floorf(m_position.y));
+    m_fluidSurfaceY = -1.0f;
+    for (int y = top; y > top - kFluidSurfaceScanDepth; --y) {
+        if (m_world.getFluidOfKind(cx, y, cz, m_surfaceKind) ==
+            kMaxFluidLevel) {
+            m_fluidSurfaceY = static_cast<float>(y) + 1.0f;
+            break;
+        }
+    }
+    m_atSurface = m_fluidSurfaceY > 0.0f &&
+        std::abs(m_position.y - m_fluidSurfaceY) <= kMaxSubstepMove &&
+        !m_restingOnSolid;
+}
+
+void Entity::integrateFluid(float h) {
+    if (m_atSurface && !m_onGround && m_velocity.y >= 0.0f &&
+        (m_position.y >= m_fluidSurfaceY - kFaceEps ||
+         m_position.y + m_velocity.y * h >= m_fluidSurfaceY - kFaceEps) &&
+        (m_position.y <= m_fluidSurfaceY + kFaceEps ||
+         m_velocity.y <= kWaterRiseSpeed + kFaceEps)) {
+        // Float snap (the player's FLUID-2 geometric clamp to the surface
+        // plane). The crossing re-check: a sub-step's displacement (up to
+        // kMaxSubstepMove) skips the kFaceEps band, so the snap fires when
+        // the sub-step reaches the plane from below (or the feet are
+        // already at/above it); the rise-speed gate keeps a breach (an
+        // above-the-plane vy) from being pulled back. The terminal
+        // (y = W', vy = 0, onGround false) is a fixed point — no input
+        // re-snaps it every tick, so it is fps-independent.
+        m_position.y = m_fluidSurfaceY;
+        m_velocity.y = 0.0f;
+    } else if (!m_restingOnSolid && m_fluidSurfaceY > 0.0f &&
+               m_velocity.y >= 0.0f) {
+        // Passive rise: buoyancy, capped at kWaterRiseSpeed. Gated on
+        // vy >= 0 — a FALLING body (the water entry with momentum) keeps
+        // sinking (the MC "dive" semantics: a falling body sinks to the
+        // bottom, a still body floats up); on a surface in the column (a
+        // pure flow film gives no buoyancy); and on free — a body on the
+        // pool floor STANDS (the FRESH check: the tick m_onGround is the
+        // previous sub-step's result).
+        m_velocity.y = std::min(m_velocity.y + kWaterBuoyancy * h,
+                                kWaterRiseSpeed);
+    } else {
+        // Sink: the downward drift (grounded in water — the Y resolve
+        // re-clamps it against the floor every sub-step, re-establishing
+        // onGround —, falling with entry momentum, clamped at the water
+        // terminal, or in a column with no surface — a pure flow film).
+        m_velocity.y -= kWaterBuoyancy * h;
+        if (m_velocity.y < -kWaterTerminalVelocity) {
+            m_velocity.y = -kWaterTerminalVelocity;
+        }
+    }
+}
+
+bool Entity::isRestingOnSolid() const {
+    const float half = m_width * 0.5f;
+    const int x0 = static_cast<int>(std::floorf(m_position.x - half));
+    const int x1 = static_cast<int>(std::floorf(m_position.x + half));
+    const int z0 = static_cast<int>(std::floorf(m_position.z - half));
+    const int z1 = static_cast<int>(std::floorf(m_position.z + half));
+    // The cell row the feet plane sits on (floor(feet - kFaceEps): a face
+    // resting exactly on a boundary is NOT in that cell) + the row below
+    // (a wall cap extends 0.5 above its cell — the Phase-95 extension).
+    const int ySupport =
+        static_cast<int>(std::floorf(m_position.y - kFaceEps));
+    for (int y = ySupport - 1; y <= ySupport; ++y) {
+        for (int x = x0; x <= x1; ++x) {
+            for (int z = z0; z <= z1; ++z) {
+                if (!(m_position.x - half < x + 1 &&
+                      m_position.x + half > x)) {
+                    continue;
+                }
+                if (!(m_position.z - half < z + 1 &&
+                      m_position.z + half > z)) {
+                    continue;
+                }
+                const BlockPos cell {x, y, z};
+                const Vec3 mn {m_position.x - half, m_position.y,
+                               m_position.z - half};
+                const Vec3 mx {m_position.x + half, m_position.y + m_height,
+                               m_position.z + half};
+                const float top =
+                    solidTopHeight(m_world.getBlock(x, y, z), mn, mx, cell);
+                if (top > 0.0f &&
+                    std::abs(m_position.y -
+                             (static_cast<float>(y) + top)) <= kFaceEps) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 } // namespace mc

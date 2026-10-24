@@ -15,7 +15,16 @@
 //
 // Physics: the same fall as the player (gravity 32 / terminal 38) plus an
 // exponential horizontal friction that zero's out below kStopSpeed so a
-// dropped item truly comes to rest.
+// dropped item truly comes to rest. ENT-4: while the AABB overlaps a
+// water OR lava cell (or the item rests at the fluid's surface) the
+// physics switches to the shared fluid model (Entity::refreshFluidState +
+// integrateFluid — the input-free twin of the player's FLUID-2 swim):
+// passive rise (buoyancy 12, capped 1.5), the geometric W' float (the
+// terminal is a STATIONARY item — the friction zero's the residual, no
+// surface drift, the documented MC simplification), and the sink /
+// pool-floor stand for entry momentum. LAVA floats symmetrically (the
+// documented extension: the player's lava has the weaker pace, items take
+// the water model in both kinds).
 //
 // Merging: two same-item entities within kMergeDistance of each other's
 // bottom-center position merge into the earlier one. The game performs the
@@ -62,6 +71,10 @@ public:
     // Remaining pickup delay (seconds; 0 = pickable now). Save/load
     // (Phase 13) restores the timers with setAge/setPickupDelay.
     double pickupDelayRemaining() const { return m_pickupDelay; }
+    // ENT-4: this tick's fluid state (the strict AABB overlap of at least
+    // one water OR lava cell — the player's inWater()/inLava() union).
+    // Exposed for tests.
+    bool inFluid() const { return m_inFluid; }
     void setAge(double a) { m_age = a; }
     void setPickupDelay(double remaining) { m_pickupDelay = remaining; }
 

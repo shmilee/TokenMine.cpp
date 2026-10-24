@@ -22,7 +22,11 @@
 //
 // The World + BlockRegistry are the sole source of solid/air: an entity
 // reads properties.solid and never switches on block identity. Fluid cells
-// are non-solid (entities pass through them).
+// are non-solid (entities pass through them). ENT-4: the shared fluid
+// immersion model (the input-free twin of the player's FLUID-2 swim)
+// lives here — refreshFluidState() + integrateFluid(), used by the mobs
+// and the items; the projectiles opt out (arrows fly through water, the
+// documented boundary).
 //
 // Ownership: the game owns the entity list and calls update() on each
 // entity. Entities never delete themselves — the game removes an entity
@@ -221,6 +225,79 @@ protected:
     // tunnel-safe, hard rule 6). Pure geometry: frame-locked, no real dt,
     // no randomness.
     void stepUp(const Vec3& wishDir, float distPerTick);
+
+    // -- ENT-4: the shared fluid immersion model --------------------------
+    //
+    // The input-free twin of the player's FLUID-2 swim (same constants,
+    // same formulas, same branch order — the player keeps its
+    // config-driven Params; their defaults are these constants). Mobs (the
+    // fixed 1/60 step) and items (the real-dt step) call
+    // refreshFluidState() once per update() and integrateFluid(h) from
+    // their integrate() while in a fluid OR at its surface; projectiles
+    // opt out (arrows fly through water — the documented boundary).
+    //
+    // refreshFluidState: the in-fluid state = the strict AABB overlap of
+    // at least one water OR lava cell (overlapsFluid, the player's
+    // isInWater/isInLava scan — the "feet cell or body cell" test). The
+    // W' surface plane = one above the topmost full (level-8) cell of the
+    // IMMERSION KIND at or below the feet, scanned down
+    // kFluidSurfaceScanDepth (the player's kSurfaceScanDepth, the same
+    // loop), -1 when none; WATER counts for the surface when both kinds
+    // overlap (the player's convention: a lava column never floats over
+    // water) — a lava-only immersion floats on the LAVA column (the
+    // symmetric extension, documented).
+    void refreshFluidState();
+
+    // integrateFluid: one sub-step of the fluid force model (the player's
+    // FLUID-2 integrate with the input branches removed — a mob / item
+    // has no Space / crouch, it rises or sinks), the branch order: the
+    // float snap (the geometric clamp to W': the crossing re-check + the
+    // rise-speed gate; the terminal y = W', vy = 0, onGround false is a
+    // fixed point — fps-independent) > the passive rise (buoyancy, capped
+    // at kWaterRiseSpeed; gated on free + a column + vy >= 0 — a falling
+    // body keeps sinking: the entry-momentum clamp, the Minecraft "dive"
+    // semantics) > the sink (the same buoyancy downward, capped at
+    // -kWaterTerminalVelocity: the pool-floor stand, the entry momentum,
+    // a pure flow film). NO GRAVITY in fluid — the air model is the
+    // caller's integrate().
+    void integrateFluid(float h);
+
+    // The fresh grounded check (the player's FLUID-2 isRestingOnSolid,
+    // lifted to the base in ENT-4 so the mob + item share it): a solid
+    // that the Y resolve would clamp against right now (a solid-region top
+    // at the feet, within kFaceEps) — the same scan as moveAxis (the
+    // strict footprint overlap + solidTopHeight), the cell row at and one
+    // below the feet plane (the wall-cap extension, Phase 95). FRESH
+    // because the tick m_onGround is the previous sub-step's result: a
+    // body preset at — or restored onto — a pool floor has no collision
+    // history yet and would otherwise pop off into the passive rise.
+    bool isRestingOnSolid() const;
+
+    // This tick's fluid state (refreshFluidState; computed once per
+    // update, consumed per sub-step). m_atSurface: the feet within the
+    // float band (kMaxSubstepMove, the max per-sub-step vertical
+    // displacement, so a sub-step that crosses the plane is always seen)
+    // of m_fluidSurfaceY and not resting on a solid. m_surfaceKind: the
+    // kind the W' scan uses — WATER while the body overlaps a water cell
+    // (the player's convention: a lava column never floats over water),
+    // LAVA while only in lava (the symmetric extension), and the LAST
+    // such kind while the body is in the air: the float terminal (the
+    // feet have cleared the fluid cells) is maintained by the at-surface
+    // band alone — the player's pattern (its scan runs unconditionally,
+    // always with the water kind).
+    bool m_inFluid = false;
+    float m_fluidSurfaceY = -1.0f;
+    bool m_atSurface = false;
+    bool m_restingOnSolid = false;
+    FluidKind m_surfaceKind = FluidKind::Water;
+
+    // The fluid force model (ENT-4): the player's FLUID-2 values (its
+    // config defaults — the player's keys keep the same numbers; here
+    // they are named constants, zero config by design).
+    static constexpr float kWaterBuoyancy = 12.0f;
+    static constexpr float kWaterRiseSpeed = 1.5f;
+    static constexpr float kWaterTerminalVelocity = 4.0f;
+    static constexpr int kFluidSurfaceScanDepth = 32;
 };
 
 // -- entity-vs-entity separation (Phase 19) ----------------------------------
