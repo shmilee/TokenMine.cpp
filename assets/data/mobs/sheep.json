@@ -19,8 +19,8 @@
     "height": 1.5,
     "boxes": [
       {
-        "pos": [0.0, 0.95, 0.0],
-        "size": [0.625, 1.0, 0.5],
+        "pos": [0.0, 1.025, 0.0],
+        "size": [0.625, 0.55, 0.95],
         "texture": "sheep_body"
       },
       {
@@ -54,10 +54,10 @@
       }
     ],
     "swings": [
-      { "part": "leg_fl", "amplitude": 0.7, "group": 0 },
-      { "part": "leg_fr", "amplitude": 0.7, "group": 1 },
-      { "part": "leg_rl", "amplitude": 0.7, "group": 1 },
-      { "part": "leg_rr", "amplitude": 0.7, "group": 0 }
+      { "part": "leg_fl", "amplitude": 0.5, "group": 0 },
+      { "part": "leg_fr", "amplitude": 0.5, "group": 1 },
+      { "part": "leg_rl", "amplitude": 0.5, "group": 1 },
+      { "part": "leg_rr", "amplitude": 0.5, "group": 0 }
     ]
   }
 }

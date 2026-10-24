@@ -19,8 +19,8 @@
     "height": 0.8,
     "boxes": [
       {
-        "pos": [0.0, 0.475, 0.0],
-        "size": [0.375, 0.45, 0.375],
+        "pos": [0.0, 0.485, 0.0],
+        "size": [0.375, 0.35, 0.5],
         "texture": "chicken_body"
       },
       {
@@ -36,29 +36,29 @@
         "texture": "chicken_legs"
       },
       {
-        "pos": [-0.21, 0.475, 0.0],
+        "pos": [-0.21, 0.485, 0.0],
         "size": [0.06, 0.28, 0.3],
         "texture": "chicken_body"
       },
       {
-        "pos": [0.21, 0.475, 0.0],
+        "pos": [0.21, 0.485, 0.0],
         "size": [0.06, 0.28, 0.3],
         "texture": "chicken_body"
       },
       {
-        "pos": [0.0, 0.675, -0.1],
+        "pos": [0.0, 0.585, -0.125],
         "size": [0.25, 0.25, 0.25],
         "texture": "chicken_head"
       },
       {
-        "pos": [0.0, 0.67, -0.205],
+        "pos": [0.0, 0.585, -0.205],
         "size": [0.14, 0.08, 0.09],
         "texture": "chicken_legs"
       }
     ],
     "swings": [
-      { "part": "leg_l", "amplitude": 0.5, "group": 0 },
-      { "part": "leg_r", "amplitude": 0.5, "group": 1 }
+      { "part": "leg_l", "amplitude": 0.4, "group": 0 },
+      { "part": "leg_r", "amplitude": 0.4, "group": 1 }
     ]
   }
 }

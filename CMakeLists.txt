@@ -50,6 +50,7 @@ add_library(mc_core STATIC
     src/entity/mob_registry.cpp
     src/entity/mob_spawning.cpp
     src/entity/mob_swing.cpp
+    src/entity/mob_swing_clip.cpp
     src/entity/particle.cpp
     src/entity/projectile.cpp
     src/item/item_registry.cpp
@@ -140,6 +141,7 @@ add_executable(tokenmine_tests
     tests/test_difficulty.cpp
     tests/test_entity.cpp
     tests/test_mob.cpp
+    tests/test_mob_model.cpp
     tests/test_item.cpp
     tests/test_recipe.cpp
     tests/test_crafting_grid.cpp

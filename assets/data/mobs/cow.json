@@ -21,8 +21,8 @@
     "height": 1.5,
     "boxes": [
       {
-        "pos": [0.0, 0.95, 0.0],
-        "size": [0.75, 1.0, 0.625],
+        "pos": [0.0, 1.025, 0.0],
+        "size": [0.75, 0.55, 1.05],
         "texture": "cow_body"
       },
       {
@@ -56,10 +56,10 @@
       }
     ],
     "swings": [
-      { "part": "leg_fl", "amplitude": 0.7, "group": 0 },
-      { "part": "leg_fr", "amplitude": 0.7, "group": 1 },
-      { "part": "leg_rl", "amplitude": 0.7, "group": 1 },
-      { "part": "leg_rr", "amplitude": 0.7, "group": 0 }
+      { "part": "leg_fl", "amplitude": 0.5, "group": 0 },
+      { "part": "leg_fr", "amplitude": 0.5, "group": 1 },
+      { "part": "leg_rl", "amplitude": 0.5, "group": 1 },
+      { "part": "leg_rr", "amplitude": 0.5, "group": 0 }
     ]
   }
 }
