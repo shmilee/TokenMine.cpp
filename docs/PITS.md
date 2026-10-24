@@ -1671,3 +1671,52 @@
   拍 ×45 s 等待）：改 **1 帧探针跑**（~15 s/拍，截图非黑才发全帧数）——
   黑相 8 拍 ~20 min → ~6 min。标准库 = `/tmp/opencode/tm_run_lib.zsh`
   （run2/scenecheck/notblack/savenorm）。
+- **init 失败与黑相不可区分（皆"无截图"）+ scratch 资产必须每门刷新**——10-26
+  门 95：scratch 仓库资产未 rsync 刷新（无护甲物品 JSON）→ format 16 场景
+  init 失败（"save 'player.armor.chest' holds unknown item 'iron_chestplate'"）
+  → run() 按黑相重试 8 拍全废 + 拷的"save"实为场景文件本身（游戏 init 前
+  退出未写存档，cp 的是跑前复制的场景）→ hp=20/pos=51 假证据误导判读。
+  判别特征：save 的 player.pos = 场景预置值原样未动 + log 有
+  "Initialization failed"。**纪律**：run() 每拍退出先
+  `grep "Initialization failed" $log`（产品/配置/资产错误 = 重试无用，立即
+  停）再判黑相；断言存档前验证其为游戏所写；每个门脚本头部
+  `rsync -a --delete 主树/assets/ scratch/assets/`（gate94 有、gate95 漏 =
+  本坑）。
+- **跨清空的引用复制 = 物品凭空消失（dangling reference，门 95 护甲脱下
+  路径）**——10-26：`Game::tryArmor` 脱下分支 `const ItemStack& worn =
+  m_player->armorSlot(slot);` 先 `setArmorSlot(slot, {}, 0)` 清空、再
+  `m_inventory.setSlot(m_selectedSlot, worn)`——引用指向的栈已被清空，
+  写入手的是**空栈**，护甲件消失（装备→脱下往返后 armor={} 且手空，
+  E2E 现场实证）。换槽分支是拷贝（`const ItemStack worn = ...`）所以没
+  事；1421 单测全绿也漏了 = **tryArmor 交互路径零单测覆盖**（只测了解析
+  /存档）。修复：逻辑上提纯函数 `item/armor.{hpp,cpp}`
+  `armorRightClickUse(Player&, Inventory&, ItemRegistry&, selectedSlot) ->
+  ArmorUseAction`（campfire 范式，Game::tryArmor = 薄适配层只放音效）+
+  9 单测（含回归：脱下件必到选中槽）。**纪律**：凡"引用容器槽 → 改该槽
+  → 用引用"的三连 = 必拷贝；交互类 Game 方法（右键通道/放置/进食）逻辑
+  一律纯函数化上提，单测拥有决策+写入。**附带语义坑**：脱下到选中槽后
+  下一次右键 = 手非空 = 重新穿上（震荡）——"连点脱整套"不成立，脱整套
+  须每点之间换空热栏槽（热栏只有 **Tab 循环**无数字键直选——E2E 序列
+  L,R,Tab,R,Tab,R,Tab,R）。
+- **T450 输入送达协议（门 95 三轮定位）：窗口期 = IsViewable + 指针 top
+  = 游戏窗 + windowfocus --sync，点击走位置、键走焦点**——10-26 门 95
+  S3 输入全夜失效（e/u 4 跑 LOCK WARN 无送达）三轮定位：① `xdotool
+  search --name tokenmine` 误匹配 **Firefox 窗口与终端**（title 含项目
+  名）→ 永远 `tm_find_game_window $PID`（_NET_WM_PID 匹配）；游戏窗
+  口真实 title = "TokenMine.cpp - 60 FPS"（非 "tokenmine"）。② 窗口
+  可被 away 组件间歇 **unmap/重平铺**（XID 会变 = SDL 重建，Bad
+  Drawable 实证）→ 轮询"窗口期"：`xwininfo` IsViewable + warp 窗心 +
+  `tm_mouse_top`==WID，命中才发输入（**不做** stabilize/unmap_covers/
+  切桌面 = 那些"修复"步骤本身会把 viewable 相位破坏掉——lock_pointer
+  的 Super+N 切桌面在窗口就在当前桌面时 = 把视图切走）。③ **点击是
+  位置事件、键是焦点事件**：焦点漂移时点击仍可达游戏而 Tab/数字键
+  静默丢失（实证：sel 恒 0 而点击全生效）→ 每个键前
+  `xdotool windowfocus --sync $WID` + 0.2 s。④ **SDL 指针捕获（相对
+  模式）要求窗口有 X 焦点**：无焦点时 L 点击 grab 失败（WARN 被
+  --log-level error 压掉）→ 捕获前必 focus --sync；捕获成功 = log
+  "Pointer captured"（debug 级 = 验证抓手）。⑤ 捕获会被 away 重平铺
+  **释放**（窗口 1280x720→1362x744 实证）→ 需要截图时 HUD 可见的
+  跑（S4）= 早捕获 + 晚重捕（T0+16.5/19.0 s 各一次 phase-gated re-L；
+  捕获中 re-L = ~0.1 s 挖掘点击释放即重置 = 无害）。⑥ 长跑 1200 f
+  （20 s）给输入窗口期（240 f = 4 s 常错过相位）。**库**：
+  `tm_input_seq`（/tmp/opencode/tm_e2e_lib.zsh）编码 ①③④。

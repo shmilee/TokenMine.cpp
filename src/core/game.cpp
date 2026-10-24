@@ -32,6 +32,7 @@
 #include "ui/font.hpp"
 #include "ui/inventory_ui.hpp"
 #include "ui/ui_scale.hpp"
+#include "item/armor.hpp"
 
 namespace mc {
 
@@ -4190,58 +4191,24 @@ bool Game::tryFluidBucket() {
 }
 
 bool Game::tryArmor() {
-    // Armor (SURV-1): the right-click channel of the armor pieces. A
-    // HELD piece equips onto its data slot — an occupied slot SWAPS the
-    // piece with the held one (Minecraft). An EMPTY hand unequips the
-    // FIRST occupied slot in the fixed order head -> chest -> legs ->
-    // feet (repeated right-clicks strip the whole set, deterministic).
-    // The click is consumed whenever the hand holds a piece (armor is a
-    // material — placeBlock would be a no-op, and the channel owns the
-    // right button) or a piece is unequipped; an empty hand with
-    // nothing worn falls through (the sneak-rotate / place no-op).
+    // Armor (SURV-1): the right-click channel of the armor pieces. The
+    // decision + every state write is the pure armorRightClickUse (item/
+    // armor.hpp — the campfire pattern): a HELD piece equips onto its
+    // data slot (an occupied slot SWAPS the piece with the held one), an
+    // EMPTY hand unequips the first occupied slot in the fixed order
+    // head -> chest -> legs -> feet. The click is consumed whenever a
+    // piece is equipped, swapped or unequipped; otherwise it falls
+    // through (the sneak-rotate / place no-op).
     if (!m_player || m_player->isDead()) {
         return false;
     }
-    ItemStack& held = m_inventory.at(m_selectedSlot);
-    if (!held.empty()) {
-        const Item& item = m_items.at(held.item);
-        if (item.armorSlot.empty()) {
-            return false; // not armor: fall through to the next channel
-        }
-        // slot >= 0 is guaranteed (the parse's vocabulary check).
-        const int slot = armorSlotIndex(item.armorSlot);
-        if (m_player->armorSlot(slot).empty()) {
-            // Equip: the piece goes on (its count is 1 by the armor
-            // items' max_stack — the inventory enforces the data cap),
-            // the held slot empties.
-            m_player->setArmorSlot(slot, held, item.armorPoints);
-            m_inventory.setSlot(m_selectedSlot, ItemStack {});
-        } else {
-            // Swap: the held piece goes on, the equipped piece comes to
-            // the hand (a plain slot write — the selected slot holds
-            // exactly the piece being swapped out).
-            const ItemStack worn = m_player->armorSlot(slot);
-            const Item& wornItem = m_items.at(worn.item);
-            m_player->setArmorSlot(slot, held, item.armorPoints);
-            m_inventory.setSlot(m_selectedSlot, worn);
-            MC_LOG_DEBUG("swapped " + item.name + " with the worn " +
-                         wornItem.name + " (" + item.armorSlot + ")");
-        }
-        m_sound.play("cloth"); // the Minecraft armor sound (no new wav)
-        return true;
+    const ArmorUseAction action =
+        armorRightClickUse(*m_player, m_inventory, m_items, m_selectedSlot);
+    if (action == ArmorUseAction::None) {
+        return false;
     }
-    // Empty hand: unequip the FIRST occupied slot (the fixed order).
-    for (int slot = 0; slot < kArmorSlotCount; ++slot) {
-        const ItemStack& worn = m_player->armorSlot(slot);
-        if (worn.empty()) {
-            continue;
-        }
-        m_player->setArmorSlot(slot, ItemStack {}, 0);
-        m_inventory.setSlot(m_selectedSlot, worn);
-        m_sound.play("cloth");
-        return true;
-    }
-    return false; // nothing to unequip: fall through
+    m_sound.play("cloth"); // the Minecraft armor sound (no new wav)
+    return true;
 }
 
 void Game::clearStatusEffects() {
