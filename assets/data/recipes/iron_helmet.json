@@ -1,0 +1,9 @@
+{
+  "id": "iron_helmet",
+  "type": "shaped",
+  "output": { "item": "iron_helmet", "count": 1 },
+  "pattern": ["LLL"],
+  "key": {
+    "L": "iron_ingot"
+  }
+}

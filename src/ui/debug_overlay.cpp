@@ -36,8 +36,8 @@ std::vector<std::string> debugOverlayLines(const DebugInfo& info) {
         fmt("inventory %s  particles %zu  entities %zu",
             info.inventoryOpen ? "open" : "closed", info.particles,
             info.entities),
-        fmt("health %.1f / %.1f  absorption %.1f", info.health, info.maxHealth,
-            info.absorption),
+        fmt("health %.1f / %.1f  absorption %.1f  armor %d",
+            info.health, info.maxHealth, info.absorption, info.armorPoints),
         fmt("hunger %.0f / %.0f", info.hunger, info.maxHunger),
         fmt("difficulty %s", info.difficulty.c_str()),
         // Only the line's data when active (an empty string renders as

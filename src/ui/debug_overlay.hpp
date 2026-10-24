@@ -36,6 +36,7 @@ struct DebugInfo {
     double health = 0.0;    // Phase 16
     double maxHealth = 0.0;
     double absorption = 0.0; // Phase 72 (the separate pool)
+    int armorPoints = 0;     // SURV-1 (the capped equipped total)
     double hunger = 0.0;    // Phase 23
     double maxHunger = 0.0;
     std::string difficulty; // Phase 25: "easy" | "normal" | "hard"

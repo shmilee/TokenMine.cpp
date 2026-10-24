@@ -1,0 +1,8 @@
+{
+  "id": "diamond_boots",
+  "type": "material",
+  "max_stack": 1,
+  "icon": "diamond_boots",
+  "armor_slot": "feet",
+  "armor_points": 2
+}

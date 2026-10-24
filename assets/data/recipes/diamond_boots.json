@@ -1,0 +1,9 @@
+{
+  "id": "diamond_boots",
+  "type": "shaped",
+  "output": { "item": "diamond_boots", "count": 1 },
+  "pattern": ["L L","L L"],
+  "key": {
+    "L": "diamond"
+  }
+}

@@ -558,6 +558,20 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         }
         player["effects"] = std::move(effectsArr);
     }
+    // SURV-1: the player's armor (format 16, ALWAYS written — a
+    // format-16 file REQUIRES the key; an empty object = no armor).
+    // Only the OCCUPIED slots are written, in the fixed slot order.
+    {
+        Json armorObj = Json::object();
+        for (int slot = 0; slot < kArmorSlotCount; ++slot) {
+            const std::string& name =
+                save.playerArmor[static_cast<std::size_t>(slot)];
+            if (!name.empty()) {
+                armorObj[kArmorSlotNames[slot]] = Json(name);
+            }
+        }
+        player["armor"] = std::move(armorObj);
+    }
     root["player"] = player;
 
     Json slots = Json::array();
@@ -858,7 +872,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     const std::set<std::string> playerFields {"pos", "yaw", "pitch",
                                               "health", "absorption",
                                               "hunger", "saturation",
-                                              "effects"};
+                                              "effects", "armor"};
     MC_TRY(rejectUnknownFields(*player, playerFields, "save 'player'"));
     const Json* ppos = player->find("pos");
     if (ppos == nullptr || !ppos->isArray() || ppos->size() != 3) {
@@ -997,6 +1011,53 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     } else if (player->find("absorption") != nullptr) {
         return MC_FAIL("save 'player.absorption' requires format 12 or "
                        "newer (got " +
+                       std::to_string(def.find("format")->asInt()) + ")");
+    }
+    // Armor (format 16; SURV-1). Absent in format 1-15 files (the
+    // player had no armor — the game loads all four slots empty; the
+    // default-empty sentinel). A format-15 file carrying the key is
+    // rejected (the version-lie discipline, the absorption twin).
+    // Format 16 REQUIRES the field (the effects-key discipline): an
+    // object of the OCCUPIED slots only — each key a name from the
+    // four-slot vocabulary, each value the NAME of a registered item
+    // that IS an armor piece for exactly that slot (the registry is
+    // available here, so the item existence + the data-slot match are
+    // enforced at parse time, the effects-name discipline).
+    if (def.find("format")->asInt() >= 16) {
+        const Json* armor = player->find("armor");
+        if (armor == nullptr || !armor->isObject()) {
+            return MC_FAIL("save format 16 requires a 'player.armor' "
+                           "object (an empty object when the player "
+                           "wore no armor)");
+        }
+        for (const auto& [key, value] : armor->members()) {
+            const std::string what = "save 'player.armor." + key + "'";
+            const int slot = armorSlotIndex(key);
+            if (slot < 0) {
+                return MC_FAIL(what + " is not a known slot (vocabulary: "
+                               "\"head\", \"chest\", \"legs\", \"feet\")");
+            }
+            if (!value.isString() || value.asString().empty()) {
+                return MC_FAIL(what + " requires a non-empty item name");
+            }
+            const Item* item = items.findByName(value.asString());
+            if (item == nullptr) {
+                return MC_FAIL(what + " holds unknown item '" +
+                               value.asString() + "'");
+            }
+            if (item->armorSlot != key) {
+                return MC_FAIL(what + " holds the item '" +
+                               value.asString() + "' whose armor slot is "
+                               "'" + item->armorSlot +
+                               "' (a piece equips the slot named by its "
+                               "data)");
+            }
+            save.playerArmor[static_cast<std::size_t>(slot)] =
+                value.asString();
+        }
+    } else if (player->find("armor") != nullptr) {
+        return MC_FAIL("save 'player.armor' requires format 16 or newer "
+                       "(got " +
                        std::to_string(def.find("format")->asInt()) + ")");
     }
 

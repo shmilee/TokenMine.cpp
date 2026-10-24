@@ -2061,6 +2061,14 @@ Result<SaveGame> Game::collectSave() const {
     save.playerAbsorption = m_player->absorption();
     save.playerHunger = m_player->hunger();
     save.playerSaturation = m_player->saturation();
+    // SURV-1: the equipped armor (format 16) — the piece names by slot
+    // ("" = empty; the count is always 1 by the armor items' max_stack,
+    // so the name is the whole state).
+    for (int slot = 0; slot < kArmorSlotCount; ++slot) {
+        const ItemStack& worn = m_player->armorSlot(slot);
+        save.playerArmor[static_cast<std::size_t>(slot)] =
+            worn.empty() ? std::string {} : m_items.at(worn.item).name;
+    }
     save.selectedSlot = static_cast<int>(m_selectedSlot);
     save.slots.resize(m_inventory.size());
     for (std::size_t i = 0; i < save.slots.size(); ++i) {
@@ -2446,6 +2454,21 @@ Result<void> Game::applySave(const SaveGame& save) {
         m_player->setAbsorption(save.playerAbsorption);
         m_player->setHealth(save.playerHealth < 0.0f ? baseMax
                                                      : save.playerHealth);
+    }
+    // 4f) The player's armor (format 16; SURV-1). The names are
+    // parse-validated (registered items whose data armor_slot matches
+    // the save's key — idForName cannot fail); format 1-15 saves carry
+    // no armor (all the slots stay empty, the default).
+    for (int slot = 0; slot < kArmorSlotCount; ++slot) {
+        const std::string& name =
+            save.playerArmor[static_cast<std::size_t>(slot)];
+        if (name.empty()) {
+            m_player->setArmorSlot(slot, ItemStack {}, 0);
+            continue;
+        }
+        const Item& item = m_items.at(m_items.idForName(name));
+        m_player->setArmorSlot(slot, ItemStack {item.id, 1},
+                               item.armorPoints);
     }
     m_prevHealth = m_player->health(); // no hurt event from the load itself
     // 5) Dropped items (with their lifetime/pickup timers restored).
@@ -3278,6 +3301,20 @@ void Game::handleInteraction(double dt) {
                     m_sound.play("ignite");
                 }
             }
+        }
+        // Armor (SURV-1): a held piece equips (an occupied slot swaps
+        // it with the held one), an empty hand unequips the first worn
+        // slot (the fixed order head -> chest -> legs -> feet) — the
+        // click is consumed whenever it acts (armor is a material,
+        // placeBlock would be a no-op; the channel owns the right
+        // button, so it runs BEFORE the sneak-rotate: equipping is an
+        // item action even while sneaking — Minecraft). Runs AFTER the
+        // item channels + the igniter: a campfire under the crosshair
+        // still cooks (it owns the click at the top of the handler),
+        // food still eats, a bucket still scoops, an igniter still
+        // lights (the channel-ownership precedence, unchanged).
+        if (tryArmor()) {
+            return;
         }
         // Block-state rotation (Phase 92 stair ring, per-instance in
         // Phase 94, generalized in ENT-2): a SNEAKING right-click on a
@@ -4150,6 +4187,61 @@ bool Game::tryFluidBucket() {
                  std::to_string(target.z) + ") (" + item.name + " -> " +
                  item.poursBecomes + ")");
     return true;
+}
+
+bool Game::tryArmor() {
+    // Armor (SURV-1): the right-click channel of the armor pieces. A
+    // HELD piece equips onto its data slot — an occupied slot SWAPS the
+    // piece with the held one (Minecraft). An EMPTY hand unequips the
+    // FIRST occupied slot in the fixed order head -> chest -> legs ->
+    // feet (repeated right-clicks strip the whole set, deterministic).
+    // The click is consumed whenever the hand holds a piece (armor is a
+    // material — placeBlock would be a no-op, and the channel owns the
+    // right button) or a piece is unequipped; an empty hand with
+    // nothing worn falls through (the sneak-rotate / place no-op).
+    if (!m_player || m_player->isDead()) {
+        return false;
+    }
+    ItemStack& held = m_inventory.at(m_selectedSlot);
+    if (!held.empty()) {
+        const Item& item = m_items.at(held.item);
+        if (item.armorSlot.empty()) {
+            return false; // not armor: fall through to the next channel
+        }
+        // slot >= 0 is guaranteed (the parse's vocabulary check).
+        const int slot = armorSlotIndex(item.armorSlot);
+        if (m_player->armorSlot(slot).empty()) {
+            // Equip: the piece goes on (its count is 1 by the armor
+            // items' max_stack — the inventory enforces the data cap),
+            // the held slot empties.
+            m_player->setArmorSlot(slot, held, item.armorPoints);
+            m_inventory.setSlot(m_selectedSlot, ItemStack {});
+        } else {
+            // Swap: the held piece goes on, the equipped piece comes to
+            // the hand (a plain slot write — the selected slot holds
+            // exactly the piece being swapped out).
+            const ItemStack worn = m_player->armorSlot(slot);
+            const Item& wornItem = m_items.at(worn.item);
+            m_player->setArmorSlot(slot, held, item.armorPoints);
+            m_inventory.setSlot(m_selectedSlot, worn);
+            MC_LOG_DEBUG("swapped " + item.name + " with the worn " +
+                         wornItem.name + " (" + item.armorSlot + ")");
+        }
+        m_sound.play("cloth"); // the Minecraft armor sound (no new wav)
+        return true;
+    }
+    // Empty hand: unequip the FIRST occupied slot (the fixed order).
+    for (int slot = 0; slot < kArmorSlotCount; ++slot) {
+        const ItemStack& worn = m_player->armorSlot(slot);
+        if (worn.empty()) {
+            continue;
+        }
+        m_player->setArmorSlot(slot, ItemStack {}, 0);
+        m_inventory.setSlot(m_selectedSlot, worn);
+        m_sound.play("cloth");
+        return true;
+    }
+    return false; // nothing to unequip: fall through
 }
 
 void Game::clearStatusEffects() {
@@ -6170,6 +6262,25 @@ void Game::renderUi() {
                     ex += kIconPx + kIconGap;
                 }
             }
+            // Armor row (SURV-1): the four equipment slots ABOVE the
+            // heart row (hy − 16 − kStripGap — the row above, so it can
+            // never collide with the effect icons / the absorption strip
+            // that share the heart row). Fixed positions head -> feet
+            // left to right, left-aligned on the hearts' left edge hx0,
+            // one 16 px per-item icon (the independent PNG through the
+            // shared drawIcon path) per OCCUPIED slot only. No armor =
+            // nothing drawn (the no-input baseline is bit-identical: a
+            // fresh run wears nothing).
+            const int ay = hy - kIconPx - kStripGap;
+            for (int slot = 0; slot < kArmorSlotCount; ++slot) {
+                const ItemStack& worn = m_player->armorSlot(slot);
+                if (worn.empty()) {
+                    continue;
+                }
+                const int ax = hx0 + slot * (kIconPx + kIconGap);
+                drawIcon(worn, static_cast<float>(ax + kIconPx / 2),
+                         static_cast<float>(ay + kIconPx / 2), kIconPx);
+            }
         }
         // Crosshair: a 2px thin cross at the screen center.
         UiBatch& cross = batchFor(kCrosshair, false, nullptr);
@@ -6515,6 +6626,7 @@ void Game::renderUi() {
             info.health = m_player->health();
             info.maxHealth = m_player->maxHealth();
             info.absorption = m_player->absorption();
+            info.armorPoints = m_player->armorPoints(); // SURV-1
             info.hunger = m_player->hunger();
             info.maxHunger = m_player->maxHunger();
         }

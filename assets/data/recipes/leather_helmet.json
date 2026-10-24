@@ -1,0 +1,9 @@
+{
+  "id": "leather_helmet",
+  "type": "shaped",
+  "output": { "item": "leather_helmet", "count": 1 },
+  "pattern": ["LLL"],
+  "key": {
+    "L": "leather"
+  }
+}

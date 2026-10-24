@@ -2,6 +2,7 @@
 #include "player/player.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 
 #include "block/block.hpp"
@@ -449,9 +450,54 @@ void Player::update(double dt) {
     }
 }
 
+const ItemStack& Player::armorSlot(int slot) const {
+    assert(slot >= 0 && slot < kArmorSlotCount);
+    return m_armor[static_cast<std::size_t>(slot)];
+}
+
+ItemStack& Player::armorSlot(int slot) {
+    assert(slot >= 0 && slot < kArmorSlotCount);
+    return m_armor[static_cast<std::size_t>(slot)];
+}
+
+void Player::setArmorSlot(int slot, const ItemStack& piece, int points) {
+    assert(slot >= 0 && slot < kArmorSlotCount);
+    m_armor[static_cast<std::size_t>(slot)] = piece;
+    // The two arrays stay in sync through this single setter (the empty
+    // piece forces 0 — a corrupted caller cannot leave a piece without
+    // its points or points without a piece).
+    m_armorPoints[static_cast<std::size_t>(slot)] =
+        piece.empty() ? 0 : points;
+}
+
+int Player::armorPoints() const {
+    int sum = 0;
+    for (const int p : m_armorPoints) {
+        sum += p;
+    }
+    return std::min(sum, kArmorMaxPoints);
+}
+
 bool Player::damage(float amount) {
     if (m_dead || amount <= 0.0f) {
         return false;
+    }
+    // SURV-1 (armor, the Minecraft integer-floor rule): the equipped
+    // points reduce the incoming damage BEFORE the resistance effect and
+    // the absorption pool (the pipeline order armor -> resistance -> pool
+    // -> health; the unit tests pin it). pts = the capped sum;
+    // amount = floor(amount × (100 − 4×pts)) / 100 — the floor lands on
+    // the percent-scaled damage (10.0 × 10 pts = floor(600)/100 = 6.0;
+    // 1.0 × 2 pts = floor(92)/100 = 0.92). pts 0 skips the step = the
+    // value is bit-identical (every pre-SURV-1 damage test untouched).
+    // Deviation from P84: the resistance is a float multiply, the armor
+    // is the floor rule (Minecraft's integer-percentage semantics).
+    const int pts = armorPoints();
+    if (pts > 0) {
+        amount = std::floor(
+                     amount * (100.0f - kArmorReductionPerPoint *
+                                          static_cast<float>(pts))) /
+                 100.0f;
     }
     // Phase 84: the beacon's resistance effect reduces the incoming damage
     // BEFORE the absorption pool drains it (the game pushes the effect-

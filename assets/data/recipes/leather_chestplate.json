@@ -1,0 +1,9 @@
+{
+  "id": "leather_chestplate",
+  "type": "shaped",
+  "output": { "item": "leather_chestplate", "count": 1 },
+  "pattern": ["L L","LLL","LLL"],
+  "key": {
+    "L": "leather"
+  }
+}

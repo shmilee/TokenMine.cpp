@@ -388,6 +388,98 @@ Result<void> ItemRegistry::parseIgnites(const Json& def, Item& out) {
     return {};
 }
 
+Result<void> ItemRegistry::parseArmor(const Json& def, bool isTool,
+                                      Item& out) {
+    // Optional 'armor_slot' (SURV-1, armor): the player slot the piece
+    // equips onto (a name from the fixed four-slot vocabulary
+    // head/chest/legs/feet — an unknown name is a typo, rejected by
+    // name), paired with 'armor_points' (the piece's damage-reduction
+    // contribution, an integer in [0, 20]). Presence (a non-empty slot
+    // name) marks the item as an ARMOR piece; the absent fields are the
+    // "not armor" default, so an explicit empty string is rejected as a
+    // typo (the ammo discipline). The fields are a STRICT pair (one
+    // without the other is rejected — the fast_against pairing
+    // discipline) and only valid on type "material" (a tool holding them
+    // is a typo — the fast_against material-rejection twin). The piece
+    // is a right-click channel owner (equip / swap), so it is mutually
+    // exclusive with every other channel owner (the parseIgnites
+    // pattern — the checks run after all the other channels parsed, the
+    // parse flow order).
+    const Json* slot = def.find("armor_slot");
+    const Json* pts = def.find("armor_points");
+    if (slot == nullptr && pts == nullptr) {
+        return {}; // absent = not armor (the default)
+    }
+    if (slot == nullptr || pts == nullptr) {
+        return MC_FAIL("'armor_slot' and 'armor_points' are a strict pair "
+                       "(both are required when either is present)");
+    }
+    if (isTool) {
+        return MC_FAIL("'armor_slot' is only valid for type \"material\" "
+                       "(the right-click channel; a tool is a weapon, "
+                       "not armor)");
+    }
+    if (!slot->isString() || slot->asString().empty()) {
+        return MC_FAIL("'armor_slot' must be a non-empty slot name");
+    }
+    if (armorSlotIndex(slot->asString()) < 0) {
+        return MC_FAIL("'armor_slot' '" + slot->asString() +
+                       "' is not a known slot (vocabulary: \"head\", "
+                       "\"chest\", \"legs\", \"feet\")");
+    }
+    if (!pts->isNumber() ||
+        pts->asDouble() != std::floor(pts->asDouble())) {
+        return MC_FAIL("'armor_points' must be an integer in [0, " +
+                       std::to_string(kArmorMaxPoints) +
+                       (pts->isNumber()
+                            ? "], got " + std::to_string(pts->asDouble())
+                            : std::string()));
+    }
+    const int p = static_cast<int>(pts->asDouble());
+    if (p < 0 || p > kArmorMaxPoints) {
+        return MC_FAIL("'armor_points' must be in [0, " +
+                       std::to_string(kArmorMaxPoints) + "], got " +
+                       std::to_string(p));
+    }
+    out.armorSlot = slot->asString();
+    out.armorPoints = p;
+    // The channel-ownership exclusivity (the parseIgnites pattern):
+    // armor equips on the right click, so it cannot share the channel
+    // with any other owner (each pair named).
+    if (out.restoreHunger > 0) {
+        return MC_FAIL("an item cannot both be armor ('armor_slot') and "
+                       "be food ('restore_hunger'): one item owns one "
+                       "right-click channel");
+    }
+    if (out.drinkTime > 0.0f) {
+        return MC_FAIL("an item cannot both be armor ('armor_slot') and "
+                       "be a drinkable ('drink_time'): one item owns one "
+                       "right-click channel");
+    }
+    if (out.shootSpeed > 0.0f) {
+        return MC_FAIL("an item cannot both be armor ('armor_slot') and "
+                       "be a launcher ('shoot_speed'): one item owns one "
+                       "right-click channel");
+    }
+    if (!out.dyeColor.empty()) {
+        return MC_FAIL("an item cannot both be armor ('armor_slot') and "
+                       "be a dye ('dye_color'): one item owns one "
+                       "right-click channel");
+    }
+    if (!out.collectsFluids.empty() || !out.poursFluid.empty()) {
+        return MC_FAIL("an item cannot both be armor ('armor_slot') and "
+                       "be a fluid bucket ('collects_fluid' / "
+                       "'pours_fluid'): one item owns one right-click "
+                       "channel");
+    }
+    if (out.ignitesFlamable) {
+        return MC_FAIL("an item cannot both be armor ('armor_slot') and "
+                       "ignite flammable blocks ('ignites_flamable'): "
+                       "one item owns one right-click channel");
+    }
+    return {};
+}
+
 Result<void> ItemRegistry::parseGrant(const Json& def, Item& out) {
     // Optional 'grants_effect' (Phase 49, golden apple): the status effect
     // granted when a full EAT completes — {"name": <effect>, "duration":
@@ -591,6 +683,8 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
             key != "ignites_flamable" &&
             key != "fast_against" &&
             key != "fast_against_multiplier" &&
+            key != "armor_slot" &&
+            key != "armor_points" &&
             key != "icon") {
             MC_LOG_WARN("Item '" + name + "': unknown field '" + key +
                         "' ignored");
@@ -623,8 +717,12 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     r = parseFluidBucket(def, item); // after parseFood/parseDrink: the
                                      // channel-ownership exclusivity
     MC_TRY(r);
-    r = parseIgnites(def, item); // last: the channel-ownership exclusivity
+    r = parseIgnites(def, item); // the channel-ownership exclusivity
                                  // checks need every other channel parsed
+    MC_TRY(r);
+    r = parseArmor(def, isTool, item); // SURV-1: LAST of the channel
+                                       // owners (its exclusivity checks
+                                       // see every other channel parsed)
     MC_TRY(r);
 
     // Optional 2D icon (Phase 15 UI): a texture file name under

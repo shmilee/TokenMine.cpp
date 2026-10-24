@@ -29,11 +29,13 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 
 #include "core/config.hpp"
 #include "core/input.hpp"
 #include "core/math/vec3.hpp"
 #include "entity/entity.hpp"
+#include "item/item.hpp"
 #include "world/world.hpp"
 
 namespace mc {
@@ -280,9 +282,34 @@ public:
         m_saturation = std::clamp(s, 0.0f, m_params.maxHunger);
     }
 
+    // -- armor (SURV-1) ------------------------------------------------------
+    // The four equipment slots (the kArmorSlotNames order: 0 = head,
+    // 1 = chest, 2 = legs, 3 = feet). A slot holds one piece (count 1 —
+    // the armor items' max_stack) or is empty. The game owns every
+    // change (the right-click channel + the save load); the player
+    // stores the pieces and derives the reduction. Death and respawn
+    // keep the armor (the inventory is kept — the project's death
+    // semantics, the keep-inventory respawn).
+    const ItemStack& armorSlot(int slot) const;
+    ItemStack& armorSlot(int slot);
+    // Equip / swap / unequip one slot: the piece (count 1, or the empty
+    // stack) + its data armor_points (0 when empty). The game passes
+    // both, so the player holds no ItemRegistry (the setAbsorption
+    // "the game owns the value" pattern).
+    void setArmorSlot(int slot, const ItemStack& piece, int points);
+    // The total equipped points, capped at kArmorMaxPoints (the damage
+    // formula's input; 0 = no armor = the pre-SURV-1 bit-identical
+    // path).
+    int armorPoints() const;
+
     // Apply `amount` damage. Returns true when health actually decreased
     // (the game drives the hurt sound/flash from this). Lethal damage sets
     // the dead state; a dead player is frozen (update() no-ops).
+    //
+    // SURV-1 (armor, the Minecraft integer-floor rule): the equipped
+    // points reduce the damage BEFORE the resistance effect and the
+    // absorption pool (the pipeline order armor -> resistance -> pool ->
+    // health; the unit tests pin it).
     bool damage(float amount);
 
     // Back at the spawn point with full health and cleared fall state. The
@@ -418,6 +445,12 @@ private:
     BlockID m_campfireExtId = BlockID::invalid();
     // Phase 71: the sitting state this tick (see isSitting()).
     bool m_sitting = false;
+    // SURV-1 (armor): the equipped pieces (count 1 or empty) + their
+    // per-slot data points (kept in sync by setArmorSlot — the player
+    // holds no ItemRegistry, the game passes the points). Index = the
+    // kArmorSlotNames slot order (head/chest/legs/feet).
+    std::array<ItemStack, kArmorSlotCount> m_armor;
+    std::array<int, kArmorSlotCount> m_armorPoints {};
 
     static constexpr float kMaxPitch = 1.5533f; // ~89 deg
     // FLUID-2: how many cells the surface scan (m_surfaceY) descends from

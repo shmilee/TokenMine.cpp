@@ -1,0 +1,8 @@
+{
+  "id": "iron_leggings",
+  "type": "material",
+  "max_stack": 1,
+  "icon": "iron_leggings",
+  "armor_slot": "legs",
+  "armor_points": 3
+}

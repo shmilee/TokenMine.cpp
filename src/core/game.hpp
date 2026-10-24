@@ -359,6 +359,18 @@ private:
     // (flowing water, occupied cell, no target) falls through to the
     // normal right-click (placeBlock is a no-op for a material).
     bool tryFluidBucket();
+    // Armor (SURV-1): the right-click channel of the armor pieces. A
+    // HELD piece equips onto its data slot (an occupied slot SWAPS the
+    // piece with the held one — Minecraft); an EMPTY hand unequips the
+    // FIRST occupied slot in the fixed order head -> chest -> legs ->
+    // feet (repeated right-clicks strip the whole set, deterministic).
+    // The click is consumed whenever the hand holds a piece (armor is a
+    // material — placeBlock would be a no-op anyway — and the channel
+    // owns the right button) or a piece is unequipped; nothing in hand
+    // + nothing worn falls through to the next channel (the sneak-
+    // rotate can still fire on an empty hand). Returns true when the
+    // click was consumed.
+    bool tryArmor();
     // Advances the eat/drink channel in real dt (Phase 28, drinkable
     // extension Phase 43): interrupts (damage, death, unlock, panel,
     // selection change) and the terminal events (complete = consume +

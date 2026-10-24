@@ -896,6 +896,92 @@ def golden_apple():
     return px
 
 
+# SURV-1 (armor): the 12 armor pieces (leather / iron / diamond x
+# helmet / chestplate / leggings / boots). Four silhouettes (one per
+# slot) in the material's palette; new salts 105+ (the next free block
+# after the master bow's 101-104) — every existing icon stays
+# pixel-identical (the determinism proof the re-run is).
+ARMOR_PALETTES = {
+    "leather": ((166, 124, 78), (120, 86, 52)),   # tan + dark rim
+    "iron": ((206, 206, 212), (160, 160, 170)),   # steel + bevel
+    "diamond": ((100, 225, 235), (58, 175, 190)), # cyan + deep facet
+}
+ARMOR_SALT = {"leather": 105, "iron": 113, "diamond": 121}
+ARMOR_PIECE_OFFSET = {"helmet": 0, "chestplate": 2, "leggings": 4, "boots": 6}
+
+
+def armor_piece(piece: str, base, dark, salt):
+    """One armor piece silhouette (16x16 design space, doubled): the
+    four slot shapes are distinct (helmet dome / chestplate torso with
+    the neck notch / leggings two legs / boots the toe flares), tinted
+    by the material palette with a darker accent line."""
+    px = blank()
+    legs_cols = list(range(4, 7)) + list(range(9, 12))
+    if piece == "helmet":
+        # Dome: a rounded cap (design x 3..12, y 3..9) + the brim band.
+        for y in range(3, 10):
+            for x in range(3, 13):
+                nx = (x - 7.5) / 4.4
+                ny = (y - 6.0) / 3.2
+                if nx * nx + ny * ny <= 1.0:
+                    setpx2(px, x, y, base, salt=salt)
+        for x in range(3, 13):
+            setpx2(px, x, 9, dark, salt=salt + 1)
+    elif piece == "chestplate":
+        # Shoulders: a wide rounded band (design y 3..5).
+        for y in range(3, 6):
+            for x in range(3, 13):
+                setpx2(px, x, y, base, salt=salt)
+        # Neck notch: clear the top centre (the head goes in here).
+        for y in range(3, 5):
+            for x in range(7, 9):
+                for ox in range(2):
+                    for oy in range(2):
+                        px[2 * y + oy][2 * x + ox] = (0, 0, 0, 0)
+        # Body: a column tapering to the waist (design y 6..13).
+        for y in range(6, 14):
+            half = 4 if y < 10 else 3
+            for x in range(8 - half, 8 + half):
+                setpx2(px, x, y, base, salt=salt)
+        # Belt line.
+        for x in range(5, 11):
+            setpx2(px, x, 12, dark, salt=salt + 1)
+    elif piece == "leggings":
+        # Waist band (design y 3..4).
+        for y in range(3, 5):
+            for x in range(4, 12):
+                setpx2(px, x, y, base, salt=salt)
+        # Two legs (design x 4..6 / 9..11, y 5..13), the crotch gap.
+        for y in range(5, 14):
+            for x in legs_cols:
+                setpx2(px, x, y, base, salt=salt)
+        # Hem lines.
+        for x in legs_cols:
+            setpx2(px, x, 12, dark, salt=salt + 1)
+    else:  # boots
+        # Two legs down to the ankle (design y 4..10).
+        for y in range(4, 11):
+            for x in legs_cols:
+                setpx2(px, x, y, base, salt=salt)
+        # Toe flares: the wider foot (design y 11..13, the sole dark).
+        for y in range(11, 14):
+            for x in list(range(3, 7)) + list(range(9, 13)):
+                setpx2(px, x, y, base if y < 13 else dark, salt=salt)
+        # Cuff lines.
+        for x in legs_cols:
+            setpx2(px, x, 4, dark, salt=salt + 1)
+    return px
+
+
+def make_armor_icon(material: str, piece: str):
+    (base, dark) = ARMOR_PALETTES[material]
+    salt = ARMOR_SALT[material] + ARMOR_PIECE_OFFSET[piece]
+
+    def icon():
+        return armor_piece(piece, base, dark, salt)
+    return icon
+
+
 ITEMS = {
     "planks": planks,
     "stick": stick,
@@ -940,6 +1026,10 @@ ITEMS = {
     "bread": bread,
     "apple": apple,
     "golden_apple": golden_apple,
+    # SURV-1 (armor): the 12 pieces (material x slot, the MC full chain).
+    **{m + "_" + p: make_armor_icon(m, p)
+       for m in ("leather", "iron", "diamond")
+       for p in ("helmet", "chestplate", "leggings", "boots")},
 }
 
 

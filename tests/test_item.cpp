@@ -1631,6 +1631,194 @@ TEST(ItemRegistryTest, FastAgainstRejectsMaterial) {
               std::string::npos);
 }
 
+// ---------------------------------------------------------------------------
+// SURV-1: armor ('armor_slot' + 'armor_points' — the strict material pair).
+// ---------------------------------------------------------------------------
+
+TEST(ItemRegistryTest, ArmorParsesMaterialPair) {
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(
+        R"({"id":"x","type":"material","max_stack":1,"armor_slot":"chest","armor_points":4})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Item& it = items.at(*r);
+    EXPECT_EQ(it.armorSlot, "chest");
+    EXPECT_EQ(it.armorPoints, 4);
+    EXPECT_EQ(it.type, ItemType::Material);
+}
+
+TEST(ItemRegistryTest, ArmorDefaultsAbsent) {
+    // No armor fields: not armor (every pre-SURV-1 item).
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(R"({"id":"x","type":"material"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Item& it = items.at(*r);
+    EXPECT_TRUE(it.armorSlot.empty());
+    EXPECT_EQ(it.armorPoints, 0);
+}
+
+TEST(ItemRegistryTest, ArmorRejectsMissingPartner) {
+    // The strict pair (the fast_against discipline): one without the
+    // other is rejected, named.
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"x","type":"material","armor_slot":"head"})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("strict pair"), std::string::npos);
+    auto r2 = items.registerItem(
+        parseJson(R"({"id":"y","type":"material","armor_points":2})"));
+    ASSERT_FALSE(r2.ok());
+    EXPECT_NE(r2.error().message.find("strict pair"), std::string::npos);
+}
+
+TEST(ItemRegistryTest, ArmorRejectsBadSlot) {
+    ItemRegistry items;
+    // An explicit empty string is a typo (ABSENT is the default, the
+    // ammo discipline).
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"x","type":"material","armor_slot":"","armor_points":1})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"x","type":"material","armor_slot":5,"armor_points":1})"))
+                     .ok());
+    // An unknown slot name (the fixed four-slot vocabulary).
+    auto r = items.registerItem(
+        parseJson(R"({"id":"x","type":"material","armor_slot":"hood","armor_points":1})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("not a known slot"), std::string::npos);
+}
+
+TEST(ItemRegistryTest, ArmorRejectsBadPoints) {
+    ItemRegistry items;
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"x","type":"material","armor_slot":"head","armor_points":-1})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"x","type":"material","armor_slot":"head","armor_points":21})"))
+                     .ok()); // above the full-diamond cap
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"x","type":"material","armor_slot":"head","armor_points":3.5})"))
+                     .ok()); // must be an integer
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"x","type":"material","armor_slot":"head","armor_points":"two"})"))
+                     .ok());
+}
+
+TEST(ItemRegistryTest, ArmorRejectsTool) {
+    // Armor is the right-click channel; a tool holding the fields is a
+    // typo (the fast_against material-rejection twin, flipped).
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(
+        R"({"id":"x","type":"tool","armor_slot":"head","armor_points":2})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("only valid for type"),
+              std::string::npos);
+}
+
+TEST(ItemRegistryTest, ArmorExcludesEveryOtherChannel) {
+    // The channel-ownership discipline (the parseIgnites pattern): armor
+    // equips on the right click, so it cannot share the channel with any
+    // other owner — each pair named.
+    const std::vector<std::string> other = {
+        R"("restore_hunger":4)",  // food
+        R"("drink_time":1.6)",    // drinkable
+        R"("shoot_speed":15.0)",  // launcher
+        R"("dye_color":"red")",   // dye
+        R"("collects_fluid":["water"])", // fluid bucket
+        R"("ignites_flamable":true)",    // igniter
+    };
+    for (const std::string& o : other) {
+        ItemRegistry items;
+        auto r = items.registerItem(
+            parseJson(std::string(R"({"id":"x","type":"material","armor_slot":"head","armor_points":2,)") +
+                    o + "}"));
+        ASSERT_FALSE(r.ok()) << o;
+        EXPECT_NE(r.error().message.find("one item owns one right-click "
+                                         "channel"),
+                  std::string::npos)
+            << o << ": " << r.error().message;
+    }
+}
+
+TEST(ItemRegistryTest, ArmorContentPinned) {
+    // The real assets (SURV-1): the 12 pieces — the three material
+    // chains, the Minecraft values exactly (leather 1/3/2/1, iron 2/4/3/
+    // 1, diamond 3/6/3/2 per head/chest/legs/feet), max_stack 1 (armor
+    // never stacks), the icon = the item name.
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry blocks;
+    ASSERT_TRUE(blocks.loadDirectory(assets, "data/blocks").ok());
+    ItemRegistry items;
+    ASSERT_TRUE(items.buildBlockItems(blocks).ok());
+    ASSERT_TRUE(items.loadDirectory(assets, "data/items").ok());
+    const std::vector<std::tuple<std::string, std::string, int>> want = {
+        {"leather_helmet", "head", 1}, {"leather_chestplate", "chest", 3},
+        {"leather_leggings", "legs", 2}, {"leather_boots", "feet", 1},
+        {"iron_helmet", "head", 2}, {"iron_chestplate", "chest", 4},
+        {"iron_leggings", "legs", 3}, {"iron_boots", "feet", 1},
+        {"diamond_helmet", "head", 3}, {"diamond_chestplate", "chest", 6},
+        {"diamond_leggings", "legs", 3}, {"diamond_boots", "feet", 2},
+    };
+    for (const auto& [name, slot, pts] : want) {
+        const Item* it = items.findByName(name);
+        ASSERT_NE(it, nullptr) << name;
+        EXPECT_EQ(it->type, ItemType::Material) << name;
+        EXPECT_EQ(it->armorSlot, slot) << name;
+        EXPECT_EQ(it->armorPoints, pts) << name;
+        EXPECT_EQ(it->maxStack, 1) << name; // MC: armor never stacks
+        EXPECT_EQ(it->icon, name) << name;
+    }
+}
+
+TEST(ItemRegistryTest, ArmorRecipesPinned) {
+    // The real assets (SURV-1): the 12 shaped recipes — the Minecraft
+    // 1.14+ patterns (helmet 1x3 / chestplate 3x3 with the neck gap /
+    // leggings the 3x3 with the leg gap / boots 2x2) and the single
+    // material key per chain.
+    const std::vector<std::tuple<std::string, std::string,
+                                 std::vector<std::string>>> want = {
+        {"leather_helmet", "leather", {"LLL"}},
+        {"leather_chestplate", "leather", {"L L", "LLL", "LLL"}},
+        {"leather_leggings", "leather", {"LLL", "L L", "L L"}},
+        {"leather_boots", "leather", {"L L", "L L"}},
+        {"iron_helmet", "iron_ingot", {"LLL"}},
+        {"iron_chestplate", "iron_ingot", {"L L", "LLL", "LLL"}},
+        {"iron_leggings", "iron_ingot", {"LLL", "L L", "L L"}},
+        {"iron_boots", "iron_ingot", {"L L", "L L"}},
+        {"diamond_helmet", "diamond", {"LLL"}},
+        {"diamond_chestplate", "diamond", {"L L", "LLL", "LLL"}},
+        {"diamond_leggings", "diamond", {"LLL", "L L", "L L"}},
+        {"diamond_boots", "diamond", {"L L", "L L"}},
+    };
+    for (const auto& [name, keyItem, pattern] : want) {
+        SCOPED_TRACE(name);
+        FILE* fp = std::fopen(("assets/data/recipes/" + name + ".json")
+                                  .c_str(), "rb");
+        ASSERT_NE(fp, nullptr) << "run from the repo root";
+        std::string text;
+        char buf[4096];
+        std::size_t n;
+        while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+            text.append(buf, n);
+        }
+        std::fclose(fp);
+        auto parsed = Json::parse(text);
+        ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+        const Json& def = *parsed;
+        EXPECT_EQ(def.find("output")->find("item")->asString(), name);
+        EXPECT_EQ(def.find("output")->find("count")->asInt(), 1);
+        const Json& pat = *def.find("pattern");
+        ASSERT_EQ(pat.size(), pattern.size());
+        for (std::size_t i = 0; i < pattern.size(); ++i) {
+            EXPECT_EQ(pat.at(i).asString(), pattern[i]);
+        }
+        const Json& key = *def.find("key");
+        ASSERT_EQ(key.memberCount(), 1u);
+        EXPECT_EQ(key.find("L")->asString(), keyItem);
+    }
+}
+
 namespace {
 // A data axe for the pure-function tests (the shipped content pins are
 // separate — Phase67AxeItemContent).

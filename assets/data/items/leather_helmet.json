@@ -1,0 +1,8 @@
+{
+  "id": "leather_helmet",
+  "type": "material",
+  "max_stack": 1,
+  "icon": "leather_helmet",
+  "armor_slot": "head",
+  "armor_points": 1
+}

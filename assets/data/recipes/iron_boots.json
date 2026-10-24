@@ -1,0 +1,9 @@
+{
+  "id": "iron_boots",
+  "type": "shaped",
+  "output": { "item": "iron_boots", "count": 1 },
+  "pattern": ["L L","L L"],
+  "key": {
+    "L": "iron_ingot"
+  }
+}

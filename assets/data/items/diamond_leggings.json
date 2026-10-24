@@ -1,0 +1,8 @@
+{
+  "id": "diamond_leggings",
+  "type": "material",
+  "max_stack": 1,
+  "icon": "diamond_leggings",
+  "armor_slot": "legs",
+  "armor_points": 3
+}

@@ -126,6 +126,23 @@ struct Fixture {
                 ADD_FAILURE() << d.def << ": " << fr.error().message;
             }
         }
+        // SURV-1: the armor pieces the format-16 save cross-checks (one
+        // per slot; the item's data armor_slot must match the save's
+        // key, so a piece filed under the wrong slot is rejected).
+        const struct {
+            const char* def;
+        } armorDefs[] = {
+            {R"({"id":"iron_helmet","type":"material","max_stack":1,"armor_slot":"head","armor_points":2})"},
+            {R"({"id":"leather_chestplate","type":"material","max_stack":1,"armor_slot":"chest","armor_points":3})"},
+            {R"({"id":"diamond_leggings","type":"material","max_stack":1,"armor_slot":"legs","armor_points":3})"},
+            {R"({"id":"diamond_boots","type":"material","max_stack":1,"armor_slot":"feet","armor_points":2})"},
+        };
+        for (const auto& d : armorDefs) {
+            auto ar = items.registerItem(parseJson(d.def));
+            if (!ar.ok()) {
+                ADD_FAILURE() << d.def << ": " << ar.error().message;
+            }
+        }
     }
 };
 
@@ -260,8 +277,8 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     s.tableGrid[8] = ItemStack {f.items.idForName("stone"), 64};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // ENT-2: writes are always format 15 (Phase 94 was format 14).
-    EXPECT_EQ(j->find("format")->asInt(), 15);
+    // SURV-1: writes are always format 16 (ENT-2 was format 15).
+    EXPECT_EQ(j->find("format")->asInt(), 16);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -305,6 +322,7 @@ TEST(SaveParseTest, FormatTwoLoadsWithEmptyGrids) {
     root = withoutKey(root, "campfires"); // format 2 predates the campfire
     root = withoutKey(root, "states"); // format 2 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 2 predates the absorption pool
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "inv_grid");
     root = withoutKey(root, "table_grid");
@@ -407,6 +425,7 @@ TEST(SaveParseTest, FormatOneLoadsWithoutHealth) {
     root = withoutKey(root, "campfires"); // format 1 predates the campfire
     root = withoutKey(root, "states"); // format 1 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 1 predates the absorption pool
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "inv_grid"); // format 1 predates the grids
     root = withoutKey(root, "table_grid");
@@ -458,6 +477,7 @@ TEST(SaveParseTest, FormatThreeLoadsWithoutHunger) {
     root = withoutKey(root, "campfires"); // format 3 predates the campfire
     root = withoutKey(root, "states"); // format 3 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 3 predates the absorption pool
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 3 predates the furnace
     ASSERT_EQ(root["player"].find("hunger"), nullptr);
@@ -507,6 +527,7 @@ TEST(SaveParseTest, FormatFourLoadsWithoutSaturation) {
     root = withoutKey(root, "campfires"); // format 4 predates the campfire
     root = withoutKey(root, "states"); // format 4 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 4 predates the absorption pool
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 4 predates the furnace
     ASSERT_EQ(root["player"].find("saturation"), nullptr);
@@ -912,6 +933,7 @@ TEST(SaveParseTest, FluidEditKindRoundTripsAndMigrates) {
     root = withoutKey(root, "campfires"); // format 8 predates the campfire
     root = withoutKey(root, "states"); // format 8 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 8 predates the absorption pool
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     Json waterEdit = Json::array();
     waterEdit.push_back(Json(3));
     waterEdit.push_back(Json(10));
@@ -1189,6 +1211,7 @@ SaveGame makeStateSave(const Fixture& f) {
 Json downgradeToFormat14(const Json& root) {
     Json out = withoutKey(root, "states");
     out["format"] = Json(14);
+    out["player"] = withoutKey(out["player"], "armor"); // SURV-1: format 14 predates the player's armor
     const Json* states = root.find("states");
     if (states == nullptr || !states->isArray()) {
         ADD_FAILURE() << "no 'states' array to downgrade";
@@ -1214,8 +1237,8 @@ TEST(SaveRoundTripTest, StatesRoundTrip) {
     SaveGame s = makeStateSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // ENT-2: writes are always format 15.
-    EXPECT_EQ(j->find("format")->asInt(), 15);
+    // SURV-1: writes are always format 16 (ENT-2 was format 15).
+    EXPECT_EQ(j->find("format")->asInt(), 16);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->states.size(), 1u);
@@ -1364,6 +1387,7 @@ TEST(SaveParseTest, RejectsStatesFieldInFormat14) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(14); // downgrade but KEEP the "states" array
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: the states lie is the one under test
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     EXPECT_FALSE(out.ok());
 }
@@ -1378,6 +1402,7 @@ TEST(SaveParseTest, RejectsStairsFieldInFormat13) {
     root = withoutKey(root, "states");
     root["stairs"] = Json::array();
     root["format"] = Json(13); // downgrade but KEEP the "stairs" array
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: the stairs lie is the one under test
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     EXPECT_FALSE(out.ok());
 }
@@ -1390,6 +1415,7 @@ TEST(SaveParseTest, RejectsStatesFieldInFormat13) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(13); // downgrade but KEEP the "states" array
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: the states lie is the one under test
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     EXPECT_FALSE(out.ok());
 }
@@ -1487,8 +1513,8 @@ TEST(SaveRoundTripTest, FurnacesRoundTrip) {
     s.furnaces[0].state.fuelSubsteps = 1234;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // ENT-2: writes are always format 15 (Phase 94 was format 14).
-    EXPECT_EQ(j->find("format")->asInt(), 15);
+    // SURV-1: writes are always format 16 (ENT-2 was format 15).
+    EXPECT_EQ(j->find("format")->asInt(), 16);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
@@ -1531,6 +1557,7 @@ TEST(SaveParseTest, FormatFiveLoadsWithEmptyFurnaces) {
     root = withoutKey(root, "campfires"); // format 5 predates the campfire
     root = withoutKey(root, "states"); // format 5 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 5 predates the absorption pool
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 5 predates the furnace
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
@@ -1559,6 +1586,7 @@ TEST(SaveParseTest, FormatSixMigratesStateToSoleFurnace) {
     root = withoutKey(root, "campfires"); // format 6 predates the campfire
     root = withoutKey(root, "states"); // format 6 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 6 predates the absorption pool
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["furnace"] = withoutKey(root["furnaces"].at(0), "pos");
     root = withoutKey(root, "furnaces");
@@ -1590,6 +1618,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
     root = withoutKey(root, "campfires"); // format 6 predates the campfire
     root = withoutKey(root, "states"); // format 6 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 6 predates the absorption pool
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["furnace"] = withoutKey(root["furnaces"].at(0), "pos");
     root = withoutKey(root, "furnaces");
@@ -1609,6 +1638,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
         root2 = withoutKey(root2, "campfires"); // format 6 predates the campfire
         root2 = withoutKey(root2, "states"); // format 6 predates per-block state
         root2["player"] = withoutKey(root2["player"], "absorption"); // format 6 predates the absorption pool
+        root2["player"] = withoutKey(root2["player"], "armor"); // SURV-1: format below 16 predates the player's armor
         root2["fluids"] = downgradeFluids(root2); // pre-Phase-51 shape
         root2 = withoutKey(root2, "furnaces");
         Json fz = Json::object();
@@ -1641,6 +1671,7 @@ TEST(SaveParseTest, RejectsFurnaceFieldInOldFormat) {
     root = withoutKey(root, "campfires"); // format older predates the campfire
     root = withoutKey(root, "states"); // format older predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 5 predates the absorption pool
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
@@ -1669,6 +1700,7 @@ TEST(SaveParseTest, RejectsFurnacesFieldInFormatSix) {
     root = withoutKey(root, "campfires"); // format older predates the campfire
     root = withoutKey(root, "states"); // format older predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 6 predates the absorption pool
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
@@ -1836,8 +1868,8 @@ TEST(SaveRoundTripTest, FiresRoundTrip) {
     SaveGame s = makeFireSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // ENT-2: writes are always format 15 (Phase 94 was format 14).
-    EXPECT_EQ(j->find("format")->asInt(), 15);
+    // SURV-1: writes are always format 16 (ENT-2 was format 15).
+    EXPECT_EQ(j->find("format")->asInt(), 16);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->fires.size(), 2u);
@@ -1873,6 +1905,7 @@ TEST(SaveParseTest, FormatNineLoadsWithoutFires) {
     root = withoutKey(root, "campfires"); // format 9 predates the campfire
     root = withoutKey(root, "states"); // format 9 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 9 predates the absorption pool
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->fires.empty());
@@ -1893,6 +1926,7 @@ TEST(SaveParseTest, FormatNineFireEditMigratesEmpty) {
     root = withoutKey(root, "campfires"); // format 9 predates the campfire
     root = withoutKey(root, "states"); // format 9 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 9 predates the absorption pool
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->fires.empty());
@@ -2024,6 +2058,7 @@ TEST(SaveFormat8Test, FormatSevenFileWithoutEffectsLoads) {
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["player"] = withoutKey(*j->find("player"), "effects");
     root["player"] = withoutKey(root["player"], "absorption"); // format 7 predates the absorption pool
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->playerEffects.empty());
@@ -2147,10 +2182,12 @@ TEST(SaveFormat12Test, Format11RejectsTheAbsorptionKey) {
     Json root = *j;
     root["format"] = Json(11); // the "absorption" key stays -> rejected
     root = withoutKey(root, "states"); // format 11 predates per-block state
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: the absorption lie is the one under test
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
     // The same file WITHOUT the key loads (the format-11 migration path;
     // the sentinel stays -1 for Game::applySave).
     root["player"] = withoutKey(root["player"], "absorption");
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerAbsorption, -1.0f);
@@ -2217,5 +2254,140 @@ TEST(SaveSchemaTest, NoSwingPhaseSurfaceInTheSave) {
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("swing_phase"), std::string::npos)
+        << out.error().message;
+}
+
+// -- SURV-1: the player's armor (format 16) -----------------------------------
+
+TEST(SaveFormat16Test, ArmorRoundTrips) {
+    // A save taken while wearing armor: the player.armor object holds the
+    // OCCUPIED slots only (the fixed slot order); the round trip must
+    // preserve every piece name and keep the empty slots empty.
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerArmor[0] = "iron_helmet";      // head
+    s.playerArmor[2] = "diamond_leggings"; // legs
+    s.playerArmor[3] = "diamond_boots";    // feet
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    const Json* armor = j->find("player")->find("armor");
+    ASSERT_TRUE(armor != nullptr && armor->isObject());
+    ASSERT_EQ(armor->memberCount(), 3u);
+    EXPECT_EQ(armor->find("head")->asString(), "iron_helmet");
+    EXPECT_EQ(armor->find("legs")->asString(), "diamond_leggings");
+    EXPECT_EQ(armor->find("feet")->asString(), "diamond_boots");
+    EXPECT_EQ(armor->find("chest"), nullptr); // the empty slot is unwritten
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_EQ(out->playerArmor[0], "iron_helmet");
+    EXPECT_TRUE(out->playerArmor[1].empty());
+    EXPECT_EQ(out->playerArmor[2], "diamond_leggings");
+    EXPECT_EQ(out->playerArmor[3], "diamond_boots");
+}
+
+TEST(SaveFormat16Test, EmptyArmorObjectValid) {
+    // A save without armor writes "armor": {} (the key is required even
+    // when empty — the effects-key discipline) and round-trips empty.
+    Fixture f;
+    const SaveGame s = makeSave(f); // the fixture wears nothing
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    const Json* armor = j->find("player")->find("armor");
+    ASSERT_TRUE(armor != nullptr && armor->isObject() && armor->memberCount() == 0);
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    for (int slot = 0; slot < kArmorSlotCount; ++slot) {
+        EXPECT_TRUE(out->playerArmor[static_cast<std::size_t>(slot)].empty());
+    }
+}
+
+TEST(SaveFormat16Test, Format16RequiresTheArmorKey) {
+    // A format-16 file WITHOUT the "armor" key is rejected (the key is
+    // required; the rest of the player object is intact).
+    Fixture f;
+    const SaveGame s = makeSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["player"] = withoutKey(root["player"], "armor");
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("player.armor"), std::string::npos)
+        << out.error().message;
+}
+
+TEST(SaveFormat16Test, Format15RejectsTheArmorKey) {
+    // The version-lie discipline: a format-15 file carrying the armor key
+    // is rejected (named); the same file WITHOUT the key loads and the
+    // slots migrate empty (the player had no armor before format 16).
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerArmor[0] = "iron_helmet"; // an occupied slot to carry
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    {
+        Json root = *j;
+        root["format"] = Json(15); // the "armor" key stays -> rejected
+        auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("format 16 or newer"),
+                  std::string::npos)
+            << out.error().message;
+    }
+    {
+        Json root = *j;
+        root["format"] = Json(15);
+        root["player"] = withoutKey(root["player"], "armor");
+        auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+        ASSERT_TRUE(out.ok()) << out.error().message;
+        for (int slot = 0; slot < kArmorSlotCount; ++slot) {
+            EXPECT_TRUE(out->playerArmor[static_cast<std::size_t>(slot)].empty());
+        }
+    }
+}
+
+TEST(SaveFormat16Test, ArmorSlotMismatchRejected) {
+    // A piece filed under a slot other than its data armor_slot is
+    // rejected and named (the serializer writes the key from the array
+    // index, so a mismatched array IS the corrupt file — the parse must
+    // not trust the writer): iron_helmet's slot is "head", not "legs".
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerArmor[2] = "iron_helmet";
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("player.armor.legs"),
+              std::string::npos)
+        << out.error().message;
+    EXPECT_NE(out.error().message.find("iron_helmet"), std::string::npos)
+        << out.error().message;
+}
+
+TEST(SaveFormat16Test, ArmorUnknownItemRejected) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerArmor[0] = "nope"; // unregistered
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("nope"), std::string::npos)
+        << out.error().message;
+}
+
+TEST(SaveFormat16Test, ArmorUnknownSlotKeyRejected) {
+    // A key outside the four-slot vocabulary (a typo or a future slot) is
+    // rejected and named.
+    Fixture f;
+    const SaveGame s = makeSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["player"]["armor"]["hood"] = Json("iron_helmet");
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("hood"), std::string::npos)
         << out.error().message;
 }

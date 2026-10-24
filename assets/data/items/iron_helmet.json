@@ -1,0 +1,8 @@
+{
+  "id": "iron_helmet",
+  "type": "material",
+  "max_stack": 1,
+  "icon": "iron_helmet",
+  "armor_slot": "head",
+  "armor_points": 2
+}

@@ -58,6 +58,7 @@
 // the whole save/load core is unit-testable headless.
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -189,9 +190,19 @@ namespace mc {
 //      key (restricted to format 14, a version lie); a format-14 file
 //      loads via the value-preserving migration above, and a format-13
 //      load migrates into this empty (the per-instance state did not
-//      exist; the block's state default is used on load). Writes are
-//      always format 15.
-inline constexpr int kSaveFormat = 15;
+//      exist; the block's state default is used on load).
+//  16: the player's armor (SURV-1) — "player" gains "armor": an object
+//      of the OCCUPIED slots only ({ "head": <item name>, ... }) written
+//      in the fixed slot order (kArmorSlotNames: head/chest/legs/feet);
+//      an empty object = the player wore no armor. The key is ALWAYS
+//      written (the effects-key discipline). A format-16 file REQUIRES
+//      the "armor" key; a format-15 and older file carrying it is
+//      rejected (the version-lie discipline); a format-15 load migrates
+//      into this empty (the player had no armor — all four slots load
+//      empty). The entries are parse-validated against the ItemRegistry
+//      (the item exists and its data armor_slot matches the key — the
+//      registry is available at parse time). Writes are always format 16.
+inline constexpr int kSaveFormat = 16;
 inline constexpr int kSaveFormatMin = 1;
 
 // Phase 40: the furnace save-field bounds — the max smelt/fuel times the
@@ -387,6 +398,12 @@ struct SaveGame {
     // The player's active status effects (format 8; Phase 46), name-
     // sorted. Empty for format 1-7 loads (the effects did not exist).
     std::vector<SavedEffect> playerEffects;
+    // The player's armor (SURV-1, format 16): the equipped piece NAME
+    // per slot — index = the kArmorSlotNames slot (0 head, 1 chest, 2
+    // legs, 3 feet), "" = empty. The count is never stored: it is 1 by
+    // the armor items' max_stack, so the name IS the whole state. Empty
+    // for format 1-15 loads (the player had no armor).
+    std::array<std::string, kArmorSlotCount> playerArmor {};
     std::vector<SavedItemEntity> entities;
     std::vector<SavedBlockEdit> blockEdits; // sorted by pos
     std::vector<SavedFluidEdit> fluidEdits; // sorted by pos

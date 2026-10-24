@@ -1,0 +1,8 @@
+{
+  "id": "leather_chestplate",
+  "type": "material",
+  "max_stack": 1,
+  "icon": "leather_chestplate",
+  "armor_slot": "chest",
+  "armor_points": 3
+}

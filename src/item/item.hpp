@@ -47,6 +47,29 @@ enum class ItemType {
     Material, // generic non-placeable item (explicit data)
 };
 
+// SURV-1 (armor): the four equipment slots, in the FIXED ORDER — the
+// unequip sequence, the HUD row (left to right) and the save's write
+// order. 0 = head, 1 = chest, 2 = legs, 3 = feet (Minecraft).
+inline constexpr int kArmorSlotCount = 4;
+inline const char* const kArmorSlotNames[kArmorSlotCount] = {
+    "head", "chest", "legs", "feet"};
+// The index of the named slot, -1 for an unknown name (the parse's
+// vocabulary check — a typo fails loudly instead of equipping nothing).
+inline int armorSlotIndex(const std::string& name) {
+    for (int i = 0; i < kArmorSlotCount; ++i) {
+        if (name == kArmorSlotNames[i]) {
+            return i;
+        }
+    }
+    return -1;
+}
+// The damage formula's constants (Minecraft, see Player::damage): each
+// armor point reduces the incoming damage by 4 PERCENT points, and the
+// equipped total caps at kArmorMaxPoints (the full diamond set is 3+6+
+// 3+2 = 20).
+inline constexpr float kArmorReductionPerPoint = 4.0f; // percent / point
+inline constexpr int kArmorMaxPoints = 20;
+
 struct Item {
     ItemID id = ItemID::invalid();
     std::string name;
@@ -195,6 +218,22 @@ struct Item {
     // init (the grows_on discipline — a typo fails init loudly).
     std::vector<std::string> fastAgainst;
     float fastAgainstMultiplier = 0.0f;
+    // SURV-1 (armor): the equipment slot (optional data fields
+    // 'armor_slot' + 'armor_points', a STRICT pair, material-only — the
+    // fast_against pairing discipline). armorSlot non-empty (a name from
+    // the kArmorSlotNames vocabulary) marks the item as an ARMOR piece:
+    // right-clicking with it selected equips it onto the player's slot
+    // (the Game::tryArmor channel — an occupied slot swaps the piece
+    // with the held one), an empty hand unequips the first worn slot
+    // (the fixed order). The piece owns the right-click channel, so it
+    // is mutually exclusive with every other channel owner (food /
+    // drinkable / launcher / dye / fluid bucket / igniter — enforced at
+    // parse). armorPoints is the piece's contribution to the damage
+    // reduction (Minecraft's integer-floor formula in Player::damage;
+    // the equipped total caps at kArmorMaxPoints). max_stack 1
+    // (Minecraft: armor never stacks).
+    std::string armorSlot;
+    int armorPoints = 0;
     // Phase 15 UI: the item's 2D icon texture name (a file under
     // assets/textures/items/, validated against the filesystem at game
     // init). Empty for block items, which render a 3D block cube instead.

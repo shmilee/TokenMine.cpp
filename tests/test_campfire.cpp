@@ -285,8 +285,8 @@ TEST(CampfireSaveTest, FormatIsThirteenAndRoundTrips) {
     s.campfires.push_back({BlockPos {4, 53, 4}, unlit});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // ENT-2: writes are always format 15 (Phase 94 was format 14).
-    EXPECT_EQ(j->find("format")->asInt(), 15);
+    // SURV-1: writes are always format 16 (ENT-2 was format 15).
+    EXPECT_EQ(j->find("format")->asInt(), 16);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->campfires.size(), 3u);
@@ -314,6 +314,7 @@ TEST(CampfireSaveTest, FormatTwelveOldShapeMigratesToSlotZero) {
     Json root = *j;
     root["format"] = Json(12);
     root = withoutKey(root, "states"); // format 12 predates per-block state
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format 12 predates the player's armor
     // Rewrite the entry to the OLD single-slot shape.
     Json oldEntry = Json::object();
     Json posArr = Json::array();
@@ -350,6 +351,7 @@ TEST(CampfireSaveTest, FormatTwelveEntryWithSlotsKeyRejected) {
     Json root = *j;
     root["format"] = Json(12);
     root = withoutKey(root, "states"); // format 12 predates per-block state
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: the "slots" lie is the one under test
     Json e = root.find("campfires")->at(0);
     Json oldEntry = Json::object();
     oldEntry["pos"] = e.find("pos");
@@ -401,6 +403,7 @@ TEST(CampfireSaveTest, FormatTenLoadsWithoutCampfires) {
     root = withoutKey(root, "campfires"); // format 10 predates the campfire
     root = withoutKey(root, "states"); // format 10 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 10 predates the absorption pool
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format 10 predates the player's armor
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->campfires.empty());
@@ -420,6 +423,7 @@ TEST(CampfireSaveTest, FormatTenCampfireEditMigratesEmpty) {
     root = withoutKey(root, "campfires"); // format 10 predates the campfire
     root = withoutKey(root, "states"); // format 10 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 10 predates the absorption pool
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format 10 predates the player's armor
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->campfires.empty());
@@ -435,6 +439,7 @@ TEST(CampfireSaveTest, RejectsCampfiresFieldInFormatTen) {
     root["format"] = Json(10); // keeps the "campfires" field
     root = withoutKey(root, "states"); // isolate the "campfires" rejection
     root["player"] = withoutKey(root["player"], "absorption"); // the rejection under test is "campfires"
+    root["player"] = withoutKey(root["player"], "armor"); // SURV-1: the rejection under test is "campfires"
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("format 11"), std::string::npos)

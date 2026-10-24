@@ -1,0 +1,9 @@
+{
+  "id": "iron_chestplate",
+  "type": "shaped",
+  "output": { "item": "iron_chestplate", "count": 1 },
+  "pattern": ["L L","LLL","LLL"],
+  "key": {
+    "L": "iron_ingot"
+  }
+}

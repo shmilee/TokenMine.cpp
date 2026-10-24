@@ -146,6 +146,19 @@ private:
     // (the grows_on discipline).
     static Result<void> parseFastAgainst(const Json& def, bool isTool,
                                          Item& out);
+    // Parse the optional 'armor_slot' + 'armor_points' pair (SURV-1,
+    // armor) into `out`: a slot vocabulary name (head/chest/legs/feet —
+    // the fixed kArmorSlotNames) + an integer in [0, kArmorMaxPoints],
+    // a STRICT pair (one without the other rejected, as is an unknown
+    // slot name), only valid on type "material" (a tool holding the
+    // fields is a typo — armor is a right-click channel, not a
+    // break-speed one). The piece owns the right-click channel (equip /
+    // swap / unequip), so it is mutually exclusive with every other
+    // channel owner (food / drinkable / launcher / dye / fluid bucket /
+    // igniter — the channel-ownership discipline, the parseIgnites
+    // pattern; the checks run after all the other channels parsed, the
+    // parse flow order).
+    static Result<void> parseArmor(const Json& def, bool isTool, Item& out);
 
     std::deque<Item> m_items; // deque: stable references on push
     std::unordered_map<std::string, int> m_names;

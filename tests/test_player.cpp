@@ -1729,6 +1729,109 @@ TEST(PlayerTest, RespawnClearsTheAbsorptionPool) {
     EXPECT_FLOAT_EQ(p.health(), p.params().maxHealth);
 }
 
+// -- armor (SURV-1): the Minecraft integer-floor damage reduction ----------
+// The equipped points reduce the damage BEFORE the resistance effect and
+// the absorption pool (the pipeline order armor -> resistance -> pool ->
+// health, pinned below):
+//     pts    = min(the equipped sum, kArmorMaxPoints)
+//     amount = floor(amount * (100 - kArmorReductionPerPoint * pts)) / 100
+// pts 0 skips the step = the value is bit-identical (every pre-SURV-1
+// damage test is untouched — the zero-regression backing).
+
+TEST(PlayerTest, ArmorDamageFloorExactValues) {
+    // 10 points: 10.0 -> floor(10.0*60)/100 = 6.0.
+    {
+        Fixture f;
+        Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+        p.setArmorSlot(1, ItemStack {ItemID {3}, 1}, 10);
+        ASSERT_TRUE(p.damage(10.0f));
+        EXPECT_FLOAT_EQ(p.health(), 14.0f);
+    }
+    // 2 points: 1.0 -> floor(1.0*92)/100 = 0.92.
+    {
+        Fixture f;
+        Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+        p.setArmorSlot(0, ItemStack {ItemID {3}, 1}, 2);
+        ASSERT_TRUE(p.damage(1.0f));
+        EXPECT_FLOAT_EQ(p.health(), 20.0f - 0.92f);
+    }
+    // 3 points: 1.0 -> floor(1.0*88)/100 = 0.88 — the floor lands on the
+    // PERCENT-scaled damage (the written formula), so a small tick is
+    // reduced but not zeroed (the spec's "3 points block the fire tick"
+    // claim is the recorded deviation).
+    {
+        Fixture f;
+        Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+        p.setArmorSlot(0, ItemStack {ItemID {3}, 1}, 3);
+        ASSERT_TRUE(p.damage(1.0f));
+        EXPECT_FLOAT_EQ(p.health(), 20.0f - 0.88f);
+    }
+}
+
+TEST(PlayerTest, ArmorZeroPointsIsBitIdentical) {
+    // No armor: the incoming values are the pre-SURV-1 ones — the four
+    // existing damage classes (a direct 5.0, a fractional 3.7, the
+    // starvation tick 1.0, the lava tick 4.0).
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    ASSERT_TRUE(p.damage(5.0f));
+    EXPECT_FLOAT_EQ(p.health(), 15.0f);
+    ASSERT_TRUE(p.damage(3.7f));
+    EXPECT_FLOAT_EQ(p.health(), 15.0f - 3.7f);
+    ASSERT_TRUE(p.damage(1.0f));
+    EXPECT_FLOAT_EQ(p.health(), 15.0f - 3.7f - 1.0f);
+    ASSERT_TRUE(p.damage(4.0f));
+    EXPECT_FLOAT_EQ(p.health(), 15.0f - 3.7f - 1.0f - 4.0f);
+}
+
+TEST(PlayerTest, ArmorCapsAtTwentyPoints) {
+    // A 32-point set (8 x 4 — unreachable from the content: the per-item
+    // cap is 20 and the full diamond set is exactly 20; the cap logic is
+    // pinned directly): damage uses 20.
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    for (int s = 0; s < kArmorSlotCount; ++s) {
+        p.setArmorSlot(s, ItemStack {ItemID {3}, 1}, 8);
+    }
+    EXPECT_EQ(p.armorPoints(), kArmorMaxPoints); // 32 -> 20
+    ASSERT_TRUE(p.damage(10.0f)); // floor(10.0*(100-80))/100 = 2.0
+    EXPECT_FLOAT_EQ(p.health(), 18.0f);
+}
+
+TEST(PlayerTest, ArmorReducesBeforeResistanceAndPool) {
+    // The pipeline order pinned: armor (10 pts) -> resistance (0.5) ->
+    // the pool (4.0). 10.0 -> 6.0 -> 3.0 -> the pool absorbs the 3.0,
+    // the health is untouched (armor first, then the P84 float multiply,
+    // then the P72 pool-first drain).
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    p.setArmorSlot(1, ItemStack {ItemID {3}, 1}, 10);
+    p.setDamageReduction(0.5f);
+    p.setAbsorption(4.0f);
+    ASSERT_TRUE(p.damage(10.0f));
+    EXPECT_FLOAT_EQ(p.health(), 20.0f);
+    EXPECT_FLOAT_EQ(p.absorption(), 1.0f);
+}
+
+TEST(PlayerTest, ArmorSlotApi) {
+    // The slot storage + the points derivation (the setArmorSlot
+    // single-setter sync: an empty piece forces its points to 0).
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    for (int s = 0; s < kArmorSlotCount; ++s) {
+        EXPECT_TRUE(p.armorSlot(s).empty());
+    }
+    EXPECT_EQ(p.armorPoints(), 0);
+    p.setArmorSlot(0, ItemStack {ItemID {3}, 1}, 1);
+    p.setArmorSlot(1, ItemStack {ItemID {7}, 1}, 2);
+    EXPECT_EQ(p.armorPoints(), 3);
+    EXPECT_EQ(p.armorSlot(0).item, ItemID {3});
+    EXPECT_EQ(p.armorSlot(1).count, 1);
+    p.setArmorSlot(0, ItemStack {}, 0);
+    EXPECT_TRUE(p.armorSlot(0).empty());
+    EXPECT_EQ(p.armorPoints(), 2);
+}
+
 // -- Fire block (Phase 70; the ignition source since Phase 74) ------------
 // The fire block does NOT deal direct contact damage anymore (the P70
 // real-dt timer is gone): Game::updateEffects re-applies the Phase 57
