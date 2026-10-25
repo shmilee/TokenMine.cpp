@@ -5,9 +5,14 @@ Phase 15.
 Deterministic: every sample comes from fixed-phase sine waves and a
 seeded LCG noise source, so the output is stable across runs and
 platforms. Re-run after editing this file to refresh assets/sounds/.
+Re-running after ANY edit must leave the pre-existing files byte-
+identical (the pure functions carry their own fixed seeds — verify with
+md5sum before/after).
 
-The set is small and generic by design (one dig/place/break sound for all
-blocks, not per-material — see docs/KNOWN_ISSUES). Files:
+The generic set (one dig/place/break sound for all blocks without a
+sound_material — the block property, CRAFT-3) + the material set
+(<material>_dig/_place/_break.wav, a material is a complete three-piece
+vocabulary; blocks name one via `sound_material`):
   dig.wav      short filtered-noise tap (mining tick while breaking)
   place.wav    low thud + click (block placement)
   break.wav    crumbly noise burst (block destroyed)
@@ -24,6 +29,28 @@ blocks, not per-material — see docs/KNOWN_ISSUES). Files:
   cloth.wav    soft rustle (dye recolor, Phase 41)
   milk.wav     liquid glug (milk drink start / cow milking, Phase 43)
   splash.wav   water splash (bucket fill / pour, Phase 47)
+  ignite.wav   crackling burst (flint and steel, Phase 60)
+  -- CRAFT-3 materials (6 x 3 events; the timbres are distinct by design:
+     stone = hard, brittle, bright / wood = mid knock / gravel = dry
+     rattle / sand = low shush / cloth = soft rustle / glass = high bell)
+  stone_dig.wav  bright sharp tap (no lowpass = the hard, brittle face)
+  stone_place.wav hard thud 170 Hz + click
+  stone_break.wav brittle shatter (bright noise + 2200 Hz ping)
+  wood_dig.wav   mid knock (lowpassed noise + 240 Hz tone)
+  wood_place.wav knock thud 150 Hz + noise
+  wood_break.wav crack (lowpassed burst + 300 -> 200 Hz wobble)
+  gravel_dig.wav dry rattle (two interleaved noise layers)
+  gravel_place.wav rattle thud (noise + 100 Hz)
+  gravel_break.wav long tumble (slow-decay noise)
+  sand_dig.wav   low shush (double lowpass)
+  sand_place.wav muffled low thud 75 Hz (double lowpass)
+  sand_break.wav low crumble (slow decay, double lowpass)
+  cloth_dig.wav  soft quiet rustle (double lowpass)
+  cloth_place.wav muffled soft thud 95 Hz (double lowpass)
+  cloth_break.wav soft tear rustle (double lowpass)
+  glass_dig.wav  high tinkle (2600 Hz bell + bright tick)
+  glass_place.wav clear click + 1900 Hz bell
+  glass_break.wav bright shatter (no lowpass + 3200 Hz ring)
 """
 import math
 import os
@@ -261,6 +288,202 @@ def ignite():
     return lowpass3(sound(dur, f))
 
 
+# ---------------------------------------------------------------------------
+# CRAFT-3: the material sounds. Each material is a complete three-piece
+# vocabulary (<material>_dig / _place / _break) — the block's optional
+# `sound_material` property names one; blocks without it keep the generic
+# dig / place / break above. The timbres are distinct by design within the
+# fixed LCG / sine paradigm:
+#   stone   = hard, brittle, bright (NO lowpass on the noise faces)
+#   wood    = a mid-range knock (lowpassed noise + a ~200 Hz tone)
+#   gravel  = a dry rattle (two decorrelated noise layers)
+#   sand    = a low shush (double lowpass, slow decay)
+#   cloth   = a soft rustle (double lowpass, quiet, longer release)
+#   glass   = a high bell (bright noise + a 1900-3200 Hz ring)
+# Every LCG seed is fixed (and unique to its sound) — the determinism
+# discipline of the generic set.
+def _noise(seed: int, dur: float) -> list:
+    return [Lcg(seed).next() for _ in range(int(RATE * dur))]
+
+
+def stone_dig():
+    """Bright sharp tap: raw noise (no lowpass = the brittle face), the
+    fastest decay of the dig family (harder than the generic dig)."""
+    noise = _noise(0x5709E, 0.08)
+    return [noise[i] * env(i / RATE, 0.08, 45.0) * 0.55 for i in range(len(noise))]
+
+
+def stone_place():
+    """Hard thud: a 170 Hz strike (higher than the generic 110 Hz) + a
+    bright click layer."""
+    lcg = Lcg(0x57107)
+
+    def f(t, _):
+        return (math.sin(2 * math.pi * 170.0 * t) * math.exp(-t * 45) * 0.55
+                + lcg.next() * math.exp(-t * 90) * 0.35)
+    return sound(0.08, f)
+
+
+def stone_break():
+    """Brittle shatter: a fast-decay bright noise burst + a 2200 Hz ping
+    (the crack flash) + a gritty tick layer."""
+    noise = _noise(0x5739B, 0.16)
+    lcg = Lcg(0x5739C)
+    out = []
+    for i in range(len(noise)):
+        t = i / RATE
+        out.append(noise[i] * math.exp(-t * 50) * 0.6
+                   + math.sin(2 * math.pi * 2200.0 * t) * math.exp(-t * 60) * 0.25
+                   + lcg.next() * math.exp(-t * 80) * 0.15)
+    return out
+
+
+def wood_dig():
+    """Mid knock: lowpassed noise under a decaying 240 Hz tone (the hollow
+    log tap — warmer than the generic dig)."""
+    noise = _noise(0x57001, 0.09)
+    out = [noise[i] * env(i / RATE, 0.09, 30.0) * 0.35
+           + math.sin(2 * math.pi * 240.0 * (i / RATE))
+           * math.exp(-(i / RATE) * 45) * 0.25
+           for i in range(len(noise))]
+    return lowpass3(out)
+
+
+def wood_place():
+    """Knock thud: a 150 Hz strike + a lowpassed noise body."""
+    lcg = Lcg(0x57110)
+
+    def f(t, _):
+        return (math.sin(2 * math.pi * 150.0 * t) * math.exp(-t * 38) * 0.6
+                + lcg.next() * math.exp(-t * 55) * 0.25)
+    return lowpass3(sound(0.10, f))
+
+
+def wood_break():
+    """Crack: a lowpassed noise burst (decay 20) + a 300 -> 200 Hz wobble
+    (the splitting grain)."""
+    noise = _noise(0x57221, 0.16)
+    out = [noise[i] * env(i / RATE, 0.16, 20.0) * 0.55
+           + math.sin(2 * math.pi * (300.0 - 150.0 * (i / RATE) / 0.16)
+                      * (i / RATE)) * math.exp(-(i / RATE) * 25) * 0.2
+           for i in range(len(noise))]
+    return lowpass3(out)
+
+
+def gravel_dig():
+    """Dry rattle: two decorrelated noise layers (70/30) — the tumbling
+    grains; no lowpass (brighter than sand, grittier than stone)."""
+    a = _noise(0x6701A, 0.10)
+    b = _noise(0x6701B, 0.10)
+    return [(a[i] * 0.7 + b[i] * 0.3) * env(i / RATE, 0.10, 28.0) * 0.5
+            for i in range(len(a))]
+
+
+def gravel_place():
+    """Rattle thud: a noise burst under a 100 Hz body."""
+    lcg = Lcg(0x67220)
+
+    def f(t, _):
+        return (lcg.next() * math.exp(-t * 40) * 0.5
+                + math.sin(2 * math.pi * 100.0 * t) * math.exp(-t * 35) * 0.35)
+    return sound(0.10, f)
+
+
+def gravel_break():
+    """Long tumble: the slowest noise decay of the break family (0.22 s,
+    decay 12) — the grains settling."""
+    noise = _noise(0x67333, 0.22)
+    out = [noise[i] * env(i / RATE, 0.22, 12.0) * 0.6 for i in range(len(noise))]
+    return lowpass3(out)
+
+
+def sand_dig():
+    """Low shush: quiet noise (0.45), decay 18, DOUBLE lowpass (the soft
+    sliding grains — the lowest face of the dig family)."""
+    noise = _noise(0x73001, 0.12)
+    out = [noise[i] * env(i / RATE, 0.12, 18.0) * 0.45 for i in range(len(noise))]
+    return lowpass3(lowpass3(out))
+
+
+def sand_place():
+    """Muffled low thud: a 75 Hz body (the lowest place strike) + a double
+    lowpassed noise."""
+    lcg = Lcg(0x73111)
+
+    def f(t, _):
+        return (math.sin(2 * math.pi * 75.0 * t) * math.exp(-t * 30) * 0.55
+                + lcg.next() * math.exp(-t * 45) * 0.3)
+    return lowpass3(lowpass3(sound(0.12, f)))
+
+
+def sand_break():
+    """Low crumble: decay 10 over 0.20 s, double lowpass — the pile
+    giving way quietly."""
+    noise = _noise(0x73222, 0.20)
+    out = [noise[i] * env(i / RATE, 0.20, 10.0) * 0.6 for i in range(len(noise))]
+    return lowpass3(lowpass3(out))
+
+
+def cloth_dig():
+    """Soft quiet rustle: the quietest dig (0.32), decay 15, double
+    lowpass — handled wool, not mined stone."""
+    noise = _noise(0xC1001, 0.12)
+    out = [noise[i] * env(i / RATE, 0.12, 15.0) * 0.32 for i in range(len(noise))]
+    return lowpass3(lowpass3(out))
+
+
+def cloth_place():
+    """Muffled soft thud: a 95 Hz body + a quiet double lowpassed noise
+    (the bundle landing)."""
+    lcg = Lcg(0xC1112)
+
+    def f(t, _):
+        return (math.sin(2 * math.pi * 95.0 * t) * math.exp(-t * 22) * 0.4
+                + lcg.next() * math.exp(-t * 35) * 0.3)
+    return lowpass3(lowpass3(sound(0.12, f)))
+
+
+def cloth_break():
+    """Soft tear rustle: decay 12, 0.15 s, double lowpass, quiet (0.35) —
+    the wool parting, not cracking."""
+    noise = _noise(0xC1223, 0.15)
+    out = [noise[i] * env(i / RATE, 0.15, 12.0) * 0.35 for i in range(len(noise))]
+    return lowpass3(lowpass3(out))
+
+
+def glass_dig():
+    """High tinkle: a 2600 Hz bell (decay 35) + a bright tick layer — the
+    fingernail on the pane (the highest face of the dig family)."""
+    lcg = Lcg(0x61001)
+
+    def f(t, _):
+        return (math.sin(2 * math.pi * 2600.0 * t) * math.exp(-t * 35) * 0.4
+                + lcg.next() * math.exp(-t * 70) * 0.15)
+    return sound(0.08, f)
+
+
+def glass_place():
+    """Clear click + bell: a 1900 Hz ring (decay 28) over a short bright
+    click."""
+    lcg = Lcg(0x61111)
+
+    def f(t, _):
+        return (math.sin(2 * math.pi * 1900.0 * t) * math.exp(-t * 28) * 0.45
+                + lcg.next() * math.exp(-t * 90) * 0.25)
+    return sound(0.10, f)
+
+
+def glass_break():
+    """Bright shatter: RAW noise (no lowpass — the sharp shards), fast
+    decay 40, over a 3200 Hz ring (decay 25)."""
+    noise = _noise(0x61222, 0.18)
+    out = [noise[i] * math.exp(-(i / RATE) * 40) * 0.55
+           + math.sin(2 * math.pi * 3200.0 * (i / RATE))
+           * math.exp(-(i / RATE) * 25) * 0.3
+           for i in range(len(noise))]
+    return out
+
+
 SOUNDS = {
     "dig": dig,
     "place": place,
@@ -279,6 +502,25 @@ SOUNDS = {
     "milk": milk,
     "splash": splash,
     "ignite": ignite,
+    # CRAFT-3: the six material vocabularies (3 events each).
+    "stone_dig": stone_dig,
+    "stone_place": stone_place,
+    "stone_break": stone_break,
+    "wood_dig": wood_dig,
+    "wood_place": wood_place,
+    "wood_break": wood_break,
+    "gravel_dig": gravel_dig,
+    "gravel_place": gravel_place,
+    "gravel_break": gravel_break,
+    "sand_dig": sand_dig,
+    "sand_place": sand_place,
+    "sand_break": sand_break,
+    "cloth_dig": cloth_dig,
+    "cloth_place": cloth_place,
+    "cloth_break": cloth_break,
+    "glass_dig": glass_dig,
+    "glass_place": glass_place,
+    "glass_break": glass_break,
 }
 
 

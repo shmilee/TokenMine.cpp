@@ -1,6 +1,7 @@
 {
   "id": "smooth_sandstone",
   "properties": {
+    "sound_material": "sand",
     "hardness": 1.5,
     "drops": "smooth_sandstone"
   },

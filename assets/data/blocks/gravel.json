@@ -1,6 +1,7 @@
 {
   "id": "gravel",
   "properties": {
+    "sound_material": "gravel",
     "hardness": 0.6,
     "drops": "gravel",
     "chance_drop": {

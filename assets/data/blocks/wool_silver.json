@@ -1,6 +1,7 @@
 {
   "id": "wool_silver",
   "properties": {
+    "sound_material": "cloth",
     "hardness": 0.8,
     "drops": "wool_silver",
     "dye_base": "wool",

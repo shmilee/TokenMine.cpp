@@ -84,6 +84,11 @@ cmake --build build
 
 ## 版本与发布
 
+- **v0.23.0**（2026-10-26）：**CRAFT-3 材质音效**（任务表 25/32，CRAFT 行 3/3
+  收尾）——per-block 材质音色（`sound_material` 数据字段，6 材质 × 3 事件 =
+  18 个确定性新音效，32 块赋值，无字段块位级不变）+ 3D 空间化（SoundBank
+  stereo 化，距离衰减 cutoff 16 块 + 恒定增益声像，dig/破坏/放置/旋转/
+  丢弃/拾取世界空间化，UI/手持音效保持 2D）。
 - **v0.22.0**（2026-10-26）：**CRAFT-2 物品 3D 模型**（任务表 24/32）——
   per-item 数据驱动 box 模型（item JSON 可选 `model` 段 = 1..16 个
   axis-aligned box + 单一纹理，严格解析），三上下文渲染：手持（替代

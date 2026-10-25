@@ -1,6 +1,7 @@
 {
   "id": "iron_ore",
   "properties": {
+    "sound_material": "stone",
     "hardness": 3.0,
     "drops": "iron_ingot"
   },

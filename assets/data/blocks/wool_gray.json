@@ -1,6 +1,7 @@
 {
   "id": "wool_gray",
   "properties": {
+    "sound_material": "cloth",
     "hardness": 0.8,
     "drops": "wool_gray",
     "dye_base": "wool",

@@ -1,6 +1,7 @@
 {
   "id": "sand",
   "properties": {
+    "sound_material": "sand",
     "hardness": 0.5,
     "drops": "sand"
   },

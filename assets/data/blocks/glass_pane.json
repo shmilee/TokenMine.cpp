@@ -1,6 +1,7 @@
 {
   "id": "glass_pane",
   "properties": {
+    "sound_material": "glass",
     "opaque": false,
     "transparent": true,
     "hardness": 0.3,

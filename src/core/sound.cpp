@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 
 #include "core/logger.hpp"
@@ -114,6 +115,46 @@ std::vector<std::int16_t> SoundBank::applyGain(
     return out;
 }
 
+float SoundBank::distanceGain(float dist, float cutoff) {
+    if (cutoff <= 0.0f) {
+        return dist <= 0.0f ? 1.0f : 0.0f;
+    }
+    return std::clamp(1.0f - dist / cutoff, 0.0f, 1.0f);
+}
+
+std::pair<float, float> SoundBank::panGains(const Vec3& origin,
+                                            const Vec3& listenerPos,
+                                            float listenerYaw) {
+    // Horizontal direction only (the height never pans).
+    const float dx = origin.x - listenerPos.x;
+    const float dz = origin.z - listenerPos.z;
+    const float dist = std::sqrt(dx * dx + dz * dz);
+    if (dist <= 0.0f) {
+        return {0.5f, 0.5f}; // AT the listener: centered (no division)
+    }
+    // The camera's RIGHT vector (horizontal): (cos yaw, -sin yaw) — the
+    // Camera::right convention (yaw 0 = facing -Z, so right = +X).
+    // lateral = the rightward component of the direction, in [-1, 1]
+    // (the distance normalizes it: the pan is directional only).
+    const float lateral = std::clamp(
+        (dx * std::cos(listenerYaw) - dz * std::sin(listenerYaw)) / dist,
+        -1.0f, 1.0f);
+    return {0.5f - 0.5f * lateral, 0.5f + 0.5f * lateral};
+}
+
+std::vector<std::int16_t> SoundBank::toStereo(
+    const std::vector<std::int16_t>& pcm, float gainL, float gainR) {
+    std::vector<std::int16_t> out(pcm.size() * 2);
+    for (std::size_t i = 0; i < pcm.size(); ++i) {
+        const float s = static_cast<float>(pcm[i]);
+        out[2 * i] = static_cast<std::int16_t>(
+            std::clamp(s * gainL, -32768.0f, 32767.0f));
+        out[2 * i + 1] = static_cast<std::int16_t>(
+            std::clamp(s * gainR, -32768.0f, 32767.0f));
+    }
+    return out;
+}
+
 // ---------------------------------------------------------------------------
 
 SoundBank::~SoundBank() {
@@ -134,7 +175,10 @@ void SoundBank::init(AssetManager& assets, const std::string& dir,
     SDL_AudioSpec spec {};
     spec.freq = kSampleRate;
     spec.format = SDL_AUDIO_S16;
-    spec.channels = 1;
+    // CRAFT-3: stereo output — the bank queues interleaved stereo (the
+    // 2D path duplicates the mono sample to both channels, the spatial
+    // path pans it; the device output format is whatever SDL chose).
+    spec.channels = 2;
     // NULL callback: the game queues samples with SDL_PutAudioStreamData
     // (SDL mixes the queued data and closes the device when the stream is
     // destroyed).
@@ -151,7 +195,7 @@ void SoundBank::init(AssetManager& assets, const std::string& dir,
     SDL_AudioSpec inSpec {};
     inSpec.freq = kSampleRate;
     inSpec.format = SDL_AUDIO_S16;
-    inSpec.channels = 1;
+    inSpec.channels = 2;
     SDL_SetAudioStreamFormat(m_stream, &inSpec, nullptr);
 
     // Load every .wav in the sound directory (sorted: deterministic order).
@@ -206,7 +250,19 @@ void SoundBank::shutdown() {
     m_enabled = false;
 }
 
+void SoundBank::setListener(Vec3 position, float yaw) {
+    m_listenerPos = position;
+    m_listenerYaw = yaw;
+}
+
 void SoundBank::play(const std::string& name) {
+    play(name, std::nullopt);
+}
+
+void SoundBank::play(const std::string& name, std::optional<Vec3> origin) {
+    // The disabled bank (no audio device) is a FULL no-op — the graceful
+    // degradation path the unit tests pin (enabled() stays false, nothing
+    // is queued, the game is otherwise unaffected).
     if (!m_enabled) {
         return;
     }
@@ -214,9 +270,26 @@ void SoundBank::play(const std::string& name) {
     if (it == m_samples.end()) {
         return; // unknown name: silent no-op (documented)
     }
-    const auto scaled = applyGain(it->second.pcm, m_volume);
-    SDL_PutAudioStreamData(m_stream, scaled.data(),
-                           static_cast<std::size_t>(scaled.size()) * 2);
+    // CRAFT-3: spatialization. The 2D path (no origin) keeps the legacy
+    // behavior: the volume-scaled mono sample DUPLICATED to both channels
+    // (gainL = gainR = 1 after the volume — perceptually bit-equivalent
+    // to the pre-stereo mono stream). With an origin: the linear distance
+    // attenuation multiplies the volume gain, and the constant-gain
+    // linear pan (against the listener, setListener) splits the channel
+    // gains (gL + gR = 1).
+    float gain = m_volume;
+    float gainL = 1.0f;
+    float gainR = 1.0f;
+    if (origin.has_value()) {
+        gain *= distanceGain(length(*origin - m_listenerPos),
+                             kSoundCutoffBlocks);
+        const auto [l, r] = panGains(*origin, m_listenerPos, m_listenerYaw);
+        gainL = l;
+        gainR = r;
+    }
+    const auto scaled = applyGain(it->second.pcm, gain);
+    const auto stereo = toStereo(scaled, gainL, gainR);
+    SDL_PutAudioStreamData(m_stream, stereo.data(), stereo.size() * 2);
 }
 
 } // namespace mc

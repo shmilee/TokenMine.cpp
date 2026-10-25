@@ -1,6 +1,7 @@
 {
   "id": "stone_wall",
   "properties": {
+    "sound_material": "stone",
     "hardness": 1.5,
     "drops": "stone_wall"
   },

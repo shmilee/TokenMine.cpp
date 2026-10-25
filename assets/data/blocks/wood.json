@@ -1,6 +1,7 @@
 {
   "id": "wood",
   "properties": {
+    "sound_material": "wood",
     "hardness": 2.0,
     "drops": "wood",
     "flamable": true

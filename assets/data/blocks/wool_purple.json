@@ -1,6 +1,7 @@
 {
   "id": "wool_purple",
   "properties": {
+    "sound_material": "cloth",
     "hardness": 0.8,
     "drops": "wool_purple",
     "dye_base": "wool",

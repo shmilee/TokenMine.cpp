@@ -27,7 +27,7 @@
 | FLUID 流体 | ~~FLUID-1 水量守恒~~ 完成 | ~~FLUID-2 游泳划水~~ 完成 | | | | |
 | ENT 实体/Mob/移动 | ~~ENT-1 四肢摆动~~ 完成 | ~~ENT-2 BlockState★~~ 完成 | ~~ENT-3 mob踏阶~~ 完成 | ~~ENT-4 水体交互~~ 完成 | | |
 | SURV 生存/战斗/效果 | ~~SURV-1 护甲~~ 完成 | ~~SURV-2 氧气窒息~~ 完成 | ~~SURV-3 耐久~~ 完成 | ~~SURV-4 药水饮用~~ 完成 | ~~SURV-5 mob效果~~ 完成 | |
-| CRAFT 物品/合成/面板 | ~~CRAFT-1 工作台分块★~~ 完成（v0.21.0） | ~~CRAFT-2 物品3D模型~~ 完成（v0.22.0） | CRAFT-3 材质音效 | | | |
+| CRAFT 物品/合成/面板 | ~~CRAFT-1 工作台分块★~~ 完成（v0.21.0） | ~~CRAFT-2 物品3D模型~~ 完成（v0.22.0） | ~~CRAFT-3 材质音效~~ 完成（v0.23.0） | | | |
 | SAVE 存档 | SAVE-1 自动存档 | | | | | |
 | PRE 表现层 | PRE-1 中文字体 | PRE-2 边缘雾 | PRE-3 水面波纹 | PRE-4 云与环境音 | PRE-5 透明discard | PRE-6 掉落光照 |
 
@@ -244,7 +244,25 @@
   双场景对 900f 三窗 fluidCells 双侧逐位一致 + 全指标同档（drop 对 render med
   +0.02-0.03 ms = 3 物品 box 成本同档内）= 成本可忽略。H1/H2/H3 手持输入跑 = 补跑
   清单（PITS 260 协议）——详见 `docs/archive/phase-craft2.md`
-- **CRAFT-3 材质音效** — per-block/per-item 材质音色 + 3D 空间化（UI 条）
+- ~~**CRAFT-3 材质音效**~~ — **完成（2026-10-26，v0.23.0，CRAFT 行 3/3 收尾）**：
+  块 JSON 可选 `properties.sound_material`（严格字符串 + 显式空串拒）+ init
+  交叉校验（引用材质 ⇒ `<m>_dig/_place/_break.wav` 3 件文件级存在，点名缺失
+  件 = registry 序首败块 + 事件序）+ **SoundBank mono→stereo** + 纯函数空间化
+  （`distanceGain` 线性衰减 cutoff `kSoundCutoffBlocks=16` 命名常量零 config /
+  `panGains` 恒定增益线性声像 gL+gR=1 / `toStereo` 16-bit 钳制）+
+  `play(name, optional<Vec3> origin)` 新 API + `setListener(相机)` 帧始同步
+  + 6 调用点位空间化（dig tick/破坏完成/放置/潜行旋转/丢弃/物品拾取；手持
+  破碎/step/shoot/eat/ui_* 保持 2D 位级不变）+ 内容 = generate_sounds.py
+  确定性扩展 **6 材质 × 3 事件 = 18 新 wav**（stone/wood/gravel/sand/cloth/
+  glass，固定种子 LCG/sine；既有 17 字节零变化 md5 实证）+ **32 块赋值**
+  （stone 8 含矿脉族 MC 语义/wood 3/gravel 1/sand 3【sandstone 系】/cloth 15
+  【wool 全染变】/glass 2）；无 `sound_material` 块三事件名位级不变；零
+  format（19）/config；音频不入帧状态。1567/1567（+18：空间化纯函数 8 +
+  事件名/校验 8 + 解析/内容钉死 2）、`-Werror` 0 警告。门 106：S1 PASS =
+  第 106 次结构性免疫（免重锚 = 渲染零触碰 + 无输入零音效事件）+ S3 套件
+  1567 + S6 init 失败 ×2 点名 PASS + 性能 A/B v0.22.0 fall 900f 三窗
+  fluidCells 逐位一致 + 全指标同档 = 成本可忽略（结构惰性）；S2 音色听感 =
+  用户实机（无头不可听记档）——详见 `docs/archive/phase-craft3.md`
 
 ### SAVE 存档
 - **SAVE-1 自动存档** — 周期性 autosave + "保存并退出"流程（存档条）

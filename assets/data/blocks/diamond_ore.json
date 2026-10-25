@@ -1,6 +1,7 @@
 {
   "id": "diamond_ore",
   "properties": {
+    "sound_material": "stone",
     "hardness": 5.0,
     "drops": "diamond"
   },

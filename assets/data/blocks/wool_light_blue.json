@@ -1,6 +1,7 @@
 {
   "id": "wool_light_blue",
   "properties": {
+    "sound_material": "cloth",
     "hardness": 0.8,
     "drops": "wool_light_blue",
     "dye_base": "wool",

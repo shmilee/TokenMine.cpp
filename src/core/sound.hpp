@@ -6,26 +6,47 @@
 // default playback device through an SDL audio stream, and scales
 // playback by the configured volume (config audio.volume).
 //
+// CRAFT-3: the stream output is STEREO. The 2D play(name) path duplicates
+// the (volume-scaled) mono sample to both channels — perceptually
+// bit-equivalent to the pre-CRAFT-3 mono stream. The spatialized play
+// (name, origin) path applies a linear distance attenuation (1.0 at the
+// listener down to 0.0 at kSoundCutoffBlocks) and a constant-gain linear
+// pan (the listener = the camera, setListener) before the stereo expand.
+// The listener + the spatial math are frame-agnostic: audio is outside the
+// frame state (hard rule 8 — nothing here touches the world, the save or
+// the render).
+//
 // Graceful degradation: when the audio subsystem or the device cannot be
 // opened (headless machine, no sound server), init() logs a warning and
 // the bank is DISABLED — every play() is a no-op and the game runs
 // exactly as before. A malformed individual file is skipped with a
 // warning; play() of an unknown name is a silent no-op.
 //
-// parseWav / applyGain are pure (no SDL) and unit-tested.
+// parseWav / applyGain / distanceGain / panGains / toStereo are pure (no
+// SDL) and unit-tested.
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "core/asset_manager.hpp"
 #include "core/error.hpp"
+#include "core/math/vec3.hpp"
 
 struct SDL_AudioStream;
 
 namespace mc {
+
+// CRAFT-3: the distance cutoff of the spatialized sounds (blocks): the
+// gain falls linearly from 1.0 at the listener to 0.0 at this distance. A
+// named constant — no config key (the zero-config discipline; Minecraft's
+// per-material volume parameters are out of v1 scope, the documented
+// deviation).
+inline constexpr float kSoundCutoffBlocks = 16.0f;
 
 struct WavSample {
     std::vector<std::int16_t> pcm;
@@ -50,6 +71,17 @@ public:
     // Queues the named sample (scaled by the volume). No-op when the bank
     // is disabled or the name is unknown.
     void play(const std::string& name);
+    // CRAFT-3: the spatialized play. origin = the world position of the
+    // sound (the block center, the dropped item); std::nullopt = the 2D
+    // centered path (the legacy behavior, perceptually bit-equivalent).
+    // With an origin the volume gain is multiplied by the linear distance
+    // attenuation (kSoundCutoffBlocks) and split across the channels by
+    // the constant-gain linear pan against the listener (setListener).
+    void play(const std::string& name, std::optional<Vec3> origin);
+    // CRAFT-3: the listener (the camera's) position + yaw for the spatial
+    // play path. Updated by the game once per interaction frame; inert for
+    // the 2D path (which ignores it).
+    void setListener(Vec3 position, float yaw);
 
     // Pure helpers (unit-tested without SDL).
     // Strict 16-bit mono PCM reader: skips unknown chunks, rejects
@@ -60,6 +92,30 @@ public:
     // Scales the samples by gain, clamping to the 16-bit range.
     static std::vector<std::int16_t> applyGain(
         const std::vector<std::int16_t>& pcm, float gain);
+    // CRAFT-3: the linear distance attenuation — 1.0 at the listener
+    // (dist 0), 0.0 at and beyond the cutoff, linear in between (negative
+    // distances clamp to 1.0). A non-positive cutoff is degenerate: only
+    // the listener's own position is audible.
+    static float distanceGain(float dist, float cutoff);
+    // CRAFT-3: the constant-gain linear pan — (gainL, gainR), both in
+    // [0, 1] and summing to 1. The pan is DIRECTIONAL only (the distance
+    // normalization lives in distanceGain): the horizontal direction from
+    // the listener to the origin, measured against the camera's right
+    // vector (yaw 0 = facing -Z, so right = +X — the Camera::right
+    // convention), gives lateral in [-1, 1] (full left .. full right);
+    // gainL = (1 - lateral) / 2, gainR = (1 + lateral) / 2. The height is
+    // ignored (a sound above the listener is not "to the side"); a sound
+    // AT the listener's position is centered (no zero-distance division);
+    // front and back are both centered (lateral panning cannot tell them
+    // apart — the documented v1 simplification).
+    static std::pair<float, float> panGains(const Vec3& origin,
+                                            const Vec3& listenerPos,
+                                            float listenerYaw);
+    // CRAFT-3: the mono -> interleaved-stereo expand with per-channel
+    // gains (clamped to the 16-bit range). gainL == gainR == 1.0 is the
+    // legacy 2D path (the sample duplicated to both channels).
+    static std::vector<std::int16_t> toStereo(
+        const std::vector<std::int16_t>& pcm, float gainL, float gainR);
 
 private:
     // The device is owned by the stream (SDL_DestroyAudioStream closes it).
@@ -68,6 +124,10 @@ private:
     float m_volume = 1.0f;
     std::unordered_map<std::string, WavSample> m_samples;
     bool m_enabled = false;
+    // CRAFT-3: the listener state (setListener) — the spatial play path
+    // only. Default = the origin / yaw 0 (the camera's default view).
+    Vec3 m_listenerPos;
+    float m_listenerYaw = 0.0f;
 };
 
 } // namespace mc

@@ -4,12 +4,14 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <string>
 #include <vector>
 
 #include <unistd.h>
 
 #include "block/block_registry.hpp"
+#include "block/block_sound.hpp"
 #include "core/asset_manager.hpp"
 
 using namespace mc;
@@ -1894,6 +1896,140 @@ TEST(BlockRegistryTest, Phase92StairRotatesToParsed) {
     ASSERT_FALSE(rEmpty.ok());
     EXPECT_NE(rEmpty.error().message.find("stair_rotates_to"),
               std::string::npos);
+}
+
+// ---------------------------------------------------------------------------
+// Sound material (CRAFT-3, the per-block material timbre): the optional
+// `sound_material` field (strict string, the ammo discipline) + the exact
+// shipped assignment over the real assets (the content contract). The
+// name selection (blockSoundName) + the init cross-check
+// (checkSoundMaterials) are unit-tested in test_block_sound.cpp.
+// ---------------------------------------------------------------------------
+
+TEST(BlockRegistryTest, Craft3SoundMaterialParses) {
+    const std::string model =
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}})";
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        std::string(R"({"id":"rock","properties":{"sound_material":"stone"},)") +
+        model + "}"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).properties.soundMaterial, "stone");
+    // ABSENT = empty (the generic dig/place/break names — the default).
+    auto rNone = reg.registerBlock(parseDef(
+        std::string(R"({"id":"plain","properties":{"hardness":1.0},)") +
+        model + "}"));
+    ASSERT_TRUE(rNone.ok()) << rNone.error().message;
+    EXPECT_TRUE(reg.at(*rNone).properties.soundMaterial.empty());
+    // An EXPLICIT empty string is a no-op typo (rejected, the ammo
+    // discipline, the ignites_to / stair_rotates_to pattern).
+    auto rEmpty = reg.registerBlock(parseDef(
+        std::string(R"({"id":"e","properties":{"sound_material":""},)") +
+        model + "}"));
+    ASSERT_FALSE(rEmpty.ok());
+    EXPECT_NE(rEmpty.error().message.find("sound_material"),
+              std::string::npos);
+    // A non-string is a type error (named, no silent fallback).
+    auto rNum = reg.registerBlock(parseDef(
+        std::string(R"({"id":"n","properties":{"sound_material":3},)") +
+        model + "}"));
+    ASSERT_FALSE(rNum.ok());
+    EXPECT_NE(rNum.error().message.find("sound_material"),
+              std::string::npos);
+}
+
+TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
+    // ACTUAL asset files (not a synthetic copy): the assignment is the
+    // content contract (the Minecraft sound families) — a typo'd material
+    // name would parse fine, so the registry-level check is the unit-level
+    // guard. The tests must run from the repository root (the game's
+    // resource paths are relative, same contract).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+
+    // The exact assignment:
+    //   stone = the stone family (stone / stone_wall / cobblestone) + the
+    //           ORE family (Minecraft: the ores use the stone sound — the
+    //           dispatch decision, the documented note)
+    //   wood  = the trunk family (wood / spruce / birch — planks is an
+    //           ITEM, not a block, so no planks block)
+    //   gravel= the gravel block
+    //   sand  = sand + the sandstone chain (Minecraft: sandstone uses the
+    //           sand sound — the dispatch decision)
+    //   cloth = the FULL 15-variant wool dye family
+    //   glass = glass + glass_pane
+    //   every other block = NO field (the generic fallback)
+    const std::map<std::string, std::string> expected = {
+        {"stone", "stone"},
+        {"stone_wall", "stone"},
+        {"cobblestone", "stone"},
+        {"coal_ore", "stone"},
+        {"iron_ore", "stone"},
+        {"gold_ore", "stone"},
+        {"diamond_ore", "stone"},
+        {"lapis_ore", "stone"},
+        {"wood", "wood"},
+        {"spruce_trunk", "wood"},
+        {"birch_trunk", "wood"},
+        {"gravel", "gravel"},
+        {"sand", "sand"},
+        {"sandstone", "sand"},
+        {"smooth_sandstone", "sand"},
+        {"wool", "cloth"},
+        {"wool_black", "cloth"},
+        {"wool_blue", "cloth"},
+        {"wool_brown", "cloth"},
+        {"wool_cyan", "cloth"},
+        {"wool_gray", "cloth"},
+        {"wool_green", "cloth"},
+        {"wool_light_blue", "cloth"},
+        {"wool_magenta", "cloth"},
+        {"wool_orange", "cloth"},
+        {"wool_pink", "cloth"},
+        {"wool_purple", "cloth"},
+        {"wool_red", "cloth"},
+        {"wool_silver", "cloth"},
+        {"wool_yellow", "cloth"},
+        {"glass", "glass"},
+        {"glass_pane", "glass"},
+    };
+    for (const auto& [name, mat] : expected) {
+        const Block* b = reg.findByName(name);
+        ASSERT_TRUE(b != nullptr) << name;
+        EXPECT_EQ(b->properties.soundMaterial, mat) << name;
+    }
+    // NO other block carries the field (the generic fallback is the
+    // default — the structural-immunity red line for the rest of the set):
+    int assigned = 0;
+    for (const BlockID id : reg.allIds()) {
+        const Block& b = reg.at(id);
+        if (b.properties.soundMaterial.empty()) {
+            continue;
+        }
+        ++assigned;
+        const auto it = expected.find(b.name);
+        ASSERT_TRUE(it != expected.end()) << "block '" << b.name
+                                          << "' carries sound_material '"
+                                          << b.properties.soundMaterial
+                                          << "' outside the expected set";
+        EXPECT_EQ(it->second, b.properties.soundMaterial) << b.name;
+    }
+    EXPECT_EQ(assigned, static_cast<int>(expected.size()));
+    // The material vocabulary resolves over the REAL sound assets (the
+    // init cross-check's input side): every used material has its three
+    // event wavs on disk.
+    for (const std::string& mat :
+         {std::string("stone"), std::string("wood"), std::string("gravel"),
+          std::string("sand"), std::string("cloth"), std::string("glass")}) {
+        for (const std::string_view ev : kSoundMaterialEvents) {
+            EXPECT_TRUE(
+                assets.exists("sounds/" + mat + "_" + std::string(ev) + ".wav"))
+                << mat << "_" << ev;
+        }
+    }
 }
 
 TEST(BlockRegistryTest, Phase92StairRotationCycle) {

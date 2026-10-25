@@ -143,7 +143,7 @@
 
 ## UI / 音效 / 粒子（Phase 15）
 
-- **音效是固定事件集，无 per-block/per-item 差异** — v1 只有 8 个数据驱动事件（dig/place/break/pickup/step/ui_open/ui_close/craft），所有方块共用同一 break/place/dig 音色，无 MC 式的材质/方块音色差异、无 3D 空间化（单声道 2D 播放）。加 per-block 音色需扩事件集 + 音色映射数据。`[Phase 15]`
+- **音效是固定事件集，无 per-block/per-item 差异** — v1 只有 8 个数据驱动事件（dig/place/break/pickup/step/ui_open/ui_close/craft），所有方块共用同一 break/place/dig 音色，无 MC 式的材质/方块音色差异、无 3D 空间化（单声道 2D 播放）。加 per-block 音色需扩事件集 + 音色映射数据。`[Phase 15]`（**`[CRAFT-3]` 已解决**：块 JSON 可选 `sound_material` = 6 材质（stone/wood/gravel/sand/cloth/glass）× 3 事件（dig/place/break）= 18 个确定性新 wav，32 块赋值（stone 8 含矿脉族/wood 3/gravel 1/sand 3/cloth 15/glass 2）；无字段块回退通用事件名位级不变。**空间化** = SoundBank stereo 化 + `play(name, origin)` 距离衰减（线性 cutoff 16 块命名常量）+ 恒定增益线性声像（listener = 相机），dig/破坏/放置/潜行旋转/丢弃/拾取 6 点位世界空间化，手持破碎/step/UI 等保持 2D；实际听感 = 用户实机（无头不可听））
 - **物品无 3D 模型，图标是程序化 32×32 贴图** — block item 的 UI 表示是带光照的倾斜 3D 立方体（复用掉落物 cube mesh），工具/材料是 `tools/generate_item_icons.py` 程序化生成的 32×32 平面图标（Phase 35：16×16 → 32×32，形状谓词按 2× 分辨率重采样——弧线/对角线获得真 2× 边缘细节，非 2×2 upscale；非 MC 的 3D 旋转手持模型）；无手持动画/旋转。`[Phase 15]`（32×32 `[Phase 35]`；**16 个物品 `[CRAFT-2]` 已有数据驱动 3D box 模型**：item JSON 可选 `model` 段 = 1..16 个 axis-aligned box + 单一纹理（严格解析、无旋转 = MC primitive rotation 记档不做、v1 简化体素造型）——手持（替代 icon 面片、继承弓拉/进食举到嘴变换）/世界掉落（替代不可见掉落）/进食举到嘴三上下文渲染；其余物品保留 2D icon 手（位级不变））
 - **背包 UI 右键语义极简** — 左键取整堆/放入/交换（取出被占堆）/并入有空间同物堆；右键只"移 1 个"（同物有空间或空格，不同物格无效）；无 MC 的"右键取半堆"、无拖拽、无 shift 快捷移动、无双击分拣。点击面板外（左键）丢弃手持堆。`[Phase 15]`
 - **背包打开不暂停世界模拟** — 打开背包只暂停**玩家物理与方块交互**；世界/昼夜/流体/实体/流式加载照常 tick（与 MC 的"暂停菜单"不同，更接近"边看背包边看世界"）。`[Phase 15]`

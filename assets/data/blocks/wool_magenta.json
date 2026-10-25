@@ -1,6 +1,7 @@
 {
   "id": "wool_magenta",
   "properties": {
+    "sound_material": "cloth",
     "hardness": 0.8,
     "drops": "wool_magenta",
     "dye_base": "wool",

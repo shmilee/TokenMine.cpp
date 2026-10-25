@@ -274,6 +274,20 @@ struct BlockProperties {
     // never completes) and state_count >= 2 (the stage IS the state,
     // rejected at registration).
     std::optional<TreeGrowData> tree;
+    // Sound material (CRAFT-3): when non-empty, the block's dig / place /
+    // break sounds play the MATERIAL's timbre ("<material>_<event>" —
+    // e.g. "stone_break") instead of the generic event name. The material
+    // vocabulary is the wav prefixes on disk (assets/sounds/): a material
+    // exists iff its three event files <material>_dig.wav /
+    // <material>_place.wav / <material>_break.wav all exist — cross-checked
+    // at game init (the grows_to discipline, naming the missing piece).
+    // An explicit empty string is rejected at data load (the ammo
+    // discipline). Empty (the default) = the generic event names (dig /
+    // place / break) — the bit-level invariant for field-less content
+    // (the structural-immunity red line: such blocks play exactly the
+    // samples pre-CRAFT-3). Pure data — the core reads the property, it
+    // never switches on a block id (hard rule 3).
+    std::string soundMaterial;
 };
 
 // Which texture name is applied to each face group (full_cube shapes) — or

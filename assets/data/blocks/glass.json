@@ -1,6 +1,7 @@
 {
   "id": "glass",
   "properties": {
+    "sound_material": "glass",
     "opaque": false,
     "transparent": true,
     "light_opacity": 1,

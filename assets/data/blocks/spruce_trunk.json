@@ -1,6 +1,7 @@
 {
   "id": "spruce_trunk",
   "properties": {
+    "sound_material": "wood",
     "hardness": 2.0,
     "drops": "spruce_trunk",
     "flamable": true

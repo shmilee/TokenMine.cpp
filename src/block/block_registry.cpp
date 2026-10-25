@@ -175,6 +175,21 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
                            "non-empty block name (omit it for a plain block)");
         }
     }
+    r = checkField(*p, "sound_material", "string",
+                   [&](const Json& v) { out.soundMaterial = v.asString(); });
+    MC_TRY(r);
+    // Sound material (CRAFT-3): an EXPLICIT empty sound_material is a
+    // no-op typo (ABSENT is the generic-sound default — the ammo
+    // discipline, the ignites_to / stair_rotates_to pattern). The
+    // material's three wavs are cross-checked at game init (the grows_to
+    // discipline, naming the missing piece).
+    if (const Json* sm = p->find("sound_material")) {
+        if (sm->asString().empty()) {
+            return MC_FAIL("block property 'sound_material' must be a "
+                           "non-empty material name (omit it for the "
+                           "generic dig/place/break sounds)");
+        }
+    }
     r = checkField(*p, "beacon_effect", "string",
                    [&](const Json& v) { out.beaconEffect = v.asString(); });
     MC_TRY(r);

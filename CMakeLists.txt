@@ -40,6 +40,7 @@ add_library(mc_core STATIC
     src/core/thread_pool.cpp
     src/core/game.cpp
     src/block/block_registry.cpp
+    src/block/block_sound.cpp
     src/block/chance_drop.cpp
     src/entity/arrow_mesh.cpp
     src/entity/entity.cpp
@@ -121,6 +122,7 @@ add_executable(tokenmine_tests
     tests/test_camera.cpp
     tests/test_png.cpp
     tests/test_block.cpp
+    tests/test_block_sound.cpp
     tests/test_atlas.cpp
     tests/test_coordinates.cpp
     tests/test_chunk.cpp

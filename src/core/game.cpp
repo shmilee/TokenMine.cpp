@@ -35,6 +35,7 @@
 #include "ui/ui_scale.hpp"
 #include "item/armor.hpp"
 #include "item/durability.hpp"
+#include "block/block_sound.hpp"
 
 namespace mc {
 
@@ -736,6 +737,13 @@ Result<void> Game::buildScene() {
                            "'");
         }
     }
+
+    // CRAFT-3: a block's sound_material must name a material whose three
+    // event wavs exist in the sound directory (the grows_to discipline —
+    // a typo fails init loudly, naming the missing piece). File-based,
+    // not the loaded bank: the check holds when the audio is disabled
+    // (the headless degradation path keeps init strict).
+    MC_TRY(checkSoundMaterials(m_blocks, m_assets));
 
     // Strict data check (Phase 51): a fluid block's water_reaction names
     // two EXISTING blocks (the source-water and flowing-water products of
@@ -3284,6 +3292,15 @@ void Game::update(double dt) {
 // ---------------------------------------------------------------------------
 
 void Game::handleInteraction(double dt) {
+    // CRAFT-3: the listener for the spatialized sounds (the material dig /
+    // place / break at the block, the pickup at the item) — the camera
+    // state at the frame start. The camera was synced from the player at
+    // the END of the previous frame (the player physics run after this in
+    // the frame), so the listener is one frame stale: zero cost, zero
+    // non-determinism — audio is outside the frame state (hard rule 8).
+    // The 2D paths (step / shoot / eat / ui_*, the held-item breaks)
+    // ignore the listener entirely.
+    m_sound.setListener(m_camera.position, m_camera.yaw);
     const bool locked = m_window.relativeMouseMode();
     if (!locked) {
         // Left click captures the pointer (standard first-person behavior)
@@ -3539,7 +3556,13 @@ void Game::handleInteraction(double dt) {
                                           hit->block.z,
                                           static_cast<std::uint8_t>(
                                               (s + 1) % b.stateCount()));
-                    m_sound.play("place");
+                    // CRAFT-3: the rotated block's material timbre at the
+                    // block center (no material = the generic "place").
+                    m_sound.play(
+                        blockSoundName(b, "place"),
+                        Vec3{static_cast<float>(hit->block.x) + 0.5f,
+                             static_cast<float>(hit->block.y) + 0.5f,
+                             static_cast<float>(hit->block.z) + 0.5f});
                     return; // the rotation consumes the click (no placement)
                 }
             }
@@ -3638,8 +3661,13 @@ void Game::updateBreaking(double dt) {
     m_breakProgress += dt;
     // Mining tick (Phase 15): a dig sound every kDigSoundInterval of held
     // progress (the crack overlay renders the same progress, see render).
+    // CRAFT-3: the broken block's material timbre at the block center
+    // (no material = the generic "dig").
+    const Vec3 digPos {static_cast<float>(hit->block.x) + 0.5f,
+                       static_cast<float>(hit->block.y) + 0.5f,
+                       static_cast<float>(hit->block.z) + 0.5f};
     while (m_breakProgress >= m_lastDigProgress + kDigSoundInterval) {
-        m_sound.play("dig");
+        m_sound.play(blockSoundName(block, "dig"), digPos);
         m_lastDigProgress += kDigSoundInterval;
     }
     if (m_breakProgress >= duration) {
@@ -4139,12 +4167,17 @@ void Game::breakBlock(const BlockHit& hit) {
                     // The tool BROKE on this block: the item-break cue
                     // (the existing "break" wav — the sound table has no
                     // dedicated item-break asset, the design's reuse).
+                    // CRAFT-3: the held item breaks at the PLAYER (gain 1,
+                    // panned centered = the 2D no-origin call, the
+                    // documented choice).
                     m_sound.play("break");
                 }
             }
         }
     }
-    m_sound.play("break");
+    // CRAFT-3: the broken BLOCK's material timbre at the block center
+    // (dropPos — no material = the generic "break").
+    m_sound.play(blockSoundName(block, "break"), dropPos);
 }
 
 void Game::placeBlock() {
@@ -4205,7 +4238,13 @@ void Game::placeBlock() {
     // Placing consumes one from the selected stack (the inventory is the
     // source of blocks — no more infinite placement).
     m_inventory.take(m_selectedSlot, 1);
-    m_sound.play("place");
+    // CRAFT-3: the PLACED block's material timbre at the new cell's
+    // center (no material = the generic "place").
+    m_sound.play(
+        blockSoundName(m_blocks.at(item.block), "place"),
+        Vec3{static_cast<float>(target.x) + 0.5f,
+             static_cast<float>(target.y) + 0.5f,
+             static_cast<float>(target.z) + 0.5f});
 }
 
 bool Game::tryEat() {
@@ -4904,7 +4943,10 @@ void Game::dropSelectedItem() {
                                                       item.name, item.maxStack,
                                                       /*count=*/1, pos,
                                                       droppedDamage));
-    m_sound.play("pickup");
+    // CRAFT-3: the timbre is the generic "pickup" (items have no
+    // sound_material — YAGNI, documented), only the spatialization is
+    // added (at the drop position, the player's feet).
+    m_sound.play("pickup", pos);
 }
 
 float Game::selectedBreakSpeed(const Block& target) const {
@@ -5125,7 +5167,10 @@ void Game::updateEntities(double dt) {
             continue; // inventory full: the item stays on the ground
         }
         gone[i] = true;
-        m_sound.play("pickup");
+        // CRAFT-3: the generic "pickup" timbre (items have no
+        // sound_material — YAGNI, documented), spatialized at the picked
+        // item's position.
+        m_sound.play("pickup", item->position());
     }
     // Arrow pickup (Phase 42): a STUCK arrow within kArrowPickupRadius of
     // the player's bottom-center returns to the inventory as the
