@@ -666,7 +666,7 @@
   （土壤门失败 = 本帧无步，土壤恢复继续长）。`[GEN-2]`
 - **spruce/birch leaves 不掉苹果** — apple = oak 专属（既有 1/128 不动）；
   新 leaves 的 chance_drops = 对应 sapling @ 0.05 + stick @ 0.02。`[GEN-2]`
-- **cz ≥ cx+1 半区整块不种树/不放装饰（wz 循环上界 bug）** —
+- ~~**cz ≥ cx+1 半区整块不种树/不放装饰（wz 循环上界 bug）**~~ —
   placeTrees/placeDecorations 内层 `for (wz = wz0; wz < limit; ...)` 的
   `limit` 误用 X 基（`ox + kChunkSize [+ margin]`）：chunk 的 oz ≥
   ox+19（树）/ ox+16（装饰）时本 chunk 的 z 列不被迭代 → trunk 单列只由
@@ -674,11 +674,15 @@
   装饰在 cz = cx+1 层同样整块缺失。Phase 4（ae19893）起潜伏，101 道门
   未发现 = 基线视图朝 -Z（该侧 chunk 恒在种树侧）+ 生成器单测只断言
   局部区域。GEN-5 shipped 扫描（320×320 树生长侧盒）首次量化：修复侧
-  346 树列正常。修复 = 一行（wz 上界改 `oz + kChunkSize [+ margin]`），
-  但使大量 chunk 新增树/装饰 = 世界生成演进（基线视图侧 wz 修正 chunk
-  如 (−2,−1) 将新增树 → 需重锚评估）+ 性能 A/B（树密度上升 = 网格/渲染
-  微增）→ 独立立项 **GEN-6**（**10-25 用户定案：入矩阵第 32 项，执行序 =
-  SURV-5 之后 v0.20.0**；BACKLOG 有条目）。`[GEN-5]` 发现。
+  346 树列正常。**`[GEN-6]` 已修复（v0.20.0）**：wz 上界改 Z 基
+  `zlimit = oz + kChunkSize [+ margin]`（2 处一行级，wx/margin/格网/
+  roll/GEN-5 守卫零改动）+ 2 判别性单测（pre-fix FAIL/post-fix PASS）；
+  世界生成演进量化（shipped seed 123456789 真实资产探针）：门场景盒树列
+  13→33（2.54×）/装饰 5→20、演示盒 24→30/+2、前瞻半区锥内 215 列
+  （游戏内视野，非 60f fresh 视图）；**base18 免重锚**（第 103 次结构性
+  免疫：区内 gained 5 特征全在视锥外 = 探针论证 + 像素终裁互证）+ 性能
+  A/B v0.19.0 成本可忽略（细节见 `archive/phase-gen6.md`）。`[GEN-5]`
+  发现，`[GEN-6]` 解决。
 
 ## 数据 / 内容
 

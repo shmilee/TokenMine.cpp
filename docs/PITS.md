@@ -1822,3 +1822,14 @@
   效果相关断言写"帧 ↔ 实时间"双界（60fps 与 3.5fps 下同判据 PASS），
   或断言"效果名存在 + hp 互斥"（勿断言精确 tick 数）；场景跑长 =
   实时间预算（timeout 按 0.3 s/帧 兜底，非 1/60）。
+- **背景 retry 环存活判断 = pgrep 明文自匹配假象 + 并行直拍撞 slot
+  （PITS 259）**——10-25 门 103：① `ps aux | grep -c "[g]ate103_retry"`
+  返回 1 = **我这次 ps 自己的 `/bin/zsh -c` 命令行**（`[g]` 技巧只挡
+  grep 自身，挡不住外层 `zsh -c` 把明文模式带进 cmdline）→ 误判 retry
+  已死 75 min 后重启同款脚本 = 双环并行；② 双环 + 我手动直拍共用
+  **同一 save slot（g103s2）+ 同一截图路径** → 三进程互删/互覆写帧
+  （12KB 残帧 + 拍黑连环）。**纪律**：判活 = `pgrep -af <script>`
+  后 `grep -v "zsh -c"`（或 `ps -o args= -p <pid>` 核对），pid 记进
+  SESSION_CONTEXT；retry 运行期间**禁止**对同 slot/同路径手动直拍——
+  收帧一律交给环（其 good() 门 + 黑帧 rm = 自愈）；撞车残帧由环的
+  `good && continue` / 拍黑 rm 自动清，勿手动删环在途文件。

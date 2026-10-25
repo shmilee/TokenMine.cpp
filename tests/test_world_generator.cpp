@@ -1566,6 +1566,348 @@ TEST(WorldGeneratorTest, TreesSkipCaveCarvedSurfaceColumns) {
     }
 }
 
+// -- GEN-6 (wz loop bound: the half-region tree/decoration gap) -------------
+//
+// Pre-fix, the wz loops of placeTrees / placeDecorations reused the X-based
+// bound (ox + kChunkSize [+ margin]) of the wx loop, so a chunk with
+// cz >= cx+1 never iterated its own far-z lattice columns. The trunk is
+// written only by its column's chunk (the single-writer contract), so those
+// columns were treeless forever — ~half the world, the cz >= cx+1 diagonal
+// half (decorations: a chunk with cz >= cx+1 iterated NO z column at all).
+// The fix is the wz bound only (Z-based: oz + kChunkSize [+ margin]); these
+// tests pin: (1) a roll-passing affected-side tree column now grows the
+// complete tree — the owning chunk plants the trunk standalone and the
+// canopy seam cell owned by the west neighbor chunk (which pre-fix also
+// iterated no z column) holds leaves, with the whole template hole-free;
+// (2) an affected-side decoration is placed one above the surface;
+// (3) no-duplication / no-loss: the neighbor chunk generated standalone is
+// cell-for-cell identical to the assembled box (a chunk's output is a pure
+// function of (seed, pos)).
+
+// Pre-fix, the tree wz bound in the owning chunk (cx, cz) was
+// ox + kChunkSize + margin = 16*cx + 19 — a lattice wz is iterated pre-fix
+// iff wz <= 16*cx + 16.
+bool gen6TreeMissedPreFix(int wx, int wz) {
+    const ChunkPos cp = worldToChunk(BlockPos{wx, 0, wz});
+    return wz > cp.x * kChunkSize + 16;
+}
+
+// Pre-fix, the decoration wz bound was ox + kChunkSize = 16*cx + 16 and the
+// loop starts at wz0 = 16*cz: a chunk with cz >= cx+1 iterated nothing.
+bool gen6DecorationMissedPreFix(int wx, int wz) {
+    const ChunkPos cp = worldToChunk(BlockPos{wx, 0, wz});
+    return cp.z >= cp.x + 1;
+}
+
+// The scan box: world x [48, 80) x z [64, 96) (lattice step 4) — owning
+// chunks (3,4), (3,5), (4,5) are on the affected side (cz >= cx+1); the
+// box is outside the spawn clear zone (|col| <= 2) and the fixture has no
+// lava lakes.
+constexpr int kGen6X0 = 48, kGen6X1 = 80, kGen6Z0 = 64, kGen6Z1 = 96;
+
+struct Gen6TreeCase {
+    std::int64_t seed = -1;
+    int wx = 0, wz = 0, hgt = 0;
+};
+
+// The trunk height of a roll-passing column, the exact expression from
+// placeTrees (the kSaltTree hash).
+int gen6TrunkHeight(const GenSetup& s, const WorldGenerator& gen,
+                    int wx, int wz) {
+    const std::uint64_t h =
+        hash2(static_cast<std::uint64_t>(static_cast<std::int64_t>(wx)),
+              static_cast<std::uint64_t>(static_cast<std::int64_t>(wz)),
+              static_cast<std::uint64_t>(gen.seed() ^ kSaltTree));
+    return s.params.treeMinHeight +
+           static_cast<int>((h >> 24) %
+                            static_cast<std::uint64_t>(
+                                s.params.treeHeightRange + 1));
+}
+
+// The first seed + tree column on the affected side that the pre-fix loop
+// missed: the roll passes, the column is dry, the GEN-5 guard is off, and
+// the trunk sits on a chunk's west edge (wx % 16 == 0) so the canopy seam
+// cell (wx-1) lies in the west neighbor chunk. Validated on the generated
+// box (the fixture's surfaceGuard 4 keeps every surface intact; the seam
+// cell must not be swallowed by a terrain hill — such candidates are
+// skipped, the findGen5CrossCase pattern).
+Gen6TreeCase findGen6TreeCase(const GenSetup& s, int maxSeeds) {
+    const int t = s.params.treeLattice;
+    const BlockID woodId = s.blocks.idForName("wood");
+    const BlockID leavesId = s.blocks.idForName("leaves");
+    for (std::int64_t seed = 1; seed <= maxSeeds; ++seed) {
+        auto res = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+        if (!res.ok()) {
+            continue;
+        }
+        const WorldGenerator& gen = *res;
+        for (int wx = kGen6X0; wx < kGen6X1; wx += t) {
+            if ((wx % kChunkSize) != 0) {
+                continue;
+            }
+            for (int wz = kGen6Z0; wz < kGen6Z1; wz += t) {
+                const ChunkPos cp = worldToChunk(BlockPos{wx, 0, wz});
+                if (cp.z < cp.x + 1) {
+                    continue;
+                }
+                if (!gen6TreeMissedPreFix(wx, wz)) {
+                    continue;
+                }
+                if (!gen5RollPasses(gen, wx, wz)) {
+                    continue;
+                }
+                const int hgt = gen.surfaceHeight(wx, wz);
+                if (hgt <= s.params.seaLevel) {
+                    continue;
+                }
+                if (gen.caveCarvesCell(wx, hgt, wz, hgt)) {
+                    continue;
+                }
+                // Cheap seam pre-check: the cell (wx-1, hgt+trunk, wz) is
+                // air iff it sits above the neighbor column's surface
+                // (the fixture caves never reach that high).
+                const int trunk = gen6TrunkHeight(s, gen, wx, wz);
+                if (gen.surfaceHeight(wx - 1, wz) >= hgt + trunk) {
+                    continue;
+                }
+                std::map<ChunkPos, Chunk> chunks;
+                gen5GenerateBox(gen, chunks, wx, wz);
+                int bottom = -1, top = -1;
+                for (int y = hgt + 1; y < kWorldHeight; ++y) {
+                    if (blockAt(chunks, wx, y, wz) == woodId) {
+                        if (bottom < 0) {
+                            bottom = y;
+                        }
+                        top = y;
+                    } else {
+                        break;
+                    }
+                }
+                if (bottom != hgt + 1 ||
+                    top - hgt < s.params.treeMinHeight ||
+                    top - hgt > s.params.treeMinHeight +
+                                    s.params.treeHeightRange) {
+                    continue; // the tree is not planted as expected
+                }
+                if (blockAt(chunks, wx - 1, top, wz) != leavesId) {
+                    continue; // terrain swallowed the seam leaf
+                }
+                return {seed, wx, wz, hgt};
+            }
+        }
+    }
+    return {};
+}
+
+TEST(WorldGeneratorTest, Gen6AffectedSideTreeColumnGrows) {
+    GenSetup s;
+    const BlockID woodId = s.blocks.idForName("wood");
+    const BlockID leavesId = s.blocks.idForName("leaves");
+    const Gen6TreeCase c = findGen6TreeCase(s, 400);
+    ASSERT_GE(c.seed, 0)
+        << "no affected-side tree column missed pre-fix in 400 seeds";
+    auto res = WorldGenerator::create(c.seed, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    const ChunkPos owner = worldToChunk(BlockPos{c.wx, 0, c.wz});
+    // 1) Single writer: the OWNING chunk alone plants the contiguous trunk
+    //    (pre-fix this chunk never iterated the column — no wood at all).
+    std::map<ChunkPos, Chunk> single;
+    for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy) {
+        res->generateChunk(single[{owner.x, cy, owner.z}],
+                           {owner.x, cy, owner.z});
+    }
+    int bottom = -1, top = -1;
+    for (int y = c.hgt + 1; y < kWorldHeight; ++y) {
+        if (blockAt(single, c.wx, y, c.wz) == woodId) {
+            if (bottom < 0) {
+                bottom = y;
+            }
+            top = y;
+        } else {
+            break;
+        }
+    }
+    ASSERT_EQ(bottom, c.hgt + 1)
+        << "the owning chunk alone must plant the trunk";
+    EXPECT_GE(top - c.hgt, s.params.treeMinHeight);
+    EXPECT_LE(top - c.hgt,
+              s.params.treeMinHeight + s.params.treeHeightRange);
+    // 2) The assembled box: the whole canopy template is hole-free,
+    //    including the seam cell (wx-1, trunk top) — it lies in the west
+    //    neighbor chunk, which pre-fix iterated no z column at all (its
+    //    wz start 16*cz-4 >= its X-based bound 16*(cx-1)+19).
+    std::map<ChunkPos, Chunk> chunks;
+    gen5GenerateBox(*res, chunks, c.wx, c.wz);
+    const int trunk = top - c.hgt;
+    const int sx = c.wx - 1;
+    EXPECT_NE(worldToChunk(BlockPos{sx, 0, c.wz}), owner)
+        << "the case must cross a chunk boundary";
+    EXPECT_EQ(blockAt(chunks, sx, top, c.wz), leavesId)
+        << "the neighbor chunk must complete the canopy half";
+    for (int dy = trunk - 1; dy <= trunk + 1; ++dy) {
+        const int radius = (dy == trunk + 1) ? 1 : 2;
+        for (int dx = -radius; dx <= radius; ++dx) {
+            for (int dz = -radius; dz <= radius; ++dz) {
+                if (dx == 0 && dz == 0 && dy <= trunk) {
+                    continue; // the trunk cell
+                }
+                if (radius == 2 && std::abs(dx) == 2 && std::abs(dz) == 2) {
+                    continue; // rounded corner
+                }
+                const BlockID id =
+                    blockAt(chunks, c.wx + dx, c.hgt + dy, c.wz + dz);
+                EXPECT_TRUE(id == leavesId || id != BlockID::air())
+                    << "canopy hole at dx=" << dx << " dy=" << dy << " dz="
+                    << dz;
+            }
+        }
+    }
+    // 3) No duplication / no loss: the west neighbor generated standalone
+    //    is cell-for-cell identical to the box's copy (the chunk output is
+    //    a pure function of (seed, pos) — the two-chunk assembly has no
+    //    write conflict).
+    const int cyTop = top / kChunkSize;
+    Chunk west;
+    res->generateChunk(west, {owner.x - 1, cyTop, owner.z});
+    const auto& boxWest = chunks.at({owner.x - 1, cyTop, owner.z});
+    for (int i = 0; i < Chunk::kVolume; ++i) {
+        EXPECT_EQ(west.data()[i], boxWest.data()[i])
+            << "standalone vs box mismatch in cell " << i;
+    }
+    EXPECT_EQ(blockAt(single, sx, top, c.wz), BlockID::air())
+        << "the seam cell is NOT in the owning chunk (single writer)";
+}
+
+struct Gen6DecoCase {
+    std::int64_t seed = -1;
+    int wx = 0, wz = 0, hgt = 0;
+    int entry = -1;
+};
+
+// placeDecorations' per-(cell, entry) roll, its exact expression (the
+// kSaltDecoration salt).
+bool gen6DecoRollPasses(const GenSetup& s, const WorldGenerator& gen,
+                        int wx, int wz, int i) {
+    const Biome* biome = s.biomes.findByName(gen.biomeNameAt(wx, wz));
+    if (biome == nullptr ||
+        i >= static_cast<int>(biome->decorations.size())) {
+        return false;
+    }
+    const std::uint64_t h =
+        hash3(static_cast<std::uint64_t>(static_cast<std::int64_t>(wx)),
+              static_cast<std::uint64_t>(static_cast<std::int64_t>(wz)),
+              static_cast<std::uint64_t>(i),
+              static_cast<std::uint64_t>(gen.seed() ^ kSaltDecoration));
+    return static_cast<float>(h >> 40) * kLattice24Scale <
+           biome->decorations[i].probability;
+}
+
+// The first seed + decoration cell on the affected side (cz >= cx+1 — the
+// pre-fix loop iterated NO z column of such a chunk): a decoration entry's
+// roll passes, the column is dry, and no tree on the same column takes the
+// h+1 cell first (placeTrees runs before placeDecorations). Validated on
+// the owning chunk alone (the decoration is a single cell — no margin).
+Gen6DecoCase findGen6DecorationCase(const GenSetup& s, int maxSeeds) {
+    const int t = s.params.treeLattice;
+    for (std::int64_t seed = 1; seed <= maxSeeds; ++seed) {
+        auto res = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+        if (!res.ok()) {
+            continue;
+        }
+        const WorldGenerator& gen = *res;
+        for (int wx = kGen6X0; wx < kGen6X1; wx += t) {
+            for (int wz = kGen6Z0; wz < kGen6Z1; wz += t) {
+                if (!gen6DecorationMissedPreFix(wx, wz)) {
+                    continue;
+                }
+                if (gen5RollPasses(gen, wx, wz)) {
+                    continue; // a trunk on the column would win the h+1 cell
+                }
+                const int hgt = gen.surfaceHeight(wx, wz);
+                if (hgt <= s.params.seaLevel) {
+                    continue;
+                }
+                if (gen.caveCarvesCell(wx, hgt, wz, hgt)) {
+                    continue;
+                }
+                const Biome* biome =
+                    s.biomes.findByName(gen.biomeNameAt(wx, wz));
+                if (biome == nullptr) {
+                    continue;
+                }
+                int entry = -1;
+                for (size_t i = 0;
+                     i < biome->decorations.size() && entry < 0; ++i) {
+                    if (gen6DecoRollPasses(s, gen, wx, wz,
+                                           static_cast<int>(i))) {
+                        entry = static_cast<int>(i);
+                    }
+                }
+                if (entry < 0) {
+                    continue;
+                }
+                const ChunkPos cp = worldToChunk(BlockPos{wx, 0, wz});
+                const int lx = wx - cp.x * kChunkSize;
+                const int lz = wz - cp.z * kChunkSize;
+                // The surface cell and the decoration cell may sit in
+                // different y-chunks (hgt+1 crossing a 16 boundary).
+                const int cyS = hgt / kChunkSize;
+                const int cyD = (hgt + 1) / kChunkSize;
+                Chunk cs;
+                gen.generateChunk(cs, {cp.x, cyS, cp.z});
+                Chunk cd;
+                if (cyD != cyS) {
+                    gen.generateChunk(cd, {cp.x, cyD, cp.z});
+                }
+                const BlockID want =
+                    s.blocks.idForName(biome->decorations[entry].block);
+                const BlockID placed = (cyD == cyS)
+                    ? cs.get(lx, hgt + 1 - cyS * kChunkSize, lz)
+                    : cd.get(lx, hgt + 1 - cyD * kChunkSize, lz);
+                if (placed != want ||
+                    cs.get(lx, hgt - cyS * kChunkSize, lz) !=
+                        s.blocks.idForName(biome->surface)) {
+                    continue; // the cell is not placed as expected
+                }
+                return {seed, wx, wz, hgt, entry};
+            }
+        }
+    }
+    return {};
+}
+
+TEST(WorldGeneratorTest, Gen6AffectedSideDecorationPlaced) {
+    GenSetup s;
+    const Gen6DecoCase c = findGen6DecorationCase(s, 400);
+    ASSERT_GE(c.seed, 0)
+        << "no affected-side decoration cell missed pre-fix in 400 seeds";
+    auto res = WorldGenerator::create(c.seed, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    const ChunkPos owner = worldToChunk(BlockPos{c.wx, 0, c.wz});
+    const Biome* biome = s.biomes.findByName(res->biomeNameAt(c.wx, c.wz));
+    ASSERT_NE(biome, nullptr);
+    const BlockID want =
+        s.blocks.idForName(biome->decorations[c.entry].block);
+    const BlockID surface = s.blocks.idForName(biome->surface);
+    // 1) The owning chunk alone places the decoration one above the
+    //    biome's own surface (pre-fix the chunk iterated no z column).
+    {
+        std::map<ChunkPos, Chunk> single;
+        for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy) {
+            res->generateChunk(single[{owner.x, cy, owner.z}],
+                               {owner.x, cy, owner.z});
+        }
+        EXPECT_EQ(blockAt(single, c.wx, c.hgt + 1, c.wz), want);
+        EXPECT_EQ(blockAt(single, c.wx, c.hgt, c.wz), surface);
+    }
+    // 2) The assembled box agrees (a decoration is a single cell written
+    //    by exactly one chunk — no duplication / no loss across the seam).
+    std::map<ChunkPos, Chunk> chunks;
+    gen5GenerateBox(*res, chunks, c.wx, c.wz);
+    EXPECT_EQ(blockAt(chunks, c.wx, c.hgt + 1, c.wz), want);
+    EXPECT_EQ(blockAt(chunks, c.wx, c.hgt, c.wz), surface);
+}
+
 // -- biomes ------------------------------------------------------------------
 
 TEST(WorldGeneratorTest, BiomeSelectionCoversAllBiomes) {

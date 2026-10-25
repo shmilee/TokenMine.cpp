@@ -452,9 +452,15 @@ void WorldGenerator::placeTrees(Chunk& chunk, const ChunkPos& pos) const {
     const int wx0 = floorDiv(ox - margin, s) * s;
     const int wz0 = floorDiv(oz - margin, s) * s;
     const int limit = ox + kChunkSize + margin;
+    // GEN-6: the wz loop's bound must be Z-based (oz), not the X-based
+    // limit — the pre-fix code shared `limit` with the wx loop, so a chunk
+    // with cz >= cx+1 never iterated its own far z lattice columns (the
+    // trunk single-writer contract then left those columns treeless for
+    // good; ~half the world, the cz >= cx+1 diagonal half, was affected).
+    const int zlimit = oz + kChunkSize + margin;
 
     for (int wx = wx0; wx < limit; wx += s) {
-        for (int wz = wz0; wz < limit; wz += s) {
+        for (int wz = wz0; wz < zlimit; wz += s) {
             const ResolvedBiome& b = resolvedBiomeAt(wx, wz);
             if (b.treeDensity <= 0.0f) {
                 continue;
@@ -523,9 +529,12 @@ void WorldGenerator::placeDecorations(Chunk& chunk, const ChunkPos& pos) const {
     const int wx0 = floorDiv(ox, s) * s;
     const int wz0 = floorDiv(oz, s) * s;
     const int limit = ox + kChunkSize;
+    // GEN-6: same Z-based bound fix as placeTrees (decorations have no
+    // margin: zlimit == the chunk's own z span).
+    const int zlimit = oz + kChunkSize;
 
     for (int wx = wx0; wx < limit; wx += s) {
-        for (int wz = wz0; wz < limit; wz += s) {
+        for (int wz = wz0; wz < zlimit; wz += s) {
             const ResolvedBiome& b = resolvedBiomeAt(wx, wz);
             if (b.decorations.empty()) {
                 continue;

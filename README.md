@@ -84,6 +84,10 @@ cmake --build build
 
 ## 版本与发布
 
+- **v0.20.0**（2026-10-25）：**GEN-6 树放置半区修复**（任务表 32/32 执行序
+  22 项）——修复 Phase 4 起潜伏的 wz 循环上界 bug：约世界一半
+  （cz ≥ cx+1 对角半区）恢复种树/放装饰（wz 上界 2 处一行级修复，
+  零 format/config/content，跨 chunk 无缝契约保持）。
 - **v0.19.0**（2026-10-25）：**SURV-5 mob 效果**（任务表 21/32，SURV 行
   5/5 全清）——状态效果双载体：skeleton 箭带 wither（1HP/4s 无地板可杀）、
   毒弓 poison_bow（箭中 mob 中毒 60s 可毒死）、不死族免疫 poison（MC 语义）。
