@@ -114,7 +114,7 @@
   S1 PASS = 第 103 次结构性免疫（fresh 60f ×2 RAW + vs base18 字节一致，
   **免重锚** = 区内 gained 5 特征全在视锥外【探针视锥论证 + 像素终裁
   互证】）+ S2 树群判别场景（(10.5,42,30.5) 斜视 (8,32) h40 t7 新增树，
-  old=frozen v0.19.0/new 各 ×2 RAW + A/B diff = **补跑清单**（提交时窗几何混合 PITS 249，retry v3 frozen 二进制 + 尺寸门续采））+ S3 套件 1521（跨 chunk
+  old=frozen v0.19.0/new 各 ×2 RAW 双侧一致 + **A/B diff 476,835 world px**【NEW 侧叶绿 44%+干褐 55% = 树干+树冠 vs OLD 侧草/天空 = 树添加像素定案，补跑收 23:2x retry att 28；提交时首轮窗几何混合 PITS 249 → retry v3 尺寸门】）+ S3 套件 1521（跨 chunk
   seam 一致性 = 新测 #1）；性能 A/B v0.19.0（发布前，timing-clean）：fall + tree 双场景对三窗
   fluidCells 双侧逐位一致（同世界）+ upd/render/swap/ents 全同档 =
   **成本可忽略无回归**（2 行纯 worldgen 零每帧代码，树密度 2.54×
