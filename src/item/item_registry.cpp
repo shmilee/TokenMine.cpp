@@ -517,11 +517,16 @@ Result<void> ItemRegistry::parseDurability(const Json& def, Item& out) {
 
 Result<void> ItemRegistry::parseGrant(const Json& def, Item& out) {
     // Optional 'grants_effect' (Phase 49, golden apple): the status effect
-    // granted when a full EAT completes — {"name": <effect>, "duration":
-    // <seconds>}. Both keys are required (the on_hit_effect pair discipline);
-    // the effect name is cross-checked against the EffectRegistry at game
-    // init (the ammo pattern). Only FOOD grants an effect on eat (a
-    // drinkable CLEARS effects on drink, so the channels are exclusive).
+    // granted when a full CONSUME completes — {"name": <effect>,
+    // "duration": <seconds>}. Both keys are required (the on_hit_effect pair
+    // discipline); the effect name is cross-checked against the EffectRegistry
+    // at game init (the ammo pattern). SURV-4: only FOOD or a DRINKABLE grants
+    // an effect on consume (the eat channel and the drink channel are the two
+    // consume paths; a non-consumable has no consume channel, so the grant
+    // would be a dead field). A duration of 0 is legal at PARSE — it marks an
+    // instant effect (settled on apply, no lingering); the 0 ⇔ instant
+    // equivalence is enforced at game init (the EffectRegistry is not
+    // available here).
     if (const Json* ge = def.find("grants_effect")) {
         if (!ge->isObject()) {
             return MC_FAIL("'grants_effect' must be an object "
@@ -539,21 +544,22 @@ Result<void> ItemRegistry::parseGrant(const Json& def, Item& out) {
                            "'name' (effect id)");
         }
         const Json* du = ge->find("duration");
-        if (du == nullptr || !du->isNumber() || du->asDouble() <= 0.0) {
-            return MC_FAIL("'grants_effect' requires 'duration' (seconds) > 0");
+        if (du == nullptr || !du->isNumber() || du->asDouble() < 0.0) {
+            return MC_FAIL("'grants_effect' requires 'duration' (seconds) "
+                           ">= 0 (0 = an instant effect)");
         }
-        // Only food grants an effect on eat (the drinkable clears effects,
-        // so the two channels are mutually exclusive).
-        if (out.restoreHunger <= 0) {
-            return MC_FAIL("'grants_effect' requires 'restore_hunger' (only "
-                           "food grants an effect on eat)");
+        // Only food or a drinkable grants an effect on consume (SURV-4).
+        if (out.restoreHunger <= 0 && out.drinkTime <= 0.0f) {
+            return MC_FAIL("'grants_effect' requires 'restore_hunger' or "
+                           "'drink_time' (only food or a drinkable grants an "
+                           "effect on consume)");
         }
         out.grantsEffect = nm->asString();
         out.grantsEffectDuration = du->asDouble();
     }
     // Phase 56: the LIST form — an array of the same strict pairs,
     // mutually exclusive with the single field (the P52 chance_drops
-    // pattern), applied IN ORDER on a full eat.
+    // pattern), applied IN ORDER on a full consume (eat or drink, SURV-4).
     if (const Json* gel = def.find("grants_effects")) {
         if (!gel->isArray()) {
             return MC_FAIL("'grants_effects' must be an array of "
@@ -566,10 +572,12 @@ Result<void> ItemRegistry::parseGrant(const Json& def, Item& out) {
             return MC_FAIL("'grants_effects' is mutually exclusive with "
                            "'grants_effect' (pick one)");
         }
-        // Only food grants an effect on eat (same as the single field).
-        if (out.restoreHunger <= 0) {
-            return MC_FAIL("'grants_effects' requires 'restore_hunger' "
-                           "(only food grants an effect on eat)");
+        // Only food or a drinkable grants an effect on consume (SURV-4,
+        // same as the single field).
+        if (out.restoreHunger <= 0 && out.drinkTime <= 0.0f) {
+            return MC_FAIL("'grants_effects' requires 'restore_hunger' or "
+                           "'drink_time' (only food or a drinkable grants an "
+                           "effect on consume)");
         }
         for (std::size_t i = 0; i < gel->size(); ++i) {
             const Json& e = gel->at(i);
@@ -589,9 +597,10 @@ Result<void> ItemRegistry::parseGrant(const Json& def, Item& out) {
                                "]' requires a non-empty string 'name'");
             }
             const Json* du = e.find("duration");
-            if (du == nullptr || !du->isNumber() || du->asDouble() <= 0.0) {
+            if (du == nullptr || !du->isNumber() || du->asDouble() < 0.0) {
                 return MC_FAIL("'grants_effects[" + std::to_string(i) +
-                               "]' requires 'duration' (seconds) > 0");
+                               "]' requires 'duration' (seconds) >= 0 "
+                               "(0 = an instant effect)");
             }
             Item::GrantEffect g;
             g.name = nm->asString();
@@ -748,7 +757,8 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     MC_TRY(r);
     r = parseDrink(def, item); // after parseFood: the exclusivity check
     MC_TRY(r);
-    r = parseGrant(def, item); // after parseFood/parseDrink: food-only check
+    r = parseGrant(def, item); // after parseFood/parseDrink: the
+                               // food-or-drinkable check (SURV-4)
     MC_TRY(r);
     r = parseFluidBucket(def, item); // after parseFood/parseDrink: the
                                      // channel-ownership exclusivity

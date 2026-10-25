@@ -28,6 +28,12 @@
 //     beats lava: in both, no fire).
 //   - `icon`: the 16 px tile index in assets/textures/effects.png the HUD
 //     draws for the effect (cross-checked against the texture at init).
+//   - `instant_hp` (SURV-4, potions): a whole-HP change settled the moment
+//     the effect is applied (positive = heal, negative = damage with the
+//     armor EXEMPTED — Minecraft's magic/potion damage), leaving no
+//     lingering duration (a grant of duration 0). Mutually exclusive with
+//     `tick_type` (an effect is either a tick action or an instant one).
+//     Absent = no instant action (the default).
 //
 // Timing: the durations and tick accumulators run on REAL dt (the survival
 // timer class, like hunger and the eat channel — hard rule 8). The events
@@ -95,6 +101,15 @@ struct Effect {
     // Combined as the single HIGHEST active reduction (the player has one
     // effective resistance, not stacked fractions).
     float damageReduction = 0.0f;
+    // SURV-4 (potions): an INSTANT HP change settled the moment the effect
+    // is APPLIED (positive = heal, negative = damage with the armor
+    // EXEMPTED — Minecraft's magic/potion damage), after which the effect
+    // leaves no lingering duration (a grant of duration 0). Mutually
+    // exclusive with `tick_type` (an effect is either a tick action or an
+    // instant one, not both — one effect, one action form). Stored as a
+    // float like absorb_hp but integer-valued (validated at parse).
+    // 0.0 = no instant action (the absent-field default).
+    float instantHp = 0.0f;
     // Cleared by drinking a milk container (negative effects).
     bool negative = false;
     // (Re-)applied every frame while the player is in the lava (the fire,

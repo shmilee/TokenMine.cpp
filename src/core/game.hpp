@@ -431,6 +431,18 @@ private:
     // call this: the format-12 pool is authoritative (it may sit below
     // the total) and the format-11 migration derives it (applySave).
     void syncAbsorption();
+    // SURV-4 (potions): the single choke point for applying a NAMED status
+    // effect to the player. Resolves the effect (init cross-checks every
+    // grant source names an existing effect, so idForName cannot fail),
+    // applies it with the RESET semantics (an already-active instance is
+    // re-timed, the tick phase kept), and settles any INSTANT action the
+    // effect data carries (a positive instant_hp = heal, a negative one =
+    // damage with the armor EXEMPTED — Minecraft's magic/potion damage, the
+    // SURV-2 drowning bypass twin). Effects without an instant action are
+    // unchanged (the pre-SURV-4 apply sites behave identically through the
+    // helper). The CALLER owns the surrounding syncAbsorption() (the pool
+    // is a pure function of the effects at every sync point).
+    void applyPlayerEffect(const std::string& name, double duration);
     // Cycles the hotbar selection; resets break progress (the selected
     // tool changed, Minecraft behavior).
     void cycleHotbar();

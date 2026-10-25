@@ -1,0 +1,11 @@
+{
+  "id": "potion_harming",
+  "type": "material",
+  "max_stack": 1,
+  "icon": "potion_harming",
+  "drink_time": 1.6,
+  "returns_item": "glass_bottle",
+  "grants_effects": [
+    { "name": "harming", "duration": 0 }
+  ]
+}

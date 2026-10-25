@@ -1,6 +1,13 @@
 {
   "items": ["stone", "dirt", "grass", "sand", "wood", "leaves", "glass", "glowstone", "wooden_pickaxe"],
   "inventory": [
+    { "slot": 17, "item": "glass_bottle", "count": 4 },
+    { "slot": 18, "item": "potion_healing", "count": 1 },
+    { "slot": 19, "item": "potion_harming", "count": 1 },
+    { "slot": 20, "item": "potion_regeneration", "count": 1 },
+    { "slot": 21, "item": "potion_weakness", "count": 1 },
+    { "slot": 22, "item": "potion_swiftness", "count": 1 },
+    { "slot": 23, "item": "potion_poison", "count": 1 },
     { "slot": 24, "item": "oak_sapling", "count": 3 },
     { "slot": 25, "item": "spruce_sapling", "count": 3 },
     { "slot": 26, "item": "birch_sapling", "count": 3 }

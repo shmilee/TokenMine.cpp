@@ -1,0 +1,6 @@
+{
+  "id": "healing",
+  "instant_hp": 4,
+  "negative": false,
+  "icon": 8
+}

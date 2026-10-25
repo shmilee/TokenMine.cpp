@@ -12,6 +12,7 @@
 #include "block/block_registry.hpp"
 #include "core/asset_manager.hpp"
 #include "core/json.hpp"
+#include "core/status_effect.hpp"
 #include "item/inventory.hpp"
 #include "item/item.hpp"
 #include "item/item_registry.hpp"
@@ -1322,42 +1323,57 @@ TEST(ItemRegistryTest, GrantEffectRequiresName) {
                      .ok());
 }
 
-TEST(ItemRegistryTest, GrantEffectRequiresPositiveDuration) {
+TEST(ItemRegistryTest, GrantEffectRequiresNonNegativeDuration) {
+    // SURV-4: the duration is >= 0 at PARSE — a 0 marks an instant effect
+    // (settled on apply, no lingering); the 0 ⇔ instant equivalence is
+    // enforced at game init (the EffectRegistry is not available at parse).
     ItemRegistry items;
+    // A missing duration is still a dead field (the pair discipline).
     EXPECT_FALSE(items.registerItem(
                      parseJson(R"({"id":"b","type":"material",
                                    "restore_hunger":3,
                                    "grants_effect":{"name":"x"}})"))
                      .ok());
-    EXPECT_FALSE(items.registerItem(
-                     parseJson(R"({"id":"b","type":"material",
-                                   "restore_hunger":3,
-                                   "grants_effect":{"name":"x","duration":0}})"))
-                     .ok());
+    // A negative duration is a typo.
     EXPECT_FALSE(items.registerItem(
                      parseJson(R"({"id":"b","type":"material",
                                    "restore_hunger":3,
                                    "grants_effect":{"name":"x","duration":-3}})"))
                      .ok());
+    // A zero duration is accepted at parse (an instant grant — init decides
+    // the effect it names is actually instant).
+    auto r0 = items.registerItem(
+        parseJson(R"({"id":"b","type":"material",
+                      "restore_hunger":3,
+                      "grants_effect":{"name":"x","duration":0}})"));
+    ASSERT_TRUE(r0.ok()) << r0.error().message;
+    EXPECT_DOUBLE_EQ(items.at(*r0).grantsEffectDuration, 0.0);
 }
 
-TEST(ItemRegistryTest, GrantEffectRequiresFood) {
-    // Only FOOD grants an effect on eat: a drinkable CLEARS effects on
-    // drink, and a non-food has no eat channel at all (the grant would be
-    // a dead field).
+TEST(ItemRegistryTest, GrantEffectRequiresConsumable) {
+    // SURV-4: only FOOD or a DRINKABLE grants an effect on consume (the two
+    // consume channels — eat and drink). A non-consumable has no consume
+    // channel, so the grant would be a dead field.
     ItemRegistry items;
     EXPECT_FALSE(items.registerItem(
                      parseJson(R"({"id":"b","type":"material",
                                    "grants_effect":{"name":"x","duration":5}})"))
                      .ok());
-    // A drinkable with the grant: rejected (the food/drink exclusivity
-    // fires first; either way the item cannot be registered).
+    // A drinkable with the grant: now ACCEPTED (the potion's channel).
     ItemRegistry items2;
-    EXPECT_FALSE(items2.registerItem(
-                     parseJson(R"({"id":"c","type":"material",
-                                   "drink_time":1.6,
-                                   "grants_effect":{"name":"x","duration":5}})"))
-                     .ok());
+    auto r2 = items2.registerItem(
+        parseJson(R"({"id":"c","type":"material",
+                      "drink_time":1.6,
+                      "grants_effect":{"name":"x","duration":5}})"));
+    ASSERT_TRUE(r2.ok()) << r2.error().message;
+    EXPECT_EQ(items2.at(*r2).grantsEffect, "x");
+    // A food with the grant: still accepted (the pre-SURV-4 channel).
+    ItemRegistry items3;
+    auto r3 = items3.registerItem(
+        parseJson(R"({"id":"d","type":"material",
+                      "restore_hunger":3,
+                      "grants_effect":{"name":"x","duration":5}})"));
+    ASSERT_TRUE(r3.ok()) << r3.error().message;
 }
 
 // -- Status-effect grant LIST on eat (Phase 56: grants_effects) --------------
@@ -1410,19 +1426,28 @@ TEST(ItemRegistryTest, GrantEffectsRejections) {
             "grants_effects":[{"duration":5}]})",
         R"({"id":"b","type":"material","restore_hunger":3,
             "grants_effects":[{"name":"","duration":5}]})",
-        // a missing / non-positive duration
+        // a missing / negative duration (SURV-4: a 0 duration is now
+        // ACCEPTED at parse — it marks an instant effect, init decides)
         R"({"id":"b","type":"material","restore_hunger":3,
             "grants_effects":[{"name":"x"}]})",
         R"({"id":"b","type":"material","restore_hunger":3,
-            "grants_effects":[{"name":"x","duration":0}]})",
+            "grants_effects":[{"name":"x","duration":-5}]})",
     };
     for (const std::string& def : bad) {
         ItemRegistry items;
         EXPECT_FALSE(items.registerItem(parseJson(def)).ok()) << def;
     }
-    // Only FOOD grants effects on eat (same as the single field).
-    ItemRegistry noFood;
-    EXPECT_FALSE(noFood.registerItem(
+    // SURV-4: a DRINKABLE (the potion channel) accepts a grant list; a
+    // non-consumable still does not (same as the single field).
+    ItemRegistry drink;
+    auto rd = drink.registerItem(
+        parseJson(R"({"id":"b","type":"material","drink_time":1.6,
+                      "grants_effects":[{"name":"x","duration":0}]})"));
+    ASSERT_TRUE(rd.ok()) << rd.error().message;
+    ASSERT_EQ(drink.at(*rd).grantsEffects.size(), 1u);
+    EXPECT_DOUBLE_EQ(drink.at(*rd).grantsEffects[0].duration, 0.0);
+    ItemRegistry noConsumable;
+    EXPECT_FALSE(noConsumable.registerItem(
                      parseJson(R"({"id":"b","type":"material",
                                    "grants_effects":[{"name":"x","duration":5}]})"))
                      .ok());
@@ -2065,9 +2090,10 @@ TEST(ItemRegistryTest, StarterSlotsStrictParse) {
 }
 
 TEST(ItemRegistryTest, Gen2HotbarStarterPinned) {
-    // The SHIPPED hotbar.json: the three sapling starters, three each, in
-    // the hidden storage slots 24/25/26 (NOT the hotbar — the structural
-    // immunity of the no-input run).
+    // The SHIPPED hotbar.json: the hidden storage starters (NOT the hotbar
+    // — the structural immunity of the no-input run). GEN-2's three sapling
+    // starters (slots 24/25/26) + SURV-4's potion starters (slots 17-23:
+    // the glass bottle fill + the six single-effect potions).
     AssetManager assets;
     ASSERT_TRUE(assets.setRoot("assets").ok())
         << "run the tests from the repository root";
@@ -2082,21 +2108,161 @@ TEST(ItemRegistryTest, Gen2HotbarStarterPinned) {
     ASSERT_TRUE(parsed.ok()) << parsed.error().message;
     auto r = parseStarterSlots(*parsed, items);
     ASSERT_TRUE(r.ok()) << r.error().message;
-    ASSERT_EQ(r->size(), 3u);
+    ASSERT_EQ(r->size(), 10u);
     const struct {
         int slot;
         const char* item;
+        int count;
     } want[] = {
-        {24, "oak_sapling"}, {25, "spruce_sapling"}, {26, "birch_sapling"},
+        {17, "glass_bottle", 4},
+        {18, "potion_healing", 1},
+        {19, "potion_harming", 1},
+        {20, "potion_regeneration", 1},
+        {21, "potion_weakness", 1},
+        {22, "potion_swiftness", 1},
+        {23, "potion_poison", 1},
+        {24, "oak_sapling", 3},
+        {25, "spruce_sapling", 3},
+        {26, "birch_sapling", 3},
     };
     for (std::size_t i = 0; i < r->size(); ++i) {
         EXPECT_EQ((*r)[i].slot, want[i].slot);
         EXPECT_EQ((*r)[i].item, items.idForName(want[i].item));
-        EXPECT_EQ((*r)[i].count, 3);
+        EXPECT_EQ((*r)[i].count, want[i].count);
     }
     // The hotbar fill itself is unchanged (the 9 shipped items, slots
     // 0..8 — no storage slot in the `items` list).
     const Json* list = parsed->find("items");
     ASSERT_TRUE(list != nullptr && list->isArray());
     ASSERT_EQ(list->size(), 9u);
+}
+
+// ---------------------------------------------------------------------------
+// SURV-4 (potions): the glass/water bottle pair + the six single-effect
+// potions — content pins (the P55/P69 real-asset discipline).
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Load the shipped items (blocks + explicit items) — the content-pin helper.
+ItemRegistry loadShippedItems(AssetManager& assets) {
+    BlockRegistry blocks;
+    if (!blocks.loadDirectory(assets, "data/blocks").ok()) {
+        ADD_FAILURE() << "load data/blocks";
+    }
+    ItemRegistry items;
+    if (!items.buildBlockItems(blocks).ok()) {
+        ADD_FAILURE() << "build block items";
+    }
+    if (!items.loadDirectory(assets, "data/items").ok()) {
+        ADD_FAILURE() << "load data/items";
+    }
+    return items;
+}
+
+} // namespace
+
+TEST(ItemRegistryTest, Surv4GlassWaterBottlePairPinned) {
+    // The bottle pair (the bucket pair's twin): glass_bottle is the EMPTY
+    // side (scoops water), water_bottle is the FULL side (pours water back
+    // into a glass_bottle). The derived companion (fullBucketFor) resolves
+    // the scoop target — the (fluid, poursBecomes) key keeps it distinct
+    // from water_bucket (which pours back into the metal bucket).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    const ItemRegistry items = loadShippedItems(assets);
+
+    const Item* bottle = items.findByName("glass_bottle");
+    ASSERT_NE(bottle, nullptr);
+    EXPECT_EQ(bottle->type, ItemType::Material);
+    EXPECT_EQ(bottle->maxStack, 16);
+    ASSERT_EQ(bottle->collectsFluids.size(), 1u);
+    EXPECT_EQ(bottle->collectsFluids[0], "water");
+    EXPECT_TRUE(bottle->poursFluid.empty());
+    EXPECT_TRUE(bottle->poursBecomes.empty());
+    EXPECT_TRUE(bottle->drinkTime == 0.0f); // the empty bottle is NOT drinkable
+    EXPECT_EQ(bottle->icon, "glass_bottle");
+
+    const Item* waterBottle = items.findByName("water_bottle");
+    ASSERT_NE(waterBottle, nullptr);
+    EXPECT_EQ(waterBottle->type, ItemType::Material);
+    EXPECT_EQ(waterBottle->maxStack, 16);
+    EXPECT_EQ(waterBottle->poursFluid, "water");
+    EXPECT_EQ(waterBottle->poursBecomes, "glass_bottle");
+    EXPECT_TRUE(waterBottle->collectsFluids.empty());
+    EXPECT_TRUE(waterBottle->drinkTime == 0.0f); // pure container (deviation)
+    EXPECT_EQ(waterBottle->icon, "water_bottle");
+
+    // The derived scoop companion: glass_bottle + water -> water_bottle, and
+    // NOT water_bucket (which pours back into the metal bucket).
+    const Item* full = items.fullBucketFor("water", "glass_bottle");
+    ASSERT_NE(full, nullptr);
+    EXPECT_EQ(full->name, "water_bottle");
+    // The metal bucket's water companion is still the metal water bucket.
+    const Item* metalFull = items.fullBucketFor("water", "bucket");
+    ASSERT_NE(metalFull, nullptr);
+    EXPECT_EQ(metalFull->name, "water_bucket");
+}
+
+TEST(ItemRegistryTest, Surv4PotionItemContentPinned) {
+    // The six single-effect potions: material, max_stack 1 (Minecraft), the
+    // 1.6 s drink channel, the glass_bottle return, and the data-driven
+    // grant (the four duration potions name a lingering effect at its
+    // Minecraft duration; the two instant potions name their instant effect
+    // at duration 0).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    const ItemRegistry items = loadShippedItems(assets);
+
+    const struct {
+        const char* name;
+        const char* effect;
+        double duration;
+    } want[] = {
+        {"potion_weakness", "weakness", 90.0},
+        {"potion_swiftness", "speed", 180.0},
+        {"potion_regeneration", "regeneration", 45.0},
+        {"potion_poison", "poison", 45.0},
+        {"potion_healing", "healing", 0.0},
+        {"potion_harming", "harming", 0.0},
+    };
+    for (const auto& w : want) {
+        const Item* it = items.findByName(w.name);
+        ASSERT_NE(it, nullptr) << w.name;
+        EXPECT_EQ(it->type, ItemType::Material) << w.name;
+        EXPECT_EQ(it->maxStack, 1) << w.name; // MC: a potion never stacks
+        EXPECT_FLOAT_EQ(it->drinkTime, 1.6f) << w.name;
+        EXPECT_EQ(it->returnsItem, "glass_bottle") << w.name;
+        EXPECT_TRUE(it->grantsEffect.empty()) << w.name; // the list form
+        ASSERT_EQ(it->grantsEffects.size(), 1u) << w.name;
+        EXPECT_EQ(it->grantsEffects[0].name, w.effect) << w.name;
+        EXPECT_DOUBLE_EQ(it->grantsEffects[0].duration, w.duration) << w.name;
+        EXPECT_EQ(it->icon, w.name) << w.name;
+    }
+}
+
+TEST(EffectContent, Surv4InstantEffectContentPinned) {
+    // The two shipped instant effects (data/effects/*.json): the exact
+    // values are the contract (healing +4 / harming -6, the icons 8/9 = the
+    // effects.png 128->160 tail extension).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    EffectRegistry effects;
+    ASSERT_TRUE(effects.loadDirectory(assets, "data/effects").ok())
+        << "load data/effects";
+    const Effect* healing = effects.findByName("healing");
+    ASSERT_NE(healing, nullptr);
+    EXPECT_FLOAT_EQ(healing->instantHp, 4.0f);
+    EXPECT_EQ(healing->tick, Effect::Tick::None);
+    EXPECT_FALSE(healing->negative);
+    EXPECT_EQ(healing->icon, 8);
+    const Effect* harming = effects.findByName("harming");
+    ASSERT_NE(harming, nullptr);
+    EXPECT_FLOAT_EQ(harming->instantHp, -6.0f);
+    EXPECT_EQ(harming->tick, Effect::Tick::None);
+    EXPECT_TRUE(harming->negative);
+    EXPECT_EQ(harming->icon, 9);
 }

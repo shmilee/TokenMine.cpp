@@ -1,0 +1,11 @@
+{
+  "id": "potion_regeneration",
+  "type": "material",
+  "max_stack": 1,
+  "icon": "potion_regeneration",
+  "drink_time": 1.6,
+  "returns_item": "glass_bottle",
+  "grants_effects": [
+    { "name": "regeneration", "duration": 45 }
+  ]
+}

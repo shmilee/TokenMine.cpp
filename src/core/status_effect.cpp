@@ -60,7 +60,10 @@ Result<void> EffectRegistry::parseEffect(const Json& def, Effect& out) {
                                                 // other primary effects.
                                                 "speed_multiplier",
                                                 "melee_bonus",
-                                                "damage_reduction"};
+                                                "damage_reduction",
+                                                // SURV-4: the potion's
+                                                // instant heal / damage.
+                                                "instant_hp"};
     for (const auto& [key, value] : def.members()) {
         if (kFields.count(key) == 0) {
             return MC_FAIL("effect '" + out.name + "' has an unknown field "
@@ -156,6 +159,40 @@ Result<void> EffectRegistry::parseEffect(const Json& def, Effect& out) {
         out.damageReduction = static_cast<float>(dr->asDouble());
     }
 
+    // SURV-4: the potion's instant HP change (optional). A whole number of
+    // HP in [-32, 32]; the ABSENT field is the "no instant action" default,
+    // so an explicit 0 is a typo (the dead-field discipline). Mutually
+    // exclusive with `tick_type` (an effect is either a tick action or an
+    // instant one, not both — one effect, one action form). Coexistence
+    // with the modifier fields (melee_penalty / speed / ...) is allowed
+    // (the data permits it; the shipped instant effects use none of them).
+    const Json* ih = def.find("instant_hp");
+    if (ih != nullptr) {
+        if (!ih->isNumber() || ih->asDouble() != std::floor(ih->asDouble())) {
+            return MC_FAIL("effect '" + out.name + "': 'instant_hp' must be "
+                           "an integer, got " +
+                           (ih->isNumber() ? std::to_string(ih->asDouble())
+                                           : std::string("non-number")));
+        }
+        const double d = ih->asDouble();
+        if (d == 0.0) {
+            return MC_FAIL("effect '" + out.name +
+                           "': 'instant_hp' must be non-zero (absent = no "
+                           "instant action; an explicit 0 is a typo)");
+        }
+        if (d < -32.0 || d > 32.0) {
+            return MC_FAIL("effect '" + out.name +
+                           "': 'instant_hp' must be in [-32, 32], got " +
+                           std::to_string(d));
+        }
+        if (def.find("tick_type") != nullptr) {
+            return MC_FAIL("effect '" + out.name +
+                           "': an effect is either tick or instant, not "
+                           "both ('instant_hp' + 'tick_type')");
+        }
+        out.instantHp = static_cast<float>(d);
+    }
+
     const Json* neg = def.find("negative");
     if (neg != nullptr) {
         if (!neg->isBool()) {
@@ -193,14 +230,16 @@ Result<void> EffectRegistry::parseEffect(const Json& def, Effect& out) {
     out.icon = static_cast<int>(icon->asDouble());
 
     // An effect must DO something: a tick action, a melee penalty/bonus, an
-    // absorption layer, speed, or resistance.
+    // absorption layer, speed, resistance, or an instant HP change (SURV-4).
     if (out.tick == Effect::Tick::None && out.meleePenalty <= 0.0f &&
         out.absorbHp <= 0.0f && out.speedMultiplier <= 1.0f &&
-        out.meleeBonus <= 0.0f && out.damageReduction <= 0.0f) {
+        out.meleeBonus <= 0.0f && out.damageReduction <= 0.0f &&
+        out.instantHp == 0.0f) {
         return MC_FAIL("effect '" + out.name + "' is a no-op: give it a "
                        "'tick_type', a positive 'melee_penalty', a positive "
                        "'absorb_hp', a 'speed_multiplier' > 1, a positive "
-                       "'melee_bonus', or a 'damage_reduction' > 0");
+                       "'melee_bonus', a 'damage_reduction' > 0, or a "
+                       "non-zero 'instant_hp'");
     }
     return {};
 }

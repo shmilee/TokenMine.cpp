@@ -1,0 +1,8 @@
+{
+  "id": "water_bottle",
+  "type": "material",
+  "max_stack": 16,
+  "icon": "water_bottle",
+  "pours_fluid": "water",
+  "pours_becomes": "glass_bottle"
+}

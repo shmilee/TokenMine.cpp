@@ -494,3 +494,169 @@ TEST(StatusEffectContent, Phase83BeaconEffectsPinned) {
     EXPECT_FALSE(e.negative);
     EXPECT_EQ(e.icon, 5);
 }
+
+// ---------------------------------------------------------------------------
+// SURV-4 (potions): the instant_hp field — a whole-HP change settled the
+// moment the effect is applied (positive = heal, negative = damage), no
+// lingering duration. Mutually exclusive with tick_type.
+// ---------------------------------------------------------------------------
+
+TEST(EffectParse, InstantHpValidHealing) {
+    // The shipped healing potion effect (data/effects/healing.json): +4 HP,
+    // icon 8 (the effects.png 128->160 extension tile).
+    Effect e;
+    auto r = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"healing","instant_hp":4,"negative":false,
+                      "icon":8})"),
+        e);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(e.name, "healing");
+    EXPECT_EQ(e.tick, Effect::Tick::None);  // instant, not a tick
+    EXPECT_FLOAT_EQ(e.instantHp, 4.0f);
+    EXPECT_FALSE(e.negative);
+    EXPECT_EQ(e.icon, 8);
+}
+
+TEST(EffectParse, InstantHpValidHarming) {
+    // The shipped harming potion effect: -6 HP (a NEGATIVE instant — damage
+    // with the armor exempted), icon 9.
+    Effect e;
+    auto r = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"harming","instant_hp":-6,"negative":true,
+                      "icon":9})"),
+        e);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FLOAT_EQ(e.instantHp, -6.0f);
+    EXPECT_TRUE(e.negative);
+    EXPECT_EQ(e.icon, 9);
+}
+
+TEST(EffectParse, InstantHpAbsentByDefault) {
+    // A pre-SURV-4 effect (weakness) has no instant action: instantHp 0.
+    const EffectRegistry reg = makeRegistry();
+    const Effect& w = *reg.findByName("weakness");
+    EXPECT_FLOAT_EQ(w.instantHp, 0.0f);
+    const Effect& p = *reg.findByName("poison");
+    EXPECT_FLOAT_EQ(p.instantHp, 0.0f);
+}
+
+TEST(EffectParse, InstantHpRejectsExplicitZero) {
+    // The absent field is the "no instant action" default, so an explicit 0
+    // is a dead-field typo (the ammo / restore_hunger discipline).
+    Effect e;
+    auto r = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"x","instant_hp":0,"icon":8})"), e);
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("non-zero"), std::string::npos);
+}
+
+TEST(EffectParse, InstantHpRejectsOutOfRange) {
+    // Whole HP in [-32, 32]; the boundaries are legal, beyond is named.
+    const std::vector<std::string> bad = {
+        R"({"id":"x","instant_hp":33,"icon":8})",
+        R"({"id":"x","instant_hp":-33,"icon":8})",
+    };
+    for (const std::string& def : bad) {
+        Effect e;
+        auto r = EffectRegistry::parseEffect(parseJson(def), e);
+        EXPECT_FALSE(r.ok()) << def;
+        EXPECT_NE(r.error().message.find("[-32, 32]"), std::string::npos)
+            << def << ": " << r.error().message;
+    }
+    Effect hi, lo;
+    EXPECT_TRUE(EffectRegistry::parseEffect(
+        parseJson(R"({"id":"x","instant_hp":32,"icon":8})"), hi).ok());
+    EXPECT_TRUE(EffectRegistry::parseEffect(
+        parseJson(R"({"id":"x","instant_hp":-32,"icon":8})"), lo).ok());
+    EXPECT_FLOAT_EQ(hi.instantHp, 32.0f);
+    EXPECT_FLOAT_EQ(lo.instantHp, -32.0f);
+}
+
+TEST(EffectParse, InstantHpRejectsNonInteger) {
+    // A fractional instant HP is a typo (the layer is whole HP, the
+    // absorb_hp discipline).
+    const std::vector<std::string> bad = {
+        R"({"id":"x","instant_hp":4.5,"icon":8})",
+        R"({"id":"x","instant_hp":-1.25,"icon":9})",
+        R"({"id":"x","instant_hp":"4","icon":8})",
+    };
+    for (const std::string& def : bad) {
+        Effect e;
+        auto r = EffectRegistry::parseEffect(parseJson(def), e);
+        EXPECT_FALSE(r.ok()) << def;
+        EXPECT_NE(r.error().message.find("integer"), std::string::npos)
+            << def << ": " << r.error().message;
+    }
+}
+
+TEST(EffectParse, InstantHpMutuallyExclusiveWithTick) {
+    // An effect is either a tick action or an instant one, not both (one
+    // effect, one action form).
+    Effect e;
+    auto r = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"x","instant_hp":4,"tick_type":"heal",
+                      "tick_amount":1.0,"tick_interval":4.5,"icon":8})"),
+        e);
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("either tick or instant"),
+              std::string::npos) << r.error().message;
+}
+
+TEST(EffectParse, InstantHpAloneIsNotNoOp) {
+    // An instant-only effect (no tick / penalty / layer) is a valid effect —
+    // the no-op rejection must not fire. ...but an effect with NONE of the
+    // actions still is a no-op.
+    Effect e;
+    auto r = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"x","instant_hp":4,"icon":8})"), e);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    Effect noop;
+    auto rNoop = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"x","icon":8})"), noop);
+    ASSERT_FALSE(rNoop.ok());
+    EXPECT_NE(rNoop.error().message.find("no-op"), std::string::npos);
+    EXPECT_NE(rNoop.error().message.find("instant_hp"), std::string::npos);
+}
+
+// -- StatusEffects: the instant grant (duration 0) ---------------------------
+
+TEST(StatusEffects, ApplyZeroDurationRemovesOnNextUpdate) {
+    // A grant of duration 0 (an instant effect) is applied then removed on
+    // the NEXT update — it never lingers, and (having no tick) it never
+    // fires a tick. The instant HP change itself is settled by the caller
+    // (Game::applyPlayerEffect), not here.
+    EffectRegistry reg;
+    auto rid = reg.registerEffect(
+        parseJson(R"({"id":"healing","instant_hp":4,"icon":8})"));
+    ASSERT_TRUE(rid.ok()) << rid.error().message;
+    const int healingId = *rid;
+    StatusEffects se;
+    se.apply(healingId, 0.0);
+    ASSERT_EQ(se.count(), 1u);  // present the frame it is applied
+    EXPECT_NEAR(se.list().at(0).remaining, 0.0, 1e-9);
+    int ticks = 0;
+    se.update(1.0 / 60.0, reg, [&](const Effect&) { ++ticks; });
+    EXPECT_EQ(se.count(), 0u);   // gone on the next update (no lingering)
+    EXPECT_EQ(ticks, 0);         // no tick (instant has none)
+    // A second update is a no-op (nothing to remove, nothing to tick).
+    se.update(1.0 / 60.0, reg, [&](const Effect&) { ++ticks; });
+    EXPECT_EQ(se.count(), 0u);
+    EXPECT_EQ(ticks, 0);
+}
+
+TEST(StatusEffects, ReapplyResetsToFullDuration) {
+    // The drink RESET semantics (Minecraft's re-application): drinking the
+    // same potion again re-times the effect to the FULL duration, not the
+    // remaining. weakness 90 s, advance 3 s, re-apply 90 -> remaining 90
+    // (not 87).
+    const EffectRegistry reg = makeRegistry();
+    StatusEffects se;
+    const int weaknessId = reg.idForName("weakness");
+    se.apply(weaknessId, 90.0);
+    se.update(3.0, reg, [](const Effect&) {});
+    EXPECT_NEAR(se.list().at(0).remaining, 87.0, 1e-9);
+    // A second drink resets to the full 90.
+    se.apply(weaknessId, 90.0);
+    ASSERT_EQ(se.count(), 1u);  // still one instance (not stacked)
+    EXPECT_NEAR(se.list().at(0).remaining, 90.0, 1e-9);
+}

@@ -6,8 +6,8 @@ output is stable across runs and platforms. Re-run after editing this file
 to refresh assets/textures/effects.png.
 
 The HUD effect row (left-aligned on the heart row) renders one 16x16 tile
-from the 80x16 strip per ACTIVE effect; the effect data's 'icon' field
-indexes the tile (tile i occupies u in [i/5, (i+1)/5]):
+from the W x 16 strip per ACTIVE effect; the effect data's 'icon' field
+indexes the tile:
   0: poison (purple skull with dark eye sockets — the Minecraft poison
      icon silhouette)
   1: weakness (dark blue down arrow)
@@ -16,13 +16,18 @@ indexes the tile (tile i occupies u in [i/5, (i+1)/5]):
      absorption silhouette)
   4: fire (Phase 57, orange flame with a yellow core — the Minecraft
      fire icon silhouette)
+  5: speed (Phase 84, cyan up-diamond)
+  6: strength (Phase 84, red power block)
+  7: resistance (Phase 84, blue shield)
+  8: healing (SURV-4, red heart with a green cross — the instant heal)
+  9: harming (SURV-4, red heart with a purple-black crack — instant harm)
 The background is transparent (the HUD draws over the world).
 """
 import os
 import struct
 import zlib
 
-W, H = 128, 16
+W, H = 160, 16
 OUT = os.path.join(os.path.dirname(__file__), "..", "assets",
                    "textures", "effects.png")
 
@@ -141,6 +146,16 @@ FLAME_CORE = (252, 216, 72)
 SPEED = (120, 200, 255)
 STRENGTH = (220, 60, 60)
 RESISTANCE = (90, 120, 220)
+
+# SURV-4 (potions): the two instant effects. healing = a red heart with a
+# GREEN cross (the instant heal mark); harming = a red heart with a
+# purple-black diagonal CRACK (the instant damage mark). New salt blocks
+# 1200+ / 1300+ (every existing tile keeps its salt — the determinism
+# proof the re-run is).
+HEAL = (216, 40, 48)
+HEAL_PLUS = (96, 208, 88)
+HARM = (200, 40, 48)
+HARM_CRACK = (70, 24, 92)
 
 
 def splitmix64(x: int) -> int:
@@ -278,12 +293,48 @@ def tile_resistance() -> list:
     return px
 
 
+def tile_healing() -> list:
+    # SURV-4: the healing potion (Minecraft instant healing, +4 HP) — a red
+    # heart with a GREEN cross over its center (the absorption heart
+    # silhouette; the green cross marks the instant heal). Salt block 1200+.
+    px = [[(0, 0, 0, 0)] * 16 for _ in range(16)]
+    for ty in range(16):
+        for tx in range(16):
+            if not in_shape(HEART, HEART_OX, HEART_OY, tx, ty):
+                continue
+            gy, gx = ty - HEART_OY, tx - HEART_OX
+            # The cross: vertical bar (center column, 3 rows) + horizontal
+            # bar (center row, 5 columns) — the absorption-plus geometry.
+            on_plus = (gx == 4 and 2 <= gy <= 4) or (gy == 3 and 2 <= gx <= 6)
+            setpx(px, tx, ty, HEAL_PLUS if on_plus else HEAL,
+                  salt=1200 + ty * 16 + tx)
+    return px
+
+
+def tile_harming() -> list:
+    # SURV-4: the harming potion (Minecraft instant harm, -6 HP) — a red
+    # heart with a purple-black diagonal CRACK across it (the instant
+    # damage mark). Salt block 1300+.
+    px = [[(0, 0, 0, 0)] * 16 for _ in range(16)]
+    for ty in range(16):
+        for tx in range(16):
+            if not in_shape(HEART, HEART_OX, HEART_OY, tx, ty):
+                continue
+            gy, gx = ty - HEART_OY, tx - HEART_OX
+            # The crack: an X (both diagonals) across the heart's heart.
+            on_crack = (gx == gy) or (gx + gy == 7)
+            setpx(px, tx, ty, HARM_CRACK if on_crack else HARM,
+                  salt=1300 + ty * 16 + tx)
+    return px
+
+
 def main() -> None:
     px = [[(0, 0, 0, 0)] * W for _ in range(H)]
     for kind, tile in enumerate((tile_poison(), tile_arrow(False),
                                  tile_arrow(True), tile_absorption(),
                                  tile_flame(), tile_speed(),
-                                 tile_strength(), tile_resistance())):
+                                 tile_strength(), tile_resistance(),
+                                 tile_healing(), tile_harming())):
         for y in range(16):
             for x in range(16):
                 px[y][kind * 16 + x] = tile[y][x]

@@ -356,9 +356,12 @@
     duration)` 泛化——通道时长按物品 `drink_time` 数据驱动，progress()
     按通道自身 total 归一）；**开始**时播 "milk" 音效（MC 一致：咕嘟声在
     前，取消也响过）；**完成**时消耗 1 个 + 返还容器 +
-    `clearStatusEffects()`（v1 效果集 = 清红闪 `m_hurtFlash`；坠落起点
-    刻意不清——MC 坠落伤害非状态效果）。中断/取消语义与进食完全相同
-    （提前松开/受击/死亡/解锁/开面板/换格）
+    （**SURV-4**：物品带 `grants_effect(s)` → 按序施加【瞬时效果
+    `instant_hp` 在施加时结算：正 = heal 钳 max / 负 = damage
+    bypassArmor 护甲豁免】+ `syncAbsorption`；**无 grants** →
+    `clearStatusEffects()` 原行为——v1 效果集 = 清红闪 `m_hurtFlash`；
+    坠落起点刻意不清——MC 坠落伤害非状态效果）。中断/取消语义与进食
+    完全相同（提前松开/受击/死亡/解锁/开面板/换格）
   - **清状态效果（Phase 46 补全）**：饮用完成 `clearStatusEffects()` =
     清红闪 `m_hurtFlash` + **移除全部负面（`negative: true`）状态效果**
     （MC 牛奶语义：正面的再生保留；**火 `negative: false` = 牛奶不灭火**，

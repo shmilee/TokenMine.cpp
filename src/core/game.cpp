@@ -934,21 +934,49 @@ Result<void> Game::buildScene() {
     }
     for (const ItemID iid : m_items.allIds()) {
         const Item& it = m_items.at(iid);
-        if (!it.grantsEffect.empty() &&
-            m_effects.findByName(it.grantsEffect) == nullptr) {
-            return MC_FAIL("item '" + it.name + "' grants_effect references "
-                           "the unregistered effect '" + it.grantsEffect + "'");
+        // A grant must name an EXISTING effect (the ammo pattern) AND obey
+        // the SURV-4 duration/instant equivalence: a grant of duration 0 is
+        // an INSTANT effect (instant_hp != 0 — settled on apply, no
+        // lingering); a grant of positive duration is a LINGERING effect
+        // (instant_hp == 0). Both directions are named: a 0 on a lingering
+        // effect is a dead grant; a positive duration on an instant effect
+        // would leave it lingering (an instant should not).
+        auto checkGrant = [&](const std::string& field,
+                              const std::string& effName,
+                              double duration) -> Result<void> {
+            const Effect* eff = m_effects.findByName(effName);
+            if (eff == nullptr) {
+                return MC_FAIL("item '" + it.name + "' " + field +
+                               " references the unregistered effect '" +
+                               effName + "'");
+            }
+            const bool instant = eff->instantHp != 0.0f;
+            if (duration == 0.0 && !instant) {
+                return MC_FAIL("item '" + it.name + "' " + field +
+                               " grants '" + effName +
+                               "' with duration 0, but the effect is not "
+                               "instant (instant_hp 0) — a 0-duration grant "
+                               "must name an instant effect");
+            }
+            if (duration > 0.0 && instant) {
+                return MC_FAIL("item '" + it.name + "' " + field +
+                               " grants the instant effect '" + effName +
+                               "' with a positive duration — an instant "
+                               "effect settles on apply and must be granted "
+                               "duration 0");
+            }
+            return {};
+        };
+        if (!it.grantsEffect.empty()) {
+            MC_TRY(checkGrant("grants_effect", it.grantsEffect,
+                              it.grantsEffectDuration));
         }
         // Phase 56: the list form, entry by entry (indexed name, the
         // chance_drops[i] pattern).
         for (std::size_t i = 0; i < it.grantsEffects.size(); ++i) {
             const Item::GrantEffect& g = it.grantsEffects[i];
-            if (m_effects.findByName(g.name) == nullptr) {
-                return MC_FAIL("item '" + it.name + "' grants_effects[" +
-                               std::to_string(i) +
-                               "] references the unregistered effect '" +
-                               g.name + "'");
-            }
+            MC_TRY(checkGrant("grants_effects[" + std::to_string(i) + "]",
+                              g.name, g.duration));
         }
         // Phase 67: the fast_against list, entry by entry (the grows_on
         // discipline: a typo must fail init loudly, not silently break
@@ -4612,6 +4640,36 @@ void Game::syncAbsorption() {
     m_player->setAbsorption(m_playerEffects.totalAbsorption(m_effects));
 }
 
+void Game::applyPlayerEffect(const std::string& name, double duration) {
+    // SURV-4 (potions): the single choke point for applying a NAMED effect
+    // to the player. Every grant source (a food's grants_effect(s), a
+    // drinkable's, a mob's on_hit_effect) is init-cross-checked to name an
+    // EXISTING effect, so idForName cannot fail here (the dead check in the
+    // call sites guards both). The apply uses the RESET semantics (an
+    // already-active instance is re-timed to `duration`, the tick phase
+    // kept — drinking the same potion twice resets, it does not stack).
+    // Then settle any INSTANT action the effect data carries: a positive
+    // instant_hp heals (clamped at the base max — the healing potion), a
+    // negative one deals damage with the armor EXEMPTED (the harming
+    // potion — Minecraft's magic/potion damage, the SURV-2 drowning
+    // bypassArmor twin; the resistance effect still applies, as in the
+    // damage pipeline). Effects without an instant action settle nothing
+    // (the pre-SURV-4 apply sites are bit-identical through the helper).
+    // The caller owns the surrounding syncAbsorption() (the pool is a pure
+    // function of the effects at every sync point).
+    const int id = m_effects.idForName(name);
+    if (id == -1) {
+        return; // init guarantees existence; this is a defensive no-op.
+    }
+    m_playerEffects.apply(id, duration);
+    const Effect& def = m_effects.at(id);
+    if (def.instantHp > 0.0f) {
+        m_player->heal(def.instantHp);
+    } else if (def.instantHp < 0.0f) {
+        m_player->damage(-def.instantHp, true);
+    }
+}
+
 void Game::updateEatChannel(double dt) {
     if (!m_eatChannel.active) {
         return;
@@ -4644,16 +4702,17 @@ void Game::updateEatChannel(double dt) {
             m_player->restoreSaturation(
                 static_cast<float>(item.restoreHunger) * kSaturationFactor);
             // Food that grants a status effect on a full eat (Phase 49,
-            // golden apple; the list form Phase 56): applied exactly where
-            // the mob melee-hit effect is (name resolved against the
-            // EffectRegistry, cross-checked at init — the ammo pattern).
-            // The list entries apply IN ORDER (the data's order).
+            // golden apple; the list form Phase 56): applied through the
+            // single choke point (applyPlayerEffect — the name is
+            // cross-checked at init, the list entries IN ORDER, the instant
+            // settlement for the SURV-4 effects). Bit-identical to the old
+            // direct apply for the pre-SURV-4 food (no instant effects).
             if (!item.grantsEffect.empty()) {
-                m_playerEffects.apply(m_effects.idForName(item.grantsEffect),
-                                      item.grantsEffectDuration);
+                applyPlayerEffect(item.grantsEffect,
+                                  item.grantsEffectDuration);
             }
             for (const Item::GrantEffect& g : item.grantsEffects) {
-                m_playerEffects.apply(m_effects.idForName(g.name), g.duration);
+                applyPlayerEffect(g.name, g.duration);
             }
             syncAbsorption(); // Phase 72: the pool takes the new total
             m_sound.play("eat");
@@ -4662,7 +4721,25 @@ void Game::updateEatChannel(double dt) {
                 m_inventory.add(m_items.idForName(item.returnsItem), 1,
                                 m_items);
             }
-            clearStatusEffects();
+            // SURV-4 (potions): a drinkable that GRANTS effects applies them
+            // on a completed drink — the milk's clear is now the NO-GRANT
+            // default, not the universal behavior. The grant entries apply
+            // IN ORDER (the data's order), each through the single choke
+            // point (applyPlayerEffect — the RESET semantics + the instant
+            // settlement). A drinkable WITHOUT grants (milk / water) keeps
+            // the original clear-negative behavior, bit-identical.
+            if (!item.grantsEffect.empty() || !item.grantsEffects.empty()) {
+                if (!item.grantsEffect.empty()) {
+                    applyPlayerEffect(item.grantsEffect,
+                                      item.grantsEffectDuration);
+                }
+                for (const Item::GrantEffect& g : item.grantsEffects) {
+                    applyPlayerEffect(g.name, g.duration);
+                }
+                syncAbsorption(); // Phase 72: the pool takes the new total
+            } else {
+                clearStatusEffects(); // milk / water: the original clear
+            }
             MC_LOG_DEBUG("drank '" + item.name + "'" +
                          (item.returnsItem.empty()
                               ? std::string()
@@ -5199,8 +5276,10 @@ void Game::attemptMobSpawn() {
         }
         m_player->damage(amount * damageScale);
         if (!hitEffectName.empty()) {
-            m_playerEffects.apply(m_effects.idForName(hitEffectName),
-                                  hitEffectDuration);
+            // SURV-4: through the single choke point (the name is
+            // init-cross-checked; the instant settlement is a no-op for the
+            // pre-SURV-4 hit effects — the spider's poison has none).
+            applyPlayerEffect(hitEffectName, hitEffectDuration);
             syncAbsorption(); // Phase 72 (the pool takes the new total)
         }
     });

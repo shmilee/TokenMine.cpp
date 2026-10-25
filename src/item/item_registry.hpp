@@ -129,11 +129,15 @@ private:
     // / dye / fluid bucket — the channel-ownership discipline).
     static Result<void> parseIgnites(const Json& def, Item& out);
     // Parse the optional 'grants_effect' field (Phase 49) into `out`: the
-    // status effect granted when a full eat completes (golden apple ->
-    // regeneration). A strict {name, duration} pair (the on_hit_effect
-    // discipline); the effect name is cross-checked at game init. Only valid
-    // on food (restore_hunger > 0) — a drinkable clears effects, so the
-    // channels are exclusive.
+    // status effect granted when a full CONSUME completes (golden apple ->
+    // regeneration; SURV-4 potions -> their effect). A strict {name,
+    // duration} pair (the on_hit_effect discipline); the effect name is
+    // cross-checked at game init. Only valid on food OR a drinkable
+    // (restore_hunger > 0 || drink_time > 0) — the two consume channels; a
+    // non-consumable carrying the field is a dead-field typo. A duration of
+    // 0 marks an instant effect (settled on apply); the 0 ⇔ instant
+    // equivalence is enforced at game init (the EffectRegistry is not
+    // available at parse).
     static Result<void> parseGrant(const Json& def, Item& out);
     // Parse the tool fields (`tool.break_speed` + `max_stack`) into `out`.
     static Result<void> parseTool(const Json& def, Item& out);

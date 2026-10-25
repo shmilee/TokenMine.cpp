@@ -152,22 +152,27 @@ struct Item {
     // valid on a drinkable item (rejected otherwise); the name's
     // existence is cross-checked at game init (the ammo pattern).
     std::string returnsItem;
-    // Phase 49: status effect granted when a full EAT completes (optional
-    // data field 'grants_effect', an object {"name": <effect>, "duration":
-    // <seconds>} — the on_hit_effect pair discipline). grantsEffect non-empty
-    // marks the item as granting that effect on eat (the golden apple grants
-    // regeneration). The effect name is cross-checked against the
-    // EffectRegistry at game init (the ammo pattern). Only valid on FOOD
-    // (restoreHunger > 0): a drinkable CLEARS effects on drink, so it cannot
-    // also grant one (mutual exclusion enforced at parse).
+    // Phase 49 (drinkable in SURV-4): status effect granted when a full
+    // CONSUME completes (optional data field 'grants_effect', an object
+    // {"name": <effect>, "duration": <seconds>} — the on_hit_effect pair
+    // discipline). grantsEffect non-empty marks the item as granting that
+    // effect on consume (the golden apple grants regeneration; the SURV-4
+    // potions grant their effect on a completed drink). The effect name is
+    // cross-checked against the EffectRegistry at game init (the ammo
+    // pattern). Only valid on FOOD (restoreHunger > 0) or a DRINKABLE
+    // (drinkTime > 0) — the two consume channels; a non-consumable carrying
+    // the field is a dead-field typo (mutual exclusion enforced at parse).
+    // A duration of 0 marks an instant effect (settled on apply, no
+    // lingering) — the 0 ⇔ instant equivalence is checked at game init.
     std::string grantsEffect;
     double grantsEffectDuration = 0.0;
-    // Phase 56: the LIST form of the eat-grant (optional data field
-    // 'grants_effects', an array of the same strict {"name", "duration"}
-    // pairs). Mutually exclusive with the single 'grants_effect' (the P52
-    // chance_drops pattern); the entries are applied IN ORDER when a full
-    // eat completes (the golden apple: regeneration + absorption). Same
-    // food-only and init cross-check disciplines as the single field.
+    // Phase 56 (drinkable in SURV-4): the LIST form of the consume-grant
+    // (optional data field 'grants_effects', an array of the same strict
+    // {"name", "duration"} pairs). Mutually exclusive with the single
+    // 'grants_effect' (the P52 chance_drops pattern); the entries are applied
+    // IN ORDER when a full consume completes (the golden apple: regeneration
+    // + absorption; the SURV-4 potions: their single effect). Same
+    // food-or-drinkable and init cross-check disciplines as the single field.
     struct GrantEffect {
         std::string name;
         double duration = 0.0;

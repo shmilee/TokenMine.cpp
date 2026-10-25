@@ -1757,4 +1757,26 @@
   先 `grep` 该 format 的必需键清单（save.hpp 的 format 段文档）逐个
   补；E2E 跑前对场景文件先跑 1 帧 `--log-level info` 冒烟看
   "Initialization failed"（PITS 245 判别法的场景版）；"未送达"误诊
-  前先看 run 日志有无 init 失败行。
+  前先看 run 日志有无 init 失败行。**10-25 第 2/3 次复现**：① mine
+  场景 blocks 改写（stairs 格→air+石）后 `states` 条目残留（ENT-2
+  朝向状态随块走）→ states 交叉校验失败；② scene_s97_hud_damaged
+  fmt18 升级漏 `player.armor` 键。两者皆 init 静默死伪装"未送达"
+  （窗口全程不存在，~40 min 误诊为 away 相位）。**纪律补**：场景块
+  编辑改写必须同步扫 states/campfires/furnaces 段同格位置引用。
+- **X 负载下窗口定位 = `xdotool search --pid` 直搜，name-regex 阶段
+  flaky（PITS 252）**——10-25 午后：3000f 长跑窗口活着且标题正则可
+  匹配（单独探针 子串/`--pid`/`--class` 三法全命中），但
+  `tm_find_game_window`（name-regex + _NET_WM_PID 双阶段）150 轮轮询
+  全程找不到；同刻 `search --pid $GPID` 5 s 即中。name 阶段在 X
+  负载下引入额外 flaky 面（xdotool search 超时/部分结果）。**纪律**：
+  输入协议窗口定位统一 `xdotool search --pid $GPID | head -1`
+  （PITS 247 更新；PID 是锚，窗口 XID 随 away 重平铺重建）。
+- **away 组件窗口 churn：稳定窗分钟级、销毁-重建循环内 PID 直搜也
+  间歇失手（PITS 253）**——10-25 15:3x-15:5x：门 98 输入跑 6 项
+  （s2 ×6 等）全程未送达；诊断现场 = 游戏窗口在两次 X 查询（<1 s
+  间隔）之间被销毁重建（XID 0x400057 前 IsViewable 后 No such
+  window）——churn 循环比 PITS 249 的重平铺更激进（窗口反复生灭
+  而非仅改尺寸）。**判别**：采集器多项连续"未送达"且 no-input 跑
+  （S1/S6）同时段正常 → 窗口 churn 而非脚本缺陷。**处置**：输入项
+  进补跑清单不硬卡发布（门 97 先例：单测级行为证明 + S1/S6 足证门内
+  核心；输入 E2E 窗口恢复后 gate98_run.zsh 一键补收）。

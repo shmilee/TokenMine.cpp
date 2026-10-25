@@ -118,15 +118,16 @@ count ∈ [1, maxStack] 点名、重复 slot 拒。缺省段 = 无 starter；
   "fuel_time": 80.0,                // 可选（Phase 40）：单格燃料燃烧秒数，(0,1000]；缺省=非燃料（显式 0 拒绝）
   "drink_time": 1.6,                // 可选（Phase 43）：饮用通道秒数，(0,10]；present=可饮用容器（与 restore_hunger 互斥）
   "returns_item": "bucket",         // 可选（Phase 43）：喝完返还的容器物品名（须存在，init 交叉校验）；要求 drink_time 存在
-  "grants_effect": {                // 可选（Phase 49）：完整吃下时施加的状态效果——仅食物（restore_hunger > 0）
-    "name": "regeneration",         //   可给（可饮用物品喝下会清效果，通道互斥；非食物带 grants_effect = 解析拒绝）。
+  "grants_effect": {                // 可选（Phase 49；SURV-4 放开到 drinkable）：完整吃下/喝下时施加的状态效果——
+    "name": "regeneration",         //   食物（restore_hunger > 0）或可饮用（drink_time > 0）可给；两者皆非 = 解析拒绝。
     "duration": 10.0                //   name+duration 严格配对（on_hit_effect 纪律），name = 已注册效果名
-  },                                //   （init 交叉校验），duration > 0
-  "grants_effects": [               // 可选（Phase 56）：grants_effect 的列表形式——同一严格配对的数组，
-    { "name": "regeneration",       //   完整吃下时**按数据顺序**依次施加（金苹果 = 再生 + 吸收）。
+  },                                //   （init 交叉校验）；duration > 0；drinkable 的 duration == 0 = 瞬时效果
+                                    //   （效果须带 instant_hp，init 双向交叉校验，SURV-4 药水范式）
+  "grants_effects": [               // 可选（Phase 56；SURV-4 同款放开）：grants_effect 的列表形式——同一严格配对的数组，
+    { "name": "regeneration",       //   完整吃下/喝下时**按数据顺序**依次施加（金苹果 = 再生 + 吸收）。
       "duration": 10.0 },           //   与单字段 grants_effect **互斥**（同写 = 解析拒绝，P52 chance_drops 模式）；
     { "name": "absorption",         //   空数组/非对象元素/缺三元组/未知键逐条目点名 grants_effects[i] 拒绝；
-      "duration": 5.0 }             //   仅食物 + init 逐条目交叉校验效果名（ammo 模式）。
+      "duration": 5.0 }             //   食物或 drinkable + init 逐条目交叉校验效果名（ammo 模式）。
   ],
   "ignites_flamable": true          // 可选（Phase 60）：严格 bool，缺省 false。true = 点燃器——
                                     //   右键烧 `flamable` 块（setBlock fire、**无掉落**、**不消耗**）；

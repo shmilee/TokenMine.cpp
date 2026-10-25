@@ -1,0 +1,11 @@
+{
+  "id": "potion_weakness",
+  "type": "material",
+  "max_stack": 1,
+  "icon": "potion_weakness",
+  "drink_time": 1.6,
+  "returns_item": "glass_bottle",
+  "grants_effects": [
+    { "name": "weakness", "duration": 90 }
+  ]
+}

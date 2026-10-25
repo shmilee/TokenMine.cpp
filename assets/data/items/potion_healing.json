@@ -1,0 +1,11 @@
+{
+  "id": "potion_healing",
+  "type": "material",
+  "max_stack": 1,
+  "icon": "potion_healing",
+  "drink_time": 1.6,
+  "returns_item": "glass_bottle",
+  "grants_effects": [
+    { "name": "healing", "duration": 0 }
+  ]
+}

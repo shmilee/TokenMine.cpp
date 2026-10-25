@@ -3,8 +3,9 @@
 > 来源：2026-10-20 对"文档中所有后续任务"的全量分类（依据 =
 > KNOWN_ISSUES 残余/留待条 + `archive/phase-99.x.md`「残余」+ 全仓
 > "留待/后续/未来"标记扫描）= 十大系统 63 项；按用户决定（10-20），
-> **每类只保留靠前（最重要）一半 = 29 项——29 项全部完成 = v1.0 发布**。
-> 此后任务只从本表取，不另列菜单；增删格子需用户确认。
+> **每类只保留靠前（最重要）一半 = 29 项；10-25 用户新增 2 项**
+>（GEN 行 ④⑤：洞穴破碎度 / 浮空树，用户实机体验报障）= **31 项——31 项全部
+> 完成 = v1.0 发布**。此后任务只从本表取，不另列菜单；增删格子需用户确认。
 
 ## 砍半规则
 
@@ -13,17 +14,17 @@
   MC 细节对齐。
 - 砍掉的项不删除：记入「砍掉清单」（保留原代号），可一句话恢复入表。
 
-## v1.0 任务矩阵（29）
+## v1.0 任务矩阵（31）
 
 | 系统 | ① | ② | ③ | ④ | ⑤ | ⑥ |
 |---|---|---|---|---|---|---|
 | STRM 流送与内存 | ~~STRM-1 环形状~~ 完成 | | | | | |
 | PIPE 帧管线与并发 | ~~PIPE-1 worker网格化~~ 完成 | ~~PIPE-2 存档增量~~ 完成 | | | | |
 | LGT 光照 | ~~LGT-1 union-region~~ 砍除 | ~~LGT-2 叶子光衰减~~ 完成 | | | | |
-| GEN 世界与生成 | ~~GEN-1 面条洞穴~~ 完成 | ~~GEN-2 树生长~~ 完成 | ~~GEN-3 矿脉形态~~ 完成 | | | |
+| GEN 世界与生成 | ~~GEN-1 面条洞穴~~ 完成 | ~~GEN-2 树生长~~ 完成 | ~~GEN-3 矿脉形态~~ 完成 | GEN-4 洞穴破碎度 | GEN-5 浮空树 | |
 | FLUID 流体 | ~~FLUID-1 水量守恒~~ 完成 | ~~FLUID-2 游泳划水~~ 完成 | | | | |
 | ENT 实体/Mob/移动 | ~~ENT-1 四肢摆动~~ 完成 | ~~ENT-2 BlockState★~~ 完成 | ~~ENT-3 mob踏阶~~ 完成 | ~~ENT-4 水体交互~~ 完成 | | |
-| SURV 生存/战斗/效果 | ~~SURV-1 护甲~~ 完成 | ~~SURV-2 氧气窒息~~ 完成 | ~~SURV-3 耐久~~ 完成 | SURV-4 药水饮用 | SURV-5 mob效果 | |
+| SURV 生存/战斗/效果 | ~~SURV-1 护甲~~ 完成 | ~~SURV-2 氧气窒息~~ 完成 | ~~SURV-3 耐久~~ 完成 | ~~SURV-4 药水饮用~~ 完成 | SURV-5 mob效果 | |
 | CRAFT 物品/合成/面板 | CRAFT-1 工作台分块★ | CRAFT-2 物品3D模型 | CRAFT-3 材质音效 | | | |
 | SAVE 存档 | SAVE-1 自动存档 | | | | | |
 | PRE 表现层 | PRE-1 中文字体 | PRE-2 边缘雾 | PRE-3 水面波纹 | PRE-4 云与环境音 | PRE-5 透明discard | PRE-6 掉落光照 |
@@ -57,6 +58,17 @@
 - ~~**GEN-2 树生长**~~ — **完成（2026-10-22 夜）**：3 树种可种植 sapling（oak 复用 wood/leaves + spruce/birch 新块；块 id 路线，stateful cross 块 = ENT-2 state_count 8 即生长 stage）+ `tree` 对象 6 键严格解析（init 交叉校验含 tree⇒state_count≥2）+ **m_crops 平行生长引擎**（saplingGrowthSteps 纯函数：plant_on 土壤门 + growth_light 9 门 + roll%ticks 120 → Advance 状态+1 零光照成本 / 终阶段+fits → 落树）+ **`world/tree_shape` 纯几何**（planTree 3 形状表：oak 与 placeTrees 逐格同构【单测对照钉死】/ spruce 下宽上尖锥 / birch 细高小冠 + treeHeightRoll 新盐 PITS #4）+ **stage 视觉 = emitCross 绕格心缩放 (stage+1)/8**（无状态 cross 恒 scale 1 位级零变化）+ **落树 = placeGrownTree**（逐格 setBlock + 1 次 updateRegion bbox = LGT-2 冠影）+ 内容闭环（3 leaves chance_drops += sapling @0.05【oak = P55 演进】/ hotbar.json 新 `inventory` 段 3 sapling 各 3 颗入隐藏槽 24-26 = 不渲染）+ 9 新 block tile（salt 935 起 / 9 atlas 空位免重锚 / 既有 PNG 零变化）；**世界生成零触碰**（sapling stateful ⇒ ENT-2 init 不变量天然拒）；1285/1285（+25 新 + 2 内容演进【P55 掉落集 2→3 / P63 可燃 10→17】）；base18 **第 86 门 = 结构性免疫不重锚**（新 ×2 与门 84 锚字节一致）；E2E：gen2_scan 探针预计算选点（PITS #208 纪律）+ S2 落树场景 ×2 RAW + savenorm EXACT + 树 55 格与 planTree 逐格一致 + 截图树像素 / S3 推进对照 **stage 4 = 探针预计算逐帧一致** + A/B 324k px / S6 点名拒绝；**偏离**：野外森林单橡种（worldgen 多树种 = 未来项需重锚）/ 旧存档无 spruce-birch 来源（oak 经 leaves 可达）/ 潜旋 sapling = stage+1 手工催熟（接受为特性）/ 斧对新木无效；晨间输入三项推迟（放 sapling/潜旋催熟/破坏掉 self）。**GEN 行剩 GEN-3 = GEN-2 完成时 GEN 行 2/3**
 - ~~**GEN-3 矿脉形态**~~ — **完成（2026-10-22 夜）**：随机游走脉 → **MC 3×2×1 旋转椭球脉**（`planOreVein` 纯函数：整数谓词 4u²+9v²+36w²≤36 恰 21 格【static_assert 钉死】+ 6 轴置换取向 + PITS #4 取数流；**gravel 同改**）+ placeOres 重接（**placeOre 零改动**、lattice/概率门/起点/盐流逐位保留、margin 17→11）+ **vein_size 语义演进 = 椭球簇数 K ∈ [1,8]**（shipped 全 K=1；K>1 机制实现 + 单测，未来调档零核心改动）+ **单轮密度标定**（探针 64 列×128 高：pass1 比值 2.6-5.6× → 概率降档定稿 0.154/0.0855/0.0376/0.0101/0.0208/0.0445 → pass2：coal 1.060×/iron 0.875×/gold 1.007×/gravel 1.073× 带内；**diamond 0.641×/lapis 0.732× 残留记档**【单轮纪律】）；1297/1297（+12 新 + 2 演进）；base18 **第 87 门 = 结构性免疫不重锚**（视图 ⊆ 演示区 + 演示区无洞 + 矿只替换 deep 层）；E2E：S2 洞壁矿 A/B（场景火把照明【深洞矿光 ≈0 不可见】+ 相机真眼高 pitch【PITS #209】）新旧 **6,703 px**（v0.3.0 资产 scratch TM_REPO 跑）/ S6 vein_size 9 点名拒绝；**偏离**：矿感 = 脉更大更稀（MC 1.18+ chunky sparse）/ 旧存档新脉形（worldgen 演进）/ K>1 未 shipped。
 
+- **GEN-4 洞穴破碎度**（10-25 用户报障）——洞穴**太多太碎**：经常碰到很小的
+  洞穴，体验差。GEN-1 面条洞穴（两噪声中位带相交，标定 0.09/0.06/0/2）的
+  密度/碎片度重标定：目标 = 减少小洞窟（pocket）、洞体更大更少（MC 1.18+
+  洞穴感）。数据驱动优先（worldgen.json caves 段参数；若碎片根因在算法
+  结构 = 最小核心改动单独立论）。执行序：行序 GEN < SURV = **在 SURV-4
+  （进行中，仅剩发布收尾）之后、SURV-5 之前**（= v0.17.0）。
+- **GEN-5 浮空树**（10-25 用户报障）——洞穴生成后**部分树长在半空中**
+  （GEN-1 洞挖掉了树下的地面/树干支撑）。修复 = 树放置的支撑校验
+  （placeTrees 与洞挖的顺序/校验：树根格与树干路径须有固体支撑，
+  被洞切 → 跳过该树或补支撑）。执行序 = GEN-4 之后（= v0.18.0）。
+
 ### FLUID 流体
 - ~~**FLUID-1 水量守恒**~~ — **完成（2026-10-22 夜→23 晨）**：根因 = 三条无记账体积变化路径（落池抬升【唯一"凭空增多"】/ 浅膜吸收 / 世界底漏排）；**step-0 混沌探针触发翻转**（统一吸收把悬崖薄膜级联变永久 period-2 翻转：环 24→196 churn 格、总编辑 6.4×、超出 Q3 授权 = 回炉）→ **路线 A 定案**：只删 `L>B → propose(下方,L)` 抬升一分支（`L≥B → 该格保留`静态沉积稳压器保留）= 守恒目标完整达成 + churn 回旧水位，**净核心 diff = fluid.cpp 一分支**；level 即 MC flow time 反相编码 = **零新状态零 format**；守恒不变量 = 逐 tick 会计恒等式 ΔF=σ−α−κ−δ（封闭盒 200 tick 逐 tick 断言）+ C1-C4 派生断言；熔岩同改（Q1）；游戏侧零代码（桶/反应锚定 L8=源恒等）。1312/1312（15 新 + 2 适配）、0 警告；base18 **第 88 门 = 结构性免疫不重锚**（门 85-88 连锁）；E2E：S2 封闭盒 600f ×2 RAW + **64 格流体与 probe 精确终态表逐位一致** + S4a 深湖静态 + S4b P90 **新旧二进制 core 逐段 identical**（v0.3.0 scratch A/B）；KNOWN_ISSUES 守恒条移入已修复 + 新增"站流水瀑布/崖膜永久轮换 24 格类（接受现状）"。
 - ~~**FLUID-2 游泳划水**~~ — **完成（2026-10-23 夜）**：被动上浮
@@ -81,7 +93,43 @@
 - ~~**SURV-1 护甲**~~ — **完成（2026-10-25，发布 v0.13.0）**：12 件护甲 = **MC 精确值**（leather 1/3/2/1 = 7 / iron 2/6/5/1 = 14 / diamond 3/8/6/3 = 20，max_stack 1、材质档三链；chain 无材料 = 记档偏离）+ **MC 整数 floor 减伤**（`Player::damage` 单收口 = **全伤害源生效含坠落**【摔落缓冲已覆盖】，次序 armor → resistance → 吸收池，`floor(amount×(100−4×pts))/100`，**pts 0 位级恒等** = 存量伤害测试零改动）+ **右键穿戴/交换/脱下**（点火器之后、潜行旋转之前；空手按 head→chest→legs→feet 序脱下到选中槽——**震荡语义**：下点 = 重穿，脱整套须每点之间 Tab 换空槽【热栏只有 Tab 循环无数字键 = 既有交互面】；10-25 门内修复脱下 **dangling reference**【引用跨清空 = 护甲件消失】→ 逻辑上提纯函数 `item/armor.{hpp,cpp}` `armorRightClickUse` = campfire 范式 + 9 单测含回归，PITS 246）+ **format 16 `player.armor`**（恒写只含占位槽、双向交叉校验 + 槽名-物品数据点名、15→16 迁移空）+ **HUD 心行上方护甲排**（仅占位槽且指针捕获时绘制 = 无甲零绘制结构性免疫）+ cloth 音效复用 + F3 armor 点行。1430/1430（+21 首轮 / +9 修复）、`-Werror` 0 警告。**门 95**：S1 base 对 **gate88 锚字节一致（真免疫）** + S2 坠落 13 格 = **10.0 / 15.6 / 18.0 三值互斥 ×2 RAW**【旧 v0.12.0 无甲 = 10.0 回归恒等；floor(10×44)/100 = 4.4 / floor(10×60)/100 = 6.0】+ S3 穿戴 armor={head:iron_helmet} ×2 RAW + 整套脱下（L R Tab R Tab R Tab R → slots0-3 序 + sel=3）×2 RAW + savenorm2 EXACT ×2【fires remaining real-dt 剥离 = PITS 244 非缺陷】+ S4 护甲排 **81 px 包围盒 = 恰 4 件皮甲图标行、带外零差异**（HUD 仅指针捕获时绘制 = 捕获+重捕协议，"Pointer captured" ×1 实证 ×4）+ S6 init 失败点名 ×2【`armor_points must be in [0,20], got 21` / `armor_slot 'hood' is not a known slot`】。**PITS 247 = T450 输入送达协议**（PID 定位窗口 + viewable+top 窗口期 + 每输入前 windowfocus --sync + 1200f 长跑 + 黑相 1 帧探针门控）。**偏离**：float HP 无半心量化（1.0 伤×3 点 = 0.88 非 0）、全源减伤（窒息 = SURV-2 届时 MC 豁免规则）、mob 无护甲、无耐久（= SURV-3）、无附魔。性能（插桩 A/B v0.12.0，发布前测试）：fall 900f 三窗 render med 0.37-0.47 / upd med 45.8-48.7 / stream 1.8-2.4 s 全指标同档（old render 0.37-0.45 / upd 46.7-49.9 / stream 1.8-2.4 s）+ vd16 填充 render 0.71-0.72 vs 0.69-0.75 / stream 44.7/30.5 vs 45.6/30.8 ms = **护甲成本可忽略**。SURV 行 1/5。
 - ~~**SURV-2 氧气窒息**~~ — **完成（2026-10-25，发布 v0.14.0）**：水下氧气条 + 窒息（溺水）伤害，**MC 语义查证落地**（minecraft.wiki 伤害调整表：Drowning/Suffocation = **Armor: No effect / Resistance: Applies**——SURV-1"届时按 MC 豁免规则"的立项兑现）：帧锁定氧气系统（150 空气 = `kOxygenMax`，头没入每 6 帧 −1 = 900 帧 15.0 s 耗尽，耗尽后每 150 帧 = 2.5 s 2.0 伤，出水立即满；时间线钉死：满空气帧 894 耗尽 / 帧 1044 首伤 / 预置 0 → 149,299,…,1499 十次 = 死）+ **头没入 = 眼位单格流体判定**（`eyePosition()` 含 crouch 缩减与相机同款；水/熔岩同款 = MC 眼在水里规则——站 1 格浅池眼上水面 = 换气不扣）+ 纯函数 `player/drown.{hpp,cpp}`（campfire 范式，Game 帧 pass 薄适配）+ **`Player::damage(float, bypassArmor = false)`**（溺水跳过 SURV-1 floor 减伤步，resistance 与吸收池照常；默认参 = 既有调用点位级不变）+ **format 17 `player.oxygen`**（恒写 [0,150]、键纪律全套点名、15/16→17 迁移满空气、drownTicks 不存 = MC 只存 airSupply 同款记档）+ **HUD 气泡排**（水下时替换饥饿排原位 = MC 空气条语义，10 泡 ceil(氧/15) 单 tile 无半态，新纹理 oxygen.png salt 105 确定性生成）+ F3 oxygen 行；零 config 键（MC 值命名常量）、无气泡声、mob 不溺水（MC 同款）、无呼吸附魔/水肺（项目无对应系统）。1448/1448（+18）、`-Werror` 0 警告、存量 1430 零回归。**门 96**：S1 base = **新旧 A/B 同窗态字节一致**（历史 gate88 锚因 away 重平铺尺寸失配弃用 = PITS 249，NEW vs v0.13.0 fresh 60f 全帧一致 = 更强免疫证明）+ **死亡场景 RAW ×2 字节一致**（1500f 全时间线 s2e/s2b）+ 存档级确定性 savenorm3 EXACT ×5【剥 fires remaining/hunger/age real-dt】+ **S2 溺水死 hp 0**（10 次 ×2.0）/ **S2b 满空气 hp 12.0 exact + o2 0**（双节奏帧精确）/ **S2c 满钻甲 hp 0 死 = 豁免实证**（误走全源减伤会 hp 16 活，死/活互斥）/ **S3 浅池换气 o2 150 + hp 20 恒定**（池底不上浮 pos 钉死）/ S5 600f hp 12.0（4 次 149-599）+ o2 0 在档 fmt 17 + S6 init 失败 ×3【版本谎报/越界 151/非整数点名】；S4 气泡排像素隔离：首轮 deep/shallow 场景对弃用（几何不同 = 覆盖层全帧差）→ 修正协议（同 deep 几何只改 o2：s4a 150 / s4b 135 → 600f 终态 50/35 = 4/3 泡互斥、hp 20/20），**状态级隔离已证**（savenorm 剥离后唯一差异 = o2 50/35），像素对 = 补跑清单（10-25 午后黑相波 6 轮未得双干净帧）。**环境坑 PITS 248-250**：zsh 空变量算术恒 0 = 黑帧静默判 GREEN（全批假 GREEN 教训）/ 重平铺改窗尺寸 = 跨时段 RAW 对失效 / 1 帧探针 ≠ 整跑干净。性能（插桩 A/B v0.13.0，发布前测试）：underwater 900f + vd16 填充 render/upd/player/ents/stream 全指标同档 = **成本可忽略**。SURV 行 2/5。
 - ~~**SURV-3 耐久**~~ — **完成（2026-10-25，发布 v0.15.0）**：工具/护甲/弓/点火器耐久（MC 值实证，wiki Durability 页查证）：27 件内容全 MC 精确值（wood 59 / stone 131 / iron 250 镐斧锹；弓族 5 件 384；燧石与钢 64；护甲 leather 55/80/75/65、iron 165/240/225/195、diamond 363/528/495/429 = 11:16:15:13）+ `durability` 严格字段（允许集 = Tool ∪ armor ∪ 发射器 ∪ 点火器，其它点名拒）+ **`ItemStack.damage` float**（堆移动随堆；**合并门 = 同物品且同 damage** 记档简化）+ 纯函数 `item/durability.{hpp,cpp}`（applyDurability / armorWearPerPiece = max(1, incoming/4) float 精确；破碎 = 动作完成点清空，现代 MC 行为）+ **五类帧锁定磨损**：破非瞬断块 +1（hardness 0 = 0）/ 镐斧锹打 mob +2 / 射出 +1（含 infinite）/ 点燃 +1 / **护甲每次"实际减伤"事件每件 −max(1,incoming/4)**（溺水 bypass = 不磨损，SURV-2 对齐；本项目饥饿/火 tick/虚空/poison 也磨损 = 记档偏离 MC）+ **format 18**（damage >0 才写三处；armor 满耐久保字符串形 = 与 fmt17 逐字节同形免疫最强、受损翻严格对象；≤17 带键/对象形 = 谎报点名；damage ≥ durability = 破碎态非法点名）+ **HUD 2px 三色耐久条**（绿≥1/2/黄≥1/4/红<1/4 = MC 渐变简化；满耐久零绘制结构性免疫；drawIcon 共享点全覆盖）+ F3 手持 d/max + 破碎音复用 break wav（护甲无声记档）；**无修复系统**（铁砧/磨刀石/Mending = 矩阵外记档）。1466/1466（+18）、`-Werror` 0 警告、存量 1448 零回归。**门 97**：S1 base = **NEW vs v0.14.0 fresh 60f RAW identical**（免疫）+ **S3 坠落护甲磨损**：hp 10.8（= 20 − floor(10×92)/100 减伤实证，对照无甲 10.0）+ **铁盔 damage 2.5 exact**（max(1,10/4)）×2 savenorm3 EXACT + **S3b 溺水豁免**：满铁甲 1500f **hp 0 死**（bypass 实证，误走减伤会 hp 11.2 活）+ **4 件 damage 恒 0** ×2 savenorm3 EXACT + S6 init 失败 ×3【apple 带 damage 点名 / damage 250 ≥ 250 破碎态点名 / fmt17 带 damage 谎报点名】；**S2 挖矿破碎（10-25 午后补收 PASS）**：600f 输入对 s2m_a600 碎（249→槽空）/ s2m_b600 存活（248→249）+ cobble 掉落 (22.5,38,−2.5) 在档（1500f 长跑 entities=[] 而 600f 有 = 未解 quirk，600f 证据有效）；**S5 耐久条像素（10-25 午后补收 PASS）**：912 px 完整分解 = 条 288 px 只在 damaged（hotbar 槽 0 + viewmodel 两 2px 带，100/250 = 黄段）+ 护甲行 624 px 只在 full（场景皮甲差异，双区互斥）；**S4 弓射出 = 补跑清单**（10-25 14:3x-14:5x 相位 8 次未送达，存档证据协议已备）。**场景坑 PITS 251**：format 升级场景漏 player.oxygen 必需键 = 6/7 场景 init 静默失败（误诊 20 min）。性能（插桩 A/B v0.14.0，发布前）：fall_armor 900f 三窗 render/upd/player/ents/stream 全指标同档 = **成本可忽略**。SURV 行 3/5。
-- **SURV-4 药水饮用** — 药水系统，给 weakness 等效果游戏内来源（状态效果条）
+- ~~**SURV-4 药水饮用**~~ — **完成（2026-10-25，发布 v0.16.0）**：药水系统 =
+  饮用通道给效果（weakness 等效果的游戏内来源，消费 status_effect.hpp
+  "weakness 无游戏内来源 = potions not built yet" 记档）：
+  **饮用通道复用**（P43 drink_time real-dt 1.6 s = MC 32 tick 同款、
+  returns_item 返还既有、milk 音效开始播放既有、中断不消费既有）+
+  **`grants_effect(s)` 放开到 drinkable**（原 food-only；一个物品一个
+  通道纪律不变；duration 放宽 >= 0）+ **效果新字段 `instant_hp`**
+  （整数非 0、[-32,32]、与 tick_type 互斥、显式 0 拒；施加时结算一次：
+  正 = heal 钳 base max / 负 = damage(bypassArmor=true) = 护甲豁免
+  Resistance 照常——MC 药水伤害语义，SURV-2 溺水同款管线）+
+  **`Game::applyPlayerEffect` 收口**（替换吃单值/吃列表/mob 命中 3 既有
+  施加点 + 新饮用侧 = 玩家效果施加单入口；RESET 语义既有零改动 =
+  再喝同效果重置不叠加；无 grants 的 drinkable = clearStatusEffects
+  原行为位级不变）+ **init 交叉校验**（grants 条目 duration==0 ⇔
+  效果 instantHp != 0，双向点名）；**内容**：2 新效果（healing +4 /
+  harming −6，icon 8/9）+ 8 新物品（glass_bottle collects_fluid water
+  桶对范式 / water_bottle pours 回瓶纯容器不可饮 / 6 药水 drink_time
+  1.6 + returns glass_bottle + max_stack 1：weakness 90 / speed 180 /
+  regeneration 45 / poison 45 / healing 0 / harming 0 = MC 精确时长）+
+  hotbar.json 隐藏 starter 槽 17-23（GEN-2 范式，无输入零渲染）+
+  effects.png 128→160 尾部 append（既有 8 tile 逐像素零变化验证）+
+  8 物品 icon 独立 PNG（salt 128-135 接续）；**零 format（18 不变）/
+  零 config / 零新音效**。1485/1485（+19）、`-Werror` 0 警告、存量
+  1466 零回归。**门 98**：S1 base = **fresh 60f 新版 ×2 RAW + vs
+  v0.15.0 二进制 A/B 字节一致**（第 98 次过门，结构性免疫不重锚）+
+  S6 init 失败 ×5 全点名【grants 非 drinkable 拒 / 未知效果名 /
+  duration 0 给非瞬时 / instant_hp 显式 0 / 桶对 (water,glass_bottle)
+  双 full 唯一性破（点名被破坏侧）】；【S2 时长互斥 / S2b 重置 /
+  S3 瞬时互斥（harming+满钻甲 = bypass 实证 10.0 vs 14.8）/ S4 瓶-水
+  循环 = 输入跑，采集器 v3 运行中——结果待回填】。**偏离**（KNOWN_
+  ISSUES [SURV-4] 条）：无酿造台（starter 发放）/ water_bottle 不可饮
+  （无中性饮用）/ 瓶舀水移除水源（桶对范式）/ 瞬时伤害护甲豁免（MC
+  语义）/ 再喝 = 重置（项目 apply 语义）/ 单效果瓶。性能（插桩 A/B
+  v0.15.0，发布前）：fall_armor 900f 三窗 fluidCells 逐位一致 +
+  upd/render/flush/player/ents/stream 全指标同档（swap med ~0.5 ms
+  无 stall = 深黑相 timing-clean 接受协议首用）= **成本可忽略**。SURV
+  行 4/5。
 - **SURV-5 mob 效果** — 效果作用于 mob（中毒/凋灵）、远程箭施加（状态效果条）
 
 ### CRAFT 物品/合成/面板
@@ -130,7 +178,7 @@
 ## 变更记录
 
 - 2026-10-20：建立。63 项（文档全量后续任务分类）→ 用户决定每类砍半
-  至 29 项 = v1.0 范围；执行顺序与前置约束见上。
+  至 29 项 + 10-25 用户新增 2 项（GEN-4/5）= **31 项 = v1.0 范围**；执行顺序与前置约束见上。
 - 2026-10-20：表外文档债已解决（KNOWN_ISSUES 9 条过期描述 + 连带 obsidian
   括注，逐条代码复核；6 条标已解决 / 3 条改写为活条目 / ⑨ 复核 = 99.2 已解决）。
 - 2026-10-21：STRM-1 完成（用户定案选项 b：圆盘 + 远平面帽 R_eff=64；实测

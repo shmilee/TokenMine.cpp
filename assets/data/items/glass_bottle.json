@@ -1,0 +1,7 @@
+{
+  "id": "glass_bottle",
+  "type": "material",
+  "max_stack": 16,
+  "icon": "glass_bottle",
+  "collects_fluid": ["water"]
+}

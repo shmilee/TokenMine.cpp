@@ -982,6 +982,43 @@ def make_armor_icon(material: str, piece: str):
     return icon
 
 
+# SURV-4 (potions): the glass-bottle silhouette — a cork cap, a short neck,
+# and a rounded body. `has_liquid` fills the lower body with `liquid` (the
+# colored potion / the water bottle); the empty glass bottle is all glass.
+# New salt block 128+ (the next free block after the diamond armor's
+# 121+6=127) — every existing icon stays pixel-identical (the determinism
+# proof the re-run is).
+def make_bottle(liquid, salt, has_liquid=True,
+                glass=(186, 210, 230), cork=(150, 110, 66)):
+    px = blank()
+    # Cork cap: a small brown block at the top (design x 6..9, y 1..2).
+    for y in range(1, 3):
+        for x in range(6, 10):
+            setpx2(px, x, y, cork, salt=salt + 4)
+    # Neck: design x 6..9, y 2..5.
+    for y in range(2, 6):
+        for x in range(6, 10):
+            setpx2(px, x, y, glass, salt=salt + 1)
+    # Body: a rounded ellipse centered at design (7, 9.5) (x 3..11, y 5..14).
+    for y in range(5, 15):
+        for x in range(3, 12):
+            nx = (x - 7.0) / 4.0
+            ny = (y - 9.5) / 5.0
+            if nx * nx + ny * ny <= 1.0:
+                if has_liquid and y >= 8:
+                    setpx2(px, x, y, liquid, salt=salt)
+                else:
+                    setpx2(px, x, y, glass, salt=salt + 1)
+    # A bright glass sheen along the left body edge (over glass and liquid —
+    # the potion bottle's shine).
+    for y in range(6, 13):
+        nx = (5.0 - 7.0) / 4.0
+        ny = (y - 9.5) / 5.0
+        if nx * nx + ny * ny <= 1.0:
+            setpx2(px, 5, y, (232, 242, 248), salt=salt + 2, amount=4)
+    return px
+
+
 ITEMS = {
     "planks": planks,
     "stick": stick,
@@ -1030,6 +1067,16 @@ ITEMS = {
     **{m + "_" + p: make_armor_icon(m, p)
        for m in ("leather", "iron", "diamond")
        for p in ("helmet", "chestplate", "leggings", "boots")},
+    # SURV-4 (potions): the glass bottle (empty) + the water bottle + the
+    # six single-effect potions (the liquid color marks the effect).
+    "glass_bottle": lambda: make_bottle((0, 0, 0), 128, has_liquid=False),
+    "water_bottle": lambda: make_bottle((70, 140, 220), 129),
+    "potion_weakness": lambda: make_bottle((180, 180, 185), 130),
+    "potion_swiftness": lambda: make_bottle((234, 138, 195), 131),
+    "potion_regeneration": lambda: make_bottle((96, 208, 88), 132),
+    "potion_poison": lambda: make_bottle((120, 60, 160), 133),
+    "potion_healing": lambda: make_bottle((210, 50, 50), 134),
+    "potion_harming": lambda: make_bottle((150, 30, 40), 135),
 }
 
 
