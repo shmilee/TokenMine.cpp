@@ -399,7 +399,8 @@ TEST(SaveFormat18Test, MidDamageRoundTripsInAllThreePlaces) {
     s.entities.push_back(e);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 18);
+    // CRAFT-1: writes are always format 19 (SURV-3 was format 18).
+    EXPECT_EQ(j->find("format")->asInt(), 19);
     // The shapes: the damaged slot + the entity carry the key; the
     // full-durability armor slot is a STRING; the damaged one an
     // OBJECT {item, damage}.

@@ -27,7 +27,7 @@
 | FLUID 流体 | ~~FLUID-1 水量守恒~~ 完成 | ~~FLUID-2 游泳划水~~ 完成 | | | | |
 | ENT 实体/Mob/移动 | ~~ENT-1 四肢摆动~~ 完成 | ~~ENT-2 BlockState★~~ 完成 | ~~ENT-3 mob踏阶~~ 完成 | ~~ENT-4 水体交互~~ 完成 | | |
 | SURV 生存/战斗/效果 | ~~SURV-1 护甲~~ 完成 | ~~SURV-2 氧气窒息~~ 完成 | ~~SURV-3 耐久~~ 完成 | ~~SURV-4 药水饮用~~ 完成 | ~~SURV-5 mob效果~~ 完成 | |
-| CRAFT 物品/合成/面板 | CRAFT-1 工作台分块★ | CRAFT-2 物品3D模型 | CRAFT-3 材质音效 | | | |
+| CRAFT 物品/合成/面板 | ~~CRAFT-1 工作台分块★~~ 完成（v0.21.0） | CRAFT-2 物品3D模型 | CRAFT-3 材质音效 | | | |
 | SAVE 存档 | SAVE-1 自动存档 | | | | | |
 | PRE 表现层 | PRE-1 中文字体 | PRE-2 边缘雾 | PRE-3 水面波纹 | PRE-4 云与环境音 | PRE-5 透明discard | PRE-6 掉落光照 |
 
@@ -210,7 +210,22 @@
   实证）。**SURV 行 5/5 全清，release ③ = v0.19.0**。
 
 ### CRAFT 物品/合成/面板
-- **CRAFT-1 工作台分块★** — 每工作台独立容器，**依赖 ENT-2**（工作台条）
+- ~~**CRAFT-1 工作台分块★**~~ — **完成（2026-10-26，v0.21.0）**：全游戏共享
+  `m_tableGrid` → 每 crafting_table 块独立 `CraftingGrid`（`m_tables` map，
+  炉子 P44/营火 P71 per-block 范式，不消费 ENT-2 状态【工作台无朝向】）+
+  `openTablePanel(pos)` 绑定所点块（`InventoryUI::bind` 零视觉变化，E 面板
+  终生绑定 2×2 零改动）+ setBlock 收口（**破坏 = 容器物品丢弃** = 炉子同款
+  记档偏离）+ **format 19 `tables` 段**（位置序 + 双向交叉校验 + 键纪律
+  【19 必 tables 拒 table_grid / ≤18 反之】+ 18→19 parse 时 sole 归属迁移
+  【legacy 非空 ∧ 恰 1 表 → 归属，0/多 → 丢弃】）+ `serializeSlotEntry`
+  提取（furnace lambda 复用；GCC16 -O3 误报消除）。1535/1535（+14：save 12
+  + UI rebind 隔离 2）、0 警告、headless 冒烟（19 写读 + 18 遗留读全过）。
+  门 104：S1 PASS = 第 104 次结构性免疫（fresh 60f ×2 RAW + vs base18 字节
+  一致，免重锚 = crafting_table 零 worldgen/biomes 引用 → m_tables 恒空）+
+  S2 双工作台互斥输入跑 = 补跑清单（行为层 14 单测已证：rebind 隔离 +
+  只消费绑定网格 + 迁移/往返；frozen v0.20.0 共享网格反例对照已备）+ S3
+  套件 1535；性能 A/B v0.20.0 fall 900f 三窗 fluidCells 逐位一致 + 全指标
+  同档 = 成本可忽略（结构惰性实证；table 场景对 = 黑相 stall 补跑清单）。
 - **CRAFT-2 物品 3D 模型** — per-item 3D 模型（手持/世界/进食举到嘴）（UI 条）
 - **CRAFT-3 材质音效** — per-block/per-item 材质音色 + 3D 空间化（UI 条）
 

@@ -261,7 +261,7 @@ bool InventoryUI::clickOutput(bool rightButton) {
         (m_carry.item != recipe.output || m_carry.count + n > maxStack)) {
         return false; // the output cannot hold foreign/overflowing stacks
     }
-    consumeGrid(m_grid, m);
+    consumeGrid(*m_grid, m);
     m_carry.item = recipe.output;
     m_carry.count += n;
     return true;
@@ -272,7 +272,7 @@ bool InventoryUI::leftClick(int slot, int gridSlot, bool onOutput) {
         return clickOutput(false);
     }
     if (gridSlot >= 0) {
-        leftClickCell(m_grid.at(gridSlot));
+        leftClickCell(m_grid->at(gridSlot));
         return false;
     }
     if (slot >= 0) {
@@ -288,7 +288,7 @@ bool InventoryUI::rightClick(int slot, int gridSlot, bool onOutput) {
         return clickOutput(true);
     }
     if (gridSlot >= 0) {
-        rightClickCell(m_grid.at(gridSlot));
+        rightClickCell(m_grid->at(gridSlot));
         return false;
     }
     if (slot >= 0) {

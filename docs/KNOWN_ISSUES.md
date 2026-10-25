@@ -214,7 +214,7 @@
 
 ## 工作台 / 形状合成（Phase 17）
 
-- **全工作台的网格是同一个容器** — `Game` 持有单个 `m_tableGrid`（`CraftingGrid`）：右键打开的**任何**工作台的 3×3 网格都是它——内容跨关/重开保留、并写入存档（format 3 `table_grid`），但放第二个工作台再打开看到的是同一份内容。MC 里每个工作台有独立容器；per-block 容器需要 per-instance 状态（见「BlockState per-block 状态」节：`[ENT-2]` 已确定两类状态存储分界——工作台容器 = campfire map 范式 +1 map +1 格式段，CRAFT-1 执行）。`[Phase 17]`
+- ~~**全工作台的网格是同一个容器**~~ — Phase 17 的 v1：`Game` 持有单个 `m_tableGrid`（`CraftingGrid`）：右键打开的**任何**工作台的 3×3 网格都是它（存档 format 3 `table_grid`）。`[Phase 17]`，**`[CRAFT-1]` 已修复**：每工作台方块独立容器（`Game` 持 `std::map<BlockPos, CraftingGrid> m_tables`，位置序 → 存档写序确定；`setBlock` 收口创建/销毁 + 读档 parse 时不变量保证完整性【炉子同款，无 rescan】）+ 右键面板绑定所点方块（`InventoryUI::bind`，`FurnaceUI::bind` 范式——面板 UI 零视觉变化，只换数据源）+ 存档 format 19 `tables`（每工作台块一条目 {pos, slots[9]}、位置序、与方块差集**双向**交叉校验、19 必需空数组合法 / 19 携 `table_grid` 拒 / ≤18 携 `tables` 拒；**18→19 迁移 = sole 归属**：旧全局 `table_grid` 非空且世界恰 1 个工作台 → 归属之，0 或多个 → 丢弃【P44 先例】；`inv_grid`（E 面板）不动）。**记档偏离：破坏工作台丢弃容器内物品**（setBlock 收口删 state，只掉工作台自身 `drops` = 炉子破坏同款语义 = MC 规则）；**格式 19 槽不携 `damage`**（合成网格属 SURV-3 三处范围外的 grid 纪律，受损物品入格读档回满 = 同款 quirk）。`[CRAFT-1]`
 - **工作台面板无配方列表** — 表格面板只有 3×3 网格 + 输出格，无任何配方提示；配方提示只存在于 E 面板列表（且该列表仅 shapeless），shaped 配方的摆法没有游戏内指引。`[Phase 17]`
 - **E 面板 2×2 固定在共享 3×3 模型的左上** — E 面板合成格与表格面板共用同一个 `CraftingGrid` 3×3 模型，只暴露槽 {0,1,3,4}（左上 2×2）；宽度或高度为 3 的 pattern（如 pickaxe `PPP/.S./.S.`）无法摆入，E 里的 shaped 匹配只可能命中落在左上角的 pattern（2×2 工作台配方可在 E 摆出合成，与 MC 一致）。`[Phase 17]`
 - **E 配方列表只显示 shapeless 配方** — shaped 配方不出现在列表里，唯一入口是工作台面板。`[Phase 17]`

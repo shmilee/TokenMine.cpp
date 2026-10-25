@@ -1669,10 +1669,11 @@ void Game::unloadFarColumns() {
     // hysteresis band around the capped disk.
     const std::int64_t keepDistSq =
         static_cast<std::int64_t>(keepDist) * keepDist;
-    // The per-block state maps (furnace/campfire/crop/beacon/fire) are
-    // keyed by BlockPos: their COLUMNS must survive (the save records the
-    // states and cross-checks them against the block edits — an unloaded
-    // column would break the load). The maps are player-scale (small).
+    // The per-block state maps (furnace/campfire/table/crop/beacon/fire)
+    // are keyed by BlockPos: their COLUMNS must survive (the save records
+    // the states and cross-checks them against the block edits — an
+    // unloaded column would break the load). The maps are player-scale
+    // (small).
     std::set<ColumnPos> protectedColumns = m_editedColumns;
     protectedColumns.insert(m_streamPending.begin(), m_streamPending.end());
     // PIPE-1: in-flight MESH columns too (same paradigm — their
@@ -1688,6 +1689,7 @@ void Game::unloadFarColumns() {
     };
     protectStates(m_furnaces);
     protectStates(m_campfires);
+    protectStates(m_tables);
     protectStates(m_crops);
     protectStates(m_saplings);
     protectStates(m_beacons);
@@ -2155,10 +2157,12 @@ Result<SaveGame> Game::collectSave() const {
         save.slots[i] = m_inventory.at(i);
     }
     // The crafting grids (format 3): items left in a grid are the player's
-    // — saving them keeps a mid-craft state loadable.
+    // — saving them keeps a mid-craft state loadable. CRAFT-1: the E
+    // panel's grid is the only global one — the table's grids are
+    // per-block (the "tables" section below).
+    save.invGrid.resize(CraftingGrid::kSize);
     for (int i = 0; i < CraftingGrid::kSize; ++i) {
-        save.invGrid.push_back(m_inventoryGrid.at(i));
-        save.tableGrid.push_back(m_tableGrid.at(i));
+        save.invGrid[static_cast<std::size_t>(i)] = m_inventoryGrid.at(i);
     }
     // The per-block furnace states (format 7; Phase 44): map iteration is
     // position-sorted (the save's order); every furnace block has an entry
@@ -2177,6 +2181,13 @@ Result<SaveGame> Game::collectSave() const {
     // entry (the setBlock invariant), empty states included.
     for (const auto& [pos, st] : m_campfires) {
         save.campfires.push_back({pos, st});
+    }
+    // The per-block crafting-table grids (format 19; CRAFT-1): map
+    // iteration is position-sorted (the save's order); every
+    // crafting_table block has an entry (the setBlock invariant), empty
+    // grids included.
+    for (const auto& [pos, grid] : m_tables) {
+        save.tables.push_back(SavedTable {pos, grid});
     }
     // PIPE-2: the journal path is the default; it falls back to the
     // legacy full-world path when the journal is invalid (the
@@ -2422,14 +2433,12 @@ Result<void> Game::applySave(const SaveGame& save) {
     }
     m_selectedSlot = static_cast<std::size_t>(save.selectedSlot);
     // 4b) Crafting grids (format 3; format 1/2 saves load them empty).
+    // CRAFT-1: the E panel's grid is the only global one — the table's
+    // grids are per-block (the 4c-quinque section below).
     m_inventoryGrid.clear();
-    m_tableGrid.clear();
     for (int i = 0; i < CraftingGrid::kSize; ++i) {
         if (i < static_cast<int>(save.invGrid.size())) {
             m_inventoryGrid.setSlot(i, save.invGrid[static_cast<std::size_t>(i)]);
-        }
-        if (i < static_cast<int>(save.tableGrid.size())) {
-            m_tableGrid.setSlot(i, save.tableGrid[static_cast<std::size_t>(i)]);
         }
     }
     // 4c) The per-block furnace states (format 7; Phase 44). Format-6
@@ -2478,6 +2487,19 @@ Result<void> Game::applySave(const SaveGame& save) {
             m_campfires.count(e.pos) == 0) {
             m_campfires.emplace(e.pos, CampfireCookState {});
         }
+    }
+    // 4c-quinque) The per-block crafting-table grids (format 19;
+    // CRAFT-1). Format-19 saves carry one entry per crafting_table block
+    // (parse-validated, cross-checked in both directions); format 18 and
+    // earlier carry the ONE global "table_grid", migrated at parse
+    // (sole attribution to the single table block, otherwise discarded —
+    // the Phase 44 precedent, save.cpp). The parse-time invariant
+    // guarantees an entry for EVERY table block in the world's block
+    // edits, so the map is complete after this copy (the furnace load
+    // path, the twin — no rescan needed).
+    m_tables.clear();
+    for (const SavedTable& st : save.tables) {
+        m_tables.emplace(st.pos, st.grid);
     }
     // 4c-quater) The per-instance block states (format 15; Phase 94 stair
     // facing, generalized in ENT-2). Format-15 saves carry one entry per
@@ -3319,7 +3341,9 @@ void Game::handleInteraction(double dt) {
                 m_world.getBlock(hit->block.x, hit->block.y,
                                  hit->block.z));
             if (b.properties.interact == kInteractCraftingTable) {
-                openPanel(OpenPanel::Table);
+                // CRAFT-1: the panel is bound to THIS block's grid
+                // (per-block table states — the Phase 44 furnace pattern).
+                openTablePanel(hit->block);
                 return;
             }
             if (b.properties.interact == kInteractFurnace) {
@@ -3912,6 +3936,21 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
             m_campfires.emplace(cpos, CampfireCookState {});
         } else {
             m_campfires.erase(cpos);
+        }
+    }
+    // CRAFT-1: the table's grid follows the cell (like the furnace
+    // states): a crafting_table block always owns a grid (created on
+    // placement, empty), and a cell that stops holding one drops its grid
+    // (the invariant the format-19 save cross-checks against the block
+    // edits). BREAKING a table loses the items in it — the container
+    // contents do not drop (the furnace-break semantics: only the block's
+    // own `drops` spawn; the Minecraft rule).
+    {
+        const BlockPos tpos {x, y, z};
+        if (m_blocks.at(id).properties.interact == kInteractCraftingTable) {
+            m_tables.emplace(tpos, CraftingGrid {});
+        } else {
+            m_tables.erase(tpos);
         }
     }
     // ENT-2: the per-instance block state follows the cell (the project's
@@ -5869,6 +5908,25 @@ FurnaceState& Game::furnaceAt(const BlockPos& pos) {
     auto it = m_furnaces.find(pos);
     if (it == m_furnaces.end()) {
         it = m_furnaces.emplace(pos, FurnaceState {}).first;
+    }
+    return it->second;
+}
+
+// CRAFT-1: the table panel opens for ONE block — bind the UI to that
+// block's grid (the setBlock invariant guarantees a table block owns
+// one; tableAt's default-construct is defensive). The grid is stable
+// while the panel is open: block interaction is paused and no other code
+// path mutates or removes a table block in the meantime (the Phase 44
+// furnace argument, the twin).
+void Game::openTablePanel(const BlockPos& pos) {
+    m_tableUi.bind(tableAt(pos));
+    openPanel(OpenPanel::Table);
+}
+
+CraftingGrid& Game::tableAt(const BlockPos& pos) {
+    auto it = m_tables.find(pos);
+    if (it == m_tables.end()) {
+        it = m_tables.emplace(pos, CraftingGrid {}).first;
     }
     return it->second;
 }

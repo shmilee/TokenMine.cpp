@@ -117,10 +117,16 @@ public:
     // references to the inventory, the crafting grids and the registries,
     // so they are constructed here (after all of them, in declaration
     // order). Phase 44: the furnace UI binds its state per panel opening
-    // (per-block furnace states — see openFurnacePanel).
-    Game() : m_inventoryUi(m_inventory, m_inventoryGrid, m_items, m_recipes),
-             m_tableUi(m_inventory, m_tableGrid, m_items, m_recipes),
-             m_furnaceUi(m_inventory, m_items) {}
+    // (per-block furnace states — see openFurnacePanel). CRAFT-1: the
+    // inventory UIs bind their grid per panel opening too — the E panel
+    // to the player's own grid (bound once, in the constructor body), the
+    // table panel to the clicked block's per-block grid (bound on every
+    // open — see openTablePanel).
+    Game() : m_inventoryUi(m_inventory, m_items, m_recipes),
+             m_tableUi(m_inventory, m_items, m_recipes),
+             m_furnaceUi(m_inventory, m_items) {
+        m_inventoryUi.bind(m_inventoryGrid);
+    }
     ~Game();
 
     Result<void> init(const GameArgs& args);
@@ -544,6 +550,14 @@ private:
     // The state of the furnace block at `pos` (default-constructs one when
     // absent — defensive: the setBlock invariant makes that unreachable).
     FurnaceState& furnaceAt(const BlockPos& pos);
+    // CRAFT-1: opens the table panel for the block at `pos` — binds the
+    // panel's UI to that block's per-block grid (created on demand; a
+    // crafting_table block always owns one — see setBlock). The
+    // openFurnacePanel twin (Phase 44).
+    void openTablePanel(const BlockPos& pos);
+    // The grid of the table block at `pos` (default-constructs one when
+    // absent — defensive: the setBlock invariant makes that unreachable).
+    CraftingGrid& tableAt(const BlockPos& pos);
     // Phase 71: the right-click campfire cooking interaction (the
     // kInteractCampfire branch of the right-click chain): a selected
     // smeltable item places one unit on an EMPTY slot (consumed from the
@@ -949,16 +963,27 @@ private:
     // UI at all, keeping the Phase 14 screenshots byte-identical).
     bool m_debugOverlay = false;
 
-    // Phase 17 crafting: the two persistent crafting grids (the E panel's
-    // 2x2 uses the top-left 4 cells of its 9-cell model; the table's grid
-    // is separate) and the open-panel state machine. The grids survive a
-    // close/reopen (see docs/KNOWN_ISSUES) and are saved (format 3).
+    // Phase 17 crafting: the E panel's persistent crafting grid (its 2x2
+    // uses the top-left 4 cells of the 9-cell model) and the open-panel
+    // state machine. The grid survives a close/reopen (see
+    // docs/KNOWN_ISSUES) and is saved (format 3). CRAFT-1: the crafting
+    // TABLE's grid is no longer a single global — it is per-block (one
+    // grid per crafting_table block, the m_tables map below).
     CraftingGrid m_inventoryGrid;
-    CraftingGrid m_tableGrid;
     InventoryUI m_inventoryUi;
     InventoryUI m_tableUi;
     OpenPanel m_openPanel = OpenPanel::None;
     bool panelOpen() const { return m_openPanel != OpenPanel::None; }
+
+    // CRAFT-1: the per-block crafting-table grids — one CraftingGrid per
+    // crafting_table block in the world (created on placement, empty;
+    // dropped when the cell stops holding a table — the container's
+    // items are lost, the furnace-break semantics; the invariant the
+    // format-19 save cross-checks against the block edits, exactly like
+    // the furnace states). std::map: position-sorted, so the save's write
+    // order is deterministic. The table panel's UI is bound to the
+    // clicked block's grid on every open (openTablePanel).
+    std::map<BlockPos, CraftingGrid> m_tables;
 
     // Phase 40/44 furnace: PER-BLOCK smelting states — one FurnaceState
     // per furnace block in the world (created on placement, dropped when

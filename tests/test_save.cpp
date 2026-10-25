@@ -67,6 +67,11 @@ BlockRegistry makeBlocks() {
     blocks.registerBlock(parseJson(
         R"({"id":"oak_sapling","properties":{"solid":false,"opaque":false,"transparent":true,"growth_ticks":120,"tree":{"trunk":"wood","leaves":"leaves","min_height":4,"height_range":3,"leaf_radius":2,"shape":"oak"}},)"
         R"("model":{"shape":"cross","state_count":8,"state_default":0,"textures":{"cross":"t"}}})"));
+    // CRAFT-1: the crafting_table block — the `interact` property (the
+    // data-driven "is a table" check) makes it a table block for the
+    // format-19 save cross-check.
+    blocks.registerBlock(parseJson(
+        R"({"id":"crafting_table","properties":{"interact":"crafting_table"},"model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
     return blocks;
 }
 
@@ -203,6 +208,20 @@ Json withoutKey(const Json& root, const std::string& key) {
     return out;
 }
 
+// CRAFT-1: the "table_grid" array a pre-format-19 file carries (required
+// in format 3-18): all 9 slots empty — the shape a downgrade of a
+// current save must restore for the legacy parse to accept it.
+Json emptyTableGrid() {
+    Json arr = Json::array();
+    for (int i = 0; i < CraftingGrid::kSize; ++i) {
+        Json e = Json::object();
+        e["item"] = Json(std::string(""));
+        e["count"] = Json(0);
+        arr.push_back(std::move(e));
+    }
+    return arr;
+}
+
 } // namespace
 
 // -- serialize/parse round trip -------------------------------------------------
@@ -273,24 +292,32 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     Fixture f;
     SaveGame s = makeSave(f);
     s.invGrid.resize(CraftingGrid::kSize);
-    s.tableGrid.resize(CraftingGrid::kSize);
     s.invGrid[0] = ItemStack {f.items.idForName("dirt"), 5};
     s.invGrid[4] = ItemStack {f.items.idForName("pick"), 1};
-    s.tableGrid[8] = ItemStack {f.items.idForName("stone"), 64};
+    // CRAFT-1: the table's grid is per-block — a crafting_table block
+    // edit + its "tables" entry (the E panel's grid stays global).
+    s.blockEdits.push_back({BlockPos {1, 53, 2}, "crafting_table"});
+    std::sort(s.blockEdits.begin(), s.blockEdits.end(),
+              [](const SavedBlockEdit& a, const SavedBlockEdit& b) {
+                  return a.pos < b.pos;
+              });
+    CraftingGrid table;
+    table.setSlot(8, ItemStack {f.items.idForName("stone"), 64});
+    s.tables.push_back(SavedTable {BlockPos {1, 53, 2}, table});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // SURV-3: writes are always format 18 (SURV-2 was format 17).
-    EXPECT_EQ(j->find("format")->asInt(), 18);
+    // CRAFT-1: writes are always format 19 (SURV-3 was format 18).
+    EXPECT_EQ(j->find("format")->asInt(), 19);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
-    ASSERT_EQ(out->tableGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
+    ASSERT_EQ(out->tables.size(), 1u);
+    EXPECT_EQ(out->tables[0].pos, (BlockPos {1, 53, 2}));
     for (int i = 0; i < CraftingGrid::kSize; ++i) {
         EXPECT_EQ(out->invGrid[static_cast<std::size_t>(i)],
                   s.invGrid[static_cast<std::size_t>(i)])
             << "invGrid cell " << i;
-        EXPECT_EQ(out->tableGrid[static_cast<std::size_t>(i)],
-                  s.tableGrid[static_cast<std::size_t>(i)])
+        EXPECT_EQ(out->tables[0].grid.at(i), table.at(i))
             << "tableGrid cell " << i;
     }
 }
@@ -302,13 +329,14 @@ TEST(SaveRoundTripTest, EmptyGridsRoundTrip) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
-    // Format 3 always carries both grids (here: all 9 cells empty).
+    // Format 3 always carries the inv grid (here: all 9 cells empty);
+    // CRAFT-1: the table grids are the "tables" array — empty (the
+    // fixture world holds no crafting_table blocks).
     EXPECT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
-    EXPECT_EQ(out->tableGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
     for (int i = 0; i < CraftingGrid::kSize; ++i) {
         EXPECT_TRUE(out->invGrid[static_cast<std::size_t>(i)].empty());
-        EXPECT_TRUE(out->tableGrid[static_cast<std::size_t>(i)].empty());
     }
+    EXPECT_TRUE(out->tables.empty());
 }
 
 TEST(SaveParseTest, FormatTwoLoadsWithEmptyGrids) {
@@ -321,6 +349,7 @@ TEST(SaveParseTest, FormatTwoLoadsWithEmptyGrids) {
     Json root = *j;
     root["format"] = Json(2);
     root = withoutKey(root, "fires"); // format 2 predates the fire
+    root = withoutKey(root, "tables"); // format 2 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 2 predates the campfire
     root = withoutKey(root, "states"); // format 2 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 2 predates the absorption pool
@@ -333,7 +362,7 @@ TEST(SaveParseTest, FormatTwoLoadsWithEmptyGrids) {
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->invGrid.empty());
-    EXPECT_TRUE(out->tableGrid.empty());
+    EXPECT_TRUE(out->tables.empty()); // CRAFT-1: no table blocks in the fixture world
 }
 
 TEST(SaveParseTest, FormatThreeRequiresBothGrids) {
@@ -341,11 +370,28 @@ TEST(SaveParseTest, FormatThreeRequiresBothGrids) {
     const SaveGame s = makeSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
+    // Format 19 (CRAFT-1): the E panel's grid ("inv_grid") and the
+    // per-block table arrays ("tables") are both required keys.
     Json missingInv = *j;
     missingInv = withoutKey(missingInv, "inv_grid");
     EXPECT_FALSE(parseSave(missingInv, f.items, f.blocks, f.effects, 42).ok());
-    Json missingTable = *j;
-    missingTable = withoutKey(missingTable, "table_grid");
+    Json missingTables = *j;
+    missingTables = withoutKey(missingTables, "tables");
+    EXPECT_FALSE(parseSave(missingTables, f.items, f.blocks, f.effects, 42).ok());
+    // Legacy (format 3): the table's grid was the global "table_grid"
+    // array — a format-3 file still requires it.
+    Json legacy = *j;
+    legacy["format"] = Json(3);
+    legacy = withoutKey(legacy, "fires"); // format 3 predates the fire
+    legacy = withoutKey(legacy, "tables"); // format 3 predates the per-block table grids
+    legacy = withoutKey(legacy, "campfires"); // format 3 predates the campfire
+    legacy = withoutKey(legacy, "states"); // format 3 predates per-block state
+    legacy["player"] = withoutKey(legacy["player"], "absorption"); // format 3 predates the absorption pool
+    legacy["player"] = withoutKey(legacy["player"], "armor"); // SURV-1: format below 16 predates the player's armor
+    legacy["player"] = withoutKey(legacy["player"], "oxygen"); // SURV-2: format below 17 predates the player's oxygen
+    legacy["fluids"] = downgradeFluids(legacy); // pre-Phase-51 shape
+    legacy = withoutKey(legacy, "furnaces"); // format 3 predates the furnace
+    Json missingTable = withoutKey(legacy, "table_grid");
     EXPECT_FALSE(parseSave(missingTable, f.items, f.blocks, f.effects, 42).ok());
 }
 
@@ -398,7 +444,7 @@ TEST(SaveParseTest, RejectsBadCraftingGrid) {
         for (std::size_t i = 1; i < cells.size(); ++i) {
             rebuilt.push_back(cells.at(i));
         }
-        bad["table_grid"] = std::move(rebuilt);
+        bad["inv_grid"] = std::move(rebuilt);
         EXPECT_FALSE(parseSave(bad, f.items, f.blocks, f.effects, 42).ok());
     }
 }
@@ -425,6 +471,7 @@ TEST(SaveParseTest, FormatOneLoadsWithoutHealth) {
     Json root = *j;
     root["format"] = Json(1);
     root = withoutKey(root, "fires"); // format 1 predates the fire
+    root = withoutKey(root, "tables"); // format 1 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 1 predates the campfire
     root = withoutKey(root, "states"); // format 1 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 1 predates the absorption pool
@@ -438,7 +485,7 @@ TEST(SaveParseTest, FormatOneLoadsWithoutHealth) {
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerHealth, -1.0f);
     EXPECT_TRUE(out->invGrid.empty());
-    EXPECT_TRUE(out->tableGrid.empty());
+    EXPECT_TRUE(out->tables.empty()); // CRAFT-1: no table blocks in the fixture world
 }
 
 TEST(SaveParseTest, RejectsNegativeHealth) {
@@ -478,6 +525,7 @@ TEST(SaveParseTest, FormatThreeLoadsWithoutHunger) {
     Json root = *j;
     root["format"] = Json(3);
     root = withoutKey(root, "fires"); // format 3 predates the fire
+    root = withoutKey(root, "tables"); // format 3 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 3 predates the campfire
     root = withoutKey(root, "states"); // format 3 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 3 predates the absorption pool
@@ -485,6 +533,7 @@ TEST(SaveParseTest, FormatThreeLoadsWithoutHunger) {
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: format below 17 predates the player's oxygen
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 3 predates the furnace
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 3 still carried the global table grid
     ASSERT_EQ(root["player"].find("hunger"), nullptr);
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
@@ -529,6 +578,7 @@ TEST(SaveParseTest, FormatFourLoadsWithoutSaturation) {
     Json root = *j;
     root["format"] = Json(4);
     root = withoutKey(root, "fires"); // format 4 predates the fire
+    root = withoutKey(root, "tables"); // format 4 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 4 predates the campfire
     root = withoutKey(root, "states"); // format 4 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 4 predates the absorption pool
@@ -536,6 +586,7 @@ TEST(SaveParseTest, FormatFourLoadsWithoutSaturation) {
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: format below 17 predates the player's oxygen
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 4 predates the furnace
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 4 still carried the global table grid
     ASSERT_EQ(root["player"].find("saturation"), nullptr);
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
@@ -936,11 +987,13 @@ TEST(SaveParseTest, FluidEditKindRoundTripsAndMigrates) {
 
     root["format"] = Json(8);
     root = withoutKey(root, "fires"); // format 8 predates the fire
+    root = withoutKey(root, "tables"); // format 8 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 8 predates the campfire
     root = withoutKey(root, "states"); // format 8 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 8 predates the absorption pool
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: format below 17 predates the player's oxygen
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 8 still carried the global table grid
     Json waterEdit = Json::array();
     waterEdit.push_back(Json(3));
     waterEdit.push_back(Json(10));
@@ -1198,6 +1251,58 @@ SaveGame makeFurnaceSave(const Fixture& f) {
     return s;
 }
 
+// CRAFT-1: a save with two crafting_table blocks (position-sorted, as the
+// game's map writes them) and the matching (here empty) grids.
+SaveGame makeTableSave(const Fixture& f) {
+    SaveGame s = makeSave(f);
+    s.blockEdits.push_back({BlockPos {1, 53, 2}, "crafting_table"});
+    s.blockEdits.push_back({BlockPos {2, 53, 2}, "crafting_table"});
+    std::sort(s.blockEdits.begin(), s.blockEdits.end(),
+              [](const SavedBlockEdit& a, const SavedBlockEdit& b) {
+                  return a.pos < b.pos;
+              });
+    s.tables.push_back(SavedTable {BlockPos {1, 53, 2}, CraftingGrid {}});
+    s.tables.push_back(SavedTable {BlockPos {2, 53, 2}, CraftingGrid {}});
+    return s;
+}
+
+// CRAFT-1: a legacy "table_grid" array (9 slot entries) with the given
+// (cell, item name, count) fills; all other cells empty (Json arrays
+// have no index-set — the fills are applied during the build).
+Json legacyTableGrid(
+    const std::vector<std::pair<int, std::pair<std::string, int>>>& fills) {
+    Json arr = Json::array();
+    for (int c = 0; c < CraftingGrid::kSize; ++c) {
+        Json e = Json::object();
+        bool filled = false;
+        for (const auto& [cell, ic] : fills) {
+            if (cell == c) {
+                e["item"] = Json(ic.first);
+                e["count"] = Json(ic.second);
+                filled = true;
+            }
+        }
+        if (!filled) {
+            e["item"] = Json(std::string(""));
+            e["count"] = Json(0);
+        }
+        arr.push_back(std::move(e));
+    }
+    return arr;
+}
+
+// CRAFT-1: rewrite a serialized format-19 save into the format-18 shape
+// (what a pre-CRAFT-1 build wrote): the per-block "tables" array is
+// removed, the format downgraded to 18, and the ONE global "table_grid"
+// restored. The format-18 parse path (still supported) is tested through
+// this.
+Json downgradeTablesToFormat18(const Json& root, const Json& tableGrid) {
+    Json out = withoutKey(root, "tables");
+    out["format"] = Json(18);
+    out["table_grid"] = tableGrid;
+    return out;
+}
+
 // Phase 94 / ENT-2: a save with a stair block + its per-instance state
 // (the project's first per-block state; for a stair, the facing).
 SaveGame makeStateSave(const Fixture& f) {
@@ -1217,6 +1322,8 @@ SaveGame makeStateSave(const Fixture& f) {
 // (still supported for old files) is tested through this.
 Json downgradeToFormat14(const Json& root) {
     Json out = withoutKey(root, "states");
+    out = withoutKey(out, "tables"); // CRAFT-1: format 14 predates the per-block table grids
+    out["table_grid"] = emptyTableGrid(); // CRAFT-1: format 14 still carried the global table grid
     out["format"] = Json(14);
     out["player"] = withoutKey(out["player"], "armor"); // SURV-1: format 14 predates the player's armor
     out["player"] = withoutKey(out["player"], "oxygen"); // SURV-2: format 14 predates the player's oxygen
@@ -1245,8 +1352,8 @@ TEST(SaveRoundTripTest, StatesRoundTrip) {
     SaveGame s = makeStateSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // SURV-3: writes are always format 18 (SURV-2 was format 17).
-    EXPECT_EQ(j->find("format")->asInt(), 18);
+    // CRAFT-1: writes are always format 19 (SURV-3 was format 18).
+    EXPECT_EQ(j->find("format")->asInt(), 19);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->states.size(), 1u);
@@ -1524,8 +1631,8 @@ TEST(SaveRoundTripTest, FurnacesRoundTrip) {
     s.furnaces[0].state.fuelSubsteps = 1234;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // SURV-3: writes are always format 18 (SURV-2 was format 17).
-    EXPECT_EQ(j->find("format")->asInt(), 18);
+    // CRAFT-1: writes are always format 19 (SURV-3 was format 18).
+    EXPECT_EQ(j->find("format")->asInt(), 19);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
@@ -1565,6 +1672,7 @@ TEST(SaveParseTest, FormatFiveLoadsWithEmptyFurnaces) {
     Json root = *j;
     root["format"] = Json(5);
     root = withoutKey(root, "fires"); // format 5 predates the fire
+    root = withoutKey(root, "tables"); // format 5 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 5 predates the campfire
     root = withoutKey(root, "states"); // format 5 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 5 predates the absorption pool
@@ -1572,6 +1680,7 @@ TEST(SaveParseTest, FormatFiveLoadsWithEmptyFurnaces) {
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: format below 17 predates the player's oxygen
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root = withoutKey(root, "furnaces"); // format 5 predates the furnace
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 5 still carried the global table grid
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u); // the blocks' entries, empty states
@@ -1595,6 +1704,7 @@ TEST(SaveParseTest, FormatSixMigratesStateToSoleFurnace) {
     Json root = *j;
     root["format"] = Json(6);
     root = withoutKey(root, "fires"); // format 6 predates the fire
+    root = withoutKey(root, "tables"); // format 6 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 6 predates the campfire
     root = withoutKey(root, "states"); // format 6 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 6 predates the absorption pool
@@ -1603,6 +1713,7 @@ TEST(SaveParseTest, FormatSixMigratesStateToSoleFurnace) {
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["furnace"] = withoutKey(root["furnaces"].at(0), "pos");
     root = withoutKey(root, "furnaces");
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 6 still carried the global table grid
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 1u);
@@ -1628,6 +1739,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
     Json root = *j;
     root["format"] = Json(6);
     root = withoutKey(root, "fires"); // format 6 predates the fire
+    root = withoutKey(root, "tables"); // format 6 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 6 predates the campfire
     root = withoutKey(root, "states"); // format 6 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 6 predates the absorption pool
@@ -1636,6 +1748,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["furnace"] = withoutKey(root["furnaces"].at(0), "pos");
     root = withoutKey(root, "furnaces");
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 6 still carried the global table grid
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
@@ -1649,6 +1762,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
         Json root2 = *j2;
         root2["format"] = Json(6);
         root2 = withoutKey(root2, "fires"); // format 6 predates the fire
+        root2 = withoutKey(root2, "tables"); // format 6 predates the per-block table grids
         root2 = withoutKey(root2, "campfires"); // format 6 predates the campfire
         root2 = withoutKey(root2, "states"); // format 6 predates per-block state
         root2["player"] = withoutKey(root2["player"], "absorption"); // format 6 predates the absorption pool
@@ -1656,6 +1770,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
         root2["player"] = withoutKey(root2["player"], "oxygen"); // SURV-2: format below 17 predates the player's oxygen
         root2["fluids"] = downgradeFluids(root2); // pre-Phase-51 shape
         root2 = withoutKey(root2, "furnaces");
+        root2["table_grid"] = emptyTableGrid(); // CRAFT-1: format 6 still carried the global table grid
         Json fz = Json::object();
         Json in = Json::object();
         in["item"] = Json(std::string("beef"));
@@ -1689,6 +1804,8 @@ TEST(SaveParseTest, RejectsFurnaceFieldInOldFormat) {
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: format below 17 predates the player's oxygen
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
+    root = withoutKey(root, "tables"); // CRAFT-1: the rejection under test is "furnaces"
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 5 still carried the global table grid
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
 
@@ -1713,12 +1830,14 @@ TEST(SaveParseTest, RejectsFurnacesFieldInFormatSix) {
     Json root = *j;
     root["format"] = Json(6); // keeps the "furnaces" field
     root = withoutKey(root, "fires"); // the rejection under test is "furnaces"
+    root = withoutKey(root, "tables"); // the rejection under test is "furnaces" (CRAFT-1)
     root = withoutKey(root, "campfires"); // format older predates the campfire
     root = withoutKey(root, "states"); // format older predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 6 predates the absorption pool
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: format below 17 predates the player's oxygen
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 6 still carried the global table grid
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
 
@@ -1885,8 +2004,8 @@ TEST(SaveRoundTripTest, FiresRoundTrip) {
     SaveGame s = makeFireSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // SURV-3: writes are always format 18 (SURV-2 was format 17).
-    EXPECT_EQ(j->find("format")->asInt(), 18);
+    // CRAFT-1: writes are always format 19 (SURV-3 was format 18).
+    EXPECT_EQ(j->find("format")->asInt(), 19);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->fires.size(), 2u);
@@ -1919,11 +2038,13 @@ TEST(SaveParseTest, FormatNineLoadsWithoutFires) {
     Json root = *j;
     root["format"] = Json(9);
     root = withoutKey(root, "fires"); // format 9 predates the fire
+    root = withoutKey(root, "tables"); // format 9 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 9 predates the campfire
     root = withoutKey(root, "states"); // format 9 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 9 predates the absorption pool
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: format below 17 predates the player's oxygen
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 9 still carried the global table grid
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->fires.empty());
@@ -1941,11 +2062,13 @@ TEST(SaveParseTest, FormatNineFireEditMigratesEmpty) {
     Json root = *j;
     root["format"] = Json(9);
     root = withoutKey(root, "fires"); // format 9 predates the fire
+    root = withoutKey(root, "tables"); // format 9 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 9 predates the campfire
     root = withoutKey(root, "states"); // format 9 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 9 predates the absorption pool
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: format below 17 predates the player's oxygen
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 9 still carried the global table grid
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->fires.empty());
@@ -1958,6 +2081,8 @@ TEST(SaveParseTest, RejectsFiresFieldInFormatNine) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(9); // keeps the "fires" field
+    root = withoutKey(root, "tables"); // the rejection under test is "fires" (CRAFT-1)
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 9 still carried the global table grid
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
 
@@ -2072,8 +2197,10 @@ TEST(SaveFormat8Test, FormatSevenFileWithoutEffectsLoads) {
     Json root = *j;
     root["format"] = Json(7);
     root = withoutKey(root, "fires"); // format 7 predates the fire
+    root = withoutKey(root, "tables"); // format 7 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 7 predates the campfire
     root = withoutKey(root, "states"); // format 7 predates per-block state
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 7 still carried the global table grid
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     root["player"] = withoutKey(*j->find("player"), "effects");
     root["player"] = withoutKey(root["player"], "absorption"); // format 7 predates the absorption pool
@@ -2207,6 +2334,8 @@ TEST(SaveFormat12Test, Format11RejectsTheAbsorptionKey) {
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
     // The same file WITHOUT the key loads (the format-11 migration path;
     // the sentinel stays -1 for Game::applySave).
+    root = withoutKey(root, "tables"); // CRAFT-1: format 11 predates the per-block table grids
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 11 still carried the global table grid
     root["player"] = withoutKey(root["player"], "absorption");
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: format below 17 predates the player's oxygen
@@ -2359,6 +2488,8 @@ TEST(SaveFormat16Test, Format15RejectsTheArmorKey) {
     {
         Json root = *j;
         root["format"] = Json(15);
+        root = withoutKey(root, "tables"); // CRAFT-1: format 15 predates the per-block table grids
+        root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 15 still carried the global table grid
         root["player"] = withoutKey(root["player"], "armor");
         root["player"] = withoutKey(root["player"], "oxygen");
         auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
@@ -2413,4 +2544,321 @@ TEST(SaveFormat16Test, ArmorUnknownSlotKeyRejected) {
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("hood"), std::string::npos)
         << out.error().message;
+}
+
+// -- CRAFT-1: the per-block crafting-table grids (format 19) -----------------
+//
+// makeSave has no table blocks; these tests add them. The format-19
+// cross-check is BIDIRECTIONAL: exactly one entry per crafting_table
+// block in the block edits (entries without a block and blocks without
+// an entry are both rejected — the furnaces-key discipline, the Phase
+// 44/71 twin).
+
+TEST(SaveRoundTripTest, TablesRoundTrip) {
+    Fixture f;
+    SaveGame s = makeTableSave(f);
+    // The first table holds items (a mid-craft state); the second stays
+    // empty.
+    s.tables[0].grid.setSlot(0, ItemStack {f.items.idForName("dirt"), 5});
+    s.tables[0].grid.setSlot(8, ItemStack {f.items.idForName("stone"), 64});
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    // CRAFT-1: writes are always format 19.
+    EXPECT_EQ(j->find("format")->asInt(), 19);
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    ASSERT_EQ(out->tables.size(), 2u);
+    const BlockPos p1 {1, 53, 2};
+    const BlockPos p2 {2, 53, 2};
+    EXPECT_EQ(out->tables[0].pos, p1);
+    EXPECT_EQ(out->tables[1].pos, p2);
+    for (int c = 0; c < CraftingGrid::kSize; ++c) {
+        EXPECT_EQ(out->tables[0].grid.at(c), s.tables[0].grid.at(c))
+            << "table #1 cell " << c;
+        EXPECT_TRUE(out->tables[1].grid.at(c).empty())
+            << "table #2 cell " << c;
+    }
+}
+
+TEST(SaveRoundTripTest, EmptyTablesRoundTrip) {
+    Fixture f;
+    const SaveGame s = makeSave(f); // no table blocks
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    // A world without table blocks still carries the (empty) key — the
+    // format-19 discipline (the furnaces/campfires-key pattern).
+    ASSERT_NE(j->find("tables"), nullptr);
+    EXPECT_EQ(j->find("tables")->size(), 0u);
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_TRUE(out->tables.empty());
+}
+
+TEST(SaveParseTest, Format19RequiresTablesKey) {
+    // A format-19 file WITHOUT the "tables" key is rejected (the key is
+    // required; an empty array is valid).
+    Fixture f;
+    const SaveGame s = makeSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = withoutKey(*j, "tables");
+    EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
+}
+
+TEST(SaveParseTest, Format19RejectsTableGridKey) {
+    // A format-19 file carrying the legacy "table_grid" is a version lie
+    // (the key is restricted to format 18 and older — replaced by the
+    // per-block "tables" array).
+    Fixture f;
+    const SaveGame s = makeSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["table_grid"] = emptyTableGrid();
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("table_grid"), std::string::npos)
+        << out.error().message;
+}
+
+TEST(SaveParseTest, RejectsTablesFieldInFormat18) {
+    // The version-lie discipline, the format-18 side: a pre-19 file
+    // carrying the "tables" key is rejected (named).
+    Fixture f;
+    const SaveGame s = makeSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["format"] = Json(18); // keeps the "tables" field
+    root["table_grid"] = emptyTableGrid();
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("format 19 or newer"),
+              std::string::npos)
+        << out.error().message;
+}
+
+TEST(SaveParseTest, RejectsTableEntryBlockMismatch) {
+    // The bidirectional cross-check: an entry whose position holds no
+    // table block, or a table block with no entry.
+    Fixture f;
+    {
+        SaveGame s = makeSave(f);
+        s.tables.push_back(SavedTable {BlockPos {5, 53, 5}, CraftingGrid {}});
+        auto j = serializeSave(s, f.items);
+        ASSERT_TRUE(j.ok());
+        auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+        EXPECT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("not a crafting_table block"),
+                  std::string::npos)
+            << out.error().message;
+    }
+    {
+        SaveGame s = makeTableSave(f);
+        s.tables.pop_back(); // the second block has no entry
+        auto j = serializeSave(s, f.items);
+        ASSERT_TRUE(j.ok());
+        auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+        EXPECT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("has no 'tables' entry"),
+                  std::string::npos)
+            << out.error().message;
+    }
+}
+
+TEST(SaveParseTest, RejectsDuplicateTableEntries) {
+    Fixture f;
+    SaveGame s = makeTableSave(f);
+    s.tables.push_back(SavedTable {s.tables[0].pos, CraftingGrid {}});
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    EXPECT_FALSE(out.ok());
+}
+
+TEST(SaveParseTest, RejectsBadTableSlots) {
+    Fixture f;
+    const SaveGame s = makeTableSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    // Rebuild the "tables" array with entry #0's slots replaced.
+    const auto withSlots = [&](Json slots) {
+        Json root = *j;
+        Json entries = Json::array();
+        for (std::size_t i = 0; i < root["tables"].size(); ++i) {
+            Json entry = withoutKey(root["tables"].at(i), "slots");
+            if (i == 0) {
+                entry["slots"] = slots;
+            }
+            entries.push_back(std::move(entry));
+        }
+        root["tables"] = std::move(entries);
+        return root;
+    };
+    // Wrong size (8 cells).
+    {
+        Json shortSlots = Json::array();
+        for (int i = 0; i < CraftingGrid::kSize - 1; ++i) {
+            Json e = Json::object();
+            e["item"] = Json(std::string(""));
+            e["count"] = Json(0);
+            shortSlots.push_back(std::move(e));
+        }
+        EXPECT_FALSE(parseSave(withSlots(shortSlots), f.items, f.blocks,
+                               f.effects, 42)
+                         .ok());
+    }
+    // Unknown item in a cell.
+    {
+        Json slots = *j->find("tables")->at(0).find("slots");
+        Json e = Json::object();
+        e["item"] = Json(std::string("nope"));
+        e["count"] = Json(1);
+        Json rebuilt = Json::array();
+        rebuilt.push_back(std::move(e));
+        for (std::size_t i = 1; i < slots.size(); ++i) {
+            rebuilt.push_back(slots.at(i));
+        }
+        EXPECT_FALSE(parseSave(withSlots(std::move(rebuilt)), f.items, f.blocks,
+                               f.effects, 42)
+                         .ok());
+    }
+    // Count above the tool's max stack (1).
+    {
+        Json slots = *j->find("tables")->at(0).find("slots");
+        Json e = Json::object();
+        e["item"] = Json(std::string("pick"));
+        e["count"] = Json(2);
+        Json rebuilt = Json::array();
+        rebuilt.push_back(std::move(e));
+        for (std::size_t i = 1; i < slots.size(); ++i) {
+            rebuilt.push_back(slots.at(i));
+        }
+        EXPECT_FALSE(parseSave(withSlots(std::move(rebuilt)), f.items, f.blocks,
+                               f.effects, 42)
+                         .ok());
+    }
+    // Empty item with a positive count.
+    {
+        Json slots = *j->find("tables")->at(0).find("slots");
+        Json e = Json::object();
+        e["item"] = Json(std::string(""));
+        e["count"] = Json(1);
+        Json rebuilt = Json::array();
+        rebuilt.push_back(std::move(e));
+        for (std::size_t i = 1; i < slots.size(); ++i) {
+            rebuilt.push_back(slots.at(i));
+        }
+        EXPECT_FALSE(parseSave(withSlots(std::move(rebuilt)), f.items, f.blocks,
+                               f.effects, 42)
+                         .ok());
+    }
+    // A "damage" key on a grid slot: the SURV-3 grid scope (the crafting
+    // grids do not carry durability).
+    {
+        Json slots = *j->find("tables")->at(0).find("slots");
+        Json e = Json::object();
+        e["item"] = Json(std::string("pick"));
+        e["count"] = Json(1);
+        e["damage"] = Json(1.0);
+        Json rebuilt = Json::array();
+        rebuilt.push_back(std::move(e));
+        for (std::size_t i = 1; i < slots.size(); ++i) {
+            rebuilt.push_back(slots.at(i));
+        }
+        EXPECT_FALSE(parseSave(withSlots(std::move(rebuilt)), f.items, f.blocks,
+                               f.effects, 42)
+                         .ok());
+    }
+    // An unknown field on the entry itself.
+    {
+        Json root = *j;
+        Json entry = root["tables"].at(0);
+        entry["extra"] = Json(1);
+        Json entries = Json::array();
+        entries.push_back(std::move(entry));
+        entries.push_back(root["tables"].at(1));
+        root["tables"] = std::move(entries);
+        auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+        EXPECT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("extra"), std::string::npos)
+            << out.error().message;
+    }
+}
+
+// -- CRAFT-1: the format-18 migration (sole attribution, Phase 44) ---------
+
+TEST(SaveParseTest, Format18To19MigrationSoleAttribution) {
+    // A format-18 file's ONE global table_grid, when non-empty, belonged
+    // to the world's (single) table — it is assigned to that block's
+    // entry (the Phase 44 sole-attribution precedent).
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.blockEdits.push_back({BlockPos {1, 53, 2}, "crafting_table"});
+    std::sort(s.blockEdits.begin(), s.blockEdits.end(),
+              [](const SavedBlockEdit& a, const SavedBlockEdit& b) {
+                  return a.pos < b.pos;
+              });
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = downgradeTablesToFormat18(
+        *j, legacyTableGrid({{0, {"dirt", 5}}, {8, {"stone", 64}}}));
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    ASSERT_EQ(out->tables.size(), 1u);
+    EXPECT_EQ(out->tables[0].pos, (BlockPos {1, 53, 2}));
+    EXPECT_EQ(out->tables[0].grid.at(0),
+              (ItemStack {f.items.idForName("dirt"), 5}));
+    EXPECT_EQ(out->tables[0].grid.at(8),
+              (ItemStack {f.items.idForName("stone"), 64}));
+    EXPECT_TRUE(out->tables[0].grid.at(4).empty());
+}
+
+TEST(SaveParseTest, Format18To19MigrationDiscardedWithSeveralTables) {
+    // With SEVERAL table blocks the owner of the global grid is
+    // unknowable — it is discarded (all grids load empty).
+    Fixture f;
+    SaveGame s = makeTableSave(f); // two table blocks
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = downgradeTablesToFormat18(*j,
+                                          legacyTableGrid({{0, {"dirt", 5}}}));
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    ASSERT_EQ(out->tables.size(), 2u);
+    EXPECT_TRUE(out->tables[0].grid.empty());
+    EXPECT_TRUE(out->tables[1].grid.empty());
+}
+
+TEST(SaveParseTest, Format18To19MigrationDiscardedWithNoTables) {
+    // With ZERO table blocks there is nowhere to put it — the grid is
+    // discarded (the entry list stays empty).
+    Fixture f;
+    const SaveGame s = makeSave(f); // no table blocks
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = downgradeTablesToFormat18(*j,
+                                          legacyTableGrid({{8, {"stone", 64}}}));
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_TRUE(out->tables.empty());
+}
+
+TEST(SaveParseTest, Format18To19MigrationEmptyLegacyGridLoadsEmpty) {
+    // An EMPTY legacy grid: nothing to attribute — the entry loads empty
+    // (the migration is a no-op on all-empty grids).
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.blockEdits.push_back({BlockPos {1, 53, 2}, "crafting_table"});
+    std::sort(s.blockEdits.begin(), s.blockEdits.end(),
+              [](const SavedBlockEdit& a, const SavedBlockEdit& b) {
+                  return a.pos < b.pos;
+              });
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = downgradeTablesToFormat18(*j, emptyTableGrid());
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    ASSERT_EQ(out->tables.size(), 1u);
+    EXPECT_TRUE(out->tables[0].grid.empty());
 }

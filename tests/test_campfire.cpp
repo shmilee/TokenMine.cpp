@@ -266,6 +266,20 @@ Json withoutKey(const Json& root, const std::string& key) {
     return out;
 }
 
+// CRAFT-1: the empty legacy "table_grid" array (9 slot entries) — a
+// pre-format-19 file carries it (required in format 3-18); a downgrade
+// of a current save restores it for the legacy parse.
+Json emptyTableGrid() {
+    Json arr = Json::array();
+    for (int i = 0; i < CraftingGrid::kSize; ++i) {
+        Json e = Json::object();
+        e["item"] = Json(std::string(""));
+        e["count"] = Json(0);
+        arr.push_back(std::move(e));
+    }
+    return arr;
+}
+
 TEST(CampfireSaveTest, FormatIsThirteenAndRoundTrips) {
     // Phase 75: the four-slot entry shape round-trips — occupied, cooking,
     // finished and empty slots alike; the extinguished twin carries its
@@ -287,8 +301,8 @@ TEST(CampfireSaveTest, FormatIsThirteenAndRoundTrips) {
     s.campfires.push_back({BlockPos {4, 53, 4}, unlit});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // SURV-3: writes are always format 18 (SURV-2 was format 17).
-    EXPECT_EQ(j->find("format")->asInt(), 18);
+    // CRAFT-1: writes are always format 19 (SURV-3 was format 18).
+    EXPECT_EQ(j->find("format")->asInt(), 19);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->campfires.size(), 3u);
@@ -315,6 +329,8 @@ TEST(CampfireSaveTest, FormatTwelveOldShapeMigratesToSlotZero) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(12);
+    root = withoutKey(root, "tables"); // CRAFT-1: format 12 predates the per-block table grids
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 12 still carried the global table grid
     root = withoutKey(root, "states"); // format 12 predates per-block state
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format 12 predates the player's armor
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: format 12 predates the player's oxygen
@@ -353,6 +369,8 @@ TEST(CampfireSaveTest, FormatTwelveEntryWithSlotsKeyRejected) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(12);
+    root = withoutKey(root, "tables"); // CRAFT-1: the "slots" lie is the one under test
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 12 still carried the global table grid
     root = withoutKey(root, "states"); // format 12 predates per-block state
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: the "slots" lie is the one under test
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: the "slots" lie is the one under test
@@ -404,6 +422,8 @@ TEST(CampfireSaveTest, FormatTenLoadsWithoutCampfires) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(10);
+    root = withoutKey(root, "tables"); // CRAFT-1: format 10 predates the per-block table grids
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 10 still carried the global table grid
     root = withoutKey(root, "campfires"); // format 10 predates the campfire
     root = withoutKey(root, "states"); // format 10 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 10 predates the absorption pool
@@ -425,6 +445,8 @@ TEST(CampfireSaveTest, FormatTenCampfireEditMigratesEmpty) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(10);
+    root = withoutKey(root, "tables"); // CRAFT-1: format 10 predates the per-block table grids
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 10 still carried the global table grid
     root = withoutKey(root, "campfires"); // format 10 predates the campfire
     root = withoutKey(root, "states"); // format 10 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 10 predates the absorption pool
@@ -443,6 +465,8 @@ TEST(CampfireSaveTest, RejectsCampfiresFieldInFormatTen) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(10); // keeps the "campfires" field
+    root = withoutKey(root, "tables"); // CRAFT-1: isolate the "campfires" rejection
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 10 still carried the global table grid
     root = withoutKey(root, "states"); // isolate the "campfires" rejection
     root["player"] = withoutKey(root["player"], "absorption"); // the rejection under test is "campfires"
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: the rejection under test is "campfires"

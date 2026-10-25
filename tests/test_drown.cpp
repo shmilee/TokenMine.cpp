@@ -97,6 +97,20 @@ Json withoutKey(const Json& root, const std::string& key) {
     return out;
 }
 
+// CRAFT-1: the empty legacy "table_grid" array (9 slot entries) — a
+// pre-format-19 file carries it (required in format 3-18); a downgrade
+// of a current save restores it for the legacy parse.
+Json emptyTableGrid() {
+    Json arr = Json::array();
+    for (int i = 0; i < CraftingGrid::kSize; ++i) {
+        Json e = Json::object();
+        e["item"] = Json(std::string(""));
+        e["count"] = Json(0);
+        arr.push_back(std::move(e));
+    }
+    return arr;
+}
+
 // A complete, minimal save (empty inventory / no world edits): the
 // format-17 parse requires every section, serializeSave writes them all.
 SaveGame makeSave() {
@@ -395,6 +409,8 @@ TEST(DrownSaveTest, Format16RejectsTheOxygenKey) {
     {
         Json root = *j;
         root["format"] = Json(16);
+        root = withoutKey(root, "tables"); // CRAFT-1: format 16 predates the per-block table grids
+        root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 16 still carried the global table grid
         root["player"] = withoutKey(root["player"], "oxygen");
         auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
         ASSERT_TRUE(out.ok()) << out.error().message;
@@ -413,6 +429,8 @@ TEST(DrownSaveTest, Format15MigratesFullAir) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["format"] = Json(15);
+    root = withoutKey(root, "tables"); // CRAFT-1: format 15 predates the per-block table grids
+    root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 15 still carried the global table grid
     root["player"] = withoutKey(root["player"], "oxygen");
     root["player"] = withoutKey(root["player"], "armor");
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);

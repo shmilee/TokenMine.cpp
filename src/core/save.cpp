@@ -545,6 +545,32 @@ Result<void> applyWorldEdits(const SaveGame& save, const BlockRegistry& blocks,
 
 // -- serialization --------------------------------------------------------------
 
+// One {item, count} slot entry of a per-block state (the furnace's
+// input/fuel/output; CRAFT-1: the crafting-table grid cells reuse the
+// same shape). A free function rather than an in-function lambda: the
+// Result<Json> value construction here trips GCC's -O3
+// maybe-uninitialized false positive when inlined into serializeSave
+// (the variant move ctor; the code is trivially initialized).
+static Result<Json> serializeSlotEntry(const ItemStack& s,
+                                       const ItemRegistry& items,
+                                       const char* what) {
+    Json e = Json::object();
+    if (s.empty()) {
+        e["item"] = Json(std::string(""));
+        e["count"] = Json(0);
+    } else {
+        const Item* item = items.find(s.item);
+        if (item == nullptr) {
+            return MC_FAIL(std::string(what) +
+                           " holds an unregistered item id " +
+                           std::to_string(s.item.value));
+        }
+        e["item"] = Json(item->name);
+        e["count"] = Json(s.count);
+    }
+    return e;
+}
+
 Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     Json root = Json::object();
     root["format"] = Json(kSaveFormat);
@@ -687,15 +713,12 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         }
         return arr;
     };
+    // The E panel's grid (format 3, the table grid's twin — the TABLE
+    // grid is per-block since CRAFT-1, the "tables" array below).
     {
         auto invGrid = serializeGrid(save.invGrid);
         MC_TRY(invGrid);
         root["inv_grid"] = std::move(*invGrid);
-    }
-    {
-        auto tableGrid = serializeGrid(save.tableGrid);
-        MC_TRY(tableGrid);
-        root["table_grid"] = std::move(*tableGrid);
     }
 
     // Format 7: the per-block furnace states (Phase 44): one entry per
@@ -704,24 +727,6 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     // integer 1/60-substep counters. Always written (possibly empty — a
     // world without furnace blocks).
     {
-        auto slotJson = [&](const ItemStack& s, const char* what)
-            -> Result<Json> {
-            Json e = Json::object();
-            if (s.empty()) {
-                e["item"] = Json(std::string(""));
-                e["count"] = Json(0);
-            } else {
-                const Item* item = items.find(s.item);
-                if (item == nullptr) {
-                    return MC_FAIL(std::string(what) +
-                                   " holds an unregistered item id " +
-                                   std::to_string(s.item.value));
-                }
-                e["item"] = Json(item->name);
-                e["count"] = Json(s.count);
-            }
-            return e;
-        };
         Json furnaces = Json::array();
         for (const SavedFurnace& sf : save.furnaces) {
             Json fz = Json::object();
@@ -730,13 +735,16 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
             pos.push_back(Json(sf.pos.y));
             pos.push_back(Json(sf.pos.z));
             fz["pos"] = pos;
-            auto inSlot = slotJson(sf.state.input, "the furnace input");
+            auto inSlot = serializeSlotEntry(sf.state.input, items,
+                                             "the furnace input");
             MC_TRY(inSlot);
             fz["input"] = std::move(*inSlot);
-            auto fuelSlot = slotJson(sf.state.fuel, "the furnace fuel");
+            auto fuelSlot = serializeSlotEntry(sf.state.fuel, items,
+                                               "the furnace fuel");
             MC_TRY(fuelSlot);
             fz["fuel"] = std::move(*fuelSlot);
-            auto outSlot = slotJson(sf.state.output, "the furnace output");
+            auto outSlot = serializeSlotEntry(sf.state.output, items,
+                                              "the furnace output");
             MC_TRY(outSlot);
             fz["output"] = std::move(*outSlot);
             fz["progress_substeps"] = Json(sf.state.progressSubsteps);
@@ -806,6 +814,36 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
             campfires.push_back(std::move(ce));
         }
         root["campfires"] = std::move(campfires);
+    }
+
+    // The per-block crafting-table grids (format 19; CRAFT-1): one entry
+    // per crafting_table block (position-sorted — the game's map order),
+    // each an object with the block position + "slots": EXACTLY 9 grid
+    // slot entries (the format-3 grid discipline — the slots carry no
+    // damage, the SURV-3 grid scope). Always written (possibly empty — a
+    // world without table blocks).
+    {
+        Json tables = Json::array();
+        for (const SavedTable& st : save.tables) {
+            Json te = Json::object();
+            Json pos = Json::array();
+            pos.push_back(Json(st.pos.x));
+            pos.push_back(Json(st.pos.y));
+            pos.push_back(Json(st.pos.z));
+            te["pos"] = pos;
+            Json slotsArr = Json::array();
+            for (int c = 0; c < CraftingGrid::kSize; ++c) {
+                auto cell = serializeSlotEntry(
+                    st.grid.at(c), items,
+                    ("save table at " + posStr(st.pos) + " cell " +
+                     std::to_string(c)).c_str());
+                MC_TRY(cell);
+                slotsArr.push_back(std::move(*cell));
+            }
+            te["slots"] = slotsArr;
+            tables.push_back(std::move(te));
+        }
+        root["tables"] = std::move(tables);
     }
 
     // Always written (possibly empty — a world without stateful blocks).
@@ -889,12 +927,16 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // (format 14) and "states" (format 15, ENT-2's generalization): both
     // are known, the per-format key discipline below enforces which one a
     // file may carry ("stairs" is restricted to 14, "states" to 15).
+    // Likewise "table_grid" (format 3-18) and "tables" (format 19,
+    // CRAFT-1's generalization): both are known, the per-format key
+    // discipline below enforces which one a file may carry ("table_grid"
+    // is restricted to 18 and older, "tables" to 19).
     const std::set<std::string> topLevel {"format", "seed", "time", "player",
                                           "inventory", "inv_grid",
                                           "table_grid", "furnace",
                                           "furnaces", "fires", "campfires",
-                                          "stairs", "states", "entities",
-                                          "blocks", "fluids"};
+                                          "stairs", "states", "tables",
+                                          "entities", "blocks", "fluids"};
     MC_TRY(rejectUnknownFields(def, topLevel, "save file"));
 
     const Json* fmt = def.find("format");
@@ -1243,25 +1285,39 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         MC_TRY(r);
     }
 
-    // -- crafting grids (format 3; Phase 17) --------------------------------------
+    // -- crafting grids (format 3; Phase 17; CRAFT-1) -------------------
     // Absent in format 1/2 files: the grids load empty (the old saves
     // predate them). Required and strictly validated in format 3.
+    // CRAFT-1 (format 19): the E panel's grid ("inv_grid") is the only
+    // global grid left — the crafting TABLE's grid is per-block now
+    // ("tables", parsed below). "table_grid" is restricted to format 18
+    // and older (it is the format-18 migration source: the ONE global
+    // grid is attributed to the world's sole table block, or discarded —
+    // the Phase 44 precedent).
     const int fmtVersion = def.find("format")->asInt();
+    std::vector<ItemStack> legacyTableGrid; // format 3-18; parsed here,
+                                            // migrated into save.tables
     if (fmtVersion >= 3) {
         const Json* invGrid = def.find("inv_grid");
         if (invGrid == nullptr) {
             return MC_FAIL("save format 3 requires an 'inv_grid' array");
         }
         MC_TRY(parseGrid(*invGrid, items, "inv_grid", save.invGrid));
-        const Json* tableGrid = def.find("table_grid");
-        if (tableGrid == nullptr) {
-            return MC_FAIL("save format 3 requires a 'table_grid' array");
-        }
-        MC_TRY(parseGrid(*tableGrid, items, "table_grid", save.tableGrid));
     } else if (def.find("inv_grid") != nullptr ||
                def.find("table_grid") != nullptr) {
         return MC_FAIL("save grids ('inv_grid'/'table_grid') require "
                        "format 3 (got " + std::to_string(fmtVersion) + ")");
+    }
+    if (fmtVersion >= 3 && fmtVersion <= 18) {
+        const Json* tableGrid = def.find("table_grid");
+        if (tableGrid == nullptr) {
+            return MC_FAIL("save format 3 requires a 'table_grid' array");
+        }
+        MC_TRY(parseGrid(*tableGrid, items, "table_grid", legacyTableGrid));
+    } else if (fmtVersion >= 19 && def.find("table_grid") != nullptr) {
+        return MC_FAIL("save 'table_grid' is restricted to format 18 or "
+                       "older (a format-19 file carries the per-block "
+                       "'tables' array instead)");
     }
 
     // -- furnace states (format 6/7) -----------------------------------------
@@ -2158,6 +2214,130 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
             return MC_FAIL("save 'stairs' requires format 14 or newer (got " +
                            std::to_string(fmtVersion) + ")");
         }
+    }
+
+    // -- per-block crafting-table grids (format 19; CRAFT-1) -------------
+    // A "table block" = a block whose `interact` property names the
+    // crafting-table GUI (data-driven — no block-id switch; the furnace's
+    // twin). World generation never emits tables, so the block edits are
+    // the complete source of truth for which cells hold one.
+    auto isTableBlock = [&](const std::string& name) {
+        const BlockID id = blocks.idForName(name);
+        return id.valid() &&
+               blocks.at(id).properties.interact == kInteractCraftingTable;
+    };
+    std::set<BlockPos> tableCells;
+    for (const SavedBlockEdit& e : save.blockEdits) {
+        if (isTableBlock(e.blockName)) {
+            tableCells.insert(e.pos);
+        }
+    }
+    const Json* tablesArr = def.find("tables");
+    if (fmtVersion >= 19) {
+        // Format 19: per-block grids, cross-checked against the world's
+        // table blocks in BOTH directions (an entry without a block or a
+        // block without an entry would desync the game's invariant: every
+        // table block owns a grid).
+        if (tablesArr == nullptr || !tablesArr->isArray()) {
+            return MC_FAIL("save format 19 requires a 'tables' array");
+        }
+        std::set<BlockPos> entryPos;
+        for (std::size_t i = 0; i < tablesArr->size(); ++i) {
+            const Json& e = tablesArr->at(i);
+            const std::string what =
+                "save 'tables' entry #" + std::to_string(i);
+            if (!e.isObject()) {
+                return MC_FAIL(what + " must be an object");
+            }
+            const std::set<std::string> eFields {"pos", "slots"};
+            MC_TRY(rejectUnknownFields(e, eFields, what));
+            const Json* pos = e.find("pos");
+            if (pos == nullptr || !pos->isArray() || pos->size() != 3) {
+                return MC_FAIL(what + " requires a 'pos' [x, y, z] array");
+            }
+            double x, y, z;
+            if (!isInt(pos->at(0), &x) || !isInt(pos->at(1), &y) ||
+                !isInt(pos->at(2), &z)) {
+                return MC_FAIL(what + " 'pos' entries must be integers");
+            }
+            const int yi = static_cast<int>(y);
+            if (!isWorldYValid(yi)) {
+                return MC_FAIL(what + " has y=" + std::to_string(yi) +
+                               " outside the world height [0, " +
+                               std::to_string(kWorldHeight) + ")");
+            }
+            const BlockPos bpos {static_cast<int>(x), yi,
+                                 static_cast<int>(z)};
+            if (entryPos.count(bpos) != 0) {
+                return MC_FAIL(what + " duplicates the table position " +
+                               posStr(bpos));
+            }
+            entryPos.insert(bpos);
+            const Json* slotsArr = e.find("slots");
+            if (slotsArr == nullptr || !slotsArr->isArray() ||
+                slotsArr->size() !=
+                    static_cast<std::size_t>(CraftingGrid::kSize)) {
+                return MC_FAIL(what + " requires a 'slots' array of "
+                               "exactly " + std::to_string(CraftingGrid::kSize) +
+                               " slot entries");
+            }
+            std::vector<ItemStack> slots;
+            MC_TRY(parseGrid(*slotsArr, items, what + " 'slots'", slots));
+            CraftingGrid grid;
+            for (int c = 0; c < CraftingGrid::kSize; ++c) {
+                grid.setSlot(c, slots[static_cast<std::size_t>(c)]);
+            }
+            save.tables.push_back(SavedTable {bpos, std::move(grid)});
+        }
+        if (entryPos != tableCells) {
+            for (const BlockPos& p : entryPos) {
+                if (tableCells.count(p) == 0) {
+                    return MC_FAIL("save 'tables' has an entry at " +
+                                   posStr(p) +
+                                   " which is not a crafting_table block "
+                                   "in the world's block edits");
+                }
+            }
+            for (const BlockPos& p : tableCells) {
+                if (entryPos.count(p) == 0) {
+                    return MC_FAIL("the crafting_table block at " +
+                                   posStr(p) +
+                                   " has no 'tables' entry (every table "
+                                   "block owns a grid, empty included)");
+                }
+            }
+            return MC_FAIL("save 'tables' does not match the world's "
+                           "crafting_table blocks");
+        }
+    } else if (tablesArr != nullptr) {
+        return MC_FAIL("save 'tables' requires format 19 or newer (got " +
+                       std::to_string(fmtVersion) + ")");
+    }
+    // The game's invariant after ANY load: every crafting_table block in
+    // the world owns a grid entry. Format 19 guarantees it (the
+    // cross-check); format 18 and older carry the ONE global
+    // "table_grid" — when it is non-empty it belonged to the world's
+    // (single) table: with exactly one table block it is ASSIGNED there;
+    // with zero or several blocks the owner is unknowable, so the grid is
+    // DISCARDED (all grids load empty — the Phase 44 sole-attribution
+    // precedent). Formats 1-2 carried no grid at all (the entries stay
+    // empty).
+    if (fmtVersion < 19) {
+        const bool nonEmptyLegacy = std::any_of(
+            legacyTableGrid.begin(), legacyTableGrid.end(),
+            [](const ItemStack& s) { return !s.empty(); });
+        const bool sole = tableCells.size() == 1;
+        for (const BlockPos& p : tableCells) {
+            CraftingGrid grid;
+            if (nonEmptyLegacy && sole) {
+                for (int c = 0; c < CraftingGrid::kSize; ++c) {
+                    grid.setSlot(
+                        c, legacyTableGrid[static_cast<std::size_t>(c)]);
+                }
+            }
+            save.tables.push_back(SavedTable {p, std::move(grid)});
+        }
+        // tableCells is a set: already position-sorted.
     }
     // The game's invariant after ANY load: every stateful block in the
     // world owns a per-instance state entry. Format 15 guarantees it (the

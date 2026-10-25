@@ -24,10 +24,13 @@
 //     "slots": [ { "item": "stone", "count": 64 }, { "item": "", "count": 0 } ]
 //   },                                        // exactly Inventory::kTotalSize
 //   "inv_grid": [ ... 9 entries ... ],        // format 3+: the inventory
-//   "table_grid": [ ... 9 entries ... ],      // panel's grid + the table's
+//   "table_grid": [ ... 9 entries ... ],      // panel's grid; format 18 and
+//   "tables": [                               // older ONLY — format 19+
+//     { "pos": [x, y, z],                      // carries the per-block "tables"
+//       "slots": [ ... 9 entries ... ] } ],   // array instead (CRAFT-1)
 //   "entities": [ { "type": "item", "item": "dirt", "count": 1,
 //                   "pos": [0.5, 52.5, 0.5], "age": 12.5,
-//                   "pickup_delay": 0.25 } ], // grid (same slot entries)
+//                   "pickup_delay": 0.25 } ],
 //   "blocks": [ [0, 53, 0, "air"] ],          // cell edits vs generation
 //   "fluids": [ [4, 50, 4, 5, "water"] ]      // (name "air" = block
 // }                                            // removed; format 9: the
@@ -72,6 +75,7 @@
 #include "core/math/vec3.hpp"
 #include "core/status_effect.hpp"
 #include "item/campfire.hpp"
+#include "item/crafting_grid.hpp"
 #include "item/furnace.hpp"
 #include "item/inventory.hpp"
 #include "world/chunk_streaming.hpp"
@@ -234,7 +238,27 @@ namespace mc {
 //      migrates into this IDENTITY (no damage key = 0 — the system did
 //      not exist, every carried item was full). Writes are always
 //      format 18.
-inline constexpr int kSaveFormat = 18;
+//  19: the per-block crafting-table states (CRAFT-1) — "tables": an
+//      array of { "pos": [x, y, z], "slots": [ 9 × { item, count } ] }
+//      (position-sorted), one entry per CRAFTING_TABLE BLOCK in the
+//      world (an empty grid is an entry of 9 empty slots). The slots
+//      follow the crafting-grid discipline (the format-3 slot shape —
+//      item name + count ≤ maxStack; no "damage" key, the SURV-3 grid
+//      scope). The bidirectional cross-check runs against the world's
+//      crafting_table block edits (every table block owns a grid, every
+//      grid is a table block — the furnaces-key discipline, the Phase
+//      44/71 twin). A format-19 file REQUIRES the "tables" key (an
+//      empty array is valid) and rejects a "table_grid" key (restricted
+//      to format 18 and older — replaced by the per-block array); a
+//      format-18 and older file carrying "tables" is a version lie. A
+//      format-18 load MIGRATES its ONE global "table_grid": non-empty
+//      and the world holds EXACTLY ONE crafting_table block -> assigned
+//      to that block's entry; zero or several blocks -> the owner is
+//      unknowable, the grid is DISCARDED (all entries load empty — the
+//      Phase 44 sole-attribution precedent). The "inv_grid" (the E
+//      panel's own 2x2) is untouched by the change. Writes are always
+//      format 19.
+inline constexpr int kSaveFormat = 19;
 inline constexpr int kSaveFormatMin = 1;
 
 // Phase 40: the furnace save-field bounds — the max smelt/fuel times the
@@ -335,6 +359,17 @@ struct SavedCampfire {
     CampfireCookState state;
 };
 
+// One crafting-table block's container (format 19; CRAFT-1). The game
+// keeps an entry for EVERY crafting_table block in the world (empty
+// grids included) — the save cross-checks the entries against the block
+// edits in both directions (the furnaces-key discipline, the Phase
+// 44/71 twin). The state IS the grid (a table has no tick of its own —
+// unlike the furnace/campfire counters there is nothing else to carry).
+struct SavedTable {
+    BlockPos pos;
+    CraftingGrid grid;
+};
+
 // One stateful block's per-instance state (format 15; Phase 94 stair
 // facing, generalized in ENT-2) — the project's first per-block STATE (a
 // breakthrough of the "no per-instance state" philosophy). A "stateful"
@@ -402,11 +437,14 @@ struct SaveGame {
     float playerSaturation = -1.0f;
     int selectedSlot = 0;
     std::vector<ItemStack> slots; // exactly Inventory::kTotalSize
-    // The crafting grids (format 3; Phase 17): the inventory panel's grid
-    // and the crafting table's grid, 9 cells each (CraftingGrid::kSize).
-    // Empty for format 1/2 saves (the game leaves the grids empty).
+    // The crafting grids (format 3; Phase 17): the E PANEL's own grid,
+    // 9 cells (CraftingGrid::kSize; the 2x2 uses the top-left 4). Empty
+    // for format 1/2 saves (the game leaves the grid empty). CRAFT-1
+    // (format 19): the crafting TABLE's grid is no longer a global array
+    // — it is per-block (one grid per crafting_table entry in `tables`);
+    // a format-18 and older load migrates its legacy "table_grid" into
+    // that array at parse time (sole attribution, save.cpp).
     std::vector<ItemStack> invGrid;
-    std::vector<ItemStack> tableGrid;
     // The per-block furnace states (format 7; Phase 44): one entry per
     // furnace block in the world (position-sorted; the game's map order).
     // Empty when the world holds no furnace blocks; a format-6 load is
@@ -430,6 +468,12 @@ struct SaveGame {
     // in value-preserving, a format-13 load into this empty (the
     // per-instance state did not exist).
     std::vector<SavedState> states;
+    // The per-block crafting-table grids (format 19; CRAFT-1): one entry
+    // per crafting_table block in the world (position-sorted; the
+    // game's map order), empty grids included. Empty when the world
+    // holds no table blocks; a format-18 load migrates into this (sole
+    // attribution of the legacy global grid — see kSaveFormat).
+    std::vector<SavedTable> tables;
     // The player's active status effects (format 8; Phase 46), name-
     // sorted. Empty for format 1-7 loads (the effects did not exist).
     std::vector<SavedEffect> playerEffects;

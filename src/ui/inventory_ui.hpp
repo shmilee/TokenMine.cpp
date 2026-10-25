@@ -188,16 +188,25 @@ private:
     ItemStack m_carry;
 };
 
-// The pick-and-place + craft state machine over one inventory and one
+// The pick-and-place + craft state machine over one inventory and ONE
 // crafting grid (see the file header for the click semantics). The
 // caller routes clicks through the layout (slot index, grid slot, output
-// hit) so the layout stays a pure function.
+// hit) so the layout stays a pure function. CRAFT-1: the grid is
+// BINDABLE (the FurnaceUI::bind pattern) — the E panel's instance is
+// bound to the player's own grid for its whole life; the table panel's
+// instance is re-bound to the clicked block's per-block grid on every
+// open (the game owns the per-block states, the panel renders the bound
+// one — zero layout/visual change, the data source only).
 class InventoryUI {
 public:
-    InventoryUI(Inventory& inventory, CraftingGrid& grid,
-                const ItemRegistry& items, const RecipeRegistry& recipes)
-        : m_inv(inventory), m_grid(grid), m_items(items),
-          m_recipes(recipes) {}
+    InventoryUI(Inventory& inventory, const ItemRegistry& items,
+                const RecipeRegistry& recipes)
+        : m_inv(inventory), m_items(items), m_recipes(recipes) {}
+
+    // Bind the crafting grid this panel operates on. The bound grid is
+    // stable for the life of the panel (block interaction is paused while
+    // a panel is open). Must be called before any click/match/grid() use.
+    void bind(CraftingGrid& grid) { m_grid = &grid; }
 
     // slot: 0..26 or -1; gridSlot: 0..8 or -1; onOutput: the output slot
     // was hit. At most one of the three is "active" (the layout hit test
@@ -209,13 +218,15 @@ public:
     // The live match for the grid (shaped first, then shapeless — see
     // crafting_grid.hpp). Recomputed on every call (cheap: a handful of
     // recipes over 9 cells); the output slot renders from it.
-    GridMatch match() const { return matchGridRecipe(m_grid, m_recipes); }
+    GridMatch match() const {
+        return matchGridRecipe(*m_grid, m_recipes);
+    }
 
     const ItemStack& carry() const { return m_carry; }
     bool carrying() const { return !m_carry.empty(); }
     // The panel's grid (the game renders its cells + saves it).
-    const CraftingGrid& grid() const { return m_grid; }
-    CraftingGrid& grid() { return m_grid; }
+    const CraftingGrid& grid() const { return *m_grid; }
+    CraftingGrid& grid() { return *m_grid; }
 
 private:
     // The shared pick-and-place / move-one rules, over one cell.
@@ -225,7 +236,9 @@ private:
     bool clickOutput(bool rightButton);
 
     Inventory& m_inv;
-    CraftingGrid& m_grid;
+    // The bound grid (see bind). Non-null once bound (the game binds the
+    // E panel in its constructor and the table panel on every open).
+    CraftingGrid* m_grid = nullptr;
     const ItemRegistry& m_items;
     const RecipeRegistry& m_recipes;
     ItemStack m_carry;

@@ -33,6 +33,8 @@ struct UiFixture {
     CraftingGrid grid;
     RecipeRegistry recipes;
     // Holds references into the four above (declared after all of them).
+    // CRAFT-1: the grid is bound in the constructor body (the E panel's
+    // pattern — the table panel's UI is re-bound per block instead).
     InventoryUI ui;
     ItemID dirt;
     ItemID stone;
@@ -41,7 +43,8 @@ struct UiFixture {
     ItemID stick;
     ItemID table; // the shaped 2x2-planks output
 
-    UiFixture() : ui(inv, grid, items, recipes) {
+    UiFixture() : ui(inv, items, recipes) {
+        ui.bind(grid);
         auto r = items.registerItem(parseJson(
             R"({"id":"dirt","type":"material"})"));
         if (!r.ok()) {
@@ -510,4 +513,56 @@ TEST(InventoryUiTest, UnmatchedGridCraftsNothing) {
     EXPECT_FALSE(f.ui.leftClick(-1, -1, true));
     EXPECT_EQ(f.ui.grid().at(0), (ItemStack {f.planks, 1}));
     EXPECT_FALSE(f.ui.carrying());
+}
+
+// -- CRAFT-1: the bindable grid (per-block table separation) ---------------
+// The table panel's InventoryUI is re-bound to the clicked block's
+// per-block grid on every open (the game does the binding — the UI just
+// operates on the bound one). These tests pin the isolation: a re-bind
+// leaves the previous grid intact and the new grid empty.
+
+TEST(InventoryUiBindTest, RebindSeparatesTheGrids) {
+    UiFixture f;
+    CraftingGrid other; // the second table block's grid
+    // Fill the fixture grid through the bound UI (grid A).
+    f.inv.setSlot(0, ItemStack {f.dirt, 2});
+    f.ui.leftClick(0, -1, false);  // carry the stack
+    f.ui.leftClick(-1, 2, false);  // into A cell 2
+    ASSERT_EQ(f.grid.at(2), (ItemStack {f.dirt, 2}));
+    // Re-bind to grid B (the other table block).
+    f.ui.bind(other);
+    ASSERT_EQ(&f.ui.grid(), static_cast<const CraftingGrid*>(&other)); // the UI now exposes B
+    EXPECT_TRUE(other.at(2).empty());   // B started empty
+    EXPECT_EQ(f.grid.at(2), (ItemStack {f.dirt, 2})); // A kept its stack
+    // An operation on B leaves A untouched.
+    f.inv.setSlot(1, ItemStack {f.stone, 1});
+    f.ui.leftClick(1, -1, false);  // carry the stone
+    f.ui.leftClick(-1, 0, false);  // into B cell 0
+    EXPECT_EQ(other.at(0), (ItemStack {f.stone, 1}));
+    EXPECT_TRUE(f.grid.at(0).empty());
+    EXPECT_EQ(f.grid.at(2), (ItemStack {f.dirt, 2}));
+}
+
+TEST(InventoryUiBindTest, CraftConsumesOnlyTheBoundGrid) {
+    UiFixture f;
+    CraftingGrid other;
+    // A: the full 2x2 planks (the shaped table recipe matches).
+    f.grid.setSlot(0, (ItemStack {f.planks, 1}));
+    f.grid.setSlot(1, (ItemStack {f.planks, 1}));
+    f.grid.setSlot(3, (ItemStack {f.planks, 1}));
+    f.grid.setSlot(4, (ItemStack {f.planks, 1}));
+    // Re-bind to the EMPTY grid B and craft: the output is empty (B
+    // matches nothing) and A is untouched.
+    f.ui.bind(other);
+    EXPECT_FALSE(f.ui.match().matched());
+    EXPECT_FALSE(f.ui.leftClick(-1, -1, true));
+    EXPECT_TRUE(other.empty());
+    EXPECT_EQ(f.grid.at(0), (ItemStack {f.planks, 1}));
+    EXPECT_EQ(f.grid.at(4), (ItemStack {f.planks, 1}));
+    // Bind A back: the same craft now consumes A's cells.
+    f.ui.bind(f.grid);
+    ASSERT_TRUE(f.ui.match().matched());
+    ASSERT_TRUE(f.ui.leftClick(-1, -1, true));
+    EXPECT_TRUE(f.grid.empty());
+    EXPECT_EQ(f.ui.carry(), (ItemStack {f.table, 1}));
 }
