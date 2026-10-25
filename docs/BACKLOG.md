@@ -192,8 +192,9 @@
   **S1 PASS = 第 102 次结构性免疫**（fresh 60f ×2 RAW + vs base18 字节
   一致）+ S2 探针 PASS（skeleton-only 场景 420f：effects 含 wither
   remaining 4.2 + hp 8 存活 = 接线全链实证；PITS 255-258 场景四坑）+
-  S2 截图对/S3 毒杀 cow/S4 zombie 免疫 = 补跑清单（行为层 test_mob 已
-  证）。性能 A/B v0.18.0（发布前）：fall 900f 三窗 fluidCells 逐位一致（同世界）
+  S2 截图对**补跑收 PASS**（×2 RAW 双侧一致 + 存档断言 wither/hp 9 vs
+  []/16 互斥；0 px A/B = 世界逐位一致，心行 locked 门控无输入不绘制）；
+  S3 毒杀 cow/S4 zombie 免疫 = 输入跑补跑清单（行为层 test_mob 已证）。性能 A/B v0.18.0（发布前）：fall 900f 三窗 fluidCells 逐位一致（同世界）
   + 全指标同档 + skel 场景 1200f ents 段双侧同档（new 更低 = 玩家被
   wither 更早死战斗活动减少，非代码差）= **成本可忽略无回归**（fast-exit
   实证）。**SURV 行 5/5 全清，release ③ = v0.19.0**。

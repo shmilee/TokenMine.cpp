@@ -80,9 +80,12 @@ min_health_mob 1 地板恒 1 活 / heal no-op / count==0 fast-exit + dead
   remaining 4.2 + hp 8 存活**；接线实证 = skeleton 箭 → applyPlayer
   Effect 全链（探针迭代史 = PITS 255-258：场景 time 存档权威 / 保护圈
   锚世界出生点 / scratch 资产漏同步 / real-dt 时标放大）
-- **S2 截图对 = 补跑中**（门内 8 次黑相未得窗；gate102_retry.zsh
-  持久化累积环运行中：预探针门控 + 单拍成功保留 + ×2 RAW + 字段断言
-  门控 + 心带区 diff）
+- **S2 截图对 PASS（补跑收 10-25 20:26，gate102_retry att 21）**：
+  old_a/old_b/new_a/new_b **×2 RAW 双侧字节一致** + **存档断言 PASS**
+  （new: effects=['wither'] hp=9 / old: effects=[] hp=16 = wither 存在 +
+  hp 差互斥）。A/B 截图 0 px diff = **世界逐像素一致**（两版同 worldgen
+  同 seed；hp 差异不入截图 = 心行 `locked && !panelOpen` 门控
+  game.cpp:6458 无输入不绘制——判别权威 = 存档，E2E 协议同款）
 - S3/S4（poison_bow 毒杀 cow / zombie 不死族免疫）= 输入跑补跑清单
   （行为层 = test_mob 载体单测已证：poison 12 tick 毒杀 cow 边界 /
   undead 门 + wither 伤不死族）
