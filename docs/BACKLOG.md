@@ -92,9 +92,10 @@
   S2 判别场景（玩家 (334,16) 框 (340,12)+(340,16) 两浮空树，old 有树/
   new 无树 A/B）+ S1 基线（spawn clear 区洞穴永不挖 = 构造免疫）+ S3
   套件复跑 PASS（1494 gate 内）。门 101 实得：**S1 PASS = 第 101 次结构
-  性免疫**（fresh 60f ×2 RAW + vs base18 字节一致，无需重锚）；S2 截图对
-  = 黑相 8 次未得窗补跑清单（机制级判别 = S3 4 新测 + shipped 扫描已立，
-  gate101_retry.zsh 高频环备妥；PITS 254 场景 cp 坑已修）。shipped 实证：
+  性免疫**（fresh 60f ×2 RAW + vs base18 字节一致，无需重锚）；S2 截图对 **PASS（补跑收 18:38，gate101_retry att 8）** =
+  A/B diff 182,469 world px 质心 (801,369) 两树投影区，颜色定案 OLD 侧
+  叶绿+干褐（树体）/ NEW 侧 sky 71% + 背景树（遮挡移除），HUD 0 px
+  （PITS 254 场景 cp 坑已修；高频环 8 s/探 + frozen binary 免构建互撞）。shipped 实证：
   346 树列 14 列（4.05%）被跳。性能（插桩 A/B v0.17.0，发布前）：fall_armor 900f 三窗
   **fluidCells 逐位一致**（同世界）+ upd/render/swap/flush/fluid/player/ents/stream
   全指标同档 = **代码成本 ≈ 0**（timing-clean 接受）。GEN 行 5/6。
