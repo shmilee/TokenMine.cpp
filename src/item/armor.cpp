@@ -20,8 +20,11 @@ ArmorUseAction armorRightClickUse(Player& player, Inventory& inventory,
         if (worn.empty()) {
             // Equip: the piece goes on (its count is 1 by the armor
             // items' max_stack — the inventory enforces the data cap),
-            // the held slot empties.
-            player.setArmorSlot(slot, held, item.armorPoints);
+            // the held slot empties. SURV-3: the piece's accumulated
+            // damage + its data durability move with it (the stack copy
+            // carries the damage, the setter takes the max).
+            player.setArmorSlot(slot, held, item.armorPoints,
+                                item.durability);
             inventory.setSlot(selectedSlot, ItemStack {});
             return ArmorUseAction::Equip;
         }
@@ -29,7 +32,7 @@ ArmorUseAction armorRightClickUse(Player& player, Inventory& inventory,
         // hand. The equipped stack is COPIED before the slot write — a
         // reference would dangle across the clear (PITS 247).
         const ItemStack wornCopy = worn;
-        player.setArmorSlot(slot, held, item.armorPoints);
+        player.setArmorSlot(slot, held, item.armorPoints, item.durability);
         inventory.setSlot(selectedSlot, wornCopy);
         return ArmorUseAction::Swap;
     }

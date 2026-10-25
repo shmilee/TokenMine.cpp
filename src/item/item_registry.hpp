@@ -159,6 +159,15 @@ private:
     // pattern; the checks run after all the other channels parsed, the
     // parse flow order).
     static Result<void> parseArmor(const Json& def, bool isTool, Item& out);
+    // Parse the optional 'durability' field (SURV-3) into `out`: a strict
+    // number > 0 (the accumulated damage at which the item breaks). The
+    // ALLOWED set = the "has a use action" items — a tool (mining / melee
+    // wear), an armor piece (damage-reduction wear), an ammo launcher
+    // (shot wear) or an igniter (ignite wear); any other item carrying the
+    // field is rejected and named (the ammo discipline: a no-op field is
+    // a typo). Runs LAST in the parse flow (the allowed-set check needs
+    // the armor / ammo / igniter fields parsed).
+    static Result<void> parseDurability(const Json& def, Item& out);
 
     std::deque<Item> m_items; // deque: stable references on push
     std::unordered_map<std::string, int> m_names;

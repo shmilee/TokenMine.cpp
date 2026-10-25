@@ -8,6 +8,7 @@
 #include "block/block.hpp"
 #include "block/block_registry.hpp"
 #include "core/math/vec2.hpp"
+#include "item/durability.hpp"
 
 namespace mc {
 
@@ -460,14 +461,17 @@ ItemStack& Player::armorSlot(int slot) {
     return m_armor[static_cast<std::size_t>(slot)];
 }
 
-void Player::setArmorSlot(int slot, const ItemStack& piece, int points) {
+void Player::setArmorSlot(int slot, const ItemStack& piece, int points,
+                          float durability) {
     assert(slot >= 0 && slot < kArmorSlotCount);
     m_armor[static_cast<std::size_t>(slot)] = piece;
-    // The two arrays stay in sync through this single setter (the empty
+    // The three arrays stay in sync through this single setter (the empty
     // piece forces 0 — a corrupted caller cannot leave a piece without
-    // its points or points without a piece).
+    // its points / durability, or points without a piece).
     m_armorPoints[static_cast<std::size_t>(slot)] =
         piece.empty() ? 0 : points;
+    m_armorDurability[static_cast<std::size_t>(slot)] =
+        piece.empty() ? 0.0f : durability;
 }
 
 int Player::armorPoints() const {
@@ -482,6 +486,10 @@ bool Player::damage(float amount, bool bypassArmor) {
     if (m_dead || amount <= 0.0f) {
         return false;
     }
+    // SURV-3: the incoming PRE-reduction amount (the armor-wear formula's
+    // input — "1 durability for every 4 HP of incoming damage" counts the
+    // damage the event STARTED with, not what survived the pipeline).
+    const float incoming = amount;
     // SURV-1 (armor, the Minecraft integer-floor rule): the equipped
     // points reduce the incoming damage BEFORE the resistance effect and
     // the absorption pool (the pipeline order armor -> resistance -> pool
@@ -510,6 +518,32 @@ bool Player::damage(float amount, bool bypassArmor) {
     amount *= 1.0f - m_damageReduction;
     if (amount <= 0.0f) {
         return false;
+    }
+    // SURV-3 (armor wear, the Minecraft float rule): this event is one the
+    // armor ACTUALLY reduced (not bypassed, points equipped, and the
+    // post-reduction amount still lands — the "armor-reduction-effective
+    // event"): every worn breakable piece takes max(1, incoming / 4)
+    // (10 -> 2.5 exact, 1 -> 1). A piece whose accumulated damage reaches
+    // its data durability BREAKS in place: the slot clears through the
+    // single setter and its points drop out of the total (the damage
+    // already settled — the action is unaffected, the item is gone). The
+    // wear follows the block rule (the project's alignment of the wiki's
+    // no-wear-source list with the bypassArmor exemption): a source the
+    // armor does not reduce (bypass — today: drowning) never wears it.
+    if (pts > 0 && !bypassArmor) {
+        const float wear = armorWearPerPiece(incoming);
+        for (int slot = 0; slot < kArmorSlotCount; ++slot) {
+            if (m_armor[static_cast<std::size_t>(slot)].empty()) {
+                continue;
+            }
+            if (applyDurability(m_armor[static_cast<std::size_t>(slot)],
+                                wear,
+                                m_armorDurability[static_cast<std::size_t>(
+                                    slot)])) {
+                setArmorSlot(slot, ItemStack {}, 0); // the BREAK: clear +
+                                                     // the points resync
+            }
+        }
     }
     // Phase 72 (the two-component model, Minecraft): the absorption pool
     // drains FIRST — the health is touched only by the remainder. The pool

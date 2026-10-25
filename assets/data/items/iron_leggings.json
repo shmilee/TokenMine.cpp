@@ -4,5 +4,6 @@
   "max_stack": 1,
   "icon": "iron_leggings",
   "armor_slot": "legs",
-  "armor_points": 5
+  "armor_points": 5,
+  "durability": 225
 }

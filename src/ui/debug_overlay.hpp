@@ -42,6 +42,9 @@ struct DebugInfo {
     int oxygen = kOxygenMax; // SURV-2 (the air units left, [0, kOxygenMax])
     double hunger = 0.0;    // Phase 23
     double maxHunger = 0.0;
+    // SURV-3: the held item's line ("(none)" on an empty hand, the item
+    // name otherwise + " d/max" when the item has a durability).
+    std::string heldItem;
     std::string difficulty; // Phase 25: "easy" | "normal" | "hard"
     // Phase 46: the active status effects, "name 12.3s; ..." (application
     // order) or "" when the player has none.

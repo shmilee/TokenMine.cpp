@@ -19,5 +19,6 @@
   "fast_against_multiplier": 2.0,
   "attack_damage": 2.5,
   "max_stack": 1,
-  "icon": "stone_pickaxe"
+  "icon": "stone_pickaxe",
+  "durability": 131
 }

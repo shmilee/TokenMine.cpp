@@ -36,7 +36,7 @@ TEST(DebugOverlayTest, LinesFormat) {
     info.maxHunger = 20.0;
     info.difficulty = "hard";
     const auto lines = debugOverlayLines(info);
-    ASSERT_EQ(lines.size(), 13u);
+    ASSERT_EQ(lines.size(), 14u);
     // Pinned literal (deliberately NOT the TM_VERSION macro): a version
     // bump must force a conscious update of this pin.
     EXPECT_EQ(lines[0], "TokenMine.cpp v0.14.0");
@@ -51,9 +51,23 @@ TEST(DebugOverlayTest, LinesFormat) {
     // SURV-2: the oxygen line (the air units left).
     EXPECT_EQ(lines[9], "oxygen 132");
     EXPECT_EQ(lines[10], "hunger 14 / 20");
-    EXPECT_EQ(lines[11], "difficulty hard");
+    // SURV-3: the held item line (the damage-less baseline state).
+    EXPECT_EQ(lines[11], "held (none)");
+    EXPECT_EQ(lines[12], "difficulty hard");
     // Phase 46: no active effects -> the baseline "(none)" line.
-    EXPECT_EQ(lines[12], "effects (none)");
+    EXPECT_EQ(lines[13], "effects (none)");
+}
+
+TEST(DebugOverlayTest, HeldItemLineWithDurability) {
+    // SURV-3: the held item carries its durability readout (d/max) —
+    // the game fills the name + value; an empty hand / unset renders
+    // "(none)".
+    DebugInfo info;
+    info.heldItem = "iron_pickaxe 238.0/250";
+    const auto lines = debugOverlayLines(info);
+    EXPECT_EQ(lines[11], "held iron_pickaxe 238.0/250");
+    DebugInfo empty;
+    EXPECT_EQ(debugOverlayLines(empty)[11], "held (none)");
 }
 
 TEST(DebugOverlayTest, ActiveEffectsLine) {

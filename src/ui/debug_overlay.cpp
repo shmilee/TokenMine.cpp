@@ -40,6 +40,10 @@ std::vector<std::string> debugOverlayLines(const DebugInfo& info) {
             info.health, info.maxHealth, info.absorption, info.armorPoints),
         fmt("oxygen %d", info.oxygen), // SURV-2 (the air units left)
         fmt("hunger %.0f / %.0f", info.hunger, info.maxHunger),
+        // SURV-3: the held item (name + " d/max" when it has a
+        // durability; an unset / empty hand renders "(none)").
+        info.heldItem.empty() ? std::string("held (none)")
+                              : fmt("held %s", info.heldItem.c_str()),
         fmt("difficulty %s", info.difficulty.c_str()),
         // Only the line's data when active (an empty string renders as
         // "effects (none)" — the no-effect baseline state).

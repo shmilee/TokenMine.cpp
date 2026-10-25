@@ -30,12 +30,14 @@ void cellLeftClick(ItemStack& cell, ItemStack& carry,
         carry = ItemStack {};
         return;
     }
-    if (cur.item == carry.item) {
+    if (cur.item == carry.item && cur.damage == carry.damage) {
+        // SURV-3: same-damage stacks only (the Inventory::add rule) — a
+        // repaired piece does not join a worn one.
         const int maxStack = items.at(cur.item).maxStack;
         const int room = maxStack - cur.count;
         const int moved = std::min(carry.count, room);
         if (moved > 0) {
-            cell = ItemStack {cur.item, cur.count + moved};
+            cell = ItemStack {cur.item, cur.count + moved, cur.damage};
             carry.count -= moved;
             if (carry.count <= 0) {
                 carry = ItemStack {};
@@ -56,7 +58,8 @@ void cellRightClick(ItemStack& cell, ItemStack& carry,
         if (cur.empty()) {
             return;
         }
-        carry = ItemStack {cur.item, 1};
+        carry = ItemStack {cur.item, 1, cur.damage}; // SURV-3: damage
+                                                     // follows the unit
         cell.count -= 1;
         if (cell.count <= 0) {
             cell = ItemStack {};
@@ -64,17 +67,19 @@ void cellRightClick(ItemStack& cell, ItemStack& carry,
         return;
     }
     if (cur.empty()) {
-        cell = ItemStack {carry.item, 1};
+        cell = ItemStack {carry.item, 1, carry.damage}; // SURV-3: damage
+                                                        // follows the unit
         carry.count -= 1;
         if (carry.count <= 0) {
             carry = ItemStack {};
         }
         return;
     }
-    if (cur.item == carry.item) {
+    if (cur.item == carry.item && cur.damage == carry.damage) {
+        // SURV-3: same-damage stacks only (the Inventory::add rule).
         const int maxStack = items.at(cur.item).maxStack;
         if (cur.count < maxStack) {
-            cell = ItemStack {cur.item, cur.count + 1};
+            cell = ItemStack {cur.item, cur.count + 1, cur.damage};
             carry.count -= 1;
             if (carry.count <= 0) {
                 carry = ItemStack {};

@@ -19,5 +19,6 @@
   "fast_against_multiplier": 2.0,
   "attack_damage": 3,
   "max_stack": 1,
-  "icon": "iron_pickaxe"
+  "icon": "iron_pickaxe",
+  "durability": 250
 }

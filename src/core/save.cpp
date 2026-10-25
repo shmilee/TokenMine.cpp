@@ -52,13 +52,45 @@ Result<void> rejectUnknownFields(const Json& obj,
 
 // One { "item", "count } entry, shared by inventory slots and the crafting
 // grids (format 3): "" / 0 = empty, otherwise a registered item name with a
-// count in [1, maxStack].
+// count in [1, maxStack]. SURV-3 (format 18): the OPTIONAL "damage" key
+// (the accumulated durability, written only when > 0) is accepted only for
+// `allowDamage` callers (the inventory slots — the grids / furnace /
+// campfire slots do not carry it, the format-18 scope) and is
+// cross-checked against the item's data durability.
+// SURV-3 (format 18): the per-stack "damage" key's value rules, shared by
+// the slot / entity / armor-object entries: a number >= 0, on an item that
+// HAS a data durability, and strictly BELOW it (the invariant
+// 0 <= damage < item.durability — a broken item is removed, it has no
+// save form).
+Result<void> checkDamageValue(const Json& dmg, const Item& item,
+                              const std::string& what, float& out) {
+    if (!dmg.isNumber() || dmg.asDouble() < 0.0) {
+        return MC_FAIL(what + " 'damage' must be a number >= 0");
+    }
+    out = static_cast<float>(dmg.asDouble());
+    if (item.durability <= 0.0f) {
+        return MC_FAIL(what + " holds damage " + std::to_string(out) +
+                       " but the item '" + item.name + "' has no durability");
+    }
+    if (out >= item.durability) {
+        return MC_FAIL(what + " damage " + std::to_string(out) +
+                       " is at/above the item '" + item.name + "'s "
+                       "durability " + std::to_string(item.durability) +
+                       " (a broken item is removed, never saved)");
+    }
+    return {};
+}
+
 Result<void> parseSlotEntry(const Json& e, const ItemRegistry& items,
-                            const std::string& what, ItemStack& out) {
+                            const std::string& what, bool allowDamage,
+                            ItemStack& out) {
     if (!e.isObject()) {
         return MC_FAIL(what + " must be an object");
     }
-    const std::set<std::string> slotFields {"item", "count"};
+    std::set<std::string> slotFields {"item", "count"};
+    if (allowDamage) {
+        slotFields.insert("damage");
+    }
     MC_TRY(rejectUnknownFields(e, slotFields, what));
     const Json* name = e.find("item");
     const Json* count = e.find("count");
@@ -87,6 +119,12 @@ Result<void> parseSlotEntry(const Json& e, const ItemRegistry& items,
                        std::to_string(items.at(id).maxStack) + ")");
     }
     out = ItemStack {id, n};
+    // SURV-3: the damage cross-check (an item without durability cannot
+    // carry one; a damage at/above the durability is the broken state —
+    // the stack is removed, never saved). Absent key = 0 (full).
+    if (const Json* dmg = e.find("damage")) {
+        MC_TRY(checkDamageValue(*dmg, items.at(id), what, out.damage));
+    }
     return {};
 }
 
@@ -102,7 +140,8 @@ Result<void> parseGrid(const Json& arr, const ItemRegistry& items,
     out.resize(static_cast<std::size_t>(CraftingGrid::kSize));
     for (std::size_t i = 0; i < arr.size(); ++i) {
         auto r = parseSlotEntry(arr.at(i), items, what + " #" +
-                                        std::to_string(i), out[i]);
+                                        std::to_string(i),
+                                        /*allowDamage=*/false, out[i]);
         MC_TRY(r);
     }
     return {};
@@ -130,7 +169,8 @@ Result<void> parseFurnaceState(const Json& fz, const ItemRegistry& items,
                            std::string(slotNames[i]) + "' slot entry");
         }
         MC_TRY(parseSlotEntry(*slot, items,
-                              what + " '" + slotNames[i] + "'", *slotPtrs[i]));
+                              what + " '" + slotNames[i] + "'",
+                              /*allowDamage=*/false, *slotPtrs[i]));
     }
     // The two integer 1/60-substep counters (bounds: the max smelt /
     // fuel times the item data allows — see save.hpp).
@@ -562,13 +602,25 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     // SURV-1: the player's armor (format 16, ALWAYS written — a
     // format-16 file REQUIRES the key; an empty object = no armor).
     // Only the OCCUPIED slots are written, in the fixed slot order.
+    // SURV-3 (format 18): an occupied slot with damage > 0 flips to the
+    // object shape {item, damage} (the key discipline: damage is written
+    // ONLY when > 0 — a full-durability piece stays the pre-18 string).
     {
         Json armorObj = Json::object();
         for (int slot = 0; slot < kArmorSlotCount; ++slot) {
             const std::string& name =
                 save.playerArmor[static_cast<std::size_t>(slot)];
             if (!name.empty()) {
-                armorObj[kArmorSlotNames[slot]] = Json(name);
+                const float dmg =
+                    save.playerArmorDamage[static_cast<std::size_t>(slot)];
+                if (dmg > 0.0f) {
+                    Json entry = Json::object();
+                    entry["item"] = Json(name);
+                    entry["damage"] = Json(dmg);
+                    armorObj[kArmorSlotNames[slot]] = std::move(entry);
+                } else {
+                    armorObj[kArmorSlotNames[slot]] = Json(name);
+                }
             }
         }
         player["armor"] = std::move(armorObj);
@@ -595,6 +647,11 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
             }
             e["item"] = Json(item->name);
             e["count"] = Json(s.count);
+            // SURV-3 (format 18): the damage key only when > 0 (0 = full
+            // durability = absent — the omit-when-default discipline).
+            if (s.damage > 0.0f) {
+                e["damage"] = Json(s.damage);
+            }
         }
         slots.push_back(std::move(e));
     }
@@ -779,6 +836,11 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         je["type"] = Json(std::string("item"));
         je["item"] = Json(e.item);
         je["count"] = Json(e.count);
+        // SURV-3 (format 18): the stack's damage only when > 0 (the omit-
+        // when-default discipline, the slots' twin).
+        if (e.damage > 0.0f) {
+            je["damage"] = Json(e.damage);
+        }
         je["pos"] = jpos;
         je["age"] = Json(e.age);
         je["pickup_delay"] = Json(e.pickupDelay);
@@ -1045,23 +1107,69 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                 return MC_FAIL(what + " is not a known slot (vocabulary: "
                                "\"head\", \"chest\", \"legs\", \"feet\")");
             }
-            if (!value.isString() || value.asString().empty()) {
-                return MC_FAIL(what + " requires a non-empty item name");
+            // SURV-3 (format 18): the entry shape — a STRING (the
+            // pre-18 shape, damage 0 = full durability) or, in a
+            // format-18 file, the STRICT object {item, damage} with
+            // damage > 0 (the damaged piece; the serializer writes the
+            // object exactly then, so an object without damage cannot
+            // occur from this build). An object in a format-17 and
+            // older file is a version lie (rejected, named).
+            std::string name;
+            float dmg = 0.0f;
+            if (value.isString()) {
+                if (value.asString().empty()) {
+                    return MC_FAIL(what + " requires a non-empty item name");
+                }
+                name = value.asString();
+            } else if (value.isObject() &&
+                       def.find("format")->asInt() >= 18) {
+                const std::set<std::string> entryFields {"item", "damage"};
+                MC_TRY(rejectUnknownFields(value, entryFields, what));
+                const Json* vItem = value.find("item");
+                const Json* vDmg = value.find("damage");
+                if (vItem == nullptr || !vItem->isString() ||
+                    vItem->asString().empty()) {
+                    return MC_FAIL(what + " requires a non-empty string "
+                                       "'item'");
+                }
+                name = vItem->asString();
+                if (vDmg == nullptr || !vDmg->isNumber() ||
+                    vDmg->asDouble() <= 0.0) {
+                    return MC_FAIL(what + " requires 'damage' (a number "
+                                       "> 0 — the object shape is the "
+                                       "damaged piece; a full-durability "
+                                       "piece is the string shape)");
+                }
+                dmg = static_cast<float>(vDmg->asDouble());
+            } else {
+                return MC_FAIL(what +
+                    (value.isObject()
+                         ? " is an object: the damaged-piece shape "
+                           "requires format 18 or newer (got " +
+                           std::to_string(def.find("format")->asInt()) +
+                           ")"
+                         : " requires an item name string (or the "
+                           "format-18 damaged-piece object)"));
             }
-            const Item* item = items.findByName(value.asString());
+            const Item* item = items.findByName(name);
             if (item == nullptr) {
-                return MC_FAIL(what + " holds unknown item '" +
-                               value.asString() + "'");
+                return MC_FAIL(what + " holds unknown item '" + name +
+                               "'");
             }
             if (item->armorSlot != key) {
                 return MC_FAIL(what + " holds the item '" +
-                               value.asString() + "' whose armor slot is "
+                               name + "' whose armor slot is "
                                "'" + item->armorSlot +
                                "' (a piece equips the slot named by its "
                                "data)");
             }
-            save.playerArmor[static_cast<std::size_t>(slot)] =
-                value.asString();
+            if (dmg > 0.0f) {
+                // The damage cross-check (an armor item without
+                // durability, or a damage at/above it, is named).
+                MC_TRY(checkDamageValue(Json(dmg), *item, what, dmg));
+            }
+            save.playerArmor[static_cast<std::size_t>(slot)] = name;
+            save.playerArmorDamage[static_cast<std::size_t>(slot)] = dmg;
         }
     } else if (player->find("armor") != nullptr) {
         return MC_FAIL("save 'player.armor' requires format 16 or newer "
@@ -1124,8 +1232,14 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     }
     save.slots.resize(static_cast<std::size_t>(Inventory::kTotalSize));
     for (std::size_t i = 0; i < slots->size(); ++i) {
+        // SURV-3 (format 18): the inventory slots carry the per-stack
+        // "damage" key (the grids do not — the format-18 scope); a
+        // format-17 and older file carrying it is a version lie
+        // (rejected by name, the allowDamage=false whitelist).
         auto r = parseSlotEntry(slots->at(i), items, "save slot #" +
-                                       std::to_string(i), save.slots[i]);
+                                       std::to_string(i),
+                                       def.find("format")->asInt() >= 18,
+                                       save.slots[i]);
         MC_TRY(r);
     }
 
@@ -1166,8 +1280,15 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
             return MC_FAIL("save entity #" + std::to_string(i) +
                            " must be an object");
         }
-        const std::set<std::string> entFields {"type", "item", "count", "pos",
-                                               "age", "pickup_delay"};
+        // SURV-3 (format 18): the stack's "damage" key (the omit-when-
+        // 0 discipline — a format-17 and older file carrying it is a
+        // version lie, rejected by name via the whitelist below).
+        std::set<std::string> entFields {"type", "item", "count",
+                                         "pos", "age",
+                                         "pickup_delay"};
+        if (def.find("format")->asInt() >= 18) {
+            entFields.insert("damage");
+        }
         MC_TRY(rejectUnknownFields(e, entFields, "save entity #" +
                                                 std::to_string(i)));
         const Json* type = e.find("type");
@@ -1201,6 +1322,11 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                            " count " + std::to_string(se.count) +
                            " is out of range for '" + name->asString() +
                            "' (max " + std::to_string(maxStack) + ")");
+        }
+        // SURV-3: the damage cross-check (absent key = 0 = full).
+        if (const Json* dmg = e.find("damage")) {
+            const std::string what = "save entity #" + std::to_string(i);
+            MC_TRY(checkDamageValue(*dmg, items.at(id), what, se.damage));
         }
         const Json* epos = e.find("pos");
         if (epos == nullptr || !epos->isArray() || epos->size() != 3) {

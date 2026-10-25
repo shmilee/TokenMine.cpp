@@ -4,5 +4,6 @@
   "max_stack": 1,
   "icon": "leather_chestplate",
   "armor_slot": "chest",
-  "armor_points": 3
+  "armor_points": 3,
+  "durability": 80
 }

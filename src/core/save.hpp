@@ -213,7 +213,28 @@ namespace mc {
 //      file carrying it is rejected (the version-lie discipline); a
 //      format-15/16 load migrates into this full (the player had full
 //      air — the system did not exist). Writes are always format 17.
-inline constexpr int kSaveFormat = 17;
+//  18: the item DURABILITY (SURV-3) — an OPTIONAL per-stack "damage"
+//      number in the THREE stack-carrying places: an inventory slot
+//      entry, an item ENTITY entry and an OCCUPIED player.armor slot
+//      (which gains the OBJECT shape for it). The key is written ONLY
+//      when the damage is > 0 (damage 0 = full durability = the key is
+//      ABSENT — the omit-when-default discipline, like the health /
+//      hunger optional fields; the crafting grids and the furnace /
+//      campfire slot entries do NOT carry it — the format-18 scope is
+//      the three places, the grids' damaged items load full, the
+//      documented deviation). Rules: a damage key in a format-17 and
+//      older file is a version lie (rejected, named); an occupied armor
+//      slot is a STRING (damage 0, the pre-18 shape) or the STRICT
+//      object {item, damage} with damage > 0 (a format-17 and older
+//      file carrying the object shape is a version lie); a damage value
+//      must be a number in [0, the item's data durability) — an item
+//      WITHOUT durability carrying damage, or a damage at/above the
+//      durability (the broken state has no save form — the stack is
+//      removed, never saved), is rejected and named. A format-17 load
+//      migrates into this IDENTITY (no damage key = 0 — the system did
+//      not exist, every carried item was full). Writes are always
+//      format 18.
+inline constexpr int kSaveFormat = 18;
 inline constexpr int kSaveFormatMin = 1;
 
 // Phase 40: the furnace save-field bounds — the max smelt/fuel times the
@@ -347,6 +368,9 @@ struct SavedItemEntity {
     double age = 0.0; // seconds alive (< ItemEntity::kDespawnSeconds)
     // Remaining pickup delay (0..ItemEntity::kPickupDelaySeconds).
     double pickupDelay = 0.0;
+    // SURV-3 (format 18): the stack's accumulated damage (0 = full —
+    // the "damage" key is written only when > 0).
+    float damage = 0.0f;
 };
 
 // Everything one save file holds (state already resolved to names, so
@@ -415,6 +439,11 @@ struct SaveGame {
     // the armor items' max_stack, so the name IS the whole state. Empty
     // for format 1-15 loads (the player had no armor).
     std::array<std::string, kArmorSlotCount> playerArmor {};
+    // SURV-3 (format 18): the equipped pieces' accumulated damage per
+    // slot (0 = full; the save's "damage" key is written only when > 0,
+    // which flips the armor entry to its object shape). 0 for format
+    // 1-17 loads (the system did not exist — every piece was full).
+    std::array<float, kArmorSlotCount> playerArmorDamage {};
     // Oxygen (SURV-2, format 17): the player's remaining air units,
     // [0, kOxygenMax] (150). -1 = "unspecified" (format 1-16 files):
     // the game loads it full (the migration — the system did not exist,

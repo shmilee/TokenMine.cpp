@@ -33,6 +33,7 @@
 #include "ui/inventory_ui.hpp"
 #include "ui/ui_scale.hpp"
 #include "item/armor.hpp"
+#include "item/durability.hpp"
 
 namespace mc {
 
@@ -2073,11 +2074,15 @@ Result<SaveGame> Game::collectSave() const {
     save.playerSaturation = m_player->saturation();
     // SURV-1: the equipped armor (format 16) — the piece names by slot
     // ("" = empty; the count is always 1 by the armor items' max_stack,
-    // so the name is the whole state).
+    // so the name is the whole state). SURV-3 (format 18): the pieces'
+    // accumulated damage by slot (0 = full — the "damage" key is
+    // written only when > 0, which flips the entry to its object shape).
     for (int slot = 0; slot < kArmorSlotCount; ++slot) {
         const ItemStack& worn = m_player->armorSlot(slot);
         save.playerArmor[static_cast<std::size_t>(slot)] =
             worn.empty() ? std::string {} : m_items.at(worn.item).name;
+        save.playerArmorDamage[static_cast<std::size_t>(slot)] =
+            worn.empty() ? 0.0f : worn.damage;
     }
     // SURV-2: the player's oxygen (format 17, always written — the air
     // units left, kOxygenMax while breathing). The drownTicks
@@ -2228,6 +2233,7 @@ Result<SaveGame> Game::collectSave() const {
         se.pos = item->position();
         se.age = item->age();
         se.pickupDelay = item->pickupDelayRemaining();
+        se.damage = item->damage(); // SURV-3 (the stack's accumulated)
         save.entities.push_back(std::move(se));
     }
     // The modifications: every cell that differs from what the seed
@@ -2473,7 +2479,11 @@ Result<void> Game::applySave(const SaveGame& save) {
     // 4f) The player's armor (format 16; SURV-1). The names are
     // parse-validated (registered items whose data armor_slot matches
     // the save's key — idForName cannot fail); format 1-15 saves carry
-    // no armor (all the slots stay empty, the default).
+    // no armor (all the slots stay empty, the default). SURV-3 (format
+    // 18): the pieces' accumulated damage rides the slot (parse-
+    // validated against the item's data durability) and the setter's
+    // durability argument (the damage()'s wear step needs it — the
+    // player holds no ItemRegistry, the points pattern).
     for (int slot = 0; slot < kArmorSlotCount; ++slot) {
         const std::string& name =
             save.playerArmor[static_cast<std::size_t>(slot)];
@@ -2482,8 +2492,10 @@ Result<void> Game::applySave(const SaveGame& save) {
             continue;
         }
         const Item& item = m_items.at(m_items.idForName(name));
-        m_player->setArmorSlot(slot, ItemStack {item.id, 1},
-                               item.armorPoints);
+        const float dmg =
+            save.playerArmorDamage[static_cast<std::size_t>(slot)];
+        m_player->setArmorSlot(slot, ItemStack {item.id, 1, dmg},
+                               item.armorPoints, item.durability);
     }
     m_prevHealth = m_player->health(); // no hurt event from the load itself
     // 4g) The player's oxygen (format 17; SURV-2, the drowning
@@ -2495,11 +2507,13 @@ Result<void> Game::applySave(const SaveGame& save) {
     m_drown.oxygen =
         save.playerOxygen < 0 ? kOxygenMax : save.playerOxygen;
     m_drown.drownTicks = 0;
-    // 5) Dropped items (with their lifetime/pickup timers restored).
+    // 5) Dropped items (with their lifetime/pickup timers restored;
+    // SURV-3: the stack's accumulated damage too).
     for (const SavedItemEntity& e : save.entities) {
         const Item& item = m_items.at(m_items.idForName(e.item));
         auto entity = std::make_unique<ItemEntity>(
-            m_world, m_blocks, e.item, item.maxStack, e.count, e.pos);
+            m_world, m_blocks, e.item, item.maxStack, e.count, e.pos,
+            e.damage);
         entity->setAge(e.age);
         entity->setPickupDelay(e.pickupDelay);
         m_entities.push_back(std::move(entity));
@@ -3335,6 +3349,16 @@ void Game::handleInteraction(double dt) {
                              toId);
                     Lighting::updateLocal(m_world, m_blocks, hit->block);
                     m_sound.play("ignite");
+                    // SURV-3: the successful relight wears the held
+                    // igniter one point (the action completed — a
+                    // flint and steel that breaks is simply gone).
+                    if (m_items.at(held.item).durability > 0.0f) {
+                        if (applyDurability(m_inventory.at(m_selectedSlot),
+                                            kIgniteWear, m_items)) {
+                            m_sound.play("break"); // it broke on the
+                                                   // successful ignition
+                        }
+                    }
                 } else if (b.properties.flamable) {
                     // (b) m_fireId is valid here: a flamable target
                     // exists, and the init cross-check requires the fire
@@ -3343,6 +3367,15 @@ void Game::handleInteraction(double dt) {
                              m_fireId);
                     Lighting::updateLocal(m_world, m_blocks, hit->block);
                     m_sound.play("ignite");
+                    // SURV-3: the successful burn wears the held igniter
+                    // one point (the action completed).
+                    if (m_items.at(held.item).durability > 0.0f) {
+                        if (applyDurability(m_inventory.at(m_selectedSlot),
+                                            kIgniteWear, m_items)) {
+                            m_sound.play("break"); // it broke on the
+                                                   // successful ignition
+                        }
+                    }
                 }
             }
         }
@@ -3540,6 +3573,24 @@ void Game::updateAttacking(double dt, MobEntity& mob) {
     // updateEntities despawn pass (same frame).
     m_swingCooldown = kSwingInterval;
     mob.damage(selectedAttackDamage());
+    // SURV-3 (durability): the held TOOL wears two points per melee hit
+    // that LANDS (the event table: pickaxe / axe / shovel +2). A bow's
+    // melee swing does not wear (it is a material, not a tool — its wear
+    // is the shot, the fireBow site), and a bare hand has no item. The
+    // hit completed (the damage + knockback landed) — a tool that breaks
+    // on this swing is simply gone.
+    {
+        ItemStack& held = m_inventory.at(m_selectedSlot);
+        if (!held.empty()) {
+            const Item& heldItem = m_items.at(held.item);
+            if (heldItem.type == ItemType::Tool &&
+                heldItem.durability > 0.0f) {
+                if (applyDurability(held, kToolMeleeWear, m_items)) {
+                    m_sound.play("break"); // the tool broke on this hit
+                }
+            }
+        }
+    }
     const Vec3 f = m_camera.forward();
     Vec3 kb {f.x, 0.0f, f.z};
     const float len = std::sqrt(kb.x * kb.x + kb.z * kb.z);
@@ -3654,6 +3705,16 @@ void Game::fireBow() {
     m_entities.push_back(std::make_unique<Projectile>(
         m_world, m_blocks, o, f, item.shootSpeed * power,
         item.shootDamage * power, /*hurtPlayer=*/false, power, item.ammo));
+    // SURV-3 (durability): the SHOT wears the launcher one point (any
+    // charge; Infinity included — the arrow is not consumed, the bow
+    // still is). The shot completed (the arrow is flying) — a bow that
+    // breaks on this shot is simply gone.
+    if (item.durability > 0.0f) {
+        if (applyDurability(m_inventory.at(m_selectedSlot),
+                            kLauncherShotWear, m_items)) {
+            m_sound.play("break"); // the bow broke on this shot
+        }
+    }
     m_sound.play("shoot");
     resetBowDraw();
 }
@@ -3920,6 +3981,28 @@ void Game::breakBlock(const BlockHit& hit) {
         (++m_particleBreakCounter) * 0x9E3779B97F4A7C15ULL;
     m_particles.spawnBreak(hit.block.x, hit.block.y, hit.block.z, id, sky,
                            blockLight, rngSeed);
+    // SURV-3 (durability): the held TOOL wears one point per NON-instant
+    // block broken (hardness 0 = the "naturally breaks instantly"
+    // approximation = 0 wear — the documented deviation; hand-mining and
+    // non-tool items wear nothing — the event table's "tool +1" gate).
+    // The break COMPLETES regardless (the block is already air +
+    // dropped + sounded — the wear is the action's epilogue): a tool
+    // that breaks on this block is simply gone from the slot.
+    if (block.properties.hardness != 0.0f) {
+        ItemStack& held = m_inventory.at(m_selectedSlot);
+        if (!held.empty()) {
+            const Item& heldItem = m_items.at(held.item);
+            if (heldItem.type == ItemType::Tool &&
+                heldItem.durability > 0.0f) {
+                if (applyDurability(held, kToolBlockWear, m_items)) {
+                    // The tool BROKE on this block: the item-break cue
+                    // (the existing "break" wav — the sound table has no
+                    // dedicated item-break asset, the design's reuse).
+                    m_sound.play("break");
+                }
+            }
+        }
+    }
     m_sound.play("break");
 }
 
@@ -4622,11 +4705,15 @@ void Game::dropSelectedItem() {
     // Spawn at the player's feet (bottom-center) with zero velocity — the
     // same determinism convention as block drops. The item's pickup delay
     // (see ItemEntity::kPickupDelaySeconds) keeps it from being
-    // re-picked up on the next frame.
+    // re-picked up on the next frame. SURV-3: the dropped unit carries
+    // the stack's accumulated damage (captured BEFORE the take above —
+    // an emptied stack would lose it; the take keeps the remainder's).
+    const float droppedDamage = stack.damage;
     const Vec3 pos = m_player->position();
     m_entities.push_back(std::make_unique<ItemEntity>(m_world, m_blocks,
                                                       item.name, item.maxStack,
-                                                      /*count=*/1, pos));
+                                                      /*count=*/1, pos,
+                                                      droppedDamage));
     m_sound.play("pickup");
 }
 
@@ -4815,7 +4902,9 @@ void Game::updateEntities(double dt) {
         // Validity is guaranteed: drops are validated at init and only
         // spawn from that validated data.
         const ItemID iid = m_items.idForName(item->itemName());
-        if (m_inventory.add(iid, item->count(), m_items) < 0) {
+        // SURV-3: the picked-up stack's damage returns with it (the
+        // Inventory::add merge rule: same-item AND same-damage only).
+        if (m_inventory.add(iid, item->count(), m_items, item->damage()) < 0) {
             continue; // inventory full: the item stays on the ground
         }
         gone[i] = true;
@@ -6043,6 +6132,19 @@ void Game::renderUi() {
     const Vec4 kText {1.0f, 1.0f, 1.0f, 0.92f};
     const Vec4 kTextDim {1.0f, 1.0f, 1.0f, 0.55f};
     const Vec4 kCrosshair {1.0f, 1.0f, 1.0f, 0.85f};
+    // SURV-3 (durability bar): the strip drawn under a DAMAGED item
+    // icon — 2 px tall at the icon's bottom edge, filled left-to-right
+    // with the REMAINING fraction (1 − damage/durability) in three
+    // tiers (green >= 1/2, yellow >= 1/4, red < 1/4 — the documented
+    // simplification of Minecraft's continuous gradient). Damage 0
+    // (full durability) draws NOTHING (the no-input baseline's
+    // structural immunity: a fresh run carries full-durability items).
+    constexpr int kDurabilityBarPx = 2;
+    constexpr float kDurabilityGreenTier = 0.5f;
+    constexpr float kDurabilityYellowTier = 0.25f;
+    const Vec4 kDurabilityGreen {0.16f, 0.69f, 0.13f, 1.0f};
+    const Vec4 kDurabilityYellow {0.93f, 0.78f, 0.12f, 1.0f};
+    const Vec4 kDurabilityRed {0.78f, 0.12f, 0.12f, 1.0f};
 
     std::vector<UiBatch> batches;
     auto batchFor = [&](const Vec4& color, bool textured,
@@ -6159,6 +6261,26 @@ void Game::renderUi() {
                               &m_itemIcons[idx]);
         addQuad(b, static_cast<int>(cx) - sizePx / 2,
                 static_cast<int>(cy) - sizePx / 2, sizePx, sizePx);
+        // SURV-3: the durability bar (the 2D-icon path only — block
+        // items are not in the durability's allowed set, so the 3D-cube
+        // path never carries one).
+        if (stack.damage > 0.0f && item.durability > 0.0f) {
+            const float remaining = 1.0f - stack.damage / item.durability;
+            const Vec4 bar =
+                remaining >= kDurabilityGreenTier
+                    ? kDurabilityGreen
+                    : (remaining >= kDurabilityYellowTier
+                           ? kDurabilityYellow : kDurabilityRed);
+            const int barW =
+                static_cast<int>(std::lround(sizePx * remaining));
+            if (barW > 0) {
+                auto& bb = batchFor(bar, false, nullptr);
+                addQuad(bb, static_cast<int>(cx) - sizePx / 2,
+                        static_cast<int>(cy) + sizePx / 2 -
+                            kDurabilityBarPx,
+                        barW, kDurabilityBarPx);
+            }
+        }
     };
 
     const std::pair<int, int> mouse = uiMouse();
@@ -6667,6 +6789,27 @@ void Game::renderUi() {
             info.oxygen = m_drown.oxygen; // SURV-2
             info.hunger = m_player->hunger();
             info.maxHunger = m_player->maxHunger();
+        }
+        // SURV-3: the held item's line — "(none)" on an empty hand, the
+        // item name otherwise, plus " damage/durability" when the item
+        // has one (the d/max readout; a full-durability held item shows
+        // 0.0).
+        {
+            const ItemStack& held = m_inventory.at(m_selectedSlot);
+            if (held.empty()) {
+                info.heldItem = "(none)";
+            } else {
+                const Item& hi = m_items.at(held.item);
+                char buf[128];
+                if (hi.durability > 0.0f) {
+                    std::snprintf(buf, sizeof(buf), "%s %.1f/%.0f",
+                                  hi.name.c_str(), held.damage,
+                                  hi.durability);
+                } else {
+                    std::snprintf(buf, sizeof(buf), "%s", hi.name.c_str());
+                }
+                info.heldItem = buf;
+            }
         }
         info.difficulty = difficultyName(m_difficulty);
         // Phase 46: the active status effects, "name 12.3s; name 4.5s"

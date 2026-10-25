@@ -21,8 +21,9 @@
 // non-block-item code paths (placement, rendering, break speed) dispatch
 // on ItemType, so adding a new explicit kind is data + one enum value.
 //
-// An ItemStack is an (item, count) pair; an empty slot is a stack with an
-// invalid item and/or zero count.
+// An ItemStack is an (item, count, damage) triple (the damage is the
+// SURV-3 accumulated durability loss, 0 for items without durability);
+// an empty slot is a stack with an invalid item and/or zero count.
 #pragma once
 
 #include <string>
@@ -234,6 +235,17 @@ struct Item {
     // (Minecraft: armor never stacks).
     std::string armorSlot;
     int armorPoints = 0;
+    // SURV-3 (durability): the max accumulated damage before the item
+    // breaks (an optional data field 'durability', a strict number > 0).
+    // 0 = the item has no durability (the absent-field default; it never
+    // wears and never breaks — every pre-SURV-3 item). The ALLOWED set is
+    // the "has a use action" items: tools (mining / melee wear), armor
+    // pieces (damage-reduction wear), ammo launchers (the bow family —
+    // shot wear) and igniters (flint and steel — ignite wear); any other
+    // item carrying the field is rejected at parse (the ammo discipline:
+    // a no-op field is a typo). The value is a FLOAT like ItemStack::
+    // damage (Minecraft accumulates fractional armor wear, e.g. 2.5).
+    float durability = 0.0f;
     // Phase 15 UI: the item's 2D icon texture name (a file under
     // assets/textures/items/, validated against the filesystem at game
     // init). Empty for block items, which render a 3D block cube instead.
@@ -243,10 +255,18 @@ struct Item {
 struct ItemStack {
     ItemID item = ItemID::invalid();
     int count = 0;
+    // SURV-3 (durability): the accumulated damage (0 = full; the item
+    // breaks when this reaches its data `durability` — the broken stack
+    // is removed, so a saved/held stack always obeys
+    // `damage < item.durability`). Copy semantics carry it: every stack
+    // move (pick-and-place, Q drop, equip/swap/unequip, ground pickup)
+    // moves the damage with the stack. Items without durability keep it
+    // at 0 forever (the wear events are data-gated).
+    float damage = 0.0f;
 
     bool empty() const { return count <= 0 || !item.valid(); }
     bool operator==(const ItemStack& o) const {
-        return item == o.item && count == o.count;
+        return item == o.item && count == o.count && damage == o.damage;
     }
 };
 

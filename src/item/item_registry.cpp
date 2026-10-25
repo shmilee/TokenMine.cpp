@@ -480,6 +480,41 @@ Result<void> ItemRegistry::parseArmor(const Json& def, bool isTool,
     return {};
 }
 
+Result<void> ItemRegistry::parseDurability(const Json& def, Item& out) {
+    // Optional 'durability' (SURV-3): the accumulated damage at which the
+    // item breaks (a strict number > 0; the absent field is the "no
+    // durability" default, so an explicit 0 / negative is rejected as a
+    // typo — the restore_hunger discipline). The ALLOWED set is the
+    // "has a use action" items: a TOOL (mining + melee wear), an ARMOR
+    // piece (damage-reduction wear), an AMMO LAUNCHER (shot wear — the
+    // bow family) or an IGNITER (ignite wear — the flint and steel).
+    // Any other item carrying the field is a no-op typo, rejected and
+    // named (the ammo discipline). Runs after every channel owner
+    // parsed (the allowed-set check reads armorSlot / ammo /
+    // ignitesFlamable — the parse flow order).
+    if (const Json* du = def.find("durability")) {
+        if (!du->isNumber() || du->asDouble() <= 0.0) {
+            return MC_FAIL("'durability' must be a number > 0" +
+                           (du->isNumber()
+                                ? ", got " + std::to_string(du->asDouble())
+                                : std::string()));
+        }
+        out.durability = static_cast<float>(du->asDouble());
+    }
+    if (out.durability > 0.0f) {
+        const bool allowed = out.type == ItemType::Tool ||
+                             !out.armorSlot.empty() ||
+                             !out.ammo.empty() || out.ignitesFlamable;
+        if (!allowed) {
+            return MC_FAIL("item '" + out.name + "': 'durability' is only "
+                           "valid for items with a use action (a tool, an "
+                           "armor piece, an 'ammo' launcher or an "
+                           "'ignites_flamable' igniter)");
+        }
+    }
+    return {};
+}
+
 Result<void> ItemRegistry::parseGrant(const Json& def, Item& out) {
     // Optional 'grants_effect' (Phase 49, golden apple): the status effect
     // granted when a full EAT completes — {"name": <effect>, "duration":
@@ -685,6 +720,7 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
             key != "fast_against_multiplier" &&
             key != "armor_slot" &&
             key != "armor_points" &&
+            key != "durability" &&
             key != "icon") {
             MC_LOG_WARN("Item '" + name + "': unknown field '" + key +
                         "' ignored");
@@ -723,6 +759,10 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     r = parseArmor(def, isTool, item); // SURV-1: LAST of the channel
                                        // owners (its exclusivity checks
                                        // see every other channel parsed)
+    MC_TRY(r);
+    r = parseDurability(def, item); // SURV-3: LAST of the parse flow (the
+                                    // allowed-set check reads the tool /
+                                    // armor / ammo / igniter fields parsed)
     MC_TRY(r);
 
     // Optional 2D icon (Phase 15 UI): a texture file name under

@@ -1747,3 +1747,14 @@
   成对连发（第一张干净立即发第二张，趁同一波隙）；stabilize 收敛
   窗尺寸保证对可比；多轮预算 8-12 轮后停手 = 记入晨间补跑清单
   （S4 气泡排像素隔离即此例，脚本 gate96_s4_retry.zsh 已备）。
+- **场景文件 format 升级 = 该版全部必需键都要补齐（门 97 首轮 6/7
+  场景全废）**——10-26：门 97 场景从 format 16/17 基座复制后直接
+  `d['format'] = 18`，漏补 format 17 引入的必需键 `player.oxygen` →
+  全部 init 失败（`save format 17 requires a 'player.oxygen' integer`）
+  ——更隐蔽的是**失败的 run 表现 = "未送达/无窗口"**（游戏 init 即
+  退，窗口从未出现，20 分钟误诊为 away 组件/窗口相位问题；diag 枚举
+  进程才发现 save 槽里是旧档）。**纪律**：场景生成器升级 format 时
+  先 `grep` 该 format 的必需键清单（save.hpp 的 format 段文档）逐个
+  补；E2E 跑前对场景文件先跑 1 帧 `--log-level info` 冒烟看
+  "Initialization failed"（PITS 245 判别法的场景版）；"未送达"误诊
+  前先看 run 日志有无 init 失败行。

@@ -60,6 +60,7 @@ add_library(mc_core STATIC
     src/item/furnace.cpp
     src/item/campfire.cpp
     src/item/armor.cpp
+    src/item/durability.cpp
     src/player/player.cpp
     src/player/drown.cpp
     src/world/chunk.cpp
@@ -151,6 +152,7 @@ add_executable(tokenmine_tests
     tests/test_campfire.cpp
     tests/test_armor.cpp
     tests/test_drown.cpp
+    tests/test_durability.cpp
     tests/test_save.cpp
     tests/test_save_journal.cpp
     tests/test_status_effect.cpp

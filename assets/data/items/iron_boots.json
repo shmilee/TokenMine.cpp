@@ -4,5 +4,6 @@
   "max_stack": 1,
   "icon": "iron_boots",
   "armor_slot": "feet",
-  "armor_points": 1
+  "armor_points": 1,
+  "durability": 195
 }

@@ -8,8 +8,11 @@
 // player, just not selectable yet).
 //
 // add() is deterministic: it first merges into an existing stack of the
-// same item (slots in ascending order, so the hotbar is searched before
-// storage), then places into the first empty slot (same order).
+// same item (SURV-3: of the SAME damage — different-damage stacks of one
+// item never merge, they take separate slots; the documented
+// simplification of Minecraft's NBT-aware stack merge), slots in
+// ascending order so the hotbar is searched before storage, then places
+// into the first empty slot (same order).
 // Precondition: count <= the item's max stack (the game guarantees it —
 // dropped items cap at their stack size and Q-drops take one at a time).
 #pragma once
@@ -62,10 +65,12 @@ public:
     ItemStack& at(std::size_t slot);
     bool isEmpty(std::size_t slot) const { return m_slots[slot].empty(); }
 
-    // Merges `count` of `item` as described above. Returns the slot the
-    // items landed in, or -1 when there is no room (every stack of the
-    // item is full and no slot is empty).
-    int add(ItemID item, int count, const ItemRegistry& items);
+    // Merges `count` of `item` (with the stack's accumulated `damage`,
+    // SURV-3) as described above. Returns the slot the items landed in,
+    // or -1 when there is no room (every stack of the item is full and
+    // no slot is empty).
+    int add(ItemID item, int count, const ItemRegistry& items,
+            float damage = 0.0f);
 
     // Removes up to `n` from the slot (clamped to what is there). Returns
     // the number actually removed; the slot becomes empty at zero.

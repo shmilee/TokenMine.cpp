@@ -293,10 +293,12 @@ public:
     const ItemStack& armorSlot(int slot) const;
     ItemStack& armorSlot(int slot);
     // Equip / swap / unequip one slot: the piece (count 1, or the empty
-    // stack) + its data armor_points (0 when empty). The game passes
-    // both, so the player holds no ItemRegistry (the setAbsorption
-    // "the game owns the value" pattern).
-    void setArmorSlot(int slot, const ItemStack& piece, int points);
+    // stack) + its data armor_points (0 when empty) + its data
+    // durability (0 when empty / the item has none — SURV-3: the
+    // damage()'s per-slot wear step needs the max WITHOUT an
+    // ItemRegistry, the points pattern). The game passes all three.
+    void setArmorSlot(int slot, const ItemStack& piece, int points,
+                      float durability = 0.0f);
     // The total equipped points, capped at kArmorMaxPoints (the damage
     // formula's input; 0 = no armor = the pre-SURV-1 bit-identical
     // path).
@@ -317,6 +319,20 @@ public:
     // reduction and the absorption pool drain as for any other damage.
     // The default false keeps every pre-SURV-2 call site bit-identical
     // (the existing damage tests are untouched).
+    //
+    // SURV-3 (armor wear, the Minecraft float rule): a damage event the
+    // armor ACTUALLY reduced (bypassArmor == false, pts > 0, and the
+    // post-reduction amount still > 0 — the "armor-reduction-effective
+    // event") wears EVERY worn breakable piece by
+    // max(1, incoming / 4) (incoming = the PRE-reduction original
+    // amount; 10 -> 2.5 exact, 1 -> 1). The wear follows the block rule
+    // (the project's self-consistent alignment of the wiki's
+    // no-wear-source list with the bypassArmor exemption): a source the
+    // armor does not reduce (bypass — today: drowning) never wears it.
+    // A piece whose accumulated damage reaches its data durability
+    // BREAKS in place (the slot clears + its points drop out of the
+    // total — the action that caused the wear is unaffected: the damage
+    // already settled, the item is simply gone).
     bool damage(float amount, bool bypassArmor = false);
 
     // Back at the spawn point with full health and cleared fall state. The
@@ -458,6 +474,13 @@ private:
     // kArmorSlotNames slot order (head/chest/legs/feet).
     std::array<ItemStack, kArmorSlotCount> m_armor;
     std::array<int, kArmorSlotCount> m_armorPoints {};
+    // SURV-3: the per-slot data DURABILITY of the worn pieces (the
+    // item's max damage; 0 = the piece has no durability — it never
+    // wears). Kept in sync by the same setter (the points pattern: the
+    // player holds no ItemRegistry, the game passes the data), so
+    // damage()'s armor-wear step + the break (slot clear) run registry-
+    // free.
+    std::array<float, kArmorSlotCount> m_armorDurability {};
 
     static constexpr float kMaxPitch = 1.5533f; // ~89 deg
     // FLUID-2: how many cells the surface scan (m_surfaceY) descends from

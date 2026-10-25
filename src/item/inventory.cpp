@@ -16,17 +16,22 @@ ItemStack& Inventory::at(std::size_t slot) {
     return m_slots[slot];
 }
 
-int Inventory::add(ItemID item, int count, const ItemRegistry& items) {
+int Inventory::add(ItemID item, int count, const ItemRegistry& items,
+                   float damage) {
     if (!item.valid() || count <= 0) {
         return -1;
     }
     const int maxStack = items.at(item).maxStack;
 
-    // 1) Merge into an existing stack of the same item (ascending slot
-    //    order — the hotbar is searched before storage).
+    // 1) Merge into an existing stack of the same item with the SAME
+    //    accumulated damage (ascending slot order — the hotbar is
+    //    searched before storage). SURV-3: different-damage stacks never
+    //    merge (a repaired and a worn piece keep their own slots — the
+    //    documented simplification of Minecraft's NBT merge).
     for (std::size_t i = 0; i < m_slots.size(); ++i) {
         ItemStack& s = m_slots[i];
-        if (s.item == item && s.count + count <= maxStack) {
+        if (s.item == item && s.damage == damage &&
+            s.count + count <= maxStack) {
             s.count += count;
             return static_cast<int>(i);
         }
@@ -34,7 +39,7 @@ int Inventory::add(ItemID item, int count, const ItemRegistry& items) {
     // 2) First empty slot.
     for (std::size_t i = 0; i < m_slots.size(); ++i) {
         if (m_slots[i].empty()) {
-            m_slots[i] = ItemStack {item, count};
+            m_slots[i] = ItemStack {item, count, damage};
             return static_cast<int>(i);
         }
     }

@@ -7,11 +7,12 @@ namespace mc {
 
 ItemEntity::ItemEntity(const World& world, const BlockRegistry& blocks,
                        const std::string& item, int maxStack, int count,
-                       Vec3 pos)
+                       Vec3 pos, float damage)
     : Entity(world, blocks, pos, kSize, kSize),
       m_item(item),
       m_maxStack(std::min(maxStack, kMaxStack)),
-      m_count(std::max(1, count)) {}
+      m_count(std::max(1, count)),
+      m_damage(damage < 0.0f ? 0.0f : damage) {}
 
 void ItemEntity::update(double dt) {
     if (dt <= 0.0) {
@@ -70,6 +71,7 @@ void ItemEntity::integrate(float h) {
 
 bool ItemEntity::canMergeInto(const ItemEntity& other) const {
     if (m_item != other.m_item ||
+        m_damage != other.m_damage || // SURV-3: same-damage only (the add rule)
         other.m_count + m_count > other.m_maxStack) {
         return false;
     }

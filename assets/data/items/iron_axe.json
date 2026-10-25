@@ -5,5 +5,6 @@
   "fast_against_multiplier": 2.0,
   "attack_damage": 4,
   "max_stack": 1,
-  "icon": "iron_axe"
+  "icon": "iron_axe",
+  "durability": 250
 }

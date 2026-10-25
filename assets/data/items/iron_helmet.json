@@ -4,5 +4,6 @@
   "max_stack": 1,
   "icon": "iron_helmet",
   "armor_slot": "head",
-  "armor_points": 2
+  "armor_points": 2,
+  "durability": 165
 }

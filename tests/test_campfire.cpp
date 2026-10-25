@@ -287,8 +287,8 @@ TEST(CampfireSaveTest, FormatIsThirteenAndRoundTrips) {
     s.campfires.push_back({BlockPos {4, 53, 4}, unlit});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // SURV-2: writes are always format 17 (SURV-1 was format 16).
-    EXPECT_EQ(j->find("format")->asInt(), 17);
+    // SURV-3: writes are always format 18 (SURV-2 was format 17).
+    EXPECT_EQ(j->find("format")->asInt(), 18);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->campfires.size(), 3u);

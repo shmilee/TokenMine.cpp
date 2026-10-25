@@ -55,9 +55,14 @@ public:
     // `maxStack` is the item's data-defined stack cap (the game passes the
     // ItemRegistry value); the effective cap is min(maxStack, kMaxStack).
     // `count` is the starting amount (block drops pass
-    // BlockProperties::dropsCount; Q-drops pass 1).
+    // BlockProperties::dropsCount; Q-drops pass 1). `damage` (SURV-3) is
+    // the accumulated durability the dropped stack carried (Q-drops pass
+    // the stack's value; block drops and saves predate the field at 0
+    // = full). Two entities of the same item merge only when their
+    // damage EQUALS (the Inventory::add merge rule, ground-side).
     ItemEntity(const World& world, const BlockRegistry& blocks,
-               const std::string& item, int maxStack, int count, Vec3 pos);
+               const std::string& item, int maxStack, int count, Vec3 pos,
+               float damage = 0.0f);
 
     void update(double dt) override;
     bool shouldDespawn() const override {
@@ -66,6 +71,9 @@ public:
 
     const std::string& itemName() const { return m_item; }
     int count() const { return m_count; }
+    // SURV-3: the accumulated durability the stack carries (0 = full; the
+    // pickup returns it into the inventory, the save persists it).
+    float damage() const { return m_damage; }
     double age() const { return m_age; }
     bool pickupReady() const { return m_pickupDelay <= 0.0; }
     // Remaining pickup delay (seconds; 0 = pickable now). Save/load
@@ -95,6 +103,7 @@ private:
     std::string m_item;
     int m_maxStack;
     int m_count; // set in the constructor (>= 1)
+    float m_damage = 0.0f; // SURV-3: the stack's accumulated durability
     double m_age = 0.0;
     double m_pickupDelay = kPickupDelaySeconds;
 
