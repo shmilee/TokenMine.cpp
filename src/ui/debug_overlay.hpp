@@ -12,6 +12,8 @@
 #include <string>
 #include <vector>
 
+#include "player/drown.hpp"
+
 namespace mc {
 
 struct DebugInfo {
@@ -37,6 +39,7 @@ struct DebugInfo {
     double maxHealth = 0.0;
     double absorption = 0.0; // Phase 72 (the separate pool)
     int armorPoints = 0;     // SURV-1 (the capped equipped total)
+    int oxygen = kOxygenMax; // SURV-2 (the air units left, [0, kOxygenMax])
     double hunger = 0.0;    // Phase 23
     double maxHunger = 0.0;
     std::string difficulty; // Phase 25: "easy" | "normal" | "hard"

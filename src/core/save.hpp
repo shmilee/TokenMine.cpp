@@ -201,8 +201,19 @@ namespace mc {
 //      into this empty (the player had no armor — all four slots load
 //      empty). The entries are parse-validated against the ItemRegistry
 //      (the item exists and its data armor_slot matches the key — the
-//      registry is available at parse time). Writes are always format 16.
-inline constexpr int kSaveFormat = 16;
+//      registry is available at parse time).
+//  17: the player's oxygen (SURV-2, the drowning system) — "player"
+//      gains "oxygen": an integer in [0, 150] (kOxygenMax) ALWAYS
+//      written (the armor-key discipline — 150 = the full air, the
+//      value a save taken while breathing carries). The drownTicks
+//      accumulator is deliberately NOT saved (a load restarts it at 0 —
+//      the tick-phase convention of the status effects; the documented
+//      deviation: Minecraft saves the air supply's decay phase too). A
+//      format-17 file REQUIRES the "oxygen" key; a format-16 and older
+//      file carrying it is rejected (the version-lie discipline); a
+//      format-15/16 load migrates into this full (the player had full
+//      air — the system did not exist). Writes are always format 17.
+inline constexpr int kSaveFormat = 17;
 inline constexpr int kSaveFormatMin = 1;
 
 // Phase 40: the furnace save-field bounds — the max smelt/fuel times the
@@ -404,6 +415,12 @@ struct SaveGame {
     // the armor items' max_stack, so the name IS the whole state. Empty
     // for format 1-15 loads (the player had no armor).
     std::array<std::string, kArmorSlotCount> playerArmor {};
+    // Oxygen (SURV-2, format 17): the player's remaining air units,
+    // [0, kOxygenMax] (150). -1 = "unspecified" (format 1-16 files):
+    // the game loads it full (the migration — the system did not exist,
+    // the player had full air). The drownTicks accumulator is never
+    // carried (it restarts at 0 on load — see the format-17 note).
+    int playerOxygen = -1;
     std::vector<SavedItemEntity> entities;
     std::vector<SavedBlockEdit> blockEdits; // sorted by pos
     std::vector<SavedFluidEdit> fluidEdits; // sorted by pos

@@ -310,7 +310,14 @@ public:
     // points reduce the damage BEFORE the resistance effect and the
     // absorption pool (the pipeline order armor -> resistance -> pool ->
     // health; the unit tests pin it).
-    bool damage(float amount);
+    //
+    // SURV-2 (drowning, the Minecraft exemption — the wiki damage table
+    // reads Drowning as "Armor: No effect / Resistance: Applies"):
+    // bypassArmor=true skips the armor floor step ONLY — the resistance
+    // reduction and the absorption pool drain as for any other damage.
+    // The default false keeps every pre-SURV-2 call site bit-identical
+    // (the existing damage tests are untouched).
+    bool damage(float amount, bool bypassArmor = false);
 
     // Back at the spawn point with full health and cleared fall state. The
     // game calls this on the R key. The inventory is untouched

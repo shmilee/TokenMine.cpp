@@ -10,6 +10,7 @@
 
 #include "entity/item_entity.hpp"
 #include "item/crafting_grid.hpp"
+#include "player/drown.hpp"
 #include "world/chunk_streaming.hpp"
 
 namespace mc {
@@ -572,6 +573,12 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         }
         player["armor"] = std::move(armorObj);
     }
+    // SURV-2: the player's oxygen (format 17, ALWAYS written — a
+    // format-17 file REQUIRES the key; the game always has the real
+    // value, kOxygenMax when breathing).
+    if (save.playerOxygen >= 0) {
+        player["oxygen"] = Json(save.playerOxygen);
+    }
     root["player"] = player;
 
     Json slots = Json::array();
@@ -872,7 +879,8 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     const std::set<std::string> playerFields {"pos", "yaw", "pitch",
                                               "health", "absorption",
                                               "hunger", "saturation",
-                                              "effects", "armor"};
+                                              "effects", "armor",
+                                              "oxygen"};
     MC_TRY(rejectUnknownFields(*player, playerFields, "save 'player'"));
     const Json* ppos = player->find("pos");
     if (ppos == nullptr || !ppos->isArray() || ppos->size() != 3) {
@@ -1057,6 +1065,35 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         }
     } else if (player->find("armor") != nullptr) {
         return MC_FAIL("save 'player.armor' requires format 16 or newer "
+                       "(got " +
+                       std::to_string(def.find("format")->asInt()) + ")");
+    }
+    // Oxygen (format 17; SURV-2, the drowning system). Absent in format
+    // 1-16 files (the player had full air — the sentinel stays -1 for
+    // the migration in Game::applySave); a format-16 file carrying the
+    // key is rejected (the version-lie discipline, the armor twin).
+    // Format 17 REQUIRES the field (the armor-key discipline): an
+    // integer in [0, kOxygenMax] (the air cap, player/drown.hpp).
+    if (def.find("format")->asInt() >= 17) {
+        const Json* oxygen = player->find("oxygen");
+        if (oxygen == nullptr) {
+            return MC_FAIL("save format 17 requires a 'player.oxygen' "
+                           "integer (0.." +
+                           std::to_string(kOxygenMax) + ")");
+        }
+        double d = 0.0;
+        if (!isInt(*oxygen, &d)) {
+            return MC_FAIL("save 'player.oxygen' must be an integer in "
+                           "[0, " + std::to_string(kOxygenMax) + "]");
+        }
+        if (d < 0.0 || d > static_cast<double>(kOxygenMax)) {
+            return MC_FAIL("save 'player.oxygen' must be in [0, " +
+                           std::to_string(kOxygenMax) + "], got " +
+                           std::to_string(d));
+        }
+        save.playerOxygen = static_cast<int>(d);
+    } else if (player->find("oxygen") != nullptr) {
+        return MC_FAIL("save 'player.oxygen' requires format 17 or newer "
                        "(got " +
                        std::to_string(def.find("format")->asInt()) + ")");
     }

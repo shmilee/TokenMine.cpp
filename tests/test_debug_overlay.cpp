@@ -31,11 +31,12 @@ TEST(DebugOverlayTest, LinesFormat) {
     info.maxHealth = 20.0;
     info.absorption = 4.0;
     info.armorPoints = 10;
+    info.oxygen = 132;
     info.hunger = 14.0;
     info.maxHunger = 20.0;
     info.difficulty = "hard";
     const auto lines = debugOverlayLines(info);
-    ASSERT_EQ(lines.size(), 12u);
+    ASSERT_EQ(lines.size(), 13u);
     // Pinned literal (deliberately NOT the TM_VERSION macro): a version
     // bump must force a conscious update of this pin.
     EXPECT_EQ(lines[0], "TokenMine.cpp v0.13.0");
@@ -47,10 +48,12 @@ TEST(DebugOverlayTest, LinesFormat) {
     EXPECT_EQ(lines[6], "streaming idle  pending 0  radius 8");
     EXPECT_EQ(lines[7], "inventory closed  particles 7  entities 3");
     EXPECT_EQ(lines[8], "health 17.0 / 20.0  absorption 4.0  armor 10");
-    EXPECT_EQ(lines[9], "hunger 14 / 20");
-    EXPECT_EQ(lines[10], "difficulty hard");
+    // SURV-2: the oxygen line (the air units left).
+    EXPECT_EQ(lines[9], "oxygen 132");
+    EXPECT_EQ(lines[10], "hunger 14 / 20");
+    EXPECT_EQ(lines[11], "difficulty hard");
     // Phase 46: no active effects -> the baseline "(none)" line.
-    EXPECT_EQ(lines[11], "effects (none)");
+    EXPECT_EQ(lines[12], "effects (none)");
 }
 
 TEST(DebugOverlayTest, ActiveEffectsLine) {

@@ -399,6 +399,15 @@ Result<void> Game::buildScene() {
     MC_TRY(hungerTex);
     m_hungerTexture = std::move(*hungerTex);
 
+    // SURV-2: the oxygen bubble strip — a SINGLE 16x16 tile (no
+    // half-state: the fill count IS the number of drawn icons). It
+    // replaces the hunger row on screen while the air is below full.
+    auto oxygenPath = m_assets.resolve("textures/oxygen.png");
+    MC_TRY(oxygenPath);
+    auto oxygenTex = Texture::loadPng(*oxygenPath);
+    MC_TRY(oxygenTex);
+    m_oxygenTexture = std::move(*oxygenTex);
+
     // Status effect icon strip (Phase 46): 16 px tiles (tile t occupies u
     // in [t/N, (t+1)/N]); the effect data's 'icon' field indexes a tile
     // (cross-checked against this texture's width at init, with the
@@ -2070,6 +2079,11 @@ Result<SaveGame> Game::collectSave() const {
         save.playerArmor[static_cast<std::size_t>(slot)] =
             worn.empty() ? std::string {} : m_items.at(worn.item).name;
     }
+    // SURV-2: the player's oxygen (format 17, always written — the air
+    // units left, kOxygenMax while breathing). The drownTicks
+    // accumulator is deliberately NOT carried (it restarts at 0 on
+    // load — the tick-phase convention, the effects pattern).
+    save.playerOxygen = m_drown.oxygen;
     save.selectedSlot = static_cast<int>(m_selectedSlot);
     save.slots.resize(m_inventory.size());
     for (std::size_t i = 0; i < save.slots.size(); ++i) {
@@ -2472,6 +2486,15 @@ Result<void> Game::applySave(const SaveGame& save) {
                                item.armorPoints);
     }
     m_prevHealth = m_player->health(); // no hurt event from the load itself
+    // 4g) The player's oxygen (format 17; SURV-2, the drowning
+    // system). A format-17 save carries the value (parse-validated
+    // [0, kOxygenMax]); format 1-16 loads full air (the sentinel —
+    // the system did not exist, the player had full air). The
+    // drownTicks accumulator is never saved — it restarts at 0 (the
+    // tick-phase convention, the effects pattern).
+    m_drown.oxygen =
+        save.playerOxygen < 0 ? kOxygenMax : save.playerOxygen;
+    m_drown.drownTicks = 0;
     // 5) Dropped items (with their lifetime/pickup timers restored).
     for (const SavedItemEntity& e : save.entities) {
         const Item& item = m_items.at(m_items.idForName(e.item));
@@ -3048,6 +3071,26 @@ void Game::update(double dt) {
     m_camera.position = m_player->eyePosition();
     m_camera.yaw = m_player->yaw;
     m_camera.pitch = m_player->pitch;
+
+    // SURV-2: the oxygen / drowning pass (the frame-locked class — driven
+    // by m_frameCount, not dt, like the day cycle; the pure step + the
+    // head predicate live in player/drown, the unit tests own them — the
+    // campfire pattern). Runs in every pointer/panel state (the player's
+    // physics pauses behind a panel, the air does not — the world keeps
+    // ticking, the Minecraft behavior); after a death it is naturally
+    // inert (Player::damage no-ops on the frozen body, and the death
+    // transition in updateSurvival refills the state for the respawn).
+    {
+        const float dmg = drownStep(m_drown, headInFluid(*m_player, m_world),
+                                    static_cast<unsigned>(m_frameCount));
+        if (dmg > 0.0f) {
+            // Drowning BYPASSES the armor reduction (the wiki damage
+            // table: Drowning = "Armor: No effect"); the resistance
+            // effect and the absorption pool still apply (damage()'s
+            // pipeline, the bypass flag skips the armor step only).
+            m_player->damage(dmg, /*bypassArmor=*/true);
+        }
+    }
 
     // Survival events (Phase 16): poll the player's health/death state —
     // a drop drives the hurt flash + sound, a death releases the pointer,
@@ -5784,6 +5827,11 @@ void Game::updateSurvival(double dt) {
         m_sound.play("death");
         m_playerEffects.clearAll();
         syncAbsorption(); // Phase 72: the pool dies with the player
+        // SURV-2: the air refills with the death (the respawn
+        // convergence point — the next life starts on the dry spawn
+        // with full oxygen; while dead the pass is inert and the
+        // state's decay is harmless).
+        m_drown = DrownState {};
     }
     m_prevHealth = hp;
     if (dead && m_input.wasPressed(GameKey::R)) {
@@ -6206,8 +6254,30 @@ void Game::renderUi() {
             }
             drawStrip(hx0, heartIcons, m_healthTexture, m_player->health(),
                       Vec4 {1.0f, 1.0f, 1.0f, 1.0f});
-            drawStrip(gx0, hungerIcons, m_hungerTexture, m_player->hunger(),
-                      Vec4 {1.0f, 1.0f, 1.0f, 1.0f});
+            // SURV-2: the oxygen bubble row REPLACES the hunger row at
+            // its position (gx0, hy — the same row, right of the hearts)
+            // while the air is below full (Minecraft: the hunger bar
+            // hides while the air bar shows; out of the fluid the air
+            // refills instantly = the row disappears the same frame).
+            // Single-tile texture, no half-state: icon i is drawn while
+            // oxygen > i * kOxygenPerIcon, so the fill count is
+            // ceil(oxygen / kOxygenPerIcon) of kOxygenBarIconCount.
+            const int oxygen = m_drown.oxygen;
+            if (oxygen < kOxygenMax) {
+                UiBatch& batch =
+                    batchFor(Vec4 {1.0f, 1.0f, 1.0f, 1.0f}, true,
+                             &m_oxygenTexture);
+                for (int i = 0; i < kOxygenBarIconCount; ++i) {
+                    if (oxygen > i * kOxygenPerIcon) {
+                        addQuadUv(batch, gx0 + i * (kIconPx + kIconGap), hy,
+                                  kIconPx, kIconPx, Vec2 {0.0f, 0.0f},
+                                  Vec2 {1.0f, 1.0f});
+                    }
+                }
+            } else {
+                drawStrip(gx0, hungerIcons, m_hungerTexture,
+                          m_player->hunger(), Vec4 {1.0f, 1.0f, 1.0f, 1.0f});
+            }
             // Status effect icons (Phase 46): left-aligned on the heart
             // row (the Minecraft layout), one 16 px effects.png tile per
             // ACTIVE effect in application order (tile t occupies u in
@@ -6594,6 +6664,7 @@ void Game::renderUi() {
             info.maxHealth = m_player->maxHealth();
             info.absorption = m_player->absorption();
             info.armorPoints = m_player->armorPoints(); // SURV-1
+            info.oxygen = m_drown.oxygen; // SURV-2
             info.hunger = m_player->hunger();
             info.maxHunger = m_player->maxHunger();
         }

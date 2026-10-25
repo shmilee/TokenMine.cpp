@@ -478,7 +478,7 @@ int Player::armorPoints() const {
     return std::min(sum, kArmorMaxPoints);
 }
 
-bool Player::damage(float amount) {
+bool Player::damage(float amount, bool bypassArmor) {
     if (m_dead || amount <= 0.0f) {
         return false;
     }
@@ -490,10 +490,15 @@ bool Player::damage(float amount) {
     // the percent-scaled damage (10.0 × 10 pts = floor(600)/100 = 6.0;
     // 1.0 × 2 pts = floor(92)/100 = 0.92). pts 0 skips the step = the
     // value is bit-identical (every pre-SURV-1 damage test untouched).
+    // SURV-2 (drowning, the Minecraft exemption — the wiki damage table
+    // "Drowning: Armor: No effect / Resistance: Applies"): bypassArmor
+    // skips THIS armor step only — the resistance multiply and the pool
+    // drain below run unchanged (drowning calls damage(2.0f, true)).
+    // The default false keeps every other call site bit-identical.
     // Deviation from P84: the resistance is a float multiply, the armor
     // is the floor rule (Minecraft's integer-percentage semantics).
     const int pts = armorPoints();
-    if (pts > 0) {
+    if (pts > 0 && !bypassArmor) {
         amount = std::floor(
                      amount * (100.0f - kArmorReductionPerPoint *
                                           static_cast<float>(pts))) /

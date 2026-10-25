@@ -18,6 +18,7 @@
 #include "core/save.hpp"
 #include "item/campfire.hpp"
 #include "item/item_registry.hpp"
+#include "player/drown.hpp"
 
 using namespace mc;
 
@@ -235,6 +236,7 @@ SaveGame makeSave(const SaveFixture& f) {
     s.playerYaw = 0.785f;
     s.playerPitch = -0.4f;
     s.playerAbsorption = 0.0f; // Phase 72 (no layer in the fixture)
+    s.playerOxygen = kOxygenMax; // SURV-2 (no dive in the fixture)
     s.selectedSlot = 0;
     s.slots.resize(Inventory::kTotalSize);
     s.slots[0] = ItemStack {f.items.idForName("stone"), 64};
@@ -285,8 +287,8 @@ TEST(CampfireSaveTest, FormatIsThirteenAndRoundTrips) {
     s.campfires.push_back({BlockPos {4, 53, 4}, unlit});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // SURV-1: writes are always format 16 (ENT-2 was format 15).
-    EXPECT_EQ(j->find("format")->asInt(), 16);
+    // SURV-2: writes are always format 17 (SURV-1 was format 16).
+    EXPECT_EQ(j->find("format")->asInt(), 17);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->campfires.size(), 3u);
@@ -315,6 +317,7 @@ TEST(CampfireSaveTest, FormatTwelveOldShapeMigratesToSlotZero) {
     root["format"] = Json(12);
     root = withoutKey(root, "states"); // format 12 predates per-block state
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format 12 predates the player's armor
+    root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: format 12 predates the player's oxygen
     // Rewrite the entry to the OLD single-slot shape.
     Json oldEntry = Json::object();
     Json posArr = Json::array();
@@ -352,6 +355,7 @@ TEST(CampfireSaveTest, FormatTwelveEntryWithSlotsKeyRejected) {
     root["format"] = Json(12);
     root = withoutKey(root, "states"); // format 12 predates per-block state
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: the "slots" lie is the one under test
+    root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: the "slots" lie is the one under test
     Json e = root.find("campfires")->at(0);
     Json oldEntry = Json::object();
     oldEntry["pos"] = e.find("pos");
@@ -404,6 +408,7 @@ TEST(CampfireSaveTest, FormatTenLoadsWithoutCampfires) {
     root = withoutKey(root, "states"); // format 10 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 10 predates the absorption pool
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format 10 predates the player's armor
+    root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: format 10 predates the player's oxygen
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->campfires.empty());
@@ -424,6 +429,7 @@ TEST(CampfireSaveTest, FormatTenCampfireEditMigratesEmpty) {
     root = withoutKey(root, "states"); // format 10 predates per-block state
     root["player"] = withoutKey(root["player"], "absorption"); // format 10 predates the absorption pool
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format 10 predates the player's armor
+    root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: format 10 predates the player's oxygen
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->campfires.empty());
@@ -440,6 +446,7 @@ TEST(CampfireSaveTest, RejectsCampfiresFieldInFormatTen) {
     root = withoutKey(root, "states"); // isolate the "campfires" rejection
     root["player"] = withoutKey(root["player"], "absorption"); // the rejection under test is "campfires"
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: the rejection under test is "campfires"
+    root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: the rejection under test is "campfires"
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("format 11"), std::string::npos)

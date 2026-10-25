@@ -60,6 +60,7 @@
 #include "item/inventory.hpp"
 #include "item/item_registry.hpp"
 #include "item/recipe.hpp"
+#include "player/drown.hpp"
 #include "player/player.hpp"
 #include "renderer/mesh.hpp"
 #include "renderer/renderer.hpp"
@@ -1065,6 +1066,13 @@ private:
     // the health strip). The player owns the hunger; the game only draws it
     // and feeds it (tryEat).
     Texture m_hungerTexture;
+    // SURV-2: the oxygen bubble strip (a SINGLE 16x16 tile — no half
+    // state; the fill count is the number of drawn icons, which
+    // replaces the hunger row while the air is below full) + the
+    // player's drowning state (the pure step lives in player/drown,
+    // the unit tests own it — the campfire pattern).
+    Texture m_oxygenTexture;
+    DrownState m_drown;
     // Phase 46 status effects: the data-driven definitions
     // (assets/data/effects) + the player's active instances (core/
     // status_effect.hpp) + the 16 px icon strip (assets/textures/
