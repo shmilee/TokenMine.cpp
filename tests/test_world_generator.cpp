@@ -195,9 +195,13 @@ int findTrunkBase(const Region& r, int x, int z) {
 // at cols 4+ (world x,z >= 64), outside the zone.
 // ---------------------------------------------------------------------------
 
-// The shipped GEN-1 cave tuning (calibrated at seed 123456789: 5.38% of
-// the subsurface band carved, ~95 surface openings per 64x64, p90 straight
-// run width 6/5, clear zone + lake boxes unscathed, 1.18 ms/col).
+// The GEN-1 cave tuning (calibrated at seed 123456789: 5.38% of the
+// subsurface band carved, ~95 surface openings per 64x64, p90 straight
+// run width 6/5, clear zone + lake boxes unscathed, 1.18 ms/col). This
+// fixture value pins the PREDICATE/GEOMETRY behaviour below (it is a
+// legal cs/t pair, independent of what is shipped); the SHIPPED tuning
+// is pinned in test_worldgen_config.cpp (content) and test_cave_probe.cpp
+// (GEN-4 calibration conclusion).
 WorldgenParams calibratedCaveParams() {
     WorldgenParams p = makeParams();
     p.caveNoiseScale = 0.09f;
@@ -1648,14 +1652,18 @@ TEST(WorldGeneratorTest, Gen3ShippedOreVeinCellCountsPinned) {
     ASSERT_TRUE(w.load()) << "run the tests from the repository root";
     w.generateRegion(kGen3CX0, kGen3CX1, kGen3CZ0, kGen3CZ1);
     // The calibration final (probe region, single round): exact pins.
+    // GEN-4 re-pin (cave noise_scale 0.09 → 0.05): caves carve a different
+    // cell set, so the deep-stone cells available to ore placement shift
+    // slightly (ores never replace carved cells) — the shape switch +
+    // probability re-tune contract is unchanged.
     const int coal = w.countOre("coal_ore");
     const int iron = w.countOre("iron_ore");
     const int diamond = w.countOre("diamond_ore");
     const int gravel = w.countOre("gravel");
-    EXPECT_EQ(coal, 3397); // old baseline 3206 (ratio 1.060)
-    EXPECT_EQ(iron, 1670); // old baseline 1908 (ratio 0.875)
-    EXPECT_EQ(diamond, 91); // old baseline 142 (ratio 0.641 — recorded)
-    EXPECT_EQ(gravel, 1080); // old baseline 1007 (ratio 1.073)
+    EXPECT_EQ(coal, 3448); // old baseline 3206 (ratio 1.075)
+    EXPECT_EQ(iron, 1684); // old baseline 1908 (ratio 0.883)
+    EXPECT_EQ(diamond, 103); // old baseline 142 (ratio 0.725 — recorded)
+    EXPECT_EQ(gravel, 1087); // old baseline 1007 (ratio 1.079)
     // The soft density band vs the old random-walk baseline: drift
     // guard (a shape/parameter regression moves the density out of band
     // long before the exact pin's value changes world meaningfully).

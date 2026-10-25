@@ -243,9 +243,15 @@ TEST(WorldgenConfigTest, OldThresholdKeyLoadsAndIsLegacy) {
     EXPECT_FLOAT_EQ(r->caveTubeThreshold, 0.06f); // the live knob
 }
 
-// Content pin: the shipped worldgen.json carries the calibrated GEN-1 cave
-// tuning (noise_scale 0.09 / tube_threshold 0.06 / surface_guard 0 /
-// spawn_clear_columns 2) and NO retired `threshold` key.
+// Content pin: the shipped worldgen.json carries the calibrated cave
+// tuning. GEN-1 set noise_scale 0.09 / tube_threshold 0.06; GEN-4
+// re-calibrated the FRAGMENTATION (the user report "caves too many and
+// too broken, small caves constantly" → the single-round probe grid,
+// tests/cave_probe.hpp + build/bin/cave_probe): noise_scale 0.09 → 0.05
+// (coarser tube features → fewer, much bigger caves; the 4-6% density
+// band holds, pocket cells drop ~97%, component count ~4x down),
+// tube_threshold 0.06 (unchanged — the pocket-merging knob was not
+// needed). surface_guard 0 / spawn_clear_columns 2 unchanged.
 TEST(WorldgenConfigTest, Gen1ShippedCaveTuning) {
     AssetManager assets;
     ASSERT_TRUE(assets.setRoot("assets").ok())
@@ -254,7 +260,7 @@ TEST(WorldgenConfigTest, Gen1ShippedCaveTuning) {
     ASSERT_TRUE(r.ok()) << r.error().message;
     const WorldgenParams& p = *r;
     EXPECT_TRUE(p.cavesEnabled);
-    EXPECT_FLOAT_EQ(p.caveNoiseScale, 0.09f);
+    EXPECT_FLOAT_EQ(p.caveNoiseScale, 0.05f); // GEN-4 (was 0.09 in GEN-1)
     EXPECT_FLOAT_EQ(p.caveTubeThreshold, 0.06f);
     EXPECT_EQ(p.caveMinY, 2);
     EXPECT_EQ(p.surfaceGuard, 0);

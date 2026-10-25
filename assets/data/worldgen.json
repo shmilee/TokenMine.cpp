@@ -13,7 +13,7 @@
  },
  "caves": {
   "enabled": true,
-  "noise_scale": 0.09,
+  "noise_scale": 0.05,
   "tube_threshold": 0.06,
   "min_y": 2,
   "surface_guard": 0,

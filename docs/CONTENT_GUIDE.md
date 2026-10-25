@@ -816,7 +816,7 @@ config 其余部分的前向兼容一致）。种子配置（首次运行生成�
 - 地形：base 40 / amplitude 24 / 海平面 34 / 高度噪声 0.02×4 octaves；y=0 bedrock。
 - Biomes：desert(w2, sand, tree 0, hs 0.9) / forest(w4, grass, tree 0.12, hs 1.1) /
   plains(w4, grass, tree 0.03, hs 1.0)；biome 噪声 0.02。
-- 洞穴（`[GEN-1]` 面条洞）：`caves` 段——`noise_scale 0.09` /
+- 洞穴（`[GEN-1]` 面条洞；`[GEN-4]` 破碎度重标定 noise_scale 0.09→0.05）：`caves` 段——`noise_scale 0.05` /
   `tube_threshold 0.06`（两 3D 噪声中位带相交 = 管状隧道；0 拒、≥0.5 拒，
   点名）/ `min_y 2` / `surface_guard 0`（0 = 允许洞口打穿表面 = shipped；
   ≥1 = 表面 + guard 层壳保护 = 旧语义）/ `spawn_clear_columns 2`（原点

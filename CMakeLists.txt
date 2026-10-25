@@ -169,8 +169,20 @@ add_executable(tokenmine_tests
     tests/test_biome.cpp
     tests/test_worldgen_config.cpp
     tests/test_world_generator.cpp
+    tests/test_cave_probe.cpp
 )
 target_compile_definitions(tokenmine_tests PRIVATE
     MC_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data")
 target_link_libraries(tokenmine_tests PRIVATE mc_core GTest::gtest_main)
 add_test(NAME unit_tests COMMAND tokenmine_tests)
+
+# ---------------------------------------------------------------------------
+# GEN-4: the standalone cave-fragmentation calibration driver (kept OUT of
+# the suite so the full 9-combo x 3-seed x 96-col cross-check table stays a
+# one-shot ~5 s run, not a per-suite cost). Run from the repository root:
+#   ./build/bin/cave_probe                 (the 32-col grid, ~0.5 s)
+#   ./build/bin/cave_probe 96              (the 96-col cross-check grid)
+#   ./build/bin/cave_probe 0.07 0.07 9     (one combo)
+# ---------------------------------------------------------------------------
+add_executable(cave_probe tests/cave_probe_main.cpp)
+target_link_libraries(cave_probe PRIVATE mc_core)

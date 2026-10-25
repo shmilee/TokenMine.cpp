@@ -58,12 +58,26 @@
 - ~~**GEN-2 树生长**~~ — **完成（2026-10-22 夜）**：3 树种可种植 sapling（oak 复用 wood/leaves + spruce/birch 新块；块 id 路线，stateful cross 块 = ENT-2 state_count 8 即生长 stage）+ `tree` 对象 6 键严格解析（init 交叉校验含 tree⇒state_count≥2）+ **m_crops 平行生长引擎**（saplingGrowthSteps 纯函数：plant_on 土壤门 + growth_light 9 门 + roll%ticks 120 → Advance 状态+1 零光照成本 / 终阶段+fits → 落树）+ **`world/tree_shape` 纯几何**（planTree 3 形状表：oak 与 placeTrees 逐格同构【单测对照钉死】/ spruce 下宽上尖锥 / birch 细高小冠 + treeHeightRoll 新盐 PITS #4）+ **stage 视觉 = emitCross 绕格心缩放 (stage+1)/8**（无状态 cross 恒 scale 1 位级零变化）+ **落树 = placeGrownTree**（逐格 setBlock + 1 次 updateRegion bbox = LGT-2 冠影）+ 内容闭环（3 leaves chance_drops += sapling @0.05【oak = P55 演进】/ hotbar.json 新 `inventory` 段 3 sapling 各 3 颗入隐藏槽 24-26 = 不渲染）+ 9 新 block tile（salt 935 起 / 9 atlas 空位免重锚 / 既有 PNG 零变化）；**世界生成零触碰**（sapling stateful ⇒ ENT-2 init 不变量天然拒）；1285/1285（+25 新 + 2 内容演进【P55 掉落集 2→3 / P63 可燃 10→17】）；base18 **第 86 门 = 结构性免疫不重锚**（新 ×2 与门 84 锚字节一致）；E2E：gen2_scan 探针预计算选点（PITS #208 纪律）+ S2 落树场景 ×2 RAW + savenorm EXACT + 树 55 格与 planTree 逐格一致 + 截图树像素 / S3 推进对照 **stage 4 = 探针预计算逐帧一致** + A/B 324k px / S6 点名拒绝；**偏离**：野外森林单橡种（worldgen 多树种 = 未来项需重锚）/ 旧存档无 spruce-birch 来源（oak 经 leaves 可达）/ 潜旋 sapling = stage+1 手工催熟（接受为特性）/ 斧对新木无效；晨间输入三项推迟（放 sapling/潜旋催熟/破坏掉 self）。**GEN 行剩 GEN-3 = GEN-2 完成时 GEN 行 2/3**
 - ~~**GEN-3 矿脉形态**~~ — **完成（2026-10-22 夜）**：随机游走脉 → **MC 3×2×1 旋转椭球脉**（`planOreVein` 纯函数：整数谓词 4u²+9v²+36w²≤36 恰 21 格【static_assert 钉死】+ 6 轴置换取向 + PITS #4 取数流；**gravel 同改**）+ placeOres 重接（**placeOre 零改动**、lattice/概率门/起点/盐流逐位保留、margin 17→11）+ **vein_size 语义演进 = 椭球簇数 K ∈ [1,8]**（shipped 全 K=1；K>1 机制实现 + 单测，未来调档零核心改动）+ **单轮密度标定**（探针 64 列×128 高：pass1 比值 2.6-5.6× → 概率降档定稿 0.154/0.0855/0.0376/0.0101/0.0208/0.0445 → pass2：coal 1.060×/iron 0.875×/gold 1.007×/gravel 1.073× 带内；**diamond 0.641×/lapis 0.732× 残留记档**【单轮纪律】）；1297/1297（+12 新 + 2 演进）；base18 **第 87 门 = 结构性免疫不重锚**（视图 ⊆ 演示区 + 演示区无洞 + 矿只替换 deep 层）；E2E：S2 洞壁矿 A/B（场景火把照明【深洞矿光 ≈0 不可见】+ 相机真眼高 pitch【PITS #209】）新旧 **6,703 px**（v0.3.0 资产 scratch TM_REPO 跑）/ S6 vein_size 9 点名拒绝；**偏离**：矿感 = 脉更大更稀（MC 1.18+ chunky sparse）/ 旧存档新脉形（worldgen 演进）/ K>1 未 shipped。
 
-- **GEN-4 洞穴破碎度**（10-25 用户报障）——洞穴**太多太碎**：经常碰到很小的
-  洞穴，体验差。GEN-1 面条洞穴（两噪声中位带相交，标定 0.09/0.06/0/2）的
-  密度/碎片度重标定：目标 = 减少小洞窟（pocket）、洞体更大更少（MC 1.18+
-  洞穴感）。数据驱动优先（worldgen.json caves 段参数；若碎片根因在算法
-  结构 = 最小核心改动单独立论）。执行序：行序 GEN < SURV = **在 SURV-4
-  （进行中，仅剩发布收尾）之后、SURV-5 之前**（= v0.17.0）。
+- ~~**GEN-4 洞穴破碎度**~~ — **完成（2026-10-25，发布 v0.17.0）**（用户
+  报障：洞穴太多太碎、小洞频繁）：GEN-1 面条洞穴参数重标定 =
+  **`noise_scale` 0.09 → 0.05**（tube_threshold 0.06 保持；worldgen.json
+  唯一内容变更，**src/ 零变更**）——噪声特征周期 ~1.8× = 管体更粗更长、
+  小口袋并入主管；t 不动 = n2 短路率持平不加密度（0.05/0.07 聚合 6.55%
+  出带证否）。**标定**：探针 `tests/cave_probe.{hpp}` + 独立驱动
+  `build/bin/cave_probe`（真实资产 + `WorldGenerator::create` 工厂，
+  32×32 设计样本 + **96×96 交叉验证**，seed {123456789,9,42} 全网格 +
+  7 抽查，26-邻洪泛连通域统计）；方法论修正 = 单 seed 摆动 ±1.5pp
+  噪声主导 → **3-seed 聚合选择规则**（4-6% 带内 + pocket 最少 + 域数
+  最少）。**效果（96×96 四 seed 聚合）**：挖除 5.82%→5.12%（−12%）/
+  域数 35→8 / **pocket(<8格) 110→10 格（−91%）** / 中位洞体积
+  12-42→392-1554 格（9-130×）= "更少更大"直击报障三点。1490/1490
+  （+5 新 + 2 契约演进重钉【GEN-3 矿计数派生漂移全在原软带内 / P90
+  溢流路由 churn 1→3 湖契约不变，两跑字节一致】）。**门 100**：S2 探针
+  统计 gate 内独立复跑 PASS（3 seed 逐 seed 全指标更优）+ 演示区恒等
+  结构性（spawn_clear 门控 + cs 只被洞穴谓词消费）+ S1 PASS = 60f 视图结构性免疫（新 ×2 RAW +
+  vs v0.16.0 A/B **0 px**——洞穴几何差异在 60f 流送视图外；base18 锚
+  刷新；洞口分布全量重排 −23% = 探针实证的世界演进事实）；性能 A/B v0.16.0 fall 900f 三窗 upd/render/flush/player/ents/stream 全同档 = **代码成本零**（fluid 段 +74% 格 = 洞穴重排世界演进，每格成本同档）。零 format（旧存档新洞形 = P86/88/93/GEN-1 先例）。
+  GEN 行 4/5（剩 GEN-5 浮空树）。
 - **GEN-5 浮空树**（10-25 用户报障）——洞穴生成后**部分树长在半空中**
   （GEN-1 洞挖掉了树下的地面/树干支撑）。修复 = 树放置的支撑校验
   （placeTrees 与洞挖的顺序/校验：树根格与树干路径须有固体支撑，

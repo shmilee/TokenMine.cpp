@@ -1308,8 +1308,8 @@ TEST(FluidTest, P90OverflowExactFinal) {
     // after its 240th frame). Fire spread never runs (the game's separate
     // pass; the P90 scene uses spread 0). The route-A constants (identical
     // to the pre-FLUID-1 rule — this scene never triggered the deleted
-    // raise branch): the rim chars, the total/late edit counts, the single
-    // churn cell, and the final lava census.
+    // raise branch): the rim chars, the total/late edit counts, the churn
+    // cells, and the final lava census (GEN-4 re-pin, see below).
     AssetManager assets;
     ASSERT_TRUE(assets.setRoot("assets").ok())
         << "run the tests from the repository root";
@@ -1383,10 +1383,16 @@ TEST(FluidTest, P90OverflowExactFinal) {
         }
     }
     EXPECT_EQ(rimChars, 66);
-    EXPECT_EQ(total, 473L);
-    EXPECT_EQ(late, 171L);
-    EXPECT_EQ(churn, 1); // the accepted standing waterfall (the KNOWN_ISSUES
-                         // fluid-section churn class)
+    // GEN-4 re-pin (cave noise_scale 0.09 → 0.05): the overflow route
+    // changed — a new drainage channel carries lava beyond the disk-3
+    // census, so the overflow cells drop 157 → 72 while the flow does
+    // MORE work (total 473 → 707, late 171 → 273) and leaves 3 standing
+    // waterfall cells (1 pre-GEN-4). The lake's own contract is intact
+    // (rimChars 66 / basin 18 / buried 260 unchanged).
+    EXPECT_EQ(total, 707L);
+    EXPECT_EQ(late, 273L);
+    EXPECT_EQ(churn, 3); // the accepted standing waterfalls (the
+                         // KNOWN_ISSUES fluid-section churn class)
     // The final lava census: basin vs overflow (the two buried lakes are
     // static and excluded by their region boxes).
     int basin = 0, buried = 0, overflow = 0;
@@ -1424,5 +1430,5 @@ TEST(FluidTest, P90OverflowExactFinal) {
     }
     EXPECT_EQ(basin, 18);
     EXPECT_EQ(buried, 260);
-    EXPECT_EQ(overflow, 157);
+    EXPECT_EQ(overflow, 72);
 }
