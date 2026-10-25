@@ -265,7 +265,27 @@
   用户实机（无头不可听记档）——详见 `docs/archive/phase-craft3.md`
 
 ### SAVE 存档
-- **SAVE-1 自动存档** — 周期性 autosave + "保存并退出"流程（存档条）
+- ~~**SAVE-1 自动存档**~~ — **完成（2026-10-26，v0.24.0，SAVE 行 1/1 收尾）**：
+  `save.auto_save_seconds` 代码默认 120.0（**config.json 零改动**，fire 节同款模式；
+  显式 0 = 关闭，负数/非数字点名拒）+ **真实 dt 自动存档计时器**（`--save` 槽门控
+  = 无槽结构惰性；`autoSaveStep` 纯函数 campfire-tick 范式；成功归零/失败不清零
+  下帧重试无退避 = 记档简化）+ **原子写**（`writeAtomicFile` 同目录 `.tmp` +
+  `std::filesystem::rename` POSIX 原子，F5/退出/自动三路共用增强；任一步失败删
+  tmp + 原 MC_FAIL 语义，失败写永不毁旧档）+ 日志行可区分（`World auto-saved to`
+  vs 既有 `World saved to`）。纯函数提取 3 件（config 严格读/计时器步进/原子写）。
+  1590/1590（+23：config 11 + 步进 5 + 原子写 7）、`-Werror` 0 警告、零 format
+  （19）；门 107：S1 PASS = 第 107 次结构性免疫（fresh 60f ×2 RAW + vs base18
+  字节一致，免重锚 = 槽门控 + 60f 实时间 ≪ 120 s 窗内零事件）+ S2 自动存档实证
+  （mov-config interval=3：600f 日志 3 行 auto-saved 实间隔 3.017/3.016/3.016 s
+  + 退出行可区分 + 终档 time 0.268333 精确匹配 + blockEdits 9→10→13→14 增量
+  journal 经自动路径工作实证 + ×2 终档 savenorm EXACT）+ S2b 崩溃韧性（kill -9
+  中途：slot 可解析 format 19 中途快照 time 0.2567 + 零 .tmp 残留 = 半写档
+  不可达）+ S6 config 点名 ×2（-5 / "fast"）+ S3 套件 1590；性能 A/B v0.23.0
+  fall 900f 三窗 fluidCells 123879/167781/236573 双侧逐位一致 + 全指标同档 +
+  双侧 auto-saved 事件 = 0（跑期 ≪120 s 结构惰性实证）= 成本可忽略。
+  记档偏离：真实 dt 节奏（MC 按游戏 tick；本项目生存计时器纪律一致）/ 无多槽
+  轮转与"保存并退出"流程（矩阵外残余）/ 失败重试下帧级无退避——详见
+  `docs/archive/phase-save1.md`
 
 ### PRE 表现层
 - **PRE-1 中文字体** — 字体中文字形（UI 条）

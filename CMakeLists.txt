@@ -159,6 +159,7 @@ add_executable(tokenmine_tests
     tests/test_durability.cpp
     tests/test_save.cpp
     tests/test_save_journal.cpp
+    tests/test_auto_save.cpp
     tests/test_status_effect.cpp
     tests/test_thread_pool.cpp
     tests/test_chunk_streaming.cpp

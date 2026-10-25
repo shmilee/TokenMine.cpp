@@ -575,6 +575,16 @@ private:
     CampfireCookState& campfireAt(const BlockPos& pos);
     // Footstep sound timer (moving + on ground, pointer captured).
     void updateSoundTimers(double dt);
+    // SAVE-1: the auto-save pass (REAL dt, the survival-timer class —
+    // hard rule 8: the accumulator is not frame state, it is never saved
+    // and never touches the deterministic frame, the audio-timer class).
+    // Gated on a --save slot (structurally inert without one) and the
+    // configured interval (save.auto_save_seconds, 0 = off); when the
+    // interval elapses it writes the full save (writeSave, atomic) — a
+    // success zeros the accumulator, a failure keeps it armed for the
+    // NEXT frame's retry (ERROR log; a broken save path must not drop
+    // the save window).
+    void updateAutoSave(double dt);
     // Phase 16 survival polling: a health drop drives the hurt flash +
     // sound, a death releases the pointer (the death screen is rendered
     // from the player's state) and plays the death sound, and R (while
@@ -623,7 +633,12 @@ private:
     // inventory + entities + time).
     Result<SaveGame> collectSave() const;
     // Serializes collectSave() to the slot file (logs the result).
-    Result<void> writeSave() const;
+    // SAVE-1: the write is ATOMIC (writeAtomicFile: same-directory temp
+    // + rename) — a crash mid-write cannot corrupt the slot. byAutoSave
+    // picks the log line ("World auto-saved to" for the periodic pass,
+    // "World saved to" for the exit / F5 passes — the E2E asserts on
+    // the line).
+    Result<void> writeSave(bool byAutoSave = false) const;
     // Reads + strictly parses the slot file (cross-checked against the
     // registries and the world seed).
     Result<SaveGame> readSaveFile(const std::filesystem::path& path) const;
@@ -1092,6 +1107,16 @@ private:
     // structurally inert — the m_fireEffectId pattern).
     Mesh m_beaconBeamMesh;
     int m_beaconEffectId = -1;
+
+    // SAVE-1: the auto-save cadence (save.auto_save_seconds — a CODE
+    // default; the committed config carries no save section, the
+    // fire/mobs/beacon config-key discipline) + the real-dt accumulator
+    // (NOT frame state, hard rule 8: never saved, never affects the
+    // deterministic frame — the audio-timer class). 0 = off (the
+    // pre-SAVE-1 behavior); without a --save slot the timer is
+    // structurally inert (updateAutoSave's gate).
+    double m_autoSaveInterval = kAutoSaveDefaultSeconds;
+    double m_autoSaveAccum = 0.0;
 
     // Phase 15 particles + audio: the break bursts (deterministic seeds:
     // world seed mixed with an increasing per-break counter) and the sound

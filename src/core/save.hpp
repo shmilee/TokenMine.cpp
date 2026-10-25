@@ -64,12 +64,14 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <map>
 #include <set>
 #include <string>
 #include <vector>
 
 #include "block/block_registry.hpp"
+#include "core/config.hpp"
 #include "core/error.hpp"
 #include "core/json.hpp"
 #include "core/math/vec3.hpp"
@@ -558,5 +560,48 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                            const BlockRegistry& blocks,
                            const EffectRegistry& effects,
                            std::int64_t expectedSeed);
+
+// ---------------------------------------------------------------------------
+// SAVE-1: the auto-save (periodic + crash-resilient save writes)
+// ---------------------------------------------------------------------------
+
+// The auto-save interval's CODE default, in REAL seconds (two minutes —
+// the survival-timer-class cadence; the committed config/config.json
+// carries no save section, the fire/mobs/beacon config-key discipline).
+inline constexpr double kAutoSaveDefaultSeconds = 120.0;
+
+// The strict read of save.auto_save_seconds (the player.cpp config-
+// reader discipline — the Config getters would SILENTLY fall back to the
+// default on a type mismatch, so the raw value is read): absent key =
+// kAutoSaveDefaultSeconds; a present key must be a finite JSON number
+// >= 0 (0 = auto-save OFF, the pre-SAVE-1 behavior; > 0 = write a full
+// save every N real seconds). A negative or non-finite value is named
+// and rejected at init; a non-number type is named and rejected.
+Result<double> autoSaveIntervalSeconds(const Config& config);
+
+// The auto-save timer step (pure — the campfire-tick pattern): advance
+// the real-dt accumulator by `dt` and report whether a save is due
+// (accumulated time reached the interval). The caller gates on the
+// presence of a --save slot (structural laziness without one) and
+// attempts the save when due: a SUCCESS zeros the accumulator, a
+// FAILURE leaves it armed (it stays >= the interval, so the NEXT frame
+// retries — a broken save path must not drop the save window). An
+// interval <= 0 (off) never reports due and leaves the accumulator
+// untouched.
+bool autoSaveStep(double& accum, double dt, double interval);
+
+// The crash-resilient file write shared by the exit save, the F5 save
+// and the periodic auto-save (Game::writeSave): the content goes to a
+// TEMP file in the SAME directory (path + ".tmp"), flushed and closed,
+// and only then is RENAMED onto the destination — a same-directory
+// rename is atomic on POSIX, so the destination holds either the old
+// COMPLETE file or the new complete file, never a half-written one
+// (a kill mid-write leaves at most the stale temp, which the next
+// write overwrites). Any failed step removes the temp (when it exists)
+// and returns the pre-SAVE-1 MC_FAIL semantics (the message still names
+// the DESTINATION — the caller's concept, not the temp); a failed write
+// never destroys a previously complete save.
+Result<void> writeAtomicFile(const std::filesystem::path& path,
+                             const std::string& content);
 
 } // namespace mc

@@ -2,6 +2,9 @@
 #include "core/thread_pool.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <iterator>
 #include <map>
 #include <set>
@@ -2347,6 +2350,75 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // possible) — the consumers fall back to the block's state default on
     // load (the cells keep the sentinel).
     return save;
+}
+
+// ---------------------------------------------------------------------------
+// SAVE-1: the auto-save (periodic + crash-resilient save writes)
+// ---------------------------------------------------------------------------
+
+Result<double> autoSaveIntervalSeconds(const Config& config) {
+    const Json* j = config.at("save.auto_save_seconds");
+    if (j == nullptr) {
+        return kAutoSaveDefaultSeconds; // absent: the code default
+    }
+    if (!j->isNumber()) {
+        return MC_FAIL("config save.auto_save_seconds must be a number");
+    }
+    const double v = j->asDouble();
+    if (!std::isfinite(v)) {
+        return MC_FAIL("config save.auto_save_seconds must be finite");
+    }
+    if (v < 0.0) {
+        return MC_FAIL("config save.auto_save_seconds must be >= 0 "
+                       "(0 = auto-save off), got " + std::to_string(v));
+    }
+    return v;
+}
+
+bool autoSaveStep(double& accum, double dt, double interval) {
+    if (interval <= 0.0) {
+        return false; // off: the timer is structurally inert
+    }
+    accum += dt;
+    return accum >= interval;
+}
+
+Result<void> writeAtomicFile(const std::filesystem::path& path,
+                             const std::string& content) {
+    // The temp sits NEXT TO the destination (same directory) so the
+    // final rename is a same-filesystem swap — atomic on POSIX.
+    const std::filesystem::path tmp = path.string() + ".tmp";
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+    {
+        std::ofstream out(tmp);
+        if (!out) {
+            return MC_FAIL("cannot open save file for writing: '" +
+                           path.string() + "'");
+        }
+        out << content;
+        out.flush();
+        if (!out) {
+            std::filesystem::remove(tmp, ec); // best effort
+            return MC_FAIL("write error for save file '" + path.string() +
+                           "'");
+        }
+        out.close();
+        if (!out) {
+            std::filesystem::remove(tmp, ec); // best effort
+            return MC_FAIL("write error for save file '" + path.string() +
+                           "'");
+        }
+    }
+    std::filesystem::rename(tmp, path, ec);
+    if (ec) {
+        // The failed rename leaves the destination untouched (the old
+        // complete save, if any, survives) — drop the temp and report.
+        std::filesystem::remove(tmp, ec); // best effort
+        return MC_FAIL("cannot move '" + tmp.string() + "' to '" +
+                       path.string() + "': " + ec.message());
+    }
+    return {};
 }
 
 } // namespace mc

@@ -1089,6 +1089,18 @@ Result<void> Game::buildScene() {
     }
     m_beaconBeam = m_config.getBool("beacon.beam", true);
 
+    // SAVE-1: the auto-save interval (save.auto_save_seconds — a CODE
+    // default, the fire/mobs/beacon config-key discipline: the committed
+    // config.json carries no save section). Strict read: absent = the
+    // default, present = a finite number >= 0 (0 = off = the pre-SAVE-1
+    // behavior; a negative / non-finite / non-number value is named and
+    // rejected).
+    {
+        auto interval = autoSaveIntervalSeconds(m_config);
+        MC_TRY(interval);
+        m_autoSaveInterval = *interval;
+    }
+
     // -- item icons (Phase 15 UI) ------------------------------------------
     // Each explicit item may name a 2D icon under assets/textures/items/
     // (strict: the file must exist — same cross-check pattern as the block
@@ -2378,25 +2390,19 @@ Result<SaveGame> Game::collectSave() const {
     return save;
 }
 
-Result<void> Game::writeSave() const {
+Result<void> Game::writeSave(bool byAutoSave) const {
     auto saved = collectSave();
     MC_TRY(saved);
     auto serialized = serializeSave(*saved, m_items);
     MC_TRY(serialized);
     const std::filesystem::path path = savePath();
-    std::error_code ec;
-    std::filesystem::create_directories(path.parent_path(), ec);
-    std::ofstream out(path);
-    if (!out) {
-        return MC_FAIL("cannot open save file for writing: '" + path.string() +
-                       "'");
-    }
-    out << serialized->dump(2) << '\n';
-    out.close();
-    if (!out) {
-        return MC_FAIL("write error for save file '" + path.string() + "'");
-    }
-    MC_LOG_INFO("World saved to '" + path.string() + "' (" +
+    // SAVE-1: the ATOMIC write (same-directory temp + rename) shared by
+    // the exit save, the F5 save and the periodic auto-save — the slot
+    // file holds either the previous complete save or this one, never a
+    // half-written one (a kill mid-write cannot corrupt it).
+    MC_TRY(writeAtomicFile(path, serialized->dump(2) + '\n'));
+    MC_LOG_INFO((byAutoSave ? "World auto-saved to '" : "World saved to '") +
+                path.string() + "' (" +
                 std::to_string(saved->blockEdits.size()) +
                 " block edits, " + std::to_string(saved->fluidEdits.size()) +
                 " fluid edits, " + std::to_string(saved->entities.size()) +
@@ -3252,6 +3258,12 @@ void Game::update(double dt) {
     // Break particles (Phase 15) + the footstep sound timer.
     m_particles.update(dt);
     updateSoundTimers(dt);
+    // SAVE-1: the auto-save pass (real dt, the survival-timer class).
+    // Runs in the frame's sole-World-writer window — the F5 save's
+    // precedent (handleUiKeys above) — AFTER every state update of this
+    // frame, so the snapshot is the frame's settled state. Structurally
+    // inert without a --save slot or with the interval off (0).
+    updateAutoSave(dt);
 
     // Streaming decision + generation jobs: posted after every
     // main-thread World write of this frame (interaction, fluids) and
@@ -6292,6 +6304,28 @@ void Game::updateSoundTimers(double dt) {
         }
     } else {
         m_stepTimer = 0.0;
+    }
+}
+
+void Game::updateAutoSave(double dt) {
+    // SAVE-1: the real-dt auto-save timer (hard rule 8 — the accumulator
+    // is NOT frame state: never saved, never touches the deterministic
+    // frame; it is the audio-timer class, the survival-timer rhythm).
+    // The slot gate is structural: without --save the timer never arms.
+    if (!m_args.saveSlot.has_value()) {
+        return;
+    }
+    if (!autoSaveStep(m_autoSaveAccum, dt, m_autoSaveInterval)) {
+        return;
+    }
+    auto saved = writeSave(true);
+    if (saved.ok()) {
+        m_autoSaveAccum = 0.0;
+    } else {
+        // A failed write keeps the accumulator armed (>= the interval):
+        // the NEXT frame retries (no backoff — the documented
+        // simplification; the save path's error is the signal).
+        MC_LOG_ERROR("Auto-save failed: " + saved.error().describe());
     }
 }
 
