@@ -34,6 +34,21 @@
 //     lingering duration (a grant of duration 0). Mutually exclusive with
 //     `tick_type` (an effect is either a tick action or an instant one).
 //     Absent = no instant action (the default).
+//   - `affects_mobs` (SURV-5): the effect is accepted by the MOB carrier
+//     (Minecraft's "affects monsters" line). Absent/false = player-only
+//     (every pre-SURV-5 effect; the bow arrow's effect must carry it —
+//     init cross-check).
+//   - `min_health_mob` (SURV-5): the health floor a MOB's damage tick must
+//     not cross — the twin of `min_health` for the mob carrier. Integer 0
+//     or 1; ABSENT = follows `min_health` (the player's floor). Poison
+//     ships `min_health_mob: 0`: the player keeps its 1-HP floor while a
+//     mob CAN be poisoned to death (Minecraft's dual-target rule). Valid
+//     only for a "damage" tick (like `min_health`).
+//   - `undead_exempt` (SURV-5): the effect is IGNORED by UNDEAD mobs
+//     (Minecraft: poison does not affect the undead). Poison ships it;
+//     the wither does not (the wither is the effect that kills undead —
+//     Minecraft's uniqueness). Combined with the mob's `undead` flag
+//     (data/mobs/*.json) at apply time.
 //
 // Timing: the durations and tick accumulators run on REAL dt (the survival
 // timer class, like hunger and the eat channel — hard rule 8). The events
@@ -41,12 +56,15 @@
 // headless runs stay byte-reproducible (the remaining seconds in a save are
 // real-dt values, like the hunger level).
 //
-// v1 scope: effects live on the PLAYER only (mobs cannot be affected —
-// there is no item/mob source that applies one to a mob). Sources: a mob's
-// `on_hit_effect` (its landed melee hit applies the effect — the spider's
-// poison), the LAVA (the `ignites_on_lava` effect, Phase 57 — the fire),
-// and save injection (the E2E scenes; weakness has no in-game source in
-// v1, its Minecraft source — potions — is not built yet).
+// v1 scope: effects live on the PLAYER (SURV-5 extends the carrier to
+// mobs, data-gated by `affects_mobs`: the bow's arrow applies its effect
+// to the hit mob, the skeleton's arrow applies the wither to the player;
+// heal ticks are a no-op on mobs — MobEntity has no regeneration).
+// Sources: a mob's `on_hit_effect` (its landed melee hit applies the
+// effect — the spider's poison), the LAVA (the `ignites_on_lava` effect,
+// Phase 57 — the fire), a bow's `arrow_effect` (SURV-5, its arrow's hit
+// on a mob) and save injection (the E2E scenes; weakness has no in-game
+// source, its Minecraft source — potions — arrived in SURV-4).
 #pragma once
 
 #include <cstddef>
@@ -112,6 +130,24 @@ struct Effect {
     float instantHp = 0.0f;
     // Cleared by drinking a milk container (negative effects).
     bool negative = false;
+    // SURV-5: accepted by the mob carrier (Minecraft's "affects monsters";
+    // poison / wither = true). A bow's arrow_effect must name an effect
+    // with this flag (init cross-check — a bow's arrow only ever hits
+    // mobs). false = player-only (every pre-SURV-5 effect).
+    bool affectsMobs = false;
+    // SURV-5: the health floor a MOB's damage tick must not cross — the
+    // mob-side twin of `minHealth`. -1 = the ABSENT field (the mob floor
+    // follows `minHealth`); 0 = no floor (a damage tick may kill the mob);
+    // 1 = the mob is kept at >= 1 (the effect never kills a mob). Valid
+    // only for Tick::Damage (a heal tick cannot floor health, like
+    // `min_health`). Poison ships 0 (player floor 1 kept, mobs die —
+    // Minecraft's dual-target rule).
+    int minHealthMob = -1;
+    // SURV-5: the effect is ignored when applied to an UNDEAD mob
+    // (Minecraft: poison does not affect the undead — the wither does).
+    // Poison ships it; a pure apply-time combination gate with the mob's
+    // data `undead` flag (no init check needed — both defaults false).
+    bool undeadExempt = false;
     // (Re-)applied every frame while the player is in the lava (the fire,
     // Phase 57). At most one registered effect may carry this flag.
     bool ignitesOnLava = false;

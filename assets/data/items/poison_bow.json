@@ -1,0 +1,12 @@
+{
+  "id": "poison_bow",
+  "type": "material",
+  "max_stack": 1,
+  "icon": "poison_bow",
+  "shoot_speed": 15.0,
+  "shoot_damage": 5.0,
+  "attack_damage": 1.0,
+  "ammo": "arrow",
+  "arrow_effect": { "name": "poison", "duration": 60 },
+  "durability": 384
+}

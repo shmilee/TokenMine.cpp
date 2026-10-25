@@ -11,9 +11,11 @@
     "retreat_distance": 3,
     "shoot_speed": 15,
     "ammo": "arrow",
+    "arrow_effect": { "name": "wither", "duration": 10 },
     "wander_interval": 2.5,
     "spawn_max_light": 0,
     "hostile": true,
+    "undead": true,
     "drops": [
       { "item": "bone", "count_min": 0, "count_max": 2 },
       { "item": "arrow", "count": 1 }

@@ -312,6 +312,52 @@ Result<void> MobRegistry::parseProperties(const Json& def,
         out.hitEffectName = nm->asString();
         out.hitEffectDuration = du->asDouble();
     }
+    // SURV-5: the undead flag (strict bool, default false) — the apply-
+    // time half of the poison exemption gate (the effect's
+    // `undead_exempt` x the mob's `undead`).
+    if (const Json* un = def.find("undead")) {
+        if (!un->isBool()) {
+            return MC_FAIL("mob properties: 'undead' must be a boolean");
+        }
+        out.undead = un->asBool();
+    }
+    // SURV-5: the optional 'arrow_effect' — the status effect this mob's
+    // ARROW applies to the target ({wither, 10} on the skeleton: the
+    // Minecraft wither-skeleton twin). The SAME strict {name, duration}
+    // pair as on_hit_effect (unknown keys named, both required, duration
+    // > 0). Only a RANGED mob may carry it: a melee mob never fires an
+    // arrow, so the field would be dead (the ammo discipline — the
+    // shoot_speed requirement pattern). The effect name's existence is
+    // cross-checked at game init (the on_hit_effect pattern).
+    if (const Json* ae = def.find("arrow_effect")) {
+        if (!ae->isObject()) {
+            return MC_FAIL("mob properties: 'arrow_effect' must be an "
+                           "object {\"name\": ..., \"duration\": ...}");
+        }
+        for (const auto& [key, value] : ae->members()) {
+            if (key != "name" && key != "duration") {
+                return MC_FAIL("mob properties: 'arrow_effect' has an "
+                               "unknown field '" + key + "'");
+            }
+        }
+        const Json* nm = ae->find("name");
+        if (nm == nullptr || !nm->isString() || nm->asString().empty()) {
+            return MC_FAIL("mob properties: 'arrow_effect' requires a "
+                           "non-empty string 'name' (effect id)");
+        }
+        const Json* du = ae->find("duration");
+        if (du == nullptr || !du->isNumber() || du->asDouble() <= 0.0) {
+            return MC_FAIL("mob properties: 'arrow_effect' requires "
+                           "'duration' (seconds) > 0");
+        }
+        if (out.shootRange <= 0.0f) {
+            return MC_FAIL("mob properties: 'arrow_effect' requires "
+                           "'shoot_range' > 0 (only a ranged mob fires "
+                           "arrows — a melee mob's field is dead)");
+        }
+        out.arrowEffectName = nm->asString();
+        out.arrowEffectDuration = du->asDouble();
+    }
     return {};
 }
 

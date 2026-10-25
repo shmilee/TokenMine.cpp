@@ -931,6 +931,18 @@ Result<void> Game::buildScene() {
                            "the unregistered effect '" +
                            mob.properties.hitEffectName + "'");
         }
+        // SURV-5: the arrow effect must name an EXISTING effect (the
+        // on_hit_effect pattern). Unlike the BOW's arrow_effect it does
+        // NOT require `affects_mobs`: the skeleton's arrow hits the
+        // PLAYER (its wither is player-facing), and a wither arrow that
+        // happens to strike another mob passes the mob-side gate on its
+        // own (the wither carries affects_mobs too).
+        if (!mob.properties.arrowEffectName.empty() &&
+            m_effects.findByName(mob.properties.arrowEffectName) == nullptr) {
+            return MC_FAIL("mob '" + mob.name + "' arrow_effect references "
+                           "the unregistered effect '" +
+                           mob.properties.arrowEffectName + "'");
+        }
     }
     for (const ItemID iid : m_items.allIds()) {
         const Item& it = m_items.at(iid);
@@ -988,6 +1000,26 @@ Result<void> Game::buildScene() {
                                std::to_string(i) +
                                "] references the unknown block '" + bn +
                                "'");
+            }
+        }
+        // SURV-5: the launcher's arrow effect must name an EXISTING
+        // effect (the ammo pattern) AND carry `affects_mobs` — a bow's
+        // arrow only ever hits MOBS (a player's bow arrow is unflagged
+        // hurtPlayer, no self-damage), so a player-only effect on a bow
+        // would be a dead grant (the named rejection).
+        if (!it.arrowEffectName.empty()) {
+            const Effect* eff = m_effects.findByName(it.arrowEffectName);
+            if (eff == nullptr) {
+                return MC_FAIL("item '" + it.name + "' arrow_effect "
+                               "references the unregistered effect '" +
+                               it.arrowEffectName + "'");
+            }
+            if (!eff->affectsMobs) {
+                return MC_FAIL("item '" + it.name + "' arrow_effect names "
+                               "effect '" + it.arrowEffectName +
+                               "' which does not accept mobs "
+                               "('affects_mobs' false) — a bow's arrow "
+                               "only hits mobs");
             }
         }
     }
@@ -3730,9 +3762,20 @@ void Game::fireBow() {
     // Phase 42: the arrow carries the shot's charge (power — scales the
     // mob-hit knockback) and the launcher's ammo item (a stuck arrow
     // picked up returns it to the inventory).
+    // SURV-5: the launcher's arrow effect — the data name resolves to the
+    // registry id here (init cross-checked the name AND its
+    // affects_mobs flag, so idForName cannot fail); -1 on a plain bow =
+    // the pre-SURV-5 projectile, bit-identical.
+    int effectId = -1;
+    double effectDuration = 0.0;
+    if (!item.arrowEffectName.empty()) {
+        effectId = m_effects.idForName(item.arrowEffectName);
+        effectDuration = item.arrowEffectDuration;
+    }
     m_entities.push_back(std::make_unique<Projectile>(
         m_world, m_blocks, o, f, item.shootSpeed * power,
-        item.shootDamage * power, /*hurtPlayer=*/false, power, item.ammo));
+        item.shootDamage * power, /*hurtPlayer=*/false, power, item.ammo,
+        effectId, effectDuration));
     // SURV-3 (durability): the SHOT wears the launcher one point (any
     // charge; Infinity included — the arrow is not consumed, the bow
     // still is). The shot completed (the arrow is flying) — a bow that
@@ -4855,6 +4898,13 @@ void Game::updateEntities(double dt) {
         if (auto* mob = dynamic_cast<MobEntity*>(entity.get())) {
             mob->setPlayer(playerPos, playerAlive);
             mob->update(kMobStepPerFrame);
+            // SURV-5: the mob's active status effects tick on the SAME
+            // fixed mob step (frame-locked, hard rule 8) — the damage
+            // floors use the effect's min_health_mob (poison: 0, the mob
+            // can die; a killing tick flows through the existing
+            // despawn/drop path below). count == 0 fast-exits (every
+            // effect-free mob's frame is bit-identical to before).
+            mob->updateStatusEffects(kMobStepPerFrame, m_effects);
         } else if (dynamic_cast<Projectile*>(entity.get()) != nullptr) {
             // Moving entity: the fixed step (kProjectileStepPerFrame).
             entity->update(kProjectileStepPerFrame);
@@ -4890,6 +4940,16 @@ void Game::updateEntities(double dt) {
                                          m_player->aabbMax());
             if (tp >= 0.0f && tp <= 1.0f && !m_player->isDead()) {
                 m_player->damage(arrow->damage());
+                if (arrow->effectId() >= 0) {
+                    // SURV-5: the arrow's effect lands on the player
+                    // (the skeleton's wither) through the SAME single
+                    // choke point as the spider's on_hit_effect (the
+                    // name is init-cross-checked; the instant settlement
+                    // is a no-op for a lingering effect like the wither).
+                    applyPlayerEffect(m_effects.at(arrow->effectId()).name,
+                                      arrow->effectDuration());
+                    syncAbsorption(); // the pool takes the new total
+                }
                 arrow->kill();
                 MC_LOG_DEBUG("mob arrow hit player for " +
                              std::to_string(arrow->damage()));
@@ -4912,6 +4972,16 @@ void Game::updateEntities(double dt) {
             // reproduces the legacy melee-style constants bit-exactly).
             mob->addKnockback(arrowKnockback(arrow->velocity(),
                                              arrow->power()));
+            if (arrow->effectId() >= 0 && !mob->dead()) {
+                // SURV-5: the arrow's effect lands on the mob (the poison
+                // bow's arrow). applyEffect runs the gates (affects_mobs —
+                // init-cross-checked for a bow's arrow — and the undead
+                // exemption: a poisoned zombie / skeleton is ignored).
+                // A mob KILLED by this arrow's damage takes no effect
+                // (it despawns with its drops this frame).
+                mob->applyEffect(arrow->effectId(), arrow->effectDuration(),
+                                 m_effects);
+            }
             m_sound.play("hurt");
             arrow->kill();
             break;
@@ -5299,9 +5369,17 @@ void Game::attemptMobSpawn() {
         // item when a stuck one is picked up (registry: a ranged mob must
         // define it; init: the item exists).
         const std::string arrowAmmo = def.properties.ammoItem;
+        // SURV-5: the mob's arrow effect (the skeleton's wither) — the
+        // data pair captured like the hit effect above; the id resolves
+        // at SHOT time (init cross-checked the name's existence, so
+        // idForName cannot fail; empty = a pre-SURV-5 mob, the arrow
+        // carries no effect, bit-identical).
+        const std::string arrowEffectName = def.properties.arrowEffectName;
+        const double arrowEffectDuration = def.properties.arrowEffectDuration;
         MobEntity* raw = mob.get();
         mob->setShootCallback(
-            [this, raw, arrowSpeed, arrowDamage, arrowAmmo]() {
+            [this, raw, arrowSpeed, arrowDamage, arrowAmmo, arrowEffectName,
+             arrowEffectDuration]() {
             if (m_player->isDead() || raw->dead()) {
                 return;
             }
@@ -5333,10 +5411,20 @@ void Game::attemptMobSpawn() {
             const Vec3 dir = computeAimDirection(eye, target,
                                                  m_player->velocity(),
                                                  arrowSpeed);
+            // SURV-5: the arrow's effect (the wither on the skeleton) —
+            // resolved to the registry id at shot time (init
+            // cross-checked the name's existence; empty = -1 = no
+            // effect, the pre-SURV-5 arrow).
+            int effectId = -1;
+            double effectDuration = 0.0;
+            if (!arrowEffectName.empty()) {
+                effectId = m_effects.idForName(arrowEffectName);
+                effectDuration = arrowEffectDuration;
+            }
             auto arrow = std::make_unique<Projectile>(
                 m_world, m_blocks, eye + dir * kArrowSpawnOffset, dir,
                 arrowSpeed, arrowDamage, /*hurtPlayer=*/true,
-                /*power=*/1.0f, arrowAmmo);
+                /*power=*/1.0f, arrowAmmo, effectId, effectDuration);
             arrow->setSource(raw);  // the hit test skips its shooter
             m_entities.push_back(std::move(arrow));
             m_sound.play("shoot");

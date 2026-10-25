@@ -10,6 +10,7 @@
 #include <cstring>
 #include <algorithm>
 #include <numbers>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -505,6 +506,306 @@ TEST(MobRegistryTest, RejectsBadOnHitEffect) {
         auto r = mobs.registerMob(parseJson(def));
         EXPECT_FALSE(r.ok()) << "accepted on_hit_effect: " << value;
     }
+}
+
+// -- SURV-5: the undead flag + the arrow effect ------------------------------
+
+TEST(MobRegistryTest, ParsesUndead) {
+    // The strict bool (default false — every pre-SURV-5 mob): the zombie
+    // (a shipped undead) carries true.
+    MobRegistry mobs;
+    std::string def = kZombieDef;
+    const std::string key = "\"wander_interval\": 2.5";
+    def.replace(def.find(key), key.size(),
+                std::string("\"wander_interval\": 2.5, \"undead\": true"));
+    auto r = mobs.registerMob(parseJson(def));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(mobs.at(*r).properties.undead);
+    // Absent = false (the passive default — the fixture zombie).
+    MobRegistry plain = makeMobRegistry();
+    EXPECT_FALSE(plain.at(MobID{0}).properties.undead);
+}
+
+TEST(MobRegistryTest, RejectsBadUndead) {
+    for (const char* bad : {"\"yes\"", "1", "0", "null"}) {
+        MobRegistry mobs;
+        std::string def = kZombieDef;
+        const std::string key = "\"wander_interval\": 2.5";
+        def.replace(def.find(key), key.size(),
+                    std::string("\"wander_interval\": 2.5, \"undead\": ") +
+                        bad);
+        auto r = mobs.registerMob(parseJson(def));
+        EXPECT_FALSE(r.ok()) << "accepted undead: " << bad;
+    }
+}
+
+TEST(MobRegistryTest, ParsesArrowEffect) {
+    // The skeleton's data shape: the strict {name, duration} pair (the
+    // on_hit_effect discipline) on a RANGED mob — the arrows carry the
+    // effect (the wither, MC's wither-skeleton value 10 s).
+    MobRegistry mobs;
+    std::string def = kSkeletonDef;
+    const std::string key = "\"wander_interval\": 2.5";
+    def.replace(def.find(key), key.size(),
+                std::string("\"wander_interval\": 2.5, "
+                            "\"arrow_effect\": {\"name\": \"wither\", "
+                            "\"duration\": 10}"));
+    auto r = mobs.registerMob(parseJson(def));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const auto& p = mobs.at(*r).properties;
+    EXPECT_EQ(p.arrowEffectName, "wither");
+    EXPECT_DOUBLE_EQ(p.arrowEffectDuration, 10.0);
+    // A pre-SURV-5 mob: the field absent.
+    MobRegistry plain;
+    ASSERT_TRUE(plain.registerMob(parseJson(kSkeletonDef)).ok());
+    EXPECT_TRUE(plain.at(MobID{0}).properties.arrowEffectName.empty());
+    EXPECT_DOUBLE_EQ(plain.at(MobID{0}).properties.arrowEffectDuration, 0.0);
+}
+
+TEST(MobRegistryTest, RejectsBadArrowEffect) {
+    const std::vector<std::string> bad = {
+        "1",                                     // not an object
+        R"({"name": "wither"})",                 // missing duration
+        R"({"duration": 10})",                   // missing name
+        R"({"name": "", "duration": 10})",       // empty name
+        R"({"name": "wither", "duration": 0})",  // duration 0
+        R"({"name": "wither", "duration": -1})", // duration < 0
+        R"({"name": "wither", "duration": "10"})", // non-number
+        R"({"name": "wither", "extra": 1})",     // unknown field
+    };
+    for (const std::string& value : bad) {
+        MobRegistry mobs;
+        std::string def = kSkeletonDef;
+        const std::string key = "\"wander_interval\": 2.5";
+        def.replace(def.find(key), key.size(),
+                    std::string("\"wander_interval\": 2.5, "
+                                "\"arrow_effect\": ") + value);
+        auto r = mobs.registerMob(parseJson(def));
+        EXPECT_FALSE(r.ok()) << "accepted arrow_effect: " << value;
+    }
+    // A MELEE mob carrying the field: its arrows never fly, so the field
+    // would be dead (the ammo discipline — the shoot_range requirement).
+    MobRegistry mobs;
+    std::string def = kZombieDef;
+    const std::string key = "\"wander_interval\": 2.5";
+    def.replace(def.find(key), key.size(),
+                std::string("\"wander_interval\": 2.5, "
+                            "\"arrow_effect\": {\"name\": \"wither\", "
+                            "\"duration\": 10}"));
+    EXPECT_FALSE(mobs.registerMob(parseJson(def)).ok());
+}
+
+// -- SURV-5: the shipped content pins -----------------------------------------
+
+TEST(MobContent, SkeletonUndeadAndWitherArrowPinned) {
+    // The real assets (data/mobs/skeleton.json): the MC wither-skeleton
+    // twin — its arrows carry the wither for 10 s (MC's value) and the
+    // skeleton is an undead (poison-immune, wither-vulnerable).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.loadDirectory(assets, "data/mobs").ok());
+    const Mob* sk = mobs.findByName("skeleton");
+    ASSERT_NE(sk, nullptr);
+    EXPECT_TRUE(sk->properties.undead);
+    EXPECT_EQ(sk->properties.arrowEffectName, "wither");
+    EXPECT_DOUBLE_EQ(sk->properties.arrowEffectDuration, 10.0);
+    // The zombie is the other shipped undead; the rest are not.
+    const Mob* zombie = mobs.findByName("zombie");
+    ASSERT_NE(zombie, nullptr);
+    EXPECT_TRUE(zombie->properties.undead);
+    for (const char* name : {"cow", "sheep", "chicken", "spider"}) {
+        const Mob* m = mobs.findByName(name);
+        ASSERT_NE(m, nullptr) << name;
+        EXPECT_FALSE(m->properties.undead) << name;
+        EXPECT_TRUE(m->properties.arrowEffectName.empty()) << name;
+    }
+}
+
+// -- SURV-5: the mob effect carrier (MobEntity) --------------------------------
+
+namespace {
+
+// A 10-HP passive mob (the cow's data shape): the poison-to-death
+// carrier test target (detect_radius 0 — it never sees the player).
+const char* kCowDef = R"({
+  "id": "cow",
+  "properties": {
+    "health": 10,
+    "speed": 0.5,
+    "detect_radius": 0,
+    "attack_range": 0,
+    "attack_damage": 0,
+    "attack_cooldown": 1.0,
+    "wander_interval": 3.0
+  },
+  "model": {
+    "width": 0.9,
+    "height": 1.0,
+    "boxes": [
+      {"pos": [0.0, 0.5, 0.0], "size": [0.6, 0.8, 0.9], "texture": "a"}
+    ]
+  }
+})";
+
+// The shipped effect set for the carrier tests: the real poison (player
+// floor 1, mob floor 0, undead-exempt, mob-accepting), a PLAYER-ONLY
+// poison twin (the gate negative), the wither (no floor anywhere, kills
+// undead) and a mob-accepting HEAL (the heal no-op proof).
+EffectRegistry makeCarrierEffects() {
+    EffectRegistry reg;
+    const struct {
+        const char* def;
+    } defs[] = {
+        {R"({"id":"poison","tick_type":"damage","tick_amount":1.0,
+             "tick_interval":2.5,"min_health":1.0,"min_health_mob":0,
+             "negative":true,"affects_mobs":true,"undead_exempt":true,
+             "icon":0})"},
+        {R"({"id":"poison_player_only","tick_type":"damage",
+             "tick_amount":1.0,"tick_interval":2.5,"min_health":1.0,
+             "negative":true,"icon":0})"},
+        {R"({"id":"wither","tick_type":"damage","tick_amount":1.0,
+             "tick_interval":4.0,"negative":true,"affects_mobs":true,
+             "icon":10})"},
+        {R"({"id":"mob_heal","tick_type":"heal","tick_amount":2.0,
+             "tick_interval":1.0,"affects_mobs":true,"icon":2})"},
+        {R"({"id":"kept_at_one","tick_type":"damage","tick_amount":1.0,
+             "tick_interval":1.0,"min_health_mob":1,"affects_mobs":true,
+             "icon":0})"},
+    };
+    for (const auto& d : defs) {
+        auto r = reg.registerEffect(parseJson(d.def));
+        if (!r.ok()) {
+            ADD_FAILURE() << d.def << ": " << r.error().message;
+        }
+    }
+    return reg;
+}
+
+MobEntity makeCarrierMob(const Fixture& f, const char* def) {
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(def));
+    if (!r.ok()) {
+        throw std::runtime_error(r.error().message);
+    }
+    return MobEntity(f.world, f.blocks, mobs.at(*r), {8.5f, 1.0f, 8.5f}, 7);
+}
+
+} // namespace
+
+TEST(MobEffectCarrier, RefusesPlayerOnlyEffects) {
+    // The affects_mobs gate: a player-only effect is ignored on apply
+    // (count stays 0 — the mob is never a carrier for it).
+    Fixture f;
+    const EffectRegistry effects = makeCarrierEffects();
+    MobEntity cow = makeCarrierMob(f, kCowDef);
+    cow.applyEffect(effects.idForName("poison_player_only"), 30.0, effects);
+    EXPECT_FALSE(cow.hasEffects());
+    // The mob-accepting poison is taken.
+    cow.applyEffect(effects.idForName("poison"), 30.0, effects);
+    EXPECT_TRUE(cow.hasEffects());
+    EXPECT_EQ(cow.statusEffects().count(), 1u);
+}
+
+TEST(MobEffectCarrier, UndeadRefuseExemptEffects) {
+    // The undead gate: poison (undead_exempt) x undead (zombie) =
+    // ignored; the same poison on a cow applies; the wither (NO
+    // undead_exempt) is taken by the zombie — the effect that kills
+    // undead (Minecraft's uniqueness).
+    Fixture f;
+    const EffectRegistry effects = makeCarrierEffects();
+    std::string zombieDef = kZombieDef;
+    const std::string key = "\"wander_interval\": 2.5";
+    zombieDef.replace(zombieDef.find(key), key.size(),
+                      std::string("\"wander_interval\": 2.5, \"undead\": true"));
+    MobEntity zombie = makeCarrierMob(f, zombieDef.c_str());
+    MobEntity cow = makeCarrierMob(f, kCowDef);
+    zombie.applyEffect(effects.idForName("poison"), 30.0, effects);
+    EXPECT_FALSE(zombie.hasEffects());  // the undead exemption
+    cow.applyEffect(effects.idForName("poison"), 30.0, effects);
+    EXPECT_TRUE(cow.hasEffects());      // the same poison on a normal mob
+    zombie.applyEffect(effects.idForName("wither"), 10.0, effects);
+    EXPECT_EQ(zombie.statusEffects().count(), 1u);  // the wither kills them
+}
+
+TEST(MobEffectCarrier, PoisonTicksKillTheCow) {
+    // The floor-0 lethal line: a 10-HP cow + poison (1 HP / 2.5 s,
+    // min_health_mob 0). Ticks land on the fixed 1/60 grid at ~2.5 s
+    // cadence; the assertions sit well clear of a tick boundary (the
+    // double sum of 1/60 steps drifts a frame, the E2E tick-margin
+    // discipline). 18 s: 7 ticks due (the 8th at 20 s) -> 3 HP left;
+    // 26 s: 10 ticks due (the 10th kills; the 11th at 27.5 s) -> dead.
+    Fixture f;
+    const EffectRegistry effects = makeCarrierEffects();
+    MobEntity cow = makeCarrierMob(f, kCowDef);
+    cow.applyEffect(effects.idForName("poison"), 60.0, effects);
+    for (int frame = 0; frame < 60 * 18; ++frame) {
+        cow.updateStatusEffects(1.0 / 60.0, effects);
+    }
+    ASSERT_FALSE(cow.dead());
+    EXPECT_FLOAT_EQ(cow.health(), 3.0f);  // 10 - 7 ticks
+    for (int frame = 60 * 18; frame < 60 * 26; ++frame) {
+        cow.updateStatusEffects(1.0 / 60.0, effects);
+    }
+    EXPECT_TRUE(cow.dead());  // the 10th tick kills (the existing
+    // damage/despawn path)
+    EXPECT_FLOAT_EQ(cow.health(), 0.0f);
+    // The effect is still carried at death (it ticks until the mob is
+    // removed by the game's despawn pass, which this unit does not run).
+    EXPECT_TRUE(cow.hasEffects());
+}
+
+TEST(MobEffectCarrier, MobFloorKeepsTheMobAlive) {
+    // The min_health_mob 1 floor: the twin damage effect never kills —
+    // the cow is clamped at exactly 1 HP (the player's poison-floor
+    // twin on the mob side).
+    Fixture f;
+    const EffectRegistry effects = makeCarrierEffects();
+    MobEntity cow = makeCarrierMob(f, kCowDef);
+    cow.applyEffect(effects.idForName("kept_at_one"), 30.0, effects);
+    for (int frame = 0; frame < 60 * 25; ++frame) {  // 25 s: 25 ticks due
+        cow.updateStatusEffects(1.0 / 60.0, effects);
+    }
+    EXPECT_FALSE(cow.dead());
+    EXPECT_FLOAT_EQ(cow.health(), 1.0f);  // clamped at the floor
+}
+
+TEST(MobEffectCarrier, HealTicksAreANoop) {
+    // The documented deviation: MobEntity has no regeneration — a
+    // mob-accepting heal tick changes nothing (the apply itself is
+    // legal: the effect is carried, it simply does not heal).
+    Fixture f;
+    const EffectRegistry effects = makeCarrierEffects();
+    MobEntity cow = makeCarrierMob(f, kCowDef);
+    cow.damage(4.0f);  // 10 -> 6
+    ASSERT_FLOAT_EQ(cow.health(), 6.0f);
+    cow.applyEffect(effects.idForName("mob_heal"), 10.0, effects);
+    EXPECT_TRUE(cow.hasEffects());
+    for (int frame = 0; frame < 60 * 10; ++frame) {  // 10 s: 10 ticks due
+        cow.updateStatusEffects(1.0 / 60.0, effects);
+    }
+    EXPECT_FALSE(cow.dead());
+    EXPECT_FLOAT_EQ(cow.health(), 6.0f);  // unchanged (no heal)
+}
+
+TEST(MobEffectCarrier, FastExitWithoutEffects) {
+    // count == 0 = zero cost / zero change: a mob without effects is
+    // untouched by the pass (the structural-immunity basis).
+    Fixture f;
+    const EffectRegistry effects = makeCarrierEffects();
+    MobEntity cow = makeCarrierMob(f, kCowDef);
+    for (int frame = 0; frame < 600; ++frame) {
+        cow.updateStatusEffects(1.0 / 60.0, effects);
+    }
+    EXPECT_FALSE(cow.dead());
+    EXPECT_FLOAT_EQ(cow.health(), 10.0f);
+    EXPECT_FALSE(cow.hasEffects());
+    // A dead mob refuses both the apply and the ticks.
+    cow.damage(10.0f);
+    ASSERT_TRUE(cow.dead());
+    cow.applyEffect(effects.idForName("poison"), 30.0, effects);
+    EXPECT_FALSE(cow.hasEffects());
 }
 
 TEST(MobRegistryTest, ParsesPassiveMob) {

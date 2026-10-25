@@ -110,6 +110,20 @@ struct Item {
     // one `ammo` item (the shot is still gated on holding one — the one
     // arrow is never spent, see Game::fireBow).
     bool infinite = false;
+    // SURV-5: the launcher's ARROW EFFECT (optional data field
+    // 'arrow_effect', the strict {name, duration} pair — the
+    // on_hit_effect discipline). Non-empty marks the launcher's arrows as
+    // carrying the named status effect for `arrowEffectDuration` seconds:
+    // the game resolves it to an id at fire time and the PROJECTILE
+    // applies it to the hit MOB (Game::fireBow; a player's bow arrow
+    // never damages the player, so the effect never reaches the player).
+    // Only a LAUNCHER (shoot_speed > 0) may carry it — on any other item
+    // the field would be dead (the ammo discipline). The effect name's
+    // existence AND its `affects_mobs` flag are cross-checked at game
+    // init (the ammo pattern). Empty = no arrow effect (every
+    // pre-SURV-5 launcher — the shipped poison_bow is the first carrier).
+    std::string arrowEffectName;
+    double arrowEffectDuration = 0.0;
     // Phase 23: food (optional data field 'restore_hunger', integer in
     // [1, 20]). restoreHunger > 0 marks the item as FOOD: while it is
     // selected, the right button eats one (restores this much hunger and

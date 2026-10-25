@@ -10,6 +10,7 @@
     "wander_interval": 2.5,
     "spawn_max_light": 0,
     "hostile": true,
+    "undead": true,
     "drops": [
       { "item": "rotten_flesh", "count": 1 }
     ]

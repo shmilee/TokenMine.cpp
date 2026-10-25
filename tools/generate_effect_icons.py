@@ -21,13 +21,16 @@ indexes the tile:
   7: resistance (Phase 84, blue shield)
   8: healing (SURV-4, red heart with a green cross — the instant heal)
   9: harming (SURV-4, red heart with a purple-black crack — instant harm)
+  10: wither (SURV-5, dark purple skull — the Minecraft wither mark;
+      the skeleton's arrow applies it, 1 HP / 4 s, lethal on both
+      targets)
 The background is transparent (the HUD draws over the world).
 """
 import os
 import struct
 import zlib
 
-W, H = 160, 16
+W, H = 176, 16
 OUT = os.path.join(os.path.dirname(__file__), "..", "assets",
                    "textures", "effects.png")
 
@@ -156,6 +159,13 @@ HEAL = (216, 40, 48)
 HEAL_PLUS = (96, 208, 88)
 HARM = (200, 40, 48)
 HARM_CRACK = (70, 24, 92)
+
+# SURV-5 (wither): a DARK PURPLE skull (the Minecraft wither mark — the
+# poison skull silhouette in the wither's undead purple). New salt block
+# 1400+ (every existing tile keeps its salt — the determinism proof the
+# re-run is).
+WITHER = (96, 44, 128)
+WITHER_EYE = (28, 8, 36)
 
 
 def splitmix64(x: int) -> int:
@@ -328,13 +338,31 @@ def tile_harming() -> list:
     return px
 
 
+def tile_wither() -> list:
+    # SURV-5: the wither (Minecraft wither I — 1 HP / 4 s, no floor on
+    # either target, the effect that kills undead). A dark purple skull:
+    # the poison skull silhouette in the wither's undead purple, the eye
+    # sockets darker still. Salt block 1400+.
+    px = [[(0, 0, 0, 0)] * 16 for _ in range(16)]
+    for ty in range(16):
+        for tx in range(16):
+            if in_shape(SKULL, SKULL_OX, SKULL_OY, tx, ty):
+                setpx(px, tx, ty, WITHER, salt=1400 + ty * 16 + tx)
+            elif (SKULL_OY + 3 <= ty < SKULL_OY + 4) and (
+                    (SKULL_OX + 1 <= tx < SKULL_OX + 2)
+                    or (SKULL_OX + 5 <= tx < SKULL_OX + 6)):
+                setpx(px, tx, ty, WITHER_EYE, salt=1450 + ty * 16 + tx)
+    return px
+
+
 def main() -> None:
     px = [[(0, 0, 0, 0)] * W for _ in range(H)]
     for kind, tile in enumerate((tile_poison(), tile_arrow(False),
                                  tile_arrow(True), tile_absorption(),
                                  tile_flame(), tile_speed(),
                                  tile_strength(), tile_resistance(),
-                                 tile_healing(), tile_harming())):
+                                 tile_healing(), tile_harming(),
+                                 tile_wither())):
         for y in range(16):
             for x in range(16):
                 px[y][kind * 16 + x] = tile[y][x]

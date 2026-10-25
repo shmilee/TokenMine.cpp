@@ -65,6 +65,7 @@
 #include "entity/entity.hpp"
 #include "entity/mob_registry.hpp"
 #include "entity/mob_swing.hpp"
+#include "core/status_effect.hpp"
 
 namespace mc {
 
@@ -143,6 +144,31 @@ public:
     void armFire(double tickInterval, float tickAmount, double duration);
     bool burning() const { return m_fireRemaining > 0.0; }
 
+    // SURV-5: the mob's active status effects (the shared pure
+    // StatusEffects class — the arrow's effect lands here). Apply gate:
+    // the effect must be mob-accepting (`affects_mobs`) AND not undead-
+    // exempted against an undead mob (Minecraft: poison does not affect
+    // the undead; the wither kills them). Both gates are defensive at
+    // apply time (the data combinations are cross-checked at game init
+    // where they make sense). A dead mob refuses the apply (it despawns
+    // this frame anyway).
+    void applyEffect(int effect, double duration,
+                     const EffectRegistry& effects);
+    // SURV-5: advance the mob's active effects by `dt` (the game calls
+    // this once per fixed mob step, right after update() — hard rule 8:
+    // frame-locked mob time). Damage ticks subtract through damage()
+    // with the MOB floor (`min_health_mob`, defaulting to the effect's
+    // player `min_health` — poison ships 0: a mob CAN be poisoned to
+    // death, the player keeps its 1-HP floor); a killing tick leaves the
+    // mob dead (the existing damage/despawn/drop path, unchanged). Heal
+    // ticks are a NO-OP (MobEntity has no regeneration — the documented
+    // deviation: the project has no mob-heal need). count == 0 fast-
+    // exits (a mob without effects costs nothing — the structural-
+    // immunity basis).
+    void updateStatusEffects(double dt, const EffectRegistry& effects);
+    bool hasEffects() const { return m_effects.count() > 0; }
+    const StatusEffects& statusEffects() const { return m_effects; }
+
     // Per-frame player state; the game sets it right before update()
     // (bottom-center position + whether the player can be attacked).
     void setPlayer(Vec3 pos, bool alive) {
@@ -214,6 +240,11 @@ private:
     int m_fireIntervalFrames = 0;
     int m_fireFrames = 0;
     int m_fireDueFrames = 0;
+
+    // SURV-5: the mob's active status effects (the shared pure class,
+    // the player's m_playerEffects twin). Ephemeral like the mob itself
+    // (never saved — zero format); count 0 = the update fast exit.
+    StatusEffects m_effects;
 
     // Shared fall (same numbers as dropped items / player).
     static constexpr float kGravity = 32.0f;

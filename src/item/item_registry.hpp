@@ -92,6 +92,14 @@ private:
     // ammo). The name's existence is cross-checked at game init (the
     // ammo item may be defined in a later file).
     static Result<void> parseAmmo(const Json& def, Item& out);
+    // Parse the optional launcher arrow-effect field `arrow_effect`
+    // (SURV-5) into `out`: the strict {name, duration} pair (the
+    // on_hit_effect discipline, duration > 0), only valid on a LAUNCHER
+    // (shoot_speed > 0 — a non-launcher's arrows never fly, the dead-
+    // field discipline). The effect name's existence + its `affects_mobs`
+    // flag are cross-checked at game init (the EffectRegistry is not
+    // available at parse, the grants_effect pattern).
+    static Result<void> parseArrowEffect(const Json& def, Item& out);
     // Parse the optional furnace fields (Phase 40) into `out`:
     // `smeltable_to` (an item name; presence marks the item as
     // smeltable — the product's existence is cross-checked at game init),

@@ -696,6 +696,22 @@ def master_bow():
     return px
 
 
+def poison_bow():
+    """SURV-5: the poison bow (Minecraft's arrow-of-poison line, the
+    data-driven bow variant — the SAME launcher data as the bow with an
+    'arrow_effect' of poison 60 s = MC's 1:00 arrow of poison). The bow
+    unchanged, with a PURPLE tip at the bow's heart (the poison mark,
+    the effect's poison purple) — new salts 136/137, every existing
+    icon pixel-identical."""
+    px = bow()
+    tip = (168, 56, 216)
+    tip_dark = (110, 30, 150)
+    for (x, y) in ((15, 14), (16, 13), (16, 14), (17, 14), (14, 15)):
+        setpx2(px, x, y, tip, salt=136)
+    setpx2(px, 17, 15, tip_dark, salt=137)
+    return px
+
+
 def arrow():
     """An arrow: a 4px diagonal shaft from the bottom-left to the
     top-right, a steel tip at the top end and light fletching at the
@@ -1044,6 +1060,7 @@ ITEMS = {
     "power_bow": power_bow,
     "speed_bow": speed_bow,
     "master_bow": master_bow,
+    "poison_bow": poison_bow,
     "arrow": arrow,
     "leather": leather,
     **{name: make_dye_icon(name) for name in DYE_PALETTE},

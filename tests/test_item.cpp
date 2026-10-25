@@ -653,6 +653,115 @@ TEST(ItemRegistryTest, BowEnhancementRecipesPinned) {
     }
 }
 
+// -- SURV-5: the arrow effect (the poison bow line) --------------------------
+
+TEST(ItemRegistryTest, ParsesArrowEffect) {
+    // A launcher with the strict {name, duration} pair (the
+    // on_hit_effect discipline): the poison bow's data shape.
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"poison_bow","type":"material","max_stack":1,
+                      "shoot_speed":15.0,"shoot_damage":5.0,"ammo":"arrow",
+                      "arrow_effect":{"name":"poison","duration":60}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Item& it = items.at(*r);
+    EXPECT_EQ(it.arrowEffectName, "poison");
+    EXPECT_DOUBLE_EQ(it.arrowEffectDuration, 60.0);
+    // A launcher without the field: every pre-SURV-5 bow (bit-identical
+    // behavior — fireBow passes no effect).
+    auto r2 = items.registerItem(
+        parseJson(R"({"id":"bow","type":"material","max_stack":1,
+                      "shoot_speed":15.0,"shoot_damage":5.0,"ammo":"arrow"})"));
+    ASSERT_TRUE(r2.ok()) << r2.error().message;
+    EXPECT_TRUE(items.at(*r2).arrowEffectName.empty());
+    EXPECT_DOUBLE_EQ(items.at(*r2).arrowEffectDuration, 0.0);
+}
+
+TEST(ItemRegistryTest, RejectsBadArrowEffect) {
+    const std::string bow =
+        R"({"id":"b","type":"material","shoot_speed":15.0,
+           "shoot_damage":5.0,"ammo":"arrow",)";
+    const std::vector<std::string> bad = {
+        "1",                                             // not an object
+        R"({"name":"poison"})",                          // missing duration
+        R"({"duration":60})",                            // missing name
+        R"({"name":"","duration":60})",                  // empty name
+        R"({"name":"poison","duration":0})",             // duration 0
+        R"({"name":"poison","duration":-5})",            // duration < 0
+        R"({"name":"poison","duration":"60"})",          // non-number
+        R"({"name":"poison","duration":60,"level":1})",  // unknown field
+    };
+    for (const std::string& value : bad) {
+        ItemRegistry items;
+        auto r = items.registerItem(
+            parseJson(bow + std::string("\"arrow_effect\":") + value + "}"));
+        EXPECT_FALSE(r.ok()) << "accepted arrow_effect: " << value;
+    }
+    // A NON-launcher carrying the field: its arrows never fly, so the
+    // field would be dead (the ammo discipline — the shoot_speed
+    // requirement).
+    ItemRegistry items;
+    EXPECT_FALSE(
+        items.registerItem(
+            parseJson(R"({"id":"g","type":"material",
+                         "arrow_effect":{"name":"poison","duration":60}})"))
+            .ok());
+}
+
+TEST(ItemRegistryTest, PoisonBowContentPinned) {
+    // The real asset (SURV-5): the poison bow — the bow's launcher data
+    // UNCHANGED + the arrow_effect {poison, 60} (1:00 = MC's arrow of
+    // poison duration) + the bow family's durability 384. The recipe is
+    // shapeless bow + potion_poison -> 1 (the potion as a consumed
+    // material, the second use for SURV-4's poison potion).
+    ItemRegistry items;
+    FILE* fp = std::fopen("assets/data/items/poison_bow.json", "rb");
+    ASSERT_NE(fp, nullptr) << "run from the repo root";
+    std::string text;
+    char buf[4096];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+        text.append(buf, n);
+    }
+    std::fclose(fp);
+    auto parsed = Json::parse(text);
+    ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+    auto reg = items.registerItem(*parsed);
+    ASSERT_TRUE(reg.ok()) << reg.error().message;
+    const Item& b = items.at(*reg);
+    EXPECT_EQ(b.name, "poison_bow");
+    EXPECT_EQ(b.maxStack, 1);
+    EXPECT_FLOAT_EQ(b.shootSpeed, 15.0f);  // the bow's speed unchanged
+    EXPECT_FLOAT_EQ(b.shootDamage, 5.0f);  // the bow's damage unchanged
+    EXPECT_EQ(b.attackDamage, 1.0f);
+    EXPECT_EQ(b.ammo, "arrow");
+    EXPECT_FALSE(b.infinite);
+    EXPECT_EQ(b.durability, 384.0f);       // the bow family's durability
+    EXPECT_EQ(b.arrowEffectName, "poison");
+    EXPECT_DOUBLE_EQ(b.arrowEffectDuration, 60.0);
+    EXPECT_EQ(b.icon, "poison_bow");
+
+    // The shipped recipe: shapeless bow + potion_poison -> 1.
+    fp = std::fopen("assets/data/recipes/poison_bow.json", "rb");
+    ASSERT_NE(fp, nullptr) << "run from the repo root";
+    text.clear();
+    while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+        text.append(buf, n);
+    }
+    std::fclose(fp);
+    auto rdef = Json::parse(text);
+    ASSERT_TRUE(rdef.ok()) << rdef.error().message;
+    const Json& def = *rdef;
+    EXPECT_EQ(def.find("output")->find("item")->asString(), "poison_bow");
+    EXPECT_EQ(def.find("output")->find("count")->asInt(), 1);
+    const Json& ing = *def.find("ingredients");
+    ASSERT_EQ(ing.size(), 2u);
+    EXPECT_EQ(ing.at(0).find("item")->asString(), "bow");
+    EXPECT_EQ(ing.at(0).find("count")->asInt(), 1);
+    EXPECT_EQ(ing.at(1).find("item")->asString(), "potion_poison");
+    EXPECT_EQ(ing.at(1).find("count")->asInt(), 1);
+}
+
 // -- Phase 80: sandstone (the P61 material-chain pattern) -------------
 
 TEST(BlockContentTest, SandstoneBlockContentPinned) {

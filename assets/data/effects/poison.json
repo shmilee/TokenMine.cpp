@@ -4,6 +4,9 @@
   "tick_amount": 1.0,
   "tick_interval": 2.5,
   "min_health": 1.0,
+  "min_health_mob": 0,
   "negative": true,
+  "affects_mobs": true,
+  "undead_exempt": true,
   "icon": 0
 }

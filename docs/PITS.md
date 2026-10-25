@@ -1792,3 +1792,33 @@
   savenorm 的 pos/yaw/pitch = 场景加载成功的权威信号，截图前断言）；
   ③ 对跑脚本里 cp 类前置操作失败必须 abort（`|| exit` / set -e
   语义），不得静默续跑。
+- **夜场景的 time 只在存档里改，`--time` CLI 无效（PITS 255）**——10-25
+  门 102 三轮探针失效：场景存档（120f 构建于 start 0.25 日）的
+  `time` 字段 = 读档权威，`--time 0.75` 只改 config 起始值（buildScene
+  前 set），被存档 time 覆盖 → 全程白天跑（现象 = 被动生成、敌对
+  全灭：敌对 spawn_max_light 0 被光 15 门杀）。**纪律**：昼夜敏感
+  场景构建后必须编辑存档 `time` 字段（savenorm 断言读回）。
+- **敌对生成保护圈锚定世界出生点（非玩家）（PITS 256）**——Phase 25
+  语义：hostile 在 `spawnProtectionRadius(difficulty)` 内（距
+  **m_spawnPoint**）不生成，被动豁免（pass 0）。场景玩家站在世界出生
+  点时，生成环 [4,6] 全在保护圈内 → 敌对永不生成且**无任何报错**
+  （表现 = 只有 sheep/cow/chicken 刷）。**纪律**：需要敌对的场景
+  玩家放 >12 格外（实测 (334,16) 高原 312 格 ✓）；"被动生成 + 敌对
+  全灭" = 本坑信号（先于 PITS 255 的昼夜判断）。
+- **E2E scratch 资产 rsync 漏同步 = 新特性静默失效且 init 不炸
+  （PITS 257）**——10-25 门 102：ent1_dense 资产停在 GEN-4 同步点
+  （无 wither.json / skeleton.json 无 arrow_effect），SURV-5 的 NEW
+  侧用旧资产跑 = wither 链整段不存在但 init 通过（旧 skeleton.json
+  无 arrow_effect = 无交叉校验对象）→ 探针三轮"hp 掉血无效果"误诊
+  为接线 bug（实为数据缺失）。**纪律**：内容变更 phase 的 E2E 脚本
+  开头必须 `rsync -a --delete assets/ $D/assets/`（与 GEN-4 门 100
+  同款动作），并对 NEW 侧跑 1 帧 init 冒烟确认关键数据在档
+  （如 `skeleton.arrow_effect == wither` 读文件断言）。
+- **状态效果 tick/duration 是 real-dt——慢帧 E2E 环境的时标放大
+  （PITS 258）**——10-25 门 102：GLX 黑相下 ~0.28 s/帧（3.5 fps），
+  420f 跑 = **118 s 实时间**（非 420/60=7 s）；skeleton 箭间隔 90f
+  = 25 s 实时间 > wither duration 10 s → wither 每箭之间**过期再重
+  施加**（4 施 × 2 tick = 8 伤，帧基估算 1 tick 差 8×）。**纪律**：
+  效果相关断言写"帧 ↔ 实时间"双界（60fps 与 3.5fps 下同判据 PASS），
+  或断言"效果名存在 + hp 互斥"（勿断言精确 tick 数）；场景跑长 =
+  实时间预算（timeout 按 0.3 s/帧 兜底，非 1/60）。

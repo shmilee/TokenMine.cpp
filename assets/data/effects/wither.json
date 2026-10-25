@@ -1,0 +1,9 @@
+{
+  "id": "wither",
+  "tick_type": "damage",
+  "tick_amount": 1.0,
+  "tick_interval": 4.0,
+  "negative": true,
+  "affects_mobs": true,
+  "icon": 10
+}

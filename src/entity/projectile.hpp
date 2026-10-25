@@ -34,6 +34,11 @@
 // Phase 10/27 defaults) scales the knockback the game applies on a mob
 // hit (core/bow.hpp arrowKnockback).
 //
+// SURV-5: the arrow may carry a status effect (`effectId`, default -1 =
+// none): the game applies it on a landed hit — to the player (the
+// skeleton's wither arrow, the Game::applyPlayerEffect choke point) or
+// to the mob (the poison bow's arrow, MobEntity::applyEffect's gates).
+//
 // v1 simplification (docs/KNOWN_ISSUES.md): arrows are not saved (transient
 // like mobs).
 #pragma once
@@ -72,10 +77,19 @@ public:
     // `ammoItem` (Phase 42, default empty = not pickable): the launcher's
     // ammo item name, returned to the player's inventory when a stuck
     // arrow is picked up.
+    // SURV-5: `effectId` (default -1 = NO arrow effect — every
+    // pre-SURV-5 call site is bit-identical) + `effectDuration`: the
+    // status effect the game applies on a landed hit (an int id, not a
+    // name — zero heap allocation; the init-cross-checked name resolves
+    // to the id at fire time). arrow->player: the effect goes to the
+    // player (the skeleton's wither arrow, through
+    // Game::applyPlayerEffect); arrow->mob: to the mob (the poison bow's
+    // arrow, through MobEntity::applyEffect's gates).
     Projectile(const World& world, const BlockRegistry& blocks, Vec3 pos,
                Vec3 direction, float speed = kLaunchSpeed,
                float damage = 0.0f, bool hurtPlayer = false,
-               float power = 1.0f, std::string ammoItem = {});
+               float power = 1.0f, std::string ammoItem = {},
+               int effectId = -1, double effectDuration = 0.0);
 
     void update(double dt) override;
     bool shouldDespawn() const override {
@@ -104,6 +118,11 @@ public:
     // The launcher's ammo item name (Phase 42, empty = not pickable):
     // returned to the player's inventory when a stuck arrow is picked up.
     const std::string& ammoItem() const { return m_ammoItem; }
+    // SURV-5: the effect id this arrow applies on a landed hit
+    // (-1 = no effect, the pre-SURV-5 default) + its duration (seconds;
+    // 0 with -1).
+    int effectId() const { return m_effectId; }
+    double effectDuration() const { return m_effectDuration; }
     // The game calls this when the block the arrow is stuck in is broken
     // or replaced (Phase 42): the arrow falls from where it hung (zero
     // velocity + gravity) and rejoins flight physics. No-op when not
@@ -149,6 +168,10 @@ private:
     MobEntity* m_source = nullptr; // shooter (skipped by the hit test)
     float m_power = 1.0f; // shot charge, scales mob-hit knockback (Phase 42)
     std::string m_ammoItem; // pickup returns this (Phase 42, "" = none)
+    // SURV-5: the arrow's status effect (id -1 = none, the default —
+    // every pre-SURV-5 arrow is bit-identical) + its duration.
+    int m_effectId = -1;
+    double m_effectDuration = 0.0;
 
     // Same fall cap as the player: keeps the sub-stepper's tunneling bound
     // (an uncapped arrow could reach 600 blocks/s after 30 s).

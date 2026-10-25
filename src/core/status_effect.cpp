@@ -63,7 +63,14 @@ Result<void> EffectRegistry::parseEffect(const Json& def, Effect& out) {
                                                 "damage_reduction",
                                                 // SURV-4: the potion's
                                                 // instant heal / damage.
-                                                "instant_hp"};
+                                                "instant_hp",
+                                                // SURV-5: the mob carrier
+                                                // (affects_mobs + the
+                                                // mob-side floor + the
+                                                // undead exemption).
+                                                "affects_mobs",
+                                                "min_health_mob",
+                                                "undead_exempt"};
     for (const auto& [key, value] : def.members()) {
         if (kFields.count(key) == 0) {
             return MC_FAIL("effect '" + out.name + "' has an unknown field "
@@ -101,8 +108,35 @@ Result<void> EffectRegistry::parseEffect(const Json& def, Effect& out) {
                                      "effect '" + out.name + "'", true);
                 MC_TRY(mr);
             }
-        } else if (def.find("min_health") != nullptr) {
-            return MC_FAIL("effect '" + out.name + "': 'min_health' is only "
+            // SURV-5: the MOB-side floor — the twin of min_health for the
+            // mob carrier. Integer 0 (no floor: a damage tick may kill
+            // the mob — poison, Minecraft's dual-target rule) or 1 (kept
+            // at 1: never kills). ABSENT = the mob floor follows the
+            // player's min_health (every pre-SURV-5 effect). A heal tick
+            // cannot floor health, so it is damage-only like min_health.
+            if (const Json* mm = def.find("min_health_mob")) {
+                if (!mm->isNumber() || mm->asDouble() !=
+                                            std::floor(mm->asDouble())) {
+                    return MC_FAIL("effect '" + out.name +
+                                   "': 'min_health_mob' must be an "
+                                   "integer (0 or 1), got " +
+                                   (mm->isNumber()
+                                        ? std::to_string(mm->asDouble())
+                                        : std::string("non-number")));
+                }
+                const double d = mm->asDouble();
+                if (d != 0.0 && d != 1.0) {
+                    return MC_FAIL("effect '" + out.name +
+                                   "': 'min_health_mob' must be 0 (no "
+                                   "floor, the mob can die) or 1 (kept "
+                                   "at 1), got " + std::to_string(d));
+                }
+                out.minHealthMob = static_cast<int>(d);
+            }
+        } else if (def.find("min_health") != nullptr ||
+                   def.find("min_health_mob") != nullptr) {
+            return MC_FAIL("effect '" + out.name +
+                           "': 'min_health' / 'min_health_mob' are only "
                            "valid for a \"damage\" tick_type (a heal tick "
                            "cannot floor health)");
         }
@@ -218,6 +252,29 @@ Result<void> EffectRegistry::parseEffect(const Json& def, Effect& out) {
                            "'extinguished_by_water' must be a boolean");
         }
         out.extinguishedByWater = ew->asBool();
+    }
+
+    // SURV-5: the mob-carrier flags (strict booleans, default false).
+    // `affects_mobs` marks the effects a mob CAN carry (Minecraft's
+    // "affects monsters": poison / wither); `undead_exempt` marks the ones
+    // the UNDEAD refuse (poison — the wither kills them, Minecraft's
+    // uniqueness). Both are apply-time combination gates (init only
+    // cross-checks the NAMES, not the flags).
+    const Json* am = def.find("affects_mobs");
+    if (am != nullptr) {
+        if (!am->isBool()) {
+            return MC_FAIL("effect '" + out.name + "': 'affects_mobs' "
+                           "must be a boolean");
+        }
+        out.affectsMobs = am->asBool();
+    }
+    const Json* ue = def.find("undead_exempt");
+    if (ue != nullptr) {
+        if (!ue->isBool()) {
+            return MC_FAIL("effect '" + out.name + "': 'undead_exempt' "
+                           "must be a boolean");
+        }
+        out.undeadExempt = ue->asBool();
     }
 
     const Json* icon = def.find("icon");

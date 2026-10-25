@@ -26,7 +26,7 @@
 | GEN 世界与生成 | ~~GEN-1 面条洞穴~~ 完成 | ~~GEN-2 树生长~~ 完成 | ~~GEN-3 矿脉形态~~ 完成 | ~~GEN-4 洞穴破碎度~~ 完成 | ~~GEN-5 浮空树~~ 完成 | GEN-6 树放置半区缺失（定案，SURV-5 后） |
 | FLUID 流体 | ~~FLUID-1 水量守恒~~ 完成 | ~~FLUID-2 游泳划水~~ 完成 | | | | |
 | ENT 实体/Mob/移动 | ~~ENT-1 四肢摆动~~ 完成 | ~~ENT-2 BlockState★~~ 完成 | ~~ENT-3 mob踏阶~~ 完成 | ~~ENT-4 水体交互~~ 完成 | | |
-| SURV 生存/战斗/效果 | ~~SURV-1 护甲~~ 完成 | ~~SURV-2 氧气窒息~~ 完成 | ~~SURV-3 耐久~~ 完成 | ~~SURV-4 药水饮用~~ 完成 | SURV-5 mob效果 | |
+| SURV 生存/战斗/效果 | ~~SURV-1 护甲~~ 完成 | ~~SURV-2 氧气窒息~~ 完成 | ~~SURV-3 耐久~~ 完成 | ~~SURV-4 药水饮用~~ 完成 | ~~SURV-5 mob效果~~ 完成 | |
 | CRAFT 物品/合成/面板 | CRAFT-1 工作台分块★ | CRAFT-2 物品3D模型 | CRAFT-3 材质音效 | | | |
 | SAVE 存档 | SAVE-1 自动存档 | | | | | |
 | PRE 表现层 | PRE-1 中文字体 | PRE-2 边缘雾 | PRE-3 水面波纹 | PRE-4 云与环境音 | PRE-5 透明discard | PRE-6 掉落光照 |
@@ -173,7 +173,30 @@
   upd/render/flush/player/ents/stream 全指标同档（swap med ~0.5 ms
   无 stall = 深黑相 timing-clean 接受协议首用）= **成本可忽略**。SURV
   行 4/5。
-- **SURV-5 mob 效果** — 效果作用于 mob（中毒/凋灵）、远程箭施加（状态效果条）
+- ~~**SURV-5 mob 效果**~~ — **完成（2026-10-25，发布 v0.19.0）**：状态
+  效果双载体（玩家 + mob）全数据驱动——效果侧 3 新字段
+  （`affects_mobs` / `min_health_mob` 整数 0/1 缺省跟随 min_health /
+  `undead_exempt`×mob `undead` 组合门）+ **wither**（1.0/4.0s 无地板
+  双目标可杀，MC wither I）+ poison `min_health_mob 0`（mob 可毒死，
+  玩家地板 1.0 不动）+ MobEntity 持 StatusEffects（count==0 fast-exit，
+  Heal no-op 记档）+ Projectile 尾部 `effectId/effectDuration`（默认 −1
+  位级恒等，9 参 legacy 形钉死）+ 双源 `arrow_effect`（skeleton
+  {wither,10} / poison_bow {poison,60} = MC arrow of poison 1:00；item
+  侧要求 shoot_speed + **affects_mobs**，mob 侧要求 shoot_range，init
+  双向交叉校验点名）+ skeleton/zombie `undead: true`（不死族免疫
+  poison，wither 唯一伤不死族）+ poison_bow（durability 384 弓族，配方
+  bow+potion_poison 不还瓶记档）+ effects.png 160→176 尾部 append
+  （既有 10 tile 逐像素零变化 + 77 icon 逐字节零变化 + 生成器幂等）。
+  **零 format（18）/零 config/零新音效**。1519/1519（+25：解析/坏值/
+  载体行为 ×6/内容钉死/投射物缺省位级）。门 102：S6 3/3 点名 PASS +
+  **S1 PASS = 第 102 次结构性免疫**（fresh 60f ×2 RAW + vs base18 字节
+  一致）+ S2 探针 PASS（skeleton-only 场景 420f：effects 含 wither
+  remaining 4.2 + hp 8 存活 = 接线全链实证；PITS 255-258 场景四坑）+
+  S2 截图对/S3 毒杀 cow/S4 zombie 免疫 = 补跑清单（行为层 test_mob 已
+  证）。性能 A/B v0.18.0（发布前）：fall 900f 三窗 fluidCells 逐位一致（同世界）
+  + 全指标同档 + skel 场景 1200f ents 段双侧同档（new 更低 = 玩家被
+  wither 更早死战斗活动减少，非代码差）= **成本可忽略无回归**（fast-exit
+  实证）。**SURV 行 5/5 全清，release ③ = v0.19.0**。
 
 ### CRAFT 物品/合成/面板
 - **CRAFT-1 工作台分块★** — 每工作台独立容器，**依赖 ENT-2**（工作台条）

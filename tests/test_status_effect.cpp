@@ -660,3 +660,195 @@ TEST(StatusEffects, ReapplyResetsToFullDuration) {
     ASSERT_EQ(se.count(), 1u);  // still one instance (not stacked)
     EXPECT_NEAR(se.list().at(0).remaining, 90.0, 1e-9);
 }
+
+// ---------------------------------------------------------------------------
+// SURV-5 (mob effects): the mob-carrier fields — `affects_mobs` (the
+// acceptance gate), `min_health_mob` (the mob-side floor) and
+// `undead_exempt` (the poison-does-not-touch-undead gate).
+// ---------------------------------------------------------------------------
+
+TEST(EffectParse, AffectsMobsValid) {
+    // The shipped wither shape: a damage tick that accepts mobs.
+    Effect e;
+    auto r = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"wither","tick_type":"damage","tick_amount":1.0,
+                      "tick_interval":4.0,"negative":true,"affects_mobs":true,
+                      "icon":10})"),
+        e);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(e.affectsMobs);
+    EXPECT_FALSE(e.undeadExempt);  // the wither kills undead (MC uniqueness)
+}
+
+TEST(EffectParse, AffectsMobsDefaultsFalse) {
+    // Every pre-SURV-5 effect is player-only: the flag absent = false
+    // (the makeRegistry fixture poison carries no affects_mobs) and an
+    // explicit false is accepted.
+    const EffectRegistry reg = makeRegistry();
+    EXPECT_FALSE(reg.findByName("poison")->affectsMobs);
+    Effect e;
+    auto r = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"x","tick_type":"damage","tick_amount":1.0,
+                      "tick_interval":2.5,"affects_mobs":false,"icon":0})"),
+        e);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FALSE(e.affectsMobs);
+}
+
+TEST(EffectParse, AffectsMobsRejectsNonBool) {
+    for (const char* bad : {R"("yes")", "1", R"("true")", "[true]"}) {
+        Effect e;
+        auto r = EffectRegistry::parseEffect(
+            parseJson(R"({"id":"x","tick_type":"damage","tick_amount":1.0,)"
+                      R"("tick_interval":2.5,"affects_mobs":)" +
+                std::string(bad) + R"(,"icon":0})"),
+            e);
+        EXPECT_FALSE(r.ok()) << "accepted affects_mobs " << bad;
+        EXPECT_NE(r.error().message.find("'affects_mobs' must be a boolean"),
+                  std::string::npos) << r.error().message;
+    }
+}
+
+TEST(EffectParse, MinHealthMobExplicitValues) {
+    // The shipped poison shape: the player floor 1.0 KEPT while the mob
+    // floor is 0 (Minecraft's dual-target rule — poison cannot kill the
+    // player, but it can kill a cow).
+    Effect e;
+    auto r = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"poison","tick_type":"damage","tick_amount":1.0,
+                      "tick_interval":2.5,"min_health":1.0,
+                      "min_health_mob":0,"icon":0})"),
+        e);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FLOAT_EQ(e.minHealth, 1.0f);   // the player floor is untouched
+    EXPECT_EQ(e.minHealthMob, 0);         // the mob may be killed
+    // The other boundary value (1 = the mob is kept at 1, never killed).
+    Effect one;
+    ASSERT_TRUE(EffectRegistry::parseEffect(
+        parseJson(R"({"id":"x","tick_type":"damage","tick_amount":1.0,
+                      "tick_interval":2.5,"min_health_mob":1,"icon":0})"),
+        one).ok());
+    EXPECT_EQ(one.minHealthMob, 1);
+}
+
+TEST(EffectParse, MinHealthMobAbsentFollowsMinHealth) {
+    // ABSENT = the mob floor follows the player's min_health (the default-
+    // follow rule): a pre-SURV-5 damage effect (the fire: floor 0) gives
+    // the mob floor 0; the fixture poison (floor 1, no min_health_mob)
+    // would give the mob floor 1. The sentinel -1 marks "not set".
+    const EffectRegistry reg = makeRegistry();
+    EXPECT_EQ(reg.findByName("fire")->minHealthMob, -1);
+    EXPECT_EQ(reg.findByName("poison")->minHealthMob, -1);
+    Effect e;
+    ASSERT_TRUE(EffectRegistry::parseEffect(
+        parseJson(R"({"id":"x","tick_type":"heal","tick_amount":1.0,
+                      "tick_interval":4.5,"icon":2})"),
+        e).ok());
+    EXPECT_EQ(e.minHealthMob, -1);
+}
+
+TEST(EffectParse, MinHealthMobRejectsBadValues) {
+    const std::vector<std::string> bad = {
+        R"({"id":"x","tick_type":"damage","tick_amount":1.0,
+           "tick_interval":2.5,"min_health_mob":0.5,"icon":0})",  //
+        // non-integer
+        R"({"id":"x","tick_type":"damage","tick_amount":1.0,
+           "tick_interval":2.5,"min_health_mob":2,"icon":0})",    // > 1
+        R"({"id":"x","tick_type":"damage","tick_amount":1.0,
+           "tick_interval":2.5,"min_health_mob":-1,"icon":0})",   // < 0
+        R"({"id":"x","tick_type":"heal","tick_amount":1.0,
+           "tick_interval":4.5,"min_health_mob":0,"icon":0})",    // heal
+        // floor
+        R"({"id":"x","tick_type":"damage","tick_amount":1.0,
+           "tick_interval":2.5,"min_health_mob":"0","icon":0})",  //
+        // non-number
+    };
+    for (const std::string& def : bad) {
+        Effect e;
+        auto r = EffectRegistry::parseEffect(parseJson(def), e);
+        EXPECT_FALSE(r.ok()) << def;
+        EXPECT_NE(r.error().message.find("min_health_mob"), std::string::npos)
+            << def << ": " << r.error().message;
+    }
+}
+
+TEST(EffectParse, UndeadExemptValidAndStrict) {
+    // The shipped poison flag: strict bool, absent = false.
+    Effect e;
+    auto r = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"poison","tick_type":"damage","tick_amount":1.0,
+                      "tick_interval":2.5,"min_health":1.0,
+                      "undead_exempt":true,"icon":0})"),
+        e);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(e.undeadExempt);
+    const EffectRegistry reg = makeRegistry();
+    EXPECT_FALSE(reg.findByName("fire")->undeadExempt);
+    Effect notBool;
+    auto rBad = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"x","tick_type":"damage","tick_amount":1.0,
+                      "tick_interval":2.5,"undead_exempt":"yes","icon":0})"),
+        notBool);
+    ASSERT_FALSE(rBad.ok());
+    EXPECT_NE(rBad.error().message.find("'undead_exempt' must be a boolean"),
+              std::string::npos) << rBad.error().message;
+}
+
+// -- SURV-5: the shipped content pins ----------------------------------------
+
+TEST(EffectContent, WitherEffectContentPinned) {
+    // The shipped wither (data/effects/wither.json): Minecraft wither I —
+    // 1 HP / 4 s, NO floor on either target (lethal on player and mob),
+    // mob-accepting, undead-KILLING (no undead_exempt), icon 10 (the
+    // effects.png 160->176 tail extension).
+    FILE* fp = std::fopen("assets/data/effects/wither.json", "rb");
+    ASSERT_NE(fp, nullptr) << "run from the repo root";
+    std::string text;
+    char buf[4096];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+        text.append(buf, n);
+    }
+    std::fclose(fp);
+    Effect e;
+    ASSERT_TRUE(EffectRegistry::parseEffect(parseJson(text), e).ok());
+    EXPECT_EQ(e.name, "wither");
+    EXPECT_EQ(e.tick, Effect::Tick::Damage);
+    EXPECT_FLOAT_EQ(e.tickAmount, 1.0f);
+    EXPECT_FLOAT_EQ(e.tickInterval, 4.0f);
+    EXPECT_FLOAT_EQ(e.minHealth, 0.0f);  // absent = no floor (player can
+    // die)
+    EXPECT_EQ(e.minHealthMob, -1);       // absent = follows min_health = 0
+    // (mob can die)
+    EXPECT_TRUE(e.negative);
+    EXPECT_TRUE(e.affectsMobs);
+    EXPECT_FALSE(e.undeadExempt);        // the wither kills the undead
+    EXPECT_EQ(e.icon, 10);
+}
+
+TEST(EffectContent, PoisonMobCarrierFieldsPinned) {
+    // The shipped poison (data/effects/poison.json) after SURV-5: the
+    // player's 1-HP floor is KEPT (zero regression), the mob floor is 0
+    // (a cow can be poisoned to death — the dual-target rule), it accepts
+    // mobs, and the undead refuse it.
+    FILE* fp = std::fopen("assets/data/effects/poison.json", "rb");
+    ASSERT_NE(fp, nullptr) << "run from the repo root";
+    std::string text;
+    char buf[4096];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+        text.append(buf, n);
+    }
+    std::fclose(fp);
+    Effect e;
+    ASSERT_TRUE(EffectRegistry::parseEffect(parseJson(text), e).ok());
+    EXPECT_EQ(e.name, "poison");
+    EXPECT_FLOAT_EQ(e.tickAmount, 1.0f);
+    EXPECT_FLOAT_EQ(e.tickInterval, 2.5f);
+    EXPECT_FLOAT_EQ(e.minHealth, 1.0f);   // the player floor (unchanged)
+    EXPECT_EQ(e.minHealthMob, 0);         // the mob floor (lethal)
+    EXPECT_TRUE(e.negative);
+    EXPECT_TRUE(e.affectsMobs);
+    EXPECT_TRUE(e.undeadExempt);
+    EXPECT_EQ(e.icon, 0);
+}

@@ -84,6 +84,9 @@ cmake --build build
 
 ## 版本与发布
 
+- **v0.19.0**（2026-10-25）：**SURV-5 mob 效果**（任务表 21/32，SURV 行
+  5/5 全清）——状态效果双载体：skeleton 箭带 wither（1HP/4s 无地板可杀）、
+  毒弓 poison_bow（箭中 mob 中毒 60s 可毒死）、不死族免疫 poison（MC 语义）。
 - **v0.18.0**（2026-10-25）：**GEN-5 浮空树**（任务表 20/31，用户报障
   修复）——洞穴挖掉的地面上不再长树（caveCarvesCell 纯谓词守卫，
   carveCaves 行为恒等，零 format/config/content）。

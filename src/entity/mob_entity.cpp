@@ -320,4 +320,53 @@ void MobEntity::armFire(double tickInterval, float tickAmount,
     m_fireDueFrames = m_fireIntervalFrames;
 }
 
+void MobEntity::applyEffect(int effect, double duration,
+                            const EffectRegistry& effects) {
+    if (m_dead || effect < 0 || duration <= 0.0) {
+        return;
+    }
+    const Effect& def = effects.at(effect);
+    if (!def.affectsMobs) {
+        return; // the effect is not mob-accepting (defensive; a bow's
+                // arrow_effect is init-cross-checked to carry the flag)
+    }
+    // Minecraft: the poison does not affect the undead (the zombie /
+    // skeleton are immune); the wither has NO undead_exempt and is the
+    // effect that kills them. A pure combination gate (both data).
+    if (def.undeadExempt && m_def->properties.undead) {
+        return;
+    }
+    m_effects.apply(effect, duration);
+}
+
+void MobEntity::updateStatusEffects(double dt, const EffectRegistry& effects) {
+    // count == 0 fast exit: a mob without active effects costs nothing
+    // (the structural-immunity basis — every pre-SURV-5 mob's frame is
+    // bit-identical to this check alone).
+    if (m_dead || dt <= 0.0 || m_effects.count() == 0) {
+        return;
+    }
+    m_effects.update(dt, effects, [this](const Effect& def) {
+        if (def.tick != Effect::Tick::Damage) {
+            // Heal ticks are a no-op on mobs (MobEntity has no
+            // regeneration — the documented deviation); a modifier
+            // effect has no ticks at all (its None tick never fires).
+            return;
+        }
+        // The MOB floor: min_health_mob when the effect sets it, else the
+        // effect's player min_health (the default-follow rule). Poison
+        // ships 0: the damage tick may kill the mob (the player's 1-HP
+        // floor is untouched — the dual-target rule).
+        const float floor =
+            def.minHealthMob >= 0 ? def.minHealthMob : def.minHealth;
+        if (m_health - def.tickAmount >= floor) {
+            // The killing tick runs through the EXISTING damage() path:
+            // the dead flag + the game's despawn pass spawn the data
+            // drops (unchanged). Later ticks this frame see m_dead and
+            // no-op (damage()'s guard).
+            damage(def.tickAmount);
+        }
+    });
+}
+
 } // namespace mc

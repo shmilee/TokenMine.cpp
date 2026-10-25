@@ -537,6 +537,41 @@ TEST(ProjectileTest, PowerAndAmmoItemRideWithTheArrow) {
     EXPECT_EQ(shot.ammoItem(), "arrow");
 }
 
+TEST(ProjectileTest, EffectIdDefaultsNone) {
+    // SURV-5: the constructor's effect args default to (-1, 0.0) — every
+    // pre-SURV-5 call site builds a no-effect arrow (bit-identical
+    // behavior: the game applies nothing on hit).
+    Fixture f;
+    Projectile plain(f.world, f.blocks, {0.5f, 5.0f, 0.5f}, {1.0f, 0.0f, 0.0f});
+    EXPECT_EQ(plain.effectId(), -1);
+    EXPECT_DOUBLE_EQ(plain.effectDuration(), 0.0);
+    // The full 9-arg legacy shape (power + ammo) also leaves the effect
+    // absent (the two new params are trailing defaults).
+    Projectile legacy(f.world, f.blocks, {0.5f, 5.0f, 0.5f}, {1.0f, 0.0f, 0.0f},
+                      15.0f, 5.0f, /*hurtPlayer=*/false, 0.6f, "arrow");
+    EXPECT_EQ(legacy.effectId(), -1);
+    EXPECT_DOUBLE_EQ(legacy.effectDuration(), 0.0);
+}
+
+TEST(ProjectileTest, EffectIdRidesWithTheArrow) {
+    // SURV-5: the resolved effect id + duration ride with the arrow
+    // (an int, not a name — zero heap allocation; the id is the
+    // EffectRegistry index the game resolved at fire time).
+    Fixture f;
+    Projectile poisonArrow(f.world, f.blocks, {0.5f, 5.0f, 0.5f},
+                           {1.0f, 0.0f, 0.0f}, 15.0f, 5.0f,
+                           /*hurtPlayer=*/false, 1.0f, "arrow",
+                           /*effectId=*/3, /*effectDuration=*/60.0);
+    EXPECT_EQ(poisonArrow.effectId(), 3);
+    EXPECT_DOUBLE_EQ(poisonArrow.effectDuration(), 60.0);
+    Projectile witherArrow(f.world, f.blocks, {0.5f, 5.0f, 0.5f},
+                           {1.0f, 0.0f, 0.0f}, 15.0f, 2.0f,
+                           /*hurtPlayer=*/true, 1.0f, "arrow",
+                           /*effectId=*/1, /*effectDuration=*/10.0);
+    EXPECT_EQ(witherArrow.effectId(), 1);
+    EXPECT_DOUBLE_EQ(witherArrow.effectDuration(), 10.0);
+}
+
 TEST(ProjectileTest, DespawnBelowKillPlaneNotOnImpact) {
     BlockRegistry blocks = makeBlocks();
     World world; // the void: no solid anywhere

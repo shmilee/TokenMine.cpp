@@ -154,6 +154,51 @@ Result<void> ItemRegistry::parseAmmo(const Json& def, Item& out) {
     return {};
 }
 
+Result<void> ItemRegistry::parseArrowEffect(const Json& def, Item& out) {
+    // SURV-5: optional 'arrow_effect' — the status effect the launcher's
+    // arrows apply to the hit MOB ({"name": "poison", "duration": 60} on
+    // the poison_bow). The STRICT {name, duration} pair (the
+    // on_hit_effect / grants_effect discipline): both keys required,
+    // unknown keys named, duration > 0 (an arrow effect always lingers —
+    // an instant effect settles on apply, an arrow has no "apply moment"
+    // other than the hit, so 0 is a typo here, the on_hit_effect
+    // rejection pattern). Only a LAUNCHER (shoot_speed > 0, parsed before
+    // this in the flow) may carry it — a non-launcher's arrows never fly,
+    // so the field would be dead (the ammo discipline). The effect name's
+    // existence + its `affects_mobs` flag are cross-checked at game init
+    // (the EffectRegistry is not available at parse).
+    if (const Json* ae = def.find("arrow_effect")) {
+        if (!ae->isObject()) {
+            return MC_FAIL("'arrow_effect' must be an object "
+                           "{\"name\": ..., \"duration\": ...}");
+        }
+        for (const auto& [key, value] : ae->members()) {
+            if (key != "name" && key != "duration") {
+                return MC_FAIL("'arrow_effect' has an unknown field '" +
+                               key + "'");
+            }
+        }
+        const Json* nm = ae->find("name");
+        if (nm == nullptr || !nm->isString() || nm->asString().empty()) {
+            return MC_FAIL("'arrow_effect' requires a non-empty string "
+                           "'name' (effect id)");
+        }
+        const Json* du = ae->find("duration");
+        if (du == nullptr || !du->isNumber() || du->asDouble() <= 0.0) {
+            return MC_FAIL("'arrow_effect' requires 'duration' (seconds) "
+                           "> 0");
+        }
+        if (out.shootSpeed <= 0.0f) {
+            return MC_FAIL("'arrow_effect' requires 'shoot_speed' (only a "
+                           "launcher's arrows carry an effect — a "
+                           "non-launcher's field is dead)");
+        }
+        out.arrowEffectName = nm->asString();
+        out.arrowEffectDuration = du->asDouble();
+    }
+    return {};
+}
+
 Result<void> ItemRegistry::parseFurnace(const Json& def, Item& out) {
     // Optional 'smeltable_to' (Phase 40): the furnace product item name.
     // Presence (a non-empty string) marks the item as SMELTABLE; the
@@ -717,6 +762,7 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
             key != "max_stack" && key != "attack_damage" &&
             key != "shoot_speed" && key != "shoot_damage" &&
             key != "restore_hunger" && key != "ammo" && key != "infinite" &&
+            key != "arrow_effect" &&
             key != "smeltable_to" && key != "smelt_time" &&
             key != "fuel_time" && key != "dye_color" &&
             key != "drink_time" && key != "returns_item" &&
@@ -750,6 +796,9 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     r = parseFood(def, item);
     MC_TRY(r);
     r = parseAmmo(def, item);
+    MC_TRY(r);
+    r = parseArrowEffect(def, item); // SURV-5: the launcher's arrow effect
+                                      // (needs shoot_speed + ammo parsed)
     MC_TRY(r);
     r = parseFurnace(def, item);
     MC_TRY(r);

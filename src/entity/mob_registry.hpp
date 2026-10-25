@@ -202,6 +202,20 @@ struct MobProperties {
     // pre-Phase-46 mob).
     std::string hitEffectName;
     double hitEffectDuration = 0.0;
+    // SURV-5: the status effect this mob's ARROW applies to the target
+    // (Minecraft's wither skeleton: its arrows wither the player). The
+    // strict {name, duration} pair, the on_hit_effect discipline; only a
+    // RANGED mob (shoot_range > 0) may carry it — a melee mob's arrows
+    // never fly, so the field would be dead (the ammo discipline). The
+    // effect name is cross-checked against the EffectRegistry at game
+    // init. Empty = no arrow effect (every pre-SURV-5 mob — the shipped
+    // skeleton is the first carrier).
+    std::string arrowEffectName;
+    double arrowEffectDuration = 0.0;
+    // SURV-5: the undead (Minecraft's undead set — the zombie / skeleton).
+    // An effect flagged `undead_exempt` (the poison) is ignored when
+    // applied to this mob. false = a normal mob (every pre-SURV-5 mob).
+    bool undead = false;
     // Drops (Phase 28): the item list the mob drops on death — one entry
     // per dropped item, spawned in list order. Empty = no drops.
     std::vector<MobDrop> drops;
