@@ -75,18 +75,24 @@ MigrationEmptyLegacyGridLoadsEmpty。UI 2 新：RebindSeparatesTheGrids（rebind
   + vs base18 **字节一致** = 免重锚；论证 = crafting_table 在 assets/ 仅
   块数据/配方/atlas 3 处引用，worldgen.json 与全部 biomes 零引用 → 无输入
   fresh 零表块 → m_tables 恒空 → 收口零创建、无面板零渲染）
-- **S2 双工作台互斥场景 = 补跑清单**（输入跑，xdotool 协议）：场景 =
-  A=(21,46,−4) / B=(22,46,−4) 两表 + 玩家 (21.5,45,−2.5) pitch −0.30 +
-  hotbar beef/coal；Run1 beef→A grid cell0（断言 B 全空）/ Run2 coal→B
-  cell4（断言 A 不变）/ Run3 持久化重开 + 截图 A/B 面板互斥；**frozen
-  v0.20.0 同输入 = 共享网格反例对照**（A/B 内容相同）。行为层 = 14 单测已证
-  （rebind 隔离 + 只消费绑定网格 + 迁移/往返）
+- **S2 双工作台互斥场景 PASS（输入跑收 10-26 02:1x）**：场景 = 双表
+  A=(21,39,−4)/B=(22,38,−4) + hotbar beef/coal（format 18 两侧同载）；
+  NEW 链 r1（beef→A）+ r2（载 r1，coal→B）：断言 **A={cell0:beef} ∧
+  B={cell4:coal} 互斥 + A 持久**；OLD 链（frozen v0.20.0 共享网格反例）
+  o1+o2：**table_grid={0:beef, 4:coal} 单一共享容器**；14/14 断言 PASS
+  （×2 savenorm 确定性 = 剥 saturation/hunger/fires remaining real-dt）。
+  输入协议调试实录（PITS 260）：右键须持惰性物品（持食物 = tryEat 吞
+  点击）+ 面板开前 L 捕获 + 窗口中心 = 隐藏 starter 槽 24（幂等双 R 会
+  携苗污染）+ ui.scale 1.5 布局空间换算（UI 空间 = 窗/1.5，点击 =
+  布局×1.5）
 - **S3** = 套件 1535 PASS
 - 性能 A/B v0.20.0（发布前必做）：fall 900f 三窗 **fluidCells
   123879/167781/236573 双侧逐位一致（同世界）+ upd/render/swap/ents/stream
-  全同档** = 成本可忽略（m_tables 恒空 fast-exit = 结构惰性实证）；table
-  场景对（2 表 + 玩家邻站 900f）= 补跑清单（黑相 stall 4+4 轮未过——两侧
-  同款同世界空容器，证据同 fall 档）
+  全同档** = 成本可忽略（m_tables 恒空 fast-exit = 结构惰性实证）。table
+  场景对**弃用**（首轮"black/stall"实为场景注入 bug = 整体替换 blocks 删掉
+  fire 编辑而 fires 段残留 → 交叉校验 init 死 = PITS 251 第 4 次复现；
+  修后评估：两侧同款同世界空容器，无输入 run 无代码路径差 = 证据与 fall 档
+  完全同构，弃跑记档）
 
 ## 偏离 / 记档
 

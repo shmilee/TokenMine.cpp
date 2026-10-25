@@ -1763,6 +1763,12 @@
   fmt18 升级漏 `player.armor` 键。两者皆 init 静默死伪装"未送达"
   （窗口全程不存在，~40 min 误诊为 away 相位）。**纪律补**：场景块
   编辑改写必须同步扫 states/campfires/furnaces 段同格位置引用。
+  **10-26 第 4 次复现**：门 104 场景注入 `d['blocks'] = [...]` **整体
+  替换**（fire 块编辑被删）而 `fires` 段条目残留 → fires 交叉校验 init
+  死，性能 run2 报 "black/stalled" 伪装 GLX 黑相 stall（~30 min 误诊 +
+  8 输入 run 全空转）。**纪律再补**：场景 blocks 改写一律**追加**（保留
+  原编辑），同步扫段 = states/campfires/furnaces/**fires**（fire 块编辑
+  与 fires 段联动）；run2 "stalled" 先查 run 日志 init 行再归因窗。
 - **X 负载下窗口定位 = `xdotool search --pid` 直搜，name-regex 阶段
   flaky（PITS 252）**——10-25 午后：3000f 长跑窗口活着且标题正则可
   匹配（单独探针 子串/`--pid`/`--class` 三法全命中），但
@@ -1833,3 +1839,36 @@
   SESSION_CONTEXT；retry 运行期间**禁止**对同 slot/同路径手动直拍——
   收帧一律交给环（其 good() 门 + 黑帧 rm = 自愈）；撞车残帧由环的
   `good && continue` / 拍黑 rm 自动清，勿手动删环在途文件。
+- **门 104 S2 输入协议五坑 + 场景几何时效（PITS 260）**——10-26 双工作台
+  互斥输入跑（~3 h 调试定案）：① **持食物右键 = `tryEat` 吞点击**——右键链
+  次序 campfire→eat→drink→launcher→milk→interact(table/furnace)→dye→place，
+  持 beef（food=3）右键 = 进食通道 RETURN，面板永不打开（且随后 swing 取消
+  通道 = 物品也不消耗 = "点击消失"假象）；**开面板右键必须持惰性物品**
+  （coal；RCHG 调试日志实证：sel=0 held=beef → 无 openTablePanel，持 coal →
+  panel=2）。② **窗口中心 = 隐藏 starter 槽 24**——ui.scale 1.5 下面板布局
+  巨大，屏中心 (640,360) = UI 空间 (427,240) = 存储 row1 col6 = slot 24
+  （oak_sapling）；"幂等双 R"的第二发右键（面板开、光标仍在中心）=
+  rightClick(slot24) 携走 1 苗 → 污染全部后续断言（SWAPWATCH 实证
+  苗 3→2 + slot0 内容被换）；**面板开时任何光标位置的点击都是槽操作**，
+  后续操作前先把光标移到面板外安全区（窗角 (10,10) 必在板外：panel UI
+  原点 (44,126)）。③ **UI 空间换算**——`uiMouse()` = 鼠标/uiScale；
+  `InventoryLayout::compute` 在 UI 空间 = round(窗/uiScale)（1280×720/1.5 =
+  853×480）进行；屏点击位 = 布局 rect × uiScale。布局探针必须传 窗/1.5
+  尺寸、结果 ×1.5 映回屏（rect 探针实证 slotAt(83,316)=0）。④ **xdotool
+  click 偶发双发 press-release 对**（BTNDBG 实证 1 click = 2 pair）→ 跨帧
+  两次 wasPressed = 槽位"拾取+放回"toggle 净零；**全部点击用
+  mousedown/sleep 0.3-0.4/mouseup 拆分**。⑤ **焦点 blip 释放 relative
+  mode**——SDL 失焦自动解锁；L（捕获）与 R 之间焦点被偷 → R 在解锁态被
+  `!locked` 分支 early-return 忽略（未锁定右键 = 无世界交互）；协议 =
+  L → `windowfocus --sync` 重断 → L2（幂等：失焦=重捕获、已锁=swing
+  无害）→ R。**终存 yaw/pitch = 锁定态探测器**：锁定态 mousemove = 相机
+  旋转 → yaw 漂移/pitch 撞 clamp = 面板从未开；面板开 = 指针释放 = 零旋转。
+  另两坑：⑥ **场景几何时效**——P59/P92/P97 时代"证明高度 y45/46"常量是
+  **GEN-1 前无洞穴世界**的；现世界 (21,-2) h=38（顶 39）、(22,-4) h=37
+  （顶 38），注入玩家/方块/掉落必须**每场景用 surfaceHeight 探针重验
+  实际地形**（否则玩家坠落 7 块、目标悬浮头顶、射线全 miss，曾误诊 ~30
+  min）；⑦ **zsh 工具 shell 后台 job setgid flake**——`failed to change
+  group ID: 不允许的操作` 偶发致命（函数内/顶层/sh launcher 均中过）→
+  可靠模式 = 顶层 `( cd $D && $bin ... & echo $! > pid; wait ) &`（smoke
+  6/6 验证）+ 每 slot 独立脚本 + 顺序 driver（g104_run_slot.zsh +
+  gate104_s2_driver.zsh）。

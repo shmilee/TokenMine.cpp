@@ -222,10 +222,9 @@
   + UI rebind 隔离 2）、0 警告、headless 冒烟（19 写读 + 18 遗留读全过）。
   门 104：S1 PASS = 第 104 次结构性免疫（fresh 60f ×2 RAW + vs base18 字节
   一致，免重锚 = crafting_table 零 worldgen/biomes 引用 → m_tables 恒空）+
-  S2 双工作台互斥输入跑 = 补跑清单（行为层 14 单测已证：rebind 隔离 +
-  只消费绑定网格 + 迁移/往返；frozen v0.20.0 共享网格反例对照已备）+ S3
+  S2 双工作台互斥输入跑 **PASS**（14/14 断言：NEW 链 A=beef@0∧B=coal@4 互斥+持久；OLD frozen v0.20.0 反例 = 共享 table_grid 单容器 {0:beef,4:coal}；×2 savenorm；协议坑 PITS 260【持食物右键 = tryEat 吞点击 / 窗中心 = 隐藏 starter 槽 24 / ui.scale 1.5 布局空间换算】）+ S3
   套件 1535；性能 A/B v0.20.0 fall 900f 三窗 fluidCells 逐位一致 + 全指标
-  同档 = 成本可忽略（结构惰性实证；table 场景对 = 黑相 stall 补跑清单）。
+  同档 = 成本可忽略（结构惰性实证；table 场景对弃用 = 首轮场景注入 bug PITS 251 复现，修后两侧同构无代码路径差）。
 - **CRAFT-2 物品 3D 模型** — per-item 3D 模型（手持/世界/进食举到嘴）（UI 条）
 - **CRAFT-3 材质音效** — per-block/per-item 材质音色 + 3D 空间化（UI 条）
 
