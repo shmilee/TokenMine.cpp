@@ -6,5 +6,16 @@
   "attack_damage": 3,
   "max_stack": 1,
   "icon": "wooden_axe",
-  "durability": 59
+  "durability": 59,
+  "model": {
+    "texture": "wooden_axe",
+    "elements": [
+      { "from": [0.06, 0.5, 0.34],
+        "to": [0.42, 0.92, 0.66],
+        "uv": [0.06, 0.08, 0.42, 0.47] },
+      { "from": [0.38, 0.16, 0.44],
+        "to": [0.94, 0.7, 0.56],
+        "uv": [0.38, 0.3, 0.94, 0.85] }
+    ]
+  }
 }

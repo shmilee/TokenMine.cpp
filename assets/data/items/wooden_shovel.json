@@ -6,5 +6,16 @@
   "attack_damage": 2.5,
   "max_stack": 1,
   "icon": "wooden_shovel",
-  "durability": 59
+  "durability": 59,
+  "model": {
+    "texture": "wooden_shovel",
+    "elements": [
+      { "from": [0.22, 0.53, 0.34],
+        "to": [0.78, 0.88, 0.66],
+        "uv": [0.22, 0.12, 0.78, 0.47] },
+      { "from": [0.44, 0.1, 0.42],
+        "to": [0.56, 0.58, 0.58],
+        "uv": [0.44, 0.4, 0.56, 0.88] }
+    ]
+  }
 }

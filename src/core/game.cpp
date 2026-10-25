@@ -19,6 +19,7 @@
 #include "core/math/frustum.hpp"
 #include "entity/arrow_mesh.hpp"
 #include "entity/item_entity.hpp"
+#include "entity/item_model_mesh.hpp"
 #include "entity/mob_entity.hpp"
 #include "entity/mob_mesh.hpp"
 #include "entity/mob_swing.hpp"
@@ -1100,6 +1101,36 @@ Result<void> Game::buildScene() {
         auto iconTex = Texture::loadPng(*iconPath);
         MC_TRY(iconTex);
         m_itemIcons[static_cast<std::size_t>(id.value)] = std::move(*iconTex);
+    }
+
+    // -- item model textures (CRAFT-2) ------------------------------------
+    // Each model item names one texture file under
+    // assets/textures/items/ (its icon or a dedicated one) for the box-
+    // model render path. The file-existence cross-check is the icon-file
+    // discipline (the grows_to pattern: it could not be validated per
+    // parse because it is a filesystem check). The model geometry itself
+    // is pure data — the mesh is built lazily on first render
+    // (itemModelMesh).
+    m_itemModelTextures.resize(m_items.count());
+    m_itemModelMeshes.resize(m_items.count());
+    for (const ItemID id : m_items.allIds()) {
+        const Item& item = m_items.at(id);
+        if (!item.model.has_value()) {
+            continue;
+        }
+        const std::string rel =
+            "textures/items/" + item.model->texture + ".png";
+        if (!m_assets.exists(rel)) {
+            return MC_FAIL("item '" + item.name +
+                           "' model references missing texture '" + rel +
+                           "'");
+        }
+        auto modelPath = m_assets.resolve(rel);
+        MC_TRY(modelPath);
+        auto modelTex = Texture::loadPng(*modelPath);
+        MC_TRY(modelTex);
+        m_itemModelTextures[static_cast<std::size_t>(id.value)] =
+            std::move(*modelTex);
     }
 
     // -- launcher ammo (Phase 24): the 'ammo' field names an item that
@@ -5224,6 +5255,62 @@ void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
             continue; // cannot happen (item data is validated at init)
         }
         const Item& it = m_items.at(iid);
+        // CRAFT-2: a model item (a tool / material with a 'model'
+        // section) renders its box mesh — replacing the legacy INVISIBLE
+        // non-block drop. The box samples the per-item model texture
+        // (the icon PNG: it carries transparent pixels, so the model
+        // joins the BLENDING pass only — unblended they would draw as an
+        // opaque black square, the icon-hand pattern), double-sided
+        // (culling OFF for the batch). No model = the legacy paths
+        // bit-level unchanged (the block cube below / the invisible
+        // non-block drop).
+        if (it.model.has_value()) {
+            if (!transparentPass) {
+                continue;
+            }
+            const std::size_t idx = static_cast<std::size_t>(iid.value);
+            if (idx >= m_itemModelTextures.size() ||
+                !m_itemModelTextures[idx].valid()) {
+                continue; // cannot happen (the texture loads at init)
+            }
+            const Mesh& mesh = itemModelMesh(iid);
+            if (!mesh.valid()) {
+                continue;
+            }
+            // Bob + spin from the frame counter (see kItemBobPeriodFrames):
+            // deterministic in headless runs; at 60 FPS the pickup bobs
+            // with a 1.5 s period and spins around once every 4 s (the
+            // block-cube-drop convention).
+            const Vec3 p = item->position();
+            const float t = static_cast<float>(m_frameCount);
+            const float bob =
+                kItemBobAmplitude *
+                std::sin(2.0f * std::numbers::pi * t /
+                         static_cast<float>(kItemBobPeriodFrames));
+            const float spin = 2.0f * std::numbers::pi * t /
+                               static_cast<float>(kItemSpinPeriodFrames);
+            const Vec3 center {p.x, p.y + item->height() * 0.5f + bob, p.z};
+            // The model geometry is canonical unit space (-0.5..0.5); the
+            // block cube bakes kSize into its geometry, the model applies
+            // it in the matrix — the same world footprint.
+            const Mat4 model = Mat4::multiply(
+                Mat4::translate(center),
+                Mat4::multiply(Mat4::rotateY(spin),
+                               Mat4::scale(ItemEntity::kSize)));
+            // The program must be BIND first: Renderer::draw unbinds the
+            // program after every draw, and a uniform call on an unbound
+            // program is GL_INVALID_OPERATION (the residual error then
+            // poisons the lazy mesh-upload's glGetError — same pattern as
+            // drawArrows).
+            m_basicShader.bind();
+            m_basicShader.setUniform1i("u_useTexture", 1);
+            m_renderer.setCulling(false); // double-sided box
+            m_itemModelTextures[idx].bind();
+            m_renderer.draw(mesh, m_basicShader, view, projection, model);
+            m_atlas.texture().bind(); // restore for the passes that follow
+            m_renderer.setCulling(true);
+            continue;
+        }
         if (it.type != ItemType::Block) {
             // Tools have no in-world cube (the held-item view arrives with
             // the UI in Phase 15).
@@ -5267,6 +5354,32 @@ const Mesh& Game::itemMesh(BlockID id) {
     if (!r.ok()) {
         MC_LOG_ERROR("Item mesh build failed for block '" +
                      m_blocks.at(id).name + "': " + r.error().describe());
+    }
+    return mesh;
+}
+
+const Mesh& Game::itemModelMesh(ItemID id) {
+    // CRAFT-2: the cached box-model mesh for a model item. Only model
+    // items are looked up (the callers gate on item.model / the texture);
+    // a non-model id yields the invalid cached mesh (the callers skip
+    // invalid). The geometry is static per item (makeItemModelGeometry
+    // is a pure function of the parsed data), so build-once + cache is
+    // byte-reproducible across runs. The cache is sized at init, before
+    // any frame renders.
+    const std::size_t idx = static_cast<std::size_t>(id.value);
+    assert(idx < m_itemModelMeshes.size());
+    Mesh& mesh = m_itemModelMeshes[idx];
+    if (!mesh.valid()) {
+        const Item& item = m_items.at(id);
+        if (item.model.has_value()) {
+            const ItemMeshGeometry geom =
+                makeItemModelGeometry(item.model.value());
+            auto r = mesh.upload(geom.vertices, geom.indices);
+            if (!r.ok()) {
+                MC_LOG_ERROR("Item model mesh build failed for item '" +
+                             item.name + "': " + r.error().describe());
+            }
+        }
     }
     return mesh;
 }
@@ -5790,7 +5903,15 @@ void Game::drawHeldHand(const Mat4& view, const Mat4& projection) {
     const bool hasIcon =
         !isBlock && iconIdx < m_itemIcons.size() &&
         m_itemIcons[iconIdx].valid();
-    if (!isBlock && !hasIcon) {
+    // CRAFT-2: a model item renders its box mesh INSTEAD of the icon
+    // quad (the block-cube hand is untouched). The bow-draw and eat-lift
+    // camera transforms below apply to the model branch exactly as to
+    // the icon branch (the eat lift is inherited — zero extra code).
+    const bool hasModel =
+        !isBlock && it.model.has_value() &&
+        iconIdx < m_itemModelTextures.size() &&
+        m_itemModelTextures[iconIdx].valid();
+    if (!isBlock && !hasIcon && !hasModel) {
         return; // no hand model for this item (v1: no per-item 3D)
     }
     const float scale = isBlock ? kHandCubeScale : kHandIconScale;
@@ -5840,6 +5961,18 @@ void Game::drawHeldHand(const Mat4& view, const Mat4& projection) {
         m_atlas.texture().bind();
         m_renderer.draw(itemMesh(it.block), m_basicShader, view, projection,
                         model);
+    } else if (hasModel) {
+        // CRAFT-2: the box-model hand — the per-item model texture bound
+        // at draw time (the icon-hand's binding path), culling OFF for
+        // the double-sided box (every face renders from any spin state),
+        // the canonical unit geometry scaled by kHandIconScale in the
+        // model matrix (the icon-quad footprint).
+        m_itemModelTextures[iconIdx].bind();
+        m_renderer.setCulling(false);
+        m_renderer.draw(itemModelMesh(it.id), m_basicShader, view,
+                        projection, model);
+        m_renderer.setCulling(true);
+        m_atlas.texture().bind(); // restore for the passes that follow
     } else {
         m_itemIcons[iconIdx].bind();
         m_renderer.draw(handIconMesh(), m_basicShader, view, projection,

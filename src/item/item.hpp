@@ -16,19 +16,27 @@
 //     non-placeable items (ingots, planks, sticks, ...) that are crafting
 //     inputs/outputs and block drops (e.g. ore -> ingot).
 //
-// Tools and materials share one property: no in-world representation
-// (dropped ones are invisible entities — see docs/KNOWN_ISSUES.md). All
-// non-block-item code paths (placement, rendering, break speed) dispatch
-// on ItemType, so adding a new explicit kind is data + one enum value.
+// Tools and materials share one property: no in-world representation by
+// DEFAULT (dropped ones are invisible entities — see docs/KNOWN_ISSUES.md).
+// CRAFT-2: an item carrying a 'model' section breaks that default — its
+// drop renders the data-defined box mesh (and its held hand the model
+// instead of the icon quad); without the section the legacy paths are
+// bit-level unchanged. All non-block-item code paths (placement,
+// rendering, break speed) dispatch on ItemType, so adding a new explicit
+// kind is data + one enum value.
 //
 // An ItemStack is an (item, count, damage) triple (the damage is the
 // SURV-3 accumulated durability loss, 0 for items without durability);
 // an empty slot is a stack with an invalid item and/or zero count.
 #pragma once
 
+#include <optional>
 #include <string>
+#include <vector>
 
 #include "block/block.hpp"
+#include "core/math/vec2.hpp"
+#include "core/math/vec3.hpp"
 
 namespace mc {
 
@@ -269,6 +277,37 @@ struct Item {
     // assets/textures/items/, validated against the filesystem at game
     // init). Empty for block items, which render a 3D block cube instead.
     std::string icon;
+    // CRAFT-2: the optional per-item 3D MODEL — a list of axis-aligned
+    // boxes in the unit-cube model space (from < to on every axis,
+    // coordinates in [0, 1]) + one texture file name under
+    // assets/textures/items/ (existence cross-checked at game init, the
+    // icon-file discipline). A model item renders the box mesh in the
+    // item's three render contexts: the held hand (replacing the
+    // icon-quad hand; the bow-draw / eat-lift camera transforms are
+    // inherited — no extra code), the world drop (replacing the
+    // invisible non-block drop), and the eat lift (the hand's eat
+    // animation state). NO ROTATION (the MC primitive box rotations are
+    // documented out of scope — v1 simplified voxel silhouettes).
+    // ABSENT model = the legacy paths run bit-level unchanged (the
+    // icon-quad hand / the block-cube drop / the invisible non-block
+    // drop — the structural-immunity red line). The 2D HUD icons
+    // (hotbar / panel / held corner badge) are untouched by the model.
+    // Block items never carry one (they are built from the BlockRegistry,
+    // no item JSON exists).
+    struct ModelElement {
+        Vec3 from {0.0f, 0.0f, 0.0f};
+        Vec3 to {0.0f, 0.0f, 0.0f};
+        // The UV sub-rectangle of `texture` this element's faces sample
+        // (texture space, v = 0 at the icon's TOP row — the hand-icon
+        // convention). Absent uv = the full texture (0,0)-(1,1).
+        Vec2 uv0 {0.0f, 0.0f};
+        Vec2 uv1 {1.0f, 1.0f};
+    };
+    struct ItemModel {
+        std::string texture;
+        std::vector<ModelElement> elements; // 1..16, strict-parsed
+    };
+    std::optional<ItemModel> model;
 };
 
 struct ItemStack {

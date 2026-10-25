@@ -27,7 +27,7 @@
 | FLUID 流体 | ~~FLUID-1 水量守恒~~ 完成 | ~~FLUID-2 游泳划水~~ 完成 | | | | |
 | ENT 实体/Mob/移动 | ~~ENT-1 四肢摆动~~ 完成 | ~~ENT-2 BlockState★~~ 完成 | ~~ENT-3 mob踏阶~~ 完成 | ~~ENT-4 水体交互~~ 完成 | | |
 | SURV 生存/战斗/效果 | ~~SURV-1 护甲~~ 完成 | ~~SURV-2 氧气窒息~~ 完成 | ~~SURV-3 耐久~~ 完成 | ~~SURV-4 药水饮用~~ 完成 | ~~SURV-5 mob效果~~ 完成 | |
-| CRAFT 物品/合成/面板 | ~~CRAFT-1 工作台分块★~~ 完成（v0.21.0） | CRAFT-2 物品3D模型 | CRAFT-3 材质音效 | | | |
+| CRAFT 物品/合成/面板 | ~~CRAFT-1 工作台分块★~~ 完成（v0.21.0） | ~~CRAFT-2 物品3D模型~~ 完成（v0.22.0） | CRAFT-3 材质音效 | | | |
 | SAVE 存档 | SAVE-1 自动存档 | | | | | |
 | PRE 表现层 | PRE-1 中文字体 | PRE-2 边缘雾 | PRE-3 水面波纹 | PRE-4 云与环境音 | PRE-5 透明discard | PRE-6 掉落光照 |
 
@@ -225,7 +225,25 @@
   S2 双工作台互斥输入跑 **PASS**（14/14 断言：NEW 链 A=beef@0∧B=coal@4 互斥+持久；OLD frozen v0.20.0 反例 = 共享 table_grid 单容器 {0:beef,4:coal}；×2 savenorm；协议坑 PITS 260【持食物右键 = tryEat 吞点击 / 窗中心 = 隐藏 starter 槽 24 / ui.scale 1.5 布局空间换算】）+ S3
   套件 1535；性能 A/B v0.20.0 fall 900f 三窗 fluidCells 逐位一致 + 全指标
   同档 = 成本可忽略（结构惰性实证；table 场景对弃用 = 首轮场景注入 bug PITS 251 复现，修后两侧同构无代码路径差）。
-- **CRAFT-2 物品 3D 模型** — per-item 3D 模型（手持/世界/进食举到嘴）（UI 条）
+- ~~**CRAFT-2 物品 3D 模型**~~ — **完成（2026-10-26，v0.22.0）**：物品 JSON 可选
+  `model` 段（1..16 axis-aligned box + 单纹理 + uv 可选，严格解析：未知键三层点名 /
+  from<to / uv 退化矩形 / 空 / >16 全拒）+ 纯函数 `makeItemModelGeometry`（新文件
+  item_model_mesh，kCubeFaces 角序/法线泛化，faceShade 纪律，居中单位空间，双面关裁剪）
+  + init per-item 模型纹理（icon 文件存在性交叉校验，texture==icon 双上传 ≈64 KB
+  VRAM 一次性）+ `itemModelMesh` 惰性缓存（幂等纯几何）+ 手持接入（替代 icon 面片，
+  弓拉/进食举到嘴变换零额外代码继承，block 立方手不动）+ 世界掉落接入（替代不可见
+  掉落，blending pass only，帧锁定 bob+spin）；16 内容模型（工具 9/弓 5【master_bow
+  无 model】/苹果 2，纹理 = 既有图标 PNG，零新纹理）。无 `model` 物品三上下文位级
+  不变（`it.model.has_value()` 静态门控）；零 format（19）/config/音效。1549/1549
+  （+14：解析 8 + 网格几何 6 含绕序守护/Z-fight 守卫）、`-Werror` 0 警告。门 105：
+  S1 PASS = 第 105 次结构性免疫（fresh 60f ×2 RAW + vs base18 字节一致，免重锚 =
+  手持仅 locked 渲染 + fresh 零掉落 + HUD 2D 不动 + 纹理只 init 加载）+ S2 掉落场景
+  A/B PASS（3 model 物品 600f 无输入，×2 RAW/侧 + A/B diff 181 采样 px ≈724 实际 px
+  限世界区 HUD 零 + 双侧 entities 位级一致 = 纯渲染实证；坑 = scratch 资产漏同步
+  PITS 255-258 第 4 次）+ S3 套件 1549；性能 A/B v0.21.0（发布前必做）fall + drop
+  双场景对 900f 三窗 fluidCells 双侧逐位一致 + 全指标同档（drop 对 render med
+  +0.02-0.03 ms = 3 物品 box 成本同档内）= 成本可忽略。H1/H2/H3 手持输入跑 = 补跑
+  清单（PITS 260 协议）——详见 `docs/archive/phase-craft2.md`
 - **CRAFT-3 材质音效** — per-block/per-item 材质音色 + 3D 空间化（UI 条）
 
 ### SAVE 存档

@@ -473,6 +473,9 @@ private:
     // The cached full-cube mesh for a dropped block (built lazily on first
     // render; the geometry is cached, only the draw transform varies).
     const Mesh& itemMesh(BlockID id);
+    // CRAFT-2: the cached box-model mesh for a model item (built lazily on
+    // first render, like itemMesh; the geometry is static per item).
+    const Mesh& itemModelMesh(ItemID id);
 
     // Mob rendering + spawning (Phase 20): the mobs are drawn after the
     // item entities with their cached box-model mesh (translate by the
@@ -957,6 +960,11 @@ private:
     Texture m_fontTexture;
     Texture m_crackTexture;
     std::vector<Texture> m_itemIcons;
+    // CRAFT-2: the per-item model textures (indexed by ItemID value, the
+    // m_itemIcons pattern; invalid entry = no model) + the cached box-
+    // model meshes (built lazily on first render, sized at init).
+    std::vector<Texture> m_itemModelTextures;
+    std::vector<Mesh> m_itemModelMeshes;
     Mesh m_outlineMesh;
     std::array<Mesh, 5> m_crackMeshes;
     // Phase 15 state (all default-off: the no-input baseline renders no

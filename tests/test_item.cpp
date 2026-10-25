@@ -3,6 +3,7 @@
 // the inventory's merge/overflow/take rules, and the break-time formula.
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -2374,4 +2375,323 @@ TEST(EffectContent, Surv4InstantEffectContentPinned) {
     EXPECT_EQ(harming->tick, Effect::Tick::None);
     EXPECT_TRUE(harming->negative);
     EXPECT_EQ(harming->icon, 9);
+}
+
+// -- CRAFT-2: the per-item 3D model ---------------------------------------
+
+namespace {
+
+bool modelParseFailsNamed(const std::string& json,
+                          const std::string& needle) {
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(json));
+    if (r.ok()) {
+        return false;
+    }
+    return r.error().message.find(needle) != std::string::npos;
+}
+
+// The shipped model geometry per item TYPE (shared across the material
+// family): the element lists (from, to, uv) — the values are the
+// contract (derived from the icon silhouettes in
+// tools/generate_item_icons.py; see the CRAFT-2 phase report).
+struct ExpectedElement {
+    float from[3];
+    float to[3];
+    float uv[4];
+};
+struct ExpectedModel {
+    std::vector<ExpectedElement> elements;
+};
+static const ExpectedModel kPickaxeModel = {{
+    {{0.05f, 0.62f, 0.34f}, {0.95f, 0.80f, 0.66f},
+     {0.05f, 0.20f, 0.95f, 0.38f}}, // head bar (the wide arc slab)
+    {{0.30f, 0.78f, 0.40f}, {0.75f, 0.94f, 0.60f},
+     {0.30f, 0.06f, 0.75f, 0.22f}}, // head cap (the arc crown)
+    {{0.44f, 0.13f, 0.44f}, {0.94f, 0.66f, 0.56f},
+     {0.44f, 0.34f, 0.94f, 0.88f}}, // handle (the diagonal, 1 box)
+}};
+static const ExpectedModel kAxeModel = {{
+    {{0.06f, 0.50f, 0.34f}, {0.42f, 0.92f, 0.66f},
+     {0.06f, 0.08f, 0.42f, 0.47f}}, // head (the upper-left slab)
+    {{0.38f, 0.16f, 0.44f}, {0.94f, 0.70f, 0.56f},
+     {0.38f, 0.30f, 0.94f, 0.85f}}, // handle (the diagonal, 1 box)
+}};
+static const ExpectedModel kShovelModel = {{
+    {{0.22f, 0.53f, 0.34f}, {0.78f, 0.88f, 0.66f},
+     {0.22f, 0.12f, 0.78f, 0.47f}}, // blade (the wide top scoop)
+    {{0.44f, 0.10f, 0.42f}, {0.56f, 0.58f, 0.58f},
+     {0.44f, 0.40f, 0.56f, 0.88f}}, // handle (the vertical, 1 box)
+}};
+static const ExpectedModel kBowModel = {{
+    {{0.12f, 0.59f, 0.32f}, {0.69f, 0.88f, 0.60f},
+     {0.12f, 0.12f, 0.69f, 0.40f}}, // upper limb
+    {{0.12f, 0.15f, 0.32f}, {0.69f, 0.40f, 0.60f},
+     {0.12f, 0.62f, 0.69f, 0.85f}}, // lower limb
+    {{0.65f, 0.12f, 0.44f}, {0.72f, 0.91f, 0.50f},
+     {0.65f, 0.12f, 0.72f, 0.91f}}, // string (the thin vertical)
+}};
+static const ExpectedModel kAppleModel = {{
+    {{0.19f, 0.07f, 0.25f}, {0.78f, 0.69f, 0.75f},
+     {0.19f, 0.31f, 0.78f, 0.94f}}, // body (the circle approximation)
+    {{0.44f, 0.63f, 0.44f}, {0.51f, 0.85f, 0.56f},
+     {0.44f, 0.15f, 0.51f, 0.34f}}, // stem (the thin column)
+}};
+
+std::string readItemFile(const std::string& name) {
+    const std::string path = "assets/data/items/" + name + ".json";
+    FILE* fp = std::fopen(path.c_str(), "rb");
+    if (fp == nullptr) {
+        ADD_FAILURE() << "run from the repo root (missing " << path << ")";
+        return "";
+    }
+    std::string text;
+    char buf[4096];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+        text.append(buf, n);
+    }
+    std::fclose(fp);
+    return text;
+}
+
+void expectModelMatches(const Item& it, const ExpectedModel& expected,
+                        const std::string& texture) {
+    ASSERT_TRUE(it.model.has_value()) << it.name;
+    EXPECT_EQ(it.model->texture, texture) << it.name;
+    ASSERT_EQ(it.model->elements.size(), expected.elements.size())
+        << it.name;
+    for (std::size_t i = 0; i < expected.elements.size(); ++i) {
+        const ExpectedElement& e = expected.elements[i];
+        const Item::ModelElement& m = it.model->elements[i];
+        EXPECT_EQ(m.from.x, e.from[0]) << it.name << " el " << i << " from.x";
+        EXPECT_EQ(m.from.y, e.from[1]) << it.name << " el " << i << " from.y";
+        EXPECT_EQ(m.from.z, e.from[2]) << it.name << " el " << i << " from.z";
+        EXPECT_EQ(m.to.x, e.to[0]) << it.name << " el " << i << " to.x";
+        EXPECT_EQ(m.to.y, e.to[1]) << it.name << " el " << i << " to.y";
+        EXPECT_EQ(m.to.z, e.to[2]) << it.name << " el " << i << " to.z";
+        EXPECT_EQ(m.uv0.x, e.uv[0]) << it.name << " el " << i << " uv.u0";
+        EXPECT_EQ(m.uv0.y, e.uv[1]) << it.name << " el " << i << " uv.v0";
+        EXPECT_EQ(m.uv1.x, e.uv[2]) << it.name << " el " << i << " uv.u1";
+        EXPECT_EQ(m.uv1.y, e.uv[3]) << it.name << " el " << i << " uv.v1";
+    }
+}
+
+} // namespace
+
+TEST(ItemModelTest, ParsesElementsAndUv) {
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"t",
+                    "elements":[
+                     {"from":[0.1,0.2,0.3],"to":[0.9,0.8,0.7],
+                      "uv":[0.0,0.1,0.5,0.9]},
+                     {"from":[0.0,0.0,0.0],"to":[1.0,1.0,1.0]}]}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Item& it = items.at(*r);
+    ASSERT_TRUE(it.model.has_value());
+    EXPECT_EQ(it.model->texture, "t");
+    ASSERT_EQ(it.model->elements.size(), 2u);
+    EXPECT_EQ(it.model->elements[0].from, Vec3(0.1f, 0.2f, 0.3f));
+    EXPECT_EQ(it.model->elements[0].to, Vec3(0.9f, 0.8f, 0.7f));
+    EXPECT_EQ(it.model->elements[0].uv0, Vec2(0.0f, 0.1f));
+    EXPECT_EQ(it.model->elements[0].uv1, Vec2(0.5f, 0.9f));
+    // Absent uv = the full texture (the documented default).
+    EXPECT_EQ(it.model->elements[1].from, Vec3(0.0f, 0.0f, 0.0f));
+    EXPECT_EQ(it.model->elements[1].to, Vec3(1.0f, 1.0f, 1.0f));
+    EXPECT_EQ(it.model->elements[1].uv0, Vec2(0.0f, 0.0f));
+    EXPECT_EQ(it.model->elements[1].uv1, Vec2(1.0f, 1.0f));
+}
+
+TEST(ItemModelTest, AbsentModelIsNoModel) {
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(
+        R"({"id":"m","type":"material","icon":"m"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FALSE(items.at(*r).model.has_value());
+}
+
+TEST(ItemModelTest, RejectsBadModelShapes) {
+    // Non-object / missing elements / missing or empty texture /
+    // unknown keys at the model level (all named).
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material","model":"t"})", "must be an object"));
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material","model":{"texture":"t"}})",
+        "requires an 'elements' array"));
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material","model":{"elements":[]}})",
+        "requires a non-empty string 'texture'"));
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"","elements":[{"from":[0,0,0],"to":[1,1,1]}]}})",
+        "requires a non-empty string 'texture'"));
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"t","elements":[],"bogus":1}})",
+        "unknown field 'bogus'"));
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"t","elements":[{"from":[0,0,0],"to":[1,1,1]}],
+                    "bogus":1}})",
+        "unknown field 'bogus'"));
+}
+
+TEST(ItemModelTest, RejectsBadElements) {
+    // Missing corners / wrong arity / non-number / out of [0, 1] /
+    // from >= to on an axis / an unknown element key (all named).
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"t","elements":[{"to":[1,1,1]}]}})",
+        "requires 'from' and 'to'"));
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"t","elements":[{"from":[0,0],"to":[1,1,1]}]}})",
+        "must be an array of 3 numbers"));
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"t","elements":[{"from":[0,0,0,0],"to":[1,1,1]}]}})",
+        "must be an array of 3 numbers"));
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"t","elements":[{"from":[0,"a",0],"to":[1,1,1]}]}})",
+        "must be a number"));
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"t","elements":[{"from":[-0.1,0,0],"to":[1,1,1]}]}})",
+        "must be in [0, 1]"));
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"t","elements":[{"from":[0,0,0],"to":[1,1,1.5]}]}})",
+        "must be in [0, 1]"));
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"t","elements":[{"from":[0.5,0,0],"to":[0.5,1,1]}]}})",
+        "must be < 'to' on the x axis"));
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"t","elements":[{"from":[1,0,0],"to":[0.5,1,1]}]}})",
+        "must be < 'to' on the x axis"));
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"t","elements":[{"from":[0,0,0.95],"to":[1,1,0.9],"uv":[0,0,1,1]}]}})",
+        "must be < 'to' on the z axis"));
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"t","elements":[{"from":[0,0,0],"to":[1,1,1],"spin":1}]}})",
+        "unknown field 'spin'"));
+}
+
+TEST(ItemModelTest, RejectsBadUv) {
+    // Wrong arity / out of [0, 1] / a degenerate rectangle (u0 >= u1 or
+    // v0 >= v1 — a no-op, rejected).
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"t","elements":[{"from":[0,0,0],"to":[1,1,1],"uv":[0,1]}]}})",
+        "must be an array of 4 numbers"));
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"t","elements":[{"from":[0,0,0],"to":[1,1,1],"uv":[0,1,0.5,1.5]}]}})",
+        "must be in [0, 1]"));
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"t","elements":[{"from":[0,0,0],"to":[1,1,1],"uv":[0.5,0,0.5,1]}]}})",
+        "must have u0 < u1 and v0 < v1"));
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"t","elements":[{"from":[0,0,0],"to":[1,1,1],"uv":[0,0.5,1,0.5]}]}})",
+        "must have u0 < u1 and v0 < v1"));
+    EXPECT_TRUE(modelParseFailsNamed(
+        R"({"id":"m","type":"material",
+           "model":{"texture":"t","elements":[{"from":[0,0,0],"to":[1,1,1],"uv":[0,"x",1,1]}]}})",
+        "must be a number"));
+}
+
+TEST(ItemModelTest, RejectsMoreThan16Elements) {
+    auto makeModelJson = [](int n) {
+        std::string json =
+            R"({"id":"m","type":"material","model":{"texture":"t","elements":[)";
+        for (int i = 0; i < n; ++i) {
+            json += std::string(i ? "," : "") +
+                    R"({"from":[0.0,0.0,0.0],"to":[0.1,0.1,0.1]})";
+        }
+        json += "]}}";
+        return json;
+    };
+    EXPECT_TRUE(modelParseFailsNamed(makeModelJson(17), "at most 16 boxes"));
+    // 16 is the legal bound.
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(makeModelJson(16)));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(items.at(*r).model->elements.size(), 16u);
+}
+
+TEST(ItemModelTest, ContentPinned16Models) {
+    // The real assets: exactly the 16 shipped models, each with its
+    // icon as texture and the pinned geometry per item TYPE (the values
+    // above are the contract — a typo moves the silhouette).
+    struct Case {
+        const char* name;
+        const ExpectedModel* model;
+    };
+    const Case cases[] = {
+        {"wooden_pickaxe", &kPickaxeModel}, {"stone_pickaxe", &kPickaxeModel},
+        {"iron_pickaxe", &kPickaxeModel}, {"wooden_axe", &kAxeModel},
+        {"stone_axe", &kAxeModel}, {"iron_axe", &kAxeModel},
+        {"wooden_shovel", &kShovelModel}, {"stone_shovel", &kShovelModel},
+        {"iron_shovel", &kShovelModel}, {"bow", &kBowModel},
+        {"power_bow", &kBowModel}, {"speed_bow", &kBowModel},
+        {"infinite_bow", &kBowModel}, {"poison_bow", &kBowModel},
+        {"apple", &kAppleModel}, {"golden_apple", &kAppleModel},
+    };
+    for (const Case& c : cases) {
+        auto parsed = Json::parse(readItemFile(c.name));
+        ASSERT_TRUE(parsed.ok()) << c.name << ": " << parsed.error().message;
+        ItemRegistry items;
+        auto reg = items.registerItem(*parsed);
+        ASSERT_TRUE(reg.ok()) << c.name << ": " << reg.error().message;
+        const Item& it = items.at(*reg);
+        // The model texture is the item's own icon (no new textures).
+        EXPECT_EQ(it.icon, c.name) << c.name;
+        expectModelMatches(it, *c.model, c.name);
+    }
+}
+
+TEST(ItemModelTest, ModelItemSetIsExactly16) {
+    // The shipped model set is exactly the 16 items (no other item
+    // carries a 'model' section — the no-model items keep the legacy
+    // render paths, the structural-immunity red line).
+    std::vector<std::string> expected = {
+        "bow",           "golden_apple", "infinite_bow", "iron_axe",
+        "iron_pickaxe",  "iron_shovel",  "apple",        "poison_bow",
+        "power_bow",     "speed_bow",    "stone_axe",    "stone_pickaxe",
+        "stone_shovel",  "wooden_axe",   "wooden_pickaxe", "wooden_shovel",
+    };
+    std::sort(expected.begin(), expected.end());
+    const std::filesystem::path dir = "assets/data/items";
+    ASSERT_TRUE(std::filesystem::is_directory(dir))
+        << "run from the repo root";
+    std::vector<std::string> modeled;
+    std::vector<std::filesystem::path> files;
+    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+        if (entry.is_regular_file() &&
+            entry.path().extension() == ".json") {
+            files.push_back(entry.path());
+        }
+    }
+    std::sort(files.begin(), files.end());
+    for (const auto& file : files) {
+        auto parsed =
+            Json::parse(readItemFile(file.stem().generic_string()));
+        ASSERT_TRUE(parsed.ok()) << file.generic_string();
+        ItemRegistry items;
+        auto reg = items.registerItem(*parsed);
+        ASSERT_TRUE(reg.ok()) << file.generic_string() << ": "
+                              << reg.error().message;
+        if (items.at(*reg).model.has_value()) {
+            modeled.push_back(items.at(*reg).name);
+        }
+    }
+    EXPECT_EQ(modeled, expected);
 }

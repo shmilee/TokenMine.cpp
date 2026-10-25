@@ -180,6 +180,19 @@ private:
     // a typo). Runs LAST in the parse flow (the allowed-set check needs
     // the armor / ammo / igniter fields parsed).
     static Result<void> parseDurability(const Json& def, Item& out);
+    // Parse the optional 'model' section (CRAFT-2, the per-item 3D
+    // model) into `out`: a strict object with 'texture' (a non-empty
+    // file name under assets/textures/items/ — the existence is
+    // cross-checked at game init, the icon-file discipline) + 'elements'
+    // (a non-empty array of 1..16 axis-aligned boxes: 'from' / 'to'
+    // arrays of 3 numbers in [0, 1] with from < to on every axis, an
+    // optional 'uv' array of 4 numbers in [0, 1] with u0 < u1 and
+    // v0 < v1 = the face's sub-rectangle of the texture, absent = the
+    // full texture). Unknown keys at every level are named and rejected;
+    // the explicit empty elements array is rejected (the no-op
+    // discipline). Pure rendering data: it owns no right-click channel,
+    // so it is not mutually exclusive with any other field.
+    static Result<void> parseModel(const Json& def, Item& out);
 
     std::deque<Item> m_items; // deque: stable references on push
     std::unordered_map<std::string, int> m_names;

@@ -560,6 +560,147 @@ Result<void> ItemRegistry::parseDurability(const Json& def, Item& out) {
     return {};
 }
 
+namespace {
+// One from/to corner of a model box: an array of 3 numbers in [0, 1].
+// `what` is the quoted path for error messages (e.g.
+// 'model.elements[0].from'). Fills `out` (x, y, z by axis index).
+Result<void> parseModelCorner(const std::string& what, const Json& c,
+                              float out[3]) {
+    if (!c.isArray() || c.size() != 3) {
+        return MC_FAIL(what + " must be an array of 3 numbers [x, y, z]");
+    }
+    for (int a = 0; a < 3; ++a) {
+        const Json& v = c.at(a);
+        if (!v.isNumber()) {
+            return MC_FAIL(what + "[" + std::to_string(a) +
+                           "] must be a number");
+        }
+        const float f = static_cast<float>(v.asDouble());
+        if (f < 0.0f || f > 1.0f) {
+            return MC_FAIL(what + "[" + std::to_string(a) +
+                           "] must be in [0, 1], got " +
+                           std::to_string(f));
+        }
+        out[a] = f;
+    }
+    return {};
+}
+} // namespace
+
+Result<void> ItemRegistry::parseModel(const Json& def, Item& out) {
+    // Optional 'model' (CRAFT-2): the per-item 3D MODEL — one texture +
+    // 1..16 axis-aligned boxes in the unit-cube model space. Pure
+    // rendering data (no right-click channel, so no exclusivity checks):
+    // it selects the box-mesh render path in the item's three contexts
+    // (the held hand, the world drop, the eat lift) instead of the
+    // legacy icon-quad / invisible-drop paths. No model = the legacy
+    // paths bit-level unchanged (the structural-immunity red line).
+    if (const Json* m = def.find("model")) {
+        if (!m->isObject()) {
+            return MC_FAIL("'model' must be an object "
+                           "{\"texture\": ..., \"elements\": [...]}");
+        }
+        for (const auto& [key, value] : m->members()) {
+            if (key != "texture" && key != "elements") {
+                return MC_FAIL("'model' has an unknown field '" + key +
+                               "'");
+            }
+        }
+        const Json* tex = m->find("texture");
+        if (tex == nullptr || !tex->isString() ||
+            tex->asString().empty()) {
+            return MC_FAIL("'model' requires a non-empty string 'texture' "
+                           "(a file under assets/textures/items/)");
+        }
+        const Json* els = m->find("elements");
+        if (els == nullptr || !els->isArray()) {
+            return MC_FAIL("'model' requires an 'elements' array "
+                           "(1..16 boxes)");
+        }
+        if (els->size() == 0) {
+            return MC_FAIL("'model.elements' must not be an empty array "
+                           "(a model without boxes is a no-op)");
+        }
+        if (els->size() > 16) {
+            return MC_FAIL("'model.elements' holds at most 16 boxes, got " +
+                           std::to_string(els->size()));
+        }
+        Item::ItemModel model;
+        model.texture = tex->asString();
+        model.elements.reserve(els->size());
+        for (std::size_t i = 0; i < els->size(); ++i) {
+            const std::string e = "model.elements[" + std::to_string(i) + "]";
+            const Json& el = els->at(i);
+            if (!el.isObject()) {
+                return MC_FAIL("'" + e + "' must be an object "
+                               "{\"from\": [...], \"to\": [...], "
+                               "\"uv\": [...]}");
+            }
+            for (const auto& [key, value] : el.members()) {
+                if (key != "from" && key != "to" && key != "uv") {
+                    return MC_FAIL("'" + e + "' has an unknown field '" +
+                                   key + "'");
+                }
+            }
+            float from[3];
+            float to[3];
+            const Json* f = el.find("from");
+            const Json* t = el.find("to");
+            if (f == nullptr || t == nullptr) {
+                return MC_FAIL("'" + e + "' requires 'from' and 'to' "
+                               "(the box corners)");
+            }
+            MC_TRY(parseModelCorner("'" + e + ".from'", *f, from));
+            MC_TRY(parseModelCorner("'" + e + ".to'", *t, to));
+            static const char* kAxisNames[3] = {"x", "y", "z"};
+            for (int a = 0; a < 3; ++a) {
+                if (from[a] >= to[a]) {
+                    return MC_FAIL("'" + e + "': 'from' must be < 'to' "
+                                   "on the " + kAxisNames[a] + " axis " +
+                                   "(from " + std::to_string(from[a]) +
+                                   ", to " + std::to_string(to[a]) + ")");
+                }
+            }
+            Item::ModelElement box;
+            box.from = {from[0], from[1], from[2]};
+            box.to = {to[0], to[1], to[2]};
+            if (const Json* uv = el.find("uv")) {
+                if (!uv->isArray() || uv->size() != 4) {
+                    return MC_FAIL("'" + e +
+                                   ".uv' must be an array of 4 numbers "
+                                   "[u0, v0, u1, v1]");
+                }
+                float c[4];
+                for (int k = 0; k < 4; ++k) {
+                    const Json& v = uv->at(k);
+                    if (!v.isNumber()) {
+                        return MC_FAIL("'" + e + ".uv[" +
+                                       std::to_string(k) +
+                                       "]' must be a number");
+                    }
+                    const float f2 = static_cast<float>(v.asDouble());
+                    if (f2 < 0.0f || f2 > 1.0f) {
+                        return MC_FAIL("'" + e + ".uv[" + std::to_string(k) +
+                                       "]' must be in [0, 1], got " +
+                                       std::to_string(f2));
+                    }
+                    c[k] = f2;
+                }
+                if (c[0] >= c[2] || c[1] >= c[3]) {
+                    return MC_FAIL("'" + e +
+                                   ".uv' must have u0 < u1 and v0 < v1 "
+                                   "(a degenerate rectangle is a no-op)");
+                }
+                box.uv0 = {c[0], c[1]};
+                box.uv1 = {c[2], c[3]};
+            }
+            model.elements.push_back(std::move(box));
+        }
+        out.model = std::move(model);
+    }
+    return {};
+}
+
 Result<void> ItemRegistry::parseGrant(const Json& def, Item& out) {
     // Optional 'grants_effect' (Phase 49, golden apple): the status effect
     // granted when a full CONSUME completes — {"name": <effect>,
@@ -776,6 +917,7 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
             key != "armor_slot" &&
             key != "armor_points" &&
             key != "durability" &&
+            key != "model" &&
             key != "icon") {
             MC_LOG_WARN("Item '" + name + "': unknown field '" + key +
                         "' ignored");
@@ -822,6 +964,11 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     r = parseDurability(def, item); // SURV-3: LAST of the parse flow (the
                                     // allowed-set check reads the tool /
                                     // armor / ammo / igniter fields parsed)
+    MC_TRY(r);
+    r = parseModel(def, item); // CRAFT-2: pure rendering data (no right-
+                               // click channel, no exclusivity); the
+                               // texture file's existence is cross-checked
+                               // at game init (the icon-file discipline)
     MC_TRY(r);
 
     // Optional 2D icon (Phase 15 UI): a texture file name under

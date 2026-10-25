@@ -74,7 +74,7 @@
 ## 物品 / 背包（Phase 11）
 
 - **工具无完整分块类型效率** — 工具效率 = flat `break_speed` + Phase 67 起的**物品侧 `fast_against` 块名列表 × 倍率**（Phase 67 = 斧对 wood/leaves 2×，Phase 68 = 铲对 dirt/grass/sand/gravel 2×【项目土类全集——无 clay/sandstone/snow】，Phase 69 = 镐对 stone/cobblestone/5 矿/glowstone 2×【项目石矿类全集；**obsidian 例外** = MC 铁镐不能破黑曜石、项目无钻石镐，保留黑曜石 = flat 镐速 3.75 s（铁）】，物品数据驱动、init 逐条目交叉校验）。仍缺：MC 的"无效率工具慢 10×"规则（本项目"无效率" = flat 档，不慢 10×）；方块侧无类别字段（分类知识在物品侧的块名列表里）。`[Phase 11]` → `[Phase 67]` → `[Phase 68]` → `[Phase 69]`
-- **非 block 物品的掉落物在 world 中不可见** — 工具/材料的**掉落物**（Q 丢出或挖出）没有 in-world 实体表示（`drawItemEntities` 跳过非 block 物品——物理/拾取/合并/消亡照常工作）；UI 侧（背包/hotbar/手持/合成产物）Phase 15 起已有图标（`Item.icon` 32×32 纹理，Phase 35）。`[Phase 11]`（UI 部分 `[Phase 15]` 已解决）
+- **非 block 物品的掉落物在 world 中不可见** — 工具/材料的**掉落物**（Q 丢出或挖出）没有 in-world 实体表示（`drawItemEntities` 跳过非 block 物品——物理/拾取/合并/消亡照常工作）；UI 侧（背包/hotbar/手持/合成产物）Phase 15 起已有图标（`Item.icon` 32×32 纹理，Phase 35）。`[Phase 11]`（UI 部分 `[Phase 15]` 已解决；**16 个 model 物品 `[CRAFT-2]` 已解决**：带 `model` 段的物品掉落物改绘双面板 box mesh（blending pass、关裁剪、per-item 模型纹理、kSize 足迹）；其余非 model 非 block 物品仍不可见 = `drawItemEntities` 的跳过路径位级保留）
 - **拾取是固定 1.0 格半径，无磁力** — 玩家底心距掉落物底心 <1.0 且过 0.5s 拾取延迟即整堆入包；Minecraft 会随时间逐渐把物品拉向玩家。`[Phase 11]`
 - **放置消耗库存（行为变化，非缺陷）** — Phase 11 起方块不再是无限的：初始 hotbar 每格满堆栈（block 64/工具 1，`hotbar.json` 定义），放置消耗 1 个；hotbar 与背包都空时右键无效。`[Phase 11]`
 - **堆合并 = 同物品且同耐久（`[SURV-3]`）** — `Inventory::add` / 地面 `ItemEntity` 合并 / 拾取 的合并门 = 同物品 **且 damage 相等**（不等 = 不合并、开新槽；UI pick-and-place 同款）：MC 的 NBT 感知合并（修复合并/部分合并）的简化——不同磨损度的同物品堆永不互并（记档简化，设计定案）。`[SURV-3]`
@@ -144,7 +144,7 @@
 ## UI / 音效 / 粒子（Phase 15）
 
 - **音效是固定事件集，无 per-block/per-item 差异** — v1 只有 8 个数据驱动事件（dig/place/break/pickup/step/ui_open/ui_close/craft），所有方块共用同一 break/place/dig 音色，无 MC 式的材质/方块音色差异、无 3D 空间化（单声道 2D 播放）。加 per-block 音色需扩事件集 + 音色映射数据。`[Phase 15]`
-- **物品无 3D 模型，图标是程序化 32×32 贴图** — block item 的 UI 表示是带光照的倾斜 3D 立方体（复用掉落物 cube mesh），工具/材料是 `tools/generate_item_icons.py` 程序化生成的 32×32 平面图标（Phase 35：16×16 → 32×32，形状谓词按 2× 分辨率重采样——弧线/对角线获得真 2× 边缘细节，非 2×2 upscale；非 MC 的 3D 旋转手持模型）；无手持动画/旋转。`[Phase 15]`（32×32 `[Phase 35]`）
+- **物品无 3D 模型，图标是程序化 32×32 贴图** — block item 的 UI 表示是带光照的倾斜 3D 立方体（复用掉落物 cube mesh），工具/材料是 `tools/generate_item_icons.py` 程序化生成的 32×32 平面图标（Phase 35：16×16 → 32×32，形状谓词按 2× 分辨率重采样——弧线/对角线获得真 2× 边缘细节，非 2×2 upscale；非 MC 的 3D 旋转手持模型）；无手持动画/旋转。`[Phase 15]`（32×32 `[Phase 35]`；**16 个物品 `[CRAFT-2]` 已有数据驱动 3D box 模型**：item JSON 可选 `model` 段 = 1..16 个 axis-aligned box + 单一纹理（严格解析、无旋转 = MC primitive rotation 记档不做、v1 简化体素造型）——手持（替代 icon 面片、继承弓拉/进食举到嘴变换）/世界掉落（替代不可见掉落）/进食举到嘴三上下文渲染；其余物品保留 2D icon 手（位级不变））
 - **背包 UI 右键语义极简** — 左键取整堆/放入/交换（取出被占堆）/并入有空间同物堆；右键只"移 1 个"（同物有空间或空格，不同物格无效）；无 MC 的"右键取半堆"、无拖拽、无 shift 快捷移动、无双击分拣。点击面板外（左键）丢弃手持堆。`[Phase 15]`
 - **背包打开不暂停世界模拟** — 打开背包只暂停**玩家物理与方块交互**；世界/昼夜/流体/实体/流式加载照常 tick（与 MC 的"暂停菜单"不同，更接近"边看背包边看世界"）。`[Phase 15]`
 - **F3 FPS 显示为整数** — `m_fpsSmoothed`（真实 dt 平滑）取整显示，vsync 稳定时恒 60；无小数帧率、无帧时间直方图/分位数（Minecraft F3 有 1% / 0.1% lows）。`[Phase 15]`

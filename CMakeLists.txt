@@ -45,6 +45,7 @@ add_library(mc_core STATIC
     src/entity/entity.cpp
     src/entity/item_entity.cpp
     src/entity/item_mesh.cpp
+    src/entity/item_model_mesh.cpp
     src/entity/mob_entity.cpp
     src/entity/mob_mesh.cpp
     src/entity/mob_registry.cpp
@@ -146,6 +147,7 @@ add_executable(tokenmine_tests
     tests/test_mob.cpp
     tests/test_mob_model.cpp
     tests/test_item.cpp
+    tests/test_item_model_mesh.cpp
     tests/test_recipe.cpp
     tests/test_crafting_grid.cpp
     tests/test_furnace.cpp
