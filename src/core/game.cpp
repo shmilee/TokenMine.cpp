@@ -6897,8 +6897,11 @@ void Game::renderUi() {
     if (m_player && m_player->isDead()) {
         addQuad(batchFor(Vec4 {0.0f, 0.0f, 0.0f, 0.55f}, false, nullptr), 0,
                 0, w, h);
-        const std::string died = "You died!";
-        const std::string hint = "Press R to respawn";
+        // PRE-1: the user-visible strings are localized to Chinese
+        // (the CJK glyphs live in the font atlas rows 0..3); the F3
+        // debug overlay stays English (a developer tool).
+        const std::string died = "你死了！";
+        const std::string hint = "按 R 重生";
         // 16 px glyphs (Phase 35): "died" at scale 2 = 32 px tall, hint
         // 16 px — the block spans h/2-40 .. h/2+28, roughly centered.
         addText(died, w / 2 - static_cast<int>(textWidth(died, 2.0)) / 2,
@@ -6925,7 +6928,7 @@ void Game::renderUi() {
         // Panel background + title.
         addQuad(batchFor(kPanel, false, nullptr), layout.panel.x,
                 layout.panel.y, layout.panel.w, layout.panel.h);
-        addText("Furnace", layout.title.x, layout.title.y + titleOffset,
+        addText("熔炉", layout.title.x, layout.title.y + titleOffset,
                 InventoryLayout::kTitleFontScale * s, kText);
 
         const int hoverSlot = layout.slotAt(mx, my);
@@ -7016,7 +7019,7 @@ void Game::renderUi() {
             drawIcon(m_furnaceUi.carry(), static_cast<float>(mx),
                      static_cast<float>(my), slotIcon);
         }
-        const std::string hint = "E to close";
+        const std::string hint = "按 E 关闭"; // PRE-1
         addText(hint,
                 layout.panel.x + static_cast<int>(std::lround(
                     (layout.panel.w - textWidth(hint, s)) / 2.0)),
@@ -7053,11 +7056,11 @@ void Game::renderUi() {
         // Panel background + titles.
         addQuad(batchFor(kPanel, false, nullptr), layout.panel.x,
                 layout.panel.y, layout.panel.w, layout.panel.h);
-        addText(table ? "Crafting Table" : "Inventory", layout.title.x,
+        addText(table ? "工作台" : "背包", layout.title.x,
                 layout.title.y + titleOffset,
                 InventoryLayout::kTitleFontScale * s, kText);
         if (!table) {
-            addText("Crafting", layout.craftHeader.x,
+            addText("合成", layout.craftHeader.x,
                     layout.craftHeader.y + titleOffset,
                     InventoryLayout::kTitleFontScale * s, kText);
         }
@@ -7153,8 +7156,8 @@ void Game::renderUi() {
                 needs += m_items.at(item).name + " x" +
                          std::to_string(count);
             }
-            addText("needs: " + needs, r.x + L(32), r.y + L(28), s,
-                    kTextDim);
+            addText("需要：" + needs, r.x + L(32), r.y + L(28), s,
+                    kTextDim); // PRE-1 (item ids stay English data)
         }
 
         // The hovered slot/cell's item name + the carried stack at the
@@ -7178,7 +7181,7 @@ void Game::renderUi() {
                      static_cast<float>(my), slotIcon);
         }
         // Close hint, centered at the panel bottom.
-        const std::string hint = "E to close";
+        const std::string hint = "按 E 关闭"; // PRE-1
         addText(hint,
                 layout.panel.x + static_cast<int>(std::lround(
                     (layout.panel.w - textWidth(hint, s)) / 2.0)),

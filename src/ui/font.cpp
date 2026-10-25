@@ -1,16 +1,15 @@
 #include "ui/font.hpp"
 
+#include <algorithm>
 #include <cstddef>
+#include <cstdint>
 
 namespace mc {
 
-GlyphUv glyphUv(char c) {
-    int code = static_cast<unsigned char>(c);
-    if (code < 32 || code > 126) {
-        code = '?'; // missing glyphs render as the question mark
-    }
-    const int col = code % 8;
-    const int row = code / 8;
+namespace {
+
+// A cell's 16x16 rect normalized to atlas UVs (v0 = the glyph top).
+GlyphUv cellUv(int col, int row) {
     const int x0 = col * kFontCell + kGlyphOffset;
     const int y0 = row * kFontCell + kGlyphOffset;
     return GlyphUv {
@@ -20,6 +19,106 @@ GlyphUv glyphUv(char c) {
         static_cast<float>(y0 + kGlyphSize) / kFontAtlasHeight};
 }
 
+} // namespace
+
+GlyphUv glyphUv(uint32_t cp) {
+    if (cp >= 32 && cp <= 126) {
+        // ASCII: the original cell (c % 8, c / 8), untouched.
+        return cellUv(static_cast<int>(cp) % 8, static_cast<int>(cp) / 8);
+    }
+    // PRE-1: kCjkGlyphs is codepoint-sorted, so a binary search yields
+    // the set index i = cell (i % 8, i / 8) in the dead rows 0..3.
+    const uint32_t* it = std::lower_bound(std::begin(kCjkGlyphs),
+                                          std::end(kCjkGlyphs), cp);
+    if (it != std::end(kCjkGlyphs) && *it == cp) {
+        const int i = static_cast<int>(it - std::begin(kCjkGlyphs));
+        return cellUv(i % 8, i / 8);
+    }
+    return cellUv('?' % 8, '?' / 8);
+}
+
+std::optional<uint32_t> utf8NextCodepoint(const std::string& text,
+                                          std::size_t& pos) {
+    if (pos >= text.size()) {
+        return std::nullopt;
+    }
+    const auto byte = [&text](std::size_t i) {
+        return static_cast<unsigned char>(text[i]);
+    };
+    const unsigned char c0 = byte(pos);
+    if (c0 < 0x80) {
+        ++pos;
+        return c0;
+    }
+    const auto skipOne = [&pos]() -> std::optional<uint32_t> {
+        // Malformed byte: the caller renders its own '?' and resumes
+        // one byte later (the legacy byte-wise fallback behavior).
+        ++pos;
+        return std::nullopt;
+    };
+    const std::size_t n = text.size();
+    // Sequence length + the first byte's strict range (the guards reject
+    // overlong encodings, UTF-8 surrogates and codepoints > U+10FFFF).
+    int len = 0;
+    unsigned int cp = 0;
+    if (c0 >= 0xC2 && c0 <= 0xDF) {
+        len = 2;
+        cp = c0 & 0x1Fu;
+    } else if (c0 == 0xE0) {
+        len = 3;
+        cp = 0; // second byte must be 0xA0..0xBF (checked below)
+    } else if (c0 >= 0xE1 && c0 <= 0xEC) {
+        len = 3;
+        cp = c0 & 0x0Fu;
+    } else if (c0 == 0xED) {
+        len = 3;
+        cp = 0x0Du; // second byte must be 0x80..0x9F (no surrogates)
+    } else if (c0 >= 0xEE && c0 <= 0xEF) {
+        len = 3;
+        cp = c0 & 0x0Fu;
+    } else if (c0 == 0xF0) {
+        len = 4;
+        cp = 0; // second byte must be 0x90..0xBF
+    } else if (c0 >= 0xF1 && c0 <= 0xF3) {
+        len = 4;
+        cp = c0 & 0x07u;
+    } else if (c0 == 0xF4) {
+        len = 4;
+        cp = 0x04u; // c0 & 0x07; second byte must be 0x80..0x8F (<= U+10FFFF)
+    } else {
+        // 0x80..0xC1 (continuation / overlong) and 0xF5..0xFF (no 5/6-byte
+        // UTF-8) are never a valid sequence start.
+        return skipOne();
+    }
+    if (pos + static_cast<std::size_t>(len) > n) {
+        return skipOne(); // truncated
+    }
+    unsigned int lo = 0x80, hi = 0xBF;
+    if (c0 == 0xE0) {
+        lo = 0xA0;
+    } else if (c0 == 0xED) {
+        hi = 0x9F;
+    } else if (c0 == 0xF0) {
+        lo = 0x90;
+    } else if (c0 == 0xF4) {
+        hi = 0x8F;
+    }
+    const unsigned char c1 = byte(pos + 1);
+    if (c1 < lo || c1 > hi) {
+        return skipOne();
+    }
+    cp = (cp << 6) | (c1 & 0x3Fu);
+    for (int i = 2; i < len; ++i) {
+        const unsigned char ci = byte(pos + static_cast<std::size_t>(i));
+        if (ci < 0x80 || ci > 0xBF) {
+            return skipOne();
+        }
+        cp = (cp << 6) | (ci & 0x3Fu);
+    }
+    pos += static_cast<std::size_t>(len);
+    return cp;
+}
+
 double textWidth(const std::string& text, double scale) {
     if (scale <= 0.0) {
         scale = 1.0;
@@ -27,9 +126,16 @@ double textWidth(const std::string& text, double scale) {
     if (text.empty()) {
         return 0.0;
     }
-    const std::size_t n = text.size();
-    return static_cast<double>(n) * kGlyphSize * scale +
-           static_cast<double>(n - 1) * scale;
+    // PRE-1: the width counts DECODED codepoints, not bytes — a CJK
+    // character is one 16px advance, not three.
+    std::size_t pos = 0;
+    std::size_t count = 0;
+    while (pos < text.size()) {
+        utf8NextCodepoint(text, pos);
+        ++count;
+    }
+    return static_cast<double>(count) * kGlyphSize * scale +
+           static_cast<double>(count - 1) * scale;
 }
 
 void makeTextVertices(const std::string& text, int x, int y, double scale,
@@ -39,8 +145,13 @@ void makeTextVertices(const std::string& text, int x, int y, double scale,
     }
     const double adv = (kGlyphSize + 1) * scale; // glyph + one spacing px
     double cx = x;
-    for (const char c : text) {
-        const GlyphUv uv = glyphUv(c);
+    // PRE-1: iterate the decoded UTF-8 codepoints; a malformed byte
+    // decodes to nullopt and renders its own '?' (the decoder advanced
+    // one byte per call).
+    std::size_t pos = 0;
+    while (pos < text.size()) {
+        const uint32_t cp = utf8NextCodepoint(text, pos).value_or('?');
+        const GlyphUv uv = glyphUv(cp);
         const float w = static_cast<float>(kGlyphSize * scale);
         const float x0 = static_cast<float>(cx);
         const float y0 = static_cast<float>(y);
