@@ -261,6 +261,226 @@ bool carvedAt(const std::map<ChunkPos, Chunk>& chunks, int x, int y, int z) {
            fluidAt(chunks, x, y, z) == 0;
 }
 
+// ---------------------------------------------------------------------------
+// GEN-5 (floating tree guard) helpers.
+//
+// The guard skips a tree whose trunk column's surface cell is cave-carved
+// (the shipped surface_guard 0 = the carving reaches the surface cell
+// itself). The scans below work WITHOUT generating chunks for every
+// candidate: placeTrees' per-column decision is pure (the biome density
+// roll on the tree lattice + the dry-column check), and the carve check is
+// caveCarvesCell — so a "floating tree" case is a lattice column whose roll
+// passes, that is dry, and whose surface cell the predicate carves.
+// ---------------------------------------------------------------------------
+
+// The fixture biome tree densities (makeBiomes): the ResolvedBiome is
+// private, so placeTrees' roll is recomputed from the public biome name.
+float gen5TreeDensity(const WorldGenerator& gen, int wx, int wz) {
+    const std::string& name = gen.biomeNameAt(wx, wz);
+    if (name == "forest") {
+        return 0.12f;
+    }
+    if (name == "plains") {
+        return 0.03f;
+    }
+    return 0.0f; // the desert plants no trees
+}
+
+// placeTrees' per-column roll, its exact expression (the kSaltTree salt).
+bool gen5RollPasses(const WorldGenerator& gen, int wx, int wz) {
+    const float density = gen5TreeDensity(gen, wx, wz);
+    if (density <= 0.0f) {
+        return false;
+    }
+    const std::uint64_t h =
+        hash2(static_cast<std::uint64_t>(static_cast<std::int64_t>(wx)),
+              static_cast<std::uint64_t>(static_cast<std::int64_t>(wz)),
+              static_cast<std::uint64_t>(gen.seed() ^ kSaltTree));
+    return static_cast<float>(h >> 40) * kLattice24Scale < density;
+}
+
+// The tree footprint (trunk ± 2 = the generator's canopy radius) straddles
+// a chunk boundary exactly when the trunk (a multiple of the lattice 4)
+// sits on a chunk's west edge (wx % 16 == 0 → wx - 2 is in the previous
+// chunk) or its north edge (wz % 16 == 0 → wz - 2 is).
+bool gen5FootprintCrosses(int wx, int wz) {
+    return (wx % kChunkSize) == 0 || (wz % kChunkSize) == 0;
+}
+
+struct Gen5Case {
+    std::int64_t seed = -1;
+    int wx = 0, wz = 0, hgt = 0;
+};
+
+// The scan region: world x [64, 96) x z [0, 64) (lattice step 4) — OUTSIDE
+// the spawn clear zone (|chunk col| <= 2 → world < 48), which never carves
+// and would mask the guard; the fixture has no lakes.
+constexpr int kGen5X0 = 64, kGen5X1 = 96, kGen5Z0 = 0, kGen5Z1 = 64;
+
+// Every y-layer of the chunks covering trunk ± 2 (the canopy radius).
+void gen5GenerateBox(const WorldGenerator& gen,
+                     std::map<ChunkPos, Chunk>& chunks, int wx, int wz) {
+    const int cx0 = floorDiv(wx - 2, kChunkSize);
+    const int cx1 = floorDiv(wx + 2, kChunkSize);
+    const int cz0 = floorDiv(wz - 2, kChunkSize);
+    const int cz1 = floorDiv(wz + 2, kChunkSize);
+    for (int cx = cx0; cx <= cx1; ++cx) {
+        for (int cz = cz0; cz <= cz1; ++cz) {
+            for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy) {
+                const ChunkPos cp{cx, cy, cz};
+                if (chunks.find(cp) == chunks.end()) {
+                    gen.generateChunk(chunks[cp], cp);
+                }
+            }
+        }
+    }
+}
+
+// The first seed + tree column (roll passes, dry) with the requested
+// surface-carve flag and footprint-cross flag; an empty case (seed -1)
+// when none within maxSeeds.
+Gen5Case findGen5Case(const GenSetup& s, bool wantCarved, bool wantCross,
+                      int maxSeeds) {
+    const int t = s.params.treeLattice;
+    for (std::int64_t seed = 1; seed <= maxSeeds; ++seed) {
+        auto res = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+        if (!res.ok()) {
+            continue;
+        }
+        const WorldGenerator& gen = *res;
+        for (int wx = kGen5X0; wx < kGen5X1; wx += t) {
+            for (int wz = kGen5Z0; wz < kGen5Z1; wz += t) {
+                if (!gen5RollPasses(gen, wx, wz)) {
+                    continue;
+                }
+                const int hgt = gen.surfaceHeight(wx, wz);
+                if (hgt <= s.params.seaLevel) {
+                    continue;
+                }
+                const bool carved = gen.caveCarvesCell(wx, hgt, wz, hgt);
+                if (carved != wantCarved ||
+                    gen5FootprintCrosses(wx, wz) != wantCross) {
+                    continue;
+                }
+                return {seed, wx, wz, hgt};
+            }
+        }
+    }
+    return {};
+}
+
+// A CROSSING case validated on generated chunks: for each seed the
+// validation world is built with `validateCavesOn`, the candidate (roll
+// passes, dry, carved flag `wantCarved` on the caves-on predicate,
+// footprint crosses) must have its tree actually planted THERE (the trunk
+// contiguous from the surface) and its seam cell — the canopy cell one
+// block past the boundary edge, at the trunk top level (written by EXACTLY
+// this tree: the nearest other trunk is 4 lattice steps away, past the
+// radius-2 canopy) — must hold leaves. A terrain hill swallows the leaf
+// and would mask the cross-chunk assertion, so such candidates are
+// skipped. `requireNeighborsUnguarded` (used for the caves-on POSITIVE
+// case) additionally rejects a candidate when a face/diagonal neighbor
+// lattice column is also guarded: the neighbor's skipped leaves would
+// pollute the "only THIS tree's contribution is gone" argument.
+Gen5Case findGen5CrossCase(const GenSetup& s, bool wantCarved, int maxSeeds,
+                           bool validateCavesOn,
+                           bool requireNeighborsUnguarded) {
+    const int t = s.params.treeLattice;
+    const BlockID woodId = s.blocks.idForName("wood");
+    const BlockID leavesId = s.blocks.idForName("leaves");
+    for (std::int64_t seed = 1; seed <= maxSeeds; ++seed) {
+        WorldgenParams pVal = s.params;
+        if (!validateCavesOn) {
+            pVal.cavesEnabled = false;
+        }
+        auto resVal = WorldGenerator::create(seed, pVal, s.biomes, s.blocks);
+        if (!resVal.ok()) {
+            continue;
+        }
+        const WorldGenerator& genVal = *resVal;
+        // The carve predicate + the neighbor guard check are properties of
+        // the SHIPPED (caves-on) world, independent of the validation
+        // world's caves flag.
+        auto resOn = WorldGenerator::create(seed, s.params, s.biomes,
+                                            s.blocks);
+        if (!resOn.ok()) {
+            continue;
+        }
+        const WorldGenerator& genOn = *resOn;
+        for (int wx = kGen5X0; wx < kGen5X1; wx += t) {
+            for (int wz = kGen5Z0; wz < kGen5Z1; wz += t) {
+                if (!gen5RollPasses(genOn, wx, wz)) {
+                    continue;
+                }
+                const int hgt = genOn.surfaceHeight(wx, wz);
+                if (hgt <= s.params.seaLevel) {
+                    continue;
+                }
+                if (genOn.caveCarvesCell(wx, hgt, wz, hgt) != wantCarved) {
+                    continue;
+                }
+                if (!gen5FootprintCrosses(wx, wz)) {
+                    continue;
+                }
+                if (requireNeighborsUnguarded) {
+                    bool neighborsClear = true;
+                    for (int dx = -t; dx <= t && neighborsClear; dx += t) {
+                        for (int dz = -t; dz <= t && neighborsClear;
+                             dz += t) {
+                            if (dx == 0 && dz == 0) {
+                                continue;
+                            }
+                            const int nx = wx + dx, nz = wz + dz;
+                            if (nx < kGen5X0 || nx >= kGen5X1 ||
+                                nz < kGen5Z0 || nz >= kGen5Z1) {
+                                continue;
+                            }
+                            const int nh = genOn.surfaceHeight(nx, nz);
+                            if (nh > s.params.seaLevel &&
+                                gen5RollPasses(genOn, nx, nz) &&
+                                genOn.caveCarvesCell(nx, nh, nz, nh)) {
+                                neighborsClear = false;
+                            }
+                        }
+                    }
+                    if (!neighborsClear) {
+                        continue;
+                    }
+                }
+                std::map<ChunkPos, Chunk> chunks;
+                gen5GenerateBox(genVal, chunks, wx, wz);
+                // The trunk: contiguous wood from the surface cell up.
+                int bottom = -1, top = -1;
+                for (int y = hgt + 1; y < kWorldHeight; ++y) {
+                    if (blockAt(chunks, wx, y, wz) == woodId) {
+                        if (bottom < 0) {
+                            bottom = y;
+                        }
+                        top = y;
+                    } else {
+                        break;
+                    }
+                }
+                if (bottom != hgt + 1 ||
+                    top - hgt < s.params.treeMinHeight ||
+                    top - hgt > s.params.treeMinHeight +
+                                    s.params.treeHeightRange) {
+                    continue; // the tree is not planted as expected
+                }
+                // The seam cell: one past the boundary edge, at the trunk
+                // top level (a full-radius canopy layer, never a corner).
+                const int sx = (wx % kChunkSize == 0) ? wx - 1 : wx;
+                const int sz = (wx % kChunkSize == 0) ? wz : wz - 1;
+                if (blockAt(chunks, sx, top, sz) != leavesId) {
+                    continue; // terrain swallowed the seam leaf
+                }
+                return {seed, wx, wz, hgt};
+            }
+        }
+    }
+    return {};
+}
+
 } // namespace
 
 // -- seed reproducibility ----------------------------------------------------
@@ -991,6 +1211,359 @@ TEST(WorldGeneratorTest, TreeStraddlingChunkBoundaryIsSeamless) {
     EXPECT_EQ(r.at(15, h + trunk, wz), leavesId);
     // 3) The cap on top of the trunk is present.
     EXPECT_EQ(r.at(16, h + trunk + 1, wz), leavesId);
+}
+
+// -- GEN-5 (floating tree guard) ---------------------------------------------
+//
+// carveCaves runs before placeTrees and with the shipped surface_guard 0
+// its openings reach the surface cell itself: a tree planted on a
+// carved-out column floats over the hole (the user report). The guard
+// skips the whole tree when the trunk column's surface cell is carved —
+// the SAME pure predicate carveCaves uses, so the verdict is identical in
+// every chunk whose margin covers the column (no half-placed canopy at a
+// chunk boundary).
+
+TEST(WorldGeneratorTest, CaveCarvesCellMatchesOldInlinePredicate) {
+    // GEN-5 extraction identity: the pure predicate is the pre-GEN-5 inline
+    // carve decision, bit-for-bit — same band (guard 0 → the surface cell
+    // itself is carve-eligible), same lake boxes, same double mid-band
+    // with the n2 short-circuit. Chunk {4,0,0} (x 64..79, z 0..15) is
+    // outside the spawn clear zone; the fixture has no lakes, so the
+    // predicate is band + mid-bands. Every cell is checked.
+    GenSetup s;
+    s.params = calibratedCaveParams();
+    const std::int64_t seed = 123456789;
+    auto res = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    const WorldGenerator& gen = *res;
+    const float cs = s.params.caveNoiseScale;
+    const float t = s.params.caveTubeThreshold;
+    const ChunkPos pos{4, 0, 0};
+    int checked = 0;
+    int carved = 0;
+    for (int lx = 0; lx < kChunkSize; ++lx) {
+        for (int lz = 0; lz < kChunkSize; ++lz) {
+            const int x = pos.x * kChunkSize + lx;
+            const int z = pos.z * kChunkSize + lz;
+            const int h = gen.surfaceHeight(x, z);
+            for (int ly = 0; ly < kChunkSize; ++ly) {
+                const int y = pos.y * kChunkSize + ly;
+                // The OLD inline decision (the CaveMatchesPurePredicate
+                // form): in-band + both mid-bands hold.
+                const int topExclusive =
+                    s.params.surfaceGuard > 0 ? h - s.params.surfaceGuard
+                                               : h + 1;
+                bool expectCarved = false;
+                if (y >= s.params.caveMinY && y < topExclusive) {
+                    const float n1 =
+                        valueNoise3(static_cast<float>(x) * cs,
+                                    static_cast<float>(y) * cs,
+                                    static_cast<float>(z) * cs,
+                                    seed ^ kSaltCave);
+                    if (std::fabs(n1 - 0.5f) < t) {
+                        const float n2 =
+                            valueNoise3(static_cast<float>(x) * cs,
+                                        static_cast<float>(y) * cs,
+                                        static_cast<float>(z) * cs,
+                                        seed ^ kSaltCave2);
+                        expectCarved = std::fabs(n2 - 0.5f) < t;
+                    }
+                }
+                const bool got = gen.caveCarvesCell(x, y, z, h);
+                EXPECT_EQ(got, expectCarved) << "x=" << x << " y=" << y
+                                              << " z=" << z;
+                if (got) {
+                    ++carved;
+                }
+                ++checked;
+            }
+        }
+    }
+    EXPECT_EQ(checked, kChunkSize * kChunkSize * kChunkSize);
+    EXPECT_GT(carved, 100) << "the calibrated region does carve";
+
+    // The spawn clear zone branch: a zone chunk is never carved (the
+    // predicate must agree, cell by cell, over its whole band).
+    const ChunkPos zone{0, 0, 0};
+    int zoneChecked = 0;
+    for (int lx = 0; lx < kChunkSize; ++lx) {
+        for (int lz = 0; lz < kChunkSize; ++lz) {
+            const int x = zone.x * kChunkSize + lx;
+            const int z = zone.z * kChunkSize + lz;
+            const int h = gen.surfaceHeight(x, z);
+            for (int y = s.params.caveMinY; y <= h; ++y) {
+                EXPECT_FALSE(gen.caveCarvesCell(x, y, z, h))
+                    << "spawn zone carved x=" << x << " y=" << y
+                    << " z=" << z;
+                ++zoneChecked;
+            }
+        }
+    }
+    EXPECT_GT(zoneChecked, 1000);
+
+    // The cavesEnabled branch: a generator with caves off never carves.
+    WorldgenParams off = s.params;
+    off.cavesEnabled = false;
+    auto resOff = WorldGenerator::create(seed, off, s.biomes, s.blocks);
+    ASSERT_TRUE(resOff.ok()) << resOff.error().message;
+    const WorldGenerator& genOff = *resOff;
+    const int hOff = genOff.surfaceHeight(70, 8);
+    EXPECT_FALSE(genOff.caveCarvesCell(70, hOff, 8, hOff));
+    EXPECT_FALSE(genOff.caveCarvesCell(70, hOff - 2, 8, hOff));
+}
+
+TEST(WorldGeneratorTest, CarveCavesWritesExactlyCaveCarvesCell) {
+    // GEN-5: carveCaves now calls the pure predicate per cell (the per-
+    // chunk early returns are kept). For every band cell of chunk {4,0,0}
+    // (a dry column's band holds no tree/ore/decoration cells — they all
+    // live above the surface or replace deep stone): the chunk holds air
+    // IFF the predicate carves it. Together with
+    // CaveCarvesCellMatchesOldInlinePredicate (predicate == old formula)
+    // and CaveMatchesPurePredicate (chunk == old formula, unchanged), this
+    // pins carveCaves' behavior identity across the extraction on the
+    // same seed / params / grid.
+    GenSetup s;
+    s.params = calibratedCaveParams();
+    const std::int64_t seed = 123456789;
+    auto res = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    const WorldGenerator& gen = *res;
+    const ChunkPos pos{4, 0, 0};
+    Chunk chunk;
+    gen.generateChunk(chunk, pos);
+    const auto cellIsCarved = [&](int x, int y, int z) {
+        const auto local = worldToChunkLocal(pos, BlockPos{x, y, z});
+        return chunk.get(local.x, local.y, local.z) == BlockID::air() &&
+               chunk.fluidAt(local.x, local.y, local.z) == 0;
+    };
+    int checked = 0;
+    int carved = 0;
+    for (int lx = 0; lx < kChunkSize; ++lx) {
+        for (int lz = 0; lz < kChunkSize; ++lz) {
+            const int x = pos.x * kChunkSize + lx;
+            const int z = pos.z * kChunkSize + lz;
+            const int h = gen.surfaceHeight(x, z);
+            for (int ly = 0; ly < kChunkSize; ++ly) {
+                const int y = pos.y * kChunkSize + ly;
+                if (y > h) {
+                    continue; // open sky: out of the carve band
+                }
+                const bool expectCarved = gen.caveCarvesCell(x, y, z, h);
+                const bool carvedCell = cellIsCarved(x, y, z);
+                EXPECT_EQ(carvedCell, expectCarved) << "x=" << x << " y=" << y
+                                                    << " z=" << z;
+                if (expectCarved) {
+                    ++carved;
+                }
+                ++checked;
+            }
+        }
+    }
+    EXPECT_GT(checked, 4000);
+    EXPECT_GT(carved, 100) << "the calibrated region does carve";
+}
+
+TEST(WorldGeneratorTest, TreesOnIntactSurfaceStillGrow) {
+    // GEN-5 negative case (regression): a tree column whose surface cell
+    // is NOT cave-carved must still be planted exactly as before — the
+    // guard fires only on the carved case. Includes a boundary-crossing
+    // column: BOTH chunks complete the seamless tree (the seam cell one
+    // past the boundary edge is written by the neighbor chunk).
+    GenSetup s;
+    s.params = calibratedCaveParams();
+    const BlockID woodId = s.blocks.idForName("wood");
+    const BlockID leavesId = s.blocks.idForName("leaves");
+
+    const Gen5Case plain = findGen5Case(s, /*wantCarved=*/false,
+                                        /*wantCross=*/false, 400);
+    ASSERT_GE(plain.seed, 0) << "no intact-surface tree column in 400 seeds";
+    {
+        auto res = WorldGenerator::create(plain.seed, s.params, s.biomes,
+                                          s.blocks);
+        ASSERT_TRUE(res.ok()) << res.error().message;
+        std::map<ChunkPos, Chunk> chunks;
+        gen5GenerateBox(*res, chunks, plain.wx, plain.wz);
+        // The surface cell is intact (the guard must not fire) ...
+        EXPECT_NE(blockAt(chunks, plain.wx, plain.hgt, plain.wz),
+                  BlockID::air());
+        // ... and the trunk is planted exactly as before: contiguous wood
+        // right above the surface, min..max length.
+        int bottom = -1;
+        for (int y = plain.hgt + 1; y < kWorldHeight; ++y) {
+            if (blockAt(chunks, plain.wx, y, plain.wz) == woodId) {
+                bottom = y;
+                break;
+            }
+        }
+        ASSERT_EQ(bottom, plain.hgt + 1);
+        int top = bottom;
+        while (top + 1 < kWorldHeight &&
+               blockAt(chunks, plain.wx, top + 1, plain.wz) == woodId) {
+            ++top;
+        }
+        EXPECT_GE(top - plain.hgt, s.params.treeMinHeight);
+        EXPECT_LE(top - plain.hgt,
+                  s.params.treeMinHeight + s.params.treeHeightRange);
+    }
+
+    const Gen5Case cross = findGen5CrossCase(s, /*wantCarved=*/false, 400,
+                                             /*validateCavesOn=*/true,
+                                             /*requireNeighborsUnguarded=*/
+                                             false);
+    ASSERT_GE(cross.seed, 0)
+        << "no boundary-crossing intact tree column in 400 seeds";
+    {
+        auto res = WorldGenerator::create(cross.seed, s.params, s.biomes,
+                                          s.blocks);
+        ASSERT_TRUE(res.ok()) << res.error().message;
+        std::map<ChunkPos, Chunk> chunks;
+        gen5GenerateBox(*res, chunks, cross.wx, cross.wz);
+        int bottom = -1;
+        for (int y = cross.hgt + 1; y < kWorldHeight; ++y) {
+            if (blockAt(chunks, cross.wx, y, cross.wz) == woodId) {
+                bottom = y;
+                break;
+            }
+        }
+        ASSERT_EQ(bottom, cross.hgt + 1);
+        int top = bottom;
+        while (top + 1 < kWorldHeight &&
+               blockAt(chunks, cross.wx, top + 1, cross.wz) == woodId) {
+            ++top;
+        }
+        // The seam cell lies in the NEIGHBOR chunk (past the boundary
+        // edge) and still holds leaves: the neighbor chunk planted its
+        // canopy half (the guard fired only for a carved surface — this
+        // one is intact).
+        const int sx = (cross.wx % kChunkSize == 0) ? cross.wx - 1 : cross.wx;
+        const int sz = (cross.wx % kChunkSize == 0) ? cross.wz : cross.wz - 1;
+        EXPECT_NE(worldToChunk(BlockPos{sx, top, sz}),
+                  worldToChunk(BlockPos{cross.wx, 0, cross.wz}))
+            << "the case must cross a chunk boundary";
+        EXPECT_EQ(blockAt(chunks, sx, top, sz), leavesId);
+    }
+}
+
+TEST(WorldGeneratorTest, TreesSkipCaveCarvedSurfaceColumns) {
+    // GEN-5 positive case: a carved-surface column is skipped — the
+    // floating tree the user reported. Proven by A/B against the SAME
+    // seed with caves disabled (the guard's only input): caves-off plants
+    // the trunk, caves-on must have none. The cross-chunk sub-case adds:
+    // the seam cell past the boundary edge is a leaf in caves-off but air
+    // in caves-on (the neighbor chunk skipped its canopy half — the same
+    // pure verdict in both chunks), with no neighbor tree guarded (so
+    // ONLY this tree's contribution is gone from the box).
+    GenSetup s;
+    s.params = calibratedCaveParams();
+    const BlockID woodId = s.blocks.idForName("wood");
+    const BlockID leavesId = s.blocks.idForName("leaves");
+
+    const Gen5Case plain = findGen5Case(s, /*wantCarved=*/true,
+                                        /*wantCross=*/false, 400);
+    ASSERT_GE(plain.seed, 0) << "no carved-surface tree column in 400 seeds";
+    {
+        auto resOn = WorldGenerator::create(plain.seed, s.params, s.biomes,
+                                            s.blocks);
+        ASSERT_TRUE(resOn.ok()) << resOn.error().message;
+        WorldgenParams pOff = s.params;
+        pOff.cavesEnabled = false;
+        auto resOff = WorldGenerator::create(plain.seed, pOff, s.biomes,
+                                             s.blocks);
+        ASSERT_TRUE(resOff.ok()) << resOff.error().message;
+        std::map<ChunkPos, Chunk> on, off;
+        gen5GenerateBox(*resOn, on, plain.wx, plain.wz);
+        gen5GenerateBox(*resOff, off, plain.wx, plain.wz);
+        // The surface cell is cave-carved in the caves-on world (the
+        // floating condition) and intact in the caves-off world.
+        EXPECT_EQ(blockAt(on, plain.wx, plain.hgt, plain.wz), BlockID::air());
+        EXPECT_NE(blockAt(off, plain.wx, plain.hgt, plain.wz), BlockID::air());
+        // The guard fired: no wood anywhere in the trunk column (only this
+        // tree can write wood there — the next trunk is 4 lattice steps
+        // away) ...
+        int woodOn = 0;
+        for (int y = plain.hgt + 1; y < kWorldHeight; ++y) {
+            woodOn += static_cast<int>(blockAt(on, plain.wx, y, plain.wz) ==
+                                       woodId);
+        }
+        EXPECT_EQ(woodOn, 0);
+        // ... and no leaves in the column's tree band either (the canopy
+        // is skipped as a whole; a neighbor canopy cannot reach this
+        // column — radius 2 < lattice 4).
+        int leavesOn = 0;
+        const int bandTop = plain.hgt + s.params.treeMinHeight +
+                            s.params.treeHeightRange + 2;
+        for (int y = plain.hgt + 1; y <= bandTop; ++y) {
+            leavesOn += static_cast<int>(
+                blockAt(on, plain.wx, y, plain.wz) == leavesId);
+        }
+        EXPECT_EQ(leavesOn, 0);
+        // The caves-off world plants the same column right above the
+        // intact surface: the A/B diff is the guard.
+        int woodOff = 0;
+        for (int y = plain.hgt + 1; y < kWorldHeight; ++y) {
+            if (blockAt(off, plain.wx, y, plain.wz) == woodId) {
+                ++woodOff;
+            } else {
+                break;
+            }
+        }
+        EXPECT_GE(woodOff, s.params.treeMinHeight);
+        EXPECT_LE(woodOff, s.params.treeMinHeight + s.params.treeHeightRange);
+    }
+
+    const Gen5Case cross = findGen5CrossCase(s, /*wantCarved=*/true, 400,
+                                             /*validateCavesOn=*/false,
+                                             /*requireNeighborsUnguarded=*/
+                                             true);
+    ASSERT_GE(cross.seed, 0)
+        << "no boundary-crossing carved tree column in 400 seeds";
+    {
+        auto resOn = WorldGenerator::create(cross.seed, s.params, s.biomes,
+                                            s.blocks);
+        ASSERT_TRUE(resOn.ok()) << resOn.error().message;
+        WorldgenParams pOff = s.params;
+        pOff.cavesEnabled = false;
+        auto resOff = WorldGenerator::create(cross.seed, pOff, s.biomes,
+                                             s.blocks);
+        ASSERT_TRUE(resOff.ok()) << resOff.error().message;
+        std::map<ChunkPos, Chunk> on, off;
+        gen5GenerateBox(*resOn, on, cross.wx, cross.wz);
+        gen5GenerateBox(*resOff, off, cross.wx, cross.wz);
+        // The surface cell is carved (the floating condition) ...
+        EXPECT_EQ(blockAt(on, cross.wx, cross.hgt, cross.wz), BlockID::air());
+        // ... and the whole tree is gone from the caves-on box: no wood
+        // (the trunk column is empty; no other trunk lies in trunk ± 2)
+        // and no leaves from the skipped canopy — the seam cell one past
+        // the boundary edge is air there, while the caves-off world holds
+        // it as a leaf (the neighbor chunk's half was planted).
+        int woodOn = 0;
+        for (const auto& [cp, chunk] : on) {
+            for (int i = 0; i < Chunk::kVolume; ++i) {
+                woodOn += static_cast<int>(chunk.data()[i] == woodId);
+            }
+        }
+        EXPECT_EQ(woodOn, 0);
+        // The trunk top level in the caves-off world (the seam's height).
+        int topOff = -1;
+        for (int y = cross.hgt + 1; y < kWorldHeight; ++y) {
+            if (blockAt(off, cross.wx, y, cross.wz) == woodId) {
+                topOff = y;
+            } else {
+                break;
+            }
+        }
+        ASSERT_GE(topOff, cross.hgt + s.params.treeMinHeight);
+        const int sx = (cross.wx % kChunkSize == 0) ? cross.wx - 1 : cross.wx;
+        const int sz = (cross.wx % kChunkSize == 0) ? cross.wz : cross.wz - 1;
+        EXPECT_NE(worldToChunk(BlockPos{sx, topOff, sz}),
+                  worldToChunk(BlockPos{cross.wx, 0, cross.wz}))
+            << "the case must cross a chunk boundary";
+        EXPECT_EQ(blockAt(off, sx, topOff, sz), leavesId)
+            << "caves-off: the neighbor chunk planted its canopy half";
+        EXPECT_EQ(blockAt(on, sx, topOff, sz), BlockID::air())
+            << "caves-on: the neighbor chunk skipped its canopy half "
+               "(same pure verdict as the trunk's chunk)";
+    }
 }
 
 // -- biomes ------------------------------------------------------------------

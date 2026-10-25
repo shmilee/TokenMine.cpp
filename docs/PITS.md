@@ -1780,3 +1780,15 @@
   （S1/S6）同时段正常 → 窗口 churn 而非脚本缺陷。**处置**：输入项
   进补跑清单不硬卡发布（门 97 先例：单测级行为证明 + S1/S6 足证门内
   核心；输入 E2E 窗口恢复后 gate98_run.zsh 一键补收）。
+- **E2E 场景 cp 到不存在的 save 目录 = 旧侧二进制静默 fresh 世界，
+  A/B 变"两个不同世界"空对（PITS 254）**——10-25 门 101 首轮：
+  `tm_v0170_run`（旧版运行目录）只有 assets 无 data/saves，场景存档
+  `cp scene.json $OLDRUN/data/saves/xxx.json` 报 "No such file or
+  directory" 后**继续执行**——旧二进制 `--save xxx` 找不到存档 =
+  新建世界（出生点），4 拍截图全是 spawn 视角，与场景侧的 diff 无
+  判别意义且**不报错**（cp 错误只在日志里，截图照常产出）。**纪律**：
+  ① 旧侧运行目录初始化时 `mkdir -p data/saves`（gate101 脚本已修）；
+  ② 场景 A/B 拍完先验**双侧存档 player.pos 都等于场景值**（读回
+  savenorm 的 pos/yaw/pitch = 场景加载成功的权威信号，截图前断言）；
+  ③ 对跑脚本里 cp 类前置操作失败必须 abort（`|| exit` / set -e
+  语义），不得静默续跑。

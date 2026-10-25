@@ -126,8 +126,8 @@
   （可长）、叠冠/4 层+ = ≤7 停长。「树下种麦」玩法按 MC 语义收紧；wheat
   growth_light 保持 9（MC 值，不偏离）。
 - **面条洞穴行为注记（`[GEN-1]`，均 MC 一致/文档化偏离，非缺陷）**：
-  ① 洞口悬树（树干立于被打穿的表面列上，placeIfAir 不检查脚下 = MC 同款
-  视觉）② 海床洞穴一次性渗水（生成平衡态后静态，99.8 冷 chunk 零成本）
+  ① ~~洞口悬树~~ **`[GEN-5]` 已修复**（caveCarvesCell 纯谓词守卫跳过整树；
+  旧存档未编辑列读档即消失 = 世界生成演进先例）② 海床洞穴一次性渗水（生成平衡态后静态，99.8 冷 chunk 零成本）
   ③ 洞内 24/7 敌对生成（封闭袋 sky 0 = 敌对光门 0，昼夜无关 = MC 洞穴
   语义；出生点 spawn protection circle 不变）④ 旧存档加载得新洞穴
   （世界生成演进 = P86/88/93 先例；编辑保留、零 format）。
@@ -660,6 +660,19 @@
   （土壤门失败 = 本帧无步，土壤恢复继续长）。`[GEN-2]`
 - **spruce/birch leaves 不掉苹果** — apple = oak 专属（既有 1/128 不动）；
   新 leaves 的 chance_drops = 对应 sapling @ 0.05 + stick @ 0.02。`[GEN-2]`
+- **cz ≥ cx+1 半区整块不种树/不放装饰（wz 循环上界 bug）** —
+  placeTrees/placeDecorations 内层 `for (wz = wz0; wz < limit; ...)` 的
+  `limit` 误用 X 基（`ox + kChunkSize [+ margin]`）：chunk 的 oz ≥
+  ox+19（树）/ ox+16（装饰）时本 chunk 的 z 列不被迭代 → trunk 单列只由
+  本列 chunk 写入 = **约世界一半（cz ≥ cx+1 对角半区）永久无树无花**；
+  装饰在 cz = cx+1 层同样整块缺失。Phase 4（ae19893）起潜伏，101 道门
+  未发现 = 基线视图朝 -Z（该侧 chunk 恒在种树侧）+ 生成器单测只断言
+  局部区域。GEN-5 shipped 扫描（320×320 树生长侧盒）首次量化：修复侧
+  346 树列正常。修复 = 一行（wz 上界改 `oz + kChunkSize [+ margin]`），
+  但使大量 chunk 新增树/装饰 = 世界生成演进（基线视图侧 wz 修正 chunk
+  如 (−2,−1) 将新增树 → 需重锚评估）+ 性能 A/B（树密度上升 = 网格/渲染
+  微增）→ 独立立项 **GEN-6**（**10-25 用户定案：入矩阵第 32 项，执行序 =
+  SURV-5 之后 v0.20.0**；BACKLOG 有条目）。`[GEN-5]` 发现。
 
 ## 数据 / 内容
 

@@ -265,6 +265,63 @@ void WorldGenerator::fillTerrain(Chunk& chunk, const ChunkPos& pos,
     }
 }
 
+bool WorldGenerator::caveCarvesCell(int wx, int wy, int wz, int height) const {
+    if (!m_params.cavesEnabled) {
+        return false;
+    }
+    // GEN-1: the spawn clear zone — a chunk whose column is within
+    // `spawn_clear_columns` of the world origin on BOTH axes is never
+    // carved (the spawn candidate columns, {-1,0}², must keep intact dry
+    // ground). A per-chunk early return: a chunk is wholly in or out of
+    // the zone (the zone is column-aligned).
+    const ChunkPos cp = worldToChunk(BlockPos{wx, wy, wz});
+    if (std::abs(cp.x) <= m_params.caveSpawnClearColumns &&
+        std::abs(cp.z) <= m_params.caveSpawnClearColumns) {
+        return false;
+    }
+    // GEN-1: surface_guard 0 lifts the shell below the surface — cave
+    // openings may reach the surface cell itself (the shipped value, the
+    // Minecraft cave entrances). guard > 0 keeps the pre-GEN-1 band (never
+    // within `guard` layers of the surface, the surface cell excluded).
+    const int guard = m_params.surfaceGuard;
+    const int topExclusive = (guard > 0) ? (height - guard) : (height + 1);
+    // Keep a floor at the bottom and (guard > 0) a shell under the surface.
+    if (wy < m_params.caveMinY || wy >= topExclusive) {
+        return false;
+    }
+    // GEN-1: the lava-lake exclusion boxes — the basin owns its carve (the
+    // lake pass, which runs LATER, carves the same region anyway; skipping
+    // it here keeps the basin geometry exact and is what makes the box
+    // observable: caves-on vs caves-off differ only OUTSIDE the box).
+    for (const ResolvedLake& rl : m_lakes) {
+        if (wx >= rl.x0 && wx <= rl.x1 && wz >= rl.z0 && wz <= rl.z1 &&
+            wy > rl.floorY) {
+            return false;
+        }
+    }
+    const float cs = m_params.caveNoiseScale;
+    const float t = m_params.caveTubeThreshold;
+    // GEN-1: the spaghetti-tube predicate — the intersection of
+    // TWO independent noise fields' mid-bands, |n - 0.5| < t on
+    // BOTH (the intersection of two thin 3D bands is a network
+    // of winding tubes, the Minecraft 1.18 cave shape — the old
+    // single-noise high-region produced blobs). The second field
+    // is evaluated ONLY when the first is in-band (same
+    // predicate, less work).
+    const float n1 = valueNoise3(static_cast<float>(wx) * cs,
+                                 static_cast<float>(wy) * cs,
+                                 static_cast<float>(wz) * cs,
+                                 m_seed ^ kSaltCave);
+    if (std::fabs(n1 - 0.5f) >= t) {
+        return false;
+    }
+    const float n2 = valueNoise3(static_cast<float>(wx) * cs,
+                                 static_cast<float>(wy) * cs,
+                                 static_cast<float>(wz) * cs,
+                                 m_seed ^ kSaltCave2);
+    return std::fabs(n2 - 0.5f) < t;
+}
+
 void WorldGenerator::carveCaves(Chunk& chunk, const ChunkPos& pos,
                                 const std::array<int, kChunkSize * kChunkSize>& heights) const {
     if (!m_params.cavesEnabled) {
@@ -282,66 +339,21 @@ void WorldGenerator::carveCaves(Chunk& chunk, const ChunkPos& pos,
     const int ox = pos.x * kChunkSize;
     const int oz = pos.z * kChunkSize;
     const int y0 = pos.y * kChunkSize;
-    const float cs = m_params.caveNoiseScale;
-    const float t = m_params.caveTubeThreshold;
-    // GEN-1: surface_guard 0 lifts the shell below the surface — cave
-    // openings may reach the surface cell itself (the shipped value, the
-    // Minecraft cave entrances). guard > 0 keeps the pre-GEN-1 band (never
-    // within `guard` layers of the surface, the surface cell excluded).
-    const int guard = m_params.surfaceGuard;
-    // GEN-1: the lava-lake exclusion boxes — the basin owns its carve (the
-    // lake pass, which runs LATER, carves the same region anyway; skipping
-    // it here keeps the basin geometry exact and is what makes the box
-    // observable: caves-on vs caves-off differ only OUTSIDE the box).
-    const auto inLakeBox = [&](int wx, int wy, int wz) {
-        for (const ResolvedLake& rl : m_lakes) {
-            if (wx >= rl.x0 && wx <= rl.x1 && wz >= rl.z0 && wz <= rl.z1 &&
-                wy > rl.floorY) {
-                return true;
-            }
-        }
-        return false;
-    };
     for (int lx = 0; lx < kChunkSize; ++lx) {
         for (int lz = 0; lz < kChunkSize; ++lz) {
             const int h =
                 heights[static_cast<std::size_t>(lx) * kChunkSize +
                         static_cast<std::size_t>(lz)];
-            const int topExclusive =
-                (guard > 0) ? (h - guard) : (h + 1);
             const int wx = ox + lx;
             const int wz = oz + lz;
             for (int ly = 0; ly < kChunkSize; ++ly) {
                 const int wy = y0 + ly;
-                // Keep a floor at the bottom and (guard > 0) a shell under
-                // the surface.
-                if (wy < m_params.caveMinY || wy >= topExclusive) {
-                    continue;
-                }
-                if (inLakeBox(wx, wy, wz)) {
-                    continue;
-                }
-                // GEN-1: the spaghetti-tube predicate — the intersection of
-                // TWO independent noise fields' mid-bands, |n - 0.5| < t on
-                // BOTH (the intersection of two thin 3D bands is a network
-                // of winding tubes, the Minecraft 1.18 cave shape — the old
-                // single-noise high-region produced blobs). The second field
-                // is evaluated ONLY when the first is in-band (same
-                // predicate, less work).
-                const float n1 =
-                    valueNoise3(static_cast<float>(wx) * cs,
-                                static_cast<float>(wy) * cs,
-                                static_cast<float>(wz) * cs,
-                                m_seed ^ kSaltCave);
-                if (std::fabs(n1 - 0.5f) >= t) {
-                    continue;
-                }
-                const float n2 =
-                    valueNoise3(static_cast<float>(wx) * cs,
-                                static_cast<float>(wy) * cs,
-                                static_cast<float>(wz) * cs,
-                                m_seed ^ kSaltCave2);
-                if (std::fabs(n2 - 0.5f) >= t) {
+                // GEN-5: the per-cell carve decision — the pure predicate
+                // (cavesEnabled / spawn zone / band / lake boxes / double
+                // mid-band) moved out of this loop bit-for-bit, so
+                // placeTrees' floating-tree guard calls the SAME decision
+                // from a neighbor chunk without reading any chunk data.
+                if (!caveCarvesCell(wx, wy, wz, h)) {
                     continue;
                 }
                 chunk.set(lx, ly, lz, BlockID::air());
@@ -457,6 +469,20 @@ void WorldGenerator::placeTrees(Chunk& chunk, const ChunkPos& pos) const {
             const int hgt = heightAt(wx, wz);
             if (hgt <= m_params.seaLevel) {
                 continue; // no trees underwater
+            }
+            // GEN-5: the floating-tree guard — the trunk column's surface
+            // cell must still be terrain. carveCaves runs FIRST, and with
+            // the shipped surface_guard 0 its openings reach the surface
+            // cell itself: planting here would float the whole tree over
+            // the hole (the placeDecorations guard is the same rule —
+            // "a flower would float over the hole" — trees were the missed
+            // case). The decision is the SAME pure predicate carveCaves
+            // uses, so it reads no chunk data: every chunk whose margin
+            // covers this column recomputes the same verdict and skips the
+            // whole tree (a half-placed canopy straddling a chunk boundary
+            // is impossible).
+            if (caveCarvesCell(wx, hgt, wz, hgt)) {
+                continue;
             }
             const int trunk = m_params.treeMinHeight +
                               static_cast<int>(

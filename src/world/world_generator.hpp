@@ -25,7 +25,10 @@
 //                     openings reach the surface, the spawn-clear zone and
 //                     the lava-lake exclusion boxes are never carved)
 //   3. ore veins     (replace deep stone only, so caves stay carved)
-//   4. trees         (replace air only, so they never destroy terrain)
+//   4. trees         (replace air only, so they never destroy terrain;
+//                     GEN-5: the trunk column is skipped when cave carving
+//                     ate its surface cell — a floating-tree guard on the
+//                     same pure predicate as step 2)
 #pragma once
 
 #include <array>
@@ -84,6 +87,27 @@ public:
     // Fill a freshly created chunk. Must not call back into a World (the
     // generator never creates or mutates other chunks).
     void generateChunk(Chunk& chunk, const ChunkPos& pos) const;
+
+    // GEN-5: the per-cell cave carve decision — a PURE function of the
+    // cell's world coordinates and its column's terrain height (`height` =
+    // heightAt(wx, wz)). False when caves are disabled, when the cell's
+    // chunk is in the spawn clear zone, outside the band
+    // [caveMinY, topExclusive) (surface_guard 0 → the surface cell itself
+    // is carve-eligible), or inside a lava-lake exclusion box (the basin
+    // owns its carve); otherwise the spaghetti double mid-band (|n - 0.5|
+    // < tubeThreshold on BOTH the kSaltCave and the kSaltCave2 fields, the
+    // second evaluated only when the first is in-band).
+    //
+    // carveCaves calls this per cell — the pre-GEN-5 inline decision moved
+    // out bit-for-bit (behavior identity, pinned by the tests). placeTrees
+    // calls it on the trunk column's surface cell as the floating-tree
+    // guard: a tree planted on a carved-out column would float over the
+    // cave opening (the placeDecorations "a flower would float over the
+    // hole" precedent; trees were the missed case). The predicate reads NO
+    // chunk data, so every chunk whose margin covers the same trunk
+    // column recomputes the SAME verdict — a skipped tree is skipped in
+    // all of them (no half-placed canopy at a chunk boundary).
+    bool caveCarvesCell(int wx, int wy, int wz, int height) const;
 
     // Terrain surface height (topmost terrain layer) of the column at
     // (x, z). Ignores caves (always below the surface) and trees.
