@@ -79,17 +79,35 @@ test_save/test_campfire/test_debug_overlay 适配 + KNOWN_ISSUES）
   at/above the item 'iron_pickaxe's durability 250.0 (a broken item is
   removed, never saved)`（破碎态非法点名）/ fmt17 带 damage 键 =
   `save slot #0 has unknown field 'damage'`（版本谎报点名）
-- **S2 工具磨损/破碎（输入）**：预置 iron pickaxe damage 249 + 单石，
-  破 1 块 → 碎（槽空 + cobble 掉落）vs damage 248 → 249 存活（互斥）
-  ——**窗口相位未开（away 组件 13:00 起持续隐藏游戏窗）= 待补**
+- **S2 工具磨损/破碎（输入，10-25 14:1x 补收 PASS）**：预置 iron
+  pickaxe damage 249 + 目标石 (22,39,−3)（射线穿 (22,39,0) air 格，
+  PITS 251 变体 #2 修后几何），单按住 0.8 s → 破 1 块。**互斥对**
+  （600f 输入跑 ×2，PITS 247 协议 + `xdotool search --pid` 直搜）：
+  s2m_a600 = **碎**（damage 249+1 → 槽空 + cobblestone 掉落实体
+  (22.5,38,−2.5) 在档）/ s2m_b600 = **存活**（248+1 = 249 + cobble
+  同款在档）。满耐久对照组 mine_fresh（damage 0 → 1 + cobble）同几何
+  三态齐备。⚠ 1500f 长跑同场景 entities=[] 而 600f 有掉落 = 未解
+  quirk（600f 证据有效，未追）。
 - **S4 弓磨损（输入）**：bow + arrow×3，L R R → bow damage 2 + arrow
-  剩 1 ——**待补**（同上）
-- **S5 耐久条像素隔离（捕获）**：预置 damage 100 pickaxe vs 满耐久
-  ——**待补**（同上）
+  剩 1 + 箭实体 2 ——**采集 2 后台补跑中**（10-25 14:3x 相位 6 次未
+  送达，900f ×≤6 重试 45 s 间隔）
+- **S5 耐久条像素隔离（捕获，10-25 14:3x 补收 PASS）**：预置 damage
+  100 pickaxe（s5d）vs 满耐久（s5f），1200f 单捕获（终帧 HUD 在 =
+  红心带/护甲行亮像素实证捕获持续到终帧）。diff **912 px 完整分解**：
+  ① 耐久条 **288 px 只在 s5d** = 两 2px 带（hotbar 槽 0 x[382,408]
+  y[718,720] + 手持 viewmodel x[1197,1265] y[690,692]；100/250 = 0.4
+  → 黄段）② 护甲行 **624 px 只在 s5f** = 场景差异（s5f 预置皮甲 4 件
+  绘 4 图标，s5d 无甲零绘制 = 护甲行免疫条款同证）。两区互斥 = 条
+  像素隔离成立（干净对协议：s5d 补同款皮甲后重跑 = 可选精化，留档）。
 - **环境注**：门 97 场景首轮 6/7 缺 format 17 必需键 player.oxygen
   （场景升级 format 须补齐该版全部必需键——游戏点名拒 = 正确行为，
-  场景生成器纪律补记）；输入窗口相位 13:00 起关闭（no-input 跑不受
-  影响 = 存档级证据照常收）。
+  场景生成器纪律补记）；10-25 14:0x 起 scene_s97_hud_damaged 又漏
+  fmt18 必需键 player.armor（**PITS 251 第三次复现**）+ mine 场景
+  blocks 改写后 states 残留 = 交叉校验失败——两者皆 **init 静默死
+  伪装"输入未送达"**（tm_find_game_window 全程无窗 → 误诊为窗口相位
+  关闭 ~40 min）；纪律：输入跑未送达**先查 run 日志
+  "Initialization failed"** 再疑相位。GLX 黑相 14:30-14:44 波动
+  （14:23-14:25 有过一次 2 连干净窗）。
 
 ## 性能（插桩 A/B v0.14.0，发布前测试）
 

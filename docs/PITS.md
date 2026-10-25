@@ -1671,7 +1671,7 @@
   拍 ×45 s 等待）：改 **1 帧探针跑**（~15 s/拍，截图非黑才发全帧数）——
   黑相 8 拍 ~20 min → ~6 min。标准库 = `/tmp/opencode/tm_run_lib.zsh`
   （run2/scenecheck/notblack/savenorm）。
-- **init 失败与黑相不可区分（皆"无截图"）+ scratch 资产必须每门刷新**——10-26
+- **init 失败与黑相不可区分（皆"无截图"）+ scratch 资产必须每门刷新**——10-25
   门 95：scratch 仓库资产未 rsync 刷新（无护甲物品 JSON）→ format 16 场景
   init 失败（"save 'player.armor.chest' holds unknown item 'iron_chestplate'"）
   → run() 按黑相重试 8 拍全废 + 拷的"save"实为场景文件本身（游戏 init 前
@@ -1683,7 +1683,7 @@
   `rsync -a --delete 主树/assets/ scratch/assets/`（gate94 有、gate95 漏 =
   本坑）。
 - **跨清空的引用复制 = 物品凭空消失（dangling reference，门 95 护甲脱下
-  路径）**——10-26：`Game::tryArmor` 脱下分支 `const ItemStack& worn =
+  路径）**——10-25：`Game::tryArmor` 脱下分支 `const ItemStack& worn =
   m_player->armorSlot(slot);` 先 `setArmorSlot(slot, {}, 0)` 清空、再
   `m_inventory.setSlot(m_selectedSlot, worn)`——引用指向的栈已被清空，
   写入手的是**空栈**，护甲件消失（装备→脱下往返后 armor={} 且手空，
@@ -1699,7 +1699,7 @@
   须每点之间换空热栏槽（热栏只有 **Tab 循环**无数字键直选——E2E 序列
   L,R,Tab,R,Tab,R,Tab,R）。
 - **T450 输入送达协议（门 95 三轮定位）：窗口期 = IsViewable + 指针 top
-  = 游戏窗 + windowfocus --sync，点击走位置、键走焦点**——10-26 门 95
+  = 游戏窗 + windowfocus --sync，点击走位置、键走焦点**——10-25 门 95
   S3 输入全夜失效（e/u 4 跑 LOCK WARN 无送达）三轮定位：① `xdotool
   search --name tokenmine` 误匹配 **Firefox 窗口与终端**（title 含项目
   名）→ 永远 `tm_find_game_window $PID`（_NET_WM_PID 匹配）；游戏窗
@@ -1721,7 +1721,7 @@
   （20 s）给输入窗口期（240 f = 4 s 常错过相位）。**库**：
   `tm_input_seq`（/tmp/opencode/tm_e2e_lib.zsh）编码 ①③④。
 - **zsh `(( 空变量 < n ))` = 0 恒真：黑帧检查静默放行（门 96 全批
-  假 GREEN）**——10-26 晨：`nb=$(notblack $png)`（函数恒 rc 0 只打
+  假 GREEN）**——10-25 晨：`nb=$(notblack $png)`（函数恒 rc 0 只打
   黑像素计数）后 `if (( nb < 10000 ))`——notblack 瞬时取空（并发负载
   下 python 启动抖动）时 nb="" → zsh 算术把空当 **0** → 黑帧判
   GREEN（门 96 首批 10 跑全"过"，事后单张计数 = 9 张全黑 921600）。
@@ -1730,7 +1730,7 @@
   大小（gate96_rerun2 的 count_ok 范式）；批末对每张 GREEN 截图补
   单张计数复核。
 - **away 重平铺改窗尺寸 = 历史锚与跨时段 RAW 对失效（门 96 S1
-  弃锚）**——10-26 晨：gate88 锚 = 679x744（当年平铺态），当前窗态
+  弃锚）**——10-25 晨：gate88 锚 = 679x744（当年平铺态），当前窗态
   1362x744（重平铺）→ 同世界不同投影 = 110k px "差异"全假象；跨
   时段两张截图（07:2x 1280x720 vs 10:0x 1362x744）亦不可 RAW 比。
   **纪律**：base 门锚尺寸与当前窗态不符时弃用历史锚，改**新旧二进制
@@ -1739,7 +1739,7 @@
   窗态（stabilize_window 收敛 1280x720 浮动后成对连发，中间不隔
   重平铺）。
 - **1 帧探针 ≠ 整跑干净：黑相干净窗只有 2-5 s（门 96 晨波 3.5 h）**
-  ——10-26 晨：GLX 黑相从 5-15 min 级退化为 2-5 s 级波动（干净窗
+  ——10-25 晨：GLX 黑相从 5-15 min 级退化为 2-5 s 级波动（干净窗
   恰够 1 帧探针、不够 5-25 s 整跑）——探针干净后整跑 25 s 仍黑
   （s2a 3 连败）；10:42 波隙拉长到 25 s+ 时 1500 f 整跑一次干净
   （s2e 配主批 s2b = 门 96 唯一 RAW 对成立时刻）。**纪律**：探针
@@ -1748,7 +1748,7 @@
   窗尺寸保证对可比；多轮预算 8-12 轮后停手 = 记入晨间补跑清单
   （S4 气泡排像素隔离即此例，脚本 gate96_s4_retry.zsh 已备）。
 - **场景文件 format 升级 = 该版全部必需键都要补齐（门 97 首轮 6/7
-  场景全废）**——10-26：门 97 场景从 format 16/17 基座复制后直接
+  场景全废）**——10-25：门 97 场景从 format 16/17 基座复制后直接
   `d['format'] = 18`，漏补 format 17 引入的必需键 `player.oxygen` →
   全部 init 失败（`save format 17 requires a 'player.oxygen' integer`）
   ——更隐蔽的是**失败的 run 表现 = "未送达/无窗口"**（游戏 init 即
