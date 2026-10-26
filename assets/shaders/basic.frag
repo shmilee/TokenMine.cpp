@@ -6,6 +6,9 @@ in float v_tiled;
 in float v_skyLight;
 in float v_blockLight;
 in float v_faceShade;
+// PRE-2 distance fog: the vertex's view-space depth (independent
+// expression tree in basic.vert — gl_Position is untouched).
+in float v_viewDepth;
 
 uniform sampler2D u_texture;
 uniform int u_useTexture;
@@ -20,6 +23,15 @@ uniform float u_dayFactor;
 // One tile in UV space (1/columns, 1/rows of the atlas). Only read on the
 // tiled (greedy-merged chunk quad) path.
 uniform vec2 u_tileSize;
+// PRE-2 distance fog: the streaming disc edge dissolves into the horizon.
+// u_fogEnabled is per-draw uniform state (1 = on, 0 = off — no fragment
+// divergence). u_fogColor is the same-frame sky color. The
+// u_fogEnd > u_fogStart guard defends against a degenerate range (the
+// caller turns the fog off first; this is belt and braces).
+uniform int u_fogEnabled;
+uniform float u_fogStart;
+uniform float u_fogEnd;
+uniform vec3 u_fogColor;
 
 out vec4 fragColor;
 
@@ -44,5 +56,17 @@ void main() {
     // fully dark areas stay distinguishable from the void background.
     const float kAmbient = 0.03;
     float light = max(v_skyLight * u_dayFactor, v_blockLight);
-    fragColor = vec4(base * (kAmbient + (1.0 - kAmbient) * light * v_faceShade), alpha);
+    vec3 rgb = base * (kAmbient + (1.0 - kAmbient) * light * v_faceShade);
+    // PRE-2 distance fog: a linear ramp toward the same-frame sky color
+    // from u_fogStart to u_fogEnd. Near geometry clamps to fogT = 0 and
+    // mix(x, y, 0.0) is x bit-exactly for non-negative colors, so
+    // enabling fog leaves near pixels bit-identical. With
+    // u_fogEnabled = 0 the branch is never taken and the pipeline is
+    // bit-identical to the pre-fog shader.
+    if (u_fogEnabled != 0 && u_fogEnd > u_fogStart) {
+        float fogT = clamp((v_viewDepth - u_fogStart) /
+                           (u_fogEnd - u_fogStart), 0.0, 1.0);
+        rgb = mix(rgb, u_fogColor, fogT);
+    }
+    fragColor = vec4(rgb, alpha);
 }

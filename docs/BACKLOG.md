@@ -304,7 +304,7 @@
   双侧存档一致）+ S3 套件 1610；性能 A/B v0.24.0 fall 900f 三窗 fluidCells 逐位一致 + 全指标同档
   （重跑 ±1% 级，首轮 stream 偏 = 页缓存环境噪声重跑证伪）= 成本可忽略
   ——详见 `docs/archive/phase-pre1.md`
-- **PRE-2 边缘雾** — 世界边缘雾，遮住流送悬空截面（渲染条）
+- ~~**PRE-2 边缘雾**~~ — **完成（2026-10-26，v0.26.0，PRE 行 2/6）**：流送盘缘原始切面（"渲染条"）距离雾溶解进同帧天空色：basic shader 雾 4 uniform（per-draw 分支，off = 位级恒等）+ 雾深度独立表达式（gl_Position 表达式树零改动 = 位级红线）+ 纯函数 fogDistanceRange（end = min(kFar, 16×min(vd,64))、start = 0.75×end；shipped vd80 = 750/1000 块）+ `render.fog` getBool 代码默认 true（config.json 零改动）。零 format（19）/内容/音效。1621/1621（+11）、`-Werror` 0 警告。门 109：S1 PASS = 第 109 次结构性免疫（免重锚 = 无输入出生点流送永不 engaged 【PITS 261】雾区零地形）+ S2 三方雾 A/B PASS（demo 角列高地相机 + vd3 收敛静态态：old≡new-off 字节一致 + on vs off diff 5409 采样 px 限地平带下方 + savenorm 全等）+ 性能 fall 三窗同档 = 成本可忽略——详见 `docs/archive/phase-pre2.md`
 - **PRE-3 水面波纹** — 水面波纹动画（渲染条）
 - **PRE-4 云与环境音** — 云层 + 昼夜环境音（渲染条）
 - **PRE-5 透明 discard** — alpha cutout discard，修透明孔深度写入（渲染条）

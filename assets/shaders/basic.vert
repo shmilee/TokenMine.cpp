@@ -18,6 +18,9 @@ out float v_tiled;
 out float v_skyLight;
 out float v_blockLight;
 out float v_faceShade;
+// PRE-2 distance fog: the fragment's depth in view space (see the
+// independent expression at the bottom of main()).
+out float v_viewDepth;
 
 void main() {
     // Model is rigid (translation + rotation only) in Phase 1, so the
@@ -42,4 +45,13 @@ void main() {
         v_faceShade = 0.6;
     }
     gl_Position = u_proj * u_view * u_model * vec4(a_position, 1.0);
+    // PRE-2 distance fog: the view-space depth on an INDEPENDENT
+    // expression tree. The gl_Position line above is byte-identical to the
+    // pre-fog shader — regrouping its float multiply order would shift
+    // ULPs and could flip coplanar-culling edges and depth-tie pixels, so
+    // the fog never touches it. The camera looks down -Z (right-handed
+    // OpenGL, hard rule 5), so the forward depth is -z. The 1e-7-class
+    // difference between the two trees is invisible: it only feeds the
+    // aesthetic fog ramp, and it is deterministic across runs.
+    v_viewDepth = -(u_view * u_model * vec4(a_position, 1.0)).z;
 }

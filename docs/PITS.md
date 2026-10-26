@@ -1872,3 +1872,38 @@
   可靠模式 = 顶层 `( cd $D && $bin ... & echo $! > pid; wait ) &`（smoke
   6/6 验证）+ 每 slot 独立脚本 + 顺序 driver（g104_run_slot.zsh +
   gate104_s2_driver.zsh）。
+- **出生点无输入跑永不流送（PITS 261）**——10-26 门 109 首轮 S2：雾效
+  A/B 用 `--new` 出生点场景 1500f ×2，on/off diff=0 误判"雾未生效"。
+  根因 = 流送惰性触发（`kStreamTriggerDistance=1`：玩家列须在 missing
+  列 1 列内——`columnDistanceSq ≤ 1`，对角 d²=2 不触发）+ 初始 4×4
+  demo 区（kDemoChunkMin/Max = -2..1）出生点恒在中心 = 离 missing 列 2
+  列 → 无输入跑世界**恒 16 列 64 块**（任何 view_distance 同；vd80
+  base18 门 108 次过门看到的"世界边缘" = demo 区边缘，不是流送边缘）。
+  判别 = info 日志：有 `Chunk streaming engaged` / `Streaming:
+  N/M columns` / `Streaming complete: N/N columns` 行 = 流送在跑；
+  全无 = 未 engaged（静默，不是卡死——"silence in the log = the disk
+  is full, not a stall" 仅对已 engaged 成立）。修正 = 场景存档把玩家
+  放 demo 区**列 1**（x∈[16,32) 或 z∈[16,32)，邻 missing 列 → 帧 0
+  engaged；vd8 盘 197 列 ~510f 填满）。**凡验证远视距/流送边缘效果的
+  E2E 场景（雾/远山/边缘渲染）都必须用触发位场景，不能用 --new 出生
+  点**。次坑同场：demo 区列 1 的低地盆地（种子 123456789 的 (24,8)
+  区）填满后流体 churn 拉低 fps ~12.5（1500f > 120 s real）→ `timeout`
+  须 ≥300 s（被杀的 run 存档照写但无截图 = 假完成）。
+  **次坑 A（场景雾带不可见）**：低地相机（种子 123456789 的 (24,8) 盆地
+  y35）看 -Z 时，vd4 雾带 48-64 块 / vd8 雾带 96-128 块全部被近处高原
+  （y53，40-60 块）+ 树冠遮挡 → on/off diff=0 三连误判"雾未生效"（vd4
+  场景 253k px 的"差异" = 流送积分状态差，非雾）。**远视距效果 A/B 的
+  雾带必须含可见几何**：出生点高原相机（y54）看 -Z 的 demo 区北缘
+  （32.5 块）在 vd2 雾带 24-32 内 = 实证 diff ~9676 px。**先跑 1 对
+  300f 探针核 diff>0 再上 6 帧批**。
+  **次坑 B（流送积分实时锁定）**：流送预算帧锁定（2 列/帧 post）但
+  worker 完成实时锁定（CPU 争用时 flush 等不到 job → 集成延后帧）→
+  **帧 N 的世界状态随机器负载漂移**（同场景三次跑两 X 一 Y = 253k px
+  差，Y = 未收敛态）。远视距/边缘效果的 A/B 只允许两种世界态：
+  ① 静态态（出生点无输入 = 流送永不 engaged，PITS 261 主坑）或 ② 收敛
+  态（"Streaming complete: N/N" 日志 + ×2 字节一致双验）；禁止用
+  半流送态做跨 run 断言。
+  **次坑 C（--config 相对路径）**：探针命令里 `--config $cfg` 用相对
+  路径 + `( cd $D && ... )` = 文件不在 $D → 静默回落内置默认 config
+  （PITS 252 复现第 2 次）→ 两侧同 default = on/off diff=0 假阴性。
+  config 路径一律绝对。

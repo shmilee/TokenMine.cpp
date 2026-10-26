@@ -36,6 +36,7 @@
 #include "item/armor.hpp"
 #include "item/durability.hpp"
 #include "block/block_sound.hpp"
+#include "renderer/fog.hpp"
 
 namespace mc {
 
@@ -7349,6 +7350,26 @@ void Game::render() {
     m_basicShader.setUniform2f(
         "u_tileSize", 1.0f / static_cast<float>(m_atlas.layout().columns),
         1.0f / static_cast<float>(m_atlas.layout().rows));
+    // PRE-2 distance fog: the streaming disc edge (raw chunk
+    // cross-sections) dissolves into the horizon — a linear ramp toward
+    // the same-frame sky color from kFogStartScale * end to end, where
+    // end = min(far plane, effective stream radius in blocks). The
+    // radius is m_streamRadius capped to kStreamCapRadius (STRM-1)
+    // times kChunkSize — the same clamp the stream disk itself uses.
+    // render.fog (code default true, the fire.particles getBool
+    // precedent) gates it; a degenerate range (end <= start — a
+    // zero/negative view distance) falls back to off. Four per-frame
+    // uniform sets, zero per-draw cost; the streaming code is untouched.
+    const bool fogConfigOn = m_config.getBool("render.fog", true);
+    const float rEffBlocks = static_cast<float>(
+                                 std::min(m_streamRadius, kStreamCapRadius)) *
+                             kChunkSize;
+    const FogRange fog = fogDistanceRange(rEffBlocks, kFar);
+    const bool fogOn = fogConfigOn && fog.end > fog.start;
+    m_basicShader.setUniform1i("u_fogEnabled", fogOn ? 1 : 0);
+    m_basicShader.setUniform1f("u_fogStart", fog.start);
+    m_basicShader.setUniform1f("u_fogEnd", fog.end);
+    m_basicShader.setUniform3f("u_fogColor", sky.x, sky.y, sky.z);
 
     m_atlas.texture().bind();
 
