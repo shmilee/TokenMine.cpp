@@ -599,65 +599,107 @@ void Entity::refreshFluidState() {
         m_surfaceKind = FluidKind::Lava;
     }
     m_restingOnSolid = isRestingOnSolid();
-    // The W' surface plane of the feet's center column (the player's
-    // FLUID-2 scan, verbatim): one above the topmost full (level-8) cell
-    // at or below the feet, or -1 when none (no float plane). In a
-    // continuous column W' tracks the feet one cell above (a transient
-    // local plane) and resolves to the true surface at the topmost cell —
-    // so the float only settles where the column ends.
+    // The W' surface plane of the feet's center column: one above the
+    // topmost full (level-8) cell of the immersion kind in the scan window
+    // (kFluidSurfaceScanDepth cells each side of the feet), or -1 when none
+    // (no float plane). FLUID-3: the TOPMOST (the true surface) — the
+    // pre-FLUID-3 scan stopped at the first L8 at or below the feet (a
+    // transient plane one above the feet's own cell): for a body standing
+    // on a pool floor that is the BOTTOM water cell, while the swim level
+    // and the pool-depth rise gate need the true surface. While the body is
+    // in the air (dry) the first L8 at or below the feet IS the topmost
+    // (no water above the feet), so the upward extension runs only while
+    // m_inFluid — the dry-column read count is the pre-FLUID-3 one. A
+    // column deeper than the window gets the window's local plane (the
+    // pre-FLUID-3 same bound).
     const int cx = static_cast<int>(std::floorf(m_position.x));
     const int cz = static_cast<int>(std::floorf(m_position.z));
     const int top = static_cast<int>(std::floorf(m_position.y));
     m_fluidSurfaceY = -1.0f;
-    for (int y = top; y > top - kFluidSurfaceScanDepth; --y) {
-        if (m_world.getFluidOfKind(cx, y, cz, m_surfaceKind) ==
-            kMaxFluidLevel) {
-            m_fluidSurfaceY = static_cast<float>(y) + 1.0f;
-            break;
+    if (m_inFluid) {
+        for (int y = top + kFluidSurfaceScanDepth; y > top; --y) {
+            if (m_world.getFluidOfKind(cx, y, cz, m_surfaceKind) ==
+                kMaxFluidLevel) {
+                m_fluidSurfaceY = static_cast<float>(y) + 1.0f;
+                break;
+            }
         }
     }
+    if (m_fluidSurfaceY < 0.0f) {
+        for (int y = top; y > top - kFluidSurfaceScanDepth; --y) {
+            if (m_world.getFluidOfKind(cx, y, cz, m_surfaceKind) ==
+                kMaxFluidLevel) {
+                m_fluidSurfaceY = static_cast<float>(y) + 1.0f;
+                break;
+            }
+        }
+    }
+    // FLUID-3: the swim level — the body's mid-axis on the surface (half
+    // the body submerged: the MC swim look, the float terminal). Pure
+    // geometry (one subtraction), frame-locked like W'.
+    m_swimLevelY = m_fluidSurfaceY - m_height * 0.5f;
+    // FLUID-3: the pool depth — the fluid surface above the feet (0 for a
+    // dry body or one above the surface). Resting on the pool floor it is
+    // the pool's depth; the rise gate (kRiseMinPoolDepth) reads it. The
+    // subtraction reuses the W' scan — no extra read.
+    m_fluidDepth = m_fluidSurfaceY > m_position.y
+        ? m_fluidSurfaceY - m_position.y
+        : 0.0f;
     m_atSurface = m_fluidSurfaceY > 0.0f &&
         std::abs(m_position.y - m_fluidSurfaceY) <= kMaxSubstepMove &&
         !m_restingOnSolid;
 }
 
 void Entity::integrateFluid(float h) {
-    if (m_atSurface && !m_onGround && m_velocity.y >= 0.0f &&
-        (m_position.y >= m_fluidSurfaceY - kFaceEps ||
-         m_position.y + m_velocity.y * h >= m_fluidSurfaceY - kFaceEps) &&
-        (m_position.y <= m_fluidSurfaceY + kFaceEps ||
-         m_velocity.y <= kWaterRiseSpeed + kFaceEps)) {
-        // Float snap (the player's FLUID-2 geometric clamp to the surface
-        // plane). The crossing re-check: a sub-step's displacement (up to
-        // kMaxSubstepMove) skips the kFaceEps band, so the snap fires when
-        // the sub-step reaches the plane from below (or the feet are
-        // already at/above it); the rise-speed gate keeps a breach (an
-        // above-the-plane vy) from being pulled back. The terminal
-        // (y = W', vy = 0, onGround false) is a fixed point — no input
-        // re-snaps it every tick, so it is fps-independent.
-        m_position.y = m_fluidSurfaceY;
+    if (!m_onGround && m_inFluid && m_fluidSurfaceY > 0.0f &&
+        m_velocity.y >= 0.0f && m_position.y >= m_swimLevelY - kFaceEps &&
+        m_position.y <= m_fluidSurfaceY) {
+        // Float snap to the SWIM LEVEL (the body's mid-axis on the surface
+        // — half the body submerged, the MC swim look; the pre-FLUID-3
+        // snap put the FEET on the surface: a fully dry body "standing on
+        // water", the reported B1). Gated on m_inFluid (not m_atSurface):
+        // a DRY body in the band above the surface is NOT snapped — a
+        // knocked-up body can breach the surface and fall back (the
+        // splash, the Minecraft look; the player's dry-band snap to the
+        // feet-plane is its accepted first-person Q2 deviation — the
+        // player path is untouched). The terminal (y = swim level, vy = 0,
+        // inFluid true — the body's lower half is in the water — onGround
+        // false) is a fixed point: the snap re-fires every sub-step as a
+        // no-op, so it is fps-independent.
+        m_position.y = m_swimLevelY;
         m_velocity.y = 0.0f;
-    } else if (!m_restingOnSolid && m_fluidSurfaceY > 0.0f &&
-               m_velocity.y >= 0.0f) {
+    } else if (m_inFluid &&
+               (!m_restingOnSolid || m_fluidDepth >= kRiseMinPoolDepth) &&
+               m_fluidSurfaceY > 0.0f && m_velocity.y >= 0.0f &&
+               m_position.y < m_swimLevelY) {
         // Passive rise: buoyancy, capped at kWaterRiseSpeed. Gated on
+        // m_inFluid — a DRY body in the band does not rise (the pre-FLUID-3
+        // dry-rise fed the "standing on water" terminal, B1) — and on the
+        // Q2 depth gate: a body RESTING on a 1-deep pool floor STANDS (the
+        // wade, the ENT-4 mainline); in a pool >= kRiseMinPoolDepth deep it
+        // rises to the swim level (the deep-water lockout, A1/B3). Gated on
         // vy >= 0 — a FALLING body (the water entry with momentum) keeps
         // sinking (the MC "dive" semantics: a falling body sinks to the
-        // bottom, a still body floats up); on a surface in the column (a
-        // pure flow film gives no buoyancy); and on free — a body on the
-        // pool floor STANDS (the FRESH check: the tick m_onGround is the
-        // previous sub-step's result).
+        // bottom, a still body floats up) — and below the swim level (it
+        // stops when it reaches it; the snap then owns the terminal).
         m_velocity.y = std::min(m_velocity.y + kWaterBuoyancy * h,
                                 kWaterRiseSpeed);
-    } else {
+    } else if (m_inFluid) {
         // Sink: the downward drift (grounded in water — the Y resolve
         // re-clamps it against the floor every sub-step, re-establishing
         // onGround —, falling with entry momentum, clamped at the water
         // terminal, or in a column with no surface — a pure flow film).
+        // Gated on m_inFluid: a DRY body in the at-surface band keeps its
+        // vy — the full-speed pass (the player's twin "keep vy" line; the
+        // pre-FLUID-3 un-gated sink clamped a dry fall to the -4 water
+        // terminal inside the band = the cliff-dive "parachute", A2).
         m_velocity.y -= kWaterBuoyancy * h;
         if (m_velocity.y < -kWaterTerminalVelocity) {
             m_velocity.y = -kWaterTerminalVelocity;
         }
     }
+    // (else: a dry body in the at-surface band — keep vy, the player's
+    // twin's final branch; the next refresh re-resolves it.)
 }
 
 bool Entity::isRestingOnSolid() const {

@@ -3237,23 +3237,39 @@ TEST(MobEntityTest, SwingPhaseInertWithoutSwingData) {
 
 // -- ENT-4: the underwater behavior (the fluid immersion model) ------------
 //
-// The input-free twin of the player's FLUID-2 swim (same constants, same
-// formulas, same branch order — Entity::refreshFluidState /
-// Entity::integrateFluid): a submerged mob RISES (the buoyancy 12, capped
-// 1.5) and FLOATS at W' (the geometric plane one above the topmost level-8
-// cell of the feet's center column — the exact, fps-independent terminal
-// state); a falling mob sinks (the entry-momentum clamp) to the pool floor
-// and STANDS (the fresh resting gate); the horizontal speed is gated ×0.6
-// (kUnderwaterSpeedFactor); the ENT-3 step-up is forbidden in fluid. The
-// fire system (P57/58/73) is untouched — the MobFireTest lava scenarios
-// above pin that a burning mob on the lava floor still stands and ticks
-// at the same rate.
+// The shared fluid model (Entity::refreshFluidState / integrateFluid —
+// the input-free twin of the player's FLUID-2 swim, FLUID-3-corrected): a
+// submerged mob RISES (the buoyancy 12, capped 1.5) to the SWIM LEVEL =
+// W' - height/2 (the body's mid-axis on the surface — half the body
+// submerged, the MC swim look; the exact, fps-independent terminal state;
+// the pre-FLUID-3 float put the FEET on W', a fully dry body "standing on
+// water"), and a RESTING mob rises in a pool >= 2 deep (the Q2 depth gate
+// — the 1-deep wade still stands on the bottom, the deep-water lockout
+// fixed); a falling mob (the entry momentum, the vy >= 0 rise gate
+// excluded) SINKS to the pool floor (and in a 2-deep pool rises off the
+// bottom to the swim level — the 1-deep stand is unchanged); a DRY body
+// in the at-surface band keeps its vy (the full-speed pass — no -4 clamp,
+// no buoyancy — the player's twin line, the cliff-dive "parachute" fixed);
+// a knocked-up body breaches the surface (the body's top clears W') and
+// settles at the swim level (the splash). The horizontal speed is gated
+// ×0.6 (kUnderwaterSpeedFactor); the ENT-3 step-up runs in fluid too
+// (the FLUID-3 lift of the ENT-4 ban — a wading mob steps out of the
+// 1-deep pool; a swimming mob, onGround false, cannot step up: no swim-up
+// shore climb, the documented deviation). The player path is untouched
+// (its dry-band snap to the feet-plane is the accepted first-person Q2
+// deviation) — test_player.cpp is the bit-level red line. The fire system
+// (P57/58/73) is untouched — the MobFireTest lava scenarios above pin the
+// burn rate (the 2-deep lava floor stand now rises to the swim level,
+// still inside the top lava cell — the re-ignition cadence holds).
 //
 // Pool conventions: the fixture floor tops out at y=1; an n-cell L8 pool
-// (y=1..n) has W' = 1+n. fillFloor (the fire-section helper) covers the
-// whole fixture floor in 2-deep fluid — a wandering mob (<= 0.4 b/s,
-// gated 0.24 in fluid) cannot leave it within a test window, so the float
-// tests do not depend on the wander path.
+// (y=1..n) has W' = 1+n. The zombie test def (h 1.8) swims at
+// W' - 0.9: the 2-deep floor (fillFloor / the 2-cell pool, W' = 3) swim
+// level is 2.1 exact; the item (kSize 0.25) at W' - 0.125: 2.875 exact.
+// fillFloor (the fire-section helper) covers the whole fixture floor in
+// 2-deep fluid — a wandering mob (<= 0.4 b/s, gated 0.24 in fluid) cannot
+// leave it within a test window, so the float tests do not depend on the
+// wander path.
 
 namespace {
 
@@ -3330,56 +3346,81 @@ TEST(MobFluidTest, DetectsFootBodyLavaAndDry) {
 
 TEST(MobFluidTest, SubmergedMobRisesAndFloatsAtSurface) {
     // A submerged body with no input RISES (the buoyancy, capped at 1.5)
-    // and FLOATS at W' = 3 (the 2-deep floor pool) — the geometric
-    // terminal (exact, fps-independent; the assertion point).
+    // and FLOATS at the SWIM LEVEL = W' - h/2 = 3 - 0.9 = 2.1 (the
+    // 2-deep floor pool, the body's mid-axis on the surface — half the
+    // body submerged, the MC swim look; FLUID-3: the pre-FLUID-3 float
+    // put the FEET on W' = 3, a fully dry body "standing on water", the
+    // reported B1). The geometric terminal (exact, fps-independent; the
+    // assertion point).
     Fixture f;
     fillFloor(f, FluidKind::Water); // W' = 3 everywhere on the floor
     MobRegistry mobs = makeMobRegistry();
-    const Mob& def = mobs.at(MobID{0});
-    MobEntity mob = makeMob(f, def, {8.5f, 2.0f, 8.5f}); // 1 below W', vy 0
+    const Mob& def = mobs.at(MobID{0}); // h 1.8: the swim level 3 - 0.9
+    MobEntity mob = makeMob(f, def, {8.5f, 2.0f, 8.5f}); // 0.1 below it
     mob.setPlayer({30.0f, 1.0f, 30.0f}, false); // pure wander (stays in)
     bool rose = false;
     for (int i = 0; i < 180; ++i) {
         mob.update(kDt);
-        if (mob.position().y > 2.1f) {
+        if (mob.position().y > 2.05f) {
             rose = true;
         }
-        // The rise never exceeds the plane (the snap clamps the crossing
-        // sub-step to W' exactly).
-        EXPECT_LE(mob.position().y, 3.0f) << "frame " << i;
+        // The rise never exceeds the swim level by more than one rise
+        // sub-step (the cap 1.5 over the 1/60 frame — the snap clamps the
+        // crossing to the swim level exactly).
+        EXPECT_LE(mob.position().y, 2.1f + 1.5f / 60.0f + 1e-6f)
+            << "frame " << i;
     }
     EXPECT_TRUE(rose); // it did rise (not the pre-ENT-4 sink-to-bottom)
     // The geometric terminal: exact (the float is geometry, not a force
     // balance).
-    EXPECT_FLOAT_EQ(mob.position().y, 3.0f);
+    EXPECT_FLOAT_EQ(mob.position().y, 2.1f);
     EXPECT_EQ(mob.velocity().y, 0.0f);
     EXPECT_FALSE(mob.onGround());
+    // FLUID-3: the terminal is HALF SUBMERGED (the body's lower half in
+    // the water — the snap re-fires as a no-op fixed point) — the
+    // pre-FLUID-3 dry W' float had inFluid false.
+    EXPECT_TRUE(mob.inFluid());
     // The fixed point: more frames keep it (the fps-independent terminal
     // — the E2E assertion point).
     runMob(mob, 240);
-    EXPECT_FLOAT_EQ(mob.position().y, 3.0f);
+    EXPECT_FLOAT_EQ(mob.position().y, 2.1f);
     EXPECT_EQ(mob.velocity().y, 0.0f);
     EXPECT_FALSE(mob.onGround());
+    EXPECT_TRUE(mob.inFluid());
 }
 
 TEST(MobFluidTest, FallingMobSinksToPoolFloor) {
     // Entry momentum: a fast-falling mob (the vy >= 0 rise gate excluded)
-    // sinks at the water terminal (-4) to the pool floor, where it STANDS
-    // (the fresh resting gate — the player's "stand on the bottom").
+    // sinks at the water terminal (-4) to the pool floor — and, FLUID-3
+    // (the fixture is a 2-deep pool: the Q2 depth gate), it RISES off the
+    // bottom to the swim level (W' - h/2 = 3 - 0.9 = 2.1) instead of
+    // standing (the 1-deep wade stand is pinned in
+    // OneDeepPoolNoRiseWhenResting). The dive-to-bottom is the mutually
+    // exclusive proof vs an immediate float: it reaches y = 1 first.
     Fixture f;
-    fillFloor(f, FluidKind::Water); // the floor y=1, W' = 3
+    fillFloor(f, FluidKind::Water); // the floor y=1, W' = 3 (2-deep)
     MobRegistry mobs = makeMobRegistry();
-    const Mob& def = mobs.at(MobID{0});
+    const Mob& def = mobs.at(MobID{0}); // h 1.8: the swim level 2.1
     MobEntity mob = makeMob(f, def, {8.5f, 8.0f, 8.5f});
     mob.setVelocity({0.0f, -30.0f, 0.0f}); // a fast entry
     mob.setPlayer({30.0f, 1.0f, 30.0f}, false);
-    runMob(mob, 600); // 10 s: the air fall + the sink + the settle
-    EXPECT_FLOAT_EQ(mob.position().y, 1.0f); // the pool floor
-    EXPECT_TRUE(mob.onGround());
+    float minY = 8.0f;
+    for (int i = 0; i < 600; ++i) { // 10 s: the air fall + the sink + the rise
+        mob.update(kDt);
+        minY = std::min(minY, mob.position().y);
+    }
+    // It DIVED to the pool floor (the entry momentum — a still body would
+    // float straight up from the preset).
+    EXPECT_FLOAT_EQ(minY, 1.0f);
+    // ...and rose off the bottom (the 2-deep Q2 depth gate) to the swim
+    // level terminal (exact, fps-independent).
+    EXPECT_FLOAT_EQ(mob.position().y, 2.1f);
     EXPECT_EQ(mob.velocity().y, 0.0f);
-    // It sank, it did not rise (mutually exclusive with the terminal of
-    // SubmergedMobRisesAndFloatsAtSurface on the same pool).
-    EXPECT_NE(mob.position().y, 3.0f);
+    EXPECT_FALSE(mob.onGround());
+    EXPECT_TRUE(mob.inFluid());
+    // It did not stand on the floor (mutually exclusive with the 1-deep
+    // terminal of OneDeepPoolNoRiseWhenResting).
+    EXPECT_NE(mob.position().y, 1.0f);
 }
 
 TEST(MobFluidTest, WadesSlowerInWaterThanOnLand) {
@@ -3412,13 +3453,19 @@ TEST(MobFluidTest, WadesSlowerInWaterThanOnLand) {
     EXPECT_TRUE(inWater.onGround());
 }
 
-TEST(MobFluidTest, NoStepUpInWater) {
-    // The ENT-3 step-up is forbidden in fluid (!m_inFluid gate): the same
-    // 1-block step (two cells wide in +X — the shared judgment's +X
-    // front-check quirk, the DoesNotStepSingleCellStepPlusX twin) is
-    // CROSSED on land (the ChasesUpOneBlockStep twin) but NOT in the
-    // wading film (the step face clamps the mob at the pool level — the
-    // float terminal is untouched).
+TEST(MobFluidTest, WadingMobStepsOutOfWater) {
+    // FLUID-3 (the inversion of the ENT-4 NoStepUpInWater — the old
+    // "stuck in the water" semantic is retired): the step-up runs in
+    // fluid too (the `!m_inFluid` gate lifted — the player never had one):
+    // the same 1-block step (two cells wide in +X — the shared judgment's
+    // +X front-check quirk, the DoesNotStepSingleCellStepPlusX twin) is
+    // CROSSED in the wading film (the mob steps out of the 1-deep pool
+    // over the shore wall — the "walked in, can't get out" report, A1)
+    // AND on land (the unchanged twin). The step-up's geometry / the
+    // TRUE-1-block judgment / the sub-step replay are untouched (ENT-3) —
+    // only the gate. The 1-deep film's depth (W' - feet = 1 < 2) keeps the
+    // wade a BOTTOM STAND (no rise) — it is the step, not the buoyancy,
+    // that gets the mob out.
     MobRegistry mobs = makeMobRegistry();
     const Mob& def = mobs.at(MobID{0});
 
@@ -3444,18 +3491,27 @@ TEST(MobFluidTest, NoStepUpInWater) {
     MobEntity onLand = makeMob(g, def, {8.5f, 1.0f, 9.5f});
     onLand.setPlayer({13.9f, 1.0f, 9.5f}, true);
 
-    runMob(inWater, 400);
-    runMob(onLand, 400);
+    // The wade: in the film at the start (the feet cell L8) — the step-out
+    // must come from a wading (onGround, inFluid) mob.
+    bool sawWade = false;
+    for (int i = 0; i < 900; ++i) {
+        inWater.update(kDt);
+        if (inWater.inFluid()) {
+            sawWade = true;
+        }
+    }
+    EXPECT_TRUE(sawWade);
+    runMob(onLand, 900);
     // On land: crossed the step (and fell back to the far floor — the
     // ChasesUpOneBlockStep twin's stop point 13.9 - 1.6 = 12.3, y = 1).
     EXPECT_EQ(onLand.state(), MobState::Attack);
     EXPECT_NEAR(onLand.position().x, 12.3f, 0.02f);
     EXPECT_FLOAT_EQ(onLand.position().y, 1.0f);
-    // In water: clamped at the step face (10 - 0.3 = 9.7), still on the
-    // pool floor (y = 1) — the mutually exclusive outcome (chase forever,
-    // the step never crossed).
-    EXPECT_EQ(inWater.state(), MobState::Chase);
-    EXPECT_NEAR(inWater.position().x, 9.7f, 0.02f);
+    // In the wading film: the SAME crossing — the step-up over the shore
+    // wall, then the fall to the far floor (mutually exclusive with the
+    // pre-FLUID-3 clamp at 9.7, chase forever, the reported lockout).
+    EXPECT_EQ(inWater.state(), MobState::Attack);
+    EXPECT_NEAR(inWater.position().x, 12.3f, 0.02f);
     EXPECT_FLOAT_EQ(inWater.position().y, 1.0f);
     EXPECT_TRUE(inWater.onGround());
 }
@@ -3484,12 +3540,219 @@ TEST(MobFluidTest, SubmergedRiseIsFrameLockedDeterministic) {
         EXPECT_EQ(a.velocity().y, b.velocity().y) << "frame " << i;
         EXPECT_EQ(a.velocity().z, b.velocity().z) << "frame " << i;
     }
-    // Both settled at the exact float terminal (the fps-independent
-    // assertion point).
-    EXPECT_FLOAT_EQ(a.position().y, 3.0f);
-    EXPECT_FLOAT_EQ(b.position().y, 3.0f);
+    // Both settled at the exact swim-level terminal (W' - h/2 = 2.1 — the
+    // fps-independent assertion point).
+    EXPECT_FLOAT_EQ(a.position().y, 2.1f);
+    EXPECT_FLOAT_EQ(b.position().y, 2.1f);
     EXPECT_EQ(a.velocity().y, 0.0f);
     EXPECT_EQ(b.velocity().y, 0.0f);
+    EXPECT_FALSE(a.onGround());
+    EXPECT_FALSE(b.onGround());
+    EXPECT_TRUE(a.inFluid());
+    EXPECT_TRUE(b.inFluid());
+}
+
+TEST(MobFluidTest, AirBandFallKeepsFullVy) {
+    // FLUID-3 fix A2 (the cliff-dive "parachute"): a DRY body falling
+    // through the at-surface band (the feet within 0.4 of W', the body
+    // clear of the water) keeps its FULL vy — no -4 water-terminal clamp,
+    // no buoyancy decrement (the pre-FLUID-3 sink branch ran un-gated: it
+    // clamped the dry fall to -4 inside the band). The player's twin
+    // keeps this "keep vy" behavior — the shared model now matches it.
+    // The preset (mid-fall beside the pool, vy = -5) is a real cliff fall
+    // through the band.
+    Fixture f;
+    fillFloor(f, FluidKind::Water); // W' = 3
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 3.2f, 8.5f}); // 0.2 above W'
+    mob.setVelocity({0.0f, -5.0f, 0.0f}); // the fall in progress
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    float maxDryAbsVy = 0.0f;
+    float maxWetAbsVy = 0.0f;
+    bool wet = false;
+    for (int i = 0; i < 300; ++i) {
+        mob.update(kDt);
+        const float absVy = std::abs(mob.velocity().y);
+        if (mob.inFluid()) {
+            wet = true;
+            maxWetAbsVy = std::max(maxWetAbsVy, absVy);
+        } else if (mob.position().y <= 3.0f + 0.4f) {
+            // The dry pass (the band + the sub-surface air of the column):
+            // full speed, unclamped.
+            maxDryAbsVy = std::max(maxDryAbsVy, absVy);
+        }
+    }
+    EXPECT_TRUE(wet); // it reached the water (the fall continued)
+    // DRY: the fall kept the full -5 (the A2 fix — no -4 clamp, no
+    // buoyancy decrement in the band).
+    EXPECT_NEAR(maxDryAbsVy, 5.0f, 1e-6f);
+    // WET: the entry momentum clamps at the water terminal -4 (the MC
+    // dive, unchanged).
+    EXPECT_LE(maxWetAbsVy, 4.0f + 1e-6f);
+    // The full cycle: the dive to the floor (2-deep: it stands off the
+    // bottom) settles at the swim level.
+    EXPECT_FLOAT_EQ(mob.position().y, 2.1f);
+    EXPECT_EQ(mob.velocity().y, 0.0f);
+    EXPECT_FALSE(mob.onGround());
+}
+
+TEST(MobFluidTest, OneDeepPoolNoRiseWhenResting) {
+    // FLUID-3 fix B3-guard (the E4 mainline kept): a mob RESTING on a
+    // 1-deep pool floor (the wade — the feet in the 1-cell film) does NOT
+    // rise (the Q2 depth gate: the pool depth W' - feet = 2 - 1 = 1 < 2) —
+    // it stands on the bottom for the whole 1800-frame run.
+    Fixture f;
+    buildMobFilm(f, 15); // the 1-cell film: W' = 2, the wade case
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {0.5f, 1.0f, 0.5f});
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false); // pure wander (stays in)
+    for (int i = 0; i < 1800; ++i) {
+        mob.update(kDt);
+        EXPECT_FLOAT_EQ(mob.position().y, 1.0f) << "frame " << i;
+        EXPECT_TRUE(mob.onGround()) << "frame " << i;
+    }
+    // It waded (the feet cell L8 — the depth gate, not the dry state,
+    // held it).
+    EXPECT_TRUE(mob.inFluid());
+}
+
+TEST(MobFluidTest, TwoDeepPoolRisesWhenResting) {
+    // FLUID-3 fix B3/A1 (the deep-water lockout): a mob RESTING on a
+    // 2-deep pool floor RISES (the Q2 depth gate: the pool depth
+    // W' - feet = 3 - 1 = 2 >= 2 lets the resting body off the bottom)
+    // to the swim level = W' - h/2 = 3 - 0.9 = 2.1 exact, where it
+    // settles (the fixed point). The pre-FLUID-3 resting gate held it on
+    // the floor forever (the report: "sunk to the bottom, can't get
+    // out" — the shore wall is now a step, the pool floor no longer a
+    // trap).
+    Fixture f;
+    fillFloor(f, FluidKind::Water); // W' = 3 (2-deep), the floor y=1
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0}); // h 1.8: the swim level 2.1
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f}); // resting on the floor
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false); // pure wander (stays in)
+    bool offBottom = false;
+    for (int i = 0; i < 300; ++i) {
+        mob.update(kDt);
+        if (mob.position().y > 1.05f) {
+            offBottom = true;
+        }
+        // The rise never exceeds the swim level by more than one rise
+        // sub-step (the cap 1.5 over the 1/60 frame — the snap clamps the
+        // crossing to the swim level exactly).
+        EXPECT_LE(mob.position().y, 2.1f + 1.5f / 60.0f + 1e-6f)
+            << "frame " << i;
+    }
+    EXPECT_TRUE(offBottom); // it left the floor (not the pre-FLUID-3 stand)
+    EXPECT_FLOAT_EQ(mob.position().y, 2.1f);
+    EXPECT_EQ(mob.velocity().y, 0.0f);
+    EXPECT_FALSE(mob.onGround());
+    EXPECT_TRUE(mob.inFluid());
+    // The fixed point.
+    runMob(mob, 240);
+    EXPECT_FLOAT_EQ(mob.position().y, 2.1f);
+    EXPECT_EQ(mob.velocity().y, 0.0f);
+    EXPECT_FALSE(mob.onGround());
+}
+
+TEST(MobFluidTest, KnockbackSplashThenSwim) {
+    // FLUID-3 fix B1-splash: a mob at the 2-deep pool floor knocked up
+    // (the +3 impulse — the rise cap 1.5 clips it, the pre-FLUID-3
+    // un-capped dry sink decrement let a dry rise run away) breaches the
+    // SURFACE (the body's top clears W' = 3 — the swim look: the head out
+    // of the water) and settles at the swim level = 3 - 0.9 = 2.1 (the
+    // half-submerged terminal — the pre-FLUID-3 terminal was the dry
+    // W' float, the feet on the surface, "standing on water"). The feet
+    // never pass the swim level (the snap owns the crossing — a sub-step
+    // overshoot of at most the cap 1.5 over the 1/60 frame).
+    Fixture f;
+    fillFloor(f, FluidKind::Water); // W' = 3 (2-deep), the floor y=1
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0}); // h 1.8: the swim level 2.1
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    mob.addKnockback({0.0f, 3.0f, 0.0f}); // the upward impulse
+    bool breached = false;
+    for (int i = 0; i < 300; ++i) {
+        mob.update(kDt);
+        if (mob.position().y + def.model.height > 3.0f) {
+            breached = true; // the body's top cleared the surface
+        }
+        EXPECT_LE(mob.position().y, 2.1f + 1.5f / 60.0f + 1e-6f)
+            << "frame " << i;
+    }
+    EXPECT_TRUE(breached); // it splashed over the surface
+    // The half-submerged swim terminal (exact, the fixed point).
+    EXPECT_FLOAT_EQ(mob.position().y, 2.1f);
+    EXPECT_EQ(mob.velocity().y, 0.0f);
+    EXPECT_FALSE(mob.onGround());
+    EXPECT_TRUE(mob.inFluid());
+    runMob(mob, 240);
+    EXPECT_FLOAT_EQ(mob.position().y, 2.1f);
+    EXPECT_TRUE(mob.inFluid());
+}
+
+TEST(MobFluidTest, DryBodyAboveWaterNoRise) {
+    // FLUID-3 fix B1 (the "standing on water" production chain): a DRY
+    // body at the water surface does NOT rise (the passive-rise inFluid
+    // gate — the pre-FLUID-3 rise ran on a dry body in the band, pushing
+    // it to the dry W' float) and does NOT take fluid forces at all.
+    // Part A (the band hover): a body preset in the dry at-surface band
+    // (the feet 0.2 above W', the body clear of the water, no support —
+    // a hover) keeps its vy (the pre-FLUID-3 dry-rise would have pushed
+    // it; the player's dry-band snap to the feet-plane is the accepted
+    // first-person Q2 deviation — the mob model does not copy it). The
+    // band hold (the frozen vy) is a preset-only artifact: a real mob in
+    // the band arrives falling (vy < 0) or from the swim level.
+    Fixture f;
+    fillFloor(f, FluidKind::Water); // W' = 3
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity hover = makeMob(f, def, {8.5f, 3.2f, 8.5f}); // 0.2 above W'
+    hover.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    for (int i = 0; i < 300; ++i) {
+        hover.update(kDt);
+        // No rise (and no pull-down snap): the hover holds (the band's
+        // keep-vy with vy 0 — the dry body is untouched by the fluid
+        // model).
+        EXPECT_FLOAT_EQ(hover.position().y, 3.2f) << "frame " << i;
+        EXPECT_EQ(hover.velocity().y, 0.0f) << "frame " << i;
+        EXPECT_FALSE(hover.inFluid()) << "frame " << i;
+    }
+    // Part B (the gravity fall): a body ABOVE the band (0.5 over W') is
+    // not in the fluid model at all — plain gravity pulls it down (no
+    // buoyancy while dry), it passes the band at the gravity-arrived vy
+    // (the frozen keep-vy — the pre-FLUID-3 un-gated sink would have
+    // decremented it in the band), enters the water (the -4 entry-momentum
+    // clamp), dives to the floor and — 2-deep pool, the Q2 depth gate —
+    // rises to the swim level terminal.
+    MobEntity fall = makeMob(f, def, {8.5f, 3.5f, 8.5f}); // 0.5 above W'
+    fall.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    float minDryVy = 0.0f;
+    bool fell = false;
+    for (int i = 0; i < 300; ++i) {
+        fall.update(kDt);
+        if (!fall.inFluid() && fall.position().y <= 3.4f) {
+            // The dry band pass: the gravity-arrived vy, frozen (no
+            // buoyancy decrement, no -4 clamp).
+            minDryVy = std::min(minDryVy, fall.velocity().y);
+        }
+        if (fall.position().y < 3.4f) {
+            fell = true; // gravity pulled it below the preset
+        }
+    }
+    EXPECT_TRUE(fell);
+    // Five gravity frames (3.5 -> the band at 3.37) = 5 x 32/60 = 8/3 —
+    // the exact frozen band pass (the pre-FLUID-3 sink ran it to -4).
+    EXPECT_NEAR(minDryVy, -8.0f / 3.0f, 1e-5f);
+    // The full cycle settles at the swim level (not the pre-FLUID-3 dry
+    // W' float).
+    EXPECT_FLOAT_EQ(fall.position().y, 2.1f);
+    EXPECT_EQ(fall.velocity().y, 0.0f);
+    EXPECT_FALSE(fall.onGround());
+    EXPECT_TRUE(fall.inFluid());
 }
 
 TEST(MobFluidTest, OnLandMobIsFluidInert) {

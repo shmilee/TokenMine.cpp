@@ -6,7 +6,9 @@
 > **每类只保留靠前（最重要）一半 = 29 项；10-25 用户新增 2 项**
 >（GEN 行 ④⑤：洞穴破碎度 / 浮空树，用户实机体验报障）**+ 10-25
 > 交付上报 1 项（GEN 行 ⑥：树放置半区缺失，wz 循环上界 bug，用户定案
-> 立项）= 32 项——32 项全部完成 = v1.0 发布**。此后任务只从本表取，
+> 立项）+ 10-26 实机报障 2 项（UX 行 ①：渲染状态泄漏白盒/黑块 =
+> UXFIX-1；FLUID 行 ③：mob 涉水悬空/站水 = FLUID-3，用户 10-26 定案
+> 入表）= 34 项——34 项全部完成 = v1.0 发布**。此后任务只从本表取，
 > 不另列菜单；增删格子需用户确认。
 
 ## 砍半规则
@@ -16,7 +18,7 @@
   MC 细节对齐。
 - 砍掉的项不删除：记入「砍掉清单」（保留原代号），可一句话恢复入表。
 
-## v1.0 任务矩阵（32）
+## v1.0 任务矩阵（34）
 
 | 系统 | ① | ② | ③ | ④ | ⑤ | ⑥ |
 |---|---|---|---|---|---|---|
@@ -24,12 +26,13 @@
 | PIPE 帧管线与并发 | ~~PIPE-1 worker网格化~~ 完成 | ~~PIPE-2 存档增量~~ 完成 | | | | |
 | LGT 光照 | ~~LGT-1 union-region~~ 砍除 | ~~LGT-2 叶子光衰减~~ 完成 | | | | |
 | GEN 世界与生成 | ~~GEN-1 面条洞穴~~ 完成 | ~~GEN-2 树生长~~ 完成 | ~~GEN-3 矿脉形态~~ 完成 | ~~GEN-4 洞穴破碎度~~ 完成 | ~~GEN-5 浮空树~~ 完成 | ~~GEN-6 树放置半区缺失~~ 完成（v0.20.0） |
-| FLUID 流体 | ~~FLUID-1 水量守恒~~ 完成 | ~~FLUID-2 游泳划水~~ 完成 | | | | |
+| FLUID 流体 | ~~FLUID-1 水量守恒~~ 完成 | ~~FLUID-2 游泳划水~~ 完成 | ~~FLUID-3 mob涉水修正~~ 完成（v0.32.0，10-26 实机报障） | | | |
 | ENT 实体/Mob/移动 | ~~ENT-1 四肢摆动~~ 完成 | ~~ENT-2 BlockState★~~ 完成 | ~~ENT-3 mob踏阶~~ 完成 | ~~ENT-4 水体交互~~ 完成 | | |
 | SURV 生存/战斗/效果 | ~~SURV-1 护甲~~ 完成 | ~~SURV-2 氧气窒息~~ 完成 | ~~SURV-3 耐久~~ 完成 | ~~SURV-4 药水饮用~~ 完成 | ~~SURV-5 mob效果~~ 完成 | |
 | CRAFT 物品/合成/面板 | ~~CRAFT-1 工作台分块★~~ 完成（v0.21.0） | ~~CRAFT-2 物品3D模型~~ 完成（v0.22.0） | ~~CRAFT-3 材质音效~~ 完成（v0.23.0） | | | |
 | SAVE 存档 | ~~SAVE-1 自动存档~~ 完成（v0.24.0） | | | | | |
 | PRE 表现层 | ~~PRE-1 中文字体~~ 完成（v0.25.0） | ~~PRE-2 边缘雾~~ 完成（v0.26.0） | ~~PRE-3 水面波纹~~ 完成（v0.27.0） | ~~PRE-4 云与环境音~~ 完成（v0.28.0） | ~~PRE-5 透明discard~~ 完成（v0.29.0） | ~~PRE-6 掉落光照~~ 完成（v0.30.0） |
+| UX 实机报障 | ~~UXFIX-1 渲染状态泄漏~~ 完成（v0.31.0，10-26 实机报障） | | | | | |
 
 ★ = 前置项：ENT-2（BlockState）是 CRAFT-1 / GEN-2 的前提。
 
@@ -134,13 +137,30 @@
   EXACT【深度无关】+ S2c 落水 y==42 池底互斥 ×2 EXACT【场景预置 bug
   feet 49 头嵌盒顶 → 48 修正】；S3 水下输入三项留新机器（2fps 墙钟
   hold 抖动，PITS 有录）；5 处设计案偏差全部机制级合理（commit 有
-  录）。发布 **v0.7.0**。FLUID 行 2/2 全清。
+  录）。发布 **v0.7.0**。
+- ~~**FLUID-3 mob 涉水修正**~~ — **完成（2026-10-26，v0.32.0，10-26 用户实机报障
+  入表）**：根因 = ENT-4 共享流体模型三缺陷（上浮/下沉分支无 inFluid 门
+  + 浮漂终态干身踩水皮 + mob 踏阶 `!m_inFluid` 双门无出口）→ 修复 = 下沉
+  inFluid 门（悬崖坠水"降落伞"修，干带 keep vy 玩家孪生对齐）+ 上浮 inFluid
+  门 + Q2 深度门（池深 ≥2 的 resting 体上浮出底，1 格浅池站底不变 = E4
+  主线保留）+ snap 改**游泳位 W'−h/2**（半浸没 MC 游泳观感，封闭不动点
+  保留）+ W' 浸没体改真水面上扫（干身路径 World 读逐位不变）+ mob 踏阶删
+  `!m_inFluid`（涉水 mob 踏 1 格岸壁出池 = 玩家对齐；ENT-4 语义修订，门 94
+  st1 历史期望翻转）。**玩家孪生位级不变**（test_player.cpp 零改动红线）；
+  item 随共享路径 = 半浸没终态记档；偏离：无 swim-up 爬岸 / 击退可溅出表面 /
+  带内 hover 冻结 preset 专属。零 format（19）/config/内容，帧锁定。
+  1677/1677（+5 新 / 重钉 6 / 反转 1，stash 判别 11 FAIL）、`-Werror` 0 警告。
+  门 115：S1 PASS = 第 115 次结构性免疫（fresh 60f 无输入 new≡old v0.31.0
+  字节一致；基线视图零水面 + 60f 零 mob 入水 + 干身 W' 读恒等 = 结构惰性）
+  + S2 判别场景 A/B（zombie 深池崖困 / 浅池出池，帧探针 y 值互斥）+ 性能
+  fall 900f 同档 = 成本可忽略（干身零新增读，浸没 ≤32 同列窗读）——详见
+  `docs/archive/phase-fluid3.md`。发布 **v0.32.0**。FLUID 行 3/3 全清。
 
 ### ENT 实体/Mob/移动
 - ~~**ENT-1 四肢摆动**~~ — **完成（2026-10-24 夜）**：mob 摆腿动画（99.x 残余 #4）：**swing 相位 = per-mob 整数**（`MobEntity::m_swingPhase` 0..63，移动帧 +2【整周期 32 帧 = 0.533 s】/ 静止帧 −4 衰减到 0【16 帧收步】，「移动」= 帧边界水平位移严格不等式【不读 AI 意图】；纯渲染层 = 不入存档【mob 本 ephemeral】+ 无 swing 数据类型恒 0 结构性惰性）+ **constexpr 16.16 定点正弦表**（64 条、编译期 14 项 Taylor 生成、零运行期 libm【std::sin 跨平台位级不稳定】；余数界 x²⁹/29! ≤ 9.2e-9 ≪ 半量子）+ **数据驱动 `swings` 段**（box 可选 `name` + 模型 `swings: [{part, amplitude (0,1] 弧度, group 0/1}]` 严格解析、part 存在性解析期交叉校验【grows_to 纪律、文件内引用】、未知键/重名/重复认领点名拒）+ **CPU 逐帧顶点变换**（pivot = box 顶面中心纯函数、绕 mob 局部 X 轴【yaw 前】、定点 sin/cos 整数 Taylor 每部件预计算、法线同旋【face shade 桶跟随】、phase 0 = 位级恒等 = 静态 fast path 结构性免疫）+ **per-mob 动态 VBO**（`Mesh::uploadDynamic`/`updateVertices` GL_DYNAMIC_DRAW、首摆帧分配、updateEntities 拆除 pass 释放）+ **config `mobs.limb_swing`**（默认 true、false = v0.9.0 静态基线 E2E 对照组）+ **内容**（chicken 2 腿 0.5 rad 半周相位 / cow·sheep 4 腿 0.7 rad 对角步态 / spider 8 腿 0.9 rad 偶奇分组；**zombie/skeleton 无独立 arm part = 不造几何记档**）；**AI/物理/存档零改动**；1367/1367（+17）、0 警告；base18 门 = 结构性免疫（基线帧无 mob = 99.7 先例）；偏离：翅不摆（MC 只飞行时扇翅）/ zombie·skeleton 无臂 / 相位不入档 / 幅度上限 1 rad
 - ~~**ENT-2 BlockState★**~~ — **完成（2026-10-22 夜）**：P94 楼梯朝向（World 每格 byte + format 14 `stairs`）泛化为**通用 per-instance 状态机制**：`Chunk::m_blockState` 换名 + 哨兵泛化 255 + 双门控数据驱动（Stairs 形状隐式 count 4 ∪ `model.state_count`[1,255]+`state_default` 严格配对，楼梯显式声明 = 矛盾拒）+ `World::get/setBlockState`（只验 <255，域由收口/旋转/parse 三处强制）+ Game 三写入点泛化（收口/旋转 `(s+1)%stateCount()`/P97 钩子）+ **format 15 `states` 段**（全量 + 逐条目域校验 + 双向交叉校验 + 键纪律三向 + 14→15 值保真迁移 + collectSave 两路 journal 派生）+ **init 不变量**（worldgen 5 类放置源 stateful 点名拒 = "stateful 格必 session 派生"结构化）；**四个 per-block map 不迁移**（byte/struct 两类状态消费者不相交 = YAGNI 定案，CRAFT-1 取 campfire 范式 + 纪律）；shipped 内容零字段改动；1260/1260（+20 新，存量换名适配语义不动）；base18 **第 85 门 = 结构性免疫不重锚**（新 ×2 与门 84 锚字节一致）；E2E：S2 预置状态场景 A/B **298,211 px = per-instance 朝向首次像素级验证**（P94 时代仅存证）+ round-trip 截图字节一致 + S3 迁移 shot 与 S2A 字节一致（值保真端到端背书）；晨间潜旋回归推迟（pent2_rot.zsh 就绪）；PITS +1（#208 场景几何探针纪律）
 - ~~**ENT-3 mob 踏阶**~~ — **完成（2026-10-25）**：step-up 纯几何从 Player 上提为 `Entity::stepUp`（受保护，player 行为**逐位不变** = `test_player.cpp` 零改动全过钉死）+ MobEntity 在 `moveInSubsteps` 前后镜像调用（pre-substep 水平速度捕获【被 clamp 轴子步内清零】+ `onGround` 门 + `normalized(preMove)` + 本 tick 距离重放 ≤ 终端速度 38/60 ≈ 0.633 < 1.0 无穿透 = 硬规则 6 共存）——判定与 player **同一个函数**：P99 TRUE-1-block（solid 区顶高 ≤ 1.0+1e-6：slab 0.5/满块 1.0/玻璃板 1.0 可踏，墙/栅栏 1.5 帽不可踏，楼梯 = 脚位点采样）+ front 格上方 2 格空 + face 贴整数 ±1e-4 + X 先 Z 后每 tick 至多一次；AI/速度/子步节奏零改动、零 format/config/内容（mob ephemeral）；帧锁定纯几何（无 real dt/无随机 = 硬规则 8）。1376/1367（+9：踏满块/踏 slab 贴顶 1.5 exact/不踏墙/不踏栅栏/不踏 2 格高/帧锁定双体位级一致/击退入阶 hasRoomAt 全程/单格 −X 可踏/+X 钉死 quirk）、`-Werror` 0 警告；门 93：竞技场（12×12 平坦 + 3 高墙封闭 + 满宽 2 格厚 barrier——**2 格厚 = 绕开 +Z 1 格宽 quirk**，PITS）三态互斥 PASS【new+台阶 zombie 追逐 7.8 块对角路径**踏阶跨越**至攻击位连击击杀 idle 玩家（hp<20）/ old v0.10.0 二进制+同场景 hp=20 卡台阶 / new+全墙 barrier hp=20 不可踏；×2 RAW 字节一致 + savenorm EXACT】+ 摆动可见性（on/off 157,158 world px 隔离，config 三验协议）+ base 门对 gate88 锚（结构性免疫：基线帧无 mob）+ 插桩性能（render med 0.47-0.60 ms / ents 11-26 ms/300f = 成本可忽略）。**顺带记档 2 个 P16 潜伏 quirk**（探针实证 + player 同款：① +X/+Z 方向 front 格查 snapped+1 → 恰 1 格宽台阶踏不过（−X/−Z 正常）② 非整数脚高行走 face 巧合对齐整数 → 凭空抬升 1.0 再落回——均为共享几何的既有行为，修复 = **player 行为变更**单独立项，本 phase 只记档不修）。
-- ~~**ENT-4 水体交互**~~ — **完成（2026-10-25，发布 v0.12.0）**：mob/掉落物游泳、浮力（实体条）——玩家 FLUID-2 的**无输入孪生**上提 `Entity` 共享（`refreshFluidState`：inFluid = AABB 严格重叠水或熔岩【player isInWater/isInLava 同款】+ W' = 中心列最高 L8 +1【扫深 32，同款循环】+ atSurface 0.4 带 + **kind 记忆**【漂浮终态脚面离水由 atSurface 带维持——空中沿用最后浸没 kind，否则熔岩漂浮终态塌，首轮单测实证】；`integrateFluid`：浮漂 snap【交叉重查 + 上浮速门，终态 y=W'/vy=0/onGround=false = fps 无关不动点】> 被动上浮【buoyancy 12 帽 1.5，vy≥0 门 = 带动量入水沉底 MC dive 语义 + 池底站立 fresh resting 门 + 流膜无面门】> 下沉【同值下漂帽 −4】，流体中零重力；`isRestingOnSolid` 纯上提 = player 逐位不变 FLUID-2 单测零改动）。mob：AI 状态机零改动（追逐/游走照常）+ 涉水/水下水平 ×`kUnderwaterSpeedFactor` 0.6（AI 与击退同门，无 per-mob 数据字段 = YAGNI 记档偏离）+ **水下禁 step-up**（ENT-3 门 +`!m_inFluid`）+ 子步峰值速度流体中 cap 峰集（陆上公式逐位未动）+ **站立 mob 不上浮**（同 MC——mob 上浮只经击退上抛）；item：同款浮力（预置静水浮面静止无漂移【摩擦保留 = MC 简化记档】+ 带动量坠水沉底站立互斥）+ **熔岩对称同浮力**（player 熔岩弱节奏 = 记档偏离）；箭穿过水不动（投射物边界记档）；P58 燃烧零改动（MobFireTest 熔岩池坐底同速率钉死）；零 format/config/内容、帧锁定（1/60 无 real dt 无随机）。1400/1400（+11：mob 7【判定/沉水上浮 W'=3 exact 不动点/坠水沉底互斥/涉水 ×0.6 ratio/水下不踏阶 vs 陆上跨越互斥/双体 300 帧逐位/陆上 inert】+ item 4【浮面 exact + 滑行静止/坠水沉底互斥/熔岩对称/陆上 inert】）、干净重建 `-Werror` 0 警告、陆上逐位不变（存量 1389 零回归 + 双 inert 锚）。**门 94**：S1 base 对 gate88 锚（结构性免疫）+ S2 item 浮面 **39.0 exact**/沉底 **36.0 exact** 互斥 ×2 RAW + savenorm EXACT（fire=9999s 对照 blocks 924/924 EXACT）+ S3 涉水三态互斥（arena#2：5×5 岛 level 39 + 满宽水膜环 + **高架干道**【level 39 实体桥——膜水沿同层干道漫灌 L8→L7 探针实证 f38=7 → 通道变水道零生成的根治】+ 1 行水隙；st1 new+膜 生成干道→涉水隙→卡岛南面 Δ3.80>1.6 y=38 静止 **hp=20** / st2 old v0.11.0+膜 同场景同生成点 踏阶上岛 Δ0.99 **hp=0** / st3 new 无膜 陆上跨越 **hp=0**；×2 RAW ×3 + savenorm2 EXACT ×3）。**场景设计三轮失效根因链**（PITS 243-245）：① 生成环审计须用 spawner 精确语义【整数格偏移环 dx²+dz²∈[25,36] + floor band ±kSpawnFloorDelta 2 + headroom 2 格含流体 + 未编辑自然地形=潜在生成平台 + 环边界 ±0.5 jitter】——墙顶/岛缘/自然地形生成平台曾致三态全 hp20 两轮（zombie 生成在 y41/y43 墙顶被墙封死）；② 膜水漫灌 L8→L7 流；③ 玩家预置格半格行界（z-18.5 属 z-19 行 = 预置进 seal 墙 → 玩家被推出 y43）。工具定案：`tm_scene_check.py` v2 跑前秒级预校验（负例验证拦全部 4 类失效）+ `tm_run_lib.zsh` 黑相 1 帧探针协议。**存档 lake 火 real-dt 漂移**（非缺陷，PITS 244）：shipped 表面湖 (24,26) 帧 0 点燃（backtrace 实证 FluidSim::tick→setBlock），火寿命 4s = real dt → 跨墙钟跑存档 blocks 段 ±13 格漂移；fire=9999s 对照 EXACT。性能（插桩 A/B v0.11.0，发布前测试）：render med 0.41-0.72 ms（old 0.42-0.84 同档）/ ents 2.7-3.4 ms/300f（含 1 涉水 zombie；old 2.3-3.6 同档）/ vd16 填充全指标一致 = **ENT-4 成本可忽略**。ENT 行 4/4 全清。
+- ~~**ENT-4 水体交互**~~ — **完成（2026-10-25，发布 v0.12.0）**：mob/掉落物游泳、浮力（实体条）——玩家 FLUID-2 的**无输入孪生**上提 `Entity` 共享（`refreshFluidState`：inFluid = AABB 严格重叠水或熔岩【player isInWater/isInLava 同款】+ W' = 中心列最高 L8 +1【扫深 32，同款循环】+ atSurface 0.4 带 + **kind 记忆**【漂浮终态脚面离水由 atSurface 带维持——空中沿用最后浸没 kind，否则熔岩漂浮终态塌，首轮单测实证】；`integrateFluid`：浮漂 snap【交叉重查 + 上浮速门，终态 y=W'/vy=0/onGround=false = fps 无关不动点】> 被动上浮【buoyancy 12 帽 1.5，vy≥0 门 = 带动量入水沉底 MC dive 语义 + 池底站立 fresh resting 门 + 流膜无面门】> 下沉【同值下漂帽 −4】，流体中零重力；`isRestingOnSolid` 纯上提 = player 逐位不变 FLUID-2 单测零改动）。mob：AI 状态机零改动（追逐/游走照常）+ 涉水/水下水平 ×`kUnderwaterSpeedFactor` 0.6（AI 与击退同门，无 per-mob 数据字段 = YAGNI 记档偏离）+ **水下禁 step-up**（ENT-3 门 +`!m_inFluid`）+ 子步峰值速度流体中 cap 峰集（陆上公式逐位未动）+ **站立 mob 不上浮**（同 MC——mob 上浮只经击退上抛）；item：同款浮力（预置静水浮面静止无漂移【摩擦保留 = MC 简化记档】+ 带动量坠水沉底站立互斥）+ **熔岩对称同浮力**（player 熔岩弱节奏 = 记档偏离）；箭穿过水不动（投射物边界记档）；P58 燃烧零改动（MobFireTest 熔岩池坐底同速率钉死）；零 format/config/内容、帧锁定（1/60 无 real dt 无随机）。1400/1400（+11：mob 7【判定/沉水上浮 W'=3 exact 不动点/坠水沉底互斥/涉水 ×0.6 ratio/水下不踏阶 vs 陆上跨越互斥/双体 300 帧逐位/陆上 inert】+ item 4【浮面 exact + 滑行静止/坠水沉底互斥/熔岩对称/陆上 inert】）、干净重建 `-Werror` 0 警告、陆上逐位不变（存量 1389 零回归 + 双 inert 锚）。**门 94**：S1 base 对 gate88 锚（结构性免疫）+ S2 item 浮面 **39.0 exact**/沉底 **36.0 exact** 互斥 ×2 RAW + savenorm EXACT（fire=9999s 对照 blocks 924/924 EXACT）+ S3 涉水三态互斥（arena#2：5×5 岛 level 39 + 满宽水膜环 + **高架干道**【level 39 实体桥——膜水沿同层干道漫灌 L8→L7 探针实证 f38=7 → 通道变水道零生成的根治】+ 1 行水隙；st1 new+膜 生成干道→涉水隙→卡岛南面 Δ3.80>1.6 y=38 静止 **hp=20** / st2 old v0.11.0+膜 同场景同生成点 踏阶上岛 Δ0.99 **hp=0** / st3 new 无膜 陆上跨越 **hp=0**；×2 RAW ×3 + savenorm2 EXACT ×3）。**场景设计三轮失效根因链**（PITS 243-245）：① 生成环审计须用 spawner 精确语义【整数格偏移环 dx²+dz²∈[25,36] + floor band ±kSpawnFloorDelta 2 + headroom 2 格含流体 + 未编辑自然地形=潜在生成平台 + 环边界 ±0.5 jitter】——墙顶/岛缘/自然地形生成平台曾致三态全 hp20 两轮（zombie 生成在 y41/y43 墙顶被墙封死）；② 膜水漫灌 L8→L7 流；③ 玩家预置格半格行界（z-18.5 属 z-19 行 = 预置进 seal 墙 → 玩家被推出 y43）。工具定案：`tm_scene_check.py` v2 跑前秒级预校验（负例验证拦全部 4 类失效）+ `tm_run_lib.zsh` 黑相 1 帧探针协议。**存档 lake 火 real-dt 漂移**（非缺陷，PITS 244）：shipped 表面湖 (24,26) 帧 0 点燃（backtrace 实证 FluidSim::tick→setBlock），火寿命 4s = real dt → 跨墙钟跑存档 blocks 段 ±13 格漂移；fire=9999s 对照 EXACT。性能（插桩 A/B v0.11.0，发布前测试）：render med 0.41-0.72 ms（old 0.42-0.84 同档）/ ents 2.7-3.4 ms/300f（含 1 涉水 zombie；old 2.3-3.6 同档）/ vd16 填充全指标一致 = **ENT-4 成本可忽略**。ENT 行 4/4 全清。**FLUID-3（v0.32.0）语义修订**（用户实机报障 mob 站在水上/悬空，见 `docs/archive/phase-fluid3.md`）：`!m_inFluid` step-up 门删除（涉水 mob 可踏 1 格岸壁出池 = 玩家对齐）+ 浮漂终态 W'（干身踩水皮）→ 游泳位 W'−h/2（半浸没）+ 池深 ≥2 的 resting 体上浮（1 格浅池站底不变）+ W' 浸没体改真水面上扫 + 下沉/浮力 inFluid 门控（干带 keep vy，悬崖坠水"降落伞"修复）；门 94 S3 st1"卡水隙"旧语义翻转（历史 E2E 记录，活契约 = 重钉单测 WadingMobStepsOutOfWater）。
 
 ### SURV 生存/战斗/状态效果
 - ~~**SURV-1 护甲**~~ — **完成（2026-10-25，发布 v0.13.0）**：12 件护甲 = **MC 精确值**（leather 1/3/2/1 = 7 / iron 2/6/5/1 = 14 / diamond 3/8/6/3 = 20，max_stack 1、材质档三链；chain 无材料 = 记档偏离）+ **MC 整数 floor 减伤**（`Player::damage` 单收口 = **全伤害源生效含坠落**【摔落缓冲已覆盖】，次序 armor → resistance → 吸收池，`floor(amount×(100−4×pts))/100`，**pts 0 位级恒等** = 存量伤害测试零改动）+ **右键穿戴/交换/脱下**（点火器之后、潜行旋转之前；空手按 head→chest→legs→feet 序脱下到选中槽——**震荡语义**：下点 = 重穿，脱整套须每点之间 Tab 换空槽【热栏只有 Tab 循环无数字键 = 既有交互面】；10-25 门内修复脱下 **dangling reference**【引用跨清空 = 护甲件消失】→ 逻辑上提纯函数 `item/armor.{hpp,cpp}` `armorRightClickUse` = campfire 范式 + 9 单测含回归，PITS 246）+ **format 16 `player.armor`**（恒写只含占位槽、双向交叉校验 + 槽名-物品数据点名、15→16 迁移空）+ **HUD 心行上方护甲排**（仅占位槽且指针捕获时绘制 = 无甲零绘制结构性免疫）+ cloth 音效复用 + F3 armor 点行。1430/1430（+21 首轮 / +9 修复）、`-Werror` 0 警告。**门 95**：S1 base 对 **gate88 锚字节一致（真免疫）** + S2 坠落 13 格 = **10.0 / 15.6 / 18.0 三值互斥 ×2 RAW**【旧 v0.12.0 无甲 = 10.0 回归恒等；floor(10×44)/100 = 4.4 / floor(10×60)/100 = 6.0】+ S3 穿戴 armor={head:iron_helmet} ×2 RAW + 整套脱下（L R Tab R Tab R Tab R → slots0-3 序 + sel=3）×2 RAW + savenorm2 EXACT ×2【fires remaining real-dt 剥离 = PITS 244 非缺陷】+ S4 护甲排 **81 px 包围盒 = 恰 4 件皮甲图标行、带外零差异**（HUD 仅指针捕获时绘制 = 捕获+重捕协议，"Pointer captured" ×1 实证 ×4）+ S6 init 失败点名 ×2【`armor_points must be in [0,20], got 21` / `armor_slot 'hood' is not a known slot`】。**PITS 247 = T450 输入送达协议**（PID 定位窗口 + viewable+top 窗口期 + 每输入前 windowfocus --sync + 1200f 长跑 + 黑相 1 帧探针门控）。**偏离**：float HP 无半心量化（1.0 伤×3 点 = 0.88 非 0）、全源减伤（窒息 = SURV-2 届时 MC 豁免规则）、mob 无护甲、无耐久（= SURV-3）、无附魔。性能（插桩 A/B v0.12.0，发布前测试）：fall 900f 三窗 render med 0.37-0.47 / upd med 45.8-48.7 / stream 1.8-2.4 s 全指标同档（old render 0.37-0.45 / upd 46.7-49.9 / stream 1.8-2.4 s）+ vd16 填充 render 0.71-0.72 vs 0.69-0.75 / stream 44.7/30.5 vs 45.6/30.8 ms = **护甲成本可忽略**。SURV 行 1/5。
@@ -310,6 +330,26 @@
 - ~~**PRE-5 透明 discard**~~ — **完成（2026-10-26，v0.29.0，PRE 行 5/6）**：根因 = 全项目零 depthMask（alpha-0 像素在 blend pass 写深度 → 叶孔/玻璃框后的几何被不可见深度遮挡）。pass 三分（opaque/cutout/blend，mesher 第三桶 + MaskCell cutout 字段不并 quad）+ **块 property cutout 数据驱动路由**（严格 bool + cutout⇒transparent 配对 + shape 门控仅 cube/cross = 死字段点名拒；shipped 20 块 = 3 叶 + 3 花 + 7 麦 + 3 苗 + fire/torch + 2 营火；glass/pane/water/lava 保持 blend 桶）+ 物品 icon init 期 alpha 普查（isPureCutoutImage 纯函数，shipped 全 83 纯 cutout）+ **frag 唯一新行 alpha<0.5 discard**（u_discardEnabled 门控，桶无关 = glass 框/leaves 孔/fire 缝全修，水 0.78/玻璃芯 0.86/云 0.55 全不 discard）+ 渲染序 cutout 段（discard+深度写）先于 blend 段（setDepthMask(false)）+ render.alpha_test getBool 默认 true（config.json 零改动），off = 对 v0.28.0 位级恒等。零 format（19）/存档/音效。1664/1664（+16）、-Werror 0 警告。门 112：S1 PASS = **第 112 次门 + 重锚**（off≡old 字节一致 + on vs old diff 5616 px 全限定树冠区 y[0..427]【孔后见后层叶 1663 叶绿 + 冠顶孔后云 231 天蓝，y>650 零 diff】→ base18 锚刷新）+ S2 叶孔判别场景 PASS（石砌房间 + 2×2 叶墙 + 室内 torch + 3 物品，demo 区 1474 cutout 格清空：old≡off 字节一致 + on vs off **diff 210 px 限定 x[648..776] y[442..511]**（与预验逐像素同值）+ savenorm 全等）+ 性能 fall 双跑：fluidCells 逐位一致 + upd/swap/stream 同档 + **render med 持续 +5-13%（绝对 +0.02-0.08 ms 随叶列占比）= 混合列 +1 draw 的 iGPU 提交成本 <0.5% 帧预算，成本可接受如实记档**——详见 `docs/archive/phase-pre5.md`
 - ~~**PRE-6 掉落光照**~~ — **完成（2026-10-26，v0.30.0，PRE 行 6/6 收尾 = 32/32 全完成，v1.0 候选）**：根因 = 块立方/model 物品掉落顶点 skyLight=1.0 硬编码恒白。vert 端 per-draw uniform 覆盖（u_useDropLight/u_dropSky/u_dropBlock + 1 行门控分支，frag 零改动 = 昼夜缩放/ambient 底/雾自动继承）+ 纯函数 itemDropLight（AABB 中心格 std::floor 负坐标安全 → getSkyLight/getBlockLight ÷ kMaxLight；每帧采样无缓存 = 光照变化自然跟随）+ drawItemEntities 双路径接线（bind → set 3 → draw → rebind 复位 u_useDropLight=0 = program uniform 跨 draw 残留坑）+ `render.drop_light` getBool 默认 true（config.json 零改动），off = 3 uniform 从不 set = 对 v0.29.0 位级恒等（几何文件零改动 = 不重烘）。**参与遮挡半 = PRE-5 结构性闭合**（opaque/cutout 掉落写深度、blend 不写 = MC 纪律）+ S2 ③ 回归证明零新增代码。箭头/手持恒白 = 记档偏离（矩阵外）。零 format（19）/存档/内容/音效。1672/1672（+8）、`-Werror` 0 警告。门 113：S1 PASS = **第 113 次结构性免疫免重锚**（三侧 ×2 RAW + old≡off + **on≡old 字节一致**【零掉落 = 零 item draw 结构惰性】+ 锚连续性）+ S2 掉落光照 A/B PASS（密封长廊 3 掉落覆盖两路径【stone 远角 (0,0) 近黑 / apple 窗旁 (11,11) 0.733 亮 / dirt 地下洞不可见】：old≡off 字节一致 + on vs off **diff 77 px 限定 x[614..683] y[402..450] 与预验逐像素同值** + savenorm 全等；旧侧 ②≈① 恒白 vs 新侧 ②>>① 互斥判别）+ 性能 fall 双跑：fluidCells 四次跑逐位一致 + 重跑全指标同档【首轮 stream +36% = 环境噪声重跑证伪】= 成本可忽略——详见 `docs/archive/phase-pre6.md`
 
+### UX 实机报障
+
+- ~~**UXFIX-1 渲染状态泄漏**~~ — **完成（2026-10-26，v0.31.0，10-26 用户实机报障
+  入表）**：两条实机报障（v0.30.0）= ① 热栏/面板方块物品图标半透明白盒
+  ② 挖掘块面纯黑。根因同一泄漏家族（PRE-4 云 per-draw 状态泄漏，v0.28.0
+  起潜伏，locked 态专属 = 113 次无输入门全盲）：bug 1 = drawClouds 遗留
+  u_useTexture=0+u_color 白+u_alpha 0.55 被立方继承（CUBE PROBE 实证）；
+  bug 2 = 云/光束尾部 disableBlending 泄漏进 drawWorldOverlay，裂纹立方
+  (0,0,0,0) 透明底不透明写入。修复 = game.cpp 4 处（云/光束删自持 blend =
+  混合段所有权上移 / overlay 自持混合 / 立方显式 bind+u_useTexture=1+
+  u_color(1,1,1)+u_alpha=1.0 受害者侧防御），无输入位级恒等。零 format
+  （19）/config/内容。1672/1672、`-Werror` 0 警告。门 114：S1 PASS = 第
+  114 次结构性免疫（fresh 60f 七帧新旧二进制 md5 全同 + base18 锚刷新 =
+  PITS 265 远云带机器态与变更无关）+ S2a 挖掘 A/B PASS（old 块区纯黑
+  38314 px vs new 石色 40194 px）+ S2b 面板 A/B PASS（槽区白盒比 5.5/10.4
+  → new 纹理 219/419）+ S3 1672 + 性能 fall 900f（fluidCells 双侧逐位一致
+  + 全指标同档）= 成本可忽略。输入协议定案（PITS 266：XSendEvent SDL 忽略
+  = 键须 XTEST；Pointer captured 为 DEBUG 级）——详见
+  `docs/archive/phase-uxfix1.md`。发布 **v0.31.0**。UX 行 1/1 全清。
+
 ## 砍掉清单（34，v1.0 不含，保留原代号）
 
 - STRM：STRM-2 流体列保留
@@ -465,3 +505,56 @@
   输入跑 S2/S4/S5 = 窗口相位关闭补跑清单；场景坑 PITS 251；插桩 A/B
   成本可忽略）。
   SURV 行 3/5，v1.0 任务表 17/29。发布 **v0.15.0**。
+- 2026-10-25：SURV-4 药水饮用完成（饮用通道给效果 + instant_hp 瞬时原语
+  + 6 药水 + 瓶-水循环；1485/1485（+19）、门 98 S1 免疫 + S6 ×5；输入跑
+  10-26 补收全 PASS）。任务表 18/29。发布 **v0.16.0**。
+- 2026-10-25：GEN-4 洞穴破碎度完成（用户报障"洞穴太多太碎"：noise_scale
+  0.09→0.05 单参数重标定，pocket −91%；门 100 免疫）。任务表 19/31
+  （10-25 用户新增 GEN-4/5 = 分母 29→31）。发布 **v0.17.0**。
+- 2026-10-25：GEN-5 浮空树完成（用户报障"树长半空"：caveCarvesCell 纯谓词
+  守卫；门 101 免疫 + S2 补收 PASS）。任务表 20/31。发布 **v0.18.0**。
+- 2026-10-25：SURV-5 mob 效果完成（wither/poison 双载体 + 不死族免疫；
+  1519/1519（+25）、门 102；S3/S4 = 补跑清单）。SURV 行 5/5 全清。任务表
+  21/32（10-25 交付上报 GEN-6 = 分母 31→32）。发布 **v0.19.0** + release ③。
+- 2026-10-25：GEN-6 树放置半区修复完成（交付上报 bug 立项：wz 循环上界
+  X 基→Z 基 2 处一行级；1521/1521、门 103 免疫 + S2 树群 A/B PASS）。
+  任务表 32/32 执行序 22 项。发布 **v0.20.0**。
+- 2026-10-26：CRAFT-1 工作台分块完成（per-block 容器 + format 19 tables 段；
+  1535/1535（+14）、门 104 免疫 + S2 双工作台互斥 PASS）。任务表 23/32。
+  发布 **v0.21.0**。
+- 2026-10-26：CRAFT-2 物品 3D 模型完成（item JSON model 段 1..16 box +
+  手持/掉落/进食三上下文；1549/1549（+14）、门 105 免疫 + S2 掉落 A/B
+  PASS；H1/H2/H3 手持输入跑 10-26 补收）。任务表 24/32。发布 **v0.22.0**。
+- 2026-10-26：CRAFT-3 材质音效完成（sound_material + SoundBank stereo +
+  6 材质 ×3 事件 18 新 wav + 32 块赋值；1567/1567（+18）、门 106 免疫）。
+  CRAFT 行 3/3 全清。任务表 25/32。发布 **v0.23.0**。
+- 2026-10-26：SAVE-1 自动存档完成（120 s 真实 dt + 原子写三路共用；
+  1590/1590（+23）、门 107 免疫 + S2 自动存档实证）。SAVE 行 1/1 全清。
+  任务表 26/32。发布 **v0.24.0**。
+- 2026-10-26：PRE-1 中文字体完成（UTF-8 渲染 + 32 CJK glyph 死格复用 +
+  8 处 UI 中文化；1610/1610（+20）、门 108 免疫 + S2 死亡屏 A/B PASS）。
+  任务表 27/32。发布 **v0.25.0**。
+- 2026-10-26：PRE-2 边缘雾完成（流送盘缘距离雾，frag 雾 4 uniform +
+  独立深度表达式；1621/1621（+11）、门 109 免疫 + S2 三方雾 A/B PASS）。
+  任务表 28/32。发布 **v0.26.0**。
+- 2026-10-26：PRE-3 水面波纹完成（水顶面 tiled 采样窗帧锁定平移；
+  1631/1631（+10）、门 110 免疫 + S2 三方 A/B PASS）。任务表 29/32。
+  发布 **v0.27.0**。
+- 2026-10-26：PRE-4 云与环境音完成（云层平板 + 3 上下文环境音 + 3 新 wav；
+  1648/1648（+17）、门 111 = 重锚【云入基线天空区】+ S2 PASS）。任务表
+  30/32。发布 **v0.28.0**。
+- 2026-10-26：PRE-5 透明 discard 完成（pass 三分 + cutout 20 块数据驱动 +
+  frag 唯一 discard 行；1664/1664（+16）、门 112 = 重锚【叶冠修复入基线】
+  + S2 叶孔判别 PASS）。任务表 31/32。发布 **v0.29.0**。
+- 2026-10-26：PRE-6 掉落光照完成（vert 端 per-draw uniform 覆盖 + item
+  中心格光照采样；1672/1672（+8）、门 113 免疫 + S2 掉落光照 A/B PASS）。
+  PRE 行 6/6 全清 = **32/32 全完成 = v1.0 候选**。发布 **v0.30.0** +
+  release ⑦。
+- 2026-10-26：实机报障 2 项入表（用户定案，分母 32→34）：UXFIX-1 渲染状态
+  泄漏（热栏/面板白盒 + 挖掘黑块，PRE-4 云 per-draw 状态泄漏 locked 态专属）
+  完成，1672/1672、门 114 免疫 + S2a/S2b A/B PASS，发布 **v0.31.0**（任务表
+  33/34）。
+- 2026-10-26：FLUID-3 mob 涉水修正完成（用户实机报障"牛羊鸡悬空/站水"：
+  游泳位 + 深度门 + 下沉 inFluid 门 + 踏阶解禁；1677/1677（+5 新/重钉 6/
+  反转 1）、门 115；玩家位级不变）。**34/34 全完成 = v1.0**。发布
+  **v0.32.0**。

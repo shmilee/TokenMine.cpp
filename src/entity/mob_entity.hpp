@@ -1,17 +1,22 @@
-// MobEntity: a data-driven hostile mob (Phase 20).
-//
-// Physics: the shared Entity AABB physics (gravity / terminal velocity,
-// sub-stepped axis moves). Unlike dropped items there is NO ground
-// friction: the AI sets the horizontal velocity every frame (exact data
-// speed), and knockback decays with its own damping while the knockback
-// window is open. ENT-4: while the AABB overlaps a water OR lava cell
-// (or the body rests at the fluid's surface) the physics switches to the
-// shared fluid model (Entity::refreshFluidState + integrateFluid — the
-// input-free twin of the player's FLUID-2 swim: passive rise, the
-// geometric W' float, the sink / pool-floor stand), the horizontal speed
-// is gated by kUnderwaterSpeedFactor, and the step-up (ENT-3) is
-// forbidden in fluid. The AI state machine is untouched — chase / wander
-// steer as usual underwater.
+ // MobEntity: a data-driven hostile mob (Phase 20).
+ //
+ // Physics: the shared Entity AABB physics (gravity / terminal velocity,
+ // sub-stepped axis moves). Unlike dropped items there is NO ground
+ // friction: the AI sets the horizontal velocity every frame (exact data
+ // speed), and knockback decays with its own damping while the knockback
+ // window is open. ENT-4 / FLUID-3: while the AABB overlaps a water OR
+ // lava cell (or the body is at the fluid's surface band) the physics
+ // switches to the shared fluid model (Entity::refreshFluidState +
+ // integrateFluid — the input-free twin of the player's FLUID-2 swim:
+ // the passive rise to the swim level (the body's mid-axis on the
+ // surface — the Q2 depth gate lets a resting body rise in a pool >= 2
+ // deep, a 1-deep wade still stands), the geometric swim-level float,
+ // the sink / pool-floor stand), the horizontal speed is gated by
+ // kUnderwaterSpeedFactor, and the step-up (ENT-3) runs in fluid too (the
+ // FLUID-3 lift of the ENT-4 ban — a wading mob steps out of a 1-deep
+ // pool; a swimming mob, onGround false, cannot step up: no swim-up shore
+ // climb, the documented deviation). The AI state machine is untouched —
+ // chase / wander steer as usual underwater.
 //
 // AI (deterministic: the same seed + input sequence yields the same
 // trajectory). The game steps mobs with a FIXED per-frame dt (the day

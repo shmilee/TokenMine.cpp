@@ -95,10 +95,14 @@ void MobEntity::update(double dt) {
     // <= 1.0: a slab / full block / a glass pane — NOT the wall / fence
     // 1.5 barrier). This is the fix for the chase getting permanently
     // stuck on 1-block terrain steps. Pure geometry: frame-locked, no real
-    // dt, no randomness (hard rule 8). ENT-4: forbidden in fluid — a
-    // step-up in water is meaningless (no ground pace) and would break
-    // the pool-floor stand / the W' float terminal.
-    if (m_onGround && !m_inFluid && lengthSq(preMove) > 0.0f) {
+    // dt, no randomness (hard rule 8). FLUID-3: no fluid gate (the ENT-4
+    // `!m_inFluid` ban is lifted — the player never had one): a wading mob
+    // (on the 1-deep pool floor) steps out of the water over a 1-block
+    // shore (the "walked in, can't get out" report, A1); a swimming mob
+    // (at the swim level, onGround false) still cannot step up — no
+    // swim-up shore climb (the documented deviation, the user's look is a
+    // mob swimming at the surface, not stuck).
+    if (m_onGround && lengthSq(preMove) > 0.0f) {
         stepUp(normalized(preMove), preMoveSpeed * static_cast<float>(dt));
     }
 
@@ -164,11 +168,13 @@ void MobEntity::update(double dt) {
 
 void MobEntity::integrate(float h) {
     if (m_inFluid || m_atSurface) {
-        // ENT-4: the fluid force model (the player's FLUID-2 integrate,
-        // the input branches removed — a mob has no Space / crouch: it
-        // rises or sinks, it does not dive or swim-up). No gravity in
-        // fluid; the at-surface branch keeps the W' float terminal a
-        // fixed point after the feet clear the water cells.
+        // ENT-4 / FLUID-3: the fluid force model (the player's FLUID-2
+        // integrate, the input branches removed — a mob has no Space /
+        // crouch: it rises or sinks, it does not dive or swim-up). No
+        // gravity in fluid; the at-surface band keeps a body's vy (the
+        // dry band above the surface: the full-speed pass + the splash
+        // fall-back) and the swim-level snap keeps the float terminal a
+        // fixed point.
         integrateFluid(h);
     } else {
         // Gravity, capped at terminal velocity.

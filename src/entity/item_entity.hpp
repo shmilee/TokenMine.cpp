@@ -15,14 +15,18 @@
 //
 // Physics: the same fall as the player (gravity 32 / terminal 38) plus an
 // exponential horizontal friction that zero's out below kStopSpeed so a
-// dropped item truly comes to rest. ENT-4: while the AABB overlaps a
-// water OR lava cell (or the item rests at the fluid's surface) the
-// physics switches to the shared fluid model (Entity::refreshFluidState +
-// integrateFluid — the input-free twin of the player's FLUID-2 swim):
-// passive rise (buoyancy 12, capped 1.5), the geometric W' float (the
-// terminal is a STATIONARY item — the friction zero's the residual, no
-// surface drift, the documented MC simplification), and the sink /
-// pool-floor stand for entry momentum. LAVA floats symmetrically (the
+// dropped item truly comes to rest. ENT-4 / FLUID-3: while the AABB
+// overlaps a water OR lava cell (or the item is at the fluid's surface
+// band) the physics switches to the shared fluid model
+// (Entity::refreshFluidState + integrateFluid — the input-free twin of
+// the player's FLUID-2 swim): passive rise (buoyancy 12, capped 1.5) to
+// the swim level, the geometric swim-level float (the terminal is a
+// STATIONARY item — the friction zero's the residual, no surface drift,
+// the documented MC simplification — FLUID-3: the item floats HALF
+// SUBMERGED, its mid-axis on the surface, the MC look: the documented
+// change of the ENT-4 dry W' float), and the sink / pool-floor stand for
+// entry momentum (a 2-deep pool floor stand rises off the bottom — the
+// Q2 depth gate — a 1-deep one stands). LAVA floats symmetrically (the
 // documented extension: the player's lava has the weaker pace, items take
 // the water model in both kinds).
 //

@@ -240,26 +240,41 @@ protected:
     // at least one water OR lava cell (overlapsFluid, the player's
     // isInWater/isInLava scan — the "feet cell or body cell" test). The
     // W' surface plane = one above the topmost full (level-8) cell of the
-    // IMMERSION KIND at or below the feet, scanned down
-    // kFluidSurfaceScanDepth (the player's kSurfaceScanDepth, the same
-    // loop), -1 when none; WATER counts for the surface when both kinds
-    // overlap (the player's convention: a lava column never floats over
-    // water) — a lava-only immersion floats on the LAVA column (the
-    // symmetric extension, documented).
+    // IMMERSION KIND in the scan window (kFluidSurfaceScanDepth cells each
+    // side of the feet — FLUID-3: the upward extension runs only while the
+    // body is in fluid, where the first L8 at or below the feet is the
+    // BOTTOM water cell and the swim level / depth gate need the true
+    // surface; for a dry body the first L8 at or below the feet IS the
+    // topmost, so the read count is the pre-FLUID-3 one), -1 when none;
+    // WATER counts for the surface when both kinds overlap (the player's
+    // convention: a lava column never floats over water) — a lava-only
+    // immersion floats on the LAVA column (the symmetric extension,
+    // documented). The swim level = W' - height/2 (the body's mid-axis on
+    // the surface — the float terminal, the MC swim look) and the pool
+    // depth = W' - feet (0 for a dry body / one above the surface; resting
+    // on the pool floor it is the pool's depth — the rise gate reads it;
+    // both are pure subtractions, no extra scan).
     void refreshFluidState();
 
     // integrateFluid: one sub-step of the fluid force model (the player's
     // FLUID-2 integrate with the input branches removed — a mob / item
     // has no Space / crouch, it rises or sinks), the branch order: the
-    // float snap (the geometric clamp to W': the crossing re-check + the
-    // rise-speed gate; the terminal y = W', vy = 0, onGround false is a
-    // fixed point — fps-independent) > the passive rise (buoyancy, capped
-    // at kWaterRiseSpeed; gated on free + a column + vy >= 0 — a falling
-    // body keeps sinking: the entry-momentum clamp, the Minecraft "dive"
-    // semantics) > the sink (the same buoyancy downward, capped at
-    // -kWaterTerminalVelocity: the pool-floor stand, the entry momentum,
-    // a pure flow film). NO GRAVITY in fluid — the air model is the
-    // caller's integrate().
+    // float snap to the SWIM LEVEL (gated on inFluid + the window
+    // [swim level, W'] + vy >= 0 + !onGround; the terminal y = swim level,
+    // vy = 0, inFluid true — the body's lower half in the water — is a
+    // fixed point, fps-independent; a DRY body in the band is not snapped
+    // — it can breach the surface and fall back, the splash) > the passive
+    // rise (buoyancy, capped at kWaterRiseSpeed; gated on inFluid + the Q2
+    // depth gate (a body resting on a 1-deep pool floor STANDS — the
+    // wade; a pool >= kRiseMinPoolDepth deep lets it rise) + a column +
+    // vy >= 0 (a falling body keeps sinking: the entry-momentum clamp, the
+    // Minecraft "dive" semantics) + below the swim level (it stops when it
+    // reaches it)) > the sink (the same buoyancy downward, capped at
+    // -kWaterTerminalVelocity, gated on inFluid: the pool-floor stand, the
+    // entry momentum, a pure flow film). A DRY body in the at-surface band
+    // keeps its vy (no branch — the player's twin final line: the
+    // full-speed pass, no -4 clamp, no buoyancy). NO GRAVITY in fluid —
+    // the air model is the caller's integrate().
     void integrateFluid(float h);
 
     // The fresh grounded check (the player's FLUID-2 isRestingOnSolid,
@@ -284,9 +299,14 @@ protected:
     // such kind while the body is in the air: the float terminal (the
     // feet have cleared the fluid cells) is maintained by the at-surface
     // band alone — the player's pattern (its scan runs unconditionally,
-    // always with the water kind).
+    // always with the water kind). FLUID-3: m_swimLevelY = W' - height/2
+    // (the float terminal — the body's mid-axis on the surface, half the
+    // body submerged) and m_fluidDepth = W' - feet (0 for a dry body;
+    // resting on the pool floor it is the pool's depth — the rise gate).
     bool m_inFluid = false;
     float m_fluidSurfaceY = -1.0f;
+    float m_swimLevelY = -1.0f;
+    float m_fluidDepth = 0.0f;
     bool m_atSurface = false;
     bool m_restingOnSolid = false;
     FluidKind m_surfaceKind = FluidKind::Water;
@@ -298,6 +318,12 @@ protected:
     static constexpr float kWaterRiseSpeed = 1.5f;
     static constexpr float kWaterTerminalVelocity = 4.0f;
     static constexpr int kFluidSurfaceScanDepth = 32;
+    // FLUID-3 (the Q2 depth gate): a body RESTING on a pool floor stands
+    // in a 1-deep pool (the wade — the feet in the film, the ENT-4
+    // mainline) but rises to the swim level in a pool this deep or
+    // deeper (the deep-water lockout, A1/B3 — the shore wall is a step,
+    // the pool floor is not). Named constant, zero config by design.
+    static constexpr float kRiseMinPoolDepth = 2.0f;
 };
 
 // -- entity-vs-entity separation (Phase 19) ----------------------------------

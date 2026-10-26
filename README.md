@@ -3,8 +3,8 @@
 本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒
 （C++20 / SDL3 / OpenGL 3.3 core，
 自研 Result/JSON/PNG，内容全数据驱动）。**确定性是项目一级要求**：无输入运行逐帧
-字节可复现。功能阶段 P0–P99 + 性能审计系列 99.x 全部完成并提交，测试
-1195/1195。
+字节可复现。功能阶段 P0–P99 + 性能审计系列 99.x + v1.0 任务表（34 项，
+含 2 项实机报障修复）全部完成并提交，测试 1677/1677。
 
 > 文档已按主题分块（Phase 30）：**新会话先读 [AGENTS.md](AGENTS.md)**（代理快速
 > 接收），再按需读下表中的文件。原文档（README 765 行 / KNOWN_ISSUES / 本地
@@ -30,7 +30,7 @@
 | 构建 | CMake + Ninja | |
 | 窗口/输入 | SDL3 | |
 | 图形 | OpenGL 3.3 Core (GLEW) | |
-| 音频 | SDL3 Audio（`SoundBank`，SDL 内置音频后端） | Phase 15 引入，17 个程序化 WAV |
+| 音频 | SDL3 Audio（`SoundBank`，SDL 内置音频后端） | Phase 15 引入，38 个程序化 WAV（确定性生成，含 CRAFT-3 材质音效 + PRE-4 环境音） |
 | 图像 | 内置 PNG 编解码器（`src/core/png.hpp`，zlib） | 8/16 位 RGB/RGBA/灰度/调色板，全 filter，CRC 校验 |
 | 测试 | GoogleTest | |
 | JSON | 内置实现（`src/core/json.hpp`） | 无外部依赖 |
@@ -84,6 +84,17 @@ cmake --build build
 
 ## 版本与发布
 
+- **v0.32.0**（2026-10-26）：**FLUID-3 mob 涉水修正**（任务表 34/34，实机报障
+  修复）——牛羊鸡走入水中/悬崖边的"悬空/站在水上"：浮漂终态从干身踩水皮
+  改半浸没游泳位（身体中轴=水面，MC 游泳观感）+ 深水（≥2 格）池底 mob
+  可上浮出底 + 1 格浅池涉水不变 + 涉水 mob 可踏 1 格岸壁出池 + 悬崖坠水
+  不再"降落伞"减速（全速过水面带）。玩家游泳行为位级不变。
+- **v0.31.0**（2026-10-26）：**UXFIX-1 实机渲染修复**（实机报障修复）——
+  两条：① 热栏/面板的方块物品图标显示为半透明白盒 ② 挖掘时方块显示全黑
+  （裂纹白线在、块面纯黑）。根因 = PRE-4 云引入的 GL per-draw 状态泄漏
+  （u_useTexture/u_color/u_alpha + blend 状态跨 draw 残留），锁定态专属、
+  无输入门全盲；修复 = 云/光束 blend 所有权上移 + 挖掘覆盖层自持混合 +
+  方块图标立方显式纹理配方。无输入位级恒等。
 - **v0.30.0**（2026-10-26）：**PRE-6 掉落光照**（任务表 32/32 全完成，PRE 行
   6/6）——v1.0 候选。掉落物受本地光照：洞穴里的掉落不再亮如白昼、
   火把旁的掉落被照亮（每帧采样所在格光照，昼夜自动跟随）；`render.drop_light`
@@ -185,7 +196,7 @@ cmake --build build
 每版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 GitHub Releases。
 - **0.x 承诺**：可玩、可扩展、确定性运行；但**不承诺稳定**——存档格式
-  （现为 format 18，向前迁移）与内容数据格式仍可能随阶段演进，旧存档
+  （现为 format 19，向前迁移）与内容数据格式仍可能随阶段演进，旧存档
   通常可读但请定期备份。已知限制见 `docs/KNOWN_ISSUES.md`。
 - 许可证：MIT（见 `LICENSE`）。
 - **内存提示**：默认 `config/config.json` 为 `view_distance: 80`（圆盘环
@@ -202,7 +213,7 @@ GitHub Releases。
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（193 条，都踩过） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（266 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃）+ 已修复存档索引 | 阶段验收前后 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phase 0–29 规划 + 细节存档索引 | 了解历史 |
 | [docs/archive/phase-NN.md](docs/archive/) | 单阶段细节存档（阶段报告 + 会话存档） | 深挖某阶段 |

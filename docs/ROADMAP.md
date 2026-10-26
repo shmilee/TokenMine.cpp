@@ -213,5 +213,24 @@
 - **GEN-2（v1.0 任务表：树生长）** — `archive/phase-gen2.md`
 - **GEN-3（v1.0 任务表：矿脉形态）** — `archive/phase-gen3.md`
 - **FLUID-1（v1.0 任务表：水量守恒）** — `archive/phase-fluid1.md`
+- **FLUID-2（v1.0 任务表：游泳划水）** — `archive/phase-fluid2.md`
+- **ENT-1（v1.0 任务表：四肢摆动，含 1b 实机模型修复）** — `archive/phase-ent1.md`
+- **ENT-3（v1.0 任务表：mob 踏阶）** — `archive/phase-ent3.md`
+- **ENT-4（v1.0 任务表：水体交互）** — `archive/phase-ent4.md`
+- **SURV-1（v1.0 任务表：护甲）** — `archive/phase-surv1.md`
+- **SURV-2（v1.0 任务表：氧气窒息）** — `archive/phase-surv2.md`
+- **SURV-3（v1.0 任务表：耐久）** — `archive/phase-surv3.md`
+- **SURV-4（v1.0 任务表：药水饮用）** — `archive/phase-surv4.md`
+- **SURV-5（v1.0 任务表：mob 效果）** — `archive/phase-surv5.md`
+- **GEN-4（v1.0 任务表：洞穴破碎度）** — `archive/phase-gen4.md`
+- **GEN-5（v1.0 任务表：浮空树）** — `archive/phase-gen5.md`
+- **GEN-6（v1.0 任务表：树放置半区修复）** — `archive/phase-gen6.md`
+- **CRAFT-1（v1.0 任务表：工作台分块）** — `archive/phase-craft1.md`
+- **CRAFT-2（v1.0 任务表：物品 3D 模型）** — `archive/phase-craft2.md`
+- **CRAFT-3（v1.0 任务表：材质音效）** — `archive/phase-craft3.md`
+- **SAVE-1（v1.0 任务表：自动存档）** — `archive/phase-save1.md`
+- **PRE-1..6（v1.0 任务表：中文字体/边缘雾/水面波纹/云与环境音/透明 discard/掉落光照）** — `archive/phase-pre1.md` … `phase-pre6.md`
+- **UXFIX-1（v1.0 任务表：实机渲染状态泄漏修复）** — `archive/phase-uxfix1.md`
+- **FLUID-3（v1.0 任务表：mob 涉水修正）** — `archive/phase-fluid3.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

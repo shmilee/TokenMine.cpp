@@ -1955,3 +1955,39 @@
   跑输入协议 = 点击重试循环盲试（16 连点击零信号实证）；② 面板签名
   断言用中心像素 (681,372) ≈ (27,27,33) kPanel 暗底 + 槽区内容判别，
   勿用大面积暗区计数（世界暗区 48k px 量级假阳性）。
+
+- **L8-on-L8 stable 不横向扩散（PITS 267）**——10-26 门 115 S2 场景
+  设计：2 深池（水 L8 y41,42）顶层水面**永不膜水**——流体规则只有
+  "块支撑"的 L8 才向同层空气邻居扩散（supported-spread），叠在同类
+  流体上的 L8 = Stable no-op。首版 A 场景用"池缘 1 行膜水"作入水
+  入口静默失效（膜根本铺不开），探针症状 = mob 终态非预期，100f
+  存档 fluids 审计才现形。设计判别入口前先 fluids 审计（5f 存档看
+  实际流体格），别靠推演流体铺展。
+- **AI 停点 = 玩家 + attack_range 沿路径（PITS 268）**——10-26 门 115
+  S2 场景 A：zombie 攻击范围 1.6 使其在**崖缘**停住远程打玩家、永不
+  进池（4 跑 old==new 全同 = 零判别，误诊为场景未生效）。判别场景
+  的"入水/出水"动作必须发生在停点**内侧**（玩家位置往池内/出池侧
+  移，使停点跨进判别区）；停点 = 探针末行常量，先探针定几何再长跑。
+  关联：1 步崖下池入水瞬间身体尾仍压崖缘 floor → fresh
+  isRestingOnSolid=TRUE → 行走 mob 物理到不了"干身踩水面"终态
+  （仅击退上抛/预置可达）——设计"干身悬浮"判别须用预置/击退路径。
+- **玩家受击红闪 = 全帧 real-dt 着色（PITS 269）**——10-26 门 115
+  S2 截图判读：同场景两侧末帧 a_old 全帧 (86,37,72) 紫红 vs a_new
+  (24,50,99) 夜蓝，初判"昼夜不同"实为**受击红闪**（real dt 衰减，
+  末帧仍在闪窗内）——old 侧 zombie 池底涉水攻击玩家 5 次、new 侧
+  游泳位 dy=1.1 超攻击垂直门零击。含 AI 攻击的 A/B 跑，末帧截图
+  颜色差先核玩家 hp/受击史再判渲染；红闪存在本身可当攻击模式
+  侧证（b_old 无闪 hp20 vs b_new 强红 hp11 = 出池攻击互斥的像素
+  侧证）。
+
+- **scratch 树 rsync `--exclude data` 连带排除 `assets/data`（PITS 270）**
+  ——10-27 门 115 性能批：建 tm_v0320_src 用 `rsync -a --exclude data`
+  （本意 = 排除存档目录），`--exclude data` 匹配**任意深度**同名目录
+  → `assets/data/**`（71 块 JSON + 物品/配方/mob/音效布局 +
+  block_atlas.json）整层缺失 → 每次 init 即死（日志有
+  "Block directory not found" + "cannot read asset file" ERROR），
+  但 run2 的失败分类只看"截图黑 + swap 不干净"= **4 轮 ×240 s 超时
+  全误判 black/stalled**，真死因埋在 log 尾。判别：性能/场景跑连续
+  try 全 black/stalled 且 log 无 STEP0 行 = 先 `tail log` 查
+  Initialization failed（PITS 264 同款"init 死伪装"家族）；建
+  scratch 树后必跑 5f 冒烟（`--new --frames 5`，exit 0 才算树可用）。

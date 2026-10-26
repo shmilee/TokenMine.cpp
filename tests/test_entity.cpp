@@ -3,6 +3,7 @@
 // impact/despawn behavior, and the dropped-item geometry conventions.
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <string>
@@ -1230,20 +1231,24 @@ TEST(EntityTest, Phase98FenceIsABarrier) {
     EXPECT_FALSE(item.hasRoomAt(Vec3{8.5f, 3.4f, 8.5f}));
 }
 
-// -- ENT-4: the item fluid buoyancy (the symmetric float) -------------------
+// -- ENT-4 / FLUID-3: the item fluid buoyancy (the symmetric float) -----
 //
 // The same Entity::refreshFluidState / integrateFluid the mobs use (the
-// input-free twin of the player's FLUID-2 swim): an item in water OR lava
-// RISES (the buoyancy 12, capped 1.5) and comes to rest AT W' — the
-// stationary float (the friction zero's the horizontal residual — no
-// surface drift, the documented MC simplification); an item with entry
-// momentum (the vy >= 0 rise gate excluded) SINKS to the pool floor and
-// STANDS (the fresh resting gate). The on-land trajectory is bit-identical
-// to the pre-ENT-4 model (FallsAndRestsExactlyOnFloor + the rest of this
-// file pin it).
+// input-free twin of the player's FLUID-2 swim, FLUID-3-corrected): an
+// item in water OR lava RISES (the buoyancy 12, capped 1.5) and comes to
+// rest AT THE SWIM LEVEL — W' - size/2 (the item's mid-axis on the
+// surface, HALF SUBMERGED — the MC look, the documented change of the
+// ENT-4 dry W' float; the stationary float: the friction zero's the
+// horizontal residual — no surface drift, the documented MC
+// simplification); an item with entry momentum (the vy >= 0 rise gate
+// excluded) SINKS to the pool floor (and in a 2-deep pool rises off the
+// bottom — the Q2 depth gate — a 1-deep one stands). The on-land
+// trajectory is bit-identical to the pre-ENT-4 model (FallsAndRests-
+// ExactlyOnFloor + the rest of this file pin it).
 //
 // Pool conventions: the fixture floor tops out at y=1; an n-cell L8 pool
-// (y=1..n) has W' = 1+n.
+// (y=1..n) has W' = 1+n. The item (kSize 0.25) swims at W' - 0.125: the
+// 2-cell pool (W' = 3) swim level is 2.875 exact.
 
 namespace {
 
@@ -1263,33 +1268,41 @@ void buildItemPool(Fixture& f, int x0, int x1, int z0, int z1, int n,
 } // namespace
 
 TEST(ItemEntityTest, FloatsAtWaterSurface) {
-    // A submerged item (vy 0) RISES and FLOATS at W' = 3 (the 2-cell
-    // pool) — the geometric terminal (exact, fps-independent; the item's
-    // real-dt step runs on the fixed 1/60 in the test, the game's dt
-    // history is irrelevant to the terminal — it is a fixed point). The
-    // float is STATIONARY: the residual horizontal velocity decays to
-    // zero (the friction, in fluid too — no surface drift).
+    // A submerged item (vy 0) RISES and FLOATS at the SWIM LEVEL =
+    // W' - size/2 = 3 - 0.125 = 2.875 (the 2-cell pool, the item's
+    // mid-axis on the surface — HALF SUBMERGED, the MC look; FLUID-3:
+    // the pre-FLUID-3 float put the item dry at W' = 3) — the geometric
+    // terminal (exact, fps-independent; the item's real-dt step runs on
+    // the fixed 1/60 in the test, the game's dt history is irrelevant to
+    // the terminal — it is a fixed point). The float is STATIONARY: the
+    // residual horizontal velocity decays to zero (the friction, in fluid
+    // too — no surface drift).
     Fixture f;
     buildItemPool(f, 6, 10, 6, 10, 2); // W' = 3
     ItemEntity item = f.makeItem({8.5f, 2.0f, 8.5f});
     f.run(item, 300); // 5 s: the rise (~1.2 s) + the settle
-    EXPECT_FLOAT_EQ(item.position().y, 3.0f);
+    EXPECT_FLOAT_EQ(item.position().y, 2.875f);
     EXPECT_EQ(item.velocity().x, 0.0f);
     EXPECT_EQ(item.velocity().y, 0.0f);
     EXPECT_EQ(item.velocity().z, 0.0f);
     EXPECT_FALSE(item.onGround());
+    // FLUID-3: the terminal is half submerged (the body's lower part in
+    // the water — the snap re-fires as a no-op fixed point).
+    EXPECT_TRUE(item.inFluid());
     // The fixed point: more frames keep it.
     f.run(item, 120);
-    EXPECT_FLOAT_EQ(item.position().y, 3.0f);
+    EXPECT_FLOAT_EQ(item.position().y, 2.875f);
     EXPECT_EQ(item.velocity().y, 0.0f);
+    EXPECT_TRUE(item.inFluid());
 
     // A sliding item (an entry horizontal velocity) still floats — and
-    // comes to REST at the surface (no drift, the documented
-    // simplification): x stops where the friction zero's it, y = W'.
+    // comes to REST at the swim level (no drift, the documented
+    // simplification): x stops where the friction zero's it, y = W' -
+    // size/2.
     ItemEntity sliding = f.makeItem({7.5f, 2.0f, 7.5f});
     sliding.setVelocity({1.5f, 0.0f, 0.0f});
     f.run(sliding, 300);
-    EXPECT_FLOAT_EQ(sliding.position().y, 3.0f);
+    EXPECT_FLOAT_EQ(sliding.position().y, 2.875f);
     EXPECT_EQ(sliding.velocity().x, 0.0f);
     EXPECT_EQ(sliding.velocity().y, 0.0f);
     // The slide is bounded (the total drift 1.5/2.5 = 0.6 blocks from the
@@ -1300,32 +1313,48 @@ TEST(ItemEntityTest, FloatsAtWaterSurface) {
 
 TEST(ItemEntityTest, SinksToPoolFloorWithEntryMomentum) {
     // A falling item (the entry momentum, the vy >= 0 rise gate excluded)
-    // sinks at the water terminal to the pool floor and STANDS there (the
-    // fresh resting gate — the player's "stand on the bottom").
+    // sinks at the water terminal to the pool floor — and, FLUID-3 (the
+    // fixture is a 2-cell pool: the Q2 depth gate), it rises off the
+    // bottom to the swim level (W' - size/2 = 3 - 0.125 = 2.875) instead
+    // of standing (the 1-deep wade stand is unchanged). The dive-to-floor
+    // is the mutually exclusive proof vs an immediate float: it reaches
+    // y = 1 first.
     Fixture f;
-    buildItemPool(f, 0, 12, 4, 10, 2); // W' = 3, the floor y=1
+    buildItemPool(f, 0, 12, 4, 10, 2); // W' = 3, the floor y=1 (2-deep)
     ItemEntity item = f.makeItem({8.5f, 6.0f, 8.5f});
     item.setVelocity({0.0f, -30.0f, 0.0f}); // a fast entry
-    f.run(item, 600); // 10 s: the fall + the sink + the settle
-    EXPECT_FLOAT_EQ(item.position().y, 1.0f); // the pool floor
-    EXPECT_TRUE(item.onGround());
+    float minY = 6.0f;
+    for (int i = 0; i < 600; ++i) { // 10 s: the fall + the sink + the rise
+        item.update(kDt);
+        minY = std::min(minY, item.position().y);
+    }
+    // It DIVED to the pool floor (the entry momentum — a still body
+    // would float straight up from the preset).
+    EXPECT_FLOAT_EQ(minY, 1.0f);
+    // ...and rose off the bottom to the swim-level terminal (exact, the
+    // half-submerged fixed point).
+    EXPECT_FLOAT_EQ(item.position().y, 2.875f);
     EXPECT_EQ(item.velocity().y, 0.0f);
-    // It sank, it did not rise (mutually exclusive with the terminal of
-    // FloatsAtWaterSurface on the same pool geometry).
-    EXPECT_NE(item.position().y, 3.0f);
+    EXPECT_FALSE(item.onGround());
+    EXPECT_TRUE(item.inFluid());
+    // It did not stand on the floor (mutually exclusive with the 1-deep
+    // terminal).
+    EXPECT_NE(item.position().y, 1.0f);
 }
 
 TEST(ItemEntityTest, FloatsInLavaSymmetric) {
     // The symmetric lava float (the documented ENT-4 extension: the
     // player's lava has the weaker pace, items — like mobs — take the
-    // water model in both kinds). A 2-cell lava pool: W' = 3.
+    // water model in both kinds). A 2-cell lava pool: W' = 3, the swim
+    // level 2.875 (FLUID-3: half submerged, the MC look).
     Fixture f;
     buildItemPool(f, 6, 10, 6, 10, 2, FluidKind::Lava);
     ItemEntity item = f.makeItem({8.5f, 2.0f, 8.5f});
     f.run(item, 300);
-    EXPECT_FLOAT_EQ(item.position().y, 3.0f);
+    EXPECT_FLOAT_EQ(item.position().y, 2.875f);
     EXPECT_EQ(item.velocity().y, 0.0f);
     EXPECT_FALSE(item.onGround());
+    EXPECT_TRUE(item.inFluid());
 }
 
 TEST(ItemEntityTest, OnLandIsFluidInert) {
