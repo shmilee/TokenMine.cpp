@@ -19,6 +19,7 @@
 #include "core/math/frustum.hpp"
 #include "entity/arrow_mesh.hpp"
 #include "entity/item_entity.hpp"
+#include "entity/item_light.hpp"
 #include "entity/item_model_mesh.hpp"
 #include "entity/mob_entity.hpp"
 #include "entity/mob_mesh.hpp"
@@ -5406,6 +5407,21 @@ void Game::updateEntities(double dt) {
 
 void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
                             RenderPass pass) {
+    // PRE-6: dropped items take the light of the cell they sit in (the
+    // AABB-center cell, itemDropLight) via the vertex shader's per-draw
+    // override (u_useDropLight / u_dropSky / u_dropBlock) — a stone cube
+    // dropped in an unlit cave no longer glows like daylight.
+    // render.drop_light (code default true, the render.fog /
+    // render.water_ripples getBool precedent — config.json is untouched)
+    // gates it: OFF = the three uniforms are NEVER set, u_useDropLight
+    // stays its link-time 0 and the vertex branch never runs, so the
+    // pipeline is the v0.29.0 one bit-for-bit (the gate 113 S1 off
+    // control). The program's uniform state persists per program object
+    // across draws (Renderer::draw unbinds after every draw), so each
+    // drop draw MUST reset u_useDropLight = 0 afterwards — a leak would
+    // light the next draw (mobs, chunks, arrows) with this drop's cell
+    // light.
+    const bool dropLightOn = m_config.getBool("render.drop_light", true);
     for (const auto& entity : m_entities) {
         const ItemEntity* item =
             dynamic_cast<const ItemEntity*>(entity.get());
@@ -5477,9 +5493,24 @@ void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
             // drawArrows).
             m_basicShader.bind();
             m_basicShader.setUniform1i("u_useTexture", 1);
+            // PRE-6: this drop's cell light (the vertex override; the
+            // reset below restores the 0 every other draw expects).
+            if (dropLightOn) {
+                const std::pair<float, float> light =
+                    itemDropLight(m_world, *item);
+                m_basicShader.setUniform1i("u_useDropLight", 1);
+                m_basicShader.setUniform1f("u_dropSky", light.first);
+                m_basicShader.setUniform1f("u_dropBlock", light.second);
+            }
             m_renderer.setCulling(false); // double-sided box
             m_itemModelTextures[idx].bind();
             m_renderer.draw(mesh, m_basicShader, view, projection, model);
+            // PRE-6: the reset (draw unbound the program — re-bind): the
+            // override must not leak into the draws that follow.
+            if (dropLightOn) {
+                m_basicShader.bind();
+                m_basicShader.setUniform1i("u_useDropLight", 0);
+            }
             m_atlas.texture().bind(); // restore for the passes that follow
             m_renderer.setCulling(true);
             continue;
@@ -5520,7 +5551,23 @@ void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
         const Vec3 center {p.x, p.y + item->height() * 0.5f + bob, p.z};
         const Mat4 model =
             Mat4::multiply(Mat4::translate(center), Mat4::rotateY(spin));
+        // PRE-6: the block-cube path needs the program bound before the
+        // per-draw uniform (Renderer::draw binds on its own, but the
+        // override must be set first — the model path's pattern).
+        if (dropLightOn) {
+            const std::pair<float, float> light =
+                itemDropLight(m_world, *item);
+            m_basicShader.bind();
+            m_basicShader.setUniform1i("u_useDropLight", 1);
+            m_basicShader.setUniform1f("u_dropSky", light.first);
+            m_basicShader.setUniform1f("u_dropBlock", light.second);
+        }
         m_renderer.draw(mesh, m_basicShader, view, projection, model);
+        // PRE-6: the reset (draw unbound the program — re-bind).
+        if (dropLightOn) {
+            m_basicShader.bind();
+            m_basicShader.setUniform1i("u_useDropLight", 0);
+        }
     }
 }
 
