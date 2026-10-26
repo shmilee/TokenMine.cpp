@@ -70,6 +70,8 @@ add_library(mc_core STATIC
     src/world/world.cpp
     src/world/chunk_mesher.cpp
     src/world/chunk_streaming.cpp
+    src/world/ambience.cpp
+    src/world/cloud.cpp
     src/world/day_cycle.cpp
     src/world/fluid.cpp
     src/world/fire_spread.cpp
@@ -170,6 +172,8 @@ add_executable(tokenmine_tests
     tests/test_ui_scale.cpp
     tests/test_fog.cpp
     tests/test_ripple.cpp
+    tests/test_cloud.cpp
+    tests/test_ambience.cpp
     tests/test_particle.cpp
     tests/test_sound.cpp
     tests/test_noise.cpp

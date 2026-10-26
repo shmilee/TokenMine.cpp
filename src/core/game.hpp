@@ -67,10 +67,12 @@
 #include "renderer/shader.hpp"
 #include "renderer/texture.hpp"
 #include "renderer/texture_atlas.hpp"
+#include "world/ambience.hpp"
 #include "world/biome.hpp"
 #include "world/chunk.hpp"
 #include "world/chunk_mesher.hpp"
 #include "world/chunk_streaming.hpp"
+#include "world/cloud.hpp"
 #include "world/day_cycle.hpp"
 #include "world/fluid.hpp"
 #include "world/lighting.hpp"
@@ -426,6 +428,18 @@ private:
     // (the level>=1 beacons) for the beam renderer. A no-op while the
     // world holds no beacon (structural immunity).
     void updateBeacons();
+    // PRE-4 ambience: the day/night/cave ambient sound (the frame-locked
+    // schedule, world/ambience): once every kAmbienceIntervalFrames the
+    // pure roll of (world seed, frame, context) decides, and a pass plays
+    // the context's sound 2D (the ambience is global — never
+    // spatialized) + the "Ambience: <name>" log line (the E2E evidence).
+    // Audio never enters the frame state (the CRAFT-3 discipline — the
+    // sound is heard, never seen or saved). The context reads the
+    // player's feet cell's RAW sky light (0 = cave, priority) + the
+    // dayFactor split. audio.ambience (code default true) gates the
+    // pass; OFF = zero events, zero sounds (the gate's "new-off"
+    // control).
+    void updateAmbience();
     // Phase 72 (the two-component model): set the player's absorption
     // pool to the active effects' total `absorb_hp`. The pool is a pure
     // function of the effects AT EVERY SYNC POINT (a refreshed layer
@@ -530,6 +544,17 @@ private:
     // the `beacon.beam` config (the E2E control, the fire.particles
     // pattern).
     void drawBeaconBeams(const Mat4& view, const Mat4& projection);
+    // PRE-4 clouds: the drifting translucent cloud layer at
+    // y = kCloudHeight (the 16-block cell grid, world/cloud), drawn in
+    // the blending pass with the basic program's unlit-white quads (the
+    // beam pattern: u_useTexture = 0 + u_alpha, culling off, the depth
+    // test occludes it behind terrain). The cached mesh is rebuilt ONLY
+    // when the camera's cloud cell or the drift time step changes
+    // (no-input = static from the first draw; walking = one rebuild per
+    // 16 blocks — the 99.x discipline, no per-frame VBO upload).
+    // render.clouds (code default true) gates the draw; OFF = zero mesh,
+    // zero draw (the v0.27.0 pipeline, bit-identical).
+    void drawClouds(const Mat4& view, const Mat4& projection);
 
     // -- Phase 15 UI / audio / particles ------------------------------------
     // E/F3/F5 handling (F3 + F5 work in any pointer state; E opens the
@@ -1107,6 +1132,20 @@ private:
     // structurally inert — the m_fireEffectId pattern).
     Mesh m_beaconBeamMesh;
     int m_beaconEffectId = -1;
+
+    // PRE-4 clouds: the cached cloud-layer mesh (the full camera window,
+    // world/buildCloudMesh) + its rebuild key — the camera's cloud cell
+    // and the drift time step. The mesh is rebuilt only when the key
+    // changes (cloudMeshNeedsRebuild, the pure dirty flag): a no-input
+    // run rebuilds once on the first draw and is static thereafter
+    // (the ×2 RAW byte-identity), walking rebuilds once per 16 blocks.
+    // render.clouds OFF never touches any of this (the v0.27.0 pipeline
+    // bit-identical).
+    Mesh m_cloudMesh;
+    bool m_cloudMeshValid = false;
+    int m_cloudMeshCellX = 0;
+    int m_cloudMeshCellZ = 0;
+    int m_cloudMeshT = 0;
 
     // SAVE-1: the auto-save cadence (save.auto_save_seconds — a CODE
     // default; the committed config carries no save section, the

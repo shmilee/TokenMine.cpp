@@ -51,6 +51,17 @@ vocabulary; blocks name one via `sound_material`):
   glass_dig.wav  high tinkle (2600 Hz bell + bright tick)
   glass_place.wav clear click + 1900 Hz bell
   glass_break.wav bright shatter (no lowpass + 3200 Hz ring)
+   -- PRE-4 ambience (3 beds; quiet by design — the ambient sound sits
+      UNDER the SFX; each a distinct fixed-seed LCG/sine composition,
+      2-4 s long, slow attack + slow release envelope):
+   ambience_cave.wav  low cave hum (~55 Hz + 110 Hz overtone, 0.4 Hz
+                      wobble) + four LCG-placed falling water drips
+                      (900 -> 300 Hz)
+   ambience_day.wav   day birds: three LCG-placed chirp bursts (2-4 notes
+                      of 2.4-4.2 kHz trills) over a double-lowpassed
+                      wind bed
+   ambience_night.wav crickets: five LCG-placed bursts of ~4.3 kHz 25 Hz
+                      pulse trills over a quiet, slow night-wind bed
 """
 import math
 import os
@@ -89,6 +100,18 @@ def write_wav(path: str, samples) -> None:
 def env(t: float, dur: float, decay: float, release=0.004) -> float:
     """Exponential decay with a short release tail (no clicks)."""
     e = math.exp(-decay * t)
+    if t > dur - release:
+        e *= (dur - t) / release
+    return max(0.0, e)
+
+
+def amb_env(t: float, dur: float, attack=0.15, release=0.3) -> float:
+    """PRE-4 ambience envelope: a slow linear attack + a slow linear
+    release (the bed-like fade an ambient sound needs — no clicks at
+    either edge, no exponential decay mid-bed)."""
+    e = 1.0
+    if t < attack:
+        e *= t / attack
     if t > dur - release:
         e *= (dur - t) / release
     return max(0.0, e)
@@ -484,6 +507,101 @@ def glass_break():
     return out
 
 
+# ---------------------------------------------------------------------------
+# PRE-4: the ambience beds. Each is a fixed-seed LCG/sine composition
+# (the generic set's determinism discipline — a re-run leaves the file
+# byte-identical), quiet by design (the ambient sound sits UNDER the SFX:
+# peak amplitudes ~0.15 vs ~0.6 for the effect taps), 2-4 s long, and
+# faded in/out with amb_env (no clicks). The placements (drip / chirp /
+# cricket burst start times) come from the per-sound LCG — spread evenly
+# with jitter, so the rhythm is irregular (the Minecraft "about every
+# other window" feel is already handled by the game-side 0.5 roll).
+def ambience_cave():
+    """Low cave hum + sparse water drips (3.0 s): a ~55 Hz body with a
+    slow 0.4 Hz wobble + a quiet 110 Hz overtone, under four LCG-placed
+    falling drip blips (900 -> 300 Hz, fast decay). The quietest bed —
+    the enclosed-space feel."""
+    lcg = Lcg(0xA7E1)
+    dur = 3.0
+    # Four drips spread over [0.35, 2.65] with jitter (the LCG decides).
+    drips = []
+    for i in range(4):
+        u = lcg.next() * 0.5 + 0.5
+        drips.append(0.35 + 0.60 * ((i + u) / 4.0))
+
+    def f(t, _):
+        hum = (math.sin(2 * math.pi * 55.0 * t)
+               * (0.7 + 0.3 * math.sin(2 * math.pi * 0.4 * t))
+               + math.sin(2 * math.pi * 110.0 * t) * 0.25)
+        out = hum * 0.16
+        for t0 in drips:
+            u = t - t0
+            if 0.0 <= u < 0.18:
+                fr = 900.0 - 3600.0 * (u / 0.18)  # 900 -> 300 Hz glide
+                out += math.sin(2 * math.pi * fr * u) * math.exp(-u * 28.0) * 0.14
+        return out * amb_env(t, dur)
+    return sound(dur, f)
+
+
+def ambience_day():
+    """Day birds + wind (3.0 s): three LCG-placed chirp bursts (each 2-4
+    notes of 2.4-4.2 kHz trills) over a double-lowpassed wind bed (the
+    same noise chain as the other sound taps, a slow 0.3 Hz swell)."""
+    lcg = Lcg(0xD1A2)
+    dur = 3.0
+    n = int(RATE * dur)
+    wind = lowpass3(lowpass3([lcg.next() for _ in range(n)]))
+    # Three bursts spread over [0.35, 2.55], each 2-4 notes 0.07 s apart.
+    bursts = []
+    for b in range(3):
+        u0 = lcg.next() * 0.5 + 0.5
+        b0 = 0.35 + (2.2 * (b + u0)) / 3.0
+        notes = []
+        for k in range(2 + int(lcg.next() * 3)):  # 2-4 notes per burst
+            u1 = lcg.next() * 0.5 + 0.5
+            notes.append((b0 + k * 0.07, 2400.0 + 1800.0 * u1))
+        bursts.append(notes)
+
+    def f(t, _):
+        i = int(t * RATE)
+        out = wind[i] * 0.10 * (0.6 + 0.4 * math.sin(2 * math.pi * 0.3 * t))
+        for notes in bursts:
+            for t0, fr in notes:
+                u = t - t0
+                if 0.0 <= u < 0.06:
+                    out += (math.sin(2 * math.pi * fr * u)
+                            * math.exp(-u * 55.0) * 0.11)
+        return out * amb_env(t, dur)
+    return sound(dur, f)
+
+
+def ambience_night():
+    """Crickets + night wind (3.5 s): five LCG-placed bursts of ~4.3 kHz
+    trills pulsed at 25 Hz (the sharpened sine gate), over the quietest
+    bed — a double-lowpassed wind with a slow 0.2 Hz swell."""
+    lcg = Lcg(0x0B17)
+    dur = 3.5
+    n = int(RATE * dur)
+    wind = lowpass3(lowpass3([lcg.next() for _ in range(n)]))
+    # Five bursts spread over [0.3, 3.0], each 0.30 s long.
+    bursts = []
+    for b in range(5):
+        u = lcg.next() * 0.5 + 0.5
+        bursts.append(0.30 + (2.7 * (b + u)) / 5.0)
+
+    def f(t, _):
+        i = int(t * RATE)
+        out = wind[i] * 0.06 * (0.6 + 0.4 * math.sin(2 * math.pi * 0.2 * t))
+        for t0 in bursts:
+            u = t - t0
+            if 0.0 <= u < 0.30:
+                gate = max(0.0, math.sin(2 * math.pi * 25.0 * u)) ** 3
+                out += (math.sin(2 * math.pi * 4300.0 * u)
+                        * gate * 0.09)
+        return out * amb_env(t, dur)
+    return sound(dur, f)
+
+
 SOUNDS = {
     "dig": dig,
     "place": place,
@@ -521,6 +639,11 @@ SOUNDS = {
     "glass_dig": glass_dig,
     "glass_place": glass_place,
     "glass_break": glass_break,
+    # PRE-4: the ambience beds (quiet by design — the ambient sound sits
+    # under the SFX; the placements are LCG-decided per sound).
+    "ambience_cave": ambience_cave,
+    "ambience_day": ambience_day,
+    "ambience_night": ambience_night,
 }
 
 

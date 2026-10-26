@@ -24,6 +24,8 @@
 #include "entity/mob_mesh.hpp"
 #include "entity/mob_swing.hpp"
 #include "block/chance_drop.hpp"
+#include "world/ambience.hpp"
+#include "world/cloud.hpp"
 #include "world/growth.hpp"
 #include "world/fire_spread.hpp"
 #include "world/beacon.hpp"
@@ -3258,6 +3260,12 @@ void Game::update(double dt) {
     // tick cannot kill — its min_health floor — so the one-frame delay is
     // only reachable by a future floor-less damage effect).
     updateEffects(dt);
+    // PRE-4 ambience: the frame-locked day/night/cave ambient sound (the
+    // roll once every kAmbienceIntervalFrames — audio outside the frame
+    // state, so this touches no screenshot/save). Runs in every
+    // pointer/panel state (the world keeps ticking — the ambience with
+    // it, the Minecraft behavior).
+    updateAmbience();
 
     // Other entities (Phase 10): per-entity physics, then item merging and
     // despawn (see updateEntities).
@@ -4740,6 +4748,50 @@ void Game::updateBeacons() {
     }
 }
 
+void Game::updateAmbience() {
+    // PRE-4: the day/night/cave ambience (the frame-locked schedule,
+    // world/ambience). audio.ambience (code default true, the render.fog
+    // getBool precedent — config.json is untouched) gates the pass; OFF =
+    // zero events, zero sounds (the gate's "new-off" control, the
+    // v0.27.0 pipeline bit-identical).
+    if (!m_config.getBool("audio.ambience", true)) {
+        return;
+    }
+    // The roll cadence: once every kAmbienceIntervalFrames (the
+    // m_frameCount % N gate — the fire.spread_interval_frames pattern;
+    // a pure function of the frame, hard rule 8).
+    if (m_frameCount % kAmbienceIntervalFrames != 0) {
+        return;
+    }
+    // The context (world/ambience's pure decision): the player's FEET
+    // cell (position = the AABB bottom-center, the floor on each axis) —
+    // raw sky light 0 = no sky path = cave (priority over day/night, the
+    // Minecraft "no sky" rule); otherwise the renderer's day/night split
+    // (the dayFactor's 0.5 cutoff).
+    const Vec3 feet = m_player->position();
+    const int cx = static_cast<int>(std::floor(feet.x));
+    const int cy = static_cast<int>(std::floor(feet.y));
+    const int cz = static_cast<int>(std::floor(feet.z));
+    const int rawSky = m_world.getSkyLight(cx, cy, cz);
+    const AmbienceContext ctx =
+        ambienceContext(rawSky, m_dayCycle.dayFactor());
+    // The roll: the pure function of (world seed, frame, context) — same
+    // inputs, same answer across runs (the event sequence is
+    // deterministic; the log line below is the E2E evidence).
+    if (!ambienceRoll(static_cast<std::uint64_t>(m_generator->seed()),
+                      static_cast<std::uint64_t>(m_frameCount), ctx)) {
+        return;
+    }
+    const char* name = ambienceSoundName(ctx);
+    // The ambience is GLOBAL — the 2D centered path (never spatialized,
+    // the CRAFT-3 listener is inert for it). Audio never enters the frame
+    // state (hard rule 8 / the CRAFT-3 discipline): no screenshot or save
+    // is affected, and the disabled-bank degradation (headless) makes
+    // play() a silent no-op — the log line still fires.
+    m_sound.play(name);
+    MC_LOG_INFO(std::string("Ambience: ") + name);
+}
+
 void Game::updateEffects(double dt) {
     // Phase 84: push the effect-derived move-speed + damage-reduction onto
     // the player every frame (the player's movement + damage read them; the
@@ -5944,6 +5996,79 @@ void Game::drawBeaconBeams(const Mat4& view, const Mat4& projection) {
         m_renderer.draw(m_beaconBeamMesh, m_basicShader, view, projection,
                         model);
     }
+    m_renderer.setCulling(true);
+    m_renderer.disableBlending();
+}
+
+void Game::drawClouds(const Mat4& view, const Mat4& projection) {
+    // PRE-4: the drifting translucent cloud layer (world/cloud).
+    // render.clouds (code default true, the render.fog getBool precedent —
+    // config.json is untouched) gates the draw; OFF = zero mesh, zero
+    // draw (the v0.27.0 pipeline bit-identical — the gate's "new-off"
+    // control). The clouds are UNLIT WHITE quads through the basic
+    // program's solid-color path (the beam pattern: u_useTexture = 0 +
+    // u_alpha, culling off so both faces of each quad render
+    // alpha-blended; the depth test stays on, so terrain occludes the
+    // layer like any other world geometry).
+    if (!m_config.getBool("render.clouds", true)) {
+        return;
+    }
+    // The rebuild key: the camera's cloud cell (the floor of the eye's
+    // x/z on the kCloudCellBlocks grid — floorDiv, hard rule 1) + the
+    // frame-locked drift time step (m_frameCount / kCloudFramesPerCell,
+    // hard rule 8). A no-input run is static from the first draw;
+    // walking rebuilds once per 16 blocks (the 99.x discipline — no
+    // per-frame VBO upload).
+    const Vec3 eye = m_camera.position;
+    const int cellX =
+        floorDiv(static_cast<int>(std::floor(eye.x)), kCloudCellBlocks);
+    const int cellZ =
+        floorDiv(static_cast<int>(std::floor(eye.z)), kCloudCellBlocks);
+    const int t = cloudTimeStep(m_frameCount);
+    if (cloudMeshNeedsRebuild(m_cloudMeshValid, m_cloudMeshCellX,
+                              m_cloudMeshCellZ, m_cloudMeshT, cellX, cellZ,
+                              t)) {
+        std::vector<MeshVertex> verts;
+        std::vector<std::uint32_t> indices;
+        buildCloudMesh(cellX, cellZ, t, verts, indices);
+        if (verts.empty()) {
+            // Unreachable at 50% density over 576 cells — defensive: no
+            // geometry, no draw, and the cache stays invalid so the next
+            // frame retries (the key is untouched).
+            m_cloudMeshValid = false;
+            return;
+        }
+        const auto up = m_cloudMesh.upload(verts, indices,
+                                           MeshMode::Triangles);
+        if (!up.ok()) {
+            MC_LOG_ERROR("Cloud mesh upload failed: " + up.error().describe());
+            m_cloudMeshValid = false;
+            return;
+        }
+        m_cloudMeshValid = true;
+        m_cloudMeshCellX = cellX;
+        m_cloudMeshCellZ = cellZ;
+        m_cloudMeshT = t;
+    }
+    if (!m_cloudMeshValid) {
+        return;
+    }
+    // The unlit-white draw: the beam's uniform recipe (u_dayFactor is
+    // read by the vertex shader — with skyLight = 0 the clouds render
+    // full-brightness white at every time of day, the documented
+    // deviation "the clouds do not darken at night").
+    m_basicShader.bind();
+    m_basicShader.setUniform1i("u_useTexture", 0);
+    m_basicShader.setUniform3f("u_color", 1.0f, 1.0f, 1.0f);
+    m_basicShader.setUniform1f("u_alpha", kCloudAlpha);
+    m_basicShader.setUniform1f("u_dayFactor", m_dayCycle.dayFactor());
+    m_renderer.enableBlending();
+    m_renderer.setCulling(false);
+    // The mesh is WORLD-SPACE (absolute quad coordinates) — the identity
+    // model matrix (the beam scales a unit box per beacon; the clouds
+    // carry their own positions).
+    m_renderer.draw(m_cloudMesh, m_basicShader, view, projection,
+                    Mat4::identity());
     m_renderer.setCulling(true);
     m_renderer.disableBlending();
 }
@@ -7486,6 +7611,12 @@ void Game::render() {
     // beacons, blended + depth-occluded like the other world geometry.
     // No-op without an active beacon (baseline byte-identical).
     drawBeaconBeams(view, projection);
+    // PRE-4 clouds: the drifting translucent layer at y = kCloudHeight,
+    // blended + depth-occluded like the other world geometry. Gated on
+    // render.clouds (code default true); OFF = zero draw (the v0.27.0
+    // pipeline bit-identical). The cached mesh rebuilds only when the
+    // camera's cloud cell or the drift step changes.
+    drawClouds(view, projection);
     // The break crack + target outline (Phase 15): world-space, blended,
     // depth test still on (the overlay cubes sit just outside the block).
     drawWorldOverlay(view, projection);
