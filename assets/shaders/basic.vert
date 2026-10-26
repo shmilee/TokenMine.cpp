@@ -8,6 +8,7 @@ layout(location = 4) in float a_blockLight;
 layout(location = 5) in vec2 a_uvLocal;
 layout(location = 6) in float a_tiled;
 layout(location = 7) in float a_water;
+layout(location = 8) in float a_cutout;
 
 uniform mat4 u_model;
 uniform mat4 u_view;
@@ -33,6 +34,12 @@ out float v_viewDepth;
 // so the tiled path (greedy quads) and the whole non-water pipeline stay
 // bit-identical.
 out vec2 v_rippleOff;
+// PRE-5 alpha cutout: the vertex's cutout identity mark (1 = an item
+// box-model vertex whose icon is a pure cutout, the init-time census; 0
+// everywhere else). Carried for the geometry's identity; the fragment's
+// discard is uniform-gated (u_discardEnabled) and alpha-based, not
+// vertex-based.
+out float v_cutout;
 
 void main() {
     // Model is rigid (translation + rotation only) in Phase 1, so the
@@ -61,6 +68,7 @@ void main() {
     v_tiled = a_tiled;
     v_skyLight = a_skyLight;
     v_blockLight = a_blockLight;
+    v_cutout = a_cutout;
     // Classic per-face shading (the Minecraft lightmap look): a lightmap
     // value alone renders flat, so each face orientation gets a fixed
     // multiplier. Chunk models are pure translations, so the world normal

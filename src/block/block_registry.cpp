@@ -94,6 +94,14 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "transparent", "boolean",
                    [&](const Json& v) { out.transparent = v.asBool(); });
     MC_TRY(r);
+    // PRE-5 alpha cutout: routes the block's geometry to the cutout
+    // render pass (depth write + alpha discard, the leaves / cross-plant
+    // case). A strict boolean (the transparent precedent); the
+    // cutout-implies-transparent pairing is validated below (the
+    // opaque/transparent conflict pattern).
+    r = checkField(*p, "cutout", "boolean",
+                   [&](const Json& v) { out.cutout = v.asBool(); });
+    MC_TRY(r);
     r = checkField(*p, "destroyable", "boolean",
                    [&](const Json& v) { out.destroyable = v.asBool(); });
     MC_TRY(r);
@@ -555,6 +563,15 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     if (out.opaque && out.transparent) {
         return MC_FAIL("block cannot be both 'opaque' and 'transparent'");
     }
+    // PRE-5: the cutout pass is a SUB-pass of the transparent routing — a
+    // cutout block that is not transparent would route its geometry
+    // nowhere (a dead field). The same contradiction as opaque+transparent,
+    // named and rejected (the cross/glass-pane forced-combination
+    // precedent).
+    if (out.cutout && !out.transparent) {
+        return MC_FAIL("block property 'cutout' requires 'transparent' (the "
+                       "cutout pass is a transparent sub-pass)");
+    }
     // Crop growth (Phase 48): both fields are optional; an EXPLICIT empty
     // growsTo is a typo (ABSENT is the "not a crop" default — the ammo
     // discipline). The two fields are a strict pair: each one requires
@@ -917,6 +934,27 @@ Result<BlockID> BlockRegistry::registerBlock(const Json& def) {
             return MC_FAIL("glass-pane block '" + name +
                            "' must be 'transparent' (it renders in the "
                            "blending pass)");
+        }
+    }
+
+    // PRE-5: the cutout routing is honored by exactly two mesh emitters —
+    // the greedy CUBE-FACE pass (full-cube blocks) and the CROSS pass.
+    // Every other emitter keeps its fixed bucket regardless of the field
+    // (slab / stairs / wall / fence are opaque-bucket, the glass pane and
+    // the fluids are blend-bucket by construction), so a `cutout` flag on
+    // them would be a dead field — rejected by name (the ammo discipline,
+    // the cross/glass-pane forced-combination precedent). Only a
+    // full-cube or cross block may carry it (and it still requires
+    // `transparent`, checked in parseProperties).
+    if (block.properties.cutout) {
+        const bool cubeOrCross =
+            block.model.shape == BlockModel::Shape::FullCube ||
+            block.model.shape == BlockModel::Shape::Cross;
+        if (!cubeOrCross || !block.properties.fluidName.empty()) {
+            return MC_FAIL("block '" + name + "' cannot be 'cutout' (only "
+                           "full-cube and cross shapes route to the cutout "
+                           "pass; fluids, slabs, stairs, walls, fences and "
+                           "glass panes keep their fixed bucket)");
         }
     }
 

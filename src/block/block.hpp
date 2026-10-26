@@ -102,6 +102,22 @@ struct BlockProperties {
     bool solid = true;           // blocks movement (AABB collision)
     bool opaque = true;          // fully occludes adjacent faces + blocks light
     bool transparent = false;    // rendered in the blending pass
+    // PRE-5 alpha cutout: true = the block's geometry belongs to the
+    // CUTOUT render pass (between the opaque and the translucent-blend
+    // pass): it is drawn with alpha discard active (the fragment shader's
+    // `alpha < 0.5 -> discard`, gated on render.alpha_test) AND with depth
+    // WRITE enabled, so the holes of its texture (alpha-0 pixels) do not
+    // occlude geometry behind them (the leaves / cross-plant case).
+    // Requires `transparent` (rejected otherwise at data load — the cutout
+    // pass is a sub-pass of the transparent routing). Default false = the
+    // block stays in the translucent-blend pass (depth write off when
+    // render.alpha_test is on; when it is off the whole pipeline is
+    // bit-identical to pre-PRE-5). The assignment is content data (the
+    // texture alpha census: a block's cutout eligibility is its texture's
+    // alpha set being a subset of {0, 255} — no intermediate values; a
+    // texture with a translucent core — glass 220, water 200, pane 90 —
+    // keeps the blend pass).
+    bool cutout = false;
     bool destroyable = true;     // can be broken by the player
     // Burns to air when 6-adjacent to a LAVA cell (Phase 58, the fire
     // system v2 — Minecraft's lava burns crops). The fluid sim's burn pass

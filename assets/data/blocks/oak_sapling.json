@@ -5,6 +5,7 @@
     "solid": false,
     "opaque": false,
     "transparent": true,
+    "cutout": true,
     "flamable": true,
     "drops": "oak_sapling",
     "plant_on": ["dirt", "grass"],

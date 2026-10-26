@@ -168,7 +168,8 @@ TEST(MeshJobTest, SnapshotMeshMatchesLiveWorldMesh) {
             }
         }
     }
-    // All 8 center-column chunks: bit-identical meshes (both passes).
+    // All 8 center-column chunks: bit-identical meshes (all three
+    // buckets — PRE-5's cutout one included).
     for (int cy = 0; cy < kVCols; ++cy) {
         const ChunkPos cp{0, cy, 0};
         const ChunkMeshData a =
@@ -177,6 +178,8 @@ TEST(MeshJobTest, SnapshotMeshMatchesLiveWorldMesh) {
             ChunkMesher(snap, reg, kLayout()).mesh(cp);
         expectVerticesEqual(a.opaqueVertices, b.opaqueVertices);
         EXPECT_EQ(a.opaqueIndices, b.opaqueIndices);
+        expectVerticesEqual(a.cutoutVertices, b.cutoutVertices);
+        EXPECT_EQ(a.cutoutIndices, b.cutoutIndices);
         expectVerticesEqual(a.transparentVertices, b.transparentVertices);
         EXPECT_EQ(a.transparentIndices, b.transparentIndices);
     }
@@ -190,6 +193,8 @@ TEST(MeshJobTest, SnapshotMeshMatchesLiveWorldMesh) {
             ChunkMesher(snap, reg, kLayout()).mesh({0, 4, 0});
         expectVerticesEqual(a.opaqueVertices, b.opaqueVertices);
         EXPECT_EQ(a.opaqueIndices, b.opaqueIndices);
+        expectVerticesEqual(a.cutoutVertices, b.cutoutVertices);
+        EXPECT_EQ(a.cutoutIndices, b.cutoutIndices);
         expectVerticesEqual(a.transparentVertices, b.transparentVertices);
         EXPECT_EQ(a.transparentIndices, b.transparentIndices);
     }
@@ -231,6 +236,8 @@ TEST(MeshJobTest, SnapshotCarriesSaplingStage) {
     const ChunkMeshData b = ChunkMesher(snap, reg, kLayout()).mesh(cp);
     expectVerticesEqual(a.transparentVertices, b.transparentVertices);
     EXPECT_EQ(a.transparentIndices, b.transparentIndices);
+    expectVerticesEqual(a.cutoutVertices, b.cutoutVertices);
+    EXPECT_EQ(a.cutoutIndices, b.cutoutIndices);
     // And the stage actually scaled the quad (not the full cell): the
     // center cell's quad corner sits at chunk-local (8.25, 0.25, 8.25) —
     // the 0.5 scale around the cell centre (local (0.5, 0.5, 0.5)).

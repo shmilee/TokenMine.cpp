@@ -83,6 +83,23 @@
 
 namespace mc {
 
+// PRE-5: the three world-geometry render passes (the classic Minecraft
+// order). Opaque: depth write on, no blend (the GL defaults, unchanged).
+// Cutout: the `cutout` blocks (leaves, cross plants) + the pure-cutout
+// item drops — drawn with alpha DISCARD active (u_discardEnabled) AND
+// depth write on, so the texture holes write no depth (the visibility
+// fix). Blend: the remaining translucent blocks (glass, the pane, the
+// fluids) + the translucent items — blended, depth write OFF (a
+// translucent surface must not occlude what is behind it). With
+// render.alpha_test off, the cutout section loses its discard, the blend
+// section keeps the depth write (the GL default), and the pipeline is
+// bit-identical to pre-PRE-5 (see the game's render()).
+enum class RenderPass {
+    Opaque,
+    Cutout,
+    Blend,
+};
+
 struct GameArgs {
     std::filesystem::path configPath = "config/config.json";
     int frames = 0;        // 0 = run until closed
@@ -151,6 +168,10 @@ private:
     // world offset, so the column model translates in X/Z only.
     struct ColumnMesh {
         std::optional<Mesh> opaque;
+        // PRE-5: the cutout sub-mesh (leaves, cross plants — the discard +
+        // depth-write pass); the transparent one below is the
+        // translucent-BLEND sub-mesh (glass, the pane, the fluids).
+        std::optional<Mesh> cutout;
         std::optional<Mesh> transparent;
     };
 
@@ -479,11 +500,12 @@ private:
     // pass and despawn (removal is deferred so the merge order — and
     // therefore the merge result — is deterministic).
     void updateEntities(double dt);
-    // Dropped-item rendering: the items whose block belongs to the given
-    // pass (opaque / transparent), bobbing + spinning around their rest
-    // position (frame-counter driven — see kItemBobPeriodFrames).
+    // Dropped-item rendering: the items belonging to the given pass
+    // (opaque / cutout / blend — PRE-5's three-way routing), bobbing +
+    // spinning around their rest position (frame-counter driven — see
+    // kItemBobPeriodFrames).
     void drawItemEntities(const Mat4& view, const Mat4& projection,
-                          bool transparentPass);
+                          RenderPass pass);
     // The cached full-cube mesh for a dropped block (built lazily on first
     // render; the geometry is cached, only the draw transform varies).
     const Mesh& itemMesh(BlockID id);
@@ -619,9 +641,10 @@ private:
     // target outline (drawn in the blending pass, depth test on).
     void drawWorldOverlay(const Mat4& view, const Mat4& projection);
     // Particle batch for one pass (dynamic mesh, rebuilt per frame;
-    // split by the block's transparency like the item entities).
+    // split by the block's pass — opaque / cutout / blend — like the
+    // item entities, PRE-5).
     void drawParticles(const Mat4& view, const Mat4& projection,
-                       bool transparentPass);
+                       RenderPass pass);
     // The whole screen-space pass: hotbar + crosshair + held item (while
     // captured), the inventory/craft panel (while open), the F3 overlay
     // (while toggled). Runs with depth test + culling off; every element
@@ -1005,6 +1028,15 @@ private:
     // model meshes (built lazily on first render, sized at init).
     std::vector<Texture> m_itemModelTextures;
     std::vector<Mesh> m_itemModelMeshes;
+    // PRE-5: the per-item cutout census (indexed by ItemID value, parallel
+    // to m_itemModelTextures; false entry = no model / not a pure cutout).
+    // Computed at init from the item's model-texture PNG (isPureCutoutImage
+    // on the decoded alpha channel) — the pure-cutout items (alpha set
+    // {0, 255}) render their world drops in the CUTOUT pass (discard +
+    // depth write, visible through the leaf holes); the items with a
+    // translucent icon stay in the BLEND pass. Shipped icons are all
+    // pure cutout (the census is content data, not code policy).
+    std::vector<bool> m_itemCutout;
     Mesh m_outlineMesh;
     std::array<Mesh, 5> m_crackMeshes;
     // Phase 15 state (all default-off: the no-input baseline renders no

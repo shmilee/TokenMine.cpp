@@ -5,6 +5,7 @@
     "solid": false,
     "opaque": false,
     "transparent": true,
+    "cutout": true,
     "flamable": true,
     "drops": "birch_sapling",
     "plant_on": ["dirt", "grass"],

@@ -17,7 +17,8 @@ constexpr int kFaceUvCorner[4][2] = {
 };
 } // namespace
 
-ItemMeshGeometry makeItemModelGeometry(const Item::ItemModel& model) {
+ItemMeshGeometry makeItemModelGeometry(const Item::ItemModel& model,
+                                       bool cutout) {
     ItemMeshGeometry out;
     out.vertices.reserve(model.elements.size() * 24);
     out.indices.reserve(model.elements.size() * 36);
@@ -46,6 +47,10 @@ ItemMeshGeometry makeItemModelGeometry(const Item::ItemModel& model) {
                 // convention — the block-cube hand's lighting).
                 v.skyLight = 1.0f;
                 v.blockLight = 0.0f;
+                // PRE-5: the cutout identity mark (location 8) — set on
+                // every vertex of a pure-cutout icon's model (the
+                // caller's census); 0.0 (the default) otherwise.
+                v.cutout = cutout ? 1.0f : 0.0f;
                 out.vertices.push_back(v);
             }
             out.indices.insert(out.indices.end(),

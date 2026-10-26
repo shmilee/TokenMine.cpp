@@ -10,7 +10,7 @@
 namespace mc {
 
 namespace {
-constexpr std::size_t kVertexSize = sizeof(MeshVertex); // 56 bytes, packed
+constexpr std::size_t kVertexSize = sizeof(MeshVertex); // 60 bytes, packed
 }
 
 Mesh::~Mesh() {
@@ -165,6 +165,11 @@ void Mesh::setupAttributes() {
     glEnableVertexAttribArray(7);
     glVertexAttribPointer(7, 1, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(kVertexSize),
                           reinterpret_cast<const void*>(offsetof(MeshVertex, water)));
+    // location 8: PRE-5 cutout identity mark (1 = an item box-model vertex
+    // whose icon is a pure cutout; 0 everywhere else, default 0).
+    glEnableVertexAttribArray(8);
+    glVertexAttribPointer(8, 1, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(kVertexSize),
+                          reinterpret_cast<const void*>(offsetof(MeshVertex, cutout)));
 }
 
 Result<void> Mesh::uploadDynamic(const std::vector<MeshVertex>& vertices,

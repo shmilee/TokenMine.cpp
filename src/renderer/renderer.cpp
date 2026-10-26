@@ -69,6 +69,10 @@ void Renderer::setCulling(bool enabled) {
     }
 }
 
+void Renderer::setDepthMask(bool enabled) {
+    glDepthMask(enabled);
+}
+
 void Renderer::draw(const Mesh& mesh, const ShaderProgram& program,
                     const Mat4& view, const Mat4& projection,
                     const Mat4& model) {

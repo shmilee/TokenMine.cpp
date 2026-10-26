@@ -86,6 +86,7 @@ add_library(mc_core STATIC
     src/world/biome.cpp
     src/world/worldgen_config.cpp
     src/world/world_generator.cpp
+    src/renderer/alpha_test.cpp
     src/renderer/fog.cpp
     src/renderer/shader.cpp
     src/renderer/texture.cpp
@@ -170,6 +171,7 @@ add_executable(tokenmine_tests
     tests/test_debug_overlay.cpp
     tests/test_inventory_ui.cpp
     tests/test_ui_scale.cpp
+    tests/test_alpha_cutout.cpp
     tests/test_fog.cpp
     tests/test_ripple.cpp
     tests/test_cloud.cpp

@@ -53,6 +53,14 @@ public:
     // hold). The world pass restores both before the next frame.
     void setDepthTest(bool enabled);
     void setCulling(bool enabled);
+    // PRE-5 alpha cutout: glDepthMask in a line — the world pass runs
+    // with the depth WRITE on (the GL default; the pre-PRE-5 behavior
+    // everywhere) except the translucent-blend section, which turns it
+    // off for its draws (a translucent surface must not occlude what is
+    // behind it — the classic Minecraft pass discipline). The caller
+    // restores it (setDepthMask(true)) after the section; a frame that
+    // never turns it off leaves the GL default untouched.
+    void setDepthMask(bool enabled);
 
     // Draw one indexed mesh. The program must declare u_model/u_view/u_proj.
     // Texture binding is the caller's job (bind the texture + set the

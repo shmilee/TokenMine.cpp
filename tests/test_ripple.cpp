@@ -19,13 +19,15 @@ using mc::Config;
 using mc::Json;
 using mc::MeshVertex;
 
-// The water flag is the TAIL field: the first 52 bytes are the pre-PRE-3
-// layout, and the new field appends one float (stride 52 -> 56). Pinning
-// the offset and the size keeps the VAO binding (offsetof) and the GL
+// The water flag sits at offset 52: the first 52 bytes are the pre-PRE-3
+// layout, and PRE-3 appended one float (stride 48 -> 52 -> 56). PRE-5
+// then appended the cutout mark as the new TAIL field (56 -> 60). Pinning
+// the offsets and the size keeps the VAO binding (offsetof) and the GL
 // stride honest if the struct is ever reordered.
-TEST(MeshVertexWaterTest, WaterFlagIsTheTailFieldAtOffset52) {
+TEST(MeshVertexWaterTest, WaterFlagAtOffset52AndTailCutoutAtOffset56) {
     EXPECT_EQ(offsetof(MeshVertex, water), 52u);
-    EXPECT_EQ(sizeof(MeshVertex), 56u);
+    EXPECT_EQ(offsetof(MeshVertex, cutout), 56u); // PRE-5 new tail
+    EXPECT_EQ(sizeof(MeshVertex), 60u); // 56 -> 60 (PRE-5)
 }
 
 // Default construction = 0: every producer that never sets the field

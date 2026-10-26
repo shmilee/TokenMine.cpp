@@ -38,6 +38,7 @@
 #include "item/armor.hpp"
 #include "item/durability.hpp"
 #include "block/block_sound.hpp"
+#include "renderer/alpha_test.hpp"
 #include "renderer/fog.hpp"
 
 namespace mc {
@@ -1143,6 +1144,14 @@ Result<void> Game::buildScene() {
     // (itemModelMesh).
     m_itemModelTextures.resize(m_items.count());
     m_itemModelMeshes.resize(m_items.count());
+    // PRE-5: the per-item cutout census (parallel to the model textures):
+    // decode the model's PNG ONCE and run isPureCutoutImage over its alpha
+    // channel — a pure cutout (alpha set ⊆ {0, 255}) routes the item's
+    // world drop to the CUTOUT pass (visible through the leaf holes); an
+    // icon with a translucent core stays in the BLEND pass. (The shipped
+    // icons are all pure cutout — the census is content data, and a
+    // future translucent icon re-routes itself with zero code changes.)
+    m_itemCutout.assign(m_items.count(), false);
     for (const ItemID id : m_items.allIds()) {
         const Item& item = m_items.at(id);
         if (!item.model.has_value()) {
@@ -1157,7 +1166,20 @@ Result<void> Game::buildScene() {
         }
         auto modelPath = m_assets.resolve(rel);
         MC_TRY(modelPath);
-        auto modelTex = Texture::loadPng(*modelPath);
+        std::ifstream in(*modelPath, std::ios::binary);
+        if (!in) {
+            return MC_FAIL("cannot open item model texture file: '" +
+                           modelPath->string() + "'");
+        }
+        const std::string bytes((std::istreambuf_iterator<char>(in)),
+                                std::istreambuf_iterator<char>());
+        auto image = Png::decode(bytes);
+        MC_TRY(image);
+        m_itemCutout[static_cast<std::size_t>(id.value)] =
+            isPureCutoutImage(image->rgba.data(), image->width,
+                              image->height);
+        auto modelTex = Texture::createFromPixels(
+            image->width, image->height, image->rgba.data());
         MC_TRY(modelTex);
         m_itemModelTextures[static_cast<std::size_t>(id.value)] =
             std::move(*modelTex);
@@ -1557,6 +1579,9 @@ Result<void> Game::rebuildColumnMesh(const ColumnPos& col) {
     // visibility the old per-chunk loop had.
     std::vector<MeshVertex> opaqueVerts;
     std::vector<std::uint32_t> opaqueIdx;
+    // PRE-5: the third (cutout) bucket, merged like the other two.
+    std::vector<MeshVertex> cutoutVerts;
+    std::vector<std::uint32_t> cutoutIdx;
     std::vector<MeshVertex> transparentVerts;
     std::vector<std::uint32_t> transparentIdx;
     for (int cy = 0; cy < kVerticalChunksPerColumn; ++cy) {
@@ -1581,6 +1606,20 @@ Result<void> Game::rebuildColumnMesh(const ColumnPos& col) {
                 opaqueIdx.push_back(i + base);
             }
         }
+        if (!d.cutoutEmpty()) {
+            const std::uint32_t base =
+                static_cast<std::uint32_t>(cutoutVerts.size());
+            cutoutVerts.reserve(cutoutVerts.size() + d.cutoutVertices.size());
+            for (const MeshVertex& v : d.cutoutVertices) {
+                MeshVertex w = v;
+                w.position.y += oy;
+                cutoutVerts.push_back(std::move(w));
+            }
+            cutoutIdx.reserve(cutoutIdx.size() + d.cutoutIndices.size());
+            for (const std::uint32_t i : d.cutoutIndices) {
+                cutoutIdx.push_back(i + base);
+            }
+        }
         if (!d.transparentEmpty()) {
             const std::uint32_t base =
                 static_cast<std::uint32_t>(transparentVerts.size());
@@ -1600,10 +1639,16 @@ Result<void> Game::rebuildColumnMesh(const ColumnPos& col) {
     }
     ColumnMesh& cm = m_columnMeshes[col];
     cm.opaque.reset();
+    cm.cutout.reset();
     cm.transparent.reset();
     if (!opaqueIdx.empty()) {
         cm.opaque.emplace();
         auto r = cm.opaque->upload(opaqueVerts, opaqueIdx);
+        MC_TRY(r);
+    }
+    if (!cutoutIdx.empty()) {
+        cm.cutout.emplace();
+        auto r = cm.cutout->upload(cutoutVerts, cutoutIdx);
         MC_TRY(r);
     }
     if (!transparentIdx.empty()) {
@@ -5360,7 +5405,7 @@ void Game::updateEntities(double dt) {
 }
 
 void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
-                            bool transparentPass) {
+                            RenderPass pass) {
     for (const auto& entity : m_entities) {
         const ItemEntity* item =
             dynamic_cast<const ItemEntity*>(entity.get());
@@ -5382,10 +5427,21 @@ void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
         // bit-level unchanged (the block cube below / the invisible
         // non-block drop).
         if (it.model.has_value()) {
-            if (!transparentPass) {
+            const std::size_t idx = static_cast<std::size_t>(iid.value);
+            // PRE-5: the model item routes by its init-time icon census
+            // (m_itemCutout) — a PURE cutout icon (alpha set ⊆ {0, 255})
+            // draws in the CUTOUT pass (discard + depth write, visible
+            // through the leaf holes); an icon with a translucent core
+            // stays in the BLEND pass. Never the opaque pass (the icon
+            // carries transparent pixels — unblended it would draw as an
+            // opaque black square, the CRAFT-2 pattern).
+            const RenderPass want =
+                (idx < m_itemCutout.size() && m_itemCutout[idx])
+                    ? RenderPass::Cutout
+                    : RenderPass::Blend;
+            if (pass != want) {
                 continue;
             }
-            const std::size_t idx = static_cast<std::size_t>(iid.value);
             if (idx >= m_itemModelTextures.size() ||
                 !m_itemModelTextures[idx].valid()) {
                 continue; // cannot happen (the texture loads at init)
@@ -5434,7 +5490,16 @@ void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
             continue;
         }
         const Block& block = m_blocks.at(it.block);
-        if (block.properties.transparent != transparentPass) {
+        // PRE-5: the block-cube drop routes by the block's properties —
+        // opaque blocks stay in the opaque pass, `cutout` blocks (leaves)
+        // join the cutout pass, the remaining transparent blocks (glass)
+        // the blend pass.
+        const RenderPass want =
+            !block.properties.transparent
+                ? RenderPass::Opaque
+                : (block.properties.cutout ? RenderPass::Cutout
+                                           : RenderPass::Blend);
+        if (pass != want) {
             continue;
         }
         const Mesh& mesh = itemMesh(it.block);
@@ -5489,8 +5554,11 @@ const Mesh& Game::itemModelMesh(ItemID id) {
     if (!mesh.valid()) {
         const Item& item = m_items.at(id);
         if (item.model.has_value()) {
-            const ItemMeshGeometry geom =
-                makeItemModelGeometry(item.model.value());
+            // PRE-5: the geometry carries the cutout identity mark (the
+            // init-time icon census) on its vertices (location 8).
+            const ItemMeshGeometry geom = makeItemModelGeometry(
+                item.model.value(),
+                idx < m_itemCutout.size() && m_itemCutout[idx]);
             auto r = mesh.upload(geom.vertices, geom.indices);
             if (!r.ok()) {
                 MC_LOG_ERROR("Item model mesh build failed for item '" +
@@ -6598,7 +6666,7 @@ void Game::drawWorldOverlay(const Mat4& view, const Mat4& projection) {
 }
 
 void Game::drawParticles(const Mat4& view, const Mat4& projection,
-                         bool transparentPass) {
+                         RenderPass pass) {
     if (m_particles.empty()) {
         return;
     }
@@ -6610,7 +6678,16 @@ void Game::drawParticles(const Mat4& view, const Mat4& projection,
     const float half = 0.06f;
     for (const Particle& p : m_particles.particles()) {
         const Block& block = m_blocks.at(p.block);
-        if (block.properties.transparent != transparentPass) {
+        // PRE-5: the particle routes like its block — opaque blocks'
+        // break particles stay in the opaque pass, `cutout` blocks'
+        // (leaves, cross plants: the fire embers) join the cutout pass,
+        // the remaining transparent blocks' the blend pass.
+        const RenderPass want =
+            !block.properties.transparent
+                ? RenderPass::Opaque
+                : (block.properties.cutout ? RenderPass::Cutout
+                                           : RenderPass::Blend);
+        if (pass != want) {
             continue;
         }
         for (const CubeFace& face : kCubeFaces) {
@@ -7521,6 +7598,17 @@ void Game::render() {
         (static_cast<float>(M_PI) * 2.0f);
     m_basicShader.setUniform1i("u_ripplesEnabled", rippleOn ? 1 : 0);
     m_basicShader.setUniform1f("u_ripplePhase", ripplePhase);
+    // PRE-5 alpha cutout: the render.alpha_test gate (code default true,
+    // the render.fog / render.clouds getBool precedent — config.json is
+    // untouched). ON = the fragment's `alpha < 0.5 -> discard` branch
+    // runs on every basic-program draw (bucket-independent: the cutout
+    // holes AND the glass frame AND the item-icon backgrounds), and the
+    // blend section below drops its depth write (setDepthMask(false));
+    // OFF = the branch is never taken and the depth mask is never
+    // touched, so the pipeline is the v0.28.0 one bit-for-bit (the S1
+    // three-way gate). One per-frame uniform set, zero per-draw cost.
+    const bool alphaTestOn = m_config.getBool("render.alpha_test", true);
+    m_basicShader.setUniform1i("u_discardEnabled", alphaTestOn ? 1 : 0);
 
     m_atlas.texture().bind();
 
@@ -7544,9 +7632,11 @@ void Game::render() {
                  z0 + kChunkSize});
     };
 
-    // Column passes: all opaque geometry first, then the transparent
-    // (blended) geometry, so blending composites over the opaque scene.
-    // Phase 99.9: one merged mesh per COLUMN (its eight chunks) instead of
+    // Column passes: all opaque geometry first, then the PRE-5 cutout
+    // geometry (discard + depth write), then the translucent (blended)
+    // geometry (no depth write with alpha_test on), so blending composites
+    // over the opaque + cutout scene. Phase 99.9: one merged mesh per
+    // COLUMN (its eight chunks) instead of
     // one per chunk — the per-chunk submission was ~10-30 us/draw on the
     // Intel iGPU and grew with the view-distance ring (the vd80 render
     // collapse). The column list is m_loadedColumns (the incremental
@@ -7567,8 +7657,10 @@ void Game::render() {
     }
 
     // Dropped items (Phase 10): the opaque ones with the chunk pass; the
-    // transparent ones (leaves, glass) join the blending pass below.
-    drawItemEntities(view, projection, false);
+    // cutout ones (leaves, the pure-cutout model items, PRE-5) join the
+    // cutout pass below; the remaining transparent ones (glass) the
+    // blending pass.
+    drawItemEntities(view, projection, RenderPass::Opaque);
     // Mobs (Phase 20): opaque box models, with the opaque pass (the depth
     // test then occludes them behind terrain exactly like the chunks).
     drawMobs(view, projection);
@@ -7585,7 +7677,7 @@ void Game::render() {
     drawCampfireCookItems(view, projection);
     // Opaque break particles (Phase 15) belong to the opaque pass so the
     // transparent geometry blends over them.
-    drawParticles(view, projection, false);
+    drawParticles(view, projection, RenderPass::Opaque);
 
     m_renderer.enableBlending();
     // Sky objects (unlit billboarded quads at kSkyDistance): drawn after
@@ -7593,6 +7685,41 @@ void Game::render() {
     // before the transparent pass (they never overlap chunk geometry in
     // depth — they sit behind everything in the demo area).
     drawSkyObjects(view, projection, h);
+
+    // PRE-5 CUTOUT section (always after the sky, before the blend
+    // section — the v0.28.0 relative order for a water/glass-free scene,
+    // which is what the OFF immunity rests on): the leaves + cross-plant
+    // column geometry, the cutout item drops and the cutout particles.
+    // With render.alpha_test ON the discard is active (u_discardEnabled,
+    // set above) AND the depth write is on (the GL default — the cutout
+    // surface occludes what is behind its SOLID pixels, the holes write
+    // no depth = the visibility fix). With it OFF the section is the old
+    // transparent section bit-for-bit (no discard, depth write on).
+    for (const ColumnPos& col : columns) {
+        if (!columnVisible(col)) {
+            continue;
+        }
+        const auto it = m_columnMeshes.find(col);
+        if (it == m_columnMeshes.end() || !it->second.cutout.has_value()) {
+            continue;
+        }
+        m_renderer.draw(*it->second.cutout, m_basicShader, view, projection,
+                        columnModel(col));
+    }
+    drawItemEntities(view, projection, RenderPass::Cutout);
+    drawParticles(view, projection, RenderPass::Cutout);
+
+    // PRE-5 BLEND section: the translucent geometry (glass, the pane, the
+    // fluids, the translucent items/particles, the beams, the clouds, the
+    // world overlay) with the depth WRITE off — a translucent surface
+    // composites over what is behind it and must not occlude it. With
+    // render.alpha_test OFF the mask is never touched (the GL default
+    // stays on) and the pipeline is the v0.28.0 one bit-for-bit (for a
+    // water/glass-free scene; the mixed-scene order deviation is the
+    // documented PRE-5 one).
+    if (alphaTestOn) {
+        m_renderer.setDepthMask(false);
+    }
     for (const ColumnPos& col : columns) {
         if (!columnVisible(col)) {
             continue;
@@ -7605,8 +7732,8 @@ void Game::render() {
         m_renderer.draw(*it->second.transparent, m_basicShader, view,
                         projection, columnModel(col));
     }
-    drawItemEntities(view, projection, true);
-    drawParticles(view, projection, true);
+    drawItemEntities(view, projection, RenderPass::Blend);
+    drawParticles(view, projection, RenderPass::Blend);
     // Beacon beams (Phase 83): the translucent light columns from active
     // beacons, blended + depth-occluded like the other world geometry.
     // No-op without an active beacon (baseline byte-identical).
@@ -7621,6 +7748,9 @@ void Game::render() {
     // depth test still on (the overlay cubes sit just outside the block).
     drawWorldOverlay(view, projection);
     m_renderer.disableBlending();
+    if (alphaTestOn) {
+        m_renderer.setDepthMask(true); // restore the GL default
+    }
 
     // Phase 15 UI pass: screen space (y-down ortho), depth test + culling
     // off. Every element is gated on a pointer/key state, so a no-input

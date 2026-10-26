@@ -196,6 +196,10 @@ void ChunkMesher::meshFaceDirection(ChunkMeshData& out, const Chunk& chunk,
                 MaskCell& cell = mask[v][u];
                 cell.valid = true;
                 cell.transparent = block.properties.transparent;
+                // PRE-5: the cutout routing (validated to imply
+                // transparent at data load). A cutout face and a blend
+                // face sharing tile + light never merge (sameAs).
+                cell.cutout = block.properties.cutout;
                 const AtlasLayout::Tile tile =
                     m_layout.tiles.at(cubeFaceTexture(block, face.textureSlot));
                 cell.tileCol = tile.col;
@@ -300,10 +304,22 @@ void ChunkMesher::emitMergedQuad(ChunkMeshData& out, const CubeFace& face,
         {alpha0, beta0}, {alpha1, beta0}, {alpha1, beta1}, {alpha0, beta1},
     };
 
-    std::vector<MeshVertex>* verts =
-        seed.transparent ? &out.transparentVertices : &out.opaqueVertices;
-    std::vector<std::uint32_t>* indices =
-        seed.transparent ? &out.transparentIndices : &out.opaqueIndices;
+    // PRE-5 three-way pass routing: opaque blocks -> the opaque
+    // sub-mesh; transparent + cutout blocks (leaves) -> the cutout
+    // sub-mesh (discard + depth write); the remaining transparent blocks
+    // (glass, water) -> the translucent-blend sub-mesh.
+    std::vector<MeshVertex>* verts;
+    std::vector<std::uint32_t>* indices;
+    if (!seed.transparent) {
+        verts = &out.opaqueVertices;
+        indices = &out.opaqueIndices;
+    } else if (seed.cutout) {
+        verts = &out.cutoutVertices;
+        indices = &out.cutoutIndices;
+    } else {
+        verts = &out.transparentVertices;
+        indices = &out.transparentIndices;
+    }
 
     const float skyF =
         static_cast<float>(seed.sky) / static_cast<float>(kMaxLight);
@@ -479,9 +495,14 @@ void ChunkMesher::emitCross(ChunkMeshData& out, const Block& block,
         static_cast<float>(m_world.getBlockLight(wx, wy, wz)) /
         static_cast<float>(kMaxLight);
     // Registry invariant: a cross shape is always transparent (validated
-    // at data load), so both quads go to the transparent sub-mesh.
-    std::vector<MeshVertex>& verts = out.transparentVertices;
-    std::vector<std::uint32_t>& indices = out.transparentIndices;
+    // at data load). PRE-5: the quads route by the block's `cutout`
+    // property — the cutout sub-mesh (leaves / flowers / wheat / torch /
+    // fire / campfire) or the translucent-blend sub-mesh (a cross without
+    // the field, pre-PRE-5 behavior).
+    std::vector<MeshVertex>& verts =
+        block.properties.cutout ? out.cutoutVertices : out.transparentVertices;
+    std::vector<std::uint32_t>& indices =
+        block.properties.cutout ? out.cutoutIndices : out.transparentIndices;
 
     // Each quad spans one cell diagonal, bottom edge first: corner order
     // (bottom-start, bottom-end, top-end, top-start), u along the

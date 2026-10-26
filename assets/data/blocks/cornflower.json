@@ -5,6 +5,7 @@
     "solid": false,
     "opaque": false,
     "transparent": true,
+    "cutout": true,
     "drops": "cornflower"
   },
   "model": {

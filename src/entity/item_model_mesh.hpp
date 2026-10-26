@@ -36,6 +36,14 @@
 
 namespace mc {
 
-ItemMeshGeometry makeItemModelGeometry(const Item::ItemModel& model);
+// Builds the item's box-model geometry. PRE-5: `cutout` marks every
+// emitted vertex with the cutout identity flag (location 8, MeshVertex's
+// trailing field) when the item's icon texture is a pure cutout (the
+// init-time alpha census — the caller passes its m_itemCutout entry).
+// The mark is geometry identity data; the fragment's discard is
+// uniform-gated and alpha-based (bucket-independent), so defaulting to
+// false leaves every pre-PRE-5 call byte-identical.
+ItemMeshGeometry makeItemModelGeometry(const Item::ItemModel& model,
+                                       bool cutout = false);
 
 } // namespace mc

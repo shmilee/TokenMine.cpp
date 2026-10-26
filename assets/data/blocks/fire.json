@@ -5,6 +5,7 @@
     "solid": false,
     "opaque": false,
     "transparent": true,
+    "cutout": true,
     "light_emission": 15
   },
   "model": {

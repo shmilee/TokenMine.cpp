@@ -6,6 +6,7 @@
     "solid": false,
     "opaque": false,
     "transparent": true,
+    "cutout": true,
     "drops": "wheat",
     "drops_count": 2
   },

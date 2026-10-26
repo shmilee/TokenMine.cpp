@@ -48,10 +48,15 @@
 // not the block array). Fluid surfaces stay per-face (level-scaled
 // geometry, not merged).
 //
-// Output: two sub-meshes per chunk so the renderer can draw all opaque
-// geometry first and the transparent (blended) geometry second:
+// Output: THREE sub-meshes per chunk so the renderer can draw the
+// geometry in the classic three-pass order (PRE-5):
 //   - faces belonging to opaque blocks
-//   - faces belonging to transparent blocks (glass, leaves, water)
+//   - faces belonging to CUTOUT blocks (transparent + the `cutout`
+//     property: leaves, cross plants) — drawn after the opaque pass with
+//     alpha discard active AND depth write on (the holes write no depth)
+//   - faces belonging to the remaining transparent (translucent-BLEND)
+//     blocks (glass, the glass pane, the fluids) — drawn last, blended,
+//     depth write off
 //
 // Vertex positions are chunk-local (0..16); the renderer applies
 // translate(chunkOrigin).
@@ -72,10 +77,19 @@ namespace mc {
 struct ChunkMeshData {
     std::vector<MeshVertex> opaqueVertices;
     std::vector<std::uint32_t> opaqueIndices;
+    // PRE-5: the cutout bucket (transparent + `cutout` blocks: leaves,
+    // cross plants). Drawn in the cutout pass (discard + depth write).
+    std::vector<MeshVertex> cutoutVertices;
+    std::vector<std::uint32_t> cutoutIndices;
+    // The translucent-blend bucket (the remaining transparent blocks:
+    // glass, the glass pane, the fluids). Drawn last, blended, no depth
+    // write (render.alpha_test on) / depth write (off = the pre-PRE-5
+    // pipeline, the cutout bucket included — see the game's render()).
     std::vector<MeshVertex> transparentVertices;
     std::vector<std::uint32_t> transparentIndices;
 
     bool opaqueEmpty() const { return opaqueIndices.empty(); }
+    bool cutoutEmpty() const { return cutoutIndices.empty(); }
     bool transparentEmpty() const { return transparentIndices.empty(); }
 };
 
@@ -83,20 +97,25 @@ class ChunkMesher {
 public:
     // One mask cell: a visible face on a greedy slice, carrying everything
     // that must be identical for two cells to merge into one quad — the
-    // atlas tile (texture), the sub-mesh (opaque vs transparent pass), and
-    // the baked face light (light-conservative merging).
+    // atlas tile (texture), the sub-mesh (the opaque / cutout / blend
+    // pass), and the baked face light (light-conservative merging).
     struct MaskCell {
         bool valid = false;
         int tileCol = 0;
         int tileRow = 0;
         bool transparent = false;
+        // PRE-5: the block's `cutout` property (transparent sub-pass
+        // routing: cutout pass vs translucent-blend pass). In sameAs so a
+        // cutout face and a blend face sharing tile + light never merge
+        // (they route to different sub-meshes).
+        bool cutout = false;
         std::uint8_t sky = 0;
         std::uint8_t blockLight = 0;
 
         bool sameAs(const MaskCell& o) const {
             return tileCol == o.tileCol && tileRow == o.tileRow &&
-                   transparent == o.transparent && sky == o.sky &&
-                   blockLight == o.blockLight;
+                   transparent == o.transparent && cutout == o.cutout &&
+                   sky == o.sky && blockLight == o.blockLight;
         }
     };
 
@@ -131,11 +150,12 @@ private:
                    std::uint8_t level, FluidKind kind) const;
 
     // Emit the cross-plant geometry of one cell (Phase 45): two crossing
-    // vertical quads (the two cell diagonals) into the transparent
-    // sub-mesh — full texture width on each quad, the cell's own light
-    // baked in, no neighbor culling (the quads sit inside the cell; the
-    // depth test against opaque neighbors handles visibility, as in
-    // Minecraft). Drawn in the unculled blending pass, so each quad is
+    // vertical quads (the two cell diagonals) — full texture width on
+    // each quad, the cell's own light baked in, no neighbor culling (the
+    // quads sit inside the cell; the depth test against opaque neighbors
+    // handles visibility, as in Minecraft). PRE-5: routed by the block's
+    // `cutout` property — the cutout sub-mesh (depth write + discard) or
+    // the translucent-blend sub-mesh. Drawn unculled, so each quad is
     // visible from both sides.
     void emitCross(ChunkMeshData& out, const Block& block,
                    const BlockPos& origin, int lx, int ly, int lz) const;

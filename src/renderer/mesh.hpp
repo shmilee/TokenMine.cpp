@@ -3,7 +3,7 @@
 // One mesh = one draw call's worth of geometry. Vertex format is fixed
 // (MeshVertex) so the VAO layout is set once at upload time.
 //
-// Vertex layout (14 floats, 56 bytes):
+// Vertex layout (15 floats, 60 bytes):
 //   location 0: position   (vec3)
 //   location 1: normal     (vec3)
 //   location 2: uv         (vec2) — legacy producers and single-face
@@ -38,6 +38,18 @@
 //                             0 field is inert for all pre-PRE-3 geometry
 //                             and for the whole pipeline when
 //                             render.water_ripples is off.
+//   location 8: cutout     (float, 0 or 1) — PRE-5: 1 on vertices of an
+//                             item's BOX-MODEL mesh whose icon texture is a
+//                             pure cutout (alpha set ⊆ {0, 255}, the init-
+//                             time census); 0 everywhere else. Carried as a
+//                             per-vertex mark so the model mesh can be
+//                             routed to the cutout render pass (the
+//                             dropped-item visibility through leaf holes);
+//                             the fragment stage's discard itself is
+//                             uniform-gated (u_discardEnabled) and
+//                             alpha-based, NOT vertex-based — the mark is
+//                             the routing/identity data. The default keeps
+//                             every existing producer byte-identical.
 //
 // Thread ownership: game thread with GL context current.
 #pragma once
@@ -64,6 +76,13 @@ struct MeshVertex {
     // (greedy quads, emitSlab/Stairs/Wall/Fence/GlassPane/Cross, item
     // cubes, particles, cracks, UI, mobs) byte-identical.
     float water = 0.0f;
+    // PRE-5 alpha cutout: 1.0 on the vertices of an item BOX-MODEL mesh
+    // whose icon texture is a pure cutout (the init-time alpha census,
+    // see item_model_mesh); 0.0 everywhere else (the default keeps every
+    // existing producer byte-identical). Carried as location 8; the
+    // fragment's discard itself is uniform-gated (u_discardEnabled) and
+    // alpha-based — this field is the geometry's cutout identity mark.
+    float cutout = 0.0f;
 };
 
 // GL primitive for the draw. Triangles is indexed (the chunk meshes and
@@ -115,7 +134,7 @@ public:
 
 private:
     void destroy();
-    // The eight attribute pointers for the fixed MeshVertex layout —
+    // The nine attribute pointers for the fixed MeshVertex layout —
     // called with the VAO and the VBO bound (shared by upload() and
     // uploadDynamic()).
     void setupAttributes();

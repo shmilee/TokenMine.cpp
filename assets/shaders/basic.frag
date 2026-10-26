@@ -37,6 +37,13 @@ uniform int u_fogEnabled;
 uniform float u_fogStart;
 uniform float u_fogEnd;
 uniform vec3 u_fogColor;
+// PRE-5 alpha cutout: the config gate (render.alpha_test, set once per
+// frame on the basic program). 1 = the alpha-0 holes of cutout textures
+// (leaves, cross plants, the glass frame, the item-icon backgrounds)
+// DISCARD their fragment — no color write AND no depth write (with the
+// depth mask on in the cutout pass / off in the blend pass). 0 = the
+// pre-PRE-5 pipeline bit-for-bit (the branch never executes).
+uniform int u_discardEnabled;
 
 out vec4 fragColor;
 
@@ -62,6 +69,13 @@ void main() {
     vec4 texel = texture(u_texture, sampleUv);
     vec3 base = (u_useTexture != 0) ? texel.rgb : u_color;
     float alpha = (u_useTexture != 0) ? texel.a : u_alpha;
+    // PRE-5 alpha cutout: discard the pure holes (alpha 0) — the
+    // translucent values (water 200/255 = 0.78, the glass core 220/255 =
+    // 0.86, the solid-color u_alpha draws >= 0.5) stay, so the fix is
+    // bucket-independent and the water / glass core / beam / cloud solid
+    // colors are untouched. With u_discardEnabled = 0 the branch is never
+    // taken and the pipeline is bit-identical to pre-PRE-5.
+    if (u_discardEnabled != 0 && alpha < 0.5) { discard; }
     // Lightmap lighting: the brighter of day-scaled sky light and block
     // light (each 0..1), with per-face shading and a small ambient floor so
     // fully dark areas stay distinguishable from the void background.
