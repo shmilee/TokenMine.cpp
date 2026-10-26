@@ -169,6 +169,7 @@ add_executable(tokenmine_tests
     tests/test_inventory_ui.cpp
     tests/test_ui_scale.cpp
     tests/test_fog.cpp
+    tests/test_ripple.cpp
     tests/test_particle.cpp
     tests/test_sound.cpp
     tests/test_noise.cpp

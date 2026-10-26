@@ -1907,3 +1907,10 @@
   路径 + `( cd $D && ... )` = 文件不在 $D → 静默回落内置默认 config
   （PITS 252 复现第 2 次）→ 两侧同 default = on/off diff=0 假阴性。
   config 路径一律绝对。
+- **天然熔岩湖首次流体 tick 点燃草 rim = real-dt 非定帧源（PITS 262）**——10-26 门 110
+  S2 场景：种子 123456789 demo 区 (x 23..25, z 25..27) 3×3×2 天然熔岩湖，首次
+  FluidSim tick 即被 P58 燃烧 pass 点燃 4 格草 rim 成 fire 块；火寿命 = 真实 dt
+  生存计时（PITS 244）→ 燃尽帧不定 → **含该区域的无输入 ×2 RAW 场景跨 run 火状态
+  漂移**（blocks 差 = 木→air 烧损位置集不同）。除源两范式：① 场景存档石块填充湖格
+  （块编辑驱离流体，存档往返干净 = PRE-3 场景用法）② fires 大 remaining（g95_fire9999
+  config 范式）。设计无输入判别场景先扫 demo 区熔岩湖。

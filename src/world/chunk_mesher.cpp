@@ -375,6 +375,12 @@ void ChunkMesher::emitFluid(ChunkMeshData& out, const Block& fluidBlock,
         // transient pre-tick state must still render both).
         const std::uint8_t neighborFluid =
             m_world.getFluidOfKind(nx, ny, nz, kind);
+        // PRE-3 water ripples: the WATER top face only (lava, side and
+        // bottom faces keep the flag 0 — a covered top face never
+        // reaches emission, so it is unmarked by construction). The
+        // vertex shader's UV-wander branch runs solely on these four
+        // vertices per face (the shimmer); everything else is inert.
+        const bool waterTop = (face.dy > 0) && (kind == FluidKind::Water);
         if (face.dy > 0) {
             // Top face: hidden by an equal-or-higher fluid above.
             if (neighborFluid >= level) {
@@ -391,10 +397,10 @@ void ChunkMesher::emitFluid(ChunkMeshData& out, const Block& fluidBlock,
             continue;
         }
 
-        const Vec2 u0 = AtlasLayout::uvMin(m_layout,
-                                           cubeFaceTexture(fluidBlock, face.textureSlot));
-        const Vec2 u1 = AtlasLayout::uvMax(m_layout,
-                                           cubeFaceTexture(fluidBlock, face.textureSlot));
+        const std::string& texName =
+            cubeFaceTexture(fluidBlock, face.textureSlot);
+        const Vec2 u0 = AtlasLayout::uvMin(m_layout, texName);
+        const Vec2 u1 = AtlasLayout::uvMax(m_layout, texName);
         // Corner UVs follow the corner order: (u0,v1),(u1,v1),
         // (u1,v0),(u0,v0).
         const Vec2 faceUv[4] = {
@@ -418,7 +424,33 @@ void ChunkMesher::emitFluid(ChunkMeshData& out, const Block& fluidBlock,
                 static_cast<float>(ly + face.corner[i][1] * h),
                 static_cast<float>(lz + face.corner[i][2])};
             v.normal = face.normal;
-            v.uv = faceUv[i];
+            if (waterTop) {
+                // PRE-3: the WATER top face takes the TILED encoding (the
+                // greedy-quad convention) so the ripple's sample window
+                // wanders inside the water tile and the fragment's fract
+                // wrap is seamless: a_uv = the atlas TILE INDEX (all four
+                // corners carry the tile origin), a_uvLocal = the corner's
+                // position in TILE UNITS (0|1 x 0|1 — the legacy corner UV
+                // re-expressed from the tile origin), a_tiled = 1. The
+                // a_water mark stays: it gates the wander computation in
+                // the vertex stage. The legacy atlas-space faceUv and
+                // (tileIndex + uvLocal) * tileSize are bit-equal (the
+                // power-of-two tile fractions are exact in binary), so
+                // ripples OFF renders the water top face exactly as
+                // v0.26.0. Every other face (lava, sides, bottom) keeps
+                // the legacy encoding untouched (tiled = 0, water = 0).
+                const AtlasLayout::Tile& tile = m_layout.tiles.at(texName);
+                const float tileW = 1.0f / static_cast<float>(m_layout.columns);
+                const float tileH = 1.0f / static_cast<float>(m_layout.rows);
+                v.uv = {static_cast<float>(tile.col),
+                        static_cast<float>(tile.row)};
+                v.uvLocal = {(faceUv[i].x - u0.x) / tileW,
+                             (faceUv[i].y - u0.y) / tileH};
+                v.tiled = 1.0f;
+                v.water = 1.0f;
+            } else {
+                v.uv = faceUv[i];
+            }
             v.skyLight = skyF;
             v.blockLight = blockF;
             verts.push_back(v);

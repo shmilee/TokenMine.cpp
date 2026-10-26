@@ -9,6 +9,11 @@ in float v_faceShade;
 // PRE-2 distance fog: the vertex's view-space depth (independent
 // expression tree in basic.vert — gl_Position is untouched).
 in float v_viewDepth;
+// PRE-3 water ripples: the vertex's sample-window wander (tile units,
+// basic.vert). (0,0) for every vertex except a ripples-on water top face
+// — fract(x + (0,0)) is x bit-for-bit, so this changes nothing for the
+// tiled greedy quads or any non-water geometry.
+in vec2 v_rippleOff;
 
 uniform sampler2D u_texture;
 uniform int u_useTexture;
@@ -46,7 +51,13 @@ void main() {
     // space) untouched, so non-chunk geometry is pixel-identical.
     vec2 sampleUv = v_uv;
     if (v_tiled > 0.5) {
-        sampleUv = (v_uv + fract(v_uvLocal)) * u_tileSize;
+        // The wander joins the in-tile coordinate BEFORE the fract wrap
+        // (PRE-3): the window moves inside this tile only — the water top
+        // face is emitted tiled by the mesher, and the wrap seam is
+        // water-on-water (the tile is generated periodic). With
+        // v_rippleOff = (0,0) this line is bit-identical to the pre-PRE-3
+        // (v_uv + fract(v_uvLocal)) * u_tileSize.
+        sampleUv = (v_uv + fract(v_uvLocal + v_rippleOff)) * u_tileSize;
     }
     vec4 texel = texture(u_texture, sampleUv);
     vec3 base = (u_useTexture != 0) ? texel.rgb : u_color;

@@ -52,6 +52,13 @@ constexpr BlockPos kFireNeighbors[6] = {
 constexpr float kFovDegrees = 70.0f;
 constexpr float kNear = 0.1f;
 constexpr float kFar = 1000.0f;
+// PRE-3 water ripples: the shimmer's phase period in FRAMES (2.0 s at the
+// 60 FPS cap — the frame-locked class, hard rule 8; the phase is a pure
+// function of m_frameCount, so the animation is byte-reproducible and the
+// period is a named constant with no config key). The u_ripplePhase uniform
+// sweeps 0..2*pi over the period; the frame MODULO keeps the sin argument
+// bounded (float precision loss over a long session).
+constexpr int kRipplePeriodFrames = 120;
 
 // Sky objects (sun/moon/stars) sit this far from the world origin — inside
 // the far plane (kFar) so they are never clipped.
@@ -7370,6 +7377,25 @@ void Game::render() {
     m_basicShader.setUniform1f("u_fogStart", fog.start);
     m_basicShader.setUniform1f("u_fogEnd", fog.end);
     m_basicShader.setUniform3f("u_fogColor", sky.x, sky.y, sky.z);
+    // PRE-3 water ripples: the frame-locked phase of the water-top UV
+    // wander (the white-noise tile shimmers as its sample window moves —
+    // the vertex computes the offset, the fragment's tiled branch wraps
+    // it inside the water tile). render.water_ripples (code default true,
+    // the render.fog getBool precedent) gates it; OFF leaves the v0.26.0
+    // pipeline bit-identical — the vertex branch never executes
+    // (u_ripplesEnabled = 0 short-circuits before the a_water read, so
+    // v_rippleOff = (0,0) for every vertex and fract(x + (0,0)) = x
+    // bit-for-bit) and every non-water-top vertex carries water = 0.
+    // u_tileSize (the third ripple-related uniform) is the same program
+    // uniform already set above for the tiled greedy quads — no second
+    // set needed. Two new per-frame uniform sets, zero per-draw cost.
+    const bool rippleOn = m_config.getBool("render.water_ripples", true);
+    const float ripplePhase =
+        2.0f * static_cast<float>(m_frameCount % kRipplePeriodFrames) /
+        static_cast<float>(kRipplePeriodFrames) *
+        (static_cast<float>(M_PI) * 2.0f);
+    m_basicShader.setUniform1i("u_ripplesEnabled", rippleOn ? 1 : 0);
+    m_basicShader.setUniform1f("u_ripplePhase", ripplePhase);
 
     m_atlas.texture().bind();
 

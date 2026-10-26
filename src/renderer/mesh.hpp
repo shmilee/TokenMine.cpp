@@ -3,7 +3,7 @@
 // One mesh = one draw call's worth of geometry. Vertex format is fixed
 // (MeshVertex) so the VAO layout is set once at upload time.
 //
-// Vertex layout (13 floats, 52 bytes):
+// Vertex layout (14 floats, 56 bytes):
 //   location 0: position   (vec3)
 //   location 1: normal     (vec3)
 //   location 2: uv         (vec2) — legacy producers and single-face
@@ -16,13 +16,28 @@
 //                             UNITS (a run of W x H merged faces spans
 //                             [0, W) x [1 - H, 1] around the seed cell;
 //                             the fragment shader wraps the fractional
-//                             part back into the tile). Zero otherwise.
+//                             part back into the tile). Water TOP faces
+//                             (PRE-3) use it too, carrying the four
+//                             tile-unit corners (0|1, 0|1). Zero
+//                             otherwise.
 //   location 6: tiled      (float, 0 or 1) — 1 selects the tiled UV
 //                             path in the fragment shader (Phase 18
 //                             greedy meshing). Zero for every legacy
 //                             producer (item cube, particles, cracks,
 //                             UI), whose atlas-space UVs are sampled
 //                             exactly as before.
+//   location 7: water      (float, 0 or 1) — PRE-3: 1 on WATER TOP-face
+//                             vertices only (the chunk mesher's emitFluid
+//                             marks them; every other producer keeps the
+//                             default 0). Water top faces additionally use
+//                             the TILED encoding (locations 2/5/6: tile
+//                             index + tile units) so the vertex shader's
+//                             UV-wander — applied by the fragment stage's
+//                             tiled branch — stays tile-local; the wander
+//                             branch runs only on marked vertices, so a
+//                             0 field is inert for all pre-PRE-3 geometry
+//                             and for the whole pipeline when
+//                             render.water_ripples is off.
 //
 // Thread ownership: game thread with GL context current.
 #pragma once
@@ -44,6 +59,11 @@ struct MeshVertex {
     float blockLight = 0.0f;
     Vec2 uvLocal {0.0f, 0.0f};
     float tiled = 0.0f;
+    // PRE-3 water ripples: 1.0 on water TOP-face vertices (emitFluid),
+    // 0.0 everywhere else. The default keeps every pre-PRE-3 producer
+    // (greedy quads, emitSlab/Stairs/Wall/Fence/GlassPane/Cross, item
+    // cubes, particles, cracks, UI, mobs) byte-identical.
+    float water = 0.0f;
 };
 
 // GL primitive for the draw. Triangles is indexed (the chunk meshes and
@@ -95,7 +115,7 @@ public:
 
 private:
     void destroy();
-    // The seven attribute pointers for the fixed MeshVertex layout —
+    // The eight attribute pointers for the fixed MeshVertex layout —
     // called with the VAO and the VBO bound (shared by upload() and
     // uploadDynamic()).
     void setupAttributes();

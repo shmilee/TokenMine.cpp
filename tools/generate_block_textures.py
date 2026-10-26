@@ -218,9 +218,14 @@ def glass(x, y):
 
 
 def water(x, y):
-    return (clamp(47 + noise(x, y, 21, 10)),
-            clamp(119 + noise(x, y, 22, 10)),
-            clamp(189 + noise(x, y, 23, 10)), 200)
+    # PRE-3: the ripple wander wraps the sample window INSIDE this tile
+    # (the shader's tiled fract wrap), so the tile is generated PERIODIC:
+    # the noise hash takes the coordinates modulo the tile size and the
+    # wrap seam is water-on-water (no discontinuity beyond the noise's
+    # own grain).
+    return (clamp(47 + noise(x % TILE, y % TILE, 21, 10)),
+            clamp(119 + noise(x % TILE, y % TILE, 22, 10)),
+            clamp(189 + noise(x % TILE, y % TILE, 23, 10)), 200)
 
 
 def lava(x, y):

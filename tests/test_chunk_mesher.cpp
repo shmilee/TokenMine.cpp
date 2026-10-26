@@ -4,7 +4,9 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "block/block_registry.hpp"
@@ -449,6 +451,203 @@ TEST(ChunkMesherTest, FluidFaceWindingIsCounterClockwiseFromOutside) {
             << "fluid face wound clockwise from outside: normal (" << n.x
             << "," << n.y << "," << n.z << ")";
     }
+}
+
+// ============================================================================
+//   PRE-3 — water ripples: the emitFluid water-top vertex mark
+// ============================================================================
+
+namespace {
+
+// Counts the vertices carrying the water-top mark (water == 1.0).
+int countWaterMarked(const std::vector<MeshVertex>& verts) {
+    int count = 0;
+    for (const MeshVertex& v : verts) {
+        if (v.water == 1.0f) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+} // namespace
+
+TEST(ChunkMesherTest, WaterTopFaceIsMarkedForRipples) {
+    // Isolated water cell (air on all six sides): exactly the TOP face's
+    // four vertices carry water = 1; every other face (sides, bottom) is 0.
+    BlockRegistry reg = makeRegistry();
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    world.setFluid(8, 4, 8, FluidKind::Water, kMaxFluidLevel);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    ASSERT_EQ(data.transparentVertices.size(), 24u); // all 6 faces
+    EXPECT_EQ(countWaterMarked(data.transparentVertices), 4);
+    const Vec3 up {0.0f, 1.0f, 0.0f};
+    for (const MeshVertex& v : data.transparentVertices) {
+        if (v.water == 1.0f) {
+            EXPECT_EQ(v.normal, up);
+            EXPECT_FLOAT_EQ(v.position.y, 5.0f); // the full-level top plane
+        } else {
+            EXPECT_FLOAT_EQ(v.water, 0.0f);
+        }
+    }
+}
+
+TEST(ChunkMesherTest, CoveredWaterTopFaceIsUnmarked) {
+    // A level-8 cell stacked on a level-8 cell: the LOWER cell's top face
+    // is culled (never emitted, so it can never be marked); only the upper
+    // cell's exposed top (the y = 6 plane) carries the four marks.
+    BlockRegistry reg = makeRegistry();
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    world.setFluid(8, 4, 8, FluidKind::Water, kMaxFluidLevel);
+    world.setFluid(8, 5, 8, FluidKind::Water, kMaxFluidLevel);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    EXPECT_EQ(countWaterMarked(data.transparentVertices), 4);
+    for (const MeshVertex& v : data.transparentVertices) {
+        if (v.water == 1.0f) {
+            EXPECT_FLOAT_EQ(v.position.y, 6.0f); // the upper cell's top only
+        }
+    }
+}
+
+TEST(ChunkMesherTest, LavaTopFaceIsNotMarked) {
+    // The kind gate: lava renders through the same emitFluid path but the
+    // mark is water-only (the documented deviation — lava does not shimmer).
+    BlockRegistry reg = makeRegistry();
+    auto lava = reg.registerBlock(parseDef(cubeDef(
+        "lava",
+        R"({"opaque":false,"transparent":true,"solid":false,"fluid":"lava"})",
+        R"({"top":"t","side":"t","bottom":"t"})")));
+    ASSERT_TRUE(lava.ok()) << lava.error().message;
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    world.setFluid(8, 4, 8, FluidKind::Lava, kMaxFluidLevel);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    ASSERT_EQ(data.transparentVertices.size(), 24u); // all 6 faces emitted
+    EXPECT_EQ(countWaterMarked(data.transparentVertices), 0);
+    for (const MeshVertex& v : data.transparentVertices) {
+        EXPECT_FLOAT_EQ(v.water, 0.0f);
+    }
+}
+
+TEST(ChunkMesherTest, PartialLevelWaterTopFaceIsMarked) {
+    // A level-4 cell: the top face sits at y = 4 + 0.5 (the scaled-cube
+    // geometry) and is still marked — the shimmer covers partial levels.
+    BlockRegistry reg = makeRegistry();
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    world.setFluid(8, 4, 8, FluidKind::Water, 4);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    ASSERT_EQ(data.transparentVertices.size(), 24u);
+    EXPECT_EQ(countWaterMarked(data.transparentVertices), 4);
+    for (const MeshVertex& v : data.transparentVertices) {
+        if (v.water == 1.0f) {
+            EXPECT_FLOAT_EQ(v.position.y, 4.5f); // h = level/8 = 0.5
+        }
+    }
+}
+
+namespace {
+
+// A registry with a water block whose texture sits at a NON-TRIVIAL tile
+// position (the "w" tile of a 1x2 layout = [0,1]), so the tiled encoding
+// (tile index + tile units) is distinguishable from the legacy
+// atlas-space UVs (the 1x1 layout of the other fluid tests would make
+// them coincide numerically).
+BlockRegistry makeWaterTileRegistry() {
+    BlockRegistry reg;
+    auto water = reg.registerBlock(parseDef(cubeDef(
+        "water",
+        R"({"opaque":false,"transparent":true,"solid":false,"fluid":"water"})",
+        R"({"top":"w","side":"w","bottom":"w"})")));
+    if (!water.ok()) {
+        ADD_FAILURE() << water.error().message;
+    }
+    return reg;
+}
+
+} // namespace
+
+TEST(ChunkMesherTest, WaterTopFaceUsesTiledEncoding) {
+    // PRE-3 (gate-110 fix): the water top face is emitted with the TILED
+    // encoding — a_uv = the atlas TILE INDEX (the tile origin, all four
+    // corners identical), a_uvLocal = the corner's position in TILE UNITS,
+    // a_tiled = 1, a_water = 1. The fragment's fract wrap then keeps the
+    // ripple's sample window inside the water tile (a boundary-grid
+    // floor() on the legacy atlas-space UVs mis-identifies the tile at
+    // the max corner and shimmers in the neighbour's pixels — the
+    // brown-pixel bug the first gate run caught).
+    BlockRegistry reg = makeWaterTileRegistry();
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    world.setFluid(8, 4, 8, FluidKind::Water, kMaxFluidLevel);
+    const AtlasLayout layout = makeLayout({"t", "w"}); // w at [0,1]
+    const auto data = ChunkMesher(world, reg, layout).mesh({0, 0, 0});
+    const AtlasLayout::Tile w = layout.tiles.at("w");
+    ASSERT_EQ(w.col, 0);
+    ASSERT_EQ(w.row, 1);
+    const Vec2 tileOrigin {static_cast<float>(w.col),
+                           static_cast<float>(w.row)};
+    const float tileW = 1.0f / static_cast<float>(layout.columns);
+    const float tileH = 1.0f / static_cast<float>(layout.rows);
+    const Vec2 u0 = AtlasLayout::uvMin(layout, "w");
+    const Vec2 u1 = AtlasLayout::uvMax(layout, "w");
+    std::set<std::pair<float, float>> locals;
+    int marked = 0;
+    for (const MeshVertex& v : data.transparentVertices) {
+        if (v.water != 1.0f) {
+            continue;
+        }
+        ++marked;
+        EXPECT_FLOAT_EQ(v.tiled, 1.0f);
+        // The tile origin on ALL FOUR corners (not the legacy atlas uv).
+        EXPECT_EQ(v.uv, tileOrigin);
+        // (tile index + tile units) is bit-equal to the v0.26.0 legacy
+        // corner UV (power-of-two tile fractions are exact in binary):
+        // every corner recombines to a legacy corner of the tile.
+        const Vec2 legacy {(v.uv.x + v.uvLocal.x) * tileW,
+                           (v.uv.y + v.uvLocal.y) * tileH};
+        EXPECT_TRUE((legacy.x == u0.x || legacy.x == u1.x) &&
+                    (legacy.y == u0.y || legacy.y == u1.y));
+        locals.emplace(v.uvLocal.x, v.uvLocal.y);
+    }
+    EXPECT_EQ(marked, 4);
+    // Exactly the four tile-unit corners, once each.
+    EXPECT_EQ(locals.size(), 4u);
+    EXPECT_EQ(locals.count({0.0f, 1.0f}), 1u);
+    EXPECT_EQ(locals.count({1.0f, 1.0f}), 1u);
+    EXPECT_EQ(locals.count({1.0f, 0.0f}), 1u);
+    EXPECT_EQ(locals.count({0.0f, 0.0f}), 1u);
+}
+
+TEST(ChunkMesherTest, WaterSidesAndBottomKeepLegacyEncoding) {
+    // The NON-top faces of a water cell (4 sides + bottom = 20 vertices)
+    // keep the pre-PRE-3 legacy encoding untouched: atlas-space uv on the
+    // tile corners, tiled = 0, water = 0 — only the top face moved to the
+    // tiled convention (the ripple's seam).
+    BlockRegistry reg = makeWaterTileRegistry();
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    world.setFluid(8, 4, 8, FluidKind::Water, kMaxFluidLevel);
+    const AtlasLayout layout = makeLayout({"t", "w"});
+    const auto data = ChunkMesher(world, reg, layout).mesh({0, 0, 0});
+    ASSERT_EQ(data.transparentVertices.size(), 24u);
+    const Vec2 u0 = AtlasLayout::uvMin(layout, "w");
+    const Vec2 u1 = AtlasLayout::uvMax(layout, "w");
+    const Vec3 up {0.0f, 1.0f, 0.0f};
+    int legacy = 0;
+    for (const MeshVertex& v : data.transparentVertices) {
+        if (v.normal == up) {
+            continue; // the tiled top face (the other test)
+        }
+        ++legacy;
+        EXPECT_FLOAT_EQ(v.tiled, 0.0f);
+        EXPECT_FLOAT_EQ(v.water, 0.0f);
+        EXPECT_TRUE(v.uv.x == u0.x || v.uv.x == u1.x);
+        EXPECT_TRUE(v.uv.y == u0.y || v.uv.y == u1.y);
+    }
+    EXPECT_EQ(legacy, 20);
 }
 
 TEST(ChunkMesherTest, OpaqueNeighborCullsTransparentFace) {

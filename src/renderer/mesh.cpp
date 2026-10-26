@@ -10,7 +10,7 @@
 namespace mc {
 
 namespace {
-constexpr std::size_t kVertexSize = sizeof(MeshVertex); // 52 bytes, packed
+constexpr std::size_t kVertexSize = sizeof(MeshVertex); // 56 bytes, packed
 }
 
 Mesh::~Mesh() {
@@ -160,6 +160,11 @@ void Mesh::setupAttributes() {
     glEnableVertexAttribArray(6);
     glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(kVertexSize),
                           reinterpret_cast<const void*>(offsetof(MeshVertex, tiled)));
+    // location 7: PRE-3 water top-face flag (1 = the vertex shader's
+    // UV-wander ripples run on it; 0 everywhere else, default 0).
+    glEnableVertexAttribArray(7);
+    glVertexAttribPointer(7, 1, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(kVertexSize),
+                          reinterpret_cast<const void*>(offsetof(MeshVertex, water)));
 }
 
 Result<void> Mesh::uploadDynamic(const std::vector<MeshVertex>& vertices,

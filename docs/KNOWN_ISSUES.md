@@ -94,6 +94,7 @@
 - **实体 `age` 按真实 dt 累积（墙钟）** — 与玩家/物理一致（非固定步长），所以含实体的存档文件在 age 字段上跨运行差 ±1-2 帧；渲染不依赖 age（掉落物动画由帧计数器驱动），截图确定性不受影响。昼夜 `time` 是固定步长（位精确）。`[Phase 13]`
 - **`DayCycle::setTimeOfDay` 至多 1 ulp 偏差** — 存 timeOfDay [0,1)，恢复时解出 totalSeconds；对远离配置 start_time 的值，`startTime + delta` 的浮点往返可能差 1 ulp（~1e-16）。昼夜渐变段是常量/平滑的，呈现无影响。`[Phase 13]`
 - **演示区外的编辑会带上"生成的 chunk"** — 在演示区外放置方块会同步生成该 chunk（既有行为），存档 diff 覆盖它；读档时 `setBlock` 重建同样生成该 chunk——一致，但读档后的世界含全新世界没有的 chunk（读档后 `propagateAll` 全量重传播，之后新出现的 chunk 由 Phase 14 的 worker 光照 job 处理）。`[Phase 13]`
+- **抽干的天然熔岩入档不完整、读档后"复活"** — `diffWorld`/journal 流体 diff 不对称：对「生成态有熔岩、会话抽干（level 0）」的格，`fluidKindOf(0)` 特例按 Water 记账 → diff 记为 **level-0 水**编辑（被抽掉的 kind 不记录）；回载 `World::setFluid(level 0)` 只清同 kind 水、不清熔岩，且 `applyWorldEdits` 对「level-0 且该 kind 已空」的编辑跳过 → 读档后生成熔岩复活。触发路径：玩家用熔岩桶抽干天然熔岩湖后存档重开。修复方向（二选一）：diff 对被抽干的格记 drained kind / level-0 编辑清任意 kind。`[PRE-3 2026-10-26 上报，未修，矩阵外]`
 - ~~**存档无迁移机制**~~ — 当前 **format 15**（save.hpp `kSaveFormat=15` / `kSaveFormatMin=1`），**format 1..15 全部可加载**（各按其字段集 + 逐 format 白名单），含 5 处规则式迁移：6→7 炉子（sole 归属/丢弃，见「炉子 / 熔炼」节）、≤11→12 吸收（共享 health 按 base max 拆分）、11/12→13 营火（单槽→槽 0）、13→14 stairs（迁移为空；旧 format 带新键 = 版本谎报拒绝）、**14→15 states**（`stairs {pos,facing}` → `states {pos,state}` 值保真；ENT-2）。写入恒 format 15。`states` 键纪律：15 必需（空数组合法）/ ≤14 携带拒 / 15 携 `stairs` 拒；双向交叉校验 = stateful 格（hasState：Stairs 形状 ∨ `model.state_count`）↔ entry 逐格点名 + 域按块 stateCount。"未知字段=报错"（rejectUnknownFields）保持。`[Phase 13]`（`[Phase 16/17]` 起 format 2/3 可加载，其后逐 format 追加；ENT-2 format 15）
 
 ## Chunk 流式（Phase 14）
