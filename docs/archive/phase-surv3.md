@@ -137,3 +137,20 @@ test_save/test_campfire/test_debug_overlay 适配 + KNOWN_ISSUES）
 - grid/炉子/营火槽不入档（受损物放网格读档回满耐久 quirk，仅网格
   可实际触达，记档）
 - 护甲破碎无声（Player 无 sound 通道，记档）
+
+## 补跑收讫（10-26）
+
+门 97 输入跑两项补收（v0.30.0 主树 binary，g95_fire9999 config）：
+
+- **S4 弓射出 PASS**（att 1，18:42）：scene_s97_bow（bow + arrow×3，
+  俯角连射几何）→ 终档 **bow damage 2 + arrow 3→1**（2 射出 = 2 磨损
+  +2 消耗，SURV-3 射出磨损源实证）。**前 11 连败根因 = PITS 264**
+  （场景缺 `player.armor` 键 → init 静默死零窗口，断言读到未改动场景
+  副本 = "NO 0 3" 假信号，10-25 8 次"相位未送达" + 10-26 前 11 次
+  重试全因同一 init 死；修场景后 att 1 即成）。
+- **S5 耐久条像素对 PASS**（att 3，18:13-18:15）：s5d（满耐久）vs s5f
+  （受损）diff **912 px，bbox x[382,1265] y[604,720]** = 与 10-25 首收
+  跨天同值（条 288 px 只在 damaged + 护甲行 624 px 场景差异，完整
+  分解见门 97 节）。
+
+门 97 补跑清单全清。

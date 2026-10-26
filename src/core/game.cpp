@@ -6096,7 +6096,11 @@ void Game::drawBeaconBeams(const Mat4& view, const Mat4& projection) {
                                kBeaconBeamB);
     m_basicShader.setUniform1f("u_alpha", kBeaconBeamAlpha);
     m_basicShader.setUniform1f("u_dayFactor", m_dayCycle.dayFactor());
-    m_renderer.enableBlending();
+    // Blending is the caller's (the blend section's) state — do NOT
+    // enable/disable it here (10-26 user-report fix: the trailing
+    // disableBlending leaked past this draw and killed the crack/outline
+    // overlay's blending — the mined block rendered through the crack
+    // cube's (0,0,0,0) background as a solid black box).
     m_renderer.setCulling(false);
     for (const BeaconBeam& b : m_beaconActive) {
         // The unit-height beam box, scaled to the level's height and
@@ -6112,7 +6116,7 @@ void Game::drawBeaconBeams(const Mat4& view, const Mat4& projection) {
                         model);
     }
     m_renderer.setCulling(true);
-    m_renderer.disableBlending();
+    // (blending state left to the caller — see drawBeaconBeams head)
 }
 
 void Game::drawClouds(const Mat4& view, const Mat4& projection) {
@@ -6177,7 +6181,11 @@ void Game::drawClouds(const Mat4& view, const Mat4& projection) {
     m_basicShader.setUniform3f("u_color", 1.0f, 1.0f, 1.0f);
     m_basicShader.setUniform1f("u_alpha", kCloudAlpha);
     m_basicShader.setUniform1f("u_dayFactor", m_dayCycle.dayFactor());
-    m_renderer.enableBlending();
+    // Blending is the caller's (the blend section's) state — do NOT
+    // enable/disable it here (10-26 user-report fix: the trailing
+    // disableBlending leaked into drawWorldOverlay, whose crack cube
+    // then drew unblended — its (0,0,0,0) background painted the mined
+    // block solid black).
     m_renderer.setCulling(false);
     // The mesh is WORLD-SPACE (absolute quad coordinates) — the identity
     // model matrix (the beam scales a unit box per beacon; the clouds
@@ -6185,7 +6193,6 @@ void Game::drawClouds(const Mat4& view, const Mat4& projection) {
     m_renderer.draw(m_cloudMesh, m_basicShader, view, projection,
                     Mat4::identity());
     m_renderer.setCulling(true);
-    m_renderer.disableBlending();
 }
 
 void Game::drawHeldHand(const Mat4& view, const Mat4& projection) {
@@ -6674,6 +6681,12 @@ void Game::drawWorldOverlay(const Mat4& view, const Mat4& projection) {
     if (!playing) {
         return;
     }
+    // The overlay is self-contained blending: the crack/outline are
+    // alpha-composited over the block faces. The blend section's state
+    // used to be assumed, but per-draw state leaks (10-26 user report:
+    // a disableBlending from an earlier draw reached here and the crack
+    // cube's (0,0,0,0) background painted the mined block solid black).
+    m_renderer.enableBlending();
     if (m_breakTarget.has_value() && m_breakProgress > 0.0) {
         const BlockPos& b = *m_breakTarget;
         const Block& block =
@@ -6710,6 +6723,7 @@ void Game::drawWorldOverlay(const Mat4& view, const Mat4& projection) {
         m_renderer.draw(m_outlineMesh, m_uiShader, view, projection,
                         Mat4::translate(center));
     }
+    m_renderer.disableBlending();
 }
 
 void Game::drawParticles(const Mat4& view, const Mat4& projection,
@@ -7539,9 +7553,19 @@ void Game::renderUi() {
     // 3D block-cube icons last: on top of every 2D element (the slot
     // backgrounds would otherwise cover them). The batch draws above may
     // have bound the font/icon textures to unit 0; the cube UVs live in
-    // the block atlas, so re-bind it.
+    // the block atlas, so re-bind it. The cube draws through the BASIC
+    // shader, whose per-draw uniforms (u_useTexture / u_color / u_alpha)
+    // persist from the last world draw — the world's solid-color draws
+    // (beacon beam, the clouds) leave u_useTexture = 0 + white u_color +
+    // u_alpha < 1, which the cube would otherwise inherit and render as
+    // a translucent white box (10-26 user report). Set the textured
+    // recipe explicitly.
     if (!iconDraws.empty()) {
         m_atlas.texture().bind();
+        m_basicShader.bind();
+        m_basicShader.setUniform1i("u_useTexture", 1);
+        m_basicShader.setUniform3f("u_color", 1.0f, 1.0f, 1.0f);
+        m_basicShader.setUniform1f("u_alpha", 1.0f);
         for (const UiIconDraw& d : iconDraws) {
             const Mesh& mesh = itemMesh(m_items.at(d.stack.item).block);
             if (!mesh.valid()) {

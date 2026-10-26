@@ -121,3 +121,22 @@ shipped 数据是唯一作者）。
   黑盒），双面关裁剪
 - **进食举到嘴 = 零额外代码**：手持进食变换（kHandEatLiftY/PullZ）
   自动继承 model 分支
+
+## H 手持输入跑补跑收讫（10-26 19:0x-19:3x）
+
+PITS 247/260 协议（窗口定位 + windowfocus --sync + 点击取锁 +
+**"Pointer captured" debug 日志轮询确认锁生效** + R 动作前再 focus——
+缺 focus 时 R 边沿丢失 19:2x 实证；首帧 GL 编译期 L/R 同 pre-lock
+poll = R 边沿被 !locked 分支丢弃 19:1x 实证）。A/B 对 = 同 binary
+v0.30.0 + 剥 model 段资产（世界零污染，19:2x 定案）。
+
+- **H1 手持 model 锁定态 PASS**：iron_pickaxe box 模型 vs icon 面片
+  A/B diff 7152 采样 px 质心 (946,587) = 手持区隔离；双侧 ×2 RAW
+  字节一致
+- **H2 进食继承 PASS**：H2a lift 态（通道中途终帧：apple 在手 +
+  饥饿 16 未变 = 1.6 s 通道未完成的中间态实证）+ H2b 通道完成
+  （apple 消耗 slot0 空 + 饥饿 16+4=20 exact = model 手继承进食举到
+  嘴变换零额外代码实证）
+- **H3 弓拉继承 PASS**：H3a 拉状态 box vs icon A/B diff 4345 采样 px
+  质心 (922,614) + H3b 射出（bow damage 1 = SURV-3 射出磨损 + arrow
+  消耗 = 弓拉模型整体后拉后正常发射实证）
