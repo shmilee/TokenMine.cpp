@@ -3,6 +3,25 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.1.0（2026-10-27）
+
+**STRM-2 流体列保留**（v1.x 任务表 1/33，门 116）——仅流体模拟改动的列
+（远端熔岩流/海岸膜，无 fire/状态条目 = 无卸载保护资格）卸载后重置为
+生成态的修复：驱逐时 journal diff 快照按列保留（`retainColumnDiff` =
+`journalDiffChunk` 字节同语义，保留 diff 条目非 chunk = 内存有界）+ 列
+再流送时 integrate 回放（blocks 先 fluids 后、不插 m_editedColumns =
+fluid-only 列保持可卸载）+ 退出存档双路径 `mergeRetained`（含
+--save-full-diff oracle 不失真）。零 format（19）/config/内容。**随门
+116 场景首触发修复 99.8 活动门流送边界活性缺口**：settled（冷）流体
+前缘对 void 的 spread 被拒后转冷，目标列流送到达不唤醒 = 级联永久卡
+在流送边界（插桩实证 395 tick 零推进）；修 = `insertChunk`/
+`getOrCreateChunk` 的 `wakeFluidChunks`（自身 + 6 面邻持该 kind 的
+chunk 各走一次，镜像 setBlock UNSTICK；唤醒仅在插入事件 = 性能面零
+回退）。性能 A/B fall 900f：全指标同档或更优（flush −3..−10%、stream
+−3..−6%）；fluidCells 123879 逐位一致 + 167781→167782 /
+236573→236575（+1/+2 = 活性补洞行为语义：静态梯度提前一格越流送
+边界，非 churn 放大）。只 tag（release 组 1.1-1.5 末发）。
+
 ## v1.0（2026-10-27）
 
 **首个正式版**：v1.0 任务矩阵 34/34 全完成（十大系统 + 2 项实机报障）。覆盖

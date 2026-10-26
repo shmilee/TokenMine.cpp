@@ -13,7 +13,7 @@
 
 | 系统 | ① | ② | ③ | ④ | ⑤ | ⑥ |
 |---|---|---|---|---|---|---|
-| STRM 流送与内存 | STRM-2 流体列保留 | | | | | |
+| STRM 流送与内存 | ~~STRM-2 流体列保留~~ ✅ v1.1.0 | | | | | |
 | PIPE 帧管线与并发 | PIPE-3 流体 per-cell | | | | | |
 | LGT 光照 | LGT-3 夜光重传播 | LGT-4 光束入光 | LGT-5 半块透光 | | | |
 | GEN 世界与生成 | GEN-7 基岩多层 | GEN-8 地形互感 | GEN-9 耕地湿润 | | | |
@@ -89,6 +89,28 @@
 
 ## 变更记录（v1.0 时代）
 
+- 2026-10-27：**STRM-2 流体列保留完成**（v1.x 第 1/33 项，v1.1.0）：驱逐
+  journal diff 快照按列保留（retainColumnDiff = journalDiffChunk 字节同语义、
+  保留 diff 条目非 chunk = 内存有界）+ 再集成回放（blocks 先 fluids 后、不插
+  m_editedColumns = fluid-only 列保持可卸载）+ 退出存档双路径 mergeRetained
+  （--save-full-diff oracle 不失真）+ 零 format（19）/config/内容；**随门 116
+  场景首触发修复 99.8 活动门流送边界活性缺口**（冷流前对 void 被拒后目标列
+  到达不唤醒 = 级联永久卡边，395 tick 插桩实证；修 = insertChunk/
+  getOrCreateChunk 的 wakeFluidChunks 镜像 setBlock UNSTICK，唤醒仅在插入
+  事件 = 99.8 性能面零回退）。1686/1686（+9：保留 diff 6 + 活性判别 3 含
+  pre-fix FAIL 实证）、-Werror 0 警告；门 116：S1 = 第 116 次结构性免疫
+  （四方 new≡old 字节一致；base18 锚刷新 ca639e50→9c64b0f8 = PITS 265 机器
+  态）+ S2 三跑全 PASS【Run A 卸载保留：NEW 10 格 C 膜（对角扇）×2 在档 /
+  OLD ×2 缺，玩家四跑终位逐位同 (22.3,38,0.5)，渠道对照 3/3 双侧在 + C 列
+  零 block 编辑；Run B 读档回放：NEW 在 / OLD+CTRL 缺，×2 savenorm EXACT +
+  CTRL≡OLD 惰性；Run C 会话内 re-apply：XTEST 标定 180° 转向 + F5 位置探针
+  双相步行，NEW ×2 膜在（西 32.4 卸载 → 东 165 回流回放）/ OLD ×2 缺，
+  四跑步行轨迹逐探针一致】+ S3 1686 + 性能 A/B fall 900f：upd/render/swap
+  同档或更优、flush −3..−10%、stream −3..−6%、fluidCells 123879 逐位一致 +
+  167781→167782 / 236573→236575（+1/+2 = 99.8 修复行为语义：静态梯度提前
+  一格越流送边界，非 churn 放大）= 成本可忽略；场景物理坑 4 项（泳态
+  stepUp 门 / 悬浮草洞 / 桥接近侧 / 转向 z 漂移三行车道）——详见
+  docs/archive/phase-strm2.md；PITS 271-279。
 - 2026-10-27：**v1.0 发布 + 矩阵刷新**。34/34 全完成（tag v1.0 14e793d +
   GitHub 正式 release "TokenMine.cpp v1.0" Latest；版本号 bump 0.15.0→1.0
   收口二进制内版本字符串滞后）。用户定案清理：v1.0 完成项移入「v1.0 完成

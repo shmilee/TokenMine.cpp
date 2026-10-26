@@ -208,6 +208,21 @@ private:
     void pruneFluidChunk(const Chunk& chunk, const ChunkPos& pos,
                          FluidKind kind);
     void scanFluidChunks(Chunk& chunk, const ChunkPos& pos);
+    // New-chunk fluid activity wake (the 99.8 streaming-boundary hole):
+    // a chunk that just APPEARED changes what its fluid neighbors can do
+    // — a spread proposal the void just rejected now has a solid target,
+    // a generated sea meets a settled neighbor — but a settled (cold)
+    // fluid chunk never re-heats on its own, so force one fluid-
+    // simulation walk of every chunk among {self + the six face-sharing
+    // neighbors} that exists and holds the kind (the setBlock UNSTICK
+    // pass's mirror: there the block change is the event, here the
+    // chunk's appearance is). Bounded cost: it fires only on chunk
+    // creation (the streaming cadence — a few columns per frame), and a
+    // settled walk re-reads its cells and re-goes-cold. Called by
+    // getOrCreateChunk / insertChunk AFTER scanFluidChunks (so the new
+    // chunk's own holding is already registered); insertSnapshotChunk is
+    // excluded (the snapshot World's maintenance indexes are never read).
+    void wakeFluidChunks(const ChunkPos& pos);
 
     std::unordered_map<ChunkPos, Chunk> m_chunks;
     // Chunks marked dirty (a mirror of each Chunk's own flag — the mesh

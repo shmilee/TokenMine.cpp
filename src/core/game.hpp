@@ -895,6 +895,27 @@ private:
     // --save-full-diff is set, collectSave falls back to the legacy
     // full diffWorld + stair scan.
     SaveJournal m_saveJournal;
+    // STRM-2: the retained diffs of UNLOADED columns — a column that left
+    // the world while the session modified it (the pure-fluid churn: far
+    // lava flow / water film, the fire burn, the water-lava reaction —
+    // the writes that go through World::setBlock/setFluid directly and so
+    // never reach the m_editedColumns protection; their columns stay
+    // unloadable by design). unloadFarColumns snapshots the column's
+    // journal diff (retainColumnDiff, BEFORE the chunk erase) into this
+    // map; integrateStreamedColumns re-applies a re-streamed column's
+    // diff (blocks first, then fluids — the applyWorldEdits order) and
+    // erases the entry; collectSave merges every entry into the exit
+    // save (BOTH paths — the journal diff and the legacy/oracle full
+    // diff). INVARIANT (the no-duplicate-cells proof of the merge): a
+    // column is in at most ONE of the save journal and this map — unload
+    // snapshots before it evicts the journal entries, integrate applies
+    // before it erases the entry (the observer re-journals the re-
+    // applied writes, so the next unload snapshots again: the self-
+    // similar loop). The retained value is DIFF ENTRIES (a few to a few
+    // dozen cells for a fluid column), not chunks — the memory stays
+    // bounded over a long wandering session. Empty columns are never
+    // stored.
+    std::map<ColumnPos, RetainedColumnDiff> m_retainedColumns;
     // Chunks that (ever, since load/integration) hold a FLAMABLE block —
     // the burn pass's gate (Phase 99.8): a lava chunk walks only when it
     // or a face neighbor is in this set. Over-approximation by design:

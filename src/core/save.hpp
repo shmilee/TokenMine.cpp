@@ -334,6 +334,25 @@ struct SavedFluidEdit {
     std::uint8_t level;
 };
 
+// STRM-2: the retained DIFF of an UNLOADED column — the column's whole
+// live-vs-fresh difference (both tables), captured at unload from the
+// column's journal cells (retainColumnDiff) and held until the column
+// re-streams (the Game re-applies it there) or the exit save merges it
+// out (mergeRetained). It holds DIFF ENTRIES (a few to a few dozen cells
+// for the pure-fluid churn this feature exists for — far lava flow /
+// water film, the fire burn, the water-lava reaction), not chunks: the
+// memory stays bounded over a long wandering session (the "keep the whole
+// column" alternative is ~128 KB/column permanent residency). A column is
+// in at most ONE of the save journal and the retained map (the Game's
+// invariant: unload snapshots BEFORE it evicts the journal entries,
+// integrate applies BEFORE it erases the entry), so the exit-save merge
+// can never emit a cell twice. An empty column is never stored (the
+// caller checks).
+struct RetainedColumnDiff {
+    std::vector<SavedBlockEdit> blocks; // pos-sorted
+    std::vector<SavedFluidEdit> fluids; // pos-sorted
+};
+
 // One furnace block's smelting state (format 7; Phase 44). The game keeps
 // an entry for EVERY furnace block in the world (empty states included) —
 // the save cross-checks the entries against the block edits in both
@@ -539,6 +558,42 @@ Result<void> journalDiff(const World& world,
                          std::vector<SavedBlockEdit>& outBlockEdits,
                          std::vector<SavedFluidEdit>& outFluidEdits,
                          int workers = 1);
+
+// STRM-2: the snapshot of ONE column's journal diff — the live-vs-fresh
+// difference restricted to the column's journal cells (the same per-cell
+// comparison as journalDiffChunk, so the output is byte-identical to what
+// journalDiff would have emitted for those cells while the column's
+// chunks were still loaded). The reference is regenerated per chunk of
+// the column (the same pure generator; a layer whose chunk no longer
+// exists is skipped — journalDiffChunk's no-op). The cell sets are the
+// column's entries of the journal's two tables (nullptr = no cells). The
+// output is pos-sorted (both vectors); a column whose journal cells are
+// all same-value reverts yields an empty diff (the caller stores
+// nothing). Called by the Game's unload pass BEFORE the column's chunks
+// are erased (the snapshot reads the live chunks).
+RetainedColumnDiff retainColumnDiff(const World& world,
+                                    const World::ChunkGenerator& reference,
+                                    const BlockRegistry& blocks,
+                                    const ColumnPos& col,
+                                    const std::set<BlockPos>* blockCells,
+                                    const std::set<BlockPos>* fluidCells);
+
+// STRM-2: merges the retained (unloaded) columns' diffs into the save's
+// cell-edit lists — the exit-save counterpart of the journal's eviction:
+// a column that left the world while the session modified it is no longer
+// an EXISTING chunk, so neither journalDiff nor diffWorld sees it; its
+// diff was captured at unload (retainColumnDiff) and lives in the
+// retained map. BOTH exit-save paths merge (the journal path and the
+// legacy/oracle --save-full-diff path). Appends every retained entry to
+// save.blockEdits / save.fluidEdits and re-sorts by position: a
+// duplicate cell is STRUCTURALLY IMPOSSIBLE (the one-of invariant — a
+// column sits in at most one of the journal and the retained map — and
+// the diffs above only cover EXISTING chunks, while a retained column is
+// unloaded by definition), so the merge is a pure union. No-op on an
+// empty map (a session that never unloaded a modified column — the
+// pre-STRM-2 behavior, bit-identical).
+void mergeRetained(SaveGame& save,
+                   const std::map<ColumnPos, RetainedColumnDiff>& retained);
 
 // Replays the saved cell edits onto a freshly generated `world`: block
 // edits first (a placement displaces any fluid in the cell), then fluid

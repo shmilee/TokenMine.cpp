@@ -488,6 +488,94 @@ Result<void> journalDiff(const World& world,
     return {};
 }
 
+// -- retained column diffs (STRM-2) ------------------------------------------------
+
+RetainedColumnDiff retainColumnDiff(const World& world,
+                                    const World::ChunkGenerator& reference,
+                                    const BlockRegistry& blocks,
+                                    const ColumnPos& col,
+                                    const std::set<BlockPos>* blockCells,
+                                    const std::set<BlockPos>* fluidCells) {
+    // Group the column's journal cells by the chunk they live in (a
+    // journal COLUMN spans up to kWorldHeight/kChunkSize chunks;
+    // journalDiffChunk reads local coords relative to the chunk origin,
+    // so only a chunk's OWN cells may be passed to it). The sets are
+    // position-sorted -> the groups are deterministic; a cell outside the
+    // column (structurally impossible — the caller passes the column's
+    // own journal sets) is dropped.
+    std::map<ChunkPos, std::vector<BlockPos>> bByChunk;
+    if (blockCells != nullptr) {
+        for (const BlockPos& pos : *blockCells) {
+            const ChunkPos cp = worldToChunk(pos);
+            if (cp.x == col.x && cp.z == col.z) {
+                bByChunk[cp].push_back(pos);
+            }
+        }
+    }
+    std::map<ChunkPos, std::vector<BlockPos>> fByChunk;
+    if (fluidCells != nullptr) {
+        for (const BlockPos& pos : *fluidCells) {
+            const ChunkPos cp = worldToChunk(pos);
+            if (cp.x == col.x && cp.z == col.z) {
+                fByChunk[cp].push_back(pos);
+            }
+        }
+    }
+    // The column's layers, bottom to top: a layer whose chunk no longer
+    // exists (structurally impossible at the Game's call site — the
+    // unload pass snapshots BEFORE the erase loop) is skipped by
+    // journalDiffChunk itself (its no-op).
+    RetainedColumnDiff out;
+    for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy) {
+        const ChunkPos cp {col.x, cy, col.z};
+        const auto b = bByChunk.find(cp);
+        const auto f = fByChunk.find(cp);
+        journalDiffChunk(world, reference, blocks, cp,
+                         b == bByChunk.end() ? nullptr : &b->second,
+                         f == fByChunk.end() ? nullptr : &f->second,
+                         out.blocks, out.fluids);
+    }
+    // The same position total order journalDiff/diffWorld end with (one
+    // edit per cell per table -> a byte-identical serialization).
+    std::sort(out.blocks.begin(), out.blocks.end(),
+              [](const SavedBlockEdit& a, const SavedBlockEdit& b) {
+                  return a.pos < b.pos;
+              });
+    std::sort(out.fluids.begin(), out.fluids.end(),
+              [](const SavedFluidEdit& a, const SavedFluidEdit& b) {
+                  return a.pos < b.pos;
+              });
+    return out;
+}
+
+void mergeRetained(SaveGame& save,
+                   const std::map<ColumnPos, RetainedColumnDiff>& retained) {
+    if (retained.empty()) {
+        return; // the pre-STRM-2 shape: the lists stay exactly as diffed
+    }
+    // A duplicate cell is structurally impossible (see the header): a
+    // column sits in at most one of the journal and this map, and the
+    // diff that filled the lists covered EXISTING chunks only — a
+    // retained column is unloaded. The merge is a pure union; the
+    // re-sort restores the position total order the journalDiff /
+    // diffWorld tail sort left.
+    for (const auto& entry : retained) {
+        const RetainedColumnDiff& diff = entry.second;
+        save.blockEdits.insert(save.blockEdits.end(), diff.blocks.begin(),
+                               diff.blocks.end());
+        save.fluidEdits.insert(save.fluidEdits.end(), diff.fluids.begin(),
+                               diff.fluids.end());
+    }
+    std::sort(save.blockEdits.begin(), save.blockEdits.end(),
+              [](const SavedBlockEdit& a, const SavedBlockEdit& b) {
+                  return a.pos < b.pos;
+              });
+    std::sort(save.fluidEdits.begin(), save.fluidEdits.end(),
+              [](const SavedFluidEdit& a, const SavedFluidEdit& b) {
+                  return a.pos < b.pos;
+              });
+}
+
 Result<void> applyWorldEdits(const SaveGame& save, const BlockRegistry& blocks,
                              World& world) {
     // Blocks first: a placement displaces any fluid in its cell, so the

@@ -1991,3 +1991,76 @@
   try 全 black/stalled 且 log 无 STEP0 行 = 先 `tail log` 查
   Initialization failed（PITS 264 同款"init 死伪装"家族）；建
   scratch 树后必跑 5f 冒烟（`--new --frames 5`，exit 0 才算树可用）。
+
+- **99.8 活动门的流送边界活性缺口（PITS 271）**——10-27 STRM-2 门 116
+  场景首触发：settled（冷）流前对着 void 的 spread 被 `World::setFluid`
+  拒（"the void stays dry"）后该 tick 零写入 → chunk 转冷；目标列
+  流送集成（`insertChunk`）不触碰 fluidWalkPending → 流前**永久**卡在
+  流送边界（门 116 场景插桩实证：熔岩级联 tick 4 被拒转冷，目标列
+  frame ~15 已集成，其后 395 tick 零推进；spread 探针全局只触发 1
+  次）。CellReader 把缺失 chunk 读作 air = "邻居看着是空的但目标不
+  存在"，表面 spread 条件全满足而写入静默失败——排障必须直接探针
+  `setFluid` 的拒绝分支（`no chunk`），不能只信 CellReader 侧读值。
+  修 = `insertChunk`/`getOrCreateChunk` 镜像 setBlock 的 UNSTICK
+  invalidate 范式（`wakeFluidChunks`：自身+6 面邻中持有该 kind 的
+  chunk 各走一次；唤醒仅在插入事件 = 99.8 性能面零回退，判别单测
+  FrontierCrossesTheStreamingBoundary pre-fix FAIL 实证 + 反向
+  GeneratedSeaFillsTheDryDepression + SettledWorldStaysColdWithoutInsertions）。
+- **帧锁定物理 × 低真实帧率 = 墙钟输入计时全部失真（PITS 272）**——
+  10-27 门 116：本机 Mesa 软渲染 ~11-13 fps（vd8 场景海岸 churn 重时）
+  至 ~50 fps（流送完静置），1 帧 = 1/60 s 游戏时间 = 0.08-0.09 s
+  墙钟；按 60fps 假设排的"t=55s 松键"只走了 34 块（83 块需求），
+  步行跑端点系统性短程。步行类输入跑的转向/终点判定必须**位置探针
+  化**（F5 中途存档读 player pos——F5 代码明载"work in any pointer
+  state"，任何指针态可用；存档 = 确定性权威同款），不能按墙钟偏移
+  排布；--frames 预算按最坏 fps（11）算（1f≈0.09s 墙钟）。
+- **away 组件换窗 XID = 缓存 WID 静默失效（PITS 273）**——10-27 门
+  116 首轮：夜间 away 组件 unmap+recreate 游戏窗（PID 锚不变、XID
+  变），持有旧 WID 的点击序列 30 连击全盲（02:52 窗内 3 轮 attempt
+  全败，02:56 手工同序列首击即中 = 窗外相位）；且 master 流程漏了
+  g104 范式的 **TM_PRE_WINDOWS 前置快照** → `unmap_covers` 的"新建窗
+  永不动"保护失效（空 pre 列表 = 守卫短路反向）→ 游戏 SDL3 X11
+  helper 窗（无 _NET_WM_PID、全尺寸）被 unmap = 主窗 orphaned = 点击
+  永不到达（lib 注释 probe4/5 同款失效链）。输入协议补强：acquire
+  每次迭代按 PID 重解 WID（tm_find_game_window）+ 周期性重稳定化 +
+  几何不可读时跳击；跑前必建 TM_PRE_WINDOWS 快照 + 取 TM_GAME_CLASS。
+- **`--new` 必须带 `--save <slot>`（PITS 274）**——10-27 门 116 S1
+  首跑 rc=2："Argument error: --new requires --save <slot>"。S1 无输
+  入截图跑加 --save 槽即可（退出写档无害，槽文件跑前 rm）。
+- **pkill 输入跑 = X server 键态残留（PITS 275）**——10-27 门 116：
+  walk 跑（keydown w）被 pkill 时"退出后 keyup"清理未执行 → W 键在
+  X server 保持按下 → 下一个"无输入"冒烟静默变成步行跑（600f 无输入
+  实证：玩家从 x=110 自走 45.7 块到洼地停下——恰好 = 上一跑端点；
+  `xdotool getkeydowns` 清键后复跑零漂移）。纪律：① 每跑前
+  `xdotool keyup w W a s d`（未按键 = no-op 安全）；② 杀输入跑后立
+  即清键；③ "无输入"冒烟出现位移 = 先查 getkeydowns 再查物理。
+- **场景桥/路面高度必须按"实际接近侧"定（PITS 276）**——10-27 门 116：
+  洼地桥首轮 y=30（top 31）只核了西口（x=63 top 30，+1 阶），忘了
+  玩家自东涉水而来（东口 x=74 脚位 28 → +3 不可上）= 整跑（9 min）
+  白走、端点卡洼地 x=64.3。判别 = 跑后核端点 x 是否过桥（过桥判据
+  x < 64）；修法 = 桥面降到接近侧脚位 +1（y=28 top 29，东 +1 西 3 降）。
+- **玩家无法从 1 深水中 step-up 上岸（PITS 277）**——10-27 门 116 东
+  出口 6 轮卡死（x=45.7/43.7/48.7/49.7 历次变体）：player.cpp:349
+  stepUp 门 `!m_crouching && m_onGround`；1 深水 = 泳态（atSurface 0.4
+  带外：脚位=底、水顶=底+1，Δ1.0）= FLUID-2 snap 脚位恒 = 水顶−0.9
+  悬底 0.9 → onGround 假 → stepUp 永不触发 → **任何岸顶 > 脚位即墙**
+  （+0.9 也是墙：moveAxis 全高碰撞，无"矮墙可挤"）。出水设计纪律：
+  平底/河床缓升（地升推升 ≤0.9/步无门控）至岸顶 ≤ 泳脚位 = 平出，
+  之后**旱地**再阶梯（每级 +1 平台宽 ≥2 = P16 宽 1 +X 阶免疫）。
+  FLUID-3"涉水 mob 踏 1 格岸壁出池"= mob stepUp（ENT-3 同门已解禁），
+  不适用于 player。
+- **场景降顶/挖格前必须垂直剖面探针（PITS 278）**——10-27 门 116：
+  x=49 顶 37 的"悬浮草"下是 (49,33..35) 3 格空腔（底 32 沙，GEN-1
+  洞穴啃顶残留）：挖草（以为把顶从 37 降到 36）= 顶落至 33 成 3 深
+  坑，玩家坠入卡死（实证 y=33 蠕动 8 min）。surface 探针只给 top，
+  抓不到悬浮/空腔——降顶/挖格前打印该列 y-4..y+2 剖面；填洞 = 石填
+  腔 + 挖顶（x=49：填 (49,34)(49,35) + 挖 (49,36)）。同类：x=48 全
+  线 1 宽 6 深壕（水平探针才见）。
+- **转向后的 z 漂移 + 甲板车道宽度（PITS 279）**——10-27 门 116 Run C：
+  XTEST 180° 转向后玩家 z 自 0.5 漂至 −0.4..−1.3（转向事件类，非
+  yaw 误差——yaw 实测仅偏 0.09°；西相 83 块涉水+甲板 z 恒 0.5 排除
+  行走漂移）→ 单行（z=0）甲板 = 玩家漂出车道落回自然地形（宽 1 阶
+  P16 卡死）。修法 = 步行基础设施按 z 三行（−1..+1）铺设（吸收
+  ±1.0 偏移，AABB 半宽 0.3）+ 转向后 F5 探针读 yaw 精调（|Δ|>30px
+  才补 xmotion，实测免纠）。漂移根因未追（XTEST 事件/SDL 锁 delta
+  类），三行车道 = 结构性免疫于该漂移量级。

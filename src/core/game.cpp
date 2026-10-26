@@ -1701,6 +1701,56 @@ void Game::integrateStreamedColumns() {
         // chunk meshes once, lit, instead of dark-then-re-meshed).
         m_lightPendingColumns.insert(job->column);
         m_unlitColumns.insert(job->column);
+        // STRM-2: re-apply this column's retained diff (the session
+        // changes it held before an earlier unload — the pure-fluid
+        // churn, the fire burn, the water-lava reaction: the writes that
+        // bypass the game's setBlock choke point and so never earned the
+        // m_editedColumns protection). BLOCKS FIRST, then fluids — the
+        // applyWorldEdits order (a block displaces the cell's fluid, so a
+        // re-applied placement re-drains the generated fluid before the
+        // fluid edits land; a level-0 fluid edit on an already-dry cell
+        // is the expected no-op). The observer re-journals every write:
+        // the column is in the journal again and out of the retained
+        // map — the one-of invariant, and the next unload snapshots it
+        // again (the self-similar loop). Deliberately NOT inserted into
+        // m_editedColumns: that would keep the column's chunks resident
+        // for the whole session (the memory regression this feature
+        // replaces) — a fluid-only column must stay unloadable.
+        // Lighting: the column just joined m_lightPendingColumns /
+        // m_unlitColumns above (new terrain, the forced propagation), so
+        // this frame's postLightJobs covers the re-applied cells and the
+        // meshes form once, lit (no lit-pop-in, the 99.4 discipline).
+        if (auto rit = m_retainedColumns.find(job->column);
+            rit != m_retainedColumns.end()) {
+            for (const SavedBlockEdit& e : rit->second.blocks) {
+                const BlockID id = m_blocks.idForName(e.blockName);
+                if (!id.valid()) {
+                    // Structurally unreachable (same session, same
+                    // registry as the snapshot — the name resolved when
+                    // the diff was produced): name it and skip the ONE
+                    // edit — never crash, never drop the column
+                    // silently.
+                    MC_LOG_ERROR("STRM-2: retained block edit at (" +
+                                 std::to_string(e.pos.x) + ", " +
+                                 std::to_string(e.pos.y) + ", " +
+                                 std::to_string(e.pos.z) +
+                                 ") names unknown block '" + e.blockName +
+                                 "' — skipped");
+                    continue;
+                }
+                // The cell's y was valid when the write was journal-
+                // recorded, and the id is valid: setBlock cannot fail.
+                m_world.setBlock(e.pos.x, e.pos.y, e.pos.z, id);
+            }
+            for (const SavedFluidEdit& e : rit->second.fluids) {
+                // A positive level targets the cell the block pass left
+                // (air — a cell holds fluid XOR a block), so setFluid
+                // cannot fail for it; the level-0 drain on an already-
+                // dry cell is the expected false no-op.
+                m_world.setFluid(e.pos.x, e.pos.y, e.pos.z, e.kind, e.level);
+            }
+            m_retainedColumns.erase(rit);
+        }
         // Per-column detail at DEBUG (a radius-80 session logs 25921 of
         // these lines; the periodic INFO progress line in streamChunks is
         // the human-readable signal).
@@ -1831,6 +1881,31 @@ void Game::unloadFarColumns() {
     for (const ChunkPos& pos : toErase) {
         columns.insert({pos.x, pos.z});
     }
+    // STRM-2: snapshot the journal diff (live != fresh, restricted to the
+    // column's journal cells) of every unloaded column BEFORE its chunks
+    // are erased — the snapshot reads the live chunks. A column with no
+    // journal entries in EITHER table costs two map finds and nothing
+    // else (the structural fast path: most unloaded columns are pristine
+    // generated terrain); an all-revert column yields an empty diff and
+    // is not stored. On re-stream the diff is re-applied
+    // (integrateStreamedColumns) and merged into the exit save
+    // (collectSave) — the one-of invariant with the journal below is
+    // established HERE: the snapshot precedes the eviction.
+    for (const ColumnPos& col : columns) {
+        const auto jb = m_saveJournal.blocks.find(col);
+        const auto jf = m_saveJournal.fluids.find(col);
+        if (jb == m_saveJournal.blocks.end() &&
+            jf == m_saveJournal.fluids.end()) {
+            continue;
+        }
+        RetainedColumnDiff diff = retainColumnDiff(
+            m_world, makeChunkGenerator(), m_blocks, col,
+            jb == m_saveJournal.blocks.end() ? nullptr : &jb->second,
+            jf == m_saveJournal.fluids.end() ? nullptr : &jf->second);
+        if (!diff.blocks.empty() || !diff.fluids.empty()) {
+            m_retainedColumns.emplace(col, std::move(diff));
+        }
+    }
     for (const ChunkPos& pos : toErase) {
         m_chunkMeshData.erase(pos);
         m_world.eraseChunk(pos); // marks the boundary neighbors dirty
@@ -1839,9 +1914,11 @@ void Game::unloadFarColumns() {
     for (const ColumnPos& col : columns) {
         m_columnMeshes.erase(col); // frees the GL buffers (Mesh destructor)
         m_columnRebuildPending.erase(col);
-        // PIPE-2: the journal entries of an unloaded column go with it
-        // (the column re-enters only as FRESH streamed terrain — its old
-        // edits are gone with the chunks).
+        // PIPE-2 / STRM-2: the journal entries of an unloaded column go
+        // with it — the session's diff they carried was just snapshotted
+        // into m_retainedColumns above (when non-empty), so nothing is
+        // lost: the column re-enters as FRESH streamed terrain plus its
+        // retained diff.
         m_saveJournal.evictColumn(col);
     }
     for (const ChunkPos& pos : toErase) {
@@ -2312,7 +2389,12 @@ Result<SaveGame> Game::collectSave() const {
         // journal. The live state read + the sentinel fallback are the same
         // logic the old scan had; a journal cell whose live block is no
         // longer stateful (broken again) is skipped, exactly as the old
-        // scan's hasState gate.
+        // scan's hasState gate. STRM-2: the retained (unloaded) columns'
+        // block edits are never stateful either — a stateful placement
+        // goes through the setBlock choke point (m_editedColumns
+        // protection: the column never unloads) and the sapling stage
+        // writes track m_saplings (protected the same way) — so the
+        // journal-only derivation stays complete.
         std::vector<SavedState> states;
         for (const auto& entry : m_saveJournal.blocks) {
             for (const BlockPos& p : entry.second) {
@@ -2443,6 +2525,15 @@ Result<SaveGame> Game::collectSave() const {
             return diff.error();
         }
     }
+    // STRM-2: the retained (unloaded) columns' diffs merge into the save
+    // in BOTH paths (the journal diff and the legacy/oracle full diff
+    // cover EXISTING chunks only — a retained column is unloaded, and its
+    // journal entries were evicted at unload; without the merge the exit
+    // save would silently drop the session's far-column fluid changes).
+    // Duplicate cells are structurally impossible (the one-of invariant);
+    // a session that never unloaded a modified column passes an empty
+    // map (the no-op — the pre-STRM-2 file shape, bit-identical).
+    mergeRetained(save, m_retainedColumns);
     return save;
 }
 

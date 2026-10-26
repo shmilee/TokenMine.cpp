@@ -253,6 +253,10 @@ Chunk& World::getOrCreateChunk(const ChunkPos& pos) {
     // Generated terrain can carry fluid (sea water, lava lakes):
     // register the new chunk for the fluid simulation's chunk sets.
     scanFluidChunks(chunk, pos);
+    // The new chunk changes its fluid neighbors' feasibility (a settled
+    // cold frontier that the void kept rejecting can now advance; see
+    // wakeFluidChunks): force their one re-walk.
+    wakeFluidChunks(pos);
     return chunk;
 }
 
@@ -264,6 +268,10 @@ bool World::insertChunk(const ChunkPos& pos, Chunk&& chunk) {
     // The incoming chunk may carry fluid (generated sea water, a lava
     // lake): register it for the fluid simulation's chunk sets.
     scanFluidChunks(result.first->second, pos);
+    // The new chunk changes its fluid neighbors' feasibility (a settled
+    // cold frontier that the void kept rejecting can now advance; see
+    // wakeFluidChunks): force their one re-walk.
+    wakeFluidChunks(pos);
     // The chunk (a fresh Chunk is dirty by construction) and every
     // face-sharing existing neighbor need a re-mesh: the neighbors'
     // boundary faces were decided against the void before the new chunk
@@ -430,6 +438,33 @@ void World::scanFluidChunks(Chunk& chunk, const ChunkPos& pos) {
     if (lava) {
         addFluidChunk(pos, FluidKind::Lava);
         chunk.setFluidHot(FluidKind::Lava); // never simulated: first tick walks it
+    }
+}
+
+void World::wakeFluidChunks(const ChunkPos& pos) {
+    // The new chunk itself + its six face-sharing neighbors: the only
+    // chunks whose fluid the just-appeared chunk can unstick (a flow
+    // write crosses at most one chunk boundary per tick, so a farther
+    // fluid chunk is unaffected by this one's appearance).
+    const ChunkPos cells[7] = {
+        pos, {pos.x - 1, pos.y, pos.z}, {pos.x + 1, pos.y, pos.z},
+        {pos.x, pos.y - 1, pos.z}, {pos.x, pos.y + 1, pos.z},
+        {pos.x, pos.y, pos.z - 1}, {pos.x, pos.y, pos.z + 1},
+    };
+    for (const FluidKind kind : {FluidKind::Water, FluidKind::Lava}) {
+        for (const ChunkPos& q : cells) {
+            // Only a chunk that HOLDS the kind has fluid this wake can
+            // unstick (the setBlock UNSTICK pass's neighbor gate); the
+            // existence check is the belt (a neighbor of an erased
+            // column's edge may be void).
+            if (m_fluidChunks[static_cast<std::size_t>(kind)].count(q) == 0) {
+                continue;
+            }
+            auto it = m_chunks.find(q);
+            if (it != m_chunks.end()) {
+                it->second.invalidateFluidWalk(kind);
+            }
+        }
     }
 }
 
