@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 1.3.0 LANGUAGES CXX)
+project(TokenMine VERSION 1.4.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -80,6 +80,7 @@ add_library(mc_core STATIC
     src/world/tree_shape.cpp
     src/world/ore_vein.cpp
     src/world/beacon.cpp
+    src/world/beam_light.cpp
     src/world/mesh_job.cpp
     src/world/light_job.cpp
     src/world/lighting.cpp
@@ -143,6 +144,7 @@ add_executable(tokenmine_tests
     tests/test_tree_shape.cpp
     tests/test_ore_vein.cpp
     tests/test_beacon.cpp
+    tests/test_beam_light.cpp
     tests/test_mesh_job.cpp
     tests/test_light_job.cpp
     tests/test_fluid_light.cpp

@@ -15,7 +15,7 @@
 |---|---|---|---|---|---|---|
 | STRM 流送与内存 | ~~STRM-2 流体列保留~~ ✅ v1.1.0 | | | | | |
 | PIPE 帧管线与并发 | ~~PIPE-3 流体 per-cell~~ ✅ v1.2.0 | | | | | |
-| LGT 光照 | ~~LGT-3 夜光重传播~~ ✅ v1.3.0 | LGT-4 光束入光 | LGT-5 半块透光 | | | |
+| LGT 光照 | ~~LGT-3 夜光重传播~~ ✅ v1.3.0 | ~~LGT-4 光束入光~~ ✅ v1.4.0 | LGT-5 半块透光 | | | |
 | GEN 世界与生成 | GEN-7 基岩多层 | GEN-8 地形互感 | GEN-9 耕地湿润 | | | |
 | FLUID 流体 | FLUID-4 倒向水面 | FLUID-5 水熔岩反应 | FLUID-6 流体种类扩展 | | | |
 | ENT 实体/Mob/移动 | ENT-5 坠落伤害 | ENT-6 AI 补强 | ENT-7 移动惯性 | ENT-8 和平/保护环 | ENT-9 掉落可视化 | |
@@ -89,6 +89,21 @@
 
 ## 变更记录（v1.0 时代）
 
+- 2026-10-27：**LGT-4 光束入光完成**（v1.x 第 4/33 项，v1.4.0，门
+  119/119b）：信标光束（最后一个恒白 unlit 消费者）经 PRE-6 per-draw
+  光照覆盖范式接收世界光——`beamLightSample` 纯函数采样**信标块上方空气
+  格 (x,y+1,z)**（= beam 最低格；首版采样块自身格 = opaque 恒 (0,0) 缺陷
+  被门 119 E2E 揪出【GPU uniform readback + on/off 双二进制 diff=0 取证链】
+  修复 + OwnCellOpaqueAlwaysIgnored 回归单测）+ u_drop* 三 uniform 改名
+  中性 + 每 beam draw 后 bind+复位 0（UXFIX-1 纪律）；深夜月光 7/15
+  （LGT-3 仿射继承）/近萤石亮化/白天恒白（df=1 恒等根）；零
+  format/config/内容；1711/1711（+7）、-Werror 0 警告；门 119：S1 第 119
+  次结构性免疫（最终二进制复验）+ S2a 首版场景 beam 失明废弃【pitch 0.15
+  取景不到 96 块高近天顶 beam 柱，PITS 287】+ S2b 门 119b（pitch 1.25）：
+  day on/off sanity 1646 px + day df=1 恒等 RAW + night beam 列 1646 px
+  全限竖直窄带仅暗化（带均比值 0.483 = 解析值，零亮化，带外 0 diff）+
+  savenorm EXACT；性能 A/B 同起跑态 fall 900f：fluidCells 三窗
+  214627/194500/230306 双侧逐位一致 + 全指标同档 = 成本可忽略。
 - 2026-10-27：**LGT-3 夜光重传播 + MC 月光地板完成**（v1.x 第 3/33 项，
   v1.3.0）：呈现层昼夜缩放 → 天空光场对源等级仿射（无损）重演（所有天空
   光源共享 S + 逐格成本与 S 无关 ⇒ 有效 = max(0, stored−(15−S)) 逐格

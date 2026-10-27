@@ -37,11 +37,23 @@ C++20、CMake+Ninja、SDL3、OpenGL 3.3 core（GLEW）、GTest、zlib。**无网
    +Y 角点 `{(0,1,0),(0,1,1),(1,1,1),(1,1,0)}`，-Y `{(0,0,1),(0,0,0),(1,0,0),(1,0,1)}`。
 7. 相机约定：yaw 0 = 朝 -Z，正=左转；pitch 正=上，clamp ±~89°。
    `forward()={-sin(yaw)cos(pitch), sin(pitch), -cos(yaw)cos(pitch)}`。
-8. 光照（Phase 7 正式）：光值 0-15 存 chunk（sky/block 两数组），查询走
-   `World::getSkyLight/getBlockLight`（虚空=sky15/block0）。shader 无光 uniform：
-   `brightness = max(sky,block)/15 × faceShade`，faceShade 顶 1.0/±X 0.8/±Z 0.6/底 0.5
-   （顶点着色器按法线算），+3% 环境光下限（`kAmbient=0.03`）。按面采样（面后方一格），
-   块状光照感。截图识面：顶面最亮、-Z 面最暗的侧面。
+8. 光照（Phase 7 正式；LGT-2/3、PRE-2/5/6、LGT-4 演进）：光值 0-15 存
+   chunk（sky/block 两数组），查询走 `World::getSkyLight/getBlockLight`
+   （虚空=sky15/block0）。呈现层 frag 公式
+   `light = max(v_sky − (8/15)×(1−u_dayFactor), v_block)`，
+   `brightness = (kAmbient 0.03 + (1−kAmbient)×light×faceShade)`，faceShade
+   顶 1.0/±X 0.8/±Z 0.6/底 0.5（顶点着色器按法线算）。**LGT-3 仿射
+   撤退**：存的是源等级 15 的 noon 场；夜间源等级 S = 7 + 8×df（kNightSkyLevel
+   7 = MC 月光地板），天空项 = max(存值−(15−S), 0)——零重传播、逐格精确
+   （confluence 单测）；block 光不随昼夜变（萤石夜亮）。**LGT-2**：光场
+   进入成本由 `light_opacity`（0-15，缺省 opaque 派生 = 内容零变化）。
+   **PRE-2**：距离雾（u_fog* 4 uniform，深度走独立表达式，gl_Position 树
+   位级红线）。**PRE-5**：cutout 桶 discard（u_discardEnabled 门控）。
+   **PRE-6/LGT-4**：per-draw 光覆盖 `u_useLightOverride`+sky/block 3
+   uniform（掉落物 itemDropLight / 信标光束 beamLightSample = 信标块上方
+   空气格 (x,y+1,z)），覆盖 draw 后强制 bind+复位 0（UXFIX-1 纪律）。
+   按面采样（面后方一格），块状光照感。截图识面：顶面最亮、-Z 面最暗的
+   侧面。
 9. `Chunk&` 引用被 map rehash 失效（world.hpp 头部已文档化）。
 10. 演示区：4×4 chunk 列（世界 x,z ∈ [-32,32)）；玩家按 `kSpawnCandidates`
     自动找干燥陆地（game.cpp）：候选列需 h > seaLevel 且 `Player::hasRoomAt`
@@ -74,6 +86,13 @@ C++20、CMake+Ninja、SDL3、OpenGL 3.3 core（GLEW）、GTest、zlib。**无网
     job-local 收集（dirtyOut），flush 后主线程统一 markChunkDirty——共享 dirty
     set 无并发写；流体列的 chunk 由此获新光值重烘 = 99.4 lit-pop-in 纪律）。
     主线程写 World（集成/交互/流体）只发生在 flush 之后、post 之前。
+ 14. **确定性双轨**（AGENTS.md Top 10 #8 的权威源）：**帧锁定**（固定 1/60
+     帧步长）= 昼夜/Mob/箭/粒子/云/环境音/流体/光照/合成/烤制/生长/摆动
+     相位——无输入运行逐帧字节可复现；**真实 dt** = 生存计时器（饥饿/
+     进食/破坏进度/坠落/实体 age/火寿命/状态效果倒计时/自动存档）。截图
+     只在帧边界字节一致；real-dt 字段与音频不入帧状态（截图/存档零影响）。
+     长墙钟跑的 savenorm 按 real-dt 类剥离（saturation/hunger/
+     effects[].remaining/fires[].remaining/entities.age，PITS 244/286）。
 ## 测试
 
 ```bash
@@ -92,6 +111,9 @@ ctest --test-dir build --output-on-failure
 - **无输入运行**：×2 全帧字节一致 + skygate（FRESH = 天空模式色正午 (120,181,242) /
   黄昏 (130,63,38)，采样中心区像素众数）+ **base 门** `/tmp/opencode/base18.png`
   字节一致（无输入基线；新系统需论证"无输入下零活动 = 结构性免疫"，P26 起惯例）。
+  **notblack 判别必须用 PNG 字节尺寸**（PITS 286）：环境窗口态把截图打成
+  均色时文件 ~22 KB（有效帧 300-430 KB），`fx:mean` 探针不可信（均色值不
+  固定，假亮放行过整批黑帧）——每跑后 `stat -c%s` 尺寸门 + 重试。
   **场景存档无输入运行例外（P54 起）**：玩家置于场景、视野含流送边界列时，
   远列的 pop-in 帧与墙钟相关（P14：光照 job 每帧至多 1 个、worker 吞吐按
   墙钟——240f 两跑差 10 ms 即可让地平线树冠碎片在终帧有无翻转）→

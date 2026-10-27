@@ -3,6 +3,27 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.4.0（2026-10-27）
+
+**LGT-4 光束入光**（v1.x 任务表 4/33，门 119/119b；信标光束 = 全项目最后
+一个恒白 unlit 消费者）——复用 PRE-6 per-draw 光照覆盖范式：纯函数
+`beamLightSample`（**信标块上方空气格 (x,y+1,z)** = beam 最低格的
+sky/block ÷15；信标块自身格不透明恒 (0,0) = 门 119 E2E 揪出并修复的采样
+缺陷，OwnCellOpaqueAlwaysIgnored 回归单测钉死）+ `u_drop*` 三 uniform
+改名中性（u_useLightOverride/u_lightOverrideSky/u_lightOverrideBlock）+
+每 beam draw 后 bind+复位 0（UXFIX-1 泄漏纪律）；beam 深夜 = LGT-3 月光
+7/15（非恒白）、近萤石/火把亮化、白天露天 = 1.0 恒白（df=1 恒等根）；
+零 format/config/内容。1711/1711（+7）、-Werror 0 警告；门 119：S1 第
+119 次结构性免疫（fresh 60f 四方 + base18 连续，最终二进制复验）+ S2a
+首版场景 beam 失明废弃（on/off 双二进制 diff=0 实证，PITS 287）+ S2b
+门 119b（pitch 1.25 取景）：sanity day on/off 1646 px + day df=1 恒等
+RAW（128226 B 字节一致，beam 在框内非平凡）+ night ×2 RAW/侧 + **night
+beam 列 1646 px 全限竖直窄带仅暗化（带均 (66,105,116)→(33,53,63)，
+比值 0.483 解析吻合，零亮化，带外 0 diff）** + savenorm EXACT + 性能
+A/B 同起跑态 fall 900f：fluidCells 三窗 214627/194500/230306 双侧逐位
+一致 + 全指标同档 = 成本可忽略（无信标结构惰性）。只 tag（release 组
+1.1-1.5 末发）。
+
 ## v1.3.0（2026-10-27）
 
 **LGT-3 夜光重传播 + MC 月光地板**（v1.x 任务表 3/33，门 118；深夜可夜视

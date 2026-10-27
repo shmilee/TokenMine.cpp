@@ -2117,3 +2117,24 @@
   （tm_vNNN_bin，与资产树解耦），资产树只作 cwd/assets；另 zsh f-string
   拼版本号易错（tm_v132_bin 式 = 13+2 拼接幻觉）——bin 路径用完整字面
   量。
+- **黑帧/平面窗判别必须用 PNG 字节尺寸，mean 探针不可信（PITS 286）**——
+  10-27 门 119：环境窗口态周期性把截图打成全画面均色（22106 B 压缩极小），
+  均色值不固定（实测 mean 0.25 与 0.54 两变体）→ `fx:mean > 0.1` 探针假
+  BRIGHT 放行，整批 6 跑 4 黑。有效场景帧 = 300-430 KB（60f fresh 387726 /
+  day 信标 426729 / night 信标 403566）。修正 = 每跑后 `stat -c%s` 尺寸门
+  （<100 KB 判 ENV-FLAT，45 s 重试），断言器输入同样先验尺寸。窗态时标
+  分钟级且批内可混（同一 4 跑批 valid/env 交替出现），重试循环是唯一
+  可靠路径。衍生：长墙钟跑（构建负载压低 fps 至 ~5，600f = 120 s）触发
+  36 s 饥饿 real-dt tick + beacon 吸收效果倒计时 → savenorm 扩展剥离
+  `player.hunger` + `player.effects[].remaining`（硬规则 8 real-dt 类，
+  世界状态 blocks/fluids 不受影响）。
+- **像素门先跑 on/off sanity 验取景，否则"恒等/零 diff"双假 PASS（PITS 287）**——
+  10-27 LGT-4 门 119：信标 beam 柱 96 块高自块顶面起（近天顶），场景相机
+  pitch 0.15（视锥 −26°..+44°）根本取景不到（beam 在 58°..87°）→ day
+  "df=1 恒等"与 night "A/B 零 diff"双双失明假绿；同二进制 beacon.beam
+  on/off 帧 diff=0 才是取景有效的判据（old/new 双二进制 on/off 均 0 =
+  场景盲，非代码）。排查辅助链：GPU uniform readback
+  （glGetUniform*，GLEW 2.2 下经 __glew* 函数指针 + 3 参核心形
+  (program,loc,params)——2 参调用编译错"实参太少"= 形参表陷阱）证
+  CPU→GPU 链路通，再怀疑取景/语义。beam 类（及一切"高出屏幕的大物体"）
+  门场景先目检截图里有没有目标。

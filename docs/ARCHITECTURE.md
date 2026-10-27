@@ -1,171 +1,232 @@
 # 架构
 
-> Phase 30 文档整理：合并 `README.md`「目录结构」与 `SESSION_CONTEXT.md`「核心架构」
-> （均未改写）。
+> v1.x 整理（LGT-4 时点）。本文 = 目录结构 + 核心架构速览；逐阶段细节在
+> `docs/archive/phase-*.md`，协议与硬规则在 `docs/PROTOCOL.md`，玩法机制在
+> `docs/MECHANICS.md`，加内容在 `docs/CONTENT_GUIDE.md`。
 
 ## 目录结构
 
 ```
 tokenmine/
 ├── assets/          # 游戏资源（textures/ models/ shaders/ sounds/ data/）
-├── config/          # 用户配置（config.json，不存在时自动生成默认值）
-├── data/            # 存档目录（data/saves/<slot>.json，Phase 13）
+│                    # data/ = blocks/ items/ recipes/ biomes/ mobs/ effects/ +
+│                    # worldgen.json（内容全数据驱动：加方块/物品/配方/Mob = JSON）
+├── config/          # 用户配置（config.json，已提交文件：view_distance 80 /
+│                    # day_length 600 用户调值，不还原；内容改动仅用户要求时做）
+├── data/            # 存档目录（data/saves/<slot>.json，format 19）
 ├── logs/            # 运行日志（logs/tokenmine.log）
 ├── src/
-│   ├── block/       # 数据驱动方块系统：Block 数据模型 + BlockRegistry（JSON 加载/校验）
-│   ├── core/        # 核心框架：日志、错误处理、JSON、配置、资源、窗口、输入、相机、PNG、
-│   │                # 存档（save：SaveGame + diffWorld/applyWorldEdits + 严格序列化/解析，
-│   │                # 无 GL 依赖可单测）、sound（SoundBank：SDL3 音频流队列 + WAV 解析，
-│   │                # 初始化失败优雅降级静音）、主循环
-│   │   └── math/    # 数学库（header-only）：Vec2/Vec3/Vec4/Mat4
-│   ├── player/      # 玩家：第一人称状态 + 输入驱动移动（继承 Entity 的统一碰撞物理）
-│   ├── entity/      # 实体系统：Entity 基类（底面中心位置/子步化轴分离碰撞/滑动/kill plane）、
-│   │                # ItemEntity（掉落物：摩擦停驻/同类合并/120s 消亡）、Projectile（投射物：
-│   │                # 受重力抛物线/撞 solid 即钉住）、particle（破坏粒子：确定性爆发/
-│   │                # 半隐式 Euler/无碰撞/spawn 烘焙光照）、item_mesh（掉落物完整立方体几何，
-│   │                # 与 chunk mesher 共享 cube_face_table）
-│   ├── item/        # 物品系统（Phase 11/12）：Item/ItemStack 数据模型（含 icon 字段）+ 破坏耗时公式、
-│   │                # ItemRegistry（方块隐式同名 block item + 显式工具/材料 JSON 严格校验）、
-│   │                # Inventory（27 格 = 9 hotbar + 18 背包，确定性合并/入包/take/setSlot）、
-│   │                # Recipe/RecipeRegistry（JSON 配方 + 经 ItemRegistry 交叉校验）、
-│   │                # canCraft/craft（确定性、全有或全无的合成纯逻辑）
-│   ├── ui/          # 界面（Phase 15，纯逻辑无 GL 可单测）：font（8x8 字形 atlas UV/文本
-│   │                # 顶点生成）、debug_overlay（F3 行格式化）、inventory_ui（面板布局 +
-│   │                # 左右键点击状态机，纯函数）
-│   ├── renderer/    # 渲染器（GL 封装）：Shader/Texture/Mesh（Triangles/Lines）/Renderer
-│   │                # （setDepthTest/setCulling）/TextureAtlas
-│   └── world/       # 体素世界：coordinates（world/chunk/local 转换）、Chunk（块+光照数组）、
-│                    # World、ChunkMesher（按面烘焙光照）、day_cycle（昼夜循环：时间/
-│                    # dayFactor/天空色/日月方位/确定性星空）、raycast（DDA 体素射线+放置校验）、
-│                    # lighting（Sky/Block Light 0-15 传播与局部更新，水每格衰减 3）、
-│                    # fluid（FluidSim：水/熔岩双种类 level 1..8 模拟——反应 pass + 下落/扩散/吸收/补满）、
-│                    # noise（确定性
-│                    # value noise/fBm）、BiomeRegistry、WorldgenParams（worldgen.json）、
-│                    # WorldGenerator（Seed 可复现生成）
-├── tools/           # 开发工具：generate_block_textures.py（16x16 占位纹理）、
-│                    # generate_font.py（16x16 字形 atlas 256×512）、generate_cracks.py（5 级裂纹条）、
-│                    # generate_item_icons.py（32x32 物品图标）、generate_sounds.py（13 个 WAV）
-└── tests/           # 单元测试（GTest）+ PNG 测试夹具（tests/data/，可用 tests/generate_fixtures.py 重新生成）
+│   ├── block/       # 数据驱动方块系统：Block 数据模型（properties + model +
+│   │                # Shape：cube/slab/stairs/wall/fence/glass_pane/cross…）
+│   │                # + BlockRegistry（JSON 加载/严格校验/未知键点名）、
+│   │                # block_sound（CRAFT-3 材质音效引用校验）、chance_drop
+│   │                # （加权多掉落确定性 roll）、cube_face_table（P10，绕序回归
+│   │                # 测试守护）
+│   ├── core/        # 核心框架：logger / error(Result+MC_TRY) / json / config
+│   │                # （点号键 + 严格读取纪律）/ asset_manager（相对路径+缓存）/
+│   │                # window / input（SDL 事件唯一消费者→GameKey）/ camera /
+│   │                # png（自研）/ math（Vec2/3/4/Mat4 header-only）/
+│   │                # save（SaveGame format 19 + diffWorld/applyWorldEdits +
+│   │                # 严格双向交叉校验 + 原子写 writeAtomicFile + 增量 journal
+│   │                # 支持，无 GL 依赖可单测）/ sound（SoundBank 立体声 +
+│   │                # 16 块距离衰减/线性声像空间化 CRAFT-3 + 环境音钩子）/
+│   │                # status_effect（状态效果双载体：玩家+Mob，纯数据驱动）/
+│   │                # food / bow / difficulty（纯函数逻辑层）/
+│   │                # thread_pool（固定 4 worker，post→flush 帧同步窗口）/
+│   │                # game（主循环+场景+全部 per-block 状态宿主：炉子/营火/
+│   │                # 工作台 map + 信标 + 作物 + 粒子 + 音频事件）/ main
+│   ├── player/      # 玩家：第一人称（继承 Entity 统一物理）+ drown（氧气窒息
+│   │                # 纯函数）+ 护甲减伤（item/armor 纯函数）
+│   ├── entity/      # 实体系统：Entity 基类（底面中心/子步化轴分离碰撞/滑动/
+│   │                # stepUp 踏阶/共享流体模型 refreshFluidState+integrateFluid）/
+│   │                # MobEntity（数据驱动 AI 状态机 chase/wander/attack/远程）/
+│   │                # mob_registry（mobs/*.json 严格解析）/ mob_spawning
+│   │                # （夜间 + 光照门 spawn_max_light）/ mob_mesh /
+│   │                # mob_swing（ENT-1 四肢摆动：16.16 定点正弦表+穿模谓词
+│   │                # mob_swing_clip）/ ItemEntity（掉落物：摩擦停驻/同类合并/
+│   │                # 拾取延迟/120s 消亡/流体浮沉/半浸没终态）/
+│   │                # item_mesh（块立方掉落）/ item_model_mesh（CRAFT-2 盒模型
+│   │                # 纯几何）/ item_light（PRE-6 掉落世界光采样）/
+│   │                # Projectile（箭：重力抛物线/钉住/尾部效果 SURV-5）/
+│   │                # arrow_mesh / particle（确定性爆发/逐粒重力/流体交互）
+│   ├── item/        # 物品系统：Item/ItemStack（+damage float SURV-3）+
+│   │                # 破坏耗时公式（effectiveBreakSpeed fast_against 分块倍率）/
+│   │                # ItemRegistry（块隐式同名 item + 显式 JSON 严格校验：
+│   │                # 食物/饮用/工具/护甲/发射器/染料/桶/模型 全数据字段）/
+│   │                # Inventory（27 格确定性合并）/ Recipe/RecipeRegistry /
+│   │                # durability（五类帧锁定磨损纯函数）/ armor（MC floor
+│   │                # 减伤纯函数）/ furnace（per-block 熔炼状态 P40/P44）/
+│   │                # campfire（per-block 4 槽烤制 + 浇灭/再点燃 P71-76）/
+│   │                # crafting_grid（per-block 合成格 CRAFT-1）
+│   ├── ui/          # 界面（纯逻辑无 GL 可单测）：font（ASCII + 32 CJK 字形
+│   │                # 静态表 + 严格 UTF-8 解码 PRE-1）、debug_overlay（F3，
+│   │                # 英文 = 开发者工具）、inventory_ui（面板布局 + 点击状态机
+│   │                # + per-block 数据源 bind）、ui_scale（高分屏缩放）
+│   ├── renderer/    # 渲染器（GL 封装）：Shader（location 缓存）/Texture/
+│   │                # TextureAtlas/Mesh/Renderer（draw/drawSky/setCulling/
+│   │                # setDepthMask）/ fog（PRE-2 距离雾纯函数）/ alpha_test
+│   │                # （PRE-5 cutout 纹理普查纯函数）
+│   └── world/       # 体素世界：coordinates（换算唯一入口）、Chunk（块+sky/
+│                    # block 光 + fluid 双种类 + blockState per-instance byte
+│                    # （P94/ENT-2）+ per-kind fluidCells（PIPE-3））、World
+│                    # （journal 收口 PIPE-2 + 流体列保留 STRM-2 + 全部 get/set
+│                    # 读接口）、chunk_streaming（**圆盘** dx²+dz²≤R_eff² 纯整数
+│                    # 谓词 + 远平面帽 64，STRM-1）、chunk_mesher（三桶
+│                    # opaque/cutout/blend + 全 Shape emit + 流体波纹 PRE-3 +
+│                    # 按面烘焙光）、mesh_job（worker 快照 meshing PIPE-1）、
+│                    # light_job（光照并行 job：流送/流体追赶各至多 2/帧，
+│                    # 位级独立判据 99.10 + 流体光照异步 99.11）、lighting
+│                    # （Sky/Block 0-15 传播：light_opacity 衰减 LGT-2 /
+│                    # 源等级仿射撤退 + 月光地板 LGT-3 / 水 -3）、
+│                    # fluid（FluidSim：反应 pass obsidian/stone + 逐列下落/
+│                    # 水平扩散/守恒 FLUID-1 + per-cell 活动门控 99.8/PIPE-3）、
+│                    # fire_spread（蔓延纯函数 P66）、growth（作物/树生长引擎
+│                    # P48/GEN-2）、tree_shape、ore_vein（GEN-3 椭球脉）、
+│                    # beacon（P83/91 基座等级纯函数）、beam_light（LGT-4 光束
+│                    # 世界光采样纯函数）、cloud（PRE-4 云层几何/漂移纯函数）、
+│                    # ambience（PRE-4 昼夜环境音判定/roll 纯函数）、noise
+│                    # （splitmix64 value noise/fBm 无状态）、BiomeRegistry、
+│                    # WorldgenParams/WorldGenerator（seed 可复现：地形→洞穴
+│                    # （面条洞 GEN-1/4）→矿脉→湖→树→装饰，浮空树守卫 GEN-5、
+│                    # 半区修复 GEN-6）、raycast（DDA 射线 + canPlaceAt/
+│                    # canPlantAt/桶目标射线）
+├── tools/           # 开发工具：generate_block_textures.py / generate_font.py
+│                    # （ASCII + CJK 静态表）/ generate_cracks.py /
+│                    # generate_item_icons.py / generate_sounds.py（53 WAV，
+│                    # 固定种子确定性，重跑幂等）+ E2E 场景/探针脚本（.zsh/.py）
+└── tests/           # GTest 单元测试（1710，-Werror 恒 0 警告）+ PNG 夹具
+                     # （tests/data/，tests/generate_fixtures.py 再生）+
+                     # 独立探针（cave_probe 等，真实资产 + 工厂函数）
 ```
+
 ## 核心架构
 
+### 帧管线（每帧 1/60 帧步长，硬规则 8）
+
 ```
-src/core/    logger / error(Result) / json / config(点号键) / asset_manager(相对路径+缓存)
-             window / input(SDL 事件唯一消费者→GameKey) / camera / png / math(Vec3/Mat4)
-             save(P13)：SaveGame 数据模型 + diffWorld/applyWorldEdits（World+生成器回调+BlockRegistry，
-             无 GL 依赖）+ serializeSave/parseSave（严格 JSON 层）——存档=seed+diff+状态，文件
-             data/saves/<slot>.json（format 9；fluids 编辑 =
-             [x,y,z,level,"water"|"lava"] 五元素，format<9 的 4 元素全迁 water）
-             thread_pool(P14)：固定 N worker（游戏里 4）、post(job)/flush()（帧同步点：等所有
-             已 post 的 job 完成）、job 异常首个存 exception_ptr、在 flush 重抛（池不坏）、
-             析构 stopped+先跑完 pending job 再 join；worker 只在 post→flush 窗口运行（帧管线
-             保证此窗口内主线程只读 World）
-             game(主循环+场景) / main
-src/block/   Block 纯数据(properties/model) + BlockRegistry
-             （JSON 数据驱动、严格校验、air 哨兵 BlockID{0}、数据块 id 从 1）
-             + BlockIDHash（P10）+ cube_face_table.hpp（P10）：kCubeFaces[6]/cubeFaceTexture，
-             chunk mesher 与掉落物 item mesh 共享（绕序有回归测试）
-src/world/   coordinates.hpp：kChunkSize=16, kWorldHeight=128, BlockPos/ChunkPos,
-             floorDiv(负坐标正确), worldToChunk/chunkOrigin/chunkLocalToWorld/worldToChunkLocal
-             Chunk：16^3 BlockID 数组 + skyLight/blockLight 两个 16^3 字节数组(0-15)
-             + fluid 16^3 字节数组(0=干 1-8=水 level 9-16=熔岩 level【P51 双种类，
-               kMaxFluidLevel=8 为界；一格至多一种】；8=满/源 1-7 流动；cell 里流体与方块互斥)
-             + dirty（新 chunk 即 dirty）；raw 访问 data()/skyLightData()/blockLightData()/
-             fluidData()；skyLightAt/blockLightAt/fluidAt 读接口
-             World：chunk map；getBlock 越界/缺失→air；getSkyLight 缺失/世界上方→15、
-             y<0→0；getBlockLight 缺失→0；setBlock 返回 bool、边界(local 0/15)标记邻居 dirty
-             （并排掉所在格的水）；setFluid（只写已存在 chunk 的 air 格，越界/非 air/不变
-             →false，标 self+面邻居 dirty）/getFluid（缺失→0）；getOrCreateChunk 跑
-             ChunkGenerator；findChunk const / findChunkMut 非const 不创建；
-             generator 不得回调 World
-             + insertChunk(P14)：预建 chunk 插入（流式集成用）；已存在→false 不改动；新 chunk
-             （构造即 dirty）+ 6 个面邻居（存在者）标脏——边界剔除决策变了，不标会 Z-fighting
-             chunk_streaming(P14)：ColumnPos{x,z}（字典序 operator<，供 set/map）+
-             columnDistance（Chebyshev）+ missingColumns(player,loaded,radius)（环内缺失列，
-             (dist,x,z) 排序确定性最近优先）+ nearestMissingDistance（环内最近缺失列距离，
-             全载返回 radius+1 哨兵）+ streamingActive（= d≤radius 且 d≤trigger，全载永不激活）
-             纯函数无 World/线程，Game 把结果接到线程池与 World
-             ChunkMesher：face culling v1（邻居非 opaque 才出面）；opaque+transparent 双子网格；
-             每面烘焙"面后方一格"的 sky/block 光（/15 归一 float）；
-             emitFluid（P9）：level/8 缩放立方体（满格=整块）、水-水剔面（邻居同级/更高
-             不出面）、流体面烘焙**自身格**的光；
-             顶点为 chunk-local(0..16)，绘制 model=translate(chunkOrigin)
-             lighting：kMaxLight=15、kLightUpdateRadius=16（world/lighting.{hpp,cpp}）；
-             propagateAll（全量：清 block 光→列顶扫 sky→sky BFS→emission 源→block BFS→全标
-             dirty）；updateLocal（委托 updateRegion(min,max)）；两阶段都含 shell 种子
-             （区域外紧邻的旧光值作只读边界源）；BFS 规则：opaque 不可入、sky 垂直 0/
-             水平 1、block 全方向 1、严格增才写+重入队；**水衰减（P9）**：列顶扫描遇水
-             每格 -3（enterCost），sky BFS 入水格额外 -3——深水湖底随深度变暗
-             fluid：FluidSim::tick（world/fluid.{hpp,cpp}，P9，P51 双种类）——
-             tick = ①反应 pass（快照扫熔岩格：6-邻有水 → setBlock 为该块
-             water_reaction 产物【源水→source/流动水→flowing】；水不消耗）→
-             ②水模拟 → ③熔岩模拟；每种类的快照式确定性模拟：
-             逐列下落扫描（下方空/下方流动→falling；falling=传送带：下方吃本级、本级吃上方）；
-             静止在方块上：水平扩散 L-1 到 4 邻居（L=1 终端；邻居是方块/同级/更高则挡）；
-             静止在流体上：满格稳定；**坐在满水上→补满到 8**（source 托底的柱是满的，
-             破坏湖底后整列补满、湖面恢复；缺这条规则 7↔吸收 永久振荡——P9 E2E 探针发现）；
-             坐在流动池上：L<L2 吸收（池保级）/ L≥L2 保持并抬升下方到 L；
-             冲突 max-merge（propose 同格取 max）、按格排序应用、返回排序净变化格（空=平衡）；
-             registry-free（只读 block/fluid 数组）
-             day_cycle（world/day_cycle.{hpp,cpp}）：DayCycleParams 在**命名空间作用域**
-             （DayCycle::Params 是 using 别名）；timeOfDay∈[0,1)（0=黎明前, 0.25=正午,
-             0.5=日落, 0.75=午夜）；dayFactor：夜 0/昼 1，[0.05,0.15)/[0.45,0.55) smoothstep
-             渐变（kDawn*/kDusk* 公开常量）；starAlpha=1-dayFactor；skyColor 关键帧插值
-             （夜(0.02,0.03,0.08)→黎明橙(0.85,0.45,0.25)@0.10→昼(0.47,0.71,0.95)@0.15-0.45
-             →黄昏橙(0.85,0.40,0.20)@0.50→夜@0.60-1.0；**常值段直接返回关键帧色**——
-             lerp 同端点有 1ulp 漂移，会破坏逐字节截图）；sunDirection：azimuth=2πt
-             （东+X→南-Z→西-X）、elevation=sin(2πt)·90°（t=0.25 天顶）；moon=-sun；
-             makeStarPositions(seed,count,radius)：splitmix64 上半球（y≥0.05）确定性星位
-             noise：splitmix64 哈希 value noise 2D/3D + fBm，纯 (坐标, seed)，无状态线程安全
-             BiomeRegistry：assets/data/biomes/*.json（权重+低频噪声 0.02 选择）
-             WorldgenParams：assets/data/worldgen.json（缺省=默认，类型错误=报错）
-             WorldGenerator：无状态 generateChunk=纯(seed,pos)；顺序 地形→洞穴→矿脉→树；
-             树/矿脉=世界空间格网+边际（跨 chunk 无缝）；surfaceHeight(x,z) 供出生点
-             raycast：DDA 体素射线（Amanatides & Woo），起点 cell 不测试；
-             BlockHit{block,normal,distance}；canPlaceAt（Y 范围+非 solid+玩家
-             AABB 不重叠，严格不等式与碰撞同约定）
-src/renderer/ Shader/Texture/Mesh/Renderer/TextureAtlas（16x16 瓦片，文件名排序入图集）
-              ShaderProgram：setUniform1i/1f/2f/3f/4f/Mat4（location 缓存，缺失只告警一次）
-              Renderer::draw（索引+u_model）/ drawSky（索引+无 u_model，天空 billboard）
-src/player/  Player：第一人称状态（yaw/pitch 公开成员）+ 输入驱动移动（继承 Entity 物理）
-             + 游泳（P9）：isInWater()=AABB 与任何 fluid>0 格相交（每 update 判一次）；
-             水中：重力 12/终端 4/水平 3.1（冲刺无效）/Space 随时上浮 4.5
-src/entity/  （P10）Entity 基类：底面中心 position + AABB(width×height) + velocity + onGround；
-             moveInSubsteps(dt,maxSpeed)：子步 ≤0.4 块/子步、≤64 步，每子步 integrate(h) →
-             moveAxis X,Z,Y → afterSubstep(blocked)；被挡轴精确贴块面 + 该轴速度清零（滑动），
-             Y 向下被挡 = onGround；重叠严格 `min < b+1 && max > b`（整数边界 float 精确，
-             无 epsilon 抖动）；solid 只读 properties.solid（水可穿过）；teleportTo/setVelocity
-             （测试入口）；shouldDespawn()/belowKillPlane()（y < -32）；实体不自删（game 延迟移除）
-             Player 并入：integrate()=输入驱动移动+游泳/跳跃；m_spawnPos 虚空重生
-             ItemEntity（P11 改）：持**物品名**（game 经 ItemRegistry 解析）+ 数据 maxStack
-             （合并上限=min(item.maxStack,64)：工具 maxStack 1 永不合并）/0.25 立方/120s 消亡
-             （MC 同款）/**0.5s 拾取延迟**（kPickupDelaySeconds，MC 10 tick，防 Q 丢出即回吸；
-             pickupReady() 供 game 拾取 pass）/同类 0.75 底心距合并（canMergeInto/absorb，
-             game 做合并 pass）/重力 32 终端 38/水平指数摩擦 2.5（0.005 硬清零）/零初速生成
-             （静止位精确、截图可复现，刻意偏离 MC 随机初速）
-             Projectile：0.25/发射 15（MC 满力箭）/重力 20（MC 0.05/tick²）/终端 38/30s 消亡/
-             afterSubstep(blocked)→m_dead（撞 solid 钉住，MC 箭行为）；无游戏内发射器
-             （弓=后续阶段）、无渲染几何
-             item_mesh：makeItemCubeGeometry(block,layout)：24 顶点/36 索引/全 6 面（不剔除）/
-             中心 ±0.125/烘焙 sky=1.0 block=0（shader dayFactor → 夜间变暗）
-             src/item/    （P11）item.hpp（header-only）：ItemID（invalid=空槽）/Item（name/type/
-             block/breakSpeed/maxStack）/ItemStack（item+count，empty()）/ItemType{Block,Tool}/
-             breakDurationSeconds(hardness,speed)=1.5×hardness÷speed（hardness≤0=即时；kBreakBaseSeconds）
-             ItemRegistry：buildBlockItems(blocks)（每个数据方块隐式同名 block item，air 跳过；
-             必须先于 loadDirectory 调用）+ loadDirectory("data/items")（显式物品**只能是**
-             type:tool——block item 以方块定义唯一来源，防第二数据源；break_speed>0、
-             max_stack 1..64、重复 id（含撞方块名）=报错；未知字段警告）
-             Inventory：27 格（kHotbarSize 9 + 18 storage）；add(item,count,registry) 确定性
-             （先合并同物堆栈再首空格，槽序升序=hotbar 优先）→slot 或 -1（满）；take(slot,n)；
-             isFull；add 前置 count≤maxStack（game 保证：实体合并受 item 上限约束+Q 丢 1 个）
-             game 集成：m_items/m_inventory/m_selectedSlot + 破坏状态（m_breakTarget 格 +
-             m_breakProgress 秒）；init 顺序 blocks→items(build+load)→**drops 严格校验**
-             （未知名=启动报错）→hotbar.json {"items":[≤9 物品名]} 填满初始 hotbar（满堆栈）；
-             handleInteraction(dt)：左键**按住**=updateBreaking（目标变/松键/解锁/Tab→
-             resetBreaking；duration≤0 即时破坏）、右键=placeBlock（选中格须 block item，
-             放置后 take 1）、Tab=cycleHotbar（mod 9 + resetBreaking）、Q=dropSelectedItem
-             （选中格 take 1 → 玩家底心零初速生成 ItemEntity）；updateEntities 合并 pass 后
-             拾取 pass（索引序：pickupReady && 底心距≤kPickupDistance=1.0 → inventory.add，
-             满则留地重试）；drawItemEntities 经 item 解析 block（非 block 物品=工具跳过
-             不渲染）
+update（帧锁定段）:
+  输入 → Player（Entity 物理/游泳/护甲/氧气/火）
+  → Mob AI + 实体（子步物理/踏阶/流体/摆动相位/效果 tick）
+  → 投射物 → 粒子
+  → FluidSim::tick（反应/下落/扩散，per-cell 活动门控 O(活格)）
+  → 流体光照追赶（列粒度待集，worker 每帧至多 2 列，99.11）
+  → 生长（作物/树 roll）→ 火蔓延/寿命 → 信标 pass → 效果 pass
+  → 合成/熔炼/烤制（per-block 状态，帧锁定子步）
+  → 存档 journal 收口（World 单写窗口；F5/退出/自动三路，原子写）
+render:
+  相机 → 流送盘缘雾 + 天空（sky 程序）→ 世界三 pass
+  （opaque → cutout【discard+深度写】→ blend【深度写关：水/玻璃/云/
+  粒子/信标光束/掉落 model】）→ 实体（mob/掉落/箭）→ 手持 →
+  UI（HUD/面板/F3）
+worker 窗口（post→flush，硬规则 7）:
+  mesh job（每帧 2 列，PIPE-1 快照）+ light job（流送/流体两类各至多 2，
+  位级独立判据 lightRegionsIndependent）
 ```
+
+### 确定性双轨（硬规则 8）
+
+- **帧锁定（1/60 固定步长）**：世界/流体/光照/Mob/箭/粒子/云/环境音/
+  合成/烤制/生长/摆动相位——无输入运行逐帧字节可复现（E2E 门 ×2 RAW）。
+- **真实 dt（生存计时器）**：饥饿/进食/破坏进度/坠落计时/实体 age/火寿命/
+  状态效果倒计时/自动存档计时——长墙钟跑触发 36s 饥饿 tick 类相位差，
+  savenorm 按类剥离（PITS 244/286）。
+
+### 存档（format 19，data/saves/<slot>.json）
+
+seed + time + player{pos/yaw/pitch/health/absorption/hunger/saturation/
+armor[4]/effects/oxygen} + inventory（27 槽，含 damage）+ tables[]（CRAFT-1
+每工作台）+ furnaces[] + campfires[]（4 槽）+ fires[]（real-dt 剩余寿命）+
+entities[]（item/mob 双 type）+ blocks[]（生成 diff）+ fluids[]（五元素，
+format 9 起 water/lava 命名）+ states[]（ENT-2 per-instance byte；format 14
+独立 stairs[] 段在 15 起值保真迁入 states，15+ 文件不含 stairs）。
+严格双向交叉校验（段间引用点名拒绝）+ 全量历史 format 1..18 值保真迁移。
+**增量 journal（PIPE-2）**：World 写收口记位置集，退出 O(会话编辑数) 按
+journal chunk 重算 fresh diff（与全量 diffWorld 字节等价，`--save-full-diff`
+进程内 oracle 守护）。**原子写**（.tmp + rename，SAVE-1 三路共用）。
+
+### 流送与并行
+
+- **圆盘流送（STRM-1）**：加载区 = 玩家列的 dx²+dz²≤R_eff²（纯整数谓词，
+  R_eff = min(view_distance, 64) 远平面帽）；2 列/帧填充（99.8）；
+  驱逐 = 最远优先（流体改动列保留 diff，STRM-2）。
+- **mesh worker（PIPE-1）**：mesher 计算在 worker 快照 job，主线程只做
+  列合并 + GL 上传。
+- **光照并行（99.10/99.11）**：流送与流体追赶两类 light job 同窗各至多
+  2 个，判据 = 写 reach ±1 列 + 读环 +1 列双向不相交（gap≥4），依赖对
+  回退单 job 顺序 = 逐位行为；流体 tick 的 changed 格 → 列粒度待集异步
+  追赶（排空 == propagateAll 幂等收敛）。
+
+### 光照模型
+
+- 双场 0-15：sky（列顶扫描 + 垂直 0/水平 1 BFS）+ block（emission 源 +
+  全方向 1 BFS）；`light_opacity`（LGT-2）逐格进入成本（缺省 opaque 派生 =
+  内容零变化；leaves 2 / glass 1 = MC 值）。
+- **呈现层昼夜（LGT-3）**：天空光场对源等级 S = 7 + 8×dayFactor 仿射
+  撤退 `max(stored − (15−S), 0)`——逐格精确（confluence 单测钉死）、零重
+  传播；深夜露天月光地板 7/15（kNightSkyLevel）；敌对生成门
+  spawn_max_light 7 配对。
+- **per-draw 光覆盖（PRE-6/LGT-4）**：`u_useLightOverride` + sky/block
+  三 uniform（basic.vert 顶点段门控），掉落物（itemDropLight）与信标光束
+  （beamLightSample）经 CPU 采样世界光接入昼夜/萤石/雾管线；override draw
+  后强制 bind+复位 0（UXFIX-1 泄漏纪律）。
+
+### 流体（双种类 level 1..8）
+
+反应 pass（水/熔岩 6-邻 → obsidian/stone，源水/流水分产物）+ 逐列下落
+扫描（传送带语义）+ 水平扩散 L-1 + **守恒（FLUID-1）**（静态沉积稳压器
+保留，落池抬升分支删除；ΔF 会计恒等式单测）+ 活动门控
+（per-chunk per-kind 活格列表 + 活动 chunk 集，tick = O(活格)，PIPE-3
+流体状态逐位不变 oracle 守护）+ 共享实体流体模型（Entity::
+refreshFluidState/integrateFluid：浮漂 snap 游泳位/下沉/step-up 涉水修正，
+FLUID-3；player/mob/item 三载体同一函数 = 行为对齐保证）。
+
+### 实体与 Mob
+
+- **Mob = 纯数据**（assets/data/mobs/*.json：几何 box 部件/纹理/AI 参数/
+  生成条件/on_hit_effect/swings 摆腿段）；AI 状态机帧锁定
+  （chase/wander/attack + 远程射击；夜间 + 光照门 spawn_max_light）。
+- **摆动（ENT-1/1b）**：纯渲染层 per-part 动画（整数 swing 相位，帧边界
+  位移判移动；constexpr 16.16 定点正弦表零运行期 libm；穿模谓词
+  Sutherland-Hodgman 凸裁剪 ≤25% 体积单测守护）；存档零字段。
+- **效果（SURV-4/5）**：状态效果双载体（玩家+Mob），全数据字段
+  （tick/instant_hp/melee_penalty/reduction/speed/undead 免疫…）；
+  箭尾部效果（skeleton wither / poison_bow）。
+
+### 物品与生存
+
+- **物品 = 纯数据**：food（restore_hunger/效果）/ drinkable
+  （grants_effect(s)+instant_hp 药水 SURV-4）/ tool（break_speed/
+  fast_against 分块倍率）/ armor（points 减伤 SURV-1）/ launcher
+  （bow 族：shoot_speed/damage/infinite/ammo）/ 桶（collects/pours 对偶）/
+  dye / model（CRAFT-2 盒模型）/ durability（MC 精确值 + 五类帧锁定磨损
+  SURV-3）/ 护甲减伤（floor(amount×(100−4×pts))/100，溺水豁免 SURV-2）。
+- **per-block 容器**：炉子/营火/工作台 = `std::map<BlockPos, State>` 位置
+  序 + setBlock 收口创建/删除（破坏丢弃物品）+ 卸载保护 + format 段双向
+  校验（P44/CRAFT-1 范式）。
+- **护甲/吸收两分量**：health + absorption 池独立（池先扣，死亡只来自
+  health）；池 = 效果总和纯函数，只在同步点重算（P72）。
+
+### 渲染 pass 与着色器
+
+- basic.vert/frag：三 pass 由 mesher 三桶驱动（opaque → cutout
+  【`discard` alpha<0.5，深度写开，PRE-5】→ blend【深度写关】）；
+  面表绕序回归守护；光照 = max(effSky, block)/15 × faceShade（顶 1.0/
+  ±X 0.8/±Z 0.6/底 0.5）+ kAmbient 0.03 底；距离雾（PRE-2，gl_Position
+  独立表达式树位级红线）；水面波纹（PRE-3，tiled 采样窗逐帧平移）；
+  云（PRE-4，纯色平板 + 100s/格漂移 + 相机格缓存重建）；天空程序
+  （日月星，不雾化 = 天空即雾色）。
+- 音频：立体声 SoundBank（44100），世界事件空间化（16 块线性衰减 +
+  恒定增益声像，CRAFT-3），环境音 3 上下文帧锁定 roll（PRE-4）；音频不入
+  帧状态（截图/存档零影响）。
+
+### 验证基础设施（详见 PROTOCOL.md）
+
+- 单测 1710（GTest，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告）：
+  纯函数优先（几何/物理/光照/流体/存档/内容钉死），GL 序列 = E2E 兜底。
+- **无输入基线门**（base18.png 字节一致）：新系统须论证"无输入零活动"
+  （结构性免疫）或重锚；过门次数与锚历史见 AGENTS.md 现状节。
+- **E2E 场景门**：×2 RAW 字节一致（无输入）/ 存档 savenorm EXACT
+  （状态级权威）+ 像素隔离带断言 + A/B 判别（old/new 互斥终态）。
+- **性能 A/B（每版发布前必做）**：fall 900f 三窗指标同档 +
+  fluidCells 逐位一致（位级 oracle 场景纪律：fire 出档 lifetime 9999s
+  或 spread_chance 0）。

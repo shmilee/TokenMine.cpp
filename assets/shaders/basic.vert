@@ -41,21 +41,24 @@ out vec2 v_rippleOff;
 // vertex-based.
 out float v_cutout;
 
-// PRE-6 drop light: the PER-DRAW light override for item drops. The drop
-// geometry bakes skyLight = 1.0 / blockLight = 0.0 (the legacy
-// always-bright convention — the geometry is NOT re-baked per frame);
-// instead the caller sets these three uniforms around each drop draw and
-// u_useDropLight = 1 swaps the baked value for the sampled one. With
-// u_useDropLight = 0 (the uniform's link-time default, and the value
-// every non-drop draw sees — the caller resets it after each drop) the
-// branch is never taken and the whole pipeline is bit-identical to
-// v0.29.0. The override happens HERE (vertex stage) so the fragment's
-// lighting formula (day/night scale on sky, the ambient floor, the face
-// shade, fog) is untouched — the drops feed raw sky/block values, the
-// same 0..1 normalized light the chunk vertices carry.
-uniform int u_useDropLight;
-uniform float u_dropSky;
-uniform float u_dropBlock;
+// PRE-6 / LGT-4: the PER-DRAW light override (item drops + beacon beams).
+// The consumers bake a constant brightness into their geometry (item
+// drops: skyLight = 1.0 / blockLight = 0.0, the legacy always-bright
+// convention; beacon beams: skyLight = 0.0 / blockLight = 1.0, the
+// legacy constant-white column — the geometry is NOT re-baked per frame);
+// instead the caller sets these three uniforms around each such draw and
+// u_useLightOverride = 1 swaps the baked value for the sampled one
+// (itemDropLight / beamLightSample). With u_useLightOverride = 0 (the
+// uniform's link-time default, and the value every other draw sees — the
+// caller resets it after each override draw) the branch is never taken
+// and the whole pipeline is bit-identical to v0.29.0. The override
+// happens HERE (vertex stage) so the fragment's lighting formula
+// (day/night scale on sky, the ambient floor, the face shade, fog) is
+// untouched — the consumers feed raw sky/block values, the same 0..1
+// normalized light the chunk vertices carry.
+uniform int u_useLightOverride;
+uniform float u_lightOverrideSky;
+uniform float u_lightOverrideBlock;
 
 void main() {
     // Model is rigid (translation + rotation only) in Phase 1, so the
@@ -84,11 +87,12 @@ void main() {
     v_tiled = a_tiled;
     v_skyLight = a_skyLight;
     v_blockLight = a_blockLight;
-    // PRE-6: the per-draw drop-light override (u_useDropLight 0 for every
-    // non-drop draw = the branch never runs, bit-identical to v0.29.0).
-    if (u_useDropLight != 0) {
-        v_skyLight = u_dropSky;
-        v_blockLight = u_dropBlock;
+    // PRE-6 / LGT-4: the per-draw light override (u_useLightOverride 0
+    // for every non-override draw = the branch never runs, bit-identical
+    // to v0.29.0).
+    if (u_useLightOverride != 0) {
+        v_skyLight = u_lightOverrideSky;
+        v_blockLight = u_lightOverrideBlock;
     }
     v_cutout = a_cutout;
     // Classic per-face shading (the Minecraft lightmap look): a lightmap

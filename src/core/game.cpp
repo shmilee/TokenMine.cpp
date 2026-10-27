@@ -30,6 +30,7 @@
 #include "world/growth.hpp"
 #include "world/fire_spread.hpp"
 #include "world/beacon.hpp"
+#include "world/beam_light.hpp"
 #include "world/light_job.hpp"
 #include "world/mesh_job.hpp"
 #include "world/noise.hpp"
@@ -461,9 +462,12 @@ Result<void> Game::buildScene() {
     // unit height on y) — scaled + positioned per active beacon by the model
     // matrix in drawBeaconBeams. All 8 corners share normal +Y (so every face
     // gets the top-face shade = a uniform bright column, independent of
-    // orientation) and blockLight 1.0 (full brightness regardless of world
-    // lighting). Culling is disabled for the beam draw, so the winding only
-    // needs to trace each quad (both faces render, alpha-blended).
+    // orientation). The baked light (skyLight 0.0 / blockLight 1.0 = the
+    // legacy constant-white fallback) is swapped PER DRAW for the beacon
+    // block's cell light by the LGT-4 vertex override (beamLightSample,
+    // the PRE-6 itemDropLight pattern) — the geometry is never re-baked.
+    // Culling is disabled for the beam draw, so the winding only needs to
+    // trace each quad (both faces render, alpha-blended).
     {
         const float h = kBeaconBeamHalfWidth;
         const Vec3 kCorners[8] = {
@@ -5498,20 +5502,22 @@ void Game::updateEntities(double dt) {
 
 void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
                             RenderPass pass) {
-    // PRE-6: dropped items take the light of the cell they sit in (the
-    // AABB-center cell, itemDropLight) via the vertex shader's per-draw
-    // override (u_useDropLight / u_dropSky / u_dropBlock) — a stone cube
-    // dropped in an unlit cave no longer glows like daylight.
+    // PRE-6 / LGT-4: dropped items take the light of the cell they sit in
+    // (the AABB-center cell, itemDropLight) via the vertex shader's
+    // per-draw override (u_useLightOverride / u_lightOverrideSky /
+    // u_lightOverrideBlock — the PRE-6 drop names, renamed neutral when
+    // the beacon beams joined the pattern) — a stone cube dropped in an
+    // unlit cave no longer glows like daylight.
     // render.drop_light (code default true, the render.fog /
     // render.water_ripples getBool precedent — config.json is untouched)
-    // gates it: OFF = the three uniforms are NEVER set, u_useDropLight
-    // stays its link-time 0 and the vertex branch never runs, so the
-    // pipeline is the v0.29.0 one bit-for-bit (the gate 113 S1 off
-    // control). The program's uniform state persists per program object
-    // across draws (Renderer::draw unbinds after every draw), so each
-    // drop draw MUST reset u_useDropLight = 0 afterwards — a leak would
-    // light the next draw (mobs, chunks, arrows) with this drop's cell
-    // light.
+    // gates it: OFF = the three uniforms are NEVER set,
+    // u_useLightOverride stays its link-time 0 and the vertex branch never
+    // runs, so the pipeline is the v0.29.0 one bit-for-bit (the gate 113
+    // S1 off control). The program's uniform state persists per program
+    // object across draws (Renderer::draw unbinds after every draw), so
+    // each drop draw MUST reset u_useLightOverride = 0 afterwards — a
+    // leak would light the next draw (mobs, chunks, arrows) with this
+    // drop's cell light.
     const bool dropLightOn = m_config.getBool("render.drop_light", true);
     for (const auto& entity : m_entities) {
         const ItemEntity* item =
@@ -5589,9 +5595,10 @@ void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
             if (dropLightOn) {
                 const std::pair<float, float> light =
                     itemDropLight(m_world, *item);
-                m_basicShader.setUniform1i("u_useDropLight", 1);
-                m_basicShader.setUniform1f("u_dropSky", light.first);
-                m_basicShader.setUniform1f("u_dropBlock", light.second);
+                m_basicShader.setUniform1i("u_useLightOverride", 1);
+                m_basicShader.setUniform1f("u_lightOverrideSky", light.first);
+                m_basicShader.setUniform1f("u_lightOverrideBlock",
+                                           light.second);
             }
             m_renderer.setCulling(false); // double-sided box
             m_itemModelTextures[idx].bind();
@@ -5600,7 +5607,7 @@ void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
             // override must not leak into the draws that follow.
             if (dropLightOn) {
                 m_basicShader.bind();
-                m_basicShader.setUniform1i("u_useDropLight", 0);
+                m_basicShader.setUniform1i("u_useLightOverride", 0);
             }
             m_atlas.texture().bind(); // restore for the passes that follow
             m_renderer.setCulling(true);
@@ -5649,15 +5656,15 @@ void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
             const std::pair<float, float> light =
                 itemDropLight(m_world, *item);
             m_basicShader.bind();
-            m_basicShader.setUniform1i("u_useDropLight", 1);
-            m_basicShader.setUniform1f("u_dropSky", light.first);
-            m_basicShader.setUniform1f("u_dropBlock", light.second);
+            m_basicShader.setUniform1i("u_useLightOverride", 1);
+            m_basicShader.setUniform1f("u_lightOverrideSky", light.first);
+            m_basicShader.setUniform1f("u_lightOverrideBlock", light.second);
         }
         m_renderer.draw(mesh, m_basicShader, view, projection, model);
         // PRE-6: the reset (draw unbound the program — re-bind).
         if (dropLightOn) {
             m_basicShader.bind();
-            m_basicShader.setUniform1i("u_useDropLight", 0);
+            m_basicShader.setUniform1i("u_useLightOverride", 0);
         }
     }
 }
@@ -6180,6 +6187,21 @@ void Game::drawBeaconBeams(const Mat4& view, const Mat4& projection) {
     // (baseline byte-identical, structural immunity); the `beacon.beam`
     // config gate is the E2E control (the fire.particles pattern). Culling
     // is off for the beam (both faces of each quad render, alpha-blended).
+    //
+    // LGT-4: the beam RECEIVES the world light. Each active beacon's draw
+    // feeds the vertex per-draw override (u_useLightOverride /
+    // u_lightOverrideSky / u_lightOverrideBlock — the PRE-6 itemDropLight
+    // pattern, renamed neutral) with beamLightSample: the light of the
+    // AIR CELL directly above the beacon block (the beam's lowest cell —
+    // the block's own cell is opaque and reads (0, 0)): the beam is
+    // moonlit at deep night (the LGT-3 affine retreat with the
+    // kNightSkyLevel 7 floor), bright next to glowstone / torches, and
+    // full white at open-sky noon = the legacy constant look there. The
+    // override is uniform-gated per draw, so the baked vertex light
+    // (sky 0 / block 1.0) is the fallback a non-override draw sees — no
+    // config gate (the beam draw itself is structurally inert without
+    // beacons), and the sample is deterministic frame state (the light
+    // field + dayFactor, hard rule 8: no real-dt).
     if (!m_beaconBeam || m_beaconActive.empty()) {
         return;
     }
@@ -6205,8 +6227,27 @@ void Game::drawBeaconBeams(const Mat4& view, const Mat4& projection) {
                             static_cast<float>(b.y) + 1.0f,
                             static_cast<float>(b.z) + 0.5f),
             Mat4::scale(1.0f, height, 1.0f));
+        // LGT-4: this beacon's light (the vertex override: the air cell
+        // directly above the beacon block — the beam's lowest cell; the
+        // block's own cell is opaque and always reads (0, 0), the gate
+        // 119 E2E defect). The reset below restores the 0 every other
+        // draw expects — a leak would light the draws that follow with
+        // this beacon's cell light, the PRE-6 / UXFIX-1 discipline. The
+        // program must be BIND first: Renderer::draw unbinds it after
+        // every draw (the top-of-function bind was already consumed by
+        // the previous iteration).
+        m_basicShader.bind();
+        const std::pair<float, float> light =
+            beamLightSample(m_world, b.x, b.y, b.z);
+        m_basicShader.setUniform1i("u_useLightOverride", 1);
+        m_basicShader.setUniform1f("u_lightOverrideSky", light.first);
+        m_basicShader.setUniform1f("u_lightOverrideBlock", light.second);
         m_renderer.draw(m_beaconBeamMesh, m_basicShader, view, projection,
                         model);
+        // LGT-4: the reset (draw unbound the program — re-bind): the
+        // override must not leak into the draws that follow.
+        m_basicShader.bind();
+        m_basicShader.setUniform1i("u_useLightOverride", 0);
     }
     m_renderer.setCulling(true);
     // (blending state left to the caller — see drawBeaconBeams head)

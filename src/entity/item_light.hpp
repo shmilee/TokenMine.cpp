@@ -6,8 +6,10 @@
 // function behind the fix — it samples the light of the cell the drop
 // sits in (the AABB CENTER cell, the Minecraft "entity cell" convention)
 // and returns it normalized to 0..1, ready for the vertex shader's
-// per-draw override (u_useDropLight / u_dropSky / u_dropBlock in
-// basic.vert). The caller samples it once per drop per frame (no cache:
+// per-draw override (u_useLightOverride / u_lightOverrideSky /
+// u_lightOverrideBlock in basic.vert — the PRE-6 drop names, renamed
+// neutral when the beacon beams joined the pattern, LGT-4). The caller
+// samples it once per drop per frame (no cache:
 // light changes — a torch placed, day turning — are picked up
 // automatically; the cost is two World reads per drop per frame,
 // negligible at player-scale drop counts).
