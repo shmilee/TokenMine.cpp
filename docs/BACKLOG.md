@@ -35,7 +35,9 @@
    提交 → 报告）。
 3. 版本号从 v1.1.0 起；**每版发布前必做性能 A/B**（用户硬要求）；
    release 节奏 = 5 版一组 GitHub release（标题 "TokenMine.cpp v1.XX.0"），
-   里程碑版本单独正式 release（v1.0 先例）。
+   里程碑版本单独正式 release（v1.0 先例）。**tag = 1:1 对应 release**
+   （10-27 用户定案：无 release 的组内成员 tag 全部清理，共 30 个；
+   组内其余版本引用 = commit / 代码内版本号，不再打 tag）。
 
 ## 表外
 
@@ -89,6 +91,11 @@
 
 ## 变更记录（v1.0 时代）
 
+- 2026-10-27：**tag 清理（用户要求）**。39 tag → **9**（= release 1:1：
+  v0.1.0 / v0.5.0 / v0.10.0 / v0.15.0 / v0.20.0 / v0.25.0 / v0.30.0 /
+  v1.0.0 / v1.5.0），30 个无 release 的组内成员 tag 删除（远端 + 本地；
+  commit 不受影响 = main 历史仍可达）。今后 A/B 旧侧引用按版本
+  （commit 内 CMake PROJECT_VERSION）/ commit SHA，不再按 tag 名。
 - 2026-10-27：**GitHub release 收尾（用户要求）**。① tag v1.0 → **v1.0.0**
   （仓库唯一两段式 tag 统一为三段式，指向 14e793d 不变；release 更名
   "TokenMine.cpp v1.0.0"，正文原样沿用；代码内 PROJECT_VERSION 保持 1.0
