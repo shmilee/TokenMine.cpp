@@ -121,7 +121,8 @@ chunk 各走一次，镜像 setBlock UNSTICK；唤醒仅在插入事件 = 性能
 **首个正式版**：v1.0 任务矩阵 34/34 全完成（十大系统 + 2 项实机报障）。覆盖
 v0.31.0 / v0.32.0 两版 + 版本号收口（二进制内版本字符串自 v0.16.0 起滞后，
 本次恢复诚实：启动日志/F3 首行 = `TokenMine.cpp v1.0`）。正式版 release
-见 GitHub Releases "TokenMine.cpp v1.0"（Latest）。
+见 GitHub Releases "TokenMine.cpp v1.0.0"（原 tag v1.0，10-27 改名；
+Latest = v1.5.0 组 release）。
 
 ## v0.32.0（2026-10-26）
 
