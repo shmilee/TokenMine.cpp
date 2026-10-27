@@ -3,6 +3,48 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.9.0（2026-10-28）
+
+**FLUID-4 倒向水面**（v1.x 任务表 9/33，FLUID 行 1/3，门 124；消费
+P47 流体桶记档偏离"倒水只能倒向方块受击面——对着水面/纯天空倒 =
+no-op（MC 对水面的倒法未实现）"）——**纯函数 `bucketPourTarget`**
+（world/raycast，canPlaceAt 同款落点）：倒水候选 = ① block 射线受击
+面邻格（P47 放置约定——block 射线穿过流体，1 深水池的地面受击使池顶
+水格成为候选 = "对着池子倒"成立）或 ② block 射线无命中（超 block
+射程的开阔水面）时 fluid 射线自身命中的格；无 cross-fallback（block
+命中恒优先 = MC 桶对块面瞄准）。候选过 canPlaceAt（Y 范围/实心/玩家
+重叠，与旧路径共享）且满足：**(a) 空气无流体 = 旧放置（位级不变）**
+或 **(b) 桶自身种类的流动格（level < 8）= 倒向水面，该格变 level-8
+源**。已源格（level 8）/异种流体格 = no-op（桶保留，点击 fall
+through，Minecraft 语义：源上倒源无变化）。tryFluidBucket pour 分支
+重接，写入路径零改动（setFluid L8 + 列保护 + Lighting::updateLocal +
+"splash" + 物品交换）。**零 format（19）/零 config/零内容/零音效**
+（水/熔岩桶对既有 P47/P51；流体 = 世界编辑既有存档路径）。
+**范围外记档**：① 流动水舀取维持 P47 现状（舀侧扩展另立项）② 水桶
+对熔岩面 = no-op（kind 不匹配；水-熔岩反应交互 = FLUID-5 行）③ 倒出
+的源走正常 FluidSim（既有）。1756/1756（+11 RaycastPourTargetTest：
+旧放置位级 / 倒向流动 / 已源 no-op / 异种 no-op（水拒熔岩 + 熔岩桶收
+熔岩 = 种类正确性）/ 实心 / 玩家重叠 / 开阔水（无 block 命中）/ 开阔
+已源 no-op / 双无命中 / Y 越界 / block 命中优先无 cross-fallback）、
+-Werror 0 警告。门 124：S1 = **第 124 次结构性免疫免重锚**（fresh
+60f 四方 ×2 387726 B 全字节一致 new≡old v1.8.0≡base18 + savenorm
+EXACT——无输入 = 无右键 = tryFluidBucket 零执行）+ **S2 单次右键输入
+跑 PASS**（受控石台 + 封源池【源 L8 (25,45,-8) + 流动 L7 (24,45,-8)
++ 6 石封 = PITS 291 纪律】+ slot0 water_bucket；瞄准几何 = CPU
+harness 实证：东玩家 (27.5,45,-7.5) 射线穿源格+流动格打西封石 +X 面
+→ 邻格 = 流动格）：new ×2 流动格 → **L8 + slot0 = bucket（互斥终态）
++ "poured" 日志行** / old v1.8.0 ×2 流动恒 L7 + slot0 = water_bucket
+（P47 旧 no-op 行为不变）/ S2b 西玩家经东封石瞄准已源格 → no-op 桶
+保留（level-8 守卫）；×2 RAW/侧 + A/B 截图 diff 19,819 px = 手持图标
++ 热栏槽 0 + 池区水面（全为倒水直接后果）；输入协议 = 左点捕获（轮询
+"Pointer captured" DEBUG 日志）+ 单次右键——**右键交互链只在指针锁定
+时执行，裸右键静默丢弃（PITS 295）**；存档状态 = 权威断言（输入跑
+协议定位）。+ 性能 A/B 同 seed 900f（fluidCells win2/3 **逐位一致**
+= 零 worldgen 改动同世界 oracle + PIPE3 changesApplied 逐位 + 全指标
+同档 = **成本可忽略**，无输入桶代码结构惰性实证）。PITS 295-296
+（捕获协议 / 同槽双进程终档竞态 = 断言前验 clean exit）。只提交
+（组内不打 tag = 10-28 定案 tag 策略）。
+
 ## v1.8.0（2026-10-28）
 
 **GEN-9 耕地湿润**（v1.x 任务表 8/33，GEN 行 3/3 收尾，门 123；"耕地

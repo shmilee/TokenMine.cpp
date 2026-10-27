@@ -4640,14 +4640,18 @@ bool Game::tryFluidBucket() {
     // land on a level-8 (source) cell of a fluid the bucket names: the
     // source is removed and one held item is swapped for the full bucket
     // of THAT fluid (the unique item that pours it back — derived, the
-    // init cross-check). The POUR side: the placement-target cell (the
-    // face neighbor of the first non-air block) must be air without fluid
-    // and not overlap the player: a level-8 source of the item's fluid is
-    // placed and the item swaps to the empty bucket. Both play "splash"
-    // and consume the click (a bucket never places a block); a no-action
-    // case falls through to the normal right-click (placeBlock is a
-    // no-op for a material — nothing happens, e.g. on a flowing cell, a
-    // source of a fluid the bucket does not name, or an occupied target).
+    // init cross-check). The POUR side (bucketPourTarget, FLUID-4): the
+    // face neighbor of the first non-air block — or the fluid ray's own
+    // hit cell when no block is in reach — must be air without fluid
+    // (the legacy placement) or a FLOWING cell of the bucket's own kind
+    // (pour onto a water surface: it becomes the source), in the Y range
+    // and not overlapping the player: a level-8 source of the item's
+    // fluid is placed and the item swaps to the empty bucket. Both play
+    // "splash" and consume the click (a bucket never places a block); a
+    // no-action case falls through to the normal right-click (placeBlock
+    // is a no-op for a material — nothing happens, e.g. on an
+    // already-source cell, a foreign-kind fluid cell, or a solid
+    // target).
     if (!m_player || m_player->isDead()) {
         return false;
     }
@@ -4728,35 +4732,42 @@ bool Game::tryFluidBucket() {
         m_sound.play("splash");
     };
     const std::optional<BlockHit> hit = targetBlock();
+    std::optional<BlockPos> fluidHit;
     if (!hit) {
-        return false; // no block face to pour against: fall through
+        // FLUID-4: no block face in reach — open water beyond block
+        // reach is the fluid ray's own hit cell (a wall in reach would
+        // have produced the block hit, so the fluid hit here is
+        // unoccluded by definition).
+        fluidHit = raycastFluid(m_world, m_camera.position,
+                                m_camera.forward(), kReach);
     }
-    // The pour cell is the face neighbor of the hit block (the
-    // placement-target convention): air, without fluid (setFluid only
-    // fills air cells), inside the Y range and not overlapping the
-    // player (canPlaceAt's tests; a material item is not placeable, so
-    // the solid-block rejection there is irrelevant here).
-    const BlockPos target {
-        hit->block.x + static_cast<int>(hit->normal.x),
-        hit->block.y + static_cast<int>(hit->normal.y),
-        hit->block.z + static_cast<int>(hit->normal.z)};
-    if (!canPlaceAt(m_world, m_blocks, target, m_player->aabbMin(),
-                    m_player->aabbMax()) ||
-        m_world.getBlock(target.x, target.y, target.z) != BlockID::air() ||
-        m_world.getFluid(target.x, target.y, target.z) != 0) {
-        return false;
+    // The pour cell (bucketPourTarget): the face neighbor of the hit
+    // block (the placement-target convention — the block ray passes
+    // through fluids, so a floor under a 1-deep pool makes the pool's
+    // top water cell the candidate), or the fluid hit when no block is
+    // in reach. The candidate is either AIR without fluid (the legacy
+    // placement, bit-identical) or a FLOWING cell of the bucket's own
+    // kind (FLUID-4 pour onto a water surface — it becomes the source);
+    // canPlaceAt keeps the Y range / solid / player-overlap tests.
+    const std::optional<BlockPos> target = bucketPourTarget(
+        m_world, m_blocks, hit, fluidHit, kind, m_player->aabbMin(),
+        m_player->aabbMax());
+
+    if (!target) {
+        return false; // no acceptable pour cell: fall through
     }
-    m_world.setFluid(target.x, target.y, target.z, kind, kMaxFluidLevel);
+    const BlockPos& cell = *target;
+    m_world.setFluid(cell.x, cell.y, cell.z, kind, kMaxFluidLevel);
     // The fluid diff is save-recorded (no setBlock choke point here):
     // keep the column (never unloaded).
-    m_editedColumns.insert({floorDiv(target.x, kChunkSize),
-                            floorDiv(target.z, kChunkSize)});
-    Lighting::updateLocal(m_world, m_blocks, target);
+    m_editedColumns.insert({floorDiv(cell.x, kChunkSize),
+                            floorDiv(cell.z, kChunkSize)});
+    Lighting::updateLocal(m_world, m_blocks, cell);
     finish();
     MC_LOG_DEBUG("poured " + item.poursFluid + " at (" +
-                 std::to_string(target.x) + ", " +
-                 std::to_string(target.y) + ", " +
-                 std::to_string(target.z) + ") (" + item.name + " -> " +
+                 std::to_string(cell.x) + ", " +
+                 std::to_string(cell.y) + ", " +
+                 std::to_string(cell.z) + ") (" + item.name + " -> " +
                  item.poursBecomes + ")");
     return true;
 }

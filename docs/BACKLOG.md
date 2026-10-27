@@ -17,7 +17,7 @@
 | PIPE 帧管线与并发 | ~~PIPE-3 流体 per-cell~~ ✅ v1.2.0 | | | | | |
 | LGT 光照 | ~~LGT-3 夜光重传播~~ ✅ v1.3.0 | ~~LGT-4 光束入光~~ ✅ v1.4.0 | ~~LGT-5 半块透光~~ ✅ v1.5.0 | | | |
 | GEN 世界与生成 | ~~GEN-7 基岩多层~~ ✅ v1.6.0 | ~~GEN-8 地形互感~~ ✅ v1.7.0 | ~~GEN-9 耕地湿润~~ ✅ v1.8.0 | | | |
-| FLUID 流体 | FLUID-4 倒向水面 | FLUID-5 水熔岩反应 | FLUID-6 流体种类扩展 | | | |
+| FLUID 流体 | ~~FLUID-4 倒向水面~~ ✅ v1.9.0 | FLUID-5 水熔岩反应 | FLUID-6 流体种类扩展 | | | |
 | ENT 实体/Mob/移动 | ENT-5 坠落伤害 | ENT-6 AI 补强 | ENT-7 移动惯性 | ENT-8 和平/保护环 | ENT-9 掉落可视化 | |
 | SURV 生存/战斗/效果 | SURV-6 效果档位 | SURV-7 死亡统计 | SURV-8 工具 10× | SURV-9 饱和细化 | SURV-10 挤奶冷却 | |
 | CRAFT 物品/合成/面板 | CRAFT-4 配方提示 | CRAFT-5 炉子表现 | CRAFT-6 燃料熔炼 | CRAFT-7 背包交互 | | |
@@ -116,6 +116,20 @@
   构建与运行 + 范围与限制 + 许可），PITS 范围 267-288 修正为 271-288
   （267-270 属 v1.0 组时代门 114/115）③ Latest 收尾回 v1.5.0 组 release
   （重建时序）。同步 README/CHANGELOG/BACKLOG/AGENTS 旧引用。
+- 2026-10-28：**FLUID-4 倒向水面完成**（v1.x 第 9/33 项，v1.9.0，门
+  124；消费 P47 桶记档偏离"倒水只能倒向方块受击面"）：纯函数
+  `bucketPourTarget`（world/raycast：候选 = block 射线受击面邻格【旧
+  放置位级不变】或（block 射线无命中）fluid 射线命中的格；接受空气无
+  流体或桶自身种类流动格 level<8 → 变源；已源/异种 = no-op 桶保留 =
+  MC parity）+ tryFluidBucket pour 分支重接（写路径零改动）；零 format
+  （19）/config/内容/音效。1756/1756（+11）、-Werror 0；门 124：S1 第
+  124 次结构性免疫免重锚（四方 ×2 字节一致 + savenorm EXACT）+ S2 单
+  次右键输入跑 PASS（封源池受控场景：new 流动 L7→L8 + 桶→空桶 互斥
+  终态 ×2 / old 恒 no-op ×2 / S2b 已源格 no-op 桶保留 + ×2 RAW/侧 +
+  A/B diff = 手持/热栏图标 + 池区水面）+ 性能 A/B 同 seed 900f
+  fluidCells win2/3 逐位一致 + 全同档 = 成本可忽略；PITS 295-296
+  （右键只在指针锁定时执行 = 输入跑先左点捕获轮询 / 同槽双进程终档
+  竞态 = 断言前验 clean exit）。只提交（组内不打 tag，10-28 定案）。
 - 2026-10-28：**GEN-9 耕地湿润完成**（v1.x 第 8/33 项，v1.8.0，门
   123；代理定案 = farmland 湿/干视觉状态，GEN 行 3/3 收尾，原始定义
   已佚）：块模型可选 `moisture_top`（FullCube-only 形状门控 + 严格非空

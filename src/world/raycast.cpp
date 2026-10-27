@@ -208,6 +208,56 @@ bool canPlantAt(const World& world, const BlockRegistry& blocks, BlockPos cell,
     return false;
 }
 
+std::optional<BlockPos> bucketPourTarget(const World& world,
+                                         const BlockRegistry& blocks,
+                                         const std::optional<BlockHit>& blockHit,
+                                         const std::optional<BlockPos>& fluidHit,
+                                         FluidKind kind,
+                                         const Vec3& playerMin,
+                                         const Vec3& playerMax) {
+    // Candidate: the block-ray face neighbor (the phase-47 placement
+    // convention — the block ray passes through fluids, so a floor under
+    // a 1-deep pool makes the pool's top water cell the candidate), or,
+    // when the block ray hit nothing (open water beyond block reach), the
+    // fluid ray's own hit cell. No cross-fallback: a block hit always
+    // decides the candidate (Minecraft aims the bucket at the block face,
+    // never at a farther water cell behind it).
+    std::optional<BlockPos> candidate;
+    if (blockHit) {
+        candidate = BlockPos {
+            blockHit->block.x + static_cast<int>(blockHit->normal.x),
+            blockHit->block.y + static_cast<int>(blockHit->normal.y),
+            blockHit->block.z + static_cast<int>(blockHit->normal.z)};
+    } else {
+        candidate = fluidHit;
+    }
+    if (!candidate) {
+        return std::nullopt;
+    }
+    if (!canPlaceAt(world, blocks, *candidate, playerMin, playerMax)) {
+        return std::nullopt; // out of range / solid / player overlap
+    }
+    const int level = world.getFluidOfKind(candidate->x, candidate->y,
+                                           candidate->z, kind);
+    if (level == 0) {
+        // (a) the legacy placement: air without the bucket's own fluid
+        // (a foreign-kind fluid cell is a no-op — the bucket does not
+        // replace another fluid).
+        if (world.getFluid(candidate->x, candidate->y, candidate->z) != 0) {
+            return std::nullopt;
+        }
+        return candidate;
+    }
+    // (b) the pour onto a water surface: a flowing cell of the bucket's
+    // own kind becomes the source. An already-source cell (level 8) is a
+    // no-op (Minecraft: the bucket is kept — pouring source on source
+    // changes nothing).
+    if (level == kMaxFluidLevel) {
+        return std::nullopt;
+    }
+    return candidate;
+}
+
 float raycastAabb(Vec3 origin, Vec3 dir, Vec3 boxMin, Vec3 boxMax) {
     // Standard slab method: each axis contributes an interval of ray
     // parameters that pierce its slab; the intersection of the three is

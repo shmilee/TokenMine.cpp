@@ -514,3 +514,162 @@ TEST(RaycastFluidTest, OriginCellFluidIsSkipped) {
     ASSERT_TRUE(hit.has_value());
     EXPECT_EQ(hit->x, 3);
 }
+
+// -- FLUID-4: bucketPourTarget (the pour onto a water surface) ----------------
+//
+// The phase-47 pour accepted only an AIR face neighbor (pouring against a
+// water surface was a documented no-op). bucketPourTarget resolves the
+// candidate (block-ray face neighbor, or the fluid ray's own hit cell when
+// no block is in reach) and accepts either (a) air without fluid (the
+// legacy placement, bit-identical) or (b) a FLOWING cell of the bucket's
+// own kind (it becomes the source). An already-source cell or a foreign
+// kind is a no-op (Minecraft: the bucket is kept).
+
+namespace {
+
+std::optional<BlockHit> floorHit(int y = 0) {
+    return BlockHit {BlockPos {8, y, 8}, Vec3 {0.0f, 1.0f, 0.0f}, 4.0f};
+}
+
+// A player AABB far from any candidate cell (no overlap by construction).
+const Vec3 kFarMin {-20.0f, 0.0f, -20.0f};
+const Vec3 kFarMax {-19.0f, 1.0f, -19.0f};
+
+} // namespace
+
+TEST(RaycastPourTargetTest, LegacyAirFaceNeighbor) {
+    const BlockRegistry reg = makeBlocks();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    ASSERT_TRUE(world.setBlock(8, 0, 8, stone));
+    // (8,1,8) is air without fluid: the legacy placement target.
+    auto t = bucketPourTarget(world, reg, floorHit(), std::nullopt,
+                              FluidKind::Water, kFarMin, kFarMax);
+    ASSERT_TRUE(t.has_value());
+    EXPECT_EQ(t->x, 8);
+    EXPECT_EQ(t->y, 1);
+    EXPECT_EQ(t->z, 8);
+}
+
+TEST(RaycastPourTargetTest, PourOntoFlowingFaceNeighbor) {
+    const BlockRegistry reg = makeBlocks();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    ASSERT_TRUE(world.setBlock(8, 0, 8, stone));
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, 5)); // flowing
+    auto t = bucketPourTarget(world, reg, floorHit(), std::nullopt,
+                              FluidKind::Water, kFarMin, kFarMax);
+    ASSERT_TRUE(t.has_value()); // the flowing cell becomes the source
+    EXPECT_EQ(t->y, 1);
+}
+
+TEST(RaycastPourTargetTest, AlreadySourceNoOp) {
+    const BlockRegistry reg = makeBlocks();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    ASSERT_TRUE(world.setBlock(8, 0, 8, stone));
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, 8)); // a source
+    EXPECT_FALSE(bucketPourTarget(world, reg, floorHit(), std::nullopt,
+                                  FluidKind::Water, kFarMin,
+                                  kFarMax).has_value());
+}
+
+TEST(RaycastPourTargetTest, ForeignKindNoOp) {
+    const BlockRegistry reg = makeBlocks();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    ASSERT_TRUE(world.setBlock(8, 0, 8, stone));
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Lava, 5)); // lava, not water
+    EXPECT_FALSE(bucketPourTarget(world, reg, floorHit(), std::nullopt,
+                                  FluidKind::Water, kFarMin,
+                                  kFarMax).has_value());
+    // The lava bucket names its own kind: the same cell is its target.
+    ASSERT_TRUE(bucketPourTarget(world, reg, floorHit(), std::nullopt,
+                                 FluidKind::Lava, kFarMin,
+                                 kFarMax).has_value());
+}
+
+TEST(RaycastPourTargetTest, SolidNeighborNoOp) {
+    const BlockRegistry reg = makeBlocks();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    ASSERT_TRUE(world.setBlock(8, 0, 8, stone));
+    ASSERT_TRUE(world.setBlock(8, 1, 8, stone)); // a solid face neighbor
+    EXPECT_FALSE(bucketPourTarget(world, reg, floorHit(), std::nullopt,
+                                  FluidKind::Water, kFarMin,
+                                  kFarMax).has_value());
+}
+
+TEST(RaycastPourTargetTest, PlayerOverlapNoOp) {
+    const BlockRegistry reg = makeBlocks();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    ASSERT_TRUE(world.setBlock(8, 0, 8, stone));
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, 5));
+    // The player's feet inside the candidate cell: rejected.
+    const Vec3 nearMin {7.5f, 0.5f, 7.5f};
+    const Vec3 nearMax {8.5f, 1.5f, 8.5f};
+    EXPECT_FALSE(bucketPourTarget(world, reg, floorHit(), std::nullopt,
+                                  FluidKind::Water, nearMin,
+                                  nearMax).has_value());
+}
+
+TEST(RaycastPourTargetTest, OpenWaterNoBlockHit) {
+    // No block in reach (the block ray hit nothing): the fluid ray's own
+    // hit cell is the candidate (open water beyond block reach).
+    const BlockRegistry reg = makeBlocks();
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, reg.idForName("stone"))); // a chunk
+    ASSERT_TRUE(world.setFluid(5, 2, 5, FluidKind::Water, 3));
+    auto t = bucketPourTarget(world, reg, std::nullopt,
+                              BlockPos {5, 2, 5}, FluidKind::Water, kFarMin,
+                              kFarMax);
+    ASSERT_TRUE(t.has_value());
+    EXPECT_EQ(t->x, 5);
+    EXPECT_EQ(t->y, 2);
+    EXPECT_EQ(t->z, 5);
+}
+
+TEST(RaycastPourTargetTest, OpenWaterSourceNoOp) {
+    const BlockRegistry reg = makeBlocks();
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, reg.idForName("stone"))); // a chunk
+    ASSERT_TRUE(world.setFluid(5, 2, 5, FluidKind::Water, 8));
+    EXPECT_FALSE(bucketPourTarget(world, reg, std::nullopt,
+                                  BlockPos {5, 2, 5}, FluidKind::Water,
+                                  kFarMin, kFarMax).has_value());
+}
+
+TEST(RaycastPourTargetTest, NoHitsNoOp) {
+    const BlockRegistry reg = makeBlocks();
+    World world;
+    EXPECT_FALSE(bucketPourTarget(world, reg, std::nullopt, std::nullopt,
+                                  FluidKind::Water, kFarMin, kFarMax)
+                     .has_value());
+}
+
+TEST(RaycastPourTargetTest, YRangeNoOp) {
+    const BlockRegistry reg = makeBlocks();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    // A floor at the world's top row: the +Y face neighbor is out of range.
+    ASSERT_TRUE(world.setBlock(8, kWorldHeight - 1, 8, stone));
+    EXPECT_FALSE(bucketPourTarget(world, reg, floorHit(kWorldHeight - 1),
+                                  std::nullopt, FluidKind::Water, kFarMin,
+                                  kFarMax).has_value());
+}
+
+TEST(RaycastPourTargetTest, BlockHitWinsOverFluidHit) {
+    // No cross-fallback: a block hit decides the candidate even when the
+    // fluid ray hit a different water cell.
+    const BlockRegistry reg = makeBlocks();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    ASSERT_TRUE(world.setBlock(8, 0, 8, stone));
+    ASSERT_TRUE(world.setFluid(5, 2, 5, FluidKind::Water, 4));
+    auto t = bucketPourTarget(world, reg, floorHit(), BlockPos {5, 2, 5},
+                              FluidKind::Water, kFarMin, kFarMax);
+    ASSERT_TRUE(t.has_value());
+    EXPECT_EQ(t->x, 8); // the face neighbor, not the fluid hit
+    EXPECT_EQ(t->z, 8);
+}

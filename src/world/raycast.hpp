@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "core/math/vec3.hpp"
+#include "world/chunk.hpp"
 #include "world/coordinates.hpp"
 #include "world/world.hpp"
 
@@ -73,6 +74,33 @@ bool canPlaceAt(const World& world, const BlockRegistry& blocks, BlockPos cell,
 // (placement is not a hot path — one per right-click).
 bool canPlantAt(const World& world, const BlockRegistry& blocks, BlockPos cell,
                 const std::vector<std::string>& plantOn);
+
+// FLUID-4: resolve the POUR target cell for a bucket that carries `kind`
+// (the phase-47 pour accepted only an AIR face neighbor — pouring against
+// a water surface was a documented no-op; this adds the Minecraft
+// pour-onto-water-surface). Candidate selection, in order:
+//   - when the BLOCK ray (`blockHit`, the plain raycast that passes
+//     through fluids) hit, the candidate is the hit face's NEIGHBOR —
+//     the placement convention: a floor under a 1-deep pool makes the
+//     top water cell the candidate, so "aim at the pool" works;
+//   - when the block ray hit NOTHING (open water beyond block reach),
+//     the candidate is the FLUID ray's own hit cell (`fluidHit`, walls
+//     already excluded by the empty block hit).
+// The candidate must pass `canPlaceAt` (Y range, no solid block, no
+// player overlap — shared with the legacy path, which it keeps
+// bit-identical) and hold EITHER:
+//   (a) air without fluid -> the legacy placement, or
+//   (b) fluid of `kind` below `kMaxFluidLevel` -> the new pour onto a
+//       water surface (a flowing cell becomes the source).
+// An already-source cell (level 8) or a different fluid kind is a no-op
+// (Minecraft: the bucket is kept); nullopt = the click falls through.
+std::optional<BlockPos> bucketPourTarget(const World& world,
+                                         const BlockRegistry& blocks,
+                                         const std::optional<BlockHit>& blockHit,
+                                         const std::optional<BlockPos>& fluidHit,
+                                         FluidKind kind,
+                                         const Vec3& playerMin,
+                                         const Vec3& playerMax);
 
 // Slab test of a ray against an axis-aligned box (Phase 20, mob targeting).
 // Returns the ray parameter t at ENTRY, or -1 for a miss. `dir` does not
