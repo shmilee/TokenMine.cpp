@@ -233,5 +233,6 @@
 - **UXFIX-1（v1.0 任务表：实机渲染状态泄漏修复）** — `archive/phase-uxfix1.md`
 - **FLUID-3（v1.0 任务表：mob 涉水修正）** — `archive/phase-fluid3.md`
 - **STRM-2（v1.x 任务表：流体列保留 + 99.8 流送边界活性补洞）** — `archive/phase-strm2.md`
+- **PIPE-3（v1.x 任务表：流体 per-cell）** — `archive/phase-pipe3.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

@@ -83,9 +83,12 @@
 // simplification: only DIRECT (6-) neighbors burn — Minecraft's fire
 // spreads cell by cell over time.
 //
-// The tick is O(loaded cells): the per-chunk scan reads raw arrays; the six
-// neighbor chunks are cached per chunk so cross-boundary cell reads cost no
-// map lookups.
+// The tick is O(visited chunks' live fluid cells) (PIPE-3: the per-chunk
+// 32K full scans are cell-list traversals — Chunk::fluidCells, collected
+// per visited chunk; the visited set = the kind's active chunks, the 99.8
+// activity flags' set twin, + their face neighbors). The six neighbor
+// chunks are cached per chunk so cross-boundary cell reads cost no map
+// lookups.
 #pragma once
 
 #include <set>

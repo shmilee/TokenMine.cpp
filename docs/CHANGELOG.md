@@ -3,6 +3,26 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.2.0（2026-10-27）
+
+**PIPE-3 流体 per-cell**（v1.x 任务表 2/33，门 117）——99.8 chunk 粒度
+活动门控的 per-cell 化：tick 成本从 O(visited chunk × 32K 格 × 2 遍 +
+全流体 chunk 集合遍历) 降到 **O(活动 chunk + 活流体格)**：per-chunk
+per-kind 流体格列表（`setFluidAt` 成员变化 push / drain lazy stale /
+walk 过滤+列序+去重+压缩，不变式 = 活格 ⇒ ≥1 条目）+ World per-kind
+活动 chunk 集合（6 插入点穷尽 flag 置位点，walk 消费，flag 双检 belt）
++ falling 标志 per-column 化（colFlag[256] + 跨 chunk topFlags[256B]，
+引用语义位级同旧）+ reaction/burn 活格扫 + propose map max 合并（序
+无关）。流体状态**逐位不变**（门 117 S2 位级一致 oracle：fall/fill 跨
+侧 savenorm EXACT + 截屏 RAW 字节同；cascade nospread 位稳 oracle 存档
+RAW 854590 B 逐字节同；fire 区 1 格差 = 同二进制自分歧实证 = 既有
+real-dt 类，非回归）。性能 A/B：fall 流体段 −50%（1261→631 ms/300f
+窗）、活跃 tick 34.8→12.6 ms（2.8×）、fill churn 窗 −80%、沉降下界
+−50%，fluidCells 逐位一致 + 帧指标全同档 = 纯收益。顺带修
+`setFluidAt` 潜伏 debug assert（lava 编码 9..16；NDEBUG 零变化）+
+test_mesh_job static_assert 契约演进（vector 成员）。只 tag（release
+组 1.1-1.5 末发）。
+
 ## v1.1.0（2026-10-27）
 
 **STRM-2 流体列保留**（v1.x 任务表 1/33，门 116）——仅流体模拟改动的列

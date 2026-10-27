@@ -32,8 +32,13 @@ using namespace mc;
 namespace {
 
 // The snapshot insertion (PIPE-1) copies whole Chunks into the throwaway
-// World — pin the copy contract: Chunk must stay trivially copyable.
-static_assert(std::is_trivially_copyable_v<Chunk>);
+// World — pin the copy contract: Chunk must stay copy/move-constructible
+// with the content carried (PIPE-3: the per-kind fluid cell lists are
+// std::vector members — they copy with the chunk; the snapshot's lists
+// are never consulted, so the semantic bit-equivalence the old
+// trivially-copyable pin guarded is unchanged).
+static_assert(std::is_copy_constructible_v<Chunk>);
+static_assert(std::is_move_constructible_v<Chunk>);
 // The vertex comparison below is a byte compare — pin the contract.
 static_assert(std::is_trivially_copyable_v<MeshVertex>);
 

@@ -65,6 +65,9 @@ bool World::setBlock(int x, int y, int z, BlockID id) {
     const std::uint8_t displaced = chunk.fluidAt(local.x, local.y, local.z);
     if (displaced != 0) {
         chunk.setFluidAt(local.x, local.y, local.z, 0);
+        // PIPE-3: the drain re-heat's active-set mirror.
+        m_fluidActive[static_cast<std::size_t>(fluidKindOf(displaced))]
+            .insert(cp);
         pruneFluidChunk(chunk, cp, fluidKindOf(displaced));
     }
     // A block change can UNSTICK fluid: support removed under a settled
@@ -73,8 +76,15 @@ bool World::setBlock(int x, int y, int z, BlockID id) {
     // fluid-simulation walk on the next tick (Phase 99.8 activity gating).
     for (FluidKind kind : {FluidKind::Water, FluidKind::Lava}) {
         chunk.invalidateFluidWalk(kind);
+        // PIPE-3: the pending flag's active-set mirror — the target
+        // UNCONDITIONALLY for both kinds (the chunk may not hold the kind;
+        // the walk is then a no-op) ...
+        m_fluidActive[static_cast<std::size_t>(kind)].insert(cp);
         const auto invalidate = [this, kind](const ChunkPos& q) {
             if (m_fluidChunks[static_cast<std::size_t>(kind)].count(q) != 0) {
+                // ... and the six face neighbors under the SAME gate as the
+                // flag (a chunk that holds the kind).
+                m_fluidActive[static_cast<std::size_t>(kind)].insert(q);
                 auto it = m_chunks.find(q);
                 if (it != m_chunks.end()) {
                     it->second.invalidateFluidWalk(kind);
@@ -185,6 +195,14 @@ bool World::setFluid(int x, int y, int z, FluidKind kind,
         // A positive level replaces any other kind in the cell.
     }
     chunk->setFluidAt(local.x, local.y, local.z, fluidCode(kind, level));
+    // PIPE-3: the active-set mirror of setFluidAt's dual-kind re-heat
+    // (`code` = the cell's OLD encoded byte, `level` = the new one).
+    if (code != 0) {
+        m_fluidActive[static_cast<std::size_t>(fluidKindOf(code))].insert(cp);
+    }
+    if (level > 0) {
+        m_fluidActive[static_cast<std::size_t>(kind)].insert(cp);
+    }
     if (level > 0) {
         addFluidChunk(cp, kind);
     } else {
@@ -306,9 +324,12 @@ bool World::eraseChunk(const ChunkPos& pos) {
         return false; // nothing to drop
     }
     // The chunk leaves the fluid simulation's chunk sets (its fluid, if
-    // any, is dropped with it).
+    // any, is dropped with it) — and the per-kind ACTIVE sets (PIPE-3):
+    // an unloaded chunk's stale entry would otherwise linger.
     m_fluidChunks[static_cast<std::size_t>(FluidKind::Water)].erase(pos);
     m_fluidChunks[static_cast<std::size_t>(FluidKind::Lava)].erase(pos);
+    m_fluidActive[static_cast<std::size_t>(FluidKind::Water)].erase(pos);
+    m_fluidActive[static_cast<std::size_t>(FluidKind::Lava)].erase(pos);
     // The six face-sharing SURVIVING neighbors re-expose their boundary
     // faces (the erased chunk now reads as the air void): re-mesh them.
     const auto mark = [this](const ChunkPos& p) {
@@ -373,6 +394,7 @@ std::vector<ChunkPos> World::chunkPositions() const {
 void World::clear() {
     m_chunks.clear();
     m_fluidChunks = {};
+    m_fluidActive = {};
     m_dirtyChunks.clear();
 }
 
@@ -433,10 +455,12 @@ void World::scanFluidChunks(Chunk& chunk, const ChunkPos& pos) {
     }
     if (water) {
         addFluidChunk(pos, FluidKind::Water);
+        m_fluidActive[static_cast<std::size_t>(FluidKind::Water)].insert(pos);
         chunk.setFluidHot(FluidKind::Water); // never simulated: first tick walks it
     }
     if (lava) {
         addFluidChunk(pos, FluidKind::Lava);
+        m_fluidActive[static_cast<std::size_t>(FluidKind::Lava)].insert(pos);
         chunk.setFluidHot(FluidKind::Lava); // never simulated: first tick walks it
     }
 }
@@ -460,6 +484,9 @@ void World::wakeFluidChunks(const ChunkPos& pos) {
             if (m_fluidChunks[static_cast<std::size_t>(kind)].count(q) == 0) {
                 continue;
             }
+            // PIPE-3: the active-set mirror, under the same gate as the
+            // pending flag.
+            m_fluidActive[static_cast<std::size_t>(kind)].insert(q);
             auto it = m_chunks.find(q);
             if (it != m_chunks.end()) {
                 it->second.invalidateFluidWalk(kind);

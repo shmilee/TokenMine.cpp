@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "block/block.hpp"
 #include "world/coordinates.hpp"
@@ -97,6 +98,25 @@ public:
     void clearFluid();
     const std::uint8_t* fluidData() const { return m_fluid.data(); }
 
+    // -- Per-kind fluid cell lists (PIPE-3) --------------------------------
+    // Every LIVE fluid cell holds at least one entry in its kind's list
+    // (local cell index); entries may be DUPLICATED or STALE — a drain or a
+    // kind replacement leaves the old entry until the fluid walk filters
+    // it (or compacts it away). setFluidAt pushes an entry exactly when the
+    // cell newly BECOMES a member of the kind (0 -> n and a kind change:
+    // membership changed); a same-kind level change keeps its existing
+    // entry, a drain removes none (lazy). The fluid tick traverses THESE
+    // lists instead of the 32K full scan; compactFluidCells replaces the
+    // storage with a filtered/sorted/deduplicated live list (the walk
+    // compacts when the list grows stale). Chunk copy/move carries the
+    // lists (the streaming worker's snapshot consistency holds for free).
+    const std::vector<std::uint32_t>& fluidCells(FluidKind kind) const {
+        return m_fluidCells[static_cast<std::size_t>(kind)];
+    }
+    void compactFluidCells(FluidKind kind, std::vector<std::uint32_t> live) {
+        m_fluidCells[static_cast<std::size_t>(kind)] = std::move(live);
+    }
+
     // -- Fluid activity flags (Phase 99.8) -------------------------------
     // The fluid simulation walks a chunk only while it is HOT (one of its
     // cells' fluid changed on the last applied tick — a moving front, a
@@ -162,6 +182,9 @@ private:
     std::array<std::uint8_t, kVolume> m_fluid {}; // encoded (see fluidCode)
     std::array<std::uint8_t, kVolume> m_blockState {}; // Phase 94 / ENT-2
     bool m_dirty = true;
+    // Per-kind fluid cell lists (PIPE-3), indexed by FluidKind (slot 0
+    // unused: Water = 1, Lava = 2), holding local cell indexes.
+    std::array<std::vector<std::uint32_t>, 3> m_fluidCells {};
     // Fluid activity flags (Phase 99.8), indexed by FluidKind (slot 0
     // unused: Water = 1, Lava = 2).
     std::array<bool, 3> m_fluidHot {false, false, false};

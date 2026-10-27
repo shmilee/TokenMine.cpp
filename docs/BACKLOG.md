@@ -14,7 +14,7 @@
 | 系统 | ① | ② | ③ | ④ | ⑤ | ⑥ |
 |---|---|---|---|---|---|---|
 | STRM 流送与内存 | ~~STRM-2 流体列保留~~ ✅ v1.1.0 | | | | | |
-| PIPE 帧管线与并发 | PIPE-3 流体 per-cell | | | | | |
+| PIPE 帧管线与并发 | ~~PIPE-3 流体 per-cell~~ ✅ v1.2.0 | | | | | |
 | LGT 光照 | LGT-3 夜光重传播 | LGT-4 光束入光 | LGT-5 半块透光 | | | |
 | GEN 世界与生成 | GEN-7 基岩多层 | GEN-8 地形互感 | GEN-9 耕地湿润 | | | |
 | FLUID 流体 | FLUID-4 倒向水面 | FLUID-5 水熔岩反应 | FLUID-6 流体种类扩展 | | | |
@@ -89,6 +89,29 @@
 
 ## 变更记录（v1.0 时代）
 
+- 2026-10-27：**PIPE-3 流体 per-cell 完成**（v1.x 第 2/33 项，v1.2.0）：
+  99.8 chunk 粒度活动门控 per-cell 化——per-chunk per-kind 流体格列表
+  （setFluidAt 成员变化 push / drain lazy stale / walk 过滤+列序+去重+
+  压缩，不变式 = 活格 ⇒ ≥1 条目）+ World per-kind 活动 chunk 集合（6
+  插入点穷尽 flag 置位点 + eraseChunk purge，walk 消费，flag 双检 belt）
+  + falling 标志 per-column 化（colFlag[256] + 跨 chunk topFlags[256B]，
+  引用语义位级同旧）+ reaction/burn 活格扫 + propose map max 合并（序
+  无关）；tick = O(活动 chunk + 活流体格)（原 O(visited×32K×2 + 全流体
+  集合遍历)）。流体状态逐位不变 = 门 117 S2 位级一致 oracle（fall/fill
+  跨侧 savenorm EXACT + 截屏 RAW 字节同；cascade nospread 位稳 oracle
+  存档 RAW 854590 B 逐字节同；fire 区 1 格差 = 同 OLD 二进制自分歧实证
+  = 既有 real-dt 类 PITS 283 非回归）；1695/1695（+9：列表维护/跨 chunk
+  边界/活动集生命周期 ×4/reaction-burn 收集/churn 有界/手算参考/belt
+  消费）、-Werror 0 警告；门 117：S1 = 第 117 次结构性免疫免重锚（四方
+  fresh 60f 字节一致 + base18 锚连续）+ 性能 A/B（用户硬要求）：fall
+  流体段 1261/2486/3785 → 631/1267/1880 ms/300f 窗（−50%）、活跃 tick
+  34.8→12.6 ms（2.8×）、fill churn 窗 1.5-2.3→0.3-0.4 ms（−80%）、沉降
+  下界 0.19-0.30→0.10-0.16 ms（−50%）、fluidCells 逐位一致 + 帧指标全
+  同档 = 纯收益零回退；顺带修 setFluidAt 潜伏 debug assert（lava 编码
+  9..16 > kMaxFluidLevel；NDEBUG 零变化）+ test_mesh_job static_assert
+  契约演进（vector 成员 → copy/move-constructible）；PITS 280-283
+  （场景拷贝假绿 / pgrep 自匹配第 4 次 / 黑窗数分钟周期 / fire 蔓延非位
+  稳类）——详见 docs/archive/phase-pipe3.md。
 - 2026-10-27：**STRM-2 流体列保留完成**（v1.x 第 1/33 项，v1.1.0）：驱逐
   journal diff 快照按列保留（retainColumnDiff = journalDiffChunk 字节同语义、
   保留 diff 条目非 chunk = 内存有界）+ 再集成回放（blocks 先 fluids 后、不插

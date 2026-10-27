@@ -2064,3 +2064,39 @@
   ±1.0 偏移，AABB 半宽 0.3）+ 转向后 F5 探针读 yaw 精调（|Δ|>30px
   才补 xmotion，实测免纠）。漂移根因未追（XTEST 事件/SDL 锁 delta
   类），三行车道 = 结构性免疫于该漂移量级。
+
+- **scratch 树漏 data/saves → 场景拷贝静默失败 = fresh 假绿（PITS 280）**
+  ——10-27 PIPE-3 step-0：插桩树 rsync 用根级 `--exclude '/data'`，树内无
+  data/saves/；run2 的 `cp /tmp/opencode/$scene $D/data/saves/...` 报
+  "没有那个文件或目录"后继续（cp 失败非致命）→ --save 读不到场景 =
+  FRESH 跑，截图照常 GREEN = 假绿（PIPE3-S0 数据仍"合理"掩盖）。判别 =
+  场景跑后存档块/流体编辑计数 vs 场景源 + 跑前 `ls $D/data/saves/` 核目
+  录存在。纪律：建 scratch 树后先 1 帧冒烟核场景已载（存档含场景特有
+  编辑）再长跑。
+- **pgrep -f 自匹配 = 等待循环永挂（PITS 259 第 4 次复现，PITS 281）**
+  ——10-27 门 117：`while pgrep -f 'g94_old_fall_t2'; do sleep 10; done`
+  的 shell 命令行自身含该字符串 → pgrep 恒匹配自身 → 300s 超时（目标
+  进程早已 clean exit）。模式必锚定二进制/特征（`pgrep -f
+  'tokenmine.*g94_old_fall'`）或 [g] 括号技巧；等待循环先核产物 mtime，
+  不裸等 pgrep。
+- **away 组件黑窗态 = 数分钟周期（PITS 273 扩展，PITS 282）**——10-27
+  门 117 S2：同场景同帧同二进制，07:30 截图亮（mean 0.436）/ 08:07-
+  08:22 连 4 跑全黑（mean 0.25，22KB 近单色 PNG）= 非场景相位（帧锁定
+  确定性排除）= 环境窗态周期波动（亮窗 ~2-12 min）。黑帧跑**帧照样
+  完成**（clean exit + 存档完整 = 确定性权威不受影响）→ 门协议 = 黑跑
+  存档照收 + 像素检查降级 SKIPPED（同场景双侧皆亮才做像素 RAW）+ 长跑
+  批前亮窗热身探针（60f，黑则 20s 重试）；黑帧判别先 `grep 'Frame
+  limit reached' log`（帧完 = 黑帧非 stall，别按 240s 超时白等）。
+- **fire 蔓延终区 = real-dt burnout × 帧锁定 roll 的非位稳类（PITS
+  283）**——10-27 门 117 S2：cascade 场景（fire lifetime 4 s 默认）600f
+  无输入 OLD vs NEW 块日差别差 = 恰 1 格 fire-spread 燃尽 air；**同 fps
+  （11.8-12.1）同 OLD 二进制 3 跑亦 1 vs 2 分歧** = 非回归、非 fps 均值
+  相关 = burnout 帧（real-dt 4 s 倒计时 × 逐帧 real-dt 抖动）迁移 → 帧
+  锁定 spread roll 序列从分歧帧起重放不同 → 燃尽 air 足迹差 1-2 格。
+  判别：跨侧块差先核差格邻域是否 fire 燃尽簇（air 密集区 + 场景 fire
+  条目半径内）+ 同二进制 ×3 跑自分歧实证。位级 oracle 场景纪律 = fire
+  生命周期出档的（lifetime 9999 s = 无 burnout = spread 纯帧锁定位稳，
+  fall 场景范式）或 spread_chance 0（burnout 原位确定性，casc nospread
+  范式）；savenorm 剥 fires[].remaining 不够——燃尽 air 在 **blocks**
+  段。PITS 244 衍生（244 = fires remaining 漂移记档非缺陷，本条 = 其块
+  足迹面）。

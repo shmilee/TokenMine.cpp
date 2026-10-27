@@ -41,7 +41,23 @@
 - **站流水瀑布/崖膜永久轮换（接受现状）** — FLUID-1 路线 A 下，海崖/盘边供给的薄膜级联以**站流水瀑布**形态运行：有界的边缘格集合每 tick 重新 churn（薄膜落下 → 沉积成新薄膜 → 再落下，period-2）。定量（路线 A step-0 probe）：流送盘 r5 场景 = **24 格**（与旧规则逐格同一集合、无新增振荡格）、稳态 **24 编辑/tick**、总编辑 ~18.6k/600 tick（旧规则 ~18.6k，同量级）；P90 表面湖溢出 = **1 churn 格**、稳态 ~3.4 编辑/tick（**`[GEN-4]` 后 = 3 churn 格**：洞穴重排新开排水沟把溢流路由出 disk-3 普查区，overflow 157→72 / total 473→707，湖契约不变——世界生成演进同款先例）**接受现状 = 非缺陷**：24 格类**视图外**（无输入基线 gate 原样通过）、**×2 RAW 字节确定**、99.8 活动门只把对应 chunk 保热（流体成本永久项有界）。pre-FLUID-1 的池抬升分支本可打断该循环——但那是唯一不守恒的体积增益路径，删抬升保稳压器 = 路线 A 定案。**`[99.11]` 成本修正**：该接受的 churn 在 shipped 海洋（seed 123456789）海岸线尺度 = 713→918→1357 格/tick（非 24 格量级），其 re-light 原为主线程同步巨盒重扫 = 每 300 帧窗口 130s→396s→661s = 用户深层卡顿根因；99.11 后光的传导走 worker 追赶流水线（≤2 列/帧、幂等收敛、滞后有界、film 光值近乎不变 = 视觉零差），churn 的主线程成本降为 set 插入（~10 ms/tick 量级、实测 update p95 7.6 s→80 ms）——churn 本体仍是接受现状（FluidSim 逐位未动，门 91 状态 vs v0.8.0 逐位相同钉死）。若未来做"斜向 film 静态梯度沉降"（MC 流时间链）= 流体模型语义变更，单独立项。`[FLUID-1]`
 - **满水格（source）失去支撑会下落** — 对 Minecraft 的刻意偏离：MC 中 source 水不随支撑消失而下落（只会停止扩散）；本实现中任何满格下方为空都会沿列下落（传送带式补位），行为更"物理"但与 MC 不符。`[Phase 9]`
 - **流体不会流进未加载的 chunk** — `World::setFluid` 只写已存在 chunk（不创建）；FluidSim 只 tick 已存在 chunk。Phase 14 起"未加载"只存在于流式半径环之外/玩家身后：水在加载区边界暂停，玩家走近加载后恢复扩散（生成地形本身的水是平衡态，tick 无变化）。`[Phase 9]`（范围 `[Phase 14]` 已收窄）
-- **流体模拟 = chunk 粒度活动门控（非 MC 的 cell 队列）** — `[99.8]` 起每 tick 只走"热"chunk（上一 tick 有流体变化 / 被块变更扰动 / 新生成），沉降流体（静态池、**静态流动梯度**）零成本——实测 P90 熔岩 228 格峡谷流沉降后流体成本 40 ms/tick → ~2 ms/tick。粒度是 chunk 非 cell：一个 16×16×128 chunk 里只有 1 格流动也走全 chunk（32K 格）；MC 的 per-cell 队列更省但重写 tick 架构，留待性能成为瓶颈时。块变更（挖掉静置水片下方的支撑）会强制受影响 chunk 走一次（walk-pending，单测钉死）。**流送边界活性补洞 `[STRM-2]`**：新 chunk 出现（`insertChunk`/`getOrCreateChunk`）同款强制——自身 + 6 面邻中持有该 kind 流体的 chunk 各走一次（`wakeFluidChunks`，setBlock UNSTICK 镜像）：pre-fix 一个 settled 冷流前对 void 的 spread 被 `setFluid` 拒（"the void stays dry"）后 chunk 转冷，目标列流送到达**不唤醒**它 = 级联永久卡在流送边界（门 116 场景插桩实证：前沿 tick 4 被拒转冷，目标列 frame ~15 已集成，其后 395 tick 零推进；CellReader 缺失 chunk 读 air = 表面条件全满足而写入静默失败，排障须探针 setFluid 拒绝分支 PITS 271）；反向同病 = 带生成海的新 chunk 插入后自身冷、不与邻接 settled 流体互扰。唤醒仅在插入事件（streaming 节奏）= 99.8 性能面零回退（`SettledWorldStaysColdWithoutInsertions` 钉死）；性能 A/B 的 fluidCells 窗差 +1/+2 = 该修复的行为语义（静态梯度提前一格越界，非 churn 放大）。
+- **流体模拟 = chunk 粒度活动门控（非 MC 的 cell 队列）** — `[99.8]` 起每 tick 只走"热"chunk（上一 tick 有流体变化 / 被块变更扰动 / 新生成），沉降流体（静态池、**静态流动梯度**）零成本——实测 P90 熔岩 228 格峡谷流沉降后流体成本 40 ms/tick → ~2 ms/tick。**`[PIPE-3]` 已 per-cell 化（v1.2.0）**：tick 成本 = O(活动 chunk + 活
+流体格)——per-chunk per-kind 流体格列表（`Chunk::setFluidAt` 成员变化时
+push、drain lazy stale、walk 过滤/列序/去重 + >50% stale 或重复即压缩，
+不变式 = 活格 ⇒ ≥1 条目）+ World per-kind **活动 chunk 集合**（6 插入点
+穷尽全部 flag 置位点：setFluid 双 kind / setBlock 排水 / setBlock UNSTICK /
+wakeFluidChunks / scanFluidChunks / eraseChunk purge，walk 点消费，flag
+双检 = stale belt）——原每 visited chunk 两遍 32K 全扫 + 32KB falling
+数组堆分配、每 tick 全流体 chunk 集合的 flag 遍历全部消除；falling 标志 =
+per-column colFlag[256]（列内自底向上 = 收集序）+ 跨 chunk 边界
+topFlags[256B]（引用语义位级同旧）；reaction/burn 同款活格扫；propose
+O(n) 线性合并 → map max 合并（序无关 = 位级同果）。流体状态逐位不变
+（门 117 S2 = fall/fill 跨侧 savenorm EXACT + 截屏 RAW 字节同 + cascade
+nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实证 fire
+区 1 格 = 既有 real-dt 类 PITS 283 非回归）；性能 = fall 流体段 −50%
+（1261→631 ms/300f 窗）、fill churn 窗 tick 1.5-2.3→0.3-0.4 ms（−80%）、
+沉降下界 0.19-0.30→0.10-0.16 ms（−50%，全集合遍历消除）。块变更（挖掉
+静置水片下方的支撑）会强制受影响 chunk 走一次（walk-pending，单测钉死）。**流送边界活性补洞 `[STRM-2]`**：新 chunk 出现（`insertChunk`/`getOrCreateChunk`）同款强制——自身 + 6 面邻中持有该 kind 流体的 chunk 各走一次（`wakeFluidChunks`，setBlock UNSTICK 镜像）：pre-fix 一个 settled 冷流前对 void 的 spread 被 `setFluid` 拒（"the void stays dry"）后 chunk 转冷，目标列流送到达**不唤醒**它 = 级联永久卡在流送边界（门 116 场景插桩实证：前沿 tick 4 被拒转冷，目标列 frame ~15 已集成，其后 395 tick 零推进；CellReader 缺失 chunk 读 air = 表面条件全满足而写入静默失败，排障须探针 setFluid 拒绝分支 PITS 271）；反向同病 = 带生成海的新 chunk 插入后自身冷、不与邻接 settled 流体互扰。唤醒仅在插入事件（streaming 节奏）= 99.8 性能面零回退（`SettledWorldStaysColdWithoutInsertions` 钉死）；性能 A/B 的 fluidCells 窗差 +1/+2 = 该修复的行为语义（静态梯度提前一格越界，非 churn 放大）。
 - **只有一种流体（水）** — 无岩浆/蜂蜜等；`fluidBlock()` 取第一个 `properties.fluid` 数据方块作纹理参考，加第二种流体需扩展存储（level 数组按流体类型分）。`[Phase 9]`
 - ~~**草方块掉小麦种子（不再掉泥土）**~~ — `[Phase 52]` 已修复：grass `drops` 改回 `dirt`（MC 语义）+ `chance_drops: [{wheat_1, 1, 0.125}]`（偶尔种子，0.125 = MC 基础概率）。种子来源 = 草概率掉 + 未熟作物（`wheat_1..6`）掉落。`[Phase 48]`（概率系统 `[Phase 49]`、多掉落列表 `[Phase 52]` 已就位）
 - ~~**作物可种在任何朝向的表面**~~ — `[Phase 53]` 已修复：新增 block 可选字段 `plant_on`（方块名数组）——放置时目标格**正下方**须为列表之一，不符 = 静默 no-op（不消耗物品）；纯函数 `canPlantAt`（canPlaceAt 同款可单测）+ init 每条目存在性校验（grows_on 纪律）。首个使用者 = `wheat_1..6` 的 `["farmland"]`（Minecraft 耕地约束落地）。`plant_on`（放置门）与 `grows_on`（生长门）相互独立。`[Phase 48]`（生长条件 `[Phase 50]`、放置限制 `[Phase 53]` 均已解决）

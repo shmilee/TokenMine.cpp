@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 1.1.0 LANGUAGES CXX)
+project(TokenMine VERSION 1.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -137,6 +137,7 @@ add_executable(tokenmine_tests
     tests/test_day_cycle.cpp
     tests/test_fluid.cpp
     tests/test_fluid_streaming_gate.cpp
+    tests/test_fluid_cell_list.cpp
     tests/test_fire_spread.cpp
     tests/test_growth.cpp
     tests/test_tree_shape.cpp

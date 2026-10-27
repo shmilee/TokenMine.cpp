@@ -161,6 +161,25 @@ public:
     }
     // Sorted, like chunkPositions (deterministic iteration order).
     std::vector<ChunkPos> fluidChunkPositions(FluidKind kind) const;
+    // Chunks the fluid simulation may WALK this tick, per kind (PIPE-3):
+    // the 99.8 activity flags' set twin. Every site that sets a chunk's
+    // fluidHot / fluidWalkPending also inserts here (the six insertion
+    // points are exhaustive over the flag-setting sites); the set may
+    // conservatively over-insert (a setBlock on a dry chunk inserts its
+    // target unconditionally — the walk is then a no-op), and set semantics
+    // make re-insertion idempotent. The per-kind simulation pass iterates
+    // THIS instead of the all-holding-chunks scan, double-checks the chunk
+    // flags (belt: a stale entry with both flags false is consumed and
+    // skipped), and the walk consumes the entry together with the flags
+    // (consumeFluidActive). Purged by eraseChunk / clear.
+    const std::set<ChunkPos>& fluidActiveChunks(FluidKind kind) const {
+        return m_fluidActive[static_cast<std::size_t>(kind)];
+    }
+    // Consume the chunk's entry (the walk's flag-clearing site): a no-op
+    // when absent (a chunk visited as a neighbor holds no entry).
+    void consumeFluidActive(const ChunkPos& pos, FluidKind kind) {
+        m_fluidActive[static_cast<std::size_t>(kind)].erase(pos);
+    }
     // Chunks currently marked dirty (content changed, mesh pending). The
     // mesh pass iterates THIS set instead of every chunk (a full-ring
     // world is ~9k-200k chunks; the dirty set is player-scale).
@@ -230,6 +249,8 @@ private:
     std::set<ChunkPos> m_dirtyChunks;
     // Indexed by FluidKind (Water = 1, Lava = 2; slot 0 unused).
     std::array<std::set<ChunkPos>, 3> m_fluidChunks;
+    // Per-kind fluid-active chunk sets (PIPE-3; see fluidActiveChunks).
+    std::array<std::set<ChunkPos>, 3> m_fluidActive {};
     ChunkGenerator m_generator;
     CellMutationObserver m_observer;
 };
