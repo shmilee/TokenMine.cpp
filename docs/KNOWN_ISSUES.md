@@ -434,8 +434,11 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
   倒出的源走正常 FluidSim（悬空下落、落地扩散），无"倒进容器"概念。
   `[Phase 47]`（**`[FLUID-4]` 已解决**：`bucketPourTarget` 纯函数——
   受击面邻格或（block 射线无命中时）fluid 射线命中的流动格（同种、
-  level<8）都可成为倒水目标 = 该格变源；已源格/异种流体 = no-op 桶
-  保留（MC parity）；纯天空无流体命中仍 no-op）
+  level<8）都可成为倒水目标 = 该格变源；已源格 = no-op 桶保留（MC
+  parity）；纯天空无流体命中仍 no-op。**`[FLUID-5]` 异种流体格解决**：
+  水桶对熔岩格 = 反应倒（水源放受击法向一步的干空气格，既有 reaction
+  pass 下 tick 转 obsidian）/ 熔岩桶对水格 = 替换倒（setFluid 既有替换
+  语义，下 tick 按残留邻水转 obsidian/stone））
   `[Phase 47]`
 - **水中无游泳物理差异** — 玩家进水体只进入水中状态（重力减半，Phase
   9），无划水/呼吸机制；桶操作在水中同样可用（无水下交互限制）。

@@ -240,12 +240,51 @@ std::optional<BlockPos> bucketPourTarget(const World& world,
     const int level = world.getFluidOfKind(candidate->x, candidate->y,
                                            candidate->z, kind);
     if (level == 0) {
-        // (a) the legacy placement: air without the bucket's own fluid
-        // (a foreign-kind fluid cell is a no-op — the bucket does not
-        // replace another fluid).
-        if (world.getFluid(candidate->x, candidate->y, candidate->z) != 0) {
-            return std::nullopt;
+        if (world.getFluid(candidate->x, candidate->y, candidate->z) == 0) {
+            // (a) the legacy placement: air without fluid.
+            return candidate;
         }
+        // (c) FLUID-5: a fluid cell of the OTHER kind (a water bucket
+        // against lava, a lava bucket against water). getFluid returns
+        // the LEVEL of whichever kind is present (0..8) — the kind
+        // itself comes from getFluidKind.
+        const std::optional<FluidKind> cellKind =
+            world.getFluidKind(candidate->x, candidate->y, candidate->z);
+        if (cellKind && *cellKind == FluidKind::Lava &&
+            kind == FluidKind::Water) {
+            // The REACTION POUR: the water source goes one cell further
+            // along the hit direction — the cell the ray came from
+            // (directly ABOVE the lava for a straight top-down pool aim,
+            // the open side for a wall-occluded aim); with no block hit
+            // (open lava beyond reach) the +Y convention. The EXISTING
+            // reaction pass then converts the lava to the lava block's
+            // water_reaction product on the next tick (the poured water
+            // is a level-8 source — one rule source, no new reaction
+            // rule). No dry-air placement cell -> no-op, the bucket is
+            // kept (Minecraft: water that cannot be placed does
+            // nothing).
+            const Vec3 dir = blockHit
+                                 ? Vec3 {blockHit->normal.x,
+                                         blockHit->normal.y,
+                                         blockHit->normal.z}
+                                 : Vec3 {0.0f, 1.0f, 0.0f};
+            const BlockPos place {
+                candidate->x + static_cast<int>(dir.x),
+                candidate->y + static_cast<int>(dir.y),
+                candidate->z + static_cast<int>(dir.z)};
+            if (!canPlaceAt(world, blocks, place, playerMin, playerMax) ||
+                world.getBlock(place.x, place.y, place.z) != BlockID::air() ||
+                world.getFluid(place.x, place.y, place.z) != 0) {
+                return std::nullopt;
+            }
+            return place;
+        }
+        // A LAVA bucket against a WATER cell: the REPLACEMENT POUR —
+        // setFluid's existing "replace the other kind" semantics swap
+        // the water for a lava source (the caller writes level 8); the
+        // reaction pass then converts it on the next tick according to
+        // the remaining water neighbors (a lone cell with none keeps
+        // the lava — Minecraft: lava replaces water, then reacts).
         return candidate;
     }
     // (b) the pour onto a water surface: a flowing cell of the bucket's

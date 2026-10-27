@@ -574,15 +574,23 @@ TEST(RaycastPourTargetTest, AlreadySourceNoOp) {
                                   kFarMax).has_value());
 }
 
-TEST(RaycastPourTargetTest, ForeignKindNoOp) {
+TEST(RaycastPourTargetTest, ForeignKindWaterOnLavaReactionPour) {
+    // FLUID-5: a water bucket against a lava cell is the REACTION POUR
+    // (the phase-47 no-op) — the target is the DRY AIR cell along the
+    // hit normal (directly above the lava for a floor hit), NOT the
+    // lava cell itself (the existing reaction pass converts the lava
+    // on the next tick).
     const BlockRegistry reg = makeBlocks();
     const BlockID stone = reg.idForName("stone");
     World world;
     ASSERT_TRUE(world.setBlock(8, 0, 8, stone));
     ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Lava, 5)); // lava, not water
-    EXPECT_FALSE(bucketPourTarget(world, reg, floorHit(), std::nullopt,
-                                  FluidKind::Water, kFarMin,
-                                  kFarMax).has_value());
+    auto t = bucketPourTarget(world, reg, floorHit(), std::nullopt,
+                              FluidKind::Water, kFarMin, kFarMax);
+    ASSERT_TRUE(t.has_value());
+    EXPECT_EQ(t->x, 8);
+    EXPECT_EQ(t->y, 2); // one step further along the +Y hit normal
+    EXPECT_EQ(t->z, 8);
     // The lava bucket names its own kind: the same cell is its target.
     ASSERT_TRUE(bucketPourTarget(world, reg, floorHit(), std::nullopt,
                                  FluidKind::Lava, kFarMin,
@@ -671,5 +679,159 @@ TEST(RaycastPourTargetTest, BlockHitWinsOverFluidHit) {
                               FluidKind::Water, kFarMin, kFarMax);
     ASSERT_TRUE(t.has_value());
     EXPECT_EQ(t->x, 8); // the face neighbor, not the fluid hit
+    EXPECT_EQ(t->z, 8);
+}
+
+// -- FLUID-5: the foreign-kind bucket interactions ---------------------
+//
+// (c1) WATER bucket against a LAVA cell: the reaction pour — the water
+// source goes to the dry-air cell along the hit normal; the existing
+// reaction pass converts the lava on the next tick (no new rule).
+// (c2) LAVA bucket against a WATER cell: the replacement pour — the
+// water cell itself becomes the lava source (setFluid's existing
+// replace-the-other-kind semantics).
+
+TEST(RaycastPourTargetTest, WaterOnLavaSourceSameTarget) {
+    // The pour target does not depend on the lava level (the reaction
+    // pass — not the pour — decides the product from the neighbors).
+    const BlockRegistry reg = makeBlocks();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    ASSERT_TRUE(world.setBlock(8, 0, 8, stone));
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Lava, 8)); // a source
+    auto t = bucketPourTarget(world, reg, floorHit(), std::nullopt,
+                              FluidKind::Water, kFarMin, kFarMax);
+    ASSERT_TRUE(t.has_value());
+    EXPECT_EQ(t->x, 8);
+    EXPECT_EQ(t->y, 2);
+    EXPECT_EQ(t->z, 8);
+}
+
+TEST(RaycastPourTargetTest, WaterOnLavaNoDryAirAbove) {
+    // No dry-air placement cell -> no-op, the bucket is kept.
+    const BlockRegistry reg = makeBlocks();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    ASSERT_TRUE(world.setBlock(8, 0, 8, stone));
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Lava, 5));
+    ASSERT_TRUE(world.setBlock(8, 2, 8, stone)); // a ceiling
+    EXPECT_FALSE(bucketPourTarget(world, reg, floorHit(), std::nullopt,
+                                  FluidKind::Water, kFarMin,
+                                  kFarMax).has_value());
+}
+
+TEST(RaycastPourTargetTest, WaterOnLavaPlaceOutOfYRange) {
+    // Lava in the top row: the placement cell is out of the world.
+    const BlockRegistry reg = makeBlocks();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    ASSERT_TRUE(world.setBlock(8, kWorldHeight - 2, 8, stone));
+    ASSERT_TRUE(world.setFluid(8, kWorldHeight - 1, 8, FluidKind::Lava, 5));
+    EXPECT_FALSE(bucketPourTarget(world, reg, floorHit(kWorldHeight - 2),
+                                  std::nullopt, FluidKind::Water, kFarMin,
+                                  kFarMax).has_value());
+}
+
+TEST(RaycastPourTargetTest, WaterOnLavaPlacePlayerOverlap) {
+    // The placement cell inside the player -> rejected.
+    const BlockRegistry reg = makeBlocks();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    ASSERT_TRUE(world.setBlock(8, 0, 8, stone));
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Lava, 5));
+    const Vec3 nearMin {7.5f, 1.5f, 7.5f};  // the (8,2,8) place cell
+    const Vec3 nearMax {8.5f, 2.5f, 8.5f};
+    EXPECT_FALSE(bucketPourTarget(world, reg, floorHit(), std::nullopt,
+                                  FluidKind::Water, nearMin,
+                                  nearMax).has_value());
+}
+
+TEST(RaycastPourTargetTest, WaterOnLavaPlaceHoldsFluid) {
+    // Defensive: a fluid in the placement cell (the reaction invariant
+    // keeps the kinds 6-disjoint, but the check pins the rule).
+    const BlockRegistry reg = makeBlocks();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    ASSERT_TRUE(world.setBlock(8, 0, 8, stone));
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Lava, 5));
+    ASSERT_TRUE(world.setFluid(8, 2, 8, FluidKind::Water, 8));
+    EXPECT_FALSE(bucketPourTarget(world, reg, floorHit(), std::nullopt,
+                                  FluidKind::Water, kFarMin,
+                                  kFarMax).has_value());
+}
+
+TEST(RaycastPourTargetTest, WaterOnLavaHorizontalNormal) {
+    // A wall-occluded aim: the hit normal is horizontal, so the water
+    // goes to the open side of the lava, not above it.
+    const BlockRegistry reg = makeBlocks();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    ASSERT_TRUE(world.setBlock(8, 0, 8, stone));
+    ASSERT_TRUE(world.setFluid(9, 0, 8, FluidKind::Lava, 5));
+    const std::optional<BlockHit> sideHit =
+        BlockHit {BlockPos {8, 0, 8}, Vec3 {1.0f, 0.0f, 0.0f}, 4.0f};
+    auto t = bucketPourTarget(world, reg, sideHit, std::nullopt,
+                              FluidKind::Water, kFarMin, kFarMax);
+    ASSERT_TRUE(t.has_value());
+    EXPECT_EQ(t->x, 10); // lava cell + the +X normal
+    EXPECT_EQ(t->y, 0);
+    EXPECT_EQ(t->z, 8);
+}
+
+TEST(RaycastPourTargetTest, WaterOnOpenLavaPlusYConvention) {
+    // No block in reach (open lava): the +Y convention places the
+    // water above the lava cell.
+    const BlockRegistry reg = makeBlocks();
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, reg.idForName("stone"))); // a chunk
+    ASSERT_TRUE(world.setFluid(5, 2, 5, FluidKind::Lava, 5));
+    auto t = bucketPourTarget(world, reg, std::nullopt, BlockPos {5, 2, 5},
+                              FluidKind::Water, kFarMin, kFarMax);
+    ASSERT_TRUE(t.has_value());
+    EXPECT_EQ(t->x, 5);
+    EXPECT_EQ(t->y, 3);
+    EXPECT_EQ(t->z, 5);
+}
+
+TEST(RaycastPourTargetTest, WaterOnOpenLavaBlockedAbove) {
+    const BlockRegistry reg = makeBlocks();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, stone)); // a chunk
+    ASSERT_TRUE(world.setFluid(5, 2, 5, FluidKind::Lava, 5));
+    ASSERT_TRUE(world.setBlock(5, 3, 5, stone)); // a ceiling
+    EXPECT_FALSE(bucketPourTarget(world, reg, std::nullopt,
+                                  BlockPos {5, 2, 5}, FluidKind::Water,
+                                  kFarMin, kFarMax).has_value());
+}
+
+TEST(RaycastPourTargetTest, LavaOnWaterReplacementPour) {
+    // (c2): the lava bucket against a water SOURCE cell -> the water
+    // cell itself (the replacement; the reaction pass converts the new
+    // lava source per the remaining water neighbors on the next tick).
+    const BlockRegistry reg = makeBlocks();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    ASSERT_TRUE(world.setBlock(8, 0, 8, stone));
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, 8)); // a source
+    auto t = bucketPourTarget(world, reg, floorHit(), std::nullopt,
+                              FluidKind::Lava, kFarMin, kFarMax);
+    ASSERT_TRUE(t.has_value());
+    EXPECT_EQ(t->x, 8);
+    EXPECT_EQ(t->y, 1); // the water cell, not the air above it
+    EXPECT_EQ(t->z, 8);
+}
+
+TEST(RaycastPourTargetTest, LavaOnFlowingWaterReplacementPour) {
+    const BlockRegistry reg = makeBlocks();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    ASSERT_TRUE(world.setBlock(8, 0, 8, stone));
+    ASSERT_TRUE(world.setFluid(8, 1, 8, FluidKind::Water, 5)); // flowing
+    auto t = bucketPourTarget(world, reg, floorHit(), std::nullopt,
+                              FluidKind::Lava, kFarMin, kFarMax);
+    ASSERT_TRUE(t.has_value());
+    EXPECT_EQ(t->x, 8);
+    EXPECT_EQ(t->y, 1);
     EXPECT_EQ(t->z, 8);
 }

@@ -91,8 +91,22 @@ bool canPlantAt(const World& world, const BlockRegistry& blocks, BlockPos cell,
 // bit-identical) and hold EITHER:
 //   (a) air without fluid -> the legacy placement, or
 //   (b) fluid of `kind` below `kMaxFluidLevel` -> the new pour onto a
-//       water surface (a flowing cell becomes the source).
-// An already-source cell (level 8) or a different fluid kind is a no-op
+//       water surface (a flowing cell becomes the source), or
+//   (c) fluid of the OTHER kind (FLUID-5, the bucket against the
+//       opposite fluid):
+//       - `kind` = Water, the cell is LAVA -> the REACTION POUR: the
+//         returned cell is one step further along the block-hit normal
+//         (the cell the ray came from — directly above the lava for a
+//         top-down pool aim; +Y when no block was hit), which must hold
+//         DRY AIR — the water source is placed there and the EXISTING
+//         reaction pass converts the lava on the next tick (no new
+//         reaction rule; no dry-air cell = no-op, bucket kept);
+//       - `kind` = Lava, the cell is WATER -> the REPLACEMENT POUR: the
+//         water cell itself is returned — setFluid's existing
+//         replace-the-other-kind semantics swap it for a lava source,
+//         then the reaction pass converts it per the remaining water
+//         neighbors.
+// An already-source cell (level 8) of the bucket's own kind is a no-op
 // (Minecraft: the bucket is kept); nullopt = the click falls through.
 std::optional<BlockPos> bucketPourTarget(const World& world,
                                          const BlockRegistry& blocks,

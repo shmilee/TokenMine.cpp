@@ -17,7 +17,7 @@
 | PIPE 帧管线与并发 | ~~PIPE-3 流体 per-cell~~ ✅ v1.2.0 | | | | | |
 | LGT 光照 | ~~LGT-3 夜光重传播~~ ✅ v1.3.0 | ~~LGT-4 光束入光~~ ✅ v1.4.0 | ~~LGT-5 半块透光~~ ✅ v1.5.0 | | | |
 | GEN 世界与生成 | ~~GEN-7 基岩多层~~ ✅ v1.6.0 | ~~GEN-8 地形互感~~ ✅ v1.7.0 | ~~GEN-9 耕地湿润~~ ✅ v1.8.0 | | | |
-| FLUID 流体 | ~~FLUID-4 倒向水面~~ ✅ v1.9.0 | FLUID-5 水熔岩反应 | FLUID-6 流体种类扩展 | | | |
+| FLUID 流体 | ~~FLUID-4 倒向水面~~ ✅ v1.9.0 | ~~FLUID-5 水熔岩反应~~ ✅ v1.10.0 | FLUID-6 流体种类扩展 | | | |
 | ENT 实体/Mob/移动 | ENT-5 坠落伤害 | ENT-6 AI 补强 | ENT-7 移动惯性 | ENT-8 和平/保护环 | ENT-9 掉落可视化 | |
 | SURV 生存/战斗/效果 | SURV-6 效果档位 | SURV-7 死亡统计 | SURV-8 工具 10× | SURV-9 饱和细化 | SURV-10 挤奶冷却 | |
 | CRAFT 物品/合成/面板 | CRAFT-4 配方提示 | CRAFT-5 炉子表现 | CRAFT-6 燃料熔炼 | CRAFT-7 背包交互 | | |
@@ -116,6 +116,23 @@
   构建与运行 + 范围与限制 + 许可），PITS 范围 267-288 修正为 271-288
   （267-270 属 v1.0 组时代门 114/115）③ Latest 收尾回 v1.5.0 组 release
   （重建时序）。同步 README/CHANGELOG/BACKLOG/AGENTS 旧引用。
+- 2026-10-28：**FLUID-5 水熔岩反应完成**（v1.x 第 10/33 项，v1.10.0，门
+  125，FLUID 行 2/3；消费 FLUID-4 范围外记档"水桶对熔岩面 no-op"；
+  模拟侧 reaction pass P51 已完整 = 零新反应规则）：纯函数
+  `bucketPourTarget` 扩展异种两规则——① 水桶对熔岩格 = 反应倒（水源放
+  candidate+受击法向一步的干空气格【无 block 命中 = +Y 约定】，既有
+  reaction pass 下 tick 转 obsidian，无空气位 = no-op 桶保留）② 熔岩桶
+  对水格 = 替换倒（setFluid 既有"替换他种"语义，下 tick 按残留邻水转
+  obsidian/stone）；game 写路径零改动。1766/1766（+10 改 1）、-Werror
+  0；门 125：S1 第 125 次结构性免疫免重锚（四方 ×2 387726 B + savenorm
+  EXACT）+ S2 三场景单次右键输入跑 PASS【A 反应倒：new obsidian+空桶 /
+  old no-op ×2 RAW 对；B 替换倒：new obsidian+水留存+空桶 / old no-op
+  ×2 RAW 对；C 守卫：placement 持流体 no-op 桶保留】+ 场景 A 双层周界
+  墙稳态化【首版无墙 ×2 RAW MISMATCH = PITS 297，CPU 收敛探针 5 tick
+  稳态】+ 性能 A/B fluidCells win2/3 逐位一致 + 全同档 = 成本可忽略；
+  PITS 297-298（场景流体稳态 / getFluid 返回 level 非编码）。**组边界
+  v1.10.0 = tag + GitHub release**（覆盖 GEN-7/8/9 + FLUID-4/5 组内 5
+  版；10-28 定案 tag 策略）。
 - 2026-10-28：**FLUID-4 倒向水面完成**（v1.x 第 9/33 项，v1.9.0，门
   124；消费 P47 桶记档偏离"倒水只能倒向方块受击面"）：纯函数
   `bucketPourTarget`（world/raycast：候选 = block 射线受击面邻格【旧

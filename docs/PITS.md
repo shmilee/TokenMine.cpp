@@ -2219,3 +2219,32 @@
   'tokenmi[n]e --save <slot>'` 确认无残留进程 + runner 断言前验
   'Game shut down cleanly'（无 clean exit = 槽内是**场景文件**而非
   终档，断言恒败且误诊为"功能失效"）。
+- **输入跑场景流体必须达稳态，否则 ×2 RAW 帧差发散（PITS 297）**——
+  10-28 FLUID-5 门 125 场景 A 首版：倒出的水在无墙平台上漫出边缘沿
+  自然地形无限扩散，帧 600 终态依赖点击落帧（点击 = 实时间锚定 ±帧
+  差）→ 新侧 ×2 RAW **MISMATCH（336169 vs 335712 实证）**。修复 =
+  场景加 2 层周界墙封闭水体 + CPU 收敛探针（FluidSim::tick 循环至零
+  changed：场景区 5 tick = 15 帧稳态）实证帧 600 与点击帧无关 → RAW
+  对 EXACT 恢复。纪律：带持续流体活动的输入跑场景，先 CPU 探针验证
+  稳态再收图；基线世界自然流体 churn（同帧锁定）双侧同帧数同状态，
+  不影响 RAW。
+- **World::getFluid 返回 level 非 chunk 编码（PITS 298）**——10-28
+  FLUID-5：getFluid = 任一种类的 level（0..8），chunk 编码才是
+  0/水 1..8/熔岩 9..16；`fluidKindOf(getFluid())` 对熔岩格恒返回
+  Water（level 5 落在水编码带）→ 水桶对熔岩 8 新测全败（返回候选格
+  而非反应倒位，"替换倒"分支吞掉全部异种路径），单测揪出；种类判定
+  须走 `World::getFluidKind`。
+- **输入跑场景流体必须达稳态，否则 ×2 RAW 帧差发散（PITS 297）**——
+  10-28 FLUID-5 门 125 场景 A 首版：倒出的水在无墙平台上漫出边缘沿
+  自然地形无限扩散，帧 600 终态依赖点击落帧（点击 = 实时间锚定 ±帧差）
+  → 新侧 ×2 RAW MISMATCH（336169 vs 335712 实证）。修复 = 场景加 2 层
+  周界墙封闭水体 + CPU 收敛探针（FluidSim::tick 循环至零 changed：
+  场景区 5 tick = 15 帧稳态）实证帧 600 与点击帧无关 → RAW EXACT 恢复。
+  纪律：带持续流体活动的输入跑场景，先 CPU 探针验证稳态再收图；基线
+  世界自然流体 churn（同帧锁定）双侧同帧数同状态，不影响 RAW。
+- **World::getFluid 返回 level 非 chunk 编码（PITS 298）**——10-28
+  FLUID-5：getFluid = 任一种类的 level（0..8），chunk 编码才是
+  0/水 1..8/熔岩 9..16；`fluidKindOf(getFluid())` 对熔岩格恒返回
+  Water（level 5 落在水编码带）→ 水桶对熔岩 8 新测全败（返回候选格
+  而非反应倒位，"替换倒"分支吞掉全部异种路径），单测揪出；种类判定
+  须走 `World::getFluidKind`。

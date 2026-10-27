@@ -4650,8 +4650,9 @@ bool Game::tryFluidBucket() {
     // "splash" and consume the click (a bucket never places a block); a
     // no-action case falls through to the normal right-click (placeBlock
     // is a no-op for a material — nothing happens, e.g. on an
-    // already-source cell, a foreign-kind fluid cell, or a solid
-    // target).
+    // already-source cell of the bucket's own kind, a water-on-lava
+    // reaction pour with no dry-air placement cell (FLUID-5), or a
+    // solid target).
     if (!m_player || m_player->isDead()) {
         return false;
     }

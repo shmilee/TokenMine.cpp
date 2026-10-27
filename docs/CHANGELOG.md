@@ -3,6 +3,56 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.10.0（2026-10-28）
+
+**FLUID-5 水熔岩反应**（v1.x 任务表 10/33，FLUID 行 2/3，门 125；消费
+FLUID-4 范围外记档"水桶对熔岩面 = no-op（水-熔岩反应交互 = FLUID-5
+行）"）——模拟侧水-熔岩反应 P51 已完整（FluidSim reaction pass：熔岩
+6-邻水 → lava 块 water_reaction 数据驱动产物【邻水含 L8 源 = obsidian /
+仅流动水 = stone】，水不消耗），**本项零新反应规则** = 桶×熔岩交互两
+规则（MC parity，纯函数扩展 `bucketPourTarget` 候选接受，返回型不变，
+game 写路径零改动）：
+- **(c1) 水桶对熔岩格 = 反应倒**：水源放 candidate + 受击法向一步
+  （顶视池格 = 正上方；侧向受击 = 开阔侧；无 block 命中 = +Y 约定），
+  该格须 air 无流体 + canPlaceAt；熔岩由既有 reaction pass 下 tick 转
+  产物（倒出的水是 L8 源 → 项目规则恒 obsidian = 单一规则源）；无空气
+  位 = no-op 桶保留（MC：水放不下即什么都不发生）。
+- **(c2) 熔岩桶对水格 = 替换倒**：setFluid 既有"替换他种流体"语义把水
+  格换成熔岩源（桶消耗），reaction pass 下 tick 按残留邻水转
+  obsidian/stone（无邻水 = 熔岩留存）——MC 同款（熔岩替换水随即反应）。
+- **范围外记档**：蒸汽（P51 既有偏离保留）/ 流动熔岩舀取维持 P47 现状。
+
+1766/1766（+10 改 1 RaycastPourTargetTest：反应倒目标 = 法向一步干空气
+格【流动/源熔岩同目标 = 产物由 pass 决定与熔岩 level 无关】/ 无空气位
+no-op / placement Y 越界 / placement 玩家重叠 / placement 持流体（防御
+分支钉死）/ 水平法向开阔侧 / 无 block 命中 +Y 约定 ×2 / 替换倒源水与
+流动水 = 水格本身；改 1 = P47 异种 no-op → FLUID-5 反应倒）、-Werror 0
+警告。门 125：S1 = **第 125 次结构性免疫免重锚**（fresh 60f 四方 ×2
+387726 B 全字节一致 new≡old v1.9.0≡base18 + savenorm EXACT——无输入 =
+无右键 = (c) 分支零执行）+ **S2 三场景单次右键输入跑 PASS**（CPU
+harness gen125_ray 实证瞄准几何；存档状态 = 权威断言；左点捕获协议
+PITS 295）：A 反应倒【单封熔岩源 + 观察柱陡顶视】new ×2 熔岩 →
+**obsidian** + 熔岩流体消失 + slot0 = bucket（平台浸水稳态）/ old ×2
+熔岩恒 L8 + water_bucket【×2 RAW 对 EXACT 207329/205364 B】；B 替换倒
+【FLUID-4 水 pool + 熔岩桶】new ×2 流动水格 → **obsidian** + 源水恒
+L8 + slot0 = bucket / old ×2 水恒【L7+L8】+ lava_bucket【×2 RAW 对
+EXACT 404382/408971 B】；C 守卫【2 格熔岩池，placement = 源熔岩格持
+流体 → nullopt】new 熔岩恒【L7+L8】+ water_bucket 保留。**场景 A 双层
+周界墙稳态化**（首版无墙 = 倒出的水漫出平台无限扩散 → ×2 RAW 帧差
+发散 MISMATCH 实证；CPU 收敛探针 FluidSim::tick 循环至零 changed =
+场景区 5 tick 稳态 → RAW 恢复 = **PITS 297**）。**PITS 298**（World::
+getFluid 返回任一种类 level 0..8 非 chunk 编码 0/1..8/9..16——
+fluidKindOf(getFluid()) 对熔岩格恒 Water，(c) 分支首轮 8 新测全败，
+种类判定走 getFluidKind）。+ 性能 A/B 同 seed 900f（fluidCells win2/3
+**逐位一致** 29803/29800 + win1 +0.006% 填充 real-dt 类 + PIPE3
+changesApplied 1404=1404 + 全指标同档 = **成本可忽略**，无输入桶代码
+结构惰性实证）。
+
+**组边界 release**：v1.10.0 = 组 1.6–1.10 末版 → tag v1.10.0 + GitHub
+release（覆盖 GEN-7 基岩多层 v1.6.0 / GEN-8 地形互感 v1.7.0 / GEN-9 耕地
+湿润 v1.8.0 / FLUID-4 倒向水面 v1.9.0 / FLUID-5 水熔岩反应 v1.10.0；
+10-28 定案 tag 策略 = 组内不打 tag、组边界 release 1:1）。
+
 ## v1.9.0（2026-10-28）
 
 **FLUID-4 倒向水面**（v1.x 任务表 9/33，FLUID 行 1/3，门 124；消费
