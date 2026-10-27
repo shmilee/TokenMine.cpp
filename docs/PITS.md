@@ -2100,3 +2100,20 @@
   范式）；savenorm 剥 fires[].remaining 不够——燃尽 air 在 **blocks**
   段。PITS 244 衍生（244 = fires remaining 漂移记档非缺陷，本条 = 其块
   足迹面）。
+
+- **门像素带断言 = 任意像素行 ≠ 语义边界（PITS 284）**——10-27 门 118：
+  以 y[381,655] 为"世界带"断言 diff 隔离，474,616 px "出带"报警——实为
+  近景树冠剪影越过地平线进上带 + 底部带含热栏块立方图标（basic 程序
+  按设计跟世界光）+ 远景雾面山体；蓝天 clear（(5,8,20) 午夜 /
+  (182,86,46) 黄昏）实测零触碰。修正 = 隔离论证构造化（git diff 仅
+  basic.frag ⇒ UI/sky 程序/clear/星云[light 恒 0] 结构性不变）+ 位置化
+  open-sky 锚盒（两场景先验证恒等的蓝天点 ± 邻域，避开树冠带 y[128,
+  139] 类剪影）。方向断言同理先行数学：深夜 max(stored−8, block) ≥
+  max(0, block) = 仅亮化可证；黄昏 v>8/15 像素亮化、v<8/15 变暗，
+  视图无深荫像素时 darker=0 = 合法非 bug。
+- **scratch 树无 build 目录 + 驱动指 $D/build = 启动即死无告警（PITS 285）**——10-27 门 118 首轮 13 跑全 NO-CLEAN-EXIT：rsync 排除 /build
+  的资产树被驱动当二进制树用（timeout 报"无法运行命令"埋在 per-run
+  log，驱动只 grep 主日志）。纪律：门驱动的二进制 = 冻结 bin 路径
+  （tm_vNNN_bin，与资产树解耦），资产树只作 cwd/assets；另 zsh f-string
+  拼版本号易错（tm_v132_bin 式 = 13+2 拼接幻觉）——bin 路径用完整字面
+  量。

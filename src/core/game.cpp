@@ -6061,9 +6061,11 @@ const Mesh& Game::handIconMesh() {
     // front. Full-texture UVs (the per-item icon is bound at draw time);
     // the top edge (y = +0.5) is v = 0 so the icon is NOT flipped relative
     // to the 2D UI icon (the UI quad maps its top screen row to v = 0).
-    // skyLight = blockLight = 1: the shader's light is
-    // max(sky*dayFactor, block) = 1, so the icon stays fully bright at any
-    // time of day (like the 2D icon). The normal is +Y (NOT the geometric
+    // skyLight = blockLight = 1: the shader's LGT-3 light is
+    // max(sky - (8.0/15.0) * (1 - dayFactor), block) = max(< 1, 1.0) =
+    // 1.0 — the block-light side dominates at EVERY time of day (the
+    // moonlit sky term is never >= 1.0), so the icon stays fully bright
+    // at night like the 2D icon. The normal is +Y (NOT the geometric
     // +Z): the vertex shader derives faceShade from the model-rotated
     // normal, and +Y keeps it in the top-face bucket (1.0) through every
     // hand spin state — a geometric +Z normal would land in the 0.6 bucket

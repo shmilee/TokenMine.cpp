@@ -12,11 +12,13 @@
 // automatically; the cost is two World reads per drop per frame,
 // negligible at player-scale drop counts).
 //
-// The values are the RAW light (0..15 / 15), NOT day-scaled: the
-// fragment's existing formula (basic.frag: max(v_skyLight * u_dayFactor,
-// v_blockLight)) applies the day/night scale to sky light and keeps
-// block light un-scaled (the glowstone-shines-at-night discipline), so a
-// drop behaves exactly like the world around it.
+// The values are the RAW light (0..15 / 15), NOT day-reduced: the
+// fragment's existing formula (basic.frag, LGT-3: max(v_skyLight -
+// (8.0/15.0) * (1.0 - u_dayFactor), v_blockLight)) applies the
+// day/night affine retreat WITH the kNightSkyLevel 7 moonlight floor to
+// sky light and keeps block light un-reduced (the
+// glowstone-shines-at-night discipline), so a drop behaves exactly like
+// the world around it (moonlit at deep night, never all black).
 #pragma once
 
 #include <utility>

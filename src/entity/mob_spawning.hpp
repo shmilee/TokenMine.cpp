@@ -96,12 +96,15 @@ inline constexpr float kSpawnClearance = 1.0f;
 
 // The CURRENT effective light level (0..15) of a cell for spawn gating —
 // the Minecraft semantics emulated with this engine's presentation-layer
-// day/night (see day_cycle.hpp): the stored daytime sky light scaled by
-// the day-cycle factor (deep night -> 0, exactly how the renderer darkens
-// it), plus block light (glowstone), which is unaffected by day/night.
-// The integer light level is the floor of the scaled sky contribution.
-// (At deep night the open-sky level is 0, so dark-sky mobs may spawn; by
-// day it is the stored sky level, so they may not.)
+// day/night (see day_cycle.hpp): the stored daytime (noon) sky light
+// reduced by the LGT-3 affine retreat effectiveSkyLight(stored,
+// dayFactor) = max(0, stored - floor((15 - kNightSkyLevel) *
+// (1 - dayFactor))) — the same level the renderer shows, the seen light
+// — plus block light (glowstone), which is unaffected by day/night.
+// (At deep night the open-sky level is the kNightSkyLevel 7 moonlight
+// floor — the shipped hostile threshold pairs to it, so dark-sky mobs
+// spawn under open night sky but not in a torch circle; by day it is the
+// stored sky level, so they may not.)
 int currentSpawnLight(const World& world, int x, int y, int z,
                       float dayFactor);
 

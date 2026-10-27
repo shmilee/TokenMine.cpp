@@ -6,10 +6,18 @@
 // the east horizon, (0.25) the zenith, (0.5) the west horizon, (0.75) the
 // nadir. The moon is always opposite the sun.
 //
-// Day/night is a PRESENTATION-layer scale (the Minecraft-style
-// approximation): light values stay stored at their daytime 0..15 values
-// and the renderer multiplies sky light by dayFactor() — no re-propagation
-// at night. Block light (glowstone) is unaffected by day/night.
+// Day/night is a PRESENTATION-layer re-enactment of the night propagation
+// (LGT-3, the Minecraft-style light retreat): light values stay stored at
+// their daytime (source level 15) 0..15 values, and the effective sky
+// level at dayFactor f is the source-affine re-derivation max(0, stored
+// - 8 * (1 - f)) — the exact field a re-propagation with sky source
+// level 7 + 8 * f would produce (kNightSkyLevel 7 = the Minecraft
+// moonlight floor, so deep night is moonlit, never all black; see
+// effectiveSkyLight in world/lighting.hpp). No re-propagation runs: the
+// renderer (basic.frag) and the spawn gate (currentSpawnLight) evaluate
+// the same formula per cell, so the lit region retreats toward cave
+// mouths and canopy gaps along the stored = 8 * (1 - f) contour as night
+// falls. Block light (glowstone) is unaffected by day/night.
 //
 // Determinism: update() is driven by a fixed per-frame step from the game
 // loop (never the wall clock), so headless runs are byte-reproducible

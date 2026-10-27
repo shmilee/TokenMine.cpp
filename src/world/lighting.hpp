@@ -39,6 +39,7 @@
 //    light actually changed (net) are marked dirty.
 #pragma once
 
+#include <cstdint>
 #include <set>
 
 #include "block/block_registry.hpp"
@@ -55,12 +56,46 @@ inline constexpr int kLightUpdateRadius = 16;
 // Light lost when entering a fluid cell (Minecraft's water value), applied
 // in every direction for both sky and block light.
 inline constexpr int kFluidLightAttenuation = 3;
+// LGT-3 (10-27 user verdict: an all-black deep night is unplayable):
+// Minecraft's moonlight FLOOR — open-sky light at midnight. The sky
+// source level never retreats below it: S = kNightSkyLevel +
+// (kMaxLight - kNightSkyLevel) * dayFactor (noon 15, deep night 7), and
+// the retreat distance is (kMaxLight - kNightSkyLevel) * (1 - dayFactor).
+// The shipped hostile mobs pair their spawn threshold to it
+// (spawn_max_light 7 — MC: hostiles spawn at light <= 7; night open
+// sky 7 spawns, a torch circle 14 is safe, day open sky 15 does not —
+// the gameplay loop is preserved).
+inline constexpr int kNightSkyLevel = 7;
+// The deep-night retreat in the shader's 0..1-normalized sky values:
+// (kMaxLight - kNightSkyLevel) / kMaxLight = 8/15. The single definition
+// of the basic.frag coefficient (the GLSL side mirrors it as a named
+// constant).
+inline constexpr float kNightRetreatScale =
+    static_cast<float>(kMaxLight - kNightSkyLevel) /
+    static_cast<float>(kMaxLight);
 
 class Lighting {
 public:
     // Recompute sky and block light for every existing chunk. O(world
     // size); the demo area takes a few tens of milliseconds.
-    static void propagateAll(World& world, const BlockRegistry& blocks);
+    //
+    // `skySourceLevel` (LGT-3, the night re-propagation seam): the light
+    // level the open-sky source reads. Production ALWAYS passes the
+    // default kMaxLight — the stored field is the noon field — so the
+    // parameter is a test-only seam. The day cycle drives S within
+    // [kNightSkyLevel, kMaxLight] (the moonlight floor); the confluence
+    // test exercises values below the floor (down to 0) to pin the
+    // mathematical property. The propagated sky field is AFFINE in the
+    // source level (every sky source shares one level and the per-cell
+    // costs are source-independent): the source-S field equals
+    // max(0, S - minCost(x)) cell by cell, which is exactly
+    // max(0, stored(x) - (kMaxLight - S)) of the noon field (lossless —
+    // see effectiveSkyLight). The confluence test
+    // (AffineTransformMatchesDirectPropagation) pins this by
+    // propagating the same world at several S and comparing against the
+    // affine transform of the S = kMaxLight field.
+    static void propagateAll(World& world, const BlockRegistry& blocks,
+                             int skySourceLevel = kMaxLight);
 
     // Re-light the region whose light can have changed after a single
     // block change at `changed` (break or place). Every chunk whose light
@@ -96,5 +131,37 @@ public:
                              bool newTerrain = false,
                              std::set<ChunkPos>* dirtyOut = nullptr);
 };
+
+// LGT-3 (the night light retreat): the EFFECTIVE sky light at a
+// day/night factor. The stored field is the noon field (source level
+// kMaxLight); the sky field is affine in its source level S (see
+// propagateAll), and S is a pure function of the existing day cycle:
+// S = kNightSkyLevel + (kMaxLight - kNightSkyLevel) * dayFactor (deep
+// night 0 -> S 7 = the Minecraft moonlight floor, noon 1 -> S 15). The
+// effective level is the stored level minus the retreat distance
+// (kMaxLight - S), clamped at 0:
+//
+//   effective = max(0, stored - (kMaxLight - kNightSkyLevel) * (1 - dayFactor))
+//
+// At dayFactor 1 it is the identity (noon, the stored field itself); at
+// 0 it is the moonlight floor (open sky 15 -> 7, and every stored level
+// below kMaxLight - kNightSkyLevel retreats to 0 — deep night is never
+// all black). The lit region therefore shrinks toward the cave mouths /
+// canopy gaps along the stored = (kMaxLight - S) contour as night falls
+// — the Minecraft-style retreat — WITHOUT any re-propagation: the
+// renderer (basic.frag, the normalized form of exactly this formula)
+// and the spawn gate (currentSpawnLight) evaluate it per cell.
+//
+// The integer version takes the STORED level (0..15, the save/spawn
+// semantics) and floors the retreat distance (whole light levels). The
+// float version is the exact mirror of the shader's sky term: it takes
+// the 0..1-NORMALIZED stored value (the mesh's v_skyLight = level /
+// kMaxLight) and applies the fractional retreat kNightRetreatScale *
+// (1 - dayFactor) = (8/15) * (1 - dayFactor) — a superset of Minecraft's
+// quantized levels (a documented deviation). The two agree exactly at
+// dayFactor 0 (the moonlight floor: 15 -> 7, 8/15 -> 7/15) and 1 (the
+// identity) and differ by less than one level through the ramps.
+std::uint8_t effectiveSkyLight(std::uint8_t stored, float dayFactor);
+float effectiveSkyLightF(float stored, float dayFactor);
 
 } // namespace mc

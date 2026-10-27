@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "core/logger.hpp"
+#include "world/lighting.hpp"
 
 namespace mc {
 
@@ -160,11 +161,19 @@ std::size_t MobSpawningConfig::pickIndex(std::uint64_t v) const {
 
 int currentSpawnLight(const World& world, int x, int y, int z,
                       float dayFactor) {
-    // Day/night scales the sky-light contribution (0 at deep night);
-    // block light is time-independent. Floor to an integer light level.
-    const int skyNow = static_cast<int>(std::floor(
-        static_cast<double>(world.getSkyLight(x, y, z)) *
-        static_cast<double>(dayFactor)));
+    // LGT-3: the sky contribution is the SAME effective level the
+    // renderer shows — the affine retreat of the stored (noon) field
+    // (effectiveSkyLight, world/lighting.hpp), not the pre-LGT-3 scale
+    // floor(stored * dayFactor): the spawn gate is the SEEN light (the
+    // Minecraft semantics). At noon (dayFactor 1) the two are
+    // value-identical for every stored level; deep night differs — the
+    // moonlight floor (kNightSkyLevel 7: open sky 15 -> 7, never 0) IS
+    // the feature (the 10-27 user verdict), which the shipped hostile
+    // threshold (spawn_max_light 7) pairs with: night open sky 7 spawns,
+    // a torch circle 14 is safe, day open sky 15 does not. Block light
+    // is time-independent.
+    const int skyNow =
+        effectiveSkyLight(world.getSkyLight(x, y, z), dayFactor);
     const int block = static_cast<int>(world.getBlockLight(x, y, z));
     return std::max(skyNow, block);
 }

@@ -15,7 +15,7 @@
 |---|---|---|---|---|---|---|
 | STRM 流送与内存 | ~~STRM-2 流体列保留~~ ✅ v1.1.0 | | | | | |
 | PIPE 帧管线与并发 | ~~PIPE-3 流体 per-cell~~ ✅ v1.2.0 | | | | | |
-| LGT 光照 | LGT-3 夜光重传播 | LGT-4 光束入光 | LGT-5 半块透光 | | | |
+| LGT 光照 | ~~LGT-3 夜光重传播~~ ✅ v1.3.0 | LGT-4 光束入光 | LGT-5 半块透光 | | | |
 | GEN 世界与生成 | GEN-7 基岩多层 | GEN-8 地形互感 | GEN-9 耕地湿润 | | | |
 | FLUID 流体 | FLUID-4 倒向水面 | FLUID-5 水熔岩反应 | FLUID-6 流体种类扩展 | | | |
 | ENT 实体/Mob/移动 | ENT-5 坠落伤害 | ENT-6 AI 补强 | ENT-7 移动惯性 | ENT-8 和平/保护环 | ENT-9 掉落可视化 | |
@@ -89,6 +89,19 @@
 
 ## 变更记录（v1.0 时代）
 
+- 2026-10-27：**LGT-3 夜光重传播 + MC 月光地板完成**（v1.x 第 3/33 项，
+  v1.3.0）：呈现层昼夜缩放 → 天空光场对源等级仿射（无损）重演（所有天空
+  光源共享 S + 逐格成本与 S 无关 ⇒ 有效 = max(0, stored−(15−S)) 逐格
+  精确，confluence 单测钉死）= MC 同款日落撤退/黎明回涌，**零重传播**
+  （shader 天空项一行 + spawn 光门整数镜像 + propagateAll 源等级 seam 生产
+  恒默认）；**用户实机定案（10-27 夜）MC 月光地板**：S = 7 + 8×dayFactor
+  （kNightSkyLevel 7 = 午夜露天月光，深夜可夜视）+ 敌对 spawn_max_light
+  0→7 MC 配对（夜露天保险/火把免疫/白天免 = 玩法闭环）；零 format/config/
+  内容解析面。1704/1704（+9）、-Werror 0；门 118：S1 = 第 118 次结构性
+  免疫免重锚（正午恒等）+ S2 深夜 A/B 828,043 px 全仅亮化 + 黄昏同数
+  diff（时间不变集）+ open-sky 锚盒零 diff + savenorm EXACT + 性能 A/B
+  fall 900f 全同档 + fluidCells 逐位 = 零成本；PITS 284-285——详见
+  docs/archive/phase-lgt3.md。
 - 2026-10-27：**PIPE-3 流体 per-cell 完成**（v1.x 第 2/33 项，v1.2.0）：
   99.8 chunk 粒度活动门控 per-cell 化——per-chunk per-kind 流体格列表
   （setFluidAt 成员变化 push / drain lazy stale / walk 过滤+列序+去重+

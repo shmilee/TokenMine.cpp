@@ -122,11 +122,12 @@ TEST(ItemDropLightTest, WorldFallbacks) {
 }
 
 // Day-independence: the function takes NO dayFactor — the raw light is
-// returned and the fragment's existing formula (max(v_skyLight *
-// u_dayFactor, v_blockLight)) applies the day/night scale, so a drop
-// brightens and dims with the world exactly like the chunks. Calling it
-// twice on an unchanged world is bit-identical (the per-frame resample
-// is pure).
+// returned and the fragment's existing formula (max(v_skyLight -
+// (8.0/15.0) * (1.0 - u_dayFactor), v_blockLight), the LGT-3 affine
+// retreat with the moonlight floor) applies the day/night reduction, so
+// a drop brightens and dims with the world exactly like the chunks
+// (moonlit at deep night, never all black). Calling it twice on an
+// unchanged world is bit-identical (the per-frame resample is pure).
 TEST(ItemDropLightTest, DayIndependentAndPure) {
     Fixture f;
     f.putSky(2, 3, 4, 9);

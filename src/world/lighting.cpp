@@ -1,6 +1,7 @@
 #include "world/lighting.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 #include <deque>
 #include <functional>
@@ -157,14 +158,20 @@ void propagateBFS(World& world, const BlockRegistry& blocks, bool sky,
 
 // Sky-light column scan for one (x, z) column: the topmost contiguous run
 // of cells that do not fully block light (light_opacity < 15) is open to
-// the sky and reads 15, attenuated by each cell's OPACITY while scanning
-// down (LGT-2: air 0, glass 1, leaves 2, a fluid cell the fixed
-// kFluidLightAttenuation); everything below the first full-opacity cell
-// reads 0 until the BFS fills it from horizontal neighbors. Missing chunks
-// are air (the open run continues) and are never written.
-void rescanColumn(World& world, const BlockRegistry& blocks, int x, int z) {
+// the sky and reads the source level, attenuated by each cell's OPACITY
+// while scanning down (LGT-2: air 0, glass 1, leaves 2, a fluid cell the
+// fixed kFluidLightAttenuation); everything below the first full-opacity
+// cell reads 0 until the BFS fills it from horizontal neighbors. Missing
+// chunks are air (the open run continues) and are never written.
+//
+// `sourceLevel` (LGT-3 seam): the open-sky level the run starts from.
+// Production always passes kMaxLight (the noon field — the default via
+// propagateAll); the confluence test drives S < kMaxLight to pin that
+// the propagated field is affine in the source level.
+void rescanColumn(World& world, const BlockRegistry& blocks, int x, int z,
+                  int sourceLevel) {
     bool open = true;
-    int light = kMaxLight; // sky light available just above the current cell
+    int light = sourceLevel; // sky light just above the current cell
     for (int y = kWorldHeight - 1; y >= 0; --y) {
         const BlockPos p{x, y, z};
         const ChunkPos cp = worldToChunk(p);
@@ -198,7 +205,34 @@ void rescanColumn(World& world, const BlockRegistry& blocks, int x, int z) {
 
 } // namespace
 
-void Lighting::propagateAll(World& world, const BlockRegistry& blocks) {
+// LGT-3: the source level S behind a day factor is kNightSkyLevel +
+// (kMaxLight - kNightSkyLevel) * dayFactor (deep night 0 -> the
+// kNightSkyLevel moonlight floor, noon 1 -> kMaxLight), and the retreat
+// distance is kMaxLight - S = (kMaxLight - kNightSkyLevel) * (1 - df).
+// The integer version floors it (whole light levels — the save/spawn
+// semantics); see the header for the affine-field argument.
+std::uint8_t effectiveSkyLight(std::uint8_t stored, float dayFactor) {
+    const int delta = static_cast<int>(std::floor(static_cast<double>(
+        kMaxLight - kNightSkyLevel) *
+        (1.0 - static_cast<double>(dayFactor))));
+    const int value = static_cast<int>(stored) - delta;
+    return static_cast<std::uint8_t>(value > 0 ? value : 0);
+}
+
+// `stored` is the shader's 0..1-normalized sky value (light level /
+// kMaxLight): the exact mirror of the basic.frag sky term, the retreat
+// in normalized units = kNightRetreatScale * (1 - dayFactor).
+float effectiveSkyLightF(float stored, float dayFactor) {
+    return std::max(
+        0.0f,
+        stored - kNightRetreatScale * (1.0f - dayFactor));
+}
+
+void Lighting::propagateAll(World& world, const BlockRegistry& blocks,
+                            int skySourceLevel) {
+    // LGT-3 seam contract: the sky source reads a level in
+    // [0, kMaxLight] (production passes the default kMaxLight).
+    assert(skySourceLevel >= 0 && skySourceLevel <= kMaxLight);
     const std::vector<ChunkPos> positions = world.chunkPositions();
     if (positions.empty()) {
         return;
@@ -225,7 +259,7 @@ void Lighting::propagateAll(World& world, const BlockRegistry& blocks) {
     std::sort(columns.begin(), columns.end());
     columns.erase(std::unique(columns.begin(), columns.end()), columns.end());
     for (const auto& [x, z] : columns) {
-        rescanColumn(world, blocks, x, z);
+        rescanColumn(world, blocks, x, z, skySourceLevel);
     }
 
     // 3. Sky BFS seeded with every lit cell.

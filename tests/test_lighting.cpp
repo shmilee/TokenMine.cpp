@@ -906,3 +906,224 @@ TEST(LightingTest, InsertedTwoChunkColumnRelightMatchesFullPropagation) {
                            /*newTerrain=*/true);
     expectSameLight(incremental, full);
 }
+
+// -- LGT-3: the night retreat is an AFFINE transform of the stored field --
+//
+// The sky field is affine in its source level S (every sky source shares
+// one level, the per-cell costs are source-independent): the source-S
+// field of a world equals max(0, stored - (kMaxLight - S)) of the noon
+// field, cell by cell (lossless). The seam: propagateAll's skySourceLevel
+// (default kMaxLight — production behavior unchanged).
+
+// The LGT-3 main fixture (one chunk): a cave under a stone roof over
+// x 0..9 (air y 1..4; light enters from the open x=10 face at cost 1 per
+// air step), a glass column in the opening (x=10, z=8, y 1..4; cost 1
+// per cell), a leaves wall (x=5, z 8..9, y 1..2; cost 2), a stone box
+// with an OPEN-TOP water interior (walls x 1..4, z 1..4, y 1..3; water
+// x 2..3, z 2..3, y 1..3 — fluid cost 3 per cell), and a stone floor.
+// The stored values span 0..15 and include an active 1/0 boundary at
+// (2,2,2)/(2,1,2) (the water column's cost 14/17 steps).
+void buildLgt3CaveScenario(World& world, const BlockRegistry& reg) {
+    const BlockID stone = idOf(reg, "stone");
+    const BlockID glass = idOf(reg, "glass");
+    const BlockID leaves = idOf(reg, "leaves");
+    world.getOrCreateChunk({0, 0, 0});
+    fillBox(world, 0, 0, 0, 15, 0, 15, stone);   // floor
+    fillBox(world, 0, 5, 0, 9, 5, 15, stone);    // cave roof (x 0..9)
+    fillBox(world, 10, 1, 8, 10, 4, 8, glass);   // glass column
+    fillBox(world, 5, 1, 8, 5, 2, 9, leaves);    // leaves wall
+    fillBox(world, 1, 1, 1, 4, 3, 4, stone);     // box walls (open top)
+    for (int x = 2; x <= 3; ++x) {
+        for (int z = 2; z <= 3; ++z) {
+            for (int y = 1; y <= 3; ++y) {
+                ASSERT_TRUE(world.setBlock(x, y, z, BlockID::air()));
+                ASSERT_TRUE(world.setFluid(x, y, z, FluidKind::Water,
+                                           kMaxFluidLevel));
+            }
+        }
+    }
+}
+
+TEST(LightingTest, AffineTransformMatchesDirectPropagation) {
+    const BlockRegistry reg = makeRegistry();
+    // The noon field (production propagateAll, source kMaxLight).
+    World noon;
+    buildLgt3CaveScenario(noon, reg);
+    Lighting::propagateAll(noon, reg);
+
+    // Fixture sanity: the stored field is non-trivial (open 15, glass
+    // attenuation, the leaves wall, the cave air gradient, the water
+    // column's cost-3 steps with its active 1/0 boundary at cost 14/17,
+    // the opaque floor).
+    EXPECT_EQ(noon.getSkyLight(12, 3, 8), 15); // open to the sky
+    EXPECT_EQ(noon.getSkyLight(10, 4, 8), 14); // glass, one cell down
+    EXPECT_EQ(noon.getSkyLight(10, 1, 8), 14); // glass bottom (horizontal
+                                               // routing beats the rescan)
+    EXPECT_EQ(noon.getSkyLight(9, 4, 8), 13);  // cave air beside the glass
+    EXPECT_EQ(noon.getSkyLight(5, 1, 8), 8);   // the leaves wall (cost 2)
+    EXPECT_EQ(noon.getSkyLight(0, 4, 8), 4);   // cave far end, air path
+    EXPECT_EQ(noon.getSkyLight(0, 1, 2), 5);   // box-corner air (free
+                                               // vertical drop)
+    EXPECT_EQ(noon.getSkyLight(2, 4, 2), 7);   // air above the water box
+    EXPECT_EQ(noon.getSkyLight(2, 3, 2), 4);   // water step (-3)
+    EXPECT_EQ(noon.getSkyLight(2, 2, 2), 1);   // water, cost 14
+    EXPECT_EQ(noon.getSkyLight(2, 1, 2), 0);   // water, cost 17 (the 1/0)
+    EXPECT_EQ(noon.getSkyLight(10, 0, 8), 0);  // opaque floor
+
+    // The confluence: for each source level S, a DIRECT propagation with
+    // skySourceLevel S (a twin world, the same geometry) must equal the
+    // affine retreat max(0, stored - (15 - S)) of the noon field, cell by
+    // cell. S = 7 is the PRODUCTION deep-night level (the kNightSkyLevel
+    // moonlight floor of the day cycle), S = 10 an intermediate ramp
+    // level, S = 0 the seam's mathematical property below the floor.
+    // Block light is source-independent (the seam must not touch it).
+    for (const int S : {7, 10, 0}) {
+        World low;
+        buildLgt3CaveScenario(low, reg);
+        Lighting::propagateAll(low, reg, S);
+        const LightSnapshot storedSnap = snapshot(noon);
+        const LightSnapshot fieldSnap = snapshot(low);
+        ASSERT_EQ(storedSnap.cells.size(), fieldSnap.cells.size());
+        const int delta = kMaxLight - S;
+        std::size_t skyDiffs = 0;
+        std::size_t blockDiffs = 0;
+        for (std::size_t i = 0; i < fieldSnap.cells.size(); ++i) {
+            const int expect = std::max(
+                0, static_cast<int>(storedSnap.cells[i].first) - delta);
+            if (fieldSnap.cells[i].first !=
+                static_cast<std::uint8_t>(expect)) {
+                ++skyDiffs;
+            }
+            if (fieldSnap.cells[i].second != storedSnap.cells[i].second) {
+                ++blockDiffs;
+            }
+        }
+        EXPECT_EQ(skyDiffs, 0u) << "S = " << S
+                                << " direct propagation differs from the "
+                                   "affine retreat of the noon field";
+        EXPECT_EQ(blockDiffs, 0u) << "S = " << S
+                                  << " touched the block light";
+    }
+}
+
+// A stored-0 cell means min-cost >= 15 (truly dark at EVERY source level
+// <= 15) — the retreat must never light one (losslessness). The counter-
+// example construction is a cost exactly 14/15 boundary: a tunnel whose
+// far end sits one step beyond the light's reach.
+TEST(LightingTest, StoredZeroIsLossless) {
+    const BlockRegistry reg = makeRegistry();
+    const BlockID stone = idOf(reg, "stone");
+    const auto build = [&](World& world) {
+        world.getOrCreateChunk({0, 0, 0});
+        world.getOrCreateChunk({1, 0, 0});
+        fillBox(world, 0, 0, 0, 31, 0, 15, stone);    // floor
+        fillBox(world, 0, 2, 0, 29, 2, 15, stone);    // roof (x 0..29)
+        // x 30..31 stay open: the tunnel cell (x, 1, z) reads
+        // 15 - (30 - x) — (16, 1, z) = 1 (cost 14), (15, 1, z) = 0
+        // (cost exactly 15, one step beyond the lit neighbor).
+    };
+    World noon;
+    build(noon);
+    Lighting::propagateAll(noon, reg);
+    EXPECT_EQ(noon.getSkyLight(30, 1, 8), 15);
+    EXPECT_EQ(noon.getSkyLight(16, 1, 8), 1);
+    EXPECT_EQ(noon.getSkyLight(15, 1, 8), 0); // the cost-15 boundary cell
+    EXPECT_EQ(noon.getSkyLight(14, 1, 8), 0);
+
+    for (const int S : {10, 7, 0}) {
+        World low;
+        build(low);
+        Lighting::propagateAll(low, reg, S);
+        const LightSnapshot storedSnap = snapshot(noon);
+        const LightSnapshot fieldSnap = snapshot(low);
+        ASSERT_EQ(storedSnap.cells.size(), fieldSnap.cells.size());
+        // Every stored-0 cell (including the cost-15 boundary) stays 0.
+        std::size_t litFromDark = 0;
+        for (std::size_t i = 0; i < fieldSnap.cells.size(); ++i) {
+            if (storedSnap.cells[i].first == 0 &&
+                fieldSnap.cells[i].first != 0) {
+                ++litFromDark;
+            }
+        }
+        EXPECT_EQ(litFromDark, 0u) << "S = " << S << " lit a stored-0 cell";
+    }
+    // The retreat contour itself: at S = 10 the lit end stops at the
+    // stored-6 cell, at S = 7 at the stored-9 cell.
+    World s10;
+    build(s10);
+    Lighting::propagateAll(s10, reg, 10);
+    EXPECT_EQ(s10.getSkyLight(21, 1, 8), 1); // stored 6 -> 6 - 5
+    EXPECT_EQ(s10.getSkyLight(20, 1, 8), 0); // stored 5 -> 0
+    World s7;
+    build(s7);
+    Lighting::propagateAll(s7, reg, 7);
+    EXPECT_EQ(s7.getSkyLight(24, 1, 8), 1); // stored 9 -> 9 - 8
+    EXPECT_EQ(s7.getSkyLight(23, 1, 8), 0); // stored 8 -> 0
+}
+
+TEST(LightingTest, EffectiveSkyLightIntegerPins) {
+    // delta = floor((15 - kNightSkyLevel) * (1 - dayFactor)) =
+    // floor(8 * (1 - df)): 0 -> 8, 0.25 -> 6, 0.5 -> 4, 0.75 -> 2,
+    // 1 -> 0. The grid of the spec: df in {0, 0.25, 0.5, 0.75, 1} x
+    // stored in {0, 7, 15} (the deep-night column is the moonlight
+    // floor: 15 -> 7, 7 -> 0, 8 -> 0).
+    EXPECT_EQ(effectiveSkyLight(0, 0.0f), 0);
+    EXPECT_EQ(effectiveSkyLight(0, 0.25f), 0);
+    EXPECT_EQ(effectiveSkyLight(0, 0.5f), 0);
+    EXPECT_EQ(effectiveSkyLight(0, 0.75f), 0);
+    EXPECT_EQ(effectiveSkyLight(0, 1.0f), 0);
+
+    EXPECT_EQ(effectiveSkyLight(7, 0.0f), 0);   // 7 - 8 < 0
+    EXPECT_EQ(effectiveSkyLight(7, 0.25f), 1);  // 7 - 6
+    EXPECT_EQ(effectiveSkyLight(7, 0.5f), 3);   // 7 - 4
+    EXPECT_EQ(effectiveSkyLight(7, 0.75f), 5);  // 7 - 2
+    EXPECT_EQ(effectiveSkyLight(7, 1.0f), 7);
+
+    EXPECT_EQ(effectiveSkyLight(15, 0.0f), 7);  // the MC moonlight floor
+    EXPECT_EQ(effectiveSkyLight(15, 0.25f), 9); // 15 - 6
+    EXPECT_EQ(effectiveSkyLight(15, 0.5f), 11); // 15 - 4
+    EXPECT_EQ(effectiveSkyLight(15, 0.75f), 13);  // 15 - 2
+    EXPECT_EQ(effectiveSkyLight(15, 1.0f), 15);
+}
+
+TEST(LightingTest, MidnightNoonIdentity) {
+    // Noon: the identity — and value-identical to the pre-LGT-3 scale
+    // floor(stored * 1) for every stored level (the gate S1 self-proof).
+    // Deep night: the MC moonlight floor — the stored level minus
+    // (kMaxLight - kNightSkyLevel) = 8, clamped at 0 (15 -> 7, 8 -> 0,
+    // 7 -> 0). Deep night is NO LONGER value-identical to the old scale
+    // floor(stored * 0) = 0 — the moonlight is the feature (the 10-27
+    // user verdict: an all-black night is unplayable). The float mirror
+    // (the shader's normalized form) matches.
+    for (int stored = 0; stored <= kMaxLight; ++stored) {
+        const std::uint8_t s = static_cast<std::uint8_t>(stored);
+        const int legacyNoon = static_cast<int>(std::floor(stored * 1.0));
+        const int expectedNight = std::max(
+            0, stored - (kMaxLight - kNightSkyLevel));
+        EXPECT_EQ(effectiveSkyLight(s, 1.0f), stored) << "stored " << stored;
+        EXPECT_EQ(effectiveSkyLight(s, 1.0f), std::max(0, legacyNoon));
+        EXPECT_EQ(effectiveSkyLight(s, 0.0f),
+                  static_cast<std::uint8_t>(expectedNight))
+            << "stored " << stored;
+        // The float mirror in the shader's normalized units (stored / 15):
+        // noon identity, deep night the 7/15 floor (1 ulp tolerance —
+        // the normalized subtraction need not be exact per level).
+        EXPECT_FLOAT_EQ(effectiveSkyLightF(1.0f, 1.0f), 1.0f);
+        EXPECT_NEAR(effectiveSkyLightF(static_cast<float>(stored) / 15.0f,
+                                       0.0f),
+                    static_cast<float>(expectedNight) / 15.0f,
+                    1e-6f);
+    }
+    // Named deep-night pins: the moonlight floor itself.
+    EXPECT_EQ(effectiveSkyLight(15, 0.0f), kNightSkyLevel); // 15 -> 7
+    EXPECT_EQ(effectiveSkyLight(8, 0.0f), 0);               // 8 -> 0
+    EXPECT_EQ(effectiveSkyLight(7, 0.0f), 0);               // 7 -> 0
+    // The fractional mirror at the open sky (1.0): noon 1.0, deep night
+    // exactly 7/15 (1.0 - fl(8/15) is representable), below-floor 0.
+    EXPECT_FLOAT_EQ(effectiveSkyLightF(1.0f, 0.0f), 7.0f / 15.0f);
+    EXPECT_FLOAT_EQ(effectiveSkyLightF(0.5f, 0.0f), 0.0f);
+    // The fractional retreat through the ramps (the superset of
+    // Minecraft's quantized steps): a half night removes 8/15 * 1/2.
+    EXPECT_NEAR(effectiveSkyLightF(1.0f, 0.5f), 1.0f - 0.5f *
+                                              (8.0f / 15.0f), 1e-6f);
+}

@@ -8,7 +8,7 @@
     "attack_damage": 2,
     "attack_cooldown": 1.0,
     "wander_interval": 2.5,
-    "spawn_max_light": 0,
+    "spawn_max_light": 7,
     "hostile": true,
     "on_hit_effect": {
       "name": "poison",

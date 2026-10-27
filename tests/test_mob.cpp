@@ -24,6 +24,7 @@
 #include "entity/mob_swing.hpp"
 #include "item/item_registry.hpp"
 #include "renderer/texture_atlas.hpp"
+#include "world/lighting.hpp"
 #include "world/raycast.hpp"
 #include "world/world.hpp"
 
@@ -620,6 +621,28 @@ TEST(MobContent, SkeletonUndeadAndWitherArrowPinned) {
         ASSERT_NE(m, nullptr) << name;
         EXPECT_FALSE(m->properties.undead) << name;
         EXPECT_TRUE(m->properties.arrowEffectName.empty()) << name;
+    }
+}
+
+TEST(MobContent, Lgt3MoonlightThresholdPinned) {
+    // LGT-3 (the 10-27 user verdict): the shipped hostile trio pairs its
+    // spawn threshold to the kNightSkyLevel 7 moonlight floor (MC: hostiles
+    // spawn at light <= 7 — night open sky 7 spawns, a torch circle 14 is
+    // safe, day open sky 15 does not); the passives stay at 15 (any light).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.loadDirectory(assets, "data/mobs").ok());
+    for (const char* name : {"zombie", "skeleton", "spider"}) {
+        const Mob* m = mobs.findByName(name);
+        ASSERT_NE(m, nullptr) << name;
+        EXPECT_EQ(m->properties.spawnMaxLight, 7) << name;
+    }
+    for (const char* name : {"cow", "sheep", "chicken"}) {
+        const Mob* m = mobs.findByName(name);
+        ASSERT_NE(m, nullptr) << name;
+        EXPECT_EQ(m->properties.spawnMaxLight, 15) << name;
     }
 }
 
@@ -1427,8 +1450,9 @@ TEST(MobSpawnCellTest, RejectsFloorFarFromThePlayers) {
 // of chunk (0, 0, -1)).
 TEST(MobSpawnCellTest, SpawnsInDarknessAtNight) {
     Fixture f;
-    // Night (dayFactor 0): the open surface's sky contribution scales to
-    // 0, so the dark-only mob may spawn at the first candidate.
+    // Night (dayFactor 0): the fixture cells read stored 0/0 light (fresh
+    // chunks = already dark), so the LGT-3 retreat gives max(0, 0 - 8) =
+    // 0 effective, and the dark-only mob may spawn at the first candidate.
     auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
                                  0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax,
                                  {});
@@ -1449,16 +1473,62 @@ TEST(MobSpawnCellTest, SkipsCellThatIsTooBrightByDay) {
     EXPECT_EQ(*cell, (BlockPos {-3, 0, -5}));
 }
 
-TEST(MobSpawnCellTest, NightScalesSkyLightToZero) {
+// LGT-3 moonlight floor (the 10-27 user verdict): deep-night open sky
+// (stored 15) retreats to kNightSkyLevel 7, NOT 0 — the pre-LGT-3
+// "night scales sky to 0" behavior is gone for lit cells. The shipped
+// hostile threshold (spawn_max_light 7) pairs with it: night open sky
+// 7 <= 7 spawns, a torch circle 14 > 7 does not, day open sky 15 > 7
+// does not — the gameplay loop is preserved.
+TEST(MobSpawnCellTest, NightMoonlightBlocksZeroThresholdMob) {
     Fixture f;
-    // The SAME bright cell is spawnable at night (dayFactor 0 -> the sky
-    // contribution is 0, the renderer-darkening convention).
+    // The SAME bright cell that the pre-LGT-3 test spawned in is NOT
+    // spawnable at night for a max_light 0 mob: dayFactor 0 -> the sky
+    // contribution is 15 - 8 = 7 (the moonlight floor) > 0.
     f.world.getOrCreateChunk({0, 0, -1}).setSkyLightAt(0, 1, 10, 15);
     auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
                                  0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax,
                                  {});
     ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {-3, 0, -5}));
+}
+
+TEST(MobSpawnCellTest, NightMoonlightAllowsShippedHostileThreshold) {
+    Fixture f;
+    // Open sky at deep night = effective 7; the shipped hostile threshold
+    // 7 admits it (7 <= 7) -> the first candidate.
+    f.world.getOrCreateChunk({0, 0, -1}).setSkyLightAt(0, 1, 10, 15);
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, 0.0f, 7, kPlayerMin, kPlayerMax,
+                                 {});
+    ASSERT_TRUE(cell.has_value());
     EXPECT_EQ(*cell, (BlockPos {0, 0, -6}));
+}
+
+TEST(MobSpawnCellTest, TorchCircleBlocksHostileAtNight) {
+    Fixture f;
+    // A torch circle (block light 14, time-independent) at deep night:
+    // effective max(7, 14) = 14 > 7 -> rejected even though the sky is
+    // moonlit (the MC safe-circle semantics).
+    Chunk& c = f.world.getOrCreateChunk({0, 0, -1});
+    c.setSkyLightAt(0, 1, 10, 15);
+    c.setBlockLightAt(0, 1, 10, 14);
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, 0.0f, 7, kPlayerMin, kPlayerMax,
+                                 {});
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {-3, 0, -5}));
+}
+
+TEST(MobSpawnCellTest, DayBlocksShippedHostileThreshold) {
+    Fixture f;
+    // Day (dayFactor 1): open sky stays 15 > 7 -> the first candidate is
+    // rejected (hostiles do not spawn by day, as before LGT-3).
+    f.world.getOrCreateChunk({0, 0, -1}).setSkyLightAt(0, 1, 10, 15);
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, 1.0f, 7, kPlayerMin, kPlayerMax,
+                                 {});
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {-3, 0, -5}));
 }
 
 TEST(MobSpawnCellTest, BlockLightStillBlocksSpawnAtNight) {
@@ -1483,6 +1553,37 @@ TEST(MobSpawnCellTest, PermissiveMobSpawnsInLight) {
                                  kPlayerMax, {});
     ASSERT_TRUE(cell.has_value());
     EXPECT_EQ(*cell, (BlockPos {0, 0, -6}));
+}
+
+// LGT-3: the spawn gate is the SEEN light — the SAME affine retreat the
+// renderer evaluates (effectiveSkyLight), not the pre-LGT-3 scale
+// floor(stored * dayFactor). At noon (dayFactor 1) the two are
+// value-identical for every stored level; deep night differs — the
+// moonlight floor (stored 15 -> 7, the feature).
+TEST(MobSpawnCellTest, SpawnLightMatchesEffectiveSkyModel) {
+    Fixture f;
+    // The first candidate's feet cell (0, 1, -6): full sky light 15.
+    f.world.getOrCreateChunk({0, 0, -1}).setSkyLightAt(0, 1, 10, 15);
+    // Noon: the identity (== the old floor(15 * 1)); deep night: the
+    // moonlight floor 15 - 8 = 7 (the old scale gave 0 — the feature).
+    EXPECT_EQ(currentSpawnLight(f.world, 0, 1, -6, 1.0f), 15);
+    EXPECT_EQ(currentSpawnLight(f.world, 0, 1, -6, 0.0f), kNightSkyLevel);
+    // Ramps: the affine retreat of stored 15 (delta = floor(8*(1-df))),
+    // value-identical to the pure function on the same input (the mirror).
+    EXPECT_EQ(currentSpawnLight(f.world, 0, 1, -6, 0.5f), 11);  // 15 - 4
+    EXPECT_EQ(currentSpawnLight(f.world, 0, 1, -6, 0.5f),
+              static_cast<int>(effectiveSkyLight(15, 0.5f)));
+    EXPECT_EQ(currentSpawnLight(f.world, 0, 1, -6, 0.25f), 9);   // 15 - 6
+    EXPECT_EQ(currentSpawnLight(f.world, 0, 1, -6, 0.75f), 13);  // 15 - 2
+    // Block light is time-independent: the torch circle stands above the
+    // moonlight at deep night (14 > 7), the moonlight above weak block
+    // light (7 > 3).
+    f.world.getOrCreateChunk({0, 0, -1}).setBlockLightAt(0, 1, 10, 14);
+    EXPECT_EQ(currentSpawnLight(f.world, 0, 1, -6, 0.0f), 14);
+    f.world.getOrCreateChunk({0, 0, -1}).setBlockLightAt(0, 1, 10, 3);
+    EXPECT_EQ(currentSpawnLight(f.world, 0, 1, -6, 0.0f), 7);
+    EXPECT_EQ(currentSpawnLight(f.world, 0, 1, -6, 0.5f), 11);
+    EXPECT_EQ(currentSpawnLight(f.world, 0, 1, -6, 1.0f), 15);
 }
 
 // -- spawn protection circle (Phase 25) ---------------------------------------
