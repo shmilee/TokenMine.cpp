@@ -31,6 +31,7 @@ TEST(WorldgenConfigTest, EmptyObjectYieldsDefaults) {
     EXPECT_EQ(p.heightOctaves, 4);
     EXPECT_EQ(p.bottomBlock, "stone");
     EXPECT_EQ(p.deepBlock, "stone");
+    EXPECT_EQ(p.bedrockLayers, 1); // GEN-7 default: the legacy single layer
     EXPECT_FLOAT_EQ(p.biomeNoiseScale, 0.02f);
     EXPECT_TRUE(p.cavesEnabled);
     EXPECT_FLOAT_EQ(p.caveThreshold, 0.68f);
@@ -294,6 +295,57 @@ TEST(WorldgenConfigTest, RejectsOctavesOutOfRange) {
         parseJson(R"({"terrain":{"height_octaves":9}})"));
     ASSERT_FALSE(r.ok());
     EXPECT_NE(r.error().message.find("height_octaves"), std::string::npos);
+}
+
+// ---------------------------------------------------------------------------
+// GEN-7: the multi-layer bedrock floor (`terrain.bedrock_layers`).
+// ---------------------------------------------------------------------------
+
+TEST(WorldgenConfigTest, ParsesBedrockLayers) {
+    auto r =
+        WorldgenParams::parse(parseJson(R"({"terrain":{"bedrock_layers":3}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(r->bedrockLayers, 3);
+    // The other terrain defaults are untouched by the new key.
+    EXPECT_EQ(r->bottomBlock, "stone");
+    EXPECT_EQ(r->deepBlock, "stone");
+}
+
+TEST(WorldgenConfigTest, RejectsBedrockLayersOutOfRange) {
+    for (const char* v : {"0", "9", "-1"}) {
+        auto r = WorldgenParams::parse(
+            parseJson(std::string("{\"terrain\":{\"bedrock_layers\":") + v +
+                     "}}"));
+        ASSERT_FALSE(r.ok()) << v;
+        EXPECT_NE(r.error().message.find("bedrock_layers"), std::string::npos)
+            << v;
+    }
+}
+
+TEST(WorldgenConfigTest, RejectsBedrockLayersNonInteger) {
+    auto r = WorldgenParams::parse(
+        parseJson(R"({"terrain":{"bedrock_layers":2.5}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("bedrock_layers"), std::string::npos);
+}
+
+TEST(WorldgenConfigTest, RejectsBedrockLayersWrongType) {
+    auto r = WorldgenParams::parse(
+        parseJson(R"({"terrain":{"bedrock_layers":"three"}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("bedrock_layers"), std::string::npos);
+}
+
+// The shipped worldgen.json uses the Minecraft classic 3-layer floor
+// (y0 always, y1 50%, y2 always).
+TEST(WorldgenConfigTest, Gen7ShippedBedrockLayers) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    auto r = WorldgenParams::load(assets);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(r->bedrockLayers, 3);
+    EXPECT_EQ(r->bottomBlock, "bedrock");
 }
 
 // ---------------------------------------------------------------------------

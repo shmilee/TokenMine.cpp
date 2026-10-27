@@ -70,7 +70,7 @@ Result<WorldgenParams> WorldgenParams::parse(const Json& def) {
         warnUnknown(*t, "terrain",
                     {"base_height", "height_amplitude", "sea_level",
                      "height_noise_scale", "height_octaves", "bottom_block",
-                     "deep_block"});
+                     "deep_block", "bedrock_layers"});
         auto r = readField(*t, "terrain", "base_height", "number",
                            [&](const Json& v) { p.baseHeight = v.asInt(); });
         MC_TRY(r);
@@ -92,6 +92,18 @@ Result<WorldgenParams> WorldgenParams::parse(const Json& def) {
         r = readField(*t, "terrain", "deep_block", "string",
                       [&](const Json& v) { p.deepBlock = v.asString(); });
         MC_TRY(r);
+        r = readField(*t, "terrain", "bedrock_layers", "number",
+                      [&](const Json& v) { p.bedrockLayers = v.asInt(); });
+        MC_TRY(r);
+        const Json* bl = t->find("bedrock_layers");
+        if (bl != nullptr && bl->isNumber() &&
+            bl->asDouble() != static_cast<double>(p.bedrockLayers)) {
+            return MC_FAIL("'terrain.bedrock_layers' must be an integer");
+        }
+        if (p.bedrockLayers < 1 || p.bedrockLayers > 8) {
+            return MC_FAIL("'terrain.bedrock_layers' must be in [1, 8] "
+                           "(GEN-7 bedrock floor)");
+        }
     }
 
     // -- biomes ----------------------------------------------------------

@@ -36,6 +36,13 @@ struct WorldgenParams {
     int heightOctaves = 4;
     std::string bottomBlock = "stone"; // the y=0 layer
     std::string deepBlock = "stone";   // the world's deep bedrock
+    // GEN-7: the multi-layer bedrock floor. Layers y < bedrockLayers are
+    // the bottom floor: EVEN layers (y 0, 2, ...) are always the bottom
+    // block, ODD layers (y 1, 3, ...) are the bottom block where a
+    // per-cell deterministic 50% roll hits (world_generator's
+    // bedrockLayerRoll, the Minecraft bedrock floor rule). 1 (default) =
+    // the legacy single y=0 layer (bit-for-bit).
+    int bedrockLayers = 1;
 
     // Biome selection (section "biomes").
     float biomeNoiseScale = 0.02f;

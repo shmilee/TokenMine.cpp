@@ -3,6 +3,24 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.6.0（2026-10-27）
+
+**GEN-7 基岩多层**（v1.x 任务表 6/33，门 121；消费 KNOWN_ISSUES Phase 4
+"基岩只有单层"）——worldgen `terrain.bedrock_layers` 新字段（int [1,8]，
+缺省 1 = 旧行为位级复现，越界/非整数点名拒）；shipped = **3 = MC 经典
+基岩底**（y0/y2 恒床岩 + y1 每格确定性 50% roll `bedrockLayerRoll`
+纯谓词，kSaltBedrock 专用 salt）；`fillTerrain` 单分支，layers=1 恒假
+= 向后兼容；零 format（世界生成演进 = 旧存档新底先例）。1722/1722
+（+8：config 5 + 生成 3）、-Werror 0 警告；GEN-3 矿计数契约演进重钉
+4 值（y1/y2 变床岩 = 可放置深石集缩小，GEN-4 先例）。门 121：S1 第
+121 次结构性免疫免重锚（基岩底 y0-2 在出生点视图外）+ S2 竖井壁带
+判别（3×3 全深井 + 悬台内瞰）：diff 13172 px 93.2% 集中横带 + 99.0%
+new 更暗（old 石亮 95.9 / new 床岩暗 42.1 = 解析值吻合）+ savenorm
+EXACT + ×2 RAW/侧 + 性能 A/B 同起跑态 fall 900f fluidCells 三窗
+229457/218800/221654 逐位一致 + 全指标同档 = 成本可忽略。PITS 289
+（init 失败后旧产物残留 = 假 PASS：探针验证四件套 ERROR/clean exit/
+真终档/截图 mtime）。只 tag。
+
 ## v1.5.0（2026-10-27）
 
 **LGT-5 半块透光**（v1.x 任务表 5/33，门 120；**release 组 1.1-1.5 组末

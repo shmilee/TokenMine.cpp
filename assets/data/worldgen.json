@@ -6,6 +6,7 @@
   "height_noise_scale": 0.02,
   "height_octaves": 4,
   "bottom_block": "bedrock",
+  "bedrock_layers": 3,
   "deep_block": "stone"
  },
  "biomes": {

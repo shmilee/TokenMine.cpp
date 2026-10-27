@@ -64,6 +64,9 @@ inline constexpr std::int64_t kSaltDecoration = 0x1A2B3C4D5E6F7A06LL;
 inline constexpr std::int64_t kSaltLavaLake = 0x1A2B3C4D5E6F7A07LL;
 // GEN-1: the second spaghetti-cave noise field.
 inline constexpr std::int64_t kSaltCave2 = 0x1A2B3C4D5E6F7A08LL;
+// GEN-7: the odd bedrock-floor layer rolls (independent of the other
+// feature rolls).
+inline constexpr std::int64_t kSaltBedrock = 0x1A2B3C4D5E6F7A09LL;
 
 // Per-feature mixing constant (the lattice walk's golden step; the per-
 // ore salt advance). Public so the unit tests can pin the generated ore
@@ -108,6 +111,13 @@ public:
     // column recomputes the SAME verdict — a skipped tree is skipped in
     // all of them (no half-placed canopy at a chunk boundary).
     bool caveCarvesCell(int wx, int wy, int wz, int height) const;
+
+    // GEN-7: the ODD bedrock-floor layer roll — a per-cell independent
+    // deterministic 50% (hash3 top bit, the kSaltBedrock-dedicated salt;
+    // even layers never roll, they are always the bottom block). Public
+    // and pure so the unit tests can pin the generated bedrock cells to
+    // the exact predicate (the CaveMatchesPurePredicate pattern).
+    bool bedrockLayerRoll(int wx, int wy, int wz) const;
 
     // Terrain surface height (topmost terrain layer) of the column at
     // (x, z). Ignores caves (always below the surface) and trees.

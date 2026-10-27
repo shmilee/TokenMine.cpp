@@ -16,7 +16,7 @@
 | STRM 流送与内存 | ~~STRM-2 流体列保留~~ ✅ v1.1.0 | | | | | |
 | PIPE 帧管线与并发 | ~~PIPE-3 流体 per-cell~~ ✅ v1.2.0 | | | | | |
 | LGT 光照 | ~~LGT-3 夜光重传播~~ ✅ v1.3.0 | ~~LGT-4 光束入光~~ ✅ v1.4.0 | ~~LGT-5 半块透光~~ ✅ v1.5.0 | | | |
-| GEN 世界与生成 | GEN-7 基岩多层 | GEN-8 地形互感 | GEN-9 耕地湿润 | | | |
+| GEN 世界与生成 | ~~GEN-7 基岩多层~~ ✅ v1.6.0 | GEN-8 地形互感 | GEN-9 耕地湿润 | | | |
 | FLUID 流体 | FLUID-4 倒向水面 | FLUID-5 水熔岩反应 | FLUID-6 流体种类扩展 | | | |
 | ENT 实体/Mob/移动 | ENT-5 坠落伤害 | ENT-6 AI 补强 | ENT-7 移动惯性 | ENT-8 和平/保护环 | ENT-9 掉落可视化 | |
 | SURV 生存/战斗/效果 | SURV-6 效果档位 | SURV-7 死亡统计 | SURV-8 工具 10× | SURV-9 饱和细化 | SURV-10 挤奶冷却 | |
@@ -89,6 +89,16 @@
 
 ## 变更记录（v1.0 时代）
 
+- 2026-10-27：**GEN-7 基岩多层完成**（v1.x 第 6/33 项，v1.6.0，门
+  121）：worldgen `terrain.bedrock_layers`（int [1,8]，缺省 1 = 旧行为
+  位级复现）；shipped 3 = MC 经典基岩底（y0/y2 恒床岩 + y1 每格确定性
+  50% roll `bedrockLayerRoll` 纯谓词，kSaltBedrock）；fillTerrain 单
+  分支；零 format（世界生成演进）。1722/1714→（+8）、-Werror 0；GEN-3
+  矿计数契约演进重钉 4 值；门 121：S1 第 121 次结构性免疫免重锚 + S2
+  竖井壁带判别（diff 13172 px 93.2% 横带 + 99.0% new 更暗 95.9→42.1
+  解析吻合 + savenorm EXACT + ×2 RAW/侧）+ 性能 A/B fluidCells 三窗
+  逐位一致 + 全同档 = 成本可忽略；PITS 289（init 失败后旧产物残留假
+  PASS）。只 tag。
 - 2026-10-27：**LGT-5 半块透光完成**（v1.x 第 5/33 项，v1.5.0，门
   120）：slab/stairs×4/wall/fence 7 块加 `light_opacity: 0` = MC 半块
   透光规则（光如空气穿过：竖直天空免费 + 每格成本 1 = 与空气逐值同），

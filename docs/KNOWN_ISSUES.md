@@ -28,7 +28,7 @@
 - **矿感 = 脉更大更稀（MC 1.18+ chunky sparse）** — 单脉 21 格（vs 旧 9 格游走）+ 概率降档（标定后 ~÷2-5：coal 0.4→0.154、iron 0.25→0.0855、gold 0.12→0.0376、diamond 0.05→0.0101、lapis 0.08→0.0208、gravel 0.25→0.0445）：挖矿"走更远才见脉、见脉收益更大"（diamond 单次可达 21 格 vs 旧 5 格）。**标定残留（单轮纪律记档）**：探针新/旧格数比 diamond 0.641×、lapis 0.732×（低于 [0.8,1.25] 带——低概率下格网通过集换血 + 截断脉占比变化的非线性，单轮后接受；软带测试按钉死值防漂移）。`[GEN-3]`
 - **K>1 多簇机制已实现 + 单测，shipped 全 K=1** — `vein_size` = 椭球簇数（[1,8]，`kMaxOreVeinClusters`）：后续簇中心在前簇 ±2 内游走（21..168 格/脉）。shipped 6 条全 K=1（Q2 拍板：单 re-tune 轴；21 格脉已比旧 9 格游走 chunky 得多）——未来给 coal/iron 调大簇 = **零核心改动的内容调档**（改 worldgen.json + 重标定）。`[GEN-3]`
 - **树是固定模板** — 树干 1×N（4~7）+ 两层半径 2 树冠 + 顶部半径 1 帽，无生长阶段、无 BlockState、无树种差异（不同树只有高度随机）。`[Phase 4]`
-- **基岩只有单层** — y=0 是 `terrain.bottom_block`（数据里为 bedrock），只有一层厚；y≥1 的石头理论上可被挖穿（Phase 6 前没有挖掘）。`[Phase 4]`
+- ~~**基岩只有单层**~~ — **`[GEN-7]` 已解决（v1.6.0：`terrain.bedrock_layers` 3 层 MC 经典底：y0/y2 恒床岩 + y1 每格确定性 50% roll，`bedrockLayerRoll` 纯谓词；世界生成演进零 format）**。`[Phase 4]`
 - **地形高度与洞穴/矿/树相互独立** — 洞穴只保留表层 4 格（`surface_guard`）与底层 2 格（`min_y`）的壳，不感知矿脉/树洞；可能出现洞口正对矿脉等巧合。`[Phase 4]`
 - **放置到未生成区域会同步生成 chunk** — 演示区边缘之外放置方块仍触发 `getOrCreateChunk`（生成器在游戏线程同步跑）。Phase 14 实现了流式加载，但放置需要**立即**拿到目标 chunk（放置当帧生效），所以该路径刻意保持同步（一列 8 chunk ≈1.6 ms 的生成尖峰）；流式管线随后按正常路径为它补光照。`[Phase 6]`
 - **水平速度无惯性** — 期望速度每 tick 直接设定（无加速/摩擦），松键即停。手感可用但非 Minecraft 式平滑。`[Phase 5]`
@@ -835,6 +835,7 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 | LGT-3（v1.x 任务表：夜光重传播 + MC 月光地板） | `archive/phase-lgt3.md` |
 | LGT-4（v1.x 任务表：光束入光） | `archive/phase-lgt4.md` |
 | LGT-5（v1.x 任务表：半块透光） | `archive/phase-lgt5.md` |
+| GEN-7（v1.x 任务表：基岩多层） | `archive/phase-gen7.md` |
 | PIPE-1（v1.0 任务表：worker 网格化） | `archive/phase-pipe-1.md` |
 | PIPE-2（v1.0 任务表：存档增量） | `archive/phase-pipe-2.md` |
 | PIPE-3（v1.x 任务表：流体 per-cell） | `archive/phase-pipe3.md` |

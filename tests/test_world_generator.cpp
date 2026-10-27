@@ -1009,6 +1009,123 @@ TEST(WorldGeneratorTest, CavesCrossSeedDifferSameSeedStable) {
     EXPECT_GT(crossSeedDiff, 500) << "a different seed changes the caves";
 }
 
+// -- GEN-7: the multi-layer bedrock floor ----------------------------------
+
+namespace {
+
+// Caves + ores off (they legitimately carve/replace the deep layers) so
+// the floor assertions read the pure terrain fill.
+WorldgenParams floorParams(int bedrockLayers) {
+    GenSetup s;
+    WorldgenParams p = s.params;
+    p.cavesEnabled = false;
+    p.ores = {};
+    p.bedrockLayers = bedrockLayers;
+    return p;
+}
+
+} // namespace
+
+// Even layers (y 0, 2) are ALWAYS the bottom block; the odd layer (y 1)
+// is the bottom block exactly where the pure per-cell roll predicate
+// hits — pinned to bedrockLayerRoll (the CaveMatchesPurePredicate
+// pattern).
+TEST(WorldGeneratorTest, BedrockFloorMatchesPurePredicate) {
+    const std::int64_t seed = 123456789;
+    GenSetup s;
+    s.params = floorParams(3);
+    auto res = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    const WorldGenerator& gen = *res;
+    const auto chunks = genColumns(gen, 0, 1, 0, 1);
+    const BlockID bottom = s.blocks.idForName("bedrock");
+    const BlockID deep = s.blocks.idForName("stone");
+    int rollHits = 0;
+    for (int x = 0; x < 32; ++x) {
+        for (int z = 0; z < 32; ++z) {
+            // y0 and y2: always bedrock (the fixture heights are all
+            // >= 16, so y2 is below the surface everywhere).
+            EXPECT_EQ(blockAt(chunks, x, 0, z), bottom);
+            EXPECT_EQ(blockAt(chunks, x, 2, z), bottom);
+            // y1: bedrock IFF the pure predicate says so, deep stone
+            // otherwise.
+            const bool roll = gen.bedrockLayerRoll(x, 1, z);
+            EXPECT_EQ(blockAt(chunks, x, 1, z),
+                      roll ? bottom : deep)
+                << "x=" << x << " z=" << z;
+            if (roll) {
+                ++rollHits;
+            }
+        }
+    }
+    // The 50% roll over 1024 cells sits in a wide band (the seed is
+    // fixed, so the count itself is reproducible too).
+    EXPECT_GT(rollHits, 384);  // > 37.5%
+    EXPECT_LT(rollHits, 640);  // < 62.5%
+}
+
+// bedrockLayers = 1 (the default) is the legacy single-layer floor: y1
+// and y2 are plain deep stone, never bedrock (bit-for-bit the
+// pre-GEN-7 fill).
+TEST(WorldGeneratorTest, BedrockFloorDefaultIsLegacy) {
+    const std::int64_t seed = 42;
+    GenSetup s;
+    s.params = floorParams(1);
+    auto res = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    const WorldGenerator& gen = *res;
+    const auto chunks = genColumns(gen, 0, 0, 0, 0);
+    const BlockID bottom = s.blocks.idForName("bedrock");
+    const BlockID deep = s.blocks.idForName("stone");
+    for (int x = 0; x < 16; x += 3) {
+        for (int z = 0; z < 16; z += 3) {
+            EXPECT_EQ(blockAt(chunks, x, 0, z), bottom);
+            EXPECT_EQ(blockAt(chunks, x, 1, z), deep);
+            EXPECT_EQ(blockAt(chunks, x, 2, z), deep);
+            EXPECT_EQ(blockAt(chunks, x, 3, z), deep);
+        }
+    }
+}
+
+// The roll: deterministic per cell (same seed + cell = same verdict,
+// repeated calls and repeated generators), ~50% over a wide grid, and
+// independent across y (the wy hash input decorrelates the layers).
+TEST(WorldGeneratorTest, BedrockLayerRollProperties) {
+    GenSetup s;
+    s.params = floorParams(3);
+    auto a = WorldGenerator::create(9, s.params, s.biomes, s.blocks);
+    auto b = WorldGenerator::create(9, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(a.ok() && b.ok());
+    int hits1 = 0, hits2 = 0, same = 0, differY = 0;
+    const int N = 128;
+    for (int x = 0; x < N; ++x) {
+        for (int z = 0; z < N; ++z) {
+            const bool r1 = (*a).bedrockLayerRoll(x, 1, z);
+            const bool r1b = (*b).bedrockLayerRoll(x, 1, z);
+            const bool r2 = (*a).bedrockLayerRoll(x, 2, z);
+            if (r1) {
+                ++hits1;
+            }
+            if (r2) {
+                ++hits2;
+            }
+            if (r1 == r1b) {
+                ++same;
+            }
+            if (r1 != r2) {
+                ++differY;
+            }
+        }
+    }
+    const int total = N * N;
+    EXPECT_EQ(same, total);            // deterministic across generators
+    EXPECT_GT(hits1, total * 45 / 100);  // ~50% bands
+    EXPECT_LT(hits1, total * 55 / 100);
+    EXPECT_GT(hits2, total * 45 / 100);
+    EXPECT_LT(hits2, total * 55 / 100);
+    EXPECT_GT(differY, total / 4);     // the layers decorrelate
+}
+
 TEST(WorldGeneratorTest, OresUnaffectedByCaves) {
     // Ores still replace deep stone only: with caves on, every ore cell is
     // the SAME ore cell in the caves-off world (caves can only REMOVE ore
@@ -2575,10 +2692,14 @@ TEST(WorldGeneratorTest, Gen3ShippedOreVeinCellCountsPinned) {
     const int iron = w.countOre("iron_ore");
     const int diamond = w.countOre("diamond_ore");
     const int gravel = w.countOre("gravel");
-    EXPECT_EQ(coal, 3448); // old baseline 3206 (ratio 1.075)
-    EXPECT_EQ(iron, 1684); // old baseline 1908 (ratio 0.883)
-    EXPECT_EQ(diamond, 103); // old baseline 142 (ratio 0.725 — recorded)
-    EXPECT_EQ(gravel, 1087); // old baseline 1007 (ratio 1.079)
+    // GEN-7 re-pin (bedrock floor layers 1 → 3): the y1/y2 cells that
+    // become bedrock are no longer deep-stone placement targets, so the
+    // vein counts shift down slightly — the shape switch + probability
+    // re-tune contract is unchanged (the GEN-4 cave re-pin precedent).
+    EXPECT_EQ(coal, 3255); // pre-GEN-7 3448 (ratio 1.075 vs old baseline)
+    EXPECT_EQ(iron, 1616); // pre-GEN-7 1684 (ratio 0.883)
+    EXPECT_EQ(diamond, 96); // pre-GEN-7 103 (ratio 0.725 — recorded)
+    EXPECT_EQ(gravel, 1003); // pre-GEN-7 1087 (ratio 1.079)
     // The soft density band vs the old random-walk baseline: drift
     // guard (a shape/parameter regression moves the density out of band
     // long before the exact pin's value changes world meaningfully).

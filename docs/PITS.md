@@ -2146,3 +2146,12 @@
   伪装成跑挂。修正 = 合并（查重冲突即报错）+ 驱动侧场景生效校验（blocks
   数 + player pos 断言，PITS 254 场景 cp 静默 fresh 坑的第三变体：cp 通
   过但内容被脚本破坏）。
+- **init 失败后旧产物残留 = 假 PASS（场景探针必看 ERROR + clean exit +
+  真终档，PITS 289）**——10-27 门 121 首轮探针 v2：场景文件自身重复
+  编辑（悬台格在井 air 循环内 = air+stone 双条）→ init "duplicate block
+  edits" 死，但驱动只查"player pos 对不对"——读的是 **cp 进去的场景
+  文件**（含预期 pos）而非游戏终档 + 截图是**上一轮 v1 场景的残留
+  PNG** → 全绿假象。纪律：场景跑验证 = ① 日志 grep ERROR（init 死）
+  ② 'Game shut down cleanly' ③ 游戏**退出后写的**终档（rm 场景槽先，
+  再 cp 场景，跑完读新写的档；PITS 15 家族）④ 截图 stat mtime > 跑前
+  时间戳。四者缺一 = 假跑。

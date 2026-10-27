@@ -247,7 +247,19 @@ void WorldGenerator::fillTerrain(Chunk& chunk, const ChunkPos& pos,
                 if (wy == 0) {
                     id = m_bottom;
                 } else if (wy < h) {
-                    id = (wy < h - b.subsurfaceDepth) ? m_deep : b.subsurface;
+                    // GEN-7: the multi-layer bedrock floor. Below
+                    // `bedrockLayers` the even layers are always the bottom
+                    // block and the odd layers where the per-cell 50% roll
+                    // hits (the Minecraft floor rule); layers = 1 leaves
+                    // this branch bit-for-bit as the legacy y>=1 terrain.
+                    if (wy < m_params.bedrockLayers &&
+                        (wy % 2 == 0 ||
+                         bedrockLayerRoll(ox + lx, wy, oz + lz))) {
+                        id = m_bottom;
+                    } else {
+                        id = (wy < h - b.subsurfaceDepth) ? m_deep
+                                                          : b.subsurface;
+                    }
                 } else if (wy == h) {
                     id = b.surface;
                 }
@@ -263,6 +275,14 @@ void WorldGenerator::fillTerrain(Chunk& chunk, const ChunkPos& pos,
             }
         }
     }
+}
+
+bool WorldGenerator::bedrockLayerRoll(int wx, int wy, int wz) const {
+    // One independent per-cell roll (the wy as the third hash input, the
+    // kSaltBedrock-dedicated salt): the hash3 top bit is an unbiased 50%.
+    return hash3(static_cast<std::uint64_t>(wx), static_cast<std::uint64_t>(wz),
+                 static_cast<std::uint64_t>(wy),
+                 static_cast<std::uint64_t>(m_seed ^ kSaltBedrock)) >> 63 == 0;
 }
 
 bool WorldGenerator::caveCarvesCell(int wx, int wy, int wz, int height) const {
