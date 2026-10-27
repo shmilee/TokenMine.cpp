@@ -2215,6 +2215,30 @@ TEST(BlockRegistryTest, Lgt2LightOpacityContent) {
     }
 }
 
+// LGT-5: the half-block family (slab / stairs / wall / fence) transmits
+// light like air (the Minecraft half-block rule) while staying OPAQUE —
+// the face-culling / mesh rendering is untouched (the P85 slab
+// neighbor-face limitation is preserved; only the light field changes).
+TEST(BlockRegistryTest, Lgt5HalfBlockLightTransmission) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    for (const char* name : {"stone_slab", "stone_stairs",
+                             "stone_stairs_east", "stone_stairs_south",
+                             "stone_stairs_west", "stone_wall", "fence"}) {
+        const Block* b = reg.findByName(name);
+        ASSERT_TRUE(b != nullptr) << name;
+        EXPECT_TRUE(b->properties.opaque) << name;  // rendering unchanged
+        EXPECT_EQ(b->properties.lightOpacity, 0) << name;  // light passes
+    }
+    // A full cube keeps deriving 15 (the contract is unchanged).
+    const Block* s = reg.findByName("stone");
+    ASSERT_TRUE(s != nullptr);
+    EXPECT_EQ(s->properties.lightOpacity, 15);
+}
+
 // ---------------------------------------------------------------------------
 // Per-block state (ENT-2, the Phase 94 stair facing generalized): the
 // dual gate — the Stairs shape carries an IMPLICIT state (count 4, default

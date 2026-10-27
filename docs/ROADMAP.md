@@ -236,5 +236,6 @@
 - **PIPE-3（v1.x 任务表：流体 per-cell）** — `archive/phase-pipe3.md`
 - **LGT-3（v1.x 任务表：夜光重传播 + MC 月光地板）** — `archive/phase-lgt3.md`
 - **LGT-4（v1.x 任务表：光束入光）** — `archive/phase-lgt4.md`
+- **LGT-5（v1.x 任务表：半块透光）** — `archive/phase-lgt5.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

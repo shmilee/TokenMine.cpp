@@ -1,11 +1,16 @@
 {
-  "id": "stone_slab",
-  "properties": {
-    "hardness": 2.0,
-    "drops": "stone_slab"
-  },
-  "model": {
-    "shape": "slab",
-    "textures": { "top": "stone", "side": "stone", "bottom": "stone" }
-  }
+    "id": "stone_slab",
+    "properties": {
+        "hardness": 2.0,
+        "light_opacity": 0,
+        "drops": "stone_slab"
+    },
+    "model": {
+        "shape": "slab",
+        "textures": {
+            "top": "stone",
+            "side": "stone",
+            "bottom": "stone"
+        }
+    }
 }

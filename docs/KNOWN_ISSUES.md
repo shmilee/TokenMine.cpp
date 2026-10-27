@@ -834,6 +834,7 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 | LGT-2（v1.0 任务表：叶子光衰减） | `archive/phase-lgt2.md` |
 | LGT-3（v1.x 任务表：夜光重传播 + MC 月光地板） | `archive/phase-lgt3.md` |
 | LGT-4（v1.x 任务表：光束入光） | `archive/phase-lgt4.md` |
+| LGT-5（v1.x 任务表：半块透光） | `archive/phase-lgt5.md` |
 | PIPE-1（v1.0 任务表：worker 网格化） | `archive/phase-pipe-1.md` |
 | PIPE-2（v1.0 任务表：存档增量） | `archive/phase-pipe-2.md` |
 | PIPE-3（v1.x 任务表：流体 per-cell） | `archive/phase-pipe3.md` |

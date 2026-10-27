@@ -2138,3 +2138,11 @@
   (program,loc,params)——2 参调用编译错"实参太少"= 形参表陷阱）证
   CPU→GPU 链路通，再怀疑取景/语义。beam 类（及一切"高出屏幕的大物体"）
   门场景先目检截图里有没有目标。
+- **场景存档构建必须合并 base 块编辑（覆盖 = 孤儿 fires 交叉校验死，PITS
+  288）**——10-27 门 120 首轮：场景脚本 `d['blocks'] = 房间编辑` 覆盖了
+  fresh base 的 6 条 runtime 编辑（P90 湖火 2 fire + 石 1 + …），而
+  fires[] 3 条目保留 → init 报 "save 'fires' has an entry at (23,35,28)
+  which is not a fire block in the world's block edits" = 场景静默未加载
+  伪装成跑挂。修正 = 合并（查重冲突即报错）+ 驱动侧场景生效校验（blocks
+  数 + player pos 断言，PITS 254 场景 cp 静默 fresh 坑的第三变体：cp 通
+  过但内容被脚本破坏）。

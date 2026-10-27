@@ -1,16 +1,17 @@
 {
-  "id": "stone_wall",
-  "properties": {
-    "sound_material": "stone",
-    "hardness": 1.5,
-    "drops": "stone_wall"
-  },
-  "model": {
-    "shape": "wall",
-    "textures": {
-      "top": "stone",
-      "side": "stone",
-      "bottom": "stone"
+    "id": "stone_wall",
+    "properties": {
+        "sound_material": "stone",
+        "hardness": 1.5,
+        "light_opacity": 0,
+        "drops": "stone_wall"
+    },
+    "model": {
+        "shape": "wall",
+        "textures": {
+            "top": "stone",
+            "side": "stone",
+            "bottom": "stone"
+        }
     }
-  }
 }

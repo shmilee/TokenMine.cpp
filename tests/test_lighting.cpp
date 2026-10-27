@@ -66,7 +66,14 @@ BlockRegistry makeRegistry() {
         cubeDef("glass",
                 R"({"opaque":false,"transparent":true,"light_opacity":1})",
                 R"({"top":"t","side":"t","bottom":"t"})")));
-    if (!r1.ok() || !r2.ok() || !r3.ok() || !r4.ok() || !r5.ok() || !r6.ok()) {
+    // LGT-5: the half-block form — OPAQUE (face culling unchanged, the
+    // P85 slab rendering contract) but light_opacity 0 (light passes
+    // like air; the shipped slab/stairs/wall/fence shape).
+    auto r7 = reg.registerBlock(parseDef(cubeDef(
+        "slab5", R"({"light_opacity":0})",
+        R"({"top":"t","side":"t","bottom":"t"})")));
+    if (!r1.ok() || !r2.ok() || !r3.ok() || !r4.ok() || !r5.ok() ||
+        !r6.ok() || !r7.ok()) {
         ADD_FAILURE() << "test registry failed to build";
     }
     return reg;
@@ -862,6 +869,69 @@ TEST(LightingTest, UpdateRegionWithLeavesMatchesFullPropagation) {
     applyEdit(local);
     Lighting::updateRegion(local, reg, {8, 1, 8}, {12, 4, 12});
     expectSameLight(local, full);
+}
+
+// -- LGT-5: half-block light transmission (slab / stairs / wall / fence) --
+// A half-block cell (opaque true + light_opacity 0) attenuates light
+// EXACTLY like air: vertical sky passes free, every other entry costs
+// 1 (max(1, opacity)) — no extra attenuation, no block.
+
+// 1. Sky light through a half-block canopy: 15 for any number of layers
+//    (air-like vertical free pass), vs stone (derived 15) = dead, vs
+//    leaves (opacity 2) = -2/layer.
+TEST(LightingTest, SkyVerticalThroughHalfBlock) {
+    const BlockRegistry reg = makeRegistry();
+    EXPECT_EQ(underCanopySky(reg, "slab5", 1), 15);
+    EXPECT_EQ(underCanopySky(reg, "slab5", 5), 15);
+    EXPECT_EQ(underCanopySky(reg, "stone", 1), 0);  // opaque: dead
+    EXPECT_EQ(underCanopySky(reg, "leaves", 1), 13);  // the leaf contrast
+}
+
+// 2. Block light through a half-block layer (a torch-level source 15
+//    below a sealed slab5 layer): the layer adds NO attenuation beyond
+//    the air-like entry cost — the cell above the layer reads exactly
+//    what an air cell would; a stone layer at the same place reads 0.
+TEST(LightingTest, BlockLightThroughHalfBlockLayer) {
+    const BlockRegistry reg = makeRegistry();
+    const BlockID stone = idOf(reg, "stone");
+    const BlockID slab = idOf(reg, "slab5");
+    const BlockID glow = idOf(reg, "glowstone");
+    // A sealed 3x3x3 box: stone floor/walls/ceiling (y 0..4, shell),
+    // glowstone at (1,0,1) replaced... build the shell, then the source
+    // at y=1 on the inside floor and the layer cell at y=2.
+    const auto build = [&](World& w, bool withSlab) {
+        fillBox(w, 0, 0, 0, 2, 4, 2, stone);      // the shell + fill
+        for (int x = 0; x <= 2; ++x) {             // hollow the interior
+            for (int z = 0; z <= 2; ++z) {
+                w.setBlock(x, 1, z, BlockID::air());
+                w.setBlock(x, 2, z, BlockID::air());
+                w.setBlock(x, 3, z, BlockID::air());
+            }
+        }
+        w.setBlock(1, 1, 1, glow);                 // the source (15)
+        if (withSlab) {
+            w.setBlock(1, 2, 1, slab);             // the test layer
+        }
+    };
+    World airWorld, slabWorld, stoneWorld;
+    build(airWorld, false);
+    build(slabWorld, true);
+    build(stoneWorld, true);
+    stoneWorld.setBlock(1, 2, 1, stone);           // the opaque contrast
+    Lighting::propagateAll(airWorld, reg);
+    Lighting::propagateAll(slabWorld, reg);
+    Lighting::propagateAll(stoneWorld, reg);
+    // Directly above the layer cell: air 13 (15-1-1 vertical), slab 13
+    // (the layer adds NO attenuation beyond the air-like entry cost =
+    // the LGT-5 assertion), stone 11 (the vertical path is dead — only
+    // the side route (0,1,1)→(0,2,1)→(0,3,1)→(1,3,1) survives: 15-4).
+    EXPECT_EQ(airWorld.getBlockLight(1, 3, 1), 13);
+    EXPECT_EQ(slabWorld.getBlockLight(1, 3, 1), 13);
+    EXPECT_EQ(stoneWorld.getBlockLight(1, 3, 1), 11);
+    // The layer cell ITSELF reads the air-like entry (14) in slab, 0 in
+    // stone (15 - 15 does not enter).
+    EXPECT_EQ(slabWorld.getBlockLight(1, 2, 1), 14);
+    EXPECT_EQ(stoneWorld.getBlockLight(1, 2, 1), 0);
 }
 
 TEST(LightingTest, InsertedTwoChunkColumnRelightMatchesFullPropagation) {

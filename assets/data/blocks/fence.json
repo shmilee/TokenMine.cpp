@@ -1,11 +1,14 @@
 {
-  "id": "fence",
-  "properties": {
-    "hardness": 2.0,
-    "drops": "fence"
-  },
-  "model": {
-    "shape": "fence",
-    "textures": { "side": "fence" }
-  }
+    "id": "fence",
+    "properties": {
+        "hardness": 2.0,
+        "light_opacity": 0,
+        "drops": "fence"
+    },
+    "model": {
+        "shape": "fence",
+        "textures": {
+            "side": "fence"
+        }
+    }
 }

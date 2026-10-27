@@ -1,17 +1,18 @@
 {
-  "id": "stone_stairs",
-  "properties": {
-    "hardness": 1.5,
-    "drops": "stone_stairs",
-    "stair_rotates_to": "stone_stairs_east"
-  },
-  "model": {
-    "shape": "stairs",
-    "textures": {
-      "top": "stone",
-      "side": "stone",
-      "bottom": "stone"
+    "id": "stone_stairs",
+    "properties": {
+        "hardness": 1.5,
+        "light_opacity": 0,
+        "drops": "stone_stairs",
+        "stair_rotates_to": "stone_stairs_east"
     },
-    "stair_facing": 0
-  }
+    "model": {
+        "shape": "stairs",
+        "textures": {
+            "top": "stone",
+            "side": "stone",
+            "bottom": "stone"
+        },
+        "stair_facing": 0
+    }
 }
