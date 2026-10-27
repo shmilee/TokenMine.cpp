@@ -384,6 +384,18 @@ struct BlockModel {
     // stateCount / stateDefault for the dual gate.
     int stateCount = 0;
     int stateDefault = 0;
+    // GEN-9: the MOISTURE top-face variant (full-cube only, empty = the
+    // feature is off for this block). When set, the +Y face is meshed with
+    // this texture while the soil cell is WET (water within Chebyshev
+    // radius kWetWaterRadius at the same y — world/growth's soilIsWet, the
+    // crop dry_slowdown rule) and with `textures.top` when dry. The wetness
+    // is DERIVED at mesh time from the live fluid field (no per-instance
+    // state, no save field): the mesher re-evaluates the top face on every
+    // re-mesh, and the game marks tracked cells' chunks dirty when a fluid
+    // change flips their wetness (the Game's m_moistureBlocks pass). The
+    // dropped-item / held-hand cube keep the dry texture (no world context
+    // there — the Minecraft inventory icon is static too).
+    std::string moistureTop;
 };
 
 // Phase 97: the stair's PER-INSTANCE facing when a player PLACES it, from

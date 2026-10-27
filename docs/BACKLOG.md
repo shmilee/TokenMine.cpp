@@ -16,7 +16,7 @@
 | STRM 流送与内存 | ~~STRM-2 流体列保留~~ ✅ v1.1.0 | | | | | |
 | PIPE 帧管线与并发 | ~~PIPE-3 流体 per-cell~~ ✅ v1.2.0 | | | | | |
 | LGT 光照 | ~~LGT-3 夜光重传播~~ ✅ v1.3.0 | ~~LGT-4 光束入光~~ ✅ v1.4.0 | ~~LGT-5 半块透光~~ ✅ v1.5.0 | | | |
-| GEN 世界与生成 | ~~GEN-7 基岩多层~~ ✅ v1.6.0 | ~~GEN-8 地形互感~~ ✅ v1.7.0 | GEN-9 耕地湿润 | | | |
+| GEN 世界与生成 | ~~GEN-7 基岩多层~~ ✅ v1.6.0 | ~~GEN-8 地形互感~~ ✅ v1.7.0 | ~~GEN-9 耕地湿润~~ ✅ v1.8.0 | | | |
 | FLUID 流体 | FLUID-4 倒向水面 | FLUID-5 水熔岩反应 | FLUID-6 流体种类扩展 | | | |
 | ENT 实体/Mob/移动 | ENT-5 坠落伤害 | ENT-6 AI 补强 | ENT-7 移动惯性 | ENT-8 和平/保护环 | ENT-9 掉落可视化 | |
 | SURV 生存/战斗/效果 | SURV-6 效果档位 | SURV-7 死亡统计 | SURV-8 工具 10× | SURV-9 饱和细化 | SURV-10 挤奶冷却 | |
@@ -116,6 +116,24 @@
   构建与运行 + 范围与限制 + 许可），PITS 范围 267-288 修正为 271-288
   （267-270 属 v1.0 组时代门 114/115）③ Latest 收尾回 v1.5.0 组 release
   （重建时序）。同步 README/CHANGELOG/BACKLOG/AGENTS 旧引用。
+- 2026-10-28：**GEN-9 耕地湿润完成**（v1.x 第 8/33 项，v1.8.0，门
+  123；代理定案 = farmland 湿/干视觉状态，GEN 行 3/3 收尾，原始定义
+  已佚）：块模型可选 `moisture_top`（FullCube-only 形状门控 + 严格非空
+  串 + requiredTextures init 交叉校验）+ 纯谓词 `soilIsWet`（Chebyshev
+  4 同层水，P50 生长节奏同款半径，cropIsWet 委托 = 一函数两消费者）+
+  mesher FullCube 顶面 mesh 时派生（湿/干邻格永不贪婪并 quad）+ Game
+  `m_moistureBlocks` 追踪 + **kMoistureRefreshEveryNFrames=10 周期
+  sweep**（worker 快照预烘 stale 收敛 + seed 点强制重烘）；shipped =
+  farmland `moisture_top: farmland_wet`（atlas 空位 [9,4] 免重锚 + 同
+  salt 暗化 0.72×）；零 format（19）/config/音效。1745/1745（+12）、
+  -Werror 0；门 123：S1 第 123 次结构性免疫免重锚（fresh 60f 四方 ×2
+  字节一致 + savenorm EXACT）+ S2 受控平台场景双视角 PASS（俯视 diff
+  108,542 px 全限耕地顶面 100% 更暗 old (102,72,49)→new (72,52,36)
+  纹理均值精确 / 侧视 888 px 隔离 + 干耕地带零 diff + 场景区存档
+  EXACT）+ 性能 A/B 同 seed 900f（fluidCells win2/3 逐位一致 + PIPE3
+  逐位 + 全同档 = 成本可忽略，零耕地 sweep 结构惰性实证）；坑 PITS
+  291-294（L8 源必封 / 大场景远景 GL quirk【新旧同现非回归，门改受控
+  场景】/ zsh 无引号展开不分词 / 场景构建器静默未写入）。只 tag。
 - 2026-10-27：**GEN-8 地形互感完成**（v1.x 第 7/33 项，v1.7.0，门
   122；代理定案 = 山峰互感 mountain passes，原始定义已佚）：worldgen
   `terrain.passes`（enabled/noise_scale/threshold/amplitude 逐条点名，

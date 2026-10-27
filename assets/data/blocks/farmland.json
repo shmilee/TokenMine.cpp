@@ -9,6 +9,7 @@
       "top": "farmland_top",
       "side": "farmland_side",
       "bottom": "dirt"
-    }
+    },
+    "moisture_top": "farmland_wet"
   }
 }

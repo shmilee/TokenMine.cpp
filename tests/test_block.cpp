@@ -2347,6 +2347,93 @@ TEST(BlockRegistryTest, StairRejectsExplicitStateCount) {
     EXPECT_NE(bad.error().message.find("state_count"), std::string::npos);
 }
 
+// ---------------------------------------------------------------------------
+// GEN-9: the moisture top-face variant (model.moisture_top) — the farmland
+// wet/dry visual. The field is FULL-CUBE ONLY (the other shapes own their
+// geometry — the cutout shape-gate discipline), a strict non-empty string
+// (the ammo discipline), and its tile is cross-checked at init
+// (requiredTextures).
+// ---------------------------------------------------------------------------
+
+TEST(BlockRegistryTest, MoistureTopDefaultsToEmpty) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(minimalDef("stone")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(reg.at(*r).model.moistureTop.empty());
+}
+
+TEST(BlockRegistryTest, ParsesMoistureTop) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"farmland","model":{"textures":{"top":"dry","side":"s",)"
+        R"("bottom":"b"},"moisture_top":"wet"}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).model.moistureTop, "wet");
+}
+
+TEST(BlockRegistryTest, MoistureTopRejectsNonFullCube) {
+    // Slab / stairs / cross own their geometry — a moisture field on them
+    // would be dead data (named and rejected, the cutout shape gate).
+    for (const char* shape : {"slab", "stairs", "cross", "wall", "fence",
+                              "glass_pane"}) {
+        auto r = BlockRegistry{}.registerBlock(parseDef(
+            std::string(R"({"id":"f","model":{"shape":")") + shape +
+            R"(","textures":{"top":"dry","side":"s","bottom":"b"},)"
+            R"("moisture_top":"wet"}})"));
+        ASSERT_FALSE(r.ok()) << shape;
+        EXPECT_NE(r.error().message.find("moisture_top"), std::string::npos)
+            << shape;
+    }
+    // The cross shape needs its single "cross" texture (not the cube trio)
+    // — re-test it with the right shape so the rejection is the moisture
+    // field, not the texture.
+    auto cross = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"f","model":{"shape":"cross","textures":{"cross":"c"},)"
+        R"("moisture_top":"wet"}})"));
+    ASSERT_FALSE(cross.ok());
+    EXPECT_NE(cross.error().message.find("moisture_top"),
+              std::string::npos);
+}
+
+TEST(BlockRegistryTest, MoistureTopRejectsEmptyAndWrongType) {
+    auto empty = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"f","model":{"textures":{"top":"d","side":"s","bottom":"b"},)"
+        R"("moisture_top":""}})"));
+    ASSERT_FALSE(empty.ok());
+    EXPECT_NE(empty.error().message.find("moisture_top"), std::string::npos);
+    auto num = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"f","model":{"textures":{"top":"d","side":"s","bottom":"b"},)"
+        R"("moisture_top":42}})"));
+    ASSERT_FALSE(num.ok());
+    EXPECT_NE(num.error().message.find("moisture_top"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, Gen9FarmlandMoisturePinned) {
+    // The shipped farmland carries the moisture visual: dry top =
+    // farmland_top (the legacy texture, unchanged), wet top = farmland_wet
+    // (the new darker tile, atlas cell [9,4] — a free slot, no UV shift).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block& f = reg.at(reg.idForName("farmland"));
+    EXPECT_EQ(f.model.textures.top, "farmland_top");
+    EXPECT_EQ(f.model.moistureTop, "farmland_wet");
+    // The wet tile is in the atlas layout and on disk (the init
+    // cross-check's unit level).
+    auto layoutText = assets.loadText("data/textures/block_atlas.json");
+    ASSERT_TRUE(layoutText.ok()) << layoutText.error().message;
+    auto layout = Json::parse(*layoutText);
+    ASSERT_TRUE(layout.ok());
+    const Json* cell = layout->find("tiles")->find("farmland_wet");
+    ASSERT_NE(cell, nullptr);
+    ASSERT_EQ(cell->size(), 2u);
+    EXPECT_EQ(cell->at(0).asInt(), 9); // column
+    EXPECT_EQ(cell->at(1).asInt(), 4); // row
+    EXPECT_TRUE(assets.exists("textures/blocks/farmland_wet.png"));
+}
+
 TEST(BlockRegistryTest, Ent2StairVariantsStatePinned) {
     // The 4 shipped stair variants: the implicit state (count 4, the
     // default is each variant's stair_facing 0/1/2/3) — and a plain

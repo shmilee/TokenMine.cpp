@@ -1249,3 +1249,97 @@ TEST(ChunkMesherTest, StatelessCrossRegressionScaleOne) {
         EXPECT_EQ(data.transparentVertices[i].position, expected[i]);
     }
 }
+
+// ---------------------------------------------------------------------------
+// GEN-9: the moisture top-face variant (model.moisture_top) — the farmland
+// wet/dry visual. The +Y face is meshed with the WET tile while the cell's
+// soil is wet (water within Chebyshev radius 4 at the same y, the
+// soilIsWet predicate) and with the dry `textures.top` otherwise. Wet and
+// dry neighbors never greedy-merge (the tile differs).
+// ---------------------------------------------------------------------------
+
+namespace {
+
+BlockRegistry moistureRegistry() {
+    BlockRegistry reg;
+    auto farmland = reg.registerBlock(parseDef(
+        R"({"id":"farmland","model":{"textures":{"top":"dry_t","side":"t",)"
+        R"("bottom":"t"},"moisture_top":"wet_t"}})"));
+    if (!farmland.ok()) {
+        ADD_FAILURE() << farmland.error().message;
+    }
+    return reg;
+}
+
+// Every top-face vertex must sit inside the tile's UV rectangle.
+bool topVerticesInside(const ChunkMeshData& data, const AtlasLayout& layout,
+                       const std::string& tile) {
+    const Vec2 u0 = AtlasLayout::uvMin(layout, tile);
+    const Vec2 u1 = AtlasLayout::uvMax(layout, tile);
+    const auto top = verticesWithNormal(data.opaqueVertices,
+                                        Vec3 {0.0f, 1.0f, 0.0f});
+    if (top.empty()) {
+        return false;
+    }
+    for (const MeshVertex& v : top) {
+        if (v.uv.x < u0.x - 1e-6 || v.uv.x > u1.x + 1e-6 ||
+            v.uv.y < u0.y - 1e-6 || v.uv.y > u1.y + 1e-6) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+TEST(ChunkMesherTest, MoistureTopUsesWetTileWhenWet) {
+    const BlockRegistry reg = moistureRegistry();
+    const AtlasLayout layout = makeLayout({"dry_t", "t", "wet_t"});
+    World world;
+    world.setBlock(8, 1, 8, reg.idForName("farmland"));
+    world.setFluid(11, 1, 8, FluidKind::Water, 8); // 3 away, the soil's y
+    const auto data = ChunkMesher(world, reg, layout).mesh({0, 0, 0});
+    EXPECT_TRUE(topVerticesInside(data, layout, "wet_t"));
+    EXPECT_FALSE(topVerticesInside(data, layout, "dry_t"));
+}
+
+TEST(ChunkMesherTest, MoistureTopUsesDryTileWhenDry) {
+    const BlockRegistry reg = moistureRegistry();
+    const AtlasLayout layout = makeLayout({"dry_t", "t", "wet_t"});
+    World world;
+    world.setBlock(8, 1, 8, reg.idForName("farmland"));
+    const auto data = ChunkMesher(world, reg, layout).mesh({0, 0, 0});
+    EXPECT_TRUE(topVerticesInside(data, layout, "dry_t"));
+    EXPECT_FALSE(topVerticesInside(data, layout, "wet_t"));
+}
+
+TEST(ChunkMesherTest, MoistureWetDryNeighborsDoNotMerge) {
+    // Two adjacent farmland tops: the west one is dry (water 5 from it),
+    // the east one is wet (water 4 from it) — the top faces carry
+    // DIFFERENT tiles, so the greedy merge keeps them as two quads
+    // (8 top vertices instead of the 4 a merged run would emit).
+    const BlockRegistry reg = moistureRegistry();
+    const AtlasLayout layout = makeLayout({"dry_t", "t", "wet_t"});
+    World world;
+    world.setBlock(7, 1, 8, reg.idForName("farmland"));
+    world.setBlock(8, 1, 8, reg.idForName("farmland"));
+    world.setFluid(12, 1, 8, FluidKind::Water, 8); // 4 from (8,1,8), 5 from (7,1,8)
+    const auto data = ChunkMesher(world, reg, layout).mesh({0, 0, 0});
+    const auto top = verticesWithNormal(data.opaqueVertices,
+                                        Vec3 {0.0f, 1.0f, 0.0f});
+    EXPECT_EQ(top.size(), 8u);
+    // Each quad is homogeneous: the wet tile's vertices and the dry
+    // tile's vertices are 4 each (no mixed run).
+    int wet = 0, dry = 0;
+    const Vec2 w0 = AtlasLayout::uvMin(layout, "wet_t");
+    const Vec2 d0 = AtlasLayout::uvMin(layout, "dry_t");
+    for (const MeshVertex& v : top) {
+        if (v.uv.y >= w0.y - 1e-6) {
+            ++wet;
+        } else if (v.uv.y <= d0.y + 0.3333f) {
+            ++dry;
+        }
+    }
+    EXPECT_EQ(wet, 4);
+    EXPECT_EQ(dry, 4);
+}

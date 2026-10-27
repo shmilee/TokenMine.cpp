@@ -708,6 +708,25 @@ private:
     // buildScene — after the save load, whose block edits restore the
     // planted saplings.
     void rescanSaplings();
+    // GEN-9: rebuilds the moisture tracking set from the world — every
+    // cell whose block carries a model.moisture_top variant (the
+    // rescanSaplings twin; the wetness is NOT rescanned into storage —
+    // it is derived at mesh time, the map value is seeded with the first
+    // evaluation so a just-loaded farm only re-meshes on a real flip).
+    // Runs at the end of buildScene — after the save load, whose block
+    // edits restore the placed farmland.
+    void rescanMoistureBlocks();
+    // GEN-9: the moisture convergence sweep — re-evaluates the wetness of
+    // every tracked moisture cell (position-sorted, the soilIsWet pure
+    // predicate over the LIVE fluid field) and marks the cell's chunk
+    // dirty ONLY when the wetness flipped. Runs on a frame-locked cadence
+    // (kMoistureRefreshEveryNFrames) because the mesh-time derivation can
+    // bake STALE wetness: the worker mesher reads the fluid field
+    // cross-chunk, and a farmland chunk meshed before its water neighbor
+    // streamed in bakes dry until this sweep re-meshes it. Deterministic;
+    // a no-op while the tracked set is empty (the fresh world / the perf
+    // scenes fast-exit).
+    void refreshMoistureStates();
     // GEN-2: places a grown tree at a COMPLETED sapling cell: the
     // planTree cells (the rolled trunk height) through the setBlock
     // choke point — trunk column first (the sapling cell becomes the
@@ -1148,6 +1167,21 @@ private:
     // this set only tracks WHICH cells roll. std::map: position-sorted,
     // so the per-frame sapling ticks iterate deterministically.
     std::map<BlockPos, BlockID> m_saplings;
+    // GEN-9 farmland wetness: the cells holding a block with a
+    // model.moisture_top variant (the farmland, the crop-growth m_crops /
+    // m_saplings tracking pattern). The value is the LAST computed wet
+    // state (water within Chebyshev kWetWaterRadius at the cell's y, the
+    // soilIsWet predicate) — refreshMoistureStates() re-evaluates on a
+    // frame-locked cadence and marks the cell's chunk dirty ONLY when the
+    // wetness flipped (a settled farm re-meshes nothing; the fresh world
+    // has no farmland and the sweep fast-exits on the empty map). The
+    // WETNESS ITSELF is derived at mesh time from the live fluid field
+    // (the mesher's moisture hook) — this map is only the change detector
+    // + the re-mesh trigger (the sweep fixes the worker-mesh staleness:
+    // a farmland chunk meshed before its water neighbor streamed in bakes
+    // dry until the next sweep). std::map: position-sorted, so the sweep
+    // iterates deterministically.
+    std::map<BlockPos, bool> m_moistureBlocks;
     // GEN-2: the RESOLVED tree specs (the sapling's `tree` names ->
     // BlockIDs, the init-resolved m_campfireLitId pattern — the registry
     // load validates the names exist, so this map is the placement's

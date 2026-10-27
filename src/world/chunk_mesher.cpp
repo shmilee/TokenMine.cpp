@@ -4,6 +4,7 @@
 
 #include "block/cube_face_table.hpp"
 #include "core/math/vec3.hpp"
+#include "world/growth.hpp"
 #include "world/lighting.hpp"
 
 namespace mc {
@@ -200,8 +201,26 @@ void ChunkMesher::meshFaceDirection(ChunkMeshData& out, const Chunk& chunk,
                 // transparent at data load). A cutout face and a blend
                 // face sharing tile + light never merge (sameAs).
                 cell.cutout = block.properties.cutout;
-                const AtlasLayout::Tile tile =
-                    m_layout.tiles.at(cubeFaceTexture(block, face.textureSlot));
+                // GEN-9: the moisture top-face variant — the +Y face of a
+                // full cube carrying model.moistureTop is meshed with the
+                // WET texture while the cell's soil is wet (water within
+                // Chebyshev kWetWaterRadius at the same y — the crop
+                // dry_slowdown rule, one predicate two consumers) and with
+                // the dry `textures.top` otherwise. Derived from the live
+                // fluid field at mesh time (no per-instance state): wet and
+                // dry neighbors never merge (the tile differs — the greedy
+                // sameAs key), and the game re-meshes tracked cells when a
+                // fluid change flips their wetness.
+                std::string faceTex =
+                    cubeFaceTexture(block, face.textureSlot);
+                if (face.textureSlot == 0 && !block.model.moistureTop.empty()) {
+                    if (soilIsWet(m_world,
+                                  BlockPos {origin.x + c[0], origin.y + c[1],
+                                            origin.z + c[2]})) {
+                        faceTex = block.model.moistureTop;
+                    }
+                }
+                const AtlasLayout::Tile tile = m_layout.tiles.at(faceTex);
                 cell.tileCol = tile.col;
                 cell.tileRow = tile.row;
                 // Per-face light: sample the cell the face borders

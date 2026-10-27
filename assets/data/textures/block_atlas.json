@@ -353,6 +353,10 @@
   "birch_leaves": [
    13,
    2
+  ],
+  "farmland_wet": [
+   9,
+   4
   ]
  }
 }

@@ -380,6 +380,71 @@ TEST(GrowthEnvTest, WaterBoundaryAtRadius4) {
     EXPECT_LT(at5.stepsOver(reg, 42, 200), 200);
 }
 
+// ---------------------------------------------------------------------------
+// GEN-9: soilIsWet — the soil-cell wetness predicate (the farmland moisture
+// visual's one function; the crop dry_slowdown is the same rule viewed from
+// the crop's cell). World fixture: a bare chunk, water placed by level.
+// ---------------------------------------------------------------------------
+
+TEST(GrowthTest, SoilIsWetWithinRadius4Inclusive) {
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    const BlockPos soil {8, 1, 8};
+    // Dry by default.
+    EXPECT_FALSE(soilIsWet(world, soil));
+    // Chebyshev distance 4 (the corner) still wets (inclusive radius).
+    world.setFluid(12, 1, 12, FluidKind::Water, 8);
+    EXPECT_TRUE(soilIsWet(world, soil));
+    world.setFluid(12, 1, 12, FluidKind::Water, 0); // drained
+    EXPECT_FALSE(soilIsWet(world, soil));
+    // Distance 5 dries.
+    world.setFluid(13, 1, 8, FluidKind::Water, 8);
+    EXPECT_FALSE(soilIsWet(world, soil));
+}
+
+TEST(GrowthTest, SoilIsWetOnlyAtTheSoilY) {
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    const BlockPos soil {8, 1, 8};
+    // Water one level ABOVE the soil (the crop's own level): no wet.
+    world.setFluid(9, 2, 8, FluidKind::Water, 8);
+    EXPECT_FALSE(soilIsWet(world, soil));
+    world.setFluid(9, 2, 8, FluidKind::Water, 0);
+    // Water one level BELOW the soil: no wet.
+    world.setFluid(9, 0, 8, FluidKind::Water, 8);
+    EXPECT_FALSE(soilIsWet(world, soil));
+    world.setFluid(9, 0, 8, FluidKind::Water, 0);
+    // Water at the soil's own y: wet.
+    world.setFluid(9, 1, 8, FluidKind::Water, 8);
+    EXPECT_TRUE(soilIsWet(world, soil));
+}
+
+TEST(GrowthTest, SoilIsWetIgnoresLava) {
+    // Phase 54: lava burns instead of wets (the crop's known-gap burn).
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    const BlockPos soil {8, 1, 8};
+    world.setFluid(10, 1, 8, FluidKind::Lava, 8);
+    EXPECT_FALSE(soilIsWet(world, soil));
+}
+
+TEST(GrowthTest, CropIsWetIsSoilIsWetOneBelow) {
+    // The crop-facing wrapper delegates to the soil predicate one level
+    // down (the soil is the cell below the crop) — the two consumers can
+    // never disagree.
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    const BlockPos crop {8, 2, 8};
+    const BlockPos soil {8, 1, 8};
+    world.setFluid(10, 1, 8, FluidKind::Water, 8); // the soil's level
+    EXPECT_TRUE(cropIsWet(world, crop));
+    EXPECT_TRUE(soilIsWet(world, soil));
+    world.setFluid(10, 1, 8, FluidKind::Water, 0);
+    world.setFluid(10, 2, 8, FluidKind::Water, 8); // the crop's level only
+    EXPECT_FALSE(cropIsWet(world, crop));
+    EXPECT_FALSE(soilIsWet(world, soil));
+}
+
 TEST(GrowthEnvTest, WaterAtOtherYDoesNotCount) {
     const BlockRegistry reg = envRegistry("soil", 0, 2);
     // Water at the CROP's y (soil y + 1), 2 away: not the soil level.

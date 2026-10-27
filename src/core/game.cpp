@@ -96,6 +96,13 @@ constexpr double kProjectileStepPerFrame = 1.0 / 60.0;
 // The fluid simulation ticks every Nth frame (20 ticks/s at 60 FPS); the
 // fixed frame step keeps headless runs byte-reproducible.
 constexpr int kFluidTickEveryNFrames = 3;
+// GEN-9: the farmland-moisture convergence sweep cadence (re-evaluate
+// every tracked moisture cell's wetness from the live fluid field and
+// re-mesh on a flip; 10 frames = 0.167 s — visually immediate for a
+// pour/drain, and the bound on the worker-mesh-staleness the sweep
+// exists to fix: a farmland chunk meshed before its water neighbor
+// streamed in converges within one sweep once the neighborhood exists).
+constexpr int kMoistureRefreshEveryNFrames = 10;
 // Fire v2 (Phase 66): the ember emission per live fire cell runs every
 // Nth frame (0.1 s = the Minecraft tick rhythm); the fixed frame step
 // keeps headless runs byte-reproducible.
@@ -1483,6 +1490,7 @@ Result<void> Game::buildScene() {
     // world scans to nothing — worldgen places no saplings (stateful
     // blocks are rejected at generator init, the ENT-2 invariant).
     rescanSaplings();
+    rescanMoistureBlocks();
     rescanBeacons();
     rescanFlammableChunks();
 
@@ -2884,6 +2892,55 @@ void Game::rescanSaplings() {
     }
 }
 
+void Game::rescanMoistureBlocks() {
+    // GEN-9: the rescanSaplings twin over the model.moisture_top
+    // predicate. The WETNESS is not stored — it is derived at mesh time
+    // from the live fluid field; the map value is SEEDED with the first
+    // evaluation so a just-loaded farm only re-meshes on a real flip
+    // (not on the load itself). Runs at the end of buildScene — a fresh
+    // world scans to nothing (worldgen places no farmland), a loaded save
+    // finds the player's placed ones (restored by the block edits).
+    m_moistureBlocks.clear();
+    for (const ChunkPos& cp : m_world.chunkPositions()) {
+        const Chunk* chunk = m_world.findChunk(cp);
+        if (chunk == nullptr) {
+            continue;
+        }
+        const int baseX = cp.x * kChunkSize;
+        const int baseY = cp.y * kChunkSize;
+        const int baseZ = cp.z * kChunkSize;
+        for (int ly = 0; ly < kChunkSize; ++ly) {
+            for (int lz = 0; lz < kChunkSize; ++lz) {
+                for (int lx = 0; lx < kChunkSize; ++lx) {
+                    const BlockID id = chunk->get(lx, ly, lz);
+                    if (m_blocks.at(id).model.moistureTop.empty()) {
+                        continue;
+                    }
+                    const BlockPos wp {baseX + lx, baseY + ly, baseZ + lz};
+                    m_moistureBlocks[wp] = soilIsWet(m_world, wp);
+                }
+            }
+        }
+    }
+}
+
+void Game::refreshMoistureStates() {
+    // GEN-9: re-evaluate the wetness of every tracked moisture cell after
+    // a fluid tick that changed cells, and mark the cell's chunk dirty
+    // ONLY when the wetness flipped. Position-sorted iteration + the pure
+    // soilIsWet predicate = deterministic (hard rule 8). The re-mesh
+    // re-derives the top face from the now-updated fluid field (the
+    // mesher's moisture hook), so the dirty mark is the whole effect.
+    for (auto& [pos, wet] : m_moistureBlocks) {
+        const bool nowWet = soilIsWet(m_world, pos);
+        if (nowWet == wet) {
+            continue;
+        }
+        wet = nowWet;
+        m_world.markChunkDirty(worldToChunk(pos));
+    }
+}
+
 void Game::placeGrownTree(const BlockPos& saplingPos, int height) {
     // GEN-2: one completed sapling -> a grown tree. The pure geometry
     // (planTree) was already FITS-probed by the growth step, so only
@@ -3327,6 +3384,24 @@ void Game::update(double dt) {
         for (const ColumnPos& col : changedCellColumns(changed)) {
             m_fluidLightPending.insert(col);
         }
+    }
+    // GEN-9: the farmland wet/dry visual — a PERIODIC re-evaluation of
+    // every tracked moisture cell (frame-locked cadence, the m_frameCount
+    // discipline). The wetness is derived at MESH time from the live fluid
+    // field (the mesher's moisture hook), but the mesh runs on a WORKER
+    // over a chunk snapshot: a farmland chunk can be meshed BEFORE the
+    // neighboring water chunk has streamed in (the cross-chunk fluid read
+    // then sees void and bakes DRY — and nothing would re-mesh it). The
+    // sweep is the convergence pass: once the neighborhood exists, the
+    // next sweep (<= kMoistureRefreshEveryNFrames frames) sees the water,
+    // flips the tracked state, and marks the chunk dirty. It also covers
+    // pours/drains (the fluid edit is visible to the next sweep) — the
+    // cost is |tracked| x 81 fluid lookups per sweep (zero while the
+    // world holds no moisture block: the fresh world and the perf scenes
+    // fast-exit on the empty map).
+    if (!m_moistureBlocks.empty() &&
+        m_frameCount % kMoistureRefreshEveryNFrames == 0) {
+        refreshMoistureStates();
     }
     // Fire (Phase 64): the per-frame real-dt burn-out countdown (a fire
     // at zero becomes air — no char, like the Phase 58 lava burn) + the
@@ -4122,6 +4197,27 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
             m_saplings[spos] = id;
         } else {
             m_saplings.erase(spos);
+        }
+    }
+    // GEN-9: the moisture tracking set follows the cell (the m_saplings
+    // twin, the model.moisture_top predicate): a farmland placement/break
+    // registers/drops the cell, seeded with its wetness NOW so the first
+    // mesh (and the first refresh) see the correct state. The WETNESS is
+    // derived at mesh time — this entry is only the change detector for
+    // the fluid-tick re-mesh trigger (refreshMoistureStates).
+    {
+        const BlockPos mpos {x, y, z};
+        if (!m_blocks.at(id).model.moistureTop.empty()) {
+            m_moistureBlocks[mpos] = soilIsWet(m_world, mpos);
+            // Seed-time re-mesh: the cell's chunk may hold a STALE mesh
+            // (baked before this placement, or before the water neighbor
+            // existed — the sweep's flip gate then never fires, because
+            // the tracked state already equals the live one). Forcing one
+            // re-mesh here makes the top face derive from the now-current
+            // fluid field; the sweep covers the later chunk-load case.
+            m_world.markChunkDirty(worldToChunk(mpos));
+        } else {
+            m_moistureBlocks.erase(mpos);
         }
     }
     // Phase 83 (a list in Phase 91): the beacon tracking set follows the

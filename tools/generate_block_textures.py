@@ -95,6 +95,20 @@ def farmland_top(x, y):
     return (r, g, b, 255)
 
 
+def farmland_wet(x, y):
+    # GEN-9: the WET farmland top (the moisture_top variant): the same
+    # tilled soil, dampened — a darker, moister tone. The SAME noise
+    # salts as farmland_top (90/91/92) so a wet patch reads as the very
+    # same field watered, not a different block (the Minecraft wet-
+    # farmland look: ~0.72x the dry tone, furrow band unchanged).
+    r = clamp(78 + noise(x, y, 90, 10))
+    g = clamp(56 + noise(x, y, 91, 10))
+    b = clamp(38 + noise(x, y, 92, 8))
+    if y % 4 == 0:
+        r, g, b = int(r * 0.72), int(g * 0.72), int(b * 0.72)
+    return (r, g, b, 255)
+
+
 def farmland_side(x, y):
     # Dirt sides with the tilled top band along the top edge.
     if y < 3:
@@ -746,6 +760,7 @@ TEXTURES = {
     "cobblestone": cobblestone,
     "dirt": dirt,
     "farmland_top": farmland_top,
+    "farmland_wet": farmland_wet,
     "farmland_side": farmland_side,
     "grass_top": grass_top,
     "grass_side": grass_side,

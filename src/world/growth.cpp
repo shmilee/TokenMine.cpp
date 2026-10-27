@@ -45,21 +45,32 @@ bool treeFits(const World& world, const BlockPos& root,
     return true;
 }
 
+// Reinterpret an (possibly negative) int as 64 bits for hashing (the
+// worldgen's u64 — two's-complement is a bijection).
+std::uint64_t asU64(int v) {
+    return static_cast<std::uint64_t>(static_cast<std::int64_t>(v));
+}
+
+} // namespace
+
 // Water proximity for the dry/wet pace (Phase 50, the Minecraft
 // farmland value): any WATER level within this CHEBYSHEV radius of the
-// soil cell (the cell below the crop), at the soil cell's y, counts as
-// water. A poured bucket's source sits on the same level as the farmland,
-// so the bucket workflow works. LAVA does not wet (Phase 54, Minecraft:
-// lava burns crops instead — the crop burn is a known gap; counting lava
-// would let dry fields beside lava grow at full pace).
-constexpr int kWetWaterRadius = 4;
-
-// True when water is near the crop's soil cell (see kWetWaterRadius).
-bool cropIsWet(const World& world, const BlockPos& cropPos) {
-    const int soilY = cropPos.y - 1;
+// SOIL cell, at the soil cell's y, counts as water. A poured bucket's
+// source sits on the same level as the farmland, so the bucket workflow
+// works. LAVA does not wet (Phase 54, Minecraft: lava burns crops
+// instead — the crop burn is a known gap; counting lava would let dry
+// fields beside lava grow at full pace).
+//
+// GEN-9: this predicate is the SOIL's, not the crop's — the farmland
+// moisture visual (BlockModel::moistureTop) derives the same wetness for
+// the farmland cell itself, so the visual and the growth pace can never
+// disagree (one function, two consumers). Public + pure (a read over the
+// World's fluid field) so the mesher and the game both call it.
+bool soilIsWet(const World& world, const BlockPos& soilPos) {
     for (int dx = -kWetWaterRadius; dx <= kWetWaterRadius; ++dx) {
         for (int dz = -kWetWaterRadius; dz <= kWetWaterRadius; ++dz) {
-            if (world.getFluidOfKind(cropPos.x + dx, soilY, cropPos.z + dz,
+            if (world.getFluidOfKind(soilPos.x + dx, soilPos.y,
+                                     soilPos.z + dz,
                                      FluidKind::Water) > 0) {
                 return true;
             }
@@ -68,13 +79,11 @@ bool cropIsWet(const World& world, const BlockPos& cropPos) {
     return false;
 }
 
-// Reinterpret an (possibly negative) int as 64 bits for hashing (the
-// worldgen's u64 — two's-complement is a bijection).
-std::uint64_t asU64(int v) {
-    return static_cast<std::uint64_t>(static_cast<std::int64_t>(v));
+// True when water is near the crop's soil cell (the cell below the crop).
+bool cropIsWet(const World& world, const BlockPos& cropPos) {
+    return soilIsWet(world,
+                     BlockPos {cropPos.x, cropPos.y - 1, cropPos.z});
 }
-
-} // namespace
 
 std::vector<GrowthStep> cropGrowthSteps(const World& world,
                                         const BlockRegistry& blocks,

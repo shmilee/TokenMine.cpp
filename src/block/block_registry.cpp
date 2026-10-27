@@ -769,6 +769,32 @@ Result<void> BlockRegistry::parseModel(const Json& def, BlockModel& out) {
         out.stateCount = count;
         out.stateDefault = static_cast<int>(sd->asDouble());
     }
+    // GEN-9: the moisture top-face variant (model.moisture_top). FULL-CUBE
+    // ONLY — the other shapes own their geometry (slab / stairs / wall /
+    // fence / glass pane / cross) and a moisture field on them would be
+    // dead data (named and rejected — the cutout shape-gate discipline).
+    // Strict non-empty string; an explicit empty string is a no-op typo
+    // (the ammo discipline). The tile's existence is cross-checked at
+    // init (requiredTextures — the sound_material pattern).
+    if (const Json* mt = m->find("moisture_top")) {
+        if (!mt->isString() || mt->asString().empty()) {
+            return MC_FAIL("model.moisture_top must be a non-empty string");
+        }
+        if (out.shape != BlockModel::Shape::FullCube) {
+            const char* sn =
+                out.shape == BlockModel::Shape::Slab    ? "slab"
+                : out.shape == BlockModel::Shape::Stairs ? "stairs"
+                : out.shape == BlockModel::Shape::Wall   ? "wall"
+                : out.shape == BlockModel::Shape::Fence  ? "fence"
+                : out.shape == BlockModel::Shape::GlassPane
+                    ? "glass_pane"
+                    : "cross";
+            return MC_FAIL(std::string("model.moisture_top is only valid "
+                                       "for shape 'full_cube' (the ") +
+                           sn + " shape owns its own geometry)");
+        }
+        out.moistureTop = mt->asString();
+    }
 
     const Json* t = m->find("textures");
     if (t == nullptr || !t->isObject()) {
@@ -1095,6 +1121,11 @@ std::set<std::string> BlockRegistry::requiredTextures() const {
         }
         if (!b.model.textures.cross.empty()) {
             names.insert(b.model.textures.cross);
+        }
+        // GEN-9: the moisture top variant is a full-cube reference too
+        // (the init cross-check must see it — the sound_material pattern).
+        if (!b.model.moistureTop.empty()) {
+            names.insert(b.model.moistureTop);
         }
     }
     return names;

@@ -37,6 +37,20 @@
 
 namespace mc {
 
+// GEN-9: the water-proximity radius for soil wetness (the Phase 50
+// Minecraft farmland value: any WATER level within this CHEBYSHEV radius
+// of the soil cell, at the soil cell's y, wets it; lava never does —
+// Phase 54). Shared by the crop growth pace (cropIsWet) and the farmland
+// moisture visual (BlockModel::moistureTop, derived at mesh time).
+inline constexpr int kWetWaterRadius = 4;
+
+// True when water wets the soil cell (see kWetWaterRadius).
+bool soilIsWet(const World& world, const BlockPos& soilPos);
+
+// True when water is near the CROP's soil cell (the cell below the crop)
+// — the dry_slowdown gate (Phase 50).
+bool cropIsWet(const World& world, const BlockPos& cropPos);
+
 // One cell advancing one growth stage this frame.
 struct GrowthStep {
     BlockPos pos;

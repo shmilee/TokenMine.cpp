@@ -3,6 +3,47 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.8.0（2026-10-28）
+
+**GEN-9 耕地湿润**（v1.x 任务表 8/33，GEN 行 3/3 收尾，门 123；"耕地
+湿润"原始定义已佚，代理定案 = farmland 湿/干视觉状态 = MC farmland
+wet/dry）——块模型可选 `moisture_top`（FullCube-only 形状门控【其余 6
+形状点名拒 = 死字段纪律】+ 严格非空串 + `requiredTextures` init 交叉
+校验）；纯谓词 `soilIsWet`（Chebyshev 半径 4 同层水 level ≥1，熔岩不
+湿 = P50 生长节奏同款规则——`cropIsWet` 改委托 = **生长节奏与视觉状态
+一函数两消费者，永不打架**）；mesher FullCube 顶面 **mesh 时从活流体
+场派生**（湿 tile/干 tile，湿干邻格永不贪婪并 quad）；Game 侧
+`m_moistureBlocks` 追踪集（setBlock 收口数据驱动 + 读档 rescan）+
+**每 10 帧周期 sweep 收敛**（worker 快照 mesh 可能在水流送前烘 dry，
+且 flip 门对"tracked == live 但 mesh stale"死锁 → seed 点强制重烘 +
+周期 sweep 双保险；无耕地世界 = 空 map fast-exit 结构零成本）。shipped
+= farmland `moisture_top: "farmland_wet"` + atlas 空位 [9,4]（无 UV
+移位免重锚）+ `farmland_wet.png`（同 salt 90/91/92 暗化 0.72×，均值
+71.8/52.0/35.6 vs 干 101.5/72.4/48.6 = "同一片田、湿了"；生成器幂等
+74 既有 PNG 字节零变化）。**零 format（19）/零 config/零新音效**——湿态
+是世界派生量（block + fluid 编辑的函数），存档两侧 A/B 同形 = 强
+oracle。1745/1745（+12：block 解析/内容钉 6 + growth 谓词 4 + mesher
+3）、-Werror 0 警告。门 123：S1 = **第 123 次结构性免疫免重锚**
+（fresh 60f 四方 ×2 387726 B 全字节一致 + savenorm EXACT）+ **S2 受控
+平台场景双视角 PASS**（石平台 13×13 + 湿耕地 + 干耕地 + 4 石封源 L8
+水：俯视 diff 108,542 px 全限耕地顶面带、100% new 更暗、old
+(102,72,49)→new (72,52,36) = 纹理均值精确吻合 / 侧视 888 px 精确隔离 +
+干耕地带零 diff + 场景区存档 EXACT【远端程序化熔岩湖 real-dt churn
+5 格 = 同二进制 ×2 同位分歧，PITS 244/283 非缺陷类】）+ 性能 A/B 同
+seed 900f（**fluidCells win2/3 逐位一致** + PIPE3 visitedChunks/
+fluidCellsSeen/changesApplied 逐位 + 全指标同档 = 成本可忽略，零耕地
+sweep 结构惰性实证）。**偏离**：二元湿/干（MC 是 0-3 四级 moisture
+按水距衰减）/ 掉落物与手持立方保持干纹理（无世界上下文）/ 视觉收敛
+延迟 ≤ 10 帧（0.17 s）/ 无 MC 水道机制。**记档**：大场景远景
+（自然地形 8.5 块侧视 demo 列）湿耕地顶面新旧二进制同现不渲染 = 该
+场景配置 GL 列 mesh 集成时机 quirk（CPU mesh 证湿 quad 已发射 + 受控
+场景全正常 + old 侧同现 = 非 GEN-9 回归）→ 门改受控场景，KNOWN_ISSUES
+候选。PITS 291-294（L8 源必须 4 石封【本项目源非 MC 静态源，240f
+平台扩散 71 格实证】/ 大场景远景 GL quirk + 渲染不可见标准取证链
+【红纹理判别帧 + CPU mesh 临时日志 + 世界视线盒 dump】/ zsh 无引号
+`${var:-word}` 不分词 = gate 脚本 bash 化 / 场景 python 构建器静默未
+写入 = 落盘后重读断言关键编辑）。只 tag（release 组 1.6-1.10 未满）。
+
 ## v1.7.0（2026-10-27）
 
 **GEN-8 地形互感**（v1.x 任务表 7/33，门 122；"地形互感"原始定义已佚，
