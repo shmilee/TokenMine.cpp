@@ -338,6 +338,86 @@ TEST(WorldgenConfigTest, RejectsBedrockLayersWrongType) {
 
 // The shipped worldgen.json uses the Minecraft classic 3-layer floor
 // (y0 always, y1 50%, y2 always).
+// ---------------------------------------------------------------------------
+// GEN-8: terrain.passes (the mountain passes, the terrain features
+// interacting with each other).
+// ---------------------------------------------------------------------------
+
+TEST(WorldgenConfigTest, PassesAbsentIsDisabledLegacy) {
+    auto r = WorldgenParams::parse(
+        parseJson(R"({"terrain":{"base_height":40}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FALSE(r->passes.enabled);
+    EXPECT_FLOAT_EQ(r->passes.noiseScale, 0.008f);
+    EXPECT_FLOAT_EQ(r->passes.threshold, 0.55f);
+    EXPECT_EQ(r->passes.amplitude, 6);
+}
+
+TEST(WorldgenConfigTest, ParsesPasses) {
+    auto r = WorldgenParams::parse(parseJson(
+        R"({"terrain":{"passes":{"enabled":true,"noise_scale":0.01,)"
+        R"("threshold":0.5,"amplitude":8}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(r->passes.enabled);
+    EXPECT_FLOAT_EQ(r->passes.noiseScale, 0.01f);
+    EXPECT_FLOAT_EQ(r->passes.threshold, 0.5f);
+    EXPECT_EQ(r->passes.amplitude, 8);
+}
+
+TEST(WorldgenConfigTest, RejectsPassesNoiseScaleOutOfRange) {
+    for (const char* v : {"0", "0.06"}) {
+        auto r = WorldgenParams::parse(
+            parseJson(std::string("{\"terrain\":{\"passes\":{\"noise_scale\":") +
+                       v + "}}}"));
+        ASSERT_FALSE(r.ok()) << v;
+        EXPECT_NE(r.error().message.find("passes.noise_scale"),
+                  std::string::npos)
+            << v;
+    }
+}
+
+TEST(WorldgenConfigTest, RejectsPassesThresholdOutOfRange) {
+    for (const char* v : {"0", "1", "1.2"}) {
+        auto r = WorldgenParams::parse(
+            parseJson(std::string("{\"terrain\":{\"passes\":{\"threshold\":") +
+                       v + "}}}"));
+        ASSERT_FALSE(r.ok()) << v;
+        EXPECT_NE(r.error().message.find("passes.threshold"),
+                  std::string::npos)
+            << v;
+    }
+}
+
+TEST(WorldgenConfigTest, RejectsPassesAmplitudeOutOfRange) {
+    auto r = WorldgenParams::parse(
+        parseJson(R"({"terrain":{"passes":{"amplitude":65}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("passes.amplitude"), std::string::npos);
+}
+
+TEST(WorldgenConfigTest, RejectsPassesEnabledWrongType) {
+    auto r = WorldgenParams::parse(
+        parseJson(R"({"terrain":{"passes":{"enabled":"yes"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("passes.enabled"), std::string::npos);
+    auto r2 = WorldgenParams::parse(parseJson(
+        R"({"terrain":{"passes":[1,2]}})"));
+    ASSERT_FALSE(r2.ok());
+    EXPECT_NE(r2.error().message.find("passes"), std::string::npos);
+}
+
+TEST(WorldgenConfigTest, Gen8ShippedPasses) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    auto r = WorldgenParams::load(assets);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(r->passes.enabled);
+    EXPECT_FLOAT_EQ(r->passes.noiseScale, 0.008f);
+    EXPECT_FLOAT_EQ(r->passes.threshold, 0.55f);
+    EXPECT_EQ(r->passes.amplitude, 6);
+}
+
 TEST(WorldgenConfigTest, Gen7ShippedBedrockLayers) {
     AssetManager assets;
     ASSERT_TRUE(assets.setRoot("assets").ok())

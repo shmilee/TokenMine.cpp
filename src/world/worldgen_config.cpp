@@ -70,7 +70,7 @@ Result<WorldgenParams> WorldgenParams::parse(const Json& def) {
         warnUnknown(*t, "terrain",
                     {"base_height", "height_amplitude", "sea_level",
                      "height_noise_scale", "height_octaves", "bottom_block",
-                     "deep_block", "bedrock_layers"});
+                     "deep_block", "bedrock_layers", "passes"});
         auto r = readField(*t, "terrain", "base_height", "number",
                            [&](const Json& v) { p.baseHeight = v.asInt(); });
         MC_TRY(r);
@@ -103,6 +103,50 @@ Result<WorldgenParams> WorldgenParams::parse(const Json& def) {
         if (p.bedrockLayers < 1 || p.bedrockLayers > 8) {
             return MC_FAIL("'terrain.bedrock_layers' must be in [1, 8] "
                            "(GEN-7 bedrock floor)");
+        }
+        // GEN-8: terrain.passes (mountain passes). ABSENT = disabled
+        // (the legacy height field bit-for-bit).
+        if (const Json* ps = t->find("passes")) {
+            if (!ps->isObject()) {
+                return MC_FAIL("'terrain.passes' must be an object");
+            }
+            auto rps = readField(*ps, "terrain.passes", "enabled", "bool",
+                                 [&](const Json& v) {
+                                     p.passes.enabled = v.asBool();
+                                 });
+            MC_TRY(rps);
+            rps = readField(*ps, "terrain.passes", "noise_scale", "number",
+                            [&](const Json& v) {
+                                p.passes.noiseScale = v.asDouble();
+                            });
+            MC_TRY(rps);
+            rps = readField(*ps, "terrain.passes", "threshold", "number",
+                            [&](const Json& v) {
+                                p.passes.threshold = v.asDouble();
+                            });
+            MC_TRY(rps);
+            rps = readField(*ps, "terrain.passes", "amplitude", "number",
+                            [&](const Json& v) {
+                                p.passes.amplitude = v.asInt();
+                            });
+            MC_TRY(rps);
+            warnUnknown(*ps, "terrain.passes",
+                        {"enabled", "noise_scale", "threshold",
+                         "amplitude"});
+            if (p.passes.noiseScale <= 0.0f ||
+                p.passes.noiseScale > 0.05f) {
+                return MC_FAIL("'terrain.passes.noise_scale' must be in "
+                               "(0, 0.05]");
+            }
+            if (p.passes.threshold <= 0.0f ||
+                p.passes.threshold >= 1.0f) {
+                return MC_FAIL("'terrain.passes.threshold' must be in "
+                               "(0, 1)");
+            }
+            if (p.passes.amplitude < 0 || p.passes.amplitude > 64) {
+                return MC_FAIL(
+                    "'terrain.passes.amplitude' must be in [0, 64]");
+            }
         }
     }
 

@@ -1087,6 +1087,140 @@ TEST(WorldGeneratorTest, BedrockFloorDefaultIsLegacy) {
     }
 }
 
+// -- GEN-8: mountain passes (the terrain features interacting) ---------
+
+namespace {
+
+// A passes-enabled/disabled generator over the fixture height field
+// (caves + ores off, the pass parameters as given).
+WorldGenerator makePassGen(std::int64_t seed, bool enabled, float noiseScale,
+                           float threshold, int amplitude) {
+    GenSetup s;
+    s.params.cavesEnabled = false;
+    s.params.ores = {};
+    s.params.passes.enabled = enabled;
+    s.params.passes.noiseScale = noiseScale;
+    s.params.passes.threshold = threshold;
+    s.params.passes.amplitude = amplitude;
+    auto r = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+    EXPECT_TRUE(r.ok()) << (r.ok() ? "" : r.error().message);
+    return *r;
+}
+
+} // namespace
+
+// Disabled passes: the bonus is 0 everywhere and the base field is the
+// legacy height field (bit-for-bit); enabled passes only ever RAISE
+// (the bonus >= 0, heightAt = base + bonus under the top clamp).
+TEST(WorldGeneratorTest, PassesDisabledIsLegacyAndRaiseOnly) {
+    const std::int64_t seed = 123456789;
+    // The shipped pass params (0.008 / 0.55 / 6).
+    const WorldGenerator on = makePassGen(seed, true, 0.008f, 0.55f, 6);
+    const WorldGenerator off = makePassGen(seed, false, 0.008f, 0.55f, 6);
+    for (int x = 0; x < 64; ++x) {
+        for (int z = 0; z < 64; ++z) {
+            EXPECT_EQ(off.passesBonus(x, z), 0);
+            EXPECT_EQ(on.baseHeightAt(x, z), off.baseHeightAt(x, z));
+            EXPECT_GE(on.surfaceHeight(x, z), off.surfaceHeight(x, z));
+        }
+    }
+}
+
+// Where the ridge mask exceeds the threshold the column is raised, the
+// bonus is bounded by the amplitude, and the height is exactly
+// base + bonus (no top-clamp interference at fixture heights). A low
+// threshold (0.45) guarantees raised columns in the 64x64 fixture.
+TEST(WorldGeneratorTest, PassesRaiseColumnsWhereMaskExceedsThreshold) {
+    const std::int64_t seed = 123456789;
+    const WorldGenerator on = makePassGen(seed, true, 0.008f, 0.45f, 8);
+    int raised = 0, exact = 0;
+    // 128x128 spans one full ridge-mask period at the 0.008 scale, so
+    // the window is guaranteed to cross the threshold.
+    for (int x = 0; x < 128; ++x) {
+        for (int z = 0; z < 128; ++z) {
+            const int bonus = on.passesBonus(x, z);
+            EXPECT_GE(bonus, 0);
+            EXPECT_LE(bonus, 8);  // bounded by the amplitude
+            if (bonus > 0) {
+                ++raised;
+                if (on.surfaceHeight(x, z) == on.baseHeightAt(x, z) + bonus) {
+                    ++exact;
+                }
+            }
+        }
+    }
+    EXPECT_GT(raised, 0) << "no ridge in the fixture — the pass is dead";
+    EXPECT_EQ(exact, raised) << "heightAt != base + bonus somewhere";
+}
+
+// The bonus is deterministic (same seed + params = same field, across
+// generator instances) and seed-sensitive (a different seed changes it).
+TEST(WorldGeneratorTest, PassesDeterministicAndSeedSensitive) {
+    // A mid threshold (0.45) keeps both seed fields non-trivial.
+    const WorldGenerator a = makePassGen(9, true, 0.008f, 0.45f, 4);
+    const WorldGenerator b = makePassGen(9, true, 0.008f, 0.45f, 4);
+    const WorldGenerator c = makePassGen(10, true, 0.008f, 0.45f, 4);
+    int same = 0, diff = 0;
+    for (int x = 0; x < 64; ++x) {
+        for (int z = 0; z < 64; ++z) {
+            if (a.passesBonus(x, z) == b.passesBonus(x, z)) {
+                ++same;
+            }
+            if (a.passesBonus(x, z) != c.passesBonus(x, z)) {
+                ++diff;
+            }
+        }
+    }
+    EXPECT_EQ(same, 64 * 64);
+    EXPECT_GT(diff, 100) << "the pass field barely tracks the seed";
+}
+
+// The SHIPPED worldgen.json (passes on: noise_scale 0.008 / threshold
+// 0.72 / amplitude 4) pins a few heightAt values at the shipped seed —
+// the content contract (re-pin on any noise/param change, the
+// GEN-3/GEN-4 precedent).
+TEST(WorldGeneratorTest, Gen8ShippedPassesPinned) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    auto pr = WorldgenParams::load(assets);
+    ASSERT_TRUE(pr.ok()) << pr.error().message;
+    // The height field (baseHeightAt / passesBonus / surfaceHeight) is
+    // independent of the ore veins, so strip them: the fixture's block
+    // registry does not carry every shipped ore (gravel). The terrain +
+    // passes config that drives the height stays exactly as shipped.
+    WorldgenParams p = *pr;
+    p.ores = {};
+    GenSetup s;
+    s.params = p;
+    auto r = WorldGenerator::create(123456789, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const WorldGenerator& gen = *r;
+    // heightAt = min(base + bonus, kWorldHeight - 16) at spread points
+    // (the top-clamp identity, incl. negative coordinates).
+    for (const std::pair<int, int> c :
+         {std::pair<int, int>{0, 0}, {10, 10}, {33, 5}, {80, 120}, {-40, 27}}) {
+        const int x = c.first, z = c.second;
+        const int base = gen.baseHeightAt(x, z);
+        const int bonus = gen.passesBonus(x, z);
+        EXPECT_EQ(gen.surfaceHeight(x, z),
+                  std::min(base + bonus, kWorldHeight - 16));
+    }
+    // The exact pinned values (the shipped seed 123456789 + shipped
+    // passes 0.008/0.55/6): re-pin on any height-field change.
+    EXPECT_EQ(gen.baseHeightAt(0, 0), 53);
+    EXPECT_EQ(gen.surfaceHeight(0, 0), 53);
+    EXPECT_EQ(gen.baseHeightAt(10, 10), 46);
+    EXPECT_EQ(gen.surfaceHeight(10, 10), 46);
+    EXPECT_EQ(gen.baseHeightAt(33, 5), 31);
+    EXPECT_EQ(gen.surfaceHeight(33, 5), 31);
+    // (62, 36) sits on a ridge-mask bump (mask 0.6275 > 0.55) and carries
+    // the demo region's only non-zero pass bonus (+1): pins the raise
+    // itself, not just the no-op points above.
+    EXPECT_EQ(gen.passesBonus(62, 36), 1);
+    EXPECT_EQ(gen.surfaceHeight(62, 36), gen.baseHeightAt(62, 36) + 1);
+}
+
 // The roll: deterministic per cell (same seed + cell = same verdict,
 // repeated calls and repeated generators), ~50% over a wide grid, and
 // independent across y (the wy hash input decorrelates the layers).
@@ -2696,10 +2830,13 @@ TEST(WorldGeneratorTest, Gen3ShippedOreVeinCellCountsPinned) {
     // become bedrock are no longer deep-stone placement targets, so the
     // vein counts shift down slightly — the shape switch + probability
     // re-tune contract is unchanged (the GEN-4 cave re-pin precedent).
-    EXPECT_EQ(coal, 3255); // pre-GEN-7 3448 (ratio 1.075 vs old baseline)
-    EXPECT_EQ(iron, 1616); // pre-GEN-7 1684 (ratio 0.883)
+    // GEN-8 re-pin (mountain passes raise a few columns): the carve-
+    // eligible deep band grows where the height rises, so the vein
+    // counts shift back up slightly — the contract is unchanged.
+    EXPECT_EQ(coal, 3337); // pre-GEN-8 3255 (pre-GEN-7 3448)
+    EXPECT_EQ(iron, 1653); // pre-GEN-8 1616 (pre-GEN-7 1684)
     EXPECT_EQ(diamond, 96); // pre-GEN-7 103 (ratio 0.725 — recorded)
-    EXPECT_EQ(gravel, 1003); // pre-GEN-7 1087 (ratio 1.079)
+    EXPECT_EQ(gravel, 1020); // pre-GEN-8 1003 (pre-GEN-7 1087)
     // The soft density band vs the old random-walk baseline: drift
     // guard (a shape/parameter regression moves the density out of band
     // long before the exact pin's value changes world meaningfully).

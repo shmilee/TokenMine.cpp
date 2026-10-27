@@ -177,16 +177,19 @@ TEST(CaveProbeTest, Gen4ShippedFinalBeatsLegacy) {
 
     // The pinned final numbers (96x96, seed 123456789 — from the
     // calibration table; the exact-pin guards against parameter drift
-    // long before it moves the world meaningfully).
-    EXPECT_EQ(finalA->bandCells, 348967);
-    EXPECT_EQ(finalA->carvedCells, 12079);
-    EXPECT_DOUBLE_EQ(finalA->carveRate, 12079.0 / 348967.0);
+    // long before it moves the world meaningfully). GEN-8 re-pin: the
+    // mountain passes raise a few columns, so the per-column carve band
+    // [caveMinY, height+guard) grows and the carve set shifts slightly —
+    // every DIRECTION pin below still holds exactly.
+    EXPECT_EQ(finalA->bandCells, 353587);
+    EXPECT_EQ(finalA->carvedCells, 12216);
+    EXPECT_DOUBLE_EQ(finalA->carveRate, 12216.0 / 353587.0);
     EXPECT_EQ(finalA->componentCount, 18);
-    EXPECT_DOUBLE_EQ(finalA->volumeP50, 392.0);
-    EXPECT_DOUBLE_EQ(finalA->volumeP90, 2361.0);
-    EXPECT_EQ(finalA->volumeMax, 2735);
+    EXPECT_DOUBLE_EQ(finalA->volumeP50, 419.0);
+    EXPECT_DOUBLE_EQ(finalA->volumeP90, 2385.0);
+    EXPECT_EQ(finalA->volumeMax, 2762);
     EXPECT_EQ(finalA->smallCells, 6);
-    EXPECT_EQ(finalA->surfaceOpenings, 380);
+    EXPECT_EQ(finalA->surfaceOpenings, 408);
 
     // The calibration conclusion (final vs legacy, same seed + sample):
     EXPECT_LT(finalA->smallCellFraction, legacy->smallCellFraction);
@@ -197,9 +200,11 @@ TEST(CaveProbeTest, Gen4ShippedFinalBeatsLegacy) {
     // swings the rate by +/-1pp, so it is pinned on the multi-seed
     // aggregate in Gen4DirectionHoldsAcrossSeeds, not per seed.)
     // Legacy reference numbers (the pre-GEN-4 behaviour, pinned so the
-    // comparison above cannot silently drift).
-    EXPECT_EQ(legacy->carvedCells, 18755);
-    EXPECT_EQ(legacy->componentCount, 27);
+    // comparison above cannot silently drift). GEN-8 re-pin: the raised
+    // columns grow the band the legacy tuning carves, shifting its
+    // component count 27 → 26 (the direction pins above unchanged).
+    EXPECT_EQ(legacy->carvedCells, 18914);
+    EXPECT_EQ(legacy->componentCount, 26);
     EXPECT_EQ(legacy->smallCells, 25);
     EXPECT_DOUBLE_EQ(legacy->volumeP50, 42.0);
 }
@@ -213,15 +218,18 @@ TEST(CaveProbeTest, Gen4DirectionHoldsAcrossSeeds) {
     ASSERT_TRUE(w.load()) << "run the tests from the repository root";
     const float cs = w.params().caveNoiseScale;
     const float t = w.params().caveTubeThreshold;
+    // GEN-8 re-pin: the mountain passes raise a few columns (the band
+    // grows, the carve sets shift) — the per-seed DIRECTION pins below
+    // all still hold exactly.
     const struct {
         std::int64_t seed;
         int finalCarved, finalComps, finalSmall;
         double finalP50;
         int legacyCarved, legacyComps, legacySmall;
     } want[] = {
-        {123456789, 12079, 18, 6, 392.0, 18755, 27, 25},
-        {9, 19379, 6, 0, 1554.0, 21946, 35, 42},
-        {42, 18227, 7, 3, 412.0, 20538, 21, 23},
+        {123456789, 12216, 18, 6, 419.0, 18914, 26, 25},
+        {9, 19408, 6, 0, 1554.0, 22022, 35, 38},
+        {42, 18531, 7, 3, 412.0, 20734, 19, 25},
     };
     long finalCarved = 0, finalBand = 0;
     long legacyCarved = 0;
@@ -249,11 +257,14 @@ TEST(CaveProbeTest, Gen4DirectionHoldsAcrossSeeds) {
         legacyCarved += l.carvedCells;
     }
     // The pinned 3-seed aggregates (the 96x96 calibration table):
-    // final = 49685 carved in a 1034334-cell band (4.80% — in band),
-    // legacy = 61239 (5.92%).
-    EXPECT_EQ(finalBand, 1034334);
-    EXPECT_EQ(finalCarved, 49685);
-    EXPECT_EQ(legacyCarved, 61239);
+    // final = 50155 carved in a 1045910-cell band (4.80% — in band),
+    // legacy = 61670 (5.90%). GEN-8 re-pin: the mountain passes RAISE a
+    // few columns (the band is per-column [caveMinY, height+guard)) so
+    // the band grows ~11.5k cells and both carve sets shift up slightly
+    // (the direction pins above all still hold exactly).
+    EXPECT_EQ(finalBand, 1045910);
+    EXPECT_EQ(finalCarved, 50155);
+    EXPECT_EQ(legacyCarved, 61670);
     const double finalRate = static_cast<double>(finalCarved) / finalBand;
     const double legacyRate = static_cast<double>(legacyCarved) / finalBand;
     EXPECT_GE(finalRate, 0.04);
@@ -288,14 +299,17 @@ TEST(CaveProbeTest, Gen4DesignSample32Aggregate) {
         legacySmall += l->smallCells;
         legacyComps += l->componentCount;
     }
-    // Pinned aggregates (the 32x32 calibration table).
-    EXPECT_EQ(band, 103676);
-    EXPECT_EQ(finalCarved, 4248);
+    // Pinned aggregates (the 32x32 calibration table). GEN-8 re-pin:
+    // the raised columns grow the band (~+1.5k cells) and shift both
+    // carve sets up slightly; the final density 4255/105219 = 4.04%
+    // stays in the 4-6% design band (at its lower edge).
+    EXPECT_EQ(band, 105219);
+    EXPECT_EQ(finalCarved, 4255);
     EXPECT_EQ(finalSmall, 2);
     EXPECT_EQ(finalComps, 8);
-    EXPECT_EQ(legacyCarved, 5693);
-    EXPECT_EQ(legacySmall, 16);
-    EXPECT_EQ(legacyComps, 23);
+    EXPECT_EQ(legacyCarved, 5746);
+    EXPECT_EQ(legacySmall, 10);
+    EXPECT_EQ(legacyComps, 22);
     const double finalRate = static_cast<double>(finalCarved) / band;
     EXPECT_GE(finalRate, 0.04);
     EXPECT_LE(finalRate, 0.06);

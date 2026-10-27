@@ -44,6 +44,34 @@ struct WorldgenParams {
     // the legacy single y=0 layer (bit-for-bit).
     int bedrockLayers = 1;
 
+    // GEN-8: mountain passes (the terrain features interacting with each
+    // other — the Minecraft "passes" rule). A COARSE ridge mask
+    // (fbm2 at `noiseScale`, its own salt) marks the mountain ranges;
+    // where the mask exceeds `threshold` the base height field is raised
+    // by up to `amplitude` (linear in the mask's excess), so adjacent
+    // peaks merge into ranges with saddles ("passes") between them where
+    // the mask dips. The bonus is a PURE function of the noise fields
+    // (no chunk data) — cross-chunk consistent by construction, and it
+    // only ever RAISES (passes never dig). Disabled (default) = the
+    // legacy height field bit-for-bit. Section "terrain.passes".
+    //
+    // (The original local-peak design — strict 3x3 maxima of the base
+    // field — was dropped in 10-27 gate 122 prep: at the shipped noise
+    // scale 0.02 the rounded dome tops are 5-10-wide PLATEAUs with no
+    // apex (the 123456789 probe had zero peaks in 64x64); the mask is
+    // the robust MC-faithful rule.)
+    struct Passes {
+        bool enabled = false;
+        float noiseScale = 0.008f;  // (0, 0.05]: the ridge mask frequency
+        // (0, 1): mask level where the bonus starts. The 3-octave fbm2
+        // mask spans ~0.07..0.88, so the threshold is a population
+        // selector: shipped 0.55 raises ~27% of the world's columns
+        // (up to `amplitude` at the mask peaks) into broad ranges.
+        float threshold = 0.55f;
+        int amplitude = 6;          // [0, 64]: the bonus at mask = 1.0
+    };
+    Passes passes;
+
     // Biome selection (section "biomes").
     float biomeNoiseScale = 0.02f;
 

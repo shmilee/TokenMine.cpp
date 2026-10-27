@@ -238,5 +238,6 @@
 - **LGT-4（v1.x 任务表：光束入光）** — `archive/phase-lgt4.md`
 - **LGT-5（v1.x 任务表：半块透光）** — `archive/phase-lgt5.md`
 - **GEN-7（v1.x 任务表：基岩多层）** — `archive/phase-gen7.md`
+- **GEN-8（v1.x 任务表：地形互感/山峰互感）** — `archive/phase-gen8.md`
 
 P0–P2、P4、P30 无细节存档（P30 为纯文档阶段；提交列表见 `SESSION_CONTEXT.md`）。

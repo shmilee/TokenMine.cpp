@@ -3,6 +3,33 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.7.0（2026-10-27）
+
+**GEN-8 地形互感**（v1.x 任务表 7/33，门 122；"地形互感"原始定义已佚，
+代理定案 = 山峰互感 mountain passes）——worldgen `terrain.passes`
+新段（enabled/noise_scale (0,0.05]/threshold (0,1)/amplitude [0,64]
+逐条点名，缺省段 = disabled 位级 legacy）；**coarse ridge mask**：
+独立低频 fbm2（0.008 尺度 = 特征周期 ~125 块、3 octaves、kSaltPasses
+专用 salt）> threshold 时 `bonus = floor(amplitude×(mask−threshold)/(1−threshold))`
+只升不降，`heightAt = min(base+bonus, kWorldHeight−16)`，纯函数零
+chunk 数据 = 跨 chunk 一致构造性成立；shipped {0.008, 0.55, 6} 探针
+标定单轮定案（mask 实测 [0.07,0.88]：0.72 首选全世零 bonus 死参数，
+0.55 = 全世 ~10% 列 bonus≥2 / max 4 / demo 区 242 列 +1）；**首版
+局部峰设计废弃记档**（lround 平顶杀严格局部最大 = PITS 290）。1733/1733
+（+11：config 7 + 生成 4）、-Werror 0 警告；4 契约演进重钉（GEN-3 矿
+计数 3 值 + GEN-4 洞穴探针 3 测，方向 pin 逐条全保持）。门 122：S1 =
+**第 122 次结构性免疫免重锚**（fresh 60f 三方 ×2 六跑 387726 B 全字节
+一致：new≡base18≡old≡off；demo 区 242 bonus 列全在 z≥0 = 基线视锥
+后方探针定量论证）+ **S2 山脊盆地排水判别 PASS**（玩家 (-304.5,35,560.5)
+西望全世最强脊簇：off≡old 字节一致 = 代码级免疫 + ×2 RAW/侧 + diff
+525,506 px 顶天带零 + old 侧 diff 区 30.5% 水域 → new 侧 0% 水域
+100% 地形 = 抬升排水定案 + player 态 EXACT）+ 性能 A/B 同 seed 900f
+（冻结起跑态流体格被抬升吞没 → 剥 fluids 重生 seed；render/swap/stream
+同档或更优 + 每流体格成本 14.2→13.9µs + PIPE3 同档 = 代码成本可
+忽略）；坑 = Firefox 同名窗平铺分半 + 黑窗双因（尺寸门 (1362,744)
+定案）+ raw string 缺 `)"` 吞并下一个 TEST 宏（--gtest_list_tests
+发现）。只 tag（release 组 1.6-1.10 未满）。
+
 ## v1.6.0（2026-10-27）
 
 **GEN-7 基岩多层**（v1.x 任务表 6/33，门 121；消费 KNOWN_ISSUES Phase 4

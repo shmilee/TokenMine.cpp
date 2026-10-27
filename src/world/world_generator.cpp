@@ -181,7 +181,8 @@ WorldGenerator::resolvedBiomeAt(int x, int z) const {
     return m_biomes[biomeIndexAt(x, z)];
 }
 
-int WorldGenerator::heightAt(int x, int z) const {
+int WorldGenerator::baseHeightAt(int x, int z) const {
+    // The legacy height field, bit-for-bit the pre-GEN-8 heightAt body.
     const float n = fbm2(static_cast<float>(x) * m_params.heightNoiseScale,
                          static_cast<float>(z) * m_params.heightNoiseScale,
                          m_seed ^ kSaltHeight, m_params.heightOctaves);
@@ -195,6 +196,40 @@ int WorldGenerator::heightAt(int x, int z) const {
     if (height < kMinHeight) {
         return kMinHeight;
     }
+    if (height > kMaxHeight) {
+        return kMaxHeight;
+    }
+    return height;
+}
+
+int WorldGenerator::passesBonus(int x, int z) const {
+    const WorldgenParams::Passes& ps = m_params.passes;
+    if (!ps.enabled || ps.amplitude <= 0) {
+        return 0;
+    }
+    // The ridge mask: a COARSE fbm2 (its own salt — the pass field never
+    // tracks the height/biome/cave noise) at 3 octaves. Where it exceeds
+    // the threshold, the base field is raised linearly with the excess:
+    // adjacent peaks share the ridge (they merge into a range), and the
+    // saddles between them (the mask dips) stay low = the "passes".
+    const float mask = fbm2(static_cast<float>(x) * ps.noiseScale,
+                            static_cast<float>(z) * ps.noiseScale,
+                            m_seed ^ kSaltPasses, 3);
+    if (mask <= ps.threshold) {
+        return 0;
+    }
+    const float t = static_cast<float>(ps.threshold);
+    const float bonus =
+        static_cast<float>(ps.amplitude) * (mask - t) / (1.0f - t);
+    return static_cast<int>(bonus);  // floor: 0..amplitude
+}
+
+int WorldGenerator::heightAt(int x, int z) const {
+    // GEN-8: base field + the mountain-pass bonus, re-clamped at the top
+    // only (the bonus can only RAISE — passes never dig, and the base is
+    // already clamped at kMinHeight 8).
+    const int kMaxHeight = kWorldHeight - 16;
+    const int height = baseHeightAt(x, z) + passesBonus(x, z);
     if (height > kMaxHeight) {
         return kMaxHeight;
     }

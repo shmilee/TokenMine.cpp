@@ -16,7 +16,7 @@
 | STRM 流送与内存 | ~~STRM-2 流体列保留~~ ✅ v1.1.0 | | | | | |
 | PIPE 帧管线与并发 | ~~PIPE-3 流体 per-cell~~ ✅ v1.2.0 | | | | | |
 | LGT 光照 | ~~LGT-3 夜光重传播~~ ✅ v1.3.0 | ~~LGT-4 光束入光~~ ✅ v1.4.0 | ~~LGT-5 半块透光~~ ✅ v1.5.0 | | | |
-| GEN 世界与生成 | ~~GEN-7 基岩多层~~ ✅ v1.6.0 | GEN-8 地形互感 | GEN-9 耕地湿润 | | | |
+| GEN 世界与生成 | ~~GEN-7 基岩多层~~ ✅ v1.6.0 | ~~GEN-8 地形互感~~ ✅ v1.7.0 | GEN-9 耕地湿润 | | | |
 | FLUID 流体 | FLUID-4 倒向水面 | FLUID-5 水熔岩反应 | FLUID-6 流体种类扩展 | | | |
 | ENT 实体/Mob/移动 | ENT-5 坠落伤害 | ENT-6 AI 补强 | ENT-7 移动惯性 | ENT-8 和平/保护环 | ENT-9 掉落可视化 | |
 | SURV 生存/战斗/效果 | SURV-6 效果档位 | SURV-7 死亡统计 | SURV-8 工具 10× | SURV-9 饱和细化 | SURV-10 挤奶冷却 | |
@@ -106,6 +106,19 @@
   构建与运行 + 范围与限制 + 许可），PITS 范围 267-288 修正为 271-288
   （267-270 属 v1.0 组时代门 114/115）③ Latest 收尾回 v1.5.0 组 release
   （重建时序）。同步 README/CHANGELOG/BACKLOG/AGENTS 旧引用。
+- 2026-10-27：**GEN-8 地形互感完成**（v1.x 第 7/33 项，v1.7.0，门
+  122；代理定案 = 山峰互感 mountain passes，原始定义已佚）：worldgen
+  `terrain.passes`（enabled/noise_scale/threshold/amplitude 逐条点名，
+  缺省 = disabled 位级 legacy）；coarse ridge mask 纯函数
+  （独立低频 fbm2 0.008/3 oct/kSaltPasses，>threshold 时 bonus 0..amplitude
+  只升不降，heightAt = min(base+bonus, cap)）；shipped {0.008,0.55,6}
+  探针单轮定案；首版局部峰设计废弃（lround 平顶 = PITS 290）；1733/1733
+  （+11）、-Werror 0、4 契约演进重钉（矿计数 3 + 洞穴探针 3，方向 pin
+  全保持）；门 122：S1 第 122 次结构性免疫免重锚（三方 ×2 六跑字节一致
+  + demo 242 bonus 列全在视锥后方探针论证）+ S2 山脊盆地排水判别 PASS
+  （off≡old 字节一致 + diff 525,506 px old 30.5% 水域→new 0% 100%
+  地形 + player EXACT）+ 性能 A/B 同 seed 900f 代码成本可忽略；坑 =
+  Firefox 同名窗平铺分半 + raw string 吞 TEST 宏。只 tag。
 - 2026-10-27：**GEN-7 基岩多层完成**（v1.x 第 6/33 项，v1.6.0，门
   121）：worldgen `terrain.bedrock_layers`（int [1,8]，缺省 1 = 旧行为
   位级复现）；shipped 3 = MC 经典基岩底（y0/y2 恒床岩 + y1 每格确定性

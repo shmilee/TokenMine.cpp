@@ -67,6 +67,8 @@ inline constexpr std::int64_t kSaltCave2 = 0x1A2B3C4D5E6F7A08LL;
 // GEN-7: the odd bedrock-floor layer rolls (independent of the other
 // feature rolls).
 inline constexpr std::int64_t kSaltBedrock = 0x1A2B3C4D5E6F7A09LL;
+// GEN-8: the mountain-pass ridge mask (independent of the other fields).
+inline constexpr std::int64_t kSaltPasses = 0x1A2B3C4D5E6F7A0ALL;
 
 // Per-feature mixing constant (the lattice walk's golden step; the per-
 // ore salt advance). Public so the unit tests can pin the generated ore
@@ -119,9 +121,25 @@ public:
     // the exact predicate (the CaveMatchesPurePredicate pattern).
     bool bedrockLayerRoll(int wx, int wy, int wz) const;
 
+    // GEN-8: the LEGACY base height field (the fbm2 noise + biome scale +
+    // [kMinHeight, kWorldHeight-16] clamp, bit-for-bit the pre-GEN-8
+    // heightAt). Public so the unit tests can pin the passes bonus to the
+    // exact base field.
+    int baseHeightAt(int x, int z) const;
+
+    // GEN-8: the mountain-pass bonus of the column at (x, z) — 0 when
+    // passes are disabled or the ridge mask (fbm2 at `noiseScale`, the
+    // kSaltPasses-dedicated salt) is at or below `threshold`; otherwise
+    // floor(amplitude × (mask − threshold) / (1 − threshold)) — linear
+    // in the mask excess, 0..amplitude. A pure function of the noise
+    // fields (NO chunk data, NO base-height read) — cross-chunk
+    // consistent by construction.
+    int passesBonus(int x, int z) const;
+
     // Terrain surface height (topmost terrain layer) of the column at
-    // (x, z). Ignores caves (always below the surface) and trees.
-    // Intended for camera / player spawning.
+    // (x, z) = baseHeightAt + passesBonus, re-clamped. Ignores caves
+    // (always below the surface) and trees. Intended for camera / player
+    // spawning.
     int surfaceHeight(int x, int z) const;
 
     // Name of the biome owning the column at (x, z) (logging/tests).

@@ -7,6 +7,12 @@
   "height_octaves": 4,
   "bottom_block": "bedrock",
   "bedrock_layers": 3,
+  "passes": {
+   "enabled": true,
+   "noise_scale": 0.008,
+   "threshold": 0.55,
+   "amplitude": 6
+  },
   "deep_block": "stone"
  },
  "biomes": {
