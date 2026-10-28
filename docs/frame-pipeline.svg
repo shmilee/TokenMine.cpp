@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1160 560" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="frame-pipeline-title frame-pipeline-desc" id="frame-pipeline-root">
+        <title id="frame-pipeline-title">TokenMine.cpp 帧管线</title>
+        <desc id="frame-pipeline-desc">一帧管线：主线程顺序推进 update 各段（输入→玩家→实体→世界模拟→内容 pass→journal 存档），向 4 个 worker 投递 mesh 与 light job，post→flush 窗口同步后进入 render 段（世界三 pass→实体·手持·UI）。</desc>
+        <defs>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
+      #frame-pipeline-root { --color-paper:   #2d3142;
+      --color-ink:     #f5f5f5;
+      --color-muted:   #bfc0c0;
+      --color-accent:  #f08a59;
+      --font-sans:     'Geist', 'Noto Sans SC', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', 'Noto Serif', 'Noto Serif SC', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace; }
+      #frame-pipeline-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #frame-pipeline-root .diagram-container { width: 100%; overflow-x: auto; }
+      @media print {
+#frame-pipeline-root .diagram-container { overflow-x: visible; }
+}
+      #frame-pipeline-root { --color-paper:   #2d3142;
+      --color-ink:     #f5f5f5;
+      --color-muted:   #bfc0c0;
+      --color-accent:  #f08a59;
+      --font-sans:     'Geist', 'Noto Sans SC', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', 'Noto Serif', 'Noto Serif SC', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace; }
+      #frame-pipeline-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #frame-pipeline-root .diagram-container { width: 100%; overflow-x: auto; }
+      @media print {
+#frame-pipeline-root .diagram-container { overflow-x: visible; }
+}</style>
+      <style>
+      #frame-pipeline-root { --color-paper:   #2d3142;
+      --color-ink:     #f5f5f5;
+      --color-muted:   #bfc0c0;
+      --color-accent:  #f08a59;
+      --font-sans:     'Geist', 'Noto Sans SC', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', 'Noto Serif', 'Noto Serif SC', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace; }
+      #frame-pipeline-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #frame-pipeline-root .diagram-container { width: 100%; overflow-x: auto; }
+      @media print {
+#frame-pipeline-root .diagram-container { overflow-x: visible; }
+}</style>
+          <marker id="frame-pipeline-frame-pipeline-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#bfc0c0"/></marker>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#2d3142"/>
+
+        <!-- Lane grid (drawn first) -->
+        <line x1="40" y1="80" x2="1120" y2="80" stroke="#f5f5f5" stroke-width="1" stroke-opacity="0.22"/>
+        <line x1="40" y1="196" x2="1120" y2="196" stroke="#f5f5f5" stroke-width="1" stroke-opacity="0.10"/>
+        <line x1="40" y1="324" x2="1120" y2="324" stroke="#f5f5f5" stroke-width="1" stroke-opacity="0.10"/>
+        <line x1="40" y1="440" x2="1120" y2="440" stroke="#f5f5f5" stroke-width="1" stroke-opacity="0.22"/>
+        <line x1="160" y1="80" x2="160" y2="440" stroke="#f5f5f5" stroke-width="1" stroke-opacity="0.22"/>
+
+        <!-- Lane labels -->
+        <text x="100" y="136" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif" text-anchor="middle">主线程</text>
+        <text x="100" y="152" fill="#949eb2" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.18em" text-anchor="middle">UPDATE</text>
+
+        <text x="100" y="252" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif" text-anchor="middle">Worker ×4</text>
+        <text x="100" y="268" fill="#949eb2" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.14em" text-anchor="middle">POST→FLUSH</text>
+
+        <text x="100" y="384" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif" text-anchor="middle">主线程</text>
+        <text x="100" y="400" fill="#949eb2" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.18em" text-anchor="middle">RENDER</text>
+
+        <!-- Arrows (drawn before steps) -->
+        <!-- Lane 1 in-lane flow -->
+        <line x1="330" y1="142" x2="354" y2="142" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#frame-pipeline-frame-pipeline-arrow)"/>
+        <line x1="514" y1="142" x2="538" y2="142" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#frame-pipeline-frame-pipeline-arrow)"/>
+        <line x1="698" y1="142" x2="722" y2="142" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#frame-pipeline-frame-pipeline-arrow)"/>
+        <line x1="882" y1="142" x2="906" y2="142" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#frame-pipeline-frame-pipeline-arrow)"/>
+        <!-- Handoff: 世界模拟 → mesh job (post) -->
+        <path d="M 562,166 V 190 Q 562,198 554,198 H 538 Q 530,198 530,206 V 234"
+              fill="none" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#frame-pipeline-frame-pipeline-arrow)"/>
+        <!-- Handoff: 世界模拟 → light job (post) -->
+        <path d="M 662,166 V 190 Q 662,198 670,198 H 682 Q 690,198 690,206 V 234"
+              fill="none" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#frame-pipeline-frame-pipeline-arrow)"/>
+        <!-- Handoff: light job → flush → render 世界三 pass -->
+        <line x1="650" y1="282" x2="650" y2="366" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#frame-pipeline-frame-pipeline-arrow)"/>
+        <!-- Phase wrap: journal 存档 → render (frame boundary) -->
+        <path d="M 1066,142 H 1092 Q 1100,142 1100,150 V 424 Q 1100,432 1092,432 H 626 Q 618,432 618,424 V 414"
+              fill="none" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#frame-pipeline-frame-pipeline-arrow)"/>
+        <!-- Lane 3 in-lane flow -->
+        <line x1="698" y1="390" x2="722" y2="390" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#frame-pipeline-frame-pipeline-arrow)"/>
+
+        <!-- Arrow labels -->
+        <rect x="464" y="202" width="56" height="16" rx="2" fill="#2d3142"/>
+        <text x="492" y="213" fill="#bfc0c0" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif" text-anchor="middle">投递 mesh</text>
+
+        <rect x="700" y="202" width="56" height="16" rx="2" fill="#2d3142"/>
+        <text x="728" y="213" fill="#bfc0c0" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif" text-anchor="middle">投递 light</text>
+
+        <rect x="584" y="300" width="56" height="16" rx="2" fill="#2d3142"/>
+        <text x="612" y="311" fill="#bfc0c0" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif" text-anchor="middle">flush 同步</text>
+
+        <!-- Steps: lane 1 (update) -->
+        <rect x="170" y="118" width="160" height="48" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+        <text x="250" y="138" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif" text-anchor="middle">输入 → 玩家</text>
+        <text x="250" y="154" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">physics · swim · oxygen</text>
+
+        <rect x="354" y="118" width="160" height="48" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+        <text x="434" y="138" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif" text-anchor="middle">Mob · 投射物 · 粒子</text>
+        <text x="434" y="154" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">sub-step · step-up · swing</text>
+
+        <rect x="538" y="118" width="160" height="48" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+        <text x="618" y="138" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif" text-anchor="middle">世界模拟</text>
+        <text x="618" y="154" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">streaming · O(active cells)</text>
+
+        <rect x="722" y="118" width="160" height="48" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+        <text x="802" y="138" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif" text-anchor="middle">内容 pass</text>
+        <text x="802" y="154" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">growth · fire · beacon · craft</text>
+
+        <rect x="906" y="118" width="160" height="48" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+        <text x="986" y="138" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif" text-anchor="middle">journal 存档</text>
+        <text x="986" y="154" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">single-write · atomic</text>
+
+        <!-- Steps: lane 2 (worker window, focal) -->
+        <rect x="402" y="234" width="160" height="48" rx="6" fill="#f08a59" stroke="#f08a59" stroke-width="1" fill-opacity="0.08"/>
+        <text x="482" y="254" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif" text-anchor="middle">mesh job</text>
+        <text x="482" y="270" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">snapshot · 2 cols/frame</text>
+
+        <rect x="610" y="234" width="160" height="48" rx="6" fill="#f08a59" stroke="#f08a59" stroke-width="1" fill-opacity="0.08"/>
+        <text x="690" y="254" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif" text-anchor="middle">light job</text>
+        <text x="690" y="270" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">streaming / fluid ≤2 each</text>
+
+        <!-- Steps: lane 3 (render) -->
+        <rect x="538" y="366" width="160" height="48" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+        <text x="618" y="386" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif" text-anchor="middle">世界三 pass</text>
+        <text x="618" y="402" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">opaque→cutout→blend</text>
+
+        <rect x="722" y="366" width="160" height="48" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+        <text x="802" y="386" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif" text-anchor="middle">实体 · 手持 · UI</text>
+        <text x="802" y="402" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">mob · drop · arrow</text>
+
+        <!-- Legend strip -->
+        <line x1="40" y1="472" x2="1120" y2="472" stroke="#f5f5f5" stroke-width="0.8" stroke-opacity="0.10"/>
+        <text x="40" y="464" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.18em">LEGEND</text>
+
+        <rect x="40" y="488" width="14" height="10" rx="2" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+        <text x="62" y="498" fill="#bfc0c0" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif">步骤</text>
+
+        <rect x="136" y="488" width="14" height="10" rx="2" fill="#f08a59" stroke="#f08a59" stroke-width="1" fill-opacity="0.08"/>
+        <text x="158" y="498" fill="#bfc0c0" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif">worker job（焦点）</text>
+
+        <line x1="300" y1="494" x2="328" y2="494" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#frame-pipeline-frame-pipeline-arrow)"/>
+        <text x="336" y="498" fill="#bfc0c0" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif">泳道内流转</text>
+
+        <line x1="452" y1="494" x2="480" y2="494" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#frame-pipeline-frame-pipeline-arrow)"/>
+        <text x="488" y="498" fill="#bfc0c0" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', system-ui, sans-serif">跨泳道交接</text>
+
+        <!-- Editorial callout: hard rule 7 -->
+        <text x="40" y="536" fill="#949eb2" font-size="14" font-style="italic"
+              font-family="'Instrument Serif', 'Noto Serif', 'Noto Serif SC', serif">硬规则 7：worker 只在 post→flush 窗口运行，窗口内主线程只读 World——mesh / light job 各 ≤2 每帧，位级独立判据 lightRegionsIndependent</text>
+      </svg>

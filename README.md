@@ -1,12 +1,19 @@
-# TokenMine.cpp
+<div align="center">
 
-本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒
-（C++20 / SDL3 / OpenGL 3.3 core，
-自研 Result/JSON/PNG，内容全数据驱动）。**确定性是项目一级要求**：无输入运行逐帧
-字节可复现。功能阶段 P0–P99 + 性能审计系列 99.x + v1.0 任务表（34 项，
-含 2 项实机报障修复）全部完成并提交，v1.x 矩阵推进中（3/33：STRM-2
-流体列保留 / PIPE-3 流体 per-cell / LGT-3 夜光重传播 + MC 月光地板），
-测试 1704/1704。
+<h1>
+  <img alt="TokenMine.cpp — 立体分层合成图（暗色 banner）：底层架构总览 · 上层帧管线，近大远小轴测层" src="docs/architecture-hero.svg">
+</h1>
+
+**本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒（C++20 / SDL3 / OpenGL 3.3 core，自研 Result/JSON/PNG，内容全数据驱动）。<br>**确定性是一级要求**——无输入运行逐帧字节可复现。v1.0 已发布（任务矩阵 34/34）· v1.x 迭代中（进度见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
+
+[![GitHub stars](https://img.shields.io/github/stars/shmilee/TokenMine.cpp?style=flat-square)](https://github.com/shmilee/TokenMine.cpp/stargazers)
+[![MIT license](https://img.shields.io/badge/license-MIT-555555?style=flat-square)](LICENSE)
+
+**[项目名](#项目名) · [技术栈](#技术栈) · [构建与运行](#构建与运行) · [版本与发布](#版本与发布) · [文档地图](#文档地图) · [开发约定](#开发约定)**
+
+<code>cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build && ./build/bin/tokenmine</code>
+
+</div>
 
 > 文档已按主题分块（Phase 30）：**新会话先读 [AGENTS.md](AGENTS.md)**（代理快速
 > 接收），再按需读下表中的文件。原文档（README 765 行 / KNOWN_ISSUES / 本地
