@@ -18,7 +18,7 @@
 | LGT 光照 | ~~LGT-3 夜光重传播~~ ✅ v1.3.0 | ~~LGT-4 光束入光~~ ✅ v1.4.0 | ~~LGT-5 半块透光~~ ✅ v1.5.0 | | | |
 | GEN 世界与生成 | ~~GEN-7 基岩多层~~ ✅ v1.6.0 | ~~GEN-8 地形互感~~ ✅ v1.7.0 | ~~GEN-9 耕地湿润~~ ✅ v1.8.0 | | | |
 | FLUID 流体 | ~~FLUID-4 倒向水面~~ ✅ v1.9.0 | ~~FLUID-5 水熔岩反应~~ ✅ v1.10.0 | ~~FLUID-6 流体种类扩展~~ ✅ v1.11.0 | | | |
-| ENT 实体/Mob/移动 | ~~ENT-5 坠落伤害~~ ✅ v1.12.0 | ~~ENT-6 AI 补强~~ ✅ v1.13.0 | ~~ENT-7 移动惯性~~ ✅ v1.14.0 | ENT-8 和平/保护环 | ENT-9 掉落可视化 | |
+| ENT 实体/Mob/移动 | ~~ENT-5 坠落伤害~~ ✅ v1.12.0 | ~~ENT-6 AI 补强~~ ✅ v1.13.0 | ~~ENT-7 移动惯性~~ ✅ v1.14.0 | ~~ENT-8 和平/保护环~~ ✅ v1.15.0 | ENT-9 掉落可视化 | |
 | SURV 生存/战斗/效果 | SURV-6 效果档位 | SURV-7 死亡统计 | SURV-8 工具 10× | SURV-9 饱和细化 | SURV-10 挤奶冷却 | |
 | CRAFT 物品/合成/面板 | CRAFT-4 配方提示 | CRAFT-5 炉子表现 | CRAFT-6 燃料熔炼 | CRAFT-7 背包交互 | | |
 | SAVE 存档 | SAVE-2 速度入档 | SAVE-3 槽位管理 | | | | |
@@ -116,6 +116,28 @@
   构建与运行 + 范围与限制 + 许可），PITS 范围 267-288 修正为 271-288
   （267-270 属 v1.0 组时代门 114/115）③ Latest 收尾回 v1.5.0 组 release
   （重建时序）。同步 README/CHANGELOG/BACKLOG/AGENTS 旧引用。
+- 2026-10-28：**ENT-8 和平/保护环完成**（v1.x 第 15/33 项，v1.15.0，
+  门 130，ENT 行 4/6）："和平/保护环"原始定义已佚 = 代理定案
+  **peaceful 难度**（消费 KNOWN_ISSUES Phase-25 条"无 Peaceful 难度"；
+  保护环本体 = Phase 25 既有敌对生成保护圈 8/12/16 锚世界出生点 +
+  被动豁免）。difficulty 词汇表 3→4（严格解析同款纪律）+ peaceful 语义
+  = **Phase-25 机制复用零新代码路径**：spawnProtectionRadius(Peaceful)
+  = kSpawnProtectionPeaceful 1e6 = 保护圈覆盖全球 → 敌对自然生成全拒
+  + 被动豁免照生（MC 和平核心）；damageScale 0.0 / rateScale 1.0 =
+  API 一致性值（无宿主消费）；偏离记档 = 无"现有敌对消亡"（mobs
+  ephemeral + difficulty 只 init 读取）/ 无自动回血 / 保护锚 = 世界
+  出生点。零 format（19）/config 新键/内容/音效。1802/1802（6 难度测
+  演进 +peaceful 断言）、-Werror 0。门 130：S1 第 130 次结构性免疫免
+  重锚（四方 ×2 387726 B + savenorm）+ S2a peaceful 夜 ×2 hp 20 恒安全
+  【RAW 342632 + savenorm】+ S2b normal 夜新 ×2 hp 0【RAW 337109】+
+  S2c normal 夜旧 ×2 hp 0 + **S2b≡S2c 字节一致零回归** + S2d peaceful
+  昼 ×2 hp 20【RAW 346925 + vs nomobs 对照 diff 45148 px = 被动豁免实
+  证】+ S3 1802 + 性能 A/B 全同档（fluidCells win1 51969 逐位 +
+  win2/3 29803 vs 29703 = ±100 rim churn 相位一周期，**同二进制 v114
+  自分歧 fires 50↔51 + 流体簇 3 格位移实证 = PITS 283 类非回归**）。
+  **v1.15.0 = 组 1.11-1.15 组末 → tag v1.15.0 + GitHub release**
+  （notes 覆盖 v1.11 FLUID-6 / v1.12 ENT-5 / v1.13 ENT-6 / v1.14 ENT-7
+  / v1.15 ENT-8）。
 - 2026-10-28：**ENT-7 移动惯性完成**（v1.x 第 14/33 项，v1.14.0，门
   129，ENT 行 3/6）："移动惯性"原始定义已佚 = 代理定案 **玩家地面/空中
   移动惯性**（消费 KNOWN_ISSUES Phase-5 条"水平速度无惯性 = 期望速度

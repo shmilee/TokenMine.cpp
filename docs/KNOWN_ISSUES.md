@@ -323,7 +323,7 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 ## Mob（Phase 20）
 
 - **mob 不入存档** — 生成物是瞬态的（与 Minecraft 一致：存档只持久化玩家/物品/方块编辑）；读档后 mob 重新按帧节奏生成。zombie 死亡掉落 `rotten_flesh` 是物品实体，随存档正常保存。`[Phase 20]`
-- **无 Peaceful 难度** — 难度仅 `easy`/`normal`/`hard`（Minecraft 的 peaceful = 无敌对生成 + 现有敌对消亡未实现）。`[Phase 25]`
+- ~~**无 Peaceful 难度**~~ — `[ENT-8]` 已解决：`mobs.difficulty = "peaceful"` 四值词汇表（peaceful = Phase-25 保护环扩到全球 kSpawnProtectionPeaceful 1e6 → 敌对自然生成全拒，被动豁免照生，MC 和平核心语义）；"现有敌对消亡" 退化 = mobs ephemeral + difficulty 只 init 读取（无运行期切换）→ 读档后本无敌对（偏离记档，详见 phase-ent8.md）。`[Phase 25]`
 - **保护环是水平圆、不跟随玩家** — 保护中心 = 新世界出生点（读档不改变它），半径为水平距离（无垂直分量）；v1 无床/村庄，保护不随玩家移动（Minecraft 的村庄保护环未实现）。`[Phase 25]`
 - ~~**生成率缩放为全局节奏**~~ — 难度缩放的是尝试节奏（全部 mob 类型共享的 `check_every_frames`），不是 Minecraft 的按类型生成权重；easy/normal/hard = 30÷0.5/1.0/1.5 帧。`[Phase 25]` 发现，`[Phase 39]` 已修复：`mob_spawning.json` 的 `mobs` 条目改为 `{"id", "weight"?}` 对象（weight 1..10000，缺省 1；旧纯字符串条目显式拒绝 = 迁移防护；重复 id/越界/非整数 = 加载失败），类型抽取改为「每次 1 次流值映射进 [0, Σweight) 后按累计权重走名单序」——全 weight 1 与旧 `pick % 名单长度` 逐位相同（已发行数据零行为变化）。难度节奏缩放保留（与权重正交：节奏 = 多久尝试，权重 = 尝试时抽中哪种）。
 - **无肢体动画/阴影/咆哮声** — 静态 box 模型（头+身两箱、单纹理六面同 tile、yaw 旋转朝向）；无行走摆臂、无 blob 阴影；受击复用 "hurt"、死亡复用 "death"，无 zombie 低吼。`[Phase 20]`

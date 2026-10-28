@@ -3,6 +3,51 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.15.0（2026-10-28）
+
+**ENT-8 和平/保护环**（v1.x 任务表 15/33，ENT 行 4/6，门 130）——"和平
+/保护环"原始定义已佚 = 代理定案 **peaceful 难度**（消费 KNOWN_ISSUES
+Phase-25 记档"无 Peaceful 难度：难度仅 easy/normal/hard"；保护环本体
+= Phase 25 既有的敌对生成保护圈 8/12/16 锚世界出生点 + 被动豁免——
+peaceful = 该保护环扩到覆盖全球）：
+- **difficulty 词汇表 3→4**：`mobs.difficulty` = "easy" | "normal" |
+  "hard" | **"peaceful"**（严格解析同款纪律，misspelling 点名）。
+- **peaceful 语义（零新代码路径 = Phase-25 机制复用）**：
+  `spawnProtectionRadius(Peaceful) = kSpawnProtectionPeaceful(1e6)` →
+  每个敌对生成格必在保护圈内 → **自然敌对生成全拒**；被动 mob 豁免
+  （protection 0）不受影响 = MC 和平"无敌对 + 被动照生"。1e6 保持平方
+  比较在 float32 范围内（named constant）。
+- **API 一致性值**：`hostileDamageScale(Peaceful) = 0.0`（读作"敌对
+  零伤"）/ `hostileSpawnRateScale(Peaceful) = 1.0`（cadence 算术不变，
+  moot = 保护先于尝试拒掉）。
+- **记档偏离**：① 无"现有敌对消亡"——mobs ephemeral（从不存档）+
+  difficulty 只 init 读取（无运行期切换）→ 读档后世界本无敌对，"消亡"
+  退化为"不存在"（MC 同款净效果）② 无 MC peaceful 的自动回血/饥饿
+  恢复（生存计时器语义 = 另行立项）③ 保护锚 = 世界出生点（Phase-25
+  既有，非玩家重生锚）。
+- **零 format（19）/config 新键/内容/音效**；game.cpp 零改动（保护圈
+  收口点 findMobSpawnCell 既有）。
+
+1802/1802（test_difficulty 6 测演进 +peaceful 断言：4 值解析 + name /
+"Peaceful"/"peacful" 拒 / protection 1e6 > hard 16 / damage 0.0 / rate
+1.0 / cadence 30 不变）、`-Werror` 0 警告。门 130：S1 = **第 130 次结
+构性免疫免重锚**（fresh 60f 四方 ×2 387726 B + base18 + savenorm；
+peaceful = config 值，默认 normal 路径零触碰）+ **S2 五跑判别 PASS**
+（平台场景复用 s129 几何，玩家 (27.5,45,-17)，2400f 无输入）：S2a
+peaceful 夜 ×2 = **hp 20 恒安全**（零敌对，RAW 342632 + savenorm）/
+S2b normal 夜新 ×2 = **hp 0**（敌对击杀，RAW 337109）/ S2c normal 夜
+旧 v1.14.0 ×2 = hp 0 + **S2b ≡ S2c 字节一致**（normal 生成/追逐/击杀
+全链零回归）/ S2d peaceful 昼 ×2 = hp 20 + **vs nomobs 昼对照 diff
+45,148 px**（被动成群 = 豁免生效）/ S2e 对照在档 + 性能 A/B 同 seed
+900f（fluidCells win1 51969 逐位 + win2/3 29803 vs 29703 = **±100 rim
+churn 相位一周期，裁定非回归**：终档差全在程序化熔岩湖 rim 区 + 同二
+进制 v114 自分歧 fires 50↔51 + 流体簇 3 格位移实证 = PITS 283 类 +
+ENT-8 代码 diff = difficulty.hpp（normal 下惰性）+ 版本串）= 成本可
+忽略。**组 1.11-1.15 收官 = v1.15.0 tag + GitHub release**（notes 覆盖
+v1.11.0 FLUID-6 honey / v1.12.0 ENT-5 坠落 / v1.13.0 ENT-6 寻路 /
+v1.14.0 ENT-7 惯性 / v1.15.0 ENT-8 和平 = 组内 5 版；发布规则 =
+BACKLOG「执行顺序」第 3 条：tag 1:1 release，组 release 5 版一组）。
+
 ## v1.14.0（2026-10-28）
 
 **ENT-7 移动惯性**（v1.x 任务表 14/33，ENT 行 3/6，门 129）——消费
