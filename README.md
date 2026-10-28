@@ -4,20 +4,17 @@
   <img alt="TokenMine.cpp — 立体分层合成图（暗色 banner）：底层架构总览 · 上层帧管线，近大远小轴测层" src="docs/architecture-hero.svg">
 </h1>
 
-**本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒（C++20 / SDL3 / OpenGL 3.3 core，自研 Result/JSON/PNG，内容全数据驱动）。<br>**确定性是一级要求**——无输入运行逐帧字节可复现。v1.0 已发布（任务矩阵 34/34）· v1.x 迭代中（进度见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
+**本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒<br>
+（C++20 / SDL3 / OpenGL 3.3，自研 JSON/PNG，内容全数据驱动）。<br>
+确定性是一级要求——无输入运行逐帧字节可复现。<br>
+v1.0 已发布 · v1.x 迭代中（进度见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
 
 [![GitHub stars](https://img.shields.io/github/stars/shmilee/TokenMine.cpp?style=flat-square)](https://github.com/shmilee/TokenMine.cpp/stargazers)
 [![MIT license](https://img.shields.io/badge/license-MIT-555555?style=flat-square)](LICENSE)
 
 **[项目名](#项目名) · [技术栈](#技术栈) · [构建与运行](#构建与运行) · [版本与发布](#版本与发布) · [文档地图](#文档地图) · [开发约定](#开发约定)**
 
-<code>cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build && ./build/bin/tokenmine</code>
-
 </div>
-
-> 文档已按主题分块（Phase 30）：**新会话先读 [AGENTS.md](AGENTS.md)**（代理快速
-> 接收），再按需读下表中的文件。原文档（README 765 行 / KNOWN_ISSUES / 本地
-> SESSION_CONTEXT 2355 行）已拆分，历史细节全部在 `docs/archive/`。
 
 ## 项目名
 
@@ -93,7 +90,7 @@ cmake --build build
 
 ## 版本与发布
 
-- **v1.0**（2026-10-27）：**首个正式版**——v1.0 任务矩阵 34/34 全完成
+- **v1.0.0**（2026-10-27）：**首个正式版**，任务矩阵 34/34 全完成
   （十大系统：流送内存/帧管线/光照/世界生成/流体/实体 Mob/生存战斗/物品
   合成/存档/表现层 + 2 项实机报障修复）。正式版 release 见 GitHub
   Releases "TokenMine.cpp v1.0.0"。v1.0 后进入 v1.x 迭代（任务矩阵已刷新，
@@ -118,6 +115,8 @@ BlockState / 四肢摆动 / mob 踏阶 / 水体交互 / 护甲 / 氧气 / 耐久
   改为 16–32（`world.view_distance`，16 ≈ 2 GB 量级）。
 
 ## 文档地图
+
+文档已按主题分块：**新会话先读 [AGENTS.md](AGENTS.md)**，再按需读下表中的文件。历史细节全部在 `docs/archive/`。
 
 | 文档 | 内容 | 何时读 |
 |---|---|---|
