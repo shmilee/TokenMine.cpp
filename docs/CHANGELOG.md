@@ -3,6 +3,58 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.14.0（2026-10-28）
+
+**ENT-7 移动惯性**（v1.x 任务表 14/33，ENT 行 3/6，门 129）——消费
+KNOWN_ISSUES Phase-5 记档"水平速度无惯性：期望速度每 tick 直接设定（无
+加速/摩擦），松键即停"。玩家地面/空中移动惯性（MC 式加速/摩擦；"移动
+惯性"原始定义已佚 = 代理定案；mob 侧 AI 每帧设精确速度 = 既有设计，
+范围外记档）：
+- **指数趋近模型（fps 无关，真实 dt）**：有 wish 时 `v += (dir×S − v)×
+  (1 − e^{−k dt})`（地面 kGroundAccelRate 8.0 = 敏捷起步 ~0.4 s 达 95%
+  / 空中 kAirSteerRate 2.0 = 弱转向）；无 wish 时 `v ×= e^{−k dt}`
+  （地面 kGroundDecelRate 12.0 = MC 0.5448/tick 摩擦档【walk 4.3 松键
+  滑行 ~0.36 块】/ 空中 kAirDecelRate 1.9 = MC 0.91/tick 拖曳档【松键
+  滑翔 ~2.3 块】）；速度 < kVelocityStopEps(0.001) → **恰好 0**（纯衰减
+  永不达 0 = 静止态确定性红线，存档字节约定）。knockback 衰减
+  std::exp 先例（entity.cpp）。
+- **FLUID-2 档保持瞬置**（水/水面/熔岩的 fluid 集成 = 独立调参模型，
+  单测 FluidTierKeepsTheInstantSet 钉死 = 记档偏离）；sitting/crouch
+  edge guard/子步物理/stepUp 零改动；beacon speed 乘子（Phase 84）作用
+  于目标速度 = 趋近目标随之缩放（免费继承）；跳跃冲量零改动。
+- **零 format（19）/config/内容/音效**。
+
+1802/1802（+4 PlayerInertiaTest：GroundReleaseSlidesThenRests【滑行 ≈
+4.3/12 解析带 + velocity 恰好 0 + 非瞬停】/ AirReleaseKeepsGliding【空中
+松键 0.267 s 后 vz > 2.0 vs 地面档同窗 < 0.4 = 档位互斥】/
+FluidTierKeepsTheInstantSet / StopEpsilonRestsExactly【静止位不漂移】）、
+`-Werror` 0 警告、**3 契约演进重钉**（固定 dt 确定性新值：
+SlidesAlongWall 斜向滑行 2 s 减起步 ramp = z 4.3115 /
+EdgeBlockNoFloat 0.5 s 地面程减 ramp = 1.6049 / SprintIsFasterThanWalk
+1 s walk 3.7977 / sprint 4.9458 = 冲刺优势全秒保持）。门 129：S1 =
+**第 129 次结构性免疫免重锚**（fresh 60f 四方 ×2 387726 B + base18 +
+savenorm；无输入无 wish = 速度恒 0 = 衰减分支 no-op 位级恒等）+ **S2
+空中滑翔判别输入跑 PASS**（s129_glide：平台 x22-33 顶 y45 + 深坑
+x34-39 底 y37 = 8 格坠落 + air carve 清自然地形；玩家 x31.5 朝 +X，
+hold W 0.8 s → ~0.77 s 出檐、~0.22 s 空中松键：old v1.13.0 无 wish
+瞬清零 → 空中 vz = 0 直落（landing x ≈ 34.6）/ new v1.14.0 弱空中衰减
+→ 滑翔 4.3(1−e^{−1.9Δ})/1.9 ≈ 1.3-1.6 块（landing x ≈ 36.0）——per-pair
+cross **1.4254/1.3332 ∈ (0.8,1.8)** ×2 + 四跑 **y37.0 exact**（8 格坠落
+双侧共享实证）+ z 0.5 恒（无漂移）+ 落坑 x∈(34,39.5) + within-pair
+|Δx| < 0.6；**首版 ground-slide 判别废弃**：松键时序 real-dt 抖动 ±0.22
+块与地面滑行 0.358 同量级 → 首轮 cross 负值 −0.18 实证不可判别 =
+**PITS 304**（判别量须 ≥3× 抖动量，否则换几何主导面）+ **PITS 303**
+（1500f ≈ 46 s 墙钟 > 自然再生窗 → 坠落 5 伤终态被回血 hp 20，弃 hp
+断言改 y37 落面证坠落）+ **S3 放置零回归输入跑 PASS**（s129_place：
+无移动键 = 惯性结构惰性——new ×2 RAW EXACT 381031 B + old ×2 RAW EXACT
++ **new_a ≡ old_a 字节一致** + savenorm EXACT + 玩家位恒 + 放置块
+(27,45,−7) 在档）+ 性能 A/B 同 seed 900f（fluidCells win2/3
+**29803=29803 / 29800=29800 逐位一致** + win1 ±0.006% 填充 real-dt 类
++ PIPE3 visitedChunks 268 / fluidCellsSeen 43994 / changesApplied 1404
+逐位 + 全指标同档 = **成本可忽略**，无输入结构惰性实证）。组
+1.11-1.15 进行中（第 4 版，组内不打 tag = 发布规则见 BACKLOG「执行
+顺序」）。
+
 ## v1.13.0（2026-10-28）
 
 **ENT-6 AI 补强**（v1.x 任务表 13/33，ENT 行 2/6，门 128）——"AI

@@ -490,6 +490,23 @@ private:
     // float plane (documented: a diver far below a 32+-deep column keeps
     // rising until within 32 of the surface).
     static constexpr int kSurfaceScanDepth = 32;
+    // ENT-7: ground/air movement inertia (the MC friction / acceleration
+    // feel, the fps-independent exponential form — exp(-k dt) on the
+    // real dt, the knockback-decay precedent). Per-second rates:
+    // kGroundDecelRate 12.0 = the MC 0.5448/tick ground-friction class
+    // (a 4.3 walk release slides ~0.36 blocks); kAirDecelRate 1.9 = the
+    // MC 0.91/tick air-drag class (a walk release glides ~2.3 blocks);
+    // the accel rates shape the start-up (ground snappy, air weak
+    // steering). The FLUID-2 tiers (water / surface / lava) keep the
+    // instant set — the fluid model is separately tuned (deviation).
+    static constexpr float kGroundAccelRate = 8.0f;
+    static constexpr float kGroundDecelRate = 12.0f;
+    static constexpr float kAirSteerRate = 2.0f;
+    static constexpr float kAirDecelRate = 1.9f;
+    // Rest: below this horizontal speed the velocity is zeroed exactly
+    // (the pure decay never reaches 0; the rest state must be
+    // deterministic for the byte-exact save convention).
+    static constexpr float kVelocityStopEps = 0.001f;
 };
 
 } // namespace mc

@@ -209,10 +209,12 @@ TEST(PlayerTest, SlidesAlongWall) {
     Player p = f.makePlayer({11.7f, 1.0f, 10.0f});
     p.yaw = -kPi / 2.0f; // W = +X (blocked by the wall), A = -right = -Z
     Input walk = heldInput({GameKey::W, GameKey::A});
-    run(p, 120, walk); // 2 s: z should move ~6 blocks along the wall
+    run(p, 120, walk); // 2 s: z should move along the wall
     // The blocked axis stays clamped, the other keeps moving: sliding.
+    // ENT-7 re-pin: the diagonal (4.3/sqrt(2)) covers 2 s less the
+    // start-up ramp distance (the kGroundAccelRate 8 approach).
     EXPECT_FLOAT_EQ(p.position().x, 12.0f - 0.3f);
-    EXPECT_LT(p.position().z, 4.0f);
+    EXPECT_NEAR(p.position().z, 4.3115f, 0.001f);
     EXPECT_TRUE(p.onGround());
 }
 
@@ -728,7 +730,9 @@ TEST(PlayerTest, EdgeBlockNoFloat) {
     Input walk = heldInput({GameKey::W});
     run(p, 30, walk); // 0.5 s
     EXPECT_TRUE(p.onGround());
-    EXPECT_NEAR(p.position().x - 9.5f, 2.15f, 0.1f); // the ground pace
+    // ENT-7 re-pin: the ground pace (4.3) over 0.5 s less the start-up
+    // ramp distance (the kGroundAccelRate 8 exponential approach).
+    EXPECT_NEAR(p.position().x - 9.5f, 1.6049f, 0.001f);
 }
 
 TEST(PlayerTest, OneDeepSourcePoolFloats) {
@@ -890,8 +894,11 @@ TEST(PlayerTest, SprintIsFasterThanWalk) {
     const float aMove = 0.5f - a.position().z;
     const float bMove = 0.5f - b.position().z;
     EXPECT_GT(bMove, aMove);
-    EXPECT_NEAR(aMove, 4.3f, 0.2f); // walk speed
-    EXPECT_NEAR(bMove, 5.6f, 0.2f); // sprint speed
+    // ENT-7 re-pin: the 1 s distances (walk 4.3 / sprint 5.6 targets)
+    // less the start-up ramp (the kGroundAccelRate 8 approach — the
+    // sprint keeps its advantage over the full second).
+    EXPECT_NEAR(aMove, 3.7977f, 0.001f); // walk speed
+    EXPECT_NEAR(bMove, 4.9458f, 0.001f); // sprint speed
 }
 
 TEST(PlayerTest, MouseLookTurnsAndClampsPitch) {
@@ -1973,4 +1980,91 @@ TEST(PlayerTest, SittingNeedsGround) {
     Input sit = heldInput({GameKey::LeftControl});
     run(p, 1, sit); // the first tick: still airborne (m_onGround = false)
     EXPECT_FALSE(p.isSitting());
+}
+
+
+// ============================================================================
+//   ENT-7 — ground/air movement inertia (the exponential friction model)
+// ============================================================================
+
+namespace {
+// The ground slide distance from a full-speed release: the analytic
+// integral of v0 e^{-k t} (the stop epsilon truncates it by < 0.001).
+constexpr float kGroundSlideAnalytic = 4.3f / 12.0f; // ~0.358
+} // namespace
+
+TEST(PlayerInertiaTest, GroundReleaseSlidesThenRests) {
+    Fixture f;
+    Player p = f.makePlayer({0.5f, 1.0f, 0.5f});
+    Input idle = heldInput({});
+    run(p, 10, idle);
+    // Build up to full walk speed (the ramp is done in ~0.4 s).
+    Input walk = heldInput({GameKey::W});
+    run(p, 60, walk);
+    const float xFull = p.position().z; // -Z travel (facing -Z by default)
+    // Release: the slide covers the analytic distance, then rests with
+    // the velocity exactly zero (the stop epsilon).
+    run(p, 300, idle);
+    EXPECT_FLOAT_EQ(p.velocity().z, 0.0f); // deterministic rest
+    const float slide = xFull - p.position().z;
+    EXPECT_NEAR(slide, kGroundSlideAnalytic, 0.05f);
+    EXPECT_GT(slide, 0.2f); // not the instant stop (the old behavior)
+    EXPECT_TRUE(p.onGround());
+}
+
+TEST(PlayerInertiaTest, AirReleaseKeepsGliding) {
+    Fixture f;
+    Player p = f.makePlayer({0.5f, 1.0f, 0.5f});
+    Input idle = heldInput({});
+    run(p, 10, idle);
+    Input walk = heldInput({GameKey::W});
+    run(p, 60, walk); // full walk speed
+    // Jump to leave the ground with the horizontal speed: the air tier
+    // must keep gliding (the weak kAirDecelRate 1.9 decay), not the
+    // ground's fast slide (k 12). Air time = 2*8.5/32 = 0.531 s, so the
+    // assertion sits at 0.467 s (still airborne, deterministic).
+    Input jump = heldInput({GameKey::Space});
+    p.update(kDt, jump, false);
+    run(p, 11, walk); // 0.2 s airborne, still rising
+    run(p, 16, idle); // release 0.267 s in the air
+    ASSERT_LT(p.velocity().y, 0.0f); // falling: definitely airborne
+    // The ground tier would decay 4.3 to < 0.4 in the same 0.267 s;
+    // the air tier keeps > 2.
+    EXPECT_GT(std::abs(p.velocity().z), 2.0f);
+}
+
+TEST(PlayerInertiaTest, FluidTierKeepsTheInstantSet) {
+    // The FLUID-2 tiers (water / surface / lava) are the documented
+    // deviation: the instant set is untouched by the inertia.
+    Fixture f;
+    for (int x = 8; x < 10; ++x) {
+        for (int z = 8; z < 10; ++z) {
+            ASSERT_TRUE(f.world.setFluid(x, 1, z, FluidKind::Water,
+                                         kMaxFluidLevel));
+        }
+    }
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f}); // in the 1-deep water
+    p.yaw = 0.0f;
+    Input walk = heldInput({GameKey::W});
+    run(p, 10, walk); // 0.16 s in the water
+    // The fluid tier sets the exact target every frame (no ramp): the
+    // speed is at the swim-tier value after the first frame.
+    EXPECT_GT(std::abs(p.velocity().z), 0.5f);
+}
+
+TEST(PlayerInertiaTest, StopEpsilonRestsExactly) {
+    Fixture f;
+    Player p = f.makePlayer({0.5f, 1.0f, 0.5f});
+    Input idle = heldInput({});
+    run(p, 10, idle);
+    Input walk = heldInput({GameKey::W});
+    run(p, 30, walk);
+    run(p, 600, idle); // the slide ends long before this
+    EXPECT_FLOAT_EQ(p.velocity().x, 0.0f);
+    EXPECT_FLOAT_EQ(p.velocity().z, 0.0f);
+    const float x0 = p.position().x;
+    const float z0 = p.position().z;
+    run(p, 60, idle); // the rest state holds (no drift)
+    EXPECT_FLOAT_EQ(p.position().x, x0);
+    EXPECT_FLOAT_EQ(p.position().z, z0);
 }

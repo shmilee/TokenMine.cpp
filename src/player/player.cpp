@@ -268,6 +268,10 @@ void Player::update(double dt) {
         m_input->isDown(GameKey::LeftShift) && lengthSq(wish) > 0.0f &&
         !m_inWater && !m_atSurface && !m_inLava;
     Vec3 dir {0.0f, 0.0f, 0.0f};
+    // ENT-7: the fluid tiers (FLUID-2 water / surface / lava) keep the
+    // instant set — the fluid integration is separately tuned (the
+    // documented deviation); only the ground/air path gets the inertia.
+    const bool inFluidTier = m_inWater || m_atSurface || m_inLava;
     if (lengthSq(wish) > 0.0f) {
         float speed = m_inLava
                           ? m_params.lavaSwimSpeed
@@ -283,15 +287,43 @@ void Player::update(double dt) {
         // effect-derived multiplier each frame; 1.0 when none is active).
         speed *= m_speedMultiplier;
         dir = normalized(wish);
-        m_velocity.x = dir.x * speed;
-        m_velocity.z = dir.z * speed;
+        if (inFluidTier) {
+            m_velocity.x = dir.x * speed;
+            m_velocity.z = dir.z * speed;
+        } else {
+            // ENT-7: the exponential approach to dir*speed (fps-
+            // independent on the real dt): the ground tier starts up
+            // snappy, the air tier steers weakly.
+            const float k = m_onGround ? kGroundAccelRate : kAirSteerRate;
+            const float f = 1.0f - std::exp(-k * static_cast<float>(dt));
+            m_velocity.x += (dir.x * speed - m_velocity.x) * f;
+            m_velocity.z += (dir.z * speed - m_velocity.z) * f;
+        }
         // Crouching on the ground: do not walk off a 1-block ledge.
         if (m_crouching && m_onGround) {
             applyCrouchEdgeGuard(dir, dt);
         }
     } else {
-        m_velocity.x = 0.0f;
-        m_velocity.z = 0.0f;
+        if (inFluidTier) {
+            m_velocity.x = 0.0f;
+            m_velocity.z = 0.0f;
+        } else {
+            // ENT-7: releasing = the exponential decay (the slide), not
+            // the instant stop: the ground stops fast (the MC 0.5448/
+            // tick friction class), the air keeps gliding (the 0.91/
+            // tick drag class). Below the stop epsilon the velocity is
+            // zero exactly (the deterministic rest state).
+            const float k = m_onGround ? kGroundDecelRate : kAirDecelRate;
+            const float f = std::exp(-k * static_cast<float>(dt));
+            m_velocity.x *= f;
+            m_velocity.z *= f;
+            if (std::abs(m_velocity.x) < kVelocityStopEps) {
+                m_velocity.x = 0.0f;
+            }
+            if (std::abs(m_velocity.z) < kVelocityStopEps) {
+                m_velocity.z = 0.0f;
+            }
+        }
     }
 
     // 3. Sub-step the tick (see Entity::moveInSubsteps); the peak-speed

@@ -18,7 +18,7 @@
 | LGT 光照 | ~~LGT-3 夜光重传播~~ ✅ v1.3.0 | ~~LGT-4 光束入光~~ ✅ v1.4.0 | ~~LGT-5 半块透光~~ ✅ v1.5.0 | | | |
 | GEN 世界与生成 | ~~GEN-7 基岩多层~~ ✅ v1.6.0 | ~~GEN-8 地形互感~~ ✅ v1.7.0 | ~~GEN-9 耕地湿润~~ ✅ v1.8.0 | | | |
 | FLUID 流体 | ~~FLUID-4 倒向水面~~ ✅ v1.9.0 | ~~FLUID-5 水熔岩反应~~ ✅ v1.10.0 | ~~FLUID-6 流体种类扩展~~ ✅ v1.11.0 | | | |
-| ENT 实体/Mob/移动 | ~~ENT-5 坠落伤害~~ ✅ v1.12.0 | ~~ENT-6 AI 补强~~ ✅ v1.13.0 | ENT-7 移动惯性 | ENT-8 和平/保护环 | ENT-9 掉落可视化 | |
+| ENT 实体/Mob/移动 | ~~ENT-5 坠落伤害~~ ✅ v1.12.0 | ~~ENT-6 AI 补强~~ ✅ v1.13.0 | ~~ENT-7 移动惯性~~ ✅ v1.14.0 | ENT-8 和平/保护环 | ENT-9 掉落可视化 | |
 | SURV 生存/战斗/效果 | SURV-6 效果档位 | SURV-7 死亡统计 | SURV-8 工具 10× | SURV-9 饱和细化 | SURV-10 挤奶冷却 | |
 | CRAFT 物品/合成/面板 | CRAFT-4 配方提示 | CRAFT-5 炉子表现 | CRAFT-6 燃料熔炼 | CRAFT-7 背包交互 | | |
 | SAVE 存档 | SAVE-2 速度入档 | SAVE-3 槽位管理 | | | | |
@@ -116,6 +116,33 @@
   构建与运行 + 范围与限制 + 许可），PITS 范围 267-288 修正为 271-288
   （267-270 属 v1.0 组时代门 114/115）③ Latest 收尾回 v1.5.0 组 release
   （重建时序）。同步 README/CHANGELOG/BACKLOG/AGENTS 旧引用。
+- 2026-10-28：**ENT-7 移动惯性完成**（v1.x 第 14/33 项，v1.14.0，门
+  129，ENT 行 3/6）："移动惯性"原始定义已佚 = 代理定案 **玩家地面/空中
+  移动惯性**（消费 KNOWN_ISSUES Phase-5 条"水平速度无惯性 = 期望速度
+  每 tick 直接设定，松键即停"）。指数趋近模型（fps 无关 exp(−k·dt)
+  真实 dt，knockback 衰减 std::exp 先例）：有 wish = v += (dir×S − v)×
+  (1−e^{−k dt})（地面 kGroundAccelRate 8.0 敏捷起步 / 空中 kAirSteerRate
+  2.0 弱转向）+ 无 wish = v ×= e^{−k dt}（地面 kGroundDecelRate 12.0 =
+  MC 0.5448/tick 摩擦档【walk 松键滑 ~0.36 块】/ 空中 kAirDecelRate 1.9
+  = MC 0.91/tick 拖曳档【松键滑翔 ~2.3 块】）+ kVelocityStopEps 0.001
+  恰好 0 = 静止态确定性红线；FLUID-2 档保持瞬置（独立调参模型 = 记档
+  偏离）；mob 侧范围外（AI 每帧精确速度 = 既有设计）。零 format（19）/
+  config/内容/音效。1802/1802（+4 PlayerInertiaTest：滑行解析带 + 恰好 0
+  静止 / 空中滑翔档位互斥 / 流体档瞬置钉死 / 静止不漂移）、-Werror 0、
+  3 契约演进重钉（SlidesAlongWall 斜向减 ramp / EdgeBlockNoFloat 0.5 s
+  减 ramp / SprintIsFasterThanWalk 双档减 ramp 冲刺优势保持）。门 129：
+  S1 第 129 次结构性免疫免重锚（四方 ×2 387726 B + savenorm；无 wish =
+  速度恒 0 = 衰减 no-op）+ S2 **空中滑翔判别输入跑 PASS**（s129_glide：
+  平台 x22-33 顶 y45 + 深坑 x34-39 底 y37 = 8 格坠落；hold W 0.8 s →
+  出檐 ~0.22 s 空中松键：old 瞬清零直落 x≈34.6 / new 弱衰减滑翔
+  x≈36.0——per-pair cross 1.4254/1.3332 ∈ (0.8,1.8) ×2 + 四跑 y37.0
+  exact + z 0.5 恒 + within-pair < 0.6；首版 ground-slide 判别废弃 =
+  松键抖动 ±0.22 与滑行 0.358 同量级实测 cross 负值 −0.18 = PITS 304）
+  + S3 放置零回归输入跑 PASS（单次右键 stone 落 (27,45,−7)：new×2/old×2
+  RAW EXACT 381031 + new≡old 字节一致【玩家恒静止 = 结构惰性】+
+  savenorm EXACT）+ S4 1802 + 性能 A/B fluidCells win2/3 29803/29800
+  逐位 + PIPE3 逐位 + 全同档 = 成本可忽略。PITS 303-304（输入跑墙钟 >
+  再生窗回血 / 判别量须 ≥3× 抖动量）。
 - 2026-10-28：**ENT-6 AI 补强完成**（v1.x 第 13/33 项，v1.13.0，门
   128，ENT 行 2/6）："AI 补强"原始定义已佚 = 代理定案 **mob 追逐寻路**
   （KNOWN_ISSUES 记档缺口"追墙会沿墙滑"）。新纯函数模块
