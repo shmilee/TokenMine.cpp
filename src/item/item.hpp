@@ -346,30 +346,37 @@ struct ItemStack {
 // Minecraft refines this with per-block-type tool effectiveness (pickaxes
 // vs stone, axes vs wood, ...): Phase 67 adds the data-driven
 // fast_against list (an item multiplies its breakSpeed for the blocks it
-// names); the per-category rules beyond that (shovel vs dirt, the
-// "inefficient tool is 10x slower" rule) are still the v1 — see
-// docs/KNOWN_ISSUES.md.
+// names); SURV-8 adds the wrong-tool penalty (a tool that has no
+// efficiency for the target mines at 1/10 of its own speed — the
+// Minecraft rule, e.g. a pickaxe on dirt).
 inline constexpr double kBreakBaseSeconds = 1.5;
 
+// SURV-8: the wrong-tool factor (Minecraft: mining with a tool that is
+// not efficient for the block takes 10x LONGER — the tool's speed is
+// divided by 10; a sword against stone is the classic 1/10 pace).
+// Named constant, no config (the tool tiers are content data).
+inline constexpr float kWrongToolFactor = 0.1f;
+
 // The effective break-speed multiplier of `item` against `target`
-// (Phase 67): 1.0 for the hand, block items and materials; for a tool,
-// its own breakSpeed — times the fast_against multiplier when the target
-// block is one the tool is fast against (Minecraft axes chop wood and
-// leaves 2x faster; pickaxes stay flat).
+// (Phase 67 + SURV-8): 1.0 for the hand, block items and materials;
+// for a tool, its own breakSpeed — times the fast_against multiplier
+// when the target block is one the tool is fast against (Minecraft axes
+// chop wood and leaves 2x faster), times kWrongToolFactor when the
+// target is NOT in the list (the 10x-slower wrong-tool rule; a tool
+// with no list at all takes the penalty on every block, the Minecraft
+// sword case).
 inline float effectiveBreakSpeed(const Item& item, const Block& target) {
     if (item.type != ItemType::Tool) {
         return 1.0f;
     }
-    float speed = item.breakSpeed;
     if (item.fastAgainstMultiplier > 0.0f) {
         for (const std::string& name : item.fastAgainst) {
             if (name == target.name) {
-                speed *= item.fastAgainstMultiplier;
-                break;
+                return item.breakSpeed * item.fastAgainstMultiplier;
             }
         }
     }
-    return speed;
+    return item.breakSpeed * kWrongToolFactor;
 }
 
 inline double breakDurationSeconds(float hardness, float breakSpeed) {

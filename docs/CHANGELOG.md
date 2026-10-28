@@ -3,6 +3,54 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.19.0（2026-10-28）
+
+**SURV-8 工具 10×**（v1.x 任务表 19/33，SURV 行 3/5，门 134）——
+原始定义已佚 = 代理定案 **MC 无效率工具 10× 惩罚规则**（消费
+KNOWN_ISSUES Phase-11"仍缺：MC 的'无效率工具慢 10×'规则（本项目
+'无效率' = flat 档，不慢 10×）"）：
+- **规则 = 纯函数 `effectiveBreakSpeed` 一个分支**（item.hpp）：工具
+  且目标 ∈ `fast_against` → `breakSpeed × multiplier`（P67 既有，位级
+  不变）；工具且目标 ∉ 列表 → **`breakSpeed × kWrongToolFactor`**
+  （新命名常量 **0.1f** = MC 精确 1/10：镐挖泥土慢、剑挖石头 1/10
+  手速）；**无 fast_against 列表的工具对一切方块吃惩罚**（= MC 剑的
+  情形）；手/非工具物品恒 1.0（位级不变）。
+- **零数据模型/零内容/零 config**：9 工具 JSON 一字不动（快对清单保
+  持 P67-P69 值，惩罚是核心规则不是内容调参）；break 通道
+  （selectedBreakSpeed 单调用点）零改动。
+- **P69 obsidian 排除条款随规则演进**：铁镐挖 obsidian 从"flat 3.75 s"
+  变"慢档 37.5 s"（有效速 0.4）= MC 方向一致（铁镐对黑曜石本就是慢
+  的情形）。
+- **exact 值**（真资产单测钉死）：铁镐（4.0）×木（硬度 2.0，off-list）
+  = 0.4 → **7.5 s**（SURV-8 前 0.75 s）；铁斧（1.0 flat）×石（硬度
+  1.5，off-list）= 0.1 → **22.5 s**；on-list 位级保持（铁镐×石 =
+  8.0 → 0.28125 s / 铁斧×木 = 2.0 → 1.5 s = 双向防泄漏）。
+
+1828/1828（+1 净：Surv8WrongToolDurations 真资产 exact-time【
+EXPECT_NEAR 1e-6 = 0.1f 非二进制精确的浮点残差说明；二进制精确的
+on-list 值保持 EXPECT_DOUBLE_EQ】+ 4 处 off-list 钉演进 + 1 测改名
+EffectiveBreakSpeedFlatToolStaysFlat → ListlessToolTakesWrongTool
+Penalty）、`-Werror` 0 警告。门 134：S1 = **第 134 次结构性免疫免重
+锚**（fresh 60f 四方 ×2 387726 B + base18 + savenorm；无输入无按住
+破坏 = 规则永不执行 + 内容/纹理零变更）+ **S2a 判别 PASS**（铁镐×木
+off-list，几何 = 玩家 (22.5,45,-2.5) yaw0/pitch0 视线恒切 y46 格行 +
+目标 (22,46,-5) 1.5 块：按住 0.85 s ∈ (0.75, 7.5)——OLD 侧 0.75 s 破 +
+wood×1 掉落静止 (22.5,45,-4.5)【距玩家 3.0 > kPickupDistance 1.0 不
+拾取】/ NEW 侧存活无掉落 = 终态互斥，×2/侧 RAW + 存档断言 4/4）+
+**S2b 对照 PASS**（铁镐×石 on-list：按住 0.42 s 双侧同破 0.28125 s +
+cobblestone 掉落【P61 内容】：**四跑 old×2+new×2 RAW 全字节一致
+609396 B + 跨侧 savenorm 场景区 EXACT** = on-list 路径位级不变零回归
+最强形）+ S3 1828 + **无 S6**【零 parse 面：规则 = 核心命名常量】+
+性能 A/B 真 v1.18 vs v1.19 PASS（banner 版本实证 = PITS 306 纪律；
+fluidCells win2/3 29803/29800 **逐位** + win1 ±2 + PIPE3
+changesApplied 1404 逐位 + visited 268/266 同档 + 全指标同档 = 结构
+性惰性，成本可忽略）。**PITS 309**（输入跑捕获点击的 grab delta = 终
+相机漂移 yaw −0.0175/pitch −0.1675 = 9.6° 俯，远超 PITS 28 ±0.01 rad
+估计；同窗几何下完全可复现 → 门脚本相机基线守卫 = 批内 RAW/savenorm
+可比前提；跨侧同窗几何同 warp → S2b 四跑 RAW 全字节一致）+ 自然区
+real-dt churn 裁定（S2a old×2 blocks 差 3 格距场景 107 块 + S2b fluids
+差 1 格自然湖区 = PITS 244/283 类同二进制自分歧，非回归）。
+
 ## v1.18.0（2026-10-28）
 
 **SURV-7 死亡统计**（v1.x 任务表 18/33，SURV 行 2/5，门 133）——

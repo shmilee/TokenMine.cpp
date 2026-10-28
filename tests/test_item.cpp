@@ -2060,16 +2060,21 @@ TEST(ItemRegistryTest, EffectiveBreakSpeedFastAgainstNamedBlocksOnly) {
     const Item axe = axeItem();
     EXPECT_FLOAT_EQ(effectiveBreakSpeed(axe, blockNamed("wood")), 2.0f);
     EXPECT_FLOAT_EQ(effectiveBreakSpeed(axe, blockNamed("leaves")), 2.0f);
-    // Off-list: the multiplier does not apply (the axe = hand speed).
-    EXPECT_FLOAT_EQ(effectiveBreakSpeed(axe, blockNamed("stone")), 1.0f);
+    // Off-list: the SURV-8 wrong-tool penalty (1/10 of the axe's speed).
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(axe, blockNamed("stone")), 0.1f);
 }
 
-TEST(ItemRegistryTest, EffectiveBreakSpeedFlatToolStaysFlat) {
+TEST(ItemRegistryTest, EffectiveBreakSpeedListlessToolTakesWrongToolPenalty) {
+    // SURV-8: a tool with NO fast_against list takes the 1/10 penalty on
+    // EVERY block (the Minecraft sword case — listless tools are the
+    // wrong tool for everything).
     Item pick;
     pick.type = ItemType::Tool;
     pick.breakSpeed = 4.0f;
-    EXPECT_FLOAT_EQ(effectiveBreakSpeed(pick, blockNamed("wood")), 4.0f);
-    EXPECT_FLOAT_EQ(effectiveBreakSpeed(pick, blockNamed("stone")), 4.0f);
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(pick, blockNamed("wood")), 0.4f);
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(pick, blockNamed("stone")), 0.4f);
+    // The factor itself is the exact 1/10 (no drift).
+    EXPECT_FLOAT_EQ(kWrongToolFactor, 0.1f);
 }
 
 TEST(ItemRegistryTest, EffectiveBreakSpeedNonToolsAreOne) {
@@ -2205,10 +2210,55 @@ TEST(ItemRegistryTest, Phase69PickaxeEffectiveBreakSpeed) {
     EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("sandstone")), 8.0f);
     EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("smooth_sandstone")),
                     8.0f);
-    // Off-list: the flat tier (no multiplier leak).
-    EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("wood")), 4.0f);
-    EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("obsidian")), 4.0f);
+    // Off-list: the SURV-8 wrong-tool penalty (1/10 of the flat tier).
+    // The P69 obsidian exclusion clause evolves with the rule: an iron
+    // pickaxe on obsidian is no longer the fast case, it is the slow one.
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("wood")), 0.4f);
+    EXPECT_FLOAT_EQ(effectiveBreakSpeed(*iron, blk("obsidian")), 0.4f);
     EXPECT_FLOAT_EQ(effectiveBreakSpeed(*wooden, blk("stone")), 4.0f);
+}
+
+// SURV-8: the wrong-tool break DURATIONS on the REAL content (exact
+// values — the E2E hold windows are designed around them): an iron
+// pickaxe (4.0) on wood (hardness 2.0, off-list) takes 7.5 s (was 0.75
+// s pre-SURV-8); an iron axe (1.0 flat) on stone (hardness 1.5,
+// off-list) takes 22.5 s. The on-list paths stay bit-identical (no leak
+// in either direction).
+TEST(ItemRegistryTest, Surv8WrongToolDurations) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry blocks;
+    ASSERT_TRUE(blocks.loadDirectory(assets, "data/blocks").ok());
+    ItemRegistry items;
+    ASSERT_TRUE(items.buildBlockItems(blocks).ok());
+    ASSERT_TRUE(items.loadDirectory(assets, "data/items").ok());
+    const Item* iron = items.findByName("iron_pickaxe");
+    const Item* axe = items.findByName("iron_axe");
+    ASSERT_NE(iron, nullptr);
+    ASSERT_NE(axe, nullptr);
+    const auto blk = [&](const char* n) {
+        return blocks.at(blocks.idForName(n));
+    };
+    // The wrong-tool factor (0.1f) is not binary-exact, so the division
+    // carries a ~1e-7 float residue: EXPECT_NEAR with a tolerance far
+    // above the residue and far below any gameplay-relevant difference.
+    EXPECT_NEAR(
+        breakDurationSeconds(blk("wood").properties.hardness,
+                             effectiveBreakSpeed(*iron, blk("wood"))),
+        7.5, 1e-6);
+    EXPECT_NEAR(
+        breakDurationSeconds(blk("stone").properties.hardness,
+                             effectiveBreakSpeed(*axe, blk("stone"))),
+        22.5, 1e-6);
+    EXPECT_DOUBLE_EQ(
+        breakDurationSeconds(blk("stone").properties.hardness,
+                             effectiveBreakSpeed(*iron, blk("stone"))),
+        0.28125);
+    EXPECT_DOUBLE_EQ(
+        breakDurationSeconds(blk("wood").properties.hardness,
+                             effectiveBreakSpeed(*axe, blk("wood"))),
+        1.5);
 }
 
 // ---------------------------------------------------------------------------

@@ -19,7 +19,7 @@
 | GEN 世界与生成 | ~~GEN-7 基岩多层~~ ✅ v1.6.0 | ~~GEN-8 地形互感~~ ✅ v1.7.0 | ~~GEN-9 耕地湿润~~ ✅ v1.8.0 | | | |
 | FLUID 流体 | ~~FLUID-4 倒向水面~~ ✅ v1.9.0 | ~~FLUID-5 水熔岩反应~~ ✅ v1.10.0 | ~~FLUID-6 流体种类扩展~~ ✅ v1.11.0 | | | |
 | ENT 实体/Mob/移动 | ~~ENT-5 坠落伤害~~ ✅ v1.12.0 | ~~ENT-6 AI 补强~~ ✅ v1.13.0 | ~~ENT-7 移动惯性~~ ✅ v1.14.0 | ~~ENT-8 和平/保护环~~ ✅ v1.15.0 | ~~ENT-9 掉落可视化~~ ✅ v1.16.0 | |
-| SURV 生存/战斗/效果 | ~~SURV-6 效果档位~~ ✅ v1.17.0 | ~~SURV-7 死亡统计~~ ✅ v1.18.0 | SURV-7 死亡统计 | SURV-8 工具 10× | SURV-9 饱和细化 | SURV-10 挤奶冷却 | |
+| SURV 生存/战斗/效果 | ~~SURV-6 效果档位~~ ✅ v1.17.0 | ~~SURV-7 死亡统计~~ ✅ v1.18.0 | ~~SURV-8 工具 10×~~ ✅ v1.19.0 | SURV-9 饱和细化 | SURV-10 挤奶冷却 | |
 | CRAFT 物品/合成/面板 | CRAFT-4 配方提示 | CRAFT-5 炉子表现 | CRAFT-6 燃料熔炼 | CRAFT-7 背包交互 | | |
 | SAVE 存档 | SAVE-2 速度入档 | SAVE-3 槽位管理 | | | | |
 | PRE 表现层 | PRE-7 中毒/燃烧表现 | PRE-8 mob 火焰 | PRE-9 箭/弓/手视觉 | PRE-10 图标重叠修复★ | PRE-11 HUD 细化 | PRE-12 tooltip/F3 |
@@ -116,6 +116,34 @@
   构建与运行 + 范围与限制 + 许可），PITS 范围 267-288 修正为 271-288
   （267-270 属 v1.0 组时代门 114/115）③ Latest 收尾回 v1.5.0 组 release
   （重建时序）。同步 README/CHANGELOG/BACKLOG/AGENTS 旧引用。
+- 2026-10-28：**SURV-8 工具 10×完成**（v1.x 第 19/33 项，v1.19.0，
+  门 134，SURV 行 3/5）："工具 10×"原始定义已佚 = 定案 **MC 无效率
+  工具 10× 惩罚规则**（消费 KNOWN_ISSUES Phase-11 条"仍缺：MC 的'无
+  效率工具慢 10×'规则"）——工具对目标方块无效率加成（∉ fast_against）
+  时采矿速度 = 自身速度 ÷ 10（`kWrongToolFactor` 0.1f 命名常量，MC
+  精确 1/10；无列表工具对一切方块吃惩罚 = MC 剑情形；手/非工具恒 1.0
+  位级不变）。纯函数 effectiveBreakSpeed 一个分支 = 零数据模型/零
+  内容/零 config（9 工具 JSON 零改动）+ **P69 obsidian 排除条款随规
+  则演进**（铁镐挖 obsidian 3.75 s flat → 37.5 s 慢档 = MC 方向一
+  致）。exact 值单测钉死：铁镐×木 7.5 s（前 0.75）/ 铁斧×石 22.5 s /
+  on-list 位级保持（铁镐×石 0.28125 / 铁斧×木 1.5）。1828/1828（+1
+  净：Surv8WrongToolDurations 真资产 exact-time【EXPECT_NEAR 1e-6 =
+  0.1f 非二进制精确残差说明】+ 4 处 off-list 钉演进 + 1 测改名）、
+  -Werror 0。门 134：S1 第 134 次结构性免疫免重锚（四方 ×2 387726 B
+  + base18 + savenorm；无输入无按住破坏 = 规则永不执行）+ S2a 判别
+  PASS（铁镐×木 off-list：按住 0.85 s ∈ (0.75, 7.5) 窗口：OLD 侧 0.75 s
+  破 + wood×1 掉落静止 (22.5,45,-4.5)【距玩家 3.0 > kPickupDistance
+  1.0 不拾取】/ NEW 侧存活无掉落 = 终态互斥 ×2/侧 RAW + 存档断言 4/4）
+  + S2b 对照 PASS（铁镐×石 on-list：按住 0.42 s 双侧同破 0.28125 s +
+  cobblestone 掉落【P61 内容】：**四跑 old×2+new×2 RAW 全字节一致
+  609396 B + 跨侧 savenorm 场景区 EXACT** = 零回归最强形）+ S3 1828
+  + 无 S6【零 parse 面】+ 性能 A/B 真 v1.18 vs v1.19 PASS（banner 实
+  证；fluidCells win2/3 29803/29800 逐位 + win1 ±2 + PIPE3
+  changesApplied 1404 逐位 + 全同档 = 结构性惰性）；**PITS 309**
+  （输入跑捕获点击 grab delta = 终相机漂移 yaw −0.0175/pitch
+  −0.1675，批内可复现 → 相机基线守卫 = RAW/savenorm 前提）+ 自然区
+  real-dt churn 裁定【S2a old×2 blocks 差 3 格距场景 107 块 + S2b
+  fluids 差 1 格自然湖区 = PITS 244/283 类同二进制自分歧，非回归】。
 - 2026-10-28：**SURV-7 死亡统计完成**（v1.x 第 18/33 项，v1.18.0，
   门 133，SURV 行 2/5）："死亡统计"原始定义已佚 = 代理定案**统计
   系统 v1 = 死亡相关计数器（deathCount + 每 mob kill.<name>），帧锁
