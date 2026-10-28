@@ -117,6 +117,16 @@ constexpr int kFireParticleEveryNFrames = 6;
 // growth/chance-drop salt separation, Phase 45/49): ember emissions
 // never track any other deterministic stream in the world.
 constexpr std::uint64_t kFireParticleRollSalt = 0xE4B6F1C2D9A83574ULL;
+// CRAFT-5: the lit-furnace flame emission runs every Nth frame. N = 36
+// (0.6 s) is >2x spawnFire's 0.3-0.5 s max ember life, so at any
+// <=60 fps the previous batch is provably dead before the next emission
+// (30 frames would sit exactly on the 0.5 s life boundary at 60 fps —
+// one run's straggler ember broke the same-side RAW, gate 138). The
+// fixed frame step keeps headless runs byte-reproducible.
+constexpr int kFurnaceParticleEveryNFrames = 36;
+// Dedicated salt for the furnace flame seeds (the P66 discipline — the
+// furnace stream never tracks the fire-ember stream).
+constexpr std::uint64_t kFurnaceParticleRollSalt = 0x4F7A2C9E1B5D8360ULL;
 
 // Phase 83 beacon: the refresh DURATION the beacon applies to its effect
 // every frame (the fire-source pattern — standing in range resets it, so
@@ -1154,6 +1164,9 @@ Result<void> Game::buildScene() {
                        std::to_string(m_fireSpreadChance) + ")");
     }
     m_fireParticles = m_config.getBool("fire.particles", true);
+    // CRAFT-5: the lit-furnace flame gate (the fire.particles pattern;
+    // off = zero emissions = bit-identical to v1.21.0).
+    m_furnaceFlames = m_config.getBool("render.furnace_flames", true);
 
     // Phase 83 beacon: the effect range (Chebyshev blocks from the beacon
     // cell; the Minecraft beacon reaches the whole build area, 50 is a
@@ -3311,7 +3324,33 @@ void Game::update(double dt) {
     // pointer/panel state (the world keeps ticking while the panel is
     // open, as in Minecraft).
     for (auto& [pos, st] : m_furnaces) {
+        // CRAFT-5: snapshot before the tick — the presentation events
+        // (the lit crackle, the smelt-complete ding) are a pure function
+        // of (before, after); audio is outside the frame state (hard
+        // rule 8), so the sound + log never touch determinism.
+        const FurnaceState before = st;
         tickFurnace(st, m_items);
+        const FurnaceTickEvents ev = furnaceTickEvents(before, st);
+        if (ev.lit) {
+            m_sound.play("ignite", Vec3 {
+                static_cast<float>(pos.x) + 0.5f,
+                static_cast<float>(pos.y) + 0.5f,
+                static_cast<float>(pos.z) + 0.5f});
+            MC_LOG_INFO("Furnace lit at (" + std::to_string(pos.x) +
+                        ", " + std::to_string(pos.y) + ", " +
+                        std::to_string(pos.z) + ")");
+        }
+        if (ev.smeltCompleted) {
+            m_sound.play("smelt", Vec3 {
+                static_cast<float>(pos.x) + 0.5f,
+                static_cast<float>(pos.y) + 0.5f,
+                static_cast<float>(pos.z) + 0.5f});
+            MC_LOG_INFO("Furnace smelt complete: " +
+                        m_items.at(st.output.item).name + " at (" +
+                        std::to_string(pos.x) + ", " +
+                        std::to_string(pos.y) + ", " +
+                        std::to_string(pos.z) + ")");
+        }
     }
 
     // Campfire water extinguish (Phase 75): a LIT campfire with a WATER
@@ -3493,6 +3532,9 @@ void Game::update(double dt) {
     // it makes are meshed on the next frame (the effects' setBlock
     // pattern). A no-op while the world holds no fire.
     updateFires(dt);
+    // CRAFT-5: the lit-furnace mouth flames (frame-locked emission; off
+    // by render.furnace_flames = zero emissions).
+    updateFurnaceFlames();
     // Phase 66 (Fire v2): the spread roll (fixed frame step, every
     // fire.spread_interval_frames frames). Runs AFTER the countdown so a
     // fire that just burned out does not spread on its last frame, and
@@ -5003,6 +5045,61 @@ void Game::updateFires(double dt) {
             m_particles.spawnFire(pos.x, pos.y, pos.z, m_fireId, sky,
                                   blockLight, rngSeed);
         }
+    }
+}
+
+void Game::updateFurnaceFlames() {
+    // CRAFT-5: the lit-furnace mouth flames — rising ember batches (the
+    // P66 spawnFire reused: 2 particles, negative gravity, 0.3-
+    // 0.5 s life) emitted from the cell ABOVE the furnace block, every
+    // kFurnaceParticleEveryNFrames frame (fixed frame step, hard rule 8 —
+    // the spawn is a pure function of the world seed, the position and
+    // the frame). The gate is (m_frameCount + 1) % N because the frame
+    // counter increments AFTER update/render: a 900-frame run renders
+    // its last frame with m_frameCount = 899 (900 % 36 = 0), so the
+    // screenshot carries that frame's age-0 batch (deterministic at any
+    // fps) while the previous batch (36 frames = 0.6 s at 60 fps > the
+    // 0.5 s max life) is already dead. Motion then integrates the real
+    // dt like every other particle. render.furnace_flames off (or no
+    // furnaces, or no fire block for the texture) = zero emissions =
+    // bit-identical to v1.22.0. Position-sorted map iteration ->
+    // deterministic order.
+    if (!m_furnaceFlames || m_furnaces.empty() || !m_fireId.valid() ||
+        (m_frameCount + 1) % kFurnaceParticleEveryNFrames != 0) {
+        return;
+    }
+    for (const auto& [pos, st] : m_furnaces) {
+        if (st.fuelSubsteps <= 0) {
+            continue; // unlit: no flame
+        }
+        // The embers live in the AIR cell above the furnace (spawnFire
+        // centers there): read the light of THAT cell — the furnace cell
+        // itself is opaque and self-dark (no light_emission), which
+        // would bake invisible black embers.
+        const BlockPos above {pos.x, pos.y + 1, pos.z};
+        const Chunk* chunk = m_world.findChunk(worldToChunk(above));
+        float sky = 0.0f;
+        float blockLight = 1.0f; // a burning furnace glows through its
+                                 // mouth — the P66 fallback
+        if (chunk != nullptr) {
+            const BlockPos local =
+                worldToChunkLocal(worldToChunk(above), above);
+            sky = static_cast<float>(
+                      chunk->skyLightAt(local.x, local.y, local.z)) /
+                  15.0f;
+            blockLight = static_cast<float>(
+                             chunk->blockLightAt(local.x, local.y,
+                                                 local.z)) /
+                         15.0f;
+        }
+        const std::uint64_t rngSeed =
+            m_generator->seed() +
+            hash3(asU64(pos.x), asU64(pos.y), asU64(pos.z),
+                  kFurnaceParticleRollSalt) +
+            static_cast<std::uint64_t>(m_frameCount) *
+                0x9E3779B97F4A7C15ULL;
+        m_particles.spawnFire(pos.x, pos.y + 1, pos.z, m_fireId, sky,
+                              blockLight, rngSeed);
     }
 }
 

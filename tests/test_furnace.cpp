@@ -440,3 +440,77 @@ TEST(FurnaceUiTest, ClickOutsideDropsCarry) {
     EXPECT_FALSE(ui.carrying());
     EXPECT_TRUE(inv.at(0).empty());
 }
+
+// -- CRAFT-5: the per-substep presentation events ---------------------------
+
+TEST(FurnaceEventsTest, LitOnFuelIgnition) {
+    Fixture f;
+    FurnaceState before;
+    before.fuel = stk(f.id("coal"), 1);
+    FurnaceState after = before;
+    after.fuelSubsteps = 4800; // coal 80 s
+    const auto ev = furnaceTickEvents(before, after);
+    EXPECT_TRUE(ev.lit);
+    EXPECT_FALSE(ev.smeltCompleted);
+    // Still burning (a decrement) is not a re-light.
+    before.fuelSubsteps = 1;
+    after.fuelSubsteps = 4800;
+    EXPECT_FALSE(furnaceTickEvents(before, after).lit);
+    // Burnout (-> 0) is not a light either.
+    before.fuelSubsteps = 1;
+    after.fuelSubsteps = 0;
+    const auto out = furnaceTickEvents(before, after);
+    EXPECT_FALSE(out.lit);
+    EXPECT_FALSE(out.smeltCompleted);
+}
+
+TEST(FurnaceEventsTest, SmeltCompletedOnOutputGain) {
+    Fixture f;
+    // empty -> one product.
+    FurnaceState before, after;
+    after.output = stk(f.id("cooked"), 1);
+    const auto ev1 = furnaceTickEvents(before, after);
+    EXPECT_TRUE(ev1.smeltCompleted);
+    EXPECT_FALSE(ev1.lit);
+    // x1 -> x2 of the same product.
+    before.output = stk(f.id("cooked"), 1);
+    after.output = stk(f.id("cooked"), 2);
+    EXPECT_TRUE(furnaceTickEvents(before, after).smeltCompleted);
+    // No output change = no event (the paused smelt / progress ticks).
+    after = before;
+    after.progressSubsteps = 1;
+    EXPECT_FALSE(furnaceTickEvents(before, after).smeltCompleted);
+    // A different product with +1 count is not a completion (the tick
+    // only ever grows the SAME product; pin the predicate shape).
+    after.output = stk(f.id("cooked_mutton"), 2);
+    EXPECT_FALSE(furnaceTickEvents(before, after).smeltCompleted);
+}
+
+TEST(FurnaceEventsTest, EventsTrackTheRealTick) {
+    Fixture f;
+    // First substep: the fuel ignites (lit) and the progress starts —
+    // no smelt yet.
+    FurnaceState st;
+    st.input = stk(f.id("beef"), 1);
+    st.fuel = stk(f.id("coal"), 1);
+    FurnaceState before = st;
+    tickFurnace(st, f.items);
+    auto ev = furnaceTickEvents(before, st);
+    EXPECT_TRUE(ev.lit);
+    EXPECT_FALSE(ev.smeltCompleted);
+    EXPECT_EQ(st.fuelSubsteps, 4800);
+    EXPECT_EQ(st.progressSubsteps, 1);
+    // Run to completion: the 599th of the remaining substeps completes
+    // the smelt (progress 1 -> 600) and nothing else fires.
+    for (int i = 0; i < 599; ++i) {
+        before = st;
+        tickFurnace(st, f.items);
+        ev = furnaceTickEvents(before, st);
+        EXPECT_EQ(ev.smeltCompleted, i == 598) << "tick " << i;
+        EXPECT_FALSE(ev.lit) << "tick " << i;
+    }
+    EXPECT_EQ(st.output, stk(f.id("cooked"), 1));
+    EXPECT_TRUE(st.input.empty());
+    EXPECT_TRUE(st.fuel.empty());
+    EXPECT_GT(st.fuelSubsteps, 0); // still burning: 4800 - 600
+}

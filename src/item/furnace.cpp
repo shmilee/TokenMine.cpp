@@ -89,4 +89,14 @@ void tickFurnace(FurnaceState& f, const ItemRegistry& items) {
     f.output.count++;
 }
 
+FurnaceTickEvents furnaceTickEvents(const FurnaceState& before,
+                                    const FurnaceState& after) {
+    FurnaceTickEvents ev;
+    ev.lit = before.fuelSubsteps == 0 && after.fuelSubsteps > 0;
+    ev.smeltCompleted =
+        after.output.count == before.output.count + 1 &&
+        (before.output.count == 0 || before.output.item == after.output.item);
+    return ev;
+}
+
 } // namespace mc

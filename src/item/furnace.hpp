@@ -78,4 +78,22 @@ int fuelSubstepsFor(const Item& item);
 // byte-deterministic.
 void tickFurnace(FurnaceState& f, const ItemRegistry& items);
 
+// CRAFT-5: what the substep that just ended did — a pure comparison of
+// the pre- and post-tick states (the game loop owns the sound/log
+// effects; the tick itself stays effect-free).
+//   - lit: the fire lit this substep (fuelSubsteps went 0 -> burning; a
+//     re-light after a full burnout is the same transition — the
+//     countdown sits at 0 in between);
+//   - smeltCompleted: the output slot gained exactly one product unit
+//     (empty -> x1, or xN -> x(N+1) of the same item). Only the tick
+//     adds to the output; the panel UI removes between frames, so the
+//     pre-tick snapshot taken in the same frame cannot alias a UI change.
+struct FurnaceTickEvents {
+    bool lit = false;
+    bool smeltCompleted = false;
+};
+
+FurnaceTickEvents furnaceTickEvents(const FurnaceState& before,
+                                    const FurnaceState& after);
+
 } // namespace mc

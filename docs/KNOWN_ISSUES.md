@@ -268,9 +268,14 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 - **炉子外观四个侧面共用同一纹理** — 带炉口/余火的前脸与其余三侧同纹理
   （BlockModel 只有 top/side/bottom 三面组）；顶/底面是石质纹理。
   `[Phase 40]`
-- **无熔炼完成音效、无火焰动画、无经验** — v1 的视觉提示只有面板里的
-  进度条（`progressSubsteps / smeltSubsteps` 填充）；无 MC 的"叮"声、
-  炉口火焰粒子与熔炼经验球。`[Phase 40]`
+- **炉子表现** — v1 的视觉提示只有面板里的进度条（`progressSubsteps /
+  smeltSubsteps` 填充）；**熔炼完成音效 + 炉口火焰 `[CRAFT-5]` 已解决**
+  （"smelt" ding 新 wav 空间化于炉块 + 帧锁定 info 日志；复燃 = 既有
+  "ignite" 声；火焰 = 燃烧中炉子每 36 帧自炉块上方一格发射 P66 余烬批
+  【专用盐、render.furnace_flames 门 off = 位级恒等；36 帧 = 余烬寿命
+  2× + 裕量（30 帧撞 60 fps 寿命边界 = PITS 316）】）；**无熔炼经验球**
+  = 项目无 XP 系统（矩阵外，保持记档偏离）。`[Phase 40]`
+  （表现 `[CRAFT-5]`，经验 = 无 XP 系统）
 - **可熔炼/燃料名单小且 wood 不可当燃料** — 数据字段 `smeltable_to` /
   `smelt_time`（(0,100] s，缺省 10）/ `fuel_time`（(0,1000] s）完全数据
   驱动、可扩展；当前仅 3 种肉可熔炼，燃料 = coal 80 s / planks 7.5 s /

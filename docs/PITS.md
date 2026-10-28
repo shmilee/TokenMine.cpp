@@ -2304,6 +2304,23 @@
   性，real-dt 终态设计先冒烟实测场景 fps，或消掉 real-dt 变量
   （本门解法 = nodecay config【hunger_decay_seconds 9999，g95 先例】
   + 帧数按最慢边界 + 恰满 10 次回复的精确终态）。
+- **性能树 step0 patch 的 hunk 锚定 update() 区 = 新插入移动上下文（PITS 316）**——10-29 门 138：
+  CRAFT-5 在 `updateFires(dt);` 与 `updateFireSpread();` 之间插入 `updateFurnaceFlames();`
+  → step0_patch 的 hunk #7（把这两行各自包进 chrono 测量块）上下文失配 FAILED（#6 恒 FAIL
+  已知 + #7 新 FAIL）→ 性能树构建 -Werror 死（s9911_f0_active set-but-unused）。教训 =
+  **性能树构建脚本接受后必须验两件事：marker 计数（9911-STEP0 = 15）+ 构建成功**；
+  hunk #6/#7 类手工补块时，新 v1.x 的 pass 放**测量块外**（保持新旧树 fires/spread 数字
+  可比的语义）。另：黑窗相位的 PNG 字节随窗口位置变（679×744+0+60 = 19817 B / +0+22 = 12037 B
+  纯黑）——sz 阈值判定用大小门（>100000）而非字节恒等；10-29 夜黑相位偏长（单 tag 8-10 连黑，
+  周期 ~40 min 级），重试 12 × 90 s 等待才收讫 = PITS 280 黑窗分钟周期的加长版
+  。
+  ③ 帧计数器 update/render **后**自增 → `--frames N` 末帧见 N−1：age-0 截图
+  设计须门 `(m_frameCount+1) % period`；粒子光读炉格（opaque 无 emission）=
+  黑粒子 on≡off diff 0——读上方空气格；**period 取寿命 2× 会撞 60 fps 边界**
+  （30 帧 = 0.5 s = spawnFire 寿命上限 → 同侧 RAW 被 125 px 残留余烬破，差值
+  全在火焰簇内世界零差）——取 36 帧留裕量；age-0 批的**当帧 update 仍积一帧
+  真实 dt 位移**（fps 依赖）→ 活粒子同侧 RAW 恒差 = P66 类（P54 条款），
+  证据 = savenorm EXACT + RAW 差异 100% 含于火焰簇。
 - **unmap_covers 覆盖谓词缺口 = 浏览器吞点击（PITS 314）**——10-29 门 137 S2 首轮：
   `unmap_covers` 的覆盖判定要求 `y+h >= 770`，用户 Firefox 窗 1362×744+0+20 的
   y+h = 764 **不满足** → 预存全屏浏览器窗不被隐藏（TM_PRE_WINDOWS 快照也不够——

@@ -20,7 +20,7 @@
 | FLUID 流体 | ~~FLUID-4 倒向水面~~ ✅ v1.9.0 | ~~FLUID-5 水熔岩反应~~ ✅ v1.10.0 | ~~FLUID-6 流体种类扩展~~ ✅ v1.11.0 | | | |
 | ENT 实体/Mob/移动 | ~~ENT-5 坠落伤害~~ ✅ v1.12.0 | ~~ENT-6 AI 补强~~ ✅ v1.13.0 | ~~ENT-7 移动惯性~~ ✅ v1.14.0 | ~~ENT-8 和平/保护环~~ ✅ v1.15.0 | ~~ENT-9 掉落可视化~~ ✅ v1.16.0 | |
 | SURV 生存/战斗/效果 | ~~SURV-6 效果档位~~ ✅ v1.17.0 | ~~SURV-7 死亡统计~~ ✅ v1.18.0 | ~~SURV-8 工具 10×~~ ✅ v1.19.0 | ~~SURV-9 饱和细化~~ ✅ v1.20.0 | ~~SURV-10 挤奶冷却~~ ✅ v1.21.0 | |
-| CRAFT 物品/合成/面板 | ~~CRAFT-4 配方提示~~ ✅ v1.22.0 | CRAFT-5 炉子表现 | CRAFT-6 燃料熔炼 | CRAFT-7 背包交互 | | |
+| CRAFT 物品/合成/面板 | ~~CRAFT-4 配方提示~~ ✅ v1.22.0 | ~~CRAFT-5 炉子表现~~ ✅ v1.23.0 | CRAFT-6 燃料熔炼 | CRAFT-7 背包交互 | | |
 | SAVE 存档 | SAVE-2 速度入档 | SAVE-3 槽位管理 | | | | |
 | PRE 表现层 | PRE-7 中毒/燃烧表现 | PRE-8 mob 火焰 | PRE-9 箭/弓/手视觉 | PRE-10 图标重叠修复★ | PRE-11 HUD 细化 | PRE-12 tooltip/F3 |
 | UX 实机报障 | （新实机报障入此行，用户定案） | | | | | |
@@ -116,6 +116,35 @@
   构建与运行 + 范围与限制 + 许可），PITS 范围 267-288 修正为 271-288
   （267-270 属 v1.0 组时代门 114/115）③ Latest 收尾回 v1.5.0 组 release
   （重建时序）。同步 README/CHANGELOG/BACKLOG/AGENTS 旧引用。
+- 2026-10-29：**CRAFT-5 炉子表现完成**（v1.x 23/33，v1.23.0，门 138，CRAFT 行 2/4）：
+  "炉子表现"原始定义已佚 = 定案 **炉子的两个 MC 表现提示**（消费 KNOWN_ISSUES
+  Phase-40"无熔炼完成音效、无火焰动画、无经验"）：① 炉口火焰粒子 = 燃烧中炉子
+  （fuelSubsteps>0）每 kFurnaceParticleEveryNFrames=36 帧自炉块上方一格发射
+  P66 spawnFire 余烬批【2 粒/负重力/0.3-0.5 s 寿命/专用盐
+  kFurnaceParticleRollSalt，36 帧 = 寿命 2× + 裕量（30 帧撞 60fps 寿命边界
+  同侧 RAW 被 125px 残留破实证）+ (m_frameCount+1)%36 门 = 帧 900 截图恒携
+  age-0 批】+ 粒子光读上方空气格【炉格 opaque 无 emission = 黑粒子 diff 0 实证】
+  + render.furnace_flames getBool 默认 true【off = 对 v1.22.0 位级恒等】
+  ② 熔炼完成 "smelt" ding = 新 wav【generate_sounds.py 1320/660 Hz 双泛音钟 +
+  LCG tick，种子 0x51DE，既有 38 wav 字节零变化 md5 实证 + 幂等】空间化于炉块
+  中心（CRAFT-3 play(name,origin) 范式）+ 帧锁定 info 日志【E2E 证据，headless
+  play 静默但日志发 = PRE-4 先例】③ 复燃 0→燃烧转移帧复用 "ignite"（P60）+
+  日志。事件检测 = 纯函数 furnaceTickEvents(before, after)（tick 保持无副作用，
+  音频不入帧状态 = 硬规则 8）。**无经验**（无 XP 系统 = 记档偏离）。零
+  format（21）/config.json/内容。1847/1847（+3：lit 三态 / 完成四例 / 真 tick
+  600 子步端到端）、-Werror 0。门 138：S1 第 138 次结构性免疫免重锚
+  （四方 ×2 168140 B 679×744 锚连续 + savenorm 同侧/跨侧；furnace 永不生成 =
+  m_furnaces 空双结构惰性）+ S2 炉子场景无输入跑 PASS（scene：表 (21,39,-4) +
+  beef 预置 progress 580/600 + fuel 3000：frame 20 熔炼完成、900 帧仍燃）：
+  on×2 savenorm EXACT + RAW 差 4232 px 100% 含于火焰簇 = P66 活粒子类
+  （P54 条款）+ off×2 RAW 235855 B EXACT + **off ≡ old（v1.22.0）RAW 字节一致
+  = 代码级免疫** + on≡off savenorm EXACT（火焰不入档纯渲染证）+ off=old
+  savenorm 仅熔岩湖 churn（PITS 244/283 类）+ on vs off 像素 4417 px bbox 130x150 紧凑簇（上中画面，不触热栏带） + 日志 new
+  侧恰 1 行 smelt（frame 20 帧锁定）/ old 侧 0 + 终态六跑 cooked_beef ×1 +
+  fuel 2100 exact + 黑窗相位 8-10 连黑重试收讫 = PITS 316 + 性能 A/B 真
+  v1.22 vs v1.23 PASS（win1 51927 逐位 + win2/3 ±100 rim churn 类 +
+  changesApplied 1404 逐位 + 全同档）。**tag v1.23.0 = CRAFT-4+5 合并 tag
+  （新政策首个）**——详见 `docs/archive/phase-craft5.md`。
 - 2026-10-29：**CRAFT-4 配方提示完成**（v1.x 22/33，v1.22.0，门 137，CRAFT 行 1/4）：
   "配方提示"原始定义已佚 = 定案 **工作台面板 shaped 配方提示列**（消费 KNOWN_
   ISSUES Phase-17"工作台面板无配方列表……shaped 配方的摆法没有游戏内指引"）：

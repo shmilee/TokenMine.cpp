@@ -432,6 +432,12 @@ private:
     // per-tick fire-ember particle emission (fixed-frame step, gated on
     // m_fireParticles) and the death burst on burn-out/water extinguish.
     void updateFires(double dt);
+    // CRAFT-5: the lit-furnace mouth flames — every
+    // kFurnaceParticleEveryNFrames frame, each furnace with a live burn
+    // emits a rising ember batch from the cell above the block (the P66
+    // spawnFire reused; gated on m_furnaceFlames = zero emissions when
+    // off, no furnaces, or no fire block for the texture).
+    void updateFurnaceFlames();
     // Phase 66 fire spread (Fire v2): every fire.spread_interval_frames
     // frame, each live fire cell rolls its 5 spread neighbors (4
     // horizontal + above — never downward, Minecraft) for a `flamable`
@@ -1144,6 +1150,11 @@ private:
     int m_fireSpreadInterval = 6;
     double m_fireSpreadChance = 0.05;
     bool m_fireParticles = true;
+
+    // CRAFT-5: the lit-furnace mouth flames (render.furnace_flames,
+    // default true — off = zero emissions = bit-identical to v1.21.0;
+    // the fire.particles E2E-control pattern).
+    bool m_furnaceFlames = true;
 
     // Phase 71 campfire (the family in Phase 75): PER-BLOCK cooking
     // states — one CampfireCookState per campfire-FAMILY block in the

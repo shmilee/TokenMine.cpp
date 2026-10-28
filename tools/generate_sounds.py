@@ -311,6 +311,22 @@ def ignite():
     return lowpass3(sound(dur, f))
 
 
+def smelt():
+    """The smelt-complete ding (CRAFT-5, the furnace's product-done
+    cue): a short two-partial bell — a bright 1320 Hz strike over a
+    660 Hz body tone, both fast-decay, with a quiet LCG tick on the
+    attack (the fixed-LCG / sine paradigm, dedicated seed)."""
+    lcg = Lcg(0x51DE)
+    dur = 0.35
+
+    def f(t, _):
+        tick = lcg.next() * math.exp(-t * 60) * 0.15
+        bell = (math.sin(2 * math.pi * 1320.0 * t) * math.exp(-t * 14) * 0.35
+                + math.sin(2 * math.pi * 660.0 * t) * math.exp(-t * 9) * 0.45)
+        return (bell + tick) * env(t, dur, 9.0) * 0.8
+    return sound(dur, f)
+
+
 # ---------------------------------------------------------------------------
 # CRAFT-3: the material sounds. Each material is a complete three-piece
 # vocabulary (<material>_dig / _place / _break) — the block's optional
@@ -620,6 +636,8 @@ SOUNDS = {
     "milk": milk,
     "splash": splash,
     "ignite": ignite,
+    # CRAFT-5: the smelt-complete ding (furnace presentation).
+    "smelt": smelt,
     # CRAFT-3: the six material vocabularies (3 events each).
     "stone_dig": stone_dig,
     "stone_place": stone_place,
