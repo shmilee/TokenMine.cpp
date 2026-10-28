@@ -1,9 +1,26 @@
 {
-  "id": "leather_leggings",
-  "type": "material",
-  "max_stack": 1,
-  "icon": "leather_leggings",
-  "armor_slot": "legs",
-  "armor_points": 2,
-  "durability": 75
+ "id": "leather_leggings",
+ "type": "material",
+ "max_stack": 1,
+ "icon": "leather_leggings",
+ "armor_slot": "legs",
+ "armor_points": 2,
+ "durability": 75,
+ "model": {
+  "texture": "leather_leggings",
+  "elements": [
+   {
+    "from": [
+     0.18,
+     0.08,
+     0.28
+    ],
+    "to": [
+     0.82,
+     0.92,
+     0.72
+    ]
+   }
+  ]
+ }
 }

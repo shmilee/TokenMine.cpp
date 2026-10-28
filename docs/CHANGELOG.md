@@ -3,6 +3,52 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.16.0（2026-10-28）
+
+**ENT-9 掉落可视化**（v1.x 任务表 16/33，**ENT 行 5/5 收尾**，门
+131，新组 1.16-1.20 首版）——"掉落可视化"原始定义已佚 = 代理定案
+**全量掉落可见（纯内容，零核心代码）**（消费 KNOWN_ISSUES Phase-11
+"非 block 物品的掉落物在 world 中不可见" + Phase-15 "物品无 3D
+模型"两条）：CRAFT-2 后 63 件非 block 无 model 物品的掉落不可见
+（含 mob 掉落 rotten_flesh/bone/arrow/feather/beef/mutton/leather +
+所有可 Q 丢弃物：食材/锭/矿/染料/盔甲/桶/药水/瓶），解法 = 全部补
+`model` 段（texture = 既有 icon PNG，零新纹理免重锚；CRAFT-2 渲染
+路径自动覆盖手持/世界掉落/进食三上下文）：
+- **model 集合 16 → 全 79 件非 block 物品**：assets/data/items 目录
+  即全非 block 集（block 物品由块数据合成、无 item JSON，P61
+  先例）→ 契约演进"每个 item 文件都有 model"。
+- **家族几何**（单位空间 1-3 box 剪影）：ingot/gem/chunk/dye/sheet/
+  bread/meat/wheat/stick/feather/bucket/armor 各 1 box；bone 3（杆 +
+  骨节）/ arrow 3（杆 + 头 + 羽）/ bottle·potion·flint_and_steel·
+  rotten 2 box；master_bow = bow.json 3 元素结构复用（texture 换
+  自身 icon）。
+- **共面 Z-fight 修正**（CRAFT-2
+  ShippedModelsHaveNoFaceCoincidentBoxes 守护首轮揪出）：bottle/
+  potion 颈底、arrow 箭头、rotten 二团 = 相交埋入替代共面（apple
+  柄先例：相交合法，共面非法）。
+- **零 src 变更/零 format（19）/config/音效**（ENT-8 后代码位级同 =
+  性能 A/B 最强形）；与 PRE-12 边界：ENT-9 = 掉落物本体可见（内容），
+  PRE-12 = 通用 tooltip/F3 框架（UI，后续行）。
+
+1803/1803（+1 净：`ModelItemSetIsExactly16` 契约演进 →
+`AllShippedItemsHaveModels`（全 79 件逐名 + texture==icon 钉死）+
+`Ent9FamilyGeometrySpotChecks`（12 家族元素数抽查）；mesh 守护
+modelCount 16→79）、`-Werror` 0 警告。门 131：S1 = **第 131 次结
+构性免疫免重锚**（fresh 60f 四方 ×2 387726 B + base18 + savenorm；
+手持 slot0 = stone 立方路径不变 + 增益件全在隐藏 starter 槽 17-26
+不渲染 + fresh 零掉落 + 模型网格惰性 build-once）+ **S2 密封房 A/B
+PASS**（s129 平台围合 + 432 glowstone 房顶【air carve 占位改写，
+PITS 305】+ 10 件预置 item 实体 + slot0 iron_ingot，600f 无输入：
+×2 RAW/侧 + savenorm ×2/侧 + **跨侧 savenorm EXACT** = 实体物理位级
+一致纯渲染实证 + **A/B diff 684 px 全限世界带 y[308..380]** + 心带/
+热栏带零 = HUD 2D 图标零变化）+ S3 1803 + 性能 A/B 最强形 PASS（两
+性能树 src 位级一致 ⇒ win1 fluidCells 51926 逐位 + win2/3 ±100 =
+**同二进制 v115perf 自分歧**【门 130 两跑 29703/29700、门 131 跑
+29803/29800】+ 终档 3 格 rim 簇 (81..84,36,73..77) 实证 = PITS 283
+类非回归 + PIPE3 changesApplied 1404 逐位 = 成本可忽略）。
+**新组 1.16-1.20 开始**（组内不打 tag；组末 v1.20.0 → tag + release；
+正确性 A/B 旧侧 = v1.15.0 = c1f9d31）。
+
 ## v1.15.0（2026-10-28）
 
 **ENT-8 和平/保护环**（v1.x 任务表 15/33，ENT 行 4/6，门 130）——"和平

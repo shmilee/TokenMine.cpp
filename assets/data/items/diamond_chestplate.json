@@ -1,9 +1,26 @@
 {
-  "id": "diamond_chestplate",
-  "type": "material",
-  "max_stack": 1,
-  "icon": "diamond_chestplate",
-  "armor_slot": "chest",
-  "armor_points": 8,
-  "durability": 528
+ "id": "diamond_chestplate",
+ "type": "material",
+ "max_stack": 1,
+ "icon": "diamond_chestplate",
+ "armor_slot": "chest",
+ "armor_points": 8,
+ "durability": 528,
+ "model": {
+  "texture": "diamond_chestplate",
+  "elements": [
+   {
+    "from": [
+     0.18,
+     0.12,
+     0.28
+    ],
+    "to": [
+     0.82,
+     0.88,
+     0.72
+    ]
+   }
+  ]
+ }
 }

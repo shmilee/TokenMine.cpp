@@ -18,7 +18,7 @@
 | LGT 光照 | ~~LGT-3 夜光重传播~~ ✅ v1.3.0 | ~~LGT-4 光束入光~~ ✅ v1.4.0 | ~~LGT-5 半块透光~~ ✅ v1.5.0 | | | |
 | GEN 世界与生成 | ~~GEN-7 基岩多层~~ ✅ v1.6.0 | ~~GEN-8 地形互感~~ ✅ v1.7.0 | ~~GEN-9 耕地湿润~~ ✅ v1.8.0 | | | |
 | FLUID 流体 | ~~FLUID-4 倒向水面~~ ✅ v1.9.0 | ~~FLUID-5 水熔岩反应~~ ✅ v1.10.0 | ~~FLUID-6 流体种类扩展~~ ✅ v1.11.0 | | | |
-| ENT 实体/Mob/移动 | ~~ENT-5 坠落伤害~~ ✅ v1.12.0 | ~~ENT-6 AI 补强~~ ✅ v1.13.0 | ~~ENT-7 移动惯性~~ ✅ v1.14.0 | ~~ENT-8 和平/保护环~~ ✅ v1.15.0 | ENT-9 掉落可视化 | |
+| ENT 实体/Mob/移动 | ~~ENT-5 坠落伤害~~ ✅ v1.12.0 | ~~ENT-6 AI 补强~~ ✅ v1.13.0 | ~~ENT-7 移动惯性~~ ✅ v1.14.0 | ~~ENT-8 和平/保护环~~ ✅ v1.15.0 | ~~ENT-9 掉落可视化~~ ✅ v1.16.0 | |
 | SURV 生存/战斗/效果 | SURV-6 效果档位 | SURV-7 死亡统计 | SURV-8 工具 10× | SURV-9 饱和细化 | SURV-10 挤奶冷却 | |
 | CRAFT 物品/合成/面板 | CRAFT-4 配方提示 | CRAFT-5 炉子表现 | CRAFT-6 燃料熔炼 | CRAFT-7 背包交互 | | |
 | SAVE 存档 | SAVE-2 速度入档 | SAVE-3 槽位管理 | | | | |
@@ -116,6 +116,31 @@
   构建与运行 + 范围与限制 + 许可），PITS 范围 267-288 修正为 271-288
   （267-270 属 v1.0 组时代门 114/115）③ Latest 收尾回 v1.5.0 组 release
   （重建时序）。同步 README/CHANGELOG/BACKLOG/AGENTS 旧引用。
+- 2026-10-28：**ENT-9 掉落可视化完成**（v1.x 第 16/33 项，v1.16.0，
+  门 131，**ENT 行 5/5 收尾**）："掉落可视化"原始定义已佚 = 代理
+  定案**全量掉落可见（纯内容，零核心代码）**（消费 KNOWN_ISSUES
+  Phase-11 条"非 block 物品的掉落物在 world 中不可见" + Phase-15
+  条"物品无 3D 模型"）：CRAFT-2 后 63 件非 block 无 model 物品掉落
+  不可见（含 mob 掉落 rotten_flesh/bone/arrow/feather/beef/mutton/
+  leather + 所有可 Q 丢弃物）→ 全部补 `model` 段（texture = 既有
+  icon PNG `<id>.png`，零新纹理免重锚；家族几何 1-3 box 剪影：
+  ingot/dye/wheat/stick 1 / bone/arrow 3 / bottle/potion/fands/
+  rotten 2 / master_bow = bow 结构复用；CRAFT-2 渲染路径自动覆盖
+  手持/世界掉落/进食三上下文）；共面 Z-fight 首轮套件揪出 4 家族
+  10 件修正（颈/头/团相交埋入，apple 柄先例）；model 集合契约
+  16→全 79 件（目录 = 全非 block 集，block 物品合成无 JSON）。
+  零 src 变更/零 format（19）/config/音效。1803/1803（+1 净：
+  ModelItemSetIsExactly16 演进 → AllShippedItemsHaveModels +
+  Ent9FamilyGeometrySpotChecks，mesh 守护 modelCount 16→79）、
+  -Werror 0。门 131：S1 第 131 次结构性免疫免重锚（四方 ×2 387726 B
+  + base18 + savenorm；手持 slot0 = stone block 立方路径不变 + 增益
+  件全在隐藏槽 17-26 + 模型惰性缓存）+ S2 密封房 A/B PASS（10 件
+  预置掉落 + ×2 RAW/侧 + 跨侧 savenorm EXACT = 纯渲染 + diff 684 px
+  全限世界带 + 心带/热栏带零）+ S3 1803 + 性能 A/B 最强形 PASS（两
+  性能树 src 位级一致【零 src 变更】⇒ win1 fluidCells 51926 逐位 +
+  win2/3 ±100 = 同二进制 v115perf 自分歧 + 终档 3 格 rim 簇实证
+  PITS 283 类 = 结构性惰性）；场景坑 PITS 305（builder 去重丢
+  glowstone 房顶）。
 - 2026-10-28：**ENT-8 和平/保护环完成**（v1.x 第 15/33 项，v1.15.0，
   门 130，ENT 行 4/6）："和平/保护环"原始定义已佚 = 代理定案
   **peaceful 难度**（消费 KNOWN_ISSUES Phase-25 条"无 Peaceful 难度"；

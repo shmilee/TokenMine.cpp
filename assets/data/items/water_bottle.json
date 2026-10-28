@@ -1,8 +1,37 @@
 {
-  "id": "water_bottle",
-  "type": "material",
-  "max_stack": 16,
-  "icon": "water_bottle",
-  "pours_fluid": "water",
-  "pours_becomes": "glass_bottle"
+ "id": "water_bottle",
+ "type": "material",
+ "max_stack": 16,
+ "icon": "water_bottle",
+ "pours_fluid": "water",
+ "pours_becomes": "glass_bottle",
+ "model": {
+  "texture": "water_bottle",
+  "elements": [
+   {
+    "from": [
+     0.32,
+     0.1,
+     0.32
+    ],
+    "to": [
+     0.68,
+     0.62,
+     0.68
+    ]
+   },
+   {
+    "from": [
+     0.42,
+     0.5,
+     0.42
+    ],
+    "to": [
+     0.58,
+     0.88,
+     0.58
+    ]
+   }
+  ]
+ }
 }

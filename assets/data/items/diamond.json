@@ -1,5 +1,22 @@
 {
-  "id": "diamond",
-  "type": "material",
-  "icon": "diamond"
+ "id": "diamond",
+ "type": "material",
+ "icon": "diamond",
+ "model": {
+  "texture": "diamond",
+  "elements": [
+   {
+    "from": [
+     0.25,
+     0.32,
+     0.3
+    ],
+    "to": [
+     0.75,
+     0.68,
+     0.7
+    ]
+   }
+  ]
+ }
 }

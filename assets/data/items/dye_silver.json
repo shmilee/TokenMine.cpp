@@ -1,7 +1,24 @@
 {
-  "id": "dye_silver",
-  "type": "material",
-  "max_stack": 64,
-  "icon": "dye_silver",
-  "dye_color": "silver"
+ "id": "dye_silver",
+ "type": "material",
+ "max_stack": 64,
+ "icon": "dye_silver",
+ "dye_color": "silver",
+ "model": {
+  "texture": "dye_silver",
+  "elements": [
+   {
+    "from": [
+     0.2,
+     0.44,
+     0.28
+    ],
+    "to": [
+     0.8,
+     0.56,
+     0.72
+    ]
+   }
+  ]
+ }
 }

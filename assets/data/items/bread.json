@@ -1,7 +1,24 @@
 {
-  "id": "bread",
-  "type": "material",
-  "max_stack": 64,
-  "icon": "bread",
-  "restore_hunger": 5
+ "id": "bread",
+ "type": "material",
+ "max_stack": 64,
+ "icon": "bread",
+ "restore_hunger": 5,
+ "model": {
+  "texture": "bread",
+  "elements": [
+   {
+    "from": [
+     0.15,
+     0.28,
+     0.32
+    ],
+    "to": [
+     0.85,
+     0.72,
+     0.68
+    ]
+   }
+  ]
+ }
 }

@@ -1,9 +1,26 @@
 {
-  "id": "diamond_boots",
-  "type": "material",
-  "max_stack": 1,
-  "icon": "diamond_boots",
-  "armor_slot": "feet",
-  "armor_points": 3,
-  "durability": 429
+ "id": "diamond_boots",
+ "type": "material",
+ "max_stack": 1,
+ "icon": "diamond_boots",
+ "armor_slot": "feet",
+ "armor_points": 3,
+ "durability": 429,
+ "model": {
+  "texture": "diamond_boots",
+  "elements": [
+   {
+    "from": [
+     0.15,
+     0.1,
+     0.3
+    ],
+    "to": [
+     0.85,
+     0.5,
+     0.7
+    ]
+   }
+  ]
+ }
 }

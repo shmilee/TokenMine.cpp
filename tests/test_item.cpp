@@ -2670,29 +2670,29 @@ TEST(ItemModelTest, ContentPinned16Models) {
     }
 }
 
-TEST(ItemModelTest, ModelItemSetIsExactly16) {
-    // The shipped model set is exactly the 16 items (no other item
-    // carries a 'model' section — the no-model items keep the legacy
-    // render paths, the structural-immunity red line).
-    std::vector<std::string> expected = {
-        "bow",           "golden_apple", "infinite_bow", "iron_axe",
-        "iron_pickaxe",  "iron_shovel",  "apple",        "poison_bow",
-        "power_bow",     "speed_bow",    "stone_axe",    "stone_pickaxe",
-        "stone_shovel",  "wooden_axe",   "wooden_pickaxe", "wooden_shovel",
-    };
-    std::sort(expected.begin(), expected.end());
+TEST(ItemModelTest, AllShippedItemsHaveModels) {
+    // ENT-9 contract evolution (was ModelItemSetIsExactly16): the
+    // shipped model set is now EVERY item — all non-block drops and
+    // discards render in the world and the hand (no invisible drops).
+    // Block items are synthesized from block data (no item JSON), so
+    // assets/data/items is exactly the non-block set: every file
+    // carries a 'model' section whose texture is the item's own icon
+    // (zero new textures, the CRAFT-2 red line).
     const std::filesystem::path dir = "assets/data/items";
     ASSERT_TRUE(std::filesystem::is_directory(dir))
         << "run from the repo root";
-    std::vector<std::string> modeled;
+    std::vector<std::string> all;
     std::vector<std::filesystem::path> files;
     for (const auto& entry : std::filesystem::directory_iterator(dir)) {
         if (entry.is_regular_file() &&
             entry.path().extension() == ".json") {
             files.push_back(entry.path());
+            all.push_back(entry.path().stem().generic_string());
         }
     }
-    std::sort(files.begin(), files.end());
+    std::sort(all.begin(), all.end());
+    ASSERT_GE(all.size(), 79u) << "the shipped item set shrank?";
+    std::vector<std::string> modeled;
     for (const auto& file : files) {
         auto parsed =
             Json::parse(readItemFile(file.stem().generic_string()));
@@ -2701,9 +2701,44 @@ TEST(ItemModelTest, ModelItemSetIsExactly16) {
         auto reg = items.registerItem(*parsed);
         ASSERT_TRUE(reg.ok()) << file.generic_string() << ": "
                               << reg.error().message;
-        if (items.at(*reg).model.has_value()) {
-            modeled.push_back(items.at(*reg).name);
+        const Item& it = items.at(*reg);
+        if (it.model.has_value()) {
+            modeled.push_back(it.name);
+            EXPECT_EQ(it.model->texture, it.name)
+                << it.name << ": the model texture is the own icon";
+            EXPECT_FALSE(it.model->elements.empty());
         }
     }
-    EXPECT_EQ(modeled, expected);
+    std::sort(modeled.begin(), modeled.end());
+    EXPECT_EQ(modeled, all);
+}
+
+TEST(ItemModelTest, Ent9FamilyGeometrySpotChecks) {
+    // ENT-9: family element-count pins (the per-family box silhouettes
+    // of the 63 gained models — a flat count would catch a whole
+    // family losing its extra boxes).
+    struct Case {
+        const char* name;
+        int elements;
+    };
+    const Case cases[] = {
+        {"arrow", 3},          {"bone", 3}, {"master_bow", 3},
+        {"potion_healing", 2}, {"glass_bottle", 2},
+        {"flint_and_steel", 2}, {"rotten_flesh", 2},
+        {"dye_red", 1},        {"iron_helmet", 1},
+        {"iron_ingot", 1},     {"stick", 1},
+        {"wheat", 1},
+    };
+    for (const Case& c : cases) {
+        auto parsed = Json::parse(readItemFile(c.name));
+        ASSERT_TRUE(parsed.ok()) << c.name << ": " << parsed.error().message;
+        ItemRegistry items;
+        auto reg = items.registerItem(*parsed);
+        ASSERT_TRUE(reg.ok()) << c.name << ": " << reg.error().message;
+        const Item& it = items.at(*reg);
+        ASSERT_TRUE(it.model.has_value()) << c.name;
+        EXPECT_EQ(static_cast<int>(it.model->elements.size()), c.elements)
+            << c.name;
+        EXPECT_EQ(it.model->texture, c.name) << c.name;
+    }
 }

@@ -1,8 +1,25 @@
 {
-  "id": "beef",
-  "type": "material",
-  "max_stack": 64,
-  "icon": "beef",
-  "restore_hunger": 3,
-  "smeltable_to": "cooked_beef"
+ "id": "beef",
+ "type": "material",
+ "max_stack": 64,
+ "icon": "beef",
+ "restore_hunger": 3,
+ "smeltable_to": "cooked_beef",
+ "model": {
+  "texture": "beef",
+  "elements": [
+   {
+    "from": [
+     0.2,
+     0.25,
+     0.28
+    ],
+    "to": [
+     0.8,
+     0.75,
+     0.72
+    ]
+   }
+  ]
+ }
 }

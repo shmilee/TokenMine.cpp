@@ -1,5 +1,22 @@
 {
-  "id": "flint",
-  "type": "material",
-  "icon": "flint"
+ "id": "flint",
+ "type": "material",
+ "icon": "flint",
+ "model": {
+  "texture": "flint",
+  "elements": [
+   {
+    "from": [
+     0.25,
+     0.28,
+     0.3
+    ],
+    "to": [
+     0.75,
+     0.72,
+     0.7
+    ]
+   }
+  ]
+ }
 }

@@ -1,7 +1,28 @@
 {
-  "id": "bucket",
-  "type": "material",
-  "max_stack": 16,
-  "icon": "bucket",
-  "collects_fluid": ["water", "lava", "honey"]
+ "id": "bucket",
+ "type": "material",
+ "max_stack": 16,
+ "icon": "bucket",
+ "collects_fluid": [
+  "water",
+  "lava",
+  "honey"
+ ],
+ "model": {
+  "texture": "bucket",
+  "elements": [
+   {
+    "from": [
+     0.18,
+     0.25,
+     0.25
+    ],
+    "to": [
+     0.82,
+     0.78,
+     0.75
+    ]
+   }
+  ]
+ }
 }

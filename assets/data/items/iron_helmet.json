@@ -1,9 +1,26 @@
 {
-  "id": "iron_helmet",
-  "type": "material",
-  "max_stack": 1,
-  "icon": "iron_helmet",
-  "armor_slot": "head",
-  "armor_points": 2,
-  "durability": 165
+ "id": "iron_helmet",
+ "type": "material",
+ "max_stack": 1,
+ "icon": "iron_helmet",
+ "armor_slot": "head",
+ "armor_points": 2,
+ "durability": 165,
+ "model": {
+  "texture": "iron_helmet",
+  "elements": [
+   {
+    "from": [
+     0.18,
+     0.3,
+     0.2
+    ],
+    "to": [
+     0.82,
+     0.8,
+     0.8
+    ]
+   }
+  ]
+ }
 }

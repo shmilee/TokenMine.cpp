@@ -1,8 +1,25 @@
 {
-  "id": "milk_bucket",
-  "type": "material",
-  "max_stack": 1,
-  "icon": "milk_bucket",
-  "drink_time": 1.6,
-  "returns_item": "bucket"
+ "id": "milk_bucket",
+ "type": "material",
+ "max_stack": 1,
+ "icon": "milk_bucket",
+ "drink_time": 1.6,
+ "returns_item": "bucket",
+ "model": {
+  "texture": "milk_bucket",
+  "elements": [
+   {
+    "from": [
+     0.18,
+     0.25,
+     0.25
+    ],
+    "to": [
+     0.82,
+     0.78,
+     0.75
+    ]
+   }
+  ]
+ }
 }

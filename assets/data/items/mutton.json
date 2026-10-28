@@ -1,8 +1,25 @@
 {
-  "id": "mutton",
-  "type": "material",
-  "max_stack": 64,
-  "icon": "mutton",
-  "restore_hunger": 2,
-  "smeltable_to": "cooked_mutton"
+ "id": "mutton",
+ "type": "material",
+ "max_stack": 64,
+ "icon": "mutton",
+ "restore_hunger": 2,
+ "smeltable_to": "cooked_mutton",
+ "model": {
+  "texture": "mutton",
+  "elements": [
+   {
+    "from": [
+     0.2,
+     0.25,
+     0.28
+    ],
+    "to": [
+     0.8,
+     0.75,
+     0.72
+    ]
+   }
+  ]
+ }
 }

@@ -1,6 +1,47 @@
 {
-  "id": "bone",
-  "type": "material",
-  "max_stack": 64,
-  "icon": "bone"
+ "id": "bone",
+ "type": "material",
+ "max_stack": 64,
+ "icon": "bone",
+ "model": {
+  "texture": "bone",
+  "elements": [
+   {
+    "from": [
+     0.12,
+     0.44,
+     0.44
+    ],
+    "to": [
+     0.88,
+     0.56,
+     0.56
+    ]
+   },
+   {
+    "from": [
+     0.05,
+     0.38,
+     0.38
+    ],
+    "to": [
+     0.25,
+     0.62,
+     0.62
+    ]
+   },
+   {
+    "from": [
+     0.75,
+     0.38,
+     0.38
+    ],
+    "to": [
+     0.95,
+     0.62,
+     0.62
+    ]
+   }
+  ]
+ }
 }

@@ -1,8 +1,25 @@
 {
-  "id": "honey_bucket",
-  "type": "material",
-  "max_stack": 1,
-  "icon": "honey_bucket",
-  "pours_fluid": "honey",
-  "pours_becomes": "bucket"
+ "id": "honey_bucket",
+ "type": "material",
+ "max_stack": 1,
+ "icon": "honey_bucket",
+ "pours_fluid": "honey",
+ "pours_becomes": "bucket",
+ "model": {
+  "texture": "honey_bucket",
+  "elements": [
+   {
+    "from": [
+     0.18,
+     0.25,
+     0.25
+    ],
+    "to": [
+     0.82,
+     0.78,
+     0.75
+    ]
+   }
+  ]
+ }
 }

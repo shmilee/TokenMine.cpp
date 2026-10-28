@@ -1,8 +1,25 @@
 {
-  "id": "water_bucket",
-  "type": "material",
-  "max_stack": 1,
-  "icon": "water_bucket",
-  "pours_fluid": "water",
-  "pours_becomes": "bucket"
+ "id": "water_bucket",
+ "type": "material",
+ "max_stack": 1,
+ "icon": "water_bucket",
+ "pours_fluid": "water",
+ "pours_becomes": "bucket",
+ "model": {
+  "texture": "water_bucket",
+  "elements": [
+   {
+    "from": [
+     0.18,
+     0.25,
+     0.25
+    ],
+    "to": [
+     0.82,
+     0.78,
+     0.75
+    ]
+   }
+  ]
+ }
 }

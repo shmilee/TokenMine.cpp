@@ -1,6 +1,23 @@
 {
-  "id": "stick",
-  "type": "material",
-  "icon": "stick",
-  "fuel_time": 5
+ "id": "stick",
+ "type": "material",
+ "icon": "stick",
+ "fuel_time": 5,
+ "model": {
+  "texture": "stick",
+  "elements": [
+   {
+    "from": [
+     0.42,
+     0.08,
+     0.42
+    ],
+    "to": [
+     0.58,
+     0.92,
+     0.58
+    ]
+   }
+  ]
+ }
 }

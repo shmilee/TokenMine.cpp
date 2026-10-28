@@ -1,6 +1,23 @@
 {
-  "id": "lapis",
-  "type": "material",
-  "max_stack": 64,
-  "icon": "lapis"
+ "id": "lapis",
+ "type": "material",
+ "max_stack": 64,
+ "icon": "lapis",
+ "model": {
+  "texture": "lapis",
+  "elements": [
+   {
+    "from": [
+     0.25,
+     0.28,
+     0.3
+    ],
+    "to": [
+     0.75,
+     0.72,
+     0.7
+    ]
+   }
+  ]
+ }
 }

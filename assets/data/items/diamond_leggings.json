@@ -1,9 +1,26 @@
 {
-  "id": "diamond_leggings",
-  "type": "material",
-  "max_stack": 1,
-  "icon": "diamond_leggings",
-  "armor_slot": "legs",
-  "armor_points": 6,
-  "durability": 495
+ "id": "diamond_leggings",
+ "type": "material",
+ "max_stack": 1,
+ "icon": "diamond_leggings",
+ "armor_slot": "legs",
+ "armor_points": 6,
+ "durability": 495,
+ "model": {
+  "texture": "diamond_leggings",
+  "elements": [
+   {
+    "from": [
+     0.18,
+     0.08,
+     0.28
+    ],
+    "to": [
+     0.82,
+     0.92,
+     0.72
+    ]
+   }
+  ]
+ }
 }

@@ -1,9 +1,26 @@
 {
-  "id": "diamond_helmet",
-  "type": "material",
-  "max_stack": 1,
-  "icon": "diamond_helmet",
-  "armor_slot": "head",
-  "armor_points": 3,
-  "durability": 363
+ "id": "diamond_helmet",
+ "type": "material",
+ "max_stack": 1,
+ "icon": "diamond_helmet",
+ "armor_slot": "head",
+ "armor_points": 3,
+ "durability": 363,
+ "model": {
+  "texture": "diamond_helmet",
+  "elements": [
+   {
+    "from": [
+     0.18,
+     0.3,
+     0.2
+    ],
+    "to": [
+     0.82,
+     0.8,
+     0.8
+    ]
+   }
+  ]
+ }
 }

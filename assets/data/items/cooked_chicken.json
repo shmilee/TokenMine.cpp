@@ -1,7 +1,24 @@
 {
-  "id": "cooked_chicken",
-  "type": "material",
-  "max_stack": 64,
-  "icon": "cooked_chicken",
-  "restore_hunger": 6
+ "id": "cooked_chicken",
+ "type": "material",
+ "max_stack": 64,
+ "icon": "cooked_chicken",
+ "restore_hunger": 6,
+ "model": {
+  "texture": "cooked_chicken",
+  "elements": [
+   {
+    "from": [
+     0.2,
+     0.25,
+     0.28
+    ],
+    "to": [
+     0.8,
+     0.75,
+     0.72
+    ]
+   }
+  ]
+ }
 }

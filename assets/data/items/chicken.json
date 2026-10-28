@@ -1,8 +1,25 @@
 {
-  "id": "chicken",
-  "type": "material",
-  "max_stack": 64,
-  "icon": "chicken",
-  "restore_hunger": 2,
-  "smeltable_to": "cooked_chicken"
+ "id": "chicken",
+ "type": "material",
+ "max_stack": 64,
+ "icon": "chicken",
+ "restore_hunger": 2,
+ "smeltable_to": "cooked_chicken",
+ "model": {
+  "texture": "chicken",
+  "elements": [
+   {
+    "from": [
+     0.2,
+     0.25,
+     0.28
+    ],
+    "to": [
+     0.8,
+     0.75,
+     0.72
+    ]
+   }
+  ]
+ }
 }

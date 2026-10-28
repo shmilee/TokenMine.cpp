@@ -1,5 +1,22 @@
 {
-  "id": "iron_ingot",
-  "type": "material",
-  "icon": "iron_ingot"
+ "id": "iron_ingot",
+ "type": "material",
+ "icon": "iron_ingot",
+ "model": {
+  "texture": "iron_ingot",
+  "elements": [
+   {
+    "from": [
+     0.15,
+     0.4,
+     0.3
+    ],
+    "to": [
+     0.85,
+     0.6,
+     0.7
+    ]
+   }
+  ]
+ }
 }

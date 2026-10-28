@@ -1,9 +1,26 @@
 {
-  "id": "iron_leggings",
-  "type": "material",
-  "max_stack": 1,
-  "icon": "iron_leggings",
-  "armor_slot": "legs",
-  "armor_points": 5,
-  "durability": 225
+ "id": "iron_leggings",
+ "type": "material",
+ "max_stack": 1,
+ "icon": "iron_leggings",
+ "armor_slot": "legs",
+ "armor_points": 5,
+ "durability": 225,
+ "model": {
+  "texture": "iron_leggings",
+  "elements": [
+   {
+    "from": [
+     0.18,
+     0.08,
+     0.28
+    ],
+    "to": [
+     0.82,
+     0.92,
+     0.72
+    ]
+   }
+  ]
+ }
 }

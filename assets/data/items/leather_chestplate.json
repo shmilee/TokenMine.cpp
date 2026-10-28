@@ -1,9 +1,26 @@
 {
-  "id": "leather_chestplate",
-  "type": "material",
-  "max_stack": 1,
-  "icon": "leather_chestplate",
-  "armor_slot": "chest",
-  "armor_points": 3,
-  "durability": 80
+ "id": "leather_chestplate",
+ "type": "material",
+ "max_stack": 1,
+ "icon": "leather_chestplate",
+ "armor_slot": "chest",
+ "armor_points": 3,
+ "durability": 80,
+ "model": {
+  "texture": "leather_chestplate",
+  "elements": [
+   {
+    "from": [
+     0.18,
+     0.12,
+     0.28
+    ],
+    "to": [
+     0.82,
+     0.88,
+     0.72
+    ]
+   }
+  ]
+ }
 }

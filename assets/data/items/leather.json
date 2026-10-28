@@ -1,6 +1,23 @@
 {
-  "id": "leather",
-  "type": "material",
-  "max_stack": 64,
-  "icon": "leather"
+ "id": "leather",
+ "type": "material",
+ "max_stack": 64,
+ "icon": "leather",
+ "model": {
+  "texture": "leather",
+  "elements": [
+   {
+    "from": [
+     0.15,
+     0.45,
+     0.3
+    ],
+    "to": [
+     0.85,
+     0.55,
+     0.7
+    ]
+   }
+  ]
+ }
 }

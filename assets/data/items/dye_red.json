@@ -1,7 +1,24 @@
 {
-  "id": "dye_red",
-  "type": "material",
-  "max_stack": 64,
-  "icon": "dye_red",
-  "dye_color": "red"
+ "id": "dye_red",
+ "type": "material",
+ "max_stack": 64,
+ "icon": "dye_red",
+ "dye_color": "red",
+ "model": {
+  "texture": "dye_red",
+  "elements": [
+   {
+    "from": [
+     0.2,
+     0.44,
+     0.28
+    ],
+    "to": [
+     0.8,
+     0.56,
+     0.72
+    ]
+   }
+  ]
+ }
 }

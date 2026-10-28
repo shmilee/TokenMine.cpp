@@ -1,9 +1,26 @@
 {
-  "id": "iron_boots",
-  "type": "material",
-  "max_stack": 1,
-  "icon": "iron_boots",
-  "armor_slot": "feet",
-  "armor_points": 1,
-  "durability": 195
+ "id": "iron_boots",
+ "type": "material",
+ "max_stack": 1,
+ "icon": "iron_boots",
+ "armor_slot": "feet",
+ "armor_points": 1,
+ "durability": 195,
+ "model": {
+  "texture": "iron_boots",
+  "elements": [
+   {
+    "from": [
+     0.15,
+     0.1,
+     0.3
+    ],
+    "to": [
+     0.85,
+     0.5,
+     0.7
+    ]
+   }
+  ]
+ }
 }

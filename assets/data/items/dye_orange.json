@@ -1,7 +1,24 @@
 {
-  "id": "dye_orange",
-  "type": "material",
-  "max_stack": 64,
-  "icon": "dye_orange",
-  "dye_color": "orange"
+ "id": "dye_orange",
+ "type": "material",
+ "max_stack": 64,
+ "icon": "dye_orange",
+ "dye_color": "orange",
+ "model": {
+  "texture": "dye_orange",
+  "elements": [
+   {
+    "from": [
+     0.2,
+     0.44,
+     0.28
+    ],
+    "to": [
+     0.8,
+     0.56,
+     0.72
+    ]
+   }
+  ]
+ }
 }

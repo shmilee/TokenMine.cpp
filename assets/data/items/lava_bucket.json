@@ -1,8 +1,25 @@
 {
-  "id": "lava_bucket",
-  "type": "material",
-  "max_stack": 1,
-  "icon": "lava_bucket",
-  "pours_fluid": "lava",
-  "pours_becomes": "bucket"
+ "id": "lava_bucket",
+ "type": "material",
+ "max_stack": 1,
+ "icon": "lava_bucket",
+ "pours_fluid": "lava",
+ "pours_becomes": "bucket",
+ "model": {
+  "texture": "lava_bucket",
+  "elements": [
+   {
+    "from": [
+     0.18,
+     0.25,
+     0.25
+    ],
+    "to": [
+     0.82,
+     0.78,
+     0.75
+    ]
+   }
+  ]
+ }
 }

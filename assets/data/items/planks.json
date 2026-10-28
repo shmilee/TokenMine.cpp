@@ -1,6 +1,23 @@
 {
-  "id": "planks",
-  "type": "material",
-  "icon": "planks",
-  "fuel_time": 7.5
+ "id": "planks",
+ "type": "material",
+ "icon": "planks",
+ "fuel_time": 7.5,
+ "model": {
+  "texture": "planks",
+  "elements": [
+   {
+    "from": [
+     0.15,
+     0.45,
+     0.3
+    ],
+    "to": [
+     0.85,
+     0.55,
+     0.7
+    ]
+   }
+  ]
+ }
 }

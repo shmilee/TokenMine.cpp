@@ -1,6 +1,23 @@
 {
-  "id": "coal",
-  "type": "material",
-  "icon": "coal",
-  "fuel_time": 80
+ "id": "coal",
+ "type": "material",
+ "icon": "coal",
+ "fuel_time": 80,
+ "model": {
+  "texture": "coal",
+  "elements": [
+   {
+    "from": [
+     0.25,
+     0.28,
+     0.3
+    ],
+    "to": [
+     0.75,
+     0.72,
+     0.7
+    ]
+   }
+  ]
+ }
 }
