@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "entity/item_entity.hpp"
+#include "entity/mob_registry.hpp" // SURV-7: validateStats' mob names
 #include "item/crafting_grid.hpp"
 #include "player/drown.hpp"
 #include "world/chunk_streaming.hpp"
@@ -722,6 +723,21 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         }
         player["effects"] = std::move(effectsArr);
     }
+    // SURV-7 (format 21): the player's death-related statistics — ALWAYS
+    // written (an empty object is valid, the furnaces/tables discipline).
+    // The map is name-sorted by construction (std::map order). Zero
+    // counters are ABSENT from the game's map, so the object holds only
+    // non-zero entries.
+    {
+        Json statsObj = Json::object();
+        for (const auto& [name, count] : save.playerStats) {
+            // The double cast is exact for every realistic counter (the
+            // uint64 value is far below 2^53); Json has no integer
+            // factory (the ambiguous-overload trap).
+            statsObj[name] = Json(static_cast<double>(count));
+        }
+        player["stats"] = std::move(statsObj);
+    }
     // SURV-1: the player's armor (format 16, ALWAYS written — a
     // format-16 file REQUIRES the key; an empty object = no armor).
     // Only the OCCUPIED slots are written, in the fixed slot order.
@@ -1077,11 +1093,16 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     if (player == nullptr || !player->isObject()) {
         return MC_FAIL("save file requires a 'player' object");
     }
-    const std::set<std::string> playerFields {"pos", "yaw", "pitch",
-                                              "health", "absorption",
-                                              "hunger", "saturation",
-                                              "effects", "armor",
-                                              "oxygen"};
+    // SURV-7: "stats" is format-21-and-newer vocabulary — a pre-21 file
+    // carrying it is a version lie (the unknown-field naming below).
+    std::set<std::string> playerFields {"pos", "yaw", "pitch",
+                                       "health", "absorption",
+                                       "hunger", "saturation",
+                                       "effects", "armor",
+                                       "oxygen"};
+    if (fmt->asInt() >= 21) {
+        playerFields.insert("stats");
+    }
     MC_TRY(rejectUnknownFields(*player, playerFields, "save 'player'"));
     const Json* ppos = player->find("pos");
     if (ppos == nullptr || !ppos->isArray() || ppos->size() != 3) {
@@ -1217,6 +1238,38 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                   [](const SavedEffect& a, const SavedEffect& b) {
                       return a.name < b.name;
                   });
+    }
+    // Statistics (format 21; SURV-7, the death-related counters):
+    // ALWAYS present on format-21 files (an empty object is valid — the
+    // furnaces/tables key discipline). Entries are a name (non-empty) +
+    // a whole number >= 0. Pre-21 files load with EMPTY stats (the
+    // system did not exist) — the "stats" key on a pre-21 file was
+    // already rejected above (the version-lie whitelist). The vocabulary
+    // check (kill.<name> names a registered mob) runs at GAME load —
+    // validateStats; the mob registry is not a parseSave parameter.
+    if (fmt->asInt() >= 21) {
+        const Json* st = player->find("stats");
+        if (st == nullptr || !st->isObject()) {
+            return MC_FAIL("save format 21 requires a 'player.stats' "
+                           "object (an empty object when no counter "
+                           "was non-zero)");
+        }
+        for (const auto& [key, value] : st->members()) {
+            const std::string what = "save 'player.stats'[" + key + "]";
+            if (key.empty()) {
+                return MC_FAIL("save 'player.stats' holds an empty stat "
+                               "name");
+            }
+            if (!value.isNumber() || value.asDouble() < 0.0 ||
+                value.asDouble() != std::floor(value.asDouble())) {
+                return MC_FAIL(what + " must be a whole number >= 0, got " +
+                               (value.isNumber()
+                                    ? std::to_string(value.asDouble())
+                                    : "a non-number"));
+            }
+            save.playerStats[key] =
+                static_cast<std::uint64_t>(value.asDouble());
+        }
     }
     // Absorption pool (format 12; Phase 72, the two-component model).
     // Absent in format 1-11 files (the SHARED health carried the layer —
@@ -2545,6 +2598,34 @@ Result<void> writeAtomicFile(const std::filesystem::path& path,
         std::filesystem::remove(tmp, ec); // best effort
         return MC_FAIL("cannot move '" + tmp.string() + "' to '" +
                        path.string() + "': " + ec.message());
+    }
+    return {};
+}
+
+Result<void> validateStats(const std::map<std::string, std::uint64_t>& stats,
+                           const MobRegistry& mobs) {
+    // SURV-7: the closed vocabulary — "deathCount" (fixed) plus one
+    // "kill.<name>" per REGISTERED mob. Anything else is a named
+    // rejection (the grows_to / on_hit_effect discipline).
+    for (const auto& [name, count] : stats) {
+        if (name == "deathCount") {
+            continue;
+        }
+        static const char kKillPrefix[] = "kill.";
+        if (name.size() <= sizeof(kKillPrefix) - 1 ||
+            name.compare(0, sizeof(kKillPrefix) - 1, kKillPrefix) != 0) {
+            return MC_FAIL("save 'player.stats' holds the unknown stat '" +
+                           name + "' (the vocabulary is \"deathCount\" "
+                           "and one \"kill.<mob>\" per registered mob)");
+        }
+        const std::string mobName =
+            name.substr(sizeof(kKillPrefix) - 1);
+        if (mobs.findByName(mobName) == nullptr) {
+            return MC_FAIL("save 'player.stats' holds the stat "
+                           "'" + name + "' but no mob named '" + mobName +
+                           "' is registered");
+        }
+        (void)count; // the count's range is parse-checked
     }
     return {};
 }

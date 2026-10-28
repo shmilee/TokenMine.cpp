@@ -1281,6 +1281,12 @@ private:
     // per active effect (left-aligned on the heart row).
     EffectRegistry m_effects;
     StatusEffects m_playerEffects;
+    // SURV-7: the player's death-related statistics (format 21):
+    // "deathCount" + one "kill.<mob name>" per registered mob. Only
+    // NON-ZERO counters are held (the save omits zeros — the
+    // omit-when-default discipline). Frame-locked events (the death
+    // transition, the mob despawn pass) increment it; deterministic.
+    std::map<std::string, std::uint64_t> m_stats;
     // Phase 57: the ignites_on_lava effect (the fire) — its id, or -1
     // when no registered effect carries the flag (init cross-checks that
     // AT MOST ONE does). (Re-)applied every frame while the player is in

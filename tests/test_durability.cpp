@@ -399,8 +399,8 @@ TEST(SaveFormat18Test, MidDamageRoundTripsInAllThreePlaces) {
     s.entities.push_back(e);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // SURV-6: writes are always format 20 (CRAFT-1 was format 19).
-    EXPECT_EQ(j->find("format")->asInt(), 20);
+    // SURV-7: writes are always format 21 (SURV-6 was format 20).
+    EXPECT_EQ(j->find("format")->asInt(), 21);
     // The shapes: the damaged slot + the entity carry the key; the
     // full-durability armor slot is a STRING; the damaged one an
     // OBJECT {item, damage}.
@@ -450,6 +450,18 @@ TEST(SaveFormat18Test, Format17WithDamageKeyIsAVersionLie) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["format"] = Json(17);
+    // SURV-7: the stats key is format-21 vocabulary — a format-17 file
+    // must not carry it (rebuild the player without it; this file has
+    // no withoutKey helper, the P75 rebuild pattern inline).
+    {
+        Json player2 = Json::object();
+        for (const auto& [k, v] : root["player"].members()) {
+            if (k != "stats") {
+                player2[k] = v;
+            }
+        }
+        root["player"] = std::move(player2);
+    }
     // The slot's damage key is no longer whitelisted in format 17.
     {
         auto bad = parseSave(root, f.items, f.blocks, f.effects, 42);

@@ -19,7 +19,7 @@
 | GEN 世界与生成 | ~~GEN-7 基岩多层~~ ✅ v1.6.0 | ~~GEN-8 地形互感~~ ✅ v1.7.0 | ~~GEN-9 耕地湿润~~ ✅ v1.8.0 | | | |
 | FLUID 流体 | ~~FLUID-4 倒向水面~~ ✅ v1.9.0 | ~~FLUID-5 水熔岩反应~~ ✅ v1.10.0 | ~~FLUID-6 流体种类扩展~~ ✅ v1.11.0 | | | |
 | ENT 实体/Mob/移动 | ~~ENT-5 坠落伤害~~ ✅ v1.12.0 | ~~ENT-6 AI 补强~~ ✅ v1.13.0 | ~~ENT-7 移动惯性~~ ✅ v1.14.0 | ~~ENT-8 和平/保护环~~ ✅ v1.15.0 | ~~ENT-9 掉落可视化~~ ✅ v1.16.0 | |
-| SURV 生存/战斗/效果 | ~~SURV-6 效果档位~~ ✅ v1.17.0 | SURV-7 死亡统计 | SURV-8 工具 10× | SURV-9 饱和细化 | SURV-10 挤奶冷却 | |
+| SURV 生存/战斗/效果 | ~~SURV-6 效果档位~~ ✅ v1.17.0 | ~~SURV-7 死亡统计~~ ✅ v1.18.0 | SURV-7 死亡统计 | SURV-8 工具 10× | SURV-9 饱和细化 | SURV-10 挤奶冷却 | |
 | CRAFT 物品/合成/面板 | CRAFT-4 配方提示 | CRAFT-5 炉子表现 | CRAFT-6 燃料熔炼 | CRAFT-7 背包交互 | | |
 | SAVE 存档 | SAVE-2 速度入档 | SAVE-3 槽位管理 | | | | |
 | PRE 表现层 | PRE-7 中毒/燃烧表现 | PRE-8 mob 火焰 | PRE-9 箭/弓/手视觉 | PRE-10 图标重叠修复★ | PRE-11 HUD 细化 | PRE-12 tooltip/F3 |
@@ -116,6 +116,41 @@
   构建与运行 + 范围与限制 + 许可），PITS 范围 267-288 修正为 271-288
   （267-270 属 v1.0 组时代门 114/115）③ Latest 收尾回 v1.5.0 组 release
   （重建时序）。同步 README/CHANGELOG/BACKLOG/AGENTS 旧引用。
+- 2026-10-28：**SURV-7 死亡统计完成**（v1.x 第 18/33 项，v1.18.0，
+  门 133，SURV 行 2/5）："死亡统计"原始定义已佚 = 代理定案**统计
+  系统 v1 = 死亡相关计数器（deathCount + 每 mob kill.<name>），帧锁
+  定事件 + format 21 存档 + 封闭词表校验**（消费 KNOWN_ISSUES
+  Phase-16 条"无死亡分数/死亡统计"的死亡次数半；统计**显示** =
+  PRE-12 呈现框架边界，本相零 UI）。词表封闭 = deathCount（玩家
+  alive→dead 过渡，任意死因）+ 每注册 mob 一个 kill.<name>（**mob
+  注册表合成 = block item 合成先例**，加 mob JSON 自动获得统计；
+  无新数据文件）；计数事件 = 死亡过渡块 + despawn pass 每个 dead()
+  mob（含无掉落；距离 despawn 不算死）；容器 m_stats map 只存非零
+  （omit-when-default）；format 20→21 `player.stats` 恒写对象（空
+  合法 = tables 键纪律；pre-21 带键 = 版本谎报；pre-21 读入 = 空
+  免迁）+ **词表校验 = game 加载点 validateStats 单收口**（parseSave
+  不加 MobRegistry 参 = 184 调用点涟漪，rescan 范式孪生）+ 未知
+  kill.<name> 点名。**顺带修复 SURV-6 漏网 bug**（game 填充路径
+  SavedEffect 只传 2 值 = 活体 tier-1 效果存盘丢档降 0，门 133 S2c
+  终档 tier 1 断言 = 回归证）。1827/1827（+7 净：SaveFormat21 ×5 +
+  ValidateStats ×2；38 处旧 format 迁移/降级测试契约演进 = 降级须
+  剥 stats 键【含 2 downgrade helper 内建 + 行尾注释/(*j) 写法漏网
+  3 处二轮补——机械批量后须全量套件验证】）、-Werror 0。门 133：
+  S1 第 133 次结构性免疫免重锚（四方 ×2 387726 B + base18 +
+  savenorm；零死零 mob = 零计数 + 零 UI）+ S2a 昼步道 kills PASS
+  （**真生成环 5-6** 的 band 石地板 + 5×5 玩家台 + 台间/带外 22 深
+  洞 = PITS 307 两连零生成后重做：被动 mob 生成 band 游走掉洞 →
+  stats = kill.chicken×2 + kill.sheep×2 双侧逐值 + deathCount 缺
+  （玩家安全）×2 RAW + savenorm）+ S2b 夜 + resistance tier 1
+  （hp 0 + **deathCount == 1 exact** + effects [] ×2 RAW + savenorm）
+  + S2c 密封房 tier 往返（终档 effects[0] = {resistance, ~110,
+  **tier 1**} = SURV-6 填充 bug 回归证 ×2 RAW + savenorm）+ S2d 旧
+  v1.17 侧 format 20 无 stats 键（系统不存在）+ S6 ×3 点名【
+  kill.dragon / deathCount −1 / f21 缺 stats 键】+ S3 1827 + 性能
+  A/B 真 v1.17 vs v1.18 PASS（banner 实证；fluidCells win2/3
+  29803/29800 **逐位** + win1 ±4 + PIPE3 三项逐位 + 全同档 =
+  结构性惰性实证）；PITS 307（spawner 环 5-6 非 8-16 = ENT-8 文档
+  误记）+ 308（grep -c 零匹配 RC=1 断 && 链 = 场景脚本静默未跑）。
 - 2026-10-28：**SURV-6 效果档位完成**（v1.x 第 17/33 项，v1.17.0，
   门 132，SURV 行 1/5）："效果档位"原始定义已佚 = 代理定案**状态
   效果档位化（amplifier I/II/III，全数据驱动）**（消费 KNOWN_ISSUES

@@ -2282,6 +2282,22 @@
   "坠落没发生"）。修 = 弃 hp 断言、用 y37.0 exact 落面证坠落（P72
   "自然回血污染长跑损伤终态：run 时长须 < regen_delay 窗"的输入跑版
   复现——输入跑时长 = 墙钟，fps 越低越长，比无输入跑更容易越窗）。
+- **spawner 生成环是半径 5-6（数据 min/max_radius），不是 8-16（PITS 307）**
+  ——10-28 SURV-7 S2 首版两连失效：按 ENT-8 文档"spawner 环 8-16"
+  设计的 8-16 annulus 地板场景零生成（"found no valid cell"），
+  SPAWNPROBE 实证 `ring = ceil(maxRadius) = 6`（真实数据
+  min_radius 5 / max_radius 6；tm_scene_check.py v2 注释早有
+  "min5 max6"——ENT-8 文档的 8-16 是把 Phase-25 的**敌对保护圈
+  8/12/16** 误记成了生成环）。教训 = 场景设计前用 debug 日志/
+  探针实证 spawner 入口参数（cx/cz/ring/floorY），文档里的环半径
+  不可信；生成格 = 玩家格整数偏移 (dx,dz)，dx²+dz² ∈ [25,36]。
+- **`grep -c` 零匹配 RC=1 静默断 `&&` 链 = 后续步骤整段不执行（PITS 308）**
+  ——10-28 SURV-7：`cmake --build ... | grep -ciE 'error|warning' &&
+  cd ... && python3 场景构建` —— 构建 0 错误时 grep -c 输出 "0"
+  但 RC=1（无匹配）→ `&&` 链断 → 场景构建 python **静默未跑**，
+  后续冒烟用的是旧场景文件（两连"零 kill"之谜的真根因之一）。
+  教训 = 批处理里 `grep -c` 之后要么 `|| true` 要么不用 `&&` 串联
+  关键步骤；"0" 输出 ≠ 成功输出。
 - **cp -a 性能树带 build/ = 陈旧 CMakeCache + ninja 假"无活" → 静默用旧二进制（PITS 306）**
   ——10-28 SURV-6 性能 A/B 首跑：tm_v117_perf = cp -a tm_v116_perf
   （build/ 目录一并复制，CMakeCache.txt 指向源树绝对路径）+ 拷

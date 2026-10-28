@@ -3,6 +3,55 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.18.0（2026-10-28）
+
+**SURV-7 死亡统计**（v1.x 任务表 18/33，SURV 行 2/5，门 133）——
+原始定义已佚 = 代理定案**统计系统 v1 = 死亡相关计数器**（消费
+KNOWN_ISSUES Phase-16"无死亡分数/死亡统计"的死亡次数半；与 PRE-12
+边界：SURV-7 = 计数/存档/校验本体（零 UI），PRE-12 = 统计屏/F3
+呈现框架）：
+- **封闭词表**：`deathCount`（玩家 alive→dead 过渡计数，任意死因，
+  一次死亡 = 一次计数）+ 每注册 mob 一个 `kill.<name>`（**mob 注册
+  表合成** = block item 合成先例：加一个 mob JSON 自动获得 kill 统
+  计，零核心改动；无新数据文件）。计数事件帧锁定：死亡过渡块 +
+  despawn pass 的每个 `dead()` mob（含无掉落 mob——死亡是事件不
+  是掉落；距离 despawn 不算死）。
+- **format 20 → 21 `player.stats`**：恒写对象（空对象合法 =
+  tables/furnaces 键纪律）；entries = 名 + 整 ≥ 0（非整数/负点名）；
+  pre-21 带键 = 版本谎报（格式依赖白名单）；pre-21 读入 = 空
+  stats（系统不存在 = 免迁）；**词表校验 = game 加载点
+  `validateStats` 单收口点名**（parseSave 不加 MobRegistry 参 =
+  184 调用点涟漪——rescan 范式孪生）。容器 `m_stats` map 只存非零
+  （omit-when-default）。
+- **顺带修复 SURV-6 漏网 bug**：game 存盘填充路径
+  `SavedEffect{name, remaining}` 只传 2 值 = 活体 tier-1 效果存盘
+  时丢档降 tier 0（门 132 同侧 savenorm 未暴露）→ 补 `a.tier`；
+  门 133 S2c 终档 tier 1 往返断言 = 回归证。
+
+1827/1827（+7 净：SaveFormat21Test ×5【往返/空对象/缺键点名/版本
+谎报/形状三形拒】+ ValidateStatsTest ×2【封闭词表接受/未知三形点
+名】；38 处旧 format 迁移/降级测试契约演进 = 降级须剥 stats 键，含
+2 个 downgrade helper 内建剥离）、`-Werror` 0 警告。门 133：S1 =
+**第 133 次结构性免疫免重锚**（fresh 60f 四方 ×2 387726 B +
+base18 + savenorm；零死零 mob = 零计数 + 零 UI 触碰）+ **S2a 昼步
+道 kills PASS**（真生成环 5-6 的 band 石地板 + 5×5 玩家台 + 台间/
+带外 22 深洞——ENT-8 文档"环 8-16"误记两连零生成后 SPAWNPROBE
+实证重做 = PITS 307：被动 mob 生成 band 游走掉洞 → stats =
+kill.chicken×2 + kill.sheep×2 双侧逐值 + deathCount 缺（玩家安全）
+×2 RAW + savenorm）+ **S2b 夜 + resistance tier 1**（hp 0 +
+**deathCount == 1 exact** + effects [] 死亡清 ×2 RAW + savenorm）+
+**S2c 密封房 tier 往返**（终档 {resistance, ~110, **tier 1**} =
+SURV-6 填充 bug 回归证 ×2 RAW + savenorm 剥 remaining 留 tier）+
+**S2d 旧 v1.17 侧**（format 20 + 无 stats 键 = 系统不存在）+ S6 ×3
+点名（kill.dragon / deathCount −1 / f21 缺 stats 键）+ S3 1827 +
+性能 A/B 真 v1.17 vs v1.18 PASS（banner 版本实证 = PITS 306 纪律；
+fluidCells win2/3 29803/29800 **逐位** + win1 ±4 + PIPE3
+fluidCellsSeen 43994/changesApplied 1404/visited 268 三项逐位 +
+全指标同档 = 结构性惰性实证，成本可忽略）。**PITS 307**（spawner
+生成环 = 数据 min/max_radius 5/6，非文档误记的 8-16——场景设计前
+须实证 spawner 入口参数）+ **PITS 308**（`grep -c` 零匹配 RC=1 静
+默断 `&&` 链 = 场景脚本整段未执行，冒烟用旧文件两连误诊）。
+
 ## v1.17.0（2026-10-28）
 
 **SURV-6 效果档位**（v1.x 任务表 17/33，SURV 行 1/5，门 132）——

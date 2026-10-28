@@ -270,7 +270,21 @@ namespace mc {
 //      format-19-and-older file CARRYING the key is a version lie
 //      (rejected by the format-dependent field whitelist). Writes are
 //      always format 20.
-inline constexpr int kSaveFormat = 20;
+//  21: the SURV-7 death-related statistics — a "player.stats" OBJECT,
+//      ALWAYS written (an empty object is valid — the furnaces/tables
+//      key discipline): { "deathCount": <whole number >= 0>,
+//      "kill.<mob name>": <whole number >= 0>, ... }, name-sorted. The
+//      vocabulary is CLOSED: "deathCount" (the player's alive->dead
+//      transitions) plus one "kill.<name>" per registered MOB (the
+//      despawn pass counts every dead mob, drop-less included). A
+//      format-20 (or older) file without the key loads with EMPTY
+//      stats (the system did not exist); carrying the key on a
+//      pre-21 file is a version lie (the format-dependent whitelist).
+//      The vocab check (an unknown "kill.<name>" names the unregistered
+//      mob) runs at GAME load — the mob registry is not a parseSave
+//      parameter (validateStats, the load-time twin of the rescan
+//      pattern). Writes are always format 21.
+inline constexpr int kSaveFormat = 21;
 inline constexpr int kSaveFormatMin = 1;
 
 // Phase 40: the furnace save-field bounds — the max smelt/fuel times the
@@ -514,6 +528,12 @@ struct SaveGame {
     // The player's active status effects (format 8; Phase 46), name-
     // sorted. Empty for format 1-7 loads (the effects did not exist).
     std::vector<SavedEffect> playerEffects;
+    // The player's death-related statistics (format 21; SURV-7),
+    // name-sorted (the map order): "deathCount" + one "kill.<mob name>"
+    // per registered mob (absent keys = 0 — the counter map only holds
+    // non-zero entries at the game level). Empty for format-20 and
+    // older loads (the system did not exist).
+    std::map<std::string, std::uint64_t> playerStats;
     // The player's armor (SURV-1, format 16): the equipped piece NAME
     // per slot — index = the kArmorSlotNames slot (0 head, 1 chest, 2
     // legs, 3 feet), "" = empty. The count is never stored: it is 1 by
@@ -631,6 +651,15 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                            const BlockRegistry& blocks,
                            const EffectRegistry& effects,
                            std::int64_t expectedSeed);
+
+class MobRegistry;
+// SURV-7: the format-21 stats vocabulary check — every "kill.<name>" key
+// must name a REGISTERED mob (the "deathCount" key is fixed). The game
+// runs this at load, right after parseSave (the mob registry is not a
+// parseSave parameter — 180+ call sites; the named rejection is the
+// same either way). An empty map is valid.
+Result<void> validateStats(const std::map<std::string, std::uint64_t>& stats,
+                           const MobRegistry& mobs);
 
 // ---------------------------------------------------------------------------
 // SAVE-1: the auto-save (periodic + crash-resilient save writes)

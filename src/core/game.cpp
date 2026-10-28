@@ -2534,9 +2534,18 @@ Result<SaveGame> Game::collectSave() const {
     // phase is deliberately not saved — a reload restarts the next tick
     // at the full interval).
     for (const ActiveEffect& a : m_playerEffects.list()) {
+        // SURV-6: the LIVE instance's tier rides the save (the
+        // aggregate's 3rd field — an active tier-1 effect saved as
+        // tier 0 would silently downgrade on load; the gate-133 S2b
+        // final save asserts the tier round trip).
         save.playerEffects.push_back(
-            SavedEffect {m_effects.at(a.effect).name, a.remaining});
+            SavedEffect {m_effects.at(a.effect).name, a.remaining,
+                         a.tier});
     }
+    // The player's death-related statistics (format 21; SURV-7): the
+    // game's counter map IS the save's (name-sorted by construction;
+    // zero counters are absent from the map).
+    save.playerStats = m_stats;
     for (const std::unique_ptr<Entity>& e : m_entities) {
         // Persisted entities are ItemEntities. Mobs (Phase 20) and arrows
         // (Phase 21) are EPHEMERAL by design — the save format expresses
@@ -2643,6 +2652,12 @@ Result<SaveGame> Game::readSaveFile(const std::filesystem::path& path) const {
         return MC_FAIL("save file '" + path.string() + "': " +
                        save.error().message);
     }
+    // SURV-7: the stats vocabulary check (every "kill.<name>" names a
+    // REGISTERED mob; "deathCount" is fixed). The mob registry is not a
+    // parseSave parameter (180+ call sites), so the check runs here, at
+    // the single game-load choke point (the named rejection is the same
+    // either way — the rescan-pattern twin).
+    MC_TRY(validateStats(save->playerStats, m_mobTypes));
     return *save;
 }
 
@@ -2784,6 +2799,10 @@ Result<void> Game::applySave(const SaveGame& save) {
         m_playerEffects.apply(m_effects.idForName(se.name), se.remaining,
                               se.tier);
     }
+    // 4d-bis) The death-related statistics (format 21; SURV-7): the map
+    // IS the state (vocabulary validated in readSaveFile; a pre-21 load
+    // migrates to EMPTY — the system did not exist).
+    m_stats = save.playerStats;
     // 4e) The player's health + absorption (Phase 16; the two SEPARATE
     // pools are set here in Phase 72, AFTER the effects of 4d). A
     // format-1 save has no health (-1 = full); a saved 0 reloads the
@@ -5633,6 +5652,12 @@ void Game::updateEntities(double dt) {
             continue;
         }
         gone[i] = true;
+        if (mob != nullptr && mob->dead()) {
+            // SURV-7: the per-mob kill counter — every DEAD mob, drop-
+            // less included (the death is the event, not the drop; a
+            // distance despawn does NOT count — the mob was never dead).
+            ++m_stats["kill." + mob->def().name];
+        }
         if (mob != nullptr && mob->dead() &&
             !mob->def().properties.drops.empty()) {
             // Every data entry becomes its own item entity (Phase 28: a
@@ -6930,6 +6955,9 @@ void Game::updateSurvival(double dt) {
         // respawn starts clean — Minecraft parity).
         m_window.setRelativeMouseMode(false);
         m_sound.play("death");
+        // SURV-7: the death counter (the alive->dead transition — one
+        // increment per life lost, whatever the cause; frame-locked).
+        m_stats["deathCount"]++;
         m_playerEffects.clearAll();
         syncAbsorption(); // Phase 72: the pool dies with the player
         // SURV-2: the air refills with the death (the respawn
