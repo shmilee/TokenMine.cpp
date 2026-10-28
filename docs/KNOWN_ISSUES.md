@@ -313,10 +313,13 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 - **喝奶不恢复饥饿** — MC 牛奶饥饿值 = 0：饮用通道只做「消耗 + 返还容器
   + 清效果」，不走 `restoreHunger` 路径；`drink_time` 与 `restore_hunger`
   互斥（同一右键按住通道，一个物品不能既是食物又是可饮用）。`[Phase 43]`
-- **挤奶无冷却、mob 不受影响** — 持 `milk_with` 物品右键可挤 mob（cow）
-  = 1 桶 → 1 奶桶（瞬时）：cow 不受伤害、不死、不掉落、无 5 分钟挤奶
-  冷却（MC 有）、可无限连续挤；背包满时不产出但点击被吞（MC 一致）。
-  挤奶音效与饮用开始共用 "milk"。`[Phase 43]`
+- **挤奶** — 持 `milk_with` 物品右键可挤 mob（cow）= 1 桶 → 1 奶桶
+  （瞬时）：cow 不受伤害、不死、不掉落；**5 分钟挤奶冷却 `[SURV-10]`
+  已解决**（`kMilkingCooldownSeconds 300` × 60 帧计数，per-mob 帧锁定
+  【mob 步长 1/60 = 确定性】，冷却内再挤 = no-op 点击照吞【failed-milk
+  同款】；mob ephemeral = 冷却从不入档【MC 同款：读档后 mob 重生】）；
+  背包满时不产出但点击被吞（MC 一致）。挤奶音效与饮用开始共用 "milk"。
+  `[Phase 43]`（冷却 `[SURV-10]`）
 - **唯一可饮用物品 = 牛奶桶** — 水/熔岩桶（`[Phase 47/51]`）是**流体容器**
   （`collects_fluid`/`pours_fluid` 舀倒，见「流体桶」节），**不可饮用**（无 `drink_time`，与 MC 一致——原"无水瓶/熔岩桶（需流体物品设计，超范围）"注记已被消费）；
   `returns_item` 容器框架 + `drink_time` 数据字段已支持未来可饮容器

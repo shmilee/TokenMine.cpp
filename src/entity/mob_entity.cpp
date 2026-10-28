@@ -44,6 +44,11 @@ void MobEntity::update(double dt) {
     if (m_dead || dt <= 0.0) {
         return;
     }
+    // SURV-10: the milking cooldown counts down one frame per update
+    // (the fixed 1/60 mob step — the integer-frame discipline).
+    if (m_milkCooldownFrames > 0) {
+        --m_milkCooldownFrames;
+    }
     // ENT-1: captured BEFORE the AI + physics so the "moving" decision
     // is the strict frame-boundary horizontal displacement (see below).
     const float prevX = position().x;

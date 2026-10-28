@@ -4178,3 +4178,43 @@ TEST(MobPathfindTest, PathDroppedWhenPlayerGone) {
     EXPECT_FALSE(mob.pathActive());
     EXPECT_NE(mob.state(), MobState::Pathfind);
 }
+
+// -- SURV-10: the milking cooldown (the Minecraft 5-minute rule) -------
+
+TEST(MobMilkCooldownTest, CooldownBlocksAndExpiresOnTheFrameBoundary) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(mobs.idForName("zombie"));
+    MobEntity mob = makeMob(f, def, Vec3 {0.5f, 1.0f, 0.5f});
+    EXPECT_TRUE(mob.milkReady()); // fresh: never milked
+    mob.startMilkCooldown();
+    EXPECT_FALSE(mob.milkReady());
+    // One frame short of the 18000-frame (5-minute) boundary: still on
+    // cooldown (the countdown runs in update, one frame per step).
+    runMob(mob, kMilkingCooldownFrames - 1);
+    EXPECT_FALSE(mob.milkReady());
+    // The boundary frame: expired.
+    runMob(mob, 1);
+    EXPECT_TRUE(mob.milkReady());
+    // A re-milk restarts the full cooldown.
+    mob.startMilkCooldown();
+    EXPECT_FALSE(mob.milkReady());
+    runMob(mob, kMilkingCooldownFrames);
+    EXPECT_TRUE(mob.milkReady());
+}
+
+TEST(MobMilkCooldownTest, CooldownIsPerMobInstance) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(mobs.idForName("zombie"));
+    MobEntity a = makeMob(f, def, Vec3 {0.5f, 1.0f, 0.5f}, 1);
+    MobEntity b = makeMob(f, def, Vec3 {5.5f, 1.0f, 5.5f}, 2);
+    a.startMilkCooldown();
+    EXPECT_FALSE(a.milkReady());
+    EXPECT_TRUE(b.milkReady()); // the sibling is unaffected
+    // b idles through the full window: nothing to count down.
+    runMob(b, kMilkingCooldownFrames);
+    EXPECT_TRUE(b.milkReady());
+    runMob(a, kMilkingCooldownFrames - 1);
+    EXPECT_FALSE(a.milkReady()); // a is still one frame short
+}

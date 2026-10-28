@@ -3,6 +3,45 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.21.0（2026-10-28）— **SURV 系统收官：tag v1.21.0 + GitHub
+release**
+
+**SURV-10 挤奶冷却**（v1.x 任务表 21/33，SURV 行 5/5 收官，门 136）
+——原始定义已佚 = 代理定案 **MC 5 分钟挤奶冷却**（消费 KNOWN_ISSUES
+Phase-43"无 5 分钟挤奶冷却、可无限连续挤"）：
+- **per-mob 帧锁定计数器**：`MobEntity::m_milkCooldownFrames`（int；
+  `kMilkingCooldownSeconds = 300` × 60 = **18000 帧**命名常量，Phase
+  58 整数帧计数纪律 = 确定性）；`update` 每帧 −1（固定 1/60 mob 步
+  长，硬规则 8）；`milkReady()` / `startMilkCooldown()`。
+- **tryMilk 单点门控**：milkWith 匹配后——冷却中 = **no-op**（不耗
+  bucket、不产奶、不发声）但**点击照吞**（failed-milk 既有规则）；
+  成功挤奶 → 启动冷却。
+- mob ephemeral（不入存档）→ 冷却从不持久化（MC 同款：读档后 mob 重
+  生无冷却）。零 format/config/内容（cow JSON 零改动）。
+
+1837/1837（+2 净：CooldownBlocksAndExpiresOnTheFrameBoundary【17999
+帧仍冷 / **第 18000 帧精确过期** / 再挤再冷】+ CooldownIsPerMob
+Instance）、`-Werror` 0 警告。门 136：S1 = **第 136 次结构性免疫免
+重锚**（fresh 60f 四方 ×2 387726 B + base18 + savenorm；nomobs = 无
+牛无挤奶双结构惰性）+ **S2 挤奶判别 PASS**（s136_cage 场景 + 临时数
+据脚手架【cow-only + max_mobs 1 + cow speed 0.01 缓牛——readPositive
+Number 拒 0】：捕获 + 双右键 2 s 间隔——**NEW 终态 bucket 1 + milk 1
+【第二击冷却拒绝】vs OLD（v1.20.0）终态 bucket 0 + milk 2【双挤】
+= 互斥**，×2/侧 RAW 452077/452070 B EXACT；首跑 old_b 静默失奶 = 低
+帧率相位 + 未禁衰减【hunger 18/19 图标差破同侧 RAW】→ nodecay config
+【hunger_decay 9999 先例】+ 奶数证据门重跑全过）+ S3 1837 + **无
+S6**【零 parse 面】+ 性能 A/B 真 v1.20 vs v1.21 PASS（banner 版本实
+证 = PITS 306 纪律；fluidCells win2/3 29803/29800 **逐位** + win1
+±3 + **PIPE3 三项全逐位**【visited 266 / seen 43048 / applied 1404】
++ 全指标同档 = 结构性惰性，成本可忽略）。**PITS 313**（挤奶 E2E 瞄
+准链四坑：① 宽 AABB 穿墙——1.2 宽 cow 经 leading-cell 检查穿过 1 格
+石墙【封死仍穿 = 盲区】→ 弃密封笼改"spawn 重叠 → 确定性挤出驻车"+
+瞄准测得驻车点 ② 射线被自家墙挡 → 1 格 sightline 窗【牛穿不过窗】
+③ **点击时相机 = 场景值**——修正 PITS 309 归因：终相机漂移 = 脚本跑
+后 mousemove 时指针仍锁定（非捕获点击 grab delta）；按终相机预补偿
+= 脱靶 7cm 实证 ④ 低帧率相位 + 未禁衰减破同侧 RAW → nodecay + 终态
+证据门）。
+
 ## v1.20.0（2026-10-28）— **组 1.16-1.20 组末：tag v1.20.0 + GitHub
 release**（notes 覆盖 v1.16-1.20 五版）
 

@@ -19,7 +19,7 @@
 | GEN 世界与生成 | ~~GEN-7 基岩多层~~ ✅ v1.6.0 | ~~GEN-8 地形互感~~ ✅ v1.7.0 | ~~GEN-9 耕地湿润~~ ✅ v1.8.0 | | | |
 | FLUID 流体 | ~~FLUID-4 倒向水面~~ ✅ v1.9.0 | ~~FLUID-5 水熔岩反应~~ ✅ v1.10.0 | ~~FLUID-6 流体种类扩展~~ ✅ v1.11.0 | | | |
 | ENT 实体/Mob/移动 | ~~ENT-5 坠落伤害~~ ✅ v1.12.0 | ~~ENT-6 AI 补强~~ ✅ v1.13.0 | ~~ENT-7 移动惯性~~ ✅ v1.14.0 | ~~ENT-8 和平/保护环~~ ✅ v1.15.0 | ~~ENT-9 掉落可视化~~ ✅ v1.16.0 | |
-| SURV 生存/战斗/效果 | ~~SURV-6 效果档位~~ ✅ v1.17.0 | ~~SURV-7 死亡统计~~ ✅ v1.18.0 | ~~SURV-8 工具 10×~~ ✅ v1.19.0 | ~~SURV-9 饱和细化~~ ✅ v1.20.0 | SURV-10 挤奶冷却 | |
+| SURV 生存/战斗/效果 | ~~SURV-6 效果档位~~ ✅ v1.17.0 | ~~SURV-7 死亡统计~~ ✅ v1.18.0 | ~~SURV-8 工具 10×~~ ✅ v1.19.0 | ~~SURV-9 饱和细化~~ ✅ v1.20.0 | ~~SURV-10 挤奶冷却~~ ✅ v1.21.0 | |
 | CRAFT 物品/合成/面板 | CRAFT-4 配方提示 | CRAFT-5 炉子表现 | CRAFT-6 燃料熔炼 | CRAFT-7 背包交互 | | |
 | SAVE 存档 | SAVE-2 速度入档 | SAVE-3 槽位管理 | | | | |
 | PRE 表现层 | PRE-7 中毒/燃烧表现 | PRE-8 mob 火焰 | PRE-9 箭/弓/手视觉 | PRE-10 图标重叠修复★ | PRE-11 HUD 细化 | PRE-12 tooltip/F3 |
@@ -116,6 +116,35 @@
   构建与运行 + 范围与限制 + 许可），PITS 范围 267-288 修正为 271-288
   （267-270 属 v1.0 组时代门 114/115）③ Latest 收尾回 v1.5.0 组 release
   （重建时序）。同步 README/CHANGELOG/BACKLOG/AGENTS 旧引用。
+- 2026-10-28：**SURV-10 挤奶冷却完成**（v1.x 第 21/33 项，v1.21.0，
+  门 136，**SURV 行 5/5 收官**，新组首版）："挤奶冷却"原始定义已佚 =
+  定案 **MC 5 分钟挤奶冷却**（消费 KNOWN_ISSUES Phase-43 条"无 5 分
+  钟挤奶冷却（MC 有）、可无限连续挤"）：per-mob 帧锁定计数器
+  （`m_milkCooldownFrames` int，`kMilkingCooldownSeconds 300` × 60 =
+  18000 命名常量，Phase 58 整数帧纪律；update 每帧 −1 = 确定性）+
+  tryMilk 单点门控（milkWith 匹配后：冷却中 = no-op 不耗桶不产奶不
+  发声、点击照吞 = failed-milk 同款；成功挤奶启动冷却）+ mob
+  ephemeral = 冷却从不入档（MC 同款：读档后 mob 重生）。零 format/
+  config/内容（cow JSON 零改动）。1837/1837（+2：帧边界 17999/18000
+  精确过期 + per-instance）、-Werror 0。门 136：S1 第 136 次结构性免
+  疫免重锚（四方 ×2 387726 B + base18 + savenorm；nomobs = 双结构惰
+  性）+ S2 挤奶判别 PASS（s136_cage + 临时数据脚手架【cow-only +
+  max_mobs 1 + cow speed 0.01 缓牛——readPositiveNumber 拒 0】+ 捕获
+  + 双右键 2 s 间隔：**NEW 终态 bucket 1 + milk 1**【click2 冷却拒
+  绝】vs **OLD 终态 bucket 0 + milk 2**【双挤】= 互斥，×2/侧 RAW
+  452077/452070 B EXACT；首跑 old_b 失奶 = 低帧率相位 + 未禁衰减
+  【hunger 18/19 图标差破 RAW】→ nodecay config + 奶数证据门重跑全
+  过）+ S3 1837 + 无 S6【零 parse 面】+ 性能 A/B 真 v1.20 vs v1.21
+  PASS（banner 实证；fluidCells win2/3 29803/29800 逐位 + win1 ±3 +
+  **PIPE3 三项全逐位**【266/43048/1404】+ 全同档 = 结构性惰性）；
+  **PITS 313**（挤奶 E2E 瞄准链四坑：宽 AABB 穿墙【1.2 宽 cow 穿 1
+  格石墙 = leading-cell 盲区，弃密封笼改确定性挤出驻车】/ 射线被自
+  家墙挡【1 格 sightline 窗】/ **点击时相机 = 场景值**【修 PITS 309
+  归因：终相机漂移 = 脚本跑后 mousemove 时指针仍锁定，非 grab delta】
+  / 低帧率相位 + 未禁衰减破同侧 RAW【nodecay + 证据门】）。
+  **发布政策变更（用户 10-28 定案）**：自 CRAFT 系统起 tag 可两任务
+  合并、release 按系统收官（CRAFT/SAVE/PRE 各一）；SURV 系统收官随
+  本项 → **tag v1.21.0 + GitHub release**。
 - 2026-10-28：**SURV-9 饱和细化完成**（v1.x 第 20/33 项，v1.20.0，
   门 135，SURV 行 4/5，**组末版 → tag v1.20.0 + GitHub release 覆盖
   v1.16-1.20**）："饱和细化"原始定义已佚 = 定案 **饱和度模型细化的

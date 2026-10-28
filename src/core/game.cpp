@@ -3700,12 +3700,13 @@ void Game::handleInteraction(double dt) {
             }
             return;
         }
-        // Milking (Phase 43): a mob whose data pairs 'milk_with' with the
-        // selected item's name, under the crosshair (melee targeting:
-        // kReach + block occlusion), is MILKED — one held item consumed,
-        // one 'milk_gives' item added, the mob unharmed (v1: no damage,
-        // death, drop or cooldown). The click is consumed either way
-        // (no interact, no placement).
+        // Milking (Phase 43, SURV-10): a mob whose data pairs
+        // 'milk_with' with the selected item's name, under the crosshair
+        // (melee targeting: kReach + block occlusion), is MILKED — one
+        // held item consumed, one 'milk_gives' item added, the mob
+        // unharmed (no damage, death or drop) but put on the 5-minute
+        // Minecraft milking cooldown (re-milking early does nothing; the
+        // click is still consumed, the failed-milk rule).
         if (tryMilk()) {
             return;
         }
@@ -4679,10 +4680,12 @@ bool Game::tryMilk() {
     // (mob data 'milk_with' == the selected item's name; melee targeting
     // — kReach with block occlusion, see targetMob) and the player must
     // hold the mob's 'milk_with' item. One held item is consumed and one
-    // 'milk_gives' item is added; the mob is NOT affected (no damage,
-    // death, drop or cooldown — the v1 rule, see docs/KNOWN_ISSUES). The
-    // click is consumed whenever the crosshair is on the mob (Minecraft:
-    // a failed milk — e.g. a full inventory — still eats the click).
+    // 'milk_gives' item is added; the mob is NOT damaged, killed or made
+    // to drop. SURV-10: a milked mob is on the 5-minute Minecraft milking
+    // cooldown — re-milking it early does nothing (the click is still
+    // consumed, the failed-milk rule below). The click is consumed
+    // whenever the crosshair is on the mob (Minecraft: a failed milk —
+    // e.g. a full inventory — still eats the click).
     if (!m_player || m_player->isDead()) {
         return false;
     }
@@ -4699,6 +4702,12 @@ bool Game::tryMilk() {
     if (props.milkWith.empty() || props.milkWith != item.name) {
         return false; // not a milkable mob, or the wrong item in hand
     }
+    // SURV-10: the milking cooldown (Minecraft's 5-minute rule) — the
+    // same mob cannot be milked again until it expires. No milk, no
+    // sound, the click is consumed (the failed-milk rule).
+    if (!mob->mob->milkReady()) {
+        return true;
+    }
     // Init cross-checks guarantee the exists; the guard is a defensive
     // no-op.
     const ItemID gives = m_items.idForName(props.milkGives);
@@ -4708,6 +4717,7 @@ bool Game::tryMilk() {
     if (m_inventory.isFull(gives, m_items)) {
         return true; // full: no milk, click consumed (Minecraft)
     }
+    mob->mob->startMilkCooldown();
     m_inventory.take(m_selectedSlot, 1);
     m_inventory.add(gives, 1, m_items);
     m_sound.play("milk");

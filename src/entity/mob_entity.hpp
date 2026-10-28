@@ -75,6 +75,12 @@
 
 namespace mc {
 
+// SURV-10: the milking cooldown (Minecraft: a milked cow cannot be
+// milked again for 5 minutes). Expressed in the fixed mob step's frames
+// (18000 x 1/60 s = 300 s) — the frame-locked discipline (hard rule 8).
+inline constexpr int kMilkingCooldownSeconds = 300;
+inline constexpr int kMilkingCooldownFrames = kMilkingCooldownSeconds * 60;
+
 // The mob's AI state (observable for tests and the debug overlay).
 enum class MobState {
     Wander, // no player in range: seeded random decisions
@@ -110,6 +116,12 @@ public:
     MobID typeId() const { return m_def->id; }
     float health() const { return m_health; }
     bool dead() const { return m_dead; }
+    // SURV-10: the Minecraft milking cooldown (5 minutes) — after being
+    // milked, the same mob cannot be milked again until it expires.
+    // Frame-locked on the fixed mob step (hard rule 8: deterministic);
+    // mobs are ephemeral, so it is never saved.
+    bool milkReady() const { return m_milkCooldownFrames <= 0; }
+    void startMilkCooldown() { m_milkCooldownFrames = kMilkingCooldownFrames; }
     MobState state() const { return m_state; }
     // ENT-6: the active chase path (test / debug observability).
     bool pathActive() const { return !m_path.empty(); }
@@ -237,6 +249,9 @@ private:
     const Mob* m_def;
     float m_health = 0.0f;
     bool m_dead = false;
+    // SURV-10: the remaining milking cooldown in FRAMES (the fixed mob
+    // step — integer counting, the Phase 58 off-by-one discipline).
+    int m_milkCooldownFrames = 0;
     // ENT-1: the limb-swing phase (see swingPhase()). Spawn = 0 (the
     // identity pose); render-only, never saved.
     int m_swingPhase = 0;
