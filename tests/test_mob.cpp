@@ -2050,8 +2050,12 @@ TEST(MobStepUpTest, StepsUpSlabAndRestsOnSlabTop) {
 
 TEST(MobStepUpTest, DoesNotStepUpWall) {
     // The Phase-99 judgment is shared verbatim: a wall (solid-region top
-    // 1.5, the barrier) is NOT a 1-block step — the mob stays clamped at
-    // its face, forever (the player's E2E S3b wall-contrast twin).
+    // 1.5, the barrier) is NOT a 1-block step — the mob never climbs
+    // onto it. ENT-6 evolution (the contract change): the mob no longer
+    // stays clamped at the wall's face forever — the stuck-triggered BFS
+    // routes AROUND the barrier instead (the wall's shape is not
+    // FullCube, so no route node exists on top of it: the maxY pin is
+    // the surviving assertion of the original judgment).
     Fixture f;
     MobRegistry mobs = makeMobRegistry();
     const Mob& def = mobs.at(MobID{0});
@@ -2062,16 +2066,27 @@ TEST(MobStepUpTest, DoesNotStepUpWall) {
     }
     MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
     mob.setPlayer({13.9f, 1.0f, 8.5f}, true);
-    runMob(mob, 300);
-    EXPECT_EQ(mob.state(), MobState::Chase);
-    EXPECT_FLOAT_EQ(mob.position().x, 10.0f - 0.3f); // clamped at the wall
-    EXPECT_FLOAT_EQ(mob.position().y, 1.0f);         // never stepped up
+    bool sawPathfind = false;
+    float maxY = 0.0f;
+    for (int i = 0; i < 300; ++i) {
+        if (mob.state() == MobState::Pathfind) {
+            sawPathfind = true;
+        }
+        if (mob.position().y > maxY) {
+            maxY = mob.position().y;
+        }
+        mob.update(kDt);
+    }
+    EXPECT_TRUE(sawPathfind); // the straight chase dead-ended, the BFS took over
+    EXPECT_FLOAT_EQ(maxY, 1.0f); // never on top of the 1.5 barrier
     EXPECT_TRUE(mob.onGround());
 }
 
 TEST(MobStepUpTest, DoesNotStepUpFence) {
     // The fence is the wall's barrier twin (the same 1.5 solid region):
-    // no step-up either.
+    // no step-up either. ENT-6 evolution: the BFS routes around the
+    // fence (no FullCube-floor node on top of it — the surviving pin is
+    // the maxY below).
     Fixture f;
     MobRegistry mobs = makeMobRegistry();
     const Mob& def = mobs.at(MobID{0});
@@ -2082,10 +2097,19 @@ TEST(MobStepUpTest, DoesNotStepUpFence) {
     }
     MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
     mob.setPlayer({13.9f, 1.0f, 8.5f}, true);
-    runMob(mob, 300);
-    EXPECT_EQ(mob.state(), MobState::Chase);
-    EXPECT_FLOAT_EQ(mob.position().x, 10.0f - 0.3f);
-    EXPECT_FLOAT_EQ(mob.position().y, 1.0f);
+    bool sawPathfind = false;
+    float maxY = 0.0f;
+    for (int i = 0; i < 300; ++i) {
+        if (mob.state() == MobState::Pathfind) {
+            sawPathfind = true;
+        }
+        if (mob.position().y > maxY) {
+            maxY = mob.position().y;
+        }
+        mob.update(kDt);
+    }
+    EXPECT_TRUE(sawPathfind);
+    EXPECT_FLOAT_EQ(maxY, 1.0f); // never on top of the 1.5 barrier
     EXPECT_TRUE(mob.onGround());
 }
 
@@ -2104,10 +2128,22 @@ TEST(MobStepUpTest, DoesNotStepTwoBlockStep) {
     }
     MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
     mob.setPlayer({13.9f, 1.0f, 8.5f}, true);
-    runMob(mob, 300);
-    EXPECT_EQ(mob.state(), MobState::Chase);
-    EXPECT_FLOAT_EQ(mob.position().x, 10.0f - 0.3f);
-    EXPECT_FLOAT_EQ(mob.position().y, 1.0f);
+    // ENT-6 evolution: two cells high has no standable top node the
+    // step-up edge can reach (the rise is 2, the edge is 1) — the BFS
+    // routes around instead of the mob staying clamped.
+    bool sawPathfind = false;
+    float maxY = 0.0f;
+    for (int i = 0; i < 300; ++i) {
+        if (mob.state() == MobState::Pathfind) {
+            sawPathfind = true;
+        }
+        if (mob.position().y > maxY) {
+            maxY = mob.position().y;
+        }
+        mob.update(kDt);
+    }
+    EXPECT_TRUE(sawPathfind);
+    EXPECT_FLOAT_EQ(maxY, 1.0f); // never on top of the 2-step
     EXPECT_TRUE(mob.onGround());
 }
 
@@ -2193,25 +2229,42 @@ TEST(MobStepUpTest, StepsUpSingleCellStepMinusX) {
     EXPECT_TRUE(mob.onGround());
 }
 
-TEST(MobStepUpTest, DoesNotStepSingleCellStepPlusX) {
+TEST(MobStepUpTest, SingleCellStepPlusXStaysClampedAtTheQuirk) {
     // The SHARED judgment's +X front check (snapped+1) looks at the cell
     // BEYOND the one the body is flush against — a single-cell step in +X
-    // is not step-up-able. This pins the EXACT player behavior (the
-    // player walks +X into a one-cell step and stays clamped at 9.7 —
-    // probe-verified, the latent quirk documented in KNOWN_ISSUES 生存
-    // step-up 条). Fixing it changes the player's step-up and is its own
-    // phase — the mob must keep matching the player either way.
+    // is not step-up-able (the latent quirk, KNOWN_ISSUES 生存 step-up
+    // 条; fixing it changes the player's step-up and is its own phase).
+    // ENT-6 evolution: the corridor is walled on both sides (z7 / z10)
+    // so the ONLY crossing is the quirk-blocked step itself — the BFS
+    // plans the step node (the FullCube model says it is standable),
+    // the physics refuses it (the +X quirk), the node timeout aborts
+    // the route, and the straight chase re-clamps: the mob stays at
+    // 9.7 exactly as pre-ENT-6 (the quirk's surviving pin).
     Fixture f;
     MobRegistry mobs = makeMobRegistry();
     const Mob& def = mobs.at(MobID{0});
     for (int z = 8; z < 10; ++z) {
         f.world.setBlock(10, 1, z, f.stone); // one cell only
     }
+    // The corridor walls (the z7 / z10 rows, x4..16): no detour.
+    for (int y = 1; y <= 2; ++y) {
+        for (int x = 4; x <= 16; ++x) {
+            f.world.setBlock(x, y, 7, f.stone);
+            f.world.setBlock(x, y, 10, f.stone);
+        }
+    }
     MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
     mob.setPlayer({13.9f, 1.0f, 8.5f}, true);
-    runMob(mob, 300);
-    EXPECT_EQ(mob.state(), MobState::Chase); // stuck: distH 4.2 > 1.6
-    EXPECT_FLOAT_EQ(mob.position().x, 10.0f - 0.3f);
+    bool sawPathfind = false;
+    for (int i = 0; i < 300; ++i) {
+        if (mob.state() == MobState::Pathfind) {
+            sawPathfind = true;
+        }
+        mob.update(kDt);
+    }
+    EXPECT_TRUE(sawPathfind); // the BFS engaged (then aborted on the quirk)
+    EXPECT_NE(mob.state(), MobState::Attack); // never crossed
+    EXPECT_FLOAT_EQ(mob.position().x, 10.0f - 0.3f); // clamped, as pre-ENT-6
     EXPECT_FLOAT_EQ(mob.position().y, 1.0f);
     EXPECT_TRUE(mob.onGround());
 }
@@ -3961,4 +4014,127 @@ TEST(MobFallDamageTest, WalkingOffAColumnTakesDamage) {
     // substep's drop (deterministic — band it tight rather than pin the
     // substep arithmetic).
     EXPECT_NEAR(mob.health(), 18.0f, 0.02f);
+}
+
+// ============================================================================
+//   ENT-6 — the stuck-triggered chase path (BFS)
+// ============================================================================
+
+namespace {
+// The 2-high, 3-wide wall on the fixture floor (top y1) at x=2.
+void buildWall(Fixture& f) {
+    for (int y = 1; y <= 2; ++y) {
+        for (int zc = -1; zc <= 1; ++zc) {
+            f.world.setBlock(2, y, zc, f.stone);
+        }
+    }
+}
+} // namespace
+
+TEST(MobPathfindTest, StuckChaserFindsPath) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& z = mobs.at(MobID{0});
+    buildWall(f);
+    int hits = 0;
+    MobEntity mob = makeMob(f, z, Vec3{0.5f, 1.0f, 0.5f});
+    mob.setPlayer(Vec3{4.5f, 1.0f, 0.5f}, true);
+    mob.setHitCallback([&hits](float) { ++hits; });
+    bool sawPathfind = false;
+    for (int i = 0; i < 1200; ++i) {
+        if (mob.state() == MobState::Pathfind) {
+            sawPathfind = true;
+        }
+        mob.update(kDt);
+    }
+    // The straight chase dead-ends at the wall; the BFS route (around
+    // the wall's end at z±2) gets the mob to the player's attack range.
+    EXPECT_TRUE(sawPathfind);
+    EXPECT_GT(hits, 0);
+    const float distH =
+        std::hypot(mob.position().x - 4.5f, mob.position().z - 0.5f);
+    EXPECT_LE(distH, 1.6f + 1e-3f);
+}
+
+TEST(MobPathfindTest, FlatChaserNeverPathfinds) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& z = mobs.at(MobID{0});
+    // No wall: the straight chase is unblocked — the pathfinding code
+    // must stay structurally dormant (the zero-regression guarantee).
+    int hits = 0;
+    MobEntity mob = makeMob(f, z, Vec3{0.5f, 1.0f, 0.5f});
+    mob.setPlayer(Vec3{4.5f, 1.0f, 0.5f}, true);
+    mob.setHitCallback([&hits](float) { ++hits; });
+    bool sawPathfind = false;
+    for (int i = 0; i < 300; ++i) {
+        if (mob.state() == MobState::Pathfind) {
+            sawPathfind = true;
+        }
+        mob.update(kDt);
+    }
+    EXPECT_FALSE(sawPathfind);
+    EXPECT_FALSE(mob.pathActive());
+    EXPECT_GT(hits, 0); // the straight chase reached the player
+}
+
+TEST(MobPathfindTest, SealedChaserStaysLost) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& z = mobs.at(MobID{0});
+    // A sealed 3x3 room (walls y1..2, ceiling y3) around the mob.
+    for (int y = 1; y <= 2; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            f.world.setBlock(x, y, -1, f.stone);
+            f.world.setBlock(x, y, 1, f.stone);
+        }
+        for (int zc = -1; zc <= 1; ++zc) {
+            f.world.setBlock(-1, y, zc, f.stone);
+            f.world.setBlock(1, y, zc, f.stone);
+        }
+    }
+    for (int x = -1; x <= 1; ++x) {
+        for (int zc = -1; zc <= 1; ++zc) {
+            f.world.setBlock(x, 3, zc, f.stone);
+        }
+    }
+    int hits = 0;
+    MobEntity mob = makeMob(f, z, Vec3{0.5f, 1.0f, 0.5f});
+    mob.setPlayer(Vec3{4.5f, 1.0f, 0.5f}, true);
+    mob.setHitCallback([&hits](float) { ++hits; });
+    bool sawPathfind = false;
+    for (int i = 0; i < 300; ++i) {
+        if (mob.state() == MobState::Pathfind) {
+            sawPathfind = true;
+        }
+        mob.update(kDt);
+    }
+    // No standable route: the failed BFS takes the lost cooldown, the
+    // straight chase resumes against the wall, the player is never hit.
+    EXPECT_FALSE(sawPathfind);
+    EXPECT_EQ(hits, 0);
+    EXPECT_LE(std::abs(mob.position().x), 1.0f + 1e-3f);
+    EXPECT_LE(std::abs(mob.position().z), 1.0f + 1e-3f);
+}
+
+TEST(MobPathfindTest, PathDroppedWhenPlayerGone) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& z = mobs.at(MobID{0});
+    buildWall(f);
+    MobEntity mob = makeMob(f, z, Vec3{0.5f, 1.0f, 0.5f});
+    mob.setPlayer(Vec3{4.5f, 1.0f, 0.5f}, true);
+    // Run until the path engages (the stuck window + the BFS).
+    int i = 0;
+    while (i < 900 && !mob.pathActive()) {
+        mob.update(kDt);
+        ++i;
+    }
+    ASSERT_TRUE(mob.pathActive());
+    // The player dies: the next AI tick leaves the chase context and
+    // drops the path (the wander takes over).
+    mob.setPlayer(Vec3{4.5f, 1.0f, 0.5f}, false);
+    mob.update(kDt);
+    EXPECT_FALSE(mob.pathActive());
+    EXPECT_NE(mob.state(), MobState::Pathfind);
 }

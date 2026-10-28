@@ -70,6 +70,7 @@
 #include "entity/entity.hpp"
 #include "entity/mob_registry.hpp"
 #include "entity/mob_swing.hpp"
+#include "entity/pathfind.hpp"
 #include "core/status_effect.hpp"
 
 namespace mc {
@@ -82,6 +83,9 @@ enum class MobState {
     // Ranged attack (Phase 27): fire on the cooldown, back away inside
     // retreat_distance.
     RangedAttack,
+    // ENT-6: following the BFS chase path (the stuck-triggered route
+    // around terrain the straight chase cannot cross).
+    Pathfind,
 };
 
 // ENT-5: the safe-fall offset for mobs (Minecraft: 3 blocks — the same
@@ -107,6 +111,8 @@ public:
     float health() const { return m_health; }
     bool dead() const { return m_dead; }
     MobState state() const { return m_state; }
+    // ENT-6: the active chase path (test / debug observability).
+    bool pathActive() const { return !m_path.empty(); }
     // Facing in the camera yaw convention (0 = -Z); the render model
     // rotates by this.
     float facingYaw() const { return m_yaw; }
@@ -216,6 +222,14 @@ public:
 private:
     void integrate(float h) override;
     void runAi(double dt);
+    // ENT-6: the chase-path helpers (all private, all frame-locked).
+    void stepAlongPath(const MobProperties& p, const Vec3& pos, double dt);
+    void tryPathfind(const Vec3& pos);
+    // The node the mob is standing on (invalid off the integer lattice:
+    // stairs/slab floors, mid-air).
+    PathNode currentStandableNode(const Vec3& pos) const;
+    PathNode playerTargetNode() const;
+    int bodyCells() const;
 
     const Mob* m_def;
     float m_health = 0.0f;
@@ -238,6 +252,19 @@ private:
     std::uint64_t m_rng = 0;        // splitmix64 state (per-mob)
     std::function<void(float)> m_hitPlayer;
     std::function<void()> m_shootPlayer;  // ranged fire (Phase 27)
+
+    // ENT-6: the active chase path (empty = none — the straight chase).
+    // Ephemeral like the mob (never saved — zero format). The stuck
+    // window measures horizontal progress over kStuckWindowSeconds;
+    // below the factor of the expected it triggers a pathfinding attempt
+    // (throttled by the lost cooldown after a failed one).
+    std::vector<PathNode> m_path;
+    std::size_t m_pathIdx = 0;
+    double m_repathT = 0.0;
+    double m_nodeT = 0.0;
+    double m_stuckWindowT = 0.0;
+    Vec3 m_stuckAnchor = Vec3::zero();
+    double m_lostCooldown = 0.0;
 
     // Fire system (Phase 58) state: armed by the game at spawn (the fire
     // effect's tick parameters + the config duration). `remaining` counts
@@ -282,6 +309,17 @@ private:
     // every mob swims at the same pace, like the player's single
     // swimSpeed).
     static constexpr float kUnderwaterSpeedFactor = 0.6f;
+    // ENT-6: stuck-triggered pathfinding tuning (the chase state only —
+    // the wander / attack / ranged steering is untouched, the documented
+    // deviation). All frame-locked seconds / factors (hard rule 8).
+    static constexpr double kStuckWindowSeconds = 0.5;
+    static constexpr float kStuckProgressFactor = 0.25f;
+    static constexpr double kLostCooldownSeconds = 1.0;
+    static constexpr double kRepathSeconds = 0.5;
+    // The model can be wrong (the shared step-up's +X/+Z single-cell
+    // quirk makes a planned step infeasible): a node not reached within
+    // this time aborts the path (the straight chase resumes, throttled).
+    static constexpr double kNodeTimeoutSeconds = 2.0;
 };
 
 } // namespace mc

@@ -18,7 +18,7 @@
 | LGT 光照 | ~~LGT-3 夜光重传播~~ ✅ v1.3.0 | ~~LGT-4 光束入光~~ ✅ v1.4.0 | ~~LGT-5 半块透光~~ ✅ v1.5.0 | | | |
 | GEN 世界与生成 | ~~GEN-7 基岩多层~~ ✅ v1.6.0 | ~~GEN-8 地形互感~~ ✅ v1.7.0 | ~~GEN-9 耕地湿润~~ ✅ v1.8.0 | | | |
 | FLUID 流体 | ~~FLUID-4 倒向水面~~ ✅ v1.9.0 | ~~FLUID-5 水熔岩反应~~ ✅ v1.10.0 | ~~FLUID-6 流体种类扩展~~ ✅ v1.11.0 | | | |
-| ENT 实体/Mob/移动 | ~~ENT-5 坠落伤害~~ ✅ v1.12.0 | ENT-6 AI 补强 | ENT-7 移动惯性 | ENT-8 和平/保护环 | ENT-9 掉落可视化 | |
+| ENT 实体/Mob/移动 | ~~ENT-5 坠落伤害~~ ✅ v1.12.0 | ~~ENT-6 AI 补强~~ ✅ v1.13.0 | ENT-7 移动惯性 | ENT-8 和平/保护环 | ENT-9 掉落可视化 | |
 | SURV 生存/战斗/效果 | SURV-6 效果档位 | SURV-7 死亡统计 | SURV-8 工具 10× | SURV-9 饱和细化 | SURV-10 挤奶冷却 | |
 | CRAFT 物品/合成/面板 | CRAFT-4 配方提示 | CRAFT-5 炉子表现 | CRAFT-6 燃料熔炼 | CRAFT-7 背包交互 | | |
 | SAVE 存档 | SAVE-2 速度入档 | SAVE-3 槽位管理 | | | | |
@@ -116,6 +116,30 @@
   构建与运行 + 范围与限制 + 许可），PITS 范围 267-288 修正为 271-288
   （267-270 属 v1.0 组时代门 114/115）③ Latest 收尾回 v1.5.0 组 release
   （重建时序）。同步 README/CHANGELOG/BACKLOG/AGENTS 旧引用。
+- 2026-10-28：**ENT-6 AI 补强完成**（v1.x 第 13/33 项，v1.13.0，门
+  128，ENT 行 2/6）："AI 补强"原始定义已佚 = 代理定案 **mob 追逐寻路**
+  （KNOWN_ISSUES 记档缺口"追墙会沿墙滑"）。新纯函数模块
+  `entity/pathfind.{hpp,cpp}`（cellStandable = feet 格 + 头空 air + 下方
+  solid FullCube 整数地板 / pathfindBFS = 统一代价 BFS，固定邻居序
+  -X/-Z/+Z/+X × flat/step-up(+1)/fall(1..8 深走廊) 三族边，target zone
+  = Chebyshev ≤1，展开帽 512，无随机无 float = 帧锁定安全）+ MobEntity
+  卡住触发集成（chase 窗 0.5 s progress < 25% 期望 → tryPathfind →
+  MobState::Pathfind 跟随 + 0.5 s 重规划 + 1 s lost 冷却 + **2 s 节点
+  超时逃逸**【A* 模型与物理的 +X/+Z 单格 step quirk 失配兜底】；未卡住
+  = 结构惰直线追逐位级恒等）。零 format（19）/config/内容/音效。
+  1798/1798（+19：standable 5 + BFS 10 + 集成 4）、-Werror 0；**4 契约
+  演进重钉**（MobStepUpTest：Wall/Fence/TwoBlockStep → "绕行而非翻越"
+  【sawPathfind + maxY 恒 1.0 = 原判定存活 pin】+ PlusX → 改名
+  SingleCellStepPlusXStaysClampedAtTheQuirk【走廊封死 = 唯一通路是
+  quirk 步 → 节点超时弃路径 → x 9.7 恒夹 = quirk pin 存活】）。门 128：
+  S1 第 128 次结构性免疫免重锚（四方 ×2 387726 B + savenorm）+ S2
+  harness A/B 矩阵 PASS【gen128 单源双库：wall NEW hits=19 绕墙攻击 vs
+  OLD hits=0 恒夹 x7.7 互斥 / flat NEW≡OLD 逐值全同【hits=29 结构惰性】
+  / sealed NEW≡OLD 逐值全同【无路 lost 回落 = 旧行为】×2/侧】+ S3 围栏
+  竞技场 900f new≡old 字节一致零回归 + 性能 A/B fluidCells win2/3
+  29803/29800 双侧逐位（重跑复现）+ 全同档【win3 upd 首轮偏置 = 环境
+  噪声重跑证伪】+ 终档流体 4 格差 = PITS 283 类 churn 簇。无新增 PITS
+  （设计期预判化解 quirk 失配 = 节点超时）。
 - 2026-10-28：**ENT-5 坠落伤害完成**（v1.x 第 12/33 项，v1.12.0，门
   127，ENT 行 1/6）：玩家侧 Phase 16 已完整（fall>3 且无流体 →
   damage(fall−3)）= 缺口 **mob 侧坠落伤害**（MC mob 同样受坠伤）。

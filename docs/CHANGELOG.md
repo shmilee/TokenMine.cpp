@@ -3,6 +3,64 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.13.0（2026-10-28）
+
+**ENT-6 AI 补强**（v1.x 任务表 13/33，ENT 行 2/6，门 128）——"AI
+补强"原始定义已佚 = 代理定案 **mob 追逐寻路**（消费 KNOWN_ISSUES
+记档缺口"每只 mob 只以玩家为对象……追墙会沿墙滑"；直线追逐被
+墙/台阶/深坑挡住时永久卡死 = 最显著的 AI 缺口）：
+- **新纯函数模块 `entity/pathfind.{hpp,cpp}`**（campfire 范式）：
+  `cellStandable`（feet 格 + bodyCells 头空 = air + 下方 = solid
+  FullCube = 整数地板；楼梯/半块 = 非整数 feet 出图 = 记档偏离）+
+  `pathfindBFS`（统一代价 BFS，固定邻居序 = 确定性：flat 四邻 /
+  step-up +1【物理 stepUp 可踏 1.0 同款模型】/ fall 1..kPathMaxFall(8)
+  深走廊格全 air；target zone = Chebyshev ≤1【末段直线 chase 收】；
+  展开帽 kPathMaxNodes(512)；无随机无 float = 帧锁定安全（硬规则 8）。
+  空路径 = from 已在 zone / 错误 = 无路）。
+- **MobEntity 卡住触发集成**：chase 窗 kStuckWindowSeconds(0.5 s)
+  水平 progress < kStuckProgressFactor(0.25)×期望 → `tryPathfind` →
+  `MobState::Pathfind`（新枚举值）跟随节点（数据 speed 指向下一节点
+  中心）+ 每 kRepathSeconds(0.5 s) 重规划（目标移动跟进）+ 失败
+  kLostCooldownSeconds(1.0 s) 节流 + **kNodeTimeoutSeconds(2.0 s) 节点
+  超时逃逸**（A* 模型可能错——共享 step-up 的 +X/+Z 单格 quirk 使
+  规划的 step 物理不可执行 → 弃路径回直线 chase = quirk 几何下行为
+  与 ENT-6 前逐位一致，单测钉死）。**结构惰性**：未卡住 = 逐位恒等
+  直线追逐；wander/attack/ranged 零触碰。
+- **零 format（19）/config/内容/音效**。
+- **范围外记档偏离**：寻路只覆盖 chase（wander 每 2.5 s 重掷自然
+  逃逸 / ranged kite / 被动 mob 无逃跑 AI = 既有条）；无跳跃边（MC
+  mob 亦不跳）；楼梯/半块地板出图（整数晶格纪律）；fall 走廊深帽 8
+  （更深坠落直线 chase 亦坠）。
+
+1798/1798（+19：PathfindStandableTest 5 + PathfindBFSTest 10【直线 /
+绕墙 / 密封无路 / 1 深坑 fall+cross / 2 深坑绕行 / step-up 平台 /
+确定性 / zone 空路径 / from 非 standable 拒 / 节点帽】+ MobPathfindTest
+4【卡住找路到玩家攻击 / 平地永不寻路 = 结构惰性 / 密封 lost 恒夹零
+命中 / 玩家离场弃路径】）、`-Werror` 0 警告。**4 契约演进重钉**
+（MobStepUpTest，ENT-6 意图行为变更 = "恒夹墙" → "绕行不翻越"）：
+DoesNotStepUpWall/Fence/TwoBlockStep → sawPathfind + **maxY 恒 1.0**
+（原"不可踏"判定存活：1.5 barrier/2 步无 FullCube 顶节点 = A* 不规划
+翻越）+ DoesNotStepSingleCellStepPlusX → 改名
+SingleCellStepPlusXStaysClampedAtTheQuirk（走廊双侧封墙 = 唯一通路是
+quirk 步 → A* 规划 → 物理拒绝 → 节点超时弃路径 → **x 9.7 恒夹 = quirk
+pin 在 ENT-6 后存活**；quirk 本体修复仍 = player 行为变更单独立项）。
+门 128：S1 = **第 128 次结构性免疫免重锚**（fresh 60f 四方 ×2 387726 B
++ base18 + savenorm new×2/old×2 EXACT；nomobs = BFS 结构惰性）+ **S2
+harness A/B 矩阵 PASS**（gen128 单源双库【state 整数面：旧枚举无
+Pathfind 值 = 旧侧 sawPathfind 构造性 false】2400f ×2/侧）：wall
+NEW hits=19 sawPathfind=true maxY=1.0 pos=(12.188,1,7.409) Attack【绕
+墙末端到达攻击】vs OLD hits=0 pos=(7.700,1,6.5) Chase 恒夹【8.0−0.3】
+互斥终态 / flat **NEW≡OLD 逐值全同**（hits=29 同终位 = 未阻塞时结构
+惰性的二进制级证明）/ sealed **NEW≡OLD 逐值全同**（hits=0 恒夹 = 无路
+时 lost 回落旧行为）+ **S3 围栏竞技场零回归 A/B PASS**（s127_arena
+900f 夜 mob on：new×2/old×2 RAW EXACT 235680 + **new≡old 字节一致**
+【围栏内部无障 = 无 chase 卡住】+ savenorm EXACT）+ 性能 A/B
+fluidCells win2/3 29803/29800 双侧逐位【重跑复现】+ PIPE3 逐位 + 全同
+档【win3 upd med 首轮 3.44 vs 5.50 = 重跑 6.27 vs 4.96 双向摆动 =
+环境噪声证伪】+ 终档流体 4 格差（PITS 283 类 churn 簇）= 成本可忽略。
+组 1.11-1.15 进行中（第 3 版，组内不打 tag = 发布规则见 BACKLOG
+「执行顺序」）。
+
 ## v1.12.0（2026-10-28）
 
 **ENT-5 坠落伤害**（v1.x 任务表 12/33，ENT 行 1/6，门 127）——玩家侧
