@@ -3,6 +3,66 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.17.0（2026-10-28）
+
+**SURV-6 效果档位**（v1.x 任务表 17/33，SURV 行 1/5，门 132）——
+原始定义已佚 = 代理定案**状态效果档位化（Minecraft amplifier
+levels I/II/III），全数据驱动**（消费 KNOWN_ISSUES Phase-46 条"无
+amplifier/时长档位"残余的 amplifier 半；与 PRE-12 边界：SURV-6 =
+档位机制/存档/行为，PRE-12 = F3/tooltip 的档位显示）：
+- **效果数据 2 新键**：`tier_max`（int [1,3]，缺省 1 = 单档位级复现
+  旧行为；>3/非整数点名）+ `tier_steps`（对象：仅 5 个加性修饰字段
+  可档位——`speed_multiplier`/`absorb_hp`/`melee_bonus`/
+  `melee_penalty`/`damage_reduction`，每值 number ≥ 0；tick/instant
+  形 = 单档记档偏离：档位改 tick 节奏会动帧网格，instant 无消费
+  面）。三门纪律：**配对**（非零 step 须 base 在场）/ **死字段**
+  （tier_max 1 带 step 拒）/ **no-op**（tier_max > 1 全零 step 拒）。
+- **全 grant 对可选 `tier`**（0 基，缺省 0 = 位级旧行为；**范围
+  init 交叉校验点名**——registry 解析期不可得，on_hit_effect 同款
+  纪律）：物品 `grants_effect`/`grants_effects`（食物/饮品）/
+  `arrow_effect`（弓）+ mob `on_hit_effect`（近战）/ `arrow_effect`
+  （skeleton 箭）。`StatusEffects::apply(effect, duration, tier)`：
+  RESET 语义扩到档位（再施放换档，不叠加 amplifier）。
+- **聚合 tier 化**（`effectTieredValue(tier, base, step)` 纯函数 =
+  base + tier×step）：speed 乘积 / absorption 和 / bonus 和 /
+  penalty 和 / resistance 取最高——每实例先按档取值再按既有组合律
+  合成；**tier 0 = 全部聚合位级复现旧值**（结构免疫根）。
+- **format 19 → 20**：`player.effects` 条目可带 `tier`（**omit-
+  when-0** = damage 纪律：tier-0 条目与 format-19 字节同形 ⇒ f19
+  文件原样读入 = 迁移免迁；f19 及更早带 tier 键 = 版本谎报，格式
+  依赖白名单自动点名；非整数/≥ tier_max 点名，registry parse 期可
+  得 = 吸收池不变量同款）。
+- **内容 = MC 档位值 5 效果**：speed 1.2+0.2（I/II/III = 1.2/1.4/
+  1.6）/ absorption 4+2（4/6/8）/ resistance 0.2+0.2（0.2/0.4/
+  0.6）/ strength 2+2（2/4/6 项目压缩刻度）/ weakness 4+4（4/8/
+  12 = MC 精确值）；其余 6 效果单档不变。
+- **无档位 in-game 消费面（记档偏离）**：信标 `beacon_effects` =
+  纯名称列表（无 grant 对象，P91 形态）；药水无酿造系统（starter
+  隐藏槽 27 槽全满，PITS 300）→ 档位实例现仅经存档注入（E2E 范
+  式，P84 先例）+ 未来内容扩展（信标 grant 对象化 / 酿造 = 矩阵
+  外）。零音效/零纹理（HUD 图标 = 既有效果 tile，档位显示 =
+  PRE-12）。
+
+1820/1820（+17 净：parse 6 / save 6 / item 3 / mob 2；7 处 format
+钉 19→20 契约演进）、`-Werror` 0 警告。门 132：S1 = **第 132 次
+结构性免疫免重锚**（fresh 60f 四方 ×2 387726 B + base18 +
+savenorm；fresh 零效果 = count 0 fast-exit 聚合零执行）+ **S2 密封
+坠落室三值互斥 PASS**（s131 房扩展坠落室：feet y53 → 8 格坠落 = 5
+伤，config 禁再生 = P84 范式，600f 无输入：s2a 无效果 **hp 15** /
+s2b resistance tier 0（5×0.8 = 4 伤）**hp 16** / s2c tier 1
+（5×0.6 = 3 伤）**hp 17**——各 ×2 RAW 327492 + savenorm EXACT，档
+位经 存档→apply→减伤管线 端到端实证）+ **S2d 迁移证明**（旧
+v1.16.0 二进制 + s2b 的 f19 孪生文件 → hp 16 = pre-SURV-6 代码原
+样读取）+ **S6 ×3 点名**（旧二进制拒 format 20 / tier_max 4 /
+grants tier 3 越界）+ S3 1820 + 性能 A/B 真 v1.16 vs v1.17 PASS
+（零效果场景结构惰性：双侧终档 effects 全空 + win1 fluidCells
+51927/51924 ±3 + win2/3 ±100 = 4 格 rim 簇 PITS 283 类非回归 +
+PIPE3 changesApplied 1404 逐位 = 成本可忽略）。**PITS 306**（cp -a
+性能树带 build/ = 陈旧 CMakeCache 目录失配 + ninja mtime 假"无活"
+→ 静默用旧二进制——门 131 性能 v116 侧实为旧 v1.15 二进制【ENT-9
+零 src 差 ⇒ 该结论仍成立且更稳，记档】；修 = rm build 重配重编 +
+perf 日志 banner 版本实证 + 构建 grep 大小写不敏感）。
+
 ## v1.16.0（2026-10-28）
 
 **ENT-9 掉落可视化**（v1.x 任务表 16/33，**ENT 行 5/5 收尾**，门

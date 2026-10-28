@@ -70,7 +70,11 @@ Result<void> EffectRegistry::parseEffect(const Json& def, Effect& out) {
                                                 // undead exemption).
                                                 "affects_mobs",
                                                 "min_health_mob",
-                                                "undead_exempt"};
+                                                "undead_exempt",
+                                                // SURV-6: the effect tiers
+                                                // (the amplifier levels).
+                                                "tier_max",
+                                                "tier_steps"};
     for (const auto& [key, value] : def.members()) {
         if (kFields.count(key) == 0) {
             return MC_FAIL("effect '" + out.name + "' has an unknown field "
@@ -191,6 +195,124 @@ Result<void> EffectRegistry::parseEffect(const Json& def, Effect& out) {
                            std::to_string(dr->asDouble()));
         }
         out.damageReduction = static_cast<float>(dr->asDouble());
+    }
+
+    // SURV-6: the effect tiers (the Minecraft amplifier levels I/II/III).
+    // `tier_max` (int in [1, 3], absent = 1 = the pre-SURV-6 single tier)
+    // counts the tiers a grant may use (0-based: tier < tierMax).
+    const Json* tm = def.find("tier_max");
+    if (tm != nullptr) {
+        if (!tm->isNumber() || tm->asDouble() != std::floor(tm->asDouble()) ||
+            tm->asDouble() < 1.0 || tm->asDouble() > 3.0) {
+            return MC_FAIL("effect '" + out.name + "': 'tier_max' must be "
+                           "an integer in [1, 3], got " +
+                           (tm->isNumber() ? std::to_string(tm->asDouble())
+                                           : "a non-number"));
+        }
+        out.tierMax = static_cast<int>(tm->asDouble());
+    }
+    // `tier_steps` (object, absent = all steps 0): the per-tier increments
+    // of the TIERABLE modifier fields only (the five data fields — a step
+    // for a tick/instant field is rejected: those forms are single-tier,
+    // the documented deviation). Each step is a number >= 0 (the tiers are
+    // monotonically stronger — Minecraft). Pairing rule: a NON-ZERO step
+    // requires its base field present (the fast_against discipline — a
+    // step on an absent base is dead data). No-op rule: tierMax > 1 with
+    // every step 0 is rejected (a tier set that changes nothing is a
+    // typo — the no-op rule).
+    float stepSm = 0.0f, stepAh = 0.0f, stepMb = 0.0f, stepMpen = 0.0f,
+        stepDr = 0.0f;
+    if (const Json* ts = def.find("tier_steps")) {
+        if (!ts->isObject()) {
+            return MC_FAIL("effect '" + out.name +
+                           "': 'tier_steps' must be an object");
+        }
+        static const std::set<std::string> kStepFields {"speed_multiplier",
+                                                        "absorb_hp",
+                                                        "melee_bonus",
+                                                        "melee_penalty",
+                                                        "damage_reduction"};
+        for (const auto& [key, value] : ts->members()) {
+            if (kStepFields.count(key) == 0) {
+                return MC_FAIL("effect '" + out.name + "' tier_steps holds "
+                               "the non-tierable field '" + key +
+                               "' (only the five modifier fields are "
+                               "tierable — the tick and instant forms are "
+                               "single-tier)");
+            }
+            if (!value.isNumber() || value.asDouble() < 0.0) {
+                return MC_FAIL("effect '" + out.name + "' tier_steps." +
+                               key + " must be a number >= 0, got " +
+                               (value.isNumber()
+                                    ? std::to_string(value.asDouble())
+                                    : "a non-number"));
+            }
+            const float v = static_cast<float>(value.asDouble());
+            if (key == "speed_multiplier") {
+                stepSm = v;
+            } else if (key == "absorb_hp") {
+                stepAh = v;
+            } else if (key == "melee_bonus") {
+                stepMb = v;
+            } else if (key == "melee_penalty") {
+                stepMpen = v;
+            } else {
+                stepDr = v;
+            }
+        }
+        // The pairing rule: a non-zero step needs its base field.
+        if (stepSm != 0.0f && out.speedMultiplier <= 1.0f) {
+            return MC_FAIL("effect '" + out.name + "' tier_steps."
+                           "speed_multiplier requires 'speed_multiplier' "
+                           "present (> 1.0)");
+        }
+        if (stepAh != 0.0f && out.absorbHp <= 0.0f) {
+            return MC_FAIL("effect '" + out.name + "' tier_steps.absorb_hp "
+                           "requires 'absorb_hp' present");
+        }
+        if (stepMb != 0.0f && out.meleeBonus <= 0.0f) {
+            return MC_FAIL("effect '" + out.name + "' tier_steps."
+                           "melee_bonus requires 'melee_bonus' present");
+        }
+        if (stepMpen != 0.0f && out.meleePenalty <= 0.0f) {
+            return MC_FAIL("effect '" + out.name + "' tier_steps."
+                           "melee_penalty requires 'melee_penalty' "
+                           "present");
+        }
+        if (stepDr != 0.0f && out.damageReduction <= 0.0f) {
+            return MC_FAIL("effect '" + out.name + "' tier_steps."
+                           "damage_reduction requires 'damage_reduction' "
+                           "present");
+        }
+        // The dead-field rule: steps only exist to serve tiers, and the
+        // single-tier effect has no tier > 0 — a step on it is dead data.
+        if (out.tierMax == 1 && (stepSm != 0.0f || stepAh != 0.0f ||
+                                 stepMb != 0.0f || stepMpen != 0.0f ||
+                                 stepDr != 0.0f)) {
+            return MC_FAIL("effect '" + out.name +
+                           "' has 'tier_steps' but tier_max 1 (a single-"
+                           "tier effect has no tier to scale — the steps "
+                           "are dead data)");
+        }
+        // The no-op rule: a tiered effect must actually scale.
+        if (out.tierMax > 1 && stepSm == 0.0f && stepAh == 0.0f &&
+            stepMb == 0.0f && stepMpen == 0.0f && stepDr == 0.0f) {
+            return MC_FAIL("effect '" + out.name +
+                           "' has tier_max > 1 but no non-zero tier step "
+                           "(a tier set that changes nothing is a no-op "
+                           "typo)");
+        }
+        out.stepSpeedMultiplier = stepSm;
+        out.stepAbsorbHp = stepAh;
+        out.stepMeleeBonus = stepMb;
+        out.stepMeleePenalty = stepMpen;
+        out.stepDamageReduction = stepDr;
+    } else if (out.tierMax > 1) {
+        // tierMax > 1 with NO tier_steps object = the no-op rule above
+        // (nothing scales).
+        return MC_FAIL("effect '" + out.name +
+                       "' has tier_max > 1 but no 'tier_steps' (a tiered "
+                       "effect must name the fields it scales)");
     }
 
     // SURV-4: the potion's instant HP change (optional). A whole number of
@@ -395,14 +517,18 @@ void EffectRegistry::clear() {
 
 // -- StatusEffects ------------------------------------------------------------
 
-void StatusEffects::apply(int effect, double duration) {
+void StatusEffects::apply(int effect, double duration, int tier) {
     for (ActiveEffect& a : m_active) {
         if (a.effect == effect) {
-            a.remaining = duration;  // re-application resets the duration
-            return;                  // (the tick phase is kept)
+            // Re-application resets the duration AND the tier (the grant's
+            // tier replaces the instance's — no amplifier stacking); the
+            // tick phase is kept.
+            a.remaining = duration;
+            a.tier = tier;
+            return;
         }
     }
-    m_active.push_back(ActiveEffect {effect, duration, 0.0});
+    m_active.push_back(ActiveEffect {effect, duration, 0.0, tier});
 }
 
 void StatusEffects::clearNegative(const EffectRegistry& effects) {
@@ -453,7 +579,9 @@ void StatusEffects::update(
 float StatusEffects::totalMeleePenalty(const EffectRegistry& effects) const {
     float sum = 0.0f;
     for (const ActiveEffect& a : m_active) {
-        sum += effects.at(a.effect).meleePenalty;
+        const Effect& e = effects.at(a.effect);
+        sum += effectTieredValue(a.tier, e.meleePenalty,
+                                 e.stepMeleePenalty);
     }
     return sum;
 }
@@ -461,17 +589,21 @@ float StatusEffects::totalMeleePenalty(const EffectRegistry& effects) const {
 float StatusEffects::totalAbsorption(const EffectRegistry& effects) const {
     float sum = 0.0f;
     for (const ActiveEffect& a : m_active) {
-        sum += effects.at(a.effect).absorbHp;
+        const Effect& e = effects.at(a.effect);
+        sum += effectTieredValue(a.tier, e.absorbHp, e.stepAbsorbHp);
     }
     return sum;
 }
 
 float StatusEffects::totalSpeedMultiplier(const EffectRegistry& effects) const {
     // Multiplicative (each active speed effect scales the move speed); the
-    // identity 1.0 when none grant speed.
+    // identity 1.0 when none grant speed. SURV-6: the tier-adjusted value
+    // per instance.
     float product = 1.0f;
     for (const ActiveEffect& a : m_active) {
-        product *= effects.at(a.effect).speedMultiplier;
+        const Effect& e = effects.at(a.effect);
+        product *= effectTieredValue(a.tier, e.speedMultiplier,
+                                     e.stepSpeedMultiplier);
     }
     return product;
 }
@@ -479,7 +611,8 @@ float StatusEffects::totalSpeedMultiplier(const EffectRegistry& effects) const {
 float StatusEffects::totalMeleeBonus(const EffectRegistry& effects) const {
     float sum = 0.0f;
     for (const ActiveEffect& a : m_active) {
-        sum += effects.at(a.effect).meleeBonus;
+        const Effect& e = effects.at(a.effect);
+        sum += effectTieredValue(a.tier, e.meleeBonus, e.stepMeleeBonus);
     }
     return sum;
 }
@@ -487,10 +620,14 @@ float StatusEffects::totalMeleeBonus(const EffectRegistry& effects) const {
 float StatusEffects::totalDamageReduction(
     const EffectRegistry& effects) const {
     // The single highest active reduction (the player has one effective
-    // resistance, not stacked fractions).
+    // resistance, not stacked fractions). SURV-6: the tier-adjusted value
+    // per instance.
     float maxr = 0.0f;
     for (const ActiveEffect& a : m_active) {
-        maxr = std::max(maxr, effects.at(a.effect).damageReduction);
+        const Effect& e = effects.at(a.effect);
+        maxr = std::max(maxr,
+                        effectTieredValue(a.tier, e.damageReduction,
+                                          e.stepDamageReduction));
     }
     return maxr;
 }

@@ -301,8 +301,8 @@ TEST(CampfireSaveTest, FormatIsThirteenAndRoundTrips) {
     s.campfires.push_back({BlockPos {4, 53, 4}, unlit});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // CRAFT-1: writes are always format 19 (SURV-3 was format 18).
-    EXPECT_EQ(j->find("format")->asInt(), 19);
+    // SURV-6: writes are always format 20 (CRAFT-1 was format 19).
+    EXPECT_EQ(j->find("format")->asInt(), 20);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->campfires.size(), 3u);

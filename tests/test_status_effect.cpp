@@ -852,3 +852,249 @@ TEST(EffectContent, PoisonMobCarrierFieldsPinned) {
     EXPECT_TRUE(e.undeadExempt);
     EXPECT_EQ(e.icon, 0);
 }
+
+// -- SURV-6: the effect tiers (the amplifier levels) ---------------------------
+
+namespace {
+
+// A single-tierable fixture registry (the shipped shape, inlined so the
+// values are test-owned): five tiered modifier effects + one single-tier
+// control.
+EffectRegistry makeTieredRegistry() {
+    EffectRegistry reg;
+    const struct {
+        const char* def;
+    } defs[] = {
+        {R"({"id":"speed","speed_multiplier":1.2,"icon":0,
+            "tier_max":3,"tier_steps":{"speed_multiplier":0.2}})"},
+        {R"({"id":"resistance","damage_reduction":0.2,"icon":1,
+            "tier_max":3,"tier_steps":{"damage_reduction":0.2}})"},
+        {R"({"id":"absorption","absorb_hp":4,"icon":2,
+            "tier_max":3,"tier_steps":{"absorb_hp":2}})"},
+        {R"({"id":"strength","melee_bonus":2.0,"icon":3,
+            "tier_max":3,"tier_steps":{"melee_bonus":2}})"},
+        {R"({"id":"weakness","melee_penalty":4.0,"negative":true,"icon":4,
+            "tier_max":3,"tier_steps":{"melee_penalty":4}})"},
+        {R"({"id":"poison","tick_type":"damage","tick_amount":1.0,
+            "tick_interval":2.5,"min_health":1.0,"negative":true,"icon":5})"},
+    };
+    for (const auto& d : defs) {
+        auto r = reg.registerEffect(parseJson(d.def));
+        if (!r.ok()) {
+            ADD_FAILURE() << d.def << ": " << r.error().message;
+        }
+    }
+    return reg;
+}
+
+} // namespace
+
+TEST(EffectParse, TierMaxRange) {
+    // int in [1, 3]; absent = 1 (the pre-SURV-6 single tier).
+    auto reg = makeTieredRegistry();
+    const Effect* speed = reg.findByName("speed");
+    ASSERT_NE(speed, nullptr);
+    EXPECT_EQ(speed->tierMax, 3);
+    const Effect* poison = reg.findByName("poison");
+    ASSERT_NE(poison, nullptr);
+    EXPECT_EQ(poison->tierMax, 1);
+    // The direct, exact rejections:
+    Effect e;
+    auto r0 = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"x","melee_bonus":2,"tier_max":0})"), e);
+    EXPECT_FALSE(r0.ok());
+    auto r4 = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"x","melee_bonus":2,"tier_max":4})"), e);
+    EXPECT_FALSE(r4.ok());
+    auto rF = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"x","melee_bonus":2,"tier_max":"3"})"), e);
+    EXPECT_FALSE(rF.ok());
+    auto r25 = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"x","melee_bonus":2,"tier_max":2.5})"), e);
+    EXPECT_FALSE(r25.ok());
+}
+
+TEST(EffectParse, TierStepsRejections) {
+    // A FRESH Effect per case: parseEffect does not reset `out`, so a
+    // shared instance leaks the previous case's base fields into the
+    // next case's pairing checks.
+    // A non-tierable field named (the tick/instant forms are single-tier).
+    {
+        Effect e;
+        auto rTick = EffectRegistry::parseEffect(
+            parseJson(R"({"id":"x","icon":0,"tick_type":"damage",
+                "tick_amount":1,"tick_interval":2,"tier_max":2,
+                "tier_steps":{"tick_interval":0.5}})"), e);
+        EXPECT_FALSE(rTick.ok());
+        EXPECT_NE(rTick.error().message.find("non-tierable"),
+                  std::string::npos);
+    }
+    // A negative step (the tiers are monotonically stronger).
+    {
+        Effect e;
+        auto rNeg = EffectRegistry::parseEffect(
+            parseJson(R"({"id":"x","icon":0,"melee_bonus":2,"tier_max":2,
+                "tier_steps":{"melee_bonus":-1}})"), e);
+        EXPECT_FALSE(rNeg.ok());
+        EXPECT_NE(rNeg.error().message.find(">= 0"), std::string::npos);
+    }
+    // Pairing: a step without its base field (dead data).
+    {
+        Effect e;
+        auto rPair = EffectRegistry::parseEffect(
+            parseJson(R"({"id":"x","icon":0,"tier_max":2,
+                "tier_steps":{"melee_bonus":2}})"), e);
+        EXPECT_FALSE(rPair.ok());
+        EXPECT_NE(rPair.error().message.find("requires"),
+                  std::string::npos);
+    }
+    // Dead field: steps with tier_max 1 (a single-tier effect has no
+    // tier to scale).
+    {
+        Effect e;
+        auto rDead = EffectRegistry::parseEffect(
+            parseJson(R"({"id":"x","icon":0,"melee_bonus":2,"tier_max":1,
+                "tier_steps":{"melee_bonus":2}})"), e);
+        EXPECT_FALSE(rDead.ok());
+        EXPECT_NE(rDead.error().message.find("dead data"),
+                  std::string::npos);
+    }
+    // No-op: tier_max 3 with every step 0 (a tier set that changes
+    // nothing is a typo).
+    {
+        Effect e;
+        auto rNoop = EffectRegistry::parseEffect(
+            parseJson(R"({"id":"x","icon":0,"melee_bonus":2,"tier_max":3,
+                "tier_steps":{"melee_bonus":0}})"), e);
+        EXPECT_FALSE(rNoop.ok());
+        EXPECT_NE(rNoop.error().message.find("no-op"), std::string::npos);
+    }
+    // No-op: tier_max 3 with no tier_steps object at all.
+    {
+        Effect e;
+        auto rNone = EffectRegistry::parseEffect(
+            parseJson(R"({"id":"x","icon":0,"melee_bonus":2,
+                "tier_max":3})"), e);
+        EXPECT_FALSE(rNone.ok());
+        EXPECT_NE(rNone.error().message.find("no 'tier_steps'"),
+                  std::string::npos);
+    }
+}
+
+TEST(EffectTieredValue, ExactMinecraftTiers) {
+    // The tier math: base + tier x step (tier 0 = the base bit-for-bit,
+    // the pre-SURV-6 value).
+    EXPECT_FLOAT_EQ(effectTieredValue(0, 1.2f, 0.2f), 1.2f);
+    EXPECT_FLOAT_EQ(effectTieredValue(1, 1.2f, 0.2f), 1.4f);
+    EXPECT_FLOAT_EQ(effectTieredValue(2, 1.2f, 0.2f), 1.6f);
+    EXPECT_FLOAT_EQ(effectTieredValue(1, 4.0f, 2.0f), 6.0f);
+    EXPECT_FLOAT_EQ(effectTieredValue(2, 0.2f, 0.2f), 0.6f);
+    // A zero step keeps the base at EVERY tier (single-tier fields on a
+    // tiered effect, e.g. resistance's absent melee_bonus).
+    EXPECT_FLOAT_EQ(effectTieredValue(2, 2.0f, 0.0f), 2.0f);
+}
+
+TEST(StatusEffects, TierAdjustsTheTotals) {
+    const EffectRegistry reg = makeTieredRegistry();
+    const int speed = reg.idForName("speed");
+    const int resist = reg.idForName("resistance");
+    const int absorb = reg.idForName("absorption");
+    const int strength = reg.idForName("strength");
+    const int weakness = reg.idForName("weakness");
+    StatusEffects s;
+    // Tier 0 = the shipped base values (the pre-SURV-6 behavior).
+    s.apply(speed, 100.0, 0);
+    s.apply(resist, 100.0, 0);
+    s.apply(absorb, 100.0, 0);
+    s.apply(strength, 100.0, 0);
+    s.apply(weakness, 100.0, 0);
+    EXPECT_FLOAT_EQ(s.totalSpeedMultiplier(reg), 1.2f);
+    EXPECT_FLOAT_EQ(s.totalDamageReduction(reg), 0.2f);
+    EXPECT_FLOAT_EQ(s.totalAbsorption(reg), 4.0f);
+    EXPECT_FLOAT_EQ(s.totalMeleeBonus(reg), 2.0f);
+    EXPECT_FLOAT_EQ(s.totalMeleePenalty(reg), 4.0f);
+    // Re-apply each at tier 1: the REPLACE semantics (no stacking) lift
+    // the totals to the Minecraft II values.
+    s.apply(speed, 100.0, 1);
+    s.apply(resist, 100.0, 1);
+    s.apply(absorb, 100.0, 1);
+    s.apply(strength, 100.0, 1);
+    s.apply(weakness, 100.0, 1);
+    EXPECT_FLOAT_EQ(s.totalSpeedMultiplier(reg), 1.4f);
+    EXPECT_FLOAT_EQ(s.totalDamageReduction(reg), 0.4f);
+    EXPECT_FLOAT_EQ(s.totalAbsorption(reg), 6.0f);
+    EXPECT_FLOAT_EQ(s.totalMeleeBonus(reg), 4.0f);
+    EXPECT_FLOAT_EQ(s.totalMeleePenalty(reg), 8.0f);
+    // Tier 2 = the III values.
+    s.apply(speed, 100.0, 2);
+    s.apply(resist, 100.0, 2);
+    s.apply(absorb, 100.0, 2);
+    s.apply(strength, 100.0, 2);
+    s.apply(weakness, 100.0, 2);
+    EXPECT_FLOAT_EQ(s.totalSpeedMultiplier(reg), 1.6f);
+    EXPECT_FLOAT_EQ(s.totalDamageReduction(reg), 0.6f);
+    EXPECT_FLOAT_EQ(s.totalAbsorption(reg), 8.0f);
+    EXPECT_FLOAT_EQ(s.totalMeleeBonus(reg), 6.0f);
+    EXPECT_FLOAT_EQ(s.totalMeleePenalty(reg), 12.0f);
+}
+
+TEST(StatusEffects, ReapplyReplacesTheTier) {
+    const EffectRegistry reg = makeTieredRegistry();
+    const int speed = reg.idForName("speed");
+    StatusEffects s;
+    s.apply(speed, 100.0, 2);
+    EXPECT_FLOAT_EQ(s.totalSpeedMultiplier(reg), 1.6f);
+    // A re-apply at tier 0 drops the instance back to the base (the
+    // amplifier does not stack across re-applies).
+    s.apply(speed, 100.0, 0);
+    EXPECT_FLOAT_EQ(s.totalSpeedMultiplier(reg), 1.2f);
+    EXPECT_EQ(s.count(), 1u);
+}
+
+TEST(ShippedContent, TieredEffectsMatchMinecraft) {
+    // The five shipped tierable effects: tier_max 3 + the exact per-tier
+    // steps (I/II/III = base/base+step/base+2step). The other six are
+    // single-tier (no tier_max key, every step 0).
+    struct Pin {
+        const char* file;
+        int tierMax;
+        float speedStep, absorbStep, bonusStep, penaltyStep, resistStep;
+    };
+    const Pin pins[] = {
+        {"speed", 3, 0.2f, 0, 0, 0, 0},
+        {"absorption", 3, 0, 2.0f, 0, 0, 0},
+        {"resistance", 3, 0, 0, 0, 0, 0.2f},
+        {"strength", 3, 0, 0, 2.0f, 0, 0},
+        {"weakness", 3, 0, 0, 0, 4.0f, 0},
+        {"poison", 1, 0, 0, 0, 0, 0},
+        {"wither", 1, 0, 0, 0, 0, 0},
+        {"regeneration", 1, 0, 0, 0, 0, 0},
+        {"fire", 1, 0, 0, 0, 0, 0},
+        {"healing", 1, 0, 0, 0, 0, 0},
+        {"harming", 1, 0, 0, 0, 0, 0},
+    };
+    for (const Pin& p : pins) {
+        std::string text;
+        FILE* fp =
+            std::fopen((std::string("assets/data/effects/") + p.file +
+                        ".json")
+                           .c_str(),
+                       "rb");
+        ASSERT_NE(fp, nullptr) << "run from the repo root";
+        char buf[4096];
+        std::size_t n;
+        while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+            text.append(buf, n);
+        }
+        std::fclose(fp);
+        Effect e;
+        ASSERT_TRUE(EffectRegistry::parseEffect(parseJson(text), e).ok())
+            << p.file << ": " << text;
+        EXPECT_EQ(e.tierMax, p.tierMax) << p.file;
+        EXPECT_FLOAT_EQ(e.stepSpeedMultiplier, p.speedStep) << p.file;
+        EXPECT_FLOAT_EQ(e.stepAbsorbHp, p.absorbStep) << p.file;
+        EXPECT_FLOAT_EQ(e.stepMeleeBonus, p.bonusStep) << p.file;
+        EXPECT_FLOAT_EQ(e.stepMeleePenalty, p.penaltyStep) << p.file;
+        EXPECT_FLOAT_EQ(e.stepDamageReduction, p.resistStep) << p.file;
+    }
+}

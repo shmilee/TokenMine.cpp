@@ -19,7 +19,7 @@
 | GEN 世界与生成 | ~~GEN-7 基岩多层~~ ✅ v1.6.0 | ~~GEN-8 地形互感~~ ✅ v1.7.0 | ~~GEN-9 耕地湿润~~ ✅ v1.8.0 | | | |
 | FLUID 流体 | ~~FLUID-4 倒向水面~~ ✅ v1.9.0 | ~~FLUID-5 水熔岩反应~~ ✅ v1.10.0 | ~~FLUID-6 流体种类扩展~~ ✅ v1.11.0 | | | |
 | ENT 实体/Mob/移动 | ~~ENT-5 坠落伤害~~ ✅ v1.12.0 | ~~ENT-6 AI 补强~~ ✅ v1.13.0 | ~~ENT-7 移动惯性~~ ✅ v1.14.0 | ~~ENT-8 和平/保护环~~ ✅ v1.15.0 | ~~ENT-9 掉落可视化~~ ✅ v1.16.0 | |
-| SURV 生存/战斗/效果 | SURV-6 效果档位 | SURV-7 死亡统计 | SURV-8 工具 10× | SURV-9 饱和细化 | SURV-10 挤奶冷却 | |
+| SURV 生存/战斗/效果 | ~~SURV-6 效果档位~~ ✅ v1.17.0 | SURV-7 死亡统计 | SURV-8 工具 10× | SURV-9 饱和细化 | SURV-10 挤奶冷却 | |
 | CRAFT 物品/合成/面板 | CRAFT-4 配方提示 | CRAFT-5 炉子表现 | CRAFT-6 燃料熔炼 | CRAFT-7 背包交互 | | |
 | SAVE 存档 | SAVE-2 速度入档 | SAVE-3 槽位管理 | | | | |
 | PRE 表现层 | PRE-7 中毒/燃烧表现 | PRE-8 mob 火焰 | PRE-9 箭/弓/手视觉 | PRE-10 图标重叠修复★ | PRE-11 HUD 细化 | PRE-12 tooltip/F3 |
@@ -116,6 +116,40 @@
   构建与运行 + 范围与限制 + 许可），PITS 范围 267-288 修正为 271-288
   （267-270 属 v1.0 组时代门 114/115）③ Latest 收尾回 v1.5.0 组 release
   （重建时序）。同步 README/CHANGELOG/BACKLOG/AGENTS 旧引用。
+- 2026-10-28：**SURV-6 效果档位完成**（v1.x 第 17/33 项，v1.17.0，
+  门 132，SURV 行 1/5）："效果档位"原始定义已佚 = 代理定案**状态
+  效果档位化（amplifier I/II/III，全数据驱动）**（消费 KNOWN_ISSUES
+  Phase-46 条"无 amplifier"残余；与 PRE-12 边界 = 档位机制/存档/
+  行为 vs F3/tooltip 显示）。效果 JSON 2 新键 `tier_max`（int
+  [1,3] 缺省 1）+ `tier_steps`（仅 5 加性修饰字段：speed/
+  absorption/strength/weakness/resistance，pairing/死字段/no-op 三
+  门）+ **全 grant 对可选 `tier`**（grants_effect(s)/物品 arrow/
+  mob on_hit/mob arrow；范围 init 交叉校验点名）+ ActiveEffect 持
+  tier（RESET 语义扩到档位不叠加）+ 5 聚合 tier 化（effectTiered
+  Value 纯函数；tier 0 = 位级旧值）+ **format 19→20**（tier
+  omit-when-0 = tier-0 条目与 f19 字节同形 ⇒ 迁移免迁 + f19 带键 =
+  版本谎报名单）+ **内容 = MC 档位值 5 效果**（speed 1.2/1.4/1.6、
+  absorption 4/6/8、resistance 0.2/0.4/0.6、strength 2/4/6 项目刻
+  度、weakness 4/8/12 MC 精确）；tick/instant 形单档 = 记档偏离；
+  无档位 in-game 消费面（信标 beacon_effects = 纯名列表 / 药水无酿
+  造 / starter 27 槽满）= 记档偏离（档位实例现经存档注入 E2E 范
+  式 + 未来内容扩展）。1820/1820（+17 净：parse 6 + save 6 + item
+  3 + mob 2，7 处 format 钉 19→20 契约演进）、-Werror 0。门 132：
+  S1 第 132 次结构性免疫免重锚（四方 ×2 387726 B + base18 +
+  savenorm；fresh 零效果 = count 0 fast-exit 聚合零执行）+ S2 密封
+  坠落室三值互斥 PASS（8 格坠落 5 伤禁再生：s2a 无效果 hp 15 / s2b
+  resistance tier 0 = 5×0.8 hp 16 / s2c tier 1 = 5×0.6 hp 17——各
+  ×2 RAW 327492 + savenorm【剥 effects remaining real-dt】EXACT，
+  档位经 存档→apply→减伤管线 端到端实证）+ S2d 迁移证明（旧
+  v1.16.0 二进制 + f19 孪生文件 hp 16 = pre-SURV-6 代码原样读取）
+  + S6 ×3 点名【旧二进制拒 format 20 / tier_max 4 / grants tier 3
+  越界】+ S3 1820 + 性能 A/B 真 v1.16 vs v1.17 二进制 PASS（零效果
+  场景结构惰性：双侧终档 effects 全空 + win1 51927/51924 ±3 +
+  win2/3 ±100 = 4 格 rim 簇 PITS 283 类非回归 + PIPE3 1404 逐位 =
+  成本可忽略）；PITS 306（cp -a 性能树带 build/ = 陈旧 CMakeCache +
+  ninja mtime 假"无活" → 静默用旧二进制——门 131 v116 侧实为旧
+  v1.15 二进制【ENT-9 零 src 差结论仍成立记档】，修 = rm build 重
+  配 + banner 版本实证 + 构建 grep 大小写）。
 - 2026-10-28：**ENT-9 掉落可视化完成**（v1.x 第 16/33 项，v1.16.0，
   门 131，**ENT 行 5/5 收尾**）："掉落可视化"原始定义已佚 = 代理
   定案**全量掉落可见（纯内容，零核心代码）**（消费 KNOWN_ISSUES

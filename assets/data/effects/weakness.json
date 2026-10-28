@@ -1,6 +1,10 @@
 {
-  "id": "weakness",
-  "melee_penalty": 4.0,
-  "negative": true,
-  "icon": 1
+ "id": "weakness",
+ "melee_penalty": 4.0,
+ "negative": true,
+ "icon": 1,
+ "tier_max": 3,
+ "tier_steps": {
+  "melee_penalty": 4
+ }
 }

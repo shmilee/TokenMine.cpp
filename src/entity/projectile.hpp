@@ -89,7 +89,8 @@ public:
                Vec3 direction, float speed = kLaunchSpeed,
                float damage = 0.0f, bool hurtPlayer = false,
                float power = 1.0f, std::string ammoItem = {},
-               int effectId = -1, double effectDuration = 0.0);
+               int effectId = -1, double effectDuration = 0.0,
+               int effectTier = 0);
 
     void update(double dt) override;
     bool shouldDespawn() const override {
@@ -123,6 +124,10 @@ public:
     // 0 with -1).
     int effectId() const { return m_effectId; }
     double effectDuration() const { return m_effectDuration; }
+    // SURV-6: the tier the arrow applies (0-based; 0 = the pre-SURV-6
+    // value, the trailing default keeps every legacy call site
+    // bit-identical).
+    int effectTier() const { return m_effectTier; }
     // The game calls this when the block the arrow is stuck in is broken
     // or replaced (Phase 42): the arrow falls from where it hung (zero
     // velocity + gravity) and rejoins flight physics. No-op when not
@@ -172,6 +177,7 @@ private:
     // every pre-SURV-5 arrow is bit-identical) + its duration.
     int m_effectId = -1;
     double m_effectDuration = 0.0;
+    int m_effectTier = 0; // SURV-6 (0-based; 0 = the pre-SURV-6 value)
 
     // Same fall cap as the player: keeps the sub-stepper's tunneling bound
     // (an uncapped arrow could reach 600 blocks/s after 30 s).

@@ -712,6 +712,12 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
             Json eObj = Json::object();
             eObj["name"] = Json(e.name);
             eObj["remaining"] = Json(e.remaining);
+            // SURV-6 (format 20): the tier ONLY when > 0 (the
+            // omit-when-default discipline, the format-18 damage twin) —
+            // a tier-0 entry keeps its format-19 byte shape.
+            if (e.tier > 0) {
+                eObj["tier"] = Json(e.tier);
+            }
             effectsArr.push_back(std::move(eObj));
         }
         player["effects"] = std::move(effectsArr);
@@ -1135,6 +1141,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // remaining > 0, no duplicate name. The entries are normalized to
     // name-sorted order (the serializer's write order).
     if (def.find("format")->asInt() >= 8) {
+        const int fmt = def.find("format")->asInt();
         const Json* effArr = player->find("effects");
         if (effArr == nullptr || !effArr->isArray()) {
             return MC_FAIL("save format 8 requires a 'player.effects' "
@@ -1150,7 +1157,14 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                 return MC_FAIL(what + " must be an object "
                                "{\"name\": ..., \"remaining\": ...}");
             }
-            const std::set<std::string> effFields {"name", "remaining"};
+            // SURV-6 (format 20): the "tier" key is format-20-and-newer
+            // vocabulary — a pre-20 file carrying it is a version lie
+            // (the format-dependent whitelist, the table_grid/tables
+            // three-way discipline).
+            const std::set<std::string> effFields =
+                (fmt >= 20)
+                    ? std::set<std::string> {"name", "remaining", "tier"}
+                    : std::set<std::string> {"name", "remaining"};
             MC_TRY(rejectUnknownFields(e, effFields, what));
             const Json* nm = e.find("name");
             const Json* rem = e.find("remaining");
@@ -1162,16 +1176,42 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                 rem->asDouble() <= 0.0) {
                 return MC_FAIL(what + " requires 'remaining' (seconds) > 0");
             }
-            if (effects.findByName(nm->asString()) == nullptr) {
+            const Effect* effDef = effects.findByName(nm->asString());
+            if (effDef == nullptr) {
                 return MC_FAIL(what + " holds the unregistered effect '" +
                                nm->asString() + "'");
+            }
+            // SURV-6: the tier (absent = 0 = the format-19 migration),
+            // a whole number in [0, tierMax) against the REFERENCED
+            // effect's data (the registry is available here — the
+            // absorption-pool invariant pattern).
+            int tier = 0;
+            if (const Json* t = e.find("tier")) {
+                if (!t->isNumber() || t->asDouble() != std::floor(t->asDouble()) ||
+                    t->asDouble() < 0.0) {
+                    return MC_FAIL(what + " 'tier' must be an integer >= 0, "
+                                   "got " +
+                                   (t->isNumber()
+                                        ? std::to_string(t->asDouble())
+                                        : "a non-number"));
+                }
+                tier = static_cast<int>(t->asDouble());
+                if (tier >= effDef->tierMax) {
+                    return MC_FAIL(what + " holds effect '" + effDef->name +
+                                   "' at tier " + std::to_string(tier) +
+                                   ", but the effect has tier_max " +
+                                   std::to_string(effDef->tierMax) +
+                                   " (tiers are 0-based, in [0, " +
+                                   std::to_string(effDef->tierMax - 1) +
+                                   "])");
+                }
             }
             if (!seen.insert(nm->asString()).second) {
                 return MC_FAIL(what + " holds the effect '" +
                                nm->asString() + "' twice");
             }
             save.playerEffects.push_back(
-                SavedEffect {nm->asString(), rem->asDouble()});
+                SavedEffect {nm->asString(), rem->asDouble(), tier});
         }
         std::sort(save.playerEffects.begin(), save.playerEffects.end(),
                   [](const SavedEffect& a, const SavedEffect& b) {

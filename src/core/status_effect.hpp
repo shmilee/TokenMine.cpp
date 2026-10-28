@@ -155,7 +155,36 @@ struct Effect {
     bool extinguishedByWater = false;
     // The effects.png 16 px tile the HUD draws for this effect.
     int icon = 0;
+    // SURV-6 (effect tiers): how many tiers this effect has (1 = single
+    // tier, the pre-SURV-6 behavior; the shipped tierable effects have 3 =
+    // Minecraft's I/II/III). A grant's `tier` is 0-based and must be <
+    // tierMax. Validated at parse: int in [1, 3], and tierMax > 1 REQUIRES
+    // at least one non-zero tier step (a no-op tier set is rejected — the
+    // no-op rule).
+    int tierMax = 1;
+    // SURV-6: the per-tier INCREMENTS of the tierable modifier fields
+    // (the Minecraft amplifier shape: value(tier) = base + tier × step).
+    // 0 = that field does not scale (the default for every pre-SURV-6
+    // effect). A step for a field is only legal while the field itself is
+    // present and non-default (the pairing rule, the fast_against
+    // discipline). Only the five modifier fields are tierable — the tick
+    // (tick_interval/tick_amount) and instant_hp forms are NOT (a tiered
+    // interval would change the tick grid; the shipped tick/instant
+    // effects stay single-tier, the documented deviation).
+    float stepSpeedMultiplier = 0.0f;
+    float stepAbsorbHp = 0.0f;
+    float stepMeleeBonus = 0.0f;
+    float stepMeleePenalty = 0.0f;
+    float stepDamageReduction = 0.0f;
 };
+
+// SURV-6: the tier-adjusted value of one modifier field for an active
+// instance: base + tier × step. Tier 0 returns the base value bit-for-bit
+// (every pre-SURV-6 consumer), and a zero step returns the base regardless
+// of the tier (single-tier effects keep their exact values).
+inline float effectTieredValue(int tier, float base, float step) {
+    return base + static_cast<float>(tier) * step;
+}
 
 // Registry of the effect definitions (data/effects/*.json). Same shape as
 // the block/item/mob registries: strict field validation, name uniqueness,
@@ -200,6 +229,10 @@ struct ActiveEffect {
     int effect = -1;
     double remaining = 0.0;
     double accum = 0.0;
+    // SURV-6: the applied tier (0-based; the grant's tier — a re-apply
+    // REPLACES it with the new grant's tier, like the duration). 0 = the
+    // pre-SURV-6 value (bit-for-bit).
+    int tier = 0;
 };
 
 // The player's active status effects (Phase 46). Deterministic order:
@@ -210,10 +243,13 @@ class StatusEffects {
 public:
     StatusEffects() = default;
 
-    // Apply `effect` for `duration` seconds. An already-active instance is
-    // RESET to the new duration (Minecraft's re-application semantics,
-    // without amplifiers); its tick phase is kept.
-    void apply(int effect, double duration);
+    // Apply `effect` for `duration` seconds at `tier` (SURV-6, 0-based,
+    // the grant's tier). An already-active instance is RESET to the new
+    // duration AND the new tier (Minecraft's re-application semantics:
+    // drinking the tier-1 potion replaces the tier-0 instance's tier, it
+    // does not stack); its tick phase is kept. `tier` 0 = the pre-SURV-6
+    // behavior bit-for-bit.
+    void apply(int effect, double duration, int tier = 0);
 
     // Remove every NEGATIVE effect (drinking a milk container — the
     // positive effects, like regeneration, survive).
@@ -235,22 +271,25 @@ public:
     void update(double dt, const EffectRegistry& effects,
                 const std::function<void(const Effect&)>& onTick);
 
-    // The total melee penalty (sum over the active instances' definitions).
+    // The total melee penalty (sum over the active instances' tier-adjusted
+    // definitions, SURV-6: base + tier × step per instance).
     float totalMeleePenalty(const EffectRegistry& effects) const;
 
-    // The total absorption layer (Phase 56): the sum of `absorb_hp` over
-    // the active instances' definitions (0 when none grant a layer).
+    // The total absorption layer (Phase 56): the sum of the tier-adjusted
+    // `absorb_hp` over the active instances (0 when none grant a layer).
     float totalAbsorption(const EffectRegistry& effects) const;
 
-    // Phase 84: the total movement speed multiplier (the PRODUCT of
-    // `speed_multiplier` over the active instances; 1.0 when none grant
-    // speed — the multiplicative identity).
+    // Phase 84 / SURV-6: the total movement speed multiplier (the PRODUCT
+    // of the tier-adjusted `speed_multiplier` over the active instances;
+    // 1.0 when none grant speed — the multiplicative identity).
     float totalSpeedMultiplier(const EffectRegistry& effects) const;
-    // Phase 84: the total melee bonus (the SUM of `melee_bonus` over the
-    // active instances; 0 when none grant strength).
+    // Phase 84 / SURV-6: the total melee bonus (the SUM of the
+    // tier-adjusted `melee_bonus` over the active instances; 0 when none
+    // grant strength).
     float totalMeleeBonus(const EffectRegistry& effects) const;
-    // Phase 84: the total damage reduction (the MAX of `damage_reduction`
-    // over the active instances; 0 when none grant resistance).
+    // Phase 84 / SURV-6: the total damage reduction (the MAX of the
+    // tier-adjusted `damage_reduction` over the active instances; 0 when
+    // none grant resistance).
     float totalDamageReduction(const EffectRegistry& effects) const;
 
     std::size_t count() const { return m_active.size(); }

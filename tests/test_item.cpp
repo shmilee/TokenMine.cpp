@@ -709,6 +709,79 @@ TEST(ItemRegistryTest, RejectsBadArrowEffect) {
             .ok());
 }
 
+TEST(ItemRegistryTest, ParsesGrantEffectTier) {
+    // SURV-6: the optional 0-based 'tier' on the consume-grant (the range
+    // against the effect's tier_max is cross-checked at GAME INIT — the
+    // registry is not available at parse; the on_hit_effect pattern).
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"potion_speed_ii","type":"material",
+                      "max_stack":1,"drink_time":1.6,
+                      "grants_effect":{"name":"speed","duration":180,
+                                       "tier":1}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Item& it = items.at(*r);
+    EXPECT_EQ(it.grantsEffect, "speed");
+    EXPECT_DOUBLE_EQ(it.grantsEffectDuration, 180.0);
+    EXPECT_EQ(it.grantsEffectTier, 1);
+    // Absent tier = 0 (the pre-SURV-6 grant, bit-identical).
+    auto r2 = items.registerItem(
+        parseJson(R"({"id":"potion_speed","type":"material",
+                      "max_stack":1,"drink_time":1.6,
+                      "grants_effect":{"name":"speed","duration":180}})"));
+    ASSERT_TRUE(r2.ok()) << r2.error().message;
+    EXPECT_EQ(items.at(*r2).grantsEffectTier, 0);
+    // The list form carries the tier per entry.
+    auto r3 = items.registerItem(
+        parseJson(R"({"id":"potion_golden_ii","type":"material",
+                      "max_stack":1,"restore_hunger":4,
+                      "grants_effects":[{"name":"regeneration","duration":10},
+                                        {"name":"absorption","duration":5,
+                                         "tier":2}]})"));
+    ASSERT_TRUE(r3.ok()) << r3.error().message;
+    const Item& it3 = items.at(*r3);
+    ASSERT_EQ(it3.grantsEffects.size(), 2u);
+    EXPECT_EQ(it3.grantsEffects[0].tier, 0);
+    EXPECT_EQ(it3.grantsEffects[1].tier, 2);
+}
+
+TEST(ItemRegistryTest, RejectsBadGrantEffectTier) {
+    const std::string food =
+        R"({"id":"b","type":"material","restore_hunger":3,
+           "grants_effect":{"name":"x","duration":5,)";
+    const std::vector<std::string> bad = {
+        "1.5", // non-integer
+        "-1",  // negative
+        "\"1\"", // a string
+    };
+    for (const std::string& value : bad) {
+        const std::string full =
+            food + std::string("\"tier\":") + value + "}}";
+        ItemRegistry items;
+        auto r = items.registerItem(parseJson(full));
+        EXPECT_FALSE(r.ok()) << "accepted grant tier: " << value;
+    }
+}
+
+TEST(ItemRegistryTest, ParsesArrowEffectTier) {
+    // SURV-6: the launcher's arrow carries the tier (0-based; init
+    // range-checks it against the effect's tier_max).
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"poison_bow_ii","type":"material","max_stack":1,
+                      "shoot_speed":15.0,"shoot_damage":5.0,"ammo":"arrow",
+                      "arrow_effect":{"name":"poison","duration":60,
+                                      "tier":1}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(items.at(*r).arrowEffectTier, 1);
+    // Absent = 0 (the pre-SURV-5 arrow, bit-identical).
+    auto r2 = items.registerItem(
+        parseJson(R"({"id":"bow","type":"material","max_stack":1,
+                      "shoot_speed":15.0,"shoot_damage":5.0,"ammo":"arrow"})"));
+    ASSERT_TRUE(r2.ok()) << r2.error().message;
+    EXPECT_EQ(items.at(*r2).arrowEffectTier, 0);
+}
+
 TEST(ItemRegistryTest, PoisonBowContentPinned) {
     // The real asset (SURV-5): the poison bow — the bow's launcher data
     // UNCHANGED + the arrow_effect {poison, 60} (1:00 = MC's arrow of

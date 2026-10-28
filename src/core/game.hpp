@@ -483,7 +483,11 @@ private:
     // unchanged (the pre-SURV-4 apply sites behave identically through the
     // helper). The CALLER owns the surrounding syncAbsorption() (the pool
     // is a pure function of the effects at every sync point).
-    void applyPlayerEffect(const std::string& name, double duration);
+    // SURV-6: `tier` (0-based; the grant's tier — 0 = the pre-SURV-6
+    // value, the trailing default keeps every legacy call site
+    // bit-identical).
+    void applyPlayerEffect(const std::string& name, double duration,
+                           int tier = 0);
     // Cycles the hotbar selection; resets break progress (the selected
     // tool changed, Minecraft behavior).
     void cycleHotbar();

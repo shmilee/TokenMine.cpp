@@ -10,6 +10,26 @@
 
 namespace mc {
 
+// SURV-6: the optional 0-based 'tier' on an effect-grant pair
+// ({"name", "duration"[, "tier"]}). Parse level: a whole number >= 0;
+// the referenced effect's tier_max range is cross-checked at GAME INIT
+// (the EffectRegistry is not available at parse — the on_hit_effect
+// pattern). Absent = tier 0 = the pre-SURV-6 value.
+static Result<int> parseGrantTier(const Json& obj,
+                                  const std::string& what) {
+    int tier = 0;
+    if (const Json* t = obj.find("tier")) {
+        if (!t->isNumber() || t->asDouble() != std::floor(t->asDouble()) ||
+            t->asDouble() < 0.0) {
+            return MC_FAIL(what + " 'tier' must be an integer >= 0, got " +
+                           (t->isNumber() ? std::to_string(t->asDouble())
+                                          : "a non-number"));
+        }
+        tier = static_cast<int>(t->asDouble());
+    }
+    return tier;
+}
+
 Result<void> ItemRegistry::buildBlockItems(const BlockRegistry& blocks) {
     for (const BlockID id : blocks.allIds()) {
         if (id == BlockID::air()) {
@@ -173,7 +193,7 @@ Result<void> ItemRegistry::parseArrowEffect(const Json& def, Item& out) {
                            "{\"name\": ..., \"duration\": ...}");
         }
         for (const auto& [key, value] : ae->members()) {
-            if (key != "name" && key != "duration") {
+            if (key != "name" && key != "duration" && key != "tier") {
                 return MC_FAIL("'arrow_effect' has an unknown field '" +
                                key + "'");
             }
@@ -195,6 +215,9 @@ Result<void> ItemRegistry::parseArrowEffect(const Json& def, Item& out) {
         }
         out.arrowEffectName = nm->asString();
         out.arrowEffectDuration = du->asDouble();
+        auto tierR = parseGrantTier(*ae, "'arrow_effect' ");
+        MC_TRY(tierR);
+        out.arrowEffectTier = *tierR;
     }
     return {};
 }
@@ -719,7 +742,7 @@ Result<void> ItemRegistry::parseGrant(const Json& def, Item& out) {
                            "{\"name\": ..., \"duration\": ...}");
         }
         for (const auto& [key, value] : ge->members()) {
-            if (key != "name" && key != "duration") {
+            if (key != "name" && key != "duration" && key != "tier") {
                 return MC_FAIL("'grants_effect' has an unknown field '" +
                                key + "'");
             }
@@ -742,6 +765,9 @@ Result<void> ItemRegistry::parseGrant(const Json& def, Item& out) {
         }
         out.grantsEffect = nm->asString();
         out.grantsEffectDuration = du->asDouble();
+        auto tierR = parseGrantTier(*ge, "'grants_effect' ");
+        MC_TRY(tierR);
+        out.grantsEffectTier = *tierR;
     }
     // Phase 56: the LIST form — an array of the same strict pairs,
     // mutually exclusive with the single field (the P52 chance_drops
@@ -772,7 +798,7 @@ Result<void> ItemRegistry::parseGrant(const Json& def, Item& out) {
                                "]' must be an object");
             }
             for (const auto& [key, value] : e.members()) {
-                if (key != "name" && key != "duration") {
+                if (key != "name" && key != "duration" && key != "tier") {
                     return MC_FAIL("'grants_effects[" + std::to_string(i) +
                                    "]' has an unknown field '" + key + "'");
                 }
@@ -791,6 +817,10 @@ Result<void> ItemRegistry::parseGrant(const Json& def, Item& out) {
             Item::GrantEffect g;
             g.name = nm->asString();
             g.duration = du->asDouble();
+            auto tierR = parseGrantTier(e, "'grants_effects[" +
+                                              std::to_string(i) + "]' ");
+            MC_TRY(tierR);
+            g.tier = *tierR;
             out.grantsEffects.push_back(std::move(g));
         }
     }

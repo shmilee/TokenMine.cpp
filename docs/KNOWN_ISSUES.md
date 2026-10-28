@@ -382,8 +382,13 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
   门 + `undead_exempt`×`undead` 不死族免疫门 + `min_health_mob` 地板；
   Heal tick = mob no-op 记档偏离）+ 远程箭施加（item/mob 双源
   `arrow_effect`：skeleton 箭 wither 10s【玩家侧】/ poison_bow 箭
-  poison 60s【mob 侧，可毒死】）。残余：无 amplifier/时长档位不变；
-  mob 无回血（heal no-op）；箭击杀 mob 同帧不施加（记档）。
+  poison 60s【mob 侧，可毒死】）。残余：**amplifier 档位 = `[SURV-6]`
+  已解决**（效果 JSON `tier_max`/`tier_steps` + 全 grant 对可选 `tier`
+  0 基 + format 20 存档 omit-when-0；5 加性修饰字段档位化 = MC
+  I/II/III，tick/instant 形单档记档偏离——详见
+  phase-surv6.md）；时长档位不变（grant 的 duration 本就是
+  数据值，无档位语义）；mob 无回血（heal no-op）；箭击杀 mob 同帧
+  不施加（记档）。
 - **no-op 效果被注册表拒绝** — 无 tick 且 `melee_penalty` = 0 且
   `absorb_hp` = 0 的效果 JSON 加载失败（纯装饰效果 v1 无消费方）。
   `[Phase 46]`（`absorb_hp` 部分 `[Phase 56]` 更新）

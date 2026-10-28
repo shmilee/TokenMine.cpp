@@ -1,6 +1,10 @@
 {
-  "id": "absorption",
-  "absorb_hp": 4,
-  "negative": false,
-  "icon": 3
+ "id": "absorption",
+ "absorb_hp": 4,
+ "negative": false,
+ "icon": 3,
+ "tier_max": 3,
+ "tier_steps": {
+  "absorb_hp": 2
+ }
 }

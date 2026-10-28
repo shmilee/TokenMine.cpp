@@ -260,7 +260,17 @@ namespace mc {
 //      Phase 44 sole-attribution precedent). The "inv_grid" (the E
 //      panel's own 2x2) is untouched by the change. Writes are always
 //      format 19.
-inline constexpr int kSaveFormat = 19;
+//  20: the SURV-6 effect tiers — a "player.effects" entry MAY carry a
+//      "tier" key (a 0-based whole number, range-checked at load against
+//      the referenced effect's tier_max: tier < tier_max, named). The
+//      key is written ONLY when > 0 (the omit-when-default discipline,
+//      the format-18 damage twin) — a tier-0 entry is byte-identical to
+//      its format-19 shape, so a format-19 file loads unchanged (every
+//      entry migrates to tier 0 — the system did not exist). A
+//      format-19-and-older file CARRYING the key is a version lie
+//      (rejected by the format-dependent field whitelist). Writes are
+//      always format 20.
+inline constexpr int kSaveFormat = 20;
 inline constexpr int kSaveFormatMin = 1;
 
 // Phase 40: the furnace save-field bounds — the max smelt/fuel times the
@@ -414,6 +424,12 @@ struct SavedState {
 struct SavedEffect {
     std::string name;
     double remaining = 0.0;
+    // SURV-6: the applied tier (0-based). Serialized ONLY when > 0 (the
+    // omit-when-default discipline, the format-18 damage twin); a
+    // format-19 (or older) file without the key loads as tier 0, and a
+    // pre-20 file WITH the key is rejected (the unknown-field version-
+    // lie naming).
+    int tier = 0;
 };
 
 // One dropped-item entity (the only entity kind the game spawns).

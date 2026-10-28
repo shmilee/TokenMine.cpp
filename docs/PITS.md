@@ -2282,6 +2282,22 @@
   "坠落没发生"）。修 = 弃 hp 断言、用 y37.0 exact 落面证坠落（P72
   "自然回血污染长跑损伤终态：run 时长须 < regen_delay 窗"的输入跑版
   复现——输入跑时长 = 墙钟，fps 越低越长，比无输入跑更容易越窗）。
+- **cp -a 性能树带 build/ = 陈旧 CMakeCache + ninja 假"无活" → 静默用旧二进制（PITS 306）**
+  ——10-28 SURV-6 性能 A/B 首跑：tm_v117_perf = cp -a tm_v116_perf
+  （build/ 目录一并复制，CMakeCache.txt 指向源树绝对路径）+ 拷
+  SURV-6 变更文件 + `cmake --build build`——构建作业输出 "0 error"
+  但二进制 mtime 停留在 13:34（上上版 v1.15.0）：cmake 的
+  CMakeCache 目录失配告警是 "CMake **E**rror"（大写 E，大小写敏感
+  grep `\berror\b` 数 0 = 假绿），ninja 因 cp -a 保留了全部
+  源文件 mtime 判"无活"不重编不重链。后果 = 门 132 性能 A/B 首轮
+  v117 侧 RC=1 秒死（旧二进制读新场景格式 20？不——读旧 seed 正常
+  跑但版本错），且**门 131 性能 A/B 的 v116 侧实为 v1.15.0 旧二进
+  制**（ENT-9 零 src 差 ⇒ 结论仍成立且更稳，记档；若 ENT-9 有 src
+  差则门 131 性能证据作废）。修 = `rm -rf build` 全量重配重编 +
+  banner 版本实证（perf 日志 grep "TokenMine.cpp v"）+ 构建 grep
+  改 `grep -ciE 'error|warning'`。纪律：**性能树从 cp -a 继承
+  build/ 必删重配；每版 perf 跑前 banner 验版本；构建"0" 须区分
+  "无告警"与"没干活"**（ninja "no work to do" = 没干活）。
 - **场景 builder 的"存在即跳过"去重会静默丢弃后写的块（PITS 305）**
   ——10-28 ENT-9 S2 密封房：air carve 段已把房顶 y48 占位为
   `air`，builder 的 add() 见 (x,y,z) 已存在即跳过 → 432 glowstone

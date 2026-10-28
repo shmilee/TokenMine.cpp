@@ -1,6 +1,10 @@
 {
-  "id": "strength",
-  "melee_bonus": 2.0,
-  "negative": false,
-  "icon": 6
+ "id": "strength",
+ "melee_bonus": 2.0,
+ "negative": false,
+ "icon": 6,
+ "tier_max": 3,
+ "tier_steps": {
+  "melee_bonus": 2
+ }
 }

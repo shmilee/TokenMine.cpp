@@ -202,6 +202,9 @@ struct MobProperties {
     // pre-Phase-46 mob).
     std::string hitEffectName;
     double hitEffectDuration = 0.0;
+    // SURV-6: the tier the hit applies (0-based; init range-checked
+    // against the effect's tier_max). 0 = the pre-SURV-6 value.
+    int hitEffectTier = 0;
     // SURV-5: the status effect this mob's ARROW applies to the target
     // (Minecraft's wither skeleton: its arrows wither the player). The
     // strict {name, duration} pair, the on_hit_effect discipline; only a
@@ -212,6 +215,8 @@ struct MobProperties {
     // skeleton is the first carrier).
     std::string arrowEffectName;
     double arrowEffectDuration = 0.0;
+    // SURV-6: the tier the arrow applies (0-based; init range-checked).
+    int arrowEffectTier = 0;
     // SURV-5: the undead (Minecraft's undead set — the zombie / skeleton).
     // An effect flagged `undead_exempt` (the poison) is ignored when
     // applied to this mob. false = a normal mob (every pre-SURV-5 mob).

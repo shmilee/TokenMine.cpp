@@ -523,7 +523,7 @@ void MobEntity::armFire(double tickInterval, float tickAmount,
 }
 
 void MobEntity::applyEffect(int effect, double duration,
-                            const EffectRegistry& effects) {
+                            const EffectRegistry& effects, int tier) {
     if (m_dead || effect < 0 || duration <= 0.0) {
         return;
     }
@@ -538,7 +538,7 @@ void MobEntity::applyEffect(int effect, double duration,
     if (def.undeadExempt && m_def->properties.undead) {
         return;
     }
-    m_effects.apply(effect, duration);
+    m_effects.apply(effect, duration, tier);
 }
 
 void MobEntity::updateStatusEffects(double dt, const EffectRegistry& effects) {

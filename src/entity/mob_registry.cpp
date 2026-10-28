@@ -28,6 +28,25 @@ Result<void> readPositiveNumber(const Json& def, const char* key,
     return {};
 }
 
+// SURV-6: the optional 0-based 'tier' on an effect-grant pair
+// ({"name", "duration"[, "tier"]}). Parse level: a whole number >= 0;
+// the referenced effect's tier_max range is cross-checked at GAME INIT
+// (the EffectRegistry is not available at parse — the on_hit_effect
+// pattern). Absent = tier 0 = the pre-SURV-6 value.
+Result<int> readOptionalTier(const Json& obj, std::string what) {
+    int tier = 0;
+    if (const Json* t = obj.find("tier")) {
+        if (!t->isNumber() || t->asDouble() != std::floor(t->asDouble()) ||
+            t->asDouble() < 0.0) {
+            return MC_FAIL(what + "'tier' must be an integer >= 0, got " +
+                           (t->isNumber() ? std::to_string(t->asDouble())
+                                          : "a non-number"));
+        }
+        tier = static_cast<int>(t->asDouble());
+    }
+    return tier;
+}
+
 // Reads a required non-negative number from `def`. The AI treats 0 of the
 // detect/attack fields as "never" (a passive mob: it wanders and never
 // chases or attacks), so 0 is valid data there, not a typo.
@@ -294,7 +313,7 @@ Result<void> MobRegistry::parseProperties(const Json& def,
                            "object {\"name\": ..., \"duration\": ...}");
         }
         for (const auto& [key, value] : oh->members()) {
-            if (key != "name" && key != "duration") {
+            if (key != "name" && key != "duration" && key != "tier") {
                 return MC_FAIL("mob properties: 'on_hit_effect' has an "
                                "unknown field '" + key + "'");
             }
@@ -311,6 +330,10 @@ Result<void> MobRegistry::parseProperties(const Json& def,
         }
         out.hitEffectName = nm->asString();
         out.hitEffectDuration = du->asDouble();
+        auto tierR =
+            readOptionalTier(*oh, "mob properties: 'on_hit_effect' ");
+        MC_TRY(tierR);
+        out.hitEffectTier = *tierR;
     }
     // SURV-5: the undead flag (strict bool, default false) — the apply-
     // time half of the poison exemption gate (the effect's
@@ -335,7 +358,7 @@ Result<void> MobRegistry::parseProperties(const Json& def,
                            "object {\"name\": ..., \"duration\": ...}");
         }
         for (const auto& [key, value] : ae->members()) {
-            if (key != "name" && key != "duration") {
+            if (key != "name" && key != "duration" && key != "tier") {
                 return MC_FAIL("mob properties: 'arrow_effect' has an "
                                "unknown field '" + key + "'");
             }
@@ -357,6 +380,9 @@ Result<void> MobRegistry::parseProperties(const Json& def,
         }
         out.arrowEffectName = nm->asString();
         out.arrowEffectDuration = du->asDouble();
+        auto tierR = readOptionalTier(*ae, "mob properties: 'arrow_effect' ");
+        MC_TRY(tierR);
+        out.arrowEffectTier = *tierR;
     }
     return {};
 }

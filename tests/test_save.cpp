@@ -92,6 +92,11 @@ EffectRegistry makeEffects() {
             "tick_interval":0.2,"min_health":0.0,"negative":false,
             "extinguished_by_water":true,"ignites_on_lava":true,
             "icon":4})"},
+        // SURV-6: a tiered effect (the format-20 tier save tests need a
+        // tier_max > 1 definition in the fixture).
+        {R"({"id":"resistance","damage_reduction":0.2,"negative":false,
+            "icon":5,"tier_max":3,
+            "tier_steps":{"damage_reduction":0.2}})"},
     };
     for (const auto& d : defs) {
         auto r = effects.registerEffect(parseJson(d.def));
@@ -306,8 +311,8 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     s.tables.push_back(SavedTable {BlockPos {1, 53, 2}, table});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // CRAFT-1: writes are always format 19 (SURV-3 was format 18).
-    EXPECT_EQ(j->find("format")->asInt(), 19);
+    // SURV-6: writes are always format 20 (CRAFT-1 was format 19).
+    EXPECT_EQ(j->find("format")->asInt(), 20);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -1364,8 +1369,8 @@ TEST(SaveRoundTripTest, StatesRoundTrip) {
     SaveGame s = makeStateSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // CRAFT-1: writes are always format 19 (SURV-3 was format 18).
-    EXPECT_EQ(j->find("format")->asInt(), 19);
+    // SURV-6: writes are always format 20 (CRAFT-1 was format 19).
+    EXPECT_EQ(j->find("format")->asInt(), 20);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->states.size(), 1u);
@@ -1643,8 +1648,8 @@ TEST(SaveRoundTripTest, FurnacesRoundTrip) {
     s.furnaces[0].state.fuelSubsteps = 1234;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // CRAFT-1: writes are always format 19 (SURV-3 was format 18).
-    EXPECT_EQ(j->find("format")->asInt(), 19);
+    // SURV-6: writes are always format 20 (CRAFT-1 was format 19).
+    EXPECT_EQ(j->find("format")->asInt(), 20);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
@@ -2016,8 +2021,8 @@ TEST(SaveRoundTripTest, FiresRoundTrip) {
     SaveGame s = makeFireSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // CRAFT-1: writes are always format 19 (SURV-3 was format 18).
-    EXPECT_EQ(j->find("format")->asInt(), 19);
+    // SURV-6: writes are always format 20 (CRAFT-1 was format 19).
+    EXPECT_EQ(j->find("format")->asInt(), 20);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->fires.size(), 2u);
@@ -2575,8 +2580,8 @@ TEST(SaveRoundTripTest, TablesRoundTrip) {
     s.tables[0].grid.setSlot(8, ItemStack {f.items.idForName("stone"), 64});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // CRAFT-1: writes are always format 19.
-    EXPECT_EQ(j->find("format")->asInt(), 19);
+    // SURV-6: writes are always format 20.
+    EXPECT_EQ(j->find("format")->asInt(), 20);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->tables.size(), 2u);
@@ -2873,4 +2878,108 @@ TEST(SaveParseTest, Format18To19MigrationEmptyLegacyGridLoadsEmpty) {
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->tables.size(), 1u);
     EXPECT_TRUE(out->tables[0].grid.empty());
+}
+
+// -- SURV-6: format 20 (the effect tiers) ---------------------------------------
+
+TEST(SaveFormat20Test, EffectTierRoundTrips) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerEffects.push_back(SavedEffect {"resistance", 30.0, 1});
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    EXPECT_EQ(j->find("format")->asInt(), 20);
+    const Json& entry = (*j)["player"]["effects"].at(0);
+    ASSERT_NE(entry.find("tier"), nullptr);
+    EXPECT_EQ(entry.find("tier")->asInt(), 1);
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    ASSERT_EQ(out->playerEffects.size(), 1u);
+    EXPECT_EQ(out->playerEffects[0].tier, 1);
+    EXPECT_FLOAT_EQ(out->playerEffects[0].remaining, 30.0);
+}
+
+TEST(SaveFormat20Test, TierZeroIsOmitted) {
+    // The omit-when-default discipline: a tier-0 entry is byte-identical
+    // to its format-19 shape (no "tier" key) and loads back as tier 0.
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerEffects.push_back(SavedEffect {"resistance", 30.0, 0});
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    const Json& entry = (*j)["player"]["effects"].at(0);
+    EXPECT_EQ(entry.find("tier"), nullptr) << "tier 0 must be omitted";
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    ASSERT_EQ(out->playerEffects.size(), 1u);
+    EXPECT_EQ(out->playerEffects[0].tier, 0);
+}
+
+TEST(SaveFormat20Test, TierOutOfRangeIsRejected) {
+    // The serializer writes the tier as-is (no range check at write time);
+    // the READER rejects tier >= the effect's tier_max (named).
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerEffects.push_back(SavedEffect {"resistance", 30.0, 3});
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("tier_max"), std::string::npos);
+}
+
+TEST(SaveFormat20Test, TierNonIntegerIsRejected) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerEffects.push_back(SavedEffect {"resistance", 30.0, 1});
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    // The Json array has no element-mutation API (the P75 precedent) —
+    // rebuild the effects array with a fractional tier.
+    Json& player = (*j)["player"];
+    const Json& old = *player.find("effects");
+    Json newArr = Json::array();
+    for (std::size_t i = 0; i < old.size(); ++i) {
+        const Json& el = old.at(i);
+        Json ne = Json::object();
+        ne["name"] = Json(el.find("name")->asString());
+        ne["remaining"] = Json(el.find("remaining")->asDouble());
+        ne["tier"] = Json(1.5);
+        newArr.push_back(std::move(ne));
+    }
+    player["effects"] = std::move(newArr);
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("integer"), std::string::npos);
+}
+
+TEST(SaveFormat20Test, Pre20FileWithTierKeyIsVersionLie) {
+    // The format-19-and-older whitelist: a pre-20 file carrying "tier" is
+    // rejected (unknown field = corruption or a version mismatch).
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerEffects.push_back(SavedEffect {"resistance", 30.0, 1});
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    (*j)["format"] = Json(19); // keeps the "tier" field
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("unknown field"), std::string::npos);
+}
+
+TEST(SaveFormat20Test, Pre20FileLoadsAsTierZero) {
+    // Migration: a format-19 file (no tier keys) loads with every effect
+    // at tier 0 — the pre-SURV-6 behavior.
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerEffects.push_back(SavedEffect {"resistance", 30.0, 0});
+    s.playerEffects.push_back(SavedEffect {"poison", 12.0, 0});
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    (*j)["format"] = Json(19); // tier-0 entries carry no key, so 19 is valid
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    for (const SavedEffect& e : out->playerEffects) {
+        EXPECT_EQ(e.tier, 0) << e.name;
+    }
 }

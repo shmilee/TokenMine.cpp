@@ -168,8 +168,11 @@ public:
     // apply time (the data combinations are cross-checked at game init
     // where they make sense). A dead mob refuses the apply (it despawns
     // this frame anyway).
-    void applyEffect(int effect, double duration,
-                     const EffectRegistry& effects);
+    // SURV-6: `tier` (0-based; the grant's tier — 0 = the pre-SURV-6
+    // value, the trailing default keeps every legacy call site
+    // bit-identical).
+    void applyEffect(int effect, double duration, const EffectRegistry& effects,
+                     int tier = 0);
     // SURV-5: advance the mob's active effects by `dt` (the game calls
     // this once per fixed mob step, right after update() — hard rule 8:
     // frame-locked mob time). Damage ticks subtract through damage()

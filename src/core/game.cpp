@@ -963,11 +963,24 @@ Result<void> Game::buildScene() {
     }
     for (const MobID mid : m_mobTypes.allIds()) {
         const Mob& mob = m_mobTypes.at(mid);
-        if (!mob.properties.hitEffectName.empty() &&
-            m_effects.findByName(mob.properties.hitEffectName) == nullptr) {
-            return MC_FAIL("mob '" + mob.name + "' on_hit_effect references "
-                           "the unregistered effect '" +
-                           mob.properties.hitEffectName + "'");
+        if (!mob.properties.hitEffectName.empty()) {
+            const Effect* eff =
+                m_effects.findByName(mob.properties.hitEffectName);
+            if (eff == nullptr) {
+                return MC_FAIL("mob '" + mob.name + "' on_hit_effect "
+                               "references the unregistered effect '" +
+                               mob.properties.hitEffectName + "'");
+            }
+            // SURV-6: the grant's tier range (0-based < tier_max).
+            if (mob.properties.hitEffectTier >= eff->tierMax) {
+                return MC_FAIL("mob '" + mob.name + "' on_hit_effect grants "
+                               "'" + eff->name + "' at tier " +
+                               std::to_string(mob.properties.hitEffectTier) +
+                               ", but the effect has tier_max " +
+                               std::to_string(eff->tierMax) +
+                               " (tiers are 0-based, in [0, " +
+                               std::to_string(eff->tierMax - 1) + "])");
+            }
         }
         // SURV-5: the arrow effect must name an EXISTING effect (the
         // on_hit_effect pattern). Unlike the BOW's arrow_effect it does
@@ -975,11 +988,24 @@ Result<void> Game::buildScene() {
         // PLAYER (its wither is player-facing), and a wither arrow that
         // happens to strike another mob passes the mob-side gate on its
         // own (the wither carries affects_mobs too).
-        if (!mob.properties.arrowEffectName.empty() &&
-            m_effects.findByName(mob.properties.arrowEffectName) == nullptr) {
-            return MC_FAIL("mob '" + mob.name + "' arrow_effect references "
-                           "the unregistered effect '" +
-                           mob.properties.arrowEffectName + "'");
+        if (!mob.properties.arrowEffectName.empty()) {
+            const Effect* eff =
+                m_effects.findByName(mob.properties.arrowEffectName);
+            if (eff == nullptr) {
+                return MC_FAIL("mob '" + mob.name + "' arrow_effect "
+                               "references the unregistered effect '" +
+                               mob.properties.arrowEffectName + "'");
+            }
+            // SURV-6: the grant's tier range (0-based < tier_max).
+            if (mob.properties.arrowEffectTier >= eff->tierMax) {
+                return MC_FAIL("mob '" + mob.name + "' arrow_effect grants "
+                               "'" + eff->name + "' at tier " +
+                               std::to_string(mob.properties.arrowEffectTier) +
+                               ", but the effect has tier_max " +
+                               std::to_string(eff->tierMax) +
+                               " (tiers are 0-based, in [0, " +
+                               std::to_string(eff->tierMax - 1) + "])");
+            }
         }
     }
     for (const ItemID iid : m_items.allIds()) {
@@ -993,12 +1019,25 @@ Result<void> Game::buildScene() {
         // would leave it lingering (an instant should not).
         auto checkGrant = [&](const std::string& field,
                               const std::string& effName,
-                              double duration) -> Result<void> {
+                              double duration,
+                              int tier) -> Result<void> {
             const Effect* eff = m_effects.findByName(effName);
             if (eff == nullptr) {
                 return MC_FAIL("item '" + it.name + "' " + field +
                                " references the unregistered effect '" +
                                effName + "'");
+            }
+            // SURV-6: the grant's tier is 0-based and must be < the
+            // effect's tier_max (a single-tier effect rejects any
+            // non-zero tier — named).
+            if (tier >= eff->tierMax) {
+                return MC_FAIL("item '" + it.name + "' " + field +
+                               " grants '" + effName + "' at tier " +
+                               std::to_string(tier) + ", but the effect "
+                               "has tier_max " +
+                               std::to_string(eff->tierMax) + " (tiers "
+                               "are 0-based, in [0, " +
+                               std::to_string(eff->tierMax - 1) + "])");
             }
             const bool instant = eff->instantHp != 0.0f;
             if (duration == 0.0 && !instant) {
@@ -1019,14 +1058,14 @@ Result<void> Game::buildScene() {
         };
         if (!it.grantsEffect.empty()) {
             MC_TRY(checkGrant("grants_effect", it.grantsEffect,
-                              it.grantsEffectDuration));
+                              it.grantsEffectDuration, it.grantsEffectTier));
         }
         // Phase 56: the list form, entry by entry (indexed name, the
         // chance_drops[i] pattern).
         for (std::size_t i = 0; i < it.grantsEffects.size(); ++i) {
             const Item::GrantEffect& g = it.grantsEffects[i];
             MC_TRY(checkGrant("grants_effects[" + std::to_string(i) + "]",
-                              g.name, g.duration));
+                              g.name, g.duration, g.tier));
         }
         // Phase 67: the fast_against list, entry by entry (the grows_on
         // discipline: a typo must fail init loudly, not silently break
@@ -1058,6 +1097,16 @@ Result<void> Game::buildScene() {
                                "' which does not accept mobs "
                                "('affects_mobs' false) — a bow's arrow "
                                "only hits mobs");
+            }
+            // SURV-6: the grant's tier range (0-based < tier_max).
+            if (it.arrowEffectTier >= eff->tierMax) {
+                return MC_FAIL("item '" + it.name + "' arrow_effect grants "
+                               "'" + it.arrowEffectName + "' at tier " +
+                               std::to_string(it.arrowEffectTier) +
+                               ", but the effect has tier_max " +
+                               std::to_string(eff->tierMax) +
+                               " (tiers are 0-based, in [0, " +
+                               std::to_string(eff->tierMax - 1) + "])");
             }
         }
     }
@@ -2730,7 +2779,10 @@ Result<void> Game::applySave(const SaveGame& save) {
     // lands at the full interval).
     m_playerEffects.clearAll();
     for (const SavedEffect& se : save.playerEffects) {
-        m_playerEffects.apply(m_effects.idForName(se.name), se.remaining);
+        // SURV-6: the saved tier (absent in format-19 files = 0 — the
+        // migration; range-checked against the registry at parse).
+        m_playerEffects.apply(m_effects.idForName(se.name), se.remaining,
+                              se.tier);
     }
     // 4e) The player's health + absorption (Phase 16; the two SEPARATE
     // pools are set here in Phase 72, AFTER the effects of 4d). A
@@ -4107,14 +4159,16 @@ void Game::fireBow() {
     // the pre-SURV-5 projectile, bit-identical.
     int effectId = -1;
     double effectDuration = 0.0;
+    int effectTier = 0;
     if (!item.arrowEffectName.empty()) {
         effectId = m_effects.idForName(item.arrowEffectName);
         effectDuration = item.arrowEffectDuration;
+        effectTier = item.arrowEffectTier;
     }
     m_entities.push_back(std::make_unique<Projectile>(
         m_world, m_blocks, o, f, item.shootSpeed * power,
         item.shootDamage * power, /*hurtPlayer=*/false, power, item.ammo,
-        effectId, effectDuration));
+        effectId, effectDuration, effectTier));
     // SURV-3 (durability): the SHOT wears the launcher one point (any
     // charge; Infinity included — the arrow is not consumed, the bow
     // still is). The shot completed (the arrow is flying) — a bow that
@@ -5125,7 +5179,8 @@ void Game::syncAbsorption() {
     m_player->setAbsorption(m_playerEffects.totalAbsorption(m_effects));
 }
 
-void Game::applyPlayerEffect(const std::string& name, double duration) {
+void Game::applyPlayerEffect(const std::string& name, double duration,
+                             int tier) {
     // SURV-4 (potions): the single choke point for applying a NAMED effect
     // to the player. Every grant source (a food's grants_effect(s), a
     // drinkable's, a mob's on_hit_effect) is init-cross-checked to name an
@@ -5133,6 +5188,9 @@ void Game::applyPlayerEffect(const std::string& name, double duration) {
     // call sites guards both). The apply uses the RESET semantics (an
     // already-active instance is re-timed to `duration`, the tick phase
     // kept — drinking the same potion twice resets, it does not stack).
+    // SURV-6: the grant's `tier` rides along (a re-apply at a DIFFERENT
+    // tier replaces the instance's tier — no amplifier stacking; tier 0
+    // is the pre-SURV-6 value, bit-identical through this choke point).
     // Then settle any INSTANT action the effect data carries: a positive
     // instant_hp heals (clamped at the base max — the healing potion), a
     // negative one deals damage with the armor EXEMPTED (the harming
@@ -5146,7 +5204,7 @@ void Game::applyPlayerEffect(const std::string& name, double duration) {
     if (id == -1) {
         return; // init guarantees existence; this is a defensive no-op.
     }
-    m_playerEffects.apply(id, duration);
+    m_playerEffects.apply(id, duration, tier);
     const Effect& def = m_effects.at(id);
     if (def.instantHp > 0.0f) {
         m_player->heal(def.instantHp);
@@ -5194,10 +5252,11 @@ void Game::updateEatChannel(double dt) {
             // direct apply for the pre-SURV-4 food (no instant effects).
             if (!item.grantsEffect.empty()) {
                 applyPlayerEffect(item.grantsEffect,
-                                  item.grantsEffectDuration);
+                                  item.grantsEffectDuration,
+                                  item.grantsEffectTier);
             }
             for (const Item::GrantEffect& g : item.grantsEffects) {
-                applyPlayerEffect(g.name, g.duration);
+                applyPlayerEffect(g.name, g.duration, g.tier);
             }
             syncAbsorption(); // Phase 72: the pool takes the new total
             m_sound.play("eat");
@@ -5216,10 +5275,11 @@ void Game::updateEatChannel(double dt) {
             if (!item.grantsEffect.empty() || !item.grantsEffects.empty()) {
                 if (!item.grantsEffect.empty()) {
                     applyPlayerEffect(item.grantsEffect,
-                                      item.grantsEffectDuration);
+                                      item.grantsEffectDuration,
+                                      item.grantsEffectTier);
                 }
                 for (const Item::GrantEffect& g : item.grantsEffects) {
-                    applyPlayerEffect(g.name, g.duration);
+                    applyPlayerEffect(g.name, g.duration, g.tier);
                 }
                 syncAbsorption(); // Phase 72: the pool takes the new total
             } else {
@@ -5392,7 +5452,8 @@ void Game::updateEntities(double dt) {
                     // name is init-cross-checked; the instant settlement
                     // is a no-op for a lingering effect like the wither).
                     applyPlayerEffect(m_effects.at(arrow->effectId()).name,
-                                      arrow->effectDuration());
+                                      arrow->effectDuration(),
+                                      arrow->effectTier());
                     syncAbsorption(); // the pool takes the new total
                 }
                 arrow->kill();
@@ -5425,7 +5486,7 @@ void Game::updateEntities(double dt) {
                 // A mob KILLED by this arrow's damage takes no effect
                 // (it despawns with its drops this frame).
                 mob->applyEffect(arrow->effectId(), arrow->effectDuration(),
-                                 m_effects);
+                                 m_effects, arrow->effectTier());
             }
             m_sound.play("hurt");
             arrow->kill();
@@ -5941,20 +6002,25 @@ void Game::attemptMobSpawn() {
     // idForName cannot fail here (the dead check guards both).
     const std::string hitEffectName = def.properties.hitEffectName;
     const double hitEffectDuration = def.properties.hitEffectDuration;
-    mob->setHitCallback([this, damageScale, hitEffectName,
-                         hitEffectDuration](float amount) {
-        if (m_player->isDead()) {
-            return;
-        }
-        m_player->damage(amount * damageScale);
-        if (!hitEffectName.empty()) {
-            // SURV-4: through the single choke point (the name is
-            // init-cross-checked; the instant settlement is a no-op for the
-            // pre-SURV-4 hit effects — the spider's poison has none).
-            applyPlayerEffect(hitEffectName, hitEffectDuration);
-            syncAbsorption(); // Phase 72 (the pool takes the new total)
-        }
-    });
+    const int hitEffectTier = def.properties.hitEffectTier;
+    mob->setHitCallback(
+        [this, damageScale, hitEffectName, hitEffectDuration,
+         hitEffectTier](float amount) {
+            if (m_player->isDead()) {
+                return;
+            }
+            m_player->damage(amount * damageScale);
+            if (!hitEffectName.empty()) {
+                // SURV-4: through the single choke point (the name is
+                // init-cross-checked; the instant settlement is a no-op for
+                // the pre-SURV-4 hit effects — the spider's poison has
+                // none). SURV-6: the data's tier rides along (0 = the
+                // pre-SURV-6 apply, bit-identical).
+                applyPlayerEffect(hitEffectName, hitEffectDuration,
+                                  hitEffectTier);
+                syncAbsorption(); // Phase 72 (the pool takes the new total)
+            }
+        });
     // Ranged mobs (Phase 27, the skeleton): the AI's shot spawns an arrow
     // from the mob's head at the player's eye — the same Projectile the
     // bow fires (it sticks in blocks, ages out, and renders), flagged
@@ -5978,10 +6044,11 @@ void Game::attemptMobSpawn() {
         // carries no effect, bit-identical).
         const std::string arrowEffectName = def.properties.arrowEffectName;
         const double arrowEffectDuration = def.properties.arrowEffectDuration;
+        const int arrowEffectTier = def.properties.arrowEffectTier;
         MobEntity* raw = mob.get();
         mob->setShootCallback(
             [this, raw, arrowSpeed, arrowDamage, arrowAmmo, arrowEffectName,
-             arrowEffectDuration]() {
+             arrowEffectDuration, arrowEffectTier]() {
             if (m_player->isDead() || raw->dead()) {
                 return;
             }
@@ -6019,14 +6086,17 @@ void Game::attemptMobSpawn() {
             // effect, the pre-SURV-5 arrow).
             int effectId = -1;
             double effectDuration = 0.0;
+            int effectTier = 0;
             if (!arrowEffectName.empty()) {
                 effectId = m_effects.idForName(arrowEffectName);
                 effectDuration = arrowEffectDuration;
+                effectTier = arrowEffectTier;
             }
             auto arrow = std::make_unique<Projectile>(
                 m_world, m_blocks, eye + dir * kArrowSpawnOffset, dir,
                 arrowSpeed, arrowDamage, /*hurtPlayer=*/true,
-                /*power=*/1.0f, arrowAmmo, effectId, effectDuration);
+                /*power=*/1.0f, arrowAmmo, effectId, effectDuration,
+                effectTier);
             arrow->setSource(raw);  // the hit test skips its shooter
             m_entities.push_back(std::move(arrow));
             m_sound.play("shoot");

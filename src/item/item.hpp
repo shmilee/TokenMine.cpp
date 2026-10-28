@@ -132,6 +132,9 @@ struct Item {
     // pre-SURV-5 launcher — the shipped poison_bow is the first carrier).
     std::string arrowEffectName;
     double arrowEffectDuration = 0.0;
+    // SURV-6: the tier the arrow applies (0-based; the effect's tier_max
+    // range is cross-checked at game init). 0 = the pre-SURV-6 value.
+    int arrowEffectTier = 0;
     // Phase 23: food (optional data field 'restore_hunger', integer in
     // [1, 20]). restoreHunger > 0 marks the item as FOOD: while it is
     // selected, the right button eats one (restores this much hunger and
@@ -188,16 +191,21 @@ struct Item {
     // lingering) — the 0 ⇔ instant equivalence is checked at game init.
     std::string grantsEffect;
     double grantsEffectDuration = 0.0;
+    // SURV-6: the tier the consume grants (0-based; the effect's tier_max
+    // range is cross-checked at game init). 0 = the pre-SURV-6 value.
+    int grantsEffectTier = 0;
     // Phase 56 (drinkable in SURV-4): the LIST form of the consume-grant
     // (optional data field 'grants_effects', an array of the same strict
-    // {"name", "duration"} pairs). Mutually exclusive with the single
-    // 'grants_effect' (the P52 chance_drops pattern); the entries are applied
-    // IN ORDER when a full consume completes (the golden apple: regeneration
-    // + absorption; the SURV-4 potions: their single effect). Same
-    // food-or-drinkable and init cross-check disciplines as the single field.
+    // {"name", "duration"} pairs + the SURV-6 optional "tier"). Mutually
+    // exclusive with the single 'grants_effect' (the P52 chance_drops
+    // pattern); the entries are applied IN ORDER when a full consume
+    // completes (the golden apple: regeneration + absorption; the SURV-4
+    // potions: their single effect). Same food-or-drinkable and init
+    // cross-check disciplines as the single field.
     struct GrantEffect {
         std::string name;
         double duration = 0.0;
+        int tier = 0; // SURV-6 (0-based; init range-checked)
     };
     std::vector<GrantEffect> grantsEffects;
     // Phase 47 (kinds in Phase 51): fluid bucket, COLLECT side (optional

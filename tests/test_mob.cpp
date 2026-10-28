@@ -509,6 +509,46 @@ TEST(MobRegistryTest, RejectsBadOnHitEffect) {
     }
 }
 
+TEST(MobRegistryTest, ParsesOnHitEffectTier) {
+    // SURV-6: the optional 0-based 'tier' on the hit grant (the range
+    // against the effect's tier_max is cross-checked at GAME INIT — the
+    // registry is not available at parse).
+    MobRegistry mobs;
+    std::string def = kZombieDef;
+    const std::string key = "\"wander_interval\": 2.5";
+    def.replace(def.find(key), key.size(),
+                std::string("\"wander_interval\": 2.5, \"on_hit_effect\": ") +
+                    "{\"name\": \"poison\", \"duration\": 15.0, "
+                    "\"tier\": 1}");
+    auto r = mobs.registerMob(parseJson(def));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const auto& p = mobs.at(*r).properties;
+    EXPECT_EQ(p.hitEffectName, "poison");
+    EXPECT_EQ(p.hitEffectTier, 1);
+    // Absent = 0 (the pre-SURV-6 hit, bit-identical).
+    MobRegistry mobs2 = makeMobRegistry();
+    EXPECT_EQ(mobs2.at(MobID{0}).properties.hitEffectTier, 0);
+}
+
+TEST(MobRegistryTest, RejectsBadOnHitEffectTier) {
+    const std::vector<std::string> bad = {
+        "1.5",    // non-integer
+        "-1",     // negative
+        "\"1\"",  // a string
+    };
+    for (const std::string& value : bad) {
+        MobRegistry mobs;
+        std::string def = kZombieDef;
+        const std::string key = "\"wander_interval\": 2.5";
+        def.replace(def.find(key), key.size(),
+                    std::string("\"wander_interval\": 2.5, \"on_hit_effect\": "
+                                "{\"name\": \"poison\", \"duration\": 15.0, "
+                                "\"tier\": ") + value + "}");
+        auto r = mobs.registerMob(parseJson(def));
+        EXPECT_FALSE(r.ok()) << "accepted hit tier: " << value;
+    }
+}
+
 // -- SURV-5: the undead flag + the arrow effect ------------------------------
 
 TEST(MobRegistryTest, ParsesUndead) {

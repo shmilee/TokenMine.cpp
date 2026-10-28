@@ -1,6 +1,10 @@
 {
-  "id": "resistance",
-  "damage_reduction": 0.2,
-  "negative": false,
-  "icon": 7
+ "id": "resistance",
+ "damage_reduction": 0.2,
+ "negative": false,
+ "icon": 7,
+ "tier_max": 3,
+ "tier_steps": {
+  "damage_reduction": 0.2
+ }
 }
