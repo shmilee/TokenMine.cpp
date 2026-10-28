@@ -4,6 +4,7 @@
  "max_stack": 64,
  "icon": "beef",
  "restore_hunger": 3,
+ "saturation": 1.8,
  "smeltable_to": "cooked_beef",
  "model": {
   "texture": "beef",

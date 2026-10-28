@@ -179,7 +179,7 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 - ~~**存档加载到空中位置时坠落伤害被绕过**~~ — `[Phase 33]` 发现（P33 E2E 探针实证：46–59 格自由落体满血落地），`[Phase 36]` 已修复：`Player::restorePosition`（= `teleportTo` + `fallStartY = pos.y` 重钉），`applySave` 改走该路径 + 单测 ×2（空中 10 格 → 精确 7 HP；地面读档零伤害）+ E2E（存档 pos y=62 加载 → 8 格坠落 → health 15 精确）——细节见 `archive/phase-36.md`。
 - **生命 HUD 是 10 心三态，半心按 0.5 HP 粒度渲染** — 每颗心 2 HP，填充 = `clamp(hp − 2i, 0, 2)`（2=满/1=半/0=空），贴图是 3 个固定状态（满/半/空），无更细粒度（如 0.5 HP 的四分之心）；MC 的心是 10 颗每颗 1 HP 且支持 0.5 增量。`[Phase 16]`
 - **无死亡分数/死亡统计** — 死亡只显示 "You died! / Press R"，无得分、无死亡次数、无 Game Over 统计屏；重生保留背包与全部物品（无死亡掉落）。`[Phase 16]`（**死亡次数 `[SURV-7]` 已解决**：`player.stats.deathCount` + 每 mob `kill.<name>` 计数器（帧锁定事件、format 21 存档、封闭词表校验）——统计的**显示**（统计屏/F3 行/Game Over 屏）= `[PRE-12]` 呈现框架；得分/死亡掉落 = 范围外记档，详见 phase-surv7.md）
-- **自然回复是定时 + 饥饿门控（Phase 23 起）** — 脱离受伤 `regenDelay=10s` 后每 `regenInterval=4s` 回 1 HP，且要求饥饿 ≥ 6（Minecraft 规则：低于 6 无自然回复）；门控关闭时累加器暂停（不重置），吃饱后继续累计。回复本身不消耗饥饿点（无 MC 的"回复花饥饿"），饥饿只按时间衰减。`[Phase 16]`（饥饿门控 `[Phase 23]`）
+- **自然回复是定时 + 饥饿门控（Phase 23 起）** — 脱离受伤 `regenDelay=10s` 后每 `regenInterval=4s` 回 1 HP，且要求饥饿 ≥ 6（Minecraft 规则：低于 6 无自然回复）；门控关闭时累加器暂停（不重置），吃饱后继续累计。**`[SURV-9]` 已解决：自然回复的每半心消耗 1 点饥饿（MC 规则）**——经标准路径（隐藏饱和度 buffer 先扣、耗尽掉条 = Phase 28 衰减 tick 同款原语 `drainOneHungerPoint`；**满血时区间免费流逝** = 无回复无成本），回复门（bar ≥ 6）不变（MC 18 = 既有偏离条款）。`[Phase 16]`（饥饿门控 `[Phase 23]`，回复成本 `[SURV-9]`）
 - **潜行缩高：钻 1 格缝隙仍未实现，楼梯几何下 1.6/1.8 有通行差异** — 潜行把身高 1.8→1.6（脚底不动、眼高降 0.2），速度 ×0.3、禁用 step-up、1 格崖缘 guard（`[Phase 16]` 原状）。**`[Phase 16]` 时"纯整数世界 1.6 无通行差异"的前提已被消费**：`[Phase 85/87]` 半块/楼梯带来非整数头顶空间——但**最大缝隙 = slab 上方 1.5 < 潜行 1.6**，"钻 1 格高缝隙"仍未实现；唯一 1.6/1.8 改变可通行集合的几何 = 楼梯斜面（如楼梯排上方 2 格高走廊：站立需 AABB 覆盖最高斜点 ≤0.2、潜行 ≤0.4，窄边缘情形）。**潜行其它用途**：营火坐姿（`[Phase 71/75]`：crouch + 贴地 + AABB 重叠 campfire 格 = 锁移动/跳）、楼梯旋转键（`[Phase 94]`：潜行 + 右键）、低顶陷阱（`updateCrouchHeight`：头顶空间 <1.8 时松开键不站起）。`[Phase 16]`（半块/楼梯 `[Phase 85/87]` 已就位；缝隙通行仍未实现）
 - **step-up 只抬升 1 格、每 tick 至多一次** — 条件：非潜行 + 贴地 + 身体贴住整数块面（`kFaceEps=1e-4`）+ 面前脚位 solid + 其上方 2 格空；X 轴优先于 Z 轴（固定顺序），一次 update 只抬一次。2 格及以上仍须跳跃。`[Phase 16]`（**`[ENT-3]`** 起纯几何 = `Entity::stepUp`，mob 追逐/游走同款共享——player 逐位不变、既有单测零改动；mob 侧无潜行门。**潜伏 quirk（ENT-3 探针实证，player/mob 同款共享）**：① +X/+Z 方向 front 格查 `snapped+1`（-X/-Z 查 `snapped-1` = 贴住的格）→ **恰 1 格宽的台阶在 +X/+Z 方向踏不过**（≥2 格宽或 -X/-Z 方向正常，单测 `MobStepUpTest.DoesNotStepSingleCellStepPlusX` / `.StepsUpSingleCellStepMinusX` 钉死）；自然地形台阶通常多格宽，影响限于 1 格窄沿。② **非整数脚高行走**（slab 顶 1.5 / 楼梯斜面）时"贴住整数块面"判定只看 face 位置落在整数 ±`kFaceEps`、不校验本 tick 是否真被 clamp：face 巧合对齐 + 脚位行（`floor(footY)`）前方 solid（= 脚下的 slab 自身）→ **凭空抬升 1.0 再落回**（mob slab 追逐测试 frame 606 实证，落回后轨迹恢复）；整数脚高（平地/满块顶）下 face 对齐 ⟹ 真被 clamp，无此问题。修复（真 clamp 校验 / +X front 格）= player step-up 行为变更，单独立项。）
 - **`[SURV-3]` 耐久系统（工具/护甲/弓/点火器磨损 + 破碎 + format 18）** — 物品字段 `durability`（严格 number > 0，允许集 = Tool ∪ armor_slot ∪ ammo 发射器 ∪ ignites_flamable，其它物品带字段 = 解析拒绝点名）+ 27 件 MC 精确值内容（wood 59 / stone 131 / iron 250 三工具 ×3 材质；bow 族 5 件 384；燧石与钢 64；护甲 leather 55/80/75/65、iron 165/240/225/195、diamond 363/528/495/429）+ `ItemStack.damage` float（operator== 含 damage；堆移动随堆）+ 纯函数 `item/durability.{hpp,cpp}`（`applyDurability` 扣减/破碎 + `armorWearPerPiece`，campfire 范式单测拥有）+ 全帧锁定磨损事件（破非瞬断块 +1【hardness==0 = 0 扣】/ 近战命中 mob 工具 +2 / 弓射出 +1 含 infinite / 点火成功 +1 / **护甲 = Player::damage 内 bypassArmor==false && pts>0 && 减伤后仍造成 >0 时每件在穿 +max(1, incoming/4)**【incoming = 减伤前原始量，10 → 2.5 float 精确、1 → 1 下限；破碎 = 槽清 + points 收口同步、不影响本次动作】）+ **format 18**（damage 键 >0 才写：inventory slots / armor【占位槽翻 {item,damage} 对象形，满耐久 = 字符串形】/ entities item 三处；≤17 带键 = 版本谎报点名；17→18 迁移恒等；交叉校验 damage < item.durability + 无 durability 物品带 damage 拒）+ HUD 耐久条（drawIcon 共享点：图标底部 2px 横条、填充 1−damage/durability、三色档绿≥1/2/黄≥1/4/红<1/4、满耐久零绘制 = 结构性免疫）+ F3 `held name d/max` 行 + 破碎音复用既有 "break" wav（sound 表无专用 item-break 资产，设计定案选项）+ 1466/1466（+18）。**范围外（记档偏离）**：① 无修复（铁砧/磨刀石/同物合成/Mending——矩阵无对应项）② 无 Unbreaking 类随机（项目无附魔系统）③ 耐久条三色简化（MC 连续渐变）④ 瞬断判定 = hardness 0 近似（MC "naturally breaks instantly" 含工具高速特例）⑤ **护甲磨损源 = 本项目"护甲实际减伤"的伤害事件**（设计定案门 = bypassArmor 豁免规则天然对齐：溺水 bypass = 不磨损【MC 同款，单测钉死】；坠落被护甲挡 = 磨损【自洽】；**MC 不磨损但本项目经护甲减伤的源——饥饿/火 tick/虚空/效果 tick（如 poison）——在本项目中磨损护甲**（它们不走 bypassArmor，护甲 floor 对它们生效，"磨损 = 减伤生效"自洽规则下即磨损；影响 = 死亡/长跑边缘情形，无 gameplay 回路差异）⑥ **合成网格/炉子/营火槽不入 format 18 的三处范围**（设计定案 = slots/armor/entities 三处）：受损物品放进 crafting grid 或炉子槽后读档 = 耐久回满（数据丢失 quirk；现役内容无"可熔炼且带耐久"物品，炉子/营火实际不可达，仅 2×2/3×3 网格可触达）⑦ 护甲破碎无声（Player 无 sound 通道；四个 game 侧破碎点有 "break" 音）⑧ mob 穿戴物不涉（项目 mob 不穿装备 = SURV-1 同款边界）⑨ 死亡保留背包（项目 keep-inventory 语义，无死亡掉落——Q 丢/破碎路径 damage 随堆已覆盖）。`[SURV-3]`
@@ -190,12 +190,16 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 - **饱和度是简化模型，非 MC 的 exhaustion 机制** — Phase 28 实现了隐藏
   饱和度缓冲（上限 = `maxHunger`，存档格式 5 `player.saturation`，format 1-4
   读档 = 0）：每 36s 衰减 tick（Phase 31 对齐 MC 被动节奏）**先扣 1 点饱和度、
-  耗尽才掉饥饿条**；食物饱食度
-  = `2 × restore_hunger`（`kSaturationFactor`，MC 熟食 ≈2× 经验法则，无逐食物
-  数据字段）。未建模：MC 的 exhaustion 子点（衰减节奏为单一固定速度——
-  `player.hunger_decay_seconds` 可配置，Phase 32——饱和只
-  推迟掉条）、**生肉的 MC 低饱和度**（beef 1.8 / mutton 1.2 / chicken 1.2——
-  本游戏生肉也按 2× 算，饱食度偏高）、回复 HP 不消耗饱食度。`[Phase 28]`
+  耗尽才掉饥饿条**；食物饱食度 **`[SURV-9]` 已解决：逐食物 `saturation`
+  数据字段**（严格 number [0,20]、配对纪律 = 须有 restore_hunger、缺省
+  = 旧 2× 规则位级复现，`foodSatiety` 纯函数）——MC 精确值 10 食物全
+  写（rotten 0.8 / 生 beef 1.8 / mutton 1.2 / chicken 1.2 = **生肉低饱
+  和度即玩法点** / 熟 beef 12.8 / mutton 7.2 / chicken 7.2 / bread 6.0 /
+  apple 2.4 / golden 9.0）+ **`[SURV-9]` 已解决：回复 HP 消耗饱食度**
+  （每半心 1 点，标准路径）。仍未建模：MC 的 exhaustion 子点（衰减节奏
+  为单一固定速度——`player.hunger_decay_seconds` 可配置，Phase 32——饱和
+  只推迟掉条；跳跃/攻击额外耗饥同款条款）。`[Phase 28]`（逐食物饱和 +
+  回复成本 `[SURV-9]`）
 - **进食通道无进度条、无手部动画** — Phase 28 进食 = 按住右键 1.6s（MC 32 tick
   时长）的通道（`core/food.hpp` 纯状态机，real dt）：唯一视觉提示是**手持物品
   图标向屏幕中心抬起**（进度 0→1、满进度 64px，复用弓拉取几何）；无 MC 的 3D

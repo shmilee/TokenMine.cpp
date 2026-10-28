@@ -4,6 +4,7 @@
   "max_stack": 64,
   "icon": "apple",
   "restore_hunger": 4,
+  "saturation": 2.4,
   "model": {
     "texture": "apple",
     "elements": [

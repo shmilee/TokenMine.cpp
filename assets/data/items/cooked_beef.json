@@ -4,6 +4,7 @@
  "max_stack": 64,
  "icon": "cooked_beef",
  "restore_hunger": 8,
+ "saturation": 12.8,
  "model": {
   "texture": "cooked_beef",
   "elements": [

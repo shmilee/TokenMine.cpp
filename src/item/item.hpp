@@ -142,6 +142,13 @@ struct Item {
     // food (every pre-Phase-23 item; explicit 0 is rejected as a typo,
     // the absent field is the "not food" default).
     int restoreHunger = 0;
+    // SURV-9: the food's SATIETY (the hidden saturation buffer gain on a
+    // completed eat — the per-food value, the Minecraft table: rotten
+    // flesh 0.8, raw beef 1.8, steak 12.8, ...). ABSENT (nullopt) = the
+    // Phase 28 legacy rule (2 x restore_hunger, foodSatiety in
+    // core/food.hpp), so content without the field is bit-identical.
+    // An explicit 0 is legal (the food adds no satiety).
+    std::optional<float> saturation;
     // Phase 40: furnace smelting (optional data fields 'smeltable_to' /
     // 'smelt_time'). smeltableTo non-empty marks the item as SMELTABLE:
     // it names the product item (cross-checked against the ItemRegistry

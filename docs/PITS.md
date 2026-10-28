@@ -2291,6 +2291,25 @@
   8/12/16** 误记成了生成环）。教训 = 场景设计前用 debug 日志/
   探针实证 spawner 入口参数（cx/cz/ring/floorY），文档里的环半径
   不可信；生成格 = 玩家格整数偏移 (dx,dz)，dx²+dz² ∈ [25,36]。
+- **zsh 脚本无 `!` 管道前缀（bash 习惯），且 `zsh -n` 零诊断输出（PITS 310）**
+  ——10-28 SURV-9 门 135：`grep -q X && ! grep -q Y && ...` 在 zsh 脚本里
+  = 语法错（`!` 前缀仅 bash 支持），`zsh -n` 静默 RC=1 **无任何报错
+  文本** → 只能 head -n 二分定位；单行 `! echo hi` 复现。解法 =
+  `grep -qv`（匹配不含 pattern 的行）或 `if ! cmd; then`；批处理脚本
+  跨 shell 移植时 `!` 前缀是隐形雷。
+- **fps 随场景变化（PITS 311）**——10-28 SURV-9：real-dt 终态设计按
+  fresh spawn 场景的 13-31 fps 带（P84 先例 600f = 19.4-46 s）算帧
+  数，冒烟即失效——密封房场景（小世界轻渲染）实测 **50-60 fps**
+  （1600f 只 4 次回复非 10 次）。教训 = fps 是场景属性不是机器属
+  性，real-dt 终态设计先冒烟实测场景 fps，或消掉 real-dt 变量
+  （本门解法 = nodecay config【hunger_decay_seconds 9999，g95 先例】
+  + 帧数按最慢边界 + 恰满 10 次回复的精确终态）。
+- **后台复合命令的 heredoc/python 步静默死（PITS 312）**——10-28 性
+  能树三连（v118/v119/v120）：`set -e` + 后台 job + 内联 heredoc
+  python（或 `python3 -c` 多行串）= 失败时**零输出**早死（.rej 文
+  件在、build/ 不存在、markers 差 4），诊断须逐状态查。解法 = 关键
+  编辑步前台跑（或直接脚本文件 `python3 /tmp/.../hunk6.py`），后台
+  只留纯 shell 步。
 - **输入跑捕获点击的 grab delta = 终相机漂移（PITS 309）**
   ——10-28 SURV-8 门 134：左键捕获点击使 SDL 相对模式初始化时记入
   一次性 delta（冒烟实测 yaw −0.0175 / pitch −0.1675 = 9.6° 俯，

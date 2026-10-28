@@ -282,6 +282,18 @@ public:
         m_saturation = std::clamp(s, 0.0f, m_params.maxHunger);
     }
 
+    // SURV-9: consume one hunger point the Phase 28 way — the hidden
+    // saturation buffer first, else the bar. Shared by the decay tick
+    // and the regenerated half heart's cost (Minecraft: natural regen
+    // spends one hunger point per half heart).
+    void drainOneHungerPoint() {
+        if (m_saturation > 0.0f) {
+            m_saturation = std::max(0.0f, m_saturation - 1.0f);
+        } else {
+            m_hunger = std::max(0.0f, m_hunger - 1.0f);
+        }
+    }
+
     // -- armor (SURV-1) ------------------------------------------------------
     // The four equipment slots (the kArmorSlotNames order: 0 = head,
     // 1 = chest, 2 = legs, 3 = feet). A slot holds one piece (count 1 —

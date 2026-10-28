@@ -19,7 +19,7 @@
 | GEN 世界与生成 | ~~GEN-7 基岩多层~~ ✅ v1.6.0 | ~~GEN-8 地形互感~~ ✅ v1.7.0 | ~~GEN-9 耕地湿润~~ ✅ v1.8.0 | | | |
 | FLUID 流体 | ~~FLUID-4 倒向水面~~ ✅ v1.9.0 | ~~FLUID-5 水熔岩反应~~ ✅ v1.10.0 | ~~FLUID-6 流体种类扩展~~ ✅ v1.11.0 | | | |
 | ENT 实体/Mob/移动 | ~~ENT-5 坠落伤害~~ ✅ v1.12.0 | ~~ENT-6 AI 补强~~ ✅ v1.13.0 | ~~ENT-7 移动惯性~~ ✅ v1.14.0 | ~~ENT-8 和平/保护环~~ ✅ v1.15.0 | ~~ENT-9 掉落可视化~~ ✅ v1.16.0 | |
-| SURV 生存/战斗/效果 | ~~SURV-6 效果档位~~ ✅ v1.17.0 | ~~SURV-7 死亡统计~~ ✅ v1.18.0 | ~~SURV-8 工具 10×~~ ✅ v1.19.0 | SURV-9 饱和细化 | SURV-10 挤奶冷却 | |
+| SURV 生存/战斗/效果 | ~~SURV-6 效果档位~~ ✅ v1.17.0 | ~~SURV-7 死亡统计~~ ✅ v1.18.0 | ~~SURV-8 工具 10×~~ ✅ v1.19.0 | ~~SURV-9 饱和细化~~ ✅ v1.20.0 | SURV-10 挤奶冷却 | |
 | CRAFT 物品/合成/面板 | CRAFT-4 配方提示 | CRAFT-5 炉子表现 | CRAFT-6 燃料熔炼 | CRAFT-7 背包交互 | | |
 | SAVE 存档 | SAVE-2 速度入档 | SAVE-3 槽位管理 | | | | |
 | PRE 表现层 | PRE-7 中毒/燃烧表现 | PRE-8 mob 火焰 | PRE-9 箭/弓/手视觉 | PRE-10 图标重叠修复★ | PRE-11 HUD 细化 | PRE-12 tooltip/F3 |
@@ -116,6 +116,40 @@
   构建与运行 + 范围与限制 + 许可），PITS 范围 267-288 修正为 271-288
   （267-270 属 v1.0 组时代门 114/115）③ Latest 收尾回 v1.5.0 组 release
   （重建时序）。同步 README/CHANGELOG/BACKLOG/AGENTS 旧引用。
+- 2026-10-28：**SURV-9 饱和细化完成**（v1.x 第 20/33 项，v1.20.0，
+  门 135，SURV 行 4/5，**组末版 → tag v1.20.0 + GitHub release 覆盖
+  v1.16-1.20**）："饱和细化"原始定义已佚 = 定案 **饱和度模型细化的
+  两个 MC 要素**（消费 KNOWN_ISSUES Phase-28 饱和度条未建模清单 ② 生
+  肉低饱和度 + ③ 回复不消耗饱食度；① exhaustion 子点 = Phase 31 节
+  奏制设计选择保持记档偏离）：① **逐食物 `saturation` 数据字段**
+  （严格 number [0,20] 显式 0 合法 + 配对纪律须有 restore_hunger +
+  缺省 = 旧 2× 规则位级复现 `foodSatiety` 纯函数；内容 = 10 食物 MC
+  精确值全写 rotten 0.8/生 beef 1.8/mutton 1.2/chicken 1.2/熟 beef
+  12.8/mutton 7.2/chicken 7.2/bread 6.0/apple 2.4/golden 9.0）② **自
+  然回复半心消耗 1 点饥饿**（MC 规则；`drainOneHungerPoint` 私有原语
+  = buffer 先扣耗尽掉条，decay tick 与回复成本共用【decay 位级恒等重
+  构】+ **满血区间免费流逝** = 无回复无成本；回复门 bar ≥ 6 不变）。
+  零 format（5）/config/纹理。1835/1835（+7 净：parse 4 + foodSatiety
+  1 + 真资产 10 值 1 + player 3 新 + RegenAfterDelay 扩展 1；1/60 双
+  累加边界 = 14 s 测改 15 s 带裕量）、-Werror 0。门 135：S1 第 135
+  次结构性免疫免重锚（四方 ×2 387726 B + base18 + savenorm；无进食无
+  回复 + 60f < 36 s 无衰减 = 饱和零触碰）+ S2a 回复成本终态判别 PASS
+  （密封房 hp10/bar20/buffer6 + **nodecay config**【hunger_decay
+  9999 = g95 先例，消 D 变量】+ 3300f = 53-83 s 跨 fps 全 ≥ 50 s 恰
+  10 次回复到满：NEW 终态 **hp20/sat0/bar16 exact**【10 成本 =
+  buffer6+bar4】vs OLD **hp20/sat6/bar20 exact** = 精确终态互斥 fps
+  无关 ×2/侧 RAW）+ S2b 进食饱食度判别 PASS（hunger14/buffer0/
+  rotten_flesh×1 右键按住 2.0 s：两侧 slot 空 + hunger 18 exact；
+  NEW **sat 0.8 exact**【MC 值】vs OLD **sat 8.0 exact**【2× 规则】
+  ×2/侧 RAW + 相机基线守卫 PITS 309）+ S2c 空闲对照四跑 RAW 全字节
+  一致 261601 B + 跨侧 savenorm EXACT + S6 ×3 点名【非食物配对/负值/
+  非数字】+ S3 1835 + 性能 A/B 真 v1.19 vs v1.20 PASS（banner 实证；
+  fluidCells win2/3 29803/29800 逐位 + win1 ±1 + PIPE3 changesApplied
+  1404 逐位 + 全同档 = 结构性惰性）；**PITS 310**（zsh 无 `!` 管道
+  前缀 = bash 习惯 + `zsh -n` 零诊断静默 RC=1）+ **311**（fps 随场景
+  变：密封房 50-60 vs fresh spawn 13-31 = real-dt 终态设计先冒烟或消
+  变量）+ **312**（后台复合命令 heredoc/python 步静默死 = 性能树三
+  连，关键步前台跑）。
 - 2026-10-28：**SURV-8 工具 10×完成**（v1.x 第 19/33 项，v1.19.0，
   门 134，SURV 行 3/5）："工具 10×"原始定义已佚 = 定案 **MC 无效率
   工具 10× 惩罚规则**（消费 KNOWN_ISSUES Phase-11 条"仍缺：MC 的'无

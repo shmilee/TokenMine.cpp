@@ -5261,8 +5261,9 @@ void Game::updateEatChannel(double dt) {
         m_inventory.take(m_eatSlot, 1);
         if (item.restoreHunger > 0) {
             m_player->restoreHunger(static_cast<float>(item.restoreHunger));
-            m_player->restoreSaturation(
-                static_cast<float>(item.restoreHunger) * kSaturationFactor);
+            // SURV-9: the per-food satiety (the 'saturation' field, the
+            // Minecraft values; absent = the legacy 2x rule).
+            m_player->restoreSaturation(foodSatiety(item));
             // Food that grants a status effect on a full eat (Phase 49,
             // golden apple; the list form Phase 56): applied through the
             // single choke point (applyPlayerEffect — the name is

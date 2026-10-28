@@ -138,6 +138,29 @@ Result<void> ItemRegistry::parseFood(const Json& def, Item& out) {
                            std::to_string(out.restoreHunger));
         }
     }
+    // Optional 'saturation' (SURV-9): the food's satiety — the hidden
+    // buffer gain on a completed eat (the Minecraft per-food values:
+    // the raw meats' low saturation is the gameplay point — eating raw
+    // barely fills the buffer). A number in [0, 20] (0 = adds nothing;
+    // 20 = the buffer's max, values beyond it would clamp anyway).
+    // FOOD-ONLY: the pairing discipline (the fast_against twin) — a
+    // non-food carrying it is a dead-field rejection by name. Absent =
+    // the legacy 2x rule (foodSatiety).
+    if (const Json* st = def.find("saturation")) {
+        if (out.restoreHunger <= 0) {
+            return MC_FAIL("'saturation' requires 'restore_hunger' (it "
+                           "is a food field; the pairing discipline)");
+        }
+        if (!st->isNumber()) {
+            return MC_FAIL("'saturation' must be a number");
+        }
+        const double d = st->asDouble();
+        if (d < 0.0 || d > 20.0) {
+            return MC_FAIL("'saturation' must be in [0, 20], got " +
+                           std::to_string(d));
+        }
+        out.saturation = static_cast<float>(d);
+    }
     return {};
 }
 

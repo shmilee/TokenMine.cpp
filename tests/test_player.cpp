@@ -1114,9 +1114,65 @@ TEST(PlayerTest, RegenAfterDelay) {
     run(p, 5 * 60, idle);
     EXPECT_FLOAT_EQ(p.health(), 19.0f);
     // After the delay: +1 HP every 4 s, capped at max. 14 s covers two
-    // intervals -> 19 -> 20 (capped).
+    // intervals: the first restores 19 -> 20 (SURV-9: it COSTS one
+    // hunger point — the buffer is empty here, a fresh player, so the
+    // bar pays 20 -> 19); the second finds full health and elapses
+    // free (no regen, no cost).
     run(p, 14 * 60, idle);
     EXPECT_FLOAT_EQ(p.health(), p.maxHealth());
+    EXPECT_FLOAT_EQ(p.hunger(), 19.0f);
+    EXPECT_FLOAT_EQ(p.saturation(), 0.0f);
+}
+
+// SURV-9: the regen cost goes through the standard drain — the hidden
+// saturation buffer FIRST, the bar only when the buffer is empty.
+TEST(PlayerTest, RegenCostsSaturationBeforeTheBar) {
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    p.damage(2.0f); // health 18
+    p.setSaturation(6.0f);
+    // 10 s delay + one 4 s interval: +1 HP, the buffer pays 6 -> 5.
+    // 15 s = the 14 s boundary plus 1 s of margin (the 1/60 double
+    // accumulation sits just under 4.0 at exactly 840 frames).
+    run(p, 15 * 60, idle);
+    EXPECT_FLOAT_EQ(p.health(), 19.0f);
+    EXPECT_FLOAT_EQ(p.saturation(), 5.0f);
+    EXPECT_FLOAT_EQ(p.hunger(), 20.0f); // the bar untouched
+}
+
+TEST(PlayerTest, RegenAtFullHealthCostsNothing) {
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    p.setSaturation(6.0f); // full health, never damaged
+    // 20 s: the regen delay passes and five intervals elapse, but at
+    // full health no half heart is regenerated -> no cost (20 s < the
+    // 36 s decay tick, so the bar is untouched as well).
+    run(p, 20 * 60, idle);
+    EXPECT_FLOAT_EQ(p.health(), p.maxHealth());
+    EXPECT_FLOAT_EQ(p.saturation(), 6.0f);
+    EXPECT_FLOAT_EQ(p.hunger(), 20.0f);
+}
+
+TEST(PlayerTest, RegenGateClosesWhenTheCostDrainsTheBar) {
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    p.damage(1.0f); // health 19
+    p.setHunger(6.0f); // exactly at the regen threshold (6)
+    // One interval: +1 HP (capped at 20), the bar pays 6 -> 5 = below
+    // the gate -> no further regen (the Minecraft rule: eating is what
+    // re-opens it). 15 s = the 14 s boundary + 1 s of margin (the 1/60
+    // double accumulation).
+    run(p, 15 * 60, idle);
+    EXPECT_FLOAT_EQ(p.health(), p.maxHealth());
+    EXPECT_FLOAT_EQ(p.hunger(), 5.0f);
+    // Plenty more time: no HP left to regain; one 36 s decay tick
+    // (5 -> 4) and nothing else.
+    run(p, 40 * 60, idle);
+    EXPECT_FLOAT_EQ(p.health(), p.maxHealth());
+    EXPECT_FLOAT_EQ(p.hunger(), 4.0f);
 }
 
 TEST(PlayerTest, HealAddsAndClampsAtMax) {

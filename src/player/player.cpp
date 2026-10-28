@@ -413,7 +413,15 @@ void Player::update(double dt) {
         m_regenAccum += dt;
         while (m_regenAccum >= m_params.regenIntervalSeconds) {
             m_regenAccum -= m_params.regenIntervalSeconds;
-            m_health = std::min(m_params.maxHealth, m_health + 1.0f);
+            if (m_health < m_params.maxHealth) {
+                m_health = std::min(m_params.maxHealth, m_health + 1.0f);
+                // SURV-9: the regenerated half heart COSTS one hunger
+                // point (Minecraft) — through the standard drain (the
+                // hidden saturation buffer first, else the bar). At
+                // full health the interval elapses free (no regen, no
+                // cost — the pre-SURV-9 clamp was a no-op either way).
+                drainOneHungerPoint();
+            }
         }
     }
     m_timeSinceDamage += dt;
@@ -431,14 +439,12 @@ void Player::update(double dt) {
     }
     while (m_hungerAccum >= m_params.hungerDecaySeconds) {
         m_hungerAccum -= m_params.hungerDecaySeconds;
-        if (m_saturation > 0.0f) {
-            m_saturation = std::max(0.0f, m_saturation - 1.0f);
-        } else {
-            m_hunger = std::max(0.0f, m_hunger - 1.0f);
-            if (m_hunger <= 0.0f) {
-                m_hungerAccum = 0.0;
-                break;
-            }
+        // SURV-9: the shared one-point drain (the buffer first, else the
+        // bar — the Phase 28 primitive, now also the regen's cost).
+        drainOneHungerPoint();
+        if (m_hunger <= 0.0f) {
+            m_hungerAccum = 0.0;
+            break;
         }
     }
     if (m_hunger <= 0.0f && !m_dead) {

@@ -12,6 +12,7 @@
 
 #include "block/block_registry.hpp"
 #include "core/asset_manager.hpp"
+#include "core/food.hpp" // SURV-9: foodSatiety
 #include "core/json.hpp"
 #include "core/status_effect.hpp"
 #include "item/inventory.hpp"
@@ -2863,5 +2864,95 @@ TEST(ItemModelTest, Ent9FamilyGeometrySpotChecks) {
         EXPECT_EQ(static_cast<int>(it.model->elements.size()), c.elements)
             << c.name;
         EXPECT_EQ(it.model->texture, c.name) << c.name;
+    }
+}
+
+// -- SURV-9: the per-food saturation field ---------------------------------
+
+TEST(ItemRegistryTest, ParsesSaturationField) {
+    // The Minecraft values: rotten flesh 0.8 (low raw-meat satiety), an
+    // explicit 0 (adds nothing), and the 20 cap (a full buffer).
+    ItemRegistry items;
+    auto r1 = items.registerItem(
+        parseJson(R"({"id":"a","type":"material","max_stack":64,
+                      "restore_hunger":4,"saturation":0.8})"));
+    ASSERT_TRUE(r1.ok()) << r1.error().message;
+    EXPECT_FLOAT_EQ(items.at(*r1).saturation.value(), 0.8f);
+    auto r2 = items.registerItem(
+        parseJson(R"({"id":"b","type":"material","max_stack":64,
+                      "restore_hunger":4,"saturation":0})"));
+    ASSERT_TRUE(r2.ok()) << r2.error().message;
+    EXPECT_FLOAT_EQ(items.at(*r2).saturation.value(), 0.0f);
+    auto r3 = items.registerItem(
+        parseJson(R"({"id":"c","type":"material","max_stack":64,
+                      "restore_hunger":4,"saturation":20})"));
+    ASSERT_TRUE(r3.ok()) << r3.error().message;
+    EXPECT_FLOAT_EQ(items.at(*r3).saturation.value(), 20.0f);
+}
+
+TEST(ItemRegistryTest, RejectsBadSaturation) {
+    ItemRegistry items;
+    // Non-food (no restore_hunger): the pairing discipline.
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(
+                         R"({"id":"a","type":"material","saturation":1.0})"))
+                     .ok());
+    // Negative / beyond the buffer's max / non-number.
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material",
+                                   "restore_hunger":4,"saturation":-0.5})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"c","type":"material",
+                                   "restore_hunger":4,"saturation":20.5})"))
+                     .ok());
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"d","type":"material",
+                                   "restore_hunger":4,
+                                   "saturation":"high"})"))
+                     .ok());
+}
+
+TEST(ItemRegistryTest, FoodSatietyFieldElseLegacy) {
+    ItemRegistry items;
+    auto withField = items.registerItem(
+        parseJson(R"({"id":"a","type":"material","max_stack":64,
+                      "restore_hunger":8,"saturation":12.8})"));
+    ASSERT_TRUE(withField.ok());
+    EXPECT_FLOAT_EQ(foodSatiety(items.at(*withField)), 12.8f);
+    auto legacy = items.registerItem(
+        parseJson(R"({"id":"b","type":"material","max_stack":64,
+                      "restore_hunger":3})"));
+    ASSERT_TRUE(legacy.ok());
+    EXPECT_FALSE(items.at(*legacy).saturation.has_value());
+    // Absent field = the Phase 28 rule (2x the restored hunger).
+    EXPECT_FLOAT_EQ(foodSatiety(items.at(*legacy)), 6.0f);
+}
+
+// SURV-9: the SHIPPED foods carry the exact Minecraft satiety values
+// (the raw meats' low saturation is the gameplay point — the line
+// 197-198 record: beef 1.8 / mutton 1.2 / chicken 1.2).
+TEST(ItemRegistryTest, Surv9FoodSaturationContent) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    ItemRegistry items;
+    BlockRegistry blocks;
+    ASSERT_TRUE(blocks.loadDirectory(assets, "data/blocks").ok());
+    ASSERT_TRUE(items.buildBlockItems(blocks).ok());
+    ASSERT_TRUE(items.loadDirectory(assets, "data/items").ok());
+    const struct {
+        const char* id;
+        float sat;
+    } cases[] = {
+        {"rotten_flesh", 0.8f}, {"beef", 1.8f}, {"mutton", 1.2f},
+        {"chicken", 1.2f}, {"cooked_beef", 12.8f}, {"cooked_mutton", 7.2f},
+        {"cooked_chicken", 7.2f}, {"bread", 6.0f}, {"apple", 2.4f},
+        {"golden_apple", 9.0f}};
+    for (const auto& c : cases) {
+        const Item* it = items.findByName(c.id);
+        ASSERT_NE(it, nullptr) << c.id;
+        ASSERT_TRUE(it->saturation.has_value()) << c.id;
+        EXPECT_FLOAT_EQ(it->saturation.value(), c.sat) << c.id;
     }
 }

@@ -3,6 +3,55 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.20.0（2026-10-28）— **组 1.16-1.20 组末：tag v1.20.0 + GitHub
+release**（notes 覆盖 v1.16-1.20 五版）
+
+**SURV-9 饱和细化**（v1.x 任务表 20/33，SURV 行 4/5，门 135）——原始
+定义已佚 = 代理定案**饱和度模型细化的两个 MC 要素**（消费 KNOWN_
+ISSUES Phase-28 条未建模清单 ② 生肉低饱和度 + ③ 回复不消耗饱食度；
+① exhaustion 子点 = Phase 31 节奏制设计选择，保持记档偏离）：
+- **① 逐食物 `saturation` 数据字段**（item JSON 可选）：严格 number
+  [0, 20]（显式 0 合法 = 不加饱食度）+ **配对纪律**（须有
+  restore_hunger，非食物带字段 = 死字段点名）+ **缺省 = 旧 2× 规则位
+  级复现**（`foodSatiety` 纯函数 = field ? field : restore_hunger ×
+  kSaturationFactor）。内容 = **10 食物全写 MC 精确值**（rotten 0.8 /
+  生 beef 1.8 / mutton 1.2 / chicken 1.2 = 生肉低饱和度即玩法点 / 熟
+  beef 12.8 / mutton 7.2 / chicken 7.2 / bread 6.0 / apple 2.4 /
+  golden 9.0）。
+- **② 自然回复半心消耗 1 点饥饿**（MC 规则）：`Player::
+  drainOneHungerPoint()` 私有原语（buffer 先扣、耗尽掉条 = Phase 28
+  衰减 tick 同款路径上提）——**decay tick 与回复成本共用**（decay 位
+  级恒等重构）+ **满血时区间免费流逝**（无回复 = 无成本）；回复门
+  （bar ≥ 6）不变。
+- 零 format（5）/零 config/零纹理（内容 = JSON 数字）。
+
+1835/1835（+7 净：ParsesSaturationField / RejectsBadSaturation 4 形 /
+FoodSatietyFieldElseLegacy / Surv9FoodSaturationContent 真资产 10 值
+/ RegenCostsSaturationBeforeTheBar / RegenAtFullHealthCostsNothing /
+RegenGateClosesWhenTheCostDrainsTheBar + RegenAfterDelay 扩展成本断
+言；1/60 双累加边界 = 14 s 测改 15 s 带 1 s 裕量）、`-Werror` 0 警
+告。门 135：S1 = **第 135 次结构性免疫免重锚**（fresh 60f 四方 ×2
+387726 B + base18 + savenorm；无进食无回复 + 60f < 36 s 无衰减 = 饱
+和零触碰）+ **S2a 回复成本终态判别 PASS**（密封房 hp10/bar20/
+buffer6 + nodecay config【hunger_decay_seconds 9999 = g95 先例，消
+real-dt D 变量】+ 3300f 跨 fps 全 ≥ 50 s 恰 10 次回复到满：NEW 终态
+**hp 20 / sat 0 / bar 16 exact**【10 成本 = buffer 6 + bar 4】vs OLD
+**hp 20 / sat 6 / bar 20 exact** = 精确终态互斥 fps 无关，×2/侧 RAW）
++ **S2b 进食饱食度判别 PASS**（hunger 14 / buffer 0 / rotten_flesh
+×1，右键按住 2.0 s 过 1.6 s 通道：两侧 slot 空 + hunger 18 exact；
+NEW **sat 0.8 exact**【MC 值】vs OLD **sat 8.0 exact**【2× 规则】，
+×2/侧 RAW + 相机基线守卫 PITS 309）+ **S2c 空闲对照**（四跑 RAW 全
+字节一致 261601 B + 跨侧 savenorm EXACT = 零回归）+ S6 ×3 点名【非
+食物配对 / 负值 / 非数字，临时资产改 + 还原】+ S3 1835 + 性能 A/B 真
+v1.19 vs v1.20 PASS（banner 版本实证 = PITS 306 纪律；fluidCells
+win2/3 29803/29800 **逐位** + win1 ±1 + PIPE3 changesApplied 1404
+逐位 + 全指标同档 = 结构性惰性，成本可忽略）。**PITS 310**（zsh 脚本
+无 `!` 管道前缀 = bash 习惯，`zsh -n` 零诊断输出静默 RC=1 → head -n
+二分 + grep -qv 解法）+ **311**（fps 随场景变化：密封房 50-60 vs
+fresh spawn 13-31 = real-dt 终态设计先冒烟实测或消变量）+ **312**
+（后台复合命令 heredoc/python 步静默死 = 性能树三连，关键编辑步前台
+跑）。
+
 ## v1.19.0（2026-10-28）
 
 **SURV-8 工具 10×**（v1.x 任务表 19/33，SURV 行 3/5，门 134）——

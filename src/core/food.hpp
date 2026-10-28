@@ -13,6 +13,8 @@
 // the exact model.
 #pragma once
 
+#include "item/item.hpp" // SURV-9: foodSatiety (the per-food field)
+
 namespace mc {
 
 // Seconds of held right button for a full eat (Minecraft: 1.6 s).
@@ -22,6 +24,16 @@ inline constexpr double kEatDurationSeconds = 1.6;
 // restored hunger. Minecraft's cooked-food rule of thumb (saturation
 // ~2x the hunger value); see docs/KNOWN_ISSUES for the v1 simplifications.
 inline constexpr float kSaturationFactor = 2.0f;
+
+// SURV-9: the food's satiety (the hidden saturation buffer gain on a
+// completed eat): the item's 'saturation' field when present (the
+// Minecraft per-food values — the raw meats' low saturation), else the
+// Phase 28 legacy rule (2x the restored hunger; bit-identical for
+// content without the field).
+inline float foodSatiety(const Item& item) {
+    return item.saturation.value_or(
+        static_cast<float>(item.restoreHunger) * kSaturationFactor);
+}
 
 enum class EatEvent {
     None,      // the channel is still running (or was inactive)

@@ -4,6 +4,7 @@
  "max_stack": 64,
  "icon": "rotten_flesh",
  "restore_hunger": 4,
+ "saturation": 0.8,
  "model": {
   "texture": "rotten_flesh",
   "elements": [
