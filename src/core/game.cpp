@@ -96,6 +96,12 @@ constexpr double kProjectileStepPerFrame = 1.0 / 60.0;
 // The fluid simulation ticks every Nth frame (20 ticks/s at 60 FPS); the
 // fixed frame step keeps headless runs byte-reproducible.
 constexpr int kFluidTickEveryNFrames = 3;
+
+// FLUID-6: the honey viscosity gate — the honey kind simulates once
+// every kHoneyTickPeriodFluidTicks fluid ticks (1/3 the rate of water
+// and lava = the Minecraft high-viscosity honey; falling and spreading
+// are both 1/3 speed under the single gate).
+constexpr int kHoneyTickPeriodFluidTicks = 3;
 // GEN-9: the farmland-moisture convergence sweep cadence (re-evaluate
 // every tracked moisture cell's wetness from the live fluid field and
 // re-mesh on a flip; 10 frames = 0.167 s — visually immediate for a
@@ -3362,8 +3368,14 @@ void Game::update(double dt) {
     // propagation). A settled world changes nothing (the fast exit is
     // unchanged).
     if (m_frameCount % kFluidTickEveryNFrames == 0) {
-        const std::vector<BlockPos> changed =
-            FluidSim::tick(m_world, m_blocks, &m_flammableChunks);
+        // The fluid tick number (frame-locked): the honey gate is its
+        // period (FLUID-6 — honey simulates on every 3rd fluid tick).
+        const bool honeyActive =
+            (m_frameCount / kFluidTickEveryNFrames) %
+                kHoneyTickPeriodFluidTicks ==
+            0;
+        const std::vector<BlockPos> changed = FluidSim::tick(
+            m_world, m_blocks, &m_flammableChunks, honeyActive);
         // Phase 64: the burn pass (inside the tick above) turns flamable
         // blocks into FIRE blocks via world.setBlock — it bypasses the
         // Game setBlock choke point, so register the changed cells that

@@ -60,6 +60,8 @@ ChunkMeshData ChunkMesher::mesh(const ChunkPos& pos) const {
         m_blocks.fluidBlock(fluidKindName(FluidKind::Water));
     const std::optional<BlockID> lavaId =
         m_blocks.fluidBlock(fluidKindName(FluidKind::Lava));
+    const std::optional<BlockID> honeyId =
+        m_blocks.fluidBlock(fluidKindName(FluidKind::Honey));
     for (int ly = 0; ly < kChunkSize; ++ly) {
         for (int lz = 0; lz < kChunkSize; ++lz) {
             for (int lx = 0; lx < kChunkSize; ++lx) {
@@ -72,7 +74,8 @@ ChunkMeshData ChunkMesher::mesh(const ChunkPos& pos) const {
                 }
                 const FluidKind kind = fluidKindOf(code);
                 const std::optional<BlockID> fluidId =
-                    (kind == FluidKind::Water) ? waterId : lavaId;
+                    (kind == FluidKind::Water) ? waterId
+                    : (kind == FluidKind::Lava) ? lavaId : honeyId;
                 if (fluidId == std::nullopt) {
                     continue;
                 }

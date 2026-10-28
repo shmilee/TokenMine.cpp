@@ -3,5 +3,5 @@
   "type": "material",
   "max_stack": 16,
   "icon": "bucket",
-  "collects_fluid": ["water", "lava"]
+  "collects_fluid": ["water", "lava", "honey"]
 }

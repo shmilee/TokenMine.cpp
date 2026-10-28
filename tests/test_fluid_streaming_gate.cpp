@@ -277,7 +277,8 @@ TEST(FluidStreamingGateTest, SettledWorldStaysColdWithoutInsertions) {
 
     // Every fluid chunk is COLD for both kinds (the activity gate's
     // observable: the next tick would walk nothing).
-    for (const FluidKind kind : {FluidKind::Water, FluidKind::Lava}) {
+    for (const FluidKind kind :
+         {FluidKind::Water, FluidKind::Lava, FluidKind::Honey}) {
         for (const ChunkPos& cp : world.fluidChunkPositions(kind)) {
             const Chunk* c = world.findChunk(cp);
             ASSERT_NE(c, nullptr);

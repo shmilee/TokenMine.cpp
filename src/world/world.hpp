@@ -248,9 +248,9 @@ private:
     // pass iterates this instead of every chunk).
     std::set<ChunkPos> m_dirtyChunks;
     // Indexed by FluidKind (Water = 1, Lava = 2; slot 0 unused).
-    std::array<std::set<ChunkPos>, 3> m_fluidChunks;
+    std::array<std::set<ChunkPos>, 4> m_fluidChunks;
     // Per-kind fluid-active chunk sets (PIPE-3; see fluidActiveChunks).
-    std::array<std::set<ChunkPos>, 3> m_fluidActive {};
+    std::array<std::set<ChunkPos>, 4> m_fluidActive {};
     ChunkGenerator m_generator;
     CellMutationObserver m_observer;
 };

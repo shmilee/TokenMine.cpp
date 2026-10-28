@@ -1,0 +1,13 @@
+{
+  "id": "honey",
+  "properties": {
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "fluid": "honey",
+    "destroyable": false
+  },
+  "model": {
+    "textures": { "top": "honey", "side": "honey", "bottom": "honey" }
+  }
+}

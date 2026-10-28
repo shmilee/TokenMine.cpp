@@ -2248,3 +2248,18 @@
   Water（level 5 落在水编码带）→ 水桶对熔岩 8 新测全败（返回候选格
   而非反应倒位，"替换倒"分支吞掉全部异种路径），单测揪出；种类判定
   须走 `World::getFluidKind`。
+- **per-kind 固定容器尺寸 = 种类数+1（哨兵槽 0），非种类数（PITS 299）**
+  ——10-28 FLUID-6：FluidKind 1 基（Water=1/Lava=2/Honey=3），per-kind
+  数组（chunk m_fluidCells/m_fluidHot/m_fluidWalkPending + world
+  m_fluidChunks/m_fluidActive）以 kind 值为下标 → 3 种类须尺寸 4。
+  尺寸 3 时 Honey(3) 静默 OOB（std::array 无边界检查）→ 段错落在
+  **下游**测试（RaycastTest，非流体路径）= 新增种类的第一排查点；
+  同款家族 = chunk_mesher 的 (kind==Water)?A:B 两种类派发（第三种类
+  落错分支：honey 格按 lavaId 查块，测试注册表无 lava → 0 顶点，单测
+  揪出）。加种类检查单：编码带 / 容器尺寸 / 派发三元式 / 词汇表 /
+  per-kind 循环列表（world.cpp ×2 + tests）。
+- **隐藏 starter 槽范围 = [9,26]（PITS 300）**——10-28 FLUID-6：
+  parseStarterSlots 硬校验 storage 槽 ∈ [9,26]（热栏 0-8 归 items
+  填充）；honey_bucket 首版用槽 27 = init 点名拒绝
+  （"slot must be a storage slot in [9, 26]"）→ 改 16。加隐藏
+  starter 物品前先数已占槽（17-26 = 药水×7 + 树苗×3）。

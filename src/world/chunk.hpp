@@ -26,33 +26,50 @@
 namespace mc {
 
 // Fluid level range: 0 = no fluid, 1..7 = flowing, 8 = full/source.
-// The project simulates TWO fluids (water and lava); the encoded array
-// value separates them (below). A level > 0 means the cell holds that
-// much fluid and no block (a block displaces fluid, see World).
+// The project simulates THREE fluids (water, lava, and honey — FLUID-6);
+// the encoded array value separates them (below). A level > 0 means the
+// cell holds that much fluid and no block (a block displaces fluid, see
+// World).
 inline constexpr std::uint8_t kMaxFluidLevel = 8;
 
-// Fluid kind vocabulary (core, like the BlockID::air sentinel): the two
+// Fluid kind vocabulary (core, like the BlockID::air sentinel): the three
 // simulated fluids, with the names data files carry (the block's 'fluid'
-// property, the bucket item fields) and save files persist.
-enum class FluidKind : std::uint8_t { Water = 1, Lava = 2 };
+// property, the bucket item fields) and save files persist. The values are
+// 1-based: the per-kind containers index by static_cast<size_t>(kind), so
+// index 0 is the unused sentinel slot.
+enum class FluidKind : std::uint8_t { Water = 1, Lava = 2, Honey = 3 };
 
-// Encoded fluid byte (Chunk::m_fluid): 0 = no fluid;
-// 1..kMaxFluidLevel = water level 1..8;
-// kMaxFluidLevel+1..2*kMaxFluidLevel = lava level 1..8. A cell holds at
-// most ONE kind (World::setFluid replaces the other kind in the cell).
+// Encoded fluid byte (Chunk::m_fluid): 0 = no fluid; then one 8-level band
+// per kind in vocabulary order: 1..8 = water, 9..16 = lava, 17..24 = honey
+// (FLUID-6). A cell holds at most ONE kind (World::setFluid replaces any
+// other kind in the cell).
 inline std::uint8_t fluidCode(FluidKind kind, std::uint8_t level) {
     return level == 0 ? 0
-                      : (kind == FluidKind::Water ? level
-                                                  : kMaxFluidLevel + level);
+                      : static_cast<std::uint8_t>(
+                            (static_cast<int>(kind) - 1) * kMaxFluidLevel +
+                            level);
 }
 inline std::uint8_t fluidLevelOf(std::uint8_t code) {
-    return code <= kMaxFluidLevel ? code : code - kMaxFluidLevel;
+    return code == 0 ? 0
+                     : static_cast<std::uint8_t>((code - 1) %
+                                                 kMaxFluidLevel + 1);
 }
 inline FluidKind fluidKindOf(std::uint8_t code) {
-    return code <= kMaxFluidLevel ? FluidKind::Water : FluidKind::Lava;
+    // Dry bytes report Water as the sentinel kind (callers only use the
+    // kind for positive codes; the level check comes first).
+    return code == 0 ? FluidKind::Water
+                     : static_cast<FluidKind>((code - 1) / kMaxFluidLevel + 1);
 }
 inline const char* fluidKindName(FluidKind kind) {
-    return kind == FluidKind::Water ? "water" : "lava";
+    switch (kind) {
+        case FluidKind::Water:
+            return "water";
+        case FluidKind::Lava:
+            return "lava";
+        case FluidKind::Honey:
+            return "honey";
+    }
+    return "unknown";
 }
 inline std::optional<FluidKind> fluidKindForName(const std::string& name) {
     if (name == "water") {
@@ -60,6 +77,9 @@ inline std::optional<FluidKind> fluidKindForName(const std::string& name) {
     }
     if (name == "lava") {
         return FluidKind::Lava;
+    }
+    if (name == "honey") {  // FLUID-6
+        return FluidKind::Honey;
     }
     return std::nullopt;
 }
@@ -184,11 +204,11 @@ private:
     bool m_dirty = true;
     // Per-kind fluid cell lists (PIPE-3), indexed by FluidKind (slot 0
     // unused: Water = 1, Lava = 2), holding local cell indexes.
-    std::array<std::vector<std::uint32_t>, 3> m_fluidCells {};
+    std::array<std::vector<std::uint32_t>, 4> m_fluidCells {};
     // Fluid activity flags (Phase 99.8), indexed by FluidKind (slot 0
     // unused: Water = 1, Lava = 2).
-    std::array<bool, 3> m_fluidHot {false, false, false};
-    std::array<bool, 3> m_fluidWalkPending {false, false, false};
+    std::array<bool, 4> m_fluidHot {false, false, false, false};
+    std::array<bool, 4> m_fluidWalkPending {false, false, false, false};
 };
 
 } // namespace mc

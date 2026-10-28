@@ -1432,3 +1432,132 @@ TEST(FluidTest, P90OverflowExactFinal) {
     EXPECT_EQ(buried, 260);
     EXPECT_EQ(overflow, 72);
 }
+
+// ============================================================================
+//   FLUID-6 — honey: the third kind (encoded band 17..24, 1/3 tick gate)
+// ============================================================================
+
+TEST(FluidTest, HoneyEncodingBands) {
+    // The water/lava bands are bit-for-bit unchanged; honey takes 17..24.
+    for (int l = 1; l <= kMaxFluidLevel; ++l) {
+        EXPECT_EQ(fluidCode(FluidKind::Water, l),
+                  static_cast<std::uint8_t>(l));
+        EXPECT_EQ(fluidCode(FluidKind::Lava, l),
+                  static_cast<std::uint8_t>(l + kMaxFluidLevel));
+        EXPECT_EQ(fluidCode(FluidKind::Honey, l),
+                  static_cast<std::uint8_t>(l + 2 * kMaxFluidLevel));
+        EXPECT_EQ(fluidLevelOf(static_cast<std::uint8_t>(l + 2 * kMaxFluidLevel)),
+                  static_cast<std::uint8_t>(l));
+        EXPECT_EQ(fluidKindOf(static_cast<std::uint8_t>(l + 2 * kMaxFluidLevel)),
+                  FluidKind::Honey);
+    }
+    EXPECT_EQ(fluidLevelOf(0), 0);
+    EXPECT_EQ(fluidKindForName("honey"), FluidKind::Honey);
+    EXPECT_STREQ(fluidKindName(FluidKind::Honey), "honey");
+}
+
+TEST(FluidTest, HoneyFrozenWhileGateOff) {
+    // An unsupported honey cell does not move on gate-off ticks (the
+    // 1/3-speed viscosity: the gate, not the physics, holds it).
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    floor(world, 0, 15, 0, 15, 0);
+    world.setBlock(8, 0, 8, BlockID::air());
+    world.setFluid(8, 2, 8, FluidKind::Honey, kMaxFluidLevel);
+    for (int i = 0; i < 5; ++i) {
+        const auto changed =
+            FluidSim::tick(world, emptyBlocks(), nullptr, false);
+        EXPECT_TRUE(changed.empty()) << "tick " << i;
+    }
+    EXPECT_EQ(world.getFluidOfKind(8, 2, 8, FluidKind::Honey), kMaxFluidLevel);
+    EXPECT_EQ(world.getFluid(8, 1, 8), 0);
+}
+
+TEST(FluidTest, HoneyFallsOneCellPerGatedTick) {
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    floor(world, 0, 15, 0, 15, 0);
+    world.setBlock(8, 0, 8, BlockID::air());
+    world.setFluid(8, 2, 8, FluidKind::Honey, kMaxFluidLevel);
+    // Gate off: frozen.
+    EXPECT_TRUE(FluidSim::tick(world, emptyBlocks(), nullptr, false)
+                    .empty());
+    // Gate on: one cell down.
+    FluidSim::tick(world, emptyBlocks(), nullptr, true);
+    EXPECT_EQ(world.getFluidOfKind(8, 1, 8, FluidKind::Honey), kMaxFluidLevel);
+    EXPECT_EQ(world.getFluidOfKind(8, 2, 8, FluidKind::Honey), 0);
+    // Gate on: onto the floor.
+    FluidSim::tick(world, emptyBlocks(), nullptr, true);
+    EXPECT_EQ(world.getFluidOfKind(8, 0, 8, FluidKind::Honey), kMaxFluidLevel);
+}
+
+TEST(FluidTest, HoneySpreadsOneRingPerGatedTick) {
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    floor(world, 0, 15, 0, 15, 0);
+    world.setFluid(8, 1, 8, FluidKind::Honey, kMaxFluidLevel);
+    // First gated tick: the four neighbors get level 7, nothing beyond.
+    FluidSim::tick(world, emptyBlocks(), nullptr, true);
+    EXPECT_EQ(world.getFluidOfKind(7, 1, 8, FluidKind::Honey), 7);
+    EXPECT_EQ(world.getFluidOfKind(9, 1, 8, FluidKind::Honey), 7);
+    EXPECT_EQ(world.getFluidOfKind(8, 1, 7, FluidKind::Honey), 7);
+    EXPECT_EQ(world.getFluidOfKind(8, 1, 9, FluidKind::Honey), 7);
+    EXPECT_EQ(world.getFluidOfKind(6, 1, 8, FluidKind::Honey), 0);
+    // A gate-off tick changes nothing.
+    EXPECT_TRUE(FluidSim::tick(world, emptyBlocks(), nullptr, false)
+                    .empty());
+    // Second gated tick: the level-6 ring.
+    FluidSim::tick(world, emptyBlocks(), nullptr, true);
+    EXPECT_EQ(world.getFluidOfKind(6, 1, 8, FluidKind::Honey), 6);
+    EXPECT_EQ(world.getFluidOfKind(8, 1, 6, FluidKind::Honey), 6);
+}
+
+TEST(FluidTest, HoneyAndWaterCoexistWithoutReplacing) {
+    // 6-adjacent honey and water never replace each other (a foreign
+    // kind is a blocker for the other's scan); each spreads into the
+    // DRY cells around it.
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    floor(world, 0, 15, 0, 15, 0);
+    world.setFluid(8, 1, 8, FluidKind::Honey, kMaxFluidLevel);
+    world.setFluid(9, 1, 8, FluidKind::Water, kMaxFluidLevel);
+    for (int i = 0; i < 10; ++i) {
+        FluidSim::tick(world, emptyBlocks(), nullptr, i % 3 == 0);
+    }
+    // Both sources still in place, still full.
+    EXPECT_EQ(world.getFluidOfKind(8, 1, 8, FluidKind::Honey), kMaxFluidLevel);
+    EXPECT_EQ(world.getFluidOfKind(9, 1, 8, FluidKind::Water), kMaxFluidLevel);
+    // Each spread one ring into its own dry side (and stopped at the
+    // foreign kind).
+    EXPECT_EQ(world.getFluidOfKind(7, 1, 8, FluidKind::Honey), 7);
+    EXPECT_EQ(world.getFluidOfKind(10, 1, 8, FluidKind::Water), 7);
+    EXPECT_EQ(world.getFluidOfKind(7, 1, 8, FluidKind::Water), 0);
+    EXPECT_EQ(world.getFluidOfKind(10, 1, 8, FluidKind::Honey), 0);
+}
+
+TEST(FluidTest, HoneyRestsOnForeignKind) {
+    // A cell resting on a foreign kind is supported (no fall) — the
+    // same rule as resting on the other fluid.
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    floor(world, 0, 15, 0, 15, 0);
+    world.setFluid(8, 1, 8, FluidKind::Water, kMaxFluidLevel);
+    world.setFluid(8, 2, 8, FluidKind::Honey, kMaxFluidLevel);
+    for (int i = 0; i < 6; ++i) {
+        FluidSim::tick(world, emptyBlocks(), nullptr, true);
+    }
+    EXPECT_EQ(world.getFluidOfKind(8, 2, 8, FluidKind::Honey), kMaxFluidLevel);
+    EXPECT_EQ(world.getFluidOfKind(8, 1, 8, FluidKind::Honey), 0);
+}
+
+TEST(FluidTest, GateDoesNotAffectWater) {
+    // The honey gate is honey-only: water spreads on a gate-off tick.
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    floor(world, 0, 15, 0, 15, 0);
+    world.setFluid(8, 1, 8, FluidKind::Water, kMaxFluidLevel);
+    const auto changed =
+        FluidSim::tick(world, emptyBlocks(), nullptr, false);
+    EXPECT_FALSE(changed.empty());
+    EXPECT_EQ(world.getFluidOfKind(7, 1, 8, FluidKind::Water), 7);
+}

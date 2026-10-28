@@ -74,7 +74,8 @@ bool World::setBlock(int x, int y, int z, BlockID id) {
     // (cold) sheet must still fall — force the target and its six
     // face-sharing chunks (the ones that hold fluid) through one
     // fluid-simulation walk on the next tick (Phase 99.8 activity gating).
-    for (FluidKind kind : {FluidKind::Water, FluidKind::Lava}) {
+    for (const FluidKind kind :
+            {FluidKind::Water, FluidKind::Lava, FluidKind::Honey}) {
         chunk.invalidateFluidWalk(kind);
         // PIPE-3: the pending flag's active-set mirror — the target
         // UNCONDITIONALLY for both kinds (the chunk may not hold the kind;
@@ -475,7 +476,8 @@ void World::wakeFluidChunks(const ChunkPos& pos) {
         {pos.x, pos.y - 1, pos.z}, {pos.x, pos.y + 1, pos.z},
         {pos.x, pos.y, pos.z - 1}, {pos.x, pos.y, pos.z + 1},
     };
-    for (const FluidKind kind : {FluidKind::Water, FluidKind::Lava}) {
+    for (const FluidKind kind :
+            {FluidKind::Water, FluidKind::Lava, FluidKind::Honey}) {
         for (const ChunkPos& q : cells) {
             // Only a chunk that HOLDS the kind has fluid this wake can
             // unstick (the setBlock UNSTICK pass's neighbor gate); the

@@ -10,6 +10,7 @@
     { "slot": 23, "item": "potion_poison", "count": 1 },
     { "slot": 24, "item": "oak_sapling", "count": 3 },
     { "slot": 25, "item": "spruce_sapling", "count": 3 },
-    { "slot": 26, "item": "birch_sapling", "count": 3 }
+    { "slot": 26, "item": "birch_sapling", "count": 3 },
+    { "slot": 16, "item": "honey_bucket", "count": 1 }
   ]
 }

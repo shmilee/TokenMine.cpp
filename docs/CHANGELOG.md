@@ -3,6 +3,66 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.11.0（2026-10-28）
+
+**FLUID-6 流体种类扩展**（v1.x 任务表 11/33，FLUID 行 3/3 收尾，门
+126）——第三流体种类 = **honey（Minecraft 1.14+ 蜂蜜）**，最小完整
+版定案：1/3 速高粘度 + 不参与水-熔岩反应 + 可桶舀/倒 + 无波纹 + 无
+worldgen（桶源 = 项目无蜂箱的记档偏离）：
+- **编码三层化**（chunk.hpp）：`FluidKind{Water=1, Lava=2, Honey=3}`；
+  编码带 0 / 水 1..8 / 熔岩 9..16 / **蜜 17..24**（水/熔岩带位级不
+  变）；fluidCode/LevelOf/KindOf 纯算术三层泛化；词汇表 +honey（存档
+  fluids 段种类名直接生效 = **零 format（19）**）。
+- **粘度 = 帧锁定 tick 门控**（单门控记档简化：下落与扩散同 1/3
+  速）：`FluidSim::tick(..., honeyActive)` 第 4 参；Game 门 =
+  `(m_frameCount / kFluidTickEveryNFrames) % kHoneyTickPeriodFluidTicks
+  (3) == 0`；水/熔岩模拟路径零改动（门只控第三段
+  simulateType(Honey)）。
+- **无反应 = 数据驱动惰性**：honey 块无 water_reaction 字段 →
+  reaction pass（熔岩侧驱动）对蜜天然不触发；蜜/水/熔岩 6-邻共存
+  互不替换（"他种类 = 阻挡"语义既有泛化，CellReader 4 元组 +
+  kindLevel/otherLevel lambda 泛化）。
+- **per-kind 容器 3→4**（PITS 299：kind 1 基下标 → 尺寸 = 种类数+1；
+  3 尺寸时 Honey 静默 OOB 段错在下游测试）+ chunk_mesher 两种类三元
+  派发 → 三种类（honey 顶面无波纹 = emitFluid 既有 kind==Water 门控
+  天然排除）。
+- **内容**：honey.json 块（非 solid/opaque、transparent、destroyable
+  false、无 light_emission = 不发光、atlas 空位 [15,1] 免重锚）+ honey
+  纹理（generate_block_textures.py honey() 琥珀光泽，既有 PNG 字节零
+  变化）+ honey_bucket 物品（pours_fluid honey / pours_becomes
+  bucket）+ bucket.json collects_fluid +honey（三种类一桶全舀）+
+  **隐藏 starter 槽 16**（GEN-2 范式；PITS 300 = storage 范围
+  [9,26]，槽 27 首版被点名拒绝）。
+- **桶交互零改动继承**（FLUID-4/5）：蜜桶对空气 = 放置 / 对蜜流动 =
+  变源 / 蜜桶对水格 = 替换倒（(c) 泛化 else 分支）/ 水桶对熔岩 = 反应
+  倒（(c1) 特例不变）。
+
+1774/1774（+8：编码带位级 / 门控冻结 / 每门控 tick 落一格 / 每门控
+tick 扩一环 / 蜜水 6-邻共存互不替换 / 他种支撑不坠 / 门控不影响水 /
+蜜顶面无波纹）、-Werror 0 警告。门 126：S1 = **第 126 次结构性免疫免
+重锚**（fresh 60f 四方截图 ×2 387726 B 全字节一致 + savenorm new×2 /
+old×2 EXACT；new vs old 存档差 = 恰好 2 项 honey_bucket 隐藏 starter
+【存储格不渲染 = 截图免疫保持，GEN-2 先例】）+ **S2 六场景 PASS**
+（CPU harness gen126 实证瞄准/落位 oracle）：A 蜜倒【new ×2 RAW
+EXACT 407951 B：蜜源 (24,45,-8) L8 + 邻格 L7 封源池稳态 + slot0 =
+bucket】/ W 水回归 A/B【s124 水场景 4 跑：new ×2 与 old ×2 各 RAW
+EXACT 409647 B + **new_a ≡ old_a 字节一致 = 蜜代码结构惰性零回归**】/
+B 落蜜【密封竖井 40f 无输入 ×2 RAW 708974 B：蜜 (24,39,-8) L8 井中
+= 5 门控 tick oracle 逐位】/ C 落水对照【同井 40f：水 (24,37,-8) L8
+已落底（21 帧落定）×2 RAW 708974 B —— **B vs C = 1/3 速证明**（同帧
+蜜 y39 仍在落 vs 水 y37 已落底，互斥终态）】/ D 无反应行【蜜 24 / 水
+25 / 封石 26 / 熔岩 27 全封 600f：三源恒 8/8/8 原位 + 行内零
+obsidian/stone 转化 ×2 RAW 699617 B】/ S6【old v1.10.0 二进制 + 蜜
+场景 = init 失败点名 unknown fluid 'honey'（新种类存档向前不兼容 =
+记档）】。+ 性能 A/B 同 seed 900f（fluidCells win2/3 **逐位一致**
+29803/29800 + win1 −0.02% 填充 real-dt 类 + PIPE3 changesApplied
+1404=1404 / fluidCellsSeen 43994=43994 逐位 + 全指标同档 = **成本可
+忽略**，无输入无蜜 = 门控与第三模拟段零执行结构惰性实证）。
+PITS 299-300（per-kind 容器尺寸 = 种类数+1 哨兵槽纪律 / 隐藏 starter
+槽范围 [9,26]）。**组 1.6-1.10 已于 v1.10.0 收官（tag + GitHub
+release）；v1.11.0 = 新组 1.11-1.15 首版**（组内不打 tag = 10-28
+定案 tag 策略）。
+
 ## v1.10.0（2026-10-28）
 
 **FLUID-5 水熔岩反应**（v1.x 任务表 10/33，FLUID 行 2/3，门 125；消费

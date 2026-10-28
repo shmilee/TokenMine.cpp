@@ -46,6 +46,13 @@ BlockRegistry makeRegistry() {
         cubeDef("water",
                 R"({"opaque":false,"transparent":true,"solid":false,"fluid":"water"})",
                 R"({"top":"t","side":"t","bottom":"t"})")));
+    // FLUID-6: the honey fluid block (like water: non-solid,
+    // transparent, a named fluid kind).
+    auto honey = reg.registerBlock(parseDef(
+        cubeDef("honey",
+                R"({"opaque":false,"transparent":true,"solid":false,"fluid":"honey"})",
+                R"({"top":"t","side":"t","bottom":"t"})")));
+    (void)honey;
     // Phase 95: a wall (the 1.5-tall pillar shape).
     auto wall = reg.registerBlock(parseDef(
         R"({"id":"wall","model":{"shape":"wall","textures":{"top":"t","side":"t","bottom":"t"}}})"));
@@ -1342,4 +1349,20 @@ TEST(ChunkMesherTest, MoistureWetDryNeighborsDoNotMerge) {
     }
     EXPECT_EQ(wet, 4);
     EXPECT_EQ(dry, 4);
+}
+
+TEST(ChunkMesherTest, HoneyTopFaceIsNotMarkedForRipples) {
+    // FLUID-6: honey has no ripples (PRE-3 is water-only) — an isolated
+    // honey cell emits the same six-face quad set as water but NOT a
+    // single water mark.
+    BlockRegistry reg = makeRegistry();
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    world.setFluid(8, 4, 8, FluidKind::Honey, kMaxFluidLevel);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    ASSERT_EQ(data.transparentVertices.size(), 24u); // all 6 faces
+    EXPECT_EQ(countWaterMarked(data.transparentVertices), 0);
+    for (const MeshVertex& v : data.transparentVertices) {
+        EXPECT_FLOAT_EQ(v.water, 0.0f);
+    }
 }

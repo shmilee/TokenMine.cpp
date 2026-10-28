@@ -971,19 +971,31 @@ TEST(SaveParseTest, FluidEditKindRoundTripsAndMigrates) {
     lavaEdit.push_back(Json(2));
     lavaEdit.push_back(Json(5));
     lavaEdit.push_back(Json("lava"));
+    Json honeyEdit = Json::array();
+    honeyEdit.push_back(Json(4));
+    honeyEdit.push_back(Json(10));
+    honeyEdit.push_back(Json(4));
+    honeyEdit.push_back(Json(8));
+    honeyEdit.push_back(Json("honey"));
     Json arr = Json::array();
     arr.push_back(std::move(lavaEdit));
+    arr.push_back(std::move(honeyEdit));
     root["fluids"] = std::move(arr);
     auto parsed = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(parsed.ok()) << parsed.error().message;
-    ASSERT_EQ(parsed->fluidEdits.size(), 1u);
+    ASSERT_EQ(parsed->fluidEdits.size(), 2u);
     EXPECT_EQ(parsed->fluidEdits[0].kind, FluidKind::Lava);
     EXPECT_EQ(parsed->fluidEdits[0].level, 5);
+    EXPECT_EQ(parsed->fluidEdits[1].kind, FluidKind::Honey);
+    EXPECT_EQ(parsed->fluidEdits[1].level, 8);
     auto reser = serializeSave(*parsed, f.items);
     ASSERT_TRUE(reser.ok());
     const Json& out = reser->find("fluids")->at(0);
     ASSERT_EQ(out.size(), 5u);
     EXPECT_EQ(out.at(4).asString(), "lava");
+    const Json& outHoney = reser->find("fluids")->at(1);
+    ASSERT_EQ(outHoney.size(), 5u);
+    EXPECT_EQ(outHoney.at(4).asString(), "honey");
 
     root["format"] = Json(8);
     root = withoutKey(root, "fires"); // format 8 predates the fire

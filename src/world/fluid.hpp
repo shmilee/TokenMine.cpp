@@ -1,15 +1,19 @@
-// FluidSim: tick-based simulation of the project's two fluids (water and
-// lava) over all loaded chunks.
+// FluidSim: tick-based simulation of the project's three fluids (water,
+// lava, and honey — FLUID-6) over all loaded chunks.
 //
 // Storage: each chunk owns a per-cell ENCODED fluid array (see Chunk:
-// 0 = dry, water level 1..8, lava level 9..16). A cell holds fluid XOR a
-// block (World::setBlock displaces fluid; World::setFluid only fills air
-// cells and replaces the other fluid kind). Level 8 (kMaxFluidLevel) is
-// the full/source state for both kinds.
+// 0 = dry, water level 1..8, lava level 9..16, honey level 17..24). A
+// cell holds fluid XOR a block (World::setBlock displaces fluid;
+// World::setFluid only fills air cells and replaces any other fluid
+// kind). Level 8 (kMaxFluidLevel) is the full/source state for all
+// kinds.
 //
 // Model (simplified Minecraft, deterministic, snapshot-based — all changes
 // are computed from the start-of-tick state and applied at the end):
-//  - Per KIND (water and lava are simulated independently, same rules):
+//  - Per KIND (water, lava and honey are simulated independently, same
+//    rules — honey is additionally tick-GATED: it only simulates on
+//    every 3rd fluid tick (FLUID-6, the 1/3-speed high viscosity; the
+//    gate is frame-locked, see Game's honeyActive):
 //  - A cell is FALLING when the cell below it is empty, or the cell below
 //    is itself falling. A falling chain shifts down one cell per tick:
 //    each cell takes the fluid level of the cell above it (the chain's top
@@ -103,8 +107,15 @@ namespace mc {
 class FluidSim {
 public:
     // Advance one tick over all loaded chunks: first the water-lava
-    // reaction pass, then the flamable burn pass (Phase 58), then the
-    // per-kind simulation (water, then lava).
+    // reaction pass (honey is inert in it — no water_reaction data), then
+    // the flamable burn pass (Phase 58), then the per-kind simulation
+    // (water, then lava, then honey when `honeyActive`).
+    //
+    // `honeyActive` (FLUID-6): the honey viscosity gate — the honey
+    // kind's simulation runs only on ticks where this is true (the
+    // caller gates it frame-locked, every 3rd fluid tick = 1/3 speed);
+    // water and lava are unaffected by the flag.
+    //
     // Returns the cells whose state changed (world coordinates, sorted and
     // de-duplicated; reaction-converted blocks, burned-to-air blocks and
     // fluid-level changes); empty when nothing moved (a settled world).
@@ -116,7 +127,8 @@ public:
     static std::vector<BlockPos> tick(World& world,
                                       const BlockRegistry& blocks,
                                       const std::set<ChunkPos>* flammable =
-                                          nullptr);
+                                          nullptr,
+                                      bool honeyActive = false);
 };
 
 } // namespace mc

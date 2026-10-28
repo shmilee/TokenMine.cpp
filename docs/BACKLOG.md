@@ -17,7 +17,7 @@
 | PIPE 帧管线与并发 | ~~PIPE-3 流体 per-cell~~ ✅ v1.2.0 | | | | | |
 | LGT 光照 | ~~LGT-3 夜光重传播~~ ✅ v1.3.0 | ~~LGT-4 光束入光~~ ✅ v1.4.0 | ~~LGT-5 半块透光~~ ✅ v1.5.0 | | | |
 | GEN 世界与生成 | ~~GEN-7 基岩多层~~ ✅ v1.6.0 | ~~GEN-8 地形互感~~ ✅ v1.7.0 | ~~GEN-9 耕地湿润~~ ✅ v1.8.0 | | | |
-| FLUID 流体 | ~~FLUID-4 倒向水面~~ ✅ v1.9.0 | ~~FLUID-5 水熔岩反应~~ ✅ v1.10.0 | FLUID-6 流体种类扩展 | | | |
+| FLUID 流体 | ~~FLUID-4 倒向水面~~ ✅ v1.9.0 | ~~FLUID-5 水熔岩反应~~ ✅ v1.10.0 | ~~FLUID-6 流体种类扩展~~ ✅ v1.11.0 | | | |
 | ENT 实体/Mob/移动 | ENT-5 坠落伤害 | ENT-6 AI 补强 | ENT-7 移动惯性 | ENT-8 和平/保护环 | ENT-9 掉落可视化 | |
 | SURV 生存/战斗/效果 | SURV-6 效果档位 | SURV-7 死亡统计 | SURV-8 工具 10× | SURV-9 饱和细化 | SURV-10 挤奶冷却 | |
 | CRAFT 物品/合成/面板 | CRAFT-4 配方提示 | CRAFT-5 炉子表现 | CRAFT-6 燃料熔炼 | CRAFT-7 背包交互 | | |
@@ -116,6 +116,29 @@
   构建与运行 + 范围与限制 + 许可），PITS 范围 267-288 修正为 271-288
   （267-270 属 v1.0 组时代门 114/115）③ Latest 收尾回 v1.5.0 组 release
   （重建时序）。同步 README/CHANGELOG/BACKLOG/AGENTS 旧引用。
+- 2026-10-28：**FLUID-6 流体种类扩展完成**（v1.x 第 11/33 项，
+  v1.11.0，门 126，FLUID 行 3/3 收尾）：第三流体种类 = **honey（MC
+  1.14+ 蜂蜜）**——编码三层化（0/1..8/9..16/**17..24**，水/熔岩带位级
+  不变）+ **粘度 = 帧锁定 tick 门控**（kHoneyTickPeriodFluidTicks=3：
+  蜜每 3 个流体 tick 模拟一次 = 1/3 速，水/熔岩零改动）+ 不参与水-
+  熔岩反应（honey 块无 water_reaction = 数据驱动惰性）+ 可桶舀/倒 +
+  无波纹（emitFluid 既有 kind==Water 门控）+ 无 worldgen（桶源 = 无
+  蜂箱偏离）。per-kind 容器 3→4【PITS 299：kind 1 基下标 = 尺寸须
+  种类数+1，静默 OOB 段错在下游测试】+ CellReader 4 元组 + mesher 三
+  种类派发 + 隐藏 starter 槽 16【PITS 300：storage 范围 [9,26]】+
+  atlas 空位 [15,1] 免重锚。1774/1774（+8：编码带/门控冻结/落速/扩环/
+  蜜水共存/他种支撑/门控不影响水/蜜顶面无波纹）、-Werror 0；门 126：
+  S1 第 126 次结构性免疫免重锚（四方截图 ×2 387726 B + savenorm
+  new×2/old×2 EXACT；new vs old 存档差 = 恰好 2 项 honey_bucket
+  starter 内容演进）+ S2 六场景 PASS【A 蜜倒 new×2 RAW 407951：蜜 L8
+  + 邻 L7 封源池稳态 + 空桶 / W 水回归 new≡old 字节一致 409647 = 蜜
+  代码惰性零回归 / B 落蜜 40f 井中 (24,39) oracle 逐位 ×2 RAW 708974
+  / C 落水 40f 落底 (24,37) ×2 RAW = **B vs C 1/3 速证明** / D 无反应
+  行 600f 三源 8/8/8 零转化 ×2 RAW 699617】+ S6 old 二进制蜜场景
+  init 点名 unknown fluid 'honey'；性能 A/B fluidCells win2/3 逐位 +
+  PIPE3 changesApplied 逐位 + 全同档 = 成本可忽略。**组 1.6-1.10 已
+  收官（v1.10.0 tag + release）；v1.11.0 = 新组 1.11-1.15 首版**
+  （组内不打 tag）。
 - 2026-10-28：**FLUID-5 水熔岩反应完成**（v1.x 第 10/33 项，v1.10.0，门
   125，FLUID 行 2/3；消费 FLUID-4 范围外记档"水桶对熔岩面 no-op"；
   模拟侧 reaction pass P51 已完整 = 零新反应规则）：纯函数

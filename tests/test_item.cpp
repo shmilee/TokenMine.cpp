@@ -1243,12 +1243,13 @@ TEST(ItemRegistryTest, ParsesFluidBucketPair) {
     auto r = items.registerItem(
         parseJson(R"({"id":"bucket","type":"material","max_stack":16,
                       "icon":"bucket",
-                      "collects_fluid":["water","lava"]})"));
+                      "collects_fluid":["water","lava","honey"]})"));
     ASSERT_TRUE(r.ok()) << r.error().message;
     const Item& b = items.at(*r);
-    ASSERT_EQ(b.collectsFluids.size(), 2u);
+    ASSERT_EQ(b.collectsFluids.size(), 3u);
     EXPECT_EQ(b.collectsFluids[0], "water");
     EXPECT_EQ(b.collectsFluids[1], "lava");
+    EXPECT_EQ(b.collectsFluids[2], "honey");
     EXPECT_TRUE(b.poursFluid.empty());
     EXPECT_TRUE(b.poursBecomes.empty());
     r = items.registerItem(
@@ -1267,14 +1268,23 @@ TEST(ItemRegistryTest, ParsesFluidBucketPair) {
                       "pours_fluid":"lava",
                       "pours_becomes":"bucket"})"));
     ASSERT_TRUE(r.ok()) << r.error().message;
+    r = items.registerItem(
+        parseJson(R"({"id":"honey_bucket","type":"material","max_stack":1,
+                      "icon":"honey_bucket",
+                      "pours_fluid":"honey",
+                      "pours_becomes":"bucket"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
     // The derived companion: scoop water -> water_bucket, scoop lava ->
-    // lava_bucket.
+    // lava_bucket, scoop honey -> honey_bucket.
     const Item* fullWater = items.fullBucketFor("water", "bucket");
     const Item* fullLava = items.fullBucketFor("lava", "bucket");
+    const Item* fullHoney = items.fullBucketFor("honey", "bucket");
     ASSERT_NE(fullWater, nullptr);
     ASSERT_NE(fullLava, nullptr);
+    ASSERT_NE(fullHoney, nullptr);
     EXPECT_EQ(fullWater->name, "water_bucket");
     EXPECT_EQ(fullLava->name, "lava_bucket");
+    EXPECT_EQ(fullHoney->name, "honey_bucket");
     EXPECT_EQ(items.fullBucketFor("water", "other"), nullptr);
 }
 
@@ -1291,8 +1301,8 @@ TEST(ItemRegistryTest, FluidBucketFieldsDefaultToEmpty) {
 }
 
 TEST(ItemRegistryTest, RejectsUnknownFluidName) {
-    // Two-kind vocabulary: "water" and "lava" (any other name is a typo
-    // or an unimplemented fluid).
+    // Three-kind vocabulary (FLUID-6): "water", "lava" and "honey"
+    // (any other name is a typo or an unimplemented fluid).
     ItemRegistry items;
     EXPECT_FALSE(items.registerItem(
                      parseJson(
@@ -2218,7 +2228,7 @@ TEST(ItemRegistryTest, Gen2HotbarStarterPinned) {
     ASSERT_TRUE(parsed.ok()) << parsed.error().message;
     auto r = parseStarterSlots(*parsed, items);
     ASSERT_TRUE(r.ok()) << r.error().message;
-    ASSERT_EQ(r->size(), 10u);
+    ASSERT_EQ(r->size(), 11u);
     const struct {
         int slot;
         const char* item;
@@ -2234,6 +2244,8 @@ TEST(ItemRegistryTest, Gen2HotbarStarterPinned) {
         {24, "oak_sapling", 3},
         {25, "spruce_sapling", 3},
         {26, "birch_sapling", 3},
+        // FLUID-6: the honey bucket (the hidden honey source).
+        {16, "honey_bucket", 1},
     };
     for (std::size_t i = 0; i < r->size(); ++i) {
         EXPECT_EQ((*r)[i].slot, want[i].slot);

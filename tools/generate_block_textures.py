@@ -261,6 +261,20 @@ def lava(x, y):
             clamp(60 + noise(x, y, 108, 25)),
             clamp(noise(x, y, 109, 15)), 255)
 
+def honey(x, y):
+    # FLUID-6: honey — glossy amber (the Minecraft honey look: golden
+    # with lighter glossy streaks, translucent like water).
+    h = h2(x, y, 110)
+    if h % 100 < 15:
+        # Glossy highlight streak: pale gold.
+        return (clamp(245 + noise(x, y, 111, 8)),
+                clamp(205 + noise(x, y, 112, 12)),
+                clamp(90 + noise(x, y, 113, 20)), 225)
+    # Base: amber-gold.
+    return (clamp(228 + noise(x, y, 114, 15)),
+            clamp(165 + noise(x, y, 115, 18)),
+            clamp(45 + noise(x, y, 116, 15)), 215)
+
 
 def obsidian(x, y):
     # Near-black with a faint violet sheen and rare lighter flecks (the
@@ -775,6 +789,7 @@ TEXTURES = {
     "glass": glass,
     "water": water,
     "lava": lava,
+    "honey": honey,
     "obsidian": obsidian,
     "bedrock": bedrock,
     "gravel": gravel,

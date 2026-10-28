@@ -58,43 +58,44 @@ public:
         : m_self(self), m_below(below), m_above(above), m_west(west),
           m_east(east), m_south(south), m_north(north) {}
 
-    // (block, water level, lava level) at local (lx, ly, lz); a level is 0
-    // for a block cell, a void cell, or a cell holding the other kind.
-    std::tuple<BlockID, std::uint8_t, std::uint8_t>
+    // (block, water level, lava level, honey level) at local (lx, ly, lz);
+    // a level is 0 for a block cell, a void cell, or a cell holding any
+    // OTHER kind (FLUID-6: the tuple is one lane per kind).
+    std::tuple<BlockID, std::uint8_t, std::uint8_t, std::uint8_t>
     cellAt(int lx, int ly, int lz) const {
         if (ly < 0) {
             if (m_below == nullptr) {
-                return {BlockID::air(), 0, 0};
+                return {BlockID::air(), 0, 0, 0};
             }
             return read(m_below, Chunk::index(lx, kChunkSize - 1, lz));
         }
         if (ly >= kChunkSize) {
             if (m_above == nullptr) {
-                return {BlockID::air(), 0, 0};
+                return {BlockID::air(), 0, 0, 0};
             }
             return read(m_above, Chunk::index(lx, 0, lz));
         }
         if (lx < 0) {
             if (m_west == nullptr) {
-                return {BlockID::air(), 0, 0};
+                return {BlockID::air(), 0, 0, 0};
             }
             return read(m_west, Chunk::index(kChunkSize - 1, ly, lz));
         }
         if (lx >= kChunkSize) {
             if (m_east == nullptr) {
-                return {BlockID::air(), 0, 0};
+                return {BlockID::air(), 0, 0, 0};
             }
             return read(m_east, Chunk::index(0, ly, lz));
         }
         if (lz < 0) {
             if (m_south == nullptr) {
-                return {BlockID::air(), 0, 0};
+                return {BlockID::air(), 0, 0, 0};
             }
             return read(m_south, Chunk::index(lx, ly, kChunkSize - 1));
         }
         if (lz >= kChunkSize) {
             if (m_north == nullptr) {
-                return {BlockID::air(), 0, 0};
+                return {BlockID::air(), 0, 0, 0};
             }
             return read(m_north, Chunk::index(lx, ly, 0));
         }
@@ -102,16 +103,14 @@ public:
     }
 
 private:
-    static std::tuple<BlockID, std::uint8_t, std::uint8_t>
+    static std::tuple<BlockID, std::uint8_t, std::uint8_t, std::uint8_t>
     read(const Chunk* c, int i) {
         const std::uint8_t code = c->fluidData()[i];
+        const std::uint8_t level = fluidLevelOf(code);
         return {c->data()[i],
-                fluidKindOf(code) == FluidKind::Water
-                    ? fluidLevelOf(code)
-                    : 0,
-                fluidKindOf(code) == FluidKind::Lava
-                    ? fluidLevelOf(code)
-                    : 0};
+                fluidKindOf(code) == FluidKind::Water ? level : 0,
+                fluidKindOf(code) == FluidKind::Lava ? level : 0,
+                fluidKindOf(code) == FluidKind::Honey ? level : 0};
     }
 
     const Chunk* m_self;
@@ -355,10 +354,11 @@ std::vector<BlockPos> reactLavaWithWater(World& world,
             bool anyWater = false;
             bool sourceWater = false;
             for (const BlockPos& d : kSixNeighbors) {
-                const auto [tb, twater, tlava] =
+                const auto [tb, twater, tlava, thoney] =
                     reader.cellAt(lx + d.x, ly + d.y, lz + d.z);
                 (void)tb;
                 (void)tlava;
+                (void)thoney;
                 if (twater > 0) {
                     anyWater = true;
                     sourceWater = sourceWater || twater == kMaxFluidLevel;
@@ -466,10 +466,11 @@ std::vector<BlockPos> burnFlamableNeighbors(World& world,
             const int lz = localZ(i);
             // Any 6-neighbor flamable BLOCK cell (snapshot reads).
             for (const BlockPos& d : kSixNeighbors) {
-                const auto [tb, twater, tlava] =
+                const auto [tb, twater, tlava, thoney] =
                     reader.cellAt(lx + d.x, ly + d.y, lz + d.z);
                 (void)twater;
                 (void)tlava;
+                (void)thoney;
                 if (tb == BlockID::air() ||
                     !blocks.at(tb).properties.flamable) {
                     continue;
@@ -534,13 +535,33 @@ std::vector<BlockPos> simulateType(World& world, FluidKind kind) {
     const auto otherOf = [kind](std::uint8_t code) {
         return fluidKindOf(code) == kind ? 0 : fluidLevelOf(code);
     };
-    // The kind's level from a CellReader tuple's (water, lava) levels.
-    const auto kindLevel = [kind](std::uint8_t water, std::uint8_t lava) {
-        return kind == FluidKind::Water ? water : lava;
+    // The kind's level from a CellReader tuple's per-kind levels.
+    const auto kindLevel = [kind](std::uint8_t water, std::uint8_t lava,
+                                  std::uint8_t honey) {
+        if (kind == FluidKind::Water) {
+            return water;
+        }
+        if (kind == FluidKind::Lava) {
+            return lava;
+        }
+        return honey;
     };
-    // The other kind's level from a CellReader tuple.
-    const auto otherLevel = [kind](std::uint8_t water, std::uint8_t lava) {
-        return kind == FluidKind::Water ? lava : water;
+    // The level of ANY other kind present in the cell (0 when none): a
+    // cell occupied by a foreign fluid is a block for this kind's scan
+    // (support + spread blocker).
+    const auto otherLevel = [kind](std::uint8_t water, std::uint8_t lava,
+                                   std::uint8_t honey) {
+        std::uint8_t best = 0;
+        if (kind != FluidKind::Water) {
+            best = std::max(best, water);
+        }
+        if (kind != FluidKind::Lava) {
+            best = std::max(best, lava);
+        }
+        if (kind != FluidKind::Honey) {
+            best = std::max(best, honey);
+        }
+        return best;
     };
 
     // Cross-chunk falling flags (PIPE-3): one flag per COLUMN (256)
@@ -615,10 +636,10 @@ std::vector<BlockPos> simulateType(World& world, FluidKind kind) {
                     f = 1; // nothing below
                 }
             } else {
-                const auto [bb, bw, bl] = reader.cellAt(lx, -1, lz);
-                if (bb != BlockID::air() || otherLevel(bw, bl) > 0) {
+                const auto [bb, bw, bl, bh] = reader.cellAt(lx, -1, lz);
+                if (bb != BlockID::air() || otherLevel(bw, bl, bh) > 0) {
                     f = 0;
-                } else if (kindLevel(bw, bl) > 0) {
+                } else if (kindLevel(bw, bl, bh) > 0) {
                     // The below chunk's top cell holds the kind: read the
                     // column's topmost fluid cell's flag (topFlags).
                     const auto fit = topFlags.find({cp.x, cp.y - 1, cp.z});
@@ -652,30 +673,30 @@ std::vector<BlockPos> simulateType(World& world, FluidKind kind) {
                 if (wp.y > 0) {
                     propose(proposed, {wp.x, wp.y - 1, wp.z}, L);
                 }
-                const auto [ab, aw, al] = reader.cellAt(lx, ly + 1, lz);
+                const auto [ab, aw, al, ah] = reader.cellAt(lx, ly + 1, lz);
                 (void)ab;
-                propose(proposed, wp, kindLevel(aw, al));
+                propose(proposed, wp, kindLevel(aw, al, ah));
                 continue;
             }
 
             // Resting: the cell below holds a block (or the other
             // kind) or a resting fluid (an empty cell below is the
             // falling case).
-            const auto [bb, bw, bl] = reader.cellAt(lx, ly - 1, lz);
-            const std::uint8_t below = kindLevel(bw, bl);
-            if (bb != BlockID::air() || otherLevel(bw, bl) > 0) {
+            const auto [bb, bw, bl, bh] = reader.cellAt(lx, ly - 1, lz);
+            const std::uint8_t below = kindLevel(bw, bl, bh);
+            if (bb != BlockID::air() || otherLevel(bw, bl, bh) > 0) {
                 // Supported: spread to the horizontal neighbors.
                 // Level 1 is the terminal film and does not spread.
                 if (L > 1) {
                     const std::uint8_t next = L - 1;
                     for (const BlockPos& d : kHorizontal) {
-                        const auto [tb, tw, tl] =
+                        const auto [tb, tw, tl, th] =
                             reader.cellAt(lx + d.x, ly, lz + d.z);
-                        if (tb != BlockID::air() || otherLevel(tw, tl) > 0) {
+                        if (tb != BlockID::air() || otherLevel(tw, tl, th) > 0) {
                             continue; // a block (or the other kind)
                                        // stops the flow
                         }
-                        if (kindLevel(tw, tl) >= next) {
+                        if (kindLevel(tw, tl, th) >= next) {
                             continue; // already at/above the level
                         }
                         propose(proposed, {wp.x + d.x, wp.y, wp.z + d.z}, next);
@@ -752,7 +773,8 @@ std::vector<BlockPos> simulateType(World& world, FluidKind kind) {
 
 std::vector<BlockPos> FluidSim::tick(World& world,
                                      const BlockRegistry& blocks,
-                                     const std::set<ChunkPos>* flammable) {
+                                     const std::set<ChunkPos>* flammable,
+                                     bool honeyActive) {
     // Reaction first: it separates the kinds (a converted cell becomes a
     // block), so the per-kind scans that follow see 6-disjoint fluids.
     std::vector<BlockPos> changed = reactLavaWithWater(world, blocks);
@@ -773,6 +795,14 @@ std::vector<BlockPos> FluidSim::tick(World& world,
     }
     for (const FluidKind kind : {FluidKind::Water, FluidKind::Lava}) {
         for (const BlockPos& p : simulateType(world, kind)) {
+            changed.push_back(p);
+        }
+    }
+    // Honey last, and only on its gated ticks (FLUID-6: the 1/3-speed
+    // high viscosity; water and lava above are unaffected by the gate).
+    if (honeyActive) {
+        for (const BlockPos& p :
+             simulateType(world, FluidKind::Honey)) {
             changed.push_back(p);
         }
     }
