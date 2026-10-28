@@ -84,6 +84,11 @@ enum class MobState {
     RangedAttack,
 };
 
+// ENT-5: the safe-fall offset for mobs (Minecraft: 3 blocks — the same
+// value as the player's Phase-16 rule; a fixed constant rather than a
+// per-mob field: no Minecraft mob varies it, YAGNI).
+inline constexpr float kMobFallDamageOffset = 3.0f;
+
 class MobEntity : public Entity {
 public:
     // `def` is a registry entry owned by the game (which outlives every
@@ -218,6 +223,11 @@ private:
     // ENT-1: the limb-swing phase (see swingPhase()). Spawn = 0 (the
     // identity pose); render-only, never saved.
     int m_swingPhase = 0;
+    // ENT-5: fall-damage tracking (the Player's Phase-16 rule mirrored).
+    // Mobs are ephemeral (never saved) — m_fallStartY is pinned once in
+    // the constructor at spawn; there is no save restore to re-pin from.
+    float m_fallStartY = 0.0f;
+    bool m_wasOnGround = false;
     Vec3 m_playerPos = Vec3::zero();
     bool m_playerAlive = true;
     MobState m_state = MobState::Wander;

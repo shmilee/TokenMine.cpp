@@ -3875,3 +3875,90 @@ TEST(MobFluidTest, OnLandMobIsFluidInert) {
     EXPECT_FLOAT_EQ(mob.position().y, 1.0f);
     EXPECT_EQ(mob.velocity().y, 0.0f);
 }
+
+// ============================================================================
+//   ENT-5 — mob fall damage (the Player's Phase-16 rule mirrored)
+// ============================================================================
+
+TEST(MobFallDamageTest, FallingAboveOffsetTakesDamage) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& z = mobs.at(MobID{0});
+    // Spawned 9 blocks above the fixture floor (top y1): fall 9 >
+    // offset 3 -> 6 damage.
+    MobEntity mob = makeMob(f, z, Vec3{0.5f, 10.0f, 0.5f});
+    runMob(mob, 300);
+    EXPECT_TRUE(mob.onGround());
+    EXPECT_FLOAT_EQ(mob.health(), 14.0f);
+}
+
+TEST(MobFallDamageTest, FallingWithinOffsetIsHarmless) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& z = mobs.at(MobID{0});
+    // Spawned 3 blocks above the floor: fall 3 = the safe offset -> 0.
+    MobEntity mob = makeMob(f, z, Vec3{0.5f, 4.0f, 0.5f});
+    runMob(mob, 300);
+    EXPECT_TRUE(mob.onGround());
+    EXPECT_FLOAT_EQ(mob.health(), 20.0f);
+}
+
+TEST(MobFallDamageTest, LandingInAPoolCancelsTheFall) {
+    // The player's P54 rule: ANY fluid cancels the fall. A 1-deep pool
+    // in the landing column.
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& z = mobs.at(MobID{0});
+    f.world.setBlock(0, 1, 0, BlockID::air());
+    ASSERT_TRUE(f.world.setFluid(0, 1, 0, FluidKind::Water, kMaxFluidLevel));
+    MobEntity mob = makeMob(f, z, Vec3{0.5f, 10.0f, 0.5f});
+    runMob(mob, 300);
+    EXPECT_TRUE(mob.onGround());
+    EXPECT_FLOAT_EQ(mob.health(), 20.0f);
+}
+
+TEST(MobFallDamageTest, LethalFallKillsThroughTheExistingPath) {
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& z = mobs.at(MobID{0});
+    // Fall 23 > 20 health: the killing hit goes through damage()'s
+    // existing death path.
+    MobEntity mob = makeMob(f, z, Vec3{0.5f, 24.0f, 0.5f});
+    runMob(mob, 400);
+    EXPECT_TRUE(mob.dead());
+}
+
+TEST(MobFallDamageTest, WalkingOffAColumnTakesDamage) {
+    // The leave-the-ground transition pins the fall start (not just the
+    // spawn pin): a mob standing on a 5-tall platform loses it under its
+    // feet and drops 5 -> 2 damage. 3x3 platform: the chase toward the
+    // origin player moves the mob at most 0.4 blocks in the 30 settle
+    // frames, so it cannot walk off before the removal.
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& z = mobs.at(MobID{0});
+    for (int x = 0; x <= 2; ++x) {
+        for (int zc = 0; zc <= 2; ++zc) {
+            for (int y = 1; y <= 5; ++y) {
+                ASSERT_TRUE(f.world.setBlock(x, y, zc, f.stone));
+            }
+        }
+    }
+    MobEntity mob = makeMob(f, z, Vec3{1.5f, 6.0f, 1.5f});
+    runMob(mob, 30); // settle on the platform
+    ASSERT_TRUE(mob.onGround());
+    for (int x = 0; x <= 2; ++x) {
+        for (int zc = 0; zc <= 2; ++zc) {
+            for (int y = 1; y <= 5; ++y) {
+                f.world.setBlock(x, y, zc, BlockID::air());
+            }
+        }
+    }
+    runMob(mob, 300);
+    EXPECT_TRUE(mob.onGround());
+    // ~2 damage: the leave-ground pin lands one physics substep after
+    // the platform disappears, so the credited fall is 5.0 minus that
+    // substep's drop (deterministic — band it tight rather than pin the
+    // substep arithmetic).
+    EXPECT_NEAR(mob.health(), 18.0f, 0.02f);
+}

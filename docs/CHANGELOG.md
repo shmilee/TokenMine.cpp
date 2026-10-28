@@ -3,6 +3,58 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.12.0（2026-10-28）
+
+**ENT-5 坠落伤害**（v1.x 任务表 12/33，ENT 行 1/6，门 127）——玩家侧
+Phase 16 已完整（`fall > fall_damage_offset(3) && !isInWater() &&
+!isInLava() → damage(fall − 3)`，P36 读档重钉、P54 任何流体取消），
+"坠落伤害"定案 = **Mob 侧坠落伤害**（Minecraft 中 mob 同样受坠落
+伤害；缺口在 MobEntity 无落差跟踪）：
+- **Player 规则镜像到 `MobEntity::update`**（stepUp 之后的落地转换
+  处）：`m_onGround && !m_wasOnGround` 时净落差 `m_fallStartY −
+  position().y` **> kMobFallDamageOffset**（3.0f 命名常量 = MC 同值，
+  玩家同值；不做 per-mob 字段——MC 无 mob 差异，YAGNI）且**落地格
+  无流体**（fresh `overlapsFluid(Water) || overlapsFluid(Lava)` 扫描
+  最终位置 = 玩家 P54 同款"任何流体取消坠落"；tick 初的 `m_inFluid`
+  滞后一 tick 会漏 1 深池 = PITS 301）→ `damage(fall − 3)` 走既有
+  伤害/死亡/掉落管线（致死掉落零新代码）。
+- **钉点**：mobs 是 ephemeral（从不存档）→ 构造函数一次钉
+  `m_fallStartY = pos.y`（无玩家 restorePosition 的读档重钉需求）；
+  离地转换（`!m_onGround && m_wasOnGround`）重钉 = 走落悬崖的
+  fall-start 正确（转换钉点晚 1 物理子步 = 确定性，单测紧公差）。
+- **帧锁定**（硬规则 8）：m_onGround = 本 tick 物理结果；无 real dt、
+  无随机。**零 format（19）/config/内容/音效**。
+- **E2E 设计约束记档**：spawner floor band = 玩家脚高 ±kSpawnFloorDelta
+  → 敌对 mob 只生成在玩家同层 ±2，**生成 mob 的致死坠落（需落差
+  23+）无法自然生成构造**（chase 受 detect_radius 16 限制到不了；
+  knockback 方向 = 远离玩家 = 推不向悬崖）→ S2 = CPU harness 探针
+  （窗口免、逐值确定性，FLUID-3 夜探针先例）。
+
+1779/1779（+5 MobFallDamageTest：9 块坠落恰 6 伤 / 3 块内 0 伤 / 1 深
+水池落地 0 伤【流体取消，fresh 扫描】/ 23 块坠落致死【既有死亡管线】/
+走落 5 格平台 ~2 伤【离地转换钉点 EXPECT_NEAR 0.02 紧公差】）、
+-Werror 0 警告。门 127：S1 = **第 127 次结构性免疫免重锚**（fresh
+60f 四方截图 ×2 387726 B 全字节一致 + base18 + savenorm new×2/old×2
+EXACT；nomobs config 无 mob = 无坠落 = 结构惰性）+ **S2 harness 探针
+矩阵 PASS**（2×1 高台 y47 + 清挖坑底 y22 = 25 落差，无玩家 wander-
+only，种子 1/5/6/8 探针选出走落 seed）：new ×4 seed 全 **dead**
+（deadAt 499/370/201/229，25−3=22 ≥ 20 hp 坠落致死）终位 y22.00 /
+old ×4 seed 全 **hp 20.00 存活** 终位 y22.00（seed 6 两侧终位逐位同
+(24.17,22.00,-6.55) = 物理恒等实证）——互斥终态 ×4 ×2 确定性（PITS
+302：harness 须从所属树 cwd 运行，assets 相对路径）+ **S3 围栏竞技场
+零回归 A/B PASS**（12×12 石墙 + 夜 0.75 + mobs on，900f 无输入：敌对
+mob 自然生成+追逐+击杀 idle 玩家，围栏 = mob 永不坠落 → ENT-5 代码
+结构惰性：new ×2 RAW EXACT 235680 B + old ×2 RAW EXACT + **new_a ≡
+old_a 字节一致**（mob 生成/追逐/攻击/死亡全链零回归）+ savenorm EXACT
++ 玩家同帧死同位 hp 0）。+ 性能 A/B 同 seed 900f（fluidCells win2/3
+**29803=29803 / 29800=29800 双侧逐位**【v112 首跑 29703 = 一次性
+churn 相位波动，重跑复现 29803 = PITS 283 场景自分歧类非回归】+ win1
+±0.004% 填充 real-dt 类 + PIPE3 changesApplied 1404=1404 逐位 + 全
+指标同档 = **成本可忽略**，mob 代码仅 update 落地块 = 无坠落事件时
+零执行）。PITS 301-302（m_inFluid tick 初滞后一 tick / harness 树
+cwd）。组 1.11-1.15 进行中（v1.11.0 首版 → v1.12.0，组内不打 tag =
+10-28 定案 tag 策略）。
+
 ## v1.11.0（2026-10-28）
 
 **FLUID-6 流体种类扩展**（v1.x 任务表 11/33，FLUID 行 3/3 收尾，门

@@ -34,7 +34,11 @@ MobEntity::MobEntity(const World& world, const BlockRegistry& blocks,
       // Fire v3 (Phase 73): the fire-block contact source, resolved once
       // (invalid = no fire block registered = structurally inert, the
       // P70 player pattern).
-      m_fireBlockId(blocks.idForName("fire")) {}
+      m_fireBlockId(blocks.idForName("fire")) {
+    // ENT-5: pin the fall tracking to the spawn height (a mob spawned
+    // mid-air would otherwise credit the drop to a stale start).
+    m_fallStartY = pos.y;
+}
 
 void MobEntity::update(double dt) {
     if (m_dead || dt <= 0.0) {
@@ -105,6 +109,31 @@ void MobEntity::update(double dt) {
     if (m_onGround && lengthSq(preMove) > 0.0f) {
         stepUp(normalized(preMove), preMoveSpeed * static_cast<float>(dt));
     }
+
+    // ENT-5: fall damage on landing — the Player's Phase-16 rule
+    // mirrored onto mobs (Minecraft: mobs take fall damage — 1 HP per
+    // block above the safe offset, kMobFallDamageOffset = 3, the
+    // player's MC value). Landing in ANY fluid cancels the fall (the
+    // player's P54 rule: the burn / swim replaces the fall damage —
+    // a FRESH overlapsFluid scan of the FINAL position, like the
+    // player: m_inFluid was sampled at the start of this tick, so a mob
+    // landing in a pool one tick after its last airborne sample would
+    // miss it). A
+    // killing hit goes through the EXISTING damage() death path (the
+    // game spawns the drops). Frame-locked (hard rule 8): m_onGround is
+    // this tick's physics result; no real dt, no randomness.
+    if (m_onGround && !m_wasOnGround) {
+        const float fall = m_fallStartY - position().y;
+        if (fall > kMobFallDamageOffset &&
+            !(overlapsFluid(FluidKind::Water) || overlapsFluid(FluidKind::Lava))) {
+            damage(fall - kMobFallDamageOffset);
+        }
+        m_fallStartY = position().y;
+    }
+    if (!m_onGround && m_wasOnGround) {
+        m_fallStartY = position().y;
+    }
+    m_wasOnGround = m_onGround;
 
     // ENT-1: advance the limb-swing phase (render-only, never saved —
     // mobs are ephemeral). "Moving" = the STRICT frame-boundary

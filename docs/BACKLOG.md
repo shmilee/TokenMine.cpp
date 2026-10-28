@@ -18,7 +18,7 @@
 | LGT 光照 | ~~LGT-3 夜光重传播~~ ✅ v1.3.0 | ~~LGT-4 光束入光~~ ✅ v1.4.0 | ~~LGT-5 半块透光~~ ✅ v1.5.0 | | | |
 | GEN 世界与生成 | ~~GEN-7 基岩多层~~ ✅ v1.6.0 | ~~GEN-8 地形互感~~ ✅ v1.7.0 | ~~GEN-9 耕地湿润~~ ✅ v1.8.0 | | | |
 | FLUID 流体 | ~~FLUID-4 倒向水面~~ ✅ v1.9.0 | ~~FLUID-5 水熔岩反应~~ ✅ v1.10.0 | ~~FLUID-6 流体种类扩展~~ ✅ v1.11.0 | | | |
-| ENT 实体/Mob/移动 | ENT-5 坠落伤害 | ENT-6 AI 补强 | ENT-7 移动惯性 | ENT-8 和平/保护环 | ENT-9 掉落可视化 | |
+| ENT 实体/Mob/移动 | ~~ENT-5 坠落伤害~~ ✅ v1.12.0 | ENT-6 AI 补强 | ENT-7 移动惯性 | ENT-8 和平/保护环 | ENT-9 掉落可视化 | |
 | SURV 生存/战斗/效果 | SURV-6 效果档位 | SURV-7 死亡统计 | SURV-8 工具 10× | SURV-9 饱和细化 | SURV-10 挤奶冷却 | |
 | CRAFT 物品/合成/面板 | CRAFT-4 配方提示 | CRAFT-5 炉子表现 | CRAFT-6 燃料熔炼 | CRAFT-7 背包交互 | | |
 | SAVE 存档 | SAVE-2 速度入档 | SAVE-3 槽位管理 | | | | |
@@ -116,6 +116,26 @@
   构建与运行 + 范围与限制 + 许可），PITS 范围 267-288 修正为 271-288
   （267-270 属 v1.0 组时代门 114/115）③ Latest 收尾回 v1.5.0 组 release
   （重建时序）。同步 README/CHANGELOG/BACKLOG/AGENTS 旧引用。
+- 2026-10-28：**ENT-5 坠落伤害完成**（v1.x 第 12/33 项，v1.12.0，门
+  127，ENT 行 1/6）：玩家侧 Phase 16 已完整（fall>3 且无流体 →
+  damage(fall−3)）= 缺口 **mob 侧坠落伤害**（MC mob 同样受坠伤）。
+  MobEntity::update 落地块镜像玩家规则：净落差 > kMobFallDamageOffset
+  (3.0f 命名常量 = MC 同值) 且落地格 fresh 无流体（overlapsFluid 扫
+  最终位置——m_inFluid tick 初值滞后一 tick 漏 1 深池 = PITS 301）→
+  damage() 既有死亡/掉落管线；mobs ephemeral = 构造函数一次钉
+  fallStartY（无读档重钉需求）+ 离地转换重钉（1 子步滞后 = 确定性，
+  紧公差断言）。帧锁定（硬规则 8）、零 format/config/内容/音效。
+  E2E 设计约束记档：spawner floor band = 玩家 ±2 → 生成 mob 的致死
+  坠落（需 23+）无法自然生成构造（chase 受 detect 16 限 / knockback
+  方向推不向崖）→ S2 = CPU harness 探针（2×1 高台 25 落差 + wander
+  走落 + 种子探测 1/5/6/8：new 全坠落死 / old 全存活 hp20 互斥终态
+  ×2 逐值；PITS 302 harness 树 cwd 坑）。1779/1779（+5 MobFallDamage
+  Test）、-Werror 0；门 127：S1 第 127 次结构性免疫免重锚（四方 ×2
+  387726 B + savenorm）+ S2 harness 矩阵 PASS + S3 围栏竞技场零回归
+  A/B（900f 夜 mob on：new×2/old×2 RAW EXACT 235680 + new≡old 字节
+  一致 + savenorm EXACT + 玩家同帧死同位）+ 性能 A/B fluidCells win2/3
+  29803/29800 双侧逐位（v112 首跑 29703 = 一次性 churn 相位波动重跑
+  复现 29803 = PITS 283 类）+ 全同档 = 成本可忽略。
 - 2026-10-28：**FLUID-6 流体种类扩展完成**（v1.x 第 11/33 项，
   v1.11.0，门 126，FLUID 行 3/3 收尾）：第三流体种类 = **honey（MC
   1.14+ 蜂蜜）**——编码三层化（0/1..8/9..16/**17..24**，水/熔岩带位级

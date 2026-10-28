@@ -2263,3 +2263,16 @@
   填充）；honey_bucket 首版用槽 27 = init 点名拒绝
   （"slot must be a storage slot in [9, 26]"）→ 改 16。加隐藏
   starter 物品前先数已占槽（17-26 = 药水×7 + 树苗×3）。
+- **tick 初采样的 m_inFluid 滞后一 tick = 漏 1 深池落地取消（PITS 301）**
+  ——10-28 ENT-5：mob 坠落取消判定首版用 m_inFluid（Entity 本 tick
+  移动前采样）——落地帧脚刚进入水格时值还是 false → 池底落地仍吃
+  坠落伤。玩家 Phase-16 注释同款教训（"a falling player enters a
+  1-deep pool one tick after the last airborne sample"）——落地流体
+  判定必须 fresh 扫最终位置（overlapsFluid）。单测
+  LandingInAPoolCancelsTheFall 钉死。
+- **CPU harness 的 assets 相对路径：binary 须从所属树 cwd 运行（PITS 302）**
+  ——10-28 ENT-5 S2：old 侧 harness 从 repo cwd 运行 → 加载新 assets
+  （honey.json 的 fluid:"honey"）→ 旧注册表拒未知 fluid 名 →
+  WorldGenerator::create() assert（RC=134、输出全空 → 门脚本误判
+  "OLD died?!"）。纪律：harness 每 binary `( cd <tree> && <harness> )`；
+  门脚本断言前验 harness 确有输出行。
