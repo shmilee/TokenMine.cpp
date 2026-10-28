@@ -153,20 +153,69 @@ TEST(InventoryLayoutTest, GridCellsMapToTopLeftOf3x3) {
                   InventoryLayout::kCraftGap);
 }
 
-TEST(InventoryLayoutTest, TableKindIs3x3WithoutRecipeList) {
+TEST(InventoryLayoutTest, TableKindIs3x3WithShapedHintList) {
+    // CRAFT-4: the table panel carries the shaped hint list in two
+    // columns. 5 recipes -> left column rows 0..2, right column 3..4.
     const InventoryLayout layout =
-        InventoryLayout::compute(1280, 720, 0, PanelKind::CraftingTable);
+        InventoryLayout::compute(1280, 720, 5, PanelKind::CraftingTable);
     ASSERT_EQ(layout.gridCells.size(), 9u);
     ASSERT_EQ(layout.gridSlots.size(), 9u);
     for (int i = 0; i < 9; ++i) {
         EXPECT_EQ(layout.gridSlots[static_cast<std::size_t>(i)], i);
     }
-    EXPECT_TRUE(layout.recipes.empty());
-    // The table panel is narrower than the inventory one (no recipe
-    // column) and still centered.
-    const InventoryLayout inv = InventoryLayout::compute(1280, 720, 2);
-    EXPECT_LT(layout.panel.w, inv.panel.w);
+    ASSERT_EQ(layout.recipes.size(), 5u);
+    // Native width with the two-column list:
+    // 2*12 + 500 + 12 + (3*52+2*4+12+52) + 12 + (2*280+8) = 1344.
+    const double sw = 1278.0 / 1344.0; // height (228) has plenty of room
+    EXPECT_DOUBLE_EQ(layout.scale, sw);
+    EXPECT_EQ(layout.panel.w, 1278);
+    EXPECT_EQ(layout.panel.h, 217); // 228 * sw
     EXPECT_EQ(layout.panel.x, (1280 - layout.panel.w) / 2);
+    // The rows split over the two columns; the right-column rows align
+    // with the left column's row 0..1.
+    for (int i = 0; i < 3; ++i) {
+        EXPECT_EQ(layout.recipes[static_cast<std::size_t>(i)].x,
+                  layout.craftHeader.x);
+    }
+    EXPECT_EQ(layout.recipes[3].x,
+              layout.craftHeader.x + layout.recipes[3].w +
+                  InventoryLayout::kRecipeColumnGap);
+    EXPECT_EQ(layout.recipes[4].x, layout.recipes[3].x);
+    for (int i = 3; i < 5; ++i) {
+        EXPECT_EQ(layout.recipes[static_cast<std::size_t>(i)].y,
+                  layout.recipes[static_cast<std::size_t>(i - 3)].y);
+    }
+    // The rows follow the (scaled) 52 px row height.
+    EXPECT_EQ(layout.recipes[1].y - layout.recipes[0].y, 49); // 52 * sw
+    // Every row sits inside the panel; the list stays right of the
+    // output slot.
+    for (const UIRect& r : layout.recipes) {
+        EXPECT_TRUE(layout.panel.contains(r.x, r.y));
+        EXPECT_TRUE(layout.panel.contains(r.x + r.w - 1, r.y + r.h - 1));
+    }
+    EXPECT_GT(layout.recipes[0].x, layout.output.x + layout.output.w);
+    // The zero-recipe table keeps its former native HEIGHT design (228)
+    // — scaled here like everything else.
+    const InventoryLayout none =
+        InventoryLayout::compute(1280, 720, 0, PanelKind::CraftingTable);
+    EXPECT_EQ(none.panel.h, 217);
+    EXPECT_TRUE(none.recipes.empty());
+}
+
+TEST(InventoryLayoutTest, TableHintRowHitTest) {
+    const InventoryLayout layout =
+        InventoryLayout::compute(1280, 720, 5, PanelKind::CraftingTable);
+    // Left-column row 0 and right-column row 3 (its row-0 twin) both hit.
+    const UIRect& r0 = layout.recipes[0];
+    EXPECT_EQ(layout.recipeRowAt(r0.x + 2, r0.y + 2), 0);
+    const UIRect& r3 = layout.recipes[3];
+    EXPECT_EQ(layout.recipeRowAt(r3.x + 2, r3.y + 2), 3);
+    // The gap between the two columns hits nothing.
+    EXPECT_EQ(layout.recipeRowAt(r0.x + r0.w + 4, r0.y + 2), -1);
+    // Hit tests stay mutually exclusive with slots/grid/output.
+    EXPECT_EQ(layout.slotAt(r3.x + 2, r3.y + 2), -1);
+    EXPECT_EQ(layout.gridCellAt(r3.x + 2, r3.y + 2), -1);
+    EXPECT_FALSE(layout.inOutput(r3.x + 2, r3.y + 2));
 }
 
 TEST(InventoryLayoutTest, SlotHitTest) {

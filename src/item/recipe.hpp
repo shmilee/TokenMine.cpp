@@ -120,6 +120,17 @@ private:
 bool canCraft(const Inventory& inv, const Recipe& recipe,
               const ItemRegistry& items);
 
+// CRAFT-4: a shaped recipe's pattern as a bag of (item, count) — one unit
+// per covered cell (spaces excluded), entries in ascending ItemID order
+// (two chars mapping to the same item merge into one entry). Empty for
+// shapeless recipes (they carry `ingredients`, not a pattern).
+std::vector<std::pair<ItemID, int>> patternBag(const Recipe& recipe);
+
+// CRAFT-4: can `inv` supply every (item, count) of `bag`? No output-fit
+// check — a grid craft's output goes to the cursor, not the inventory
+// (the shaped hint rows color from this). Empty bag = true.
+bool canSupply(const Inventory& inv, const std::vector<std::pair<ItemID, int>>& bag);
+
 // Consumes the ingredients and adds the output to `inv`. All-or-nothing:
 // on failure the inventory is unchanged and an error naming the recipe is
 // returned.

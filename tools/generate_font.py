@@ -7,13 +7,18 @@ file to refresh assets/textures/font.png.
 
 Atlas layout (256x512, 32px cells; 16 rows):
   - rows 4..15 are indexed by ASCII code: cell (c % 8, c // 8), so ASCII
-    codes 32..126 keep the original c // 8 row indexing;
+    codes 32..126 keep the original c // 8 row indexing (cell 127 = DEL
+    is dead, and since CRAFT-4 holds the 33rd CJK glyph, 作);
   - rows 0..3 hold the PRE-1 CJK set: ASCII codes 0..31 are control
     characters that never render (src/ui/font.cpp maps them to '?'), so
-    those 32 cells were dead transparent space; the i-th CJK_FONT entry
-    (codepoint-sorted) occupies cell (i % 8, i // 8). Reusing the dead
-    cells keeps the atlas 256x512 and the ASCII glyph UVs bit-identical
+    those 32 cells were dead transparent space. Reusing the dead cells
+    keeps the atlas 256x512 and the ASCII glyph UVs bit-identical
     (PRE-1 red line) instead of growing the texture height;
+  - CRAFT-4: the CJK set grew to 33 (PRE-1 omitted 作, the
+    crafting-table title rendered 工?台). The 33rd glyph takes the dead
+    ASCII-DEL cell 127 (col 7, row 15) via the explicit CJK_CELL map —
+    the original 32 keep their cells 0..31, so every PRE-1 UV and all
+    of rows 0..14 stay bit-identical;
   - each 16x16 glyph is drawn centered in its 32px cell (8px offset);
   - ink pixels are white with full alpha; everything else is transparent.
 
@@ -171,16 +176,19 @@ FONT = {
 
 # PRE-1: 16x16 CJK glyph table (extracted from Noto Sans CJK SC Regular,
 # em 16, line-box rows 5..20, threshold >= 128). Static data for
-# tools/generate_font.py. The 32-entry set = the localized UI strings'
-# 18 characters (你死了按重生熔炉工作台背包合成需要关闭) + 10 Chinese
+# tools/generate_font.py. The 33-entry set = the localized UI strings'
+# 19 characters (你死了按重生熔炉工作台背包合成需要关闭) + 10 Chinese
 # punctuation marks (，。！？：；“”（）) + a 4-character reserve
-# (物品方块); it fills atlas rows 0..3 exactly. The i-th codepoint
-# (sorted) takes cell (i % 8, i / 8).
+# (物品方块). CRAFT-4: the PRE-1 table carried only 18 of the 19 (作 was
+# omitted — the crafting-table title rendered 工?台); 作 is added here,
+# taking the dead ASCII-DEL cell 127 while the original 32 keep their
+# cells 0..31 (atlas rows 0..3, the never-rendered ASCII 0..31 cells).
 CJK_FONT = {
     0x201C: ('................', '...........#..#.', '..........#..#..', '..........##.##.', '..........##..#.', '................', '................', '................', '................', '................', '................', '................', '................', '................', '................', '................'),
     0x201D: ('.#..##..........', '.##.##..........', '..#..#..........', '.#..#...........', '................', '................', '................', '................', '................', '................', '................', '................', '................', '................', '................', '................'),
     0x3002: ('................', '................', '................', '................', '................', '................', '................', '................', '................', '................', '..##............', '.#..#...........', '.#..............', '.#..............', '.#..#...........', '..##............'),
     0x4E86: ('................', '................', '..############..', '...........##...', '..........##....', '.........##.....', '........#.......', '.......##.......', '.......##.......', '.......##.......', '.......##.......', '.......##.......', '.......##.......', '.......##.......', '.......##.......', '....####........'),
+    0x4F5C: ('................', '....#...#.......', '....#...#.......', '...#...########.', '...#...#.#......', '..##..#..#......', '.###.##..#......', '.#.#.#...######.', '...#.....#......', '...#.....#......', '...#.....#......', '...#.....######.', '...#.....#......', '...#.....#......', '...#.....#......', '...#.....#......'),
     0x4F60: ('....#...........', '....#..#........', '...##..#........', '...#...#........', '..##..#########.', '..##..#...#...#.', '.###.##...#...#.', '##.#.#....#.....', '...#...#..#.##..', '...#...#..#..#..', '...#..##..#..#..', '...#..#...#..##.', '...#.##...#...#.', '...#......#...#.', '...#......#.....', '...#....###.....'),
     0x5173: ('...........#....', '....#......#....', '.....#....##....', '.....#....#.....', '..############..', '.......##.......', '.......##.......', '.......##.......', '.##############.', '.......##.......', '.......###......', '......##.##.....', '.....##...##....', '...###.....##...', '.###........###.', '.#..............'),
     0x5305: ('.....#..........', '....##..........', '....#...........', '...###########..', '..##.........#..', '..#..........#..', '.#.#######...#..', '...#.....#...#..', '...#.....#..##..', '...#######..##..', '...#........#...', '...#......###...', '...#..........#.', '...##.........#.', '....###########.', '................'),
@@ -211,18 +219,35 @@ CJK_FONT = {
     0xFF1F: ('................', '................', '..####..........', '.#...##.........', '......#.........', '......#.........', '.....##.........', '....##..........', '...##...........', '...#............', '................', '................', '...##...........', '...##...........', '................', '................'),
 }
 
-CJK_CELL_ROWS = 4  # atlas rows 0..3 (the never-rendered ASCII 0..31 cells)
+# CRAFT-4: explicit atlas cell per CJK codepoint. The original 32 keep
+# their PRE-1 cells 0..31 (atlas rows 0..3); 作 0x4F5C takes cell 127 —
+# the dead ASCII-DEL cell (col 7, row 15; DEL never renders, and it is
+# the only free cell in the used rows, so the atlas stays 256x512 and
+# every PRE-1 UV is bit-identical).
+CJK_CELL = {
+    0x201C: 0, 0x201D: 1, 0x3002: 2, 0x4E86: 3, 0x4F5C: 127, 0x4F60: 4,
+    0x5173: 5, 0x5305: 6, 0x53F0: 7, 0x5408: 8, 0x54C1: 9, 0x5757: 10,
+    0x5DE5: 11, 0x6210: 12, 0x6309: 13, 0x65B9: 14, 0x6B7B: 15, 0x7089: 16,
+    0x7194: 17, 0x7269: 18, 0x751F: 19, 0x80CC: 20, 0x8981: 21, 0x91CD: 22,
+    0x95ED: 23, 0x9700: 24, 0xFF01: 25, 0xFF08: 26, 0xFF09: 27, 0xFF0C: 28,
+    0xFF1A: 29, 0xFF1B: 30, 0xFF1F: 31,
+}
 
 
 def main() -> None:
     assert len(FONT) == 95, "expected ASCII 32..126"
     for code in range(32, 127):
         assert code in FONT, "missing glyph 0x%02x" % code
-    assert len(CJK_FONT) == 32, "expected the 32-glyph CJK set (rows 0..3)"
-    cjk_codes = sorted(CJK_FONT)
-    assert len(set(cjk_codes)) == 32, "duplicate CJK codepoint"
-    for cp in cjk_codes:
+    assert len(CJK_FONT) == 33, "expected the 33-glyph CJK set"
+    assert set(CJK_CELL) == set(CJK_FONT), "CJK_CELL must cover CJK_FONT"
+    cells = list(CJK_CELL.values())
+    assert len(set(cells)) == 33, "duplicate CJK atlas cell"
+    for cp, cell in CJK_CELL.items():
         assert cp > 0x7F, "CJK entry 0x%04x is ASCII" % cp
+        # Cells 0..31 = the dead ASCII 0..31 rows; the only other allowed
+        # cell is 127 (dead ASCII DEL, row 15 — codes 120..126 are used,
+        # 127 is not rendered).
+        assert cell < 32 or cell == 127, "CJK cell 0x%x out of the dead set" % cell
     px = [[(0, 0, 0, 0)] * W for _ in range(H)]
     for code, glyph in FONT.items():
         assert len(glyph) == 16, "glyph 0x%02x row count" % code
@@ -234,13 +259,13 @@ def main() -> None:
                 if ch == "#":
                     px[row * CELL + 8 + gy][col * CELL + 8 + gx] = (
                         255, 255, 255, 255)
-    for i, cp in enumerate(cjk_codes):
+    for cp in sorted(CJK_FONT):
         glyph = CJK_FONT[cp]
         assert len(glyph) == 16, "glyph 0x%04x row count" % cp
         for r, row in enumerate(glyph):
             assert len(row) == 16, "glyph 0x%04x row %d width" % (cp, r)
-        col, row = i % 8, i // 8
-        assert row < CJK_CELL_ROWS, "CJK set overflowed rows 0..3"
+        cell = CJK_CELL[cp]
+        col, row = cell % 8, cell // 8
         for gy, line in enumerate(glyph):
             for gx, ch in enumerate(line):
                 if ch == "#":

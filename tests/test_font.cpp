@@ -248,19 +248,25 @@ TEST(FontTest, GlyphUvAsciiBitIdentical) {
 }
 
 TEST(FontTest, GlyphUvCjkCellPositions) {
-    // Pinned cells: the i-th codepoint-sorted entry is cell (i % 8,
-    // i / 8); x0 = col*32+8, y0 = row*32+8.
-    expectUv(glyphUv(0x201C), 8, 8);     // " idx 0 -> cell (0,0)
-    expectUv(glyphUv(0x3002), 72, 8);    // 。 idx 2 -> cell (2,0)
-    expectUv(glyphUv(0x4F60), 136, 8);   // 你 idx 4 -> cell (4,0)
-    expectUv(glyphUv(0x9700), 8, 104);   // 需 idx 24 -> cell (0,3)
-    expectUv(glyphUv(0xFF0C), 136, 104); // ， idx 28 -> cell (4,3)
-    expectUv(glyphUv(0xFF1F), 232, 104); // ？ idx 31 -> cell (7,3)
-    // All 32 set entries stay inside the atlas rows 0..3.
-    for (uint32_t cp : kCjkGlyphs) {
-        const GlyphUv uv = glyphUv(cp);
+    // Pinned cells: the PRE-1 entries keep their cells (the sorted index
+    // within the original 32); x0 = col*32+8, y0 = row*32+8.
+    expectUv(glyphUv(0x201C), 8, 8);     // " cell 0 -> (0,0)
+    expectUv(glyphUv(0x3002), 72, 8);    // 。 cell 2 -> (2,0)
+    expectUv(glyphUv(0x4F60), 136, 8);   // 死 cell 4 -> (4,0)
+    expectUv(glyphUv(0x9700), 8, 104);   // 包 cell 24 -> (0,3)
+    expectUv(glyphUv(0xFF0C), 136, 104); // ， cell 28 -> (4,3)
+    expectUv(glyphUv(0xFF1F), 232, 104); // ？ cell 31 -> (7,3)
+    // CRAFT-4: 作 (the PRE-1 omission — the table title rendered 工?台)
+    // takes the dead ASCII-DEL cell 127 = (col 7, row 15).
+    expectUv(glyphUv(0x4F5C), 232, 488);
+    // Every entry stays inside the atlas; the PRE-1 32 inside rows 0..3.
+    for (const CjkGlyph& g : kCjkGlyphs) {
+        const GlyphUv uv = glyphUv(g.cp);
         EXPECT_GE(uv.v0, 0.0f);
-        EXPECT_LE(uv.v1, 4.0f * kFontCell / kFontAtlasHeight);
+        EXPECT_LE(uv.v1, kFontCell * 16 / kFontAtlasHeight);
+        if (g.cp != 0x4F5C) {
+            EXPECT_LE(uv.v1, 4.0f * kFontCell / kFontAtlasHeight);
+        }
     }
 }
 
@@ -278,30 +284,43 @@ TEST(FontTest, GlyphUvUnknownCodepointsMapToQuestionMark) {
 }
 
 TEST(FontTest, CjkTablePinned) {
-    ASSERT_EQ(std::size(kCjkGlyphs), 32u);
+    ASSERT_EQ(std::size(kCjkGlyphs), 33u);
     for (std::size_t i = 1; i < std::size(kCjkGlyphs); ++i) {
-        EXPECT_GT(kCjkGlyphs[i], kCjkGlyphs[i - 1]); // sorted, unique
+        EXPECT_GT(kCjkGlyphs[i].cp, kCjkGlyphs[i - 1].cp); // sorted, unique
     }
-    for (uint32_t cp : kCjkGlyphs) {
-        EXPECT_GT(cp, 0x7Fu);
-        EXPECT_LE(cp, 0xFFFFu); // BMP only (the atlas is 2-byte wide)
+    std::size_t cellsBelow32 = 0;
+    for (const CjkGlyph& g : kCjkGlyphs) {
+        EXPECT_GT(g.cp, 0x7Fu);
+        EXPECT_LE(g.cp, 0xFFFFu); // BMP only (the atlas is 2-byte wide)
+        // CRAFT-4: 作 takes the dead ASCII-DEL cell 127; the PRE-1 32
+        // keep their cells 0..31 (unique, below 32).
+        if (g.cp == 0x4F5C) {
+            EXPECT_EQ(g.cell, 127);
+        } else {
+            EXPECT_LT(g.cell, 32);
+            ++cellsBelow32;
+        }
     }
-    // The exact set (semantic pin): 18 localized-UI characters + 10
+    EXPECT_EQ(cellsBelow32, 32u);
+    // The exact set (semantic pin): 19 localized-UI characters + 10
     // Chinese punctuation marks + the 4-character reserve.
     const std::vector<uint32_t> expected = {
         // 你死了按重生熔炉工作台背包合成需要关闭
         0x4F60, 0x6B7B, 0x4E86, 0x6309, 0x91CD, 0x751F, 0x7194, 0x7089,
-        0x5DE5, 0x53F0, 0x80CC, 0x5305, 0x5408, 0x6210, 0x9700, 0x8981,
-        0x5173, 0x95ED,
+        0x5DE5, 0x4F5C, 0x53F0, 0x80CC, 0x5305, 0x5408, 0x6210, 0x9700,
+        0x8981, 0x5173, 0x95ED,
         // ，。！？：；“”（）
         0xFF0C, 0x3002, 0xFF01, 0xFF1F, 0xFF1A, 0xFF1B, 0x201C, 0x201D,
         0xFF08, 0xFF09,
         // reserve: 物品方块
         0x7269, 0x54C1, 0x65B9, 0x5757};
-    ASSERT_EQ(expected.size(), 32u);
+    ASSERT_EQ(expected.size(), 33u);
     std::vector<uint32_t> got(expected);
     std::sort(got.begin(), got.end());
-    std::vector<uint32_t> tab(std::begin(kCjkGlyphs), std::end(kCjkGlyphs));
+    std::vector<uint32_t> tab;
+    for (const CjkGlyph& g : kCjkGlyphs) {
+        tab.push_back(g.cp);
+    }
     EXPECT_EQ(got, tab);
 }
 
@@ -367,12 +386,29 @@ TEST(FontTest, MakeTextVerticesMalformedRendersQuestion) {
     EXPECT_FLOAT_EQ(v[6].uv.y, q.v0);
 }
 
+TEST(FontTest, FitLabelKeepsSuffixAndTrimsName) {
+    // At scale 1.0 each codepoint is 17 px (16 + 1 spacing).
+    // "planks" (6) + " x4" (3) = 9 x 17 - 1 = 152 px fits 160.
+    EXPECT_EQ(fitLabel("planks", " x4", 1.0, 160), "planks");
+    // 152 > 140: the suffix (51 px) is kept, the name trims to 140 - 51
+    // = 89 px = 5 codepoints ("plank" = 85 px; 6 = 102 px > 89).
+    EXPECT_EQ(fitLabel("planks", " x4", 1.0, 140), "plank");
+    // Zero room: the name empties, the suffix still fits-checks.
+    EXPECT_EQ(fitLabel("planks", " x4", 1.0, 0), "");
+    // An empty name stays empty.
+    EXPECT_EQ(fitLabel("", " x4", 1.0, 10), "");
+    // Fractional scale (the hint rows' real regime): 0.5 -> 8.5 px/char.
+    // "crafting_table" (14) + " x1" (3) = 17 x 8.5 - 0.5 = 144 px > 120.
+    // Suffix = 3 x 8.5 - 0.5 = 25 px, name budget 120 - 25 = 95 px =
+    // 11 chars (11 x 8.5 - 0.5 = 93; 12 = 101.5 > 95) -> "crafting_ta".
+    EXPECT_EQ(fitLabel("crafting_table", " x1", 0.5, 120), "crafting_ta");
+}
+
 TEST(FontTest, FontPngBytesPinned) {
     // Determinism pin: the generated atlas is byte-stable (re-running
     // tools/generate_font.py must not change it). FNV-1a 64 over the
-    // file bytes; the hex below is the PRE-1 atlas (the ASCII rows
-    // 4..15 pixel-identical to the Phase 35 file + the 32 CJK glyphs
-    // in the dead rows 0..3).
+    // file bytes; the hex below is the CRAFT-4 atlas (the PRE-1 rows
+    // 0..14 pixel-identical + 作 in the dead ASCII-DEL cell 127).
     std::ifstream in("assets/textures/font.png", std::ios::binary);
     ASSERT_TRUE(in);
     const std::string data((std::istreambuf_iterator<char>(in)),
@@ -386,5 +422,5 @@ TEST(FontTest, FontPngBytesPinned) {
     char hex[17];
     std::snprintf(hex, sizeof(hex), "%016llx",
                   static_cast<unsigned long long>(h));
-    EXPECT_STREQ(hex, "3e4d748347f5f658");
+    EXPECT_STREQ(hex, "74b5d1418347dab6");
 }

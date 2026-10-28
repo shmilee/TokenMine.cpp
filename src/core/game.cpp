@@ -6824,6 +6824,19 @@ std::vector<const Recipe*> Game::shapelessRecipes() const {
     return out;
 }
 
+// CRAFT-4: the shaped recipes in registry order: the table panel's hint
+// list (display-only — the player crafts them in the 3x3 grid following
+// the mini pattern).
+std::vector<const Recipe*> Game::shapedRecipes() const {
+    std::vector<const Recipe*> out;
+    for (const Recipe& r : m_recipes.all()) {
+        if (r.type == RecipeType::Shaped) {
+            out.push_back(&r);
+        }
+    }
+    return out;
+}
+
 void Game::handlePanelClicks() {
     // The layout and the mouse hit tests both live in UI pixels (Phase
     // 34): InventoryLayout / FurnaceLayout are pure geometry, so passing
@@ -6855,13 +6868,12 @@ void Game::handlePanelClicks() {
     const bool table = m_openPanel == OpenPanel::Table;
     const PanelKind kind =
         table ? PanelKind::CraftingTable : PanelKind::Inventory;
-    std::vector<const Recipe*> shapeless;
-    if (!table) {
-        shapeless = shapelessRecipes();
-    }
+    // The hint list per kind: shapeless craft rows (E panel) or shaped
+    // display-only hint rows (table panel, CRAFT-4).
+    std::vector<const Recipe*> hints =
+        table ? shapedRecipes() : shapelessRecipes();
     const InventoryLayout layout =
-        InventoryLayout::compute(w, h, static_cast<int>(shapeless.size()),
-                                 kind);
+        InventoryLayout::compute(w, h, static_cast<int>(hints.size()), kind);
     const std::pair<int, int> mp = uiMouse();
     const int px = mp.first;
     const int py = mp.second;
@@ -6875,22 +6887,25 @@ void Game::handlePanelClicks() {
     const bool onOutput = layout.inOutput(px, py);
     if (m_input.wasPressed(MouseButton::Left)) {
         // Craft rows first (they sit beside the slots, so the hit test is
-        // unambiguous): a click crafts when the inventory can satisfy the
-        // recipe (all-or-nothing, see craft()).
-        if (!table) {
-            const int row = layout.recipeRowAt(px, py);
-            if (row >= 0) {
-                const Recipe& recipe = *shapeless[static_cast<std::size_t>(row)];
-                if (canCraft(m_inventory, recipe, m_items)) {
-                    auto crafted = craft(m_inventory, recipe, m_items);
-                    if (crafted.ok()) {
-                        m_sound.play("craft");
-                    } else {
-                        MC_LOG_ERROR("Craft failed: " + crafted.error().describe());
-                    }
-                }
+        // unambiguous): an E-panel row crafts when the inventory can
+        // satisfy the recipe (all-or-nothing, see craft()). A table-panel
+        // hint row (CRAFT-4) is display-only: the click is CONSUMED (no
+        // craft, and no carry drop like a click outside every slot).
+        const int row = layout.recipeRowAt(px, py);
+        if (row >= 0) {
+            if (table) {
                 return;
             }
+            const Recipe& recipe = *hints[static_cast<std::size_t>(row)];
+            if (canCraft(m_inventory, recipe, m_items)) {
+                auto crafted = craft(m_inventory, recipe, m_items);
+                if (crafted.ok()) {
+                    m_sound.play("craft");
+                } else {
+                    MC_LOG_ERROR("Craft failed: " + crafted.error().describe());
+                }
+            }
+            return;
         }
         if (ui.leftClick(layout.slotAt(px, py), gridSlot, onOutput)) {
             m_sound.play("craft");
@@ -7661,18 +7676,17 @@ void Game::renderUi() {
     }
 
     // -- crafting panel (while open): the E inventory (2x2 grid + the
-    // shapeless recipe list) or the crafting table (3x3 grid). ---------------
+    // shapeless recipe craft list) or the crafting table (3x3 grid + the
+    // shaped recipe hint list, CRAFT-4). ------------------------------------
     if (panelOpen() && m_openPanel != OpenPanel::Furnace) {
         const bool table = m_openPanel == OpenPanel::Table;
         const PanelKind kind =
             table ? PanelKind::CraftingTable : PanelKind::Inventory;
-        std::vector<const Recipe*> shapeless;
-        if (!table) {
-            shapeless = shapelessRecipes();
-        }
+        // The hint list per kind (same source handlePanelClicks uses).
+        std::vector<const Recipe*> hints =
+            table ? shapedRecipes() : shapelessRecipes();
         const InventoryLayout layout =
-            InventoryLayout::compute(w, h,
-                                     static_cast<int>(shapeless.size()),
+            InventoryLayout::compute(w, h, static_cast<int>(hints.size()),
                                      kind);
         InventoryUI& ui = table ? m_tableUi : m_inventoryUi;
 
@@ -7693,11 +7707,11 @@ void Game::renderUi() {
         addText(table ? "工作台" : "背包", layout.title.x,
                 layout.title.y + titleOffset,
                 InventoryLayout::kTitleFontScale * s, kText);
-        if (!table) {
-            addText("合成", layout.craftHeader.x,
-                    layout.craftHeader.y + titleOffset,
-                    InventoryLayout::kTitleFontScale * s, kText);
-        }
+        // The list header ("合成") now serves both panels (CRAFT-4: the
+        // table panel's hint column).
+        addText("合成", layout.craftHeader.x,
+                layout.craftHeader.y + titleOffset,
+                InventoryLayout::kTitleFontScale * s, kText);
 
         const int hoverSlot = layout.slotAt(mx, my);
         const int hoverCell = layout.gridCellAt(mx, my);
@@ -7769,29 +7783,83 @@ void Game::renderUi() {
             }
         }
 
-        // Crafting rows (E panel only): output icon + "name xN" (white when
-        // craftable, dim otherwise) + the ingredient list.
-        for (std::size_t i = 0; i < layout.recipes.size(); ++i) {
-            const Recipe& recipe = *shapeless[static_cast<std::size_t>(i)];
-            const UIRect& r = layout.recipes[i];
-            const bool can = canCraft(m_inventory, recipe, m_items);
-            const Vec4 outColor = can ? kText : kTextDim;
-            drawIcon(ItemStack {recipe.output, recipe.outputCount},
-                     static_cast<float>(r.x + L(14)),
-                     static_cast<float>(r.y + r.h / 2), rowIcon);
-            addText(m_items.at(recipe.output).name + " x" +
-                        std::to_string(recipe.outputCount),
-                    r.x + L(32), r.y + L(8), s, outColor);
-            std::string needs;
-            for (const auto& [item, count] : recipe.ingredients) {
-                if (!needs.empty()) {
-                    needs += ", ";
+        // Crafting rows: the E panel's shapeless CRAFT rows (output icon +
+        // "name xN" white when craftable, dim otherwise + the ingredient
+        // list) and the table panel's shaped HINT rows (CRAFT-4: the mini
+        // pattern + output icon + "name xN", white when the inventory can
+        // supply the pattern, dim otherwise — display-only, the click is
+        // consumed in handlePanelClicks).
+        if (table) {
+            const int pcell = L(14); // the mini pattern's cell
+            const int pgap = L(2);    // between mini pattern cells
+            for (std::size_t i = 0; i < layout.recipes.size(); ++i) {
+                const Recipe& recipe = *hints[static_cast<std::size_t>(i)];
+                const UIRect& r = layout.recipes[i];
+                const bool can = canSupply(m_inventory, patternBag(recipe));
+                // The 3x3 mini pattern, top-left aligned exactly as defined
+                // (a valid placement the grid match accepts): dark cell
+                // background + the keyed item's icon; a space = empty cell.
+                for (int pr = 0; pr < CraftingGrid::kColumns; ++pr) {
+                    for (int pc = 0; pc < CraftingGrid::kColumns; ++pc) {
+                        const int cx = r.x + L(3) + pc * (pcell + pgap);
+                        const int cy = r.y + L(3) + pr * (pcell + pgap);
+                        addQuad(batchFor(kSlotBg, false, nullptr), cx, cy,
+                                pcell, pcell);
+                        const std::string* row =
+                            pr < static_cast<int>(recipe.pattern.size())
+                                ? &recipe.pattern[static_cast<std::size_t>(pr)]
+                                : nullptr;
+                        if (row != nullptr &&
+                            pc < static_cast<int>(row->size()) &&
+                            row->at(static_cast<std::size_t>(pc)) != ' ') {
+                            const char ch =
+                                row->at(static_cast<std::size_t>(pc));
+                            const ItemID item = recipe.key.at(ch);
+                            drawIcon(ItemStack {item, 1},
+                                     static_cast<float>(cx + pcell / 2),
+                                     static_cast<float>(cy + pcell / 2),
+                                     L(12));
+                        }
+                    }
                 }
-                needs += m_items.at(item).name + " x" +
-                         std::to_string(count);
+                const Vec4 outColor = can ? kText : kTextDim;
+                drawIcon(ItemStack {recipe.output, recipe.outputCount},
+                         static_cast<float>(r.x + L(55)),
+                         static_cast<float>(r.y + r.h / 2), rowIcon);
+                // The label fits the row: the " xN" suffix is kept, a long
+                // item id is trimmed so it never bleeds into the other
+                // column (deterministic, see fitLabel).
+                const std::string suffix =
+                    " x" + std::to_string(recipe.outputCount);
+                const std::string label =
+                    fitLabel(m_items.at(recipe.output).name, suffix, s,
+                             std::max(0, r.w - L(89) - L(4))) +
+                    suffix;
+                addText(label, r.x + L(89), r.y + L(18), s, outColor);
             }
-            addText("需要：" + needs, r.x + L(32), r.y + L(28), s,
-                    kTextDim); // PRE-1 (item ids stay English data)
+        } else {
+            for (std::size_t i = 0; i < layout.recipes.size(); ++i) {
+                const Recipe& recipe = *hints[static_cast<std::size_t>(i)];
+                const UIRect& r = layout.recipes[i];
+                const bool can = canCraft(m_inventory, recipe, m_items);
+                const Vec4 outColor = can ? kText : kTextDim;
+                drawIcon(ItemStack {recipe.output, recipe.outputCount},
+                         static_cast<float>(r.x + L(14)),
+                         static_cast<float>(r.y + r.h / 2), rowIcon);
+                addText(m_items.at(recipe.output).name + " x" +
+                            std::to_string(recipe.outputCount),
+                        r.x + L(32), r.y + L(8), s, outColor);
+                std::string needs;
+                for (const auto& [item, count] : recipe.ingredients) {
+                    if (!needs.empty()) {
+                        needs += ", ";
+                    }
+                    needs += m_items.at(item).name + " x" +
+                             std::to_string(count);
+                }
+                addText("需要：" + needs, r.x + L(32), r.y + L(28), s,
+                        kTextDim); // PRE-1 (item ids stay English data)
+            }
         }
 
         // The hovered slot/cell's item name + the carried stack at the

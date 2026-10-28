@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <map>
 #include <unordered_set>
 #include <utility>
 
@@ -337,6 +338,46 @@ Result<void> RecipeRegistry::loadDirectory(AssetManager& assets,
 const Recipe* RecipeRegistry::find(const std::string& id) const {
     const auto it = m_names.find(id);
     return it == m_names.end() ? nullptr : &m_recipes[it->second];
+}
+
+std::vector<std::pair<ItemID, int>> patternBag(const Recipe& recipe) {
+    std::map<int, int> counts; // ItemID.value -> units (ascending order)
+    if (recipe.type == RecipeType::Shapeless) {
+        return {}; // shapeless recipes carry ingredients, not a pattern
+    }
+    for (const std::string& row : recipe.pattern) {
+        for (const char ch : row) {
+            if (ch == ' ') {
+                continue;
+            }
+            const auto it = recipe.key.find(ch);
+            if (it == recipe.key.end()) {
+                continue; // unreachable (validated at registration)
+            }
+            ++counts[it->second.value];
+        }
+    }
+    std::vector<std::pair<ItemID, int>> out;
+    for (const auto& [value, n] : counts) {
+        out.emplace_back(ItemID {value}, n);
+    }
+    return out;
+}
+
+bool canSupply(const Inventory& inv,
+               const std::vector<std::pair<ItemID, int>>& bag) {
+    for (const auto& [item, need] : bag) {
+        int have = 0;
+        for (std::size_t i = 0; i < inv.size(); ++i) {
+            if (inv.at(i).item == item) {
+                have += inv.at(i).count;
+            }
+        }
+        if (have < need) {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace mc

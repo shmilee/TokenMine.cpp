@@ -3,6 +3,49 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.22.0（2026-10-29）— CRAFT 系统首版
+
+**CRAFT-4 配方提示**（v1.x 任务表 22/33，CRAFT 行 1/4，门 137）——原始定义已佚 = 代理
+定案 **工作台面板 shaped 配方提示列**（消费 KNOWN_ISSUES Phase-17「工作台面板无配方
+列表……shaped 配方的摆法没有游戏内指引」）：
+- **33 个 shipped shaped 配方两列提示**：每行 = mini 3×3 pattern（暗格 + 键位物品
+  图标，按定义左上对齐 = 网格匹配接受的合法摆放）+ 输出图标 + "name xN"；行着色 =
+  **背包可供应则白 / 否则暗**（新纯函数 `canSupply(inventory, patternBag(recipe))`：
+  pattern 每覆盖格 1 单位、空格除外、同物品跨字符合并、ItemID 升序）。
+- **提示行点击 = 消费性 no-op**：不合成、不动网格/背包，但吞掉点击（区别于"所有槽
+  外点击丢弃 carry"规则）。右键落行 = 既有槽外 no-op 位级路径。
+- **E 面板位级不变**（shapeless 列表 + 布局几何 + 渲染分支零改动 = 既有布局测试
+  零改动全绿钉死）。长 name 行内溢出 = 确定性 `fitLabel` 尾截（" xN" 后缀恒保）。
+- **顺带修 PRE-1 潜伏漏字**（P65 触及面内小修先例）：CJK 静态表 32 字形漏 **作
+  （U+4F5C）**——PRE-1「18 UI 字」实为 19 字误计，工作台面板标题自 v0.25.0 起渲染
+  「工?台」。修复 = `kCjkGlyphs` 改显式 (cp, cell) 表 33 条：既有 32 条 cell 0..31
+  逐位不动，作取**死格 cell 127（ASCII DEL，永不渲染）**——font.png 256×512 尺寸零
+  变化、全图仅 cell 127 一格变化（56 ink px 逐像素 diff 实证）、既有 32 CJK + 全
+  ASCII UV 位级零变化（PRE-1 双红线保持）。字形提取 = NotoSansCJK SC Regular em 16
+  行盒 rows 5..20 阈值 ≥128（PRE-1 同款规格），**提取管线 32/32 既有字形逐位复现
+  自校验**后才信任。
+
+零 format（21）/config/内容/音效。1844/1844（+7 净：两列布局 + 行命中 + patternBag
+×3 + canSupply ×2 + fitLabel；`TableKindIs3x3WithoutRecipeList` 契约演进重写 + 字体
+3 测演进含 FNV 重锚 74b5d1418347dab6）、`-Werror` 0 警告。门 137：S1 = **第 137 次
+结构性免疫 + base18 锚刷新**（679×744 半平铺态 168140 B——PITS 315：用户 Firefox 窗
+在场 WM 平铺变化，旧锚 1362×744 尺寸失配 = 环境态非回归；四方 ×2 全 EXACT +
+savenorm 同侧/跨侧）+ S2 判别 PASS（g104 实证开台几何 + 供料物品场景：捕获 → 右键
+开台 → 左点 slot5 携 dirt → 左点提示行 0【NEW no-op 保 carry / OLD 同窗位在旧窄面板
+外 = 丢 carry】→ 左点 slot5【NEW dirt 回槽】→ 闭合鼠标路径回中心【两侧终相机 =
+场景值】：**NEW slot5 = dirt ×1 vs OLD = 空 = 互斥** + 两侧 tables 条目 + 终相机
+(0,−0.7) 逐值 + ×2/侧 RAW 335034/280285 B EXACT + savenorm 同侧仅 PITS 244/283 类熔岩湖
+churn（~100 块视图外，同侧 RAW EXACT 实证视图零差）+ A/B 像素 640430 px 100.0% 限两
+面板并集带 + 新面板右半提示列 255883 px 可见）+ S3 1844 + **无 S6**（零 parse 面）+
+性能 A/B 真 v1.21 vs v1.22 PASS（banner 实证；fluidCells win2/3 **29803/29800 逐位**
+×2 轮 + win1 ±3 + PIPE3 **changesApplied 1404 逐位** + 全指标同档 = 成本可忽略，
+结构惰性；终窗 fluidCellsSeen 43048/43996 树间翻转 = 树内同幅 = PITS 283 类湖相）。
+**PITS 314**（unmap_covers 覆盖谓词 y+h≥770 不盖 1362×744+0+20 浏览器窗 → 点击全落
+浏览器静默失败；输入跑前显式隐藏预存 covers）+ **315**（WM 平铺态环境依赖 + 锚刷新
+协议；zsh 循环内 local 重声明打印旧值假象）。发布政策（用户 10-28 定案）下 v1.22.0
+不打 tag（tag 两项合并：v1.23.0 = CRAFT-4+5 候选）；CRAFT release = 系统收官（CRAFT-
+7）时发。
+
 ## v1.21.0（2026-10-28）— **SURV 系统收官：tag v1.21.0 + GitHub
 release**
 

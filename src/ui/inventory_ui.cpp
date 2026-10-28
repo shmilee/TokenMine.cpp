@@ -107,12 +107,19 @@ InventoryLayout InventoryLayout::compute(int windowWidth, int windowHeight,
     const int gridCols = table ? 3 : 2;
     const int gridSectionW = gridCols * kSlot + (gridCols - 1) * kGap;
     const int sectionW = gridSectionW + kCraftGap + kSlot;
-    const int nativePanelW = 2 * kPanelPadding + gridW + kCraftGap + sectionW +
-                             (table ? 0 : kCraftGap + kCraftWidth);
-    const int craftH =
-        table ? 0 : kTitleHeight + recipeCount * kCraftRowHeight;
+    // The recipe list (right of the output): one column (the E panel's
+    // shapeless craft list) or two (the table panel's shaped hint list,
+    // CRAFT-4 — 33 shaped rows in one column would shrink the panel fit
+    // factor to ~0.34 and the mini patterns to unusable 5 px cells).
+    const int listW =
+        table ? 2 * kCraftWidth + kRecipeColumnGap : kCraftWidth;
+    const int nativePanelW = 2 * kPanelPadding + gridW + kCraftGap +
+                             sectionW + kCraftGap + listW;
+    // Rows per column (the table splits recipeCount left/right).
+    const int leftRows = table ? (recipeCount + 1) / 2 : recipeCount;
+    const int listH = kTitleHeight + leftRows * kCraftRowHeight;
     const int nativePanelH = 2 * kPanelPadding +
-                             std::max(kTitleHeight + gridH, craftH);
+                             std::max(kTitleHeight + gridH, listH);
 
     // Fit factor (Phase 35): the panel is designed at the native size;
     // when the window is smaller, EVERYTHING (slots, gaps, padding, title,
@@ -193,18 +200,24 @@ InventoryLayout InventoryLayout::compute(int windowWidth, int windowHeight,
         static_cast<int>(std::lround(gridY + (gH - slotLen) / 2.0)),
         scaledLength(slotLen), scaledLength(slotLen)};
 
-    // The shapeless recipe list (the table panel has none — the grid IS
-    // its crafting UI).
-    if (!table) {
+    // The recipe list: the shapeless craft rows (E panel, one column) or
+    // the shaped hint rows (table panel, CRAFT-4, two columns — row i
+    // sits in the left column while i < leftRows, the right one after).
+    {
         const double craftX = outputX + slotLen + craftGap;
+        const double colGap = kRecipeColumnGap * s;
         out.craftHeader = UIRect {static_cast<int>(std::lround(craftX)),
                                   static_cast<int>(std::lround(panelY + pad)),
-                                  scaledLength(craftW), scaledLength(titleH)};
+                                  scaledLength(listW * s),
+                                  scaledLength(titleH)};
         for (int i = 0; i < recipeCount; ++i) {
+            const int column = (table && i >= leftRows) ? 1 : 0;
+            const int rowIdx = table ? (column == 0 ? i : i - leftRows) : i;
+            const double x = craftX + column * (craftW + colGap);
             out.recipes.push_back(UIRect {
-                static_cast<int>(std::lround(craftX)),
+                static_cast<int>(std::lround(x)),
                 static_cast<int>(std::lround(panelY + pad + titleH +
-                                             i * rowH)),
+                                             rowIdx * rowH)),
                 scaledLength(craftW), scaledLength(rowH)});
         }
     }

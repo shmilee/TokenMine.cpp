@@ -414,6 +414,96 @@ TEST(CraftTest, OutputItemCanBeAnIngredient) {
     EXPECT_EQ(inv.at(0), (ItemStack {f.dirt, 2}));
 }
 
+// ---------------------------------------------------------------------------
+// CRAFT-4: the shaped pattern as a supply bag (the hint rows' coloring).
+// ---------------------------------------------------------------------------
+
+TEST(PatternBagTest, CountsOneUnitPerCoveredCell) {
+    Fixture f;
+    Recipe r;
+    r.id = "x";
+    r.type = RecipeType::Shaped;
+    r.output = f.ingot;
+    r.outputCount = 1;
+    r.pattern = {"II", "II"};
+    r.key = {{'I', f.ingot}};
+    const auto bag = patternBag(r);
+    ASSERT_EQ(bag.size(), 1u);
+    EXPECT_EQ(bag[0].first, f.ingot);
+    EXPECT_EQ(bag[0].second, 4);
+}
+
+TEST(PatternBagTest, EntriesAreAscendingItemOrderAndMergeChars) {
+    Fixture f;
+    // A pickaxe-like 3-wide pattern with two keys: the bag must come back
+    // in ascending ItemID order (stone < ingot in this fixture), one entry
+    // per covered cell.
+    Recipe r;
+    r.id = "pick";
+    r.type = RecipeType::Shaped;
+    r.output = f.pick;
+    r.outputCount = 1;
+    r.pattern = {"III", " S ", " S "};
+    r.key = {{'I', f.ingot}, {'S', f.stone}};
+    const auto bag = patternBag(r);
+    ASSERT_EQ(bag.size(), 2u);
+    EXPECT_EQ(bag[0].first, f.stone);
+    EXPECT_EQ(bag[0].second, 2);
+    EXPECT_EQ(bag[1].first, f.ingot);
+    EXPECT_EQ(bag[1].second, 3);
+    // Two chars mapping to the same item merge into one entry.
+    r.pattern = {"AB"};
+    r.key = {{'A', f.ingot}, {'B', f.ingot}};
+    const auto merged = patternBag(r);
+    ASSERT_EQ(merged.size(), 1u);
+    EXPECT_EQ(merged[0].first, f.ingot);
+    EXPECT_EQ(merged[0].second, 2);
+}
+
+TEST(PatternBagTest, SpacesAndShapelessYieldNoBag) {
+    Fixture f;
+    Recipe r;
+    r.id = "x";
+    r.type = RecipeType::Shaped;
+    r.output = f.ingot;
+    r.pattern = {"   ", " I "};
+    r.key = {{'I', f.ingot}};
+    const auto bag = patternBag(r);
+    ASSERT_EQ(bag.size(), 1u);
+    EXPECT_EQ(bag[0].second, 1);
+    // A shapeless recipe carries ingredients, not a pattern.
+    Recipe shapeless =
+        f.recipe("s", f.ingot, 1, {{f.stone, 1}});
+    EXPECT_TRUE(patternBag(shapeless).empty());
+}
+
+TEST(CanSupplyTest, SumsAcrossSlotsAndRespectsCounts) {
+    Fixture f;
+    Inventory inv;
+    const auto bag = std::vector<std::pair<ItemID, int>> {{f.dirt, 4}};
+    inv.setSlot(0, (ItemStack {f.dirt, 2}));
+    EXPECT_FALSE(canSupply(inv, bag)); // 2 < 4
+    inv.setSlot(5, (ItemStack {f.dirt, 2}));
+    EXPECT_TRUE(canSupply(inv, bag)); // 2 + 2 spread across slots
+    // An empty bag is always supplied.
+    EXPECT_TRUE(canSupply(inv, {}));
+    // An empty inventory supplies nothing (except the empty bag).
+    Inventory empty;
+    EXPECT_FALSE(canSupply(empty, bag));
+}
+
+TEST(CanSupplyTest, MultiItemBagNeedsEveryEntry) {
+    Fixture f;
+    Inventory inv;
+    inv.setSlot(0, (ItemStack {f.stone, 2}));
+    inv.setSlot(1, (ItemStack {f.ingot, 3}));
+    const auto bag =
+        std::vector<std::pair<ItemID, int>> {{f.stone, 2}, {f.ingot, 3}};
+    EXPECT_TRUE(canSupply(inv, bag));
+    inv.take(1, 1); // 2 ingots < 3
+    EXPECT_FALSE(canSupply(inv, bag));
+}
+
 // -- shaped recipes (Phase 17) ---------------------------------------------------
 
 TEST(ShapedRecipeTest, RegistersValidShapedRecipe) {

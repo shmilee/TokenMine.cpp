@@ -39,17 +39,30 @@ inline constexpr int kFontCell = 32;
 inline constexpr int kGlyphSize = 16;
 inline constexpr int kGlyphOffset = (kFontCell - kGlyphSize) / 2; // 8
 
-// PRE-1: the CJK glyph set (static, codepoint-sorted), occupying the
-// atlas rows 0..3 — the cells of ASCII codes 0..31 (control characters
-// that never render). The i-th entry occupies cell (i % 8, i / 8).
-// Set = the localized UI strings' characters (你死了按重生熔炉工作台背包
-// 合成需要关闭) + the Chinese punctuation (，。！？：；“”（）) + a
+// PRE-1: the CJK glyph set (static, codepoint-sorted). The original 32
+// entries occupy the dead ASCII control cells 0..31 (atlas rows 0..3 —
+// ASCII codes 0..31 never render), so the i-th entry of the PRE-1 table
+// is cell (i % 8, i / 8). Set = the localized UI strings' 19 characters
+// (你死了按重生熔炉工作台背包合成需要关闭 — PRE-1's table carried only
+// 18, omitting 作) + the 10 Chinese punctuation (，。！？：；“”（）) + a
 // 4-character reserve (物品方块); pinned in tests/test_font.cpp.
-inline constexpr uint32_t kCjkGlyphs[32] = {
-    0x201C, 0x201D, 0x3002, 0x4E86, 0x4F60, 0x5173, 0x5305, 0x53F0,
-    0x5408, 0x54C1, 0x5757, 0x5DE5, 0x6210, 0x6309, 0x65B9, 0x6B7B,
-    0x7089, 0x7194, 0x7269, 0x751F, 0x80CC, 0x8981, 0x91CD, 0x95ED,
-    0x9700, 0xFF01, 0xFF08, 0xFF09, 0xFF0C, 0xFF1A, 0xFF1B, 0xFF1F};
+// CRAFT-4 (fixing the PRE-1 omission): the crafting-table title "工作台"
+// rendered "工?台" because 作 was missing. It takes the dead ASCII-DEL
+// cell 127 (col 7, row 15; DEL never renders), the only free cell in the
+// used rows — the atlas stays 256x512 and every PRE-1 UV (rows 0..3 +
+// the ASCII rows 4..15) is bit-identical.
+struct CjkGlyph {
+    uint32_t cp;
+    int cell; // atlas cell index (col + row * 8)
+};
+inline constexpr CjkGlyph kCjkGlyphs[33] = {
+    {0x201C, 0}, {0x201D, 1}, {0x3002, 2}, {0x4E86, 3}, {0x4F5C, 127},
+    {0x4F60, 4}, {0x5173, 5}, {0x5305, 6}, {0x53F0, 7}, {0x5408, 8},
+    {0x54C1, 9}, {0x5757, 10}, {0x5DE5, 11}, {0x6210, 12}, {0x6309, 13},
+    {0x65B9, 14}, {0x6B7B, 15}, {0x7089, 16}, {0x7194, 17}, {0x7269, 18},
+    {0x751F, 19}, {0x80CC, 20}, {0x8981, 21}, {0x91CD, 22}, {0x95ED, 23},
+    {0x9700, 24}, {0xFF01, 25}, {0xFF08, 26}, {0xFF09, 27}, {0xFF0C, 28},
+    {0xFF1A, 29}, {0xFF1B, 30}, {0xFF1F, 31}};
 
 struct GlyphUv {
     float u0 = 0.0f, v0 = 0.0f, u1 = 0.0f, v1 = 0.0f; // v0 = glyph top
@@ -78,6 +91,14 @@ GlyphUv glyphUv(uint32_t cp);
 // monospace advance as ASCII — the PRE-1 width discipline). Fractional
 // scales downscale the glyphs.
 double textWidth(const std::string& text, double scale = 1.0);
+
+// CRAFT-4: shrink `name` (trailing codepoints) so that `name + suffix`
+// fits `availPx` at `scale` — the suffix (the " xN" output count) is
+// always kept, the name is truncated last-resort so a long item id never
+// bleeds into the neighboring hint column. Deterministic (pure string
+// math over textWidth).
+std::string fitLabel(const std::string& name, const std::string& suffix,
+                     double scale, int availPx);
 
 // Appends non-indexed triangle vertices for `text` (UTF-8) laid out
 // from the top-left corner (x, y) in SCREEN pixels (y grows downward).

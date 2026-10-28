@@ -26,13 +26,14 @@ GlyphUv glyphUv(uint32_t cp) {
         // ASCII: the original cell (c % 8, c / 8), untouched.
         return cellUv(static_cast<int>(cp) % 8, static_cast<int>(cp) / 8);
     }
-    // PRE-1: kCjkGlyphs is codepoint-sorted, so a binary search yields
-    // the set index i = cell (i % 8, i / 8) in the dead rows 0..3.
-    const uint32_t* it = std::lower_bound(std::begin(kCjkGlyphs),
-                                          std::end(kCjkGlyphs), cp);
-    if (it != std::end(kCjkGlyphs) && *it == cp) {
-        const int i = static_cast<int>(it - std::begin(kCjkGlyphs));
-        return cellUv(i % 8, i / 8);
+    // CRAFT-4: kCjkGlyphs is codepoint-sorted with an EXPLICIT atlas
+    // cell per entry (the original 32 fill the dead cells 0..31 of rows
+    // 0..3; 作 0x4F5C takes the dead ASCII-DEL cell 127 — see font.hpp).
+    const auto it = std::lower_bound(
+        std::begin(kCjkGlyphs), std::end(kCjkGlyphs), cp,
+        [](const CjkGlyph& g, uint32_t c) { return g.cp < c; });
+    if (it != std::end(kCjkGlyphs) && it->cp == cp) {
+        return cellUv(it->cell % 8, it->cell / 8);
     }
     return cellUv('?' % 8, '?' / 8);
 }
@@ -136,6 +137,28 @@ double textWidth(const std::string& text, double scale) {
     }
     return static_cast<double>(count) * kGlyphSize * scale +
            static_cast<double>(count - 1) * scale;
+}
+
+std::string fitLabel(const std::string& name, const std::string& suffix,
+                     double scale, int availPx) {
+    if (textWidth(name + suffix, scale) <= availPx) {
+        return name;
+    }
+    const int nameAvail =
+        std::max(0, availPx - static_cast<int>(textWidth(suffix, scale)));
+    std::string out = name;
+    // Trim one codepoint at a time (item ids are ASCII data; the decoder
+    // keeps this well-formed regardless).
+    while (!out.empty() && textWidth(out, scale) > nameAvail) {
+        std::size_t pos = 0;
+        std::size_t last = 0; // start of the final codepoint
+        while (pos < out.size()) {
+            last = pos;
+            utf8NextCodepoint(out, pos);
+        }
+        out.erase(last);
+    }
+    return out;
 }
 
 void makeTextVertices(const std::string& text, int x, int y, double scale,

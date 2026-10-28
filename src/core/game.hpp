@@ -590,6 +590,10 @@ private:
     // The shapeless recipes in registry order (the E panel's craft list —
     // shaped recipes are crafted in the grids, not from the list).
     std::vector<const Recipe*> shapelessRecipes() const;
+    // CRAFT-4: the shaped recipes in registry order (the table panel's
+    // HINT list — display-only rows with the mini pattern; crafted in
+    // the grid, never from the list).
+    std::vector<const Recipe*> shapedRecipes() const;
     // Click routing while a crafting panel is open (Phase 17): shapeless
     // craft rows (the E panel only), then the output slot, a grid cell or
     // an inventory slot (the active panel's InventoryUI).

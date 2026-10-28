@@ -20,7 +20,8 @@
 // Storage = slots 9..26 in two rows (top to bottom), the hotbar = slots
 // 0..8 in the bottom row — the same 27 Inventory slots the game already
 // owns (no separate storage). The CraftingTable kind is the same panel
-// without the recipe column and with a 3x3 grid instead of 2x2.
+// with a 3x3 grid instead of 2x2 and the shaped recipe HINT list (CRAFT-4)
+// in two columns instead of the shapeless craft list.
 //
 // Click semantics (Minecraft's minimal subset):
 //   left click  a slot or grid cell: pick up a whole stack / place or swap
@@ -60,8 +61,9 @@ struct UIRect {
     }
 };
 
-// The two crafting panels (Phase 17): the E inventory (2x2 grid + the
-// shapeless recipe list) and the crafting table (3x3 grid, no list).
+// The two crafting panels: the E inventory (2x2 grid + the shapeless
+// recipe craft list) and the crafting table (3x3 grid + the shaped
+// recipe HINT list, CRAFT-4 — display-only rows with the mini pattern).
 enum class PanelKind {
     Inventory,
     CraftingTable,
@@ -84,6 +86,9 @@ struct InventoryLayout {
     // Gaps around the crafting section (grid, output) — tighter than the
     // recipe-column gap because the section sits between the two.
     static constexpr int kCraftGap = 12;
+    // CRAFT-4: the crafting table's recipe HINT column (shaped recipes,
+    // two side-by-side columns of kCraftWidth) — the gap between them.
+    static constexpr int kRecipeColumnGap = 8;
 
     // Fit factor (Phase 35): 1.0 when the window is at least the native
     // panel size, below that the whole panel — and the text and icons the
@@ -101,15 +106,17 @@ struct InventoryLayout {
     std::vector<int> gridSlots;
     // The output slot (the matched recipe's result).
     UIRect output;
-    // One row per SHAPELESS recipe (the CraftingTable kind has none).
+    // One row per SHAPELESS recipe (Inventory kind) or per SHAPED recipe
+    // (CraftingTable kind, CRAFT-4: the rows split over two columns, the
+    // first (recipeCount+1)/2 in the left).
     std::vector<UIRect> recipes;
     UIRect panel;
     // The "Inventory"/"Crafting Table" title and the "Crafting" header.
     UIRect title;
     UIRect craftHeader;
 
-    // recipeCount: shapeless recipes only (Inventory kind); ignored for
-    // the CraftingTable kind.
+    // recipeCount: shapeless recipes (Inventory kind) or shaped recipes
+    // (CraftingTable kind, CRAFT-4).
     static InventoryLayout compute(int windowWidth, int windowHeight,
                                    int recipeCount,
                                    PanelKind kind = PanelKind::Inventory);

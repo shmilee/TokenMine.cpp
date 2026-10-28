@@ -237,9 +237,9 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 ## 工作台 / 形状合成（Phase 17）
 
 - ~~**全工作台的网格是同一个容器**~~ — Phase 17 的 v1：`Game` 持有单个 `m_tableGrid`（`CraftingGrid`）：右键打开的**任何**工作台的 3×3 网格都是它（存档 format 3 `table_grid`）。`[Phase 17]`，**`[CRAFT-1]` 已修复**：每工作台方块独立容器（`Game` 持 `std::map<BlockPos, CraftingGrid> m_tables`，位置序 → 存档写序确定；`setBlock` 收口创建/销毁 + 读档 parse 时不变量保证完整性【炉子同款，无 rescan】）+ 右键面板绑定所点方块（`InventoryUI::bind`，`FurnaceUI::bind` 范式——面板 UI 零视觉变化，只换数据源）+ 存档 format 19 `tables`（每工作台块一条目 {pos, slots[9]}、位置序、与方块差集**双向**交叉校验、19 必需空数组合法 / 19 携 `table_grid` 拒 / ≤18 携 `tables` 拒；**18→19 迁移 = sole 归属**：旧全局 `table_grid` 非空且世界恰 1 个工作台 → 归属之，0 或多个 → 丢弃【P44 先例】；`inv_grid`（E 面板）不动）。**记档偏离：破坏工作台丢弃容器内物品**（setBlock 收口删 state，只掉工作台自身 `drops` = 炉子破坏同款语义 = MC 规则）；**格式 19 槽不携 `damage`**（合成网格属 SURV-3 三处范围外的 grid 纪律，受损物品入格读档回满 = 同款 quirk）。`[CRAFT-1]`
-- **工作台面板无配方列表** — 表格面板只有 3×3 网格 + 输出格，无任何配方提示；配方提示只存在于 E 面板列表（且该列表仅 shapeless），shaped 配方的摆法没有游戏内指引。`[Phase 17]`
+- **工作台面板配方提示** — 表格面板 3×3 网格 + 输出格旁有 **shaped 配方提示列**（`[CRAFT-4]` 已解决）：33 个 shipped shaped 配方两列排布，每行 = mini 3×3 pattern（暗格 + 键位物品图标，按定义左上对齐 = 合法摆放）+ 输出图标 + "name xN"（背包可供应则白 / 否则暗 = `canSupply(patternBag)` 纯函数）；**提示行点击 = 消费性 no-op**（不合成不动背包，但吞点击 ≠ 槽外点击丢 carry）。E 面板位级不变（shapeless 列表保持）。`[Phase 17]`（提示 `[CRAFT-4]`）
 - **E 面板 2×2 固定在共享 3×3 模型的左上** — E 面板合成格与表格面板共用同一个 `CraftingGrid` 3×3 模型，只暴露槽 {0,1,3,4}（左上 2×2）；宽度或高度为 3 的 pattern（如 pickaxe `PPP/.S./.S.`）无法摆入，E 里的 shaped 匹配只可能命中落在左上角的 pattern（2×2 工作台配方可在 E 摆出合成，与 MC 一致）。`[Phase 17]`
-- **E 配方列表只显示 shapeless 配方** — shaped 配方不出现在列表里，唯一入口是工作台面板。`[Phase 17]`
+- **E 配方列表只显示 shapeless 配方** — shaped 配方不出现在 E 列表里（既有设计 = "shaped 在网格里摆"，2×2 网格摆不下的 pattern 占多数）；shaped 摆法的**游戏内指引 = 工作台面板的提示列**（`[CRAFT-4]`：mini pattern + 可供应着色）。`[Phase 17]`（指引 `[CRAFT-4]`）
 - **E2E 合成输入的环境约束（本机 :0）** — xdotool 每次调用 ~150 ms（长序列追不上帧帽截图）；XTest 伪事件**每个动作后必须 `XFlush`**（libX11 会缓冲无应答请求成 ~1s 一批投递，同帧事件被 `wasPressed` 边沿逻辑折叠）；合成输入要求点击位置处游戏窗口在最上层（运行时临时 unmap UI 窗口），但 unmap 期间用户的真实鼠标会污染运行（指针锁定期间的真实 motion = 相机旋转），所以运行前须等光标静止 ~400 ms；地面命中格瞄准容差在 pitch −0.80 时仅 ~±10 px，驱动用 pitch −0.68（~±49 px）。Xephyr :99 仅作逻辑回退（:0 光标扫过 Xephyr 窗口会被转发进 :99；llvmpipe 渲染不能用于 base 字节基线）。`[Phase 17]`
 - **指针锁定 grab delta（输入驱动 E2E 的环境约束，本机 :0）** — xdotool
   `mousemove`（XWarpPointer）只移虚拟光标、不移物理鼠标；游戏进 relative mode
