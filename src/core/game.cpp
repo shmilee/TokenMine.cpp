@@ -16,6 +16,7 @@
 #include "core/png.hpp"
 #include "core/bow.hpp"
 #include "core/difficulty.hpp"
+#include "core/ui_layout.hpp"
 #include "core/math/frustum.hpp"
 #include "entity/arrow_mesh.hpp"
 #include "entity/item_entity.hpp"
@@ -7701,33 +7702,45 @@ void Game::renderUi() {
         // metrics; the icon count follows the configured max (the default
         // 20 = the 10-icon Phase 16/23 layout, bit-identical).
         {
-            constexpr int kIconPx = 16;
-            constexpr int kIconGap = 2;
-            constexpr int kStripGap = 6; // between the strips
+            // The UI icon metrics come from the single source of truth
+            // (core/ui_layout.hpp — the pure layout is unit-test-owned).
+            constexpr int kIconPx = kUiIconPx;
+            constexpr int kIconGap = kUiIconGap;
+            constexpr int kStripGap = kUiStripGap;
             const float baseMaxHealth = m_player->params().maxHealth;
             const int heartIcons =
                 static_cast<int>(std::ceil(baseMaxHealth / 2.0f));
             const int hungerIcons =
                 static_cast<int>(std::ceil(m_player->maxHunger() / 2.0f));
-            const int heartW =
-                heartIcons * kIconPx + (heartIcons - 1) * kIconGap;
-            // The (BASE) hearts stay centered (the Phase 16 layout); the
-            // hunger strip starts just past their right edge.
-            const int hx0 = (w - heartW) / 2;
-            const int gx0 = hx0 + heartW + kStripGap;
-            const int hy = y0 - kIconPx - 6;
+            const int oxygen = m_drown.oxygen;
+            const float absorbPool = m_player->absorption();
+            const int absIcons = absorbPool > 0.0f
+                ? static_cast<int>(std::ceil(absorbPool / 2.0f))
+                : 0;
+            const int absW =
+                absIcons > 0
+                    ? absIcons * kIconPx + (absIcons - 1) * kIconGap
+                    : 0;
+            // The heart row (Phase 16/23; PRE-11: the narrow-window
+            // fallback): the pure heartRowLayout — the right strip is
+            // the oxygen bar while the air is below full (it REPLACES
+            // the hunger strip at its position, SURV-2), so the layout
+            // reserves the strip that renders THIS frame. Legacy
+            // centered when the row fits (bit-exact); shifted left
+            // until the right strip fits otherwise.
+            const int rightIcons =
+                oxygen < kOxygenMax ? kOxygenBarIconCount : hungerIcons;
+            const HeartRowLayout heartRow =
+                heartRowLayout(w, heartIcons, absIcons, rightIcons);
+            const int hx0 = heartRow.heartsX;
+            const int gx0 = heartRow.rightX;
+            const int hy = y0 - kIconPx - kStripGap;
             // The absorption pool (Phase 72, the golden apple): extra
             // RED hearts just LEFT of the normal strip (the Minecraft
             // layout). The strip shows the POOL itself — damage empties
             // it before any normal heart is (the two-component model).
             // Pool 0 = nothing drawn (the no-input baseline is
             // bit-identical: a fresh run has no effects, hence no pool).
-            const float absorbPool = m_player->absorption();
-            const int absIcons = absorbPool > 0.0f
-                ? static_cast<int>(std::ceil(absorbPool / 2.0f))
-                : 0;
-            const int absW =
-                absIcons * kIconPx + (absIcons - 1) * kIconGap;
             // One pass per strip: tile t occupies u in [t/3, (t+1)/3].
             auto drawStrip = [&](int x0, int icons, const Texture& tex,
                                  float value, const Vec4& tint) {
@@ -7762,7 +7775,8 @@ void Game::renderUi() {
             // Single-tile texture, no half-state: icon i is drawn while
             // oxygen > i * kOxygenPerIcon, so the fill count is
             // ceil(oxygen / kOxygenPerIcon) of kOxygenBarIconCount.
-            const int oxygen = m_drown.oxygen;
+            // (oxygen is computed above — the layout reserves the strip
+            // that renders this frame.)
             if (oxygen < kOxygenMax) {
                 UiBatch& batch =
                     batchFor(Vec4 {1.0f, 1.0f, 1.0f, 1.0f}, true,
@@ -7791,8 +7805,7 @@ void Game::renderUi() {
             // the absorption strip's left edge when the pool is up, the
             // plain hearts' left edge otherwise. No effects = nothing
             // drawn (the no-input baseline is untouched).
-            const int effX0 =
-                (absIcons > 0) ? (hx0 - kStripGap - absW) : hx0;
+            const int effX0 = heartRow.rowLeft;
             const int ey = hy - kIconPx - kStripGap;
             if (m_playerEffects.count() > 0) {
                 const int n = static_cast<int>(

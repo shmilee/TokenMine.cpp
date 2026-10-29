@@ -3,6 +3,32 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.32.0（2026-10-30）
+
+**PRE-11 HUD 细化**（v1.x 任务表 32/33，门 147，PRE 行 5/6）：原始定义
+已佚 = 定案 **心行窄窗回退布局**（消费 KNOWN_ISSUES UI 节 Phase-23 条
+"饥饿 HUD 在极窄窗口会被裁剪——越界即裁，无回退布局"）：纯函数
+`core/ui_layout.heartRowLayout`（新文件，campfire 范式 8 单测）——整行
+（[吸收带][心][6px][饥饿|氧气]）超出右缘时左移直至**右排右缘贴屏**
+（吸收带最先被裁 = 记档 last resort，低于最小行宽心也裁 = 记档极限）；
+**宽窗返回 legacy 坐标位级精确**（无输入基线 + E2E 窗零触碰 = 结构免疫
+根）；右排宽度按本帧实渲染排预留（氧气替换饥饿 = SURV-2 原位语义）；
+顺带 UI 度量常量（16/2/6）收口 ui_layout.hpp 单一真源（drawUI 别名）。
+零 format（22）/config/内容/音效/帧状态。1905/1905（+8：宽窗 legacy
+位级/池锚/贴合边界/1px 过界移 1/窄窗右排贴屏/带池吸收先裁/sub-row 心
+也裁/零宽守卫）、`-Werror` 0；门 147：S1 第 147 次结构性免疫 +
+**base18 锚刷新 387726→168140 B**（WM 平铺态 1362×744→679×744，
+PITS 265/315 类环境态，四方 clean 后采用）+ 跨版 savenorm EXACT；S2
+宽窗 capture A/B 10/10 PASS（N/M × 新旧 ×2 = 8 跑全零漂移：存档证据
+4/4 + x2 RAW 4 对 + **new_N≡old_N / new_M≡old_M 字节同 = 代码级免疫**
+【三行 HUD 全覆盖】；半态判别 = 8 布局单测位级钉死，本门矩阵落宽态）
++ PITS 333-336【336 = 高负载取景间歇纯黑读回 → 场景相机移地表】；S3 1905；性能 A/B 真 v1.31 vs v1.32-dev
+PASS（banner 双侧 + 全指标同档 + changesApplied 9/3/1 三窗逐位 + 终档
+fluids 18/18 + blocks 55/55 集合恒等 = 同世界同成本【结构惰性最强形：
+无 capture = drawUI 心行段零执行】）。v1.32.0 不打 tag（PRE 政策：
+tag v1.33.0 = PRE-11+12 合并，PRE-12 收官时打 + PRE 系统 release）。
+详见 `docs/archive/phase-pre11.md`。
+
 ## v1.31.0（2026-10-30）— **tag v1.31.0 = PRE-9+10 合并 tag**
 
 **PRE-10 图标重叠修复**（v1.x 任务表 31/33，门 146，PRE 行 4/6，
