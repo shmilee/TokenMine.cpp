@@ -2517,3 +2517,23 @@
   截图无活余烬。修 = N 取 36 倍数（540 → 末帧 539，(539+1)%36=0 = age-0
   批在帧）→ ON×2 diff=371px 判别成立（CRAFT-5 PITS 316 边界教训第 2 次）。
   凡活粒子余烬 A/B，截图帧数须对齐发射周期（36）。
+- **护甲减伤 floor 在乘积上非最终值——满甲不免疫小伤（PITS 328）**
+  ——10-30 PRE-9 门 145 S2 设计：skeleton 箭伤 2 + 满钻甲（20 点）按
+  "floor 后 0 伤零红闪"设场景 → 实测 hp 10 s 内 20→0（DAMAGE-DEBUG：
+  箭 2.0→0.4、wither 1.0→0.2，红闪 real-dt 必破 ×2 RAW）。根因 =
+  SURV-1 公式 `floor(amount×(100−4×pts))/100` 的 floor 作用于**乘积**
+  （2.0×20 点 = floor(40)/100 = 0.4，非 floor(2.0×0.20) = 0）→ 小伤
+  永远剩 4%×amount，护甲点数再高也归不了零。修 = "零红闪"输入场景须
+  **伤害源头为 0**（scaffold skeleton attack_damage 0 + 去 arrow_effect
+  → damage(0) 早退无闪），护甲只作保险不作免疫手段。凡需"无输入侧
+  字节同"的受击场景，先算 floor 乘积项再定护甲/伤害搭配。
+- **门内 S3 套件与资产脚手架互斥——脚手架须在 S3 前还原（PITS 329）**
+  ——10-30 PRE-9 门 145：S2 用资产脚手架（skeleton.json attack_damage 0
+  + 去 arrow_effect / mob_spawning.json skeleton-only），S3 全量套件
+  在脚手架未还原的工作区跑 → `MobContent.SkeletonUndeadAndWitherArrowPinned`
+  失败（内容钉死单测读真实资产，预期 attack_damage 2 + wither）。
+  根因 = 内容钉死测试消费工作区 assets/，config 脚手架（nomobs 等）
+  不影响但**资产脚手架必然冲突**。修 = 门脚本 S3 段前还原资产
+  （git checkout HEAD -- <scaffolded assets>）或协议 = 资产脚手架只
+  存门资产目录、跑完立即还原再进 S3。凡 S2 改资产的门，S3 必须在
+  还原后的工作区跑。

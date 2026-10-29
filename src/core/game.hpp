@@ -566,9 +566,13 @@ private:
     // box mesh, oriented along their velocity (model = translate *
     // rotateY(yaw) * rotateX(pitch), local -Z = travel direction, see
     // arrowOrientation), in the basic shader's solid-color path
-    // (u_useTexture 0).
+    // (u_useTexture 0). PRE-9: each arrow is THREE parts drawn in order
+    // (the brown shaft, the gray tip, the white fletching) — three
+    // single-color draws per arrow, the classic MC arrow.
     void drawArrows(const Mat4& view, const Mat4& projection);
-    const Mesh& arrowMesh();
+    // The three shared arrow-part meshes (Phase 21; PRE-9 three-part;
+    // built lazily on first render, idempotent).
+    void buildArrowMeshes();
 
     // 3D held hand (Phase 42, the Minecraft hand): while the pointer is
     // locked and no panel is open, the selected item renders as a view-
@@ -1064,8 +1068,11 @@ private:
     std::size_t m_eatSlot = 0;
     ItemID m_eatItem = ItemID::invalid();
     float m_eatStartHealth = -1.0f; // damage during the channel cancels it
-    // The shared arrow mesh (Phase 21; built lazily on first render).
-    Mesh m_arrowMesh;
+    // The three shared arrow-part meshes (Phase 21; PRE-9 three-part:
+    // shaft/tip/fletching; built lazily on first render).
+    Mesh m_arrowShaftMesh;
+    Mesh m_arrowTipMesh;
+    Mesh m_arrowFletchMesh;
 
     // Item/inventory system (Phase 11): item registry (implicit block
     // items + explicit tools/materials from assets/data/items), the

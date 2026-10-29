@@ -6421,8 +6421,12 @@ void Game::drawArrows(const Mat4& view, const Mat4& projection) {
     // arrow texture): u_useTexture is per-program state shared with every
     // textured draw of the frame, so it is switched here and restored
     // immediately (the next pass, the particles, samples the atlas).
-    const Mesh& mesh = arrowMesh();
-    if (!mesh.valid()) {
+    // PRE-9: each arrow is THREE parts (the brown shaft, the gray tip,
+    // the white fletching) — three single-color draws per arrow (the
+    // classic MC arrow colors).
+    buildArrowMeshes();
+    if (!m_arrowShaftMesh.valid() || !m_arrowTipMesh.valid() ||
+        !m_arrowFletchMesh.valid()) {
         return;
     }
     // The program is UNBOUND here: Renderer::draw binds/unbinds around
@@ -6432,8 +6436,6 @@ void Game::drawArrows(const Mat4& view, const Mat4& projection) {
     // on the program object; the next pass re-binds per draw).
     m_basicShader.bind();
     m_basicShader.setUniform1i("u_useTexture", 0);
-    m_basicShader.setUniform3f("u_color", kArrowColorR, kArrowColorG,
-                               kArrowColorB);
     m_basicShader.setUniform1f("u_alpha", 1.0f); // arrows are opaque
     for (const auto& entity : m_entities) {
         const Projectile* arrow =
@@ -6441,8 +6443,8 @@ void Game::drawArrows(const Mat4& view, const Mat4& projection) {
         if (arrow == nullptr) {
             continue;
         }
-        // Collision-box center (the box is kSize tall; the box mesh is
-        // centered on its origin) oriented along the travel direction
+        // Collision-box center (the box is kSize tall; the part meshes
+        // are centered on the origin) oriented along the travel direction
         // (local -Z). A stuck arrow (Phase 24) keeps the pre-impact
         // direction for the orientation — the collision resolver zeroed
         // the blocked axis of the live velocity. Dead arrows are removed
@@ -6455,7 +6457,22 @@ void Game::drawArrows(const Mat4& view, const Mat4& projection) {
         const Mat4 model = Mat4::multiply(
             Mat4::multiply(Mat4::translate(c), Mat4::rotateY(yaw)),
             Mat4::rotateX(pitch));
-        m_renderer.draw(mesh, m_basicShader, view, projection, model);
+        // Three parts, one color each (re-bind before each: the draw
+        // unbinds, and u_color is per-part).
+        m_basicShader.bind();
+        m_basicShader.setUniform3f("u_color", kArrowShaftColorR,
+                                   kArrowShaftColorG, kArrowShaftColorB);
+        m_renderer.draw(m_arrowShaftMesh, m_basicShader, view, projection,
+                        model);
+        m_basicShader.bind();
+        m_basicShader.setUniform3f("u_color", kArrowTipColorR,
+                                   kArrowTipColorG, kArrowTipColorB);
+        m_renderer.draw(m_arrowTipMesh, m_basicShader, view, projection, model);
+        m_basicShader.bind();
+        m_basicShader.setUniform3f("u_color", kArrowFletchColorR,
+                                   kArrowFletchColorG, kArrowFletchColorB);
+        m_renderer.draw(m_arrowFletchMesh, m_basicShader, view, projection,
+                        model);
     }
     // Re-bind for the restore: the last arrow draw (if any) unbound the
     // program.
@@ -6464,16 +6481,32 @@ void Game::drawArrows(const Mat4& view, const Mat4& projection) {
     m_basicShader.unbind();
 }
 
-const Mesh& Game::arrowMesh() {
-    if (m_arrowMesh.valid()) {
-        return m_arrowMesh;
+void Game::buildArrowMeshes() {
+    // Idempotent: build the three arrow-part meshes once (the pure
+    // makeArrowGeometry — the brown shaft box, the gray tip pyramid, the
+    // white fletching box).
+    if (m_arrowShaftMesh.valid() && m_arrowTipMesh.valid() &&
+        m_arrowFletchMesh.valid()) {
+        return;
     }
-    const ItemMeshGeometry geom = makeArrowGeometry();
-    auto r = m_arrowMesh.upload(geom.vertices, geom.indices);
-    if (!r.ok()) {
-        MC_LOG_ERROR("Arrow mesh build failed: " + r.error().describe());
+    const ArrowGeometry geom = makeArrowGeometry();
+    const auto rShaft =
+        m_arrowShaftMesh.upload(geom.shaft.vertices, geom.shaft.indices);
+    const auto rTip =
+        m_arrowTipMesh.upload(geom.tip.vertices, geom.tip.indices);
+    const auto rFletch = m_arrowFletchMesh.upload(geom.fletching.vertices,
+                                                  geom.fletching.indices);
+    if (!rShaft.ok()) {
+        MC_LOG_ERROR("Arrow shaft mesh build failed: " +
+                     rShaft.error().describe());
     }
-    return m_arrowMesh;
+    if (!rTip.ok()) {
+        MC_LOG_ERROR("Arrow tip mesh build failed: " + rTip.error().describe());
+    }
+    if (!rFletch.ok()) {
+        MC_LOG_ERROR("Arrow fletching mesh build failed: " +
+                     rFletch.error().describe());
+    }
 }
 
 const Mesh& Game::handIconMesh() {

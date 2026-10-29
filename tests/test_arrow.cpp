@@ -30,69 +30,155 @@ void expectAligns(const Vec3& v) {
 
 } // namespace
 
-// -- geometry ------------------------------------------------------------------
+// -- geometry (PRE-9: the three-part MC-style arrow) --------------------------
 
-TEST(ArrowGeometryTest, SixFacesTwentyFourVertices) {
-    const ItemMeshGeometry g = makeArrowGeometry();
-    EXPECT_EQ(g.vertices.size(), 24u);
-    EXPECT_EQ(g.indices.size(), 36u);
-    for (const std::uint32_t i : g.indices) {
+TEST(ArrowGeometryTest, PartVertexCounts) {
+    // Shaft + fletching = boxes (24 vertices / 36 indices each, the
+    // kCubeFaces table); tip = a 4-sided pyramid (12 vertices / 12
+    // indices, four triangles).
+    const ArrowGeometry g = makeArrowGeometry();
+    EXPECT_EQ(g.shaft.vertices.size(), 24u);
+    EXPECT_EQ(g.shaft.indices.size(), 36u);
+    EXPECT_EQ(g.tip.vertices.size(), 12u);
+    EXPECT_EQ(g.tip.indices.size(), 12u);
+    EXPECT_EQ(g.fletching.vertices.size(), 24u);
+    EXPECT_EQ(g.fletching.indices.size(), 36u);
+    for (const std::uint32_t i : g.shaft.indices) {
+        EXPECT_LT(i, 24u);
+    }
+    for (const std::uint32_t i : g.tip.indices) {
+        EXPECT_LT(i, 12u);
+    }
+    for (const std::uint32_t i : g.fletching.indices) {
         EXPECT_LT(i, 24u);
     }
 }
 
-TEST(ArrowGeometryTest, BoxAlongZCenteredAtOrigin) {
-    // The box is centered on the origin, the long axis on z (the travel
-    // axis: local -Z is the direction of flight), thin on x/y.
-    const ItemMeshGeometry g = makeArrowGeometry();
-    for (const MeshVertex& v : g.vertices) {
-        EXPECT_GE(v.position.z, -kArrowLength * 0.5f - kEps);
-        EXPECT_LE(v.position.z, kArrowLength * 0.5f + kEps);
-        EXPECT_GE(v.position.x, -kArrowThickness * 0.5f - kEps);
-        EXPECT_LE(v.position.x, kArrowThickness * 0.5f + kEps);
-        EXPECT_GE(v.position.y, -kArrowThickness * 0.5f - kEps);
-        EXPECT_LE(v.position.y, kArrowThickness * 0.5f + kEps);
-    }
-    // Every extent is reached (the box is not smaller than its constants).
-    float zmax = -1e9f;
-    float xmax = -1e9f;
-    for (const MeshVertex& v : g.vertices) {
-        zmax = std::max(zmax, std::abs(v.position.z));
-        xmax = std::max(xmax, std::abs(v.position.x));
-    }
-    EXPECT_NEAR(zmax, kArrowLength * 0.5f, kEps);
-    EXPECT_NEAR(xmax, kArrowThickness * 0.5f, kEps);
+TEST(ArrowGeometryTest, PartsTileTheTotalLength) {
+    // The three parts tile the whole arrow (tip front + shaft middle +
+    // fletch back) to exactly kArrowLength (the pre-PRE-9 box length —
+    // the overall silhouette size is unchanged).
+    EXPECT_NEAR(kArrowTipLength + kArrowShaftLength + kArrowFletchLength,
+                kArrowLength, 1e-6f);
 }
 
-TEST(ArrowGeometryTest, WindingIsCounterClockwiseFromOutside) {
-    // The box is axis-aligned: each face's winding cross product must be
-    // exactly one of the unit axes, pointing away from the box center.
-    const ItemMeshGeometry g = makeArrowGeometry();
-    for (int face = 0; face < 6; ++face) {
-        const Vec3& a = g.vertices[g.indices[face * 6 + 0]].position;
-        const Vec3& b = g.vertices[g.indices[face * 6 + 1]].position;
-        const Vec3& c = g.vertices[g.indices[face * 6 + 2]].position;
-        const Vec3 n = normalized(cross(b - a, c - a));
-        const float ax = std::abs(n.x);
-        const float ay = std::abs(n.y);
-        const float az = std::abs(n.z);
-        const int axis = (ax >= ay && ax >= az) ? 0 : (ay >= az) ? 1 : 2;
-        const float major = (axis == 0) ? ax : (axis == 1) ? ay : az;
-        EXPECT_NEAR(major, 1.0f, 1e-4f) << "face " << face;
-        // Outward: the normal points away from the origin (the box center).
-        const float s = (axis == 0) ? n.x : (axis == 1) ? n.y : n.z;
-        const float p = (axis == 0) ? a.x : (axis == 1) ? a.y : a.z;
-        EXPECT_GT(s * p, 0.0f) << "face " << face;
+TEST(ArrowGeometryTest, WholeArrowSpansLengthCenteredOnOrigin) {
+    // Every part lies in z in [-kArrowLength/2, +kArrowLength/2], and both
+    // ends are reached: the tip apex at the front (-L/2), the fletching at
+    // the back (+L/2).
+    const ArrowGeometry g = makeArrowGeometry();
+    float zmin = 1e9f;
+    float zmax = -1e9f;
+    for (const auto& m : {g.shaft, g.tip, g.fletching}) {
+        for (const MeshVertex& v : m.vertices) {
+            zmin = std::min(zmin, v.position.z);
+            zmax = std::max(zmax, v.position.z);
+        }
+    }
+    EXPECT_NEAR(zmin, -kArrowLength * 0.5f, kEps);
+    EXPECT_NEAR(zmax, kArrowLength * 0.5f, kEps);
+}
+
+TEST(ArrowGeometryTest, TipIsPointedPyramidAtFront) {
+    // The tip: a single apex at the arrow's front (z = -L/2, duplicated
+    // once per face = 4 vertices) and a square base at the shaft's front
+    // end (z = -ShaftLength/2, 4 corners x 2 faces each = 8 vertices).
+    const ArrowGeometry g = makeArrowGeometry();
+    int apex = 0;
+    int base = 0;
+    for (const MeshVertex& v : g.tip.vertices) {
+        if (std::abs(v.position.z + kArrowLength * 0.5f) < kEps) {
+            ++apex;
+        }
+        if (std::abs(v.position.z + kArrowShaftLength * 0.5f) < kEps) {
+            ++base;
+        }
+    }
+    EXPECT_EQ(apex, 4);
+    EXPECT_EQ(base, 8);
+    // The apex is on-axis (x = y = 0): a point, not a flat face.
+    for (const MeshVertex& v : g.tip.vertices) {
+        if (std::abs(v.position.z + kArrowLength * 0.5f) < kEps) {
+            EXPECT_NEAR(v.position.x, 0.0f, kEps);
+            EXPECT_NEAR(v.position.y, 0.0f, kEps);
+        }
+    }
+}
+
+TEST(ArrowGeometryTest, FletchingWiderThanShaft) {
+    // The fletching (the feathers) is wider than the shaft.
+    const ArrowGeometry g = makeArrowGeometry();
+    float shaftX = 0.0f;
+    float fletchX = 0.0f;
+    for (const MeshVertex& v : g.shaft.vertices) {
+        shaftX = std::max(shaftX, std::abs(v.position.x));
+    }
+    for (const MeshVertex& v : g.fletching.vertices) {
+        fletchX = std::max(fletchX, std::abs(v.position.x));
+    }
+    EXPECT_NEAR(shaftX, kArrowThickness * 0.5f, kEps);
+    EXPECT_NEAR(fletchX, kArrowFletchWidth * 0.5f, kEps);
+    EXPECT_GT(fletchX, shaftX);
+}
+
+TEST(ArrowGeometryTest, WindingIsOutwardOnEveryPart) {
+    // Shaft + fletching are axis-aligned boxes (kCubeFaces): each face's
+    // winding normal is a unit axis pointing AWAY FROM THE BOX'S OWN
+    // CENTER (the fletching is z-offset from the origin, so "away from the
+    // origin" would be wrong — the check is against the box center). The
+    // tip is a pyramid: each of its 4 faces' winding normal points AWAY
+    // from the arrow's axis (dot with the face centroid's (x,y) > 0).
+    const ArrowGeometry g = makeArrowGeometry();
+    for (const auto& m : {g.shaft, g.fletching}) {
+        float xmin = 1e9f, xmax = -1e9f, ymin = 1e9f, ymax = -1e9f;
+        float zmin = 1e9f, zmax = -1e9f;
+        for (const MeshVertex& v : m.vertices) {
+            xmin = std::min(xmin, v.position.x);
+            xmax = std::max(xmax, v.position.x);
+            ymin = std::min(ymin, v.position.y);
+            ymax = std::max(ymax, v.position.y);
+            zmin = std::min(zmin, v.position.z);
+            zmax = std::max(zmax, v.position.z);
+        }
+        const Vec3 cen {(xmin + xmax) * 0.5f, (ymin + ymax) * 0.5f,
+                        (zmin + zmax) * 0.5f};
+        for (std::size_t tri = 0; tri < m.indices.size(); tri += 3) {
+            const Vec3& a = m.vertices[m.indices[tri + 0]].position;
+            const Vec3& b = m.vertices[m.indices[tri + 1]].position;
+            const Vec3& c = m.vertices[m.indices[tri + 2]].position;
+            const Vec3 n = normalized(cross(b - a, c - a));
+            const float ax = std::abs(n.x);
+            const float ay = std::abs(n.y);
+            const float az = std::abs(n.z);
+            const int axis = (ax >= ay && ax >= az) ? 0 : (ay >= az) ? 1 : 2;
+            const float major = (axis == 0) ? ax : (axis == 1) ? ay : az;
+            EXPECT_NEAR(major, 1.0f, 1e-4f);
+            // Outward: the normal points away from the box center.
+            const Vec3 rel = a - cen;
+            const float s = (axis == 0) ? n.x : (axis == 1) ? n.y : n.z;
+            const float p = (axis == 0) ? rel.x : (axis == 1) ? rel.y : rel.z;
+            EXPECT_GT(s * p, 0.0f) << "box face " << tri;
+        }
+    }
+    for (int face = 0; face < 4; ++face) {
+        const Vec3& a = g.tip.vertices[g.tip.indices[face * 3 + 0]].position;
+        const Vec3& b = g.tip.vertices[g.tip.indices[face * 3 + 1]].position;
+        const Vec3& c = g.tip.vertices[g.tip.indices[face * 3 + 2]].position;
+        const Vec3 n = cross(b - a, c - a);
+        const Vec3 cen = (a + b + c) * (1.0f / 3.0f);
+        EXPECT_GT(n.x * cen.x + n.y * cen.y, 0.0f) << "tip face " << face;
     }
 }
 
 TEST(ArrowGeometryTest, FullSkyLightNoBlockLight) {
-    // Full sky light baked (like dropped items / mob models): the shader
-    // applies the day/night scale.
-    const ItemMeshGeometry g = makeArrowGeometry();
-    for (const MeshVertex& v : g.vertices) {
-        EXPECT_FLOAT_EQ(v.skyLight, 1.0f);
-        EXPECT_FLOAT_EQ(v.blockLight, 0.0f);
+    // Full sky light baked on every part (like dropped items / mob
+    // models): the shader applies the day/night scale.
+    const ArrowGeometry g = makeArrowGeometry();
+    for (const auto& m : {g.shaft, g.tip, g.fletching}) {
+        for (const MeshVertex& v : m.vertices) {
+            EXPECT_FLOAT_EQ(v.skyLight, 1.0f);
+            EXPECT_FLOAT_EQ(v.blockLight, 0.0f);
+        }
     }
 }
 
