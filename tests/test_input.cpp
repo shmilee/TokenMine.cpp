@@ -57,6 +57,19 @@ TEST(InputTest, AllMappedKeys) {
         {SDLK_F3, GameKey::F3},
         {SDLK_F5, GameKey::F5},
         {SDLK_R, GameKey::R},
+        // CRAFT-7: the top-row digits (hotbar selection) and the right
+        // shift (it drives the shift-click quick-move, mapped onto the
+        // left one).
+        {SDLK_RSHIFT, GameKey::LeftShift},
+        {SDLK_1, GameKey::Digit1},
+        {SDLK_2, GameKey::Digit2},
+        {SDLK_3, GameKey::Digit3},
+        {SDLK_4, GameKey::Digit4},
+        {SDLK_5, GameKey::Digit5},
+        {SDLK_6, GameKey::Digit6},
+        {SDLK_7, GameKey::Digit7},
+        {SDLK_8, GameKey::Digit8},
+        {SDLK_9, GameKey::Digit9},
     };
     Input input;
     input.frameBegin();

@@ -58,9 +58,13 @@ void cellRightClick(ItemStack& cell, ItemStack& carry,
         if (cur.empty()) {
             return;
         }
-        carry = ItemStack {cur.item, 1, cur.damage}; // SURV-3: damage
-                                                     // follows the unit
-        cell.count -= 1;
+        // CRAFT-7: right-click takes the HALF stack (Minecraft):
+        // floor(count/2), minimum 1 — a 1-stack gives itself, a 2- or
+        // 3-stack gives 1 (the v1 "take one" behavior), a 64-stack
+        // gives 32. SURV-3: damage follows the units.
+        const int take = std::max(1, cur.count / 2);
+        carry = ItemStack {cur.item, take, cur.damage};
+        cell.count -= take;
         if (cell.count <= 0) {
             cell = ItemStack {};
         }
@@ -88,6 +92,125 @@ void cellRightClick(ItemStack& cell, ItemStack& carry,
         return;
     }
     // Different item, occupied cell: no-op (minimal v1 semantics).
+}
+
+// CRAFT-7: the shift-click move — move as much of src as possible into
+// the inventory slots listed in order (the caller fixes the index
+// order), merging same-item same-damage stacks up to the max (the
+// SURV-3 gate); a stack may split across several slots (Minecraft).
+// src is cleared when fully moved.
+void moveStackIntoOrder(ItemStack& src, Inventory& inv,
+                        const ItemRegistry& items,
+                        const std::vector<int>& order) {
+    if (src.empty()) {
+        return;
+    }
+    const int maxStack = items.at(src.item).maxStack;
+    for (const int i : order) {
+        if (src.empty()) {
+            break;
+        }
+        const ItemStack& cell = inv.at(i);
+        if (cell.empty()) {
+            const int put = std::min(src.count, maxStack);
+            inv.setSlot(i, ItemStack {src.item, put, src.damage});
+            src.count -= put;
+        } else if (cell.item == src.item && cell.damage == src.damage &&
+                   cell.count < maxStack) {
+            const int put = std::min(src.count, maxStack - cell.count);
+            inv.setSlot(i, ItemStack {cell.item, cell.count + put,
+                                      cell.damage});
+            src.count -= put;
+        }
+    }
+    if (src.count <= 0) {
+        src = ItemStack {};
+    }
+}
+
+// CRAFT-7: the destination order for a quick move over the whole
+// player inventory: storage (hotbar..last) first — Minecraft puts a
+// container's items into the main inventory before the hotbar — then
+// the hotbar.
+std::vector<int> inventorySlotOrder(const Inventory& inv, bool hotbarFirst) {
+    std::vector<int> order;
+    const int hb = inv.hotbarSize();
+    const int n = static_cast<int>(inv.size());
+    if (hotbarFirst) {
+        for (int i = 0; i < hb; ++i) {
+            order.push_back(i);
+        }
+        for (int i = hb; i < n; ++i) {
+            order.push_back(i);
+        }
+    } else {
+        for (int i = hb; i < n; ++i) {
+            order.push_back(i);
+        }
+        for (int i = 0; i < hb; ++i) {
+            order.push_back(i);
+        }
+    }
+    return order;
+}
+
+// CRAFT-7: the double-click collect over ONE player-inventory section
+// (shared by the crafting panels and the furnace panel). Minecraft
+// sections the screen: the hotbar (0..8) and the main storage (9..26)
+// are SEPARATE collect sections — double-clicking a slot collects from
+// its own section only. With a carried stack (the first click of the
+// pair picked it up), gather every same-item same-damage stack of the
+// section into the clicked slot (capped at maxStack), the remainder
+// filling the section's other slots in index order. The total always
+// fits (it came from the very slots being refilled), so no overflow
+// exists; the defensive carry keeps it total regardless.
+void collectInventoryInto(Inventory& inv, const ItemRegistry& items,
+                          ItemStack& carry, int slot) {
+    if (slot < 0 || slot >= static_cast<int>(inv.size())) {
+        return;
+    }
+    if (carry.empty()) {
+        return;
+    }
+    const ItemID id = carry.item;
+    const float dmg = carry.damage;
+    const int maxStack = items.at(id).maxStack;
+    // The section bounds: the hotbar or the main storage.
+    const int hb = inv.hotbarSize();
+    const int lo = slot < hb ? 0 : hb;
+    const int hi = slot < hb ? hb : static_cast<int>(inv.size());
+    if (!inv.at(slot).empty() &&
+        !(inv.at(slot).item == id && inv.at(slot).damage == dmg)) {
+        return; // defensive: the clicked slot holds a foreign item
+    }
+    int remaining = carry.count;
+    for (int i = lo; i < hi; ++i) {
+        if (inv.at(i).item == id && inv.at(i).damage == dmg) {
+            remaining += inv.at(i).count;
+            inv.setSlot(i, ItemStack {});
+        }
+    }
+    carry = ItemStack {};
+    if (remaining > 0) {
+        const int put = std::min(remaining, maxStack);
+        inv.setSlot(slot, ItemStack {id, put, dmg});
+        remaining -= put;
+    }
+    for (int i = lo; i < hi && remaining > 0; ++i) {
+        if (i == slot) {
+            continue;
+        }
+        const ItemStack& cell = inv.at(i);
+        if (cell.empty() ||
+            (cell.item == id && cell.damage == dmg && cell.count < maxStack)) {
+            const int put = std::min(remaining, maxStack - cell.count);
+            inv.setSlot(i, ItemStack {id, cell.count + put, dmg});
+            remaining -= put;
+        }
+    }
+    if (remaining > 0) {
+        carry = ItemStack {id, remaining, dmg};
+    }
 }
 
 } // namespace
@@ -311,6 +434,34 @@ bool InventoryUI::rightClick(int slot, int gridSlot, bool onOutput) {
     return false; // right click outside the slots does nothing
 }
 
+void InventoryUI::quickMove(int slot, int gridSlot, bool onOutput) {
+    // CRAFT-7: shift-click (Minecraft's E-screen semantics). A carried
+    // stack is never quick-moved (the carry is kept); the output slot
+    // keeps the craft actions only.
+    if (carrying() || onOutput) {
+        return;
+    }
+    if (gridSlot >= 0) {
+        // Grid cell -> the player inventory, storage first (Minecraft).
+        moveStackIntoOrder(m_grid->at(gridSlot), m_inv, m_items,
+                           inventorySlotOrder(m_inv, /*hotbarFirst=*/false));
+        return;
+    }
+    if (slot >= 0) {
+        // Hotbar slot -> storage; storage slot -> hotbar (index order).
+        const std::vector<int> order = slot < m_inv.hotbarSize()
+            ? inventorySlotOrder(m_inv, /*hotbarFirst=*/false)
+            : inventorySlotOrder(m_inv, /*hotbarFirst=*/true);
+        moveStackIntoOrder(m_inv.at(slot), m_inv, m_items, order);
+    }
+}
+
+void InventoryUI::doubleCollect(int slot) {
+    // CRAFT-7: double-click collect (player inventory only — the grid
+    // and the output are not part of the collect; see the header).
+    collectInventoryInto(m_inv, m_items, m_carry, slot);
+}
+
 // ---------------------------------------------------------------------------
 // Phase 40: the furnace panel
 
@@ -493,6 +644,29 @@ void FurnaceUI::rightClick(int slot, int furnaceSlot) {
         return;
     }
     // right click outside the slots does nothing
+}
+
+void FurnaceUI::quickMove(int slot, int furnaceSlot) {
+    // CRAFT-7: shift-click (Minecraft's container-GUI semantics): only
+    // a FURNACE slot quick-moves (into the player inventory, storage
+    // first); a click on the player inventory is a no-op; a carried
+    // stack is never quick-moved. Moving the input resets the progress
+    // when the input item changes (the furnace.hpp invariant).
+    if (slot >= 0 || furnaceSlot < 0 || carrying() || m_furnace == nullptr) {
+        return;
+    }
+    const ItemStack before = m_furnace->input;
+    moveStackIntoOrder(cellAt(furnaceSlot), m_inv, m_items,
+                       inventorySlotOrder(m_inv, /*hotbarFirst=*/false));
+    if (furnaceSlot == 0) {
+        inputChanged(before);
+    }
+}
+
+void FurnaceUI::doubleCollect(int slot) {
+    // CRAFT-7: double-click collect (player inventory only — the
+    // furnace slots are a separate Minecraft section, not collected).
+    collectInventoryInto(m_inv, m_items, m_carry, slot);
 }
 
 } // namespace mc

@@ -612,3 +612,65 @@ TEST(FurnaceBlockItemTest, RealTickWithBlockFuelAndSmeltable) {
     EXPECT_EQ(st.progressSubsteps, 0);
     EXPECT_GT(st.fuelSubsteps, 0); // 1200 - 600: still burning
 }
+
+// -- CRAFT-7: the inventory-interaction panel operations --------------
+
+TEST(FurnaceUiTest, QuickMoveOutputToStorage) {
+    Fixture f;
+    Inventory inv;
+    FurnaceState fz;
+    FurnaceUI ui(inv, f.items);
+    ui.bind(fz);
+    fz.output = stk(f.id("cooked"), 2);
+    ui.quickMove(-1, 2);
+    EXPECT_TRUE(fz.output.empty());
+    EXPECT_EQ(inv.at(9), stk(f.id("cooked"), 2)); // storage first
+    EXPECT_FALSE(ui.carrying());
+}
+
+TEST(FurnaceUiTest, QuickMoveInputResetsProgress) {
+    Fixture f;
+    Inventory inv;
+    FurnaceState fz;
+    FurnaceUI ui(inv, f.items);
+    ui.bind(fz);
+    fz.input = stk(f.id("beef"), 3);
+    fz.progressSubsteps = 100;
+    ui.quickMove(-1, 0);
+    EXPECT_TRUE(fz.input.empty());
+    EXPECT_EQ(fz.progressSubsteps, 0); // the input item changed
+    EXPECT_EQ(inv.at(9), stk(f.id("beef"), 3));
+    EXPECT_FALSE(ui.carrying());
+}
+
+TEST(FurnaceUiTest, QuickMovePlayerSlotNoOp) {
+    // Minecraft's container GUI: a shift-click on the PLAYER inventory
+    // does nothing (only container -> inventory quick-moves).
+    Fixture f;
+    Inventory inv;
+    FurnaceState fz;
+    FurnaceUI ui(inv, f.items);
+    ui.bind(fz);
+    inv.setSlot(0, stk(f.id("beef"), 2));
+    ui.quickMove(0, -1);
+    EXPECT_EQ(inv.at(0), stk(f.id("beef"), 2)); // untouched
+    EXPECT_FALSE(ui.carrying());
+}
+
+TEST(FurnaceUiTest, DoubleCollectInventory) {
+    // The furnace panel's double collect works over the player
+    // inventory (the furnace slots are a separate section).
+    Fixture f;
+    Inventory inv;
+    FurnaceState fz;
+    FurnaceUI ui(inv, f.items);
+    ui.bind(fz);
+    inv.setSlot(9, stk(f.id("beef"), 2));
+    inv.setSlot(13, stk(f.id("beef"), 3));
+    ui.leftClick(9, -1); // the first click of the pair: carry 2
+    ASSERT_TRUE(ui.carrying());
+    ui.doubleCollect(9);
+    EXPECT_EQ(inv.at(9), stk(f.id("beef"), 5));
+    EXPECT_TRUE(inv.isEmpty(13));
+    EXPECT_FALSE(ui.carrying());
+}

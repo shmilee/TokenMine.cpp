@@ -392,22 +392,163 @@ TEST(InventoryUiTest, ClickOutsideDropsCarriedStack) {
     EXPECT_TRUE(f.inv.isEmpty(5));
 }
 
-TEST(InventoryUiTest, RightClickTakesOne) {
+TEST(InventoryUiTest, RightClickTakesHalf) {
+    // CRAFT-7: right-click takes the HALF stack (Minecraft): floor
+    // (N/2), minimum 1 — N=1 gives itself, N=2/3 give 1 (the v1 "take
+    // one" boundary), N=64 gives 32.
     UiFixture f;
-    f.inv.setSlot(5, ItemStack {f.dirt, 5});
+    f.inv.setSlot(5, ItemStack {f.dirt, 64});
+    f.ui.rightClick(5, -1, false);
+    EXPECT_EQ(f.ui.carry(), (ItemStack {f.dirt, 32}));
+    EXPECT_EQ(f.inv.at(5), (ItemStack {f.dirt, 32}));
+    f.ui.leftClick(9, -1, false); // park the carry
+    f.inv.setSlot(5, ItemStack {f.dirt, 3});
     f.ui.rightClick(5, -1, false);
     EXPECT_EQ(f.ui.carry(), (ItemStack {f.dirt, 1}));
-    EXPECT_EQ(f.inv.at(5), (ItemStack {f.dirt, 4}));
+    EXPECT_EQ(f.inv.at(5), (ItemStack {f.dirt, 2}));
+    f.ui.leftClick(10, -1, false);
+    f.inv.setSlot(5, ItemStack {f.dirt, 1});
+    f.ui.rightClick(5, -1, false);
+    EXPECT_EQ(f.ui.carry(), (ItemStack {f.dirt, 1}));
+    EXPECT_TRUE(f.inv.isEmpty(5));
 }
 
 TEST(InventoryUiTest, RightClickPlacesOneOnEmpty) {
+    // CRAFT-7 contract evolution: the take is now the half (5 -> 2).
     UiFixture f;
     f.inv.setSlot(5, ItemStack {f.dirt, 5});
     f.ui.rightClick(5, -1, false);
     f.ui.rightClick(9, -1, false);
-    EXPECT_FALSE(f.ui.carrying());
+    EXPECT_EQ(f.ui.carry(), (ItemStack {f.dirt, 1}));
     EXPECT_EQ(f.inv.at(9), (ItemStack {f.dirt, 1}));
+    EXPECT_EQ(f.inv.at(5), (ItemStack {f.dirt, 3}));
+}
+
+TEST(InventoryUiTest, QuickMoveHotbarToStorageMerges) {
+    // CRAFT-7: shift-click a hotbar slot -> the storage (index order,
+    // the SURV-3 merge gate; a stack splits across slots, Minecraft).
+    UiFixture f;
+    f.inv.setSlot(0, ItemStack {f.dirt, 64});
+    f.inv.setSlot(9, ItemStack {f.dirt, 30});
+    f.inv.setSlot(10, ItemStack {f.dirt, 30});
+    f.ui.quickMove(0, -1, false);
+    EXPECT_TRUE(f.inv.isEmpty(0));
+    EXPECT_EQ(f.inv.at(9), (ItemStack {f.dirt, 64})); // +34
+    EXPECT_EQ(f.inv.at(10), (ItemStack {f.dirt, 60})); // +30
+    EXPECT_FALSE(f.ui.carrying());
+}
+
+TEST(InventoryUiTest, QuickMoveStorageToHotbar) {
+    UiFixture f;
+    f.inv.setSlot(9, ItemStack {f.dirt, 10});
+    f.ui.quickMove(9, -1, false);
+    EXPECT_TRUE(f.inv.isEmpty(9));
+    EXPECT_EQ(f.inv.at(0), (ItemStack {f.dirt, 10}));
+    EXPECT_FALSE(f.ui.carrying());
+}
+
+TEST(InventoryUiTest, QuickMoveGridToInventoryStorageFirst) {
+    UiFixture f;
+    f.grid.setSlot(0, ItemStack {f.dirt, 20});
+    f.ui.quickMove(-1, 0, false);
+    EXPECT_TRUE(f.grid.at(0).empty());
+    EXPECT_EQ(f.inv.at(9), (ItemStack {f.dirt, 20})); // storage before
+                                                       // the hotbar
+    EXPECT_FALSE(f.ui.carrying());
+}
+
+TEST(InventoryUiTest, QuickMoveNoOpWhileCarrying) {
+    UiFixture f;
+    f.inv.setSlot(0, ItemStack {f.dirt, 5});
+    f.ui.leftClick(0, -1, false); // pick up the carry
+    ASSERT_TRUE(f.ui.carrying());
+    f.inv.setSlot(9, ItemStack {f.stone, 3});
+    f.ui.quickMove(9, -1, false);
+    EXPECT_EQ(f.inv.at(9), (ItemStack {f.stone, 3})); // untouched
+    EXPECT_EQ(f.ui.carry(), (ItemStack {f.dirt, 5})); // the carry kept
+}
+
+TEST(InventoryUiTest, QuickMoveSkipsDifferentDamage) {
+    // SURV-3: a worn stack never merges into a fresh one — the quick
+    // move opens a fresh slot instead.
+    UiFixture f;
+    f.inv.setSlot(0, ItemStack {f.pickaxe, 1, 5.0f});
+    f.inv.setSlot(9, ItemStack {f.pickaxe, 1});
+    f.ui.quickMove(0, -1, false);
+    EXPECT_TRUE(f.inv.isEmpty(0));
+    EXPECT_EQ(f.inv.at(9), (ItemStack {f.pickaxe, 1})); // no merge
+    EXPECT_EQ(f.inv.at(10), (ItemStack {f.pickaxe, 1, 5.0f}));
+}
+
+TEST(InventoryUiTest, DoubleCollectGathersSameItem) {
+    // CRAFT-7: the first click of the pair picks the stack; the second
+    // (the game's double dispatch) collects every same-item same-damage
+    // stack of the section into the clicked slot. A different item
+    // stays.
+    UiFixture f;
+    f.inv.setSlot(9, ItemStack {f.dirt, 2});
+    f.inv.setSlot(13, ItemStack {f.dirt, 3});
+    f.inv.setSlot(15, ItemStack {f.dirt, 5});
+    f.inv.setSlot(17, ItemStack {f.stone, 4});
+    f.ui.leftClick(9, -1, false);
+    ASSERT_TRUE(f.ui.carrying());
+    f.ui.doubleCollect(9);
+    EXPECT_EQ(f.inv.at(9), (ItemStack {f.dirt, 10}));
+    EXPECT_TRUE(f.inv.isEmpty(13));
+    EXPECT_TRUE(f.inv.isEmpty(15));
+    EXPECT_EQ(f.inv.at(17), (ItemStack {f.stone, 4}));
+    EXPECT_FALSE(f.ui.carrying());
+}
+
+TEST(InventoryUiTest, DoubleCollectOverflowFillsInIndexOrder) {
+    // The 128 collected exceed one stack: the clicked slot fills to
+    // the max, the remainder goes to the NEXT section slot in index
+    // order (10, not 13).
+    UiFixture f;
+    f.inv.setSlot(9, ItemStack {f.dirt, 64});
+    f.inv.setSlot(13, ItemStack {f.dirt, 64});
+    f.ui.leftClick(9, -1, false); // the first click: carry 64
+    f.ui.doubleCollect(9);
+    EXPECT_EQ(f.inv.at(9), (ItemStack {f.dirt, 64}));
+    EXPECT_EQ(f.inv.at(10), (ItemStack {f.dirt, 64})); // the remainder
+    EXPECT_TRUE(f.inv.isEmpty(13));
+    EXPECT_FALSE(f.ui.carrying());
+}
+
+TEST(InventoryUiTest, DoubleCollectIsSectionBound) {
+    // CRAFT-7: Minecraft sections the screen — a main-storage collect
+    // never touches the hotbar (and vice versa).
+    UiFixture f;
+    f.inv.setSlot(0, ItemStack {f.dirt, 64}); // hotbar section
+    f.inv.setSlot(9, ItemStack {f.dirt, 1});  // main section
+    f.inv.setSlot(13, ItemStack {f.dirt, 1});
+    f.ui.leftClick(9, -1, false);
+    ASSERT_TRUE(f.ui.carrying());
+    f.ui.doubleCollect(9);
+    EXPECT_EQ(f.inv.at(9), (ItemStack {f.dirt, 2}));
+    EXPECT_TRUE(f.inv.isEmpty(13));
+    EXPECT_EQ(f.inv.at(0), (ItemStack {f.dirt, 64})); // untouched
+    EXPECT_FALSE(f.ui.carrying());
+}
+
+TEST(InventoryUiTest, DoubleCollectRequiresCarry) {
+    UiFixture f;
+    f.inv.setSlot(5, ItemStack {f.dirt, 4});
+    f.ui.doubleCollect(5); // no carry (no first click) = no-op
     EXPECT_EQ(f.inv.at(5), (ItemStack {f.dirt, 4}));
+    EXPECT_FALSE(f.ui.carrying());
+}
+
+TEST(InventoryUiTest, DoubleCollectKeepsDifferentDamageApart) {
+    UiFixture f;
+    f.inv.setSlot(5, ItemStack {f.pickaxe, 1, 0.0f});
+    f.inv.setSlot(9, ItemStack {f.pickaxe, 1, 3.0f});
+    f.ui.leftClick(5, -1, false); // carry the fresh one
+    f.ui.doubleCollect(5);
+    EXPECT_EQ(f.inv.at(5), (ItemStack {f.pickaxe, 1, 0.0f}));
+    EXPECT_EQ(f.inv.at(9), (ItemStack {f.pickaxe, 1, 3.0f})); // worn
+                                                              // stays
+    EXPECT_FALSE(f.ui.carrying());
 }
 
 TEST(InventoryUiTest, RightClickAddsOneIntoRoom) {

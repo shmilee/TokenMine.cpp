@@ -20,7 +20,7 @@
 | FLUID 流体 | ~~FLUID-4 倒向水面~~ ✅ v1.9.0 | ~~FLUID-5 水熔岩反应~~ ✅ v1.10.0 | ~~FLUID-6 流体种类扩展~~ ✅ v1.11.0 | | | |
 | ENT 实体/Mob/移动 | ~~ENT-5 坠落伤害~~ ✅ v1.12.0 | ~~ENT-6 AI 补强~~ ✅ v1.13.0 | ~~ENT-7 移动惯性~~ ✅ v1.14.0 | ~~ENT-8 和平/保护环~~ ✅ v1.15.0 | ~~ENT-9 掉落可视化~~ ✅ v1.16.0 | |
 | SURV 生存/战斗/效果 | ~~SURV-6 效果档位~~ ✅ v1.17.0 | ~~SURV-7 死亡统计~~ ✅ v1.18.0 | ~~SURV-8 工具 10×~~ ✅ v1.19.0 | ~~SURV-9 饱和细化~~ ✅ v1.20.0 | ~~SURV-10 挤奶冷却~~ ✅ v1.21.0 | |
-| CRAFT 物品/合成/面板 | ~~CRAFT-4 配方提示~~ ✅ v1.22.0 | ~~CRAFT-5 炉子表现~~ ✅ v1.23.0 | ~~CRAFT-6 燃料熔炼~~ ✅ v1.24.0 | CRAFT-7 背包交互 | | |
+| CRAFT 物品/合成/面板 | ~~CRAFT-4 配方提示~~ ✅ v1.22.0 | ~~CRAFT-5 炉子表现~~ ✅ v1.23.0 | ~~CRAFT-6 燃料熔炼~~ ✅ v1.24.0 | ~~CRAFT-7 背包交互~~ ✅ v1.25.0 | | |
 | SAVE 存档 | SAVE-2 速度入档 | SAVE-3 槽位管理 | | | | |
 | PRE 表现层 | PRE-7 中毒/燃烧表现 | PRE-8 mob 火焰 | PRE-9 箭/弓/手视觉 | PRE-10 图标重叠修复★ | PRE-11 HUD 细化 | PRE-12 tooltip/F3 |
 | UX 实机报障 | （新实机报障入此行，用户定案） | | | | | |
@@ -128,6 +128,36 @@
   （CRAFT-6）不打 tag → **v1.25.0 = CRAFT-6+7 合并 tag + CRAFT 系统
   release**（notes 覆盖 v1.22-1.25）；SAVE / PRE 系统同型。执行顺序 #3
   已刷新（10-27 组政策适用至 v1.21.0 为止，保留为历史事实）。
+- 2026-10-29：**CRAFT-7 背包交互完成（CRAFT 系统 4/4 收官）**（v1.x 25/33，v1.25.0，门 140）：
+  "背包交互"原始定义已佚 = 定案 **背包面板 MC 操作面（3/4 项 + 数字键）**
+  （消费 KNOWN_ISSUES"背包 UI 右键语义极简"条）：① **右键取半堆**（空手右键
+  占位格取 floor(N/2) 最小 1：N=1 取自身/N=2/3 取 1 = v1 边界/N=64 取 32；
+  共享 cellRightClick 原语 = 三面板同语义；耐久随堆 SURV-3）② **shift 快捷
+  移动**（E 屏：hotbar⇄storage 互移索引序合并 + 容器格→主背包优先 + 堆可
+  跨格分裂 + 手持堆 no-op；炉子面板 = 容器 GUI：炉槽→主背包、背包侧 no-op、
+  移 input 按 furnace.hpp 不变量重置进度；左右 Shift 皆可）③ **双击收集分
+  拣**（MC 分区语义：hotbar 0..8 / 主背包 9..26 独立分区【首轮单分区被测试
+  揪出跨区 = 修正】；收集同物同耐久入点击格满堆上限 + 溢出索引序回填；
+  游戏层 0.3 s 真实 dt 双击窗 = 生存计时器类输入态）④ **顶排数字键 1-9 直接
+  选热栏**（MC；Tab 保留；面板开/关皆可 = handleUiKeys 全局键段【首轮误置
+  locked-world 段 = 面板开时 !locked 早退 8/8 实证，移入后 4/4 i=1】）；
+  **无拖拽**（记录偏离：三点击 + 数字键覆盖核心操作面，拖拽 = 捕获下轨迹追
+  踪最高风险 E2E 类矩阵外）。零 format（21）/config/新数据字段。1866/1866
+  （+14：input 映射演进 10 / inventory_ui 9 / furnace 4）、`-Werror` 0。门
+  140：S1 第 140 次结构性免疫免重锚（四方 ×2 168140 B 全 EXACT + base18 锚
+  字节一致 + savenorm；panelOpen 门控惰性 + 数字键未按下 = 双结构惰性）+ S2
+  输入跑 16/16 PASS（firefox 显隐 PITS 314 + 捕获轮询 Pointer captured
+  协议 + probe140 纯布局函数算绝对槽位坐标 + 720f：r1 shift-move NEW 9=64+
+  10=30 分裂 vs OLD 拾堆+关面板丢弃 9=30 / r2 取半 NEW dirt5 vs OLD dirt9 /
+  r3 双击 NEW 13=8+17 空 vs OLD 拾回原样 / r4 数字键 NEW selected=4 vs OLD
+  0 = **四操作存档终态全互斥** + 同侧 ×2 savenorm EXACT ×8）+ S3 1866 + 无
+  S6（零 parse 面）+ PITS 319（捕获 grab delta 相机漂移本 WM 态系统性偏大
+  yaw −0.255/pitch −1.09 但操作终态 8/8 正确 = 存档终态唯一权威、相机只记
+  录不门控）+ 性能 A/B 真 v1.24 vs v1.25 PASS（banner 实证 + 同款 g139 补丁
+  器；PERF-WIN 全指标同档 + changesApplied max 9/3/1 三窗逐位 + 终档 fluids
+  18/18 + blocks 55/55 集合恒等 = 同世界同成本【无面板结构惰性最强形】）。
+  **CRAFT 系统收官：tag v1.25.0 = CRAFT-6+7 合并 tag + CRAFT 系统 GitHub
+  release（notes 覆盖 v1.22-1.25）**——详见 `docs/archive/phase-craft7.md`。
 - 2026-10-29：**CRAFT-6 燃料熔炼完成**（v1.x 24/33，v1.24.0，门 139，CRAFT 行 3/4）：
   "燃料熔炼"原始定义已佚 = 定案 **block 物品的炉子字段 = block 属性继承**
   （消费 KNOWN_ISSUES Phase-40"可熔炼/燃料名单小且 wood 不可当燃料"）：

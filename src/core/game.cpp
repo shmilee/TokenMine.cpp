@@ -117,6 +117,12 @@ constexpr int kFireParticleEveryNFrames = 6;
 // growth/chance-drop salt separation, Phase 45/49): ember emissions
 // never track any other deterministic stream in the world.
 constexpr std::uint64_t kFireParticleRollSalt = 0xE4B6F1C2D9A83574ULL;
+// CRAFT-7: the double-click collect window (real dt, the survival-timer
+// class — input-only state, a no-input run never touches it). 0.3 s is
+// the Minecraft-style "fast double tap" band: wide enough for xdotool's
+// ~50 ms click jitter (the E2E protocol), narrow enough that a deliberate
+// pick-and-place (>= a glance) never collects by accident.
+constexpr double kDoubleClickSeconds = 0.3;
 // CRAFT-5: the lit-furnace flame emission runs every Nth frame. N = 36
 // (0.6 s) is >2x spawnFire's 0.3-0.5 s max ember life, so at any
 // <=60 fps the previous batch is provably dead before the next emission
@@ -6759,6 +6765,17 @@ void Game::handleUiKeys() {
     if (m_input.wasPressed(GameKey::F3)) {
         m_debugOverlay = !m_debugOverlay;
     }
+    // CRAFT-7: the top-row digits select the hotbar slot directly
+    // (Minecraft; the Tab cycle stays). In the GLOBAL key section
+    // (handleUiKeys, not the locked-world section): it must work with a
+    // panel open, as in Minecraft — the world section early-returns
+    // while the pointer is free (panel open).
+    for (int d = 0; d < 9; ++d) {
+        if (m_input.wasPressed(static_cast<GameKey>(
+                static_cast<int>(GameKey::Digit1) + d))) {
+            m_selectedSlot = static_cast<std::size_t>(d);
+        }
+    }
     if (m_input.wasPressed(GameKey::F5)) {
         if (m_args.saveSlot.has_value()) {
             auto saved = writeSave();
@@ -6942,6 +6959,29 @@ void Game::handlePanelClicks() {
     const int w = space.width;
     const int h = space.height;
 
+    // CRAFT-7: the interaction dispatch — shift-click quick-moves, a
+    // fast second left click on the same player-inventory slot collects.
+    // The double-click window is REAL dt (the survival-timer class, hard
+    // rule 8: input-only state — a no-input run never touches it), and
+    // any non-slot click / other button / shift resets the pairing.
+    const bool shift = m_input.isDown(GameKey::LeftShift);
+    const bool leftPressed = m_input.wasPressed(MouseButton::Left);
+    const bool rightPressed = m_input.wasPressed(MouseButton::Right);
+    const double now = nowSeconds();
+    auto isDoubleClick = [&](int slot) {
+        return !shift && slot >= 0 && slot == m_lastLeftSlot &&
+               m_lastLeftClickTime >= 0.0 &&
+               (now - m_lastLeftClickTime) <= kDoubleClickSeconds;
+    };
+    auto armDoubleClick = [&](int slot) {
+        m_lastLeftSlot = slot;
+        m_lastLeftClickTime = slot >= 0 ? now : -1.0;
+    };
+    auto disarmDoubleClick = [&]() {
+        m_lastLeftSlot = -1;
+        m_lastLeftClickTime = -1.0;
+    };
+
     // Phase 40: the furnace panel. Same click model as the crafting
     // panels: the layout hit tests are disjoint (at most one of a
     // 27-slot / input / fuel / output is active; a left click with all of
@@ -6952,12 +6992,28 @@ void Game::handlePanelClicks() {
         const std::pair<int, int> mp = uiMouse();
         const int slot = layout.slotAt(mp.first, mp.second);
         const int fslot = layout.furnaceSlotAt(mp.first, mp.second);
-        if (m_input.wasPressed(MouseButton::Left)) {
-            m_furnaceUi.leftClick(slot, fslot);
+        if (leftPressed) {
+            if (shift) {
+                m_furnaceUi.quickMove(slot, fslot);
+            } else if (fslot < 0 && isDoubleClick(slot)) {
+                m_furnaceUi.doubleCollect(slot);
+            } else {
+                m_furnaceUi.leftClick(slot, fslot);
+            }
+            if (fslot < 0 && !shift) {
+                armDoubleClick(slot);
+            } else {
+                disarmDoubleClick();
+            }
             return;
         }
-        if (m_input.wasPressed(MouseButton::Right)) {
-            m_furnaceUi.rightClick(slot, fslot);
+        if (rightPressed) {
+            if (shift) {
+                m_furnaceUi.quickMove(slot, fslot);
+            } else {
+                m_furnaceUi.rightClick(slot, fslot);
+            }
+            disarmDoubleClick();
         }
         return;
     }
@@ -6982,7 +7038,8 @@ void Game::handlePanelClicks() {
     const int gridSlot =
         cell >= 0 ? layout.gridSlots[static_cast<std::size_t>(cell)] : -1;
     const bool onOutput = layout.inOutput(px, py);
-    if (m_input.wasPressed(MouseButton::Left)) {
+    const int slot = layout.slotAt(px, py);
+    if (leftPressed) {
         // Craft rows first (they sit beside the slots, so the hit test is
         // unambiguous): an E-panel row crafts when the inventory can
         // satisfy the recipe (all-or-nothing, see craft()). A table-panel
@@ -6991,6 +7048,7 @@ void Game::handlePanelClicks() {
         const int row = layout.recipeRowAt(px, py);
         if (row >= 0) {
             if (table) {
+                disarmDoubleClick();
                 return;
             }
             const Recipe& recipe = *hints[static_cast<std::size_t>(row)];
@@ -7002,17 +7060,34 @@ void Game::handlePanelClicks() {
                     MC_LOG_ERROR("Craft failed: " + crafted.error().describe());
                 }
             }
+            disarmDoubleClick();
             return;
         }
-        if (ui.leftClick(layout.slotAt(px, py), gridSlot, onOutput)) {
-            m_sound.play("craft");
+        if (shift) {
+            ui.quickMove(slot, gridSlot, onOutput);
+        } else if (gridSlot < 0 && !onOutput && isDoubleClick(slot)) {
+            ui.doubleCollect(slot);
+        } else {
+            if (ui.leftClick(slot, gridSlot, onOutput)) {
+                m_sound.play("craft");
+            }
+        }
+        if (gridSlot < 0 && !onOutput && !shift) {
+            armDoubleClick(slot);
+        } else {
+            disarmDoubleClick();
         }
         return;
     }
-    if (m_input.wasPressed(MouseButton::Right)) {
-        if (ui.rightClick(layout.slotAt(px, py), gridSlot, onOutput)) {
-            m_sound.play("craft");
+    if (rightPressed) {
+        if (shift) {
+            ui.quickMove(slot, gridSlot, onOutput);
+        } else {
+            if (ui.rightClick(slot, gridSlot, onOutput)) {
+                m_sound.play("craft");
+            }
         }
+        disarmDoubleClick();
     }
 }
 

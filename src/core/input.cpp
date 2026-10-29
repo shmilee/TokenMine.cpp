@@ -12,7 +12,9 @@ std::optional<GameKey> Input::mapKey(std::uint32_t sdlKeycode) {
         case SDLK_S: return GameKey::S;
         case SDLK_D: return GameKey::D;
         case SDLK_SPACE: return GameKey::Space;
-        case SDLK_LSHIFT: return GameKey::LeftShift;
+        case SDLK_LSHIFT:
+        case SDLK_RSHIFT: // CRAFT-7: either shift key drives quick-move
+            return GameKey::LeftShift;
         case SDLK_LCTRL: return GameKey::LeftControl;
         case SDLK_LALT: return GameKey::LeftAlt;
         case SDLK_TAB: return GameKey::Tab;
@@ -22,6 +24,17 @@ std::optional<GameKey> Input::mapKey(std::uint32_t sdlKeycode) {
         case SDLK_F3: return GameKey::F3;
         case SDLK_F5: return GameKey::F5;
         case SDLK_R: return GameKey::R;
+        // CRAFT-7: the top-row digits (the numpad digits are left
+        // unmapped — Minecraft binds the top row).
+        case SDLK_1: return GameKey::Digit1;
+        case SDLK_2: return GameKey::Digit2;
+        case SDLK_3: return GameKey::Digit3;
+        case SDLK_4: return GameKey::Digit4;
+        case SDLK_5: return GameKey::Digit5;
+        case SDLK_6: return GameKey::Digit6;
+        case SDLK_7: return GameKey::Digit7;
+        case SDLK_8: return GameKey::Digit8;
+        case SDLK_9: return GameKey::Digit9;
         default: return std::nullopt;
     }
 }

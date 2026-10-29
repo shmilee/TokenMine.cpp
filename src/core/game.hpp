@@ -1107,6 +1107,12 @@ private:
     InventoryUI m_inventoryUi;
     InventoryUI m_tableUi;
     OpenPanel m_openPanel = OpenPanel::None;
+    // CRAFT-7: the last left click on a PLAYER-INVENTORY slot (for the
+    // double-click collect): the slot index (-1 = none) and the real-dt
+    // timestamp (seconds, -1 = none). Input-only state (the survival-
+    // timer class, hard rule 8) — a no-input run never touches it.
+    int m_lastLeftSlot = -1;
+    double m_lastLeftClickTime = -1.0;
     bool panelOpen() const { return m_openPanel != OpenPanel::None; }
 
     // CRAFT-1: the per-block crafting-table grids — one CraftingGrid per

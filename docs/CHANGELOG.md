@@ -3,6 +3,49 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.25.0（2026-10-29）— **tag v1.25.0 = CRAFT-6+7 合并 tag + CRAFT 系统 release（notes 覆盖 v1.22-1.25）**
+
+**CRAFT-7 背包交互**（v1.x 任务表 25/33，CRAFT 行 4/4 = **CRAFT 系统收官**，门 140）——原始
+定义已佚 = 代理定案 **背包面板 MC 操作面（3/4 项 + 数字键）**（消费 KNOWN_ISSUES「背包 UI
+右键语义极简」）：
+- **右键取半堆**：空手右键占位格取 `floor(N/2)` 最小 1（N=1 取自身、N=2/3 取 1 = v1 行为
+  边界、N=64 取 32；耐久随堆 SURV-3）。共享 `cellRightClick` 原语 = E 屏/工作台/炉子面板
+  同语义。
+- **shift 快捷移动**：E 屏 = hotbar(0..8)⇄storage(9..26) 互移（索引序、同物同耐久合并、
+  堆可跨格分裂）+ 容器格 → storage 优先（MC 主背包优先）+ 手持堆 no-op；炉子面板 = 容器
+  GUI 语义（炉槽 → 主背包、玩家背包侧 no-op、移 input 按 furnace.hpp 不变量重置进度）；
+  左右 Shift 皆可（RSHIFT → LeftShift 映射）。
+- **双击收集分拣**：MC 分区语义（hotbar 与主背包为独立分区——首轮单分区实现被单测揪出
+  跨区 = 修正）；第一击拾堆 + 0.3 s 真实 dt 窗内第二击同格 = 收集分区内同物同耐久堆入
+  点击格（满堆上限、溢出索引序回填）；游戏层检测（kDoubleClickSeconds 0.3 命名常量，
+  生存计时器类 = 输入态不入帧状态，无输入跑永不触碰）。
+- **顶排数字键 1-9**：直接选热栏槽（MC；Tab 循环保留；面板开/关皆可 = 全局键段
+  handleUiKeys——首轮误置 locked-world 段被 E2E 8/8 实证【面板开时 !locked 早退】，移入后
+  4/4 i=1 首试）。
+- **无拖拽**（记录偏离：三点击 + 数字键覆盖核心操作面；拖拽 = 指针捕获下轨迹跟踪 =
+  最高风险 E2E 类，矩阵外）。
+
+零 format（21）/config/新数据字段。1866/1866（+14：input 映射演进 10 / inventory_ui 9 /
+furnace 4）、`-Werror` 0 警告。门 140：S1 = **第 140 次结构性免疫免重锚**（fresh 60f 四方
+×2 168140 B 全 EXACT + base18 锚字节一致 + savenorm 同侧/跨侧；panelOpen 门控惰性 + 数字
+键未按下 = 双结构惰性）+ S2 输入跑 **16/16 PASS**（firefox 显隐 PITS 314 + 捕获轮询
+"Pointer captured" 协议 + probe140 纯布局函数算绝对槽位坐标 + 720f：r1 shift-move NEW
+slot9=64+slot10=30 分裂 vs OLD 拾堆 + 关面板丢弃（9=30 原样）/ r2 取半 NEW dirt5 vs OLD
+dirt9 / r3 双击 NEW slot13=8+slot17 空 vs OLD 拾回原样（13=3+17=5）/ r4 数字键 NEW
+selected=4 vs OLD selected=0 = **四操作存档终态全互斥** + 同侧 ×2 savenorm EXACT ×8 对）+
+S3 1866 + 无 S6（零 parse 面）+ **PITS 319**（捕获点击 grab delta 相机漂移在本 WM 平铺态
+系统性偏大——冒烟 8/8 次 yaw −0.255/pitch −1.09 但操作终态 8/8 正确 → 存档终态 = 唯一权威、
+相机只记录不门控；漂移时大时小 = 捕获瞬间 X 异步竞态）+ 性能 A/B 真 v1.24 vs v1.25 PASS
+（banner 实证 + 同款 g139 插桩补丁器两侧同打；PERF-WIN 全指标同档【upd med 0.379/0.394/
+0.394 vs 0.366/0.365/0.439】+ PIPE3-S0 tickMs 同档 + **changesApplied max 9/3/1 三窗逐位
+一致** + **终档 fluids 18/18 + blocks 55/55 集合恒等 = 同世界同成本**【无面板结构惰性最强
+形】）。
+
+**CRAFT 系统收官（release 政策：用户 10-28 定案）**：v1.22 CRAFT-4 配方提示 / v1.23 CRAFT-5
+炉子表现（tag v1.23.0 合并 CRAFT-4+5）/ v1.24 CRAFT-6 燃料熔炼 / v1.25 CRAFT-7 背包交互
+（tag v1.25.0 合并 CRAFT-6+7）→ GitHub release "TokenMine.cpp v1.25.0" notes 覆盖 v1.22-
+1.25。
+
 ## v1.24.0（2026-10-29）
 
 **CRAFT-6 燃料熔炼**（v1.x 任务表 24/33，CRAFT 行 3/4，门 139）——原始定义已佚 =

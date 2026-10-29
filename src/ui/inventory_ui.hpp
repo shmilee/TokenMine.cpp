@@ -176,6 +176,23 @@ public:
     // are disjoint: at most one is active).
     void leftClick(int slot, int furnaceSlot);
     void rightClick(int slot, int furnaceSlot);
+    // CRAFT-7: shift-click quick move (Minecraft's container-GUI
+    // semantics): a furnace slot (input/fuel/output) moves its whole
+    // stack into the player inventory (storage 9..26 first, then the
+    // hotbar, merging same-item same-damage stacks); a click on the
+    // player inventory is a no-op; carrying a stack is a no-op (the
+    // carry is kept, Minecraft). Moving the input resets the progress
+    // when the input item changes (the furnace.hpp invariant).
+    void quickMove(int slot, int furnaceSlot);
+    // CRAFT-7: double-click collect (Minecraft): with a carried stack
+    // (the first click of the pair picked it up), gather every stack of
+    // the SAME item and SAME damage in its SECTION (Minecraft: the
+    // hotbar 0..8 and the main storage 9..26 are separate sections)
+    // into the clicked slot (capped at maxStack), the remainder filling
+    // the section's other slots in index order. No carry = no-op; the
+    // furnace slots and the crafting grid are NOT part of the collect
+    // (documented deviation: the grid).
+    void doubleCollect(int slot);
 
     const ItemStack& carry() const { return m_carry; }
     bool carrying() const { return !m_carry.empty(); }
@@ -221,6 +238,23 @@ public:
     // grid) — the game plays the craft sound on that cue.
     bool leftClick(int slot, int gridSlot, bool onOutput);
     bool rightClick(int slot, int gridSlot, bool onOutput);
+    // CRAFT-7: shift-click quick move (Minecraft's E-screen semantics):
+    // a hotbar slot (0..8) moves its whole stack into the storage
+    // (9..26), a storage slot into the hotbar, a grid cell into the
+    // storage (then the hotbar if it does not fit) — each destination
+    // fills in index order, merging same-item same-damage stacks up to
+    // the max (a stack may split across several slots, Minecraft).
+    // The output slot and a carried stack are no-ops (the carry is
+    // kept). Deterministic over the slot index order.
+    void quickMove(int slot, int gridSlot, bool onOutput);
+    // CRAFT-7: double-click collect (Minecraft): with a carried stack
+    // (the first click of the pair picked it up), gather every stack of
+    // the SAME item and SAME damage in its SECTION (Minecraft: the
+    // hotbar 0..8 and the main storage 9..26 are separate sections)
+    // into the clicked slot (capped at maxStack), the remainder filling
+    // the section's other slots in index order. No carry = no-op; the
+    // grid and the output are NOT part of the collect.
+    void doubleCollect(int slot);
 
     // The live match for the grid (shaped first, then shapeless — see
     // crafting_grid.hpp). Recomputed on every call (cheap: a handful of

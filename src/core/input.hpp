@@ -36,10 +36,22 @@ enum class GameKey {
     F3, // toggle the F3 debug overlay (Phase 15)
     F5, // save now, when a save slot is active (Phase 15)
     R, // respawn, while dead (Phase 16)
+    // CRAFT-7: hotbar selection (Minecraft's top-row digits — select
+    // slot 1..9 directly, the Tab cycle stays). Both physical shift keys
+    // map to LeftShift (the shift-click quick-move accepts either).
+    Digit1,
+    Digit2,
+    Digit3,
+    Digit4,
+    Digit5,
+    Digit6,
+    Digit7,
+    Digit8,
+    Digit9,
     // Keep in sync with kKeyCount.
 };
 
-inline constexpr int kKeyCount = static_cast<int>(GameKey::R) + 1;
+inline constexpr int kKeyCount = static_cast<int>(GameKey::Digit9) + 1;
 
 enum class MouseButton {
     Left,
