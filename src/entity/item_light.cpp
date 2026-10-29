@@ -8,23 +8,25 @@
 
 namespace mc {
 
+BlockPos entityCenterCell(const Vec3& position, float height) {
+    return {static_cast<int>(std::floor(position.x)),
+            static_cast<int>(std::floor(position.y + height * 0.5f)),
+            static_cast<int>(std::floor(position.z))};
+}
+
 std::pair<float, float> itemDropLight(const World& world,
                                       const ItemEntity& item) {
-    // The AABB center: position is the bottom-center (Entity convention),
-    // the center is height/2 above it. The light is sampled at the cell
-    // the CENTER sits in (the Minecraft "entity cell" — a drop straddling
-    // a cell boundary takes the center's cell, not a blend of both).
-    const Vec3 p = item.position();
-    const int cx = static_cast<int>(std::floor(p.x));
-    const int cy = static_cast<int>(std::floor(p.y + item.height() * 0.5f));
-    const int cz = static_cast<int>(std::floor(p.z));
+    // The light is sampled at the cell the AABB CENTER sits in (the
+    // Minecraft "entity cell" — a drop straddling a cell boundary takes
+    // the center's cell, not a blend of both).
+    const BlockPos cell = entityCenterCell(item.position(), item.height());
     // World getters' documented fallback covers y out of range and
     // never-created chunks (open sky / void / below the world).
     const float sky =
-        static_cast<float>(world.getSkyLight(cx, cy, cz)) /
+        static_cast<float>(world.getSkyLight(cell.x, cell.y, cell.z)) /
         static_cast<float>(kMaxLight);
     const float block =
-        static_cast<float>(world.getBlockLight(cx, cy, cz)) /
+        static_cast<float>(world.getBlockLight(cell.x, cell.y, cell.z)) /
         static_cast<float>(kMaxLight);
     return {sky, block};
 }

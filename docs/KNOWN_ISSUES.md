@@ -504,10 +504,17 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
   pass**（熔岩格 6-邻 flammable 块烧成 air，无掉落，快照确定性）。
   Mob 无火焰视觉等 v1 限制见下三条新增条目。`[Phase 54]`
   （`[Phase 58]` 已解决）
-- **Mob 燃烧无火焰视觉** — mob 的燃烧是纯 HP 通道：无火焰贴图/粒子、
-  无红闪、无音效、无 HP 条——视觉上完全不可见（玩家燃烧有红闪 +
-  "hurt" 音，Phase 57）。Minecraft 的 mob 身上有火焰粒子。
-  `[Phase 58]`
+- ~~**Mob 燃烧无火焰视觉**~~ — `[PRE-8]` 已解决：燃烧 mob 的余烬火焰
+  （`Game::updateMobFlames` 每 `kMobFlameEveryNFrames` 36 帧、每燃烧
+  mob 一批上升余烬 = P66 `spawnFire` 复用，专用盐 `kMobFlameRollSalt`；
+  **自发光** = block 光 1.0 + 中心格天光环境项，深夜也亮 = MC 观感；
+  中心格 = `entityCenterCell` 纯函数【AABB 中心 position+height/2 逐轴
+  floor，从 PRE-6 `itemDropLight` 提取共享】；`render.mob_flames` getBool
+  代码默认 true，off = 零发射 = 对 v1.28.0 位级恒等 = 结构免疫根）。
+  与 CRAFT-5 炉口余烬的记档差异 = 炉口火探出（环境光）/ mob 火裹身
+  （自发光）。**残余**：无红闪/无音效/无 HP 条（mob 燃烧仍无独立 HUD
+  反馈，玩家燃烧红闪不变）；余烬 = 小型上升粒子（2 粒/批，与 P66 同款
+  密度）。`[Phase 58]`（`[PRE-8]` 已解决）
 - **hostile 光门与熔岩互斥** — hostile `spawn_max_light` 0 对熔岩方块
   光 15（level 无关，L1 膜也是 15）：任何熔岩格 ~15 块内 hostile 永不
   生成 → 无输入运行中 hostile 永远进不了熔岩（池边连生成都不行，且不

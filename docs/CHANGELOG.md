@@ -3,6 +3,31 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.29.0（2026-10-30）— **tag v1.29.0 = PRE-7+8 合并 tag**
+
+**PRE-8 mob 火焰**（v1.x 任务表 29/33，PRE 行 2/6，门 144）——原始定义已佚
+= 定案 **燃烧 mob 的余烬火焰**（消费 KNOWN_ISSUES「Mob 燃烧无火焰视觉」
+Phase-58 条）：`Game::updateMobFlames` 每 36 帧（`kMobFlameEveryNFrames`，
+CRAFT-5 周期）每燃烧 mob（`MobEntity::burning` = P57/P73 火系统状态）一批
+上升余烬（P66 `spawnFire` 复用，专用盐 `kMobFlameRollSalt`）+ **自发光**
+（block 光 1.0 深夜也亮 + 中心格天光环境项，与 CRAFT-5 炉口环境光余烬的
+记档差异 = 炉口火探出 / mob 火裹身）+ 中心格 = `entityCenterCell` 纯函数
+（AABB 中心 position+height/2 逐轴 floor 负坐标安全，从 PRE-6 `itemDropLight`
+提取共享）+ `render.mob_flames` getBool 代码默认 true（config.json 零改动，
+off = 对 v1.28.0 位级恒等 = 结构免疫根）。零 format（22）/config/内容/音效/
+世界状态。1894/1894（+6：entityCenterCell 4 + config 2）、`-Werror` 0；门
+144：S1 第 144 次结构性免疫 + base18 锚连续 387726 B 免重锚 + 跨版 savenorm
+EXACT；S2 燃烧 mob 活粒子协议 PASS（场景 = 膜区抬平 y39 + 8 格火膜环 + 2 格
+石柱 + 僵尸追踪 dy=2 零伤：OFF×2/OLD×2/**OFF≡OLD 字节同 = 代码级免疫** +
+**ON×2 N=540 diff 371 px 限簇** = 活余烬 + savenorm 仅 1 格视图外熔岩湖
+churn【PITS 244/283 类】+ 玩家 hp20）；性能 A/B 真 v1.28 vs v1.29-dev PASS
+（全指标同档 + changesApplied 9/3/1 三窗逐位 + 终档 fluids 18/18 + blocks
+55/55 集合恒等 = 同世界同成本）。**PITS 324**（被动 mob 夜间不生成：需光
+≥9 月光仅 7）/ **325**（敌对生成保护圈 12 = 场景须离出生点 >12）/ **326**
+（抬高玩家 dy 双重约束：周边高地形破安全 → 膜区抬平）/ **327**（余烬截图
+帧数须为 36 倍数，否则活余烬缺席 diff=0 假阴性）。详见
+`docs/archive/phase-pre8.md`。
+
 ## v1.28.0（2026-10-29）
 
 **PRE-7 中毒/燃烧表现**（v1.x 任务表 28/33，PRE 行 1/6，门 143）——原始

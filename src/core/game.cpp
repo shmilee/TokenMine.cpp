@@ -32,6 +32,7 @@
 #include "world/beacon.hpp"
 #include "world/beam_light.hpp"
 #include "world/light_job.hpp"
+#include "world/lighting.hpp" // kMaxLight
 #include "world/mesh_job.hpp"
 #include "world/noise.hpp"
 #include "ui/font.hpp"
@@ -133,6 +134,14 @@ constexpr int kFurnaceParticleEveryNFrames = 36;
 // Dedicated salt for the furnace flame seeds (the P66 discipline — the
 // furnace stream never tracks the fire-ember stream).
 constexpr std::uint64_t kFurnaceParticleRollSalt = 0x4F7A2C9E1B5D8360ULL;
+// PRE-8: the burning-mob flame emission cadence — the CRAFT-5 value
+// (36 frames, >2x the 0.5 s max ember life: at any <=60 fps the
+// previous batch is provably dead before the next emission, so the age-0
+// batch is the only live one in any <=900-frame screenshot).
+constexpr int kMobFlameEveryNFrames = 36;
+// Dedicated salt for the mob-flame seeds (the P66/CRAFT-5 discipline —
+// the mob stream never tracks the furnace or the fire-ember stream).
+constexpr std::uint64_t kMobFlameRollSalt = 0x6B3E91C4A7F25D08ULL;
 
 // Phase 83 beacon: the refresh DURATION the beacon applies to its effect
 // every frame (the fire-source pattern — standing in range resets it, so
@@ -1173,6 +1182,9 @@ Result<void> Game::buildScene() {
     // CRAFT-5: the lit-furnace flame gate (the fire.particles pattern;
     // off = zero emissions = bit-identical to v1.21.0).
     m_furnaceFlames = m_config.getBool("render.furnace_flames", true);
+    // PRE-8: the burning-mob flame gate (the render.furnace_flames
+    // pattern; off = zero emissions = bit-identical to v1.28.0).
+    m_mobFlames = m_config.getBool("render.mob_flames", true);
 
     // Phase 83 beacon: the effect range (Chebyshev blocks from the beacon
     // cell; the Minecraft beacon reaches the whole build area, 50 is a
@@ -3550,6 +3562,9 @@ void Game::update(double dt) {
     // CRAFT-5: the lit-furnace mouth flames (frame-locked emission; off
     // by render.furnace_flames = zero emissions).
     updateFurnaceFlames();
+    // PRE-8: the burning-mob flames (frame-locked emission; off by
+    // render.mob_flames = zero emissions; inert while no mob burns).
+    updateMobFlames();
     // Phase 66 (Fire v2): the spread roll (fixed frame step, every
     // fire.spread_interval_frames frames). Runs AFTER the countdown so a
     // fire that just burned out does not spread on its last frame, and
@@ -5115,6 +5130,69 @@ void Game::updateFurnaceFlames() {
                 0x9E3779B97F4A7C15ULL;
         m_particles.spawnFire(pos.x, pos.y + 1, pos.z, m_fireId, sky,
                               blockLight, rngSeed);
+    }
+}
+
+void Game::updateMobFlames() {
+    // PRE-8: the burning-mob flames — one rising ember batch per BURNING
+    // mob (MobEntity::burning = the P57/P73 fire system's state: a mob in
+    // the lava or strictly overlapping a fire-block cell re-ignites every
+    // step; the lingering burn after leaving counts down), every
+    // kMobFlameEveryNFrames frame (fixed frame step, hard rule 8). The
+    // (m_frameCount + 1) % N gate is the CRAFT-5 boundary lesson: a
+    // 900-frame run renders its last frame with m_frameCount = 899
+    // (900 % 36 = 0), so the screenshot carries that frame's age-0 batch
+    // while the 36-frame-old predecessor (0.6 s > the 0.5 s max life) is
+    // already dead — the 30-frame variant sat on the life boundary and a
+    // straggler ember broke the same-side RAW (gate 138). The spawn is a
+    // pure function of the world seed, the mob's cell and the frame, so
+    // identical runs emit identical particles; motion then integrates
+    // the real dt like every other particle (the live-particle class —
+    // E2E compares the OFF side and the cluster bounds, never the ON
+    // side's bytes, the P66 discipline).
+    //
+    // The batch is SELF-LIT: a burning mob is engulfed in its own fire,
+    // so the embers take block light 1.0 (visible at deep night —
+    // Minecraft's look) with the center cell's SKY as the ambient term.
+    // CRAFT-5's furnace-mouth embers instead live in the AIR cell above
+    // the furnace and are environment-lit (the documented difference:
+    // a furnace's flame pokes out, a mob's flame covers it).
+    //
+    // render.mob_flames off (or no burning mob, or no fire block for the
+    // texture) = zero emissions = bit-identical to v1.28.0 (the
+    // structural immunity: the no-input fresh baseline never burns a
+    // mob). The m_entities vector order is the run's own, so the batch
+    // sequence is deterministic for identical runs.
+    if (!m_mobFlames || !m_fireId.valid() ||
+        (m_frameCount + 1) % kMobFlameEveryNFrames != 0) {
+        return;
+    }
+    for (const auto& entity : m_entities) {
+        const MobEntity* mob =
+            dynamic_cast<const MobEntity*>(entity.get());
+        if (mob == nullptr || !mob->burning()) {
+            continue;
+        }
+        // The AABB-center cell (the PRE-6 entity-cell convention,
+        // hard rule 1 floors; the World getter's documented fallback
+        // covers out-of-range / never-created chunks).
+        const BlockPos center =
+            entityCenterCell(mob->position(), mob->height());
+        // Self-lit: the combustion is the block term (1.0 — the embers
+        // stay bright at deep night, Minecraft's look); the center cell's
+        // sky is the ambient term.
+        const float sky =
+            static_cast<float>(m_world.getSkyLight(center.x, center.y,
+                                                   center.z)) /
+            static_cast<float>(kMaxLight);
+        const std::uint64_t rngSeed =
+            m_generator->seed() +
+            hash3(asU64(center.x), asU64(center.y), asU64(center.z),
+                  kMobFlameRollSalt) +
+            static_cast<std::uint64_t>(m_frameCount) *
+                0x9E3779B97F4A7C15ULL;
+        m_particles.spawnFire(center.x, center.y, center.z, m_fireId, sky,
+                              1.0f, rngSeed);
     }
 }
 

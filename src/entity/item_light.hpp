@@ -25,10 +25,21 @@
 
 #include <utility>
 
+#include "core/math/vec3.hpp"
+#include "world/coordinates.hpp"
+
 namespace mc {
 
 class World;
 class ItemEntity;
+
+// The AABB center cell of an entity (the PRE-6 "entity cell" convention,
+// shared by the drop light and the PRE-8 burning-mob flames): `position`
+// is the AABB BOTTOM center (the Entity convention), the center is
+// height/2 above it, and the cell is the per-axis FLOOR of the center
+// (hard rule 1 — floor semantics for negative coordinates: an entity at
+// x = -0.2 takes cell -1, not 0).
+BlockPos entityCenterCell(const Vec3& position, float height);
 
 // The (sky, block) light of the drop's AABB-center cell, each normalized
 // to 0..1 (light level / kMaxLight). center = position + height/2

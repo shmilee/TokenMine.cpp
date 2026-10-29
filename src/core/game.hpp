@@ -446,6 +446,17 @@ private:
     // spawnFire reused; gated on m_furnaceFlames = zero emissions when
     // off, no furnaces, or no fire block for the texture).
     void updateFurnaceFlames();
+    // PRE-8: the burning-mob flames — every kMobFlameEveryNFrames frame,
+    // each BURNING mob (MobEntity::burning, the P57/P73 fire system's
+    // state) emits a rising ember batch from its AABB-center cell (the
+    // P66 spawnFire reused; the embers are SELF-LIT — block 1.0, the
+    // combustion lights them at deep night, the center cell's sky as
+    // the ambient term — unlike CRAFT-5's furnace-mouth embers, which
+    // live in the air above the furnace and are environment-lit; the
+    // documented difference: a furnace's flame pokes out, a mob's flame
+    // covers it). Gated on m_mobFlames = zero emissions when off, no
+    // burning mob, or no fire block for the texture.
+    void updateMobFlames();
     // Phase 66 fire spread (Fire v2): every fire.spread_interval_frames
     // frame, each live fire cell rolls its 5 spread neighbors (4
     // horizontal + above — never downward, Minecraft) for a `flamable`
@@ -1169,6 +1180,11 @@ private:
     // default true — off = zero emissions = bit-identical to v1.21.0;
     // the fire.particles E2E-control pattern).
     bool m_furnaceFlames = true;
+
+    // PRE-8: the burning-mob flames (render.mob_flames, default true —
+    // off = zero emissions = bit-identical to v1.28.0; the
+    // render.furnace_flames E2E-control pattern).
+    bool m_mobFlames = true;
 
     // Phase 71 campfire (the family in Phase 75): PER-BLOCK cooking
     // states — one CampfireCookState per campfire-FAMILY block in the
