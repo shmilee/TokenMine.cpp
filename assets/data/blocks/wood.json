@@ -4,7 +4,8 @@
     "sound_material": "wood",
     "hardness": 2.0,
     "drops": "wood",
-    "flamable": true
+    "flamable": true,
+    "fuel_time": 20
   },
   "model": {
     "textures": { "top": "wood_top", "side": "wood_side", "bottom": "wood_top" }

@@ -3,6 +3,44 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.24.0（2026-10-29）
+
+**CRAFT-6 燃料熔炼**（v1.x 任务表 24/33，CRAFT 行 3/4，门 139）——原始定义已佚 =
+代理定案 **block 物品的炉子字段 = block 属性继承**（消费 KNOWN_ISSUES Phase-40「可
+熔炼/燃料名单小且 wood 不可当燃料」）：
+- **技术路线**：`buildBlockItems` 合成 block 物品且显式同名物品文件被注册表拒绝
+（"block items are defined by their block"）= 物品侧无文件可挂字段 → 新增 block
+可选属性 `fuel_time`（(0,1000]，显式 0 点名拒 = item 侧同款纪律）+ `smeltable_to`
+（显式空串点名拒 = ammo 纪律；产物存在性 = 既有 game init 全物品遍历自动覆盖
+block 物品，**零新校验代码**）→ 继承进合成 item。炉子 tick 零改动（读 item 字段
+从不读 block id = 硬规则 3；非燃料 burn 0 永不消耗 = 既有语义）。
+- **内容（3 项，MC 语义，零新资产）**：`wood` 块 + `fuel_time: 20`（项目木族刻度：
+planks 7.5 / stick 5，coal 80 = MC 精确锚；20 s ≈ 2.7× 单 planks = MC log-vs-plank
+比值方向）+ `sand` 块 + `smeltable_to: "glass"`（MC 10 s 缺省）+ `lava_bucket`
+物品 + `fuel_time: 1000`（MC 精确 = 区间上限）。
+
+零 format（21）/config/新资产/音效。1852/1852（+5：解析 2 / 内容钉 1 / 继承 + 真
+tick 2）、`-Werror` 0 警告。门 139：S1 = **第 139 次结构性免疫**（fresh 60f 四方
+×2 168140 B 全 EXACT + savenorm 同侧/跨侧；furnace 永不 worldgen = m_furnaces 空
+双结构惰性 + 属性纯数据零渲染变更；**base18 锚随服务器重启 /tmp 清空丢失 = 四方
+字节一致后刷新采用**【与丢失前同尺寸同 WM 态，PITS 265/315/317 先例】）+ S2 炉
+场景无输入跑 PASS（input sand×1 + fuel wood×1 预置，900f：NEW frame 1 点火【wood
+消耗 →1200】/ frame 600 熔炼完成【glass×1】/ 900f fuel_substeps 301【点火帧授予不
+消耗 = 1200−899，冒烟精确实证】仍燃 = P66 活粒子类【new×2 RAW 差 1453 px 100% 含于
+火焰带 + 炉子态 ×2 逐位一致】vs OLD wood 非燃料恒保留 = 恒无火无熔炼【old×2 RAW
+235855 B EXACT + 日志 0 行】= **新旧终态互斥（玻璃在产 vs 原料恒存）** + new vs old
+4337 px bbox 130×150 紧凑火焰簇 + savenorm 仅熔岩湖 churn【blocks 集合恒等 +
+fluids 1-5 格 @ ~100 块视图外 = PITS 244/283 类】）+ S3 1852 + S6 ×3 点名 PASS
+【fuel_time 显式 0 / smeltable_to 空串 / "glassz" 未知产物 = game init 交叉校验
+覆盖 block 物品实证】+ 性能 A/B 真 v1.23 vs v1.24 PASS（banner 实证 + 同款 g139
+插桩补丁器两侧同打；PERF-WIN 全指标同档 + changesApplied max 9/3/1 三窗逐位 +
+**终档 fluids 18/18 + blocks 55/55 集合恒等 = 同世界同成本**【结构惰性最强形】）。
+**PITS 317**（服务器重启清空 /tmp = 全部门资产丢失 → 重建清单：xenv / g117 对比器
+/ configs / 参照树【git archive + 同款补丁器】/ 锚刷新采用 / 冻结 seed 可换
+`--new --seed`【世界生成跨二进制确定性 = 核心不变量】；教训 = 门协议资产必须可从
+仓库 + commit 重建）。发布政策（用户 10-28 定案）：**v1.24.0 不打 tag**；
+**v1.25.0 = CRAFT-6+7 合并 tag + CRAFT 系统 release**（notes 覆盖 v1.22-1.25）。
+
 ## v1.23.0（2026-10-29）— **tag v1.23.0 = CRAFT-4+5 合并 tag（新政策首个）**
 
 **CRAFT-5 炉子表现**（v1.x 任务表 23/33，CRAFT 行 2/4，门 138）——原始定义已佚 =

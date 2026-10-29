@@ -278,10 +278,19 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
   （表现 `[CRAFT-5]`，经验 = 无 XP 系统）
 - **可熔炼/燃料名单小且 wood 不可当燃料** — 数据字段 `smeltable_to` /
   `smelt_time`（(0,100] s，缺省 10）/ `fuel_time`（(0,1000] s）完全数据
-  驱动、可扩展；当前仅 3 种肉可熔炼，燃料 = coal 80 s / planks 7.5 s /
-  stick 5 s。wood 是隐式 block 物品（无数据文件）故无 `fuel_time`——要让它
-  当燃料需建显式物品数据文件（与 block 同名冲突规则见「物品 / 背包」）。
-  `[Phase 40]`
+  驱动、可扩展；初版仅 3 种肉可熔炼，燃料 = coal 80 s / planks 7.5 s /
+  stick 5 s。wood 是隐式 block 物品（无数据文件）故无 `fuel_time`——
+  **`[CRAFT-6]` 已解决：block 物品炉子字段 = block 属性继承**（显式同名
+  物品文件被注册表拒绝 = "block items are defined by their block"，block
+  属性是唯一数据驱动路线）：block 可选属性 `fuel_time`（(0,1000]，显式 0
+  点名拒 = item 侧同款纪律）+ `smeltable_to`（显式空串点名拒 = ammo 纪律；
+  产物存在性 = 既有 game init 全物品遍历自动覆盖 block 物品），
+  `buildBlockItems` 继承进合成 item；内容 = **wood 20 s 燃料**（项目木族
+  刻度：planks 7.5 / stick 5，coal 80 = MC 精确锚，20 s ≈ 2.7× 单 planks =
+  MC log-vs-plank 比值方向）+ **sand → glass 熔炼**（MC 10 s 缺省）+
+  **lava_bucket 1000 s**（MC 精确 = 区间上限）；炉子 tick 零改动（读 item
+  字段从不读 block id = 硬规则 3；非燃料 burn 0 永不消耗 = 既有语义）。
+  `[Phase 40]`（→ `[CRAFT-6]`）
 - **熔炼计时是每帧固定 1/60 子步 + 整数倒计时（非墙钟）** — 与昼夜同类的
   世界状态：无输入运行逐字节可复现（存档 progress/fuel 是整数子步）；
   代价是非 60fps 下熔炼随帧钟变速（同昼夜条目）。点火 tick 授予整段燃烧

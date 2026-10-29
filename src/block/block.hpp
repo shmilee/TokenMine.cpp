@@ -304,6 +304,20 @@ struct BlockProperties {
     // samples pre-CRAFT-3). Pure data — the core reads the property, it
     // never switches on a block id (hard rule 3).
     std::string soundMaterial;
+
+    // CRAFT-6: the block item's furnace fields. A block item is
+    // SYNTHESIZED from its block (buildBlockItems — an explicit
+    // same-named item file is rejected), so the block property is the
+    // only data-driven route for a block to be fuel or smeltable.
+    // 'fuel_time' (seconds, (0, 1000] — the item-side discipline, the
+    // coal 80 s precedent; ABSENT / 0 = not a fuel): inherited by the
+    // synthesized item (wood 20 s shipped).
+    float fuelTime = 0.0f;
+    // 'smeltable_to' (the smelting product's ITEM name; ABSENT = not
+    // smeltable — the ammo discipline, explicit empty string rejected;
+    // the product's existence is cross-checked at game init over ALL
+    // items, block items included): sand -> glass shipped.
+    std::string smeltableTo;
 };
 
 // Which texture name is applied to each face group (full_cube shapes) — or

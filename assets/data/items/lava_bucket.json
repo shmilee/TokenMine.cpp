@@ -5,6 +5,7 @@
  "icon": "lava_bucket",
  "pours_fluid": "lava",
  "pours_becomes": "bucket",
+ "fuel_time": 1000,
  "model": {
   "texture": "lava_bucket",
   "elements": [

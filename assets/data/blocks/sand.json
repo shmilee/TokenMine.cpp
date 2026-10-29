@@ -3,7 +3,8 @@
   "properties": {
     "sound_material": "sand",
     "hardness": 0.5,
-    "drops": "sand"
+    "drops": "sand",
+    "smeltable_to": "glass"
   },
   "model": {
     "textures": { "top": "sand", "side": "sand", "bottom": "sand" }

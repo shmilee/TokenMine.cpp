@@ -20,7 +20,7 @@
 | FLUID 流体 | ~~FLUID-4 倒向水面~~ ✅ v1.9.0 | ~~FLUID-5 水熔岩反应~~ ✅ v1.10.0 | ~~FLUID-6 流体种类扩展~~ ✅ v1.11.0 | | | |
 | ENT 实体/Mob/移动 | ~~ENT-5 坠落伤害~~ ✅ v1.12.0 | ~~ENT-6 AI 补强~~ ✅ v1.13.0 | ~~ENT-7 移动惯性~~ ✅ v1.14.0 | ~~ENT-8 和平/保护环~~ ✅ v1.15.0 | ~~ENT-9 掉落可视化~~ ✅ v1.16.0 | |
 | SURV 生存/战斗/效果 | ~~SURV-6 效果档位~~ ✅ v1.17.0 | ~~SURV-7 死亡统计~~ ✅ v1.18.0 | ~~SURV-8 工具 10×~~ ✅ v1.19.0 | ~~SURV-9 饱和细化~~ ✅ v1.20.0 | ~~SURV-10 挤奶冷却~~ ✅ v1.21.0 | |
-| CRAFT 物品/合成/面板 | ~~CRAFT-4 配方提示~~ ✅ v1.22.0 | ~~CRAFT-5 炉子表现~~ ✅ v1.23.0 | CRAFT-6 燃料熔炼 | CRAFT-7 背包交互 | | |
+| CRAFT 物品/合成/面板 | ~~CRAFT-4 配方提示~~ ✅ v1.22.0 | ~~CRAFT-5 炉子表现~~ ✅ v1.23.0 | ~~CRAFT-6 燃料熔炼~~ ✅ v1.24.0 | CRAFT-7 背包交互 | | |
 | SAVE 存档 | SAVE-2 速度入档 | SAVE-3 槽位管理 | | | | |
 | PRE 表现层 | PRE-7 中毒/燃烧表现 | PRE-8 mob 火焰 | PRE-9 箭/弓/手视觉 | PRE-10 图标重叠修复★ | PRE-11 HUD 细化 | PRE-12 tooltip/F3 |
 | UX 实机报障 | （新实机报障入此行，用户定案） | | | | | |
@@ -34,14 +34,18 @@
 2. 一任务一 phase，走标准阶段流程（实现 → 构建+测试 → E2E → 文档 →
    提交 → 报告）。
 3. 版本号仍逐版 bump（每 phase 一个 = 代码内二进制身份，供 A/B 旧侧 /
-   CHANGELOG 逐版条目 / F3 钉），但 **phase 级不打任何 tag**
-   （10-27 用户定案：任务矩阵每完成一个打一个 tag 太频繁）；
-   **每版发布前必做性能 A/B**（用户硬要求），旧侧 = 上一 release tag 或
-   指定 commit。**tag = 1:1 对应 release**，只在发 GitHub release 时打：
-   - 组 release：5 版一组，tag = 组末版本号（标题 "TokenMine.cpp v1.XX.0"）；
-     v1.x 组边界 = 1.6–1.10 / 1.11–1.15 / …（矩阵余 26 项 ≈ 6 个组 release）。
-   - 里程碑版本：单独正式 release（v1.0.0 先例）。
-   - 组内用户定案单独发：tag 该版本、下一版本起新组。
+   CHANGELOG 逐版条目 / F3 钉），但 **phase 级不打 tag**（10-27 用户定案：
+   任务矩阵每完成一个打一个 tag 太频繁）；**每版发布前必做性能 A/B**
+   （用户硬要求），旧侧 = 上一 release tag 或指定 commit。
+   **发布政策（10-28 用户定案，自 CRAFT 系统起生效）**：**tag 可两任务
+   合并**（一个 1.x.0 tag 覆盖两个任务——v1.23.0 = CRAFT-4+5 已兑现
+   ✓；下一 v1.25.0 = CRAFT-6+7；SAVE/PRE 系统同型：各系统内两两合并）；
+   **release 按系统收官**（CRAFT / SAVE / PRE 各一个，notes 覆盖系统内
+   全部版本：CRAFT release = CRAFT-7 收官时发（v1.25.0 tag），notes 覆盖
+   v1.22-1.25；SAVE / PRE 各在其系统收官时发）。里程碑版本：单独正式
+   release（v1.0.0 先例）。历史：10-27 组政策（5 版一组、tag = 组末版本
+   号）适用至 v1.21.0 为止，由 10-28 政策取代（v1.15.0 / v1.20.0 /
+   v1.21.0 tag + release 为组政策产物，保留为历史事实）。
 
 ## 表外
 
@@ -116,6 +120,52 @@
   构建与运行 + 范围与限制 + 许可），PITS 范围 267-288 修正为 271-288
   （267-270 属 v1.0 组时代门 114/115）③ Latest 收尾回 v1.5.0 组 release
   （重建时序）。同步 README/CHANGELOG/BACKLOG/AGENTS 旧引用。
+- 2026-10-28：**发布政策刷新（用户定案，自 CRAFT 系统起）**。"从下一个
+  系统 CRAFT 的任务开始，不需要每个任务一个 1.x.0 的 tag，可以合并两个
+  任务一个 tag；release 则是一个系统完成后对应一个 release（CRAFT 系统
+  一个、SAVE 系统一个、PRE 系统一个）"。**兑现**：v1.22.0（CRAFT-4）不
+  打 tag → **v1.23.0 = CRAFT-4+5 合并 tag（首个，9e326d1）**；v1.24.0
+  （CRAFT-6）不打 tag → **v1.25.0 = CRAFT-6+7 合并 tag + CRAFT 系统
+  release**（notes 覆盖 v1.22-1.25）；SAVE / PRE 系统同型。执行顺序 #3
+  已刷新（10-27 组政策适用至 v1.21.0 为止，保留为历史事实）。
+- 2026-10-29：**CRAFT-6 燃料熔炼完成**（v1.x 24/33，v1.24.0，门 139，CRAFT 行 3/4）：
+  "燃料熔炼"原始定义已佚 = 定案 **block 物品的炉子字段 = block 属性继承**
+  （消费 KNOWN_ISSUES Phase-40"可熔炼/燃料名单小且 wood 不可当燃料"）：
+  注册表拒显式同名物品文件（"block items are defined by their block"）
+  = 唯一数据驱动路线 → block 可选属性 `fuel_time`（(0,1000]，显式 0 点名
+  拒 = item 侧同款纪律）+ `smeltable_to`（显式空串点名拒 = ammo 纪律；
+  产物存在性 = 既有 game init 全物品遍历自动覆盖 block 物品，零新校验
+  代码）→ buildBlockItems 继承进合成 item；内容 = **wood 20 s 燃料**（项目
+  木族刻度：planks 7.5 / stick 5，coal 80 = MC 精确锚，≈2.7× 单 planks =
+  MC log-vs-plank 比值方向）+ **sand → glass 熔炼**（MC 10 s 缺省）+
+  **lava_bucket 1000 s**（MC 精确 = 区间上限）；炉子 tick 零改动（读 item
+  字段从不读 block id = 硬规则 3；非燃料 burn 0 永不消耗 = 既有语义 = OLD
+  侧 wood 恒保留的行为根）。零 format（21）/config/新资产/音效。
+  1852/1852（+5：解析 2 / 内容钉 1 / 继承 + 真 tick 2）、`-Werror` 0。
+  门 139：S1 第 139 次结构性免疫（fresh 60f 四方 ×2 168140 B 全 EXACT +
+  savenorm 同侧/跨侧；furnace 永不生成 = m_furnaces 空双结构惰性 + 属性
+  纯数据；**base18 锚随 /tmp 重启丢失 = 四方一致后刷新采用**【尺寸与丢失
+  前一致 = 同 WM 态延续，PITS 265/315/317 先例】）+ S2 炉场景无输入跑
+  PASS（input sand×1 + fuel wood×1 预置：NEW frame 1 点火【wood 消耗
+  →1200，Furnace lit 日志】/ frame 600 熔炼完成【glass×1，smelt complete:
+  glass 日志】/ 900f fuel_substeps 301【点火帧授予不消耗 = 1200−899，冒烟
+  30f→1171 精确实证】仍燃 = P66 活粒子类【new×2 RAW 差 1453 px 100% 含于
+  火焰带 + 炉子态 ×2 逐位】vs OLD wood 非燃料恒保留 = 恒无火无熔炼【old×2
+  RAW 235855 B EXACT + 日志 0】= **新旧终态互斥（玻璃在产 vs 原料恒存）**
+  + new vs old 4337 px bbox 130×150 紧凑簇 + savenorm 仅熔岩湖 churn
+  【blocks 集合恒等 + fluids 1-5 格 @ ~100 块视图外 = PITS 244/283 类】）+
+  S3 1852 + S6 ×3 点名【fuel_time 显式 0 "in (0, 1000]" / smeltable_to 空串
+  "non-empty item name" / glassz "references unknown smelting product" =
+  game init 交叉校验覆盖 block 物品实证】+ 性能 A/B 真 v1.23 vs v1.24 PASS
+  （banner 实证 + 同款 g139 插桩补丁器两侧同打；PERF-WIN 全指标同档 +
+  changesApplied max 9/3/1 三窗逐位 + **终档 fluids 18/18 + blocks 55/55
+  集合恒等 = 同世界同成本**【结构惰性最强形】）。**PITS 317**（服务器重启
+  清空 /tmp = 全部门资产丢失 → 重建清单：xenv/g117 对比器/configs/参照树
+  【git archive + 同款补丁器】/锚刷新采用/冻结 seed 可换 --new --seed
+  【世界生成跨二进制确定性 = 核心不变量】；门协议资产须可从仓库 + commit
+  重建）+ 点火帧 off-by-one 301 记档。v1.24.0 不打 tag（**v1.25.0 =
+  CRAFT-6+7 合并 tag + CRAFT 系统 release**，notes 覆盖 v1.22-1.25）——详见
+  `docs/archive/phase-craft6.md`。
 - 2026-10-29：**CRAFT-5 炉子表现完成**（v1.x 23/33，v1.23.0，门 138，CRAFT 行 2/4）：
   "炉子表现"原始定义已佚 = 定案 **炉子的两个 MC 表现提示**（消费 KNOWN_ISSUES
   Phase-40"无熔炼完成音效、无火焰动画、无经验"）：① 炉口火焰粒子 = 燃烧中炉子

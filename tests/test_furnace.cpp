@@ -9,6 +9,7 @@
 
 #include <string>
 
+#include "block/block_registry.hpp"
 #include "core/json.hpp"
 #include "item/furnace.hpp"
 #include "item/item_registry.hpp"
@@ -513,4 +514,101 @@ TEST(FurnaceEventsTest, EventsTrackTheRealTick) {
     EXPECT_TRUE(st.input.empty());
     EXPECT_TRUE(st.fuel.empty());
     EXPECT_GT(st.fuelSubsteps, 0); // still burning: 4800 - 600
+}
+
+// -- CRAFT-6: block items as fuel / smeltable (the inherited fields) --
+
+namespace {
+
+Result<Json> parseJsonFromFile(const char* path) {
+    FILE* fp = std::fopen(path, "rb");
+    if (fp == nullptr) {
+        return MC_FAIL("cannot open " + std::string(path) +
+                       " (run from the repo root)");
+    }
+    std::string text;
+    char buf[4096];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+        text.append(buf, n);
+    }
+    std::fclose(fp);
+    return Json::parse(text);
+}
+
+// The real block files a furnace scene needs (wood fuel, sand -> glass).
+BlockRegistry loadRealBlocks() {
+    BlockRegistry blocks;
+    for (const char* path : {"assets/data/blocks/wood.json",
+                             "assets/data/blocks/sand.json",
+                             "assets/data/blocks/glass.json"}) {
+        auto j = parseJsonFromFile(path);
+        if (!j.ok()) {
+            break; // repo-root guard, ASSERTed in the tests
+        }
+        if (!blocks.registerBlock(*j).ok()) {
+            break;
+        }
+    }
+    return blocks;
+}
+
+} // namespace
+
+TEST(FurnaceBlockItemTest, RealAssetsInheritFurnaceFields) {
+    // The shipped CRAFT-6 content over the REAL files: the block items
+    // inherit fuel_time (wood 20 s) and smeltable_to (sand -> glass);
+    // lava_bucket (an explicit item file) carries the MC-exact 1000 s.
+    BlockRegistry blocks = loadRealBlocks();
+    ASSERT_TRUE(blocks.findByName("wood") != nullptr) << "repo root";
+    ASSERT_TRUE(blocks.findByName("glass") != nullptr) << "repo root";
+    ItemRegistry items;
+    auto lb = parseJsonFromFile("assets/data/items/lava_bucket.json");
+    ASSERT_TRUE(lb.ok()) << "repo root";
+    ASSERT_TRUE(items.registerItem(*lb).ok());
+    ASSERT_TRUE(items.buildBlockItems(blocks).ok());
+    const Item* wood = items.findByName("wood");
+    const Item* sand = items.findByName("sand");
+    const Item* glass = items.findByName("glass");
+    ASSERT_NE(wood, nullptr);
+    ASSERT_NE(sand, nullptr);
+    ASSERT_NE(glass, nullptr);
+    EXPECT_FLOAT_EQ(wood->fuelTime, 20.0f);
+    EXPECT_EQ(fuelSubstepsFor(*wood), 20 * 60);
+    EXPECT_EQ(sand->smeltableTo, "glass");
+    EXPECT_EQ(sand->smeltableTo, glass->name);
+    EXPECT_EQ(smeltSubstepsFor(*sand), 600); // the 10 s default
+    EXPECT_FLOAT_EQ(items.at(items.idForName("lava_bucket")).fuelTime,
+                    1000.0f);
+    EXPECT_EQ(fuelSubstepsFor(items.at(items.idForName("lava_bucket"))),
+              1000 * 60);
+}
+
+TEST(FurnaceBlockItemTest, RealTickWithBlockFuelAndSmeltable) {
+    // End-to-end over the pure tick: a furnace fed with SAND (block
+    // item, smeltable) and WOOD (block item, fuel) ignites on the first
+    // substep and completes the smelt on the 600th — the block items
+    // flow through the SAME tick path as explicit items (the furnace
+    // reads item data, never a block id — hard rule 3).
+    BlockRegistry blocks = loadRealBlocks();
+    ASSERT_NE(blocks.findByName("wood"), nullptr) << "repo root";
+    ItemRegistry items;
+    ASSERT_TRUE(items.buildBlockItems(blocks).ok());
+    const ItemID woodId = items.idForName("wood");
+    const ItemID sandId = items.idForName("sand");
+    const ItemID glassId = items.idForName("glass");
+    FurnaceState st;
+    st.input = stk(sandId, 1);
+    st.fuel = stk(woodId, 1);
+    tickFurnace(st, items);
+    ASSERT_TRUE(st.fuel.empty()); // the wood was consumed as fuel
+    EXPECT_EQ(st.fuelSubsteps, 20 * 60);
+    EXPECT_EQ(st.progressSubsteps, 1);
+    for (int i = 1; i < 600; ++i) {
+        tickFurnace(st, items);
+    }
+    EXPECT_EQ(st.output, stk(glassId, 1));
+    ASSERT_TRUE(st.input.empty());
+    EXPECT_EQ(st.progressSubsteps, 0);
+    EXPECT_GT(st.fuelSubsteps, 0); // 1200 - 600: still burning
 }

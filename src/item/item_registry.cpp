@@ -46,6 +46,12 @@ Result<void> ItemRegistry::buildBlockItems(const BlockRegistry& blocks) {
         item.block = id;
         item.breakSpeed = 1.0f;
         item.maxStack = 64;
+        // CRAFT-6: the block item inherits the block's furnace fields —
+        // the only data-driven route (an explicit same-named item file
+        // is rejected above), so a block can be fuel or smeltable with
+        // zero item-side content (wood fuel / sand -> glass shipped).
+        item.fuelTime = block.properties.fuelTime;
+        item.smeltableTo = block.properties.smeltableTo;
         item.id = ItemID{static_cast<int>(m_items.size())};
         m_names.emplace(item.name, item.id.value);
         m_items.push_back(std::move(item));

@@ -2874,3 +2874,97 @@ TEST(BlockRegistryTest, Phase83IronBlockRecipeContent) {
     }
     EXPECT_EQ(def.find("key")->find("I")->asString(), "iron_ingot");
 }
+
+// -- CRAFT-6: the block item's furnace fields (fuel_time / smeltable_to)
+
+TEST(BlockFurnaceFieldsTest, ParseKeepsFuelAndSmeltable) {
+    BlockRegistry reg;
+    auto rw = reg.registerBlock(parseDef(
+        R"({"id":"wood","properties":{"fuel_time":20},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(rw.ok()) << rw.error().message;
+    const Block& w = reg.at(*rw);
+    EXPECT_FLOAT_EQ(w.properties.fuelTime, 20.0f);
+    EXPECT_TRUE(w.properties.smeltableTo.empty());
+    auto rs = reg.registerBlock(parseDef(
+        R"({"id":"sand","properties":{"smeltable_to":"glass"},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(rs.ok()) << rs.error().message;
+    const Block& s = reg.at(*rs);
+    EXPECT_EQ(s.properties.smeltableTo, "glass");
+    EXPECT_FLOAT_EQ(s.properties.fuelTime, 0.0f);
+    // Both ABSENT = the plain-block defaults (neither fuel nor
+    // smeltable) — the structural-immunity root for existing content.
+    auto rplain = reg.registerBlock(parseDef(minimalDef("stone")));
+    ASSERT_TRUE(rplain.ok());
+    const Block& p = reg.at(*rplain);
+    EXPECT_FLOAT_EQ(p.properties.fuelTime, 0.0f);
+    EXPECT_TRUE(p.properties.smeltableTo.empty());
+}
+
+TEST(BlockFurnaceFieldsTest, ParseRejectsBadValues) {
+    BlockRegistry reg;
+    // An EXPLICIT fuel_time 0 is a typo (ABSENT is the default — the
+    // item-side restore_hunger discipline).
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"a","properties":{"fuel_time":0},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("fuel_time"), std::string::npos);
+    // Out of (0, 1000] both ends.
+    r = reg.registerBlock(parseDef(
+        R"({"id":"b","properties":{"fuel_time":1001},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("(0, 1000]"), std::string::npos);
+    r = reg.registerBlock(parseDef(
+        R"({"id":"c","properties":{"fuel_time":12.5},"model":)"
+        R"({"textures":{"top":"t","side":"t","bottom":"t"}},"junk":1})"));
+    // (12.5 is legal — the range check only; the unknown-key tolerance
+    // of 'properties' is unchanged.)
+    EXPECT_TRUE(r.ok());
+    // Wrong types.
+    r = reg.registerBlock(parseDef(
+        R"({"id":"d","properties":{"fuel_time":"fast"},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(r.ok());
+    r = reg.registerBlock(parseDef(
+        R"({"id":"e","properties":{"smeltable_to":7},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(r.ok());
+    // An explicit empty smeltable_to is a no-op typo (the ammo
+    // discipline, the ignites_to pattern).
+    r = reg.registerBlock(parseDef(
+        R"({"id":"f","properties":{"smeltable_to":""},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("smeltable_to"), std::string::npos);
+}
+
+TEST(BlockContentTest, Craft6FuelAndSmeltableContentPinned) {
+    // The real assets: wood = FUEL 20 s (the project wood-family scale:
+    // planks 7.5 s / stick 5 s, coal 80 s the MC-exact anchor — 20 s is
+    // ~2.7x one plank, the MC log-vs-plank ratio direction) and sand
+    // = SMELTABLE -> glass (the MC 10 s default smelt).
+    BlockRegistry blocks;
+    for (const char* path : {"assets/data/blocks/wood.json",
+                             "assets/data/blocks/sand.json"}) {
+        FILE* fp = std::fopen(path, "rb");
+        ASSERT_NE(fp, nullptr) << "run from the repo root: " << path;
+        std::string text;
+        char buf[4096];
+        std::size_t n;
+        while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+            text.append(buf, n);
+        }
+        std::fclose(fp);
+        auto parsed = Json::parse(text);
+        ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+        auto reg = blocks.registerBlock(*parsed);
+        ASSERT_TRUE(reg.ok()) << reg.error().message;
+    }
+    EXPECT_FLOAT_EQ(blocks.at(blocks.idForName("wood")).properties.fuelTime,
+                    20.0f);
+    EXPECT_EQ(blocks.at(blocks.idForName("sand")).properties.smeltableTo,
+              "glass");
+}

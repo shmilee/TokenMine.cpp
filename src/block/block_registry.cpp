@@ -198,6 +198,33 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
                            "generic dig/place/break sounds)");
         }
     }
+    // CRAFT-6: the block item's furnace fuel (the item-side 'fuel_time'
+    // discipline mirrored: a number in (0, 1000], an EXPLICIT 0 is a
+    // typo — ABSENT means "not a fuel"). Inherited by the synthesized
+    // block item in buildBlockItems.
+    r = checkField(*p, "fuel_time", "number",
+                   [&](const Json& v) { out.fuelTime = v.asDouble(); });
+    MC_TRY(r);
+    if (p->find("fuel_time") != nullptr) {
+        if (out.fuelTime <= 0.0f || out.fuelTime > 1000.0f) {
+            return MC_FAIL("block property 'fuel_time' must be a number "
+                           "in (0, 1000], got " +
+                           std::to_string(out.fuelTime));
+        }
+    }
+    // CRAFT-6: the block item's smelting product (the item-side
+    // 'smeltable_to' discipline mirrored; the product's existence is
+    // cross-checked at game init over all items, block items included).
+    r = checkField(*p, "smeltable_to", "string",
+                   [&](const Json& v) { out.smeltableTo = v.asString(); });
+    MC_TRY(r);
+    if (const Json* st = p->find("smeltable_to")) {
+        if (st->asString().empty()) {
+            return MC_FAIL("block property 'smeltable_to' must be a "
+                           "non-empty item name (omit it for a plain "
+                           "block)");
+        }
+    }
     r = checkField(*p, "beacon_effect", "string",
                    [&](const Json& v) { out.beaconEffect = v.asString(); });
     MC_TRY(r);

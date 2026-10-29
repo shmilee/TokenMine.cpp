@@ -2304,6 +2304,32 @@
   性，real-dt 终态设计先冒烟实测场景 fps，或消掉 real-dt 变量
   （本门解法 = nodecay config【hunger_decay_seconds 9999，g95 先例】
   + 帧数按最慢边界 + 恰满 10 次回复的精确终态）。
+- **服务器重启回滚 .git/index = 假暂存删除（PITS 318）**——10-29 门 139
+  （PITS 317 同事件）：opencode 服务器重启不仅清了 /tmp，还把仓库
+  .git/index 回滚到 CRAFT-5 提交前状态（HEAD/worktree 完好）：CRAFT-5
+  的 2 个新文件 status 呈"D（暂存删除）+ ??（未跟踪）"混合态、13 个改
+  动文件呈 MM——`git diff <HEAD>` 甚至报 worktree 删除（文件实际存在、
+  尺寸吻合）。判定 = `git diff --cached --stat` 显示 index 落后 HEAD
+  恰一个提交体量（439 行 = CRAFT-5 提交体量）。修 = `git reset`（mixed，
+  index 从 HEAD 重建，worktree 零改动）+ `git diff <HEAD> --stat -- <疑
+  点文件>` = 0 行验证。教训 = 任何重启/回滚事件后先 `git status` 体检；
+  见已提交文件"D + ??"混合态，先疑索引回滚而非文件丢失（ls 实尺寸核
+  验 + `git diff --cached --stat` 对差量）。
+- **服务器重启清空 /tmp = 全部门资产丢失（PITS 317）**——10-29 门 139：
+  opencode 服务器重启清掉 /tmp/opencode——tm_v1XX_src/perf 参照树、门
+  脚本/场景/config/断言产物、base18 锚、插桩 step0 patch/hunk 脚本、性
+  能 seed 全失（仓库无损）。重建清单 = ① xenv.sh（DISPLAY=:0）② g117
+  对比器（raw 字节比 + savenorm real-dt 剥离：fires[*].remaining /
+  entities[*].age / player.saturation）③ configs（以已提交
+  config/config.json 用户调值为底 + nomobs/nodecay/perf 变体）④ 参照
+  树（git archive <commit> + mkdir data/saves；性能树 = 同款补丁器两侧
+  同打——CRAFT-6 零 game.cpp 变更 = v1.23/v1.24 树锚点字节一致可共享
+  补丁器）⑤ base18 锚（S1 四方字节一致后刷新采用 = PITS 265/315 先
+  例）⑥ 性能冻结 seed 可换 `--new --seed`（世界生成跨二进制确定性 =
+  项目核心不变量，GEN-7/8/9 "同 seed 900f" 同款协议）。教训 = **门协议
+  资产必须可从仓库 + commit 重建**；只存在于 /tmp 且不可推导者（step0
+  patch）是风险点——本次重建为 g139_instrument.py 同款补丁器，长期须
+  入 tools/（下轮基础设施项）。
 - **性能树 step0 patch 的 hunk 锚定 update() 区 = 新插入移动上下文（PITS 316）**——10-29 门 138：
   CRAFT-5 在 `updateFires(dt);` 与 `updateFireSpread();` 之间插入 `updateFurnaceFlames();`
   → step0_patch 的 hunk #7（把这两行各自包进 chrono 测量块）上下文失配 FAILED（#6 恒 FAIL
