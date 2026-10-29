@@ -3,6 +3,37 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.31.0（2026-10-30）— **tag v1.31.0 = PRE-9+10 合并 tag**
+
+**PRE-10 图标重叠修复**（v1.x 任务表 31/33，门 146，PRE 行 4/6，
+**矩阵唯一 bug 级项**）：原始定义 = 砍掉清单回填项"图标重叠修复★"
+（消费 KNOWN_ISSUES「效果图标行与吸收红心可视觉重叠」Phase-56 条：
+效果图标行与心行同行，图标多时画到吸收红心区——现状几何 w=1362 下
+5 个效果触发，shipped 内容可达 5-6）= 定案 **MC 三行 HUD 堆栈**（行距
+kIconPx+kStripGap = 22，每行独占 = 任意图标数零碰撞）：心行（hy，零
+改动）/ **效果行（hy−22，新专属行，左锚 = 心行最左缘 = 池在时吸收带
+左缘，MC 布局）**/ **护甲行（hy−44，SURV-1 护甲槽上移一行 = MC 护甲
+在效果行之上）**。纯布局常量（game.cpp drawUI 两段），零 format
+（22）/config/内容/音效/帧状态；HUD 仅指针锁定时绘制 = 无输入结构
+免疫根。1897/1897（零新测 = 布局 GL 路径内不可单测，门像素断言钉死，
+PRE-7 先例）、`-Werror` 0；门 146：S1 第 146 次结构性免疫 + base18
+锚连续 387726 B 免重锚 + 跨版 savenorm EXACT；S2 HUD capture 矩阵
+PASS（N/A/M × 新旧 ×2 = 12 跑，原子中心点击协议 + 尺寸门【PITS 331】
++ 漂移门 <0.001 rad【PITS 332】，12 跑全零漂移 + 存档证据 6/6 +
+x2 RAW 6 对字节同 + **像素断言 7/7**【DPI 1.5× 缩放自探测 PITS 330：
+bare HUD old_N≡new_N 字节同 = 代码级免疫 / **OLD 吸收带 bug footprint
+45 px** / **NEW 吸收带 diff = 0** = 修复实证 / NEW 效果行 288 px /
+HUD 带外 0 diff = 世界零回归 / 护甲行移位双向各 624 px】）；S3 1897；
+性能 A/B 真 v1.30 vs v1.31-dev PASS（全指标同档 + changesApplied
+9/3/1 三窗逐位 + 终档 fluids 18/18 + blocks 55/55 集合恒等 = 同世界
+同成本【结构惰性最强形：无 capture = 零 HUD 绘制】）。**PITS 330**
+（HUD 像素断言须按 DPI 缩放换算：布局虚拟 908×496 vs 截图物理
+1362×744 = 1.5×，黄选中框自探测 s）/ **331**（门内 WM 重排破 A/B
+矩阵尺寸一致性 → capture 跑尺寸门）/ **332**（capture 跑 x2 RAW 漂移
+门须 <0.001 rad）。**tag v1.31.0 = PRE-9+10 合并 tag**（PRE 政策；
+release 于 PRE-12 收官，notes 将覆盖 v1.30-1.31）。详见
+`docs/archive/phase-pre9.md` + `docs/archive/phase-pre10.md`。
+
 ## v1.30.0（2026-10-30）— 不打 tag（PRE 政策：tag v1.31.0 = PRE-9+10 合并）
 
 **PRE-9 箭/弓/手视觉**（v1.x 任务表 30/33，门 145，PRE 行 3/6）——原始

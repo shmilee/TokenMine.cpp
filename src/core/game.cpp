@@ -7778,37 +7778,49 @@ void Game::renderUi() {
                 drawStrip(gx0, hungerIcons, m_hungerTexture,
                           m_player->hunger(), Vec4 {1.0f, 1.0f, 1.0f, 1.0f});
             }
-            // Status effect icons (Phase 46): left-aligned on the heart
-            // row (the Minecraft layout), one 16 px effects.png tile per
-            // ACTIVE effect in application order (tile t occupies u in
-            // [t/N, (t+1)/N]; the width gives N). No effects = nothing
+            // Status effect icons (Phase 46; PRE-10: the dedicated row):
+            // one 16 px effects.png tile per ACTIVE effect in application
+            // order (tile t occupies u in [t/N, (t+1)/N]; the width gives
+            // N). PRE-10: the icons no longer share the heart row — a
+            // long icon row (>= 5 effects) drew OVER the absorption strip
+            // (the Phase-56 KNOWN_ISSUES overlap, triggerable with shipped
+            // content: golden apple + spider + beacon + ...). The
+            // Minecraft stack is three separate rows: hearts (hy),
+            // effects (the row above), armor (the row above that). The
+            // effect row is left-aligned on the heart row's LEFT edge —
+            // the absorption strip's left edge when the pool is up, the
+            // plain hearts' left edge otherwise. No effects = nothing
             // drawn (the no-input baseline is untouched).
+            const int effX0 =
+                (absIcons > 0) ? (hx0 - kStripGap - absW) : hx0;
+            const int ey = hy - kIconPx - kStripGap;
             if (m_playerEffects.count() > 0) {
                 const int n = static_cast<int>(
                     m_effectTexture.width() / kIconPx);
                 UiBatch& batch =
                     batchFor(Vec4 {1.0f, 1.0f, 1.0f, 1.0f}, true,
                              &m_effectTexture);
-                int ex = x0; // left-aligned on the hotbar's left edge (MC)
+                int ex = effX0;
                 for (const ActiveEffect& a : m_playerEffects.list()) {
                     const Effect& def = m_effects.at(a.effect);
-                    addQuadUv(batch, ex, hy, kIconPx, kIconPx,
+                    addQuadUv(batch, ex, ey, kIconPx, kIconPx,
                               Vec2 {static_cast<float>(def.icon) / n, 0.0f},
                               Vec2 {static_cast<float>(def.icon + 1) / n,
                                     1.0f});
                     ex += kIconPx + kIconGap;
                 }
             }
-            // Armor row (SURV-1): the four equipment slots ABOVE the
-            // heart row (hy − 16 − kStripGap — the row above, so it can
-            // never collide with the effect icons / the absorption strip
-            // that share the heart row). Fixed positions head -> feet
-            // left to right, left-aligned on the hearts' left edge hx0,
-            // one 16 px per-item icon (the independent PNG through the
-            // shared drawIcon path) per OCCUPIED slot only. No armor =
-            // nothing drawn (the no-input baseline is bit-identical: a
-            // fresh run wears nothing).
-            const int ay = hy - kIconPx - kStripGap;
+            // Armor row (SURV-1; PRE-10: the top row of the three-row
+            // stack): the four equipment slots ABOVE the effect row
+            // (hy − 2×(16 + kStripGap)) — every HUD row is to itself, so
+            // no icon count can collide with another strip. Fixed
+            // positions head -> feet left to right, left-aligned on the
+            // hearts' left edge hx0, one 16 px per-item icon (the
+            // independent PNG through the shared drawIcon path) per
+            // OCCUPIED slot only. No armor = nothing drawn (the
+            // no-input baseline is bit-identical: a fresh run wears
+            // nothing).
+            const int ay = hy - 2 * (kIconPx + kStripGap);
             for (int slot = 0; slot < kArmorSlotCount; ++slot) {
                 const ItemStack& worn = m_player->armorSlot(slot);
                 if (worn.empty()) {
