@@ -8,5 +8,6 @@
   "negative": true,
   "affects_mobs": true,
   "undead_exempt": true,
-  "icon": 0
+  "icon": 0,
+  "tint": [0.63, 0.24, 0.86, 0.35]
 }

@@ -8197,6 +8197,24 @@ void Game::renderUi() {
         }
     }
 
+    // PRE-7: the effect tints — a full-screen veil per ACTIVE player
+    // effect carrying a data-driven tint (poison = the Minecraft purple
+    // veil). Constant alpha (the pulsing poison veil is a documented
+    // deviation). No active tinted effect = zero quads: the no-input
+    // baseline carries no effects, so nothing is drawn there (the
+    // structural immunity).
+    {
+        const std::vector<EffectTint> tints =
+            activeEffectTints(m_playerEffects, m_effects);
+        for (const EffectTint& t : tints) {
+            UiBatch veil;
+            veil.color = {t.r, t.g, t.b, t.a};
+            addQuad(veil, 0, 0, w, h);
+            drawUiBatch(veil.vertices, ortho, m_fontTexture, false,
+                        veil.color);
+        }
+    }
+
     // Hurt flash (Phase 16): a full-screen red veil that decays over
     // kHurtFlashSeconds after a damage event. Drawn last (over every UI
     // element); the timer is 0 in the no-input baseline, so nothing is

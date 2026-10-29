@@ -3,6 +3,21 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.28.0（2026-10-29）
+
+**PRE-7 中毒/燃烧表现**（v1.x 任务表 28/33，PRE 行 1/6，门 143）——原始
+定义已佚 = 定案 **全屏效果 tint 通道（数据驱动）+ poison 紫色纱**（消费
+KNOWN_ISSUES「中毒无独立紫色 tint」条 = P46 原文"需新的全屏 tint 通道"）：
+效果 JSON 可选 `tint` [r,g,b,a]（严格解析；缺省全零 = 无纱零绘制 = 结构
+免疫根；正 alpha = no-op 规则的"表现层动作"演进）+ poison [0.63,0.24,
+0.86,0.35] = MC 中毒紫 + HUD pass 红纱前每活跃 tinted 效果一个全屏 quad
+（`activeEffectTints` 纯函数；恒定 alpha = 脉动记档偏离）；燃烧半边界
+= fire 无 tint（玩家燃烧 = 既有 0.2 s tick 红纱不变，mob 火焰 = PRE-8
+独立项）。零 format（22）/config/音效。1888/1888（+6）、`-Werror` 0；
+门 143：S1 第 143 次结构性免疫免重锚 + 跨版 savenorm EXACT；S2 三方
+poison 纱 A/B（混合数学 A ≈ 0.65·B + 0.35·tint 红闪相位重试）；性能 A/B
+同世界同成本。详见 `docs/archive/phase-pre7.md`。
+
 ## v1.27.0（2026-10-29）— **tag v1.27.0 = SAVE-2+3 合并 tag + SAVE 系统 release（notes 覆盖 v1.26-1.27）**
 
 **SAVE-3 槽位管理**（v1.x 任务表 27/33，SAVE 行 2/2 = **SAVE 系统收官**，门

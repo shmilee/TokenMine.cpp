@@ -74,7 +74,10 @@ Result<void> EffectRegistry::parseEffect(const Json& def, Effect& out) {
                                                 // SURV-6: the effect tiers
                                                 // (the amplifier levels).
                                                 "tier_max",
-                                                "tier_steps"};
+                                                "tier_steps",
+                                                // PRE-7: the full-screen
+                                                // veil (poison = purple).
+                                                "tint"};
     for (const auto& [key, value] : def.members()) {
         if (kFields.count(key) == 0) {
             return MC_FAIL("effect '" + out.name + "' has an unknown field "
@@ -408,19 +411,66 @@ Result<void> EffectRegistry::parseEffect(const Json& def, Effect& out) {
     }
     out.icon = static_cast<int>(icon->asDouble());
 
+    // PRE-7: the full-screen veil (the Minecraft potion tints). Optional
+    // 4-array [r, g, b, a], every channel a number in [0, 1]; absent =
+    // no veil (all zeros — zero draws). Strict shape, the ammo
+    // discipline: non-array / wrong size / non-number / out of range are
+    // each named.
+    const Json* tint = def.find("tint");
+    if (tint != nullptr) {
+        if (!tint->isArray() || tint->size() != 4) {
+            return MC_FAIL("effect '" + out.name +
+                           "': 'tint' must be an array of 4 numbers "
+                           "[r, g, b, a] in [0, 1]");
+        }
+        float channels[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        for (int c = 0; c < 4; ++c) {
+            if (!tint->at(c).isNumber()) {
+                return MC_FAIL("effect '" + out.name + "': 'tint[" +
+                               std::to_string(c) + "]' must be a number");
+            }
+            const double v = tint->at(c).asDouble();
+            if (v < 0.0 || v > 1.0) {
+                return MC_FAIL("effect '" + out.name + "': 'tint[" +
+                               std::to_string(c) + "]' must be in [0, 1], "
+                               "got " + std::to_string(v));
+            }
+            channels[c] = static_cast<float>(v);
+        }
+        out.tintR = channels[0];
+        out.tintG = channels[1];
+        out.tintB = channels[2];
+        out.tintA = channels[3];
+    }
+
     // An effect must DO something: a tick action, a melee penalty/bonus, an
-    // absorption layer, speed, resistance, or an instant HP change (SURV-4).
+    // absorption layer, speed, resistance, an instant HP change (SURV-4),
+    // or a full-screen veil (PRE-7 — a presentation-layer action counts).
     if (out.tick == Effect::Tick::None && out.meleePenalty <= 0.0f &&
         out.absorbHp <= 0.0f && out.speedMultiplier <= 1.0f &&
         out.meleeBonus <= 0.0f && out.damageReduction <= 0.0f &&
-        out.instantHp == 0.0f) {
+        out.instantHp == 0.0f && out.tintA <= 0.0f) {
         return MC_FAIL("effect '" + out.name + "' is a no-op: give it a "
                        "'tick_type', a positive 'melee_penalty', a positive "
                        "'absorb_hp', a 'speed_multiplier' > 1, a positive "
-                       "'melee_bonus', a 'damage_reduction' > 0, or a "
-                       "non-zero 'instant_hp'");
+                       "'melee_bonus', a 'damage_reduction' > 0, a "
+                       "non-zero 'instant_hp', or a positive 'tint' alpha");
     }
     return {};
+}
+
+std::vector<EffectTint> activeEffectTints(const StatusEffects& effects,
+                                          const EffectRegistry& registry) {
+    std::vector<EffectTint> tints;
+    for (const ActiveEffect& ae : effects.list()) {
+        const Effect* e = registry.find(ae.effect);
+        if (e == nullptr || e->tintA <= 0.0f) {
+            continue; // untinted effects draw nothing
+        }
+        tints.push_back(EffectTint {e->tintR, e->tintG, e->tintB,
+                                    e->tintA});
+    }
+    return tints;
 }
 
 Result<int> EffectRegistry::registerEffect(const Json& def) {

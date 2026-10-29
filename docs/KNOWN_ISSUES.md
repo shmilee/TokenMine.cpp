@@ -392,9 +392,14 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
   `on_hit_effect`（当前 spider = poison 15 s）与存档注入（E2E 场景）。
   regeneration 已有游戏内来源（金苹果，Phase 49）。`[Phase 46]`（再生
   部分 `[Phase 49]` 已解决）
-- **中毒无独立紫色 tint** — 毒 tick 复用玩家正常受伤路径（红纱 +
-  "hurt" 音）；MC 的紫色屏幕 tint 未实现（需新的全屏 tint 通道）。
-  `[Phase 46]`
+- ~~**中毒无独立紫色 tint**~~ — `[PRE-7]` 已解决：全屏效果 tint 通道
+  （效果 JSON 可选 `tint` [r,g,b,a] 全 [0,1] 严格解析，缺省全零 = 无纱
+  零绘制；正 alpha = no-op 规则的"表现层动作"）+ `poison.json`
+  [0.63,0.24,0.86,0.35] = MC 中毒紫（HUD pass 红纱前每活跃 tinted 效果
+  一个全屏 quad，`activeEffectTints` 纯函数收集）；毒 tick 红纱 + "hurt"
+  音保留不变（纱在红纱之下 = 分层）；**恒定 alpha**（MC 中毒纱脉动 =
+  记档偏离）；fire 效果无 tint（玩家燃烧表现 = 既有 0.2 s tick 红纱，
+  mob 火焰视觉 = PRE-8 独立项）。`[Phase 46]`（`[PRE-7]` 已解决）
 - **tick 相位不存** — 存档只写 `{name, remaining}`；重载后下一 tick 从
   整 interval 起算（相位重置，秒级内无感）。`[Phase 46]`
 - **效果只作用于玩家（v1）** — mob 不持效果（无凋灵/中毒 mob 等）；

@@ -155,6 +155,17 @@ struct Effect {
     bool extinguishedByWater = false;
     // The effects.png 16 px tile the HUD draws for this effect.
     int icon = 0;
+    // PRE-7: the full-screen veil rgba while the effect is active on the
+    // PLAYER (the Minecraft potion tints — poison = the purple veil).
+    // [r, g, b, a] each in [0, 1]; a = 0 (the absent-field default) = no
+    // veil (zero draws — the structural-immunity root). The constant
+    // alpha is the v1: Minecraft's pulsing poison veil is a documented
+    // deviation. A positive alpha also satisfies the no-op rule (a
+    // presentation-layer action counts as "doing something").
+    float tintR = 0.0f;
+    float tintG = 0.0f;
+    float tintB = 0.0f;
+    float tintA = 0.0f;
     // SURV-6 (effect tiers): how many tiers this effect has (1 = single
     // tier, the pre-SURV-6 behavior; the shipped tierable effects have 3 =
     // Minecraft's I/II/III). A grant's `tier` is 0-based and must be <
@@ -298,5 +309,22 @@ public:
 private:
     std::vector<ActiveEffect> m_active;
 };
+
+// PRE-7: one full-screen veil color (the rgba of an active tinted
+// effect). The render pass draws one veil per entry.
+struct EffectTint {
+    float r = 0.0f;
+    float g = 0.0f;
+    float b = 0.0f;
+    float a = 0.0f;
+};
+
+// PRE-7: the veil colors of the player's ACTIVE effects — one entry per
+// active instance whose definition carries a tint (alpha > 0), in the
+// StatusEffects' deterministic application order. Empty when no active
+// effect has a tint = zero draws (the structural immunity: the no-input
+// baseline carries no effects).
+std::vector<EffectTint> activeEffectTints(const StatusEffects& effects,
+                                          const EffectRegistry& registry);
 
 } // namespace mc

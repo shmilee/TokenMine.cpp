@@ -1098,3 +1098,160 @@ TEST(ShippedContent, TieredEffectsMatchMinecraft) {
         EXPECT_FLOAT_EQ(e.stepDamageReduction, p.resistStep) << p.file;
     }
 }
+
+// -- PRE-7: the full-screen effect tint (poison = the purple veil) --------
+
+TEST(EffectParse, TintValid) {
+    Effect e;
+    auto r = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"tinted","melee_penalty":1.0,"icon":0,
+                     "tint":[0.63, 0.24, 0.86, 0.35]})"),
+        e);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FLOAT_EQ(e.tintR, 0.63f);
+    EXPECT_FLOAT_EQ(e.tintG, 0.24f);
+    EXPECT_FLOAT_EQ(e.tintB, 0.86f);
+    EXPECT_FLOAT_EQ(e.tintA, 0.35f);
+    // The boundary values are legal (inclusive [0, 1]).
+    r = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"tinted","melee_penalty":1.0,"icon":0,
+                     "tint":[0, 1, 1, 0.0]})"),
+        e);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FLOAT_EQ(e.tintA, 0.0f); // alpha 0 = the absent-field default
+}
+
+TEST(EffectParse, TintAbsentIsTheZeroVeil) {
+    // Every pre-PRE-7 definition (no "tint" key) parses to the zero
+    // rgba = no veil (zero draws, the structural-immunity root).
+    Effect e;
+    auto r = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"poison","tick_type":"damage","tick_amount":1.0,
+                     "tick_interval":2.5,"min_health":1.0,"negative":true,
+                     "icon":0})"),
+        e);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FLOAT_EQ(e.tintR, 0.0f);
+    EXPECT_FLOAT_EQ(e.tintG, 0.0f);
+    EXPECT_FLOAT_EQ(e.tintB, 0.0f);
+    EXPECT_FLOAT_EQ(e.tintA, 0.0f);
+}
+
+TEST(EffectParse, TintRejections) {
+    struct Case {
+        const char* tint;
+        const char* needle;
+    };
+    const Case cases[] = {
+        {R"([0.63, 0.24, 0.86])", "array of 4 numbers"},       // 3
+        {R"([0.63, 0.24, 0.86, 0.35, 1])", "array of 4 numbers"}, // 5
+        {R"([0.63, 0.24, "purple", 0.35])", "tint[2]' must be a number"},
+        {R"([0.63, 0.24, 0.86, 1.5])", "tint[3]' must be in [0, 1]"},
+        {R"([-0.1, 0.24, 0.86, 0.35])", "tint[0]' must be in [0, 1]"},
+        {R"("purple")", "array of 4 numbers"}, // a bare string
+    };
+    for (const Case& c : cases) {
+        Effect e;
+        auto r = EffectRegistry::parseEffect(
+            parseJson(std::string(R"({"id":"bad","melee_penalty":1.0,
+                      "icon":0,"tint":)") + c.tint + "}"),
+            e);
+        EXPECT_FALSE(r.ok()) << c.tint;
+        if (!r.ok()) {
+            EXPECT_NE(r.error().message.find(c.needle), std::string::npos)
+                << r.error().message;
+        }
+    }
+}
+
+TEST(EffectParse, TintAlphaAloneIsNotNoOp) {
+    // PRE-7 evolves the no-op rule: a positive tint alpha is a
+    // presentation-layer action (a pure decorative veil effect is legal).
+    Effect e;
+    auto r = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"veil","icon":0,"tint":[0.63, 0.24, 0.86, 0.35]})"),
+        e);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    // But an alpha-0 tint does NOT satisfy the rule (it draws nothing).
+    r = EffectRegistry::parseEffect(
+        parseJson(R"({"id":"veil","icon":0,"tint":[0.63, 0.24, 0.86, 0.0]})"),
+        e);
+    EXPECT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("no-op"), std::string::npos);
+    EXPECT_NE(r.error().message.find("tint"), std::string::npos);
+}
+
+TEST(StatusEffects, ActiveEffectTintsOnlyForTintedEffects) {
+    // A registry with one tinted effect (poison-shaped) and one plain
+    // effect (weakness-shaped).
+    EffectRegistry reg;
+    auto rp = reg.registerEffect(
+        parseJson(R"({"id":"poison","tick_type":"damage","tick_amount":1.0,
+                     "tick_interval":2.5,"min_health":1.0,"negative":true,
+                     "icon":0,"tint":[0.63, 0.24, 0.86, 0.35]})"));
+    auto rw = reg.registerEffect(
+        parseJson(R"({"id":"weakness","melee_penalty":4.0,"negative":true,
+                     "icon":1})"));
+    ASSERT_TRUE(rp.ok()) << rp.error().message;
+    ASSERT_TRUE(rw.ok()) << rw.error().message;
+    const int poisonId = *rp;
+    const int weaknessId = *rw;
+
+    StatusEffects fx;
+    // Nothing active = no tints (the structural immunity).
+    EXPECT_TRUE(activeEffectTints(fx, reg).empty());
+    // Only the plain effect active = still no tints.
+    fx.apply(weaknessId, 10.0);
+    EXPECT_TRUE(activeEffectTints(fx, reg).empty());
+    // The tinted effect joins = exactly one veil, the poison purple.
+    fx.apply(poisonId, 60.0);
+    auto tints = activeEffectTints(fx, reg);
+    ASSERT_EQ(tints.size(), 1u);
+    EXPECT_FLOAT_EQ(tints[0].r, 0.63f);
+    EXPECT_FLOAT_EQ(tints[0].g, 0.24f);
+    EXPECT_FLOAT_EQ(tints[0].b, 0.86f);
+    EXPECT_FLOAT_EQ(tints[0].a, 0.35f);
+    // Expiry removes the veil.
+    fx.update(61.0, reg, [](const Effect&) {});
+    EXPECT_TRUE(activeEffectTints(fx, reg).empty());
+}
+
+TEST(EffectContent, PoisonTintPinned) {
+    // The shipped poison (data/effects/poison.json) after PRE-7 carries
+    // the Minecraft purple veil (RGB 160/60/220 at alpha 0.35); the
+    // other ten shipped effects stay untinted (zero veils).
+    struct Pin {
+        const char* file;
+        float r, g, b, a;
+    };
+    const Pin pins[] = {
+        {"poison", 0.63f, 0.24f, 0.86f, 0.35f},
+        {"wither", 0, 0, 0, 0}, {"regeneration", 0, 0, 0, 0},
+        {"fire", 0, 0, 0, 0},   {"healing", 0, 0, 0, 0},
+        {"harming", 0, 0, 0, 0}, {"speed", 0, 0, 0, 0},
+        {"absorption", 0, 0, 0, 0}, {"resistance", 0, 0, 0, 0},
+        {"strength", 0, 0, 0, 0}, {"weakness", 0, 0, 0, 0},
+    };
+    for (const Pin& p : pins) {
+        std::string text;
+        FILE* fp =
+            std::fopen((std::string("assets/data/effects/") + p.file +
+                        ".json")
+                           .c_str(),
+                       "rb");
+        ASSERT_NE(fp, nullptr) << "run from the repo root";
+        char buf[4096];
+        std::size_t n;
+        while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+            text.append(buf, n);
+        }
+        std::fclose(fp);
+        Effect e;
+        ASSERT_TRUE(EffectRegistry::parseEffect(parseJson(text), e).ok())
+            << p.file << ": " << text;
+        EXPECT_FLOAT_EQ(e.tintR, p.r) << p.file;
+        EXPECT_FLOAT_EQ(e.tintG, p.g) << p.file;
+        EXPECT_FLOAT_EQ(e.tintB, p.b) << p.file;
+        EXPECT_FLOAT_EQ(e.tintA, p.a) << p.file;
+    }
+}
