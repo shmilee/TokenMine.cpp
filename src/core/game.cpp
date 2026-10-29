@@ -2396,6 +2396,10 @@ Result<SaveGame> Game::collectSave() const {
     save.seed = m_generator->seed();
     save.time = m_dayCycle.timeOfDay();
     save.playerPos = m_player->position();
+    // SAVE-2 (format 22): the player's velocity — the game always has
+    // the real value ([0,0,0] at rest: the ENT-7 stop epsilon makes
+    // rest exactly zero, so a no-input save carries the zero triple).
+    save.playerVelocity = m_player->velocity();
     save.playerYaw = m_player->yaw;
     save.playerPitch = m_player->pitch;
     save.playerHealth = m_player->health();
@@ -2705,6 +2709,11 @@ Result<void> Game::applySave(const SaveGame& save) {
     //    was taken at rest the one-frame gravity re-settle is
     //    position-exact (the floor plane is an integer).
     m_player->restorePosition(save.playerPos);
+    // SAVE-2 (format 22): re-apply the saved velocity (pre-22 files
+    // carry the zero triple = the legacy zeroed restore, bit-for-bit).
+    // restorePosition's teleport already zeroed it, so this single
+    // assignment is the whole motion restore.
+    m_player->setVelocity(save.playerVelocity);
     m_player->yaw = save.playerYaw;
     m_player->pitch = save.playerPitch;
     // Hunger (Phase 23): format 1-3 saves have none (-1 = full).

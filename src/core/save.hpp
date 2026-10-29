@@ -283,8 +283,17 @@ namespace mc {
 //      The vocab check (an unknown "kill.<name>" names the unregistered
 //      mob) runs at GAME load — the mob registry is not a parseSave
 //      parameter (validateStats, the load-time twin of the rescan
-//      pattern). Writes are always format 21.
-inline constexpr int kSaveFormat = 21;
+//      pattern). Format 22 (SAVE-2): player.velocity (3 numbers,
+//      always written — a format-22 file REQUIREs the key; pre-22
+//      files load with the velocity zeroed = the legacy
+//      restorePosition behavior, value-faithful). Writes are always
+//      format 22.
+inline constexpr int kSaveFormat = 22;
+// SAVE-2: the bound a saved player velocity component must respect
+// (corrupt-file naming, the oxygen [0,150] precedent). The game's own
+// speeds stay far below it (terminal fall 38, jump 8.5, sprint ~5.8,
+// knockback spikes in the tens).
+inline constexpr float kSavedVelocityMax = 100.0f;
 inline constexpr int kSaveFormatMin = 1;
 
 // Phase 40: the furnace save-field bounds — the max smelt/fuel times the
@@ -465,6 +474,12 @@ struct SaveGame {
     std::int64_t seed = 0;
     double time = 0.0; // timeOfDay, [0, 1)
     Vec3 playerPos;
+    // SAVE-2 (format 22): the player's velocity (blocks/s) at save
+    // time. Always written (the game always has the value — [0,0,0]
+    // when the player is at rest, the ENT-7 stop-epsilon makes rest
+    // exactly zero). A pre-22 load keeps the default (0,0,0) = the
+    // legacy velocity-zeroed restore, so old files are value-faithful.
+    Vec3 playerVelocity {0.0f, 0.0f, 0.0f};
     float playerYaw = 0.0f;
     float playerPitch = 0.0f;
     // Health (Phase 16). -1 = "unspecified" (format-1 files): the game

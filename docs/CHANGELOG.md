@@ -3,6 +3,24 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.26.0（2026-10-29）
+
+**SAVE-2 速度入档**（v1.x 任务表 26/33，SAVE 行 1/2，门 141，按 10-28 政策
+不打 tag——SAVE-3 → tag v1.27.0 = SAVE-2+3 合并 + SAVE 系统 release）——原始
+定义已佚 = 定案 **玩家速度入档**（消费 KNOWN_ISSUES「玩家速度/onGround 不存」
+速度半）：format 21→22 `player.velocity` 3 数组恒写（oxygen/stats 键纪律：22
+必键 / ≤21 携 = 版本谎报点名；区间 ±100 `kSavedVelocityMax` 损坏档点名）+
+读档 `restorePosition` 后 `setVelocity`（≤21 载入 = 零速 legacy 值保真免迁）+
+onGround 不存（位置派生 = 记档偏离）。1872/1872（+6）、`-Werror` 0；门 141：
+S1 第 141 次结构性免疫 + base18 锚刷新（WM 平铺态 PITS 265/315）+ **跨版 save
+diff 恰 2 项**{format, +velocity}；S2 −Z 漂移终态判别（z 带 8.4-8.7 块互斥 +
+zero/twin 整数平面全 exact + twin PNG ≡ zero PNG + 跨侧 player 段位级 = legacy
+回归双证；初版中间帧设计被 PITS 320 推翻）；S2d 旧二进制拒 format 22 + S6 ×2
+点名；性能 A/B 同世界同成本（changesApplied 9/3/1 逐位 + 终档集合 diff 0）。
+门内发现：物品严格解析白名单漏 `saturation` = 10 行 init WARN 噪音（两侧恒同
+结构无害，收录 KNOWN_ISSUES 待基础设施轮修）。详见
+`docs/archive/phase-save2.md`。
+
 ## v1.25.0（2026-10-29）— **tag v1.25.0 = CRAFT-6+7 合并 tag + CRAFT 系统 release（notes 覆盖 v1.22-1.25）**
 
 **CRAFT-7 背包交互**（v1.x 任务表 25/33，CRAFT 行 4/4 = **CRAFT 系统收官**，门 140）——原始

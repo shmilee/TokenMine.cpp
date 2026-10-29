@@ -675,6 +675,14 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     pos.push_back(Json(save.playerPos.z));
     Json player = Json::object();
     player["pos"] = pos;
+    // SAVE-2 (format 22): the player's velocity — ALWAYS written (a
+    // format-22 file REQUIREs the key; the game always has the real
+    // value, [0,0,0] at rest).
+    Json vel = Json::array();
+    vel.push_back(Json(save.playerVelocity.x));
+    vel.push_back(Json(save.playerVelocity.y));
+    vel.push_back(Json(save.playerVelocity.z));
+    player["velocity"] = vel;
     player["yaw"] = Json(save.playerYaw);
     player["pitch"] = Json(save.playerPitch);
     // Format 2: the player's health. -1 (unspecified) omits the field —
@@ -1103,6 +1111,12 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     if (fmt->asInt() >= 21) {
         playerFields.insert("stats");
     }
+    // SAVE-2: "velocity" is format-22-and-newer vocabulary — a pre-22
+    // file carrying it is a version lie (the unknown-field naming
+    // below).
+    if (fmt->asInt() >= 22) {
+        playerFields.insert("velocity");
+    }
     MC_TRY(rejectUnknownFields(*player, playerFields, "save 'player'"));
     const Json* ppos = player->find("pos");
     if (ppos == nullptr || !ppos->isArray() || ppos->size() != 3) {
@@ -1116,6 +1130,33 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
             return MC_FAIL("save 'player.pos'[" + std::to_string(i) +
                            "] must be a number");
         }
+    }
+    // SAVE-2 (format 22): the player's velocity. REQUIRED for a
+    // format-22 file (a missing key is a version lie — the oxygen /
+    // stats key discipline); ABSENT in format <=21 = the velocity
+    // stays (0,0,0) = the legacy velocity-zeroed restore (the value-
+    // faithful migration: pre-22 saves never carried motion).
+    if (fmt->asInt() >= 22) {
+        const Json* pvel = player->find("velocity");
+        if (pvel == nullptr || !pvel->isArray() || pvel->size() != 3) {
+            return MC_FAIL("format 22 save 'player' requires 'velocity' "
+                           "(an array of 3 numbers)");
+        }
+        for (std::size_t i = 0; i < 3; ++i) {
+            if (!pvel->at(i).isNumber()) {
+                return MC_FAIL("save 'player.velocity'[" +
+                               std::to_string(i) + "] must be a number");
+            }
+            const double v = pvel->at(i).asDouble();
+            if (v < -kSavedVelocityMax || v > kSavedVelocityMax) {
+                return MC_FAIL("save 'player.velocity'[" +
+                               std::to_string(i) + "] must be in "
+                               "[-100, 100], got " + std::to_string(v));
+            }
+        }
+        save.playerVelocity = {static_cast<float>(pvel->at(0).asDouble()),
+                               static_cast<float>(pvel->at(1).asDouble()),
+                               static_cast<float>(pvel->at(2).asDouble())};
     }
     const Json* yaw = player->find("yaw");
     const Json* pitch = player->find("pitch");

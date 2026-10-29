@@ -399,8 +399,8 @@ TEST(SaveFormat18Test, MidDamageRoundTripsInAllThreePlaces) {
     s.entities.push_back(e);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // SURV-7: writes are always format 21 (SURV-6 was format 20).
-    EXPECT_EQ(j->find("format")->asInt(), 21);
+    // SURV-7: writes are always format 22 (SURV-6 was format 20).
+    EXPECT_EQ(j->find("format")->asInt(), 22);
     // The shapes: the damaged slot + the entity carry the key; the
     // full-durability armor slot is a STRING; the damaged one an
     // OBJECT {item, damage}.
@@ -456,7 +456,7 @@ TEST(SaveFormat18Test, Format17WithDamageKeyIsAVersionLie) {
     {
         Json player2 = Json::object();
         for (const auto& [k, v] : root["player"].members()) {
-            if (k != "stats") {
+            if (k != "stats" && k != "velocity") { // SAVE-2: velocity is format 22
                 player2[k] = v;
             }
         }
