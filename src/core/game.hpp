@@ -120,6 +120,14 @@ struct GameArgs {
     // the in-process equivalence oracle and the escape hammer. A debug
     // flag: no config key, no save-format effect.
     bool saveFullDiff = false;
+    // SAVE-3: save slot management — headless, STANDALONE (at most one
+    // per run, and never combined with a game-run flag; parseArgs
+    // enforces both). The operation runs on data/saves before the game
+    // boots, prints the result, and exits.
+    bool listSaves = false;
+    std::optional<std::pair<std::string, std::string>> copySave; // src, dst
+    std::optional<std::pair<std::string, std::string>> renameSave;
+    std::optional<std::string> deleteSave;
 };
 
 class Game {

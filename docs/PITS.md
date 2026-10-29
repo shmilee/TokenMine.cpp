@@ -2467,3 +2467,13 @@
   世界 → 全 S2 跑出生点 + "S2b ×2 RAW" 假 PASS（PITS 294/305 类第 5
   次）：cp 后必须落盘重读断言场景 pos/format/vel 三值（g141_s2_rerun.sh
   scene-verify）。
+- **确定性 stdout 的 ×2 字节比对须剥 INFO banner 时间戳行；名单序断言须 LC_ALL=C（PITS 321）**
+  ——10-29 SAVE-3 门 142 S2 干跑：`--list-saves` 输出 = 1 行 INFO banner
+  （含墙钟时间戳）+ 列表体。×2 全文件 cmp 必然 FAIL——**列表体本身逐
+  字节一致**（摘要纯读文件内容、无 mtime = 确定性设计的实证；差异仅在
+  banner 时间戳，按设计可变）。断言 = 比 `tail -n +2` 起的列表体。同批：
+  名单序断言 `sort -c` 用 locale 序（en_US.UTF-8 把字母排在下划线前：
+  g124_s2b < g124_s2_）与 C++ `std::sort` 的**字节序**不符 → 假
+  "unordered"——须 `LC_ALL=C sort -c`（byte order = 程序序）。教训 =
+  凡比对"程序输出的确定性段"：先界定确定性段的边界（剥掉按设计可变的
+  前缀/后缀），再按程序的序语义选比对工具的 locale。

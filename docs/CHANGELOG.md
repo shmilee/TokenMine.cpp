@@ -3,6 +3,22 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.27.0（2026-10-29）— **tag v1.27.0 = SAVE-2+3 合并 tag + SAVE 系统 release（notes 覆盖 v1.26-1.27）**
+
+**SAVE-3 槽位管理**（v1.x 任务表 27/33，SAVE 行 2/2 = **SAVE 系统收官**，门
+142）——原始定义已佚 = 定案 **CLI 槽位管理（headless 四操作）**（消费
+KNOWN_ISSUES「多个槽只是多个文件，手动切换」+ SAVE-1 残余「无多槽轮转」
+条）：`--list-saves`（名序确定性列表，摘要 = 纯文件内容【format/seed/昼时/
+位置/血量】无 mtime = 重复运行逐字节同输出；损坏文件浮现 UNREADABLE +
+点名）+ `--copy-save S D`（字节保真分支存档，D 已存在拒，原子写 = SAVE-1
+同款失败零半写）+ `--rename-save S D`（POSIX 原子改名）+ `--delete-save S`；
+槽名 = `--save` 字符集（天然杀路径穿越）；管理旗标独占（每跑一个、与游戏
+旗标互斥 = rc 2 点名，管理跑不启动游戏）。零 format（22）/config/渲染/运行
+期路径 = 普通跑结构惰性。1882/1882（+10）、`-Werror` 0；门 142：S1 第 142
+次结构性免疫 + **跨版 save 字节一致**（零 format 变更）；S2 headless 管理
+矩阵（list ×2 确定性 + 损坏浮现 + 全操作 rc/点名/字节保真 + 旧二进制拒旗
+标）；性能 A/B 同世界同成本。详见 `docs/archive/phase-save3.md`。
+
 ## v1.26.0（2026-10-29）
 
 **SAVE-2 速度入档**（v1.x 任务表 26/33，SAVE 行 1/2，门 141，按 10-28 政策

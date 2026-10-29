@@ -6,6 +6,7 @@
 
 #include "core/game.hpp"
 #include "core/logger.hpp"
+#include "core/save_slot.hpp"
 
 using namespace mc;
 
@@ -30,6 +31,16 @@ void printUsage() {
         "  --save-full-diff  Force the legacy full-world save diff at exit\n"
         "                    (PIPE-2: the journal-path equivalence oracle /\n"
         "                    escape hammer; no config key, no format effect)\n"
+        "  --list-saves      List the data/saves slots (name, format, seed,\n"
+        "                    time of day, player position, health) and exit\n"
+        "  --copy-save S D   Copy save slot S to a NEW slot D (branch a\n"
+        "                    save; D must not exist) and exit\n"
+        "  --rename-save S D Rename save slot S to D (D must not exist)\n"
+        "                    and exit\n"
+        "  --delete-save S   Delete save slot S and exit\n"
+        "                    (slot names: letters/digits/_/-, the --save\n"
+        "                    charset; management flags are standalone — one\n"
+        "                    per run, no game-run flags)\n"
         "  --log-level <l>   trace|debug|info|warn|error\n"
         "  -h, --help        Show this help\n");
 }
@@ -105,6 +116,24 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
             args.newWorld = true;
         } else if (arg == "--save-full-diff") {
             args.saveFullDiff = true;
+        } else if (arg == "--list-saves") {
+            args.listSaves = true;
+        } else if (arg == "--copy-save") {
+            const char* src = nextValue(i, "--copy-save");
+            if (!src) return false;
+            const char* dst = nextValue(i, "--copy-save <dst>");
+            if (!dst) return false;
+            args.copySave = {src, dst};
+        } else if (arg == "--rename-save") {
+            const char* src = nextValue(i, "--rename-save");
+            if (!src) return false;
+            const char* dst = nextValue(i, "--rename-save <dst>");
+            if (!dst) return false;
+            args.renameSave = {src, dst};
+        } else if (arg == "--delete-save") {
+            const char* v = nextValue(i, "--delete-save");
+            if (!v) return false;
+            args.deleteSave = v;
         } else if (arg == "--log-level") {
             const char* v = nextValue(i, "--log-level");
             if (!v) return false;
@@ -125,6 +154,96 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
         err = "--new requires --save <slot>";
         return false;
     }
+    // SAVE-3: the save management flags are STANDALONE — at most one per
+    // run, and never combined with a flag that starts the game.
+    const int managementCount =
+        (args.listSaves ? 1 : 0) + (args.copySave ? 1 : 0) +
+        (args.renameSave ? 1 : 0) + (args.deleteSave ? 1 : 0);
+    if (managementCount > 1) {
+        err = "the save management flags (--list-saves / --copy-save / "
+              "--rename-save / --delete-save) are standalone: one per run";
+        return false;
+    }
+    if (managementCount == 1 && (args.saveSlot.has_value() ||
+                                 args.newWorld || args.frames != 0 ||
+                                 !args.screenshotPath.empty() ||
+                                 args.time >= 0.0 || args.seed >= 0 ||
+                                 args.saveFullDiff)) {
+        err = "save management runs without a game: drop the game-run "
+              "flags (--save / --new / --frames / --screenshot / --time / "
+              "--seed / --save-full-diff)";
+        return false;
+    }
+    return true;
+}
+
+// SAVE-3: run the (single) save-slot management operation headless on
+// data/saves, print the result, and return true (exit 0) / false
+// (exit 1, the naming on stderr). No world, no window — the game never
+// boots for a management run.
+bool runSaveManagement(const GameArgs& args) {
+    const std::filesystem::path dir = "data/saves";
+    if (args.listSaves) {
+        auto names = listSaveSlots(dir);
+        if (!names.ok()) {
+            std::fprintf(stderr, "Save management error: %s\n",
+                         names.error().message.c_str());
+            return false;
+        }
+        std::printf("saves in %s:\n", dir.string().c_str());
+        if (names->empty()) {
+            std::printf("  (none)\n");
+            return true;
+        }
+        for (const auto& name : *names) {
+            auto summary = readSaveSlotSummary(dir, name);
+            if (!summary.ok()) {
+                std::fprintf(stderr, "Save management error: %s\n",
+                             summary.error().message.c_str());
+                return false;
+            }
+            const SaveSlotSummary& s = *summary;
+            if (!s.readable) {
+                std::printf("  %-16s UNREADABLE: %s\n", s.name.c_str(),
+                            s.problem.c_str());
+            } else {
+                std::printf("  %-16s fmt %3d seed %11lld day %5.2f pos "
+                            "(%4.0f,%3.0f,%4.0f) hp %5.1f\n",
+                            s.name.c_str(), s.format,
+                            static_cast<long long>(s.seed), s.time,
+                            s.posX, s.posY, s.posZ, s.health);
+            }
+        }
+        return true;
+    }
+    const bool isCopy = args.copySave.has_value();
+    const std::pair<std::string, std::string>* pair =
+        isCopy ? &*args.copySave
+               : (args.renameSave ? &*args.renameSave : nullptr);
+    std::string single;
+    if (args.deleteSave) {
+        single = *args.deleteSave;
+    }
+    if (pair) {
+        auto r = isCopy ? copySaveSlot(dir, pair->first, pair->second)
+                        : renameSaveSlot(dir, pair->first, pair->second);
+        if (!r.ok()) {
+            std::fprintf(stderr, "Save management error: %s\n",
+                         r.error().message.c_str());
+            return false;
+        }
+        std::printf("%s save slot '%s' -> '%s'\n",
+                    isCopy ? "copied" : "renamed", pair->first.c_str(),
+                    pair->second.c_str());
+        return true;
+    }
+    auto r = deleteSaveSlot(dir, single);
+    if (!r.ok()) {
+        std::fprintf(stderr, "Save management error: %s\n",
+                     r.error().message.c_str());
+        return false;
+    }
+    std::printf("deleted save slot '%s'\n", single.c_str());
     return true;
 }
 
@@ -146,6 +265,15 @@ int main(int argc, char** argv) {
 
     Logger::instance().init("logs/tokenmine.log", args.logLevel);
     MC_LOG_INFO("=== TokenMine.cpp v" TM_VERSION " ===");
+
+    // SAVE-3: a save management run (--list-saves / --copy-save /
+    // --rename-save / --delete-save) operates on data/saves headless and
+    // exits here — the game never boots.
+    if (args.listSaves || args.copySave || args.renameSave ||
+        args.deleteSave) {
+        Logger::instance().shutdown();
+        return runSaveManagement(args) ? 0 : 1;
+    }
 
     Game game;
     auto st = game.init(args);
