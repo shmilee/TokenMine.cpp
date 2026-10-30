@@ -42,7 +42,7 @@ static_assert(std::is_move_constructible_v<Chunk>);
 // The vertex comparison below is a byte compare — pin the contract.
 static_assert(std::is_trivially_copyable_v<MeshVertex>);
 
-// The column's chunk layers (the game.cpp constant is file-local; the
+// The column's chunk layers (kWorldHeight is world/coordinates.hpp; the
 // same expression — a column spans the whole world height).
 constexpr int kVCols = kWorldHeight / kChunkSize;
 

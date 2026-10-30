@@ -7,8 +7,9 @@
 // into the horizon (the Minecraft fog semantics).
 //
 // This file is the pure function behind it. The world constants (the far
-// plane kFar, the far-plane cap kStreamCapRadius, kChunkSize) live in
-// src/core/game.cpp and are PASSED IN here — never duplicated, so a
+// plane kFar in src/core/game_render.cpp, the far-plane cap
+// kStreamCapRadius in src/core/game_local.hpp, kChunkSize in
+// world/coordinates.hpp) are PASSED IN here — never duplicated, so a
 // far-plane change stays a one-line edit there.
 #pragma once
 

@@ -40,10 +40,14 @@ add_library(mc_core STATIC
     src/core/status_effect.cpp
     src/core/ui_layout.cpp
     src/core/thread_pool.cpp
-    src/core/game.cpp
+    src/core/game_entities.cpp
+    src/core/game_frame.cpp
     src/core/game_init.cpp
+    src/core/game_interaction.cpp
+    src/core/game_render.cpp
     src/core/game_save.cpp
     src/core/game_streaming.cpp
+    src/core/game_ui.cpp
     src/block/block_registry.cpp
     src/block/block_sound.cpp
     src/block/chance_drop.cpp

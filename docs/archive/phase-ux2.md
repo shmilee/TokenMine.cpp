@@ -38,11 +38,31 @@ setBlock 9 项簿记 + 4 镜像站点/存档收口/渲染 pass/流送 worker 窗
   + banner 实证）old 侧 ×2 **a1n1 ≡ a1o1 字节一致** + base18 锚连续
   168140 B + savenorm old×2/跨版 EXACT
 
-### A2（剩余 6 组全量搬移 + game.cpp 退役）【待执行】
+### A2（剩余 6 组全量搬移 + game.cpp 退役）
+- 5 新 TU：game_frame.cpp（814 行 7 法 + 13 常量）/ game_interaction.cpp
+  （1465 行 26 法 + 5 常量）/ game_entities.cpp（1046 行 12 法 + 7
+  常量）/ game_render.cpp（894 行 9 法 + 25 常量）/ game_ui.cpp（1549
+  行 23 法 + 14 常量）；**game.cpp 删除（零残留）**；CMakeLists mc_core
+  = 8 game_*.cpp 字母序；game_local.hpp +kArrowSpawnOffset（fireBow +
+  attemptMobSpawn 双 TU 共享，8 项全部 ≥2 TU 引用复核）；65 文件局部项
+  = 64 单 TU 入各自匿名命名空间 + 1 共享
+- 逐字符证明（编排者独立复验）：5 最长方法整法 diff VERBATIM（update
+  365 / handleInteraction 330 / setBlock 214 / updateEntities 330 /
+  render 236 行）+ 全部方法签名在位 + game.cpp 对 b6edcf8 纯删
+- 门 152 PASS：构建 0 警告 + 1929/1929 + **a2n1 ≡ a2n2 ≡ a1o1（v1.35.0
+  冻结基线）≡ a1n1（A1 态）≡ base18 锚 全字节一致 168140 B**【A 段完整
+  = game.cpp 8776 行 → 8 TU，终态对拆分前位级恒等的传递链闭合】+ 跨版
+  savenorm EXACT
+- 顺带修 4 处陈旧注释（fog.hpp / chunk_streaming.hpp /
+  test_chunk_streaming / test_mesh_job：常量现居 game_local.hpp /
+  game_render.cpp / coordinates.hpp）
+
 ### B1-B4（per-block 族 / 流送族 / mob 族 / 交互面板族 struct 收拢）【待执行】
 
-## 门 151+（子相门，无像素门）
-<!-- 每子相：new ×2 + base ×2 RAW 字节一致 + 锚 + savenorm + 套件 -->
+## 子相门协议（无像素门）
+每子相：new ×2 + 基线侧 RAW 字节一致（tm_v136_base = v1.35.0 冻结）+
+base18 锚连续 + 跨版 savenorm EXACT + 构建 0 警告 + 1929 套件；B 段每
+子相附**声明序映射表**（构造序 = 初始化序 = 行为面）。
 
 ## 性能 A/B（UX-2 收官必做，发布前硬门槛）
 <!-- old = tm_v136_base（v1.35.0）/ new = UX-2 终态；预期 = 同世界同成本

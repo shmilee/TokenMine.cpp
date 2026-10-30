@@ -13,7 +13,7 @@
 // corners beyond the renderer's far plane (kFar = 1000 blocks); the Game
 // clamps the radius to kStreamCapRadius (64), the exact disk that covers
 // every potentially-renderable column (per-lattice-point derivation on
-// the constant in core/game.cpp). All distances here are SQUARED and
+// the constant in core/game_local.hpp). All distances here are SQUARED and
 // pure integer (no floating point) so the predicate stays deterministic
 // and cheap.
 //

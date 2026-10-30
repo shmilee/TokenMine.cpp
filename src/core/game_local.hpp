@@ -1,6 +1,8 @@
 // Private shared constants/helpers for the game_*.cpp TU family (UX-2 A1).
 //
-// game.cpp was split into game.cpp / game_init.cpp / game_streaming.cpp
+// game.cpp was split (and finally retired in A2) into
+// game_frame.cpp / game_interaction.cpp / game_entities.cpp /
+// game_render.cpp / game_ui.cpp / game_init.cpp / game_streaming.cpp
 // / game_save.cpp; the file-local items used by >= 2 of those translation
 // units live here. They sit in the plain (NOT anonymous) namespace mc so a
 // TU that includes this header and uses only some of the items cannot trip
@@ -58,5 +60,10 @@ inline Mat4 columnModel(const ColumnPos& col) {
     return Mat4::translate({static_cast<float>(col.x * kChunkSize), 0.0f,
                             static_cast<float>(col.z * kChunkSize)});
 }
+
+
+// Bow (Phase 21): the arrow spawns this far in front of the eye (the
+// launch origin never sits inside the camera near plane).
+constexpr float kArrowSpawnOffset = 0.3f;
 
 } // namespace mc

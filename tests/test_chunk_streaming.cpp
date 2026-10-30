@@ -108,7 +108,7 @@ TEST(ChunkStreamingTest, MissingColumnsNearestDiskFirst) {
 TEST(ChunkStreamingTest, DiskColumnCountExact) {
     EXPECT_EQ(diskColumnCount(0), 1u);
     EXPECT_EQ(diskColumnCount(1), 5u);
-    // The far-plane cap (kStreamCapRadius in core/game.cpp) and the
+    // The far-plane cap (kStreamCapRadius in core/game_local.hpp) and the
     // shipped user config (world.view_distance 80): exact lattice
     // counts, pinned (a regression here moves the log "N/M" totals and
     // the streaming budget math).
