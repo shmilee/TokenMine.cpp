@@ -1434,7 +1434,7 @@ void Game::renderUi() {
                 info.heldItem = buf;
             }
         }
-        info.difficulty = difficultyName(m_difficulty);
+        info.difficulty = difficultyName(m_mobs.difficulty);
         // Phase 46: the active status effects, "name I 12.3s; name 4.5s"
         // (application order); empty when the player has none. PRE-12
         // (the SURV-6 display boundary): every effect carries its

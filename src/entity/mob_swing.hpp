@@ -44,7 +44,7 @@
 // 0 and N/2 entries are exactly 0), so a resting mob is byte-identical
 // to the static per-type mesh — the fast path (structural immunity) in
 // Game::drawMobs takes mobs that are not swinging through the existing
-// m_mobMeshes cache untouched.
+// m_mobs.mobMeshes cache untouched.
 #pragma once
 
 #include <array>
@@ -228,7 +228,7 @@ struct SwingPart {
 };
 
 // The per-type swing geometry: the CPU copy of the STATIC box mesh (the
-// base every frame starts from — identical to the m_mobMeshes upload) +
+// base every frame starts from — identical to the m_mobs.mobMeshes upload) +
 // the swing parts (empty = a type that never swings: zombie/skeleton
 // have no limb parts, the 99.7 geometry is head + torso only).
 struct SwingModel {

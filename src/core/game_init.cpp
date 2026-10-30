@@ -565,34 +565,34 @@ Result<void> Game::buildScene() {
     // the config (mobs.enabled, default true). Cross-checks (same
     // discipline as block drops): the spawning list, every model texture
     // and every drop must resolve.
-    MC_TRY(m_mobTypes.loadDirectory(m_assets, "data/mobs"));
+    MC_TRY(m_mobs.mobTypes.loadDirectory(m_assets, "data/mobs"));
     auto spawnText = m_assets.loadText("data/mob_spawning.json");
     MC_TRY(spawnText);
     auto spawnJson = Json::parse(*spawnText);
     MC_TRY(spawnJson);
     auto spawnCfg = MobSpawningConfig::parse(*spawnJson);
     MC_TRY(spawnCfg);
-    m_spawnConfig = *spawnCfg;
-    m_mobsEnabled = m_config.getBool("mobs.enabled", true);
+    m_mobs.spawnConfig = *spawnCfg;
+    m_mobs.mobsEnabled = m_config.getBool("mobs.enabled", true);
     // ENT-1: the limb-swing enable flag (config mobs.limb_swing, default
     // true; false = the v0.9.0 static gait — the mobs.enabled pattern,
     // the E2E control group). Pure render layer: it gates nothing else.
-    m_limbSwing = m_config.getBool("mobs.limb_swing", true);
+    m_mobs.limbSwing = m_config.getBool("mobs.limb_swing", true);
     // Difficulty (Phase 25): strict — an unknown value fails init with a
     // message naming the field (the config default is "normal", which is
     // also the no-behavior-change baseline: scales 1.0 / cadence base).
     auto difficulty = parseDifficulty(
         m_config.getString("mobs.difficulty", "normal"));
     MC_TRY(difficulty);
-    m_difficulty = *difficulty;
-    for (const SpawnMobEntry& entry : m_spawnConfig.mobs) {
-        if (m_mobTypes.findByName(entry.id) == nullptr) {
+    m_mobs.difficulty = *difficulty;
+    for (const SpawnMobEntry& entry : m_mobs.spawnConfig.mobs) {
+        if (m_mobs.mobTypes.findByName(entry.id) == nullptr) {
             return MC_FAIL("mob_spawning.json: unknown mob '" + entry.id +
                            "'");
         }
     }
-    for (const MobID mid : m_mobTypes.allIds()) {
-        const Mob& mob = m_mobTypes.at(mid);
+    for (const MobID mid : m_mobs.mobTypes.allIds()) {
+        const Mob& mob = m_mobs.mobTypes.at(mid);
         for (const MobBox& box : mob.model.boxes) {
             if (!m_atlas.contains(box.texture)) {
                 return MC_FAIL("mob '" + mob.name + "': model texture '" +
@@ -681,8 +681,8 @@ Result<void> Game::buildScene() {
             }
         }
     }
-    for (const MobID mid : m_mobTypes.allIds()) {
-        const Mob& mob = m_mobTypes.at(mid);
+    for (const MobID mid : m_mobs.mobTypes.allIds()) {
+        const Mob& mob = m_mobs.mobTypes.at(mid);
         if (!mob.properties.hitEffectName.empty()) {
             const Effect* eff =
                 m_effects.findByName(mob.properties.hitEffectName);
@@ -1072,8 +1072,8 @@ Result<void> Game::buildScene() {
     // -- mob arrow ammo (Phase 42): a ranged mob's 'ammo' field names the
     // item a stuck arrow returns to the player's inventory on pickup (the
     // same cross-check pattern as the launcher ammo above).
-    for (const MobID id : m_mobTypes.allIds()) {
-        const Mob& def = m_mobTypes.at(id);
+    for (const MobID id : m_mobs.mobTypes.allIds()) {
+        const Mob& def = m_mobs.mobTypes.at(id);
         if (!def.properties.ammoItem.empty() &&
             m_items.findByName(def.properties.ammoItem) == nullptr) {
             return MC_FAIL("mob '" + def.name + "' references unknown "
@@ -1273,7 +1273,7 @@ Result<void> Game::buildScene() {
     // circle. Captured BEFORE the save load — a loaded save moves the
     // player, but the protection stays anchored to the world spawn (the
     // Minecraft semantics; there are no beds in v1).
-    m_spawnPoint = spawnPos;
+    m_mobs.spawnPoint = spawnPos;
     m_player.emplace(m_world, m_blocks, spawnPos, *playerParams);
     m_player->pitch = -0.25f; // look slightly down at the landscape
     m_camera.position = m_player->eyePosition();

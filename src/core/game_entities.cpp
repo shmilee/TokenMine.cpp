@@ -60,11 +60,11 @@ void Game::updateEntities(double dt) {
     // The cadence is the data base scaled by the difficulty (Phase 25:
     // check_every_frames / hostileSpawnRateScale — 30 -> 60/30/20 for
     // easy/normal/hard). Normal = the base itself (baseline unchanged).
-    if (m_mobsEnabled &&
-        m_frameCount >= m_spawnConfig.firstSpawnFrame &&
+    if (m_mobs.mobsEnabled &&
+        m_frameCount >= m_mobs.spawnConfig.firstSpawnFrame &&
         m_frameCount %
-                checkEveryFramesFor(m_spawnConfig.checkEveryFrames,
-                                    m_difficulty) ==
+                checkEveryFramesFor(m_mobs.spawnConfig.checkEveryFrames,
+                                    m_mobs.difficulty) ==
             0) {
         attemptMobSpawn();
     }
@@ -305,7 +305,7 @@ void Game::updateEntities(double dt) {
     // here, AFTER the list rebuild — pushing during the scan would lose
     // them) + mobs beyond the despawn distance from the player.
     const float despawnSq =
-        m_spawnConfig.despawnDistance * m_spawnConfig.despawnDistance;
+        m_mobs.spawnConfig.despawnDistance * m_mobs.spawnConfig.despawnDistance;
     struct PendingDrop {
         std::string item;
         int count;
@@ -366,7 +366,7 @@ void Game::updateEntities(double dt) {
             // — the key is absent otherwise) so its GL buffers die with
             // the entity. The pointer key is valid here: the pointee is
             // destroyed only AFTER this rebuild (unique_ptr move).
-            m_swingMeshes.erase(mob);
+            m_mobs.swingMeshes.erase(mob);
         }
     }
     m_entities = std::move(kept);
@@ -607,7 +607,7 @@ void Game::attemptMobSpawn() {
             mobPositions.push_back(entity->position());
         }
     }
-    if (mobCount >= m_spawnConfig.maxMobs) {
+    if (mobCount >= m_mobs.spawnConfig.maxMobs) {
         MC_LOG_DEBUG("mob spawn f" + std::to_string(m_frameCount) +
                      ": cap reached (" + std::to_string(mobCount) +
                      " live), attempt skipped");
@@ -626,11 +626,11 @@ void Game::attemptMobSpawn() {
         splitmix64(static_cast<std::uint64_t>(m_generator->seed()) ^
                    (std::uint64_t{0x9E3779B97F4A7C15} *
                     static_cast<std::uint64_t>(m_frameCount)));
-    const Mob& def = m_mobTypes.at(m_mobTypes.idForName(
-        m_spawnConfig
-            .mobs[m_spawnConfig.pickIndex(pick %
+    const Mob& def = m_mobs.mobTypes.at(m_mobs.mobTypes.idForName(
+        m_mobs.spawnConfig
+            .mobs[m_mobs.spawnConfig.pickIndex(pick %
                                           static_cast<std::uint64_t>(
-                                              m_spawnConfig.totalWeight()))]
+                                              m_mobs.spawnConfig.totalWeight()))]
             .id));
 
     // Player anchor: the player's column + the floor block under its feet
@@ -651,16 +651,16 @@ void Game::attemptMobSpawn() {
     // Spawn protection (Phase 25): hostiles are gated by the difficulty's
     // radius around the world spawn point; passive mobs pass 0 (exempt).
     const float protection = def.properties.hostile
-        ? spawnProtectionRadius(m_difficulty)
+        ? spawnProtectionRadius(m_mobs.difficulty)
         : 0.0f;
-    auto cell = findMobSpawnCell(m_world, m_blocks, m_spawnConfig.minRadius,
-                                 m_spawnConfig.maxRadius, px, pz, floorY,
+    auto cell = findMobSpawnCell(m_world, m_blocks, m_mobs.spawnConfig.minRadius,
+                                 m_mobs.spawnConfig.maxRadius, px, pz, floorY,
                                  def.model.width, def.model.height,
                                  m_dayCycle.dayFactor(),
                                  def.properties.spawnMaxLight,
                                  m_player->aabbMin(), m_player->aabbMax(),
-                                 mobPositions, protection, m_spawnPoint.x,
-                                 m_spawnPoint.z, m_nightSkyLevel);
+                                 mobPositions, protection, m_mobs.spawnPoint.x,
+                                 m_mobs.spawnPoint.z, m_nightSkyLevel);
     if (!cell) {
         MC_LOG_DEBUG("mob spawn f" + std::to_string(m_frameCount) +
                      ": pick '" + def.name + "' found no valid cell "
@@ -677,10 +677,10 @@ void Game::attemptMobSpawn() {
                  ": '" + def.name + "' at (" + std::to_string(spawn.x) +
                  ", " + std::to_string(spawn.y) + ", " +
                  std::to_string(spawn.z) + ")");
-    ++m_spawnCounter;
+    ++m_mobs.spawnCounter;
     const std::uint64_t seed =
         static_cast<std::uint64_t>(m_generator->seed()) ^
-        (std::uint64_t{0x9E3779B97F4A7C15} * m_spawnCounter);
+        (std::uint64_t{0x9E3779B97F4A7C15} * m_mobs.spawnCounter);
     auto mob = std::make_unique<MobEntity>(m_world, m_blocks, def, spawn,
                                            seed);
     // Phase 58: the fire system reaches the mobs (Minecraft's lava ignites
@@ -697,7 +697,7 @@ void Game::attemptMobSpawn() {
     // Hostile damage is scaled by the difficulty (Phase 25); passive mobs
     // (attack_damage 0 in the data) pass the scale untouched.
     const float damageScale = def.properties.hostile
-        ? hostileDamageScale(m_difficulty)
+        ? hostileDamageScale(m_mobs.difficulty)
         : 1.0f;
     // Phase 46: a landed melee hit also applies the mob's on_hit_effect
     // (the spider's poison) — the effect name is init-cross-checked, so
@@ -829,9 +829,9 @@ void Game::drawMobs(const Mat4& view, const Mat4& projection) {
         if (mob == nullptr) {
             continue;
         }
-        const Mob& def = m_mobTypes.at(mob->typeId());
+        const Mob& def = m_mobs.mobTypes.at(mob->typeId());
         const Mesh& mesh =
-            limbSwingActive(m_limbSwing, !def.model.swings.empty(),
+            limbSwingActive(m_mobs.limbSwing, !def.model.swings.empty(),
                             mob->swingPhase())
                 ? swingMobMesh(*mob, def)
                 : mobMesh(mob->typeId());
@@ -847,17 +847,17 @@ void Game::drawMobs(const Mat4& view, const Mat4& projection) {
 }
 
 const Mesh& Game::mobMesh(MobID id) {
-    auto it = m_mobMeshes.find(id);
-    if (it != m_mobMeshes.end()) {
+    auto it = m_mobs.mobMeshes.find(id);
+    if (it != m_mobs.mobMeshes.end()) {
         return it->second;
     }
-    Mesh& mesh = m_mobMeshes[id];
+    Mesh& mesh = m_mobs.mobMeshes[id];
     const ItemMeshGeometry geom =
-        makeMobModelGeometry(m_mobTypes.at(id).model, m_atlas.layout());
+        makeMobModelGeometry(m_mobs.mobTypes.at(id).model, m_atlas.layout());
     auto r = mesh.upload(geom.vertices, geom.indices);
     if (!r.ok()) {
         MC_LOG_ERROR("Mob mesh build failed for mob '" +
-                     m_mobTypes.at(id).name + "': " + r.error().describe());
+                     m_mobs.mobTypes.at(id).name + "': " + r.error().describe());
     }
     return mesh;
 }
@@ -869,8 +869,8 @@ const Mesh& Game::swingMobMesh(const MobEntity& mob, const Mob& def) {
     // VBO is rewritten every frame afterwards — the topology is static,
     // so the IBO/VAO are never touched again).
     const SwingModel& sm = swingModel(def.id);
-    buildSwingFrame(sm, mob.swingPhase(), m_swingFrameVerts);
-    Mesh& mesh = m_swingMeshes[&mob];
+    buildSwingFrame(sm, mob.swingPhase(), m_mobs.swingFrameVerts);
+    Mesh& mesh = m_mobs.swingMeshes[&mob];
     if (!mesh.valid()) {
         auto r = mesh.uploadDynamic(sm.base, sm.indices);
         if (!r.ok()) {
@@ -878,17 +878,17 @@ const Mesh& Game::swingMobMesh(const MobEntity& mob, const Mob& def) {
                          "': " + r.error().describe());
         }
     }
-    mesh.updateVertices(m_swingFrameVerts);
+    mesh.updateVertices(m_mobs.swingFrameVerts);
     return mesh;
 }
 
 const SwingModel& Game::swingModel(MobID id) {
-    auto it = m_swingModels.find(id);
-    if (it != m_swingModels.end()) {
+    auto it = m_mobs.swingModels.find(id);
+    if (it != m_mobs.swingModels.end()) {
         return it->second;
     }
-    SwingModel& sm = m_swingModels[id];
-    sm = buildSwingModel(m_mobTypes.at(id).model, m_atlas.layout());
+    SwingModel& sm = m_mobs.swingModels[id];
+    sm = buildSwingModel(m_mobs.mobTypes.at(id).model, m_atlas.layout());
     return sm;
 }
 

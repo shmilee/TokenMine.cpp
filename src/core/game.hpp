@@ -1048,37 +1048,63 @@ private:
     // items — the per-item texture is bound at draw time).
     Mesh m_handIconMesh;
 
-    // Mobs (Phase 20): the data-driven types (assets/data/mobs) + the
-    // spawn config (assets/data/mob_spawning.json), the enable flag
-    // (config mobs.enabled, default true), the per-type box-model meshes
-    // (built lazily) and the spawn counter (feeds the per-mob RNG seeds,
-    // so the same runs spawn the same mobs with the same seeds).
-    MobRegistry m_mobTypes;
-    MobSpawningConfig m_spawnConfig;
-    bool m_mobsEnabled = true;
-    // Difficulty (Phase 25): config mobs.difficulty (default "normal"),
-    // strict-parsed; scales the hostile spawn cadence, the spawn-protection
-    // radius and the hostile damage (core/difficulty.hpp). m_spawnPoint is
-    // the WORLD spawn (the fresh-world spawn, before save load) — the
-    // center of the spawn-protection circle.
-    Difficulty m_difficulty = Difficulty::Normal;
-    Vec3 m_spawnPoint {0.5f, 0.0f, 0.5f};
-    std::unordered_map<MobID, Mesh, MobIDHash> m_mobMeshes;
-    // ENT-1: the limb-swing config (mobs.limb_swing, default true; false
-    // = the v0.9.0 static-gait baseline — the mobs.enabled pattern) + the
-    // per-type swing geometry (built lazily on a swinging type's first
-    // frame: the CPU copy of the static mesh + the per-part phase
-    // sin/cos) + the per-entity dynamic meshes (allocated on the mob's
-    // first swing frame, freed in the updateEntities despawn rebuild —
-    // the entity pointer is stable: m_entities holds unique_ptrs, and
-    // neither push_back nor the erase-rebuild moves the pointees) + the
-    // frame-vertex scratch (one buffer shared by all mobs: drawMobs is
-    // single-threaded on the game/GL thread).
-    bool m_limbSwing = true;
-    std::unordered_map<MobID, SwingModel, MobIDHash> m_swingModels;
-    std::unordered_map<const MobEntity*, Mesh> m_swingMeshes;
-    std::vector<MeshVertex> m_swingFrameVerts;
-    std::uint64_t m_spawnCounter = 0;
+    // The mob family (UX-2 B3): everything the mob subsystem maintains —
+    // the data-driven type registry (assets/data/mobs) + the spawn config
+    // (assets/data/mob_spawning.json) + the enable flag (config
+    // mobs.enabled), the difficulty (config mobs.difficulty) + the WORLD
+    // spawn point (the hostile spawn-protection circle center), the
+    // per-type box-model meshes (built lazily), the ENT-1 limb-swing
+    // assets (config mobs.limb_swing + per-type swing geometry + per-
+    // entity dynamic meshes + frame-vertex scratch), and the spawn counter
+    // (feeds the per-mob RNG seeds, so the same runs spawn the same mobs
+    // with the same seeds). Consumer sites: game_init (the registry /
+    // spawn config / difficulty / flag load + the cross-checks + the world
+    // spawn capture), game_entities (the spawn cadence gate +
+    // attemptMobSpawn + the despawn distance + drawMobs / mobMesh /
+    // swingMobMesh / swingModel + the despawn-rebuild swing-mesh erase),
+    // game_save (the SURV-7 stats vocabulary cross-check) and game_ui
+    // (the F3 difficulty line). Collected so a NEW mob-system feature adds
+    // one member here and writes m_mobs.xxx explicitly, instead of
+    // scattering a member across the mob bookkeeping. Member order = the
+    // original declaration order of the family (construction order =
+    // initialization order = behavior red line). m_handIconMesh /
+    // m_swingCooldown stay OUT — the held-hand icon (Phase 42) + the
+    // player attack-input swing cooldown (Phase 20, game_interaction)
+    // families.
+    struct MobSystem {
+        // Mobs (Phase 20): the data-driven types (assets/data/mobs) + the
+        // spawn config (assets/data/mob_spawning.json), the enable flag
+        // (config mobs.enabled, default true), the per-type box-model meshes
+        // (built lazily) and the spawn counter (feeds the per-mob RNG seeds,
+        // so the same runs spawn the same mobs with the same seeds).
+        MobRegistry mobTypes;
+        MobSpawningConfig spawnConfig;
+        bool mobsEnabled = true;
+        // Difficulty (Phase 25): config mobs.difficulty (default "normal"),
+        // strict-parsed; scales the hostile spawn cadence, the spawn-protection
+        // radius and the hostile damage (core/difficulty.hpp). spawnPoint is
+        // the WORLD spawn (the fresh-world spawn, before save load) — the
+        // center of the spawn-protection circle.
+        Difficulty difficulty = Difficulty::Normal;
+        Vec3 spawnPoint {0.5f, 0.0f, 0.5f};
+        std::unordered_map<MobID, Mesh, MobIDHash> mobMeshes;
+        // ENT-1: the limb-swing config (mobs.limb_swing, default true; false
+        // = the v0.9.0 static-gait baseline — the mobs.enabled pattern) + the
+        // per-type swing geometry (built lazily on a swinging type's first
+        // frame: the CPU copy of the static mesh + the per-part phase
+        // sin/cos) + the per-entity dynamic meshes (allocated on the mob's
+        // first swing frame, freed in the updateEntities despawn rebuild —
+        // the entity pointer is stable: m_entities holds unique_ptrs, and
+        // neither push_back nor the erase-rebuild moves the pointees) + the
+        // frame-vertex scratch (one buffer shared by all mobs: drawMobs is
+        // single-threaded on the game/GL thread).
+        bool limbSwing = true;
+        std::unordered_map<MobID, SwingModel, MobIDHash> swingModels;
+        std::unordered_map<const MobEntity*, Mesh> swingMeshes;
+        std::vector<MeshVertex> swingFrameVerts;
+        std::uint64_t spawnCounter = 0;
+    };
+    MobSystem m_mobs;
     // Swing cooldown (seconds; Phase 20): one attack hit per
     // kSwingInterval while the left button is held on a mob. Reset to 0
     // on release / when the aim leaves the mob (the next swing is

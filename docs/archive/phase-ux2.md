@@ -82,7 +82,17 @@ setBlock 9 项簿记 + 4 镜像站点/存档收口/渲染 pass/流送 worker 窗
   基线）≡ 锚 全字节一致 168140 B** + 跨版 savenorm EXACT + 读档往返
   全状态恒等（dt = 30 步浮点累加 2e-17 内）
 
-### B3-B4（mob 族 / 交互面板族 struct 收拢）【待执行】
+### B3（mob 族 → MobSystem）
+- 11 成员收拢（m_mobTypes…m_spawnCounter，相对序逐字保持 = 零初始化
+  重排，B2 同型；无类型前移需求 = struct 原位）；实例名 `m_mobs` 全
+  src 冲突核实（MobRegistry 私有同名 vector = 另一类无遮蔽）；51 处
+  调用点（entities 35 / init 14 / save 1 / ui 1）+ 2 跨文件注释；
+  发生数守恒 65 = 53 新 + 11 声明 + 1 struct 内注释，逐 TU 对上
+- 门 155 PASS：构建 0 警告 + 1929 + **b3n1 ≡ b3n2 ≡ a1o1（v1.35.0
+  基线）≡ 锚 全字节一致 168140 B** + 跨版 savenorm EXACT + 读档往返
+  全状态恒等
+
+### B4（交互/面板族 → InteractionState + PanelState）【待执行】
 
 ## 子相门协议（无像素门）
 每子相：new ×2 + 基线侧 RAW 字节一致（tm_v136_base = v1.35.0 冻结）+

@@ -301,7 +301,7 @@ Result<SaveGame> Game::readSaveFile(const std::filesystem::path& path) const {
     // parseSave parameter (180+ call sites), so the check runs here, at
     // the single game-load choke point (the named rejection is the same
     // either way — the rescan-pattern twin).
-    MC_TRY(validateStats(save->playerStats, m_mobTypes));
+    MC_TRY(validateStats(save->playerStats, m_mobs.mobTypes));
     return *save;
 }
 
