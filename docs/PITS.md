@@ -2677,3 +2677,11 @@
   '^TokenMine'` + WM_CLASS 排 Firefox（用户浏览器标签页标题同前缀，名搜索
   返回 2 窗）。凡"后台启动带窗程序 + xdotool 定位窗"的脚本：PID 一律
   pgrep -x 进程名，不取 $!（timeout/nohup 包装层）。
+- **表格/网格槽存档丢弃 damage，E2E 终态断言须落 inventory 槽（PITS 345）**——10-31
+  UX-5 门 159 S2 首跑：修复后工具留在工作台格（cell 4），退出存档该格
+  {"count":1,"item":"iron_pickaxe"} **无 damage 键**（serializeSlotEntry =
+  CRAFT-1 "槽带 damage 拒"纪律：inv_grid/tables 槽只写 item+count；
+  damage 只有 inventory 27 槽段写【>0 才写】）→ 误判"修复未生效"浪费 1 跑。
+  凡"格内中间态 → 持久终态"的输入跑断言设计：终态物品必须经点击路径落
+  inventory 槽（或 entities 掉落），网格/表格/炉槽内的 damage 只存在于
+  运行时（UI 可见、存档不可见）。

@@ -3,6 +3,34 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.39.0（2026-10-31）— UX-5 耐久修复系统（UX 行 5/7，门 159 全 PASS）
+
+消费 SURV-3「无修复系统」记档 = **工作台材料修复（MC 铁砧语义的
+crafting-grid 形式）**：受损工具/护甲 + 材料入合成网格 → 输出槽 =
+修复后物品（1 材料 +25% max 耐久 = kRepairFraction 0.25f，damage 钳
+0），点击输出取走。物品 JSON 新严格字段 `repair_with`（白名单演进 +
+空串/非串/无 durability 携带/未知材料全点名）+ 纯函数
+`item/repair.{hpp,cpp}`（matchRepair 格索引序配对 / applyRepair 原位
+保 count【flint_and_steel maxStack 64 不丢件】/ checkRepairMaterials
+init 交叉校验）+ GridMatch 尾加 optional<RepairMatch>（**配方恒优先，
+repair = 无配方回退**——shipped 实证碰撞：受损弓 + 钻石走 infinite_bow
+配方 / + 棍走修复）+ clickOutput 修复分支（异 item / 异 damage /
+maxStack 溢出三重守卫 = SURV-3 合并纪律）+ 输出图标携 outputDamage
+（drawIcon 耐久条自动，零布局变化）+ **28 件 shipped 全配 MC 精确材料**
+（wood 系 → planks / stone 系 → cobblestone / iron 系 → iron_ingot /
+弓族 6 含 poison_bow → stick / flint_and_steel → flint / 皮甲 →
+leather / 铁甲 → iron_ingot / 钻甲 → diamond）。零 format（22）/config/
+新资产/音效；E 面板 2×2 同款生效 + 无 XP 成本/成本递增 = 记档偏离。
+1975/1975（+29）、-Werror 0、banner v1.39.0。门 159：S1 **第 159 次
+结构性免疫 + base18 锚连续 168140 B** + S2 修复输入跑 PASS（NEW
+slot0 = pickaxe damage **125.0 exact**【187.5−62.5】+ ingot 7 / OLD
+输出 no-op 终态互斥；×2 RAW/侧字节一致 + 跨侧 savenorm diff 恰 6 字段
+全在修复语义【世界零 diff = 同世界最强形】+ 像素 diff 445 限面板区）+
+S6 ×3 精确点名 + 性能 A/B v1.38 vs v1.39 fall 900f 全指标同档 +
+changesApplied 9/3/1 三窗逐位 + 终档 fluids 18/18 + blocks 55/55 集合
+恒等。PITS 345（表格槽存档丢 damage，断言须落 inventory）。本版不打
+tag（**tag v1.40.0 = UX-5+6 合并**）。详见 docs/archive/phase-ux5.md。
+
 ## v1.38.0（2026-10-30）— **tag v1.38.0 = UX-3+4 合并 tag**
 
 ### UX-4 第三人称/拉远相机（UX 行 4/7，门 158 全 PASS）
