@@ -62,26 +62,26 @@ Result<SaveGame> Game::collectSave() const {
     // The per-block furnace states (format 7; Phase 44): map iteration is
     // position-sorted (the save's order); every furnace block has an entry
     // (the setBlock invariant), empty states included.
-    for (const auto& [pos, st] : m_furnaces) {
+    for (const auto& [pos, st] : m_states.furnaces) {
         save.furnaces.push_back({pos, st});
     }
     // The burning fire blocks (format 10; Phase 64): positions + the
     // real-dt seconds remaining (the map is position-sorted — the
     // serializer's write order; a reload continues burning).
-    for (const auto& [pos, remaining] : m_fires) {
+    for (const auto& [pos, remaining] : m_states.fires) {
         save.fires.push_back(SavedFire {pos, remaining});
     }
     // The campfire cooking states (format 11; Phase 71): map iteration is
     // position-sorted (the save's order); every campfire block has an
     // entry (the setBlock invariant), empty states included.
-    for (const auto& [pos, st] : m_campfires) {
+    for (const auto& [pos, st] : m_states.campfires) {
         save.campfires.push_back({pos, st});
     }
     // The per-block crafting-table grids (format 19; CRAFT-1): map
     // iteration is position-sorted (the save's order); every
     // crafting_table block has an entry (the setBlock invariant), empty
     // grids included.
-    for (const auto& [pos, grid] : m_tables) {
+    for (const auto& [pos, grid] : m_states.tables) {
         save.tables.push_back(SavedTable {pos, grid});
     }
     // PIPE-2: the journal path is the default; it falls back to the
@@ -104,7 +104,7 @@ Result<SaveGame> Game::collectSave() const {
         // block edits are never stateful either — a stateful placement
         // goes through the setBlock choke point (m_editedColumns
         // protection: the column never unloads) and the sapling stage
-        // writes track m_saplings (protected the same way) — so the
+        // writes track m_states.saplings (protected the same way) — so the
         // journal-only derivation stays complete.
         std::vector<SavedState> states;
         for (const auto& entry : m_saveJournal.blocks) {
@@ -369,35 +369,35 @@ Result<void> Game::applySave(const SaveGame& save) {
     // furnace block: assigned there; otherwise: discarded — save.cpp);
     // format 1-5 load no entries at all. The parser derived progressFor
     // on each state; the copy keeps it.
-    m_furnaces.clear();
+    m_states.furnaces.clear();
     for (const SavedFurnace& sf : save.furnaces) {
-        m_furnaces.emplace(sf.pos, sf.state);
+        m_states.furnaces.emplace(sf.pos, sf.state);
     }
     // 4c-bis) The burning fire blocks (format 10; Phase 64): positions +
     // the real-dt seconds remaining (a reload continues burning — like
     // the player's fire effect). The entries are parse-validated
     // (remaining > 0, one per fire block).
-    m_fires.clear();
+    m_states.fires.clear();
     for (const SavedFire& sf : save.fires) {
-        m_fires.emplace(sf.pos, sf.remainingSeconds);
+        m_states.fires.emplace(sf.pos, sf.remainingSeconds);
     }
     // Migration (format 9 and earlier): a fire block in the world's block
     // edits WITHOUT a fires entry is only possible in a hand-edited old
     // file (the fire block did not exist before format 10) — it starts at
     // the full lifetime (the empty-furnace-state migration pattern).
-    if (m_fireId.valid()) {
+    if (m_states.fireId.valid()) {
         for (const SavedBlockEdit& e : save.blockEdits) {
             if (e.blockName == "fire") {
-                m_fires.emplace(e.pos, m_fireLifetime);
+                m_states.fires.emplace(e.pos, m_states.fireLifetime);
             }
         }
     }
     // 4c-ter) The campfire cooking states (format 11; Phase 71). Format-
     // 11 saves carry one entry per campfire block (parse-validated,
     // cross-checked in both directions); format 10 and earlier carry none.
-    m_campfires.clear();
+    m_states.campfires.clear();
     for (const SavedCampfire& sc : save.campfires) {
-        m_campfires.emplace(sc.pos, sc.state);
+        m_states.campfires.emplace(sc.pos, sc.state);
     }
     // Migration (format 10 and earlier): a campfire-FAMILY block in the
     // world's block edits WITHOUT a campfires entry is only possible in
@@ -407,8 +407,8 @@ Result<void> Game::applySave(const SaveGame& save) {
     for (const SavedBlockEdit& e : save.blockEdits) {
         if ((e.blockName == "campfire" ||
              e.blockName == "campfire_extinguished") &&
-            m_campfires.count(e.pos) == 0) {
-            m_campfires.emplace(e.pos, CampfireCookState {});
+            m_states.campfires.count(e.pos) == 0) {
+            m_states.campfires.emplace(e.pos, CampfireCookState {});
         }
     }
     // 4c-quinque) The per-block crafting-table grids (format 19;
@@ -420,9 +420,9 @@ Result<void> Game::applySave(const SaveGame& save) {
     // guarantees an entry for EVERY table block in the world's block
     // edits, so the map is complete after this copy (the furnace load
     // path, the twin — no rescan needed).
-    m_tables.clear();
+    m_states.tables.clear();
     for (const SavedTable& st : save.tables) {
-        m_tables.emplace(st.pos, st.grid);
+        m_states.tables.emplace(st.pos, st.grid);
     }
     // 4c-quater) The per-instance block states (format 15; Phase 94 stair
     // facing, generalized in ENT-2). Format-15 saves carry one entry per

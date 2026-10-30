@@ -421,13 +421,13 @@ void Game::unloadFarColumns() {
                 floorDiv(pos.x, kChunkSize), floorDiv(pos.z, kChunkSize)});
         }
     };
-    protectStates(m_furnaces);
-    protectStates(m_campfires);
-    protectStates(m_tables);
-    protectStates(m_crops);
-    protectStates(m_saplings);
-    protectStates(m_beacons);
-    protectStates(m_fires);
+    protectStates(m_states.furnaces);
+    protectStates(m_states.campfires);
+    protectStates(m_states.tables);
+    protectStates(m_states.crops);
+    protectStates(m_states.saplings);
+    protectStates(m_states.beacons);
+    protectStates(m_states.fires);
 
     std::vector<ChunkPos> toErase;
     // The loaded COLUMNS (the incremental mirror), not a full chunk scan:

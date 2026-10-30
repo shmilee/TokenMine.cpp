@@ -230,7 +230,7 @@ Result<void> Game::buildScene() {
         }
         std::vector<std::uint32_t> indices(kIndices, kIndices + 36);
         auto up =
-            m_beaconBeamMesh.upload(verts, indices, MeshMode::Triangles);
+            m_states.beaconBeamMesh.upload(verts, indices, MeshMode::Triangles);
         MC_TRY(up);
     }
 
@@ -330,8 +330,8 @@ Result<void> Game::buildScene() {
     // once (the registry is static after init; an absent name leaves the
     // id invalid = the family-dependent paths are structurally inert —
     // the P70 fire/campfire id pattern).
-    m_campfireLitId = m_blocks.idForName("campfire");
-    m_campfireExtId = m_blocks.idForName("campfire_extinguished");
+    m_states.campfireLitId = m_blocks.idForName("campfire");
+    m_states.campfireExtId = m_blocks.idForName("campfire_extinguished");
 
     // -- texture atlas (16x16 tiles from assets/textures/blocks/*.png) --------
     // The layout is data (data/textures/block_atlas.json): explicit cells
@@ -435,11 +435,11 @@ Result<void> Game::buildScene() {
     }
 
     // GEN-2: resolve the tree specs (the sapling `tree` names -> BlockIDs,
-    // the m_campfireLitId init-resolved pattern). The registry load
+    // the m_states.campfireLitId init-resolved pattern). The registry load
     // already validated the trunk / leaves names EXIST and the parse
     // validated the geometry, so the ids resolve (invalid would be a
     // logic error — the defensive guard keeps the spec out of the cache).
-    m_treeSpecs.clear();
+    m_states.treeSpecs.clear();
     for (const BlockID id : m_blocks.allIds()) {
         const Block& b = m_blocks.at(id);
         if (!b.hasTree()) {
@@ -453,7 +453,7 @@ Result<void> Game::buildScene() {
                            "block(s) '" + b.properties.tree->trunk +
                            "' / '" + b.properties.tree->leaves + "'");
         }
-        m_treeSpecs[b.id] = std::move(spec);
+        m_states.treeSpecs[b.id] = std::move(spec);
     }
 
     // Strict data check (Phase 76): a block's ignites_to must name an
@@ -847,51 +847,51 @@ Result<void> Game::buildScene() {
             break;
         }
     }
-    m_fireId = m_blocks.idForName("fire");
-    if (anyFlamable && !m_fireId.valid()) {
+    m_states.fireId = m_blocks.idForName("fire");
+    if (anyFlamable && !m_states.fireId.valid()) {
         return MC_FAIL("the flamable blocks require the 'fire' block (the "
                        "burn target of the ignition and the lava burn "
                        "pass) — register it in data/blocks");
     }
-    m_fireLifetime = m_config.getDouble("fire.lifetime_seconds", 4.0);
-    if (m_fireLifetime <= 0.0) {
+    m_states.fireLifetime = m_config.getDouble("fire.lifetime_seconds", 4.0);
+    if (m_states.fireLifetime <= 0.0) {
         return MC_FAIL("config fire.lifetime_seconds must be > 0 (got " +
-                       std::to_string(m_fireLifetime) + ")");
+                       std::to_string(m_states.fireLifetime) + ")");
     }
     // Fire v2 (Phase 66): the spread roll cadence + per-neighbor chance
     // (Minecraft values: the 0.1 s tick rhythm, the normal-difficulty
     // per-neighbor 5%) and the ember-emission gate.
-    m_fireSpreadInterval =
+    m_states.fireSpreadInterval =
         m_config.getInt("fire.spread_interval_frames", 6);
-    if (m_fireSpreadInterval < 1) {
+    if (m_states.fireSpreadInterval < 1) {
         return MC_FAIL("config fire.spread_interval_frames must be >= 1 "
                        "(got " +
-                       std::to_string(m_fireSpreadInterval) + ")");
+                       std::to_string(m_states.fireSpreadInterval) + ")");
     }
-    m_fireSpreadChance = m_config.getDouble("fire.spread_chance", 0.05);
-    if (m_fireSpreadChance < 0.0 || m_fireSpreadChance > 1.0) {
+    m_states.fireSpreadChance = m_config.getDouble("fire.spread_chance", 0.05);
+    if (m_states.fireSpreadChance < 0.0 || m_states.fireSpreadChance > 1.0) {
         return MC_FAIL("config fire.spread_chance must be in [0, 1] (got " +
-                       std::to_string(m_fireSpreadChance) + ")");
+                       std::to_string(m_states.fireSpreadChance) + ")");
     }
-    m_fireParticles = m_config.getBool("fire.particles", true);
+    m_states.fireParticles = m_config.getBool("fire.particles", true);
     // CRAFT-5: the lit-furnace flame gate (the fire.particles pattern;
     // off = zero emissions = bit-identical to v1.21.0).
-    m_furnaceFlames = m_config.getBool("render.furnace_flames", true);
+    m_states.furnaceFlames = m_config.getBool("render.furnace_flames", true);
     // PRE-8: the burning-mob flame gate (the render.furnace_flames
     // pattern; off = zero emissions = bit-identical to v1.28.0).
-    m_mobFlames = m_config.getBool("render.mob_flames", true);
+    m_states.mobFlames = m_config.getBool("render.mob_flames", true);
 
     // Phase 83 beacon: the effect range (Chebyshev blocks from the beacon
     // cell; the Minecraft beacon reaches the whole build area, 50 is a
     // generous default) and the beam visibility gate (the E2E control, the
     // fire.particles pattern — a no-input run without beacons is inert
     // either way).
-    m_beaconRange = m_config.getInt("beacon.range_blocks", 50);
-    if (m_beaconRange <= 0) {
+    m_states.beaconRange = m_config.getInt("beacon.range_blocks", 50);
+    if (m_states.beaconRange <= 0) {
         return MC_FAIL("config beacon.range_blocks must be > 0 (got " +
-                       std::to_string(m_beaconRange) + ")");
+                       std::to_string(m_states.beaconRange) + ")");
     }
-    m_beaconBeam = m_config.getBool("beacon.beam", true);
+    m_states.beaconBeam = m_config.getBool("beacon.beam", true);
 
     // SAVE-1: the auto-save interval (save.auto_save_seconds — a CODE
     // default, the fire/mobs/beacon config-key discipline: the committed
@@ -1348,7 +1348,7 @@ void Game::rescanCrops() {
     // end of buildScene — a fresh world finds nothing (worldgen places no
     // crops), a loaded save finds the player's planted ones (restored by
     // the block edits).
-    m_crops.clear();
+    m_states.crops.clear();
     for (const ChunkPos& cp : m_world.chunkPositions()) {
         const Chunk* chunk = m_world.findChunk(cp);
         if (chunk == nullptr) {
@@ -1368,7 +1368,7 @@ void Game::rescanCrops() {
                         continue;
                     }
                     const BlockPos wp {baseX + lx, baseY + ly, baseZ + lz};
-                    m_crops[wp] = id;
+                    m_states.crops[wp] = id;
                 }
             }
         }
@@ -1380,7 +1380,7 @@ void Game::rescanSaplings() {
     // not rescanned — it is the world's per-instance state byte (the
     // save's format-15 segment restored it with the block edits); this
     // set only decides which cells the growth engine rolls.
-    m_saplings.clear();
+    m_states.saplings.clear();
     for (const ChunkPos& cp : m_world.chunkPositions()) {
         const Chunk* chunk = m_world.findChunk(cp);
         if (chunk == nullptr) {
@@ -1397,7 +1397,7 @@ void Game::rescanSaplings() {
                         continue;
                     }
                     const BlockPos wp {baseX + lx, baseY + ly, baseZ + lz};
-                    m_saplings[wp] = id;
+                    m_states.saplings[wp] = id;
                 }
             }
         }
@@ -1412,7 +1412,7 @@ void Game::rescanMoistureBlocks() {
     // (not on the load itself). Runs at the end of buildScene — a fresh
     // world scans to nothing (worldgen places no farmland), a loaded save
     // finds the player's placed ones (restored by the block edits).
-    m_moistureBlocks.clear();
+    m_states.moistureBlocks.clear();
     for (const ChunkPos& cp : m_world.chunkPositions()) {
         const Chunk* chunk = m_world.findChunk(cp);
         if (chunk == nullptr) {
@@ -1429,7 +1429,7 @@ void Game::rescanMoistureBlocks() {
                         continue;
                     }
                     const BlockPos wp {baseX + lx, baseY + ly, baseZ + lz};
-                    m_moistureBlocks[wp] = soilIsWet(m_world, wp);
+                    m_states.moistureBlocks[wp] = soilIsWet(m_world, wp);
                 }
             }
         }
@@ -1443,7 +1443,7 @@ void Game::refreshMoistureStates() {
     // soilIsWet predicate = deterministic (hard rule 8). The re-mesh
     // re-derives the top face from the now-updated fluid field (the
     // mesher's moisture hook), so the dirty mark is the whole effect.
-    for (auto& [pos, wet] : m_moistureBlocks) {
+    for (auto& [pos, wet] : m_states.moistureBlocks) {
         const bool nowWet = soilIsWet(m_world, pos);
         if (nowWet == wet) {
             continue;
@@ -1464,8 +1464,8 @@ void Game::placeGrownTree(const BlockPos& saplingPos, int height) {
     // plan the SAME tree).
     const BlockID saplingId = m_world.getBlock(saplingPos.x, saplingPos.y,
                                                saplingPos.z);
-    const auto it = m_treeSpecs.find(saplingId);
-    if (it == m_treeSpecs.end()) {
+    const auto it = m_states.treeSpecs.find(saplingId);
+    if (it == m_states.treeSpecs.end()) {
         return; // defensive: an untracked sapling id (a stale step)
     }
     const TreeSpec& spec = it->second;
@@ -1482,7 +1482,7 @@ void Game::placeGrownTree(const BlockPos& saplingPos, int height) {
     }
     // The choke point already dropped the tracking entry when the root
     // cell became trunk (a non-`tree` block); the belt is deterministic.
-    m_saplings.erase(saplingPos);
+    m_states.saplings.erase(saplingPos);
     // ONE relight over the tree's bounding box (the fluid-tick pattern,
     // not per-cell updateLocal): the trunk column + the canopy shadow
     // (LGT-2: the leaves' light_opacity 2 darkens what is under the
@@ -1517,7 +1517,7 @@ void Game::rescanBeacons() {
     // nothing (worldgen places no beacons); a loaded save finds the
     // player's placed ones (restored by the block edits). No per-instance
     // state: the power level is re-derived from the world each frame.
-    m_beacons.clear();
+    m_states.beacons.clear();
     for (const ChunkPos& cp : m_world.chunkPositions()) {
         const Chunk* chunk = m_world.findChunk(cp);
         if (chunk == nullptr) {
@@ -1534,7 +1534,7 @@ void Game::rescanBeacons() {
                         continue;
                     }
                     const BlockPos wp {baseX + lx, baseY + ly, baseZ + lz};
-                    m_beacons[wp] = id;
+                    m_states.beacons[wp] = id;
                 }
             }
         }

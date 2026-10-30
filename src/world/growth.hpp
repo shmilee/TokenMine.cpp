@@ -3,7 +3,7 @@
 // -> the next stage; the mature stage has no growsTo and never rolls).
 //
 // Design (mirrors FluidSim: a pure function over the world; the game keeps
-// the bookkeeping set — see Game::m_crops):
+// the bookkeeping set — see Game::m_states.crops):
 //  - The WORLD holds the growth state: a crop cell's block id IS the stage
 //    (wheat_N). There is no per-instance state and no save-format field.
 //  - Once per frame (fixed 1/60 step, day-cycle class — a no-input run
@@ -87,7 +87,7 @@ std::vector<GrowthStep> cropGrowthSteps(const World& world,
                                         std::uint64_t frame);
 
 // GEN-2: the SAPLING growth steps (the cropGrowthSteps twin over the
-// `m_saplings` tracked set — blocks with a `tree` object). Once per frame
+// `m_states.saplings` tracked set — blocks with a `tree` object). Once per frame
 // (the same fixed 1/60 step the day cycle uses — a no-input run stays
 // byte-reproducible), each tracked cell, in position order:
 //   1. trust the world (the cell still holds the tracked sapling id — a

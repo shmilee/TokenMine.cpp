@@ -406,7 +406,7 @@ struct BlockModel {
     // is DERIVED at mesh time from the live fluid field (no per-instance
     // state, no save field): the mesher re-evaluates the top face on every
     // re-mesh, and the game marks tracked cells' chunks dirty when a fluid
-    // change flips their wetness (the Game's m_moistureBlocks pass). The
+    // change flips their wetness (the Game's m_states.moistureBlocks pass). The
     // dropped-item / held-hand cube keep the dry texture (no world context
     // there — the Minecraft inventory icon is static too).
     std::string moistureTop;

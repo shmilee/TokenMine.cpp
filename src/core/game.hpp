@@ -438,13 +438,14 @@ private:
     // pass are registered and the new water is visible). A no-op when
     // the world holds no fire. Phase 66 adds, on the same pass: the
     // per-tick fire-ember particle emission (fixed-frame step, gated on
-    // m_fireParticles) and the death burst on burn-out/water extinguish.
+    // m_states.fireParticles) and the death burst on burn-out/water
+    // extinguish.
     void updateFires(double dt);
     // CRAFT-5: the lit-furnace mouth flames — every
     // kFurnaceParticleEveryNFrames frame, each furnace with a live burn
     // emits a rising ember batch from the cell above the block (the P66
-    // spawnFire reused; gated on m_furnaceFlames = zero emissions when
-    // off, no furnaces, or no fire block for the texture).
+    // spawnFire reused; gated on m_states.furnaceFlames — zero emissions
+    // when off, no furnaces, or no fire block for the texture).
     void updateFurnaceFlames();
     // PRE-8: the burning-mob flames — every kMobFlameEveryNFrames frame,
     // each BURNING mob (MobEntity::burning, the P57/P73 fire system's
@@ -454,8 +455,8 @@ private:
     // the ambient term — unlike CRAFT-5's furnace-mouth embers, which
     // live in the air above the furnace and are environment-lit; the
     // documented difference: a furnace's flame pokes out, a mob's flame
-    // covers it). Gated on m_mobFlames = zero emissions when off, no
-    // burning mob, or no fire block for the texture.
+    // covers it). Gated on m_states.mobFlames — zero emissions when off,
+    // no burning mob, or no fire block for the texture.
     void updateMobFlames();
     // Phase 66 fire spread (Fire v2): every fire.spread_interval_frames
     // frame, each live fire cell rolls its 5 spread neighbors (4
@@ -470,7 +471,8 @@ private:
     // below it) and, for each level >= 1, apply its NAMED effect to the
     // player while the player is within `beaconRange` blocks of the
     // beacon (the duration refreshes every frame, the fire-source pattern
-    // — standing in range keeps it active). Also fills `m_beaconActive`
+    // — standing in range keeps it active). Also fills
+    // `m_states.beaconActive`
     // (the level>=1 beacons) for the beam renderer. A no-op while the
     // world holds no beacon (structural immunity).
     void updateBeacons();
@@ -1128,7 +1130,7 @@ private:
     // state machine. The grid survives a close/reopen (see
     // docs/KNOWN_ISSUES) and is saved (format 3). CRAFT-1: the crafting
     // TABLE's grid is no longer a single global — it is per-block (one
-    // grid per crafting_table block, the m_tables map below).
+    // grid per crafting_table block, the m_states.tables map below).
     CraftingGrid m_inventoryGrid;
     InventoryUI m_inventoryUi;
     InventoryUI m_tableUi;
@@ -1141,140 +1143,163 @@ private:
     double m_lastLeftClickTime = -1.0;
     bool panelOpen() const { return m_openPanel != OpenPanel::None; }
 
-    // CRAFT-1: the per-block crafting-table grids — one CraftingGrid per
-    // crafting_table block in the world (created on placement, empty;
-    // dropped when the cell stops holding a table — the container's
-    // items are lost, the furnace-break semantics; the invariant the
-    // format-19 save cross-checks against the block edits, exactly like
-    // the furnace states). std::map: position-sorted, so the save's write
-    // order is deterministic. The table panel's UI is bound to the
-    // clicked block's grid on every open (openTablePanel).
-    std::map<BlockPos, CraftingGrid> m_tables;
-
-    // Phase 40/44 furnace: PER-BLOCK smelting states — one FurnaceState
-    // per furnace block in the world (created on placement, dropped when
-    // the cell stops holding a furnace; the invariant the format-7 save
-    // cross-checks). std::map: position-sorted, so the per-frame ticks
-    // iterate deterministically. m_openFurnacePos is valid while
-    // m_openPanel == OpenPanel::Furnace (the panel's UI is bound to its
-    // state).
-    std::map<BlockPos, FurnaceState> m_furnaces;
-    BlockPos m_openFurnacePos {};
-    FurnaceUI m_furnaceUi;
-
-    // Phase 64 fire: the remaining real-dt life of EVERY burning fire
-    // block in the world (created on placement/burn, dropped when the cell
-    // stops holding a fire; the invariant the format-10 save
-    // cross-checks). std::map: position-sorted, so the per-frame burn-out
-    // countdown iterates deterministically. m_fireId is the registry id of
-    // the "fire" block (the burn target; the init cross-check guarantees
-    // it whenever a flamable block exists); m_fireLifetime is the
-    // config-driven burn-out duration (fire.lifetime_seconds, default 4).
-    std::map<BlockPos, double> m_fires;
-    BlockID m_fireId = BlockID::invalid();
-    double m_fireLifetime = 4.0;
-    // Phase 66 fire spread + embers (Fire v2): the spread roll cadence
-    // (fire.spread_interval_frames, default 6 = the 0.1 s Minecraft tick
-    // rhythm) and per-neighbor chance (fire.spread_chance, default 0.05
-    // = the Minecraft normal value); m_fireParticles gates the ember
-    // emission (fire.particles, default true — a no-input run without
-    // fires is inert either way, and it is the E2E control).
-    int m_fireSpreadInterval = 6;
-    double m_fireSpreadChance = 0.05;
-    bool m_fireParticles = true;
-
-    // CRAFT-5: the lit-furnace mouth flames (render.furnace_flames,
-    // default true — off = zero emissions = bit-identical to v1.21.0;
-    // the fire.particles E2E-control pattern).
-    bool m_furnaceFlames = true;
-
-    // PRE-8: the burning-mob flames (render.mob_flames, default true —
-    // off = zero emissions = bit-identical to v1.28.0; the
-    // render.furnace_flames E2E-control pattern).
-    bool m_mobFlames = true;
-
-    // Phase 71 campfire (the family in Phase 75): PER-BLOCK cooking
-    // states — one CampfireCookState per campfire-FAMILY block in the
-    // world (lit or extinguished: water puts the lit one out into the
-    // extinguished block, which KEEPS its state — the items stay on the
-    // unlit logs; created on placement, dropped when the cell stops
-    // holding a family block; the invariant the format-13 save
-    // cross-checks, exactly like the furnace states). std::map:
-    // position-sorted, so the per-frame ticks iterate deterministically.
-    std::map<BlockPos, CampfireCookState> m_campfires;
-    // Phase 75: the campfire family ids (init-resolved; invalid = the
-    // family-dependent paths are structurally inert, the P70 pattern).
-    BlockID m_campfireLitId = BlockID::invalid();
-    BlockID m_campfireExtId = BlockID::invalid();
-
-    // Phase 48 crop growth: the cells holding a block with a non-empty
-    // growsTo property (the growth stage is the block id itself — no
-    // per-instance state, no save field). Maintained through the setBlock
-    // choke point (like the furnace states) and rebuilt from the world by
-    // rescanCrops() after load. std::map: position-sorted, so the per-
-    // frame growth ticks iterate deterministically.
-    std::map<BlockPos, BlockID> m_crops;
-
-    // GEN-2 tree growth: the cells holding a SAPLING (a block with a
-    // `tree` object — the growth P48 pattern, the m_crops twin: maintained
-    // through the setBlock choke point, rebuilt by rescanSaplings() after
-    // load). The GROWTH STAGE is NOT stored here — it is the cell's
-    // per-instance state (ENT-2, the format-15 `states` save segment);
-    // this set only tracks WHICH cells roll. std::map: position-sorted,
-    // so the per-frame sapling ticks iterate deterministically.
-    std::map<BlockPos, BlockID> m_saplings;
-    // GEN-9 farmland wetness: the cells holding a block with a
-    // model.moisture_top variant (the farmland, the crop-growth m_crops /
-    // m_saplings tracking pattern). The value is the LAST computed wet
-    // state (water within Chebyshev kWetWaterRadius at the cell's y, the
-    // soilIsWet predicate) — refreshMoistureStates() re-evaluates on a
-    // frame-locked cadence and marks the cell's chunk dirty ONLY when the
-    // wetness flipped (a settled farm re-meshes nothing; the fresh world
-    // has no farmland and the sweep fast-exits on the empty map). The
-    // WETNESS ITSELF is derived at mesh time from the live fluid field
-    // (the mesher's moisture hook) — this map is only the change detector
-    // + the re-mesh trigger (the sweep fixes the worker-mesh staleness:
-    // a farmland chunk meshed before its water neighbor streamed in bakes
-    // dry until the next sweep). std::map: position-sorted, so the sweep
-    // iterates deterministically.
-    std::map<BlockPos, bool> m_moistureBlocks;
-    // GEN-2: the RESOLVED tree specs (the sapling's `tree` names ->
-    // BlockIDs, the init-resolved m_campfireLitId pattern — the registry
-    // load validates the names exist, so this map is the placement's
-    // fast path). Keyed by the sapling's block id; empty = no sapling
-    // content (the structurally-inert pattern).
-    std::map<BlockID, TreeSpec> m_treeSpecs;
-
-    // Phase 83 beacon: the cells holding a block with a non-empty
-    // beaconEffect property (a beacon — the growth P48 pattern: maintained
-    // through the setBlock choke point, rebuilt by rescanBeacons() after
-    // load). The power level is NOT stored here — it is re-derived from
-    // the world every frame (world/beacon), so there is no save-format
-    // field. std::map: position-sorted, so the per-frame pass iterates
-    // deterministically.
-    std::map<BlockPos, BlockID> m_beacons;
-    // Phase 83 beacon: this frame's ACTIVE beacons (level >= 1), filled by
-    // updateBeacons() and read by drawBeaconBeams() — the (x, y, z) of the
-    // beacon block plus its power level (the beam is taller at higher
-    // levels, Minecraft).
+    // Phase 83 beacon: the (x, y, z) of a beacon block plus its power
+    // level (the beam is taller at higher levels, Minecraft). Filled by
+    // updateBeacons() (this frame's active beacons, level >= 1) and read
+    // by drawBeaconBeams(). UX-2 B1: a TYPE only (no construction-order
+    // effect) — declared before PerBlockStates because its beaconActive
+    // member is a std::vector of it, and a nested type is visible to a
+    // nested struct only when declared first.
     struct BeaconBeam {
         int x, y, z, level;
     };
-    std::vector<BeaconBeam> m_beaconActive;
-    // Phase 83 beacon config: the effect range in blocks
-    // (beacon.range_blocks, default 50, >0 — a player within Chebyshev
-    // distance <= range of the beacon cell receives the effect) and the
-    // beam visibility gate (beacon.beam, default true — a no-input run
-    // without beacons is inert either way, the E2E control the fire.
-    // particles pattern).
-    int m_beaconRange = 50;
-    bool m_beaconBeam = true;
-    // Phase 83 beacon: the shared translucent beam column mesh (a thin box
-    // from y=0 to y=1, scaled + positioned per beacon by the model matrix)
-    // and its resolved effect id (init; -1 = no beacon effect, the path is
-    // structurally inert — the m_fireEffectId pattern).
-    Mesh m_beaconBeamMesh;
-    int m_beaconEffectId = -1;
+
+    // The per-block world-state family (UX-2 B1): everything maintained
+    // at the setBlock choke point (the bookkeeping maps) consumed by the
+    // update ticks + the unload protectStates + the collectSave/applySave
+    // save passes + the rescan* load rebuilds — the five consumer sites
+    // (the A4 assembly point). Collected so a NEW per-block system adds
+    // one member here and writes m_states.xxx explicitly, instead of
+    // scattering a member across the nine setBlock bookkeeping lines and
+    // five call sites. Member order = the original declaration order of
+    // the family (construction order = initialization order = behavior
+    // red line). m_openFurnacePos / m_furnaceUi stay OUT — the panel
+    // family (UX-2 B4).
+    struct PerBlockStates {
+        // CRAFT-1: the per-block crafting-table grids — one CraftingGrid
+        // per crafting_table block in the world (created on placement,
+        // empty; dropped when the cell stops holding a table — the
+        // container's items are lost, the furnace-break semantics; the
+        // invariant the format-19 save cross-checks against the block
+        // edits, exactly like the furnace states). std::map:
+        // position-sorted, so the save's write order is deterministic.
+        // The table panel's UI is bound to the clicked block's grid on
+        // every open (openTablePanel).
+        std::map<BlockPos, CraftingGrid> tables;
+        // Phase 40/44 furnace: PER-BLOCK smelting states — one FurnaceState
+        // per furnace block in the world (created on placement, dropped
+        // when the cell stops holding a furnace; the invariant the
+        // format-7 save cross-checks). std::map: position-sorted, so the
+        // per-frame ticks iterate deterministically.
+        std::map<BlockPos, FurnaceState> furnaces;
+        // Phase 64 fire: the remaining real-dt life of EVERY burning fire
+        // block in the world (created on placement/burn, dropped when the
+        // cell stops holding a fire; the invariant the format-10 save
+        // cross-checks). std::map: position-sorted, so the per-frame
+        // burn-out countdown iterates deterministically. fireId is the
+        // registry id of the "fire" block (the burn target; the init
+        // cross-check guarantees it whenever a flamable block exists);
+        // fireLifetime is the config-driven burn-out duration
+        // (fire.lifetime_seconds, default 4).
+        std::map<BlockPos, double> fires;
+        BlockID fireId = BlockID::invalid();
+        double fireLifetime = 4.0;
+        // Phase 66 fire spread + embers (Fire v2): the spread roll cadence
+        // (fire.spread_interval_frames, default 6 = the 0.1 s Minecraft
+        // tick rhythm) and per-neighbor chance (fire.spread_chance,
+        // default 0.05 = the Minecraft normal value); fireParticles gates
+        // the ember emission (fire.particles, default true — a no-input
+        // run without fires is inert either way, and it is the E2E
+        // control).
+        int fireSpreadInterval = 6;
+        double fireSpreadChance = 0.05;
+        bool fireParticles = true;
+        // CRAFT-5: the lit-furnace mouth flames (render.furnace_flames,
+        // default true — off = zero emissions = bit-identical to v1.21.0;
+        // the fire.particles E2E-control pattern).
+        bool furnaceFlames = true;
+        // PRE-8: the burning-mob flames (render.mob_flames, default true
+        // — off = zero emissions = bit-identical to v1.28.0; the
+        // render.furnace_flames E2E-control pattern).
+        bool mobFlames = true;
+        // Phase 71 campfire (the family in Phase 75): PER-BLOCK cooking
+        // states — one CampfireCookState per campfire-FAMILY block in the
+        // world (lit or extinguished: water puts the lit one out into the
+        // extinguished block, which KEEPS its state — the items stay on
+        // the unlit logs; created on placement, dropped when the cell
+        // stops holding a family block; the invariant the format-13 save
+        // cross-checks, exactly like the furnace states). std::map:
+        // position-sorted, so the per-frame ticks iterate
+        // deterministically.
+        std::map<BlockPos, CampfireCookState> campfires;
+        // Phase 75: the campfire family ids (init-resolved; invalid = the
+        // family-dependent paths are structurally inert, the P70 pattern).
+        BlockID campfireLitId = BlockID::invalid();
+        BlockID campfireExtId = BlockID::invalid();
+        // Phase 48 crop growth: the cells holding a block with a
+        // non-empty growsTo property (the growth stage is the block id
+        // itself — no per-instance state, no save field). Maintained
+        // through the setBlock choke point (like the furnace states) and
+        // rebuilt from the world by rescanCrops() after load. std::map:
+        // position-sorted, so the per-frame growth ticks iterate
+        // deterministically.
+        std::map<BlockPos, BlockID> crops;
+        // GEN-2 tree growth: the cells holding a SAPLING (a block with a
+        // `tree` object — the growth P48 pattern, the crops twin:
+        // maintained through the setBlock choke point, rebuilt by
+        // rescanSaplings() after load). The GROWTH STAGE is NOT stored
+        // here — it is the cell's per-instance state (ENT-2, the
+        // format-15 `states` save segment); this set only tracks WHICH
+        // cells roll. std::map: position-sorted, so the per-frame
+        // sapling ticks iterate deterministically.
+        std::map<BlockPos, BlockID> saplings;
+        // GEN-9 farmland wetness: the cells holding a block with a
+        // model.moisture_top variant (the farmland, the crop-growth crops
+        // / saplings tracking pattern). The value is the LAST computed
+        // wet state (water within Chebyshev kWetWaterRadius at the
+        // cell's y, the soilIsWet predicate) — refreshMoistureStates()
+        // re-evaluates on a frame-locked cadence and marks the cell's
+        // chunk dirty ONLY when the wetness flipped (a settled farm
+        // re-meshes nothing; the fresh world has no farmland and the
+        // sweep fast-exits on the empty map). The WETNESS ITSELF is
+        // derived at mesh time from the live fluid field (the mesher's
+        // moisture hook) — this map is only the change detector + the
+        // re-mesh trigger (the sweep fixes the worker-mesh staleness: a
+        // farmland chunk meshed before its water neighbor streamed in
+        // bakes dry until the next sweep). std::map: position-sorted, so
+        // the sweep iterates deterministically.
+        std::map<BlockPos, bool> moistureBlocks;
+        // GEN-2: the RESOLVED tree specs (the sapling's `tree` names ->
+        // BlockIDs, the init-resolved campfireLitId pattern — the
+        // registry load validates the names exist, so this map is the
+        // placement's fast path). Keyed by the sapling's block id; empty
+        // = no sapling content (the structurally-inert pattern).
+        std::map<BlockID, TreeSpec> treeSpecs;
+        // Phase 83 beacon: the cells holding a block with a non-empty
+        // beaconEffect property (a beacon — the growth P48 pattern:
+        // maintained through the setBlock choke point, rebuilt by
+        // rescanBeacons() after load). The power level is NOT stored
+        // here — it is re-derived from the world every frame
+        // (world/beacon), so there is no save-format field. std::map:
+        // position-sorted, so the per-frame pass iterates
+        // deterministically.
+        std::map<BlockPos, BlockID> beacons;
+        // Phase 83 beacon: this frame's ACTIVE beacons (level >= 1),
+        // filled by updateBeacons() and read by drawBeaconBeams().
+        std::vector<BeaconBeam> beaconActive;
+        // Phase 83 beacon config: the effect range in blocks
+        // (beacon.range_blocks, default 50, >0 — a player within
+        // Chebyshev distance <= range of the beacon cell receives the
+        // effect) and the beam visibility gate (beacon.beam, default true
+        // — a no-input run without beacons is inert either way, the E2E
+        // control the fire.particles pattern).
+        int beaconRange = 50;
+        bool beaconBeam = true;
+        // Phase 83 beacon: the shared translucent beam column mesh (a thin
+        // box from y=0 to y=1, scaled + positioned per beacon by the model
+        // matrix) and its resolved effect id (init; -1 = no beacon effect,
+        // the path is structurally inert — the m_fireEffectId pattern).
+        Mesh beaconBeamMesh;
+        int beaconEffectId = -1;
+    };
+    PerBlockStates m_states;
+
+    // Phase 40/44 furnace panel: m_openFurnacePos is valid while
+    // m_openPanel == OpenPanel::Furnace (the panel's UI is bound to its
+    // state). UX-2 B1: OUT of the PerBlockStates family (the panel
+    // family — B4).
+    BlockPos m_openFurnacePos {};
+    FurnaceUI m_furnaceUi;
 
     // PRE-4 clouds: the cached cloud-layer mesh (the full camera window,
     // world/buildCloudMesh) + its rebuild key — the camera's cloud cell

@@ -102,7 +102,7 @@ void Game::drawCampfireCookItems(const Mat4& view, const Mat4& projection) {
     // each campfire. No occupied slot: nothing draws (a no-input run has
     // no campfire at all — worldgen never emits one — and a placed-but-
     // empty campfire draws nothing either: baseline byte-identical).
-    for (const auto& [pos, st] : m_campfires) {
+    for (const auto& [pos, st] : m_states.campfires) {
         bool any = false;
         for (const ItemStack& slot : st.slots) {
             if (!slot.empty()) {
@@ -162,7 +162,7 @@ void Game::drawBeaconBeams(const Mat4& view, const Mat4& projection) {
     // Phase 83: the translucent light column rising from every ACTIVE
     // (level>=1) beacon to the sky. Drawn in the blending pass (the depth
     // test occludes it behind terrain like the other world geometry). A
-    // no-input run has no beacon -> m_beaconActive empty -> this is a no-op
+    // no-input run has no beacon -> m_states.beaconActive empty -> this is a no-op
     // (baseline byte-identical, structural immunity); the `beacon.beam`
     // config gate is the E2E control (the fire.particles pattern). Culling
     // is off for the beam (both faces of each quad render, alpha-blended).
@@ -181,7 +181,7 @@ void Game::drawBeaconBeams(const Mat4& view, const Mat4& projection) {
     // config gate (the beam draw itself is structurally inert without
     // beacons), and the sample is deterministic frame state (the light
     // field + dayFactor, hard rule 8: no real-dt).
-    if (!m_beaconBeam || m_beaconActive.empty()) {
+    if (!m_states.beaconBeam || m_states.beaconActive.empty()) {
         return;
     }
     m_basicShader.bind();
@@ -196,7 +196,7 @@ void Game::drawBeaconBeams(const Mat4& view, const Mat4& projection) {
     // overlay's blending — the mined block rendered through the crack
     // cube's (0,0,0,0) background as a solid black box).
     m_renderer.setCulling(false);
-    for (const BeaconBeam& b : m_beaconActive) {
+    for (const BeaconBeam& b : m_states.beaconActive) {
         // The unit-height beam box, scaled to the level's height and
         // positioned on the beacon cell's top face (y = cell y + 1).
         const float height =
@@ -221,7 +221,7 @@ void Game::drawBeaconBeams(const Mat4& view, const Mat4& projection) {
         m_basicShader.setUniform1i("u_useLightOverride", 1);
         m_basicShader.setUniform1f("u_lightOverrideSky", light.first);
         m_basicShader.setUniform1f("u_lightOverrideBlock", light.second);
-        m_renderer.draw(m_beaconBeamMesh, m_basicShader, view, projection,
+        m_renderer.draw(m_states.beaconBeamMesh, m_basicShader, view, projection,
                         model);
         // LGT-4: the reset (draw unbound the program — re-bind): the
         // override must not leak into the draws that follow.

@@ -4,10 +4,10 @@
 // stages — Phase 58/63).
 //
 // Design (mirrors cropGrowthSteps: a pure function over the world; the
-// game keeps the bookkeeping set — see Game::m_fires):
+// game keeps the bookkeeping set — see Game::m_states.fires):
 //  - The WORLD holds the burn state: a burning cell's block id IS the fire
 //    block. There is no per-instance state and no save-format field
-//    (the remaining life lives in Game::m_fires — Phase 64).
+//    (the remaining life lives in Game::m_states.fires — Phase 64).
 //  - Once every spread_interval_frames (the game gates on the frame
 //    counter, fixed 1/60 step, day-cycle class — a no-input run stays
 //    byte-reproducible), each live fire cell rolls once per SPREAD
@@ -24,7 +24,7 @@
 //  - A flammable cell adjacent to several fire cells rolls once per fire
 //    neighbor (any pass ignites it) and is returned ONCE.
 //  - The firePositions input is position-ordered (the game passes the
-//    m_fires map keys), so the returned list — sorted — is deterministic.
+//    m_states.fires map keys), so the returned list — sorted — is deterministic.
 #pragma once
 
 #include <cstdint>

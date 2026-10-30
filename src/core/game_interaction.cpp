@@ -236,11 +236,11 @@ void Game::handleInteraction(double dt) {
                         }
                     }
                 } else if (b.properties.flamable) {
-                    // (b) m_fireId is valid here: a flamable target
+                    // (b) m_states.fireId is valid here: a flamable target
                     // exists, and the init cross-check requires the fire
                     // block whenever the registry holds one.
                     setBlock(hit->block.x, hit->block.y, hit->block.z,
-                             m_fireId);
+                             m_states.fireId);
                     Lighting::updateLocal(m_world, m_blocks, hit->block);
                     m_sound.play("ignite");
                     // SURV-3: the successful burn wears the held igniter
@@ -670,9 +670,9 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
         const bool furnace =
             m_blocks.at(id).properties.interact == kInteractFurnace;
         if (furnace) {
-            m_furnaces.emplace(fpos, FurnaceState {});
+            m_states.furnaces.emplace(fpos, FurnaceState {});
         } else {
-            m_furnaces.erase(fpos);
+            m_states.furnaces.erase(fpos);
         }
     }
     // Phase 48: the crop-growth tracking set follows the cell (like the
@@ -682,12 +682,12 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
     {
         const BlockPos cpos {x, y, z};
         if (!m_blocks.at(id).properties.growsTo.empty()) {
-            m_crops[cpos] = id;
+            m_states.crops[cpos] = id;
         } else {
-            m_crops.erase(cpos);
+            m_states.crops.erase(cpos);
         }
     }
-    // GEN-2: the sapling tracking set follows the cell (the m_crops twin,
+    // GEN-2: the sapling tracking set follows the cell (the m_states.crops twin,
     // the `tree` predicate): a sapling placement/break registers/drops the
     // cell; a GROWN tree's cells (trunk / leaves) never match, so the
     // completion drops the entry through this same path (the root cell
@@ -696,12 +696,12 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
     {
         const BlockPos spos {x, y, z};
         if (m_blocks.at(id).hasTree()) {
-            m_saplings[spos] = id;
+            m_states.saplings[spos] = id;
         } else {
-            m_saplings.erase(spos);
+            m_states.saplings.erase(spos);
         }
     }
-    // GEN-9: the moisture tracking set follows the cell (the m_saplings
+    // GEN-9: the moisture tracking set follows the cell (the m_states.saplings
     // twin, the model.moisture_top predicate): a farmland placement/break
     // registers/drops the cell, seeded with its wetness NOW so the first
     // mesh (and the first refresh) see the correct state. The WETNESS is
@@ -710,7 +710,7 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
     {
         const BlockPos mpos {x, y, z};
         if (!m_blocks.at(id).model.moistureTop.empty()) {
-            m_moistureBlocks[mpos] = soilIsWet(m_world, mpos);
+            m_states.moistureBlocks[mpos] = soilIsWet(m_world, mpos);
             // Seed-time re-mesh: the cell's chunk may hold a STALE mesh
             // (baked before this placement, or before the water neighbor
             // existed — the sweep's flip gate then never fires, because
@@ -719,7 +719,7 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
             // fluid field; the sweep covers the later chunk-load case.
             m_world.markChunkDirty(worldToChunk(mpos));
         } else {
-            m_moistureBlocks.erase(mpos);
+            m_states.moistureBlocks.erase(mpos);
         }
     }
     // Phase 83 (a list in Phase 91): the beacon tracking set follows the
@@ -730,9 +730,9 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
     {
         const BlockPos bpos {x, y, z};
         if (!m_blocks.at(id).properties.beaconEffects.empty()) {
-            m_beacons[bpos] = id;
+            m_states.beacons[bpos] = id;
         } else {
-            m_beacons.erase(bpos);
+            m_states.beacons.erase(bpos);
         }
     }
     // Phase 64: the fire remaining life follows the cell (like the
@@ -740,15 +740,15 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
     // (created with the FULL lifetime on placement/burn — emplace keeps
     // an existing countdown, so a same-block re-set never resets it), and
     // a cell that stops holding a fire drops its life (the invariant the
-    // format-10 save cross-checks). m_fireId is invalid only in an asset
+    // format-10 save cross-checks). m_states.fireId is invalid only in an asset
     // set without the fire block (then this is a no-op, like the other
     // registry-keyed bookkeeping).
     {
         const BlockPos ppos {x, y, z};
-        if (m_fireId.valid() && id == m_fireId) {
-            m_fires.emplace(ppos, m_fireLifetime);
+        if (m_states.fireId.valid() && id == m_states.fireId) {
+            m_states.fires.emplace(ppos, m_states.fireLifetime);
         } else {
-            m_fires.erase(ppos);
+            m_states.fires.erase(ppos);
         }
     }
     // Phase 71: the campfire cooking state follows the cell (like the
@@ -759,9 +759,9 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
     {
         const BlockPos cpos {x, y, z};
         if (m_blocks.at(id).properties.interact == kInteractCampfire) {
-            m_campfires.emplace(cpos, CampfireCookState {});
+            m_states.campfires.emplace(cpos, CampfireCookState {});
         } else {
-            m_campfires.erase(cpos);
+            m_states.campfires.erase(cpos);
         }
     }
     // CRAFT-1: the table's grid follows the cell (like the furnace
@@ -774,9 +774,9 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
     {
         const BlockPos tpos {x, y, z};
         if (m_blocks.at(id).properties.interact == kInteractCraftingTable) {
-            m_tables.emplace(tpos, CraftingGrid {});
+            m_states.tables.emplace(tpos, CraftingGrid {});
         } else {
-            m_tables.erase(tpos);
+            m_states.tables.erase(tpos);
         }
     }
     // ENT-2: the per-instance block state follows the cell (the project's

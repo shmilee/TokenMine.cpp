@@ -222,9 +222,9 @@ void Game::openFurnacePanel(const BlockPos& pos) {
 }
 
 FurnaceState& Game::furnaceAt(const BlockPos& pos) {
-    auto it = m_furnaces.find(pos);
-    if (it == m_furnaces.end()) {
-        it = m_furnaces.emplace(pos, FurnaceState {}).first;
+    auto it = m_states.furnaces.find(pos);
+    if (it == m_states.furnaces.end()) {
+        it = m_states.furnaces.emplace(pos, FurnaceState {}).first;
     }
     return it->second;
 }
@@ -241,17 +241,17 @@ void Game::openTablePanel(const BlockPos& pos) {
 }
 
 CraftingGrid& Game::tableAt(const BlockPos& pos) {
-    auto it = m_tables.find(pos);
-    if (it == m_tables.end()) {
-        it = m_tables.emplace(pos, CraftingGrid {}).first;
+    auto it = m_states.tables.find(pos);
+    if (it == m_states.tables.end()) {
+        it = m_states.tables.emplace(pos, CraftingGrid {}).first;
     }
     return it->second;
 }
 
 CampfireCookState& Game::campfireAt(const BlockPos& pos) {
-    auto it = m_campfires.find(pos);
-    if (it == m_campfires.end()) {
-        it = m_campfires.emplace(pos, CampfireCookState {}).first;
+    auto it = m_states.campfires.find(pos);
+    if (it == m_states.campfires.end()) {
+        it = m_states.campfires.emplace(pos, CampfireCookState {}).first;
     }
     return it->second;
 }
@@ -289,7 +289,7 @@ void Game::tryCampfireCook(const BlockPos& pos) {
     // too). There is no panel (v1): the slot choice is by index — first
     // empty (place) / first occupied (take), deterministic.
     const bool lit =
-        m_world.getBlock(pos.x, pos.y, pos.z) == m_campfireLitId;
+        m_world.getBlock(pos.x, pos.y, pos.z) == m_states.campfireLitId;
     if (!held.empty()) {
         const Item& it = m_items.at(held.item);
         if (lit && !it.smeltableTo.empty()) {

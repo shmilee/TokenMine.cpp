@@ -3,7 +3,7 @@
 //
 // Determinism (hard rule 8): the whole pipeline is integer / fixed-point
 // and frame-locked, mirroring the project's animation precedent (the day
-// cycle's m_dayCycle, the growth engine's m_crops):
+// cycle's m_dayCycle, the growth engine's m_states.crops):
 //   - the MOB's state is ONE integer, the swing phase (0..N-1), advanced
 //     per frame by MobEntity::update (MobEntity holds nothing else of
 //     the animation — the render isolation rule);

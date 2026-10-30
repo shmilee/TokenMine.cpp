@@ -119,7 +119,7 @@ void Game::update(double dt) {
     // order is deterministic. No-op on an empty state; runs in every
     // pointer/panel state (the world keeps ticking while the panel is
     // open, as in Minecraft).
-    for (auto& [pos, st] : m_furnaces) {
+    for (auto& [pos, st] : m_states.furnaces) {
         // CRAFT-5: snapshot before the tick — the presentation events
         // (the lit crackle, the smelt-complete ding) are a pure function
         // of (before, after); audio is outside the frame state (hard
@@ -159,12 +159,12 @@ void Game::update(double dt) {
     // extinguished campfire does not cook on its extinguish frame.
     // Fast-exit: a no-input run has no campfires (worldgen never emits
     // one) and the fresh world has no water next to one.
-    if (!m_campfires.empty() && m_campfireLitId.valid() &&
-        m_campfireExtId.valid()) {
+    if (!m_states.campfires.empty() && m_states.campfireLitId.valid() &&
+        m_states.campfireExtId.valid()) {
         std::vector<BlockPos> goOut;
-        for (const auto& entry : m_campfires) {
+        for (const auto& entry : m_states.campfires) {
             const BlockPos& pos = entry.first;
-            if (m_world.getBlock(pos.x, pos.y, pos.z) != m_campfireLitId) {
+            if (m_world.getBlock(pos.x, pos.y, pos.z) != m_states.campfireLitId) {
                 continue; // already out (or the family id is stale)
             }
             for (const BlockPos& d : kFireNeighbors) {
@@ -179,7 +179,7 @@ void Game::update(double dt) {
         // Apply AFTER the scan (setBlock touches the world state the scan
         // reads — the snapshot discipline, like the fire put-out pass).
         for (const BlockPos& pos : goOut) {
-            setBlock(pos.x, pos.y, pos.z, m_campfireExtId);
+            setBlock(pos.x, pos.y, pos.z, m_states.campfireExtId);
             // Light 15 -> 0: re-light the touched region (the P64
             // fire-put-out pattern).
             Lighting::updateLocal(m_world, m_blocks, pos);
@@ -193,8 +193,8 @@ void Game::update(double dt) {
     // order is deterministic. Only LIT campfires cook (an extinguished
     // one holds its items, no progress). No-op on an empty state; runs
     // in every pointer/panel state (the world keeps ticking).
-    for (auto& [pos, st] : m_campfires) {
-        if (m_world.getBlock(pos.x, pos.y, pos.z) != m_campfireLitId) {
+    for (auto& [pos, st] : m_states.campfires) {
+        if (m_world.getBlock(pos.x, pos.y, pos.z) != m_states.campfireLitId) {
             continue;
         }
         tickCampfireCook(st, m_items);
@@ -209,7 +209,7 @@ void Game::update(double dt) {
     // open, as in Minecraft).
     {
         const std::vector<GrowthStep> steps = cropGrowthSteps(
-            m_world, m_blocks, m_crops,
+            m_world, m_blocks, m_states.crops,
             static_cast<std::uint64_t>(m_generator->seed()),
             static_cast<std::uint64_t>(m_frameCount));
         for (const GrowthStep& s : steps) {
@@ -230,7 +230,7 @@ void Game::update(double dt) {
     // Runs in every pointer/panel state, like the crops.
     {
         const std::vector<SaplingStep> steps = saplingGrowthSteps(
-            m_world, m_blocks, m_saplings,
+            m_world, m_blocks, m_states.saplings,
             static_cast<std::uint64_t>(m_generator->seed()),
             static_cast<std::uint64_t>(m_frameCount));
         for (const SaplingStep& s : steps) {
@@ -288,10 +288,10 @@ void Game::update(double dt) {
         // now hold fire with their full lifetime here (emplace keeps an
         // existing countdown; the registry without the fire block makes
         // this a no-op).
-        if (m_fireId.valid()) {
+        if (m_states.fireId.valid()) {
             for (const BlockPos& p : changed) {
-                if (m_world.getBlock(p.x, p.y, p.z) == m_fireId) {
-                    m_fires.emplace(p, m_fireLifetime);
+                if (m_world.getBlock(p.x, p.y, p.z) == m_states.fireId) {
+                    m_states.fires.emplace(p, m_states.fireLifetime);
                 }
             }
         }
@@ -317,7 +317,7 @@ void Game::update(double dt) {
     // cost is |tracked| x 81 fluid lookups per sweep (zero while the
     // world holds no moisture block: the fresh world and the perf scenes
     // fast-exit on the empty map).
-    if (!m_moistureBlocks.empty() &&
+    if (!m_states.moistureBlocks.empty() &&
         m_frameCount % kMoistureRefreshEveryNFrames == 0) {
         refreshMoistureStates();
     }
@@ -460,7 +460,7 @@ void Game::update(double dt) {
 // ---------------------------------------------------------------------------
 
 void Game::updateFires(double dt) {
-    if (m_fires.empty()) {
+    if (m_states.fires.empty()) {
         return;
     }
     // std::map iteration is position-sorted: the put-out order is
@@ -469,7 +469,7 @@ void Game::updateFires(double dt) {
     // run at a fixed frame rate is byte-reproducible, and the burn-out
     // moment is wall-clock-stable.
     std::vector<BlockPos> putOut;
-    for (auto& [pos, remaining] : m_fires) {
+    for (auto& [pos, remaining] : m_states.fires) {
         remaining -= dt;
         if (remaining <= 0.0) {
             putOut.push_back(pos);
@@ -518,7 +518,7 @@ void Game::updateFires(double dt) {
         const std::uint64_t rngSeed =
             m_generator->seed() +
             (++m_particleBreakCounter) * 0x9E3779B97F4A7C15ULL;
-        m_particles.spawnBreak(pos.x, pos.y, pos.z, m_fireId, sky, blockLight,
+        m_particles.spawnBreak(pos.x, pos.y, pos.z, m_states.fireId, sky, blockLight,
                                rngSeed);
     }
     // Phase 66 (Fire v2): the ember emission. FIXED-frame step (hard rule
@@ -530,8 +530,8 @@ void Game::updateFires(double dt) {
     // fires that SURVIVED this frame's countdown emit; the put-outs got
     // their death burst above. Position-sorted map iteration ->
     // deterministic emission order.
-    if (m_fireParticles && m_frameCount % kFireParticleEveryNFrames == 0) {
-        for (const auto& [pos, remaining] : m_fires) {
+    if (m_states.fireParticles && m_frameCount % kFireParticleEveryNFrames == 0) {
+        for (const auto& [pos, remaining] : m_states.fires) {
             (void)remaining;
             const Chunk* chunk = m_world.findChunk(worldToChunk(pos));
             float sky = 0.0f;
@@ -557,7 +557,7 @@ void Game::updateFires(double dt) {
                       kFireParticleRollSalt) +
                 static_cast<std::uint64_t>(m_frameCount) *
                     0x9E3779B97F4A7C15ULL;
-            m_particles.spawnFire(pos.x, pos.y, pos.z, m_fireId, sky,
+            m_particles.spawnFire(pos.x, pos.y, pos.z, m_states.fireId, sky,
                                   blockLight, rngSeed);
         }
     }
@@ -579,11 +579,11 @@ void Game::updateFurnaceFlames() {
     // furnaces, or no fire block for the texture) = zero emissions =
     // bit-identical to v1.22.0. Position-sorted map iteration ->
     // deterministic order.
-    if (!m_furnaceFlames || m_furnaces.empty() || !m_fireId.valid() ||
+    if (!m_states.furnaceFlames || m_states.furnaces.empty() || !m_states.fireId.valid() ||
         (m_frameCount + 1) % kFurnaceParticleEveryNFrames != 0) {
         return;
     }
-    for (const auto& [pos, st] : m_furnaces) {
+    for (const auto& [pos, st] : m_states.furnaces) {
         if (st.fuelSubsteps <= 0) {
             continue; // unlit: no flame
         }
@@ -613,7 +613,7 @@ void Game::updateFurnaceFlames() {
                   kFurnaceParticleRollSalt) +
             static_cast<std::uint64_t>(m_frameCount) *
                 0x9E3779B97F4A7C15ULL;
-        m_particles.spawnFire(pos.x, pos.y + 1, pos.z, m_fireId, sky,
+        m_particles.spawnFire(pos.x, pos.y + 1, pos.z, m_states.fireId, sky,
                               blockLight, rngSeed);
     }
 }
@@ -648,7 +648,7 @@ void Game::updateMobFlames() {
     // structural immunity: the no-input fresh baseline never burns a
     // mob). The m_entities vector order is the run's own, so the batch
     // sequence is deterministic for identical runs.
-    if (!m_mobFlames || !m_fireId.valid() ||
+    if (!m_states.mobFlames || !m_states.fireId.valid() ||
         (m_frameCount + 1) % kMobFlameEveryNFrames != 0) {
         return;
     }
@@ -676,7 +676,7 @@ void Game::updateMobFlames() {
                   kMobFlameRollSalt) +
             static_cast<std::uint64_t>(m_frameCount) *
                 0x9E3779B97F4A7C15ULL;
-        m_particles.spawnFire(center.x, center.y, center.z, m_fireId, sky,
+        m_particles.spawnFire(center.x, center.y, center.z, m_states.fireId, sky,
                               1.0f, rngSeed);
     }
 }
@@ -686,27 +686,27 @@ void Game::updateFireSpread() {
     // fire.spread_interval_frames frame (the fixed frame step, hard rule
     // 8) — no fires, no fire block (a stripped asset set), or a chance of
     // 0 all fast-exit inside fireSpreadIgnitions.
-    if (m_fires.empty() || !m_fireId.valid() ||
-        m_frameCount % m_fireSpreadInterval != 0) {
+    if (m_states.fires.empty() || !m_states.fireId.valid() ||
+        m_frameCount % m_states.fireSpreadInterval != 0) {
         return;
     }
-    // Position-ordered fire list (the m_fires map keys, std::map order).
+    // Position-ordered fire list (the m_states.fires map keys, std::map order).
     std::vector<BlockPos> firePositions;
-    firePositions.reserve(m_fires.size());
-    for (const auto& [pos, remaining] : m_fires) {
+    firePositions.reserve(m_states.fires.size());
+    for (const auto& [pos, remaining] : m_states.fires) {
         (void)remaining;
         firePositions.push_back(pos);
     }
     const std::vector<BlockPos> ignitions = fireSpreadIgnitions(
         m_world, m_blocks, firePositions, m_generator->seed(),
-        static_cast<std::uint64_t>(m_frameCount), m_fireSpreadChance);
+        static_cast<std::uint64_t>(m_frameCount), m_states.fireSpreadChance);
     // Apply (AFTER the roll — setBlock erases nothing here, but it
     // EMPLACES the new fires' full lives through the choke point; never
     // feed a map into a pure function while mutating it). No sound: a
     // spreading fire line would otherwise spam the one-shot "ignite"
     // (documented Fire v2 scope).
     for (const BlockPos& pos : ignitions) {
-        setBlock(pos.x, pos.y, pos.z, m_fireId);
+        setBlock(pos.x, pos.y, pos.z, m_states.fireId);
         Lighting::updateLocal(m_world, m_blocks, pos);
     }
 }
@@ -717,9 +717,9 @@ void Game::updateBeacons() {
     // The level is a pure function of the world (world/beacon) — no stored
     // state. A no-op (fast-exit) while the world holds no beacon OR the
     // player is dead (structural immunity: a fresh no-input world has no
-    // beacon, so m_beacons is empty and this never runs its body).
-    m_beaconActive.clear();
-    if (m_beacons.empty() || m_player->isDead()) {
+    // beacon, so m_states.beacons is empty and this never runs its body).
+    m_states.beaconActive.clear();
+    if (m_states.beacons.empty() || m_player->isDead()) {
         return;
     }
     // The absorption pool is a pure function of the effect total at the
@@ -731,14 +731,14 @@ void Game::updateBeacons() {
     // between sync points, Phase 72).
     const float absorbBefore = m_playerEffects.totalAbsorption(m_effects);
     const Vec3 feet = m_player->position();
-    for (const auto& [pos, bid] : m_beacons) {
+    for (const auto& [pos, bid] : m_states.beacons) {
         const int level = beaconLevel(m_world, m_blocks, pos.x, pos.y, pos.z);
         if (level < 1) {
             continue;
         }
         // An active beacon feeds the beam renderer (drawn in the blending
         // pass; the beam is gated on the `beacon.beam` config there).
-        m_beaconActive.push_back(BeaconBeam {pos.x, pos.y, pos.z, level});
+        m_states.beaconActive.push_back(BeaconBeam {pos.x, pos.y, pos.z, level});
         // In range? Chebyshev distance from the player's feet to the beacon
         // cell's centre (the voxel-cube "within N blocks" rule).
         const float dx = feet.x - (pos.x + 0.5f);
@@ -746,7 +746,7 @@ void Game::updateBeacons() {
         const float dz = feet.z - (pos.z + 0.5f);
         const float dist = std::max(std::fabs(dx),
                                     std::max(std::fabs(dy), std::fabs(dz)));
-        if (dist > static_cast<float>(m_beaconRange)) {
+        if (dist > static_cast<float>(m_states.beaconRange)) {
             continue;
         }
         // Apply the beacon's EFFECT LIST (Phase 91; each name is

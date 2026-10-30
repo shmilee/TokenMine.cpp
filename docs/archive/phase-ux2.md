@@ -57,7 +57,20 @@ setBlock 9 项簿记 + 4 镜像站点/存档收口/渲染 pass/流送 worker 窗
   test_chunk_streaming / test_mesh_job：常量现居 game_local.hpp /
   game_render.cpp / coordinates.hpp）
 
-### B1-B4（per-block 族 / 流送族 / mob 族 / 交互面板族 struct 收拢）【待执行】
+### B1（per-block 族 → PerBlockStates）
+- 23 数据成员收拢（m_tables…m_beaconEffectId，**族内相对序逐字保持** =
+  构造序红线）；`PerBlockStates m_states;` 在 m_tables 原位；
+  m_openFurnacePos/m_furnaceUi 留原位（B4 面板族）；**BeaconBeam 纯类型
+  前移**（嵌套 struct 内名字查找不可见外层后声明类型 = C++ [basic.
+  scope]，fallback 按预案启用）；setBlock 9 项簿记 + 五消费者站点全
+  显式化（146 处 m_states.*：frame 44 / init 37 / interaction 24 /
+  save 18 / ui 10 / streaming 7 / render 6）+ 4 跨模块头纯注释同步
+- 门 153 PASS：构建 0 警告 + 1929 + **b1n1 ≡ b1n2 ≡ a1o1（v1.35.0 基线）
+  ≡ 锚 全字节一致 168140 B** + 跨版 savenorm EXACT + **读档往返**（载入
+  60f 终态 + 30f：全状态恒等，仅 time = 30 步浮点累加 2e-17 内 = B 段
+  读路径 applySave/rescan* 经 m_states.* 行为零差证明）
+
+### B2-B4（流送族 / mob 族 / 交互面板族 struct 收拢）【待执行】
 
 ## 子相门协议（无像素门）
 每子相：new ×2 + 基线侧 RAW 字节一致（tm_v136_base = v1.35.0 冻结）+
