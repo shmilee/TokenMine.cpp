@@ -312,7 +312,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | 文档 | 内容 | 何时读 |
 |---|---|---|
 | [docs/GAMEPLAY.md](docs/GAMEPLAY.md) | 玩法指南（操作/生存循环/战斗与食物/工具路线/昼夜） | 玩法问题 |
-| [docs/MECHANICS.md](docs/MECHANICS.md) | 机制详解（主体截至 ~P51；P52+ 子系统见阶段存档，全面刷新排队） | 改玩法逻辑前 |
+| [docs/MECHANICS.md](docs/MECHANICS.md) | 机制详解（现状 v1.33.0，16 子系统分节；2026-10-30 全面刷新，数字/字段以文内标注的来源为准，细节证据在 164 阶段存档） | 改玩法逻辑前 |
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |

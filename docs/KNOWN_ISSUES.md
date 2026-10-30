@@ -253,6 +253,13 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 
 ## 炉子 / 熔炼（Phase 40）
 
+- **炉子无获取途径（内容缺口）** — shipped 全部 65 条配方零 furnace
+  引用 + 初始库存（热栏 9 件 + 隐藏 starter 槽 16-26）无 furnace =
+  **正常游玩拿不到炉子**（炉子系统本身完整可用：熔炼/燃料/面板/完成
+  ding/炉口火星；炉块自掉，预置的炉子可拾取复用）。补法 = 内容层：
+  shaped 配方（MC 摆法 8 cobblestone 围圈 → 1 furnace）± 隐藏 starter
+  槽给 1 个。`[Phase 40]`（10-30 GAMEPLAY.md 文档刷新时发现并如实写入
+  玩法指南「炉子」节）
 - ~~**炉子状态是单个全局容器**~~ — Phase 40 的 v1：`Game` 持有单个
   `FurnaceState`（input/fuel/output + 两个整数子步计数器），右键打开的**任何**
   炉子看到的是同一份熔炼状态（存档 format 6 `furnace`）。`[Phase 40]`，
