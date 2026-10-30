@@ -1,9 +1,11 @@
 // Phase 15 UI tests: the pixel font (glyph UV mapping, text width, vertex
-// generation). Phase 35: the atlas is assets/textures/font.png (256x512,
-// 32px cells indexed by ASCII code, 16x16 glyph at an 8px cell offset) and
-// the text scale is a double (fractional scales downscale the glyphs).
-// PRE-1: UTF-8 decoding + the CJK glyph set (atlas rows 0..3, the dead
-// ASCII control cells) and the byte pin of the generated atlas.
+// generation). Phase 35: the atlas is assets/textures/font.png (32px cells
+// indexed by ASCII code, 16x16 glyph at an 8px cell offset) and the text
+// scale is a double (fractional scales downscale the glyphs). PRE-1: UTF-8
+// decoding + the CJK glyph set (atlas rows 0..3, the dead ASCII control
+// cells) and the byte pin of the generated atlas. UX-6: the CJK set grew
+// 33 -> 392 (the atlas 256x512 -> 256x2080; the top 512 rows are the
+// pre-UX-6 atlas, byte-identical red line).
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -11,8 +13,11 @@
 #include <cstdio>
 #include <fstream>
 #include <iterator>
+#include <string>
 #include <vector>
+#include <zlib.h>
 
+#include "core/png.hpp"
 #include "renderer/mesh.hpp"
 #include "ui/font.hpp"
 
@@ -27,6 +32,71 @@ void expectUv(const GlyphUv& uv, int x0, int y0) {
                     static_cast<float>(x0 + kGlyphSize) / kFontAtlasWidth);
     EXPECT_FLOAT_EQ(uv.v1,
                     static_cast<float>(y0 + kGlyphSize) / kFontAtlasHeight);
+}
+
+// FNV-1a 64 over the file/region bytes (the determinism-pin convention).
+std::string fnv1a64Hex(const std::string& data) {
+    std::uint64_t h = 1469598103934665603ULL; // FNV-1a 64 offset basis
+    for (char ch : data) {
+        h ^= static_cast<unsigned char>(ch);
+        h *= 1099511628211ULL;
+    }
+    char hex[17];
+    std::snprintf(hex, sizeof(hex), "%016llx",
+                  static_cast<unsigned long long>(h));
+    return std::string(hex);
+}
+
+// UX-6 red line helper: re-encode a 256x512 RGBA region byte-identically
+// to the pre-UX-6 tools/generate_font.py writer — signature + IHDR
+// (256,512,8,6,0,0,0) + one IDAT (per-row filter None + zlib level 6, the
+// Python zlib.compress default) + IEND, big-endian chunk lengths and
+// CRC-32. Hashing the result pins the top-512 rows against the old
+// whole-file FNV (a collision would be ~2^-64, so equality IS
+// byte-identity of the region).
+std::string legacyWriterStylePng(const std::vector<std::uint8_t>& rgba,
+                                 int w, int h) {
+    auto be32 = [](std::uint32_t v) {
+        std::string s(4, '\0');
+        s[0] = static_cast<char>(v >> 24);
+        s[1] = static_cast<char>(v >> 16);
+        s[2] = static_cast<char>(v >> 8);
+        s[3] = static_cast<char>(v);
+        return s;
+    };
+    auto chunk = [&be32](const char* tag, const std::string& body) {
+        uLong crc = crc32(0L, Z_NULL, 0);
+        crc = crc32(crc, reinterpret_cast<const Bytef*>(tag), 4);
+        crc = crc32(crc, reinterpret_cast<const Bytef*>(body.data()),
+                    static_cast<uInt>(body.size()));
+        return be32(static_cast<std::uint32_t>(body.size())) + tag + body +
+               be32(static_cast<std::uint32_t>(crc));
+    };
+    std::string ihdr = be32(static_cast<std::uint32_t>(w)) +
+                       be32(static_cast<std::uint32_t>(h));
+    ihdr += static_cast<char>(8);   // bit depth
+    ihdr += static_cast<char>(6);   // color type RGBA
+    ihdr += static_cast<char>(0);   // compression
+    ihdr += static_cast<char>(0);   // filter method
+    ihdr += static_cast<char>(0);   // no interlace
+    std::string raw;
+    raw.reserve(static_cast<std::size_t>(h) * (static_cast<std::size_t>(w) * 4 + 1));
+    for (int y = 0; y < h; ++y) {
+        raw += static_cast<char>(0); // filter: None
+        raw.append(reinterpret_cast<const char*>(
+                       rgba.data() + static_cast<std::size_t>(y) * w * 4),
+                   static_cast<std::size_t>(w) * 4);
+    }
+    uLongf clen = compressBound(static_cast<uLong>(raw.size()));
+    std::vector<Bytef> buf(clen);
+    const int zr = compress2(buf.data(), &clen,
+                             reinterpret_cast<const Bytef*>(raw.data()),
+                             static_cast<uLong>(raw.size()), 6);
+    EXPECT_EQ(zr, Z_OK);
+    return std::string("\x89PNG\r\n\x1a\n") + chunk("IHDR", ihdr) +
+           chunk("IDAT", std::string(reinterpret_cast<const char*>(buf.data()),
+                                     clen)) +
+           chunk("IEND", std::string());
 }
 
 } // namespace
@@ -259,13 +329,26 @@ TEST(FontTest, GlyphUvCjkCellPositions) {
     // CRAFT-4: 作 (the PRE-1 omission — the table title rendered 工?台)
     // takes the dead ASCII-DEL cell 127 = (col 7, row 15).
     expectUv(glyphUv(0x4F5C), 232, 488);
-    // Every entry stays inside the atlas; the PRE-1 32 inside rows 0..3.
+    // UX-6: the extended set starts at cell 128 (row 16, col 0) and its
+    // last glyph 默 takes cell 486 (row 60, col 6); 镐 (cell 465) sits at
+    // (col 1, row 58).
+    expectUv(glyphUv(0x00B7), 8, 16 * kFontCell + kGlyphOffset);
+    expectUv(glyphUv(0x9550), kFontCell + kGlyphOffset,
+             58 * kFontCell + kGlyphOffset);
+    expectUv(glyphUv(0x9ED8), 6 * kFontCell + kGlyphOffset,
+             60 * kFontCell + kGlyphOffset);
+    // Every entry stays inside the atlas; the legacy 33 inside the
+    // legacy region (rows 0..15), the extended 359 inside rows 16..60.
     for (const CjkGlyph& g : kCjkGlyphs) {
         const GlyphUv uv = glyphUv(g.cp);
         EXPECT_GE(uv.v0, 0.0f);
-        EXPECT_LE(uv.v1, kFontCell * 16 / kFontAtlasHeight);
-        if (g.cp != 0x4F5C) {
-            EXPECT_LE(uv.v1, 4.0f * kFontCell / kFontAtlasHeight);
+        EXPECT_LT(uv.v1, 1.0f);
+        if (g.cell >= 128) {
+            EXPECT_LE(uv.v1,
+                      static_cast<float>(61 * kFontCell) / kFontAtlasHeight);
+        } else {
+            EXPECT_LE(uv.v1,
+                      static_cast<float>(16 * kFontCell) / kFontAtlasHeight);
         }
     }
 }
@@ -284,27 +367,36 @@ TEST(FontTest, GlyphUvUnknownCodepointsMapToQuestionMark) {
 }
 
 TEST(FontTest, CjkTablePinned) {
-    ASSERT_EQ(std::size(kCjkGlyphs), 33u);
+    // UX-6: the set grew 33 -> 392 (codepoint order, the charset
+    // endpoints pinned); the legacy 33 keep their exact cells, and the
+    // extended 359 take cells 128..486 in codepoint-rank order.
+    ASSERT_EQ(std::size(kCjkGlyphs), 392u);
     for (std::size_t i = 1; i < std::size(kCjkGlyphs); ++i) {
         EXPECT_GT(kCjkGlyphs[i].cp, kCjkGlyphs[i - 1].cp); // sorted, unique
     }
-    std::size_t cellsBelow32 = 0;
+    EXPECT_EQ(kCjkGlyphs[0].cp, 0x00B7u);   // charset first: ·
+    EXPECT_EQ(kCjkGlyphs[391].cp, 0xFF1Fu); // charset last: ？
+    std::size_t legacyCount = 0;
     for (const CjkGlyph& g : kCjkGlyphs) {
         EXPECT_GT(g.cp, 0x7Fu);
         EXPECT_LE(g.cp, 0xFFFFu); // BMP only (the atlas is 2-byte wide)
         // CRAFT-4: 作 takes the dead ASCII-DEL cell 127; the PRE-1 32
-        // keep their cells 0..31 (unique, below 32).
-        if (g.cp == 0x4F5C) {
+        // keep their cells 0..31; UX-6: the extended glyphs start at
+        // cell 128 (row 16).
+        if (g.cell < 32) {
+            ++legacyCount;
+        } else if (g.cp == 0x4F5C) {
             EXPECT_EQ(g.cell, 127);
+            ++legacyCount;
         } else {
-            EXPECT_LT(g.cell, 32);
-            ++cellsBelow32;
+            EXPECT_GE(g.cell, 128);
+            EXPECT_LE(g.cell, 486); // rows 16..60
         }
     }
-    EXPECT_EQ(cellsBelow32, 32u);
-    // The exact set (semantic pin): 19 localized-UI characters + 10
+    EXPECT_EQ(legacyCount, 33u);
+    // The legacy set (semantic pin): 19 localized-UI characters + 10
     // Chinese punctuation marks + the 4-character reserve.
-    const std::vector<uint32_t> expected = {
+    const std::vector<uint32_t> legacyExpected = {
         // 你死了按重生熔炉工作台背包合成需要关闭
         0x4F60, 0x6B7B, 0x4E86, 0x6309, 0x91CD, 0x751F, 0x7194, 0x7089,
         0x5DE5, 0x4F5C, 0x53F0, 0x80CC, 0x5305, 0x5408, 0x6210, 0x9700,
@@ -314,14 +406,64 @@ TEST(FontTest, CjkTablePinned) {
         0xFF08, 0xFF09,
         // reserve: 物品方块
         0x7269, 0x54C1, 0x65B9, 0x5757};
-    ASSERT_EQ(expected.size(), 33u);
-    std::vector<uint32_t> got(expected);
+    ASSERT_EQ(legacyExpected.size(), 33u);
+    std::vector<uint32_t> got(legacyExpected);
     std::sort(got.begin(), got.end());
-    std::vector<uint32_t> tab;
+    std::vector<uint32_t> legacyTab;
     for (const CjkGlyph& g : kCjkGlyphs) {
-        tab.push_back(g.cp);
+        if (g.cell < 128) {
+            legacyTab.push_back(g.cp);
+        }
     }
-    EXPECT_EQ(got, tab);
+    EXPECT_EQ(got, legacyTab);
+    // The extended 359 fill cells 128..486, one per codepoint in order:
+    // walking the sorted table, every cell >= 128 must be the next one.
+    int nextCell = 128;
+    std::size_t extendedCount = 0;
+    for (const CjkGlyph& g : kCjkGlyphs) {
+        if (g.cell >= 128) {
+            EXPECT_EQ(g.cell, nextCell);
+            ++nextCell;
+            ++extendedCount;
+        }
+    }
+    EXPECT_EQ(extendedCount, 359u);
+    EXPECT_EQ(nextCell, 487); // max used cell 486; rows 61..64 = headroom
+}
+
+TEST(FontTest, CjkExtendedGlyphCellsPinned) {
+    // UX-6 tutorial vocabulary: exact cells for the key extended glyphs
+    // (the UX-7 onboarding text must never render '?').
+    const std::vector<std::pair<uint32_t, int>> pinned = {
+        {0x50F5, 172}, // 僵
+        {0x5E8A, 260}, // 床
+        {0x5251, 192}, // 剑
+        {0x9550, 465}, // 镐
+        {0x7761, 380}, // 睡
+        {0x5065, 171}, // 健
+        {0x5EB7, 264}, // 康
+        {0x5B89, 243}, // 安
+        {0x5168, 177}, // 全
+        {0x5E87, 259}, // 庇
+        {0x62A4, 284}, // 护
+        {0x6240, 281}, // 所
+        {0x6316, 287}, // 挖
+        {0x6324, 288}, // 挤
+        {0x5976, 237}, // 奶
+        {0x6BD2, 340}, // 毒
+        {0x7BAD, 395}, // 箭
+        {0x5CA9, 255}, // 岩
+        {0x706B, 352}, // 火
+        {0x71C3, 359}, // 燃
+        {0x70E7, 355}}; // 烧
+    // expectUv pins the EXACT cell of every codepoint — a '?' fallback
+    // would address cell 36 (row 4), which none of the pinned cells are,
+    // so the UV pin alone proves table membership.
+    for (const auto& [cp, cell] : pinned) {
+        const int col = cell % 8, row = cell / 8;
+        expectUv(glyphUv(cp), col * kFontCell + kGlyphOffset,
+                 row * kFontCell + kGlyphOffset);
+    }
 }
 
 TEST(FontTest, TextWidthCountsCodepointsNotBytes) {
@@ -407,20 +549,55 @@ TEST(FontTest, FitLabelKeepsSuffixAndTrimsName) {
 TEST(FontTest, FontPngBytesPinned) {
     // Determinism pin: the generated atlas is byte-stable (re-running
     // tools/generate_font.py must not change it). FNV-1a 64 over the
-    // file bytes; the hex below is the CRAFT-4 atlas (the PRE-1 rows
-    // 0..14 pixel-identical + 作 in the dead ASCII-DEL cell 127).
+    // file bytes; the hex below is the UX-6 atlas (256x2080: the legacy
+    // 512 rows pixel-identical + 359 extended glyphs in cells 128..486).
     std::ifstream in("assets/textures/font.png", std::ios::binary);
     ASSERT_TRUE(in);
     const std::string data((std::istreambuf_iterator<char>(in)),
                            std::istreambuf_iterator<char>());
     ASSERT_FALSE(data.empty());
-    uint64_t h = 1469598103934665603ULL; // FNV-1a 64 offset basis
-    for (char ch : data) {
-        h ^= static_cast<unsigned char>(ch);
-        h *= 1099511628211ULL;
-    }
-    char hex[17];
-    std::snprintf(hex, sizeof(hex), "%016llx",
-                  static_cast<unsigned long long>(h));
-    EXPECT_STREQ(hex, "74b5d1418347dab6");
+    EXPECT_EQ(fnv1a64Hex(data), "027c6b820b2818ad");
+}
+
+TEST(FontTest, FontPngIsTheUx6Atlas) {
+    // UX-6: the atlas grew 256x512 -> 256x2080 (65 rows of 32px cells;
+    // rows 16..60 = the extended CJK set, rows 61..64 = headroom). The
+    // size constants and the actual file dimensions are pinned so a
+    // silent reshape fails loudly.
+    EXPECT_EQ(kFontAtlasWidth, 256);
+    EXPECT_EQ(kFontAtlasHeight, 2080);
+    EXPECT_EQ(kFontCell, 32);
+    EXPECT_EQ(kGlyphSize, 16);
+    EXPECT_EQ(kGlyphOffset, 8);
+    std::ifstream in("assets/textures/font.png", std::ios::binary);
+    ASSERT_TRUE(in);
+    const std::string data((std::istreambuf_iterator<char>(in)),
+                           std::istreambuf_iterator<char>());
+    const auto img = Png::decode(data);
+    ASSERT_TRUE(img.ok()) << img.error().describe();
+    EXPECT_EQ(img.value().width, 256);
+    EXPECT_EQ(img.value().height, 2080);
+    EXPECT_EQ(img.value().rgba.size(),
+              static_cast<std::size_t>(256) * 2080 * 4u);
+}
+
+TEST(FontTest, Top512RowsAreTheLegacyAtlas) {
+    // UX-6 red line: the top 512 rows of the 256x2080 atlas are the
+    // pre-UX-6 256x512 atlas — ASCII rows 4..15 and the legacy CJK rows
+    // 0..3 + 作 (cell 127) included, pixel-for-pixel. Re-encoded in the
+    // generator's byte format (filter None + zlib level 6), the region
+    // must hash to the PINNED pre-UX-6 whole-file FNV: since that writer
+    // is deterministic, equal hashes ARE byte-identity of the region.
+    std::ifstream in("assets/textures/font.png", std::ios::binary);
+    ASSERT_TRUE(in);
+    const std::string data((std::istreambuf_iterator<char>(in)),
+                           std::istreambuf_iterator<char>());
+    const auto img = Png::decode(data);
+    ASSERT_TRUE(img.ok()) << img.error().describe();
+    EXPECT_EQ(img.value().width, 256);
+    EXPECT_EQ(img.value().height, 2080);
+    std::vector<std::uint8_t> top(256u * 512u * 4u);
+    std::copy_n(img.value().rgba.begin(), top.size(), top.begin());
+    EXPECT_EQ(fnv1a64Hex(legacyWriterStylePng(top, 256, 512)),
+              "74b5d1418347dab6");
 }
