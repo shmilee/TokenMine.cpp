@@ -57,7 +57,7 @@ void Game::handleInteraction(double dt) {
             MC_LOG_DEBUG("Pointer captured");
         }
         resetBreaking();
-        m_swingCooldown = 0.0;
+        m_interaction.swingCooldown = 0.0;
         resetBowDraw();
         resetEatChannel();
         return;
@@ -66,7 +66,7 @@ void Game::handleInteraction(double dt) {
     if (m_input.wasPressed(GameKey::Escape)) {
         m_window.setRelativeMouseMode(false);
         resetBreaking();
-        m_swingCooldown = 0.0;
+        m_interaction.swingCooldown = 0.0;
         resetBowDraw();
         resetEatChannel();
         return;
@@ -110,8 +110,8 @@ void Game::handleInteraction(double dt) {
         // available (Minecraft: no draw without arrows).
         if (selectedShootSpeed() > 0.0f) {
             if (ammoAvailable()) {
-                m_bowDrawing = true;
-                m_bowDrawSeconds = 0.0;
+                m_interaction.bowDrawing = true;
+                m_interaction.bowDrawSeconds = 0.0;
                 m_sound.play("bow");
             }
             return;
@@ -331,7 +331,7 @@ void Game::handleInteraction(double dt) {
     if (m_input.isDown(MouseButton::Left)) {
         // A swing cancels an in-progress eat (Phase 28, Minecraft) — the
         // food is not consumed; the swing itself proceeds normally.
-        if (m_eatChannel.active) {
+        if (m_interaction.eatChannel.active) {
             resetEatChannel();
         }
         if (selectedShootSpeed() > 0.0f) {
@@ -339,18 +339,18 @@ void Game::handleInteraction(double dt) {
             if (const std::optional<MobHit> mob = targetMob()) {
                 updateAttacking(dt, *mob->mob);
             } else {
-                m_swingCooldown = 0.0;
+                m_interaction.swingCooldown = 0.0;
             }
         } else if (const std::optional<MobHit> mob = targetMob()) {
             resetBreaking();
             updateAttacking(dt, *mob->mob);
         } else {
-            m_swingCooldown = 0.0;
+            m_interaction.swingCooldown = 0.0;
             updateBreaking(dt);
         }
     } else {
         resetBreaking();
-        m_swingCooldown = 0.0;
+        m_interaction.swingCooldown = 0.0;
     }
     // Draw charge (Phase 24): with a launcher selected, the held right
     // button accumulates draw time (real dt, like the survival timers)
@@ -371,9 +371,9 @@ std::optional<BlockHit> Game::targetBlock() const {
 }
 
 void Game::resetBreaking() {
-    m_breakTarget.reset();
-    m_breakProgress = 0.0;
-    m_lastDigProgress = 0.0;
+    m_interaction.breakTarget.reset();
+    m_interaction.breakProgress = 0.0;
+    m_interaction.lastDigProgress = 0.0;
 }
 
 void Game::updateBreaking(double dt) {
@@ -390,9 +390,9 @@ void Game::updateBreaking(double dt) {
         resetBreaking();
         return;
     }
-    if (!m_breakTarget.has_value() || *m_breakTarget != hit->block) {
-        m_breakTarget = hit->block;
-        m_breakProgress = 0.0;
+    if (!m_interaction.breakTarget.has_value() || *m_interaction.breakTarget != hit->block) {
+        m_interaction.breakTarget = hit->block;
+        m_interaction.breakProgress = 0.0;
     }
     const double duration = breakDurationSeconds(
         block.properties.hardness, selectedBreakSpeed(block));
@@ -402,7 +402,7 @@ void Game::updateBreaking(double dt) {
         resetBreaking();
         return;
     }
-    m_breakProgress += dt;
+    m_interaction.breakProgress += dt;
     // Mining tick (Phase 15): a dig sound every kDigSoundInterval of held
     // progress (the crack overlay renders the same progress, see render).
     // CRAFT-3: the broken block's material timbre at the block center
@@ -410,11 +410,11 @@ void Game::updateBreaking(double dt) {
     const Vec3 digPos {static_cast<float>(hit->block.x) + 0.5f,
                        static_cast<float>(hit->block.y) + 0.5f,
                        static_cast<float>(hit->block.z) + 0.5f};
-    while (m_breakProgress >= m_lastDigProgress + kDigSoundInterval) {
+    while (m_interaction.breakProgress >= m_interaction.lastDigProgress + kDigSoundInterval) {
         m_sound.play(blockSoundName(block, "dig"), digPos);
-        m_lastDigProgress += kDigSoundInterval;
+        m_interaction.lastDigProgress += kDigSoundInterval;
     }
-    if (m_breakProgress >= duration) {
+    if (m_interaction.breakProgress >= duration) {
         breakBlock(*hit);
         resetBreaking();
     }
@@ -451,14 +451,14 @@ std::optional<Game::MobHit> Game::targetMob() const {
 }
 
 void Game::updateAttacking(double dt, MobEntity& mob) {
-    if (m_swingCooldown > 0.0) {
-        m_swingCooldown -= dt;
+    if (m_interaction.swingCooldown > 0.0) {
+        m_interaction.swingCooldown -= dt;
         return;
     }
     // A swing landed: data damage (selected item) + knockback along the
     // aim (horizontal) with a lift. Removal + drops happen in the
     // updateEntities despawn pass (same frame).
-    m_swingCooldown = kSwingInterval;
+    m_interaction.swingCooldown = kSwingInterval;
     mob.damage(selectedAttackDamage());
     // SURV-3 (durability): the held TOOL wears two points per melee hit
     // that LANDS (the event table: pickaxe / axe / shovel +2). A bow's
@@ -531,15 +531,15 @@ bool Game::ammoAvailable() const {
 }
 
 void Game::updateBowDraw(double dt) {
-    if (!m_bowDrawing) {
+    if (!m_interaction.bowDrawing) {
         return;
     }
     if (m_input.isDown(MouseButton::Right)) {
         // The charge fills in real dt, capped at the full-draw time
         // (core/bow.hpp). A press and a release in the same frame still
         // fire (at the minimum power), like a Minecraft quick click.
-        m_bowDrawSeconds =
-            std::min(m_bowDrawSeconds + dt, kBowFullDrawSeconds);
+        m_interaction.bowDrawSeconds =
+            std::min(m_interaction.bowDrawSeconds + dt, kBowFullDrawSeconds);
     } else if (m_input.wasReleased(MouseButton::Right)) {
         fireBow();
     } else {
@@ -583,7 +583,7 @@ void Game::fireBow() {
     // its swept arrow-vs-mob hit test; the despawn pass removes it on
     // age / kill plane, and a block impact STICKS it (Phase 24). Arrows
     // are not saved (ephemeral, like mobs).
-    const float power = bowPower(m_bowDrawSeconds);
+    const float power = bowPower(m_interaction.bowDrawSeconds);
     const Vec3 f = m_camera.forward();
     const Vec3 o = m_camera.position + f * kArrowSpawnOffset;
     // Phase 42: the arrow carries the shot's charge (power — scales the
@@ -620,8 +620,8 @@ void Game::fireBow() {
 }
 
 void Game::resetBowDraw() {
-    m_bowDrawing = false;
-    m_bowDrawSeconds = 0.0;
+    m_interaction.bowDrawing = false;
+    m_interaction.bowDrawSeconds = 0.0;
 }
 
 void Game::setBlock(int x, int y, int z, BlockID id) {
@@ -1037,13 +1037,13 @@ bool Game::tryEat() {
     // right button for 1.6 s eats (updateEatChannel owns the completion:
     // consume + restore + sound). An extra press while channeling is
     // ignored (Minecraft: the eat continues).
-    if (m_eatChannel.active) {
+    if (m_interaction.eatChannel.active) {
         return true;
     }
-    m_eatChannel.start();
-    m_eatSlot = m_selectedSlot;
-    m_eatItem = stack.item;
-    m_eatStartHealth = m_player->health();
+    m_interaction.eatChannel.start();
+    m_interaction.eatSlot = m_selectedSlot;
+    m_interaction.eatItem = stack.item;
+    m_interaction.eatStartHealth = m_player->health();
     return true;
 }
 
@@ -1080,13 +1080,13 @@ bool Game::tryDrink() {
     // while channeling is ignored (the drink continues). The "milk"
     // sound plays on START (Minecraft: the glug is up front, even when
     // the drink is cancelled — same as the bow draw sound).
-    if (m_eatChannel.active) {
+    if (m_interaction.eatChannel.active) {
         return true;
     }
-    m_eatChannel.start(static_cast<double>(item.drinkTime));
-    m_eatSlot = m_selectedSlot;
-    m_eatItem = stack.item;
-    m_eatStartHealth = m_player->health();
+    m_interaction.eatChannel.start(static_cast<double>(item.drinkTime));
+    m_interaction.eatSlot = m_selectedSlot;
+    m_interaction.eatItem = stack.item;
+    m_interaction.eatStartHealth = m_player->health();
     m_sound.play("milk");
     return true;
 }
@@ -1319,7 +1319,7 @@ void Game::clearStatusEffects() {
 }
 
 void Game::updateEatChannel(double dt) {
-    if (!m_eatChannel.active) {
+    if (!m_interaction.eatChannel.active) {
         return;
     }
     // Interrupts (Phase 28, Minecraft): damage, death, pointer unlock, a
@@ -1328,13 +1328,13 @@ void Game::updateEatChannel(double dt) {
     // — the food is NOT consumed.
     const ItemStack& stack = m_inventory.at(m_selectedSlot);
     if (m_player->isDead() || !m_window.relativeMouseMode() ||
-        panelOpen() || m_player->health() < m_eatStartHealth ||
-        m_selectedSlot != m_eatSlot || stack.item != m_eatItem) {
+        panelOpen() || m_player->health() < m_interaction.eatStartHealth ||
+        m_selectedSlot != m_interaction.eatSlot || stack.item != m_interaction.eatItem) {
         resetEatChannel();
         return;
     }
     const EatEvent ev =
-        m_eatChannel.update(dt, m_input.isDown(MouseButton::Right));
+        m_interaction.eatChannel.update(dt, m_input.isDown(MouseButton::Right));
     if (ev == EatEvent::Completed) {
         // The channel finished: consume one from the captured slot (its
         // validity was just re-checked). Food restores hunger plus the
@@ -1343,8 +1343,8 @@ void Game::updateEatChannel(double dt) {
         // container to the inventory (start checked the capacity — the
         // add cannot fail) and clears the player's status effects (the
         // v1 set: the hurt flash; see clearStatusEffects).
-        const Item& item = m_items.at(m_eatItem);
-        m_inventory.take(m_eatSlot, 1);
+        const Item& item = m_items.at(m_interaction.eatItem);
+        m_inventory.take(m_interaction.eatSlot, 1);
         if (item.restoreHunger > 0) {
             m_player->restoreHunger(static_cast<float>(item.restoreHunger));
             // SURV-9: the per-food satiety (the 'saturation' field, the
@@ -1404,9 +1404,9 @@ void Game::updateEatChannel(double dt) {
 }
 
 void Game::resetEatChannel() {
-    m_eatChannel.reset();
-    m_eatItem = ItemID::invalid();
-    m_eatStartHealth = -1.0f;
+    m_interaction.eatChannel.reset();
+    m_interaction.eatItem = ItemID::invalid();
+    m_interaction.eatStartHealth = -1.0f;
 }
 
 void Game::cycleHotbar() {

@@ -57,7 +57,7 @@ Result<SaveGame> Game::collectSave() const {
     // per-block (the "tables" section below).
     save.invGrid.resize(CraftingGrid::kSize);
     for (int i = 0; i < CraftingGrid::kSize; ++i) {
-        save.invGrid[static_cast<std::size_t>(i)] = m_inventoryGrid.at(i);
+        save.invGrid[static_cast<std::size_t>(i)] = m_panel.inventoryGrid.at(i);
     }
     // The per-block furnace states (format 7; Phase 44): map iteration is
     // position-sorted (the save's order); every furnace block has an entry
@@ -358,10 +358,10 @@ Result<void> Game::applySave(const SaveGame& save) {
     // 4b) Crafting grids (format 3; format 1/2 saves load them empty).
     // CRAFT-1: the E panel's grid is the only global one — the table's
     // grids are per-block (the 4c-quinque section below).
-    m_inventoryGrid.clear();
+    m_panel.inventoryGrid.clear();
     for (int i = 0; i < CraftingGrid::kSize; ++i) {
         if (i < static_cast<int>(save.invGrid.size())) {
-            m_inventoryGrid.setSlot(i, save.invGrid[static_cast<std::size_t>(i)]);
+            m_panel.inventoryGrid.setSlot(i, save.invGrid[static_cast<std::size_t>(i)]);
         }
     }
     // 4c) The per-block furnace states (format 7; Phase 44). Format-6

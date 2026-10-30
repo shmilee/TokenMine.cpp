@@ -345,12 +345,12 @@ void Game::drawHeldHand(const Mat4& view, const Mat4& projection) {
     // raises the hand toward the face with the progress.
     Vec3 offset = kHandOffset;
     float spinX = kHandSpinX;
-    if (m_bowDrawing) {
-        const float p = bowPower(m_bowDrawSeconds);
+    if (m_interaction.bowDrawing) {
+        const float p = bowPower(m_interaction.bowDrawSeconds);
         offset.z += kHandDrawPullZ * p;
         spinX += kHandDrawSpinX * p;
-    } else if (m_eatChannel.active) {
-        const float p = m_eatChannel.progress();
+    } else if (m_interaction.eatChannel.active) {
+        const float p = m_interaction.eatChannel.progress();
         offset.y += kHandEatLiftY * p;
         offset.z += kHandEatPullZ * p;
     }
@@ -427,8 +427,8 @@ void Game::drawWorldOverlay(const Mat4& view, const Mat4& projection) {
     // a disableBlending from an earlier draw reached here and the crack
     // cube's (0,0,0,0) background painted the mined block solid black).
     m_renderer.enableBlending();
-    if (m_breakTarget.has_value() && m_breakProgress > 0.0) {
-        const BlockPos& b = *m_breakTarget;
+    if (m_interaction.breakTarget.has_value() && m_interaction.breakProgress > 0.0) {
+        const BlockPos& b = *m_interaction.breakTarget;
         const Block& block =
             m_blocks.at(m_world.getBlock(b.x, b.y, b.z));
         const double duration = breakDurationSeconds(
@@ -437,7 +437,7 @@ void Game::drawWorldOverlay(const Mat4& view, const Mat4& projection) {
             duration > 0.0
                 ? std::clamp(
                       static_cast<int>(std::floor(
-                          (m_breakProgress / duration) * kCrackStages)),
+                          (m_interaction.breakProgress / duration) * kCrackStages)),
                       0, kCrackStages - 1)
                 : kCrackStages - 1;
         const Vec3 center {static_cast<float>(b.x) + 0.5f,

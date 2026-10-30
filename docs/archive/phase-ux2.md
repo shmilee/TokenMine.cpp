@@ -92,7 +92,21 @@ setBlock 9 项簿记 + 4 镜像站点/存档收口/渲染 pass/流送 worker 窗
   基线）≡ 锚 全字节一致 168140 B** + 跨版 savenorm EXACT + 读档往返
   全状态恒等
 
-### B4（交互/面板族 → InteractionState + PanelState）【待执行】
+### B4（交互/面板族 → InteractionState + PanelState，B 段收官）
+- 交互 11 成员 → `InteractionState m_interaction`（m_swingCooldown 原位；
+  安全重排 = break 族 + stepTimer 自红线块后前移，11 成员相对序保持，
+  全默认构造零跨读论证）+ 面板 8 成员 → `PanelState m_panel`
+ （m_inventoryGrid 原位；openFurnacePos/furnaceUi 自 PerBlockStates 邻位
+  移入 = 构造时点提前论证：furnaceUi 3 参构造只存引用零跨成员读 +
+  红线 m_recipes < UI 三构造保持）；**Game 构造改 `m_panel(m_inventory,
+  m_items, m_recipes)` 初始化器**（UI 取引用绑定自构造体移入 struct
+  构造 = 绑定机制变更，行为零差由门 156 字节级 + 往返恒等证明）+
+  panelOpen() 留 Game 层改读 m_panel.openPanel；93 处调用点
+  （interaction 55 / ui 32 / render 8 / save 3；frame/init/streaming/
+  entities 零触点）；发生数守恒 93=93 逐名对上
+- 门 156 PASS：构建 0 警告 + 1929 + **b4n1 ≡ b4n2 ≡ a1o1（v1.35.0
+  基线）≡ 锚 全字节一致 168140 B** + 跨版 savenorm EXACT + 读档往返
+  全状态恒等——**B 段 4/4 收：4 域 struct 全部落位**
 
 ## 子相门协议（无像素门）
 每子相：new ×2 + 基线侧 RAW 字节一致（tm_v136_base = v1.35.0 冻结）+

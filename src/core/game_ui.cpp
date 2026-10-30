@@ -198,7 +198,7 @@ void Game::handleUiKeys() {
 
 void Game::openPanel(OpenPanel panel) {
     m_window.setRelativeMouseMode(false); // free the cursor for clicking
-    m_openPanel = panel;
+    m_panel.openPanel = panel;
     resetBreaking();
     resetBowDraw(); // a panel interrupts a draw (Phase 24)
     resetEatChannel(); // a panel interrupts an eat too (Phase 28)
@@ -206,7 +206,7 @@ void Game::openPanel(OpenPanel panel) {
 }
 
 void Game::closePanel() {
-    m_openPanel = OpenPanel::None;
+    m_panel.openPanel = OpenPanel::None;
     m_sound.play("ui_close");
 }
 
@@ -216,8 +216,8 @@ void Game::closePanel() {
 // while the panel is open: block interaction is paused and no other code
 // path mutates or removes a furnace block in the meantime.
 void Game::openFurnacePanel(const BlockPos& pos) {
-    m_openFurnacePos = pos;
-    m_furnaceUi.bind(furnaceAt(pos));
+    m_panel.openFurnacePos = pos;
+    m_panel.furnaceUi.bind(furnaceAt(pos));
     openPanel(OpenPanel::Furnace);
 }
 
@@ -236,7 +236,7 @@ FurnaceState& Game::furnaceAt(const BlockPos& pos) {
 // path mutates or removes a table block in the meantime (the Phase 44
 // furnace argument, the twin).
 void Game::openTablePanel(const BlockPos& pos) {
-    m_tableUi.bind(tableAt(pos));
+    m_panel.tableUi.bind(tableAt(pos));
     openPanel(OpenPanel::Table);
 }
 
@@ -367,17 +367,17 @@ void Game::handlePanelClicks() {
     const bool rightPressed = m_input.wasPressed(MouseButton::Right);
     const double now = nowSeconds();
     auto isDoubleClick = [&](int slot) {
-        return !shift && slot >= 0 && slot == m_lastLeftSlot &&
-               m_lastLeftClickTime >= 0.0 &&
-               (now - m_lastLeftClickTime) <= kDoubleClickSeconds;
+        return !shift && slot >= 0 && slot == m_panel.lastLeftSlot &&
+               m_panel.lastLeftClickTime >= 0.0 &&
+               (now - m_panel.lastLeftClickTime) <= kDoubleClickSeconds;
     };
     auto armDoubleClick = [&](int slot) {
-        m_lastLeftSlot = slot;
-        m_lastLeftClickTime = slot >= 0 ? now : -1.0;
+        m_panel.lastLeftSlot = slot;
+        m_panel.lastLeftClickTime = slot >= 0 ? now : -1.0;
     };
     auto disarmDoubleClick = [&]() {
-        m_lastLeftSlot = -1;
-        m_lastLeftClickTime = -1.0;
+        m_panel.lastLeftSlot = -1;
+        m_panel.lastLeftClickTime = -1.0;
     };
 
     // Phase 40: the furnace panel. Same click model as the crafting
@@ -385,18 +385,18 @@ void Game::handlePanelClicks() {
     // 27-slot / input / fuel / output is active; a left click with all of
     // them inactive drops the carry). No craft action — the output fills
     // by itself.
-    if (m_openPanel == OpenPanel::Furnace) {
+    if (m_panel.openPanel == OpenPanel::Furnace) {
         const FurnaceLayout layout = FurnaceLayout::compute(w, h);
         const std::pair<int, int> mp = uiMouse();
         const int slot = layout.slotAt(mp.first, mp.second);
         const int fslot = layout.furnaceSlotAt(mp.first, mp.second);
         if (leftPressed) {
             if (shift) {
-                m_furnaceUi.quickMove(slot, fslot);
+                m_panel.furnaceUi.quickMove(slot, fslot);
             } else if (fslot < 0 && isDoubleClick(slot)) {
-                m_furnaceUi.doubleCollect(slot);
+                m_panel.furnaceUi.doubleCollect(slot);
             } else {
-                m_furnaceUi.leftClick(slot, fslot);
+                m_panel.furnaceUi.leftClick(slot, fslot);
             }
             if (fslot < 0 && !shift) {
                 armDoubleClick(slot);
@@ -407,16 +407,16 @@ void Game::handlePanelClicks() {
         }
         if (rightPressed) {
             if (shift) {
-                m_furnaceUi.quickMove(slot, fslot);
+                m_panel.furnaceUi.quickMove(slot, fslot);
             } else {
-                m_furnaceUi.rightClick(slot, fslot);
+                m_panel.furnaceUi.rightClick(slot, fslot);
             }
             disarmDoubleClick();
         }
         return;
     }
 
-    const bool table = m_openPanel == OpenPanel::Table;
+    const bool table = m_panel.openPanel == OpenPanel::Table;
     const PanelKind kind =
         table ? PanelKind::CraftingTable : PanelKind::Inventory;
     // The hint list per kind: shapeless craft rows (E panel) or shaped
@@ -428,7 +428,7 @@ void Game::handlePanelClicks() {
     const std::pair<int, int> mp = uiMouse();
     const int px = mp.first;
     const int py = mp.second;
-    InventoryUI& ui = table ? m_tableUi : m_inventoryUi;
+    InventoryUI& ui = table ? m_panel.tableUi : m_panel.inventoryUi;
     // The layout hit tests are disjoint: at most one of slot / grid cell /
     // output is active (the UI dispatch checks output first, then grid,
     // then slot; all-inactive drops the carry on a left click).
@@ -497,13 +497,13 @@ void Game::updateSoundTimers(double dt) {
     const bool moving =
         std::abs(v.x) > kStepMinSpeed || std::abs(v.z) > kStepMinSpeed;
     if (moving && m_player->onGround()) {
-        m_stepTimer += dt;
-        if (m_stepTimer >= kStepSoundInterval) {
-            m_stepTimer = 0.0;
+        m_interaction.stepTimer += dt;
+        if (m_interaction.stepTimer >= kStepSoundInterval) {
+            m_interaction.stepTimer = 0.0;
             m_sound.play("step");
         }
     } else {
-        m_stepTimer = 0.0;
+        m_interaction.stepTimer = 0.0;
     }
 }
 
@@ -1037,8 +1037,8 @@ void Game::renderUi() {
     // (its per-block state). The 27 inventory slots + the smelting
     // section (input, progress bar, output, fuel). No crafting of any
     // kind happens here — the output fills by itself (the furnace tick).
-    if (m_openPanel == OpenPanel::Furnace) {
-        const FurnaceState& f = furnaceAt(m_openFurnacePos);
+    if (m_panel.openPanel == OpenPanel::Furnace) {
+        const FurnaceState& f = furnaceAt(m_panel.openFurnacePos);
         const FurnaceLayout layout = FurnaceLayout::compute(w, h);
         const double s = layout.scale;
         const auto L = [s](int v) {
@@ -1140,8 +1140,8 @@ void Game::renderUi() {
                               mx + L(12), my + L(12), s, L(16));
             }
         }
-        if (m_furnaceUi.carrying()) {
-            drawIcon(m_furnaceUi.carry(), static_cast<float>(mx),
+        if (m_panel.furnaceUi.carrying()) {
+            drawIcon(m_panel.furnaceUi.carry(), static_cast<float>(mx),
                      static_cast<float>(my), slotIcon);
         }
         const std::string hint = "按 E 关闭"; // PRE-1
@@ -1154,8 +1154,8 @@ void Game::renderUi() {
     // -- crafting panel (while open): the E inventory (2x2 grid + the
     // shapeless recipe craft list) or the crafting table (3x3 grid + the
     // shaped recipe hint list, CRAFT-4). ------------------------------------
-    if (panelOpen() && m_openPanel != OpenPanel::Furnace) {
-        const bool table = m_openPanel == OpenPanel::Table;
+    if (panelOpen() && m_panel.openPanel != OpenPanel::Furnace) {
+        const bool table = m_panel.openPanel == OpenPanel::Table;
         const PanelKind kind =
             table ? PanelKind::CraftingTable : PanelKind::Inventory;
         // The hint list per kind (same source handlePanelClicks uses).
@@ -1164,7 +1164,7 @@ void Game::renderUi() {
         const InventoryLayout layout =
             InventoryLayout::compute(w, h, static_cast<int>(hints.size()),
                                      kind);
-        InventoryUI& ui = table ? m_tableUi : m_inventoryUi;
+        InventoryUI& ui = table ? m_panel.tableUi : m_panel.inventoryUi;
 
         // Panel fit factor (Phase 35): below the native width the whole
         // panel scales down; the text (font scale) and icons (quad sizes)

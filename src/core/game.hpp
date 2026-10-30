@@ -140,19 +140,17 @@ public:
         Furnace,   // Phase 40: right-clicked furnace: the smelting GUI
     };
 
-    // The crafting UIs (Phase 15/17) + the furnace UI (Phase 40) hold
-    // references to the inventory, the crafting grids and the registries,
-    // so they are constructed here (after all of them, in declaration
-    // order). Phase 44: the furnace UI binds its state per panel opening
+    // The panel UIs (Phase 15/17/40 — UX-2 B4's m_panel) hold references
+    // to the inventory and the registries, so they are constructed in
+    // m_panel's initializer (after all of them, in declaration order).
+    // Phase 44: the furnace UI binds its state per panel opening
     // (per-block furnace states — see openFurnacePanel). CRAFT-1: the
     // inventory UIs bind their grid per panel opening too — the E panel
     // to the player's own grid (bound once, in the constructor body), the
     // table panel to the clicked block's per-block grid (bound on every
     // open — see openTablePanel).
-    Game() : m_inventoryUi(m_inventory, m_items, m_recipes),
-             m_tableUi(m_inventory, m_items, m_recipes),
-             m_furnaceUi(m_inventory, m_items) {
-        m_inventoryUi.bind(m_inventoryGrid);
+    Game() : m_panel(m_inventory, m_items, m_recipes) {
+        m_panel.inventoryUi.bind(m_panel.inventoryGrid);
     }
     ~Game();
 
@@ -1068,9 +1066,8 @@ private:
     // scattering a member across the mob bookkeeping. Member order = the
     // original declaration order of the family (construction order =
     // initialization order = behavior red line). m_handIconMesh /
-    // m_swingCooldown stay OUT — the held-hand icon (Phase 42) + the
-    // player attack-input swing cooldown (Phase 20, game_interaction)
-    // families.
+    // m_interaction stay OUT — the held-hand icon (Phase 42) and the
+    // player input-channel (UX-2 B4, game_interaction) families.
     struct MobSystem {
         // Mobs (Phase 20): the data-driven types (assets/data/mobs) + the
         // spawn config (assets/data/mob_spawning.json), the enable flag
@@ -1105,28 +1102,60 @@ private:
         std::uint64_t spawnCounter = 0;
     };
     MobSystem m_mobs;
-    // Swing cooldown (seconds; Phase 20): one attack hit per
-    // kSwingInterval while the left button is held on a mob. Reset to 0
-    // on release / when the aim leaves the mob (the next swing is
-    // immediate).
-    double m_swingCooldown = 0.0;
-    // Bow draw (Phase 24): true while the right button is held with a
-    // launcher selected; m_bowDrawSeconds accumulates the draw in real dt
-    // (capped at kBowFullDrawSeconds). Reset by fireBow/resetBowDraw and
-    // by every state change that interrupts a draw (unlock, panel, item
-    // switch).
-    bool m_bowDrawing = false;
-    double m_bowDrawSeconds = 0.0;
-    // Eat channel (Phase 28, core/food.hpp): the Minecraft-style 1.6 s
-    // eat animation — right-clicking with food selected starts the
-    // channel (m_eatSlot/m_eatItem capture the slot and item; completion
-    // consumes one and restores hunger + saturation). Interrupted by
-    // damage, death, unlock, panel, selection change, early release, or a
-    // left-button swing (none of these consume the food).
-    EatChannel m_eatChannel;
-    std::size_t m_eatSlot = 0;
-    ItemID m_eatItem = ItemID::invalid();
-    float m_eatStartHealth = -1.0f; // damage during the channel cancels it
+    // The player input-channel family (UX-2 B4): everything the pointer-
+    // locked interaction maintains — the swing cooldown (Phase 20, the
+    // attack input), the bow draw (Phase 24), the eat channel (Phase 28,
+    // core/food.hpp) and the hold-to-break state (Phase 11) + the
+    // dig-sound dedupe + the footstep timer (Phase 15). Consumer sites:
+    // game_interaction (the unlock / escape / panel-mutex resets,
+    // fireBow / updateBowDraw / resetBowDraw, updateEatChannel /
+    // resetEatChannel, updateBreaking / updateAttacking), game_frame
+    // (the update cadence) and game_render / game_ui (the held-hand pose,
+    // the crack overlay and the step sounds). Collected so a NEW
+    // interaction channel adds one member here and writes
+    // m_interaction.xxx explicitly, instead of scattering a member
+    // across the input bookkeeping. Member order = the original
+    // declaration order of the family (construction order =
+    // initialization order = behavior red line) — the break state + the
+    // step timer move in from after the item/inventory red line block;
+    // all eleven members are default-constructed with no cross-reads.
+    // m_arrowShaftMesh / m_arrowTipMesh / m_arrowFletchMesh (the Phase 21
+    // render assets) and the red line block (m_items / m_inventory /
+    // m_selectedSlot / m_recipes) stay OUT.
+    struct InteractionState {
+        // Swing cooldown (seconds; Phase 20): one attack hit per
+        // kSwingInterval while the left button is held on a mob. Reset to
+        // 0 on release / when the aim leaves the mob (the next swing is
+        // immediate).
+        double swingCooldown = 0.0;
+        // Bow draw (Phase 24): true while the right button is held with a
+        // launcher selected; bowDrawSeconds accumulates the draw in real
+        // dt (capped at kBowFullDrawSeconds). Reset by fireBow/
+        // resetBowDraw and by every state change that interrupts a draw
+        // (unlock, panel, item switch).
+        bool bowDrawing = false;
+        double bowDrawSeconds = 0.0;
+        // Eat channel (Phase 28, core/food.hpp): the Minecraft-style 1.6 s
+        // eat animation — right-clicking with food selected starts the
+        // channel (eatSlot / eatItem capture the slot and item; completion
+        // consumes one and restores hunger + saturation). Interrupted by
+        // damage, death, unlock, panel, selection change, early release,
+        // or a left-button swing (none of these consume the food).
+        EatChannel eatChannel;
+        std::size_t eatSlot = 0;
+        ItemID eatItem = ItemID::invalid();
+        float eatStartHealth = -1.0f; // damage during the channel cancels it
+        // Hold-to-break state (Phase 11): the cell being broken and how
+        // long it has been held (seconds). Reset on target change,
+        // pointer unlock, selection change, and completion.
+        std::optional<BlockPos> breakTarget;
+        double breakProgress = 0.0;
+        // Last progress value at which a dig sound played (Phase 15).
+        double lastDigProgress = 0.0;
+        // Footstep timer (seconds since the last step sound; Phase 15).
+        double stepTimer = 0.0;
+    };
+    InteractionState m_interaction;
     // The three shared arrow-part meshes (Phase 21; PRE-9 three-part:
     // shaft/tip/fletching; built lazily on first render).
     Mesh m_arrowShaftMesh;
@@ -1143,16 +1172,6 @@ private:
     Inventory m_inventory;
     std::size_t m_selectedSlot = 0;
     RecipeRegistry m_recipes;
-
-    // Hold-to-break state (Phase 11): the cell being broken and how long
-    // it has been held (seconds). Reset on target change, pointer unlock,
-    // selection change, and completion.
-    std::optional<BlockPos> m_breakTarget;
-    double m_breakProgress = 0.0;
-    // Last progress value at which a dig sound played (Phase 15).
-    double m_lastDigProgress = 0.0;
-    // Footstep timer (seconds since the last step sound; Phase 15).
-    double m_stepTimer = 0.0;
 
     // Phase 15 UI: unlit screen-space shader + the generated font/crack
     // textures, the 2D icons of the explicit items (indexed by ItemID
@@ -1182,23 +1201,55 @@ private:
     // UI at all, keeping the Phase 14 screenshots byte-identical).
     bool m_debugOverlay = false;
 
-    // Phase 17 crafting: the E panel's persistent crafting grid (its 2x2
-    // uses the top-left 4 cells of the 9-cell model) and the open-panel
-    // state machine. The grid survives a close/reopen (see
-    // docs/KNOWN_ISSUES) and is saved (format 3). CRAFT-1: the crafting
-    // TABLE's grid is no longer a single global — it is per-block (one
-    // grid per crafting_table block, the m_states.tables map below).
-    CraftingGrid m_inventoryGrid;
-    InventoryUI m_inventoryUi;
-    InventoryUI m_tableUi;
-    OpenPanel m_openPanel = OpenPanel::None;
-    // CRAFT-7: the last left click on a PLAYER-INVENTORY slot (for the
-    // double-click collect): the slot index (-1 = none) and the real-dt
-    // timestamp (seconds, -1 = none). Input-only state (the survival-
-    // timer class, hard rule 8) — a no-input run never touches it.
-    int m_lastLeftSlot = -1;
-    double m_lastLeftClickTime = -1.0;
-    bool panelOpen() const { return m_openPanel != OpenPanel::None; }
+    // The panel family (UX-2 B4): the Phase 17 E panel's persistent
+    // crafting grid (its 2x2 uses the top-left 4 cells of the 9-cell
+    // model; the grid survives a close/reopen — see docs/KNOWN_ISSUES —
+    // and is saved, format 3) + the panel UIs (the inventory / table
+    // pick-and-place state machines, Phase 15/17, and the furnace UI,
+    // Phase 40) + the open-panel state machine + the CRAFT-7 double-click
+    // collect memory + the Phase 40/44 furnace panel's bound position.
+    // Consumer sites: game_ui (the panel rendering, the click routing and
+    // the open / close transitions), game_interaction (the panel-mutex
+    // resets) and game_save (the grid collect / apply). Collected so a
+    // NEW panel feature adds one member here and writes m_panel.xxx
+    // explicitly, instead of scattering a member across the UI
+    // bookkeeping. Member order = the original declaration order of the
+    // family (construction order = initialization order = behavior red
+    // line) — openFurnacePos / furnaceUi move in from after the
+    // PerBlockStates family (B1): all three UIs take their references in
+    // the PanelState constructor (after m_items / m_inventory /
+    // m_recipes, declared above) and the E panel's grid binding stays in
+    // the Game constructor body (after every member initialization).
+    // CRAFT-1: the crafting TABLE's grid is no longer a single global —
+    // it is per-block (one grid per crafting_table block, the
+    // m_states.tables map below).
+    struct PanelState {
+        CraftingGrid inventoryGrid;
+        InventoryUI inventoryUi;
+        InventoryUI tableUi;
+        OpenPanel openPanel = OpenPanel::None;
+        // CRAFT-7: the last left click on a PLAYER-INVENTORY slot (for
+        // the double-click collect): the slot index (-1 = none) and the
+        // real-dt timestamp (seconds, -1 = none). Input-only state (the
+        // survival-timer class, hard rule 8) — a no-input run never
+        // touches it.
+        int lastLeftSlot = -1;
+        double lastLeftClickTime = -1.0;
+        // Phase 40/44 furnace panel: openFurnacePos is valid while
+        // openPanel == OpenPanel::Furnace (the panel's UI is bound to its
+        // state).
+        BlockPos openFurnacePos {};
+        FurnaceUI furnaceUi;
+        PanelState(Inventory& inventory, const ItemRegistry& items,
+                   const RecipeRegistry& recipes)
+            : inventoryUi(inventory, items, recipes),
+              tableUi(inventory, items, recipes),
+              furnaceUi(inventory, items) {}
+    };
+    PanelState m_panel {m_inventory, m_items, m_recipes};
+    bool panelOpen() const {
+        return m_panel.openPanel != OpenPanel::None;
+    }
 
     // Phase 83 beacon: the (x, y, z) of a beacon block plus its power
     // level (the beam is taller at higher levels, Minecraft). Filled by
@@ -1220,8 +1271,8 @@ private:
     // scattering a member across the nine setBlock bookkeeping lines and
     // five call sites. Member order = the original declaration order of
     // the family (construction order = initialization order = behavior
-    // red line). m_openFurnacePos / m_furnaceUi stay OUT — the panel
-    // family (UX-2 B4).
+    // red line). The furnace panel's bound position + UI (openFurnacePos
+    // / furnaceUi) moved to the panel family (UX-2 B4, m_panel).
     struct PerBlockStates {
         // CRAFT-1: the per-block crafting-table grids — one CraftingGrid
         // per crafting_table block in the world (created on placement,
@@ -1350,13 +1401,6 @@ private:
         int beaconEffectId = -1;
     };
     PerBlockStates m_states;
-
-    // Phase 40/44 furnace panel: m_openFurnacePos is valid while
-    // m_openPanel == OpenPanel::Furnace (the panel's UI is bound to its
-    // state). UX-2 B1: OUT of the PerBlockStates family (the panel
-    // family — B4).
-    BlockPos m_openFurnacePos {};
-    FurnaceUI m_furnaceUi;
 
     // PRE-4 clouds: the cached cloud-layer mesh (the full camera window,
     // world/buildCloudMesh) + its rebuild key — the camera's cloud cell
