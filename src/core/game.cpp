@@ -1212,6 +1212,29 @@ Result<void> Game::buildScene() {
         m_autoSaveInterval = *interval;
     }
 
+    // UX-1: the deep-night sky floor (render.night_sky_level — a CODE
+    // default kNightSkyLevel, the fire/mobs/beacon config-key discipline:
+    // the committed config.json carries no such key). Strict read: absent
+    // = 7 (bit-identical to v1.34.0); present = an integer in [0,15]
+    // (0 = the all-black night, the ambient floor goes with it; 15 = no
+    // retreat). Non-integer / out-of-range / non-number is named and
+    // rejected (the SAVE-1 discipline — the Config getters would silently
+    // fall back on a type mismatch).
+    auto nightLevel = readNightSkyLevel(m_config);
+    MC_TRY(nightLevel);
+    m_nightSkyLevel = *nightLevel;
+    // The two uniforms are per-run constants (config-driven, no per-draw
+    // variation): set them once on the basic program. At the default L =
+    // 7 the uploaded values (8.0f/15.0f, 0.03f) are the pre-UX-1 named
+    // constants bit-for-bit (the GLSL 8.0/15.0 and 0.03 float literals
+    // round to the same IEEE values).
+    m_basicShader.bind();
+    m_basicShader.setUniform1f("u_nightRetreat",
+                               nightRetreatScale(m_nightSkyLevel));
+    m_basicShader.setUniform1f("u_ambient",
+                               ambientFloorForLevel(m_nightSkyLevel));
+    m_basicShader.unbind();
+
     // -- item icons (Phase 15 UI) ------------------------------------------
     // Each explicit item may name a 2D icon under assets/textures/items/
     // (strict: the file must exist — same cross-check pattern as the block
@@ -6186,7 +6209,7 @@ void Game::attemptMobSpawn() {
                                  def.properties.spawnMaxLight,
                                  m_player->aabbMin(), m_player->aabbMax(),
                                  mobPositions, protection, m_spawnPoint.x,
-                                 m_spawnPoint.z);
+                                 m_spawnPoint.z, m_nightSkyLevel);
     if (!cell) {
         MC_LOG_DEBUG("mob spawn f" + std::to_string(m_frameCount) +
                      ": pick '" + def.name + "' found no valid cell "

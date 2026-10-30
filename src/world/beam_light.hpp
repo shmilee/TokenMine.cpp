@@ -19,13 +19,15 @@
 // negligible at player-scale beacon counts).
 //
 // The values are the RAW light (0..15 / 15), NOT day-reduced: the
-// fragment's existing formula (basic.frag, LGT-3: max(v_skyLight -
-// (8.0/15.0) * (1.0 - u_dayFactor), v_blockLight)) applies the
-// day/night affine retreat WITH the kNightSkyLevel 7 moonlight floor to
-// sky light and keeps block light un-reduced (the
-// glowstone-shines-at-night discipline), so a beam behaves exactly like
-// the world around it (moonlit at deep night, bright next to glowstone,
-// full white at open-sky noon = the legacy constant look there).
+// fragment's existing formula (basic.frag, LGT-3 + UX-1: max(v_skyLight -
+// u_nightRetreat * (1.0 - u_dayFactor), v_blockLight)) applies the
+// day/night affine retreat WITH the configured moonlight floor
+// (u_nightRetreat = (15 - L) / 15, L = render.night_sky_level, default
+// kNightSkyLevel 7 — 8/15 at the default) to sky light and keeps block
+// light un-reduced (the glowstone-shines-at-night discipline), so a beam
+// behaves exactly like the world around it (moonlit at deep night at the
+// default floor, bright next to glowstone, full white at open-sky noon =
+// the legacy constant look there).
 #pragma once
 
 #include <utility>

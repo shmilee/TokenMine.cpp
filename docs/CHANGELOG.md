@@ -3,6 +3,46 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.35.0（2026-10-30）— UX-1 夜变暗程度（UX 行 1/7，门 150 全 PASS）
+
+**UX-1**（v1.x 任务表 34/40，10-30 用户定案方向）：消费 LGT-3 定案「10-27
+深夜须可夜视」（初版深夜全黑被实机反馈推翻 = `kNightSkyLevel 7` 的由来）
+→ **深夜天空地板可配置，可设全黑夜**：config `render.night_sky_level`
+（int [0,15]，**代码默认 7 = 对 v1.34.0 位级恒等**；严格读：absent = 7 /
+非 number / 非有限 / 越界 / 非整数全点名拒，检查序 = 非有限 → 范围
+（double 域）→ 整数 → int 投影【1e18 int cast = UB 路径，编排者核证
+封堵】= SAVE-1 纪律，config.json 零改动）——shader 两编译期常量
+（`kNightRetreat 8.0/15.0` / `kAmbient 0.03`）→ **两 uniform**
+（`u_nightRetreat = (15−L)/15` / `u_ambient`，表达式树一字未动，init
+bind→set→unbind 一次性注入 = 每 run 常量无 per-draw 变化 = UXFIX-1
+泄漏类结构不适用）+ **全黑夜 = L 0 且环境底随地板归零**（`kAmbientFloor
+0.03` 单一真源，L=0 → 0.0 = 真纯黑无残光）+ 主机纯函数尾参参数化
+（`effectiveSkyLight(F)` / `currentSpawnLight` / `findMobSpawnCell`，
+默认参 = 旧常量 = 既有调用点位级不变）+ **spawn 成对语义任意 L 成立**
+（夜露天等级 = L 本身：L≤7 敌对照生 / 火把圈 14 恒免疫 / L=15 夜不生成
+= 用户配置选择，文档/测试同步）；仿射撤退其它消费者（信标光束 LGT-4 /
+掉落 PRE-6 / 云 / 手持块立方）经 shader 公式自动继承零代码。零 format
+（22）/内容/音效/帧状态。1929/1929（+16：config 严格读 11【含 1e18 大
+有限值防御】+ retreat scale 位级钉 + ambient 规则 + effectiveSkyLight
+配置地板【含 16×16 正午恒等网格】+ F 版位级钉 + spawn 镜像 4 值）、
+`-Werror` 0、banner v1.35.0。门 150 全 PASS：S1 = **第 150 次结构性
+免疫 + base18 锚连续 168140 B 免重锚**（fresh 60f 四方 RAW 全字节一致
++ 跨版 savenorm EXACT）；S2 深夜 0.75 无输入 600f 多向 9 跑：
+**old v1.34.0 ≡ new-L7 字节一致 160959 B = 代码级免疫（深夜帧亦位级
+恒等）** + old 忽略未知键 = forward-compat + **L0 vs L7 diff 378,350 px
+逐像素分量全仅暗化（违反 0）/ L15 vs L7 同数 378,350 px 全仅亮化（违反
+0）= 时间不变集**【LGT-3 门 118 同型特征证明】+ 六存档 savenorm 全对
+EXACT（光照不入档）+ 全黑夜帧 22453 B ≈ 纯黑实证；S6 init 点名 ×3；S3
+1929；性能 A/B v1.34.0 vs v1.35.0 fall 900f 三窗全指标同档 +
+changesApplied 9/3/1 逐位 + **终档 fluids 18/18 + blocks 55/55 集合恒等
+= 同世界同成本**【结构惰性最强形】。PITS 341（门脚本截图相对路径静默
+落游戏 CWD = 全门假 FAIL）+ 342（门批前查活跃游戏进程 + 日志时钟 NTP
+回拨非单调）+ 270 第 3 次复现（rsync 无锚 --exclude data 吞
+assets/data）。**UX 行 tag/release 政策（10-30 用户定案，同款 10-28）**：
+两两合并 tag（v1.36.0 = UX-1+2 / v1.38.0 = UX-3+4 / v1.40.0 = UX-5+6 /
+v1.41.0 = UX-7 收官）+ UX 系统 release 收官时发（notes 覆盖
+v1.35-1.41）——本版不打 tag。详见 `docs/archive/phase-ux1.md`。
+
 ## v1.34.0（2026-10-30）— 插队修复 ×3（矩阵 UX 行开工前清积压）
 
 **④ 物品解析白名单补 `saturation`**：门 141 内发现的 10 行 init WARN

@@ -27,6 +27,17 @@ uniform float u_alpha;
 // instead of scaling; block light is intentionally unaffected —
 // glowstone shines at night.
 uniform float u_dayFactor;
+// UX-1 (the configurable deep-night sky floor): the retreat distance in
+// the 0..1-normalized sky units, (15 - L) / 15 with L = the configured
+// floor (render.night_sky_level, code default 7 = the LGT-3 moonlight
+// floor — at the default the host uploads 8/15, the pre-UX-1 named
+// constant bit-for-bit). u_ambient is the ambient floor of the light
+// formula (the host uploads 0.03 at any nonzero floor; 0.0 for L = 0 =
+// the true all-black night, no residual glow). Both are PER-RUN
+// constants (config-driven, no per-draw variation): set once at init
+// (bind -> set -> unbind).
+uniform float u_nightRetreat;
+uniform float u_ambient;
 // One tile in UV space (1/columns, 1/rows of the atlas). Only read on the
 // tiled (greedy-merged chunk quad) path.
 uniform vec2 u_tileSize;
@@ -82,32 +93,32 @@ void main() {
     // block light (each 0..1), with per-face shading and a small ambient
     // floor so fully dark areas stay distinguishable from the void
     // background.
-    // LGT-3 (the night light retreat): the sky term is an affine retreat
-    // of the stored noon field, not a scale. v_skyLight is the noon
-    // (source level 15) field normalized to 0..1; the source level behind
-    // u_dayFactor is S = 7 + 8 * u_dayFactor — the Minecraft moonlight
-    // FLOOR kNightSkyLevel 7 at deep night (10-27 user verdict: an
-    // all-black night is unplayable) — and the sky field is affine in its
-    // source level (world/lighting.hpp — every sky source shares one
-    // level, the per-cell costs are source-independent), so the effective
-    // level is max(stored - (15 - S), 0): in these normalized values
-    // max(v_skyLight - (8.0/15.0) * (1.0 - u_dayFactor), 0.0). The lit
-    // region shrinks toward the cave mouths / canopy gaps along the
-    // stored = 15 - S contour as night falls — the Minecraft-style
-    // retreat, with zero re-propagation. v_blockLight is always >= 0, so
-    // the outer max also supplies the 0 clamp. Fixed points: at
-    // u_dayFactor 1 the term is v_skyLight - 0.0 = v_skyLight bit-for-bit
-    // (the noon identity — the gate S1 root); at 0 the open sky (1.0)
-    // reads 1.0 - 8.0/15.0 = 7/15 — the moonlight floor, NEVER all black
-    // (deep night is the moonlit 7/15 of the stored level — that IS the
-    // feature vs the pre-LGT-3 scale's all-0 night).
-    const float kAmbient = 0.03;
-    // (kMaxLight - kNightSkyLevel) / kMaxLight = 8/15 (world/lighting.hpp
-    // — the single definition of this coefficient).
-    const float kNightRetreat = 8.0 / 15.0;
-    float light = max(v_skyLight - kNightRetreat * (1.0 - u_dayFactor),
+    // LGT-3 (the night light retreat) + UX-1 (the configurable floor):
+    // the sky term is an affine retreat of the stored noon field, not a
+    // scale. v_skyLight is the noon (source level 15) field normalized to
+    // 0..1; the source level behind u_dayFactor is S = L + (15 - L) *
+    // u_dayFactor with L = the configured deep-night floor
+    // (render.night_sky_level, code default 7 — the LGT-3 Minecraft
+    // moonlight floor, the 10-27 user verdict) — and the sky field is
+    // affine in its source level (world/lighting.hpp — every sky source
+    // shares one level, the per-cell costs are source-independent), so
+    // the effective level is max(stored - (15 - S), 0): in these
+    // normalized values max(v_skyLight - u_nightRetreat *
+    // (1.0 - u_dayFactor), 0.0) with u_nightRetreat = (15 - L) / 15
+    // (default 8/15). The lit region shrinks toward the cave mouths /
+    // canopy gaps along the stored = 15 - S contour as night falls — the
+    // Minecraft-style retreat, with zero re-propagation. v_blockLight is
+    // always >= 0, so the outer max also supplies the 0 clamp. Fixed
+    // points: at u_dayFactor 1 the term is v_skyLight - 0.0 = v_skyLight
+    // bit-for-bit (the noon identity — the gate S1 root, for ANY floor);
+    // at 0 the open sky (1.0) reads 1.0 - u_nightRetreat = L / 15
+    // (default 7/15 — the moonlight floor, never all black; L = 0 IS the
+    // all-black night, and u_ambient goes to 0.0 with it — deep night at
+    // the default floor is the moonlit 7/15 of the stored level, that IS
+    // the feature vs the pre-LGT-3 scale's all-0 night).
+    float light = max(v_skyLight - u_nightRetreat * (1.0 - u_dayFactor),
                       v_blockLight);
-    vec3 rgb = base * (kAmbient + (1.0 - kAmbient) * light * v_faceShade);
+    vec3 rgb = base * (u_ambient + (1.0 - u_ambient) * light * v_faceShade);
     // PRE-2 distance fog: a linear ramp toward the same-frame sky color
     // from u_fogStart to u_fogEnd. Near geometry clamps to fogT = 0 and
     // mix(x, y, 0.0) is x bit-exactly for non-negative colors, so

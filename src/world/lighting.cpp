@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <cstring>
 #include <deque>
 #include <functional>
@@ -205,15 +206,18 @@ void rescanColumn(World& world, const BlockRegistry& blocks, int x, int z,
 
 } // namespace
 
-// LGT-3: the source level S behind a day factor is kNightSkyLevel +
-// (kMaxLight - kNightSkyLevel) * dayFactor (deep night 0 -> the
-// kNightSkyLevel moonlight floor, noon 1 -> kMaxLight), and the retreat
-// distance is kMaxLight - S = (kMaxLight - kNightSkyLevel) * (1 - df).
-// The integer version floors it (whole light levels — the save/spawn
-// semantics); see the header for the affine-field argument.
-std::uint8_t effectiveSkyLight(std::uint8_t stored, float dayFactor) {
+// LGT-3 + UX-1: the source level S behind a day factor is nightLevel +
+// (kMaxLight - nightLevel) * dayFactor (deep night 0 -> the configured
+// floor, noon 1 -> kMaxLight), and the retreat distance is
+// kMaxLight - S = (kMaxLight - nightLevel) * (1 - df). The integer
+// version floors it (whole light levels — the save/spawn semantics);
+// see the header for the affine-field argument. The default floor
+// (kNightSkyLevel) keeps the pre-UX-1 v1.34.0 values bit-for-bit (the
+// expression is unchanged, only the constant became a parameter).
+std::uint8_t effectiveSkyLight(std::uint8_t stored, float dayFactor,
+                               int nightLevel) {
     const int delta = static_cast<int>(std::floor(static_cast<double>(
-        kMaxLight - kNightSkyLevel) *
+        kMaxLight - nightLevel) *
         (1.0 - static_cast<double>(dayFactor))));
     const int value = static_cast<int>(stored) - delta;
     return static_cast<std::uint8_t>(value > 0 ? value : 0);
@@ -221,11 +225,55 @@ std::uint8_t effectiveSkyLight(std::uint8_t stored, float dayFactor) {
 
 // `stored` is the shader's 0..1-normalized sky value (light level /
 // kMaxLight): the exact mirror of the basic.frag sky term, the retreat
-// in normalized units = kNightRetreatScale * (1 - dayFactor).
-float effectiveSkyLightF(float stored, float dayFactor) {
+// in normalized units = nightRetreatScale(nightLevel) * (1 - dayFactor)
+// (at the default floor bit-identical to kNightRetreatScale — the same
+// expression, the same float operations).
+float effectiveSkyLightF(float stored, float dayFactor, int nightLevel) {
     return std::max(
         0.0f,
-        stored - kNightRetreatScale * (1.0f - dayFactor));
+        stored - nightRetreatScale(nightLevel) * (1.0f - dayFactor));
+}
+
+// UX-1: the deep-night sky floor from the config (the strict read — the
+// SAVE-1 autoSaveIntervalSeconds pattern: the raw key, nullptr = absent
+// = the code default; a type mismatch must be named, never silently
+// fallen back). The integer check is the worldgen_config bedrock_layers
+// idiom: the value equals its int projection.
+Result<int> readNightSkyLevel(const Config& config) {
+    const Json* j = config.at("render.night_sky_level");
+    if (j == nullptr) {
+        return kNightSkyLevel; // absent: the code default
+    }
+    if (!j->isNumber()) {
+        return MC_FAIL("config render.night_sky_level must be a number");
+    }
+    const double d = j->asDouble();
+    if (!std::isfinite(d)) {
+        return MC_FAIL("config render.night_sky_level must be finite");
+    }
+    // The range check runs BEFORE any int projection, in the double domain:
+    // static_cast<int> of a finite value outside the int range is UB, so
+    // 1e18 must be rejected here, not in the integer check.
+    if (d < 0.0 || d > static_cast<double>(kMaxLight)) {
+        return MC_FAIL("config render.night_sky_level must be in [0, 15] "
+                       "(UX-1 night sky level: 0 = all-black night, "
+                       "15 = no retreat), got " + std::to_string(d));
+    }
+    // Here d is in [0, 15]: the floor comparison is a safe integer check
+    // (the worldgen_config bedrock_layers idiom, reordered for safety).
+    if (d != std::floor(d)) {
+        return MC_FAIL("config render.night_sky_level must be an integer");
+    }
+    return static_cast<int>(d);
+}
+
+float nightRetreatScale(int level) {
+    return static_cast<float>(kMaxLight - level) /
+           static_cast<float>(kMaxLight);
+}
+
+float ambientFloorForLevel(int level) {
+    return level > 0 ? kAmbientFloor : 0.0f;
 }
 
 void Lighting::propagateAll(World& world, const BlockRegistry& blocks,

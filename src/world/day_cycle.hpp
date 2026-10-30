@@ -10,14 +10,17 @@
 // (LGT-3, the Minecraft-style light retreat): light values stay stored at
 // their daytime (source level 15) 0..15 values, and the effective sky
 // level at dayFactor f is the source-affine re-derivation max(0, stored
-// - 8 * (1 - f)) — the exact field a re-propagation with sky source
-// level 7 + 8 * f would produce (kNightSkyLevel 7 = the Minecraft
-// moonlight floor, so deep night is moonlit, never all black; see
+// - (15 - L) * (1 - f)) — the exact field a re-propagation with sky
+// source level L + (15 - L) * f would produce (L = the configured
+// deep-night floor, kNightSkyLevel 7 = the Minecraft moonlight floor by
+// default — UX-1: render.night_sky_level, so deep night is moonlit at
+// the default floor, never all black, L = 0 excepted; see
 // effectiveSkyLight in world/lighting.hpp). No re-propagation runs: the
 // renderer (basic.frag) and the spawn gate (currentSpawnLight) evaluate
 // the same formula per cell, so the lit region retreats toward cave
-// mouths and canopy gaps along the stored = 8 * (1 - f) contour as night
-// falls. Block light (glowstone) is unaffected by day/night.
+// mouths and canopy gaps along the stored = (15 - L) * (1 - f) contour
+// as night falls (8 * (1 - f) at the default floor). Block light
+// (glowstone) is unaffected by day/night.
 //
 // Determinism: update() is driven by a fixed per-frame step from the game
 // loop (never the wall clock), so headless runs are byte-reproducible

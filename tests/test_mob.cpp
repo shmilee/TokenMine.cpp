@@ -1626,6 +1626,31 @@ TEST(MobSpawnCellTest, SpawnLightMatchesEffectiveSkyModel) {
     EXPECT_EQ(currentSpawnLight(f.world, 0, 1, -6, 1.0f), 15);
 }
 
+// UX-1: the configured floor (render.night_sky_level) drives the spawn
+// light through the SAME affine retreat as the renderer. The pairing
+// rule holds for any floor: at deep night the open-sky level IS the
+// floor, so the shipped hostile threshold (spawn_max_light 7) admits the
+// floor at L <= 7 and refuses it at L > 7 (the user's choice).
+TEST(MobSpawnCellTest, SpawnLightWithConfiguredNightFloor) {
+    Fixture f;
+    // The first candidate's feet cell (0, 1, -6): full sky light 15.
+    f.world.getOrCreateChunk({0, 0, -1}).setSkyLightAt(0, 1, 10, 15);
+    // L = 0: the all-black night — open sky 0 (a zero-threshold mob may
+    // spawn; 0 <= 7 the pairing rule is preserved).
+    EXPECT_EQ(currentSpawnLight(f.world, 0, 1, -6, 0.0f, 0), 0);
+    // L = 7: the default floor — the pre-UX-1 moonlight value.
+    EXPECT_EQ(currentSpawnLight(f.world, 0, 1, -6, 0.0f, 7), kNightSkyLevel);
+    // L = 10: 15 - 5 = 10 > 7 — the hostile threshold is NOT admitted.
+    EXPECT_EQ(currentSpawnLight(f.world, 0, 1, -6, 0.0f, 10), 10);
+    // L = 15: no retreat — open sky 15 > 7, not admitted.
+    EXPECT_EQ(currentSpawnLight(f.world, 0, 1, -6, 0.0f, 15), 15);
+    // Noon is the identity for any floor.
+    EXPECT_EQ(currentSpawnLight(f.world, 0, 1, -6, 1.0f, 0), 15);
+    EXPECT_EQ(currentSpawnLight(f.world, 0, 1, -6, 1.0f, 10), 15);
+    // The default parameter is the pre-UX-1 value (the 7 floor).
+    EXPECT_EQ(currentSpawnLight(f.world, 0, 1, -6, 0.0f), kNightSkyLevel);
+}
+
 // -- spawn protection circle (Phase 25) ---------------------------------------
 //
 // The circle is centered on the WORLD spawn point (here: the cell (0,0)

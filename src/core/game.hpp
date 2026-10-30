@@ -1300,6 +1300,16 @@ private:
     double m_autoSaveInterval = kAutoSaveDefaultSeconds;
     double m_autoSaveAccum = 0.0;
 
+    // UX-1: the configured deep-night sky floor (render.night_sky_level —
+    // a CODE default kNightSkyLevel; the fire/mobs/beacon config-key
+    // discipline: the committed config.json carries no such key). Strict
+    // read at init (absent = 7 = the v1.34.0 pipeline bit-for-bit; 0 =
+    // the all-black night, the ambient floor goes with it). Drives the
+    // basic shader's u_nightRetreat / u_ambient uniforms (set once at
+    // init — per-run constants, no per-draw variation) and the hostile
+    // spawn light gate (findMobSpawnCell).
+    int m_nightSkyLevel = kNightSkyLevel;
+
     // Phase 15 particles + audio: the break bursts (deterministic seeds:
     // world seed mixed with an increasing per-break counter) and the sound
     // bank (gracefully silent when no audio device exists).

@@ -8,11 +8,14 @@
 
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "block/block_registry.hpp"
+#include "core/config.hpp"
 #include "core/json.hpp"
 #include "renderer/texture_atlas.hpp"
 #include "world/chunk_mesher.hpp"
@@ -1196,4 +1199,208 @@ TEST(LightingTest, MidnightNoonIdentity) {
     // Minecraft's quantized steps): a half night removes 8/15 * 1/2.
     EXPECT_NEAR(effectiveSkyLightF(1.0f, 0.5f), 1.0f - 0.5f *
                                               (8.0f / 15.0f), 1e-6f);
+}
+
+// ---------------------------------------------------------------------------
+// UX-1: the configurable deep-night sky floor (render.night_sky_level)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// A Config built from written JSON (the test_auto_save.cpp pattern — the
+// SAVE-1 strict reads must validate through the PARSER's number handling,
+// not through hand-built Json values). The stream is CLOSED (flushed)
+// before the load.
+Config loadNightLevelConfig(const std::string& json) {
+    static const std::filesystem::path dir = [] {
+        const auto d = std::filesystem::temp_directory_path() /
+                       ("mc_ux1_lighting_" + std::to_string(
+                            ::testing::UnitTest::GetInstance()->random_seed()));
+        std::filesystem::create_directories(d);
+        return d;
+    }();
+    static int counter = 0;
+    const std::filesystem::path p =
+        dir / ("cfg_" + std::to_string(counter++) + ".json");
+    {
+        std::ofstream out(p);
+        out << json;
+    }
+    auto r = Config::load(p);
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().describe();
+        return Config {};
+    }
+    return *r;
+}
+
+std::string errOf(const Result<int>& r) {
+    return r.error().message;
+}
+
+} // namespace
+
+TEST(LightingTest, NightSkyLevelDefaultWhenKeyAbsent) {
+    auto r = readNightSkyLevel(loadNightLevelConfig(R"({})"));
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    EXPECT_EQ(*r, kNightSkyLevel);
+    EXPECT_EQ(*r, 7);
+    // Present render section, absent key: still the default.
+    auto r2 = readNightSkyLevel(
+        loadNightLevelConfig(R"({"render": {"something_else": 1}})"));
+    ASSERT_TRUE(r2.ok()) << r2.error().describe();
+    EXPECT_EQ(*r2, 7);
+}
+
+TEST(LightingTest, NightSkyLevelZeroIsAllBlackNight) {
+    auto r = readNightSkyLevel(
+        loadNightLevelConfig(R"({"render": {"night_sky_level": 0}})"));
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    EXPECT_EQ(*r, 0);
+}
+
+TEST(LightingTest, NightSkyLevelMaxIsNoRetreat) {
+    auto r = readNightSkyLevel(
+        loadNightLevelConfig(R"({"render": {"night_sky_level": 15}})"));
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    EXPECT_EQ(*r, 15);
+}
+
+TEST(LightingTest, NightSkyLevelAboveMaxNamed) {
+    auto r = readNightSkyLevel(
+        loadNightLevelConfig(R"({"render": {"night_sky_level": 16}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(errOf(r).find("render.night_sky_level"), std::string::npos);
+    EXPECT_NE(errOf(r).find("[0, 15]"), std::string::npos);
+    EXPECT_NE(errOf(r).find("got 16"), std::string::npos);
+}
+
+TEST(LightingTest, NightSkyLevelNegativeNamed) {
+    auto r = readNightSkyLevel(
+        loadNightLevelConfig(R"({"render": {"night_sky_level": -1}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(errOf(r).find("render.night_sky_level"), std::string::npos);
+    EXPECT_NE(errOf(r).find("got -1"), std::string::npos);
+}
+
+TEST(LightingTest, NightSkyLevelFractionalNamed) {
+    auto r = readNightSkyLevel(
+        loadNightLevelConfig(R"({"render": {"night_sky_level": 7.5}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(errOf(r).find("render.night_sky_level"), std::string::npos);
+    EXPECT_NE(errOf(r).find("must be an integer"), std::string::npos);
+}
+
+TEST(LightingTest, NightSkyLevelStringNamed) {
+    auto r = readNightSkyLevel(loadNightLevelConfig(
+        R"({"render": {"night_sky_level": "abc"}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(errOf(r).find("render.night_sky_level"), std::string::npos);
+    EXPECT_NE(errOf(r).find("must be a number"), std::string::npos);
+}
+
+TEST(LightingTest, NightSkyLevelBoolNamed) {
+    auto r = readNightSkyLevel(
+        loadNightLevelConfig(R"({"render": {"night_sky_level": true}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(errOf(r).find("must be a number"), std::string::npos);
+}
+
+TEST(LightingTest, NightSkyLevelNullNamed) {
+    auto r = readNightSkyLevel(
+        loadNightLevelConfig(R"({"render": {"night_sky_level": null}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(errOf(r).find("must be a number"), std::string::npos);
+}
+
+TEST(LightingTest, NightSkyLevelNonFiniteNamed) {
+    // The parser's strtod turns an overflow literal into inf: a present
+    // number that is not finite is named and rejected (the SAVE-1
+    // reader's isfinite discipline).
+    auto r = readNightSkyLevel(
+        loadNightLevelConfig(R"({"render": {"night_sky_level": 1e999}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(errOf(r).find("must be finite"), std::string::npos);
+}
+
+TEST(LightingTest, NightSkyLevelHugeFiniteNamed) {
+    // A finite value far outside the int range: rejected by the RANGE
+    // check in the double domain, which precedes any int projection
+    // (static_cast<int> of 1e18 is UB — the safe-order red line).
+    auto r = readNightSkyLevel(
+        loadNightLevelConfig(R"({"render": {"night_sky_level": 1e18}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(errOf(r).find("render.night_sky_level"), std::string::npos);
+    EXPECT_NE(errOf(r).find("[0, 15]"), std::string::npos);
+}
+
+TEST(LightingTest, NightRetreatScalePins) {
+    // The default floor: bit-identical to the pre-UX-1 named constant
+    // (the same expression, the same float operations).
+    EXPECT_EQ(nightRetreatScale(kNightSkyLevel), kNightRetreatScale);
+    EXPECT_EQ(nightRetreatScale(7), 8.0f / 15.0f);
+    // Zero floor: the full retreat (deep night reads 0 open sky).
+    EXPECT_EQ(nightRetreatScale(0), 1.0f);
+    // Max floor: no retreat at all.
+    EXPECT_EQ(nightRetreatScale(15), 0.0f);
+    // A generic intermediate floor.
+    EXPECT_EQ(nightRetreatScale(1), 14.0f / 15.0f);
+}
+
+TEST(LightingTest, AmbientFloorForLevelPins) {
+    // Zero floor: the all-black night carries no residual glow.
+    EXPECT_EQ(ambientFloorForLevel(0), 0.0f);
+    // Any nonzero floor: the named constant (the GLSL 0.03 literal,
+    // bit-for-bit).
+    EXPECT_EQ(ambientFloorForLevel(1), kAmbientFloor);
+    EXPECT_EQ(ambientFloorForLevel(7), kAmbientFloor);
+    EXPECT_EQ(ambientFloorForLevel(15), kAmbientFloor);
+    EXPECT_EQ(kAmbientFloor, 0.03f);
+}
+
+TEST(LightingTest, EffectiveSkyLightConfiguredFloor) {
+    // L = 0: the all-black night — every stored level retreats to 0.
+    EXPECT_EQ(effectiveSkyLight(15, 0.0f, 0), 0);
+    EXPECT_EQ(effectiveSkyLight(7, 0.0f, 0), 0);
+    EXPECT_EQ(effectiveSkyLight(0, 0.0f, 0), 0);
+    // L = 15: no retreat — the stored field itself at deep night.
+    EXPECT_EQ(effectiveSkyLight(15, 0.0f, 15), 15);
+    EXPECT_EQ(effectiveSkyLight(8, 0.0f, 15), 8);
+    // L = 10: delta = floor((15 - 10) * (1 - df)) = floor(5 * (1 - df)).
+    EXPECT_EQ(effectiveSkyLight(15, 0.0f, 10), 10); // 15 - 5
+    EXPECT_EQ(effectiveSkyLight(12, 0.0f, 10), 7);  // 12 - 5
+    EXPECT_EQ(effectiveSkyLight(15, 0.5f, 10), 13); // 15 - 2
+    // The default parameter IS the pre-UX-1 behavior (the v1.34.0 pins).
+    EXPECT_EQ(effectiveSkyLight(15, 0.0f),
+              effectiveSkyLight(15, 0.0f, kNightSkyLevel));
+    EXPECT_EQ(effectiveSkyLight(7, 0.25f),
+              effectiveSkyLight(7, 0.25f, kNightSkyLevel));
+    // Noon is the identity for ANY floor (the gate S1 root, extended).
+    for (int L = 0; L <= kMaxLight; ++L) {
+        for (int stored = 0; stored <= kMaxLight; ++stored) {
+            EXPECT_EQ(effectiveSkyLight(static_cast<std::uint8_t>(stored),
+                                        1.0f, L),
+                      stored)
+                << "L " << L << " stored " << stored;
+        }
+    }
+}
+
+TEST(LightingTest, EffectiveSkyLightFConfiguredFloor) {
+    // L = 0: full retreat — the open sky (1.0) reads 0 at deep night.
+    EXPECT_FLOAT_EQ(effectiveSkyLightF(1.0f, 0.0f, 0), 0.0f);
+    // L = 15: no retreat — the stored value bit-identical (0.0f
+    // included: max(0.0f, 0.0f - 0.0f) = 0.0f).
+    EXPECT_FLOAT_EQ(effectiveSkyLightF(1.0f, 0.0f, 15), 1.0f);
+    EXPECT_FLOAT_EQ(effectiveSkyLightF(0.0f, 0.0f, 15), 0.0f);
+    // The default floor: the pre-UX-1 expression pinned bit-for-bit
+    // (the same float operations, kNightRetreatScale = 8.0f/15.0f).
+    EXPECT_FLOAT_EQ(effectiveSkyLightF(1.0f, 0.5f, kNightSkyLevel),
+                    1.0f - kNightRetreatScale * 0.5f);
+    EXPECT_FLOAT_EQ(effectiveSkyLightF(1.0f, 0.0f, kNightSkyLevel),
+                    1.0f - kNightRetreatScale);
+    EXPECT_FLOAT_EQ(effectiveSkyLightF(1.0f, 0.5f),
+                    effectiveSkyLightF(1.0f, 0.5f, kNightSkyLevel));
+    // A generic floor: the retreat distance is (15 - L) / 15.
+    EXPECT_FLOAT_EQ(effectiveSkyLightF(1.0f, 0.0f, 10), 1.0f - 5.0f / 15.0f);
 }

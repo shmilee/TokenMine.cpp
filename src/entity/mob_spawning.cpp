@@ -160,20 +160,22 @@ std::size_t MobSpawningConfig::pickIndex(std::uint64_t v) const {
 }
 
 int currentSpawnLight(const World& world, int x, int y, int z,
-                      float dayFactor) {
-    // LGT-3: the sky contribution is the SAME effective level the
+                      float dayFactor, int nightLevel) {
+    // LGT-3 + UX-1: the sky contribution is the SAME effective level the
     // renderer shows — the affine retreat of the stored (noon) field
-    // (effectiveSkyLight, world/lighting.hpp), not the pre-LGT-3 scale
-    // floor(stored * dayFactor): the spawn gate is the SEEN light (the
-    // Minecraft semantics). At noon (dayFactor 1) the two are
-    // value-identical for every stored level; deep night differs — the
-    // moonlight floor (kNightSkyLevel 7: open sky 15 -> 7, never 0) IS
-    // the feature (the 10-27 user verdict), which the shipped hostile
+    // (effectiveSkyLight with the configured floor nightLevel,
+    // world/lighting.hpp), not the pre-LGT-3 scale floor(stored *
+    // dayFactor): the spawn gate is the SEEN light (the Minecraft
+    // semantics). At noon (dayFactor 1) the two are value-identical for
+    // every stored level and every floor; deep night differs — the floor
+    // (default kNightSkyLevel 7: open sky 15 -> 7, never 0) IS the
+    // feature (the 10-27 user verdict), which the shipped hostile
     // threshold (spawn_max_light 7) pairs with: night open sky 7 spawns,
-    // a torch circle 14 is safe, day open sky 15 does not. Block light
+    // a torch circle 14 is safe, day open sky 15 does not. The pairing
+    // rule holds for any configured floor (see the header). Block light
     // is time-independent.
     const int skyNow =
-        effectiveSkyLight(world.getSkyLight(x, y, z), dayFactor);
+        effectiveSkyLight(world.getSkyLight(x, y, z), dayFactor, nightLevel);
     const int block = static_cast<int>(world.getBlockLight(x, y, z));
     return std::max(skyNow, block);
 }
@@ -189,7 +191,8 @@ std::optional<BlockPos> findMobSpawnCell(const World& world,
                                          const std::vector<Vec3>& mobPositions,
                                          float protectionRadius,
                                          float protectionX,
-                                         float protectionZ) {
+                                         float protectionZ,
+                                         int nightLevel) {
     // Cells the mob's AABB occupies above the floor top: the AABB spans
     // [floorTop, floorTop + height), which strictly overlaps the cells
     // floorTop .. floorTop + ceil(height - eps) - 1.
@@ -256,11 +259,13 @@ std::optional<BlockPos> findMobSpawnCell(const World& world,
 
             // Light gate (the day/night rule): the CURRENT effective light
             // of the cell the mob would stand in (feet cell) must not
-            // exceed the mob's spawn_max_light. At night the sky
-            // contribution is 0, so dark-only mobs may spawn under open
-            // sky; by day it is the full stored level, so they may not.
-            if (currentSpawnLight(world, x, floorY + 1, z, dayFactor) >
-                spawnMaxLight) {
+            // exceed the mob's spawn_max_light. At deep night the sky
+            // contribution is the configured floor nightLevel (UX-1;
+            // default 7 = the LGT-3 moonlight floor), so dark-only mobs
+            // may spawn under open sky when the floor admits them; by
+            // day it is the full stored level, so they may not.
+            if (currentSpawnLight(world, x, floorY + 1, z, dayFactor,
+                                  nightLevel) > spawnMaxLight) {
                 continue;
             }
 

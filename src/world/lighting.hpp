@@ -43,6 +43,8 @@
 #include <set>
 
 #include "block/block_registry.hpp"
+#include "core/config.hpp"
+#include "core/error.hpp"
 #include "world/coordinates.hpp"
 #include "world/world.hpp"
 
@@ -56,23 +58,38 @@ inline constexpr int kLightUpdateRadius = 16;
 // Light lost when entering a fluid cell (Minecraft's water value), applied
 // in every direction for both sky and block light.
 inline constexpr int kFluidLightAttenuation = 3;
-// LGT-3 (10-27 user verdict: an all-black deep night is unplayable):
-// Minecraft's moonlight FLOOR — open-sky light at midnight. The sky
-// source level never retreats below it: S = kNightSkyLevel +
-// (kMaxLight - kNightSkyLevel) * dayFactor (noon 15, deep night 7), and
-// the retreat distance is (kMaxLight - kNightSkyLevel) * (1 - dayFactor).
-// The shipped hostile mobs pair their spawn threshold to it
-// (spawn_max_light 7 — MC: hostiles spawn at light <= 7; night open
-// sky 7 spawns, a torch circle 14 is safe, day open sky 15 does not —
-// the gameplay loop is preserved).
+// LGT-3 (10-27 user verdict: an all-black deep night is unplayable) +
+// UX-1 (the floor is now a RECOVERABLE setting): Minecraft's moonlight
+// FLOOR — open-sky light at midnight. This is the CODE DEFAULT of the
+// config key `render.night_sky_level` (an integer in [0, kMaxLight];
+// absent = this value = the pre-UX-1 v1.34.0 pipeline bit-for-bit;
+// 0 = the true all-black night, kMaxLight = no retreat at all). For a
+// floor L the sky source level never retreats below it: S = L +
+// (kMaxLight - L) * dayFactor (noon 15, deep night L), and the retreat
+// distance is (kMaxLight - L) * (1 - dayFactor).
+// The shipped hostile mobs pair their spawn threshold to the DEFAULT
+// floor (spawn_max_light 7 — MC: hostiles spawn at light <= 7; night
+// open sky 7 spawns, a torch circle 14 is safe, day open sky 15 does
+// not — the gameplay loop is preserved). The pairing rule holds for any
+// configured floor L: the open-sky deep-night level IS L, so at L = 0
+// night open sky 0 <= 7 still spawns, at L = 15 it does not — the user's
+// choice (the gate S2 narrative in the LGT-3 docs).
 inline constexpr int kNightSkyLevel = 7;
-// The deep-night retreat in the shader's 0..1-normalized sky values:
-// (kMaxLight - kNightSkyLevel) / kMaxLight = 8/15. The single definition
-// of the basic.frag coefficient (the GLSL side mirrors it as a named
-// constant).
+// The deep-night retreat in the shader's 0..1-normalized sky values at
+// the DEFAULT floor: (kMaxLight - kNightSkyLevel) / kMaxLight = 8/15.
+// nightRetreatScale(kNightSkyLevel) is bit-identical to this constant
+// (the same expression); the basic.frag coefficient is the u_nightRetreat
+// uniform, set once at init from the configured floor (UX-1).
 inline constexpr float kNightRetreatScale =
     static_cast<float>(kMaxLight - kNightSkyLevel) /
     static_cast<float>(kMaxLight);
+// UX-1: the ambient floor of the presentation light formula (basic.frag:
+// rgb = base * (ambient + (1 - ambient) * light * faceShade)) — the
+// single definition (the shader side is the u_ambient uniform, set once
+// at init). At any nonzero floor the host uploads this value (the GLSL
+// 0.03 literal, bit-for-bit); for the zero floor it uploads 0.0 — a
+// true all-black night carries no residual glow.
+inline constexpr float kAmbientFloor = 0.03f;
 
 class Lighting {
 public:
@@ -132,36 +149,66 @@ public:
                              std::set<ChunkPos>* dirtyOut = nullptr);
 };
 
-// LGT-3 (the night light retreat): the EFFECTIVE sky light at a
-// day/night factor. The stored field is the noon field (source level
-// kMaxLight); the sky field is affine in its source level S (see
-// propagateAll), and S is a pure function of the existing day cycle:
-// S = kNightSkyLevel + (kMaxLight - kNightSkyLevel) * dayFactor (deep
-// night 0 -> S 7 = the Minecraft moonlight floor, noon 1 -> S 15). The
-// effective level is the stored level minus the retreat distance
-// (kMaxLight - S), clamped at 0:
+// LGT-3 (the night light retreat) + UX-1 (the configurable floor): the
+// EFFECTIVE sky light at a day/night factor. The stored field is the
+// noon field (source level kMaxLight); the sky field is affine in its
+// source level S (see propagateAll), and S is a pure function of the
+// existing day cycle and the deep-night floor `nightLevel` (default
+// kNightSkyLevel = 7, the Minecraft moonlight floor — the pre-UX-1
+// constant): S = nightLevel + (kMaxLight - nightLevel) * dayFactor
+// (deep night 0 -> S = the floor, noon 1 -> S 15). The effective level
+// is the stored level minus the retreat distance (kMaxLight - S),
+// clamped at 0:
 //
-//   effective = max(0, stored - (kMaxLight - kNightSkyLevel) * (1 - dayFactor))
+//   effective = max(0, stored - (kMaxLight - nightLevel) * (1 - dayFactor))
 //
-// At dayFactor 1 it is the identity (noon, the stored field itself); at
-// 0 it is the moonlight floor (open sky 15 -> 7, and every stored level
-// below kMaxLight - kNightSkyLevel retreats to 0 — deep night is never
-// all black). The lit region therefore shrinks toward the cave mouths /
-// canopy gaps along the stored = (kMaxLight - S) contour as night falls
-// — the Minecraft-style retreat — WITHOUT any re-propagation: the
-// renderer (basic.frag, the normalized form of exactly this formula)
-// and the spawn gate (currentSpawnLight) evaluate it per cell.
+// At dayFactor 1 it is the identity for ANY floor (noon, the stored
+// field itself); at 0 it is the floor (open sky 15 -> nightLevel, and
+// every stored level below kMaxLight - nightLevel retreats to 0 — at
+// the default floor deep night is never all black; at nightLevel 0 it
+// IS all black). The lit region therefore shrinks toward the cave
+// mouths / canopy gaps along the stored = (kMaxLight - S) contour as
+// night falls — the Minecraft-style retreat — WITHOUT any
+// re-propagation: the renderer (basic.frag, the normalized form of
+// exactly this formula, via the u_nightRetreat uniform) and the spawn
+// gate (currentSpawnLight) evaluate it per cell.
 //
 // The integer version takes the STORED level (0..15, the save/spawn
 // semantics) and floors the retreat distance (whole light levels). The
 // float version is the exact mirror of the shader's sky term: it takes
 // the 0..1-NORMALIZED stored value (the mesh's v_skyLight = level /
-// kMaxLight) and applies the fractional retreat kNightRetreatScale *
-// (1 - dayFactor) = (8/15) * (1 - dayFactor) — a superset of Minecraft's
-// quantized levels (a documented deviation). The two agree exactly at
-// dayFactor 0 (the moonlight floor: 15 -> 7, 8/15 -> 7/15) and 1 (the
-// identity) and differ by less than one level through the ramps.
-std::uint8_t effectiveSkyLight(std::uint8_t stored, float dayFactor);
-float effectiveSkyLightF(float stored, float dayFactor);
+// kMaxLight) and applies the fractional retreat nightRetreatScale(
+// nightLevel) * (1 - dayFactor) — (8/15) * (1 - dayFactor) at the
+// default floor (bit-identical to kNightRetreatScale) — a superset of
+// Minecraft's quantized levels (a documented deviation). The two agree
+// exactly at dayFactor 0 (the floor: 15 -> nightLevel, 1 -
+// nightRetreatScale -> nightLevel/15) and 1 (the identity) and differ
+// by less than one level through the ramps.
+std::uint8_t effectiveSkyLight(std::uint8_t stored, float dayFactor,
+                               int nightLevel = kNightSkyLevel);
+float effectiveSkyLightF(float stored, float dayFactor,
+                         int nightLevel = kNightSkyLevel);
+
+// UX-1: the deep-night sky floor as a STRICT config read
+// (render.night_sky_level). Absent = kNightSkyLevel (the code default,
+// the pre-UX-1 pipeline bit-for-bit); present = a JSON number that is
+// an integer value in [0, kMaxLight] (0 = the all-black night,
+// kMaxLight = no retreat at all). A non-number / non-integer /
+// non-finite / out-of-range value is named and rejected (the SAVE-1
+// strict-read discipline — the Config getters would silently fall back
+// on a type mismatch, which must not happen for a user-visible knob).
+Result<int> readNightSkyLevel(const Config& config);
+
+// UX-1: the deep-night retreat distance in the shader's 0..1-normalized
+// sky units for a floor of `level`: (kMaxLight - level) / kMaxLight.
+// At level = kNightSkyLevel this is bit-identical to kNightRetreatScale
+// (the same expression, the same float operations).
+float nightRetreatScale(int level);
+
+// UX-1: the ambient floor for a floor of `level`: kAmbientFloor at any
+// nonzero level, and 0.0 for level = 0 — a true all-black night
+// carries no residual glow (the pair with nightRetreatScale: the two
+// values the host uploads to the basic shader once at init).
+float ambientFloorForLevel(int level);
 
 } // namespace mc

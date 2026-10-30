@@ -52,6 +52,7 @@
 #include "core/json.hpp"
 #include "core/math/vec3.hpp"
 #include "world/coordinates.hpp"
+#include "world/lighting.hpp" // kNightSkyLevel (the UX-1 default floor)
 #include "world/world.hpp"
 
 namespace mc {
@@ -98,15 +99,20 @@ inline constexpr float kSpawnClearance = 1.0f;
 // the Minecraft semantics emulated with this engine's presentation-layer
 // day/night (see day_cycle.hpp): the stored daytime (noon) sky light
 // reduced by the LGT-3 affine retreat effectiveSkyLight(stored,
-// dayFactor) = max(0, stored - floor((15 - kNightSkyLevel) *
+// dayFactor, nightLevel) = max(0, stored - floor((15 - nightLevel) *
 // (1 - dayFactor))) — the same level the renderer shows, the seen light
 // — plus block light (glowstone), which is unaffected by day/night.
-// (At deep night the open-sky level is the kNightSkyLevel 7 moonlight
-// floor — the shipped hostile threshold pairs to it, so dark-sky mobs
-// spawn under open night sky but not in a torch circle; by day it is the
-// stored sky level, so they may not.)
+// nightLevel is the configured deep-night floor (UX-1:
+// render.night_sky_level, default kNightSkyLevel = the pre-UX-1
+// constant). The pairing rule holds for ANY floor: at deep night the
+// open-sky level IS nightLevel, so the shipped hostile threshold
+// (spawn_max_light 7) admits it at the default floor (7 <= 7 — dark-sky
+// mobs spawn under open night sky but not in a torch circle; by day it
+// is the stored sky level, so they may not), still admits it at L = 0
+// (0 <= 7 — the all-black night is at least as spawnable), and refuses
+// it at L = 15 (15 > 7 — the user configured a moonless-bright night).
 int currentSpawnLight(const World& world, int x, int y, int z,
-                      float dayFactor);
+                      float dayFactor, int nightLevel = kNightSkyLevel);
 
 std::optional<BlockPos> findMobSpawnCell(const World& world,
                                          const BlockRegistry& blocks,
@@ -119,6 +125,7 @@ std::optional<BlockPos> findMobSpawnCell(const World& world,
                                          const std::vector<Vec3>& mobPositions,
                                          float protectionRadius = 0.0f,
                                          float protectionX = 0.0f,
-                                         float protectionZ = 0.0f);
+                                         float protectionZ = 0.0f,
+                                         int nightLevel = kNightSkyLevel);
 
 } // namespace mc
