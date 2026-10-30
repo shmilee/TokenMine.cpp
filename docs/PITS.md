@@ -2686,3 +2686,37 @@
   inventory 槽（或 entities 掉落），网格/表格/炉槽内的 damage 只存在于
   运行时（UI 可见、存档不可见）。
 - **项目 FNV 约定 ≠ 标准 FNV-1a 64，独立复算须同算法（PITS 346）**——10-31 UX-6 门 160 编排者独立核证：tests/test_font.cpp 的 fnv1a64Hex（自 PRE-1 沿用）offset basis = 1469598103934665603 = FNV-1a **32 位**基数（注释误标 "64"）+ 64 位 prime 1099511628211 = 非标准混合。用标准 64 位基数 0xcbf29ce484222325 复算旧 font.png 得 11975ce6d2b3924c ≠ 锚 74b5d1418347dab6 = 假失配，一度疑「顶 512 行回归 / 测试空转」；改项目约定算法复算双锚（旧全图 74b5d141… / 新全图 027c6b82…）全吻合 + raw 扫描线直接字节比对一致 = 红线成立。独立复算 PNG/位图哈希锚：先 grep 测试里的哈希函数常量，用同款算法再下结论。
+- **SDL3/dppx1.5 捕获态指针 warp 相机模型 = Δ−(绝对屏幕坐标)（PITS 347）**——10-31 门 161 S2：
+  捕获态 `xdotool mousemove --sync (Xa,Ya)` 产生的 grab delta 不是
+  "目标−中心"，而是 **−(Xa,Ya)×k**（k 0.0025 rad/px，pitch 钳 ±1.55）：
+  warp (1311,394) → yaw −3.28 / pitch −1.10；二次 warp 同目标同 delta +
+  pitch 钳位复现吻合（双数据点）。推论：绝对 warp 只能左转（Δyaw≤0）+
+  俯（Δpitch≤0），180°/右转/仰视不可达。输入跑相机控制弃 warp，改
+  **存档 pose 预置**（save 写 pos/yaw/pitch，B2a/B2b 段全 pose 化，零
+  转向）；纯 pitch 下压 = warp 到 (0, Y)（Δpitch = −Y·k 精确，二次
+  数据点验证）。WM 平铺态重排会放大此类异常（PITS 340 家族）。
+- **近战攻击 = isDown 按住，1ms tap 不可见（PITS 348）**——门 161 B2b：
+  XTEST `click 1`（press+release 同帧内）在 wasPressed 边缘类交互
+  （面板点击/捕获）有效，在 `isDown(Left)` 轮询类（近战攻击
+  kSwingInterval 0.25 节奏 / 挖掘）**恒不可见**（6 tap 0 伤害实证，
+  pose/鸡位/射线全对——先怀疑 aim 后查输入通道）。改
+  `mousedown 1; sleep 0.35; mouseup 1`（一次按住 = 2 摆 = 4 伤 = 鸡
+  全血）。凡 E2E 断言"点击产生效果"而效果不出现：先区分该效果的
+  输入语义是 wasPressed 还是 isDown。
+- **空槽整堆放置 + shaped 匹配 ≥1（PITS 349）**——门 161 B 段：携带
+  满堆左点**空**格 = 整堆放入（非 1）；shaped 配方匹配 = 每 pattern
+  格 count ≥1（多余合法，CPU harness 实证 4/2/2+4/4 命中——曾误判
+  "必须恰好 1"）。拆分协议 = 整堆放 + 右键取半（floor(N/2)）循环到
+  pattern 格 + 清理回合归位（8 木板 → 4/2/2 三格 + 余 5 回 slot 全
+  确定）。点击序列偶发整段错位 = warp-press 竞态（PITS 338 家族）：
+  mousemove --sync 返回时 X 指针到位但游戏帧未必消费了 motion 事件 →
+  点击落旧坐标 → 序列逐格漂移；缓解 = settle 0.6s + 二次 getmouse
+  location 验证 + 每阶段 F5 存档断言（失败即定位到阶段）。
+- **spawner 环锚玩家列，非世界出生点（PITS 350）**——门 161 鸡预测
+  三组 pose 实证：玩家 z −4.5 → 鸡 z −10.5；z −8 → z −13.5（环距恒
+  5.5-6.0，AGENTS 旧记"保护圈锚世界出生点"在玩家远离后失效——该记
+  的是敌对保护圈，spawner 候选环另以玩家列为锚）；鸡恒在玩家前方
+  ~5.5 + 下坡 1-2 = kReach 5 之外，杀鸡须先走近。鸡只在 frame 60
+  （first_spawn）按当时 pose 定落点，无亚格 jitter（代码实证），
+  之后 wandering 0.01 近静止 = **存档 pose 可完全预言落点**（probe
+  复刻真实 spawner 路径三组全中）。
