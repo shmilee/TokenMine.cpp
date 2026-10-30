@@ -2669,3 +2669,11 @@
   零误改的机械证明；首轮 line-count 审计差 1 = 一行双发生，改
   occurrence 计法对上）。凡"纯文本机械改写"类任务（struct 收拢/重命名），
   验证协议 = 词边界 sed + occurrence 守恒 + 构建 -Werror + 零残留 grep。
+- **xdotool search --pid 须用真实进程 PID，timeout 包装 PID 无窗（PITS 344）**——10-30
+  UX-4 门 158 S2 首轮：后台 `timeout 120 ./build/bin/tokenmine ... & GAMEPID=$!`
+  后 `xdotool search --pid $GAMEPID` 恒空 = NO-WINDOW 整跑浪费（$! = timeout
+  包装进程 PID，X 窗口挂在 tokenmine 子进程名下）。修 = `pgrep -x tokenmine`
+  取真实 PID（零并发 :0 纪律保证唯一实例）。备选 = `xdotool search --name
+  '^TokenMine'` + WM_CLASS 排 Firefox（用户浏览器标签页标题同前缀，名搜索
+  返回 2 窗）。凡"后台启动带窗程序 + xdotool 定位窗"的脚本：PID 一律
+  pgrep -x 进程名，不取 $!（timeout/nohup 包装层）。
