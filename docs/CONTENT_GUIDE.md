@@ -19,7 +19,7 @@
 | `assets/data/biomes/*.json` | 生物群系 | 3 |
 | `assets/data/blocks/*.json` | 方块（含 3 个流体参考块 water/lava/honey） | 72 |
 | `assets/data/items/*.json` | 显式物品（工具/材料；block 物品无独立 JSON） | 79 |
-| `assets/data/recipes/*.json` | 配方 | 65 |
+| `assets/data/recipes/*.json` | 配方 | 66 |
 | `assets/data/mobs/*.json` | Mob | 6 |
 | `assets/data/effects/*.json` | 状态效果 | 11 |
 | `assets/data/worldgen.json` | 世界生成参数 | 1 |
@@ -431,15 +431,16 @@ pattern 偏移扫描（任意左上偏移放进网格、空格对应格必须为
 
 **游戏内呈现**：`E` 背包面板右侧 = **shapeless** 配方列（可合成白色、
 不可合成灰色，点击行执行 craft）；放置并右键工作台 = 3×3 面板，右侧
-**shaped 配方提示列（CRAFT-4，两列排布**——33 个 shipped shaped 配方单列
+**shaped 配方提示列（CRAFT-4，两列排布**——34 个 shipped shaped 配方单列
 拟合因子 0.34 不可用），每行 = mini 3×3 pattern（暗格 + 键位物品图标，
 按定义左上对齐 = 合法摆放）+ 输出图标 + "name xN"（`canSupply(patternBag)`
 纯函数着色）；**提示行点击 = 消费性 no-op**（不合成不动背包，吞点击 ≠
-槽外点击丢 carry）。当前 shipped 65 条（shaped 33 / shapeless 32）：
-方块/材料/杂项 23（planks/stick/stone/sandstone/smooth_sandstone/
+槽外点击丢 carry）。当前 shipped 66 条（shaped 34 / shapeless 32）：
+方块/材料/杂项 24（planks/stick/stone/sandstone/smooth_sandstone/
 iron_block/torch/farmland/bucket/glass_pane/fence/stone_slab/stone_wall/
-楼梯 4/crafting_table/arrow/bread/campfire/flint_and_steel/golden_apple）+
-工具 9 + 弓 6 + 护甲 12 + 染料 15。
+楼梯 4/crafting_table/**furnace【v1.34.0：8 cobblestone 围圈 = MC 摆法，
+补齐 Phase 40 起炉子无获取途径的内容缺口】*/arrow/bread/campfire/
+flint_and_steel/golden_apple）+ 工具 9 + 弓 6 + 护甲 12 + 染料 15。
 
 ## 新增一个染料 / 染色方块（P41 框架；P45 起颜色零代码）
 

@@ -38,7 +38,7 @@
   物品**（`assets/data/items/`，`[ENT-9]` 起**全部**带 1..16 box 的 3D `model`
   段 = 三上下文渲染全覆盖）
 - **状态效果**：**11**（`assets/data/effects/`，见「状态效果」）；**Mob**：**6**
-  （`assets/data/mobs/`，见「实体与 Mob」）；**配方**：**65**（shaped 33 /
+  （`assets/data/mobs/`，见「实体与 Mob」）；**配方**：**66**（shaped 34 /
   shapeless 32，`assets/data/recipes/`）；**生物群系**：3（desert/forest/plains）
 - **食物**：10 种（`restore_hunger`，见「生存系统」）；**染料**：15 色；**护甲**：
   12 件；**耐久**：28 件（9 工具 + 6 弓 + 燧石与钢 + 12 护甲，`[SURV-3]` 首批 27
@@ -949,8 +949,9 @@
 
 ## 合成与容器
 
-- **配方系统**（`assets/data/recipes/*.json`，**65** = shaped 33 + shapeless
-  32，`[P12]`/`[P17]` 起全数据驱动）：shapeless = 原料袋（无 `type`，
+- **配方系统**（`assets/data/recipes/*.json`，**66** = shaped 34 + shapeless
+  32，`[P12]`/`[P17]` 起全数据驱动；v1.34.0 起含炉子配方
+  `8 cobblestone 围圈 → furnace`）：shapeless = 原料袋（无 `type`，
   `ingredients`）/ shaped = `"type": "shaped"` + `pattern`（行字符串，1..3 行 ×
   1..3 列，空格 = 空位）+ `key`（字母 → 物品，shaped 禁用 ingredients）；经
   ItemRegistry 交叉严格校验（未知原料/产物点名）。**网格匹配 = pattern 偏移

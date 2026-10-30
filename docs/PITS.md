@@ -2609,3 +2609,36 @@
   HUD 断言全屏幕空间与取景无关，×4 跑 mean 46 全正常）。凡 E2E
   场景设计，相机取景避开流体 churn/熔岩夜光等重渲染区；间歇纯黑
   （unique=1）= 重跑而非"黑帧期等待"。
+- **面板点击的 warp-press 竞态：双 warp 不够，落点错位可污染状态
+  （PITS 338）**——10-30 插队修复门 149 S2（工作台 8 格放置 + 输出槽
+  点击）：首轮 `mousemove --sync` + 0.2 s 单 warp 有 3/8 放置点击落
+  **旧光标位**（press 先于 warp 落定，PITS 337 同款）；加固为双 warp +
+  0.45 s 后**仍**有 1-2/8 失手，且失手后果比"丢点击"更重——错位点击
+  落在相邻槽上、0.3 s 内同槽两次 = **双击收集**（CRAFT-7 doubleCollect
+  把分区内同物堆合并，8 个 ×1 变 1 个 ×6 = 终态被污染而非简单缺失）。
+  修 = **warp 后 `xdotool getmouselocation --shell` 回读实际光标位，
+  不符则重 warp（至多 6 次），落位确认后才 press**；落位失败 = 整跑
+  中止重试（污染终态不可局部修复）。凡多点击序列的面板 E2E，点击
+  必须带落位验证；`getmouselocation` 的 eval 会覆盖窗口原点 X/Y 变量
+  = 先存 WX/WY 副本再用。
+- **场景注入带 per-block 状态容器块必须携对应状态段（PITS 339）**——
+  10-30 门 149 场景给 blocks 编辑加了 crafting_table 块但忘加
+  `tables` 段 = init 交叉校验拒档（CRAFT-1 不变式"每工作台块必有
+  tables 条目，空 grid 也要"）→ 游戏在窗口创建前 init 死，门脚本
+  `xdotool search --class tokenmine | head -1` 命中**上一轮残留窗** =
+  症状误导为 GEOM-UNSTABLE 连重试 12 次（孤儿窗几何"稳定"= 假象，
+  PITS 335 同款）。教训：场景 builder 加 furnace/campfire/
+  crafting_table/信标类块时同步加 furnaces/campfires/tables/beacons
+  对应条目；跑前用 `--frames 5` 冒烟确认 "Game shut down cleanly"
+  而非只看窗口出现（init 死的窗口根本不会出现，search 命中的是别的）。
+- **长输入序列须先把游戏窗浮动（float）+ 强制几何（PITS 340）**——10-30
+  门 149 S2 三轮失败史：①tile 态窗口被 WM 数秒级重排（679×744→
+  679×370 换位），已验证的光标落在窗外/WM 标题栏 = NOT-CAPTURED +
+  点击标题栏 quit 按钮 = 游戏 5.6 s 自退（"Exit requested"）；②每次
+  unmap/remap firefox covers 都触发 WM 重排 = 门脚本自己的操作在制造
+  不稳定的来源。修 = 输入序列开始前 `xdotool key super+ctrl+space`
+  （awesomeWM rc.lua:231 modkey=Mod4 的 floating toggle）把游戏窗
+  浮动（浮动窗不被重排）+ `windowsize 1362 744` + `windowmove` 强制
+  已知矩阵几何 + 双读稳定校验后才开打；冒烟实证 3 读 2.1 s 恒 (4,24)
+  1362×744 + 捕获 1。PITS 338（点击落位验证）解决"press 先于 warp"，
+  本条解决"warp 之后窗子自己走了"——两者叠加 = 长输入序列完整协议。

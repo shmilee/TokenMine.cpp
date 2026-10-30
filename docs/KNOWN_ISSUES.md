@@ -108,7 +108,7 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 - ~~**写存档时在退出路径重跑生成器做 diff**~~ — `[Phase 13]` 引入（`[Phase 14]` 起规模放大；用户日志 ~100k-chunk 世界退出 13.6 s，`[Phase 33]` 诊断 ~0.14 ms/chunk），`[Phase 37]` 已修复（并行化）：`diffWorld` 在 >256 chunk 时改为**每 chunk 一个 job 跑在临时 4-worker 池**上（小世界保持单线程、线程生成零开销），每 job 写自己的 slice、flush 后合并；输出按位置排序是**全序**（一格至多一个编辑）→ 并行结果与串行**逐字节相同**（E2E A/B 对 P36 串行构建的存档字节一致是核心证据；~9600-chunk 实测退出 diff 1.3 s → 0.35 s，墙钟 Δ0.98 s）。增量编辑跟踪（O(编辑数)）**`[PIPE-2]` 已实现**：World 写收口位置集 journal（observer，含位移陷阱双上报）+ 退出按 journal 触及 chunk 重算 fresh、仅 live≠fresh 输出（**与 diffWorld 字节等价**，进程内 oracle = `--save-full-diff` 旗，legacy 路径保留）；楼梯 O(N) 世界扫描一并转 journal 派生（不变式 = worldgen 永不生成楼梯，真实 assets 单测钉死）；vd80 全环退出 6.2 s → **实测 17 ms**（journal 路径；3600f 场景 legacy 对照 3.28 s ≈ 190×；K = journal 触及 chunk 数，退出成本与环大小脱钩）。99.2 残余①（仅流体模拟改动的远端列卸载回生成态）在新语义下自动一致（卸载驱逐 journal + 退出过滤只查现存 chunk）。细节见 `archive/phase-37.md` + `archive/phase-pipe-2.md`。
 - **无周期性自动存档** — 崩溃/断电丢失自上次写入以来的全部修改；`F5` 立即存档（Phase 15，`--save` 槽激活时游戏内随时手动保存）已补上"会话中手动保存"，但仍无周期性 autosave/无"保存并退出"流程。`[Phase 13]`（手动保存热键 `[Phase 15]` 已解决；**`[SAVE-1]` 周期性 autosave + 崩溃韧性已解决**：`save.auto_save_seconds` 代码默认 120 s（0 = 显式关闭，config.json 零改动）真实 dt 计时器（`--save` 槽门控 = 无槽结构惰性，失败下帧重试）+ **原子写**（同目录 `.tmp` + rename，F5/退出/自动三路共用 = 崩溃时目标文件恒为完整旧档或完整新档，半写档不可达，kill -9 实证）；残余**`[SAVE-3]` 已解决**：多槽轮转 = `--copy-save` 分支 + `--rename-save` + `--delete-save`（CLI 管理面，headless 确定性）；"保存并退出" = 既有 ESC/退出存档路径（本已存在，无菜单流 = 无标题画面记档偏离））
 - ~~**玩家速度/onGround 不存**~~ — 速度半 `[SAVE-2]` 已解决：format 22 `player.velocity` 3 数组恒写（oxygen/stats 键纪律：22 必键、≤21 携 = 版本谎报点名；区间 ±100 `kSavedVelocityMax` 损坏档点名）+ 读档 `restorePosition` 后 `setVelocity`（≤21 载入 = 零速 legacy 值保真免迁；门 141 S2c 孪生跨侧 player 段位级 + PNG 字节双证）；**onGround 半保留不存** = 位置派生（空中读档 onGround 自然 false / 静止读档首子步碰撞置位 = 值保真，记档偏离）。`[Phase 13]`（坠落伤害部分 `[Phase 36]` 已解决；速度 `[SAVE-2]` 已解决）
-- **物品严格解析白名单漏 `saturation` = 10 行 init WARN 噪音** — 10 个带 `saturation` 的食物 JSON（SURV-9 内容）在 item_registry 的 unknown-field 白名单（~L960）中缺名 → 每次 init 打 10 行 `Item '<food>': unknown field 'saturation' ignored`（WARN 非 FAIL；字段随后被 SURV-9 消费路径正确读取 = 值有效，纯日志噪音；新旧二进制两侧恒同 = 结构无害）。修复 = 白名单加一行 `saturation`（基础设施轮，随插桩器入 tools/ 同类积压）。`[SAVE-2 门内发现]`
+- ~~**物品严格解析白名单漏 `saturation` = 10 行 init WARN 噪音**~~ — `[v1.34.0]` 已解决：10 个带 `saturation` 的食物 JSON（SURV-9 内容）在 item_registry 的 unknown-field 白名单中缺名 → 每次 init 打 10 行 `Item '<food>': unknown field 'saturation' ignored`（WARN 非 FAIL；字段随后被 SURV-9 消费路径正确读取 = 值有效，纯日志噪音；新旧二进制两侧恒同 = 结构无害）→ 白名单加一行 `saturation`（零行为变更：解析路径不动，仅 WARN 消除；门 149 S2b 实证 = 旧 10 行 / 新 0 行）。`[SAVE-2 门内发现]` → `[v1.34.0]`
 - **实体 `age` 按真实 dt 累积（墙钟）** — 与玩家/物理一致（非固定步长），所以含实体的存档文件在 age 字段上跨运行差 ±1-2 帧；渲染不依赖 age（掉落物动画由帧计数器驱动），截图确定性不受影响。昼夜 `time` 是固定步长（位精确）。`[Phase 13]`
 - **`DayCycle::setTimeOfDay` 至多 1 ulp 偏差** — 存 timeOfDay [0,1)，恢复时解出 totalSeconds；对远离配置 start_time 的值，`startTime + delta` 的浮点往返可能差 1 ulp（~1e-16）。昼夜渐变段是常量/平滑的，呈现无影响。`[Phase 13]`
 - **演示区外的编辑会带上"生成的 chunk"** — 在演示区外放置方块会同步生成该 chunk（既有行为），存档 diff 覆盖它；读档时 `setBlock` 重建同样生成该 chunk——一致，但读档后的世界含全新世界没有的 chunk（读档后 `propagateAll` 全量重传播，之后新出现的 chunk 由 Phase 14 的 worker 光照 job 处理）。`[Phase 13]`
@@ -253,13 +253,13 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 
 ## 炉子 / 熔炼（Phase 40）
 
-- **炉子无获取途径（内容缺口）** — shipped 全部 65 条配方零 furnace
-  引用 + 初始库存（热栏 9 件 + 隐藏 starter 槽 16-26）无 furnace =
-  **正常游玩拿不到炉子**（炉子系统本身完整可用：熔炼/燃料/面板/完成
-  ding/炉口火星；炉块自掉，预置的炉子可拾取复用）。补法 = 内容层：
-  shaped 配方（MC 摆法 8 cobblestone 围圈 → 1 furnace）± 隐藏 starter
-  槽给 1 个。`[Phase 40]`（10-30 GAMEPLAY.md 文档刷新时发现并如实写入
-  玩法指南「炉子」节）
+- ~~**炉子无获取途径（内容缺口）**~~ — `[v1.34.0]` 已解决：shipped 全部
+  65 条配方零 furnace 引用 + 初始库存（热栏 9 件 + 隐藏 starter 槽 16-26）
+  无 furnace = 正常游玩拿不到炉子（10-30 GAMEPLAY.md 文档刷新时发现）→
+  **shaped 配方 `8 cobblestone 围圈 → 1 furnace`**（MC 1.14+ 摆法，纯
+  内容零核心代码；锻石 = Phase 61 挖石头掉落 = 石头→锻石→炉子闭环；
+  内容钉死单测含真实匹配器正/负例）。隐藏 starter 槽不给（配方即获取
+  途径，MC 同款进度）。`[Phase 40]` → `[v1.34.0]`
 - ~~**炉子状态是单个全局容器**~~ — Phase 40 的 v1：`Game` 持有单个
   `FurnaceState`（input/fuel/output + 两个整数子步计数器），右键打开的**任何**
   炉子看到的是同一份熔炼状态（存档 format 6 `furnace`）。`[Phase 40]`，
