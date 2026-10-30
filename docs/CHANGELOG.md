@@ -3,6 +3,41 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.33.0（2026-10-30）— **tag v1.33.0 = PRE-11+12 合并 tag + v1.x 任务矩阵 33/33 全完成 + PRE 系统 release**
+
+**PRE-12 tooltip/F3**（v1.x 任务表 33/33 = v1.x 收官，门 148，PRE 行 6/6）：
+原始定义已佚 = 定案 **悬停 tooltip 补齐 + F3 呈现框架**（消费三处记档
+边界：Phase-15"物品 tooltip 只有名字"、SURV-6 档位"vs F3/tooltip
+显示"、SURV-7 统计"显示 = PRE-12 呈现框架"）：① 物品 tooltip =
+`name`/`name xN`（count>1）+ 工具第二行 `damage/max`（纯函数
+`ui/item_tooltip`，campfire 范式 5 单测；**tooltip 渲染层修复** = 门内
+发现 Phase-15 潜伏缺陷：旧文本与面板共享 kText batch【绘制先于槽底/
+图标】+ 偏移随面板 fit scale 收缩【679×744 窗 s≈0.286 文本 4.6px】=
+悬停 tooltip 恒被覆盖不可见 → 独立 batch 移至 3D 块立方图标后绘制，
+无悬停零 batch 无输入基线不变；记档偏离 = 效果图标 hover tooltip 结构
+不可行【locked 光标固定中心】档位/时长呈现 = F3 通道）；② F3 两新面：
+效果行带档位罗马（`effectTierRoman`：tier 0 = "I" MC amplifier 惯例，
+越界钳制）+ **stats 行**（`stats deathCount N | kill.<name> N` 键序，
+空 = "(none)" 基线）；无描述/附魔文本（项目无附魔系统 = 记档偏离，MC
+同款）。零 format（22）/config/内容/音效/帧状态。1912/1912（+7：
+tooltip 5 + stats 行 2 + effectTierRoman 钳制）、`-Werror` 0、banner
+v1.33.0；门 148（全 PASS 25/25）：S1 第 148 次结构性免疫 + base18 锚
+连续 168140 B 免重锚 + 跨版 savenorm EXACT；S2 四输入矩阵 1362×744
+全零漂移【S2a F3 stats 行 diff 4762 px 限 F3 盒带外 0 + 存档 stats
+精确双侧 / S2b F3 效果罗马 diff 4761 px 限盒 + 效果名 5/5 / S2c
+tooltip "dirt x64" x2 RAW ×2 侧 + 跨侧 savenorm EXACT + diff 66 px 限
+tooltip 盒带外 0 / S2c2 tooltip "wooden_pickaxe"+"0.0/59" 同断言
+diff 78 px 限盒】——OLD 侧无可见 tooltip = Phase-15 潜伏覆盖缺陷的
+判别实证；S3 1912；
+性能 A/B 真 v1.32 vs v1.33-dev PASS（banner 双侧 + 全指标同档 +
+changesApplied 9/3/1 三窗逐位 + 终档 fluids 18/18 + blocks 55/55
+集合恒等 = 同世界同成本【结构惰性最强形：无 F3/面板/悬停 = PRE-12 零
+执行】）。详见 `docs/archive/phase-pre12.md`。
+
+**tag v1.33.0 = PRE-11+12 合并 tag**（PRE 政策兑现：v1.32.0 组内未打，
+本 tag 覆盖 PRE-11 心行窄窗回退 + PRE-12 tooltip/F3）= **v1.x 任务矩阵
+33/33 全完成 + PRE 系统收官 release**。
+
 ## v1.32.0（2026-10-30）
 
 **PRE-11 HUD 细化**（v1.x 任务表 32/33，门 147，PRE 行 5/6）：原始定义

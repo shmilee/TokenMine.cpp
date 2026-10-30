@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 1.32.0 LANGUAGES CXX)
+project(TokenMine VERSION 1.33.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -101,6 +101,7 @@ add_library(mc_core STATIC
     src/ui/font.cpp
     src/ui/debug_overlay.cpp
     src/ui/inventory_ui.cpp
+    src/ui/item_tooltip.cpp
     src/ui/ui_scale.cpp
 )
 target_include_directories(mc_core PUBLIC ${CMAKE_SOURCE_DIR}/src)
@@ -183,6 +184,7 @@ add_executable(tokenmine_tests
     tests/test_chunk_streaming.cpp
     tests/test_font.cpp
     tests/test_debug_overlay.cpp
+    tests/test_item_tooltip.cpp
     tests/test_inventory_ui.cpp
     tests/test_ui_scale.cpp
     tests/test_alpha_cutout.cpp

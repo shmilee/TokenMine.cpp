@@ -36,10 +36,10 @@ TEST(DebugOverlayTest, LinesFormat) {
     info.maxHunger = 20.0;
     info.difficulty = "hard";
     const auto lines = debugOverlayLines(info);
-    ASSERT_EQ(lines.size(), 14u);
+    ASSERT_EQ(lines.size(), 15u);
     // Pinned literal (deliberately NOT the TM_VERSION macro): a version
     // bump must force a conscious update of this pin.
-    EXPECT_EQ(lines[0], "TokenMine.cpp v1.32.0");
+    EXPECT_EQ(lines[0], "TokenMine.cpp v1.33.0");
     EXPECT_EQ(lines[1], "60 FPS | frame 1234");
     EXPECT_EQ(lines[2], "chunks 2312 | draws 45 | verts 987654");
     EXPECT_EQ(lines[3], "pos 0.50, 54.00, -34.70  yaw 0.00  pitch -0.25");
@@ -56,6 +56,9 @@ TEST(DebugOverlayTest, LinesFormat) {
     EXPECT_EQ(lines[12], "difficulty hard");
     // Phase 46: no active effects -> the baseline "(none)" line.
     EXPECT_EQ(lines[13], "effects (none)");
+    // PRE-12 (the SURV-7 display boundary): no stats -> the baseline
+    // "(none)" line.
+    EXPECT_EQ(lines[14], "stats (none)");
 }
 
 TEST(DebugOverlayTest, HeldItemLineWithDurability) {
@@ -72,11 +75,41 @@ TEST(DebugOverlayTest, HeldItemLineWithDurability) {
 
 TEST(DebugOverlayTest, ActiveEffectsLine) {
     // Phase 46: the active status effects render as "name 12.3s; ..."
-    // (application order, one decimal place).
+    // (application order, one decimal place). PRE-12 (the SURV-6 display
+    // boundary): the game fills in the amplifier roman (tier 0 = "I").
     DebugInfo info;
-    info.effects = "poison 12.3s; regeneration 4.5s";
+    info.effects = "poison I 12.3s; resistance II 4.5s";
     const auto lines = debugOverlayLines(info);
-    EXPECT_EQ(lines.back(), "effects poison 12.3s; regeneration 4.5s");
+    EXPECT_EQ(lines[13], "effects poison I 12.3s; resistance II 4.5s");
+    EXPECT_EQ(lines.back(), "stats (none)");
+}
+
+TEST(DebugOverlayTest, StatsLine) {
+    // PRE-12 (the SURV-7 display boundary): the stats render in key
+    // order, "name N", joined by " | ".
+    DebugInfo info;
+    info.stats = {
+        {"deathCount", 1},
+        {"kill.chicken", 3},
+        {"kill.sheep", 2},
+    };
+    const auto lines = debugOverlayLines(info);
+    EXPECT_EQ(lines.back(),
+              "stats deathCount 1 | kill.chicken 3 | kill.sheep 2");
+    // A single entry has no separator.
+    DebugInfo one;
+    one.stats = {{"kill.spider", 7}};
+    EXPECT_EQ(debugOverlayLines(one).back(), "stats kill.spider 7");
+}
+
+TEST(DebugOverlayTest, EffectTierRoman) {
+    // PRE-12: tier 0 = "I" (the MC amplifier convention), 1 = "II",
+    // 2 = "III"; out-of-range clamps (defensive, saves are validated).
+    EXPECT_STREQ(effectTierRoman(0), "I");
+    EXPECT_STREQ(effectTierRoman(1), "II");
+    EXPECT_STREQ(effectTierRoman(2), "III");
+    EXPECT_STREQ(effectTierRoman(-1), "I");
+    EXPECT_STREQ(effectTierRoman(5), "III");
 }
 
 TEST(DebugOverlayTest, EngagedStreamingAndOpenInventory) {

@@ -2576,6 +2576,15 @@
   `H/s` 推导（s 从黄框自探测），高度自适应（679×744 与 679×370 同为
   虚拟 453 宽 = 同一回退态，仅高度不同）。凡多跑 A/B 矩阵，尺寸门按
   PNG 定、点击前稳几何。
+- **capture 点击的 `mousemove A B click 1` 单命令有 X 竞态（PITS 337）**
+  ——10-30 PRE-12 门 148 S2：xdotool 组合命令 = XWarpPointer（**异步
+  hint**）+ XTEST fake button press 两条 X 请求；press 可在 warp 生效前
+  被处理 → 点击落在**旧光标位置** → 游戏在旧位置捕获指针，SDL 把光标
+  warp 到 drawable 中心 = 一次性大相机旋转（实测固定漂移 0.435/0.725
+  rad = 174/290 px @ k 0.0025，同窗同点击点 3 跑 = 0/漂/漂 复现）。
+  修 = `xdotool mousemove --sync A B` + sleep 0.25 + **独立** `xdotool
+  click 1`（warp 落定后再 press）；漂移门 <0.001 rad 保留 = 兜底重试。
+  凡 capture 点击协议，warp 与 press 必须分命令 + --sync。
 - **子壳 `kill $gpid` 杀不到游戏本尊 → 孤儿窗污染后续 capture 跑（PITS 335）**
   ——10-30 PRE-11 门 147 S2 v4：runin 用 `( cd $D && timeout 900 $bin … ) &`
   起游戏、`gpid=$!` 记的是**子壳** PID；`kill $gpid` 只杀子壳，

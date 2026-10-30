@@ -22,7 +22,7 @@
 | SURV 生存/战斗/效果 | ~~SURV-6 效果档位~~ ✅ v1.17.0 | ~~SURV-7 死亡统计~~ ✅ v1.18.0 | ~~SURV-8 工具 10×~~ ✅ v1.19.0 | ~~SURV-9 饱和细化~~ ✅ v1.20.0 | ~~SURV-10 挤奶冷却~~ ✅ v1.21.0 | |
 | CRAFT 物品/合成/面板 | ~~CRAFT-4 配方提示~~ ✅ v1.22.0 | ~~CRAFT-5 炉子表现~~ ✅ v1.23.0 | ~~CRAFT-6 燃料熔炼~~ ✅ v1.24.0 | ~~CRAFT-7 背包交互~~ ✅ v1.25.0 | | |
 | SAVE 存档 | ~~SAVE-2 速度入档~~ ✅ v1.26.0 | ~~SAVE-3 槽位管理~~ ✅ v1.27.0 | | | | |
-| PRE 表现层 | ~~PRE-7 中毒/燃烧表现~~ ✅ v1.28.0 | ~~PRE-8 mob 火焰~~ ✅ v1.29.0 | ~~PRE-9 箭/弓/手视觉~~ ✅ v1.30.0 | ~~PRE-10 图标重叠修复★~~ ✅ v1.31.0 | ~~PRE-11 HUD 细化~~ ✅ v1.32.0 | PRE-12 tooltip/F3 |
+| PRE 表现层 | ~~PRE-7 中毒/燃烧表现~~ ✅ v1.28.0 | ~~PRE-8 mob 火焰~~ ✅ v1.29.0 | ~~PRE-9 箭/弓/手视觉~~ ✅ v1.30.0 | ~~PRE-10 图标重叠修复★~~ ✅ v1.31.0 | ~~PRE-11 HUD 细化~~ ✅ v1.32.0 | ~~PRE-12 tooltip/F3~~ ✅ v1.33.0 |
 | UX 实机报障 | （新实机报障入此行，用户定案） | | | | | |
 
 ★ PRE-10 = 原砍掉清单唯一 bug 级项（效果图标行与吸收红心重叠，3 效果
@@ -128,6 +128,8 @@
   （CRAFT-6）不打 tag → **v1.25.0 = CRAFT-6+7 合并 tag + CRAFT 系统
   release**（notes 覆盖 v1.22-1.25）；SAVE / PRE 系统同型。执行顺序 #3
   已刷新（10-27 组政策适用至 v1.21.0 为止，保留为历史事实）。
+- 2026-10-30：**PRE-12 tooltip/F3 完成 = v1.x 任务矩阵 33/33 全完成（PRE 系统 6/6 收官）**（v1.33.0，门 148 全 PASS 25/25）：定案 **悬停 tooltip 补齐 + F3 呈现框架**（消费 Phase-15 物品 tooltip 只有名字 / SURV-6 档位显示 / SURV-7 统计显示三处记档边界）：物品 tooltip = `name`/`name xN` + 工具 `damage/max` 第二行（纯函数 `ui/item_tooltip` 5 单测）+ **tooltip 渲染层修复**（门内发现 Phase-15 潜伏缺陷：旧文本与面板共享 kText batch【绘制先于槽底/图标】+ 偏移随面板 fit scale 收缩 = 悬停 tooltip 恒被覆盖不可见 → 独立 batch 移至 3D 块立方图标后）+ F3 效果行档位罗马（`effectTierRoman`，tier 0 = "I"）+ F3 stats 行（SURV-7 计数呈现）；效果图标 hover tooltip = 结构不可行记档（locked 光标固定中心，档位/时长走 F3 通道）；零 format（22）/config/内容/音效。1912/1912（+7）、-Werror 0；门 148：S1 第 148 次结构性免疫 + 锚连续 168140 B + S2 四输入矩阵 1362×744 全零漂移【F3 stats diff 4762 px 限盒 / F3 罗马 diff 4761 px / tooltip dirt x64 diff 66 px + x2 RAW ×2 侧 + 跨侧 savenorm EXACT / tooltip pickaxe 双行 diff 78 px】+ S3 1912 + 性能 A/B 真 v1.32 vs v1.33-dev PASS（同世界同成本最强形）；PITS 337（xdotool `mousemove A B click 1` 单命令 XWarpPointer 异步竞态 → 固定捕获漂移，修 = --sync + 独立 click）。**tag v1.33.0 = PRE-11+12 合并 tag（政策兑现）+ PRE 系统 GitHub release = v1.x 33/33 收官**。详见 docs/archive/phase-pre12.md。
+- 2026-10-30：**PRE-11 HUD 细化完成**（v1.x 32/33，v1.32.0，门 147）：心行窄窗回退布局（纯函数 `heartRowLayout` 8 单测，宽窗 legacy 位级 = 结构免疫根；右排贴屏、吸收带先裁、sub-row 极限记档）+ UI 度量常量单一真源。1905/1905；门 147 全 PASS（S1 锚刷新 387726→168140 B WM 半平铺态 / S2 宽窗 capture A/B 10/10 代码级免疫 / S3 / 性能 A/B）；PITS 333-336（probe 帧数 / WM 重排几何 / 孤儿窗假捕获 / 高负载取景间歇纯黑）。v1.32.0 组内不打 tag。详见 docs/archive/phase-pre11.md。
 - 2026-10-29：**CRAFT-7 背包交互完成（CRAFT 系统 4/4 收官）**（v1.x 25/33，v1.25.0，门 140）：
   "背包交互"原始定义已佚 = 定案 **背包面板 MC 操作面（3/4 项 + 数字键）**
   （消费 KNOWN_ISSUES"背包 UI 右键语义极简"条）：① **右键取半堆**（空手右键

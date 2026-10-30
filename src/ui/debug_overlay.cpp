@@ -16,7 +16,35 @@ std::string fmt(const char* format, ...) {
     return buf;
 }
 
+// PRE-12: the stats map (already key-ordered) as "name N | name N".
+std::string joinStats(const std::map<std::string, std::uint64_t>& stats) {
+    std::string out;
+    for (const auto& [name, value] : stats) {
+        if (!out.empty()) {
+            out += " | ";
+        }
+        out += name;
+        out += ' ';
+        out += std::to_string(value);
+    }
+    return out;
+}
+
 } // namespace
+
+const char* effectTierRoman(int tier) {
+    // SURV-6: tier is 0-based with tier_max ≤ 3 → tiers 0..2. The MC
+    // convention renders amplifier 0 as "I". Clamp defensively (a
+    // corrupted save is rejected at load, but the formatter must not
+    // index out of bounds).
+    static const char* const kRoman[3] = {"I", "II", "III"};
+    if (tier < 0) {
+        tier = 0;
+    } else if (tier > 2) {
+        tier = 2;
+    }
+    return kRoman[tier];
+}
 
 std::vector<std::string> debugOverlayLines(const DebugInfo& info) {
     return {
@@ -49,6 +77,13 @@ std::vector<std::string> debugOverlayLines(const DebugInfo& info) {
         // "effects (none)" — the no-effect baseline state).
         info.effects.empty() ? std::string("effects (none)")
                              : fmt("effects %s", info.effects.c_str()),
+        // PRE-12 (the SURV-7 display boundary): the player stats in key
+        // order, "name N" joined by " | "; "(none)" when the map is
+        // empty (m_stats stores non-zero entries only — an empty map is
+        // the no-deaths no-kills baseline state).
+        info.stats.empty()
+            ? std::string("stats (none)")
+            : fmt("stats %s", joinStats(info.stats).c_str()),
     };
 }
 

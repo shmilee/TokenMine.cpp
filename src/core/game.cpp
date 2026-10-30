@@ -38,6 +38,7 @@
 #include "world/noise.hpp"
 #include "ui/font.hpp"
 #include "ui/inventory_ui.hpp"
+#include "ui/item_tooltip.hpp"
 #include "ui/ui_scale.hpp"
 #include "item/armor.hpp"
 #include "item/durability.hpp"
@@ -7584,6 +7585,32 @@ void Game::renderUi() {
                          batchFor(color, true, &m_fontTexture).vertices);
     };
 
+    // PRE-12 (tooltip): the hover tooltip lines are collected into
+    // separate batches drawn AFTER the 2D batches and the 3D block-cube
+    // icons. A cursor-adjacent tooltip sits over slot rects/icons; the
+    // shared kText batch (inserted at the panel title, before the slot
+    // backgrounds) would draw UNDER them and vanish at the panel's fit
+    // scale (Phase 15's "only the name" tooltip was effectively hidden
+    // for the same reason).
+    std::vector<UiBatch> tooltipBatches;
+    auto appendTooltip = [&](const ItemTooltip& tip, int x, int y,
+                             double s, int lineGap) {
+        UiBatch title;
+        title.color = kText;
+        title.textured = true;
+        title.texture = &m_fontTexture;
+        makeTextVertices(tip.title, x, y, s, title.vertices);
+        tooltipBatches.push_back(std::move(title));
+        if (!tip.durability.empty()) {
+            UiBatch dur;
+            dur.color = kTextDim;
+            dur.textured = true;
+            dur.texture = &m_fontTexture;
+            makeTextVertices(tip.durability, x, y + lineGap, s, dur.vertices);
+            tooltipBatches.push_back(std::move(dur));
+        }
+    };
+
     // Fluid overlay (Phase 99.5): when the camera's cell holds a fluid,
     // the fluid geometry around the eye self-culls (same-kind faces hide
     // each other — a level-8 cell in a deep pool has no faces at all), so
@@ -7977,8 +8004,11 @@ void Game::renderUi() {
         if (hoverSlot >= 0) {
             const ItemStack& stack = m_inventory.at(hoverSlot);
             if (!stack.empty()) {
-                addText(m_items.at(stack.item).name, mx + L(12), my + L(12),
-                        s, kText);
+                // PRE-12 (tooltip): name + " xN" (count > 1) + the
+                // d/max durability readout line (the pure
+                // ui/item_tooltip; the Phase-15 "only the name" residue).
+                appendTooltip(itemTooltip(m_items.at(stack.item), stack),
+                              mx + L(12), my + L(12), s, L(16));
             }
         }
         if (m_furnaceUi.carrying()) {
@@ -8184,15 +8214,20 @@ void Game::renderUi() {
         if (hoverSlot >= 0) {
             const ItemStack& stack = m_inventory.at(hoverSlot);
             if (!stack.empty()) {
-                addText(m_items.at(stack.item).name, mx + L(12), my + L(12),
-                        s, kText);
+                // PRE-12 (tooltip): name + " xN" (count > 1) + the
+                // d/max durability readout line (the pure
+                // ui/item_tooltip; the Phase-15 "only the name" residue).
+                // Drawn via the tooltip batches (after the 2D batches and
+                // the 3D block-cube icons — see appendTooltip).
+                appendTooltip(itemTooltip(m_items.at(stack.item), stack),
+                              mx + L(12), my + L(12), s, L(16));
             }
         } else if (hoverCell >= 0) {
             const ItemStack& stack =
                 ui.grid().at(layout.gridSlots[static_cast<std::size_t>(hoverCell)]);
             if (!stack.empty()) {
-                addText(m_items.at(stack.item).name, mx + L(12), my + L(12),
-                        s, kText);
+                appendTooltip(itemTooltip(m_items.at(stack.item), stack),
+                              mx + L(12), my + L(12), s, L(16));
             }
         }
         if (ui.carrying()) {
@@ -8271,18 +8306,24 @@ void Game::renderUi() {
             }
         }
         info.difficulty = difficultyName(m_difficulty);
-        // Phase 46: the active status effects, "name 12.3s; name 4.5s"
-        // (application order); empty when the player has none.
+        // Phase 46: the active status effects, "name I 12.3s; name 4.5s"
+        // (application order); empty when the player has none. PRE-12
+        // (the SURV-6 display boundary): every effect carries its
+        // amplifier roman (tier 0 = "I").
         for (const ActiveEffect& a : m_playerEffects.list()) {
-            char buf[64];
-            std::snprintf(buf, sizeof(buf), "%s %.1fs",
+            char buf[80];
+            std::snprintf(buf, sizeof(buf), "%s %s %.1fs",
                           m_effects.at(a.effect).name.c_str(),
-                          a.remaining);
+                          effectTierRoman(a.tier), a.remaining);
             if (!info.effects.empty()) {
                 info.effects += "; ";
             }
             info.effects += buf;
         }
+        // PRE-12 (the SURV-7 display boundary): the player stats
+        // (deathCount + kill.<name>; the map holds non-zero entries in
+        // key order).
+        info.stats = m_stats;
         int y = kF3Margin;
         for (const std::string& line : debugOverlayLines(info)) {
             addText(line, kF3Margin, y, 1, kText);
@@ -8331,6 +8372,16 @@ void Game::renderUi() {
             m_renderer.draw(mesh, m_basicShader, Mat4::identity(), ortho,
                             model);
         }
+    }
+
+    // PRE-12: the hover tooltip — LAST of the UI passes, above the 2D
+    // batches and the 3D block-cube icons (it sits cursor-adjacent, over
+    // slot rects and icons). No hovered stack = zero batches = the
+    // no-input baseline is untouched.
+    for (auto& tb : tooltipBatches) {
+        drawUiBatch(tb.vertices, ortho, tb.textured ? *tb.texture
+                                                    : m_fontTexture,
+                    tb.textured, tb.color);
     }
 
     // PRE-7: the effect tints — a full-screen veil per ACTIVE player
