@@ -612,6 +612,25 @@ Result<void> ItemRegistry::parseDurability(const Json& def, Item& out) {
     return {};
 }
 
+Result<void> ItemRegistry::parseRepair(const Json& def, Item& out) {
+    // Optional 'repair_with' (UX-5, material repair): the name of the
+    // item that repairs this one in a crafting grid (one material unit
+    // restores kRepairFraction of the max durability — see item/repair).
+    // A STRICT non-empty item name (the ammo discipline: the absent
+    // field is the "not repairable" default, so an explicit empty string
+    // or a non-string is a typo, rejected and named). The pairing check
+    // (the item must carry a durability) and the material's existence
+    // run at game init (checkRepairMaterials — the material may be
+    // defined in a later file, the ammo pattern).
+    if (const Json* rp = def.find("repair_with")) {
+        if (!rp->isString() || rp->asString().empty()) {
+            return MC_FAIL("'repair_with' must be a non-empty item name");
+        }
+        out.repairWith = rp->asString();
+    }
+    return {};
+}
+
 namespace {
 // One from/to corner of a model box: an array of 3 numbers in [0, 1].
 // `what` is the quoted path for error messages (e.g.
@@ -977,6 +996,7 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
             key != "armor_slot" &&
             key != "armor_points" &&
             key != "durability" &&
+            key != "repair_with" &&
             key != "model" &&
             key != "icon") {
             MC_LOG_WARN("Item '" + name + "': unknown field '" + key +
@@ -1024,6 +1044,11 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     r = parseDurability(def, item); // SURV-3: LAST of the parse flow (the
                                     // allowed-set check reads the tool /
                                     // armor / ammo / igniter fields parsed)
+    MC_TRY(r);
+    r = parseRepair(def, item); // UX-5: the repair material name (strict
+                                // parse only — the pairing + existence
+                                // cross-checks run at game init, the ammo
+                                // pattern)
     MC_TRY(r);
     r = parseModel(def, item); // CRAFT-2: pure rendering data (no right-
                                // click channel, no exclusivity); the

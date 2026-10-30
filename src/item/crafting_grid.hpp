@@ -17,6 +17,13 @@
 //     required ingredient over the cells must reach its count.
 //   - The first match wins (shaped before shapeless, registry order
 //     within a kind — the registry's file-sorted order is deterministic).
+//   - UX-5 REPAIR fallback (matchRepair, item/repair.hpp): when NO recipe
+//     matches, the grid is a MATERIAL REPAIR if it holds a damaged
+//     repairable item (data durability + repair_with, stack damage > 0)
+//     plus a cell holding its named material. The UI's match() computes
+//     the fallback (GridMatch::repair) — matchGridRecipe itself is the
+//     pure recipe matcher and never sees it (the recipe match always
+//     wins: a grid that crafts never repairs).
 //
 // Consumption (consumeGrid) is exact for both kinds:
 //   - shaped: one item from each covered cell at the matched offset;
@@ -26,10 +33,12 @@
 #pragma once
 
 #include <cstddef>
+#include <optional>
 #include <vector>
 
 #include "item/item.hpp"
 #include "item/recipe.hpp"
+#include "item/repair.hpp"
 
 namespace mc {
 
@@ -56,13 +65,21 @@ private:
 };
 
 // One successful grid match: the recipe plus the shaped offset (dx, dy;
-// (0, 0) for shapeless, which has no offset).
+// (0, 0) for shapeless, which has no offset) — or, when no recipe
+// matches, the UX-5 material-repair fallback (the damaged repairable
+// tool + its material, see item/repair.hpp). matched() is true for
+// either: the UI's output slot renders and the output click acts on
+// whichever is set (the recipe always wins — match() fills `repair`
+// only when `recipe` is null).
 struct GridMatch {
     const Recipe* recipe = nullptr;
     int dx = 0;
     int dy = 0;
+    // UX-5: set (and only set) when no recipe matched and the grid is a
+    // material repair (see matchRepair). nullopt = no repair.
+    std::optional<RepairMatch> repair;
 
-    bool matched() const { return recipe != nullptr; }
+    bool matched() const { return recipe != nullptr || repair.has_value(); }
 };
 
 // Does `grid` satisfy the shaped `recipe` at some offset? On success *dx/

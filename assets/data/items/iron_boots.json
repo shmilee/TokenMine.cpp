@@ -6,6 +6,7 @@
  "armor_slot": "feet",
  "armor_points": 1,
  "durability": 195,
+ "repair_with": "iron_ingot",
  "model": {
   "texture": "iron_boots",
   "elements": [

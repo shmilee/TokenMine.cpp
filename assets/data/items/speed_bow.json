@@ -8,6 +8,7 @@
   "attack_damage": 1.0,
   "ammo": "arrow",
   "durability": 384,
+  "repair_with": "stick",
   "model": {
     "texture": "speed_bow",
     "elements": [

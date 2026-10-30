@@ -6,6 +6,7 @@
  "armor_slot": "legs",
  "armor_points": 5,
  "durability": 225,
+ "repair_with": "iron_ingot",
  "model": {
   "texture": "iron_leggings",
   "elements": [

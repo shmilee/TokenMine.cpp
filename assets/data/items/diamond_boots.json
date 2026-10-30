@@ -6,6 +6,7 @@
  "armor_slot": "feet",
  "armor_points": 3,
  "durability": 429,
+ "repair_with": "diamond",
  "model": {
   "texture": "diamond_boots",
   "elements": [

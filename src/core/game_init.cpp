@@ -15,6 +15,7 @@
 #include "core/game_local.hpp"
 #include "core/json.hpp"
 #include "core/png.hpp"
+#include "item/repair.hpp"
 #include "renderer/alpha_test.hpp"
 #include "ui/ui_scale.hpp"
 #include "world/beacon.hpp"
@@ -1104,6 +1105,13 @@ Result<void> Game::buildScene() {
             }
         }
     }
+
+    // -- repair materials (UX-5): every item's 'repair_with' names an
+    // EXISTING item (the ammo / grows_to discipline — a typo fails init
+    // loudly) and only durable items are repairable (the pairing
+    // discipline). The pure checkRepairMaterials (the CRAFT-3
+    // checkSoundMaterials pattern).
+    MC_TRY(checkRepairMaterials(m_items));
 
     // -- mob arrow ammo (Phase 42): a ranged mob's 'ammo' field names the
     // item a stuck arrow returns to the player's inventory on pickup (the

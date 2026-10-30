@@ -389,6 +389,39 @@ bool InventoryUI::clickOutput(bool rightButton) {
     if (!m.matched()) {
         return false;
     }
+    // UX-5: the material-repair fallback (match() fills m.repair only
+    // when NO recipe matched — the recipe branch below is the winner).
+    // The grid is not recipe-consumed (there is no recipe): the repair
+    // runs in place (the tool's cell takes the reduced damage, one
+    // material unit is spent) and the repaired tool — the anvil's
+    // result — leaves the grid into the carry.
+    if (m.repair.has_value()) {
+        const ItemStack& tool = m_grid->at(m.repair->itemSlot);
+        const Item& item = m_items.at(tool.item);
+        // The carry guard (the recipe path's twin, the SURV-3
+        // same-damage merge rule): a foreign carried stack, a
+        // different-damage same item, or a stack that would overflow
+        // maxStack all reject the click (every max-stack-1 tool
+        // rejects ANY non-empty carry — 1 + 1 > 1).
+        if (!m_carry.empty() &&
+            (m_carry.item != tool.item ||
+             m_carry.damage != m.repair->outputDamage ||
+             m_carry.count + tool.count > item.maxStack)) {
+            return false;
+        }
+        applyRepair(*m_grid, *m.repair, m_items);
+        // Take the repaired tool out of its cell (the result slot): the
+        // stack rides the cursor (merging into an equal carried stack —
+        // the guard made the damage equal, so the assignment is a no-op
+        // there), the cell empties. rightButton and left behave alike
+        // (the tool count is the whole repairable unit).
+        const ItemStack& repaired = m_grid->at(m.repair->itemSlot);
+        m_carry.item = repaired.item;
+        m_carry.count += repaired.count;
+        m_carry.damage = repaired.damage;
+        m_grid->setSlot(m.repair->itemSlot, ItemStack {});
+        return true;
+    }
     const Recipe& recipe = *m.recipe;
     const int maxStack = m_items.at(recipe.output).maxStack;
     const int n = rightButton ? std::min(1, recipe.outputCount)

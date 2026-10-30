@@ -1255,8 +1255,21 @@ void Game::renderUi() {
             }
             const GridMatch m = ui.match();
             if (m.matched()) {
-                const ItemStack out {m.recipe->output,
+                // The output stack: the recipe's result, or (UX-5: no
+                // recipe matched) the repaired tool itself — the tool
+                // cell's item + count at the match's reduced damage.
+                // drawIcon's durability bar reads the stack's damage,
+                // so the bar shows on the repair output for free.
+                ItemStack out;
+                if (m.recipe != nullptr) {
+                    out = ItemStack {m.recipe->output,
                                      m.recipe->outputCount};
+                } else {
+                    const ItemStack& cell =
+                        ui.grid().at(m.repair->itemSlot);
+                    out = ItemStack {cell.item, cell.count,
+                                     m.repair->outputDamage};
+                }
                 drawIcon(out, static_cast<float>(r.x + r.w / 2),
                          static_cast<float>(r.y + r.h / 2), slotIcon);
                 if (out.count < m_items.at(out.item).maxStack) {

@@ -256,11 +256,19 @@ public:
     // grid and the output are NOT part of the collect.
     void doubleCollect(int slot);
 
-    // The live match for the grid (shaped first, then shapeless — see
-    // crafting_grid.hpp). Recomputed on every call (cheap: a handful of
-    // recipes over 9 cells); the output slot renders from it.
+    // The live match for the grid: the recipe match (shaped first, then
+    // shapeless — see crafting_grid.hpp) and, when NO recipe matches, the
+    // UX-5 material-repair fallback (matchRepair: the damaged repairable
+    // tool + its material in the grid). The recipe always wins (the
+    // repair is a pure fallback — see crafting_grid.hpp). Recomputed on
+    // every call (cheap: a handful of recipes over 9 cells); the output
+    // slot renders from it.
     GridMatch match() const {
-        return matchGridRecipe(*m_grid, m_recipes);
+        GridMatch m = matchGridRecipe(*m_grid, m_recipes);
+        if (!m.matched()) {
+            m.repair = matchRepair(*m_grid, m_items);
+        }
+        return m;
     }
 
     const ItemStack& carry() const { return m_carry; }

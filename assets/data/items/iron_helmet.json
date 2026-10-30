@@ -6,6 +6,7 @@
  "armor_slot": "head",
  "armor_points": 2,
  "durability": 165,
+ "repair_with": "iron_ingot",
  "model": {
   "texture": "iron_helmet",
   "elements": [

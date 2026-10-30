@@ -6,6 +6,7 @@
  "armor_slot": "chest",
  "armor_points": 8,
  "durability": 528,
+ "repair_with": "diamond",
  "model": {
   "texture": "diamond_chestplate",
   "elements": [

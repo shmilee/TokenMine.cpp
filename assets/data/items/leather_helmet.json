@@ -6,6 +6,7 @@
  "armor_slot": "head",
  "armor_points": 1,
  "durability": 55,
+ "repair_with": "leather",
  "model": {
   "texture": "leather_helmet",
   "elements": [

@@ -9,6 +9,7 @@
   "ammo": "arrow",
   "arrow_effect": { "name": "poison", "duration": 60 },
   "durability": 384,
+  "repair_with": "stick",
   "model": {
     "texture": "poison_bow",
     "elements": [

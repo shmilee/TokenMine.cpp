@@ -21,6 +21,7 @@
   "max_stack": 1,
   "icon": "stone_pickaxe",
   "durability": 131,
+  "repair_with": "cobblestone",
   "model": {
     "texture": "stone_pickaxe",
     "elements": [

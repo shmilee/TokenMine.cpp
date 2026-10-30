@@ -7,6 +7,7 @@
   "max_stack": 1,
   "icon": "iron_shovel",
   "durability": 250,
+  "repair_with": "iron_ingot",
   "model": {
     "texture": "iron_shovel",
     "elements": [

@@ -6,6 +6,7 @@
  "armor_slot": "legs",
  "armor_points": 2,
  "durability": 75,
+ "repair_with": "leather",
  "model": {
   "texture": "leather_leggings",
   "elements": [

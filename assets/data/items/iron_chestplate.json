@@ -6,6 +6,7 @@
  "armor_slot": "chest",
  "armor_points": 6,
  "durability": 240,
+ "repair_with": "iron_ingot",
  "model": {
   "texture": "iron_chestplate",
   "elements": [

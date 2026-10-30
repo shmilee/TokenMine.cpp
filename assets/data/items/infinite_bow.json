@@ -9,6 +9,7 @@
   "ammo": "arrow",
   "infinite": true,
   "durability": 384,
+  "repair_with": "stick",
   "model": {
     "texture": "infinite_bow",
     "elements": [

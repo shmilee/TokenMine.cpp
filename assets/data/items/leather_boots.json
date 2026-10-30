@@ -6,6 +6,7 @@
  "armor_slot": "feet",
  "armor_points": 1,
  "durability": 65,
+ "repair_with": "leather",
  "model": {
   "texture": "leather_boots",
   "elements": [

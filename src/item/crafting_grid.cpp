@@ -152,10 +152,16 @@ GridMatch matchGridRecipe(const CraftingGrid& grid,
             if (wanted == RecipeType::Shaped) {
                 int dx = 0, dy = 0;
                 if (matchesShaped(grid, recipe, &dx, &dy)) {
-                    return GridMatch {&recipe, dx, dy};
+                    GridMatch m;
+                    m.recipe = &recipe;
+                    m.dx = dx;
+                    m.dy = dy;
+                    return m; // the repair fallback stays nullopt (UX-5)
                 }
             } else if (matchesShapeless(grid, recipe)) {
-                return GridMatch {&recipe, 0, 0};
+                GridMatch m;
+                m.recipe = &recipe;
+                return m; // (0, 0) offset + no repair fallback (UX-5)
             }
         }
     }

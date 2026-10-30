@@ -288,6 +288,19 @@ struct Item {
     // a no-op field is a typo). The value is a FLOAT like ItemStack::
     // damage (Minecraft accumulates fractional armor wear, e.g. 2.5).
     float durability = 0.0f;
+    // UX-5 (material repair): the item that repairs this one in a
+    // crafting grid (an optional data field 'repair_with', a strict
+    // non-empty item name — the ammo discipline; an explicit empty
+    // string is a typo, rejected at parse). Empty = not repairable
+    // (every pre-UX-5 item). Pairing discipline: only an item WITH a
+    // durability may carry it (the no-durability typo is rejected at
+    // game init — the field is parsed in the same file); the material's
+    // existence is cross-checked at game init (the ammo / grows_to
+    // discipline — the material may be defined in a later file). The
+    // repair rule (Minecraft's anvil, one material unit): the grid
+    // holds the damaged tool + the material -> the tool's accumulated
+    // damage drops by kRepairFraction of its max (item/repair.hpp).
+    std::string repairWith;
     // Phase 15 UI: the item's 2D icon texture name (a file under
     // assets/textures/items/, validated against the filesystem at game
     // init). Empty for block items, which render a 3D block cube instead.

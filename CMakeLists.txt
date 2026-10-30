@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 1.38.0 LANGUAGES CXX)
+project(TokenMine VERSION 1.39.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -75,6 +75,7 @@ add_library(mc_core STATIC
     src/item/campfire.cpp
     src/item/armor.cpp
     src/item/durability.cpp
+    src/item/repair.cpp
     src/player/player.cpp
     src/player/drown.cpp
     src/world/chunk.cpp
@@ -184,6 +185,7 @@ add_executable(tokenmine_tests
     tests/test_armor.cpp
     tests/test_drown.cpp
     tests/test_durability.cpp
+    tests/test_repair.cpp
     tests/test_save.cpp
     tests/test_save_slot.cpp
     tests/test_save_journal.cpp

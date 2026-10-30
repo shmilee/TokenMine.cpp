@@ -180,6 +180,14 @@ private:
     // a typo). Runs LAST in the parse flow (the allowed-set check needs
     // the armor / ammo / igniter fields parsed).
     static Result<void> parseDurability(const Json& def, Item& out);
+    // Parse the optional 'repair_with' field (UX-5, material repair)
+    // into `out`: a strict non-empty item name (the ammo discipline —
+    // the absent field is the "not repairable" default, so an explicit
+    // empty string or a non-string is a typo, rejected and named). The
+    // pairing (the item must carry a durability) and the material's
+    // existence are cross-checked at game init (checkRepairMaterials —
+    // the material may be defined in a later file, the ammo pattern).
+    static Result<void> parseRepair(const Json& def, Item& out);
     // Parse the optional 'model' section (CRAFT-2, the per-item 3D
     // model) into `out`: a strict object with 'texture' (a non-empty
     // file name under assets/textures/items/ — the existence is

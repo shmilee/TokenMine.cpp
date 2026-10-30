@@ -7,6 +7,7 @@
   "max_stack": 1,
   "icon": "wooden_axe",
   "durability": 59,
+  "repair_with": "planks",
   "model": {
     "texture": "wooden_axe",
     "elements": [

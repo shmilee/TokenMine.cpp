@@ -7,6 +7,7 @@
   "max_stack": 1,
   "icon": "stone_shovel",
   "durability": 131,
+  "repair_with": "cobblestone",
   "model": {
     "texture": "stone_shovel",
     "elements": [

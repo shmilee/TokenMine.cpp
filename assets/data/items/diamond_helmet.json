@@ -6,6 +6,7 @@
  "armor_slot": "head",
  "armor_points": 3,
  "durability": 363,
+ "repair_with": "diamond",
  "model": {
   "texture": "diamond_helmet",
   "elements": [

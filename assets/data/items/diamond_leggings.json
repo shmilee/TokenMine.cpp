@@ -6,6 +6,7 @@
  "armor_slot": "legs",
  "armor_points": 6,
  "durability": 495,
+ "repair_with": "diamond",
  "model": {
   "texture": "diamond_leggings",
   "elements": [
