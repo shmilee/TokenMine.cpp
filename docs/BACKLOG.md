@@ -152,8 +152,11 @@
   统**（消费 SURV-3 记档「无修复系统（矩阵外）」条；具体语义——工作台
   材料修复/磨刀石/自修复——立项时定案）⑥ **UX-6 字体扩容**（CJK 字形
   33 → 高频 ~300；**方案 10-30 定案 = A+ 离线提取自动化**：
-  generate_font.py 字集 = 数据 + 提取脚本化（Noto 来源 + 文件哈希记入
-  脚本、本机缺 TTF 点名拒）+ 既有 33 字逐位自校验先行 + font.png 尾部
+  generate_font.py 字集 = 数据 + 提取脚本化（**来源钉定 10-30 本机实证**：
+  /usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc【系统 fonts-noto-cjk
+  包】SC = face index 2、内部版本 2.004 CFF、SHA-256 b76b0433…690a
+  【全值见 kickoff_prompt.md】记入脚本、提取前验哈希不匹配点名拒、本机
+  缺文件 = 钉定来源取 + 再验）+ 既有 33 字逐位自校验先行 + font.png 尾部
   append 免重锚【先例 effects.png 128→160→176 / CRAFT-4 死格 127】+
   工具只写 assets/.py、font.hpp 片段人工粘贴 = 不碰 src 范式；运行期
   仅 font.hpp 表 + 尺寸常量；门 = 结构性免疫【既有 UI 字集 ⊆ 旧 33 字
