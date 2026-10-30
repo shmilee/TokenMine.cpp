@@ -847,6 +847,12 @@ void Game::breakBlock(const BlockHit& hit) {
     // Relight the region around the change (a broken occluder lets light
     // in; the broken cell stops blocking).
     Lighting::updateLocal(m_world, m_blocks, hit.block);
+    // UX-7: the tutorial break event (the block the break COMPLETED on —
+    // the data-driven name, chance drops irrelevant: the goal counts the
+    // block, not the drop). Frame-locked: breakBlock only runs from the
+    // hold-to-break completion / the instant-break path inside the update
+    // frame.
+    emitTutorialEvent("break." + m_blocks.at(id).name, 1);
 
     // Drops are data-driven: `properties.drops` names an item (validated
     // against the ItemRegistry at init). The item spawns at the block
@@ -1005,6 +1011,9 @@ void Game::placeBlock() {
     // Placing consumes one from the selected stack (the inventory is the
     // source of blocks — no more infinite placement).
     m_inventory.take(m_selectedSlot, 1);
+    // UX-7: the tutorial place event (the block that was PLACED — the
+    // success point: setBlock committed + the item consumed).
+    emitTutorialEvent("place." + m_blocks.at(item.block).name, 1);
     // CRAFT-3: the PLACED block's material timbre at the new cell's
     // center (no material = the generic "place").
     m_sound.play(
@@ -1366,6 +1375,11 @@ void Game::updateEatChannel(double dt) {
             }
             syncAbsorption(); // Phase 72: the pool takes the new total
             m_sound.play("eat");
+            // UX-7: the tutorial eat event (the frame the eat channel
+            // FULLY COMPLETES — the hunger-grant point). The drink
+            // completion (the else branch) does NOT emit (the brief's
+            // documented deviation — a drink is not an eat).
+            emitTutorialEvent("eat", 1);
         } else {
             if (!item.returnsItem.empty()) {
                 m_inventory.add(m_items.idForName(item.returnsItem), 1,

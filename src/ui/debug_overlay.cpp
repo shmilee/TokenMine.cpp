@@ -84,6 +84,12 @@ std::vector<std::string> debugOverlayLines(const DebugInfo& info) {
         info.stats.empty()
             ? std::string("stats (none)")
             : fmt("stats %s", joinStats(info.stats).c_str()),
+        // UX-7: the tutorial line (the F3 stays English): "off" when
+        // disabled, "done" when finished/skipped, "<id> p/c" in progress,
+        // "(none)" for a unit-test DebugInfo with no data filled.
+        info.tutorial.empty()
+            ? std::string("tutorial (none)")
+            : fmt("tutorial %s", info.tutorial.c_str()),
     };
 }
 

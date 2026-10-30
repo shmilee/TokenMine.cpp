@@ -56,6 +56,11 @@ struct DebugInfo {
     // kill.<name>, key-ordered; m_stats holds non-zero entries only) or
     // empty when the player has none.
     std::map<std::string, std::uint64_t> stats;
+    // UX-7: the tutorial line's data — "off" (disabled), "done"
+    // (finished or skipped), or "<id> <progress>/<count>" (in progress);
+    // empty renders the baseline "(none)" (a unit-test DebugInfo with
+    // no tutorial filled).
+    std::string tutorial;
 };
 
 // PRE-12 (the SURV-6 display boundary): the amplifier roman numeral for

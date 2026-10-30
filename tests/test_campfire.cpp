@@ -301,8 +301,8 @@ TEST(CampfireSaveTest, FormatIsThirteenAndRoundTrips) {
     s.campfires.push_back({BlockPos {4, 53, 4}, unlit});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // SURV-7: writes are always format 22 (SURV-6 was format 20).
-    EXPECT_EQ(j->find("format")->asInt(), 22);
+    // UX-7: writes are always format 23 (SAVE-2 was 22).
+    EXPECT_EQ(j->find("format")->asInt(), 23);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->campfires.size(), 3u);
@@ -331,6 +331,7 @@ TEST(CampfireSaveTest, FormatTwelveOldShapeMigratesToSlotZero) {
     root["format"] = Json(12);
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial"); // UX-7: the tutorial key is format 23
     root = withoutKey(root, "tables"); // CRAFT-1: format 12 predates the per-block table grids
     root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 12 still carried the global table grid
     root = withoutKey(root, "states"); // format 12 predates per-block state
@@ -373,6 +374,7 @@ TEST(CampfireSaveTest, FormatTwelveEntryWithSlotsKeyRejected) {
     root["format"] = Json(12);
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial"); // UX-7: the tutorial key is format 23
     root = withoutKey(root, "tables"); // CRAFT-1: the "slots" lie is the one under test
     root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 12 still carried the global table grid
     root = withoutKey(root, "states"); // format 12 predates per-block state
@@ -428,6 +430,7 @@ TEST(CampfireSaveTest, FormatTenLoadsWithoutCampfires) {
     root["format"] = Json(10);
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial"); // UX-7: the tutorial key is format 23
     root = withoutKey(root, "tables"); // CRAFT-1: format 10 predates the per-block table grids
     root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 10 still carried the global table grid
     root = withoutKey(root, "campfires"); // format 10 predates the campfire
@@ -453,6 +456,7 @@ TEST(CampfireSaveTest, FormatTenCampfireEditMigratesEmpty) {
     root["format"] = Json(10);
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial"); // UX-7: the tutorial key is format 23
     root = withoutKey(root, "tables"); // CRAFT-1: format 10 predates the per-block table grids
     root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 10 still carried the global table grid
     root = withoutKey(root, "campfires"); // format 10 predates the campfire
@@ -481,6 +485,7 @@ TEST(CampfireSaveTest, RejectsCampfiresFieldInFormatTen) {
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: the rejection under test is "campfires"
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the rejection under test is "campfires"
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial"); // UX-7: the tutorial key is format 23
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("format 11"), std::string::npos)

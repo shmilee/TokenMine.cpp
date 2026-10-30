@@ -36,10 +36,10 @@ TEST(DebugOverlayTest, LinesFormat) {
     info.maxHunger = 20.0;
     info.difficulty = "hard";
     const auto lines = debugOverlayLines(info);
-    ASSERT_EQ(lines.size(), 15u);
+    ASSERT_EQ(lines.size(), 16u);
     // Pinned literal (deliberately NOT the TM_VERSION macro): a version
     // bump must force a conscious update of this pin.
-    EXPECT_EQ(lines[0], "TokenMine.cpp v1.40.0");
+    EXPECT_EQ(lines[0], "TokenMine.cpp v1.41.0");
     EXPECT_EQ(lines[1], "60 FPS | frame 1234");
     EXPECT_EQ(lines[2], "chunks 2312 | draws 45 | verts 987654");
     EXPECT_EQ(lines[3], "pos 0.50, 54.00, -34.70  yaw 0.00  pitch -0.25");
@@ -59,6 +59,9 @@ TEST(DebugOverlayTest, LinesFormat) {
     // PRE-12 (the SURV-7 display boundary): no stats -> the baseline
     // "(none)" line.
     EXPECT_EQ(lines[14], "stats (none)");
+    // UX-7: the tutorial line — a unit-test DebugInfo with no tutorial
+    // data renders the baseline "(none)".
+    EXPECT_EQ(lines[15], "tutorial (none)");
 }
 
 TEST(DebugOverlayTest, HeldItemLineWithDurability) {
@@ -81,7 +84,7 @@ TEST(DebugOverlayTest, ActiveEffectsLine) {
     info.effects = "poison I 12.3s; resistance II 4.5s";
     const auto lines = debugOverlayLines(info);
     EXPECT_EQ(lines[13], "effects poison I 12.3s; resistance II 4.5s");
-    EXPECT_EQ(lines.back(), "stats (none)");
+    EXPECT_EQ(lines[14], "stats (none)");
 }
 
 TEST(DebugOverlayTest, StatsLine) {
@@ -94,12 +97,12 @@ TEST(DebugOverlayTest, StatsLine) {
         {"kill.sheep", 2},
     };
     const auto lines = debugOverlayLines(info);
-    EXPECT_EQ(lines.back(),
+    EXPECT_EQ(lines[14],
               "stats deathCount 1 | kill.chicken 3 | kill.sheep 2");
     // A single entry has no separator.
     DebugInfo one;
     one.stats = {{"kill.spider", 7}};
-    EXPECT_EQ(debugOverlayLines(one).back(), "stats kill.spider 7");
+    EXPECT_EQ(debugOverlayLines(one)[14], "stats kill.spider 7");
 }
 
 TEST(DebugOverlayTest, EffectTierRoman) {

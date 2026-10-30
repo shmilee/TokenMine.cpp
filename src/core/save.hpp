@@ -18,7 +18,10 @@
 //               "hunger": 20.0,              // format 4+ (older: full)
 //               "saturation": 6.0,           // format 5+ (older: 0)
 //               "effects": [                 // format 8+ (older: none)
-//                 { "name": "poison", "remaining": 12.5 } ] },
+//                 { "name": "poison", "remaining": 12.5 } ],
+//               "tutorial": {} }              // format 23+ (older: none;
+//                                             // {} = done/skipped,
+//                                             // {id, count} = in progress)
 //   "inventory": {
 //     "selected": 0,
 //     "slots": [ { "item": "stone", "count": 64 }, { "item": "", "count": 0 } ]
@@ -76,6 +79,7 @@
 #include "core/json.hpp"
 #include "core/math/vec3.hpp"
 #include "core/status_effect.hpp"
+#include "core/tutorial.hpp"
 #include "item/campfire.hpp"
 #include "item/crafting_grid.hpp"
 #include "item/furnace.hpp"
@@ -286,9 +290,22 @@ namespace mc {
 //      pattern). Format 22 (SAVE-2): player.velocity (3 numbers,
 //      always written — a format-22 file REQUIREs the key; pre-22
 //      files load with the velocity zeroed = the legacy
-//      restorePosition behavior, value-faithful). Writes are always
-//      format 22.
-inline constexpr int kSaveFormat = 22;
+//      restorePosition behavior, value-faithful).
+//  23: the UX-7 tutorial progress — a "player.tutorial" OBJECT,
+//      ALWAYS written (an empty object is valid — the armor/tables
+//      key discipline): {} when the tutorial is done or skipped,
+//      { "id": <step id>, "count": <progress> } while in progress.
+//      The step id is the CURRENT data's vocabulary (the data is
+//      content, the save is state): an id no longer in the data
+//      RESETS the tutorial to its first step at game load (an info
+//      log, not a failure — the kickoff decision), and a progress
+//      at/above the referenced step's count is corruption (named
+//      rejection — a completed step must have advanced). Pre-23
+//      files load FRESH (the system did not exist — the
+//      velocity-zeroed migration twin); carrying the key on a pre-23
+//      file is a version lie (the format-dependent player-field
+//      whitelist). Writes are always format 23.
+inline constexpr int kSaveFormat = 23;
 // SAVE-2: the bound a saved player velocity component must respect
 // (corrupt-file naming, the oxygen [0,150] precedent). The game's own
 // speeds stay far below it (terminal fall 38, jump 8.5, sprint ~5.8,
@@ -549,6 +566,19 @@ struct SaveGame {
     // non-zero entries at the game level). Empty for format-20 and
     // older loads (the system did not exist).
     std::map<std::string, std::uint64_t> playerStats;
+    // The player's tutorial progress (format 23; UX-7). ALWAYS written
+    // (an empty object when done/skipped — the armor/tables key
+    // discipline): { "id": <step id>, "count": <progress> } in
+    // progress. Absent = the file predates format 23 (the system did
+    // not exist — the game loads a fresh start). The id's existence in
+    // the CURRENT data + the count's bound against the step's count are
+    // cross-checked at GAME load (tutorialRestore — the tutorial data
+    // is not a parseSave parameter, the validateStats pattern).
+    // collectSave always fills Done or InProgress; a hand-rolled
+    // SaveGame's Absent serializes as the Done shape ({}).
+    TutorialSaveState tutorial = TutorialSaveState::Absent;
+    std::string tutorialId;
+    int tutorialProgress = 0;
     // The player's armor (SURV-1, format 16): the equipped piece NAME
     // per slot — index = the kArmorSlotNames slot (0 head, 1 chest, 2
     // legs, 3 feet), "" = empty. The count is never stored: it is 1 by

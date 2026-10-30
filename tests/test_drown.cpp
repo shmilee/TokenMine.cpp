@@ -399,6 +399,7 @@ TEST(DrownSaveTest, Format16RejectsTheOxygenKey) {
         root["format"] = Json(16); // the "oxygen" key stays -> rejected
         root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the oxygen lie is the rejection under test
         root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+        root["player"] = withoutKey(root["player"], "tutorial"); // UX-7: the tutorial key is format 23
         auto bad = parseSave(root, f.items, f.blocks, f.effects, 42);
         ASSERT_FALSE(bad.ok());
         EXPECT_NE(bad.error().message.find("player.oxygen"),
@@ -413,6 +414,7 @@ TEST(DrownSaveTest, Format16RejectsTheOxygenKey) {
         root["format"] = Json(16);
         root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
         root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+        root["player"] = withoutKey(root["player"], "tutorial"); // UX-7: the tutorial key is format 23
         root = withoutKey(root, "tables"); // CRAFT-1: format 16 predates the per-block table grids
         root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 16 still carried the global table grid
         root["player"] = withoutKey(root["player"], "oxygen");
@@ -435,6 +437,7 @@ TEST(DrownSaveTest, Format15MigratesFullAir) {
     root["format"] = Json(15);
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial"); // UX-7: the tutorial key is format 23
     root = withoutKey(root, "tables"); // CRAFT-1: format 15 predates the per-block table grids
     root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 15 still carried the global table grid
     root["player"] = withoutKey(root["player"], "oxygen");

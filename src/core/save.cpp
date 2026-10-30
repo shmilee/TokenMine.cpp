@@ -778,6 +778,19 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     if (save.playerOxygen >= 0) {
         player["oxygen"] = Json(save.playerOxygen);
     }
+    // UX-7 (format 23): the player's tutorial progress — ALWAYS written
+    // (a format-23 file REQUIRES the key; an empty object = done/skipped
+    // — the armor/tables key discipline). In progress = the current
+    // step's id + its progress count; a hand-rolled Absent (the game's
+    // collectSave never emits one) normalizes to the Done shape.
+    {
+        Json tut = Json::object();
+        if (save.tutorial == TutorialSaveState::InProgress) {
+            tut["id"] = Json(save.tutorialId);
+            tut["count"] = Json(save.tutorialProgress);
+        }
+        player["tutorial"] = std::move(tut);
+    }
     root["player"] = player;
 
     Json slots = Json::array();
@@ -1116,6 +1129,11 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // below).
     if (fmt->asInt() >= 22) {
         playerFields.insert("velocity");
+    }
+    // UX-7: "tutorial" is format-23-and-newer vocabulary — a pre-23
+    // file carrying it is a version lie (the whitelist naming above).
+    if (fmt->asInt() >= 23) {
+        playerFields.insert("tutorial");
     }
     MC_TRY(rejectUnknownFields(*player, playerFields, "save 'player'"));
     const Json* ppos = player->find("pos");
@@ -1471,6 +1489,56 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         return MC_FAIL("save 'player.oxygen' requires format 17 or newer "
                        "(got " +
                        std::to_string(def.find("format")->asInt()) + ")");
+    }
+    // UX-7 (format 23): the player's tutorial progress. REQUIRED for a
+    // format-23 file (a missing key is a version lie — the oxygen /
+    // velocity key discipline); an EMPTY object is valid (done/skipped).
+    // In progress = EXACTLY {id, count}: a non-empty string id, a whole
+    // number >= 0 count. The id's existence in the current tutorial
+    // data + the count's bound against the step's count are cross-
+    // checked at GAME load (tutorialRestore — the data is not a
+    // parseSave parameter, the validateStats pattern). Pre-23 files
+    // load FRESH (the system did not exist — save.tutorial stays
+    // Absent; the "tutorial" key on one was rejected above by the
+    // format-dependent whitelist).
+    if (fmt->asInt() >= 23) {
+        const Json* tut = player->find("tutorial");
+        if (tut == nullptr || !tut->isObject()) {
+            return MC_FAIL("save format 23 requires a 'player.tutorial' "
+                           "object (an empty object when the tutorial "
+                           "was done or skipped)");
+        }
+        if (tut->members().empty()) {
+            save.tutorial = TutorialSaveState::Done;
+        } else {
+            const std::set<std::string> tutFields {"id", "count"};
+            MC_TRY(rejectUnknownFields(*tut, tutFields,
+                                       "save 'player.tutorial'"));
+            const Json* tid = tut->find("id");
+            if (tid == nullptr || !tid->isString() ||
+                tid->asString().empty()) {
+                return MC_FAIL("save 'player.tutorial' (non-empty) "
+                               "requires a non-empty string 'id' (the "
+                               "current step)");
+            }
+            const Json* tcount = tut->find("count");
+            if (tcount == nullptr) {
+                return MC_FAIL("save 'player.tutorial' (non-empty) "
+                               "requires 'count' (the step's progress, a "
+                               "whole number >= 0)");
+            }
+            double td = 0.0;
+            if (!isInt(*tcount, &td) || td < 0.0) {
+                return MC_FAIL("save 'player.tutorial' 'count' must be a "
+                               "whole number >= 0, got " +
+                               (tcount->isNumber()
+                                    ? std::to_string(tcount->asDouble())
+                                    : "a non-number"));
+            }
+            save.tutorial = TutorialSaveState::InProgress;
+            save.tutorialId = tid->asString();
+            save.tutorialProgress = static_cast<int>(td);
+        }
     }
 
     // -- inventory ---------------------------------------------------------------

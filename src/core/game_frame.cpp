@@ -114,6 +114,18 @@ void Game::update(double dt) {
     // headless runs byte-reproducible.
     m_dayCycle.update(kDayStepPerFrame);
 
+    // UX-7: the tutorial completion-toast countdown (the frame-locked
+    // class — the kTutorialToastFrames window armed by the done flip
+    // in emitTutorialEvent or the T skip, decremented once per frame;
+    // the render draws while > 0). The decrement runs BEFORE this
+    // frame's interaction events, so a toast armed by an event later in
+    // this same update still draws this frame (120 frames total).
+    // A no-input run never arms it (zero events — the structural
+    // immunity).
+    if (m_tutorialToastFrames > 0) {
+        --m_tutorialToastFrames;
+    }
+
     // Furnaces (Phase 40, per-block Phase 44): one fixed 1/60 substep per
     // frame, per state (the day-cycle class — integer substep counters,
     // byte-reproducible). std::map iteration is position-sorted: the tick
@@ -358,7 +370,31 @@ void Game::update(double dt) {
     // Paused while the inventory is open (Phase 15) or the player is dead
     // (Phase 16: the death screen freezes the body; R respawns).
     if (!panelOpen() && !m_player->isDead()) {
+        // UX-7: the tutorial walk / jump events — pure comparisons of
+        // the player's own state across this frame's update (frame-
+        // locked, no real-dt, hard rule 8):
+        //   - walk: the frame-boundary HORIZONTAL displacement (the
+        //     ENT-1 swing's move rule: x or z strictly differs between
+        //     frames — one event per moved frame at most);
+        //   - jump: the JUMP IMPULSE GRANT frame — the velocity's rise
+        //     out of a grounded, non-fluid frame (the on-ground Space
+        //     branch sets velocity.y = jumpSpeed; the in-fluid Space is
+        //     the swim-up, not a jump — the inWater/inLava tick-state
+        //     gate; a knockback lift applied BEFORE the player update
+        //     is already in the baseline, so it never fakes a rise).
+        const Vec3 tutPosBefore = m_player->position();
+        const float tutVyBefore = m_player->velocity().y;
+        const bool tutGroundedBefore = m_player->onGround();
         m_player->update(dt, m_input, m_window.relativeMouseMode());
+        const Vec3 tutPosAfter = m_player->position();
+        if (tutPosAfter.x != tutPosBefore.x ||
+            tutPosAfter.z != tutPosBefore.z) {
+            emitTutorialEvent("walk", 1);
+        }
+        if (tutGroundedBefore && m_player->velocity().y > tutVyBefore &&
+            !m_player->inWater() && !m_player->inLava()) {
+            emitTutorialEvent("jump", 1);
+        }
     }
     // UX-4: first person keeps the legacy assignment bit-exactly (the
     // camera is the eye). Third person orbits kThirdPersonDistance BEHIND
@@ -823,6 +859,29 @@ void Game::updateAmbience() {
     // play() a silent no-op — the log line still fires.
     m_sound.play(name);
     MC_LOG_INFO(std::string("Ambience: ") + name);
+}
+
+void Game::emitTutorialEvent(const std::string& name, int n) {
+    // UX-7: the single tutorial-event choke point (the thin adapter —
+    // the state machine's logic is unit-test-owned in core/tutorial).
+    // Gated: disabled or done = ZERO execution (no event ever fires
+    // without input — the no-input run's structural immunity — and a
+    // done/disabled tutorial never re-runs the machine, the skip key
+    // no-ops through this same gate).
+    if (!m_tutorialEnabled || m_tutorial.done) {
+        return;
+    }
+    m_tutorial = tutorialApply(m_tutorial, name, n, m_tutorialSteps);
+    if (m_tutorial.done) {
+        // The completion flip (this event completed the last step):
+        // arm the toast window + the one-shot info log (the E2E
+        // evidence — the PRE-4 ambience-log pattern: frame-locked event
+        // sequence in the log, audio outside the frame state).
+        m_tutorialToastFrames = kTutorialToastFrames;
+        const int total = static_cast<int>(m_tutorialSteps.size());
+        MC_LOG_INFO("Tutorial: completed (step " + std::to_string(total) +
+                    "/" + std::to_string(total) + ")");
+    }
 }
 
 } // namespace mc

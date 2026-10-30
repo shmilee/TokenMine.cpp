@@ -59,6 +59,8 @@ TEST(InputTest, AllMappedKeys) {
         {SDLK_R, GameKey::R},
         // UX-4: the camera toggle.
         {SDLK_C, GameKey::C},
+        // UX-7: the tutorial skip.
+        {SDLK_T, GameKey::T},
         // CRAFT-7: the top-row digits (hotbar selection) and the right
         // shift (it drives the shift-click quick-move, mapped onto the
         // left one).

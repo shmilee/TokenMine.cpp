@@ -27,6 +27,9 @@ std::optional<GameKey> Input::mapKey(std::uint32_t sdlKeycode) {
         // UX-4: the camera toggle (Minecraft's modern camera key; F5 is
         // the manual save in this project).
         case SDLK_C: return GameKey::C;
+        // UX-7: the tutorial skip (locked pointer only, the C-key
+        // pattern). T is otherwise unused in the input layer.
+        case SDLK_T: return GameKey::T;
         // CRAFT-7: the top-row digits (the numpad digits are left
         // unmapped — Minecraft binds the top row).
         case SDLK_1: return GameKey::Digit1;

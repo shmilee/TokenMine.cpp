@@ -654,6 +654,37 @@ Result<void> Game::buildScene() {
         }
     }
 
+    // -- tutorial (UX-7): the beginner guide data --------------------------
+    // data/tutorials/beginner.json — the step list (each step {id, text,
+    // goal, count}, the closed goal vocabulary strict-parsed). The goal
+    // name halves are cross-checked against the registries HERE (the
+    // grows_to precedent — the parse owns the grammar, init owns the
+    // existence, the registry-order first failure names the step + the
+    // missing name). Content lives in the JSON (hard rule 3): the core
+    // never switches on a step id. The enable flag is the render.fog
+    // getBool precedent (code default true; the committed config.json is
+    // untouched). The frame-locked state machine (core/tutorial) + the
+    // format-23 save segment + the HUD target line / toast / T skip are
+    // the rest of the feature; a no-input run emits zero events (the
+    // base gate's structural immunity).
+    auto tutorialText = m_assets.loadText("data/tutorials/beginner.json");
+    MC_TRY(tutorialText);
+    auto tutorialJson = Json::parse(*tutorialText);
+    MC_TRY(tutorialJson);
+    auto tutorialSteps = parseTutorial(*tutorialJson);
+    MC_TRY(tutorialSteps);
+    m_tutorialSteps = std::move(*tutorialSteps);
+    MC_TRY(validateTutorialGoals(m_tutorialSteps, m_items, m_blocks,
+                                 m_mobs.mobTypes));
+    // The enable flag (strict read — the SAVE-1 discipline: absent =
+    // the code default true, a non-boolean = named init failure; the
+    // Config getters' silent fallback is the trap): the committed
+    // config.json carries no tutorial section (the render.fog
+    // precedent).
+    auto tutorialEnabledRead = tutorialEnabled(m_config);
+    MC_TRY(tutorialEnabledRead);
+    m_tutorialEnabled = *tutorialEnabledRead;
+
     // -- status effects (Phase 46) ------------------------------------------
     // The data-driven effect definitions (data/effects/*.json) + the
     // cross-checks: a mob's on_hit_effect must name a registered effect

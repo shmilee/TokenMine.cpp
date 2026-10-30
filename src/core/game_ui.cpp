@@ -194,6 +194,18 @@ void Game::handleUiKeys() {
                            ? CameraMode::ThirdBack
                            : CameraMode::First;
     }
+    // UX-7: T skips the tutorial (locked pointer only — the C-key
+    // pattern: a free cursor / panel / death screen never touches it).
+    // Gated on enabled ∧ !done (the brief's rules: disabled = the key is
+    // a no-op; a finished tutorial cannot be re-skipped) — T not pressed
+    // = zero execution. The flip arms the SAME completion toast and the
+    // one-shot info log (the E2E evidence, the PRE-4 pattern).
+    if (m_input.wasPressed(GameKey::T) && m_window.relativeMouseMode() &&
+        m_tutorialEnabled && !m_tutorial.done) {
+        m_tutorial.done = true;
+        m_tutorialToastFrames = kTutorialToastFrames;
+        MC_LOG_INFO("Tutorial: skipped");
+    }
     if (m_input.wasPressed(GameKey::E)) {
         if (panelOpen()) {
             closePanel();
@@ -229,6 +241,11 @@ void Game::openFurnacePanel(const BlockPos& pos) {
     m_panel.openFurnacePos = pos;
     m_panel.furnaceUi.bind(furnaceAt(pos));
     openPanel(OpenPanel::Furnace);
+    // UX-7: the tutorial interact event (the panel-open success point —
+    // the block under the click, the data-driven name).
+    emitTutorialEvent(
+        "interact." +
+            m_blocks.at(m_world.getBlock(pos.x, pos.y, pos.z)).name, 1);
 }
 
 FurnaceState& Game::furnaceAt(const BlockPos& pos) {
@@ -248,6 +265,11 @@ FurnaceState& Game::furnaceAt(const BlockPos& pos) {
 void Game::openTablePanel(const BlockPos& pos) {
     m_panel.tableUi.bind(tableAt(pos));
     openPanel(OpenPanel::Table);
+    // UX-7: the tutorial interact event (the panel-open success point —
+    // the block under the click, the data-driven name).
+    emitTutorialEvent(
+        "interact." +
+            m_blocks.at(m_world.getBlock(pos.x, pos.y, pos.z)).name, 1);
 }
 
 CraftingGrid& Game::tableAt(const BlockPos& pos) {
@@ -290,6 +312,9 @@ void Game::tryCampfireCook(const BlockPos& pos) {
             setBlock(pos.x, pos.y, pos.z, toId);
             Lighting::updateLocal(m_world, m_blocks, pos);
             m_sound.play("ignite");
+            // UX-7: the tutorial interact event (the relight completed —
+            // the block the click turned into, the data-driven name).
+            emitTutorialEvent("interact." + m_blocks.at(toId).name, 1);
         }
         return;
     }
@@ -312,6 +337,14 @@ void Game::tryCampfireCook(const BlockPos& pos) {
                     st.progressSubsteps[i] = 0;
                     m_inventory.take(m_selectedSlot, 1);
                     m_sound.play("place");
+                    // UX-7: the tutorial interact event (a unit was
+                    // placed on the fire — the block under the click).
+                    emitTutorialEvent(
+                        "interact." +
+                            m_blocks.at(m_world.getBlock(pos.x, pos.y,
+                                                         pos.z))
+                                .name,
+                        1);
                     break;
                 }
             }
@@ -329,6 +362,12 @@ void Game::tryCampfireCook(const BlockPos& pos) {
             st.slots[i] = ItemStack {};
             st.progressSubsteps[i] = 0;
             m_sound.play("pickup");
+            // UX-7: the tutorial interact event (a unit was taken back —
+            // the block under the click, lit or extinguished).
+            emitTutorialEvent(
+                "interact." +
+                    m_blocks.at(m_world.getBlock(pos.x, pos.y, pos.z)).name,
+                1);
             break;
         }
     }
@@ -476,8 +515,20 @@ void Game::handlePanelClicks() {
         } else if (gridSlot < 0 && !onOutput && isDoubleClick(slot)) {
             ui.doubleCollect(slot);
         } else {
+            // UX-7: the tutorial craft event — the RECIPE branch only
+            // (a UX-5 repair completion ALSO plays the "craft" sound
+            // but crafts nothing — the pre-click match's recipe pointer
+            // is the branch discriminator; the grid is consumed on a
+            // successful click, so the match must be read BEFORE it).
+            const GridMatch tutMatch = onOutput ? ui.match() : GridMatch {};
             if (ui.leftClick(slot, gridSlot, onOutput)) {
                 m_sound.play("craft");
+                if (tutMatch.recipe != nullptr) {
+                    emitTutorialEvent(
+                        "craft." +
+                            m_items.at(tutMatch.recipe->output).name,
+                        1);
+                }
             }
         }
         if (gridSlot < 0 && !onOutput && !shift) {
@@ -491,8 +542,18 @@ void Game::handlePanelClicks() {
         if (shift) {
             ui.quickMove(slot, gridSlot, onOutput);
         } else {
+            // UX-7: the recipe-branch discriminator (the pre-click match,
+            // the left-click branch's twin — a repair completion does not
+            // emit).
+            const GridMatch tutMatch = onOutput ? ui.match() : GridMatch {};
             if (ui.rightClick(slot, gridSlot, onOutput)) {
                 m_sound.play("craft");
+                if (tutMatch.recipe != nullptr) {
+                    emitTutorialEvent(
+                        "craft." +
+                            m_items.at(tutMatch.recipe->output).name,
+                        1);
+                }
             }
         }
         disarmDoubleClick();
@@ -1021,6 +1082,38 @@ void Game::renderUi() {
         const float heldX = static_cast<float>(w - kHeldIconOffset);
         const float heldY = static_cast<float>(h - kHeldIconOffset);
         drawIcon(m_inventory.at(m_selectedSlot), heldX, heldY, kHeldIconPx);
+        // UX-7: the tutorial target line (centered, one row above the
+        // heart row — the effect row / armor row push it up a tier when
+        // active, the PRE-10 stacked-rows discipline) + the completion
+        // toast (the same slot, the kTutorialToastFrames window armed
+        // by the done flip / the T skip). Gated: enabled ∧ !dead ∧ (in
+        // progress ∨ toast armed) — the death screen releases the
+        // pointer, so the locked segment (hence this line) is free of
+        // the dead case anyway; the explicit !isDead is the brief's
+        // HUD discipline. A no-input run is pointer-free, so nothing
+        // here ever draws (structural immunity — the base gate).
+        // kText (the primary HUD text color, the death-hint precedent):
+        // the target is the primary guidance line; kTextDim (0.55) was
+        // too faint against bright terrain for a first-time player.
+        if (m_tutorialEnabled && !m_player->isDead() &&
+            (!m_tutorial.done || m_tutorialToastFrames > 0)) {
+            const int hy = y0 - kUiIconPx - kUiStripGap; // heart row top
+            bool hasArmor = false;
+            for (int slot = 0; slot < kArmorSlotCount && !hasArmor; ++slot) {
+                hasArmor = !m_player->armorSlot(slot).empty();
+            }
+            const int topRow =
+                hasArmor ? 2 : (m_playerEffects.count() > 0 ? 1 : 0);
+            const int tutY =
+                hy - topRow * (kUiIconPx + kUiStripGap) - kUiStripGap -
+                kGlyphSize;
+            const std::string line =
+                m_tutorial.done
+                    ? std::string(kTutorialDoneText)
+                    : tutorialTargetLine(m_tutorial, m_tutorialSteps);
+            addText(line, (w - static_cast<int>(textWidth(line))) / 2, tutY,
+                    1.0, kText);
+        }
     }
 
     // -- death screen (Phase 16, while the player is dead) ------------------
@@ -1476,6 +1569,24 @@ void Game::renderUi() {
         // (deathCount + kill.<name>; the map holds non-zero entries in
         // key order).
         info.stats = m_stats;
+        // UX-7: the tutorial line (the F3 stays English — the developer-
+        // tool discipline): "off" when disabled, "done" when finished or
+        // skipped, "<id> <progress>/<count>" while in progress.
+        if (!m_tutorialEnabled) {
+            info.tutorial = "off";
+        } else if (m_tutorial.done) {
+            info.tutorial = "done";
+        } else if (!m_tutorialSteps.empty() &&
+                   m_tutorial.stepIndex >= 0 &&
+                   m_tutorial.stepIndex <
+                       static_cast<int>(m_tutorialSteps.size())) {
+            const TutorialStep& s =
+                m_tutorialSteps[static_cast<std::size_t>(m_tutorial.stepIndex)];
+            char buf[96];
+            std::snprintf(buf, sizeof(buf), "%s %d/%d", s.id.c_str(),
+                          m_tutorial.progress, s.count);
+            info.tutorial = buf;
+        }
         int y = kF3Margin;
         for (const std::string& line : debugOverlayLines(info)) {
             addText(line, kF3Margin, y, 1, kText);

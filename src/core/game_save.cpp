@@ -190,6 +190,22 @@ Result<SaveGame> Game::collectSave() const {
     // game's counter map IS the save's (name-sorted by construction;
     // zero counters are absent from the map).
     save.playerStats = m_stats;
+    // UX-7 (format 23): the player's tutorial progress — ALWAYS carried
+    // (an empty object when done/skipped — the key discipline; the
+    // disabled tutorial carries its untouched initial state {first step,
+    // 0}, the brief's decision for a uniform key). The step id comes
+    // from the CURRENT data (the machine's index is data-order — the
+    // validateTutorialGoals cross-check made the ids stable within a
+    // run; a save outlives data edits through the load-time reset).
+    if (m_tutorial.done) {
+        save.tutorial = TutorialSaveState::Done;
+    } else {
+        save.tutorial = TutorialSaveState::InProgress;
+        save.tutorialId =
+            m_tutorialSteps
+                [static_cast<std::size_t>(m_tutorial.stepIndex)].id;
+        save.tutorialProgress = m_tutorial.progress;
+    }
     for (const std::unique_ptr<Entity>& e : m_entities) {
         // Persisted entities are ItemEntities. Mobs (Phase 20) and arrows
         // (Phase 21) are EPHEMERAL by design — the save format expresses
@@ -519,6 +535,28 @@ Result<void> Game::applySave(const SaveGame& save) {
     m_drown.oxygen =
         save.playerOxygen < 0 ? kOxygenMax : save.playerOxygen;
     m_drown.drownTicks = 0;
+    // 4h) The player's tutorial progress (format 23; UX-7). The pure
+    // restore (tutorialRestore) owns the cross-checks: the id must name
+    // a step of the CURRENT data (else: reset to the first step — the
+    // data is content, the save is state; the kickoff decision: an info
+    // log, NOT a load failure), and the progress must sit strictly
+    // below the step's count (a completed step would have advanced —
+    // corruption, named rejection). Pre-23 loads migrate to FRESH (the
+    // system did not exist). A loaded done/skipped state does NOT arm
+    // the toast (the toast is a live-session presentation — it belongs
+    // to the completion frame, the camera-mode session-state class):
+    // m_tutorialToastFrames stays 0.
+    bool tutReset = false;
+    auto tutState = tutorialRestore(save.tutorial, save.tutorialId,
+                                    save.tutorialProgress, m_tutorialSteps,
+                                    &tutReset);
+    MC_TRY(tutState);
+    m_tutorial = *tutState;
+    if (tutReset) {
+        MC_LOG_INFO("Save tutorial step '" + save.tutorialId +
+                    "' is not in the current tutorial data — resetting "
+                    "to the first step");
+    }
     // 5) Dropped items (with their lifetime/pickup timers restored;
     // SURV-3: the stack's accumulated damage too).
     for (const SavedItemEntity& e : save.entities) {

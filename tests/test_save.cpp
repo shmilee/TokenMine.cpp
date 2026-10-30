@@ -169,6 +169,11 @@ SaveGame makeSave(const Fixture& f) {
     s.playerAbsorption = 0.0f; // Phase 72 (no layer in the fixture)
     s.playerOxygen = kOxygenMax; // SURV-2 (no dive in the fixture)
     s.selectedSlot = 3;
+    // UX-7 (format 23): the tutorial progress — the fixture carries an
+    // IN-PROGRESS state (the round trip must preserve id + count).
+    s.tutorial = TutorialSaveState::InProgress;
+    s.tutorialId = "chop";
+    s.tutorialProgress = 2;
     s.slots.resize(Inventory::kTotalSize);
     s.slots[0] = ItemStack {f.items.idForName("stone"), 64};
     s.slots[1] = ItemStack {f.items.idForName("dirt"), 7};
@@ -249,6 +254,13 @@ TEST(SaveRoundTripTest, SerializeParsePreservesEverything) {
     EXPECT_FLOAT_EQ(out->playerYaw, in.playerYaw);
     EXPECT_FLOAT_EQ(out->playerPitch, in.playerPitch);
     EXPECT_EQ(out->selectedSlot, in.selectedSlot);
+    // UX-7 (format 23): the tutorial progress (the in-progress shape's
+    // id + count round-trip exactly).
+    EXPECT_EQ(out->tutorial, in.tutorial);
+    if (in.tutorial == TutorialSaveState::InProgress) {
+        EXPECT_EQ(out->tutorialId, in.tutorialId);
+        EXPECT_EQ(out->tutorialProgress, in.tutorialProgress);
+    }
     ASSERT_EQ(out->slots.size(), in.slots.size());
     for (std::size_t i = 0; i < out->slots.size(); ++i) {
         EXPECT_EQ(out->slots[i], in.slots[i]) << "slot " << i;
@@ -312,8 +324,8 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     s.tables.push_back(SavedTable {BlockPos {1, 53, 2}, table});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // SURV-7: writes are always format 22 (SURV-6 was format 20).
-    EXPECT_EQ(j->find("format")->asInt(), 22);
+    // UX-7: writes are always format 23 (SAVE-2 was format 22).
+    EXPECT_EQ(j->find("format")->asInt(), 23);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -356,6 +368,7 @@ TEST(SaveParseTest, FormatTwoLoadsWithEmptyGrids) {
     root["format"] = Json(2);
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial");
     root = withoutKey(root, "fires"); // format 2 predates the fire
     root = withoutKey(root, "tables"); // format 2 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 2 predates the campfire
@@ -480,6 +493,7 @@ TEST(SaveParseTest, FormatOneLoadsWithoutHealth) {
     root["format"] = Json(1);
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial");
     root = withoutKey(root, "fires"); // format 1 predates the fire
     root = withoutKey(root, "tables"); // format 1 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 1 predates the campfire
@@ -536,6 +550,7 @@ TEST(SaveParseTest, FormatThreeLoadsWithoutHunger) {
     root["format"] = Json(3);
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial");
     root = withoutKey(root, "fires"); // format 3 predates the fire
     root = withoutKey(root, "tables"); // format 3 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 3 predates the campfire
@@ -591,6 +606,7 @@ TEST(SaveParseTest, FormatFourLoadsWithoutSaturation) {
     root["format"] = Json(4);
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial");
     root = withoutKey(root, "fires"); // format 4 predates the fire
     root = withoutKey(root, "tables"); // format 4 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 4 predates the campfire
@@ -1014,6 +1030,7 @@ TEST(SaveParseTest, FluidEditKindRoundTripsAndMigrates) {
     root["format"] = Json(8);
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial");
     root = withoutKey(root, "fires"); // format 8 predates the fire
     root = withoutKey(root, "tables"); // format 8 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 8 predates the campfire
@@ -1332,6 +1349,7 @@ Json downgradeTablesToFormat18(const Json& root, const Json& tableGrid) {
     out["player"] = withoutKey(out["player"], "stats");
     // SAVE-2: format 18 predates the player's velocity.
     out["player"] = withoutKey(out["player"], "velocity");
+    out["player"] = withoutKey(out["player"], "tutorial");  // UX-7: the tutorial key is format 23 (the pre-23 version-lie twin)
     return out;
 }
 
@@ -1363,6 +1381,7 @@ Json downgradeToFormat14(const Json& root) {
     out["player"] = withoutKey(out["player"], "stats");
     // SAVE-2: format 14 predates the player's velocity.
     out["player"] = withoutKey(out["player"], "velocity");
+    out["player"] = withoutKey(out["player"], "tutorial");  // UX-7: the tutorial key is format 23 (the pre-23 version-lie twin)
     const Json* states = root.find("states");
     if (states == nullptr || !states->isArray()) {
         ADD_FAILURE() << "no 'states' array to downgrade";
@@ -1388,8 +1407,8 @@ TEST(SaveRoundTripTest, StatesRoundTrip) {
     SaveGame s = makeStateSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // SURV-7: writes are always format 22 (SURV-6 was format 20).
-    EXPECT_EQ(j->find("format")->asInt(), 22);
+    // UX-7: writes are always format 23 (SAVE-2 was format 22).
+    EXPECT_EQ(j->find("format")->asInt(), 23);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->states.size(), 1u);
@@ -1526,6 +1545,7 @@ TEST(SaveParseTest, Format13LoadsEmptyStates) {
     root["format"] = Json(13);
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial");
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->states.empty());
@@ -1669,8 +1689,8 @@ TEST(SaveRoundTripTest, FurnacesRoundTrip) {
     s.furnaces[0].state.fuelSubsteps = 1234;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // SURV-7: writes are always format 22 (SURV-6 was format 20).
-    EXPECT_EQ(j->find("format")->asInt(), 22);
+    // UX-7: writes are always format 23 (SAVE-2 was format 22).
+    EXPECT_EQ(j->find("format")->asInt(), 23);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
@@ -1711,6 +1731,7 @@ TEST(SaveParseTest, FormatFiveLoadsWithEmptyFurnaces) {
     root["format"] = Json(5);
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial");
     root = withoutKey(root, "fires"); // format 5 predates the fire
     root = withoutKey(root, "tables"); // format 5 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 5 predates the campfire
@@ -1745,6 +1766,7 @@ TEST(SaveParseTest, FormatSixMigratesStateToSoleFurnace) {
     root["format"] = Json(6);
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial");
     root = withoutKey(root, "fires"); // format 6 predates the fire
     root = withoutKey(root, "tables"); // format 6 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 6 predates the campfire
@@ -1782,6 +1804,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
     root["format"] = Json(6);
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial");
     root = withoutKey(root, "fires"); // format 6 predates the fire
     root = withoutKey(root, "tables"); // format 6 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 6 predates the campfire
@@ -1807,6 +1830,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
         root2["format"] = Json(6);
         root2["player"] = withoutKey(root2["player"], "stats"); // SURV-7: the stats key is format 21
         root2["player"] = withoutKey(root2["player"], "velocity"); // SAVE-2: the velocity key is format 22
+        root2["player"] = withoutKey(root2["player"], "tutorial");
         root2 = withoutKey(root2, "fires"); // format 6 predates the fire
         root2 = withoutKey(root2, "tables"); // format 6 predates the per-block table grids
         root2 = withoutKey(root2, "campfires"); // format 6 predates the campfire
@@ -2050,8 +2074,8 @@ TEST(SaveRoundTripTest, FiresRoundTrip) {
     SaveGame s = makeFireSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // SURV-7: writes are always format 22 (SURV-6 was format 20).
-    EXPECT_EQ(j->find("format")->asInt(), 22);
+    // UX-7: writes are always format 23 (SAVE-2 was format 22).
+    EXPECT_EQ(j->find("format")->asInt(), 23);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->fires.size(), 2u);
@@ -2085,6 +2109,7 @@ TEST(SaveParseTest, FormatNineLoadsWithoutFires) {
     root["format"] = Json(9);
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial");
     root = withoutKey(root, "fires"); // format 9 predates the fire
     root = withoutKey(root, "tables"); // format 9 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 9 predates the campfire
@@ -2111,6 +2136,7 @@ TEST(SaveParseTest, FormatNineFireEditMigratesEmpty) {
     root["format"] = Json(9);
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial");
     root = withoutKey(root, "fires"); // format 9 predates the fire
     root = withoutKey(root, "tables"); // format 9 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 9 predates the campfire
@@ -2260,6 +2286,7 @@ TEST(SaveFormat8Test, FormatSevenFileWithoutEffectsLoads) {
     // the original serialization above, which would re-add it).
     root["player"] = withoutKey(root["player"], "stats");
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial");
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->playerEffects.empty());
@@ -2387,6 +2414,7 @@ TEST(SaveFormat12Test, Format11RejectsTheAbsorptionKey) {
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: the absorption lie is the one under test
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the absorption lie is the one under test
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial");
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
     // The same file WITHOUT the key loads (the format-11 migration path;
     // the sentinel stays -1 for Game::applySave).
@@ -2397,6 +2425,7 @@ TEST(SaveFormat12Test, Format11RejectsTheAbsorptionKey) {
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: format below 17 predates the player's oxygen
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: format below 21 predates the player's stats
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial");
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerAbsorption, -1.0f);
@@ -2539,6 +2568,7 @@ TEST(SaveFormat16Test, Format15RejectsTheArmorKey) {
         root["format"] = Json(15); // the "armor" key stays -> rejected
         root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the armor lie is the rejection under test
         root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+        root["player"] = withoutKey(root["player"], "tutorial");
         auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
         ASSERT_FALSE(out.ok());
         EXPECT_NE(out.error().message.find("format 16 or newer"),
@@ -2550,6 +2580,7 @@ TEST(SaveFormat16Test, Format15RejectsTheArmorKey) {
         root["format"] = Json(15);
         root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
         root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+        root["player"] = withoutKey(root["player"], "tutorial");
         root = withoutKey(root, "tables"); // CRAFT-1: format 15 predates the per-block table grids
         root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 15 still carried the global table grid
         root["player"] = withoutKey(root["player"], "armor");
@@ -2625,8 +2656,8 @@ TEST(SaveRoundTripTest, TablesRoundTrip) {
     s.tables[0].grid.setSlot(8, ItemStack {f.items.idForName("stone"), 64});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // SURV-7: writes are always format 22.
-    EXPECT_EQ(j->find("format")->asInt(), 22);
+    // UX-7: writes are always format 23.
+    EXPECT_EQ(j->find("format")->asInt(), 23);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->tables.size(), 2u);
@@ -2695,6 +2726,7 @@ TEST(SaveParseTest, RejectsTablesFieldInFormat18) {
     root["table_grid"] = emptyTableGrid();
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the tables lie is the rejection under test
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
+    root["player"] = withoutKey(root["player"], "tutorial");
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("format 19 or newer"),
@@ -2935,7 +2967,7 @@ TEST(SaveFormat20Test, EffectTierRoundTrips) {
     s.playerEffects.push_back(SavedEffect {"resistance", 30.0, 1});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 22);
+    EXPECT_EQ(j->find("format")->asInt(), 23);
     const Json& entry = (*j)["player"]["effects"].at(0);
     ASSERT_NE(entry.find("tier"), nullptr);
     EXPECT_EQ(entry.find("tier")->asInt(), 1);
@@ -3028,6 +3060,7 @@ TEST(SaveFormat20Test, Pre20FileLoadsAsTierZero) {
     (*j)["player"] = withoutKey((*j)["player"], "stats");
     // SAVE-2: format 19 predates the player's velocity.
     (*j)["player"] = withoutKey((*j)["player"], "velocity");
+    (*j)["player"] = withoutKey((*j)["player"], "tutorial");  // UX-7: the tutorial key is format 23 (the pre-23 version-lie twin)
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     for (const SavedEffect& e : out->playerEffects) {
@@ -3095,7 +3128,7 @@ TEST(SaveFormat21Test, StatsRoundTrips) {
     s.playerStats["kill.zombie"] = 5;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 22);
+    EXPECT_EQ(j->find("format")->asInt(), 23);
     const Json& st = (*j)["player"]["stats"];
     ASSERT_TRUE(st.isObject());
     ASSERT_NE(st.find("deathCount"), nullptr);
@@ -3192,7 +3225,7 @@ TEST(SaveFormat22Test, VelocityRoundTrips) {
     s.playerVelocity = Vec3 {2.5f, -3.75f, 0.125f};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 22);
+    EXPECT_EQ(j->find("format")->asInt(), 23);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerVelocity.x, 2.5f);
@@ -3220,6 +3253,7 @@ TEST(SaveFormat22Test, Format22WithoutVelocityIsRejected) {
     auto j = serializeSave(makeSave(f), f.items);
     ASSERT_TRUE(j.ok());
     (*j)["player"] = withoutKey((*j)["player"], "velocity");
+    (*j)["player"] = withoutKey((*j)["player"], "tutorial");  // UX-7: the tutorial key is format 23 (the pre-23 version-lie twin)
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("velocity"), std::string::npos)
@@ -3231,6 +3265,7 @@ TEST(SaveFormat22Test, Pre22FileCarryingVelocityIsAVersionLie) {
     auto j = serializeSave(makeSave(f), f.items);
     ASSERT_TRUE(j.ok());
     (*j)["format"] = Json(21); // keeps the "velocity" field
+    (*j)["player"] = withoutKey((*j)["player"], "tutorial"); // UX-7: isolate the velocity lie (the whitelist names the alphabetically-first unknown field)
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("velocity"), std::string::npos)
@@ -3246,6 +3281,7 @@ TEST(SaveFormat22Test, Pre22FileLoadsAsVelocityZero) {
     ASSERT_TRUE(j.ok());
     (*j)["format"] = Json(21);
     (*j)["player"] = withoutKey((*j)["player"], "velocity");
+    (*j)["player"] = withoutKey((*j)["player"], "tutorial");  // UX-7: the tutorial key is format 23 (the pre-23 version-lie twin)
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerVelocity.x, 0.0f);
@@ -3295,4 +3331,133 @@ TEST(SaveFormat22Test, VelocityBoundsAndTypeNaming) {
     ASSERT_TRUE(ok.ok()) << ok.error().message;
     EXPECT_FLOAT_EQ(ok->playerVelocity.x, 100.0f);
     EXPECT_FLOAT_EQ(ok->playerVelocity.y, -100.0f);
+}
+
+// -- UX-7: format 23 (the tutorial progress) ---------------------------------
+
+TEST(SaveFormat23Test, InProgressRoundTrips) {
+    // The fixture's in-progress state (id "chop", count 2) survives the
+    // serialize -> parse trip exactly.
+    Fixture f;
+    const SaveGame in = makeSave(f);
+    ASSERT_EQ(in.tutorial, TutorialSaveState::InProgress);
+    auto serialized = serializeSave(in, f.items);
+    ASSERT_TRUE(serialized.ok()) << serialized.error().message;
+    // The file shape: { "id": "chop", "count": 2 } (an OBJECT, not an
+    // array — the armor-object shape).
+    const Json* tut = (*serialized)["player"].find("tutorial");
+    ASSERT_NE(tut, nullptr);
+    ASSERT_TRUE(tut->isObject());
+    ASSERT_EQ(tut->members().size(), 2u);
+    EXPECT_EQ(tut->find("id")->asString(), "chop");
+    EXPECT_EQ(tut->find("count")->asInt(), 2);
+    auto parsed = Json::parse(serialized->dump(2));
+    ASSERT_TRUE(parsed.ok());
+    auto out = parseSave(*parsed, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_EQ(out->tutorial, TutorialSaveState::InProgress);
+    EXPECT_EQ(out->tutorialId, "chop");
+    EXPECT_EQ(out->tutorialProgress, 2);
+}
+
+TEST(SaveFormat23Test, DoneSerializesAsEmptyObject) {
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.tutorial = TutorialSaveState::Done;
+    auto serialized = serializeSave(s, f.items);
+    ASSERT_TRUE(serialized.ok()) << serialized.error().message;
+    const Json* tut = (*serialized)["player"].find("tutorial");
+    ASSERT_NE(tut, nullptr); // the key is ALWAYS written (the discipline)
+    ASSERT_TRUE(tut->isObject());
+    EXPECT_TRUE(tut->members().empty());
+    auto parsed = Json::parse(serialized->dump(2));
+    ASSERT_TRUE(parsed.ok());
+    auto out = parseSave(*parsed, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_EQ(out->tutorial, TutorialSaveState::Done);
+}
+
+TEST(SaveFormat23Test, Pre23FileLoadsFresh) {
+    // Migration: a format-22 file (no tutorial key) loads with the
+    // system FRESH (it did not exist — the velocity-zeroed migration
+    // twin; the game restores the first step at progress 0).
+    Fixture f;
+    auto j = serializeSave(makeSave(f), f.items);
+    ASSERT_TRUE(j.ok());
+    (*j)["format"] = Json(22);
+    (*j)["player"] = withoutKey((*j)["player"], "tutorial");
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_EQ(out->tutorial, TutorialSaveState::Absent);
+}
+
+TEST(SaveFormat23Test, Pre23FileCarryingKeyIsAVersionLie) {
+    Fixture f;
+    auto j = serializeSave(makeSave(f), f.items);
+    ASSERT_TRUE(j.ok());
+    (*j)["format"] = Json(22);
+    // The key stays (the format is downgraded) — the format-dependent
+    // player-field whitelist must reject it.
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("tutorial"), std::string::npos);
+}
+
+TEST(SaveFormat23Test, Format23RequiresTheKey) {
+    Fixture f;
+    auto j = serializeSave(makeSave(f), f.items);
+    ASSERT_TRUE(j.ok());
+    (*j)["player"] = withoutKey((*j)["player"], "tutorial");
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("player.tutorial"),
+              std::string::npos);
+}
+
+TEST(SaveFormat23Test, InProgressShapeViolationsNamed) {
+    Fixture f;
+    auto build = [&](const char* shape) {
+        auto j = serializeSave(makeSave(f), f.items);
+        if (!j.ok()) {
+            ADD_FAILURE() << j.error().message;
+            return Json::object();
+        }
+        (*j)["player"]["tutorial"] = parseJson(shape);
+        return *j;
+    };
+    auto parse = [&](const Json& j) {
+        return parseSave(j, f.items, f.blocks, f.effects, 42);
+    };
+    // Unknown key.
+    auto bad = parse(build(R"({"id": "chop", "count": 1, "x": 0})"));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("x"), std::string::npos);
+    // Empty id.
+    bad = parse(build(R"({"id": "", "count": 1})"));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("id"), std::string::npos);
+    // Missing count.
+    bad = parse(build(R"({"id": "chop"})"));
+    ASSERT_FALSE(bad.ok());
+    // Negative count.
+    bad = parse(build(R"({"id": "chop", "count": -1})"));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("whole number >= 0"),
+              std::string::npos);
+    // Non-integer count.
+    bad = parse(build(R"({"id": "chop", "count": 1.5})"));
+    ASSERT_FALSE(bad.ok());
+    // Non-integer count (a string).
+    bad = parse(build(R"({"id": "chop", "count": "two"})"));
+    ASSERT_FALSE(bad.ok());
+    // Not an object.
+    bad = parse(build(R"([1, 2])"));
+    ASSERT_FALSE(bad.ok());
+    // count 0 is legal at parse (a fresh in-progress step) — the
+    // step-bound check (count >= the step's count) is the game load's
+    // cross-check (tutorialRestore, the validateStats pattern).
+    auto ok = parse(build(R"({"id": "chop", "count": 0})"));
+    ASSERT_TRUE(ok.ok()) << ok.error().message;
+    EXPECT_EQ(ok->tutorial, TutorialSaveState::InProgress);
+    EXPECT_EQ(ok->tutorialProgress, 0);
 }

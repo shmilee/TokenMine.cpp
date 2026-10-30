@@ -49,10 +49,11 @@ enum class GameKey {
     Digit8,
     Digit9,
     C, // UX-4: toggle the camera First <-> ThirdBack (locked pointer only)
+    T, // UX-7: skip the tutorial (locked pointer only)
     // Keep in sync with kKeyCount.
 };
 
-inline constexpr int kKeyCount = static_cast<int>(GameKey::C) + 1;
+inline constexpr int kKeyCount = static_cast<int>(GameKey::T) + 1;
 
 enum class MouseButton {
     Left,

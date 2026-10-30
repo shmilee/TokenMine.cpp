@@ -42,6 +42,7 @@
 #include "core/sound.hpp"
 #include "core/status_effect.hpp"
 #include "core/thread_pool.hpp"
+#include "core/tutorial.hpp"
 #include "core/window.hpp"
 #include "entity/entity.hpp"
 #include "entity/item_entity.hpp"
@@ -529,6 +530,21 @@ private:
     // bit-identical).
     void applyPlayerEffect(const std::string& name, double duration,
                            int tier = 0);
+    // UX-7: the SINGLE choke point for tutorial events — every
+    // game-world event of the closed vocabulary (walk / jump / eat /
+    // break.<block> / place.<block> / craft.<item> / kill.<mob> /
+    // interact.<block>) funnels through here, one call site per event
+    // class (the tutorial logic never scatters into the call sites).
+    // Gated on m_tutorialEnabled ∧ !m_tutorial.done (a no-input run
+    // emits no events — the base gate's structural immunity — and a
+    // done/skipped/disabled tutorial never re-runs the machine): the
+    // body is the thin adapter over the pure tutorialApply (the logic
+    // is unit-test-owned in core/tutorial). The completion flip (this
+    // call made the state done) arms the toast window + fires the
+    // one-shot info log (the E2E evidence — the PRE-4 ambience-log
+    // pattern). Frame-locked: only called from update-frame code paths
+    // (hard rule 8).
+    void emitTutorialEvent(const std::string& name, int n);
     // Cycles the hotbar selection; resets break progress (the selected
     // tool changed, Minecraft behavior).
     void cycleHotbar();
@@ -1536,6 +1552,23 @@ private:
     // omit-when-default discipline). Frame-locked events (the death
     // transition, the mob despawn pass) increment it; deterministic.
     std::map<std::string, std::uint64_t> m_stats;
+    // UX-7: the beginner tutorial (the objective-style onboarding) —
+    // the step data (assets/data/tutorials/beginner.json, strict-parsed
+    // at init + the goal cross-checks: content lives in the JSON, the
+    // core reads it — hard rule 3), the player's frame-locked progress
+    // (format 23), the enable flag (config tutorial.enabled, code
+    // default true — the render.fog getBool precedent; OFF = zero
+    // state-machine execution + zero UI + the skip key no-op, the
+    // save still writes the segment = the key discipline) and the
+    // completion-toast countdown (the frame-locked kTutorialToastFrames
+    // window, armed by the done flip / the T skip; render-only — never
+    // saved, the camera-mode session-state class). The event emission
+    // is the single choke point emitTutorialEvent (game_frame) over
+    // the pure state machine (core/tutorial, the unit tests own it).
+    std::vector<TutorialStep> m_tutorialSteps;
+    TutorialState m_tutorial;
+    bool m_tutorialEnabled = true;
+    int m_tutorialToastFrames = 0;
     // Phase 57: the ignites_on_lava effect (the fire) — its id, or -1
     // when no registered effect carries the flag (init cross-checks that
     // AT MOST ONE does). (Re-)applied every frame while the player is in

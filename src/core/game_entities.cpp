@@ -334,6 +334,10 @@ void Game::updateEntities(double dt) {
             // less included (the death is the event, not the drop; a
             // distance despawn does NOT count — the mob was never dead).
             ++m_stats["kill." + mob->def().name];
+            // UX-7: the tutorial kill event (the death-REMOVAL point,
+            // any cause of death — the same place the drops spawn; the
+            // data-driven mob name).
+            emitTutorialEvent("kill." + mob->def().name, 1);
         }
         if (mob != nullptr && mob->dead() &&
             !mob->def().properties.drops.empty()) {
