@@ -3,6 +3,38 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.37.0（2026-10-30）— UX-3 玩家身体模型（UX 行 3/7，门 157 全 PASS）
+
+玩家世界空间身体 = **MC 标准 5 部件 box 模型**（头 0.5³ / 躯干
+0.5×0.55×0.25 / 四肢 0.25×0.75×0.25，总高 1.8）+ **行走摆臂摆腿**
+（四部件对角步态 arm_l+leg_r / arm_r+leg_l，amplitude leg 0.35 / arm
+0.3 = 64 相位 checkSwingClip 全过）。**全管线复用 mob box 模型系统**
+（`MobRegistry::parseModel` 加 label 默认参 / `makeMobModelGeometry` /
+ENT-1 `advanceSwingPhase` 相位机镜像进 `Player::update` /
+`checkSwingClip`），零新渲染机制。纹理 = **生成式占位皮肤**（用户
+定案：64×64 经典布局官方 wiki 4px-arm 模板逐区解码验证 + 4 派生
+16×16 部件 tile 尾部追加图集 [10..13,4] 免重锚；
+`tools/generate_player_skin.py` 确定性幂等，真实皮肤同布局一键替换）。
+数据 = 独立 `assets/data/player_body.json`（只含 model 段，无假 AI
+字段；模型 width 1.0 = box 验证界非碰撞，玩家 AABB 0.6×1.8 零触碰）。
+渲染 = `drawPlayerBody`（opaque 段 drawMobs 后，lazy build 门关时永不
+build，零 per-draw uniform，烘焙恒亮 = mob 同款记档偏离）+
+`CameraMode { First, ThirdBack }` 门 **UX-3 恒 First = 身体不可见**
+（第三人称 = UX-4 消费；手持 viewmodel 零改动）。相位 render-only
+不入档 = **零 format（22）/ 零 config / 零音效**。1938/1938（+9：
+PlayerBodyTest 6【模型钉/tile 布局/64 相位 NoClip/非真空/解析点名/
+皮肤 FNV 5 件 + 15 旧 tile 零变化】+ PlayerSwingPhaseTest 3【行走
+推进/滑行续摆+衰减/无输入惰性】）、`-Werror` 0、banner v1.37.0。
+门 157：S1 **第 157 次结构性免疫 + base18 锚连续 168140 B 免重锚**
+（fresh 60f 四方字节一致 + 跨版 savenorm EXACT；三重惰性 = 门恒关 +
+相位恒 0 + 图集追加零移位）+ S6 init 点名 ×3（box 出界 / 未知 part /
+amplitude 0 全 "player body model" 精确）+ S3 1938 + 性能 A/B v1.36
+vs v1.37 fall 900f 全指标同档 + changesApplied 9/3/1 三窗逐位 + 终档
+fluids 18/18 + blocks 55/55 集合恒等 = 同世界同成本【结构惰性最强
+形】。偏离：占位皮肤纯色分区 / 头部 cap 与躯干侧面 tile 不表征 /
+模型烘焙恒亮（mob 同款）/ crouch 不缩放（记档）。本版不打 tag（**tag
+v1.38.0 = UX-3+4 合并**）。详见 docs/archive/phase-ux3.md。
+
 ## v1.36.0（2026-10-30）— **tag v1.36.0 = UX-1+2 合并 tag（UX 政策首个兑现）**
 
 ### UX-2 Game 拆分/装配层收敛（UX 行 2/7，门 151-156 全 PASS）
