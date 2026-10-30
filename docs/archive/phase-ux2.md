@@ -70,7 +70,19 @@ setBlock 9 项簿记 + 4 镜像站点/存档收口/渲染 pass/流送 worker 窗
   60f 终态 + 30f：全状态恒等，仅 time = 30 步浮点累加 2e-17 内 = B 段
   读路径 applySave/rescan* 经 m_states.* 行为零差证明）
 
-### B2-B4（流送族 / mob 族 / 交互面板族 struct 收拢）【待执行】
+### B2（流送/worker 族 → StreamingState）
+- 14 成员收拢（m_pool…m_retainedColumns，**相对序逐字保持 = 零初始化
+  重排**：struct 首成员原位声明）；StreamJob/LightJob/MeshJob 三嵌套
+  类型前移（B1 BeaconBeam 范式，纯类型无构造序效应）；m_flammable-
+  Chunks/m_lightPendingColumns/m_fluidLightPending 跨域留平铺（域注释
+  点名 = B 段记档残余）；115 处调用点改写（streaming 73 / init 8 /
+  save 7 / render 5 / interaction 5 / frame 3 / ui 3 / entities 0）；
+  发生数守恒复核：131 旧名 = 115 新 + 14 struct 声明 + 2 注释
+- 门 154 PASS：构建 0 警告 + 1929 + **b2n1 ≡ b2n2 ≡ a1o1（v1.35.0
+  基线）≡ 锚 全字节一致 168140 B** + 跨版 savenorm EXACT + 读档往返
+  全状态恒等（dt = 30 步浮点累加 2e-17 内）
+
+### B3-B4（mob 族 / 交互面板族 struct 收拢）【待执行】
 
 ## 子相门协议（无像素门）
 每子相：new ×2 + 基线侧 RAW 字节一致（tm_v136_base = v1.35.0 冻结）+

@@ -638,9 +638,9 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
         // register the column for streaming (loaded), unload (tracked),
         // and the lighting job (new terrain).
         m_world.ensureColumn(cp.x, cp.z);
-        m_loadedColumns.insert({cp.x, cp.z});
+        m_streaming.loadedColumns.insert({cp.x, cp.z});
         m_lightPendingColumns.insert({cp.x, cp.z});
-        m_unlitColumns.insert({cp.x, cp.z});
+        m_streaming.unlitColumns.insert({cp.x, cp.z});
     }
     // The single choke point for every in-game block change (break, place,
     // dye recolor). Phase 42: in addition to the raw setBlock, any STUCK
@@ -663,7 +663,7 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
     // this choke point): the save records the diff, so the column's chunks
     // must survive the unload pass (player-edited columns are never
     // dropped — a reloaded save would otherwise lose the edits).
-    m_editedColumns.insert({floorDiv(x, kChunkSize),
+    m_streaming.editedColumns.insert({floorDiv(x, kChunkSize),
                             floorDiv(z, kChunkSize)});
     {
         const BlockPos fpos {x, y, z};
@@ -1217,7 +1217,7 @@ bool Game::tryFluidBucket() {
         m_world.setFluid(cell->x, cell->y, cell->z, *kind, 0);
         // The fluid diff is save-recorded (no setBlock choke point here):
         // keep the column (never unloaded).
-        m_editedColumns.insert({floorDiv(cell->x, kChunkSize),
+        m_streaming.editedColumns.insert({floorDiv(cell->x, kChunkSize),
                                 floorDiv(cell->z, kChunkSize)});
         Lighting::updateLocal(m_world, m_blocks, *cell);
         finish();
@@ -1272,7 +1272,7 @@ bool Game::tryFluidBucket() {
     m_world.setFluid(cell.x, cell.y, cell.z, kind, kMaxFluidLevel);
     // The fluid diff is save-recorded (no setBlock choke point here):
     // keep the column (never unloaded).
-    m_editedColumns.insert({floorDiv(cell.x, kChunkSize),
+    m_streaming.editedColumns.insert({floorDiv(cell.x, kChunkSize),
                             floorDiv(cell.z, kChunkSize)});
     Lighting::updateLocal(m_world, m_blocks, cell);
     finish();

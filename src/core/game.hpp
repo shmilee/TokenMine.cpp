@@ -217,11 +217,13 @@ private:
     void integrateStreamedColumns();
     // Collects the completed lighting jobs (after the pool flush):
     // STREAMING job columns (LightJob::fluid = false) leave
-    // m_unlitColumns, so the next updateChunkMeshes builds their meshes
+    // m_streaming.unlitColumns, so the next updateChunkMeshes builds their
+    // meshes
     // with the propagated light (the one-and-only mesh); FLUID catch-up
     // job columns (99.11, fluid = true) leave m_fluidLightPending (the
     // set was already drained at post time — the reap's erase is the
-    // contract belt, and m_unlitColumns is never touched: fluid columns
+    // contract belt, and m_streaming.unlitColumns is never touched: fluid
+    // columns
     // are not unlit columns). Every job's net-changed chunks (collected
     // job-locally by the workers, 99.10) join the World's dirty set
     // here — the main-thread-writer window, no worker in flight.
@@ -290,11 +292,13 @@ private:
     // integrateStreamedColumns (the pool is flushed: no worker in flight),
     // the same safe main-thread-writer point. A column survives when it is
     // within view_distance + kUnloadHysteresis, part of the protected 4x4
-    // demo area (respawn safety), player-edited (m_editedColumns — the
+    // demo area (respawn safety), player-edited (m_streaming.editedColumns
+    // — the
     // save records its diff and must keep the chunks), tracked by per-block
     // state (furnace/campfire/crop/beacon/fire — the save cross-checks
     // those entries against the block edits), or awaiting a generation job
-    // (m_streamPending). Unloading erases the chunks (eraseChunk re-meshes
+    // (m_streaming.streamPending). Unloading erases the chunks (eraseChunk
+    // re-meshes
     // the boundary neighbors), frees the GL mesh buffers, and drops the lit
     // set entries.
     void unloadFarColumns();
@@ -839,7 +843,11 @@ private:
     //     re-marks the chunks it changed dirty, so a mesh posted before the
     //     light re-queues after it — the selection rules in
     //     world/mesh_job.hpp).
-    std::unique_ptr<ThreadPool> m_pool;
+    // The streaming family's job TYPES (UX-2 B2): pure types with no
+    // construction-order effect — declared before StreamingState because
+    // its job deque members are std::deque of std::unique_ptr of them,
+    // and a nested type is visible to a nested struct only when declared
+    // first (the B1 BeaconBeam pattern).
     // One in-flight generation job: a whole column
     // (kVerticalChunksPerColumn scratch chunks). `done` is written by the
     // worker and read by the main thread only after pool->flush()
@@ -849,9 +857,6 @@ private:
         std::unique_ptr<Chunk[]> chunks;
         bool done = false;
     };
-    // In-flight generation jobs (deque: the heap-allocated StreamJob never
-    // moves, so worker lambdas may capture it by raw pointer).
-    std::deque<std::unique_ptr<StreamJob>> m_streamJobs;
     // Up to two in-flight lighting jobs per frame (99.10): the pending
     // columns are partitioned by planLightJobs — two columns whose light
     // regions are bit-level independent (write footprint + the
@@ -863,26 +868,26 @@ private:
     // positions in `dirtyChunks` instead of mutating the World's shared
     // dirty set (two parallel markChunkDirty calls would race);
     // collectLitColumns applies them at the next flush. The done flag +
-    // columns let the main thread clear m_unlitColumns there (see
-    // collectLitColumns).
+    // columns let the main thread clear m_streaming.unlitColumns there
+    // (see collectLitColumns).
     struct LightJob {
         std::vector<std::array<BlockPos, 2>> boxes;
         std::set<ColumnPos> columns;
         std::set<ChunkPos> dirtyChunks;
         bool done = false;
         // 99.11: the job's kind — false = a streaming job (its columns
-        // leave m_unlitColumns at reap: the lit-gate is new-terrain
-        // only), true = a fluid catch-up job (its columns are already
-        // lit and left m_fluidLightPending at POST time; the reap's
-        // erase is the contract belt — see collectLitColumns). The two
-        // kinds never touch each other's bookkeeping: a newly integrated
-        // column can have its fluid churned before its streaming job
-        // lands, and the streaming reap must NOT drop that fluid pending
-        // entry (its re-light would be lost); a fluid reap must not
-        // touch m_unlitColumns (fluid columns are not unlit).
+        // leave m_streaming.unlitColumns at reap: the lit-gate is
+        // new-terrain only), true = a fluid catch-up job (its columns are
+        // already lit and left m_fluidLightPending at POST time; the
+        // reap's erase is the contract belt — see collectLitColumns).
+        // The two kinds never touch each other's bookkeeping: a newly
+        // integrated column can have its fluid churned before its
+        // streaming job lands, and the streaming reap must NOT drop that
+        // fluid pending entry (its re-light would be lost); a fluid reap
+        // must not touch m_streaming.unlitColumns (fluid columns are not
+        // unlit).
         bool fluid = false;
     };
-    std::deque<std::unique_ptr<LightJob>> m_lightJobs;
     // One in-flight MESH job (PIPE-1): the target column's 3x3 column
     // neighborhood snapshotted into a throwaway World (insertSnapshotChunk,
     // after every main-thread World write of the posting frame), plus the
@@ -896,84 +901,109 @@ private:
         std::vector<ChunkMeshData> meshes; // sized kVerticalChunksPerColumn
         bool done = false;
     };
-    // In-flight mesh jobs (deque: the heap-allocated MeshJob never moves,
-    // so worker lambdas may capture it by raw pointer).
-    std::deque<std::unique_ptr<MeshJob>> m_meshJobs;
-    // Columns whose mesh job is in flight (not yet integrated). Same
-    // paradigm as m_streamPending: they are excluded from re-posting
-    // (nextMeshColumns) and protected from unloading.
-    std::set<ColumnPos> m_meshPending;
-    // Columns whose light has NOT propagated yet (integrated this session
-    // or first-touch created, their lighting job still in flight). Their
-    // chunks are NOT meshed until the job completes: the old design meshed
-    // them at light 0 (black faces) and re-meshed after the light landed —
-    // with the remesh budget that re-mesh could lag by the whole dirty
-    // backlog, so freshly loaded terrain showed black faces for seconds
-    // (99.2 walking-run report). Meshing once, lit (pop-in), is also less
-    // work; PIPE-1 enforces the same rule in the worker selection (a
-    // column in this set never gets a mesh job).
-    std::set<ColumnPos> m_unlitColumns;
-    // Columns with a generation job in flight (not yet in the World).
-    std::set<ColumnPos> m_streamPending;
-    // Columns the player has MODIFIED (the setBlock choke point — break /
-    // place / rotate / growth / burn / campfire, plus the fluid-bucket
-    // scoop and pour paths). Their diff is recorded in the save, so the
-    // chunks must survive until the save is written: never unloaded.
-    std::set<ColumnPos> m_editedColumns;
-    // Streaming hysteresis (see chunk_streaming): engaged when the player
-    // reaches the edge of the loaded area, disengaged when the player is
-    // deep inside it again. While engaged, the full radius disk around
-    // the player is filled (the capped view_distance becomes visible
-    // terrain).
-    bool m_streamingEngaged = false;
-    // The streaming radius in chunk columns (config world.view_distance),
-    // UNCLAMPED: the logs and the F3 overlay report this raw value; the
-    // geometric consumers (stream disk, unload band) clamp it to
-    // kStreamCapRadius (STRM-1 far-plane cap).
-    int m_streamRadius = 8;
-    // The loaded columns (incremental mirror of the World's chunk map —
-    // streaming decides on THIS instead of scanning every chunk: the
-    // scan is ~9k-200k map entries + a sort per frame at full ring).
-    // Maintained by buildScene (initial), integrateStreamedColumns (+),
-    // unloadFarColumns (-), and the setBlock choke point (+ a column it
-    // completed for a first-touch edit). A column is "loaded" when ANY
-    // chunk of it exists — the ensureColumn invariant makes "any" and
-    // "all" equivalent.
-    std::set<ColumnPos> m_loadedColumns;
-    // Total columns unloaded since session start (the periodic INFO
-    // progress line reports it — proof the unload pass is working).
-    std::size_t m_unloadedColumnsTotal = 0;
-    // The save journal (PIPE-2): the session's cell-edit history as
-    // position sets, fed by the World's cell-mutation observer (installed
-    // at the top of buildScene — BEFORE tryLoadSave, so the save load's
-    // replay seeds it automatically) and evicted per column by
-    // unloadFarColumns. At exit the save diff (journalDiff) + the stair
-    // array derive from it instead of the O(N) world scans; when it is
-    // invalid (the kSaveJournalMaxEntries cap was exceeded) or
-    // --save-full-diff is set, collectSave falls back to the legacy
-    // full diffWorld + stair scan.
-    SaveJournal m_saveJournal;
-    // STRM-2: the retained diffs of UNLOADED columns — a column that left
-    // the world while the session modified it (the pure-fluid churn: far
-    // lava flow / water film, the fire burn, the water-lava reaction —
-    // the writes that go through World::setBlock/setFluid directly and so
-    // never reach the m_editedColumns protection; their columns stay
-    // unloadable by design). unloadFarColumns snapshots the column's
-    // journal diff (retainColumnDiff, BEFORE the chunk erase) into this
-    // map; integrateStreamedColumns re-applies a re-streamed column's
-    // diff (blocks first, then fluids — the applyWorldEdits order) and
-    // erases the entry; collectSave merges every entry into the exit
-    // save (BOTH paths — the journal diff and the legacy/oracle full
-    // diff). INVARIANT (the no-duplicate-cells proof of the merge): a
-    // column is in at most ONE of the save journal and this map — unload
-    // snapshots before it evicts the journal entries, integrate applies
-    // before it erases the entry (the observer re-journals the re-
-    // applied writes, so the next unload snapshots again: the self-
-    // similar loop). The retained value is DIFF ENTRIES (a few to a few
-    // dozen cells for a fluid column), not chunks — the memory stays
-    // bounded over a long wandering session. Empty columns are never
-    // stored.
-    std::map<ColumnPos, RetainedColumnDiff> m_retainedColumns;
+    // The streaming/worker family (UX-2 B2): everything the chunk
+    // streaming pipeline maintains — the worker pool, the in-flight job
+    // deques (gen / mesh / light), the pending-column bookkeeping sets,
+    // the streaming hysteresis + radius state, the loaded/unload mirror
+    // and progress counter, and the save journal + retained-column diffs
+    // (the PIPE-2 / STRM-2 exit-save O(edits) machinery). Collected so a
+    // NEW streaming subsystem adds one member here and writes
+    // m_streaming.xxx explicitly, instead of scattering a member across
+    // the streaming bookkeeping. Member order = the original declaration
+    // order of the family (construction order = initialization order =
+    // behavior red line). m_flammableChunks / m_lightPendingColumns /
+    // m_fluidLightPending stay OUT — the burn + light bookkeeping
+    // (cross-domain, the B-segment residual).
+    struct StreamingState {
+        std::unique_ptr<ThreadPool> pool;
+        // In-flight generation jobs (deque: the heap-allocated StreamJob
+        // never moves, so worker lambdas may capture it by raw pointer).
+        std::deque<std::unique_ptr<StreamJob>> streamJobs;
+        std::deque<std::unique_ptr<LightJob>> lightJobs;
+        // In-flight mesh jobs (deque: the heap-allocated MeshJob never
+        // moves, so worker lambdas may capture it by raw pointer).
+        std::deque<std::unique_ptr<MeshJob>> meshJobs;
+        // Columns whose mesh job is in flight (not yet integrated). Same
+        // paradigm as streamPending: they are excluded from re-posting
+        // (nextMeshColumns) and protected from unloading.
+        std::set<ColumnPos> meshPending;
+        // Columns whose light has NOT propagated yet (integrated this
+        // session or first-touch created, their lighting job still in
+        // flight). Their chunks are NOT meshed until the job completes:
+        // the old design meshed them at light 0 (black faces) and
+        // re-meshed after the light landed — with the remesh budget that
+        // re-mesh could lag by the whole dirty backlog, so freshly loaded
+        // terrain showed black faces for seconds (99.2 walking-run
+        // report). Meshing once, lit (pop-in), is also less work; PIPE-1
+        // enforces the same rule in the worker selection (a column in
+        // this set never gets a mesh job).
+        std::set<ColumnPos> unlitColumns;
+        // Columns with a generation job in flight (not yet in the World).
+        std::set<ColumnPos> streamPending;
+        // Columns the player has MODIFIED (the setBlock choke point —
+        // break / place / rotate / growth / burn / campfire, plus the
+        // fluid-bucket scoop and pour paths). Their diff is recorded in
+        // the save, so the chunks must survive until the save is written:
+        // never unloaded.
+        std::set<ColumnPos> editedColumns;
+        // Streaming hysteresis (see chunk_streaming): engaged when the
+        // player reaches the edge of the loaded area, disengaged when the
+        // player is deep inside it again. While engaged, the full radius
+        // disk around the player is filled (the capped view_distance
+        // becomes visible terrain).
+        bool streamingEngaged = false;
+        // The streaming radius in chunk columns (config
+        // world.view_distance), UNCLAMPED: the logs and the F3 overlay
+        // report this raw value; the geometric consumers (stream disk,
+        // unload band) clamp it to kStreamCapRadius (STRM-1 far-plane
+        // cap).
+        int streamRadius = 8;
+        // The loaded columns (incremental mirror of the World's chunk map
+        // — streaming decides on THIS instead of scanning every chunk:
+        // the scan is ~9k-200k map entries + a sort per frame at full
+        // ring). Maintained by buildScene (initial),
+        // integrateStreamedColumns (+), unloadFarColumns (-), and the
+        // setBlock choke point (+ a column it completed for a first-touch
+        // edit). A column is "loaded" when ANY chunk of it exists — the
+        // ensureColumn invariant makes "any" and "all" equivalent.
+        std::set<ColumnPos> loadedColumns;
+        // Total columns unloaded since session start (the periodic INFO
+        // progress line reports it — proof the unload pass is working).
+        std::size_t unloadedColumnsTotal = 0;
+        // The save journal (PIPE-2): the session's cell-edit history as
+        // position sets, fed by the World's cell-mutation observer
+        // (installed at the top of buildScene — BEFORE tryLoadSave, so
+        // the save load's replay seeds it automatically) and evicted per
+        // column by unloadFarColumns. At exit the save diff (journalDiff)
+        // + the stair array derive from it instead of the O(N) world
+        // scans; when it is invalid (the kSaveJournalMaxEntries cap was
+        // exceeded) or --save-full-diff is set, collectSave falls back to
+        // the legacy full diffWorld + stair scan.
+        SaveJournal saveJournal;
+        // STRM-2: the retained diffs of UNLOADED columns — a column that
+        // left the world while the session modified it (the pure-fluid
+        // churn: far lava flow / water film, the fire burn, the
+        // water-lava reaction — the writes that go through
+        // World::setBlock/setFluid directly and so never reach the
+        // editedColumns protection; their columns stay unloadable by
+        // design). unloadFarColumns snapshots the column's journal diff
+        // (retainColumnDiff, BEFORE the chunk erase) into this map;
+        // integrateStreamedColumns re-applies a re-streamed column's diff
+        // (blocks first, then fluids — the applyWorldEdits order) and
+        // erases the entry; collectSave merges every entry into the exit
+        // save (BOTH paths — the journal diff and the legacy/oracle full
+        // diff). INVARIANT (the no-duplicate-cells proof of the merge):
+        // a column is in at most ONE of the save journal and this map —
+        // unload snapshots before it evicts the journal entries,
+        // integrate applies before it erases the entry (the observer
+        // re-journals the re-applied writes, so the next unload snapshots
+        // again: the self-similar loop). The retained value is DIFF
+        // ENTRIES (a few to a few dozen cells for a fluid column), not
+        // chunks — the memory stays bounded over a long wandering
+        // session. Empty columns are never stored.
+        std::map<ColumnPos, RetainedColumnDiff> retainedColumns;
+    };
+    StreamingState m_streaming;
     // Chunks that (ever, since load/integration) hold a FLAMABLE block —
     // the burn pass's gate (Phase 99.8): a lava chunk walks only when it
     // or a face neighbor is in this set. Over-approximation by design:
@@ -998,7 +1028,8 @@ private:
     // the coast churn rate exceeds the budget, so the set saturates at
     // the coast column count. Unloaded columns are evicted by
     // unloadFarColumns (no unbounded growth). A column may briefly sit
-    // in BOTH this set and m_unlitColumns (a freshly integrated column
+    // in BOTH this set and m_streaming.unlitColumns (a freshly integrated
+    // column
     // whose fluid churns before its streaming job lands) — the sets are
     // independent bookkeeping (the LightJob::fluid flag at reap: each
     // job drains only its own set), and window exclusivity (a fluid

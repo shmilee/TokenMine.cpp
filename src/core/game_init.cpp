@@ -79,12 +79,12 @@ Result<void> Game::buildScene() {
     m_world.setCellMutationObserver([this](const CellMutation& mu) {
         bool capped = false;
         if (mu.block.valid()) {
-            capped = m_saveJournal.recordBlock(mu.pos);
+            capped = m_streaming.saveJournal.recordBlock(mu.pos);
         }
         // The displacement double report: a setBlock into a fluid cell
         // also recorded the drained cell in the fluid table.
         if (mu.fluidCode.has_value()) {
-            capped = capped || m_saveJournal.recordFluid(mu.pos);
+            capped = capped || m_streaming.saveJournal.recordFluid(mu.pos);
         }
         if (capped) {
             MC_LOG_INFO("Save journal exceeded kSaveJournalMaxEntries (" +
@@ -1227,8 +1227,8 @@ Result<void> Game::buildScene() {
     // (config world.view_distance, in chunk columns around the player).
     // The raw config value is kept here for reporting; the geometric
     // consumers clamp it to kStreamCapRadius (far-plane cap).
-    m_pool = std::make_unique<ThreadPool>(kStreamWorkerCount);
-    m_streamRadius = m_config.getInt("world.view_distance", 8);
+    m_streaming.pool = std::make_unique<ThreadPool>(kStreamWorkerCount);
+    m_streaming.streamRadius = m_config.getInt("world.view_distance", 8);
 
     // Spawn the player on dry land: the seed may put the origin underwater
     // or a tree may stand on the column, so check nearby candidates before
@@ -1304,7 +1304,7 @@ Result<void> Game::buildScene() {
     // world — applySave ends with a full propagation); anything that
     // appears later is NEW (tracked by m_lightPendingColumns).
     for (const ChunkPos& c : m_world.chunkPositions()) {
-        m_loadedColumns.insert({c.x, c.z});
+        m_streaming.loadedColumns.insert({c.x, c.z});
     }
 
     // -- audio (Phase 15) ----------------------------------------------------
@@ -1689,9 +1689,9 @@ int Game::run() {
     // reset joins the workers. In-flight generation columns are not
     // integrated (integration happens in update); that is correct, they
     // are pristine generated terrain that a save never records.
-    if (m_pool) {
-        m_pool->flush();
-        m_pool.reset();
+    if (m_streaming.pool) {
+        m_streaming.pool->flush();
+        m_streaming.pool.reset();
     }
 
     // Audio (Phase 15): close the stream/device before the window's

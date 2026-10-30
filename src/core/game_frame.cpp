@@ -101,8 +101,8 @@ void Game::update(double dt) {
     // integrateMeshJobs runs BEFORE integrateStreamedColumns: a stream
     // insert re-marks neighbor columns dirty, and that re-dirtying must
     // survive the mesh integrate's clear-dirty (see integrateMeshJobs).
-    if (m_pool) {
-        m_pool->flush();
+    if (m_streaming.pool) {
+        m_streaming.pool->flush();
     }
     collectLitColumns();
     integrateMeshJobs();
@@ -447,7 +447,7 @@ void Game::update(double dt) {
     // synchronous bounding-box re-light there was the frame's entire
     // cost in the shipped ocean, step-0: 130..661 s per 300-frame
     // window). LAST of the posts: it reads the streaming job columns of
-    // this window from m_lightJobs for the cross-kind exclusion, and
+    // this window from m_streaming.lightJobs for the cross-kind exclusion, and
     // posts nothing while a candidate is not lightRegionsIndependent of
     // them (the 99.10 parallel safety is per-plan). The reap + the
     // dirtyOut application land at the next frame's collectLitColumns —

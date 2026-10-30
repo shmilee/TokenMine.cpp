@@ -89,7 +89,7 @@ Result<SaveGame> Game::collectSave() const {
     // kSaveJournalMaxEntries cap was exceeded — logged at the crossing)
     // or --save-full-diff was given (the in-process equivalence oracle
     // and escape hammer). Both paths produce the same file format.
-    const bool journalSave = m_saveJournal.valid && !m_args.saveFullDiff;
+    const bool journalSave = m_streaming.saveJournal.valid && !m_args.saveFullDiff;
     // The per-instance block states (format 15; Phase 94 stair facing,
     // generalized in ENT-2).
     if (journalSave) {
@@ -102,12 +102,12 @@ Result<SaveGame> Game::collectSave() const {
         // longer stateful (broken again) is skipped, exactly as the old
         // scan's hasState gate. STRM-2: the retained (unloaded) columns'
         // block edits are never stateful either — a stateful placement
-        // goes through the setBlock choke point (m_editedColumns
+        // goes through the setBlock choke point (m_streaming.editedColumns
         // protection: the column never unloads) and the sapling stage
         // writes track m_states.saplings (protected the same way) — so the
         // journal-only derivation stays complete.
         std::vector<SavedState> states;
-        for (const auto& entry : m_saveJournal.blocks) {
+        for (const auto& entry : m_streaming.saveJournal.blocks) {
             for (const BlockPos& p : entry.second) {
                 const BlockID id = m_world.getBlock(p.x, p.y, p.z);
                 if (id == BlockID::air() || !m_blocks.at(id).hasState()) {
@@ -226,7 +226,7 @@ Result<SaveGame> Game::collectSave() const {
         // legacy path as the in-process oracle). Phase 37: large journal
         // footprints diff on kSaveDiffWorkers threads.
         auto diff = journalDiff(m_world, makeChunkGenerator(), m_blocks,
-                                m_saveJournal.blocks, m_saveJournal.fluids,
+                                m_streaming.saveJournal.blocks, m_streaming.saveJournal.fluids,
                                 save.blockEdits, save.fluidEdits,
                                 kSaveDiffWorkers);
         if (!diff.ok()) {
@@ -253,7 +253,7 @@ Result<SaveGame> Game::collectSave() const {
     // Duplicate cells are structurally impossible (the one-of invariant);
     // a session that never unloaded a modified column passes an empty
     // map (the no-op — the pre-STRM-2 file shape, bit-identical).
-    mergeRetained(save, m_retainedColumns);
+    mergeRetained(save, m_streaming.retainedColumns);
     return save;
 }
 
@@ -313,11 +313,11 @@ Result<void> Game::applySave(const SaveGame& save) {
     // far away: protect them from the unload pass (applyWorldEdits writes
     // the World directly, bypassing the setBlock choke point's marking).
     for (const SavedBlockEdit& e : save.blockEdits) {
-        m_editedColumns.insert({floorDiv(e.pos.x, kChunkSize),
+        m_streaming.editedColumns.insert({floorDiv(e.pos.x, kChunkSize),
                                 floorDiv(e.pos.z, kChunkSize)});
     }
     for (const SavedFluidEdit& e : save.fluidEdits) {
-        m_editedColumns.insert({floorDiv(e.pos.x, kChunkSize),
+        m_streaming.editedColumns.insert({floorDiv(e.pos.x, kChunkSize),
                                 floorDiv(e.pos.z, kChunkSize)});
     }
     // 2) Lighting: a full re-propagation is exact for any edit count (the

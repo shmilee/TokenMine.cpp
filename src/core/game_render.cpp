@@ -592,7 +592,7 @@ void Game::render() {
     // cross-sections) dissolves into the horizon — a linear ramp toward
     // the same-frame sky color from kFogStartScale * end to end, where
     // end = min(far plane, effective stream radius in blocks). The
-    // radius is m_streamRadius capped to kStreamCapRadius (STRM-1)
+    // radius is m_streaming.streamRadius capped to kStreamCapRadius (STRM-1)
     // times kChunkSize — the same clamp the stream disk itself uses.
     // render.fog (code default true, the fire.particles getBool
     // precedent) gates it; a degenerate range (end <= start — a
@@ -600,7 +600,7 @@ void Game::render() {
     // uniform sets, zero per-draw cost; the streaming code is untouched.
     const bool fogConfigOn = m_config.getBool("render.fog", true);
     const float rEffBlocks = static_cast<float>(
-                                 std::min(m_streamRadius, kStreamCapRadius)) *
+                                 std::min(m_streaming.streamRadius, kStreamCapRadius)) *
                              kChunkSize;
     const FogRange fog = fogDistanceRange(rEffBlocks, kFar);
     const bool fogOn = fogConfigOn && fog.end > fog.start;
@@ -668,11 +668,11 @@ void Game::render() {
     // COLUMN (its eight chunks) instead of
     // one per chunk — the per-chunk submission was ~10-30 us/draw on the
     // Intel iGPU and grew with the view-distance ring (the vd80 render
-    // collapse). The column list is m_loadedColumns (the incremental
+    // collapse). The column list is m_streaming.loadedColumns (the incremental
     // mirror): no per-frame chunkPositions() snapshot + sort of the ~200k
     // loaded chunks.
-    const std::vector<ColumnPos> columns(m_loadedColumns.begin(),
-                                         m_loadedColumns.end());
+    const std::vector<ColumnPos> columns(m_streaming.loadedColumns.begin(),
+                                         m_streaming.loadedColumns.end());
     for (const ColumnPos& col : columns) {
         if (!columnVisible(col)) {
             continue;

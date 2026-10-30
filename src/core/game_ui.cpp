@@ -1397,9 +1397,9 @@ void Game::renderUi() {
         info.seed = m_generator ? m_generator->seed() : 0;
         info.timeOfDay = m_dayCycle.timeOfDay();
         info.dayFactor = m_dayCycle.dayFactor();
-        info.streamingEngaged = m_streamingEngaged;
-        info.streamPending = static_cast<int>(m_streamPending.size());
-        info.streamRadius = m_streamRadius;
+        info.streamingEngaged = m_streaming.streamingEngaged;
+        info.streamPending = static_cast<int>(m_streaming.streamPending.size());
+        info.streamRadius = m_streaming.streamRadius;
         info.pointerLocked = locked;
         info.inventoryOpen = panelOpen();
         info.particles = m_particles.size();
