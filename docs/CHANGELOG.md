@@ -3,6 +3,10 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.40.0（2026-10-31）— UX-6 字体扩容（UX 行 6/7，门 160 全 PASS，**tag v1.40.0 = UX-5+6 合并**）
+
+消费 PRE-1 记档「CJK glyph 静态表 32 + 4 余量装不下长文本」= **CJK 字集 33 → 392**（A+ 自动化方案，10-30 定案）。字集 392 数据定稿（游戏文档语料 top 330 ∪ UX-7 教程全词集零缺字 ∪ 既有 33 ∪ 标点，codepoint 序 0x00B7..0xFF1F；generate_font.py CJK_CHARSET 段，**加字 = 改清单一条命令零代码**）+ 来源钉定 NotoSansCJK-Regular.ttc（SHA-256 b76b0433…41690a / 19,484,784 B / 10 face / SC index 2 / 内部版本 2.004；提取前验，漂移点名拒）+ 光栅化 = PIL FreeType PRE-1 参数（em 16 / line box (19,5) / rows 5..20 窗口 / coverage ≥128）+ 既有 33 字 33/33 位级自校验先行。font.png **尾部 append** 256×512 → **256×2080**（新字 359 按 codepoint 序填 cell 128..486，rows 61..64 = 32 cell 余量 → 424 字内零代码加字；**顶 512 行逐字节不变** = ASCII UV 位级恒等 + 免重锚）；font.hpp 仅 kCjkGlyphs[33]→[392] + kFontAtlasHeight 2080 两处，**font.cpp 零改动**；工具只写 assets/ + .py（src/ 不碰范式）。零 format（22）/config/资产文件/音效/帧状态。1978/1978（+3：Ux6Atlas 尺寸钉 / Top512 重编码 FNV 红线 / 教程 21 字 exact cell + CjkTablePinned 演进 392）、-Werror 0、banner v1.40.0、重跑 ×3 md5 恒。门 160：S1 **第 160 次结构性免疫 + base18 锚连续 168140 B 免重锚**（无输入无死亡屏/面板/F3/悬停 = 零字体绘制）+ S3 1978 + 无 S6（字集 = 工具期数据零运行期 parse 面）+ 性能 A/B v1.39 vs v1.40 fall 900f 全指标同档 + changesApplied 9/3/1 三窗逐位 + 终档 fluids 18/18 + blocks 55/55 集合恒等 diff 0 = 同世界同成本。PITS 346（项目 FNV 约定 = 32 位基数 + 64 位 prime 非标准混合，独立复算用标准基数 = 假失配）。**tag v1.40.0 = UX-5+6 合并 tag**（UX 行政策第 3 个兑现；UX 系统 release 于 UX-7 收官）。详见 docs/archive/phase-ux6.md。
+
 ## v1.39.0（2026-10-31）— UX-5 耐久修复系统（UX 行 5/7，门 159 全 PASS）
 
 消费 SURV-3「无修复系统」记档 = **工作台材料修复（MC 铁砧语义的
