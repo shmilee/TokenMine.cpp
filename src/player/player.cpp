@@ -8,6 +8,7 @@
 #include "block/block.hpp"
 #include "block/block_registry.hpp"
 #include "core/math/vec2.hpp"
+#include "entity/mob_swing.hpp"
 #include "item/durability.hpp"
 
 namespace mc {
@@ -334,6 +335,12 @@ void Player::update(double dt) {
     // speeds at any frame rate. The lava and air formulas are UNCHANGED
     // (the resting air tier must not gain a sub-step — the P99 frame
     // budget).
+    // UX-3: captured BEFORE the physics so the "moving" decision is the
+    // strict frame-boundary horizontal displacement (the ENT-1 rule: the
+    // position says, not the intent — a knocked-back / sliding / falling
+    // player swings or rests exactly as its position says).
+    const float prevX = m_position.x;
+    const float prevZ = m_position.z;
     const float vyAfter =
         m_inLava
             ? std::max(m_velocity.y - m_params.lavaGravity *
@@ -380,6 +387,16 @@ void Player::update(double dt) {
     // the ground).
     if (!m_crouching && m_onGround && lengthSq(wish) > 0.0f) {
         stepUp(dir, preMoveSpeed * static_cast<float>(dt));
+    }
+
+    // UX-3: advance the limb-swing phase (render-only — see m_swingPhase).
+    // Unconditional (an int op: zero cost, and no input = no displacement
+    // = the phase stays 0 forever = the structural-immunity root). The
+    // gate for the RENDER is the camera mode, not a config flag.
+    {
+        const Vec3 pos = position();
+        const bool moving = pos.x != prevX || pos.z != prevZ;
+        m_swingPhase = advanceSwingPhase(m_swingPhase, moving);
     }
 
     // 4. Survival (Phase 16): fall damage on landing, regeneration, and

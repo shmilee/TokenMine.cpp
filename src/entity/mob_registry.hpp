@@ -259,7 +259,11 @@ public:
 
     // Pure parse helpers (unit-testable without a registry).
     static Result<void> parseProperties(const Json& def, MobProperties& out);
-    static Result<void> parseModel(const Json& def, MobModel& out);
+    // `label` prefixes the error messages ("mob model" for the mob files,
+    // "player body model" for the UX-3 player body — the default keeps
+    // every pre-UX-3 message bit-identical).
+    static Result<void> parseModel(const Json& def, MobModel& out,
+                                   const char* label = "mob model");
 
 private:
     std::vector<Mob> m_mobs;

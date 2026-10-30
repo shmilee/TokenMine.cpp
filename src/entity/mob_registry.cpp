@@ -387,7 +387,8 @@ Result<void> MobRegistry::parseProperties(const Json& def,
     return {};
 }
 
-Result<void> MobRegistry::parseModel(const Json& def, MobModel& out) {
+Result<void> MobRegistry::parseModel(const Json& def, MobModel& out,
+                                     const char* label) {
     if (!def.isObject()) {
         return MC_FAIL("mob 'model' must be a JSON object");
     }
@@ -396,25 +397,28 @@ Result<void> MobRegistry::parseModel(const Json& def, MobModel& out) {
     for (const auto& [key, value] : def.members()) {
         if (key != "width" && key != "height" && key != "boxes" &&
             key != "swings") {
-            return MC_FAIL("mob model has unknown field '" + key + "'");
+            return MC_FAIL(std::string(label) +
+                           " has unknown field '" + key + "'");
         }
     }
-    auto r = readPositiveNumber(def, "width", out.width, "mob model");
+    auto r = readPositiveNumber(def, "width", out.width, label);
     MC_TRY(r);
-    r = readPositiveNumber(def, "height", out.height, "mob model");
+    r = readPositiveNumber(def, "height", out.height, label);
     MC_TRY(r);
 
     const Json* boxesJson = def.find("boxes");
     if (boxesJson == nullptr || !boxesJson->isArray() ||
         boxesJson->size() == 0) {
-        return MC_FAIL("mob model: 'boxes' is required and must be a "
+        return MC_FAIL(std::string(label) +
+                       ": 'boxes' is required and must be a "
                        "non-empty array");
     }
     out.boxes.clear();
     out.boxes.reserve(boxesJson->size());
     for (std::size_t i = 0; i < boxesJson->size(); ++i) {
         const Json& bj = boxesJson->at(i);
-        const std::string what = "mob model box " + std::to_string(i);
+        const std::string what = std::string(label) + " box " +
+                                 std::to_string(i);
         if (!bj.isObject()) {
             return MC_FAIL(what + " must be a JSON object");
         }
@@ -482,11 +486,11 @@ Result<void> MobRegistry::parseModel(const Json& def, MobModel& out) {
     out.swings.clear();
     if (const Json* swingsJson = def.find("swings")) {
         if (!swingsJson->isArray()) {
-            return MC_FAIL("mob model: 'swings' must be an array");
+            return MC_FAIL(std::string(label) + ": 'swings' must be an array");
         }
         for (std::size_t i = 0; i < swingsJson->size(); ++i) {
             const Json& e = swingsJson->at(i);
-            const std::string what = "mob model swings[" +
+            const std::string what = std::string(label) + " swings[" +
                                      std::to_string(i) + "]";
             if (!e.isObject()) {
                 return MC_FAIL(what + " must be a JSON object "

@@ -140,6 +140,15 @@ public:
         Furnace,   // Phase 40: right-clicked furnace: the smelting GUI
     };
 
+    // UX-3: the camera mode — the player's world-space body renders ONLY
+    // in third person (the body is invisible in first person, the Minecraft
+    // convention). UX-3 ships First as the constant (the render gate is
+    // off for every run = structural immunity); UX-4 adds the toggle.
+    enum class CameraMode {
+        First,     // the default: no player body (byte-identical baseline)
+        ThirdBack, // the body renders behind the camera (UX-4)
+    };
+
     // The panel UIs (Phase 15/17/40 — UX-2 B4's m_panel) hold references
     // to the inventory and the registries, so they are constructed in
     // m_panel's initializer (after all of them, in declaration order).
@@ -564,6 +573,19 @@ private:
     const Mesh& mobMesh(MobID id);
     const Mesh& swingMobMesh(const MobEntity& mob, const Mob& def);
     const SwingModel& swingModel(MobID id);
+
+    // UX-3: the player's world-space body — the shared mob box-model
+    // pipeline (data/player_body.json parsed through MobRegistry::
+    // parseModel) rendered in THIRD PERSON ONLY (m_cameraMode != First;
+    // UX-3 ships First = a no-op on every run, the structural-immunity
+    // root). First person: the held hand (drawHeldHand) is untouched.
+    // The swing (arms + legs, the player's swing phase) draws the
+    // per-frame DYNAMIC mesh exactly like a swinging mob; the rest pose
+    // (phase 0) draws the STATIC cache.
+    void drawPlayerBody(const Mat4& view, const Mat4& projection);
+    const Mesh& playerBodyMesh();
+    const Mesh& playerBodySwingMesh();
+    const SwingModel& playerBodySwingModel();
 
     // Arrow rendering (Phase 21): the arrows (the P10 Projectiles the bow
     // launches) draw after the mobs in the opaque pass with the shared
@@ -1102,6 +1124,42 @@ private:
         std::uint64_t spawnCounter = 0;
     };
     MobSystem m_mobs;
+    // The player body family (UX-3): the player's world-space body —
+    // the data model (data/player_body.json, parsed through MobRegistry::
+    // parseModel's full strict discipline) + the render assets (the static
+    // box mesh, the swing geometry, the per-frame dynamic mesh — all
+    // built lazily, so a First-person run (the UX-3 constant) never
+    // builds them = structural immunity) + the camera mode (First =
+    // the body never draws; UX-4 adds the toggle). The phase itself
+    // lives on the Player (m_swingPhase — render-only, never saved, the
+    // mobs-ephemeral precedent). Consumer sites: game_init (the model
+    // load + the atlas cross-check), game_entities (drawPlayerBody + the
+    // lazy builders), game_render (the opaque-pass call after drawMobs).
+    // All members are default-constructed with no cross-reads (the
+    // construction-order red line).
+    struct PlayerBody {
+        // The parsed model section (boxes + swings; the width/height are
+        // the RENDER bounding values — the player's collision AABB stays
+        // Player::Params 0.6 x 1.8, untouched).
+        MobModel model;
+        bool modelLoaded = false;
+        // The static box mesh (built lazily — never in a First run).
+        Mesh mesh;
+        // The swing geometry (the CPU base + parts; built lazily on the
+        // first swing frame of a third-person run).
+        SwingModel swingModel;
+        // The per-frame dynamic mesh (one instance = the player; the
+        // VBO is rewritten per swing frame, the IBO/VAO never again).
+        Mesh swingMesh;
+        // The frame-vertex scratch for buildSwingFrame (drawPlayerBody
+        // is single-threaded on the GL thread — the mobs' shared-scratch
+        // pattern, this body's own instance).
+        std::vector<MeshVertex> swingFrameVerts;
+    };
+    PlayerBody m_playerBody;
+    // UX-3: the camera mode (First = the body is invisible — the UX-3
+    // constant; UX-4 adds the in-game toggle).
+    CameraMode m_cameraMode = CameraMode::First;
     // The player input-channel family (UX-2 B4): everything the pointer-
     // locked interaction maintains — the swing cooldown (Phase 20, the
     // attack input), the bow draw (Phase 24), the eat channel (Phase 28,

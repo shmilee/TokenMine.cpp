@@ -892,6 +892,89 @@ const SwingModel& Game::swingModel(MobID id) {
     return sm;
 }
 
+void Game::drawPlayerBody(const Mat4& view, const Mat4& projection) {
+    // UX-3: the player's world-space body draws ONLY in third person
+    // (m_cameraMode != First). UX-3 ships the mode constant at First, so
+    // this returns immediately on EVERY run — the no-input baseline is
+    // byte-identical (the structural-immunity root). The held hand (the
+    // first-person view model, drawHeldHand) is untouched by this
+    // function.
+    if (m_cameraMode == CameraMode::First || !m_playerBody.modelLoaded ||
+        !m_player) {
+        return;
+    }
+    // The ENT-1 pattern: an actively swinging player (the model has swing
+    // data + the phase != 0) draws the per-frame DYNAMIC mesh (the swing
+    // parts rotated about their pivots, the rest verbatim); the rest pose
+    // (phase 0 = the identity pose) draws the STATIC cache — byte-
+    // identical. mobs.limb_swing does NOT gate the player body: its
+    // visibility belongs to the camera mode alone (the task's rule — the
+    // config is the mobs' render switch).
+    const Mesh& mesh =
+        limbSwingActive(true, !m_playerBody.model.swings.empty(),
+                        m_player->swingPhase())
+            ? playerBodySwingMesh()
+            : playerBodyMesh();
+    if (!mesh.valid()) {
+        return;
+    }
+    // Bottom-center origin (the player's AABB position — the Entity
+    // convention), rotated by the camera yaw (the mob's facingYaw
+    // convention: yaw 0 = facing -Z, the box's -Z face is the front).
+    const Mat4 model = Mat4::multiply(
+        Mat4::translate(m_player->position()), Mat4::rotateY(m_player->yaw));
+    // Zero per-draw uniforms (the drawMobs pattern, the function right
+    // above in the same pass): the render pass set u_useTexture = 1 and
+    // bound the atlas at the top, and the bake is skyLight = 1.0 /
+    // blockLight = 0 (makeMobModelGeometry — the mobs' always-bright
+    // convention; the PRE-6 / LGT-4 world-light override is NOT applied,
+    // the documented deviation shared with the mobs).
+    m_renderer.draw(mesh, m_basicShader, view, projection, model);
+}
+
+const Mesh& Game::playerBodyMesh() {
+    if (m_playerBody.mesh.valid()) {
+        return m_playerBody.mesh;
+    }
+    const ItemMeshGeometry geom =
+        makeMobModelGeometry(m_playerBody.model, m_atlas.layout());
+    auto r = m_playerBody.mesh.upload(geom.vertices, geom.indices);
+    if (!r.ok()) {
+        MC_LOG_ERROR("Player body mesh build failed: " +
+                     r.error().describe());
+    }
+    return m_playerBody.mesh;
+}
+
+const Mesh& Game::playerBodySwingMesh() {
+    // swingMobMesh mirrored for the single instance: the per-frame
+    // vertices (buildSwingFrame into this body's scratch) rewrite the
+    // dynamic VBO (the topology is static — the IBO/VAO are never
+    // touched again).
+    const SwingModel& sm = playerBodySwingModel();
+    buildSwingFrame(sm, m_player->swingPhase(), m_playerBody.swingFrameVerts);
+    if (!m_playerBody.swingMesh.valid()) {
+        auto r = m_playerBody.swingMesh.uploadDynamic(sm.base, sm.indices);
+        if (!r.ok()) {
+            MC_LOG_ERROR("Player body swing mesh build failed: " +
+                         r.error().describe());
+        }
+    }
+    m_playerBody.swingMesh.updateVertices(m_playerBody.swingFrameVerts);
+    return m_playerBody.swingMesh;
+}
+
+const SwingModel& Game::playerBodySwingModel() {
+    // Built lazily on the first swing frame (only reachable when the
+    // model has swing data — the draw gate above), so parts.empty() is
+    // the not-built marker (a swing-less model never comes here).
+    if (m_playerBody.swingModel.parts.empty()) {
+        m_playerBody.swingModel =
+            buildSwingModel(m_playerBody.model, m_atlas.layout());
+    }
+    return m_playerBody.swingModel;
+}
+
 void Game::drawArrows(const Mat4& view, const Mat4& projection) {
     // The arrows render in the basic shader's solid-color path (v1 has no
     // arrow texture): u_useTexture is per-program state shared with every

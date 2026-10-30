@@ -617,6 +617,42 @@ Result<void> Game::buildScene() {
         }
     }
 
+    // -- player body (UX-3): the world-space body model ----------------------
+    // data/player_body.json is a MODEL-ONLY file (exactly one top-level
+    // 'model' key — no id / properties / AI fields, the mob file's
+    // strictness without the behavior): it is parsed through the mob
+    // model's strict parser (MobRegistry::parseModel — the full boxes /
+    // swings discipline, labeled "player body model") and cross-checked
+    // against the atlas with the same 5-line pattern as the mob textures
+    // above. Render-only: the model loads no world/save state (zero
+    // format change) and the first-person gate (m_cameraMode) keeps every
+    // UX-3 run byte-identical (the structural-immunity root).
+    auto playerBodyText = m_assets.loadText("data/player_body.json");
+    MC_TRY(playerBodyText);
+    auto playerBodyJson = Json::parse(*playerBodyText);
+    MC_TRY(playerBodyJson);
+    if (!playerBodyJson->isObject() ||
+        playerBodyJson->members().size() != 1 ||
+        playerBodyJson->find("model") == nullptr) {
+        return MC_FAIL("player_body.json must contain exactly the "
+                       "'model' section (no id / properties / AI fields)");
+    }
+    const Json* playerBodyModel = playerBodyJson->find("model");
+    if (!playerBodyModel->isObject()) {
+        return MC_FAIL("player body model must be a JSON object");
+    }
+    auto playerBodyParsed =
+        MobRegistry::parseModel(*playerBodyModel, m_playerBody.model,
+                                "player body model");
+    MC_TRY(playerBodyParsed);
+    m_playerBody.modelLoaded = true;
+    for (const MobBox& box : m_playerBody.model.boxes) {
+        if (!m_atlas.contains(box.texture)) {
+            return MC_FAIL("player body: model texture '" + box.texture +
+                           "' not in the atlas");
+        }
+    }
+
     // -- status effects (Phase 46) ------------------------------------------
     // The data-driven effect definitions (data/effects/*.json) + the
     // cross-checks: a mob's on_hit_effect must name a registered effect

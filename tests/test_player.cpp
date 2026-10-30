@@ -8,6 +8,7 @@
 
 #include "block/block_registry.hpp"
 #include "core/input.hpp"
+#include "entity/mob_swing.hpp"
 #include "player/player.hpp"
 #include "world/world.hpp"
 
@@ -2123,4 +2124,79 @@ TEST(PlayerInertiaTest, StopEpsilonRestsExactly) {
     run(p, 60, idle); // the rest state holds (no drift)
     EXPECT_FLOAT_EQ(p.position().x, x0);
     EXPECT_FLOAT_EQ(p.position().z, z0);
+}
+
+// -- UX-3: the player limb-swing phase (the ENT-1 MobEntity rule) --------
+//
+// The phase is one int, advanced per frame from the STRICT frame-boundary
+// horizontal displacement (the position says, not the input intent — the
+// ENT-7 slide keeps swinging, the rest decays to the identity pose).
+// Render-only: never saved, no config gate (the render gate is the camera
+// mode — in UX-3 constant First = the phase is computed but never drawn).
+
+TEST(PlayerSwingPhaseTest, AdvancesWhileWalking) {
+    // The phase advances kSwingStep per MOVING frame: a walking player
+    // (strict horizontal displacement every frame) at 10 frames has
+    // swung exactly 10 * kSwingStep.
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    p.yaw = 0.0f; // W walks -Z
+    Input walk = heldInput({GameKey::W});
+    run(p, 10, walk);
+    EXPECT_LT(p.position().z, 8.5f); // the walk really moved (non-vacuous)
+    EXPECT_EQ(p.swingPhase(), 10 * kSwingStep);
+}
+
+TEST(PlayerSwingPhaseTest, KeepsSwingingWhileSlidingThenDecays) {
+    // Walk 5 frames (phase 10), then release: the ENT-7 slide (velocity
+    // decay) still produces strict per-frame displacement, so the phase
+    // KEEPS advancing +kSwingStep per slide frame; the frame the velocity
+    // is clamped to 0 is the first resting frame (the phase decays
+    // kSwingDecay toward 0 from there), and the rest holds at 0.
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    p.yaw = 0.0f; // W walks -Z
+    Input walk = heldInput({GameKey::W});
+    run(p, 5, walk);
+    ASSERT_EQ(p.swingPhase(), 5 * kSwingStep);
+    Input idle = heldInput({});
+    int slide = 0;
+    for (;;) {
+        p.update(kDt, idle, false);
+        if (p.velocity().z != 0.0f) {
+            ++slide;
+            EXPECT_EQ(p.swingPhase(),
+                      (5 * kSwingStep + slide * kSwingStep) %
+                          kSwingPhaseCount);
+        } else {
+            break; // the stop frame: no displacement, the decay ran
+        }
+    }
+    ASSERT_GE(slide, 5)
+        << "the ENT-7 slide must carry the phase (non-vacuous)";
+    EXPECT_EQ(p.swingPhase(),
+              advanceSwingPhase((5 + slide) * kSwingStep % kSwingPhaseCount,
+                                false));
+    // The decay schedule (kSwingDecay per frame, clamped at 0).
+    int expected = p.swingPhase();
+    for (int i = 0; i < 20 && expected > 0; ++i) {
+        p.update(kDt, idle, false);
+        expected = advanceSwingPhase(expected, false);
+        EXPECT_EQ(p.swingPhase(), expected);
+    }
+    EXPECT_EQ(p.swingPhase(), 0); // the rest pose, exactly
+}
+
+TEST(PlayerSwingPhaseTest, InertWithoutInput) {
+    // The structural-immunity root: no input = no displacement = the
+    // phase stays 0 (the identity pose) forever — a no-input run never
+    // leaves the render fast path (the static mesh), so the baseline is
+    // byte-identical.
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    for (int i = 0; i < 20; ++i) {
+        p.update(kDt, idle, false);
+        EXPECT_EQ(p.swingPhase(), 0) << "frame " << i;
+    }
 }

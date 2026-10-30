@@ -693,6 +693,10 @@ void Game::render() {
     // Mobs (Phase 20): opaque box models, with the opaque pass (the depth
     // test then occludes them behind terrain exactly like the chunks).
     drawMobs(view, projection);
+    // UX-3: the player's world-space body — third person ONLY
+    // (m_cameraMode != First); UX-3 ships First = a no-op on every run
+    // (baseline byte-identical, the structural-immunity root).
+    drawPlayerBody(view, projection);
     // Arrows (Phase 21): the bow's in-flight projectiles, solid color.
     drawArrows(view, projection);
     // 3D held hand (Phase 42): the selected item's view model, in the

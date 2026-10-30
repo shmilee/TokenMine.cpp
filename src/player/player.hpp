@@ -178,6 +178,13 @@ public:
     float yaw = 0.0f;
     float pitch = 0.0f;
 
+    // UX-3: the limb-swing phase (render-only, never saved — the mobs are
+    // ephemeral, the player's phase is just as transient: a save reload
+    // starts at the rest pose, 0). One integer, advanced per frame in
+    // update() by the ENT-1 rule (see m_swingPhase); the body render
+    // (drawPlayerBody) consumes it through the shared mob_swing math.
+    int swingPhase() const { return m_swingPhase; }
+
     // Eye height: the standing value, lowered by the crouch delta (the eye
     // stays a fixed distance below the top of the head).
     float currentEyeHeight() const {
@@ -478,6 +485,12 @@ private:
     // still a seat — the logs are unchanged).
     BlockID m_campfireBlockId = BlockID::invalid();
     BlockID m_campfireExtId = BlockID::invalid();
+    // UX-3: the limb-swing phase (see swingPhase()). Render-only: advanced
+    // in update() from the strict frame-boundary horizontal displacement
+    // (the ENT-1 MobEntity rule — the displacement decides, not the input
+    // intent: a sliding player (ENT-7 inertia) keeps swinging, a resting
+    // player decays to the identity pose). Never saved.
+    int m_swingPhase = 0;
     // Phase 71: the sitting state this tick (see isSitting()).
     bool m_sitting = false;
     // SURV-1 (armor): the equipped pieces (count 1 or empty) + their

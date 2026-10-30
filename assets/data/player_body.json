@@ -1,0 +1,49 @@
+{
+  "model": {
+    "width": 1.0,
+    "height": 1.8,
+    "boxes": [
+      {
+        "pos": [0.0, 1.55, 0.0],
+        "size": [0.5, 0.5, 0.5],
+        "texture": "player_head"
+      },
+      {
+        "name": "body",
+        "pos": [0.0, 1.025, 0.0],
+        "size": [0.5, 0.55, 0.25],
+        "texture": "player_body"
+      },
+      {
+        "name": "arm_l",
+        "pos": [-0.375, 0.925, 0.0],
+        "size": [0.25, 0.75, 0.25],
+        "texture": "player_arm"
+      },
+      {
+        "name": "arm_r",
+        "pos": [0.375, 0.925, 0.0],
+        "size": [0.25, 0.75, 0.25],
+        "texture": "player_arm"
+      },
+      {
+        "name": "leg_l",
+        "pos": [-0.125, 0.375, 0.0],
+        "size": [0.25, 0.75, 0.25],
+        "texture": "player_leg"
+      },
+      {
+        "name": "leg_r",
+        "pos": [0.125, 0.375, 0.0],
+        "size": [0.25, 0.75, 0.25],
+        "texture": "player_leg"
+      }
+    ],
+    "swings": [
+      { "part": "arm_l", "amplitude": 0.3, "group": 0 },
+      { "part": "leg_r", "amplitude": 0.35, "group": 0 },
+      { "part": "arm_r", "amplitude": 0.3, "group": 1 },
+      { "part": "leg_l", "amplitude": 0.35, "group": 1 }
+    ]
+  }
+}

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 1.36.0 LANGUAGES CXX)
+project(TokenMine VERSION 1.37.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -169,6 +169,7 @@ add_executable(tokenmine_tests
     tests/test_entity.cpp
     tests/test_mob.cpp
     tests/test_mob_model.cpp
+    tests/test_player_body.cpp
     tests/test_pathfind.cpp
     tests/test_item.cpp
     tests/test_item_light.cpp
