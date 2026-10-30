@@ -3,6 +3,40 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.34.0（2026-10-30）— 插队修复 ×3（矩阵 UX 行开工前清积压）
+
+**④ 物品解析白名单补 `saturation`**：门 141 内发现的 10 行 init WARN
+噪音（10 个 SURV-9 食物 JSON 的 `saturation` 字段在 item_registry
+顶层 unknown-field 白名单缺名）→ 白名单加一行，解析路径零改动。门
+149 S2b 实证：v1.33.0 init 恰 10 行 / v1.34.0 = 0 行。
+
+**③ 性能插桩器入 `tools/`**：`tools/g139_instrument.py`（g139 族门
+脚本的 perf 树 27 标记补丁器；锚点结构性断言 = game.cpp 结构变化时
+loud fail，PITS 317 纪律——perf 树可从 repo+commit+本工具重建，/tmp
+重启不丢）。门 149 性能 A/B 双侧同打 = 入 tools/ 即实战首验。
+
+**炉子配方（内容缺口修复）**：Phase 40 起炉子系统完整可用但 shipped
+配方零 furnace + 初始库存无 = **正常游玩拿不到炉子**（10-30
+GAMEPLAY.md 刷新时发现，KNOWN_ISSUES 落档）→ shaped 配方
+`8 cobblestone 围圈 → 1 furnace`（MC 1.14+ 摆法，纯内容零核心代码；
+锻石 = Phase 61 挖石头掉落 = 石头→锻石→炉子闭环；隐藏 starter 槽不
+给 = 配方即获取途径）。内容钉死单测含真实匹配器正/负例。配方
+65→66（shaped 33→34）。
+
+1913/1913（+1 炉子钉死）、`-Werror` 0、banner v1.34.0。门 149 全
+PASS：S1 第 149 次结构性免疫 + base18 锚连续 168140 B 免重锚 + 跨版
+savenorm EXACT；S2b WARN 10→0；S2 炉子合成 A/B 6/6（NEW 侧 full
+19 点击 E2E：×2 RAW + ×2 savenorm + 终态 slot0 furnace ×1 = shaped
+围圈命中实证 / OLD 侧 minimal 7 点击竞态无关断言：无 furnace/无
+stone/8 锻石守恒 + ×2 RAW + ×2 savenorm；**双二进制 CPU harness
+逻辑层终态互斥**：同 19 点击 NEW = furnace ×1 vs OLD = stone ×2
+【v1.33.0 无 furnace 配方，满围圈也只 shapeless 石头双合成】）；S3
+1913；性能 A/B v1.33.0 vs v1.34.0 PASS（banner 双侧 + 全指标同档 +
+changesApplied 9/3/1 三窗逐位 + 终档 fluids 18/18 + blocks 55/55
+集合恒等 = 同世界同成本）。PITS 338（面板点击落位验证协议）+ 339
+（场景容器块须携状态段）+ 340（长输入序列浮动窗 + 强制几何）。详见
+`docs/archive/phase-fixes-v134.md`。
+
 ## v1.33.0（2026-10-30）— **tag v1.33.0 = PRE-11+12 合并 tag + v1.x 任务矩阵 33/33 全完成 + PRE 系统 release**
 
 **PRE-12 tooltip/F3**（v1.x 任务表 33/33 = v1.x 收官，门 148，PRE 行 6/6）：

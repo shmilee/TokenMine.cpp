@@ -12,7 +12,9 @@
 
 #include "block/block_registry.hpp"
 #include "core/json.hpp"
+#include "item/crafting_grid.hpp"
 #include "item/inventory.hpp"
+#include "item/item.hpp"
 #include "item/item_registry.hpp"
 #include "item/recipe.hpp"
 
@@ -937,4 +939,57 @@ TEST(RecipeRegistryTest, Phase68ShovelRecipeContent) {
         EXPECT_EQ(f.items.at(rec->key.at(headCh)).name, headName) << id;
         EXPECT_EQ(f.items.at(rec->key.at(stickCh)).name, "stick") << id;
     }
+}
+
+// v1.34.0 (the furnace content gap, KNOWN_ISSUES Phase 40 residue): the
+// ACTUAL furnace recipe. The furnace block existed since Phase 40 with a
+// fully working smelting system but NO recipe and no starter inventory
+// item — normal play could never obtain one. The MC 1.14+ layout: 8
+// cobblestone in a ring -> 1 furnace (cobblestone = the Phase 61 stone
+// drop, closing the stone -> cobblestone -> furnace loop). The test also
+// drives the REAL matcher: a ring-filled grid must match the furnace
+// recipe through matchGridRecipe (the same entry point the table UI
+// uses), and a 7-stone ring (one gap) must not.
+TEST(RecipeRegistryTest, FurnaceRecipeContent) {
+    RealAssets f;
+    ASSERT_TRUE(f);
+    const Recipe* rec = f.recipes.find("furnace");
+    ASSERT_NE(rec, nullptr);
+    EXPECT_EQ(rec->type, RecipeType::Shaped);
+    ASSERT_EQ(rec->pattern.size(), 3u);
+    EXPECT_EQ(rec->pattern,
+              (std::vector<std::string>{"CCC", "C C", "CCC"}));
+    ASSERT_EQ(rec->key.size(), 1u);
+    EXPECT_EQ(f.items.at(rec->key.begin()->second).name, "cobblestone");
+    EXPECT_EQ(rec->output, f.items.idForName("furnace"));
+    EXPECT_EQ(rec->outputCount, 1);
+
+    // The matcher: fill all 8 ring cells (slot 4 = the center stays
+    // empty) with cobblestone and run the registry-wide match.
+    auto cobble = f.items.idForName("cobblestone");
+    auto ringGrid = [&cobble]() {
+        CraftingGrid grid;
+        ItemStack stone;
+        stone.item = cobble;
+        stone.count = 1;
+        for (int slot = 0; slot < CraftingGrid::kSize; ++slot) {
+            if (slot != 4) {
+                grid.setSlot(slot, stone);
+            }
+        }
+        return grid;
+    };
+    GridMatch m = matchGridRecipe(ringGrid(), f.recipes);
+    ASSERT_TRUE(m.matched());
+    EXPECT_EQ(m.recipe, rec);
+
+    // One ring cell missing = the pattern's covered cell is empty ->
+    // the FURNACE pattern cannot match (a 7-cobblestone grid may still
+    // match OTHER recipes, e.g. the shapeless 6-stone wall — that is
+    // correct bag semantics, not a furnace false positive, so assert
+    // against the shaped matcher directly).
+    CraftingGrid gapped = ringGrid();
+    gapped.setSlot(0, ItemStack{});
+    int dx = 0, dy = 0;
+    EXPECT_FALSE(matchesShaped(gapped, *rec, &dx, &dy));
 }
