@@ -113,14 +113,43 @@ setBlock 9 项簿记 + 4 镜像站点/存档收口/渲染 pass/流送 worker 窗
 base18 锚连续 + 跨版 savenorm EXACT + 构建 0 警告 + 1929 套件；B 段每
 子相附**声明序映射表**（构造序 = 初始化序 = 行为面）。
 
-## 性能 A/B（UX-2 收官必做，发布前硬门槛）
-<!-- old = tm_v136_base（v1.35.0）/ new = UX-2 终态；预期 = 同世界同成本
-（纯重构零行为变更最强形）-->
+## 性能 A/B（UX-2 收官必做，发布前硬门槛）PASS
+fall 900f 无输入，tm_v136_perf_old（v1.35.0 + 27 标记，legacy 布局）vs
+tm_v136_perf_new（v1.36.0 + 同款补丁器 split 模式，27 标记，banner 双侧
+实证）：PERF-WIN 三窗 upd med 0.385/0.377/0.477 vs 0.397/0.431/0.419、
+render med 0.460/0.427/0.505 vs 0.449/0.459/0.483、swap med
+15.66/15.77/15.58 vs 15.62/15.68/15.66、fluid 0.045/0.043/0.050 vs
+0.045/0.048/0.044 = **全指标同档**；PIPE3-S0 changesApplied **9/3/1
+三窗逐位**；**终档 fluids 18/18 + blocks 55/55 集合恒等 diff 0 = 同世界
+同成本（纯重构零行为变更最强形）**。
+**补丁器适配**：A2 退役单文件 game.cpp 后原 g139_instrument 对新布局
+loud fail（设计行为）→ v2 双模式自动检测（legacy 输出与 v1 字节一致
+实证 / split = 生成 g139win.hpp 全 inline ODR 安全 + 6 站点锚点重定位：
+update 内 5 站点 game_frame.cpp + run loop game_init.cpp；标记口径
+27 不变）。教训：生成头文件跨 TU 共享时自由函数须 inline（首轮
+multiple definition 链接错，PITS 级）。
 
 ## 偏离/记档
 - C 方案（子系统对象化）= 矩阵外（立项需用户定案；流送域试点候选）
 - game.hpp 成员平铺 → struct 收拢 = B 段逐步完成（本相结束前 hpp 仍
   1376 行平铺 = A 段零结构变更的代价）
 
+## 装配点前后对照（痛点兑现）
+
+| 装配点 | 前（v1.35.0） | 后（v1.36.0） |
+|---|---|---|
+| A4 setBlock 9 项簿记 | 9 个平铺 m_ 成员散落 | `m_states.xxx` 域内显式 |
+| A7 流送 worker 窗 | 14 平铺成员 | `m_streaming.xxx` |
+| mob 生成/摆动域 | 11 平铺成员 | `m_mobs.xxx` |
+| A3 右键链 + A8 UI 态 | 19 平铺成员（含红线块间交错） | `m_interaction.xxx` + `m_panel.xxx` |
+| 新 per-block 系统成本 | 9 簿记行 + 5 站点隐式耦合 + hpp 平铺 +1 | struct +1 成员 + 5 站点显式 `m_states.xxx` |
+| game.cpp | 8776 行单 TU | **退役**（8 TU 各 558-1718 行） |
+
+留平铺记档（跨域簿记，域归属模糊不强收）：m_flammableChunks /
+m_lightPendingColumns / m_fluidLightPending（burn/光照簿记跨 frame +
+streaming 两域）+ 箭头三 mesh + 红线块（items/inventory/selectedSlot/
+recipes 永不动）。
+
 ## PITS
-<!-- 子相执行中追加 -->
+- PITS 343（ast_grep C++ 裸标识符 no matches → sed \b + occurrence
+  守恒协议，B4 19 名 × 93 处实证）

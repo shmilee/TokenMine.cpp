@@ -2659,3 +2659,13 @@
   非单调（16:32 的行使在前、16:04 在后）+ awk 子串匹配 `"15:3[4-9]"` 命中前一日
   `23:15:34` 行 = 双重错配。修 = 按行内时间**字段**（$2）前缀匹配 + 提取后先核
   head/tail 时序合理性，反常 = 查 `date` 与 NTP 步调。
+- **ast_grep 对 C++ 裸标识符机械改写无效，改 sed 词边界 + 发生数守恒（PITS 343）**——10-30
+  UX-2 B4：批量 `m_xxx` → `m_panel.xxx` 式调用点改写（19 名 × 93 处）用
+  ast_grep_search 裸标识符 pattern 验证 = 全 no matches（ast-grep 对纯
+  标识符非完整 AST 节点不匹配）；改 `sed -E 's/\b名\b/新名/g'` 逐词边界
+  （注意前缀名对：m_inventoryGrid/m_inventory、m_beaconBeam/m_beaconBeamMesh
+  靠 \b 天然区分）+ **发生数守恒复核**（改名前全 src 旧名 occurrence 总数
+  = 改名后新名总数 + struct 内裸声明数 + 注释引用数，逐名对上 = 零漏改
+  零误改的机械证明；首轮 line-count 审计差 1 = 一行双发生，改
+  occurrence 计法对上）。凡"纯文本机械改写"类任务（struct 收拢/重命名），
+  验证协议 = 词边界 sed + occurrence 守恒 + 构建 -Werror + 零残留 grep。

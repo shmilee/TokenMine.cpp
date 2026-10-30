@@ -3,6 +3,41 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v1.36.0（2026-10-30）— **tag v1.36.0 = UX-1+2 合并 tag（UX 政策首个兑现）**
+
+### UX-2 Game 拆分/装配层收敛（UX 行 2/7，门 151-156 全 PASS）
+
+**A 段（纯文件拆分，零结构变更）**：8776 行 game.cpp 单 TU → **8 个
+game_*.cpp**（A1：game_init 13 法 / game_streaming 10 法 / game_save 5
+法 + game_local.hpp 私有共享头；A2：game_frame 7 / game_interaction 26
+【右键链 12 级顺序 = 所有权随迁】/ game_entities 12 / game_render 9 /
+game_ui 23；game.cpp 退役删除；game.hpp 零触碰）。方法体 verbatim
+（编排者独立抽验 5 最长法整法 diff 零差异 + 全签名在位 + 纯删确认）。
+
+**B 段（域状态 struct 收拢 = 装配点显式化，路线 A+B 用户定案）**：
+B1 per-block 23 成员 → PerBlockStates m_states（setBlock 9 项簿记 + 五
+消费者站点全显式化，146 处改写）/ B2 流送 14 成员 → StreamingState
+m_streaming（零初始化重排，115 处）/ B3 mob 11 成员 → MobSystem m_mobs
+（零重排，51 处）/ B4 交互 11 + 面板 8 → InteractionState m_interaction
++ PanelState m_panel（安全重排，序映射表论证：全默认构造零跨读 + 红线
+items<inventory<recipes<UI 三构造序保持）。每 struct 族内相对序逐字
+保持 = 构造序 = 初始化序 = 行为面红线；4 跨域簿记留平铺记档。
+**痛点直接缓解**：新 per-block 系统 = 域内 1 成员 + 5 消费点显式
+m_states.xxx（前 = 9 项簿记散落 + 隐式耦合）。
+
+1929/1929（全子相零测试改动 = 拆分零测试面影响实证，192 套件全纯函数
+级）、-Werror 0、banner v1.36.0。门 151-156 全 PASS（子相协议 = 无像素
+门）：每子相 new ×2 + **对 v1.35.0 冻结基线（tm_v136_base）字节一致 +
+base18 锚连续 168140 B + 跨版 savenorm EXACT**；B 段每子相加读档往返
+全状态恒等（applySave/rescan* 经新 struct 行为零差证明）；A 段传递链
+闭合（a2n1 ≡ a1n1 ≡ a1o1 ≡ 锚 全 EXACT = 终态二进制对拆分前位级恒等）。
+性能 A/B v1.35.0 vs v1.36.0 fall 900f 三窗全指标同档 + changesApplied 9/3/1 逐位 + 终档 fluids 18/18 + blocks 55/55 集合恒等 diff 0 = 同世界同成本【纯重构最强形】；补丁器 g139_instrument v2 双模式适配 8-TU 布局（legacy 输出字节一致实证，PITS 343 机械改写协议）。C 方案（子系统
+对象化）记档矩阵外。详见 docs/archive/phase-ux2.md。
+
+**tag v1.36.0 = UX-1+2 合并 tag**（10-30 用户定案 UX 行政策兑现：两两
+合并 tag v1.36/1.38/1.40/1.41 收官 + UX 系统 release 于 UX-7 收官，
+notes 覆盖 v1.35-1.41）。UX-1 夜变暗程度明细见 v1.35.0 条目。
+
 ## v1.35.0（2026-10-30）— UX-1 夜变暗程度（UX 行 1/7，门 150 全 PASS）
 
 **UX-1**（v1.x 任务表 34/40，10-30 用户定案方向）：消费 LGT-3 定案「10-27
