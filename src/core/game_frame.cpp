@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "core/third_person.hpp"
 #include "entity/item_light.hpp"
 #include "world/beacon.hpp"
 #include "world/fire_spread.hpp"
@@ -359,9 +360,22 @@ void Game::update(double dt) {
     if (!panelOpen() && !m_player->isDead()) {
         m_player->update(dt, m_input, m_window.relativeMouseMode());
     }
-    m_camera.position = m_player->eyePosition();
+    // UX-4: first person keeps the legacy assignment bit-exactly (the
+    // camera is the eye). Third person orbits kThirdPersonDistance BEHIND
+    // the eye on the view's own sphere and clamps against the first
+    // occluding block face (the pure read-only resolve in
+    // core/third_person — the campfire pattern). The mode is session
+    // state (never saved, defaults to First), so a no-input run stays on
+    // the legacy path.
     m_camera.yaw = m_player->yaw;
     m_camera.pitch = m_player->pitch;
+    if (m_cameraMode == CameraMode::ThirdBack) {
+        m_camera.position = resolveThirdPersonCamera(
+            m_world, m_player->eyePosition(), m_player->yaw,
+            m_player->pitch);
+    } else {
+        m_camera.position = m_player->eyePosition(); // First: legacy
+    }
 
     // SURV-2: the oxygen / drowning pass (the frame-locked class — driven
     // by m_frameCount, not dt, like the day cycle; the pure step + the

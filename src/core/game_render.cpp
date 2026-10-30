@@ -312,10 +312,14 @@ void Game::drawHeldHand(const Mat4& view, const Mat4& projection) {
     // Phase 42: the 3D held-item hand (the Minecraft hand). Rendered only
     // while the pointer is locked and no panel is open (the same gate as
     // the hotbar/held icon) — a no-input run is never locked, so it renders
-    // the pre-Phase-42 image (byte-identical baseline). Pure rendering: it
-    // reads the selected slot + the bow/eat channel state and draws one
-    // model; it mutates nothing.
-    if (!m_window.relativeMouseMode() || panelOpen()) {
+    // the pre-Phase-42 image (byte-identical baseline). UX-4: hidden in
+    // third person too (the world-space body is visible instead — the
+    // Minecraft far view has no first-person arm; an arm-held-item /
+    // bow-draw pose is a documented deviation). Pure rendering: it reads
+    // the selected slot + the bow/eat channel state and draws one model;
+    // it mutates nothing.
+    if (!m_window.relativeMouseMode() || panelOpen() ||
+        m_cameraMode == CameraMode::ThirdBack) {
         return;
     }
     const ItemStack& stack = m_inventory.at(m_selectedSlot);

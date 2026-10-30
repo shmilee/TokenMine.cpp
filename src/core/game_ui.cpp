@@ -184,6 +184,16 @@ void Game::handleUiKeys() {
             MC_LOG_WARN("F5: no save slot (pass --save <slot>)");
         }
     }
+    // UX-4: C toggles the camera (Minecraft's modern camera key; F5 is
+    // the manual save here). Locked-pointer only: with the cursor free
+    // (panel open / death screen) C does nothing — the E-key pattern.
+    // The mode is session state (never saved): a loaded world starts in
+    // first person, the Minecraft convention.
+    if (m_input.wasPressed(GameKey::C) && m_window.relativeMouseMode()) {
+        m_cameraMode = (m_cameraMode == CameraMode::First)
+                           ? CameraMode::ThirdBack
+                           : CameraMode::First;
+    }
     if (m_input.wasPressed(GameKey::E)) {
         if (panelOpen()) {
             closePanel();

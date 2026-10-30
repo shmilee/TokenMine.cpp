@@ -140,10 +140,13 @@ public:
         Furnace,   // Phase 40: right-clicked furnace: the smelting GUI
     };
 
-    // UX-3: the camera mode — the player's world-space body renders ONLY
-    // in third person (the body is invisible in first person, the Minecraft
-    // convention). UX-3 ships First as the constant (the render gate is
-    // off for every run = structural immunity); UX-4 adds the toggle.
+    // The camera mode (UX-3/UX-4): the player's world-space body renders
+    // ONLY in third person (the body is invisible in first person, the
+    // Minecraft convention). First is the default — every UX-4 change is
+    // gated on m_cameraMode, so a first-person (no-input) run stays
+    // bit-identical. UX-4's C key (locked pointer only) toggles it at run
+    // time; the mode is session state, never saved (a loaded world starts
+    // in first person, the Minecraft convention).
     enum class CameraMode {
         First,     // the default: no player body (byte-identical baseline)
         ThirdBack, // the body renders behind the camera (UX-4)
