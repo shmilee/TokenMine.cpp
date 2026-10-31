@@ -190,3 +190,37 @@ TEST(ThirdPersonTest, OffsetPointsOppositeTheViewForward) {
         EXPECT_NEAR(dir.z, want.z, 1e-4f) << "yaw " << c[0];
     }
 }
+
+// -- UX-8g: the aim rays leave from the eye in both modes ------------------------
+
+TEST(ThirdPersonTest, EyeAimRayCoincidesWithTheViewAxis) {
+    // UX-8g: the interaction raycasts (targetBlock / targetMob / the
+    // bucket rays / the arrow origin) leave from the EYE along
+    // m_camera.forward() in BOTH camera modes. In third person the
+    // camera sits kThirdPersonDistance behind the eye; this test pins
+    // the geometry that makes the eye ray the screen-center line —
+    // the unoccluded resolved camera lies EXACTLY on the eye's aim
+    // line at t = -kThirdPersonDistance (eye + forward * t), so the
+    // player's own body can never occlude the aim and the full kReach
+    // budget is spent IN FRONT of the eye. (targetBlock's origin
+    // itself is a Game method, not unit-testable in isolation; this
+    // collinearity + the bit-exact First assignment in game_frame are
+    // the two halves of the first-person identity argument.)
+    World world; // no chunks: the unoccluded resolve = the ideal orbit
+    const float cases[][2] = {
+        {0.0f, 0.0f},   {0.4f, -0.2f}, {1.2f, 0.5f},
+        {-2.1f, 0.9f},  {3.0f, -1.2f}, {kPiOver2, 0.0f},
+    };
+    for (const auto& c : cases) {
+        Camera view {};
+        view.yaw = c[0];
+        view.pitch = c[1];
+        const Vec3 cam = resolveThirdPersonCamera(world, kEye, c[0], c[1]);
+        // The camera is on the eye ray at t = -kThirdPersonDistance.
+        const Vec3 onRay =
+            kEye + view.forward() * (-kThirdPersonDistance);
+        EXPECT_NEAR(cam.x, onRay.x, 1e-5f) << "yaw " << c[0];
+        EXPECT_NEAR(cam.y, onRay.y, 1e-5f) << "yaw " << c[0];
+        EXPECT_NEAR(cam.z, onRay.z, 1e-5f) << "yaw " << c[0];
+    }
+}

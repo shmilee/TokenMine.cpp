@@ -367,7 +367,17 @@ void Game::handleInteraction(double dt) {
 }
 
 std::optional<BlockHit> Game::targetBlock() const {
-    return raycastBlock(m_world, m_camera.position, m_camera.forward(),
+    // UX-8g: the aim ray leaves from the EYE in both camera modes
+    // (Minecraft semantics: the screen center IS the eye's line of
+    // sight, and the player never occludes its own aim). First person:
+    // game_frame keeps m_camera.position == eyePosition bit-exactly
+    // (the First branch is the legacy assignment), so the origin is
+    // unchanged there. Third person: the camera sits
+    // kThirdPersonDistance behind the eye on the SAME line (yaw/pitch
+    // are the player's), so the old camera origin ate 4 blocks of the
+    // kReach budget (effective reach 1) and made the nearest hit the
+    // player's own head area — the crosshair-on-itself bug.
+    return raycastBlock(m_world, m_player->eyePosition(), m_camera.forward(),
                         kReach);
 }
 
@@ -430,7 +440,11 @@ std::optional<Game::MobHit> Game::targetMob() const {
         bestT = b->distance;
     }
     MobEntity* best = nullptr;
-    const Vec3 o = m_camera.position;
+    // UX-8g: the origin is the eye in both modes, matching targetBlock
+    // (the block hit that sets the initial bestT is measured from the
+    // SAME point, so the block-vs-mob occlusion comparison stays
+    // consistent; first person is bit-identical as above).
+    const Vec3 o = m_player->eyePosition();
     const Vec3 d = m_camera.forward();
     for (const auto& entity : m_entities) {
         const MobEntity* mob =
@@ -586,7 +600,13 @@ void Game::fireBow() {
     // are not saved (ephemeral, like mobs).
     const float power = bowPower(m_interaction.bowDrawSeconds);
     const Vec3 f = m_camera.forward();
-    const Vec3 o = m_camera.position + f * kArrowSpawnOffset;
+    // UX-8g: the arrow leaves from in front of the EYE in both modes
+    // (first person: m_camera.position == eyePosition = the bit-
+    // identical legacy origin). Third person the camera sits 4 blocks
+    // behind the eye, so the old origin made the shot appear out of
+    // the player's back; the eye origin = the Minecraft shot from in
+    // front, on the aim line.
+    const Vec3 o = m_player->eyePosition() + f * kArrowSpawnOffset;
     // Phase 42: the arrow carries the shot's charge (power — scales the
     // mob-hit knockback) and the launcher's ammo item (a stuck arrow
     // picked up returns it to the inventory).
@@ -1203,9 +1223,14 @@ bool Game::tryFluidBucket() {
     }
     const bool collect = !item.collectsFluids.empty();
     if (collect) {
+        // UX-8g: the bucket-target ray leaves from the eye in both
+        // modes (first person: m_camera.position == eyePosition =
+        // bit-identical; third person the camera behind the eye would
+        // otherwise eat the reach budget and occlude itself, the same
+        // family as the crosshair bug).
         const std::optional<BlockPos> cell =
-            raycastFluid(m_world, m_camera.position, m_camera.forward(),
-                         kReach);
+            raycastFluid(m_world, m_player->eyePosition(),
+                         m_camera.forward(), kReach);
         // A source cell is level kMaxFluidLevel (flowing cells are lower
         // and cannot be collected, Minecraft). A block cell reads dry.
         const std::optional<FluidKind> kind =
@@ -1275,8 +1300,10 @@ bool Game::tryFluidBucket() {
         // FLUID-4: no block face in reach — open water beyond block
         // reach is the fluid ray's own hit cell (a wall in reach would
         // have produced the block hit, so the fluid hit here is
-        // unoccluded by definition).
-        fluidHit = raycastFluid(m_world, m_camera.position,
+        // unoccluded by definition). UX-8g: the origin is the eye,
+        // matching the targetBlock block hit above — same line and
+        // same reach budget in both modes (first person bit-identical).
+        fluidHit = raycastFluid(m_world, m_player->eyePosition(),
                                 m_camera.forward(), kReach);
     }
     // The pour cell (bucketPourTarget): the face neighbor of the hit
