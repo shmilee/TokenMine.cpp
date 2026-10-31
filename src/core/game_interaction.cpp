@@ -5,6 +5,7 @@
 
 #include "block/block_sound.hpp"
 #include "block/chance_drop.hpp"
+#include "block/drop_scatter.hpp"
 #include "core/bow.hpp"
 #include "core/game_local.hpp"
 #include "item/armor.hpp"
@@ -855,48 +856,64 @@ void Game::breakBlock(const BlockHit& hit) {
     emitTutorialEvent("break." + m_blocks.at(id).name, 1);
 
     // Drops are data-driven: `properties.drops` names an item (validated
-    // against the ItemRegistry at init). The item spawns at the block
-    // center with zero velocity, so its rest position is exact and headless
-    // runs stay byte-reproducible (see ItemEntity).
+    // against the ItemRegistry at init). Each spawned item rests at its
+    // spawn position with zero velocity, so headless runs stay
+    // byte-reproducible (see ItemEntity). UX-8d: the spawns scatter
+    // deterministically around the block center (dropSpawnOffset — a pure
+    // function of (seed, position, drop index); the item always stays
+    // inside the broken cell, see its bound argument) so a multi-drop block
+    // no longer stacks its items at one point and a broken column no longer
+    // lines up on the block centers.
     const Block& block = m_blocks.at(id);
+    // The break sound stays at the exact block center (the BLOCK is the
+    // sound's source, not the scattered items).
     const Vec3 dropPos {static_cast<float>(hit.block.x) + 0.5f,
                         static_cast<float>(hit.block.y) + 0.5f,
                         static_cast<float>(hit.block.z) + 0.5f};
+    const std::uint64_t dropSeed =
+        static_cast<std::uint64_t>(m_generator->seed());
+    // The scattered spawn for `dropIndex`: 0 = primary `drops`,
+    // 1 = `chance_drop`, 2 + i = `chance_drops` list entry i (the same
+    // 0-based list order the entry roll uses — block/drop_scatter).
+    const auto dropAt = [&](int dropIndex) {
+        const Vec2 off = dropSpawnOffset(dropSeed, hit.block.x, hit.block.y,
+                                         hit.block.z, dropIndex);
+        return Vec3 {dropPos.x + off.x, dropPos.y, dropPos.z + off.y};
+    };
     if (!block.properties.drops.empty()) {
         const Item& dropItem = m_items.at(m_items.idForName(block.properties.drops));
         // dropsCount (validated at init to fit the item's max stack).
         m_entities.push_back(std::make_unique<ItemEntity>(
             m_world, m_blocks, dropItem.name, dropItem.maxStack,
-            block.properties.dropsCount, dropPos));
+            block.properties.dropsCount, dropAt(0)));
     }
     // Chance secondary drop (Phase 49): an OPTIONAL extra item rolled per
     // break, independent of (and in addition to) the primary drop. The roll
     // is a pure function of (world seed, position, chance) — headless
-    // byte-reproducible (no wall-clock, no per-instance RNG). Spawns at the
-    // same block center (the deterministic rest position, like the primary).
+    // byte-reproducible (no wall-clock, no per-instance RNG). Spawns at its
+    // own scattered position (dropIndex 1), decorrelated from the primary.
     if (!block.properties.chanceDropItem.empty()) {
-        if (rollChanceDrop(static_cast<std::uint64_t>(m_generator->seed()),
-                           hit.block.x, hit.block.y, hit.block.z,
+        if (rollChanceDrop(dropSeed, hit.block.x, hit.block.y, hit.block.z,
                            block.properties.chanceDropChance)) {
             const Item& cdItem =
                 m_items.at(m_items.idForName(block.properties.chanceDropItem));
             m_entities.push_back(std::make_unique<ItemEntity>(
                 m_world, m_blocks, cdItem.name, cdItem.maxStack,
-                block.properties.chanceDropCount, dropPos));
+                block.properties.chanceDropCount, dropAt(1)));
         }
     }
     // Chance secondary drop LIST (Phase 52): each entry rolls independently
     // (the entry-indexed salt keeps them decorrelated — block/chance_drop)
-    // and each passing entry spawns its own item at the block center.
+    // and each passing entry spawns its own item at its own scattered
+    // position (dropIndex 2 + i).
     for (std::size_t i = 0; i < block.properties.chanceDrops.size(); ++i) {
         const ChanceDrop& cd = block.properties.chanceDrops[i];
-        if (rollChanceDropEntry(static_cast<std::uint64_t>(m_generator->seed()),
-                                hit.block.x, hit.block.y, hit.block.z,
+        if (rollChanceDropEntry(dropSeed, hit.block.x, hit.block.y, hit.block.z,
                                 static_cast<int>(i), cd.chance)) {
             const Item& cdItem = m_items.at(m_items.idForName(cd.item));
             m_entities.push_back(std::make_unique<ItemEntity>(
                 m_world, m_blocks, cdItem.name, cdItem.maxStack,
-                cd.count, dropPos));
+                cd.count, dropAt(2 + static_cast<int>(i))));
         }
     }
 

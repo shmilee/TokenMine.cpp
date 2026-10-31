@@ -1,12 +1,14 @@
 // ItemEntity: a dropped item (Phases 10/11).
 //
 // When the player breaks a block whose `properties.drops` names an item,
-// the game spawns one here at the block's center with zero velocity. The
-// zero-velocity spawn is deliberate: the rest position is then an exact
-// integer boundary, which keeps headless runs byte-reproducible (Minecraft
-// scatters drops with a random kick; that is not representable in a
-// deterministic screenshot workflow). Q-drops spawn the same way, at the
-// player's feet.
+// the game spawns one here near the block's center with zero velocity.
+// UX-8d: the break spawns get a DETERMINISTIC horizontal pseudo-scatter
+// (block/drop_scatter — a pure function of (seed, position, drop index),
+// bounded so the item always stays inside the broken cell) in lieu of
+// Minecraft's random kick (not representable in a deterministic screenshot
+// workflow); the zero velocity is kept, so the item rests exactly at its
+// scattered spawn and headless runs stay byte-reproducible. Q-drops spawn
+// at the player's feet (unscattered).
 //
 // The entity holds the item's NAME (the game resolves it through the
 // ItemRegistry) plus the item's data-defined max stack: merging respects

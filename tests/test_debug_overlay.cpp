@@ -39,7 +39,7 @@ TEST(DebugOverlayTest, LinesFormat) {
     ASSERT_EQ(lines.size(), 16u);
     // Pinned literal (deliberately NOT the TM_VERSION macro): a version
     // bump must force a conscious update of this pin.
-    EXPECT_EQ(lines[0], "TokenMine.cpp v1.43.0");
+    EXPECT_EQ(lines[0], "TokenMine.cpp v1.44.0");
     EXPECT_EQ(lines[1], "60 FPS | frame 1234");
     EXPECT_EQ(lines[2], "chunks 2312 | draws 45 | verts 987654");
     EXPECT_EQ(lines[3], "pos 0.50, 54.00, -34.70  yaw 0.00  pitch -0.25");

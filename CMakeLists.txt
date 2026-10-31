@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 1.43.0 LANGUAGES CXX)
+project(TokenMine VERSION 1.44.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -53,6 +53,7 @@ add_library(mc_core STATIC
     src/block/block_registry.cpp
     src/block/block_sound.cpp
     src/block/chance_drop.cpp
+    src/block/drop_scatter.cpp
     src/entity/arrow_mesh.cpp
     src/entity/entity.cpp
     src/entity/item_entity.cpp
@@ -164,6 +165,7 @@ add_executable(tokenmine_tests
     tests/test_light_job.cpp
     tests/test_fluid_light.cpp
     tests/test_chance_drop.cpp
+    tests/test_drop_scatter.cpp
     tests/test_lighting.cpp
     tests/test_arrow.cpp
     tests/test_ui_layout.cpp
