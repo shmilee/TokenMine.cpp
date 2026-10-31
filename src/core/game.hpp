@@ -55,6 +55,7 @@
 #include "ui/debug_overlay.hpp"
 #include "ui/font.hpp"
 #include "ui/inventory_ui.hpp"
+#include "ui/ui_scale.hpp"
 #include "item/campfire.hpp"
 #include "item/crafting_grid.hpp"
 #include "item/furnace.hpp"
@@ -833,6 +834,11 @@ private:
     GameArgs m_args;
     Config m_config;
     float m_uiScale = 1.0f; // ui.scale (Phase 34); 1.0 = pixel-exact
+    // ui.font_scale (UX-8e): the text-only zoom applied in renderUi —
+    // 1.0 = the bit-exact v1.44.0 baseline (s * 1.0 is IEEE-exact).
+    // An init-time constant like m_uiScale (never a frame state, so it
+    // carries no save-format field).
+    double m_fontScale = kFontScaleDefault;
     AssetManager m_assets;
     Window m_window;
     Input m_input;

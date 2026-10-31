@@ -1318,6 +1318,11 @@ Result<void> Game::buildScene() {
     const auto uiScale = uiScaleFromConfig(m_config);
     MC_TRY(uiScale);
     m_uiScale = *uiScale;
+    // Font-only scale (UX-8e): text-only zoom in renderUi (icons and
+    // panel geometry stay put); the same strict-read contract.
+    const auto fontScale = uiFontScaleFromConfig(m_config);
+    MC_TRY(fontScale);
+    m_fontScale = *fontScale;
     const Player::Params& playerDims = *playerParams; // room check
     Vec3 spawnPos {0.5f,
                    static_cast<float>(m_generator->surfaceHeight(0, 0)) + 1.0f,

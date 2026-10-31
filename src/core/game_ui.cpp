@@ -785,6 +785,15 @@ void Game::renderUi() {
         addQuad(b, r.x, r.y, thickness, r.h);
         addQuad(b, r.x + r.w - thickness, r.y, thickness, r.h);
     };
+    // UX-8e (ui.font_scale): the text-only zoom. Every text scale in
+    // this function passes through fScale; the icons, slot rects, panel
+    // geometry and the HUD row pitch NEVER do (that independence is the
+    // point of the key). fs = 1.0 (the default) is the bit-exact
+    // v1.44.0 baseline — s * 1.0 is IEEE-exact, so every vertex, width
+    // and line step below stays unchanged.
+    const double fs = m_fontScale;
+    auto fScale = [fs](double s) { return s * fs; };
+
     auto addText = [&](const std::string& text, int x, int y, double scale,
                        const Vec4& color) {
         makeTextVertices(text, x, y, scale,
@@ -801,18 +810,25 @@ void Game::renderUi() {
     std::vector<UiBatch> tooltipBatches;
     auto appendTooltip = [&](const ItemTooltip& tip, int x, int y,
                              double s, int lineGap) {
+        // UX-8e: the tooltip text follows the font scale, and its line
+        // gap is a TEXT-STACK pitch (the 16 px row metric the panel
+        // scales with s), so it grows with the glyphs too (lround —
+        // identity at fs = 1.0). The icon metrics stay untouched.
+        const double ts = fScale(s);
         UiBatch title;
         title.color = kText;
         title.textured = true;
         title.texture = &m_fontTexture;
-        makeTextVertices(tip.title, x, y, s, title.vertices);
+        makeTextVertices(tip.title, x, y, ts, title.vertices);
         tooltipBatches.push_back(std::move(title));
         if (!tip.durability.empty()) {
             UiBatch dur;
             dur.color = kTextDim;
             dur.textured = true;
             dur.texture = &m_fontTexture;
-            makeTextVertices(tip.durability, x, y + lineGap, s, dur.vertices);
+            makeTextVertices(tip.durability,
+                             x, y + static_cast<int>(std::lround(lineGap * fs)),
+                             ts, dur.vertices);
             tooltipBatches.push_back(std::move(dur));
         }
     };
@@ -924,8 +940,9 @@ void Game::renderUi() {
                 const std::string count = std::to_string(stack.count);
                 addText(count,
                         sx + kHotbarSlotSize - 4 -
-                            static_cast<int>(textWidth(count)),
-                        y0 + kHotbarSlotSize - 4 - kGlyphSize, 1.0, kText);
+                            static_cast<int>(textWidth(count, fScale(1.0))),
+                        y0 + kHotbarSlotSize - 4 - kGlyphSize, fScale(1.0),
+                        kText);
             }
         }
         // Health bar (Phase 16) + hunger bar (Phase 23): hearts above the
@@ -1120,8 +1137,9 @@ void Game::renderUi() {
                 m_tutorial.done
                     ? std::string(kTutorialDoneText)
                     : tutorialTargetLine(m_tutorial, m_tutorialSteps);
-            addText(line, (w - static_cast<int>(textWidth(line))) / 2, tutY,
-                    1.0, kText);
+            addText(line,
+                    (w - static_cast<int>(textWidth(line, fScale(1.0)))) / 2,
+                    tutY, fScale(1.0), kText);
             // UX-8b: the tip line (the secondary guidance row) — one
             // stack pitch above the main line (the HUD's named row
             // constant, the heart/effect/armor spacing), centered by its
@@ -1134,8 +1152,17 @@ void Game::renderUi() {
                 const std::string tip =
                     tutorialTipLine(m_tutorial, m_tutorialSteps);
                 if (!tip.empty()) {
-                    addText(tip, (w - static_cast<int>(textWidth(tip))) / 2,
-                            tutY - (kUiIconPx + kUiStripGap), 1.0, kTextDim);
+                    // UX-8e: the tip/main offset is a TEXT-STACK pitch —
+                    // it grows with the glyphs (lround, identity at
+                    // fs = 1.0); the icon rows below never do.
+                    addText(tip,
+                            (w -
+                                 static_cast<int>(
+                                     textWidth(tip, fScale(1.0)))) /
+                                2,
+                            tutY - static_cast<int>(std::lround(
+                                (kUiIconPx + kUiStripGap) * fs)),
+                            fScale(1.0), kTextDim);
                 }
             }
         }
@@ -1154,10 +1181,12 @@ void Game::renderUi() {
         const std::string hint = "按 R 重生";
         // 16 px glyphs (Phase 35): "died" at scale 2 = 32 px tall, hint
         // 16 px — the block spans h/2-40 .. h/2+28, roughly centered.
-        addText(died, w / 2 - static_cast<int>(textWidth(died, 2.0)) / 2,
-                h / 2 - 40, 2.0, Vec4 {1.0f, 0.35f, 0.35f, 1.0f});
-        addText(hint, w / 2 - static_cast<int>(textWidth(hint)) / 2,
-                h / 2 + 12, 1.0, kText);
+        addText(died,
+                w / 2 - static_cast<int>(textWidth(died, fScale(2.0))) / 2,
+                h / 2 - 40, fScale(2.0), Vec4 {1.0f, 0.35f, 0.35f, 1.0f});
+        addText(hint,
+                w / 2 - static_cast<int>(textWidth(hint, fScale(1.0))) / 2,
+                h / 2 + 12, fScale(1.0), kText);
     }
 
     // -- furnace panel (Phase 40/44): the smelting GUI (right-clicked
@@ -1179,7 +1208,7 @@ void Game::renderUi() {
         addQuad(batchFor(kPanel, false, nullptr), layout.panel.x,
                 layout.panel.y, layout.panel.w, layout.panel.h);
         addText("熔炉", layout.title.x, layout.title.y + titleOffset,
-                InventoryLayout::kTitleFontScale * s, kText);
+                fScale(InventoryLayout::kTitleFontScale * s), kText);
 
         const int hoverSlot = layout.slotAt(mx, my);
         const int hoverFslot = layout.furnaceSlotAt(mx, my);
@@ -1202,8 +1231,9 @@ void Game::renderUi() {
                 stack.count < m_items.at(stack.item).maxStack) {
                 const std::string count = std::to_string(stack.count);
                 addText(count,
-                        r.x + r.w - L(4) - static_cast<int>(textWidth(count, s)),
-                        r.y + r.h - L(4) - L(kGlyphSize), s, kText);
+                        r.x + r.w - L(4) -
+                            static_cast<int>(textWidth(count, fScale(s))),
+                        r.y + r.h - L(4) - L(kGlyphSize), fScale(s), kText);
             }
         }
 
@@ -1227,8 +1257,9 @@ void Game::renderUi() {
                 stack.count < m_items.at(stack.item).maxStack) {
                 const std::string count = std::to_string(stack.count);
                 addText(count,
-                        r.x + r.w - L(4) - static_cast<int>(textWidth(count, s)),
-                        r.y + r.h - L(4) - L(kGlyphSize), s, kText);
+                        r.x + r.w - L(4) -
+                            static_cast<int>(textWidth(count, fScale(s))),
+                        r.y + r.h - L(4) - L(kGlyphSize), fScale(s), kText);
             }
         }
 
@@ -1275,8 +1306,8 @@ void Game::renderUi() {
         const std::string hint = "按 E 关闭"; // PRE-1
         addText(hint,
                 layout.panel.x + static_cast<int>(std::lround(
-                    (layout.panel.w - textWidth(hint, s)) / 2.0)),
-                layout.panel.y + layout.panel.h - L(20), s, kTextDim);
+                    (layout.panel.w - textWidth(hint, fScale(s))) / 2.0)),
+                layout.panel.y + layout.panel.h - L(20), fScale(s), kTextDim);
     }
 
     // -- crafting panel (while open): the E inventory (2x2 grid + the
@@ -1315,12 +1346,12 @@ void Game::renderUi() {
                 layout.panel.y, layout.panel.w, layout.panel.h);
         addText(table ? "工作台" : "背包", layout.title.x,
                 layout.title.y + titleOffset,
-                InventoryLayout::kTitleFontScale * s, kText);
+                fScale(InventoryLayout::kTitleFontScale * s), kText);
         // The list header ("合成") now serves both panels (CRAFT-4: the
         // table panel's hint column).
         addText("合成", layout.craftHeader.x,
                 layout.craftHeader.y + titleOffset,
-                InventoryLayout::kTitleFontScale * s, kText);
+                fScale(InventoryLayout::kTitleFontScale * s), kText);
 
         const int hoverSlot = layout.slotAt(mx, my);
         const int hoverCell = layout.gridCellAt(mx, my);
@@ -1342,8 +1373,9 @@ void Game::renderUi() {
                 stack.count < m_items.at(stack.item).maxStack) {
                 const std::string count = std::to_string(stack.count);
                 addText(count,
-                        r.x + r.w - L(4) - static_cast<int>(textWidth(count, s)),
-                        r.y + r.h - L(4) - L(kGlyphSize), s, kText);
+                        r.x + r.w - L(4) -
+                            static_cast<int>(textWidth(count, fScale(s))),
+                        r.y + r.h - L(4) - L(kGlyphSize), fScale(s), kText);
             }
         }
 
@@ -1364,8 +1396,9 @@ void Game::renderUi() {
                 stack.count < m_items.at(stack.item).maxStack) {
                 const std::string count = std::to_string(stack.count);
                 addText(count,
-                        r.x + r.w - L(4) - static_cast<int>(textWidth(count, s)),
-                        r.y + r.h - L(4) - L(kGlyphSize), s, kText);
+                        r.x + r.w - L(4) -
+                            static_cast<int>(textWidth(count, fScale(s))),
+                        r.y + r.h - L(4) - L(kGlyphSize), fScale(s), kText);
             }
         }
         {
@@ -1399,8 +1432,9 @@ void Game::renderUi() {
                     const std::string count = std::to_string(out.count);
                     addText(count,
                             r.x + r.w - L(4) -
-                                static_cast<int>(textWidth(count, s)),
-                            r.y + r.h - L(4) - L(kGlyphSize), s, kText);
+                                static_cast<int>(textWidth(count, fScale(s))),
+                            r.y + r.h - L(4) - L(kGlyphSize), fScale(s),
+                            kText);
                 }
             }
         }
@@ -1454,10 +1488,10 @@ void Game::renderUi() {
                 const std::string suffix =
                     " x" + std::to_string(recipe.outputCount);
                 const std::string label =
-                    fitLabel(m_items.at(recipe.output).name, suffix, s,
+                    fitLabel(m_items.at(recipe.output).name, suffix, fScale(s),
                              std::max(0, r.w - L(89) - L(4))) +
                     suffix;
-                addText(label, r.x + L(89), r.y + L(18), s, outColor);
+                addText(label, r.x + L(89), r.y + L(18), fScale(s), outColor);
             }
         } else {
             for (std::size_t i = 0; i < layout.recipes.size(); ++i) {
@@ -1477,10 +1511,10 @@ void Game::renderUi() {
                 const std::string suffix =
                     " x" + std::to_string(recipe.outputCount);
                 const std::string label =
-                    fitLabel(m_items.at(recipe.output).name, suffix, s,
-                             avail) +
+                    fitLabel(m_items.at(recipe.output).name, suffix,
+                             fScale(s), avail) +
                     suffix;
-                addText(label, r.x + L(32), r.y + L(8), s, outColor);
+                addText(label, r.x + L(32), r.y + L(8), fScale(s), outColor);
                 std::string needs;
                 for (const auto& [item, count] : recipe.ingredients) {
                     if (!needs.empty()) {
@@ -1491,8 +1525,8 @@ void Game::renderUi() {
                 }
                 // PRE-1 (item ids stay English); the "需要：" prefix is the
                 // string head, so fitLabel trims the ingredient tail only.
-                addText(fitLabel("需要：" + needs, "", s, avail), r.x + L(32),
-                        r.y + L(28), s, kTextDim);
+                addText(fitLabel("需要：" + needs, "", fScale(s), avail),
+                        r.x + L(32), r.y + L(28), fScale(s), kTextDim);
             }
         }
 
@@ -1525,8 +1559,8 @@ void Game::renderUi() {
         const std::string hint = "按 E 关闭"; // PRE-1
         addText(hint,
                 layout.panel.x + static_cast<int>(std::lround(
-                    (layout.panel.w - textWidth(hint, s)) / 2.0)),
-                layout.panel.y + layout.panel.h - L(20), s, kTextDim);
+                    (layout.panel.w - textWidth(hint, fScale(s))) / 2.0)),
+                layout.panel.y + layout.panel.h - L(20), fScale(s), kTextDim);
     }
 
     // -- F3 debug overlay (while toggled) ------------------------------------
@@ -1629,10 +1663,15 @@ void Game::renderUi() {
                           m_tutorial.progress, s.count);
             info.tutorial = buf;
         }
+        // UX-8e: the F3 line step is a TEXT-STACK pitch — it grows with
+        // the glyphs (lround, identity at fs = 1.0); the margin (an
+        // icon-space inset) does not.
+        const int f3Step =
+            static_cast<int>(std::lround(kF3LineHeight * fs));
         int y = kF3Margin;
         for (const std::string& line : debugOverlayLines(info)) {
-            addText(line, kF3Margin, y, 1, kText);
-            y += kF3LineHeight;
+            addText(line, kF3Margin, y, fScale(1.0), kText);
+            y += f3Step;
         }
     }
 
