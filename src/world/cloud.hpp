@@ -1,10 +1,12 @@
-// PRE-4: the drifting sky cloud layer (Minecraft's grid clouds).
+// PRE-4 / UX-9a: the drifting sky cloud layer (Minecraft's grid
+// clouds).
 //
-// The clouds are a FLAT translucent layer of world-space quads at
-// y = kCloudHeight over a 16-block cell grid (kCloudCellBlocks — the
-// kChunkSize alignment: the cloud grid IS the chunk grid at cloud
-// height). One cell of drift every kCloudFramesPerCell frames (100 s at
-// 60 fps = the Minecraft "one cell per in-game 10 minutes" rhythm).
+// The clouds sit at y = kCloudHeight over the WORLD 4-block SUB lattice
+// (kCloudSubCellBlocks — the block grain), grouped into 16-block REGION
+// cells (kCloudCellBlocks — the kChunkSize alignment: the region grid IS
+// the chunk grid at cloud height). One cell of drift every
+// kCloudFramesPerCell frames (100 s at 60 fps = the Minecraft "one cell
+// per in-game 10 minutes" rhythm).
 //
 // The presence field is TWO-LEVEL (UX-9a, the "blocky clouds" report:
 // PRE-4's flat 50% region cells read as smooth paper sheets): a 16-block
@@ -17,34 +19,40 @@
 // the region layer, so a whole clump changes together (no sub-clump
 // relative sliding) and standing still never wanders the texture.
 //
-// A THIRD, INDEPENDENT level gives the clouds their THICKNESS (UX-9b):
-// cloudSubHeight(wx, wz, t) is a uniform {1, 2, 3} block column height
-// for every ON sub-cell (0 for OFF sub-cells), rolled with the dedicated
+// A THIRD, INDEPENDENT level gives the columns their THICKNESS (UX-9a):
+// cloudSubHeight(wx, wz, t) is a uniform {1, 2, 3} block height for
+// every ON sub-cell (0 for OFF sub-cells), rolled with the dedicated
 // kSaltCloudSubHeight lattice on the SAME time step (a whole clump
-// changes shape together). It is a pure field — the CPU oracle for the
-// world-anchored fragment-shader cloud-column port (the mesh path stays
-// the UX-9a flat sheet until that lands).
+// changes shape together).
+//
+// RENDERING (UX-9a): the pattern is computed PER PIXEL by a dedicated
+// shader program (assets/shaders/cloud.vert + cloud.frag) that the host
+// draws as ONE kCloudQuadSize x kCloudQuadSize world-space quad at
+// kCloudHeight, translated per draw to the camera-anchored 4-block
+// lattice origin. The GLSL predicates are an EXACT port of the functions
+// below (the project's 3.3 core context has no 64-bit integers — the
+// CPU's uint64_t is emulated as uvec2 (lo, hi) pairs in cloud.frag), so
+// THIS FILE IS THE CPU ORACLE: the shader must reproduce cloudMask ∧
+// cloudSubMask pixel-for-pixel (tests/test_cloud.cpp pins the field; the
+// gate's A/B protocol pins the image). The old per-camera-window Mesh
+// rebuild is gone: the iGPU's ~140 ms per MB of buffer update made every
+// 16-block crossing hitch, while the window edge popped in. The quad is
+// uploaded ONCE at init and never again — zero upload, zero camera
+// drift, zero pop-in. The thickness in the fragment is a constant-width
+// boundary band (cloud.frag documents the approximation); the height
+// field is the CPU-side data for the future true-3D (height-aware) port.
 //
 // Everything here is a PURE function of (cell coordinates, time step):
-// no state, no allocation beyond the mesh builders' outputs,
-// thread-safe.
+// no state, no allocation, thread-safe.
 //
 // PITS #4 discipline: the lattice hashes (hash3 with the dedicated
 // kSaltCloud / kSaltCloudSub / kSaltCloudSubHeight) decorrelate the cells
 // from each other; the time step advances the state by the golden step
 // before the splitmix64 finalizer (the finalizer alone is not a
 // progression).
-//
-// The game caches one Mesh and rebuilds it ONLY when the camera's cloud
-// cell or the time step changes (the 99.x discipline — no per-frame VBO
-// upload: a no-input run is static from its first draw, walking costs
-// one rebuild per 16 blocks).
 #pragma once
 
 #include <cstdint>
-#include <vector>
-
-#include "renderer/mesh.hpp" // MeshVertex
 
 namespace mc {
 
@@ -52,9 +60,9 @@ namespace mc {
 // the world (the Minecraft clouds sit below the build ceiling, the same
 // place). A named constant — no config key (the zero-config discipline).
 inline constexpr int kCloudHeight = 108;
-// One cloud cell's side length in blocks (kChunkSize-aligned).
+// One REGION cell's side length in blocks (kChunkSize-aligned).
 inline constexpr int kCloudCellBlocks = 16;
-// UX-9a: one sub-cell's side length in blocks (kCloudCellBlocks /
+// UX-9a: one SUB cell's side length in blocks (kCloudCellBlocks /
 // kCloudSubCellBlocks = 4 sub-cells per region side — the 4-block block
 // grain of the cloud edge).
 inline constexpr int kCloudSubCellBlocks = 4;
@@ -67,11 +75,17 @@ inline constexpr std::uint32_t kCloudSubDensityDenominator = 4;
 // the integer division of the frame count — a pure function of the frame
 // (hard rule 8), so same-frame-count runs are bit-reproducible.
 inline constexpr int kCloudFramesPerCell = 6000;
-// The camera-centered window of cloud cells per side the mesh covers
-// (kCloudWindowCells * kCloudCellBlocks = 384 blocks — far beyond the
-// 70-degree frustum's reach at cloud height; the window edge's pop-in
-// is hundreds of blocks away, the documented deviation).
-inline constexpr int kCloudWindowCells = 24;
+// UX-9a: the one-time cloud QUAD's side length in blocks. The host
+// translates it to 4*floorDiv(floor(eye), 4) - kCloudQuadSize/2 in x and
+// z, so the quad spans kCloudQuadSize/2 = 8192 blocks on each side of
+// the camera's sub cell: far beyond the 70-degree frustum's reach at
+// cloud height even at maximum elevation (the edge's largest elevation
+// angle, 0.19 degrees, is sub-pixel — invisible), and 8192 is a multiple
+// of 4 so the anchor stays on the world sub lattice for every eye
+// position. 16384 = 2^14 keeps every corner coordinate (a multiple of 4,
+// at most |eye| + 24576) far inside float32's exact-integer bound (2^24);
+// the per-pixel evaluation x*0.25 stays cell-exact for |eye| < 2^26.
+inline constexpr int kCloudQuadSize = 16384;
 // The cloud quad's translucency (0..1). 0.55 = the Minecraft low-res
 // cloud look (the white tiles read as clouds, the sky stays visible
 // through them). A named constant — no config key.
@@ -88,7 +102,7 @@ inline constexpr std::uint64_t kSaltCloud = 0xC10D05A1ULL;
 // rolls, 0xA1B65445 ambience) — no other system hashes with it, and the
 // two cloud layers never track each other.
 inline constexpr std::uint64_t kSaltCloudSub = 0x5B8C92E7ULL;
-// The dedicated salt for the cloud SUB-CELL HEIGHT lattice (UX-9b, the
+// The dedicated salt for the cloud SUB-CELL HEIGHT lattice (UX-9a, the
 // "cloud column thickness" level — the CPU oracle for the fragment-
 // shader cloud column port). A sibling of kSaltCloud / kSaltCloudSub in
 // the same 32-bit value family (0xC10D05A1 / 0x5B8C92E7 / 0x9C2E4B71):
@@ -101,6 +115,7 @@ inline constexpr std::uint64_t kSaltCloudSubHeight = 0x9C2E4B71ULL;
 // The cloud's presence at lattice cell (cellX, cellZ) in time step t:
 // true = a cloud tile covers the cell. 50% density (the splitmix64 top
 // bit). Pure: same arguments -> same answer, across runs and threads.
+// (The CPU oracle for cloud.frag's regionOn — an exact GLSL port.)
 bool cloudMask(int cellX, int cellZ, int t);
 
 // The cloud's SUB-cell presence inside region cell (cellX, cellZ): the
@@ -110,10 +125,10 @@ bool cloudMask(int cellX, int cellZ, int t);
 // camera stands still) and uses the SAME time step as cloudMask (region
 // and sub re-roll on the same frame — a whole clump changes together, no
 // sub-clump relative sliding). Pure: same arguments -> same answer,
-// across runs and threads.
+// across runs and threads. (The CPU oracle for cloud.frag's subOn.)
 bool cloudSubMask(int cellX, int cellZ, int subX, int subZ, int t);
 
-// UX-9b: the cloud SUB-CELL THICKNESS at world 4-block lattice
+// UX-9a: the cloud SUB-CELL THICKNESS at world 4-block lattice
 // coordinates (wx, wz) in time step t — the CPU oracle for the
 // fragment-shader cloud-column port. 0 when the sub is OFF (its region
 // cell off, or its sub roll off — the SAME two-level decision as
@@ -122,45 +137,14 @@ bool cloudSubMask(int cellX, int cellZ, int subX, int subZ, int t);
 // 2 — the dedicated kSaltCloudSubHeight lattice, re-rolled on the SAME
 // time step so a whole clump changes shape together; the height never
 // tracks the on/off layers). Pure: same arguments -> same answer, across
-// runs and threads.
+// runs and threads. (Not evaluated by the current fragment — the
+// boundary-band approximation documents the stand-in; the data is kept
+// for the future true-3D port.)
 int cloudSubHeight(int wx, int wz, int t);
 
 // The frame-locked drift time step: frameCount / kCloudFramesPerCell.
 // The integer division keeps the drift a pure function of the frame;
 // monotone non-decreasing in frameCount (period kCloudFramesPerCell).
 int cloudTimeStep(int frameCount);
-
-// The world-space vertices of ONE cloud cell: a kCloudCellBlocks x
-// kCloudCellBlocks flat quad at y = kCloudHeight, in the corner order
-// (x0, z0), (x1, z0), (x1, z1), (x0, z1). Every corner carries normal
-// +Y (the vertex shader's top-face shade 1.0 — the beacon beam pattern,
-// so both rendered faces are equally bright) and skyLight 0 /
-// blockLight 1.0 (the unlit-white rule — the clouds do not darken with
-// the day cycle, the documented deviation). Appends to `out`.
-void cloudCellVertices(int cellX, int cellZ, std::vector<MeshVertex>& out);
-
-// The world-space vertices of ONE cloud sub-cell: a kCloudSubCellBlocks
-// x kCloudSubCellBlocks flat quad at y = kCloudHeight, the same corner
-// order / normals / lightmap convention as cloudCellVertices (the shared
-// emitter — UX-9a). Appends to `out`.
-void cloudSubCellVertices(int cellX, int cellZ, int subX, int subZ,
-                          std::vector<MeshVertex>& out);
-
-// The FULL window mesh (UX-9a two-level grain: one flat 4x4 quad per ON
-// SUB-cell of every ON region cell in the kCloudWindowCells x
-// kCloudWindowCells window centered on the camera's cloud cell): indexed
-// triangles — 4 vertices + 6 indices per quad, in window-scan order (z
-// outer, x inner; sub z outer / sub x inner inside a cell). Pure function
-// of its arguments (the game rebuilds the cached Mesh from it; the
-// rebuild key — camera cell + t — is unchanged by the sub level).
-void buildCloudMesh(int camCellX, int camCellZ, int t,
-                    std::vector<MeshVertex>& vertices,
-                    std::vector<std::uint32_t>& indices);
-
-// The cached mesh's rebuild predicate (the pure dirty flag): true when
-// the mesh is not valid yet or the camera cell / the time step moved
-// since the last build.
-bool cloudMeshNeedsRebuild(bool valid, int cellX, int cellZ, int t,
-                           int newCellX, int newCellZ, int newT);
 
 } // namespace mc

@@ -122,6 +122,39 @@ Result<void> Game::buildScene() {
     MC_TRY(uiShader);
     m_uiShader = std::move(*uiShader);
 
+    // -- UX-9a clouds: dedicated per-pixel shader + ONE-TIME quad -------
+    // The pattern (cloudMask ∧ cloudSubMask, the exact GLSL port of
+    // world/cloud) is evaluated per fragment in cloud.frag — the quad
+    // below is uploaded ONCE here and never again (the old per-16-block
+    // window mesh rebuild hit the iGPU's ~140 ms per MB buffer-update
+    // wall; this path costs zero uploads after init).
+    auto cloudVert = m_assets.loadText("shaders/cloud.vert");
+    MC_TRY(cloudVert);
+    auto cloudFrag = m_assets.loadText("shaders/cloud.frag");
+    MC_TRY(cloudFrag);
+    auto cloudShader = ShaderProgram::create(*cloudVert, *cloudFrag);
+    MC_TRY(cloudShader);
+    m_cloudShader = std::move(*cloudShader);
+
+    // kCloudQuadSize x kCloudQuadSize at y = kCloudHeight, local corners
+    // (0,0)-(size,size) (the draw translates it to the camera-anchored
+    // 4-block lattice origin). cloud.vert reads the position slot only;
+    // the remaining MeshVertex fields stay zero (the unlit pass ignores
+    // them — the ui.vert convention). Winding is irrelevant (the draw is
+    // culling-off).
+    const float cs = static_cast<float>(kCloudQuadSize);
+    const float cy = static_cast<float>(kCloudHeight);
+    const Vec3 cloudCorners[4] = {{0.0f, cy, 0.0f}, {cs, cy, 0.0f},
+                                  {cs, cy, cs}, {0.0f, cy, cs}};
+    std::vector<MeshVertex> cloudVerts;
+    for (const Vec3& corner : cloudCorners) {
+        MeshVertex v;
+        v.position = corner;
+        cloudVerts.push_back(v);
+    }
+    auto cloudUpload = m_cloudMesh.upload(cloudVerts, {0, 1, 2, 0, 2, 3});
+    MC_TRY(cloudUpload);
+
     auto fontPath = m_assets.resolve("textures/font.png");
     MC_TRY(fontPath);
     auto fontTex = Texture::loadPng(*fontPath);

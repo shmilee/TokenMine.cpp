@@ -1485,19 +1485,17 @@ private:
     };
     PerBlockStates m_states;
 
-    // PRE-4 clouds: the cached cloud-layer mesh (the full camera window,
-    // world/buildCloudMesh) + its rebuild key — the camera's cloud cell
-    // and the drift time step. The mesh is rebuilt only when the key
-    // changes (cloudMeshNeedsRebuild, the pure dirty flag): a no-input
-    // run rebuilds once on the first draw and is static thereafter
-    // (the ×2 RAW byte-identity), walking rebuilds once per 16 blocks.
-    // render.clouds OFF never touches any of this (the v0.27.0 pipeline
-    // bit-identical).
+    // UX-9a clouds: the ONE-TIME kCloudQuadSize world-space quad (built
+    // at init, uploaded once — the PATTERN is computed per pixel by
+    // m_cloudShader, an exact GLSL port of the world/cloud field, so
+    // nothing is re-uploaded after init: the old per-camera-window mesh
+    // rebuild cost the iGPU ~140 ms per MB of buffer update on every
+    // 16-block crossing, and its window edge popped in) + its dedicated
+    // shader program (independent of the basic/sky/ui programs — they
+    // are untouched). render.clouds OFF never touches any of this (the
+    // v0.27.0 pipeline bit-identical).
     Mesh m_cloudMesh;
-    bool m_cloudMeshValid = false;
-    int m_cloudMeshCellX = 0;
-    int m_cloudMeshCellZ = 0;
-    int m_cloudMeshT = 0;
+    ShaderProgram m_cloudShader;
 
     // SAVE-1: the auto-save cadence (save.auto_save_seconds — a CODE
     // default; the committed config carries no save section, the

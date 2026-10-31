@@ -1,48 +1,36 @@
-// PRE-4 + UX-9a + UX-9b: the cloud layer's CPU-side contracts — the
+// PRE-4 + UX-9a + UX-9a: the cloud field's CPU-side contracts — the
 // presence field (world/cloud's pure cloudMask: determinism pins, the
-// 50% density band, the time-step drift) and the mesh builders (the
-// full-window quad count, the y = kCloudHeight pin, the pure dirty
-// flag), plus the render.clouds config key semantics (code default true,
-// the render.fog / fire.particles getBool precedent — config.json is
-// untouched). The GPU half (the unlit-white quads in the blending pass)
-// is exercised by the gate's re-anchor protocol; the frame-locked step
-// is a pure function of m_frameCount (hard rule 8), so same-frame-count
-// runs are byte-identical without a separate unit seam.
+// 50% density band, the time-step drift), the two-level grain
+// (cloudSubMask), and the independent THICKNESS level (cloudSubHeight,
+// the uniform {1,2,3} column height for every on sub-cell, 0 for off
+// sub-cells, the dedicated kSaltCloudSubHeight lattice), plus the
+// render.clouds config key semantics (code default true, the render.fog
+// / fire.particles getBool precedent — config.json is untouched).
 //
-// UX-9a: the two-level block grain — cloudSubMask (the 4-block sub-cells
-// inside each on region cell, 75% density, world-anchored, same t step)
-// and the sub-level mesh (4x4 quads per on sub-cell; the old
-// cloudCellVertices output stays bit-identical via the shared emitter).
+// These pure functions are the ORACLE for the fragment-shader cloud port
+// (assets/shaders/cloud.frag — an exact GLSL port evaluated per pixel
+// over the host's one-time quad; UX-9a retired the old per-camera-window
+// mesh builders with the iGPU's ~140 ms per MB buffer-update wall). The
+// GPU half is exercised by the gate's A/B protocol; the frame-locked
+// step is a pure function of m_frameCount (hard rule 8), so
+// same-frame-count runs are byte-identical without a separate unit seam.
+//
 // The coverage pins come from a probe (regionOn 8268 / subOnTotal 99275
 // over the 128x128 window at t=0 — overall coverage 0.3787, the 30-45%
-// blocky target band; in-region sub ratio 0.7504).
-//
-// UX-9b: the third, independent THICKNESS level — cloudSubHeight
-// (a uniform {1,2,3} column height for every on sub-cell, 0 for off
-// sub-cells, world-anchored, same t step, the dedicated kSaltCloudSubHeight
-// lattice). These are the CPU-side contract pins for the pure field:
-// the fragment-shader cloud-column port (world-anchored, zero-upload)
-// must reproduce these exact values pixel-for-pixel — this file is the
-// oracle. The mesh path stays the UX-9a flat sheet.
+// blocky target band; in-region sub ratio 0.7504). The height pins come
+// from the same probe (h1/h2/h3 = 33111/32873/33291 over the 99275 on
+// subs — the uniform mod-3 roll; per-position x per-tier 48-value table
+// decorrelated from the on level).
 
 #include <gtest/gtest.h>
-
-#include <cmath>
-#include <cstddef>
-#include <cstdint>
-#include <vector>
 
 #include "core/config.hpp"
 #include "world/cloud.hpp"
 #include "world/coordinates.hpp" // floorDiv
 
-using mc::buildCloudMesh;
-using mc::cloudCellVertices;
 using mc::cloudMask;
-using mc::cloudSubCellVertices;
 using mc::cloudSubHeight;
 using mc::cloudSubMask;
-using mc::cloudMeshNeedsRebuild;
 using mc::cloudTimeStep;
 
 // The presence field is a pure function — the pins (the CRAFT-3 content-
@@ -240,7 +228,7 @@ TEST(CloudSubMaskTest, SubCountVariesPerRegionCell) {
     EXPECT_TRUE(minSubs == 0 || maxSubs == 16);
 }
 
-// UX-9b: the thickness field is a pure function — the pins (the CRAFT-3
+// UX-9a: the thickness field is a pure function — the pins (the CRAFT-3
 // content-pin pattern): any drift in the hash chain (salt, lattice
 // mapping, mod-3 roll, t advance) is a contract break, not a "different
 // sky". The mix pins ON cells at {1,2,3} and OFF cells at 0, incl.
@@ -271,7 +259,7 @@ TEST(CloudSubHeightTest, DeterministicPins) {
     EXPECT_EQ(mc::cloudSubHeight(-10, -10, 1), mc::cloudSubHeight(-10, -10, 1));
 }
 
-// UX-9b: the t drift moves the thickness field (the PITS #4 advance is
+// UX-9a: the t drift moves the thickness field (the PITS #4 advance is
 // live at the height level): the pinned cells flip between t steps — a
 // constant-input finalizer (no golden-step advance) would keep them.
 TEST(CloudSubHeightTest, TimeStepMovesTheField) {
@@ -280,7 +268,7 @@ TEST(CloudSubHeightTest, TimeStepMovesTheField) {
     EXPECT_NE(mc::cloudSubHeight(-10, -10, 1), mc::cloudSubHeight(-10, -10, 2));
 }
 
-// UX-9b: the height level is the SAME on/off set as the presence field,
+// UX-9a: the height level is the SAME on/off set as the presence field,
 // restated in world coordinates: over a -32..32 world sub window at t=0,
 // h > 0 iff (region on AND sub on) — zero mismatches in both directions,
 // and the ON count (1536) is pinned. This is what lets the GLSL port
@@ -309,7 +297,7 @@ TEST(CloudSubHeightTest, MatchesOnOffLevels) {
     EXPECT_EQ(offButHnz, 0L);
 }
 
-// UX-9b: the height distribution over the SAME 128x128 region window the
+// UX-9a: the height distribution over the SAME 128x128 region window the
 // coverage pins use (t=0): the ON count is EXACTLY the subOnTotal pin
 // (99275 — the third level refines the same set), and the {1,2,3}
 // counts are probe-pinned exact (the mod-3 roll is uniform — each tier
@@ -360,7 +348,7 @@ TEST(CloudSubHeightTest, HeightDistributionPinned) {
     EXPECT_LE(static_cast<double>(h3) / on, 0.40);
 }
 
-// UX-9b: decorrelation — the height tier does not track the sub
+// UX-9a: decorrelation — the height tier does not track the sub
 // position (a collapsed hash would pin some (sx,sz) to one tier). Over
 // the same 128x128 window (t=0), the probe-pinned exact per-position
 // per-tier counts: every one of the 48 cells of the 16 (sx,sz) x 3-tier
@@ -431,169 +419,6 @@ TEST(CloudTimeStepTest, MonotoneAndPeriod) {
         EXPECT_GE(t, prev) << "not monotone at frame " << f;
         prev = t;
     }
-}
-
-// One cell's quad: exactly 4 vertices in the corner order, every y at
-// kCloudHeight, the unlit-white lightmap (skyLight 0 / blockLight 1),
-// the +Y normals (both rendered faces get the top-face shade — the beam
-// pattern), the zeroed tail fields (the tiling/ripple paths inert).
-// UX-9a: this test pins the cloudCellVertices output BIT-IDENTICAL to
-// PRE-4 (the shared emitQuad refactor must not move a single byte).
-TEST(CloudCellVerticesTest, GeometryPinned) {
-    std::vector<mc::MeshVertex> v;
-    mc::cloudCellVertices(3, -2, v);
-    ASSERT_EQ(v.size(), 4u);
-    // cell (3, -2): x in [48, 64), z in [-32, -16).
-    const float ys = static_cast<float>(mc::kCloudHeight);
-    EXPECT_FLOAT_EQ(v[0].position.x, 48.0f);
-    EXPECT_FLOAT_EQ(v[0].position.z, -32.0f);
-    EXPECT_FLOAT_EQ(v[1].position.x, 64.0f);
-    EXPECT_FLOAT_EQ(v[1].position.z, -32.0f);
-    EXPECT_FLOAT_EQ(v[2].position.x, 64.0f);
-    EXPECT_FLOAT_EQ(v[2].position.z, -16.0f);
-    EXPECT_FLOAT_EQ(v[3].position.x, 48.0f);
-    EXPECT_FLOAT_EQ(v[3].position.z, -16.0f);
-    for (const mc::MeshVertex& c : v) {
-        EXPECT_FLOAT_EQ(c.position.y, ys);
-        EXPECT_FLOAT_EQ(c.normal.x, 0.0f);
-        EXPECT_FLOAT_EQ(c.normal.y, 1.0f);
-        EXPECT_FLOAT_EQ(c.normal.z, 0.0f);
-        EXPECT_FLOAT_EQ(c.skyLight, 0.0f);
-        EXPECT_FLOAT_EQ(c.blockLight, 1.0f);
-        EXPECT_FLOAT_EQ(c.tiled, 0.0f);
-        EXPECT_FLOAT_EQ(c.water, 0.0f);
-        EXPECT_FLOAT_EQ(c.uv.x, 0.0f);
-        EXPECT_FLOAT_EQ(c.uv.y, 0.0f);
-    }
-}
-
-// UX-9a: one sub-cell's quad — 4 vertices in the same corner order /
-// normal / lightmap convention, 4-block corners world-aligned (x0 =
-// cellX*16 + subX*4, z0 = cellZ*16 + subZ*4, the world 4-block lattice),
-// the same unlit-white fields. The negative-cell case pins the floor
-// convention for the sub origin too.
-TEST(CloudSubCellVerticesTest, GeometryPinned) {
-    const float ys = static_cast<float>(mc::kCloudHeight);
-    // cell (3, -2), sub (1, 2): x in [52, 56), z in [-24, -20).
-    std::vector<mc::MeshVertex> v;
-    mc::cloudSubCellVertices(3, -2, 1, 2, v);
-    ASSERT_EQ(v.size(), 4u);
-    EXPECT_FLOAT_EQ(v[0].position.x, 52.0f);
-    EXPECT_FLOAT_EQ(v[0].position.z, -24.0f);
-    EXPECT_FLOAT_EQ(v[1].position.x, 56.0f);
-    EXPECT_FLOAT_EQ(v[1].position.z, -24.0f);
-    EXPECT_FLOAT_EQ(v[2].position.x, 56.0f);
-    EXPECT_FLOAT_EQ(v[2].position.z, -20.0f);
-    EXPECT_FLOAT_EQ(v[3].position.x, 52.0f);
-    EXPECT_FLOAT_EQ(v[3].position.z, -20.0f);
-    for (const mc::MeshVertex& c : v) {
-        EXPECT_FLOAT_EQ(c.position.y, ys);
-        EXPECT_FLOAT_EQ(c.normal.x, 0.0f);
-        EXPECT_FLOAT_EQ(c.normal.y, 1.0f);
-        EXPECT_FLOAT_EQ(c.normal.z, 0.0f);
-        EXPECT_FLOAT_EQ(c.skyLight, 0.0f);
-        EXPECT_FLOAT_EQ(c.blockLight, 1.0f);
-        EXPECT_FLOAT_EQ(c.tiled, 0.0f);
-        EXPECT_FLOAT_EQ(c.water, 0.0f);
-        EXPECT_FLOAT_EQ(c.uv.x, 0.0f);
-        EXPECT_FLOAT_EQ(c.uv.y, 0.0f);
-        // World 4-block alignment (the block grain): both coordinates of
-        // every corner are multiples of 4.
-        EXPECT_EQ(static_cast<int>(c.position.x) % 4, 0);
-        EXPECT_EQ(static_cast<int>(c.position.z) % 4, 0);
-    }
-    // A negative-cell sub origin: cell (-1, 0), sub (3, 0) -> x in
-    // [-4, 0), z in [0, 4).
-    std::vector<mc::MeshVertex> v2;
-    mc::cloudSubCellVertices(-1, 0, 3, 0, v2);
-    ASSERT_EQ(v2.size(), 4u);
-    EXPECT_FLOAT_EQ(v2[0].position.x, -4.0f);
-    EXPECT_FLOAT_EQ(v2[0].position.z, 0.0f);
-    EXPECT_FLOAT_EQ(v2[1].position.x, 0.0f);
-    EXPECT_FLOAT_EQ(v2[1].position.z, 0.0f);
-    EXPECT_FLOAT_EQ(v2[2].position.x, 0.0f);
-    EXPECT_FLOAT_EQ(v2[2].position.z, 4.0f);
-    EXPECT_FLOAT_EQ(v2[3].position.x, -4.0f);
-    EXPECT_FLOAT_EQ(v2[3].position.z, 4.0f);
-}
-
-// The full window mesh (UX-9a: sub-level quads): one flat 4x4 quad per
-// ON SUB-cell of every ON region cell — 4 vertices + 6 indices per quad,
-// in window-scan order (z outer, x inner; sub z outer / sub x inner
-// inside a cell). The quad count is pinned BOTH ways: the probe-pinned
-// exact value (cam (1,0) t=0 -> 3582) and INDEPENDENTLY recomputed from
-// cloudMask ∧ cloudSubMask (the consistency pin). Every vertex sits at
-// kCloudHeight; every quad is 4-block aligned and stays INSIDE its on
-// region cell (a quad never leaks past its clump domain).
-TEST(BuildCloudMeshTest, QuadCountAndHeight) {
-    const int camX = 1, camZ = 0; // the spawn-point camera cell
-    const int t = 0;
-    long quads = 0;
-    const int half = mc::kCloudWindowCells / 2;
-    for (int dz = -half; dz < half; ++dz) {
-        for (int dx = -half; dx < half; ++dx) {
-            const int cx = camX + dx, cz = camZ + dz;
-            if (!mc::cloudMask(cx, cz, t)) {
-                continue;
-            }
-            for (int sz = 0; sz < 4; ++sz) {
-                for (int sx = 0; sx < 4; ++sx) {
-                    if (mc::cloudSubMask(cx, cz, sx, sz, t)) {
-                        ++quads;
-                    }
-                }
-            }
-        }
-    }
-    EXPECT_EQ(quads, 3582L); // the probe-pinned exact value
-    std::vector<mc::MeshVertex> verts;
-    std::vector<std::uint32_t> idx;
-    mc::buildCloudMesh(camX, camZ, t, verts, idx);
-    EXPECT_EQ(verts.size(), 4u * static_cast<std::size_t>(quads));
-    EXPECT_EQ(idx.size(), 6u * static_cast<std::size_t>(quads));
-    for (const mc::MeshVertex& c : verts) {
-        EXPECT_FLOAT_EQ(c.position.y, static_cast<float>(mc::kCloudHeight));
-    }
-    // The index range is legal (every index addresses a vertex).
-    for (std::uint32_t i : idx) {
-        EXPECT_LT(i, verts.size());
-    }
-    // Every quad: the 4-block-aligned corner pattern (x0, z0), (x0+4,
-    // z0), (x0+4, z0+4), (x0, z0+4), and the corner's region cell
-    // (floor(x0/16), floor(z0/16)) must be ON (no quad leaks outside
-    // its clump domain — the sub level only rolls inside on regions).
-    for (std::size_t q = 0; q * 4 < verts.size(); ++q) {
-        const mc::MeshVertex& a = verts[q * 4 + 0];
-        const mc::MeshVertex& b = verts[q * 4 + 1];
-        const mc::MeshVertex& c = verts[q * 4 + 2];
-        const mc::MeshVertex& d = verts[q * 4 + 3];
-        const float x0 = a.position.x, z0 = a.position.z;
-        EXPECT_EQ(static_cast<int>(x0) % 4, 0) << "quad " << q;
-        EXPECT_EQ(static_cast<int>(z0) % 4, 0) << "quad " << q;
-        EXPECT_FLOAT_EQ(b.position.x, x0 + 4.0f);
-        EXPECT_FLOAT_EQ(b.position.z, z0);
-        EXPECT_FLOAT_EQ(c.position.x, x0 + 4.0f);
-        EXPECT_FLOAT_EQ(c.position.z, z0 + 4.0f);
-        EXPECT_FLOAT_EQ(d.position.x, x0);
-        EXPECT_FLOAT_EQ(d.position.z, z0 + 4.0f);
-        const int rcx = static_cast<int>(std::floor(x0 / 16.0f));
-        const int rcz = static_cast<int>(std::floor(z0 / 16.0f));
-        EXPECT_TRUE(mc::cloudMask(rcx, rcz, t))
-            << "quad " << q << " leaks outside its region cell (" << rcx
-            << ", " << rcz << ")";
-    }
-}
-
-// UX-9a: the rebuild key is UNCHANGED by the sub level — the dirty flag
-// still keys on camera cell + t (the no-input ×2 RAW byte-identity and
-// the per-16-blocks walking cost rely on it).
-TEST(CloudMeshNeedsRebuildTest, DirtyFlagContract) {
-    EXPECT_TRUE(mc::cloudMeshNeedsRebuild(false, 0, 0, 0, 0, 0, 0));
-    EXPECT_FALSE(mc::cloudMeshNeedsRebuild(true, 0, 0, 0, 0, 0, 0));
-    EXPECT_TRUE(mc::cloudMeshNeedsRebuild(true, 0, 0, 0, 1, 0, 0));
-    EXPECT_TRUE(mc::cloudMeshNeedsRebuild(true, 0, 0, 0, 0, 1, 0));
-    EXPECT_TRUE(mc::cloudMeshNeedsRebuild(true, 0, 0, 0, 0, 0, 1));
-    EXPECT_FALSE(mc::cloudMeshNeedsRebuild(true, -5, 7, 3, -5, 7, 3));
 }
 
 // render.clouds: the key is absent from config.json by design — the code

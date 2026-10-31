@@ -233,78 +233,55 @@ void Game::drawBeaconBeams(const Mat4& view, const Mat4& projection) {
 }
 
 void Game::drawClouds(const Mat4& view, const Mat4& projection) {
-    // PRE-4: the drifting translucent cloud layer (world/cloud).
-    // render.clouds (code default true, the render.fog getBool precedent —
-    // config.json is untouched) gates the draw; OFF = zero mesh, zero
-    // draw (the v0.27.0 pipeline bit-identical — the gate's "new-off"
-    // control). The clouds are UNLIT WHITE quads through the basic
-    // program's solid-color path (the beam pattern: u_useTexture = 0 +
-    // u_alpha, culling off so both faces of each quad render
-    // alpha-blended; the depth test stays on, so terrain occludes the
-    // layer like any other world geometry).
+    // UX-9a: the drifting translucent cloud layer (world/cloud) — the
+    // MESH is the one-time kCloudQuadSize quad uploaded at init; the
+    // PATTERN is computed per pixel by m_cloudShader (cloud.frag — an
+    // exact GLSL port of the cloudMask ∧ cloudSubMask field, the CPU
+    // functions in world/cloud stay the oracle). World-anchored: the
+    // pattern does not move with the camera (no drift, no window-edge
+    // pop-in), and nothing is uploaded after init (the old per-16-block
+    // window mesh rebuild cost the iGPU ~140 ms per MB of buffer update
+    // — the hitch that motivated the shader port).
+    // render.clouds (code default true, the render.fog getBool precedent
+    // — config.json is untouched) gates the draw; OFF = zero draw (the
+    // v0.27.0 pipeline bit-identical — the gate's "new-off" control).
+    // The depth test stays on (terrain occludes the layer like any other
+    // world geometry); blending is the caller's (the blend section's)
+    // state — do NOT enable/disable it here (10-26 user-report fix: the
+    // trailing disableBlending leaked into drawWorldOverlay, whose crack
+    // cube then drew unblended — its (0,0,0,0) background painted the
+    // mined block solid black).
     if (!m_config.getBool("render.clouds", true)) {
         return;
     }
-    // The rebuild key: the camera's cloud cell (the floor of the eye's
-    // x/z on the kCloudCellBlocks grid — floorDiv, hard rule 1) + the
-    // frame-locked drift time step (m_frameCount / kCloudFramesPerCell,
-    // hard rule 8). A no-input run is static from the first draw;
-    // walking rebuilds once per 16 blocks (the 99.x discipline — no
-    // per-frame VBO upload).
     const Vec3 eye = m_camera.position;
-    const int cellX =
-        floorDiv(static_cast<int>(std::floor(eye.x)), kCloudCellBlocks);
-    const int cellZ =
-        floorDiv(static_cast<int>(std::floor(eye.z)), kCloudCellBlocks);
+    // The frame-locked drift time step (m_frameCount /
+    // kCloudFramesPerCell, hard rule 8) — the shader re-rolls the field
+    // on it, so a no-input run is static from its first frame.
     const int t = cloudTimeStep(m_frameCount);
-    if (cloudMeshNeedsRebuild(m_cloudMeshValid, m_cloudMeshCellX,
-                              m_cloudMeshCellZ, m_cloudMeshT, cellX, cellZ,
-                              t)) {
-        std::vector<MeshVertex> verts;
-        std::vector<std::uint32_t> indices;
-        buildCloudMesh(cellX, cellZ, t, verts, indices);
-        if (verts.empty()) {
-            // Unreachable at 50% density over 576 cells — defensive: no
-            // geometry, no draw, and the cache stays invalid so the next
-            // frame retries (the key is untouched).
-            m_cloudMeshValid = false;
-            return;
-        }
-        const auto up = m_cloudMesh.upload(verts, indices,
-                                           MeshMode::Triangles);
-        if (!up.ok()) {
-            MC_LOG_ERROR("Cloud mesh upload failed: " + up.error().describe());
-            m_cloudMeshValid = false;
-            return;
-        }
-        m_cloudMeshValid = true;
-        m_cloudMeshCellX = cellX;
-        m_cloudMeshCellZ = cellZ;
-        m_cloudMeshT = t;
-    }
-    if (!m_cloudMeshValid) {
-        return;
-    }
-    // The unlit-white draw: the beam's uniform recipe (u_dayFactor is
-    // read by the vertex shader — with skyLight = 0 the clouds render
-    // full-brightness white at every time of day, the documented
-    // deviation "the clouds do not darken at night").
-    m_basicShader.bind();
-    m_basicShader.setUniform1i("u_useTexture", 0);
-    m_basicShader.setUniform3f("u_color", 1.0f, 1.0f, 1.0f);
-    m_basicShader.setUniform1f("u_alpha", kCloudAlpha);
-    m_basicShader.setUniform1f("u_dayFactor", m_dayCycle.dayFactor());
-    // Blending is the caller's (the blend section's) state — do NOT
-    // enable/disable it here (10-26 user-report fix: the trailing
-    // disableBlending leaked into drawWorldOverlay, whose crack cube
-    // then drew unblended — its (0,0,0,0) background painted the mined
-    // block solid black).
+    // The quad's anchor: the camera's 4-block SUB-cell origin minus half
+    // the quad (kCloudQuadSize / 2 = 8192, a multiple of 4 — the anchor
+    // stays on the world sub lattice for every eye position; floorDiv is
+    // negative-safe, hard rule 1). The pattern is world-anchored, so this
+    // translation moves the QUAD, not the clouds.
+    const float qx = 4.0f *
+                         floorDiv(static_cast<int>(std::floor(eye.x)), 4) -
+                     static_cast<float>(kCloudQuadSize / 2);
+    const float qz = 4.0f *
+                         floorDiv(static_cast<int>(std::floor(eye.z)), 4) -
+                     static_cast<float>(kCloudQuadSize / 2);
+    // The fragment's uniforms (the program must be bound first —
+    // Renderer::draw re-binds the same program inside, no side effect).
+    m_cloudShader.bind();
+    m_cloudShader.setUniform1i("u_t", t);
+    m_cloudShader.setUniform1f("u_alpha", kCloudAlpha);
+    m_cloudShader.setUniform2f("u_camXZ", eye.x, eye.z);
+    // u_model / u_view / u_proj are set by name inside Renderer::draw
+    // (the beam's Mat4::translate precedent — the quad is local
+    // 0..kCloudQuadSize at y = kCloudHeight, translated into place).
     m_renderer.setCulling(false);
-    // The mesh is WORLD-SPACE (absolute quad coordinates) — the identity
-    // model matrix (the beam scales a unit box per beacon; the clouds
-    // carry their own positions).
-    m_renderer.draw(m_cloudMesh, m_basicShader, view, projection,
-                    Mat4::identity());
+    m_renderer.draw(m_cloudMesh, m_cloudShader, view, projection,
+                    Mat4::translate(qx, 0.0f, qz));
     m_renderer.setCulling(true);
 }
 
@@ -775,11 +752,11 @@ void Game::render() {
     // beacons, blended + depth-occluded like the other world geometry.
     // No-op without an active beacon (baseline byte-identical).
     drawBeaconBeams(view, projection);
-    // PRE-4 clouds: the drifting translucent layer at y = kCloudHeight,
+    // UX-9a clouds: the drifting translucent layer at y = kCloudHeight,
     // blended + depth-occluded like the other world geometry. Gated on
     // render.clouds (code default true); OFF = zero draw (the v0.27.0
-    // pipeline bit-identical). The cached mesh rebuilds only when the
-    // camera's cloud cell or the drift step changes.
+    // pipeline bit-identical). The pattern is per-pixel (the one-time
+    // quad, zero upload after init — see drawClouds).
     drawClouds(view, projection);
     // The break crack + target outline (Phase 15): world-space, blended,
     // depth test still on (the overlay cubes sit just outside the block).
