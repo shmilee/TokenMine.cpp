@@ -2720,3 +2720,16 @@
   （first_spawn）按当时 pose 定落点，无亚格 jitter（代码实证），
   之后 wandering 0.01 近静止 = **存档 pose 可完全预言落点**（probe
   复刻真实 spawner 路径三组全中）。
+- **matchesShapeless 要求每个占位格都是该配方原料（PITS 351）**——10-31
+  门 162 首轮 trace：网格预置「木板×3 + 木头×1」想一次点击出 planks，
+  实际输出 no-op——crafting_grid.cpp:108 的 shapeless 匹配先逐格检查
+  「每个非空格 ∈ 原料集」，木板格杀死 planks 配方（同时木头格杀死
+  stick、缺格杀死 table 2x2）= 混置网格杀死一切。推论：教程/门合成
+  步的网格预置必须**单配方纯净**；分时合成 = 单木预置 → 输出（整堆 4
+  入 carry）→ 整堆放格（shaped 每格 ≥1 合法）+ re-verify RMB 拆分。
+- **generate_font.py 段落自定位缺标记 = 脚本自毁（PITS 352）**——门 162
+  首次扩表：write_table_section 用 src.index(BEGIN_MARKER) 定位 kCjk
+  Glyphs 表段，committed 文件缺标记 → index 自匹配到**自身代码行** →
+  把 .py 改坏（PNG 已写出 = 假成功，脚本报废）。修 = 补标记 + 重写时
+  复发射。教训：脚本改自己的段落定位必须断言标记存在（找不到 = fail
+  loud），`str.index` 的"自匹配自身"是静默自毁路径。
