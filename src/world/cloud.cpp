@@ -1,6 +1,7 @@
 #include "world/cloud.hpp"
 
-#include "world/noise.hpp" // splitmix64, hash3
+#include "world/coordinates.hpp" // floorDiv
+#include "world/noise.hpp"       // splitmix64, hash3
 
 namespace mc {
 
@@ -70,6 +71,33 @@ bool cloudSubMask(int cellX, int cellZ, int subX, int subZ, int t) {
         static_cast<std::uint64_t>(t) * kGoldenStep;
     return splitmix64(state) % kCloudSubDensityDenominator <
            kCloudSubDensityNumerator;
+}
+
+int cloudSubHeight(int wx, int wz, int t) {
+    // UX-9a: the third, INDEPENDENT level — the column thickness (the CPU
+    // oracle for the fragment-shader cloud-column port). The on/off
+    // decision is the SAME two-level predicate restated in world
+    // coordinates (region = floorDiv(wx, 4), sub = the 0..3 remainder —
+    // calling cloudMask ∧ cloudSubMask, so the values cannot drift from
+    // the presence field). The height roll itself is a dedicated lattice
+    // (kSaltCloudSubHeight — collision-checked against every other salt)
+    // with the SAME PITS #4 discipline: the golden-step t advance before
+    // the splitmix64 finalizer, the asU64 two's-complement convention for
+    // negative coordinates. The mod-3 roll is a uniform {1, 2, 3} (mean 2
+    // blocks of thickness), independent of the on/off rolls (different
+    // salts — no tracking).
+    const int regionX = floorDiv(wx, kCloudSubCellBlocks);
+    const int regionZ = floorDiv(wz, kCloudSubCellBlocks);
+    const int subX = wx - regionX * kCloudSubCellBlocks;
+    const int subZ = wz - regionZ * kCloudSubCellBlocks;
+    if (!cloudMask(regionX, regionZ, t) ||
+        !cloudSubMask(regionX, regionZ, subX, subZ, t)) {
+        return 0;
+    }
+    const std::uint64_t state =
+        hash3(asU64(wx), asU64(wz), 0, kSaltCloudSubHeight) +
+        static_cast<std::uint64_t>(t) * kGoldenStep;
+    return 1 + static_cast<int>(splitmix64(state) % 3);
 }
 
 int cloudTimeStep(int frameCount) {

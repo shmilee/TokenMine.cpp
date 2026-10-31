@@ -17,14 +17,23 @@
 // the region layer, so a whole clump changes together (no sub-clump
 // relative sliding) and standing still never wanders the texture.
 //
+// A THIRD, INDEPENDENT level gives the clouds their THICKNESS (UX-9b):
+// cloudSubHeight(wx, wz, t) is a uniform {1, 2, 3} block column height
+// for every ON sub-cell (0 for OFF sub-cells), rolled with the dedicated
+// kSaltCloudSubHeight lattice on the SAME time step (a whole clump
+// changes shape together). It is a pure field — the CPU oracle for the
+// world-anchored fragment-shader cloud-column port (the mesh path stays
+// the UX-9a flat sheet until that lands).
+//
 // Everything here is a PURE function of (cell coordinates, time step):
 // no state, no allocation beyond the mesh builders' outputs,
 // thread-safe.
 //
 // PITS #4 discipline: the lattice hashes (hash3 with the dedicated
-// kSaltCloud / kSaltCloudSub) decorrelate the cells from each other; the
-// time step advances the state by the golden step before the splitmix64
-// finalizer (the finalizer alone is not a progression).
+// kSaltCloud / kSaltCloudSub / kSaltCloudSubHeight) decorrelate the cells
+// from each other; the time step advances the state by the golden step
+// before the splitmix64 finalizer (the finalizer alone is not a
+// progression).
 //
 // The game caches one Mesh and rebuilds it ONLY when the camera's cloud
 // cell or the time step changes (the 99.x discipline — no per-frame VBO
@@ -79,6 +88,15 @@ inline constexpr std::uint64_t kSaltCloud = 0xC10D05A1ULL;
 // rolls, 0xA1B65445 ambience) — no other system hashes with it, and the
 // two cloud layers never track each other.
 inline constexpr std::uint64_t kSaltCloudSub = 0x5B8C92E7ULL;
+// The dedicated salt for the cloud SUB-CELL HEIGHT lattice (UX-9b, the
+// "cloud column thickness" level — the CPU oracle for the fragment-
+// shader cloud column port). A sibling of kSaltCloud / kSaltCloudSub in
+// the same 32-bit value family (0xC10D05A1 / 0x5B8C92E7 / 0x9C2E4B71):
+// collision-checked against every kSalt* / k*RollSalt / kAmbienceSalt in
+// src/ — no other system hashes with it in either the 32-bit domain or
+// the zero-extended 64-bit domain, and the height layer never tracks the
+// on/off layers (three independent rolls, one per level).
+inline constexpr std::uint64_t kSaltCloudSubHeight = 0x9C2E4B71ULL;
 
 // The cloud's presence at lattice cell (cellX, cellZ) in time step t:
 // true = a cloud tile covers the cell. 50% density (the splitmix64 top
@@ -94,6 +112,18 @@ bool cloudMask(int cellX, int cellZ, int t);
 // sub-clump relative sliding). Pure: same arguments -> same answer,
 // across runs and threads.
 bool cloudSubMask(int cellX, int cellZ, int subX, int subZ, int t);
+
+// UX-9b: the cloud SUB-CELL THICKNESS at world 4-block lattice
+// coordinates (wx, wz) in time step t — the CPU oracle for the
+// fragment-shader cloud-column port. 0 when the sub is OFF (its region
+// cell off, or its sub roll off — the SAME two-level decision as
+// cloudMask ∧ cloudSubMask, restated in world coordinates), otherwise a
+// uniform {1, 2, 3} block column height (the splitmix64 mod-3 roll, mean
+// 2 — the dedicated kSaltCloudSubHeight lattice, re-rolled on the SAME
+// time step so a whole clump changes shape together; the height never
+// tracks the on/off layers). Pure: same arguments -> same answer, across
+// runs and threads.
+int cloudSubHeight(int wx, int wz, int t);
 
 // The frame-locked drift time step: frameCount / kCloudFramesPerCell.
 // The integer division keeps the drift a pure function of the frame;
