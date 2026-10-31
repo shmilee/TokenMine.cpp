@@ -230,16 +230,17 @@ InventoryLayout InventoryLayout::compute(int windowWidth, int windowHeight,
     const int gridCols = table ? 3 : 2;
     const int gridSectionW = gridCols * kSlot + (gridCols - 1) * kGap;
     const int sectionW = gridSectionW + kCraftGap + kSlot;
-    // The recipe list (right of the output): one column (the E panel's
-    // shapeless craft list) or two (the table panel's shaped hint list,
-    // CRAFT-4 — 33 shaped rows in one column would shrink the panel fit
-    // factor to ~0.34 and the mini patterns to unusable 5 px cells).
-    const int listW =
-        table ? 2 * kCraftWidth + kRecipeColumnGap : kCraftWidth;
+    // The recipe list (right of the output): two side-by-side columns of
+    // kCraftWidth for BOTH panels — CRAFT-4's table geometry generalized
+    // to the E panel (UX-8c: 32 shapeless rows in one column would shrink
+    // the panel fit factor to ~0.43, the row text to unusably small at
+    // ui.scale 2.0).
+    const int listW = 2 * kCraftWidth + kRecipeColumnGap;
     const int nativePanelW = 2 * kPanelPadding + gridW + kCraftGap +
                              sectionW + kCraftGap + listW;
-    // Rows per column (the table splits recipeCount left/right).
-    const int leftRows = table ? (recipeCount + 1) / 2 : recipeCount;
+    // Rows per column (both kinds split recipeCount left/right: the left
+    // column holds the first (recipeCount + 1) / 2 rows).
+    const int leftRows = (recipeCount + 1) / 2;
     const int listH = kTitleHeight + leftRows * kCraftRowHeight;
     const int nativePanelH = 2 * kPanelPadding +
                              std::max(kTitleHeight + gridH, listH);
@@ -323,9 +324,10 @@ InventoryLayout InventoryLayout::compute(int windowWidth, int windowHeight,
         static_cast<int>(std::lround(gridY + (gH - slotLen) / 2.0)),
         scaledLength(slotLen), scaledLength(slotLen)};
 
-    // The recipe list: the shapeless craft rows (E panel, one column) or
-    // the shaped hint rows (table panel, CRAFT-4, two columns — row i
-    // sits in the left column while i < leftRows, the right one after).
+    // The recipe list: both panels split their rows over the two columns
+    // (the table's shaped hint rows, CRAFT-4, and the E panel's shapeless
+    // craft rows, UX-8c — row i sits in the left column while
+    // i < leftRows, the right one after).
     {
         const double craftX = outputX + slotLen + craftGap;
         const double colGap = kRecipeColumnGap * s;
@@ -334,14 +336,36 @@ InventoryLayout InventoryLayout::compute(int windowWidth, int windowHeight,
                                   scaledLength(listW * s),
                                   scaledLength(titleH)};
         for (int i = 0; i < recipeCount; ++i) {
-            const int column = (table && i >= leftRows) ? 1 : 0;
-            const int rowIdx = table ? (column == 0 ? i : i - leftRows) : i;
+            const int column = (i >= leftRows) ? 1 : 0;
+            const int rowIdx = (column == 0) ? i : i - leftRows;
             const double x = craftX + column * (craftW + colGap);
             out.recipes.push_back(UIRect {
                 static_cast<int>(std::lround(x)),
                 static_cast<int>(std::lround(panelY + pad + titleH +
                                              rowIdx * rowH)),
                 scaledLength(craftW), scaledLength(rowH)});
+        }
+    }
+    return out;
+}
+
+// UX-8c: the E panel's stable craftable-first partition (see the
+// declaration). Two passes over the SAME input order: every canCraft
+// row first, then the rest — registry order kept inside each group, so
+// the order is a pure function of (hints, inv, items).
+std::vector<const Recipe*> orderedRecipeHints(
+    const std::vector<const Recipe*>& hints, const Inventory& inv,
+    const ItemRegistry& items) {
+    std::vector<const Recipe*> out;
+    out.reserve(hints.size());
+    for (const Recipe* r : hints) {
+        if (canCraft(inv, *r, items)) {
+            out.push_back(r);
+        }
+    }
+    for (const Recipe* r : hints) {
+        if (!canCraft(inv, *r, items)) {
+            out.push_back(r);
         }
     }
     return out;

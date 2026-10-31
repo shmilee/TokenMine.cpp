@@ -5,6 +5,8 @@
 // panel kinds.
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cmath>
 #include <string>
 
 #include "core/json.hpp"
@@ -12,6 +14,7 @@
 #include "item/inventory.hpp"
 #include "item/item_registry.hpp"
 #include "item/recipe.hpp"
+#include "ui/font.hpp"
 #include "ui/inventory_ui.hpp"
 
 using namespace mc;
@@ -218,6 +221,110 @@ TEST(InventoryLayoutTest, TableHintRowHitTest) {
     EXPECT_FALSE(layout.inOutput(r3.x + 2, r3.y + 2));
 }
 
+TEST(InventoryLayoutTest, EPanelTwoColumnGeometry) {
+    // UX-8c: the E panel's shapeless list splits over two columns
+    // (CRAFT-4's table geometry generalized to both kinds): 32 rows ->
+    // 16/16. A 1400x1000 window keeps the native design (scale 1.0).
+    const InventoryLayout layout =
+        InventoryLayout::compute(1400, 1000, 32, PanelKind::Inventory);
+    EXPECT_DOUBLE_EQ(layout.scale, 1.0);
+    // Native width with the two-column list:
+    // 2*12 + 500 + 12 + (2*52+2*4+12+52) + 12 + (2*280+8) = 1288.
+    EXPECT_EQ(layout.panel.w, 1288);
+    // 2*12 + max(40 + 3*52+2*4, 40 + 16*52) = 896.
+    EXPECT_EQ(layout.panel.h, 896);
+    ASSERT_EQ(layout.recipes.size(), 32u);
+    // Left column: rows 0..15 at the list origin; right column: rows
+    // 16..31 one column width + gap over, row i-16 aligned with row i.
+    for (int i = 0; i < 16; ++i) {
+        EXPECT_EQ(layout.recipes[static_cast<std::size_t>(i)].x,
+                  layout.craftHeader.x);
+    }
+    for (int i = 16; i < 32; ++i) {
+        EXPECT_EQ(layout.recipes[static_cast<std::size_t>(i)].x,
+                  layout.craftHeader.x + InventoryLayout::kCraftWidth +
+                      InventoryLayout::kRecipeColumnGap);
+        EXPECT_EQ(layout.recipes[static_cast<std::size_t>(i)].y,
+                  layout.recipes[static_cast<std::size_t>(i - 16)].y);
+    }
+    // The rows follow the native 52 px row height; the first row sits at
+    // the list origin (the title bottom).
+    EXPECT_EQ(layout.recipes[1].y - layout.recipes[0].y,
+              InventoryLayout::kCraftRowHeight);
+    EXPECT_EQ(layout.recipes[0].y,
+              layout.craftHeader.y + InventoryLayout::kTitleHeight);
+    // Every row sits inside the panel; the list stays right of the
+    // output slot.
+    for (const UIRect& r : layout.recipes) {
+        EXPECT_TRUE(layout.panel.contains(r.x, r.y));
+        EXPECT_TRUE(layout.panel.contains(r.x + r.w - 1, r.y + r.h - 1));
+    }
+    EXPECT_GT(layout.recipes[0].x, layout.output.x + layout.output.w);
+    // Hit tests follow the split: row 16 (right column, its row-0 twin)
+    // hits, the inter-column gap hits nothing.
+    const UIRect& r16 = layout.recipes[16];
+    EXPECT_EQ(layout.recipeRowAt(r16.x + 2, r16.y + 2), 16);
+    EXPECT_EQ(layout.recipeRowAt(layout.recipes[0].x + layout.recipes[0].w + 4,
+                                 layout.recipes[0].y + 2), -1);
+}
+
+TEST(InventoryLayoutTest, EPanelOddRowSplit) {
+    // UX-8c: the (n+1)/2 rule (CRAFT-4's formula) — 31 rows -> 16 left /
+    // 15 right; 1 row -> the single row sits in the left column, the
+    // right one empty.
+    const InventoryLayout odd =
+        InventoryLayout::compute(1400, 1000, 31, PanelKind::Inventory);
+    ASSERT_EQ(odd.recipes.size(), 31u);
+    EXPECT_EQ(odd.recipes[15].x, odd.craftHeader.x);
+    EXPECT_EQ(odd.recipes[16].x,
+              odd.craftHeader.x + InventoryLayout::kCraftWidth +
+                  InventoryLayout::kRecipeColumnGap);
+    EXPECT_EQ(odd.recipes[30].x, odd.recipes[16].x);
+    EXPECT_EQ(odd.recipes[30].y, odd.recipes[14].y);
+    const InventoryLayout one =
+        InventoryLayout::compute(1400, 1000, 1, PanelKind::Inventory);
+    ASSERT_EQ(one.recipes.size(), 1u);
+    EXPECT_EQ(one.recipes[0].x, one.craftHeader.x);
+    // The 1-row panel height stays the slot-row design (list shorter).
+    EXPECT_EQ(one.panel.h, 228);
+}
+
+TEST(InventoryLayoutTest, EPanelRowsFitTheColumn) {
+    // UX-8c: the E panel's two text lines are tail-trimmed with fitLabel
+    // to (row width - left offset - right margin) — the rendered label
+    // never reaches the column's right edge, so it cannot bleed into the
+    // other column. Longest shipped cases: the master_bow's
+    // three-ingredient needs line and a dual-ingredient dye pair; the
+    // name line keeps its " xN" suffix.
+    const InventoryLayout layout =
+        InventoryLayout::compute(1280, 720, 32, PanelKind::Inventory);
+    const double s = layout.scale;
+    const int left = static_cast<int>(std::lround(32 * s));
+    const int right = static_cast<int>(std::lround(4 * s));
+    const int avail = std::max(0, layout.recipes[0].w - left - right);
+    const std::string prefix = "需要：";
+    for (const UIRect& r : layout.recipes) {
+        // Name line: the " xN" suffix is kept, the trimmed label's right
+        // edge stays inside the column rect.
+        const std::string suffix = " x4";
+        const std::string name =
+            fitLabel("smooth_sandstone", suffix, s, avail) + suffix;
+        EXPECT_LE(left + static_cast<int>(std::ceil(textWidth(name, s))),
+                  r.w);
+        // Needs lines: the "需要：" prefix is the string head, so only
+        // the ingredient tail trims — it always survives.
+        for (const std::string& needs :
+             {prefix + "flint x1, stick x1, feather x1",
+              prefix + "red_dye x1, white_wool x1",
+              prefix + "power_bow x1, speed_bow x1, infinite_bow x1"}) {
+            const std::string label = fitLabel(needs, "", s, avail);
+            EXPECT_EQ(label.compare(0, prefix.size(), prefix), 0);
+            EXPECT_LE(left + static_cast<int>(std::ceil(textWidth(label, s))),
+                      r.w);
+        }
+    }
+}
+
 TEST(InventoryLayoutTest, SlotHitTest) {
     const InventoryLayout layout = InventoryLayout::compute(1280, 720, 4);
     // Slot 0's center maps to slot 0.
@@ -247,31 +354,35 @@ TEST(InventoryLayoutTest, SlotHitTest) {
 }
 
 TEST(InventoryLayoutTest, WideWindowKeepsTheNativeSize) {
-    const InventoryLayout layout = InventoryLayout::compute(1280, 720, 2);
+    // UX-8c: the E panel's list is two columns, so the native width grew
+    // to 1288 — a 1362 window (the E2E size) still keeps scale 1.0.
+    const InventoryLayout layout = InventoryLayout::compute(1362, 742, 2);
     EXPECT_DOUBLE_EQ(layout.scale, 1.0);
-    // Native design: 2*12 + 500 + 12 + (2*52+4+12+52) + 12 + 280 = 1000.
-    EXPECT_EQ(layout.panel.w, 1000);
-    // 2*12 + max(40 + 3*52+2*4, 40 + 2*52) = 228.
+    // Native design: 2*12 + 500 + 12 + (2*52+2*4+12+52) + 12 + (2*280+8)
+    // = 1288.
+    EXPECT_EQ(layout.panel.w, 1288);
+    // 2*12 + max(40 + 3*52+2*4, 40 + 1*52) = 228 (the 2 rows split 1/1).
     EXPECT_EQ(layout.panel.h, 228);
     EXPECT_EQ(layout.slots[0].w, InventoryLayout::kSlot);
 }
 
 TEST(InventoryLayoutTest, NarrowWindowScalesThePanelDown) {
     const InventoryLayout layout = InventoryLayout::compute(640, 360, 2);
-    // Width-constrained: s = (640-2)/1000 (the height has plenty of room).
-    EXPECT_DOUBLE_EQ(layout.scale, 638.0 / 1000.0);
+    // Width-constrained: s = (640-2)/1288 (the height has plenty of
+    // room) — UX-8c's two-column native width.
+    EXPECT_DOUBLE_EQ(layout.scale, 638.0 / 1288.0);
     // The panel fits with >=1 px of margin on every side.
     EXPECT_GE(layout.panel.x, 0);
     EXPECT_GE(layout.panel.y, 0);
     EXPECT_LE(layout.panel.x + layout.panel.w, 640 - 1);
     EXPECT_LE(layout.panel.y + layout.panel.h, 360 - 1);
-    // Slots are scaled (52 -> 33) and every child stays inside the panel.
-    EXPECT_EQ(layout.slots[0].w, 33);
+    // Slots are scaled (52 -> 26) and every child stays inside the panel.
+    EXPECT_EQ(layout.slots[0].w, 26);
     for (const UIRect& r : layout.slots) {
         EXPECT_TRUE(layout.panel.contains(r.x, r.y));
         EXPECT_TRUE(layout.panel.contains(r.x + r.w - 1, r.y + r.h - 1));
     }
-    // Adjacent hotbar slots never overlap (the scaled 4px gap is 2 or 3).
+    // Adjacent hotbar slots never overlap (the scaled 4px gap is 2).
     for (int i = 0; i < 8; ++i) {
         const UIRect& a = layout.slots[static_cast<std::size_t>(i)];
         const UIRect& b = layout.slots[static_cast<std::size_t>(i + 1)];
@@ -703,6 +814,79 @@ TEST(InventoryUiTest, UnmatchedGridCraftsNothing) {
     EXPECT_FALSE(f.ui.leftClick(-1, -1, true));
     EXPECT_EQ(f.ui.grid().at(0), (ItemStack {f.planks, 1}));
     EXPECT_FALSE(f.ui.carrying());
+}
+
+// -- UX-8c: the E panel's craftable-first row order (stable partition) ---
+
+TEST(InventoryUiTest, OrderedRecipeHintsCraftableFirst) {
+    UiFixture f;
+    // Two more shapeless recipes: stone <-> dirt exchanges.
+    auto rr = f.recipes.registerRecipe(
+        parseJson(R"({"id":"dirt_from_stone",
+                     "output":{"item":"dirt","count":1},
+                     "ingredients":[{"item":"stone","count":1}]})"),
+        f.items);
+    if (!rr.ok()) {
+        ADD_FAILURE() << rr.error().message;
+    }
+    rr = f.recipes.registerRecipe(
+        parseJson(R"({"id":"stone_from_dirt",
+                     "output":{"item":"stone","count":1},
+                     "ingredients":[{"item":"dirt","count":1}]})"),
+        f.items);
+    if (!rr.ok()) {
+        ADD_FAILURE() << rr.error().message;
+    }
+    const Recipe* sticks = f.recipes.find("sticks");
+    const Recipe* dfs = f.recipes.find("dirt_from_stone");
+    const Recipe* sdf = f.recipes.find("stone_from_dirt");
+    ASSERT_NE(sticks, nullptr);
+    ASSERT_NE(dfs, nullptr);
+    ASSERT_NE(sdf, nullptr);
+
+    // All craftable -> the input order is kept (group-internal stability).
+    f.inv.setSlot(0, ItemStack {f.planks, 4});
+    f.inv.setSlot(1, ItemStack {f.stone, 1});
+    f.inv.setSlot(2, ItemStack {f.dirt, 1});
+    {
+        const std::vector<const Recipe*> in = {dfs, sticks, sdf};
+        const std::vector<const Recipe*> out =
+            orderedRecipeHints(in, f.inv, f.items);
+        ASSERT_EQ(out.size(), 3u);
+        EXPECT_EQ(out[0], dfs);
+        EXPECT_EQ(out[1], sticks);
+        EXPECT_EQ(out[2], sdf);
+    }
+    // None craftable (empty inventory) -> the input order is kept.
+    {
+        const Inventory empty;
+        const std::vector<const Recipe*> in = {dfs, sticks, sdf};
+        const std::vector<const Recipe*> out =
+            orderedRecipeHints(in, empty, f.items);
+        ASSERT_EQ(out.size(), 3u);
+        EXPECT_EQ(out[0], dfs);
+        EXPECT_EQ(out[1], sticks);
+        EXPECT_EQ(out[2], sdf);
+    }
+    // Mixed: input order false -> true -> false partitions into
+    // [craftable] + [uncraftable], each group keeping its input order.
+    f.inv.setSlot(1, ItemStack {}); // the first case's stone...
+    f.inv.setSlot(2, ItemStack {}); // ...and dirt go away
+    f.inv.setSlot(0, ItemStack {f.planks, 4}); // only sticks can craft
+    {
+        const std::vector<const Recipe*> in = {dfs, sticks, sdf};
+        const std::vector<const Recipe*> out =
+            orderedRecipeHints(in, f.inv, f.items);
+        ASSERT_EQ(out.size(), 3u);
+        EXPECT_EQ(out[0], sticks);
+        EXPECT_EQ(out[1], dfs);
+        EXPECT_EQ(out[2], sdf);
+    }
+    // Empty hint list -> empty order.
+    {
+        const std::vector<const Recipe*> in;
+        EXPECT_TRUE(orderedRecipeHints(in, f.inv, f.items).empty());
+    }
 }
 
 // -- CRAFT-1: the bindable grid (per-block table separation) ---------------

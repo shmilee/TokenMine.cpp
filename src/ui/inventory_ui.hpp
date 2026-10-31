@@ -21,7 +21,8 @@
 // 0..8 in the bottom row — the same 27 Inventory slots the game already
 // owns (no separate storage). The CraftingTable kind is the same panel
 // with a 3x3 grid instead of 2x2 and the shaped recipe HINT list (CRAFT-4)
-// in two columns instead of the shapeless craft list.
+// instead of the shapeless craft list; BOTH panels split their recipe
+// list over two columns (CRAFT-4 for the table, UX-8c for the E panel).
 //
 // Click semantics (Minecraft's minimal subset):
 //   left click  a slot or grid cell: pick up a whole stack / place or swap
@@ -107,8 +108,10 @@ struct InventoryLayout {
     // The output slot (the matched recipe's result).
     UIRect output;
     // One row per SHAPELESS recipe (Inventory kind) or per SHAPED recipe
-    // (CraftingTable kind, CRAFT-4: the rows split over two columns, the
-    // first (recipeCount+1)/2 in the left).
+    // (CraftingTable kind) — both kinds split the rows over two columns
+    // (CRAFT-4 for the table, UX-8c for the E panel): the first
+    // (recipeCount + 1) / 2 rows sit in the left column, the rest in the
+    // right, row i - leftRows aligned with row i.
     std::vector<UIRect> recipes;
     UIRect panel;
     // The "Inventory"/"Crafting Table" title and the "Crafting" header.
@@ -125,6 +128,16 @@ struct InventoryLayout {
     int recipeRowAt(int px, int py) const;  // row index or -1
     bool inOutput(int px, int py) const { return output.contains(px, py); }
 };
+
+// UX-8c: the E panel's recipe row order — a STABLE partition of `hints`:
+// every recipe `inv` can craft (canCraft, the click path's own gate)
+// first, then the rest, each group keeping the registry order of
+// `hints`. The click path and the render path both apply it (the single
+// seam), so a row index means the same recipe in both. Pure: reads the
+// inventory and registry only, deterministic.
+std::vector<const Recipe*> orderedRecipeHints(
+    const std::vector<const Recipe*>& hints, const Inventory& inv,
+    const ItemRegistry& items);
 
 // Phase 40: the furnace panel — the smelting GUI, opened by right-clicking
 // a furnace in the world. Same panel chrome as the inventory screen: the

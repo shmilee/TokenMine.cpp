@@ -469,9 +469,15 @@ void Game::handlePanelClicks() {
     const PanelKind kind =
         table ? PanelKind::CraftingTable : PanelKind::Inventory;
     // The hint list per kind: shapeless craft rows (E panel) or shaped
-    // display-only hint rows (table panel, CRAFT-4).
+    // display-only hint rows (table panel, CRAFT-4). UX-8c: the E panel
+    // orders its rows craftable-first (orderedRecipeHints — the SAME seam
+    // the render path applies, so a row index means the same recipe for
+    // the click and the draw); the table list stays in registry order.
     std::vector<const Recipe*> hints =
         table ? shapedRecipes() : shapelessRecipes();
+    if (!table) {
+        hints = orderedRecipeHints(hints, m_inventory, m_items);
+    }
     const InventoryLayout layout =
         InventoryLayout::compute(w, h, static_cast<int>(hints.size()), kind);
     const std::pair<int, int> mp = uiMouse();
@@ -1280,9 +1286,14 @@ void Game::renderUi() {
         const bool table = m_panel.openPanel == OpenPanel::Table;
         const PanelKind kind =
             table ? PanelKind::CraftingTable : PanelKind::Inventory;
-        // The hint list per kind (same source handlePanelClicks uses).
+        // The hint list per kind (same source — and, for the E panel, the
+        // same UX-8c orderedRecipeHints seam — handlePanelClicks uses, so
+        // a row index means the same recipe for the click and the draw).
         std::vector<const Recipe*> hints =
             table ? shapedRecipes() : shapelessRecipes();
+        if (!table) {
+            hints = orderedRecipeHints(hints, m_inventory, m_items);
+        }
         const InventoryLayout layout =
             InventoryLayout::compute(w, h, static_cast<int>(hints.size()),
                                      kind);
@@ -1457,9 +1468,19 @@ void Game::renderUi() {
                 drawIcon(ItemStack {recipe.output, recipe.outputCount},
                          static_cast<float>(r.x + L(14)),
                          static_cast<float>(r.y + r.h / 2), rowIcon);
-                addText(m_items.at(recipe.output).name + " x" +
-                            std::to_string(recipe.outputCount),
-                        r.x + L(32), r.y + L(8), s, outColor);
+                // UX-8c: the two text lines fit the (now half-width)
+                // column — the " xN" suffix is kept, a long item id or a
+                // long ingredient list is tail-trimmed so it never bleeds
+                // into the other column (deterministic, see fitLabel — the
+                // table panel's hint rows use the same discipline).
+                const int avail = std::max(0, r.w - L(32) - L(4));
+                const std::string suffix =
+                    " x" + std::to_string(recipe.outputCount);
+                const std::string label =
+                    fitLabel(m_items.at(recipe.output).name, suffix, s,
+                             avail) +
+                    suffix;
+                addText(label, r.x + L(32), r.y + L(8), s, outColor);
                 std::string needs;
                 for (const auto& [item, count] : recipe.ingredients) {
                     if (!needs.empty()) {
@@ -1468,8 +1489,10 @@ void Game::renderUi() {
                     needs += m_items.at(item).name + " x" +
                              std::to_string(count);
                 }
-                addText("需要：" + needs, r.x + L(32), r.y + L(28), s,
-                        kTextDim); // PRE-1 (item ids stay English data)
+                // PRE-1 (item ids stay English); the "需要：" prefix is the
+                // string head, so fitLabel trims the ingredient tail only.
+                addText(fitLabel("需要：" + needs, "", s, avail), r.x + L(32),
+                        r.y + L(28), s, kTextDim);
             }
         }
 
