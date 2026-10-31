@@ -33,6 +33,8 @@ void Mesh::destroy() {
     m_vertexCount = 0;
     m_indexCount = 0;
     m_mode = MeshMode::Triangles;
+    m_vboBytes = 0;
+    m_iboBytes = 0;
 }
 
 Mesh::Mesh(Mesh&& other) noexcept {
@@ -42,9 +44,12 @@ Mesh::Mesh(Mesh&& other) noexcept {
     m_vertexCount = other.m_vertexCount;
     m_indexCount = other.m_indexCount;
     m_mode = other.m_mode;
+    m_vboBytes = other.m_vboBytes;
+    m_iboBytes = other.m_iboBytes;
     other.m_vao = other.m_vbo = other.m_ibo = 0;
     other.m_vertexCount = other.m_indexCount = 0;
     other.m_mode = MeshMode::Triangles;
+    other.m_vboBytes = other.m_iboBytes = 0;
 }
 
 Mesh& Mesh::operator=(Mesh&& other) noexcept {
@@ -56,9 +61,12 @@ Mesh& Mesh::operator=(Mesh&& other) noexcept {
         m_vertexCount = other.m_vertexCount;
         m_indexCount = other.m_indexCount;
         m_mode = other.m_mode;
+        m_vboBytes = other.m_vboBytes;
+        m_iboBytes = other.m_iboBytes;
         other.m_vao = other.m_vbo = other.m_ibo = 0;
         other.m_vertexCount = other.m_indexCount = 0;
         other.m_mode = MeshMode::Triangles;
+        other.m_vboBytes = other.m_iboBytes = 0;
     }
     return *this;
 }
@@ -87,9 +95,47 @@ Result<void> Mesh::upload(const std::vector<MeshVertex>& vertices,
         }
     }
 
+    const bool indexed = mode == MeshMode::Triangles && !indices.empty();
+    const std::size_t vertBytes = vertices.size() * kVertexSize;
+    const std::size_t idxBytes = indices.size() * sizeof(std::uint32_t);
+
+    // UX-9a: the in-place reuse path (the header documents the invariant).
+    // Same mode + the request fits the allocated capacity -> glBufferSubData
+    // into the existing VBO/IBO, VAO and attribute pointers untouched.
+    // The only beneficiary in the tree is the cloud mesh (rebuilt once per
+    // 16-block camera crossing): every other upload call site is either a
+    // fresh local Mesh (first upload) or a once-per-key cached upload.
+    if (m_vao != 0 && m_mode == mode && vertBytes <= m_vboBytes &&
+        (!indexed || (m_ibo != 0 && idxBytes <= m_iboBytes))) {
+        glBindVertexArray(m_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(vertBytes),
+                        vertices.data());
+        if (indexed) {
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ibo);
+            glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0,
+                            static_cast<GLsizeiptr>(idxBytes), indices.data());
+        }
+        glBindVertexArray(0);
+        m_vertexCount = vertices.size();
+        // Non-indexed after indexed: m_indexCount = 0 makes the draw path
+        // take glDrawArrays; the VAO's leftover element-buffer binding is
+        // never referenced.
+        m_indexCount = indexed ? indices.size() : 0;
+
+        const GLenum glErr = glGetError();
+        if (glErr != GL_NO_ERROR) {
+            MC_LOG_ERROR("GL error during mesh upload subdata: " +
+                         std::to_string(static_cast<unsigned>(glErr)));
+            destroy();
+            // Fall through: retry once on the full allocation path.
+        } else {
+            return {};
+        }
+    }
+
     destroy();
     m_mode = mode;
-    const bool indexed = mode == MeshMode::Triangles && !indices.empty();
 
     glGenVertexArrays(1, &m_vao);
     glGenBuffers(1, &m_vbo);
@@ -101,19 +147,23 @@ Result<void> Mesh::upload(const std::vector<MeshVertex>& vertices,
         return MC_FAIL("GL buffer/VAO generation failed");
     }
 
+    // The allocated capacity — the reuse gate's yardstick (grow-only on
+    // the subdata path; a fresh allocation here is always exactly sized).
+    m_vboBytes = vertBytes;
+    if (indexed) {
+        m_iboBytes = idxBytes;
+    }
+
     glBindVertexArray(m_vao);
 
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(vertices.size() * kVertexSize),
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertBytes),
                  vertices.data(), GL_STATIC_DRAW);
     setupAttributes();
 
     if (indexed) {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ibo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                     static_cast<GLsizeiptr>(indices.size() *
-                                             sizeof(std::uint32_t)),
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(idxBytes),
                      indices.data(), GL_STATIC_DRAW);
     }
 

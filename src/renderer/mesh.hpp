@@ -106,6 +106,25 @@ public:
     // Upload geometry. For Triangles the indices reference vertices (may
     // be empty, in which case the vertices are drawn in order); for Lines
     // the indices must be empty.
+    //
+    // UX-9a: in-place reuse invariant — when this mesh ALREADY holds
+    // geometry of the same mode and the request fits the currently
+    // ALLOCATED buffer capacity (m_vboBytes / m_iboBytes, the byte sizes
+    // of the last full glBufferData), the buffers are rewritten with
+    // glBufferSubData and the VAO + attribute pointers are kept: the
+    // vertex layout is the fixed 15-float MeshVertex, so they stay valid
+    // for any upload of this mesh. Capacity is grow-only on the reuse
+    // path: a smaller request never shrinks the allocation, and the
+    // stale tail bytes beyond m_vertexCount / m_indexCount are never
+    // drawn (the counts limit every draw call). A mode change, a
+    // non-indexed mesh asked for indexed geometry, or a request beyond
+    // capacity falls back to the full destroy + allocate path, which
+    // records the new capacity. A GL error on the reuse path destroys
+    // and retries ONCE on the full path. Identical input produces
+    // identical geometry and rendering output either way — only the
+    // GL-side allocation pattern changes (the cloud mesh, rebuilt once
+    // per 16-block camera crossing, is the beneficiary: no per-crossing
+    // VBO reallocation).
     Result<void> upload(const std::vector<MeshVertex>& vertices,
                         const std::vector<std::uint32_t>& indices = {},
                         MeshMode mode = MeshMode::Triangles);
@@ -145,6 +164,12 @@ private:
     std::size_t m_vertexCount = 0;
     std::size_t m_indexCount = 0;
     MeshMode m_mode = MeshMode::Triangles;
+    // UX-9a: the ALLOCATED byte size of m_vbo / m_ibo (set on the last
+    // full glBufferData, zeroed by destroy()). upload() rewrites in
+    // place when a same-mode request fits; m_iboBytes stays 0 on a
+    // non-indexed mesh (no IBO allocated).
+    std::size_t m_vboBytes = 0;
+    std::size_t m_iboBytes = 0;
 };
 
 } // namespace mc
