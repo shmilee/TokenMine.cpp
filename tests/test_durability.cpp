@@ -136,6 +136,43 @@ Json withArrayElement(const Json& arr, std::size_t idx, const Json& v) {
     return out;
 }
 
+// UX-8f: a pre-format-24 file carries the 27-slot array shape
+// (kPreUx8fInventorySlots). When a test downgrades the format of a
+// serialized (format 24) save, the slots array must be truncated to the
+// legacy shape — the parser tail-pads it back to the current kTotalSize
+// (value-faithful, the new 9 slots load empty). Self-contained (this
+// file has no withoutKey helper — the P75 inline-rebuild pattern).
+Json downgradeSlots(const Json& root) {
+    const Json* inv = root.find("inventory");
+    if (inv == nullptr || !inv->isObject()) {
+        return root;
+    }
+    const Json* slots = inv->find("slots");
+    if (slots == nullptr || !slots->isArray() ||
+        slots->size() <= static_cast<std::size_t>(kPreUx8fInventorySlots)) {
+        return root;
+    }
+    Json legacy = Json::array();
+    for (int i = 0; i < kPreUx8fInventorySlots; ++i) {
+        legacy.push_back(slots->at(static_cast<std::size_t>(i)));
+    }
+    Json invOut = Json::object();
+    for (const auto& [k, v] : inv->members()) {
+        if (k != "slots") {
+            invOut[k] = v;
+        }
+    }
+    invOut["slots"] = std::move(legacy);
+    Json out = Json::object();
+    for (const auto& [k, v] : root.members()) {
+        if (k != "inventory") {
+            out[k] = v;
+        }
+    }
+    out["inventory"] = std::move(invOut);
+    return out;
+}
+
 } // namespace
 
 // -- applyDurability: the pure wear step --------------------------------------
@@ -400,7 +437,7 @@ TEST(SaveFormat18Test, MidDamageRoundTripsInAllThreePlaces) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     // UX-7: writes are always format 23 (SAVE-2 was 22).
-    EXPECT_EQ(j->find("format")->asInt(), 23);
+    EXPECT_EQ(j->find("format")->asInt(), 24);
     // The shapes: the damaged slot + the entity carry the key; the
     // full-durability armor slot is a STRING; the damaged one an
     // OBJECT {item, damage}.
@@ -450,6 +487,7 @@ TEST(SaveFormat18Test, Format17WithDamageKeyIsAVersionLie) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["format"] = Json(17);
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     // SURV-7: the stats key is format-21 vocabulary — a format-17 file
     // must not carry it (rebuild the player without it; this file has
     // no withoutKey helper, the P75 rebuild pattern inline).

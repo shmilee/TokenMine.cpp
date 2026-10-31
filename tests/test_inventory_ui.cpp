@@ -112,8 +112,8 @@ struct UiFixture {
 TEST(InventoryLayoutTest, ComputesSlotsAndPanel) {
     const InventoryLayout layout =
         InventoryLayout::compute(1280, 720, 4);
-    // 27 slots: 18 storage + 9 hotbar.
-    ASSERT_EQ(layout.slots.size(), 27u);
+    // 36 slots: 27 storage + 9 hotbar (UX-8f).
+    ASSERT_EQ(layout.slots.size(), 36u);
     ASSERT_EQ(layout.recipes.size(), 4u);
     // The 2x2 grid of the Inventory kind + the output slot.
     ASSERT_EQ(layout.gridCells.size(), 4u);
@@ -169,10 +169,10 @@ TEST(InventoryLayoutTest, TableKindIs3x3WithShapedHintList) {
     ASSERT_EQ(layout.recipes.size(), 5u);
     // Native width with the two-column list:
     // 2*12 + 500 + 12 + (3*52+2*4+12+52) + 12 + (2*280+8) = 1344.
-    const double sw = 1278.0 / 1344.0; // height (228) has plenty of room
+    const double sw = 1278.0 / 1344.0; // height (284, UX-8f) has room
     EXPECT_DOUBLE_EQ(layout.scale, sw);
     EXPECT_EQ(layout.panel.w, 1278);
-    EXPECT_EQ(layout.panel.h, 217); // 228 * sw
+    EXPECT_EQ(layout.panel.h, 270); // 284 * sw
     EXPECT_EQ(layout.panel.x, (1280 - layout.panel.w) / 2);
     // The rows split over the two columns; the right-column rows align
     // with the left column's row 0..1.
@@ -188,8 +188,10 @@ TEST(InventoryLayoutTest, TableKindIs3x3WithShapedHintList) {
         EXPECT_EQ(layout.recipes[static_cast<std::size_t>(i)].y,
                   layout.recipes[static_cast<std::size_t>(i - 3)].y);
     }
-    // The rows follow the (scaled) 52 px row height.
-    EXPECT_EQ(layout.recipes[1].y - layout.recipes[0].y, 49); // 52 * sw
+    // The rows follow the (scaled) 52 px row height (the per-rect
+    // rounding gives a 50 px step at this fit factor, UX-8f's taller
+    // panel origin).
+    EXPECT_EQ(layout.recipes[1].y - layout.recipes[0].y, 50); // 52 * sw
     // Every row sits inside the panel; the list stays right of the
     // output slot.
     for (const UIRect& r : layout.recipes) {
@@ -197,11 +199,11 @@ TEST(InventoryLayoutTest, TableKindIs3x3WithShapedHintList) {
         EXPECT_TRUE(layout.panel.contains(r.x + r.w - 1, r.y + r.h - 1));
     }
     EXPECT_GT(layout.recipes[0].x, layout.output.x + layout.output.w);
-    // The zero-recipe table keeps its former native HEIGHT design (228)
-    // — scaled here like everything else.
+    // The zero-recipe table keeps its native HEIGHT design (284, UX-8f's
+    // four slot rows) — scaled here like everything else.
     const InventoryLayout none =
         InventoryLayout::compute(1280, 720, 0, PanelKind::CraftingTable);
-    EXPECT_EQ(none.panel.h, 217);
+    EXPECT_EQ(none.panel.h, 270);
     EXPECT_TRUE(none.recipes.empty());
 }
 
@@ -285,8 +287,9 @@ TEST(InventoryLayoutTest, EPanelOddRowSplit) {
         InventoryLayout::compute(1400, 1000, 1, PanelKind::Inventory);
     ASSERT_EQ(one.recipes.size(), 1u);
     EXPECT_EQ(one.recipes[0].x, one.craftHeader.x);
-    // The 1-row panel height stays the slot-row design (list shorter).
-    EXPECT_EQ(one.panel.h, 228);
+    // The 1-row panel height stays the slot-row design (list shorter,
+    // 284 with UX-8f's four slot rows).
+    EXPECT_EQ(one.panel.h, 284);
 }
 
 TEST(InventoryLayoutTest, EPanelRowsFitTheColumn) {
@@ -333,9 +336,9 @@ TEST(InventoryLayoutTest, SlotHitTest) {
     // A point between slots maps to nothing (the 4px gap).
     EXPECT_EQ(layout.slotAt(layout.slots[0].x + layout.slots[0].w + 2,
                             layout.slots[0].y + 1), -1);
-    // Slot 26 (last storage slot, top-right area).
-    const UIRect& s26 = layout.slots[26];
-    EXPECT_EQ(layout.slotAt(s26.x + s26.w / 2, s26.y + s26.h / 2), 26);
+    // Slot 35 (last storage slot, top-right area, UX-8f).
+    const UIRect& s35 = layout.slots[35];
+    EXPECT_EQ(layout.slotAt(s35.x + s35.w / 2, s35.y + s35.h / 2), 35);
     // Grid cell + output hit tests.
     const UIRect& g0 = layout.gridCells[0];
     EXPECT_EQ(layout.gridCellAt(g0.x + 1, g0.y + 1), 0);
@@ -361,8 +364,9 @@ TEST(InventoryLayoutTest, WideWindowKeepsTheNativeSize) {
     // Native design: 2*12 + 500 + 12 + (2*52+2*4+12+52) + 12 + (2*280+8)
     // = 1288.
     EXPECT_EQ(layout.panel.w, 1288);
-    // 2*12 + max(40 + 3*52+2*4, 40 + 1*52) = 228 (the 2 rows split 1/1).
-    EXPECT_EQ(layout.panel.h, 228);
+    // 2*12 + max(40 + 4*52+3*4, 40 + 1*52) = 284 (the 2 rows split 1/1,
+    // UX-8f's four slot rows).
+    EXPECT_EQ(layout.panel.h, 284);
     EXPECT_EQ(layout.slots[0].w, InventoryLayout::kSlot);
 }
 
@@ -400,8 +404,9 @@ TEST(InventoryLayoutTest, NarrowWindowScalesThePanelDown) {
 
 TEST(InventoryLayoutTest, ShortWindowScalesByHeight) {
     const InventoryLayout layout = InventoryLayout::compute(1280, 200, 2);
-    // Height-constrained: s = (200-2)/228 (the width has plenty of room).
-    EXPECT_DOUBLE_EQ(layout.scale, 198.0 / 228.0);
+    // Height-constrained: s = (200-2)/284 (the width has plenty of room,
+    // UX-8f's four slot rows).
+    EXPECT_DOUBLE_EQ(layout.scale, 198.0 / 284.0);
     EXPECT_LE(layout.panel.y + layout.panel.h, 199);
     EXPECT_LE(layout.panel.x + layout.panel.w, 1279);
     EXPECT_GT(layout.panel.x, 0); // the scaled panel is narrower than 1280
@@ -419,17 +424,24 @@ TEST(InventoryLayoutTest, SlotOrderIsStorageThenHotbar) {
     for (int i = 0; i < 9; ++i) {
         EXPECT_EQ(layout.slots[static_cast<std::size_t>(i)].y, hotbarRowY);
     }
-    // The two storage rows sit above it.
+    // The three storage rows sit above it (UX-8f).
     EXPECT_LT(layout.slots[9].y, hotbarRowY);
-    EXPECT_LT(layout.slots[26].y, hotbarRowY);
-    // Storage row 1 (slots 18..26) sits directly above the hotbar row;
-    // storage row 0 (slots 9..17) is the topmost.
-    EXPECT_EQ(layout.slots[18].y,
-              layout.slots[0].y - (InventoryLayout::kSlot +
-                                   InventoryLayout::kGap));
-    EXPECT_EQ(layout.slots[9].y,
-              layout.slots[0].y - 2 * (InventoryLayout::kSlot +
-                                       InventoryLayout::kGap));
+    EXPECT_LT(layout.slots[35].y, hotbarRowY);
+    // Storage row 1 (slots 27..35) sits directly above the hotbar row;
+    // row 2 (18..26) above it; storage row 0 (9..17) is the topmost. The
+    // window below native width scales the step (56 -> ~55.57 px here)
+    // and every rect rounds from the same doubles, so the row step is
+    // asserted within a 2 px rounding band.
+    const int step = InventoryLayout::kSlot + InventoryLayout::kGap;
+    const int d27 = layout.slots[0].y - layout.slots[27].y;
+    EXPECT_GE(d27, step - 2);
+    EXPECT_LE(d27, step + 2);
+    const int d18 = layout.slots[0].y - layout.slots[18].y;
+    EXPECT_GE(d18, 2 * step - 2);
+    EXPECT_LE(d18, 2 * step + 2);
+    const int d9 = layout.slots[0].y - layout.slots[9].y;
+    EXPECT_GE(d9, 3 * step - 2);
+    EXPECT_LE(d9, 3 * step + 2);
 }
 
 // -- InventoryUI click state machine --------------------------------------------
@@ -628,16 +640,19 @@ TEST(InventoryUiTest, DoubleCollectOverflowFillsInIndexOrder) {
 
 TEST(InventoryUiTest, DoubleCollectIsSectionBound) {
     // CRAFT-7: Minecraft sections the screen — a main-storage collect
-    // never touches the hotbar (and vice versa).
+    // never touches the hotbar (and vice versa). UX-8f: the new top
+    // storage row (27..35) is in the SAME main section (9..35).
     UiFixture f;
     f.inv.setSlot(0, ItemStack {f.dirt, 64}); // hotbar section
     f.inv.setSlot(9, ItemStack {f.dirt, 1});  // main section
     f.inv.setSlot(13, ItemStack {f.dirt, 1});
+    f.inv.setSlot(31, ItemStack {f.dirt, 1}); // UX-8f's new top row
     f.ui.leftClick(9, -1, false);
     ASSERT_TRUE(f.ui.carrying());
     f.ui.doubleCollect(9);
-    EXPECT_EQ(f.inv.at(9), (ItemStack {f.dirt, 2}));
+    EXPECT_EQ(f.inv.at(9), (ItemStack {f.dirt, 3}));
     EXPECT_TRUE(f.inv.isEmpty(13));
+    EXPECT_TRUE(f.inv.isEmpty(31));
     EXPECT_EQ(f.inv.at(0), (ItemStack {f.dirt, 64})); // untouched
     EXPECT_FALSE(f.ui.carrying());
 }

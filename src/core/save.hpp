@@ -2,8 +2,9 @@
 //
 // A save file stores the world seed plus only what DIFFERS from the world
 // that seed generates (block/fluid cell edits), plus the non-world state:
-// player position/orientation, the day-cycle time, the 27-slot inventory
-// and the dropped-item entities (with their lifetime timers). Loading a
+// player position/orientation, the day-cycle time, the 36-slot inventory
+// (UX-8f's full backpack; pre-24 files carry the 27-slot shape) and the
+// dropped-item entities (with their lifetime timers). Loading a
 // save = generate the world from the seed (the normal startup path) and
 // apply the saved state on top — no voxel data is duplicated in the file.
 //
@@ -304,8 +305,22 @@ namespace mc {
 //      files load FRESH (the system did not exist — the
 //      velocity-zeroed migration twin); carrying the key on a pre-23
 //      file is a version lie (the format-dependent player-field
-//      whitelist). Writes are always format 23.
-inline constexpr int kSaveFormat = 23;
+//      whitelist).
+//  24: the UX-8f full backpack — "inventory.slots" carries
+//      Inventory::kTotalSize = 36 entries (the 9-slot hotbar row +
+//      three 9-slot storage rows, Minecraft's backpack). A format-23
+//      (or older) file carries the 27-slot shape
+//      (kPreUx8fInventorySlots) and loads via the TAIL-PAD MIGRATION:
+//      the original 27 slots value-faithful, the new slots 27..35 load
+//      empty (the velocity-zeroed / tier-omitted migration twin). A
+//      format-24 file with 27 entries, or a pre-24 file with 36, is a
+//      version lie (named by the per-format size check). Writes are
+//      always format 24.
+inline constexpr int kSaveFormat = 24;
+// UX-8f (format 24): the inventory's total slot count as of format 23
+// (9 hotbar + 18 storage) — the 27-slot array shape a pre-24 file
+// carries (the parser tail-pads it to the current kTotalSize).
+inline constexpr int kPreUx8fInventorySlots = 27;
 // SAVE-2: the bound a saved player velocity component must respect
 // (corrupt-file naming, the oxygen [0,150] precedent). The game's own
 // speeds stay far below it (terminal fall 38, jump 8.5, sprint ~5.8,

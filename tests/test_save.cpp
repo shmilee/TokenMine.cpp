@@ -219,6 +219,32 @@ Json withoutKey(const Json& root, const std::string& key) {
     return out;
 }
 
+// UX-8f: a pre-format-24 file carries the 27-slot array shape
+// (kPreUx8fInventorySlots). When a test downgrades the format of a
+// serialized (format 24) save, the slots array must be truncated to the
+// legacy shape — the parser tail-pads it back to the current kTotalSize
+// (value-faithful, the new 9 slots load empty).
+Json downgradeSlots(const Json& root) {
+    const Json* inv = root.find("inventory");
+    if (inv == nullptr || !inv->isObject()) {
+        return root;
+    }
+    const Json* slots = inv->find("slots");
+    if (slots == nullptr || !slots->isArray() ||
+        slots->size() <= static_cast<std::size_t>(kPreUx8fInventorySlots)) {
+        return root;
+    }
+    Json legacy = Json::array();
+    for (int i = 0; i < kPreUx8fInventorySlots; ++i) {
+        legacy.push_back(slots->at(static_cast<std::size_t>(i)));
+    }
+    Json invOut = withoutKey(*inv, "slots");
+    invOut["slots"] = std::move(legacy);
+    Json out = withoutKey(root, "inventory");
+    out["inventory"] = std::move(invOut);
+    return out;
+}
+
 // CRAFT-1: the "table_grid" array a pre-format-19 file carries (required
 // in format 3-18): all 9 slots empty — the shape a downgrade of a
 // current save must restore for the legacy parse to accept it.
@@ -324,8 +350,8 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     s.tables.push_back(SavedTable {BlockPos {1, 53, 2}, table});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-7: writes are always format 23 (SAVE-2 was format 22).
-    EXPECT_EQ(j->find("format")->asInt(), 23);
+    // UX-8f: writes are always format 24 (UX-7 was format 23).
+    EXPECT_EQ(j->find("format")->asInt(), 24);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -366,6 +392,7 @@ TEST(SaveParseTest, FormatTwoLoadsWithEmptyGrids) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(2);
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
     root["player"] = withoutKey(root["player"], "tutorial");
@@ -403,6 +430,7 @@ TEST(SaveParseTest, FormatThreeRequiresBothGrids) {
     // array — a format-3 file still requires it.
     Json legacy = *j;
     legacy["format"] = Json(3);
+    legacy = downgradeSlots(legacy);  // UX-8f: the pre-24 27-slot shape
     legacy = withoutKey(legacy, "fires"); // format 3 predates the fire
     legacy = withoutKey(legacy, "tables"); // format 3 predates the per-block table grids
     legacy = withoutKey(legacy, "campfires"); // format 3 predates the campfire
@@ -491,6 +519,7 @@ TEST(SaveParseTest, FormatOneLoadsWithoutHealth) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["format"] = Json(1);
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
     root["player"] = withoutKey(root["player"], "tutorial");
@@ -548,6 +577,7 @@ TEST(SaveParseTest, FormatThreeLoadsWithoutHunger) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["format"] = Json(3);
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
     root["player"] = withoutKey(root["player"], "tutorial");
@@ -604,6 +634,7 @@ TEST(SaveParseTest, FormatFourLoadsWithoutSaturation) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["format"] = Json(4);
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
     root["player"] = withoutKey(root["player"], "tutorial");
@@ -709,23 +740,41 @@ TEST(SaveParseTest, RejectsBadInventory) {
         root["inventory"]["slots"] = std::move(slots);
         return root;
     };
-    // Exactly 27 slots are required.
-    Json slots26 = Json::array();
-    for (int i = 0; i < 26; ++i) {
-        Json e = Json::object();
-        e["item"] = Json(std::string(""));
-        e["count"] = Json(0);
-        slots26.push_back(e);
+    // Exactly 36 slots are required in a format-24 file (UX-8f's full
+    // backpack): one short, the legacy 27 shape (a version lie) and one
+    // over are all rejected.
+    auto emptySlots = [](int n) {
+        Json arr = Json::array();
+        for (int i = 0; i < n; ++i) {
+            Json e = Json::object();
+            e["item"] = Json(std::string(""));
+            e["count"] = Json(0);
+            arr.push_back(e);
+        }
+        return arr;
+    };
+    EXPECT_FALSE(parseSave(withSlots(emptySlots(Inventory::kTotalSize - 1)),
+                           f.items, f.blocks, f.effects, 42)
+                     .ok());
+    EXPECT_FALSE(parseSave(withSlots(emptySlots(Inventory::kTotalSize + 1)),
+                           f.items, f.blocks, f.effects, 42)
+                     .ok());
+    {
+        auto r = parseSave(withSlots(emptySlots(kPreUx8fInventorySlots)),
+                           f.items, f.blocks, f.effects, 42);
+        EXPECT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("36"), std::string::npos)
+            << r.error().message;
     }
-    EXPECT_FALSE(parseSave(withSlots(slots26), f.items, f.blocks, f.effects, 42).ok());
 
     // selected must be a hotbar index.
     Json bad = *j;
     bad["inventory"]["selected"] = Json(9);
     EXPECT_FALSE(parseSave(bad, f.items, f.blocks, f.effects, 42).ok());
 
-    // The specific slot rejections need a FULL 27-slot array with only
-    // slot 0 bad (a short array is rejected for its size, not its slot).
+    // The specific slot rejections need a FULL 36-slot array (UX-8f)
+    // with only slot 0 bad (a short array is rejected for its size, not
+    // its slot).
     auto slotsWith = [&](const std::string& item, int count) {
         Json slots = Json::array();
         for (int i = 0; i < Inventory::kTotalSize; ++i) {
@@ -1028,6 +1077,7 @@ TEST(SaveParseTest, FluidEditKindRoundTripsAndMigrates) {
     EXPECT_EQ(outHoney.at(4).asString(), "honey");
 
     root["format"] = Json(8);
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
     root["player"] = withoutKey(root["player"], "tutorial");
@@ -1350,6 +1400,7 @@ Json downgradeTablesToFormat18(const Json& root, const Json& tableGrid) {
     // SAVE-2: format 18 predates the player's velocity.
     out["player"] = withoutKey(out["player"], "velocity");
     out["player"] = withoutKey(out["player"], "tutorial");  // UX-7: the tutorial key is format 23 (the pre-23 version-lie twin)
+    out = downgradeSlots(out);  // UX-8f: format 18 carries the 27-slot shape
     return out;
 }
 
@@ -1382,6 +1433,7 @@ Json downgradeToFormat14(const Json& root) {
     // SAVE-2: format 14 predates the player's velocity.
     out["player"] = withoutKey(out["player"], "velocity");
     out["player"] = withoutKey(out["player"], "tutorial");  // UX-7: the tutorial key is format 23 (the pre-23 version-lie twin)
+    out = downgradeSlots(out);  // UX-8f: format 14 carries the 27-slot shape
     const Json* states = root.find("states");
     if (states == nullptr || !states->isArray()) {
         ADD_FAILURE() << "no 'states' array to downgrade";
@@ -1407,8 +1459,8 @@ TEST(SaveRoundTripTest, StatesRoundTrip) {
     SaveGame s = makeStateSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-7: writes are always format 23 (SAVE-2 was format 22).
-    EXPECT_EQ(j->find("format")->asInt(), 23);
+    // UX-8f: writes are always format 24 (UX-7 was format 23).
+    EXPECT_EQ(j->find("format")->asInt(), 24);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->states.size(), 1u);
@@ -1543,6 +1595,7 @@ TEST(SaveParseTest, Format13LoadsEmptyStates) {
     ASSERT_TRUE(j.ok());
     Json root = withoutKey(downgradeToFormat14(*j), "stairs");
     root["format"] = Json(13);
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
     root["player"] = withoutKey(root["player"], "tutorial");
@@ -1560,6 +1613,7 @@ TEST(SaveParseTest, RejectsStatesFieldInFormat14) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(14); // downgrade but KEEP the "states" array
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: the states lie is the one under test
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: the states lie is the one under test
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
@@ -1576,6 +1630,7 @@ TEST(SaveParseTest, RejectsStairsFieldInFormat13) {
     root = withoutKey(root, "states");
     root["stairs"] = Json::array();
     root["format"] = Json(13); // downgrade but KEEP the "stairs" array
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: the stairs lie is the one under test
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: the stairs lie is the one under test
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
@@ -1590,6 +1645,7 @@ TEST(SaveParseTest, RejectsStatesFieldInFormat13) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(13); // downgrade but KEEP the "states" array
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: the states lie is the one under test
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: the states lie is the one under test
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
@@ -1689,8 +1745,8 @@ TEST(SaveRoundTripTest, FurnacesRoundTrip) {
     s.furnaces[0].state.fuelSubsteps = 1234;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-7: writes are always format 23 (SAVE-2 was format 22).
-    EXPECT_EQ(j->find("format")->asInt(), 23);
+    // UX-8f: writes are always format 24 (UX-7 was format 23).
+    EXPECT_EQ(j->find("format")->asInt(), 24);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
@@ -1729,6 +1785,7 @@ TEST(SaveParseTest, FormatFiveLoadsWithEmptyFurnaces) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(5);
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
     root["player"] = withoutKey(root["player"], "tutorial");
@@ -1764,6 +1821,7 @@ TEST(SaveParseTest, FormatSixMigratesStateToSoleFurnace) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(6);
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
     root["player"] = withoutKey(root["player"], "tutorial");
@@ -1802,6 +1860,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(6);
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
     root["player"] = withoutKey(root["player"], "tutorial");
@@ -1828,6 +1887,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
         ASSERT_TRUE(j2.ok());
         Json root2 = *j2;
         root2["format"] = Json(6);
+        root2 = downgradeSlots(root2);  // UX-8f: the pre-24 27-slot shape
         root2["player"] = withoutKey(root2["player"], "stats"); // SURV-7: the stats key is format 21
         root2["player"] = withoutKey(root2["player"], "velocity"); // SAVE-2: the velocity key is format 22
         root2["player"] = withoutKey(root2["player"], "tutorial");
@@ -1867,6 +1927,7 @@ TEST(SaveParseTest, RejectsFurnaceFieldInOldFormat) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(5); // keeps the "furnaces" field
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root = withoutKey(root, "fires"); // the rejection under test is "furnaces"
     root = withoutKey(root, "campfires"); // format older predates the campfire
     root = withoutKey(root, "states"); // format older predates per-block state
@@ -1899,6 +1960,7 @@ TEST(SaveParseTest, RejectsFurnacesFieldInFormatSix) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(6); // keeps the "furnaces" field
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root = withoutKey(root, "fires"); // the rejection under test is "furnaces"
     root = withoutKey(root, "tables"); // the rejection under test is "furnaces" (CRAFT-1)
     root = withoutKey(root, "campfires"); // format older predates the campfire
@@ -2074,8 +2136,8 @@ TEST(SaveRoundTripTest, FiresRoundTrip) {
     SaveGame s = makeFireSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-7: writes are always format 23 (SAVE-2 was format 22).
-    EXPECT_EQ(j->find("format")->asInt(), 23);
+    // UX-8f: writes are always format 24 (UX-7 was format 23).
+    EXPECT_EQ(j->find("format")->asInt(), 24);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->fires.size(), 2u);
@@ -2107,6 +2169,7 @@ TEST(SaveParseTest, FormatNineLoadsWithoutFires) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(9);
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
     root["player"] = withoutKey(root["player"], "tutorial");
@@ -2134,6 +2197,7 @@ TEST(SaveParseTest, FormatNineFireEditMigratesEmpty) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(9);
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
     root["player"] = withoutKey(root["player"], "tutorial");
@@ -2157,6 +2221,7 @@ TEST(SaveParseTest, RejectsFiresFieldInFormatNine) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(9); // keeps the "fires" field
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root = withoutKey(root, "tables"); // the rejection under test is "fires" (CRAFT-1)
     root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 9 still carried the global table grid
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
@@ -2272,6 +2337,7 @@ TEST(SaveFormat8Test, FormatSevenFileWithoutEffectsLoads) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(7);
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root = withoutKey(root, "fires"); // format 7 predates the fire
     root = withoutKey(root, "tables"); // format 7 predates the per-block table grids
     root = withoutKey(root, "campfires"); // format 7 predates the campfire
@@ -2409,6 +2475,7 @@ TEST(SaveFormat12Test, Format11RejectsTheAbsorptionKey) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(11); // the "absorption" key stays -> rejected
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root = withoutKey(root, "states"); // format 11 predates per-block state
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: the absorption lie is the one under test
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: the absorption lie is the one under test
@@ -2566,6 +2633,7 @@ TEST(SaveFormat16Test, Format15RejectsTheArmorKey) {
     {
         Json root = *j;
         root["format"] = Json(15); // the "armor" key stays -> rejected
+        root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
         root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the armor lie is the rejection under test
         root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
         root["player"] = withoutKey(root["player"], "tutorial");
@@ -2578,6 +2646,7 @@ TEST(SaveFormat16Test, Format15RejectsTheArmorKey) {
     {
         Json root = *j;
         root["format"] = Json(15);
+        root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
         root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
         root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
         root["player"] = withoutKey(root["player"], "tutorial");
@@ -2656,8 +2725,8 @@ TEST(SaveRoundTripTest, TablesRoundTrip) {
     s.tables[0].grid.setSlot(8, ItemStack {f.items.idForName("stone"), 64});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-7: writes are always format 23.
-    EXPECT_EQ(j->find("format")->asInt(), 23);
+    // UX-8f: writes are always format 24.
+    EXPECT_EQ(j->find("format")->asInt(), 24);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->tables.size(), 2u);
@@ -2723,6 +2792,7 @@ TEST(SaveParseTest, RejectsTablesFieldInFormat18) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(18); // keeps the "tables" field
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["table_grid"] = emptyTableGrid();
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the tables lie is the rejection under test
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
@@ -2967,7 +3037,7 @@ TEST(SaveFormat20Test, EffectTierRoundTrips) {
     s.playerEffects.push_back(SavedEffect {"resistance", 30.0, 1});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 23);
+    EXPECT_EQ(j->find("format")->asInt(), 24);
     const Json& entry = (*j)["player"]["effects"].at(0);
     ASSERT_NE(entry.find("tier"), nullptr);
     EXPECT_EQ(entry.find("tier")->asInt(), 1);
@@ -3041,6 +3111,7 @@ TEST(SaveFormat20Test, Pre20FileWithTierKeyIsVersionLie) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
     (*j)["format"] = Json(19); // keeps the "tier" field
+    (*j) = downgradeSlots(*j);  // UX-8f: the pre-24 27-slot shape
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("unknown field"), std::string::npos);
@@ -3056,6 +3127,7 @@ TEST(SaveFormat20Test, Pre20FileLoadsAsTierZero) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
     (*j)["format"] = Json(19); // tier-0 entries carry no key, so 19 is valid
+    (*j) = downgradeSlots(*j);  // UX-8f: the pre-24 27-slot shape
     // SURV-7: format 19 predates the player's stats.
     (*j)["player"] = withoutKey((*j)["player"], "stats");
     // SAVE-2: format 19 predates the player's velocity.
@@ -3128,7 +3200,7 @@ TEST(SaveFormat21Test, StatsRoundTrips) {
     s.playerStats["kill.zombie"] = 5;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 23);
+    EXPECT_EQ(j->find("format")->asInt(), 24);
     const Json& st = (*j)["player"]["stats"];
     ASSERT_TRUE(st.isObject());
     ASSERT_NE(st.find("deathCount"), nullptr);
@@ -3173,6 +3245,7 @@ TEST(SaveFormat21Test, Pre21FileWithStatsKeyIsVersionLie) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
     (*j)["format"] = Json(20); // keep the stats key, claim format 20
+    (*j) = downgradeSlots(*j);  // UX-8f: the pre-24 27-slot shape
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("stats"), std::string::npos);
@@ -3225,7 +3298,7 @@ TEST(SaveFormat22Test, VelocityRoundTrips) {
     s.playerVelocity = Vec3 {2.5f, -3.75f, 0.125f};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 23);
+    EXPECT_EQ(j->find("format")->asInt(), 24);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerVelocity.x, 2.5f);
@@ -3265,6 +3338,7 @@ TEST(SaveFormat22Test, Pre22FileCarryingVelocityIsAVersionLie) {
     auto j = serializeSave(makeSave(f), f.items);
     ASSERT_TRUE(j.ok());
     (*j)["format"] = Json(21); // keeps the "velocity" field
+    (*j) = downgradeSlots(*j);  // UX-8f: the pre-24 27-slot shape
     (*j)["player"] = withoutKey((*j)["player"], "tutorial"); // UX-7: isolate the velocity lie (the whitelist names the alphabetically-first unknown field)
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
@@ -3280,6 +3354,7 @@ TEST(SaveFormat22Test, Pre22FileLoadsAsVelocityZero) {
     auto j = serializeSave(makeSave(f), f.items);
     ASSERT_TRUE(j.ok());
     (*j)["format"] = Json(21);
+    (*j) = downgradeSlots(*j);  // UX-8f: the pre-24 27-slot shape
     (*j)["player"] = withoutKey((*j)["player"], "velocity");
     (*j)["player"] = withoutKey((*j)["player"], "tutorial");  // UX-7: the tutorial key is format 23 (the pre-23 version-lie twin)
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
@@ -3385,6 +3460,7 @@ TEST(SaveFormat23Test, Pre23FileLoadsFresh) {
     auto j = serializeSave(makeSave(f), f.items);
     ASSERT_TRUE(j.ok());
     (*j)["format"] = Json(22);
+    (*j) = downgradeSlots(*j);  // UX-8f: the pre-24 27-slot shape
     (*j)["player"] = withoutKey((*j)["player"], "tutorial");
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
@@ -3396,6 +3472,7 @@ TEST(SaveFormat23Test, Pre23FileCarryingKeyIsAVersionLie) {
     auto j = serializeSave(makeSave(f), f.items);
     ASSERT_TRUE(j.ok());
     (*j)["format"] = Json(22);
+    (*j) = downgradeSlots(*j);  // UX-8f: the pre-24 27-slot shape
     // The key stays (the format is downgraded) — the format-dependent
     // player-field whitelist must reject it.
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
@@ -3460,4 +3537,84 @@ TEST(SaveFormat23Test, InProgressShapeViolationsNamed) {
     ASSERT_TRUE(ok.ok()) << ok.error().message;
     EXPECT_EQ(ok->tutorial, TutorialSaveState::InProgress);
     EXPECT_EQ(ok->tutorialProgress, 0);
+}
+
+// -- UX-8f: format 24 (the full 36-slot backpack) ----------------------------
+
+TEST(SaveFormat24Test, FullBackpackRoundTrips) {
+    // The 36-slot shape round-trips: the new storage rows 27..35 carry
+    // stacks like any other slot.
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.slots[27] = ItemStack {f.items.idForName("dirt"), 5};
+    s.slots[31] = ItemStack {f.items.idForName("stone"), 64};
+    s.slots[35] = ItemStack {f.items.idForName("pick"), 1};
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    // UX-8f: writes are always format 24 (UX-7 was 23), 36 entries.
+    EXPECT_EQ(j->find("format")->asInt(), 24);
+    const Json& slots = *j->find("inventory")->find("slots");
+    ASSERT_TRUE(slots.isArray());
+    EXPECT_EQ(slots.size(),
+              static_cast<std::size_t>(Inventory::kTotalSize));
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    ASSERT_EQ(out->slots.size(), s.slots.size());
+    for (std::size_t i = 0; i < out->slots.size(); ++i) {
+        EXPECT_EQ(out->slots[i], s.slots[i]) << "slot " << i;
+    }
+}
+
+TEST(SaveFormat24Test, Pre24FileLoadsPaddedTo36) {
+    // The tail-pad migration: a format-23 file's 27 slots load
+    // value-faithful (0..26), the new 27..35 load empty (the
+    // velocity-zeroed / tier-omitted migration twin).
+    Fixture f;
+    SaveGame s = makeSave(f);
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["format"] = Json(23); // format 23+ requires the tutorial key — keep it
+    root = downgradeSlots(root);
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    ASSERT_EQ(out->slots.size(),
+              static_cast<std::size_t>(Inventory::kTotalSize));
+    for (int i = 0; i < kPreUx8fInventorySlots; ++i) {
+        EXPECT_EQ(out->slots[static_cast<std::size_t>(i)],
+                  s.slots[static_cast<std::size_t>(i)])
+            << "slot " << i;
+    }
+    for (int i = kPreUx8fInventorySlots; i < Inventory::kTotalSize; ++i) {
+        EXPECT_TRUE(out->slots[static_cast<std::size_t>(i)].empty())
+            << "slot " << i;
+    }
+}
+
+TEST(SaveFormat24Test, Pre24FileWith36EntriesIsAVersionLie) {
+    // A pre-24 file never carried 36 entries — the size check names the
+    // legacy count.
+    Fixture f;
+    auto j = serializeSave(makeSave(f), f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["format"] = Json(23); // format 23+ requires the tutorial key — keep it
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("27"), std::string::npos)
+        << out.error().message;
+}
+
+TEST(SaveFormat24Test, Format24With27EntriesIsAVersionLie) {
+    // The mirror: a format-24 file with the legacy 27-slot shape is a
+    // version lie — the size check names the current count.
+    Fixture f;
+    auto j = serializeSave(makeSave(f), f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root = downgradeSlots(root);
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("36"), std::string::npos)
+        << out.error().message;
 }

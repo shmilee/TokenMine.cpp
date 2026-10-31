@@ -266,15 +266,18 @@ TEST(FurnaceTest, EmptyFurnaceNoop) {
 TEST(FurnaceLayoutTest, Pinned1280x720) {
     const FurnaceLayout L = FurnaceLayout::compute(1280, 720);
     EXPECT_DOUBLE_EQ(L.scale, 1.0);
-    expectRect(L.panel, 288, 246, 704, 228, "panel");
-    expectRect(L.title, 300, 258, 500, 40, "title");
-    EXPECT_EQ(L.slots.size(), 27u);
-    // Hotbar row (slots 0..8) bottom, the two storage rows above.
-    expectRect(L.slots[0], 300, 410, 52, 52, "slot 0");
-    expectRect(L.slots[9], 300, 298, 52, 52, "slot 9");
-    expectRect(L.slots[17], 748, 298, 52, 52, "slot 17");
-    expectRect(L.slots[18], 300, 354, 52, 52, "slot 18");
-    expectRect(L.slots[26], 748, 354, 52, 52, "slot 26");
+    expectRect(L.panel, 288, 218, 704, 284, "panel"); // UX-8f: 4 slot rows
+    expectRect(L.title, 300, 230, 500, 40, "title");
+    EXPECT_EQ(L.slots.size(), 36u);
+    // Hotbar row (slots 0..8) bottom, the three storage rows above
+    // (UX-8f).
+    expectRect(L.slots[0], 300, 438, 52, 52, "slot 0");
+    expectRect(L.slots[9], 300, 270, 52, 52, "slot 9");
+    expectRect(L.slots[17], 748, 270, 52, 52, "slot 17");
+    expectRect(L.slots[18], 300, 326, 52, 52, "slot 18");
+    expectRect(L.slots[26], 748, 326, 52, 52, "slot 26");
+    expectRect(L.slots[27], 300, 382, 52, 52, "slot 27");
+    expectRect(L.slots[35], 748, 382, 52, 52, "slot 35");
     // The smelting section (input top-left, output top-right, fuel
     // bottom-left, the progress bar between input and output).
     expectRect(L.input, 812, 326, 52, 52, "input");
@@ -282,9 +285,9 @@ TEST(FurnaceLayoutTest, Pinned1280x720) {
     expectRect(L.fuel, 812, 382, 52, 52, "fuel");
     expectRect(L.progress, 868, 346, 56, 12, "progress");
     // Hit tests.
-    EXPECT_EQ(L.slotAt(310, 415), 0);
+    EXPECT_EQ(L.slotAt(310, 443), 0);
     EXPECT_EQ(L.slotAt(310, 303), 9);
-    EXPECT_EQ(L.slotAt(810, 330), -1); // the input is not a 27-slot
+    EXPECT_EQ(L.slotAt(810, 330), -1); // the input is not a 36-slot
     EXPECT_EQ(L.furnaceSlotAt(817, 331), 0);
     EXPECT_EQ(L.furnaceSlotAt(817, 387), 1);
     EXPECT_EQ(L.furnaceSlotAt(935, 331), 2);
@@ -296,10 +299,10 @@ TEST(FurnaceLayoutTest, Pinned1280x720) {
 TEST(FurnaceLayoutTest, ScalesDownToFit) {
     const FurnaceLayout L = FurnaceLayout::compute(400, 300);
     EXPECT_DOUBLE_EQ(L.scale, 398.0 / 704.0);
-    expectRect(L.panel, 1, 85, 398, 129, "panel");
+    expectRect(L.panel, 1, 69, 398, 161, "panel"); // UX-8f: 284 * scale
     // Every slot center hits its own slot (the scaled rects stay
     // consistent with the hit tests).
-    for (int i = 0; i < 27; ++i) {
+    for (int i = 0; i < Inventory::kTotalSize; ++i) {
         const UIRect& r = L.slots[static_cast<std::size_t>(i)];
         EXPECT_EQ(L.slotAt(r.x + r.w / 2, r.y + r.h / 2), i) << "slot " << i;
     }

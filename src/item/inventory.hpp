@@ -51,7 +51,9 @@ Result<std::vector<StarterSlot>> parseStarterSlots(const Json& hotbar,
 class Inventory {
 public:
     static constexpr int kHotbarSize = 9;  // Minecraft's hotbar
-    static constexpr int kTotalSize = 27;  // 9 hotbar + 18 storage
+    // UX-8f: the full Minecraft backpack — 9 hotbar + 27 storage (three
+    // rows of nine; pre-UX-8f the storage was 18 = two rows).
+    static constexpr int kTotalSize = 36;
 
     explicit Inventory(
         std::size_t size = static_cast<std::size_t>(kTotalSize))

@@ -269,6 +269,32 @@ Json withoutKey(const Json& root, const std::string& key) {
 // CRAFT-1: the empty legacy "table_grid" array (9 slot entries) — a
 // pre-format-19 file carries it (required in format 3-18); a downgrade
 // of a current save restores it for the legacy parse.
+// UX-8f: a pre-format-24 file carries the 27-slot array shape
+// (kPreUx8fInventorySlots). When a test downgrades the format of a
+// serialized (format 24) save, the slots array must be truncated to the
+// legacy shape — the parser tail-pads it back to the current kTotalSize
+// (value-faithful, the new 9 slots load empty).
+Json downgradeSlots(const Json& root) {
+    const Json* inv = root.find("inventory");
+    if (inv == nullptr || !inv->isObject()) {
+        return root;
+    }
+    const Json* slots = inv->find("slots");
+    if (slots == nullptr || !slots->isArray() ||
+        slots->size() <= static_cast<std::size_t>(kPreUx8fInventorySlots)) {
+        return root;
+    }
+    Json legacy = Json::array();
+    for (int i = 0; i < kPreUx8fInventorySlots; ++i) {
+        legacy.push_back(slots->at(static_cast<std::size_t>(i)));
+    }
+    Json invOut = withoutKey(*inv, "slots");
+    invOut["slots"] = std::move(legacy);
+    Json out = withoutKey(root, "inventory");
+    out["inventory"] = std::move(invOut);
+    return out;
+}
+
 Json emptyTableGrid() {
     Json arr = Json::array();
     for (int i = 0; i < CraftingGrid::kSize; ++i) {
@@ -302,7 +328,7 @@ TEST(CampfireSaveTest, FormatIsThirteenAndRoundTrips) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     // UX-7: writes are always format 23 (SAVE-2 was 22).
-    EXPECT_EQ(j->find("format")->asInt(), 23);
+    EXPECT_EQ(j->find("format")->asInt(), 24);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->campfires.size(), 3u);
@@ -329,6 +355,7 @@ TEST(CampfireSaveTest, FormatTwelveOldShapeMigratesToSlotZero) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(12);
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
     root["player"] = withoutKey(root["player"], "tutorial"); // UX-7: the tutorial key is format 23
@@ -372,6 +399,7 @@ TEST(CampfireSaveTest, FormatTwelveEntryWithSlotsKeyRejected) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(12);
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
     root["player"] = withoutKey(root["player"], "tutorial"); // UX-7: the tutorial key is format 23
@@ -428,6 +456,7 @@ TEST(CampfireSaveTest, FormatTenLoadsWithoutCampfires) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(10);
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
     root["player"] = withoutKey(root["player"], "tutorial"); // UX-7: the tutorial key is format 23
@@ -454,6 +483,7 @@ TEST(CampfireSaveTest, FormatTenCampfireEditMigratesEmpty) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(10);
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
     root["player"] = withoutKey(root["player"], "tutorial"); // UX-7: the tutorial key is format 23
@@ -477,6 +507,7 @@ TEST(CampfireSaveTest, RejectsCampfiresFieldInFormatTen) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(10); // keeps the "campfires" field
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root = withoutKey(root, "tables"); // CRAFT-1: isolate the "campfires" rejection
     root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 10 still carried the global table grid
     root = withoutKey(root, "states"); // isolate the "campfires" rejection

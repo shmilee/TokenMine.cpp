@@ -156,8 +156,9 @@ std::vector<int> inventorySlotOrder(const Inventory& inv, bool hotbarFirst) {
 
 // CRAFT-7: the double-click collect over ONE player-inventory section
 // (shared by the crafting panels and the furnace panel). Minecraft
-// sections the screen: the hotbar (0..8) and the main storage (9..26)
-// are SEPARATE collect sections — double-clicking a slot collects from
+// sections the screen: the hotbar (0..8) and the main storage (9..35,
+// the full UX-8f backpack) are SEPARATE collect sections —
+// double-clicking a slot collects from
 // its own section only. With a carried stack (the first click of the
 // pair picked it up), gather every same-item same-damage stack of the
 // section into the clicked slot (capped at maxStack), the remainder
@@ -222,8 +223,9 @@ InventoryLayout InventoryLayout::compute(int windowWidth, int windowHeight,
 
     // Native (unscaled) design sizes.
     const int gridW = kColumns * kSlot + (kColumns - 1) * kGap;
-    // 27 slots = 18 storage (two rows of nine) + the nine-slot hotbar row.
-    const int gridH = 3 * kSlot + 2 * kGap;
+    // UX-8f: the full 36-slot grid — 27 storage (three rows of nine) +
+    // the nine-slot hotbar row (four rows total, kGridRows).
+    const int gridH = kGridRows * kSlot + (kGridRows - 1) * kGap;
 
     // The crafting section: the grid (2x2 = the inventory's top-left cells
     // of the 3x3 model, 3x3 for the table) + the output slot.
@@ -291,11 +293,13 @@ InventoryLayout InventoryLayout::compute(int windowWidth, int windowHeight,
                         scaledLength(gW), scaledLength(titleH)};
 
     // slots[i] is the rect of inventory slot i: the bottom row is the
-    // hotbar (slots 0..8, left to right); above it, two storage rows hold
-    // slots 9..17 (top) and 18..26.
+    // hotbar (slots 0..8, left to right); above it, three storage rows
+    // hold slots 27..35 (top), 18..26 and 9..17 (UX-8f).
     for (int slot = 0; slot < Inventory::kTotalSize; ++slot) {
         const int row =
-            (slot < Inventory::kHotbarSize) ? 2 : (slot - Inventory::kHotbarSize) / kColumns;
+            (slot < Inventory::kHotbarSize)
+                ? kStorageRows
+                : (slot - Inventory::kHotbarSize) / kColumns;
         const int col =
             (slot < Inventory::kHotbarSize) ? slot : (slot - Inventory::kHotbarSize) % kColumns;
         out.slots.push_back(UIRect {
@@ -525,15 +529,16 @@ void InventoryUI::doubleCollect(int slot) {
 FurnaceLayout FurnaceLayout::compute(int windowWidth, int windowHeight) {
     FurnaceLayout out;
     // Native (unscaled) design sizes: the slot grid is the inventory
-    // screen's (9 columns x 3 rows); the smelting section replaces the
-    // crafting grid + output + recipe column.
+    // screen's (9 columns x 4 rows, UX-8f's full 36 slots); the smelting
+    // section replaces the crafting grid + output + recipe column.
     const int slot = InventoryLayout::kSlot;
     const int gap = InventoryLayout::kGap;
     const int pad = InventoryLayout::kPanelPadding;
     const int titleH = InventoryLayout::kTitleHeight;
     const int gridW = InventoryLayout::kColumns * slot +
                       (InventoryLayout::kColumns - 1) * gap;
-    const int gridH = 3 * slot + 2 * gap;
+    const int gridH = InventoryLayout::kGridRows * slot +
+                      (InventoryLayout::kGridRows - 1) * gap;
     const int sectionW = 2 * slot + 2 * gap + kProgressWidth;
     const int sectionH = 2 * slot + gap;
     const int nativePanelW = 2 * pad + gridW + InventoryLayout::kCraftGap +
@@ -577,12 +582,13 @@ FurnaceLayout FurnaceLayout::compute(int windowWidth, int windowHeight) {
                         static_cast<int>(std::lround(panelY + padLen)),
                         scaledLength(gW), scaledLength(titleLen)};
 
-    // The 27 inventory slots (the inventory screen's order: the hotbar
-    // row 0..8 bottom, storage rows 9..17 / 18..26 above).
+    // The 36 inventory slots (the inventory screen's order: the hotbar
+    // row 0..8 bottom, storage rows 9..17 / 18..26 / 27..35 above,
+    // UX-8f).
     for (int sl = 0; sl < Inventory::kTotalSize; ++sl) {
         const int row =
             (sl < Inventory::kHotbarSize)
-                ? 2
+                ? InventoryLayout::kStorageRows
                 : (sl - Inventory::kHotbarSize) / InventoryLayout::kColumns;
         const int col =
             (sl < Inventory::kHotbarSize)

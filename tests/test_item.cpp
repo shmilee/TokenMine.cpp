@@ -2283,14 +2283,16 @@ TEST(ItemRegistryTest, StarterSlotsStrictParse) {
         const Json def = parseJson(
             R"({"items":["stone"],"inventory":[)"
             R"({"slot":9,"item":"dirt","count":1},)"
-            R"({"slot":26,"item":"stone","count":64}]})");
+            R"({"slot":35,"item":"stone","count":64}]})");
         auto r = parseStarterSlots(def, f.items);
         ASSERT_TRUE(r.ok()) << r.error().message;
         ASSERT_EQ(r->size(), 2u);
         EXPECT_EQ((*r)[0].slot, 9);
         EXPECT_EQ((*r)[0].item, f.dirt);
         EXPECT_EQ((*r)[0].count, 1);
-        EXPECT_EQ((*r)[1].slot, 26);
+        // UX-8f: slot 35 (the full backpack's last storage slot) is the
+        // range's upper bound.
+        EXPECT_EQ((*r)[1].slot, 35);
         EXPECT_EQ((*r)[1].item, f.stone);
         EXPECT_EQ((*r)[1].count, 64);
     }
@@ -2302,7 +2304,7 @@ TEST(ItemRegistryTest, StarterSlotsStrictParse) {
         const char* needle;
     } bad[] = {
         {R"([{"slot":8,"item":"dirt","count":1}])", "slot"},
-        {R"([{"slot":27,"item":"dirt","count":1}])", "slot"},
+        {R"([{"slot":36,"item":"dirt","count":1}])", "slot"}, // UX-8f: one past the 36-slot range
         {R"([{"slot":9,"item":"diamondz","count":1}])", "unknown item"},
         {R"([{"slot":9,"item":"dirt","count":0}])", "count"},
         {R"([{"slot":9,"item":"dirt","count":65}])", "count"},

@@ -1560,11 +1560,22 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                        "], got " + std::to_string(save.selectedSlot));
     }
     const Json* slots = inv->find("slots");
-    if (slots == nullptr || !slots->isArray() ||
-        slots->size() != static_cast<std::size_t>(Inventory::kTotalSize)) {
+    // UX-8f (format 24): the slot count is format-dependent — a
+    // format-24 file carries the current kTotalSize (36) entries, a
+    // pre-24 file the legacy 27 (a wrong count either way is a version
+    // lie, named).
+    const std::size_t wantSlots =
+        fmt->asInt() >= kSaveFormat
+            ? static_cast<std::size_t>(Inventory::kTotalSize)
+            : static_cast<std::size_t>(kPreUx8fInventorySlots);
+    if (slots == nullptr || !slots->isArray() || slots->size() != wantSlots) {
         return MC_FAIL("save 'inventory.slots' must be an array of exactly " +
-                       std::to_string(Inventory::kTotalSize) + " entries");
+                       std::to_string(wantSlots) + " entries");
     }
+    // The tail-pad migration: a pre-24 file's 27 entries fill slots
+    // 0..26 value-faithful; the resize leaves 27..35 default-empty
+    // (ItemStack value-initializes empty — the velocity-zeroed
+    // migration twin).
     save.slots.resize(static_cast<std::size_t>(Inventory::kTotalSize));
     for (std::size_t i = 0; i < slots->size(); ++i) {
         // SURV-3 (format 18): the inventory slots carry the per-stack

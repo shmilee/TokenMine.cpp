@@ -100,6 +100,32 @@ Json withoutKey(const Json& root, const std::string& key) {
 // CRAFT-1: the empty legacy "table_grid" array (9 slot entries) — a
 // pre-format-19 file carries it (required in format 3-18); a downgrade
 // of a current save restores it for the legacy parse.
+// UX-8f: a pre-format-24 file carries the 27-slot array shape
+// (kPreUx8fInventorySlots). When a test downgrades the format of a
+// serialized (format 24) save, the slots array must be truncated to the
+// legacy shape — the parser tail-pads it back to the current kTotalSize
+// (value-faithful, the new 9 slots load empty).
+Json downgradeSlots(const Json& root) {
+    const Json* inv = root.find("inventory");
+    if (inv == nullptr || !inv->isObject()) {
+        return root;
+    }
+    const Json* slots = inv->find("slots");
+    if (slots == nullptr || !slots->isArray() ||
+        slots->size() <= static_cast<std::size_t>(kPreUx8fInventorySlots)) {
+        return root;
+    }
+    Json legacy = Json::array();
+    for (int i = 0; i < kPreUx8fInventorySlots; ++i) {
+        legacy.push_back(slots->at(static_cast<std::size_t>(i)));
+    }
+    Json invOut = withoutKey(*inv, "slots");
+    invOut["slots"] = std::move(legacy);
+    Json out = withoutKey(root, "inventory");
+    out["inventory"] = std::move(invOut);
+    return out;
+}
+
 Json emptyTableGrid() {
     Json arr = Json::array();
     for (int i = 0; i < CraftingGrid::kSize; ++i) {
@@ -397,6 +423,7 @@ TEST(DrownSaveTest, Format16RejectsTheOxygenKey) {
     {
         Json root = *j;
         root["format"] = Json(16); // the "oxygen" key stays -> rejected
+        root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
         root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the oxygen lie is the rejection under test
         root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
         root["player"] = withoutKey(root["player"], "tutorial"); // UX-7: the tutorial key is format 23
@@ -412,6 +439,7 @@ TEST(DrownSaveTest, Format16RejectsTheOxygenKey) {
     {
         Json root = *j;
         root["format"] = Json(16);
+        root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
         root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
         root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
         root["player"] = withoutKey(root["player"], "tutorial"); // UX-7: the tutorial key is format 23
@@ -435,6 +463,7 @@ TEST(DrownSaveTest, Format15MigratesFullAir) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["format"] = Json(15);
+    root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
     root["player"] = withoutKey(root["player"], "tutorial"); // UX-7: the tutorial key is format 23

@@ -431,7 +431,7 @@ void Game::handlePanelClicks() {
 
     // Phase 40: the furnace panel. Same click model as the crafting
     // panels: the layout hit tests are disjoint (at most one of a
-    // 27-slot / input / fuel / output is active; a left click with all of
+    // 36-slot / input / fuel / output is active; a left click with all of
     // them inactive drops the carry). No craft action — the output fills
     // by itself.
     if (m_panel.openPanel == OpenPanel::Furnace) {
@@ -1191,7 +1191,7 @@ void Game::renderUi() {
 
     // -- furnace panel (Phase 40/44): the smelting GUI (right-clicked
     // furnace) — rendering the ONE furnace block the panel is bound to
-    // (its per-block state). The 27 inventory slots + the smelting
+    // (its per-block state). The 36 inventory slots + the smelting
     // section (input, progress bar, output, fuel). No crafting of any
     // kind happens here — the output fills by itself (the furnace tick).
     if (m_panel.openPanel == OpenPanel::Furnace) {
@@ -1213,7 +1213,7 @@ void Game::renderUi() {
         const int hoverSlot = layout.slotAt(mx, my);
         const int hoverFslot = layout.furnaceSlotAt(mx, my);
 
-        // The 27 inventory slots (drawn like the crafting panels').
+        // The 36 inventory slots (drawn like the crafting panels').
         for (std::size_t i = 0; i < layout.slots.size(); ++i) {
             const UIRect& r = layout.slots[i];
             addQuad(batchFor(kSlotBg, false, nullptr), r.x, r.y, r.w, r.h);

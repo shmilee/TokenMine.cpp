@@ -11,15 +11,17 @@
 // without a game.
 //
 // Screen layout (window 1280x720, panel centered; Inventory kind):
-//   +------------------------------------------------------------+
-//   |  Inventory        [g][g]   [out]     Crafting              |
-//   |  [9 ][10]...[17]  [g][g]           [icon] planks x4        |
-//   |  [18][19]...[26]                [icon] stick x4            |
-//   |  [0 ][1 ]...[8 ]  (hotbar)                           |
-//   +------------------------------------------------------------+
-// Storage = slots 9..26 in two rows (top to bottom), the hotbar = slots
-// 0..8 in the bottom row — the same 27 Inventory slots the game already
-// owns (no separate storage). The CraftingTable kind is the same panel
+//   +-------------------------------------------------------------+
+//   |  Inventory          [g][g]   [out]     Crafting             |
+//   |  [27][28]...[35]    [g][g]           [icon] planks x4       |
+//   |  [18][19]...[26]                [icon] stick x4             |
+//   |  [9 ][10]...[17]                                    |
+//   |  [0 ][1 ]...[8 ]   (hotbar)                            |
+//   +-------------------------------------------------------------+
+// Storage = slots 9..35 in three rows (top to bottom), the hotbar = slots
+// 0..8 in the bottom row — the same 36 Inventory slots the game already
+// owns (no separate storage, UX-8f's full Minecraft backpack). The
+// CraftingTable kind is the same panel
 // with a 3x3 grid instead of 2x2 and the shaped recipe HINT list (CRAFT-4)
 // instead of the shapeless craft list; BOTH panels split their recipe
 // list over two columns (CRAFT-4 for the table, UX-8c for the E panel).
@@ -76,6 +78,14 @@ struct InventoryLayout {
     static constexpr int kSlot = 52;
     static constexpr int kGap = 4;
     static constexpr int kColumns = 9; // Inventory::kHotbarSize
+    // UX-8f: the grid's row count — one storage row per kColumns of the
+    // storage slots (27 storage = three rows) + the hotbar row (four).
+    static constexpr int kStorageRows =
+        (Inventory::kTotalSize - Inventory::kHotbarSize) / kColumns;
+    static_assert((Inventory::kTotalSize - Inventory::kHotbarSize) %
+                        kColumns == 0,
+                  "the storage slots must fill whole rows");
+    static constexpr int kGridRows = kStorageRows + 1;
     static constexpr int kTitleHeight = 40;
     // Title text is drawn at 1.5x the body font scale (24 px native vs the
     // body's 16 px). 2.0x was too large at ui.scale 2 — the 40.8 physical
@@ -97,7 +107,7 @@ struct InventoryLayout {
     // the panel always fits with >=1 px of margin on each side.
     double scale = 1.0;
 
-    // 27 slot rects in slot-index order (0..26).
+    // 36 slot rects in slot-index order (0..35, the full kTotalSize).
     std::vector<UIRect> slots;
     // Crafting grid cell rects: 4 (Inventory kind, the 2x2) or 9
     // (CraftingTable kind, the 3x3), row-major.
@@ -141,7 +151,7 @@ std::vector<const Recipe*> orderedRecipeHints(
 
 // Phase 40: the furnace panel — the smelting GUI, opened by right-clicking
 // a furnace in the world. Same panel chrome as the inventory screen: the
-// 27 inventory slots + the smelting section in Minecraft's arrangement
+// 36 inventory slots + the smelting section in Minecraft's arrangement
 // (input top-left, output top-right with the progress bar between, fuel
 // bottom-left). No crafting of any kind happens here — the output fills
 // by itself (the furnace tick) and is taken with an ordinary slot click.
@@ -152,7 +162,7 @@ struct FurnaceLayout {
     static constexpr int kProgressHeight = 12;
 
     double scale = 1.0;
-    std::vector<UIRect> slots; // 27 rects in slot-index order (0..26)
+    std::vector<UIRect> slots; // 36 rects in slot-index order (0..35)
     UIRect panel;
     UIRect title;
     // The smelting section slots, in furnaceSlotAt order (0=input,
@@ -185,13 +195,13 @@ public:
     // open).
     void bind(FurnaceState& furnace) { m_furnace = &furnace; }
 
-    // slot: 0..26 or -1; furnaceSlot: 0..2 or -1 (the layout hit tests
+    // slot: 0..35 or -1; furnaceSlot: 0..2 or -1 (the layout hit tests
     // are disjoint: at most one is active).
     void leftClick(int slot, int furnaceSlot);
     void rightClick(int slot, int furnaceSlot);
     // CRAFT-7: shift-click quick move (Minecraft's container-GUI
     // semantics): a furnace slot (input/fuel/output) moves its whole
-    // stack into the player inventory (storage 9..26 first, then the
+    // stack into the player inventory (storage 9..35 first, then the
     // hotbar, merging same-item same-damage stacks); a click on the
     // player inventory is a no-op; carrying a stack is a no-op (the
     // carry is kept, Minecraft). Moving the input resets the progress
@@ -200,7 +210,7 @@ public:
     // CRAFT-7: double-click collect (Minecraft): with a carried stack
     // (the first click of the pair picked it up), gather every stack of
     // the SAME item and SAME damage in its SECTION (Minecraft: the
-    // hotbar 0..8 and the main storage 9..26 are separate sections)
+    // hotbar 0..8 and the main storage 9..35 are separate sections)
     // into the clicked slot (capped at maxStack), the remainder filling
     // the section's other slots in index order. No carry = no-op; the
     // furnace slots and the crafting grid are NOT part of the collect
@@ -245,7 +255,7 @@ public:
     // a panel is open). Must be called before any click/match/grid() use.
     void bind(CraftingGrid& grid) { m_grid = &grid; }
 
-    // slot: 0..26 or -1; gridSlot: 0..8 or -1; onOutput: the output slot
+    // slot: 0..35 or -1; gridSlot: 0..8 or -1; onOutput: the output slot
     // was hit. At most one of the three is "active" (the layout hit test
     // guarantees it). Returns true when the click crafted (consumed the
     // grid) — the game plays the craft sound on that cue.
@@ -253,7 +263,7 @@ public:
     bool rightClick(int slot, int gridSlot, bool onOutput);
     // CRAFT-7: shift-click quick move (Minecraft's E-screen semantics):
     // a hotbar slot (0..8) moves its whole stack into the storage
-    // (9..26), a storage slot into the hotbar, a grid cell into the
+    // (9..35), a storage slot into the hotbar, a grid cell into the
     // storage (then the hotbar if it does not fit) — each destination
     // fills in index order, merging same-item same-damage stacks up to
     // the max (a stack may split across several slots, Minecraft).
@@ -263,7 +273,7 @@ public:
     // CRAFT-7: double-click collect (Minecraft): with a carried stack
     // (the first click of the pair picked it up), gather every stack of
     // the SAME item and SAME damage in its SECTION (Minecraft: the
-    // hotbar 0..8 and the main storage 9..26 are separate sections)
+    // hotbar 0..8 and the main storage 9..35 are separate sections)
     // into the clicked slot (capped at maxStack), the remainder filling
     // the section's other slots in index order. No carry = no-op; the
     // grid and the output are NOT part of the collect.
