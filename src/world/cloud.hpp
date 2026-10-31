@@ -1,5 +1,4 @@
-// PRE-4: the drifting sky cloud layer (Minecraft's grid clouds, the
-// minimal version).
+// PRE-4: the drifting sky cloud layer (Minecraft's grid clouds).
 //
 // The clouds are a FLAT translucent layer of world-space quads at
 // y = kCloudHeight over a 16-block cell grid (kCloudCellBlocks — the
@@ -7,15 +6,24 @@
 // height). One cell of drift every kCloudFramesPerCell frames (100 s at
 // 60 fps = the Minecraft "one cell per in-game 10 minutes" rhythm).
 //
+// The presence field is TWO-LEVEL (UX-9a, the "blocky clouds" report:
+// PRE-4's flat 50% region cells read as smooth paper sheets): a 16-block
+// REGION cell is on at 50% (the splitmix64 top bit — the cloud clump
+// domain), and each on region cell is subdivided into 4x4 4-block SUB
+// cells, each independently on at 75% (the splitmix64 mod-4 roll — the
+// block grain). Total coverage = 50% x 75% = 37.5% (the 30-45% blocky
+// target band). The sub pattern is anchored to the WORLD 4-block lattice
+// (cellX*4 + subX, cellZ*4 + subZ) and re-rolls on the SAME time step as
+// the region layer, so a whole clump changes together (no sub-clump
+// relative sliding) and standing still never wanders the texture.
+//
 // Everything here is a PURE function of (cell coordinates, time step):
 // no state, no allocation beyond the mesh builders' outputs,
-// thread-safe. The presence field is 50% density (the splitmix64 top
-// bit — the salt-and-pepper grid look, the documented deviation from
-// Minecraft's noise field: no cloud clump shapes).
+// thread-safe.
 //
-// PITS #4 discipline: the lattice hash (hash3 with the dedicated
-// kSaltCloud) decorrelates the cells from each other; the time step
-// advances the state by the golden step before the splitmix64
+// PITS #4 discipline: the lattice hashes (hash3 with the dedicated
+// kSaltCloud / kSaltCloudSub) decorrelate the cells from each other; the
+// time step advances the state by the golden step before the splitmix64
 // finalizer (the finalizer alone is not a progression).
 //
 // The game caches one Mesh and rebuilds it ONLY when the camera's cloud
@@ -37,6 +45,15 @@ namespace mc {
 inline constexpr int kCloudHeight = 108;
 // One cloud cell's side length in blocks (kChunkSize-aligned).
 inline constexpr int kCloudCellBlocks = 16;
+// UX-9a: one sub-cell's side length in blocks (kCloudCellBlocks /
+// kCloudSubCellBlocks = 4 sub-cells per region side — the 4-block block
+// grain of the cloud edge).
+inline constexpr int kCloudSubCellBlocks = 4;
+// UX-9a: the sub-cell on-density (splitmix64 % 4 < 3 = 3/4 on — the 75%
+// grain inside each cloud region; region 50% x sub 75% = 37.5% total
+// coverage). Named constant — no config key.
+inline constexpr std::uint32_t kCloudSubDensityNumerator = 3;
+inline constexpr std::uint32_t kCloudSubDensityDenominator = 4;
 // The frames one cell of drift takes (100 s at 60 fps). The time step is
 // the integer division of the frame count — a pure function of the frame
 // (hard rule 8), so same-frame-count runs are bit-reproducible.
@@ -51,14 +68,32 @@ inline constexpr int kCloudWindowCells = 24;
 // through them). A named constant — no config key.
 inline constexpr float kCloudAlpha = 0.55f;
 
-// The dedicated salt for the cloud lattice hash (the kCropRollSalt
+// The dedicated salt for the cloud REGION lattice hash (the kCropRollSalt
 // pattern — no other system hashes with it).
 inline constexpr std::uint64_t kSaltCloud = 0xC10D05A1ULL;
+// The dedicated salt for the cloud SUB-cell lattice hash (UX-9a). A
+// sibling of kSaltCloud in a different value family (kSaltCloud =
+// 0xC10D05A1; the sub salt = 0x5B8C92E7): collision-checked against
+// every kSalt* / k*RollSalt / kAmbienceSalt in src/ (0x1A2B3C4D5E6F7A0x
+// worldgen family, 0xC1B1D57E7AE0C9Ax growth, 0x... particle/fire/chance
+// rolls, 0xA1B65445 ambience) — no other system hashes with it, and the
+// two cloud layers never track each other.
+inline constexpr std::uint64_t kSaltCloudSub = 0x5B8C92E7ULL;
 
 // The cloud's presence at lattice cell (cellX, cellZ) in time step t:
 // true = a cloud tile covers the cell. 50% density (the splitmix64 top
 // bit). Pure: same arguments -> same answer, across runs and threads.
 bool cloudMask(int cellX, int cellZ, int t);
+
+// The cloud's SUB-cell presence inside region cell (cellX, cellZ): the
+// world 4-block lattice point (cellX*4 + subX, cellZ*4 + subZ) is on at
+// 75% (the splitmix64 % 4 < kCloudSubDensityNumerator roll, UX-9a). The
+// sub identity is WORLD-anchored (the pattern does not wander when the
+// camera stands still) and uses the SAME time step as cloudMask (region
+// and sub re-roll on the same frame — a whole clump changes together, no
+// sub-clump relative sliding). Pure: same arguments -> same answer,
+// across runs and threads.
+bool cloudSubMask(int cellX, int cellZ, int subX, int subZ, int t);
 
 // The frame-locked drift time step: frameCount / kCloudFramesPerCell.
 // The integer division keeps the drift a pure function of the frame;
@@ -74,11 +109,20 @@ int cloudTimeStep(int frameCount);
 // the day cycle, the documented deviation). Appends to `out`.
 void cloudCellVertices(int cellX, int cellZ, std::vector<MeshVertex>& out);
 
-// The FULL window mesh (one flat quad per CLOUD cell of the
-// kCloudWindowCells x kCloudWindowCells window centered on the camera's
-// cloud cell): indexed triangles — 4 vertices + 6 indices per quad, in
-// window-scan order (z outer, x inner). Pure function of its arguments
-// (the game rebuilds the cached Mesh from it).
+// The world-space vertices of ONE cloud sub-cell: a kCloudSubCellBlocks
+// x kCloudSubCellBlocks flat quad at y = kCloudHeight, the same corner
+// order / normals / lightmap convention as cloudCellVertices (the shared
+// emitter — UX-9a). Appends to `out`.
+void cloudSubCellVertices(int cellX, int cellZ, int subX, int subZ,
+                          std::vector<MeshVertex>& out);
+
+// The FULL window mesh (UX-9a two-level grain: one flat 4x4 quad per ON
+// SUB-cell of every ON region cell in the kCloudWindowCells x
+// kCloudWindowCells window centered on the camera's cloud cell): indexed
+// triangles — 4 vertices + 6 indices per quad, in window-scan order (z
+// outer, x inner; sub z outer / sub x inner inside a cell). Pure function
+// of its arguments (the game rebuilds the cached Mesh from it; the
+// rebuild key — camera cell + t — is unchanged by the sub level).
 void buildCloudMesh(int camCellX, int camCellZ, int t,
                     std::vector<MeshVertex>& vertices,
                     std::vector<std::uint32_t>& indices);
