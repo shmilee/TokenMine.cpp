@@ -5,9 +5,10 @@
 // PURE step machine (the campfire pattern — the game's
 // emitTutorialEvent is the thin adapter; the logic is owned here), the
 // save-restore rules (format 23: the id reset, the count bound), the
-// target line / toast constants, the config strict read, and the
-// shipped content pin (beginner.json: the 7 steps exact + every text
-// character inside the UX-6 392-glyph font set).
+// target line / tip line / toast constants, the config strict read, and
+// the shipped content pin (beginner.json: the 8 steps exact — the UX-8a
+// planks step + the reworded table step — + every text AND tip
+// character inside the UX-6/UX-8 395-glyph font set).
 //
 // Run from the repository root (the assets are relative).
 #include <gtest/gtest.h>
@@ -40,7 +41,9 @@ Json parseJson(const std::string& text) {
 
 TutorialStep step(const std::string& id, const std::string& goal,
                   int count) {
-    return TutorialStep {id, id + " text", goal, count};
+    // The trailing "" is the optional tip (UX-8b — no tip row for the
+    // machine's fixture steps unless a test sets one).
+    return TutorialStep {id, id + " text", goal, count, ""};
 }
 
 // The machine's fixture: three steps (a count-1 bare goal, a count-3
@@ -101,7 +104,7 @@ std::vector<TutorialStep> loadShippedTutorial() {
 
 // True when every codepoint of `text` is either a printable ASCII
 // character (32..126 — the font's rows 4..15) or a member of the UX-6
-// 392-glyph CJK set (kCjkGlyphs, codepoint-sorted — the binary search).
+// 395-glyph CJK set (kCjkGlyphs, codepoint-sorted — the binary search).
 bool allCharsInFontSet(const std::string& text) {
     std::size_t pos = 0;
     while (pos < text.size()) {
@@ -195,6 +198,53 @@ TEST(TutorialParseTest, RejectsStepFieldViolations) {
     EXPECT_FALSE(parseTutorial(
                      parseJson(wrap(R"({"id": "a", "text": "", "goal": "walk", "count": 1})")))
                      .ok());
+}
+
+TEST(TutorialParseTest, OptionalTipParsesWhenPresentAndAbsent) {
+    // UX-8b: the tip is OPTIONAL — present = the non-empty string is
+    // stored on the step; absent = empty (the step draws no tip row,
+    // the v1.41.0 render).
+    const std::string def =
+        R"({"steps": [
+            {"id": "a", "text": "t", "goal": "walk", "count": 1,
+             "tip": "the hint"},
+            {"id": "b", "text": "u", "goal": "jump", "count": 2}
+        ]})";
+    auto r = parseTutorial(parseJson(def));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    ASSERT_EQ(r->size(), 2u);
+    EXPECT_EQ((*r)[0].tip, "the hint");
+    EXPECT_TRUE((*r)[1].tip.empty());
+}
+
+TEST(TutorialParseTest, RejectsBadTip) {
+    auto wrap = [](const char* stepJson) {
+        return std::string(R"({"steps": [)") + stepJson + R"(]})";
+    };
+    // A non-string tip is named (the step + the key, the project's
+    // "tutorial 'steps'[i] '<key>'" wording).
+    auto r = parseTutorial(parseJson(wrap(
+        R"({"id": "a", "text": "t", "goal": "walk", "count": 1, "tip": 1})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("steps'[0]"), std::string::npos);
+    EXPECT_NE(r.error().message.find("tip"), std::string::npos);
+    // An explicit "" is named and rejected (the ammo discipline — the
+    // sound_material precedent: the key present-but-empty is a bug, not
+    // an absence).
+    r = parseTutorial(parseJson(wrap(
+        R"({"id": "a", "text": "t", "goal": "walk", "count": 1, "tip": ""})")));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("steps'[0]"), std::string::npos);
+    EXPECT_NE(r.error().message.find("tip"), std::string::npos);
+    // A valid non-empty tip passes.
+    EXPECT_TRUE(parseTutorial(parseJson(wrap(
+        R"({"id": "a", "text": "t", "goal": "walk", "count": 1, "tip": "ok"})")))
+        .ok());
+    // The unknown-key rejection is unchanged (tip is now a known key,
+    // a different foreign key is still named).
+    EXPECT_FALSE(parseTutorial(parseJson(wrap(
+        R"({"id": "a", "text": "t", "goal": "walk", "count": 1, "tip": "ok", "x": 1})")))
+        .ok());
 }
 
 TEST(TutorialParseTest, RejectsDuplicateId) {
@@ -400,6 +450,27 @@ TEST(TutorialUiTest, TargetLineDoneIsEmpty) {
     EXPECT_TRUE(tutorialTargetLine(done, steps).empty());
 }
 
+TEST(TutorialUiTest, TipLineInProgressCarriesTheTip) {
+    // UX-8b: the tip line is the current step's tip while in progress —
+    // a tip-less step (or a step out of range) carries the empty line,
+    // so the UI adds zero rows (bit-identical to v1.41.0).
+    std::vector<TutorialStep> steps = threeSteps();
+    steps[1].tip = "the hint";
+    TutorialState s {};
+    s.stepIndex = 1;
+    EXPECT_EQ(tutorialTipLine(s, steps), "the hint");
+    EXPECT_TRUE(tutorialTipLine({}, steps).empty());       // step 0: no tip
+    EXPECT_TRUE(tutorialTipLine(s, threeSteps()).empty()); // tip-less data
+}
+
+TEST(TutorialUiTest, TipLineDoneIsEmpty) {
+    // Done: the toast owns the slot — no tip row even for a tip step.
+    std::vector<TutorialStep> steps = threeSteps();
+    steps[0].tip = "the hint";
+    const TutorialState done {0, 0, true};
+    EXPECT_TRUE(tutorialTipLine(done, steps).empty());
+}
+
 TEST(TutorialUiTest, ToastWindowIs120Frames) {
     EXPECT_EQ(kTutorialToastFrames, 120);
     // The toast text is in the font set (the brief's character audit).
@@ -497,20 +568,24 @@ TEST(TutorialConfigTest, NonBoolIsNamedAndRejected) {
 
 // -- the shipped content pin (real assets) ---------------------------------------
 
-TEST(TutorialContentTest, ShippedBeginnerIsTheSevenStepChain) {
+TEST(TutorialContentTest, ShippedBeginnerIsTheEightStepChain) {
+    // UX-8a: the 7-step chain grew a planks step after chop (the
+    // "wood -> planks -> table" cognition link the real-player feedback
+    // was missing) + the table step reworded with the 2x2 layout.
     auto steps = loadShippedTutorial();
-    ASSERT_EQ(steps.size(), 7u) << "the shipped beginner.json is the 7-step "
-                                   "chain (parse error above)";
+    ASSERT_EQ(steps.size(), 8u) << "the shipped beginner.json is the 8-step "
+                                    "chain (parse error above)";
     const std::vector<std::tuple<const char*, const char*, int>> pinned = {
         {"walk", "walk", 1},
         {"chop", "break.wood", 3},
+        {"planks", "craft.planks", 1},
         {"table", "craft.crafting_table", 1},
         {"wpick", "craft.wooden_pickaxe", 1},
         {"stone", "break.stone", 5},
         {"spick", "craft.stone_pickaxe", 1},
         {"kill", "kill.chicken", 1},
     };
-    for (int i = 0; i < 7; ++i) {
+    for (int i = 0; i < 8; ++i) {
         EXPECT_EQ(steps[static_cast<std::size_t>(i)].id,
                   std::get<0>(pinned[static_cast<std::size_t>(i)]))
             << "step " << i;
@@ -521,17 +596,43 @@ TEST(TutorialContentTest, ShippedBeginnerIsTheSevenStepChain) {
                   std::get<2>(pinned[static_cast<std::size_t>(i)]))
             << "step " << i;
     }
+    // The planks step counts ONE event: the craft event is emitted at
+    // the successful output click with n=1 (one click crafts the whole
+    // 4-plank output, but the event counts as one — the UX-8a brief's
+    // rule; count 4 would stall the chain).
+    EXPECT_EQ(steps[2].count, 1);
+    // The table step text carries the ASCII "2x2" (the multiplication
+    // sign is outside the font set — the brief's rule).
+    EXPECT_NE(steps[3].text.find("2x2"), std::string::npos);
+    EXPECT_EQ(steps[3].text, "做 1 个工作台（4 木板排 2x2）");
+    // The planks step text is pinned exactly too (the cognition link:
+    // 1 wood becomes 4 planks).
+    EXPECT_EQ(steps[2].text, "合成 4 个木板（1 木头变 4）");
+    // The UX-8b tips: planks + table carry them, the other six do not
+    // (zero tip rows = the v1.41.0 render).
+    EXPECT_EQ(steps[2].tip, "按 E 打开面板，选木头点输出");
+    EXPECT_EQ(steps[3].tip, "E 面板 2x2 格摆满木板，点输出");
+    for (int i : {0, 1, 4, 5, 6, 7}) {
+        EXPECT_TRUE(steps[static_cast<std::size_t>(i)].tip.empty())
+            << "step " << i;
+    }
 }
 
 TEST(TutorialContentTest, ShippedTextsStayInsideTheFontSet) {
-    // The brief's red line: every text character (and the toast text)
-    // is either printable ASCII or a member of the UX-6 392-glyph set —
-    // a missing glyph would render as '?' for the player.
+    // The brief's red line: every text AND tip character (and the toast
+    // text) is either printable ASCII or a member of the UX-6/UX-8
+    // 395-glyph set — a missing glyph would render as '?' for the
+    // player. UX-8b: the tips are checked per character too (the tip
+    // row draws the same way as the target line).
     auto steps = loadShippedTutorial();
-    ASSERT_EQ(steps.size(), 7u);
+    ASSERT_EQ(steps.size(), 8u);
     for (const TutorialStep& s : steps) {
         EXPECT_TRUE(allCharsInFontSet(s.text)) << "step '" << s.id
                                                << "': " << s.text;
+        if (!s.tip.empty()) {
+            EXPECT_TRUE(allCharsInFontSet(s.tip)) << "step '" << s.id
+                                                   << "' tip: " << s.tip;
+        }
     }
     EXPECT_TRUE(allCharsInFontSet(kTutorialDoneText));
 }
@@ -540,14 +641,16 @@ TEST(TutorialContentTest, ShippedGoalsSurviveTheRealInitCrossCheck) {
     RealRegistries r;
     ASSERT_TRUE(r.load()) << "run from the repository root";
     auto steps = loadShippedTutorial();
-    ASSERT_EQ(steps.size(), 7u);
+    ASSERT_EQ(steps.size(), 8u);
     auto v = validateTutorialGoals(steps, r.items, r.blocks, r.mobs);
     ASSERT_TRUE(v.ok()) << v.error().message;
     // The chain's targets are all reachable with shipped content:
-    // wood (worldgen), the three craft outputs (the recipes exist —
-    // the init's recipe cross-check owns their existence), stone
-    // (worldgen), chicken (the spawn config + the mob registry).
+    // wood (worldgen), planks (the wood -> 4 planks recipe), the four
+    // craft outputs (the recipes exist — the init's recipe
+    // cross-check owns their existence), stone (worldgen), chicken
+    // (the spawn config + the mob registry).
     EXPECT_TRUE(r.blocks.findByName("wood") != nullptr);
+    EXPECT_TRUE(r.items.findByName("planks") != nullptr);
     EXPECT_TRUE(r.blocks.findByName("stone") != nullptr);
     EXPECT_TRUE(r.items.findByName("crafting_table") != nullptr);
     EXPECT_TRUE(r.items.findByName("wooden_pickaxe") != nullptr);

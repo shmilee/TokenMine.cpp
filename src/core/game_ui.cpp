@@ -1086,12 +1086,15 @@ void Game::renderUi() {
         // heart row — the effect row / armor row push it up a tier when
         // active, the PRE-10 stacked-rows discipline) + the completion
         // toast (the same slot, the kTutorialToastFrames window armed
-        // by the done flip / the T skip). Gated: enabled ∧ !dead ∧ (in
-        // progress ∨ toast armed) — the death screen releases the
-        // pointer, so the locked segment (hence this line) is free of
-        // the dead case anyway; the explicit !isDead is the brief's
-        // HUD discipline. A no-input run is pointer-free, so nothing
-        // here ever draws (structural immunity — the base gate).
+        // by the done flip / the T skip). UX-8b: when the current step
+        // carries a tip, one more row ABOVE the target line (kTextDim,
+        // the same stack pitch — the topmost HUD row, so it cannot
+        // collide with the heart / effect / armor rows). Gated: enabled
+        // ∧ !dead ∧ (in progress ∨ toast armed) — the death screen
+        // releases the pointer, so the locked segment (hence this line)
+        // is free of the dead case anyway; the explicit !isDead is the
+        // brief's HUD discipline. A no-input run is pointer-free, so
+        // nothing here ever draws (structural immunity — the base gate).
         // kText (the primary HUD text color, the death-hint precedent):
         // the target is the primary guidance line; kTextDim (0.55) was
         // too faint against bright terrain for a first-time player.
@@ -1113,6 +1116,22 @@ void Game::renderUi() {
                     : tutorialTargetLine(m_tutorial, m_tutorialSteps);
             addText(line, (w - static_cast<int>(textWidth(line))) / 2, tutY,
                     1.0, kText);
+            // UX-8b: the tip line (the secondary guidance row) — one
+            // stack pitch above the main line (the HUD's named row
+            // constant, the heart/effect/armor spacing), centered by its
+            // own width (no forced equal width), kTextDim (the
+            // minor-information color; the main line stays kText).
+            // Same gate as the main line, plus !done (the toast owns the
+            // slot) and a non-empty tip: a tip-less step adds ZERO rows
+            // (bit-identical to v1.41.0).
+            if (!m_tutorial.done) {
+                const std::string tip =
+                    tutorialTipLine(m_tutorial, m_tutorialSteps);
+                if (!tip.empty()) {
+                    addText(tip, (w - static_cast<int>(textWidth(tip))) / 2,
+                            tutY - (kUiIconPx + kUiStripGap), 1.0, kTextDim);
+                }
+            }
         }
     }
 

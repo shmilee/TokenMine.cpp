@@ -1,9 +1,11 @@
 // UX-7: the beginner tutorial (the objective-style onboarding guide).
+// UX-8b: a step may carry an OPTIONAL `tip` (the secondary guidance
+// line, drawn above the target line in kTextDim).
 //
 // The content is DATA (assets/data/tutorials/beginner.json — a step list,
-// each step {id, text, goal, count}; strict parsing with the project's
-// naming discipline). The step machine is a PURE function (the campfire
-// pattern — the unit tests own it). The game is the thin adapter: one
+// each step {id, text, goal, count} + the optional tip; strict parsing
+// with the project's naming discipline). The step machine is a PURE
+// function (the campfire pattern — the unit tests own it). The game is the thin adapter: one
 // emitTutorialEvent choke point per event class, fed by frame-locked
 // events only (hard rule 8 — the tutorial has NO real-dt component), so
 // a no-input run emits zero events and the state never moves (the base
@@ -33,13 +35,15 @@ class MobRegistry;
 // One tutorial step (the parsed data). `goal` is the closed-vocabulary
 // event name the step waits for; `count` is the number of such events
 // that complete it (>= 1). `text` is the HUD line (Chinese, every
-// character inside the UX-6 392-glyph font set — the content pin test
-// checks it against the real charset).
+// character inside the UX-6 395-glyph font set — the content pin test
+// checks it against the real charset). `tip` (UX-8b) is the optional
+// secondary line (empty = the step draws no tip row).
 struct TutorialStep {
     std::string id;   // non-empty, unique within the file
     std::string text; // the HUD line (non-empty)
     std::string goal; // "walk" | "jump" | "eat" | "<prefix>.<name>"
     int count = 0;    // [1, ...]
+    std::string tip;  // optional (empty = no tip row)
 };
 
 // The player's progress through the step list (the frame-locked state;
@@ -65,8 +69,9 @@ enum class TutorialSaveState { Absent, Done, InProgress };
 inline constexpr int kTutorialToastFrames = 120;
 
 // The completion-toast text. The brief's "教程完成！" fine-tuned — 教 and
-// 程 are outside the UX-6 392-glyph font set, "全部完成！" is in-set and
-// semantically equivalent (the content pin test asserts the membership).
+// 程 are outside the UX-6/UX-8 395-glyph font set, "全部完成！" is in-set
+// and semantically equivalent (the content pin test asserts the
+// membership).
 inline constexpr const char* kTutorialDoneText = "全部完成！";
 
 // The closed goal vocabulary: the bare (unqualified) event words, and
@@ -91,10 +96,12 @@ Result<bool> tutorialEnabled(const Config& config);
 
 // Strict parse of a tutorial file: the top level is an object holding
 // EXACTLY the "steps" key (a non-empty array); each step is an object
-// holding EXACTLY {id, text, goal, count} (every deviation named
-// "tutorial 'steps'[i]" / "'steps'[i].<key>"); id is a non-empty string,
-// unique in the file; text a non-empty string; goal in the closed
-// grammar; count a whole number >= 1.
+// holding EXACTLY {id, text, goal, count} + the OPTIONAL tip (every
+// deviation named "tutorial 'steps'[i]" / "'steps'[i].<key>"); id is a
+// non-empty string, unique in the file; text a non-empty string; goal in
+// the closed grammar; count a whole number >= 1; tip, when present, a
+// NON-EMPTY string (an explicit "" is named and rejected — the ammo
+// discipline; absent = the step carries no tip).
 Result<std::vector<TutorialStep>> parseTutorial(const Json& def);
 
 // The init cross-check (the grows_to precedent — steps in file order,
@@ -135,6 +142,15 @@ TutorialState tutorialApply(const TutorialState& state,
 std::string tutorialTargetLine(const TutorialState& state,
                                const std::vector<TutorialStep>& steps);
 
+// The HUD tip line (UX-8b): the current step's optional `tip` (the
+// secondary guidance row the UI draws ABOVE the target line, in
+// kTextDim — the minor-information color). Empty string when done (the
+// toast owns the slot) or when the step carries no tip (the caller adds
+// zero rows — bit-identical to v1.41.0). Same state guards as
+// tutorialTargetLine.
+std::string tutorialTipLine(const TutorialState& state,
+                            const std::vector<TutorialStep>& steps);
+
 // The save segment's restore (the game load's cross-check + migration —
 // the pure half; the game logs the reset and owns the state write):
 //   - InProgress: the id must name a step of the CURRENT data, else the
@@ -147,6 +163,13 @@ std::string tutorialTargetLine(const TutorialState& state,
 //     exist — the format <= 22 migration, no data needed).
 // `steps` must be non-empty (the parse rejects an empty list — the
 // guard is defensive).
+//
+// UX-8a note on format 23: the step data is a DATA-plane expansion, not
+// a format change — the id set only GROWS (the 8-step chain keeps every
+// v1.41.0 id; no id is removed or renamed), so every existing
+// {id:walk}/{id:table}/... save stays valid (and a save pointing at a
+// still-existing id restores to the same step as before, at the same
+// progress bound).
 Result<TutorialState> tutorialRestore(TutorialSaveState saved,
                                       const std::string& id,
                                       int progress,

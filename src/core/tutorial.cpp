@@ -94,10 +94,12 @@ Result<std::vector<TutorialStep>> parseTutorial(const Json& def) {
         const std::string what = "tutorial 'steps'[" + std::to_string(i) + "]";
         if (!e.isObject()) {
             return MC_FAIL(what +
-                           " must be an object {id, text, goal, count}");
+                           " must be an object {id, text, goal, count} "
+                           "(+ the optional tip)");
         }
         std::string keyError;
-        if (!checkKeys(e, {"id", "text", "goal", "count"}, what, &keyError)) {
+        if (!checkKeys(e, {"id", "text", "goal", "count", "tip"}, what,
+                       &keyError)) {
             return MC_FAIL(keyError);
         }
         const Json* id = e.find("id");
@@ -134,9 +136,25 @@ Result<std::vector<TutorialStep>> parseTutorial(const Json& def) {
                                 ? std::to_string(count->asDouble())
                                 : "a non-number"));
         }
+        // UX-8b: the optional tip — when present it must be a NON-EMPTY
+        // string (an explicit "" is named and rejected — the ammo
+        // discipline, the sound_material precedent); absent = no tip.
+        const Json* tip = e.find("tip");
+        std::string tipStr;
+        if (tip != nullptr) {
+            if (!tip->isString()) {
+                return MC_FAIL(what + " 'tip' must be a string, got a "
+                               "non-string");
+            }
+            if (tip->asString().empty()) {
+                return MC_FAIL(what + " 'tip' must be a non-empty string "
+                               "(an explicit \"\" is rejected)");
+            }
+            tipStr = tip->asString();
+        }
         out.push_back(TutorialStep {id->asString(), text->asString(),
-                                    goal->asString(),
-                                    static_cast<int>(d)});
+                                    goal->asString(), static_cast<int>(d),
+                                    tipStr});
     }
     return out;
 }
@@ -212,6 +230,17 @@ std::string tutorialTargetLine(const TutorialState& state,
                 std::to_string(s.count);
     }
     return line;
+}
+
+std::string tutorialTipLine(const TutorialState& state,
+                            const std::vector<TutorialStep>& steps) {
+    // The same guards as tutorialTargetLine: done / out-of-range / an
+    // empty list (defensive — the parse rejects one) carry no tip row.
+    if (state.done || steps.empty() || state.stepIndex < 0 ||
+        state.stepIndex >= static_cast<int>(steps.size())) {
+        return std::string();
+    }
+    return steps[static_cast<std::size_t>(state.stepIndex)].tip;
 }
 
 Result<TutorialState> tutorialRestore(TutorialSaveState saved,

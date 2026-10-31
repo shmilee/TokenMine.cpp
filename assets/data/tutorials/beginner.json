@@ -1,11 +1,14 @@
 {
   "steps": [
-    { "id": "walk",  "text": "按 W 向前走",             "goal": "walk",               "count": 1 },
-    { "id": "chop",  "text": "打木头（持续击打）",       "goal": "break.wood",         "count": 3 },
-    { "id": "table", "text": "按 E 打开合成，做 1 个工作台", "goal": "craft.crafting_table", "count": 1 },
-    { "id": "wpick", "text": "在工作台合成 1 个木镐",     "goal": "craft.wooden_pickaxe", "count": 1 },
-    { "id": "stone", "text": "挖 5 个石头（掉出石料）",   "goal": "break.stone",        "count": 5 },
-    { "id": "spick", "text": "在工作台合成 1 个石镐",     "goal": "craft.stone_pickaxe",  "count": 1 },
-    { "id": "kill",  "text": "打 1 只白色小动物（打 4 下）", "goal": "kill.chicken",     "count": 1 }
+    { "id": "walk",   "text": "按 W 向前走",               "goal": "walk",               "count": 1 },
+    { "id": "chop",   "text": "打木头（持续击打）",         "goal": "break.wood",         "count": 3 },
+    { "id": "planks", "text": "合成 4 个木板（1 木头变 4）", "tip": "按 E 打开面板，选木头点输出",
+      "goal": "craft.planks",         "count": 1 },
+    { "id": "table",  "text": "做 1 个工作台（4 木板排 2x2）", "tip": "E 面板 2x2 格摆满木板，点输出",
+      "goal": "craft.crafting_table", "count": 1 },
+    { "id": "wpick",  "text": "在工作台合成 1 个木镐",     "goal": "craft.wooden_pickaxe", "count": 1 },
+    { "id": "stone",  "text": "挖 5 个石头（掉出石料）",   "goal": "break.stone",        "count": 5 },
+    { "id": "spick",  "text": "在工作台合成 1 个石镐",     "goal": "craft.stone_pickaxe",  "count": 1 },
+    { "id": "kill",   "text": "打 1 只白色小动物（打 4 下）", "goal": "kill.chicken",     "count": 1 }
   ]
 }

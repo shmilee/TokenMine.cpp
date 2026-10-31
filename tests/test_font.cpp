@@ -4,8 +4,10 @@
 // scale is a double (fractional scales downscale the glyphs). PRE-1: UTF-8
 // decoding + the CJK glyph set (atlas rows 0..3, the dead ASCII control
 // cells) and the byte pin of the generated atlas. UX-6: the CJK set grew
-// 33 -> 392 (the atlas 256x512 -> 256x2080; the top 512 rows are the
-// pre-UX-6 atlas, byte-identical red line).
+// 33 -> 395 (the atlas 256x512 -> 256x2080; the top 512 rows are the
+// pre-UX-6 atlas, byte-identical red line). UX-8: the +3 tutorial tip
+// glyphs (排摆输) re-celled the extended region in place (cells 128..489),
+// the top 512 rows untouched.
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -329,23 +331,23 @@ TEST(FontTest, GlyphUvCjkCellPositions) {
     // CRAFT-4: 作 (the PRE-1 omission — the table title rendered 工?台)
     // takes the dead ASCII-DEL cell 127 = (col 7, row 15).
     expectUv(glyphUv(0x4F5C), 232, 488);
-    // UX-6: the extended set starts at cell 128 (row 16, col 0) and its
-    // last glyph 默 takes cell 486 (row 60, col 6); 镐 (cell 465) sits at
-    // (col 1, row 58).
+    // UX-6/UX-8: the extended set starts at cell 128 (row 16, col 0) and
+    // its last glyph 默 takes cell 489 (row 61, col 1); 镐 (cell 468)
+    // sits at (col 4, row 58).
     expectUv(glyphUv(0x00B7), 8, 16 * kFontCell + kGlyphOffset);
-    expectUv(glyphUv(0x9550), kFontCell + kGlyphOffset,
+    expectUv(glyphUv(0x9550), 4 * kFontCell + kGlyphOffset,
              58 * kFontCell + kGlyphOffset);
-    expectUv(glyphUv(0x9ED8), 6 * kFontCell + kGlyphOffset,
-             60 * kFontCell + kGlyphOffset);
+    expectUv(glyphUv(0x9ED8), kFontCell + kGlyphOffset,
+             61 * kFontCell + kGlyphOffset);
     // Every entry stays inside the atlas; the legacy 33 inside the
-    // legacy region (rows 0..15), the extended 359 inside rows 16..60.
+    // legacy region (rows 0..15), the extended 362 inside rows 16..61.
     for (const CjkGlyph& g : kCjkGlyphs) {
         const GlyphUv uv = glyphUv(g.cp);
         EXPECT_GE(uv.v0, 0.0f);
         EXPECT_LT(uv.v1, 1.0f);
         if (g.cell >= 128) {
             EXPECT_LE(uv.v1,
-                      static_cast<float>(61 * kFontCell) / kFontAtlasHeight);
+                      static_cast<float>(62 * kFontCell) / kFontAtlasHeight);
         } else {
             EXPECT_LE(uv.v1,
                       static_cast<float>(16 * kFontCell) / kFontAtlasHeight);
@@ -367,15 +369,15 @@ TEST(FontTest, GlyphUvUnknownCodepointsMapToQuestionMark) {
 }
 
 TEST(FontTest, CjkTablePinned) {
-    // UX-6: the set grew 33 -> 392 (codepoint order, the charset
+    // UX-6/UX-8: the set grew 33 -> 395 (codepoint order, the charset
     // endpoints pinned); the legacy 33 keep their exact cells, and the
-    // extended 359 take cells 128..486 in codepoint-rank order.
-    ASSERT_EQ(std::size(kCjkGlyphs), 392u);
+    // extended 362 take cells 128..489 in codepoint-rank order.
+    ASSERT_EQ(std::size(kCjkGlyphs), 395u);
     for (std::size_t i = 1; i < std::size(kCjkGlyphs); ++i) {
         EXPECT_GT(kCjkGlyphs[i].cp, kCjkGlyphs[i - 1].cp); // sorted, unique
     }
     EXPECT_EQ(kCjkGlyphs[0].cp, 0x00B7u);   // charset first: ·
-    EXPECT_EQ(kCjkGlyphs[391].cp, 0xFF1Fu); // charset last: ？
+    EXPECT_EQ(kCjkGlyphs[394].cp, 0xFF1Fu); // charset last: ？
     std::size_t legacyCount = 0;
     for (const CjkGlyph& g : kCjkGlyphs) {
         EXPECT_GT(g.cp, 0x7Fu);
@@ -390,7 +392,7 @@ TEST(FontTest, CjkTablePinned) {
             ++legacyCount;
         } else {
             EXPECT_GE(g.cell, 128);
-            EXPECT_LE(g.cell, 486); // rows 16..60
+            EXPECT_LE(g.cell, 489); // rows 16..61
         }
     }
     EXPECT_EQ(legacyCount, 33u);
@@ -416,7 +418,7 @@ TEST(FontTest, CjkTablePinned) {
         }
     }
     EXPECT_EQ(got, legacyTab);
-    // The extended 359 fill cells 128..486, one per codepoint in order:
+    // The extended 362 fill cells 128..489, one per codepoint in order:
     // walking the sorted table, every cell >= 128 must be the next one.
     int nextCell = 128;
     std::size_t extendedCount = 0;
@@ -427,19 +429,21 @@ TEST(FontTest, CjkTablePinned) {
             ++extendedCount;
         }
     }
-    EXPECT_EQ(extendedCount, 359u);
-    EXPECT_EQ(nextCell, 487); // max used cell 486; rows 61..64 = headroom
+    EXPECT_EQ(extendedCount, 362u);
+    EXPECT_EQ(nextCell, 490); // max used cell 489; rows 62..64 = headroom
 }
 
 TEST(FontTest, CjkExtendedGlyphCellsPinned) {
-    // UX-6 tutorial vocabulary: exact cells for the key extended glyphs
-    // (the UX-7 onboarding text must never render '?').
+    // UX-6/UX-8 tutorial vocabulary: exact cells for the key extended
+    // glyphs (the onboarding text must never render '?'). The UX-8
+    // addition (排 292 / 摆 294 / 输 445) re-celled every later glyph
+    // by +1..+3 (the pins below carry the shifted values).
     const std::vector<std::pair<uint32_t, int>> pinned = {
         {0x50F5, 172}, // 僵
         {0x5E8A, 260}, // 床
         {0x5251, 192}, // 剑
-        {0x9550, 465}, // 镐
-        {0x7761, 380}, // 睡
+        {0x9550, 468}, // 镐
+        {0x7761, 382}, // 睡
         {0x5065, 171}, // 健
         {0x5EB7, 264}, // 康
         {0x5B89, 243}, // 安
@@ -450,12 +454,15 @@ TEST(FontTest, CjkExtendedGlyphCellsPinned) {
         {0x6316, 287}, // 挖
         {0x6324, 288}, // 挤
         {0x5976, 237}, // 奶
-        {0x6BD2, 340}, // 毒
-        {0x7BAD, 395}, // 箭
+        {0x6BD2, 342}, // 毒
+        {0x7BAD, 397}, // 箭
         {0x5CA9, 255}, // 岩
-        {0x706B, 352}, // 火
-        {0x71C3, 359}, // 燃
-        {0x70E7, 355}}; // 烧
+        {0x706B, 354}, // 火
+        {0x71C3, 361}, // 燃
+        {0x70E7, 357}, // 烧
+        {0x6392, 292}, // 排 (UX-8)
+        {0x6446, 294}, // 摆 (UX-8)
+        {0x8F93, 445}}; // 输 (UX-8)
     // expectUv pins the EXACT cell of every codepoint — a '?' fallback
     // would address cell 36 (row 4), which none of the pinned cells are,
     // so the UV pin alone proves table membership.
@@ -549,19 +556,19 @@ TEST(FontTest, FitLabelKeepsSuffixAndTrimsName) {
 TEST(FontTest, FontPngBytesPinned) {
     // Determinism pin: the generated atlas is byte-stable (re-running
     // tools/generate_font.py must not change it). FNV-1a 64 over the
-    // file bytes; the hex below is the UX-6 atlas (256x2080: the legacy
-    // 512 rows pixel-identical + 359 extended glyphs in cells 128..486).
+    // file bytes; the hex below is the UX-8 atlas (256x2080: the legacy
+    // 512 rows pixel-identical + 362 extended glyphs in cells 128..489).
     std::ifstream in("assets/textures/font.png", std::ios::binary);
     ASSERT_TRUE(in);
     const std::string data((std::istreambuf_iterator<char>(in)),
                            std::istreambuf_iterator<char>());
     ASSERT_FALSE(data.empty());
-    EXPECT_EQ(fnv1a64Hex(data), "027c6b820b2818ad");
+    EXPECT_EQ(fnv1a64Hex(data), "5ea51ddcf9f65071");
 }
 
 TEST(FontTest, FontPngIsTheUx6Atlas) {
     // UX-6: the atlas grew 256x512 -> 256x2080 (65 rows of 32px cells;
-    // rows 16..60 = the extended CJK set, rows 61..64 = headroom). The
+    // rows 16..61 = the extended CJK set, rows 62..64 = headroom). The
     // size constants and the actual file dimensions are pinned so a
     // silent reshape fails loudly.
     EXPECT_EQ(kFontAtlasWidth, 256);
