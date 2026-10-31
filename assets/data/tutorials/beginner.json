@@ -9,6 +9,12 @@
     { "id": "wpick",  "text": "在工作台合成 1 个木镐",     "goal": "craft.wooden_pickaxe", "count": 1 },
     { "id": "stone",  "text": "挖 5 个石头（掉出石料）",   "goal": "break.stone",        "count": 5 },
     { "id": "spick",  "text": "在工作台合成 1 个石镐",     "goal": "craft.stone_pickaxe",  "count": 1 },
+    { "id": "coal",   "text": "挖 1 个煤矿石",             "tip": "煤矿石多在地下洞中，用石镐挖",
+      "goal": "break.coal_ore",       "count": 1 },
+    { "id": "torch",  "text": "合成 1 个火把（1 煤 + 1 木棍）", "tip": "木棍 = 2 木板（E 面板配方）",
+      "goal": "craft.torch",          "count": 1 },
+    { "id": "light",  "text": "放 1 个火把",               "tip": "暗处放火把照亮，敌对不在亮处生成",
+      "goal": "place.torch",          "count": 1 },
     { "id": "kill",   "text": "打 1 只白色小动物（打 4 下）", "goal": "kill.chicken",     "count": 1 }
   ]
 }

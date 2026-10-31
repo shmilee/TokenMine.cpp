@@ -6,9 +6,10 @@
 // emitTutorialEvent is the thin adapter; the logic is owned here), the
 // save-restore rules (format 23: the id reset, the count bound), the
 // target line / tip line / toast constants, the config strict read, and
-// the shipped content pin (beginner.json: the 8 steps exact — the UX-8a
-// planks step + the reworded table step — + every text AND tip
-// character inside the UX-6/UX-8 395-glyph font set).
+// the shipped content pin (beginner.json: the 11 steps exact — the UX-8a
+// planks step + the reworded table step + the UX-9b coal/torch/light
+// steps after spick — + every text AND tip character inside the
+// UX-6/UX-8/UX-9b 401-glyph font set).
 //
 // Run from the repository root (the assets are relative).
 #include <gtest/gtest.h>
@@ -103,8 +104,9 @@ std::vector<TutorialStep> loadShippedTutorial() {
 }
 
 // True when every codepoint of `text` is either a printable ASCII
-// character (32..126 — the font's rows 4..15) or a member of the UX-6
-// 395-glyph CJK set (kCjkGlyphs, codepoint-sorted — the binary search).
+// character (32..126 — the font's rows 4..15) or a member of the UX-6/
+// UX-8/UX-9b 401-glyph CJK set (kCjkGlyphs, codepoint-sorted — the
+// binary search).
 bool allCharsInFontSet(const std::string& text) {
     std::size_t pos = 0;
     while (pos < text.size()) {
@@ -568,13 +570,17 @@ TEST(TutorialConfigTest, NonBoolIsNamedAndRejected) {
 
 // -- the shipped content pin (real assets) ---------------------------------------
 
-TEST(TutorialContentTest, ShippedBeginnerIsTheEightStepChain) {
+TEST(TutorialContentTest, ShippedBeginnerIsTheElevenStepChain) {
     // UX-8a: the 7-step chain grew a planks step after chop (the
     // "wood -> planks -> table" cognition link the real-player feedback
-    // was missing) + the table step reworded with the 2x2 layout.
+    // was missing) + the table step reworded with the 2x2 layout. UX-9b:
+    // the 8-step chain grew the coal/torch/light steps after spick (the
+    // "fell into a dark cave" real-player feedback: the chain now
+    // teaches a torch before the kill step).
     auto steps = loadShippedTutorial();
-    ASSERT_EQ(steps.size(), 8u) << "the shipped beginner.json is the 8-step "
-                                    "chain (parse error above)";
+    ASSERT_EQ(steps.size(), 11u)
+        << "the shipped beginner.json is the 11-step "
+           "chain (parse error above)";
     const std::vector<std::tuple<const char*, const char*, int>> pinned = {
         {"walk", "walk", 1},
         {"chop", "break.wood", 3},
@@ -583,9 +589,12 @@ TEST(TutorialContentTest, ShippedBeginnerIsTheEightStepChain) {
         {"wpick", "craft.wooden_pickaxe", 1},
         {"stone", "break.stone", 5},
         {"spick", "craft.stone_pickaxe", 1},
+        {"coal", "break.coal_ore", 1},
+        {"torch", "craft.torch", 1},
+        {"light", "place.torch", 1},
         {"kill", "kill.chicken", 1},
     };
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 11; ++i) {
         EXPECT_EQ(steps[static_cast<std::size_t>(i)].id,
                   std::get<0>(pinned[static_cast<std::size_t>(i)]))
             << "step " << i;
@@ -608,11 +617,20 @@ TEST(TutorialContentTest, ShippedBeginnerIsTheEightStepChain) {
     // The planks step text is pinned exactly too (the cognition link:
     // 1 wood becomes 4 planks).
     EXPECT_EQ(steps[2].text, "合成 4 个木板（1 木头变 4）");
-    // The UX-8b tips: planks + table carry them, the other six do not
-    // (zero tip rows = the v1.41.0 render).
+    // The UX-8b tips: planks + table carry them; the UX-9b tips: coal +
+    // torch + light carry them; the other eight do not (zero tip rows =
+    // the v1.41.0 render).
     EXPECT_EQ(steps[2].tip, "按 E 打开面板，选木头点输出");
     EXPECT_EQ(steps[3].tip, "E 面板 2x2 格摆满木板，点输出");
-    for (int i : {0, 1, 4, 5, 6, 7}) {
+    // The UX-9b step texts are pinned exactly (the torch chain: the
+    // coal ore, the 1-coal + 1-stick craft, the placement).
+    EXPECT_EQ(steps[7].text, "挖 1 个煤矿石");
+    EXPECT_EQ(steps[7].tip, "煤矿石多在地下洞中，用石镐挖");
+    EXPECT_EQ(steps[8].text, "合成 1 个火把（1 煤 + 1 木棍）");
+    EXPECT_EQ(steps[8].tip, "木棍 = 2 木板（E 面板配方）");
+    EXPECT_EQ(steps[9].text, "放 1 个火把");
+    EXPECT_EQ(steps[9].tip, "暗处放火把照亮，敌对不在亮处生成");
+    for (int i : {0, 1, 4, 5, 6, 10}) {
         EXPECT_TRUE(steps[static_cast<std::size_t>(i)].tip.empty())
             << "step " << i;
     }
@@ -620,12 +638,12 @@ TEST(TutorialContentTest, ShippedBeginnerIsTheEightStepChain) {
 
 TEST(TutorialContentTest, ShippedTextsStayInsideTheFontSet) {
     // The brief's red line: every text AND tip character (and the toast
-    // text) is either printable ASCII or a member of the UX-6/UX-8
-    // 395-glyph set — a missing glyph would render as '?' for the
-    // player. UX-8b: the tips are checked per character too (the tip
-    // row draws the same way as the target line).
+    // text) is either printable ASCII or a member of the UX-6/UX-8/
+    // UX-9b 401-glyph set — a missing glyph would render as '?' for
+    // the player. UX-8b: the tips are checked per character too (the
+    // tip row draws the same way as the target line).
     auto steps = loadShippedTutorial();
-    ASSERT_EQ(steps.size(), 8u);
+    ASSERT_EQ(steps.size(), 11u);
     for (const TutorialStep& s : steps) {
         EXPECT_TRUE(allCharsInFontSet(s.text)) << "step '" << s.id
                                                << "': " << s.text;
@@ -641,19 +659,23 @@ TEST(TutorialContentTest, ShippedGoalsSurviveTheRealInitCrossCheck) {
     RealRegistries r;
     ASSERT_TRUE(r.load()) << "run from the repository root";
     auto steps = loadShippedTutorial();
-    ASSERT_EQ(steps.size(), 8u);
+    ASSERT_EQ(steps.size(), 11u);
     auto v = validateTutorialGoals(steps, r.items, r.blocks, r.mobs);
     ASSERT_TRUE(v.ok()) << v.error().message;
     // The chain's targets are all reachable with shipped content:
-    // wood (worldgen), planks (the wood -> 4 planks recipe), the four
+    // wood (worldgen), planks (the wood -> 4 planks recipe), the six
     // craft outputs (the recipes exist — the init's recipe
-    // cross-check owns their existence), stone (worldgen), chicken
-    // (the spawn config + the mob registry).
+    // cross-check owns their existence), stone + coal_ore (worldgen),
+    // torch + stick (the recipes), chicken (the spawn config + the mob
+    // registry).
     EXPECT_TRUE(r.blocks.findByName("wood") != nullptr);
     EXPECT_TRUE(r.items.findByName("planks") != nullptr);
     EXPECT_TRUE(r.blocks.findByName("stone") != nullptr);
+    EXPECT_TRUE(r.blocks.findByName("coal_ore") != nullptr);
     EXPECT_TRUE(r.items.findByName("crafting_table") != nullptr);
     EXPECT_TRUE(r.items.findByName("wooden_pickaxe") != nullptr);
     EXPECT_TRUE(r.items.findByName("stone_pickaxe") != nullptr);
+    EXPECT_TRUE(r.items.findByName("torch") != nullptr);
+    EXPECT_TRUE(r.items.findByName("stick") != nullptr);
     EXPECT_TRUE(r.mobs.findByName("chicken") != nullptr);
 }
