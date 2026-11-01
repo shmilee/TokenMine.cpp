@@ -2741,7 +2741,7 @@ TEST(WorldGeneratorTest, Phase93ProceduralLakesAreDeterministic) {
 
 // -- GEN-3 (ore vein shape): the ellipsoid vein pins ------------------------
 //
-// The calibration probe region (docs/archive/phase-gen3.md): seed
+// The calibration probe region (docs/archive/v1x/phase-gen3.md): seed
 // 123456789, columns cx 4..11 x cz 0..7 (world x[64,192) z[0,128)), full
 // height, REAL assets. The pinned counts below are the single-round
 // calibration final (shape switch + the probability re-tune); the old

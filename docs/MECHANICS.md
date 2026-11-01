@@ -1,16 +1,17 @@
-# 机制详解（现状 v1.33.0）
+# 机制详解（现状 v2.0.0）
 
-> 2026-10-30 全面刷新：现状 = **v1.33.0**（tag = PRE-11+12 合并）、无输入基线门
-> **148** 次、单元测试 **1912/1912**、`-Wall -Wextra -Wpedantic -Werror` 0 警告、
-> 存档 **format 22**、v1.x 任务矩阵 **33/33 全完成**（v1.0 矩阵 34 项 + v1.x 33 项
-> 均已归档）。旧版本文档是 Phase 28 快照 + 逐点补丁（尾部 LGT-2/LGT-3），本次把
-> 全部子系统更新到现状。
+> 2026-11-02 全面刷新：现状 = **v2.0.0**（1.x 收官里程碑：v1.x 任务矩阵 40/40
+> + UX-8g/UX-9 实机报障 4 项 + 2.0.0 扫尾「第三人称准星抬相机」）、无输入基线
+> 门 **171** 次、单元测试 **2075/2075**、`-Wall -Wextra -Wpedantic -Werror` 0
+> 警告、存档 **format 24**、base18 锚 179116 B。上一轮刷新（2026-10-30）止于
+> v1.33.0，本次把 v1.34.0 → v2.0.0 的全部变更（逐版见 `docs/CHANGELOG.md`，
+> 细节证据见 `docs/archive/v1x/` 阶段存档）并入各节。
 >
 > **来源约定**：本文所有具体数字/字段名/常量值以本文件各条的标注为准，细节
-> （机制公式、单测、门证据、偏离记档全文）见 `docs/archive/v1x/phase-*.md`（164 个
-> 阶段存档）；活跃已知问题与已修复索引见 `docs/KNOWN_ISSUES.md`；逐版明细见
-> `docs/CHANGELOG.md`；执行协议（命令/硬规则/E2E）见 `docs/PROTOCOL.md` 与
-> `AGENTS.md`。
+> （机制公式、单测、门证据、偏离记档全文）见 `docs/archive/v1x/phase-*.md`
+> （181 份阶段存档 + `HISTORY.md` 全史，只读历史）；活跃已知问题与已修复索引
+> 见 `docs/KNOWN_ISSUES.md`；逐版明细见 `docs/CHANGELOG.md`；执行协议（命令/
+> 硬规则/E2E）见 `docs/PROTOCOL.md` 与 `AGENTS.md`。
 >
 > **阶段标签约定**：`Phase NN`（或 `[PNN]`）= v0.x 时代编号阶段；`[XXX-N]` =
 > v1.x 任务表任务 ID（如 `[ENT-7]`/`[SURV-3]`/`[CRAFT-1]`/`[PRE-2]`/`[STRM-1]`）；
@@ -47,9 +48,11 @@
   幂等；17 基础事件 + 18 材质音 6×3 + 3 环境音 + 1 smelt）
 - **纹理**：block atlas **16×8**（128 tile，`assets/data/textures/block_atlas.json`
   数据驱动布局——加纹理 = 加 PNG + 加一行 JSON，不改代码；**atlas 空位**纪律 =
-  不重锚基线）；物品图标 = 每物品独立 32×32 PNG；字体 **256×512**（ASCII 16×16
-  字形 + **33 个 CJK glyph** `[PRE-1]`/`[CRAFT-4]`）；health/hunger 48×16 条带、
+  不重锚基线）；物品图标 = 每物品独立 32×32 PNG；字体 **256×2080**（ASCII 16×16
+  字形 + **401 个 CJK glyph** `[PRE-1]` 33 → `[CRAFT-4]` 34 → `[UX-6]` 392 →
+  `[UX-8a]` 395 → `[UX-9b]` 401，顶 512 行位级不变）；health/hunger 48×16 条带、
   oxygen 16×16、effects **176×16**（11 tile）、cracks 80×16、mob 图集
+  （+ `[UX-3]` 玩家占位皮肤 64×64 + 4 派生 16×16 tile 尾部追加）
 - **初始库存**（`assets/data/hotbar.json`）：hotbar 9 格（stone/dirt/grass/
   sand/wood/leaves/glass/glowstone/wooden_pickaxe，每格满堆栈）+ **隐藏 starter
   存储槽 16–26**（honey_bucket ×1 `[FLUID-6]` / glass_bottle ×4 + 6 瓶单效果药水
@@ -70,6 +73,33 @@
   鼠标转向——**左键点击锁定指针；转向仅在指针锁定时生效**（未锁定光标不转
   视角 = 无输入运行截图逐字节复现的保证，硬规则 5）：yaw 0 = 朝 -Z、正 =
   左转；pitch 正 = 上、clamp ±~89°；灵敏度 0.0025 rad/px
+- **第三人称 `[UX-4]`/`[UX-8g]`/v2.0.0**：`C` 切换第一/第三人称（MC 现代相机键；
+  F5 已被手动存档占用 = 记档偏离；仅指针锁定时生效）——第三人称 = 相机**眼位后
+  上方球面偏移 4.0 块**（`kThirdPersonDistance`，offset = −Camera::forward×D 与
+  视图矩阵位级同源）+ **v2.0.0 准星不压头**：轨道点沿**相机 up 轴**抬高
+  `kThirdPersonOrbitHeight` **0.4**（`thirdPersonOrbitCenter(eye, yaw, pitch)`
+  纯函数 = 眼位 + `Camera::up()`×0.4，up = cross(right, forward) 与视图矩阵
+  锁步单一真源——pitch 0 时头 top ≈**29 px** / 头底缘 ≈**96 px** 低于屏幕中心，
+  任意 yaw/pitch 恒定 = 准星零重叠；crouch 随眼位降零额外代码；第一人称分支
+  字节不变 = 结构免疫根）+ **遮挡收敛**（`kCameraOcclusionMargin` **0.1**：
+  嵌墙 = 解析穿出留 0.1 间隙**玩家侧** / 远墙 = raycastBlock 面前 0.1 停 /
+  穿流体 = 相机看水 MC 同款）+ **零状态**（相机每帧派生、无 Game 成员 = 零
+  format / 不入档，读档回 First = MC 同款）；**瞄准射线两模式均自
+  `eyePosition()` `[UX-8g]`**（5 处交互射线原点统一：targetBlock 挖掘/放置/
+  交互/裂纹全链 / targetMob / fireBow 箭生成 / tryFluidBucket 双射线；方向
+  `m_camera.forward()` 零动 = 两模式皆玩家朝向；**第一人称位级恒等零回归**；
+  声音 listener 保持相机）→ 屏幕中心射线与眼位射线平行偏移 0.4 = **固定第三
+  人称视差**（MC 同款观感，记档偏离——精确瞄准可切第一人称，见 KNOWN_ISSUES）；
+  **玩家身体 `[UX-3]`**（第三人称可见）= **MC 标准 5 部件 box**（头 0.5³ / 躯干
+  0.5×0.55×0.25 / 四肢 0.25×0.75×0.25，总高 1.8）+ **行走摆臂摆腿**（四部件
+  对角步态 arm_l+leg_r / arm_r+leg_l，amplitude leg 0.35 / arm 0.3 = ENT-1
+  `advanceSwingPhase` 相位机镜像进 `Player::update`，`checkSwingClip` 64 相位
+  验收）+ **生成式占位皮肤**（64×64 经典布局官方 wiki 4px-arm 模板逐区解码 +
+  `tools/generate_player_skin.py` 确定性幂等 + 4 派生 16×16 tile 尾部追加图集
+  免重锚，真实皮肤同布局一键替换）+ `drawPlayerBody`（opaque 段 drawMobs 后，
+  烘焙恒亮 = mob 同款记档偏离；模型 width 1.0 = box 验证界非碰撞，玩家 AABB
+  0.6×1.8 零触碰）；drawHeldHand 第三人称隐藏（2D 手持角标 = HUD 层照画；
+  手臂持物/弓拉姿态缺失 = 记档偏离）
 - **左键**（锁定，**按住**）：准星命中 mob（射线先比方块距离——**方块遮挡**：
   方块更近则打方块）= 挥击，每 `kSwingInterval` **0.25s** 一击：伤害 = 选中
   物品 `attack_damage` 数据（徒手/方块/材料 = 1.0；shipped：wooden/stone/iron
@@ -118,7 +148,9 @@
   `E` 开/关背包面板（释放指针、暂停玩家物理与方块交互，世界/昼夜/流体/实体/
   流式/熔炼照常 tick——与 MC「暂停菜单」不同，接近「边看背包边看世界」）；
   `F3` 切换调试 overlay（任意指针状态，英文 = 开发者工具记档 `[PRE-1]`）；
-  `F5` 立即存档（`--save` 槽激活时，日志记录结果）；`ESC` 释放指针 / 未锁定时
+  `F5` 立即存档（`--save` 槽激活时，日志记录结果）；`C` 切换第一/第三人称
+  （`[UX-4]`，见上）；`T` 跳过新手指导（`[UX-7]`，仅指针锁定且教程未结束时，
+  效果等同完成）；`ESC` 释放指针 / 未锁定时
   退出（干净退出自动写回）；`R` 死亡后重生
 - **背包面板操作**（`[CRAFT-7]` = MC 操作面 3/4 项 + 数字键）：左键 = 取整堆/
   放入/交换/并入有空间同物堆（**合并门 = 同物品且同 damage** `[SURV-3]`）；
@@ -127,11 +159,32 @@
   移动**（hotbar⇄storage 互移索引序合并 + 容器格→主背包优先 + 堆跨格分裂 +
   手持堆 no-op；炉子面板 = 容器 GUI：炉槽→主背包、移 input 按不变量重置进度；
   左右 Shift 皆可）；**双击收集分拣**（**MC 分区语义：hotbar 0..8 与主背包
-  9..26 独立分区**；收集同物同耐久入点击格 + 溢出索引序回填；`kDoubleClick-
-  Seconds` 0.3 真实 dt 窗 = 生存计时器类输入态）；**无拖拽**（记档偏离：三
+  9..35 独立分区** `[UX-8f]` 36 槽起；收集同物同耐久入点击格 + 溢出索引序回填；`kDoubleClick-
+  Seconds` 0.3 真实 dt 窗 = 生存计时器类输入态）；**工作台材料修复
+  `[UX-5]`**（合成网格 = 受损工具/护甲 + 1 材料 → 输出槽 = 修复后物品【1 材料
+  +25% max 耐久 `kRepairFraction` 0.25】，点击输出取走；**配方恒优先、repair =
+  无配方回退**；输出三重守卫 = 异 item/异 damage/maxStack 溢出拒；E 面板 2×2
+  同款生效——详见「合成与容器 · 工作台」）；**无拖拽**（记档偏离：三
   点击 + 数字键覆盖核心操作面，拖拽 = 捕获下轨迹跟踪最高风险 E2E 类矩阵外）；
   点击面板外（左键）= 丢弃手持堆；关闭面板时手持堆保留在 UI 实例（MC 会退回
   背包 = 记档偏离）；**悬停 tooltip**（`[PRE-12]`，见「渲染与表现」）
+- **新手指导 `[UX-7]`/`[UX-8a]`/`[UX-9b]`**（MC objective 式数据驱动逐步教程，
+  内容 = `assets/data/tutorials/beginner.json` 严格解析【四键齐全/id 唯一/count
+  ≥1 全点名】）：shipped **11 步链** = walk 按 W 走 → chop 打木头×3 → **planks
+  合成 4 木板**【`[UX-8a]`，tip「按 E 打开面板，选木头点输出」】→ table 做工作
+  台（4 木板排 2×2）→ wpick 木镐 → stone 挖石×5 → spick 石镐 → **coal 挖 1 煤
+  矿石 / torch 合成 1 火把 / light 放 1 火把 = 三步点灯**【`[UX-9b]`，消费
+  「掉在洞里黑乎乎怎么打怪」实机报障：光 14 > 敌对生成门槛 7】→ kill 打 1 只
+  鸡；每步可选 **`tip` 辅助行**（`[UX-8a]` 严格解析，主行上方 kTextDim）；
+  **封闭事件词表**（craft./break./place./kill./interact. + walk/jump/eat 裸词，
+  `emitTutorialEvent` 单点收口 8 类各一调用点——repair 完成不发 craft = UX-5
+  边界）+ **纯函数状态机** `core/tutorial`（campfire 范式帧锁定，进度 ≥ count
+  步进越尾 done）+ **format 23 `player.tutorial`**（恒写 {id,count}/{}；键纪律
+  双向/≤22 免迁/**id 失效 = 重置首步**/count 越界损坏点名；读档跨续接）+
+  **UI**（下中部目标行 PRE-10 堆叠纪律 + 120 帧完成 toast + **`T` 跳过键**
+  GameKey 尾追加 + config `tutorial.enabled` 严格读代码默认 true config.json
+  零改动 + F3 `tutorial` 行）；字集需求三段扩容（33→392 `[UX-6]` → 395
+  `[UX-8a]` → 401 `[UX-9b]`，顶 512 行位级不变免重锚）
 - **破坏反馈**（`[P15]`）：**渐进裂纹**——破坏进度映射 5 级累积裂纹纹理
   （cracks.png 80×16 五格，白 alpha 随机游走裂纹），破坏中的方块叠加半透明
   裂纹面（scale 1.006 免 Z-fight）；**破坏粒子**——方块碎成 16 个 0.12 格小
@@ -306,18 +359,36 @@
   流体 3（固定，不读块字段）/ slab·stairs×4·wall·fence = 0**（`[LGT-5]` 半块
   透光 = MC 半块规则：光如空气穿过，竖直天空免费 + 每格成本 1 = 与空气逐值
   同，**零核心代码**；opaque 保持 true = 剔面/渲染零变更）
-- **昼夜 = 天空光场仿射撤退 `[LGT-3]`（零重传播）**：天空光场**恒按正午
-  （源等级 15）存储**；有效源等级 **`S = 7 + 8×dayFactor`**（深夜 =
-  `kNightSkyLevel` **7** = MC 午夜露天月光——10-27 用户实机定案「深夜须可
-  夜视」，初版全黑被推翻）。所有天空光源共享源等级 S 且逐格成本与 S 无关 ⇒
+- **昼夜 = 天空光场仿射撤退 `[LGT-3]`→`[UX-1]`（零重传播）**：天空光场**恒按
+  正午（源等级 15）存储**；有效源等级 **`S = L + (15−L)×dayFactor`**（`[UX-1]`
+  起 **L = `render.night_sky_level`** int [0,15] **代码默认 7** = 对 v1.34.0 位
+  级恒等；7 = `kNightSkyLevel` = MC 午夜露天月光——10-27 用户实机定案「深夜须
+  可夜视」，初版全黑被推翻；**L 0 = 全黑夜**【环境底随地板归零 = 真纯黑无残
+  光】/ L 15 = 夜同昼不生成敌对 = 用户配置选择；严格读：absent = 7 / 非
+  number / 非有限 / 越界 / 非整数全点名拒，检查序 = 非有限 → 范围（double 域）
+  → 整数 → int 投影【1e18 int cast = UB 路径】= SAVE-1 纪律，config.json 零改
+  动）。所有天空光源共享源等级 S 且逐格成本与 S 无关 ⇒
   **`field_S(x) = max(0, stored(x) − (15−S))` 逐格精确**（confluence 单测 =
   源等级 S 直接重传播 vs 仿射逐格相等）——日落时亮区沿 `stored = 15−S`
   等值线向洞口/冠隙收缩（MC 同款撤退观感），零重传播、分数 Δ 平滑（MC 量化
-  超集）。**生成光门 `currentSpawnLight` 与渲染求值同一公式**（所见即所生）
+  超集）。**主机纯函数尾参参数化**（`effectiveSkyLight(stored, df, nightLevel)`
+  / `currentSpawnLight` / `findMobSpawnCell`，默认参 = `kNightSkyLevel` 既有调用
+  点位级不变）+ **生成光门与渲染求值同一公式**（所见即所生）+ **spawn 成对语
+  义任意 L 成立**（夜露天等级 = L 本身：L≤7 敌对照生 / 火把圈 14 恒免疫 /
+  L=15 夜不生成）
 - **面烘焙光公式**（basic.frag，归一化 0..1，硬规则 9）：`light = max(
-  v_skyLight − (8/15)×(1 − dayFactor), v_blockLight)`，`rgb = base × (0.03 +
-  0.97 × light × faceShade)`；**faceShade** = 顶 1.0 / ±X 0.8 / ±Z 0.6 / 底
-  0.5；3% 环境光底（全暗区与虚空背景可区分）；每面采样**面后方一格**的光值、
+  v_skyLight − u_nightRetreat×(1 − dayFactor), v_blockLight)`（`u_nightRetreat
+  = (15−L)/15`，L = `[UX-1]` `render.night_sky_level` 默认 7 = 8/15 旧常量位级
+  恒等；init bind→set→unbind 一次性注入 = 每 run 常量无 per-draw 变化）+
+  **`[UX-9c]` 全遮挡底光**：`amb = light ≤ 0.001 ? u_caveAmbient : u_ambient`
+  （**全遮挡区** = 洞穴/深水/室内烘焙光恒 0 的**底值单独可调**——`render.
+  cave_ambient` double [0,1] **代码默认 0.03** = `kAmbientFloor` 单一真源、对
+  v1.49.0 位级恒等；深水衰减到 0 自动同享零额外代码；夜晚露天 light > 0.001
+  不触 = **与 night_sky_level 两键正交**；严格读 = UX-1 同范式 [0,1] 越界/非数
+  全点名，config.json 零改动）+ `rgb = base × (amb + (1 − amb) × light ×
+  faceShade)`（amb = 0.03 时 = 旧 `0.03 + 0.97×light×faceShade` 位级同式）；
+  **faceShade** = 顶 1.0 / ±X 0.8 / ±Z 0.6 / 底
+  0.5；环境底全暗区与虚空背景可区分；每面采样**面后方一格**的光值、
   4 顶点同值（块状光照，无 AO = KNOWN_ISSUES）；**方块光不受昼夜影响**
   （glowstone 夜间也亮，MC 一致）
 - **per-draw 光覆盖 `[PRE-6]`/`[LGT-4]`**（vert 端唯一门控分支，frag 零改动 =
@@ -464,7 +535,12 @@
   arrow/feather/beef/mutton/leather + 所有可 Q 丢弃物皆可见，零核心代码纯
   内容；家族几何 1–3 box 剪影，纹理 = 既有 icon PNG）；统一 Entity 碰撞物理
   （重力/终端速度/水平摩擦）；**零初速生成**（静止位精确、截图可复现——对 MC
-  随机初速的刻意偏离）；落地悬浮摆动（1.5 s 周期）+ 自转（4 s 周期）= **帧
+  随机初速的刻意偏离）；**破坏掉落确定性伪散落 `[UX-8d]`**（`block/
+  drop_scatter` 纯函数 = seed⊕位置⊕dropIndex 专用 salt 与 4 既有 salt 零碰撞：
+  水平 (dx,dz) ∈ **±0.2²**、**y 不偏移**；界论证 0.325 < 0.5 = 物品**恒留被破
+  格内**；只改破坏掉落——Q 丢弃/mob 击杀/拾取/存档/粒子/掉落光零触碰；合并
+  安全 0.566 < 0.75 同物仍合并 = MC 随机观感的确定性替身）；落地悬浮摆动
+  （1.5 s 周期）+ 自转（4 s 周期）= **帧
   计数器驱动**（非墙钟）；同类 **0.75 格**内自动合并（**合并门 = 同物品且同
   damage** `[SURV-3]`，堆叠上限按物品数据：block 64 / 工具护甲弓 1）；**120 s**
   （MC 同款）或掉出世界消失（age = real-dt 累积）；**拾取** = 玩家底心距 ≤
@@ -530,13 +606,17 @@
   1，全 1 与旧 `pick % 长度` 逐位相同；shipped 6 种全 weight 1）；**抽中的类型
   过不了光门则该次尝试作废**（如白天抽中 zombie，v1 接受）
 - **光照门（昼夜生成规则，`[P20.5]`→`[LGT-3]`）**：生成格（脚位）的**当前
-  有效光照** = max(天空光昼夜有效等级 `effectiveSkyLight(stored, df) = max(0,
-  stored − (15−S))`【与渲染同款仿射撤退 + 月光地板：正午恒等，深夜开阔地 15
-  → **7 非 0**】，方块光【萤石，不受昼夜影响】)，必须 ≤ 该 mob 的
+  有效光照** = max(天空光昼夜有效等级 `effectiveSkyLight(stored, df, L) = max(0,
+  stored − (15−S))`，S = L + (15−L)×df【与渲染同款仿射撤退 + 月光地板：正午
+  恒等，深夜开阔地 15 → **L 非 0**（`[UX-1]` 默认 L = 7）】，方块光【萤石，不
+  受昼夜影响】)，必须 ≤ 该 mob 的
   `spawn_max_light`（数据字段 0..15；**shipped 敌对 trio zombie/skeleton/
-  spider = 7** = MC 月光配对【`[LGT-3]` 起 0 → 7】，被动 = 15 任何光照/时间
-  可生成）。效果：zombie 白天开阔地（有效 15 > 7）不生成、深夜生成（有效 7
-  ≤ 7）、火把圈（块光 14 > 7）不生成 = 玩法闭环；萤石照亮处深夜也不生成敌对；
+  spider = 7** = MC 月光配对【`[LGT-3]` 起 0 → 7，与 `[UX-1]` 默认 L 7 配
+  对】，被动 = 15 任何光照/时间可生成）。效果：zombie 白天开阔地（有效 15 >
+  7）不生成、深夜生成（有效 **L** ≤ 7 ⇔ L ≤ 7）、火把圈（块光 14 > 7）不生
+  成 = 玩法闭环；**spawn 成对语义任意 L 成立**（夜露天等级 = L 本身：L ≤ 7
+  敌对照生 / 火把圈 14 恒免疫 / L = 15 夜不生成 = 用户配置选择，`[UX-1]`）；
+  萤石照亮处深夜也不生成敌对；
   **树冠/洞穴永久暗格（存储天空光 0）白天也可生成敌对**（MC 一致——洞内 24/7
   敌对生成，出生点保护圈不变）；**熔岩格 ~15 块内 hostile 永不生成**（块光 15
   对光门，`[P58]` 记档）
@@ -679,7 +759,8 @@
   resistance 与吸收池照常）；**format 16** `player.armor`（恒写、只含占位槽、
   键纪律 + 槽名-物品数据双向交叉校验点名）；**HUD 护甲行**（心行上方行 =
   hy−44 `[PRE-10]`，仅占位槽且指针捕获时绘制 = 无甲零绘制结构性免疫）；
-  **无附魔、无修复系统**（矩阵外记档）
+  **无附魔**（矩阵外记档）；**修复 = `[UX-5]` 工作台材料修复**（见「合成与容器
+  · 工作台」）
 - **氧气窒息 `[SURV-2]`**（帧锁定）：**150 空气**（`kOxygenMax`）；**眼位单格
   流体判定**（`headInFluid` 纯函数：眼格 = `eyePosition()` 含 crouch 缩减；
   水/熔岩同款 = MC 眼在水里规则——站 1 格浅池/浮漂面眼上水面 = 换气）头没入
@@ -712,8 +793,12 @@
   点名；交叉校验 damage < durability + 无 durability 物品带 damage 拒）+
   **HUD 2px 三色耐久条**（图标底部，填充 1−damage/durability，绿 ≥1/2 / 黄
   ≥1/4 / 红 <1/4，**满耐久零绘制** = 结构性免疫）+ F3 `held name d/max` +
-  破碎音复用 break（玩家侧护甲破碎无声 = Player 无 sound 通道记档）；**无
-  修复系统**（铁砧/磨刀石/同物合成/Mending = 矩阵外记档）；合成网格/炉子/营火
+  破碎音复用 break（玩家侧护甲破碎无声 = Player 无 sound 通道记档）；**修复
+  `[UX-5]`** = 工作台材料修复（**MC 铁砧语义的 crafting-grid 形式**：受损
+  工具/护甲 + 1 材料 → 输出槽 +25% max 耐久，`repair_with` 数据字段 28 件
+  shipped 全配 MC 精确材料，配方恒优先——详见「合成与容器 · 工作台」；E 面板
+  2×2 同款；无 XP 成本/成本递增 = 记档偏离；磨刀石/同物合成/Mending = 矩阵外
+  记档）；合成网格/炉子/营火
   槽不入 format 18 范围（受损物品入格读档 = 耐久回满 quirk 记档——现役内容
   无「可熔炼且带耐久」物品，仅 2×2/3×3 网格可触达）
 - **死亡统计 `[SURV-7]`**（统计系统 v1 = 死亡相关计数器；**显示** = `[PRE-12]`
@@ -793,7 +878,8 @@
   （E2E 场景范式——含 `[SURV-6]` 档位实例）；**tier grant `[SURV-6]`**：全
   grant 对（grants_effect(s)/item arrow/mob on_hit/mob arrow）可选 `tier`
   **0 基**（范围 init 交叉校验点名，on_hit_effect 同款纪律）——**无档位 in-
-  game 消费面**（信标 = 纯名列表 / 药水无酿造 / starter 27 槽满）= 记档偏离
+  game 消费面**（信标 = 纯名列表 / 药水无酿造 / **档位物品未 shipped**——
+  `[UX-8f]` 36 槽后 storage 有 9 空槽但无档位内容）= 记档偏离
 - **tick（real-dt，硬规则 8 生存计时器类）**：`Game::updateEffects`（每帧
   `updateSurvival` 后）：`remaining −= dt` ≤0 移除；tick 效果 `accum += dt`、
   **每跨过一个 interval 结算一次**（大 dt 可跨多次）；damage tick 的
@@ -960,11 +1046,17 @@
   序）；`canCraft`/`craft` 确定性纯逻辑（原料按槽序升序消耗、副本模拟
   **全有或全无**——失败背包逐位不变，产出永远放得下）；无多配方消歧仍成立
   （shipped shapeless 原料集互不重复——将来重复 = 加载序首个命中，系统不猜）
-- **E 背包面板**（`E` 开关；27 格 = 9 hotbar + 18 背包 + **2×2 合成格** =
+- **E 背包面板**（`E` 开关；**36 格 = 9 hotbar + 27 背包（4 行）`[UX-8f]`**
+  = MC 标准背包 + **2×2 合成格** =
   共享 3×3 网格模型的左上 4 格（放不进宽/高 3 的 shaped pattern——「需要
   工作台」= de facto 网格尺寸门，与 MC 一致）+ 右侧**配方列表只显示
   shapeless**（产物图标 + 名称 ×N，白 = 可合成/灰 = 不可 + `需要：` 原料
-  清单；点击行 = `craft()`）
+  清单；点击行 = `craft()`；**`[UX-8c]` 两列排布**【CRAFT-4 机制泛化：
+  compute 三处去 kind 分支，左列 (n+1)/2 行；CraftingTable kind 位级不变红线】
+  + **可合成排序置顶**（纯函数 `orderedRecipeHints` 两遍同序稳定分区
+  canCraft 真在前、组内保注册表序，点击/渲染同一 seam；工作台 shaped 列表
+  不排序 = display-only 记档偏离）+ 行内 fitLabel 约束列宽【E 面板 native
+  宽 1000→1288 = 行高 ≈2×】）
 - **工作台 `[P17]`→`[CRAFT-1]` 分块→`[CRAFT-4]` 提示**：`interact:
   "crafting_table"` 数据驱动块（破坏掉自身）；锁定时右键命中 = **打开该块的
   面板**（3×3 网格 + 输出格，不放置方块）；**每工作台块独立 `CraftingGrid`**
@@ -979,15 +1071,31 @@
   tables 拒 table_grid / ≤18 必 table_grid 拒 tables】+ **parse 时 sole 归属
   迁移**【legacy 非空 ∧ 恰 1 表 → 归属，0/多 → 丢弃，`[P44]` 先例】+ 解析期
   不变量每表必有 entry = 无 rescan）；**`[CRAFT-4]` shaped 配方提示列**：面板
-  网格旁 **33 个 shipped shaped 配方两列排布**【单列拟合因子 0.34 不可用】，
+  网格旁 **34 个 shipped shaped 配方两列排布**【单列拟合因子 0.34 不可用；
+  v1.34 炉子配方入列 = 33→34】，
   每行 = mini 3×3 pattern（暗格 + 键位物品图标，按定义左上对齐 = 合法摆放）+
   输出图标 + "name xN"（**背包可供应则白/否则暗** = `canSupply(patternBag)`
   纯函数：每覆盖格 1 单位/空格除外/跨字符合并/ItemID 升序）+ **提示行点击 =
   消费性 no-op**（不合成不动背包，吞点击 ≠ 槽外点击丢 carry）；长 name 行内
-  溢出 = 确定性 `fitLabel` 尾截（" xN" 恒保）
+  溢出 = 确定性 `fitLabel` 尾截（" xN" 恒保）；**`[UX-5]` 材料修复**（MC 铁砧
+  语义的 crafting-grid 形式）：受损工具/护甲 + 材料入合成网格 → **输出槽 =
+  修复后物品**（1 材料 +`kRepairFraction` **25%** max 耐久，damage 钳 0；
+  `matchRepair` 格索引序配对 / `applyRepair` 原位**保格内 count**【flint_and_-
+  steel maxStack 64 不丢件单测钉死】）；**配方恒优先、repair = 无配方回退**
+  （shipped 实证碰撞：受损弓 + 钻石走 infinite_bow 配方胜 / + 棍走修复，
+  Priority 专测）；`clickOutput` 修复分支（**三重守卫** = 异 item / 同 item
+  异 damage / maxStack 溢出全拒 = SURV-3 合并纪律）+ 输出图标携 outputDamage
+  （drawIcon 耐久条自动显示，零布局变化）+ "craft" 音既有路径自动；物品 JSON
+  严格字段 **`repair_with`**（白名单演进 + 空串/非串/无 durability 携带/未知
+  材料全点名；`checkRepairMaterials` init 交叉校验 CRAFT-3 范式）；**28 件
+  shipped 全配 MC 精确材料**（wood 系 3 → planks / stone 系 3 → cobblestone /
+  iron 系 3 → iron_ingot / 弓族 6 含 poison_bow → stick / 燧石与钢 → flint /
+  皮甲 4 → leather / 铁甲 4 → iron_ingot / 钻甲 4 → diamond）；**E 面板 2×2
+  同款生效**（MC 铁砧仅限工作台 = 记档偏离）+ 无 XP 成本/成本递增（无 XP
+  系统 = 记档偏离）
 - **炉子 `[P40]`→`[P44]`→`[CRAFT-6]`→`[CRAFT-5]`**：`interact: "furnace"`
-  块（破坏掉自身）；锁定时右键命中 = **打开该炉子的面板**（27 格背包 +
-  input/进度条/output + fuel 槽，MC 排布；无任何合成动作——output 自己填满，
+  块（破坏掉自身）；锁定时右键命中 = **打开该炉子的面板**（**36 格背包
+  `[UX-8f]` 4 行** + input/进度条/output + fuel 槽，MC 排布；无任何合成动作——output 自己填满，
   点击取走）；**每炉子块独立 `FurnaceState`**（`std::map<BlockPos,
   FurnaceState>` 位置序 → 逐帧 tick 迭代确定；放置时建空态、块被换/破时删态
   ——`Game::setBlock` 收口；面板打开时绑定所点方块，面板期间块交互暂停 →
@@ -1274,7 +1382,9 @@
   驱动）：物品 = 纯数据（`ItemRegistry`，151 种 = 72 隐式 block item + 79
   显式：`type: "tool"` 带 `tool.break_speed` / `type: "material"` 通用非方块
   物品——锭/木棍/染料/桶/药水/护甲/弓等，作为配方原料/产物和方块掉落）；
-  **背包 27 格** = 9 hotbar + 18 背包（`hotbar.json` `items` 定义初始 hotbar
+  **背包 36 格** = 9 hotbar + 27 背包（**4 行** `[UX-8f]`，`kTotalSize`
+  27→36 双击/shift/取半/数字键全 size 驱动零代码改动；format 24 尾部补 9 空槽
+  值保真迁移）（`hotbar.json` `items` 定义初始 hotbar
   满堆栈 + `inventory` 段隐藏 starter 槽 16–26）；拾取确定性入包（先合并同物
   同耐久堆、再找空位，hotbar 优先）；破坏方块按 `properties.drops`（物品名，
   init 严格校验）+ `drops_count`（1..64 默认 1，须 ≤ 掉落物品 max_stack）+
@@ -1310,8 +1420,8 @@
   日志行可区分（`World auto-saved to` vs `World saved to`）
 - **文件**：`data/saves/<slot>.json` = **seed + 与生成态的 diff + 完整游戏
   状态**——不重复存储地形，只存「和这个 seed 生成的世界不同的格子」（
-  `blocks`/`fluids` 编辑列表，破坏 = `"air"`）+ 玩家全状态 + 昼夜时间 + 27 格
-  背包 + 选中格 + 掉落物实体（含 120 s 寿命与拾取延迟计时器）
+  `blocks`/`fluids` 编辑列表，破坏 = `"air"`）+ 玩家全状态 + 昼夜时间 + **36
+  格背包 `[UX-8f]`** + 选中格 + 掉落物实体（含 120 s 寿命与拾取延迟计时器）
 - **diff = journal 增量 `[PIPE-2]`（O(会话编辑数)）**：World 写收口位置集
   **journal**（observer，含位移陷阱双上报）+ 退出**按 journal 触及 chunk
   重算 fresh**、仅 live≠fresh 输出（**与 diffWorld 字节等价**，进程内 oracle =
@@ -1334,7 +1444,7 @@
   至多一个 + 与游戏旗标互斥 = rc 2 点名）；**记档偏离**：无游戏内选档面板/
   会话内换档（游戏无标题画面，会话内载档 = 世界重建级架构变更矩阵外；多槽
   切换 = CLI `--save` 既有面；「保存并退出」= 既有 ESC/退出存档路径）
-- **format 22**（`kSaveFormat` 22 / `kSaveFormatMin` 1；**1..22 全部可加载**，
+- **format 24**（`kSaveFormat` 24 / `kSaveFormatMin` 1；**1..24 全部可加载**，
   各按字段集 + 逐 format 白名单，规则式迁移——「未知字段 = 报错」
   rejectUnknownFields 保持）：
   - **player**：pos / yaw / pitch / `health` / `absorption`（12+，[0,64]，
@@ -1345,7 +1455,12 @@
     零运行期成本；onGround 不存 = 位置派生记档）** / `effects`（8+ 名字序，
     `{name, remaining, tier?}` tier omit-when-0（20+））/ `armor`（16+，恒
     写，只含占位槽）/ `stats`（21+，恒写，空对象合法——deathCount +
-    kill.<name> 封闭词表）
+    kill.<name> 封闭词表）/ **`tutorial`（23+，恒写 {id,count}/{}——`[UX-7]`
+    教程进度：id 失效 = 重置首步、count 越界损坏点名、≤22 读入免迁）**
+  - **inventory**：**36 槽**（`[UX-8f]`，24+ 写恒 36；per-format 尺寸检查
+    **双向点名**——24 须恰 36 / ≤23 须恰 27，错计数 = "exactly 36 entries"
+    式版本谎报拒绝；**23→24 迁移 = 尾部补 9 空槽**原 27 槽逐槽值保真
+    `kPreUx8fInventorySlots` 命名常量）
   - **world**：`blocks`（diff，破坏 = air；**同格不得同时有方块 + 流体编辑**）/
     `fluids`（diff，format 9+ 带种类名 `[x,y,z,level,"water"|"lava"|"honey"]`，
     format 8 的 4 元素编辑加载时全迁移 water）/ `states`（15+，全量含默认值，
@@ -1363,7 +1478,8 @@
     双向交叉校验（container 块 ⟷ 状态条目逐格点名）
 - **读档**：正常从 seed 生成世界 → 逐格应用编辑（**先方块后流体**）→ 全量重
   传播光照（`propagateAll`）→ 恢复玩家/背包/实体/时间（`restorePosition` 含
-  `fallStartY` 重钉 `[P36]` + `setVelocity` `[SAVE-2]`）→ per-block 状态重建
+  `fallStartY` 重钉 `[P36]` + `setVelocity` `[SAVE-2]`；inventory ≤23 → 24
+  尾部补 9 空槽值保真 `[UX-8f]`）→ per-block 状态重建
   （furnaces/campfires/tables = 段内条目，fires = 段内条目，crops/saplings/
   beacons = **rescan** 范式——tables 例外 = parse 时不变量保证每表必有 entry）
   → 光传播。演示区外编辑会带上「生成的 chunk」（读档后世界含全新世界没有的
@@ -1544,15 +1660,22 @@
   fract(x+0) = x 位级恒等）；`render.water_ripples` getBool 代码默认 true +
   off = v0.26.0 位级恒等；**偏离**：lava 不闪 / 侧底静 / 非顶点波；
   water.png 周期化重跑字节零变化（16 格网内恒等）
-- **云 `[PRE-4]`**：basic program **纯色半透明平板层**（y = `kCloudHeight`
-  **108** / **16 块格** / **50% 密度** splitmix64 顶位 / 漂移 t = frame/
-  `kCloudFramesPerCell` **6000** = **100 s/格** MC 节奏 / alpha **0.55**，全
-  命名常量零 config；u_useTexture=0 + u_alpha + culling off + depth on = 信标
-  光束 `[P83]` 同款范式，世界坐标恒等 model 单 draw；**缓存 mesh 仅相机云格/
-  t 变化时重建** = 无输入恒静态 ×2 RAW 位级、走路每 16 块一次 = 99.x 纪律；
-  `render.clouds` getBool 代码默认 true，off = 零 mesh 零 draw 位级恒等）；
-  **偏离**：云 = 纯色平板无云团形状 / 云窗口 **±384 块**窗外 pop-in / 云不随
-  昼夜变色（恒白）
+- **云 `[PRE-4]`→`[UX-9a]`**（v1.48.0 **架构翻转 = 独立 cloud program
+  fragment 逐像素**，消费用户两轮实机报障「云像纸片非方块组成」+「看不出
+  云层厚度」）：PRE-4 纯色半透明平板 mesh（16 块格 50% 密度）→ **两级颗粒**
+  （region 16 格 **50%** ∧ sub 4 块 **75%**，世界锚定专用盐同 t 步，覆盖度
+  **37.5%**）+ **厚度**（4 向边界带 **MC 侧壁着色** ±X 0.8/±Z 0.6 相机侧判定
+  + 底面恒白；4 条常数近似记档）+ y = `kCloudHeight` **108** / 漂移 t =
+  frame/`kCloudFramesPerCell` **6000** = **100 s/格** MC 节奏 / alpha **0.55**
+  （全命名常量零 config）；**GLSL 330 无 64 位整数 = uvec2 对模拟位精确**移植
+  CPU mask 链（三层核对 107,520 评估 + 131,072 像素 0 失配；纯场四函数
+  mask/sub/height/timestep 保留 = CPU oracle）+ init 一次性 **16384² quad**
+  （~240 B 全期唯一上传——门内走位探针揪出 **iGPU buffer 更新 ~140 ms/MB** =
+  旧 mesh 每跨 16 块云格 139 ms 卡顿根因；修后跨格 render max 142.9 →
+  **2.5 ms（57×）**）+ per-frame 平移锚 4 块格网（世界锚定零游移）+
+  **云延伸地平线**（旧 ±384 块窗口硬边消失）；mesh 面整体移除（−175 行）；
+  `render.clouds` getBool 代码默认 true，off = 零 draw 位级恒等；**偏离**：
+  云不随昼夜变色（恒白）
 - **掉落光照 `[PRE-6]`**：块立方/model 物品掉落顶点 skyLight = 1.0 硬编码恒白
   （洞穴石头立方亮如白昼）→ **vert 端 per-draw uniform 覆盖**（basic.vert
   唯一改动：u_useLightOverride 3 uniform + 1 行门控分支；**frag 零改动** =
@@ -1633,7 +1756,7 @@
   item JSON 无 description = MC 同款无描述）+ 效果图标 hover tooltip 结构不可
   行（见「状态效果 · HUD」）
 - **F3 调试 overlay**（`[P15]`，任意指针状态可切换，**英文保持** `[PRE-1]`
-  记档）：15 行 = `TokenMine.cpp v1.33.0`（banner）/ `%d FPS | frame %d`
+  记档）：**16 行** = `TokenMine.cpp v2.0.0`（banner）/ `%d FPS | frame %d`
   （FPS = 真实 dt 平滑取整）/ `chunks %d | draws %u | verts %llu` / `pos %.2f,
   %.2f, %.2f yaw %.2f pitch %.2f` / `col (x, z) seed N` / `time %.3f day %.2f
   locked|free` / `streaming engaged|idle pending N radius N` / `inventory
@@ -1641,7 +1764,9 @@
   （`[P72]`）/ `oxygen N`（`[SURV-2]`）/ `hunger X / X` / `held name d/max`
   （`[SURV-3]`，无 = "(none)"）/ `difficulty %s`（`[P25]`）/ `effects name
   Ns 罗马 | ...`（无 = "(none)"；`[PRE-12]` 档位罗马）/ `stats deathCount N |
-  kill.<name> N | ...`（无 = "(none)"；`[PRE-12]` stats 行）
+  kill.<name> N | ...`（无 = "(none)"；`[PRE-12]` stats 行）/ `tutorial
+  off|done|<id> p/c`（`[UX-7]`：禁用 = off / 完成或跳过 = done / 进行中 = 步
+  id + 进度）
 - **死亡屏**（`[P16]`/`[PRE-1]`）：「**你死了！** / **按 R 重生**」中文化（红
   字——`[P36]` 文字着色修复：ui.frag textured 分支 = `texel.rgb × u_color.rgb`
   【此前 u_color 只调制 alpha，死亡屏红字被静默忽略渲成白字】，图标/心带/白字
@@ -1649,16 +1774,23 @@
 - **中文 UI `[PRE-1]`**：**UTF-8 解码渲染**（纯函数 `utf8NextCodepoint` 严格
   1..4 字节——拒 overlong/surrogate/>U+10FFFF/5-6 字节/孤立续字节/截断，非法
   字节 nullopt + pos+1 = 每坏字节一个 `?` 旧逐字节回退语义保持）+ **CJK glyph
-  静态表 33**（19 UI 字【你死了按重生熔炉工作台背包合成需要关闭——PRE-1 表仅
-  18 漏 `作`，`[CRAFT-4]` 补】+ 10 中文标点（，。！？：；“”（））+ 4 余量
-  【物品方块】；离线 Noto Sans CJK SC Regular em 16 提取 rows 5..20 窗口阈值
-  ≥128，.py 静态表范式 = ASCII 同款，TTF 仅工具期）+ `glyphUv(uint32_t)` 泛化
+  静态表 401**（`[PRE-1]` **33** = 19 UI 字【你死了按重生熔炉工作台背包合成
+  需要关闭——PRE-1 表仅 18 漏 `作`，`[CRAFT-4]` 补 = 34】+ 10 中文标点（，。！？
+  ：；“”（））+ 4 余量【物品方块】→ **`[UX-6]` 392**（游戏文档语料 top 330 ∪
+  教程全词集零缺字 ∪ 既有 33 ∪ 标点，codepoint 序 0x00B7..0xFF1F；**来源钉定**
+  NotoSansCJK-Regular.ttc SHA-256 + 10 face/SC index 2/版本 2.004 提取前验漂移
+  点名拒 + 既有 33 字 33/33 位级自校验先行；**加字 = 改 .py `CJK_CHARSET` 清单
+  一条命令零代码**）→ **`[UX-8a]` 395**（排/摆/输）→ **`[UX-9b]` 401**（亮处
+  把敌暗煤）；PIL FreeType PRE-1 参数光栅化 em 16 / line box (19,5) / rows
+  5..20 / coverage ≥128，TTF 仅工具期）+ `glyphUv(uint32_t)` 泛化
   （ASCII 32..126 原 cell 公式零改动 / CJK lower_bound 二分 / 未知 `?` 旧格）+
   textWidth/makeTextVertices 按 codepoint 迭代（CJK 16 px 等宽 advance，ASCII
-  宽度逐位不变）；**图集 = 既有死格复用**（ASCII 控制字符 cell rows 0..3 恒
-  透明从未被采样，32 格恰装 32 字形；`作` 取 ASCII DEL 死格 127——
-  font.png **256×512 尺寸零变化** + 既有 32 格逐位复现自校验 + 全图仅 cell 127
-  一格变 56 ink px）；**8 处 UI 字符串中文化**（死亡屏 You died! → 你死了！/
+  宽度逐位不变）；**图集 = 尾部 append**（`[PRE-1]`/`[CRAFT-4]` 既有 34 字 =
+  ASCII 控制字符死格 rows 0..3 复用【`作` 取 ASCII DEL 死格 127】；**`[UX-6]`
+  font.png 256×512 → 256×2080**（新字按 codepoint 序填 cell 128..486，rows
+  61..64 = 32 cell 余量 → 424 字内零代码加字；**顶 512 行逐字节不变** = ASCII
+  UV 位级恒等 + 免重锚红线，raw 扫描线独立核验 + 双 FNV 锚复算；重跑 ×3 md5
+  恒 704ca41e = 确定性）；**8 处 UI 字符串中文化**（死亡屏 You died! → 你死了！/
   Press R to respawn → 按 R 重生 + 面板 Furnace → 熔炉 / Crafting Table →
   工作台 / Inventory → 背包 / E to close ×2 → 按 E 关闭 / Crafting → 合成 /
   needs: → 需要：）；**F3 调试屏保持英文**（开发者工具记档偏离）+ 悬停/配方
@@ -1667,7 +1799,14 @@
   F3/死亡屏/手持/准星）布局在「UI 像素」空间 = 窗口**逻辑**尺寸 ÷ `ui.scale`
   （config [1,4]，代码默认 1.0，**已提交 config = 1.5 用户调值**），正交投影
   拉伸到可绘制区——GPU 放大（NEAREST 纹理保持锐利），SDL 逻辑鼠标坐标 ÷
-  ui.scale 做命中测试；**高分 UI 素材 `[P35]`**：字体 16×16 字形（32 px cell
+  ui.scale 做命中测试；**`[UX-8e]` 字体独立缩放 `ui.font_scale`**（double
+  (0,4.0] **代码默认 1.0** = 对 v1.44.0 位级恒等；absent/非数/非有限/≤0/>4 全
+  点名 = SAVE-1/UX-1 纪律，config.json 零改动）——**只缩文本不缩图标/面板
+  几何**：renderUi 全部文本 scale 单点缝（addText 19 / textWidth 12【配对一致
+  性 = fs≠1 居中仍精确】/ fitLabel 3 / tooltip 2）+ 三处文本堆栈行距 ×fs（F3 /
+  教程 tip / tooltip，lround 恒等 at 1.0）；图标/槽位/面板/心行/护甲行/效果行
+  间距零动 = 独立性本体；fs = 1.0 时 s×1.0 IEEE 精确 = 结构免疫根）；
+  **高分 UI 素材 `[P35]`**：字体 16×16 字形（32 px cell
   8 px 偏移）、平面物品图标 32×32、文字缩放 double scale（分数缩放支持）；
   **面板自适应 `[P35]`**：面板 native 设计，UI 空间更小时整个面板（槽/间距/
   内边距/标题/配方行 + 按同一系数绘制的字体 scale 与图标尺寸）等比缩小（长度
@@ -1774,18 +1913,20 @@
     tick（3 帧节奏 + 蜂蜜 1/3 门）/ 炉子/营火/作物/树苗子步（整数子步倒计时）/
     火蔓延 roll（固定帧步纯函数）/ 氧气体积（帧计数 6/150）/ mob 整数帧燃烧
     格 / swing 相位 / 流送填充（2 列/帧）/ 光照 job 预算（2+2/帧）/ 环境音
-    roll（300 帧）/ 云漂移（帧函数）/ 水波纹（帧 mod 120）
+    roll（300 帧）/ 云漂移（帧函数）/ 水波纹（帧 mod 120）/ 教程状态机
+    （`[UX-7]` 纯函数步进，零 real-dt）
   - **real-dt（真实墙钟，生存计时器类）**：饥饿衰减/星饥伤害/自然回复 / 进食
     饮用通道 / 破坏进度 / 弓蓄力 / 坠落伤害结算（fallStartY 记录）/ 熔岩灼烧 /
     火块燃尽（m_fires remaining）/ 效果 remaining 与 tick 累加 / 实体 age /
     物品拾取延迟 / 自动存档计时器 / 双击窗（0.3 s）/ 粒子运动
   - **音频不入帧状态**（事件驱动，截图/存档零影响）
-- **无输入运行逐字节可复现**：截图只在**帧边界**字节一致；**148 次无输入基线
+- **无输入运行逐字节可复现**：截图只在**帧边界**字节一致；**171 次无输入基线
   门**（新 ×2 RAW 字节一致 + vs `/tmp/opencode/base18.png` 字节一致，或论证
   「无输入下零活动」= **结构性免疫**免重锚【变更在无输入路径永不执行——如
   炉子永不生成 = m_furnaces 空双结构惰性 / 无掉落 = 零 item draw / 无效果 =
   count 0 fast-exit / 音频 = 无事件】，或**重锚记档**【渲染基线本身变更——
-  LGT-2 门 83 / PRE-4 门 111 云入基线 / PRE-5 门 112 cutout 入基线】；base18
+  LGT-2 门 83 / PRE-4 门 111 云入基线 / PRE-5 门 112 cutout 入基线 / **UX-9a
+  门 168 云 shader 化（168140 → 179116 B）**】；base18
   锚随环境态（WM 平铺/机器态）刷新有先例 = PITS 265/315 类，非回归）
 - **指针锁定协议**（硬规则 5）：yaw 0 = -Z、正 = 左转；pitch 正 = 上、clamp
   ±~89°；**鼠标转向仅在指针锁定时生效**（无输入运行字节复现的保证；物理光标
@@ -1803,7 +1944,7 @@
   最短可往返精度（位精确）；worldgen 演进 = 旧存档未编辑列按**当前**生成器
   重建（洞穴/矿/树/基岩/路径演进先例：P86/88/93、GEN-1..8——编辑权威、零
   format）
-- **质量门**：**1912/1912 单元测试**（`./build/bin/tokenmine_tests`）+
+- **质量门**：**2075/2075 单元测试**（`./build/bin/tokenmine_tests`）+
   `-Wall -Wextra -Wpedantic -Werror` **0 警告**；机制逻辑一律上提**纯函数**
   （campfire 范式：`Result<T>` 显式传播 + 游戏与单测共享同一文件），像素/
   存档证据 = E2E 门（`docs/PROTOCOL.md` E2E 协议）；**禁止** TODO/伪代码/魔法

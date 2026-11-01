@@ -3,6 +3,16 @@
 > 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/v1x/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v2.0.0（2026-11-02）— 1.x 收官里程碑发布（扫尾三件事，门 171 全 PASS）
+
+1.x 任务表 40/40 + UX-8g/UX-9 实机报障 4 项全完成后的里程碑发布（无新玩法），用户 11-02 定案三件扫尾：
+
+1. **1.x 阶段文档归档**：`docs/archive/` 181 份 phase 文档 `git mv` → `docs/archive/v1x/`（保历史）+ 全仓 556 处引用零残留 + BACKLOG v1.x 表标记归档、顶部开 v2.x 任务表占位（待用户定范围）+ AGENTS「现状」节瘦身（1.x 巨段编年史 149k + 逐门记录抽出 → `docs/archive/v1x/HISTORY.md` 只读全史）+ 活文档刷新到 2.0 状态（MECHANICS 12+ 处 / KNOWN_ISSUES 8+12 处 / GAMEPLAY 8 处，全数字源码实证）+ 门协议工具入仓（`tools/gate_compare.py` / `perf_gate_config.json` / `xenv.sh` = PITS 317 重建纪律）
+2. **第三人称准星不压头**（用户报障，B 方案 = MC 同款抬相机）：轨道点沿相机 up 轴抬高 `kThirdPersonOrbitHeight` 0.4 块（`Camera::up()` = cross(right, forward) 单一三角真源，头 top 降 29px / 底缘降 96px 低于屏幕中心 = 准星零重叠，任意俯仰角恒定）；瞄准射线两模式仍自眼位（UX-8g 红线零动）= 固定 TP 视差 MC 同款记偏离；First 分支字节不变
+3. **发布**：tag v2.0.0 + GitHub release（2.x 迭代起点）
+
+2075/2075（扫尾② +3）、`-Werror` 0 警告、banner v2.0.0。门 171：S1 **第 171 次结构性免疫 + 默认 First 位级恒等 + base18 锚连续 179116 B 免重锚**（四方 ×2 全字节一致 + 跨版 savenorm EXACT）+ S2 TP 准星 A/B 判别 PASS（OLD 中央带 160 皮肤 px = 压头实证 / NEW 中央带 0 + 下移带 720 = 头降 29-96px 解析吻合 + 中心像素 OLD 面部 vs NEW 草逐像素 + 遮挡回归 2390 皮肤 = 相机出墙保持 + 跨侧 savenorm EXACT 同世界最强形）+ S3 2075 + 性能 A/B v1.50.0 vs v2.0.0 同世界同成本（changesApplied 9/3/1 逐位 + 终档 18/18 55/55 diff 0）——详见 docs/archive/phase-2.0.0.md。
+
 ## v1.50.0（2026-11-02）— UX-9c 环境底光可配置（UX-9 二轮实机报障行 ③ = 系统收官，门 170 全 PASS，tag v1.50.0 + UX-9 系统 release）
 
 用户 11-01 实机诉求「洞穴底光调亮，最好 config 可配置不同环境、不同时间的视觉亮度」= 一夜/洞穴/水底三诉求收敛两键（夜晚露天既有 render.night_sky_level UX-1，本项 = 全遮挡环境新键）：`render.cave_ambient`（double [0,1]，代码默认 kAmbientFloor 0.03f = 复用既有常量，对 v1.49.0 位级恒等）——basic.frag 光公式唯一改动 `amb = light <= 0.001f ? u_caveAmbient : u_ambient`（全遮挡区 = 洞穴/深水/室内烘焙光恒 0 的底值单独可调，深水衰减到 0 自动同享零额外代码，夜晚露天 light>0.001 不触 = 两键正交）+ readCaveAmbient 严格读纯函数（readNightSkyLevel 同范式：absent/非数/非有限/[0,1] 越界全点名，浮点合法无整数检查）+ init 扩进既有 per-run 常量块第 3 uniform（零新 Game 成员 YAGNI，config.json 零改动）。2072/2072（+11）、-Werror 0、banner v1.50.0。门 170：S1 **第 170 次结构性免疫 + 默认位级恒等 + base18 锚连续 179116 B 免重锚最强形**（六跑：new-default ×2 / new-explicit-0.03 ×2【显式==absent】/ old ×2 全字节一致 + 跨版 savenorm EXACT）+ S2 洞穴 A/B PASS（受控密封石室：A=0.03 ×2 32119 B / B=0.3 ×2 74863 B + **diff 505,176 px = 100% 全帧 0 px 变暗**（无输入未锁 HUD 零绘制世界铺满）+ A(4,4,4)→B(36,36,36) ≈10× 地板亮化 + savenorm A≡B EXACT）+ S6 ×2 精确点名 + 性能 A/B 同世界同成本【首轮 render med 偏置重跑证伪 = 执行序噪声 + changesApplied 9/3/1 逐位 + 终档 18/18 55/55 diff 0】——详见 docs/archive/v1x/phase-ux9c.md。

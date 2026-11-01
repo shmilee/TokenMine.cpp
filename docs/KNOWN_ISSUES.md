@@ -7,15 +7,23 @@
 
 ## 渲染
 
+- 【设计记档】**第三人称屏幕中心射线与眼位瞄准射线有固定视差** — v2.0.0
+  抬相机（轨道点沿相机 up 抬高 `kThirdPersonOrbitHeight` 0.4 块，准星不再压
+  头）引入：瞄准/交互射线两模式仍自 `eyePosition()` 出发（UX-8g 红线），
+  屏幕中心（视图 forward）射线与眼位射线**平行偏移 0.4**——第三人称下「准星
+  正对的像素」与「射线打中的格」在远处有轻微错位（近处 <1 格不可感，MC 第三
+  人称同款观感）。**非缺陷**：代码零补偿（补偿会破坏眼位瞄准的 MC 语义与
+  UX-8g 等价性）；需要精确瞄准（卡视角射击/贴脸点射）时按 `C` 切第一人称
+  （第一人称两射线严格重合 = 位级恒等）。`[2.0.0]`
 - **叶子挨叶子的内部面仍会生成** — 剔除规则 v1 只判断"邻居是否 opaque"，结果正确但多发了面。水-水的内部面已在 Phase 9 由流体网格化剔除（相邻水位相同/更高的水面不出面）；叶子-叶子待细化为"邻居是否为同种方块"。`[Phase 3]`（水部分 `[Phase 9]` 已解决）
-- **玻璃/叶子不衰减光** — 光的遮挡对非水方块仍是二值的（opaque=15，其余=0）：Minecraft 中玻璃/叶子有衰减（叶子有 fancy 选项）。水的每格衰减（天空光 -3）已在 Phase 9 实现；玻璃/叶子要支持需给 `BlockProperties` 加 0-15 的 opacity 字段并改传播算法（衰减系数）。`[Phase 7]`（水部分 `[Phase 9]` 已解决）
-- **水面是 level/8 缩放的立方体顶面，无波纹动画** — 流动水（level 1-7）的顶面高度按等级线性缩放，静态观感；Minecraft 有水面波纹动画。`[Phase 9]`
+- **~~玻璃/叶子不衰减光~~** — `[Phase 7]` 已修复 `[LGT-2]`：块属性可选字段 `light_opacity`（0-15，缺省由 opaque 派生 = 未设内容逐位复现旧行为）+ 统一进入格成本（天空光按 opacity 逐格衰减）；shipped leaves 2 / glass 1 = MC 值。**残余偏离**：MC 叶子 fancy 选项（纹理 alpha 不均衰减）未实现 = 均匀衰减。水的每格 -3（`[Phase 9]`）为既有先例。
+- **~~水面是 level/8 缩放的立方体顶面，无波纹动画~~** — `[Phase 9]` 已修复 `[PRE-3]`：静态水面 → 帧锁定 shimmer（水纹理 = 纯白噪声 GL_NEAREST，顶面 UV 采样窗逐帧平移即闪烁；幅度 0.06 tile ≈ 1 texel / 波数 0.8 rad/block / 周期 120 帧 = m_frameCount % 120 纯函数；`render.water_ripples` 代码默认 true，off = 对 v0.26.0 位级恒等）。**记档偏离**：熔岩不闪、侧/底静态、仅顶面波。
 - **完全浸没时水体几何自剔除、"看到空气"** — 同种流体面互剔（level 相等/更高的邻居不出面）：深水中一格满水有 6 个同级邻居 = 零面，相机在水内时周边水体几何全部不可见（99.x 用户报告"走进深水后周边像空气一样透明"）。`[Phase 9]` 观感由 **`[99.5]` 流体覆盖层**缓解：相机格含流体时全屏半透明染色（水蓝 (0.20,0.42,0.85,0.45) / 熔岩橙 (0.95,0.42,0.05,0.60)，HUD 之下、世界之上，MC 同款 fluid overlay）；无波纹/无深度渐变/无气泡（v1 注记）。
 - **按面采样光照，无逐顶点插值/环境光遮蔽** — 每个面采样面后方一格的光值，4 个顶点同值（块状光照感，Minecraft 经典观感）；无 AO 阴影。`[Phase 7]`
 - **昼夜是呈现层缩放，不是夜间重算光照** — 天空光恒按正午存储（0-15），渲染时 sky × dayFactor（夜晚=0）。Minecraft 会在夜间真正重传播光照（例如日落时光线从洞口退出的动态变化）；本实现夜晚的天空光区域是"均匀变暗"，无动态传播变化。方块光（glowstone）不受昼夜影响（与 MC 一致）。`[Phase 8]`（**`[LGT-3]` 已解决**：缩放 → **天空光场对源等级仿射（无损）重演**——源等级 S = 7 + 8×dayFactor（正午 15 / 深夜 = 月光 7）的收敛场 = `max(0, stored − (15−S))` 逐格精确（所有天空光源共享同一等级 + 逐格成本与 S 无关；confluence 单测 = 直接改源等级重传播 vs 仿射变换逐格相等钉死），shader 天空项与生成光门（`currentSpawnLight`）求值同一公式 = **零重传播**的 MC 同款日落撤退/黎明回涌（亮区沿 `stored = 15−S` 等值线向洞口收缩）。**记档**：分数 Δ 平滑撤退（MC 量化超集）。**月光地板 = 10-27 用户实机定案落实**（深夜全黑无法夜视不可玩 → 推翻立项时"矩阵外"记档）：`kNightSkyLevel` 7（MC 午夜露天月光），源等级 S = 7 + 8×dayFactor，敌对 trio spawn_max_light 0→7 配对【深夜露天 7 可生成保夜险 / 火把圈 14 免疫 / 白天露天 15 不生成 = 玩法闭环不变】。**UX-1（v1.35.0）转为可回退设置**：`render.night_sky_level` [0,15] 默认 7 = 位级恒等，0 = 全黑夜且环境底随地板归零，spawn 成对语义任意 L 成立（夜露天等级 = L 本身：L≤7 敌对照生 / L=15 夜不生成）——详见 phase-ux1.md）
 - **昼夜时间按每帧固定 1/60s 推进（非墙钟）** — 保证无输入运行（截图验证）逐字节可复现；代价是非 60Hz 显示器上昼夜的真实时间速度按比例偏差（120Hz = 2× 速）。`[Phase 8]`
 - **太阳/月亮/星星是 billboard 圆形 sprite** — 太阳 40px / 月亮 28px / 星星 2px 的像素级圆形 quad（着色器 view-space 膨胀；不用点精灵——Mesa ANV 等驱动会把 shader `gl_PointSize` 钳到 1）。无纹理、无月相、无星星闪烁；星星固定在以世界原点为心的 r=800 上半球（走路时有极小视差），无银河。`[Phase 8]`
-- **无云、无昼夜音效** — 云层与昼夜环境音未实现。`[Phase 8]`
+- ~~**无云、无昼夜音效**~~ — `[PRE-4]` 已解决（云层 + 昼夜环境音 3 上下文）；**`[UX-9a]`（v1.48.0）云方块化**：两级颗粒（region 16 格 50% ∧ sub 4 块 75%）+ 厚度 4 向边界带 MC 侧壁着色 + 独立 cloud program fragment 逐像素（iGPU buffer 140ms/MB 卡顿根因消除，跨格 render 142.9→2.5 ms）+ 云延伸地平线（384 块窗口硬边消失），详见 phase-ux9a.md。`[Phase 8]`（`[PRE-4]`/`[UX-9a]` 已解决）
 - **世界边缘即"虚空"（无雾）** — 未加载区域读作 air，没有雾效/边缘遮挡，站在流式加载的边缘能看到悬空截面（Phase 14 起"边缘"随玩家移动，不再是固定的演示区边界）。`[Phase 3]`（流式部分 `[Phase 14]` 已缓解）
 - **顶面/底面纹理朝向约定** — Phase 3 修正 Y 面绕序后，顶面纹理的 u 轴指向 +Z、v 轴指向 -X（与 Minecraft"顶面纹顶部朝向 -Z"不同）。占位纹理下无视觉影响；正式纹理阶段可统一调整。`[Phase 3]`
 - **alpha cutout 无 discard（透明纹素仍写深度）** — 混合 pass 用 src-alpha 混合、无 `discard`：alpha=0 的纹素视觉透明（贡献 0），但深度照常写入——花/十字植物面片"透明孔"后面的几何会被孔遮挡（孔内看到深度而非透过去）。leaves（~12% 透明孔）/glass 既有同类行为；Phase 45 的十字植物花（allium/tulip/cornflower）同类。修复 = shader 加 `if (alpha < 0.5) discard;`（需先确认无其他依赖深度写入的混合几何）。`[Phase 3]`（十字植物部分 `[Phase 45]`）
@@ -23,7 +31,7 @@
 
 ## 世界 / 生成
 
-- **洞穴是"奶酪洞"** — 单个 3D 噪声阈值雕刻（`caves.threshold`），生成的是团块状空腔，不是 Minecraft 式的 spaghetti 隧道（两条 3D 噪声相交）。形状可用配置调，但拓扑类型要等以后升级。`[Phase 4]`
+- **~~洞穴是"奶酪洞"~~** — `[Phase 4]` 拓扑升级 `[GEN-1]`：单噪声奶酪洞 → 两 3D value-noise 中位带相交管状隧道（MC spaghetti 同款）+ 洞口 surface_guard 0 + spawn_clear_columns 2 出生区结构保护 + 每湖 lava 带排除盒；参数再标定 `[GEN-4]`（noise_scale 0.09→0.05 = 管粗洞大、口袋 −91%、中位洞体积 9-130×）；浮空树 `[GEN-5]` 修、树放置半区 `[GEN-6]` 修。
 - ~~**矿脉是简化随机游走**~~ — `[GEN-3]` 已解决：**MC 3×2×1 旋转椭球脉**（`world/ore_vein` `planOreVein` 纯函数：整数谓词 `4u²+9v²+36w²≤36` = 21 格/球，6 轴置换取向，`vein_size` 语义演进为**椭球簇数 K ∈ [1,8]**；shipped 全 K=1 + 单轮密度标定）。格网/概率门/起点/盐流/跨 chunk 无缝/deep-only 契约逐位保留。
 - **旧存档未编辑的 deep 石按新脉形生成** — 存档只存块编辑（diff vs 生成）：读档后**未被玩家编辑**的 deep 石列仍由世界生成器按当前（GEN-3 椭球）脉形生成——旧存档里的矿脉位置/形状 ≠ 当时的随机游走（与地形同源的 worldgen 演进，`[GEN-1]` 面条洞穴同款先例：存档不重生成，只重演编辑）。已编辑列不受影响（编辑权威）。`[GEN-3]`
 - **矿感 = 脉更大更稀（MC 1.18+ chunky sparse）** — 单脉 21 格（vs 旧 9 格游走）+ 概率降档（标定后 ~÷2-5：coal 0.4→0.154、iron 0.25→0.0855、gold 0.12→0.0376、diamond 0.05→0.0101、lapis 0.08→0.0208、gravel 0.25→0.0445）：挖矿"走更远才见脉、见脉收益更大"（diamond 单次可达 21 格 vs 旧 5 格）。**标定残留（单轮纪律记档）**：探针新/旧格数比 diamond 0.641×、lapis 0.732×（低于 [0.8,1.25] 带——低概率下格网通过集换血 + 截断脉占比变化的非线性，单轮后接受；软带测试按钉死值防漂移）。`[GEN-3]`
@@ -59,10 +67,10 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 （1261→631 ms/300f 窗）、fill churn 窗 tick 1.5-2.3→0.3-0.4 ms（−80%）、
 沉降下界 0.19-0.30→0.10-0.16 ms（−50%，全集合遍历消除）。块变更（挖掉
 静置水片下方的支撑）会强制受影响 chunk 走一次（walk-pending，单测钉死）。**流送边界活性补洞 `[STRM-2]`**：新 chunk 出现（`insertChunk`/`getOrCreateChunk`）同款强制——自身 + 6 面邻中持有该 kind 流体的 chunk 各走一次（`wakeFluidChunks`，setBlock UNSTICK 镜像）：pre-fix 一个 settled 冷流前对 void 的 spread 被 `setFluid` 拒（"the void stays dry"）后 chunk 转冷，目标列流送到达**不唤醒**它 = 级联永久卡在流送边界（门 116 场景插桩实证：前沿 tick 4 被拒转冷，目标列 frame ~15 已集成，其后 395 tick 零推进；CellReader 缺失 chunk 读 air = 表面条件全满足而写入静默失败，排障须探针 setFluid 拒绝分支 PITS 271）；反向同病 = 带生成海的新 chunk 插入后自身冷、不与邻接 settled 流体互扰。唤醒仅在插入事件（streaming 节奏）= 99.8 性能面零回退（`SettledWorldStaysColdWithoutInsertions` 钉死）；性能 A/B 的 fluidCells 窗差 +1/+2 = 该修复的行为语义（静态梯度提前一格越界，非 churn 放大）。
-- **只有一种流体（水）** — 无岩浆/蜂蜜等；`fluidBlock()` 取第一个 `properties.fluid` 数据方块作纹理参考，加第二种流体需扩展存储（level 数组按流体类型分）。`[Phase 9]`
+- **~~只有一种流体（水）~~** — `[Phase 9]` 已解决：`[FLUID-5]` 熔岩（9..16 编码、水/熔岩 6-邻反应 → obsidian/stone、熔岩桶、燃烧 pass）+ `[FLUID-6]` 蜂蜜（17..24、粘度 = 帧锁定 tick 周期 3、无 water_reaction 字段 = 反应 pass 数据驱动惰性）= 三种类 6-邻共存互不替换。`fluidBlock()` 取 `properties.fluid` 数据方块作纹理参考的机制保留；**残余**：种类词汇表在代码（FluidKind），加新种类仍需改编码区间（记档偏离）。
 - ~~**草方块掉小麦种子（不再掉泥土）**~~ — `[Phase 52]` 已修复：grass `drops` 改回 `dirt`（MC 语义）+ `chance_drops: [{wheat_1, 1, 0.125}]`（偶尔种子，0.125 = MC 基础概率）。种子来源 = 草概率掉 + 未熟作物（`wheat_1..6`）掉落。`[Phase 48]`（概率系统 `[Phase 49]`、多掉落列表 `[Phase 52]` 已就位）
 - ~~**作物可种在任何朝向的表面**~~ — `[Phase 53]` 已修复：新增 block 可选字段 `plant_on`（方块名数组）——放置时目标格**正下方**须为列表之一，不符 = 静默 no-op（不消耗物品）；纯函数 `canPlantAt`（canPlaceAt 同款可单测）+ init 每条目存在性校验（grows_on 纪律）。首个使用者 = `wheat_1..6` 的 `["farmland"]`（Minecraft 耕地约束落地）。`plant_on`（放置门）与 `grows_on`（生长门）相互独立。`[Phase 48]`（生长条件 `[Phase 50]`、放置限制 `[Phase 53]` 均已解决）
-- **耕地无湿润视觉状态、不会变回泥土** — 湿润是生长引擎**逐作物计算**的环境量（土壤格 4 格内同 y 有无水），不是方块状态：同一片耕地浇不浇水长得一样（视觉无变化，Minecraft 的湿润耕地变深色）；干耕地也不会随时间退化回泥土（MC 有 revert）。无 per-instance 状态（Phase 2 遗留同一性质）。`[Phase 50]`
+- **耕地不会变回泥土；湿润视觉状态已实现** — `[Phase 50]` 原条两项：① 无湿润视觉 = **已修复 `[GEN-9]`**：块模型可选 `moisture_top`（FullCube-only 形状门控）+ 纯谓词 `soilIsWet`（Chebyshev 4 同层水 = 生长节奏同款半径，cropIsWet 委托 = 生长与视觉一函数两消费者）+ mesher 顶面按活流体场派生湿/干（湿/干邻格永不贪婪并 quad）；shipped farmland `moisture_top: farmland_wet`（同 salt 暗化 0.72×）。湿润仍为**世界派生量非存档状态**（零 format）。② 干耕地不随时间退化回泥土（MC 有 revert）= **仍活跃**。
 - **湿润判定是简化几何** — "土壤格（作物下方）同 y、切比雪夫半径 4 内有任一**水**（level ≥1；`[Phase 54]` 起只算水，熔岩不湿润）"：不区分源/流动水（流动水膜也算湿润）、不检查水是否可达（4 格外隔墙的水也算）、半径/层级规则与 Minecraft 的"4 格内水源"不完全一致。`[Phase 50]`
 - **未熟作物掉种子（非 MC 的"不掉"）** — 破坏 `wheat_1..wheat_6` 掉 1 个种子（可再种，玩家友好）；Minecraft 破坏未熟作物不掉任何东西。`[Phase 48]`
 - **`wheat_2..wheat_7` 有隐式 block 物品但不可获得** — 每个数据方块自动有同名 block 物品（可放置）；`wheat_2..wheat_7` 的物品没有掉落/合成来源，实际拿不到（`wheat_1` 是种子来源）。无害，但物品表里有 7 个小麦 block 物品。`[Phase 48]`
@@ -81,12 +89,19 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 
 - ~~**Mob 无行走摆腿/手臂动画**~~ — `[ENT-1]` 已解决：swing 相位 = per-mob 整数（移动帧 +2、静止帧 −4 衰减到 0、帧边界水平位移严格不等式判定、纯渲染层不入存档）+ constexpr 16.16 定点正弦表（编译期 Taylor、零运行期 libm）+ mob 模型 `swings` 数据段（box `name` + `part`/`amplitude` (0,1] 弧度/`group` 0/1 半周相位组，严格解析 + part 存在性交叉校验）+ CPU 逐帧顶点变换（pivot = box 顶面中心、绕局部 X 轴、法线同旋、phase 0 位级恒等 = 静态 fast path 结构性免疫）+ per-mob 动态 VBO（`Mesh::uploadDynamic`/`updateVertices`）+ config `mobs.limb_swing`（默认 true、false = 静态基线）。内容：chicken 2 腿 0.5 rad 半周相位、cow/sheep 4 腿 0.7 rad 对角步态、spider 8 腿 0.9 rad 偶奇分组。**残余（文档化偏离）**：zombie/skeleton 无独立 arm part（99.7 几何 = 头 + 躯干两 box，`[ENT-1]` 不造几何）；翅不摆（MC 只飞行时扇翅）；swing 相位 session-local（读档/生成 = 0，mob 本 ephemeral 不入档）。`[Phase 10]`（腿 `[99.7]` 已补；动画 `[ENT-1]` 已解决）
 
-- **掉落物不受本地光照、也不遮挡光** — 掉落物顶点烘焙满天空光（sky=1.0、block=0），shader 随世界同款昼夜（LGT-3 仿射撤退 + 月光地板；sky=1.0 ⇒ 有效 = 7/15 + (8/15)×dayFactor——深夜月光 7/15 非全黑，特性本体），不采样所在位置的方块光：洞穴/树荫下的掉落物和空地上一样亮（夜间同步变暗到月光）；反过来掉落物也不参与光传播/网格化（不挡光）。需要按物品位置读世界光数组、并让掉落物参与遮挡。`[Phase 10]`
+- **掉落物不参与光传播（不遮挡光）；本地光照已实现** — `[Phase 10]` 原条两项：① 不受本地光照 = **已修复 `[PRE-6]`**：basic.vert per-draw uniform 覆盖（u_useDropLight/u_dropSky/u_dropBlock，frag 零改动 = 昼夜缩放/雾/波纹自动继承）+ `itemDropLight` 纯函数（AABB 中心格 → getSkyLight/getBlockLight ÷15，每帧采样无缓存 = 光照变化自然跟随）+ 覆盖后强制复位（UXFIX-1 纪律）——洞穴/树荫下掉落物随环境变暗。② 不参与光传播/网格化（不挡光）= **仍活跃**。**记档偏离**：箭头/手持恒白（`[PRE-6]` 矩阵外）。
 - **掉落物动画由帧计数器驱动（非墙钟）** — 上下浮动（1.5s 周期）/自转（4s 周期）取自 `m_frameCount`，保证无输入/自动化运行逐字节可复现；代价是非 60Hz 显示器上动画速度随帧率变化（与昼夜时间同一权衡）。`[Phase 10]`
 - **透明掉落物不做深度排序** — 掉落物按其方块属于哪个 pass（opaque/transparent）与 chunk 同 pass 绘制，但"掉落物之间 + 掉落物与 chunk 之间"无全局排序，复杂透明场景可能出现混合顺序伪影（当前透明方块只有水/玻璃/叶子，演示区规模下不易察觉）。`[Phase 10]`
 - ~~**实体与流体无交互**~~ — `[ENT-4]` 已解决（mob/掉落物）：**共享流体浸入模型** = 玩家 FLUID-2 的无输入孪生（`Entity::refreshFluidState` + `Entity::integrateFluid`，同常量 12/1.5/4/32 同名同公式，`isRestingOnSolid` 从 Player 上提共享）：浸没体被动上浮（vy≥0 门 = 沉水体继续下沉的 MC "dive" 语义）、水面 W' 几何漂浮（FLUID-3：W' = 真水面上扫【浸没体窗内最高 L8+1】+ 浮漂终态 = 游泳位 W'−h/2 半浸没【原脚面=水面干身终态 = 用户报障"站在水上"，已修】+ fps 无关不动点）、池底站立（fresh resting 门；FLUID-3 深度门：池深 ≥2 的 resting 体上浮出底，1 格浅池站底不变）；mob 水平速度门 ×0.6（命名常量、无 per-mob 数据字段 = 文档化 YAGNI 偏离）+ step-up 水下解禁（FLUID-3：ENT-4 的 `!m_inFluid` 门删除 = 玩家对齐，涉水 mob 可踏 1 格岸壁出池；游泳位 mob onGround=false 仍无 step-up = 无 swim-up 爬岸记档偏离）；下沉/浮力 inFluid 门控（FLUID-3：水面以上 0.4 干带 keep vy = 全速过带，原无门 = 悬崖坠水"降落伞"已修）；掉落物浮面静止（摩擦零残差 = 无漂移，MC 简化记档）；**熔岩对称同路**（玩家熔岩是弱浮力节奏，mob/物品两类流体同一水模型 = 文档化偏离；P58 燃烧系统零改动 = MobFireTest 熔岩池坐底同速率钉死）。**残余**：投射物/箭仍穿过水（任务条 = mob/掉落物，文档化边界）。`[Phase 10]`（mob/掉落物 `[ENT-4]` 已解决，投射物保留）
 - **实体间碰撞是每帧分离 pass，不是多体约束求解器** — Phase 19 把 Phase 16 的玩家↔掉落物分离推广为通用实体 pass：固定顺序 body 列表（玩家先、再实体列表按索引；中心精确重合时：可推动体被推向 −axis 侧、两个可推动体则列表中靠后者走 − 侧——正好丢在玩家脚底的物品去玩家 −x 侧，保持 P16 方向），重叠对沿最小穿透轴分离——两个可推动体 50/50、对不可推动体走全量面到面跨度（玩家不可推动，Phase 16 规则）；体只移动到其 AABB 可占据的位置（`hasRoomAt`，与碰撞解析同一严格格扫描），被 solid 挡住的一侧份额由另一侧全量接管、两侧都挡则跳过该对；重复 sweep 直到某 sweep 的最大位移 <1e-6 块（亚视觉残差）或 32 次硬上限。参与/可推动均为数据位（`collidesWithEntities`/`pushableByEntities`，非按类型硬编码）：投射物不参与（箭穿过实体）、玩家不可推动。剩余简化：(a) 成对分离，病态簇可留 ≤~1e-6 块的亚视觉残留穿透；(b) 只沿最小穿透轴推、不尝试次轴——该轴两侧都被墙挡死时该对保持原样（无切向滑动）；(c) 玩家↔掉落物分离从"无条件推"变为"有世界感知"：唯一可推方向被 solid 挡死时物品保持重叠而不再被推进墙里（P16 旧行为是嵌入墙内）。`[Phase 10]`（玩家↔掉落物 `[Phase 16]`、掉落物↔掉落物与通用 pass `[Phase 19]` 已解决）
-- **掉落物零初速生成（刻意权衡）** — Minecraft 的掉落物带随机初速散开；本实现在方块中心零速生成，静止位精确、无随机性，headless 截图可逐字节复现。`[Phase 10]`
+- **掉落物零初速生成（刻意权衡）** — Minecraft 的掉落物带随机初速散开；
+  本实现生成在方块中心零速（Q 丢弃/mob 击杀掉落），静止位精确、无随机性，
+  headless 截图可逐字节复现。**`[UX-8d]` 破坏掉落改确定性伪散落**：
+  `block/drop_scatter` 纯函数（seed⊕位置⊕dropIndex 专用 salt，与
+  chance_drop/chance_drops/crop 4 salt 互不追踪）水平 ±0.2² 散开、y 不偏移、
+  界论证恒留被破格内（0.325 < 0.5）= MC 随机观感的确定性替身（同格每次破坏
+  结果相同）；Q 丢弃/mob 击杀仍中心零初速（6 构造点逐一核过零触碰）；
+  合并安全（同格双散落最大间距 0.566 < 0.75 同物仍合并）。`[Phase 10]`
 
 ## 物品 / 背包（Phase 11）
 
@@ -98,8 +113,11 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 
 ## 合成（Phase 12）
 
-- **配方 = shapeless + shaped（`[Phase 17]` 起）** — shaped（`pattern` + `key`，1..3 行 × 1..3 列；shaped 禁用 `ingredients`）`[Phase 17]` 实装（shipped 21 个：工具 / 营火 SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作台 / 弓 / 桶）；网格匹配 **shaped 先、shapeless 后，首个命中即成**（注册表加载序）。**"需要工作台" = de facto 网格尺寸门**：E 面板只暴露 2×2（共享 3×3 左上，见「工作台 / 形状合成」节 E 面板条），宽/高 3 的 pattern 只能在工作台摆出（与 MC 一致）。**无多配方消歧仍成立**：`craft` 按 id 精确执行；shipped 31 个 shapeless 原料集互不重复——若将来重复 = 加载序首个命中，系统不猜。`[Phase 12]`（shaped + 工作台门 `[Phase 17]` 已解决）
-- **部分材料暂无用途** — **`gold_ingot`/`diamond` 用途已解决**：gold_ingot = 金苹果（shaped 镶金，`[Phase 49]`）/ 黄色染料（`[Phase 45]`）/ 速度弓（`[Phase 79]`）；diamond = 无限弓（`[Phase 77]`）/ 力量弓（`[Phase 79]` ×2），大师弓（`[Phase 82]`）间接。**仍无配方消费的材料 = 仅 `leather`**（见「Mob」节）。无饰品、火把用 coal（金/钻石不用于火把 = 偏离不变）；`coal`/`planks`/`stick` 在 Phase 40 起是炉子燃料（`fuel_time`）；`coal` 另进火把配方（Phase 65）；`planks`/`stick`/`iron_ingot` 已在配方链中。`[Phase 12]`（coal `[Phase 40/65]`、gold/diamond `[Phase 45]`→`[Phase 49]`→`[Phase 77]`→`[Phase 79]` 已解决）
+- **配方 = shapeless + shaped（`[Phase 17]` 起）** — shaped（`pattern` + `key`，1..3 行 × 1..3 列；shaped 禁用 `ingredients`）`[Phase 17]` 实装（**现状 shipped 34 个**——`[v1.34.0]` 起含炉子配方 `8 cobblestone 围圈 →
+1 furnace`【MC 1.14+ 摆法，内容缺口修复】；其余 = 工具 9 / 护甲 12 / 营火
+SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作台 / 弓 / 桶）；网格匹配 **shaped 先、shapeless 后，首个命中即成**（注册表加载序）。**"需要工作台" = de facto 网格尺寸门**：E 面板只暴露 2×2（共享 3×3 左上，见「工作台 / 形状合成」节 E 面板条），宽/高 3 的 pattern 只能在工作台摆出（与 MC 一致）。**无多配方消歧仍成立**：`craft` 按 id 精确执行；shipped **32** 个 shapeless 原料集互不重复（`[SURV-5]` poison_bow 入列）——若将来重复 = 加载序首个命中，系统不猜。`[Phase 12]`（shaped + 工作台门 `[Phase 17]` 已解决；炉子配方 `[v1.34.0]`）
+- **部分材料暂无用途** — **`gold_ingot`/`diamond` 用途已解决**：gold_ingot = 金苹果（shaped 镶金，`[Phase 49]`）/ 黄色染料（`[Phase 45]`）/ 速度弓（`[Phase 79]`）；diamond = 无限弓（`[Phase 77]`）/ 力量弓（`[Phase 79]` ×2），大师弓（`[Phase 82]`）间接。**仍无配方消费的材料 = 仅 `leather`**（见「Mob」节；**`[UX-5]` 起有非配方
+消费 = 皮甲 4 件修复材料**——材料用途已闭环，但无合成路线消费）。无饰品、火把用 coal（金/钻石不用于火把 = 偏离不变）；`coal`/`planks`/`stick` 在 Phase 40 起是炉子燃料（`fuel_time`）；`coal` 另进火把配方（Phase 65）；`planks`/`stick`/`iron_ingot` 已在配方链中。`[Phase 12]`（coal `[Phase 40/65]`、gold/diamond `[Phase 45]`→`[Phase 49]`→`[Phase 77]`→`[Phase 79]` 已解决）
 - **矿石掉落改为材料（行为变化，刻意）** — 4 种矿石现在掉材料物品（coal_ore→coal、iron_ore→iron_ingot、gold_ore→gold_ingot、diamond_ore→diamond，MC 同款），**矿方块物品不能再从采矿获得**（数据仍在、可放置，只是无产出途径）；wood 仍掉 wood 本身（它是木板配方的原料，若改掉 planks 则配方链断）。`[Phase 12]`
 
 ## 存档（Phase 13）
@@ -113,7 +131,7 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 - **`DayCycle::setTimeOfDay` 至多 1 ulp 偏差** — 存 timeOfDay [0,1)，恢复时解出 totalSeconds；对远离配置 start_time 的值，`startTime + delta` 的浮点往返可能差 1 ulp（~1e-16）。昼夜渐变段是常量/平滑的，呈现无影响。`[Phase 13]`
 - **演示区外的编辑会带上"生成的 chunk"** — 在演示区外放置方块会同步生成该 chunk（既有行为），存档 diff 覆盖它；读档时 `setBlock` 重建同样生成该 chunk——一致，但读档后的世界含全新世界没有的 chunk（读档后 `propagateAll` 全量重传播，之后新出现的 chunk 由 Phase 14 的 worker 光照 job 处理）。`[Phase 13]`
 - **抽干的天然熔岩入档不完整、读档后"复活"** — `diffWorld`/journal 流体 diff 不对称：对「生成态有熔岩、会话抽干（level 0）」的格，`fluidKindOf(0)` 特例按 Water 记账 → diff 记为 **level-0 水**编辑（被抽掉的 kind 不记录）；回载 `World::setFluid(level 0)` 只清同 kind 水、不清熔岩，且 `applyWorldEdits` 对「level-0 且该 kind 已空」的编辑跳过 → 读档后生成熔岩复活。触发路径：玩家用熔岩桶抽干天然熔岩湖后存档重开。修复方向（二选一）：diff 对被抽干的格记 drained kind / level-0 编辑清任意 kind。`[PRE-3 2026-10-26 上报，未修，矩阵外]`
-- ~~**存档无迁移机制**~~ — 当前 **format 15**（save.hpp `kSaveFormat=15` / `kSaveFormatMin=1`），**format 1..15 全部可加载**（各按其字段集 + 逐 format 白名单），含 5 处规则式迁移：6→7 炉子（sole 归属/丢弃，见「炉子 / 熔炼」节）、≤11→12 吸收（共享 health 按 base max 拆分）、11/12→13 营火（单槽→槽 0）、13→14 stairs（迁移为空；旧 format 带新键 = 版本谎报拒绝）、**14→15 states**（`stairs {pos,facing}` → `states {pos,state}` 值保真；ENT-2）。写入恒 format 15。`states` 键纪律：15 必需（空数组合法）/ ≤14 携带拒 / 15 携 `stairs` 拒；双向交叉校验 = stateful 格（hasState：Stairs 形状 ∨ `model.state_count`）↔ entry 逐格点名 + 域按块 stateCount。"未知字段=报错"（rejectUnknownFields）保持。`[Phase 13]`（`[Phase 16/17]` 起 format 2/3 可加载，其后逐 format 追加；ENT-2 format 15）
+- ~~**存档无迁移机制**~~ — 当前 **format 24**（save.hpp `kSaveFormat=24` / `kSaveFormatMin=1`），**format 1..24 全部可加载**（各按其字段集 + 逐 format 白名单，规则式迁移——"未知字段=报错" rejectUnknownFields 保持）。format 演进（15 → 24）：15 `states`（ENT-2，14→15 值保真）/ 16 `player.armor`（SURV-1，恒写占位槽）/ 17 `player.oxygen`（SURV-2，恒写）/ 18 耐久 `damage`（SURV-3，>0 才写）/ 19 `tables`（CRAFT-1，恒写 + 18→19 sole 归属迁移）/ 20 效果 `tier`（SURV-6，omit-when-0 免迁）/ 21 `player.stats`（SURV-7，恒写空对象合法）/ 22 `player.velocity`（SAVE-2，恒写 ≤21 零速免迁）/ 23 `player.tutorial`（UX-7，恒写 {id,count}/{} ≤22 免迁）/ **24 inventory 36 槽（UX-8f，写恒 36；per-format 尺寸检查双向点名【24 须恰 36 / ≤23 须恰 27】+ 23→24 尾部补 9 空槽值保真迁移 `kPreUx8fInventorySlots`）**。更早的规则式迁移：6→7 炉子（sole 归属/丢弃）、≤11→12 吸收（共享 health 拆分）、11/12→13 营火（单槽→槽 0）、13→14 stairs（迁移为空）。写入恒 format 24。`[Phase 13]`（`[Phase 16/17]` 起 format 2/3 可加载，其后逐 format 追加；UX-8f format 24）
 
 ## Chunk 流式（Phase 14）
 
@@ -164,12 +182,12 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 
 - **音效是固定事件集，无 per-block/per-item 差异** — v1 只有 8 个数据驱动事件（dig/place/break/pickup/step/ui_open/ui_close/craft），所有方块共用同一 break/place/dig 音色，无 MC 式的材质/方块音色差异、无 3D 空间化（单声道 2D 播放）。加 per-block 音色需扩事件集 + 音色映射数据。`[Phase 15]`（**`[CRAFT-3]` 已解决**：块 JSON 可选 `sound_material` = 6 材质（stone/wood/gravel/sand/cloth/glass）× 3 事件（dig/place/break）= 18 个确定性新 wav，32 块赋值（stone 8 含矿脉族/wood 3/gravel 1/sand 3/cloth 15/glass 2）；无字段块回退通用事件名位级不变。**空间化** = SoundBank stereo 化 + `play(name, origin)` 距离衰减（线性 cutoff 16 块命名常量）+ 恒定增益线性声像（listener = 相机），dig/破坏/放置/潜行旋转/丢弃/拾取 6 点位世界空间化，手持破碎/step/UI 等保持 2D；实际听感 = 用户实机（无头不可听））
 - **物品无 3D 模型，图标是程序化 32×32 贴图** — block item 的 UI 表示是带光照的倾斜 3D 立方体（复用掉落物 cube mesh），工具/材料是 `tools/generate_item_icons.py` 程序化生成的 32×32 平面图标（Phase 35：16×16 → 32×32，形状谓词按 2× 分辨率重采样——弧线/对角线获得真 2× 边缘细节，非 2×2 upscale；非 MC 的 3D 旋转手持模型）；无手持动画/旋转。`[Phase 15]`（32×32 `[Phase 35]`；**16 个物品 `[CRAFT-2]` 已有数据驱动 3D box 模型**：item JSON 可选 `model` 段 = 1..16 个 axis-aligned box + 单一纹理（严格解析、无旋转 = MC primitive rotation 记档不做、v1 简化体素造型）——手持（替代 icon 面片、继承弓拉/进食举到嘴变换）/世界掉落（替代不可见掉落）/进食举到嘴三上下文渲染；**`[ENT-9]` 全量解决**：其余 63 件全部补齐数据驱动 3D box 模型（家族几何 1-3 box 剪影、texture = 既有 icon PNG、零核心代码）= 全 79 件非 block 物品三上下文 3D 模型，2D icon 手路径退役；block item 3D 立方不变（详见 phase-ent9.md））
-- **背包 UI 右键语义极简** — 左键取整堆/放入/交换（取出被占堆）/并入有空间同物堆；v1 右键只"移 1 个"（同物有空间或空格，不同物格无效）。**`[CRAFT-7]` 已解决（3/4）：**① 右键取半堆（MC：空手右键占位格取 floor(N/2) 最小 1——N=1 取自身、N=2/3 取 1 = v1 行为边界、N=64 取 32；耐久随堆 SURV-3 纪律）② shift 快捷移动（MC E 屏语义：hotbar⇄storage 互移、容器格→主背包优先、同物同耐久合并、堆可跨格分裂、手持堆 no-op；炉子面板 = 容器 GUI 语义：炉槽→主背包、玩家背包侧 no-op、移 input 按 furnace.hpp 不变量重置进度）③ 双击收集分拣（MC 分区语义：hotbar 0..8 与主背包 9..26 为两个独立分区，点击分区内收集同物同耐久堆、溢出按索引序回填、游戏层 0.3 s 真实 dt 双击窗【生存计时器类 = 输入态不入帧状态，无输入跑永不触碰】）。另：顶排数字键 1-9 直接选热栏槽（MC；Tab 循环保留，面板开/关皆可用；右 Shift 并入 LeftShift 映射）。**残余 = 无拖拽**（记录偏离：三点击操作 + 数字键覆盖核心操作面，拖拽需指针捕获下的鼠标轨迹跟踪 = 最高风险 E2E 类，矩阵外）。点击面板外（左键）丢弃手持堆。关闭面板时手持堆保留在 UI 实例（v1 既有语义，MC 会退回背包 = 记档偏离不变）。`[Phase 15]`（→ `[CRAFT-7]`）
+- **背包 UI 右键语义极简** — 左键取整堆/放入/交换（取出被占堆）/并入有空间同物堆；v1 右键只"移 1 个"（同物有空间或空格，不同物格无效）。**`[CRAFT-7]` 已解决（3/4）：**① 右键取半堆（MC：空手右键占位格取 floor(N/2) 最小 1——N=1 取自身、N=2/3 取 1 = v1 行为边界、N=64 取 32；耐久随堆 SURV-3 纪律）② shift 快捷移动（MC E 屏语义：hotbar⇄storage 互移、容器格→主背包优先、同物同耐久合并、堆可跨格分裂、手持堆 no-op；炉子面板 = 容器 GUI 语义：炉槽→主背包、玩家背包侧 no-op、移 input 按 furnace.hpp 不变量重置进度）③ 双击收集分拣（MC 分区语义：hotbar 0..8 与主背包 9..35 为两个独立分区【`[UX-8f]` 36 槽后由 9..26 扩到 9..35，全 size 驱动零代码改动】，点击分区内收集同物同耐久堆、溢出按索引序回填、游戏层 0.3 s 真实 dt 双击窗【生存计时器类 = 输入态不入帧状态，无输入跑永不触碰】）。另：顶排数字键 1-9 直接选热栏槽（MC；Tab 循环保留，面板开/关皆可用；右 Shift 并入 LeftShift 映射）。**残余 = 无拖拽**（记录偏离：三点击操作 + 数字键覆盖核心操作面，拖拽需指针捕获下的鼠标轨迹跟踪 = 最高风险 E2E 类，矩阵外）。点击面板外（左键）丢弃手持堆。关闭面板时手持堆保留在 UI 实例（v1 既有语义，MC 会退回背包 = 记档偏离不变）。`[Phase 15]`（→ `[CRAFT-7]`）
 - **背包打开不暂停世界模拟** — 打开背包只暂停**玩家物理与方块交互**；世界/昼夜/流体/实体/流式加载照常 tick（与 MC 的"暂停菜单"不同，更接近"边看背包边看世界"）。`[Phase 15]`
 - **F3 FPS 显示为整数** — `m_fpsSmoothed`（真实 dt 平滑）取整显示，vsync 稳定时恒 60；无小数帧率、无帧时间直方图/分位数（Minecraft F3 有 1% / 0.1% lows）。`[Phase 15]`
 - **粒子是逐帧动态 mesh、无碰撞** — 每帧重建一个动态 indexed mesh（0.12 格小立方体），粒子之间/粒子与世界无碰撞（穿模），无风/阻力，半隐式 Euler（先速后位）；上限 256、每爆发 16、寿命 0.45~0.75s。spawn 时烘焙光照（渲染是只读窗口，不能读光数组）。`[Phase 15]`
 - ~~**破坏 cross 块（作物/花/火把）崩溃：粒子纹理查找 `unordered_map::at`**~~ — `[Phase 65]` 发现并修复：`Game::drawParticles` 对所有块的粒子用 `cubeFaceTexture`（top/side/bottom 槽）查纹理——cross 模型（`[Phase 45]` 引入）没有这三项纹理（只有 `cross`）→ 空名 → `AtlasLayout::uvMin` 直接抛 `unordered_map::out_of_range`。`[Phase 45]` 起的潜在 bug（此前无任何 E2E 破坏过 cross 块），由 P65 火把破坏 E2E 首次暴露（gdb 回溯定位 `drawParticles → uvMin`）。修复 = `drawParticles` 加 cross 分支：粒子立方体六面全用 `cross` 纹理（与 item_mesh / chunk_mesher 既有的两个 cross 分支同款单一查找）；E2E S4（火把破坏 → 粒子帧渲染 → 无崩溃 + ×2 savenorm）为回归证据。`[Phase 65]`
-- **字体无中文字形与字重渐变** — `tools/generate_font.py` 生成 256×512 字形 atlas（32px cell、16×16 glyph 8px 偏移；Phase 35：8×8 → 16×16，字形表一次性从 DejaVu Sans Bold em16 提取（基线 row 12、阈值 128）后静态嵌入生成器——纯 stdlib、确定性输出），仅 ASCII 可打印（非 ASCII → `?`）；无字重渐变（缩放支持 double scale——Phase 35 起面板自适应分数缩放，`textWidth/makeTextVertices` 均 double）；无中文字形。`[Phase 15]`（8×8 低细节 `[Phase 35]` 已解决：16×16 字形 + 32×32 物品图标）
+- **字体无字重渐变；中文字形 = 静态表（字集外 → `?`）** — `tools/generate_font.py` 生成字形 atlas（32px cell、16×16 glyph 8px 偏移；Phase 35：8×8 → 16×16，字形表一次性从 DejaVu Sans Bold em16 提取（基线 row 12、阈值 128）后静态嵌入生成器——纯 stdlib、确定性输出）。ASCII 可打印恒有字形（非 ASCII → `?` 回退）。**中文字形**：`[PRE-1]` 起静态表 33（`作` `[CRAFT-4]` 补 = 34）→ **`[UX-6]` 392**（游戏文档语料 top 330 ∪ 教程全词集 ∪ 标点；来源钉定 NotoSansCJK-Regular.ttc SHA-256 验漂移；**font.png 尾部 append 256×512 → 256×2080**，顶 512 行逐字节不变 = 免重锚；rows 61..64 余量 → 424 字内加字零代码）→ **`[UX-8a]` 395**（排/摆/输）→ **`[UX-9b]` 401**（亮处把敌暗煤）；字集外字符仍 → `?`（**加字 = 改 .py `CJK_CHARSET` 清单一条命令零代码**）。无字重渐变（缩放支持 double scale——Phase 35 起面板自适应分数缩放 + `[UX-8e]` `ui.font_scale` 文本独立缩放，`textWidth/makeTextVertices` 均 double）。`[Phase 15]`（8×8 低细节 `[Phase 35]`、中文字形 `[PRE-1]`→`[UX-6]`→`[UX-8a]`→`[UX-9b]` 已解决）
 - ~~**物品名 tooltip 只有名字**~~ — `[PRE-12]` 已解决：悬停格（炉子/E 面板槽与格）显示 `name`（count 1）/ `name xN`（count > 1）+ 工具第二行 `damage/max` 耐久读法（纯函数 `ui/item_tooltip`，campfire 范式 5 单测；**tooltip 渲染层修复**：旧文本与面板共享 kText batch = 绘制先于槽底/图标 + 偏移随面板 fit scale 收缩 = Phase-15 起悬停 tooltip 恒被覆盖不可见，E2E 首触发实证；修 = tooltip 独立 batch 移至 3D 块立方图标后绘制）。残余 = 无描述/附魔文本（项目无附魔系统、item JSON 无 description 字段 = 记档偏离，MC 同款无描述）。`[Phase 15]` → `[PRE-12]`
 - ~~**"You died!" 死亡屏幕文字实际是白色（颜色参数被忽略）**~~ — `[Phase 33]` 发现，`[Phase 36]` 已修复：`ui.frag` textured 分支改 `texel.rgb × u_color.rgb`（所有 textured 绘制的 u_color.rgb 均为白，白字/图标/心带逐位不变，只死亡屏红字生效）+ E2E 重像素验证（红字 bbox A (488,320,282,24)/B 恰好 2×，hint 白字 bbox 不变）——细节见 `archive/v1x/phase-36.md`。
 
@@ -183,7 +201,7 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 - **自然回复是定时 + 饥饿门控（Phase 23 起）** — 脱离受伤 `regenDelay=10s` 后每 `regenInterval=4s` 回 1 HP，且要求饥饿 ≥ 6（Minecraft 规则：低于 6 无自然回复）；门控关闭时累加器暂停（不重置），吃饱后继续累计。**`[SURV-9]` 已解决：自然回复的每半心消耗 1 点饥饿（MC 规则）**——经标准路径（隐藏饱和度 buffer 先扣、耗尽掉条 = Phase 28 衰减 tick 同款原语 `drainOneHungerPoint`；**满血时区间免费流逝** = 无回复无成本），回复门（bar ≥ 6）不变（MC 18 = 既有偏离条款）。`[Phase 16]`（饥饿门控 `[Phase 23]`，回复成本 `[SURV-9]`）
 - **潜行缩高：钻 1 格缝隙仍未实现，楼梯几何下 1.6/1.8 有通行差异** — 潜行把身高 1.8→1.6（脚底不动、眼高降 0.2），速度 ×0.3、禁用 step-up、1 格崖缘 guard（`[Phase 16]` 原状）。**`[Phase 16]` 时"纯整数世界 1.6 无通行差异"的前提已被消费**：`[Phase 85/87]` 半块/楼梯带来非整数头顶空间——但**最大缝隙 = slab 上方 1.5 < 潜行 1.6**，"钻 1 格高缝隙"仍未实现；唯一 1.6/1.8 改变可通行集合的几何 = 楼梯斜面（如楼梯排上方 2 格高走廊：站立需 AABB 覆盖最高斜点 ≤0.2、潜行 ≤0.4，窄边缘情形）。**潜行其它用途**：营火坐姿（`[Phase 71/75]`：crouch + 贴地 + AABB 重叠 campfire 格 = 锁移动/跳）、楼梯旋转键（`[Phase 94]`：潜行 + 右键）、低顶陷阱（`updateCrouchHeight`：头顶空间 <1.8 时松开键不站起）。`[Phase 16]`（半块/楼梯 `[Phase 85/87]` 已就位；缝隙通行仍未实现）
 - **step-up 只抬升 1 格、每 tick 至多一次** — 条件：非潜行 + 贴地 + 身体贴住整数块面（`kFaceEps=1e-4`）+ 面前脚位 solid + 其上方 2 格空；X 轴优先于 Z 轴（固定顺序），一次 update 只抬一次。2 格及以上仍须跳跃。`[Phase 16]`（**`[ENT-3]`** 起纯几何 = `Entity::stepUp`，mob 追逐/游走同款共享——player 逐位不变、既有单测零改动；mob 侧无潜行门。**潜伏 quirk（ENT-3 探针实证，player/mob 同款共享）**：① +X/+Z 方向 front 格查 `snapped+1`（-X/-Z 查 `snapped-1` = 贴住的格）→ **恰 1 格宽的台阶在 +X/+Z 方向踏不过**（≥2 格宽或 -X/-Z 方向正常，单测 `MobStepUpTest.DoesNotStepSingleCellStepPlusX` / `.StepsUpSingleCellStepMinusX` 钉死）；自然地形台阶通常多格宽，影响限于 1 格窄沿。② **非整数脚高行走**（slab 顶 1.5 / 楼梯斜面）时"贴住整数块面"判定只看 face 位置落在整数 ±`kFaceEps`、不校验本 tick 是否真被 clamp：face 巧合对齐 + 脚位行（`floor(footY)`）前方 solid（= 脚下的 slab 自身）→ **凭空抬升 1.0 再落回**（mob slab 追逐测试 frame 606 实证，落回后轨迹恢复）；整数脚高（平地/满块顶）下 face 对齐 ⟹ 真被 clamp，无此问题。修复（真 clamp 校验 / +X front 格）= player step-up 行为变更，单独立项。）
-- **`[SURV-3]` 耐久系统（工具/护甲/弓/点火器磨损 + 破碎 + format 18）** — 物品字段 `durability`（严格 number > 0，允许集 = Tool ∪ armor_slot ∪ ammo 发射器 ∪ ignites_flamable，其它物品带字段 = 解析拒绝点名）+ 27 件 MC 精确值内容（wood 59 / stone 131 / iron 250 三工具 ×3 材质；bow 族 5 件 384；燧石与钢 64；护甲 leather 55/80/75/65、iron 165/240/225/195、diamond 363/528/495/429）+ `ItemStack.damage` float（operator== 含 damage；堆移动随堆）+ 纯函数 `item/durability.{hpp,cpp}`（`applyDurability` 扣减/破碎 + `armorWearPerPiece`，campfire 范式单测拥有）+ 全帧锁定磨损事件（破非瞬断块 +1【hardness==0 = 0 扣】/ 近战命中 mob 工具 +2 / 弓射出 +1 含 infinite / 点火成功 +1 / **护甲 = Player::damage 内 bypassArmor==false && pts>0 && 减伤后仍造成 >0 时每件在穿 +max(1, incoming/4)**【incoming = 减伤前原始量，10 → 2.5 float 精确、1 → 1 下限；破碎 = 槽清 + points 收口同步、不影响本次动作】）+ **format 18**（damage 键 >0 才写：inventory slots / armor【占位槽翻 {item,damage} 对象形，满耐久 = 字符串形】/ entities item 三处；≤17 带键 = 版本谎报点名；17→18 迁移恒等；交叉校验 damage < item.durability + 无 durability 物品带 damage 拒）+ HUD 耐久条（drawIcon 共享点：图标底部 2px 横条、填充 1−damage/durability、三色档绿≥1/2/黄≥1/4/红<1/4、满耐久零绘制 = 结构性免疫）+ F3 `held name d/max` 行 + 破碎音复用既有 "break" wav（sound 表无专用 item-break 资产，设计定案选项）+ 1466/1466（+18）。**范围外（记档偏离）**：① 无修复（铁砧/磨刀石/同物合成/Mending——矩阵无对应项）② 无 Unbreaking 类随机（项目无附魔系统）③ 耐久条三色简化（MC 连续渐变）④ 瞬断判定 = hardness 0 近似（MC "naturally breaks instantly" 含工具高速特例）⑤ **护甲磨损源 = 本项目"护甲实际减伤"的伤害事件**（设计定案门 = bypassArmor 豁免规则天然对齐：溺水 bypass = 不磨损【MC 同款，单测钉死】；坠落被护甲挡 = 磨损【自洽】；**MC 不磨损但本项目经护甲减伤的源——饥饿/火 tick/虚空/效果 tick（如 poison）——在本项目中磨损护甲**（它们不走 bypassArmor，护甲 floor 对它们生效，"磨损 = 减伤生效"自洽规则下即磨损；影响 = 死亡/长跑边缘情形，无 gameplay 回路差异）⑥ **合成网格/炉子/营火槽不入 format 18 的三处范围**（设计定案 = slots/armor/entities 三处）：受损物品放进 crafting grid 或炉子槽后读档 = 耐久回满（数据丢失 quirk；现役内容无"可熔炼且带耐久"物品，炉子/营火实际不可达，仅 2×2/3×3 网格可触达）⑦ 护甲破碎无声（Player 无 sound 通道；四个 game 侧破碎点有 "break" 音）⑧ mob 穿戴物不涉（项目 mob 不穿装备 = SURV-1 同款边界）⑨ 死亡保留背包（项目 keep-inventory 语义，无死亡掉落——Q 丢/破碎路径 damage 随堆已覆盖）。`[SURV-3]`
+- **`[SURV-3]` 耐久系统（工具/护甲/弓/点火器磨损 + 破碎 + format 18）** — 物品字段 `durability`（严格 number > 0，允许集 = Tool ∪ armor_slot ∪ ammo 发射器 ∪ ignites_flamable，其它物品带字段 = 解析拒绝点名）+ 27 件 MC 精确值内容（wood 59 / stone 131 / iron 250 三工具 ×3 材质；bow 族 5 件 384；燧石与钢 64；护甲 leather 55/80/75/65、iron 165/240/225/195、diamond 363/528/495/429）+ `ItemStack.damage` float（operator== 含 damage；堆移动随堆）+ 纯函数 `item/durability.{hpp,cpp}`（`applyDurability` 扣减/破碎 + `armorWearPerPiece`，campfire 范式单测拥有）+ 全帧锁定磨损事件（破非瞬断块 +1【hardness==0 = 0 扣】/ 近战命中 mob 工具 +2 / 弓射出 +1 含 infinite / 点火成功 +1 / **护甲 = Player::damage 内 bypassArmor==false && pts>0 && 减伤后仍造成 >0 时每件在穿 +max(1, incoming/4)**【incoming = 减伤前原始量，10 → 2.5 float 精确、1 → 1 下限；破碎 = 槽清 + points 收口同步、不影响本次动作】）+ **format 18**（damage 键 >0 才写：inventory slots / armor【占位槽翻 {item,damage} 对象形，满耐久 = 字符串形】/ entities item 三处；≤17 带键 = 版本谎报点名；17→18 迁移恒等；交叉校验 damage < item.durability + 无 durability 物品带 damage 拒）+ HUD 耐久条（drawIcon 共享点：图标底部 2px 横条、填充 1−damage/durability、三色档绿≥1/2/黄≥1/4/红<1/4、满耐久零绘制 = 结构性免疫）+ F3 `held name d/max` 行 + 破碎音复用既有 "break" wav（sound 表无专用 item-break 资产，设计定案选项）+ 1466/1466（+18）。**范围外（记档偏离）**：① ~~无修复~~ **`[UX-5]` 已解决**：工作台材料修复（MC 铁砧语义的 crafting-grid 形式）——物品 JSON 严格字段 `repair_with`（白名单演进 + 空串/非串/无 durability 携带/未知材料全点名；`checkRepairMaterials` init 交叉校验 CRAFT-3 范式）+ 纯函数 `item/repair.{hpp,cpp}`（`matchRepair` 格索引序配对 / `applyRepair` 原位保 count【flint_and_steel maxStack 64 不丢件】）+ **配方恒优先、repair = 无配方回退**（受损弓 + 钻石走 infinite_bow 配方胜 / + 棍走修复）+ 输出三重守卫（异 item/异 damage/maxStack 溢出拒 = SURV-3 合并纪律）+ 1 材料 +`kRepairFraction` **25%** max 耐久、damage 钳 0 + 28 件 shipped 全配 MC 精确材料（wood→planks / stone→cobblestone / iron→iron_ingot / 弓族 6→stick / 燧石与钢→flint / 皮甲→leather / 铁甲→iron_ingot / 钻甲→diamond）+ E 面板 2×2 同款生效（MC 铁砧仅限工作台 = 记档偏离）；**磨刀石/同物合成/Mending/XP 成本仍无** = 矩阵外记档）② 无 Unbreaking 类随机（项目无附魔系统）③ 耐久条三色简化（MC 连续渐变）④ 瞬断判定 = hardness 0 近似（MC "naturally breaks instantly" 含工具高速特例）⑤ **护甲磨损源 = 本项目"护甲实际减伤"的伤害事件**（设计定案门 = bypassArmor 豁免规则天然对齐：溺水 bypass = 不磨损【MC 同款，单测钉死】；坠落被护甲挡 = 磨损【自洽】；**MC 不磨损但本项目经护甲减伤的源——饥饿/火 tick/虚空/效果 tick（如 poison）——在本项目中磨损护甲**（它们不走 bypassArmor，护甲 floor 对它们生效，"磨损 = 减伤生效"自洽规则下即磨损；影响 = 死亡/长跑边缘情形，无 gameplay 回路差异）⑥ **合成网格/炉子/营火槽不入 format 18 的三处范围**（设计定案 = slots/armor/entities 三处）：受损物品放进 crafting grid 或炉子槽后读档 = 耐久回满（数据丢失 quirk；现役内容无"可熔炼且带耐久"物品，炉子/营火实际不可达，仅 2×2/3×3 网格可触达）⑦ 护甲破碎无声（Player 无 sound 通道；四个 game 侧破碎点有 "break" 音）⑧ mob 穿戴物不涉（项目 mob 不穿装备 = SURV-1 同款边界）⑨ 死亡保留背包（项目 keep-inventory 语义，无死亡掉落——Q 丢/破碎路径 damage 随堆已覆盖）。`[SURV-3]`
 - **`[SURV-4]` 药水饮用（6 单效果药水 + 玻璃瓶/水瓶循环 + instant_hp 瞬时效果原语）** — 物品侧：`drink_time 1.6`（既有 P43 通道）+ `returns_item glass_bottle`（既有 P43 返还）+ `grants_effects`（**SURV-4 从 food-only 放开到 drinkable**：喝完按序施加 = `applyPlayerEffect` 收口【RESET 语义既有，再喝同效果重置不叠加】；**无 grants 的 drinkable 保持清负面原行为位级不变**）；`glass_bottle`（`collects_fluid ["water"]`，桶对 P47 范式，init 唯一性键 = (fluid, poursBecomes) 与既有水桶共存）/ `water_bottle`（`pours_fluid` 回 glass_bottle，**纯容器不可饮**）；6 药水（weakness 90 / speed 180 / regeneration 45 / poison 45 / healing 0 / harming 0，max_stack 1）；**效果侧新字段 `instant_hp`**（整数非 0、[-32,32]、与 `tick_type` 互斥、显式 0 拒；施加时结算一次：正 = `heal` 钳 base max / 负 = `damage(bypassArmor=true)` = 护甲豁免、Resistance 照常）；grants 条目 `duration==0` ⇔ 效果 `instantHp!=0`（init 双向点名）；内容发放 = hotbar.json `inventory` 隐藏 starter 槽 17-23（GEN-2 范式，无输入零渲染）；texture：effects.png 128→160 尾部 append（既有 8 tile 逐像素零变化验证）+ 8 物品 icon 独立 PNG。**范围外（记档偏离）**：① **无酿造台/酿造线**——药水 = starter 发放（GEN-2 树苗先例）；无 II 级/延长/强化/泼溅/滞留/多效果瓶 ② **water_bottle 不可饮用**——项目 drinkable = 清负面（milk 语义），无"中性饮用"（避免新字段）；MC 水瓶 = 中性喝 ③ **瓶舀水移除水源**——项目桶对范式（P47 既有语义：舀 = 删 L8 源）；MC 瓶填 = 工作台 3 瓶/桶不耗源 ④ **瞬时伤害护甲豁免**——MC 药水伤害语义（伤害调整表 Potion = Armor No effect / Resistance Applies；管线 = SURV-2 溺水同款 bypassArmor）⑤ **再喝同效果 = 重置**——项目 `StatusEffects::apply` 语义（MC = 保较长者；单等级药水下无实际差）⑥ 瞬时效果 icon 闪现 ≤1 帧（duration 0 下一帧 update 移除，截图不可观测，非缺陷）。`[SURV-4]`
 
 ## 饥饿 / 食物（Phase 23，Phase 28，Phase 31）
@@ -201,10 +219,10 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
   为单一固定速度——`player.hunger_decay_seconds` 可配置，Phase 32——饱和
   只推迟掉条；跳跃/攻击额外耗饥同款条款）。`[Phase 28]`（逐食物饱和 +
   回复成本 `[SURV-9]`）
-- **进食通道无进度条、无手部动画** — Phase 28 进食 = 按住右键 1.6s（MC 32 tick
-  时长）的通道（`core/food.hpp` 纯状态机，real dt）：唯一视觉提示是**手持物品
-  图标向屏幕中心抬起**（进度 0→1、满进度 64px，复用弓拉取几何）；无 MC 的 3D
-  手部举到嘴边动画 / 进食进度条。中断 = 取消且不消耗食物：提前松开右键 /
+- **进食通道无进度条；手部动画已实现** — Phase 28 进食 = 按住右键 1.6s（MC 32 tick
+  时长）的通道（`core/food.hpp` 纯状态机，real dt）：`[CRAFT-2]` 起视觉提示 = **3D 手持
+  手部**（drawHeldHand，model 物品继承进食举到嘴变换 = 随进度抬向面部）替代 2D 图标
+  抬起；**仍无 MC 的进食进度条**。中断 = 取消且不消耗食物：提前松开右键 /
   受击 / 死亡 / 解锁鼠标 / 开面板 / 切换选中格（Tab）/ 左键挥击；进食中再按
   右键 = 忽略（进食继续）。浮点边界：96×(1/60) 累加略短于 double 1.6，完成帧
   落在第 97 帧（1/60 累加约定，见本节末条）。`[Phase 28]`
@@ -235,9 +253,9 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 ## 工作台 / 形状合成（Phase 17）
 
 - ~~**全工作台的网格是同一个容器**~~ — Phase 17 的 v1：`Game` 持有单个 `m_tableGrid`（`CraftingGrid`）：右键打开的**任何**工作台的 3×3 网格都是它（存档 format 3 `table_grid`）。`[Phase 17]`，**`[CRAFT-1]` 已修复**：每工作台方块独立容器（`Game` 持 `std::map<BlockPos, CraftingGrid> m_tables`，位置序 → 存档写序确定；`setBlock` 收口创建/销毁 + 读档 parse 时不变量保证完整性【炉子同款，无 rescan】）+ 右键面板绑定所点方块（`InventoryUI::bind`，`FurnaceUI::bind` 范式——面板 UI 零视觉变化，只换数据源）+ 存档 format 19 `tables`（每工作台块一条目 {pos, slots[9]}、位置序、与方块差集**双向**交叉校验、19 必需空数组合法 / 19 携 `table_grid` 拒 / ≤18 携 `tables` 拒；**18→19 迁移 = sole 归属**：旧全局 `table_grid` 非空且世界恰 1 个工作台 → 归属之，0 或多个 → 丢弃【P44 先例】；`inv_grid`（E 面板）不动）。**记档偏离：破坏工作台丢弃容器内物品**（setBlock 收口删 state，只掉工作台自身 `drops` = 炉子破坏同款语义 = MC 规则）；**格式 19 槽不携 `damage`**（合成网格属 SURV-3 三处范围外的 grid 纪律，受损物品入格读档回满 = 同款 quirk）。`[CRAFT-1]`
-- **工作台面板配方提示** — 表格面板 3×3 网格 + 输出格旁有 **shaped 配方提示列**（`[CRAFT-4]` 已解决）：33 个 shipped shaped 配方两列排布，每行 = mini 3×3 pattern（暗格 + 键位物品图标，按定义左上对齐 = 合法摆放）+ 输出图标 + "name xN"（背包可供应则白 / 否则暗 = `canSupply(patternBag)` 纯函数）；**提示行点击 = 消费性 no-op**（不合成不动背包，但吞点击 ≠ 槽外点击丢 carry）。E 面板位级不变（shapeless 列表保持）。`[Phase 17]`（提示 `[CRAFT-4]`）
+- **工作台面板配方提示** — 表格面板 3×3 网格 + 输出格旁有 **shaped 配方提示列**（`[CRAFT-4]` 已解决）：**34 个** shipped shaped 配方两列排布（`[v1.34.0]` 炉子配方入列 = 33→34），每行 = mini 3×3 pattern（暗格 + 键位物品图标，按定义左上对齐 = 合法摆放）+ 输出图标 + "name xN"（背包可供应则白 / 否则暗 = `canSupply(patternBag)` 纯函数）；**提示行点击 = 消费性 no-op**（不合成不动背包，但吞点击 ≠ 槽外点击丢 carry）。E 面板位级不变（shapeless 列表保持，`[UX-8c]` 两列 + 可合成排序）。`[Phase 17]`（提示 `[CRAFT-4]`；数量 `[v1.34.0]`）
 - **E 面板 2×2 固定在共享 3×3 模型的左上** — E 面板合成格与表格面板共用同一个 `CraftingGrid` 3×3 模型，只暴露槽 {0,1,3,4}（左上 2×2）；宽度或高度为 3 的 pattern（如 pickaxe `PPP/.S./.S.`）无法摆入，E 里的 shaped 匹配只可能命中落在左上角的 pattern（2×2 工作台配方可在 E 摆出合成，与 MC 一致）。`[Phase 17]`
-- **E 配方列表只显示 shapeless 配方** — shaped 配方不出现在 E 列表里（既有设计 = "shaped 在网格里摆"，2×2 网格摆不下的 pattern 占多数）；shaped 摆法的**游戏内指引 = 工作台面板的提示列**（`[CRAFT-4]`：mini pattern + 可供应着色）。`[Phase 17]`（指引 `[CRAFT-4]`）
+- **E 配方列表只显示 shapeless 配方** — shaped 配方不出现在 E 列表里（既有设计 = "shaped 在网格里摆"，2×2 网格摆不下的 pattern 占多数）；shaped 摆法的**游戏内指引 = 工作台面板的提示列**（`[CRAFT-4]`：mini pattern + 可供应着色）。**`[UX-8c]` 列表本身演进**：单列满高 → **两列排布**（CRAFT-4 机制泛化，左列 (n+1)/2 行；CraftingTable kind 位级不变红线）+ **可合成排序置顶**（`orderedRecipeHints` 纯函数两遍同序稳定分区 canCraft 真在前、组内保注册表序；工作台 shaped 列表不排序 = display-only 记档偏离）+ 行内 fitLabel 约束列宽（E 面板 native 宽 1000→1288）。`[Phase 17]`（指引 `[CRAFT-4]`；两列 + 排序 `[UX-8c]`）
 - **E2E 合成输入的环境约束（本机 :0）** — xdotool 每次调用 ~150 ms（长序列追不上帧帽截图）；XTest 伪事件**每个动作后必须 `XFlush`**（libX11 会缓冲无应答请求成 ~1s 一批投递，同帧事件被 `wasPressed` 边沿逻辑折叠）；合成输入要求点击位置处游戏窗口在最上层（运行时临时 unmap UI 窗口），但 unmap 期间用户的真实鼠标会污染运行（指针锁定期间的真实 motion = 相机旋转），所以运行前须等光标静止 ~400 ms；地面命中格瞄准容差在 pitch −0.80 时仅 ~±10 px，驱动用 pitch −0.68（~±49 px）。Xephyr :99 仅作逻辑回退（:0 光标扫过 Xephyr 窗口会被转发进 :99；llvmpipe 渲染不能用于 base 字节基线）。`[Phase 17]`
 - **指针锁定 grab delta（输入驱动 E2E 的环境约束，本机 :0）** — xdotool
   `mousemove`（XWarpPointer）只移虚拟光标、不移物理鼠标；游戏进 relative mode
@@ -352,7 +370,7 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 - ~~**无 Peaceful 难度**~~ — `[ENT-8]` 已解决：`mobs.difficulty = "peaceful"` 四值词汇表（peaceful = Phase-25 保护环扩到全球 kSpawnProtectionPeaceful 1e6 → 敌对自然生成全拒，被动豁免照生，MC 和平核心语义）；"现有敌对消亡" 退化 = mobs ephemeral + difficulty 只 init 读取（无运行期切换）→ 读档后本无敌对（偏离记档，详见 phase-ent8.md）。`[Phase 25]`
 - **保护环是水平圆、不跟随玩家** — 保护中心 = 新世界出生点（读档不改变它），半径为水平距离（无垂直分量）；v1 无床/村庄，保护不随玩家移动（Minecraft 的村庄保护环未实现）。`[Phase 25]`
 - ~~**生成率缩放为全局节奏**~~ — 难度缩放的是尝试节奏（全部 mob 类型共享的 `check_every_frames`），不是 Minecraft 的按类型生成权重；easy/normal/hard = 30÷0.5/1.0/1.5 帧。`[Phase 25]` 发现，`[Phase 39]` 已修复：`mob_spawning.json` 的 `mobs` 条目改为 `{"id", "weight"?}` 对象（weight 1..10000，缺省 1；旧纯字符串条目显式拒绝 = 迁移防护；重复 id/越界/非整数 = 加载失败），类型抽取改为「每次 1 次流值映射进 [0, Σweight) 后按累计权重走名单序」——全 weight 1 与旧 `pick % 名单长度` 逐位相同（已发行数据零行为变化）。难度节奏缩放保留（与权重正交：节奏 = 多久尝试，权重 = 尝试时抽中哪种）。
-- **无肢体动画/阴影/咆哮声** — 静态 box 模型（头+身两箱、单纹理六面同 tile、yaw 旋转朝向）；无行走摆臂、无 blob 阴影；受击复用 "hurt"、死亡复用 "death"，无 zombie 低吼。`[Phase 20]`
+- **无阴影/无咆哮声；肢体动画已实现** — `[Phase 20]` 原条三项：① 无行走摆臂 = **已修复 `[ENT-1]`**（纯渲染层：per-mob 整数 swing 相位 + constexpr 16.16 定点正弦表 + mob JSON `swings` 数据段 + CPU 逐帧部件顶点变换 + `checkSwingClip` 防穿模验收；chicken 2 腿 / cow·sheep 4 腿对角步态 / spider 8 腿偶奇分组；zombie/skeleton 99.7 几何无独立 arm part = 不造几何）+ 比例/摆幅/关节 `[ENT-1b]` 实机校准；② 无 blob 阴影 = **仍活跃**；③ 无咆哮/低吼（受击 "hurt" / 死亡 "death" 复用）= **仍活跃**。
 - ~~**mob 无 step-up**~~ — 1 格台阶会挡住追逐（贴墙滑动、可能永远到不了玩家）；玩家有 P16 step-up，mob 没有。`[Phase 20]`（追逐卡台阶）**`[ENT-3]` 已修复**：step-up 纯几何上提为 `Entity::stepUp`（player 逐位不变 = 既有 stepUp 单测零改动全过），mob 在水平移动受阻的同一位置、同一判定（P99 TRUE-1-block：solid 区顶高 ≤ 1.0 → slab/满块/玻璃板可踏、墙/栅栏 1.5 帽不可踏）调用同款抬升 + 本 tick 水平位移重放；AI/速度/子步节奏零改动、零 format（mob ephemeral）。**共享判定顺带钉死 P16 两个潜伏 quirk**（player 同款、ENT-3 探针实证，详见「生存」step-up 条）：+X/+Z 方向 front 格查 `snapped+1`（-X/-Z 查 `snapped-1` = 贴住的格），**恰 1 格宽的台阶在 +X/+Z 方向踏不过**（≥2 格宽或 -X/-Z 方向正常）；非整数脚高行走时 face 巧合对齐整数可触发凭空抬升 1.0 再落回。修复会改 player 行为，单独立项。
 - ~~**mob 无游泳/水交互**~~ — `[ENT-4]` 已解决：走进水 = 共享流体模型（浮力 12 / 上浮帽 1.5 / 下沉帽 4 = 玩家 FLUID-2 同常量）——沉水被动上浮、水面 W' 几何漂浮（fps 无关终态）、池底站立、水平速度 ×0.6 门控、水下禁 step-up（**FLUID-3 修订**：`!m_inFluid` 门已删 = 涉水 mob 可踏 1 格岸壁出池；浮漂终态 = 游泳位 W'−h/2 半浸没；池深 ≥2 的 resting 体上浮；详见 phase-fluid3.md）；AI 状态机零改动（追逐/游走照常驱动，只是水下更慢）；熔岩同路（P58 燃烧照旧）。生成检查（地面格 + 头顶空余）不变。`[Phase 20]`
 - ~~**mob 无坠落伤害**~~ — `[ENT-5]` 已解决：MobEntity 落地块镜像玩家 Phase-16 规则（净落差 > 3 且落地格 fresh 无流体 → damage，详见 phase-ent5.md）。`[Phase 20]`
@@ -392,9 +410,12 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 
 ## 状态效果（Phase 46）
 
-- **weakness 无游戏内来源** — MC 来源是药水（未做）；v1 来源仅 mob
-  `on_hit_effect`（当前 spider = poison 15 s）与存档注入（E2E 场景）。
-  regeneration 已有游戏内来源（金苹果，Phase 49）。`[Phase 46]`（再生
+- **~~weakness 无游戏内来源~~** — `[Phase 46]` 已修复 `[SURV-4]`：6 种单效果药水
+  （weakness 90 / speed 180 / regeneration 45 / poison 45 / healing 0 / harming 0 =
+  MC 时长；glass_bottle 桶对舀水 + `instant_hp` 瞬时原语；starter 隐藏槽 17-23
+  发放）。regeneration = 金苹果（`[Phase 49]`）+ 药水双来源。mob `on_hit_effect`
+  （spider = poison）与存档注入保留。**范围外（记档偏离）**：无酿造台/酿造线；
+  药水档位无游戏内消费面（档位机制 = `[SURV-6]`）。`[Phase 46]`（再生
   部分 `[Phase 49]` 已解决）
 - ~~**中毒无独立紫色 tint**~~ — `[PRE-7]` 已解决：全屏效果 tint 通道
   （效果 JSON 可选 `tint` [r,g,b,a] 全 [0,1] 严格解析，缺省全零 = 无纱
@@ -454,10 +475,12 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 
 ## 流体桶（Phase 47，Phase 51 双种类更新）
 
-- **只有水/熔岩两种流体** — 流体种类词汇表在代码中（`FluidKind`：
-  `water`/`lava`），`slime` 等其它流体名被解析拒绝；新增流体种类需改
-  代码（编码区间/词汇表），桶对与反应表本身是数据。`[Phase 47]`
-  （Phase 51 起词汇表 = `water` + `lava`，熔岩桶/黑曜石已就位）
+- **~~只有水/熔岩两种流体~~** — `[Phase 47]`（Phase 51 起词汇表 = `water` +
+  `lava`）已解决 `[FLUID-6]`：第三种类 = **honey**（17..24 编码，粘度 = 帧锁定
+  tick 周期 3，无 water_reaction 字段 = 反应 pass 数据驱动惰性，蜜/水/熔岩 6-邻
+  共存互不替换，`bucket collects +honey` = 一桶全舀三种类）。**残余**：词汇表在
+  代码（FluidKind），`slime` 等其它名仍被解析拒绝，加新种类需改编码区间；桶对与
+  反应表本身是数据。
 - **流动流体不能舀** — 只有 level 8（源）格能舀（MC 一致）；且源格每
   tick 向四向补 level 7，**远处的玩家隔着源头自己的扩散永远舀不
   到**——要舀源必须站旁 1 格从上往下斜视源顶面（MC 同行为；E2E 场景
@@ -579,8 +602,9 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
   除"：满块贴着 slab 时，满块的侧面要么整面绘制（slab 半区经深度测试遮挡，
   半重合面 Z-fight）要么整面剔除（顶部半区露洞）。shipped stone_slab 放在
   空邻居场景（E2E）无此问题；相邻满块是 v1 已知局限。`[Phase 85]`
-- **slab 光照按满块不透明** — slab 顶半格是空气（光本应透过），但 v1 按
-  `opaque: true` 处理（挡光如满块）；简化偏离。`[Phase 85]`
+- **~~slab 光照按满块不透明~~** — `[Phase 85]` 已修复 `[LGT-5]`：`light_opacity: 0`
+  （slab/stairs×4/wall/fence 7 块光如空气穿过 = MC 半块透光规则，统一进入格成本 +1
+  零核心代码；`opaque` 保持 true = 剔面/渲染零变更）。
 
 ## 墙 wall（Phase 95）
 
@@ -599,8 +623,8 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
   = 正确暴露（同 slab v1 保守取舍）。P95 曾记录"墙邻满块 Z-fight"系误判
   （满块面早被贪婪路径对 opaque 墙邻居剔除，无共面双绘）。`[Phase 95]`
   `[Phase 96]`
-- **墙光照按满块不透明** — 帽（y 1..1.5）是空气（光本应透过），但 v1 按
-  `opaque: true` 处理（挡光如满块）；同 slab 简化偏离。`[Phase 95]`
+- **~~墙光照按满块不透明~~** — `[Phase 95]` 已修复 `[LGT-5]`：墙（与 slab/stairs/栅栏
+  同款）`light_opacity: 0` = 光如空气穿过，同 slab 条。
 
 ## 栅栏 fence（Phase 98）
 
@@ -753,7 +777,12 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 
 ## 数据 / 内容
 
-- **方块 per-instance 状态 = 仅楼梯朝向一种** — BlockState 概念仍未引入（附属、流体等级等需要时再设计）。`[Phase 2]`
+- **~~方块 per-instance 状态 = 仅楼梯朝向一种~~** — `[Phase 2]` BlockState 已泛化
+  `[ENT-2]`：World 每格 byte `m_blockState` + 双门控 `state_count`/`state_default`
+  （缺省 = 无 stateful 块位级 legacy）+ `World::get/setBlockState` + 存档 format 15
+  `states` 段（14→15 值保真迁移 + journal 派生）+ init 不变量（worldgen 放置源禁
+  stateful）；消费面 = 楼梯朝向（P94）+ sapling 生长 stage（`[GEN-2]` state 0-7）。
+  四类 map（炉子/营火/工作台/信标）未迁移 BlockState（YAGNI 定案）。
   **`[Phase 94]` 起唯一例外 = 楼梯朝向**：World 每格 byte（chunk `m_stairFacing`，哨兵 255 = 未设置 →
   碰撞/mesh 回落块 `stair_facing` 默认），setBlock 收口维护（放置按块默认、潜行右键旋转、移除清哨兵），
   碰撞（solidTopHeight）+ mesh（emitStairs）直接读，存档 format 14 `stairs` 数组双向交叉校验——

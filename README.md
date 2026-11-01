@@ -7,7 +7,7 @@
 **本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒<br>
 （C++20 / SDL3 / OpenGL 3.3，自研 JSON/PNG，内容全数据驱动）。<br>
 确定性是一级要求——无输入运行逐帧字节可复现。<br>
-v1.0 已发布 · v1.x 迭代中（进度见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
+v2.0.0 已发布（1.x 收官里程碑）· v2.x 待立项（任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
 
 [![GitHub stars](https://img.shields.io/github/stars/shmilee/TokenMine.cpp?style=flat-square)](https://github.com/shmilee/TokenMine.cpp/stargazers)
 [![MIT license](https://img.shields.io/badge/license-MIT-555555?style=flat-square)](LICENSE)
@@ -90,6 +90,12 @@ cmake --build build
 
 ## 版本与发布
 
+- **v2.0.0**（2026-11-02）：**1.x 收官里程碑**——任务矩阵 40/40 + 两轮实机报障
+  系列（UX-8g/UX-9：云方块化/教程火把步/洞穴底光可配置）全完成 + 发布扫尾
+  （1.x 文档归档 `docs/archive/v1x/` / 第三人称准星不压头 / 活文档刷新 2.0 状态）。
+  2075/2075 测试。Release 见 GitHub Releases "TokenMine.cpp v2.0.0"。
+  v2.x 任务表待立项（`docs/BACKLOG.md`）；1.x 全史 =
+  `docs/archive/v1x/HISTORY.md`。
 - **v1.0.0**（2026-10-27）：**首个正式版**，任务矩阵 34/34 全完成
   （十大系统：流送内存/帧管线/光照/世界生成/流体/实体 Mob/生存战斗/物品
   合成/存档/表现层 + 2 项实机报障修复）。正式版 release 见 GitHub
@@ -129,7 +135,7 @@ BlockState / 四肢摆动 / mob 踏阶 / 水体交互 / 护甲 / 氧气 / 耐久
 | [docs/PITS.md](docs/PITS.md) | 坑位合集（266 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃）+ 已修复存档索引 | 阶段验收前后 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phase 0–29 规划 + 细节存档索引 | 了解历史 |
-| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v0.1.0 → v1.0 逐版明细） | 查某版改了什么 |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v0.1.0 → v2.0.0 逐版明细） | 查某版改了什么 |
 | [docs/archive/v1x/phase-NN.md](docs/archive/) | 单阶段细节存档（阶段报告 + 会话存档） | 深挖某阶段 |
 | `opencode-sessions/SESSION_CONTEXT.md`（本地，不入库） | 会话交接：最新状态/提交列表/下一步（+ 历史块/遗留附录/新会话启动 prompt，同目录） | 任何"继续"会话 |
 
