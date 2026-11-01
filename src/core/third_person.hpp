@@ -33,6 +33,38 @@ constexpr float kThirdPersonDistance = 4.0f;
 // How far in FRONT of an occluding face the clamped camera stops.
 constexpr float kCameraOcclusionMargin = 0.1f;
 
+// The orbit center's lift along the view's up axis (Camera::up): the
+// camera orbits a point kThirdPersonOrbitHeight ABOVE the eye instead
+// of the eye itself — the Minecraft third-person convention, the 2.0.0
+// fix for the screen-center crosshair sitting on the player's head.
+// Lifted along the view's own up axis, the head drops BELOW the screen
+// center by a fixed amount at every yaw/pitch (up_cam is orthonormal
+// with the view forward by construction, so looking up or down never
+// puts the head back on the crosshair).
+//
+// Derivation at pitch 0 (up_cam = +Y), the shipped 70 deg vertical FOV
+// in a 744 px window (~531 px per world unit at 1 block): the head's
+// top (eye + 0.18 — the 1.8 body / 1.62 eye) projects
+// (0.4 - 0.18)/4 ≈ 29 px below the screen center, and the head box's
+// bottom edge (eye - 0.32 — the 0.5 box centered 1.55)
+// (0.4 + 0.32)/4 ≈ 96 px below — the 2 px crosshair sits clear of the
+// head with a wide margin.
+//
+// The aim rays are UNTOUCHED (UX-8g red line): they still leave from
+// eyePosition() in both modes. The screen-center ray (the view's own
+// forward) is PARALLEL to the eye ray, offset by this lift along
+// up_cam — a fixed third-person parallax (the Minecraft third-person
+// look), documented deviation, no code compensation.
+constexpr float kThirdPersonOrbitHeight = 0.4f;
+
+// The orbit center for a third-person frame: the eye lifted along the
+// view's up axis (Camera::up) by kThirdPersonOrbitHeight. The caller
+// passes eyePosition() + yaw + pitch — the same three the view matrix
+// is built from, so the lift is constant for every orientation. Crouch
+// needs no extra code: eyePosition() already carries the crouch eye
+// drop, so the orbit center descends with it.
+Vec3 thirdPersonOrbitCenter(const Vec3& eye, float yaw, float pitch);
+
 // The unoccluded camera offset for a view orientation: the view's unit
 // forward negated and scaled to `distance` (the camera sits BEHIND the
 // player). pitch 0 -> (0, 0, distance); pitch +90 deg -> (0,
@@ -43,8 +75,12 @@ Vec3 thirdPersonCameraOffset(float yaw, float pitch, float distance);
 
 // The third-person camera position for this frame: the ideal orbit
 // position, pulled back to the first occluding face when a block sits
-// between it and the eye. orbitCenter = the player's eye position (the
-// caller passes eyePosition()).
+// between it and the eye. orbitCenter = the lifted orbit point (the
+// caller passes thirdPersonOrbitCenter(eyePosition(), yaw, pitch) —
+// 2.0.0: the eye kThirdPersonOrbitHeight up the view's up axis). The
+// function itself is agnostic: the ideal->orbitCenter segment has
+// length kThirdPersonDistance either way, so the occlusion logic is
+// unchanged.
 //
 // Occlusion, in order:
 //   1. the cell containing the ideal position is checked EXPLICITLY

@@ -1,10 +1,13 @@
-// UX-4: the third-person back camera (core/third_person).
+// UX-4 (2.0.0: the lifted orbit): the third-person back camera
+// (core/third_person).
 //
-// The offset math pins the Minecraft third-person convention (behind the
-// eye, on the view's own sphere, one trig source with Camera::forward);
-// the resolve pins the occlusion clamps (wall face, the embedded-ideal
-// edge, fluids transparent, beyond reach) with exact expected
-// positions.
+// The offset math pins the Minecraft third-person convention (behind
+// the orbit point, on the view's own sphere, one trig source with
+// Camera::forward); the orbit-center math pins the 2.0.0 lift (the eye
+// kThirdPersonOrbitHeight up the view's up axis — the head stays clear
+// of the screen-center crosshair); the resolve pins the occlusion
+// clamps (wall face, the embedded-ideal edge, fluids transparent,
+// beyond reach) with exact expected positions.
 
 #include <gtest/gtest.h>
 
@@ -96,51 +99,98 @@ TEST(ThirdPersonTest, OffsetIntermediateAnglesAndLength) {
     EXPECT_NEAR(length(v2), kThirdPersonDistance, 1e-5f);
 }
 
+// -- 2.0.0: the lifted orbit center ----------------------------------------------
+
+TEST(ThirdPersonTest, OrbitCenterLiftPins) {
+    // pitch 0 / yaw 0: up_cam = +Y EXACTLY (sin 0 = 0, cos 0 = 1 are
+    // exact in binary), so the orbit center is bit-exactly the eye
+    // kThirdPersonOrbitHeight up.
+    const Vec3 orbit0 = thirdPersonOrbitCenter(kEye, 0.0f, 0.0f);
+    const Vec3 want0 {22.5f, 40.9f, 0.5f};
+    EXPECT_EQ(orbit0, want0);
+
+    // Non-axis: the analytic form of up_cam = cross(right, forward)
+    // (see Camera::up) is (sin yaw * sin pitch, cos pitch,
+    // sin pitch * cos yaw), so the orbit center is the eye + that,
+    // scaled by kThirdPersonOrbitHeight.
+    const float cases[][2] = {
+        {0.0f, 0.5f},    {kPiOver2, 0.5f}, {0.7f, -0.3f},
+        {-2.1f, 0.9f},   {3.0f, -1.2f},    {kPiOver2, 0.0f},
+    };
+    for (const auto& c : cases) {
+        const float yaw = c[0];
+        const float pitch = c[1];
+        const Vec3 orbit = thirdPersonOrbitCenter(kEye, yaw, pitch);
+        expectVecNear("orbit", orbit,
+                      kEye.x + kThirdPersonOrbitHeight * std::sin(yaw) *
+                          std::sin(pitch),
+                      kEye.y + kThirdPersonOrbitHeight * std::cos(pitch),
+                      kEye.z + kThirdPersonOrbitHeight * std::sin(pitch) *
+                          std::cos(yaw),
+                      1e-6f);
+        // The lift has the exact magnitude at every orientation
+        // (1e-5: recovering it by subtracting the ~40-magnitude eye
+        // costs a few ulps at that scale).
+        EXPECT_NEAR(length(orbit - kEye), kThirdPersonOrbitHeight, 1e-5f)
+            << "yaw " << yaw;
+    }
+}
+
 // -- occlusion resolve ---------------------------------------------------------
 
 TEST(ThirdPersonTest, ResolveEmptyWorldIsIdeal) {
     World world; // no chunks: every read is air
-    // The yaw-0/pitch-0 ideal is exactly the eye + (0, 0, 4): the
-    // unoccluded path returns it BIT-exactly.
-    const Vec3 ideal {22.5f, 40.5f, 4.5f};
-    const Vec3 cam = resolveThirdPersonCamera(world, kEye, 0.0f, 0.0f);
+    // 2.0.0: the yaw-0/pitch-0 orbit center is exactly the eye +
+    // (0, 0.4, 0) (up_cam = +Y), so the ideal is exactly the orbit +
+    // (0, 0, 4): the unoccluded path returns it BIT-exactly.
+    const Vec3 orbit = thirdPersonOrbitCenter(kEye, 0.0f, 0.0f);
+    const Vec3 ideal {22.5f, 40.9f, 4.5f};
+    const Vec3 cam = resolveThirdPersonCamera(world, orbit, 0.0f, 0.0f);
     EXPECT_EQ(cam, ideal);
     // A non-axis orientation too (same function, so bit-exact here).
-    const Vec3 cam2 = resolveThirdPersonCamera(world, kEye, 0.4f, -0.2f);
-    const Vec3 ideal2 = kEye +
+    const Vec3 orbit2 = thirdPersonOrbitCenter(kEye, 0.4f, -0.2f);
+    const Vec3 cam2 = resolveThirdPersonCamera(world, orbit2, 0.4f, -0.2f);
+    const Vec3 ideal2 = orbit2 +
         thirdPersonCameraOffset(0.4f, -0.2f, kThirdPersonDistance);
     EXPECT_EQ(cam2, ideal2);
 }
 
 TEST(ThirdPersonTest, ResolveClampsInFrontOfWall) {
     World world;
-    // Eye at kEye, yaw 0 / pitch 0 -> the ideal camera at
-    // (22.5, 40.5, 4.5), looking -Z toward the eye. Two wall blocks at
-    // (22,40,1) and (22,40,2): the first occluding face is z = 3, at
-    // t = 1.5 from the ideal.
+    // Eye at kEye, yaw 0 / pitch 0 -> 2.0.0: the orbit center at
+    // (22.5, 40.9, 0.5) (the eye 0.4 up, up_cam = +Y) and the ideal
+    // camera at (22.5, 40.9, 4.5), looking -Z toward the orbit. Two
+    // wall blocks at (22,40,1) and (22,40,2) (the ray's y = 40.9 is
+    // still inside their y range [40, 41)): the first occluding face
+    // is z = 3, at t = 1.5 from the ideal.
     ASSERT_TRUE(world.setBlock(22, 40, 1, BlockID{1}));
     ASSERT_TRUE(world.setBlock(22, 40, 2, BlockID{1}));
-    const Vec3 cam = resolveThirdPersonCamera(world, kEye, 0.0f, 0.0f);
+    const Vec3 orbit = thirdPersonOrbitCenter(kEye, 0.0f, 0.0f);
+    const Vec3 cam = resolveThirdPersonCamera(world, orbit, 0.0f, 0.0f);
     // Stop kCameraOcclusionMargin in front of the face: 4.5 - (1.5 -
     // 0.1) = 3.1 (0.1 in front of the wall's z = 3 face).
-    expectVecNear("clamp", cam, 22.5f, 40.5f, 3.1f);
+    expectVecNear("clamp", cam, 22.5f, 40.9f, 3.1f);
 }
 
 TEST(ThirdPersonTest, ResolveEmbeddedIdealExitsTheFace) {
     // The acceptance scene: the ideal position is INSIDE the wall cell.
-    // Eye at (22.5, 39.62, 0.5), yaw 0 / pitch 0 -> ideal at
-    // (22.5, 39.62, 4.5), embedded in the z = 4 wall cell, dir =
-    // (0, 0, -1). The DDA first step out of that cell is t_exit = 0.5
-    // (the z = 4 face). The face is the eye-SIDE boundary of the wall,
-    // so the camera exits it and takes the margin OUTSIDE, on the
-    // player's side: z = 4.5 - (0.5 + 0.1) = 3.9 — 0.1 in front of the
-    // wall's z = 4 face, in the air (NOT z = 4.1: t_exit - margin
-    // would leave the camera 0.1 inside the wall, the gate S2b bug).
+    // Eye at (22.5, 39.62, 0.5), yaw 0 / pitch 0 -> 2.0.0: the orbit
+    // center at (22.5, 40.02, 0.5) (the eye 0.4 up, up_cam = +Y) and
+    // the ideal at (22.5, 40.02, 4.5), embedded in the z = 4 wall cell
+    // (the wall moved up with the ideal: (22,40,4), so the embedded
+    // semantics are preserved), dir = (0, 0, -1). The DDA first step
+    // out of that cell is t_exit = 0.5 (the z = 4 face). The face is
+    // the orbit-SIDE boundary of the wall, so the camera exits it and
+    // takes the margin OUTSIDE, on the player's side: z = 4.5 -
+    // (0.5 + 0.1) = 3.9 — 0.1 in front of the wall's z = 4 face, in
+    // the air (NOT z = 4.1: t_exit - margin would leave the camera
+    // 0.1 inside the wall, the gate S2b bug).
     World world;
-    const Vec3 orbit {22.5f, 39.62f, 0.5f};
-    ASSERT_TRUE(world.setBlock(22, 39, 4, BlockID{1}));
+    const Vec3 orbit =
+        thirdPersonOrbitCenter(Vec3{22.5f, 39.62f, 0.5f}, 0.0f, 0.0f);
+    ASSERT_TRUE(world.setBlock(22, 40, 4, BlockID{1}));
     const Vec3 cam = resolveThirdPersonCamera(world, orbit, 0.0f, 0.0f);
-    expectVecNear("embedded", cam, 22.5f, 39.62f, 3.9f);
+    expectVecNear("embedded", cam, 22.5f, 40.02f, 3.9f);
 }
 
 TEST(ThirdPersonTest, ResolveIgnoresFluids) {
@@ -151,19 +201,21 @@ TEST(ThirdPersonTest, ResolveIgnoresFluids) {
     world.getOrCreateChunk(worldToChunk({22, 40, 3}));
     ASSERT_TRUE(world.setFluid(22, 40, 3, FluidKind::Water,
                                kMaxFluidLevel));
-    const Vec3 cam = resolveThirdPersonCamera(world, kEye, 0.0f, 0.0f);
-    const Vec3 ideal {22.5f, 40.5f, 4.5f};
+    const Vec3 orbit = thirdPersonOrbitCenter(kEye, 0.0f, 0.0f);
+    const Vec3 cam = resolveThirdPersonCamera(world, orbit, 0.0f, 0.0f);
+    const Vec3 ideal {22.5f, 40.9f, 4.5f};
     EXPECT_EQ(cam, ideal);
 }
 
 TEST(ThirdPersonTest, ResolveIgnoresWallBeyondReach) {
     // A wall past the orbit center (more than kThirdPersonDistance from
     // the ideal, at the z = 0 plane = t 4.5 > 4.0): it occludes nothing
-    // on the camera->eye segment.
+    // on the camera->orbit segment.
     World world;
     ASSERT_TRUE(world.setBlock(22, 40, -1, BlockID{1}));
-    const Vec3 cam = resolveThirdPersonCamera(world, kEye, 0.0f, 0.0f);
-    const Vec3 ideal {22.5f, 40.5f, 4.5f};
+    const Vec3 orbit = thirdPersonOrbitCenter(kEye, 0.0f, 0.0f);
+    const Vec3 cam = resolveThirdPersonCamera(world, orbit, 0.0f, 0.0f);
+    const Vec3 ideal {22.5f, 40.9f, 4.5f};
     EXPECT_EQ(cam, ideal);
 }
 
@@ -191,21 +243,58 @@ TEST(ThirdPersonTest, OffsetPointsOppositeTheViewForward) {
     }
 }
 
+TEST(ThirdPersonTest, UpCamIsOrthonormalToTheViewAxes) {
+    // 2.0.0: up_cam = cross(right, forward) (Camera::up) is the view's
+    // ACTUAL up — unit length, orthogonal to the view forward and the
+    // view right, at every player-clamped orientation. This is what
+    // makes the orbit lift "straight up in view space" for every
+    // yaw/pitch (looking up or down never re-puts the head on the
+    // crosshair).
+    const float cases[][2] = {
+        {0.0f, 0.0f},   {0.4f, -0.2f}, {1.2f, 0.5f},
+        {-2.1f, 0.9f},  {3.0f, -1.2f}, {kPiOver2, 0.0f},
+    };
+    for (const auto& c : cases) {
+        Camera cam {};
+        cam.yaw = c[0];
+        cam.pitch = c[1];
+        const Vec3 up = cam.up();
+        EXPECT_NEAR(length(up), 1.0f, 1e-6f) << "yaw " << c[0];
+        EXPECT_NEAR(dot(up, cam.forward()), 0.0f, 1e-6f) << "yaw " << c[0];
+        EXPECT_NEAR(dot(up, cam.right()), 0.0f, 1e-6f) << "yaw " << c[0];
+        // Cross-check against the view matrix's OWN up row: lookAt
+        // derives u = cross(s, f') with f' = normalized(forward) and
+        // s = normalized(cross(f', unitY)); for the player's clamped
+        // pitch, cross(f', unitY) = cos(pitch) * right() (a POSITIVE
+        // scalar), so s = right() and u == up() (to within the
+        // normalization's few ulps).
+        const Mat4 view = cam.viewMatrix();
+        EXPECT_NEAR(view.at(1, 0), up.x, 1e-6f) << "yaw " << c[0];
+        EXPECT_NEAR(view.at(1, 1), up.y, 1e-6f) << "yaw " << c[0];
+        EXPECT_NEAR(view.at(1, 2), up.z, 1e-6f) << "yaw " << c[0];
+    }
+}
+
 // -- UX-8g: the aim rays leave from the eye in both modes ------------------------
 
 TEST(ThirdPersonTest, EyeAimRayCoincidesWithTheViewAxis) {
     // UX-8g: the interaction raycasts (targetBlock / targetMob / the
     // bucket rays / the arrow origin) leave from the EYE along
     // m_camera.forward() in BOTH camera modes. In third person the
-    // camera sits kThirdPersonDistance behind the eye; this test pins
-    // the geometry that makes the eye ray the screen-center line —
-    // the unoccluded resolved camera lies EXACTLY on the eye's aim
-    // line at t = -kThirdPersonDistance (eye + forward * t), so the
-    // player's own body can never occlude the aim and the full kReach
-    // budget is spent IN FRONT of the eye. (targetBlock's origin
-    // itself is a Game method, not unit-testable in isolation; this
-    // collinearity + the bit-exact First assignment in game_frame are
-    // the two halves of the first-person identity argument.)
+    // camera sits kThirdPersonDistance behind the (2.0.0: lifted)
+    // orbit center; this test pins the geometry that keeps the body
+    // out of the aim: the unoccluded resolved camera lies EXACTLY on
+    // the screen-center line through the orbit center at t =
+    // -kThirdPersonDistance (orbit + forward * t). The screen-center
+    // line is the view's own forward — PARALLEL to the eye's aim ray,
+    // offset by kThirdPersonOrbitHeight along up_cam: a fixed
+    // third-person parallax (the Minecraft third-person look,
+    // documented deviation — no code compensation). The full kReach
+    // budget of the eye ray is still spent IN FRONT of the eye.
+    // (targetBlock's origin itself is a Game method, not
+    // unit-testable in isolation; this collinearity + the bit-exact
+    // First assignment in game_frame are the two halves of the
+    // first-person identity argument.)
     World world; // no chunks: the unoccluded resolve = the ideal orbit
     const float cases[][2] = {
         {0.0f, 0.0f},   {0.4f, -0.2f}, {1.2f, 0.5f},
@@ -215,12 +304,63 @@ TEST(ThirdPersonTest, EyeAimRayCoincidesWithTheViewAxis) {
         Camera view {};
         view.yaw = c[0];
         view.pitch = c[1];
-        const Vec3 cam = resolveThirdPersonCamera(world, kEye, c[0], c[1]);
-        // The camera is on the eye ray at t = -kThirdPersonDistance.
+        const Vec3 orbit = thirdPersonOrbitCenter(kEye, c[0], c[1]);
+        const Vec3 cam = resolveThirdPersonCamera(world, orbit, c[0], c[1]);
+        // The camera is on the screen-center line (through the lifted
+        // orbit center) at t = -kThirdPersonDistance.
         const Vec3 onRay =
-            kEye + view.forward() * (-kThirdPersonDistance);
+            orbit + view.forward() * (-kThirdPersonDistance);
         EXPECT_NEAR(cam.x, onRay.x, 1e-5f) << "yaw " << c[0];
         EXPECT_NEAR(cam.y, onRay.y, 1e-5f) << "yaw " << c[0];
         EXPECT_NEAR(cam.z, onRay.z, 1e-5f) << "yaw " << c[0];
+    }
+}
+
+TEST(ThirdPersonTest, UnoccludedCameraPinsTheLiftedOrbitInvariant) {
+    // 2.0.0 invariants for the unoccluded resolve, at every
+    // orientation:
+    //   (1) the resolved camera is BIT-exactly on the lifted orbit
+    //       line (orbit + offset, the resolve's own arithmetic);
+    //   (2) the lift vector identity: (eye - camera) =
+    //       forward * kThirdPersonDistance - up_cam *
+    //       kThirdPersonOrbitHeight — its component along up_cam is
+    //       exactly -kThirdPersonOrbitHeight, so the head stays a
+    //       fixed distance below the screen center at every
+    //       yaw/pitch;
+    //   (3) the screen-center ray (the resolved camera's own forward)
+    //       is the eye aim ray's PARALLEL — the direction is
+    //       bit-exactly equal (same trig expression), so the
+    //       parallax is a fixed offset, never a direction change.
+    World world; // no chunks: the unoccluded resolve = the ideal orbit
+    const float cases[][2] = {
+        {0.0f, 0.0f},   {0.4f, -0.2f}, {1.2f, 0.5f},
+        {-2.1f, 0.9f},  {3.0f, -1.2f}, {kPiOver2, 0.0f},
+    };
+    for (const auto& c : cases) {
+        Camera view {};
+        view.yaw = c[0];
+        view.pitch = c[1];
+        const Vec3 orbit = thirdPersonOrbitCenter(kEye, c[0], c[1]);
+        const Vec3 cam = resolveThirdPersonCamera(world, orbit, c[0], c[1]);
+        // (1) bit-exact on the lifted orbit line.
+        const Vec3 want = orbit +
+            thirdPersonCameraOffset(c[0], c[1], kThirdPersonDistance);
+        EXPECT_EQ(cam, want) << "yaw " << c[0];
+        // (2) the lift vector identity, per view axis (1e-5: the
+        //     segment is recovered by subtracting ~40-magnitude
+        //     coordinates, costing a few ulps at that scale).
+        const Vec3 seg = kEye - cam;
+        EXPECT_NEAR(dot(seg, view.up()), -kThirdPersonOrbitHeight, 1e-5f)
+            << "yaw " << c[0];
+        EXPECT_NEAR(dot(seg, view.forward()), kThirdPersonDistance, 1e-5f)
+            << "yaw " << c[0];
+        EXPECT_NEAR(dot(seg, view.right()), 0.0f, 1e-5f) << "yaw " << c[0];
+        // (3) the screen-center ray direction == the eye ray
+        //     direction, bit-exactly.
+        Camera resolved {};
+        resolved.position = cam;
+        resolved.yaw = c[0];
+        resolved.pitch = c[1];
+        EXPECT_EQ(resolved.forward(), view.forward()) << "yaw " << c[0];
     }
 }

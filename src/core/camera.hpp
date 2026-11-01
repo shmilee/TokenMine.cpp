@@ -25,6 +25,12 @@ public:
     Vec3 forward() const;
     Vec3 right() const;
 
+    // The view's actual up axis: orthonormal with forward and right,
+    // the up that viewMatrix()'s lookAt derives for the player's clamped
+    // pitch (|pitch| < 90 deg). Cross of the two existing accessors —
+    // no new trig, lock-step with the view matrix.
+    Vec3 up() const;
+
     // World-to-camera matrix.
     Mat4 viewMatrix() const;
 

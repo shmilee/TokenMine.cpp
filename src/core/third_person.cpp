@@ -60,6 +60,18 @@ Vec3 thirdPersonCameraOffset(float yaw, float pitch, float distance) {
     return (-cam.forward()) * distance;
 }
 
+Vec3 thirdPersonOrbitCenter(const Vec3& eye, float yaw, float pitch) {
+    // The SAME Camera the view matrix is built from (one trig source):
+    // lift the eye along the view's up axis (Camera::up —
+    // cross(right, forward), the up lookAt derives for the player's
+    // clamped pitch), the Minecraft third-person convention (see
+    // kThirdPersonOrbitHeight for the head-clearance derivation).
+    Camera cam {};
+    cam.yaw = yaw;
+    cam.pitch = pitch;
+    return eye + cam.up() * kThirdPersonOrbitHeight;
+}
+
 Vec3 resolveThirdPersonCamera(const World& world, const Vec3& orbitCenter,
                               float yaw, float pitch) {
     const Vec3 ideal =

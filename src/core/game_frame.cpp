@@ -406,9 +406,19 @@ void Game::update(double dt) {
     m_camera.yaw = m_player->yaw;
     m_camera.pitch = m_player->pitch;
     if (m_cameraMode == CameraMode::ThirdBack) {
+        // 2.0.0: orbit kThirdPersonOrbitHeight ABOVE the eye along the
+        // view's up axis (the Minecraft third-person convention) so the
+        // screen-center crosshair no longer sits on the player's head.
+        // The aim rays still leave from eyePosition() in both modes
+        // (UX-8g red line, untouched); the screen-center ray is the
+        // view's own forward — parallel to the eye ray, offset by the
+        // lift along up_cam = the fixed third-person parallax
+        // (documented deviation, the MC third-person look).
         m_camera.position = resolveThirdPersonCamera(
-            m_world, m_player->eyePosition(), m_player->yaw,
-            m_player->pitch);
+            m_world,
+            thirdPersonOrbitCenter(m_player->eyePosition(), m_player->yaw,
+                                   m_player->pitch),
+            m_player->yaw, m_player->pitch);
     } else {
         m_camera.position = m_player->eyePosition(); // First: legacy
     }
