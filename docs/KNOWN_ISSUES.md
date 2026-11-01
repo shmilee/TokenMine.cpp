@@ -1,6 +1,6 @@
 # 已知问题清单（Known Issues）
 
-每个阶段完成后把新发现的限制/简化记到这里；修复后移入 `docs/archive/phase-NN.md`
+每个阶段完成后把新发现的限制/简化记到这里；修复后移入 `docs/archive/v1x/phase-NN.md`
 （本文件末尾有已修复存档索引）。
 条目格式：**问题** — 影响与现状。`[阶段]` 标注发现/引入阶段，`计划` 标注预计修复阶段。
 排序约定：**章节按主题（子系统）组织**——查"某系统有什么问题"跳到对应 `##` 节；章节顺序 = 主题首次立项的顺序（非 phase 排序，`[Phase]` 标签只是引入/发现阶段的标记，不是排序键）；章节内条目 = 发现/追加时间序（append-only），修复历史写进条目正文（`[99.x] 已修复` 式标注），不按修复阶段重排。
@@ -19,7 +19,7 @@
 - **世界边缘即"虚空"（无雾）** — 未加载区域读作 air，没有雾效/边缘遮挡，站在流式加载的边缘能看到悬空截面（Phase 14 起"边缘"随玩家移动，不再是固定的演示区边界）。`[Phase 3]`（流式部分 `[Phase 14]` 已缓解）
 - **顶面/底面纹理朝向约定** — Phase 3 修正 Y 面绕序后，顶面纹理的 u 轴指向 +Z、v 轴指向 -X（与 Minecraft"顶面纹顶部朝向 -Z"不同）。占位纹理下无视觉影响；正式纹理阶段可统一调整。`[Phase 3]`
 - **alpha cutout 无 discard（透明纹素仍写深度）** — 混合 pass 用 src-alpha 混合、无 `discard`：alpha=0 的纹素视觉透明（贡献 0），但深度照常写入——花/十字植物面片"透明孔"后面的几何会被孔遮挡（孔内看到深度而非透过去）。leaves（~12% 透明孔）/glass 既有同类行为；Phase 45 的十字植物花（allium/tulip/cornflower）同类。修复 = shader 加 `if (alpha < 0.5) discard;`（需先确认无其他依赖深度写入的混合几何）。`[Phase 3]`（十字植物部分 `[Phase 45]`）
-- **特定自然地形场景配置下 GL 列 mesh 更新滞后（远景顶面不渲染，候选）** — 10-28 GEN-9 门 123 发现：自然地形场景（相机 8.5 块侧视 demo 列 + 走廊挖通）中，湿耕地顶面恒不渲染——CPU mesh 日志证 quad 已发射（tile 正确）、世界 dump 证视线盒全空、受控平台场景同二进制全正常、**old v1.7.0 二进制帧字节一致（非 GEN-9 引入）**。= 该场景配置的 GL 列 mesh 集成时机 quirk（demo 列 + 场景编辑 + 流送交互）；实机玩家视角 = 近景站立/行走（受控场景覆盖）不受影响。复现场景与取证链见 `docs/archive/phase-gen9.md` E2E 节 + PITS 292。`[GEN-9 门 123 候选]`
+- **特定自然地形场景配置下 GL 列 mesh 更新滞后（远景顶面不渲染，候选）** — 10-28 GEN-9 门 123 发现：自然地形场景（相机 8.5 块侧视 demo 列 + 走廊挖通）中，湿耕地顶面恒不渲染——CPU mesh 日志证 quad 已发射（tile 正确）、世界 dump 证视线盒全空、受控平台场景同二进制全正常、**old v1.7.0 二进制帧字节一致（非 GEN-9 引入）**。= 该场景配置的 GL 列 mesh 集成时机 quirk（demo 列 + 场景编辑 + 流送交互）；实机玩家视角 = 近景站立/行走（受控场景覆盖）不受影响。复现场景与取证链见 `docs/archive/v1x/phase-gen9.md` E2E 节 + PITS 292。`[GEN-9 门 123 候选]`
 
 ## 世界 / 生成
 
@@ -38,7 +38,7 @@
   3 沙合成砂岩、2 砂岩合成光滑砂岩）与 `stone → cobblestone`（Phase 61，
   挖掘掉落）都**不可逆**（无锻回配方/熔炼——P61 既定范式的同款偏离；MC
   的砂岩→沙、光滑砂岩→砂岩亦无，一致）。`[Phase 80]` → `[Phase 81]`
-- ~~**水量不守恒**~~ — `[Phase 9]` 问题，**`[FLUID-1]` 已修复**（路线 A，细节见 `archive/phase-fluid1.md`）：修复前流体体积有三条不记账路径——浅膜落入更深流动池被"吸收"（池保持原水位，**合法具名事件 α**）；下落链落入世界底部直接消失（**合法具名事件 δ**）；**落入池时按等级抬升池水位**（无源增益 = 唯一不守恒的体积增加路径，已删除）。修复 = 删抬升一分支的**统一池规则**三分支：下方满格（level 8）→ 本格拉满到 8（**κ**，source 托底补满）；下方流动池 0<B<8 且 L<B → 本格拉入池（**α**，池水位 B 不动）；L≥B → **静态沉积**（零写入：本格保留、池水位不动 = 池水位逐格单调不增）。守恒目标 = **逐 tick 会计恒等式**而非"总量 ±0"（后者是错误目标——MC 流前缘创生 level-L-1 邻居合法，记为具名事件 **σ**；下落传送带为成对移动净零）：封闭区域流动格数 F 与源数 S 满足 F' = F + σ_c − α − κ − δ、S' = S + κ，单测逐 tick 钉死（封闭盒 64 格精确终态表 + P90 湖精确终态计数）。**残余** = 站流水瀑布/崖膜的永久轮换（下条，接受现状）。`[Phase 9]`
+- ~~**水量不守恒**~~ — `[Phase 9]` 问题，**`[FLUID-1]` 已修复**（路线 A，细节见 `archive/v1x/phase-fluid1.md`）：修复前流体体积有三条不记账路径——浅膜落入更深流动池被"吸收"（池保持原水位，**合法具名事件 α**）；下落链落入世界底部直接消失（**合法具名事件 δ**）；**落入池时按等级抬升池水位**（无源增益 = 唯一不守恒的体积增加路径，已删除）。修复 = 删抬升一分支的**统一池规则**三分支：下方满格（level 8）→ 本格拉满到 8（**κ**，source 托底补满）；下方流动池 0<B<8 且 L<B → 本格拉入池（**α**，池水位 B 不动）；L≥B → **静态沉积**（零写入：本格保留、池水位不动 = 池水位逐格单调不增）。守恒目标 = **逐 tick 会计恒等式**而非"总量 ±0"（后者是错误目标——MC 流前缘创生 level-L-1 邻居合法，记为具名事件 **σ**；下落传送带为成对移动净零）：封闭区域流动格数 F 与源数 S 满足 F' = F + σ_c − α − κ − δ、S' = S + κ，单测逐 tick 钉死（封闭盒 64 格精确终态表 + P90 湖精确终态计数）。**残余** = 站流水瀑布/崖膜的永久轮换（下条，接受现状）。`[Phase 9]`
 - **站流水瀑布/崖膜永久轮换（接受现状）** — FLUID-1 路线 A 下，海崖/盘边供给的薄膜级联以**站流水瀑布**形态运行：有界的边缘格集合每 tick 重新 churn（薄膜落下 → 沉积成新薄膜 → 再落下，period-2）。定量（路线 A step-0 probe）：流送盘 r5 场景 = **24 格**（与旧规则逐格同一集合、无新增振荡格）、稳态 **24 编辑/tick**、总编辑 ~18.6k/600 tick（旧规则 ~18.6k，同量级）；P90 表面湖溢出 = **1 churn 格**、稳态 ~3.4 编辑/tick（**`[GEN-4]` 后 = 3 churn 格**：洞穴重排新开排水沟把溢流路由出 disk-3 普查区，overflow 157→72 / total 473→707，湖契约不变——世界生成演进同款先例）**接受现状 = 非缺陷**：24 格类**视图外**（无输入基线 gate 原样通过）、**×2 RAW 字节确定**、99.8 活动门只把对应 chunk 保热（流体成本永久项有界）。pre-FLUID-1 的池抬升分支本可打断该循环——但那是唯一不守恒的体积增益路径，删抬升保稳压器 = 路线 A 定案。**`[99.11]` 成本修正**：该接受的 churn 在 shipped 海洋（seed 123456789）海岸线尺度 = 713→918→1357 格/tick（非 24 格量级），其 re-light 原为主线程同步巨盒重扫 = 每 300 帧窗口 130s→396s→661s = 用户深层卡顿根因；99.11 后光的传导走 worker 追赶流水线（≤2 列/帧、幂等收敛、滞后有界、film 光值近乎不变 = 视觉零差），churn 的主线程成本降为 set 插入（~10 ms/tick 量级、实测 update p95 7.6 s→80 ms）——churn 本体仍是接受现状（FluidSim 逐位未动，门 91 状态 vs v0.8.0 逐位相同钉死）。若未来做"斜向 film 静态梯度沉降"（MC 流时间链）= 流体模型语义变更，单独立项。`[FLUID-1]`
 - **满水格（source）失去支撑会下落** — 对 Minecraft 的刻意偏离：MC 中 source 水不随支撑消失而下落（只会停止扩散）；本实现中任何满格下方为空都会沿列下落（传送带式补位），行为更"物理"但与 MC 不符。`[Phase 9]`
 - **流体不会流进未加载的 chunk** — `World::setFluid` 只写已存在 chunk（不创建）；FluidSim 只 tick 已存在 chunk。Phase 14 起"未加载"只存在于流式半径环之外/玩家身后：水在加载区边界暂停，玩家走近加载后恢复扩散（生成地形本身的水是平衡态，tick 无变化）。`[Phase 9]`（范围 `[Phase 14]` 已收窄）
@@ -105,7 +105,7 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 ## 存档（Phase 13）
 
 - **存档是 opt-in（`--save <slot>`），无默认世界** — 不带 `--save` 时不读不写（保持既有运行行为与基线截图不变）；没有"上次世界"的隐式恢复。**槽管理面 `[SAVE-3]` 已解决**：CLI headless 四操作 `--list-saves`（名序确定性，摘要纯读文件内容无 mtime；损坏文件浮现 UNREADABLE 点名）/ `--copy-save`（字节保真分支，原子写）/ `--rename-save`（原子）/ `--delete-save`（槽名 = `--save` 字符集 = 路径穿越死）；**游戏内选择 UI/会话内换档保留不立项** = 游戏无标题画面，会话内载档 = 世界重建级架构变更（矩阵外记档偏离；多槽切换 = CLI `--save <slot>` 既有面）。`[Phase 13]`（管理面 `[SAVE-3]` 已解决）
-- ~~**写存档时在退出路径重跑生成器做 diff**~~ — `[Phase 13]` 引入（`[Phase 14]` 起规模放大；用户日志 ~100k-chunk 世界退出 13.6 s，`[Phase 33]` 诊断 ~0.14 ms/chunk），`[Phase 37]` 已修复（并行化）：`diffWorld` 在 >256 chunk 时改为**每 chunk 一个 job 跑在临时 4-worker 池**上（小世界保持单线程、线程生成零开销），每 job 写自己的 slice、flush 后合并；输出按位置排序是**全序**（一格至多一个编辑）→ 并行结果与串行**逐字节相同**（E2E A/B 对 P36 串行构建的存档字节一致是核心证据；~9600-chunk 实测退出 diff 1.3 s → 0.35 s，墙钟 Δ0.98 s）。增量编辑跟踪（O(编辑数)）**`[PIPE-2]` 已实现**：World 写收口位置集 journal（observer，含位移陷阱双上报）+ 退出按 journal 触及 chunk 重算 fresh、仅 live≠fresh 输出（**与 diffWorld 字节等价**，进程内 oracle = `--save-full-diff` 旗，legacy 路径保留）；楼梯 O(N) 世界扫描一并转 journal 派生（不变式 = worldgen 永不生成楼梯，真实 assets 单测钉死）；vd80 全环退出 6.2 s → **实测 17 ms**（journal 路径；3600f 场景 legacy 对照 3.28 s ≈ 190×；K = journal 触及 chunk 数，退出成本与环大小脱钩）。99.2 残余①（仅流体模拟改动的远端列卸载回生成态）在新语义下自动一致（卸载驱逐 journal + 退出过滤只查现存 chunk）。细节见 `archive/phase-37.md` + `archive/phase-pipe-2.md`。
+- ~~**写存档时在退出路径重跑生成器做 diff**~~ — `[Phase 13]` 引入（`[Phase 14]` 起规模放大；用户日志 ~100k-chunk 世界退出 13.6 s，`[Phase 33]` 诊断 ~0.14 ms/chunk），`[Phase 37]` 已修复（并行化）：`diffWorld` 在 >256 chunk 时改为**每 chunk 一个 job 跑在临时 4-worker 池**上（小世界保持单线程、线程生成零开销），每 job 写自己的 slice、flush 后合并；输出按位置排序是**全序**（一格至多一个编辑）→ 并行结果与串行**逐字节相同**（E2E A/B 对 P36 串行构建的存档字节一致是核心证据；~9600-chunk 实测退出 diff 1.3 s → 0.35 s，墙钟 Δ0.98 s）。增量编辑跟踪（O(编辑数)）**`[PIPE-2]` 已实现**：World 写收口位置集 journal（observer，含位移陷阱双上报）+ 退出按 journal 触及 chunk 重算 fresh、仅 live≠fresh 输出（**与 diffWorld 字节等价**，进程内 oracle = `--save-full-diff` 旗，legacy 路径保留）；楼梯 O(N) 世界扫描一并转 journal 派生（不变式 = worldgen 永不生成楼梯，真实 assets 单测钉死）；vd80 全环退出 6.2 s → **实测 17 ms**（journal 路径；3600f 场景 legacy 对照 3.28 s ≈ 190×；K = journal 触及 chunk 数，退出成本与环大小脱钩）。99.2 残余①（仅流体模拟改动的远端列卸载回生成态）在新语义下自动一致（卸载驱逐 journal + 退出过滤只查现存 chunk）。细节见 `archive/v1x/phase-37.md` + `archive/v1x/phase-pipe-2.md`。
 - **无周期性自动存档** — 崩溃/断电丢失自上次写入以来的全部修改；`F5` 立即存档（Phase 15，`--save` 槽激活时游戏内随时手动保存）已补上"会话中手动保存"，但仍无周期性 autosave/无"保存并退出"流程。`[Phase 13]`（手动保存热键 `[Phase 15]` 已解决；**`[SAVE-1]` 周期性 autosave + 崩溃韧性已解决**：`save.auto_save_seconds` 代码默认 120 s（0 = 显式关闭，config.json 零改动）真实 dt 计时器（`--save` 槽门控 = 无槽结构惰性，失败下帧重试）+ **原子写**（同目录 `.tmp` + rename，F5/退出/自动三路共用 = 崩溃时目标文件恒为完整旧档或完整新档，半写档不可达，kill -9 实证）；残余**`[SAVE-3]` 已解决**：多槽轮转 = `--copy-save` 分支 + `--rename-save` + `--delete-save`（CLI 管理面，headless 确定性）；"保存并退出" = 既有 ESC/退出存档路径（本已存在，无菜单流 = 无标题画面记档偏离））
 - ~~**玩家速度/onGround 不存**~~ — 速度半 `[SAVE-2]` 已解决：format 22 `player.velocity` 3 数组恒写（oxygen/stats 键纪律：22 必键、≤21 携 = 版本谎报点名；区间 ±100 `kSavedVelocityMax` 损坏档点名）+ 读档 `restorePosition` 后 `setVelocity`（≤21 载入 = 零速 legacy 值保真免迁；门 141 S2c 孪生跨侧 player 段位级 + PNG 字节双证）；**onGround 半保留不存** = 位置派生（空中读档 onGround 自然 false / 静止读档首子步碰撞置位 = 值保真，记档偏离）。`[Phase 13]`（坠落伤害部分 `[Phase 36]` 已解决；速度 `[SAVE-2]` 已解决）
 - ~~**物品严格解析白名单漏 `saturation` = 10 行 init WARN 噪音**~~ — `[v1.34.0]` 已解决：10 个带 `saturation` 的食物 JSON（SURV-9 内容）在 item_registry 的 unknown-field 白名单中缺名 → 每次 init 打 10 行 `Item '<food>': unknown field 'saturation' ignored`（WARN 非 FAIL；字段随后被 SURV-9 消费路径正确读取 = 值有效，纯日志噪音；新旧二进制两侧恒同 = 结构无害）→ 白名单加一行 `saturation`（零行为变更：解析路径不动，仅 WARN 消除；门 149 S2b 实证 = 旧 10 行 / 新 0 行）。`[SAVE-2 门内发现]` → `[v1.34.0]`
@@ -126,7 +126,7 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 ## 性能 / 架构
 
 - **Chunk 网格化 = worker 快照 job（`[PIPE-1]` 起）+ 主线程列合并 GL 上传** — `[99.2]` 的 `kRemeshBudgetPerFrame=8`（主线程预算 mesher）**已删除** → `[PIPE-1]`：**mesher 计算搬 4 worker**（每帧至多 `kMaxMeshBacklog=2` 个列快照 job：目标列 3×3 邻域 9 列 × 8 chunk memcpy 进 job 私有临时 World，worker 用**零改动的 ChunkMesher** 出 8 chunk 几何，次帧 flush 后主线程 move 进 `m_chunkMeshData` + 清脏 + 列合并 GL 上传【GL 上下文只在主线程，~1-3 ms/列 = 不可搬走部分】）。选择规则 = 脏列投影 ∩ 非 unlit（99.4 lit pop-in 承接）∩ 距当帧 light-pending 列 Chebyshev ≥2（光 footprint E±1 列会改 C 的光 = 本帧快照必陈旧；被排除列保持脏、下帧自动入选）∩ 非在途，`columnDistanceSq` 最近优先。**帧时序**：pop-in 晚 1 帧（render N+1→N+2，帧锁定确定）；已 mesh 列的邻列 stream 进来 = 最坏 +2 帧收敛（边界面临时对 void 烘焙，dirty 自愈，PITS 有录）。**启动演示区网格化**也走 worker（2 列/帧，帧 ≤10 完成——base18 论证措辞 = "无输入 worker 活动有界于启动 16 mesh job，其后零活动"；帧 60 终图像位级不变 = A/B 四对字节实证）。**实测**：vd80 step-0（插桩）主线程 remesh 填充期 7-11.3 ms/帧 + complete 后 **2.8 min 拖尾**（脏集峰值 45,895）→ `[PIPE-1]` 后主线程只留 GL 上传（step-0b 实测）；填充墙钟不变（gen/post-rate bound：vd16 A/B 8.1 s vs 8.0 s，存档 time/age 剥离后字节一致）。`[Phase 3]`（生成部分 `[Phase 14]` 已并行化；重 mesh 预算 `[99.2]`；列合并+裁剪 `[99.9]`；**worker 快照 mesh `[PIPE-1]`**）
-- **vd80 渲染管线（`[99.9]` 前是 2-30 FPS 坍缩，现已修）** — 三个实测根因：① 无视锥裁剪：207k 加载 chunk 全部提交 draw call（iGPU 每 draw ~10-30 µs + 小 VBO 页表开销，随环增长无上限）；② 光照 job 每格一次 `unordered_map` 查找（天空重扫+种子扫描+BFS ≈ 12 ms/box，流送 2 box/帧 = flush 恒等 25-30 ms）；③ 每 chunk 一个小 VBO。`[99.9]` 修复：视锥裁剪（列级保守 AABB）+ 列合并（draw ÷8）+ 光照 chunk 级重构（每 16³ 块一次查找 + BFS last-chunk 缓存 + 既有地形重扫零写入时跳过天空 BFS——**新地形必须强制传播**，`newTerrain` 参数：整列天生暗（天花板下）时重扫零写入，但侧邻列的光仍要流进来）。实测 vd80 流送中：render 37→1.5-2.5 ms/帧（不随环增长）、flush 25-30→13-17 ms、主线程 CPU 100%→40%（4 worker 各 16-23%，负载分布见 99.9 报告）。**残余**：~~方形环 12 GB~~（`[STRM-1]` 已解决：圆盘 + 远平面帽，实测 9.08→4.59 GB，见「Chunk 流式」99.2 条）、~~光照 union-region~~（`[LGT-1]` 砍除记档：step-0 实测同帧选列大多远隔（(distSq,x,z) 平局 → 位置序配对同半径圆远隔对称点），可合并 6/6418 = 0.1%、预期节省 0.002 ms/帧 ≪ 1 ms 砍除线；光照 job 下限 ~16.7 ms/帧保留 = 流送 fps 主下限，潜在方向 = 选列 tie-break 相邻化 + union（STRM 相邻变更）表外——见 `archive/phase-lgt1-flip.md`）、worker 网格化（`[PIPE-1]` 已完成：mesher 计算 → worker 快照 job，主线程只留 GL 上传，见「性能 / 架构」首条）。
+- **vd80 渲染管线（`[99.9]` 前是 2-30 FPS 坍缩，现已修）** — 三个实测根因：① 无视锥裁剪：207k 加载 chunk 全部提交 draw call（iGPU 每 draw ~10-30 µs + 小 VBO 页表开销，随环增长无上限）；② 光照 job 每格一次 `unordered_map` 查找（天空重扫+种子扫描+BFS ≈ 12 ms/box，流送 2 box/帧 = flush 恒等 25-30 ms）；③ 每 chunk 一个小 VBO。`[99.9]` 修复：视锥裁剪（列级保守 AABB）+ 列合并（draw ÷8）+ 光照 chunk 级重构（每 16³ 块一次查找 + BFS last-chunk 缓存 + 既有地形重扫零写入时跳过天空 BFS——**新地形必须强制传播**，`newTerrain` 参数：整列天生暗（天花板下）时重扫零写入，但侧邻列的光仍要流进来）。实测 vd80 流送中：render 37→1.5-2.5 ms/帧（不随环增长）、flush 25-30→13-17 ms、主线程 CPU 100%→40%（4 worker 各 16-23%，负载分布见 99.9 报告）。**残余**：~~方形环 12 GB~~（`[STRM-1]` 已解决：圆盘 + 远平面帽，实测 9.08→4.59 GB，见「Chunk 流式」99.2 条）、~~光照 union-region~~（`[LGT-1]` 砍除记档：step-0 实测同帧选列大多远隔（(distSq,x,z) 平局 → 位置序配对同半径圆远隔对称点），可合并 6/6418 = 0.1%、预期节省 0.002 ms/帧 ≪ 1 ms 砍除线；光照 job 下限 ~16.7 ms/帧保留 = 流送 fps 主下限，潜在方向 = 选列 tie-break 相邻化 + union（STRM 相邻变更）表外——见 `archive/v1x/phase-lgt1-flip.md`）、worker 网格化（`[PIPE-1]` 已完成：mesher 计算 → worker 快照 job，主线程只留 GL 上传，见「性能 / 架构」首条）。
 - **sky rescan clobber（潜伏，`[LGT-1]` 设计时发现，未修）**：天花板板骑跨
   光照 footprint 边界（边界一侧开敞列、另一侧 opaque 天花板延伸）时，顺序
   两次 region 传播中**后一 region 的 rescan** 把边界格 sky 重写为纯地形值
@@ -171,13 +171,13 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 - ~~**破坏 cross 块（作物/花/火把）崩溃：粒子纹理查找 `unordered_map::at`**~~ — `[Phase 65]` 发现并修复：`Game::drawParticles` 对所有块的粒子用 `cubeFaceTexture`（top/side/bottom 槽）查纹理——cross 模型（`[Phase 45]` 引入）没有这三项纹理（只有 `cross`）→ 空名 → `AtlasLayout::uvMin` 直接抛 `unordered_map::out_of_range`。`[Phase 45]` 起的潜在 bug（此前无任何 E2E 破坏过 cross 块），由 P65 火把破坏 E2E 首次暴露（gdb 回溯定位 `drawParticles → uvMin`）。修复 = `drawParticles` 加 cross 分支：粒子立方体六面全用 `cross` 纹理（与 item_mesh / chunk_mesher 既有的两个 cross 分支同款单一查找）；E2E S4（火把破坏 → 粒子帧渲染 → 无崩溃 + ×2 savenorm）为回归证据。`[Phase 65]`
 - **字体无中文字形与字重渐变** — `tools/generate_font.py` 生成 256×512 字形 atlas（32px cell、16×16 glyph 8px 偏移；Phase 35：8×8 → 16×16，字形表一次性从 DejaVu Sans Bold em16 提取（基线 row 12、阈值 128）后静态嵌入生成器——纯 stdlib、确定性输出），仅 ASCII 可打印（非 ASCII → `?`）；无字重渐变（缩放支持 double scale——Phase 35 起面板自适应分数缩放，`textWidth/makeTextVertices` 均 double）；无中文字形。`[Phase 15]`（8×8 低细节 `[Phase 35]` 已解决：16×16 字形 + 32×32 物品图标）
 - ~~**物品名 tooltip 只有名字**~~ — `[PRE-12]` 已解决：悬停格（炉子/E 面板槽与格）显示 `name`（count 1）/ `name xN`（count > 1）+ 工具第二行 `damage/max` 耐久读法（纯函数 `ui/item_tooltip`，campfire 范式 5 单测；**tooltip 渲染层修复**：旧文本与面板共享 kText batch = 绘制先于槽底/图标 + 偏移随面板 fit scale 收缩 = Phase-15 起悬停 tooltip 恒被覆盖不可见，E2E 首触发实证；修 = tooltip 独立 batch 移至 3D 块立方图标后绘制）。残余 = 无描述/附魔文本（项目无附魔系统、item JSON 无 description 字段 = 记档偏离，MC 同款无描述）。`[Phase 15]` → `[PRE-12]`
-- ~~**"You died!" 死亡屏幕文字实际是白色（颜色参数被忽略）**~~ — `[Phase 33]` 发现，`[Phase 36]` 已修复：`ui.frag` textured 分支改 `texel.rgb × u_color.rgb`（所有 textured 绘制的 u_color.rgb 均为白，白字/图标/心带逐位不变，只死亡屏红字生效）+ E2E 重像素验证（红字 bbox A (488,320,282,24)/B 恰好 2×，hint 白字 bbox 不变）——细节见 `archive/phase-36.md`。
+- ~~**"You died!" 死亡屏幕文字实际是白色（颜色参数被忽略）**~~ — `[Phase 33]` 发现，`[Phase 36]` 已修复：`ui.frag` textured 分支改 `texel.rgb × u_color.rgb`（所有 textured 绘制的 u_color.rgb 均为白，白字/图标/心带逐位不变，只死亡屏红字生效）+ E2E 重像素验证（红字 bbox A (488,320,282,24)/B 恰好 2×，hint 白字 bbox 不变）——细节见 `archive/v1x/phase-36.md`。
 
 ## 生存（Phase 16）
 
 - **伤害来源：坠落、虚空、mob 攻击、熔岩灼烧、燃烧效果与火接触** — 无 mob 攻击与火接触以外的接触伤害（`fire` 块非 solid，玩家站火里被**点燃** = Phase 74【P70 直伤版退役】：fire 效果 1 HP/0.2 s、离开残留 8 s、水灭；Mob 站火里被点燃 = Phase 73，P58 熔岩点燃的块版）。`fallDamage = max(0, 净下落格数 − fallDamageOffset)`（offset 默认 3），从离地帧的 `fallStartY` 到落地点的净竖直距离结算；落入水中的落地取消伤害。~~无护甲/摔落缓冲机制~~ — **`[SURV-1]` 已解决（护甲 = 摔落缓冲：全源减伤含坠落）**：12 件护甲（leather/iron/diamond × helmet/chestplate/leggings/boots = MC 精确值 1/3/2/1（总 7）、2/6/5/1（总 14）、3/8/6/3（总 20），max_stack 1，材质档 = 三链；chain 无材料 = 记档偏离）+ MC 整数 floor 减伤（`Player::damage` 单收口 = **全伤害源生效**【坠落/饥饿/熔岩/虚空/mob/箭/火 tick 全走它】，次序 armor → resistance → 吸收池，pts=0 位级恒等）+ 右键穿戴/交换/脱下通道（点火器之后、潜行旋转之前；空手按 head→chest→legs→feet 固定序脱下到选中槽——10-25 修复脱下 dangling reference【物品消失，PITS 246】，逻辑上提纯函数 `item/armor.hpp` + 9 单测；脱下后手非空，连点 = 穿上/脱下震荡，脱整套须每点之间换空热栏槽）+ 存档 format 16 `player.armor`（恒写、只含占位槽、键纪律 + 槽名-物品数据交叉校验）+ HUD 心行上方护甲排（仅占位槽绘制 = 无输入结构性免疫）；~~窒息伤害未实现~~ — **`[SURV-2]` 已解决（氧气窒息：水下/熔岩扣空气 + 耗尽后每 150 帧 2 HP 豁免护甲减伤）**。`[Phase 16]`（mob 攻击 `[Phase 20]`、熔岩灼烧 `[Phase 54]`、燃烧效果 `[Phase 57]`、玩家火接触点燃 `[Phase 70]`→`[Phase 74]`、Mob 火接触点燃 `[Phase 73]`、护甲 `[SURV-1]`、氧气窒息 `[SURV-2]` 已解决）
 - **`[SURV-2]` 氧气窒息（水下/熔岩扣空气 + 耗尽每 150 帧 2 HP）** — 纯函数 `player/drown.{hpp,cpp}`（`drownStep` 帧锁定节奏 + `headInFluid` 单格眼位谓词【眼在水/熔岩里；站 1 格浅池/漂浮面 = 换气；熔岩同款溺水 = MC】，campfire 范式单测拥有）+ `Player::damage` 加 `bypassArmor=false` 默认参（**溺水 = damage(2.0f, true) 豁免护甲 floor 减伤【维基伤害表 Drowning: Armor: No effect】，resistance 与吸收池照常【Resistance: Applies】；默认参 = 既有调用点位级不变，存量伤害测试零改动**）+ Game 每帧 pass（player update 之后、传 m_frameCount、面板暂停期间照常 tick）+ 死亡/respawn 复位满空气 + **format 17 `player.oxygen` int [0,150] 恒写**（17 必需 / ≤16 带键 = 版本谎报点名 / 越界与非整数点名 / 15/16→17 迁移满空气 150）+ **HUD 氧气泡排替换饥饿排原位**（`locked && !panelOpen() && oxygen<150`；10 图标 = ceil(oxygen/15)、单 tile 无半态、出水同帧消失；`oxygen.png` 16×16 = `tools/generate_oxygen_icons.py` salt 105 起【既有 PNG 重跑零变化】）+ F3 `oxygen N` 行。**范围外（记档偏离）**：① 无气泡/喝水声（MC 气泡声本身随机 = 非确定性，项目无新 wav）② 无 mob 溺水（MC mob 不溺水；任务条 = 玩家氧气条）③ 无呼吸附魔/水肺/和平豁免（项目无这些系统）④ 无 config 键（MC 值 = `player/drown.hpp` 命名常量 kOxygenMax=150 / kOxygenDecayFrames=6 / kDrownDamageFrames=150 / kDrownDamage=2.0f，YAGNI）⑤ **drownTicks 不入档**（读档归零 = tick 相位惯例，effects 同款；MC 存 airSupply 相位 = 偏离）⑥ 气泡排空位不绘暗态（单 tile 纹理设计定案，填充数 = 绘制数）。`[SURV-2]`
-- ~~**存档加载到空中位置时坠落伤害被绕过**~~ — `[Phase 33]` 发现（P33 E2E 探针实证：46–59 格自由落体满血落地），`[Phase 36]` 已修复：`Player::restorePosition`（= `teleportTo` + `fallStartY = pos.y` 重钉），`applySave` 改走该路径 + 单测 ×2（空中 10 格 → 精确 7 HP；地面读档零伤害）+ E2E（存档 pos y=62 加载 → 8 格坠落 → health 15 精确）——细节见 `archive/phase-36.md`。
+- ~~**存档加载到空中位置时坠落伤害被绕过**~~ — `[Phase 33]` 发现（P33 E2E 探针实证：46–59 格自由落体满血落地），`[Phase 36]` 已修复：`Player::restorePosition`（= `teleportTo` + `fallStartY = pos.y` 重钉），`applySave` 改走该路径 + 单测 ×2（空中 10 格 → 精确 7 HP；地面读档零伤害）+ E2E（存档 pos y=62 加载 → 8 格坠落 → health 15 精确）——细节见 `archive/v1x/phase-36.md`。
 - **生命 HUD 是 10 心三态，半心按 0.5 HP 粒度渲染** — 每颗心 2 HP，填充 = `clamp(hp − 2i, 0, 2)`（2=满/1=半/0=空），贴图是 3 个固定状态（满/半/空），无更细粒度（如 0.5 HP 的四分之心）；MC 的心是 10 颗每颗 1 HP 且支持 0.5 增量。`[Phase 16]`
 - **无死亡分数/死亡统计** — 死亡只显示 "You died! / Press R"，无得分、无死亡次数、无 Game Over 统计屏；重生保留背包与全部物品（无死亡掉落）。`[Phase 16]`（**死亡次数 `[SURV-7]` 已解决**：`player.stats.deathCount` + 每 mob `kill.<name>` 计数器（帧锁定事件、format 21 存档、封闭词表校验）；统计**显示** = `[PRE-12]` 已解决：F3 `stats` 行（键序 "name N | ..."，空 = "(none)" 基线行）——独立统计屏/Game Over 屏 = 范围外记档，得分/死亡掉落 = 范围外记档，详见 phase-surv7.md + phase-pre12.md）
 - **自然回复是定时 + 饥饿门控（Phase 23 起）** — 脱离受伤 `regenDelay=10s` 后每 `regenInterval=4s` 回 1 HP，且要求饥饿 ≥ 6（Minecraft 规则：低于 6 无自然回复）；门控关闭时累加器暂停（不重置），吃饱后继续累计。**`[SURV-9]` 已解决：自然回复的每半心消耗 1 点饥饿（MC 规则）**——经标准路径（隐藏饱和度 buffer 先扣、耗尽掉条 = Phase 28 衰减 tick 同款原语 `drainOneHungerPoint`；**满血时区间免费流逝** = 无回复无成本），回复门（bar ≥ 6）不变（MC 18 = 既有偏离条款）。`[Phase 16]`（饥饿门控 `[Phase 23]`，回复成本 `[SURV-9]`）
@@ -369,7 +369,7 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
   合成用途（纯收集/交换物）。`[Phase 22/28]`（随机区间 `[Phase 38]`）
 - ~~**skeleton 无视线检查**~~ — `[Phase 38]` 已修复：射击回调先过 `hasLineOfSight`（纯 raycast 函数：眼→玩家眼被非空气格挡住 = blocked），blocked 则不发（箭反正只会插墙消失），冷却照常消耗、下个间隔重试（Minecraft 行为）+ debug log。E2E：存档手工 96 格石墙（两 skeleton与玩家之间）→ blocked=6 / shot=0 / health 20 / 两 skeleton 照常生成。
 - ~~**skeleton 掉落固定 1 个 `arrow`**~~ — `[Phase 38]` 已修复：新 material 物品 `bone`（图标 = 白色对角骨，generate_item_icons.py 新 salt 63，既有 17 图标零变化）+ skeleton `drops` = bone 0–2（随机区间）+ `arrow` 1。掷落用该 mob 自己的种子流（`rollDropCount`；固定 count 不推进流 → P38 前的精确流保留）；E2E 输入击杀 → 存档 entities = arrow×1 + bone×2。（Minecraft skeleton 还掉 0–2 箭；本项目箭保持固定 1。）
-- ~~**skeleton 箭提前量只补偿重力、不预判位移**~~ — `[Phase 38]` 已修复：`computeAimDirection`（projectile.hpp 自由函数）——“目标位置 + 速度×飞行时间”迭代 2 次 + 0.5·g·t² 弧线提前量；静止目标（速度 0）与 Phase 27 瞄法逐位相同（回归锚：E2E 射击场景 P37/P38 存档逐字节一致），移动目标被预判（单测：侧向/逃离目标最近接近距离严格小于无预判）——细节见 `archive/phase-38.md`。
+- ~~**skeleton 箭提前量只补偿重力、不预判位移**~~ — `[Phase 38]` 已修复：`computeAimDirection`（projectile.hpp 自由函数）——“目标位置 + 速度×飞行时间”迭代 2 次 + 0.5·g·t² 弧线提前量；静止目标（速度 0）与 Phase 27 瞄法逐位相同（回归锚：E2E 射击场景 P37/P38 存档逐字节一致），移动目标被预判（单测：侧向/逃离目标最近接近距离严格小于无预判）——细节见 `archive/v1x/phase-38.md`。
 
 - **spider 无掉落** — MC 的 spider 掉 string/spider_eye 0–2，两物品未做
   （string 无用途、spider_eye 无用途）；`drops: []`。spider 是首个
@@ -748,7 +748,7 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
   13→33（2.54×）/装饰 5→20、演示盒 24→30/+2、前瞻半区锥内 215 列
   （游戏内视野，非 60f fresh 视图）；**base18 免重锚**（第 103 次结构性
   免疫：区内 gained 5 特征全在视锥外 = 探针论证 + 像素终裁互证）+ 性能
-  A/B v0.19.0 成本可忽略（细节见 `archive/phase-gen6.md`）。`[GEN-5]`
+  A/B v0.19.0 成本可忽略（细节见 `archive/v1x/phase-gen6.md`）。`[GEN-5]`
   发现，`[GEN-6]` 解决。
 
 ## 数据 / 内容
@@ -762,148 +762,148 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
   （format 7/11/10，非 World 每格字段，见各节）。
 ## 已修复（归档）→ 细节存档
 
-各阶段的修复条目已移入 `docs/archive/phase-NN.md`（「阶段报告」= 原归档条目；
+各阶段的修复条目已移入 `docs/archive/v1x/phase-NN.md`（「阶段报告」= 原归档条目；
 有会话存档节的阶段另含「会话存档」部分）：
 
 | 阶段 | 存档文件 |
 |---|---|
-| Phase 3 | `archive/phase-3.md` |
-| Phase 5 | `archive/phase-5.md` |
-| Phase 6 | `archive/phase-6.md` |
-| Phase 7 | `archive/phase-7.md` |
-| Phase 8 | `archive/phase-8.md` |
-| Phase 9 | `archive/phase-9.md` |
-| Phase 10 | `archive/phase-10.md` |
-| Phase 11 | `archive/phase-11.md` |
-| Phase 12 | `archive/phase-12.md` |
-| Phase 13 | `archive/phase-13.md` |
-| Phase 14 | `archive/phase-14.md` |
-| Phase 15 | `archive/phase-15.md` |
-| Phase 16 | `archive/phase-16.md` |
-| Phase 17 | `archive/phase-17.md` |
-| Phase 18 | `archive/phase-18.md` |
-| Phase 19 | `archive/phase-19.md` |
-| Phase 20 | `archive/phase-20.md` |
-| Phase 20.5 | `archive/phase-20.5.md` |
-| Phase 21 | `archive/phase-21.md` |
-| Phase 22 | `archive/phase-22.md` |
-| Phase 23 | `archive/phase-23.md` |
-| Phase 24 | `archive/phase-24.md` |
-| Phase 25 | `archive/phase-25.md` |
-| Phase 26 | `archive/phase-26.md` |
-| Phase 27 | `archive/phase-27.md` |
-| Phase 28 | `archive/phase-28.md` |
-| Phase 29 | `archive/phase-29.md` |
-| Phase 31 | `archive/phase-31.md` |
-| Phase 32 | `archive/phase-32.md` |
-| Phase 33 | `archive/phase-33.md` |
-| Phase 34 | `archive/phase-34.md` |
-| Phase 35 | `archive/phase-35.md` |
-| Phase 36 | `archive/phase-36.md` |
-| Phase 37 | `archive/phase-37.md` |
-| Phase 38 | `archive/phase-38.md` |
-| Phase 39 | `archive/phase-39.md` |
-| Phase 40 | `archive/phase-40.md` |
-| Phase 41 | `archive/phase-41.md` |
-| Phase 42 | `archive/phase-42.md` |
-| Phase 43 | `archive/phase-43.md` |
-| Phase 44 | `archive/phase-44.md` |
-| Phase 45 | `archive/phase-45.md` |
-| Phase 46 | `archive/phase-46.md` |
-| Phase 47 | `archive/phase-47.md` |
-| Phase 48 | `archive/phase-48.md` |
-| Phase 49 | `archive/phase-49.md` |
-| Phase 50 | `archive/phase-50.md` |
-| Phase 51 | `archive/phase-51.md` |
-| Phase 52 | `archive/phase-52.md` |
-| Phase 53 | `archive/phase-53.md` |
-| Phase 54 | `archive/phase-54.md` |
-| Phase 55 | `archive/phase-55.md` |
-| Phase 56 | `archive/phase-56.md` |
-| Phase 57 | `archive/phase-57.md` |
-| Phase 58 | `archive/phase-58.md` |
-| Phase 59 | `archive/phase-59.md` |
-| Phase 60 | `archive/phase-60.md` |
-| Phase 61 | `archive/phase-61.md` |
-| Phase 62 | `archive/phase-62.md` |
-| Phase 63 | `archive/phase-63.md` |
-| Phase 64 | `archive/phase-64.md` |
-| Phase 65 | `archive/phase-65.md` |
-| Phase 66 | `archive/phase-66.md` |
-| Phase 67 | `archive/phase-67.md` |
-| Phase 68 | `archive/phase-68.md` |
-| Phase 69 | `archive/phase-69.md` |
-| Phase 70 | `archive/phase-70.md` |
-| Phase 71 | `archive/phase-71.md` |
-| Phase 72 | `archive/phase-72.md` |
-| Phase 73 | `archive/phase-73.md` |
-| Phase 74 | `archive/phase-74.md` |
-| Phase 75 | `archive/phase-75.md` |
-| Phase 76 | `archive/phase-76.md` |
-| Phase 77 | `archive/phase-77.md` |
-| Phase 78 | `archive/phase-78.md` |
-| Phase 79 | `archive/phase-79.md` |
-| Phase 80 | `archive/phase-80.md` |
-| Phase 81 | `archive/phase-81.md` |
-| Phase 82 | `archive/phase-82.md` |
-| Phase 83 | `archive/phase-83.md` |
-| Phase 84 | `archive/phase-84.md` |
-| Phase 85 | `archive/phase-85.md` |
-| Phase 86 | `archive/phase-86.md` |
-| Phase 87 | `archive/phase-87.md` |
-| Phase 88 | `archive/phase-88.md` |
-| Phase 89 | `archive/phase-89.md` |
-| Phase 90 | `archive/phase-90.md` |
-| Phase 91 | `archive/phase-91.md` |
-| Phase 92 | `archive/phase-92.md` |
-| Phase 93 | `archive/phase-93.md` |
-| Phase 94 | `archive/phase-94.md` |
-| Phase 95 | `archive/phase-95.md` |
-| Phase 96 | `archive/phase-96.md` |
-| Phase 97 | `archive/phase-97.md` |
-| Phase 98 | `archive/phase-98.md` |
-| Phase 99 | `archive/phase-99.md` |
-| Phase 99.x（性能系列） | `archive/phase-99.x.md` |
-| CRAFT-1（v1.0 任务表：工作台分块） | `archive/phase-craft1.md` |
-| CRAFT-2（v1.0 任务表：物品 3D 模型） | `archive/phase-craft2.md` |
-| CRAFT-3（v1.0 任务表：材质音效） | `archive/phase-craft3.md` |
-| ENT-1（v1.0 任务表：四肢摆动，含 1b 实机模型修复） | `archive/phase-ent1.md` |
-| ENT-2（v1.0 任务表：BlockState per-block 状态泛化） | `archive/phase-ent2.md` |
-| ENT-3（v1.0 任务表：mob 踏阶） | `archive/phase-ent3.md` |
-| ENT-4（v1.0 任务表：水体交互） | `archive/phase-ent4.md` |
-| FLUID-1（v1.0 任务表：水量守恒） | `archive/phase-fluid1.md` |
-| FLUID-2（v1.0 任务表：游泳划水） | `archive/phase-fluid2.md` |
-| FLUID-3（v1.0 任务表：mob 涉水修正） | `archive/phase-fluid3.md` |
-| GEN-1（v1.0 任务表：面条洞穴） | `archive/phase-gen1.md` |
-| GEN-2（v1.0 任务表：树生长） | `archive/phase-gen2.md` |
-| GEN-3（v1.0 任务表：矿脉形态） | `archive/phase-gen3.md` |
-| GEN-4（v1.0 任务表：洞穴破碎度） | `archive/phase-gen4.md` |
-| GEN-5（v1.0 任务表：浮空树） | `archive/phase-gen5.md` |
-| GEN-6（v1.0 任务表：树放置半区修复） | `archive/phase-gen6.md` |
-| LGT-1（v1.0 任务表：union-region，砍除记档） | `archive/phase-lgt1-flip.md` |
-| LGT-2（v1.0 任务表：叶子光衰减） | `archive/phase-lgt2.md` |
-| LGT-3（v1.x 任务表：夜光重传播 + MC 月光地板） | `archive/phase-lgt3.md` |
-| LGT-4（v1.x 任务表：光束入光） | `archive/phase-lgt4.md` |
-| LGT-5（v1.x 任务表：半块透光） | `archive/phase-lgt5.md` |
-| GEN-7（v1.x 任务表：基岩多层） | `archive/phase-gen7.md` |
-| GEN-8（v1.x 任务表：地形互感/山峰互感） | `archive/phase-gen8.md` |
-| PIPE-1（v1.0 任务表：worker 网格化） | `archive/phase-pipe-1.md` |
-| PIPE-2（v1.0 任务表：存档增量） | `archive/phase-pipe-2.md` |
-| PIPE-3（v1.x 任务表：流体 per-cell） | `archive/phase-pipe3.md` |
-| PRE-1..6（v1.0 任务表：中文字体/边缘雾/水面波纹/云与环境音/透明 discard/掉落光照） | `archive/phase-pre1.md` |
-| PRE-2（v1.0 任务表：边缘雾） | `archive/phase-pre2.md` |
-| PRE-3（v1.0 任务表：水面波纹） | `archive/phase-pre3.md` |
-| PRE-4（v1.0 任务表：云与环境音） | `archive/phase-pre4.md` |
-| PRE-5（v1.0 任务表：透明 discard） | `archive/phase-pre5.md` |
-| PRE-6（v1.0 任务表：掉落光照） | `archive/phase-pre6.md` |
-| SAVE-1（v1.0 任务表：自动存档） | `archive/phase-save1.md` |
-| STRM-1（v1.0 任务表：环形状） | `archive/phase-strm1.md` |
-| STRM-2（v1.x 任务表：流体列保留 + 99.8 流送边界活性补洞） | `archive/phase-strm2.md` |
-| SURV-1（v1.0 任务表：护甲） | `archive/phase-surv1.md` |
-| SURV-2（v1.0 任务表：氧气窒息） | `archive/phase-surv2.md` |
-| SURV-3（v1.0 任务表：耐久） | `archive/phase-surv3.md` |
-| SURV-4（v1.0 任务表：药水饮用） | `archive/phase-surv4.md` |
-| SURV-5（v1.0 任务表：mob 效果） | `archive/phase-surv5.md` |
-| UXFIX-1（v1.0 任务表：实机渲染状态泄漏修复） | `archive/phase-uxfix1.md` |
+| Phase 3 | `archive/v1x/phase-3.md` |
+| Phase 5 | `archive/v1x/phase-5.md` |
+| Phase 6 | `archive/v1x/phase-6.md` |
+| Phase 7 | `archive/v1x/phase-7.md` |
+| Phase 8 | `archive/v1x/phase-8.md` |
+| Phase 9 | `archive/v1x/phase-9.md` |
+| Phase 10 | `archive/v1x/phase-10.md` |
+| Phase 11 | `archive/v1x/phase-11.md` |
+| Phase 12 | `archive/v1x/phase-12.md` |
+| Phase 13 | `archive/v1x/phase-13.md` |
+| Phase 14 | `archive/v1x/phase-14.md` |
+| Phase 15 | `archive/v1x/phase-15.md` |
+| Phase 16 | `archive/v1x/phase-16.md` |
+| Phase 17 | `archive/v1x/phase-17.md` |
+| Phase 18 | `archive/v1x/phase-18.md` |
+| Phase 19 | `archive/v1x/phase-19.md` |
+| Phase 20 | `archive/v1x/phase-20.md` |
+| Phase 20.5 | `archive/v1x/phase-20.5.md` |
+| Phase 21 | `archive/v1x/phase-21.md` |
+| Phase 22 | `archive/v1x/phase-22.md` |
+| Phase 23 | `archive/v1x/phase-23.md` |
+| Phase 24 | `archive/v1x/phase-24.md` |
+| Phase 25 | `archive/v1x/phase-25.md` |
+| Phase 26 | `archive/v1x/phase-26.md` |
+| Phase 27 | `archive/v1x/phase-27.md` |
+| Phase 28 | `archive/v1x/phase-28.md` |
+| Phase 29 | `archive/v1x/phase-29.md` |
+| Phase 31 | `archive/v1x/phase-31.md` |
+| Phase 32 | `archive/v1x/phase-32.md` |
+| Phase 33 | `archive/v1x/phase-33.md` |
+| Phase 34 | `archive/v1x/phase-34.md` |
+| Phase 35 | `archive/v1x/phase-35.md` |
+| Phase 36 | `archive/v1x/phase-36.md` |
+| Phase 37 | `archive/v1x/phase-37.md` |
+| Phase 38 | `archive/v1x/phase-38.md` |
+| Phase 39 | `archive/v1x/phase-39.md` |
+| Phase 40 | `archive/v1x/phase-40.md` |
+| Phase 41 | `archive/v1x/phase-41.md` |
+| Phase 42 | `archive/v1x/phase-42.md` |
+| Phase 43 | `archive/v1x/phase-43.md` |
+| Phase 44 | `archive/v1x/phase-44.md` |
+| Phase 45 | `archive/v1x/phase-45.md` |
+| Phase 46 | `archive/v1x/phase-46.md` |
+| Phase 47 | `archive/v1x/phase-47.md` |
+| Phase 48 | `archive/v1x/phase-48.md` |
+| Phase 49 | `archive/v1x/phase-49.md` |
+| Phase 50 | `archive/v1x/phase-50.md` |
+| Phase 51 | `archive/v1x/phase-51.md` |
+| Phase 52 | `archive/v1x/phase-52.md` |
+| Phase 53 | `archive/v1x/phase-53.md` |
+| Phase 54 | `archive/v1x/phase-54.md` |
+| Phase 55 | `archive/v1x/phase-55.md` |
+| Phase 56 | `archive/v1x/phase-56.md` |
+| Phase 57 | `archive/v1x/phase-57.md` |
+| Phase 58 | `archive/v1x/phase-58.md` |
+| Phase 59 | `archive/v1x/phase-59.md` |
+| Phase 60 | `archive/v1x/phase-60.md` |
+| Phase 61 | `archive/v1x/phase-61.md` |
+| Phase 62 | `archive/v1x/phase-62.md` |
+| Phase 63 | `archive/v1x/phase-63.md` |
+| Phase 64 | `archive/v1x/phase-64.md` |
+| Phase 65 | `archive/v1x/phase-65.md` |
+| Phase 66 | `archive/v1x/phase-66.md` |
+| Phase 67 | `archive/v1x/phase-67.md` |
+| Phase 68 | `archive/v1x/phase-68.md` |
+| Phase 69 | `archive/v1x/phase-69.md` |
+| Phase 70 | `archive/v1x/phase-70.md` |
+| Phase 71 | `archive/v1x/phase-71.md` |
+| Phase 72 | `archive/v1x/phase-72.md` |
+| Phase 73 | `archive/v1x/phase-73.md` |
+| Phase 74 | `archive/v1x/phase-74.md` |
+| Phase 75 | `archive/v1x/phase-75.md` |
+| Phase 76 | `archive/v1x/phase-76.md` |
+| Phase 77 | `archive/v1x/phase-77.md` |
+| Phase 78 | `archive/v1x/phase-78.md` |
+| Phase 79 | `archive/v1x/phase-79.md` |
+| Phase 80 | `archive/v1x/phase-80.md` |
+| Phase 81 | `archive/v1x/phase-81.md` |
+| Phase 82 | `archive/v1x/phase-82.md` |
+| Phase 83 | `archive/v1x/phase-83.md` |
+| Phase 84 | `archive/v1x/phase-84.md` |
+| Phase 85 | `archive/v1x/phase-85.md` |
+| Phase 86 | `archive/v1x/phase-86.md` |
+| Phase 87 | `archive/v1x/phase-87.md` |
+| Phase 88 | `archive/v1x/phase-88.md` |
+| Phase 89 | `archive/v1x/phase-89.md` |
+| Phase 90 | `archive/v1x/phase-90.md` |
+| Phase 91 | `archive/v1x/phase-91.md` |
+| Phase 92 | `archive/v1x/phase-92.md` |
+| Phase 93 | `archive/v1x/phase-93.md` |
+| Phase 94 | `archive/v1x/phase-94.md` |
+| Phase 95 | `archive/v1x/phase-95.md` |
+| Phase 96 | `archive/v1x/phase-96.md` |
+| Phase 97 | `archive/v1x/phase-97.md` |
+| Phase 98 | `archive/v1x/phase-98.md` |
+| Phase 99 | `archive/v1x/phase-99.md` |
+| Phase 99.x（性能系列） | `archive/v1x/phase-99.x.md` |
+| CRAFT-1（v1.0 任务表：工作台分块） | `archive/v1x/phase-craft1.md` |
+| CRAFT-2（v1.0 任务表：物品 3D 模型） | `archive/v1x/phase-craft2.md` |
+| CRAFT-3（v1.0 任务表：材质音效） | `archive/v1x/phase-craft3.md` |
+| ENT-1（v1.0 任务表：四肢摆动，含 1b 实机模型修复） | `archive/v1x/phase-ent1.md` |
+| ENT-2（v1.0 任务表：BlockState per-block 状态泛化） | `archive/v1x/phase-ent2.md` |
+| ENT-3（v1.0 任务表：mob 踏阶） | `archive/v1x/phase-ent3.md` |
+| ENT-4（v1.0 任务表：水体交互） | `archive/v1x/phase-ent4.md` |
+| FLUID-1（v1.0 任务表：水量守恒） | `archive/v1x/phase-fluid1.md` |
+| FLUID-2（v1.0 任务表：游泳划水） | `archive/v1x/phase-fluid2.md` |
+| FLUID-3（v1.0 任务表：mob 涉水修正） | `archive/v1x/phase-fluid3.md` |
+| GEN-1（v1.0 任务表：面条洞穴） | `archive/v1x/phase-gen1.md` |
+| GEN-2（v1.0 任务表：树生长） | `archive/v1x/phase-gen2.md` |
+| GEN-3（v1.0 任务表：矿脉形态） | `archive/v1x/phase-gen3.md` |
+| GEN-4（v1.0 任务表：洞穴破碎度） | `archive/v1x/phase-gen4.md` |
+| GEN-5（v1.0 任务表：浮空树） | `archive/v1x/phase-gen5.md` |
+| GEN-6（v1.0 任务表：树放置半区修复） | `archive/v1x/phase-gen6.md` |
+| LGT-1（v1.0 任务表：union-region，砍除记档） | `archive/v1x/phase-lgt1-flip.md` |
+| LGT-2（v1.0 任务表：叶子光衰减） | `archive/v1x/phase-lgt2.md` |
+| LGT-3（v1.x 任务表：夜光重传播 + MC 月光地板） | `archive/v1x/phase-lgt3.md` |
+| LGT-4（v1.x 任务表：光束入光） | `archive/v1x/phase-lgt4.md` |
+| LGT-5（v1.x 任务表：半块透光） | `archive/v1x/phase-lgt5.md` |
+| GEN-7（v1.x 任务表：基岩多层） | `archive/v1x/phase-gen7.md` |
+| GEN-8（v1.x 任务表：地形互感/山峰互感） | `archive/v1x/phase-gen8.md` |
+| PIPE-1（v1.0 任务表：worker 网格化） | `archive/v1x/phase-pipe-1.md` |
+| PIPE-2（v1.0 任务表：存档增量） | `archive/v1x/phase-pipe-2.md` |
+| PIPE-3（v1.x 任务表：流体 per-cell） | `archive/v1x/phase-pipe3.md` |
+| PRE-1..6（v1.0 任务表：中文字体/边缘雾/水面波纹/云与环境音/透明 discard/掉落光照） | `archive/v1x/phase-pre1.md` |
+| PRE-2（v1.0 任务表：边缘雾） | `archive/v1x/phase-pre2.md` |
+| PRE-3（v1.0 任务表：水面波纹） | `archive/v1x/phase-pre3.md` |
+| PRE-4（v1.0 任务表：云与环境音） | `archive/v1x/phase-pre4.md` |
+| PRE-5（v1.0 任务表：透明 discard） | `archive/v1x/phase-pre5.md` |
+| PRE-6（v1.0 任务表：掉落光照） | `archive/v1x/phase-pre6.md` |
+| SAVE-1（v1.0 任务表：自动存档） | `archive/v1x/phase-save1.md` |
+| STRM-1（v1.0 任务表：环形状） | `archive/v1x/phase-strm1.md` |
+| STRM-2（v1.x 任务表：流体列保留 + 99.8 流送边界活性补洞） | `archive/v1x/phase-strm2.md` |
+| SURV-1（v1.0 任务表：护甲） | `archive/v1x/phase-surv1.md` |
+| SURV-2（v1.0 任务表：氧气窒息） | `archive/v1x/phase-surv2.md` |
+| SURV-3（v1.0 任务表：耐久） | `archive/v1x/phase-surv3.md` |
+| SURV-4（v1.0 任务表：药水饮用） | `archive/v1x/phase-surv4.md` |
+| SURV-5（v1.0 任务表：mob 效果） | `archive/v1x/phase-surv5.md` |
+| UXFIX-1（v1.0 任务表：实机渲染状态泄漏修复） | `archive/v1x/phase-uxfix1.md` |
 
 P0–P2、P4 无细节存档（提交列表见 `SESSION_CONTEXT.md`）。

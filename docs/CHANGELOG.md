@@ -1,51 +1,51 @@
 # 版本历史（CHANGELOG）
 
-> 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段存档与
+> 逐版细节（机制/证据/偏离/性能 A/B）见 `docs/archive/v1x/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
 ## v1.50.0（2026-11-02）— UX-9c 环境底光可配置（UX-9 二轮实机报障行 ③ = 系统收官，门 170 全 PASS，tag v1.50.0 + UX-9 系统 release）
 
-用户 11-01 实机诉求「洞穴底光调亮，最好 config 可配置不同环境、不同时间的视觉亮度」= 一夜/洞穴/水底三诉求收敛两键（夜晚露天既有 render.night_sky_level UX-1，本项 = 全遮挡环境新键）：`render.cave_ambient`（double [0,1]，代码默认 kAmbientFloor 0.03f = 复用既有常量，对 v1.49.0 位级恒等）——basic.frag 光公式唯一改动 `amb = light <= 0.001f ? u_caveAmbient : u_ambient`（全遮挡区 = 洞穴/深水/室内烘焙光恒 0 的底值单独可调，深水衰减到 0 自动同享零额外代码，夜晚露天 light>0.001 不触 = 两键正交）+ readCaveAmbient 严格读纯函数（readNightSkyLevel 同范式：absent/非数/非有限/[0,1] 越界全点名，浮点合法无整数检查）+ init 扩进既有 per-run 常量块第 3 uniform（零新 Game 成员 YAGNI，config.json 零改动）。2072/2072（+11）、-Werror 0、banner v1.50.0。门 170：S1 **第 170 次结构性免疫 + 默认位级恒等 + base18 锚连续 179116 B 免重锚最强形**（六跑：new-default ×2 / new-explicit-0.03 ×2【显式==absent】/ old ×2 全字节一致 + 跨版 savenorm EXACT）+ S2 洞穴 A/B PASS（受控密封石室：A=0.03 ×2 32119 B / B=0.3 ×2 74863 B + **diff 505,176 px = 100% 全帧 0 px 变暗**（无输入未锁 HUD 零绘制世界铺满）+ A(4,4,4)→B(36,36,36) ≈10× 地板亮化 + savenorm A≡B EXACT）+ S6 ×2 精确点名 + 性能 A/B 同世界同成本【首轮 render med 偏置重跑证伪 = 执行序噪声 + changesApplied 9/3/1 逐位 + 终档 18/18 55/55 diff 0】——详见 docs/archive/phase-ux9c.md。
+用户 11-01 实机诉求「洞穴底光调亮，最好 config 可配置不同环境、不同时间的视觉亮度」= 一夜/洞穴/水底三诉求收敛两键（夜晚露天既有 render.night_sky_level UX-1，本项 = 全遮挡环境新键）：`render.cave_ambient`（double [0,1]，代码默认 kAmbientFloor 0.03f = 复用既有常量，对 v1.49.0 位级恒等）——basic.frag 光公式唯一改动 `amb = light <= 0.001f ? u_caveAmbient : u_ambient`（全遮挡区 = 洞穴/深水/室内烘焙光恒 0 的底值单独可调，深水衰减到 0 自动同享零额外代码，夜晚露天 light>0.001 不触 = 两键正交）+ readCaveAmbient 严格读纯函数（readNightSkyLevel 同范式：absent/非数/非有限/[0,1] 越界全点名，浮点合法无整数检查）+ init 扩进既有 per-run 常量块第 3 uniform（零新 Game 成员 YAGNI，config.json 零改动）。2072/2072（+11）、-Werror 0、banner v1.50.0。门 170：S1 **第 170 次结构性免疫 + 默认位级恒等 + base18 锚连续 179116 B 免重锚最强形**（六跑：new-default ×2 / new-explicit-0.03 ×2【显式==absent】/ old ×2 全字节一致 + 跨版 savenorm EXACT）+ S2 洞穴 A/B PASS（受控密封石室：A=0.03 ×2 32119 B / B=0.3 ×2 74863 B + **diff 505,176 px = 100% 全帧 0 px 变暗**（无输入未锁 HUD 零绘制世界铺满）+ A(4,4,4)→B(36,36,36) ≈10× 地板亮化 + savenorm A≡B EXACT）+ S6 ×2 精确点名 + 性能 A/B 同世界同成本【首轮 render med 偏置重跑证伪 = 执行序噪声 + changesApplied 9/3/1 逐位 + 终档 18/18 55/55 diff 0】——详见 docs/archive/v1x/phase-ux9c.md。
 
 ## v1.49.0（2026-11-01）— UX-9b 教程火把步（UX-9 二轮实机报障行 ②，门 169 全 PASS，不挂 tag = 实机报障修复惯例）
 
-用户 11-01 实机报障定案「掉在洞里，黑乎乎看不到东西，我怎么打怪物呢？」= 8 步教程诱导下洞却从不教点灯 = 认知链断环（游戏内点灯路线本已存在：煤矿石 prob 0.154 y≤80 → 煤；2 木板 = 4 棍；煤 + 棍 = 火把 ×4 光 14 > 生成门槛 7）。**beginner.json 8→11 步**（spick 后插 coal「挖 1 个煤矿石」/torch「合成 1 个火把（1 煤 + 1 木棍）」/light「放 1 个火把」三步 + tip 辅助行，kill 收尾不变；事件词表既有 break./craft./place. 全覆盖 = **零核心代码**）+ **字集 395→401**（亮处把敌暗煤 codepoint 序中段插入，TTF SHA 钉 + legacy 33/33 自校验 + **顶 512 行逐字节不变免重锚** + font.png 256×2080 尺寸不变 ≤427 余量，md5 ×3 恒等）+ 措辞微调 1 处（coal tip 免加字，记档）。2061/2061、-Werror 0、banner v1.49.0。门 169：S1 **第 169 次结构性免疫 + base18 锚连续 179116 B 免重锚**（六跑全字节一致 + savenorm EXACT）+ S2 教程链输入跑 PASS（段 C 挖煤→合成→放置：**F5 中检查点互斥 NEW {torch,0} vs OLD {kill,0}** + 终态双侧收敛同形【torch 配方两版皆有 = 同世界最强形，跨侧 savenorm 仅 pos[2] ±0.009 real-dt 类】；段 D 杀鸡【chicken-only 脚手架 + spawner 环 6 出射程 W 接近 + 石镐 2 swings 一击】：**NEW "step 11/11" vs OLD "step 8/8" 日志判别定案** + 双侧 kill.chicken 1/feather/{} + 跨侧 savenorm 仅 pos[2] ±0.001）+ S3 2061 + 无 S6 + 性能 A/B 同世界同成本（changesApplied 9/3/1 逐位 + 终档 18/18 55/55 diff 0）；PITS 356-359（E 面板释放指针锁须 re-lock / 放置格玩家 AABB 重叠静默拒 / 跨版资产脱节第 6 次复现 / 近战击杀五要素）——详见 docs/archive/phase-ux9b.md。
+用户 11-01 实机报障定案「掉在洞里，黑乎乎看不到东西，我怎么打怪物呢？」= 8 步教程诱导下洞却从不教点灯 = 认知链断环（游戏内点灯路线本已存在：煤矿石 prob 0.154 y≤80 → 煤；2 木板 = 4 棍；煤 + 棍 = 火把 ×4 光 14 > 生成门槛 7）。**beginner.json 8→11 步**（spick 后插 coal「挖 1 个煤矿石」/torch「合成 1 个火把（1 煤 + 1 木棍）」/light「放 1 个火把」三步 + tip 辅助行，kill 收尾不变；事件词表既有 break./craft./place. 全覆盖 = **零核心代码**）+ **字集 395→401**（亮处把敌暗煤 codepoint 序中段插入，TTF SHA 钉 + legacy 33/33 自校验 + **顶 512 行逐字节不变免重锚** + font.png 256×2080 尺寸不变 ≤427 余量，md5 ×3 恒等）+ 措辞微调 1 处（coal tip 免加字，记档）。2061/2061、-Werror 0、banner v1.49.0。门 169：S1 **第 169 次结构性免疫 + base18 锚连续 179116 B 免重锚**（六跑全字节一致 + savenorm EXACT）+ S2 教程链输入跑 PASS（段 C 挖煤→合成→放置：**F5 中检查点互斥 NEW {torch,0} vs OLD {kill,0}** + 终态双侧收敛同形【torch 配方两版皆有 = 同世界最强形，跨侧 savenorm 仅 pos[2] ±0.009 real-dt 类】；段 D 杀鸡【chicken-only 脚手架 + spawner 环 6 出射程 W 接近 + 石镐 2 swings 一击】：**NEW "step 11/11" vs OLD "step 8/8" 日志判别定案** + 双侧 kill.chicken 1/feather/{} + 跨侧 savenorm 仅 pos[2] ±0.001）+ S3 2061 + 无 S6 + 性能 A/B 同世界同成本（changesApplied 9/3/1 逐位 + 终档 18/18 55/55 diff 0）；PITS 356-359（E 面板释放指针锁须 re-lock / 放置格玩家 AABB 重叠静默拒 / 跨版资产脱节第 6 次复现 / 近战击杀五要素）——详见 docs/archive/v1x/phase-ux9b.md。
 
 ## v1.48.0（2026-11-01）— UX-9a 云方块化 + 厚度（UX-9 二轮实机报障行首项，门 168 重锚全 PASS，不挂 tag = 实机报障修复惯例）
 
-用户两轮实机反馈「云像纸片不是方块组成的」+「看不出云层厚度，要方块组成」= PRE-4 记档偏离被看穿。四笔演进收口：① 两级颗粒（region 16 格 50% ∧ sub 4 块 75%，世界锚定专用盐同 t 步，覆盖度 37.5%）→ ② 门内走位探针揪出 **iGPU buffer 更新 ~140ms/MB**（每跨 16 块云格重建上传 = 139ms 卡顿）→ Mesh::upload 原地 subdata（通用加固，未改善 = 上传本身慢）→ ③ 高度场 CPU oracle（cloudSubHeight {1,2,3} 独立盐）→ ④ **架构翻转 = 云 shader 化**：独立 cloud program（basic/sky/ui 位级零触碰）fragment 逐像素精确移植 mask 链（**GLSL 330 无 64 位整数 = uvec2 对模拟位精确**，三层核对 107,520 评估 + 131,072 像素 0 失配）+ 底面恒白 + **厚度 = 4 向边界带 MC 侧壁着色**（±X 0.8/±Z 0.6 相机侧判定，4 条常数近似记档）+ init 一次性 16384² quad（~240B 全期唯一上传）+ per-frame 平移锚 4 块格网（世界锚定零游移、**云延伸地平线 = 旧 384 块窗口硬边消失**）；mesh 面整体移除（−175 行）纯场四函数保留 = CPU oracle。2061/2061（+6+5−4）、-Werror 0、banner v1.48.0。门 168：S1 **第 168 次门 + 重锚**（4 侧 ×2：off≡off 代码级免疫 167097 B + old-on ≡ 原锚 + savenorm 四方 + diff 38,153 px 全限地平线以上天空【地形零泄漏】+ **像素终裁 38,153/38,153 云一致**（sky/白/0.8壁/0.6壁四假设逐像素）→ base18 刷新 179116 B）+ S2 等价走位探针 **跨格 render max 142.9ms → 2.5ms（57×，低于 old slab 4.4ms 基线 = 零跨格上传实证）** + S3 2061 + 无 S6 + 性能 A/B 同世界同成本（render med +0.03ms 帧预算 <0.2% + changesApplied 9/3/1 逐位 + 终档 fluids 18/18 blocks 55/55 diff 0）——详见 docs/archive/phase-ux9a.md。
+用户两轮实机反馈「云像纸片不是方块组成的」+「看不出云层厚度，要方块组成」= PRE-4 记档偏离被看穿。四笔演进收口：① 两级颗粒（region 16 格 50% ∧ sub 4 块 75%，世界锚定专用盐同 t 步，覆盖度 37.5%）→ ② 门内走位探针揪出 **iGPU buffer 更新 ~140ms/MB**（每跨 16 块云格重建上传 = 139ms 卡顿）→ Mesh::upload 原地 subdata（通用加固，未改善 = 上传本身慢）→ ③ 高度场 CPU oracle（cloudSubHeight {1,2,3} 独立盐）→ ④ **架构翻转 = 云 shader 化**：独立 cloud program（basic/sky/ui 位级零触碰）fragment 逐像素精确移植 mask 链（**GLSL 330 无 64 位整数 = uvec2 对模拟位精确**，三层核对 107,520 评估 + 131,072 像素 0 失配）+ 底面恒白 + **厚度 = 4 向边界带 MC 侧壁着色**（±X 0.8/±Z 0.6 相机侧判定，4 条常数近似记档）+ init 一次性 16384² quad（~240B 全期唯一上传）+ per-frame 平移锚 4 块格网（世界锚定零游移、**云延伸地平线 = 旧 384 块窗口硬边消失**）；mesh 面整体移除（−175 行）纯场四函数保留 = CPU oracle。2061/2061（+6+5−4）、-Werror 0、banner v1.48.0。门 168：S1 **第 168 次门 + 重锚**（4 侧 ×2：off≡off 代码级免疫 167097 B + old-on ≡ 原锚 + savenorm 四方 + diff 38,153 px 全限地平线以上天空【地形零泄漏】+ **像素终裁 38,153/38,153 云一致**（sky/白/0.8壁/0.6壁四假设逐像素）→ base18 刷新 179116 B）+ S2 等价走位探针 **跨格 render max 142.9ms → 2.5ms（57×，低于 old slab 4.4ms 基线 = 零跨格上传实证）** + S3 2061 + 无 S6 + 性能 A/B 同世界同成本（render med +0.03ms 帧预算 <0.2% + changesApplied 9/3/1 逐位 + 终档 fluids 18/18 blocks 55/55 diff 0）——详见 docs/archive/v1x/phase-ux9a.md。
 
 ## v1.47.0（2026-11-01）— UX-8g 第三人称瞄准修复（UX-8 行收官后首个实机报障，门 167 全 PASS，不挂 tag = v1.34.0 插队修复同款，UX-8 release 补记）
 
-用户 v1.46.0 实机报障「按 C 切第三人称后十字光标在自己身上，选中/右键/挖/砍树全失效」= **UX-4 门 158 记档『交互/瞄准全读 m_camera = MC 同款』误判**：第三人称相机在眼后 4.0 块（kThirdPersonDistance），瞄准射线 kReach 5.0 预算被吃 4 = **前方有效射程仅 1.0 块** + 射线穿玩家自身头部区 = 最近命中落贴身块（"光标在自己身上"）——MC 真实语义 = 瞄准射线从**眼位**出发（玩家自身永不遮挡）。修复 = **5 处交互射线原点两模式统一 `m_player->eyePosition()`**（targetBlock 挖掘/放置/交互/裂纹全链收口 / targetMob 与 bestT 同原点 / fireBow 箭生成从身前 / tryFluidBucket collect+pour 双射线；方向 m_camera.forward() 零动 = 两模式皆玩家朝向；**第一人称 m_camera.position ≡ eyePosition 位级恒等零回归**；声音 listener 保持相机 = 听者视点；m_camera.position 消费点 13 处逐一复核报告）。新测 EyeAimRayCoincidesWithTheViewAxis（无遮挡 resolve 相机位 = 眼位射线 t=−4.0 精确共线 6 用例）。2054/2054（+1）、-Werror 0、banner v1.47.0。门 167：S1 **第 167 次结构性免疫免重锚**（四方 ×2 全字节一致 + 跨侧 RAW 字节一致【无 C = First 原点恒等】+ 锚连续 + savenorm EXACT）+ S2 第三人称挖矿 A/B PASS（**NEW-3P 破 3 木 = 报障直接修复 + NEW-3P ≡ NEW-1P savenorm EXACT = 第三人称行为与第一人称完全等价（最强形）/ OLD-3P 只破 1 木**【最近格 ≈4.3 < 5.0、次近 ≈5.3 > 5.0 = 根因预测逐值复现】+ 段级分解跨侧 diff 仅 wood 2 格 + 掉落 3/1 + 教程 + ×2 RAW 三对 EXACT）+ S3 2054 + 无 S6 + 性能 A/B fall 900f 全指标同档 + changesApplied 9/3/1 逐位 + 终档 fluids 18/18 blocks 55/55 diff 0——详见 docs/archive/phase-ux8g.md。
+用户 v1.46.0 实机报障「按 C 切第三人称后十字光标在自己身上，选中/右键/挖/砍树全失效」= **UX-4 门 158 记档『交互/瞄准全读 m_camera = MC 同款』误判**：第三人称相机在眼后 4.0 块（kThirdPersonDistance），瞄准射线 kReach 5.0 预算被吃 4 = **前方有效射程仅 1.0 块** + 射线穿玩家自身头部区 = 最近命中落贴身块（"光标在自己身上"）——MC 真实语义 = 瞄准射线从**眼位**出发（玩家自身永不遮挡）。修复 = **5 处交互射线原点两模式统一 `m_player->eyePosition()`**（targetBlock 挖掘/放置/交互/裂纹全链收口 / targetMob 与 bestT 同原点 / fireBow 箭生成从身前 / tryFluidBucket collect+pour 双射线；方向 m_camera.forward() 零动 = 两模式皆玩家朝向；**第一人称 m_camera.position ≡ eyePosition 位级恒等零回归**；声音 listener 保持相机 = 听者视点；m_camera.position 消费点 13 处逐一复核报告）。新测 EyeAimRayCoincidesWithTheViewAxis（无遮挡 resolve 相机位 = 眼位射线 t=−4.0 精确共线 6 用例）。2054/2054（+1）、-Werror 0、banner v1.47.0。门 167：S1 **第 167 次结构性免疫免重锚**（四方 ×2 全字节一致 + 跨侧 RAW 字节一致【无 C = First 原点恒等】+ 锚连续 + savenorm EXACT）+ S2 第三人称挖矿 A/B PASS（**NEW-3P 破 3 木 = 报障直接修复 + NEW-3P ≡ NEW-1P savenorm EXACT = 第三人称行为与第一人称完全等价（最强形）/ OLD-3P 只破 1 木**【最近格 ≈4.3 < 5.0、次近 ≈5.3 > 5.0 = 根因预测逐值复现】+ 段级分解跨侧 diff 仅 wood 2 格 + 掉落 3/1 + 教程 + ×2 RAW 三对 EXACT）+ S3 2054 + 无 S6 + 性能 A/B fall 900f 全指标同档 + changesApplied 9/3/1 逐位 + 终档 fluids 18/18 blocks 55/55 diff 0——详见 docs/archive/v1x/phase-ux8g.md。
 
 ## v1.46.0（2026-11-01）— UX-8f 背包 3 行 36 槽（UX-8 行 6/6 = **UX-8 系统收官**，门 166 全 PASS，**tag v1.46.0 + UX-8 系统 GitHub release 覆盖 v1.42-1.46**）
 
-消费用户 11-01 定案「背包可以增加更多行，与右侧两列配方的高度更和谐」= **MC 标准背包（27 存储 + 9 热栏）**：① `Inventory::kTotalSize` 27→36（构造/size 全自适应；双击分区/shift 移动/取半/数字键全 size 驱动**零代码改动**仅注释 9..26→9..35）② **布局 4 行**（新派生常量 kStorageRows=(kTotalSize−kHotbarSize)/kColumns static_assert 整行 + kGridRows=4，零字面量行号——E 面板 gridH 3→4 行 + **炉子面板同款跟进**【FurnaceLayout 原按 9×3 渲染全库存】；行主序 slot i → row (i−9)/9 col (i−9)%9 底行热栏 0..8；**shipped E 面板 listH 872 恒主导 → 原生高 896 不变** = 网格填满左区与配方列齐平而非面板变高）③ **存档 format 23→24**（写恒 36 槽；读 per-format 尺寸检查 24 须恰 36 / ≤23 须恰 27 错计数双向点名 + **尾部补 9 空槽迁移**原 27 槽逐槽值保真——velocity-zeroed 迁移同款纪律；kPreUx8fInventorySlots 27 命名常量）④ starter 范围 [9,26]→[9,35] 经 kTotalSize 派生零代码改动（shipped starter 16-26 全 legacy 区内容零改动）；零 config/内容/资产/音效。2053/2053（净 +4 = SaveFormat24Test ×4：36 槽往返含新行堆/f23 读补 36 值保真+27..35 恒空/pre-24 携 36 条点名/f24 携 27 条点名；42 处 format 降级位接入 downgradeSlots 助手 + 13 处 format 钉 23→24 + 布局/炉子全重钉【冶炼区 4 矩形零变化】/双击分区加 slot 31 新行同区 + headless 独立驱动冒烟 10/10）、-Werror 0、banner v1.46.0。门 166：S1 **第 166 次结构性免疫免重锚**（四方 ×2 168140 B 全字节一致 + 跨侧 RAW + 锚连续 + 跨版 savenorm diff 恰 2 项 {format 24/23, slots len 36/27}、**占用 20 槽逐值恒等 + 尾部 9 恒空**）+ S2 面板 A/B PASS（×2 RAW 双侧 + 跨侧 savenorm 唯一 diff = 远端湖 churn【inventory 占用段恒等】+ **肉眼终裁：NEW 4 行网格与两列配方列底部齐平 = 用户诉求直接兑现 vs OLD 3 行留大空 + 配方列两侧像素一致【UX-8c 红线保持】** + diff 14,166 px 全限网格行带 + 面板外框两侧同位 = 原生高不变）+ S2b 迁移证明三跑 PASS（NEW f23→f24 值保真尾部恒空 / **OLD 精确拒档 "unsupported save format 24 (this build reads formats 1-23)"** / 往返 OK）+ S6 版本谎报点名 "exactly 36 entries" + S3 2053 + 性能 A/B fall 900f 全指标同档 + changesApplied 9/3/1 逐位 + 终档 fluids 18/18 blocks 55/55 diff 0 + format 23→24/slots 27→36 迁移实证 = 同世界同成本；**PITS 355**（sed 链式版本替换双移 = 门 163/166 两度复现，版本标签脚本禁链式 sed）——详见 docs/archive/phase-ux8f.md。
+消费用户 11-01 定案「背包可以增加更多行，与右侧两列配方的高度更和谐」= **MC 标准背包（27 存储 + 9 热栏）**：① `Inventory::kTotalSize` 27→36（构造/size 全自适应；双击分区/shift 移动/取半/数字键全 size 驱动**零代码改动**仅注释 9..26→9..35）② **布局 4 行**（新派生常量 kStorageRows=(kTotalSize−kHotbarSize)/kColumns static_assert 整行 + kGridRows=4，零字面量行号——E 面板 gridH 3→4 行 + **炉子面板同款跟进**【FurnaceLayout 原按 9×3 渲染全库存】；行主序 slot i → row (i−9)/9 col (i−9)%9 底行热栏 0..8；**shipped E 面板 listH 872 恒主导 → 原生高 896 不变** = 网格填满左区与配方列齐平而非面板变高）③ **存档 format 23→24**（写恒 36 槽；读 per-format 尺寸检查 24 须恰 36 / ≤23 须恰 27 错计数双向点名 + **尾部补 9 空槽迁移**原 27 槽逐槽值保真——velocity-zeroed 迁移同款纪律；kPreUx8fInventorySlots 27 命名常量）④ starter 范围 [9,26]→[9,35] 经 kTotalSize 派生零代码改动（shipped starter 16-26 全 legacy 区内容零改动）；零 config/内容/资产/音效。2053/2053（净 +4 = SaveFormat24Test ×4：36 槽往返含新行堆/f23 读补 36 值保真+27..35 恒空/pre-24 携 36 条点名/f24 携 27 条点名；42 处 format 降级位接入 downgradeSlots 助手 + 13 处 format 钉 23→24 + 布局/炉子全重钉【冶炼区 4 矩形零变化】/双击分区加 slot 31 新行同区 + headless 独立驱动冒烟 10/10）、-Werror 0、banner v1.46.0。门 166：S1 **第 166 次结构性免疫免重锚**（四方 ×2 168140 B 全字节一致 + 跨侧 RAW + 锚连续 + 跨版 savenorm diff 恰 2 项 {format 24/23, slots len 36/27}、**占用 20 槽逐值恒等 + 尾部 9 恒空**）+ S2 面板 A/B PASS（×2 RAW 双侧 + 跨侧 savenorm 唯一 diff = 远端湖 churn【inventory 占用段恒等】+ **肉眼终裁：NEW 4 行网格与两列配方列底部齐平 = 用户诉求直接兑现 vs OLD 3 行留大空 + 配方列两侧像素一致【UX-8c 红线保持】** + diff 14,166 px 全限网格行带 + 面板外框两侧同位 = 原生高不变）+ S2b 迁移证明三跑 PASS（NEW f23→f24 值保真尾部恒空 / **OLD 精确拒档 "unsupported save format 24 (this build reads formats 1-23)"** / 往返 OK）+ S6 版本谎报点名 "exactly 36 entries" + S3 2053 + 性能 A/B fall 900f 全指标同档 + changesApplied 9/3/1 逐位 + 终档 fluids 18/18 blocks 55/55 diff 0 + format 23→24/slots 27→36 迁移实证 = 同世界同成本；**PITS 355**（sed 链式版本替换双移 = 门 163/166 两度复现，版本标签脚本禁链式 sed）——详见 docs/archive/v1x/phase-ux8f.md。
 
 ## v1.45.0（2026-11-01）— UX-8e 字体独立缩放（UX-8 行 5/6，门 165 全 PASS）
 
-消费用户 v1.41.0 实机反馈③「字体只能 ui.scale 整 UI 等比缩」= 新 config `ui.font_scale` **只缩文本不缩图标/面板几何**：严格读纯函数 `uiFontScaleFromConfig`（ui_scale.{hpp,cpp} 与 uiScaleFromConfig 同族）double (0, kFontScaleMax 4.0] **代码默认 1.0 = 对 v1.44.0 位级恒等**（absent=1.0 / 非 number / 非有限 / ≤0 / >4 全点名拒，检查序非有限→范围 = SAVE-1/UX-1 纪律，config.json 零改动）+ `m_fontScale` init 常量 + **fScale 单点缝**（renderUi 内全部文本 scale 包裹：addText 19 / textWidth 12（配对一致性红线 = fs≠1 居中仍精确）/ fitLabel 3 / tooltip 2 经 ts）+ **三处文本堆栈行距 ×fs**（F3 f3Step / 教程 tip 偏移 / tooltip lineGap，lround 恒等 at 1.0；图标/槽位/面板/心行/护甲行/效果行间距零动）；fs=1.0 时 s×1.0 IEEE 精确 = 结构免疫根。2049/2049（+16：严格读 13 + textWidth 线性含 CJK + fScale 位级恒等 + 行距恒等）、-Werror 0、banner v1.45.0。门 165：S1 **第 165 次结构性免疫免重锚**（四方 ×2 168140 B 全字节一致 + 跨侧 RAW + 锚连续 + savenorm EXACT）+ S2a 教程行 A/B PASS（六跑 ×2 RAW 全过 + **new-fs10 ≡ old-fs10config RAW 字节一致 = 代码级免疫 + forward-compat** + 像素 diff 5210 px bbox [98,615,564,671] = 恰两文本行并集【tip 行上移 11px = 行距 22→33 解析值 + 字形 16→24，居中锚 x0 逐像素吻合】世界/热栏/计数/心行零 diff + savenorm 唯一 diff = 远端湖 churn【同二进制自分歧实证 PITS 283 类】）+ S2b F3 盒 A/B PASS（×2 RAW 双侧 EXACT + savenorm EXACT 纯渲染 + diff 43038 px 全限 F3 文本盒【fs15 盒 = 16 行 × 27px 步进】盒下零 diff）+ S6 ×3 精确点名 + S3 2049 + 性能 A/B fall 900f 全指标同档 + changesApplied 9/3/1 逐位 + 终档 fluids 18/18 blocks 55/55 diff 0 = 同世界同成本；**PITS 353**（门 config 继承用户 ui.scale 1.5 = 复合 2.25× 文本越界首轮 6 跑全废，误诊居中 bug → 文本缩放门 config 显式钉 ui 节控变量）+ **354**（输入跑帧窗 < 脚本序列时长第 2 次复现 = 帧窗 ≥ 序列 ×1.5 按环境 fps 实测重估）——详见 docs/archive/phase-ux8e.md。
+消费用户 v1.41.0 实机反馈③「字体只能 ui.scale 整 UI 等比缩」= 新 config `ui.font_scale` **只缩文本不缩图标/面板几何**：严格读纯函数 `uiFontScaleFromConfig`（ui_scale.{hpp,cpp} 与 uiScaleFromConfig 同族）double (0, kFontScaleMax 4.0] **代码默认 1.0 = 对 v1.44.0 位级恒等**（absent=1.0 / 非 number / 非有限 / ≤0 / >4 全点名拒，检查序非有限→范围 = SAVE-1/UX-1 纪律，config.json 零改动）+ `m_fontScale` init 常量 + **fScale 单点缝**（renderUi 内全部文本 scale 包裹：addText 19 / textWidth 12（配对一致性红线 = fs≠1 居中仍精确）/ fitLabel 3 / tooltip 2 经 ts）+ **三处文本堆栈行距 ×fs**（F3 f3Step / 教程 tip 偏移 / tooltip lineGap，lround 恒等 at 1.0；图标/槽位/面板/心行/护甲行/效果行间距零动）；fs=1.0 时 s×1.0 IEEE 精确 = 结构免疫根。2049/2049（+16：严格读 13 + textWidth 线性含 CJK + fScale 位级恒等 + 行距恒等）、-Werror 0、banner v1.45.0。门 165：S1 **第 165 次结构性免疫免重锚**（四方 ×2 168140 B 全字节一致 + 跨侧 RAW + 锚连续 + savenorm EXACT）+ S2a 教程行 A/B PASS（六跑 ×2 RAW 全过 + **new-fs10 ≡ old-fs10config RAW 字节一致 = 代码级免疫 + forward-compat** + 像素 diff 5210 px bbox [98,615,564,671] = 恰两文本行并集【tip 行上移 11px = 行距 22→33 解析值 + 字形 16→24，居中锚 x0 逐像素吻合】世界/热栏/计数/心行零 diff + savenorm 唯一 diff = 远端湖 churn【同二进制自分歧实证 PITS 283 类】）+ S2b F3 盒 A/B PASS（×2 RAW 双侧 EXACT + savenorm EXACT 纯渲染 + diff 43038 px 全限 F3 文本盒【fs15 盒 = 16 行 × 27px 步进】盒下零 diff）+ S6 ×3 精确点名 + S3 2049 + 性能 A/B fall 900f 全指标同档 + changesApplied 9/3/1 逐位 + 终档 fluids 18/18 blocks 55/55 diff 0 = 同世界同成本；**PITS 353**（门 config 继承用户 ui.scale 1.5 = 复合 2.25× 文本越界首轮 6 跑全废，误诊居中 bug → 文本缩放门 config 显式钉 ui 节控变量）+ **354**（输入跑帧窗 < 脚本序列时长第 2 次复现 = 帧窗 ≥ 序列 ×1.5 按环境 fps 实测重估）——详见 docs/archive/v1x/phase-ux8e.md。
 
 ## v1.44.0（2026-10-31）— UX-8d 掉落确定性伪散落（UX-8 行 4/6，门 164 全 PASS）
 
-消费用户 v1.41.0 实机反馈①「两个木头不能掉在同一个位置」= breakBlock 所有掉落恒在方块中心零初速（同块双掉落完全重叠、相邻格排成整齐中心线）→ **确定性伪散落**：新纯函数 `block/drop_scatter`（seed⊕位置⊕dropIndex，专用 salt 0x4E7A2C9D5B1F8E03 与 chance_drop/chance_drops/crop 4 salt 全不同 = 互不追踪，grep 实证；per-index golden 先推进后 mix = PITS #4；双 32 位独立半经 double 精确映射 [0,1) = chance_drop 53 位同款纪律，float 24 位尾数 256 桶化弃用）→ 水平 (dx,dz) ∈ ±0.2²、**y 不偏移**（垂直散落 = 物理歧义 MC 同款）；**界论证** kSize 0.25 半 0.125 + 0.2 = 0.325 < 0.5 = **物品恒留在被破格内**（单测钉死）；dropIndex 0/1/2+i = 主 drops/chance_drop/chance_drops 条目序（与 roll entryIndex 同序约定）；破坏音效留格中心（声源 = 块非散落物）；**只改破坏掉落**——Q 丢弃/mob 击杀掉落/拾取/存档/粒子/PRE-6 掉落光零触碰（ItemEntity 6 构造点逐一核过）；合并安全：同格双散落最大间距 0.566 < kMergeDistance 0.75 同物仍合并；零 format（entities pos 自然存散落位）/config/JSON/real-dt。2033/2033（+7：界穷边 4 seed×147 格×4 index/确定性/格内界论证/去相关 4 选 2/seed 依赖/负坐标/带展布非常数）、-Werror 0、banner v1.44.0。门 164：S1 **第 164 次结构性免疫免重锚**（四方 ×2 168140 B 全字节一致 + 跨侧 RAW 字节一致 + 锚连续 + 跨版 savenorm EXACT = 无输入无破坏零执行）+ S2 散落 A/B PASS（门 162 实证几何 3 木 9.5s hold：×2 RAW 双侧 + 同侧 savenorm EXACT + **OLD 格中心** 2 实体 + 第 3 破恰中心距玩家 0.8 < 拾取半径 1.0 **被拾入 slot9** vs **NEW ±0.2 内非中心** 3 实体 + 散落推过半径 1.008 **不拾 = 拾取反转终态互斥** + 跨侧 savenorm 恰 7 项 diff 全在散落/拾取语义、世界/教程 {planks,0} 零 diff + 像素 7046 px 限掉落纵深列裁图定案）+ S3 2033 + 无 S6 零 parse 面 + 性能 A/B fall 900f 全指标同档 + changesApplied 9/3/1 逐位 + 终档 fluids 18/18 blocks 55/55 diff 0 = 同世界同成本——详见 docs/archive/phase-ux8d.md。
+消费用户 v1.41.0 实机反馈①「两个木头不能掉在同一个位置」= breakBlock 所有掉落恒在方块中心零初速（同块双掉落完全重叠、相邻格排成整齐中心线）→ **确定性伪散落**：新纯函数 `block/drop_scatter`（seed⊕位置⊕dropIndex，专用 salt 0x4E7A2C9D5B1F8E03 与 chance_drop/chance_drops/crop 4 salt 全不同 = 互不追踪，grep 实证；per-index golden 先推进后 mix = PITS #4；双 32 位独立半经 double 精确映射 [0,1) = chance_drop 53 位同款纪律，float 24 位尾数 256 桶化弃用）→ 水平 (dx,dz) ∈ ±0.2²、**y 不偏移**（垂直散落 = 物理歧义 MC 同款）；**界论证** kSize 0.25 半 0.125 + 0.2 = 0.325 < 0.5 = **物品恒留在被破格内**（单测钉死）；dropIndex 0/1/2+i = 主 drops/chance_drop/chance_drops 条目序（与 roll entryIndex 同序约定）；破坏音效留格中心（声源 = 块非散落物）；**只改破坏掉落**——Q 丢弃/mob 击杀掉落/拾取/存档/粒子/PRE-6 掉落光零触碰（ItemEntity 6 构造点逐一核过）；合并安全：同格双散落最大间距 0.566 < kMergeDistance 0.75 同物仍合并；零 format（entities pos 自然存散落位）/config/JSON/real-dt。2033/2033（+7：界穷边 4 seed×147 格×4 index/确定性/格内界论证/去相关 4 选 2/seed 依赖/负坐标/带展布非常数）、-Werror 0、banner v1.44.0。门 164：S1 **第 164 次结构性免疫免重锚**（四方 ×2 168140 B 全字节一致 + 跨侧 RAW 字节一致 + 锚连续 + 跨版 savenorm EXACT = 无输入无破坏零执行）+ S2 散落 A/B PASS（门 162 实证几何 3 木 9.5s hold：×2 RAW 双侧 + 同侧 savenorm EXACT + **OLD 格中心** 2 实体 + 第 3 破恰中心距玩家 0.8 < 拾取半径 1.0 **被拾入 slot9** vs **NEW ±0.2 内非中心** 3 实体 + 散落推过半径 1.008 **不拾 = 拾取反转终态互斥** + 跨侧 savenorm 恰 7 项 diff 全在散落/拾取语义、世界/教程 {planks,0} 零 diff + 像素 7046 px 限掉落纵深列裁图定案）+ S3 2033 + 无 S6 零 parse 面 + 性能 A/B fall 900f 全指标同档 + changesApplied 9/3/1 逐位 + 终档 fluids 18/18 blocks 55/55 diff 0 = 同世界同成本——详见 docs/archive/v1x/phase-ux8d.md。
 
 ## v1.43.0（2026-10-31）— UX-8c E 面板配方两列 + 可合成排序（UX-8 行 3/5，门 163 全 PASS）
 
-消费用户 v1.41.0 实机反馈②「配方列很长」= E 面板 32 条 shapeless 单列满高（ui.scale 2.0 下 fit scale ~0.21 行文字不可读）→ **两列排布**（CRAFT-4 工作台面板机制泛化：compute 三处去 kind 分支，左列 (n+1)/2 行；**CraftingTable kind 位级不变红线** = 回归钉原值 1278×217 通过）+ **可合成排序置顶**（纯函数 `orderedRecipeHints` 两遍同序稳定分区 canCraft 真在前，组内保注册表序；点击/渲染同一 seam 行号语义一致；工作台 shaped 列表不排序 = display-only 记档偏离）+ 行内两行文本 fitLabel 约束列宽（name 保 " xN" / 需要行保前缀只裁原料尾 = CRAFT-4 同款确定性纪律）；零 format/config/内容/音效（面板开 = 输入驱动 = 无输入零 layout 执行）。2026/2026（+4：两列几何 16/16 / 奇数分列 / fitLabel 不溢列含 46 字最长 needs / 排序稳定分组 + 2 契约演进【E 面板 native 宽 1000→1288】）、-Werror 0、banner v1.43.0。门 163：S1 **第 163 次结构性免疫免重锚**（四方 ×2 168140 B 全字节一致 + **跨侧 RAW 字节一致** + 锚连续 + 跨版 savenorm EXACT）+ S2 面板 A/B PASS（×2 RAW 双侧 + savenorm EXACT 纯渲染 + 肉眼终裁：NEW 两列可合成白行顶格 farmland/glass_pane/planks + fitLabel 尾截实证 vs OLD 单列 32 行注册表序 planks 沉 60% 处 = 痛点本体；diff 262,529 px 全限两侧面板并集世界零触碰）+ S3 2026 + 无 S6 零 parse 面 + 性能 A/B fall 900f 全指标同档 + changesApplied 9/3/1 逐位 + 终档 fluids 18/18 blocks 55/55 diff 0 = 同世界同成本。本版不打 tag（10-31 政策：UX-8 系统收官 v1.45.0 挂 tag/release）——详见 docs/archive/phase-ux8c.md。
+消费用户 v1.41.0 实机反馈②「配方列很长」= E 面板 32 条 shapeless 单列满高（ui.scale 2.0 下 fit scale ~0.21 行文字不可读）→ **两列排布**（CRAFT-4 工作台面板机制泛化：compute 三处去 kind 分支，左列 (n+1)/2 行；**CraftingTable kind 位级不变红线** = 回归钉原值 1278×217 通过）+ **可合成排序置顶**（纯函数 `orderedRecipeHints` 两遍同序稳定分区 canCraft 真在前，组内保注册表序；点击/渲染同一 seam 行号语义一致；工作台 shaped 列表不排序 = display-only 记档偏离）+ 行内两行文本 fitLabel 约束列宽（name 保 " xN" / 需要行保前缀只裁原料尾 = CRAFT-4 同款确定性纪律）；零 format/config/内容/音效（面板开 = 输入驱动 = 无输入零 layout 执行）。2026/2026（+4：两列几何 16/16 / 奇数分列 / fitLabel 不溢列含 46 字最长 needs / 排序稳定分组 + 2 契约演进【E 面板 native 宽 1000→1288】）、-Werror 0、banner v1.43.0。门 163：S1 **第 163 次结构性免疫免重锚**（四方 ×2 168140 B 全字节一致 + **跨侧 RAW 字节一致** + 锚连续 + 跨版 savenorm EXACT）+ S2 面板 A/B PASS（×2 RAW 双侧 + savenorm EXACT 纯渲染 + 肉眼终裁：NEW 两列可合成白行顶格 farmland/glass_pane/planks + fitLabel 尾截实证 vs OLD 单列 32 行注册表序 planks 沉 60% 处 = 痛点本体；diff 262,529 px 全限两侧面板并集世界零触碰）+ S3 2026 + 无 S6 零 parse 面 + 性能 A/B fall 900f 全指标同档 + changesApplied 9/3/1 逐位 + 终档 fluids 18/18 blocks 55/55 diff 0 = 同世界同成本。本版不打 tag（10-31 政策：UX-8 系统收官 v1.45.0 挂 tag/release）——详见 docs/archive/v1x/phase-ux8c.md。
 
 ## v1.42.0（2026-10-31）— UX-8a 教程木板步 + UX-8b 目标行辅助文字（UX-8 行 1-2/5，门 162 全 PASS）
 
-消费用户 v1.41.0 实机反馈④「新手做工作台只有简单提示还是不知道如何做」= 认知链补"先木板后工作台"环。① **beginner.json 7→8 步**（chop 后插 `planks` 步「合成 4 个木板（1 木头变 4）」`craft.planks` count 1 = 一次输出点击语义 + table 步扩写「做 1 个工作台（4 木板排 2x2）」ASCII x；其余 6 步一字未动）② **`tip` 可选字段**（严格解析：非字符串/显式空串点名拒）+ 目标行主行**上方**第二行 kTextDim（PRE-10 堆栈最顶行零碰撞；无 tip 步对 v1.41.0 位级不变）③ 字集 392→395（排/摆/输 = 中段 codepoint → 195 既有扩展格位移 +1..+3，**红线顶 512 行 + legacy 33 位级保持免重锚**；font.png 256×2080 不变 md5 e0d92bf6 FNV 5ea51ddc；**顺带修 generate_font.py 自毁潜伏 bug** = 缺 BEGIN 标记首次扩表即改坏脚本，PITS 352）；format 23 零改动（id 集只扩不删）。2022/2022（+4）、-Werror 0、banner v1.42.0。门 162：S1 **第 162 次结构性免疫免重锚**（六跑 168140 B 全字节一致 + 跨版 savenorm **EXACT**【old 侧 v1.41.0 本有 format 23】）+ S2 tip 像素 A/B【跨侧 diff 4399 px 全限目标带 y[567..623]，裁图实证 NEW 灰 tip 行+白新主行 vs OLD 旧主行 1 行，世界逐像素一致】+ **S2 全链输入跑**（四段 F5 存读续接 = 8 步逐步推进 {walk}→{chop}→{planks}→{table}→{wpick}→{spick}→{kill}→{} + 日志 NEW `step 8/8` vs OLD `step 7/7` = 链存在性直接判别 + A 段跨侧 RAW 字节一致 + B2a 跨侧 savenorm EXACT + 跳过 T 双侧 parity）+ S6 ×2 tip 点名 + 性能 A/B fall 900f 全指标同档 + changesApplied 9/3/1 逐位 + 终档 fluids 18/18 blocks 55/55 diff 0；**PITS 351**（matchesShapeless 全格原料规则：混置网格杀死一切配方 = 门内 trace 实证 + 分时合成/整堆放置/re-verify RMB 协议定案）+ **352**（生成器段落自定位缺标记 = 脚本自毁）。本版不打 tag（10-31 政策：tag 1:1 对应 release，UX-8 系统收官 v1.45.0 挂）——详见 docs/archive/phase-ux8ab.md。
+消费用户 v1.41.0 实机反馈④「新手做工作台只有简单提示还是不知道如何做」= 认知链补"先木板后工作台"环。① **beginner.json 7→8 步**（chop 后插 `planks` 步「合成 4 个木板（1 木头变 4）」`craft.planks` count 1 = 一次输出点击语义 + table 步扩写「做 1 个工作台（4 木板排 2x2）」ASCII x；其余 6 步一字未动）② **`tip` 可选字段**（严格解析：非字符串/显式空串点名拒）+ 目标行主行**上方**第二行 kTextDim（PRE-10 堆栈最顶行零碰撞；无 tip 步对 v1.41.0 位级不变）③ 字集 392→395（排/摆/输 = 中段 codepoint → 195 既有扩展格位移 +1..+3，**红线顶 512 行 + legacy 33 位级保持免重锚**；font.png 256×2080 不变 md5 e0d92bf6 FNV 5ea51ddc；**顺带修 generate_font.py 自毁潜伏 bug** = 缺 BEGIN 标记首次扩表即改坏脚本，PITS 352）；format 23 零改动（id 集只扩不删）。2022/2022（+4）、-Werror 0、banner v1.42.0。门 162：S1 **第 162 次结构性免疫免重锚**（六跑 168140 B 全字节一致 + 跨版 savenorm **EXACT**【old 侧 v1.41.0 本有 format 23】）+ S2 tip 像素 A/B【跨侧 diff 4399 px 全限目标带 y[567..623]，裁图实证 NEW 灰 tip 行+白新主行 vs OLD 旧主行 1 行，世界逐像素一致】+ **S2 全链输入跑**（四段 F5 存读续接 = 8 步逐步推进 {walk}→{chop}→{planks}→{table}→{wpick}→{spick}→{kill}→{} + 日志 NEW `step 8/8` vs OLD `step 7/7` = 链存在性直接判别 + A 段跨侧 RAW 字节一致 + B2a 跨侧 savenorm EXACT + 跳过 T 双侧 parity）+ S6 ×2 tip 点名 + 性能 A/B fall 900f 全指标同档 + changesApplied 9/3/1 逐位 + 终档 fluids 18/18 blocks 55/55 diff 0；**PITS 351**（matchesShapeless 全格原料规则：混置网格杀死一切配方 = 门内 trace 实证 + 分时合成/整堆放置/re-verify RMB 协议定案）+ **352**（生成器段落自定位缺标记 = 脚本自毁）。本版不打 tag（10-31 政策：tag 1:1 对应 release，UX-8 系统收官 v1.45.0 挂）——详见 docs/archive/v1x/phase-ux8ab.md。
 
 ## v1.41.0（2026-10-31）— UX-7 新手指导（UX 行 7/7 收官，门 161 全 PASS，**tag v1.41.0 + UX 系统 GitHub release**）
 
-消费「信息通道缺失」可玩性瓶颈 = **MC objective 式数据驱动逐步教程**（10-30 kickoff 五部件定案）。内容 `assets/data/tutorials/beginner.json` 严格解析（四键齐全/id 唯一/count ≥1/未知键全点名）：shipped 7 步链条 **walk → 打木头×3 → 合成工作台 → 木镐 → 挖石头×5 → 石镐 → 打 1 只鸡**（text 全字 ⊆ UX-6 392 字集单测钉死；brief 原措辞 8 字缺 = 措辞微调记档）+ **封闭事件词表**（craft./break./place./kill./interact. + walk/jump/eat 裸词，每类 = `Game::emitTutorialEvent` 单点收口——repair 完成不发 craft = UX-5 边界）+ **纯函数状态机** `core/tutorial.{hpp,cpp}`（campfire 范式，帧锁定零 real-dt，进度 ≥ count 步进越尾 done）+ **format 22→23 `player.tutorial`**（恒写 {id,count}/{}；键纪律双向/≤22 免迁/**id 失效 = 重置首步**/count 越界损坏点名；交叉校验在 game 加载点 validateStats 范式）+ **UI**（下中部目标行 PRE-10 堆叠纪律 + 120 帧完成 toast + **T 跳过键** GameKey 尾追加 + config `tutorial.enabled` 严格读代码默认 true config.json 零改动 + F3 tutorial 行）；零新资产文件/零音效。2018/2018（+40：tutorial 34 + SaveFormat23 6）、-Werror 0、banner v1.41.0。门 161：S1 **第 161 次结构性免疫免重锚**（六跑 168140 B 全字节一致 + 锚连续 + 跨版 savenorm 恰 2 项——kickoff 预期的"一次重锚"未发生 = 目标行仅锁定态绘制，无输入基线零触碰，更强结果）+ S2 **全链输入跑 PASS**（A 段 ×2 RAW 双侧 + 跨侧 RAW 字节一致 + savenorm 恰 2 项；B1/B2a/B2b 三段 **F5 存读续接** = 教程跨读档实证：{chop}→{wpick}→{spick}→{kill}→{} + 日志 `Tutorial: completed (step 7/7)`；B2a 同侧 savenorm 双侧 EXACT；走位腿 pos/掉落 real-dt 抖动类全字段跨侧恒等）+ 跳过 T（NEW {} + `Tutorial: skipped` / OLD no-op 对照）+ S6 ×2 精确点名 + 性能 A/B v1.40 vs v1.41 fall 900f 全指标同档 + changesApplied 9/3/1 三窗逐位 + 终档 fluids 18/18 + blocks 55/55 diff 0 = 同世界同成本【结构惰性最强形：无输入零事件零 UI】；**PITS 347-350**（SDL3/dppx1.5 warp 相机模型 = Δ−(绝对坐标) 仅左/下可用 = 相机控制改存档 pose 预置 / 攻击 isDown 按住 1ms tap 不可见 / 空槽整堆放置 + shaped ≥1 匹配 + 点击竞态 settle 协议 / spawner 环锚玩家列非世界出生点 + frame 60 存档 pose 可完全预言鸡落点）；**tag v1.41.0 = UX-7 收官 + UX 系统 GitHub release（notes 覆盖 v1.35-1.41）= UX 行 7/7 全清，v1.x 任务矩阵 40/40 全完成**——详见 docs/archive/phase-ux7.md。
+消费「信息通道缺失」可玩性瓶颈 = **MC objective 式数据驱动逐步教程**（10-30 kickoff 五部件定案）。内容 `assets/data/tutorials/beginner.json` 严格解析（四键齐全/id 唯一/count ≥1/未知键全点名）：shipped 7 步链条 **walk → 打木头×3 → 合成工作台 → 木镐 → 挖石头×5 → 石镐 → 打 1 只鸡**（text 全字 ⊆ UX-6 392 字集单测钉死；brief 原措辞 8 字缺 = 措辞微调记档）+ **封闭事件词表**（craft./break./place./kill./interact. + walk/jump/eat 裸词，每类 = `Game::emitTutorialEvent` 单点收口——repair 完成不发 craft = UX-5 边界）+ **纯函数状态机** `core/tutorial.{hpp,cpp}`（campfire 范式，帧锁定零 real-dt，进度 ≥ count 步进越尾 done）+ **format 22→23 `player.tutorial`**（恒写 {id,count}/{}；键纪律双向/≤22 免迁/**id 失效 = 重置首步**/count 越界损坏点名；交叉校验在 game 加载点 validateStats 范式）+ **UI**（下中部目标行 PRE-10 堆叠纪律 + 120 帧完成 toast + **T 跳过键** GameKey 尾追加 + config `tutorial.enabled` 严格读代码默认 true config.json 零改动 + F3 tutorial 行）；零新资产文件/零音效。2018/2018（+40：tutorial 34 + SaveFormat23 6）、-Werror 0、banner v1.41.0。门 161：S1 **第 161 次结构性免疫免重锚**（六跑 168140 B 全字节一致 + 锚连续 + 跨版 savenorm 恰 2 项——kickoff 预期的"一次重锚"未发生 = 目标行仅锁定态绘制，无输入基线零触碰，更强结果）+ S2 **全链输入跑 PASS**（A 段 ×2 RAW 双侧 + 跨侧 RAW 字节一致 + savenorm 恰 2 项；B1/B2a/B2b 三段 **F5 存读续接** = 教程跨读档实证：{chop}→{wpick}→{spick}→{kill}→{} + 日志 `Tutorial: completed (step 7/7)`；B2a 同侧 savenorm 双侧 EXACT；走位腿 pos/掉落 real-dt 抖动类全字段跨侧恒等）+ 跳过 T（NEW {} + `Tutorial: skipped` / OLD no-op 对照）+ S6 ×2 精确点名 + 性能 A/B v1.40 vs v1.41 fall 900f 全指标同档 + changesApplied 9/3/1 三窗逐位 + 终档 fluids 18/18 + blocks 55/55 diff 0 = 同世界同成本【结构惰性最强形：无输入零事件零 UI】；**PITS 347-350**（SDL3/dppx1.5 warp 相机模型 = Δ−(绝对坐标) 仅左/下可用 = 相机控制改存档 pose 预置 / 攻击 isDown 按住 1ms tap 不可见 / 空槽整堆放置 + shaped ≥1 匹配 + 点击竞态 settle 协议 / spawner 环锚玩家列非世界出生点 + frame 60 存档 pose 可完全预言鸡落点）；**tag v1.41.0 = UX-7 收官 + UX 系统 GitHub release（notes 覆盖 v1.35-1.41）= UX 行 7/7 全清，v1.x 任务矩阵 40/40 全完成**——详见 docs/archive/v1x/phase-ux7.md。
 
 ## v1.40.0（2026-10-31）— UX-6 字体扩容（UX 行 6/7，门 160 全 PASS，**tag v1.40.0 = UX-5+6 合并**）
 
-消费 PRE-1 记档「CJK glyph 静态表 32 + 4 余量装不下长文本」= **CJK 字集 33 → 392**（A+ 自动化方案，10-30 定案）。字集 392 数据定稿（游戏文档语料 top 330 ∪ UX-7 教程全词集零缺字 ∪ 既有 33 ∪ 标点，codepoint 序 0x00B7..0xFF1F；generate_font.py CJK_CHARSET 段，**加字 = 改清单一条命令零代码**）+ 来源钉定 NotoSansCJK-Regular.ttc（SHA-256 b76b0433…41690a / 19,484,784 B / 10 face / SC index 2 / 内部版本 2.004；提取前验，漂移点名拒）+ 光栅化 = PIL FreeType PRE-1 参数（em 16 / line box (19,5) / rows 5..20 窗口 / coverage ≥128）+ 既有 33 字 33/33 位级自校验先行。font.png **尾部 append** 256×512 → **256×2080**（新字 359 按 codepoint 序填 cell 128..486，rows 61..64 = 32 cell 余量 → 424 字内零代码加字；**顶 512 行逐字节不变** = ASCII UV 位级恒等 + 免重锚）；font.hpp 仅 kCjkGlyphs[33]→[392] + kFontAtlasHeight 2080 两处，**font.cpp 零改动**；工具只写 assets/ + .py（src/ 不碰范式）。零 format（22）/config/资产文件/音效/帧状态。1978/1978（+3：Ux6Atlas 尺寸钉 / Top512 重编码 FNV 红线 / 教程 21 字 exact cell + CjkTablePinned 演进 392）、-Werror 0、banner v1.40.0、重跑 ×3 md5 恒。门 160：S1 **第 160 次结构性免疫 + base18 锚连续 168140 B 免重锚**（无输入无死亡屏/面板/F3/悬停 = 零字体绘制）+ S3 1978 + 无 S6（字集 = 工具期数据零运行期 parse 面）+ 性能 A/B v1.39 vs v1.40 fall 900f 全指标同档 + changesApplied 9/3/1 三窗逐位 + 终档 fluids 18/18 + blocks 55/55 集合恒等 diff 0 = 同世界同成本。PITS 346（项目 FNV 约定 = 32 位基数 + 64 位 prime 非标准混合，独立复算用标准基数 = 假失配）。**tag v1.40.0 = UX-5+6 合并 tag**（UX 行政策第 3 个兑现；UX 系统 release 于 UX-7 收官）。详见 docs/archive/phase-ux6.md。
+消费 PRE-1 记档「CJK glyph 静态表 32 + 4 余量装不下长文本」= **CJK 字集 33 → 392**（A+ 自动化方案，10-30 定案）。字集 392 数据定稿（游戏文档语料 top 330 ∪ UX-7 教程全词集零缺字 ∪ 既有 33 ∪ 标点，codepoint 序 0x00B7..0xFF1F；generate_font.py CJK_CHARSET 段，**加字 = 改清单一条命令零代码**）+ 来源钉定 NotoSansCJK-Regular.ttc（SHA-256 b76b0433…41690a / 19,484,784 B / 10 face / SC index 2 / 内部版本 2.004；提取前验，漂移点名拒）+ 光栅化 = PIL FreeType PRE-1 参数（em 16 / line box (19,5) / rows 5..20 窗口 / coverage ≥128）+ 既有 33 字 33/33 位级自校验先行。font.png **尾部 append** 256×512 → **256×2080**（新字 359 按 codepoint 序填 cell 128..486，rows 61..64 = 32 cell 余量 → 424 字内零代码加字；**顶 512 行逐字节不变** = ASCII UV 位级恒等 + 免重锚）；font.hpp 仅 kCjkGlyphs[33]→[392] + kFontAtlasHeight 2080 两处，**font.cpp 零改动**；工具只写 assets/ + .py（src/ 不碰范式）。零 format（22）/config/资产文件/音效/帧状态。1978/1978（+3：Ux6Atlas 尺寸钉 / Top512 重编码 FNV 红线 / 教程 21 字 exact cell + CjkTablePinned 演进 392）、-Werror 0、banner v1.40.0、重跑 ×3 md5 恒。门 160：S1 **第 160 次结构性免疫 + base18 锚连续 168140 B 免重锚**（无输入无死亡屏/面板/F3/悬停 = 零字体绘制）+ S3 1978 + 无 S6（字集 = 工具期数据零运行期 parse 面）+ 性能 A/B v1.39 vs v1.40 fall 900f 全指标同档 + changesApplied 9/3/1 三窗逐位 + 终档 fluids 18/18 + blocks 55/55 集合恒等 diff 0 = 同世界同成本。PITS 346（项目 FNV 约定 = 32 位基数 + 64 位 prime 非标准混合，独立复算用标准基数 = 假失配）。**tag v1.40.0 = UX-5+6 合并 tag**（UX 行政策第 3 个兑现；UX 系统 release 于 UX-7 收官）。详见 docs/archive/v1x/phase-ux6.md。
 
 ## v1.39.0（2026-10-31）— UX-5 耐久修复系统（UX 行 5/7，门 159 全 PASS）
 
@@ -73,7 +73,7 @@ slot0 = pickaxe damage **125.0 exact**【187.5−62.5】+ ingot 7 / OLD
 S6 ×3 精确点名 + 性能 A/B v1.38 vs v1.39 fall 900f 全指标同档 +
 changesApplied 9/3/1 三窗逐位 + 终档 fluids 18/18 + blocks 55/55 集合
 恒等。PITS 345（表格槽存档丢 damage，断言须落 inventory）。本版不打
-tag（**tag v1.40.0 = UX-5+6 合并**）。详见 docs/archive/phase-ux5.md。
+tag（**tag v1.40.0 = UX-5+6 合并**）。详见 docs/archive/v1x/phase-ux5.md。
 
 ## v1.38.0（2026-10-30）— **tag v1.38.0 = UX-3+4 合并 tag**
 
@@ -96,7 +96,7 @@ A=0/B=1697/C=1394 视差单调 + 遮挡出墙 + save A≡B（模式不入档）/
 全指标同档 + changesApplied 9/3/1 逐位 + 终档 fluids 18/18 + blocks
 55/55 集合恒等。PITS 344（xdotool search --pid 须真实进程 PID）。
 **tag v1.38.0 = UX-3+4 合并 tag**（UX 行政策第 2 个兑现）。UX-3 明细
-见 v1.37.0 条目。详见 docs/archive/phase-ux4.md。
+见 v1.37.0 条目。详见 docs/archive/v1x/phase-ux4.md。
 
 ## v1.37.0（2026-10-30）— UX-3 玩家身体模型（UX 行 3/7，门 157 全 PASS）
 
@@ -128,7 +128,7 @@ vs v1.37 fall 900f 全指标同档 + changesApplied 9/3/1 三窗逐位 + 终档
 fluids 18/18 + blocks 55/55 集合恒等 = 同世界同成本【结构惰性最强
 形】。偏离：占位皮肤纯色分区 / 头部 cap 与躯干侧面 tile 不表征 /
 模型烘焙恒亮（mob 同款）/ crouch 不缩放（记档）。本版不打 tag（**tag
-v1.38.0 = UX-3+4 合并**）。详见 docs/archive/phase-ux3.md。
+v1.38.0 = UX-3+4 合并**）。详见 docs/archive/v1x/phase-ux3.md。
 
 ## v1.36.0（2026-10-30）— **tag v1.36.0 = UX-1+2 合并 tag（UX 政策首个兑现）**
 
@@ -159,7 +159,7 @@ base18 锚连续 168140 B + 跨版 savenorm EXACT**；B 段每子相加读档往
 全状态恒等（applySave/rescan* 经新 struct 行为零差证明）；A 段传递链
 闭合（a2n1 ≡ a1n1 ≡ a1o1 ≡ 锚 全 EXACT = 终态二进制对拆分前位级恒等）。
 性能 A/B v1.35.0 vs v1.36.0 fall 900f 三窗全指标同档 + changesApplied 9/3/1 逐位 + 终档 fluids 18/18 + blocks 55/55 集合恒等 diff 0 = 同世界同成本【纯重构最强形】；补丁器 g139_instrument v2 双模式适配 8-TU 布局（legacy 输出字节一致实证，PITS 343 机械改写协议）。C 方案（子系统
-对象化）记档矩阵外。详见 docs/archive/phase-ux2.md。
+对象化）记档矩阵外。详见 docs/archive/v1x/phase-ux2.md。
 
 **tag v1.36.0 = UX-1+2 合并 tag**（10-30 用户定案 UX 行政策兑现：两两
 合并 tag v1.36/1.38/1.40/1.41 收官 + UX 系统 release 于 UX-7 收官，
@@ -203,7 +203,7 @@ changesApplied 9/3/1 逐位 + **终档 fluids 18/18 + blocks 55/55 集合恒等
 assets/data）。**UX 行 tag/release 政策（10-30 用户定案，同款 10-28）**：
 两两合并 tag（v1.36.0 = UX-1+2 / v1.38.0 = UX-3+4 / v1.40.0 = UX-5+6 /
 v1.41.0 = UX-7 收官）+ UX 系统 release 收官时发（notes 覆盖
-v1.35-1.41）——本版不打 tag。详见 `docs/archive/phase-ux1.md`。
+v1.35-1.41）——本版不打 tag。详见 `docs/archive/v1x/phase-ux1.md`。
 
 ## v1.34.0（2026-10-30）— 插队修复 ×3（矩阵 UX 行开工前清积压）
 
@@ -237,7 +237,7 @@ stone/8 锻石守恒 + ×2 RAW + ×2 savenorm；**双二进制 CPU harness
 changesApplied 9/3/1 三窗逐位 + 终档 fluids 18/18 + blocks 55/55
 集合恒等 = 同世界同成本）。PITS 338（面板点击落位验证协议）+ 339
 （场景容器块须携状态段）+ 340（长输入序列浮动窗 + 强制几何）。详见
-`docs/archive/phase-fixes-v134.md`。
+`docs/archive/v1x/phase-fixes-v134.md`。
 
 ## v1.33.0（2026-10-30）— **tag v1.33.0 = PRE-11+12 合并 tag + v1.x 任务矩阵 33/33 全完成 + PRE 系统 release**
 
@@ -268,7 +268,7 @@ diff 78 px 限盒】——OLD 侧无可见 tooltip = Phase-15 潜伏覆盖缺陷
 性能 A/B 真 v1.32 vs v1.33-dev PASS（banner 双侧 + 全指标同档 +
 changesApplied 9/3/1 三窗逐位 + 终档 fluids 18/18 + blocks 55/55
 集合恒等 = 同世界同成本【结构惰性最强形：无 F3/面板/悬停 = PRE-12 零
-执行】）。详见 `docs/archive/phase-pre12.md`。
+执行】）。详见 `docs/archive/v1x/phase-pre12.md`。
 
 **tag v1.33.0 = PRE-11+12 合并 tag**（PRE 政策兑现：v1.32.0 组内未打，
 本 tag 覆盖 PRE-11 心行窄窗回退 + PRE-12 tooltip/F3）= **v1.x 任务矩阵
@@ -298,7 +298,7 @@ PASS（banner 双侧 + 全指标同档 + changesApplied 9/3/1 三窗逐位 + 终
 fluids 18/18 + blocks 55/55 集合恒等 = 同世界同成本【结构惰性最强形：
 无 capture = drawUI 心行段零执行】）。v1.32.0 不打 tag（PRE 政策：
 tag v1.33.0 = PRE-11+12 合并，PRE-12 收官时打 + PRE 系统 release）。
-详见 `docs/archive/phase-pre11.md`。
+详见 `docs/archive/v1x/phase-pre11.md`。
 
 ## v1.31.0（2026-10-30）— **tag v1.31.0 = PRE-9+10 合并 tag**
 
@@ -329,7 +329,7 @@ HUD 带外 0 diff = 世界零回归 / 护甲行移位双向各 624 px】）；S3
 矩阵尺寸一致性 → capture 跑尺寸门）/ **332**（capture 跑 x2 RAW 漂移
 门须 <0.001 rad）。**tag v1.31.0 = PRE-9+10 合并 tag**（PRE 政策；
 release 于 PRE-12 收官，notes 将覆盖 v1.30-1.31）。详见
-`docs/archive/phase-pre9.md` + `docs/archive/phase-pre10.md`。
+`docs/archive/v1x/phase-pre9.md` + `docs/archive/v1x/phase-pre10.md`。
 
 ## v1.30.0（2026-10-30）— 不打 tag（PRE 政策：tag v1.31.0 = PRE-9+10 合并）
 
@@ -355,7 +355,7 @@ changesApplied 9/3/1 三窗逐位 + 终档 fluids 18/18 + blocks 55/55
 集合恒等 = 同世界同成本【结构惰性最强形】）。**PITS 328**（护甲减伤
 floor 在乘积上非最终值：满钻甲 20 点不免疫箭伤 2 = 0.4 伤 + 红闪破
 ×2 RAW，零红闪场景须伤害源头为 0）/ **329**（门内 S3 与资产脚手架
-互斥：S2 脚手架须 S3 前还原）。详见 `docs/archive/phase-pre9.md`。
+互斥：S2 脚手架须 S3 前还原）。详见 `docs/archive/v1x/phase-pre9.md`。
 
 ## v1.29.0（2026-10-30）— **tag v1.29.0 = PRE-7+8 合并 tag**
 
@@ -380,7 +380,7 @@ churn【PITS 244/283 类】+ 玩家 hp20）；性能 A/B 真 v1.28 vs v1.29-dev 
 ≥9 月光仅 7）/ **325**（敌对生成保护圈 12 = 场景须离出生点 >12）/ **326**
 （抬高玩家 dy 双重约束：周边高地形破安全 → 膜区抬平）/ **327**（余烬截图
 帧数须为 36 倍数，否则活余烬缺席 diff=0 假阴性）。详见
-`docs/archive/phase-pre8.md`。
+`docs/archive/v1x/phase-pre8.md`。
 
 ## v1.28.0（2026-10-29）
 
@@ -395,7 +395,7 @@ KNOWN_ISSUES「中毒无独立紫色 tint」条 = P46 原文"需新的全屏 tin
 独立项）。零 format（22）/config/音效。1888/1888（+6）、`-Werror` 0；
 门 143：S1 第 143 次结构性免疫免重锚 + 跨版 savenorm EXACT；S2 三方
 poison 纱 A/B（混合数学 A ≈ 0.65·B + 0.35·tint 红闪相位重试）；性能 A/B
-同世界同成本。详见 `docs/archive/phase-pre7.md`。
+同世界同成本。详见 `docs/archive/v1x/phase-pre7.md`。
 
 ## v1.27.0（2026-10-29）— **tag v1.27.0 = SAVE-2+3 合并 tag + SAVE 系统 release（notes 覆盖 v1.26-1.27）**
 
@@ -411,7 +411,7 @@ KNOWN_ISSUES「多个槽只是多个文件，手动切换」+ SAVE-1 残余「�
 期路径 = 普通跑结构惰性。1882/1882（+10）、`-Werror` 0；门 142：S1 第 142
 次结构性免疫 + **跨版 save 字节一致**（零 format 变更）；S2 headless 管理
 矩阵（list ×2 确定性 + 损坏浮现 + 全操作 rc/点名/字节保真 + 旧二进制拒旗
-标）；性能 A/B 同世界同成本。详见 `docs/archive/phase-save3.md`。
+标）；性能 A/B 同世界同成本。详见 `docs/archive/v1x/phase-save3.md`。
 
 ## v1.26.0（2026-10-29）
 
@@ -429,7 +429,7 @@ zero/twin 整数平面全 exact + twin PNG ≡ zero PNG + 跨侧 player 段位�
 点名；性能 A/B 同世界同成本（changesApplied 9/3/1 逐位 + 终档集合 diff 0）。
 门内发现：物品严格解析白名单漏 `saturation` = 10 行 init WARN 噪音（两侧恒同
 结构无害，收录 KNOWN_ISSUES 待基础设施轮修）。详见
-`docs/archive/phase-save2.md`。
+`docs/archive/v1x/phase-save2.md`。
 
 ## v1.25.0（2026-10-29）— **tag v1.25.0 = CRAFT-6+7 合并 tag + CRAFT 系统 release（notes 覆盖 v1.22-1.25）**
 

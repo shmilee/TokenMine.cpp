@@ -7,7 +7,7 @@
 > 全部子系统更新到现状。
 >
 > **来源约定**：本文所有具体数字/字段名/常量值以本文件各条的标注为准，细节
-> （机制公式、单测、门证据、偏离记档全文）见 `docs/archive/phase-*.md`（164 个
+> （机制公式、单测、门证据、偏离记档全文）见 `docs/archive/v1x/phase-*.md`（164 个
 > 阶段存档）；活跃已知问题与已修复索引见 `docs/KNOWN_ISSUES.md`；逐版明细见
 > `docs/CHANGELOG.md`；执行协议（命令/硬规则/E2E）见 `docs/PROTOCOL.md` 与
 > `AGENTS.md`。

@@ -104,7 +104,7 @@ BlockState / 四肢摆动 / mob 踏阶 / 水体交互 / 护甲 / 氧气 / 耐久
 水面波纹 / 云与环境音 / 透明 discard / 掉落光照 / 渲染修复 / mob 涉水修正 /
 流体列保留 / 流体 per-cell / 夜光重传播 + 月光）：
 见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)（逐版明细 + 发布节奏）；
-每版工程细节（机制/证据/偏离/性能 A/B）见 `docs/archive/phase-*.md` 阶段
+每版工程细节（机制/证据/偏离/性能 A/B）见 `docs/archive/v1x/phase-*.md` 阶段
 存档与 GitHub Releases。
 - **0.x 承诺**：可玩、可扩展、确定性运行；但**不承诺稳定**——存档格式
   （现为 format 19，向前迁移）与内容数据格式仍可能随阶段演进，旧存档
@@ -130,7 +130,7 @@ BlockState / 四肢摆动 / mob 踏阶 / 水体交互 / 护甲 / 氧气 / 耐久
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃）+ 已修复存档索引 | 阶段验收前后 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phase 0–29 规划 + 细节存档索引 | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v0.1.0 → v1.0 逐版明细） | 查某版改了什么 |
-| [docs/archive/phase-NN.md](docs/archive/) | 单阶段细节存档（阶段报告 + 会话存档） | 深挖某阶段 |
+| [docs/archive/v1x/phase-NN.md](docs/archive/) | 单阶段细节存档（阶段报告 + 会话存档） | 深挖某阶段 |
 | `opencode-sessions/SESSION_CONTEXT.md`（本地，不入库） | 会话交接：最新状态/提交列表/下一步（+ 历史块/遗留附录/新会话启动 prompt，同目录） | 任何"继续"会话 |
 
 ## 开发约定

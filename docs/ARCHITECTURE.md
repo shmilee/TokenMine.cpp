@@ -1,7 +1,7 @@
 # 架构
 
 > v1.x 整理（LGT-4 时点）。本文 = 目录结构 + 核心架构速览；逐阶段细节在
-> `docs/archive/phase-*.md`，协议与硬规则在 `docs/PROTOCOL.md`，玩法机制在
+> `docs/archive/v1x/phase-*.md`，协议与硬规则在 `docs/PROTOCOL.md`，玩法机制在
 > `docs/MECHANICS.md`，加内容在 `docs/CONTENT_GUIDE.md`。
 
 ## 目录结构

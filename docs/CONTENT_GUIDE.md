@@ -10,7 +10,7 @@
 > `src/core/save.cpp`、`src/core/game.cpp` init 交叉校验段）；新增 worldgen.json
 > 完整参考、config 参考、块音效材质、纹理/atlas 纪律节。文中 `KNOWN_ISSUES`
 > 均指 `docs/KNOWN_ISSUES.md`。每节标题的 phase 标签（PXX / ABC-N）是引入
-> 该数据面的阶段，细节存档见 `docs/archive/phase-*.md`。
+> 该数据面的阶段，细节存档见 `docs/archive/v1x/phase-*.md`。
 
 ## 数据布局与校验策略总览
 
@@ -1157,6 +1157,6 @@ generate_mob_textures.py（mob 16×16，splitmix64）/ generate_item_icons.py
 
 ---
 
-*（完）——各 phase 细节存档见 `docs/archive/phase-*.md`；活跃已知问题与
+*（完）——各 phase 细节存档见 `docs/archive/v1x/phase-*.md`；活跃已知问题与
 记档偏离见 `docs/KNOWN_ISSUES.md`；玩法语义见 `docs/GAMEPLAY.md` /
 `docs/MECHANICS.md`。*
