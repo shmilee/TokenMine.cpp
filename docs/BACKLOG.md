@@ -26,7 +26,7 @@
 | PRE 表现层 | ~~PRE-7 中毒/燃烧表现~~ ✅ v1.28.0 | ~~PRE-8 mob 火焰~~ ✅ v1.29.0 | ~~PRE-9 箭/弓/手视觉~~ ✅ v1.30.0 | ~~PRE-10 图标重叠修复★~~ ✅ v1.31.0 | ~~PRE-11 HUD 细化~~ ✅ v1.32.0 | ~~PRE-12 tooltip/F3~~ ✅ v1.33.0 | |
 | UX 实机报障 | ~~UX-1 夜变暗程度~~ ✅ v1.35.0 | ~~UX-2 Game 拆分/装配层收敛~~ ✅ v1.36.0 | ~~UX-3 玩家身体模型~~ ✅ v1.37.0 | ~~UX-4 第三人称/拉远相机~~ ✅ v1.38.0 | ~~UX-5 耐久修复系统~~ ✅ v1.39.0 | ~~UX-6 字体扩容~~ ✅ v1.40.0 | ~~UX-7 新手指导~~ ✅ v1.41.0 |
 | UX-8 体验细化 | ~~UX-8a 教程木板步~~ ✅ v1.42.0 | ~~UX-8b 目标行辅助文字~~ ✅ v1.42.0 | ~~UX-8c E 面板配方两列~~ ✅ v1.43.0 | ~~UX-8d 掉落伪散落~~ ✅ v1.44.0 | ~~UX-8e 字体独立缩放~~ ✅ v1.45.0 | ~~UX-8f 背包 3 行 36 槽~~ ✅ v1.46.0 | ~~UX-8g 第三人称瞄准修复~~ ✅ v1.47.0 |
-| UX-9 体验细化（二轮实机报障） | ~~UX-9a 云方块化~~ ✅ v1.48.0 | ~~UX-9b 教程火把步~~ ✅ v1.49.0 | UX-9c 环境底光可配置 | | | | |
+| UX-9 体验细化（二轮实机报障） | ~~UX-9a 云方块化~~ ✅ v1.48.0 | ~~UX-9b 教程火把步~~ ✅ v1.49.0 | ~~UX-9c 环境底光可配置~~ ✅ v1.50.0 | | | | |
 
 ★ PRE-10 = 原砍掉清单唯一 bug 级项（效果图标行与吸收红心重叠，3 效果
 同激活可触发）——默认走行序，用户可一句话提前提到任意位置。
@@ -129,6 +129,8 @@
 - 2026-11-01：**UX-9a 云方块化 + 厚度完成（v1.48.0，门 168 重锚全 PASS，不挂 tag）**：云 = 独立 fragment shader 逐像素两级颗粒（region 50% ∧ sub 4 块 75%）+ 厚度边界带（MC 侧壁着色）+ 高度场 CPU oracle；门内实证 iGPU buffer 更新 ~140ms/MB → 架构翻转（mesh→shader，uvec2 模拟 64 位位精确，三层核对 0 失配）+ 云延伸地平线。2061/2061；门 168：S1 重锚（像素终裁 38,153/38,153 云一致 + 地形零泄漏 + off≡off 免疫 → base18 179116 B）+ 走位探针跨格 142.9→2.5ms（57×）+ 性能同世界同成本——详见 docs/archive/phase-ux9a.md。
 
 - 2026-11-01：**UX-9a 架构翻转（门内性能实测定案）：mesh 云 → fragment 逐像素 mask**：两级颗粒 mesh（139ebc2，~860KB/窗口）+ 厚度（底/顶/侧 quad）在门 168 走位探针实证 = **每跨 16 块云格重建上传 140ms**（iGPU Mesa BDW GT2 硬件）；Mesh::upload 原地 subdata 修复（d20e406，保留 = 通用加固）+ 3× 预分配对照实验（subdata 强制路径 135ms 未改善）= **buffer 更新本身 ~140ms/MB = 分配非瓶颈**；静态窗口替代 = 云相对地标游移 6.25% 步行速可见 = 质量不可接受。翻转 = **独立云 shader program（assets/shaders/cloud.{vert,frag}，basic/sky/ui 第三先例）**：一个静态大世界 quad（init 一次上传 ~100B，per-frame model 平移 = uniform 零上传），fragment 逐像素 CPU 同款纯函数（hash3/splitmix64 GLSL ES 3.00 uint 精确移植：region 50% ∧ sub 75% ∧ 高度场 1-3 块）——世界锚定（零游移）+ 零跨格成本 + 几何规模无界（厚度 = 边界带 MC 侧壁着色 ±X 0.8/±Z 0.6，自下而上的厚度视觉本体；峰顶 y112 俯视顶面近似 = 记档）；CPU 纯函数（cloudMask/cloudSubMask/cloudSubHeight）保留 = GLSL 移植测试 oracle + 单测钉不变。v1.48.0 同版收口（门 168 数据全重跑）。
+
+- 2026-11-02：**UX-9c 环境底光可配置完成（v1.50.0，门 170 全 PASS = UX-9 系统收官，tag v1.50.0 + GitHub release 覆盖 v1.48-1.50）**：render.cave_ambient [0,1] 默认 0.03 位级恒等 + basic.frag amb 分支（light≤0.001 全遮挡底值）+ 严格读 + init 第 3 per-run uniform。2072/2072；门 170：S1 六跑全字节一致免重锚最强形 + S2 洞穴 A/B 全帧仅亮化 ≈10× + savenorm EXACT + S6 ×2 点名 + 性能同世界同成本（首轮偏置重跑证伪）——详见 docs/archive/phase-ux9c.md。
 
 - 2026-11-01：**UX-9c 环境底光可配置立项（用户 11-01 实机反馈定案：「洞穴底光调亮，我也需要，最好 config 中可以配置不同环境、不同时间的视觉亮度，比如夜晚的、水底的、洞穴的等」）**：现状 = 全黑区（天空光 0 ∧ 块光 0 = 洞穴/深水/室内）恒 0.03 环境底（u_ambient 全局 per-run 常量）+ 夜晚已有 render.night_sky_level（UX-1，露天月光明暗可配但洞穴无）。定案 = **`render.cave_ambient`（double [0,1]，代码默认 0.03 = 对 v1.49.0 位级恒等，SAVE-1/UX-1 严格读纪律）**：shader 光公式底值分支——`light = max(sky 仿射撤退, block)` 后 **light ≤ 0.001（全遮挡区 = 洞穴/深水/室内，夜晚露天 0.467 不触）→ 底值用 u_caveAmbient 替代 u_ambient**（per-vertex 值 quad 内恒 = 分支无像素分歧，u_fogEnabled per-draw 分支同款纪律）+ init 一次性上传（UX-1 u_nightRetreat/u_ambient 同款 bind→set→unbind per-run 常量）；**深水自动同享**（水 light_opacity 2 衰减天空 → 深处 light 0 = 同分支，零额外代码）= 一夜/洞穴/水底三诉求收敛两键（night_sky_level 既有 + cave_ambient 新）。v1.50.0（门 170，执行序 UX-9b 后）。
 
