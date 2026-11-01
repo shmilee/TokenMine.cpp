@@ -267,6 +267,33 @@ Result<int> readNightSkyLevel(const Config& config) {
     return static_cast<int>(d);
 }
 
+// UX-9c: the fully-occluded ambient floor from the config (the strict
+// read — the readNightSkyLevel pattern: the raw key, nullptr = absent =
+// the code default; a type mismatch must be named, never silently
+// fallen back). Unlike night_sky_level there is NO integer check —
+// this knob is a continuous brightness, so the range check in the
+// double domain is the whole validation.
+Result<double> readCaveAmbient(const Config& config) {
+    const Json* j = config.at("render.cave_ambient");
+    if (j == nullptr) {
+        return static_cast<double>(kAmbientFloor); // absent: the code default
+    }
+    if (!j->isNumber()) {
+        return MC_FAIL("config render.cave_ambient must be a number");
+    }
+    const double d = j->asDouble();
+    if (!std::isfinite(d)) {
+        return MC_FAIL("config render.cave_ambient must be finite");
+    }
+    if (d < 0.0 || d > 1.0) {
+        return MC_FAIL("config render.cave_ambient must be in [0, 1] "
+                       "(0 = no residual glow in fully-occluded areas, "
+                       "1 = full brightness), got " +
+                       std::to_string(d));
+    }
+    return d;
+}
+
 float nightRetreatScale(int level) {
     return static_cast<float>(kMaxLight - level) /
            static_cast<float>(kMaxLight);

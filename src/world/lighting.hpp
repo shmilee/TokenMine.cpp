@@ -199,6 +199,26 @@ float effectiveSkyLightF(float stored, float dayFactor,
 // on a type mismatch, which must not happen for a user-visible knob).
 Result<int> readNightSkyLevel(const Config& config);
 
+// UX-9c: the fully-occluded ambient floor as a STRICT config read
+// (render.cave_ambient). Consumer side: caves / deep water / sealed
+// rooms — the vertices whose effective light is ~0 (the baked light is
+// exactly 0 there) read this value instead of the u_ambient floor.
+// Orthogonal to night_sky_level: the open-sky night retreat is
+// untouched (lit pixels keep u_ambient; the day/night factor only moves
+// the sky term), and deep water shares the branch for free (water
+// attenuates sky light to 0, so a deep lake bottom reads the cave floor
+// too). Absent = kAmbientFloor (0.03 — the code default: at the default
+// night floor both uploaded floors are 0.03, the pre-UX-9c pipeline
+// bit-for-bit); present = a finite JSON number in [0, 1] (0 = no
+// residual glow in fully-occluded areas, 1 = full brightness). Float
+// values are legal — this knob is a continuous brightness, no integer
+// check (the one deliberate difference from readNightSkyLevel).
+// Non-number / non-finite / out-of-range is named and rejected (the
+// SAVE-1 strict-read discipline — the Config getters would silently
+// fall back on a type mismatch, which must not happen for a user-
+// visible knob).
+Result<double> readCaveAmbient(const Config& config);
+
 // UX-1: the deep-night retreat distance in the shader's 0..1-normalized
 // sky units for a floor of `level`: (kMaxLight - level) / kMaxLight.
 // At level = kNightSkyLevel this is bit-identical to kNightRetreatScale

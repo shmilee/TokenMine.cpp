@@ -1017,16 +1017,31 @@ Result<void> Game::buildScene() {
     auto nightLevel = readNightSkyLevel(m_config);
     MC_TRY(nightLevel);
     m_nightSkyLevel = *nightLevel;
-    // The two uniforms are per-run constants (config-driven, no per-draw
-    // variation): set them once on the basic program. At the default L =
-    // 7 the uploaded values (8.0f/15.0f, 0.03f) are the pre-UX-1 named
-    // constants bit-for-bit (the GLSL 8.0/15.0 and 0.03 float literals
-    // round to the same IEEE values).
+    // UX-9c: the fully-occluded ambient floor (render.cave_ambient — a
+    // CODE default, the fire/mobs/beacon/night_sky_level config-key
+    // discipline: the committed config.json carries no such key).
+    // Strict read: absent = kAmbientFloor (at the default night floor
+    // both uploaded floors are 0.03f — the pre-UX-9c pipeline
+    // bit-for-bit); present = a finite number in [0, 1] (0 = no
+    // residual glow in caves / deep water / sealed rooms, 1 = full
+    // brightness). No host-side consumer (the shader is the only one),
+    // so no new Game member (YAGNI — unlike m_nightSkyLevel, whose
+    // host-side pure functions read the floor).
+    auto caveAmbient = readCaveAmbient(m_config);
+    MC_TRY(caveAmbient);
+    // The three uniforms are per-run constants (config-driven, no
+    // per-draw variation): set them once on the basic program. At the
+    // defaults (L = 7, cave_ambient = 0.03) the uploaded values
+    // (8.0f/15.0f, 0.03f, 0.03f) are the pre-UX-9c named constants
+    // bit-for-bit (the GLSL 8.0/15.0 and 0.03 float literals round to
+    // the same IEEE values).
     m_basicShader.bind();
     m_basicShader.setUniform1f("u_nightRetreat",
                                nightRetreatScale(m_nightSkyLevel));
     m_basicShader.setUniform1f("u_ambient",
                                ambientFloorForLevel(m_nightSkyLevel));
+    m_basicShader.setUniform1f("u_caveAmbient",
+                               static_cast<float>(*caveAmbient));
     m_basicShader.unbind();
 
     // -- item icons (Phase 15 UI) ------------------------------------------

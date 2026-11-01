@@ -38,6 +38,15 @@ uniform float u_dayFactor;
 // (bind -> set -> unbind).
 uniform float u_nightRetreat;
 uniform float u_ambient;
+// UX-9c (the configurable fully-occluded floor): the ambient value used
+// when the effective light is ~0 (caves / deep water / sealed rooms —
+// the baked light is exactly 0 at every vertex there). The host uploads
+// render.cave_ambient (code default kAmbientFloor — at the default
+// night floor both uploaded values are 0.03f, so the presentation
+// formula is bit-identical to the pre-UX-9c pipeline). Like
+// u_nightRetreat / u_ambient it is a PER-RUN constant (config-driven,
+// no per-draw variation): set once at init (bind -> set -> unbind).
+uniform float u_caveAmbient;
 // One tile in UV space (1/columns, 1/rows of the atlas). Only read on the
 // tiled (greedy-merged chunk quad) path.
 uniform vec2 u_tileSize;
@@ -118,7 +127,16 @@ void main() {
     // the feature vs the pre-LGT-3 scale's all-0 night).
     float light = max(v_skyLight - u_nightRetreat * (1.0 - u_dayFactor),
                       v_blockLight);
-    vec3 rgb = base * (u_ambient + (1.0 - u_ambient) * light * v_faceShade);
+    // UX-9c: the fully-occluded floor (light <= 0.001 = caves / deep
+    // water / sealed rooms, where the baked light is exactly 0 at every
+    // vertex): u_caveAmbient replaces u_ambient as the floor. At the
+    // code default both are 0.03f, so `amb` is 0.03f either way = the
+    // expression keeps identical operands and order = bit-identical
+    // (the gate's S1 root). A fragment whose interpolated light
+    // straddles the 0.001 boundary selects per pixel — a pure ALU
+    // select, no correctness issue.
+    float amb = light <= 0.001f ? u_caveAmbient : u_ambient;
+    vec3 rgb = base * (amb + (1.0 - amb) * light * v_faceShade);
     // PRE-2 distance fog: a linear ramp toward the same-frame sky color
     // from u_fogStart to u_fogEnd. Near geometry clamps to fogT = 0 and
     // mix(x, y, 0.0) is x bit-exactly for non-negative colors, so

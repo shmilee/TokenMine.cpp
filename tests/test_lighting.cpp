@@ -1238,6 +1238,10 @@ std::string errOf(const Result<int>& r) {
     return r.error().message;
 }
 
+std::string errOf(const Result<double>& r) {
+    return r.error().message;
+}
+
 } // namespace
 
 TEST(LightingTest, NightSkyLevelDefaultWhenKeyAbsent) {
@@ -1332,6 +1336,113 @@ TEST(LightingTest, NightSkyLevelHugeFiniteNamed) {
     ASSERT_FALSE(r.ok());
     EXPECT_NE(errOf(r).find("render.night_sky_level"), std::string::npos);
     EXPECT_NE(errOf(r).find("[0, 15]"), std::string::npos);
+}
+
+// ---------------------------------------------------------------------------
+// UX-9c: the configurable fully-occluded floor (render.cave_ambient)
+// ---------------------------------------------------------------------------
+
+TEST(LightingTest, CaveAmbientDefaultWhenKeyAbsent) {
+    // Absent key = kAmbientFloor (0.03) EXACTLY (the code default: at the
+    // default night floor both uploaded floors are 0.03, the pre-UX-9c
+    // pipeline bit-for-bit).
+    auto r = readCaveAmbient(loadNightLevelConfig(R"({})"));
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    // kAmbientFloor is a FLOAT (0.03f): the exact double is its cast,
+    // NOT the double literal 0.03 (they differ by ~1e-9 relative, far
+    // outside EXPECT_DOUBLE_EQ's 4-ULP tolerance).
+    EXPECT_DOUBLE_EQ(*r, static_cast<double>(kAmbientFloor));
+    // Present render section, absent key: still the default.
+    auto r2 = readCaveAmbient(
+        loadNightLevelConfig(R"({"render": {"something_else": 1}})"));
+    ASSERT_TRUE(r2.ok()) << r2.error().describe();
+    EXPECT_DOUBLE_EQ(*r2, static_cast<double>(kAmbientFloor));
+}
+
+TEST(LightingTest, CaveAmbientZeroLegal) {
+    // 0 = no residual glow in fully-occluded areas.
+    auto r = readCaveAmbient(
+        loadNightLevelConfig(R"({"render": {"cave_ambient": 0.0}})"));
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    EXPECT_DOUBLE_EQ(*r, 0.0);
+}
+
+TEST(LightingTest, CaveAmbientHalfLegal) {
+    auto r = readCaveAmbient(
+        loadNightLevelConfig(R"({"render": {"cave_ambient": 0.5}})"));
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    EXPECT_DOUBLE_EQ(*r, 0.5);
+}
+
+TEST(LightingTest, CaveAmbientOneLegal) {
+    // 1 = full brightness.
+    auto r = readCaveAmbient(
+        loadNightLevelConfig(R"({"render": {"cave_ambient": 1.0}})"));
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    EXPECT_DOUBLE_EQ(*r, 1.0);
+}
+
+TEST(LightingTest, CaveAmbientFractionalIsLegal) {
+    // Unlike night_sky_level, float values are legal (a continuous
+    // brightness — no integer check). 0.25 must pass, not be named.
+    auto r = readCaveAmbient(
+        loadNightLevelConfig(R"({"render": {"cave_ambient": 0.25}})"));
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    EXPECT_DOUBLE_EQ(*r, 0.25);
+}
+
+TEST(LightingTest, CaveAmbientNegativeNamed) {
+    auto r = readCaveAmbient(
+        loadNightLevelConfig(R"({"render": {"cave_ambient": -0.1}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(errOf(r).find("render.cave_ambient"), std::string::npos);
+    EXPECT_NE(errOf(r).find("in [0, 1]"), std::string::npos);
+    EXPECT_NE(errOf(r).find("got -0.1"), std::string::npos);
+}
+
+TEST(LightingTest, CaveAmbientAboveOneNamed) {
+    auto r = readCaveAmbient(
+        loadNightLevelConfig(R"({"render": {"cave_ambient": 1.5}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(errOf(r).find("render.cave_ambient"), std::string::npos);
+    EXPECT_NE(errOf(r).find("in [0, 1]"), std::string::npos);
+    EXPECT_NE(errOf(r).find("got 1.5"), std::string::npos);
+}
+
+TEST(LightingTest, CaveAmbientStringNamed) {
+    auto r = readCaveAmbient(
+        loadNightLevelConfig(R"({"render": {"cave_ambient": "dark"}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(errOf(r).find("render.cave_ambient"), std::string::npos);
+    EXPECT_NE(errOf(r).find("must be a number"), std::string::npos);
+}
+
+TEST(LightingTest, CaveAmbientNullNamed) {
+    auto r = readCaveAmbient(
+        loadNightLevelConfig(R"({"render": {"cave_ambient": null}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(errOf(r).find("must be a number"), std::string::npos);
+}
+
+TEST(LightingTest, CaveAmbientNonFiniteNamed) {
+    // The parser's strtod turns an overflow literal into inf: a present
+    // number that is not finite is named and rejected (the SAVE-1
+    // reader's isfinite discipline).
+    auto r = readCaveAmbient(
+        loadNightLevelConfig(R"({"render": {"cave_ambient": 1e999}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(errOf(r).find("must be finite"), std::string::npos);
+}
+
+TEST(LightingTest, CaveAmbientHugeFiniteNamed) {
+    // A finite value far outside [0, 1]: rejected by the RANGE check in
+    // the double domain (the whole validation — there is no integer
+    // projection for this knob).
+    auto r = readCaveAmbient(
+        loadNightLevelConfig(R"({"render": {"cave_ambient": 1e300}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(errOf(r).find("render.cave_ambient"), std::string::npos);
+    EXPECT_NE(errOf(r).find("in [0, 1]"), std::string::npos);
 }
 
 TEST(LightingTest, NightRetreatScalePins) {
