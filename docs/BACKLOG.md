@@ -15,6 +15,7 @@
 2.0.0 = 1.x 全完成里程碑发布（扫尾项见 AGENTS 现状节）；2.x 任务从本表取。
 
 | V2-1 第三人称前视角 | ~~V2-1 前视角~~ ✅ v2.1.0（门 172：C 键三循环 + 翻转角纯函数 + aimReach D+kReach） |
+| V2-2 玩家皮肤 Steve 化 | ~~V2-2 Steve 皮肤~~ ✅ v2.2.0（门 173：模型 per-face 纹理通用能力 + Steve 脸 8×8 像素 + 7 tile，既有 mob 位级不变） |
 
 ## v1.x 任务矩阵（33 + UX 7 = 40）（**已全部完成，归档**）
 
@@ -136,6 +137,8 @@
 - 2026-11-01：**UX-9a 云方块化 + 厚度完成（v1.48.0，门 168 重锚全 PASS，不挂 tag）**：云 = 独立 fragment shader 逐像素两级颗粒（region 50% ∧ sub 4 块 75%）+ 厚度边界带（MC 侧壁着色）+ 高度场 CPU oracle；门内实证 iGPU buffer 更新 ~140ms/MB → 架构翻转（mesh→shader，uvec2 模拟 64 位位精确，三层核对 0 失配）+ 云延伸地平线。2061/2061；门 168：S1 重锚（像素终裁 38,153/38,153 云一致 + 地形零泄漏 + off≡off 免疫 → base18 179116 B）+ 走位探针跨格 142.9→2.5ms（57×）+ 性能同世界同成本——详见 docs/archive/v1x/phase-ux9a.md。
 
 - 2026-11-01：**UX-9a 架构翻转（门内性能实测定案）：mesh 云 → fragment 逐像素 mask**：两级颗粒 mesh（139ebc2，~860KB/窗口）+ 厚度（底/顶/侧 quad）在门 168 走位探针实证 = **每跨 16 块云格重建上传 140ms**（iGPU Mesa BDW GT2 硬件）；Mesh::upload 原地 subdata 修复（d20e406，保留 = 通用加固）+ 3× 预分配对照实验（subdata 强制路径 135ms 未改善）= **buffer 更新本身 ~140ms/MB = 分配非瓶颈**；静态窗口替代 = 云相对地标游移 6.25% 步行速可见 = 质量不可接受。翻转 = **独立云 shader program（assets/shaders/cloud.{vert,frag}，basic/sky/ui 第三先例）**：一个静态大世界 quad（init 一次上传 ~100B，per-frame model 平移 = uniform 零上传），fragment 逐像素 CPU 同款纯函数（hash3/splitmix64 GLSL ES 3.00 uint 精确移植：region 50% ∧ sub 75% ∧ 高度场 1-3 块）——世界锚定（零游移）+ 零跨格成本 + 几何规模无界（厚度 = 边界带 MC 侧壁着色 ±X 0.8/±Z 0.6，自下而上的厚度视觉本体；峰顶 y112 俯视顶面近似 = 记档）；CPU 纯函数（cloudMask/cloudSubMask/cloudSubHeight）保留 = GLSL 移植测试 oracle + 单测钉不变。v1.48.0 同版收口（门 168 数据全重跑）。
+
+- 2026-11-02：**V2-2 玩家皮肤 Steve 化完成（v2.2.0，门 173 全 PASS）**：模型 per-face 纹理（既有 mob 位级不变）+ Steve 脸/衫/裤/靴 7 tile（图集零移位免重锚）。详见 docs/archive/phase-2.2.0.md。
 
 - 2026-11-02：**V2-1 第三人称前视角完成（v2.1.0，门 172 全 PASS）**：2.x 首个功能项——前视 = 后视同款数学在翻转角下执行（纯函数零改动），C 键三循环，瞄准 aimReach D+kReach。详见 docs/archive/phase-2.1.0.md。
 
