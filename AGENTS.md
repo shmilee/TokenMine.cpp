@@ -18,8 +18,9 @@ C++20 / SDL3 / OpenGL 3.3 core，
   全史）② **第三人称准星不压头**（MC 同款：轨道点沿相机 up 抬高 0.4 块，
   头降到屏幕中心下 29-96px；瞄准射线仍自眼位 = UX-8g 不变，TP 固定视差
   = MC 同款记偏离）③ 活文档刷新到 2.0 状态。门 171 全 PASS。
-- **任务只从 `docs/BACKLOG.md` 的 v2.x 节取**（现 V2-1/V2-2 已完成，
-  下一项待用户定案）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`（只读，
+- **任务只从 `docs/BACKLOG.md` 的 v2.x 节取**（11-02 起 = 1.x 同款系统矩阵：
+  10 核心系统行 + UX 行 ①–⑦；现 V2-1/V2-2 已完成 = UX 行 ①②，其余格留空
+  待用户定案）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`（只读，
   别把 1.x 细节当现状）。
 - 测试 **2084/2084**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 24；base18 锚 179116 B（679×744 半平铺态，/tmp/opencode
