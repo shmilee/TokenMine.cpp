@@ -66,7 +66,18 @@ std::uint64_t asU64(int v) {
 // the farmland cell itself, so the visual and the growth pace can never
 // disagree (one function, two consumers). Public + pure (a read over the
 // World's fluid field) so the mesher and the game both call it.
-bool soilIsWet(const World& world, const BlockPos& soilPos) {
+//
+// V2-4: the `raining` extension — rain wets every soil (the disjunction
+// soilIsWet(world, pos, raining) = water-within-radius OR raining, no
+// roof-shade check = the documented deviation). The default false keeps
+// the pre-V2-4 water-only semantics bit-identical for the consumers that
+// do not read the weather (the mesher's moisture visual, the moisture
+// sweep, the placement seed) — only the crop growth pace passes the live
+// rain state (the game's cropGrowthSteps call site).
+bool soilIsWet(const World& world, const BlockPos& soilPos, bool raining) {
+    if (raining) {
+        return true;
+    }
     for (int dx = -kWetWaterRadius; dx <= kWetWaterRadius; ++dx) {
         for (int dz = -kWetWaterRadius; dz <= kWetWaterRadius; ++dz) {
             if (world.getFluidOfKind(soilPos.x + dx, soilPos.y,
@@ -79,17 +90,20 @@ bool soilIsWet(const World& world, const BlockPos& soilPos) {
     return false;
 }
 
-// True when water is near the crop's soil cell (the cell below the crop).
-bool cropIsWet(const World& world, const BlockPos& cropPos) {
+// True when water (or the rain, V2-4) is near the crop's soil cell (the
+// cell below the crop).
+bool cropIsWet(const World& world, const BlockPos& cropPos, bool raining) {
     return soilIsWet(world,
-                     BlockPos {cropPos.x, cropPos.y - 1, cropPos.z});
+                     BlockPos {cropPos.x, cropPos.y - 1, cropPos.z},
+                     raining);
 }
 
 std::vector<GrowthStep> cropGrowthSteps(const World& world,
                                         const BlockRegistry& blocks,
                                         const std::map<BlockPos, BlockID>& cropCells,
                                         std::uint64_t seed,
-                                        std::uint64_t frame) {
+                                        std::uint64_t frame,
+                                        bool raining) {
     std::vector<GrowthStep> steps;
     // Position-ordered iteration (std::map) — deterministic step list.
     for (const auto& [pos, tracked] : cropCells) {
@@ -130,12 +144,14 @@ std::vector<GrowthStep> cropGrowthSteps(const World& world,
         }
         // Dry/wet pace (Phase 50): near water the crop rolls at full pace
         // (modulus growthTicks); dry, the modulus is multiplied by
-        // drySlowdown (1 = no slowdown). The roll value is unchanged, so
-        // every dry pass is also a wet pass — exactly 1/drySlowdown as
-        // often, deterministic per (seed, frame, cell).
+        // drySlowdown (1 = no slowdown). V2-4: rain counts as wet (the
+        // raining argument releases the slowdown — the 2x growth in
+        // rain). The roll value is unchanged, so every dry pass is also a
+        // wet pass — exactly 1/drySlowdown as often, deterministic per
+        // (seed, frame, cell).
         const int ticks =
             block.properties.growthTicks *
-            (cropIsWet(world, pos) ? 1 : block.properties.drySlowdown);
+            (cropIsWet(world, pos, raining) ? 1 : block.properties.drySlowdown);
         // The roll state advances with the frame (PITS #4) and is
         // per-cell via the position hash; splitmix64 finalizes.
         const std::uint64_t state = seed +

@@ -1383,6 +1383,92 @@ Result<void> Game::buildScene() {
     MC_TRY(gen);
     m_generator = std::move(*gen);
 
+    // -- V2-4 weather (rain/thunder): the session-derived state machine --
+    // NOT saved (zero format, the cloud-drift precedent class): every run
+    // restarts the machine — the first segment is ALWAYS CLEAR with a
+    // duration >= kClearMin (9000 frames = 150 s), so the 60-frame no-
+    // input baseline never sees rain (the base gate's structural
+    // immunity). render.weather (strict read, the SAVE-1 discipline):
+    // absent = true (the code default, the render.clouds precedent — the
+    // committed config.json carries no such key); a non-boolean is named
+    // and rejected at init. OFF = the machine never runs + zero drops +
+    // zero interaction = the v2.3.0 pipeline bit-identical (the gate's
+    // "new-off" control). The streams are seeded from the WORLD seed
+    // (same world, same weather sequence across runs); the thunder runs
+    // on the dedicated kSaltWeatherThunder stream (the independent-salt
+    // decision). The --weather override touches the INITIAL STATE only
+    // (rain = the fixed-kRainMin opening segment, then the streams take
+    // over — the verbatim init logs are the E2E evidence).
+    auto weatherEnabledRead = weatherEnabled(m_config);
+    MC_TRY(weatherEnabledRead);
+    m_weatherEnabled = *weatherEnabledRead;
+    if (m_weatherEnabled) {
+        m_weatherStream = static_cast<std::uint64_t>(m_generator->seed());
+        m_weatherThunderStream = m_weatherStream + kSaltWeatherThunder;
+        const bool startRaining =
+            m_args.weather.has_value() && *m_args.weather;
+        m_weather = weatherInitialState(
+            startRaining, m_weatherStream, m_weatherThunderStream);
+        if (m_args.weather.has_value()) {
+            MC_LOG_INFO(std::string("Weather override: ") +
+                        (startRaining ? "rain" : "clear"));
+        }
+        if (startRaining) {
+            // The rain is live from frame 0 (the design's verbatim line —
+            // the natural entry's frame-locked event log is the machine's
+            // in updateWeather).
+            MC_LOG_INFO("Weather: rain started");
+        }
+    }
+
+    // V2-4: the rain shader program (the cloud program's fourth
+    // precedent — a dedicated program; the basic/sky/ui/cloud programs
+    // are untouched) + the STATIC kRainDropCount-drop mesh (the per-drop
+    // spawn offset + fall phase, uploaded ONCE here, zero per-frame
+    // upload: the vertex shader re-derives every drop's position from
+    // the frame-bounded fall offset + the player-anchored box origin —
+    // the CPU oracle is rainDropPosition in core/weather, the unit
+    // tests own it). render.weather OFF / clear weather never draws any
+    // of this (the v2.3.0 pipeline bit-identical).
+    auto rainVert = m_assets.loadText("shaders/rain.vert");
+    MC_TRY(rainVert);
+    auto rainFrag = m_assets.loadText("shaders/rain.frag");
+    MC_TRY(rainFrag);
+    auto rainShader = ShaderProgram::create(*rainVert, *rainFrag);
+    MC_TRY(rainShader);
+    m_rainShader = std::move(*rainShader);
+    {
+        // The bar-quad corners (0.02 x 0.5, the X-Y plane — a vertical
+        // strip; culling off makes both sides render, the thin edge-on
+        // case is sub-pixel). a_position carries the drop's spawn offset
+        // (the same for all four corners), a_normal the corner offset,
+        // a_uv.x the fall phase [0, 1) (the rain.vert contract).
+        const float halfW = kRainDropWidth * 0.5f;
+        const float halfL = kRainDropLength * 0.5f;
+        const Vec3 corners[4] = {{-halfW, -halfL, 0.0f}, {halfW, -halfL, 0.0f},
+                                 {halfW, halfL, 0.0f}, {-halfW, halfL, 0.0f}};
+        std::vector<MeshVertex> verts;
+        std::vector<std::uint32_t> indices;
+        verts.reserve(static_cast<std::size_t>(kRainDropCount) * 4);
+        indices.reserve(static_cast<std::size_t>(kRainDropCount) * 6);
+        for (const RainDrop& drop : makeRainDrops(m_generator->seed())) {
+            const std::uint32_t first =
+                static_cast<std::uint32_t>(verts.size());
+            for (const Vec3& corner : corners) {
+                MeshVertex v;
+                v.position = drop.offset;
+                v.normal = corner;
+                v.uv = {drop.phase, 0.0f};
+                verts.push_back(v);
+            }
+            indices.insert(indices.end(),
+                           {first, first + 1, first + 2, first, first + 2,
+                            first + 3});
+        }
+        auto rainUpload = m_rainMesh.upload(verts, indices);
+        MC_TRY(rainUpload);
+    }
+
     m_world.setChunkGenerator(makeChunkGenerator());
     for (int cx = kDemoChunkMin; cx <= kDemoChunkMax; ++cx) {
         for (int cz = kDemoChunkMin; cz <= kDemoChunkMax; ++cz) {

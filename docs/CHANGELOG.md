@@ -1,10 +1,14 @@
 # 版本历史（CHANGELOG）
 
 > 本文件只留 **v2.x** 逐版明细（v2.0.0 = 1.x 收官里程碑 / V2-1 前视角 /
-> V2-2 Steve 皮肤 / V2-3 教程系列化）。v1.x（v1.50.0→v1.0）→ `docs/archive/v1x/CHANGELOG.md`；
+> V2-2 Steve 皮肤 / V2-3 教程系列化 / V2-4 天气）。v1.x（v1.50.0→v1.0）→ `docs/archive/v1x/CHANGELOG.md`；
 > v0.x（v0.12.0→v0.1.0）→ `docs/archive/v0x/CHANGELOG.md`。逐版细节
 > （机制/证据/偏离/性能 A/B）见 `docs/archive/v1x/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
+
+## v2.4.0（2026-11-03）— V2-4 天气（雨/雷）（门 175 全 PASS）
+
+帧锁定天气系统（设计定案 11-03 夜间自主推进）：**状态机 = core/weather 纯函数**（campfire 范式，splitmix64 推进式流 PITS 4——主流 seed = 世界 seed【同世界同序列】，雷 = 独立 salt 流 0x7E42B1D9；CLEAR [9000,18000)f / RAIN [3000,6000)f / 雷 [600,1800)f 命名常量；**首段恒 CLEAR** = 无输入 60f 基线永不进雨的结构免疫根）+ **呈现 = rain shader program**（cloud 第四先例：静态 VBO 300 滴出生偏移+相位【0xD93A5E17 专用 salt 流】init 一次上传 + 顶点 shader 逐滴纯函数位置【有界 fallOffset + 玩家 16³ 盒 boxOrigin，per-frame 零上传】+ 0.02×0.5 细竖条 alpha 0.35 白蓝 (200,210,235) 无纹理）+ **天空 dayFactor 消费点单收口**（RAIN ×0.85 + 雷 5 帧线性衰减 +0.15 脉冲——u_dayFactor/clear/雾同源，shader 表达式树零改动）+ **交互四件全帧锁定**（雨灭火块/灭营火 = 新纯谓词 extinguishedByWaterOrRain【6-邻水 ∨ raining，Phase 64/75 路径收口】/ 雨灭燃烧效果【玩家+mob inWater ∨ raining，re-ignite 先行保水胜火序，无屋檐检查 = 记档偏离】/ 雨润耕地【soilIsWet/cropIsWet/cropGrowthSteps 扩参默认 false = 旧语义位级不变，mesher 湿润视觉不传 = 视觉零变，雨中生长 2× = 111/200→200/200 钉】）+ **render.weather strict read 默认 true**（off = 状态机不跑+零雨滴+零交互 = v2.3.0 位级恒等）+ **--weather clear|rain CLI**（仅覆盖初始 state——rain = kRainMin 3000f 固定可复现，主流零消费其后走流；词校验点名）+ F3 `weather clear|rain` 行 + **雷新 wav**（generate_sounds 固定种子 0x70DE 60→40Hz 滚雷 3.5s，既有 39 wav md5 零变化+幂等实证；2D 中心不空间化；**无雨声循环** = 记档）+ **零 format**（25 不动，天气 = session 派生云漂移先例类）。2128/2128（+19：weather 17【设计 §6 八组 + 脉冲/wav 资产】+ F3 WeatherLine + mob ExtinguishedInRain）、-Werror 0、banner v2.4.0。门 175 全 PASS：S1 **三方恒等最强形**（60f 六跑 new-on ≡ old v2.3.0 ≡ new-off ≡ base18 锚逐字节 + savenorm EXACT 零 format）+ S2 雨判别全 PASS（rain ×2 恒等 / 雨可见 / 120f savenorm 精确 churn 判别【rain 侧恒无火 + 非世界键 EXACT】/ 营火+火块互斥终态 / 雷+停雨 4 事件 ×2 间隔 ±0.08s 帧锁定 + 雨窗 50.5 s ≈ kRainMin）+ S3 2128 + S6 点名 2/2 + **性能 A/B 同世界同成本**（changesApplied 9/3/1 三窗逐位 + 终档 18/18 55/55 集合恒等 + 全指标同档；rain 自成本 = 300 滴静态 VBO 在噪声带内）。详见 docs/archive/phase-2.4.0.md。
 
 ## v2.3.0（2026-11-03）— V2-3 教程系列化（农耕 + 厨房）（门 174 全 PASS）
 

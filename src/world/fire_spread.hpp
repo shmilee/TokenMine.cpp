@@ -25,6 +25,9 @@
 //    neighbor (any pass ignites it) and is returned ONCE.
 //  - The firePositions input is position-ordered (the game passes the
 //    m_states.fires map keys), so the returned list — sorted — is deterministic.
+//  - V2-4 adds the fire-family EXTINGUISH predicate (the rain puts fire
+//    out like water does): extinguishedByWaterOrRain, shared by the
+//    fire-block and the lit-campfire put-out passes.
 #pragma once
 
 #include <cstdint>
@@ -55,5 +58,15 @@ std::vector<BlockPos> fireSpreadIgnitions(const World& world,
                                           std::uint64_t seed,
                                           std::uint64_t frame,
                                           double chance);
+
+// V2-4: the fire-family extinguish rule shared by the two consumers (the
+// fire-block put-out pass, Phase 64, and the lit-campfire put-out pass,
+// Phase 75): a WATER fluid (any level) in one of the six face-adjacent
+// cells — OR `raining` (the rain puts fire out like water does, no
+// roof-shade check = the documented deviation). Pure function of its
+// arguments; `raining` defaults to false = the pre-V2-4 water-only
+// semantics bit-identical (the render.weather off structural immunity).
+bool extinguishedByWaterOrRain(const World& world, const BlockPos& pos,
+                               bool raining = false);
 
 } // namespace mc

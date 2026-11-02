@@ -43,6 +43,7 @@
 #include "core/status_effect.hpp"
 #include "core/thread_pool.hpp"
 #include "core/tutorial.hpp"
+#include "core/weather.hpp"
 #include "core/window.hpp"
 #include "entity/entity.hpp"
 #include "entity/item_entity.hpp"
@@ -107,6 +108,13 @@ struct GameArgs {
     int frames = 0;        // 0 = run until closed
     std::int64_t seed = -1; // -1 = use config value
     double time = -1;      // -1 = use config start_time_of_day (else [0, 1))
+    // V2-4: --weather <clear|rain> — the initial weather state (nullopt =
+    // not given = the default first-segment-CLEAR; true = rain — the
+    // opening segment runs the fixed kRainMin frames, then the world-
+    // seed streams take over; false = clear — behaviorally the default).
+    // It touches the initial state ONLY, never the stream sequence
+    // (same world seed, same weather after the opening segment).
+    std::optional<bool> weather;
     LogLevel logLevel = LogLevel::Info;
     std::filesystem::path screenshotPath; // if set: save after the last frame
     // Save slot (Phase 13): --save <slot>. At startup loads
@@ -459,9 +467,10 @@ private:
     void updateEffects(double dt);
     // Phase 64 fire: the real-dt burn-out countdown for every burning
     // fire block (a fire that reaches zero becomes air — the burn leaves
-    // no char, like the Phase 58 lava burn) + the water extinguish (a
-    // fire with a water fluid 6-adjacent is put out instantly — water
-    // beats fire, the Phase 57 water-beats-lava rule). Runs every frame
+    // no char, like the Phase 58 lava burn) + the extinguish (a fire with
+    // a water fluid 6-adjacent is put out instantly — water beats fire,
+    // the Phase 57 water-beats-lava rule; V2-4: the rain disjunct through
+    // the shared extinguishedByWaterOrRain predicate). Runs every frame
     // after the fluids tick (so the newly burned cells from the Phase 58
     // pass are registered and the new water is visible). A no-op when
     // the world holds no fire. Phase 66 adds, on the same pass: the
@@ -516,6 +525,20 @@ private:
     // pass; OFF = zero events, zero sounds (the gate's "new-off"
     // control).
     void updateAmbience();
+    // V2-4 weather: the frame-locked state-machine step (the fixed 1/60
+    // day-cycle class, hard rule 8 — the pure logic in core/weather, the
+    // unit tests own it). The game owns the streams + the event effects:
+    // the verbatim log lines ("Weather: rain started" / "Weather: rain
+    // stopped" / "Thunder" — the E2E evidence), the thunder sound (2D
+    // centered, never spatialized — the distant-thunder decision; audio
+    // never enters the frame state, the PRE-4 discipline) and the
+    // thunder frame's presentation pulse state. render.weather OFF =
+    // this never runs (the machine stays at its initial clear state —
+    // zero interaction, zero drops, the v2.3.0 pipeline bit-identical).
+    // Runs FIRST in update (before every raining consumer: the campfire
+    // put-out, the crop growth, the fire put-out, the effect extinguish,
+    // the mobs' setRaining feed).
+    void updateWeather();
     // Phase 72 (the two-component model): set the player's absorption
     // pool to the active effects' total `absorb_hp`. The pool is a pure
     // function of the effects AT EVERY SYNC POINT (a refreshed layer
@@ -669,6 +692,29 @@ private:
     // render.clouds (code default true) gates the draw; OFF = zero mesh,
     // zero draw (the v0.27.0 pipeline, bit-identical).
     void drawClouds(const Mat4& view, const Mat4& projection);
+    // V2-4 rain: the static 300-drop field (the cloud program's fourth
+    // precedent — a dedicated shader program, a one-time VBO upload, zero
+    // per-frame upload: the vertex shader re-derives each drop's
+    // position from the frame-bounded fall offset + the player-anchored
+    // 16^3 box origin, the CPU oracle rainDropPosition in core/
+    // weather). Drawn in the blending pass AFTER the clouds, BEFORE the
+    // HUD (the depth test occludes the drops behind terrain; culling off
+    // for the double-sided bar quads; blending is the caller's state —
+    // the drawClouds discipline). RAIN only: clear weather (the default
+    // runs, the first segment >= kClearMin frames) or render.weather OFF
+    // = zero drops (the v2.3.0 pipeline bit-identical, the structural
+    // immunity).
+    void drawRain(const Mat4& view, const Mat4& projection);
+    // V2-4: the dayFactor channel's SINGLE convergence point (the design
+    // decision "dayFactor 消费点单收口"): the base day/night factor,
+    // RAIN-dimmed by kRainSkyDim, plus the thunder's 5-frame brightness
+    // pulse (thunderPulse on the last strike frame). Every per-frame
+    // consumer (the u_dayFactor uniform at the top of render(), the
+    // drawBeaconBeams per-draw override) reads this one value; the sky
+    // clear + the fog color consume the twin weather-adjusted sky.
+    // Weather off / clear returns m_dayCycle.dayFactor() bit-for-bit
+    // (the IEEE identities: x * 1.0f == x, x + 0.0f == x).
+    float weatherDayFactor() const;
 
     // -- Phase 15 UI / audio / particles ------------------------------------
     // E/F3/F5 handling (F3 + F5 work in any pointer state; E opens the
@@ -1509,6 +1555,48 @@ private:
     // v0.27.0 pipeline bit-identical).
     Mesh m_cloudMesh;
     ShaderProgram m_cloudShader;
+
+    // V2-4 weather (rain/thunder): everything the session-derived weather
+    // system maintains (NOT saved — zero format, the cloud-drift
+    // precedent class; every run restarts the machine, and the first
+    // segment-CLEAR >= kClearMin is the 60f no-input baseline's structural
+    // immunity). The pure state machine + presentation constants live in
+    // core/weather (the unit tests own them — the campfire pattern).
+    // Consumer sites: game_init (the render.weather strict read + the
+    // state init from the world seed + the --weather override + the rain
+    // program/mesh build), game_frame (updateWeather — the frame-locked
+    // step + the verbatim log lines + the thunder sound, and the raining
+    // reads in the fire/campfire put-out passes + the crop growth pace),
+    // game_render (the weatherDayFactor sky-channel convergence + the
+    // drawRain blend pass), game_ui (the player fire-effect rain
+    // extinguish + the F3 weather line), game_entities (the mobs'
+    // setRaining feed). Member order = append after the cloud family
+    // (all default-constructed, no cross-reads — the construction-order
+    // red line).
+    WeatherState m_weather;
+    // render.weather (strict read at init, code default true — the
+    // committed config.json carries no such key). OFF = the machine never
+    // runs + zero drops + zero interaction = the v2.3.0 pipeline bit-
+    // identical (the gate's "new-off" control).
+    bool m_weatherEnabled = true;
+    // The two world-seed streams (same world, same weather sequence
+    // across runs): the main CLEAR/RAIN duration stream (seed = the world
+    // seed) and the dedicated-salt THUNDER stream (seed = world seed +
+    // kSaltWeatherThunder).
+    std::uint64_t m_weatherStream = 0;
+    std::uint64_t m_weatherThunderStream = 0;
+    // The last thunder event's frame (-1 = none): the sky pulse's
+    // presentation state (thunderPulse, the 5-frame linear decay — read
+    // by weatherDayFactor; never saved, the render-only class).
+    int m_weatherThunderFrame = -1;
+    // The rain render assets (the cloud program's fourth precedent — a
+    // dedicated shader program + a STATIC kRainDropCount-drop mesh
+    // uploaded once at init, zero per-frame upload: the vertex shader
+    // re-derives each drop's position from the frame-bounded fall offset
+    // + the player-anchored box origin). render.weather OFF never draws
+    // any of this (the v2.3.0 pipeline bit-identical).
+    Mesh m_rainMesh;
+    ShaderProgram m_rainShader;
 
     // SAVE-1: the auto-save cadence (save.auto_save_seconds — a CODE
     // default; the committed config carries no save section, the

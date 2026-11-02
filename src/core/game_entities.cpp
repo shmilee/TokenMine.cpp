@@ -98,6 +98,11 @@ void Game::updateEntities(double dt) {
         auto& entity = m_entities[i];
         if (auto* mob = dynamic_cast<MobEntity*>(entity.get())) {
             mob->setPlayer(playerPos, playerAlive);
+            // V2-4: the weather feed (the setPlayer pattern) — rain
+            // extinguishes the burning mob the way water does (the
+            // inWater ∨ raining extension in the mob's fire section;
+            // off/clear = false = the pre-V2-4 water-only semantics).
+            mob->setRaining(m_weather.raining);
             mob->update(kMobStepPerFrame);
             // SURV-5: the mob's active status effects tick on the SAME
             // fixed mob step (frame-locked, hard rule 8) — the damage

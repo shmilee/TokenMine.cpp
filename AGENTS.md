@@ -19,21 +19,29 @@ C++20 / SDL3 / OpenGL 3.3 core，
   头降到屏幕中心下 29-96px；瞄准射线仍自眼位 = UX-8g 不变，TP 固定视差
   = MC 同款记偏离）③ 活文档刷新到 2.0 状态。门 171 全 PASS。
 - **任务只从 `docs/BACKLOG.md` 的 v2.x 节取**（11-03 三期分工定案：2.x
-  「上手与体验补全」V2-3~V2-10 八项【执行权威；**V2-3 已完成 v2.3.0 门 174**，下一项 **V2-4 天气（雨/雷）**】/ 3.x「系统扩展」
+  「上手与体验补全」V2-3~V2-10 八项【执行权威；**V2-4 天气 v2.4.0 完成
+  （门 175 全 PASS）**，下一项 **V2-5 新 mob 猪**】/ 3.x「系统扩展」
   V3-1~V3-8 = `docs/BACKLOG_3x.md` 方向底稿 / 4.x「世界扩展」
   V4-1~V4-6 = `docs/BACKLOG_4x.md` 方向底稿；三期总量 24 < pre-v2.0 的
   78-84 = 用户采纳判据；2.x 收官 → 3x 表晋升执行权威）；1.x 历史全在
   `docs/archive/v1x/HISTORY.md`（只读，别把 1.x 细节当现状）。
-- 测试 **2109/2109**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2128/2128**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 25；base18 锚 179116 B（679×744 半平铺态，/tmp/opencode
-  丢失后按先例刷新采用）；门计数 174（**V2-1 前视角 v2.1.0** 门 172：
+  丢失后按先例刷新采用）；门计数 175（**V2-1 前视角 v2.1.0** 门 172：
   C 键三循环，前视 = 后视同款数学翻转角执行 + aimReach D+kReach——详见
   `docs/archive/phase-2.1.0.md`；**V2-2 Steve 皮肤 v2.2.0** 门 173：
   模型 per-face 纹理通用能力【既有 mob 位级不变】+ Steve 脸 8×8 像素
   + 7 tile 图集零移位——详见 `docs/archive/phase-2.2.0.md`；
   **V2-3 教程系列化 v2.3.0** 门 174：tutorials/ 三系列（beginner 零
   改动 + 农耕 + 厨房）+ format 25 + pickup./smelt. 事件 + T 跳当前
-  系列——详见 `docs/archive/phase-2.3.0.md`）。
+  系列——详见 `docs/archive/phase-2.3.0.md`；
+  **V2-4 天气 v2.4.0** 门 175 全 PASS：core/weather 纯状态机（推进式流
+  首段恒 CLEAR【60f 基线免疫根】+ 雷独立 salt）+ rain shader 静态 300
+  滴 + 天空 dayFactor 单收口（RAIN ×0.85 + 雷 5 帧脉冲）+ 交互四件
+  （雨灭火/营火/燃烧效果/润耕地 2×）+ render.weather strict 默认 true
+  【off = v2.3.0 位级恒等，门内三方恒等实证】+ --weather CLI + 雷 wav
+  + 零 format；性能 A/B changesApplied 9/3/1 逐位 + 终档集合恒等——
+  详见 `docs/archive/phase-2.4.0.md`）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；**v2.x 任务表（执行权威）：
   `docs/BACKLOG.md`**（v1.x 表已全部完成归档；1.x 完整编年史 + 逐门
   记录 = `docs/archive/v1x/HISTORY.md`）；会话交接：

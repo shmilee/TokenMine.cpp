@@ -189,7 +189,11 @@ void Game::drawBeaconBeams(const Mat4& view, const Mat4& projection) {
     m_basicShader.setUniform3f("u_color", kBeaconBeamR, kBeaconBeamG,
                                kBeaconBeamB);
     m_basicShader.setUniform1f("u_alpha", kBeaconBeamAlpha);
-    m_basicShader.setUniform1f("u_dayFactor", m_dayCycle.dayFactor());
+    // V2-4: the weather-adjusted dayFactor (the same convergence point as
+    // the per-frame set at the top of render() — the beam's sky term
+    // dims with the rain, pulses with the thunder, like every other
+    // world-lit draw).
+    m_basicShader.setUniform1f("u_dayFactor", weatherDayFactor());
     // Blending is the caller's (the blend section's) state — do NOT
     // enable/disable it here (10-26 user-report fix: the trailing
     // disableBlending leaked past this draw and killed the crack/outline
@@ -282,6 +286,67 @@ void Game::drawClouds(const Mat4& view, const Mat4& projection) {
     m_renderer.setCulling(false);
     m_renderer.draw(m_cloudMesh, m_cloudShader, view, projection,
                     Mat4::translate(qx, 0.0f, qz));
+    m_renderer.setCulling(true);
+}
+
+float Game::weatherDayFactor() const {
+    // V2-4: the dayFactor channel's single convergence point (the design
+    // decision — every per-frame consumer reads this one value; the
+    // shader expression trees are untouched). The base day/night factor,
+    // RAIN-dimmed by kRainSkyDim (the named constant), plus the thunder's
+    // 5-frame brightness pulse (thunderPulse on the last strike frame, 0
+    // with no strike in the window). Weather off / clear returns
+    // m_dayCycle.dayFactor() bit-for-bit: the IEEE identities (x * 1.0f
+    // == x, x + 0.0f == x) keep the v2.3.0 pipeline exact.
+    return m_dayCycle.dayFactor() * (m_weather.raining ? kRainSkyDim : 1.0f) +
+           thunderPulse(m_frameCount, m_weatherThunderFrame);
+}
+
+void Game::drawRain(const Mat4& view, const Mat4& projection) {
+    // V2-4: the rain drops — the static kRainDropCount-drop mesh (built
+    // at init, uploaded ONCE — the cloud-quad fourth precedent: zero
+    // per-frame upload; the vertex shader re-derives each drop's
+    // position from the two per-frame uniforms below, the CPU oracle is
+    // rainDropPosition in core/weather). The depth test stays on
+    // (terrain occludes the drops like any other world geometry);
+    // blending is the caller's (the blend section's) state — do NOT
+    // enable/disable it here (the drawBeaconBeams leak lesson); culling
+    // is OFF for the double-sided bar quads (the beam pattern).
+    // RAIN only: clear weather (the default runs — the first segment is
+    // always >= kClearMin frames, so a no-input run never sees rain in
+    // the base-gate window) or render.weather OFF (the machine never
+    // runs, m_weather.raining stays false) = zero drops = the v2.3.0
+    // pipeline bit-identical.
+    if (!m_weather.raining) {
+        return;
+    }
+    // The kRainBoxSize^3 box centered on the player's cell (the floor on
+    // each axis — the box origin uniform's documented meaning; the hard
+    // rule 1 floor on the exact player position).
+    const Vec3 p = m_player->position();
+    const float ox = static_cast<float>(std::floor(p.x)) - kRainBoxHalf;
+    const float oy = static_cast<float>(std::floor(p.y)) - kRainBoxHalf;
+    const float oz = static_cast<float>(std::floor(p.z)) - kRainBoxHalf;
+    // The program must be BIND first: Renderer::draw re-binds the same
+    // program inside (no side effect on the uniforms set here).
+    m_rainShader.bind();
+    m_rainShader.setUniform3f("u_boxOrigin", ox, oy, oz);
+    // The bounded fall offset ((frame % kRainFallPeriodFrames) *
+    // kRainDropFallSpeed, in [0, kRainBoxSize) — kRainDropFallSpeed *
+    // kRainFallPeriodFrames = kRainBoxSize makes the box wrap seamless;
+    // the bound keeps the magnitude float32-exact over a long session,
+    // the cloud shader's float premise).
+    m_rainShader.setUniform1f(
+        "u_fallOffset",
+        static_cast<float>(m_frameCount % kRainFallPeriodFrames) *
+            kRainDropFallSpeed);
+    // The drop's white-blue + alpha (the no-texture decision — a flat
+    // unlit color, the beam's solid-color path analog).
+    m_rainShader.setUniform4f("u_color", kRainDropColorR, kRainDropColorG,
+                              kRainDropColorB, kRainDropAlpha);
+    m_renderer.setCulling(false);
+    m_renderer.draw(m_rainMesh, m_rainShader, view, projection,
+                    Mat4::identity());
     m_renderer.setCulling(true);
 }
 
@@ -548,8 +613,21 @@ void Game::render() {
 
     m_renderer.beginFrame(w, h);
     // The sky background is the day-cycle color (deep night blue at
-    // midnight, orange at dawn/dusk, the classic blue by day).
-    const Vec3 sky = m_dayCycle.skyColor();
+    // midnight, orange at dawn/dusk, the classic blue by day). V2-4: the
+    // weather's sky channel — RAIN multiplies the sky by kRainSkyDim (the
+    // named constant) and the thunder adds the 5-frame brightness pulse
+    // (thunderPulse) to every channel: the u_dayFactor uniform above,
+    // THIS clear and the fog color (u_fogColor = this same sky value) all
+    // consume the one converged weather-adjusted value — the shader
+    // expression trees are untouched (the fog auto-inherits; the clouds
+    // read the darkened sky between their tiles). Weather off / clear =
+    // the IEEE identities (x * 1.0f == x, x + 0.0f == x): the v2.3.0
+    // pipeline bit-for-bit.
+    const float weatherDim = m_weather.raining ? kRainSkyDim : 1.0f;
+    const float weatherPulse =
+        thunderPulse(m_frameCount, m_weatherThunderFrame);
+    const Vec3 sky = m_dayCycle.skyColor() * weatherDim +
+                     Vec3 {weatherPulse, weatherPulse, weatherPulse};
     m_renderer.clear({sky.x, sky.y, sky.z, 1.0f});
 
     const Mat4 projection = Mat4::perspective(
@@ -563,7 +641,12 @@ void Game::render() {
     m_basicShader.bind();
     m_basicShader.setUniform1i("u_texture", 0);
     m_basicShader.setUniform1i("u_useTexture", 1);
-    m_basicShader.setUniform1f("u_dayFactor", m_dayCycle.dayFactor());
+    // V2-4: the weather-adjusted dayFactor (the per-frame channel's
+    // single convergence point — see weatherDayFactor): RAIN dims it by
+    // kRainSkyDim, the thunder adds the 5-frame brightness pulse.
+    // Weather off / clear = m_dayCycle.dayFactor() bit-for-bit (the
+    // IEEE identities — the v2.3.0 pipeline).
+    m_basicShader.setUniform1f("u_dayFactor", weatherDayFactor());
     // Solid-color alpha default 1.0 (opaque world + arrows; the beacon beam
     // lowers it for its own draws — Phase 83). The textured path ignores it.
     m_basicShader.setUniform1f("u_alpha", 1.0f);
@@ -761,6 +844,14 @@ void Game::render() {
     // pipeline bit-identical). The pattern is per-pixel (the one-time
     // quad, zero upload after init — see drawClouds).
     drawClouds(view, projection);
+    // V2-4 rain: the 300-drop field in the 16^3 box around the player —
+    // the blend pass after the clouds, before the HUD (the depth test
+    // occludes the drops behind terrain; the bar quads are double-sided,
+    // culling off). RAIN only: clear weather or render.weather OFF = zero
+    // drops (the v2.3.0 pipeline bit-identical — the first segment is
+    // always >= kClearMin frames, so a no-input run never sees rain in
+    // the base-gate window).
+    drawRain(view, projection);
     // The break crack + target outline (Phase 15): world-space, blended,
     // depth test still on (the overlay cubes sit just outside the block).
     drawWorldOverlay(view, projection);

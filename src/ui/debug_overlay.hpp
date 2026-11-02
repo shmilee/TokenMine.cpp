@@ -61,6 +61,11 @@ struct DebugInfo {
     // empty renders the baseline "(none)" (a unit-test DebugInfo with
     // no tutorial filled).
     std::string tutorial;
+    // V2-4: the weather line's data — "clear" / "rain" (the machine's
+    // current segment; render.weather off = the machine never runs, so
+    // the game fills "clear" there too); empty renders the baseline
+    // "(none)" (a unit-test DebugInfo with no weather filled).
+    std::string weather;
 };
 
 // PRE-12 (the SURV-6 display boundary): the amplifier roman numeral for

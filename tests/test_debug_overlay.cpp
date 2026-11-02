@@ -36,10 +36,10 @@ TEST(DebugOverlayTest, LinesFormat) {
     info.maxHunger = 20.0;
     info.difficulty = "hard";
     const auto lines = debugOverlayLines(info);
-    ASSERT_EQ(lines.size(), 16u);
+    ASSERT_EQ(lines.size(), 17u);
     // Pinned literal (deliberately NOT the TM_VERSION macro): a version
     // bump must force a conscious update of this pin.
-    EXPECT_EQ(lines[0], "TokenMine.cpp v2.3.0");
+    EXPECT_EQ(lines[0], "TokenMine.cpp v2.4.0");
     EXPECT_EQ(lines[1], "60 FPS | frame 1234");
     EXPECT_EQ(lines[2], "chunks 2312 | draws 45 | verts 987654");
     EXPECT_EQ(lines[3], "pos 0.50, 54.00, -34.70  yaw 0.00  pitch -0.25");
@@ -62,6 +62,9 @@ TEST(DebugOverlayTest, LinesFormat) {
     // UX-7: the tutorial line — a unit-test DebugInfo with no tutorial
     // data renders the baseline "(none)".
     EXPECT_EQ(lines[15], "tutorial (none)");
+    // V2-4: the weather line — a unit-test DebugInfo with no weather
+    // data renders the baseline "(none)".
+    EXPECT_EQ(lines[16], "weather (none)");
 }
 
 TEST(DebugOverlayTest, TutorialLine) {
@@ -79,6 +82,22 @@ TEST(DebugOverlayTest, TutorialLine) {
     DebugInfo off;
     off.tutorial = "off";
     EXPECT_EQ(debugOverlayLines(off)[15], "tutorial off");
+}
+
+TEST(DebugOverlayTest, WeatherLine) {
+    // V2-4: the game fills info.weather with the machine's current
+    // segment (the F3 stays English — the developer-tool discipline):
+    // "clear" / "rain", "(none)" for a unit-test DebugInfo with no data
+    // filled (render.weather off = the machine never runs, so the game
+    // fills "clear" there too).
+    DebugInfo rain;
+    rain.weather = "rain";
+    EXPECT_EQ(debugOverlayLines(rain)[16], "weather rain");
+    DebugInfo clear;
+    clear.weather = "clear";
+    EXPECT_EQ(debugOverlayLines(clear)[16], "weather clear");
+    DebugInfo none;
+    EXPECT_EQ(debugOverlayLines(none)[16], "weather (none)");
 }
 
 TEST(DebugOverlayTest, HeldItemLineWithDurability) {

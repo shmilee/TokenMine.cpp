@@ -62,6 +62,12 @@ vocabulary; blocks name one via `sound_material`):
                       wind bed
    ambience_night.wav crickets: five LCG-placed bursts of ~4.3 kHz 25 Hz
                       pulse trills over a quiet, slow night-wind bed
+-- V2-4 weather (1 one-shot; the rain sound loop is the documented
+      absence — the project's sound set has no looping-sound precedent):
+   thunder.wav        rolling thunder (a 60 -> 40 Hz glide + a fixed-seed
+                      double-lowpassed LCG rumble body, slow attack +
+                      long decay over the ~3.5 s roll) — the distant
+                      thunder one-shot (2D centered, never spatialized)
 """
 import math
 import os
@@ -618,6 +624,29 @@ def ambience_night():
     return sound(dur, f)
 
 
+# ---------------------------------------------------------------------------
+# V2-4: the weather thunder. The distant-thunder one-shot (2D centered,
+# never spatialized — the design decision): a 60 -> 40 Hz glide (the
+# 40-60 Hz low body) under a fixed-seed double-lowpassed LCG rumble, all
+# in a slow-attack + long-decay envelope over the ~3.5 s roll. The
+# determinism discipline of the other sounds (the fixed seed; a re-run
+# leaves the file byte-identical — the existing wavs' md5s unchanged).
+def thunder():
+    lcg = Lcg(0x70DE)  # dedicated fixed seed (unique to this sound)
+    dur = 3.5
+    n = int(RATE * dur)
+    noise = lowpass3(lowpass3([lcg.next() for _ in range(n)]))
+
+    def f(t, _):
+        i = int(t * RATE)
+        fr = 60.0 - 20.0 * (t / dur)  # 60 -> 40 Hz glide (the low body)
+        roll = math.sin(2 * math.pi * fr * t) * 0.55
+        body = roll + noise[i] * 0.65
+        return body * math.exp(-t * 1.4) * amb_env(t, dur, 0.08, 0.6) * 0.9
+
+    return sound(dur, f)
+
+
 SOUNDS = {
     "dig": dig,
     "place": place,
@@ -662,6 +691,9 @@ SOUNDS = {
     "ambience_cave": ambience_cave,
     "ambience_day": ambience_day,
     "ambience_night": ambience_night,
+    # V2-4: the weather thunder (the distant one-shot — 2D centered,
+    # never spatialized; the rain loop is the documented absence).
+    "thunder": thunder,
 }
 
 

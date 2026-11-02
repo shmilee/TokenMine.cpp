@@ -2687,6 +2687,47 @@ TEST(MobFireTest, ExtinguishedInWater) {
     EXPECT_FALSE(mob.dead());
 }
 
+TEST(MobFireTest, ExtinguishedInRain) {
+    // V2-4 (the design's third extinguish case — the fire EFFECT on the
+    // entity, over the live update path): rain extinguishes the burning
+    // mob the way water does (the inWater ∨ raining extension — no
+    // roof-shade check = the documented deviation; the re-ignition runs
+    // first, so a mob on a fire source in the rain stays out, the water-
+    // beats-fire order). Off-immunity: the default setRaining(false)
+    // keeps the pre-V2-4 water-only semantics (the lingering burn
+    // counts down normally in dry air — the BurnLingersAfterLeavingLava
+    // twin) and the next ignition burns normally.
+    Fixture f;
+    fillFloor(f, FluidKind::Lava);
+    MobRegistry mobs = makeTankRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({30.0f, 1.0f, 30.0f}, false);
+    armShippedFire(mob);
+    for (int i = 0; i < 60; ++i) {
+        mob.update(kDt);
+    }
+    EXPECT_FLOAT_EQ(mob.health(), 95.0f);
+    EXPECT_TRUE(mob.burning());
+    clearFloor(f, FluidKind::Lava); // dry land — no water anywhere
+    mob.setRaining(true); // the rain is live (no roof in between)
+    mob.update(kDt);
+    EXPECT_FALSE(mob.burning());
+    for (int i = 0; i < 600; ++i) { // 10 s: no burn damage in the rain
+        mob.update(kDt);
+    }
+    EXPECT_FLOAT_EQ(mob.health(), 95.0f);
+    EXPECT_FALSE(mob.dead());
+    // The rain stops: the next ignition lingers normally (the off-
+    // immunity — the water-only baseline semantics are back).
+    mob.setRaining(false);
+    fillFloor(f, FluidKind::Lava);
+    for (int i = 0; i < 60; ++i) {
+        mob.update(kDt);
+    }
+    EXPECT_TRUE(mob.burning());
+}
+
 TEST(MobFireTest, StayingInLavaReignites) {
     Fixture f;
     fillFloor(f, FluidKind::Lava);

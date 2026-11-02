@@ -80,14 +80,19 @@ void Game::updateEffects(double dt) {
     // resets, the tick phase is kept — standing in the fire source burns
     // continuously, Minecraft); after leaving, the effect counts down
     // fireDurationSeconds and burns until it expires. Water
-    // EXTINGUISHES instantly (and beats both: in water, no fire).
+    // EXTINGUISHES instantly (and beats both: in water, no fire). V2-4:
+    // the rain extinguishes the same way (the inWater ∨ raining
+    // extension — the re-ignition runs first, so a player on a fire block
+    // in the rain stays out, the water-beats-fire order; no roof-shade
+    // check = the documented deviation; off/clear = the water-only path
+    // bit-identical).
     if (m_fireEffectId != -1) {
         if (m_player->inLava() || m_player->isInFire()) {
             m_playerEffects.apply(
                 m_fireEffectId,
                 m_player->params().fireDurationSeconds);
         }
-        if (m_player->inWater()) {
+        if (m_player->inWater() || m_weather.raining) {
             m_playerEffects.clearExtinguishable(m_effects);
         }
     }
@@ -1617,6 +1622,11 @@ void Game::renderUi() {
         info.seed = m_generator ? m_generator->seed() : 0;
         info.timeOfDay = m_dayCycle.timeOfDay();
         info.dayFactor = m_dayCycle.dayFactor();
+        // V2-4: the weather line (the F3 stays English — the developer-
+        // tool discipline): the machine's current segment, "clear" /
+        // "rain" (render.weather off = the machine never runs, so the
+        // line reads "clear" there too).
+        info.weather = m_weather.raining ? "rain" : "clear";
         info.streamingEngaged = m_streaming.streamingEngaged;
         info.streamPending = static_cast<int>(m_streaming.streamPending.size());
         info.streamRadius = m_streaming.streamRadius;

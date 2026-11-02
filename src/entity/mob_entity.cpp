@@ -160,8 +160,12 @@ void MobEntity::update(double dt) {
     // this step (the AI + physics ran above). While in the lava or
     // overlapping a fire block the burn re-ignites (the duration resets
     // = continuous burn); water extinguishes instantly BEFORE the tick
-    // (zero burn damage in water; water beats both, the P57 rule). The
-    // countdown + tick run after leaving (the lingering burn), with the
+    // (zero burn damage in water; water beats both, the P57 rule). V2-4:
+    // the rain (m_raining, the setRaining per-frame feed) extinguishes
+    // the same way — the inWater ∨ raining extension, no roof-shade
+    // check (the documented deviation); the re-ignition runs first, so a
+    // mob on a fire block in the rain stays out (the water-beats-fire
+    // order). The countdown + tick run after leaving (the lingering burn), with the
     // Phase 46 effect semantics (the expiry step does not tick).
     if (m_fireArmed) {
         const bool inLava = overlapsFluid(FluidKind::Lava);
@@ -174,7 +178,7 @@ void MobEntity::update(double dt) {
         if (inLava || inFire) {
             m_fireRemaining = m_fireDuration;
         }
-        if (inWater) {
+        if (inWater || m_raining) {
             m_fireRemaining = 0.0;
             m_fireFrames = 0;
             m_fireDueFrames = m_fireIntervalFrames;

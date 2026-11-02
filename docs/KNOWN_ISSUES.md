@@ -793,6 +793,10 @@ SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作�
 
 - **教程 = 三系列（基础/农耕/厨房），系列过渡无 toast，T = 跳当前系列** — `[V2-3]`（v2.3.0，详见 docs/archive/phase-2.3.0.md）：`tutorials/` 目录 3 文件按名序 = 系列序（beginner 11 步**字节零改动** + farming 7 步 + kitchen 6 步）；**系列过渡无 toast**（目标行换步即提示 = 设计定案，零新文本）；T = 跳**当前系列**（末系列 = done 旧行为 + toast）；事件词表 +pickup./smelt. 两前缀（均帧锁定）；存档 format 25 `player.tutorial` 加 series（≤24 值保真免迁，失效 = 重置上报不拒档）。**记档偏离**：① 干耕地生长文案「约 1 分钟」= 72 s 均值（两株独立 roll 并行，先到先破，不要求同时熟）② 种子 1/8 概率获取（草 chance_drop 12.5%，tip 明示）③ 系列集 = 数据（tutorials/ 增删文件 = 内容变更，存档失效自动重置）。`[UX-7]` → `[V2-3]`
 
+## 天气（V2-4）
+
+- **天气 = 帧锁定状态机 + 雨滴渲染 + 雷声，session 派生不持久** — `[V2-4]`（v2.4.0，详见 docs/archive/phase-2.4.0.md）：`core/weather` 纯状态机（推进式 splitmix64【PITS 4】主流 seed = 世界 seed【同世界同序列】+ 雷独立 salt 流；CLEAR 9000-18000f / RAIN 3000-6000f / 雷 600-1800f）+ rain shader program（cloud 第四先例：静态 300 滴 VBO + 顶点 shader 逐滴纯函数位置 + per-frame 零上传）+ 天空 dayFactor 单收口（RAIN ×0.85 + 雷 5 帧 +0.15 脉冲）+ 交互四件（雨灭火块/灭营火/灭燃烧效果/润耕地 2×）+ `render.weather` strict 默认 true（**off = 状态机不跑+零雨滴+零交互 = v2.3.0 位级恒等**）+ `--weather clear|rain`（仅初始 state，rain = kRainMin 3000f 固定）+ F3 `weather` 行 + 雷新 wav（既有 39 md5 零变化幂等）。**记档偏离**：① **初始 CLEAR 不持久**（零 format 定案——重载/新 run 一律首段 CLEAR 重启，MC 持久天气 = 偏离；云漂移同款 session 派生先例类）② **屋檐遮蔽无**（雨中 fire/营火/燃烧效果一律灭，MC 有遮蔽检查）③ **无雨声循环**（项目音效集无循环音范式——雷 = 一次性远雷 2D 中心不空间化）④ **雷无伤害/落点**（无声外效果，MC 闪电可落点伤害）⑤ **流体不注水**（雨不产生流体，MC 同款）⑥ 首段恒 CLEAR ≥9000f = 无输入 60f 基线结构性免疫根（也是「开局 2.5 分钟内必无雨」的玩法事实）。
+
 ## 已修复（归档）→ 细节存档
 
 pre-2.0 已修复条目全索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`（按需查找；各

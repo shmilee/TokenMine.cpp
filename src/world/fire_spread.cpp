@@ -23,6 +23,13 @@ std::uint64_t asU64(int v) {
     return static_cast<std::uint64_t>(static_cast<std::int64_t>(v));
 }
 
+// V2-4: the six face-adjacent offsets — the fire-family extinguish's
+// "water 6-adjacent" scan (the same neighborhood the Phase 64 fire and
+// the Phase 75 campfire passes used inline).
+constexpr BlockPos kExtinguishNeighbors[6] = {
+    {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
+};
+
 } // namespace
 
 std::vector<BlockPos> fireSpreadIgnitions(const World& world,
@@ -84,6 +91,27 @@ std::vector<BlockPos> fireSpreadIgnitions(const World& world,
     ignitions.erase(std::unique(ignitions.begin(), ignitions.end()),
                     ignitions.end());
     return ignitions;
+}
+
+bool extinguishedByWaterOrRain(const World& world, const BlockPos& pos,
+                               bool raining) {
+    // V2-4: the rain disjunct (no roof-shade check — the documented
+    // deviation: the rain wets everything, the Phase 57 water-beats-fire
+    // rule extended from the 6-neighbor water to the sky).
+    if (raining) {
+        return true;
+    }
+    // Water extinguish (Phase 64/75): a WATER fluid (any level) in one of
+    // the six face-adjacent cells. Lava does NOT extinguish: the fire
+    // beside the pool is the lava's product and keeps burning (Minecraft
+    // — fire and lava coexist).
+    for (const BlockPos& d : kExtinguishNeighbors) {
+        if (world.getFluidOfKind(pos.x + d.x, pos.y + d.y, pos.z + d.z,
+                                 FluidKind::Water) > 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace mc

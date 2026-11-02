@@ -20,6 +20,9 @@ void printUsage() {
         "  --seed <n>        Override world seed\n"
         "  --time <0..1>     Start time of day (0 = pre-dawn, 0.25 = noon,\n"
         "                    0.5 = sunset, 0.75 = midnight)\n"
+        "  --weather <w>     Initial weather (V2-4): clear (the default) or\n"
+        "                    rain (the opening segment runs the fixed kRainMin\n"
+        "                    frames, then the world-seed stream takes over)\n"
         "  --frames <n>      Exit after N frames (0 = run until closed)\n"
         "  --screenshot <p>  Save a PNG screenshot of the last frame\n"
         "  --save <slot>     Save slot (letters/digits/_/-): load\n"
@@ -81,6 +84,17 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
                 err = "--time must be in [0, 1)";
                 return false;
             }
+        } else if (arg == "--weather") {
+            const char* v = nextValue(i, "--weather");
+            if (!v) return false;
+            // V2-4: the closed word (the --log-level parse discipline —
+            // the unknown value is named and rejected): "clear" / "rain".
+            auto w = parseWeather(v);
+            if (!w.ok()) {
+                err = w.error().message;
+                return false;
+            }
+            args.weather = *w;
         } else if (arg == "--frames") {
             const char* v = nextValue(i, "--frames");
             if (!v) return false;
@@ -168,10 +182,11 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
                                  args.newWorld || args.frames != 0 ||
                                  !args.screenshotPath.empty() ||
                                  args.time >= 0.0 || args.seed >= 0 ||
+                                 args.weather.has_value() ||
                                  args.saveFullDiff)) {
         err = "save management runs without a game: drop the game-run "
               "flags (--save / --new / --frames / --screenshot / --time / "
-              "--seed / --save-full-diff)";
+              "--seed / --weather / --save-full-diff)";
         return false;
     }
     return true;

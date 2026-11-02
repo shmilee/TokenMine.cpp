@@ -15,12 +15,6 @@ namespace mc {
 
 namespace {
 
-// Phase 64: the six face-adjacent offsets — the fire extinguish's
-// "water 6-adjacent" scan (the same neighborhood the fluid sim uses).
-constexpr BlockPos kFireNeighbors[6] = {
-    {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
-};
-
 // Day/night time advances by this fixed amount per frame (not the wall
 // clock), so headless runs are byte-reproducible frame for frame; the
 // real-time speed is exact at 60 FPS.
@@ -114,6 +108,17 @@ void Game::update(double dt) {
     // headless runs byte-reproducible.
     m_dayCycle.update(kDayStepPerFrame);
 
+    // V2-4: the weather state machine (the fixed 1/60 frame step, the
+    // day-cycle class — hard rule 8): the frame-locked CLEAR/RAIN
+    // segments + the thunder schedule (the pure logic in core/weather,
+    // the unit tests own it). Runs FIRST — before every raining consumer
+    // (the campfire put-out, the crop growth, the fire put-out, the
+    // player's fire-effect extinguish, the mobs' setRaining feed).
+    // render.weather OFF = this never runs (the state machine does not
+    // run + zero drops + zero interaction = the v2.3.0 pipeline bit-
+    // identical).
+    updateWeather();
+
     // UX-7 / V2-3: the tutorial completion-toast countdown (the
     // frame-locked class — the kTutorialToastFrames window armed by the
     // done flip in emitTutorialEvent or the T skip of the LAST series,
@@ -168,7 +173,12 @@ void Game::update(double dt) {
 
     // Campfire water extinguish (Phase 75): a LIT campfire with a WATER
     // fluid (any level) in one of its 6 neighbors goes out instantly —
-    // water beats fire (the Phase 57/64 rule, the fire-block twin). The
+    // water beats fire (the Phase 57/64 rule, the fire-block twin). V2-4:
+    // the condition is the shared fire-family predicate extended with the
+    // rain disjunct (extinguishedByWaterOrRain — the rain puts a lit
+    // campfire out like the water does, no roof-shade check = the
+    // documented deviation; the world seed never changes, so a no-input
+    // run's first rain still lands only after kClearMin frames). The
     // cooking state SURVIVES (the items stay on the unlit logs: the
     // take-back works, the clocks pause); there is no re-light in v2
     // (documented deviation). A frame-state check (deterministic; the
@@ -184,13 +194,8 @@ void Game::update(double dt) {
             if (m_world.getBlock(pos.x, pos.y, pos.z) != m_states.campfireLitId) {
                 continue; // already out (or the family id is stale)
             }
-            for (const BlockPos& d : kFireNeighbors) {
-                if (m_world.getFluidOfKind(pos.x + d.x, pos.y + d.y,
-                                           pos.z + d.z,
-                                           FluidKind::Water) > 0) {
-                    goOut.push_back(pos);
-                    break;
-                }
+            if (extinguishedByWaterOrRain(m_world, pos, m_weather.raining)) {
+                goOut.push_back(pos);
             }
         }
         // Apply AFTER the scan (setBlock touches the world state the scan
@@ -223,12 +228,14 @@ void Game::update(double dt) {
     // ordered set makes the step list deterministic. Advances go through
     // setBlock (chunk dirty marking + tracking-set maintenance). Runs in
     // every pointer/panel state (the world keeps ticking while a panel is
-    // open, as in Minecraft).
+    // open, as in Minecraft). V2-4: the live rain state releases the
+    // dry_slowdown gate (cropGrowthSteps' raining argument — off/clear =
+    // false = the pre-V2-4 pace bit-identical).
     {
         const std::vector<GrowthStep> steps = cropGrowthSteps(
             m_world, m_blocks, m_states.crops,
             static_cast<std::uint64_t>(m_generator->seed()),
-            static_cast<std::uint64_t>(m_frameCount));
+            static_cast<std::uint64_t>(m_frameCount), m_weather.raining);
         for (const GrowthStep& s : steps) {
             setBlock(s.pos.x, s.pos.y, s.pos.z, s.to);
             // Cross-shaped crops are non-opaque: the light field is
@@ -564,20 +571,16 @@ void Game::updateFires(double dt) {
             putOut.push_back(pos);
             continue;
         }
-        // Water extinguish (Phase 64): a fire with a WATER fluid (any
-        // level) in one of its 6 neighbors is put out instantly — water
-        // beats fire (the Phase 57 water-beats-lava rule). Lava does not
-        // extinguish: the fire beside the pool is the lava's product and
-        // keeps burning (Minecraft — fire and lava coexist).
-        bool wet = false;
-        for (const BlockPos& d : kFireNeighbors) {
-            if (m_world.getFluidOfKind(pos.x + d.x, pos.y + d.y,
-                                       pos.z + d.z, FluidKind::Water) > 0) {
-                wet = true;
-                break;
-            }
-        }
-        if (wet) {
+        // Extinguish (Phase 64): the shared fire-family rule (world/
+        // fire_spread) — a WATER fluid (any level) in one of the 6
+        // neighbors puts the fire out instantly, water beats fire (the
+        // Phase 57 water-beats-lava rule). Lava does not extinguish: the
+        // fire beside the pool is the lava's product and keeps burning
+        // (Minecraft — fire and lava coexist). V2-4: the rain disjunct
+        // (the rain wets every fire, no roof-shade check = the documented
+        // deviation — off/clear = false = the water-only rule bit-
+        // identical).
+        if (extinguishedByWaterOrRain(m_world, pos, m_weather.raining)) {
             putOut.push_back(pos);
         }
     }
@@ -898,6 +901,40 @@ void Game::updateAmbience() {
     // play() a silent no-op — the log line still fires.
     m_sound.play(name);
     MC_LOG_INFO(std::string("Ambience: ") + name);
+}
+
+void Game::updateWeather() {
+    // V2-4: the weather state machine's frame step (the fixed 1/60 day-
+    // cycle class, hard rule 8 — the pure logic in core/weather, the unit
+    // tests own it). render.weather OFF = the machine never runs (the
+    // state stays at its initial clear — zero interaction + zero drops +
+    // the weatherDayFactor's IEEE identities = the v2.3.0 pipeline bit-
+    // identical, the gate's "new-off" control).
+    if (!m_weatherEnabled) {
+        return;
+    }
+    const WeatherEvent ev =
+        weatherStep(m_weather, m_weatherStream, m_weatherThunderStream);
+    // The verbatim log lines (the design's E2E evidence — the frame-
+    // locked event sequence in the log, the PRE-4 ambience-log pattern).
+    if (ev.enteredRain) {
+        MC_LOG_INFO("Weather: rain started");
+    }
+    if (ev.exitedRain) {
+        MC_LOG_INFO("Weather: rain stopped");
+    }
+    if (ev.thunder) {
+        // The thunder frame arms the sky pulse (the presentation state —
+        // read by weatherDayFactor; never saved, the render-only class).
+        m_weatherThunderFrame = m_frameCount;
+        // The thunder is GLOBAL — the 2D centered path (never
+        // spatialized, the distant-thunder decision, the ambience
+        // pattern). Audio never enters the frame state (hard rule 8):
+        // the disabled-bank degradation (headless) makes play() a silent
+        // no-op — the log line still fires.
+        m_sound.play("thunder");
+        MC_LOG_INFO("Thunder");
+    }
 }
 
 void Game::emitTutorialEvent(const std::string& name, int n) {

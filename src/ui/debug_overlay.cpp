@@ -91,6 +91,13 @@ std::vector<std::string> debugOverlayLines(const DebugInfo& info) {
         info.tutorial.empty()
             ? std::string("tutorial (none)")
             : fmt("tutorial %s", info.tutorial.c_str()),
+        // V2-4: the weather line (the F3 stays English — the developer-
+        // tool discipline): "clear" / "rain" (the machine's current
+        // segment), "(none)" for a unit-test DebugInfo with no data
+        // filled.
+        info.weather.empty()
+            ? std::string("weather (none)")
+            : fmt("weather %s", info.weather.c_str()),
     };
 }
 

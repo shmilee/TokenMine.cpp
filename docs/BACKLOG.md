@@ -16,7 +16,7 @@
 > 时：本表 → `docs/archive/v2x/BACKLOG.md`，3x 表晋升本文件（1.x→2.x 同款
 > 先例）。
 
-## v2.x 任务矩阵（3/10 完成）
+## v2.x 任务矩阵（4/10 完成）
 
 | 系统 | ① | ② | ③ | ④ | ⑤ | ⑥ | ⑦ |
 |---|---|---|---|---|---|---|---|
@@ -29,7 +29,7 @@
 | SURV 生存/战斗/效果 | | | | | | | |
 | CRAFT 物品/合成/面板 | V2-7 材料补齐批 | | | | | | |
 | SAVE 存档 | | | | | | | |
-| PRE 表现层 | V2-4 天气（雨/雷） | V2-10 网格修复批 | | | | | |
+| PRE 表现层 | ~~V2-4 天气（雨/雷）~~ ✅ v2.4.0（门 175 全 PASS：纯状态机首段恒 CLEAR + rain shader 静态 300 滴 + dayFactor 单收口 + 交互四件 ∨raining + 雷 wav，零 format，off ≡ v2.3.0 位级【门内三方恒等实证】） | V2-10 网格修复批 | | | | | |
 | UX 实机报障/体验细化 | ~~V2-1 第三人称前视角~~ ✅ v2.1.0（门 172：C 键三循环 + 翻转角纯函数 + aimReach D+kReach） | ~~V2-2 玩家皮肤 Steve 化~~ ✅ v2.2.0（门 173：模型 per-face 纹理通用能力 + Steve 脸 8×8 像素 + 7 tile，既有 mob 位级不变） | ~~V2-3 教程系列化（农耕 + 厨房）~~ ✅ v2.3.0（门 174：系列化机制 + 2 新系列 + format 25 + recipe 行 emit 修复） | V2-6 体验打磨批 | | | |
 
 > **2.x 定案说明（11-03 用户审议；V2-N = 执行序，立项时走设计定案）**：
@@ -103,6 +103,20 @@
   `docs/archive/v1x/BACKLOG.md` 表外节）。
 
 ## 变更记录（v2.x）
+
+- 2026-11-03：**V2-4 天气（雨/雷）完成（v2.4.0，门 175 全 PASS）**：core/weather 纯状态机（推进式 splitmix64 PITS 4，主流 = 世界
+  seed + 雷独立 salt；CLEAR 9000-18000f / RAIN 3000-6000f / 雷 600-1800f；
+  首段恒 CLEAR = 60f 基线免疫根）+ rain shader program（cloud 第四先例：
+  静态 300 滴 VBO + 顶点逐滴纯函数位置 + per-frame 零上传）+ 天空
+  dayFactor 单收口（RAIN ×0.85 + 雷 5 帧 +0.15 脉冲，clear/雾同源）+
+  交互四件（雨灭火/灭营火 = extinguishedByWaterOrRain 谓词、灭燃烧效果
+  玩家+mob inWater ∨ raining、润耕地 soilIsWet 扩参默认 false 位级不变
+  雨中生长 2×）+ render.weather strict read 默认 true（off = 位级恒等）+
+  --weather CLI（初始 state 覆盖，kRainMin 固定）+ F3 weather 行 + 雷
+  新 wav（固定种子，既有 39 md5 零变化幂等实证；无雨声循环记档）+ **零
+  format**（25 不动）。2128/2128（+19）、-Werror 0、banner v2.4.0；预门
+  实证 60f 无输入 = base18 锚四方 md5 恒等。详见
+  docs/archive/phase-2.4.0.md。
 
 - 2026-11-03：**V2-3 教程系列化（农耕 + 厨房）完成（v2.3.0，门 174 全
   PASS）**：tutorials/ 多文件名序 = 系列序（beginner 11 步零改动 +

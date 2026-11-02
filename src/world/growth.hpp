@@ -22,7 +22,9 @@
 //    max(sky, block) light at the crop cell; the roll modulus is
 //    growthTicks x drySlowdown (1 = none) when no water is within
 //    Chebyshev radius 4 of the soil cell at the soil's y (dry farmland
-//    grows slower — the Minecraft value is 2).
+//    grows slower — the Minecraft value is 2). V2-4: rain counts as wet
+//    (cropGrowthSteps' `raining` argument, default false = the pre-V2-4
+//    pace bit-identical — the rain wets every soil, no roof-shade check).
 //  - The tracked set is position-ordered (std::map), so iteration and the
 //    returned step list are deterministic.
 #pragma once
@@ -44,12 +46,20 @@ namespace mc {
 // moisture visual (BlockModel::moistureTop, derived at mesh time).
 inline constexpr int kWetWaterRadius = 4;
 
-// True when water wets the soil cell (see kWetWaterRadius).
-bool soilIsWet(const World& world, const BlockPos& soilPos);
+// True when water wets the soil cell (see kWetWaterRadius) — or when
+// `raining` (V2-4: the rain wets every soil, no roof-shade check = the
+// documented deviation). `raining` defaults to false = the pre-V2-4
+// water-only semantics, bit-identical (the mesher visual + the
+// moisture sweep keep that default; the crop growth pace passes the
+// live weather).
+bool soilIsWet(const World& world, const BlockPos& soilPos,
+               bool raining = false);
 
 // True when water is near the CROP's soil cell (the cell below the crop)
-// — the dry_slowdown gate (Phase 50).
-bool cropIsWet(const World& world, const BlockPos& cropPos);
+// — the dry_slowdown gate (Phase 50); V2-4: the raining extension
+// (rain releases the slowdown, the 2x growth pace).
+bool cropIsWet(const World& world, const BlockPos& cropPos,
+               bool raining = false);
 
 // One cell advancing one growth stage this frame.
 struct GrowthStep {
@@ -79,12 +89,16 @@ struct SaplingStep {
 // frame. A cell whose world block no longer matches the tracked id (stale
 // entry — defensive; the game maintains the set through its setBlock
 // choke point and rescans after load) yields no step. Pure function of
-// its arguments: same world + set + seed + frame -> same steps.
+// its arguments: same world + set + seed + frame + raining -> same
+// steps. `raining` (V2-4, default false = the pre-V2-4 pace bit-
+// identical) releases the dry_slowdown gate through cropIsWet: a dry
+// field grows at the full pace while it rains.
 std::vector<GrowthStep> cropGrowthSteps(const World& world,
                                         const BlockRegistry& blocks,
                                         const std::map<BlockPos, BlockID>& cropCells,
                                         std::uint64_t seed,
-                                        std::uint64_t frame);
+                                        std::uint64_t frame,
+                                        bool raining = false);
 
 // GEN-2: the SAPLING growth steps (the cropGrowthSteps twin over the
 // `m_states.saplings` tracked set — blocks with a `tree` object). Once per frame

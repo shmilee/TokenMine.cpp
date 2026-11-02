@@ -161,8 +161,11 @@ public:
     // inert) the burn re-ignites (the duration resets every step = a
     // continuous burn); after leaving, the remaining time counts down
     // (the lingering burn). Water extinguishes instantly, BEFORE the tick
-    // (zero burn damage in water; water beats both, the P57 rule). The
-    // burn ticks run on the fixed mob step (deterministic — hard rule 8:
+    // (zero burn damage in water; water beats both, the P57 rule); V2-4:
+    // the rain extinguishes the same way (the inWater ∨ raining
+    // extension — setRaining, no roof-shade check = the documented
+    // deviation). The burn ticks run on the fixed mob step
+    // (deterministic — hard rule 8:
     // mobs tick at the fixed 1/60 frame step) with the Phase 46 effect
     // semantics (the expiry step does not tick). Because the step is the
     // exact 1/60 frame grid, the tick cadence is kept in INTEGER frame
@@ -206,6 +209,14 @@ public:
         m_playerPos = pos;
         m_playerAlive = alive;
     }
+    // V2-4: the per-frame weather flag (the setPlayer pattern — the game
+    // sets it right before update()): rain extinguishes the burning mob
+    // the way water does (the inWater ∨ raining extension of the P57
+    // instant-extinguish path; the re-ignition runs first, so a mob on a
+    // fire block in the rain stays out — the water-beats-fire order. No
+    // roof-shade check = the documented deviation; default false = the
+    // pre-V2-4 water-only semantics bit-identical).
+    void setRaining(bool raining) { m_raining = raining; }
     // The AI invokes this when an attack lands (the game wires it to
     // Player::damage; tests record calls).
     void setHitCallback(std::function<void(float)> cb) {
@@ -262,6 +273,10 @@ private:
     bool m_wasOnGround = false;
     Vec3 m_playerPos = Vec3::zero();
     bool m_playerAlive = true;
+    // V2-4: the weather flag (the setRaining per-frame feed — rain
+    // extinguishes the burn, see the setter). Default false = the
+    // pre-V2-4 water-only semantics.
+    bool m_raining = false;
     MobState m_state = MobState::Wander;
     float m_yaw = 0.0f;
     double m_wanderTimer = 0.0;   // <= 0: decide this frame
