@@ -9,32 +9,70 @@
 > 任务只从本表取，不另列菜单；增删格子需用户确认。V2-1/V2-2（均为 1.x
 > UX-4 第三人称相机 / UX-3 玩家身体模型的后续，用户实机诉求）落 UX 行
 > ①/②；后续任务自 **V2-3** 起编号，按系统归属落行。
+>
+> **11-03 三表分工（用户定案）**：本表 = **2.x「上手与体验补全」期**（执行
+> 权威，V2-3~V2-10 八项）；3.x = `docs/BACKLOG_3x.md`（「系统扩展」期，方向
+> 底稿）；4.x = `docs/BACKLOG_4x.md`（「世界扩展」期，方向底稿）。2.x 收官
+> 时：本表 → `docs/archive/v2x/BACKLOG.md`，3x 表晋升本文件（1.x→2.x 同款
+> 先例）。
 
-## v2.x 任务矩阵（2/∞ 完成）
+## v2.x 任务矩阵（2/10 完成）
 
 | 系统 | ① | ② | ③ | ④ | ⑤ | ⑥ | ⑦ |
 |---|---|---|---|---|---|---|---|
 | STRM 流送与内存 | | | | | | | |
 | PIPE 帧管线与并发 | | | | | | | |
-| LGT 光照 | | | | | | | |
+| LGT 光照 | V2-8 sky rescan clobber 修复 | | | | | | |
 | GEN 世界与生成 | | | | | | | |
 | FLUID 流体 | | | | | | | |
-| ENT 实体/Mob/移动 | | | | | | | |
+| ENT 实体/Mob/移动 | V2-5 新 mob 猪 | V2-9 step-up quirk 修复 | | | | | |
 | SURV 生存/战斗/效果 | | | | | | | |
-| CRAFT 物品/合成/面板 | | | | | | | |
+| CRAFT 物品/合成/面板 | V2-7 材料补齐批 | | | | | | |
 | SAVE 存档 | | | | | | | |
-| PRE 表现层 | | | | | | | |
-| UX 实机报障/体验细化 | ~~V2-1 第三人称前视角~~ ✅ v2.1.0（门 172：C 键三循环 + 翻转角纯函数 + aimReach D+kReach） | ~~V2-2 玩家皮肤 Steve 化~~ ✅ v2.2.0（门 173：模型 per-face 纹理通用能力 + Steve 脸 8×8 像素 + 7 tile，既有 mob 位级不变） | | | | | |
+| PRE 表现层 | V2-4 天气（雨/雷） | V2-10 网格修复批 | | | | | |
+| UX 实机报障/体验细化 | ~~V2-1 第三人称前视角~~ ✅ v2.1.0（门 172：C 键三循环 + 翻转角纯函数 + aimReach D+kReach） | ~~V2-2 玩家皮肤 Steve 化~~ ✅ v2.2.0（门 173：模型 per-face 纹理通用能力 + Steve 脸 8×8 像素 + 7 tile，既有 mob 位级不变） | V2-3 教程系列化（农耕 + 厨房） | V2-6 体验打磨批 | | | |
 
-> **UX 行** = 2.x 实机报障/体验细化入口（1.x UX / UX-8 / UX-9 行先例，格随
-> 需扩展）；V2-1/V2-2 落此行。其余 10 个核心系统行任务**暂空待用户定案**
-> （1.x 同系统任务已全部完成，见 `docs/archive/v1x/BACKLOG.md` 矩阵；
-> 系统归属有歧义的立项时定）。
+> **2.x 定案说明（11-03 用户审议；V2-N = 执行序，立项时走设计定案）**：
+> - **V2-3 教程系列化（农耕 + 厨房）**（中，门 174）：UX-7 机制系列化——
+>   `tutorials/` 多文件按名序 = 系列序 + 存档 format 24→25（`player.tutorial`
+>   加 `series` 字段；≤24 迁移默认 series 0；失效仍「重置上报」不拒档）+
+>   系列完成自动推进 + T = 跳过当前系列；新系列②农耕（pickup.wheat_1 →
+>   craft.farmland → place.farmland → place.wheat_1 → break.wheat_7 →
+>   craft.bread → eat；生长 6 级×平均 360 帧 ≈ 36 s 节奏对教程友好；
+>   **零新机制** = 全链数据已核实在位）+ 新系列③厨房（break.stone×3 补
+>   锻石 → craft.furnace → place.furnace → interact.furnace →
+>   smelt.cooked_chicken → eat）；事件词表 +2 前缀 `pickup.` / `smelt.`
+>   （均帧锁定；smelt = CRAFT-5 既有帧锁定日志钩子）；新增字体字在 424
+>   预算内零代码。既有 11 步基础链**零改动**。
+> - **V2-4 天气（雨/雷）**（中大）：帧锁定粒子雨（P66 余烬先例）+ 雷声
+>   （SoundBank 既有空间化）+ `render.weather` config；交互全走既有系统：
+>   雨灭火/灭营火（水浇灭规则既有）、雨湿润耕地（`soilIsWet` 扩展雨水源）。
+> - **V2-5 新 mob 猪**（小）：纯数据驱动（Mob JSON + 纹理，**V2-2
+>   per-face 消费** = 猪脸）+ 新食物 pork 生/熟 2 件 + 掉落；验证「加 mob =
+>   JSON + 纹理」数据驱动承诺。
+> - **V2-6 体验打磨批**（小中，UX-8/9 同款多格批）：第一人称手臂
+>   viewmodel（「无手部皮肤」记档消费）/ mob blob 阴影（记档消费）/ 物品
+>   拾取磁力（「无磁力」记档消费）/ 月相（billboard「无月相」记档消费）。
+> - **V2-7 材料补齐批**（小中）：planks 可放置化（现状 planks = item-only
+>   不可铺地 = MC parity 缺口）+ gold_block / diamond_block（信标配「仅
+>   iron_block」记档消费）+ spider 掉 string / spider_eye（「spider 无掉落」
+>   记档消费）+ 块级 per-face 纹理（V2-2 MobBox `faces` 范式搬入
+>   BlockModel → 炉子「四侧面共用纹理」记档消费）。
+> - **V2-8 sky rescan clobber 修复**（小中）：LGT-1 记档潜伏 bug（天花板
+>   骑跨光照 footprint 边界 → stale-dark 暗带）；修复形态两选一并已记档
+>   （sky BFS 加 shell seed 推荐；union 单遍 = LGT-1 已砍除形态）。
+> - **V2-9 step-up quirk 修复**（小）：记档「单独立项」两 quirk——+X/+Z
+>   方向恰 1 格窄沿踏不过 / 非整数脚高凭空抬升 1.0 再落回；修复 = player
+>   行为变更，既有单测钉死回归。
+> - **V2-10 网格修复批**（小，门须重锚论证）：叶子-叶子内部面（剔除 v2 =
+>   「邻居同种方块」记档）+ alpha cutout discard（shader 一行形记档）；
+>   演示区叶冠/花可视范围 → base18 重锚或结构性免疫论证。
 
 ## 执行顺序
 
-1. 从上到下逐行、行内从左到右：V2-1 → V2-2 → V2-3 …（新任务按系统归属
-   落行，格序 ①–⑦，列随需扩展）。
+1. **V2-N = 执行序号（用户定案序）**：V2-3 → V2-4 → … → V2-10；格按系统
+   归属落行（行内格序 = V2-N 序）。1.x「从上到下逐行」适用于整表预定；
+   2.x 逐项由用户定案，执行按 V2-N。
 2. 一任务一 phase，走标准阶段流程（设计定案 → 实现 → 构建+测试 → E2E →
    文档 → 提交 → 报告；详见 AGENTS.md）。
 3. 版本号逐版 bump（自 v2.3.0 起：CMakeLists PROJECT_VERSION 单点 +
@@ -44,19 +82,34 @@
    d9d62b0，暂不挂 tag 按 commit SHA 引用）。
 5. 2.x tag/release 政策**未定**（v2.1/v2.2 暂不挂 tag）= 立项时问用户
    （1.x 政策参照 `docs/archive/v1x/BACKLOG.md` 执行顺序 #3）。
+6. 表外 3.x/4.x 方向项（`docs/BACKLOG_3x.md` / `docs/BACKLOG_4x.md`）**不
+   是本表执行项**；跨表只经 2.x 收官晋升流程，不跨表编号。
 
-## 表外（1.x 表外继承，对 2.x 仍有效）
+## 表外
 
+- **3.x / 4.x 路线图（方向底稿，非本表执行项）**：3.x「系统扩展」期 8 项
+  （XP / 附魔 / 床 / 蝙蝠 / 染色羊 / 雪原 biome / 顶部 slab / AO）=
+  `docs/BACKLOG_3x.md`；4.x「世界扩展」期（下界维度锚 + 终局方向，条目
+  3.x 收官时定）= `docs/BACKLOG_4x.md`。
 - **无界项（矩阵外，立项需用户定案）**：新内容开放空间（方块/物品/配方/
-  mob 可无限加）、经验（XP）/附魔系统
+  mob 可无限加）；netherite 材料链（依赖 4.x 下界）；末地 / 创造 / 多人
+  等大方向。经验（XP）/附魔 = 3.x V3-1/V3-2 已立项化（方向底稿），移出
+  本条。
 - **已接受偏离（非任务）**：继承 1.x 清单（见
   `docs/archive/v1x/BACKLOG.md` 表外节：锻石不可熔回、箭不自伤、实体 age
   墙钟等）；2.x 各版自身偏离记档见 `docs/archive/phase-2.x.0.md`「偏离」
-  节
+  节。
 - **不立项**：PIPE-4 跨 chunk 合并（99.x 数据不支持，用户确认，见
-  `docs/archive/v1x/BACKLOG.md` 表外节）
+  `docs/archive/v1x/BACKLOG.md` 表外节）。
 
 ## 变更记录（v2.x）
+
+- 2026-11-03：**2.x 任务定案（V2-3~V2-10 八项）+ 3.x / 4.x 路线图建表（用户
+  11-03 定案）**：2.x = 「上手与体验补全」期（V2-3 教程系列化农耕+厨房 /
+  V2-4 天气 / V2-5 猪 / V2-6 体验打磨批 / V2-7 材料补齐批 / V2-8 sky
+  rescan clobber / V2-9 step-up quirk / V2-10 网格修复批，条目说明见矩阵
+  表下）；3.x「系统扩展」期 8 项 + 4.x「世界扩展」期方向底稿建表 =
+  `docs/BACKLOG_3x.md` / `docs/BACKLOG_4x.md`。纯文档无版本 bump。
 
 - 2026-11-02：**2.x 任务矩阵搭建（用户定案）**：按 1.x 同款格式 = 10 核心
   系统行（STRM/PIPE/LGT/GEN/FLUID/ENT/SURV/CRAFT/SAVE/PRE）+ UX 行，①–⑦

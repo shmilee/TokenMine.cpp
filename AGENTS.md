@@ -18,10 +18,12 @@ C++20 / SDL3 / OpenGL 3.3 core，
   全史）② **第三人称准星不压头**（MC 同款：轨道点沿相机 up 抬高 0.4 块，
   头降到屏幕中心下 29-96px；瞄准射线仍自眼位 = UX-8g 不变，TP 固定视差
   = MC 同款记偏离）③ 活文档刷新到 2.0 状态。门 171 全 PASS。
-- **任务只从 `docs/BACKLOG.md` 的 v2.x 节取**（11-02 起 = 1.x 同款系统矩阵：
-  10 核心系统行 + UX 行 ①–⑦；现 V2-1/V2-2 已完成 = UX 行 ①②，其余格留空
-  待用户定案）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`（只读，
-  别把 1.x 细节当现状）。
+- **任务只从 `docs/BACKLOG.md` 的 v2.x 节取**（11-03 三期分工定案：2.x
+  「上手与体验补全」V2-3~V2-10 八项【执行权威】/ 3.x「系统扩展」
+  V3-1~V3-8 = `docs/BACKLOG_3x.md` 方向底稿 / 4.x「世界扩展」
+  V4-1~V4-6 = `docs/BACKLOG_4x.md` 方向底稿；三期总量 24 < pre-v2.0 的
+  78-84 = 用户采纳判据；2.x 收官 → 3x 表晋升执行权威）；1.x 历史全在
+  `docs/archive/v1x/HISTORY.md`（只读，别把 1.x 细节当现状）。
 - 测试 **2084/2084**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 24；base18 锚 179116 B（679×744 半平铺态，/tmp/opencode
   丢失后按先例刷新采用）；门计数 173（**V2-1 前视角 v2.1.0**：C 键三循环，前视 = 后视同款数学翻转角执行 + aimReach D+kReach——详见 `docs/archive/phase-2.1.0.md`；**V2-2 Steve 皮肤 v2.2.0**：模型 per-face 纹理通用能力【既有 mob 位级不变】+ Steve 脸 8×8 像素 + 7 tile 图集零移位——详见 `docs/archive/phase-2.2.0.md`）。
@@ -142,6 +144,8 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v2.x 逐版明细；v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |
 | [docs/BACKLOG.md](docs/BACKLOG.md) | **v2.x 任务表（执行权威）** + v2.x 变更记录（v1.x 表 → `docs/archive/v1x/BACKLOG.md`） | 取下一个任务 |
+| [docs/BACKLOG_3x.md](docs/BACKLOG_3x.md) | v3.x「系统扩展」期方向底稿（V3-1~V3-8 暂定；2.x 收官晋升执行权威） | 2.x 收官定案时 |
+| [docs/BACKLOG_4x.md](docs/BACKLOG_4x.md) | v4.x「世界扩展」期方向底稿（下界维度锚 V4-1；3.x 收官晋升执行权威） | 3.x 收官定案时 |
 | [docs/archive/v1x/](docs/archive/v1x/) | 1.x 阶段细节存档（181 份 phase，只读历史）+ HISTORY.md 全史 + v1x/CHANGELOG.md + v1x/BACKLOG.md | 深挖 1.x 某阶段 |
 | [docs/archive/v0x/](docs/archive/v0x/) | 0.x 时代文档（ROADMAP 规划 / DISCUSSION 记录 / v0x/CHANGELOG.md） | 深挖 0.x |
 | [docs/archive/phase-NN.md](docs/archive/) | 2.x 阶段细节存档（新阶段放这里） | 深挖 2.x 某阶段 |
