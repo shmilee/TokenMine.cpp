@@ -22,7 +22,10 @@
 //                 { "name": "poison", "remaining": 12.5 } ],
 //               "tutorial": {} }              // format 23+ (older: none;
 //                                             // {} = done/skipped,
-//                                             // {id, count} = in progress)
+//                                             // {id, count} = in
+//                                             // progress (format 23/24);
+//                                             // {series, id, count} =
+//                                             // in progress (format 25+))
 //   "inventory": {
 //     "selected": 0,
 //     "slots": [ { "item": "stone", "count": 64 }, { "item": "", "count": 0 } ]
@@ -316,7 +319,19 @@ namespace mc {
 //      format-24 file with 27 entries, or a pre-24 file with 36, is a
 //      version lie (named by the per-format size check). Writes are
 //      always format 24.
-inline constexpr int kSaveFormat = 24;
+//  25: the V2-3 tutorial SERIES — the "player.tutorial" in-progress
+//      object gains "series" (a whole number >= 0, the 0-based current
+//      series): the InProgress shape is { "series", "id", "count" }.
+//      The three-way key discipline: a format-25 file REQUIRES
+//      "series" (a missing key is a version lie — the oxygen / velocity
+//      key discipline); a format-23/24 file CARRYING it is a version
+//      lie (the per-format field whitelist names it); a format 23/24
+//      load defaults series to 0 — the series-0 data (beginner.json)
+//      is byte-unchanged by V2-3, so every existing {id, count} save
+//      restores to the same step at the same progress bound
+//      (value-faithful, no migration — the UX-8a twin). The done
+//      shape ({}) is unchanged. Writes are always format 25.
+inline constexpr int kSaveFormat = 25;
 // UX-8f (format 24): the inventory's total slot count as of format 23
 // (9 hotbar + 18 storage) — the 27-slot array shape a pre-24 file
 // carries (the parser tail-pads it to the current kTotalSize).
@@ -581,17 +596,20 @@ struct SaveGame {
     // non-zero entries at the game level). Empty for format-20 and
     // older loads (the system did not exist).
     std::map<std::string, std::uint64_t> playerStats;
-    // The player's tutorial progress (format 23; UX-7). ALWAYS written
-    // (an empty object when done/skipped — the armor/tables key
-    // discipline): { "id": <step id>, "count": <progress> } in
-    // progress. Absent = the file predates format 23 (the system did
-    // not exist — the game loads a fresh start). The id's existence in
-    // the CURRENT data + the count's bound against the step's count are
+    // The player's tutorial progress (format 23; UX-7, the series from
+    // V2-3 / format 25). ALWAYS written (an empty object when
+    // done/skipped — the armor/tables key discipline): { "series",
+    // "id", "count" } in progress (format 23/24 carry { "id", "count" }
+    // — the series defaults to 0 on a load of that shape). Absent = the
+    // file predates format 23 (the system did not exist — the game
+    // loads a fresh start). The series/id's existence in the CURRENT
+    // data + the count's bound against the step's count are
     // cross-checked at GAME load (tutorialRestore — the tutorial data
     // is not a parseSave parameter, the validateStats pattern).
     // collectSave always fills Done or InProgress; a hand-rolled
     // SaveGame's Absent serializes as the Done shape ({}).
     TutorialSaveState tutorial = TutorialSaveState::Absent;
+    int tutorialSeries = 0;
     std::string tutorialId;
     int tutorialProgress = 0;
     // The player's armor (SURV-1, format 16): the equipped piece NAME

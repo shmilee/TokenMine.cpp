@@ -333,23 +333,23 @@ TEST(FontTest, GlyphUvCjkCellPositions) {
     // CRAFT-4: 作 (the PRE-1 omission — the table title rendered 工?台)
     // takes the dead ASCII-DEL cell 127 = (col 7, row 15).
     expectUv(glyphUv(0x4F5C), 232, 488);
-    // UX-6/UX-8/UX-9b: the extended set starts at cell 128 (row 16,
-    // col 0) and its last glyph 默 takes cell 495 (row 61, col 7); 镐
-    // (cell 474) sits at (col 2, row 59).
+    // UX-6/UX-8/UX-9b/V2-3: the extended set starts at cell 128 (row 16,
+    // col 0) and its last glyph 默 takes cell 516 (row 64, col 4); 镐
+    // (cell 491) sits at (col 3, row 61).
     expectUv(glyphUv(0x00B7), 8, 16 * kFontCell + kGlyphOffset);
-    expectUv(glyphUv(0x9550), 2 * kFontCell + kGlyphOffset,
-             59 * kFontCell + kGlyphOffset);
-    expectUv(glyphUv(0x9ED8), 7 * kFontCell + kGlyphOffset,
+    expectUv(glyphUv(0x9550), 3 * kFontCell + kGlyphOffset,
              61 * kFontCell + kGlyphOffset);
+    expectUv(glyphUv(0x9ED8), 4 * kFontCell + kGlyphOffset,
+             64 * kFontCell + kGlyphOffset);
     // Every entry stays inside the atlas; the legacy 33 inside the
-    // legacy region (rows 0..15), the extended 368 inside rows 16..61.
+    // legacy region (rows 0..15), the extended 389 inside rows 16..64.
     for (const CjkGlyph& g : kCjkGlyphs) {
         const GlyphUv uv = glyphUv(g.cp);
         EXPECT_GE(uv.v0, 0.0f);
         EXPECT_LT(uv.v1, 1.0f);
         if (g.cell >= 128) {
             EXPECT_LE(uv.v1,
-                      static_cast<float>(62 * kFontCell) / kFontAtlasHeight);
+                      static_cast<float>(65 * kFontCell) / kFontAtlasHeight);
         } else {
             EXPECT_LE(uv.v1,
                       static_cast<float>(16 * kFontCell) / kFontAtlasHeight);
@@ -371,15 +371,16 @@ TEST(FontTest, GlyphUvUnknownCodepointsMapToQuestionMark) {
 }
 
 TEST(FontTest, CjkTablePinned) {
-    // UX-6/UX-8/UX-9b: the set grew 33 -> 401 (codepoint order, the
-    // charset endpoints pinned); the legacy 33 keep their exact cells,
-    // and the extended 368 take cells 128..495 in codepoint-rank order.
-    ASSERT_EQ(std::size(kCjkGlyphs), 401u);
+    // UX-6/UX-8/UX-9b/V2-3: the set grew 33 -> 422 (codepoint order,
+    // the charset endpoints pinned); the legacy 33 keep their exact
+    // cells, and the extended 389 take cells 128..516 in
+    // codepoint-rank order.
+    ASSERT_EQ(std::size(kCjkGlyphs), 422u);
     for (std::size_t i = 1; i < std::size(kCjkGlyphs); ++i) {
         EXPECT_GT(kCjkGlyphs[i].cp, kCjkGlyphs[i - 1].cp); // sorted, unique
     }
     EXPECT_EQ(kCjkGlyphs[0].cp, 0x00B7u);    // charset first: ·
-    EXPECT_EQ(kCjkGlyphs[400].cp, 0xFF1Fu);  // charset last: ？
+    EXPECT_EQ(kCjkGlyphs[421].cp, 0xFF1Fu);  // charset last: ？
     std::size_t legacyCount = 0;
     for (const CjkGlyph& g : kCjkGlyphs) {
         EXPECT_GT(g.cp, 0x7Fu);
@@ -394,7 +395,7 @@ TEST(FontTest, CjkTablePinned) {
             ++legacyCount;
         } else {
             EXPECT_GE(g.cell, 128);
-            EXPECT_LE(g.cell, 495); // rows 16..61
+            EXPECT_LE(g.cell, 516); // rows 16..64
         }
     }
     EXPECT_EQ(legacyCount, 33u);
@@ -420,7 +421,7 @@ TEST(FontTest, CjkTablePinned) {
         }
     }
     EXPECT_EQ(got, legacyTab);
-    // The extended 368 fill cells 128..495, one per codepoint in order:
+    // The extended 389 fill cells 128..516, one per codepoint in order:
     // walking the sorted table, every cell >= 128 must be the next one.
     int nextCell = 128;
     std::size_t extendedCount = 0;
@@ -431,47 +432,69 @@ TEST(FontTest, CjkTablePinned) {
             ++extendedCount;
         }
     }
-    EXPECT_EQ(extendedCount, 368u);
-    EXPECT_EQ(nextCell, 496); // max used cell 495; rows 62..64 = headroom
+    EXPECT_EQ(extendedCount, 389u);
+    EXPECT_EQ(nextCell, 517); // max used cell 516; row 64 = partial
+                              // headroom (cells 517..519)
 }
 
 TEST(FontTest, CjkExtendedGlyphCellsPinned) {
-    // UX-6/UX-8/UX-9b tutorial vocabulary: exact cells for the key
+    // UX-6/UX-8/UX-9b/V2-3 tutorial vocabulary: exact cells for the key
     // extended glyphs (the onboarding text must never render '?'). The
-    // UX-8 addition (排摆输) and the UX-9b addition (亮处把敌暗煤)
-    // re-celled every later glyph (the pins below carry the shifted
-    // values).
+    // UX-8 addition (排摆输), the UX-9b addition (亮处把敌暗煤) and the
+    // V2-3 addition (割圈基捡杀概泥炭炼础约耕草钟链锻颗鸡麦黄株) re-celled
+    // every later glyph (the pins below carry the shifted values).
     const std::vector<std::pair<uint32_t, int>> pinned = {
         {0x50F5, 173}, // 僵
-        {0x5E8A, 262}, // 床
+        {0x5E8A, 265}, // 床
         {0x5251, 193}, // 剑
-        {0x9550, 474}, // 镐
-        {0x7761, 388}, // 睡
+        {0x9550, 491}, // 镐
+        {0x7761, 398}, // 睡
         {0x5065, 172}, // 健
-        {0x5EB7, 266}, // 康
-        {0x5B89, 245}, // 安
+        {0x5EB7, 269}, // 康
+        {0x5B89, 248}, // 安
         {0x5168, 178}, // 全
-        {0x5E87, 261}, // 庇
-        {0x62A4, 287}, // 护
-        {0x6240, 283}, // 所
-        {0x6316, 290}, // 挖
-        {0x6324, 291}, // 挤
-        {0x5976, 239}, // 奶
-        {0x6BD2, 347}, // 毒
-        {0x7BAD, 403}, // 箭
-        {0x5CA9, 257}, // 岩
-        {0x706B, 359}, // 火
-        {0x71C3, 367}, // 燃
-        {0x70E7, 362}, // 烧
-        {0x6392, 295}, // 排 (UX-8)
-        {0x6446, 297}, // 摆 (UX-8)
-        {0x8F93, 451}, // 输 (UX-8)
+        {0x5E87, 264}, // 庇
+        {0x62A4, 290}, // 护
+        {0x6240, 286}, // 所
+        {0x6316, 293}, // 挖
+        {0x6324, 294}, // 挤
+        {0x5976, 242}, // 奶
+        {0x6BD2, 354}, // 毒
+        {0x7BAD, 414}, // 箭
+        {0x5CA9, 260}, // 岩
+        {0x706B, 367}, // 火
+        {0x71C3, 377}, // 燃
+        {0x70E7, 372}, // 烧
+        {0x6392, 299}, // 排 (UX-8)
+        {0x6446, 301}, // 摆 (UX-8)
+        {0x8F93, 465}, // 输 (UX-8)
         {0x4EAE, 153}, // 亮 (UX-9b)
-        {0x5904, 233}, // 处 (UX-9b)
-        {0x628A, 286}, // 把 (UX-9b)
-        {0x654C, 302}, // 敌 (UX-9b)
-        {0x6697, 317}, // 暗 (UX-9b)
-        {0x7164, 364}}; // 煤 (UX-9b)
+        {0x5904, 236}, // 处 (UX-9b)
+        {0x628A, 289}, // 把 (UX-9b)
+        {0x654C, 306}, // 敌 (UX-9b)
+        {0x6697, 321}, // 暗 (UX-9b)
+        {0x7164, 374}, // 煤 (UX-9b)
+        {0x5272, 194}, // 割 (V2-3)
+        {0x5708, 228}, // 圈 (V2-3)
+        {0x57FA, 234}, // 基 (V2-3)
+        {0x6361, 295}, // 捡 (V2-3)
+        {0x6740, 329}, // 杀 (V2-3)
+        {0x6982, 346}, // 概 (V2-3)
+        {0x6CE5, 358}, // 泥 (V2-3)
+        {0x682A, 341}, // 株 (V2-3 fix: the harvest count-2 text)
+        {0x70AD, 368}, // 炭 (V2-3)
+        {0x70BC, 370}, // 炼 (V2-3)
+        {0x7840, 405}, // 础 (V2-3)
+        {0x7EA6, 418}, // 约 (V2-3)
+        {0x8015, 429}, // 耕 (V2-3)
+        {0x8349, 440}, // 草 (V2-3)
+        {0x949F, 485}, // 钟 (V2-3)
+        {0x94FE, 487}, // 链 (V2-3)
+        {0x953B, 490}, // 锻 (V2-3)
+        {0x9897, 507}, // 颗 (V2-3)
+        {0x9E21, 513}, // 鸡 (V2-3)
+        {0x9EA6, 514}, // 麦 (V2-3)
+        {0x9EC4, 515}}; // 黄 (V2-3)
     // expectUv pins the EXACT cell of every codepoint — a '?' fallback
     // would address cell 36 (row 4), which none of the pinned cells are,
     // so the UV pin alone proves table membership.
@@ -565,21 +588,20 @@ TEST(FontTest, FitLabelKeepsSuffixAndTrimsName) {
 TEST(FontTest, FontPngBytesPinned) {
     // Determinism pin: the generated atlas is byte-stable (re-running
     // tools/generate_font.py must not change it). FNV-1a 64 over the
-    // file bytes; the hex below is the UX-9b atlas (256x2080: the
-    // legacy 512 rows pixel-identical + 368 extended glyphs in cells
-    // 128..495).
+    // file bytes; the hex below is the V2-3 atlas (256x2080: the legacy
+    // 512 rows pixel-identical + 389 extended glyphs in cells 128..516).
     std::ifstream in("assets/textures/font.png", std::ios::binary);
     ASSERT_TRUE(in);
     const std::string data((std::istreambuf_iterator<char>(in)),
                            std::istreambuf_iterator<char>());
     ASSERT_FALSE(data.empty());
-    EXPECT_EQ(fnv1a64Hex(data), "42976f1063d0610b");
+    EXPECT_EQ(fnv1a64Hex(data), "9ed008514ff831b4");
 }
 
 TEST(FontTest, FontPngIsTheUx6Atlas) {
     // UX-6: the atlas grew 256x512 -> 256x2080 (65 rows of 32px cells;
-    // rows 16..61 = the extended CJK set, rows 62..64 = headroom). The
-    // size constants and the actual file dimensions are pinned so a
+    // rows 16..64 = the extended CJK set, row 64 partially headroom).
+    // The size constants and the actual file dimensions are pinned so a
     // silent reshape fails loudly.
     EXPECT_EQ(kFontAtlasWidth, 256);
     EXPECT_EQ(kFontAtlasHeight, 2080);

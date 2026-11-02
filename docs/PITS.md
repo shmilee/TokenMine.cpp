@@ -2784,3 +2784,56 @@
   roll，两侧同 cell 实证）但**随 pose 移动**（环锚玩家列）= 走位后
   的 pose 才定鸡位，迭代法：probe 读 "mob spawn" DEBUG 日志 → 终位
   存档算精确 yaw/pitch → 复跑。
+- **recipe 行合成漏发 tutorial craft 事件（PITS 360，门 174 A1）**——
+  UX-7 的 craft emit 只在 grid/output 分支；E 面板 recipe 行左键分支
+  （canCraft→craft）成功合成后**漏 emit** → 玩家点配方行合成（耕地/
+  面包类 shapeless 直合成）永久卡教程（A1 实证：farmland ×2 合成成
+  功、tutorial 停 {till,0}）。修 = recipe 行分支补同款 emit（每次成功
+  合成恰一发的契约两路径统一）；table 面板 hint 行 = display-only 零
+  合成（无需补）、右键 recipe 行无合成路径（核实无）。1.x 教程链从
+  未经 recipe 行合成 = 潜伏两版。
+- **kSaveFormat bump 后 per-format 形状边界须用引入 format 字面量
+  （PITS 361，门 174 核证）**——slot 数边界 `fmt >= kSaveFormat`（真
+  = 36 槽）在 bump 24→25 后把 format-24 档误判为 27 槽拒档。修 =
+  字面量 `fmt >= 24`（UX-8f 引入 format）+ 注释。纪律：per-format
+  形状检查的边界谓词恒用该形状"引入版本"字面量，不用 kSaveFormat
+  移动目标。
+- **教程链内容须核经济账（PITS 362，门 174 核证）**——wheat_7
+  drops_count = 2（固定）< bread 配方 3 wheat = 单株链死局（玩家按
+  教程走完种 1 收 1 只有 2 wheat 合不出面包）。修 = 全链 ×2（2 种子/
+  2 耕地/2 种/2 收 = 4 wheat = bread 3 + 余 1）。纪律：教程链设计逐
+  步核经济账（掉落数 × 次数 ≥ 下游配方需求），内容钉单测钉死链算
+  术（ShippedFarmingIsTheSevenStepChain 含 ×2 断言）。
+- **锁定态世界点击前禁 mousemove 预 move = 相机漂移（PITS 363，门
+  174 A3）**——pointer 锁定态 xdotool mousemove --sync（XWarpPointer）
+  产生合成 MotionNotify → SDL 报相对 delta（warp 目标 vs SDL 自算中
+  心 ~40 px）→ 相机转 0.1-0.2 rad → 世界 RMB/LMB 落错格（A3 实证：
+  pose −0.50 应落 (0,53,−3) 顶面，实际耕地落到 (0,54,−1) = NEAR 耕
+  地 +Z 面）。协议 = capture 后光标已在物理中心（capture 点击的
+  mousemove 所为），世界点击**零预 move**（仅自由光标态的面板点击
+  可 mousemove）；PITS 28/337 族。
+- **面板布局 = uiSize 空间（窗口 ÷ uiScale）（PITS 364，门 174 B）**
+  ——handlePanelClicks 与面板渲染同一 compute(uiSize())，uiSize =
+  logical 窗口 ÷ ui.scale（quiet config 1.5）：独占窗 1362×744 → ui
+  908×496。探针按物理窗口尺寸跑坐标 = 炉子槽（52 px 目标）全 miss、
+  E 配方行（154 px 宽区）侥幸命中。标定 = 探针按 ui 空间跑
+  （compute(908,496)）+ 物理点击 = round(ui × 1.5) + 窗原点；窗口
+  尺寸随 WM 平铺态变（独占 1362×744 / 半平铺 679×744）= 按态标定
+  （PITS 314/334 族首案）。
+- **capture 漂移重试无效须重捕获（PITS 365，门 174 B）**——grab
+  delta 漂移（PITS 28/319）在 capture 瞬间固定，同一次 capture 的
+  世界 RMB 重试不变 = 4 连 miss（炉子面板带 ±0.225 rad 全出带）。
+  修 = 重试循环含 **Escape 释放 + 重新 capture**（每次 capture 抽新
+  漂移值）：实测首试 miss、二试命中。
+- **炉子燃料点火即消耗物品（PITS 366，门 174 B）**——炉子点火（燃料
+  + input 就位）= 燃料物品被消耗、转 fuel_substeps 计数（CRAFT-5
+  ignition 帧授予语义：点火后物品不占槽，存档 fuel 字段空 +
+  substeps 倒数）。陷阱：E2E「fuel 槽有煤」断言 = 假阴性（实证：
+  fuel 空 + 264 substeps burned = 4.4 s 与点击→F5 时间线吻合）。
+  判别 = fuel_substeps > 0 or fuel 物品在位。
+- **饥饿满时吃 = 静默 no-op（PITS 367，门 174 A9）**——quiet config
+  hunger_decay 9999 冻结饥饿于 max（20）：教程 eat 步长按右键 =
+  「满条时 no-op 但吞掉右键」（P23 规则）→ 步永不完成（A9 实证：
+  面包在包、hunger 20、长按 1.8 s 零反应）。E2E 场景须注入
+  hunger < max（A/B 场景注入 14：bread +5 → 19 ✓ / cooked_chicken
+  +6 → 20 ✓）。

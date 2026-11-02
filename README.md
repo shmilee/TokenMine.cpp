@@ -110,7 +110,7 @@ v1.x（v1.50.0→v1.0）见 `docs/archive/v1x/CHANGELOG.md`；v0.x
 （机制/证据/偏离/性能 A/B）见 `docs/archive/*/phase-*.md` 阶段存档与
 GitHub Releases。
 - **0.x 承诺**：可玩、可扩展、确定性运行；但**不承诺稳定**——存档格式
-  （现为 format 24，向前迁移）与内容数据格式仍可能随阶段演进，旧存档
+  （现为 format 25，向前迁移）与内容数据格式仍可能随阶段演进，旧存档
   通常可读但请定期备份。已知限制见 `docs/KNOWN_ISSUES.md`。
 - 许可证：MIT（见 `LICENSE`）。
 - **内存提示**：默认 `config/config.json` 为 `view_distance: 80`（圆盘环
@@ -129,7 +129,7 @@ GitHub Releases。
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（359 条，都踩过） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（367 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v2.x 逐版明细；v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

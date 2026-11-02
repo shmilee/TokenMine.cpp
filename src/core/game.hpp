@@ -543,11 +543,12 @@ private:
     // bit-identical).
     void applyPlayerEffect(const std::string& name, double duration,
                            int tier = 0);
-    // UX-7: the SINGLE choke point for tutorial events — every
+    // UX-7 / V2-3: the SINGLE choke point for tutorial events — every
     // game-world event of the closed vocabulary (walk / jump / eat /
     // break.<block> / place.<block> / craft.<item> / kill.<mob> /
-    // interact.<block>) funnels through here, one call site per event
-    // class (the tutorial logic never scatters into the call sites).
+    // interact.<block> / pickup.<item> / smelt.<item>) funnels through
+    // here, one call site per event class (the tutorial logic never
+    // scatters into the call sites).
     // Gated on m_tutorialEnabled ∧ !m_tutorial.done (a no-input run
     // emits no events — the base gate's structural immunity — and a
     // done/skipped/disabled tutorial never re-runs the machine): the
@@ -1568,20 +1569,23 @@ private:
     // omit-when-default discipline). Frame-locked events (the death
     // transition, the mob despawn pass) increment it; deterministic.
     std::map<std::string, std::uint64_t> m_stats;
-    // UX-7: the beginner tutorial (the objective-style onboarding) —
-    // the step data (assets/data/tutorials/beginner.json, strict-parsed
-    // at init + the goal cross-checks: content lives in the JSON, the
-    // core reads it — hard rule 3), the player's frame-locked progress
-    // (format 23), the enable flag (config tutorial.enabled, code
-    // default true — the render.fog getBool precedent; OFF = zero
-    // state-machine execution + zero UI + the skip key no-op, the
-    // save still writes the segment = the key discipline) and the
+    // UX-7 / V2-3: the tutorial SERIES (the objective-style onboarding)
+    // — the step data (assets/data/tutorials/*.json, one file per
+    // series, file-name byte order = the series order; strict-parsed at
+    // init + the goal cross-checks + the global step-id uniqueness:
+    // content lives in the JSON, the core reads it — hard rule 3), the
+    // player's frame-locked progress (format 25: the seriesIndex +
+    // stepIndex + progress), the enable flag (config tutorial.enabled,
+    // code default true — the render.fog getBool precedent; OFF = zero
+    // state-machine execution + zero UI + the skip key no-op, the save
+    // still writes the segment = the key discipline) and the
     // completion-toast countdown (the frame-locked kTutorialToastFrames
-    // window, armed by the done flip / the T skip; render-only — never
-    // saved, the camera-mode session-state class). The event emission
-    // is the single choke point emitTutorialEvent (game_frame) over
-    // the pure state machine (core/tutorial, the unit tests own it).
-    std::vector<TutorialStep> m_tutorialSteps;
+    // window, armed by the done flip ONLY — the series transition and
+    // the T series-skip carry no toast; render-only — never saved, the
+    // camera-mode session-state class). The event emission is the
+    // single choke point emitTutorialEvent (game_frame) over the pure
+    // state machine (core/tutorial, the unit tests own it).
+    std::vector<std::vector<TutorialStep>> m_tutorialSeries;
     TutorialState m_tutorial;
     bool m_tutorialEnabled = true;
     int m_tutorialToastFrames = 0;

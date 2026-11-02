@@ -1,0 +1,10 @@
+{
+  "steps": [
+    { "id": "cobble",  "text": "再挖 3 个石头（炉子要 8 锻石）", "tip": "基础链已挖 5 个", "goal": "break.stone", "count": 3 },
+    { "id": "furnace", "text": "在工作台合成 1 个炉子", "tip": "8 锻石围一圈", "goal": "craft.furnace", "count": 1 },
+    { "id": "set",     "text": "放 1 个炉子", "goal": "place.furnace", "count": 1 },
+    { "id": "feed",    "text": "打开炉子，放燃料和鸡肉", "tip": "煤炭是燃料，杀鸡得鸡肉", "goal": "interact.furnace", "count": 1 },
+    { "id": "cook",    "text": "等熔炼完成（约 10 秒）", "goal": "smelt.cooked_chicken", "count": 1 },
+    { "id": "eat",     "text": "吃 1 块熟鸡肉", "goal": "eat", "count": 1 }
+  ]
+}

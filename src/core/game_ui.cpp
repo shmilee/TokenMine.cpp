@@ -198,17 +198,31 @@ void Game::handleUiKeys() {
                       ? CameraMode::ThirdFront
                       : CameraMode::First;
     }
-    // UX-7: T skips the tutorial (locked pointer only — the C-key
-    // pattern: a free cursor / panel / death screen never touches it).
-    // Gated on enabled ∧ !done (the brief's rules: disabled = the key is
-    // a no-op; a finished tutorial cannot be re-skipped) — T not pressed
-    // = zero execution. The flip arms the SAME completion toast and the
-    // one-shot info log (the E2E evidence, the PRE-4 pattern).
+    // UX-7 / V2-3: T skips the tutorial (locked pointer only — the
+    // C-key pattern: a free cursor / panel / death screen never touches
+    // it). Gated on enabled ∧ !done (the brief's rules: disabled = the
+    // key is a no-op; a finished tutorial cannot be re-skipped) — T not
+    // pressed = zero execution. V2-3: T skips the CURRENT SERIES — a
+    // non-final series moves to the next series' first step (NO toast
+    // — the target line's step change is the cue, the design decision)
+    // with the one-shot info log (the E2E evidence, the PRE-4 pattern);
+    // the last series keeps the pre-V2-3 behavior (the done flip arms
+    // the SAME completion toast + the log).
     if (m_input.wasPressed(GameKey::T) && m_window.relativeMouseMode() &&
         m_tutorialEnabled && !m_tutorial.done) {
-        m_tutorial.done = true;
-        m_tutorialToastFrames = kTutorialToastFrames;
-        MC_LOG_INFO("Tutorial: skipped");
+        if (m_tutorial.seriesIndex + 1 <
+            static_cast<int>(m_tutorialSeries.size())) {
+            m_tutorial.seriesIndex += 1;
+            m_tutorial.stepIndex = 0;
+            m_tutorial.progress = 0;
+            MC_LOG_INFO("Tutorial: series skipped (" +
+                        std::to_string(m_tutorial.seriesIndex) + "/" +
+                        std::to_string(m_tutorialSeries.size()) + ")");
+        } else {
+            m_tutorial.done = true;
+            m_tutorialToastFrames = kTutorialToastFrames;
+            MC_LOG_INFO("Tutorial: skipped");
+        }
     }
     if (m_input.wasPressed(GameKey::E)) {
         if (panelOpen()) {
@@ -513,6 +527,16 @@ void Game::handlePanelClicks() {
                 auto crafted = craft(m_inventory, recipe, m_items);
                 if (crafted.ok()) {
                     m_sound.play("craft");
+                    // UX-7: the tutorial craft event — the RECIPE-ROW
+                    // path (the grid/output click path's twin): one
+                    // event per successful craft. A recipe-row click is
+                    // ALWAYS a true craft (canCraft matched just above
+                    // — the UX-5 repair case only lives in the grid
+                    // match, which this path never touches), so no
+                    // repair discriminator is needed here.
+                    emitTutorialEvent("craft." +
+                                         m_items.at(recipe.output).name,
+                                     1);
                 } else {
                     MC_LOG_ERROR("Craft failed: " + crafted.error().describe());
                 }
@@ -1140,7 +1164,7 @@ void Game::renderUi() {
             const std::string line =
                 m_tutorial.done
                     ? std::string(kTutorialDoneText)
-                    : tutorialTargetLine(m_tutorial, m_tutorialSteps);
+                    : tutorialTargetLine(m_tutorial, m_tutorialSeries);
             addText(line,
                     (w - static_cast<int>(textWidth(line, fScale(1.0)))) / 2,
                     tutY, fScale(1.0), kText);
@@ -1154,7 +1178,7 @@ void Game::renderUi() {
             // (bit-identical to v1.41.0).
             if (!m_tutorial.done) {
                 const std::string tip =
-                    tutorialTipLine(m_tutorial, m_tutorialSteps);
+                    tutorialTipLine(m_tutorial, m_tutorialSeries);
                 if (!tip.empty()) {
                     // UX-8e: the tip/main offset is a TEXT-STACK pitch —
                     // it grows with the glyphs (lround, identity at
@@ -1649,22 +1673,31 @@ void Game::renderUi() {
         // (deathCount + kill.<name>; the map holds non-zero entries in
         // key order).
         info.stats = m_stats;
-        // UX-7: the tutorial line (the F3 stays English — the developer-
-        // tool discipline): "off" when disabled, "done" when finished or
-        // skipped, "<id> <progress>/<count>" while in progress.
+        // UX-7 / V2-3: the tutorial line (the F3 stays English — the
+        // developer-tool discipline): "off" when disabled, "done" when
+        // finished or skipped, "<series+1>/<total> <id>
+        // <progress>/<count>" while in progress (the series position is
+        // 1-based, e.g. "2/3 seed 0/1").
         if (!m_tutorialEnabled) {
             info.tutorial = "off";
         } else if (m_tutorial.done) {
             info.tutorial = "done";
-        } else if (!m_tutorialSteps.empty() &&
+        } else if (m_tutorial.seriesIndex >= 0 &&
+                   m_tutorial.seriesIndex <
+                       static_cast<int>(m_tutorialSeries.size()) &&
                    m_tutorial.stepIndex >= 0 &&
                    m_tutorial.stepIndex <
-                       static_cast<int>(m_tutorialSteps.size())) {
+                       static_cast<int>(
+                           m_tutorialSeries[m_tutorial.seriesIndex].size())) {
             const TutorialStep& s =
-                m_tutorialSteps[static_cast<std::size_t>(m_tutorial.stepIndex)];
+                m_tutorialSeries[m_tutorial.seriesIndex]
+                                   [static_cast<std::size_t>(
+                                       m_tutorial.stepIndex)];
             char buf[96];
-            std::snprintf(buf, sizeof(buf), "%s %d/%d", s.id.c_str(),
-                          m_tutorial.progress, s.count);
+            std::snprintf(buf, sizeof(buf), "%d/%d %s %d/%d",
+                          m_tutorial.seriesIndex + 1,
+                          static_cast<int>(m_tutorialSeries.size()),
+                          s.id.c_str(), m_tutorial.progress, s.count);
             info.tutorial = buf;
         }
         // UX-8e: the F3 line step is a TEXT-STACK pitch — it grows with

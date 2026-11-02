@@ -714,28 +714,53 @@ Result<void> Game::buildScene() {
         }
     }
 
-    // -- tutorial (UX-7): the beginner guide data --------------------------
-    // data/tutorials/beginner.json — the step list (each step {id, text,
-    // goal, count}, the closed goal vocabulary strict-parsed). The goal
-    // name halves are cross-checked against the registries HERE (the
-    // grows_to precedent — the parse owns the grammar, init owns the
+    // -- tutorial (UX-7 / V2-3): the tutorial series data -------------
+    // assets/data/tutorials/ = the series collection (one JSON file per
+    // series, the FILE-NAME BYTE ORDER is the series order — the
+    // registry file-order paradigm). Per file: strict parse
+    // (parseTutorial — unchanged) + the goal name halves cross-checked
+    // against the registries (validateTutorialGoals — unchanged, the
+    // grows_to precedent: the parse owns the grammar, init owns the
     // existence, the registry-order first failure names the step + the
-    // missing name). Content lives in the JSON (hard rule 3): the core
-    // never switches on a step id. The enable flag is the render.fog
-    // getBool precedent (code default true; the committed config.json is
-    // untouched). The frame-locked state machine (core/tutorial) + the
-    // format-23 save segment + the HUD target line / toast / T skip are
-    // the rest of the feature; a no-input run emits zero events (the
-    // base gate's structural immunity).
-    auto tutorialText = m_assets.loadText("data/tutorials/beginner.json");
-    MC_TRY(tutorialText);
-    auto tutorialJson = Json::parse(*tutorialText);
-    MC_TRY(tutorialJson);
-    auto tutorialSteps = parseTutorial(*tutorialJson);
-    MC_TRY(tutorialSteps);
-    m_tutorialSteps = std::move(*tutorialSteps);
-    MC_TRY(validateTutorialGoals(m_tutorialSteps, m_items, m_blocks,
-                                 m_mobs.mobTypes));
+    // missing name), then the step ids checked GLOBALLY unique across
+    // the series (checkSeriesGlobalIds — the save's {series, id} pair
+    // must name one step). Content lives in the JSON (hard rule 3):
+    // the core never switches on a series or step id. Non-.json
+    // entries are named and rejected; an empty directory is a named
+    // failure (the content is mandatory). The enable flag is the
+    // render.fog getBool precedent (code default true; the committed
+    // config.json is untouched). The frame-locked state machine
+    // (core/tutorial) + the format-25 save segment + the HUD target
+    // line / toast / T series-skip are the rest of the feature; a
+    // no-input run emits zero events (the base gate's structural
+    // immunity).
+    auto tutorialFiles = m_assets.listDir("data/tutorials");
+    MC_TRY(tutorialFiles);
+    if (tutorialFiles->empty()) {
+        return MC_FAIL(
+            "the tutorials directory 'data/tutorials' is empty (the "
+            "series set must hold at least one .json file)");
+    }
+    std::vector<std::vector<TutorialStep>> tutorialSeries;
+    for (const std::string& file : *tutorialFiles) {
+        if (file.size() <= 5 || file.compare(file.size() - 5, 5,
+                                             ".json") != 0) {
+            return MC_FAIL("tutorials directory entry '" + file +
+                           "' is not a .json series file");
+        }
+        auto tutorialText = m_assets.loadText("data/tutorials/" + file);
+        MC_TRY(tutorialText);
+        auto tutorialJson = Json::parse(*tutorialText);
+        MC_TRY(tutorialJson);
+        auto tutorialSteps = parseTutorial(*tutorialJson);
+        MC_TRY(tutorialSteps);
+        tutorialSeries.push_back(std::move(*tutorialSteps));
+    }
+    for (const std::vector<TutorialStep>& s : tutorialSeries) {
+        MC_TRY(validateTutorialGoals(s, m_items, m_blocks, m_mobs.mobTypes));
+    }
+    MC_TRY(checkSeriesGlobalIds(tutorialSeries));
+    m_tutorialSeries = std::move(tutorialSeries);
     // The enable flag (strict read — the SAVE-1 discipline: absent =
     // the code default true, a non-boolean = named init failure; the
     // Config getters' silent fallback is the trap): the committed

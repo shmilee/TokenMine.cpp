@@ -1,0 +1,11 @@
+{
+  "steps": [
+    { "id": "seed",    "text": "割草捡 2 颗小麦种子", "tip": "草方块有 1/8 概率掉种子", "goal": "pickup.wheat_1", "count": 2 },
+    { "id": "till",    "text": "合成 2 块耕地（泥土变耕地）", "tip": "按 E 打开面板，选泥土点输出", "goal": "craft.farmland", "count": 2 },
+    { "id": "soil",    "text": "放 2 块耕地", "goal": "place.farmland", "count": 2 },
+    { "id": "plant",   "text": "在耕地上种 2 颗种子", "tip": "选种子右键耕地", "goal": "place.wheat_1", "count": 2 },
+    { "id": "harvest", "text": "等小麦金黄（约 1 分钟）收 2 株", "tip": "未熟会掉回种子，可重种", "goal": "break.wheat_7", "count": 2 },
+    { "id": "bread",   "text": "合成 1 个面包（3 小麦）", "goal": "craft.bread", "count": 1 },
+    { "id": "meal",    "text": "吃 1 个面包", "goal": "eat", "count": 1 }
+  ]
+}

@@ -261,6 +261,11 @@ void Game::updateEntities(double dt) {
         // sound_material — YAGNI, documented), spatialized at the picked
         // item's position.
         m_sound.play("pickup", item->position());
+        // V2-3: the pickup.<item> tutorial event — the PLAYER's pickup
+        // of a dropped ItemEntity (the single choke point: the merge /
+        // despawn paths above never fire it, mob drops are unrelated),
+        // every frame the entity pass runs (hard rule 8).
+        emitTutorialEvent("pickup." + item->itemName(), 1);
     }
     // Arrow pickup (Phase 42): a STUCK arrow within kArrowPickupRadius of
     // the player's bottom-center returns to the inventory as the

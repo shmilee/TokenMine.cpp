@@ -131,7 +131,7 @@ SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作�
 - **`DayCycle::setTimeOfDay` 至多 1 ulp 偏差** — 存 timeOfDay [0,1)，恢复时解出 totalSeconds；对远离配置 start_time 的值，`startTime + delta` 的浮点往返可能差 1 ulp（~1e-16）。昼夜渐变段是常量/平滑的，呈现无影响。`[Phase 13]`
 - **演示区外的编辑会带上"生成的 chunk"** — 在演示区外放置方块会同步生成该 chunk（既有行为），存档 diff 覆盖它；读档时 `setBlock` 重建同样生成该 chunk——一致，但读档后的世界含全新世界没有的 chunk（读档后 `propagateAll` 全量重传播，之后新出现的 chunk 由 Phase 14 的 worker 光照 job 处理）。`[Phase 13]`
 - **抽干的天然熔岩入档不完整、读档后"复活"** — `diffWorld`/journal 流体 diff 不对称：对「生成态有熔岩、会话抽干（level 0）」的格，`fluidKindOf(0)` 特例按 Water 记账 → diff 记为 **level-0 水**编辑（被抽掉的 kind 不记录）；回载 `World::setFluid(level 0)` 只清同 kind 水、不清熔岩，且 `applyWorldEdits` 对「level-0 且该 kind 已空」的编辑跳过 → 读档后生成熔岩复活。触发路径：玩家用熔岩桶抽干天然熔岩湖后存档重开。修复方向（二选一）：diff 对被抽干的格记 drained kind / level-0 编辑清任意 kind。`[PRE-3 2026-10-26 上报，未修，矩阵外]`
-- ~~**存档无迁移机制**~~ — 当前 **format 24**（save.hpp `kSaveFormat=24` / `kSaveFormatMin=1`），**format 1..24 全部可加载**（各按其字段集 + 逐 format 白名单，规则式迁移——"未知字段=报错" rejectUnknownFields 保持）。format 演进（15 → 24）：15 `states`（ENT-2，14→15 值保真）/ 16 `player.armor`（SURV-1，恒写占位槽）/ 17 `player.oxygen`（SURV-2，恒写）/ 18 耐久 `damage`（SURV-3，>0 才写）/ 19 `tables`（CRAFT-1，恒写 + 18→19 sole 归属迁移）/ 20 效果 `tier`（SURV-6，omit-when-0 免迁）/ 21 `player.stats`（SURV-7，恒写空对象合法）/ 22 `player.velocity`（SAVE-2，恒写 ≤21 零速免迁）/ 23 `player.tutorial`（UX-7，恒写 {id,count}/{} ≤22 免迁）/ **24 inventory 36 槽（UX-8f，写恒 36；per-format 尺寸检查双向点名【24 须恰 36 / ≤23 须恰 27】+ 23→24 尾部补 9 空槽值保真迁移 `kPreUx8fInventorySlots`）**。更早的规则式迁移：6→7 炉子（sole 归属/丢弃）、≤11→12 吸收（共享 health 拆分）、11/12→13 营火（单槽→槽 0）、13→14 stairs（迁移为空）。写入恒 format 24。`[Phase 13]`（`[Phase 16/17]` 起 format 2/3 可加载，其后逐 format 追加；UX-8f format 24）
+- ~~**存档无迁移机制**~~ — 当前 **format 25**（save.hpp `kSaveFormat=25` / `kSaveFormatMin=1`），**format 1..25 全部可加载**（各按其字段集 + 逐 format 白名单，规则式迁移——"未知字段=报错" rejectUnknownFields 保持）。format 演进（15 → 25）：15 `states`（ENT-2，14→15 值保真）/ 16 `player.armor`（SURV-1，恒写占位槽）/ 17 `player.oxygen`（SURV-2，恒写）/ 18 耐久 `damage`（SURV-3，>0 才写）/ 19 `tables`（CRAFT-1，恒写 + 18→19 sole 归属迁移）/ 20 效果 `tier`（SURV-6，omit-when-0 免迁）/ 21 `player.stats`（SURV-7，恒写空对象合法）/ 22 `player.velocity`（SAVE-2，恒写 ≤21 零速免迁）/ 23 `player.tutorial`（UX-7，恒写 {id,count}/{} ≤22 免迁）/ **24 inventory 36 槽（UX-8f，写恒 36；per-format 尺寸检查双向点名【24 须恰 36 / ≤23 须恰 27】+ 23→24 尾部补 9 空槽值保真迁移 `kPreUx8fInventorySlots`）/ 25 `player.tutorial` 加 `series`（V2-3 教程系列化，InProgress 形状 {series,id,count}；25 缺 series 拒 / 23-24 携 series = 版本谎报拒 / 23-24 载入缺省 0 = 值保真免迁；per-format 形状边界用引入 format 字面量 = PITS 361）**。更早的规则式迁移：6→7 炉子（sole 归属/丢弃）、≤11→12 吸收（共享 health 拆分）、11/12→13 营火（单槽→槽 0）、13→14 stairs（迁移为空）。写入恒 format 24。`[Phase 13]`（`[Phase 16/17]` 起 format 2/3 可加载，其后逐 format 追加；UX-8f format 24）
 
 ## Chunk 流式（Phase 14）
 
@@ -789,6 +789,10 @@ SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作�
   （需要时再设计 = YAGNI）；炉子/营火/工作台/火 4 个 per-position map（format
   7/13/19/10）+ m_beacons 位置集（功率等级 `world/beacon` 纯函数每帧从基座重
   算）未迁移 BlockState（`[ENT-2]` YAGNI 定案）。
+## 教程（UX-7 / V2-3）
+
+- **教程 = 三系列（基础/农耕/厨房），系列过渡无 toast，T = 跳当前系列** — `[V2-3]`（v2.3.0，详见 docs/archive/phase-2.3.0.md）：`tutorials/` 目录 3 文件按名序 = 系列序（beginner 11 步**字节零改动** + farming 7 步 + kitchen 6 步）；**系列过渡无 toast**（目标行换步即提示 = 设计定案，零新文本）；T = 跳**当前系列**（末系列 = done 旧行为 + toast）；事件词表 +pickup./smelt. 两前缀（均帧锁定）；存档 format 25 `player.tutorial` 加 series（≤24 值保真免迁，失效 = 重置上报不拒档）。**记档偏离**：① 干耕地生长文案「约 1 分钟」= 72 s 均值（两株独立 roll 并行，先到先破，不要求同时熟）② 种子 1/8 概率获取（草 chance_drop 12.5%，tip 明示）③ 系列集 = 数据（tutorials/ 增删文件 = 内容变更，存档失效自动重置）。`[UX-7]` → `[V2-3]`
+
 ## 已修复（归档）→ 细节存档
 
 pre-2.0 已修复条目全索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`（按需查找；各

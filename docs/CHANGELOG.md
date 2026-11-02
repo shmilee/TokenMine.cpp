@@ -1,10 +1,14 @@
 # 版本历史（CHANGELOG）
 
 > 本文件只留 **v2.x** 逐版明细（v2.0.0 = 1.x 收官里程碑 / V2-1 前视角 /
-> V2-2 Steve 皮肤）。v1.x（v1.50.0→v1.0）→ `docs/archive/v1x/CHANGELOG.md`；
+> V2-2 Steve 皮肤 / V2-3 教程系列化）。v1.x（v1.50.0→v1.0）→ `docs/archive/v1x/CHANGELOG.md`；
 > v0.x（v0.12.0→v0.1.0）→ `docs/archive/v0x/CHANGELOG.md`。逐版细节
 > （机制/证据/偏离/性能 A/B）见 `docs/archive/v1x/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
+
+## v2.3.0（2026-11-03）— V2-3 教程系列化（农耕 + 厨房）（门 174 全 PASS）
+
+用户 11-02 实机反馈「之前的新手指导比较单调，有没有多个任务系列可以添加」：**A 机制系列化**（`tutorials/` 多文件按名序 = 系列序 + `AssetManager::listDir` + 步 id 跨系列全局唯一 init 点名；`TutorialState` +seriesIndex 纯函数推广；**存档 format 24→25** `player.tutorial` 加 `series`——三向键纪律【25 缺 series 拒 / 23-24 携 = 版本谎报拒 / ≤24 载入缺省 0 = 值保真免迁】+ series 越界/id 不在该系列 = 重置上报不拒档；事件词表 +**pickup./smelt.** 两前缀均帧锁定【拾取收口 + 炉子 smelt-complete 消费点】；**T = 跳当前系列**；系列过渡无 toast【目标行换步即提示定案】；F3 行 `<s>/<total> <id> p/c`）+ **B 两个新系列**：② 农耕 7 步（2 种子→2 耕地→2 种→2 收 = 4 小麦→面包→吃，全链数据核实在位零新机制；**×2 修订** = wheat_7 掉 2 < bread 配方 3 的经济账死局修复）+ ③ 厨房 6 步（3 锻石→炉子→放→开→熔炼熟鸡→吃）；**beginner.json 字节零改动**；字体 401→422（+株 等，顶 512 行逐字节不变免重锚）。**门 174 内抓到并修复 UX-7 潜伏 bug**：E 面板 recipe 行左键合成成功漏发 tutorial craft 事件（玩家点配方行合成 = 永久卡教程；1.x 链从未经该路径 = 潜伏两版，PITS 360）。2109/2109（+25）、-Werror 0、banner v2.3.0。门 174：S1 **第 174 次结构性免疫免重锚**（四方 ×2 RAW 全字节一致 + 锚 179116 B 连续 + 跨版 savenorm 恰 2 项【format + series:0 值保真】）+ S2 输入链全 PASS（A 农耕 9 段【FAR 先放 = 累积态遮挡定案 + 生长轮询 + 走捡 + 逐 checkpoint 断言 ×8】/ B 厨房 2 段【开炉重捕获重试 + 燃料点火即耗物品判别】/ C T 三态 + 日志逐字 / D format 24 迁移值保真）+ S3 2109 + S6 精确点名 4/4 + 性能 A/B 同世界同成本【changesApplied 9/3/1 三窗逐位 + 终档 fluids 18/18 + blocks 55/55 集合恒等 + 全指标同档】。PITS 359→367（8 条：360 recipe 行漏 emit / 361 format 边界字面量 / 362 教程经济账 / 363 锁定态禁预 move / 364 面板 uiSize 空间 / 365 漂移须重捕获 / 366 燃料点火即耗 / 367 饥饿满 no-op）——详见 docs/archive/phase-2.3.0.md。
 
 ## v2.2.0（2026-11-02）— V2-2 玩家皮肤 Steve 化（门 173 全 PASS）
 

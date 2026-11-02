@@ -1,5 +1,6 @@
 #include "core/asset_manager.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 
@@ -96,6 +97,33 @@ Result<std::string> AssetManager::loadText(const std::string& relative) {
 std::size_t AssetManager::textCacheSize() const {
     std::lock_guard lock(m_mutex);
     return m_textCache.size();
+}
+
+Result<std::vector<std::string>> AssetManager::listDir(
+    const std::string& relative) const {
+    auto p = resolve(relative); // the same traversal guard loadText uses
+    MC_TRY(p);
+    std::error_code ec;
+    if (!std::filesystem::exists(*p, ec) || ec) {
+        return MC_FAIL("asset directory does not exist: '" + relative + "'");
+    }
+    if (!std::filesystem::is_directory(*p, ec) || ec) {
+        return MC_FAIL("asset path is not a directory: '" + relative + "'");
+    }
+    std::vector<std::string> out;
+    for (const auto& entry : std::filesystem::directory_iterator(*p, ec)) {
+        if (ec) {
+            return MC_FAIL("cannot read asset directory: '" + relative + "'");
+        }
+        if (!entry.is_regular_file(ec) || ec) {
+            continue; // subdirectories / special entries are out of scope
+        }
+        out.push_back(entry.path().filename().string());
+    }
+    // Byte order (std::string compare) = the series order the callers
+    // rely on (the registry file-order paradigm).
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 void AssetManager::clearCache() {

@@ -1,4 +1,4 @@
-# 机制详解（现状 v2.0.0）
+# 机制详解（现状 v2.3.0）
 
 > 2026-11-02 全面刷新：现状 = **v2.0.0**（1.x 收官里程碑：v1.x 任务矩阵 40/40
 > + UX-8g/UX-9 实机报障 4 项 + 2.0.0 扫尾「第三人称准星抬相机」）、无输入基线
@@ -6,6 +6,13 @@
 > 警告、存档 **format 24**、base18 锚 179116 B。上一轮刷新（2026-10-30）止于
 > v1.33.0，本次把 v1.34.0 → v2.0.0 的全部变更（逐版见 `docs/CHANGELOG.md`，
 > 细节证据见 `docs/archive/v1x/` 阶段存档）并入各节。
+>
+> **2026-11-03 增量（v2.1.0→v2.3.0）**：V2-1 前视角（门 172，`C` 三循环 +
+> 翻转角 + aimReach）/ V2-2 Steve 皮肤（门 173，MobBox per-face 纹理）/
+> **V2-3 教程系列化（门 174，tutorials/ 三系列 + format 25 + pickup./
+> smelt. 事件）**；现状 = 测试 **2109/2109**、存档 **format 25**、门计数
+> **174**（教程节/键位/存档 format 节/F3 行已同步；相机/皮肤细节见
+> `docs/archive/phase-2.1.0.md` / `phase-2.2.0.md` / `phase-2.3.0.md`）。
 >
 > **来源约定**：本文所有具体数字/字段名/常量值以本文件各条的标注为准，细节
 > （机制公式、单测、门证据、偏离记档全文）见 `docs/archive/v1x/phase-*.md`
@@ -149,8 +156,9 @@
   流式/熔炼照常 tick——与 MC「暂停菜单」不同，接近「边看背包边看世界」）；
   `F3` 切换调试 overlay（任意指针状态，英文 = 开发者工具记档 `[PRE-1]`）；
   `F5` 立即存档（`--save` 槽激活时，日志记录结果）；`C` 切换第一/第三人称
-  （`[UX-4]`，见上）；`T` 跳过新手指导（`[UX-7]`，仅指针锁定且教程未结束时，
-  效果等同完成）；`ESC` 释放指针 / 未锁定时
+  （`[UX-4]`，见上）；`T` 跳过**当前教程系列**（`[UX-7]`/`[V2-3]`，仅指针
+  锁定且教程未结束时；末系列 = 效果等同完成 + toast）；`ESC` 释放指针 /
+  未锁定时
   退出（干净退出自动写回）；`R` 死亡后重生
 - **背包面板操作**（`[CRAFT-7]` = MC 操作面 3/4 项 + 数字键）：左键 = 取整堆/
   放入/交换/并入有空间同物堆（**合并门 = 同物品且同 damage** `[SURV-3]`）；
@@ -176,15 +184,25 @@
   矿石 / torch 合成 1 火把 / light 放 1 火把 = 三步点灯**【`[UX-9b]`，消费
   「掉在洞里黑乎乎怎么打怪」实机报障：光 14 > 敌对生成门槛 7】→ kill 打 1 只
   鸡；每步可选 **`tip` 辅助行**（`[UX-8a]` 严格解析，主行上方 kTextDim）；
-  **封闭事件词表**（craft./break./place./kill./interact. + walk/jump/eat 裸词，
-  `emitTutorialEvent` 单点收口 8 类各一调用点——repair 完成不发 craft = UX-5
-  边界）+ **纯函数状态机** `core/tutorial`（campfire 范式帧锁定，进度 ≥ count
-  步进越尾 done）+ **format 23 `player.tutorial`**（恒写 {id,count}/{}；键纪律
-  双向/≤22 免迁/**id 失效 = 重置首步**/count 越界损坏点名；读档跨续接）+
-  **UI**（下中部目标行 PRE-10 堆叠纪律 + 120 帧完成 toast + **`T` 跳过键**
-  GameKey 尾追加 + config `tutorial.enabled` 严格读代码默认 true config.json
-  零改动 + F3 `tutorial` 行）；字集需求三段扩容（33→392 `[UX-6]` → 395
-  `[UX-8a]` → 401 `[UX-9b]`，顶 512 行位级不变免重锚）
+  **`[V2-3]` 三系列**：内容 = `assets/data/tutorials/` 目录**多文件按名序 =
+  系列序**（beginner 11 步字节零改动 + **farming 农耕 7 步**（2 种子→2
+  耕地→2 种→2 收=4 小麦→面包→吃，×2 经济账修订）+ **kitchen 厨房 6 步**
+  （3 锻石→炉子→放→开→熔炼熟鸡→吃））；跨系列步 id 全局唯一（init 点名）；
+  **系列过渡无 toast**（目标行换步即提示，定案）；**封闭事件词表**
+  （craft./break./place./kill./interact. + **pickup./smelt.** `[V2-3]`
+  + walk/jump/eat 裸词，`emitTutorialEvent` 单点收口各一调用点——repair
+  完成不发 craft = UX-5 边界；**recipe 行合成与 grid/output 路径同发
+  craft 事件** = 门 174 内修复的 UX-7 潜伏漏发 PITS 360）+ **纯函数状态机**
+  `core/tutorial`（campfire 范式帧锁定，进度 ≥ count 步进，越系列 → 下系列
+  首步，越末系列 done）+ **format 25 `player.tutorial`**（恒写
+  {series,id,count}/{}；三向键纪律：25 缺 series 拒 / 23-24 携 series =
+  版本谎报拒 / ≤24 载入 series 缺省 0 = 值保真免迁；**series 越界或 id
+  不在该系列 = 重置上报**不拒档/count 越界损坏点名；读档跨续接）+
+  **UI**（下中部目标行 PRE-10 堆叠纪律 + 120 帧完成 toast【仅末系列】+
+  **`T` 跳当前系列** + config `tutorial.enabled` 严格读代码默认 true
+  config.json 零改动 + F3 `tutorial` 行）；字集扩容 33→392 `[UX-6]` →
+  395 `[UX-8a]` → 401 `[UX-9b]` → **422 `[V2-3]`（+株 等 21 字）**，顶
+  512 行位级不变免重锚
 - **破坏反馈**（`[P15]`）：**渐进裂纹**——破坏进度映射 5 级累积裂纹纹理
   （cracks.png 80×16 五格，白 alpha 随机游走裂纹），破坏中的方块叠加半透明
   裂纹面（scale 1.006 免 Z-fight）；**破坏粒子**——方块碎成 16 个 0.12 格小
@@ -1444,9 +1462,11 @@
   至多一个 + 与游戏旗标互斥 = rc 2 点名）；**记档偏离**：无游戏内选档面板/
   会话内换档（游戏无标题画面，会话内载档 = 世界重建级架构变更矩阵外；多槽
   切换 = CLI `--save` 既有面；「保存并退出」= 既有 ESC/退出存档路径）
-- **format 24**（`kSaveFormat` 24 / `kSaveFormatMin` 1；**1..24 全部可加载**，
+- **format 25**（`kSaveFormat` 25 / `kSaveFormatMin` 1；**1..25 全部可加载**，
   各按字段集 + 逐 format 白名单，规则式迁移——「未知字段 = 报错」
-  rejectUnknownFields 保持）：
+  rejectUnknownFields 保持；**25 = `[V2-3]` 教程系列**：`player.tutorial`
+  InProgress 形状加 `series` 整数字段（25 必需 / 23-24 携 = 版本谎报拒 /
+  23-24 载入缺省 0 = 值保真免迁））：
   - **player**：pos / yaw / pitch / `health` / `absorption`（12+，[0,64]，
     ≤ 效果总和不变量）/ `hunger` / `saturation`（5+）/ `oxygen`（17+，恒写，
     [0,150]）/ **`velocity` 3 数组（22+，恒写，±100 `kSavedVelocityMax` 损坏
@@ -1455,8 +1475,10 @@
     零运行期成本；onGround 不存 = 位置派生记档）** / `effects`（8+ 名字序，
     `{name, remaining, tier?}` tier omit-when-0（20+））/ `armor`（16+，恒
     写，只含占位槽）/ `stats`（21+，恒写，空对象合法——deathCount +
-    kill.<name> 封闭词表）/ **`tutorial`（23+，恒写 {id,count}/{}——`[UX-7]`
-    教程进度：id 失效 = 重置首步、count 越界损坏点名、≤22 读入免迁）**
+    kill.<name> 封闭词表）/ **`tutorial`（23+，恒写 {id,count}/{}（25+ =
+    {series,id,count}）——`[UX-7]`/`[V2-3]` 教程进度：series 越界或 id
+    不在该系列 = 重置上报、count 越界损坏点名、≤22 读入免迁、23-24 载入
+    series 缺省 0 值保真）**
   - **inventory**：**36 槽**（`[UX-8f]`，24+ 写恒 36；per-format 尺寸检查
     **双向点名**——24 须恰 36 / ≤23 须恰 27，错计数 = "exactly 36 entries"
     式版本谎报拒绝；**23→24 迁移 = 尾部补 9 空槽**原 27 槽逐槽值保真
@@ -1765,8 +1787,8 @@
   （`[SURV-3]`，无 = "(none)"）/ `difficulty %s`（`[P25]`）/ `effects name
   Ns 罗马 | ...`（无 = "(none)"；`[PRE-12]` 档位罗马）/ `stats deathCount N |
   kill.<name> N | ...`（无 = "(none)"；`[PRE-12]` stats 行）/ `tutorial
-  off|done|<id> p/c`（`[UX-7]`：禁用 = off / 完成或跳过 = done / 进行中 = 步
-  id + 进度）
+  off|done|<s>/<total> <id> p/c`（`[UX-7]`/`[V2-3]`：禁用 = off / 完成或
+  跳过 = done / 进行中 = 系列序号（1 基）+ 步 id + 进度）
 - **死亡屏**（`[P16]`/`[PRE-1]`）：「**你死了！** / **按 R 重生**」中文化（红
   字——`[P36]` 文字着色修复：ui.frag textured 分支 = `texel.rgb × u_color.rgb`
   【此前 u_color 只调制 alpha，死亡屏红字被静默忽略渲成白字】，图标/心带/白字

@@ -114,14 +114,14 @@ void Game::update(double dt) {
     // headless runs byte-reproducible.
     m_dayCycle.update(kDayStepPerFrame);
 
-    // UX-7: the tutorial completion-toast countdown (the frame-locked
-    // class — the kTutorialToastFrames window armed by the done flip
-    // in emitTutorialEvent or the T skip, decremented once per frame;
-    // the render draws while > 0). The decrement runs BEFORE this
-    // frame's interaction events, so a toast armed by an event later in
-    // this same update still draws this frame (120 frames total).
-    // A no-input run never arms it (zero events — the structural
-    // immunity).
+    // UX-7 / V2-3: the tutorial completion-toast countdown (the
+    // frame-locked class — the kTutorialToastFrames window armed by the
+    // done flip in emitTutorialEvent or the T skip of the LAST series,
+    // decremented once per frame; the render draws while > 0). The
+    // decrement runs BEFORE this frame's interaction events, so a toast
+    // armed by an event later in this same update still draws this
+    // frame (120 frames total). A no-input run never arms it (zero
+    // events — the structural immunity).
     if (m_tutorialToastFrames > 0) {
         --m_tutorialToastFrames;
     }
@@ -159,6 +159,10 @@ void Game::update(double dt) {
                         std::to_string(pos.x) + ", " +
                         std::to_string(pos.y) + ", " +
                         std::to_string(pos.z) + ")");
+            // V2-3: the smelt.<item> tutorial event — the smelt-complete
+            // consumption point (the product the furnace just output),
+            // one fixed 1/60 substep per frame per state (hard rule 8).
+            emitTutorialEvent("smelt." + m_items.at(st.output.item).name, 1);
         }
     }
 
@@ -897,25 +901,44 @@ void Game::updateAmbience() {
 }
 
 void Game::emitTutorialEvent(const std::string& name, int n) {
-    // UX-7: the single tutorial-event choke point (the thin adapter —
-    // the state machine's logic is unit-test-owned in core/tutorial).
-    // Gated: disabled or done = ZERO execution (no event ever fires
-    // without input — the no-input run's structural immunity — and a
-    // done/disabled tutorial never re-runs the machine, the skip key
-    // no-ops through this same gate).
+    // UX-7 / V2-3: the single tutorial-event choke point (the thin
+    // adapter — the state machine's logic is unit-test-owned in
+    // core/tutorial). Gated: disabled or done = ZERO execution (no
+    // event ever fires without input — the no-input run's structural
+    // immunity — and a done/disabled tutorial never re-runs the
+    // machine, the skip key no-ops through this same gate).
     if (!m_tutorialEnabled || m_tutorial.done) {
         return;
     }
-    m_tutorial = tutorialApply(m_tutorial, name, n, m_tutorialSteps);
+    const TutorialState before = m_tutorial;
+    m_tutorial = tutorialApply(m_tutorial, name, n, m_tutorialSeries);
     if (m_tutorial.done) {
-        // The completion flip (this event completed the last step):
-        // arm the toast window + the one-shot info log (the E2E
-        // evidence — the PRE-4 ambience-log pattern: frame-locked event
-        // sequence in the log, audio outside the frame state).
+        // The completion flip (this event completed the last step of
+        // the LAST series): arm the toast window + the one-shot info
+        // log (the E2E evidence — the PRE-4 ambience-log pattern:
+        // frame-locked event sequence in the log, audio outside the
+        // frame state).
         m_tutorialToastFrames = kTutorialToastFrames;
-        const int total = static_cast<int>(m_tutorialSteps.size());
-        MC_LOG_INFO("Tutorial: completed (step " + std::to_string(total) +
-                    "/" + std::to_string(total) + ")");
+        const int totalSeries = static_cast<int>(m_tutorialSeries.size());
+        MC_LOG_INFO("Tutorial: completed (series " +
+                    std::to_string(totalSeries) + "/" +
+                    std::to_string(totalSeries) + ", step " +
+                    std::to_string(m_tutorialSeries.back().size()) +
+                    "/" + std::to_string(m_tutorialSeries.back().size()) +
+                    ")");
+    } else if (before.seriesIndex != m_tutorial.seriesIndex) {
+        // The series transition flip (this event completed the last
+        // step of a NON-final series): the one-shot info log, NO toast
+        // (the design decision: the target line's step change is the
+        // cue — zero new text).
+        MC_LOG_INFO("Tutorial: series complete (" +
+                    std::to_string(before.seriesIndex + 1) + "/" +
+                    std::to_string(m_tutorialSeries.size()) + ", step " +
+                    std::to_string(m_tutorialSeries[before.seriesIndex]
+                                       .size()) +
+                    "/" + std::to_string(m_tutorialSeries[before.seriesIndex]
+                                            .size()) +
+                    ")");
     }
 }
 

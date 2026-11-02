@@ -39,7 +39,7 @@ TEST(DebugOverlayTest, LinesFormat) {
     ASSERT_EQ(lines.size(), 16u);
     // Pinned literal (deliberately NOT the TM_VERSION macro): a version
     // bump must force a conscious update of this pin.
-    EXPECT_EQ(lines[0], "TokenMine.cpp v2.2.0");
+    EXPECT_EQ(lines[0], "TokenMine.cpp v2.3.0");
     EXPECT_EQ(lines[1], "60 FPS | frame 1234");
     EXPECT_EQ(lines[2], "chunks 2312 | draws 45 | verts 987654");
     EXPECT_EQ(lines[3], "pos 0.50, 54.00, -34.70  yaw 0.00  pitch -0.25");
@@ -62,6 +62,23 @@ TEST(DebugOverlayTest, LinesFormat) {
     // UX-7: the tutorial line — a unit-test DebugInfo with no tutorial
     // data renders the baseline "(none)".
     EXPECT_EQ(lines[15], "tutorial (none)");
+}
+
+TEST(DebugOverlayTest, TutorialLine) {
+    // UX-7 / V2-3: the game fills info.tutorial with the F3's English
+    // readout — "off" when disabled, "done" when finished/skipped, the
+    // in-progress shape "<series+1>/<total> <id> <progress>/<count>"
+    // (the format the game's F3 fill produces, e.g. "2/3 seed 0/1"),
+    // "(none)" for a unit-test DebugInfo with no data filled.
+    DebugInfo inProgress;
+    inProgress.tutorial = "2/3 seed 0/1";
+    EXPECT_EQ(debugOverlayLines(inProgress)[15], "tutorial 2/3 seed 0/1");
+    DebugInfo done;
+    done.tutorial = "done";
+    EXPECT_EQ(debugOverlayLines(done)[15], "tutorial done");
+    DebugInfo off;
+    off.tutorial = "off";
+    EXPECT_EQ(debugOverlayLines(off)[15], "tutorial off");
 }
 
 TEST(DebugOverlayTest, HeldItemLineWithDurability) {

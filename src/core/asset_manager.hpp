@@ -12,6 +12,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "core/error.hpp"
 
@@ -31,6 +32,14 @@ public:
 
     // Load a text asset (shader, JSON, ...). Results are cached.
     Result<std::string> loadText(const std::string& relative);
+
+    // List the REGULAR FILES inside an asset directory (basenames only,
+    // sorted in byte order — std::string comparison, the registry
+    // file-order paradigm). Subdirectories and special entries are
+    // skipped. A missing directory or a path that is not a directory is
+    // named and rejected; traversal is rejected exactly like resolve()
+    // (the same safe-path check loadText() uses).
+    Result<std::vector<std::string>> listDir(const std::string& relative) const;
 
     std::size_t textCacheSize() const;
     void clearCache();

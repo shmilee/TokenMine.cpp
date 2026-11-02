@@ -96,3 +96,57 @@ TEST_F(AssetTest, LoadTextIsCached) {
     ASSERT_TRUE(r.ok());
     EXPECT_EQ(*r, "CHANGED");
 }
+
+TEST_F(AssetTest, ListDirReturnsRegularFilesByteSorted) {
+    // The basenames only, REGULAR files (the "blocks" subdirectory is
+    // skipped), byte order (the std::string comparison — "Z" < "a" <
+    // "b", the series-order discipline the tutorial init relies on).
+    {
+        std::ofstream out(m_root / "shaders" / "b.frag");
+        out << "#version 330\nvoid main() {}\n";
+    }
+    {
+        std::ofstream out(m_root / "shaders" / "Z_first.txt");
+        out << "Z";
+    }
+    // A file whose name holds a traversal-ish byte still lists (the
+    // NAME is data; the path check is on the directory, the resolve
+    // twin).
+    {
+        std::ofstream out(m_root / "shaders" / "a.json");
+        out << "{}";
+    }
+    auto r = m_assets.listDir("shaders");
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    ASSERT_EQ(r->size(), 4u);
+    EXPECT_EQ((*r)[0], "Z_first.txt");
+    EXPECT_EQ((*r)[1], "a.json");
+    EXPECT_EQ((*r)[2], "b.frag");
+    EXPECT_EQ((*r)[3], "basic.vert");
+}
+
+TEST_F(AssetTest, ListDirEmptyDirectoryIsEmpty) {
+    std::filesystem::create_directories(m_root / "empty");
+    auto r = m_assets.listDir("empty");
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(r->empty());
+}
+
+TEST_F(AssetTest, ListDirRejectsMissingOrNonDirectory) {
+    auto missing = m_assets.listDir("nope");
+    ASSERT_FALSE(missing.ok());
+    EXPECT_NE(missing.error().message.find("nope"), std::string::npos);
+    auto file = m_assets.listDir("shaders/basic.vert");
+    ASSERT_FALSE(file.ok());
+    EXPECT_NE(file.error().message.find("not a directory"),
+              std::string::npos);
+}
+
+TEST_F(AssetTest, ListDirRejectsTraversal) {
+    // The resolve() twin: a path escaping the root is named and
+    // rejected before any directory read.
+    EXPECT_FALSE(m_assets.listDir("../").ok());
+    EXPECT_FALSE(m_assets.listDir("shaders/../../outside").ok());
+    EXPECT_FALSE(m_assets.listDir("/etc").ok());
+    EXPECT_FALSE(m_assets.listDir("").ok());
+}

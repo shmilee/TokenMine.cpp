@@ -169,9 +169,11 @@ SaveGame makeSave(const Fixture& f) {
     s.playerAbsorption = 0.0f; // Phase 72 (no layer in the fixture)
     s.playerOxygen = kOxygenMax; // SURV-2 (no dive in the fixture)
     s.selectedSlot = 3;
-    // UX-7 (format 23): the tutorial progress — the fixture carries an
-    // IN-PROGRESS state (the round trip must preserve id + count).
+    // UX-7 (format 23) / V2-3 (format 25): the tutorial progress — the
+    // fixture carries an IN-PROGRESS state (the round trip must
+    // preserve series + id + count).
     s.tutorial = TutorialSaveState::InProgress;
+    s.tutorialSeries = 1;
     s.tutorialId = "chop";
     s.tutorialProgress = 2;
     s.slots.resize(Inventory::kTotalSize);
@@ -245,6 +247,27 @@ Json downgradeSlots(const Json& root) {
     return out;
 }
 
+// V2-3: a pre-format-25 file carries the {id, count} tutorial shape
+// (no "series" key). When a test downgrades the format of a serialized
+// (format 25) save to 23/24, the series key must be stripped — the
+// per-format field whitelist rejects it as a version lie otherwise
+// (the downgradeFluids / downgradeSlots twins).
+Json stripTutorialSeries(const Json& root) {
+    const Json* player = root.find("player");
+    if (player == nullptr || !player->isObject()) {
+        return root;
+    }
+    const Json* tut = player->find("tutorial");
+    if (tut == nullptr || !tut->isObject() || tut->find("series") == nullptr) {
+        return root;
+    }
+    Json playerOut = withoutKey(*player, "tutorial");
+    playerOut["tutorial"] = withoutKey(*tut, "series");
+    Json out = withoutKey(root, "player");
+    out["player"] = std::move(playerOut);
+    return out;
+}
+
 // CRAFT-1: the "table_grid" array a pre-format-19 file carries (required
 // in format 3-18): all 9 slots empty — the shape a downgrade of a
 // current save must restore for the legacy parse to accept it.
@@ -280,10 +303,11 @@ TEST(SaveRoundTripTest, SerializeParsePreservesEverything) {
     EXPECT_FLOAT_EQ(out->playerYaw, in.playerYaw);
     EXPECT_FLOAT_EQ(out->playerPitch, in.playerPitch);
     EXPECT_EQ(out->selectedSlot, in.selectedSlot);
-    // UX-7 (format 23): the tutorial progress (the in-progress shape's
-    // id + count round-trip exactly).
+    // UX-7 (format 23) / V2-3 (format 25): the tutorial progress (the
+    // in-progress shape's series + id + count round-trip exactly).
     EXPECT_EQ(out->tutorial, in.tutorial);
     if (in.tutorial == TutorialSaveState::InProgress) {
+        EXPECT_EQ(out->tutorialSeries, in.tutorialSeries);
         EXPECT_EQ(out->tutorialId, in.tutorialId);
         EXPECT_EQ(out->tutorialProgress, in.tutorialProgress);
     }
@@ -350,8 +374,8 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     s.tables.push_back(SavedTable {BlockPos {1, 53, 2}, table});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-8f: writes are always format 24 (UX-7 was format 23).
-    EXPECT_EQ(j->find("format")->asInt(), 24);
+    // UX-8f/V2-3: writes are always format 25 (UX-8f was 24).
+    EXPECT_EQ(j->find("format")->asInt(), 25);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -1459,8 +1483,8 @@ TEST(SaveRoundTripTest, StatesRoundTrip) {
     SaveGame s = makeStateSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-8f: writes are always format 24 (UX-7 was format 23).
-    EXPECT_EQ(j->find("format")->asInt(), 24);
+    // UX-8f/V2-3: writes are always format 25 (UX-8f was 24).
+    EXPECT_EQ(j->find("format")->asInt(), 25);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->states.size(), 1u);
@@ -1745,8 +1769,8 @@ TEST(SaveRoundTripTest, FurnacesRoundTrip) {
     s.furnaces[0].state.fuelSubsteps = 1234;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-8f: writes are always format 24 (UX-7 was format 23).
-    EXPECT_EQ(j->find("format")->asInt(), 24);
+    // UX-8f/V2-3: writes are always format 25 (UX-8f was 24).
+    EXPECT_EQ(j->find("format")->asInt(), 25);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
@@ -2136,8 +2160,8 @@ TEST(SaveRoundTripTest, FiresRoundTrip) {
     SaveGame s = makeFireSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-8f: writes are always format 24 (UX-7 was format 23).
-    EXPECT_EQ(j->find("format")->asInt(), 24);
+    // UX-8f/V2-3: writes are always format 25 (UX-8f was 24).
+    EXPECT_EQ(j->find("format")->asInt(), 25);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->fires.size(), 2u);
@@ -2725,8 +2749,8 @@ TEST(SaveRoundTripTest, TablesRoundTrip) {
     s.tables[0].grid.setSlot(8, ItemStack {f.items.idForName("stone"), 64});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-8f: writes are always format 24.
-    EXPECT_EQ(j->find("format")->asInt(), 24);
+    // UX-8f/V2-3: writes are always format 25 (UX-8f was 24).
+    EXPECT_EQ(j->find("format")->asInt(), 25);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->tables.size(), 2u);
@@ -3037,7 +3061,7 @@ TEST(SaveFormat20Test, EffectTierRoundTrips) {
     s.playerEffects.push_back(SavedEffect {"resistance", 30.0, 1});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 24);
+    EXPECT_EQ(j->find("format")->asInt(), 25);
     const Json& entry = (*j)["player"]["effects"].at(0);
     ASSERT_NE(entry.find("tier"), nullptr);
     EXPECT_EQ(entry.find("tier")->asInt(), 1);
@@ -3200,7 +3224,7 @@ TEST(SaveFormat21Test, StatsRoundTrips) {
     s.playerStats["kill.zombie"] = 5;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 24);
+    EXPECT_EQ(j->find("format")->asInt(), 25);
     const Json& st = (*j)["player"]["stats"];
     ASSERT_TRUE(st.isObject());
     ASSERT_NE(st.find("deathCount"), nullptr);
@@ -3298,7 +3322,7 @@ TEST(SaveFormat22Test, VelocityRoundTrips) {
     s.playerVelocity = Vec3 {2.5f, -3.75f, 0.125f};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 24);
+    EXPECT_EQ(j->find("format")->asInt(), 25);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerVelocity.x, 2.5f);
@@ -3411,19 +3435,20 @@ TEST(SaveFormat22Test, VelocityBoundsAndTypeNaming) {
 // -- UX-7: format 23 (the tutorial progress) ---------------------------------
 
 TEST(SaveFormat23Test, InProgressRoundTrips) {
-    // The fixture's in-progress state (id "chop", count 2) survives the
-    // serialize -> parse trip exactly.
+    // The fixture's in-progress state (series 1, id "chop", count 2)
+    // survives the serialize -> parse trip exactly.
     Fixture f;
     const SaveGame in = makeSave(f);
     ASSERT_EQ(in.tutorial, TutorialSaveState::InProgress);
     auto serialized = serializeSave(in, f.items);
     ASSERT_TRUE(serialized.ok()) << serialized.error().message;
-    // The file shape: { "id": "chop", "count": 2 } (an OBJECT, not an
-    // array — the armor-object shape).
+    // The file shape: { "series": 1, "id": "chop", "count": 2 } (an
+    // OBJECT, not an array — the armor-object shape).
     const Json* tut = (*serialized)["player"].find("tutorial");
     ASSERT_NE(tut, nullptr);
     ASSERT_TRUE(tut->isObject());
-    ASSERT_EQ(tut->members().size(), 2u);
+    ASSERT_EQ(tut->members().size(), 3u);
+    EXPECT_EQ(tut->find("series")->asInt(), 1);
     EXPECT_EQ(tut->find("id")->asString(), "chop");
     EXPECT_EQ(tut->find("count")->asInt(), 2);
     auto parsed = Json::parse(serialized->dump(2));
@@ -3431,6 +3456,7 @@ TEST(SaveFormat23Test, InProgressRoundTrips) {
     auto out = parseSave(*parsed, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_EQ(out->tutorial, TutorialSaveState::InProgress);
+    EXPECT_EQ(out->tutorialSeries, 1);
     EXPECT_EQ(out->tutorialId, "chop");
     EXPECT_EQ(out->tutorialProgress, 2);
 }
@@ -3506,26 +3532,26 @@ TEST(SaveFormat23Test, InProgressShapeViolationsNamed) {
         return parseSave(j, f.items, f.blocks, f.effects, 42);
     };
     // Unknown key.
-    auto bad = parse(build(R"({"id": "chop", "count": 1, "x": 0})"));
+    auto bad = parse(build(R"({"series": 0, "id": "chop", "count": 1, "x": 0})"));
     ASSERT_FALSE(bad.ok());
     EXPECT_NE(bad.error().message.find("x"), std::string::npos);
     // Empty id.
-    bad = parse(build(R"({"id": "", "count": 1})"));
+    bad = parse(build(R"({"series": 0, "id": "", "count": 1})"));
     ASSERT_FALSE(bad.ok());
     EXPECT_NE(bad.error().message.find("id"), std::string::npos);
     // Missing count.
-    bad = parse(build(R"({"id": "chop"})"));
+    bad = parse(build(R"({"series": 0, "id": "chop"})"));
     ASSERT_FALSE(bad.ok());
     // Negative count.
-    bad = parse(build(R"({"id": "chop", "count": -1})"));
+    bad = parse(build(R"({"series": 0, "id": "chop", "count": -1})"));
     ASSERT_FALSE(bad.ok());
     EXPECT_NE(bad.error().message.find("whole number >= 0"),
               std::string::npos);
     // Non-integer count.
-    bad = parse(build(R"({"id": "chop", "count": 1.5})"));
+    bad = parse(build(R"({"series": 0, "id": "chop", "count": 1.5})"));
     ASSERT_FALSE(bad.ok());
     // Non-integer count (a string).
-    bad = parse(build(R"({"id": "chop", "count": "two"})"));
+    bad = parse(build(R"({"series": 0, "id": "chop", "count": "two"})"));
     ASSERT_FALSE(bad.ok());
     // Not an object.
     bad = parse(build(R"([1, 2])"));
@@ -3533,7 +3559,7 @@ TEST(SaveFormat23Test, InProgressShapeViolationsNamed) {
     // count 0 is legal at parse (a fresh in-progress step) — the
     // step-bound check (count >= the step's count) is the game load's
     // cross-check (tutorialRestore, the validateStats pattern).
-    auto ok = parse(build(R"({"id": "chop", "count": 0})"));
+    auto ok = parse(build(R"({"series": 0, "id": "chop", "count": 0})"));
     ASSERT_TRUE(ok.ok()) << ok.error().message;
     EXPECT_EQ(ok->tutorial, TutorialSaveState::InProgress);
     EXPECT_EQ(ok->tutorialProgress, 0);
@@ -3551,8 +3577,8 @@ TEST(SaveFormat24Test, FullBackpackRoundTrips) {
     s.slots[35] = ItemStack {f.items.idForName("pick"), 1};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-8f: writes are always format 24 (UX-7 was 23), 36 entries.
-    EXPECT_EQ(j->find("format")->asInt(), 24);
+    // UX-8f/V2-3: writes are always format 25 (UX-8f was 24), 36 entries.
+    EXPECT_EQ(j->find("format")->asInt(), 25);
     const Json& slots = *j->find("inventory")->find("slots");
     ASSERT_TRUE(slots.isArray());
     EXPECT_EQ(slots.size(),
@@ -3575,6 +3601,7 @@ TEST(SaveFormat24Test, Pre24FileLoadsPaddedTo36) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(23); // format 23+ requires the tutorial key — keep it
+    root = stripTutorialSeries(root); // V2-3: the pre-25 shape has no series
     root = downgradeSlots(root);
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
@@ -3599,6 +3626,7 @@ TEST(SaveFormat24Test, Pre24FileWith36EntriesIsAVersionLie) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(23); // format 23+ requires the tutorial key — keep it
+    root = stripTutorialSeries(root); // V2-3: the pre-25 shape has no series
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("27"), std::string::npos)
@@ -3617,4 +3645,162 @@ TEST(SaveFormat24Test, Format24With27EntriesIsAVersionLie) {
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("36"), std::string::npos)
         << out.error().message;
+}
+
+// -- V2-3: format 25 (the tutorial series) ----------------------------------
+
+TEST(SaveFormat25Test, InProgressShapeIsSeriesIdCount) {
+    // The format-25 in-progress shape: EXACTLY {series, id, count} (the
+    // key set, the armor/tables key discipline).
+    Fixture f;
+    const SaveGame in = makeSave(f);
+    ASSERT_EQ(in.tutorial, TutorialSaveState::InProgress);
+    auto serialized = serializeSave(in, f.items);
+    ASSERT_TRUE(serialized.ok()) << serialized.error().message;
+    EXPECT_EQ(serialized->find("format")->asInt(), kSaveFormat);
+    const Json* tut = (*serialized)["player"].find("tutorial");
+    ASSERT_NE(tut, nullptr);
+    ASSERT_TRUE(tut->isObject());
+    ASSERT_EQ(tut->members().size(), 3u);
+    EXPECT_EQ(tut->find("series")->asInt(), 1);
+    EXPECT_EQ(tut->find("id")->asString(), "chop");
+    EXPECT_EQ(tut->find("count")->asInt(), 2);
+    // Done stays the empty object (the shape is unchanged by V2-3).
+    SaveGame s = makeSave(f);
+    s.tutorial = TutorialSaveState::Done;
+    auto done = serializeSave(s, f.items);
+    ASSERT_TRUE(done.ok()) << done.error().message;
+    const Json* dtut = (*done)["player"].find("tutorial");
+    ASSERT_NE(dtut, nullptr); // the key is ALWAYS written (the discipline)
+    EXPECT_TRUE(dtut->members().empty());
+    auto out = parseSave(*done, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_EQ(out->tutorial, TutorialSaveState::Done);
+}
+
+TEST(SaveFormat25Test, Format25MissingSeriesIsAVersionLie) {
+    // The three-way discipline, arm 1: a format-25 in-progress object
+    // WITHOUT "series" is named and rejected (the oxygen / velocity key
+    // discipline).
+    Fixture f;
+    auto j = serializeSave(makeSave(f), f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["player"] = withoutKey(root["player"], "tutorial");
+    root["player"]["tutorial"] =
+        parseJson(R"({"id": "chop", "count": 2})");
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("series"), std::string::npos)
+        << out.error().message;
+}
+
+TEST(SaveFormat25Test, Format25SeriesViolationsNamed) {
+    // series must be a whole number >= 0 (the corruption naming).
+    Fixture f;
+    auto build = [&](const char* seriesJson) {
+        auto j = serializeSave(makeSave(f), f.items);
+        if (!j.ok()) {
+            ADD_FAILURE() << j.error().message;
+            return Json::object();
+        }
+        (*j)["player"]["tutorial"]["series"] =
+            parseJson(seriesJson);
+        return *j;
+    };
+    auto parse = [&](const Json& j) {
+        return parseSave(j, f.items, f.blocks, f.effects, 42);
+    };
+    // Negative.
+    auto bad = parse(build(R"(-1)"));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("whole number >= 0"),
+              std::string::npos)
+          << bad.error().message;
+    // Non-integer.
+    bad = parse(build(R"(1.5)"));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("whole number >= 0"),
+              std::string::npos);
+    // A string.
+    bad = parse(build(R"("zero")"));
+    ASSERT_FALSE(bad.ok());
+    // Zero is legal (the first series).
+    auto ok = parse(build(R"(0)"));
+    ASSERT_TRUE(ok.ok()) << ok.error().message;
+    EXPECT_EQ(ok->tutorialSeries, 0);
+}
+
+TEST(SaveFormat25Test, Pre25FileCarryingSeriesIsAVersionLie) {
+    // The three-way discipline, arm 2: a format-23/24 in-progress
+    // object CARRYING "series" is a version lie (the per-format field
+    // whitelist names it).
+    Fixture f;
+    auto j = serializeSave(makeSave(f), f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["format"] = Json(24);
+    // The series key STAYS (the format is downgraded) — the whitelist
+    // must reject it.
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("series"), std::string::npos)
+        << out.error().message;
+    // The format-23 arm.
+    Json root23 = *j;
+    root23["format"] = Json(23);
+    root23 = downgradeSlots(root23);
+    out = parseSave(root23, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("series"), std::string::npos)
+        << out.error().message;
+}
+
+TEST(SaveFormat25Test, Format24OldShapeLoadsSeriesZero) {
+    // The three-way discipline, arm 3 (the 24 -> 25 read migration): a
+    // format-24 file's {id, count} shape loads with the series default
+    // 0 — the value is preserved (the same step, the same progress
+    // bound; the series-0 data is byte-unchanged by V2-3, the UX-8a
+    // value-faithful twin).
+    Fixture f;
+    auto j = serializeSave(makeSave(f), f.items);
+    ASSERT_TRUE(j.ok());
+    Json root = *j;
+    root["format"] = Json(24);
+    root = stripTutorialSeries(root); // the pre-25 shape: no series key
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_EQ(out->tutorial, TutorialSaveState::InProgress);
+    EXPECT_EQ(out->tutorialSeries, 0);
+    EXPECT_EQ(out->tutorialId, "chop");
+    EXPECT_EQ(out->tutorialProgress, 2);
+    // The format-23 arm (the oldest in-progress shape still loads).
+    Json root23 = *j;
+    root23["format"] = Json(23);
+    root23 = downgradeSlots(root23);
+    root23 = stripTutorialSeries(root23);
+    out = parseSave(root23, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_EQ(out->tutorial, TutorialSaveState::InProgress);
+    EXPECT_EQ(out->tutorialSeries, 0);
+    EXPECT_EQ(out->tutorialId, "chop");
+    EXPECT_EQ(out->tutorialProgress, 2);
+}
+
+TEST(SaveFormat25Test, RoundTripPreservesTheSeries) {
+    // The full 25 round trip: the fixture's series 1 survives the
+    // serialize -> parse trip exactly (the SaveRoundTripTest's tutorial
+    // assertion, isolated here for the format-25 shape).
+    Fixture f;
+    const SaveGame in = makeSave(f);
+    auto serialized = serializeSave(in, f.items);
+    ASSERT_TRUE(serialized.ok()) << serialized.error().message;
+    auto parsed = Json::parse(serialized->dump(2));
+    ASSERT_TRUE(parsed.ok());
+    auto out = parseSave(*parsed, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_EQ(out->tutorial, TutorialSaveState::InProgress);
+    EXPECT_EQ(out->tutorialSeries, in.tutorialSeries);
+    EXPECT_EQ(out->tutorialId, in.tutorialId);
+    EXPECT_EQ(out->tutorialProgress, in.tutorialProgress);
 }

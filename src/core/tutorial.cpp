@@ -38,8 +38,22 @@ bool isWholeNumber(const Json& v, double* out) {
     return true;
 }
 
+// The closed prefix list for the grammar error message (built from the
+// vocabulary — a prefix added there updates the wording automatically,
+// no second hand-kept list to drift).
+std::string prefixList() {
+    std::string out;
+    for (std::size_t i = 0; i < kTutorialGoalPrefixCount; ++i) {
+        if (i > 0) {
+            out += "|";
+        }
+        out += kTutorialGoalPrefixes[i];
+    }
+    return out;
+}
+
 // The closed goal grammar: a bare word, or "<prefix>.<name>" with the
-// prefix one of the five and a non-empty, dot-free name. Returns false
+// prefix one of the seven and a non-empty, dot-free name. Returns false
 // (naming the bad goal) when `goal` is outside the grammar.
 bool goalGrammarOk(const std::string& goal, std::string* error) {
     for (const char* const bare : kTutorialBareGoals) {
@@ -50,7 +64,8 @@ bool goalGrammarOk(const std::string& goal, std::string* error) {
     const auto dot = goal.find('.');
     if (dot == std::string::npos) {
         *error = " (bare goals are walk / jump / eat; qualified goals "
-                 "are <craft|break|place|kill|interact>.<name>)";
+                 "are <" +
+                 prefixList() + ">.<name>)";
         return false;
     }
     const std::string prefix = goal.substr(0, dot);
@@ -63,11 +78,30 @@ bool goalGrammarOk(const std::string& goal, std::string* error) {
     }
     const std::string name = goal.substr(dot + 1);
     if (!prefixKnown || name.empty() || name.find('.') != std::string::npos) {
-        *error = " (a qualified goal is <craft|break|place|kill|"
-                 "interact>.<name>, the name dot-free and non-empty)";
+        *error = " (a qualified goal is <" + prefixList() +
+                 ">.<name>, the name dot-free and non-empty)";
         return false;
     }
     return true;
+}
+
+// The current series + step of `state` (the guard all the series-aware
+// helpers share): null when state is done / out of range on EITHER axis
+// (the defensive bound — the init never stores one).
+const TutorialStep* currentStep(
+    const TutorialState& state,
+    const std::vector<std::vector<TutorialStep>>& series) {
+    if (state.done || series.empty() || state.seriesIndex < 0 ||
+        state.seriesIndex >= static_cast<int>(series.size())) {
+        return nullptr;
+    }
+    const std::vector<TutorialStep>& steps =
+        series[static_cast<std::size_t>(state.seriesIndex)];
+    if (steps.empty() || state.stepIndex < 0 ||
+        state.stepIndex >= static_cast<int>(steps.size())) {
+        return nullptr;
+    }
+    return &steps[static_cast<std::size_t>(state.stepIndex)];
 }
 
 } // namespace
@@ -173,7 +207,7 @@ Result<void> validateTutorialGoals(const std::vector<TutorialStep>& steps,
         const std::string name = goal.substr(dot + 1);
         const char* kind = nullptr;
         bool exists = false;
-        if (prefix == "craft") {
+        if (prefix == "craft" || prefix == "pickup" || prefix == "smelt") {
             kind = "item";
             exists = items.findByName(name) != nullptr;
         } else if (prefix == "break" || prefix == "place" ||
@@ -192,79 +226,138 @@ Result<void> validateTutorialGoals(const std::vector<TutorialStep>& steps,
     return {};
 }
 
+Result<void> checkSeriesGlobalIds(
+    const std::vector<std::vector<TutorialStep>>& series) {
+    // O(n^2) over the shipped content (a few dozen steps) — the list is
+    // small enough that a map is ceremony; the first collision in series
+    // order is named with both file indexes.
+    for (std::size_t i = 0; i < series.size(); ++i) {
+        for (std::size_t j = i + 1; j < series.size(); ++j) {
+            for (const TutorialStep& a : series[i]) {
+                for (const TutorialStep& b : series[j]) {
+                    if (a.id == b.id) {
+                        return MC_FAIL("series " + std::to_string(i) +
+                                       " step id '" + a.id +
+                                       "' collides with series " +
+                                       std::to_string(j));
+                    }
+                }
+            }
+        }
+    }
+    return {};
+}
+
 TutorialState tutorialApply(const TutorialState& state,
                             const std::string& name, int n,
-                            const std::vector<TutorialStep>& steps) {
+                            const std::vector<std::vector<TutorialStep>>&
+                                series) {
     TutorialState out = state;
-    if (out.done || steps.empty() || n <= 0 ||
-        out.stepIndex < 0 ||
-        out.stepIndex >= static_cast<int>(steps.size())) {
+    const TutorialStep* s = currentStep(out, series);
+    if (s == nullptr || n <= 0) {
         return out;
     }
-    const TutorialStep& s = steps[static_cast<std::size_t>(out.stepIndex)];
-    if (s.goal != name) {
+    if (s->goal != name) {
         return out;
     }
     out.progress += n;
-    if (out.progress >= s.count) {
-        out.stepIndex += 1;
+    if (out.progress >= s->count) {
         out.progress = 0;
-        if (out.stepIndex >= static_cast<int>(steps.size())) {
-            out.stepIndex = static_cast<int>(steps.size()) - 1;
+        const std::vector<TutorialStep>& steps =
+            series[static_cast<std::size_t>(out.seriesIndex)];
+        if (out.stepIndex + 1 < static_cast<int>(steps.size())) {
+            out.stepIndex += 1;
+        } else if (out.seriesIndex + 1 < static_cast<int>(series.size())) {
+            // The series transition: the next series starts at its first
+            // step (the target line's step change is the HUD cue — no
+            // toast, the done flip owns it).
+            out.seriesIndex += 1;
+            out.stepIndex = 0;
+        } else {
+            // The last step of the last series: done (clamped to the
+            // last series' last step — the stepIndex clamp discipline).
             out.done = true;
         }
     }
     return out;
 }
 
-std::string tutorialTargetLine(const TutorialState& state,
-                               const std::vector<TutorialStep>& steps) {
-    if (state.done || steps.empty() || state.stepIndex < 0 ||
-        state.stepIndex >= static_cast<int>(steps.size())) {
+std::string tutorialTargetLine(
+    const TutorialState& state,
+    const std::vector<std::vector<TutorialStep>>& series) {
+    const TutorialStep* s = currentStep(state, series);
+    if (s == nullptr) {
         return std::string();
     }
-    const TutorialStep& s = steps[static_cast<std::size_t>(state.stepIndex)];
-    std::string line = s.text;
-    if (s.count > 1) {
+    std::string line = s->text;
+    if (s->count > 1) {
         line += " " + std::to_string(state.progress) + "/" +
-                std::to_string(s.count);
+                std::to_string(s->count);
     }
     return line;
 }
 
-std::string tutorialTipLine(const TutorialState& state,
-                            const std::vector<TutorialStep>& steps) {
+std::string tutorialTipLine(
+    const TutorialState& state,
+    const std::vector<std::vector<TutorialStep>>& series) {
     // The same guards as tutorialTargetLine: done / out-of-range / an
-    // empty list (defensive — the parse rejects one) carry no tip row.
-    if (state.done || steps.empty() || state.stepIndex < 0 ||
-        state.stepIndex >= static_cast<int>(steps.size())) {
+    // empty list (defensive — the init rejects one) carry no tip row.
+    const TutorialStep* s = currentStep(state, series);
+    if (s == nullptr) {
         return std::string();
     }
-    return steps[static_cast<std::size_t>(state.stepIndex)].tip;
+    return s->tip;
 }
 
-Result<TutorialState> tutorialRestore(TutorialSaveState saved,
-                                      const std::string& id,
-                                      int progress,
-                                      const std::vector<TutorialStep>& steps,
+Result<TutorialState> tutorialRestore(TutorialSaveState saved, int series,
+                                      const std::string& id, int progress,
+                                      const std::vector<
+                                          std::vector<TutorialStep>>&
+                                          seriesList,
                                       bool* reset) {
     if (reset != nullptr) {
         *reset = false;
     }
     if (saved == TutorialSaveState::Done) {
-        return TutorialState {0, 0, true};
+        // The finished state (clamped to the last series' last step —
+        // the apply-done discipline; a single-series set clamps to its
+        // own last step).
+        TutorialState done {0, 0, true, 0};
+        if (!seriesList.empty()) {
+            done.seriesIndex = static_cast<int>(seriesList.size()) - 1;
+            done.stepIndex =
+                static_cast<int>(seriesList[seriesList.size() - 1].size()) - 1;
+        }
+        return done;
     }
     if (saved == TutorialSaveState::Absent) {
         return TutorialState {}; // fresh (the system did not exist)
     }
-    if (steps.empty()) {
-        return MC_FAIL("tutorial restore: the step data is empty (the "
-                       "parse rejects an empty file — a contract "
+    if (seriesList.empty()) {
+        return MC_FAIL("tutorial restore: the series data is empty (the "
+                       "init rejects an empty directory — a contract "
                        "violation)");
     }
     if (progress < 0) {
         return MC_FAIL("save 'player.tutorial' count " +
                        std::to_string(progress) + " is negative");
+    }
+    // V2-3: the series out of range (the data is content — the series
+    // set may have shrunk, or a hand-rolled file names a negative one)
+    // is a RESET, not a failure (the id-reset semantics generalized).
+    if (series < 0 || series >= static_cast<int>(seriesList.size())) {
+        if (reset != nullptr) {
+            *reset = true;
+        }
+        return TutorialState {};
+    }
+    const std::vector<TutorialStep>& steps =
+        seriesList[static_cast<std::size_t>(series)];
+    if (steps.empty()) {
+        return MC_FAIL("tutorial restore: series " +
+                       std::to_string(series) +
+                       " holds no steps (the parse rejects an empty "
+                       "file — a contract violation)");
     }
     int idx = -1;
     for (int i = 0; i < static_cast<int>(steps.size()); ++i) {
@@ -274,9 +367,10 @@ Result<TutorialState> tutorialRestore(TutorialSaveState saved,
         }
     }
     if (idx < 0) {
-        // The saved step is no longer in the CURRENT data (the data is
-        // content — it may have been reworked): reset to the first step
-        // (the kickoff decision: a reported reset, not a load failure).
+        // The saved step is no longer in the CURRENT data of THAT series
+        // (the data is content — it may have been reworked): reset to
+        // fresh (the kickoff decision: a reported reset, not a load
+        // failure).
         if (reset != nullptr) {
             *reset = true;
         }
@@ -290,7 +384,7 @@ Result<TutorialState> tutorialRestore(TutorialSaveState saved,
                                           .count) +
                        " (a completed step must have advanced)");
     }
-    return TutorialState {idx, progress, false};
+    return TutorialState {idx, progress, false, series};
 }
 
 } // namespace mc

@@ -778,14 +778,16 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     if (save.playerOxygen >= 0) {
         player["oxygen"] = Json(save.playerOxygen);
     }
-    // UX-7 (format 23): the player's tutorial progress — ALWAYS written
-    // (a format-23 file REQUIRES the key; an empty object = done/skipped
-    // — the armor/tables key discipline). In progress = the current
+    // UX-7 (format 23) / V2-3 (format 25): the player's tutorial
+    // progress — ALWAYS written (a format-23+ file REQUIRES the key; an
+    // empty object = done/skipped — the armor/tables key discipline).
+    // In progress = the current series (format 25, written first) + the
     // step's id + its progress count; a hand-rolled Absent (the game's
     // collectSave never emits one) normalizes to the Done shape.
     {
         Json tut = Json::object();
         if (save.tutorial == TutorialSaveState::InProgress) {
+            tut["series"] = Json(save.tutorialSeries);
             tut["id"] = Json(save.tutorialId);
             tut["count"] = Json(save.tutorialProgress);
         }
@@ -1490,17 +1492,24 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                        "(got " +
                        std::to_string(def.find("format")->asInt()) + ")");
     }
-    // UX-7 (format 23): the player's tutorial progress. REQUIRED for a
-    // format-23 file (a missing key is a version lie — the oxygen /
-    // velocity key discipline); an EMPTY object is valid (done/skipped).
-    // In progress = EXACTLY {id, count}: a non-empty string id, a whole
-    // number >= 0 count. The id's existence in the current tutorial
-    // data + the count's bound against the step's count are cross-
-    // checked at GAME load (tutorialRestore — the data is not a
-    // parseSave parameter, the validateStats pattern). Pre-23 files
-    // load FRESH (the system did not exist — save.tutorial stays
-    // Absent; the "tutorial" key on one was rejected above by the
-    // format-dependent whitelist).
+    // UX-7 (format 23) / V2-3 (format 25): the player's tutorial
+    // progress. REQUIRED for a format-23 file (a missing key is a
+    // version lie — the oxygen / velocity key discipline); an EMPTY
+    // object is valid (done/skipped). In progress, the THREE-WAY key
+    // discipline: a format-25 file carries EXACTLY {series, id, count}
+    // — series a whole number >= 0 (REQUIRED, a missing key is a
+    // version lie), id a non-empty string, count a whole number >= 0;
+    // a format-23/24 file carries EXACTLY {id, count} — a "series" key
+    // on one is a version lie (the per-format field whitelist names
+    // it) and the load defaults series to 0 (the series-0 data is
+    // byte-unchanged by V2-3 — value-faithful, no migration, the UX-8a
+    // twin). The series/id's existence in the current tutorial data +
+    // the count's bound against the step's count are cross-checked at
+    // GAME load (tutorialRestore — the data is not a parseSave
+    // parameter, the validateStats pattern). Pre-23 files load FRESH
+    // (the system did not exist — save.tutorial stays Absent; the
+    // "tutorial" key on one was rejected above by the format-dependent
+    // whitelist).
     if (fmt->asInt() >= 23) {
         const Json* tut = player->find("tutorial");
         if (tut == nullptr || !tut->isObject()) {
@@ -1511,9 +1520,37 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         if (tut->members().empty()) {
             save.tutorial = TutorialSaveState::Done;
         } else {
-            const std::set<std::string> tutFields {"id", "count"};
+            // The per-format field whitelist: format 23/24 carry
+            // {id, count} (a "series" key on one is a version lie —
+            // rejectUnknownFields names it); format 25+ adds "series".
+            const bool isV25 = fmt->asInt() >= kSaveFormat;
+            std::set<std::string> tutFields {"id", "count"};
+            if (isV25) {
+                tutFields.insert("series");
+            }
             MC_TRY(rejectUnknownFields(*tut, tutFields,
                                        "save 'player.tutorial'"));
+            if (isV25) {
+                // V2-3 (format 25): the series is REQUIRED (the oxygen
+                // / velocity key discipline — a format-25 in-progress
+                // object without it is a version lie).
+                const Json* tser = tut->find("series");
+                if (tser == nullptr) {
+                    return MC_FAIL("save 'player.tutorial' (non-empty, "
+                                   "format 25) requires 'series' (the "
+                                   "current tutorial series, a whole "
+                                   "number >= 0)");
+                }
+                double sd = 0.0;
+                if (!isInt(*tser, &sd) || sd < 0.0) {
+                    return MC_FAIL("save 'player.tutorial' 'series' must "
+                                   "be a whole number >= 0, got " +
+                                   (tser->isNumber()
+                                        ? std::to_string(tser->asDouble())
+                                        : "a non-number"));
+                }
+                save.tutorialSeries = static_cast<int>(sd);
+            }
             const Json* tid = tut->find("id");
             if (tid == nullptr || !tid->isString() ||
                 tid->asString().empty()) {
@@ -1561,11 +1598,13 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     }
     const Json* slots = inv->find("slots");
     // UX-8f (format 24): the slot count is format-dependent — a
-    // format-24 file carries the current kTotalSize (36) entries, a
-    // pre-24 file the legacy 27 (a wrong count either way is a version
-    // lie, named).
+    // format-24-or-newer file carries the current kTotalSize (36)
+    // entries, a pre-24 file the legacy 27 (a wrong count either way is
+    // a version lie, named). The boundary is the LITERAL 24 (UX-8f's
+    // introduction format — kSaveFormat moved on to 25 in V2-3, so the
+    // old `>= kSaveFormat` form would misclassify format-24 files).
     const std::size_t wantSlots =
-        fmt->asInt() >= kSaveFormat
+        fmt->asInt() >= 24
             ? static_cast<std::size_t>(Inventory::kTotalSize)
             : static_cast<std::size_t>(kPreUx8fInventorySlots);
     if (slots == nullptr || !slots->isArray() || slots->size() != wantSlots) {

@@ -1,11 +1,15 @@
 // UX-7: the beginner tutorial (the objective-style onboarding guide).
 // UX-8b: a step may carry an OPTIONAL `tip` (the secondary guidance
 // line, drawn above the target line in kTextDim).
+// V2-3: the content is a SERIES — assets/data/tutorials/*.json, one file
+// per series (file-name byte order = the series order), the steps run
+// series by series (the state carries the seriesIndex + the stepIndex
+// inside it).
 //
-// The content is DATA (assets/data/tutorials/beginner.json — a step list,
-// each step {id, text, goal, count} + the optional tip; strict parsing
-// with the project's naming discipline). The step machine is a PURE
-// function (the campfire pattern — the unit tests own it). The game is the thin adapter: one
+// The content is DATA (a step list per file, each step {id, text, goal,
+// count} + the optional tip; strict parsing with the project's naming
+// discipline). The step machine is a PURE function (the campfire pattern
+// — the unit tests own it). The game is the thin adapter: one
 // emitTutorialEvent choke point per event class, fed by frame-locked
 // events only (hard rule 8 — the tutorial has NO real-dt component), so
 // a no-input run emits zero events and the state never moves (the base
@@ -13,9 +17,10 @@
 //
 // The goal vocabulary is CLOSED: the bare words (walk / jump / eat) or
 // "<prefix>.<name>" with prefix in craft / break / place / kill /
-// interact. Parse enforces the GRAMMAR; the name half's existence is
-// the init cross-check's job (craft -> item name, break / place /
-// interact -> block name, kill -> mob name — the grows_to precedent).
+// interact / pickup / smelt. Parse enforces the GRAMMAR; the name half's
+// existence is the init cross-check's job (craft / pickup / smelt -> item
+// name, break / place / interact -> block name, kill -> mob name — the
+// grows_to precedent).
 #pragma once
 
 #include <cstddef>
@@ -35,7 +40,7 @@ class MobRegistry;
 // One tutorial step (the parsed data). `goal` is the closed-vocabulary
 // event name the step waits for; `count` is the number of such events
 // that complete it (>= 1). `text` is the HUD line (Chinese, every
-// character inside the UX-6 395-glyph font set — the content pin test
+// character inside the V2-3 422-glyph font set — the content pin test
 // checks it against the real charset). `tip` (UX-8b) is the optional
 // secondary line (empty = the step draws no tip row).
 struct TutorialStep {
@@ -46,26 +51,35 @@ struct TutorialStep {
     std::string tip;  // optional (empty = no tip row)
 };
 
-// The player's progress through the step list (the frame-locked state;
-// format 23 carries it as {step id, progress} or {} (done/skipped)).
-// stepIndex is valid in [0, steps.size()) while !done.
+// The player's progress through the series (the frame-locked state;
+// format 25 carries it as {series, step id, progress} or {}
+// (done/skipped)). seriesIndex is valid in [0, series.size()) and
+// stepIndex in [0, series[seriesIndex].size()) while !done; done clamps
+// both to the last series' last step (the single-series stepIndex clamp
+// discipline, generalized).
 struct TutorialState {
     int stepIndex = 0;
     int progress = 0;
     bool done = false;
+    int seriesIndex = 0;
 };
 
-// The save-file state of the tutorial segment (format 23): Absent = the
-// file predates format 23 (the system did not exist — a fresh start);
-// Done = the empty object (finished or skipped); InProgress = the
-// {id, count} shape. The id + the count-bound cross-checks run at GAME
-// load (tutorialRestore — the tutorial data is not a parseSave
-// parameter, the validateStats pattern).
+// The save-file state of the tutorial segment (format 23; V2-3's format
+// 25 adds the series): Absent = the file predates format 23 (the system
+// did not exist — a fresh start); Done = the empty object (finished or
+// skipped); InProgress = the {series, id, count} shape (format 23/24
+// carry {id, count} — the series defaults to 0 at game load). The
+// series/id existence + the count-bound cross-checks run at GAME load
+// (tutorialRestore — the tutorial data is not a parseSave parameter, the
+// validateStats pattern).
 enum class TutorialSaveState { Absent, Done, InProgress };
 
 // The completion-toast window, in FRAMES (the frame-locked count: the
 // done flip / the T skip arms it to this value, the update decrements it
 // once per frame, the render draws while > 0). 120 = 2 s at 60 fps.
+// V2-3: the toast arms ONLY on the done flip — a series transition
+// carries no toast (the target line's step change is the cue, zero new
+// text).
 inline constexpr int kTutorialToastFrames = 120;
 
 // The completion-toast text. The brief's "教程完成！" fine-tuned — 教 and
@@ -75,14 +89,14 @@ inline constexpr int kTutorialToastFrames = 120;
 inline constexpr const char* kTutorialDoneText = "全部完成！";
 
 // The closed goal vocabulary: the bare (unqualified) event words, and
-// the qualified form's five prefixes (each followed by "." + a
+// the qualified form's seven prefixes (each followed by "." + a
 // registry name).
 inline constexpr const char* const kTutorialBareGoals[] = {
     "walk", "jump", "eat"};
 inline constexpr std::size_t kTutorialBareGoalCount =
     sizeof(kTutorialBareGoals) / sizeof(kTutorialBareGoals[0]);
 inline constexpr const char* const kTutorialGoalPrefixes[] = {
-    "craft", "break", "place", "kill", "interact"};
+    "craft", "break", "place", "kill", "interact", "pickup", "smelt"};
 inline constexpr std::size_t kTutorialGoalPrefixCount =
     sizeof(kTutorialGoalPrefixes) / sizeof(kTutorialGoalPrefixes[0]);
 
@@ -106,12 +120,20 @@ Result<std::vector<TutorialStep>> parseTutorial(const Json& def);
 
 // The init cross-check (the grows_to precedent — steps in file order,
 // the first failing goal names its step + the missing name): every
-// qualified goal's name half must exist — "craft" -> an item, "break" /
-// "place" / "interact" -> a block, "kill" -> a mob. Bare goals pass.
+// qualified goal's name half must exist — "craft" / "pickup" / "smelt"
+// -> an item, "break" / "place" / "interact" -> a block, "kill" -> a
+// mob. Bare goals pass.
 Result<void> validateTutorialGoals(const std::vector<TutorialStep>& steps,
                                    const ItemRegistry& items,
                                    const BlockRegistry& blocks,
                                    const MobRegistry& mobs);
+
+// V2-3: the step ids are GLOBALLY unique across the series (the save's
+// {series, id} pair + the load-time restore rely on no id naming two
+// steps of two series). A collision names the file index (the series
+// order) of both sides.
+Result<void> checkSeriesGlobalIds(
+    const std::vector<std::vector<TutorialStep>>& series);
 
 inline Result<bool> tutorialEnabled(const Config& config) {
     const Json* j = config.at("tutorial.enabled");
@@ -126,21 +148,28 @@ inline Result<bool> tutorialEnabled(const Config& config) {
 }
 
 // The step machine (PURE — zero side effects; the unit tests own it).
-// `n` events named `name` on `state`: done -> unchanged; a non-matching
-// event (or n <= 0, or an empty step list) -> unchanged; the current
-// step's goal matching -> progress += n; progress reaching the step's
-// count -> the step advances (index + 1, progress 0) — advancing past
-// the last step sets done.
+// V2-3: the multi-series generalization. `n` events named `name` on
+// `state` (against `series`, the parsed files in series order): done ->
+// unchanged; a non-matching event (or n <= 0, or an empty series list /
+// an out-of-range series/step index) -> unchanged; the current step's
+// goal matching -> progress += n; progress reaching the step's count ->
+// the step advances (progress 0): past the LAST STEP OF THE SERIES ->
+// the next series' first step (seriesIndex + 1, stepIndex 0); past the
+// LAST SERIES -> done (clamped to the last series' last step).
 TutorialState tutorialApply(const TutorialState& state,
                             const std::string& name, int n,
-                            const std::vector<TutorialStep>& steps);
+                            const std::vector<std::vector<TutorialStep>>&
+                                series);
 
 // The HUD target line: the current step's text, plus " progress/count"
 // (e.g. " 1/3") when the step counts more than one event — a count-1
 // step shows the text only (the brief's rule). Empty string when done
-// (the caller draws the toast text instead).
-std::string tutorialTargetLine(const TutorialState& state,
-                               const std::vector<TutorialStep>& steps);
+// (the caller draws the toast text instead). The step is taken from
+// series[state.seriesIndex][state.stepIndex] (the same guards as
+// tutorialApply).
+std::string tutorialTargetLine(
+    const TutorialState& state,
+    const std::vector<std::vector<TutorialStep>>& series);
 
 // The HUD tip line (UX-8b): the current step's optional `tip` (the
 // secondary guidance row the UI draws ABOVE the target line, in
@@ -149,31 +178,35 @@ std::string tutorialTargetLine(const TutorialState& state,
 // zero rows — bit-identical to v1.41.0). Same state guards as
 // tutorialTargetLine.
 std::string tutorialTipLine(const TutorialState& state,
-                            const std::vector<TutorialStep>& steps);
+                            const std::vector<std::vector<TutorialStep>>&
+                                series);
 
 // The save segment's restore (the game load's cross-check + migration —
 // the pure half; the game logs the reset and owns the state write):
-//   - InProgress: the id must name a step of the CURRENT data, else the
-//     result RESETS to the first step (the data is content, the save is
-//     state — the kickoff decision: a reported reset, not a load
-//     failure; `reset` carries the flag for the game's info log). The
-//     progress must sit strictly BELOW the step's count (a completed
-//     step would have advanced — corruption, named rejection).
-//   - Done: the finished state. Absent: fresh (the system did not
-//     exist — the format <= 22 migration, no data needed).
-// `steps` must be non-empty (the parse rejects an empty list — the
-// guard is defensive).
+//   - Done: the finished state (clamped to the last series' last step).
+//   - Absent: fresh (the system did not exist — the format <= 22
+//     migration, no data needed).
+//   - InProgress: `series` (the save's 0-based series, default 0 for a
+//     format 23/24 file) out of range (>= the series count, or negative
+//     — a hand-rolled file) RESETS to fresh (the data is content, the
+//     series set may have shrunk — a reported reset, not a load
+//     failure; `reset` carries the flag for the game's info log);
+//     in range, the id must name a step OF THAT SERIES, else the same
+//     reset; the progress must sit strictly BELOW the step's count (a
+//     completed step would have advanced — corruption, named rejection).
+// `series` (the list) must be non-empty (the init rejects an empty
+// directory — the guard is defensive).
 //
-// UX-8a note on format 23: the step data is a DATA-plane expansion, not
-// a format change — the id set only GROWS (the 8-step chain keeps every
-// v1.41.0 id; no id is removed or renamed), so every existing
-// {id:walk}/{id:table}/... save stays valid (and a save pointing at a
-// still-existing id restores to the same step as before, at the same
-// progress bound).
-Result<TutorialState> tutorialRestore(TutorialSaveState saved,
-                                      const std::string& id,
-                                      int progress,
-                                      const std::vector<TutorialStep>& steps,
+// V2-3 note on the format 24 -> 25 load: the series defaults to 0 and
+// the series-0 data (beginner.json) is byte-unchanged, so every
+// existing {id:walk}/{id:table}/... save restores to the same step at
+// the same progress bound (value-faithful, no migration — the UX-8a
+// twin).
+Result<TutorialState> tutorialRestore(TutorialSaveState saved, int series,
+                                      const std::string& id, int progress,
+                                      const std::vector<
+                                          std::vector<TutorialStep>>&
+                                          seriesList,
                                       bool* reset = nullptr);
 
 } // namespace mc
