@@ -21,9 +21,9 @@ C++20 / SDL3 / OpenGL 3.3 core，
 - **v2.x 任务表 = 空（待用户定范围）**——任务只从 `docs/BACKLOG.md` 的
   v2.x 节取；1.x 历史全在 `docs/archive/v1x/HISTORY.md`（只读，别把 1.x
   细节当现状）。
-- 测试 **2075/2075**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2079/2079**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 24；base18 锚 179116 B（679×744 半平铺态，/tmp/opencode
-  丢失后按先例刷新采用）；门计数 171（2.x 从 172 起）。
+  丢失后按先例刷新采用）；门计数 172（**V2-1 第三人称前视角 v2.1.0 = 2.x 首个功能项**：C 键三循环 First→后视→前视，前视 = 后视同款数学在翻转角下执行 + aimReach D+kReach 身后有效带，门 172 三模式矩阵 + 前视挖矿互斥——详见 `docs/archive/phase-2.1.0.md`）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；**v2.x 任务表（执行权威）：
   `docs/BACKLOG.md`**（v1.x 表已全部完成归档；1.x 完整编年史 + 逐门
   记录 = `docs/archive/v1x/HISTORY.md`）；会话交接：
