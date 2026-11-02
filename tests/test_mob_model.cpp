@@ -103,9 +103,9 @@ TEST(MobSwingClipTest, RestingJointAtBodyBottomIsClean) {
     // binary-exact joint): at rest the two boxes only share a face —
     // zero overlap, tip on the floor, everything passes.
     const MobBox leg {Vec3 {0.0f, 0.25f, 0.0f}, Vec3 {0.2f, 0.5f, 0.2f},
-                      "t", "leg"};
+                      "t", "leg", {} };
     const MobBox body {Vec3 {0.0f, 1.0f, 0.0f}, Vec3 {0.6f, 1.0f, 0.6f},
-                       "t", "body"};
+                       "t", "body", {} };
     const SwingClipResult r = checkSwingClip(leg, body, 0.0f, 1.0f);
     EXPECT_TRUE(r.groundOk);
     EXPECT_TRUE(r.bodyOk);
@@ -122,9 +122,9 @@ TEST(MobSwingClipTest, JointAtBodyBottomSmallSwingPasses) {
     // underside (a few % of the leg volume, all inside the pivot-end
     // third), the foot stays above the floor.
     const MobBox leg {Vec3 {0.0f, 0.3f, 0.0f}, Vec3 {0.2f, 0.6f, 0.2f},
-                      "t", "leg"};
+                      "t", "leg", {} };
     const MobBox body {Vec3 {0.0f, 1.1f, 0.0f}, Vec3 {0.6f, 1.0f, 0.6f},
-                       "t", "body"};
+                       "t", "body", {} };
     float s = 0.0f;
     float c = 1.0f;
     rendererSwingCos(0.3f, s, c);
@@ -149,9 +149,9 @@ TEST(MobSwingClipTest, BuriedPivotFailsAtRest) {
     // the swing. (The leg sits under the torso center: full x/z
     // overlap, the buried depth is the only factor.)
     const MobBox leg {Vec3 {0.0f, 0.375f, 0.0f}, Vec3 {0.25f, 0.75f, 0.25f},
-                      "t", "leg"};
+                      "t", "leg", {} };
     const MobBox body {Vec3 {0.0f, 0.95f, 0.0f}, Vec3 {0.75f, 1.0f, 0.625f},
-                       "t", "body"};
+                       "t", "body", {} };
     const SwingClipResult r = checkSwingClip(leg, body, 0.0f, 1.0f);
     EXPECT_FALSE(r.bodyOk);
     EXPECT_FALSE(r.ok());
@@ -165,9 +165,9 @@ TEST(MobSwingClipTest, FootBelowGroundFails) {
     // A leg longer than its pivot is below the floor already at rest
     // (the deep-swing / low-pivot failure mode): tip -0.1 << -0.02.
     const MobBox leg {Vec3 {0.0f, 0.15f, 0.0f}, Vec3 {0.25f, 0.5f, 0.25f},
-                      "t", "leg"};
+                      "t", "leg", {} };
     const MobBox body {Vec3 {0.0f, 5.0f, 0.0f}, Vec3 {0.5f, 1.0f, 0.5f},
-                       "t", "body"};
+                       "t", "body", {} };
     const SwingClipResult r = checkSwingClip(leg, body, 0.0f, 1.0f);
     EXPECT_FALSE(r.groundOk);
     EXPECT_FALSE(r.ok());
@@ -183,9 +183,9 @@ TEST(MobSwingClipTest, ForbiddenZoneIsolatesFromFraction) {
     // Binary-exact boxes: leg 0.25x0.5x0.25 at y 0..0.5 (pivot 0.5);
     // body x half-width 0.0625 (half the leg's), y 0.25..1.25.
     const MobBox leg {Vec3 {0.0f, 0.25f, 0.0f}, Vec3 {0.25f, 0.5f, 0.25f},
-                      "t", "leg"};
+                      "t", "leg", {} };
     const MobBox body {Vec3 {0.0f, 0.75f, 0.0f}, Vec3 {0.125f, 1.0f, 0.25f},
-                       "t", "body"};
+                       "t", "body", {} };
     const SwingClipResult r = checkSwingClip(leg, body, 0.0f, 1.0f);
     const float legVolume = 0.25f * 0.5f * 0.25f;
     // Total = 0.125 (x) * 0.25 (y) * 0.25 (z) = exactly 25% of the leg.
@@ -205,10 +205,10 @@ TEST(MobSwingClipTest, VolumeFractionEndpoints) {
     // center (0.875 -> y0 0.375 = 25% overlap; 0.84375 -> 0.34375 =
     // 31.25%).
     const MobBox leg {Vec3 {0.0f, 0.25f, 0.0f}, Vec3 {0.25f, 0.5f, 0.25f},
-                      "t", "leg"};
+                      "t", "leg", {} };
     const float legVolume = 0.25f * 0.5f * 0.25f;
     const MobBox bodyAt25 {Vec3 {0.0f, 0.875f, 0.0f},
-                           Vec3 {1.0f, 1.0f, 1.0f}, "t", "body"};
+                           Vec3 {1.0f, 1.0f, 1.0f}, "t", "body", {} };
     const SwingClipResult r25 = checkSwingClip(leg, bodyAt25, 0.0f, 1.0f);
     EXPECT_FLOAT_EQ(r25.overlapVolume, kClipJointOverlapFraction * legVolume);
     EXPECT_LE(r25.forbiddenVolume, kClipForbiddenSliver); // top-third only
@@ -216,7 +216,7 @@ TEST(MobSwingClipTest, VolumeFractionEndpoints) {
     EXPECT_TRUE(r25.ok());
 
     const MobBox bodyOver {Vec3 {0.0f, 0.84375f, 0.0f},
-                           Vec3 {1.0f, 1.0f, 1.0f}, "t", "body"};
+                           Vec3 {1.0f, 1.0f, 1.0f}, "t", "body", {} };
     const SwingClipResult rover = checkSwingClip(leg, bodyOver, 0.0f, 1.0f);
     EXPECT_GT(rover.overlapVolume, kClipJointOverlapFraction * legVolume);
     EXPECT_FALSE(rover.bodyOk);

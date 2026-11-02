@@ -55,6 +55,12 @@ constexpr float kCrackCubeScale = 1.006f;
 
 constexpr float kOutlineScale = 1.004f;
 
+// V2-2: the box reference for the per-face tile error messages (the part
+// name, or the box index when the box is unnamed).
+std::string boxRef(const MobBox& box, std::size_t index) {
+    return box.name.empty() ? std::to_string(index) : box.name;
+}
+
 } // namespace
 
 Game::~Game() {
@@ -627,10 +633,21 @@ Result<void> Game::buildScene() {
     }
     for (const MobID mid : m_mobs.mobTypes.allIds()) {
         const Mob& mob = m_mobs.mobTypes.at(mid);
-        for (const MobBox& box : mob.model.boxes) {
+        for (std::size_t bi = 0; bi < mob.model.boxes.size(); ++bi) {
+            const MobBox& box = mob.model.boxes[bi];
             if (!m_atlas.contains(box.texture)) {
                 return MC_FAIL("mob '" + mob.name + "': model texture '" +
                                box.texture + "' not in the atlas");
+            }
+            // V2-2: the per-face overrides must exist too (named box +
+            // face — the model-texture pattern extended to `faces`).
+            for (const auto& [fn, tile] : box.faces) {
+                if (!m_atlas.contains(tile)) {
+                    return MC_FAIL("mob '" + mob.name +
+                                   "': model box '" + boxRef(box, bi) +
+                                   "' face '" + fn + "' texture '" + tile +
+                                   "' not in the atlas");
+                }
             }
         }
         for (const MobDrop& drop : mob.properties.drops) {
@@ -680,10 +697,20 @@ Result<void> Game::buildScene() {
                                 "player body model");
     MC_TRY(playerBodyParsed);
     m_playerBody.modelLoaded = true;
-    for (const MobBox& box : m_playerBody.model.boxes) {
+    for (std::size_t bi = 0; bi < m_playerBody.model.boxes.size(); ++bi) {
+        const MobBox& box = m_playerBody.model.boxes[bi];
         if (!m_atlas.contains(box.texture)) {
             return MC_FAIL("player body: model texture '" + box.texture +
                            "' not in the atlas");
+        }
+        // V2-2: the per-face overrides must exist too (named box + face —
+        // the same pattern as the mob loop above).
+        for (const auto& [fn, tile] : box.faces) {
+            if (!m_atlas.contains(tile)) {
+                return MC_FAIL("player body: model box '" + boxRef(box, bi) +
+                               "' face '" + fn + "' texture '" + tile +
+                               "' not in the atlas");
+            }
         }
     }
 

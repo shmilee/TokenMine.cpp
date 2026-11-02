@@ -424,10 +424,10 @@ Result<void> MobRegistry::parseModel(const Json& def, MobModel& out,
         }
         // ENT-1: strict box fields (the swing spec references parts by
         // their `name`, so a stray key is a typo, not forward
-        // compatibility).
+        // compatibility); V2-2 adds the optional `faces` overrides.
         for (const auto& [key, value] : bj.members()) {
             if (key != "pos" && key != "size" && key != "texture" &&
-                key != "name") {
+                key != "name" && key != "faces") {
                 return MC_FAIL(what + " has unknown field '" + key + "'");
             }
         }
@@ -461,6 +461,41 @@ Result<void> MobRegistry::parseModel(const Json& def, MobModel& out,
                                    box.name + "' (box " +
                                    std::to_string(j) + ")");
                 }
+            }
+        }
+
+        // V2-2: the optional per-face tile overrides — an object of the
+        // six face names (the yaw-0 = -Z convention: front = -Z, back =
+        // +Z, left = -X, right = +X, top = +Y, bottom = -Y) to atlas tile
+        // names. Absent/{} = the pre-V2-2 single-tile behavior
+        // (bit-identical geometry); partial keys are legal (only the
+        // named faces are overridden, the rest fall back to `texture`).
+        // An unknown face key is a typo (named, like every other strict
+        // field); an empty or non-string value is rejected.
+        if (const Json* fs = bj.find("faces")) {
+            const std::string boxRef =
+                box.name.empty() ? ("#" + std::to_string(i)) : box.name;
+            if (!fs->isObject()) {
+                return MC_FAIL(what + ": box '" + boxRef + "' 'faces' must "
+                               "be a JSON object of {face name: atlas tile "
+                               "name}");
+            }
+            for (const auto& [key, value] : fs->members()) {
+                const bool knownFace =
+                    key == "front" || key == "back" || key == "left" ||
+                    key == "right" || key == "top" || key == "bottom";
+                if (!knownFace) {
+                    return MC_FAIL(what + ": unknown face '" + key +
+                                   "' in box '" + boxRef + "' faces "
+                                   "(allowed: front, back, left, right, "
+                                   "top, bottom)");
+                }
+                if (!value.isString() || value.asString().empty()) {
+                    return MC_FAIL(what + ": face '" + key + "' in box '" +
+                                   boxRef + "' faces must be a non-empty "
+                                   "string (atlas tile name)");
+                }
+                box.faces[key] = value.asString();
             }
         }
 

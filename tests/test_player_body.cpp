@@ -1,8 +1,9 @@
-// UX-3: the player's world-space body — the shipped content pin + the
-// swing-clip acceptance, mirroring the ENT-1b mob-model discipline
+// UX-3 / V2-2: the player's world-space body — the shipped content pin
+// + the swing-clip acceptance, mirroring the ENT-1b mob-model discipline
 // (test_mob_model.cpp):
 //   - data/player_body.json pins the 6 boxes (exact pos/size/texture) +
-//     the 4 swings (exact amplitude/group) + the shared-tile convention
+//     the V2-2 per-face `faces` maps (exact: the Steve tiles) + the 4
+//     swings (exact amplitude/group) + the shared-tile convention
 //     (both arms one tile, both legs one tile) + the joint geometry
 //     (leg pivots AT the body bottom, arm pivots AT the body top — the
 //     ENT-1b "joint out of the body" rule: zero overlap at rest);
@@ -12,14 +13,21 @@
 //     joint kiss at the max-swing phase;
 //   - the parseModel label ("player body model") propagates into every
 //     strict-parse error (the negative cases);
-//   - the five generated skin PNGs are byte-pinned (FNV-1a 64, the
+//   - the atlas layout pins the seven V2-2 per-face tiles (exact cells,
+//     the appended row-5 free run) AND the 90 surviving legacy entries
+//     zero-shift (the append-only red line) AND the four retired UX-3
+//     grid tiles absent;
+//   - the eight generated skin PNGs are byte-pinned (FNV-1a 64, the
 //     font.png precedent) AND the 15 pre-UX-3 mob tiles are pinned
-//     unchanged (the "existing assets untouched" red line).
+//     unchanged (the "existing assets untouched" red line) AND the four
+//     retired UX-3 player PNGs are gone from disk.
 #include <gtest/gtest.h>
 
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <string>
 
@@ -81,13 +89,15 @@ bool loadPlayerBody(MobModel& out) {
     return true;
 }
 
-// The 4 part tiles in a small synthetic layout (buildSwingModel resolves
-// each box's texture through the layout — the makeQuadLayout pattern).
+// The 7 V2-2 per-face tiles in a small synthetic layout (buildSwingModel
+// resolves each box's texture + faces through the layout — the
+// makeQuadLayout pattern).
 AtlasLayout makePlayerLayout() {
     auto r = AtlasLayout::parse(parseJson(
         R"({"columns":4,"rows":2,"tiles":{
-            "player_head":[0,0],"player_body":[1,0],
-            "player_arm":[2,0],"player_leg":[3,0]}})"));
+            "ph_face":[0,0],"ph_hair":[1,0],"ph_side":[2,0],
+            "pb_shirt":[3,0],"pa_arm":[0,1],"pl_pants":[1,1],
+            "pl_boot":[2,1]}})"));
     if (!r.ok()) {
         ADD_FAILURE() << r.error().message;
     }
@@ -162,7 +172,17 @@ TEST(PlayerBodyTest, ShippedModelPinned) {
     EXPECT_FLOAT_EQ(head.size.x, 0.5f);
     EXPECT_FLOAT_EQ(head.size.y, 0.5f);
     EXPECT_FLOAT_EQ(head.size.z, 0.5f);
-    EXPECT_EQ(head.texture, "player_head");
+    EXPECT_EQ(head.texture, "ph_face");
+    // V2-2: the per-face map — the Steve face front, the hair back/top/
+    // bottom, the hair+ear sides (the yaw-0 = -Z convention: front = -Z
+    // = the face the third-person camera meets).
+    EXPECT_EQ(head.faces, (std::map<std::string, std::string>{
+                               {"front", "ph_face"},
+                               {"back", "ph_hair"},
+                               {"left", "ph_side"},
+                               {"right", "ph_side"},
+                               {"top", "ph_hair"},
+                               {"bottom", "ph_hair"}}));
     // The body: pos [0, 1.025, 0], size [0.5, 0.55, 0.25] — the bottom
     // flush with the leg pivots (0.75), the top flush with the head
     // bottom (1.3) + the arm pivots (1.3).
@@ -174,9 +194,18 @@ TEST(PlayerBodyTest, ShippedModelPinned) {
     EXPECT_FLOAT_EQ(body->size.x, 0.5f);
     EXPECT_FLOAT_EQ(body->size.y, 0.55f);
     EXPECT_FLOAT_EQ(body->size.z, 0.25f);
-    EXPECT_EQ(body->texture, "player_body");
-    // The four limbs (the shared-tile convention: both arms player_arm,
-    // both legs player_leg — the Minecraft convention).
+    EXPECT_EQ(body->texture, "pb_shirt");
+    // V2-2: all six faces the shirt tile (the flat-color torso — the
+    // caps show the shirt art like the sides).
+    EXPECT_EQ(body->faces, (std::map<std::string, std::string>{
+                               {"front", "pb_shirt"},
+                               {"back", "pb_shirt"},
+                               {"left", "pb_shirt"},
+                               {"right", "pb_shirt"},
+                               {"top", "pb_shirt"},
+                               {"bottom", "pb_shirt"}}));
+    // The four limbs (the shared-tile convention: both arms pa_arm,
+    // both legs pl_pants — the Minecraft convention).
     const struct {
         const char* name;
         float x;
@@ -192,9 +221,30 @@ TEST(PlayerBodyTest, ShippedModelPinned) {
         EXPECT_FLOAT_EQ(box->size.x, 0.25f) << l.name;
         EXPECT_FLOAT_EQ(box->size.y, 0.75f) << l.name;
         EXPECT_FLOAT_EQ(box->size.z, 0.25f) << l.name;
-        const std::string expectedTexture =
-            l.name[0] == 'a' ? "player_arm" : "player_leg";
-        EXPECT_EQ(box->texture, expectedTexture) << l.name;
+        const bool isArm = l.name[0] == 'a';
+        EXPECT_EQ(box->texture, isArm ? "pa_arm" : "pl_pants") << l.name;
+        // V2-2: the arms take the sleeve/hand tile on all six faces;
+        // the legs take the pants tile on every face EXCEPT the bottom
+        // cap — the sole (pl_boot).
+        if (isArm) {
+            EXPECT_EQ(box->faces, (std::map<std::string, std::string>{
+                                       {"front", "pa_arm"},
+                                       {"back", "pa_arm"},
+                                       {"left", "pa_arm"},
+                                       {"right", "pa_arm"},
+                                       {"top", "pa_arm"},
+                                       {"bottom", "pa_arm"}}))
+                << l.name;
+        } else {
+            EXPECT_EQ(box->faces, (std::map<std::string, std::string>{
+                                       {"front", "pl_pants"},
+                                       {"back", "pl_pants"},
+                                       {"left", "pl_pants"},
+                                       {"right", "pl_pants"},
+                                       {"top", "pl_pants"},
+                                       {"bottom", "pl_boot"}}))
+                << l.name;
+        }
     }
     // The joints (the ENT-1b rule, pinned): the leg pivots (box
     // top-center) sit EXACTLY at the body bottom — zero overlap at rest
@@ -243,8 +293,10 @@ TEST(PlayerBodyTest, ShippedModelPinned) {
 }
 
 TEST(PlayerBodyTest, ShippedTilesInAtlasLayout) {
-    // The four part tiles have their appended cells in the atlas layout
-    // (the farmland_wet GEN-9 append-only precedent: [10..13, 4]).
+    // The seven V2-2 per-face tiles have their appended cells in the
+    // atlas layout (the farmland_wet GEN-9 append-only precedent: the
+    // row-5 free run [9..15, 5] — the retired UX-3 cells [10..13, 4]
+    // were NOT re-homed, the append went to the free slots).
     AssetManager assets;
     ASSERT_TRUE(assets.setRoot("assets").ok())
         << "run the tests from the repository root";
@@ -254,20 +306,94 @@ TEST(PlayerBodyTest, ShippedTilesInAtlasLayout) {
     ASSERT_TRUE(def.ok());
     const Json* tiles = def->find("tiles");
     ASSERT_NE(tiles, nullptr);
-    const std::pair<int, int> exp[] = {
-        {10, 4}, // player_head
-        {11, 4}, // player_body
-        {12, 4}, // player_arm
-        {13, 4}, // player_leg
+    const struct {
+        const char* name;
+        int col;
+        int row;
+    } exp[] = {
+        {"ph_face", 9, 5},  // head front (the Steve face, 2x)
+        {"ph_hair", 10, 5}, // head back (hair; top/bottom reuse)
+        {"ph_side", 11, 5}, // head right (hair + ear; left reuses)
+        {"pb_shirt", 12, 5}, // body (all six faces reuse)
+        {"pa_arm", 13, 5},   // arm (all six faces reuse)
+        {"pl_pants", 14, 5}, // leg (five faces reuse)
+        {"pl_boot", 15, 5},  // leg bottom cap (the sole)
     };
-    const char* names[] = {"player_head", "player_body", "player_arm",
-                           "player_leg"};
-    for (int i = 0; i < 4; ++i) {
-        const Json* cell = tiles->find(names[i]);
-        ASSERT_NE(cell, nullptr) << names[i];
+    for (const auto& e : exp) {
+        const Json* cell = tiles->find(e.name);
+        ASSERT_NE(cell, nullptr) << e.name;
         ASSERT_TRUE(cell->isArray() && cell->size() == 2);
-        EXPECT_EQ(static_cast<int>(cell->at(0).asDouble(0)), exp[i].first);
-        EXPECT_EQ(static_cast<int>(cell->at(1).asDouble(0)), exp[i].second);
+        EXPECT_EQ(static_cast<int>(cell->at(0).asDouble(0)), e.col)
+            << e.name;
+        EXPECT_EQ(static_cast<int>(cell->at(1).asDouble(0)), e.row)
+            << e.name;
+    }
+}
+
+TEST(PlayerBodyTest, LegacyAtlasEntriesUnshifted) {
+    // The V2-2 red line, per entry: the 90 surviving legacy entries
+    // (the pre-V2-2 94 minus the four retired UX-3 player tiles) keep
+    // their EXACT cells — zero UV shift for the whole shipped world
+    // (the byte-stable baseline's atlas half). The retired four are
+    // ABSENT (the generator no longer writes the PNGs; the layout no
+    // longer names the cells).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    auto text = assets.loadText("data/textures/block_atlas.json");
+    ASSERT_TRUE(text.ok());
+    auto def = Json::parse(*text);
+    ASSERT_TRUE(def.ok());
+    const Json* tiles = def->find("tiles");
+    ASSERT_NE(tiles, nullptr);
+    const struct {
+        const char* name;
+        int col;
+        int row;
+    } legacy[] = {
+        {"bedrock", 0, 0},          {"coal_ore", 1, 0},       {"diamond_ore", 2, 0},
+        {"dirt", 3, 0},             {"glass", 0, 1},          {"glowstone", 1, 1},
+        {"gold_ore", 2, 1},         {"grass_side", 3, 1},     {"grass_top", 0, 2},
+        {"iron_ore", 1, 2},         {"leaves", 2, 2},         {"sand", 3, 2},
+        {"stone", 0, 3},            {"water", 1, 3},          {"wood_side", 2, 3},
+        {"wood_top", 3, 3},         {"crafting_table_side", 0, 4},
+        {"crafting_table_top", 1, 4}, {"planks", 2, 4},      {"zombie_head", 3, 4},
+        {"zombie_body", 0, 5},      {"cow_body", 1, 5},      {"cow_head", 2, 5},
+        {"sheep_body", 3, 5},       {"sheep_head", 0, 6},    {"chicken_body", 1, 6},
+        {"chicken_head", 2, 6},     {"skeleton_body", 3, 6}, {"skeleton_head", 0, 7},
+        {"furnace_side", 1, 7},     {"furnace_top", 2, 7},   {"wool", 3, 7},
+        {"spider_body", 5, 7},      {"spider_head", 6, 7},   {"wool_red", 4, 0},
+        {"wool_yellow", 5, 0},      {"wool_orange", 6, 0},   {"wool_pink", 7, 0},
+        {"wool_brown", 4, 1},       {"wool_gray", 5, 1},     {"wool_black", 6, 1},
+        {"wool_silver", 7, 1},      {"lapis_ore", 4, 2},     {"cactus", 4, 3},
+        {"allium", 4, 4},           {"tulip", 4, 5},         {"cornflower", 4, 6},
+        {"wool_blue", 4, 7},        {"wool_green", 5, 2},    {"wool_purple", 5, 3},
+        {"wool_magenta", 5, 4},     {"wool_light_blue", 5, 5}, {"wool_cyan", 5, 6},
+        {"wheat_1", 6, 2},          {"wheat_2", 6, 3},       {"wheat_3", 6, 4},
+        {"wheat_4", 6, 5},          {"wheat_5", 6, 6},       {"wheat_6", 7, 2},
+        {"wheat_7", 7, 3},          {"farmland_top", 7, 4},  {"farmland_side", 7, 5},
+        {"lava", 7, 6},             {"honey", 15, 1},        {"obsidian", 7, 7},
+        {"gravel", 8, 0},           {"cobblestone", 9, 0},   {"fire", 10, 0},
+        {"torch", 11, 0},           {"campfire", 12, 0},     {"campfire_extinguished", 13, 0},
+        {"sandstone", 14, 0},       {"smooth_sandstone", 15, 0}, {"iron_block", 8, 1},
+        {"beacon", 9, 1},           {"fence", 8, 2},         {"glass_pane", 8, 3},
+        {"chicken_legs", 8, 4},     {"cow_legs", 8, 5},      {"sheep_legs", 8, 6},
+        {"oak_sapling", 10, 1},     {"spruce_sapling", 11, 1}, {"birch_sapling", 12, 1},
+        {"spruce_trunk_side", 13, 1}, {"spruce_trunk_top", 14, 1},
+        {"birch_trunk_side", 10, 2}, {"birch_trunk_top", 11, 2},
+        {"spruce_leaves", 12, 2},   {"birch_leaves", 13, 2}, {"farmland_wet", 9, 4},
+    };
+    ASSERT_EQ(sizeof(legacy) / sizeof(legacy[0]), 90u); // the full census
+    for (const auto& e : legacy) {
+        const Json* cell = tiles->find(e.name);
+        ASSERT_NE(cell, nullptr) << e.name;
+        ASSERT_TRUE(cell->isArray() && cell->size() == 2);
+        EXPECT_EQ(static_cast<int>(cell->at(0).asDouble(0)), e.col) << e.name;
+        EXPECT_EQ(static_cast<int>(cell->at(1).asDouble(0)), e.row) << e.name;
+    }
+    for (const char* retired : {"player_head", "player_body", "player_arm",
+                                "player_leg"}) {
+        EXPECT_EQ(tiles->find(retired), nullptr) << retired;
     }
 }
 
@@ -442,20 +568,34 @@ TEST(PlayerBodyTest, ParseLabelsAndRejects) {
 // ---------------------------------------------------------------------------
 
 TEST(PlayerBodyTest, SkinPngBytesPinned) {
-    // The five UX-3 files are byte-stable (re-running
-    // tools/generate_player_skin.py must not change them).
+    // The eight V2-2 files are byte-stable (re-running
+    // tools/generate_player_skin.py must not change them — the script
+    // prints the md5s; the x2-run identity is its self-proof).
     const struct {
         const char* path;
         const char* fnv;
     } newFiles[] = {
-        {"assets/textures/player/player_skin.png", "537f4015dccd62f1"},
-        {"assets/textures/mobs/player_head.png", "47fc72c279990511"},
-        {"assets/textures/mobs/player_body.png", "76d6f6b7c9675eb1"},
-        {"assets/textures/mobs/player_arm.png", "878e9e2f77428cf5"},
-        {"assets/textures/mobs/player_leg.png", "e3e1cb8051e76e23"},
+        {"assets/textures/player/player_skin.png", "ee33f13977b5eb69"},
+        {"assets/textures/mobs/ph_face.png", "de62f0e3a6c9f0f1"},
+        {"assets/textures/mobs/ph_hair.png", "838ea486bb1cd1aa"},
+        {"assets/textures/mobs/ph_side.png", "c40981d1b0cd1128"},
+        {"assets/textures/mobs/pb_shirt.png", "d4e2167d4e5922bf"},
+        {"assets/textures/mobs/pa_arm.png", "1cfc2b33a972ee04"},
+        {"assets/textures/mobs/pl_pants.png", "2a3363da12b37577"},
+        {"assets/textures/mobs/pl_boot.png", "631efdd3bbae4e54"},
     };
     for (const auto& f : newFiles) {
         EXPECT_EQ(fnv1a64(readAll(f.path)), f.fnv) << f.path;
+    }
+    // The four retired UX-3 grid tiles are GONE from disk (the generator
+    // no longer writes them; the layout no longer names them — the
+    // upload's both-directions cross-check would fail otherwise).
+    for (const char* retired : {"player_head", "player_body", "player_arm",
+                                "player_leg"}) {
+        EXPECT_FALSE(
+            std::filesystem::exists(
+                std::string("assets/textures/mobs/") + retired + ".png"))
+            << retired;
     }
     // The 15 pre-UX-3 mob tiles are UNCHANGED (the existing-assets red
     // line — a re-run of the generator touching them turns this red).

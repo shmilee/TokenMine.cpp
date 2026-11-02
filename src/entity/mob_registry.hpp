@@ -37,6 +37,11 @@
 //         "texture": "zombie_head" },
 //       { "name": "leg", "pos": [0, 0.25, 0], "size": [0.3, 0.5, 0.3],
 //         "texture": "zombie_body" },
+//       { "name": "head", "pos": [0, 1.55, 0], "size": [0.5, 0.5, 0.5],
+//         "texture": "ph_face",
+//         "faces": { "front": "ph_face", "back": "ph_hair",
+//                    "top": "ph_hair", "left": "ph_side",
+//                    "right": "ph_side", "bottom": "ph_hair" } },
 //       ...
 //     ],
 //     "swings": [                 // ENT-1: optional limb animation (absent
@@ -52,6 +57,16 @@
 // and item cubes), one atlas tile on all six faces, centered at `pos`
 // relative to the mob's bottom-center position. Every box must lie inside
 // the width x height AABB.
+//
+// V2-2 per-face textures: a box may carry an optional `faces` object
+// mapping face names to atlas tile names. The face names follow the
+// yaw-0 = -Z convention (front = -Z, back = +Z, left = -X, right = +X,
+// top = +Y, bottom = -Y — the box faces of the shared table). Partial
+// keys are legal: only the named faces are overridden, the rest fall
+// back to the box's `texture`. Absent `faces` = the pre-V2-2
+// single-tile behavior (bit-identical geometry for every shipped mob).
+// The tile names (default + overrides) are cross-checked against the
+// atlas at game init (the model-texture pattern, named box + face).
 //
 // ENT-1 limb swing: a box may carry an optional unique `name` (part
 // name), and the model may carry a `swings` list whose entries reference
@@ -73,6 +88,7 @@
 #pragma once
 
 #include <cstddef>
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -104,11 +120,19 @@ struct MobIDHash {
 struct MobBox {
     Vec3 center = Vec3::zero();  // box center, relative to bottom-center
     Vec3 size = Vec3::zero();    // full extent per axis
-    std::string texture;         // atlas tile name (all six faces)
+    std::string texture;         // atlas tile name (all six faces unless a
+                                 // faces override names another)
     // ENT-1: the optional part NAME (empty = unnamed; unique among the
     // model's boxes). A name is required for a box a 'swings' entry
     // references; unnamed boxes simply never swing.
     std::string name;
+    // V2-2: the optional per-face tile overrides (face name -> atlas tile
+    // name). EMPTY = the pre-V2-2 single-tile behavior (every face uses
+    // `texture` — the bit-identical root). Keys are the six face names
+    // of the yaw-0 = -Z convention (front = -Z, back = +Z, left = -X,
+    // right = +X, top = +Y, bottom = -Y); the strict parse accepts
+    // nothing else (a partial map overrides only the named faces).
+    std::map<std::string, std::string> faces;
 };
 
 // One limb-swing spec of a mob model (ENT-1, see mob_swing.hpp for the

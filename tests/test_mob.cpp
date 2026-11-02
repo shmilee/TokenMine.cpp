@@ -1725,6 +1725,26 @@ ItemMeshGeometry makeMobGeometry() {
     return makeMobModelGeometry(mobs.at(MobID{0}).model, makeMobLayout());
 }
 
+// V2-2: a single-box model with the optional `faces` overrides
+// ("" = no faces field — the pre-V2-2 def), parsed through the strict
+// path. makeMobLayout's two tiles: "a" = row 0 -> v [0, 0.5],
+// "b" = row 1 -> v [0.5, 1] (one column: u spans [0, 1] for both).
+MobModel parseFacesModel(const std::string& facesText) {
+    const std::string facesField =
+        facesText.empty() ? "" : (",\"faces\":" + facesText);
+    // The model def: the head box, its `texture` and the (optional)
+    // `faces` field spliced in, closing the box + the boxes array.
+    const std::string def =
+        std::string(R"({"width":0.6,"height":1.8,"boxes":[{"name":"head","pos":[0.0,1.25,0.0],"size":[0.5,0.5,0.5],"texture":"a")")
+            + facesField + R"(}]})";
+    MobModel m;
+    auto r = MobRegistry::parseModel(parseJson(def), m, "mob model");
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    return m;
+}
+
 } // namespace
 
 TEST(MobMeshTest, VertexAndIndexCounts) {
@@ -1773,6 +1793,68 @@ TEST(MobMeshTest, UvsStayInsideTheBoxTile) {
         EXPECT_LE(g.vertices[i].uv.x, u1.x + 1e-6f);
         EXPECT_GE(g.vertices[i].uv.y, u0.y - 1e-6f);
         EXPECT_LE(g.vertices[i].uv.y, u1.y + 1e-6f);
+    }
+}
+
+// -- V2-2: the per-face tile overrides -----------------------------------------
+
+TEST(MobMeshTest, FacesOverrideUvPerFace) {
+    // The partial-override contract: the front (-Z, the yaw-0 facing)
+    // face takes the override tile "b"; the other five faces keep the
+    // default tile "a" with the EXACT pre-V2-2 corner UVs. kCubeFaces
+    // order: 0 +Y (top), 1 -Y (bottom), 2 +Z (back), 3 -Z (front),
+    // 4 +X (right), 5 -X (left); the corner order is (u0,v1),(u1,v1),
+    // (u1,v0),(u0,v0) — "a" = v [0, 0.5], "b" = v [0.5, 1].
+    const MobModel m = parseFacesModel(R"({"front":"b"})");
+    const ItemMeshGeometry g = makeMobModelGeometry(m, makeMobLayout());
+    ASSERT_EQ(g.vertices.size(), 24u);
+    ASSERT_EQ(g.indices.size(), 36u);
+    const Vec2 front[4] = {{0.0f, 1.0f}, {1.0f, 1.0f},
+                           {1.0f, 0.5f}, {0.0f, 0.5f}};
+    for (int i = 0; i < 4; ++i) {
+        EXPECT_EQ(g.vertices[static_cast<std::size_t>(12 + i)].uv,
+                  front[i])
+            << "front corner " << i;
+    }
+    const Vec2 def[4] = {{0.0f, 0.5f}, {1.0f, 0.5f}, {1.0f, 0.0f},
+                         {0.0f, 0.0f}};
+    for (const int fi : {0, 1, 2, 4, 5}) {
+        const int base = fi * 4;
+        for (int i = 0; i < 4; ++i) {
+            EXPECT_EQ(g.vertices[static_cast<std::size_t>(base + i)].uv,
+                      def[i])
+                << "face " << fi << " corner " << i;
+        }
+    }
+    // The override touched the UVs ONLY: positions/normals/indices are
+    // bit-identical to the faces-less model of the same box (the
+    // bit-level red line's geometry side).
+    const ItemMeshGeometry gp = makeMobModelGeometry(
+        parseFacesModel(""), makeMobLayout());
+    ASSERT_EQ(gp.vertices.size(), g.vertices.size());
+    for (std::size_t i = 0; i < g.vertices.size(); ++i) {
+        EXPECT_EQ(g.vertices[i].position, gp.vertices[i].position) << i;
+        EXPECT_EQ(g.vertices[i].normal, gp.vertices[i].normal) << i;
+        EXPECT_FLOAT_EQ(g.vertices[i].skyLight, gp.vertices[i].skyLight)
+            << i;
+        EXPECT_FLOAT_EQ(g.vertices[i].blockLight,
+                        gp.vertices[i].blockLight)
+            << i;
+    }
+    EXPECT_EQ(g.indices, gp.indices);
+}
+
+TEST(MobMeshTest, FacesOverrideAllSix) {
+    // The full six-face map: every face lands on the override tile "b"
+    // (the corner order per face unchanged — the shared table's winding
+    // invariant holds on the identical positions).
+    const MobModel m = parseFacesModel(
+        R"({"front":"b","back":"b","left":"b","right":"b","top":"b","bottom":"b"})");
+    const ItemMeshGeometry g = makeMobModelGeometry(m, makeMobLayout());
+    const Vec2 corners[4] = {{0.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 0.5f},
+                             {0.0f, 0.5f}}; // tile "b"'s corner order
+    for (std::size_t i = 0; i < g.vertices.size(); ++i) {
+        EXPECT_EQ(g.vertices[i].uv, corners[i % 4]) << i;
     }
 }
 
@@ -3067,7 +3149,7 @@ TEST(MobSwingTest, LimbSwingActiveGate) {
 TEST(MobSwingTest, PivotIsBoxTopCenter) {
     // The formula (binary-exact inputs: a pin the float cannot fudge).
     const MobBox exact {Vec3 {0.0f, 0.5f, 0.0f}, Vec3 {0.5f, 1.0f, 0.3f},
-                        "t", "leg"};
+                        "t", "leg", {} };
     const Vec3 pe = swingPivot(exact);
     EXPECT_FLOAT_EQ(pe.x, 0.0f);
     EXPECT_FLOAT_EQ(pe.y, 1.0f); // 0.5 + 1.0/2, exact in binary
@@ -3340,6 +3422,94 @@ TEST(MobRegistryTest, RejectsSwingSchemaErrors) {
             EXPECT_NE(r.error().message.find(c.expect), std::string::npos)
                 << r.error().message << " <- " << c.broken;
         }
+    }
+}
+
+// -- V2-2: the per-face tile overrides (the strict parse) -----------------------
+
+namespace {
+
+// The V2-2 fixture def: the zombie's properties + a NAMED head box whose
+// `faces` field is the injected object text ("" = no faces field at all).
+std::string defWithFaces(const std::string& faces) {
+    const std::string facesField =
+        faces.empty() ? "" : (", \"faces\": " + faces);
+    return std::string(R"({
+  "id": "zombie",
+  "properties": {
+    "health": 20,
+    "speed": 0.8,
+    "detect_radius": 16,
+    "attack_range": 1.6,
+    "attack_damage": 3,
+    "attack_cooldown": 1.0,
+    "wander_interval": 2.5
+  },
+  "model": {
+    "width": 0.6,
+    "height": 1.8,
+    "boxes": [
+      {"name": "head", "pos": [0.0, 1.25, 0.0], "size": [0.5, 0.5, 0.5],
+       "texture": "a")" + facesField + R"( } ]
+  }
+})");
+}
+
+} // namespace
+
+TEST(MobRegistryTest, ParsesFacesFullAndPartial) {
+    // The full six-face map: parsed exact (the yaw-0 = -Z vocabulary,
+    // the values verbatim).
+    MobRegistry mobs;
+    auto r = mobs.registerMob(
+        parseJson(defWithFaces(
+            R"({"front":"f","back":"k","left":"l","right":"r","top":"t","bottom":"b"})")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(mobs.at(*r).model.boxes[0].faces,
+              (std::map<std::string, std::string> {
+                  {"front", "f"}, {"back", "k"}, {"left", "l"},
+                  {"right", "r"}, {"top", "t"}, {"bottom", "b"}}));
+    // Partial keys: only the named faces are overridden (the rest fall
+    // back to `texture` at the geometry build — see MobMeshTest).
+    MobRegistry partial;
+    auto rp = partial.registerMob(parseJson(defWithFaces(R"({"front":"f"})")));
+    ASSERT_TRUE(rp.ok()) << rp.error().message;
+    EXPECT_EQ(partial.at(*rp).model.boxes[0].faces,
+              (std::map<std::string, std::string>{{"front", "f"}}));
+    // An empty {} = the absent case: the pre-V2-2 single-tile behavior.
+    MobRegistry empty;
+    auto re = empty.registerMob(parseJson(defWithFaces(R"({})")));
+    ASSERT_TRUE(re.ok()) << re.error().message;
+    EXPECT_TRUE(empty.at(*re).model.boxes[0].faces.empty());
+    // No faces field at all: the shipped legacy def parses unchanged
+    // (every pre-V2-2 mob = the bit-identical root).
+    MobRegistry none = makeMobRegistry();
+    EXPECT_TRUE(none.at(MobID{0}).model.boxes[0].faces.empty());
+    EXPECT_TRUE(none.at(MobID{0}).model.boxes[1].faces.empty());
+}
+
+TEST(MobRegistryTest, RejectsBadFaces) {
+    // The strict-parse table: every error names the offending face (and
+    // the box — the named part 'head' here).
+    const struct {
+        const char* faces;
+        const char* expect; // message substring
+    } cases[] = {
+        {R"({"up":"f"})", "unknown face 'up'"},
+        {R"({"front":"f","frontal":"f"})", "unknown face 'frontal'"},
+        {R"({"front":""})", "non-empty string"},
+        {R"({"front":42})", "non-empty string"},
+        {R"({"front":null})", "non-empty string"},
+        {R"([{"front":"f"}])", "must be a JSON object"},
+    };
+    for (const auto& c : cases) {
+        MobRegistry mobs;
+        auto r = mobs.registerMob(parseJson(defWithFaces(c.faces)));
+        ASSERT_FALSE(r.ok()) << c.faces;
+        EXPECT_NE(r.error().message.find(c.expect), std::string::npos)
+            << r.error().message << " <- " << c.faces;
+        EXPECT_NE(r.error().message.find("box 'head'"), std::string::npos)
+            << r.error().message << " <- " << c.faces;
     }
 }
 

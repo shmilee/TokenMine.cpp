@@ -362,21 +362,33 @@
    9,
    4
   ],
-  "player_head": [
+  "ph_face": [
+   9,
+   5
+  ],
+  "ph_hair": [
    10,
-   4
+   5
   ],
-  "player_body": [
+  "ph_side": [
    11,
-   4
+   5
   ],
-  "player_arm": [
+  "pb_shirt": [
    12,
-   4
+   5
   ],
-  "player_leg": [
+  "pa_arm": [
    13,
-   4
+   5
+  ],
+  "pl_pants": [
+   14,
+   5
+  ],
+  "pl_boot": [
+   15,
+   5
   ]
  }
 }

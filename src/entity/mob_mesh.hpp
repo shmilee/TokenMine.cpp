@@ -2,10 +2,13 @@
 //
 // makeMobModelGeometry builds the vertex/index data for every box of a
 // MobModel: the shared six-face table (same corner order and winding as
-// blocks and dropped items — see cube_face_table.hpp), one texture tile on
-// all six faces, full sky light baked in (the shader's day/night scale
-// then shades the mob like the world: bright by day, dark by night — the
-// same simplification as dropped items; mobs have no local light).
+// blocks and dropped items — see cube_face_table.hpp), one texture tile
+// per face — the box's `texture` default plus the optional per-face
+// `faces` overrides (V2-2; an empty override map = the pre-V2-2
+// single-tile behavior, bit-identical), full sky light baked in (the
+// shader's day/night scale then shades the mob like the world: bright by
+// day, dark by night — the same simplification as dropped items; mobs
+// have no local light).
 //
 // Local space: the mob's BOTTOM-CENTER is the origin (boxes are positioned
 // relative to it, in model units). The game draws the result with

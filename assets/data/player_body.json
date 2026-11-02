@@ -6,37 +6,85 @@
       {
         "pos": [0.0, 1.55, 0.0],
         "size": [0.5, 0.5, 0.5],
-        "texture": "player_head"
+        "texture": "ph_face",
+        "faces": {
+          "front": "ph_face",
+          "back": "ph_hair",
+          "top": "ph_hair",
+          "bottom": "ph_hair",
+          "left": "ph_side",
+          "right": "ph_side"
+        }
       },
       {
         "name": "body",
         "pos": [0.0, 1.025, 0.0],
         "size": [0.5, 0.55, 0.25],
-        "texture": "player_body"
+        "texture": "pb_shirt",
+        "faces": {
+          "front": "pb_shirt",
+          "back": "pb_shirt",
+          "left": "pb_shirt",
+          "right": "pb_shirt",
+          "top": "pb_shirt",
+          "bottom": "pb_shirt"
+        }
       },
       {
         "name": "arm_l",
         "pos": [-0.375, 0.925, 0.0],
         "size": [0.25, 0.75, 0.25],
-        "texture": "player_arm"
+        "texture": "pa_arm",
+        "faces": {
+          "front": "pa_arm",
+          "back": "pa_arm",
+          "left": "pa_arm",
+          "right": "pa_arm",
+          "top": "pa_arm",
+          "bottom": "pa_arm"
+        }
       },
       {
         "name": "arm_r",
         "pos": [0.375, 0.925, 0.0],
         "size": [0.25, 0.75, 0.25],
-        "texture": "player_arm"
+        "texture": "pa_arm",
+        "faces": {
+          "front": "pa_arm",
+          "back": "pa_arm",
+          "left": "pa_arm",
+          "right": "pa_arm",
+          "top": "pa_arm",
+          "bottom": "pa_arm"
+        }
       },
       {
         "name": "leg_l",
         "pos": [-0.125, 0.375, 0.0],
         "size": [0.25, 0.75, 0.25],
-        "texture": "player_leg"
+        "texture": "pl_pants",
+        "faces": {
+          "front": "pl_pants",
+          "back": "pl_pants",
+          "left": "pl_pants",
+          "right": "pl_pants",
+          "top": "pl_pants",
+          "bottom": "pl_boot"
+        }
       },
       {
         "name": "leg_r",
         "pos": [0.125, 0.375, 0.0],
         "size": [0.25, 0.75, 0.25],
-        "texture": "player_leg"
+        "texture": "pl_pants",
+        "faces": {
+          "front": "pl_pants",
+          "back": "pl_pants",
+          "left": "pl_pants",
+          "right": "pl_pants",
+          "top": "pl_pants",
+          "bottom": "pl_boot"
+        }
       }
     ],
     "swings": [
