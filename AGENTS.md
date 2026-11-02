@@ -95,7 +95,7 @@ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build  # 构
 ## 阶段流程（每个 phase 按此顺序）
 
 1. 用户确认方向 → 2. 实现（数据驱动、无 TODO）→ 3. 构建 + 全量测试（`-Werror`）→
-4. E2E（base 门 + 回归对 + 场景专属验证，按上面协议）→ 5. 文档（ROADMAP 行、
+4. E2E（base 门 + 回归对 + 场景专属验证，按上面协议）→ 5. 文档（CHANGELOG v2.x 条 / BACKLOG v2.x 表 + 变更记录、
 KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表** git commit（永不 `git add -A`；
 永不提交 `opencode-sessions/` 下任何文件（本地））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
@@ -137,10 +137,11 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
 | [docs/PITS.md](docs/PITS.md) | 坑位合集（359 条，都踩过） | 遇到怪问题 |
-| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃）+ 已修复存档索引 | 阶段验收前后 |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Phase 0–29 规划 + 细节存档索引 | 了解历史 |
-| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v0.1.0 → v2.0.0 逐版明细；README 只留里程碑版本） | 查某版改了什么 |
-| [docs/BACKLOG.md](docs/BACKLOG.md) | **v2.x 任务表（执行权威，待用户定范围）** + v1.x 任务表归档（40/40 全完成）+ 变更记录 | 取下一个任务 |
-| [docs/archive/v1x/phase-NN.md](docs/archive/v1x/) | 1.x 阶段细节存档（181 份，只读历史）+ HISTORY.md 全史 | 深挖 1.x 某阶段 |
+| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
+| [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v2.x 逐版明细；v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |
+| [docs/BACKLOG.md](docs/BACKLOG.md) | **v2.x 任务表（执行权威）** + v2.x 变更记录（v1.x 表 → `docs/archive/v1x/BACKLOG.md`） | 取下一个任务 |
+| [docs/archive/v1x/](docs/archive/v1x/) | 1.x 阶段细节存档（181 份 phase，只读历史）+ HISTORY.md 全史 + v1x/CHANGELOG.md + v1x/BACKLOG.md | 深挖 1.x 某阶段 |
+| [docs/archive/v0x/](docs/archive/v0x/) | 0.x 时代文档（ROADMAP 规划 / DISCUSSION 记录 / v0x/CHANGELOG.md） | 深挖 0.x |
 | [docs/archive/phase-NN.md](docs/archive/) | 2.x 阶段细节存档（新阶段放这里） | 深挖 2.x 某阶段 |
-| `opencode-sessions/SESSION_CONTEXT.md`（本地，不入库） | 会话交接：最新状态/提交列表/下一步（+ 同目录 SESSION_HISTORY 历史块 / LEGACY_STATUS_P30 遗留附录 / kickoff_prompt 新会话启动 prompt） | 任何"继续"会话 |
+| `opencode-sessions/SESSION_CONTEXT.md`（本地，不入库） | 会话交接：最新状态/提交列表/下一步（+ kickoff_prompt 启动 prompt；SESSION_CONTEXT_PRE2.0 / LEGACY_STATUS_P30 / SESSION_HISTORY / 门资产 → 同目录 `archive/`） | 任何"继续"会话 |

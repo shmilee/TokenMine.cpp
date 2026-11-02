@@ -1,6 +1,8 @@
 # 架构规划（分阶段）
 
 > Phase 30 文档整理：从 `README.md` 移入（未改写）。各阶段细节存档见文末索引。
+> 11-02 深层整理：`git mv` 至 `docs/archive/v0x/`（0.x 时代规划，live 不再
+> 引用；live 文档见 `../../AGENTS.md` 文档地图）。
 
 - [x] **Phase 0** — 项目基础：构建系统、主循环、日志、配置、资源系统、错误处理、测试框架
 - [x] **Phase 1** — 基础 3D 引擎：数学库、Input、Camera、Renderer（Shader/Texture/Mesh/VAO）、PNG 编解码、demo 场景

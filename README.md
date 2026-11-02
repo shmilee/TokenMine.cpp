@@ -7,7 +7,7 @@
 **本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒<br>
 （C++20 / SDL3 / OpenGL 3.3，自研 JSON/PNG，内容全数据驱动）。<br>
 确定性是一级要求——无输入运行逐帧字节可复现。<br>
-v2.0.0 已发布（1.x 收官里程碑）· v2.x 待立项（任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
+v2.0.0 已发布（1.x 收官里程碑）· v2.x 进行中（V2-1 前视角 / V2-2 Steve 皮肤已完成，任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
 
 [![GitHub stars](https://img.shields.io/github/stars/shmilee/TokenMine.cpp?style=flat-square)](https://github.com/shmilee/TokenMine.cpp/stargazers)
 [![MIT license](https://img.shields.io/badge/license-MIT-555555?style=flat-square)](LICENSE)
@@ -94,7 +94,7 @@ cmake --build build
   系列（UX-8g/UX-9：云方块化/教程火把步/洞穴底光可配置）全完成 + 发布扫尾
   （1.x 文档归档 `docs/archive/v1x/` / 第三人称准星不压头 / 活文档刷新 2.0 状态）。
   2075/2075 测试。Release 见 GitHub Releases "TokenMine.cpp v2.0.0"。
-  v2.x 任务表待立项（`docs/BACKLOG.md`）；1.x 全史 =
+  v2.x 进行中（V2-1/V2-2 已完成，见 `docs/CHANGELOG.md`）；1.x 全史 =
   `docs/archive/v1x/HISTORY.md`。
 - **v1.0.0**（2026-10-27）：**首个正式版**，任务矩阵 34/34 全完成
   （十大系统：流送内存/帧管线/光照/世界生成/流体/实体 Mob/生存战斗/物品
@@ -104,16 +104,13 @@ cmake --build build
 - **v0.1.0**（2026-10-17，首个公开版）：功能阶段 P0–P99 + 性能系列 99.x
   全部完成；1195/1195 测试、`-Werror` 0 警告。
 
-v0.2.0 → v1.3.0 逐版明细（流送圆盘化 / 游泳划水 / 水量守恒 / 矿脉 / 树生长 /
-BlockState / 四肢摆动 / mob 踏阶 / 水体交互 / 护甲 / 氧气 / 耐久 / 药水 / mob 效果 /
-洞穴与树修复 / 工作台 / 物品 3D 模型 / 材质音效 / 自动存档 / 中文字体 / 边缘雾 /
-水面波纹 / 云与环境音 / 透明 discard / 掉落光照 / 渲染修复 / mob 涉水修正 /
-流体列保留 / 流体 per-cell / 夜光重传播 + 月光）：
-见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)（逐版明细 + 发布节奏）；
-每版工程细节（机制/证据/偏离/性能 A/B）见 `docs/archive/v1x/phase-*.md` 阶段
-存档与 GitHub Releases。
+v0.2.0 → v2.2.0 逐版明细：v2.x 见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)；
+v1.x（v1.50.0→v1.0）见 `docs/archive/v1x/CHANGELOG.md`；v0.x
+（v0.12.0→v0.1.0）见 `docs/archive/v0x/CHANGELOG.md`；每版工程细节
+（机制/证据/偏离/性能 A/B）见 `docs/archive/*/phase-*.md` 阶段存档与
+GitHub Releases。
 - **0.x 承诺**：可玩、可扩展、确定性运行；但**不承诺稳定**——存档格式
-  （现为 format 19，向前迁移）与内容数据格式仍可能随阶段演进，旧存档
+  （现为 format 24，向前迁移）与内容数据格式仍可能随阶段演进，旧存档
   通常可读但请定期备份。已知限制见 `docs/KNOWN_ISSUES.md`。
 - 许可证：MIT（见 `LICENSE`）。
 - **内存提示**：默认 `config/config.json` 为 `view_distance: 80`（圆盘环
@@ -132,12 +129,13 @@ BlockState / 四肢摆动 / mob 踏阶 / 水体交互 / 护甲 / 氧气 / 耐久
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（266 条，都踩过） | 遇到怪问题 |
-| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃）+ 已修复存档索引 | 阶段验收前后 |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Phase 0–29 规划 + 细节存档索引 | 了解历史 |
-| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v0.1.0 → v2.0.0 逐版明细） | 查某版改了什么 |
-| [docs/archive/v1x/phase-NN.md](docs/archive/) | 单阶段细节存档（阶段报告 + 会话存档） | 深挖某阶段 |
-| `opencode-sessions/SESSION_CONTEXT.md`（本地，不入库） | 会话交接：最新状态/提交列表/下一步（+ 历史块/遗留附录/新会话启动 prompt，同目录） | 任何"继续"会话 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（359 条，都踩过） | 遇到怪问题 |
+| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
+| [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v2.x 逐版明细；v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |
+| [docs/archive/](docs/archive/) | 阶段细节存档（1.x：181 phase + HISTORY.md 全史 + v1x/CHANGELOG.md + v1x/BACKLOG.md；2.x：phase-2.x.x.md） | 深挖某阶段 |
+| [docs/archive/v0x/](docs/archive/v0x/) | 0.x 时代文档（ROADMAP 规划 / DISCUSSION 记录 / v0x/CHANGELOG.md） | 深挖 0.x |
+| `opencode-sessions/SESSION_CONTEXT.md`（本地，不入库） | 会话交接：最新状态/提交列表/下一步（历史块/遗留附录 → 同目录 `archive/`；新会话启动 prompt 同目录） | 任何"继续"会话 |
 
 ## 开发约定
 
