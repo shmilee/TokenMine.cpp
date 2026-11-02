@@ -397,12 +397,14 @@ void Game::update(double dt) {
         }
     }
     // UX-4: first person keeps the legacy assignment bit-exactly (the
-    // camera is the eye). Third person orbits kThirdPersonDistance BEHIND
+    // camera is the eye). Third person orbits kThirdPersonDistance from
     // the eye on the view's own sphere and clamps against the first
     // occluding block face (the pure read-only resolve in
-    // core/third_person — the campfire pattern). The mode is session
-    // state (never saved, defaults to First), so a no-input run stays on
-    // the legacy path.
+    // core/third_person — the campfire pattern). V2-1: the front view is
+    // the SAME resolve executed at the flipped view angles
+    // (thirdPersonFrontAngles) — the camera in front of the player,
+    // looking at it. The mode is session state (never saved, defaults
+    // to First), so a no-input run stays on the legacy path.
     m_camera.yaw = m_player->yaw;
     m_camera.pitch = m_player->pitch;
     if (m_cameraMode == CameraMode::ThirdBack) {
@@ -419,6 +421,29 @@ void Game::update(double dt) {
             thirdPersonOrbitCenter(m_player->eyePosition(), m_player->yaw,
                                    m_player->pitch),
             m_player->yaw, m_player->pitch);
+    } else if (m_cameraMode == CameraMode::ThirdFront) {
+        // V2-1: front view = the back camera's resolve run at the flipped
+        // view angles (thirdPersonFrontAngles): the camera sits
+        // kThirdPersonDistance IN FRONT of the eye, looking at the
+        // player (the player's front is visible). The orbit center still
+        // uses the PLAYER's angles (up_cam is invariant under the flip —
+        // the same 0.4 lift, so the head stays 29-96 px below the screen
+        // center as in the back view). The occlusion / fluid / embedded
+        // clamps apply symmetrically (the same geometry, mirrored about
+        // the orbit center). The aim rays still leave from eyePosition()
+        // (UX-8g); the direction is now the camera's own forward = the
+        // player's backward, and the reach is extended (aimReach — see
+        // the V2-1 note in game_interaction, the MC front-view
+        // convention).
+        const ThirdPersonAngles fa =
+            thirdPersonFrontAngles(m_player->yaw, m_player->pitch);
+        m_camera.yaw = fa.yaw;
+        m_camera.pitch = fa.pitch;
+        m_camera.position = resolveThirdPersonCamera(
+            m_world,
+            thirdPersonOrbitCenter(m_player->eyePosition(), m_player->yaw,
+                                   m_player->pitch),
+            fa.yaw, fa.pitch);
     } else {
         m_camera.position = m_player->eyePosition(); // First: legacy
     }

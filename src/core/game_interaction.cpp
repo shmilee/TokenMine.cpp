@@ -8,6 +8,7 @@
 #include "block/drop_scatter.hpp"
 #include "core/bow.hpp"
 #include "core/game_local.hpp"
+#include "core/third_person.hpp"
 #include "item/armor.hpp"
 #include "item/durability.hpp"
 #include "world/growth.hpp"
@@ -34,6 +35,19 @@ constexpr float kKnockbackLift = 2.5f;   // vertical knockback (blocks/s)
 constexpr double kDigSoundInterval = 0.3;
 
 } // namespace
+
+float Game::aimReach() const {
+    // V2-1: the front camera sits kThirdPersonDistance IN FRONT of the
+    // eye (it is the player's visual eye in that view), so the eye ray
+    // gets the D compensation — the full Minecraft reach behind the
+    // player (the MC front-view convention). First / ThirdBack return
+    // the legacy kReach BIT-IDENTICALLY (the same constexpr value the
+    // pre-V2-1 call sites passed as literals — the structural-immunity
+    // root: no-input and back-view runs are unchanged).
+    return m_cameraMode == CameraMode::ThirdFront
+               ? kThirdPersonDistance + kReach
+               : kReach;
+}
 
 void Game::handleInteraction(double dt) {
     // CRAFT-3: the listener for the spatialized sounds (the material dig /
@@ -377,8 +391,16 @@ std::optional<BlockHit> Game::targetBlock() const {
     // are the player's), so the old camera origin ate 4 blocks of the
     // kReach budget (effective reach 1) and made the nearest hit the
     // player's own head area — the crosshair-on-itself bug.
+    // V2-1: the front view reuses this same ray with the camera's own
+    // angles: the origin stays the eye, the direction is the camera's
+    // forward = the player's BACKWARD (the screen-center direction —
+    // the region behind the player the front camera looks at), and the
+    // reach is kThirdPersonDistance + kReach (aimReach, the MC
+    // front-view convention: the front camera is the player's visual
+    // eye, D from the real eye). First / ThirdBack: aimReach() = kReach,
+    // bit-identical to the pre-V2-1 literal.
     return raycastBlock(m_world, m_player->eyePosition(), m_camera.forward(),
-                        kReach);
+                        aimReach());
 }
 
 void Game::resetBreaking() {
@@ -434,8 +456,11 @@ void Game::updateBreaking(double dt) {
 std::optional<Game::MobHit> Game::targetMob() const {
     // The block occludes: the nearer of the block hit and the mob AABB
     // hits wins (a mob behind the aimed block is not hit; a mob in front
-    // of the block is).
-    float bestT = kReach;
+    // of the block is). V2-1: the initial budget is aimReach() (the
+    // block hit that sets bestT comes from targetBlock with the SAME
+    // budget, so the occlusion comparison stays consistent in every
+    // mode; First / ThirdBack: aimReach() = kReach, bit-identical).
+    float bestT = aimReach();
     if (const std::optional<BlockHit> b = targetBlock()) {
         bestT = b->distance;
     }
@@ -1227,10 +1252,12 @@ bool Game::tryFluidBucket() {
         // modes (first person: m_camera.position == eyePosition =
         // bit-identical; third person the camera behind the eye would
         // otherwise eat the reach budget and occlude itself, the same
-        // family as the crosshair bug).
+        // family as the crosshair bug). V2-1: the budget is aimReach()
+        // (front view: D + kReach, the same convention as targetBlock
+        // — First / ThirdBack bit-identical).
         const std::optional<BlockPos> cell =
             raycastFluid(m_world, m_player->eyePosition(),
-                         m_camera.forward(), kReach);
+                         m_camera.forward(), aimReach());
         // A source cell is level kMaxFluidLevel (flowing cells are lower
         // and cannot be collected, Minecraft). A block cell reads dry.
         const std::optional<FluidKind> kind =
@@ -1301,10 +1328,11 @@ bool Game::tryFluidBucket() {
         // reach is the fluid ray's own hit cell (a wall in reach would
         // have produced the block hit, so the fluid hit here is
         // unoccluded by definition). UX-8g: the origin is the eye,
-        // matching the targetBlock block hit above — same line and
-        // same reach budget in both modes (first person bit-identical).
+        // matching the targetBlock block hit above — same line and same
+        // reach budget in both modes (V2-1: the budget is aimReach() —
+        // front view D + kReach; first person bit-identical).
         fluidHit = raycastFluid(m_world, m_player->eyePosition(),
-                                m_camera.forward(), kReach);
+                                m_camera.forward(), aimReach());
     }
     // The pour cell (bucketPourTarget): the face neighbor of the hit
     // block (the placement-target convention — the block ray passes

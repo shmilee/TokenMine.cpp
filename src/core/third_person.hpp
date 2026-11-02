@@ -15,9 +15,11 @@
 //
 // Both functions are pure and read-only (hard rule 8: deterministic —
 // a no-input run reproduces byte for byte; hard rule 2: no GL). The
-// Game calls resolveThirdPersonCamera once per frame while
-// m_cameraMode == ThirdBack; first person never enters this code (the
-// Game's else branch keeps the legacy eye-position assignment).
+// Game calls resolveThirdPersonCamera once per frame while in third
+// person: the back view at the player's own angles, and (V2-1) the
+// front view at the flipped angles (thirdPersonFrontAngles); first
+// person never enters this code (the Game's else branch keeps the
+// legacy eye-position assignment).
 #pragma once
 
 #include "core/math/vec3.hpp"
@@ -56,6 +58,12 @@ constexpr float kCameraOcclusionMargin = 0.1f;
 // up_cam — a fixed third-person parallax (the Minecraft third-person
 // look), documented deviation, no code compensation.
 constexpr float kThirdPersonOrbitHeight = 0.4f;
+
+// V2-1 (front view): pi as a float — the single constant the front-view
+// yaw flip needs (thirdPersonFrontAngles). The codebase's other pi uses
+// are <cmath> M_PI doubles in unrelated modules; none is a named float
+// constant to reuse.
+constexpr float kPi = 3.14159265f;
 
 // The orbit center for a third-person frame: the eye lifted along the
 // view's up axis (Camera::up) by kThirdPersonOrbitHeight. The caller
@@ -112,5 +120,33 @@ Vec3 thirdPersonCameraOffset(float yaw, float pitch, float distance);
 // safe). Pure read-only World access.
 Vec3 resolveThirdPersonCamera(const World& world, const Vec3& orbitCenter,
                               float yaw, float pitch);
+
+// V2-1: the third-person FRONT view — the back camera's math executed at
+// the flipped view angles.
+//
+// The flip: yaw' = yaw + kPi, pitch' = -pitch. Derivation (one trig
+// source, Camera::forward = (sin yaw * -cos pitch, sin pitch,
+// cos yaw * -cos pitch), hard rule 5):
+//   forward(yaw', pitch') = -forward(yaw, pitch)
+// so -forward(yaw', pitch') = +forward(yaw, pitch) = the player's
+// FORWARD: resolveThirdPersonCamera (the back camera's identical
+// geometry) places the camera kThirdPersonDistance IN FRONT of the eye,
+// looking at the player — the player's front is visible (the user's
+// request: "see my own front").
+//
+// The view up is invariant under the flip: up_cam = cross(right,
+// forward) and right(yaw') = -right(yaw), forward(yaw') = -forward
+// (each to the sin(yaw + kPi) ulp), so up_cam(yaw', pitch') =
+// cross(-right, -forward) = up_cam(yaw, pitch). That is why the Game
+// keeps passing the PLAYER's angles to thirdPersonOrbitCenter: the same
+// kThirdPersonOrbitHeight lift, the head stays 29-96 px below the
+// screen center exactly as in the back view. The occlusion / fluid /
+// embedded clamps of resolveThirdPersonCamera apply symmetrically — it
+// is the same geometry mirrored about the orbit center, no new branch.
+struct ThirdPersonAngles {
+    float yaw;
+    float pitch;
+};
+ThirdPersonAngles thirdPersonFrontAngles(float yaw, float pitch);
 
 } // namespace mc

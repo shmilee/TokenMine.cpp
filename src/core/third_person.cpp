@@ -124,4 +124,10 @@ Vec3 resolveThirdPersonCamera(const World& world, const Vec3& orbitCenter,
     return ideal + dir * std::max(0.0f, *t - kCameraOcclusionMargin);
 }
 
+ThirdPersonAngles thirdPersonFrontAngles(float yaw, float pitch) {
+    // The flip (see the hpp derivation): yaw' = yaw + kPi, pitch' =
+    // -pitch. Nothing else — the back camera's resolve is reused as is.
+    return {yaw + kPi, -pitch};
+}
+
 } // namespace mc

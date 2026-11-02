@@ -184,15 +184,19 @@ void Game::handleUiKeys() {
             MC_LOG_WARN("F5: no save slot (pass --save <slot>)");
         }
     }
-    // UX-4: C toggles the camera (Minecraft's modern camera key; F5 is
-    // the manual save here). Locked-pointer only: with the cursor free
-    // (panel open / death screen) C does nothing — the E-key pattern.
-    // The mode is session state (never saved): a loaded world starts in
-    // first person, the Minecraft convention.
+    // UX-4: C cycles the camera (V2-1: the Minecraft F5 order — First ->
+    // ThirdBack -> ThirdFront -> First; F5 is the manual save here).
+    // Locked-pointer only: with the cursor free (panel open / death
+    // screen) C does nothing — the E-key pattern. The mode is session
+    // state (never saved): a loaded world starts in first person, the
+    // Minecraft convention.
     if (m_input.wasPressed(GameKey::C) && m_window.relativeMouseMode()) {
-        m_cameraMode = (m_cameraMode == CameraMode::First)
-                           ? CameraMode::ThirdBack
-                           : CameraMode::First;
+        m_cameraMode =
+            m_cameraMode == CameraMode::First
+                ? CameraMode::ThirdBack
+                : m_cameraMode == CameraMode::ThirdBack
+                      ? CameraMode::ThirdFront
+                      : CameraMode::First;
     }
     // UX-7: T skips the tutorial (locked pointer only — the C-key
     // pattern: a free cursor / panel / death screen never touches it).

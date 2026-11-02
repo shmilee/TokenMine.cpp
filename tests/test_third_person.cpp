@@ -1,4 +1,4 @@
-// UX-4 (2.0.0: the lifted orbit): the third-person back camera
+// UX-4 (2.0.0: the lifted orbit): the third-person camera math
 // (core/third_person).
 //
 // The offset math pins the Minecraft third-person convention (behind
@@ -7,7 +7,11 @@
 // kThirdPersonOrbitHeight up the view's up axis — the head stays clear
 // of the screen-center crosshair); the resolve pins the occlusion
 // clamps (wall face, the embedded-ideal edge, fluids transparent,
-// beyond reach) with exact expected positions.
+// beyond reach) with exact expected positions. V2-1: the front view is
+// the SAME resolve at the flipped angles (yaw + pi, -pitch) — the
+// frontAngles pin, the up-invariance, the empty-world identity (the
+// camera in front of the player, mirrored about the orbit center) and
+// the mirrored wall clamp.
 
 #include <gtest/gtest.h>
 
@@ -363,4 +367,125 @@ TEST(ThirdPersonTest, UnoccludedCameraPinsTheLiftedOrbitInvariant) {
         resolved.pitch = c[1];
         EXPECT_EQ(resolved.forward(), view.forward()) << "yaw " << c[0];
     }
+}
+
+// -- V2-1: the front view (the flipped-angles resolve) -------------------------
+
+TEST(ThirdPersonTest, FrontAnglesFlipPins) {
+    // The flip, pinned by the SAME expression (bit-exact): yaw' = yaw +
+    // kPi, pitch' = -pitch. Multiple orientations, including the axis
+    // cases.
+    const float cases[][2] = {
+        {0.0f, 0.0f},   {0.4f, -0.2f}, {1.2f, 0.5f},
+        {-2.1f, 0.9f},  {3.0f, -1.2f}, {kPiOver2, 0.0f},
+    };
+    for (const auto& c : cases) {
+        const ThirdPersonAngles a = thirdPersonFrontAngles(c[0], c[1]);
+        EXPECT_FLOAT_EQ(a.yaw, c[0] + kPi) << "yaw " << c[0];
+        EXPECT_FLOAT_EQ(a.pitch, -c[1]) << "yaw " << c[0];
+    }
+}
+
+TEST(ThirdPersonTest, FrontViewUpIsInvariant) {
+    // up_cam(yaw', pitch') = up_cam(yaw, pitch): the flip negates BOTH
+    // right and forward (cross(-r, -f) = cross(r, f)), so the view's up
+    // axis is unchanged (to the sin(yaw + kPi) ulp — 1e-6, NOT
+    // bit-exact). This is what lets the orbit center keep using the
+    // PLAYER's angles: the same kThirdPersonOrbitHeight lift, the head
+    // 29-96 px below the screen center as in the back view.
+    const float cases[][2] = {
+        {0.0f, 0.0f},   {0.4f, -0.2f}, {1.2f, 0.5f},
+        {-2.1f, 0.9f},  {3.0f, -1.2f}, {kPiOver2, 0.0f},
+    };
+    for (const auto& c : cases) {
+        Camera a {};
+        a.yaw = c[0];
+        a.pitch = c[1];
+        Camera b {};
+        const ThirdPersonAngles fa = thirdPersonFrontAngles(c[0], c[1]);
+        b.yaw = fa.yaw;
+        b.pitch = fa.pitch;
+        const Vec3 ua = a.up();
+        const Vec3 ub = b.up();
+        EXPECT_NEAR(ua.x, ub.x, 1e-6f) << "yaw " << c[0];
+        EXPECT_NEAR(ua.y, ub.y, 1e-6f) << "yaw " << c[0];
+        EXPECT_NEAR(ua.z, ub.z, 1e-6f) << "yaw " << c[0];
+    }
+}
+
+TEST(ThirdPersonTest, FrontViewEmptyWorldResolveIdentity) {
+    // Empty world (no occlusion): the front-view resolve is the ideal
+    // position, and the ideal is orbit + forward(yaw, pitch) * D — the
+    // camera IN FRONT of the player (the player's front is visible).
+    // (1) Bit-exact against the resolve's OWN unoccluded expression
+    //     (orbit + thirdPersonCameraOffset(fa) — same operation order,
+    //     self-consistent);
+    // (2) the semantic identity against the player's forward at 1e-6
+    //     (the sin(yaw + kPi) ulp — NOT bit-exact across the flip);
+    // (3) the mirror relation to the back view at the SAME orbit
+    //     center: front_cam - orbit = -(back_cam - orbit) (1e-5: kEye-
+    //     scale coordinate rounding).
+    World world; // no chunks: every read is air
+    const float cases[][2] = {
+        {0.0f, 0.0f},   {0.4f, -0.2f}, {1.2f, 0.5f},
+        {-2.1f, 0.9f},  {3.0f, -1.2f}, {kPiOver2, 0.0f},
+    };
+    for (const auto& c : cases) {
+        Camera view {};
+        view.yaw = c[0];
+        view.pitch = c[1];
+        const ThirdPersonAngles fa = thirdPersonFrontAngles(c[0], c[1]);
+        // The orbit center keeps the PLAYER's angles (the invariance
+        // above) — the same point the back view orbits.
+        const Vec3 orbit = thirdPersonOrbitCenter(kEye, c[0], c[1]);
+        const Vec3 camFront =
+            resolveThirdPersonCamera(world, orbit, fa.yaw, fa.pitch);
+        const Vec3 camBack =
+            resolveThirdPersonCamera(world, orbit, c[0], c[1]);
+        // (1) bit-exact: the resolve's own unoccluded arithmetic.
+        const Vec3 want =
+            orbit + thirdPersonCameraOffset(fa.yaw, fa.pitch,
+                                            kThirdPersonDistance);
+        EXPECT_EQ(camFront, want) << "yaw " << c[0];
+        // (2) the semantic identity: in front of the eye along the
+        //     player's forward (1e-5: the sin(yaw + kPi) ulp plus the
+        //     ~21-magnitude coordinate rounding — the file's convention
+        //     for values recovered at kEye scale; NOT bit-exact across
+        //     the flip).
+        expectVecNear("front ideal", camFront,
+                      orbit.x + view.forward().x * kThirdPersonDistance,
+                      orbit.y + view.forward().y * kThirdPersonDistance,
+                      orbit.z + view.forward().z * kThirdPersonDistance,
+                      1e-5f);
+        // (3) the mirror relation about the orbit center (1e-5: the
+        //     difference of ~21-magnitude coordinates costs a ulp at
+        //     that scale — 1.9e-6 observed at yaw 0.4).
+        EXPECT_NEAR(camFront.x - orbit.x, -(camBack.x - orbit.x), 1e-5f)
+            << "yaw " << c[0];
+        EXPECT_NEAR(camFront.y - orbit.y, -(camBack.y - orbit.y), 1e-5f)
+            << "yaw " << c[0];
+        EXPECT_NEAR(camFront.z - orbit.z, -(camBack.z - orbit.z), 1e-5f)
+            << "yaw " << c[0];
+    }
+}
+
+TEST(ThirdPersonTest, FrontViewClampsInFrontOfWall) {
+    // The back-view wall clamp (ResolveClampsInFrontOfWall) mirrored to
+    // the +f side: eye at kEye, yaw 0 (facing -Z) / pitch 0 -> the orbit
+    // center at (22.5, 40.9, 0.5) and the FRONT ideal camera at
+    // (22.5, 40.9, -3.5), looking +Z toward the orbit. Two wall blocks
+    // IN FRONT of the player at (22,40,-1) and (22,40,-2) (the ray's
+    // y = 40.9 is still inside their y range [40, 41)): the first
+    // occluding face is z = -2, at t = 1.5 from the ideal.
+    World world;
+    ASSERT_TRUE(world.setBlock(22, 40, -1, BlockID{1}));
+    ASSERT_TRUE(world.setBlock(22, 40, -2, BlockID{1}));
+    const Vec3 orbit = thirdPersonOrbitCenter(kEye, 0.0f, 0.0f);
+    const ThirdPersonAngles fa = thirdPersonFrontAngles(0.0f, 0.0f);
+    const Vec3 cam =
+        resolveThirdPersonCamera(world, orbit, fa.yaw, fa.pitch);
+    // Stop kCameraOcclusionMargin in front of the face, on the
+    // PLAYER's side (z > -2): -3.5 + (1.5 - 0.1) = -2.1 (the exact
+    // mirror of the back view's 3.1 about the orbit's z = 0.5).
+    expectVecNear("front clamp", cam, 22.5f, 40.9f, -2.1f);
 }

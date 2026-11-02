@@ -142,16 +142,20 @@ public:
         Furnace,   // Phase 40: right-clicked furnace: the smelting GUI
     };
 
-    // The camera mode (UX-3/UX-4): the player's world-space body renders
-    // ONLY in third person (the body is invisible in first person, the
-    // Minecraft convention). First is the default — every UX-4 change is
-    // gated on m_cameraMode, so a first-person (no-input) run stays
-    // bit-identical. UX-4's C key (locked pointer only) toggles it at run
-    // time; the mode is session state, never saved (a loaded world starts
-    // in first person, the Minecraft convention).
+    // The camera mode (UX-3/UX-4, V2-1): the player's world-space body
+    // renders ONLY in third person (the body is invisible in first person,
+    // the Minecraft convention). First is the default — every UX-4 change
+    // is gated on m_cameraMode, so a first-person (no-input) run stays
+    // bit-identical. UX-4's C key (locked pointer only) cycles it at run
+    // time (V2-1: the Minecraft F5 order First -> ThirdBack -> ThirdFront
+    // -> First); the mode is session state, never saved (a loaded world
+    // starts in first person, the Minecraft convention).
     enum class CameraMode {
         First,     // the default: no player body (byte-identical baseline)
         ThirdBack, // the body renders behind the camera (UX-4)
+        // V2-1: the camera in front of the player, looking at it — the
+        // player's front is visible (the Minecraft F5 front view).
+        ThirdFront,
     };
 
     // The panel UIs (Phase 15/17/40 — UX-2 B4's m_panel) hold references
@@ -324,8 +328,16 @@ private:
     // Pointer-lock state machine + block interaction (called from update).
     void handleInteraction(double dt);
     // The block the crosshair is aiming at (raycast from the eye, within
-    // kReach), if any.
+    // aimReach), if any.
     std::optional<BlockHit> targetBlock() const;
+    // V2-1: the aim ray's reach budget. First / ThirdBack: the legacy
+    // kReach (bit-identical — the structural-immunity root of the UX-8g
+    // red line). ThirdFront: kThirdPersonDistance + kReach — the front
+    // camera sits kThirdPersonDistance in front of the eye (it IS the
+    // player's visual eye in that view), so the eye ray needs the D
+    // compensation to keep the full Minecraft reach (the MC front-view
+    // convention). Defined in game_interaction (next to kReach).
+    float aimReach() const;
     // Hold-to-break state machine (Phase 11): advances the progress while
     // the crosshair stays on the same destroyable block and breaks it when
     // the data-driven duration elapses (see breakDurationSeconds).

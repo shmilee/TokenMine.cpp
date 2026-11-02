@@ -48,7 +48,8 @@ enum class GameKey {
     Digit7,
     Digit8,
     Digit9,
-    C, // UX-4: toggle the camera First <-> ThirdBack (locked pointer only)
+    C, // UX-4: cycle the camera First -> ThirdBack -> ThirdFront (locked
+       // pointer only; V2-1: the Minecraft F5 order)
     T, // UX-7: skip the tutorial (locked pointer only)
     // Keep in sync with kKeyCount.
 };

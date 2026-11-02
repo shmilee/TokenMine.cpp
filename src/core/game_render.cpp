@@ -292,11 +292,14 @@ void Game::drawHeldHand(const Mat4& view, const Mat4& projection) {
     // the pre-Phase-42 image (byte-identical baseline). UX-4: hidden in
     // third person too (the world-space body is visible instead — the
     // Minecraft far view has no first-person arm; an arm-held-item /
-    // bow-draw pose is a documented deviation). Pure rendering: it reads
-    // the selected slot + the bow/eat channel state and draws one model;
-    // it mutates nothing.
+    // bow-draw pose is a documented deviation). V2-1: the gate is "not
+    // first person", so the front view hides it as well (the body is
+    // visible instead — an arm floating in front of the player's face
+    // would be nonsense). First / ThirdBack behavior is unchanged.
+    // Pure rendering: it reads the selected slot + the bow/eat channel
+    // state and draws one model; it mutates nothing.
     if (!m_window.relativeMouseMode() || panelOpen() ||
-        m_cameraMode == CameraMode::ThirdBack) {
+        m_cameraMode != CameraMode::First) {
         return;
     }
     const ItemStack& stack = m_inventory.at(m_selectedSlot);
