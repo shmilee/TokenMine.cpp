@@ -1,7 +1,8 @@
 # v2.x 版本历史（已归档）
 
-> 2.x「上手与体验补全」期收官（11-03）归档。现行 CHANGELOG =
-> `docs/CHANGELOG.md`（v3.x 起）。逐版细节（机制/证据/偏离/性能 A/B）=
+> 2.x「上手与体验补全」期**第一批**（V2-1~V2-10）收官（11-03）归档。
+> 现行 CHANGELOG = `docs/CHANGELOG.md`（v2.11.0 起 = 2.x 第二批，原
+> 3.x 八项并入，11-03 收官日用户定案）。逐版细节（机制/证据/偏离/性能 A/B）=
 > 本目录 `phase-2.x.0.md` 阶段存档。v1.x → `docs/archive/v1x/CHANGELOG.md`；
 > v0.x → `docs/archive/v0x/CHANGELOG.md`。
 

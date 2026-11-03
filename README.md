@@ -98,7 +98,9 @@ cmake --build build
   + 金钻块 + spider 掉落）/ sky rescan clobber 修复 / step-up quirk
   修复 / 网格修复批（叶子面剔除 + cutout 普查确认）。2181/2181 测试；
   2.x 全史 = `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/
-  phase 存档 11 份）。3.x「系统扩展」已晋执行权威（条目待定案）。
+  phase 存档 11 份）。**收官日定案：原 3.x 八项并入 2.x 第二批
+  （V2-11~V2-18，`docs/BACKLOG.md` 执行权威）；原 4.x「世界扩展」
+  保持大版本。**
 - **v2.0.0**（2026-11-02）：**1.x 收官里程碑**——任务矩阵 40/40 + 两轮实机报障
   系列（UX-8g/UX-9：云方块化/教程火把步/洞穴底光可配置）全完成 + 发布扫尾
   （1.x 文档归档 `docs/archive/v1x/` / 第三人称准星不压头 / 活文档刷新 2.0 状态）。
@@ -140,8 +142,8 @@ GitHub Releases。
 | [docs/PITS.md](docs/PITS.md) | 坑位合集（375 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
-| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v3.x 起逐版明细；v2.x → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |
-| [docs/archive/](docs/archive/) | 阶段细节存档（v2x/：11 phase + HISTORY.md 全史 + v2x/CHANGELOG.md + v2x/BACKLOG.md；1.x：181 phase + HISTORY.md 全史；3.x 新阶段按 2.x 同款） | 深挖某阶段 |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v2.11.0 起逐版明细；2.x 第一批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |
+| [docs/archive/](docs/archive/) | 阶段细节存档（v2x/：11 phase + HISTORY.md 全史 + v2x/CHANGELOG.md + v2x/BACKLOG.md；1.x：181 phase + HISTORY.md 全史；2.x 二批新阶段按同款） | 深挖某阶段 |
 | [docs/archive/v0x/](docs/archive/v0x/) | 0.x 时代文档（ROADMAP 规划 / DISCUSSION 记录 / v0x/CHANGELOG.md） | 深挖 0.x |
 | `opencode-sessions/SESSION_CONTEXT.md`（本地，不入库） | 会话交接：最新状态/提交列表/下一步（历史块/遗留附录 → 同目录 `archive/`；新会话启动 prompt 同目录） | 任何"继续"会话 |
 

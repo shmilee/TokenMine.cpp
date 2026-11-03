@@ -19,11 +19,13 @@ C++20 / SDL3 / OpenGL 3.3 core，
   头降到屏幕中心下 29-96px；瞄准射线仍自眼位 = UX-8g 不变，TP 固定视差
   = MC 同款记偏离）③ 活文档刷新到 2.0 状态。门 171 全 PASS。
 - **任务只从 `docs/BACKLOG.md` 的 v2.x 节取**（11-03 三期分工定案：2.x
-  「上手与体验补全」V2-3~V2-10 八项**全部完成（11-03 收官）**】/
-  **3.x「系统扩展」V3-1~V3-8 = `docs/BACKLOG.md`（2.x 收官晋升执行
-  权威；条目均为暂定 = 待用户逐项定案后立项，定案前不执行）**/
-  4.x「世界扩展」V4-1~V4-6 = `docs/BACKLOG_4x.md` 方向底稿；三期
-  总量 24 < pre-v2.0 的 78-84 = 用户采纳判据 ✓）；2.x 全史 =
+  「上手与体验补全」V2-3~V2-10 八项**全部完成（11-03 收官，
+  tag v2.10.0）**；**11-03 收官日用户定案：原 3.x 八项并入 2.x
+  = 第二批 V2-11~V2-18（XP/附魔/床/蝙蝠/染色羊/雪原 biome/顶部
+  slab/AO，`docs/BACKLOG.md` 执行权威，用户已授权 V2-11 起推进）**
+  / 原 4.x「世界扩展」V4-1~V4-6 = `docs/BACKLOG_4x.md` 方向底稿
+  **保持大版本**（二批收官时定案晋升）；总量 24 < pre-v2.0 的
+  78-84 = 用户采纳判据 ✓）；2.x 全史 =
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 11 份）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`（只读，
   别把历史细节当现状）。
@@ -86,9 +88,10 @@ C++20 / SDL3 / OpenGL 3.3 core，
   单测钉）；**base18 第 2 次重锚 178148 B**（diff 4185 px 全叶冠
   区零泄漏论证，Phase 18 先例）+ 零 format——详见
   `docs/archive/v2x/phase-2.10.0.md`）。
-- 活跃已知问题：`docs/KNOWN_ISSUES.md`；**v3.x 任务表（执行权威）：
-  `docs/BACKLOG.md`**（2.x 收官晋升；条目待用户逐项定案；2.x 表 +
-  全史 = `docs/archive/v2x/`；1.x = `docs/archive/v1x/`）；会话交接：
+- 活跃已知问题：`docs/KNOWN_ISSUES.md`；**v2.x 第二批任务表（执行
+  权威）：`docs/BACKLOG.md`**（V2-11~V2-18 = 原 3.x 八项并入，
+  下一项 V2-11 XP 系统；第一批 V2-1~V2-10 + 全史 =
+  `docs/archive/v2x/`；1.x = `docs/archive/v1x/`）；会话交接：
   `opencode-sessions/SESSION_CONTEXT.md`。
 ## 命令
 
@@ -202,10 +205,10 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v2.x 逐版明细；v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |
-| [docs/BACKLOG.md](docs/BACKLOG.md) | **v3.x 任务表（执行权威，2.x 收官晋升）** + v3.x 变更记录（条目暂定待用户定案；2.x 表 → `docs/archive/v2x/BACKLOG.md`、v1.x 表 → `docs/archive/v1x/BACKLOG.md`） | 取下一个任务 |
-| [docs/BACKLOG_4x.md](docs/BACKLOG_4x.md) | v4.x「世界扩展」期方向底稿（下界维度锚 V4-1；3.x 收官晋升执行权威） | 3.x 收官定案时 |
+| [docs/BACKLOG.md](docs/BACKLOG.md) | **v2.x 第二批任务表（执行权威）**（V2-11~V2-18 = 原 3.x 八项并入，11-03 用户定案；第一批表 → `docs/archive/v2x/BACKLOG.md`、v1.x 表 → `docs/archive/v1x/BACKLOG.md`） | 取下一个任务 |
+| [docs/BACKLOG_4x.md](docs/BACKLOG_4x.md) | v4.x「世界扩展」期方向底稿（下界维度锚 V4-1，保持大版本；二批收官晋升执行权威） | 二批收官定案时 |
 | [docs/archive/v1x/](docs/archive/v1x/) | 1.x 阶段细节存档（181 份 phase，只读历史）+ HISTORY.md 全史 + v1x/CHANGELOG.md + v1x/BACKLOG.md | 深挖 1.x 某阶段 |
 | [docs/archive/v0x/](docs/archive/v0x/) | 0.x 时代文档（ROADMAP 规划 / DISCUSSION 记录 / v0x/CHANGELOG.md） | 深挖 0.x |
 | [docs/archive/v2x/](docs/archive/v2x/) | 2.x 阶段细节存档（11 份 phase，只读历史）+ v2x/HISTORY.md 全史 + v2x/CHANGELOG.md + v2x/BACKLOG.md | 深挖 2.x 某阶段 |
-| `docs/archive/phase-3.x.0.md`（新阶段放 docs/archive/） | 3.x 阶段细节存档（按 2.x 同款：新阶段放这里，收官沉 archive/v3x/） | 深挖 3.x 某阶段 |
+| `docs/archive/phase-2.x.0.md`（新阶段放 docs/archive/） | 2.x 二批阶段细节存档（第一批 11 份已沉 `docs/archive/v2x/`；二批收官沉 v2x/） | 深挖某阶段 |
 | `opencode-sessions/SESSION_CONTEXT.md`（本地，不入库） | 会话交接：最新状态/提交列表/下一步（+ kickoff_prompt 启动 prompt；SESSION_CONTEXT_PRE2.0 / LEGACY_STATUS_P30 / SESSION_HISTORY / 门资产 → 同目录 `archive/`） | 任何"继续"会话 |
