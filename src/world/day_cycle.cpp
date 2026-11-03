@@ -141,6 +141,44 @@ Vec3 DayCycle::moonDirection() const {
     return -sunDirection();
 }
 
+int DayCycle::dayIndex() const {
+    // The total cycles elapsed since the configured start (the same
+    // expression as timeOfDay() without the wrap — timeOfDay is the
+    // fractional part, dayIndex the integer part).
+    return static_cast<int>(std::floor(m_params.startTimeOfDay +
+                                       m_totalSeconds /
+                                           m_params.dayLengthSeconds));
+}
+
+int DayCycle::moonPhase() const {
+    return moonPhaseIndex(dayIndex());
+}
+
+int DayCycle::moonPhaseIndex(int dayIndex) {
+    int p = dayIndex % kMoonPhaseCount;
+    if (p < 0) {
+        p += kMoonPhaseCount;
+    }
+    return p;
+}
+
+Vec2 DayCycle::moonPhaseOffset(int phase) {
+    // The 8-phase magnitude table (disc radii; see the header): the
+    // shadow slides from concentric (new) to tangent (full) over the
+    // waxing half and back over the waning half. The quarter steps are
+    // the 25 % / 50 % / 75 % crescent-width marks (the uncovered
+    // crescent's width = the magnitude times the disc radius — the
+    // equal-radius circles' lens geometry).
+    static constexpr float kMagnitudes[kMoonPhaseCount] = {
+        0.0f, 0.25f, 0.5f, 0.75f, 1.0f, 0.75f, 0.5f, 0.25f,
+    };
+    const int p = moonPhaseIndex(phase);
+    // Phase 4 (full) is tangent — either direction reads "no overlap";
+    // pin +1 for a total order (the render skips it on magnitude 1).
+    const float dir = (p > 4) ? -1.0f : 1.0f;
+    return {dir, kMagnitudes[p]};
+}
+
 std::vector<Vec3> DayCycle::makeStarPositions(std::uint64_t seed, int count,
                                               double radius) {
     std::vector<Vec3> out;

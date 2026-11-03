@@ -713,6 +713,22 @@ Result<void> Game::buildScene() {
             }
         }
     }
+    // V2-6: the first-person arm (drawHeldHand's viewmodel) IS the
+    // model's 'arm_r' box — a model without it can't render the arm.
+    // Reject at init (the named-box discipline: the swings' part
+    // references work the same way).
+    bool hasArmR = false;
+    for (const MobBox& box : m_playerBody.model.boxes) {
+        if (box.name == "arm_r") {
+            hasArmR = true;
+            break;
+        }
+    }
+    if (!hasArmR) {
+        return MC_FAIL(
+            "player body: the V2-6 first-person arm requires a box named "
+            "'arm_r'");
+    }
 
     // -- tutorial (UX-7 / V2-3): the tutorial series data -------------
     // assets/data/tutorials/ = the series collection (one JSON file per

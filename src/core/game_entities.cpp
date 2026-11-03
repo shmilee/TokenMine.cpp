@@ -6,10 +6,12 @@
 #include "core/bow.hpp"
 #include "core/game_local.hpp"
 #include "entity/arrow_mesh.hpp"
+#include "entity/blob_shadow.hpp"
 #include "entity/item_light.hpp"
 #include "entity/item_model_mesh.hpp"
 #include "entity/mob_mesh.hpp"
 #include "entity/mob_swing.hpp"
+#include "entity/pickup_magnet.hpp"
 #include "world/noise.hpp"
 
 namespace mc {
@@ -236,10 +238,62 @@ void Game::updateEntities(double dt) {
             }
         }
     }
+    // V2-6: the pickup MAGNET — the frame-locked draw-in of READY drops
+    // and STUCK arrows toward the player (entity/pickup_magnet.hpp: one
+    // fixed displacement per game frame, a pure function of the
+    // distance + m_frameCount + the kMobStepPerFrame step — the
+    // frame-locked moving-entity class, hard rule 8). It runs after the
+    // physics / separation / merge (the final pre-pickup positions) and
+    // before the pickup passes below (a drawn-in entity can be
+    // collected this frame). Drops are ROOM-CHECKED (hasRoomAt — the
+    // magnet never pushes a drop through a block, the MC wall rule; a
+    // blocked step leaves the drop where it is, retried next frame);
+    // stuck arrows are pulled OUT of their block (that is the pickup's
+    // point — no room check: a stuck arrow's AABB is inside solid by
+    // construction, and a stuck arrow takes no physics steps). A
+    // no-input run has no ready drops and no stuck arrows (zero
+    // entities in the 60-frame baseline) = zero motion = the baseline
+    // byte-identical (structural immunity).
+    for (std::size_t i = 0; i < n; ++i) {
+        if (gone[i]) {
+            continue;
+        }
+        auto* item = dynamic_cast<ItemEntity*>(m_entities[i].get());
+        if (item != nullptr) {
+            if (!item->pickupReady()) {
+                continue;
+            }
+            const Vec3 disp = pickupMagnetDisplacement(item->position(),
+                                                       playerPos,
+                                                       m_frameCount,
+                                                       kMobStepPerFrame);
+            if (disp != Vec3::zero()) {
+                const Vec3 next = item->position() + disp;
+                if (item->hasRoomAt(next)) {
+                    item->setPosition(next);
+                }
+            }
+            continue;
+        }
+        auto* arrow = dynamic_cast<Projectile*>(m_entities[i].get());
+        if (arrow == nullptr || !arrow->stuck() ||
+            arrow->ammoItem().empty()) {
+            continue;
+        }
+        const Vec3 disp = pickupMagnetDisplacement(arrow->position(),
+                                                   playerPos, m_frameCount,
+                                                   kMobStepPerFrame);
+        if (disp != Vec3::zero()) {
+            arrow->setPosition(arrow->position() + disp);
+        }
+    }
     // Pickup (Phase 11): items within kPickupDistance of the player's
     // bottom-center that are past their pickup delay go into the inventory
     // (deterministic index order; if the inventory has no room the item
-    // stays where it is and is retried next frame).
+    // stays where it is and is retried next frame). V2-6: the magnet
+    // above has already drawn ready drops in toward the player, so the
+    // fixed radius now collects what the pull delivered (the radius
+    // itself is unchanged).
     const float pickupSq = kPickupDistance * kPickupDistance;
     for (std::size_t i = 0; i < n; ++i) {
         if (gone[i]) {
@@ -860,6 +914,89 @@ void Game::drawMobs(const Mat4& view, const Mat4& projection) {
     }
 }
 
+void Game::drawMobShadows(const Mat4& view, const Mat4& projection) {
+    // V2-6: the blob shadows — a flat double-sided translucent-black
+    // quad under each mob (and the player, THIRD PERSON only — the
+    // first-person view has no self-shadow, the MC look; the body's own
+    // m_cameraMode != First gate is mirrored here). Pure rendering: the
+    // geometry is a function of the entities' CURRENT positions
+    // (blobShadowCenter/Side, entity/blob_shadow.hpp) — zero new frame
+    // state, frame-locked by construction (a render of frame N is a pure
+    // function of N's entity state). Structural immunity: a no-input
+    // run has no mobs (the spawn config's firstSpawnFrame keeps the
+    // 60-frame baseline mob-free) AND is first person (the player's
+    // shadow is gated off) = zero shadows = zero draws = the v2.5.0
+    // pipeline bit-identical (the lazy quad is never even built).
+    struct Shadow {
+        Vec3 center;
+        float side;
+    };
+    std::vector<Shadow> shadows;
+    for (const auto& entity : m_entities) {
+        const MobEntity* mob =
+            dynamic_cast<const MobEntity*>(entity.get());
+        if (mob == nullptr) {
+            continue;
+        }
+        const Mob& def = m_mobs.mobTypes.at(mob->typeId());
+        shadows.push_back({blobShadowCenter(mob->position()),
+                           blobShadowSide(def.model.width)});
+    }
+    if (m_playerBody.modelLoaded && m_player.has_value() &&
+        m_cameraMode != CameraMode::First) {
+        shadows.push_back({blobShadowCenter(m_player->position()),
+                           blobShadowSide(m_playerBody.model.width)});
+    }
+    if (shadows.empty()) {
+        return; // no shadow to draw: the mesh stays unbuilt (immunity)
+    }
+    // The unlit solid-color path (the outline's pattern,
+    // drawWorldOverlay): the UI shader with u_useTexture = 0 draws
+    // u_color as-is — the translucent black (kMobShadowAlpha). Culling
+    // OFF: the quad is double-sided (seen from below its plane it must
+    // read the same). The caller's blend section composites it (depth
+    // write off — it must not occlude; depth test on — hills hide it).
+    const Mesh& mesh = mobShadowMesh();
+    if (!mesh.valid()) {
+        return;
+    }
+    m_uiShader.bind();
+    m_uiShader.setUniform1i("u_texture", 0);
+    m_uiShader.setUniform1i("u_useTexture", 0);
+    m_uiShader.setUniform4f("u_color", 0.0f, 0.0f, 0.0f, kMobShadowAlpha);
+    m_renderer.setCulling(false);
+    for (const Shadow& s : shadows) {
+        const Mat4 model =
+            Mat4::multiply(Mat4::translate(s.center), Mat4::scale(s.side));
+        m_renderer.draw(mesh, m_uiShader, view, projection, model);
+    }
+    m_renderer.setCulling(true);
+}
+
+const Mesh& Game::mobShadowMesh() {
+    // The unit quad (side 1, corners at ±0.5 in y = 0) — scaled per
+    // shadow by the model matrix (blobShadowSide). The vertex light
+    // slots are unused (the unlit UI shader).
+    if (m_mobShadowMesh.valid()) {
+        return m_mobShadowMesh;
+    }
+    std::vector<MeshVertex> verts(4);
+    const float c = 0.5f;
+    verts[0].position = {-c, 0.0f, c};
+    verts[1].position = {c, 0.0f, c};
+    verts[2].position = {c, 0.0f, -c};
+    verts[3].position = {-c, 0.0f, -c};
+    for (MeshVertex& v : verts) {
+        v.normal = Vec3::unitY();
+    }
+    auto r = m_mobShadowMesh.upload(verts, {0, 1, 2, 0, 2, 3});
+    if (!r.ok()) {
+        MC_LOG_ERROR("Mob shadow mesh build failed: " +
+                     r.error().describe());
+    }
+    return m_mobShadowMesh;
+}
+
 const Mesh& Game::mobMesh(MobID id) {
     auto it = m_mobs.mobMeshes.find(id);
     if (it != m_mobs.mobMeshes.end()) {
@@ -987,6 +1124,46 @@ const SwingModel& Game::playerBodySwingModel() {
             buildSwingModel(m_playerBody.model, m_atlas.layout());
     }
     return m_playerBody.swingModel;
+}
+
+const Mesh& Game::firstPersonArmMesh() {
+    // V2-6: the first-person arm — the player model's 'arm_r' box
+    // (data/player_body.json — init-validated to exist), re-centered at
+    // the origin (the pose is firstPersonArmLocal's, in the camera
+    // frame) through the shared box-model pipeline: the Steve-skin
+    // pa_arm tile on every face (ZERO new texture — the V2-2 tile the
+    // third-person arms already use; its lower rows are the skin, so
+    // the hand reads as a skin hand) + full sky light baked (the
+    // always-bright hand — the mob / player-body convention, the
+    // documented deviation shared with them). Built LAZILY on the first
+    // locked first-person frame: a no-input run never builds it (the
+    // structural-immunity root — zero GL calls at all).
+    if (m_playerBody.armMesh.valid()) {
+        return m_playerBody.armMesh;
+    }
+    MobModel arm;
+    arm.width = m_playerBody.model.width;
+    arm.height = m_playerBody.model.height;
+    for (const MobBox& box : m_playerBody.model.boxes) {
+        if (box.name == "arm_r") {
+            MobBox centered = box;
+            centered.center = Vec3::zero();
+            arm.boxes.push_back(centered);
+            break;
+        }
+    }
+    if (arm.boxes.empty()) {
+        // Unreachable: init rejects a player model without 'arm_r'.
+        return m_playerBody.armMesh;
+    }
+    const ItemMeshGeometry geom =
+        makeMobModelGeometry(arm, m_atlas.layout());
+    auto r = m_playerBody.armMesh.upload(geom.vertices, geom.indices);
+    if (!r.ok()) {
+        MC_LOG_ERROR("First-person arm mesh build failed: " +
+                     r.error().describe());
+    }
+    return m_playerBody.armMesh;
 }
 
 void Game::drawArrows(const Mat4& view, const Mat4& projection) {

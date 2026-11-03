@@ -236,3 +236,94 @@ TEST(DayCycleTest, FixedStepUpdatesAreReproducible) {
     EXPECT_DOUBLE_EQ(a.timeOfDay(), b.timeOfDay());
     EXPECT_FLOAT_EQ(a.dayFactor(), b.dayFactor());
 }
+
+// -- V2-6: the moon phase (8 phases from the cumulative day index) --------
+
+TEST(DayCycleTest, MoonPhaseIndexIsDayIndexMod8) {
+    // The full 2-day sequence (the 8-phase cycle repeats every 8 days).
+    for (int day = 0; day < 16; ++day) {
+        EXPECT_EQ(day % 8, DayCycle::moonPhaseIndex(day)) << "day " << day;
+    }
+    // Negative-safe modulo (a live day index is never negative; the
+    // helper total-orders anyway).
+    EXPECT_EQ(7, DayCycle::moonPhaseIndex(-1));
+    EXPECT_EQ(4, DayCycle::moonPhaseIndex(-4));
+}
+
+TEST(DayCycleTest, MoonPhaseOffsetTable) {
+    // Pinned: (direction, magnitude) in MOON-DISC-RADIUS units — phase
+    // 0 = new (concentric, the disc fully covered), 4 = full (tangent,
+    // zero overlap — the render skips the quad), the waxing half (1..3)
+    // slides the shadow to the sprite's +X (the light crescent opens on
+    // the left), the waning half (5..7) to its -X.
+    const mc::Vec2 expect[8] = {
+        {1.0f, 0.0f},  {1.0f, 0.25f}, {1.0f, 0.5f},  {1.0f, 0.75f},
+        {1.0f, 1.0f},  {-1.0f, 0.75f}, {-1.0f, 0.5f}, {-1.0f, 0.25f},
+    };
+    for (int p = 0; p < DayCycle::kMoonPhaseCount; ++p) {
+        const mc::Vec2 o = DayCycle::moonPhaseOffset(p);
+        EXPECT_FLOAT_EQ(expect[p].x, o.x) << "phase " << p;
+        EXPECT_FLOAT_EQ(expect[p].y, o.y) << "phase " << p;
+    }
+    // Out-of-range phases wrap through moonPhaseIndex (total function).
+    EXPECT_EQ(expect[0], DayCycle::moonPhaseOffset(8));
+    EXPECT_EQ(expect[3], DayCycle::moonPhaseOffset(11));
+}
+
+TEST(DayCycleTest, MoonPhaseWaxingGrowsWaningShrinks) {
+    // The crescent width (= the magnitude, disc radii) grows over the
+    // waxing half to full and shrinks symmetrically over the waning half.
+    float mag[8];
+    for (int p = 0; p < 8; ++p) {
+        mag[p] = DayCycle::moonPhaseOffset(p).y;
+    }
+    EXPECT_FLOAT_EQ(0.0f, mag[0]);   // new: fully covered
+    EXPECT_FLOAT_EQ(1.0f, mag[4]);   // full: zero overlap
+    for (int p = 1; p < 4; ++p) {
+        EXPECT_LT(mag[p], mag[p + 1]) << "waxing " << p;
+    }
+    for (int p = 5; p < 8; ++p) {
+        EXPECT_LT(mag[p], mag[p - 1]) << "waning " << p;
+    }
+    // The waxing / waning halves are mirror phases.
+    for (int p = 1; p < 4; ++p) {
+        EXPECT_FLOAT_EQ(mag[p], mag[8 - p]) << "mirror " << p;
+    }
+}
+
+TEST(DayCycleTest, DayIndexCountsCycles) {
+    DayCycle c = atTime(0.0, 240.0);
+    EXPECT_EQ(0, c.dayIndex()); // the start
+    c.update(239.0);
+    EXPECT_EQ(0, c.dayIndex()); // 0.9958 of the first cycle
+    c.update(1.0);
+    EXPECT_EQ(1, c.dayIndex()); // exactly 1.0 cycles
+    // The configured start offset: start 0.25 = a quarter into cycle 0;
+    // the exact midnight boundary (0.25 + 180/240) starts cycle 1.
+    DayCycle n = atTime(0.25, 240.0);
+    EXPECT_EQ(0, n.dayIndex());
+    n.update(180.0);
+    EXPECT_EQ(1, n.dayIndex());
+    // The 60-frame no-input run (1 s of game time from the default
+    // noon start): still day 0, phase 0 — and at noon the moon is at
+    // the nadir (below the horizon), so the phase never draws in the
+    // baseline (the structural-immunity root, pinned here).
+    DayCycle b;
+    for (int i = 0; i < 60; ++i) {
+        b.update(1.0 / 60.0);
+    }
+    EXPECT_EQ(0, b.dayIndex());
+    EXPECT_EQ(0, b.moonPhase());
+    EXPECT_LT(b.moonDirection().y, 0.0f);
+}
+
+TEST(DayCycleTest, MoonPhaseFollowsDayIndex) {
+    DayCycle c = atTime(0.0);
+    EXPECT_EQ(0, c.moonPhase());
+    c.update(240.0); // one cycle -> day 1
+    EXPECT_EQ(1, c.moonPhase());
+    c.update(2 * 240.0); // two more -> day 3
+    EXPECT_EQ(3, c.moonPhase());
+    c.update(5 * 240.0); // five more -> day 8
+    EXPECT_EQ(0, c.moonPhase()); // the 8-day cycle wraps
+}

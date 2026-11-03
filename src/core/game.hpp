@@ -629,6 +629,17 @@ private:
     const Mesh& mobMesh(MobID id);
     const Mesh& swingMobMesh(const MobEntity& mob, const Mob& def);
     const SwingModel& swingModel(MobID id);
+    // V2-6: the blob shadows — the flat double-sided translucent-black
+    // quad under each mob (and the player, THIRD PERSON only — first
+    // person has no self-shadow, the MC look). Pure rendering: the
+    // geometry is a function of the entities' current positions
+    // (entity/blob_shadow.hpp) — zero new frame state. Drawn in the
+    // blending pass (depth write off, depth test on: hills occlude a
+    // shadow, the ground surface hosts it). A no-input run has no mobs
+    // (the spawn config's firstSpawnFrame) and is first person = zero
+    // draws = the v2.5.0 pipeline bit-identical.
+    void drawMobShadows(const Mat4& view, const Mat4& projection);
+    const Mesh& mobShadowMesh();
 
     // UX-3: the player's world-space body — the shared mob box-model
     // pipeline (data/player_body.json parsed through MobRegistry::
@@ -663,11 +674,24 @@ private:
     // flat icon quad for the other icon items (always bright). While the
     // bow is drawn the hand pulls back with the charge (the draw
     // indicator, replacing the Phase 24 2D icon pull); while food is
-    // being eaten it rises toward the face with the eat progress. Pure
-    // rendering — no state, and gated on the pointer lock, so a no-input
-    // run renders the pre-Phase-42 image (byte-identical baseline).
+    // being eaten it rises toward the face with the eat progress. V2-6:
+    // the FIRST-PERSON ARM (the player's data-model 'arm_r' box, the
+    // Steve-skin pa_arm tile — zero new texture) draws under the item,
+    // for an empty hand too (the bare skin hand); it is static (no
+    // walking swing — the documented deviation) but follows the item's
+    // bow/eat offset. Pure rendering — no state, and gated on the
+    // pointer lock, so a no-input run renders the pre-Phase-42 image
+    // (byte-identical baseline; the arm's lazy mesh is never built).
     void drawHeldHand(const Mat4& view, const Mat4& projection);
     const Mesh& handIconMesh();
+    // V2-6: the first-person arm's mesh — the player model's 'arm_r' box
+    // (data/player_body.json, init-validated to exist) re-centered at
+    // the origin through the shared box-model pipeline (makeMobModel-
+    // Geometry: the chunk-mesher-verified UVs, full sky light baked =
+    // the always-bright hand, the mob convention). Built LAZILY on the
+    // first locked first-person frame (a no-input run never builds it —
+    // structural immunity).
+    const Mesh& firstPersonArmMesh();
     // Phase 71: the item cooking on each campfire (the non-empty slots)
     // as a small crossed icon quad above the block (the cross-block
     // convention — view-independent, opaque pass, depth-occluded like
@@ -1239,6 +1263,10 @@ private:
         // is single-threaded on the GL thread — the mobs' shared-scratch
         // pattern, this body's own instance).
         std::vector<MeshVertex> swingFrameVerts;
+        // V2-6: the first-person arm mesh (the 'arm_r' box re-centered
+        // at the origin; built lazily on the first locked first-person
+        // frame — a no-input run never builds it).
+        Mesh armMesh;
     };
     PlayerBody m_playerBody;
     // UX-3: the camera mode (First = the body is invisible — the UX-3
@@ -1338,6 +1366,9 @@ private:
     // pure cutout (the census is content data, not code policy).
     std::vector<bool> m_itemCutout;
     Mesh m_outlineMesh;
+    // V2-6: the blob-shadow unit quad (built lazily on the first frame
+    // that has a shadow to draw — a no-input run never builds it).
+    Mesh m_mobShadowMesh;
     std::array<Mesh, 5> m_crackMeshes;
     // Phase 15 state (all default-off: the no-input baseline renders no
     // UI at all, keeping the Phase 14 screenshots byte-identical).

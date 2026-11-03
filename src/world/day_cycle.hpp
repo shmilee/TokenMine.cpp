@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "core/math/vec2.hpp"
 #include "core/math/vec3.hpp"
 
 namespace mc {
@@ -77,6 +78,31 @@ public:
     // Unit vectors from the world origin toward the sun / moon.
     Vec3 sunDirection() const;
     Vec3 moonDirection() const;
+
+    // V2-6 moon phases: the 8-phase cycle derived from the cumulative day
+    // index (frame-locked: m_totalSeconds advances on the fixed per-frame
+    // step, so dayIndex() is a pure function of the frame count). Phase 0
+    // = new, 4 = full (see moonPhaseOffset).
+    static constexpr int kMoonPhaseCount = 8;
+
+    // The cumulative day index: the full day cycles elapsed since the
+    // configured start (0 at construction; the 60-frame no-input run —
+    // 1 s of game time from start_time 0.25 — stays on day 0).
+    int dayIndex() const;
+    // The moon phase (0..kMoonPhaseCount-1) of the current day.
+    int moonPhase() const;
+
+    // Pure phase helpers (unit-testable without an instance):
+    // day index -> phase index (the modulo, negative-safe so a loaded
+    // world's derived index total-orders too).
+    static int moonPhaseIndex(int dayIndex);
+    // phase index -> the dark "eclipse" quad's offset over the moon disc:
+    // x = the slide direction along the sprite's +X axis (phases 1..4 to
+    // +X — the light crescent opens on the left, the northern-hemisphere
+    // convention; 5..7 to -X), y = the magnitude in MOON-DISC-RADIUS
+    // units (0 = concentric = new, the disc fully covered; 1 = tangent
+    // = full, zero overlap — the draw is skipped at magnitude 1).
+    static Vec2 moonPhaseOffset(int phase);
 
     // Deterministic starfield: `count` positions on the upper hemisphere,
     // `radius` from the world origin. Same inputs always give the same

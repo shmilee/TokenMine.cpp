@@ -1,11 +1,80 @@
 # 版本历史（CHANGELOG）
 
 > 本文件只留 **v2.x** 逐版明细（v2.0.0 = 1.x 收官里程碑 / V2-1 前视角 /
-> V2-2 Steve 皮肤 / V2-3 教程系列化 / V2-4 天气 / V2-5 猪）。
+> V2-2 Steve 皮肤 / V2-3 教程系列化 / V2-4 天气 / V2-5 猪 / V2-6 体验打磨批）。
 > v1.x（v1.50.0→v1.0）→ `docs/archive/v1x/CHANGELOG.md`；
 > v0.x（v0.12.0→v0.1.0）→ `docs/archive/v0x/CHANGELOG.md`。逐版细节
 > （机制/证据/偏离/性能 A/B）见 `docs/archive/v1x/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
+
+## v2.6.0（2026-11-03）— V2-6 体验打磨批（第一人称手臂 / mob 阴影 / 拾取磁力 / 月相）（门 177 全 PASS）
+
+UX-8/9 同款多格批：四子项各消费一处记档偏离，全为表现层/手感层，
+**零 format（25 不动）/ 零 config 新键**：
+
+1. **第一人称手臂**（「无手部皮肤——只渲染手持物品」消费）：
+   `drawHeldHand` 加臂 viewmodel = 玩家数据模型 **`arm_r` box**
+   （data/player_body.json，init 校验存在）re-center 后走既有
+   box-model 管线（makeMobModelGeometry：chunk-mesher-verified UVs）
+   ——Steve 皮肤 pa_arm tile 六面全贴（**零新纹理**，V2-2 tile；tile
+   下 10 行 = 肤、上 6 行 = 袖，π 翻转姿态使肤手朝持物端）；
+   **仅第一人称**（门控 = 指针锁定 ∧ 无面板 ∧ First = 既有手持门
+   三态矩阵化，`firstPersonArmVisible` 纯函数单测钉）；**无手持也画
+   空手（肤手）**；静态（无行走摆动 = 记档偏离）但继承手持 offset
+   → 弓拉/进食通道携臂微动；懒构建（无输入运行永不建 mesh =
+   结构性免疫）。
+2. **mob blob 阴影**（「无 blob 阴影 = 仍活跃」消费）：每 mob 脚下
+   （+ 玩家**仅第三人称**，第一人称无自身阴影 = MC 观感）世界空间扁
+   quad：双面、半透明黑 **alpha 0.3** 命名常量、边长 = **1.5×模型
+   宽**（blobShadowSide 纯函数钉）、中心 = 底心正下方**底格顶面**
+   （blobShadowCenter = floor(footY) + 0.01 防 z-fight 抬升）——
+   贴地面而非悬浮脚边（MC blob 观感）；UI shader 纯色路径（outline
+   范式）+ blend pass（深度写关测开：山丘遮挡、地形承托）；纯渲染
+   零帧状态（无新帧状态成员；mesh 懒构建，无阴影可画永不建）。
+3. **物品拾取磁力**（「固定 1.0 格半径无磁力」消费）：0.5s 延迟过后
+   水平距离 ≤ **kMagnetRadius 2.5** 的掉落物被逐渐吸向玩家——
+   **帧锁定**（kMobStepPerFrame 同款固定步长纪律）：位移 =
+   f(距离, 帧) 纯函数（entity/pickup_magnet.hpp）：径向速度 =
+   kMagnetMaxSpeed 6 ×(1−d/2.5)²（远慢近快 = **加速趋近 + 距离
+   衰减**，边缘 0）+ 侧向 **swirl**（24 帧周期、幅值 = 径向 25% =
+   收紧螺旋 MC 手感，frame 有界 modulo 纪律）；掉落物步进过
+   hasRoomAt（**磁力不穿墙** = MC 规则）；**箭头拾取（Phase 42 同款
+   半径 1.0）同步消费** = 插墙箭被同款磁力拉出方块（无 room 检查：
+   卡住箭 AABB 本就在 solid 内，stuck 箭不做物理步）；拾取半径 1.0 /
+   延迟 0.5s / 入包规则零动（磁力只是把物品送进半径）；无 ready
+   掉落物/插墙箭 = 零执行（60f 基线零实体 = 结构性免疫）。
+4. **月相**（billboard「无月相」消费）：**8 相 = day cycle 累计天
+   index（帧锁定派生，`DayCycle::dayIndex` = floor(start + total/len)）
+   % 8**（纯函数 `moonPhaseIndex/moonPhaseOffset` 单测钉：新月同心 →
+   满月相切，25/50/75% 象限刻度，盈凸 1..3 滑 +X / 亏凸 5..7 滑 −X）
+   ；呈现 = 既有月 quad 上叠暗色「食相」quad（**零新纹理**：sky
+   shader 纯色路径同款 28px 圆盘滑移，颜色 = 深夜天色 kNightSky，
+   覆盖区读作天空 = 娥眉幻觉）；**绘制序 = 食相先/月后**——
+   kSkyDistance 平面 24-bit 深度只分辨 ~160 块，同平面第二绘制只能
+   靠严格 LESS 的绘制序取胜（亚块 nudge 被量化吞掉 = 实证废案，
+   **PITS 371**）；正午基线月在地平线下 = 整分支不执行（结构性
+   免疫）；**星星不动**（无星闪保持记档）。
+
+2157/2157（+22：月相 5【8 相序列/偏移表/单调/天 index/基线钉】/
+磁力 9【速度曲线/单调加速/到达零向量/swirl 峰/周期/越界】/ 阴影
+3【贴地几何/边长/常量】/ 手臂 5【门控三态矩阵/姿态钉/静态确定/
+offset 继承/相机随行】）、`-Werror` 0、banner v2.6.0。基线自证：
+60f 无输入 `--screenshot` = base18 锚 179116 B **逐字节恒等**（四子项
+全惰性）；功能实证：月相 1/3 两相像素判别（0.25r 娥眉 / 0.75r 凸月
+宽度精确）、臂 viewmodel 锁屏态像素带（袖蓝 800px + 肤手 + 石方块
+手持）、mob 阴影像素判别（猪/牛脚下草地精确 ×0.7 变暗 + 玩家脚区
+100% 无阴影）。门 177 全 PASS：S1 **第 177 次结构性免疫**（60f 四方
+RAW 全字节一致 + 锚 179116 B + 跨版 savenorm EXACT 零 format）+ S2
+四子项判别全 PASS（手臂 new-locked ×2 恒等 + new vs old 臂区 diff
+349×191 右下 / 阴影 mobs-off new≡old 零 quad 免疫 + mobs-on 地面
+diff / 磁力 new ×2 恒等 + pork 吸入拾取 vs old 原地不动互斥终态 /
+月相 new ×2 恒等 + **diff bbox 恰 28×28 px 月盘 @ 预测位**【存档
+time 0.519 + 朝东 pose——PITS 372 载档 time 压过 --time】）+ S3
+2157 + S6 点名（arm_r 缺失 init 拒）+ **性能 A/B 同世界同成本**
+（changesApplied 9/3/1 三窗逐位 + 终档 18/18 55/55 集合恒等 + mobs-on
+阴影 ents 同档 + 磁力场景同档）。门内环境事故 3 条记 PITS
+368-370/372（XTEST 键盘服务器级失效 + drawin 窗盖中央点击 + mob 不
+持久化 + 载档 time 优先）。详见 docs/archive/phase-2.6.0.md。
 
 ## v2.5.0（2026-11-03）— V2-5 新 mob 猪（门 176 全 PASS）
 

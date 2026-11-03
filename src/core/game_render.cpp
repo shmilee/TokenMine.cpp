@@ -10,9 +10,11 @@
 
 #include "block/cube_face_table.hpp"
 #include "core/bow.hpp"
+#include "core/first_person_arm.hpp"
 #include "core/game_local.hpp"
 #include "core/math/frustum.hpp"
 #include "core/png.hpp"
+#include "entity/blob_shadow.hpp"
 #include "renderer/alpha_test.hpp"
 #include "renderer/fog.hpp"
 #include "ui/ui_scale.hpp"
@@ -46,6 +48,14 @@ constexpr float kMoonSpriteSize = 28.0f;
 // Sun/moon fade-out: alpha = clamp(elevation / kHorizonFade, 0, 1), so they
 // are fully visible a little above the horizon and invisible on/below it.
 constexpr float kHorizonFade = 0.1f;
+
+// V2-6 moon phase: the dark "eclipse" overlay quad — the same 28px disc as
+// the moon (zero new texture: the sky shader's solid-color path), colored
+// the deep-night sky keyframe (day_cycle's kNightSky): the covered disc
+// region reads as sky, the crescent illusion.
+constexpr float kMoonPhaseColorR = 0.02f;
+constexpr float kMoonPhaseColorG = 0.03f;
+constexpr float kMoonPhaseColorB = 0.08f;
 
 constexpr float kBeaconBeamBaseHeight = 64.0f;
 
@@ -354,22 +364,59 @@ void Game::drawHeldHand(const Mat4& view, const Mat4& projection) {
     // Phase 42: the 3D held-item hand (the Minecraft hand). Rendered only
     // while the pointer is locked and no panel is open (the same gate as
     // the hotbar/held icon) — a no-input run is never locked, so it renders
-    // the pre-Phase-42 image (byte-identical baseline). UX-4: hidden in
-    // third person too (the world-space body is visible instead — the
-    // Minecraft far view has no first-person arm; an arm-held-item /
-    // bow-draw pose is a documented deviation). V2-1: the gate is "not
-    // first person", so the front view hides it as well (the body is
-    // visible instead — an arm floating in front of the player's face
-    // would be nonsense). First / ThirdBack behavior is unchanged.
+    // the pre-Phase-42 image (byte-identical baseline; the arm's lazy mesh
+    // below is never even built). UX-4: hidden in third person too (the
+    // world-space body is visible instead). V2-1: the gate is "not first
+    // person", so the front view hides it as well. V2-6: the FIRST-PERSON
+    // ARM (the player's data-model 'arm_r' box — the Steve-skin pa_arm
+    // tile, zero new texture; see core/first_person_arm.hpp) draws under
+    // the held item for every gated frame: an empty hand shows the bare
+    // skin hand (the tile's lower rows); the pose is static (no walking
+    // swing — the documented deviation) but follows the item's bow-draw /
+    // eat-lift offset, so the hand carries the arm.
     // Pure rendering: it reads the selected slot + the bow/eat channel
-    // state and draws one model; it mutates nothing.
-    if (!m_window.relativeMouseMode() || panelOpen() ||
-        m_cameraMode != CameraMode::First) {
+    // state and draws the arm + one item model; it mutates nothing.
+    if (!firstPersonArmVisible(m_cameraMode, m_window.relativeMouseMode(),
+                               panelOpen())) {
         return;
     }
     const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    // Animation offsets (camera frame): the bow draw pulls the hand back
+    // and tilts the bow toward the face with the charge; the eat channel
+    // raises the hand toward the face with the progress. The arm shares
+    // the offset (firstPersonArmLocal), so it follows these channels.
+    Vec3 offset = kHandOffset;
+    float spinX = kHandSpinX;
+    if (m_interaction.bowDrawing) {
+        const float p = bowPower(m_interaction.bowDrawSeconds);
+        offset.z += kHandDrawPullZ * p;
+        spinX += kHandDrawSpinX * p;
+    } else if (m_interaction.eatChannel.active) {
+        const float p = m_interaction.eatChannel.progress();
+        offset.y += kHandEatLiftY * p;
+        offset.z += kHandEatPullZ * p;
+    }
+    // Camera -> world (yaw-then-pitch FPS convention, see Camera::forward):
+    // C = T(pos) * Ry(yaw) * Rx(pitch). The hand sits in the camera frame
+    // (x = right, y = up, z = behind the eye), spun + tilted, then scaled.
+    const Mat4 cam = Mat4::multiply(
+        Mat4::translate(m_camera.position),
+        Mat4::multiply(Mat4::rotateY(m_camera.yaw),
+                       Mat4::rotateX(m_camera.pitch)));
+
+    // V2-6: the first-person arm — the data model's 'arm_r' box
+    // (firstPersonArmMesh, built lazily) in the camera frame
+    // (firstPersonArmLocal: the item's offset + the fixed delta + the
+    // static lean). Drawn UNDER the item (the item sits in the hand):
+    // opaque atlas texture, blending stays OFF (the item branch below
+    // enables it for its transparent pixels).
+    m_basicShader.bind();
+    m_basicShader.setUniform1i("u_useTexture", 1);
+    m_atlas.texture().bind();
+    m_renderer.draw(firstPersonArmMesh(), m_basicShader, view, projection,
+                    Mat4::multiply(cam, firstPersonArmLocal(offset)));
     if (stack.empty()) {
-        return; // empty hand: nothing to hold
+        return; // empty hand: the arm (skin hand) only
     }
     const Item& it = m_items.at(stack.item);
     bool isBlock = it.type == ItemType::Block;
@@ -386,34 +433,14 @@ void Game::drawHeldHand(const Mat4& view, const Mat4& projection) {
         iconIdx < m_itemModelTextures.size() &&
         m_itemModelTextures[iconIdx].valid();
     if (!isBlock && !hasIcon && !hasModel) {
-        return; // no hand model for this item (v1: no per-item 3D)
+        return; // no hand model for this item (v1: no per-item 3D) —
+                // the arm (bare hand) stays
     }
     const float scale = isBlock ? kHandCubeScale : kHandIconScale;
-    // Animation offsets (camera frame): the bow draw pulls the hand back
-    // and tilts the bow toward the face with the charge; the eat channel
-    // raises the hand toward the face with the progress.
-    Vec3 offset = kHandOffset;
-    float spinX = kHandSpinX;
-    if (m_interaction.bowDrawing) {
-        const float p = bowPower(m_interaction.bowDrawSeconds);
-        offset.z += kHandDrawPullZ * p;
-        spinX += kHandDrawSpinX * p;
-    } else if (m_interaction.eatChannel.active) {
-        const float p = m_interaction.eatChannel.progress();
-        offset.y += kHandEatLiftY * p;
-        offset.z += kHandEatPullZ * p;
-    }
-    // Camera -> world (yaw-then-pitch FPS convention, see Camera::forward):
-    // C = T(pos) * Ry(yaw) * Rx(pitch). The hand sits in the camera frame
-    // (x = right, y = up, z = behind the eye), spun + tilted, then scaled.
     const Mat4 item = Mat4::multiply(
         Mat4::rotateX(spinX),
         Mat4::multiply(Mat4::rotateY(kHandSpinY), Mat4::scale(scale)));
     const Mat4 place = Mat4::multiply(Mat4::translate(offset), item);
-    const Mat4 cam = Mat4::multiply(
-        Mat4::translate(m_camera.position),
-        Mat4::multiply(Mat4::rotateY(m_camera.yaw),
-                       Mat4::rotateX(m_camera.pitch)));
     const Mat4 model = Mat4::multiply(cam, place);
 
     // The basic shader's texture state is set at the top of the render
@@ -421,9 +448,9 @@ void Game::drawHeldHand(const Mat4& view, const Mat4& projection) {
     // block-cube hand uses the atlas as-is; the icon hand binds its per-item
     // texture (and the atlas is restored for the passes that follow).
     // The program must be BIND first: Renderer::draw unbinds the program
-    // after every draw, and a uniform call on an unbound program is
-    // GL_INVALID_OPERATION (the residual error then poisons the lazy
-    // mesh-upload's glGetError — same pattern as drawArrows).
+    // after every draw (the arm's above), and a uniform call on an unbound
+    // program is GL_INVALID_OPERATION (the residual error then poisons the
+    // lazy mesh-upload's glGetError — same pattern as drawArrows).
     m_basicShader.bind();
     m_basicShader.setUniform1i("u_useTexture", 1);
     // Blending is enabled for the hand: the opaque pass runs with blending
@@ -834,6 +861,11 @@ void Game::render() {
     }
     drawItemEntities(view, projection, RenderPass::Blend);
     drawParticles(view, projection, RenderPass::Blend);
+    // V2-6 blob shadows: the flat translucent-black quads under the mobs
+    // (and the player in third person), blended + depth-occluded like the
+    // other world geometry. Zero draws without a shadow to draw (a
+    // no-input run: no mobs + first person — baseline byte-identical).
+    drawMobShadows(view, projection);
     // Beacon beams (Phase 83): the translucent light columns from active
     // beacons, blended + depth-occluded like the other world geometry.
     // No-op without an active beacon (baseline byte-identical).
@@ -915,10 +947,77 @@ void Game::drawSkyObjects(const Mat4& view, const Mat4& projection,
     const Vec3 moon = m_dayCycle.moonDirection();
     const float moonAlpha = std::clamp(moon.y / kHorizonFade, 0.0f, 1.0f);
     if (moonAlpha > 0.0f) {
+        const Vec3 moonPos = moon * static_cast<float>(kSkyDistance);
+        // V2-6: the moon PHASE — the dark "eclipse" quad over the moon
+        // disc. 8 phases from the day cycle's cumulative day index
+        // (dayIndex() is a pure function of the frame count — the cycle
+        // advances on the fixed 1/60 step); the offset is the pure
+        // DayCycle::moonPhaseOffset(phase): the same 28px disc (zero new
+        // texture — the sky shader's solid-color path) slides sideways,
+        // 0 = concentric (new, the disc fully covered) to 1 = tangent
+        // (full, zero overlap — the quad is skipped). The slide is along
+        // the view-plane X axis (the billboard's own axis — the phase
+        // reads correctly from any camera yaw), sized in disc radii at
+        // the moon's view depth.
+        //
+        // DRAW ORDER (the depth-quantization root): the phase quad draws
+        // FIRST, the moon SECOND, both on the same depth plane (the X
+        // offset is perpendicular to the view axis — the float32
+        // residual is far below the 24-bit depth resolution at
+        // kSkyDistance, so both quantize to the SAME depth value). The
+        // LESS test is strict: the moon then fails where the phase
+        // already wrote = the dark phase shows through the overlap, and
+        // the moon's non-overlap side (the crescent) finds no phase
+        // depth = it draws bright. (Drawing the phase LATER nudge-
+        // closer never works: at the ~740-800 depth of the kSkyDistance
+        // plane with near 0.1 / far 1000 the depth buffer resolves
+        // ~160 BLOCKS per step, so any sub-block nudge is quantized
+        // away — verified in the V2-6 gate.) The phase's halo (its disc
+        // beyond the moon's) is sky-colored — invisible against the
+        // night sky — and its sky-plane depth write is harmless:
+        // nothing drawn later in the blend section sits at or beyond
+        // the kSkyDistance plane (clouds y = 108, the rain box, the
+        // beacons). Terrain still occludes the phase correctly (depth
+        // test on: a ridge closer than the sky plane rejects both the
+        // moon's and the phase's fragments there). Baseline immunity:
+        // the moon draws only when moonAlpha > 0 (above the horizon =
+        // night); the 60-frame no-input run starts at noon (start_time
+        // 0.25) where the moon is at the nadir (moon.y < 0) = this
+        // whole branch, phase included, never executes.
+        const int phase = m_dayCycle.moonPhase();
+        const Vec2 po = DayCycle::moonPhaseOffset(phase);
+        if (po.y < 1.0f) { // full moon: tangent, zero overlap — no quad
+            const Vec3 viewRight {view.at(0, 0), view.at(0, 1),
+                                  view.at(0, 2)};
+            // The moon's depth in view space (the sky shader's billboard
+            // scale uses exactly this: -viewPos.z).
+            const float depth =
+                -view.transformVec4(Vec4::fromVec3(moonPos, 1.0f)).z;
+            // The disc radius in world units at that depth (the quad
+            // SIDE is sizePixels * pxToWorld * depth; the disc is half).
+            const float discRadius =
+                0.5f * kMoonSpriteSize * pxToWorld * depth;
+            const Vec3 phasePos =
+                moonPos + viewRight * (po.x * po.y * discRadius);
+            m_skyShader.bind();
+            m_skyShader.setUniformMat4("u_view", view);
+            m_skyShader.setUniformMat4("u_proj", projection);
+            m_skyShader.setUniform3f("u_offset", phasePos.x, phasePos.y,
+                                     phasePos.z);
+            m_skyShader.setUniform2f("u_sizePixels", kMoonSpriteSize,
+                                     kMoonSpriteSize);
+            m_skyShader.setUniform1f("u_pxToWorld", pxToWorld);
+            m_skyShader.setUniform4f("u_color", kMoonPhaseColorR,
+                                     kMoonPhaseColorG, kMoonPhaseColorB,
+                                     moonAlpha);
+            m_renderer.drawSky(m_skyPointMesh, m_skyShader, view, projection);
+        }
+        // The moon quad, drawn AFTER the phase (see the draw-order note
+        // above): the bright disc — the crescent where the phase left
+        // room, fully dark on the new-moon phase.
         m_skyShader.bind();
         m_skyShader.setUniformMat4("u_view", view);
         m_skyShader.setUniformMat4("u_proj", projection);
-        const Vec3 moonPos = moon * static_cast<float>(kSkyDistance);
         m_skyShader.setUniform3f("u_offset", moonPos.x, moonPos.y, moonPos.z);
         m_skyShader.setUniform2f("u_sizePixels", kMoonSpriteSize,
                                  kMoonSpriteSize);
