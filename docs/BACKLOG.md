@@ -20,7 +20,7 @@
 | GEN 世界与生成 | V2-16 新 biome：雪原/针叶林 | V2-17 顶部 slab/双 slab | | | | | |
 | FLUID 流体 | | | | | | | |
 | ENT 实体/Mob/移动 | V2-14 新 mob 蝙蝠（飞行 AI） | V2-15 16 色染色羊 | | | | | |
-| SURV 生存/战斗/效果 | V2-11 XP 系统 | V2-13 床（睡觉跳夜） | | | | | |
+| SURV 生存/战斗/效果 | ~~V2-11 XP 系统~~ ✅ v2.12.0（门 183：经验球 1..9 无合并分裂 + 全整数 MC 曲线【等级派生不存储】+ 三发放源数据驱动【hostile 5/passive 2/mine coal 1 diamond 5 iron 0 gold 0/smelt 1 统一】+ format 26 三向键 + save.cpp PITS 361 潜在 bug 修复 + XP 条 HUD；base18 第 4 次重锚 179027 B） | V2-13 床（睡觉跳夜） | | | | | |
 | CRAFT 物品/合成/面板 | V2-12 附魔 | | | | | | |
 | SAVE 存档 | | | | | | | |
 | PRE 表现层 | V2-18 AO 环境光遮蔽 | | | | | | |
@@ -68,6 +68,24 @@
    二批收官 = v2.18.0 系统收官 tag + release，用户可推翻）。
 
 ## 变更记录（v2.x 第二批）
+
+- 2026-11-04：**V2-11 XP 系统完成（v2.12.0，门 183 全 PASS）**——
+  fixer 半成品（43 文件，11-03 中断取消入 stash）11-04 pop 零冲突
+  恢复至 v2.11.0 之上 + 编排者修 3 处 WIP 编译破损（test_save.cpp）
+  + 修 save.cpp 潜在 bug（PITS 361 违例第二实例：tutorial 白名单
+  isV25 = fmt >= kSaveFormat → 字面量 >= 25）。全整数 MC 曲线
+  （needed 2L+7/5L−38/9L−158，逆 = 整数二分，等级永不存储）+ 经验
+  球 1..9（无合并分裂记档）+ 三发放源（mob 击杀 hostile 5/passive 2
+  / 熔炼 smelt_xp 默认 1 统一记档 / 挖掘 mine_xp 现代 MC raw 值
+  coal 1 diamond 5 iron 0 gold 0）严格 [0,9] 解析 + format 26
+  （player.xp 恒写 + entities type∈{item,xp} 三向键）+ XP 条 HUD
+  （热栏下恒可见，零新字形）。2249/2249（+42）、banner v2.12.0。
+  门 183：S1 base18 第 4 次重锚论证（diff 2031 px 全落底部 XP 条带
+  → 新锚 179027 B）+ S2 三发放源（熔炼 1/击杀 5【W 步行拾取：orb
+  距静止玩家 2.54 > 磁力 2.5】/挖掘 1，旧侧 format 25 形状互斥）+
+  S3 + S6 四项点名 + 性能 A/B 同世界同成本（9/1/3 逐位 + 16/16
+  36/36 恒等 + 熔炼场景同档）。PITS 377（旧侧新格式场景 init 拒 /
+  orb 磁力 3D 边界）。详见 docs/archive/phase-2.12.0.md。
 
 - 2026-11-03：**V2-19 视角/移动/时间显示批完成（v2.11.0，门 182 全
   PASS）**——用户 11-03 实机诉求三项提前执行（先于 SURV/CRAFT 行，

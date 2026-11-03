@@ -48,6 +48,7 @@
 #include "core/weather.hpp"
 #include "core/window.hpp"
 #include "entity/entity.hpp"
+#include "entity/exp_orb.hpp"
 #include "entity/item_entity.hpp"
 #include "entity/item_mesh.hpp"
 #include "entity/mob_entity.hpp"
@@ -600,14 +601,39 @@ private:
 
     // Entity simulation (Phase 10): per-entity physics, then the item merge
     // pass and despawn (removal is deferred so the merge order — and
-    // therefore the merge result — is deterministic).
+    // therefore the merge result — is deterministic). V2-11: the XP orbs
+    // run in the same list — their physics take the real-dt rest branch
+    // (the item twin), the magnet pass and the pickup pass each add a
+    // dynamic_cast branch (isolated — the item paths stay bit-level
+    // unchanged), and the despawn pass spawns a dead mob's data `xp` orb
+    // at its drop position (xp 0 = no grant).
     void updateEntities(double dt);
+    // V2-11 (XP): the single spawn point for every XP grant (the three
+    // call sites — the smelt-complete event, the mob-death despawn, the
+    // break completion — each pass its data-validated value + position):
+    // one ExpOrbEntity at rest at `pos` (zero velocity — the item
+    // convention; the value is clamped into 1..9 by the entity's
+    // constructor, the belt over the data discipline). `value <= 0`
+    // spawns nothing (the "0 = no grant" data gate, the belt).
+    void spawnExpOrb(int value, Vec3 pos);
     // Dropped-item rendering: the items belonging to the given pass
     // (opaque / cutout / blend — PRE-5's three-way routing), bobbing +
     // spinning around their rest position (frame-counter driven — see
     // kItemBobPeriodFrames).
     void drawItemEntities(const Mat4& view, const Mat4& projection,
                           RenderPass pass);
+    // V2-11 (XP): the experience orbs — the small solid-green cubes in
+    // the opaque pass after the arrows (the basic shader's solid-color
+    // path, the arrows' precedent; the per-draw light override samples
+    // each orb's cell — the itemDropLight pattern: the orb does not
+    // EMIT light, the MC orb lights nothing). Zero orbs = zero draws
+    // (the lazy mesh is never built — a no-input run's structural
+    // immunity; the HUD bar is the documented pixel exception).
+    void drawExpOrbs(const Mat4& view, const Mat4& projection);
+    // The cached solid orb-cube mesh (built lazily on first render, the
+    // mobShadowMesh pattern; the geometry is static — one shared mesh,
+    // the per-orb transform varies).
+    const Mesh& expOrbMesh();
     // The cached full-cube mesh for a dropped block (built lazily on first
     // render; the geometry is cached, only the draw transform varies).
     const Mesh& itemMesh(BlockID id);
@@ -1389,6 +1415,10 @@ private:
     // V2-6: the blob-shadow unit quad (built lazily on the first frame
     // that has a shadow to draw — a no-input run never builds it).
     Mesh m_mobShadowMesh;
+    // V2-11: the solid orb-cube mesh (built lazily on the first frame
+    // that has an orb to draw — a no-input run has zero orbs, so it
+    // never builds the mesh = the structural immunity).
+    Mesh m_expOrbMesh;
     std::array<Mesh, 5> m_crackMeshes;
     // Phase 15 state (all default-off: the no-input baseline renders no
     // UI at all, keeping the Phase 14 screenshots byte-identical).

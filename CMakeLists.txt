@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 2.11.0 LANGUAGES CXX)
+project(TokenMine VERSION 2.12.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -58,6 +58,7 @@ add_library(mc_core STATIC
     src/block/drop_scatter.cpp
     src/entity/arrow_mesh.cpp
     src/entity/entity.cpp
+    src/entity/exp_orb.cpp
     src/entity/item_entity.cpp
     src/entity/item_light.cpp
     src/entity/item_mesh.cpp
@@ -223,6 +224,8 @@ add_executable(tokenmine_tests
     tests/test_pickup_magnet.cpp
     tests/test_blob_shadow.cpp
     tests/test_first_person_arm.cpp
+    tests/test_xp_curve.cpp
+    tests/test_exp_orb.cpp
 )
 target_compile_definitions(tokenmine_tests PRIVATE
     MC_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data")

@@ -46,6 +46,12 @@ Result<SaveGame> Game::collectSave() const {
     // accumulator is deliberately NOT carried (it restarts at 0 on
     // load — the tick-phase convention, the effects pattern).
     save.playerOxygen = m_drown.oxygen;
+    // V2-11 (format 26): the player's XP pool (the TOTAL points — always
+    // written, the oxygen / velocity key discipline). The level is NOT
+    // carried: it is derived from the pool through core/xp_curve.hpp
+    // (the single source of truth — a stored level would be a second,
+    // driftable copy).
+    save.playerXp = m_player->xpTotal();
     save.selectedSlot = static_cast<int>(m_selectedSlot);
     save.slots.resize(m_inventory.size());
     for (std::size_t i = 0; i < save.slots.size(); ++i) {
@@ -209,6 +215,21 @@ Result<SaveGame> Game::collectSave() const {
         save.tutorialProgress = m_tutorial.progress;
     }
     for (const std::unique_ptr<Entity>& e : m_entities) {
+        // V2-11 (format 26): the XP orbs are the SECOND persisted entity
+        // kind (the strict {type, xp, pos, age, pickup_delay} save entry —
+        // no item / count / damage: the orb carries no stack). The
+        // dynamic_cast isolation: the item path below is bit-level
+        // unchanged (an orb is not an ItemEntity).
+        if (const ExpOrbEntity* orb =
+                dynamic_cast<const ExpOrbEntity*>(e.get())) {
+            SavedXpEntity se;
+            se.xp = orb->value();
+            se.pos = orb->position();
+            se.age = orb->age();
+            se.pickupDelay = orb->pickupDelayRemaining();
+            save.xpEntities.push_back(std::move(se));
+            continue;
+        }
         // Persisted entities are ItemEntities. Mobs (Phase 20) and arrows
         // (Phase 21) are EPHEMERAL by design — the save format expresses
         // them by not storing them (a mob/arrow alive at save time is
@@ -290,7 +311,9 @@ Result<void> Game::writeSave(bool byAutoSave) const {
                 path.string() + "' (" +
                 std::to_string(saved->blockEdits.size()) +
                 " block edits, " + std::to_string(saved->fluidEdits.size()) +
-                " fluid edits, " + std::to_string(saved->entities.size()) +
+                " fluid edits, " +
+                std::to_string(saved->entities.size() +
+                               saved->xpEntities.size()) +
                 " entities, " + std::to_string(saved->slots.size()) +
                 " slots)");
     return {};
@@ -537,6 +560,12 @@ Result<void> Game::applySave(const SaveGame& save) {
     m_drown.oxygen =
         save.playerOxygen < 0 ? kOxygenMax : save.playerOxygen;
     m_drown.drownTicks = 0;
+    // 4g-bis) The player's XP pool (format 26; V2-11). A format-26
+    // save carries the value (parse-validated whole number >= 0);
+    // format 1-25 loads 0 (the sentinel -1 — the system did not
+    // exist, the player had no XP; setXpTotal's clamp handles it).
+    // The level is derived on read (core/xp_curve.hpp — never saved).
+    m_player->setXpTotal(save.playerXp);
     // 4h) The player's tutorial progress (format 23; UX-7, the series
     // from format 25 / V2-3). The pure restore (tutorialRestore) owns
     // the cross-checks: the series must name a series of the CURRENT
@@ -575,6 +604,18 @@ Result<void> Game::applySave(const SaveGame& save) {
         entity->setPickupDelay(e.pickupDelay);
         m_entities.push_back(std::move(entity));
     }
+    // 5-bis) The XP orbs (format 26; V2-11): the second entity kind,
+    // restored with their value + position + the two lifetime timers
+    // (the item-entity twin — the value is parse-validated 1..9, the
+    // constructor's clamp is unreachable). A format-25-and-older save
+    // carries none (the list is empty — the migration).
+    for (const SavedXpEntity& e : save.xpEntities) {
+        auto orb =
+            std::make_unique<ExpOrbEntity>(m_world, m_blocks, e.xp, e.pos);
+        orb->setAge(e.age);
+        orb->setPickupDelay(e.pickupDelay);
+        m_entities.push_back(std::move(orb));
+    }
     // 6) Day-cycle time (wins over --time for a loaded save).
     m_dayCycle.setTimeOfDay(save.time);
     return {};
@@ -595,7 +636,9 @@ Result<void> Game::tryLoadSave() {
     MC_LOG_INFO("Loaded save '" + path.string() + "' (" +
                 std::to_string(save->blockEdits.size()) +
                 " block edits, " + std::to_string(save->fluidEdits.size()) +
-                " fluid edits, " + std::to_string(save->entities.size()) +
+                " fluid edits, " +
+                std::to_string(save->entities.size() +
+                               save->xpEntities.size()) +
                 " entities)");
     return {};
 }

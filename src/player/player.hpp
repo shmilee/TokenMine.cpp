@@ -322,6 +322,26 @@ public:
         }
     }
 
+    // -- XP (V2-11) -------------------------------------------------------
+    // The player's experience pool: the TOTAL points ever gained (the
+    // single int source of truth, format 26's player.xp). The LEVEL is
+    // never stored — it is derived through core/xp_curve.hpp
+    // (levelFromTotalXp), so the pool and the level cannot drift apart.
+    // The game owns every change (the orb pickup's gainXp + the save
+    // load's setXpTotal); respawn keeps the pool (the keep-inventory
+    // death semantics — the inventory is kept, the XP with it).
+    int xpTotal() const { return m_xpTotal; }
+    // Add `amount` points (the orb's value, 1..9 — the grant points pass
+    // data-validated values; a non-positive amount is a no-op belt).
+    void gainXp(int amount) {
+        if (amount > 0) {
+            m_xpTotal += amount;
+        }
+    }
+    // Restore the pool (save load / tests): clamped to >= 0 (a corrupt
+    // negative reads as fresh — the curve's total < 0 clamp twin).
+    void setXpTotal(int total) { m_xpTotal = std::max(0, total); }
+
     // -- armor (SURV-1) ------------------------------------------------------
     // The four equipment slots (the kArmorSlotNames order: 0 = head,
     // 1 = chest, 2 = legs, 3 = feet). A slot holds one piece (count 1 —
@@ -489,6 +509,9 @@ private:
     float m_saturation = 0.0f;
     double m_hungerAccum = 0.0;
     double m_starveAccum = 0.0;
+    // XP (V2-11): the total experience pool (0 = a fresh player — the
+    // level 0 the HUD always shows its bar + "0" for).
+    int m_xpTotal = 0;
     // Lava burn (Phase 54): the real-dt accumulator for the pending burn
     // tick (only runs while the AABB overlaps a lava cell; leaving the
     // lava resets it — no lingering fire in v1).

@@ -146,6 +146,29 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "drops_count", "number",
                    [&](const Json& v) { out.dropsCount = v.asInt(); });
     MC_TRY(r);
+    // V2-11 (XP): the mine-complete grant (the orb's value). A STRICT
+    // integer in [0, 9]: 0 (the absent-field default) = no orb; a
+    // non-integer / negative is named and rejected (the integer
+    // discipline — checkField's "number" would take 1.5 silently, so
+    // the whole-number check is explicit here), and > 9 is rejected by
+    // name (the orb value cap — no split mechanism, the data discipline
+    // that keeps a future over-valued block from booting with an
+    // unrepresentable grant).
+    if (const Json* mx = p->find("mine_xp")) {
+        if (!mx->isNumber() || mx->asDouble() != std::floor(mx->asDouble()) ||
+            mx->asDouble() < 0.0) {
+            return MC_FAIL("block property 'mine_xp' must be an integer "
+                           ">= 0, got " +
+                           (mx->isNumber() ? std::to_string(mx->asDouble())
+                                           : "a non-number"));
+        }
+        out.mineXp = static_cast<int>(mx->asDouble());
+        if (out.mineXp > 9) {
+            return MC_FAIL("block property 'mine_xp' must be in [0, 9] "
+                           "(the orb value cap — no split mechanism), "
+                           "got " + std::to_string(out.mineXp));
+        }
+    }
     r = checkField(*p, "interact", "string",
                    [&](const Json& v) { out.interact = v.asString(); });
     MC_TRY(r);

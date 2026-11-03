@@ -3,7 +3,8 @@
   "properties": {
     "sound_material": "stone",
     "hardness": 3.0,
-    "drops": "gold_ingot"
+    "drops": "gold_ingot",
+    "mine_xp": 0
   },
   "model": {
     "textures": { "top": "gold_ore", "side": "gold_ore", "bottom": "gold_ore" }

@@ -3,7 +3,8 @@
   "properties": {
     "sound_material": "stone",
     "hardness": 5.0,
-    "drops": "diamond"
+    "drops": "diamond",
+    "mine_xp": 5
   },
   "model": {
     "textures": { "top": "diamond_ore", "side": "diamond_ore", "bottom": "diamond_ore" }

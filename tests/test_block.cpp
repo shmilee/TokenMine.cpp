@@ -2946,6 +2946,80 @@ TEST(BlockFurnaceFieldsTest, ParseRejectsBadValues) {
     EXPECT_NE(r.error().message.find("smeltable_to"), std::string::npos);
 }
 
+// -- V2-11 (XP): the block's mine-complete grant (mine_xp) ---------------------
+
+TEST(BlockMineXpTest, ParseDefaultsZero) {
+    // ABSENT = 0 (the "no orb" default — the structural-immunity root:
+    // every field-less block grants nothing, bit-level unchanged).
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(minimalDef("stone")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).properties.mineXp, 0);
+}
+
+TEST(BlockMineXpTest, ParseKeepsValue) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"coal_ore","properties":{"mine_xp":1},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(reg.at(*r).properties.mineXp, 1);
+    // An explicit 0 is LEGAL (the "no XP" data statement, the iron/gold
+    // ore modern-MC retirement).
+    auto r0 = reg.registerBlock(parseDef(
+        R"({"id":"iron_ore","properties":{"mine_xp":0},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r0.ok()) << r0.error().message;
+    EXPECT_EQ(reg.at(*r0).properties.mineXp, 0);
+}
+
+TEST(BlockMineXpTest, ParseRejectsBadValues) {
+    BlockRegistry reg;
+    // > 9 = named (the orb value cap — no split mechanism).
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"a","properties":{"mine_xp":10},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("mine_xp"), std::string::npos);
+    EXPECT_NE(r.error().message.find("[0, 9]"), std::string::npos);
+    // Non-integer (checkField's "number" would take 1.5 silently — the
+    // strict whole-number check is the point).
+    r = reg.registerBlock(parseDef(
+        R"({"id":"b","properties":{"mine_xp":1.5},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("mine_xp"), std::string::npos);
+    // Negative.
+    r = reg.registerBlock(parseDef(
+        R"({"id":"c","properties":{"mine_xp":-1},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(r.ok());
+    // Non-number.
+    r = reg.registerBlock(parseDef(
+        R"({"id":"d","properties":{"mine_xp":"5"},)"
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("mine_xp"), std::string::npos);
+}
+
+TEST(BlockContentTest, V211OreMineXpPinned) {
+    // The shipped ore XP values (the wiki-verified 11-03 modern-Minecraft
+    // set): coal_ore 1 (MC 0-2 mid), diamond_ore 5 (MC 3-7 mid), iron_ore
+    // 0 + gold_ore 0 (the 1.17 raw-conversion retirement — mining ore
+    // blocks grants no XP for the two smelted-raw ores). A non-ore block
+    // (stone) keeps the default 0.
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    EXPECT_EQ(reg.at(reg.idForName("coal_ore")).properties.mineXp, 1);
+    EXPECT_EQ(reg.at(reg.idForName("diamond_ore")).properties.mineXp, 5);
+    EXPECT_EQ(reg.at(reg.idForName("iron_ore")).properties.mineXp, 0);
+    EXPECT_EQ(reg.at(reg.idForName("gold_ore")).properties.mineXp, 0);
+    EXPECT_EQ(reg.at(reg.idForName("stone")).properties.mineXp, 0);
+}
+
 TEST(BlockContentTest, Craft6FuelAndSmeltableContentPinned) {
     // The real assets: wood = FUEL 20 s (the project wood-family scale:
     // planks 7.5 s / stick 5 s, coal 80 s the MC-exact anchor — 20 s is

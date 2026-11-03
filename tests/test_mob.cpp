@@ -449,6 +449,64 @@ TEST(MobRegistryTest, RejectsNonIntegerSpawnMaxLight) {
     EXPECT_FALSE(r.ok());
 }
 
+// -- V2-11 (XP): the mob's death grant ----------------------------------------
+
+TEST(MobRegistryTest, XpDefaultsToZero) {
+    // kZombieDef has no 'xp': the default (no orb) applies.
+    MobRegistry mobs = makeMobRegistry();
+    EXPECT_EQ(mobs.at(MobID{0}).properties.xp, 0);
+}
+
+TEST(MobRegistryTest, ParsesXp) {
+    MobRegistry mobs;
+    std::string def = kZombieDef;
+    const std::string key = "\"wander_interval\": 2.5";
+    def.replace(def.find(key), key.size(),
+                "\"wander_interval\": 2.5, \"xp\": 5");
+    auto r = mobs.registerMob(parseJson(def));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(mobs.at(*r).properties.xp, 5);
+    // An explicit 0 is legal (the "no orb" data statement).
+    MobRegistry mobsZero;
+    std::string defZero = kZombieDef;
+    defZero.replace(defZero.find(key), key.size(),
+                    "\"wander_interval\": 2.5, \"xp\": 0");
+    auto rz = mobsZero.registerMob(parseJson(defZero));
+    ASSERT_TRUE(rz.ok()) << rz.error().message;
+    EXPECT_EQ(mobsZero.at(*rz).properties.xp, 0);
+}
+
+TEST(MobRegistryTest, RejectsXpAboveTheOrbCap) {
+    // > 9 = named rejection (the orb value cap — no split mechanism).
+    for (const int bad : {10, 99}) {
+        MobRegistry mobs;
+        std::string def = kZombieDef;
+        const std::string key = "\"wander_interval\": 2.5";
+        def.replace(def.find(key), key.size(),
+                    "\"wander_interval\": 2.5, \"xp\": " + std::to_string(bad));
+        auto r = mobs.registerMob(parseJson(def));
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("xp"), std::string::npos)
+            << r.error().message;
+        EXPECT_NE(r.error().message.find("[0, 9]"), std::string::npos)
+            << r.error().message;
+    }
+}
+
+TEST(MobRegistryTest, RejectsNonIntegerNegativeAndNonNumberXp) {
+    for (const std::string bad : {"1.5", "-1", "\"5\""}) {
+        MobRegistry mobs;
+        std::string def = kZombieDef;
+        const std::string key = "\"wander_interval\": 2.5";
+        def.replace(def.find(key), key.size(),
+                    "\"wander_interval\": 2.5, \"xp\": " + bad);
+        auto r = mobs.registerMob(parseJson(def));
+        ASSERT_FALSE(r.ok()) << bad;
+        EXPECT_NE(r.error().message.find("xp"), std::string::npos)
+            << r.error().message;
+    }
+}
+
 // -- hostile flag (Phase 25: the difficulty system is data-driven) ------------
 
 TEST(MobRegistryTest, HostileDefaultsToFalse) {
@@ -752,16 +810,19 @@ TEST(MobContent, PreV25MobFilesUnchanged) {
     // V2-7: the spider GAINS its drop list (string / spider_eye — the
     // intended edit, the new pin below); its FNV updates accordingly, the
     // other five files stay.
+    // V2-11: every mob GAINS its `xp` grant (the intended edit — the
+    // wiki-verified values, the V2-7 pin-update precedent); all six
+    // FNVs update accordingly.
     const struct {
         const char* path;
         const char* fnv;
     } files[] = {
-        {"assets/data/mobs/chicken.json", "bb3b1afcdc42f90a"},
-        {"assets/data/mobs/cow.json", "767141e2c6222064"},
-        {"assets/data/mobs/sheep.json", "9009bc23c3cb09c9"},
-        {"assets/data/mobs/skeleton.json", "454faac161b1c605"},
-        {"assets/data/mobs/spider.json", "298528226ebbaea7"},
-        {"assets/data/mobs/zombie.json", "2a7212f0ec271210"},
+        {"assets/data/mobs/chicken.json", "315c4f4f1ac672bc"},
+        {"assets/data/mobs/cow.json", "17b36715e3e0f286"},
+        {"assets/data/mobs/sheep.json", "96f952ab9c56ac8b"},
+        {"assets/data/mobs/skeleton.json", "a444383845de7fb8"},
+        {"assets/data/mobs/spider.json", "9b2b53e9ffa14ed8"},
+        {"assets/data/mobs/zombie.json", "653a09208010cccb"},
     };
     for (const auto& f : files) {
         EXPECT_EQ(fnv1a64(readAll(f.path)), f.fnv) << f.path;
@@ -802,19 +863,49 @@ TEST(MobContent, V27SpiderDropsPinned) {
     EXPECT_DOUBLE_EQ(sp->properties.hitEffectDuration, 15.0);
     // The other SIX shipped mobs (the 5 pre-V2-5 non-spider + the pig)
     // are byte-untouched by V2-7 (the FNV pin, the PreV25 precedent).
+    // V2-11: all seven shipped mobs GAIN their `xp` grant (the intended
+    // edit — the pins update, the V2-7 precedent for the spider).
     const struct {
         const char* path;
         const char* fnv;
     } untouched[] = {
-        {"assets/data/mobs/chicken.json", "bb3b1afcdc42f90a"},
-        {"assets/data/mobs/cow.json", "767141e2c6222064"},
-        {"assets/data/mobs/sheep.json", "9009bc23c3cb09c9"},
-        {"assets/data/mobs/skeleton.json", "454faac161b1c605"},
-        {"assets/data/mobs/zombie.json", "2a7212f0ec271210"},
-        {"assets/data/mobs/pig.json", "4e2e5d4cedb90d7f"},
+        {"assets/data/mobs/chicken.json", "315c4f4f1ac672bc"},
+        {"assets/data/mobs/cow.json", "17b36715e3e0f286"},
+        {"assets/data/mobs/sheep.json", "96f952ab9c56ac8b"},
+        {"assets/data/mobs/skeleton.json", "a444383845de7fb8"},
+        {"assets/data/mobs/zombie.json", "653a09208010cccb"},
+        {"assets/data/mobs/pig.json", "b49895541001dfcb"},
     };
     for (const auto& f : untouched) {
         EXPECT_EQ(fnv1a64(readAll(f.path)), f.fnv) << f.path;
+    }
+}
+
+// -- V2-11: the XP system (the mob death grant) --------------------------------
+
+TEST(MobContent, V211MobXpPinned) {
+    // The shipped mob XP values (the wiki-verified 11-03 set — the modern
+    // Minecraft table simplified to FIXED values: the hostile trio is MC's
+    // fixed 5 (equipment bonuses out of scope), the passive quartet the
+    // MC 1-3 interval mid = 2 — the documented deviation). Every OTHER
+    // mob field stays (the V2-11 data change is the xp line).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.loadDirectory(assets, "data/mobs").ok());
+    const struct {
+        const char* name;
+        int xp;
+    } expect[] = {
+        {"zombie", 5}, {"skeleton", 5}, {"spider", 5},
+        {"pig", 2}, {"cow", 2}, {"sheep", 2}, {"chicken", 2},
+    };
+    for (const auto& e : expect) {
+        SCOPED_TRACE(e.name);
+        const Mob* m = mobs.findByName(e.name);
+        ASSERT_NE(m, nullptr);
+        EXPECT_EQ(m->properties.xp, e.xp);
     }
 }
 
@@ -878,8 +969,13 @@ EffectRegistry makeCarrierEffects() {
     return reg;
 }
 
-MobEntity makeCarrierMob(const Fixture& f, const char* def) {
-    MobRegistry mobs;
+// The carrier mob's definition pointer (MobEntity::m_def) points INTO
+// `mobs` — the registry must outlive every mob this helper returns, so
+// it is TEST-OWNED: a registry local to the helper would dangle the
+// entity's definition on return (a latent UAF the V2-11
+// MobProperties layout shift exposed — the freed memory happened to
+// still hold the old flags, so the undead gate "worked" by luck).
+MobEntity makeCarrierMob(const Fixture& f, MobRegistry& mobs, const char* def) {
     auto r = mobs.registerMob(parseJson(def));
     if (!r.ok()) {
         throw std::runtime_error(r.error().message);
@@ -893,8 +989,9 @@ TEST(MobEffectCarrier, RefusesPlayerOnlyEffects) {
     // The affects_mobs gate: a player-only effect is ignored on apply
     // (count stays 0 — the mob is never a carrier for it).
     Fixture f;
+    MobRegistry mobs; // test-owned (outlives the carrier mobs — see the helper)
     const EffectRegistry effects = makeCarrierEffects();
-    MobEntity cow = makeCarrierMob(f, kCowDef);
+    MobEntity cow = makeCarrierMob(f, mobs, kCowDef);
     cow.applyEffect(effects.idForName("poison_player_only"), 30.0, effects);
     EXPECT_FALSE(cow.hasEffects());
     // The mob-accepting poison is taken.
@@ -909,13 +1006,14 @@ TEST(MobEffectCarrier, UndeadRefuseExemptEffects) {
     // undead_exempt) is taken by the zombie — the effect that kills
     // undead (Minecraft's uniqueness).
     Fixture f;
+    MobRegistry mobs; // test-owned (outlives the carrier mobs — see the helper)
     const EffectRegistry effects = makeCarrierEffects();
     std::string zombieDef = kZombieDef;
     const std::string key = "\"wander_interval\": 2.5";
     zombieDef.replace(zombieDef.find(key), key.size(),
                       std::string("\"wander_interval\": 2.5, \"undead\": true"));
-    MobEntity zombie = makeCarrierMob(f, zombieDef.c_str());
-    MobEntity cow = makeCarrierMob(f, kCowDef);
+    MobEntity zombie = makeCarrierMob(f, mobs, zombieDef.c_str());
+    MobEntity cow = makeCarrierMob(f, mobs, kCowDef);
     zombie.applyEffect(effects.idForName("poison"), 30.0, effects);
     EXPECT_FALSE(zombie.hasEffects());  // the undead exemption
     cow.applyEffect(effects.idForName("poison"), 30.0, effects);
@@ -932,8 +1030,9 @@ TEST(MobEffectCarrier, PoisonTicksKillTheCow) {
     // discipline). 18 s: 7 ticks due (the 8th at 20 s) -> 3 HP left;
     // 26 s: 10 ticks due (the 10th kills; the 11th at 27.5 s) -> dead.
     Fixture f;
+    MobRegistry mobs; // test-owned (outlives the carrier mobs — see the helper)
     const EffectRegistry effects = makeCarrierEffects();
-    MobEntity cow = makeCarrierMob(f, kCowDef);
+    MobEntity cow = makeCarrierMob(f, mobs, kCowDef);
     cow.applyEffect(effects.idForName("poison"), 60.0, effects);
     for (int frame = 0; frame < 60 * 18; ++frame) {
         cow.updateStatusEffects(1.0 / 60.0, effects);
@@ -956,8 +1055,9 @@ TEST(MobEffectCarrier, MobFloorKeepsTheMobAlive) {
     // the cow is clamped at exactly 1 HP (the player's poison-floor
     // twin on the mob side).
     Fixture f;
+    MobRegistry mobs; // test-owned (outlives the carrier mobs — see the helper)
     const EffectRegistry effects = makeCarrierEffects();
-    MobEntity cow = makeCarrierMob(f, kCowDef);
+    MobEntity cow = makeCarrierMob(f, mobs, kCowDef);
     cow.applyEffect(effects.idForName("kept_at_one"), 30.0, effects);
     for (int frame = 0; frame < 60 * 25; ++frame) {  // 25 s: 25 ticks due
         cow.updateStatusEffects(1.0 / 60.0, effects);
@@ -971,8 +1071,9 @@ TEST(MobEffectCarrier, HealTicksAreANoop) {
     // mob-accepting heal tick changes nothing (the apply itself is
     // legal: the effect is carried, it simply does not heal).
     Fixture f;
+    MobRegistry mobs; // test-owned (outlives the carrier mobs — see the helper)
     const EffectRegistry effects = makeCarrierEffects();
-    MobEntity cow = makeCarrierMob(f, kCowDef);
+    MobEntity cow = makeCarrierMob(f, mobs, kCowDef);
     cow.damage(4.0f);  // 10 -> 6
     ASSERT_FLOAT_EQ(cow.health(), 6.0f);
     cow.applyEffect(effects.idForName("mob_heal"), 10.0, effects);
@@ -988,8 +1089,9 @@ TEST(MobEffectCarrier, FastExitWithoutEffects) {
     // count == 0 = zero cost / zero change: a mob without effects is
     // untouched by the pass (the structural-immunity basis).
     Fixture f;
+    MobRegistry mobs; // test-owned (outlives the carrier mobs — see the helper)
     const EffectRegistry effects = makeCarrierEffects();
-    MobEntity cow = makeCarrierMob(f, kCowDef);
+    MobEntity cow = makeCarrierMob(f, mobs, kCowDef);
     for (int frame = 0; frame < 600; ++frame) {
         cow.updateStatusEffects(1.0 / 60.0, effects);
     }

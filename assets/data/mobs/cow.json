@@ -14,7 +14,8 @@
     "drops": [
       { "item": "leather", "count": 1 },
       { "item": "beef", "count": 1 }
-    ]
+    ],
+    "xp": 2
   },
   "model": {
     "width": 1.2,

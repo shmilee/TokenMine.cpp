@@ -11,6 +11,7 @@
 #include <string>
 #include <utility>
 
+#include "entity/exp_orb.hpp" // V2-11: the xp entity's timer constants
 #include "entity/item_entity.hpp"
 #include "entity/mob_registry.hpp" // SURV-7: validateStats' mob names
 #include "item/crafting_grid.hpp"
@@ -778,6 +779,14 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     if (save.playerOxygen >= 0) {
         player["oxygen"] = Json(save.playerOxygen);
     }
+    // V2-11 (format 26): the player's XP pool — ALWAYS written (a
+    // format-26 file REQUIRES the key — the oxygen / velocity key
+    // discipline). The game always has the real value (0 for a fresh
+    // player). The LEVEL is never written: it is derived from the pool
+    // at read time (core/xp_curve.hpp — the single source of truth).
+    if (save.playerXp >= 0) {
+        player["xp"] = Json(save.playerXp);
+    }
     // UX-7 (format 23) / V2-3 (format 25): the player's tutorial
     // progress — ALWAYS written (a format-23+ file REQUIRES the key; an
     // empty object = done/skipped — the armor/tables key discipline).
@@ -1020,6 +1029,27 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         je["pickup_delay"] = Json(e.pickupDelay);
         entities.push_back(std::move(je));
     }
+    // V2-11 (format 26): the XP orbs — the array's SECOND kind (type
+    // "xp", the strict {type, xp, pos, age, pickup_delay} shape). The
+    // item entries above keep their pre-26 shape byte-unchanged (the
+    // red line); the xp entries are written after the items, so the
+    // array order is deterministic (each kind-list is m_entities order
+    // at collect time — the kind interleaving of the live session is
+    // not carried: the pickup / magnet passes are structurally
+    // kind-ordered anyway, the item-then-orb loop order).
+    for (const SavedXpEntity& e : save.xpEntities) {
+        Json jpos = Json::array();
+        jpos.push_back(Json(e.pos.x));
+        jpos.push_back(Json(e.pos.y));
+        jpos.push_back(Json(e.pos.z));
+        Json je = Json::object();
+        je["type"] = Json(std::string("xp"));
+        je["xp"] = Json(e.xp);
+        je["pos"] = jpos;
+        je["age"] = Json(e.age);
+        je["pickup_delay"] = Json(e.pickupDelay);
+        entities.push_back(std::move(je));
+    }
     root["entities"] = entities;
 
     Json blockEdits = Json::array();
@@ -1136,6 +1166,13 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // file carrying it is a version lie (the whitelist naming above).
     if (fmt->asInt() >= 23) {
         playerFields.insert("tutorial");
+    }
+    // V2-11: "xp" is format-26-and-newer vocabulary — a pre-26 file
+    // carrying it is a version lie (the whitelist naming above; the
+    // player.xp parse below requires it ON format-26 files, the
+    // three-way discipline).
+    if (fmt->asInt() >= 26) {
+        playerFields.insert("xp");
     }
     MC_TRY(rejectUnknownFields(*player, playerFields, "save 'player'"));
     const Json* ppos = player->find("pos");
@@ -1492,6 +1529,30 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                        "(got " +
                        std::to_string(def.find("format")->asInt()) + ")");
     }
+    // XP (format 26; V2-11, the experience system). The player's TOTAL
+    // pool — the single int the level derives from (core/xp_curve.hpp;
+    // the level itself has no save form, the derived-state discipline).
+    // A format-26 file REQUIRES the key (the oxygen / velocity key
+    // discipline): a whole number >= 0 (a negative / non-integer is
+    // named). Pre-26 files load 0 (the migration — the system did not
+    // exist, the velocity-zeroed twin); a pre-26 file CARRYING the key
+    // is a version lie (the playerFields whitelist above rejects it,
+    // the "xp" key is format-26-and-newer vocabulary).
+    if (def.find("format")->asInt() >= 26) {
+        const Json* xp = player->find("xp");
+        if (xp == nullptr) {
+            return MC_FAIL("save format 26 requires a 'player.xp' "
+                           "(a whole number >= 0, the experience pool)");
+        }
+        double d = 0.0;
+        if (!isInt(*xp, &d) || d < 0.0) {
+            return MC_FAIL("save 'player.xp' must be a whole number >= 0, "
+                           "got " +
+                           (xp->isNumber() ? std::to_string(xp->asDouble())
+                                           : "a non-number"));
+        }
+        save.playerXp = static_cast<int>(d);
+    }
     // UX-7 (format 23) / V2-3 (format 25): the player's tutorial
     // progress. REQUIRED for a format-23 file (a missing key is a
     // version lie — the oxygen / velocity key discipline); an EMPTY
@@ -1523,7 +1584,10 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
             // The per-format field whitelist: format 23/24 carry
             // {id, count} (a "series" key on one is a version lie —
             // rejectUnknownFields names it); format 25+ adds "series".
-            const bool isV25 = fmt->asInt() >= kSaveFormat;
+            // PITS 361: the per-format shape boundary uses the
+            // INTRODUCING format's literal (25), not kSaveFormat —
+            // the comparison must survive every future format bump.
+            const bool isV25 = fmt->asInt() >= 25;
             std::set<std::string> tutFields {"id", "count"};
             if (isV25) {
                 tutFields.insert("series");
@@ -1679,23 +1743,112 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
             return MC_FAIL("save entity #" + std::to_string(i) +
                            " must be an object");
         }
-        // SURV-3 (format 18): the stack's "damage" key (the omit-when-
-        // 0 discipline — a format-17 and older file carrying it is a
-        // version lie, rejected by name via the whitelist below).
-        std::set<std::string> entFields {"type", "item", "count",
-                                         "pos", "age",
-                                         "pickup_delay"};
-        if (def.find("format")->asInt() >= 18) {
-            entFields.insert("damage");
+        // V2-11 (format 26): the entry's KIND — "item" (the pre-26
+        // shape, unchanged) or "xp" (the orb, format-26-only). The
+        // three-way discipline (the V2-3 tutorial twin): a pre-26 file
+        // CARRYING the xp kind is a version lie (named below); each
+        // kind gets its OWN strict field whitelist (an item entry with
+        // an "xp" field is named, the per-kind split); a format-26 xp
+        // entry must carry the full {type, xp, pos, age, pickup_delay}
+        // shape (a missing / out-of-range "xp" is named).
+        const int fmtV = def.find("format")->asInt();
+        const Json* type = e.find("type");
+        const std::string typeName =
+            (type != nullptr && type->isString()) ? type->asString() : "";
+        const bool isXp = typeName == "xp";
+        const bool isItem = typeName == "item";
+        if (!isItem && !isXp) {
+            return MC_FAIL("save entity #" + std::to_string(i) +
+                           ": 'type' must be \"item\"" +
+                           (fmtV >= 26
+                                ? " or \"xp\" (the entity kinds this "
+                                  "build saves)"
+                                : " (the only entity kind this build "
+                                  "saves)"));
+        }
+        if (isXp && fmtV < 26) {
+            return MC_FAIL("save entity #" + std::to_string(i) +
+                           " has type \"xp\" (a format-26 entity kind) "
+                           "but the file is format " + std::to_string(fmtV) +
+                           " (a version lie)");
+        }
+        std::set<std::string> entFields;
+        if (isXp) {
+            // The orb's strict shape (no item / count / damage — the
+            // orb carries no stack, the per-kind split).
+            entFields = {"type", "xp", "pos", "age", "pickup_delay"};
+        } else {
+            // SURV-3 (format 18): the stack's "damage" key (the omit-
+            // when-0 discipline — a format-17 and older file carrying
+            // it is a version lie, rejected by name via the whitelist).
+            entFields = {"type", "item", "count", "pos", "age",
+                         "pickup_delay"};
+            if (fmtV >= 18) {
+                entFields.insert("damage");
+            }
+            if (fmtV >= 26 && e.find("xp") != nullptr) {
+                return MC_FAIL("save entity #" + std::to_string(i) +
+                               " (type \"item\") must not carry an 'xp' "
+                               "field (the value belongs to a type \"xp\" "
+                               "entry — the per-kind split)");
+            }
         }
         MC_TRY(rejectUnknownFields(e, entFields, "save entity #" +
-                                                std::to_string(i)));
-        const Json* type = e.find("type");
-        if (type == nullptr || !type->isString() ||
-            type->asString() != "item") {
-            return MC_FAIL("save entity #" + std::to_string(i) +
-                           ": 'type' must be \"item\" (the only entity "
-                           "kind this build saves)");
+                                               std::to_string(i)));
+        if (isXp) {
+            SavedXpEntity se;
+            const Json* xpv = e.find("xp");
+            double xd = 0.0;
+            if (xpv == nullptr || !isInt(*xpv, &xd) || xd < 1.0 || xd > 9.0) {
+                return MC_FAIL("save entity #" + std::to_string(i) +
+                               " (type \"xp\") 'xp' must be an integer in "
+                               "[1, 9] (the orb value cap), got " +
+                               (xpv != nullptr && xpv->isNumber()
+                                    ? std::to_string(xpv->asDouble())
+                                    : "a missing or non-number key"));
+            }
+            se.xp = static_cast<int>(xd);
+            // pos / age / pickup_delay: the item entry's twin rules
+            // (the orb's own constants — same values, named from the
+            // orb's discipline).
+            const Json* epos = e.find("pos");
+            if (epos == nullptr || !epos->isArray() || epos->size() != 3) {
+                return MC_FAIL("save entity #" + std::to_string(i) +
+                               " requires 'pos' (an array of 3 numbers)");
+            }
+            for (std::size_t k = 0; k < 3; ++k) {
+                if (!epos->at(k).isNumber()) {
+                    return MC_FAIL("save entity #" + std::to_string(i) +
+                                   " 'pos'[" + std::to_string(k) +
+                                   "] must be a number");
+                }
+            }
+            se.pos = {static_cast<float>(epos->at(0).asDouble()),
+                      static_cast<float>(epos->at(1).asDouble()),
+                      static_cast<float>(epos->at(2).asDouble())};
+            const Json* age = e.find("age");
+            if (age == nullptr || !age->isNumber() ||
+                !(age->asDouble() >= 0.0 && age->asDouble() <
+                  ExpOrbEntity::kDespawnSeconds)) {
+                return MC_FAIL("save entity #" + std::to_string(i) +
+                               " 'age' must be a number in [0, " +
+                               std::to_string(ExpOrbEntity::kDespawnSeconds) +
+                               ")");
+            }
+            se.age = age->asDouble();
+            const Json* delay = e.find("pickup_delay");
+            if (delay == nullptr || !delay->isNumber() ||
+                !(delay->asDouble() >= 0.0 && delay->asDouble() <=
+                  ExpOrbEntity::kPickupDelaySeconds)) {
+                return MC_FAIL("save entity #" + std::to_string(i) +
+                               " 'pickup_delay' must be a number in [0, " +
+                               std::to_string(
+                                   ExpOrbEntity::kPickupDelaySeconds) +
+                               "]");
+            }
+            se.pickupDelay = delay->asDouble();
+            save.xpEntities.push_back(std::move(se));
+            continue;
         }
         SavedItemEntity se;
         const Json* name = e.find("item");

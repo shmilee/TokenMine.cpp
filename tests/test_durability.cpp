@@ -109,6 +109,7 @@ SaveGame makeSave() {
     s.playerPos = {1.5f, 2.0f, 1.5f};
     s.playerAbsorption = 0.0f; // format 12+ requires the field
     s.playerOxygen = kOxygenMax; // format 17+ requires the field
+    s.playerXp = 0; // V2-11: format 26+ requires the field
     s.slots.resize(Inventory::kTotalSize);
     return s;
 }
@@ -436,8 +437,8 @@ TEST(SaveFormat18Test, MidDamageRoundTripsInAllThreePlaces) {
     s.entities.push_back(e);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-7/V2-3: writes are always format 25 (UX-8f was 24).
-    EXPECT_EQ(j->find("format")->asInt(), 25);
+    // UX-7/V2-3/V2-11: writes are always format 26 (V2-3 was 25).
+    EXPECT_EQ(j->find("format")->asInt(), 26);
     // The shapes: the damaged slot + the entity carry the key; the
     // full-durability armor slot is a STRING; the damaged one an
     // OBJECT {item, damage}.
@@ -495,7 +496,8 @@ TEST(SaveFormat18Test, Format17WithDamageKeyIsAVersionLie) {
         Json player2 = Json::object();
         for (const auto& [k, v] : root["player"].members()) {
             if (k != "stats" && k != "velocity" &&
-                k != "tutorial") { // SAVE-2: velocity is format 22; UX-7: tutorial is format 23
+                k != "tutorial" &&  // SAVE-2: 22; UX-7: 23
+                k != "xp") {       // V2-11: the xp key is format 26
                 player2[k] = v;
             }
         }

@@ -3,7 +3,8 @@
   "properties": {
     "sound_material": "stone",
     "hardness": 3.0,
-    "drops": "coal"
+    "drops": "coal",
+    "mine_xp": 1
   },
   "model": {
     "textures": { "top": "coal_ore", "side": "coal_ore", "bottom": "coal_ore" }

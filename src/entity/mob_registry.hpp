@@ -88,6 +88,7 @@
 #pragma once
 
 #include <cstddef>
+#include <deque>
 #include <map>
 #include <string>
 #include <unordered_map>
@@ -248,6 +249,17 @@ struct MobProperties {
     // Drops (Phase 28): the item list the mob drops on death — one entry
     // per dropped item, spawned in list order. Empty = no drops.
     std::vector<MobDrop> drops;
+    // V2-11 (XP): the experience points the mob's death drops as an XP
+    // orb (one orb, this value — the despawn pass spawns it at the mob's
+    // rest position, the drop-point twin). Optional data field `xp`, a
+    // strict integer in [0, 9]: 0 (the default) = no orb; > 9 rejected
+    // by name (the orb value cap — no split mechanism). Shipped = the
+    // FIXED values of the modern Minecraft table (the wiki-verified
+    // 11-03 set, the random intervals simplified to their mids — the
+    // documented deviation): hostiles zombie / skeleton / spider 5
+    // (Minecraft's fixed 5), passives pig / cow / sheep / chicken 2
+    // (Minecraft's 1-3 mid).
+    int xp = 0;
 };
 
 struct Mob {
@@ -290,7 +302,13 @@ public:
                                    const char* label = "mob model");
 
 private:
-    std::vector<Mob> m_mobs;
+    // deque: STABLE references on push (the BlockRegistry / ItemRegistry
+    // pattern — a vector's reallocation would dangle every earlier
+    // `at()` reference). MobEntity holds a const Mob* into this storage
+    // for its whole life, so the stability is load-bearing: a test (or
+    // the game) that registers several mobs and keeps early ones alive
+    // reads through pointers the late pushes must not move.
+    std::deque<Mob> m_mobs;
     std::unordered_map<std::string, int> m_names;
 };
 

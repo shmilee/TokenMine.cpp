@@ -276,15 +276,33 @@ void Game::updateEntities(double dt) {
             continue;
         }
         auto* arrow = dynamic_cast<Projectile*>(m_entities[i].get());
-        if (arrow == nullptr || !arrow->stuck() ||
-            arrow->ammoItem().empty()) {
+        if (arrow != nullptr) {
+            if (arrow->stuck() && !arrow->ammoItem().empty()) {
+                const Vec3 disp =
+                    pickupMagnetDisplacement(arrow->position(), playerPos,
+                                             m_frameCount, kMobStepPerFrame);
+                if (disp != Vec3::zero()) {
+                    arrow->setPosition(arrow->position() + disp);
+                }
+            }
             continue;
         }
-        const Vec3 disp = pickupMagnetDisplacement(arrow->position(),
-                                                   playerPos, m_frameCount,
+        // V2-11 (XP): the READY orbs take the SAME magnet as the ready
+        // items (the dynamic_cast branch — the item / arrow paths above
+        // are bit-level unchanged): the frame-locked pull + the room
+        // check (the magnet never pushes an orb through a block).
+        auto* orb = dynamic_cast<ExpOrbEntity*>(m_entities[i].get());
+        if (orb == nullptr || !orb->pickupReady()) {
+            continue;
+        }
+        const Vec3 disp = pickupMagnetDisplacement(orb->position(), playerPos,
+                                                   m_frameCount,
                                                    kMobStepPerFrame);
         if (disp != Vec3::zero()) {
-            arrow->setPosition(arrow->position() + disp);
+            const Vec3 next = orb->position() + disp;
+            if (orb->hasRoomAt(next)) {
+                orb->setPosition(next);
+            }
         }
     }
     // Pickup (Phase 11): items within kPickupDistance of the player's
@@ -325,6 +343,32 @@ void Game::updateEntities(double dt) {
         // despawn paths above never fire it, mob drops are unrelated),
         // every frame the entity pass runs (hard rule 8).
         emitTutorialEvent("pickup." + item->itemName(), 1);
+    }
+    // V2-11 (XP): the orb pickup — the SAME deterministic index order,
+    // radius (kPickupDistance, pickupSq above) and pickup delay as the
+    // item pickup: a READY orb within the radius is collected into the
+    // player's experience pool (m_xpTotal += value — the curve derives
+    // the level), the orb is removed, and the "pickup" timbre plays
+    // (REUSED — the 8-event set, no new wav; spatialized at the orb, the
+    // item pattern). The dynamic_cast isolation: the item loop above is
+    // bit-level unchanged (it never sees an orb — the orb is not an
+    // ItemEntity, and there is no inventory-full retry here: the pool
+    // is unbounded, so a ready orb in range always collects).
+    for (std::size_t i = 0; i < n; ++i) {
+        if (gone[i]) {
+            continue;
+        }
+        auto* orb = dynamic_cast<ExpOrbEntity*>(m_entities[i].get());
+        if (orb == nullptr || !orb->pickupReady()) {
+            continue;
+        }
+        const Vec3 d = orb->position() - playerPos;
+        if (lengthSq(d) > pickupSq) {
+            continue;
+        }
+        gone[i] = true;
+        m_player->gainXp(orb->value());
+        m_sound.play("pickup", orb->position());
     }
     // Arrow pickup (Phase 42): a STUCK arrow within kArrowPickupRadius of
     // the player's bottom-center returns to the inventory as the
@@ -376,6 +420,15 @@ void Game::updateEntities(double dt) {
         Vec3 pos;
     };
     std::vector<PendingDrop> mobDrops;
+    // V2-11 (XP): the dead mobs' XP orb grants (collected like the drops
+    // — the spawn runs AFTER the list rebuild below, the mobDrops twin;
+    // one orb per dead mob with a data xp > 0, at the mob's rest
+    // position = the drop-point twin).
+    struct PendingXp {
+        int value;
+        Vec3 pos;
+    };
+    std::vector<PendingXp> mobXpOrbs;
     int mobDeaths = 0;
     for (std::size_t i = 0; i < n; ++i) {
         if (gone[i]) {
@@ -420,6 +473,15 @@ void Game::updateEntities(double dt) {
             }
             ++mobDeaths;
         }
+        // V2-11 (XP): the dead mob's data `xp` grant (independent of the
+        // drops — a drop-less mob with xp > 0 still grants; xp 0 = no
+        // orb, the data gate). Collected like the drops: the spawn runs
+        // after the list rebuild below, at the same rest position
+        // (the drop-point twin).
+        if (mob != nullptr && mob->dead() &&
+            mob->def().properties.xp > 0) {
+            mobXpOrbs.push_back({mob->def().properties.xp, mob->position()});
+        }
     }
     if (std::none_of(gone.begin(), gone.end(), [](bool g) { return g; })) {
         return;
@@ -446,9 +508,28 @@ void Game::updateEntities(double dt) {
         m_entities.push_back(std::make_unique<ItemEntity>(
             m_world, m_blocks, it.name, it.maxStack, drop.count, drop.pos));
     }
+    // V2-11 (XP): the dead mobs' XP orbs (the single spawn point; the
+    // value is data-validated 1..9 at init — the belt clamp in the
+    // entity constructor is unreachable here).
+    for (const PendingXp& x : mobXpOrbs) {
+        spawnExpOrb(x.value, x.pos);
+    }
     if (mobDeaths > 0) {
         m_sound.play("death");
     }
+}
+
+void Game::spawnExpOrb(int value, Vec3 pos) {
+    // V2-11 (XP): one grant = one orb (no merge, no split — the value is
+    // 1..9 by the data discipline; the constructor clamps as the belt).
+    // value <= 0 spawns nothing: the grant points gate on their data
+    // (xp / mine_xp / smelt_xp > 0) and this is the shared choke point's
+    // belt.
+    if (value <= 0) {
+        return;
+    }
+    m_entities.push_back(std::make_unique<ExpOrbEntity>(m_world, m_blocks,
+                                                        value, pos));
 }
 
 void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
@@ -1257,6 +1338,103 @@ void Game::buildArrowMeshes() {
         MC_LOG_ERROR("Arrow fletching mesh build failed: " +
                      rFletch.error().describe());
     }
+}
+
+void Game::drawExpOrbs(const Mat4& view, const Mat4& projection) {
+    // V2-11 (XP): the experience orbs in the basic shader's solid-color
+    // path (u_useTexture = 0 + u_color = the fixed MC green — the
+    // arrows' precedent; zero new texture, zero new atlas item). The
+    // program is BOUND first: Renderer::draw unbinds the program after
+    // every draw, and a uniform call on an unbound program is
+    // GL_INVALID_OPERATION (the drawArrows pattern).
+    //
+    // The orb does not EMIT light (the Minecraft orb lights nothing —
+    // no lighting update on spawn, by construction). Its RENDER takes
+    // the light of the cell it sits in through the PRE-6 per-draw
+    // override (the itemDropLight pattern — the same sampling, via
+    // entityCenterCell: bright by day, moonlit by night, dark in a
+    // cave). The override uniform is per-program persistent state
+    // (Renderer::draw unbinds after every draw), so it is reset to 0
+    // after EVERY orb draw — a leak would light the next draw (the
+    // item-pass discipline).
+    //
+    // Structural immunity: a no-input run has zero orbs (the grant
+    // points need a smelt completion / a mob death / a break — the
+    // quiet gate config is mob-free and the world events are
+    // input-driven), so this returns before building the mesh — the
+    // v2.10.0 pipeline is byte-identical (the HUD bar is the documented
+    // pixel exception, the gate-182 re-anchor).
+    bool any = false;
+    for (const auto& entity : m_entities) {
+        if (dynamic_cast<const ExpOrbEntity*>(entity.get()) != nullptr) {
+            any = true;
+            break;
+        }
+    }
+    if (!any) {
+        return; // no orb in the list: zero draws, mesh never built
+    }
+    const Mesh& mesh = expOrbMesh();
+    if (!mesh.valid()) {
+        return;
+    }
+    m_basicShader.bind();
+    m_basicShader.setUniform1i("u_useTexture", 0);
+    m_basicShader.setUniform1f("u_alpha", 1.0f); // orbs are opaque
+    m_basicShader.setUniform3f("u_color", ExpOrbEntity::kColorR,
+                               ExpOrbEntity::kColorG, ExpOrbEntity::kColorB);
+    for (const auto& entity : m_entities) {
+        const ExpOrbEntity* orb =
+            dynamic_cast<const ExpOrbEntity*>(entity.get());
+        if (orb == nullptr) {
+            continue;
+        }
+        // The cube's center (bottom-center + kSize/2 — the item cube's
+        // draw convention). No bob: the orb is a solid ball at rest
+        // (the item's bob/spin are the item's visual, not the orb's).
+        const Vec3 c = orb->position() +
+                       Vec3 {0.0f, ExpOrbEntity::kSize * 0.5f, 0.0f};
+        const Mat4 model = Mat4::translate(c);
+        const BlockPos cell =
+            entityCenterCell(orb->position(), orb->height());
+        const float sky = static_cast<float>(
+                              m_world.getSkyLight(cell.x, cell.y, cell.z)) /
+                          static_cast<float>(kMaxLight);
+        const float blockLight = static_cast<float>(
+                                      m_world.getBlockLight(cell.x, cell.y,
+                                                           cell.z)) /
+                                 static_cast<float>(kMaxLight);
+        m_basicShader.setUniform1i("u_useLightOverride", 1);
+        m_basicShader.setUniform1f("u_lightOverrideSky", sky);
+        m_basicShader.setUniform1f("u_lightOverrideBlock", blockLight);
+        m_renderer.draw(mesh, m_basicShader, view, projection, model);
+        // The reset (draw unbound the program — re-bind): the override
+        // must not leak into the draws that follow.
+        m_basicShader.bind();
+        m_basicShader.setUniform1i("u_useLightOverride", 0);
+    }
+    // Re-bind for the restore: the last orb draw (if any) unbound the
+    // program. The textured path is back for the passes that follow
+    // (the drawArrows restore pattern).
+    m_basicShader.bind();
+    m_basicShader.setUniform1i("u_useTexture", 1);
+    m_basicShader.unbind();
+}
+
+const Mesh& Game::expOrbMesh() {
+    // The solid orb cube (makeExpOrbGeometry — the shared six-face
+    // table at kSize, static per-orb-independent geometry): built
+    // lazily on the first frame that has an orb (the mobShadowMesh
+    // pattern — a no-input run never builds it).
+    if (m_expOrbMesh.valid()) {
+        return m_expOrbMesh;
+    }
+    const ItemMeshGeometry geom = makeExpOrbGeometry();
+    auto r = m_expOrbMesh.upload(geom.vertices, geom.indices);
+    if (!r.ok()) {
+        MC_LOG_ERROR("Exp orb mesh build failed: " + r.error().describe());
+    }
+    return m_expOrbMesh;
 }
 
 const Mesh& Game::handIconMesh() {

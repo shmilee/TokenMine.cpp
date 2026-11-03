@@ -1165,13 +1165,17 @@ TEST(ItemRegistryTest, ParsesFurnaceFields) {
 
 TEST(ItemRegistryTest, FurnaceFieldsDefaultToAbsent) {
     // No furnace fields: not smeltable, the smelt time is the Minecraft
-    // 10 s default (only meaningful when smeltable), not fuel.
+    // 10 s default (only meaningful when smeltable), not fuel. V2-11:
+    // smelt_xp DEFAULTS TO 1 (the documented unification of Minecraft's
+    // fractional smelt table — every smelt grants 1, the field is kept
+    // for future per-item tuning).
     ItemRegistry items;
     auto r = items.registerItem(parseJson(R"({"id":"gem","type":"material"})"));
     ASSERT_TRUE(r.ok()) << r.error().message;
     EXPECT_TRUE(items.at(*r).smeltableTo.empty());
     EXPECT_FLOAT_EQ(items.at(*r).smeltTime, 10.0f);
     EXPECT_FLOAT_EQ(items.at(*r).fuelTime, 0.0f);
+    EXPECT_EQ(items.at(*r).smeltXp, 1);
 }
 
 TEST(ItemRegistryTest, RejectsBadFurnaceFields) {
@@ -1210,6 +1214,73 @@ TEST(ItemRegistryTest, RejectsBadFurnaceFields) {
     EXPECT_FALSE(items.registerItem(
                      parseJson(R"({"id":"b","type":"material","fuel_time":1001})"))
                      .ok());
+}
+
+// -- V2-11 (XP): the smelt grant (smelt_xp) ----------------------------------
+
+TEST(ItemRegistryTest, ParsesSmeltXp) {
+    // A strict integer in [0, 9]: the points a completed smelt of this
+    // item grants (the smelt-complete orb's value). 0 = no orb (legal —
+    // the "no XP" data statement, the mine_xp default-0 twin).
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(
+        R"({"id":"beef","type":"material","smeltable_to":"cooked","smelt_xp":3})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(items.at(*r).smeltXp, 3);
+    auto r0 = items.registerItem(parseJson(
+        R"({"id":"stone","type":"material","smelt_xp":0})"));
+    ASSERT_TRUE(r0.ok()) << r0.error().message;
+    EXPECT_EQ(items.at(*r0).smeltXp, 0);
+    // The cap 9 is legal.
+    auto r9 = items.registerItem(parseJson(
+        R"({"id":"gem","type":"material","smelt_xp":9})"));
+    ASSERT_TRUE(r9.ok()) << r9.error().message;
+    EXPECT_EQ(items.at(*r9).smeltXp, 9);
+}
+
+TEST(ItemRegistryTest, RejectsBadSmeltXp) {
+    ItemRegistry items;
+    // > 9 = named rejection (the orb value cap — no split mechanism).
+    auto r = items.registerItem(parseJson(
+        R"({"id":"b","type":"material","smelt_xp":10})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("smelt_xp"), std::string::npos);
+    EXPECT_NE(r.error().message.find("[0, 9]"), std::string::npos);
+    // Non-integer (the strict whole-number check, not checkField's loose
+    // "number").
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material","smelt_xp":1.5})"))
+                     .ok());
+    // Negative.
+    EXPECT_FALSE(items.registerItem(
+                     parseJson(R"({"id":"b","type":"material","smelt_xp":-1})"))
+                     .ok());
+    // Non-number.
+    auto rn = items.registerItem(parseJson(
+        R"({"id":"b","type":"material","smelt_xp":"3"})"));
+    ASSERT_FALSE(rn.ok());
+    EXPECT_NE(rn.error().message.find("smelt_xp"), std::string::npos);
+}
+
+TEST(ItemRegistryTest, V211SmeltXpDefaultOneShipped) {
+    // The shipped data carries NO explicit smelt_xp (the default 1
+    // unifies every smelt — the documented simplification of MC's
+    // fractional table). A sample of the smeltable content resolves to
+    // 1; the field is present and data-driven (a future per-item value
+    // needs zero core change).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry blocks;
+    ASSERT_TRUE(blocks.loadDirectory(assets, "data/blocks").ok());
+    ItemRegistry items;
+    ASSERT_TRUE(items.buildBlockItems(blocks).ok());
+    ASSERT_TRUE(items.loadDirectory(assets, "data/items").ok());
+    // cooked_beef is a smelting product (the smelt grant reads the
+    // PRODUCT's smelt_xp); its default is 1.
+    const Item* cooked = items.findByName("cooked_beef");
+    ASSERT_NE(cooked, nullptr);
+    EXPECT_EQ(cooked->smeltXp, 1);
 }
 
 // -- dye (Phase 41) ----------------------------------------------------------

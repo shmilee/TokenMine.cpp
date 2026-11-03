@@ -13,7 +13,8 @@
     "undead": true,
     "drops": [
       { "item": "rotten_flesh", "count": 1 }
-    ]
+    ],
+    "xp": 5
   },
   "model": {
     "width": 0.6,

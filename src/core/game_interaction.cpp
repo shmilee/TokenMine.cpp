@@ -993,6 +993,15 @@ void Game::breakBlock(const BlockHit& hit) {
                 cd.count, dropAt(2 + static_cast<int>(i))));
         }
     }
+    // V2-11 (XP): the mine-complete grant — one orb worth the block's
+    // data mine_xp, at the break position's center (the dropPos the
+    // items scatter around — the unscattered center, the break sound's
+    // position). mine_xp 0 (the default) = no orb (the data gate). The
+    // drop-less paths (the flint-and-steel burn, the fire burn) never
+    // run breakBlock, so they grant nothing — by construction.
+    if (block.properties.mineXp > 0) {
+        spawnExpOrb(block.properties.mineXp, dropPos);
+    }
 
     // Break particles (Phase 15): a deterministic burst (world seed mixed
     // with an increasing per-break counter: the same input sequence gives

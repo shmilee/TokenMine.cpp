@@ -794,6 +794,12 @@ void Game::render() {
     drawPlayerBody(view, projection);
     // Arrows (Phase 21): the bow's in-flight projectiles, solid color.
     drawArrows(view, projection);
+    // V2-11 (XP): the experience orbs — the small solid-green cubes
+    // (the opaque pass, after the arrows: the solid-color precedent).
+    // Zero orbs = zero draws = the no-input run's structural immunity
+    // (the lazy mesh is never built; the HUD bar is the documented
+    // pixel exception, the gate-182 re-anchor).
+    drawExpOrbs(view, projection);
     // 3D held hand (Phase 42): the selected item's view model, in the
     // opaque pass (the depth test occludes it behind terrain like
     // everything else). No-op unless the pointer is locked and no panel is

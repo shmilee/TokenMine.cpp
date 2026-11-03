@@ -168,6 +168,22 @@ void Game::update(double dt) {
             // consumption point (the product the furnace just output),
             // one fixed 1/60 substep per frame per state (hard rule 8).
             emitTutorialEvent("smelt." + m_items.at(st.output.item).name, 1);
+            // V2-11 (XP): the smelt-complete grant — one orb worth the
+            // PRODUCT's data smelt_xp (the smelt_xp default 1 unifies
+            // every smelt — the documented simplification of Minecraft's
+            // fractional table), at the furnace block's center raised
+            // +0.5 (the cell above the block — the CRAFT-5 flame-spawn
+            // position; the orb falls onto the furnace's face and rests,
+            // the item convention). smelt_xp 0 = no orb (the data gate
+            // — spawnExpOrb's belt makes it structural). Frame-locked
+            // event boundary (hard rule 8: the smelt event fires on the
+            // fixed 1/60 substep, the pool mutation lands on the frame).
+            if (m_items.at(st.output.item).smeltXp > 0) {
+                spawnExpOrb(m_items.at(st.output.item).smeltXp,
+                            Vec3 {static_cast<float>(pos.x) + 0.5f,
+                                  static_cast<float>(pos.y) + 1.0f,
+                                  static_cast<float>(pos.z) + 0.5f});
+            }
         }
     }
 

@@ -178,6 +178,18 @@ struct BlockProperties {
     // How many of the drop item one break yields (1..64, must fit in one
     // stack of the drop item — cross-checked at game init).
     int dropsCount = 1;
+    // V2-11 (XP): the experience points a COMPLETED break of this block
+    // grants (the mine-complete orb's value). Optional data field
+    // `mine_xp`, a strict integer in [0, 9]: 0 (the default) = no orb;
+    // > 9 rejected by name (the orb value cap — no split mechanism).
+    // Only the player's break-completion path grants it (the burn /
+    // flint-and-steel paths have no drops and no XP — the drop-less
+    // path grants nothing, by construction). Shipped = the modern
+    // Minecraft ore values (the wiki-verified 11-03 set): coal_ore 1,
+    // diamond_ore 5, iron_ore 0 / gold_ore 0 (the 1.17 raw-conversion
+    // retirement: mining ore blocks no longer grants XP for the two
+    // smelted-raw ores).
+    int mineXp = 0;
     // Chance secondary drop (Phase 49): an OPTIONAL extra drop rolled per
     // break — INDEPENDENT of (and in addition to) the primary `drops`.
     // `chanceDropItem` names the extra item (empty = no chance drop, the

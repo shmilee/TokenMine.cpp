@@ -301,6 +301,28 @@ Result<void> MobRegistry::parseProperties(const Json& def,
             out.drops.push_back(std::move(drop));
         }
     }
+    // Optional 'xp' (V2-11, XP): the experience points the mob's death
+    // drops as an XP orb. A STRICT integer in [0, 9]: 0 (the absent-field
+    // default) = no orb; a non-integer / negative is named and rejected
+    // (the growth_light integer discipline), and > 9 is rejected by name
+    // (the orb value cap — no split mechanism, the data discipline that
+    // keeps a future over-valued mob from booting with an unrepresentable
+    // grant).
+    if (const Json* xp = def.find("xp")) {
+        if (!xp->isNumber() || xp->asDouble() != std::floor(xp->asDouble()) ||
+            xp->asDouble() < 0.0) {
+            return MC_FAIL("mob properties: 'xp' must be an integer >= 0, "
+                           "got " +
+                           (xp->isNumber() ? std::to_string(xp->asDouble())
+                                           : "a non-number"));
+        }
+        out.xp = static_cast<int>(xp->asDouble());
+        if (out.xp > 9) {
+            return MC_FAIL("mob properties: 'xp' must be in [0, 9] (the "
+                           "orb value cap — no split mechanism), got " +
+                           std::to_string(out.xp));
+        }
+    }
     // Optional 'on_hit_effect' (Phase 46, spider): the status effect this
     // mob's landed MELEE hit applies to the player —
     // {"name": "poison", "duration": 15.0}. Both keys are required

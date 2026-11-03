@@ -25,22 +25,27 @@ C++20 / SDL3 / OpenGL 3.3 core，
   slab/AO，`docs/BACKLOG.md` 执行权威）**；**用户实机诉求提前项
   V2-19 视角/移动/时钟批已完成 = v2.11.0 门 182**（滚轮缩放 +
   双击 Space 飞行 + 24h HUD 时钟，全会话态零 format，base18 第
-  3 次重锚）；**当前 = V2-11 XP 系统恢复**（半成品在 git stash
-  「V2-11 XP partial」，恢复 = stash pop + 版本 bump 冲突修正
-  【stash 内 CMakeLists 2.11.0 → 应为 2.12.0】+ F3 钉同款）/
+  3 次重锚）+ **V2-11 XP 系统已完成 = v2.12.0 门 183**（stash
+  半成品恢复 + 全整数 MC 曲线【等级派生不存储】+ 经验球 1..9 无
+  合并分裂 + 三发放源数据驱动 + format 26 + XP 条 HUD，base18 第
+  4 次重锚 179027 B，详见 `docs/archive/phase-2.12.0.md`）；
+  **当前 = V2-12 附魔（v2.13.0，需新设计：附魔台范式定案）** /
   原 4.x「世界扩展」V4-1~V4-6 = `docs/BACKLOG_4x.md` 方向底稿
   **保持大版本**（二批收官时定案晋升）；总量 24 < pre-v2.0 的
   78-84 = 用户采纳判据 ✓）；2.x 全史 =
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 11 份）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`（只读，
   别把历史细节当现状）。
-- 测试 **2207/2207**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
-  存档 format 25；base18 锚 **178676 B**（679×744 WM tile 态——
+- 测试 **2249/2249**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+  存档 format 26（V2-11 XP 引入：player.xp 恒写 + entities
+  type∈{item,xp}）；base18 锚 **179027 B**（679×744 WM tile 态——
   11-03 重启后重锚谱系：v2.7.0 净树重导 179116 B【字节数与原锚
   吻合】→ V2-10 叶冠 178148 B【门 181 论证】→ V2-19 时钟 178676 B
-  【门 182 论证，diff 609 px 全落右上角】；PITS 375 tile 几何
-  dummy 暖机 + PITS 376 输入 E2E capture 重试/帧限收尾）；
-  门计数 182（**V2-1 前视角 v2.1.0** 门 172：
+  【门 182 论证，diff 609 px 全落右上角】→ V2-11 XP 条 179027 B
+  【门 183 论证，diff 2031 px 全落底部条带】；PITS 375 tile 几何
+  dummy 暖机 + PITS 376 输入 E2E capture 重试/帧限收尾 + PITS 377
+  旧侧场景降级/orb 磁力 3D 边界）；
+  门计数 183（**V2-1 前视角 v2.1.0** 门 172：
   C 键三循环，前视 = 后视同款数学翻转角执行 + aimReach D+kReach——详见
   `docs/archive/v2x/phase-2.1.0.md`；**V2-2 Steve 皮肤 v2.2.0** 门 173：
   模型 per-face 纹理通用能力【既有 mob 位级不变】+ Steve 脸 8×8 像素
@@ -95,10 +100,11 @@ C++20 / SDL3 / OpenGL 3.3 core，
   `docs/archive/v2x/phase-2.10.0.md`）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；**v2.x 第二批任务表（执行
   权威）：`docs/BACKLOG.md`**（V2-11~V2-18 = 原 3.x 八项并入 +
-  V2-19 用户诉求提前项 ✅ v2.11.0；**下一项 V2-11 XP 系统
-  【git stash 半成品恢复 = v2.12.0】**；第一批 V2-1~V2-10 +
-  全史 = `docs/archive/v2x/`；1.x = `docs/archive/v1x/`）；会话
-  交接：`opencode-sessions/SESSION_CONTEXT.md`。
+  V2-19 用户诉求提前项 ✅ v2.11.0 + V2-11 XP ✅ v2.12.0；
+  **下一项 V2-12 附魔（v2.13.0，附魔台范式需新设计）**；第一批
+  V2-1~V2-10 + 全史 = `docs/archive/v2x/`；1.x =
+  `docs/archive/v1x/`）；会话交接：`opencode-sessions/
+  SESSION_CONTEXT.md`。
 ## 命令
 
 ```bash
@@ -171,7 +177,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 永不提交 `opencode-sessions/` 下任何文件（本地））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
-## 坑位 Top 8（全文 docs/PITS.md，376 条）
+## 坑位 Top 8（全文 docs/PITS.md，377 条）
 
 1. **SDL grab delta**（P28）：输入 E2E 全帧字节一致不保证——存档 yaw/pitch 为漂移
    探测器；驱动 warp 用实际窗口原点（实测 (4,64)）+ (632,352)。
@@ -207,7 +213,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（376 条，都踩过） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（377 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v2.x 逐版明细；v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

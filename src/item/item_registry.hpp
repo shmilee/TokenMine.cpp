@@ -104,7 +104,9 @@ private:
     // `smeltable_to` (an item name; presence marks the item as
     // smeltable — the product's existence is cross-checked at game init),
     // `smelt_time` ((0, 100] s, default 10.0) and `fuel_time` ((0, 1000]
-    // s; 0 = not fuel).
+    // s; 0 = not fuel). V2-11: plus `smelt_xp` (a strict integer in
+    // [0, 9], default 1 — the points a completed smelt of this item
+    // grants; 0 = no orb, > 9 rejected by name = the orb value cap).
     static Result<void> parseFurnace(const Json& def, Item& out);
     // Parse the optional dye field `dye_color` (Phase 41) into `out`
     // (a color name; presence marks the item as a dye — block dye

@@ -331,7 +331,30 @@ namespace mc {
 //      restores to the same step at the same progress bound
 //      (value-faithful, no migration — the UX-8a twin). The done
 //      shape ({}) is unchanged. Writes are always format 25.
-inline constexpr int kSaveFormat = 25;
+//  26: the V2-11 XP SYSTEM — "player" gains "xp" (the player's TOTAL
+//      experience pool, a whole number >= 0, ALWAYS written — the
+//      oxygen / velocity key discipline; the level is NOT saved — it
+//      is derived from the pool through core/xp_curve.hpp, the single
+//      source of truth). The "entities" array gains a SECOND kind:
+//      type ∈ {"item", "xp"} (the item entry shape is UNCHANGED — the
+//      red line). An xp entry is the strict shape { "type": "xp",
+//      "xp": <integer 1..9 — the orb value cap, no split>, "pos",
+//      "age", "pickup_delay" } (no item / count / damage — the orb
+//      carries no stack). The three-way key discipline (the V2-3
+//      tutorial twin): a format-26 file REQUIREs "player.xp" (a
+//      missing key is a version lie) and an xp entity entry requires
+//      the full {type, xp, pos, age, pickup_delay} shape (a missing /
+//      out-of-range "xp" is named and rejected); a format-25-and-
+//      older file CARRYING "player.xp" OR a type-"xp" entity is a
+//      version lie (the per-format field whitelists name it — the
+//      ≤25 shapes predate the system); an item entry CARRYING an
+//      "xp" field on a format-26 file is a version lie (the field
+//      belongs to the xp kind, named); a format-25 (or older) load
+//      migrates into the system ABSENT — player.xp loads 0 (the pool
+//      did not exist, the velocity-zeroed migration twin) and no xp
+//      entities exist (structurally: a pre-26 file cannot carry
+//      them). Writes are always format 26.
+inline constexpr int kSaveFormat = 26;
 // UX-8f (format 24): the inventory's total slot count as of format 23
 // (9 hotbar + 18 storage) — the 27-slot array shape a pre-24 file
 // carries (the parser tail-pads it to the current kTotalSize).
@@ -502,7 +525,8 @@ struct SavedEffect {
     int tier = 0;
 };
 
-// One dropped-item entity (the only entity kind the game spawns).
+// One dropped-item entity (the item kind the game spawns; the XP ORB
+// kind joined in format 26 — see SavedXpEntity).
 struct SavedItemEntity {
     std::string item; // item NAME (registry-resolved on load)
     int count = 1;
@@ -513,6 +537,19 @@ struct SavedItemEntity {
     // SURV-3 (format 18): the stack's accumulated damage (0 = full —
     // the "damage" key is written only when > 0).
     float damage = 0.0f;
+};
+
+// One XP orb entity (V2-11, format 26): the orb's VALUE (1..9 — the
+// orb value cap, no merge/split) + its position + the two lifetime
+// timers (the SavedItemEntity twin; the orb carries no stack, so there
+// is no item / count / damage — its entry shape is the strict
+// {type, xp, pos, age, pickup_delay}, parse-whitelisted per kind).
+struct SavedXpEntity {
+    int xp = 1;       // the orb's value (1..ExpOrbEntity::kMaxValue)
+    Vec3 pos;         // bottom-center
+    double age = 0.0; // seconds alive (< ExpOrbEntity::kDespawnSeconds)
+    // Remaining pickup delay (0..ExpOrbEntity::kPickupDelaySeconds).
+    double pickupDelay = 0.0;
 };
 
 // Everything one save file holds (state already resolved to names, so
@@ -629,7 +666,20 @@ struct SaveGame {
     // the player had full air). The drownTicks accumulator is never
     // carried (it restarts at 0 on load — see the format-17 note).
     int playerOxygen = -1;
+    // XP (V2-11, format 26): the player's TOTAL experience pool (the
+    // single int source of truth — the level is derived at read time
+    // through core/xp_curve.hpp, never saved). -1 = "unspecified"
+    // (format 1-25 files): the game loads it 0 (the migration — the
+    // system did not exist, the velocity-zeroed twin). A format-26
+    // file REQUIRES the field (parse-validated: a whole number >= 0).
+    int playerXp = -1;
     std::vector<SavedItemEntity> entities;
+    // The XP orbs (V2-11, format 26): the second entity kind of the
+    // save's "entities" array (type "xp" — the item entries above keep
+    // their shape unchanged). Empty for format-25-and-older loads
+    // (structurally: they cannot carry the kind — the version-lie
+    // rejection).
+    std::vector<SavedXpEntity> xpEntities;
     std::vector<SavedBlockEdit> blockEdits; // sorted by pos
     std::vector<SavedFluidEdit> fluidEdits; // sorted by pos
 };

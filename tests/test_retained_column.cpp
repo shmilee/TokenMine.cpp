@@ -395,6 +395,7 @@ TEST(RetainedColumnDiffTest, RetainedShapeSaveRoundTrips) {
     save.slots.resize(Inventory::kTotalSize); // all empty
     save.playerAbsorption = 0.0f; // format 12 (always written)
     save.playerOxygen = kOxygenMax; // format 17 (always written)
+    save.playerXp = 0; // format 26 (always written, V2-11)
     std::map<ColumnPos, RetainedColumnDiff> retained;
     retained[{2, 0}] = diff;
     mergeRetained(save, retained);

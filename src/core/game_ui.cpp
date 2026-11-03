@@ -6,6 +6,7 @@
 
 #include "core/game_local.hpp"
 #include "core/ui_layout.hpp"
+#include "core/xp_curve.hpp" // V2-11: the XP bar's pure level/fill math
 #include "ui/item_tooltip.hpp"
 #include "ui/ui_scale.hpp"
 
@@ -27,6 +28,15 @@ constexpr int kHotbarSlotSize = 44;
 constexpr int kHotbarSlotGap = 2;
 
 constexpr int kHotbarBottomMargin = 8;
+
+// V2-11 (XP): the XP bar's geometry (the Minecraft position — directly
+// below the hotbar row, the hotbar's full width, 2 px tall) and the
+// level number's offset above the bar (the glyph height — the number
+// floats over the bar's top edge, the MC HUD look). Named, not magic:
+// the bar's layout is a pure function of these + the hotbar metrics.
+constexpr int kXpBarGap = 4;
+
+constexpr int kXpBarHeight = 2;
 
 constexpr int kHotbarIconPx = 30;
 
@@ -766,6 +776,13 @@ void Game::renderUi() {
     const Vec4 kText {1.0f, 1.0f, 1.0f, 0.92f};
     const Vec4 kTextDim {1.0f, 1.0f, 1.0f, 0.55f};
     const Vec4 kCrosshair {1.0f, 1.0f, 1.0f, 0.85f};
+    // V2-11 (XP): the XP bar's colors — the dark track (the empty bar,
+    // always drawn: level 0 is the track + "0", the MC look) and the
+    // fill (the Minecraft yellow-green — the bar's fill AND the level
+    // number, the MC same-style green; the orb's world color is the
+    // entity-side named constant, the (0,1,0) MC green).
+    const Vec4 kXpBarBg {0.0f, 0.0f, 0.0f, 0.65f};
+    const Vec4 kXpBarFill {0.5f, 1.0f, 0.2f, 1.0f};
     // SURV-3 (durability bar): the strip drawn under a DAMAGED item
     // icon — 2 px tall at the icon's bottom edge, filled left-to-right
     // with the REMAINING fraction (1 − damage/durability) in three
@@ -1214,6 +1231,44 @@ void Game::renderUi() {
                 }
             }
         }
+    }
+
+    // -- V2-11 (XP): the XP bar + level number -------------------------------
+    // ALWAYS visible during play (the documented re-anchor pixel source —
+    // gate 182 S1: unlike the hotbar row above it, this does NOT gate on
+    // the pointer lock, so the no-input baseline renders it too; a panel
+    // hides it, the HUD convention). The Minecraft position: directly
+    // below the hotbar row (the hotbar's own geometry — drawn or not),
+    // the hotbar's full width, kXpBarHeight (2) px tall. SOLID-FILL
+    // implementation (the 10-segment alternative — the documented
+    // choice: one background quad + one fill quad, the fill width = the
+    // xpIntoLevel / xpNeededForLevel ratio of the bar, exact integer
+    // math). The level number floats centered above the bar (the glyph
+    // height — the MC look, the digits 0-9 are existing font glyphs,
+    // zero new font). The pool is the player's single int
+    // (m_xpTotal); the level + fill derive through the pure
+    // xp_curve functions (the level is never stored). xpNeededForLevel
+    // is always >= 7, so the ratio never divides by zero.
+    if (!panelOpen() && m_player) {
+        const int n = Inventory::kHotbarSize;
+        const int total = n * kHotbarSlotSize + (n - 1) * kHotbarSlotGap;
+        const int x0 = (w - total) / 2;
+        const int hotbarY = h - kHotbarBottomMargin - kHotbarSlotSize;
+        const int barY = hotbarY + kHotbarSlotSize + kXpBarGap;
+        const int xpTotal = m_player->xpTotal();
+        const int level = levelFromTotalXp(xpTotal);
+        const int needed = xpNeededForLevel(level);
+        const int into = xpIntoLevel(xpTotal, level);
+        auto& bg = batchFor(kXpBarBg, false, nullptr);
+        addQuad(bg, x0, barY, total, kXpBarHeight);
+        const int fillW = (into * total) / needed;
+        if (fillW > 0) {
+            auto& fill = batchFor(kXpBarFill, false, nullptr);
+            addQuad(fill, x0, barY, fillW, kXpBarHeight);
+        }
+        const std::string lvl = std::to_string(level);
+        addText(lvl, w / 2 - static_cast<int>(textWidth(lvl, fScale(1.0))) / 2,
+                barY - kGlyphSize, fScale(1.0), kXpBarFill);
     }
 
     // -- death screen (Phase 16, while the player is dead) ------------------

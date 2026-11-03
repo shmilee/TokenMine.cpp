@@ -159,6 +159,17 @@ struct Item {
     // only meaningful when smeltable.
     std::string smeltableTo;
     float smeltTime = 10.0f;
+    // V2-11 (XP): the experience points a completed SMELT of this item
+    // grants (the smelt-complete orb's value — the orb is worth the
+    // PRODUCT's smeltXp, the game's smelt event reads it). Optional data
+    // field 'smelt_xp', a strict integer in [0, 9]: 0 = no orb (the data
+    // discipline, the mine_xp default-0 twin), > 9 rejected by name (the
+    // orb value cap — no split). DEFAULT 1 for every item = the
+    // documented simplification of Minecraft's fractional smelt table
+    // (meat 0.35 / iron 0.7 / gold ingot 1 / stone 0.1): the project's
+    // integer XP unifies all smelts at 1, the field is kept for future
+    // per-item tuning (zero core change to re-differentiate).
+    int smeltXp = 1;
     // Phase 40: furnace fuel (optional data field 'fuel_time'). fuelTime
     // (seconds, (0, 1000]) is how long one unit burns; 0 = not fuel (the
     // absent-field default; an explicit 0 is rejected as a typo, the

@@ -12,7 +12,8 @@
     "drops": [
       { "item": "wool", "count": 1 },
       { "item": "mutton", "count": 1 }
-    ]
+    ],
+    "xp": 2
   },
   "model": {
     "width": 1.2,

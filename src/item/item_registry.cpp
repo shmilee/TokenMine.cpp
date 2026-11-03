@@ -292,6 +292,29 @@ Result<void> ItemRegistry::parseFurnace(const Json& def, Item& out) {
                            std::to_string(out.fuelTime));
         }
     }
+    // Optional 'smelt_xp' (V2-11, XP): the points a completed smelt of
+    // this item grants (the smelt-complete orb's value). A STRICT integer
+    // in [0, 9]: 0 = no orb (an explicit 0 is LEGAL here — unlike the
+    // fuel_time typo-rejection, 0 is the "no XP" data statement, the
+    // mine_xp default-0 twin); > 9 is rejected by name (the orb value
+    // cap — there is no split mechanism, the data discipline that keeps
+    // a future over-valued item from booting with an unrepresentable
+    // grant). Absent = the default 1 (the documented unification of
+    // Minecraft's fractional smelt table — every smelt grants 1).
+    if (const Json* sx = def.find("smelt_xp")) {
+        if (!sx->isNumber() || sx->asDouble() != std::floor(sx->asDouble()) ||
+            sx->asDouble() < 0.0) {
+            return MC_FAIL("'smelt_xp' must be an integer >= 0, got " +
+                           (sx->isNumber() ? std::to_string(sx->asDouble())
+                                           : "a non-number"));
+        }
+        out.smeltXp = static_cast<int>(sx->asDouble());
+        if (out.smeltXp > 9) {
+            return MC_FAIL("'smelt_xp' must be in [0, 9] (the orb value "
+                           "cap — no split mechanism), got " +
+                           std::to_string(out.smeltXp));
+        }
+    }
     return {};
 }
 
@@ -984,7 +1007,8 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
             key != "ammo" && key != "infinite" &&
             key != "arrow_effect" &&
             key != "smeltable_to" && key != "smelt_time" &&
-            key != "fuel_time" && key != "dye_color" &&
+            key != "fuel_time" && key != "smelt_xp" &&
+            key != "dye_color" &&
             key != "drink_time" && key != "returns_item" &&
             key != "collects_fluid" &&
             key != "pours_fluid" && key != "pours_becomes" &&

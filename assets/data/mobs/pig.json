@@ -12,7 +12,8 @@
     "drops": [
       { "item": "pork", "count_min": 1, "count_max": 2 },
       { "item": "leather", "count_min": 0, "count_max": 1 }
-    ]
+    ],
+    "xp": 2
   },
   "model": {
     "width": 0.9,
