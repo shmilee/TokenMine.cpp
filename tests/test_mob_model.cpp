@@ -5,9 +5,9 @@
 //   - every swing leg's pivot (box top-center) sits AT the body bottom
 //     (the joint out of the body — a leg hangs from the torso's
 //     underside, it is never buried in the torso);
-//   - the amplitudes (cow/sheep 0.5, chicken 0.4, spider 0.45 rad) keep
-//     the leg clear of the body and the floor at EVERY one of the 64
-//     swing phases: checkSwingClip (mob_swing_clip) is run on the
+//   - the amplitudes (cow/sheep 0.5, chicken/pig 0.4, spider 0.45 rad)
+//     keep the leg clear of the body and the floor at EVERY one of the
+//     64 swing phases: checkSwingClip (mob_swing_clip) is run on the
 //     shipped boxes with the renderer's exact per-phase (sin, cos).
 // Any future JSON edit that re-buries a pivot, re-inflates an
 // amplitude, or raises the body off the legs turns this file red
@@ -37,16 +37,17 @@ Json parseJson(const std::string& text) {
     return *r;
 }
 
-// A layout covering every tile the four shipped quadruped models use
+// A layout covering every tile the shipped quadruped models use
 // (buildSwingModel runs makeMobModelGeometry, which resolves each box's
-// texture through the atlas layout).
+// texture through the atlas layout; V2-5 adds the pig's two).
 AtlasLayout makeQuadLayout() {
     auto r = AtlasLayout::parse(parseJson(
         R"({"columns":4,"rows":4,"tiles":{
             "cow_body":[0,0],"cow_legs":[1,0],"cow_head":[2,0],
             "sheep_body":[3,0],"sheep_legs":[0,1],"sheep_head":[1,1],
             "chicken_body":[2,1],"chicken_legs":[3,1],"chicken_head":[0,2],
-            "spider_body":[1,2],"spider_head":[2,2]}})"));
+            "spider_body":[1,2],"spider_head":[2,2],
+            "pig_body":[3,2],"pig_face":[0,3]}})"));
     if (!r.ok()) {
         ADD_FAILURE() << r.error().message;
     }
@@ -240,7 +241,8 @@ TEST(MobModelTest, ShippedBodiesLongerThanTall) {
     } cases[] = {
         {"cow", 0.75f, 0.55f, 1.05f},   // length:height 1.9:1
         {"sheep", 0.625f, 0.55f, 0.95f}, // 1.73:1
-        {"chicken", 0.375f, 0.35f, 0.5f} // 1.43:1
+        {"chicken", 0.375f, 0.35f, 0.5f}, // 1.43:1
+        {"pig", 0.6f, 0.5f, 0.75f}       // 1.5:1 (V2-5, the wide body)
     };
     for (const auto& c : cases) {
         const Mob& m = mobs.at(mobs.idForName(c.mob));
@@ -271,6 +273,9 @@ TEST(MobModelTest, ShippedSwingAmplitudesPinned) {
     const Exp quadruped[] = {{"leg_fl", 0.5f, 0}, {"leg_fr", 0.5f, 1},
                              {"leg_rl", 0.5f, 1}, {"leg_rr", 0.5f, 0}};
     const Exp chicken[] = {{"leg_l", 0.4f, 0}, {"leg_r", 0.4f, 1}};
+    // V2-5: the pig's diagonal gait at the chicken's 0.4-rad schedule.
+    const Exp pig[] = {{"leg_fl", 0.4f, 0}, {"leg_fr", 0.4f, 1},
+                       {"leg_rl", 0.4f, 1}, {"leg_rr", 0.4f, 0}};
     const Exp spider[] = {{"leg_1", 0.45f, 0}, {"leg_2", 0.45f, 1},
                           {"leg_3", 0.45f, 0}, {"leg_4", 0.45f, 1},
                           {"leg_5", 0.45f, 0}, {"leg_6", 0.45f, 1},
@@ -292,6 +297,7 @@ TEST(MobModelTest, ShippedSwingAmplitudesPinned) {
     expectSwings("cow", quadruped, 4);
     expectSwings("sheep", quadruped, 4);
     expectSwings("chicken", chicken, 2);
+    expectSwings("pig", pig, 4);
     expectSwings("spider", spider, 8);
     // The humanoids keep their ENT-1 documented deviation (no limb
     // geometry): no swings.
@@ -333,12 +339,65 @@ TEST(MobModelTest, ShippedSpiderGeometryPinned) {
     EXPECT_NEAR(boxTop(head), boxTop(body), 1e-6f);
 }
 
+TEST(MobModelTest, ShippedPigGeometryPinned) {
+    // V2-5: the pig — the wide-bodied quadruped (the MC 0.9x0.9 hitbox):
+    // the body bottom flush with the four stubby legs' pivots (the
+    // joint-out-of-the-body rule), the head fused to the body front with
+    // its top flush with the model height, and the V2-2 per-face `faces`
+    // consumption: ONLY the head's front overrides to the explicit pig
+    // face tile (the other five faces fall back to the body texture).
+    const MobRegistry mobs = loadShippedMobs();
+    const Mob& pig = mobs.at(mobs.idForName("pig"));
+    EXPECT_FLOAT_EQ(pig.model.width, 0.9f);
+    EXPECT_FLOAT_EQ(pig.model.height, 0.9f);
+    ASSERT_EQ(pig.model.boxes.size(), 6u);
+    const MobBox& body = pig.model.boxes[0];
+    EXPECT_FLOAT_EQ(body.center.x, 0.0f);
+    EXPECT_FLOAT_EQ(body.center.y, 0.65f);
+    EXPECT_FLOAT_EQ(body.center.z, 0.0f);
+    EXPECT_FLOAT_EQ(body.size.x, 0.6f);
+    EXPECT_FLOAT_EQ(body.size.y, 0.5f);
+    EXPECT_FLOAT_EQ(body.size.z, 0.75f);
+    EXPECT_EQ(body.texture, "pig_body");
+    EXPECT_TRUE(body.faces.empty());
+    const struct {
+        float x;
+        float z;
+    } legs[] = {{-0.15f, -0.225f}, {0.15f, -0.225f},
+                {-0.15f, 0.225f}, {0.15f, 0.225f}};
+    for (std::size_t i = 0; i < 4; ++i) {
+        const MobBox& leg = pig.model.boxes[1 + i];
+        EXPECT_FLOAT_EQ(leg.center.x, legs[i].x) << "leg " << i;
+        EXPECT_FLOAT_EQ(leg.center.z, legs[i].z) << "leg " << i;
+        EXPECT_FLOAT_EQ(leg.center.y, 0.2f) << "leg " << i;
+        EXPECT_FLOAT_EQ(leg.size.x, 0.2f) << "leg " << i;
+        EXPECT_FLOAT_EQ(leg.size.y, 0.4f) << "leg " << i;
+        EXPECT_FLOAT_EQ(leg.size.z, 0.2f) << "leg " << i;
+        EXPECT_NEAR(boxBottom(leg), 0.0f, 1e-6f) << "leg " << i; // to ground
+        EXPECT_NEAR(swingPivot(leg).y, boxBottom(body), 1e-6f)
+            << "leg " << i; // the joint at the body bottom
+        EXPECT_EQ(leg.texture, "pig_body") << "leg " << i;
+        EXPECT_TRUE(leg.faces.empty()) << "leg " << i;
+    }
+    const MobBox& head = pig.model.boxes[5];
+    EXPECT_FLOAT_EQ(head.center.x, 0.0f);
+    EXPECT_FLOAT_EQ(head.center.y, 0.675f);
+    EXPECT_FLOAT_EQ(head.center.z, -0.225f);
+    EXPECT_FLOAT_EQ(head.size.x, 0.45f);
+    EXPECT_FLOAT_EQ(head.size.y, 0.45f);
+    EXPECT_FLOAT_EQ(head.size.z, 0.45f);
+    EXPECT_EQ(head.texture, "pig_body");
+    ASSERT_EQ(head.faces.size(), 1u); // the partial-map convention
+    EXPECT_EQ(head.faces.at("front"), "pig_face");
+    EXPECT_NEAR(boxTop(head), pig.model.height, 1e-6f); // flush top
+}
+
 TEST(MobModelTest, ShippedBoxesInsideModelAabb) {
     // Every box of the four re-proportioned models stays inside the
     // physical AABB (the model width/height are the collision box —
     // untouched; the head/wings/beak re-placement must not escape it).
     const MobRegistry mobs = loadShippedMobs();
-    const char* names[] = {"cow", "sheep", "chicken", "spider"};
+    const char* names[] = {"cow", "sheep", "chicken", "spider", "pig"};
     for (const char* name : names) {
         const Mob& m = mobs.at(mobs.idForName(name));
         const float halfW = m.model.width * 0.5f;
@@ -363,7 +422,7 @@ TEST(MobModelTest, ShippedAllPhasesNoClip) {
     // the clip predicate against its body box (box 0 in every model).
     const MobRegistry mobs = loadShippedMobs();
     const AtlasLayout layout = makeQuadLayout();
-    const char* names[] = {"cow", "sheep", "chicken", "spider"};
+    const char* names[] = {"cow", "sheep", "chicken", "spider", "pig"};
     for (const char* name : names) {
         const Mob& m = mobs.at(mobs.idForName(name));
         const SwingModel sm = buildSwingModel(m.model, layout);

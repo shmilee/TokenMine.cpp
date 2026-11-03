@@ -194,6 +194,65 @@ def shirt_tile(salt: int, base) -> list:
     return pixels
 
 
+# V2-5 pig (the data-driven content addition: new salt block 0x5011, the
+# six existing mob tile families keep their salts and bytes — the md5
+# pin in tests/test_player_body.cpp is the zero-change proof).
+PIG_PINK = (228, 170, 160)  # MC pig pink (body/legs/head base)
+PIG_EYE = (40, 32, 32)      # the pig's dark eyes (the V2-2 face palette)
+PIG_SNOUT = (196, 130, 126)  # the dark-pink snout band
+
+# The 8x8 pig face (the V2-2 Steve-face paradigm: explicit pixels, zero
+# hash, 2x upscaled into the 16x16 tile so the features land on exact
+# 4x4 / 8x4 pixels). Rows top->bottom: P = pink, E = eye, S = snout:
+#   the 2x2 eyes sit in rows 2-3 (the outer columns x1-2 / x5-6) and the
+#   4x2 dark-pink snout band in rows 5-6 (x2..5) — the MC pig's face.
+PIG_FACE = [
+    "PPPPPPPP",  # y0
+    "PPPPPPPP",  # y1
+    "PEEPPEEP",  # y2: 2x2 eyes (x1-2 / x5-6)
+    "PEEPPEEP",  # y3: 2x2 eyes
+    "PPPPPPPP",  # y4
+    "PPSSSSPP",  # y5: dark-pink snout band (x2..5)
+    "PPSSSSPP",  # y6: snout band
+    "PPPPPPPP",  # y7
+]
+FACE_PIG_COLORS = {
+    "P": PIG_PINK,
+    "E": PIG_EYE,
+    "S": PIG_SNOUT,
+}
+
+
+def pig_tile(salt: int) -> list:
+    """Pig skin (V2-5): the MC pig pink base + light noise (smooth skin,
+    the chicken's noise level)."""
+    (br, bg, bb) = PIG_PINK
+    pixels = []
+    for y in range(SIZE):
+        row = []
+        for x in range(SIZE):
+            n = noise(x, y, salt, 8)
+            r, g, b = clamp(br + n), clamp(bg + n), clamp(bb + n)
+            row.append((r, g, b, 255))
+        pixels.append(row)
+    return pixels
+
+
+def pig_face_tile() -> list:
+    """The pig's per-face head tile (V2-2 `faces` consumption): the
+    explicit 8x8 PIG_FACE grid 2x-upscaled to 16x16 (nearest neighbor,
+    the ph_face packing — zero hash, deterministic by construction)."""
+    up = []
+    for gy in range(SIZE):
+        src_row = PIG_FACE[gy // 2]
+        row = []
+        for gx in range(SIZE):
+            (r, g, b) = FACE_PIG_COLORS[src_row[gx // 2]]
+            row.append((r, g, b, 255))
+        up.append(row)
+    return up
+
+
 def main() -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
     # Green zombie skin (eyes on the front face) + teal shirt.
@@ -241,6 +300,11 @@ def main() -> None:
               spider_tile(0x5D11, (74, 66, 56)))
     write_png(os.path.join(OUT_DIR, "spider_head.png"),
               spider_tile(0x5D12, (58, 52, 44), eyes=True))
+    # Pink pig (V2-5): the body/legs tile is the MC pig pink + noise
+    # (new salt 0x5011); the head's front face is the explicit 8x8 pig
+    # face 2x-upscaled (the V2-2 per-face paradigm, zero hash).
+    write_png(os.path.join(OUT_DIR, "pig_body.png"), pig_tile(0x5011))
+    write_png(os.path.join(OUT_DIR, "pig_face.png"), pig_face_tile())
 
 
 if __name__ == "__main__":

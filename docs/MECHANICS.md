@@ -48,7 +48,7 @@
 - **状态效果**：**11**（`assets/data/effects/`，见「状态效果」）；**Mob**：**6**
   （`assets/data/mobs/`，见「实体与 Mob」）；**配方**：**66**（shaped 34 /
   shapeless 32，`assets/data/recipes/`）；**生物群系**：3（desert/forest/plains）
-- **食物**：10 种（`restore_hunger`，见「生存系统」）；**染料**：15 色；**护甲**：
+- **食物**：12 种（`restore_hunger`，见「生存系统」）；**染料**：15 色；**护甲**：
   12 件；**耐久**：28 件（9 工具 + 6 弓 + 燧石与钢 + 12 护甲，`[SURV-3]` 首批 27
   件 + `[SURV-5]` poison_bow）
 - **音效**：**39** 个确定性 WAV（`tools/generate_sounds.py` 固定种子，重跑字节
@@ -549,8 +549,8 @@
 
 - **掉落物**（`ItemEntity` `[P10]`）：**block item = 0.25 立方体**（atlas 光照
   随昼夜变暗）/ **非 block item = 3D box 模型**（`[CRAFT-2]` 16 件 →
-  **`[ENT-9]` 全 79 件**非 block 物品补齐 model——mob 掉落 rotten_flesh/bone/
-  arrow/feather/beef/mutton/leather + 所有可 Q 丢弃物皆可见，零核心代码纯
+  **`[ENT-9]` 全 81 件**非 block 物品补齐 model——mob 掉落 rotten_flesh/bone/
+  arrow/feather/beef/mutton/pork/leather + 所有可 Q 丢弃物皆可见，零核心代码纯
   内容；家族几何 1–3 box 剪影，纹理 = 既有 icon PNG）；统一 Entity 碰撞物理
   （重力/终端速度/水平摩擦）；**零初速生成**（静止位精确、截图可复现——对 MC
   随机初速的刻意偏离）；**破坏掉落确定性伪散落 `[UX-8d]`**（`block/
@@ -593,7 +593,7 @@
   affects_mobs 效果 / mob 侧要求 shoot_range；init 双向点名；Projectile 尾部
   effectId/effectDuration 默认 −1 位级恒等）——skeleton 箭 = **wither 10 s**
   （玩家侧）/ poison_bow 箭 = **poison 60 s**（mob 侧可毒死）= MC 值
-- **6 种 mob**（`assets/data/mobs/`，全数据驱动 `MobEntity`/`MobRegistry`；
+- **7 种 mob**（`assets/data/mobs/`，全数据驱动 `MobEntity`/`MobRegistry`；
   数值 = normal 基线）：
   - **zombie**（敌对）：20 HP / speed 0.8 / 探测 16 / 近战 1.6 / 伤害 3 /
     冷却 1.0 / 掉 rotten_flesh ×1 / `undead: true`
@@ -608,6 +608,9 @@
     （`milk_with` bucket → `milk_gives` milk_bucket）
   - **sheep**（被动）：8 HP / 0.5 / 掉 wool ×1 + mutton ×1
   - **chicken**（被动）：4 HP / 0.6 / 掉 feather ×1 + chicken ×1
+  - **pig**（被动，`[V2-5]`）：10 HP / 0.6 / 掉 pork **1–2**（随机区间，首个
+    min>0 区间 carrier）+ leather **0–1** / 4 腿 0.4 rad 对角步态 / head front
+    = 首个 V2-2 per-face `faces` 消费 mob（显式 8×8 猪脸 2× tile）
 - **生成**（`data/mob_spawning.json` + 帧节奏驱动，纯函数 = 同一运行必生成
   同一只）：每 `check_every_frames` **30** 帧尝试一次（难度节奏缩放：easy 60 /
   normal 30 / hard 20，见「难度」）、`first_spawn_frame` **60** 之前不生成、
@@ -621,7 +624,7 @@
   AABB 重叠（严格不等式）⑥ 与其他 mob 水平间隔 ≥1；类型在每次尝试时按数据
   名单**确定性抽取**（种子 ⊕ 帧号，1 次流值映射 [0, Σweight) 后按累计权重走
   名单序——`[P39]` `mobs` 条目 = `{"id", "weight"?}`，weight 1..10000 缺省
-  1，全 1 与旧 `pick % 长度` 逐位相同；shipped 6 种全 weight 1）；**抽中的类型
+  1，全 1 与旧 `pick % 长度` 逐位相同；shipped 7 种全 weight 1）；**抽中的类型
   过不了光门则该次尝试作废**（如白天抽中 zombie，v1 接受）
 - **光照门（昼夜生成规则，`[P20.5]`→`[LGT-3]`）**：生成格（脚位）的**当前
   有效光照** = max(天空光昼夜有效等级 `effectiveSkyLight(stored, df, L) = max(0,
@@ -742,9 +745,10 @@
   复用）；MC 的跳跃/攻击额外耗饥（exhaustion 子点）未建模 = 记档偏离
 - **饱和度 `[SURV-9]`**：逐食物 `saturation` 数据字段（严格 number [0,20]、
   配对纪律 = 须有 `restore_hunger`；**缺省 = 旧 2× 规则位级复现**
-  `foodSatiety` 纯函数）——shipped 10 食物 **MC 精确值全写**：rotten_flesh
-  0.8 / beef 1.8 / mutton 1.2 / chicken 1.2（**生肉低饱和度即玩法点**）/
-  cooked_beef 12.8 / cooked_mutton 7.2 / cooked_chicken 7.2 / bread 6.0 /
+  `foodSatiety` 纯函数）——shipped 12 食物 **MC 精确值全写**：rotten_flesh
+  0.8 / beef 1.8 / mutton 1.2 / chicken 1.2 / pork 1.8（`[V2-5]`）（**生肉低
+  饱和度即玩法点**）/ cooked_beef 12.8 / cooked_mutton 7.2 / cooked_chicken
+  7.2 / cooked_pork 12.8（`[V2-5]`，熟牛肉同款刻度）/ bread 6.0 /
   apple 2.4 / golden_apple 9.0
 - **进食**（`[P28]` `core/food.hpp` 纯状态机，real-dt）：选中食物时**按住右键
   1.6 s**（`kEatDurationSeconds` = MC 32 tick）= 吃——完成时回复该物品

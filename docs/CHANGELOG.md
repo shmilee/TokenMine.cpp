@@ -1,10 +1,43 @@
 # 版本历史（CHANGELOG）
 
 > 本文件只留 **v2.x** 逐版明细（v2.0.0 = 1.x 收官里程碑 / V2-1 前视角 /
-> V2-2 Steve 皮肤 / V2-3 教程系列化 / V2-4 天气）。v1.x（v1.50.0→v1.0）→ `docs/archive/v1x/CHANGELOG.md`；
+> V2-2 Steve 皮肤 / V2-3 教程系列化 / V2-4 天气 / V2-5 猪）。
+> v1.x（v1.50.0→v1.0）→ `docs/archive/v1x/CHANGELOG.md`；
 > v0.x（v0.12.0→v0.1.0）→ `docs/archive/v0x/CHANGELOG.md`。逐版细节
 > （机制/证据/偏离/性能 A/B）见 `docs/archive/v1x/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
+
+## v2.5.0（2026-11-03）— V2-5 新 mob 猪（门 176 全 PASS）
+
+「加 mob = JSON + 纹理」数据驱动承诺的验证 = **零核心代码**：
+**pig.json**（passive 10 HP / 0.6 speed / spawn_max_light 15 / drops
+pork ×1-2 + leather ×0-1 随机区间既有机制）+ **宽体 6-box 模型**
+（body + 4 粗短腿 + head 0.45³ 嵌入 body 前方 cow 范式；4 腿 0.4 rad
+对角 swing；64 相位 clip 验收）+ **head `faces.front` = pig_face**
+（**V2-2 per-face 纹理的首个 mob 消费**——此前仅玩家身体用过；显式
+8×8 猪脸粉/深粉鼻口/2×2 眼 Steve 范式零 hash）+ **pig_body 纹理**
+（MC 猪粉 (228,170,160)+noise，新 salt 0x5011；**既有 6 mob tile 176
+文件全 cmp 零变化**）+ **pork/cooked_pork 食物链**（+3/1.8 sat →
+smelt → +8/12.8 sat = beef 熟同款刻度；icon 生成器新 salt；无新配方
+杀猪→熔炼 MC 同款）+ **生成权重** {"id":"pig","weight":1}（6→7 加权
+抽取零代码）+ **图集 97→99**（pig_body [8,7]/pig_face [9,7] 进 row-7
+空位，97 既有条目**零移位**，99 条全 census 逐格钉）+ **字体
+422→423**（猪 U+732A 码点序，顶 512 行逐字节不变免重锚，424 预算剩
+1）。2135/2135（+7 新 + 10 既有扩展）、-Werror 0、banner v2.5.0。
+门 176 全 PASS：S1 **第 176 次结构性免疫**（60f 六跑 n1≡o1≡o2 跨版
+RAW + n1≡m1【mobs-on ≡ off = first_spawn_frame 60 零 spawn 扫描
+render-inert】+ m1≡m2 + 锚 179116 B + savenorm EXACT 零 format）+
+S2 猪判别（a 生成序列 ×2 恒等 118 行【pig f60+f300 (0.5,-5.5) 外环
+优先复现】+ 旧侧零 pig 互斥；b 杀猪链全存档权威：离线 f210 截图粉簇
+反投影 + 走位自洽迭代解 KILL pose → 实跑零修正 3+ 命中 iron_axe →
+**pork ×1 掉落区间钉** + leather ×0 → 两段接力【mobs-off save-posed
+传送到掉落格】拾取/开炉/喂料/熔炼/取排/吃【selected 预置免数字键】
+→ hunger 14→20）+ S3 2135 + S6 点名 2/2（unknown mob 'dragon' /
+pig_face 图集缺条目）+ **性能 A/B 同世界同成本**（changesApplied
+9/3/1 三窗逐位 + 终档 18/18 55/55 集合恒等 + mobs-on 猪自成本 ents
+0.04-0.10 ms ≈ 既有 mob 同档无回归）。门内环境事故 3 条记 PITS
+368-370（XTEST 键盘服务器级失效 + drawin 窗盖中央 + mob 不持久化）。
+详见 docs/archive/phase-2.5.0.md。
 
 ## v2.4.0（2026-11-03）— V2-4 天气（雨/雷）（门 175 全 PASS）
 

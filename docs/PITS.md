@@ -2837,3 +2837,36 @@
   面包在包、hunger 20、长按 1.8 s 零反应）。E2E 场景须注入
   hunger < max（A/B 场景注入 14：bread +5 → 19 ✓ / cooked_chicken
   +6 → 20 ✓）。
+- **XTEST 键盘事件服务器级失效（PITS 368，门 176 环境事故）**——
+  xdotool/任何 XTestFakeKeyEvent 键事件被 X 服务器拒绝（直接 dlopen
+  libXtst 调 XTestFakeKeyEvent 返回 rc=1；keywatch Xlib 观察者在游戏窗
+  与 Firefox 窗均零事件；xdotool type 同样失效），**鼠标 XTEST 正常**。
+  渐进恶化（先数字/字母，后 F5）；xmodmap no-op remap / setxkbmap
+  重应用 / xinput disable-enable / xset r rate 全部无效；XGrabKeyboard
+  四参数组合全 BadParameter（服务器输入层异常佐证）。物理键盘静默
+  （xev -root 零事件——xev 本身零输出不可用，用自写 keywatch.c 替代）。
+  绕过（无 F5/无数字键的输入门）：① 选中槽 = **存档 inventory.selected
+  预置**（场景 builder 直接写）；② 存档读取 = **SIGTERM 退出自动存档**
+  （clean shutdown 必写 save，F5 非必需）；③ 开面板 = RMB 世界交互
+  （免 E 键）。根治 = 重启 X 会话（杀桌面，须用户在场）——**后续输入
+  门（V2-6+）开工前先探测**（keywatch 发 F5 看事件是否到达）。
+- **Awesome drawin 窗盖住游戏窗中央 = capture 点击被吞（PITS 369，门
+  176）**——夜间桌面出现 "Awesome drawin" 窗 (682,368) 120×400
+  （IsViewable，盖住 1362×744 游戏窗的中央点击区），capture 的 LMB
+  中心点击全被它吃（"Pointer captured" 零日志，6 连试皆败，且此前
+  疑似引发焦点混乱）。修 = capture 点击改**安全点 (X+300,Y+120)**
+  （左上象限，drawin 覆盖区之外）+ `xdotool windowraise` 游戏窗。
+  教训：capture 点击点 = 任意窗内点即可（LMB 捕获与位置无关），
+  不必恒用中央；环境窗（WM 挂件/通知条）会漂移出现 = 点击 miss 时
+  先 `xdotool mousemove 点击点; xdotool getmouselocation` 看
+  window 字段确认点下是谁。
+- **mob 不持久化——save entities 只存 item drops（PITS 370，门 176
+  S2 设计更正）**——save.hpp：`entities` = SavedItemEntity（掉落物，
+  带 lifetime 计时）；活 mob/箭**不存档**（game_save「a mob/arrow
+  alive at save time is not stored」注释实证：3600f 跑终档 4 活 mob
+  + 0 entities）。推论：① 跨会话无法"带着猪去杀"——杀猪链 = 单会话
+  （spawn→kill 同 run）或两段接力（段 1 杀猪留掉落存档 → 段 2
+  mobs-OFF quiet 载掉落档做炉子/吃链，save-posed PITS 347）；② S2
+  生成判别权威 = **帧锁定生成日志**（"mob spawn f60: 'pig' at
+  (x,y,z)" DEBUG 级）而非存档实体；③ 场景注入 mob 不可行（只能注入
+  方块/物品/姿态）。

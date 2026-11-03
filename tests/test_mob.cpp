@@ -7,9 +7,12 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <algorithm>
+#include <fstream>
 #include <numbers>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -41,6 +44,28 @@ Json parseJson(const std::string& text) {
         return Json::object();
     }
     return *r;
+}
+
+std::string readAll(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    EXPECT_TRUE(in) << path;
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    return ss.str();
+}
+
+// The project FNV-1a 64 pin (the font.png / skin-tile convention:
+// offset basis 1469598103934665603, prime 1099511628211).
+std::string fnv1a64(const std::string& data) {
+    std::uint64_t h = 1469598103934665603ULL; // FNV-1a 64 offset basis
+    for (char ch : data) {
+        h ^= static_cast<unsigned char>(ch);
+        h *= 1099511628211ULL;
+    }
+    char hex[17];
+    std::snprintf(hex, sizeof(hex), "%016llx",
+                  static_cast<unsigned long long>(h));
+    return hex;
 }
 
 // stone: one solid block (floors + roofs in the spawn tests). ENT-3: the
@@ -684,6 +709,60 @@ TEST(MobContent, Lgt3MoonlightThresholdPinned) {
         ASSERT_NE(m, nullptr) << name;
         EXPECT_EQ(m->properties.spawnMaxLight, 15) << name;
     }
+    // V2-5: the pig joins the passive day-spawn trio at the same gate.
+    const Mob* pig = mobs.findByName("pig");
+    ASSERT_NE(pig, nullptr);
+    EXPECT_EQ(pig->properties.spawnMaxLight, 15);
+}
+
+TEST(MobContent, PigPassiveAndDropsPinned) {
+    // V2-5 (the pig — the "add a mob = JSON + textures" data-driven
+    // promise): the chicken's passive shape (detect_radius 0 / attack 0,
+    // the chicken's wander_interval 2.0), the MC pig stats (health 10,
+    // speed 0.6) and the drop chain: pork x1-2 (the Phase 38 count
+    // RANGE — the pig is the first shipped carrier of a min>0 range) +
+    // leather x0-1 (the cow/sheep leather precedent).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.loadDirectory(assets, "data/mobs").ok());
+    const Mob* pig = mobs.findByName("pig");
+    ASSERT_NE(pig, nullptr);
+    EXPECT_FLOAT_EQ(pig->properties.health, 10.0f);
+    EXPECT_FLOAT_EQ(pig->properties.speed, 0.6f);
+    EXPECT_FLOAT_EQ(pig->properties.detectRadius, 0.0f);
+    EXPECT_FLOAT_EQ(pig->properties.attackRange, 0.0f);
+    EXPECT_FLOAT_EQ(pig->properties.attackDamage, 0.0f);
+    EXPECT_DOUBLE_EQ(pig->properties.wanderInterval, 2.0);
+    EXPECT_FALSE(pig->properties.hostile);
+    EXPECT_TRUE(pig->properties.drops.size() == 2);
+    EXPECT_EQ(pig->properties.drops[0].item, "pork");
+    EXPECT_EQ(pig->properties.drops[0].countMin, 1);
+    EXPECT_EQ(pig->properties.drops[0].countMax, 2);
+    EXPECT_EQ(pig->properties.drops[1].item, "leather");
+    EXPECT_EQ(pig->properties.drops[1].countMin, 0);
+    EXPECT_EQ(pig->properties.drops[1].countMax, 1);
+}
+
+TEST(MobContent, PreV25MobFilesUnchanged) {
+    // V2-5 red line: the six pre-pig mob JSONs are byte-untouched (the
+    // FNV pin — the SkinPngBytesPinned existing-assets precedent: a
+    // stray edit of a shipped mob turns this red).
+    const struct {
+        const char* path;
+        const char* fnv;
+    } files[] = {
+        {"assets/data/mobs/chicken.json", "bb3b1afcdc42f90a"},
+        {"assets/data/mobs/cow.json", "767141e2c6222064"},
+        {"assets/data/mobs/sheep.json", "9009bc23c3cb09c9"},
+        {"assets/data/mobs/skeleton.json", "454faac161b1c605"},
+        {"assets/data/mobs/spider.json", "b7e6bac5c9b679b9"},
+        {"assets/data/mobs/zombie.json", "2a7212f0ec271210"},
+    };
+    for (const auto& f : files) {
+        EXPECT_EQ(fnv1a64(readAll(f.path)), f.fnv) << f.path;
+    }
 }
 
 // -- SURV-5: the mob effect carrier (MobEntity) --------------------------------
@@ -1264,6 +1343,32 @@ TEST(MobSpawningConfigTest, ParsesWeightedMobList) {
     EXPECT_EQ((*r).mobs[1].id, "skeleton");
     EXPECT_EQ((*r).mobs[1].weight, 10);
     EXPECT_EQ((*r).totalWeight(), 11);
+}
+
+TEST(MobSpawningConfigTest, ShippedSpawnListPinsPig) {
+    // V2-5: the REAL assets/data/mob_spawning.json — the pre-pig six +
+    // the pig, all weight 1 (the vocabulary pin: with every weight 1 the
+    // pick is the legacy % list.size() extended to seven, and the pig's
+    // cumulative slot is the last one).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    auto text = assets.loadText("data/mob_spawning.json");
+    ASSERT_TRUE(text.ok()) << text.error().message;
+    auto def = Json::parse(*text);
+    ASSERT_TRUE(def.ok()) << def.error().message;
+    auto r = MobSpawningConfig::parse(*def);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    ASSERT_EQ((*r).mobs.size(), 7u);
+    const char* ids[] = {"zombie", "cow", "sheep", "chicken", "skeleton",
+                         "spider", "pig"};
+    for (std::size_t i = 0; i < 7; ++i) {
+        EXPECT_EQ((*r).mobs[i].id, ids[i]) << i;
+        EXPECT_EQ((*r).mobs[i].weight, 1) << i;
+    }
+    EXPECT_EQ((*r).totalWeight(), 7);
+    // The pick's domain: v = 6 (the last unit) resolves to the pig.
+    EXPECT_EQ((*r).pickIndex(6), 6u);
 }
 
 TEST(MobSpawningConfigTest, RejectsBadMobListEntries) {

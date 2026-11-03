@@ -341,6 +341,56 @@ def cooked_mutton():
     return px
 
 
+def pork():
+    """Raw pork (V2-5): a pink chop slab with a pale fat cap (the mutton
+    slab silhouette in the pork palette) + the porkchop's white bone
+    knob at the lower right (the MC item look). New salts 138-141."""
+    px = blank()
+    meat = (222, 150, 144)
+    fat = (244, 228, 218)
+    bone = (250, 246, 236)
+    for y in range(10, 26):
+        for x in range(4, 28):
+            if (x in (4, 27)) and (y in (10, 25)):
+                continue
+            if y < 14:
+                setpx(px, x, y, fat, salt=138)
+            else:
+                setpx(px, x, y, meat, salt=139)
+    # Seam between the fat cap and the meat.
+    for x in range(4, 28):
+        setpx(px, x, 14, (198, 118, 112), salt=140, amount=4)
+    # The bone knob (the porkchop's bone, lower right of the slab).
+    for (x, y) in ((11, 10), (12, 10), (11, 11), (12, 11)):
+        setpx2(px, x, y, bone, salt=141, amount=3)
+    return px
+
+
+def cooked_pork():
+    """Cooked pork (V2-5): the raw pork browned (the cooked-mutton
+    palette), fat cap crisped, the bone stays white (the cooked
+    chicken's bone convention). New salts 142-145."""
+    px = blank()
+    meat = (156, 96, 72)
+    fat = (222, 186, 148)
+    bone = (250, 246, 236)
+    for y in range(10, 26):
+        for x in range(4, 28):
+            if (x in (4, 27)) and (y in (10, 25)):
+                continue
+            if y < 14:
+                setpx(px, x, y, fat, salt=142)
+            else:
+                setpx(px, x, y, meat, salt=143)
+    # Seam between the fat cap and the meat.
+    for x in range(4, 28):
+        setpx(px, x, 14, (110, 66, 50), salt=144, amount=4)
+    # The bone knob (the same position as the raw pork's).
+    for (x, y) in ((11, 10), (12, 10), (11, 11), (12, 11)):
+        setpx2(px, x, y, bone, salt=145, amount=3)
+    return px
+
+
 def cooked_chicken():
     """Cooked chicken (Phase 40): a golden-brown drumstick on a bone."""
     px = blank()
@@ -1084,6 +1134,9 @@ ITEMS = {
     "cooked_beef": cooked_beef,
     "cooked_mutton": cooked_mutton,
     "cooked_chicken": cooked_chicken,
+    # V2-5: the pork chain (the pig's food, the MC porkchop look).
+    "pork": pork,
+    "cooked_pork": cooked_pork,
     "bucket": bucket_icon,
     "milk_bucket": milk_bucket_icon,
     "water_bucket": water_bucket_icon,

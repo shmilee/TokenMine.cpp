@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "core/asset_manager.hpp"
 #include "core/json.hpp"
 #include "renderer/texture_atlas.hpp"
 
@@ -175,4 +176,84 @@ TEST(AtlasLayoutTest, UvUnknownTileThrows) {
         R"({"columns":1,"rows":1,"tiles":{"a":[0,0]}})");
     EXPECT_THROW(AtlasLayout::uvMin(l, "zzz"), std::out_of_range);
     EXPECT_THROW(AtlasLayout::uvMax(l, "zzz"), std::out_of_range);
+}
+
+TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
+    // V2-5 red line, per entry: the REAL block_atlas.json is 99 entries
+    // on the unchanged 16x8 grid — the 97 pre-V2-5 entries (the 90
+    // V2-2 legacy + the 7 player tiles) keep their EXACT cells (zero UV
+    // shift = no re-anchor of the byte-stable baseline) and the two new
+    // ones (pig_body / pig_face) sit in the row-7 free run [8..9, 7].
+    // NOTE: the pork / cooked_pork food icons are standalone PNGs (the
+    // every-shipped-food-icon convention: textures/items/*.png loaded by
+    // the item-icon pass, NOT atlas tiles — an atlas entry would fail
+    // the upload's both-directions cross-check).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    auto text = assets.loadText("data/textures/block_atlas.json");
+    ASSERT_TRUE(text.ok()) << text.error().message;
+    const AtlasLayout l = parseLayout(*text);
+    EXPECT_EQ(l.columns, 16);
+    EXPECT_EQ(l.rows, 8);
+    EXPECT_EQ(l.tiles.size(), 99u);
+    const struct {
+        const char* name;
+        int col;
+        int row;
+    } preV25[] = {
+        {"allium", 4, 4}, {"beacon", 9, 1}, {"bedrock", 0, 0},
+        {"birch_leaves", 13, 2}, {"birch_sapling", 12, 1}, {"birch_trunk_side", 10, 2},
+        {"birch_trunk_top", 11, 2}, {"cactus", 4, 3}, {"campfire", 12, 0},
+        {"campfire_extinguished", 13, 0}, {"chicken_body", 1, 6}, {"chicken_head", 2, 6},
+        {"chicken_legs", 8, 4}, {"coal_ore", 1, 0}, {"cobblestone", 9, 0},
+        {"cornflower", 4, 6}, {"cow_body", 1, 5}, {"cow_head", 2, 5},
+        {"cow_legs", 8, 5}, {"crafting_table_side", 0, 4}, {"crafting_table_top", 1, 4},
+        {"diamond_ore", 2, 0}, {"dirt", 3, 0}, {"farmland_side", 7, 5},
+        {"farmland_top", 7, 4}, {"farmland_wet", 9, 4}, {"fence", 8, 2},
+        {"fire", 10, 0}, {"furnace_side", 1, 7}, {"furnace_top", 2, 7},
+        {"glass", 0, 1}, {"glass_pane", 8, 3}, {"glowstone", 1, 1},
+        {"gold_ore", 2, 1}, {"grass_side", 3, 1}, {"grass_top", 0, 2},
+        {"gravel", 8, 0}, {"honey", 15, 1}, {"iron_block", 8, 1},
+        {"iron_ore", 1, 2}, {"lapis_ore", 4, 2}, {"lava", 7, 6},
+        {"leaves", 2, 2}, {"oak_sapling", 10, 1}, {"obsidian", 7, 7},
+        {"pa_arm", 13, 5}, {"pb_shirt", 12, 5}, {"ph_face", 9, 5},
+        {"ph_hair", 10, 5}, {"ph_side", 11, 5}, {"pl_boot", 15, 5},
+        {"pl_pants", 14, 5}, {"planks", 2, 4}, {"sand", 3, 2},
+        {"sandstone", 14, 0}, {"sheep_body", 3, 5}, {"sheep_head", 0, 6},
+        {"sheep_legs", 8, 6}, {"skeleton_body", 3, 6}, {"skeleton_head", 0, 7},
+        {"smooth_sandstone", 15, 0}, {"spider_body", 5, 7}, {"spider_head", 6, 7},
+        {"spruce_leaves", 12, 2}, {"spruce_sapling", 11, 1}, {"spruce_trunk_side", 13, 1},
+        {"spruce_trunk_top", 14, 1}, {"stone", 0, 3}, {"torch", 11, 0},
+        {"tulip", 4, 5}, {"water", 1, 3}, {"wheat_1", 6, 2},
+        {"wheat_2", 6, 3}, {"wheat_3", 6, 4}, {"wheat_4", 6, 5},
+        {"wheat_5", 6, 6}, {"wheat_6", 7, 2}, {"wheat_7", 7, 3},
+        {"wood_side", 2, 3}, {"wood_top", 3, 3}, {"wool", 3, 7},
+        {"wool_black", 6, 1}, {"wool_blue", 4, 7}, {"wool_brown", 4, 1},
+        {"wool_cyan", 5, 6}, {"wool_gray", 5, 1}, {"wool_green", 5, 2},
+        {"wool_light_blue", 5, 5}, {"wool_magenta", 5, 4}, {"wool_orange", 6, 0},
+        {"wool_pink", 7, 0}, {"wool_purple", 5, 3}, {"wool_red", 4, 0},
+        {"wool_silver", 7, 1}, {"wool_yellow", 5, 0}, {"zombie_body", 0, 5},
+        {"zombie_head", 3, 4}
+    };
+    ASSERT_EQ(sizeof(preV25) / sizeof(preV25[0]), 97u); // the full census
+    for (const auto& e : preV25) {
+        const auto it = l.tiles.find(e.name);
+        ASSERT_NE(it, l.tiles.end()) << e.name;
+        EXPECT_EQ(it->second.col, e.col) << e.name;
+        EXPECT_EQ(it->second.row, e.row) << e.name;
+    }
+    const struct {
+        const char* name;
+        int col;
+        int row;
+    } v25[] = {
+        {"pig_body", 8, 7}, {"pig_face", 9, 7},
+    };
+    for (const auto& e : v25) {
+        const auto it = l.tiles.find(e.name);
+        ASSERT_NE(it, l.tiles.end()) << e.name;
+        EXPECT_EQ(it->second.col, e.col) << e.name;
+        EXPECT_EQ(it->second.row, e.row) << e.name;
+    }
 }

@@ -5,8 +5,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -15,6 +18,7 @@
 #include "core/food.hpp" // SURV-9: foodSatiety
 #include "core/json.hpp"
 #include "core/status_effect.hpp"
+#include "item/furnace.hpp" // V2-5: smeltSubstepsFor (the chain's data view)
 #include "item/inventory.hpp"
 #include "item/item.hpp"
 #include "item/item_registry.hpp"
@@ -30,6 +34,27 @@ Json parseJson(const std::string& text) {
         return Json::object();
     }
     return *r;
+}
+
+std::string readAll(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    EXPECT_TRUE(in) << path;
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    return ss.str();
+}
+
+// The project FNV-1a 64 pin (the font.png / skin-tile convention).
+std::string fnv1a64(const std::string& data) {
+    std::uint64_t h = 1469598103934665603ULL; // FNV-1a 64 offset basis
+    for (char ch : data) {
+        h ^= static_cast<unsigned char>(ch);
+        h *= 1099511628211ULL;
+    }
+    char hex[17];
+    std::snprintf(hex, sizeof(hex), "%016llx",
+                  static_cast<unsigned long long>(h));
+    return hex;
 }
 
 // stone + dirt: two distinct data blocks for the implicit block items.
@@ -2956,5 +2981,57 @@ TEST(ItemRegistryTest, Surv9FoodSaturationContent) {
         ASSERT_NE(it, nullptr) << c.id;
         ASSERT_TRUE(it->saturation.has_value()) << c.id;
         EXPECT_FLOAT_EQ(it->saturation.value(), c.sat) << c.id;
+    }
+}
+
+TEST(ItemRegistryTest, V25PorkChainPinned) {
+    // V2-5: the pork food chain — raw pork (restore 3, the MC raw
+    // porkchop) smelts to cooked pork (restore 8 = the beef scale, the
+    // cooked_beef twin); the saturation follows the beef chain (1.8 raw /
+    // 12.8 cooked, the SURV-9 per-food values). The icons are byte-pinned
+    // (the new two + the pre-V2-5 meat family unchanged).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    ItemRegistry items;
+    BlockRegistry blocks;
+    ASSERT_TRUE(blocks.loadDirectory(assets, "data/blocks").ok());
+    ASSERT_TRUE(items.buildBlockItems(blocks).ok());
+    ASSERT_TRUE(items.loadDirectory(assets, "data/items").ok());
+    const Item* pork = items.findByName("pork");
+    ASSERT_NE(pork, nullptr);
+    EXPECT_EQ(pork->restoreHunger, 3);
+    ASSERT_TRUE(pork->saturation.has_value());
+    EXPECT_FLOAT_EQ(pork->saturation.value(), 1.8f);
+    EXPECT_EQ(pork->smeltableTo, "cooked_pork");
+    EXPECT_EQ(pork->icon, "pork");
+    const Item* cooked = items.findByName("cooked_pork");
+    ASSERT_NE(cooked, nullptr);
+    EXPECT_EQ(cooked->restoreHunger, 8);
+    ASSERT_TRUE(cooked->saturation.has_value());
+    EXPECT_FLOAT_EQ(cooked->saturation.value(), 12.8f);
+    EXPECT_TRUE(cooked->smeltableTo.empty());
+    EXPECT_EQ(cooked->icon, "cooked_pork");
+    // The smelt chain resolves (the furnace's pure data view): the
+    // default 10 s = 600 substeps; the cooked side is not smeltable.
+    EXPECT_EQ(smeltSubstepsFor(*pork), 600);
+    EXPECT_EQ(smeltSubstepsFor(*cooked), 0);
+    // The icon PNGs (generate_item_icons.py, the new salt block 138-145):
+    // the two V2-5 files pinned, the pre-V2-5 meat family unchanged.
+    const struct {
+        const char* path;
+        const char* fnv;
+    } icons[] = {
+        {"assets/textures/items/pork.png", "ac9d53802504a470"},
+        {"assets/textures/items/cooked_pork.png", "f2664e5b61be6bd7"},
+        {"assets/textures/items/beef.png", "b6cacf80cdb874e0"},
+        {"assets/textures/items/cooked_beef.png", "26dd16f722f0753e"},
+        {"assets/textures/items/mutton.png", "bc7dedac6d711ffb"},
+        {"assets/textures/items/cooked_mutton.png", "2b01abb058dadf23"},
+        {"assets/textures/items/chicken.png", "857e925cb1a9487f"},
+        {"assets/textures/items/leather.png", "52103f216058ad22"},
+    };
+    for (const auto& i : icons) {
+        EXPECT_EQ(fnv1a64(readAll(i.path)), i.fnv) << i.path;
     }
 }

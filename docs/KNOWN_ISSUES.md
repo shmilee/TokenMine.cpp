@@ -234,10 +234,12 @@ SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作�
   放置/交互（对齐 MC "满条时不能放置"）；该次点击被静默消耗。`[Phase 23]`
 - **食物不直接回血** — `restore_hunger` 只加饥饿点；HP 恢复只走（门控后的）
   自然回复与饥饿=0 的扣血，无"吃牛排直接 +4 HP"类食物。`[Phase 23]`
-- **食物共 10 种：4 生肉/腐肉 + 3 熟肉 + 面包/苹果/金苹果** — Phase 28 起：`rotten_flesh`（+4，zombie）、
-  `beef`（+3，cow）、`mutton`（+2，sheep）、`chicken`（+2，chicken）；
-  Phase 40 起：`cooked_beef`（+8）、`cooked_mutton`（+6）、`cooked_chicken`（+6）
-  —— 由炉子熔炼对应生肉得到（MC 数值：牛排 8 / 熟羊肉 6 / 熟鸡肉 6）；
+- **食物共 12 种：5 生肉/腐肉 + 4 熟肉 + 面包/苹果/金苹果** — Phase 28 起：`rotten_flesh`（+4，zombie）、
+  `beef`（+3，cow）、`mutton`（+2，sheep）、`chicken`（+2，chicken）；V2-5 起：
+  `pork`（+3，pig，MC 生猪排 3）；
+  Phase 40 起：`cooked_beef`（+8）、`cooked_mutton`（+6）、`cooked_chicken`（+6）；
+  V2-5 起：`cooked_pork`（+8，MC 熟猪排 8 = 熟牛肉同款刻度）
+  —— 由炉子熔炼对应生肉得到（MC 数值：牛排 8 / 熟羊肉 6 / 熟鸡肉 6 / 熟猪排 8）；
   **`bread`（+5，shapeless 3 wheat，`[Phase 48]`）**、**`apple`（+4，leaves 1/128 概率掉，`[Phase 49]`）**、
   **`golden_apple`（+4，shaped 镶金，`[Phase 49]`；`[Phase 56]` 起 grants_effects = regeneration 10 s + absorption 5 s）**。
   `leather`/`wool`/`feather` 刻意**不是**食物（对齐 MC 的收集品定位）。
@@ -393,6 +395,13 @@ SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作�
   （string 无用途、spider_eye 无用途）；`drops: []`。spider 是首个
   `on_hit_effect` mob（poison 15 s，近战命中落定施加，见「状态效果」）。
   `[Phase 46]`
+- **猪掉皮革 0–1 = MC 同款区间；猪无骑乘** — V2-5 猪 `drops` = `pork`
+  1–2（随机区间）+ `leather` 0–1（cow/sheep leather 先例、Phase 38 随机
+  区间）：皮革 0–1 与 MC 猪的 leather 区间同款（MC 上限 2，本项目取 1 =
+  与既有被动 mob 皮革刻度一致，记档）；pork 1–2 vs MC 猪排固定 1 = 记档
+  偏离；**猪无骑乘**（项目无骑乘系统，MC 猪可骑）；猪 = 首个 V2-2
+  per-face `faces` 消费的 mob（head front = 显式 8×8 猪脸 2× tile，其余
+  五面回落 body tile）。`[V2-5]`
 
 ## 弓 / 箭（Phase 21 + Phase 24 + Phase 42）
 

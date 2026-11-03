@@ -286,5 +286,6 @@ TEST(ItemModelMeshTest, ShippedModelsHaveNoFaceCoincidentBoxes) {
     }
     // ENT-9 contract evolution (was exactly 16): every shipped
     // item carries a model (all drops and discards are visible).
-    EXPECT_EQ(modelCount, 79) << "ENT-9: all 79 items have models";
+    // V2-5: +2 (pork / cooked_pork) -> 81.
+    EXPECT_EQ(modelCount, 81) << "ENT-9: all 81 items have models";
 }

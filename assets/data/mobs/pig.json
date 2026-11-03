@@ -1,0 +1,64 @@
+{
+  "id": "pig",
+  "properties": {
+    "health": 10,
+    "speed": 0.6,
+    "detect_radius": 0,
+    "attack_range": 0,
+    "attack_damage": 0,
+    "attack_cooldown": 1.0,
+    "wander_interval": 2.0,
+    "spawn_max_light": 15,
+    "drops": [
+      { "item": "pork", "count_min": 1, "count_max": 2 },
+      { "item": "leather", "count_min": 0, "count_max": 1 }
+    ]
+  },
+  "model": {
+    "width": 0.9,
+    "height": 0.9,
+    "boxes": [
+      {
+        "pos": [0.0, 0.65, 0.0],
+        "size": [0.6, 0.5, 0.75],
+        "texture": "pig_body"
+      },
+      {
+        "name": "leg_fl",
+        "pos": [-0.15, 0.2, -0.225],
+        "size": [0.2, 0.4, 0.2],
+        "texture": "pig_body"
+      },
+      {
+        "name": "leg_fr",
+        "pos": [0.15, 0.2, -0.225],
+        "size": [0.2, 0.4, 0.2],
+        "texture": "pig_body"
+      },
+      {
+        "name": "leg_rl",
+        "pos": [-0.15, 0.2, 0.225],
+        "size": [0.2, 0.4, 0.2],
+        "texture": "pig_body"
+      },
+      {
+        "name": "leg_rr",
+        "pos": [0.15, 0.2, 0.225],
+        "size": [0.2, 0.4, 0.2],
+        "texture": "pig_body"
+      },
+      {
+        "pos": [0.0, 0.675, -0.225],
+        "size": [0.45, 0.45, 0.45],
+        "texture": "pig_body",
+        "faces": { "front": "pig_face" }
+      }
+    ],
+    "swings": [
+      { "part": "leg_fl", "amplitude": 0.4, "group": 0 },
+      { "part": "leg_fr", "amplitude": 0.4, "group": 1 },
+      { "part": "leg_rl", "amplitude": 0.4, "group": 1 },
+      { "part": "leg_rr", "amplitude": 0.4, "group": 0 }
+    ]
+  }
+}

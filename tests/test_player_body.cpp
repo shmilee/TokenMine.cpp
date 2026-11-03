@@ -619,3 +619,25 @@ TEST(PlayerBodyTest, SkinPngBytesPinned) {
             << t.name;
     }
 }
+
+TEST(PlayerBodyTest, V25PigMobTilesPinned) {
+    // V2-5: the two generated pig tiles are byte-stable (re-running
+    // tools/generate_mob_textures.py must not change them — the body tile
+    // is the new salt 0x5011 pink + noise, the face is the explicit 8x8
+    // grid 2x-upscaled, zero hash); the 22 pre-V2-5 tiles of this
+    // directory stay pinned by SkinPngBytesPinned (the existing-assets
+    // red line).
+    const struct {
+        const char* name;
+        const char* fnv;
+    } tiles[] = {
+        {"pig_body", "417f84b406bbaee7"},
+        {"pig_face", "d8a08749a6f6cc92"},
+    };
+    for (const auto& t : tiles) {
+        EXPECT_EQ(fnv1a64(readAll(std::string("assets/textures/mobs/") +
+                                   t.name + ".png")),
+                  t.fnv)
+            << t.name;
+    }
+}

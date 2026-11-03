@@ -16,7 +16,7 @@
 > 时：本表 → `docs/archive/v2x/BACKLOG.md`，3x 表晋升本文件（1.x→2.x 同款
 > 先例）。
 
-## v2.x 任务矩阵（4/10 完成）
+## v2.x 任务矩阵（5/10 完成）
 
 | 系统 | ① | ② | ③ | ④ | ⑤ | ⑥ | ⑦ |
 |---|---|---|---|---|---|---|---|
@@ -25,7 +25,7 @@
 | LGT 光照 | V2-8 sky rescan clobber 修复 | | | | | | |
 | GEN 世界与生成 | | | | | | | |
 | FLUID 流体 | | | | | | | |
-| ENT 实体/Mob/移动 | V2-5 新 mob 猪 | V2-9 step-up quirk 修复 | | | | | |
+| ENT 实体/Mob/移动 | ~~V2-5 新 mob 猪~~ ✅ v2.5.0（门 176：纯数据零核心代码 + V2-2 per-face 首个 mob 消费 + pork 食物链 + 图集零移位 + 猪字 +1） | V2-9 step-up quirk 修复 | | | | | |
 | SURV 生存/战斗/效果 | | | | | | | |
 | CRAFT 物品/合成/面板 | V2-7 材料补齐批 | | | | | | |
 | SAVE 存档 | | | | | | | |
@@ -104,6 +104,23 @@
 
 ## 变更记录（v2.x）
 
+- 2026-11-03：**V2-5 新 mob 猪完成（v2.5.0，门 176 全 PASS）**：
+  「加 mob = JSON + 纹理」验证 = 零核心代码——pig.json（passive 10 HP /
+  drops pork ×1-2 + leather ×0-1）+ 宽体 6-box 模型（4 腿对角 swing，
+  head 嵌入 body cow 范式，64 相位 clip 验收）+ **head faces.front =
+  pig_face = V2-2 per-face 纹理首个 mob 消费**（显式 8×8 猪脸零
+  hash）+ pig_body 新 salt 纹理（既有 176 文件零变化 cmp 实证）+
+  pork→cooked_pork 食物链（+3→+8 beef 熟同款刻度，无新配方）+ 生成
+  权重 6→7 + 图集 97→99 零移位（99 条全 census 钉）+ 字体 422→423
+  猪（顶 512 行不变免重锚，424 预算剩 1）。2135/2135（+7）。门 176：
+  S1 第 176 次结构免疫（n1≡o1≡m1 跨版 + mobs-on ≡ off = 扫描
+  render-inert + 锚 + savenorm EXACT）+ S2（生成序列 ×2 恒等 + 旧侧
+  零 pig 互斥 / 杀猪链全存档权威【离线 f210 粉簇反投影解 KILL pose +
+  pork ×1 掉落区间钉 + 两段接力拾取/熔炼/吃 hunger 14→20】）+ S6 点名
+  2/2 + 性能 A/B 同世界同成本（9/3/1 逐位 + 18/18 55/55 恒等 + 猪自
+  成本同档）。门内环境事故 PITS 368-370（XTEST 键盘服务器级失效——
+  **后续输入门前须探测/修 X 会话** + drawin 窗盖中央点击 + mob 不
+  持久化）。详见 docs/archive/phase-2.5.0.md。
 - 2026-11-03：**V2-4 天气（雨/雷）完成（v2.4.0，门 175 全 PASS）**：core/weather 纯状态机（推进式 splitmix64 PITS 4，主流 = 世界
   seed + 雷独立 salt；CLEAR 9000-18000f / RAIN 3000-6000f / 雷 600-1800f；
   首段恒 CLEAR = 60f 基线免疫根）+ rain shader program（cloud 第四先例：
