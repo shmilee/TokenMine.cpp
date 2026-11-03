@@ -807,6 +807,48 @@ def birch_leaves(x, y):
             clamp(72 + noise(x, y, 956, 10)), 255)
 
 
+def enchanting_table(x, y):
+    """V2-12: the enchanting table tile (the `enchanting_table` block). An
+    obsidian purple-black base (salt 966..970) with a WHITE BOOK on the top
+    face (rows 3..10, cols 3..12 — a bright white block with a dark spine
+    down its middle). New salts 966..972, every existing texture
+    pixel-identical."""
+    # The book: a white block with a dark spine (cols 7..8).
+    if 3 <= y <= 10 and 3 <= x <= 12:
+        if x in (7, 8):
+            return (clamp(120 + noise(x, y, 971, 8)),
+                    clamp(120 + noise(x, y, 971, 8)),
+                    clamp(116 + noise(x, y, 971, 8)), 255)
+        w = 236 + noise(x, y, 972, 8)
+        return (clamp(w), clamp(w), clamp(w - 4), 255)
+    # The obsidian purple-black base (the obsidian palette, salts 966..970).
+    h = h2(x, y, 966)
+    if h % 100 < 6:  # rare lighter violet fleck
+        return (clamp(70 + noise(x, y, 967, 15)),
+                clamp(40 + noise(x, y, 968, 12)),
+                clamp(75 + noise(x, y, 969, 15)), 255)
+    v = clamp(28 + noise(x, y, 970, 8))
+    return (v + 10, v + 4, v + 12, 255)
+
+
+def bookshelf(x, y):
+    """V2-12: the bookshelf tile (the `bookshelf` block). A plank base (the
+    fence planks palette, salt 980) with THREE horizontal shelf rows of
+    vertical BOOK SPINES (colored bands — salts 981..984). New salts only,
+    every existing texture pixel-identical."""
+    n = noise(x, y, 980, 6)
+    r, g, b = clamp(150 + n), clamp(118 + n), clamp(74 + n)
+    # The three shelf rows (rows 2..5, 8..11, 13..15) hold book spines.
+    if 2 <= y <= 5 or 8 <= y <= 11 or 13 <= y <= 15:
+        spine = (x // 3) % 4
+        # A fixed 4-color book palette (red / blue / gold / green).
+        colors = ((150, 60, 60), (60, 120, 150), (150, 140, 60), (100, 150, 80))
+        cr, cg, cb = colors[spine]
+        m = noise(x, y, 981 + spine, 6)
+        return (clamp(cr + m), clamp(cg + m), clamp(cb + m), 255)
+    return (r, g, b, 255)
+
+
 TEXTURES = {
     **{name: make_wool_tile(name) for name in WOOL_PALETTE},
     **{"oak_sapling": make_sapling(935, (110, 165, 60)),
@@ -870,6 +912,12 @@ TEXTURES = {
     "furnace_front": furnace_front,
     "gold_block": gold_block,
     "diamond_block": diamond_block,
+    # V2-12: the enchantment-system blocks — the enchanting table (the
+    # obsidian base + white book) + the bookshelf (planks + book spines).
+    # New tiles only, every existing PNG stays byte-identical (salts
+    # 966..972 + 980..984).
+    "enchanting_table": enchanting_table,
+    "bookshelf": bookshelf,
 }
 
 

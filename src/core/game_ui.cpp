@@ -63,6 +63,18 @@ constexpr double kHurtFlashSeconds = 0.5;
 
 } // namespace
 
+int Game::armorProtectionPoints() const {
+    // V2-12 (protection): 4 * min(20, the sum of the protection levels over
+    // the four worn pieces). The pure accessor per piece is
+    // protectionLevel (0 when the piece is empty / unenchantable / has no
+    // protection). No protection worn = 0 (the pre-V2-12 bit-identical path).
+    int sum = 0;
+    for (int slot = 0; slot < kArmorSlotCount; ++slot) {
+        sum += protectionLevel(m_player->armorSlot(slot), m_enchants);
+    }
+    return 4 * std::min(20, sum);
+}
+
 void Game::updateEffects(double dt) {
     // Phase 84: push the effect-derived move-speed + damage-reduction onto
     // the player every frame (the player's movement + damage read them; the
@@ -72,6 +84,15 @@ void Game::updateEffects(double dt) {
         m_playerEffects.totalSpeedMultiplier(m_effects));
     m_player->setDamageReduction(
         m_playerEffects.totalDamageReduction(m_effects));
+    // V2-12 (protection): push the armor protection bonus each frame (0 =
+    // none — the pre-V2-12 bit-identical damage path).
+    m_player->setProtectionBonus(armorProtectionPoints());
+    // V2-12 (unbreaking): push each worn piece's unbreaking level (0 =
+    // none — the pre-V2-12 bit-identical armor wear).
+    for (int slot = 0; slot < kArmorSlotCount; ++slot) {
+        m_player->setArmorUnbreaking(
+            slot, unbreakingLevel(m_player->armorSlot(slot), m_enchants));
+    }
     if (m_player->isDead()) {
         return;
     }
@@ -276,6 +297,16 @@ void Game::openPanel(OpenPanel panel) {
 }
 
 void Game::closePanel() {
+    // V2-12: the enchant panel's item + lapis slots are SESSION state —
+    // they return to the inventory on close (a full inventory drops them at
+    // the player's feet — the documented return rule). The other panels'
+    // states persist (the furnace per-block, the grids), so only the
+    // Enchant panel triggers the return.
+    if (m_panel.openPanel == OpenPanel::Enchant) {
+        returnEnchantSlot(m_panel.enchantItemSlot);
+        returnEnchantSlot(m_panel.enchantLapisSlot);
+        m_panel.enchantOffers = EnchantOffers {};
+    }
     m_panel.openPanel = OpenPanel::None;
     m_sound.play("ui_close");
 }
@@ -334,6 +365,106 @@ CampfireCookState& Game::campfireAt(const BlockPos& pos) {
         it = m_states.campfires.emplace(pos, CampfireCookState {}).first;
     }
     return it->second;
+}
+
+// V2-12: the enchanting panel (the furnace GUI's session-state twin). The
+// offers are rolled on demand (deterministic — bookshelfCount + the item's
+// class/enchantability + the player's xpSeed); the item/lapis slots are
+// session state returned to the inventory on close (the documented
+// deviation from the furnace's per-block persistence).
+void Game::openEnchantPanel(const BlockPos& pos) {
+    m_panel.openEnchantPos = pos;
+    m_panel.enchantItemSlot = ItemStack {};
+    m_panel.enchantLapisSlot = ItemStack {};
+    m_panel.enchantUi.bind(m_panel.enchantItemSlot, m_panel.enchantLapisSlot);
+    openPanel(OpenPanel::Enchant);
+    regenEnchantOffers(); // empty slot -> the offers clear
+    // UX-7: the tutorial interact event (the panel-open success point).
+    emitTutorialEvent(
+        "interact." +
+            m_blocks.at(m_world.getBlock(pos.x, pos.y, pos.z)).name, 1);
+}
+
+void Game::regenEnchantOffers() {
+    if (m_panel.openPanel != OpenPanel::Enchant) {
+        return;
+    }
+    const ItemStack& itemSlot = m_panel.enchantItemSlot;
+    if (itemSlot.empty()) {
+        m_panel.enchantOffers = EnchantOffers {};
+        return;
+    }
+    const Item& item = m_items.at(itemSlot.item);
+    // bookshelfCount is evaluated ONLY while the panel is open (no panel =
+    // zero cost, the structural-immunity root).
+    const int B =
+        bookshelfCount(m_world, m_blocks, m_panel.openEnchantPos);
+    m_panel.enchantOffers = generateOffers(
+        static_cast<std::uint64_t>(m_generator->seed()),
+        m_panel.openEnchantPos, item.enchantClass, item.enchantability,
+        m_player->xpSeed(), B, m_enchants);
+}
+
+// V2-12: return one panel slot's stack to the inventory (add-merge; a full
+// inventory drops it at the player's feet — the documented return rule).
+void Game::returnEnchantSlot(ItemStack& stack) {
+    if (stack.empty()) {
+        return;
+    }
+    const Item& item = m_items.at(stack.item);
+    const int slot =
+        m_inventory.add(stack.item, stack.count, m_items, stack.damage,
+                        stack.enchants);
+    if (slot < 0) {
+        m_entities.push_back(std::make_unique<ItemEntity>(
+            m_world, m_blocks, item.name, item.maxStack, stack.count,
+            m_player->position(), stack.damage, stack.enchants));
+    }
+    stack = ItemStack {};
+}
+
+bool Game::applyEnchantOffer(int row) {
+    if (row < 0 || row > 2) {
+        return false;
+    }
+    const EnchantOffer* o =
+        row == 0 ? &m_panel.enchantOffers.top
+        : row == 1 ? &m_panel.enchantOffers.mid
+                   : &m_panel.enchantOffers.bottom;
+    const ItemStack& itemSlot = m_panel.enchantItemSlot;
+    if (itemSlot.empty()) {
+        return false;
+    }
+    const Item& item = m_items.at(itemSlot.item);
+    const int poolLevel = levelFromTotalXp(m_player->xpTotal());
+    const int lapisCount =
+        m_panel.enchantLapisSlot.empty() ? 0 : m_panel.enchantLapisSlot.count;
+    if (!offerApplicable(itemSlot, item.enchantability, poolLevel, lapisCount,
+                         *o)) {
+        return false;
+    }
+    // Apply: the item slot gains the offer's enchants (one apply per item —
+    // the offerApplicable gate ensures it was unenchanted).
+    m_panel.enchantItemSlot.enchants = o->enchants;
+    // Deduct the whole XP levels (the within-level remainder is kept).
+    m_player->setXpTotal(
+        applyEnchantXpCharge(m_player->xpTotal(), o->xpCost));
+    // Deduct the lapis from the panel slot.
+    m_panel.enchantLapisSlot.count -= o->lapisCost;
+    if (m_panel.enchantLapisSlot.count <= 0) {
+        m_panel.enchantLapisSlot = ItemStack {};
+    }
+    // Advance the xpSeed (the next panel-open roll differs — the PITS #4
+    // step-then-mix).
+    m_player->setXpSeed(xpSeedStep(m_player->xpSeed()));
+    // The item is now enchanted: clear the offers (a re-place re-rolls).
+    m_panel.enchantOffers = EnchantOffers {};
+    m_sound.play("craft"); // reused (no dedicated enchant sound asset)
+    MC_LOG_DEBUG("enchant applied: " +
+                 std::to_string(m_panel.enchantItemSlot.enchants.size()) +
+                 " enchant(s), xpCost " + std::to_string(o->xpCost) +
+                 ", lapisCost " + std::to_string(o->lapisCost));
+    return true;
 }
 
 void Game::tryCampfireCook(const BlockPos& pos) {
@@ -507,6 +638,51 @@ void Game::handlePanelClicks() {
                 m_panel.furnaceUi.quickMove(slot, fslot);
             } else {
                 m_panel.furnaceUi.rightClick(slot, fslot);
+            }
+            disarmDoubleClick();
+        }
+        return;
+    }
+
+    // V2-12: the enchanting panel. The same pick-and-place model as the
+    // furnace (the layout hit tests are disjoint: at most one of a
+    // 36-slot / item / lapis / offer row is active). The offer rows (the
+    // panelSlotAt 2..4) apply the offer when the four gates pass; the item
+    // / lapis slots are ordinary pick-and-place (the lapis slot's
+    // enchant_material gate lives in the EnchantUI). A left click that
+    // changes the item slot re-rolls the offers (the one-shot generation).
+    if (m_panel.openPanel == OpenPanel::Enchant) {
+        const EnchantLayout layout = EnchantLayout::compute(w, h);
+        const std::pair<int, int> mp = uiMouse();
+        const int slot = layout.slotAt(mp.first, mp.second);
+        const int pslot = layout.panelSlotAt(mp.first, mp.second);
+        if (leftPressed) {
+            if (shift) {
+                m_panel.enchantUi.quickMove(slot, pslot);
+            } else {
+                const int offerRow = (pslot >= 2 && pslot <= 4) ? pslot - 2 : -1;
+                if (offerRow >= 0) {
+                    applyEnchantOffer(offerRow); // the sound plays inside
+                } else if (m_panel.enchantUi.leftClick(slot,
+                                                       pslot == 0 || pslot == 1
+                                                           ? pslot
+                                                           : -1)) {
+                    regenEnchantOffers(); // the item slot changed
+                }
+            }
+            disarmDoubleClick();
+            return;
+        }
+        if (rightPressed) {
+            if (shift) {
+                m_panel.enchantUi.quickMove(slot, pslot);
+            } else {
+                const bool itemChanged =
+                    m_panel.enchantUi.rightClick(
+                        slot, pslot == 0 || pslot == 1 ? pslot : -1);
+                if (itemChanged) {
+                    regenEnchantOffers();
+                }
             }
             disarmDoubleClick();
         }
@@ -1413,10 +1589,142 @@ void Game::renderUi() {
                 layout.panel.y + layout.panel.h - L(20), fScale(s), kTextDim);
     }
 
+    // -- V2-12: the enchanting panel (the 3-offer GUI) ----------------------
+    if (m_panel.openPanel == OpenPanel::Enchant) {
+        const EnchantLayout layout = EnchantLayout::compute(w, h);
+        const double s = layout.scale;
+        const auto L = [s](int v) {
+            return static_cast<int>(std::lround(v * s));
+        };
+        const int slotIcon = L(34);
+        const int titleOffset = L(4);
+
+        addQuad(batchFor(kPanel, false, nullptr), layout.panel.x,
+                layout.panel.y, layout.panel.w, layout.panel.h);
+        addText("附魔台", layout.title.x, layout.title.y + titleOffset,
+                fScale(InventoryLayout::kTitleFontScale * s), kText);
+
+        const int hoverSlot = layout.slotAt(mx, my);
+        const int hoverPslot = layout.panelSlotAt(mx, my);
+
+        // The 36 inventory slots (drawn like the furnace's).
+        for (std::size_t i = 0; i < layout.slots.size(); ++i) {
+            const UIRect& r = layout.slots[i];
+            addQuad(batchFor(kSlotBg, false, nullptr), r.x, r.y, r.w, r.h);
+            if (i == m_selectedSlot) {
+                addBorder(batchFor(kSelected, false, nullptr), r, 2);
+            } else if (static_cast<int>(i) == hoverSlot) {
+                addBorder(batchFor(kHover, false, nullptr), r, 2);
+            } else {
+                addBorder(batchFor(kBorder, false, nullptr), r, 1);
+            }
+            const ItemStack& stack = m_inventory.at(i);
+            drawIcon(stack, static_cast<float>(r.x + r.w / 2),
+                     static_cast<float>(r.y + r.h / 2), slotIcon);
+            if (!stack.empty() &&
+                stack.count < m_items.at(stack.item).maxStack) {
+                const std::string count = std::to_string(stack.count);
+                addText(count,
+                        r.x + r.w - L(4) -
+                            static_cast<int>(textWidth(count, fScale(s))),
+                        r.y + r.h - L(4) - L(kGlyphSize), fScale(s), kText);
+            }
+        }
+
+        // The item + lapis slots.
+        const UIRect* pRects[2] = {&layout.item, &layout.lapis};
+        const ItemStack* pSlots[2] = {&m_panel.enchantItemSlot,
+                                      &m_panel.enchantLapisSlot};
+        for (int i = 0; i < 2; ++i) {
+            const UIRect& r = *pRects[i];
+            addQuad(batchFor(kSlotBg, false, nullptr), r.x, r.y, r.w, r.h);
+            if (i == hoverPslot) {
+                addBorder(batchFor(kHover, false, nullptr), r, 2);
+            } else {
+                addBorder(batchFor(kBorder, false, nullptr), r, 1);
+            }
+            const ItemStack& stack = *pSlots[i];
+            drawIcon(stack, static_cast<float>(r.x + r.w / 2),
+                     static_cast<float>(r.y + r.h / 2), slotIcon);
+            if (!stack.empty() &&
+                stack.count < m_items.at(stack.item).maxStack) {
+                const std::string count = std::to_string(stack.count);
+                addText(count,
+                        r.x + r.w - L(4) -
+                            static_cast<int>(textWidth(count, fScale(s))),
+                        r.y + r.h - L(4) - L(kGlyphSize), fScale(s), kText);
+            }
+        }
+
+        // The three offer rows: "name roman xpCost" (the first enchant's
+        // display name + its level's roman + the row's xp cost). An empty
+        // offer (no enchants) draws a dimmed placeholder.
+        const EnchantOffer* offers[3] = {&m_panel.enchantOffers.top,
+                                         &m_panel.enchantOffers.mid,
+                                         &m_panel.enchantOffers.bottom};
+        for (int r = 0; r < 3; ++r) {
+            const UIRect& rect = layout.offers[r];
+            addQuad(batchFor(kSlotBg, false, nullptr), rect.x, rect.y,
+                    rect.w, rect.h);
+            if (2 + r == hoverPslot) {
+                addBorder(batchFor(kHover, false, nullptr), rect, 2);
+            } else {
+                addBorder(batchFor(kBorder, false, nullptr), rect, 1);
+            }
+            const EnchantOffer& o = *offers[r];
+            std::string label;
+            Vec4 color = kTextDim;
+            if (!o.enchants.empty()) {
+                // The map is id-sorted; the FIRST entry is the display.
+                const auto& first = *o.enchants.begin();
+                const Enchantment* e = m_enchants.find(first.first);
+                const std::string name =
+                    e != nullptr ? e->name : first.first;
+                label = name + " " + effectTierRoman(first.second - 1) +
+                        " " + std::to_string(o.xpCost);
+                // Affordable (the four gates minus the "not yet enchanted"
+                // — the display brightens when the player could apply it):
+                const int poolLevel = levelFromTotalXp(m_player->xpTotal());
+                const int lapisCount = m_panel.enchantLapisSlot.empty()
+                    ? 0 : m_panel.enchantLapisSlot.count;
+                const bool affordable =
+                    poolLevel >= o.xpCost && lapisCount >= o.lapisCost &&
+                    !m_panel.enchantItemSlot.empty() &&
+                    m_items.at(m_panel.enchantItemSlot.item).enchantability >
+                        0;
+                color = affordable ? kText : kTextDim;
+            } else {
+                label = "—";
+            }
+            addText(label, rect.x + L(6),
+                    rect.y + (rect.h - L(kGlyphSize)) / 2, fScale(s),
+                    color);
+        }
+
+        // The hovered slot's item name + the carried stack + the close hint.
+        if (hoverSlot >= 0) {
+            const ItemStack& stack = m_inventory.at(hoverSlot);
+            if (!stack.empty()) {
+                appendTooltip(itemTooltip(m_items.at(stack.item), stack),
+                              mx + L(12), my + L(12), s, L(16));
+            }
+        }
+        if (m_panel.enchantUi.carrying()) {
+            drawIcon(m_panel.enchantUi.carry(), static_cast<float>(mx),
+                     static_cast<float>(my), slotIcon);
+        }
+        const std::string hint = "按 E 关闭"; // PRE-1
+        addText(hint,
+                layout.panel.x + static_cast<int>(std::lround(
+                    (layout.panel.w - textWidth(hint, fScale(s))) / 2.0)),
+                layout.panel.y + layout.panel.h - L(20), fScale(s), kTextDim);
+    }
+
     // -- crafting panel (while open): the E inventory (2x2 grid + the
     // shapeless recipe craft list) or the crafting table (3x3 grid + the
     // shaped recipe hint list, CRAFT-4). ------------------------------------
-    if (panelOpen() && m_panel.openPanel != OpenPanel::Furnace) {
+    if (panelOpen() && m_panel.openPanel != OpenPanel::Furnace &&
+        m_panel.openPanel != OpenPanel::Enchant) {
         const bool table = m_panel.openPanel == OpenPanel::Table;
         const PanelKind kind =
             table ? PanelKind::CraftingTable : PanelKind::Inventory;

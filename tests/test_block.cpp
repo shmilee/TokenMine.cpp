@@ -1975,10 +1975,14 @@ TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
         {"gold_ore", "stone"},
         {"diamond_ore", "stone"},
         {"lapis_ore", "stone"},
+        // V2-12: the enchanting table (the stone sound, the design).
+        {"enchanting_table", "stone"},
         {"wood", "wood"},
         {"spruce_trunk", "wood"},
         {"birch_trunk", "wood"},
         {"planks", "wood"},
+        // V2-12: the bookshelf (the wood sound, the design).
+        {"bookshelf", "wood"},
         {"gravel", "gravel"},
         {"sand", "sand"},
         {"sandstone", "sand"},

@@ -1,5 +1,7 @@
 {
   "id": "stone_shovel",
+  "enchant_class": "shovel",
+  "enchantability": 5,
   "type": "tool",
   "fast_against": ["dirt", "grass", "sand", "gravel"],
   "fast_against_multiplier": 2.0,

@@ -1,0 +1,10 @@
+{
+  "id": "enchanting_table",
+  "type": "shapeless",
+  "output": { "item": "enchanting_table", "count": 1 },
+  "ingredients": [
+    { "item": "obsidian", "count": 4 },
+    { "item": "diamond", "count": 2 },
+    { "item": "lapis", "count": 3 }
+  ]
+}

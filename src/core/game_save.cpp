@@ -40,6 +40,10 @@ Result<SaveGame> Game::collectSave() const {
             worn.empty() ? std::string {} : m_items.at(worn.item).name;
         save.playerArmorDamage[static_cast<std::size_t>(slot)] =
             worn.empty() ? 0.0f : worn.damage;
+        // V2-12 (format 27): the piece's applied enchantments (empty when
+        // unworn / unenchanted — the serializer omits the key then).
+        save.playerArmorEnchants[static_cast<std::size_t>(slot)] =
+            worn.empty() ? std::map<std::string, int> {} : worn.enchants;
     }
     // SURV-2: the player's oxygen (format 17, always written — the air
     // units left, kOxygenMax while breathing). The drownTicks
@@ -52,6 +56,10 @@ Result<SaveGame> Game::collectSave() const {
     // (the single source of truth — a stored level would be a second,
     // driftable copy).
     save.playerXp = m_player->xpTotal();
+    // V2-12 (format 27): the player's XP seed (always written — the oxygen
+    // / velocity key discipline; the game always has the value, set at
+    // init / load).
+    save.playerXpSeed = m_player->xpSeed();
     save.selectedSlot = static_cast<int>(m_selectedSlot);
     save.slots.resize(m_inventory.size());
     for (std::size_t i = 0; i < save.slots.size(); ++i) {
@@ -253,6 +261,9 @@ Result<SaveGame> Game::collectSave() const {
         se.age = item->age();
         se.pickupDelay = item->pickupDelayRemaining();
         se.damage = item->damage(); // SURV-3 (the stack's accumulated)
+        // V2-12 (format 27): the dropped stack's enchantments (empty =
+        // unenchanted — the serializer omits the key then).
+        se.enchants = item->enchants();
         save.entities.push_back(std::move(se));
     }
     // The modifications: every cell that differs from what the seed
@@ -343,6 +354,12 @@ Result<SaveGame> Game::readSaveFile(const std::filesystem::path& path) const {
     // the single game-load choke point (the named rejection is the same
     // either way — the rescan-pattern twin).
     MC_TRY(validateStats(save->playerStats, m_mobs.mobTypes));
+    // V2-12 (format 27): the enchant cross-check (every enchant id on any
+    // stack is registered, within its max, class-compatible with the item,
+    // and not an incompatible pair). The registries are not parseSave
+    // parameters, so it runs here at the single game-load choke point (the
+    // validateStats twin).
+    MC_TRY(validateEnchants(*save, m_items, m_enchants));
     return *save;
 }
 
@@ -547,8 +564,14 @@ Result<void> Game::applySave(const SaveGame& save) {
         const Item& item = m_items.at(m_items.idForName(name));
         const float dmg =
             save.playerArmorDamage[static_cast<std::size_t>(slot)];
-        m_player->setArmorSlot(slot, ItemStack {item.id, 1, dmg},
-                               item.armorPoints, item.durability);
+        // V2-12 (format 27): the piece's enchantments ride the stack
+        // (parse-shape-validated; the full cross-check runs in
+        // validateEnchants, the validateStats twin).
+        ItemStack piece {item.id, 1, dmg};
+        piece.enchants =
+            save.playerArmorEnchants[static_cast<std::size_t>(slot)];
+        m_player->setArmorSlot(slot, piece, item.armorPoints,
+                               item.durability);
     }
     m_prevHealth = m_player->health(); // no hurt event from the load itself
     // 4g) The player's oxygen (format 17; SURV-2, the drowning
@@ -566,6 +589,10 @@ Result<void> Game::applySave(const SaveGame& save) {
     // exist, the player had no XP; setXpTotal's clamp handles it).
     // The level is derived on read (core/xp_curve.hpp — never saved).
     m_player->setXpTotal(save.playerXp);
+    // 4g-ter) The player's XP seed (format 27; V2-12). parseSave ALWAYS
+    // fills this (a format-27 read, or the deterministic worldSeed ^
+    // kXpSeedInit migration for a pre-27 load), so the restore is direct.
+    m_player->setXpSeed(save.playerXpSeed);
     // 4h) The player's tutorial progress (format 23; UX-7, the series
     // from format 25 / V2-3). The pure restore (tutorialRestore) owns
     // the cross-checks: the series must name a series of the CURRENT
@@ -594,12 +621,13 @@ Result<void> Game::applySave(const SaveGame& save) {
                     "to the first step");
     }
     // 5) Dropped items (with their lifetime/pickup timers restored;
-    // SURV-3: the stack's accumulated damage too).
+    // SURV-3: the stack's accumulated damage; V2-12 format 27: the
+    // stack's enchantments too).
     for (const SavedItemEntity& e : save.entities) {
         const Item& item = m_items.at(m_items.idForName(e.item));
         auto entity = std::make_unique<ItemEntity>(
             m_world, m_blocks, e.item, item.maxStack, e.count, e.pos,
-            e.damage);
+            e.damage, e.enchants);
         entity->setAge(e.age);
         entity->setPickupDelay(e.pickupDelay);
         m_entities.push_back(std::move(entity));

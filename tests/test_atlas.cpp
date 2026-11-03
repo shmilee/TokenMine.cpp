@@ -199,8 +199,10 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     EXPECT_EQ(l.rows, 8);
     // V2-7: 99 -> 102 (the material batch's three tiles — gold_block /
     // diamond_block / furnace_front — join the row-7 free run [10..12, 7];
-    // planks reuses its EXISTING tile, zero new texture).
-    EXPECT_EQ(l.tiles.size(), 102u);
+    // planks reuses its EXISTING tile, zero new texture). V2-12: 102 -> 104
+    // (the enchantment batch's two tiles — enchanting_table / bookshelf —
+    // join the row-2 free run [9, 2] / [14, 2]; zero existing shift).
+    EXPECT_EQ(l.tiles.size(), 104u);
     const struct {
         const char* name;
         int col;
@@ -273,6 +275,23 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
         {"furnace_front", 12, 7},
     };
     for (const auto& e : v27) {
+        const auto it = l.tiles.find(e.name);
+        ASSERT_NE(it, l.tiles.end()) << e.name;
+        EXPECT_EQ(it->second.col, e.col) << e.name;
+        EXPECT_EQ(it->second.row, e.row) << e.name;
+    }
+    // V2-12: the enchantment batch's two tiles (the enchanting table + the
+    // bookshelf) join the row-2 free run [9, 2] / [14, 2] — the 102
+    // pre-V2-12 entries above keep their EXACT cells (the zero-shift red
+    // line, no baseline re-anchor).
+    const struct {
+        const char* name;
+        int col;
+        int row;
+    } v212[] = {
+        {"enchanting_table", 9, 2}, {"bookshelf", 14, 2},
+    };
+    for (const auto& e : v212) {
         const auto it = l.tiles.find(e.name);
         ASSERT_NE(it, l.tiles.end()) << e.name;
         EXPECT_EQ(it->second.col, e.col) << e.name;

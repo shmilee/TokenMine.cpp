@@ -34,6 +34,8 @@ inline constexpr std::string_view kInteractFurnace = "furnace";
 // Phase 71: the campfire cooking interaction (place/take the single
 // smelting slot — no panel; see item/campfire.hpp).
 inline constexpr std::string_view kInteractCampfire = "campfire";
+// V2-12: opens the enchanting panel (the 3-offer GUI, the furnace pattern).
+inline constexpr std::string_view kInteractEnchant = "enchant";
 
 // Phase 41: the dye color of a dye-family base block. A dyed variant is
 // named "<dye_base>_<color>" — EXCEPT white, which IS the base block
@@ -310,6 +312,13 @@ struct BlockProperties {
     // data load, the grants_effect / grants_effects discipline). Merged
     // into this list at parse time.
     std::vector<std::string> beaconEffects;
+    // V2-12 (enchantments): the ENCHANT-BOOKSHELF flag (optional data field
+    // 'enchant_bookshelf', a strict bool, default false). true marks the
+    // block as a bookshelf for the enchanting table's bookshelfCount (the
+    // 5x5 ring x two layers, capped at 15 — core/enchanting.hpp). A pure
+    // data flag the core reads by property, never by block id (hard rule 3,
+    // the beaconBase precedent). Shipped = bookshelf.
+    bool enchantBookshelf = false;
     // GEN-2: the tree this sapling grows into (the data `tree` object; see
     // TreeGrowData). nullopt = not a sapling (the default). Requires
     // growth_ticks (the per-stage roll pace — a `tree` block without it

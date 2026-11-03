@@ -190,6 +190,13 @@ void Game::handleInteraction(double dt) {
                 openFurnacePanel(hit->block);
                 return;
             }
+            if (b.properties.interact == kInteractEnchant) {
+                // V2-12: the panel rolls its offers for THIS block's
+                // position (bookshelfCount around it) + the item the player
+                // places in the slot (session state, the furnace twin).
+                openEnchantPanel(hit->block);
+                return;
+            }
             // The campfire (Phase 71) is handled at the TOP of this
             // handler, before the item channels (see above).
         }
@@ -276,8 +283,8 @@ void Game::handleInteraction(double dt) {
                     // igniter one point (the action completed — a
                     // flint and steel that breaks is simply gone).
                     if (m_items.at(held.item).durability > 0.0f) {
-                        if (applyDurability(m_inventory.at(m_selectedSlot),
-                                            kIgniteWear, m_items)) {
+                        if (wearItem(m_inventory.at(m_selectedSlot),
+                                     kIgniteWear)) {
                             m_sound.play("break"); // it broke on the
                                                    // successful ignition
                         }
@@ -293,8 +300,8 @@ void Game::handleInteraction(double dt) {
                     // SURV-3: the successful burn wears the held igniter
                     // one point (the action completed).
                     if (m_items.at(held.item).durability > 0.0f) {
-                        if (applyDurability(m_inventory.at(m_selectedSlot),
-                                            kIgniteWear, m_items)) {
+                        if (wearItem(m_inventory.at(m_selectedSlot),
+                                     kIgniteWear)) {
                             m_sound.play("break"); // it broke on the
                                                    // successful ignition
                         }
@@ -544,7 +551,7 @@ void Game::updateAttacking(double dt, MobEntity& mob) {
             const Item& heldItem = m_items.at(held.item);
             if (heldItem.type == ItemType::Tool &&
                 heldItem.durability > 0.0f) {
-                if (applyDurability(held, kToolMeleeWear, m_items)) {
+                if (wearItem(held, kToolMeleeWear)) {
                     m_sound.play("break"); // the tool broke on this hit
                 }
             }
@@ -567,11 +574,17 @@ float Game::selectedAttackDamage() const {
     const float base =
         stack.empty() ? 1.0f  // bare hand
                       : m_items.at(stack.item).attackDamage;  // data (1.0)
+    // V2-12: SHARPNESS adds (L+1) melee damage points (the held pure
+    // accessor — 0 for a bare hand / an unenchantable / an unenchanted
+    // item, so the pre-V2-12 melee is bit-identical).
+    const int sharp = sharpnessLevel(stack, m_enchants);
+    const float sharpBonus =
+        sharp > 0 ? static_cast<float>(sharp + 1) : 0.0f;
     // Phase 46: the active weakness effects subtract their melee penalty;
     // Phase 84: the strength effects ADD their melee bonus (the pair — the
     // net is clamped at 0, so a fully weakened hand deals no damage even
     // with no strength).
-    return std::max(0.0f, base -
+    return std::max(0.0f, base + sharpBonus -
                                m_playerEffects.totalMeleePenalty(m_effects) +
                                m_playerEffects.totalMeleeBonus(m_effects));
 }
@@ -623,14 +636,23 @@ void Game::updateBowDraw(double dt) {
 }
 
 void Game::fireBow() {
-    const Item& item = m_items.at(m_inventory.at(m_selectedSlot).item);
+    ItemStack& stack = m_inventory.at(m_selectedSlot);
+    const Item& item = m_items.at(stack.item);
+    // V2-12: the held bow's enchant bonuses (the pure accessors — 0 for an
+    // unenchanted bow, the pre-V2-12 bit-identical shot).
+    const float powerBonus = static_cast<float>(powerLevel(stack, m_enchants));
+    const float speedBonus = static_cast<float>(speedLevel(stack, m_enchants));
+    const bool infinite =
+        item.infinite || heldInfinite(stack, m_enchants);
     // Ammo (Phase 24): one from the lowest-index slot that holds the
     // launcher's data 'ammo' item. The inventory can run out between the
     // draw start and the release — then the shot is cancelled silently.
     // Phase 77 (Infinity): an `infinite` launcher is still gated on
     // holding at least one (found below) but consumes NONE — the one
     // arrow is never spent (Minecraft's bow Infinity enchantment,
-    // data-driven here).
+    // data-driven here). V2-12: the INFINITE ENCHANT is the field's twin
+    // (field OR enchant — the infinite_bow / master_bow variants keep
+    // working, the documented coexistence).
     if (!item.ammo.empty()) {
         const ItemID ammo = m_items.idForName(item.ammo);
         int slot = -1;
@@ -644,7 +666,7 @@ void Game::fireBow() {
             resetBowDraw();
             return;
         }
-        if (!item.infinite) {
+        if (!infinite) {
             m_inventory.take(static_cast<std::size_t>(slot), 1);
         }
     }
@@ -679,17 +701,21 @@ void Game::fireBow() {
         effectDuration = item.arrowEffectDuration;
         effectTier = item.arrowEffectTier;
     }
+    // V2-12: the POWER enchant adds to the shot damage, the SPEED enchant
+    // adds to the shot velocity (the documented deviation: MC's Quick
+    // Charge is a draw-time reduction, the project has no draw-time model,
+    // so speed = the projectile-speed paradigm, +L to shoot_speed). Both
+    // scale by the charge power as the base data does.
     m_entities.push_back(std::make_unique<Projectile>(
-        m_world, m_blocks, o, f, item.shootSpeed * power,
-        item.shootDamage * power, /*hurtPlayer=*/false, power, item.ammo,
-        effectId, effectDuration, effectTier));
+        m_world, m_blocks, o, f, (item.shootSpeed + speedBonus) * power,
+        (item.shootDamage + powerBonus) * power, /*hurtPlayer=*/false, power,
+        item.ammo, effectId, effectDuration, effectTier));
     // SURV-3 (durability): the SHOT wears the launcher one point (any
     // charge; Infinity included — the arrow is not consumed, the bow
     // still is). The shot completed (the arrow is flying) — a bow that
-    // breaks on this shot is simply gone.
+    // breaks on this shot is simply gone. V2-12: the unbreaking skip.
     if (item.durability > 0.0f) {
-        if (applyDurability(m_inventory.at(m_selectedSlot),
-                            kLauncherShotWear, m_items)) {
+        if (wearItem(stack, kLauncherShotWear)) {
             m_sound.play("break"); // the bow broke on this shot
         }
     }
@@ -1039,7 +1065,7 @@ void Game::breakBlock(const BlockHit& hit) {
             const Item& heldItem = m_items.at(held.item);
             if (heldItem.type == ItemType::Tool &&
                 heldItem.durability > 0.0f) {
-                if (applyDurability(held, kToolBlockWear, m_items)) {
+                if (wearItem(held, kToolBlockWear)) {
                     // The tool BROKE on this block: the item-break cue
                     // (the existing "break" wav — the sound table has no
                     // dedicated item-break asset, the design's reuse).
@@ -1563,12 +1589,14 @@ void Game::dropSelectedItem() {
     // re-picked up on the next frame. SURV-3: the dropped unit carries
     // the stack's accumulated damage (captured BEFORE the take above —
     // an emptied stack would lose it; the take keeps the remainder's).
+    // V2-12 (format 27): the dropped unit carries the stack's enchantments
+    // too (the same captured-before-take discipline).
     const float droppedDamage = stack.damage;
+    const std::map<std::string, int> droppedEnchants = stack.enchants;
     const Vec3 pos = m_player->position();
-    m_entities.push_back(std::make_unique<ItemEntity>(m_world, m_blocks,
-                                                      item.name, item.maxStack,
-                                                      /*count=*/1, pos,
-                                                      droppedDamage));
+    m_entities.push_back(std::make_unique<ItemEntity>(
+        m_world, m_blocks, item.name, item.maxStack, /*count=*/1, pos,
+        droppedDamage, droppedEnchants));
     // CRAFT-3: the timbre is the generic "pickup" (items have no
     // sound_material — YAGNI, documented), only the spatialization is
     // added (at the drop position, the player's feet).
@@ -1580,9 +1608,47 @@ float Game::selectedBreakSpeed(const Block& target) const {
     if (stack.empty()) {
         return 1.0f; // bare hands
     }
+    const Item& item = m_items.at(stack.item);
     // Phase 67: the fast_against list (axes vs wood) is part of the
     // item's data — effectiveBreakSpeed applies it against `target`.
-    return effectiveBreakSpeed(m_items.at(stack.item), target);
+    float speed = effectiveBreakSpeed(item, target);
+    // V2-12: EFFICIENCY — on the CORRECT tool (the target block is in the
+    // item's fast_against list, the Minecraft rule: a wrong tool / bare
+    // hand gets no efficiency), add (1 + L^2) to the break speed. L = the
+    // held efficiency level (0 for an unenchantable / unenchanted item —
+    // the pre-V2-12 speed is bit-identical).
+    const int eff = efficiencyLevel(stack, m_enchants);
+    if (eff > 0 && item.fastAgainstMultiplier > 0.0f) {
+        bool fast = false;
+        for (const std::string& n : item.fastAgainst) {
+            if (n == target.name) {
+                fast = true;
+                break;
+            }
+        }
+        if (fast) {
+            speed += 1.0f + static_cast<float>(eff * eff);
+        }
+    }
+    return speed;
+}
+
+bool Game::wearItem(ItemStack& stack, float wear) {
+    // V2-12 (unbreaking): the tool / bow / igniter wear choke point. The
+    // unbreaking level (0 = none, the pre-V2-12 bit-identical wear) rolls
+    // the per-point skip; the state is the world seed ^ the stack's damage
+    // BEFORE this event ^ the item id (NO frame dependence — the damage
+    // history determines the roll, so a re-derivation is identical).
+    const int L = unbreakingLevel(stack, m_enchants);
+    const float applied =
+        unbreakingWear(L, /*isArmor=*/false, wear,
+                       unbreakingState(
+                           static_cast<std::uint64_t>(m_generator->seed()),
+                           stack.damage, stack.item.value));
+    if (applied <= 0.0f) {
+        return false; // the roll skipped the whole event (no wear, no break)
+    }
+    return applyDurability(stack, applied, m_items);
 }
 
 // ---------------------------------------------------------------------------

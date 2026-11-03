@@ -328,9 +328,11 @@ void Game::updateEntities(double dt) {
         // Validity is guaranteed: drops are validated at init and only
         // spawn from that validated data.
         const ItemID iid = m_items.idForName(item->itemName());
-        // SURV-3: the picked-up stack's damage returns with it (the
-        // Inventory::add merge rule: same-item AND same-damage only).
-        if (m_inventory.add(iid, item->count(), m_items, item->damage()) < 0) {
+        // SURV-3: the picked-up stack's damage returns with it; V2-12
+        // (format 27): its enchantments too (the Inventory::add merge
+        // rule: same-item AND same-damage AND same-enchants only).
+        if (m_inventory.add(iid, item->count(), m_items, item->damage(),
+                            item->enchants()) < 0) {
             continue; // inventory full: the item stays on the ground
         }
         gone[i] = true;

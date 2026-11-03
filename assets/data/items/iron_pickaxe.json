@@ -1,5 +1,7 @@
 {
   "id": "iron_pickaxe",
+  "enchant_class": "pick",
+  "enchantability": 14,
   "type": "tool",
   "tool": {
     "break_speed": 4.0

@@ -43,6 +43,7 @@
 // Q-drop at the player's feet from being re-picked up on the next frame).
 #pragma once
 
+#include <map>
 #include <string>
 
 #include "entity/entity.hpp"
@@ -64,11 +65,15 @@ public:
     // BlockProperties::dropsCount; Q-drops pass 1). `damage` (SURV-3) is
     // the accumulated durability the dropped stack carried (Q-drops pass
     // the stack's value; block drops and saves predate the field at 0
-    // = full). Two entities of the same item merge only when their
-    // damage EQUALS (the Inventory::add merge rule, ground-side).
+    // = full). `enchants` (V2-12, format 27) is the applied enchantments
+    // the dropped stack carried (Q-drops pass the stack's map; block
+    // drops and saves predate the field at empty = unenchanted). Two
+    // entities of the same item merge only when their damage AND enchants
+    // EQUAL (the Inventory::add merge rule, ground-side).
     ItemEntity(const World& world, const BlockRegistry& blocks,
                const std::string& item, int maxStack, int count, Vec3 pos,
-               float damage = 0.0f);
+               float damage = 0.0f,
+               std::map<std::string, int> enchants = {});
 
     void update(double dt) override;
     bool shouldDespawn() const override {
@@ -80,6 +85,13 @@ public:
     // SURV-3: the accumulated durability the stack carries (0 = full; the
     // pickup returns it into the inventory, the save persists it).
     float damage() const { return m_damage; }
+    // V2-12 (format 27): the applied enchantments the stack carries (empty
+    // = unenchanted; the pickup returns them into the inventory, the save
+    // persists them — the damage twin).
+    const std::map<std::string, int>& enchants() const { return m_enchants; }
+    void setEnchants(std::map<std::string, int> e) {
+        m_enchants = std::move(e);
+    }
     double age() const { return m_age; }
     bool pickupReady() const { return m_pickupDelay <= 0.0; }
     // Remaining pickup delay (seconds; 0 = pickable now). Save/load
@@ -110,6 +122,9 @@ private:
     int m_maxStack;
     int m_count; // set in the constructor (>= 1)
     float m_damage = 0.0f; // SURV-3: the stack's accumulated durability
+    // V2-12 (format 27): the stack's applied enchantments (empty =
+    // unenchanted — the damage twin).
+    std::map<std::string, int> m_enchants;
     double m_age = 0.0;
     double m_pickupDelay = kPickupDelaySeconds;
 

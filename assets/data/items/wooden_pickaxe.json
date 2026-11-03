@@ -1,5 +1,7 @@
 {
   "id": "wooden_pickaxe",
+  "enchant_class": "pick",
+  "enchantability": 15,
   "type": "tool",
   "tool": {
     "break_speed": 2.0

@@ -601,7 +601,12 @@ bool Player::damage(float amount, bool bypassArmor) {
     // The default false keeps every other call site bit-identical.
     // Deviation from P84: the resistance is a float multiply, the armor
     // is the floor rule (Minecraft's integer-percentage semantics).
-    const int pts = armorPoints();
+    // V2-12 (protection): the effective points = the equipped points + the
+    // protection bonus, capped at kArmorMaxPoints (the SHARED 20-point cap).
+    // No protection worn = m_protBonus 0 = pts = armorPoints() = the
+    // pre-V2-12 bit-identical value (the red line the damage tests pin).
+    const int pts =
+        std::min(kArmorMaxPoints, armorPoints() + m_protBonus);
     if (pts > 0 && !bypassArmor) {
         amount = std::floor(
                      amount * (100.0f - kArmorReductionPerPoint *
@@ -632,10 +637,24 @@ bool Player::damage(float amount, bool bypassArmor) {
             if (m_armor[static_cast<std::size_t>(slot)].empty()) {
                 continue;
             }
-            if (applyDurability(m_armor[static_cast<std::size_t>(slot)],
-                                wear,
-                                m_armorDurability[static_cast<std::size_t>(
-                                    slot)])) {
+            // V2-12 (unbreaking): the armor piece's unbreaking level (0 =
+            // none, the pre-V2-12 bit-identical wear) rolls the per-point
+            // skip (the state from the world seed + the piece's damage
+            // BEFORE this event + its item id — no frame dependence).
+            const int L =
+                m_armorUnbreaking[static_cast<std::size_t>(slot)];
+            const float applied =
+                unbreakingWear(L, /*isArmor=*/true, wear,
+                               unbreakingState(
+                                   m_worldSeed,
+                                   m_armor[static_cast<std::size_t>(slot)]
+                                       .damage,
+                                   m_armor[static_cast<std::size_t>(slot)]
+                                       .item.value));
+            if (applied > 0.0f &&
+                applyDurability(
+                    m_armor[static_cast<std::size_t>(slot)], applied,
+                    m_armorDurability[static_cast<std::size_t>(slot)])) {
                 setArmorSlot(slot, ItemStack {}, 0); // the BREAK: clear +
                                                      // the points resync
             }

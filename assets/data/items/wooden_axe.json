@@ -1,5 +1,7 @@
 {
   "id": "wooden_axe",
+  "enchant_class": "axe",
+  "enchantability": 15,
   "type": "tool",
   "fast_against": ["wood", "leaves"],
   "fast_against_multiplier": 2.0,

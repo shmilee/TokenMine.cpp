@@ -11,6 +11,7 @@
 #include <string>
 #include <utility>
 
+#include "core/enchanting.hpp" // V2-12: the EnchantmentRegistry + vocab
 #include "entity/exp_orb.hpp" // V2-11: the xp entity's timer constants
 #include "entity/item_entity.hpp"
 #include "entity/mob_registry.hpp" // SURV-7: validateStats' mob names
@@ -86,15 +87,104 @@ Result<void> checkDamageValue(const Json& dmg, const Item& item,
     return {};
 }
 
+// V2-12 (format 27): the player's xp_seed is a FULL 64-bit value (a
+// splitmix64 output — far above the JSON number's 53-bit double mantissa,
+// so a numeric field would LOSE precision on the round trip and corrupt
+// every future offer roll). It is stored as a lowercase 16-char HEX STRING
+// (lossless, the documented representation of the design's "int").
+std::string xpSeedToHex(std::uint64_t v) {
+    static const char* kDigits = "0123456789abcdef";
+    std::string out(16, '0');
+    for (int i = 15; i >= 0; --i) {
+        out[static_cast<std::size_t>(i)] = kDigits[v & 0xFu];
+        v >>= 4;
+    }
+    return out;
+}
+
+Result<std::uint64_t> xpSeedFromHex(const Json& v, const std::string& what) {
+    if (!v.isString()) {
+        return MC_FAIL(what + " must be a 16-char lowercase hex string");
+    }
+    const std::string s = v.asString();
+    if (s.size() == 0 || s.size() > 16) {
+        return MC_FAIL(what + " must be a 1..16-char lowercase hex string, "
+                       "got " + std::to_string(s.size()));
+    }
+    std::uint64_t out = 0;
+    for (char c : s) {
+        int d;
+        if (c >= '0' && c <= '9') {
+            d = c - '0';
+        } else if (c >= 'a' && c <= 'f') {
+            d = c - 'a' + 10;
+        } else {
+            return MC_FAIL(what + " has a non-hex character '" +
+                           std::string(1, c) + "'");
+        }
+        out = (out << 4) | static_cast<std::uint64_t>(d);
+    }
+    return out;
+}
+
+// V2-12 (format 27): writes the per-stack "enchants" object onto `obj`
+// ONLY when non-empty (the omit-when-default discipline — an unenchanted
+// stack keeps its byte-identical pre-27 shape). The map is id-sorted, so
+// the JSON key order is deterministic.
+void writeEnchantsObj(Json& obj, const std::map<std::string, int>& enchants) {
+    if (enchants.empty()) {
+        return;
+    }
+    Json e = Json::object();
+    for (const auto& [id, lvl] : enchants) {
+        e[id] = Json(lvl);
+    }
+    obj["enchants"] = std::move(e);
+}
+
+// V2-12 (format 27): the per-stack "enchants" object { <id>: <level> },
+// shared by the slot / armor-object / entity entries. Shape rules here:
+// an object, each key a non-empty id, each value a whole number >= 1.
+// The FULL cross-validation (an unknown id, a level > the enchantment's
+// max, a class that does not include the item's enchant_class, or an
+// incompatible PAIR) runs at GAME load (validateEnchants — the
+// EnchantmentRegistry is not a parseSave parameter, the validateStats
+// precedent: the mob registry's kill.<name> check is game-load too).
+// Absent key = empty (unenchanted); the serializer writes it ONLY when
+// non-empty (the omit-when-default discipline, the SURV-3 damage twin).
+Result<void> parseEnchantsObj(const Json& e, const std::string& what,
+                              std::map<std::string, int>& out) {
+    if (!e.isObject()) {
+        return MC_FAIL(what + " 'enchants' must be an object "
+                       "{<enchant id>: <level>}");
+    }
+    out.clear();
+    for (const auto& [key, value] : e.members()) {
+        if (key.empty()) {
+            return MC_FAIL(what + " 'enchants' has an empty id key");
+        }
+        const double d = value.asDouble();
+        if (!value.isNumber() || d < 1.0 || d != std::floor(d)) {
+            return MC_FAIL(what + " 'enchants' level for '" + key +
+                           "' must be a whole number >= 1");
+        }
+        out[key] = static_cast<int>(d);
+    }
+    return {};
+}
+
 Result<void> parseSlotEntry(const Json& e, const ItemRegistry& items,
                             const std::string& what, bool allowDamage,
-                            ItemStack& out) {
+                            bool allowEnchants, ItemStack& out) {
     if (!e.isObject()) {
         return MC_FAIL(what + " must be an object");
     }
     std::set<std::string> slotFields {"item", "count"};
     if (allowDamage) {
         slotFields.insert("damage");
+    }
+    if (allowEnchants) {
+        slotFields.insert("enchants");
     }
     MC_TRY(rejectUnknownFields(e, slotFields, what));
     const Json* name = e.find("item");
@@ -130,6 +220,11 @@ Result<void> parseSlotEntry(const Json& e, const ItemRegistry& items,
     if (const Json* dmg = e.find("damage")) {
         MC_TRY(checkDamageValue(*dmg, items.at(id), what, out.damage));
     }
+    // V2-12: the enchants (format 27). Absent key = empty (unenchanted —
+    // the byte-identical pre-27 shape).
+    if (const Json* ench = e.find("enchants")) {
+        MC_TRY(parseEnchantsObj(*ench, what, out.enchants));
+    }
     return {};
 }
 
@@ -146,7 +241,8 @@ Result<void> parseGrid(const Json& arr, const ItemRegistry& items,
     for (std::size_t i = 0; i < arr.size(); ++i) {
         auto r = parseSlotEntry(arr.at(i), items, what + " #" +
                                         std::to_string(i),
-                                        /*allowDamage=*/false, out[i]);
+                                        /*allowDamage=*/false,
+                                        /*allowEnchants=*/false, out[i]);
         MC_TRY(r);
     }
     return {};
@@ -175,7 +271,8 @@ Result<void> parseFurnaceState(const Json& fz, const ItemRegistry& items,
         }
         MC_TRY(parseSlotEntry(*slot, items,
                               what + " '" + slotNames[i] + "'",
-                              /*allowDamage=*/false, *slotPtrs[i]));
+                              /*allowDamage=*/false,
+                              /*allowEnchants=*/false, *slotPtrs[i]));
     }
     // The two integer 1/60-substep counters (bounds: the max smelt /
     // fuel times the item data allows — see save.hpp).
@@ -765,9 +862,29 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
                     Json entry = Json::object();
                     entry["item"] = Json(name);
                     entry["damage"] = Json(dmg);
+                    // V2-12 (format 27): the enchants key only when
+                    // non-empty (the object shape is the damaged/
+                    // enchanted piece).
+                    writeEnchantsObj(entry,
+                        save.playerArmorEnchants[static_cast<std::size_t>(
+                            slot)]);
                     armorObj[kArmorSlotNames[slot]] = std::move(entry);
                 } else {
-                    armorObj[kArmorSlotNames[slot]] = Json(name);
+                    // V2-12: a full-durability but ENCHANTED piece must
+                    // ALSO use the object shape (the enchants have no
+                    // string form) — the string is reserved for the plain
+                    // unenchanted, full-durability piece.
+                    if (save.playerArmorEnchants[static_cast<std::size_t>(
+                            slot)].empty()) {
+                        armorObj[kArmorSlotNames[slot]] = Json(name);
+                    } else {
+                        Json entry = Json::object();
+                        entry["item"] = Json(name);
+                        writeEnchantsObj(entry,
+                            save.playerArmorEnchants[static_cast<std::size_t>(
+                                slot)]);
+                        armorObj[kArmorSlotNames[slot]] = std::move(entry);
+                    }
                 }
             }
         }
@@ -787,6 +904,12 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     if (save.playerXp >= 0) {
         player["xp"] = Json(save.playerXp);
     }
+    // V2-12 (format 27): the player's XP seed — ALWAYS written (a
+    // format-27 file REQUIRES the key — the oxygen / velocity key
+    // discipline). Stored as a HEX STRING (the full 64-bit value does not
+    // fit the JSON number's 53-bit double mantissa — the round trip must
+    // be lossless or the next offer roll would diverge).
+    player["xp_seed"] = Json(xpSeedToHex(save.playerXpSeed));
     // UX-7 (format 23) / V2-3 (format 25): the player's tutorial
     // progress — ALWAYS written (a format-23+ file REQUIRES the key; an
     // empty object = done/skipped — the armor/tables key discipline).
@@ -823,6 +946,8 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
             if (s.damage > 0.0f) {
                 e["damage"] = Json(s.damage);
             }
+            // V2-12 (format 27): the enchants key only when non-empty.
+            writeEnchantsObj(e, s.enchants);
         }
         slots.push_back(std::move(e));
     }
@@ -1027,6 +1152,9 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         je["pos"] = jpos;
         je["age"] = Json(e.age);
         je["pickup_delay"] = Json(e.pickupDelay);
+        // V2-12 (format 27): the dropped stack's enchants (only when
+        // non-empty — the slots' / armor's twin).
+        writeEnchantsObj(je, e.enchants);
         entities.push_back(std::move(je));
     }
     // V2-11 (format 26): the XP orbs — the array's SECOND kind (type
@@ -1173,6 +1301,11 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // three-way discipline).
     if (fmt->asInt() >= 26) {
         playerFields.insert("xp");
+    }
+    // V2-12: "xp_seed" is format-27-and-newer vocabulary — a pre-27 file
+    // carrying it is a version lie (the whitelist naming above).
+    if (fmt->asInt() >= 27) {
+        playerFields.insert("xp_seed");
     }
     MC_TRY(rejectUnknownFields(*player, playerFields, "save 'player'"));
     const Json* ppos = player->find("pos");
@@ -1447,24 +1580,49 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                 name = value.asString();
             } else if (value.isObject() &&
                        def.find("format")->asInt() >= 18) {
-                const std::set<std::string> entryFields {"item", "damage"};
+                std::set<std::string> entryFields {"item", "damage"};
+                // V2-12 (format 27): the enchanted-piece object gains the
+                // OPTIONAL "enchants" key (a format-26 and older file
+                // carrying it is a version lie — the whitelist naming).
+                if (def.find("format")->asInt() >= 27) {
+                    entryFields.insert("enchants");
+                }
                 MC_TRY(rejectUnknownFields(value, entryFields, what));
                 const Json* vItem = value.find("item");
-                const Json* vDmg = value.find("damage");
                 if (vItem == nullptr || !vItem->isString() ||
                     vItem->asString().empty()) {
                     return MC_FAIL(what + " requires a non-empty string "
                                        "'item'");
                 }
                 name = vItem->asString();
-                if (vDmg == nullptr || !vDmg->isNumber() ||
-                    vDmg->asDouble() <= 0.0) {
-                    return MC_FAIL(what + " requires 'damage' (a number "
-                                       "> 0 — the object shape is the "
-                                       "damaged piece; a full-durability "
-                                       "piece is the string shape)");
+                // V2-12 (format 27): the "damage" key is now OPTIONAL in
+                // the object shape — a full-durability ENCHANTED piece is
+                // the object {item, enchants} (no damage key = 0 = full).
+                // A format-18-26 object still REQUIRES damage > 0 (the
+                // pre-27 damaged-piece shape — a missing damage there is a
+                // version lie, named). The object must carry damage > 0 OR
+                // a non-empty enchants (a {item} alone should be a string).
+                bool hasDamage = false;
+                if (const Json* vDmg = value.find("damage")) {
+                    if (!vDmg->isNumber() || vDmg->asDouble() <= 0.0) {
+                        return MC_FAIL(what + " 'damage' must be a number "
+                                       "> 0");
+                    }
+                    dmg = static_cast<float>(vDmg->asDouble());
+                    hasDamage = true;
                 }
-                dmg = static_cast<float>(vDmg->asDouble());
+                if (const Json* vEnch = value.find("enchants")) {
+                    MC_TRY(parseEnchantsObj(*vEnch, what,
+                        save.playerArmorEnchants[static_cast<std::size_t>(
+                            slot)]));
+                }
+                if (!hasDamage &&
+                    save.playerArmorEnchants[static_cast<std::size_t>(
+                        slot)].empty()) {
+                    return MC_FAIL(what + " object requires 'damage' > 0 "
+                                       "or a non-empty 'enchants' (a plain "
+                                       "full piece is the string shape)");
+                }
             } else {
                 return MC_FAIL(what +
                     (value.isObject()
@@ -1552,6 +1710,31 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                                            : "a non-number"));
         }
         save.playerXp = static_cast<int>(d);
+    }
+    // XP seed (format 27; V2-12, the enchantment system). The player's
+    // enchanting offer-roll decorrelation seed — a FULL 64-bit value stored
+    // as a hex STRING (the JSON number's 53-bit mantissa would lose
+    // precision). A format-27 file REQUIRES the key (the oxygen / velocity
+    // key discipline): a 1..16-char lowercase hex string (named otherwise).
+    // A pre-27 file loads the DETERMINISTIC MIGRATION value — worldSeed ^
+    // kXpSeedInit (the fresh-world value; the system did not exist, the
+    // pool's 0-migration twin). expectedSeed is the world's seed (the
+    // parseSave parameter).
+    if (def.find("format")->asInt() >= 27) {
+        const Json* xs = player->find("xp_seed");
+        if (xs == nullptr) {
+            return MC_FAIL("save format 27 requires a 'player.xp_seed' "
+                           "(a 1..16-char lowercase hex string, the "
+                           "enchanting offer-roll seed)");
+        }
+        auto xsr = xpSeedFromHex(*xs, "save 'player.xp_seed'");
+        MC_TRY(xsr);
+        save.playerXpSeed = *xsr;
+    } else {
+        // The pre-27 migration: the deterministic fresh value (the pool's
+        // 0-migration twin). expectedSeed ^ kXpSeedInit.
+        save.playerXpSeed =
+            static_cast<std::uint64_t>(expectedSeed) ^ kXpSeedInit;
     }
     // UX-7 (format 23) / V2-3 (format 25): the player's tutorial
     // progress. REQUIRED for a format-23 file (a missing key is a
@@ -1688,6 +1871,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         auto r = parseSlotEntry(slots->at(i), items, "save slot #" +
                                        std::to_string(i),
                                        def.find("format")->asInt() >= 18,
+                                       def.find("format")->asInt() >= 27,
                                        save.slots[i]);
         MC_TRY(r);
     }
@@ -1786,6 +1970,12 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
             if (fmtV >= 18) {
                 entFields.insert("damage");
             }
+            // V2-12 (format 27): the dropped stack's "enchants" key (the
+            // omit-when-empty discipline — a format-26 and older file
+            // carrying it is a version lie, the whitelist naming).
+            if (fmtV >= 27) {
+                entFields.insert("enchants");
+            }
             if (fmtV >= 26 && e.find("xp") != nullptr) {
                 return MC_FAIL("save entity #" + std::to_string(i) +
                                " (type \"item\") must not carry an 'xp' "
@@ -1879,6 +2069,12 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         if (const Json* dmg = e.find("damage")) {
             const std::string what = "save entity #" + std::to_string(i);
             MC_TRY(checkDamageValue(*dmg, items.at(id), what, se.damage));
+        }
+        // V2-12 (format 27): the dropped stack's enchants (absent key =
+        // empty = unenchanted — the byte-identical pre-27 shape).
+        if (const Json* ench = e.find("enchants")) {
+            const std::string what = "save entity #" + std::to_string(i);
+            MC_TRY(parseEnchantsObj(*ench, what, se.enchants));
         }
         const Json* epos = e.find("pos");
         if (epos == nullptr || !epos->isArray() || epos->size() != 3) {
@@ -2938,6 +3134,119 @@ Result<void> validateStats(const std::map<std::string, std::uint64_t>& stats,
                            "' is registered");
         }
         (void)count; // the count's range is parse-checked
+    }
+    return {};
+}
+
+namespace {
+// V2-12: validate ONE stack's enchant map against the item it sits on.
+// `what` is the quoted source ("save slot #3", "save player.armor.chest",
+// "save entity #2"). Empty enchants = valid (the unenchanted default).
+Result<void> validateStackEnchants(
+    const std::map<std::string, int>& enchants, const Item& item,
+    const std::string& what, const EnchantmentRegistry& reg) {
+    for (const auto& [id, level] : enchants) {
+        const Enchantment* e = reg.find(id);
+        if (e == nullptr) {
+            return MC_FAIL(what + " holds the unknown enchantment '" + id +
+                           "' (not in the current data)");
+        }
+        if (level > e->maxLevel) {
+            return MC_FAIL(what + " holds '" + id + "' at level " +
+                           std::to_string(level) + " above its max " +
+                           std::to_string(e->maxLevel));
+        }
+        // The enchantment must be able to apply to the item's class. An
+        // item with NO class (enchantability 0) cannot be enchanted at all
+        // (any enchant on it is corruption).
+        if (item.enchantability <= 0 || item.enchantClass == EnchantClass::None) {
+            return MC_FAIL(what + " holds the enchantment '" + id +
+                           "' but the item '" + item.name +
+                           "' has no enchant class (it cannot be enchanted)");
+        }
+        bool classOk = false;
+        for (EnchantClass c : e->classes) {
+            if (c == item.enchantClass) {
+                classOk = true;
+                break;
+            }
+        }
+        if (!classOk) {
+            return MC_FAIL(what + " holds the enchantment '" + id +
+                           "' which does not apply to the item '" +
+                           item.name + "' (class " +
+                           enchantClassName(item.enchantClass) + ")");
+        }
+    }
+    // The incompatible PAIR check: no two enchants on the same stack may be
+    // an exclusive pair (the map is id-sorted, so the pair is found by the
+    // registry's symmetric check).
+    std::vector<std::string> ids;
+    for (const auto& [id, level] : enchants) {
+        (void)level;
+        ids.push_back(id);
+    }
+    for (std::size_t i = 0; i < ids.size(); ++i) {
+        for (std::size_t j = i + 1; j < ids.size(); ++j) {
+            if (reg.incompatiblePair(ids[i], ids[j])) {
+                return MC_FAIL(what + " holds the incompatible enchantment "
+                               "pair '" + ids[i] + "' and '" + ids[j] + "'");
+            }
+        }
+    }
+    return {};
+}
+} // namespace
+
+Result<void> validateEnchants(const SaveGame& save, const ItemRegistry& items,
+                              const EnchantmentRegistry& enchants) {
+    // The inventory slots.
+    for (std::size_t i = 0; i < save.slots.size(); ++i) {
+        const ItemStack& s = save.slots[i];
+        if (s.empty() || s.enchants.empty()) {
+            continue;
+        }
+        const Item* item = items.find(s.item);
+        if (item == nullptr) {
+            return MC_FAIL("save slot #" + std::to_string(i) +
+                           " holds an unregistered item with enchants");
+        }
+        MC_TRY(validateStackEnchants(s.enchants, *item, "save slot #" +
+                                                       std::to_string(i),
+                                     enchants));
+    }
+    // The worn armor pieces.
+    for (int slot = 0; slot < kArmorSlotCount; ++slot) {
+        const auto& ench = save.playerArmorEnchants[static_cast<std::size_t>(slot)];
+        if (ench.empty()) {
+            continue;
+        }
+        const Item* item = items.findByName(
+            save.playerArmor[static_cast<std::size_t>(slot)]);
+        if (item == nullptr) {
+            return MC_FAIL("save player.armor." +
+                           std::string(kArmorSlotNames[slot]) +
+                           " holds an unregistered item with enchants");
+        }
+        MC_TRY(validateStackEnchants(
+            ench, *item,
+            "save player.armor." + std::string(kArmorSlotNames[slot]),
+            enchants));
+    }
+    // The dropped-item entities.
+    for (std::size_t i = 0; i < save.entities.size(); ++i) {
+        const SavedItemEntity& e = save.entities[i];
+        if (e.enchants.empty()) {
+            continue;
+        }
+        const Item* item = items.findByName(e.item);
+        if (item == nullptr) {
+            return MC_FAIL("save entity #" + std::to_string(i) +
+                           " holds an unregistered item with enchants");
+        }
+        MC_TRY(validateStackEnchants(e.enchants, *item, "save entity #" +
+                                                       std::to_string(i),
+                                     enchants));
     }
     return {};
 }

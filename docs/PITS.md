@@ -2976,3 +2976,24 @@
   拾 = xp 假零**（掉落物实体在终档可见 = 诊断签名）。正解 = 击杀后
   W 步行 1.5 s（spider f300 恒停 → orb 位每跑确定 = 步行确定性）；
   或场景 pose 移近使击杀位 ≤2.5。
+- **场景 AABB 顶高 / 面板 carry / xdotool --pid / savenorm 工具
+  （PITS 378，门 184 V2-12 附魔 S2）**——① **场景置块须查玩家
+  AABB 邻格**：书架 (0,54,-5) 与玩家 (0.5,54,-4) 的 AABB（z ∈
+  [−4.3,−3.7]）重叠 0.3 → 载时碰撞解算把玩家**顶高到 y=55**（站
+  上书架）→ 视线升高 1 块 → RMB 交互射线从台顶上方 1.2 块掠过 =
+  **面板静默不开**（无日志无声音，诊断 = 终档 player.y +1 + 截图
+  面板缺席；同场景无书架则 RMB 恒开）。正解 = 环位避开玩家所在列
+  的 ±0.3 重叠格（(0,·,zp−1)/(0,·,zp) 两格禁置）。② **面板交互 =
+  纯 pick-and-place carry 模型**（cellLeftClick：carry 空 + 格空 =
+  no-op）：从库存放面板槽须**两击**（LMB 库存格拾起 → LMB 面板槽
+  放入）；直接点空面板槽 = 无事发生（假"放置失败"源）；shift-click
+  仅面板槽有效（整堆拉入库存）。热栏行屏坐标 = 布局 scale 后实算
+  （679×744 窗 fit scale 0.82：热栏行 y≈456-498 屏，槽 0 中心
+  x≈34 / 槽 1 中心 x≈80——**槽宽 42.6 屏，坐标错一格 = 拾错物品**）。
+  ③ **xdotool 窗口查找用 --pid，勿用标题子串**：子串 "TokenMine"
+  命中用户浏览器页（"TokenMine.cpp | OpenChamber"）→ 输入全打在
+  浏览器上（仅鼠标点击无键入 = 无害但假无响应）；游戏窗 =
+  `xdotool search --pid <pgrep -x tokenmine>`。④ **savenorm 必须用
+  官方 tools/gate_compare.py**（norm = 剥 fires[*].remaining 等
+  real-dt 字段）：手写 norm 漏剥 → fires remaining 微差假 MISMATCH
+  （门 184 S1 首跑 5 diff，官方工具 = 恰 2 预期键）。

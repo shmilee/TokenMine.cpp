@@ -354,7 +354,31 @@ namespace mc {
 //      did not exist, the velocity-zeroed migration twin) and no xp
 //      entities exist (structurally: a pre-26 file cannot carry
 //      them). Writes are always format 26.
-inline constexpr int kSaveFormat = 26;
+//  27: the V2-12 ENCHANTMENT SYSTEM — "player" gains "xp_seed" (the
+//      enchanting offer roll's decorrelation seed, a whole number >= 0,
+//      ALWAYS written — the oxygen / velocity key discipline; the fresh
+//      value is worldSeed ^ kXpSeedInit, the 26->27 migration is the SAME
+//      value). The three stack-carrying places (an inventory slot entry,
+//      an OCCUPIED player.armor slot, and an item ENTITY entry) gain an
+//      OPTIONAL "enchants" OBJECT { <enchant id>: <level> } — written
+//      ONLY when non-empty (the omit-when-default discipline, the SURV-3
+//      damage twin; an unenchanted stack carries no key = byte-identical
+//      to its format-26 shape). The enchant ids are the current data's
+//      vocabulary (the registry is available at parse time): an unknown
+//      id, a level > the enchantment's max, an enchantment whose classes
+//      do not include the item's enchant_class, or an incompatible PAIR
+//      are all rejected and named (the cross-check discipline). The
+//      three-way key discipline (the V2-3 tutorial twin): a format-27
+//      file REQUIRES "player.xp_seed" (a missing key is a version lie)
+//      and an "enchants" key on a stack is allowed ONLY in format 27; a
+//      format-26 (or older) file CARRYING "player.xp_seed" OR an
+//      "enchants" key is a version lie (the per-format field whitelists
+//      name it — the <=26 shapes predate the system). A format-26 (or
+//      older) load migrates into the system: xp_seed loads worldSeed ^
+//      kXpSeedInit (the deterministic fresh value — the pool's 0
+//      migration twin) and no enchants exist (structurally: a pre-27
+//      file cannot carry them). Writes are always format 27.
+inline constexpr int kSaveFormat = 27;
 // UX-8f (format 24): the inventory's total slot count as of format 23
 // (9 hotbar + 18 storage) — the 27-slot array shape a pre-24 file
 // carries (the parser tail-pads it to the current kTotalSize).
@@ -537,6 +561,13 @@ struct SavedItemEntity {
     // SURV-3 (format 18): the stack's accumulated damage (0 = full —
     // the "damage" key is written only when > 0).
     float damage = 0.0f;
+    // V2-12 (format 27): the dropped stack's applied enchantments
+    // (enchant id -> level). Empty = unenchanted (the "enchants" key is
+    // written only when non-empty, the SURV-3 damage omit-when-default
+    // twin). std::map = id-sorted = the save's deterministic key order.
+    // The explicit `= {}` keeps partial aggregate inits free of
+    // -Wmissing-field-initializers (the ItemStack.enchants twin).
+    std::map<std::string, int> enchants = {};
 };
 
 // One XP orb entity (V2-11, format 26): the orb's VALUE (1..9 — the
@@ -660,6 +691,15 @@ struct SaveGame {
     // which flips the armor entry to its object shape). 0 for format
     // 1-17 loads (the system did not exist — every piece was full).
     std::array<float, kArmorSlotCount> playerArmorDamage {};
+    // V2-12 (format 27): the equipped pieces' applied enchantments per
+    // slot (enchant id -> level). Empty = unenchanted (the armor object
+    // entry's "enchants" key is written only when non-empty, the SURV-3
+    // damage omit-when-default twin). For format <= 17 loads the entry is
+    // a string (no object shape) so the enchants are empty by
+    // construction; for 18-26 loads the object may carry damage but no
+    // enchants key (the version-lie rejection of "enchants" on <=26).
+    std::array<std::map<std::string, int>, kArmorSlotCount>
+        playerArmorEnchants {};
     // Oxygen (SURV-2, format 17): the player's remaining air units,
     // [0, kOxygenMax] (150). -1 = "unspecified" (format 1-16 files):
     // the game loads it full (the migration — the system did not exist,
@@ -673,6 +713,13 @@ struct SaveGame {
     // system did not exist, the velocity-zeroed twin). A format-26
     // file REQUIRES the field (parse-validated: a whole number >= 0).
     int playerXp = -1;
+    // XP seed (V2-12, format 27): the enchanting offer roll's
+    // decorrelation seed (the fresh value = worldSeed ^ kXpSeedInit).
+    // parseSave ALWAYS fills this (a format-27 read, or the deterministic
+    // migration for a pre-27 load), so applySave restores it directly.
+    // 0 is a valid seed value (no sentinel — the migration is computed at
+    // parse time, not inferred from a default).
+    std::uint64_t playerXpSeed = 0;
     std::vector<SavedItemEntity> entities;
     // The XP orbs (V2-11, format 26): the second entity kind of the
     // save's "entities" array (type "xp" — the item entries above keep
@@ -781,6 +828,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                            std::int64_t expectedSeed);
 
 class MobRegistry;
+class EnchantmentRegistry;
 // SURV-7: the format-21 stats vocabulary check — every "kill.<name>" key
 // must name a REGISTERED mob (the "deathCount" key is fixed). The game
 // runs this at load, right after parseSave (the mob registry is not a
@@ -788,6 +836,19 @@ class MobRegistry;
 // same either way). An empty map is valid.
 Result<void> validateStats(const std::map<std::string, std::uint64_t>& stats,
                            const MobRegistry& mobs);
+
+// V2-12: the format-27 ENCHANT cross-check — every enchant id carried on
+// ANY of the save's stacks (the inventory slots, the worn armor pieces,
+// the dropped-item entities) must be: a REGISTERED enchantment (an unknown
+// id is named), at a level <= the enchantment's max (named), whose classes
+// include the item's enchant_class (a class mismatch is named — an
+// enchantment that cannot apply to the item's class is corruption), and
+// no two enchants on the same stack may form an incompatible PAIR (named).
+// Runs at GAME load, right after parseSave (the EnchantmentRegistry +
+// ItemRegistry are not parseSave parameters — the validateStats twin).
+// A save with no enchants (every map empty) is valid (the pre-27 shape).
+Result<void> validateEnchants(const SaveGame& save, const ItemRegistry& items,
+                              const EnchantmentRegistry& enchants);
 
 // ---------------------------------------------------------------------------
 // SAVE-1: the auto-save (periodic + crash-resilient save writes)

@@ -438,7 +438,7 @@ TEST(SaveFormat18Test, MidDamageRoundTripsInAllThreePlaces) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     // UX-7/V2-3/V2-11: writes are always format 26 (V2-3 was 25).
-    EXPECT_EQ(j->find("format")->asInt(), 26);
+    EXPECT_EQ(j->find("format")->asInt(), 27);
     // The shapes: the damaged slot + the entity carry the key; the
     // full-durability armor slot is a STRING; the damaged one an
     // OBJECT {item, damage}.
@@ -497,7 +497,8 @@ TEST(SaveFormat18Test, Format17WithDamageKeyIsAVersionLie) {
         for (const auto& [k, v] : root["player"].members()) {
             if (k != "stats" && k != "velocity" &&
                 k != "tutorial" &&  // SAVE-2: 22; UX-7: 23
-                k != "xp") {       // V2-11: the xp key is format 26
+                k != "xp" &&        // V2-11: the xp key is format 26
+                k != "xp_seed") {  // V2-12: the xp_seed key is format 27
                 player2[k] = v;
             }
         }

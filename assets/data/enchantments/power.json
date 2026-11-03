@@ -1,0 +1,8 @@
+{
+  "id": "power",
+  "name": "力量",
+  "effect": "power",
+  "classes": ["bow"],
+  "weight": 10,
+  "ecost": [[1, 10], [11, 20], [21, 30], [31, 40], [41, 56]]
+}

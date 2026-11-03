@@ -1,0 +1,8 @@
+{
+  "id": "unbreaking",
+  "name": "耐久",
+  "effect": "unbreaking",
+  "classes": ["axe", "pick", "shovel", "armor", "bow"],
+  "weight": 5,
+  "ecost": [[5, 12], [13, 20], [21, 71]]
+}

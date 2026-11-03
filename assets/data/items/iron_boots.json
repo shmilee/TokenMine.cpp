@@ -1,5 +1,7 @@
 {
  "id": "iron_boots",
+ "enchant_class": "armor",
+ "enchantability": 9,
  "type": "material",
  "max_stack": 1,
  "icon": "iron_boots",

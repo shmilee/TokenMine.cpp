@@ -32,11 +32,13 @@
 // an empty slot is a stack with an invalid item and/or zero count.
 #pragma once
 
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "block/block.hpp"
+#include "core/enchanting.hpp" // EnchantClass (V2-12) + the effect accessors
 #include "core/math/vec2.hpp"
 #include "core/math/vec3.hpp"
 
@@ -314,6 +316,25 @@ struct Item {
     // holds the damaged tool + the material -> the tool's accumulated
     // damage drops by kRepairFraction of its max (item/repair.hpp).
     std::string repairWith;
+    // V2-12 (enchantments): the item's ENCHANT CLASS (optional data field
+    // 'enchant_class', a strict vocabulary name: sword / axe / pick /
+    // shovel / armor / bow / hoe). None (the default) = the item is not
+    // enchantable (every pre-V2-12 item). MUTUALLY EXCLUSIVE-paired with
+    // 'enchantability' (the design's class<->ability pairing: one without
+    // the other is rejected at parse, the armor_slot pair precedent).
+    EnchantClass enchantClass = EnchantClass::None;
+    // V2-12: the item's ENCHANTABILITY (optional data field
+    // 'enchantability', an int >= 0) — the input to the offer roll's seed
+    // (the Minecraft values: wooden 15 / stone 5 / iron 14 / leather
+    // armor 15 / iron armor 9 / diamond armor 10 / bow 1). Pairs with
+    // enchant_class (both or neither).
+    int enchantability = 0;
+    // V2-12: the ENCHANT MATERIAL flag (optional data field
+    // 'enchant_material', a strict bool, default false; only a type
+    // "material" may carry it — otherwise rejected by name). true marks
+    // the item as the panel's lapis-slot content (the data-driven gate —
+    // the core never hardcodes "lapis"). Shipped = lapis.
+    bool enchantMaterial = false;
     // Phase 15 UI: the item's 2D icon texture name (a file under
     // assets/textures/items/, validated against the filesystem at game
     // init). Empty for block items, which render a 3D block cube instead.
@@ -362,10 +383,21 @@ struct ItemStack {
     // moves the damage with the stack. Items without durability keep it
     // at 0 forever (the wear events are data-gated).
     float damage = 0.0f;
+    // V2-12 (enchantments): the applied enchantments, enchant id -> level
+    // (the save's {id: level} object, written ONLY when non-empty — the
+    // omit-when-default discipline, the SURV-3 damage twin). Empty = the
+    // item is unenchanted (every pre-V2-12 stack, the bit-level-invariant
+    // red line: an unenchanted stack carries {} and behaves identically).
+    // std::map = id-sorted = the save's deterministic key order. The
+    // explicit `= {}` default member initializer keeps the partial
+    // aggregate inits (`ItemStack {id, n}`) free of -Wmissing-field-
+    // initializers (the damage twin's discipline).
+    std::map<std::string, int> enchants = {};
 
     bool empty() const { return count <= 0 || !item.valid(); }
     bool operator==(const ItemStack& o) const {
-        return item == o.item && count == o.count && damage == o.damage;
+        return item == o.item && count == o.count && damage == o.damage &&
+               enchants == o.enchants;
     }
 };
 

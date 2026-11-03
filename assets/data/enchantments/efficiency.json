@@ -1,0 +1,8 @@
+{
+  "id": "efficiency",
+  "name": "效率",
+  "effect": "efficiency",
+  "classes": ["pick", "shovel", "axe"],
+  "weight": 10,
+  "ecost": [[1, 10], [11, 20], [21, 30], [31, 40], [41, 91]]
+}

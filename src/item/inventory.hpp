@@ -68,11 +68,16 @@ public:
     bool isEmpty(std::size_t slot) const { return m_slots[slot].empty(); }
 
     // Merges `count` of `item` (with the stack's accumulated `damage`,
-    // SURV-3) as described above. Returns the slot the items landed in,
-    // or -1 when there is no room (every stack of the item is full and
-    // no slot is empty).
+    // SURV-3, and its applied `enchants`, V2-12) as described above.
+    // Returns the slot the items landed in, or -1 when there is no room
+    // (every stack of the item is full and no slot is empty). The merge
+    // rule extends to the enchants: a stack merges only into an existing
+    // stack of the SAME item, SAME damage AND SAME enchants (the V2-12
+    // ground-side twin of the ItemEntity canMergeInto rule). A new slot
+    // is seeded with `enchants`.
     int add(ItemID item, int count, const ItemRegistry& items,
-            float damage = 0.0f);
+            float damage = 0.0f,
+            const std::map<std::string, int>& enchants = {});
 
     // Removes up to `n` from the slot (clamped to what is there). Returns
     // the number actually removed; the slot becomes empty at zero.

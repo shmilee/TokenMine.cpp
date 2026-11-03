@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 2.12.0 LANGUAGES CXX)
+project(TokenMine VERSION 2.13.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -42,6 +42,7 @@ add_library(mc_core STATIC
     src/core/status_effect.cpp
     src/core/tutorial.cpp
     src/core/weather.cpp
+    src/core/enchanting.cpp
     src/core/ui_layout.cpp
     src/core/thread_pool.cpp
     src/core/game_entities.cpp
@@ -226,6 +227,9 @@ add_executable(tokenmine_tests
     tests/test_first_person_arm.cpp
     tests/test_xp_curve.cpp
     tests/test_exp_orb.cpp
+    tests/test_enchanting.cpp
+    tests/test_enchant_content.cpp
+    tests/test_enchant_save.cpp
 )
 target_compile_definitions(tokenmine_tests PRIVATE
     MC_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data")

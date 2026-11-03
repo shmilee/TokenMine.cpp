@@ -30,14 +30,17 @@ void cellLeftClick(ItemStack& cell, ItemStack& carry,
         carry = ItemStack {};
         return;
     }
-    if (cur.item == carry.item && cur.damage == carry.damage) {
+    if (cur.item == carry.item && cur.damage == carry.damage &&
+        cur.enchants == carry.enchants) {
         // SURV-3: same-damage stacks only (the Inventory::add rule) — a
-        // repaired piece does not join a worn one.
+        // repaired piece does not join a worn one. V2-12: same-enchant
+        // only — an enchanted stack does not join a plain one (or one with
+        // a different enchantment set).
         const int maxStack = items.at(cur.item).maxStack;
         const int room = maxStack - cur.count;
         const int moved = std::min(carry.count, room);
         if (moved > 0) {
-            cell = ItemStack {cur.item, cur.count + moved, cur.damage};
+            cell.count += moved; // keep cell.enchants (== carry's — merged)
             carry.count -= moved;
             if (carry.count <= 0) {
                 carry = ItemStack {};
@@ -61,9 +64,11 @@ void cellRightClick(ItemStack& cell, ItemStack& carry,
         // CRAFT-7: right-click takes the HALF stack (Minecraft):
         // floor(count/2), minimum 1 — a 1-stack gives itself, a 2- or
         // 3-stack gives 1 (the v1 "take one" behavior), a 64-stack
-        // gives 32. SURV-3: damage follows the units.
+        // gives 32. SURV-3: damage follows the units. V2-12: the
+        // enchantments follow the units too.
         const int take = std::max(1, cur.count / 2);
         carry = ItemStack {cur.item, take, cur.damage};
+        carry.enchants = cur.enchants;
         cell.count -= take;
         if (cell.count <= 0) {
             cell = ItemStack {};
@@ -72,18 +77,20 @@ void cellRightClick(ItemStack& cell, ItemStack& carry,
     }
     if (cur.empty()) {
         cell = ItemStack {carry.item, 1, carry.damage}; // SURV-3: damage
-                                                        // follows the unit
+        cell.enchants = carry.enchants; // V2-12: enchants follow the unit
         carry.count -= 1;
         if (carry.count <= 0) {
             carry = ItemStack {};
         }
         return;
     }
-    if (cur.item == carry.item && cur.damage == carry.damage) {
-        // SURV-3: same-damage stacks only (the Inventory::add rule).
+    if (cur.item == carry.item && cur.damage == carry.damage &&
+        cur.enchants == carry.enchants) {
+        // SURV-3: same-damage stacks only; V2-12: same-enchant only (the
+        // Inventory::add rule).
         const int maxStack = items.at(cur.item).maxStack;
         if (cur.count < maxStack) {
-            cell = ItemStack {cur.item, cur.count + 1, cur.damage};
+            cell.count += 1; // keep cell.enchants (== carry's — merged)
             carry.count -= 1;
             if (carry.count <= 0) {
                 carry = ItemStack {};
@@ -113,13 +120,17 @@ void moveStackIntoOrder(ItemStack& src, Inventory& inv,
         const ItemStack& cell = inv.at(i);
         if (cell.empty()) {
             const int put = std::min(src.count, maxStack);
-            inv.setSlot(i, ItemStack {src.item, put, src.damage});
+            ItemStack moved {src.item, put, src.damage};
+            moved.enchants = src.enchants; // V2-12: the stack's enchants
+            inv.setSlot(i, std::move(moved));
             src.count -= put;
         } else if (cell.item == src.item && cell.damage == src.damage &&
+                   cell.enchants == src.enchants && // V2-12: same-enchant
                    cell.count < maxStack) {
             const int put = std::min(src.count, maxStack - cell.count);
-            inv.setSlot(i, ItemStack {cell.item, cell.count + put,
-                                      cell.damage});
+            ItemStack merged {cell.item, cell.count + put, cell.damage};
+            merged.enchants = cell.enchants; // V2-12: keep the cell's
+            inv.setSlot(i, std::move(merged));
             src.count -= put;
         }
     }
@@ -730,6 +741,213 @@ void FurnaceUI::doubleCollect(int slot) {
     // CRAFT-7: double-click collect (player inventory only — the
     // furnace slots are a separate Minecraft section, not collected).
     collectInventoryInto(m_inv, m_items, m_carry, slot);
+}
+
+// ---------------------------------------------------------------------------
+// V2-12: the enchanting panel layout + UI (the furnace panel's twin).
+// ---------------------------------------------------------------------------
+
+EnchantLayout EnchantLayout::compute(int windowWidth, int windowHeight) {
+    EnchantLayout out;
+    const int slot = InventoryLayout::kSlot;
+    const int gap = InventoryLayout::kGap;
+    const int pad = InventoryLayout::kPanelPadding;
+    const int titleH = InventoryLayout::kTitleHeight;
+    const int gridW = InventoryLayout::kColumns * slot +
+                      (InventoryLayout::kColumns - 1) * gap;
+    const int gridH = InventoryLayout::kGridRows * slot +
+                      (InventoryLayout::kGridRows - 1) * gap;
+    // The section: the item + lapis slots side by side (left) + the three
+    // offer rows (right column).
+    const int offerColH = 3 * kOfferRowHeight + 2 * gap;
+    const int sectionW = 2 * slot + gap + kOfferColumnGap + kOfferRowWidth;
+    const int sectionH = std::max(offerColH, slot);
+    const int nativePanelW = 2 * pad + gridW + InventoryLayout::kCraftGap +
+                             sectionW;
+    const int nativePanelH = 2 * pad + std::max(titleH + gridH, sectionH);
+
+    double s = 1.0;
+    if (windowWidth > 2 && windowWidth - 2 < nativePanelW) {
+        s = std::min(s,
+                     static_cast<double>(windowWidth - 2) / nativePanelW);
+    }
+    if (windowHeight > 2 && windowHeight - 2 < nativePanelH) {
+        s = std::min(s,
+                     static_cast<double>(windowHeight - 2) / nativePanelH);
+    }
+    out.scale = s;
+
+    const double slotLen = slot * s;
+    const double gapLen = gap * s;
+    const double padLen = pad * s;
+    const double titleLen = titleH * s;
+    const double gW = gridW * s;
+    const double gH = gridH * s;
+    const double secH = sectionH * s;
+    const double panelW = nativePanelW * s;
+    const double panelH = nativePanelH * s;
+    out.panel = UIRect {(windowWidth - static_cast<int>(std::lround(panelW))) / 2,
+                        (windowHeight - static_cast<int>(std::lround(panelH))) / 2,
+                        scaledLength(panelW), scaledLength(panelH)};
+
+    const double panelX = (windowWidth - panelW) / 2.0;
+    const double panelY = (windowHeight - panelH) / 2.0;
+    const double gridX = panelX + padLen;
+    const double gridY = panelY + padLen + titleLen;
+    out.title = UIRect {static_cast<int>(std::lround(gridX)),
+                        static_cast<int>(std::lround(panelY + padLen)),
+                        scaledLength(gW), scaledLength(titleLen)};
+
+    // The 36 inventory slots (the inventory screen's order).
+    for (int sl = 0; sl < Inventory::kTotalSize; ++sl) {
+        const int row =
+            (sl < Inventory::kHotbarSize)
+                ? InventoryLayout::kStorageRows
+                : (sl - Inventory::kHotbarSize) / InventoryLayout::kColumns;
+        const int col =
+            (sl < Inventory::kHotbarSize)
+                ? sl
+                : (sl - Inventory::kHotbarSize) % InventoryLayout::kColumns;
+        out.slots.push_back(UIRect {
+            static_cast<int>(std::lround(gridX + col * (slotLen + gapLen))),
+            static_cast<int>(std::lround(gridY + row * (slotLen + gapLen))),
+            scaledLength(slotLen), scaledLength(slotLen)});
+    }
+
+    // The section: vertically centered against the slot rows.
+    const double secX = gridX + gW + InventoryLayout::kCraftGap * s;
+    const double secY = gridY + (gH - secH) / 2.0;
+    // The item + lapis slots (vertically centered in the section).
+    const double slotY = secY + (secH - slotLen) / 2.0;
+    out.item = UIRect {static_cast<int>(std::lround(secX)),
+                       static_cast<int>(std::lround(slotY)),
+                       scaledLength(slotLen), scaledLength(slotLen)};
+    out.lapis = UIRect {static_cast<int>(std::lround(secX + slotLen + gapLen)),
+                        static_cast<int>(std::lround(slotY)),
+                        scaledLength(slotLen), scaledLength(slotLen)};
+    // The three offer rows (right column, top to bottom, centered).
+    const double offerX = secX + 2 * (slotLen + gapLen) +
+                          kOfferColumnGap * s;
+    const double offerRowH = kOfferRowHeight * s;
+    const double offerColHpx = 3 * offerRowH + 2 * gapLen;
+    const double offerY0 = secY + (secH - offerColHpx) / 2.0;
+    for (int r = 0; r < 3; ++r) {
+        out.offers[r] = UIRect {static_cast<int>(std::lround(offerX)),
+                                static_cast<int>(std::lround(
+                                    offerY0 + r * (offerRowH + gapLen))),
+                                scaledLength(kOfferRowWidth * s),
+                                scaledLength(offerRowH)};
+    }
+    return out;
+}
+
+int EnchantLayout::slotAt(int px, int py) const {
+    for (std::size_t i = 0; i < slots.size(); ++i) {
+        if (slots[i].contains(px, py)) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+int EnchantLayout::panelSlotAt(int px, int py) const {
+    if (item.contains(px, py)) {
+        return 0;
+    }
+    if (lapis.contains(px, py)) {
+        return 1;
+    }
+    for (int r = 0; r < 3; ++r) {
+        if (offers[r].contains(px, py)) {
+            return 2 + r;
+        }
+    }
+    return -1;
+}
+
+// -- the EnchantUI state machine --------------------------------------------
+
+void EnchantUI::leftClickCell(ItemStack& cell) {
+    cellLeftClick(cell, m_carry, m_items);
+}
+
+void EnchantUI::rightClickCell(ItemStack& cell) {
+    cellRightClick(cell, m_carry, m_items);
+}
+
+ItemStack& EnchantUI::cellAt(int panelSlot) {
+    // panelSlot 0=item, 1=lapis (the caller guarantees the range).
+    return panelSlot == 0 ? *m_itemSlot : *m_lapisSlot;
+}
+
+// The lapis slot's data-driven gate: only an `enchant_material` item may
+// occupy it (the core never hardcodes "lapis"). A placed non-material is
+// not accepted (the cell click is a no-op, the carry is kept — the
+// furnace input's smeltable-gate twin).
+bool EnchantUI::lapisAccepts(const ItemStack& stack) const {
+    if (stack.empty()) {
+        return true; // an empty placement (a pickup) is always allowed
+    }
+    return m_items.at(stack.item).enchantMaterial;
+}
+
+bool EnchantUI::leftClick(int slot, int panelSlot) {
+    if (panelSlot >= 0) {
+        const ItemStack before = *m_itemSlot;
+        if (panelSlot == 1 && !lapisAccepts(m_carry)) {
+            // A non-enchant-material in the hand cannot go to the lapis
+            // slot (the gate); the click is consumed, the carry is kept.
+            return false;
+        }
+        leftClickCell(cellAt(panelSlot));
+        if (panelSlot == 0 && *m_itemSlot != before) {
+            return true; // the item slot changed (the game re-rolls offers)
+        }
+        return false;
+    }
+    if (slot >= 0) {
+        leftClickCell(m_inv.at(slot));
+        return false;
+    }
+    m_carry = ItemStack {}; // click outside every slot: drop the stack
+    return false;
+}
+
+bool EnchantUI::rightClick(int slot, int panelSlot) {
+    if (panelSlot >= 0) {
+        const ItemStack before = *m_itemSlot;
+        if (panelSlot == 1 && !m_carry.empty() &&
+            !lapisAccepts(m_carry)) {
+            return false; // the gate (a non-material cannot enter the
+                          // lapis slot, even one-at-a-time)
+        }
+        rightClickCell(cellAt(panelSlot));
+        if (panelSlot == 0 && *m_itemSlot != before) {
+            return true;
+        }
+        return false;
+    }
+    if (slot >= 0) {
+        rightClickCell(m_inv.at(slot));
+        return false;
+    }
+    return false; // right click outside the slots does nothing
+}
+
+void EnchantUI::quickMove(int slot, int panelSlot) {
+    // CRAFT-7: shift-click — only a PANEL slot quick-moves (into the
+    // player inventory, storage first); a click on the player inventory is
+    // a no-op; a carried stack is never quick-moved.
+    if (slot >= 0 || panelSlot < 0 || carrying() || m_itemSlot == nullptr) {
+        return;
+    }
+    ItemStack& cell = cellAt(panelSlot);
+    if (panelSlot == 1 && !lapisAccepts(cell)) {
+        // (defensive: the lapis slot never holds a non-material)
+        return;
+    }
+    moveStackIntoOrder(cell, m_inv, m_items,
+                       inventorySlotOrder(m_inv, /*hotbarFirst=*/false));
 }
 
 } // namespace mc

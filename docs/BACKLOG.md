@@ -10,7 +10,7 @@
 > V3-N → V2-N 重编号）；细节立项时设计定案。**用户已授权按 V2-11
 > 起顺序推进**（11-03「继续推进原 3.x 转到 2.x 的 8 个任务」）。
 
-## v2.x 第二批任务矩阵（0/8 完成）
+## v2.x 第二批任务矩阵（2/8 完成）
 
 | 系统 | ① | ② | ③ | ④ | ⑤ | ⑥ | ⑦ |
 |---|---|---|---|---|---|---|---|
@@ -21,7 +21,7 @@
 | FLUID 流体 | | | | | | | |
 | ENT 实体/Mob/移动 | V2-14 新 mob 蝙蝠（飞行 AI） | V2-15 16 色染色羊 | | | | | |
 | SURV 生存/战斗/效果 | ~~V2-11 XP 系统~~ ✅ v2.12.0（门 183：经验球 1..9 无合并分裂 + 全整数 MC 曲线【等级派生不存储】+ 三发放源数据驱动【hostile 5/passive 2/mine coal 1 diamond 5 iron 0 gold 0/smelt 1 统一】+ format 26 三向键 + save.cpp PITS 361 潜在 bug 修复 + XP 条 HUD；base18 第 4 次重锚 179027 B） | V2-13 床（睡觉跳夜） | | | | | |
-| CRAFT 物品/合成/面板 | V2-12 附魔 | | | | | | |
+| CRAFT 物品/合成/面板 | ~~V2-12 附魔~~ ✅ v2.13.0（门 184：7 附魔数据驱动【锋利/保护/效率/耐久/力量/速度/无限，MC 精确区间+权重】+ 附魔台/书架 2 块 2 配方【lapis 代 book 偏离】+ 确定性 offer 全整式【种子 = world^hash3(台位)^ability^xpSeed，仅面板开时求值】+ XP 整级扣减余量保留 + format 27【xp_seed hex + enchants 三处，四拒】+ 面板 furnace 范式 + 字体 +4 字【锋利限魔】；结构免疫第 65 次免重锚） | | | | | |
 | SAVE 存档 | | | | | | | |
 | PRE 表现层 | V2-18 AO 环境光遮蔽 | | | | | | |
 | UX 实机报障/体验细化 | （开放：2.x 二批实机报障入此，V2-N 续编号 V2-20+） | ~~V2-19 视角/移动/时间显示批~~ ✅ v2.11.0（门 182：滚轮缩放【默认参数位级不变 + aimReach 联动】+ 双击 Space 飞行【1.6× 速 + 坠伤归零 + 水切出记档】+ 24h HUD 时钟【ramp 边精确对齐映射】；base18 第 3 次重锚 178676 B，全会话态零 format） | | | | | |
@@ -68,6 +68,33 @@
    二批收官 = v2.18.0 系统收官 tag + release，用户可推翻）。
 
 ## 变更记录（v2.x 第二批）
+
+- 2026-11-04：**V2-12 附魔系统完成（v2.13.0，门 184 全 PASS）**——
+  立项定案 = 真附魔台范式（消费三处替身记档：master_bow P82 / 弓强
+  化 P77-79 / 信标 P91）。7 附魔（assets/data/enchantments 数据驱
+  动严格解析）：锋利 axe +(L+1) 点 / 保护 armor +4L 点共享 20 cap /
+  效率 正确工具 +(1+L²) / 耐久 掷骰跳过（工具 L/(L+1)·护甲
+  2L/5(L+1) = MC 1.21 精确）/ 力量 bow +L 伤 / 速度 bow +L 弹速 /
+  无限 bow 不耗尽；物品 enchant_class+enchantability 严格互配（22
+  件，仅基础 bow）+ lapis enchant_material 门；确定性 offer（core/
+  enchanting 纯函数全整式：xpBase 三槽成本 + eCost randTri 整式 +
+  权重选择循环 = MC 精确；bookshelfCount 15 环双层 cap 15 无视线偏
+  离，仅面板开时求值 = 无输入零成本）；新块 附魔台（hardness 5 /
+  light 7 / interact "enchant" / full_cube 偏离）+ 书架；配方 ×2
+  （lapis 代 book 偏离）；tile 102→104；format 27（xp_seed 16-hex
+  无损恒写 + enchants 三处 omit-when-empty + 四拒）；XP 整级扣减余
+  量保留（T(30)=1395 → T(24)=828 实证）+ xpSeed 推进；面板
+  （furnace 范式：RMB 开 + carry 模型 + 3 offer 行 + 关归还 +
+  "craft" 音偏离）+ 字体 +4 字锋利限魔（atlas 2080→2112 顶 512 行
+  不变，kCjkGlyphs 427 码点序 re-cell）。2308/2308（+59）、banner
+  v2.13.0。门 184：S1 结构免疫第 65 次免重锚（≡ 锚 179027 B 逐字
+  节——atlas v-UV 亚 LSB 零像素差；fixer 中间态"需重锚"= 环境伪影）
+  + savenorm 恰 {format, xp_seed} / S2 面板 E2E（offer 种子确定 效率
+  I 6/III 9/IIII 17 + 附魔应用全断言 + 旧侧 format 26 形状互斥 +
+  面板开态 ×2 恒等）/ S3 / S6 12/12 点名 / 性能 A/B 同档（9/1/3 逐
+  位 + 16/16 36/36 + 预置台场景零成本）。PITS 378（AABB 重叠顶高 /
+  carry 模型 / xdotool --pid / savenorm 官方工具）。详见
+  docs/archive/phase-2.13.0.md。
 
 - 2026-11-04：**V2-11 XP 系统完成（v2.12.0，门 183 全 PASS）**——
   fixer 半成品（43 文件，11-03 中断取消入 stash）11-04 pop 零冲突

@@ -1,0 +1,8 @@
+{
+  "id": "protection",
+  "name": "保护",
+  "effect": "protection",
+  "classes": ["armor"],
+  "weight": 10,
+  "ecost": [[5, 12], [13, 20], [21, 28], [29, 37]]
+}

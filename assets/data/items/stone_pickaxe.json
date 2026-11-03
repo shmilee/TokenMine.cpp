@@ -1,5 +1,7 @@
 {
   "id": "stone_pickaxe",
+  "enchant_class": "pick",
+  "enchantability": 5,
   "type": "tool",
   "tool": {
     "break_speed": 3.0

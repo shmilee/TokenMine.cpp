@@ -34,6 +34,7 @@
 #include "core/camera.hpp"
 #include "core/config.hpp"
 #include "core/difficulty.hpp"
+#include "core/enchanting.hpp"
 #include "core/error.hpp"
 #include "core/fly.hpp"
 #include "core/food.hpp"
@@ -151,6 +152,7 @@ public:
         Inventory, // E: 2x2 grid + the shapeless recipe list
         Table,     // right-clicked crafting table: the 3x3 grid
         Furnace,   // Phase 40: right-clicked furnace: the smelting GUI
+        Enchant,   // V2-12: right-clicked enchanting table: the 3-offer GUI
     };
 
     // The camera mode (UX-3/UX-4, V2-1): the player's world-space body
@@ -366,8 +368,23 @@ private:
     };
     std::optional<MobHit> targetMob() const;
     void updateAttacking(double dt, MobEntity& mob);
-    // Melee damage of the selected item (data; bare hand = 1.0).
+    // Melee damage of the selected item (data; bare hand = 1.0). V2-12:
+    // includes the held SHARPNESS bonus (the (L+1) points).
     float selectedAttackDamage() const;
+    // V2-12 (protection): the armor protection BONUS points (4 * min(20,
+    // the sum of the protection levels over the four worn pieces) — 0 when
+    // no protection is worn). The game pushes this to the player each frame
+    // (setProtectionBonus); damage() adds it to the equipped points before
+    // the shared kArmorMaxPoints cap.
+    int armorProtectionPoints() const;
+    // V2-12 (unbreaking): apply `wear` to `stack`, respecting its unbreaking
+    // enchantment (the per-point skip roll — the state from the world seed,
+    // the stack's damage BEFORE this event, and the item id). Returns true
+    // exactly when the stack BROKE (the applyDurability result); false when
+    // the wear was fully skipped or the stack survived. The armor wear runs
+    // through Player::damage (which holds no registry — the pushed-level
+    // pattern), so this is for the TOOL / bow / igniter sites only.
+    bool wearItem(ItemStack& stack, float wear);
     // Bow launching (Phase 21, charge + ammo Phase 24): the selected
     // item's launch data (data 'shoot_speed' / 'shoot_damage'; 0 = the
     // selected item is not a launcher). While a launcher is selected the
@@ -804,6 +821,27 @@ private:
     // The grid of the table block at `pos` (default-constructs one when
     // absent — defensive: the setBlock invariant makes that unreachable).
     CraftingGrid& tableAt(const BlockPos& pos);
+    // V2-12: opens the enchanting panel for the block at `pos` — clears the
+    // session item/lapis slots, re-rolls the (empty) offers, binds the UI.
+    // The openTablePanel twin (the session-state variant: no per-block
+    // state — the offers are derived on demand).
+    void openEnchantPanel(const BlockPos& pos);
+    // V2-12: re-derives the panel's offers from the CURRENT item slot (the
+    // deterministic roll — bookshelfCount around the table + the item's
+    // class/enchantability + the player's xpSeed). Called on open and after
+    // any item-slot change. An empty item slot clears the offers.
+    void regenEnchantOffers();
+    // V2-12: applies the offer at `row` (0..2) to the item slot when the
+    // four gates pass (item has a class + not yet enchanted + level >=
+    // xpCost + lapis >= lapisCost): sets the enchants, deducts the whole
+    // XP levels (the remainder kept), deducts the lapis, advances the
+    // xpSeed, plays "craft", and clears the offers. Returns true when
+    // applied (the game's click routing uses the cue for nothing else —
+    // the sound is played here).
+    bool applyEnchantOffer(int row);
+    // V2-12: return one enchant panel slot's stack to the inventory (a full
+    // inventory drops it at the player's feet). The closePanel cleanup.
+    void returnEnchantSlot(ItemStack& stack);
     // Phase 71: the right-click campfire cooking interaction (the
     // kInteractCampfire branch of the right-click chain): a selected
     // smeltable item places one unit on an EMPTY slot (consumed from the
@@ -1388,6 +1426,11 @@ private:
     Inventory m_inventory;
     std::size_t m_selectedSlot = 0;
     RecipeRegistry m_recipes;
+    // V2-12 (format 27): the enchantment registry (loaded from assets/data/
+    // enchantments/*.json at init — the ItemRegistry / RecipeRegistry
+    // pattern). The offer roll, the panel, and the save cross-check read
+    // it; the content is static after load.
+    EnchantmentRegistry m_enchants;
 
     // Phase 15 UI: unlit screen-space shader + the generated font/crack
     // textures, the 2D icons of the explicit items (indexed by ItemID
@@ -1463,11 +1506,23 @@ private:
         // state).
         BlockPos openFurnacePos {};
         FurnaceUI furnaceUi;
+        // V2-12 enchanting panel: openEnchantPos is valid while
+        // openPanel == OpenPanel::Enchant. The item / lapis slots are
+        // SESSION state (not per-block — the offers are rolled on demand
+        // and the slots are returned to the inventory on close), and the
+        // offers are re-derived when the item slot changes. The UI is
+        // bound to the two slots on open.
+        BlockPos openEnchantPos {};
+        ItemStack enchantItemSlot;
+        ItemStack enchantLapisSlot;
+        EnchantOffers enchantOffers;
+        EnchantUI enchantUi;
         PanelState(Inventory& inventory, const ItemRegistry& items,
                    const RecipeRegistry& recipes)
             : inventoryUi(inventory, items, recipes),
               tableUi(inventory, items, recipes),
-              furnaceUi(inventory, items) {}
+              furnaceUi(inventory, items),
+              enchantUi(inventory, items) {}
     };
     PanelState m_panel {m_inventory, m_items, m_recipes};
     bool panelOpen() const {

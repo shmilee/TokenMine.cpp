@@ -279,15 +279,49 @@ Json stripTutorialSeries(const Json& root) {
 // When a test downgrades the format of a serialized (format-26) save,
 // both must be stripped, or the per-format field whitelists reject them
 // as version lies (the stripTutorialSeries / downgradeSlots twins).
+// Strip the per-stack "enchants" key (V2-12, format 27) from an object
+// entry (a slot / armor-object / item-entity), when present.
+Json stripEnchants(const Json& e) {
+    if (e.isObject() && e.find("enchants") != nullptr) {
+        return withoutKey(e, "enchants");
+    }
+    return e;
+}
+
 Json stripXp(const Json& root) {
     Json out = root;
-    // The player.xp key.
+    // The player.xp + player.xp_seed keys (the latter is V2-12, format 27).
     if (const Json* player = root.find("player")) {
-        if (player->isObject() && player->find("xp") != nullptr) {
-            out["player"] = withoutKey(*player, "xp");
+        if (player->isObject() &&
+            (player->find("xp") != nullptr ||
+             player->find("xp_seed") != nullptr)) {
+            Json p = *player;
+            if (player->find("xp") != nullptr) {
+                p = withoutKey(*player, "xp");
+            }
+            if (player->find("xp_seed") != nullptr) {
+                p = withoutKey(p, "xp_seed");
+            }
+            out["player"] = std::move(p);
         }
     }
-    // The type-"xp" entities (the item entities stay).
+    // The inventory slots' "enchants" (V2-12, format 27).
+    if (const Json* inv = root.find("inventory")) {
+        if (inv->isObject()) {
+            const Json* slots = inv->find("slots");
+            if (slots != nullptr && slots->isArray()) {
+                Json kept = Json::array();
+                for (std::size_t i = 0; i < slots->size(); ++i) {
+                    kept.push_back(stripEnchants(slots->at(i)));
+                }
+                Json invCopy = *inv;
+                invCopy["slots"] = std::move(kept);
+                out["inventory"] = std::move(invCopy);
+            }
+        }
+    }
+    // The type-"xp" entities (the item entities stay) + the item entities'
+    // "enchants" (V2-12, format 27).
     if (const Json* ents = root.find("entities")) {
         if (ents->isArray()) {
             Json kept = Json::array();
@@ -300,7 +334,7 @@ Json stripXp(const Json& root) {
                         continue; // drop the xp-kind entity
                     }
                 }
-                kept.push_back(e);
+                kept.push_back(stripEnchants(e));
             }
             out["entities"] = std::move(kept);
         }
@@ -418,7 +452,7 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     // UX-8f/V2-3/V2-11: writes are always format 26 (V2-3 was 25).
-    EXPECT_EQ(j->find("format")->asInt(), 26);
+    EXPECT_EQ(j->find("format")->asInt(), 27);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -1535,7 +1569,7 @@ TEST(SaveRoundTripTest, StatesRoundTrip) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     // UX-8f/V2-3/V2-11: writes are always format 26 (V2-3 was 25).
-    EXPECT_EQ(j->find("format")->asInt(), 26);
+    EXPECT_EQ(j->find("format")->asInt(), 27);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->states.size(), 1u);
@@ -1825,7 +1859,7 @@ TEST(SaveRoundTripTest, FurnacesRoundTrip) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     // UX-8f/V2-3/V2-11: writes are always format 26 (V2-3 was 25).
-    EXPECT_EQ(j->find("format")->asInt(), 26);
+    EXPECT_EQ(j->find("format")->asInt(), 27);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
@@ -2222,7 +2256,7 @@ TEST(SaveRoundTripTest, FiresRoundTrip) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     // UX-8f/V2-3/V2-11: writes are always format 26 (V2-3 was 25).
-    EXPECT_EQ(j->find("format")->asInt(), 26);
+    EXPECT_EQ(j->find("format")->asInt(), 27);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->fires.size(), 2u);
@@ -2434,10 +2468,12 @@ TEST(SaveFormat8Test, FormatSevenFileWithoutEffectsLoads) {
     root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 7 still carried the global table grid
     root["fluids"] = downgradeFluids(root); // pre-Phase-51 shape
     // The player rebuild comes from the ORIGINAL serialization (which
-    // would re-add every format-26+ key): strip xp at the source (V2-11)
-    // — the same reason the stats comment below calls out the rebuild.
-    root["player"] = withoutKey(withoutKey(*j->find("player"), "xp"),
-                                "effects");
+    // would re-add every format-26+ key): strip xp at the source (V2-11) +
+    // xp_seed (V2-12) — the same reason the stats comment below calls out
+    // the rebuild.
+    root["player"] = withoutKey(
+        withoutKey(withoutKey(*j->find("player"), "xp"), "xp_seed"),
+        "effects");
     root["player"] = withoutKey(root["player"], "absorption"); // format 7 predates the absorption pool
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: format below 17 predates the player's oxygen
@@ -2822,7 +2858,7 @@ TEST(SaveRoundTripTest, TablesRoundTrip) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     // UX-8f/V2-3/V2-11: writes are always format 26 (V2-3 was 25).
-    EXPECT_EQ(j->find("format")->asInt(), 26);
+    EXPECT_EQ(j->find("format")->asInt(), 27);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->tables.size(), 2u);
@@ -3134,7 +3170,7 @@ TEST(SaveFormat20Test, EffectTierRoundTrips) {
     s.playerEffects.push_back(SavedEffect {"resistance", 30.0, 1});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 26);
+    EXPECT_EQ(j->find("format")->asInt(), 27);
     const Json& entry = (*j)["player"]["effects"].at(0);
     ASSERT_NE(entry.find("tier"), nullptr);
     EXPECT_EQ(entry.find("tier")->asInt(), 1);
@@ -3299,7 +3335,7 @@ TEST(SaveFormat21Test, StatsRoundTrips) {
     s.playerStats["kill.zombie"] = 5;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 26);
+    EXPECT_EQ(j->find("format")->asInt(), 27);
     const Json& st = (*j)["player"]["stats"];
     ASSERT_TRUE(st.isObject());
     ASSERT_NE(st.find("deathCount"), nullptr);
@@ -3398,7 +3434,7 @@ TEST(SaveFormat22Test, VelocityRoundTrips) {
     s.playerVelocity = Vec3 {2.5f, -3.75f, 0.125f};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 26);
+    EXPECT_EQ(j->find("format")->asInt(), 27);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerVelocity.x, 2.5f);
@@ -3658,7 +3694,7 @@ TEST(SaveFormat24Test, FullBackpackRoundTrips) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     // UX-8f/V2-3/V2-11: writes are always format 26 (V2-3 was 25), 36 entries.
-    EXPECT_EQ(j->find("format")->asInt(), 26);
+    EXPECT_EQ(j->find("format")->asInt(), 27);
     const Json& slots = *j->find("inventory")->find("slots");
     ASSERT_TRUE(slots.isArray());
     EXPECT_EQ(slots.size(),

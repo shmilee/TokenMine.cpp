@@ -9,6 +9,48 @@
 > README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本 /
 > v2.10.0 第一批收官 tag / v2.18.0 二批收官 tag）。
 
+## v2.13.0（2026-11-04）— V2-12 附魔系统（7 附魔 + 附魔台/书架 + 确定性 offer + format 27）（门 184 全 PASS）
+
+二批 CRAFT 行（立项定案 = **真附魔台范式**，消费三处「附魔台替身」
+记档：master_bow P82 / 弓强化 P77-79 / 信标 P91）；MC 现代数值
+11-04 wiki 核定入稿：
+**7 附魔**（assets/data/enchantments 数据驱动，严格解析点名）——
+锋利 axe（近战 +(L+1) 点，MC 精确区间）/ 保护 armor（+4L 护甲点，
+共享 20 点 cap 偏离）/ 效率 pick·shovel·axe（正确工具 +（1+L²）挖
+速，MC 精确）/ 耐久 全 durability（每损点掷骰跳过：工具 L/(L+1) /
+护甲 2L/5(L+1) = MC 1.21 remove_binomial 精确，无帧依赖确定）/ 力量
+bow（shoot_damage +L）/ 速度 bow（shoot_speed +L，Quick Charge 蓄
+力 = 弹速范式偏离）/ 无限 bow（发射不耗尽最后一支，∨ 字段）。
+物品侧 enchant_class + enchantability 严格互配（12 工具 15/5/14 +
+9 护甲 15/9/10 + bow 1；仅基础 bow，变体弓保持替身）+ lapis
+enchant_material 门。**确定性 offer**（core/enchanting 纯函数全整
+式禁 double）：种子 = worldSeed^hash3(台位)^enchantability^xpSeed；
+xpBase/三槽成本/lapis 1-3/eCost 含 randTri 整式/选择循环（权重 +
+区间取最高级 + incompatible 移除 + v%(eCost+150) 继续判定）= MC
+精确；bookshelfCount 15 环×双层 cap 15（无视线偏离），**仅面板开
+时求值**。**新块 ×2**（附魔台 hardness 5/light 7/interact
+"enchant"/恒掉自身偏离/full_cube 偏离 + 书架）+ **配方 ×2**（lapis
+代 book 偏离）+ tile 102→104 零移位。**format 27**：player.xp_seed
+16-hex 串恒写（64-bit 无损偏离；26 迁移 = worldSeed^init）+ 物品
+enchants 三处（omit-when-empty）+ 四拒（26 携 xp_seed / 26 携
+enchants / 27 缺 xp_seed / 交叉校验 level>max·类不兼容·未知 id）。
+**面板**（furnace 范式全克隆）：RMB 开 + pick-and-place carry + 3
+offer 行「名 罗马 成本」+ 青金石槽门 + 关归还 + "craft" 音（偏离）
++ 字体 +4 字 锋利限**魔**（首交漏标题字「魔」门内补；atlas
+256×2080→2112，顶 512 行逐字节不变；kCjkGlyphs 423→427 码点序
+re-cell）。2308/2308（+59）、banner v2.13.0。门 184：S1 **结构免
+疫第 65 次免重锚**（新侧 ×2 ≡ 现锚 179027 B 逐字节——atlas 高度
+v-UV 亚 LSB 位移零像素差实证；fixer 中间态"需重锚"= 环境伪影复证
+作废 + savenorm 恰 {format, xp_seed}）/ S2 面板输入 E2E（场景 B=8
++ xp T(30)：RMB 开 → 拾斧放槽【offer 效率 I 6/III 9/IIII 17 种子
+确定】→ 青金石 → 点 offer → 取回 → 终档 **斧 {效率:1} + xp
+1395→828 = T(24) 恰扣 6 整级余量保留 + seed 推进 + lapis 10→9**；
+旧侧 format 26 无 enchants/xp_seed 形状互斥；面板开态 ×2 逐字节恒
+等）/ S3 / S6 12/12 点名 / 性能 A/B 同档（9/1/3 逐位 + 16/16 36/36
+恒等 + 预置台场景零成本）。PITS 378（场景块 AABB 重叠顶高 / 面板
+carry 模型 / xdotool --pid / savenorm 官方工具）。详见
+docs/archive/phase-2.13.0.md。
+
 ## v2.12.0（2026-11-04）— V2-11 XP 系统（经验球 + 等级曲线 + 三发放源 + format 26）（门 183 全 PASS）
 
 第二批 SURV 行首项（实现源 = fixer 43 文件半成品 11-03 中断取消 →
@@ -83,5 +125,5 @@ PERF-WIN 全指标同档——时钟 +1 文本 draw 成本不可测）。门协�
 PASS 源）。详见 docs/archive/phase-2.11.0.md。
 
 ## v2.x 第二批（V2-11~V2-18，进行中）
-（V2-12 附魔起，逐版条目入此。）
+（V2-13 床起，逐版条目入此。）
 

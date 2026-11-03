@@ -258,6 +258,25 @@ public:
     void setDamageReduction(float r) {
         m_damageReduction = std::clamp(r, 0.0f, 1.0f);
     }
+    // V2-12 (protection): the armor PROTECTION bonus points the game pushes
+    // each frame (4 * min(20, the sum of the protection levels over the
+    // four worn pieces — 0 when no protection is worn). damage() adds it to
+    // the equipped points before the kArmorMaxPoints cap, so the shared
+    // 20-point cap (hence the 80% max reduction) is preserved. 0 = the
+    // pre-V2-12 bit-identical path (no protection worn).
+    void setProtectionBonus(int p) { m_protBonus = p > 0 ? p : 0; }
+    int protectionBonus() const { return m_protBonus; }
+    // V2-12 (unbreaking): the world seed (set once at init — the world is
+    // static after generation) + the per-slot unbreaking level of the worn
+    // pieces (pushed by the game each frame, the protBonus pattern) — the
+    // inputs to the damage() armor-wear skip roll.
+    void setWorldSeed(std::uint64_t s) { m_worldSeed = s; }
+    void setArmorUnbreaking(int slot, int level) {
+        if (slot >= 0 && slot < kArmorSlotCount) {
+            m_armorUnbreaking[static_cast<std::size_t>(slot)] =
+                level > 0 ? level : 0;
+        }
+    }
     bool isCrouching() const { return m_crouching; }
     double timeSinceDamage() const { return m_timeSinceDamage; }
     // Fluid immersion (Phase 54 tick state, exposed in Phase 57 for the
@@ -341,6 +360,17 @@ public:
     // Restore the pool (save load / tests): clamped to >= 0 (a corrupt
     // negative reads as fresh — the curve's total < 0 clamp twin).
     void setXpTotal(int total) { m_xpTotal = std::max(0, total); }
+
+    // -- XP seed (V2-12, format 27) ----------------------------------------
+    // The enchanting offer roll's XP decorrelation seed (the modern
+    // Minecraft XpSeed): a fresh world's seed is worldSeed ^ kXpSeedInit
+    // (deterministic), and every SUCCESSFUL enchant advances it (core/
+    // enchanting.hpp's xpSeedStep — the PITS #4 step-then-mix) so the next
+    // panel-open roll differs. The game owns every change (init's fresh
+    // seed, the panel's apply advance, the save load's restore); it is
+    // saved as player.xp_seed (format 27, always written).
+    std::uint64_t xpSeed() const { return m_xpSeed; }
+    void setXpSeed(std::uint64_t s) { m_xpSeed = s; }
 
     // -- armor (SURV-1) ------------------------------------------------------
     // The four equipment slots (the kArmorSlotNames order: 0 = head,
@@ -497,6 +527,16 @@ private:
     // (set by the game each frame from the active effects).
     float m_speedMultiplier = 1.0f;
     float m_damageReduction = 0.0f;
+    // V2-12 (protection): the armor protection bonus points (set by the
+    // game each frame from the worn pieces' protection enchants; 0 = none).
+    int m_protBonus = 0;
+    // V2-12 (unbreaking): the world seed (set once at init — the world is
+    // static after generation) + the per-slot unbreaking LEVEL of the worn
+    // pieces (pushed by the game each frame, the protBonus pattern). The
+    // damage() armor-wear step uses these to run the unbreaking skip roll
+    // (the player holds no EnchantmentRegistry / World, the points pattern).
+    std::uint64_t m_worldSeed = 0;
+    std::array<int, kArmorSlotCount> m_armorUnbreaking {};
     double m_timeSinceDamage = 0.0;
     double m_regenAccum = 0.0;
     bool m_wasOnGround = false;
@@ -512,6 +552,10 @@ private:
     // XP (V2-11): the total experience pool (0 = a fresh player — the
     // level 0 the HUD always shows its bar + "0" for).
     int m_xpTotal = 0;
+    // XP seed (V2-12, format 27): the enchanting offer roll's decorrelation
+    // seed (see xpSeed() above). 0 until the game's init / save-load sets
+    // it (a fresh world = worldSeed ^ kXpSeedInit).
+    std::uint64_t m_xpSeed = 0;
     // Lava burn (Phase 54): the real-dt accumulator for the pending burn
     // tick (only runs while the AABB overlaps a lava cell; leaving the
     // lava resets it — no lingering fire in v1).

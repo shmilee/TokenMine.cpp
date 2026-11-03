@@ -1,5 +1,7 @@
 {
   "id": "bow",
+  "enchant_class": "bow",
+  "enchantability": 1,
   "type": "material",
   "max_stack": 1,
   "icon": "bow",

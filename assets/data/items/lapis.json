@@ -1,5 +1,6 @@
 {
  "id": "lapis",
+ "enchant_material": true,
  "type": "material",
  "max_stack": 64,
  "icon": "lapis",

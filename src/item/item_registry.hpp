@@ -190,6 +190,19 @@ private:
     // existence are cross-checked at game init (checkRepairMaterials —
     // the material may be defined in a later file, the ammo pattern).
     static Result<void> parseRepair(const Json& def, Item& out);
+    // Parse the optional V2-12 ENCHANT fields into `out`:
+    //   'enchant_class'    — a strict vocabulary name (sword / axe / pick /
+    //                         shovel / armor / bow / hoe);
+    //   'enchantability'   — an int >= 0 (the offer-roll's seed input);
+    //   'enchant_material' — a strict bool (default false; only a type
+    //                        "material" may carry it, the lapis gate).
+    // 'enchant_class' and 'enchantability' are a STRICT pair (the design's
+    // class<->ability mutual-exclusion: one without the other is rejected
+    // and named, the armor_slot pair precedent). 'enchant_material' is
+    // independent (a material flag, not a pair). Runs after parseArmor in
+    // the flow (the armor piece's enchant_class "armor" is legal on a
+    // material; the pairing check only needs its own two fields).
+    static Result<void> parseEnchant(const Json& def, bool isTool, Item& out);
     // Parse the optional 'model' section (CRAFT-2, the per-item 3D
     // model) into `out`: a strict object with 'texture' (a non-empty
     // file name under assets/textures/items/ — the existence is

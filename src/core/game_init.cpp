@@ -405,6 +405,11 @@ Result<void> Game::buildScene() {
     MC_TRY(m_items.buildBlockItems(m_blocks));
     auto itemsLoad = m_items.loadDirectory(m_assets, "data/items");
     MC_TRY(itemsLoad);
+    // V2-12 (format 27): the enchantment registry (the 7 data-driven
+    // enchantments — the offer roll, the panel and the save cross-check
+    // read it; loaded after the items so the class vocabulary is stable).
+    auto enchantsLoad = m_enchants.loadDirectory(m_assets, "data/enchantments");
+    MC_TRY(enchantsLoad);
     // Strict data check: a block's drops must name a registered item whose
     // max stack fits dropsCount (block items cover the usual case, e.g.
     // grass -> wheat_1 seed; ores drop material items, e.g.
@@ -1557,6 +1562,13 @@ Result<void> Game::buildScene() {
     // Minecraft semantics; there are no beds in v1).
     m_mobs.spawnPoint = spawnPos;
     m_player.emplace(m_world, m_blocks, spawnPos, *playerParams);
+    // V2-12 (format 27): the FRESH-world xp seed (worldSeed ^ kXpSeedInit —
+    // deterministic). A loaded save REPLACES it in applySave (the saved
+    // value, or the same migration for a pre-27 file), so this only
+    // affects new worlds. The world seed (static after generation) is also
+    // handed to the player for the unbreaking wear-roll state.
+    m_player->setXpSeed(xpSeedInit(static_cast<std::uint64_t>(seed)));
+    m_player->setWorldSeed(static_cast<std::uint64_t>(seed));
     m_player->pitch = -0.25f; // look slightly down at the landscape
     m_camera.position = m_player->eyePosition();
     m_camera.yaw = m_player->yaw;

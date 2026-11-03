@@ -1,0 +1,18 @@
+{
+    "id": "enchanting_table",
+    "properties": {
+        "hardness": 5,
+        "sound_material": "stone",
+        "light_emission": 7,
+        "drops": "enchanting_table",
+        "interact": "enchant"
+    },
+    "model": {
+        "shape": "full_cube",
+        "textures": {
+            "top": "enchanting_table",
+            "side": "enchanting_table",
+            "bottom": "enchanting_table"
+        }
+    }
+}

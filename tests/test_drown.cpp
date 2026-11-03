@@ -424,7 +424,7 @@ TEST(DrownSaveTest, Format16RejectsTheOxygenKey) {
     {
         Json root = *j;
         root["format"] = Json(16); // the "oxygen" key stays -> rejected
-        root["player"] = withoutKey(root["player"], "xp"); // V2-11: the xp key is format-26 vocabulary
+        root["player"] = withoutKey(withoutKey(root["player"], "xp"), "xp_seed"); // V2-11: the xp key is format-26 vocabulary
         root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
         root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the oxygen lie is the rejection under test
         root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
@@ -441,7 +441,7 @@ TEST(DrownSaveTest, Format16RejectsTheOxygenKey) {
     {
         Json root = *j;
         root["format"] = Json(16);
-        root["player"] = withoutKey(root["player"], "xp"); // V2-11: the xp key is format-26 vocabulary
+        root["player"] = withoutKey(withoutKey(root["player"], "xp"), "xp_seed"); // V2-11: the xp key is format-26 vocabulary
         root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
         root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
         root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
@@ -466,7 +466,7 @@ TEST(DrownSaveTest, Format15MigratesFullAir) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
     root["format"] = Json(15);
-    root["player"] = withoutKey(root["player"], "xp"); // V2-11: the xp key is format-26 vocabulary
+    root["player"] = withoutKey(withoutKey(root["player"], "xp"), "xp_seed"); // V2-11: the xp key is format-26 vocabulary
     root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22

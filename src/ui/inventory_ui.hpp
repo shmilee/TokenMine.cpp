@@ -235,6 +235,77 @@ private:
     ItemStack m_carry;
 };
 
+// V2-12: the enchanting panel — the smelting-GUI twin (the furnace panel's
+// layout pattern): the 36 inventory slots + a section with the ITEM slot
+// (left), the LAPIS slot (top-middle, the enchant_material gate) and the
+// THREE offer rows (right — "name roman xpCost"). No per-block persistence
+// (the offers are rolled on demand, the item/lapis slots are session state
+// returned to the inventory on close — the documented deviation from the
+// furnace's per-block states).
+struct EnchantLayout {
+    // The offer row metrics (native): each row shows the first enchant's
+    // name + roman level + the xp cost.
+    static constexpr int kOfferRowHeight = 40;
+    static constexpr int kOfferRowWidth = 170;
+    static constexpr int kOfferColumnGap = 12;
+
+    double scale = 1.0;
+    std::vector<UIRect> slots; // 36 rects in slot-index order (0..35)
+    UIRect panel;
+    UIRect title;
+    UIRect item; // the item slot (left)
+    UIRect lapis; // the lapis slot (top-middle)
+    UIRect offers[3]; // the three offer rows (right column, top to bottom)
+
+    static EnchantLayout compute(int windowWidth, int windowHeight);
+    int slotAt(int px, int py) const; // slot index or -1
+    // 0=item, 1=lapis, 2..4=offer rows 0..1..2, -1=none (the hit tests are
+    // disjoint: at most one is active).
+    int panelSlotAt(int px, int py) const;
+};
+
+// V2-12: the pick-and-place state machine over the player inventory + the
+// enchant panel's TWO slots (item, lapis) — the FurnaceUI cell semantics
+// (the shared cellLeftClick / cellRightClick). The offer ROWS are NOT part
+// of this state machine: the game handles them (the apply needs the
+// player's XP + the xpSeed + the sound). The lapis slot accepts only
+// `enchant_material` items (the data-driven gate, the item's flag).
+class EnchantUI {
+public:
+    EnchantUI(Inventory& inventory, const ItemRegistry& items)
+        : m_inv(inventory), m_items(items) {}
+
+    // Bind the two panel slots this operates on (the game's session state,
+    // cleared on open, returned on close).
+    void bind(ItemStack& itemSlot, ItemStack& lapisSlot) {
+        m_itemSlot = &itemSlot;
+        m_lapisSlot = &lapisSlot;
+    }
+
+    // slot: 0..35 or -1; panelSlot: 0=item, 1=lapis, -1 (the layout hit
+    // tests are disjoint: at most one is active). Returns true when the
+    // ITEM slot's item CHANGED (the game re-rolls the offers on that cue).
+    bool leftClick(int slot, int panelSlot);
+    bool rightClick(int slot, int panelSlot);
+    void quickMove(int slot, int panelSlot);
+
+    const ItemStack& carry() const { return m_carry; }
+    bool carrying() const { return !m_carry.empty(); }
+
+private:
+    void leftClickCell(ItemStack& cell);
+    void rightClickCell(ItemStack& cell);
+    ItemStack& cellAt(int panelSlot);
+    // The lapis slot's data-driven gate (an empty placement or an
+    // `enchant_material` item is accepted).
+    bool lapisAccepts(const ItemStack& stack) const;
+    Inventory& m_inv;
+    const ItemRegistry& m_items;
+    ItemStack* m_itemSlot = nullptr;
+    ItemStack* m_lapisSlot = nullptr;
+    ItemStack m_carry;
+};
+
 // The pick-and-place + craft state machine over one inventory and ONE
 // crafting grid (see the file header for the click semantics). The
 // caller routes clicks through the layout (slot index, grid slot, output

@@ -1,5 +1,7 @@
 {
  "id": "diamond_helmet",
+ "enchant_class": "armor",
+ "enchantability": 10,
  "type": "material",
  "max_stack": 1,
  "icon": "diamond_helmet",

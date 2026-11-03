@@ -1,0 +1,7 @@
+{
+  "id": "bookshelf",
+  "type": "shaped",
+  "output": { "item": "bookshelf", "count": 1 },
+  "pattern": ["PPP", "LLL", "PPP"],
+  "key": { "P": "planks", "L": "lapis" }
+}

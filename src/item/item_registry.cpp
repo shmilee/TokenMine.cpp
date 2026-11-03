@@ -654,6 +654,59 @@ Result<void> ItemRegistry::parseRepair(const Json& def, Item& out) {
     return {};
 }
 
+Result<void> ItemRegistry::parseEnchant(const Json& def, bool isTool,
+                                        Item& out) {
+    // V2-12: the optional ENCHANT fields (see the header for the rules).
+    const Json* cls = def.find("enchant_class");
+    const Json* ab = def.find("enchantability");
+    const Json* mat = def.find("enchant_material");
+    // 'enchant_material' is independent (a material-only flag).
+    if (mat != nullptr) {
+        if (!mat->isBool()) {
+            return MC_FAIL("'enchant_material' must be a boolean");
+        }
+        out.enchantMaterial = mat->asBool();
+        if (isTool) {
+            return MC_FAIL("'enchant_material' is only valid for type "
+                           "\"material\" (a tool is not an enchant "
+                           "material)");
+        }
+    }
+    // 'enchant_class' + 'enchantability' are a STRICT pair (the design's
+    // class<->ability mutual exclusion: one without the other is a typo).
+    if (cls != nullptr || ab != nullptr) {
+        if (cls == nullptr || ab == nullptr) {
+            return MC_FAIL("'enchant_class' and 'enchantability' are a "
+                           "strict pair (both are required when either is "
+                           "present)");
+        }
+        if (!cls->isString() || cls->asString().empty()) {
+            return MC_FAIL("'enchant_class' must be a non-empty vocabulary "
+                           "name (sword / axe / pick / shovel / armor / bow "
+                           "/ hoe)");
+        }
+        const int ci = enchantClassFromName(cls->asString());
+        if (ci < 0) {
+            return MC_FAIL("'enchant_class' is an unknown class '" +
+                           cls->asString() +
+                           "' (vocabulary: sword, axe, pick, shovel, armor, "
+                           "bow, hoe)");
+        }
+        if (!ab->isNumber() || ab->asDouble() < 0.0 ||
+            ab->asDouble() != std::floor(ab->asDouble())) {
+            return MC_FAIL("'enchantability' must be a whole number >= 0");
+        }
+        out.enchantClass = static_cast<EnchantClass>(ci);
+        out.enchantability = static_cast<int>(ab->asDouble());
+        // An armor piece is a MATERIAL (parseArmor enforces it); a tool's
+        // class must be a tool class (sword / axe / pick / shovel / hoe).
+        // The data may use any class for either type — the ONLY hard
+        // constraint is the class<->ability pairing above (the design
+        // leaves the type cross-check to the data, like armor's).
+    }
+    return {};
+}
+
 namespace {
 // One from/to corner of a model box: an array of 3 numbers in [0, 1].
 // `what` is the quoted path for error messages (e.g.
@@ -1021,6 +1074,9 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
             key != "armor_points" &&
             key != "durability" &&
             key != "repair_with" &&
+            key != "enchant_class" &&
+            key != "enchantability" &&
+            key != "enchant_material" &&
             key != "model" &&
             key != "icon") {
             MC_LOG_WARN("Item '" + name + "': unknown field '" + key +
@@ -1073,6 +1129,12 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
                                 // parse only — the pairing + existence
                                 // cross-checks run at game init, the ammo
                                 // pattern)
+    MC_TRY(r);
+    r = parseEnchant(def, isTool, item); // V2-12: the enchant class/ability
+                                         // pair + the material flag (strict
+                                         // parse only — the class vocabulary
+                                         // is checked here, the data is
+                                         // closed: no game-init cross-check)
     MC_TRY(r);
     r = parseModel(def, item); // CRAFT-2: pure rendering data (no right-
                                // click channel, no exclusivity); the

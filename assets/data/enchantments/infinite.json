@@ -1,0 +1,8 @@
+{
+  "id": "infinite",
+  "name": "无限",
+  "effect": "infinite",
+  "classes": ["bow"],
+  "weight": 1,
+  "ecost": [[20, 50]]
+}

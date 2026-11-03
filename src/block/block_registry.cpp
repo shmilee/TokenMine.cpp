@@ -119,6 +119,12 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "beacon_base", "boolean",
                    [&](const Json& v) { out.beaconBase = v.asBool(); });
     MC_TRY(r);
+    // V2-12: the enchant-bookshelf flag (a pure data flag, the beacon_base
+    // twin — the core's bookshelfCount reads the property, never a block
+    // id; hard rule 3).
+    r = checkField(*p, "enchant_bookshelf", "boolean",
+                   [&](const Json& v) { out.enchantBookshelf = v.asBool(); });
+    MC_TRY(r);
     r = checkField(*p, "fluid", "string",
                    [&](const Json& v) { out.fluidName = v.asString(); });
     MC_TRY(r);
@@ -582,12 +588,14 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     }
     if (!out.interact.empty() && out.interact != kInteractCraftingTable &&
         out.interact != kInteractFurnace &&
-        out.interact != kInteractCampfire) {
+        out.interact != kInteractCampfire &&
+        out.interact != kInteractEnchant) {
         return MC_FAIL("block property 'interact' is unsupported: '" +
                        out.interact + "' (only '" +
                        std::string(kInteractCraftingTable) + "', '" +
-                       std::string(kInteractFurnace) + "' and '" +
-                       std::string(kInteractCampfire) + "' exist)");
+                       std::string(kInteractFurnace) + "', '" +
+                       std::string(kInteractCampfire) + "' and '" +
+                       std::string(kInteractEnchant) + "' exist)");
     }
     // Dye family (Phase 41): both fields are optional; an EXPLICIT empty
     // string is a typo (ABSENT is the "not dyeable" default — the ammo

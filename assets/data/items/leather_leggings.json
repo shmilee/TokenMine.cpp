@@ -1,5 +1,7 @@
 {
  "id": "leather_leggings",
+ "enchant_class": "armor",
+ "enchantability": 15,
  "type": "material",
  "max_stack": 1,
  "icon": "leather_leggings",

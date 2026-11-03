@@ -1,0 +1,17 @@
+{
+    "id": "bookshelf",
+    "properties": {
+        "hardness": 1.5,
+        "sound_material": "wood",
+        "drops": "bookshelf",
+        "enchant_bookshelf": true
+    },
+    "model": {
+        "shape": "full_cube",
+        "textures": {
+            "top": "bookshelf",
+            "side": "bookshelf",
+            "bottom": "bookshelf"
+        }
+    }
+}
