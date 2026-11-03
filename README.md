@@ -90,12 +90,20 @@ cmake --build build
 
 ## 版本与发布
 
+- **v2.10.0**（2026-11-03）：**2.x「上手与体验补全」收官里程碑**（tag
+  `v2.10.0`）——任务矩阵 V2-1~V2-10 十项全完成（门 171-181 全 PASS，
+  八版每版发布前性能 A/B 全同世界同成本）：第三人称前视角 / Steve
+  皮肤（per-face 纹理通用能力）/ 教程系列化（format 25）/ 天气（雨雷）
+  / 猪 / 体验打磨批（手臂/阴影/磁力/月相）/ 材料补齐批（块级 per-face
+  + 金钻块 + spider 掉落）/ sky rescan clobber 修复 / step-up quirk
+  修复 / 网格修复批（叶子面剔除 + cutout 普查确认）。2181/2181 测试；
+  2.x 全史 = `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/
+  phase 存档 11 份）。3.x「系统扩展」已晋执行权威（条目待定案）。
 - **v2.0.0**（2026-11-02）：**1.x 收官里程碑**——任务矩阵 40/40 + 两轮实机报障
   系列（UX-8g/UX-9：云方块化/教程火把步/洞穴底光可配置）全完成 + 发布扫尾
   （1.x 文档归档 `docs/archive/v1x/` / 第三人称准星不压头 / 活文档刷新 2.0 状态）。
   2075/2075 测试。Release 见 GitHub Releases "TokenMine.cpp v2.0.0"。
-  v2.x 进行中（V2-1/V2-2 已完成，见 `docs/CHANGELOG.md`）；1.x 全史 =
-  `docs/archive/v1x/HISTORY.md`。
+  1.x 全史 = `docs/archive/v1x/HISTORY.md`。
 - **v1.0.0**（2026-10-27）：**首个正式版**，任务矩阵 34/34 全完成
   （十大系统：流送内存/帧管线/光照/世界生成/流体/实体 Mob/生存战斗/物品
   合成/存档/表现层 + 2 项实机报障修复）。正式版 release 见 GitHub
@@ -104,7 +112,7 @@ cmake --build build
 - **v0.1.0**（2026-10-17，首个公开版）：功能阶段 P0–P99 + 性能系列 99.x
   全部完成；1195/1195 测试、`-Werror` 0 警告。
 
-v0.2.0 → v2.2.0 逐版明细：v2.x 见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)；
+v0.2.0 → v2.10.0 逐版明细：v2.x 见 [`docs/archive/v2x/CHANGELOG.md`](docs/archive/v2x/CHANGELOG.md)；v3.x 起见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)；
 v1.x（v1.50.0→v1.0）见 `docs/archive/v1x/CHANGELOG.md`；v0.x
 （v0.12.0→v0.1.0）见 `docs/archive/v0x/CHANGELOG.md`；每版工程细节
 （机制/证据/偏离/性能 A/B）见 `docs/archive/*/phase-*.md` 阶段存档与
@@ -132,8 +140,8 @@ GitHub Releases。
 | [docs/PITS.md](docs/PITS.md) | 坑位合集（375 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
-| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v2.x 逐版明细；v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |
-| [docs/archive/](docs/archive/) | 阶段细节存档（1.x：181 phase + HISTORY.md 全史 + v1x/CHANGELOG.md + v1x/BACKLOG.md；2.x：phase-2.x.x.md） | 深挖某阶段 |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v3.x 起逐版明细；v2.x → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |
+| [docs/archive/](docs/archive/) | 阶段细节存档（v2x/：11 phase + HISTORY.md 全史 + v2x/CHANGELOG.md + v2x/BACKLOG.md；1.x：181 phase + HISTORY.md 全史；3.x 新阶段按 2.x 同款） | 深挖某阶段 |
 | [docs/archive/v0x/](docs/archive/v0x/) | 0.x 时代文档（ROADMAP 规划 / DISCUSSION 记录 / v0x/CHANGELOG.md） | 深挖 0.x |
 | `opencode-sessions/SESSION_CONTEXT.md`（本地，不入库） | 会话交接：最新状态/提交列表/下一步（历史块/遗留附录 → 同目录 `archive/`；新会话启动 prompt 同目录） | 任何"继续"会话 |
 

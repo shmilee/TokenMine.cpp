@@ -12,7 +12,7 @@
 > **V2-3 教程系列化（门 174，tutorials/ 三系列 + format 25 + pickup./
 > smelt. 事件）**；现状 = 测试 **2109/2109**、存档 **format 25**、门计数
 > **174**（教程节/键位/存档 format 节/F3 行已同步；相机/皮肤细节见
-> `docs/archive/phase-2.1.0.md` / `phase-2.2.0.md` / `phase-2.3.0.md`）。
+> `docs/archive/v2x/phase-2.1.0.md` / `phase-2.2.0.md` / `phase-2.3.0.md`）。
 >
 > **来源约定**：本文所有具体数字/字段名/常量值以本文件各条的标注为准，细节
 > （机制公式、单测、门证据、偏离记档全文）见 `docs/archive/v1x/phase-*.md`

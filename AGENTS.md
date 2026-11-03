@@ -19,15 +19,14 @@ C++20 / SDL3 / OpenGL 3.3 core，
   头降到屏幕中心下 29-96px；瞄准射线仍自眼位 = UX-8g 不变，TP 固定视差
   = MC 同款记偏离）③ 活文档刷新到 2.0 状态。门 171 全 PASS。
 - **任务只从 `docs/BACKLOG.md` 的 v2.x 节取**（11-03 三期分工定案：2.x
-  「上手与体验补全」V2-3~V2-10 八项【执行权威；**V2-10 网格修复批
-  v2.10.0 完成 = V2-3~V2-10 八项全 ✅**，下一步 **2.x 收官**
-  （2.x 表沉 docs/archive/v2x/ + BACKLOG_3x.md 晋升执行权威
-  【1.x→2.x 同款先例】+ 收官报告【八项汇总 + tag/release 政策
-  自主定案须说明——v2.1~v2.10 未挂 tag】）】/ 3.x「系统扩展」
-  V3-1~V3-8 = `docs/BACKLOG_3x.md` 方向底稿 / 4.x「世界扩展」
-  V4-1~V4-6 = `docs/BACKLOG_4x.md` 方向底稿；三期总量 24 < pre-v2.0 的
-  78-84 = 用户采纳判据；2.x 收官 → 3x 表晋升执行权威）；1.x 历史全在
-  `docs/archive/v1x/HISTORY.md`（只读，别把 1.x 细节当现状）。
+  「上手与体验补全」V2-3~V2-10 八项**全部完成（11-03 收官）**】/
+  **3.x「系统扩展」V3-1~V3-8 = `docs/BACKLOG.md`（2.x 收官晋升执行
+  权威；条目均为暂定 = 待用户逐项定案后立项，定案前不执行）**/
+  4.x「世界扩展」V4-1~V4-6 = `docs/BACKLOG_4x.md` 方向底稿；三期
+  总量 24 < pre-v2.0 的 78-84 = 用户采纳判据 ✓）；2.x 全史 =
+  `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
+  存档 11 份）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`（只读，
+  别把历史细节当现状）。
 - 测试 **2181/2181**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 25；base18 锚 **178148 B**（679×744 WM tile 态——
   11-03 机器重启后从 v2.7.0 净树重导 179116 B【字节数与原锚吻合
@@ -36,22 +35,22 @@ C++20 / SDL3 / OpenGL 3.3 core，
   PITS 375：tile 几何由 Awesome 强制，门脚本须 dummy 暖机吞会话
   首窗 floating 例外）；门计数 181（**V2-1 前视角 v2.1.0** 门 172：
   C 键三循环，前视 = 后视同款数学翻转角执行 + aimReach D+kReach——详见
-  `docs/archive/phase-2.1.0.md`；**V2-2 Steve 皮肤 v2.2.0** 门 173：
+  `docs/archive/v2x/phase-2.1.0.md`；**V2-2 Steve 皮肤 v2.2.0** 门 173：
   模型 per-face 纹理通用能力【既有 mob 位级不变】+ Steve 脸 8×8 像素
-  + 7 tile 图集零移位——详见 `docs/archive/phase-2.2.0.md`；
+  + 7 tile 图集零移位——详见 `docs/archive/v2x/phase-2.2.0.md`；
   **V2-3 教程系列化 v2.3.0** 门 174：tutorials/ 三系列（beginner 零
   改动 + 农耕 + 厨房）+ format 25 + pickup./smelt. 事件 + T 跳当前
-  系列——详见 `docs/archive/phase-2.3.0.md`；
+  系列——详见 `docs/archive/v2x/phase-2.3.0.md`；
   **V2-4 天气 v2.4.0** 门 175 全 PASS：core/weather 纯状态机（推进式流
   首段恒 CLEAR【60f 基线免疫根】+ 雷独立 salt）+ rain shader 静态 300
   滴 + 天空 dayFactor 单收口（RAIN ×0.85 + 雷 5 帧脉冲）+ 交互四件
   （雨灭火/营火/燃烧效果/润耕地 2×）+ render.weather strict 默认 true
   【off = v2.3.0 位级恒等，门内三方恒等实证】+ --weather CLI + 雷 wav
   + 零 format；性能 A/B changesApplied 9/3/1 逐位 + 终档集合恒等——
-  详见 `docs/archive/phase-2.4.0.md`；**V2-5 猪 v2.5.0** 门 176：
+  详见 `docs/archive/v2x/phase-2.4.0.md`；**V2-5 猪 v2.5.0** 门 176：
   纯数据零核心代码 + V2-2 per-face 首个 mob 消费（pig_face 显式 8×8
   脸）+ pork 食物链（+3→+8）+ 图集 99 零移位 + 字体 423——详见
-  `docs/archive/phase-2.5.0.md`；**V2-6 体验打磨批 v2.6.0** 门 177：
+  `docs/archive/v2x/phase-2.5.0.md`；**V2-6 体验打磨批 v2.6.0** 门 177：
   四子项各消费一处记档偏离——① 第一人称手臂（arm_r box 数据驱动
   pa_arm 零新纹理 + 三态门控 + 静态无摆动记档）② mob blob 阴影
   （1.5×宽扁 quad alpha 0.3 贴底格顶面 + 玩家仅第三人称）③ 拾取磁力
@@ -59,37 +58,37 @@ C++20 / SDL3 / OpenGL 3.3 core，
   不穿墙 + 插墙箭同款拉出）④ 月相（8 相 = 累计天 index%8，食相 quad
   滑移零新纹理，**绘制序 = 食相先/月后**——r=800 平面 24-bit 深度
   ~160 块分辨，PITS 371）+ 零 format；基线 60f = base18 逐字节恒等
-  ——详见 `docs/archive/phase-2.6.0.md`；**V2-7 材料补齐批 v2.7.0**
+  ——详见 `docs/archive/v2x/phase-2.6.0.md`；**V2-7 材料补齐批 v2.7.0**
   门 178：四子项全数据驱动（核心唯一新增 = 块级 per-face faces 段，
   无 faces 位级不变红线）——① planks 块化（既有 tile 零新纹理 +
   fuel_time 7.5 迁块属性 + 8 配方按名零改动）② gold/diamond_block
   （iron_block 先例 + beacon_base 布尔入列）③ spider 掉
   string/spider_eye ×0-2（纯收集记档）④ furnace_front 单 tile
   （lit = 既有火焰粒子记档）+ 图集 102 零移位 + 零 format——详见
-  `docs/archive/phase-2.7.0.md`；**V2-8 sky rescan clobber 修复 v2.8.0**
+  `docs/archive/v2x/phase-2.7.0.md`；**V2-8 sky rescan clobber 修复 v2.8.0**
   门 179：光照核心定向修复（LGT-1 记档潜伏 bug：天花板骑跨 footprint
   边界 → 后一 region rescan 覆写边界格 sky 为纯垂直值 + sky BFS 种子
   无界外源 = stale-dark/stale-partial 暗带）——修复 = sky BFS 种子盒
   +1 块 shell 环（rescan/BFS 写界/no-op skip/propagateAll 零改动；
   shell 读 = 既有 1-chunk 边界读环 → 独立性判据/confluence 零改动）+
   TDD 双回归（pre-fix 2464/544 diff 格复现）+ CPU 探针 + E2E slab
-  无输入流送判别 + 零 format——详见 `docs/archive/phase-2.8.0.md`；
+  无输入流送判别 + 零 format——详见 `docs/archive/v2x/phase-2.8.0.md`；
   **V2-9 step-up quirk 修复 v2.9.0** 门 180：player/mob 共享
   Entity::stepUp 两 quirk 定向消除——① +X/+Z 恰 1 格宽台阶踏不过
   （front 格 snapped+1 不对称 → 查贴住格）② 非整数脚高巧合对齐
   凭空抬升 1.0（flush 位置判 → 无状态真阻挡验，严格不等式）；
   整数脚高位级不变红线 + TDD 3 新 + 1 反转 + 零 format——详见
-  `docs/archive/phase-2.9.0.md`；**V2-10 网格修复批 v2.10.0** 门
+  `docs/archive/v2x/phase-2.9.0.md`；**V2-10 网格修复批 v2.10.0** 门
   181：渲染节两记档修复——① 叶子-叶子内部面剔除（块属性
   cull_same_id 严格布尔，leaves 族 3 块首消费，mesher greedy pass
   同 id 剔面纹理选择前，glass/水/cross 族红线零触碰）② alpha
   cutout discard 零代码确认（PRE-5 桶无关 discard 普查全覆盖 +
   单测钉）；**base18 第 2 次重锚 178148 B**（diff 4185 px 全叶冠
   区零泄漏论证，Phase 18 先例）+ 零 format——详见
-  `docs/archive/phase-2.10.0.md`）。
-- 活跃已知问题：`docs/KNOWN_ISSUES.md`；**v2.x 任务表（执行权威）：
-  `docs/BACKLOG.md`**（v1.x 表已全部完成归档；1.x 完整编年史 + 逐门
-  记录 = `docs/archive/v1x/HISTORY.md`）；会话交接：
+  `docs/archive/v2x/phase-2.10.0.md`）。
+- 活跃已知问题：`docs/KNOWN_ISSUES.md`；**v3.x 任务表（执行权威）：
+  `docs/BACKLOG.md`**（2.x 收官晋升；条目待用户逐项定案；2.x 表 +
+  全史 = `docs/archive/v2x/`；1.x = `docs/archive/v1x/`）；会话交接：
   `opencode-sessions/SESSION_CONTEXT.md`。
 ## 命令
 
@@ -203,10 +202,10 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v2.x 逐版明细；v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |
-| [docs/BACKLOG.md](docs/BACKLOG.md) | **v2.x 任务表（执行权威）** + v2.x 变更记录（v1.x 表 → `docs/archive/v1x/BACKLOG.md`） | 取下一个任务 |
-| [docs/BACKLOG_3x.md](docs/BACKLOG_3x.md) | v3.x「系统扩展」期方向底稿（V3-1~V3-8 暂定；2.x 收官晋升执行权威） | 2.x 收官定案时 |
+| [docs/BACKLOG.md](docs/BACKLOG.md) | **v3.x 任务表（执行权威，2.x 收官晋升）** + v3.x 变更记录（条目暂定待用户定案；2.x 表 → `docs/archive/v2x/BACKLOG.md`、v1.x 表 → `docs/archive/v1x/BACKLOG.md`） | 取下一个任务 |
 | [docs/BACKLOG_4x.md](docs/BACKLOG_4x.md) | v4.x「世界扩展」期方向底稿（下界维度锚 V4-1；3.x 收官晋升执行权威） | 3.x 收官定案时 |
 | [docs/archive/v1x/](docs/archive/v1x/) | 1.x 阶段细节存档（181 份 phase，只读历史）+ HISTORY.md 全史 + v1x/CHANGELOG.md + v1x/BACKLOG.md | 深挖 1.x 某阶段 |
 | [docs/archive/v0x/](docs/archive/v0x/) | 0.x 时代文档（ROADMAP 规划 / DISCUSSION 记录 / v0x/CHANGELOG.md） | 深挖 0.x |
-| [docs/archive/phase-NN.md](docs/archive/) | 2.x 阶段细节存档（新阶段放这里） | 深挖 2.x 某阶段 |
+| [docs/archive/v2x/](docs/archive/v2x/) | 2.x 阶段细节存档（11 份 phase，只读历史）+ v2x/HISTORY.md 全史 + v2x/CHANGELOG.md + v2x/BACKLOG.md | 深挖 2.x 某阶段 |
+| `docs/archive/phase-3.x.0.md`（新阶段放 docs/archive/） | 3.x 阶段细节存档（按 2.x 同款：新阶段放这里，收官沉 archive/v3x/） | 深挖 3.x 某阶段 |
 | `opencode-sessions/SESSION_CONTEXT.md`（本地，不入库） | 会话交接：最新状态/提交列表/下一步（+ kickoff_prompt 启动 prompt；SESSION_CONTEXT_PRE2.0 / LEGACY_STATUS_P30 / SESSION_HISTORY / 门资产 → 同目录 `archive/`） | 任何"继续"会话 |
