@@ -19,18 +19,22 @@ C++20 / SDL3 / OpenGL 3.3 core，
   头降到屏幕中心下 29-96px；瞄准射线仍自眼位 = UX-8g 不变，TP 固定视差
   = MC 同款记偏离）③ 活文档刷新到 2.0 状态。门 171 全 PASS。
 - **任务只从 `docs/BACKLOG.md` 的 v2.x 节取**（11-03 三期分工定案：2.x
-  「上手与体验补全」V2-3~V2-10 八项【执行权威；**V2-7 材料补齐批
-  v2.7.0 完成**，下一项 **V2-8 sky rescan clobber**（光照重扫覆盖
-  修复，KNOWN_ISSUES LGT 条已有修复形态两选一；输入依赖预期低；
-  开工前留意 PITS 368-370/373-374 门内环境事故——输入门前先探测
-  XTEST 键盘）】/ 3.x「系统扩展」
+  「上手与体验补全」V2-3~V2-10 八项【执行权威；**V2-8 sky rescan
+  clobber 修复 v2.8.0 完成**，下一项 **V2-9 step-up quirk 修复**
+  （KNOWN_ISSUES 203/382 两 quirk：+X/+Z 恰 1 格窄沿踏不过【front 格
+  查 snapped+1 不对称】/ 非整数脚高巧合对齐凭空抬升 1.0【flush 测试
+  无真 clamp 校验】；修复 = player/mob 共享 Entity::stepUp 行为变更，
+  设计草稿 /tmp/opencode/v29_design.md；**键盘已恢复**（PITS 368 随
+  X 会话重起根治）= 完整输入协议可用）】/ 3.x「系统扩展」
   V3-1~V3-8 = `docs/BACKLOG_3x.md` 方向底稿 / 4.x「世界扩展」
   V4-1~V4-6 = `docs/BACKLOG_4x.md` 方向底稿；三期总量 24 < pre-v2.0 的
   78-84 = 用户采纳判据；2.x 收官 → 3x 表晋升执行权威）；1.x 历史全在
   `docs/archive/v1x/HISTORY.md`（只读，别把 1.x 细节当现状）。
-- 测试 **2169/2169**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
-  存档 format 25；base18 锚 179116 B（679×744 半平铺态，/tmp/opencode
-  丢失后按先例刷新采用）；门计数 178（**V2-1 前视角 v2.1.0** 门 172：
+- 测试 **2171/2171**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+  存档 format 25；base18 锚 **179116 B**（679×744 WM tile 态——11-03
+  机器重启后 /tmp 丢失，从 v2.7.0 净树重导 ×2 恒等，字节数与原锚
+  吻合 = 连续性；PITS 375：tile 几何由 Awesome 强制，门脚本须
+  dummy 暖机吞会话首窗 floating 例外）；门计数 179（**V2-1 前视角 v2.1.0** 门 172：
   C 键三循环，前视 = 后视同款数学翻转角执行 + aimReach D+kReach——详见
   `docs/archive/phase-2.1.0.md`；**V2-2 Steve 皮肤 v2.2.0** 门 173：
   模型 per-face 纹理通用能力【既有 mob 位级不变】+ Steve 脸 8×8 像素
@@ -62,7 +66,14 @@ C++20 / SDL3 / OpenGL 3.3 core，
   （iron_block 先例 + beacon_base 布尔入列）③ spider 掉
   string/spider_eye ×0-2（纯收集记档）④ furnace_front 单 tile
   （lit = 既有火焰粒子记档）+ 图集 102 零移位 + 零 format——详见
-  `docs/archive/phase-2.7.0.md`）。
+  `docs/archive/phase-2.7.0.md`；**V2-8 sky rescan clobber 修复 v2.8.0**
+  门 179：光照核心定向修复（LGT-1 记档潜伏 bug：天花板骑跨 footprint
+  边界 → 后一 region rescan 覆写边界格 sky 为纯垂直值 + sky BFS 种子
+  无界外源 = stale-dark/stale-partial 暗带）——修复 = sky BFS 种子盒
+  +1 块 shell 环（rescan/BFS 写界/no-op skip/propagateAll 零改动；
+  shell 读 = 既有 1-chunk 边界读环 → 独立性判据/confluence 零改动）+
+  TDD 双回归（pre-fix 2464/544 diff 格复现）+ CPU 探针 + E2E slab
+  无输入流送判别 + 零 format——详见 `docs/archive/phase-2.8.0.md`）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；**v2.x 任务表（执行权威）：
   `docs/BACKLOG.md`**（v1.x 表已全部完成归档；1.x 完整编年史 + 逐门
   记录 = `docs/archive/v1x/HISTORY.md`）；会话交接：
@@ -139,7 +150,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 永不提交 `opencode-sessions/` 下任何文件（本地））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
-## 坑位 Top 8（全文 docs/PITS.md，374 条）
+## 坑位 Top 8（全文 docs/PITS.md，375 条）
 
 1. **SDL grab delta**（P28）：输入 E2E 全帧字节一致不保证——存档 yaw/pitch 为漂移
    探测器；驱动 warp 用实际窗口原点（实测 (4,64)）+ (632,352)。
@@ -175,7 +186,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（374 条，都踩过） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（375 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v2.x 逐版明细；v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

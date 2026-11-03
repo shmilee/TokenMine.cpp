@@ -525,22 +525,57 @@ void Lighting::updateRegion(World& world, const BlockRegistry& blocks,
         // columns, even though its own rescan wrote nothing.)
     } else {
         std::deque<BlockPos> queue;
-        // Seed: EVERY lit cell of the ±R region (the original semantics,
-        // chunk-level since Phase 99.9 — one lookup per 16^3 block). The
-        // worklist BFS propagates only from QUEUED cells, and a box
-        // change can invalidate the light of any column within the
-        // propagation distance (the pre-insertion field may have ridden
-        // paths through the now-filled void), so the full lit region is
-        // the required source set — reduced seeds (changed cells + shell)
-        // left darkened regions unre-lit (test regression). The seed
-        // ORDER differs from the pre-99.9 block loop; the BFS is a
-        // monotone strict-increase worklist, so the converged field is
-        // identical regardless of order.
+        // Seed: EVERY lit cell of the ±R region PLUS a 1-block X/Z shell
+        // ring around it (chunk-level scan since Phase 99.9 — one lookup
+        // per 16^3 block). The full lit footprint is the required source
+        // set (the original semantics): the worklist BFS propagates only
+        // from QUEUED cells, and a box change can invalidate the light of
+        // any column within the propagation distance (the pre-insertion
+        // field may have ridden paths through the now-filled void), so
+        // reduced seeds (changed cells + shell) left darkened regions
+        // unre-lit (the pre-99.9 regression — never shrink the footprint
+        // seed set). The seed ORDER differs from the pre-99.9 block loop;
+        // the BFS is a monotone strict-increase worklist, so the
+        // converged field is identical regardless of order.
+        //
+        // V2-8 (sky rescan clobber recovery — the 1-block shell ring):
+        // the rescan above re-asserts each footprint column's
+        // VERTICAL-ONLY value, destroying the horizontal flow the
+        // converged field rode in from OUTSIDE the footprint (a ceiling
+        // slab straddling the boundary: the open source column beyond
+        // min/max, the shaded side inside — the streaming drain's
+        // ascending column jobs clobber the boundary on every pass,
+        // KNOWN_ISSUES「光照」). Sufficiency: the flow path of any
+        // clobbered cell's true value either stays in the footprint (its
+        // rescan-exact vertical origin is seeded by the full lit
+        // footprint) or crosses the footprint boundary — and the first
+        // OUT-of-footprint cell of that path is exactly a shell cell (1
+        // X/Z step away; the vertical direction needs no shell, the
+        // rescan re-asserts the vertical value exactly per column). The
+        // shell is never written here (the rescan is footprint-only and
+        // so is the inRegion below), so it still holds the converged
+        // value; seeding its lit cells restores the boundary condition
+        // the strict-increase BFS needs. With no clobber the shell seeds
+        // are pure re-proof: at the old fixed point every in-footprint
+        // cell already reads >= (shell neighbor - 1), so no strict
+        // increase fires and the result is bit-identical to the
+        // footprint-only seeds.
+        //
+        // Read-ring / independence (99.10): the shell chunk range
+        // (floorDiv(sx0-1)..floorDiv(sx1+1) on X and Z) is EXACTLY the
+        // range the block-light shell below already reads — the "1-chunk
+        // boundary read ring" that lightRegionsIndependent's
+        // kLightParallelColumnGap = 2*(kLightRegionReach+1) accounts for
+        // (world/light_job.hpp). This fix adds no chunk read beyond that
+        // ring, so the independence criterion and the confluence proof
+        // (docs/archive/v1x/phase-lgt1-flip.md) are untouched.
         constexpr int kLayers = kWorldHeight / kChunkSize;
-        const int scx0 = floorDiv(sx0, kChunkSize),
-                  scx1 = floorDiv(sx1, kChunkSize);
-        const int scz0 = floorDiv(sz0, kChunkSize),
-                  scz1 = floorDiv(sz1, kChunkSize);
+        const int hx0 = sx0 - 1, hx1 = sx1 + 1;
+        const int hz0 = sz0 - 1, hz1 = sz1 + 1;
+        const int scx0 = floorDiv(hx0, kChunkSize),
+                  scx1 = floorDiv(hx1, kChunkSize);
+        const int scz0 = floorDiv(hz0, kChunkSize),
+                  scz1 = floorDiv(hz1, kChunkSize);
         for (int cx = scx0; cx <= scx1; ++cx) {
             for (int cz = scz0; cz <= scz1; ++cz) {
                 for (int cy = 0; cy < kLayers; ++cy) {
@@ -553,8 +588,8 @@ void Lighting::updateRegion(World& world, const BlockRegistry& blocks,
                             for (int lx = 0; lx < kChunkSize; ++lx) {
                                 const int wx = cx * kChunkSize + lx;
                                 const int wz = cz * kChunkSize + lz;
-                                if (wx < sx0 || wx > sx1 || wz < sz0 ||
-                                    wz > sz1) {
+                                if (wx < hx0 || wx > hx1 || wz < hz0 ||
+                                    wz > hz1) {
                                     continue;
                                 }
                                 if (chunk->skyLightAt(lx, ly, lz) > 0) {

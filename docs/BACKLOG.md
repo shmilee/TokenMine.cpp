@@ -22,7 +22,7 @@
 |---|---|---|---|---|---|---|---|
 | STRM 流送与内存 | | | | | | | |
 | PIPE 帧管线与并发 | | | | | | | |
-| LGT 光照 | V2-8 sky rescan clobber 修复 | | | | | | |
+| LGT 光照 | ~~V2-8 sky rescan clobber 修复~~ ✅ v2.8.0（门 179：sky BFS 种子盒 +1 块 shell 环——rescan/BFS 写界/判据零改动，TDD 双回归 pre-fix 2464/544 diff 格复现，CPU 探针 + E2E slab 无输入流送判别，零 format） | | | | | | |
 | GEN 世界与生成 | | | | | | | |
 | FLUID 流体 | | | | | | | |
 | ENT 实体/Mob/移动 | ~~V2-5 新 mob 猪~~ ✅ v2.5.0（门 176：纯数据零核心代码 + V2-2 per-face 首个 mob 消费 + pork 食物链 + 图集零移位 + 猪字 +1） | V2-9 step-up quirk 修复 | | | | | |
@@ -103,6 +103,31 @@
   `docs/archive/v1x/BACKLOG.md` 表外节）。
 
 ## 变更记录（v2.x）
+
+- 2026-11-03：**V2-8 sky rescan clobber 修复完成（v2.8.0，门 179 全
+  PASS）**：LGT-1 记档潜伏 bug 定向消除（KNOWN_ISSUES「光照」条划解）
+  ——天花板板骑跨光照 footprint 边界时，后一 region 的 sky rescan 把
+  边界格 sky 重写为纯垂直值（opaque 下 0 / LGT-2 衰减冠下部分值 <
+  真值），sky BFS 种子只取 footprint 内 lit 格（开敞源列在境外）→
+  水平光流无法恢复 = stale-dark/stale-partial 暗带（1-14 格宽，流送
+  drain 序触发）。修复 = 记档两选一中的 **sky BFS 加 shell seed**
+  （union 单遍 = LGT-1 已砍除形态不复活）：updateRegion 天空种子盒
+  从 footprint 扩为 +1 块 shell 环（rescan 仍 footprint-only、BFS 写
+  界 inRegion 不变、no-op skip/propagateAll/块光零改动；shell 格持
+  收敛值 = 恢复边界条件；无 clobber 时位级不变）。**独立性判据零改
+  动**（算术实证：标准列盒 shell 读列 c±2 = 99.10 文档化 1-chunk
+  边界读环，kLightParallelColumnGap 与 confluence 证明原样成立；
+  light_job.hpp 零变更）。TDD：2 回归测试先在 v2.7.0 树证 FAIL
+  （stale-dark 2464 diff 格 / stale-partial 544 diff 格，清点与设计
+  预测精确吻合）后修复 PASS；2171/2171（+2）。门 179：S1 第 179 次
+  结构免疫（**锚重启后重锚 179116 B = 679×744 WM tile 态**——/tmp
+  丢失后从 v2.7.0 净树重导 ×2 恒等，字节数与原锚吻合 = 连续性；
+  PITS 375 tile 几何协议 + dummy 暖机吞会话首窗 floating 例外）
+  + S2 clobber 判别（CPU 探针旧库梯度 14..1→全 0 命名
+  复现 / 新库完整保持 + E2E slab 无输入流送：板 x25..63 西区 x32..38
+  旧树暗带 vs 新树恢复）+ S3 + S6 命名回归 + 性能 A/B 同世界同成本。
+  环境事件：机器重启 /tmp 重建 + **XTEST 键盘恢复**（PITS 368 根治
+  实证 = X 会话重启）。详见 docs/archive/phase-2.8.0.md。
 
 - 2026-11-03：**V2-7 材料补齐批完成（v2.7.0，门 178 全 PASS）**：四子项
   均数据驱动（核心唯一新增 = 块级 per-face `faces` 通用能力，

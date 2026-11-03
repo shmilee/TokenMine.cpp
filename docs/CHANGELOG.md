@@ -8,6 +8,43 @@
 > （机制/证据/偏离/性能 A/B）见 `docs/archive/v1x/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v2.8.0（2026-11-03）— V2-8 sky rescan clobber 修复（LGT-1 记档潜伏 bug 定向消除）（门 179 全 PASS）
+
+**光照核心修复**（KNOWN_ISSUES「光照」节划解）：天花板板骑跨光照
+footprint 边界时，后一 region 的 sky rescan 把边界格 sky 重写为纯
+垂直值（opaque 下 0 / LGT-2 衰减冠下部分值 < 真值），sky BFS 种子
+只取 footprint 内 lit 格（开敞源列在境外）→ 水平光流无法恢复 =
+**stale-dark/stale-partial 暗带**（1-14 格宽、天花板下，流送 drain
+序触发，确定性"错得确定"）。修复 = 记档两选一中的 **sky BFS 加
+shell seed**（union 单遍 = LGT-1 已砍除形态不复活）：
+`updateRegion` 天空种子盒从 footprint 扩为 **+1 块 shell 环**
+（rescan 仍 footprint-only、BFS 写界 inRegion 不变、no-op skip /
+propagateAll / 块光段零改动；shell 格持收敛值 = 恢复边界条件，
+严格增 BFS 向内推进；**无 clobber 时位级不变**——旧不动点上严格增
+不触发）。**独立性判据零改动**（算术实证：标准列盒的 shell 读列
+c±2 = 99.10 文档化 1-chunk 边界读环，kLightParallelColumnGap=4 与
+confluence 证明原样成立；world/light_job.hpp 零变更）。零 format /
+零 config 新键 / 零新数据。
+
+**TDD**：2 回归测试先在 v2.7.0 树上证 FAIL（stale-dark 2464 diff
+格 x8..21 全 0 / stale-partial 544 diff 格恰 = 冠下 x8..10 的
+11<14/13/12——清点与设计预测精确吻合），修复后 PASS。2171/2171
+（+2）、banner v2.8.0、base18 恒等（无输入启动窗 clobber 几何未
+触发 = 结构免疫）。CPU 探针（真实资产半板几何）：旧库 = 梯度
+14..1 被 updateRegion 毁成全 0（bug 命名复现）/ 新库 = 完整保持
+（恢复实证）。
+
+门 179 全 PASS：S1 第 179 次结构免疫（**锚重启后重锚 179116 B**
+= 679×744 WM tile 态——/tmp 丢失后从 v2.7.0 净树重导 ×2 恒等，
+字节数与原锚吻合 = 连续性；PITS 375 tile 几何协议 + dummy 暖机）
++ S2 clobber 判别（CPU 探针
+旧/新互斥 + E2E slab 场景无输入流送：板 x25..63 西区 x32..38 旧树
+stale-dark vs 新树梯度恢复，diff bbox @ 板下地台）+ S3 2171 + S6
+命名回归 + **性能 A/B 同世界同成本**（changesApplied 9/1/3 三窗逐位 + 终档 16/16 36/36 集合恒等 + PERF-WIN 全指标同档 + slab 自成本同档）。**环境事件**：机器重启后 /tmp 重建 +
+**XTEST 键盘恢复**（PITS 368 根治实证 = X 会话重启，W 键位移实证
+z 0.5→−3.0，V2-9 起完整输入协议可用）。详见
+docs/archive/phase-2.8.0.md。
+
 ## v2.7.0（2026-11-03）— V2-7 材料补齐批（planks 块化 / 金钻块 / spider 掉落 / 块级 per-face）
 
 四子项均数据驱动（核心唯一新增 = 块级 `faces` 通用能力，

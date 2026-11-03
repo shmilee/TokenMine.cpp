@@ -509,6 +509,90 @@ TEST(LightingTest, UpdateRegionAfterFluidChange) {
     EXPECT_FALSE(local.findChunk({3, 0, 0})->dirty());
 }
 
+// -- V2-8 (sky rescan clobber recovery): the shell seed ------------------------
+//
+// KNOWN_ISSUES「光照」(LGT-1 latent, LGT-2 interaction): when a ceiling slab
+// straddles a light footprint boundary (open source columns on one side,
+// opaque ceiling extending on the other), a FARTHER region's sky rescan
+// re-asserts the vertical-only value over the footprint's shaded boundary
+// cells (0 under an opaque slab), and the sky BFS — seeded with lit cells
+// of the footprint alone — has no seed at the open source column OUTSIDE
+// the footprint, so the horizontal flow cannot restore the gradient:
+// stale-dark (stone slab) / stale-partial (LGT-2 attenuating canopy) bands.
+// The streaming drain (column jobs, ascending set order) is the production
+// trigger: each column's footprint (column box ± kLightUpdateRadius)
+// re-clobbers, and the last job's clobber is final.
+//
+// These two tests drive exactly that geometry directly (updateRegion on a
+// converged world, no cell change — the clobber is a consequence of the
+// re-light, not of the edit) and pin the recovery invariant: the local
+// re-light must land bit-identical on the full propagateAll field.
+
+// ① Stale-dark: a stone slab at y=12 over x 8..31, the open source at
+// x < 8. The far box {24,0,8}..{24,12,8} has footprint x 8..40: the whole
+// shaded slab underside is inside it, the open source column x=7 is OUT
+// (min.x = 8 excludes it — x8's source at x7 is one block beyond).
+TEST(LightingTest, SkyRescanShellSeedClobberRecovery) {
+    const BlockRegistry reg = makeRegistry();
+    const BlockID stone = idOf(reg, "stone");
+    World local, full;
+    const auto buildSlab = [&](World& w) {
+        w.getOrCreateChunk({0, 0, 0});
+        w.getOrCreateChunk({1, 0, 0});
+        fillBox(w, 0, 0, 0, 31, 0, 15, stone);  // ground at y=0
+        fillBox(w, 8, 12, 0, 31, 12, 15, stone); // slab at y=12, x 8..31
+    };
+    buildSlab(local);
+    buildSlab(full);
+    // Converged truth (y=11, under the slab): x7:15 (open), x8:14, x9:13,
+    // ..., x21:1, x22..31:0 — the horizontal flow from the open columns.
+    Lighting::propagateAll(local, reg);
+    Lighting::propagateAll(full, reg);
+
+    // The clobber trigger: re-light a far box. Its ±kLightUpdateRadius
+    // sky footprint is x 8..40 × z -8..24 — it contains the entire shaded
+    // underside and EXCLUDES the open source column x=7. The rescan writes
+    // 0 to x8..21 (truth 14..1); pre-fix the seed scan (footprint-only lit
+    // cells) finds nothing below the slab, the BFS from the above-slab sky
+    // cannot cross the stone, and x8..21 stay stale-dark.
+    Lighting::updateRegion(local, reg, {24, 0, 8}, {24, 12, 8});
+    expectSameLight(local, full);
+}
+
+// ② Stale-partial (LGT-2 form): a two-layer leaves canopy (opacity 2 per
+// layer) at y=12,13 over x 8..20 plus a stone rim at y=12 over x 21..31.
+// Converged truth (y=11): x7:15 (open), x8:14, x9:13, x10:12 (horizontal
+// flow), x11..x20:11 (vertical under the canopy: 15-2-2, dominates),
+// x21:10 ... x30:1 (canopy light flowing out past the rim), x31:0.
+// The same far box clobbers the canopy underside to 11 (x8:14<11-stale,
+// x9:13<11, x10:12<11) and the rim underside to 0 (x21..30). Pre-fix the
+// canopy's partial seeds (11) restore the rim but NOT x8..10 — the strict
+// increase BFS cannot push 11 up to 14/13/12 without a 15 seed at x=7.
+TEST(LightingTest, SkyRescanShellSeedLgt2PartialRecovery) {
+    const BlockRegistry reg = makeRegistry();
+    const BlockID stone = idOf(reg, "stone");
+    const BlockID leaves = idOf(reg, "leaves");
+    World local, full;
+    const auto buildCanopy = [&](World& w) {
+        w.getOrCreateChunk({0, 0, 0});
+        w.getOrCreateChunk({1, 0, 0});
+        fillBox(w, 0, 0, 0, 31, 0, 15, stone);   // ground at y=0
+        fillBox(w, 8, 12, 0, 20, 13, 15, leaves); // canopy y=12,13, x 8..20
+        fillBox(w, 21, 12, 0, 31, 12, 15, stone);  // rim y=12, x 21..31
+    };
+    buildCanopy(local);
+    buildCanopy(full);
+    Lighting::propagateAll(local, reg);
+    Lighting::propagateAll(full, reg);
+
+    // The same clobber trigger as ① (footprint x 8..40 × z -8..24, open
+    // source x=7 excluded). Pre-fix: x8..10 stuck at the canopy's partial
+    // 11 (stale-partial), x21..30 restored from the canopy seeds — the
+    // expectSameLight diff pins exactly the x8..10 band.
+    Lighting::updateRegion(local, reg, {24, 0, 8}, {24, 12, 8});
+    expectSameLight(local, full);
+}
+
 // -- updateLocal dirty tracking ----------------------------------------------------
 
 TEST(LightingTest, UpdateLocalDirtyTracking) {
