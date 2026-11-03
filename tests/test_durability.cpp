@@ -110,6 +110,7 @@ SaveGame makeSave() {
     s.playerAbsorption = 0.0f; // format 12+ requires the field
     s.playerOxygen = kOxygenMax; // format 17+ requires the field
     s.playerXp = 0; // V2-11: format 26+ requires the field
+    s.playerRespawn = {3.5f, 54.5f, -7.5f}; // V2-13: format 28 always writes it
     s.slots.resize(Inventory::kTotalSize);
     return s;
 }
@@ -437,8 +438,8 @@ TEST(SaveFormat18Test, MidDamageRoundTripsInAllThreePlaces) {
     s.entities.push_back(e);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-7/V2-3/V2-11: writes are always format 26 (V2-3 was 25).
-    EXPECT_EQ(j->find("format")->asInt(), 27);
+    // UX-7/V2-3/V2-11: writes are always format 28 (V2-13 was 27).
+    EXPECT_EQ(j->find("format")->asInt(), 28);
     // The shapes: the damaged slot + the entity carry the key; the
     // full-durability armor slot is a STRING; the damaged one an
     // OBJECT {item, damage}.
@@ -498,7 +499,8 @@ TEST(SaveFormat18Test, Format17WithDamageKeyIsAVersionLie) {
             if (k != "stats" && k != "velocity" &&
                 k != "tutorial" &&  // SAVE-2: 22; UX-7: 23
                 k != "xp" &&        // V2-11: the xp key is format 26
-                k != "xp_seed") {  // V2-12: the xp_seed key is format 27
+                k != "xp_seed" &&   // V2-12: the xp_seed key is format 27
+                k != "respawn") {  // V2-13: the respawn key is format 28
                 player2[k] = v;
             }
         }

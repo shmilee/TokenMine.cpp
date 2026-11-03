@@ -9,6 +9,44 @@
 > README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本 /
 > v2.10.0 第一批收官 tag / v2.18.0 二批收官 tag）。
 
+## v2.14.0（2026-11-04）— V2-13 床（15 色染色族 + 睡觉跳夜 + 重生点 + format 28）（门 185 全 PASS）
+
+二批 SURV 行（BACKLOG「中」）；MC 机制 11-04 wiki 核定（Bed 页）：
+**15 色床**（dye_base/dye_color Phase 41 机制，wool 15 色词表同款
+无 lime，white = base；RMB 持染料染色 = 既有路径免费）+ 确定性纹理
+15 tile（彩色毯 + 头端白枕，atlas 104→119 零既有移位 md5 实证）+
+配方 15（shaped 3 同色 wool + 3 planks = MC 精确）+ 新 sleep.wav
+（确定性合成）；**Slab 半格形**（MC 1×2 两格无项目先例 = 记档偏离
+1）/ hardness 0.2 MC 精确 / cloth 音族。**睡眠三门定案序**
+（core/bed 纯函数 + game 薄适配，RMB 链纯插入面板分支后染色前）：
+b 距离 ≤3.0（MC 精确，脚心 vs 床格中心）→ c hostile 盒 水平 ±8/
+垂直 +5/−1（数据旗判据无物种 switch，被动/掉落物/箭豁免）→ 设重生
+点（MC：RMB 恒设点夜或日）→ a 夜窗 [kDuskEnd 0.55,1)∪[0,kDawnStart
+0.05)（MC sky≤11 略窄 = 偏离 3）：夜内 = **即时跳夜**（偏离 2：
+setTimeOfDay(kDawnStart) 06:00 黎明 + 雨/雷 weatherInitialState 纯
+重置 CLEAR + sleep 音空间化 + "sleep" 教程词入裸词表）/ 夜外 = 仅
+设点；门 b/c 拒 = 全拒含设点（偏离 6）。**重生点**：Player 新
+spawnPos 访问器 + **format 28** player.respawn int 三元组恒写（27
+携键拒 / 28 缺键拒 / 27 载 = 哨兵 → applySave 覆写世界出生点；分量
+非整数 / y∉[0,128) 拒）+ **respawn 验床**（R 键收口 respawnPlayer：
+纯函数 bedRespawnValid = 该位任意床族块 + 房间空间【床格支撑豁免】
+→ 床位，否则世界出生点回退 + 重新钉位 = 床破坏永久回退，MC"仅
+respawn 时查"同款）。mob 炸床不做（偏离 5：项目无爆炸机制；门 c
+覆盖主语义）。2330/2330（+22 TEST：块 15 内容钉/配方 15/三门边界/
+验床 4/save 28 全形/sleep.wav 装载/教程词）、banner v2.14.0。门
+185：S1 **结构免疫第 66 次免重锚**（≡ 锚 179027 B 逐字节——床不入
+worldgen + RMB 门；savenorm 恰 {format 28, respawn}）/ S2 三臂输入
+E2E（**夜跳**：t0.70 RMB → time 0.0796 + respawn = 床格 / **日设
+点**：t0.30 不跳 + 设点 / **mob 拒**：scratch spider 恒停格置床 +
+aim 重几何【slab 半高更陡 pitch】→ 不跳 + respawn = 世界出生点 +
+hp 22/60 交战实证；旧侧全 format 27 无 respawn 形状互斥）/ S3 / S6
+5/5 点名（缺染色变体/dye+interact 互斥/hardness −1/27 携 respawn/
+28 缺）/ 性能 A/B 同世界同成本（9/1/3 逐位 + 16/16 36/36 恒等 +
+respawn 唯一预期 diff + 预置床场景零成本）。PITS 379（旧侧参照树
+= 前一版本 banner 实证【首跑误用 v2.12.0 树 = 3 键假象】/ 单行
+local 展开序 / slab 瞄准 + capture 单击不破 0.2 床）。消费
+"v1 无床" 注释记档。详见 docs/archive/phase-2.14.0.md。
+
 ## v2.13.0（2026-11-04）— V2-12 附魔系统（7 附魔 + 附魔台/书架 + 确定性 offer + format 27）（门 184 全 PASS）
 
 二批 CRAFT 行（立项定案 = **真附魔台范式**，消费三处「附魔台替身」
@@ -125,5 +163,5 @@ PERF-WIN 全指标同档——时钟 +1 文本 draw 成本不可测）。门协�
 PASS 源）。详见 docs/archive/phase-2.11.0.md。
 
 ## v2.x 第二批（V2-11~V2-18，进行中）
-（V2-13 床起，逐版条目入此。）
+（V2-14 蝙蝠起，逐版条目入此。）
 

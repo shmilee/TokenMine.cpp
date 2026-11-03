@@ -202,7 +202,9 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     // planks reuses its EXISTING tile, zero new texture). V2-12: 102 -> 104
     // (the enchantment batch's two tiles — enchanting_table / bookshelf —
     // join the row-2 free run [9, 2] / [14, 2]; zero existing shift).
-    EXPECT_EQ(l.tiles.size(), 104u);
+    // V2-13: 104 -> 119 (the bed batch's 15 tiles — the dyed family, the
+    // wool's vocabulary — join the free cells; zero existing shift).
+    EXPECT_EQ(l.tiles.size(), 119u);
     const struct {
         const char* name;
         int col;
@@ -292,6 +294,31 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
         {"enchanting_table", 9, 2}, {"bookshelf", 14, 2},
     };
     for (const auto& e : v212) {
+        const auto it = l.tiles.find(e.name);
+        ASSERT_NE(it, l.tiles.end()) << e.name;
+        EXPECT_EQ(it->second.col, e.col) << e.name;
+        EXPECT_EQ(it->second.row, e.row) << e.name;
+    }
+    // V2-13: the bed batch's 15 tiles (the dyed bed family — the wool's
+    // exact vocabulary) take the FREE cells of the 104-entry layout
+    // (sorted name order onto the deterministic (row, col) free-cell
+    // scan: the [15, 2] / row-3 [9..15] / row-4 [10..15] / [9..10, 6]
+    // runs) — the 104 pre-V2-13 entries above keep their EXACT cells
+    // (the zero-shift red line, no baseline re-anchor).
+    const struct {
+        const char* name;
+        int col;
+        int row;
+    } v213[] = {
+        {"bed", 15, 2}, {"bed_black", 9, 3}, {"bed_blue", 10, 3},
+        {"bed_brown", 11, 3}, {"bed_cyan", 12, 3}, {"bed_gray", 13, 3},
+        {"bed_green", 14, 3}, {"bed_light_blue", 15, 3},
+        {"bed_magenta", 10, 4}, {"bed_orange", 11, 4}, {"bed_pink", 12, 4},
+        {"bed_purple", 13, 4}, {"bed_red", 14, 4}, {"bed_silver", 15, 4},
+        {"bed_yellow", 9, 6},
+    };
+    ASSERT_EQ(sizeof(v213) / sizeof(v213[0]), 15u);
+    for (const auto& e : v213) {
         const auto it = l.tiles.find(e.name);
         ASSERT_NE(it, l.tiles.end()) << e.name;
         EXPECT_EQ(it->second.col, e.col) << e.name;

@@ -2997,3 +2997,17 @@
   官方 tools/gate_compare.py**（norm = 剥 fires[*].remaining 等
   real-dt 字段）：手写 norm 漏剥 → fires remaining 微差假 MISMATCH
   （门 184 S1 首跑 5 diff，官方工具 = 恰 2 预期键）。
+- **参照树版本 / 单行 local / slab 瞄准（PITS 379，门 185 V2-13 床
+  S1/S2）**——① **门旧侧参照树 = 前一版本 tag，banner 实证**：门
+  185 首跑误用 tm_v2130_base（= v2.12.0 9dedab9，门 184 旧侧）→
+  savenorm 3 键假象【format 28 vs 26 + respawn + xp_seed】= 版本
+  跳两代的叠加 diff；正解 = 建 tm_v2140_base（72e0028 v2.13.0）+
+  banner grep 实证后再跑。② **bash 单行 local 展开序**：`local a=$1
+  b=${2:-$a}` 中 $a 在赋值前展开（全部右值先展开）→ set -u 下
+  "a: unbound"；拆两行 local。门脚本函数解参恒拆行（PITS 378 同款
+  第二实例）。③ **slab 半高块瞄准 + 单击不破软床**：RMB 交互射线
+  对 Slab 形（y 0..0.5）= 比整块更陡的 pitch（眼 1.6 上 + slab 顶
+  0.5：Δz=2 时 pitch ≈ −atan(1.35/2) = −0.59 级，整块范式 −0.353
+  恒 miss slab 顶上方）；capture 单击 LMB 对 hardness 0.2 床 =
+  0.1 s 进度 < 0.3 s 破块时长 + 释放重置 = 不碎（重试环 ≤6 单击均
+  安全；**按住**才碎——软块场景的输入序列禁 hold）。

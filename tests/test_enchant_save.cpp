@@ -112,6 +112,7 @@ SaveGame makeSave(std::uint64_t xpSeed) {
     s.playerAbsorption = 0.0f;
     s.playerOxygen = kOxygenMax;
     s.playerXp = 19;
+    s.playerRespawn = {3.5f, 54.5f, -7.5f}; // V2-13 (format 28 always writes it)
     s.playerXpSeed = xpSeed;
     s.slots.resize(Inventory::kTotalSize);
     s.invGrid.resize(CraftingGrid::kSize);
@@ -153,17 +154,23 @@ TEST(SaveFormat27, Pre27LoadMigratesXpSeed) {
     // no xp_seed, no enchants).
     root["format"] = Json(26);
     if (const Json* player = root.find("player")) {
+        Json p = *player;
         if (player->find("xp_seed") != nullptr) {
-            Json p = *player;
             p = withoutKeyForTest(p, "xp_seed");
-            root["player"] = std::move(p);
         }
+        if (player->find("respawn") != nullptr) {
+            p = withoutKeyForTest(p, "respawn"); // V2-13: format 28
+        }
+        root["player"] = std::move(p);
     }
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     // The deterministic migration: worldSeed ^ kXpSeedInit.
     EXPECT_EQ(out->playerXpSeed,
               static_cast<std::uint64_t>(42) ^ kXpSeedInit);
+    // V2-13: the pre-28 respawn migration is the sentinel (the game's
+    // applySave re-pins it to the world spawn — the parse cannot know it).
+    EXPECT_EQ(out->playerRespawn.y, -1.0f);
 }
 
 TEST(SaveFormat27, Format27MissingXpSeedRejected) {
@@ -189,8 +196,17 @@ TEST(SaveFormat27, Format26CarryingXpSeedRejected) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     // Downgrade to format 26 but KEEP xp_seed -> a version lie (the key is
-    // format-27 vocabulary; the player whitelist rejects it).
+    // format-27 vocabulary; the player whitelist rejects it). The V2-13
+    // respawn key (format 28) is stripped so the xp_seed lie is the one
+    // named (the whitelist reports the alphabetically first unknown).
     root["format"] = Json(26);
+    if (const Json* player = root.find("player")) {
+        Json p = *player;
+        if (player->find("respawn") != nullptr) {
+            p = withoutKeyForTest(p, "respawn");
+        }
+        root["player"] = std::move(p);
+    }
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("xp_seed"), std::string::npos);
@@ -304,10 +320,14 @@ TEST(SaveFormat27, Format26CarryingEnchantsRejected) {
     // Downgrade to format 26 but KEEP the slot's enchants -> a version lie.
     root["format"] = Json(26);
     if (const Json* player = root.find("player")) {
+        Json p = *player;
         if (player->find("xp_seed") != nullptr) {
-            Json p = *player;
-            root["player"] = withoutKeyForTest(p, "xp_seed");
+            p = withoutKeyForTest(p, "xp_seed");
         }
+        if (player->find("respawn") != nullptr) {
+            p = withoutKeyForTest(p, "respawn"); // V2-13: format 28
+        }
+        root["player"] = std::move(p);
     }
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());

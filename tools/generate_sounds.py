@@ -68,6 +68,11 @@ vocabulary; blocks name one via `sound_material`):
                       double-lowpassed LCG rumble body, slow attack +
                       long decay over the ~3.5 s roll) — the distant
                       thunder one-shot (2D centered, never spatialized)
+-- V2-13 bed (1 one-shot; the sleep action's cue — spatialized at the
+      bed, the block-center pattern):
+   sleep.wav           a soft low "sigh" (a 180 -> 90 Hz exponential glide
+                      under a quiet 360 Hz partial, slow attack/release,
+                      tone-only — the hushed bedroom feel)
 """
 import math
 import os
@@ -631,6 +636,25 @@ def ambience_night():
 # in a slow-attack + long-decay envelope over the ~3.5 s roll. The
 # determinism discipline of the other sounds (the fixed seed; a re-run
 # leaves the file byte-identical — the existing wavs' md5s unchanged).
+def sleep():
+    """V2-13: the sleep sound (a successful night-skip on the bed — the
+    right-click action's cue). A soft, low sine "sigh" with a slow decay
+    (the hushed bedroom feel): a 180 -> 90 Hz glide under a quiet second
+    partial, no noise layer (the cloth rustle is the bed's place/break
+    material sound — the sleep cue itself is tone-only). The fixed-LCG /
+    sine paradigm (the smelt-ding precedent), dedicated seed."""
+    lcg = Lcg(0x51EE)  # dedicated fixed seed (unique to this sound)
+    dur = 0.40
+
+    def f(t, _):
+        fr = 180.0 * (90.0 / 180.0) ** (t / dur)  # exponential glide down
+        tone = (math.sin(2 * math.pi * fr * t) * 0.55
+                + math.sin(2 * math.pi * 360.0 * t) * math.exp(-t * 10) * 0.15)
+        tick = lcg.next() * math.exp(-t * 40) * 0.06
+        return (tone + tick) * amb_env(t, dur, 0.03, 0.15) * 0.7
+    return sound(dur, f)
+
+
 def thunder():
     lcg = Lcg(0x70DE)  # dedicated fixed seed (unique to this sound)
     dur = 3.5
@@ -694,6 +718,9 @@ SOUNDS = {
     # V2-4: the weather thunder (the distant one-shot — 2D centered,
     # never spatialized; the rain loop is the documented absence).
     "thunder": thunder,
+    # V2-13: the bed sleep cue (the successful night-skip — spatialized
+    # at the bed, the block-center pattern).
+    "sleep": sleep,
 }
 
 

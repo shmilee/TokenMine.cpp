@@ -1559,7 +1559,11 @@ Result<void> Game::buildScene() {
     // The WORLD spawn (Phase 25): the center of the hostile spawn-protection
     // circle. Captured BEFORE the save load — a loaded save moves the
     // player, but the protection stays anchored to the world spawn (the
-    // Minecraft semantics; there are no beds in v1).
+    // Minecraft semantics). V2-13: it is ALSO the fresh-world respawn
+    // point (the player is constructed at spawnPos above — format 28's
+    // player.respawn writes it for a never-slept player) and the fallback
+    // of the respawn-time bed validation (respawnPlayer — a remembered
+    // bed that no longer validates reverts the spawn to here).
     m_mobs.spawnPoint = spawnPos;
     m_player.emplace(m_world, m_blocks, spawnPos, *playerParams);
     // V2-12 (format 27): the FRESH-world xp seed (worldSeed ^ kXpSeedInit —

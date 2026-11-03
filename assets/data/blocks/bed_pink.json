@@ -1,0 +1,19 @@
+{
+    "id": "bed_pink",
+    "properties": {
+        "sound_material": "cloth",
+        "hardness": 0.2,
+        "light_opacity": 0,
+        "drops": "bed_pink",
+        "dye_base": "bed",
+        "dye_color": "pink"
+    },
+    "model": {
+        "shape": "slab",
+        "textures": {
+            "top": "bed_pink",
+            "side": "bed_pink",
+            "bottom": "bed_pink"
+        }
+    }
+}

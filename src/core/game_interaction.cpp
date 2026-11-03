@@ -200,6 +200,28 @@ void Game::handleInteraction(double dt) {
             // The campfire (Phase 71) is handled at the TOP of this
             // handler, before the item channels (see above).
         }
+        // Bed sleep (V2-13, core/bed): a bed FAMILY block (the
+        // kDyeBaseBed dye_base property — the family check, never a
+        // color id) under the crosshair attempts the sleep: the three
+        // gates (distance / no hostile nearby / the night window)
+        // decide between the immediate night skip and the bare
+        // respawn-point set (the Minecraft day rule). The click is
+        // consumed either way (no placement fall-through). A HELD DYE
+        // does not sleep: the bed is a dye family like the wool, so
+        // the Phase-41 recolor path below owns the click instead.
+        if (const std::optional<BlockHit> hit = targetBlock(); hit) {
+            const Block& b = m_blocks.at(
+                m_world.getBlock(hit->block.x, hit->block.y,
+                                 hit->block.z));
+            if (b.properties.dyeBase == kDyeBaseBed) {
+                const ItemStack& held = m_inventory.at(m_selectedSlot);
+                if (held.empty() ||
+                    m_items.at(held.item).dyeColor.empty()) {
+                    trySleep(*hit);
+                    return;
+                }
+            }
+        }
         // Dye recoloring (Phase 41): a selected dye item right-clicked on
         // a dye-family block converts the block to the dyed variant
         // (dyeVariantName) and consumes one dye — instant (no channel,
@@ -1451,6 +1473,72 @@ bool Game::tryArmor() {
     }
     m_sound.play("cloth"); // the Minecraft armor sound (no new wav)
     return true;
+}
+
+void Game::trySleep(const BlockHit& hit) {
+    // V2-13 (core/bed): the bed sleep's three gates, in the design's
+    // order — the pure predicates own the boundaries (the unit tests
+    // pin them), the adapter owns the state writes. The caller
+    // guarantees the hit block is a bed FAMILY member (the kDyeBaseBed
+    // property) and the hand holds no dye (the recolor path's).
+    const Vec3 bedCenter =
+        bedSpawnPosition(hit.block.x, hit.block.y, hit.block.z);
+    // Gate b: the player's feet (the AABB bottom center) within 3
+    // blocks of the bed's cell center (the Minecraft value).
+    if (!sleepDistanceOk(m_player->position(), bedCenter)) {
+        return; // refused: the click is consumed, no action (the
+                // documented deviation 6 — the point-set is part of
+                // the sleep, so a refused sleep sets nothing)
+    }
+    // Gate c: no HOSTILE mob in the 8x5 box around the bed (the
+    // Minecraft head-volume rule — the hostile check is the
+    // spawn-protection's data flag, never a species switch; passive
+    // mobs, item drops and arrows are exempt, the protection twin).
+    for (const std::unique_ptr<Entity>& e : m_entities) {
+        const MobEntity* mob = dynamic_cast<const MobEntity*>(e.get());
+        if (mob != nullptr && mob->def().properties.hostile &&
+            inSleepHostileBox(bedCenter, mob->position())) {
+            return; // refused: no sleep, no point (the deviation 6)
+        }
+    }
+    // Gates b + c passed: the respawn point is the bed (the Minecraft
+    // rule — a right-click on a bed sets it, night OR day).
+    m_player->setSpawnPos(bedCenter);
+    // Gate a: the night window decides the sleep vs the bare point-set.
+    const double t = m_dayCycle.timeOfDay();
+    if (!sleepNightWindow(t)) {
+        MC_LOG_INFO("Bed spawn set at (" + std::to_string(hit.block.x) +
+                    ", " + std::to_string(hit.block.y) + ", " +
+                    std::to_string(hit.block.z) + ") — day: the point "
+                    "is set, the night is not skipped");
+        return; // the Minecraft day rule: awake, the point is set
+    }
+    // The sleep (the immediate night skip — the documented deviation 2,
+    // no 101-tick entry animation / no hurt-wake-up): the time jumps
+    // to the dawn edge (kDawnStart = the 06:00 clock, the ramp's
+    // plateau — the day resumes in full light).
+    m_dayCycle.setTimeOfDay(DayCycle::kDawnStart);
+    // The weather reset (the Minecraft "sleeping clears the rain" rule):
+    // only a RAINING weather is replaced — by the V2-4 machine's pure
+    // initial state (a fresh CLEAR segment off the same world-seed
+    // streams — the session-derived class, the stream's continuation
+    // stays deterministic); a clear sky is untouched.
+    if (m_weather.raining) {
+        m_weather = weatherInitialState(false, m_weatherStream,
+                                        m_weatherThunderStream);
+        MC_LOG_INFO("Weather: rain stopped");
+    }
+    // The "sleep" cue (spatialized at the bed — the block-center
+    // pattern; audio outside the frame state, the PRE-4 discipline) +
+    // the tutorial event (the closed vocabulary's new bare word — no
+    // series JSON change; the emit is gated on the tutorial being live
+    // and not done, the choke point's invariant).
+    m_sound.play("sleep", bedCenter);
+    emitTutorialEvent("sleep", 1);
+    MC_LOG_INFO("Slept at the bed (" + std::to_string(hit.block.x) +
+                ", " + std::to_string(hit.block.y) + ", " +
+                std::to_string(hit.block.z) + ") — the night skipped "
+                "to dawn, the spawn is the bed");
 }
 
 void Game::clearStatusEffects() {

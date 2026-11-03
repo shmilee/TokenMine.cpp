@@ -1,0 +1,19 @@
+{
+    "id": "bed_brown",
+    "properties": {
+        "sound_material": "cloth",
+        "hardness": 0.2,
+        "light_opacity": 0,
+        "drops": "bed_brown",
+        "dye_base": "bed",
+        "dye_color": "brown"
+    },
+    "model": {
+        "shape": "slab",
+        "textures": {
+            "top": "bed_brown",
+            "side": "bed_brown",
+            "bottom": "bed_brown"
+        }
+    }
+}

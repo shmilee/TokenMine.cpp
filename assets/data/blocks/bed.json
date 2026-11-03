@@ -1,0 +1,19 @@
+{
+    "id": "bed",
+    "properties": {
+        "sound_material": "cloth",
+        "hardness": 0.2,
+        "light_opacity": 0,
+        "drops": "bed",
+        "dye_base": "bed",
+        "dye_color": "white"
+    },
+    "model": {
+        "shape": "slab",
+        "textures": {
+            "top": "bed",
+            "side": "bed",
+            "bottom": "bed"
+        }
+    }
+}

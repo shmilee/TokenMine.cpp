@@ -174,6 +174,9 @@ SaveGame makeSave(const Fixture& f) {
     // section exercises the orb entity (keeping the ~35 downgrade sites
     // below to a single player.xp strip, not an entity strip).
     s.playerXp = 37;
+    // V2-13 (format 28): the respawn point (a bed-form position — the
+    // cell's center: the floor-reconstruction round trip is exact).
+    s.playerRespawn = {3.5f, 54.5f, -7.5f};
     s.selectedSlot = 3;
     // UX-7 (format 23) / V2-3 (format 25): the tutorial progress — the
     // fixture carries an IN-PROGRESS state (the round trip must
@@ -290,17 +293,22 @@ Json stripEnchants(const Json& e) {
 
 Json stripXp(const Json& root) {
     Json out = root;
-    // The player.xp + player.xp_seed keys (the latter is V2-12, format 27).
+    // The player.xp + player.xp_seed keys (the latter is V2-12, format 27)
+    // + player.respawn (V2-13, format 28).
     if (const Json* player = root.find("player")) {
         if (player->isObject() &&
             (player->find("xp") != nullptr ||
-             player->find("xp_seed") != nullptr)) {
+             player->find("xp_seed") != nullptr ||
+             player->find("respawn") != nullptr)) {
             Json p = *player;
             if (player->find("xp") != nullptr) {
                 p = withoutKey(*player, "xp");
             }
             if (player->find("xp_seed") != nullptr) {
                 p = withoutKey(p, "xp_seed");
+            }
+            if (player->find("respawn") != nullptr) {
+                p = withoutKey(p, "respawn");
             }
             out["player"] = std::move(p);
         }
@@ -451,8 +459,8 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     s.tables.push_back(SavedTable {BlockPos {1, 53, 2}, table});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-8f/V2-3/V2-11: writes are always format 26 (V2-3 was 25).
-    EXPECT_EQ(j->find("format")->asInt(), 27);
+    // UX-8f/V2-3/V2-11: writes are always format 28 (V2-13 was 27).
+    EXPECT_EQ(j->find("format")->asInt(), 28);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -1568,8 +1576,8 @@ TEST(SaveRoundTripTest, StatesRoundTrip) {
     SaveGame s = makeStateSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-8f/V2-3/V2-11: writes are always format 26 (V2-3 was 25).
-    EXPECT_EQ(j->find("format")->asInt(), 27);
+    // UX-8f/V2-3/V2-11: writes are always format 28 (V2-13 was 27).
+    EXPECT_EQ(j->find("format")->asInt(), 28);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->states.size(), 1u);
@@ -1858,8 +1866,8 @@ TEST(SaveRoundTripTest, FurnacesRoundTrip) {
     s.furnaces[0].state.fuelSubsteps = 1234;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-8f/V2-3/V2-11: writes are always format 26 (V2-3 was 25).
-    EXPECT_EQ(j->find("format")->asInt(), 27);
+    // UX-8f/V2-3/V2-11: writes are always format 28 (V2-13 was 27).
+    EXPECT_EQ(j->find("format")->asInt(), 28);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
@@ -2255,8 +2263,8 @@ TEST(SaveRoundTripTest, FiresRoundTrip) {
     SaveGame s = makeFireSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-8f/V2-3/V2-11: writes are always format 26 (V2-3 was 25).
-    EXPECT_EQ(j->find("format")->asInt(), 27);
+    // UX-8f/V2-3/V2-11: writes are always format 28 (V2-13 was 27).
+    EXPECT_EQ(j->find("format")->asInt(), 28);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->fires.size(), 2u);
@@ -2472,8 +2480,10 @@ TEST(SaveFormat8Test, FormatSevenFileWithoutEffectsLoads) {
     // xp_seed (V2-12) — the same reason the stats comment below calls out
     // the rebuild.
     root["player"] = withoutKey(
-        withoutKey(withoutKey(*j->find("player"), "xp"), "xp_seed"),
-        "effects");
+        withoutKey(withoutKey(withoutKey(*j->find("player"), "xp"),
+                              "xp_seed"),
+                   "respawn"),
+        "effects"); // V2-13: the respawn key is format 28
     root["player"] = withoutKey(root["player"], "absorption"); // format 7 predates the absorption pool
     root["player"] = withoutKey(root["player"], "armor"); // SURV-1: format below 16 predates the player's armor
     root["player"] = withoutKey(root["player"], "oxygen"); // SURV-2: format below 17 predates the player's oxygen
@@ -2857,8 +2867,8 @@ TEST(SaveRoundTripTest, TablesRoundTrip) {
     s.tables[0].grid.setSlot(8, ItemStack {f.items.idForName("stone"), 64});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-8f/V2-3/V2-11: writes are always format 26 (V2-3 was 25).
-    EXPECT_EQ(j->find("format")->asInt(), 27);
+    // UX-8f/V2-3/V2-11: writes are always format 28 (V2-13 was 27).
+    EXPECT_EQ(j->find("format")->asInt(), 28);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->tables.size(), 2u);
@@ -3170,7 +3180,7 @@ TEST(SaveFormat20Test, EffectTierRoundTrips) {
     s.playerEffects.push_back(SavedEffect {"resistance", 30.0, 1});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 27);
+    EXPECT_EQ(j->find("format")->asInt(), 28);
     const Json& entry = (*j)["player"]["effects"].at(0);
     ASSERT_NE(entry.find("tier"), nullptr);
     EXPECT_EQ(entry.find("tier")->asInt(), 1);
@@ -3335,7 +3345,7 @@ TEST(SaveFormat21Test, StatsRoundTrips) {
     s.playerStats["kill.zombie"] = 5;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 27);
+    EXPECT_EQ(j->find("format")->asInt(), 28);
     const Json& st = (*j)["player"]["stats"];
     ASSERT_TRUE(st.isObject());
     ASSERT_NE(st.find("deathCount"), nullptr);
@@ -3434,7 +3444,7 @@ TEST(SaveFormat22Test, VelocityRoundTrips) {
     s.playerVelocity = Vec3 {2.5f, -3.75f, 0.125f};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 27);
+    EXPECT_EQ(j->find("format")->asInt(), 28);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerVelocity.x, 2.5f);
@@ -3693,8 +3703,8 @@ TEST(SaveFormat24Test, FullBackpackRoundTrips) {
     s.slots[35] = ItemStack {f.items.idForName("pick"), 1};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-8f/V2-3/V2-11: writes are always format 26 (V2-3 was 25), 36 entries.
-    EXPECT_EQ(j->find("format")->asInt(), 27);
+    // UX-8f/V2-3/V2-11: writes are always format 28 (V2-13 was 27), 36 entries.
+    EXPECT_EQ(j->find("format")->asInt(), 28);
     const Json& slots = *j->find("inventory")->find("slots");
     ASSERT_TRUE(slots.isArray());
     EXPECT_EQ(slots.size(),
@@ -4017,7 +4027,19 @@ TEST(SaveFormat26Test, Pre26FileCarryingPlayerXpIsAVersionLie) {
     Json root = *j;
     root["format"] = Json(25);
     // player.xp STAYS (the format is downgraded) — the whitelist must
-    // reject it. (No stripXp here: the key's presence is the point.)
+    // reject it. (No stripXp here: the key's presence is the point.) The
+    // OTHER post-25 player keys are stripped so the xp lie is the one
+    // named (the whitelist reports the alphabetically first unknown —
+    // V2-13's respawn / V2-12's xp_seed / the stats family would beat it).
+    {
+        Json p = *root.find("player");
+        p = withoutKey(p, "respawn");
+        p = withoutKey(p, "xp_seed");
+        p = withoutKey(p, "stats");
+        p = withoutKey(p, "velocity");
+        p = withoutKey(p, "tutorial");
+        root["player"] = std::move(p);
+    }
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("xp"), std::string::npos)

@@ -238,6 +238,7 @@ SaveGame makeSave(const SaveFixture& f) {
     s.playerAbsorption = 0.0f; // Phase 72 (no layer in the fixture)
     s.playerOxygen = kOxygenMax; // SURV-2 (no dive in the fixture)
     s.playerXp = 0; // V2-11 (format 26 requires the key; no XP in the fixture)
+    s.playerRespawn = {3.5f, 54.5f, -7.5f}; // V2-13 (format 28 always writes it)
     s.selectedSlot = 0;
     s.slots.resize(Inventory::kTotalSize);
     s.slots[0] = ItemStack {f.items.idForName("stone"), 64};
@@ -328,8 +329,8 @@ TEST(CampfireSaveTest, FormatIsThirteenAndRoundTrips) {
     s.campfires.push_back({BlockPos {4, 53, 4}, unlit});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-7/V2-3/V2-11: writes are always format 26 (V2-3 was 25).
-    EXPECT_EQ(j->find("format")->asInt(), 27);
+    // UX-7/V2-3/V2-11: writes are always format 28 (V2-13 was 27).
+    EXPECT_EQ(j->find("format")->asInt(), 28);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->campfires.size(), 3u);
@@ -356,7 +357,7 @@ TEST(CampfireSaveTest, FormatTwelveOldShapeMigratesToSlotZero) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(12);
-    root["player"] = withoutKey(withoutKey(root["player"], "xp"), "xp_seed"); // V2-11: the xp key is format-26 vocabulary
+    root["player"] = withoutKey(withoutKey(withoutKey(root["player"], "xp"), "xp_seed"), "respawn"); // V2-11: the xp key is format-26 vocabulary; V2-13: the respawn key is format-28 vocabulary
     root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
@@ -401,7 +402,7 @@ TEST(CampfireSaveTest, FormatTwelveEntryWithSlotsKeyRejected) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(12);
-    root["player"] = withoutKey(withoutKey(root["player"], "xp"), "xp_seed"); // V2-11: the xp key is format-26 vocabulary
+    root["player"] = withoutKey(withoutKey(withoutKey(root["player"], "xp"), "xp_seed"), "respawn"); // V2-11: the xp key is format-26 vocabulary; V2-13: the respawn key is format-28 vocabulary
     root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
@@ -459,7 +460,7 @@ TEST(CampfireSaveTest, FormatTenLoadsWithoutCampfires) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(10);
-    root["player"] = withoutKey(withoutKey(root["player"], "xp"), "xp_seed"); // V2-11: the xp key is format-26 vocabulary
+    root["player"] = withoutKey(withoutKey(withoutKey(root["player"], "xp"), "xp_seed"), "respawn"); // V2-11: the xp key is format-26 vocabulary; V2-13: the respawn key is format-28 vocabulary
     root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
@@ -487,7 +488,7 @@ TEST(CampfireSaveTest, FormatTenCampfireEditMigratesEmpty) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(10);
-    root["player"] = withoutKey(withoutKey(root["player"], "xp"), "xp_seed"); // V2-11: the xp key is format-26 vocabulary
+    root["player"] = withoutKey(withoutKey(withoutKey(root["player"], "xp"), "xp_seed"), "respawn"); // V2-11: the xp key is format-26 vocabulary; V2-13: the respawn key is format-28 vocabulary
     root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root["player"] = withoutKey(root["player"], "stats"); // SURV-7: the stats key is format 21
     root["player"] = withoutKey(root["player"], "velocity"); // SAVE-2: the velocity key is format 22
@@ -512,7 +513,7 @@ TEST(CampfireSaveTest, RejectsCampfiresFieldInFormatTen) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     root["format"] = Json(10); // keeps the "campfires" field
-    root["player"] = withoutKey(withoutKey(root["player"], "xp"), "xp_seed"); // V2-11: the xp key is format-26 vocabulary
+    root["player"] = withoutKey(withoutKey(withoutKey(root["player"], "xp"), "xp_seed"), "respawn"); // V2-11: the xp key is format-26 vocabulary; V2-13: the respawn key is format-28 vocabulary
     root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     root = withoutKey(root, "tables"); // CRAFT-1: isolate the "campfires" rejection
     root["table_grid"] = emptyTableGrid(); // CRAFT-1: format 10 still carried the global table grid

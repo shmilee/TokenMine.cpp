@@ -1,0 +1,19 @@
+{
+    "id": "bed_silver",
+    "properties": {
+        "sound_material": "cloth",
+        "hardness": 0.2,
+        "light_opacity": 0,
+        "drops": "bed_silver",
+        "dye_base": "bed",
+        "dye_color": "silver"
+    },
+    "model": {
+        "shape": "slab",
+        "textures": {
+            "top": "bed_silver",
+            "side": "bed_silver",
+            "bottom": "bed_silver"
+        }
+    }
+}

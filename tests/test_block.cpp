@@ -1963,7 +1963,9 @@ TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
     //   gravel= the gravel block
     //   sand  = sand + the sandstone chain (Minecraft: sandstone uses the
     //           sand sound — the dispatch decision)
-    //   cloth = the FULL 15-variant wool dye family
+    //   cloth = the FULL 15-variant wool dye family + the V2-13 15-
+    //           variant bed dye family (the wool's sound — the bed's
+    //           cloth material, the MC bed's place/break)
     //   glass = glass + glass_pane
     //   every other block = NO field (the generic fallback)
     const std::map<std::string, std::string> expected = {
@@ -2002,6 +2004,22 @@ TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
         {"wool_red", "cloth"},
         {"wool_silver", "cloth"},
         {"wool_yellow", "cloth"},
+        // V2-13: the FULL 15-variant bed dye family (the cloth material).
+        {"bed", "cloth"},
+        {"bed_black", "cloth"},
+        {"bed_blue", "cloth"},
+        {"bed_brown", "cloth"},
+        {"bed_cyan", "cloth"},
+        {"bed_gray", "cloth"},
+        {"bed_green", "cloth"},
+        {"bed_light_blue", "cloth"},
+        {"bed_magenta", "cloth"},
+        {"bed_orange", "cloth"},
+        {"bed_pink", "cloth"},
+        {"bed_purple", "cloth"},
+        {"bed_red", "cloth"},
+        {"bed_silver", "cloth"},
+        {"bed_yellow", "cloth"},
         {"glass", "glass"},
         {"glass_pane", "glass"},
     };

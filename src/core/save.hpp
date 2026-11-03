@@ -378,7 +378,32 @@ namespace mc {
 //      kXpSeedInit (the deterministic fresh value — the pool's 0
 //      migration twin) and no enchants exist (structurally: a pre-27
 //      file cannot carry them). Writes are always format 27.
-inline constexpr int kSaveFormat = 27;
+//  28: the V2-13 BED SYSTEM — "player" gains "respawn" (the player's
+//      RESPAWN POINT, the int CELL triple [x, y, z] — ALWAYS written,
+//      the oxygen / velocity key discipline). The triple is the floor of
+//      the remembered position's components: the bed's cell (the last
+//      sleep / day point-set — the position is the cell's center, core/
+//      bed's bedSpawnPosition, which floors exactly) or the world
+//      spawn's cell (a player who never slept — the init position, the
+//      integer y stays put under the floor). A format-28 file REQUIREs
+//      the key (a missing key is a version lie); a format-27 (or older)
+//      file CARRYING it is a version lie (the per-format field
+//      whitelist names it — the <=27 shapes predate the system). The
+//      components are whole numbers with y in [0, kWorldHeight) (the
+//      block-edit y bound — a spawn above the world is corruption,
+//      named); x / z are unbounded (the world is unbounded in X/Z).
+//      The parser RECONSTRUCTS the cell center (bedSpawnPosition); a
+//      format-27 (or older) load migrates into the sentinel (the system
+//      did not exist — the respawn was always the world spawn; the
+//      WORLD SPAWN ITSELF is unknowable at parse time — it is the
+//      generator's room-checked scan in the game's init — so the
+//      migration lands in Game::applySave, which re-pins the player's
+//      remembered spawn to the world spawn for a sentinel load).
+//      Respawn re-validates the bed at RESPAWN TIME only (core/bed's
+//      bedRespawnValid — the coordinate memory survives the bed's
+//      break / recolor / reorientation in between, the Minecraft rule).
+//      Writes are always format 28.
+inline constexpr int kSaveFormat = 28;
 // UX-8f (format 24): the inventory's total slot count as of format 23
 // (9 hotbar + 18 storage) — the 27-slot array shape a pre-24 file
 // carries (the parser tail-pads it to the current kTotalSize).
@@ -720,6 +745,19 @@ struct SaveGame {
     // 0 is a valid seed value (no sentinel — the migration is computed at
     // parse time, not inferred from a default).
     std::uint64_t playerXpSeed = 0;
+    // Respawn point (V2-13, format 28): the player's REMEMBERED respawn
+    // position (the bed cell's center from the last sleep / day
+    // point-set, or the world spawn for a player who never slept — the
+    // game's collectSave always fills the live value, so the sentinel
+    // never serializes). -1,-1,-1 = "unspecified" (format 1-27 files):
+    // the game migrates to the WORLD spawn in applySave (the migration
+    // cannot run at parse — the world spawn is the generator's
+    // room-checked scan in the game's init, the xp_seed's deterministic-
+    // migration twin except for the game-side application; the y < 0
+    // component is the discriminator — a parsed format-28 y is
+    // validated in [0, kWorldHeight), so a real value never reads as
+    // the sentinel).
+    Vec3 playerRespawn {-1.0f, -1.0f, -1.0f};
     std::vector<SavedItemEntity> entities;
     // The XP orbs (V2-11, format 26): the second entity kind of the
     // save's "entities" array (type "xp" — the item entries above keep

@@ -1,0 +1,19 @@
+{
+    "id": "bed_magenta",
+    "properties": {
+        "sound_material": "cloth",
+        "hardness": 0.2,
+        "light_opacity": 0,
+        "drops": "bed_magenta",
+        "dye_base": "bed",
+        "dye_color": "magenta"
+    },
+    "model": {
+        "shape": "slab",
+        "textures": {
+            "top": "bed_magenta",
+            "side": "bed_magenta",
+            "bottom": "bed_magenta"
+        }
+    }
+}

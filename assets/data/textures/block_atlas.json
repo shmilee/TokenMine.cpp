@@ -417,6 +417,66 @@
   "bookshelf": [
    14,
    2
+  ],
+  "bed": [
+   15,
+   2
+  ],
+  "bed_black": [
+   9,
+   3
+  ],
+  "bed_blue": [
+   10,
+   3
+  ],
+  "bed_brown": [
+   11,
+   3
+  ],
+  "bed_cyan": [
+   12,
+   3
+  ],
+  "bed_gray": [
+   13,
+   3
+  ],
+  "bed_green": [
+   14,
+   3
+  ],
+  "bed_light_blue": [
+   15,
+   3
+  ],
+  "bed_magenta": [
+   10,
+   4
+  ],
+  "bed_orange": [
+   11,
+   4
+  ],
+  "bed_pink": [
+   12,
+   4
+  ],
+  "bed_purple": [
+   13,
+   4
+  ],
+  "bed_red": [
+   14,
+   4
+  ],
+  "bed_silver": [
+   15,
+   4
+  ],
+  "bed_yellow": [
+   9,
+   6
   ]
  }
 }

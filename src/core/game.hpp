@@ -31,6 +31,7 @@
 
 #include "block/block_registry.hpp"
 #include "core/asset_manager.hpp"
+#include "core/bed.hpp"
 #include "core/camera.hpp"
 #include "core/config.hpp"
 #include "core/difficulty.hpp"
@@ -854,6 +855,29 @@ private:
     // when absent — defensive: the setBlock invariant makes that
     // unreachable).
     CampfireCookState& campfireAt(const BlockPos& pos);
+    // V2-13 (the bed sleep, core/bed): the right-click on a bed FAMILY
+    // block (the caller guarantees the kDyeBaseBed property — the family
+    // check, never a color id) and a NON-dye held item (a held dye is the
+    // Phase-41 recolor's, which falls through). The three gates, in
+    // order (the pure predicates own the boundaries, core/bed):
+    //   b — the player's feet within kSleepMaxDistance (3, the Minecraft
+    //       value) of the bed cell's center;
+    //   c — no HOSTILE mob (the spawn-protection's data flag, the same
+    //       check) in the 8x5 box around the bed;
+    //   a — the night window (the day-cycle's dusk->dawn span).
+    // b or c failing = the whole action is refused (no spawn point —
+    // the documented deviation 6). Passed: the respawn point is the bed
+    // cell's center (Minecraft: the right-click sets it, night or day);
+    // inside the window the sleep completes IMMEDIATELY (the documented
+    // deviation 2 — no 101-tick entry animation): the time jumps to
+    // kDawnStart (the 06:00 dawn), a RAINING weather resets to CLEAR
+    // (the Minecraft "sleeping clears the rain" rule — a clear sky is
+    // untouched; the V2-4 machine's pure initial state, a fresh CLEAR
+    // segment off the same world-seed streams), the "sleep" cue plays
+    // (spatialized at the bed) and the "sleep" tutorial event emits
+    // (the closed vocabulary's new bare word — no series JSON change).
+    // The click is consumed either way (no placement fall-through).
+    void trySleep(const BlockHit& hit);
     // Footstep sound timer (moving + on ground, pointer captured).
     void updateSoundTimers(double dt);
     // SAVE-1: the auto-save pass (REAL dt, the survival-timer class —
@@ -871,6 +895,22 @@ private:
     // from the player's state) and plays the death sound, and R (while
     // dead) respawns the player.
     void updateSurvival(double dt);
+    // V2-13 (the respawn flow, core/bed): the R key's single choke point
+    // (the game side of the death screen — updateSurvival calls this
+    // instead of the player's respawn() directly). The RESPAWN-TIME bed
+    // validation (the Minecraft rule — only at respawn, the coordinate
+    // memory survives the bed's break/recolor/reorientation in between):
+    // the remembered spawn (the player's m_spawnPos — the bed cell's
+    // center from the last sleep / point-set, or the world spawn) is
+    // checked by the pure bedRespawnValid (the cell holds a bed family
+    // block + the player's AABB fits); a valid bed respawns AT the bed,
+    // an invalid one (no bed, a blocked headroom) falls back to the
+    // WORLD spawn (m_mobs.spawnPoint — captured at init, before the
+    // save load, the spawn-protection anchor). The fallback writes the
+    // world spawn back (setSpawnPos): a broken bed therefore restores
+    // the world spawn PERMANENTLY (the Minecraft rule — the coordinate
+    // memory is re-pinned to what the respawn actually used).
+    void respawnPlayer();
     // World-space overlay: the break crack on the target block + the
     // target outline (drawn in the blending pass, depth test on).
     void drawWorldOverlay(const Mat4& view, const Mat4& projection);

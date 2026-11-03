@@ -1,0 +1,17 @@
+{
+    "id": "bed_blue",
+    "type": "shaped",
+    "output": {
+        "item": "bed_blue",
+        "count": 1
+    },
+    "pattern": [
+        "   ",
+        "WWW",
+        "PPP"
+    ],
+    "key": {
+        "W": "wool_blue",
+        "P": "planks"
+    }
+}

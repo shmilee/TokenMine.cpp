@@ -60,6 +60,13 @@ Result<SaveGame> Game::collectSave() const {
     // / velocity key discipline; the game always has the value, set at
     // init / load).
     save.playerXpSeed = m_player->xpSeed();
+    // V2-13 (format 28): the player's respawn point (always written — the
+    // oxygen / velocity key discipline; the game always has the value, the
+    // world spawn at init, the bed's cell center after a sleep / day
+    // point-set). The serializer stores the int cell triple (the floor of
+    // the components — exact for both position classes); the parse
+    // reconstructs the cell center.
+    save.playerRespawn = m_player->spawnPos();
     save.selectedSlot = static_cast<int>(m_selectedSlot);
     save.slots.resize(m_inventory.size());
     for (std::size_t i = 0; i < save.slots.size(); ++i) {
@@ -593,6 +600,20 @@ Result<void> Game::applySave(const SaveGame& save) {
     // fills this (a format-27 read, or the deterministic worldSeed ^
     // kXpSeedInit migration for a pre-27 load), so the restore is direct.
     m_player->setXpSeed(save.playerXpSeed);
+    // 4g-quater) The player's respawn point (format 28; V2-13). A
+    // format-28 save carries the cell center (parse-reconstructed —
+    // the bed's cell from the last sleep / point-set, or the world
+    // spawn's cell); the restore is direct. A pre-28 load carries the
+    // sentinel (the system did not exist — the respawn was always the
+    // world spawn): the migration re-pins the remembered spawn to the
+    // WORLD SPAWN (m_mobs.spawnPoint — captured at init BEFORE this
+    // save load, the spawn-protection anchor; the parse cannot know it
+    // — the generator's room-checked scan lives in the game's init).
+    if (save.playerRespawn.y >= 0.0f) {
+        m_player->setSpawnPos(save.playerRespawn);
+    } else {
+        m_player->setSpawnPos(m_mobs.spawnPoint);
+    }
     // 4h) The player's tutorial progress (format 23; UX-7, the series
     // from format 25 / V2-3). The pure restore (tutorialRestore) owns
     // the cross-checks: the series must name a series of the CURRENT

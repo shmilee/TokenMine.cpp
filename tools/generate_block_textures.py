@@ -831,6 +831,53 @@ def enchanting_table(x, y):
     return (v + 10, v + 4, v + 12, 255)
 
 
+# V2-13: the dyed bed family (15 colors, the wool vocabulary). The bed is a
+# slab block (bottom half-cell, the stone_slab precedent); its tile is the
+# colored BLANKET (the wool palette — the bed and its wool ingredient read
+# as one material) with a white PILLOW band across the head end (rows
+# 0..3 — the Minecraft bed look: a pillow at one end, the blanket across
+# the rest). One noise per tile (the wool fluff paradigm: hue constant,
+# brightness varies). New salts 985..999 (after the bookshelf's 980..984),
+# every existing texture pixel-identical.
+BED_SALT = {
+    "bed": 985,
+    "bed_black": 986,
+    "bed_blue": 987,
+    "bed_brown": 988,
+    "bed_cyan": 989,
+    "bed_gray": 990,
+    "bed_green": 991,
+    "bed_light_blue": 992,
+    "bed_magenta": 993,
+    "bed_orange": 994,
+    "bed_pink": 995,
+    "bed_purple": 996,
+    "bed_red": 997,
+    "bed_silver": 998,
+    "bed_yellow": 999,
+}
+# The bed's blanket color IS the wool palette (same name stem: "bed" is
+# the white family base, "bed_<color>" the dyed variants — the wool's
+# dyeVariantName convention mirrored).
+assert BED_SALT.keys() == {
+    "bed" if c == "wool" else f"bed_{c[len('wool_'):]}"
+    for c in WOOL_PALETTE
+}, "BED_SALT must cover every wool palette color"
+
+
+def make_bed_tile(name: str):
+    (br, bg, bb) = WOOL_PALETTE[
+        "wool" if name == "bed" else f"wool_{name[len('bed_'):]}"]
+    salt = BED_SALT[name]
+
+    def tile(x, y):
+        n = noise(x, y, salt, 10)
+        if y <= 3:  # the white pillow band (the head end)
+            return (clamp(238 + n), clamp(238 + n), clamp(240 + n), 255)
+        return (clamp(br + n), clamp(bg + n), clamp(bb + n), 255)
+    return tile
+
+
 def bookshelf(x, y):
     """V2-12: the bookshelf tile (the `bookshelf` block). A plank base (the
     fence planks palette, salt 980) with THREE horizontal shelf rows of
@@ -918,6 +965,10 @@ TEXTURES = {
     # 966..972 + 980..984).
     "enchanting_table": enchanting_table,
     "bookshelf": bookshelf,
+    # V2-13: the dyed bed family (15 colors — the wool vocabulary). New
+    # tiles only, every existing PNG stays byte-identical (salts
+    # 985..999).
+    **{name: make_bed_tile(name) for name in BED_SALT},
 }
 
 

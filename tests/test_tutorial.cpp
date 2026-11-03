@@ -321,10 +321,13 @@ TEST(TutorialParseTest, RejectsGoalOutsideClosedVocabulary) {
     EXPECT_FALSE(withGoal("break").ok());      // qualified without a dot
     EXPECT_FALSE(withGoal("").ok());           // empty
     // The bare words pass the grammar (their existence is not a
-    // registry question).
+    // registry question). V2-13: "sleep" (the bed's night-skip event —
+    // the vocabulary's new bare word) passes too.
     EXPECT_TRUE(withGoal("walk").ok());
     EXPECT_TRUE(withGoal("jump").ok());
     EXPECT_TRUE(withGoal("eat").ok());
+    EXPECT_TRUE(withGoal("sleep").ok());
+    EXPECT_EQ(kTutorialBareGoalCount, 4u);
     // All seven prefixes with a name pass the grammar (V2-3: pickup +
     // smelt joined the closed vocabulary).
     EXPECT_TRUE(withGoal("craft.x").ok());

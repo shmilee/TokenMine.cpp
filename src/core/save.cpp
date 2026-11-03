@@ -11,6 +11,7 @@
 #include <string>
 #include <utility>
 
+#include "core/bed.hpp" // V2-13: the respawn cell-center reconstruction
 #include "core/enchanting.hpp" // V2-12: the EnchantmentRegistry + vocab
 #include "entity/exp_orb.hpp" // V2-11: the xp entity's timer constants
 #include "entity/item_entity.hpp"
@@ -910,6 +911,24 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     // fit the JSON number's 53-bit double mantissa — the round trip must
     // be lossless or the next offer roll would diverge).
     player["xp_seed"] = Json(xpSeedToHex(save.playerXpSeed));
+    // V2-13 (format 28): the player's respawn point — ALWAYS written (a
+    // format-28 file REQUIRES the key — the oxygen / velocity key
+    // discipline; the game's collectSave always fills the live value, so
+    // the sentinel never reaches the serializer). The int CELL triple of
+    // the position (the floor of each component: the bed's cell — the
+    // cell-center position floors exactly — or the world spawn's cell,
+    // whose integer y stays put). The parser reconstructs the cell
+    // center (core/bed's bedSpawnPosition).
+    {
+        Json rpos = Json::array();
+        const float comps[3] = {save.playerRespawn.x, save.playerRespawn.y,
+                                save.playerRespawn.z};
+        for (int i = 0; i < 3; ++i) {
+            rpos.push_back(Json(static_cast<double>(
+                static_cast<int>(std::floor(comps[i])))));
+        }
+        player["respawn"] = std::move(rpos);
+    }
     // UX-7 (format 23) / V2-3 (format 25): the player's tutorial
     // progress — ALWAYS written (a format-23+ file REQUIRES the key; an
     // empty object = done/skipped — the armor/tables key discipline).
@@ -1306,6 +1325,13 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // carrying it is a version lie (the whitelist naming above).
     if (fmt->asInt() >= 27) {
         playerFields.insert("xp_seed");
+    }
+    // V2-13: "respawn" is format-28-and-newer vocabulary — a pre-28 file
+    // carrying it is a version lie (the whitelist naming above; the
+    // player.respawn parse below requires it ON format-28 files, the
+    // three-way discipline).
+    if (fmt->asInt() >= 28) {
+        playerFields.insert("respawn");
     }
     MC_TRY(rejectUnknownFields(*player, playerFields, "save 'player'"));
     const Json* ppos = player->find("pos");
@@ -1735,6 +1761,46 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         // 0-migration twin). expectedSeed ^ kXpSeedInit.
         save.playerXpSeed =
             static_cast<std::uint64_t>(expectedSeed) ^ kXpSeedInit;
+    }
+    // Respawn point (format 28; V2-13, the bed system). The player's
+    // REMEMBERED respawn position as the int CELL triple [x, y, z] (the
+    // bed's cell from the last sleep / day point-set, or the world
+    // spawn's cell). A format-28 file REQUIRES the key (the oxygen /
+    // velocity key discipline); the components must be WHOLE NUMBERS
+    // (named) with y in [0, kWorldHeight) (the block-edit y bound — a
+    // spawn above the world is corruption, named; x / z are unbounded,
+    // the world is unbounded in X/Z, the player.pos twin). The parse
+    // RECONSTRUCTS the cell center (core/bed's bedSpawnPosition — the
+    // slab's top is the cell's middle, the feet rest on it). A pre-28
+    // file keeps the SENTINEL (-1,-1,-1): the migration is the WORLD
+    // SPAWN, which is unknowable at parse time (the generator's
+    // room-checked scan in the game's init) — Game::applySave re-pins
+    // the player's remembered spawn from the sentinel to it.
+    if (def.find("format")->asInt() >= 28) {
+        const Json* rpos = player->find("respawn");
+        if (rpos == nullptr || !rpos->isArray() || rpos->size() != 3) {
+            return MC_FAIL("save format 28 requires 'player.respawn' "
+                           "(an array of 3 integers — the respawn cell's "
+                           "coordinates)");
+        }
+        int comps[3] = {0, 0, 0};
+        for (int i = 0; i < 3; ++i) {
+            double d = 0.0;
+            if (!isInt(rpos->at(i), &d)) {
+                return MC_FAIL("save 'player.respawn'[" + std::to_string(i) +
+                               "] must be a whole number, got " +
+                               (rpos->at(i).isNumber()
+                                    ? std::to_string(rpos->at(i).asDouble())
+                                    : "a non-number"));
+            }
+            comps[i] = static_cast<int>(d);
+        }
+        if (comps[1] < 0 || comps[1] >= kWorldHeight) {
+            return MC_FAIL("save 'player.respawn'[1] (y) must be in "
+                           "[0, " + std::to_string(kWorldHeight) +
+                           "), got " + std::to_string(comps[1]));
+        }
+        save.playerRespawn = bedSpawnPosition(comps[0], comps[1], comps[2]);
     }
     // UX-7 (format 23) / V2-3 (format 25): the player's tutorial
     // progress. REQUIRED for a format-23 file (a missing key is a

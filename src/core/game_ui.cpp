@@ -875,9 +875,33 @@ void Game::updateSurvival(double dt) {
     }
     m_prevHealth = hp;
     if (dead && m_input.wasPressed(GameKey::R)) {
-        m_player->respawn();
+        respawnPlayer();
         m_prevHealth = m_player->health(); // no hurt flash on respawn
     }
+}
+
+void Game::respawnPlayer() {
+    // V2-13 (core/bed): the R key's single choke point — the RESPAWN-
+    // TIME bed validation (the Minecraft rule: the saved coordinate is
+    // re-checked only at the respawn; the bed's break / recolor /
+    // reorientation in between do not move it). The remembered spawn
+    // (the player's m_spawnPos — the bed cell's center from the last
+    // sleep / point-set, or the world spawn for a player who never
+    // slept): valid = the cell still holds a bed FAMILY block (the
+    // kDyeBaseBed property, color-blind) with room for the player's
+    // AABB -> respawn AT the bed; invalid -> the WORLD spawn
+    // (m_mobs.spawnPoint — captured at init before the save load, the
+    // spawn-protection anchor) and the memory re-pins to it (a broken
+    // bed therefore restores the world spawn permanently — the
+    // Minecraft rule, the coordinate memory follows the respawn).
+    const Vec3 remembered = m_player->spawnPos();
+    const Vec3 target = bedRespawnValid(
+        m_world, m_blocks, remembered, m_player->params().width,
+        m_player->params().height)
+        ? remembered
+        : m_mobs.spawnPoint;
+    m_player->setSpawnPos(target);
+    m_player->respawn();
 }
 
 Game::UiSize Game::uiSize() const {

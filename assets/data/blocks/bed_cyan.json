@@ -1,0 +1,19 @@
+{
+    "id": "bed_cyan",
+    "properties": {
+        "sound_material": "cloth",
+        "hardness": 0.2,
+        "light_opacity": 0,
+        "drops": "bed_cyan",
+        "dye_base": "bed",
+        "dye_color": "cyan"
+    },
+    "model": {
+        "shape": "slab",
+        "textures": {
+            "top": "bed_cyan",
+            "side": "bed_cyan",
+            "bottom": "bed_cyan"
+        }
+    }
+}

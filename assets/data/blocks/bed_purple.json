@@ -1,0 +1,19 @@
+{
+    "id": "bed_purple",
+    "properties": {
+        "sound_material": "cloth",
+        "hardness": 0.2,
+        "light_opacity": 0,
+        "drops": "bed_purple",
+        "dye_base": "bed",
+        "dye_color": "purple"
+    },
+    "model": {
+        "shape": "slab",
+        "textures": {
+            "top": "bed_purple",
+            "side": "bed_purple",
+            "bottom": "bed_purple"
+        }
+    }
+}

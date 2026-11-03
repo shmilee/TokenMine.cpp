@@ -90,9 +90,12 @@ inline constexpr const char* kTutorialDoneText = "全部完成！";
 
 // The closed goal vocabulary: the bare (unqualified) event words, and
 // the qualified form's seven prefixes (each followed by "." + a
-// registry name).
+// registry name). V2-13: "sleep" (the bed's night-skip — the
+// emitTutorialEvent's new bare word; no series JSON uses it yet, the
+// vocabulary change is forward-compatible: an event no step waits for
+// is a no-op, tutorialApply's invariant).
 inline constexpr const char* const kTutorialBareGoals[] = {
-    "walk", "jump", "eat"};
+    "walk", "jump", "eat", "sleep"};
 inline constexpr std::size_t kTutorialBareGoalCount =
     sizeof(kTutorialBareGoals) / sizeof(kTutorialBareGoals[0]);
 inline constexpr const char* const kTutorialGoalPrefixes[] = {

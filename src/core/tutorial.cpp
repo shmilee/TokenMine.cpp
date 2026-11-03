@@ -38,8 +38,8 @@ bool isWholeNumber(const Json& v, double* out) {
     return true;
 }
 
-// The closed prefix list for the grammar error message (built from the
-// vocabulary — a prefix added there updates the wording automatically,
+// The closed list for the grammar error message (built from the
+// vocabulary — a word added there updates the wording automatically,
 // no second hand-kept list to drift).
 std::string prefixList() {
     std::string out;
@@ -48,6 +48,17 @@ std::string prefixList() {
             out += "|";
         }
         out += kTutorialGoalPrefixes[i];
+    }
+    return out;
+}
+
+std::string bareList() {
+    std::string out;
+    for (std::size_t i = 0; i < kTutorialBareGoalCount; ++i) {
+        if (i > 0) {
+            out += "|";
+        }
+        out += kTutorialBareGoals[i];
     }
     return out;
 }
@@ -63,9 +74,8 @@ bool goalGrammarOk(const std::string& goal, std::string* error) {
     }
     const auto dot = goal.find('.');
     if (dot == std::string::npos) {
-        *error = " (bare goals are walk / jump / eat; qualified goals "
-                 "are <" +
-                 prefixList() + ">.<name>)";
+        *error = " (bare goals are " + bareList() +
+                 "; qualified goals are <" + prefixList() + ">.<name>)";
         return false;
     }
     const std::string prefix = goal.substr(0, dot);

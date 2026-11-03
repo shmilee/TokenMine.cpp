@@ -430,6 +430,19 @@ public:
     // (Minecraft-Java keep-inventory respawn).
     void respawn();
 
+    // -- respawn point (V2-13, format 28) ------------------------------------
+    // The respawn position (the AABB bottom center — the constructor's
+    // spawnPos argument, the world spawn at init). The game owns every
+    // change: the bed sleep / day point-set (core/bed's bedSpawnPosition
+    // — the bed cell's center) and the save load (the format-28 restore,
+    // or the world-spawn migration for a pre-28 file). The respawn itself
+    // is the Game's (respawnPlayer — the bed validation, core/bed's
+    // bedRespawnValid, falls back to the world spawn; this member is the
+    // coordinate memory, validated only at respawn time, the Minecraft
+    // rule).
+    Vec3 spawnPos() const { return m_spawnPos; }
+    void setSpawnPos(Vec3 pos) { m_spawnPos = pos; }
+
     // Restore health (save load): clamped to [0, base max] (Phase 72: the
     // absorption pool is SEPARATE — it is restored via setAbsorption, the
     // two pools of the format-12 save); 0 sets the dead state (a dead save

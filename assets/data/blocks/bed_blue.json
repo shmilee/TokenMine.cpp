@@ -1,0 +1,19 @@
+{
+    "id": "bed_blue",
+    "properties": {
+        "sound_material": "cloth",
+        "hardness": 0.2,
+        "light_opacity": 0,
+        "drops": "bed_blue",
+        "dye_base": "bed",
+        "dye_color": "blue"
+    },
+    "model": {
+        "shape": "slab",
+        "textures": {
+            "top": "bed_blue",
+            "side": "bed_blue",
+            "bottom": "bed_blue"
+        }
+    }
+}
