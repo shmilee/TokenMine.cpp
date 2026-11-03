@@ -16,10 +16,17 @@
 //   - the item-model geometry's cutout mark
 //   - the render.alpha_test config key (code default true, the render.fog
 //     precedent)
+//   - V2-10: the full block-texture alpha census pin (every texture with
+//     alpha-0 holes is routed on a discard-covered path — the cutout pass
+//     for pure cutouts, the blend pass + the bucket-independent discard
+//     for the intermediate-alpha glass; KNOWN_ISSUES 29 = PRE-5 full
+//     coverage, zero render code)
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <cstddef>
+#include <fstream>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -27,6 +34,7 @@
 #include "core/asset_manager.hpp"
 #include "core/config.hpp"
 #include "core/json.hpp"
+#include "core/png.hpp"
 #include "entity/item_model_mesh.hpp"
 #include "item/item.hpp"
 #include "renderer/alpha_test.hpp"
@@ -264,6 +272,131 @@ TEST(AlphaCutoutContentTest, BlendPassBlocksAreNotCutout) {
         ASSERT_TRUE(b != nullptr) << name;
         EXPECT_FALSE(b->properties.cutout) << name;
     }
+}
+
+// V2-10 (KNOWN_ISSUES 29 = PRE-5 full coverage, zero render code): the
+// FULL 16x16 block-texture alpha census pin. Every block texture carrying
+// alpha-0 HOLES must be routed on a discard-covered path:
+//   - a PURE cutout image (alpha set ⊆ {0, 255}) -> every referencing
+//     block is cutout-routed (the cutout pass: discard active + depth
+//     write on);
+//   - an intermediate-alpha image (the glass: holes + a translucent
+//     core) -> every referencing block stays in the blend pass, whose
+//     draws carry the SAME fragment discard (u_discardEnabled is set on
+//     the basic program per frame — bucket-independent), active under
+//     the render.alpha_test CODE DEFAULT true (config.json carries no
+//     override — zero config keys).
+// A future texture that leaks alpha-0 holes onto an uncovered path fails
+// this pin by name.
+TEST(AlphaCutoutContentTest, EveryHoleTextureIsDiscardCovered) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+
+    // Reverse index: texture name -> the referencing block names (every
+    // model slot: the cube faces, the V2-7 per-face overrides, the cross,
+    // the GEN-9 moisture top).
+    std::map<std::string, std::vector<std::string>> blocksByTexture;
+    for (std::size_t i = 0; i < reg.count(); ++i) {
+        const Block& b = reg.at(BlockID{static_cast<int>(i)});
+        const std::vector<std::string> slots = {
+            b.model.textures.top,  b.model.textures.side,
+            b.model.textures.bottom, b.model.textures.front,
+            b.model.textures.back, b.model.textures.left,
+            b.model.textures.right, b.model.textures.cross,
+            b.model.moistureTop,
+        };
+        for (const std::string& s : slots) {
+            if (!s.empty()) {
+                blocksByTexture[s].push_back(b.name);
+            }
+        }
+    }
+
+    // The discard gate's code default, pinned two ways: a fresh config
+    // resolves the getBool default, and the SHIPPED config carries no
+    // override key (the zero-config red line — the code default is what
+    // runs).
+    {
+        Config fresh;
+        EXPECT_TRUE(fresh.getBool("render.alpha_test", true));
+    }
+    auto shipped = Config::load("config/config.json");
+    ASSERT_TRUE(shipped.ok()) << shipped.error().message;
+    EXPECT_EQ((*shipped).at("render.alpha_test"), nullptr);
+
+    // The census: every PNG in textures/blocks (the 16x16 block
+    // tiles — the directory and the block-referenced set are 1:1).
+    auto files = assets.listDir("textures/blocks");
+    ASSERT_TRUE(files.ok()) << files.error().message;
+    int holeTextures = 0;
+    int pureHoleTextures = 0;
+    std::vector<std::string> nonPureHoleTextures;
+    for (const std::string& file : *files) {
+        if (file.size() < 4 || file.substr(file.size() - 4) != ".png") {
+            continue;
+        }
+        const std::string name = file.substr(0, file.size() - 4);
+        std::ifstream in(assets.root() / "textures/blocks" / file, std::ios::binary);
+        ASSERT_TRUE(in) << "missing block texture: " << file;
+        const std::string bytes(
+            (std::istreambuf_iterator<char>(in)),
+            std::istreambuf_iterator<char>());
+        auto image = Png::decode(bytes);
+        ASSERT_TRUE(image.ok()) << file << ": " << image.error().describe();
+        int n0 = 0, nMid = 0;
+        for (std::size_t i = 3; i < image->rgba.size(); i += 4) {
+            const int a = image->rgba[i];
+            if (a == 0) {
+                ++n0;
+            } else if (a < 255) {
+                ++nMid;
+            }
+        }
+        if (n0 == 0) {
+            continue; // no holes — the discard never fires, any pass safe
+        }
+        ++holeTextures;
+        const bool pure =
+            isPureCutoutImage(image->rgba.data(), image->width,
+                              image->height);
+        EXPECT_EQ(pure, nMid == 0) << name; // the predicate and the census
+        const auto it = blocksByTexture.find(name);
+        ASSERT_NE(it, blocksByTexture.end())
+            << name << " is on disk but no block references it";
+        if (pure) {
+            ++pureHoleTextures;
+            // Pin: the CUTOUT pass (discard + depth write on).
+            for (const std::string& b : it->second) {
+                const Block* blk = reg.findByName(b);
+                ASSERT_NE(blk, nullptr) << b;
+                EXPECT_TRUE(blk->properties.cutout)
+                    << name << " is a pure cutout image but '" << b
+                    << "' leaves the cutout pass";
+            }
+        } else {
+            nonPureHoleTextures.push_back(name);
+            // Pin: the BLEND pass + the bucket-independent discard (the
+            // alpha_test code default true pinned above).
+            for (const std::string& b : it->second) {
+                const Block* blk = reg.findByName(b);
+                ASSERT_NE(blk, nullptr) << b;
+                EXPECT_FALSE(blk->properties.cutout)
+                    << name << " carries intermediate alpha — '" << b
+                    << "' must stay in the blend pass";
+            }
+        }
+    }
+    // The v2.10.0 census, pinned: 21 hole textures = the 20 pure cutouts
+    // (the leaves family + all the cross plants) + glass (the ONLY
+    // intermediate-alpha hole texture — 187 holes + 9 core pixels).
+    // water / glass_pane / honey are mid-only (zero holes, above the pin
+    // line).
+    EXPECT_EQ(holeTextures, 21);
+    EXPECT_EQ(pureHoleTextures, 20);
+    EXPECT_EQ(nonPureHoleTextures, (std::vector<std::string>{"glass"}));
 }
 
 // ---------------------------------------------------------------------------

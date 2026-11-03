@@ -102,6 +102,12 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "cutout", "boolean",
                    [&](const Json& v) { out.cutout = v.asBool(); });
     MC_TRY(r);
+    // V2-10: the same-id leaf culling flag (a strict boolean like the
+    // cutout precedent; no name to cross-check at init — the mesher reads
+    // the property and the neighbor's block id, both registry data).
+    r = checkField(*p, "cull_same_id", "boolean",
+                   [&](const Json& v) { out.cullSameId = v.asBool(); });
+    MC_TRY(r);
     r = checkField(*p, "destroyable", "boolean",
                    [&](const Json& v) { out.destroyable = v.asBool(); });
     MC_TRY(r);

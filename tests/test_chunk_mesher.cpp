@@ -3,13 +3,16 @@
 // positions, outward normals) and per-face UV mapping.
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "block/block_registry.hpp"
+#include "core/asset_manager.hpp"
 #include "renderer/texture_atlas.hpp"
 #include "world/chunk_mesher.hpp"
 #include "world/world.hpp"
@@ -1443,4 +1446,172 @@ TEST(ChunkMesherTest, V27NoFacesBlockMeshesAsBefore) {
         ASSERT_EQ(vs.size(), 4u);
         EXPECT_EQ(vs[0].uv, (Vec2 {0.0f, w.v}));
     }
+}
+
+// ============================================================================
+//   V2-10 — cull_same_id (the leaf-leaf internal faces)
+// ============================================================================
+
+namespace {
+
+// The V2-10 fixture: makeRegistry + a leaves block carrying cull_same_id
+// (non-opaque + transparent + cutout, like the shipped leaves family).
+BlockRegistry makeLeafRegistry() {
+    BlockRegistry reg = makeRegistry();
+    auto leaves = reg.registerBlock(parseDef(
+        cubeDef("leaves",
+                R"({"opaque":false,"transparent":true,"solid":false,)"
+                R"("cutout":true,"cull_same_id":true})",
+                R"({"top":"t","side":"t","bottom":"t"})")));
+    if (!leaves.ok()) {
+        ADD_FAILURE() << leaves.error().message;
+    }
+    return reg;
+}
+
+} // namespace
+
+TEST(ChunkMesherV210Test, CullSameIdParsesStrictBoolean) {
+    // Present + true: parsed.
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        cubeDef("a",
+                R"({"opaque":false,"transparent":true,"solid":false,)"
+                R"("cull_same_id":true})",
+                R"({"top":"t","side":"t","bottom":"t"})")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(reg.findByName("a")->properties.cullSameId);
+    // Absent = false (the pre-V2-10 default — every field-less block).
+    auto r2 = reg.registerBlock(parseDef(
+        cubeDef("b", R"({"opaque":false,"transparent":true,"solid":false})",
+                R"({"top":"t","side":"t","bottom":"t"})")));
+    ASSERT_TRUE(r2.ok()) << r2.error().message;
+    EXPECT_FALSE(reg.findByName("b")->properties.cullSameId);
+    // A non-boolean is rejected by NAME (the checkField discipline, the
+    // cutout precedent — no silent fallback for malformed data).
+    auto r3 = BlockRegistry{}.registerBlock(parseDef(
+        cubeDef("c",
+                R"({"opaque":false,"transparent":true,"solid":false,)"
+                R"("cull_same_id":"yes"})",
+                R"({"top":"t","side":"t","bottom":"t"})")));
+    ASSERT_FALSE(r3.ok());
+    EXPECT_NE(r3.error().message.find("cull_same_id"), std::string::npos);
+    EXPECT_NE(r3.error().message.find("boolean"), std::string::npos);
+}
+
+TEST(ChunkMesherV210Test, LeafLeafInternalFacesAreCulled) {
+    BlockRegistry reg = makeLeafRegistry();
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("leaves"));
+    world.setBlock(9, 4, 8, reg.idForName("leaves"));
+    const auto data = mesh(world, reg, {0, 0, 0});
+    // 6 + 6 - 2 (the shared face dropped from BOTH sides — the symmetry)
+    // = 10 visible faces. Greedy merge (same tile + light + bucket): the
+    // coplanar pairs on the Y/Z planes merge into four 2x1 quads, the two
+    // outer X faces stay single: 4 + 2 = 6 quads = 24 cutout vertices.
+    EXPECT_TRUE(data.opaqueEmpty());
+    EXPECT_TRUE(data.transparentEmpty());
+    EXPECT_EQ(data.cutoutVertices.size(), 24u);
+    EXPECT_EQ(data.cutoutIndices.size(), 36u);
+    // The between plane (x=9) carries NO +-X face vertices: the only +X
+    // face is the EAST face of (9,4,8) at x=10, the only -X face the WEST
+    // face of (8,4,8) at x=8 (pre-V2-10 this pair kept both between-faces).
+    const std::vector<MeshVertex> plusX =
+        verticesWithNormal(data.cutoutVertices, {1.0f, 0.0f, 0.0f});
+    ASSERT_EQ(plusX.size(), 4u);
+    for (const MeshVertex& v : plusX) {
+        EXPECT_FLOAT_EQ(v.position.x, 10.0f);
+    }
+    const std::vector<MeshVertex> minusX =
+        verticesWithNormal(data.cutoutVertices, {-1.0f, 0.0f, 0.0f});
+    ASSERT_EQ(minusX.size(), 4u);
+    for (const MeshVertex& v : minusX) {
+        EXPECT_FLOAT_EQ(v.position.x, 8.0f);
+    }
+}
+
+TEST(ChunkMesherV210Test, LeafLeafCrossChunkFacesCulledInBothMeshes) {
+    // Local x=15 in chunk 0 and local x=0 in chunk 1 (the world
+    // getBlock neighbor path): the shared face is culled in BOTH meshes.
+    BlockRegistry reg = makeLeafRegistry();
+    World world;
+    world.setBlock(15, 4, 4, reg.idForName("leaves"));
+    world.setBlock(16, 4, 4, reg.idForName("leaves"));
+    const auto d0 = mesh(world, reg, {0, 0, 0});
+    const auto d1 = mesh(world, reg, {1, 0, 0});
+    // Each chunk: 6 faces minus the shared one = 5 faces = 20 cutout
+    // vertices (the opaque pair's CrossChunkFaceIsCulled arithmetic, in
+    // the cutout bucket).
+    EXPECT_EQ(d0.cutoutVertices.size(), 20u);
+    EXPECT_EQ(d1.cutoutVertices.size(), 20u);
+    // The shared face is gone from both sides (the void-side faces stay).
+    EXPECT_EQ(countVerticesWithNormal(d0.cutoutVertices, {1.0f, 0.0f, 0.0f}),
+              0);
+    EXPECT_EQ(countVerticesWithNormal(d1.cutoutVertices, {-1.0f, 0.0f, 0.0f}),
+              0);
+}
+
+TEST(ChunkMesherV210Test, LeafGlassKeepsBothBetweenFaces) {
+    // DIFFERENT ids: the cull is same-id only — the leaf keeps its +X
+    // face (cutout bucket) and the glass keeps its -X face (blend bucket),
+    // each block all six faces (a non-opaque neighbor never occludes).
+    BlockRegistry reg = makeLeafRegistry();
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("leaves"));
+    world.setBlock(9, 4, 8, reg.idForName("glass"));
+    const auto data = mesh(world, reg, {0, 0, 0});
+    EXPECT_TRUE(data.opaqueEmpty());
+    EXPECT_EQ(data.cutoutVertices.size(), 24u);
+    EXPECT_EQ(data.transparentVertices.size(), 24u);
+    const std::vector<MeshVertex> leafPlusX =
+        verticesWithNormal(data.cutoutVertices, {1.0f, 0.0f, 0.0f});
+    ASSERT_EQ(leafPlusX.size(), 4u);
+    for (const MeshVertex& v : leafPlusX) {
+        EXPECT_FLOAT_EQ(v.position.x, 9.0f); // the shared plane, kept
+    }
+    const std::vector<MeshVertex> glassMinusX =
+        verticesWithNormal(data.transparentVertices, {-1.0f, 0.0f, 0.0f});
+    ASSERT_EQ(glassMinusX.size(), 4u);
+    for (const MeshVertex& v : glassMinusX) {
+        EXPECT_FLOAT_EQ(v.position.x, 9.0f); // the shared plane, kept
+    }
+}
+
+TEST(ChunkMesherV210Test, RedLineFieldLessBlocksKeepBothFaces) {
+    // The data side of the red lines: glass (no property — the glass-glass
+    // face count stays the v2.9.0 baseline pinned by
+    // TransparentPairKeepsBothBetweenFaces), stone (opaque — the opaque
+    // rule already culls, the property would be dead), and water / honey
+    // (the Phase 9 fluid culling is untouched — FluidToFluidFacesCulled
+    // pins the geometry; fluid cells read as air to the block grid
+    // anyway).
+    BlockRegistry reg = makeRegistry();
+    for (const char* name : {"glass", "stone", "water", "honey", "wall",
+                             "fence", "glass_pane"}) {
+        const Block* b = reg.findByName(name);
+        ASSERT_TRUE(b != nullptr) << name;
+        EXPECT_FALSE(b->properties.cullSameId) << name;
+    }
+}
+
+TEST(ChunkMesherV210Test, ShippedCullSameIdSetIsExactlyTheLeavesFamily) {
+    // The zero-impact proof at the data level: the ONLY shipped blocks
+    // carrying cull_same_id are the three leaves — every other block is
+    // bit-level unchanged (the mesher rule is gated on the property).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    std::vector<std::string> withFlag;
+    for (std::size_t i = 0; i < reg.count(); ++i) {
+        const Block& b = reg.at(BlockID{static_cast<int>(i)});
+        if (b.properties.cullSameId) {
+            withFlag.push_back(b.name);
+        }
+    }
+    std::sort(withFlag.begin(), withFlag.end());
+    EXPECT_EQ(withFlag,
+              (std::vector<std::string>{"birch_leaves", "leaves",
+                                        "spruce_leaves"}));
 }

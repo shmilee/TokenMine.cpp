@@ -118,6 +118,20 @@ struct BlockProperties {
     // texture with a translucent core — glass 220, water 200, pane 90 —
     // keeps the blend pass).
     bool cutout = false;
+    // V2-10: same-id leaf culling (Minecraft's fast-graphics leaves
+    // semantics): when true, the mesher drops a full-cube face toward a
+    // 6-neighbor of the SAME block id (the internal leaf-leaf faces — the
+    // neighbor is non-opaque, so the opaque-occlusion rule never culls it,
+    // and the face is otherwise emitted). Symmetric by construction: both
+    // cells share the registry entry, so the face is dropped from BOTH
+    // sides at once. The core reads the property, it never switches on a
+    // block id (hard rule 3). Default false = the pre-V2-10 behavior
+    // (glass-glass and every field-less block keep emitting both
+    // between-faces — the bit-level-invariant red line). Only effective on
+    // the full-cube greedy pass (the cross / slab / stairs / wall / fence /
+    // pane emitters own their geometry; a fluid cell reads as air to the
+    // block grid, so the fluid culling rules are untouched).
+    bool cullSameId = false;
     bool destroyable = true;     // can be broken by the player
     // Burns to air when 6-adjacent to a LAVA cell (Phase 58, the fire
     // system v2 — Minecraft's lava burns crops). The fluid sim's burn pass

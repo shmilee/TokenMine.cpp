@@ -196,6 +196,21 @@ void ChunkMesher::meshFaceDirection(ChunkMeshData& out, const Chunk& chunk,
                         BlockModel::Shape::Fence) {
                     continue; // fully occluded
                 }
+                // V2-10: same-id leaf culling (the cull_same_id property,
+                // MC fast-graphics leaves semantics). Reached only when the
+                // neighbor is non-opaque (or a fence, which can never
+                // match a full-cube cell's id): a neighbor of the SAME
+                // block id is internal for a cull_same_id block, so the
+                // face is dropped — BEFORE the texture selection below,
+                // so the greedy merge never sees it. Symmetric by
+                // construction (both cells share the registry entry: the
+                // neighbor's own face toward this cell is dropped by the
+                // same check when its turn comes). Field-less blocks
+                // (glass-glass, ...) and the fluid / cross / partial-block
+                // emitters are untouched (the red line).
+                if (neighbor == id && block.properties.cullSameId) {
+                    continue; // internal same-id face (the leaf-leaf case)
+                }
 
                 MaskCell& cell = mask[v][u];
                 cell.valid = true;

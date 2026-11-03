@@ -16,21 +16,21 @@
 > 时：本表 → `docs/archive/v2x/BACKLOG.md`，3x 表晋升本文件（1.x→2.x 同款
 > 先例）。
 
-## v2.x 任务矩阵（5/10 完成）
+## v2.x 任务矩阵（8/10 完成）
 
 | 系统 | ① | ② | ③ | ④ | ⑤ | ⑥ | ⑦ |
 |---|---|---|---|---|---|---|---|
 | STRM 流送与内存 | | | | | | | |
 | PIPE 帧管线与并发 | | | | | | | |
-| LGT 光照 | ~~V2-8 sky rescan clobber 修复~~ ✅ v2.8.0（门 179：sky BFS 种子盒 +1 块 shell 环——rescan/BFS 写界/判据零改动，TDD 双回归 pre-fix 2464/544 diff 格复现，CPU 探针 + E2E slab 无输入流送判别，零 format） | | | | | | |
+| LGT 光照 | ~~V2-8 sky rescan clobber 修复~~ ✅ v2.8.0（门 179） | | | | | | |
 | GEN 世界与生成 | | | | | | | |
 | FLUID 流体 | | | | | | | |
-| ENT 实体/Mob/移动 | ~~V2-5 新 mob 猪~~ ✅ v2.5.0（门 176：纯数据零核心代码 + V2-2 per-face 首个 mob 消费 + pork 食物链 + 图集零移位 + 猪字 +1） | ~~V2-9 step-up quirk 修复~~ ✅ v2.9.0（门 180：front 格对称化 + 真 clamp 无状态验，整数脚高位级不变，TDD 3 新 + 1 反转，2174） | | | | | |
+| ENT 实体/Mob/移动 | ~~V2-5 新 mob 猪~~ ✅ v2.5.0（门 176） | ~~V2-9 step-up quirk 修复~~ ✅ v2.9.0（门 180） | | | | | |
 | SURV 生存/战斗/效果 | | | | | | | |
-| CRAFT 物品/合成/面板 | ~~V2-7 材料补齐批~~ ✅ v2.7.0（门 178：planks 块化 + gold/diamond_block【beacon_base 入列】+ spider 掉 string/spider_eye ×0-2 + 块级 per-face 通用能力【无 faces 位级不变红线，首个消费 furnace_front】，全数据驱动，零 format） | | | | | | |
+| CRAFT 物品/合成/面板 | ~~V2-7 材料补齐批~~ ✅ v2.7.0（门 178） | | | | | | |
 | SAVE 存档 | | | | | | | |
-| PRE 表现层 | ~~V2-4 天气（雨/雷）~~ ✅ v2.4.0（门 175 全 PASS：纯状态机首段恒 CLEAR + rain shader 静态 300 滴 + dayFactor 单收口 + 交互四件 ∨raining + 雷 wav，零 format，off ≡ v2.3.0 位级【门内三方恒等实证】） | V2-10 网格修复批 | | | | | |
-| UX 实机报障/体验细化 | ~~V2-1 第三人称前视角~~ ✅ v2.1.0（门 172：C 键三循环 + 翻转角纯函数 + aimReach D+kReach） | ~~V2-2 玩家皮肤 Steve 化~~ ✅ v2.2.0（门 173：模型 per-face 纹理通用能力 + Steve 脸 8×8 像素 + 7 tile，既有 mob 位级不变） | ~~V2-3 教程系列化（农耕 + 厨房）~~ ✅ v2.3.0（门 174：系列化机制 + 2 新系列 + format 25 + recipe 行 emit 修复） | ~~V2-6 体验打磨批~~ ✅ v2.6.0（门 177：第一人称手臂 + mob blob 阴影 + 拾取磁力 + 月相，四记档消费，零 format） | | | |
+| PRE 表现层 | ~~V2-4 天气（雨/雷）~~ ✅ v2.4.0（门 175） | ~~V2-10 网格修复批~~ ✅ v2.10.0（门 181：叶子-叶子内部面剔除 cull_same_id + cutout discard 普查确认，base18 重锚 178148 B） | | | | | |
+| UX 实机报障/体验细化 | ~~V2-1 第三人称前视角~~ ✅ v2.1.0（门 172） | ~~V2-2 玩家皮肤 Steve 化~~ ✅ v2.2.0（门 173） | ~~V2-3 教程系列化（农耕 + 厨房）~~ ✅ v2.3.0（门 174） | ~~V2-6 体验打磨批~~ ✅ v2.6.0（门 177） | | | |
 
 > **2.x 定案说明（11-03 用户审议；V2-N = 执行序，立项时走设计定案）**：
 > - **V2-3 教程系列化（农耕 + 厨房）**（中，门 174）：UX-7 机制系列化——
@@ -103,6 +103,21 @@
   `docs/archive/v1x/BACKLOG.md` 表外节）。
 
 ## 变更记录（v2.x）
+
+- 2026-11-03：**V2-10 网格修复批完成（v2.10.0，门 181 全 PASS）**：
+  渲染节两记档修复（**2.x 收官前最后一项**）——① 叶子-叶子内部面
+  剔除 = 块属性 `cull_same_id`（严格布尔，leaves 族 3 块首消费，
+  shipped 恰三零影响钉）+ mesher greedy pass 同 id 剔面（纹理
+  选择前 merge 不见；glass-glass/水规则/cross 族红线零触碰；
+  单测几何钉 24v=6 quads vs 32v）② alpha cutout discard = **零
+  代码确认**（PRE-5 桶无关 discard 全覆盖实证：普查 21 个 0 孔
+  纹理 = 20 纯 cutout + glass blend 已覆盖；+ 普查单测钉防未来
+  漏检，KNOWN_ISSUES 29 条划解）。2181/2174+7、零 format。门
+  181：S1 **base18 重锚论证**（Phase 18 先例：旧侧 ≡ 现锚
+  179116 B 环境干净 / 新侧 ×2 178148 B / diff 4185 px 全叶冠区
+  天空·UI 零泄漏 / 2681 px 邻叶背面→天空 = 孔透视修复实证 /
+  **新锚 178148 B 采用**）+ S2 + S3 + S6 点名 + 性能 A/B。详见
+  docs/archive/phase-2.10.0.md。
 
 - 2026-11-03：**V2-9 step-up quirk 修复完成（v2.9.0，门 180 全
   PASS）**：KNOWN_ISSUES 203/382 条「单独立项」两 quirk 定向消除

@@ -8,6 +8,33 @@
 > （机制/证据/偏离/性能 A/B）见 `docs/archive/v1x/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v2.10.0（2026-11-03）— V2-10 网格修复批（叶子-叶子内部面剔除 + cutout discard 普查确认）（门 181 全 PASS）
+
+渲染节两记档修复（**收官前最后一项**）：
+**① 叶子-叶子内部面剔除**（KNOWN_ISSUES 18 条）——剔除 v1 只判
+邻居 opaque，叶子（非 opaque）内部面全生成（~12% 透明孔后看到
+邻叶背面）：修 = 块 JSON 新可选布尔 `cull_same_id`（严格解析，
+leaves/birch_leaves/spruce_leaves 首消费，shipped 恰三 = 零影响
+数据钉）+ mesher greedy pass 同 id 非 opaque 邻剔面（纹理选择
+前 = merge 不见该面；对称性 = 共享 registry 构造保证；
+glass-glass 不剔 / 水规则 / cross·slab·stairs·wall·fence·pane
+红线零触碰；单测几何钉 LeafLeaf 24v=6 quads vs 32v）。
+**② alpha cutout discard = 零代码确认**（KNOWN_ISSUES 29 条划解）
+——侦察实证 PRE-5 已全覆盖（`render.alpha_test` 代码默认 true，
+`alpha<0.5 → discard` **桶无关**含 blend section；普查：含 0 孔
+纹理 21 个 = 20 纯 cutout + glass 唯一非纯已被覆盖，
+water/glass_pane/honey 无 0 孔）+ 普查单测钉（防未来漏检）。
+2181/2181（+7）、零 format（25 不动）/ 零 config 新键 / 图集·
+纹理·字体零变化。门 181：**S1 = base18 重锚论证**（Phase 18
+先例——旧侧 60f ×2 ≡ 现锚 179116 B【环境干净纯代码归因】/
+新侧 ×2 恒等 **178148 B** / 新旧 diff 4185 px @ bbox (0,0)-
+(679,380) 全叶冠区，**天空蓝泄漏 0 + UI 区零 diff**；像素归因
+含 2681 px 旧「邻叶背面暗块」→ 新「天空」= 透明孔透视修复
+直接实证；**新锚 178148 B 采用**）+ S2 叶冠判别（= S1 diff
+本体 + 普查钉）+ S3 2181 + S6 点名（`cull_same_id` 非布尔 =
+「must be a boolean」）+ **性能 A/B 同世界同成本**（changesApplied 9/1/3 三窗逐位 + 终档 16/16 36/36 集合恒等 + PERF-WIN 全指标同档【叶冠面数减无可测回归信号】）。详见
+docs/archive/phase-2.10.0.md。
+
 ## v2.9.0（2026-11-03）— V2-9 step-up quirk 修复（player/mob 共享 Entity::stepUp 两 quirk 定向消除）（门 180 全 PASS）
 
 KNOWN_ISSUES 203/382 条「单独立项」两 quirk（ENT-3 探针实证，
