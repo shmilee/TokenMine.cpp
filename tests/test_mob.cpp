@@ -2300,11 +2300,10 @@ TEST(MobStepUpTest, ChasesUpOneBlockStep) {
     Fixture f;
     MobRegistry mobs = makeMobRegistry();
     const Mob& def = mobs.at(MobID{0});
-    // One-block ledge at x in [10, 12), z in [8, 10) (TWO cells wide in
-    // +X: the shared judgment's +X front check looks at snapped+1 — the
-    // player's exact latent quirk, pinned by
-    // DoesNotStepSingleCellStepPlusX below — so a one-cell step in +X is
-    // not step-up-able for either actor).
+    // One-block ledge at x in [10, 12), z in [8, 10) (the pre-V2-9 width
+    // was forced by the shared judgment's +X front-check quirk, which
+    // V2-9 fixed — the single-cell pin is StepsUpSingleCellStepPlusX
+    // below).
     for (int x = 10; x < 12; ++x) {
         for (int z = 8; z < 10; ++z) {
             f.world.setBlock(x, 1, z, f.stone);
@@ -2342,11 +2341,12 @@ TEST(MobStepUpTest, StepsUpSlabAndRestsOnSlabTop) {
     runMob(mob, 900);
     EXPECT_EQ(mob.state(), MobState::Attack);
     // The stop is the first frame-start with distH <= 1.6 (within one
-    // chase frame of 16.8); the range also covers the player-shared
-    // mid-air hop (a face flush by coincidence while the feet are at the
-    // NON-integer slab-top level 1.5 lifts 1.0 and falls back — it can
-    // shift the stop frame through the attack vertical band, see the
-    // KNOWN_ISSUES 生存 step-up 条).
+    // chase frame of 16.8). The pre-V2-9 range also covered the
+    // player-shared mid-air hop (a coincidental face flush at the
+    // NON-integer slab-top level 1.5 lifted 1.0 and fell back, shifting
+    // the stop frame through the attack vertical band — V2-9's
+    // real-block check removes it, see the inverted single-cell pin
+    // below and PlayerTest.SlabTopWalkNoCoincidentalLift).
     EXPECT_GE(mob.position().x, 16.8f);
     EXPECT_LE(mob.position().x, 16.9f);
     EXPECT_FLOAT_EQ(mob.position().y, 1.5f); // feet flush on the slab top
@@ -2534,17 +2534,17 @@ TEST(MobStepUpTest, StepsUpSingleCellStepMinusX) {
     EXPECT_TRUE(mob.onGround());
 }
 
-TEST(MobStepUpTest, SingleCellStepPlusXStaysClampedAtTheQuirk) {
-    // The SHARED judgment's +X front check (snapped+1) looks at the cell
-    // BEYOND the one the body is flush against — a single-cell step in +X
-    // is not step-up-able (the latent quirk, KNOWN_ISSUES 生存 step-up
-    // 条; fixing it changes the player's step-up and is its own phase).
-    // ENT-6 evolution: the corridor is walled on both sides (z7 / z10)
-    // so the ONLY crossing is the quirk-blocked step itself — the BFS
-    // plans the step node (the FullCube model says it is standable),
-    // the physics refuses it (the +X quirk), the node timeout aborts
-    // the route, and the straight chase re-clamps: the mob stays at
-    // 9.7 exactly as pre-ENT-6 (the quirk's surviving pin).
+TEST(MobStepUpTest, StepsUpSingleCellStepPlusX) {
+    // V2-9: the +X front check now looks at the cell the body is flush
+    // against (snapped, not snapped+1), so a SINGLE-cell step is
+    // step-up-able in +X — this test is the INVERTED pre-V2-9 pin (it was
+    // SingleCellStepPlusXStaysClampedAtTheQuirk, the quirk's surviving pin
+    // after ENT-6 re-named DoesNotStepSingleCellStepPlusX: the corridor
+    // walls made the step the only crossing, the BFS planned it, the
+    // physics refused it, and the chase re-clamped). With the quirk fixed
+    // the straight chase steps over and stops in attack range — the BFS
+    // never engages (the corridor is still sealed: z7 / z10 rows, x4..16,
+    // no detour).
     Fixture f;
     MobRegistry mobs = makeMobRegistry();
     const Mob& def = mobs.at(MobID{0});
@@ -2567,9 +2567,9 @@ TEST(MobStepUpTest, SingleCellStepPlusXStaysClampedAtTheQuirk) {
         }
         mob.update(kDt);
     }
-    EXPECT_TRUE(sawPathfind); // the BFS engaged (then aborted on the quirk)
-    EXPECT_NE(mob.state(), MobState::Attack); // never crossed
-    EXPECT_FLOAT_EQ(mob.position().x, 10.0f - 0.3f); // clamped, as pre-ENT-6
+    EXPECT_FALSE(sawPathfind); // no detour needed: the step itself is crossed
+    EXPECT_EQ(mob.state(), MobState::Attack); // crossed (13.9 - 1.6 = 12.3)
+    EXPECT_NEAR(mob.position().x, 12.3f, 0.02f);
     EXPECT_FLOAT_EQ(mob.position().y, 1.0f);
     EXPECT_TRUE(mob.onGround());
 }
@@ -4045,8 +4045,8 @@ TEST(MobFluidTest, WadingMobStepsOutOfWater) {
     // FLUID-3 (the inversion of the ENT-4 NoStepUpInWater — the old
     // "stuck in the water" semantic is retired): the step-up runs in
     // fluid too (the `!m_inFluid` gate lifted — the player never had one):
-    // the same 1-block step (two cells wide in +X — the shared judgment's
-    // +X front-check quirk, the DoesNotStepSingleCellStepPlusX twin) is
+    // the same 1-block step (two cells wide in +X — the pre-V2-9 width,
+    // forced by the +X front-check quirk that V2-9 fixed) is
     // CROSSED in the wading film (the mob steps out of the 1-deep pool
     // over the shore wall — the "walked in, can't get out" report, A1)
     // AND on land (the unchanged twin). The step-up's geometry / the

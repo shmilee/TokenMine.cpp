@@ -8,6 +8,32 @@
 > （机制/证据/偏离/性能 A/B）见 `docs/archive/v1x/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
 
+## v2.9.0（2026-11-03）— V2-9 step-up quirk 修复（player/mob 共享 Entity::stepUp 两 quirk 定向消除）（门 180 全 PASS）
+
+KNOWN_ISSUES 203/382 条「单独立项」两 quirk（ENT-3 探针实证，
+player/mob 共享）：**① +X/+Z 恰 1 格宽台阶踏不过**（front 格
+`snapped+1` 不对称 = +dir 查贴住格之后那格）→ 修 = `front =
+snapped + (w > 0 ? 0 : -1)`（+dir 查贴住格本身，−dir 不变）；
+**② 非整数脚高巧合对齐凭空抬升 1.0 再落回**（stepUp 调用点无条件，
+「贴住整数块面」位置判非因果判——slab 顶 1.5 行走 face 巧合过整数
++ 前方低半板/同高 slab → 抬升再落回，mob 追逐 frame 606 实证）→
+修 = **无状态真阻挡验**（front 列在身体 y 跨内 ∃ solid 格且顶 >
+feet 严格不等式——moveAxis 同款行；不加 per-tick 旗标/不改调用
+点/零新帧状态）。**整数脚高位级不变**（face 对齐 ⟹ 真 clamp ⟹
+新校验恒过；既有 step-up 单测族零改动全过 = 红线）。TDD：3 新
+测试（+X/+Z 单格踏过 + slab 顶行走 y 轨迹恒 1.5【相位 8.17 =
+pre-fix 逐 0.01 扫相钉】）先在 v2.8.0 树证 FAIL（x/z 9.7 clamp /
+maxY 2.5 抬升）后修复 PASS；既有 mob 单格 +X 钉**反转**（
+DoesNotStep → StepsUp，ENT-6 封死走廊保留）。2174/2174（+3）、
+零 format（25 不动）/ 零 config 新键。门 180：S1 **第 180 次结构
+免疫**（四方 RAW 179116 B + 锚 + savenorm EXACT——无输入零位移
+stepUp 永不触发）+ S2 **1 格台阶 E2E**（自建平台场景：旧树
+**x = 15.700 ×2 精确 clamp**【quirk ① 实机命名复现】vs 新树
+踏过 x 25.1/25.1）+ S3 2174 + S6 命名回归（pre-fix TDD 四证）+
+**性能 A/B 同世界同成本**（changesApplied 9/1/3 三窗逐位 + 终档 16/16 36/36 集合恒等 + PERF-WIN 全指标同档 + 台阶场景自成本双侧同款 churn 同档）。**键盘协议回归**（PITS 368 已随 X 会话重起
+根治——门 177 起鼠标-only 绕过退役）。详见
+docs/archive/phase-2.9.0.md。
+
 ## v2.8.0（2026-11-03）— V2-8 sky rescan clobber 修复（LGT-1 记档潜伏 bug 定向消除）（门 179 全 PASS）
 
 **光照核心修复**（KNOWN_ISSUES「光照」节划解）：天花板板骑跨光照

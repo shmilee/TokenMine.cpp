@@ -25,7 +25,7 @@
 | LGT 光照 | ~~V2-8 sky rescan clobber 修复~~ ✅ v2.8.0（门 179：sky BFS 种子盒 +1 块 shell 环——rescan/BFS 写界/判据零改动，TDD 双回归 pre-fix 2464/544 diff 格复现，CPU 探针 + E2E slab 无输入流送判别，零 format） | | | | | | |
 | GEN 世界与生成 | | | | | | | |
 | FLUID 流体 | | | | | | | |
-| ENT 实体/Mob/移动 | ~~V2-5 新 mob 猪~~ ✅ v2.5.0（门 176：纯数据零核心代码 + V2-2 per-face 首个 mob 消费 + pork 食物链 + 图集零移位 + 猪字 +1） | V2-9 step-up quirk 修复 | | | | | |
+| ENT 实体/Mob/移动 | ~~V2-5 新 mob 猪~~ ✅ v2.5.0（门 176：纯数据零核心代码 + V2-2 per-face 首个 mob 消费 + pork 食物链 + 图集零移位 + 猪字 +1） | ~~V2-9 step-up quirk 修复~~ ✅ v2.9.0（门 180：front 格对称化 + 真 clamp 无状态验，整数脚高位级不变，TDD 3 新 + 1 反转，2174） | | | | | |
 | SURV 生存/战斗/效果 | | | | | | | |
 | CRAFT 物品/合成/面板 | ~~V2-7 材料补齐批~~ ✅ v2.7.0（门 178：planks 块化 + gold/diamond_block【beacon_base 入列】+ spider 掉 string/spider_eye ×0-2 + 块级 per-face 通用能力【无 faces 位级不变红线，首个消费 furnace_front】，全数据驱动，零 format） | | | | | | |
 | SAVE 存档 | | | | | | | |
@@ -103,6 +103,22 @@
   `docs/archive/v1x/BACKLOG.md` 表外节）。
 
 ## 变更记录（v2.x）
+
+- 2026-11-03：**V2-9 step-up quirk 修复完成（v2.9.0，门 180 全
+  PASS）**：KNOWN_ISSUES 203/382 条「单独立项」两 quirk 定向消除
+  （player/mob 共享 `Entity::stepUp`，ENT-3 探针实证）——① +X/+Z
+  恰 1 格宽台阶踏不过 = front 格 `snapped+1` 不对称（+dir 查贴住格
+  之后那格）→ 修 `front = snapped + (w > 0 ? 0 : -1)`；② 非整数
+  脚高（slab 顶 1.5 / 楼梯斜面）face 巧合对齐整数 → 凭空抬升 1.0
+  再落回（调用点无条件 + 位置判非因果判，mob 追逐 frame 606
+  实证）→ 修 = **无状态真阻挡验**（front 列身体 y 跨内 ∃ solid 格
+  顶 > feet 严格不等式；零新帧状态/零调用点改动）。整数脚高位级
+  不变红线（既有 step-up 单测族零改动全过）。TDD：3 新测试 pre-fix
+  FAIL（x/z 9.7 clamp / maxY 2.5）后 PASS + 既有 mob +X 单格钉
+  反转；2174/2174（+3）。门 180：S1 第 180 次结构免疫（四方
+  179116 B + savenorm EXACT）+ S2 台阶 E2E（自建平台 1 格台阶：
+  旧树 x15.700 ×2 精确 clamp 实机命名复现 vs 新树踏过 x25.1）+
+  S3 + S6 命名回归。详见 docs/archive/phase-2.9.0.md。
 
 - 2026-11-03：**V2-8 sky rescan clobber 修复完成（v2.8.0，门 179 全
   PASS）**：LGT-1 记档潜伏 bug 定向消除（KNOWN_ISSUES「光照」条划解）

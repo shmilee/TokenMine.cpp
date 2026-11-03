@@ -212,10 +212,18 @@ protected:
     // the same judgment, so a step that is crossable for the player is
     // crossable for a mob and vice versa). At most one step per call (x
     // axis first, then z): the AABB face along the wish axis must be flush
-    // with a block face (within kFaceEps — the collision clamp is exact),
-    // the front cell solid at foot level with its SOLID-REGION top within
-    // 1.0 + kStepUpTopTol (a slab / full block / glass pane — NOT the
-    // wall / fence 1.5 barrier, Phase 99), and the two cells above the
+    // with a block face (within kFaceEps — the collision clamp is exact)
+    // AND that flush must be a REAL clamp (V2-9 quirk ②: at a NON-integer
+    // foot height — the slab top 1.5, the stair slope — the face can drift
+    // over an integer by coincidence while walking; the front column must
+    // hold a solid region overlapping the body's y span strictly above the
+    // feet, the moveAxis rows. At an integer foot height a flush face
+    // implies a real clamp, so the check always passes there and the
+    // behavior is bit-identical to pre-V2-9), the front cell — the one
+    // the body is flush against (V2-9 quirk ①: snapped in the +direction,
+    // snapped − 1 in the −) — solid at foot level with its SOLID-REGION top
+    // within 1.0 + kStepUpTopTol (a slab / full block / glass pane — NOT
+    // the wall / fence 1.5 barrier, Phase 99), and the two cells above the
     // step free (every shipped actor is at most 1.8 tall, so the +1.0 lift
     // fits). On success the body is lifted by exactly 1.0 and this tick's
     // horizontal move is re-applied along the stepped axis (the sub-steps

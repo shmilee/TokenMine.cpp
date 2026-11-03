@@ -19,22 +19,19 @@ C++20 / SDL3 / OpenGL 3.3 core，
   头降到屏幕中心下 29-96px；瞄准射线仍自眼位 = UX-8g 不变，TP 固定视差
   = MC 同款记偏离）③ 活文档刷新到 2.0 状态。门 171 全 PASS。
 - **任务只从 `docs/BACKLOG.md` 的 v2.x 节取**（11-03 三期分工定案：2.x
-  「上手与体验补全」V2-3~V2-10 八项【执行权威；**V2-8 sky rescan
-  clobber 修复 v2.8.0 完成**，下一项 **V2-9 step-up quirk 修复**
-  （KNOWN_ISSUES 203/382 两 quirk：+X/+Z 恰 1 格窄沿踏不过【front 格
-  查 snapped+1 不对称】/ 非整数脚高巧合对齐凭空抬升 1.0【flush 测试
-  无真 clamp 校验】；修复 = player/mob 共享 Entity::stepUp 行为变更，
-  设计草稿 /tmp/opencode/v29_design.md；**键盘已恢复**（PITS 368 随
-  X 会话重起根治）= 完整输入协议可用）】/ 3.x「系统扩展」
+  「上手与体验补全」V2-3~V2-10 八项【执行权威；**V2-9 step-up quirk
+  修复 v2.9.0 完成**，下一项 **V2-10 网格修复批**（2.x 收官前最后一
+  项；KNOWN_ISSUES 渲染/网格节修复项——开工前读该节取范围；完整
+  输入协议可用【PITS 368 已根治】）】/ 3.x「系统扩展」
   V3-1~V3-8 = `docs/BACKLOG_3x.md` 方向底稿 / 4.x「世界扩展」
   V4-1~V4-6 = `docs/BACKLOG_4x.md` 方向底稿；三期总量 24 < pre-v2.0 的
   78-84 = 用户采纳判据；2.x 收官 → 3x 表晋升执行权威）；1.x 历史全在
   `docs/archive/v1x/HISTORY.md`（只读，别把 1.x 细节当现状）。
-- 测试 **2171/2171**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2174/2174**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 25；base18 锚 **179116 B**（679×744 WM tile 态——11-03
   机器重启后 /tmp 丢失，从 v2.7.0 净树重导 ×2 恒等，字节数与原锚
   吻合 = 连续性；PITS 375：tile 几何由 Awesome 强制，门脚本须
-  dummy 暖机吞会话首窗 floating 例外）；门计数 179（**V2-1 前视角 v2.1.0** 门 172：
+  dummy 暖机吞会话首窗 floating 例外）；门计数 180（**V2-1 前视角 v2.1.0** 门 172：
   C 键三循环，前视 = 后视同款数学翻转角执行 + aimReach D+kReach——详见
   `docs/archive/phase-2.1.0.md`；**V2-2 Steve 皮肤 v2.2.0** 门 173：
   模型 per-face 纹理通用能力【既有 mob 位级不变】+ Steve 脸 8×8 像素
@@ -73,7 +70,13 @@ C++20 / SDL3 / OpenGL 3.3 core，
   +1 块 shell 环（rescan/BFS 写界/no-op skip/propagateAll 零改动；
   shell 读 = 既有 1-chunk 边界读环 → 独立性判据/confluence 零改动）+
   TDD 双回归（pre-fix 2464/544 diff 格复现）+ CPU 探针 + E2E slab
-  无输入流送判别 + 零 format——详见 `docs/archive/phase-2.8.0.md`）。
+  无输入流送判别 + 零 format——详见 `docs/archive/phase-2.8.0.md`；
+  **V2-9 step-up quirk 修复 v2.9.0** 门 180：player/mob 共享
+  Entity::stepUp 两 quirk 定向消除——① +X/+Z 恰 1 格宽台阶踏不过
+  （front 格 snapped+1 不对称 → 查贴住格）② 非整数脚高巧合对齐
+  凭空抬升 1.0（flush 位置判 → 无状态真阻挡验，严格不等式）；
+  整数脚高位级不变红线 + TDD 3 新 + 1 反转 + 零 format——详见
+  `docs/archive/phase-2.9.0.md`）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；**v2.x 任务表（执行权威）：
   `docs/BACKLOG.md`**（v1.x 表已全部完成归档；1.x 完整编年史 + 逐门
   记录 = `docs/archive/v1x/HISTORY.md`）；会话交接：

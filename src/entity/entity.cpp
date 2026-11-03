@@ -548,12 +548,48 @@ void Entity::stepUp(const Vec3& wishDir, float distPerTick) {
         if (std::abs(face - snapped) > kFaceEps) {
             continue;
         }
-        const int front = static_cast<int>(snapped) + (w > 0.0f ? 1 : -1);
+        // V2-9 quirk ①: the front cell is the one the body is flush
+        // against. In the +direction the flush face is that cell's NEAR
+        // edge, so front = snapped (the old offset +1 looked one cell PAST
+        // the blocker — a step exactly one cell wide was not crossable in
+        // +X/+Z, while -X/-Z crossed fine: the pinned asymmetry, now the
+        // inverted single-cell pins). In the -direction the flush face is
+        // the far edge, front = snapped - 1 (unchanged).
+        const int front = static_cast<int>(snapped) + (w > 0.0f ? 0 : -1);
         // axis 0 is X, axis 1 is Z (the loop index, NOT the moveAxis
         // numbering 0=x, 1=y, 2=z — that mapping is applied at the
         // moveAxis call below).
         const int cx = axis == 0 ? front : fx0;
         const int cz = axis == 1 ? front : fz0;
+        // V2-9 quirk ②: the flush test above is positional, not causal —
+        // at a NON-integer foot height (the slab top 1.5, the stair slope)
+        // the face drifts over an integer within kFaceEps while walking,
+        // with nothing actually blocking the body, and the old code lifted
+        // 1.0 into the air and fell back (the mob slab-chase frame-606 pin).
+        // A REAL clamp means the front column's solid region overlaps the
+        // body's y span — the same rows as the moveAxis scan (y from floor
+        // of the feet up to y < feet + height), strict on both ends (hard
+        // rule 6): a solid cell whose top is STRICTLY above the feet (the
+        // same-height slab tops out at the feet = no overlap = rejected).
+        // No such cell -> coincidental flush -> no step. At an INTEGER foot
+        // height a flush face implies a real clamp, the blocking cell sits
+        // at the foot row and tops out strictly above the feet -> this
+        // check always passes -> the behavior is bit-identical to
+        // pre-V2-9 (the shared stepUp unit pins run unchanged).
+        bool frontBlocks = false;
+        for (int y = fy; y < m_position.y + m_height && !frontBlocks; ++y) {
+            const BlockID id = m_world.getBlock(cx, y, cz);
+            if (!isSolid(id)) {
+                continue;
+            }
+            frontBlocks =
+                static_cast<float>(y) +
+                solidTopHeight(id, m_position, m_position, BlockPos {cx, y, cz}) >
+                m_position.y;
+        }
+        if (!frontBlocks) {
+            continue;
+        }
         // The step exists (solid at foot level) and the lifted body fits
         // (the two cells above the step are free). Phase 99: the step must
         // also be a TRUE 1-block step — the front cell's solid region tops

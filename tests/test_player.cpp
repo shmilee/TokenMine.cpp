@@ -65,6 +65,14 @@ BlockRegistry makeBlocks() {
     if (!r.ok()) {
         ADD_FAILURE() << r.error().message;
     }
+    // V2-9: the slab (solid-region top 0.5, the non-integer foot-height
+    // surface of the step-up coincidence test) — the mob fixture's twin.
+    r = blocks.registerBlock(parseJson(
+        R"({"id":"slab","model":{"shape":"slab",)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
     return blocks;
 }
 
@@ -74,6 +82,7 @@ struct Fixture {
     BlockRegistry blocks = makeBlocks();
     World world;
     BlockID stone;
+    BlockID slab;
     BlockID water;
     BlockID fire;
     BlockID campfire;
@@ -81,6 +90,7 @@ struct Fixture {
 
     Fixture() {
         stone = blocks.idForName("stone");
+        slab = blocks.idForName("slab");
         water = blocks.idForName("water");
         fire = blocks.idForName("fire");
         campfire = blocks.idForName("campfire");
@@ -307,6 +317,79 @@ TEST(PlayerTest, ClimbsOneBlockAlongZ) {
     run(p, 60, walk); // walk only: the step is climbed, not jumped
     EXPECT_LT(p.position().z, -8.3f); // crossed the step
     EXPECT_FLOAT_EQ(p.position().y, 2.0f); // resting on the step top
+    EXPECT_TRUE(p.onGround());
+}
+
+TEST(PlayerTest, StepsUpSingleCellStepPlusX) {
+    // V2-9 quirk ①: the +X front check now looks at the cell the body is
+    // flush against (snapped, not snapped+1), so a step EXACTLY one cell
+    // wide is crossable in +X (pre-V2-9 the player stayed clamped at the
+    // face — the asymmetry the -X twin already passed). The single cell
+    // is not wide enough to stand on for the whole window: the pin is the
+    // crossing itself (the player walks past the far end, x > 11.3, and
+    // settles back on the floor).
+    Fixture f;
+    for (int z = 8; z < 10; ++z) {
+        f.world.setBlock(10, 1, z, f.stone); // one cell only (x = 10)
+    }
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    p.yaw = -kPi / 2.0f; // facing +X (into the step)
+    Input walk = heldInput({GameKey::W});
+    run(p, 90, walk);
+    EXPECT_GT(p.position().x, 11.3f); // crossed the single cell, walked off
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f); // back on the floor
+    EXPECT_TRUE(p.onGround());
+}
+
+TEST(PlayerTest, StepsUpSingleCellStepPlusZ) {
+    // V2-9 quirk ①, the Z axis: the +Z front check now looks at the cell
+    // the body is flush against (snapped, not snapped+1), so a step
+    // exactly one cell wide is crossable in +Z (ClimbsOneBlockAlongZ
+    // above covers -Z; the X-axis twin is StepsUpSingleCellStepPlusX).
+    Fixture f;
+    for (int x = 8; x < 10; ++x) {
+        f.world.setBlock(x, 1, 10, f.stone); // one cell only (z = 10)
+    }
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    p.yaw = kPi; // facing +Z (into the step)
+    Input walk = heldInput({GameKey::W});
+    run(p, 90, walk);
+    EXPECT_GT(p.position().z, 11.3f); // crossed the single cell, walked off
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f); // back on the floor
+    EXPECT_TRUE(p.onGround());
+}
+
+TEST(PlayerTest, SlabTopWalkNoCoincidentalLift) {
+    // V2-9 quirk ②: the flush test is positional, not causal — at the
+    // NON-integer foot height (the slab top, 1.5) the face drifts over an
+    // integer within kFaceEps while walking, with the front foot cell the
+    // SAME slab (solid-region top 1.5 = the feet: no overlap, no real
+    // clamp). Pre-V2-9 the body lifted 1.0 (feet 2.5) and fell back; the
+    // front-column real-block check (a solid region strictly above the
+    // feet, hard rule 6) rejects the coincidence — the feet stay at 1.5
+    // for the whole walk (the mob slab-chase frame-606 pin, shared).
+    // The start (8.17, not 8.5) phase-pins the walk: the frame-locked
+    // trajectory's face crosses an integer within kFaceEps at frame 56
+    // (probed on the pre-fix tree, where it pulses to 2.5 there); the
+    // 1.0 offset twin (9.17) fires identically.
+    Fixture f;
+    for (int x = 8; x < 36; ++x) {
+        for (int z = 8; z < 10; ++z) {
+            f.world.setBlock(x, 1, z, f.slab); // the slab strip, top 1.5
+        }
+    }
+    Player p = f.makePlayer({8.17f, 1.5f, 8.5f});
+    p.yaw = -kPi / 2.0f; // facing +X, along the strip
+    Input walk = heldInput({GameKey::W});
+    float maxY = p.position().y;
+    for (int i = 0; i < 300; ++i) {
+        walk.frameBegin();
+        p.update(kDt, walk, false);
+        maxY = std::max(maxY, p.position().y);
+    }
+    EXPECT_FLOAT_EQ(maxY, 1.5f); // no coincidental 1.0 pulse
+    EXPECT_FLOAT_EQ(p.position().y, 1.5f); // feet flush on the slab top
+    EXPECT_GT(p.position().x, 28.0f); // walked most of the strip
     EXPECT_TRUE(p.onGround());
 }
 
