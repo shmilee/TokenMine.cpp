@@ -489,3 +489,75 @@ TEST(ThirdPersonTest, FrontViewClampsInFrontOfWall) {
     // mirror of the back view's 3.1 about the orbit's z = 0.5).
     expectVecNear("front clamp", cam, 22.5f, 40.9f, -2.1f);
 }
+
+// -- V2-19: the wheel-zoom distance argument ----------------------------------
+
+TEST(ThirdPersonTest, ZoomConstantsPinned) {
+    // The design's decision values (documented deviation: the vanilla
+    // Minecraft has no wheel zoom — the mod-convention range) + the
+    // default 4.0 bit-pin (a no-input run's session distance never
+    // leaves kThirdPersonDistance).
+    EXPECT_FLOAT_EQ(kZoomMin, 2.0f);
+    EXPECT_FLOAT_EQ(kZoomMax, 8.0f);
+    EXPECT_FLOAT_EQ(kZoomStep, 0.5f);
+    EXPECT_FLOAT_EQ(kThirdPersonDistance, 4.0f);
+    EXPECT_LT(kZoomMin, kThirdPersonDistance);
+    EXPECT_GT(kZoomMax, kThirdPersonDistance);
+}
+
+TEST(ThirdPersonTest, ResolveDistanceDefaultIsBitIdentical) {
+    // The red line: the explicit default argument and the omitted one
+    // agree BIT-exactly (every pre-V2-19 call site and unit test is
+    // untouched — the whole file above passes unchanged).
+    World world; // no chunks: the unoccluded resolve
+    const float cases[][2] = {
+        {0.0f, 0.0f},   {0.4f, -0.2f}, {1.2f, 0.5f},
+        {-2.1f, 0.9f},  {3.0f, -1.2f}, {kPiOver2, 0.0f},
+    };
+    for (const auto& c : cases) {
+        const Vec3 orbit = thirdPersonOrbitCenter(kEye, c[0], c[1]);
+        const Vec3 a = resolveThirdPersonCamera(world, orbit, c[0], c[1]);
+        const Vec3 b = resolveThirdPersonCamera(world, orbit, c[0], c[1],
+                                                kThirdPersonDistance);
+        EXPECT_EQ(a, b) << "yaw " << c[0];
+    }
+}
+
+TEST(ThirdPersonTest, ResolveDistanceScalesTheOrbit) {
+    // Empty world: the unoccluded resolve is the ideal = orbit + offset
+    // at the given distance, bit-exactly (yaw 0 / pitch 0: behind = +Z).
+    World world;
+    const Vec3 orbit = thirdPersonOrbitCenter(kEye, 0.0f, 0.0f);
+    const float dists[] = {kZoomMin, kThirdPersonDistance, kZoomMax};
+    for (const float d : dists) {
+        const Vec3 cam = resolveThirdPersonCamera(world, orbit, 0.0f, 0.0f, d);
+        const Vec3 ideal {22.5f, 40.9f, 0.5f + d};
+        EXPECT_EQ(cam, ideal) << "distance " << d;
+    }
+}
+
+TEST(ThirdPersonTest, ResolveDistanceFollowsTheWallClamp) {
+    // The occlusion clamp follows the radius (the farther camera is
+    // clamped by the SAME first face — the correct behavior, the pre-
+    // V2-19 resolve semantics at any distance): the single wall block
+    // at (22,40,3), orbit (22.5, 40.9, 0.5), yaw 0 / pitch 0 — the
+    // first occluding face is z = 4 (the block's eye-side boundary):
+    //   d = 8: ideal z = 8.5, t = 4.5 -> z = 8.5 - (4.5 - 0.1) = 4.1
+    //   d = 4: ideal z = 4.5, t = 0.5 -> z = 4.5 - (0.5 - 0.1) = 4.1
+    //          (the same face, the same stop — the face, not the radius,
+    //          anchors the clamp)
+    //   d = 2: ideal z = 2.5 — the face is BEHIND the ideal (the segment
+    //          ideal -> orbit is z in [0.5, 2.5]), so unoccluded: 2.5
+    World world;
+    ASSERT_TRUE(world.setBlock(22, 40, 3, BlockID{1}));
+    const Vec3 orbit = thirdPersonOrbitCenter(kEye, 0.0f, 0.0f);
+    expectVecNear("d8",
+                  resolveThirdPersonCamera(world, orbit, 0.0f, 0.0f, 8.0f),
+                  22.5f, 40.9f, 4.1f);
+    expectVecNear("d4",
+                  resolveThirdPersonCamera(world, orbit, 0.0f, 0.0f, 4.0f),
+                  22.5f, 40.9f, 4.1f);
+    expectVecNear("d2",
+                  resolveThirdPersonCamera(world, orbit, 0.0f, 0.0f, 2.0f),
+                  22.5f, 40.9f, 2.5f);
+}

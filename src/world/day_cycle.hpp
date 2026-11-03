@@ -28,6 +28,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "core/math/vec2.hpp"
@@ -96,6 +97,24 @@ public:
     // day index -> phase index (the modulo, negative-safe so a loaded
     // world's derived index total-orders too).
     static int moonPhaseIndex(int dayIndex);
+
+    // V2-19 (the HUD clock): the 24-hour "HH:MM" string of the frame-
+    // locked time of day — the render's single source (the pure function
+    // the unit tests own the mapping of; the Game draws it top-right,
+    // always visible — the vanilla Minecraft has no HUD clock, the
+    // documented new feature, the user's request).
+    //
+    // The mapping (the RAMP-EDGE EXACT alignment, the named-constant
+    // derivation — no magic numbers): hour24 = ((t - kDawnStart) * 24 +
+    // 6) mod 24, so the day/night ramp edges read the canonical clock
+    // values: t = kDawnStart (the dawn edge) -> 06:00, t = (kDawnEnd +
+    // kDuskStart) / 2 = 0.3 (the day plateau's center) -> 12:00, t =
+    // kDuskEnd (the dusk edge) -> 18:00, t = (kDuskEnd + 1 + kDawnStart)
+    // / 2 = 0.8 (the night center) -> 00:00. `t` is timeOfDay's [0, 1)
+    // (out of range is undefined — the caller is the frame-locked cycle).
+    // The minute is the FLOOR of the hour's fraction x 60 (the displayed
+    // time is the elapsed one; the next minute is never pre-shown).
+    static std::string clockString(double timeOfDay);
     // phase index -> the dark "eclipse" quad's offset over the moon disc:
     // x = the slide direction along the sprite's +X axis (phases 1..4 to
     // +X — the light crescent opens on the left, the northern-hemisphere

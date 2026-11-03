@@ -327,3 +327,41 @@ TEST(DayCycleTest, MoonPhaseFollowsDayIndex) {
     c.update(5 * 240.0); // five more -> day 8
     EXPECT_EQ(0, c.moonPhase()); // the 8-day cycle wraps
 }
+
+// -- V2-19: the HUD clock (clockString) ----------------------------------------
+
+TEST(DayCycleTest, ClockStringRampEdgesAligned) {
+    // The 24-hour mapping is EXACTLY aligned with the named ramp
+    // constants (no magic numbers): the dawn edge 06:00, the noon
+    // plateau center 12:00, the dusk edge 18:00, the night center
+    // 00:00.
+    EXPECT_EQ(DayCycle::clockString(DayCycle::kDawnStart), "06:00");
+    EXPECT_EQ(DayCycle::clockString(
+                  (DayCycle::kDawnEnd + DayCycle::kDuskStart) / 2.0),
+              "12:00");
+    EXPECT_EQ(DayCycle::clockString(DayCycle::kDuskEnd), "18:00");
+    EXPECT_EQ(DayCycle::clockString(
+                  (DayCycle::kDuskEnd + 1.0 + DayCycle::kDawnStart) / 2.0),
+              "00:00");
+}
+
+TEST(DayCycleTest, ClockStringMinuteFloorAndWrap) {
+    // The minute is FLOORed (the elapsed minute, never pre-shown) and
+    // the display wraps 23:59 -> 00:00 at the night center (t = 0.8).
+    EXPECT_EQ(DayCycle::clockString(0.7999), "23:59");
+    EXPECT_EQ(DayCycle::clockString(0.8), "00:00");
+    // The pre-dawn segment (t < kDawnStart) reads the early-morning
+    // band: t = 0 (the darkest pre-dawn) lands on 04:47 — the
+    // mathematical 04:48 minus the double-0.05 ulp (the kDawnStart
+    // constant is 2.8e-18 above exact 0.05, so t = 0 sits just under
+    // the 48-minute floor); the next frame up crosses 04:48, and the
+    // band approaches 06:00 from below at the dawn edge.
+    EXPECT_EQ(DayCycle::clockString(0.0), "04:47");
+    EXPECT_EQ(DayCycle::clockString(0.0499), "05:59");
+    // The post-midnight segment approaches the wrap from below.
+    EXPECT_EQ(DayCycle::clockString(0.9999), "04:47");
+    // Past the midnight wrap, away from both integer-minute boundaries
+    // (1.5 minutes: the floor is robustly 1 — a minute is 1/1440 of the
+    // day; at the 600 s shipped day that is 25 frames).
+    EXPECT_EQ(DayCycle::clockString(0.8 + 1.5 / 1440.0), "00:01");
+}

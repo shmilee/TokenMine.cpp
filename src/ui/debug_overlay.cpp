@@ -98,6 +98,14 @@ std::vector<std::string> debugOverlayLines(const DebugInfo& info) {
         info.weather.empty()
             ? std::string("weather (none)")
             : fmt("weather %s", info.weather.c_str()),
+        // V2-19: the camera line (the F3 stays English): the mode + the
+        // third-person orbit distance (the wheel-zoom readout — "D") +
+        // the fly marker; "(none)" for a unit-test DebugInfo with no
+        // camera data filled.
+        info.camMode.empty()
+            ? std::string("cam (none)")
+            : fmt("cam %s D %.1f%s", info.camMode.c_str(), info.camDistance,
+                  info.flying ? "  flying" : ""),
     };
 }
 

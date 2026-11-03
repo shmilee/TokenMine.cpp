@@ -66,6 +66,14 @@ struct DebugInfo {
     // the game fills "clear" there too); empty renders the baseline
     // "(none)" (a unit-test DebugInfo with no weather filled).
     std::string weather;
+    // V2-19: the camera line's data — the mode name ("First" / "ThirdBack"
+    // / "ThirdFront"; empty renders the baseline "(none)"), the
+    // third-person orbit distance (the wheel-zoom readout, "D"), and the
+    // player's fly state (the "flying" marker; the double-tap Space
+    // toggle).
+    std::string camMode;
+    double camDistance = 0.0;
+    bool flying = false;
 };
 
 // PRE-12 (the SURV-6 display boundary): the amplifier roman numeral for

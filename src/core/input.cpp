@@ -60,6 +60,7 @@ void Input::frameBegin() {
     m_buttonPressed.fill(false);
     m_buttonReleased.fill(false);
     m_mouseDelta = Vec2 {0.0f, 0.0f};
+    m_wheelDelta = 0; // V2-19: the wheel is per-frame input state
 }
 
 void Input::pump() {
@@ -82,6 +83,12 @@ void Input::pump() {
             case SDL_EVENT_MOUSE_MOTION:
                 handleMouseMotion(event.motion.xrel, event.motion.yrel,
                                   event.motion.x, event.motion.y);
+                break;
+            case SDL_EVENT_MOUSE_WHEEL:
+                // V2-19: the third-person zoom's input (the vertical
+                // ticks only — the Game's consumer reads the per-frame
+                // accumulated total).
+                handleMouseWheel(static_cast<int>(event.wheel.y));
                 break;
             default:
                 break;
@@ -119,6 +126,10 @@ void Input::handleMouseMotion(float dx, float dy, float x, float y) {
     m_mouseDelta.x += dx;
     m_mouseDelta.y += dy;
     m_mousePos = Vec2 {x, y};
+}
+
+void Input::handleMouseWheel(int deltaY) {
+    m_wheelDelta += deltaY;
 }
 
 void Input::handleQuit() {

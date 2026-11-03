@@ -99,6 +99,14 @@ public:
     // Accumulated relative mouse motion since frameBegin.
     Vec2 mouseDelta() const { return m_mouseDelta; }
 
+    // V2-19: the mouse wheel's VERTICAL ticks accumulated since
+    // frameBegin (positive = scroll up / away from the user). Input state
+    // like the mouse delta: per-frame, reset by frameBegin — a no-input
+    // run reads 0 forever (the structural-immunity root: the Game's
+    // third-person wheel zoom only moves its session distance on a
+    // nonzero reading).
+    int wheelDelta() const { return m_wheelDelta; }
+
     // Last absolute mouse position in window pixels (the UI screens read
     // it; while the pointer is captured SDL reports (0, 0) and the value
     // is stale by design — the UI is only used while the pointer is free).
@@ -110,6 +118,9 @@ public:
     void handleKey(std::uint32_t sdlKeycode, bool down);
     void handleMouseButton(int sdlButton, bool down);
     void handleMouseMotion(float dx, float dy, float x, float y);
+    // V2-19: one wheel event's vertical delta (SDL delivers ticks, not
+    // absolute positions; the consumer accumulates through this handler).
+    void handleMouseWheel(int deltaY);
     void handleQuit();
 
 private:
@@ -122,6 +133,9 @@ private:
     std::array<bool, kMouseButtonCount> m_buttonPressed {};
     std::array<bool, kMouseButtonCount> m_buttonReleased {};
     Vec2 m_mouseDelta {0.0f, 0.0f};
+    // V2-19: the frame's accumulated wheel ticks (reset by frameBegin,
+    // like the mouse delta — input state, never a persisted level).
+    int m_wheelDelta = 0;
     // Absolute position: updated on every motion event, NOT reset by
     // frameBegin (the cursor sits where it last was).
     Vec2 m_mousePos {0.0f, 0.0f};

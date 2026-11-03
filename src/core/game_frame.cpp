@@ -427,11 +427,15 @@ void Game::update(double dt) {
         // view's own forward — parallel to the eye ray, offset by the
         // lift along up_cam = the fixed third-person parallax
         // (documented deviation, the MC third-person look).
+        // V2-19: the wheel-zoomed session distance (default
+        // kThirdPersonDistance — a no-input run resolves bit-identically;
+        // the orbit center is distance-INDEPENDENT — the fixed 0.4 lift —
+        // so it keeps its pre-V2-19 signature).
         m_camera.position = resolveThirdPersonCamera(
             m_world,
             thirdPersonOrbitCenter(m_player->eyePosition(), m_player->yaw,
                                    m_player->pitch),
-            m_player->yaw, m_player->pitch);
+            m_player->yaw, m_player->pitch, m_thirdPersonDistance);
     } else if (m_cameraMode == CameraMode::ThirdFront) {
         // V2-1: front view = the back camera's resolve run at the flipped
         // view angles (thirdPersonFrontAngles): the camera sits
@@ -450,11 +454,14 @@ void Game::update(double dt) {
             thirdPersonFrontAngles(m_player->yaw, m_player->pitch);
         m_camera.yaw = fa.yaw;
         m_camera.pitch = fa.pitch;
+        // V2-19: the same wheel-zoomed session distance (the front view
+        // zooms identically — one value per session, the design's
+        // single-value sharing).
         m_camera.position = resolveThirdPersonCamera(
             m_world,
             thirdPersonOrbitCenter(m_player->eyePosition(), m_player->yaw,
                                    m_player->pitch),
-            fa.yaw, fa.pitch);
+            fa.yaw, fa.pitch, m_thirdPersonDistance);
     } else {
         m_camera.position = m_player->eyePosition(); // First: legacy
     }

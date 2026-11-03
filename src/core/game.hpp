@@ -35,6 +35,7 @@
 #include "core/config.hpp"
 #include "core/difficulty.hpp"
 #include "core/error.hpp"
+#include "core/fly.hpp"
 #include "core/food.hpp"
 #include "core/input.hpp"
 #include "core/logger.hpp"
@@ -42,6 +43,7 @@
 #include "core/sound.hpp"
 #include "core/status_effect.hpp"
 #include "core/thread_pool.hpp"
+#include "core/third_person.hpp"
 #include "core/tutorial.hpp"
 #include "core/weather.hpp"
 #include "core/window.hpp"
@@ -340,11 +342,13 @@ private:
     std::optional<BlockHit> targetBlock() const;
     // V2-1: the aim ray's reach budget. First / ThirdBack: the legacy
     // kReach (bit-identical — the structural-immunity root of the UX-8g
-    // red line). ThirdFront: kThirdPersonDistance + kReach — the front
-    // camera sits kThirdPersonDistance in front of the eye (it IS the
-    // player's visual eye in that view), so the eye ray needs the D
-    // compensation to keep the full Minecraft reach (the MC front-view
-    // convention). Defined in game_interaction (next to kReach).
+    // red line). ThirdFront: the third-person distance + kReach (V2-19:
+    // the wheel-zoomed session m_thirdPersonDistance, default
+    // kThirdPersonDistance — the front camera sits that far in front of
+    // the eye (it IS the player's visual eye in that view), so the eye
+    // ray needs the D compensation to keep the full Minecraft reach at
+    // any zoom, the MC front-view convention). Defined in
+    // game_interaction (next to kReach).
     float aimReach() const;
     // Hold-to-break state machine (Phase 11): advances the progress while
     // the crosshair stays on the same destroyable block and breaks it when
@@ -1272,6 +1276,22 @@ private:
     // UX-3: the camera mode (First = the body is invisible — the UX-3
     // constant; UX-4 adds the in-game toggle).
     CameraMode m_cameraMode = CameraMode::First;
+    // V2-19: the third-person orbit distance (the mouse-wheel zoom):
+    // SESSION state, never saved (the camera-mode precedent — the V2-1
+    // "session state never saved" discipline). One value shared by
+    // ThirdBack / ThirdFront (a C mode switch does NOT reset it), the
+    // default kThirdPersonDistance keeps a no-input run bit-identical
+    // (the structural-immunity root). The Game clamps it to
+    // [kZoomMin, kZoomMax] in kZoomStep increments per wheel tick
+    // (the Input's per-frame wheelDelta, reset in frameBegin — input
+    // state, never a persisted level).
+    float m_thirdPersonDistance = kThirdPersonDistance;
+    // V2-19: the last Space press's real-dt timestamp (-1 = no press yet)
+    // — the double-tap FLY window's state (the CRAFT-7 kDoubleClickSeconds
+    // input-state discipline, hard rule 8: never frame state, never saved
+    // — a no-input run never presses Space, so it is structurally immune
+    // to the toggle). The decision is the pure core/fly function.
+    double m_lastSpacePressTime = -1.0;
     // The player input-channel family (UX-2 B4): everything the pointer-
     // locked interaction maintains — the swing cooldown (Phase 20, the
     // attack input), the bow draw (Phase 24), the eat channel (Phase 28,

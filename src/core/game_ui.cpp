@@ -203,6 +203,21 @@ void Game::handleUiKeys() {
                       ? CameraMode::ThirdFront
                       : CameraMode::First;
     }
+    // V2-19: the mouse wheel zooms the third-person orbit distance
+    // (session state — never saved, the camera-mode precedent; the C mode
+    // switch does NOT reset it). Third views only: First is a no-op
+    // (the design gate). The wheel delta is the per-frame input state
+    // (reset in frameBegin — a no-input run reads 0 forever, the
+    // structural-immunity root): distance += kZoomStep per tick, clamped
+    // to [kZoomMin, kZoomMax] (the pure resolve takes the value, the
+    // aimReach's ThirdFront D + kReach follows it — the front camera's
+    // reach stays the full Minecraft reach behind the player at any
+    // zoom; the aim RAYS still leave from the eye, UX-8g untouched).
+    if (m_input.wheelDelta() != 0 && m_cameraMode != CameraMode::First) {
+        m_thirdPersonDistance = std::clamp(
+            m_thirdPersonDistance + kZoomStep * m_input.wheelDelta(),
+            kZoomMin, kZoomMax);
+    }
     // UX-7 / V2-3: T skips the tutorial (locked pointer only — the
     // C-key pattern: a free cursor / panel / death screen never touches
     // it). Gated on enabled ∧ !done (the brief's rules: disabled = the
@@ -1710,6 +1725,17 @@ void Game::renderUi() {
                           s.id.c_str(), m_tutorial.progress, s.count);
             info.tutorial = buf;
         }
+        // V2-19: the camera line (the F3 stays English — the developer-
+        // tool discipline): the mode name + the third-person orbit
+        // distance (the wheel-zoom readout; First shows the session value
+        // too — it only APPLIES to the third views) + the fly marker.
+        info.camMode =
+            m_cameraMode == CameraMode::ThirdBack
+                ? "ThirdBack"
+                : (m_cameraMode == CameraMode::ThirdFront ? "ThirdFront"
+                                                          : "First");
+        info.camDistance = m_thirdPersonDistance;
+        info.flying = m_player ? m_player->isFlying() : false;
         // UX-8e: the F3 line step is a TEXT-STACK pitch — it grows with
         // the glyphs (lround, identity at fs = 1.0); the margin (an
         // icon-space inset) does not.
@@ -1720,6 +1746,27 @@ void Game::renderUi() {
             addText(line, kF3Margin, y, fScale(1.0), kText);
             y += f3Step;
         }
+    }
+
+    // -- V2-19: the HUD clock (ALWAYS VISIBLE) --------------------------------
+    // The 24-hour time of day (DayCycle::clockString over the frame-locked
+    // time — the pure mapping the unit tests own: dawn edge 06:00, noon
+    // 12:00, dusk 18:00, night center 00:00), white, top-right on the
+    // F3-margin inset (the hotbar/heart-row coordinate paradigm: the 8 px
+    // HUD margin, the 16 px glyph). "Always visible" = the user's request
+    // (the vanilla Minecraft has no HUD clock — the documented new
+    // feature): it draws in EVERY pointer/panel/death state, on top of
+    // everything (it is the last batch added before the upload). A
+    // no-input run draws it too — the frame-locked time makes the pixels
+    // a deterministic function of the frame count (the base gate's
+    // re-anchor is the clock region only, S1; 1 game minute = 25 frames
+    // at the shipped 600 s day, so the anchor reads the frame-60
+    // frozen value).
+    {
+        const std::string clock = DayCycle::clockString(m_dayCycle.timeOfDay());
+        addText(clock,
+                w - static_cast<int>(textWidth(clock, fScale(1.0))) - kF3Margin,
+                kF3Margin, fScale(1.0), kText);
     }
 
     // Upload + draw every 2D batch (backgrounds, borders, text, 2D item

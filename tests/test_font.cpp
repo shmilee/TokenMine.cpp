@@ -117,6 +117,46 @@ TEST(FontTest, GlyphUvIsAsciiIndexedCell) {
     expectUv(glyphUv('~'), 200, 488);
 }
 
+TEST(FontTest, ColonGlyphIsPresent) {
+    // V2-19 (the HUD clock's ':'): 0x3A = 58 sits in the ASCII rows
+    // (32..126, atlas rows 4..15), so it has a real generated cell —
+    // NOT the '?' fallback. cell (58 % 8, 58 / 8) = (col 2, row 7) ->
+    // x0 = 2*32+8 = 72, y0 = 7*32+8 = 232. The UV pin proves the cell
+    // addressing; the ink scan below proves the glyph is actually
+    // drawn (a blank cell would still map, but render nothing).
+    const int col = 58 % 8;
+    const int row = 58 / 8;
+    const int x0 = col * kFontCell + kGlyphOffset;
+    const int y0 = row * kFontCell + kGlyphOffset;
+    expectUv(glyphUv(':'), x0, y0);
+    // ':' and '?' share atlas row 7 (both in the 56..63 codepoint row),
+    // so the COLUMN is the discriminator: the fallback would address
+    // col 7 (x0 = 232), the real glyph col 2 (x0 = 72).
+    const GlyphUv q = glyphUv('?');
+    const GlyphUv colon = glyphUv(':');
+    EXPECT_NE(colon.u0, q.u0);
+    std::ifstream in("assets/textures/font.png", std::ios::binary);
+    ASSERT_TRUE(in);
+    const std::string data((std::istreambuf_iterator<char>(in)),
+                           std::istreambuf_iterator<char>());
+    const auto img = Png::decode(data);
+    ASSERT_TRUE(img.ok()) << img.error().describe();
+    ASSERT_EQ(img.value().width, 256);
+    ASSERT_EQ(img.value().height, 2080);
+    int ink = 0;
+    for (int y = 0; y < kGlyphSize; ++y) {
+        for (int x = 0; x < kGlyphSize; ++x) {
+            const std::size_t i =
+                static_cast<std::size_t>(y0 + y) * 256u +
+                static_cast<std::size_t>(x0 + x);
+            if (img.value().rgba[i * 4u + 3u] != 0) {
+                ++ink;
+            }
+        }
+    }
+    EXPECT_GT(ink, 0);
+}
+
 TEST(FontTest, GlyphUvStaysInsideTheAtlas) {
     for (int c = 32; c <= 126; ++c) {
         const GlyphUv uv = glyphUv(static_cast<char>(c));

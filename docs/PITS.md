@@ -2948,3 +2948,19 @@
   吻合 = 连续性证据——179116 B 重锚与原锚同尺寸）。另：60f ≡ 120f
   截图逐字节相同（清晨 t=0.25 天空 0.006 rad 位移低于像素量化）=
   锚对帧数小幅不敏感，但协议仍钉 60f。
+- **输入 E2E 三坑：capture 重试 / 帧限收尾 / kill 超时壳（PITS 376，
+  门 182 V2-19 S2）**——① **指针 capture 首击常失手**（新 X 会话
+  焦点竞态）：单次 click 1 的捕获率 ~50-75%（门 182 实测 4 连跑
+  3 失）→ 捕获 = **重试环**（至多 6 次：focus --sync + 安全点
+  mousemove + click 1 + 0.8 s + grep 'Pointer captured'【DEBUG 级！
+  --log-level info 下 captured=0 是日志假象，非捕获失败】）。
+  ② **输入跑必须帧限收尾，不 SIGTERM**：`--screenshot` 只在
+  frame-limit 收尾时写（SIGTERM 提前杀 = 截图缺失 + 存档在帧限
+  前一刻的状态）；且 `kill $tp`（$tp = timeout 包装 pid）杀的是壳，
+  游戏孤儿化跑满帧（PITS 374③ 同款）——正解 = 输入在帧限前完成
+  （300f 预算 = 5 s 主循环，输入序列 ≤3 s）+ `wait $tp` 自然收尾
+  + 帧限后读存档/截图。③ **pgrep 时序**：游戏进程名 tokenmine
+  启动即有，但窗口（WID）要等 SDL 建窗——p 与 WID 各轮询至多
+  10×0.5 s；$p 空时 `xdotool search --pid $p` 报 "requires an
+  argument"（静默丢输入，不报错 = 假 PASS 源，断言必须含
+  captured=1 计数回显）。

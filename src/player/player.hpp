@@ -185,6 +185,27 @@ public:
     // (drawPlayerBody) consumes it through the shared mob_swing math.
     int swingPhase() const { return m_swingPhase; }
 
+    // V2-19 (the player fly — the double-tap Space creative-style toggle):
+    // the fly STATE is session (never saved: a loaded world starts on the
+    // ground, the camera-mode precedent). The Game owns the toggle (the
+    // real-dt double-tap window, core/fly) and writes it through
+    // setFlying(); the player owns the PHYSICS (see integrate's fly
+    // branch + the update's fluid gate): the gravity skip (Space =
+    // ascend, LeftShift = descend at kFlyVerticalSpeed, neither = hover;
+    // the crouch mechanism runs as usual — height shrink + step-up
+    // prohibition, the Shift's dual meaning is the creative's), the
+    // horizontal kFlySpeedMultiplier pace, the normal collision, the
+    // fall-distance re-pin each fly frame, and the auto switch-off in
+    // water / lava (the documented deviation: the project's fluid
+    // buoyancy model does not stack the fly).
+    bool isFlying() const { return m_flying; }
+    void setFlying(bool f) { m_flying = f; }
+    // The toggle press consumed this frame's jump grant (the "second tap
+    // swallows the jump"): the air branch's Space jump is skipped until
+    // the end of the next update (a one-frame input-only flag, cleared in
+    // update — never saved, a no-input run never sets it).
+    void suppressJumpGrant() { m_jumpGrantSuppressed = true; }
+
     // Eye height: the standing value, lowered by the crouch delta (the eye
     // stays a fixed distance below the top of the head).
     float currentEyeHeight() const {
@@ -491,6 +512,10 @@ private:
     // intent: a sliding player (ENT-7 inertia) keeps swinging, a resting
     // player decays to the identity pose). Never saved.
     int m_swingPhase = 0;
+    // V2-19: the fly state (see isFlying()) + the toggle press's
+    // one-frame jump-swallow flag (see suppressJumpGrant()).
+    bool m_flying = false;
+    bool m_jumpGrantSuppressed = false;
     // Phase 71: the sitting state this tick (see isSitting()).
     bool m_sitting = false;
     // SURV-1 (armor): the equipped pieces (count 1 or empty) + their
@@ -508,6 +533,15 @@ private:
     std::array<float, kArmorSlotCount> m_armorDurability {};
 
     static constexpr float kMaxPitch = 1.5533f; // ~89 deg
+    // V2-19 (the fly physics, the documented decision values — zero
+    // config keys): the fixed vertical pace of the creative-style flight
+    // (Space ascend / LeftShift descend; the gravity skip — the vy
+    // baseline is 0, no acceleration) and the horizontal multiplier over
+    // the WALK speed (4.3 x 1.6 = 6.88 b/s — the user's "faster than
+    // walking", above the sprint 5.6; the Minecraft creative fly's ~1.6x
+    // class).
+    static constexpr float kFlyVerticalSpeed = 4.0f;
+    static constexpr float kFlySpeedMultiplier = 1.6f;
     // FLUID-2: how many cells the surface scan (m_surfaceY) descends from
     // the feet. 32 covers the shipped water columns (ocean depth is
     // sea_level 34 - base_height 40 + amplitude 24 >= 16 => <= 18 cells;

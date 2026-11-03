@@ -2283,3 +2283,186 @@ TEST(PlayerSwingPhaseTest, InertWithoutInput) {
         EXPECT_EQ(p.swingPhase(), 0) << "frame " << i;
     }
 }
+
+// -- V2-19: the fly (the double-tap Space creative-style toggle) --------------
+
+namespace {
+
+// Settle the player on the fixture's floor (the shared fly-test preamble:
+// the toggle's window is the Game's input state, so the physics tests
+// drive the fly state directly through setFlying — the session flag the
+// Game writes).
+Player settledFlyingPlayer(Fixture& f) {
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(p, 10, idle);
+    p.setFlying(true);
+    return p;
+}
+
+} // namespace
+
+TEST(PlayerTest, FlyAscendsAtFixedSpeed) {
+    // The gravity skip: the fly branch SETS the vy baseline (4.0, the
+    // decision value) instead of accumulating — Space ascend.
+    Fixture f;
+    Player p = settledFlyingPlayer(f);
+    ASSERT_TRUE(p.onGround());
+    Input up = heldInput({GameKey::Space});
+    p.update(kDt, up, false);
+    EXPECT_FLOAT_EQ(p.velocity().y, 4.0f); // kFlyVerticalSpeed
+    // 60 frames = 1 s at 4.0 b/s = 4.0 blocks.
+    const float y0 = p.position().y;
+    run(p, 60, up);
+    EXPECT_NEAR(p.position().y, y0 + 4.0f, 1e-3f);
+    EXPECT_TRUE(p.isFlying());
+}
+
+TEST(PlayerTest, FlyDescendsWithShift) {
+    // LeftShift descend at the same fixed pace (the crouch mechanism
+    // runs as usual: the Shift's dual meaning is the creative's).
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 5.0f, 8.5f}); // mid-air
+    p.setFlying(true);
+    Input down = heldInput({GameKey::LeftShift});
+    p.update(kDt, down, false);
+    EXPECT_FLOAT_EQ(p.velocity().y, -4.0f); // the direct set, no gravity
+    const float y0 = p.position().y;
+    run(p, 30, down); // 0.5 s -> 2.0 blocks
+    EXPECT_NEAR(p.position().y, y0 - 2.0f, 1e-3f);
+}
+
+TEST(PlayerTest, FlyHoversWithNoVerticalKeys) {
+    // Neither Space nor Shift: the hover (the vy baseline 0, no gravity
+    // accumulation — zero drift, bit-exact).
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 5.0f, 8.5f});
+    p.setFlying(true);
+    Input idle = heldInput({});
+    const float y0 = p.position().y;
+    run(p, 30, idle);
+    EXPECT_FLOAT_EQ(p.velocity().y, 0.0f);
+    EXPECT_FLOAT_EQ(p.position().y, y0);
+}
+
+TEST(PlayerTest, FlyHorizontalPaceIsWalkTimesMultiplier) {
+    // The horizontal pace = walkSpeed x kFlySpeedMultiplier (4.3 x 1.6
+    // = 6.88 b/s — the user's "faster than walking", above the sprint
+    // 5.6). Mid-air, the ENT-7 air-tier approach converges in ~1 s.
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 5.0f, 8.5f});
+    p.setFlying(true);
+    p.yaw = -kPi / 2.0f; // facing +X
+    Input walk = heldInput({GameKey::W});
+    run(p, 600, walk); // 10 s: converged to the terminal pace
+    const float hSpeed =
+        std::hypot(p.velocity().x, p.velocity().z);
+    EXPECT_NEAR(hSpeed, 4.3f * 1.6f, 0.05f);
+    // The distance over the same time is well above the walk pace's.
+    EXPECT_GT(p.position().x - 8.5f, 55.0f);
+}
+
+TEST(PlayerTest, FlyLandingTakesNoFallDamage) {
+    // A controlled fly descent (Shift) back to the floor is a fly
+    // LANDING, not a fall: the per-frame fall re-pin + the landing
+    // path's fly gate take no damage (the creative's no-damage landing).
+    Fixture f;
+    Player p = settledFlyingPlayer(f);
+    Input up = heldInput({GameKey::Space});
+    run(p, 150, up); // 2.5 s x 4.0 = 10 blocks
+    EXPECT_GT(p.position().y, 10.0f);
+    Input down = heldInput({GameKey::LeftShift});
+    run(p, 300, down); // 5 s: enough for the 10-block descent + margin
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f);
+    EXPECT_TRUE(p.onGround());
+    EXPECT_FLOAT_EQ(p.health(), p.maxHealth()); // no fall damage
+}
+
+TEST(PlayerTest, FlySwitchOffMidAirCountsFallFromSwitchHeight) {
+    // The switch-OFF frame's free fall counts from the switch height
+    // (the last per-frame re-pin) — the normal fall damage applies on
+    // the landing (the MC same: mid-air switch-off grants no immunity;
+    // the pre-V2-19 bug would have counted from the pre-fly ground and
+    // taken zero damage for a 10-block fall).
+    Fixture f;
+    Player p = settledFlyingPlayer(f);
+    Input up = heldInput({GameKey::Space});
+    run(p, 150, up); // y ~ 11
+    Input idle = heldInput({});
+    run(p, 1, idle); // hover: the vy baseline 0 before the switch
+    const float switchY = p.position().y;
+    EXPECT_GT(switchY - 1.0f, 9.0f);
+    p.setFlying(false); // the double-tap's second press (Game side)
+    run(p, 300, idle); // the free fall back to the floor
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f);
+    EXPECT_TRUE(p.onGround());
+    const float fall = switchY - 1.0f; // ~10 blocks
+    EXPECT_NEAR(p.health(), p.maxHealth() - (fall - 3.0f), 1e-3f);
+    EXPECT_FALSE(p.isFlying());
+}
+
+TEST(PlayerTest, FlyAutoSwitchesOffInWater) {
+    // The documented deviation: in water / lava the fly auto-switches
+    // OFF (the project's fluid buoyancy model does not stack the flight)
+    // — the frame inside the fluid is already on the swim model (Space
+    // = the swim-up 4.5, not the fly's 4.0).
+    Fixture f;
+    buildPool(f, 6, 10, 6, 10);
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f}); // feet in the pool
+    Input idle = heldInput({});
+    run(p, 10, idle);
+    p.setFlying(true);
+    p.update(kDt, idle, false);
+    EXPECT_FALSE(p.isFlying()); // the auto switch-off
+    Input up = heldInput({GameKey::Space});
+    p.update(kDt, up, false);
+    EXPECT_FLOAT_EQ(p.velocity().y, p.params().swimUpSpeed); // the swim
+}
+
+TEST(PlayerTest, FlyStateResetsOnRespawn) {
+    // The death / respawn resets the fly (session state — the player
+    // respawns on the ground, no creative carry-over).
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 5.0f, 8.5f});
+    p.setFlying(true);
+    ASSERT_TRUE(p.isFlying());
+    p.damage(p.maxHealth() * 1000.0f); // lethal (the kill-plane pattern)
+    ASSERT_TRUE(p.isDead());
+    p.respawn();
+    EXPECT_FALSE(p.isDead());
+    EXPECT_FALSE(p.isFlying());
+}
+
+TEST(PlayerTest, TogglePressSwallowsTheJumpGrant) {
+    // The double-tap's second press swallows the jump: the toggle-OFF
+    // press on the ground does NOT grant the jump this frame (the
+    // creative's toggle consumes it), and the swallow is ONE frame — a
+    // Space still held on the next frame jumps normally (the pre-V2-19
+    // hold convention).
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(p, 10, idle);
+    ASSERT_TRUE(p.onGround());
+    p.suppressJumpGrant();
+    Input jump = heldInput({GameKey::Space});
+    p.update(kDt, jump, false);
+    EXPECT_FLOAT_EQ(p.velocity().y, 0.0f); // no 8.5 impulse
+    EXPECT_TRUE(p.onGround());
+    jump.frameBegin();
+    p.update(kDt, jump, false);
+    EXPECT_FLOAT_EQ(p.velocity().y, p.params().jumpSpeed); // it re-grants
+}
+
+TEST(PlayerTest, SingleSpacePressStillJumps) {
+    // The red line: a single tap (the window only armed, never hit) is
+    // EXACTLY the pre-V2-19 jump.
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(p, 10, idle);
+    Input jump = heldInput({GameKey::Space});
+    p.update(kDt, jump, false);
+    EXPECT_FLOAT_EQ(p.velocity().y, p.params().jumpSpeed);
+    EXPECT_FALSE(p.onGround()); // left the ground
+}

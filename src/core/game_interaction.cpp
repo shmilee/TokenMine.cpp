@@ -7,6 +7,7 @@
 #include "block/chance_drop.hpp"
 #include "block/drop_scatter.hpp"
 #include "core/bow.hpp"
+#include "core/fly.hpp"
 #include "core/game_local.hpp"
 #include "core/third_person.hpp"
 #include "item/armor.hpp"
@@ -37,15 +38,20 @@ constexpr double kDigSoundInterval = 0.3;
 } // namespace
 
 float Game::aimReach() const {
-    // V2-1: the front camera sits kThirdPersonDistance IN FRONT of the
-    // eye (it is the player's visual eye in that view), so the eye ray
-    // gets the D compensation — the full Minecraft reach behind the
-    // player (the MC front-view convention). First / ThirdBack return
-    // the legacy kReach BIT-IDENTICALLY (the same constexpr value the
-    // pre-V2-1 call sites passed as literals — the structural-immunity
-    // root: no-input and back-view runs are unchanged).
+    // V2-1: the front camera sits IN FRONT of the eye (it is the
+    // player's visual eye in that view), so the eye ray gets the D
+    // compensation — the full Minecraft reach behind the player (the MC
+    // front-view convention). V2-19: D is the wheel-zoomed session
+    // distance (m_thirdPersonDistance — zoom in = reach the near, zoom
+    // out = reach the far, the front view's convention at any zoom; the
+    // default kThirdPersonDistance keeps the pre-V2-19 value). First /
+    // ThirdBack return the legacy kReach BIT-IDENTICALLY (the same
+    // constexpr value the pre-V2-1 call sites passed as literals — the
+    // structural-immunity root: no-input and back-view runs are
+    // unchanged). The aim RAYS still leave from the eye (UX-8g,
+    // untouched — only the budget moves with the camera).
     return m_cameraMode == CameraMode::ThirdFront
-               ? kThirdPersonDistance + kReach
+               ? m_thirdPersonDistance + kReach
                : kReach;
 }
 
@@ -85,6 +91,32 @@ void Game::handleInteraction(double dt) {
         resetBowDraw();
         resetEatChannel();
         return;
+    }
+    // V2-19: the double-tap Space toggles the player's FLY (the creative-
+    // style toggle, "the Chinese can fly" — faster-than-walk exploration;
+    // the physics live in Player, the session state on the player). The
+    // double-tap window is REAL dt input state (the CRAFT-7
+    // kDoubleClickSeconds pattern — never frame state, never saved: a
+    // no-input run never presses Space = the structural-immunity root).
+    // Locked pointer only (the C-key pattern — the panel frees the
+    // pointer, so a panel-open press never reaches here; the death
+    // screen owns its input), alive only (the toggle does not fight the
+    // frozen body). The decision is the pure core/fly function; a SINGLE
+    // tap only records its time (the jump is exactly the pre-V2-19 one),
+    // a DOUBLE tap flips the fly and swallows the second tap's jump
+    // grant (Player::suppressJumpGrant — the creative's toggle consumes
+    // it: on the toggle-ON frame the fly branch owns Space, on the
+    // toggle-OFF frame the grant gate does).
+    if (m_input.wasPressed(GameKey::Space) && !m_player->isDead()) {
+        const double now = nowSeconds();
+        const FlyToggleDecision d =
+            flyToggleDecision(now, m_lastSpacePressTime,
+                              m_player->isFlying());
+        m_lastSpacePressTime = now;
+        if (d.doubleTap) {
+            m_player->setFlying(d.nowFlying);
+            m_player->suppressJumpGrant();
+        }
     }
     if (m_input.wasPressed(MouseButton::Right)) {
         // Campfire cooking (Phase 71): a campfire under the crosshair

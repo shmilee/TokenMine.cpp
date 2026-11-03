@@ -1,7 +1,9 @@
 // UX-4: the third-person back camera — the pure math behind it.
 //
 // The camera orbits BEHIND the player's eye on a fixed radius
-// (kThirdPersonDistance), the Minecraft third-person convention:
+// (kThirdPersonDistance by default; V2-19: the wheel-adjusted session
+// distance, resolveThirdPersonCamera's `distance` argument), the
+// Minecraft third-person convention:
 //   offset = -forward(yaw, pitch) * distance
 // (forward is the view's own direction vector — Camera::forward, the
 // single trig source shared with the view matrix). The camera then
@@ -29,8 +31,22 @@ namespace mc {
 class World;
 
 // The camera's orbit radius: ideal position = eye + offset, and
-// |offset| = this. 4.0 blocks is the back-camera distance.
+// |offset| = this. 4.0 blocks is the back-camera distance — and the
+// DEFAULT orbit radius (V2-19: the wheel zoom's session distance starts
+// here and is the resolve's default argument, so every pre-V2-19 call
+// site and unit test stays bit-identical).
 constexpr float kThirdPersonDistance = 4.0f;
+
+// V2-19 (the wheel zoom): the clamp band + the per-tick step of the
+// third-person orbit distance the mouse wheel adjusts (the Game owns the
+// session value — m_thirdPersonDistance — and passes it to
+// resolveThirdPersonCamera as `distance`). Documented deviation: the
+// vanilla Minecraft has no wheel zoom (the mod-convention range, the
+// user's request); the default kThirdPersonDistance keeps a no-input run
+// bit-identical (the structural-immunity root).
+constexpr float kZoomMin = 2.0f;
+constexpr float kZoomMax = 8.0f;
+constexpr float kZoomStep = 0.5f;
 
 // How far in FRONT of an occluding face the clamped camera stops.
 constexpr float kCameraOcclusionMargin = 0.1f;
@@ -87,8 +103,14 @@ Vec3 thirdPersonCameraOffset(float yaw, float pitch, float distance);
 // caller passes thirdPersonOrbitCenter(eyePosition(), yaw, pitch) —
 // 2.0.0: the eye kThirdPersonOrbitHeight up the view's up axis). The
 // function itself is agnostic: the ideal->orbitCenter segment has
-// length kThirdPersonDistance either way, so the occlusion logic is
-// unchanged.
+// length `distance` either way, so the occlusion logic is unchanged.
+//
+// V2-19 (the wheel zoom): `distance` is the orbit radius — the
+// wheel-adjusted session value the Game passes (clamped to
+// [kZoomMin, kZoomMax]). The default kThirdPersonDistance keeps every
+// pre-V2-19 call site AND unit test bit-identical (the red line): the
+// occlusion clamp simply follows the radius (a farther camera is
+// clamped by the same first face — the correct behavior).
 //
 // Occlusion, in order:
 //   1. the cell containing the ideal position is checked EXPLICITLY
@@ -98,8 +120,8 @@ Vec3 thirdPersonCameraOffset(float yaw, float pitch, float distance);
 //      view direction (the DDA first step, the same arithmetic
 //      world/raycast.cpp's walk starts with);
 //   2. otherwise t = the raycastBlock hit distance along the segment
-//      ideal -> orbitCenter (reach = kThirdPersonDistance, the exact
-//      length of that segment), or no hit -> the unoccluded case.
+//      ideal -> orbitCenter (reach = distance, the exact length of that
+//      segment), or no hit -> the unoccluded case.
 //
 //   embedded origin cell -> ideal + dir * min(t + margin, distance)
 //                (the face is the eye-side boundary of the occluding
@@ -116,10 +138,11 @@ Vec3 thirdPersonCameraOffset(float yaw, float pitch, float distance);
 //   t missing            -> ideal, returned bit-exactly.
 //
 // dir = normalize(orbitCenter - ideal) = the unit forward (the offset
-// length is exactly kThirdPersonDistance != 0, so the normalization is
-// safe). Pure read-only World access.
+// length is exactly distance != 0, so the normalization is safe). Pure
+// read-only World access.
 Vec3 resolveThirdPersonCamera(const World& world, const Vec3& orbitCenter,
-                              float yaw, float pitch);
+                              float yaw, float pitch,
+                              float distance = kThirdPersonDistance);
 
 // V2-1: the third-person FRONT view — the back camera's math executed at
 // the flipped view angles.

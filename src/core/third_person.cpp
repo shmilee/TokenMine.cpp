@@ -73,13 +73,13 @@ Vec3 thirdPersonOrbitCenter(const Vec3& eye, float yaw, float pitch) {
 }
 
 Vec3 resolveThirdPersonCamera(const World& world, const Vec3& orbitCenter,
-                              float yaw, float pitch) {
-    const Vec3 ideal =
-        orbitCenter +
-        thirdPersonCameraOffset(yaw, pitch, kThirdPersonDistance);
+                              float yaw, float pitch, float distance) {
+    const Vec3 ideal = orbitCenter + thirdPersonCameraOffset(yaw, pitch,
+                                                             distance);
     // Toward the orbit center (the eye): the unit forward. The offset
-    // length is exactly kThirdPersonDistance != 0, so the normalization
-    // is safe (normalized(orbitCenter - ideal) == -normalized(offset)).
+    // length is exactly distance != 0 (the zoom band keeps it >=
+    // kZoomMin), so the normalization is safe (normalized(orbitCenter -
+    // ideal) == -normalized(offset)).
     const Vec3 dir = normalized(orbitCenter - ideal);
 
     // The ideal position's cell, per-axis floor (the raycast's own
@@ -97,8 +97,7 @@ Vec3 resolveThirdPersonCamera(const World& world, const Vec3& orbitCenter,
         // (the DDA first step out of `cell` along dir).
         embedded = true;
         t = firstExitDistance(ideal, dir);
-    } else if (const auto hit =
-                   raycastBlock(world, ideal, dir, kThirdPersonDistance)) {
+    } else if (const auto hit = raycastBlock(world, ideal, dir, distance)) {
         t = hit->distance;
     }
     if (!t) {
@@ -109,12 +108,11 @@ Vec3 resolveThirdPersonCamera(const World& world, const Vec3& orbitCenter,
         // it, then take the margin OUTSIDE, on the player's side of the
         // face. (Stopping t_exit - margin instead would leave the
         // camera up to a full block deep in the wall — the wall is 1.0
-        // thick, the margin 0.1.) Clamped to kThirdPersonDistance: the
-        // segment ideal -> eye is exactly that long, so the camera must
-        // never pass the orbit center. In practice t_exit <= ~1.1, so
-        // the clamp is a defensive bound, not a reachable state.
-        const float pull =
-            std::min(*t + kCameraOcclusionMargin, kThirdPersonDistance);
+        // thick, the margin 0.1.) Clamped to distance: the segment
+        // ideal -> eye is exactly that long, so the camera must never
+        // pass the orbit center. In practice t_exit <= ~1.1, so the
+        // clamp is a defensive bound, not a reachable state.
+        const float pull = std::min(*t + kCameraOcclusionMargin, distance);
         return ideal + dir * pull;
     }
     // The face is AHEAD of the camera: stop the margin short of it.

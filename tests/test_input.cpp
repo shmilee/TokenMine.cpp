@@ -157,6 +157,38 @@ TEST(InputTest, MousePositionTracksLastAbsolute) {
     EXPECT_EQ(input.mouseDelta(), (Vec2{0.0f, 0.0f}));
 }
 
+TEST(InputTest, WheelDeltaAccumulatesAndResetsPerFrame) {
+    // V2-19: the wheel's vertical ticks accumulate over the frame and
+    // reset at frameBegin (the mouse-delta discipline — input state,
+    // never a persisted level).
+    Input input;
+    input.frameBegin();
+    EXPECT_EQ(input.wheelDelta(), 0); // fresh = 0
+    input.handleMouseWheel(1);
+    input.handleMouseWheel(-1);
+    input.handleMouseWheel(2);
+    EXPECT_EQ(input.wheelDelta(), 2);
+    input.frameBegin();
+    EXPECT_EQ(input.wheelDelta(), 0);
+    // Level-triggered state is untouched by the reset.
+    input.handleKey(SDLK_W, true);
+    input.frameBegin();
+    EXPECT_TRUE(input.isDown(GameKey::W));
+    EXPECT_EQ(input.wheelDelta(), 0);
+}
+
+TEST(InputTest, WheelZeroWithoutInput) {
+    // V2-19: the no-input discipline (the third-person zoom's structural
+    // immunity root): a fresh Input with frameBegin + pump (no events —
+    // no SDL video in the test process) reads 0, across frames.
+    Input input;
+    for (int i = 0; i < 3; ++i) {
+        input.frameBegin();
+        input.pump();
+        EXPECT_EQ(input.wheelDelta(), 0) << "frame " << i;
+    }
+}
+
 TEST(InputTest, QuitFlagSticky) {
     Input input;
     input.frameBegin();

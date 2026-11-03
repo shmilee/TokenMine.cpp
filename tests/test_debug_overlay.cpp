@@ -36,10 +36,10 @@ TEST(DebugOverlayTest, LinesFormat) {
     info.maxHunger = 20.0;
     info.difficulty = "hard";
     const auto lines = debugOverlayLines(info);
-    ASSERT_EQ(lines.size(), 17u);
+    ASSERT_EQ(lines.size(), 18u);
     // Pinned literal (deliberately NOT the TM_VERSION macro): a version
     // bump must force a conscious update of this pin.
-    EXPECT_EQ(lines[0], "TokenMine.cpp v2.10.0");
+    EXPECT_EQ(lines[0], "TokenMine.cpp v2.11.0");
     EXPECT_EQ(lines[1], "60 FPS | frame 1234");
     EXPECT_EQ(lines[2], "chunks 2312 | draws 45 | verts 987654");
     EXPECT_EQ(lines[3], "pos 0.50, 54.00, -34.70  yaw 0.00  pitch -0.25");
@@ -65,6 +65,27 @@ TEST(DebugOverlayTest, LinesFormat) {
     // V2-4: the weather line — a unit-test DebugInfo with no weather
     // data renders the baseline "(none)".
     EXPECT_EQ(lines[16], "weather (none)");
+    // V2-19: the camera line — a unit-test DebugInfo with no camera
+    // data renders the baseline "(none)".
+    EXPECT_EQ(lines[17], "cam (none)");
+}
+
+TEST(DebugOverlayTest, CamLine) {
+    // V2-19: the camera line — the mode + the third-person orbit
+    // distance (the wheel-zoom readout, one decimal: the kZoomStep 0.5
+    // grid) + the fly marker (the double-tap Space toggle).
+    DebugInfo none;
+    EXPECT_EQ(debugOverlayLines(none).size(), 18u);
+    EXPECT_EQ(debugOverlayLines(none)[17], "cam (none)");
+    DebugInfo back;
+    back.camMode = "ThirdBack";
+    back.camDistance = 4.0;
+    EXPECT_EQ(debugOverlayLines(back)[17], "cam ThirdBack D 4.0");
+    DebugInfo front;
+    front.camMode = "ThirdFront";
+    front.camDistance = 6.5;
+    front.flying = true;
+    EXPECT_EQ(debugOverlayLines(front)[17], "cam ThirdFront D 6.5  flying");
 }
 
 TEST(DebugOverlayTest, TutorialLine) {

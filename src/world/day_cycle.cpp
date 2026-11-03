@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 #include "world/noise.hpp" // splitmix64 (starfield hashing)
 
@@ -160,6 +161,25 @@ int DayCycle::moonPhaseIndex(int dayIndex) {
         p += kMoonPhaseCount;
     }
     return p;
+}
+
+std::string DayCycle::clockString(double timeOfDay) {
+    // The mapping (see the hpp — the ramp-edge exact alignment): dawn
+    // edge 06:00, noon plateau center 12:00, dusk edge 18:00, night
+    // center 00:00. For t in [0, 1) the raw value (t - kDawnStart) * 24 +
+    // 6 stays in [4.8, 28.8), so the fmod lands in [0, 24) without any
+    // negative wrap (the pre-dawn segment reads the 04:48..05:59 band,
+    // the post-midnight one the 00:00..04:47 band).
+    const double hour24 =
+        std::fmod((timeOfDay - kDawnStart) * 24.0 + 6.0, 24.0);
+    // hour24 < 24 by the fmod, so the truncation hour is 0..23 and the
+    // fraction (exact by Sterbenz) is < 1: the minute floor is 0..59.
+    const int hour = static_cast<int>(hour24);
+    const int minute =
+        static_cast<int>(std::floor((hour24 - hour) * 60.0));
+    char buf[6];
+    std::snprintf(buf, sizeof(buf), "%02d:%02d", hour, minute);
+    return buf;
 }
 
 Vec2 DayCycle::moonPhaseOffset(int phase) {

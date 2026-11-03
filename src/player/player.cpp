@@ -196,6 +196,15 @@ void Player::update(double dt) {
     // AABB straddles both kinds, lava wins.
     m_inWater = isInWater();
     m_inLava = isInLava();
+    // V2-19: the fly's fluid gate — in water / lava the fly auto-switches
+    // OFF (the documented deviation: the project's fluid buoyancy model
+    // does not stack the flight, the minimal surface — the Minecraft
+    // creative flies underwater, this one does not). Runs before the
+    // speed computation and the sub-steps, so the SAME frame is already
+    // on the swim pace + the normal gravity.
+    if (m_flying && (m_inWater || m_inLava)) {
+        m_flying = false;
+    }
     // 2a-fluid2. The water surface plane W' of the feet's center column:
     // one above the topmost full (level-8) water cell at or below the feet
     // (scanned down kSurfaceScanDepth cells), or -1 when none. In a
@@ -274,7 +283,16 @@ void Player::update(double dt) {
     // documented deviation); only the ground/air path gets the inertia.
     const bool inFluidTier = m_inWater || m_atSurface || m_inLava;
     if (lengthSq(wish) > 0.0f) {
-        float speed = m_inLava
+        // V2-19: the fly's horizontal pace — the WALK speed x
+        // kFlySpeedMultiplier (the user's "faster than walking": 6.88
+        // b/s, above the sprint 5.6). The Shift is the fly's DESCEND key,
+        // not the sprint, so the fly never takes the sprint branch (the
+        // fluid tiers are unreachable while flying — the auto switch-off
+        // gate above); crouch + the beacon speed multiplier scale it
+        // exactly like the walk (the crouch mechanism runs as usual).
+        float speed = m_flying
+                          ? m_params.walkSpeed * kFlySpeedMultiplier
+                          : m_inLava
                           ? m_params.lavaSwimSpeed
                           : ((m_inWater || m_atSurface)
                                   ? m_params.swimSpeed // surface swim, FLUID-2
@@ -382,6 +400,11 @@ void Player::update(double dt) {
     const float preMoveSpeed =
         std::max(std::abs(m_velocity.x), std::abs(m_velocity.z));
     moveInSubsteps(dt, maxSpeed);
+    // V2-19: the toggle press's jump swallow is a ONE-frame flag — the
+    // sub-steps above had their jump grants gated on it; clear it for the
+    // next update (a Space STILL held on later frames jumps normally, the
+    // pre-V2-19 hold convention).
+    m_jumpGrantSuppressed = false;
 
     // 3b. Step up 1 block when flush against a step (not crouching, on
     // the ground).
@@ -401,6 +424,12 @@ void Player::update(double dt) {
 
     // 4. Survival (Phase 16): fall damage on landing, regeneration, and
     // the kill plane is now DEATH (the old respawn-teleport is gone).
+    // V2-19: this frame's fly state at the update's start (the landing
+    // path's fall-damage gate below: a landing WHILE flying is a
+    // controlled descent, not a fall — the creative's no-damage landing;
+    // the switch-OFF frame reads flying = false, so the free fall after
+    // it counts normally from the re-pinned start).
+    const bool flying = m_flying;
     if (m_onGround && !m_wasOnGround) {
         // Just landed: the net drop since leaving the ground. No damage
         // for the first fallDamageOffset blocks, 1 HP per block above
@@ -410,14 +439,26 @@ void Player::update(double dt) {
         // sample, so the tick state would miss the landing-in-water.
         const float fall = m_fallStartY - m_position.y;
         // ANY fluid cancels the fall (Phase 54: lava like water — the
-        // burn replaces the fall damage).
-        if (fall > m_params.fallDamageOffset && !isInWater() && !isInLava()) {
+        // burn replaces the fall damage). V2-19: so does a fly landing
+        // (see `flying` above).
+        if (fall > m_params.fallDamageOffset && !isInWater() && !isInLava() &&
+            !flying) {
             damage(fall - m_params.fallDamageOffset);
         }
         m_fallStartY = m_position.y;
     }
     if (!m_onGround && m_wasOnGround) {
         m_fallStartY = m_position.y; // just left the ground
+    }
+    // V2-19: the fly's fall bookkeeping — while flying, the fall-distance
+    // accumulator re-pins to this frame's (post-physics) position EVERY
+    // frame: no distance accrues in the hover (the gravity skip), and the
+    // switch-off frame's free fall counts from the switch height (the
+    // last pin) — no burst damage at the switch instant, the normal fall
+    // damage after (the landing path's `fall = m_fallStartY -
+    // m_position.y`, unchanged).
+    if (flying) {
+        m_fallStartY = m_position.y;
     }
     m_wasOnGround = m_onGround;
 
@@ -636,6 +677,10 @@ void Player::respawn() {
     m_lavaAccum = 0.0; // respawn out of the lava (spawn is dry land)
     m_wasOnGround = false;
     m_fallStartY = m_spawnPos.y;
+    // V2-19: the death / respawn resets the fly (session state — the
+    // player respawns on the ground, no creative carry-over).
+    m_flying = false;
+    m_jumpGrantSuppressed = false;
     teleportTo(m_spawnPos);
 }
 
@@ -770,6 +815,23 @@ void Player::integrate(float h) {
             // plane: keep vy; the next tick's state re-resolves it.
         }
     } else {
+        // V2-19: the fly (the creative-style double-tap Space toggle) —
+        // the gravity skip (the vy baseline 0, no acceleration) + the
+        // fixed-pace vertical control: Space = ascend, LeftShift =
+        // descend (the crouch mechanism runs as usual — the height shrink
+        // + the step-up prohibition are the existing paths, the Shift's
+        // dual meaning is the creative's), neither = hover. The
+        // horizontal move, the collision (the moveInSubsteps AABB, the
+        // creative's wall bump) and the tunneling sub-steps are UNCHANGED.
+        if (m_flying) {
+            m_velocity.y =
+                m_input->isDown(GameKey::Space)
+                    ? kFlyVerticalSpeed
+                    : (m_input->isDown(GameKey::LeftShift)
+                           ? -kFlyVerticalSpeed
+                           : 0.0f);
+            return;
+        }
         // Gravity, capped at terminal velocity.
         m_velocity.y -= m_params.gravity * h;
         if (m_velocity.y < -m_params.terminalVelocity) {
@@ -778,8 +840,12 @@ void Player::integrate(float h) {
         // Jump: only from the ground (m_onGround is the previous
         // sub-step's result, so one press cannot re-trigger mid-air) and
         // never while sitting (Phase 71 — standing up is uncrouching, not
-        // jumping).
-        if (m_input->isDown(GameKey::Space) && m_onGround && !m_sitting) {
+        // jumping). V2-19: never on the toggle press's frame either —
+        // the double-tap's second tap SWALLOWS the jump (the creative's
+        // toggle consumes it: on the toggle-ON frame the fly branch
+        // above owns Space, on the toggle-OFF frame this gate does).
+        if (m_input->isDown(GameKey::Space) && m_onGround && !m_sitting &&
+            !m_jumpGrantSuppressed) {
             m_velocity.y = m_params.jumpSpeed;
         }
     }

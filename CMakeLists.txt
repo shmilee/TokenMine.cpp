@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 2.10.0 LANGUAGES CXX)
+project(TokenMine VERSION 2.11.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -34,6 +34,7 @@ add_library(mc_core STATIC
     src/core/input.cpp
     src/core/camera.cpp
     src/core/third_person.cpp
+    src/core/fly.cpp
     src/core/png.cpp
     src/core/save.cpp
     src/core/save_slot.cpp
@@ -143,6 +144,7 @@ add_executable(tokenmine_tests
     tests/test_input.cpp
     tests/test_camera.cpp
     tests/test_third_person.cpp
+    tests/test_fly.cpp
     tests/test_png.cpp
     tests/test_block.cpp
     tests/test_block_sound.cpp
