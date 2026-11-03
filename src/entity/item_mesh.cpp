@@ -58,7 +58,8 @@ ItemMeshGeometry makeItemCubeGeometry(const Block& block,
     for (const CubeFace& face : kCubeFaces) {
         const std::string& tex =
             thinSideOnly ? block.model.textures.side
-                         : cubeFaceTexture(block, face.textureSlot);
+                         : cubeFaceTexture(block, face.textureSlot,
+                                            face.normal);
         const Vec2 u0 = AtlasLayout::uvMin(layout, tex);
         const Vec2 u1 = AtlasLayout::uvMax(layout, tex);
         // Corner UVs follow the corner order: (u0,v1),(u1,v1),(u1,v0),(u0,v0)

@@ -401,6 +401,55 @@ def furnace_top(x, y):
     return stone(x, y)
 
 
+def furnace_front(x, y):
+    # V2-7: the furnace's FRONT face (the first consumer of the block-level
+    # per-face textures — before V2-7 all four sides shared furnace_side).
+    # A WIDER firebox mouth than the side (the MC furnace_front look): the
+    # dark opening x 3..12 / y 4..12 with glowing embers along its bottom
+    # (the side's mouth palette, new salts 961..964) + the darker stone rim
+    # band under the mouth (salt 965). New salts only, every existing
+    # texture pixel-identical.
+    if 3 <= x <= 12 and 4 <= y <= 12:
+        if y >= 10 and 5 <= x <= 10:
+            glow = h2(x, y, 961) % 40
+            return (clamp(240 - glow), clamp(130 - glow),
+                    clamp(48 - glow // 2), 255)
+        if y >= 10:
+            return (70, 45, 32, 255)
+        return (38 + noise(x, y, 962, 8), 33 + noise(x, y, 963, 8),
+                30 + noise(x, y, 964, 8), 255)
+    if 2 <= x <= 13 and 13 <= y <= 14:
+        v = 100 + noise(x, y, 965, 8)
+        return (v, v, v, 255)
+    return stone(x, y)
+
+
+def gold_block(x, y):
+    """V2-7: the gold block (the beacon pyramid material next to the iron
+    block). A bright, uniform metallic gold with a faint brushed noise
+    (the iron_block pattern, the gold_ore speckle palette). New salts
+    957/958, every existing texture pixel-identical."""
+    base = (247, 218, 62)  # the Minecraft gold-block yellow
+    n = noise(x, y, 957, 5)
+    n2 = noise(x, y, 958, 3)
+    v = n + n2
+    return (clamp(base[0] + v), clamp(base[1] + v),
+            clamp(base[2] + v), 255)
+
+
+def diamond_block(x, y):
+    """V2-7: the diamond block (the beacon pyramid material next to the
+    iron block). A bright, uniform metallic cyan with a faint brushed
+    noise (the iron_block pattern, the diamond_ore speckle palette). New
+    salts 959/960, every existing texture pixel-identical."""
+    base = (98, 232, 234)  # the Minecraft diamond-block cyan
+    n = noise(x, y, 959, 5)
+    n2 = noise(x, y, 960, 3)
+    v = n + n2
+    return (clamp(base[0] + v), clamp(base[1] + v),
+            clamp(base[2] + v), 255)
+
+
 def furnace_side(x, y):
     # Stone + a dark firebox mouth in the lower middle, glowing embers at
     # the bottom of the mouth, a darker stone rim around it.
@@ -814,6 +863,13 @@ TEXTURES = {
     "crafting_table_side": crafting_table_side,
     "furnace_top": furnace_top,
     "furnace_side": furnace_side,
+    # V2-7: the material-completion batch — the gold / diamond blocks (the
+    # beacon pyramid materials) + the furnace front (the first block-level
+    # per-face texture). New tiles only, every existing PNG stays
+    # byte-identical (new salts 957..965).
+    "furnace_front": furnace_front,
+    "gold_block": gold_block,
+    "diamond_block": diamond_block,
 }
 
 

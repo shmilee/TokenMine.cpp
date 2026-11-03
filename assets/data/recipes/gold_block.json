@@ -1,0 +1,16 @@
+{
+  "id": "gold_block",
+  "type": "shaped",
+  "output": {
+    "item": "gold_block",
+    "count": 1
+  },
+  "pattern": [
+    "III",
+    "III",
+    "III"
+  ],
+  "key": {
+    "I": "gold_ingot"
+  }
+}

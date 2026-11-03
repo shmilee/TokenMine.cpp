@@ -106,23 +106,6 @@ def line(px, x0, y0, x1, y1, color, salt, width=1):
             y0 += sy
 
 
-def planks():
-    px = blank()
-    base = (168, 126, 74)
-    for y in range(SIZE):
-        for x in range(SIZE):
-            setpx(px, x, y, base, salt=7)
-    # Three horizontal seams (plank edges) + staggered vertical joints.
-    seam = (122, 88, 50)
-    for y in (8, 16, 24):
-        for x in range(SIZE):
-            setpx(px, x, y, seam, salt=9, amount=4)
-    for (x, y0, y1) in ((6, 0, 8), (20, 8, 16), (12, 16, 24), (24, 24, 32)):
-        for y in range(y0, min(y1, SIZE)):
-            setpx(px, x, y, seam, salt=11, amount=4)
-    return px
-
-
 def stick():
     px = blank()
     color = (140, 100, 58)
@@ -406,6 +389,56 @@ def cooked_chicken():
     line(px, 16, 18, 16, 26, bone, salt=95, width=4)
     for (x, y) in ((7, 13), (7, 14), (10, 13), (10, 14)):
         setpx2(px, x, y, bone, salt=96, amount=4)
+    return px
+
+
+def string():
+    """String (V2-7, the spider's drop): a coiled cream cord — a 2.5-turn
+    spiral with a loose end, the Minecraft string item look (the spiral is
+    shaded in alternating light/dark turns). New salts 146-148, every
+    existing icon pixel-identical."""
+    import math
+    px = blank()
+    cream = (216, 206, 186)
+    cream_dark = (176, 164, 142)
+    # The spiral: centre (16,16), radius 4..13 design px, 2 px wide.
+    turns = 2.5
+    for t in range(240):
+        a = t / 240.0 * turns * 2.0 * math.pi
+        r = 4.0 + (13.0 - 4.0) * (a / (turns * 2.0 * math.pi))
+        x = int(round(16.0 + r * math.cos(a)))
+        y = int(round(16.0 + r * math.sin(a)))
+        c = cream if int(a / math.pi) % 2 == 0 else cream_dark
+        for (ox, oy) in ((0, 0), (1, 0), (0, 1), (1, 1)):
+            setpx(px, x + ox, y + oy, c, salt=146)
+    # The loose end trailing from the spiral's start (lower left).
+    setpx2(px, 9, 24, cream, salt=147)
+    setpx2(px, 8, 25, cream_dark, salt=148)
+    return px
+
+
+def spider_eye():
+    """Spider eye (V2-7, the spider's drop): a bluish-purple eyeball on a
+    tan rim with a glossy highlight — the Minecraft spider-eye item look.
+    New salts 149-151, every existing icon pixel-identical."""
+    px = blank()
+    violet = (146, 84, 216)
+    violet_dark = (104, 52, 168)
+    rim = (122, 108, 88)
+    for y in range(4, 28):
+        for x in range(2, 30):
+            nx = (x - 16.0) / 13.0
+            ny = (y - 16.0) / 11.0
+            d = nx * nx + ny * ny
+            if d < 0.55:
+                setpx(px, x, y, violet, salt=149)
+            elif d < 1.0:
+                setpx(px, x, y, violet_dark, salt=149)
+            elif d < 1.25:
+                setpx(px, x, y, rim, salt=150)
+    # The glossy highlight (upper left of the eyeball).
+    for (x, y) in ((11, 10), (12, 10), (11, 11)):
+        setpx2(px, x, y, (232, 224, 244), salt=151, amount=4)
     return px
 
 
@@ -1098,7 +1131,9 @@ def make_bottle(liquid, salt, has_liquid=True,
 
 
 ITEMS = {
-    "planks": planks,
+    # V2-7: the planks icon is retired — planks is now a BLOCK item (the
+    # 3D cube renders in its place, the Phase 41 wool precedent), so its
+    # standalone PNG is deleted with this entry.
     "stick": stick,
     "rotten_flesh": rotten_flesh,
     "lapis": lapis,
@@ -1137,6 +1172,9 @@ ITEMS = {
     # V2-5: the pork chain (the pig's food, the MC porkchop look).
     "pork": pork,
     "cooked_pork": cooked_pork,
+    # V2-7: the spider's drops (string + spider eye, the MC values).
+    "string": string,
+    "spider_eye": spider_eye,
     "bucket": bucket_icon,
     "milk_bucket": milk_bucket_icon,
     "water_bucket": water_bucket_icon,

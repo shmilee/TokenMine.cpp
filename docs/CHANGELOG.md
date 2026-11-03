@@ -1,11 +1,74 @@
 # 版本历史（CHANGELOG）
 
 > 本文件只留 **v2.x** 逐版明细（v2.0.0 = 1.x 收官里程碑 / V2-1 前视角 /
-> V2-2 Steve 皮肤 / V2-3 教程系列化 / V2-4 天气 / V2-5 猪 / V2-6 体验打磨批）。
+> V2-2 Steve 皮肤 / V2-3 教程系列化 / V2-4 天气 / V2-5 猪 / V2-6 体验
+> 打磨批 / V2-7 材料补齐批）。
 > v1.x（v1.50.0→v1.0）→ `docs/archive/v1x/CHANGELOG.md`；
 > v0.x（v0.12.0→v0.1.0）→ `docs/archive/v0x/CHANGELOG.md`。逐版细节
 > （机制/证据/偏离/性能 A/B）见 `docs/archive/v1x/phase-*.md` 阶段存档与
 > GitHub Releases。README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本）。
+
+## v2.7.0（2026-11-03）— V2-7 材料补齐批（planks 块化 / 金钻块 / spider 掉落 / 块级 per-face）
+
+四子项均数据驱动（核心唯一新增 = 块级 `faces` 通用能力，
+**无 faces = 位级不变红线**），**零 format（25 不动）/ 零 config
+新键**：
+
+- **planks 块化**：新块 `planks`（FullCube 复用图集既有 planks
+  tile @ [2,4] **零新纹理**；hardness 2.0 / drops 自身 / sound wood
+  / flamable / **fuel_time 7.5** 自物品迁入值不变 = wood.json 块
+  属性先例）；`items/planks.json` 删（块物品按名自动注册；同名
+  显式文件 = init 点名拒「duplicate item id 'planks'」S6 实证）；
+  8 配方（bow/crafting_table/planks/stick/wooden_axe/pickaxe/
+  shovel/fence）全按名解析 = 零改动（单测钉）。图标观感 = 3D
+  方块体（记档偏离，wool 同名先例 Phase 41）。
+- **gold_block / diamond_block**：iron_block 先例复制（hardness
+  3.0/5.0 + 9 锭 shaped 配方 ×2 + 图集新 tile）；**`beacon_base:
+  true`** 两块入信标配基座集合 {iron, gold, diamond}——等级仍是
+  world/beacon 纯函数（3×3/5×5 连续完整层），零核心代码。
+- **spider 掉落**：`string ×0-2` + `spider_eye ×0-2`（既有
+  count_min/max 随机区间机制，MC 同款值；spider 其余字段零改动
+  + 六 mob FNV 钉）+ 2 新 material 物品（螺旋绳 / 紫青眼球 icon
+  新 salt）。**弓配方用 planks 不用 string → 两物品纯收集 = 记档
+  偏离**（不加配方 = 最小面）。
+- **块级 per-face 纹理**：`BlockModel.textures` 扩可选 `faces` 段
+  （front/back/left/right 覆写 side，**面外法线定名**——
+  front=(0,0,−1) 共享 yaw-0=−Z 约定；top/bottom 归既有键，faces
+  内命名 = 点名拒；严格解析：未知键/非串/空串/cross·fence·
+  glass_pane 形状全点名拒；`cubeFaceTexture` 方向感知重载 +
+  mesher 10 调用点转向 = **per-face 覆写自动断 greedy merge**）。
+  **无 faces = 位级不变**（空串回退 side；单测证明除 furnace 外
+  全块方向查找 = 旧查找）。首个消费 = **furnace front 单 tile
+  `furnace_front`**（宽炉口+余火）；**炉子无 lit 纹理态 = 记档
+  偏离**（lit 表现 = 既有炉口火焰粒子）。
+
+图集 102/128（3 新 tile row-7 [10..12,7]，纯 +12 行零移位）、
+字体 423 零新字、既有 184 纹理 PNG md5 零变化（5 新 1 删普查
+实证）；`-Werror` 0、banner v2.7.0。
+
+门 178 全 PASS：S1 **第 178 次结构免疫**（new/old 60f 四方 RAW
+全字节一致 + base18 锚 179116 B + 跨版 savenorm EXACT 零 format）
++ S2 四子项判别全 PASS（planks RMB 放置互斥终态 = 新侧块入 world
+@ (0,54,-3) / 旧侧 material 无动作 / 首试命中零 CALIB；炉子前脸
+new ×2 恒等 + 新旧 diff bbox 112×107 @ 画面中心 = 前脸纹理区【pose
+站 −Z 侧朝 +Z yaw 3.0——首跑从 +Z 侧看 back 面三图恒等零 diff =
+面名约定实证，PITS 374②】；beacon gold 3×3 基座光束 = 细竖列
+x[316..355] + 基座金色 diff vs stone 对照 None + **旧侧载 gold
+场景 init 点名拒 = 可载性互斥** + CPU 探针（真实资产+世界）
+beaconLevel(gold)=1/(stone)=0；spider 夜间 scratch spider-only
+场景击杀 E2E【PITS 373 敌对生成双门 = 生成保护 12 块 + 夜间被动
+cap 挤占】：单跑 hold-swing kill 2 只，掉落两组
+string×2+eye×2 / string×1+eye×2 **每组独立在 0-2 区间** +
+**复跑两组逐位恒等**，旧侧 v2.6.0 spider.json 无 drops 字段 =
+结构互斥）+ S3 2169/2169（+12）+ S6 双点名（`unknown face
+'weirdface' in model.textures.faces` / `duplicate item id
+'planks'`）+ **性能 A/B 同世界同成本**（900f 无输入：changesApplied
+9/3/1 三窗双侧逐位 + 终档 fluids 18/18、blocks 55/55 集合恒等 +
+PERF-WIN 全指标同档；FURN 炉子场景双侧 900f = per-face 覆写非空
+分支零可测增量）。门协议
+发现记 PITS 373/374（敌对生成双门 + hold-swing 帧预算/capture
+时延锚/face 面名 pose/symlink 进程名脱管）。详见
+docs/archive/phase-2.7.0.md。
 
 ## v2.6.0（2026-11-03）— V2-6 体验打磨批（第一人称手臂 / mob 阴影 / 拾取磁力 / 月相）（门 177 全 PASS）
 

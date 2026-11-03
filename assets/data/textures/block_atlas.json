@@ -397,6 +397,18 @@
   "pig_face": [
    9,
    7
+  ],
+  "gold_block": [
+   10,
+   7
+  ],
+  "diamond_block": [
+   11,
+   7
+  ],
+  "furnace_front": [
+   12,
+   7
   ]
  }
 }

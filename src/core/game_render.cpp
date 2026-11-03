@@ -581,7 +581,8 @@ void Game::drawParticles(const Mat4& view, const Mat4& projection,
                     : (block.model.shape == BlockModel::Shape::Fence ||
                        block.model.shape == BlockModel::Shape::GlassPane)
                           ? block.model.textures.side
-                          : cubeFaceTexture(block, face.textureSlot);
+                          : cubeFaceTexture(block, face.textureSlot,
+                                            face.normal);
             const Vec2 u0 = AtlasLayout::uvMin(m_atlas.layout(), tex);
             const Vec2 u1 = AtlasLayout::uvMax(m_atlas.layout(), tex);
             const Vec2 faceUv[4] = {

@@ -214,8 +214,14 @@ void ChunkMesher::meshFaceDirection(ChunkMeshData& out, const Chunk& chunk,
                 // dry neighbors never merge (the tile differs — the greedy
                 // sameAs key), and the game re-meshes tracked cells when a
                 // fluid change flips their wetness.
+                // V2-7: direction-aware (the side slot resolves the
+                // per-face override from the face's outward normal; no
+                // faces section = the pre-V2-7 slot-only tile, bit-
+                // identical). The greedy key below carries the tile, so
+                // faces with different side tiles never merge (the
+                // moisture split pattern).
                 std::string faceTex =
-                    cubeFaceTexture(block, face.textureSlot);
+                    cubeFaceTexture(block, face.textureSlot, face.normal);
                 if (face.textureSlot == 0 && !block.model.moistureTop.empty()) {
                     if (soilIsWet(m_world,
                                   BlockPos {origin.x + c[0], origin.y + c[1],
@@ -435,8 +441,10 @@ void ChunkMesher::emitFluid(ChunkMeshData& out, const Block& fluidBlock,
             continue;
         }
 
+        // V2-7: direction-aware (the fluid pass textures from the
+        // reference block like every cube-face emitter).
         const std::string& texName =
-            cubeFaceTexture(fluidBlock, face.textureSlot);
+            cubeFaceTexture(fluidBlock, face.textureSlot, face.normal);
         const Vec2 u0 = AtlasLayout::uvMin(m_layout, texName);
         const Vec2 u1 = AtlasLayout::uvMax(m_layout, texName);
         // Corner UVs follow the corner order: (u0,v1),(u1,v1),
@@ -616,9 +624,9 @@ void ChunkMesher::emitSlab(ChunkMeshData& out, const Block& block,
             }
         }
         const Vec2 u0 = AtlasLayout::uvMin(
-            m_layout, cubeFaceTexture(block, face.textureSlot));
+            m_layout, cubeFaceTexture(block, face.textureSlot, face.normal));
         const Vec2 u1 = AtlasLayout::uvMax(
-            m_layout, cubeFaceTexture(block, face.textureSlot));
+            m_layout, cubeFaceTexture(block, face.textureSlot, face.normal));
         const Vec2 faceUv[4] = {{u0.x, u1.y}, {u1.x, u1.y},
                                 {u1.x, u0.y}, {u0.x, u0.y}};
         // Per-face light: sample the cell the face borders (the blocky-light
@@ -705,9 +713,9 @@ void ChunkMesher::emitWall(ChunkMeshData& out, const Block& block,
             }
         }
         const Vec2 u0 = AtlasLayout::uvMin(
-            m_layout, cubeFaceTexture(block, face.textureSlot));
+            m_layout, cubeFaceTexture(block, face.textureSlot, face.normal));
         const Vec2 u1 = AtlasLayout::uvMax(
-            m_layout, cubeFaceTexture(block, face.textureSlot));
+            m_layout, cubeFaceTexture(block, face.textureSlot, face.normal));
         const Vec2 faceUv[4] = {{u0.x, u1.y}, {u1.x, u1.y},
                                 {u1.x, u0.y}, {u0.x, u0.y}};
         const std::uint8_t faceSky = m_world.getSkyLight(
@@ -1004,8 +1012,8 @@ void ChunkMesher::emitStairs(ChunkMeshData& out, const Block& block,
     };
     auto emitQuad = [&](const std::array<Vec3, 4>& c, const Vec3& normal,
                         int slot) {
-        const Vec2 u0 = AtlasLayout::uvMin(m_layout, cubeFaceTexture(block, slot));
-        const Vec2 u1 = AtlasLayout::uvMax(m_layout, cubeFaceTexture(block, slot));
+        const Vec2 u0 = AtlasLayout::uvMin(m_layout, cubeFaceTexture(block, slot, normal));
+        const Vec2 u1 = AtlasLayout::uvMax(m_layout, cubeFaceTexture(block, slot, normal));
         const Vec2 uv[4] = {{u0.x, u1.y}, {u1.x, u1.y},
                             {u1.x, u0.y}, {u0.x, u0.y}};
         const std::uint32_t first =
@@ -1025,8 +1033,8 @@ void ChunkMesher::emitStairs(ChunkMeshData& out, const Block& block,
     };
     auto emitTri = [&](const std::array<Vec3, 3>& c, const Vec3& normal,
                        int slot) {
-        const Vec2 u0 = AtlasLayout::uvMin(m_layout, cubeFaceTexture(block, slot));
-        const Vec2 u1 = AtlasLayout::uvMax(m_layout, cubeFaceTexture(block, slot));
+        const Vec2 u0 = AtlasLayout::uvMin(m_layout, cubeFaceTexture(block, slot, normal));
+        const Vec2 u1 = AtlasLayout::uvMax(m_layout, cubeFaceTexture(block, slot, normal));
         const Vec2 uv[3] = {{u0.x, u1.y}, {u1.x, u1.y}, {u0.x, u0.y}};
         const std::uint32_t first =
             static_cast<std::uint32_t>(out.opaqueVertices.size());

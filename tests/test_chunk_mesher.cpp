@@ -1366,3 +1366,81 @@ TEST(ChunkMesherTest, HoneyTopFaceIsNotMarkedForRipples) {
         EXPECT_FLOAT_EQ(v.water, 0.0f);
     }
 }
+
+// -- V2-7: the block-level per-face side overrides ----------------------------
+
+TEST(ChunkMesherTest, V27PerFaceSideOverrideSelectsTheFrontTile) {
+    // V2-7: model.textures.faces.front overrides ONLY the -Z face (the
+    // yaw-0 = -Z convention): the front face draws the "f" tile, the
+    // other three sides draw the "s" tile, and top/bottom keep their
+    // keys (the slot-only behavior — the no-faces red line). A lone
+    // block cannot merge, so every face stays on the legacy atlas-space
+    // UV path: the corner-0 uv = (u0.x, u1.y) = the tile's TOP row
+    // boundary, distinct per layout row (1x4: t/s/b/f rows 0..3).
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"furn","model":{"textures":{"top":"t","side":"s","bottom":"b",)"
+        R"("faces":{"front":"f"}}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("furn"));
+    const ChunkMeshData data =
+        ChunkMesher(world, reg, makeLayout({"t", "s", "b", "f"})).mesh({0, 0, 0});
+    ASSERT_EQ(data.opaqueVertices.size(), 24u); // six unmerged faces
+    const struct {
+        const char* name;
+        Vec3 n;
+        float v;
+    } want[] = {
+        {"front", {0.0f, 0.0f, -1.0f}, 1.0f},   // f (row 3)
+        {"back", {0.0f, 0.0f, 1.0f}, 0.5f},     // s (row 1)
+        {"left", {-1.0f, 0.0f, 0.0f}, 0.5f},    // s
+        {"right", {1.0f, 0.0f, 0.0f}, 0.5f},    // s
+        {"top", {0.0f, 1.0f, 0.0f}, 0.25f},     // t (row 0, the key)
+        {"bottom", {0.0f, -1.0f, 0.0f}, 0.75f}, // b (row 2, the key)
+    };
+    for (const auto& w : want) {
+        SCOPED_TRACE(w.name);
+        const std::vector<MeshVertex> vs =
+            verticesWithNormal(data.opaqueVertices, w.n);
+        ASSERT_EQ(vs.size(), 4u);
+        EXPECT_EQ(vs[0].uv, (Vec2 {0.0f, w.v}));
+    }
+}
+
+TEST(ChunkMesherTest, V27NoFacesBlockMeshesAsBefore) {
+    // The V2-7 red line at the MESH level: a block WITHOUT a faces
+    // section emits the exact pre-V2-7 UVs (the direction-aware lookup
+    // falls back to the slot-only tile on every face — a bit-identical
+    // mesh for all shipped pre-V2-7 content).
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"stone","model":{"textures":{"top":"t","side":"s","bottom":"b"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    World world;
+    world.setBlock(8, 4, 8, reg.idForName("stone"));
+    // The 4-row layout (the "f" row stays unused — same row math as the
+    // override test above).
+    const ChunkMeshData data =
+        ChunkMesher(world, reg, makeLayout({"t", "s", "b", "f"})).mesh({0, 0, 0});
+    ASSERT_EQ(data.opaqueVertices.size(), 24u);
+    const struct {
+        const char* name;
+        Vec3 n;
+        float v;
+    } want[] = {
+        {"front", {0.0f, 0.0f, -1.0f}, 0.5f},   // s (row 1)
+        {"back", {0.0f, 0.0f, 1.0f}, 0.5f},     // s
+        {"left", {-1.0f, 0.0f, 0.0f}, 0.5f},    // s
+        {"right", {1.0f, 0.0f, 0.0f}, 0.5f},    // s
+        {"top", {0.0f, 1.0f, 0.0f}, 0.25f},     // t (row 0)
+        {"bottom", {0.0f, -1.0f, 0.0f}, 0.75f}, // b (row 2)
+    };
+    for (const auto& w : want) {
+        SCOPED_TRACE(w.name);
+        const std::vector<MeshVertex> vs =
+            verticesWithNormal(data.opaqueVertices, w.n);
+        ASSERT_EQ(vs.size(), 4u);
+        EXPECT_EQ(vs[0].uv, (Vec2 {0.0f, w.v}));
+    }
+}

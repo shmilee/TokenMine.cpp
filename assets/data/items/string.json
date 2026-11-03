@@ -1,0 +1,22 @@
+{
+ "id": "string",
+ "type": "material",
+ "icon": "string",
+ "model": {
+  "texture": "string",
+  "elements": [
+   {
+    "from": [
+     0.2,
+     0.25,
+     0.3
+    ],
+    "to": [
+     0.8,
+     0.75,
+     0.7
+    ]
+   }
+  ]
+ }
+}

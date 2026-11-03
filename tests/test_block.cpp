@@ -12,6 +12,7 @@
 
 #include "block/block_registry.hpp"
 #include "block/block_sound.hpp"
+#include "block/cube_face_table.hpp"
 #include "core/asset_manager.hpp"
 
 using namespace mc;
@@ -1390,7 +1391,9 @@ TEST(BlockRegistryTest, Phase63FlamableContent) {
         EXPECT_TRUE(b->properties.flamable) << name;
     }
     // The complete flamable set = 10 (Phase 63) + 7 (GEN-2: 3 saplings,
-    // 2 trunks, 2 leaves) = 17 blocks, nothing else.
+    // 2 trunks, 2 leaves) + 1 (V2-7: planks, the wood precedent — the
+    // placeable plank block burns like the log it is crafted from) = 18
+    // blocks, nothing else.
     std::vector<std::string> flamables;
     for (std::size_t i = 0; i < reg.count(); ++i) {
         const Block& b = reg.at(BlockID{static_cast<int>(i)});
@@ -1399,14 +1402,15 @@ TEST(BlockRegistryTest, Phase63FlamableContent) {
         }
     }
     std::sort(flamables.begin(), flamables.end());
-    EXPECT_EQ(flamables.size(), 17u);
+    EXPECT_EQ(flamables.size(), 18u);
     const std::vector<std::string> want = {"birch_leaves", "birch_sapling",
                                            "birch_trunk", "grass", "leaves",
-                                           "oak_sapling", "spruce_leaves",
-                                           "spruce_sapling", "spruce_trunk",
-                                           "wheat_1", "wheat_2", "wheat_3",
-                                           "wheat_4", "wheat_5", "wheat_6",
-                                           "wheat_7", "wood"};
+                                           "oak_sapling", "planks",
+                                           "spruce_leaves", "spruce_sapling",
+                                           "spruce_trunk", "wheat_1",
+                                           "wheat_2", "wheat_3", "wheat_4",
+                                           "wheat_5", "wheat_6", "wheat_7",
+                                           "wood"};
     EXPECT_EQ(flamables, want);
 }
 
@@ -1954,8 +1958,8 @@ TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
     //   stone = the stone family (stone / stone_wall / cobblestone) + the
     //           ORE family (Minecraft: the ores use the stone sound — the
     //           dispatch decision, the documented note)
-    //   wood  = the trunk family (wood / spruce / birch — planks is an
-    //           ITEM, not a block, so no planks block)
+    //   wood  = the trunk family (wood / spruce / birch) + planks (V2-7:
+    //           planks became a BLOCK, the wood sound like its log)
     //   gravel= the gravel block
     //   sand  = sand + the sandstone chain (Minecraft: sandstone uses the
     //           sand sound — the dispatch decision)
@@ -1974,6 +1978,7 @@ TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
         {"wood", "wood"},
         {"spruce_trunk", "wood"},
         {"birch_trunk", "wood"},
+        {"planks", "wood"},
         {"gravel", "gravel"},
         {"sand", "sand"},
         {"sandstone", "sand"},
@@ -2967,4 +2972,227 @@ TEST(BlockContentTest, Craft6FuelAndSmeltableContentPinned) {
                     20.0f);
     EXPECT_EQ(blocks.at(blocks.idForName("sand")).properties.smeltableTo,
               "glass");
+}
+
+// -- V2-7: the material-completion batch ---------------------------------------
+// planks becomes a BLOCK (the item retires into the block item — the Phase 41
+// wool precedent), gold_block / diamond_block join the beacon pyramid
+// materials (the iron_block precedent + the beacon_base data flag), and the
+// furnace is the first consumer of the block-level per-face textures
+// (model.textures.faces — the V2-2 MobBox faces paradigm on the block side).
+
+TEST(BlockContentTest, V27PlanksBlockContentPinned) {
+    // The real assets: the planks block (FullCube, the EXISTING planks
+    // atlas tile on all six faces — zero new textures), hardness 2.0
+    // (Minecraft), drops itself (its block item), the wood sound material
+    // (the wood-family precedent) + flamable (the log it is crafted from
+    // burns, so the plank does) + FUEL 7.5 s — the value MIGRATED from
+    // the retired item file (the CRAFT-6 block-item inheritance: the
+    // synthesized item reads it back). Worldgen places no planks, so a
+    // fresh world carries none (the no-input baseline immunity root).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* b = reg.findByName("planks");
+    ASSERT_TRUE(b != nullptr);
+    EXPECT_EQ(b->model.shape, BlockModel::Shape::FullCube);
+    EXPECT_EQ(b->model.textures.top, "planks");
+    EXPECT_EQ(b->model.textures.side, "planks");
+    EXPECT_EQ(b->model.textures.bottom, "planks");
+    EXPECT_TRUE(b->properties.solid);
+    EXPECT_TRUE(b->properties.opaque);
+    EXPECT_FLOAT_EQ(b->properties.hardness, 2.0f);
+    EXPECT_EQ(b->properties.drops, "planks"); // drops its own block item
+    EXPECT_TRUE(b->properties.flamable);
+    EXPECT_EQ(b->properties.soundMaterial, "wood");
+    EXPECT_FLOAT_EQ(b->properties.fuelTime, 7.5f); // migrated from the item
+    // The explicit item file is GONE (an explicit same-named item is
+    // rejected by buildBlockItems — the block owns the item now).
+    EXPECT_FALSE(std::filesystem::exists("assets/data/items/planks.json"));
+}
+
+TEST(BlockContentTest, V27GoldDiamondBlockContentPinned) {
+    // The real assets: the gold / diamond blocks — the iron_block
+    // precedent (FullCube, all six faces one tile, drops itself) with the
+    // Minecraft hardnesses (gold 3.0 / diamond 5.0, the iron 5.0 family)
+    // and the beacon_base flag: the beacon pyramid materials join the
+    // iron block (a PURE data row — the core's beaconLevel scan reads
+    // the property, zero core code; the level check is in test_beacon).
+    // NO-INPUT BASELINE IMMUNITY (the gate 178 S1 argument): worldgen
+    // places neither block (no veins, no structures — the iron_block
+    // precedent), the hotbar carries none, and a fresh world therefore
+    // holds zero gold/diamond cells: no new face is ever meshed, no new
+    // pixel is ever drawn (the base18 byte-identity is the proof).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    for (const char* name : {"gold_block", "diamond_block"}) {
+        const Block* b = reg.findByName(name);
+        ASSERT_TRUE(b != nullptr) << name;
+        EXPECT_EQ(b->model.shape, BlockModel::Shape::FullCube) << name;
+        EXPECT_EQ(b->model.textures.top, name) << name;
+        EXPECT_EQ(b->model.textures.side, name) << name;
+        EXPECT_EQ(b->model.textures.bottom, name) << name;
+        EXPECT_TRUE(b->properties.solid) << name;
+        EXPECT_TRUE(b->properties.opaque) << name;
+        EXPECT_EQ(b->properties.drops, name) << name; // drops itself
+        EXPECT_TRUE(b->properties.beaconBase) << name;
+        // No side override (the V2-7 faces section stays furnace-only).
+        EXPECT_TRUE(b->model.textures.front.empty()) << name;
+    }
+    EXPECT_FLOAT_EQ(reg.at(reg.idForName("gold_block")).properties.hardness,
+                    3.0f);
+    EXPECT_FLOAT_EQ(reg.at(reg.idForName("diamond_block")).properties.hardness,
+                    5.0f);
+}
+
+TEST(BlockContentTest, V27FurnaceFrontPinned) {
+    // The real assets: the furnace is the FIRST block-level faces
+    // consumer — the front (the -Z face, the yaw-0 = -Z convention) draws
+    // the new furnace_front tile (the wider firebox mouth, the MC
+    // furnace_front look); the other three sides keep furnace_side and
+    // the top/bottom keys are untouched. The furnace has NO lit texture
+    // state (the lit expression is the existing fire particles at the
+    // mouth — the documented deviation: no furnace_front_lit tile).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* fp = reg.findByName("furnace");
+    ASSERT_TRUE(fp != nullptr);
+    const Block& f = *fp;
+    EXPECT_EQ(f.model.textures.front, "furnace_front");
+    EXPECT_TRUE(f.model.textures.back.empty());
+    EXPECT_TRUE(f.model.textures.left.empty());
+    EXPECT_TRUE(f.model.textures.right.empty());
+    EXPECT_EQ(f.model.textures.top, "furnace_top");
+    EXPECT_EQ(f.model.textures.side, "furnace_side");
+    EXPECT_EQ(f.model.textures.bottom, "furnace_top");
+    // The direction-aware selection (the outward normal resolves the
+    // face name): front = -Z overridden, the rest fall back to side.
+    EXPECT_EQ(cubeFaceTexture(f, 1, Vec3 {0.0f, 0.0f, -1.0f}), "furnace_front");
+    EXPECT_EQ(cubeFaceTexture(f, 1, Vec3 {0.0f, 0.0f, 1.0f}), "furnace_side");
+    EXPECT_EQ(cubeFaceTexture(f, 1, Vec3 {-1.0f, 0.0f, 0.0f}), "furnace_side");
+    EXPECT_EQ(cubeFaceTexture(f, 1, Vec3 {1.0f, 0.0f, 0.0f}), "furnace_side");
+    // Top / bottom never consult the overrides (their keys own them).
+    EXPECT_EQ(cubeFaceTexture(f, 0, Vec3 {0.0f, 1.0f, 0.0f}), "furnace_top");
+    EXPECT_EQ(cubeFaceTexture(f, 2, Vec3 {0.0f, -1.0f, 0.0f}), "furnace_top");
+    // The new tile is in the atlas (the init cross-check's input side).
+    const auto tiles = reg.requiredTextures();
+    EXPECT_TRUE(tiles.count("furnace_front") == 1);
+}
+
+TEST(BlockContentTest, V27NoFacesBlocksSelectUnchangedTiles) {
+    // The V2-7 red line on the REAL content: every shipped block EXCEPT
+    // the furnace (the only faces carrier) has all four side overrides
+    // empty, and on EVERY block the direction-aware lookup equals the
+    // pre-V2-7 slot-only lookup on all six cube faces — the per-face
+    // texture selection is bit-for-bit the old one (no block JSON
+    // changed except the furnace's, no mesh pixel changes).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    for (const BlockID id : reg.allIds()) {
+        const Block& b = reg.at(id);
+        if (b.name == "furnace") {
+            continue; // the faces consumer (pinned above)
+        }
+        EXPECT_TRUE(b.model.textures.front.empty()) << b.name;
+        EXPECT_TRUE(b.model.textures.back.empty()) << b.name;
+        EXPECT_TRUE(b.model.textures.left.empty()) << b.name;
+        EXPECT_TRUE(b.model.textures.right.empty()) << b.name;
+        for (const CubeFace& face : kCubeFaces) {
+            EXPECT_EQ(cubeFaceTexture(b, face.textureSlot, face.normal),
+                      cubeFaceTexture(b, face.textureSlot))
+                << b.name;
+        }
+    }
+}
+
+TEST(BlockRegistryTest, V27BlockFacesParsing) {
+    // The strict model.textures.faces parse (the V2-2 MobBox faces
+    // paradigm, block side): up to four side face names (front / back /
+    // left / right — the yaw-0 = -Z vocabulary) to atlas tile names; a
+    // named face overrides the single side texture, the rest keep it.
+    // Absent = the pre-V2-7 slot-only behavior (bit-identical); partial
+    // keys are legal. Unknown key / top-bottom-as-face / non-string /
+    // empty value are all rejected naming the BLOCK and the FACE.
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"furn","model":{"textures":{"top":"t","side":"s","bottom":"b",)"
+        R"("faces":{"front":"f","back":"k","left":"l","right":"r"}}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Block& b = reg.at(*r);
+    EXPECT_EQ(b.model.textures.front, "f");
+    EXPECT_EQ(b.model.textures.back, "k");
+    EXPECT_EQ(b.model.textures.left, "l");
+    EXPECT_EQ(b.model.textures.right, "r");
+    // Partial keys: only the named faces override, the rest fall back.
+    BlockRegistry reg2;
+    auto r2 = reg2.registerBlock(parseDef(
+        R"({"id":"furn2","model":{"textures":{"top":"t","side":"s","bottom":"b",)"
+        R"("faces":{"front":"f"}}}})"));
+    ASSERT_TRUE(r2.ok()) << r2.error().message;
+    const Block& b2 = reg2.at(*r2);
+    EXPECT_EQ(b2.model.textures.front, "f");
+    EXPECT_TRUE(b2.model.textures.back.empty());
+    EXPECT_TRUE(b2.model.textures.left.empty());
+    EXPECT_TRUE(b2.model.textures.right.empty());
+    // An unknown face key is a typo, rejected naming block + face.
+    auto bad = reg.registerBlock(parseDef(
+        R"({"id":"x1","model":{"textures":{"top":"t","side":"s","bottom":"b",)"
+        R"("faces":{"up":"f"}}}})"));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("x1"), std::string::npos);
+    EXPECT_NE(bad.error().message.find("up"), std::string::npos);
+    // top / bottom are NOT faces keys (the existing model.textures keys
+    // own those faces — an override would be dead).
+    bad = reg.registerBlock(parseDef(
+        R"({"id":"x2","model":{"textures":{"top":"t","side":"s","bottom":"b",)"
+        R"("faces":{"top":"f"}}}})"));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("top"), std::string::npos);
+    // Non-string / empty values are rejected naming block + face.
+    bad = reg.registerBlock(parseDef(
+        R"({"id":"x3","model":{"textures":{"top":"t","side":"s","bottom":"b",)"
+        R"("faces":{"front":42}}}})"));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("x3"), std::string::npos);
+    EXPECT_NE(bad.error().message.find("front"), std::string::npos);
+    bad = reg.registerBlock(parseDef(
+        R"({"id":"x4","model":{"textures":{"top":"t","side":"s","bottom":"b",)"
+        R"("faces":{"left":""}}}})"));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("left"), std::string::npos);
+    // faces must be an object.
+    bad = reg.registerBlock(parseDef(
+        R"({"id":"x5","model":{"textures":{"top":"t","side":"s","bottom":"b",)"
+        R"("faces":"front"}}})"));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("faces"), std::string::npos);
+    // The single-texture shapes own their geometry: the section would be
+    // dead (rejected by name, the cross / fence / glass_pane discipline).
+    bad = reg.registerBlock(parseDef(
+        R"({"id":"x6","properties":{"opaque":false,"transparent":true,)"
+        R"("solid":false},"model":{"shape":"cross","textures":)"
+        R"({"cross":"c","faces":{"front":"f"}}}})"));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("cross"), std::string::npos);
+    bad = reg.registerBlock(parseDef(
+        R"({"id":"x7","model":{"shape":"fence","textures":)"
+        R"({"side":"s","faces":{"front":"f"}}}})"));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("fence"), std::string::npos);
+    bad = reg.registerBlock(parseDef(
+        R"({"id":"x8","properties":{"opaque":false,"transparent":true},"model":)"
+        R"({"shape":"glass_pane","textures":{"side":"s","faces":{"front":"f"}}}})"));
+    ASSERT_FALSE(bad.ok());
+    EXPECT_NE(bad.error().message.find("glass_pane"), std::string::npos);
 }

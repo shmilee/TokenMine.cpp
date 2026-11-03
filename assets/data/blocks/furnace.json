@@ -9,7 +9,8 @@
     "textures": {
       "top": "furnace_top",
       "side": "furnace_side",
-      "bottom": "furnace_top"
+      "bottom": "furnace_top",
+      "faces": { "front": "furnace_front" }
     }
   }
 }

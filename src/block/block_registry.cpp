@@ -843,6 +843,14 @@ Result<void> BlockRegistry::parseModel(const Json& def, BlockModel& out) {
                                "single 'cross' texture)");
             }
         }
+        // V2-7: the per-face side overrides are CUBE-FACE data — a cross
+        // shape owns its geometry (two crossing quads, one texture) and
+        // the section would be dead (the ammo discipline, named).
+        if (t->find("faces") != nullptr) {
+            return MC_FAIL("model.textures.faces is not valid for shape "
+                           "'cross' (the cross quads use the single "
+                           "'cross' texture)");
+        }
         out.textures.cross = c->asString();
         return {};
     }
@@ -862,6 +870,14 @@ Result<void> BlockRegistry::parseModel(const Json& def, BlockModel& out) {
                                " is not valid for shape 'fence' (use a "
                                "single 'side' texture)");
             }
+        }
+        // V2-7: the per-face side overrides are CUBE-FACE data — a fence
+        // owns its geometry (posts + bars, one texture) and the section
+        // would be dead (the ammo discipline, named, the cross twin).
+        if (t->find("faces") != nullptr) {
+            return MC_FAIL("model.textures.faces is not valid for shape "
+                           "'fence' (the posts and bars use the single "
+                           "'side' texture)");
         }
         out.textures.side = sd->asString();
         return {};
@@ -883,6 +899,15 @@ Result<void> BlockRegistry::parseModel(const Json& def, BlockModel& out) {
                                "a single 'side' texture)");
             }
         }
+        // V2-7: the per-face side overrides are CUBE-FACE data — a glass
+        // pane owns its geometry (the sheet + rim slivers, one texture)
+        // and the section would be dead (the ammo discipline, named, the
+        // fence twin).
+        if (t->find("faces") != nullptr) {
+            return MC_FAIL("model.textures.faces is not valid for shape "
+                           "'glass_pane' (the sheet and rim use the "
+                           "single 'side' texture)");
+        }
         out.textures.side = sd->asString();
         return {};
     }
@@ -902,6 +927,61 @@ Result<void> BlockRegistry::parseModel(const Json& def, BlockModel& out) {
     out.textures.top = t->find("top")->asString();
     out.textures.side = t->find("side")->asString();
     out.textures.bottom = t->find("bottom")->asString();
+    // V2-7: the optional per-face SIDE overrides (model.textures.faces) —
+    // the V2-2 MobBox `faces` paradigm moved to the block side. An object
+    // of up to four face names (front / back / left / right — the shared
+    // yaw-0 = -Z vocabulary) to atlas tile names; a named face OVERRIDES
+    // the single `side` texture, the rest keep it. Absent = the pre-V2-7
+    // slot-only behavior (bit-identical — the structural-immunity red
+    // line); partial keys are legal (only the named faces override).
+    // `top` / `bottom` are NOT face keys here (the existing top/bottom
+    // keys own those faces — an override would be dead, rejected by name,
+    // the ammo discipline); an unknown key or an empty / non-string value
+    // is a typo, rejected naming the BLOCK and the FACE (the V2-2 strict
+    // faces parsing, block side). Only the cube-face shapes reach this
+    // point (cross / fence / glass_pane returned above with their single-
+    // texture discipline — a faces section on them would be dead). The
+    // tiles' existence is cross-checked at init (requiredTextures — the
+    // moisture_top pattern).
+    if (const Json* fs = t->find("faces")) {
+        if (!fs->isObject()) {
+            return MC_FAIL("model.textures.faces must be a JSON object of "
+                           "{\"face name\": atlas tile name}");
+        }
+        const std::string blockName =
+            (def.find("id") != nullptr && def.find("id")->isString())
+                ? def.find("id")->asString()
+                : "?";
+        for (const auto& [key, value] : fs->members()) {
+            const bool knownFace =
+                key == "front" || key == "back" || key == "left" ||
+                key == "right";
+            if (!knownFace) {
+                return MC_FAIL("block '" + blockName +
+                               "': unknown face '" + key +
+                               "' in model.textures.faces (allowed: "
+                               "front, back, left, right — top/bottom are "
+                               "the existing model.textures keys)");
+            }
+            if (!value.isString() || value.asString().empty()) {
+                return MC_FAIL("block '" + blockName + "': face '" + key +
+                               "' in model.textures.faces must be a "
+                               "non-empty string (atlas tile name)");
+            }
+        }
+        if (const Json* v = fs->find("front")) {
+            out.textures.front = v->asString();
+        }
+        if (const Json* v = fs->find("back")) {
+            out.textures.back = v->asString();
+        }
+        if (const Json* v = fs->find("left")) {
+            out.textures.left = v->asString();
+        }
+        if (const Json* v = fs->find("right")) {
+            out.textures.right = v->asString();
+        }
+    }
     return {};
 }
 
@@ -1148,6 +1228,20 @@ std::set<std::string> BlockRegistry::requiredTextures() const {
         }
         if (!b.model.textures.cross.empty()) {
             names.insert(b.model.textures.cross);
+        }
+        // V2-7: the per-face side overrides are atlas references too (the
+        // init cross-check must see them — the moisture_top pattern).
+        if (!b.model.textures.front.empty()) {
+            names.insert(b.model.textures.front);
+        }
+        if (!b.model.textures.back.empty()) {
+            names.insert(b.model.textures.back);
+        }
+        if (!b.model.textures.left.empty()) {
+            names.insert(b.model.textures.left);
+        }
+        if (!b.model.textures.right.empty()) {
+            names.insert(b.model.textures.right);
         }
         // GEN-9: the moisture top variant is a full-cube reference too
         // (the init cross-check must see it — the sound_material pattern).

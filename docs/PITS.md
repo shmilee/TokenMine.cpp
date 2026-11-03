@@ -2896,3 +2896,43 @@
   窗口 = t∈[0.51,0.53]（东）/[0.97,0.99]（西）**，朝东/西 pose 才
   拍得到（朝南默认 pose 永远拍不到低空月——月升落恒在正东西向
   ±7° 内）。
+- **敌对生成双门：生成保护半径 + 夜间被动 cap 挤占（PITS 373，门 178
+  V2-7 spider 段）**——确定性敌对门场景有两道非光照门：①
+  **生成保护**（Phase 25）：敌对 pick 的 ring cell 须距**世界出生点**
+  (0.5,0.5) 超出难度半径（normal = 12 块 = kSpawnProtectionNormal；
+  easy 8 / hard 16 / peaceful 1e6）——玩家站在演示 4×4 区附近时最近
+  ring cell 恒 <12 → 敌对 pick 永远 "found no valid cell (light gate /
+  clearance / protection)"。站位须 >12 块（门 178 场景 (0,52,−16)
+  距出生点 16，最近 ring cell (0,−12) 距出生点 12.5 ✓）。② **夜间
+  被动 mob 同生挤占 cap**：夜底光 7 ≤ 被动 spawn_max_light 15 →
+  猪/鸡/牛/羊夜间照生，pick 流帧锁定（splitmix(frame×golden)，无
+  世界 seed），max_mobs 4 cap 被先到者占满 → 默认 7-mob 词表下
+  spider 的 f180/f240 pick 恒 "cap reached (4 live)"（门 178 实证）。
+  正解 = **scratch 资产树**（s7 范式：assets 副本 + 真二进制路径
+  启动，PITS 374③）mob_spawning.json 改 = 目标 mob only +
+  max_mobs 1 → f60 = 那只 spider（确定性）。光照门本身 = 有效光
+  ≤ spawn_max_light（夜 7≤7 可生 / 昼 15>7 不可——skeleton 白天
+  f90/f120 no valid cell = 光门，夜间同 roll 照生）。
+- **输入 E2E hold-swing 窗三坑（PITS 374，门 178 V2-7 spider 段）**
+  ① **挥击窗必须落在帧预算内——capture 时延是秒级**：X 退化环境
+  （PITS 368）指针 capture 可能 2-3 次重试 + 时延 ≈ 11s = f~660
+  （'Pointer captured' 时间戳 − 'Audio ready' 锚 = 实测 capture 帧）。
+  若脚本按"capture ≈ f300"假设加 sleep 8 + 4s hold，mousedown 落
+  f~866-900 = 游戏已退（--frames 900）或临界 → **零命中但玩家照常
+  挨打**（mob 攻击与玩家输入无关）。诊断签名 = **targetMob 内
+  f%N 插桩零行**（被调必输出）——判别"输入未达 isDown 分支" vs
+  "瞄准 miss"（后者 = 有输出但 bestT = aimReach / mob t > budget）。
+  正解 = 先读日志 capture 时延锚，hold 窗 = capture 帧 + 小 margin
+  （spider f300 已恒停 = 无需接近等待），帧预算 ≥ capture + margin
+  + hold + 30% 余量（门 178 终版 = 1200f：capture f660 + sleep 2 +
+  4s hold → 挥击 f~780-1020，kill 2 只 + 掉落实证 ✓；首跑 900f
+  = mousedown f866-900 边界全 miss）。② **块级 faces 门 pose =
+  站 −Z 侧朝 +Z**（front 法线 (0,0,−1)，yaw-0=−Z 约定）：首跑玩家
+  在 +Z 侧看 = **back** 面 → 新旧侧三图字节恒等零 diff——"无 diff"
+  不是功能失效，可能是看错了面（back 无覆写 = 位级不变红线的
+  正确行为）。正解 = pose (0.5,54,−6.5) yaw 3.0 pitch −0.353 →
+  diff bbox 112×107 画面中心 = 前脸纹理区 ✓。③ **scratch 树必须用
+  真实二进制路径启动**：symlink `./tm` 启动令 process comm = "tm"
+  → `pgrep -x tokenmine` 失配 → NO-WINDOW → 脚本 kill 只杀
+  timeout 壳不杀游戏 → 游戏孤儿化跑飞（13:01 实证：脚本已 exit，
+  游戏继续至 f885 自行停、终档 hp 0 = 脱管）。

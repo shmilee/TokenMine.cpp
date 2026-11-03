@@ -9,6 +9,7 @@
 #include <string>
 
 #include "block/block_registry.hpp"
+#include "core/asset_manager.hpp"
 #include "core/json.hpp"
 #include "world/beacon.hpp"
 #include "world/world.hpp"
@@ -163,5 +164,29 @@ TEST(BeaconLevelTest, DeterministicRepeat) {
         beaconWorld(reg.idForName("beacon"), reg.idForName("iron"), 3);
     for (int i = 0; i < 5; ++i) {
         EXPECT_EQ(beaconLevel(world, reg, 8, 4, 8), 3);
+    }
+}
+
+TEST(BeaconLevelTest, V27GoldAndDiamondBasesActivate) {
+    // V2-7: the gold / diamond blocks join the beacon pyramid materials
+    // (the beacon_base data flag — the core's scan is UNCHANGED, it reads
+    // the property, never a block id): the REAL shipped registry, a full
+    // 3x3 of either base under the beacon = level 1 (the iron_block
+    // precedent; the "iron-only" documentation retired).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const BlockID beacon = reg.idForName("beacon");
+    ASSERT_TRUE(beacon.valid());
+    for (const char* baseName : {"gold_block", "diamond_block",
+                                 "iron_block"}) {
+        SCOPED_TRACE(baseName);
+        World world;
+        world.getOrCreateChunk({0, 0, 0});
+        world.setBlock(8, 4, 8, beacon);
+        fillSquare(world, reg.idForName(baseName), 8, 3, 8, 1); // 3x3 layer
+        EXPECT_EQ(beaconLevel(world, reg, 8, 4, 8), 1);
     }
 }

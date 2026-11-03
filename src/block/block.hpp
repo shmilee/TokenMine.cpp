@@ -322,6 +322,20 @@ struct BlockProperties {
 
 // Which texture name is applied to each face group (full_cube shapes) — or
 // the single cross texture (cross shapes; Phase 45).
+//
+// V2-7: the optional per-face SIDE overrides (`front` / `back` / `left` /
+// `right`, parsed from model.textures.faces — the V2-2 MobBox `faces`
+// paradigm moved to the block side). An EMPTY string is "no override" (the
+// face draws `side` — the pre-V2-7 behavior, the bit-level-invariant red
+// line: no faces section = every face resolves exactly as before). The
+// face name is fixed by the face's OUTWARD normal with the shared yaw-0 =
+// -Z convention (front = (0,0,-1), back = (0,0,+1), left = (-1,0,0),
+// right = (+1,0,0) — cubeFaceTexture's normal overload). `top` / `bottom`
+// are NOT part of the faces section (the existing top/bottom keys own
+// them; a faces entry naming either is rejected at data load). Only the
+// cube-face shapes (full_cube / slab / stairs / wall) may carry the
+// section — the cross / fence / glass_pane shapes own their geometry and
+// the field would be dead (rejected by name, the cross discipline).
 struct BlockTexture {
     std::string top;
     std::string side;
@@ -329,6 +343,11 @@ struct BlockTexture {
     // Cross plants (shape "cross", Phase 45): the single texture drawn on
     // both crossing quads. Only used when model.shape == Shape::Cross.
     std::string cross;
+    // V2-7: the per-face side overrides (empty = fall back to `side`).
+    std::string front;
+    std::string back;
+    std::string left;
+    std::string right;
 };
 
 // Rendering shape + face textures.

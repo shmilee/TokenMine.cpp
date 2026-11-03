@@ -1,0 +1,16 @@
+{
+  "id": "diamond_block",
+  "type": "shaped",
+  "output": {
+    "item": "diamond_block",
+    "count": 1
+  },
+  "pattern": [
+    "III",
+    "III",
+    "III"
+  ],
+  "key": {
+    "I": "diamond"
+  }
+}

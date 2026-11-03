@@ -179,11 +179,12 @@ TEST(AtlasLayoutTest, UvUnknownTileThrows) {
 }
 
 TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
-    // V2-5 red line, per entry: the REAL block_atlas.json is 99 entries
-    // on the unchanged 16x8 grid — the 97 pre-V2-5 entries (the 90
-    // V2-2 legacy + the 7 player tiles) keep their EXACT cells (zero UV
-    // shift = no re-anchor of the byte-stable baseline) and the two new
-    // ones (pig_body / pig_face) sit in the row-7 free run [8..9, 7].
+    // Per-entry census of the REAL block_atlas.json on the unchanged 16x8
+    // grid (the V2-5 red line, extended per phase): the 99 pre-V2-7
+    // entries (the 97 pre-V2-5 — the 90 V2-2 legacy + the 7 player tiles —
+    // + pig_body / pig_face) keep their EXACT cells (zero UV shift = no
+    // re-anchor of the byte-stable baseline) and the new ones sit in the
+    // row-7 free run (V2-5: [8..9, 7]; V2-7: [10..12, 7]).
     // NOTE: the pork / cooked_pork food icons are standalone PNGs (the
     // every-shipped-food-icon convention: textures/items/*.png loaded by
     // the item-icon pass, NOT atlas tiles — an atlas entry would fail
@@ -196,7 +197,10 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     const AtlasLayout l = parseLayout(*text);
     EXPECT_EQ(l.columns, 16);
     EXPECT_EQ(l.rows, 8);
-    EXPECT_EQ(l.tiles.size(), 99u);
+    // V2-7: 99 -> 102 (the material batch's three tiles — gold_block /
+    // diamond_block / furnace_front — join the row-7 free run [10..12, 7];
+    // planks reuses its EXISTING tile, zero new texture).
+    EXPECT_EQ(l.tiles.size(), 102u);
     const struct {
         const char* name;
         int col;
@@ -251,6 +255,24 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
         {"pig_body", 8, 7}, {"pig_face", 9, 7},
     };
     for (const auto& e : v25) {
+        const auto it = l.tiles.find(e.name);
+        ASSERT_NE(it, l.tiles.end()) << e.name;
+        EXPECT_EQ(it->second.col, e.col) << e.name;
+        EXPECT_EQ(it->second.row, e.row) << e.name;
+    }
+    // V2-7: the material batch's three tiles continue the row-7 free run
+    // after the pig's [8..9, 7] (design order: gold / diamond / furnace
+    // front) — the 99 pre-V2-7 entries above keep their EXACT cells (the
+    // zero-shift red line, no baseline re-anchor).
+    const struct {
+        const char* name;
+        int col;
+        int row;
+    } v27[] = {
+        {"gold_block", 10, 7}, {"diamond_block", 11, 7},
+        {"furnace_front", 12, 7},
+    };
+    for (const auto& e : v27) {
         const auto it = l.tiles.find(e.name);
         ASSERT_NE(it, l.tiles.end()) << e.name;
         EXPECT_EQ(it->second.col, e.col) << e.name;

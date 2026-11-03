@@ -22,6 +22,7 @@
 #include "item/inventory.hpp"
 #include "item/item.hpp"
 #include "item/item_registry.hpp"
+#include "item/recipe.hpp" // V2-7: the planks-referencing recipes' pins
 
 using namespace mc;
 
@@ -3033,5 +3034,150 @@ TEST(ItemRegistryTest, V25PorkChainPinned) {
     };
     for (const auto& i : icons) {
         EXPECT_EQ(fnv1a64(readAll(i.path)), i.fnv) << i.path;
+    }
+}
+
+// -- V2-7: the material-completion batch ----------------------------------------
+// planks retires from an explicit material item into its BLOCK item (the
+// Phase 41 wool precedent — "block items are defined by their block"), the
+// fuel_time 7.5 s migrates to the block property (read back through the
+// CRAFT-6 inheritance), and the spider's two NEW material items (string /
+// spider_eye) are pure collectibles (the bow recipe uses planks, not
+// string — the documented deviation: no recipe added for either).
+
+TEST(ItemRegistryTest, V27PlanksIsTheBlockItem) {
+    // The real assets: the planks item is now SYNTHESIZED from the planks
+    // block (the explicit same-named item file is rejected by
+    // buildBlockItems, so it is deleted — the retirement proof), it
+    // inherits fuel_time 7.5 s from the block (the value unchanged from
+    // the retired item), and the 8 planks-referencing recipes (bow /
+    // crafting_table / planks / stick / wooden_axe / wooden_pickaxe /
+    // wooden_shovel / fence) resolve the name to the BLOCK ITEM — all
+    // name-addressed, zero recipe edits. The icon is the 3D block cube
+    // (no icon file — the documented visual deviation).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry blocks;
+    ASSERT_TRUE(blocks.loadDirectory(assets, "data/blocks").ok());
+    ItemRegistry items;
+    ASSERT_TRUE(items.buildBlockItems(blocks).ok());
+    ASSERT_TRUE(items.loadDirectory(assets, "data/items").ok());
+    // The item file + its icon PNG are gone (the retirement proof).
+    EXPECT_FALSE(std::filesystem::exists("assets/data/items/planks.json"));
+    EXPECT_FALSE(std::filesystem::exists("assets/textures/items/planks.png"));
+    const Item* planks = items.findByName("planks");
+    ASSERT_NE(planks, nullptr);
+    EXPECT_EQ(planks->type, ItemType::Block);
+    EXPECT_EQ(planks->block, blocks.idForName("planks"));
+    EXPECT_FLOAT_EQ(planks->fuelTime, 7.5f); // the migrated value, unchanged
+    EXPECT_TRUE(planks->icon.empty()); // block items render the 3D cube
+    // The 8 recipes referencing "planks" (by name) resolve to the block
+    // item (ingredient OR output — the planks recipe's output is it).
+    RecipeRegistry recipes;
+    ASSERT_TRUE(recipes.loadDirectory(assets, items, "data/recipes").ok());
+    const ItemID want = planks->id;
+    const char* refRecipes[] = {"bow", "crafting_table", "planks",
+                                "stick", "wooden_axe", "wooden_pickaxe",
+                                "wooden_shovel", "fence"};
+    for (const char* id : refRecipes) {
+        SCOPED_TRACE(id);
+        const Recipe* recipe = recipes.find(id);
+        ASSERT_NE(recipe, nullptr);
+        bool seen = (recipe->output == want);
+        if (!seen && recipe->type == RecipeType::Shaped) {
+            for (const auto& [ch, itemId] : recipe->key) {
+                seen = seen || (itemId == want);
+            }
+        } else if (!seen) {
+            for (const auto& [itemId, count] : recipe->ingredients) {
+                seen = seen || (itemId == want);
+            }
+        }
+        EXPECT_TRUE(seen) << "recipe '" << id << "' lost its planks reference";
+    }
+}
+
+TEST(ItemRegistryTest, V27StringAndSpiderEyeContentPinned) {
+    // The real assets: the spider's two NEW material items — pure
+    // collectibles (no food / no fuel / no recipe consumes them — the
+    // bow's string is planks: the documented deviation). Default max
+    // stack 64, icon + 3D model box on the shared texture (the diamond
+    // gem precedent), the icon PNGs byte-pinned (generate_item_icons.py
+    // new salts 146-151, the pork 138-145 precedent).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry blocks;
+    ASSERT_TRUE(blocks.loadDirectory(assets, "data/blocks").ok());
+    ItemRegistry items;
+    ASSERT_TRUE(items.buildBlockItems(blocks).ok());
+    ASSERT_TRUE(items.loadDirectory(assets, "data/items").ok());
+    for (const char* name : {"string", "spider_eye"}) {
+        SCOPED_TRACE(name);
+        const Item* it = items.findByName(name);
+        ASSERT_NE(it, nullptr);
+        EXPECT_EQ(it->type, ItemType::Material);
+        EXPECT_EQ(it->maxStack, 64); // the default
+        EXPECT_EQ(it->icon, name);
+        EXPECT_TRUE(it->restoreHunger <= 0); // no food
+        EXPECT_FLOAT_EQ(it->fuelTime, 0.0f); // no fuel
+        ASSERT_TRUE(it->model.has_value());
+        EXPECT_EQ(it->model->texture, name);
+        EXPECT_EQ(it->model->elements.size(), 1u);
+    }
+    // The new icon PNGs pinned (FNV-1a 64, the pork precedent).
+    const struct {
+        const char* path;
+        const char* fnv;
+    } icons[] = {
+        {"assets/textures/items/string.png", "0118c55b62523be5"},
+        {"assets/textures/items/spider_eye.png", "de4950ab4efa03bc"},
+    };
+    for (const auto& i : icons) {
+        EXPECT_EQ(fnv1a64(readAll(i.path)), i.fnv) << i.path;
+    }
+}
+
+TEST(ItemRegistryTest, V27GoldDiamondRecipesPinned) {
+    // The real assets: the gold / diamond block recipes — the iron_block
+    // precedent (9 ingots -> 1 block, the shaped 3x3 pattern), the block
+    // items as outputs (name-addressed, the block items synthesized at
+    // init).
+    const struct {
+        const char* recipe;
+        const char* keyItem;
+    } want[] = {
+        {"gold_block", "gold_ingot"},
+        {"diamond_block", "diamond"},
+    };
+    for (const auto& w : want) {
+        SCOPED_TRACE(w.recipe);
+        FILE* fp = std::fopen(("assets/data/recipes/" + std::string(w.recipe) +
+                               ".json")
+                                  .c_str(),
+                              "rb");
+        ASSERT_NE(fp, nullptr) << "run from the repo root";
+        std::string text;
+        char buf[4096];
+        std::size_t n;
+        while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+            text.append(buf, n);
+        }
+        std::fclose(fp);
+        auto parsed = Json::parse(text);
+        ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+        const Json& def = *parsed;
+        EXPECT_EQ(def.find("type")->asString(), "shaped");
+        EXPECT_EQ(def.find("output")->find("item")->asString(), w.recipe);
+        EXPECT_EQ(def.find("output")->find("count")->asInt(), 1);
+        const Json& pat = *def.find("pattern");
+        ASSERT_EQ(pat.size(), 3u);
+        for (std::size_t i = 0; i < 3; ++i) {
+            EXPECT_EQ(pat.at(i).asString(), "III");
+        }
+        const Json& key = *def.find("key");
+        ASSERT_EQ(key.memberCount(), 1u);
+        EXPECT_EQ(key.find("I")->asString(), w.keyItem);
     }
 }

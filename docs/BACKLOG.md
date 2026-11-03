@@ -27,7 +27,7 @@
 | FLUID 流体 | | | | | | | |
 | ENT 实体/Mob/移动 | ~~V2-5 新 mob 猪~~ ✅ v2.5.0（门 176：纯数据零核心代码 + V2-2 per-face 首个 mob 消费 + pork 食物链 + 图集零移位 + 猪字 +1） | V2-9 step-up quirk 修复 | | | | | |
 | SURV 生存/战斗/效果 | | | | | | | |
-| CRAFT 物品/合成/面板 | V2-7 材料补齐批 | | | | | | |
+| CRAFT 物品/合成/面板 | ~~V2-7 材料补齐批~~ ✅ v2.7.0（门 178：planks 块化 + gold/diamond_block【beacon_base 入列】+ spider 掉 string/spider_eye ×0-2 + 块级 per-face 通用能力【无 faces 位级不变红线，首个消费 furnace_front】，全数据驱动，零 format） | | | | | | |
 | SAVE 存档 | | | | | | | |
 | PRE 表现层 | ~~V2-4 天气（雨/雷）~~ ✅ v2.4.0（门 175 全 PASS：纯状态机首段恒 CLEAR + rain shader 静态 300 滴 + dayFactor 单收口 + 交互四件 ∨raining + 雷 wav，零 format，off ≡ v2.3.0 位级【门内三方恒等实证】） | V2-10 网格修复批 | | | | | |
 | UX 实机报障/体验细化 | ~~V2-1 第三人称前视角~~ ✅ v2.1.0（门 172：C 键三循环 + 翻转角纯函数 + aimReach D+kReach） | ~~V2-2 玩家皮肤 Steve 化~~ ✅ v2.2.0（门 173：模型 per-face 纹理通用能力 + Steve 脸 8×8 像素 + 7 tile，既有 mob 位级不变） | ~~V2-3 教程系列化（农耕 + 厨房）~~ ✅ v2.3.0（门 174：系列化机制 + 2 新系列 + format 25 + recipe 行 emit 修复） | ~~V2-6 体验打磨批~~ ✅ v2.6.0（门 177：第一人称手臂 + mob blob 阴影 + 拾取磁力 + 月相，四记档消费，零 format） | | | |
@@ -103,6 +103,40 @@
   `docs/archive/v1x/BACKLOG.md` 表外节）。
 
 ## 变更记录（v2.x）
+
+- 2026-11-03：**V2-7 材料补齐批完成（v2.7.0，门 178 全 PASS）**：四子项
+  均数据驱动（核心唯一新增 = 块级 per-face `faces` 通用能力，
+  **无 faces = 位级不变红线**），**零 format（25 不动）/ 零 config
+  新键**：① **planks 块化**（「material 不可铺地」MC parity 缺口
+  消费）= 新 blocks/planks.json 复用图集既有 planks tile @ [2,4]
+  零新纹理 + fuel_time 7.5 迁块属性（值不变）+ 删 items/planks.json
+  【同名显式文件 = init 点名拒「duplicate item id」S6 实证】+ 8 配方
+  全按名零改动（单测钉）+ 图标 = 3D 方块体记档偏离（wool 先例）；
+  ② **gold_block/diamond_block**（「信标基座 = 仅 iron_block」消费）
+  = iron_block 先例复制 + 9 锭 shaped 配方 ×2 + beacon_base: true
+  入列（等级仍是 world/beacon 纯函数零核心代码；S2 = gold 3×3 基座
+  光束 vs stone 对照 + 旧侧载 gold 场景 init 拒 = 可载性互斥 + CPU
+  探针 level 1/0）；③ **spider 掉 string ×0-2 + spider_eye ×0-2**
+  （「spider 无掉落」消费）= 既有 count_min/max 区间机制 + 2 新
+  material 物品 + **纯收集记档偏离**（弓配方用 planks 不用 string；
+  S2 = 夜间 scratch spider-only 场景击杀 E2E，单跑 kill 2 只两组
+  掉落各自 0-2 区间 + 复跑逐位恒等）；④ **块级 per-face 纹理**
+  （「炉子四侧面共用同一纹理」消费）= BlockModel.textures 可选
+  faces 段（front/back/left/right 外法线定名，front=(0,0,−1)；
+  严格解析未知键/非串/空串/cross·fence·glass_pane 形状全点名拒；
+  mesher 10 调用点方向感知 = greedy merge 自动断并；首个内容
+  furnace front 单 tile，**lit 态 = 既有炉口火焰粒子记档偏离**；
+  S2 首跑踩面名约定坑 = 从 +Z 侧看 back 面三图恒等零 diff，
+  改 −Z 侧 yaw 3.0 后 diff bbox 112×107 画面中心 = 前脸纹理区）。
+  图集 102/128 纯 +12 行零移位、字体 423 零新字、既有 184 纹理
+  PNG md5 零变化（5 新 1 删）；2169/2169（+12）；门 178：S1
+  第 178 次结构免疫（四方 RAW + 锚 179116 B + savenorm EXACT）+
+  S2 四子项判别全 PASS + S3 + S6 双点名（unknown face 'weirdface'
+  / duplicate item id 'planks'）。门协议发现 PITS 373（敌对生成
+  双门 = 生成保护 12 块 + 夜间被动 cap 挤占 → scratch 资产
+  spider-only）/ 374（hold-swing 帧预算 + capture 时延锚 +
+  块级 faces pose 面名约定 + symlink 进程名脱管）。详见
+  docs/archive/phase-2.7.0.md。
 
 - 2026-11-03：**V2-6 体验打磨批完成（v2.6.0，门 177）**：四子项各消费
   一处记档偏离，全为表现层/手感层，**零 format（25 不动）/ 零 config

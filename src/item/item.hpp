@@ -13,8 +13,10 @@
 //   - Tool items: explicit data (assets/data/items/*.json); they carry a
 //     break speed multiplier used by the hold-to-break rule.
 //   - Material items: explicit data (assets/data/items/*.json); generic
-//     non-placeable items (ingots, planks, sticks, ...) that are crafting
-//     inputs/outputs and block drops (e.g. ore -> ingot).
+//     non-placeable items (ingots, sticks, ...) that are crafting
+//     inputs/outputs and block drops (e.g. ore -> ingot). (V2-7: planks
+//     moved here to the block side — it is a placeable block item now,
+//     the Phase 41 wool precedent.)
 //
 // Tools and materials share one property: no in-world representation by
 // DEFAULT (dropped ones are invisible entities — see docs/KNOWN_ISSUES.md).

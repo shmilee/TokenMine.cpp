@@ -1,0 +1,15 @@
+{
+  "id": "diamond_block",
+  "properties": {
+    "hardness": 5.0,
+    "drops": "diamond_block",
+    "beacon_base": true
+  },
+  "model": {
+    "textures": {
+      "top": "diamond_block",
+      "side": "diamond_block",
+      "bottom": "diamond_block"
+    }
+  }
+}

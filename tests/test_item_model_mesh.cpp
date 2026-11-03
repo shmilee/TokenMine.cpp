@@ -287,5 +287,8 @@ TEST(ItemModelMeshTest, ShippedModelsHaveNoFaceCoincidentBoxes) {
     // ENT-9 contract evolution (was exactly 16): every shipped
     // item carries a model (all drops and discards are visible).
     // V2-5: +2 (pork / cooked_pork) -> 81.
-    EXPECT_EQ(modelCount, 81) << "ENT-9: all 81 items have models";
+    // V2-7: -1 (planks retired into its BLOCK item — block items render
+    // the 3D block cube, the Phase 41 wool precedent) +2 (string /
+    // spider_eye, the spider's drops) -> 82.
+    EXPECT_EQ(modelCount, 82) << "ENT-9: all 82 items have models";
 }

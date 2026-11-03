@@ -117,7 +117,7 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 1 furnace`【MC 1.14+ 摆法，内容缺口修复】；其余 = 工具 9 / 护甲 12 / 营火
 SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作台 / 弓 / 桶）；网格匹配 **shaped 先、shapeless 后，首个命中即成**（注册表加载序）。**"需要工作台" = de facto 网格尺寸门**：E 面板只暴露 2×2（共享 3×3 左上，见「工作台 / 形状合成」节 E 面板条），宽/高 3 的 pattern 只能在工作台摆出（与 MC 一致）。**无多配方消歧仍成立**：`craft` 按 id 精确执行；shipped **32** 个 shapeless 原料集互不重复（`[SURV-5]` poison_bow 入列）——若将来重复 = 加载序首个命中，系统不猜。`[Phase 12]`（shaped + 工作台门 `[Phase 17]` 已解决；炉子配方 `[v1.34.0]`）
 - **部分材料暂无用途** — **`gold_ingot`/`diamond` 用途已解决**：gold_ingot = 金苹果（shaped 镶金，`[Phase 49]`）/ 黄色染料（`[Phase 45]`）/ 速度弓（`[Phase 79]`）；diamond = 无限弓（`[Phase 77]`）/ 力量弓（`[Phase 79]` ×2），大师弓（`[Phase 82]`）间接。**仍无配方消费的材料 = 仅 `leather`**（见「Mob」节；**`[UX-5]` 起有非配方
-消费 = 皮甲 4 件修复材料**——材料用途已闭环，但无合成路线消费）。无饰品、火把用 coal（金/钻石不用于火把 = 偏离不变）；`coal`/`planks`/`stick` 在 Phase 40 起是炉子燃料（`fuel_time`）；`coal` 另进火把配方（Phase 65）；`planks`/`stick`/`iron_ingot` 已在配方链中。`[Phase 12]`（coal `[Phase 40/65]`、gold/diamond `[Phase 45]`→`[Phase 49]`→`[Phase 77]`→`[Phase 79]` 已解决）
+消费 = 皮甲 4 件修复材料**——材料用途已闭环，但无合成路线消费）。无饰品、火把用 coal（金/钻石不用于火把 = 偏离不变）；`coal`/`planks`/`stick` 在 Phase 40 起是炉子燃料（`fuel_time`）；`coal` 另进火把配方（Phase 65）；`planks`/`stick`/`iron_ingot` 已在配方链中；`[v2.7.0]`：`planks` **块化**（可放置 + fuel_time 7.5 迁块属性值不变 + 图标 = 3D 方块体记档偏离，wool 先例）/ gold_ingot·diamond 各 + 9 锭→块配方（gold_block/diamond_block，另见「信标」节基座条）。`[Phase 12]`（coal `[Phase 40/65]`、gold/diamond `[Phase 45]`→`[Phase 49]`→`[Phase 77]`→`[Phase 79]` 已解决、planks 块化 `[v2.7.0]`）
 - **矿石掉落改为材料（行为变化，刻意）** — 4 种矿石现在掉材料物品（coal_ore→coal、iron_ore→iron_ingot、gold_ore→gold_ingot、diamond_ore→diamond，MC 同款），**矿方块物品不能再从采矿获得**（数据仍在、可放置，只是无产出途径）；wood 仍掉 wood 本身（它是木板配方的原料，若改掉 planks 则配方链断）。`[Phase 12]`
 
 ## 存档（Phase 13）
@@ -290,9 +290,15 @@ SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作�
   校验）。format 6 加载**按规则迁移**：世界恰有 1 个炉子方块 → 全局状态
   归属它；0 个或多个 → 归属不可知，**丢弃**（所有炉子状态空载）——迁移在
   纯解析器（save.cpp）内完成，单测覆盖三分支。
-- **炉子外观四个侧面共用同一纹理** — 带炉口/余火的前脸与其余三侧同纹理
-  （BlockModel 只有 top/side/bottom 三面组）；顶/底面是石质纹理。
-  `[Phase 40]`
+- ~~**炉子外观四个侧面共用同一纹理**~~ — `[v2.7.0]` 已解决：**块级
+  per-face 纹理通用能力**（`BlockModel.textures` 可选 `faces` 段，
+  front/back/left/right 由**面外法线**定名——front=(0,0,−1) 共享
+  yaw-0=−Z 约定；严格解析未知键/非串/空串/形状不符全点名；
+  cross/fence/glass_pane 自持几何点名拒；**无 faces = 位级不变
+  红线**（空串回退 side，除 furnace 外全块方向查找 = 旧查找单测
+  证明））首个消费 = 炉子前脸单 tile `furnace_front`（宽炉口+余火）；
+  **lit 态不加纹理 = 记档偏离**（lit 表现 = 既有炉口火焰粒子）。
+  顶/底面仍石质（MC 同款）。`[Phase 40]` → `[v2.7.0]`
 - **炉子表现** — v1 的视觉提示只有面板里的进度条（`progressSubsteps /
   smeltSubsteps` 填充）；**熔炼完成音效 + 炉口火焰 `[CRAFT-5]` 已解决**
   （"smelt" ding 新 wav 空间化于炉块 + 帧锁定 info 日志；复燃 = 既有
@@ -391,10 +397,14 @@ SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作�
 - ~~**skeleton 掉落固定 1 个 `arrow`**~~ — `[Phase 38]` 已修复：新 material 物品 `bone`（图标 = 白色对角骨，generate_item_icons.py 新 salt 63，既有 17 图标零变化）+ skeleton `drops` = bone 0–2（随机区间）+ `arrow` 1。掷落用该 mob 自己的种子流（`rollDropCount`；固定 count 不推进流 → P38 前的精确流保留）；E2E 输入击杀 → 存档 entities = arrow×1 + bone×2。（Minecraft skeleton 还掉 0–2 箭；本项目箭保持固定 1。）
 - ~~**skeleton 箭提前量只补偿重力、不预判位移**~~ — `[Phase 38]` 已修复：`computeAimDirection`（projectile.hpp 自由函数）——“目标位置 + 速度×飞行时间”迭代 2 次 + 0.5·g·t² 弧线提前量；静止目标（速度 0）与 Phase 27 瞄法逐位相同（回归锚：E2E 射击场景 P37/P38 存档逐字节一致），移动目标被预判（单测：侧向/逃离目标最近接近距离严格小于无预判）——细节见 `archive/v1x/phase-38.md`。
 
-- **spider 无掉落** — MC 的 spider 掉 string/spider_eye 0–2，两物品未做
-  （string 无用途、spider_eye 无用途）；`drops: []`。spider 是首个
-  `on_hit_effect` mob（poison 15 s，近战命中落定施加，见「状态效果」）。
-  `[Phase 46]`
+- ~~**spider 无掉落**~~ — `[v2.7.0]` 已解决：新 material 物品
+  `string`（螺旋绳）/ `spider_eye`（紫青眼球）+ spider `drops` =
+  string 0–2 + spider_eye 0–2（既有 count_min/max 随机区间机制，
+  MC 同款值；掷落走该 mob 自己的种子流 = Phase 38 纪律）。
+  **两物品纯收集 = 记档偏离**（弓配方用 planks 不用 string，MC 弓
+  要 string 的路线不演进 = 最小面定案）。spider 仍是首个
+  `on_hit_effect` mob（poison 15 s，近战命中落定施加，见「状态
+  效果」）。`[Phase 46]` → `[v2.7.0]`
 - **猪掉皮革 0–1 = MC 同款区间；猪无骑乘** — V2-5 猪 `drops` = `pork`
   1–2（随机区间）+ `leather` 0–1（cow/sheep leather 先例、Phase 38 随机
   区间）：皮革 0–1 与 MC 猪的 leather 区间同款（MC 上限 2，本项目取 1 =
@@ -593,9 +603,13 @@ SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作�
   "多效果同信标" = 本条）。`beacon_effect`（单个）= 向后兼容 1 元素列表；两
   字段互斥（都写 = 拒绝）。效果词汇表 = 速度/力量/抗性/吸收（Phase 84 加
   speed/strength/resistance）。`[Phase 83]` → `[Phase 84]` → `[Phase 91]`
-- **信标基座 = 仅 iron_block** — `beacon_base` 布尔属性（shipped 只 iron_block
-  带）；MC 的 gold/diamond/netherite 块基座 = 无（项目无这些金属块）。金字塔
-  等级 = 3×3/5×5/7×7/9×9 连续完整层（`world/beacon` 纯函数）。`[Phase 83]`
+- **信标基座 = iron/gold/diamond 三金属块** — `beacon_base` 布尔属性
+  （`[v2.7.0]` 起 shipped = iron_block / gold_block / diamond_block
+  三块带——金/钻块 = iron_block 先例复制 + 9 锭 shaped 配方）；
+  MC 的 netherite 块基座 = 无（项目无 netherite）。金字塔
+  等级 = 3×3/5×5/7×7/9×9 连续完整层（`world/beacon` 纯函数，零
+  核心代码——基座判定读块属性）。`[Phase 83]`（`[v2.7.0]` 金钻块
+  入列）
 - **光束不入光照** — 信标光束是半透明渲染柱（`beacon.beam` 可关），**不提供
   方块光**（MC 光束照亮周围）；信标块本身 `light_emission 0`。`[Phase 83]`
 - **信标范围 = Chebyshev 立方** — 玩家脚到信标格的切比雪夫距离 ≤

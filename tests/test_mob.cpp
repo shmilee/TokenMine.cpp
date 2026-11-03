@@ -749,6 +749,9 @@ TEST(MobContent, PreV25MobFilesUnchanged) {
     // V2-5 red line: the six pre-pig mob JSONs are byte-untouched (the
     // FNV pin — the SkinPngBytesPinned existing-assets precedent: a
     // stray edit of a shipped mob turns this red).
+    // V2-7: the spider GAINS its drop list (string / spider_eye — the
+    // intended edit, the new pin below); its FNV updates accordingly, the
+    // other five files stay.
     const struct {
         const char* path;
         const char* fnv;
@@ -757,10 +760,60 @@ TEST(MobContent, PreV25MobFilesUnchanged) {
         {"assets/data/mobs/cow.json", "767141e2c6222064"},
         {"assets/data/mobs/sheep.json", "9009bc23c3cb09c9"},
         {"assets/data/mobs/skeleton.json", "454faac161b1c605"},
-        {"assets/data/mobs/spider.json", "b7e6bac5c9b679b9"},
+        {"assets/data/mobs/spider.json", "298528226ebbaea7"},
         {"assets/data/mobs/zombie.json", "2a7212f0ec271210"},
     };
     for (const auto& f : files) {
+        EXPECT_EQ(fnv1a64(readAll(f.path)), f.fnv) << f.path;
+    }
+}
+
+TEST(MobContent, V27SpiderDropsPinned) {
+    // V2-7: the spider's drops (the "spider drops nothing" documentation
+    // retired): string x0-2 + spider_eye x0-2 (the MC spider values, the
+    // Phase 38 count RANGE — the pig's first-shipped-range precedent).
+    // Every OTHER spider field stays (the hostile stats + the poison
+    // on_hit_effect) — the drop list is the only edit.
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.loadDirectory(assets, "data/mobs").ok());
+    const Mob* sp = mobs.findByName("spider");
+    ASSERT_NE(sp, nullptr);
+    ASSERT_TRUE(sp->properties.drops.size() == 2);
+    EXPECT_EQ(sp->properties.drops[0].item, "string");
+    EXPECT_EQ(sp->properties.drops[0].countMin, 0);
+    EXPECT_EQ(sp->properties.drops[0].countMax, 2);
+    EXPECT_EQ(sp->properties.drops[1].item, "spider_eye");
+    EXPECT_EQ(sp->properties.drops[1].countMin, 0);
+    EXPECT_EQ(sp->properties.drops[1].countMax, 2);
+    // The untouched rest of the spider (the V2-7 change is the drops).
+    EXPECT_FLOAT_EQ(sp->properties.health, 16.0f);
+    EXPECT_FLOAT_EQ(sp->properties.speed, 1.0f);
+    EXPECT_FLOAT_EQ(sp->properties.detectRadius, 16.0f);
+    EXPECT_FLOAT_EQ(sp->properties.attackRange, 1.6f);
+    EXPECT_FLOAT_EQ(sp->properties.attackDamage, 2.0f);
+    EXPECT_FLOAT_EQ(sp->properties.attackCooldown, 1.0f);
+    EXPECT_FLOAT_EQ(sp->properties.wanderInterval, 2.5f);
+    EXPECT_EQ(sp->properties.spawnMaxLight, 7);
+    EXPECT_TRUE(sp->properties.hostile);
+    EXPECT_EQ(sp->properties.hitEffectName, "poison");
+    EXPECT_DOUBLE_EQ(sp->properties.hitEffectDuration, 15.0);
+    // The other SIX shipped mobs (the 5 pre-V2-5 non-spider + the pig)
+    // are byte-untouched by V2-7 (the FNV pin, the PreV25 precedent).
+    const struct {
+        const char* path;
+        const char* fnv;
+    } untouched[] = {
+        {"assets/data/mobs/chicken.json", "bb3b1afcdc42f90a"},
+        {"assets/data/mobs/cow.json", "767141e2c6222064"},
+        {"assets/data/mobs/sheep.json", "9009bc23c3cb09c9"},
+        {"assets/data/mobs/skeleton.json", "454faac161b1c605"},
+        {"assets/data/mobs/zombie.json", "2a7212f0ec271210"},
+        {"assets/data/mobs/pig.json", "4e2e5d4cedb90d7f"},
+    };
+    for (const auto& f : untouched) {
         EXPECT_EQ(fnv1a64(readAll(f.path)), f.fnv) << f.path;
     }
 }
