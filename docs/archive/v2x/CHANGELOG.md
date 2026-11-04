@@ -3,8 +3,9 @@
 > 2.x「上手与体验补全」期**收官（11-04）**归档：第二批（V2-11~V2-18 = 原
 > 3.x 八项并入，11-03 收官日用户定案）+ 第一批（V2-1~V2-10）。逐版细节
 > （机制/证据/偏离/性能 A/B）= 本目录 `phase-2.x.0.md` 阶段存档（20 份）。
-> v4.x 时代（下）= `docs/CHANGELOG.md`；v1.x → `docs/archive/v1x/
-> CHANGELOG.md`；v0.x → `docs/archive/v0x/CHANGELOG.md`。
+> 3.x 时代（下，原命名 v4.x = 11-04 同日用户重编号定案改 3.x）=
+> `docs/CHANGELOG.md`；v1.x → `docs/archive/v1x/CHANGELOG.md`；
+> v0.x → `docs/archive/v0x/CHANGELOG.md`。
 
 ## v2.19.0（2026-11-04）— V2-18 AO 环境光遮蔽（经典 MC 顶点 AO bake 入既有光 attribute；**二批收官**）
 
