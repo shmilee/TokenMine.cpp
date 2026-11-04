@@ -195,7 +195,9 @@ V3-1 Phase B 下界世界 + 真传送 = v3.4.0 候选）
   【原 4.x 命名改 3.x】：6 项全保留 + 用户诉求 **V3-7 存档 gzip
   （默认开 = format 29）先执 = v3.1.0**（用户开新会话后执行），其后
   V3-1 下界维度锚【超大】拆分立项；v3.0.0 = 开启版已发布【纯文档 +
-  banner】；逐版 tag + GitHub release 政策沿用 2.x 定案）；2.x 全
+  banner】；11-05 UX 行 +2 = V3-8 手柄支持【v3.3.0 执行中】/ V3-9 demo
+   回放【矩阵尾部默认，双入口 + 只观察交互模型定案，详见 BACKLOG】；逐版
+   tag + GitHub release 政策沿用 2.x 定案）；2.x 全
   任务表 = `docs/archive/v2x/BACKLOG.md`；1.x = `docs/archive/v1x/`；
   会话交接：`opencode-sessions/SESSION_CONTEXT.md`。
 ## 命令
