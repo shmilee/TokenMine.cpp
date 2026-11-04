@@ -853,8 +853,12 @@ void Game::postMeshJobs() {
         // mesh is a pure function of the snapshot, so the result is
         // deterministic (frame-locked FIFO integration).
         m_streaming.pool->post([this, rawJob] {
+            // V2-18 AO: m_aoEnabled = render.ao (the init strict read,
+            // code default true). OFF = the AO factor is constant 1.0 +
+            // the mask's ao[4] stays zero = the pre-V2-19 mesh bit-
+            // identical (the gate's "new-off" control).
             const ChunkMesher mesher(rawJob->snap, m_blocks,
-                                     m_atlas.layout());
+                                     m_atlas.layout(), m_aoEnabled);
             for (std::size_t cy = 0; cy < rawJob->meshes.size(); ++cy) {
                 rawJob->meshes[cy] = mesher.mesh({rawJob->column.x,
                                                   static_cast<int>(cy),

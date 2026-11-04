@@ -1124,6 +1124,17 @@ Result<void> Game::buildScene() {
     auto nightLevel = readNightSkyLevel(m_config);
     MC_TRY(nightLevel);
     m_nightSkyLevel = *nightLevel;
+    // V2-18 AO: the mesh-time vertex-shading gate (render.ao — strict
+    // read, the weatherEnabled / readNightSkyLevel discipline: absent =
+    // true the code default, the committed config.json is untouched; a
+    // non-boolean is named and rejected). OFF = the mesher's AO factor
+    // is constant 1.0 + the mask's ao[4] stays zero = the pre-V2-19
+    // mesh bit-identical (the gate's "new-off" control: the AO path is
+    // gated at mesher construction — the shader, the 15-float vertex
+    // format and the per-draw light overrides are untouched either way).
+    auto aoOn = aoEnabled(m_config);
+    MC_TRY(aoOn);
+    m_aoEnabled = *aoOn;
     // UX-9c: the fully-occluded ambient floor (render.cave_ambient — a
     // CODE default, the fire/mobs/beacon/night_sky_level config-key
     // discipline: the committed config.json carries no such key).

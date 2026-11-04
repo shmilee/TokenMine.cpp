@@ -14,6 +14,7 @@
 #include "block/block_registry.hpp"
 #include "core/asset_manager.hpp"
 #include "renderer/texture_atlas.hpp"
+#include "world/ao.hpp"
 #include "world/chunk_mesher.hpp"
 #include "world/world.hpp"
 
@@ -1851,4 +1852,588 @@ TEST(ChunkMesherV210Test, ShippedCullSameIdSetIsExactlyTheLeavesFamily) {
     EXPECT_EQ(withFlag,
               (std::vector<std::string>{"birch_leaves", "leaves",
                                         "spruce_leaves"}));
+}
+
+// -- V2-18 AO (v2.19.0): the mesh-time vertex shading. The mask cell's
+//    ao[4] (face corner order c0..c3) enters the merge key (AO breaks
+//    runs), the merged quad's vertex i bakes the run END cell's corner i
+//    (= seed.ao[i] — the key forces the run's levels identical), the
+//    slab/stairs emitters bake the per-vertex level (the half-block
+//    height bands), and fluid / cross / wall / fence / glass pane are
+//    EXEMPT (their vertex write points are untouched — the design's
+//    red line). render.ao OFF = the pre-V2-19 mesh bit-identical. --
+
+namespace {
+
+// The 6 viewer cells' sky of the full block at (8,4,8) set to 15 (the
+// uniform-light world: AO is the only light variation).
+void lightAllViewersOf(World& world, int x, int y, int z) {
+    Chunk& c = world.getOrCreateChunk({0, 0, 0});
+    c.setSkyLightAt(x, y + 1, z, 15);
+    c.setSkyLightAt(x, y - 1, z, 15);
+    c.setSkyLightAt(x, y, z + 1, 15);
+    c.setSkyLightAt(x, y, z - 1, 15);
+    c.setSkyLightAt(x + 1, y, z, 15);
+    c.setSkyLightAt(x - 1, y, z, 15);
+}
+
+// The vertex at (px, py, pz) with normal n — nullptr when absent.
+const MeshVertex* vertexAt(const std::vector<MeshVertex>& verts, Vec3 n,
+                           float px, float py, float pz) {
+    for (const MeshVertex& v : verts) {
+        if (v.normal == n && std::fabs(v.position.x - px) < 1e-6f &&
+            std::fabs(v.position.y - py) < 1e-6f &&
+            std::fabs(v.position.z - pz) < 1e-6f) {
+            return &v;
+        }
+    }
+    return nullptr;
+}
+
+// A stateless CROSS block (the torch shape: transparent + cutout, the
+// cell's own light on both quads).
+BlockID registerCross(BlockRegistry& reg) {
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"torch","properties":{"opaque":false,"transparent":true,)"
+        R"("solid":false,"cutout":true},"model":{"shape":"cross",)"
+        R"("textures":{"cross":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+        return BlockID::invalid();
+    }
+    return *r;
+}
+
+// The stateless STAIRS (facing 0 = north: the high end at -Z, the slope
+// to +Z).
+BlockID registerStairs(BlockRegistry& reg) {
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"stairs","model":{"shape":"stairs",)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+        return BlockID::invalid();
+    }
+    return *r;
+}
+
+} // namespace
+
+// The isolated-block red line (the design's fixture census): AO ON is
+// the default and the lone block's in-front cells are all air — every
+// vertex keeps the EXACT pre-V2-19 light (factor 1.0, zero change).
+TEST(ChunkMesherV218Test, LoneBlockVertexLightsUnchanged) {
+    BlockRegistry reg = makeRegistry();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    world.setBlock(8, 4, 8, stone);
+    lightAllViewersOf(world, 8, 4, 8);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    ASSERT_EQ(data.opaqueVertices.size(), 24u);
+    for (const MeshVertex& v : data.opaqueVertices) {
+        EXPECT_FLOAT_EQ(v.skyLight, 1.0f)
+            << "vertex at (" << v.position.x << "," << v.position.y << ","
+            << v.position.z << ")";
+        EXPECT_FLOAT_EQ(v.blockLight, 0.0f);
+    }
+}
+
+// The greedy corner bake: B's +X face with the bottom-front corner's
+// three checks all solid -> level 3 (0.3), the two edge corners level 1
+// (0.75), the opposite corner 0 (1.0). The block light bakes the SAME
+// factor (the two light paths share the multiply).
+TEST(ChunkMesherV218Test, GreedyCornerBakesAoLevels) {
+    BlockRegistry reg = makeRegistry();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    world.setBlock(8, 4, 8, stone); // B
+    world.setBlock(9, 3, 8, stone); // B's +X c1's side1
+    world.setBlock(9, 4, 7, stone); // c1's side2
+    world.setBlock(9, 3, 7, stone); // c1's corner
+    lightAllViewersOf(world, 8, 4, 8);
+    // The block light on the +X viewer: the c1 vertex bakes it x 0.3.
+    world.getOrCreateChunk({0, 0, 0}).setBlockLightAt(9, 4, 8, 10);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    const Vec3 plusX {1.0f, 0.0f, 0.0f};
+    const MeshVertex* c1 = vertexAt(data.opaqueVertices, plusX, 9.0f, 4.0f,
+                                    8.0f);
+    const MeshVertex* c0 = vertexAt(data.opaqueVertices, plusX, 9.0f, 4.0f,
+                                    9.0f);
+    const MeshVertex* c2 = vertexAt(data.opaqueVertices, plusX, 9.0f, 5.0f,
+                                    8.0f);
+    const MeshVertex* c3 = vertexAt(data.opaqueVertices, plusX, 9.0f, 5.0f,
+                                    9.0f);
+    ASSERT_NE(c1, nullptr);
+    ASSERT_NE(c0, nullptr);
+    ASSERT_NE(c2, nullptr);
+    ASSERT_NE(c3, nullptr);
+    EXPECT_FLOAT_EQ(c1->skyLight, 1.0f * kAoCorner);   // level 3 (0.3)
+    EXPECT_FLOAT_EQ(c1->blockLight, (10.0f / 15.0f) * kAoCorner);
+    EXPECT_FLOAT_EQ(c0->skyLight, 1.0f * kAoOne);      // level 1 (0.75)
+    EXPECT_FLOAT_EQ(c0->blockLight, (10.0f / 15.0f) * kAoOne);
+    EXPECT_FLOAT_EQ(c2->skyLight, 1.0f * kAoOne);      // level 1 (0.75)
+    EXPECT_FLOAT_EQ(c3->skyLight, 1.0f * kAoFull);     // level 0 (1.0)
+    // The level-0 corner bakes the viewer's block light UNTOUCHED.
+    EXPECT_FLOAT_EQ(c3->blockLight, 10.0f / 15.0f);
+}
+
+// The merge key's AO arm: two +Z faces (same tile + same light) whose
+// shared-edge corner AO differs (A's c0/c3 meet the occluder, B's do
+// not) BREAK the run — two single faces, not one merged quad.
+TEST(ChunkMesherV218Test, RunBreaksWhenSharedCornerAoDiffers) {
+    BlockRegistry reg = makeRegistry();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    world.setBlock(8, 4, 8, stone); // A
+    world.setBlock(9, 4, 8, stone); // B
+    world.setBlock(7, 4, 9, stone); // the occluder: A's +Z c0's side1 +
+                                    // c3's side2 (B's checks stay air)
+    lightAllViewersOf(world, 8, 4, 8);
+    lightAllViewersOf(world, 9, 4, 8);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    const Vec3 plusZ {0.0f, 0.0f, 1.0f};
+    // The +Z pair (A, B at z 9) used to merge into ONE 2x1 quad (the
+    // Phase-18 MergedQuadGeometryAndTiledUvs fixture): the AO difference
+    // splits it back into two single faces (8 vertices at z 9, legacy UV
+    // path; the occluder's own +Z face adds 4 more at z 10).
+    EXPECT_EQ(countVerticesWithNormal(data.opaqueVertices, plusZ), 12);
+    for (const MeshVertex& v : data.opaqueVertices) {
+        if (v.normal == plusZ) {
+            EXPECT_FLOAT_EQ(v.tiled, 0.0f);
+        }
+    }
+    // A's +Z: c0 (8,4,9) level 1 (0.75), c3 (8,5,9) level 1 (0.75);
+    // B's +Z: all four corners level 0 (1.0).
+    const MeshVertex* aC0 = vertexAt(data.opaqueVertices, plusZ, 8.0f, 4.0f,
+                                     9.0f);
+    const MeshVertex* aC3 = vertexAt(data.opaqueVertices, plusZ, 8.0f, 5.0f,
+                                     9.0f);
+    const MeshVertex* bC0 = vertexAt(data.opaqueVertices, plusZ, 9.0f, 4.0f,
+                                     9.0f);
+    const MeshVertex* bC3 = vertexAt(data.opaqueVertices, plusZ, 9.0f, 5.0f,
+                                     9.0f);
+    ASSERT_NE(aC0, nullptr);
+    ASSERT_NE(aC3, nullptr);
+    ASSERT_NE(bC0, nullptr);
+    ASSERT_NE(bC3, nullptr);
+    EXPECT_FLOAT_EQ(aC0->skyLight, 1.0f * kAoOne);
+    EXPECT_FLOAT_EQ(aC3->skyLight, 1.0f * kAoOne);
+    EXPECT_FLOAT_EQ(bC0->skyLight, 1.0f * kAoFull);
+    EXPECT_FLOAT_EQ(bC3->skyLight, 1.0f * kAoFull);
+}
+
+// The merged quad bakes the RUN END corners: a 3-wide +Z run whose bottom
+// edge meets the occluder row (all three cells' ao[4] = {2,2,0,0} — the
+// key holds the run together) emits ONE quad: the bottom edge vertices
+// (seed end A's c0, far end C's c1) bake level 2 (0.5), the top edge
+// (A's c3, C's c2) level 0 (1.0).
+TEST(ChunkMesherV218Test, MergedQuadBakesRunEndCorners) {
+    BlockRegistry reg = makeRegistry();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    world.setBlock(8, 4, 8, stone); // A
+    world.setBlock(9, 4, 8, stone); // B
+    world.setBlock(10, 4, 8, stone); // C
+    // The occluder row below the +Z viewer plane (y 3, z 9): every run
+    // cell's bottom corners level 2, the top corners level 0.
+    for (int x = 7; x <= 12; ++x) {
+        world.setBlock(x, 3, 9, stone);
+    }
+    lightAllViewersOf(world, 8, 4, 8);
+    lightAllViewersOf(world, 9, 4, 8);
+    lightAllViewersOf(world, 10, 4, 8);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    const Vec3 plusZ {0.0f, 0.0f, 1.0f};
+    // The run quad's vertices sit at z 9 (the occluder row's own +Z
+    // faces merge into a separate 6x1 quad at z 10).
+    std::vector<MeshVertex> zVerts;
+    for (const MeshVertex& v : data.opaqueVertices) {
+        if (v.normal == plusZ && std::fabs(v.position.z - 9.0f) < 1e-6f) {
+            zVerts.push_back(v);
+        }
+    }
+    ASSERT_EQ(zVerts.size(), 4u); // ONE 3x1 quad (the AO is run-uniform)
+    for (const MeshVertex& v : zVerts) {
+        EXPECT_FLOAT_EQ(v.tiled, 1.0f);
+    }
+    // The run spans x 8..11 at z 9: the bottom edge at y 4, the top at
+    // y 5; the ends at x 8 (A) and x 11 (C).
+    const MeshVertex* seedBottom = vertexAt(data.opaqueVertices, plusZ,
+                                            8.0f, 4.0f, 9.0f);
+    const MeshVertex* farBottom = vertexAt(data.opaqueVertices, plusZ,
+                                           11.0f, 4.0f, 9.0f);
+    const MeshVertex* seedTop = vertexAt(data.opaqueVertices, plusZ,
+                                         8.0f, 5.0f, 9.0f);
+    const MeshVertex* farTop = vertexAt(data.opaqueVertices, plusZ,
+                                        11.0f, 5.0f, 9.0f);
+    ASSERT_NE(seedBottom, nullptr);
+    ASSERT_NE(farBottom, nullptr);
+    ASSERT_NE(seedTop, nullptr);
+    ASSERT_NE(farTop, nullptr);
+    EXPECT_FLOAT_EQ(seedBottom->skyLight, 1.0f * kAoTwo); // A's c0: 2
+    EXPECT_FLOAT_EQ(farBottom->skyLight, 1.0f * kAoTwo);  // C's c1: 2
+    EXPECT_FLOAT_EQ(seedTop->skyLight, 1.0f * kAoFull);   // A's c3: 0
+    EXPECT_FLOAT_EQ(farTop->skyLight, 1.0f * kAoFull);    // C's c2: 0
+}
+
+// The slab seam, closed endpoints: the state-0 slab's +X top vertex (y
+// 0.5) is covered by the same-row bottom slab (the band's hi end) ->
+// 0.75; its bottom vertex (y 0) meets the row-below full block (the
+// band's hi end, yInRow 1) AND the same-row bottom slab (the band's lo
+// end) -> the two-side level 3 (0.3).
+TEST(ChunkMesherV218Test, SlabSeamClosedEndpoints) {
+    BlockRegistry reg = makeRegistry();
+    const BlockID slab3 = registerStatefulSlab(reg);
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    world.setBlock(8, 4, 8, slab3);
+    world.setBlockState(8, 4, 8, 0); // S: the bottom slab
+    world.setBlock(9, 4, 7, slab3);
+    world.setBlockState(9, 4, 7, 0); // F: the same-row bottom slab (z-1)
+    world.setBlock(9, 3, 8, stone);  // G: the row-below full block
+    world.getOrCreateChunk({0, 0, 0}).setSkyLightAt(9, 4, 8, 15);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    const Vec3 plusX {1.0f, 0.0f, 0.0f};
+    const MeshVertex* topFront = vertexAt(data.opaqueVertices, plusX, 9.0f,
+                                          4.5f, 8.0f);
+    const MeshVertex* bottomFront = vertexAt(data.opaqueVertices, plusX,
+                                             9.0f, 4.0f, 8.0f);
+    const MeshVertex* topBack = vertexAt(data.opaqueVertices, plusX, 9.0f,
+                                         4.5f, 9.0f);
+    const MeshVertex* bottomBack = vertexAt(data.opaqueVertices, plusX, 9.0f,
+                                            4.0f, 9.0f);
+    ASSERT_NE(topFront, nullptr);
+    ASSERT_NE(bottomFront, nullptr);
+    ASSERT_NE(topBack, nullptr);
+    ASSERT_NE(bottomBack, nullptr);
+    EXPECT_FLOAT_EQ(topFront->skyLight, 1.0f * kAoOne);       // F covers 0.5
+    EXPECT_FLOAT_EQ(bottomFront->skyLight, 1.0f * kAoCorner); // G ∧ F
+    // c0 (bottom, z 9 side): G covers its row-below check (yInRow 1 —
+    // the block band's closed hi end) -> 0.75.
+    EXPECT_FLOAT_EQ(bottomBack->skyLight, 1.0f * kAoOne);
+    EXPECT_FLOAT_EQ(topBack->skyLight, 1.0f * kAoFull);
+}
+
+// The slab mid-plane rule, mesher side: the state-0 slab's TOP face (y
+// 0.5) meets the row-above full blocks at yInRow -0.5 -> never covered
+// (all four vertices 1.0); the state-1 slab's TOP face sits ON the row
+// (y 1.0) and bakes like a full top face (c0 -> 0.3, c3 -> 0.75); the
+// state-1 slab's BOTTOM face (y 0.5) meets the row-below at yInRow 1.5
+// -> never covered.
+TEST(ChunkMesherV218Test, SlabTopFaceMidPlaneVsRow) {
+    BlockRegistry reg = makeRegistry();
+    const BlockID slab3 = registerStatefulSlab(reg);
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    world.setBlock(8, 4, 8, slab3);
+    world.setBlockState(8, 4, 8, 0); // S0: the bottom slab
+    world.setBlock(12, 4, 8, slab3);
+    world.setBlockState(12, 4, 8, 1); // S1: the top slab
+    // The row above S0's top face: all three c0 checks solid (but the
+    // mid-plane vertex never reaches them).
+    world.setBlock(7, 5, 8, stone);
+    world.setBlock(8, 5, 7, stone);
+    world.setBlock(7, 5, 7, stone);
+    // The row above S1's top face (on the row): the c0 corner's three
+    // solid -> 0.3; the c3 corner's one (12,5,7) solid -> 0.75.
+    world.setBlock(11, 5, 8, stone);
+    world.setBlock(12, 5, 7, stone);
+    world.setBlock(11, 5, 7, stone);
+    Chunk& c = world.getOrCreateChunk({0, 0, 0});
+    c.setSkyLightAt(8, 5, 8, 15);  // S0's top face's viewer
+    c.setSkyLightAt(12, 5, 8, 15); // S1's top face's viewer
+    c.setSkyLightAt(12, 3, 8, 15); // S1's bottom face's viewer
+    const auto data = mesh(world, reg, {0, 0, 0});
+    const Vec3 plusY {0.0f, 1.0f, 0.0f};
+    // S0's top face: the four vertices at y 4.5 all full light.
+    for (const Vec3 p : {Vec3 {8.0f, 4.5f, 8.0f}, Vec3 {9.0f, 4.5f, 8.0f},
+                         Vec3 {9.0f, 4.5f, 9.0f}, Vec3 {8.0f, 4.5f, 9.0f}}) {
+        const MeshVertex* v =
+            vertexAt(data.opaqueVertices, plusY, p.x, p.y, p.z);
+        ASSERT_NE(v, nullptr) << "missing S0 top vertex at " << p.x;
+        EXPECT_FLOAT_EQ(v->skyLight, 1.0f * kAoFull)
+            << "S0 mid-plane top vertex at " << p.x << "," << p.z;
+    }
+    // S1's top face: the four vertices at y 5.0.
+    const MeshVertex* s1C0 = vertexAt(data.opaqueVertices, plusY, 12.0f, 5.0f,
+                                      8.0f);
+    const MeshVertex* s1C1 = vertexAt(data.opaqueVertices, plusY, 12.0f, 5.0f,
+                                      9.0f);
+    const MeshVertex* s1C2 = vertexAt(data.opaqueVertices, plusY, 13.0f, 5.0f,
+                                      9.0f);
+    const MeshVertex* s1C3 = vertexAt(data.opaqueVertices, plusY, 13.0f, 5.0f,
+                                      8.0f);
+    ASSERT_NE(s1C0, nullptr);
+    ASSERT_NE(s1C1, nullptr);
+    ASSERT_NE(s1C2, nullptr);
+    ASSERT_NE(s1C3, nullptr);
+    EXPECT_FLOAT_EQ(s1C0->skyLight, 1.0f * kAoCorner);
+    // c3 (x 13 end): the (12,5,7) occluder covers its e_z check -> 0.75.
+    EXPECT_FLOAT_EQ(s1C3->skyLight, 1.0f * kAoOne);
+    // c1 (x 12, z 9 end): the (11,5,8) occluder covers its e_x check.
+    EXPECT_FLOAT_EQ(s1C1->skyLight, 1.0f * kAoOne);
+    EXPECT_FLOAT_EQ(s1C2->skyLight, 1.0f * kAoFull);
+    // S1's bottom face (y 4.5, always emitted): all four vertices full.
+    const Vec3 minusY {0.0f, -1.0f, 0.0f};
+    for (const Vec3 p : {Vec3 {12.0f, 4.5f, 8.0f}, Vec3 {13.0f, 4.5f, 8.0f},
+                         Vec3 {13.0f, 4.5f, 9.0f}, Vec3 {12.0f, 4.5f, 9.0f}}) {
+        const MeshVertex* v =
+            vertexAt(data.opaqueVertices, minusY, p.x, p.y, p.z);
+        ASSERT_NE(v, nullptr);
+        EXPECT_FLOAT_EQ(v->skyLight, 1.0f * kAoFull);
+    }
+}
+
+// The stair riser's top edge: the -Z back wall's top vertices meet the
+// row-above step (a full block at (8,5,7)) at yInRow 0 -> 0.75; the
+// bottom vertices stay 1.0 (the classic staircase gradient).
+TEST(ChunkMesherV218Test, StairsRiserTopEdgeDarkens) {
+    BlockRegistry reg = makeRegistry();
+    const BlockID stairs = registerStairs(reg);
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    world.setBlock(8, 4, 8, stairs); // the north-facing wedge (high at -Z)
+    world.setBlock(8, 5, 7, stone);  // the step above the high end
+    // The stair bakes its OWN cell's light (the emitStairs convention,
+    // like the cross — the thin wedge samples no neighbor light).
+    world.getOrCreateChunk({0, 0, 0}).setSkyLightAt(8, 4, 8, 15);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    const Vec3 minusZ {0.0f, 0.0f, -1.0f};
+    const MeshVertex* topLeft = vertexAt(data.opaqueVertices, minusZ, 8.0f,
+                                         5.0f, 8.0f);
+    const MeshVertex* topRight = vertexAt(data.opaqueVertices, minusZ, 9.0f,
+                                          5.0f, 8.0f);
+    const MeshVertex* bottomLeft = vertexAt(data.opaqueVertices, minusZ,
+                                            8.0f, 4.0f, 8.0f);
+    const MeshVertex* bottomRight = vertexAt(data.opaqueVertices, minusZ,
+                                             9.0f, 4.0f, 8.0f);
+    ASSERT_NE(topLeft, nullptr);
+    ASSERT_NE(topRight, nullptr);
+    ASSERT_NE(bottomLeft, nullptr);
+    ASSERT_NE(bottomRight, nullptr);
+    EXPECT_FLOAT_EQ(topLeft->skyLight, 1.0f * kAoOne);
+    EXPECT_FLOAT_EQ(topRight->skyLight, 1.0f * kAoOne);
+    EXPECT_FLOAT_EQ(bottomLeft->skyLight, 1.0f * kAoFull);
+    EXPECT_FLOAT_EQ(bottomRight->skyLight, 1.0f * kAoFull);
+}
+
+// The fluid exemption (MC exact: water surfaces are not smooth-lit): the
+// water +X face's bottom-front corner would be level 3 (all three checks
+// solid) without the exemption — its light stays the cell's own, exact.
+TEST(ChunkMesherV218Test, FluidExemptFromAo) {
+    BlockRegistry reg = makeRegistry();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    world.getOrCreateChunk({0, 0, 0}); // setFluid needs an existing chunk
+    world.setFluid(8, 4, 8, FluidKind::Water, kMaxFluidLevel);
+    world.setBlock(9, 3, 8, stone);
+    world.setBlock(9, 4, 7, stone);
+    world.setBlock(9, 3, 7, stone);
+    world.getOrCreateChunk({0, 0, 0}).setSkyLightAt(8, 4, 8, 15);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    const Vec3 plusX {1.0f, 0.0f, 0.0f};
+    const MeshVertex* c1 = vertexAt(data.transparentVertices, plusX, 9.0f,
+                                    4.0f, 8.0f);
+    const MeshVertex* c0 = vertexAt(data.transparentVertices, plusX, 9.0f,
+                                    4.0f, 9.0f);
+    ASSERT_NE(c1, nullptr);
+    ASSERT_NE(c0, nullptr);
+    EXPECT_FLOAT_EQ(c1->skyLight, 1.0f); // would be 0.3 without the
+    // exemption (the level-3 corner)
+    EXPECT_FLOAT_EQ(c0->skyLight, 1.0f); // would be 0.75 (level 1)
+}
+
+// The cross exemption: the torch bakes its OWN cell light on both quads
+// (the cross convention) — the corner occluders never reach it.
+TEST(ChunkMesherV218Test, CrossExemptFromAo) {
+    BlockRegistry reg = makeRegistry();
+    const BlockID torch = registerCross(reg);
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    world.setBlock(8, 4, 8, torch);
+    world.setBlock(9, 3, 8, stone);
+    world.setBlock(9, 4, 7, stone);
+    world.setBlock(9, 3, 7, stone);
+    world.getOrCreateChunk({0, 0, 0}).setSkyLightAt(8, 4, 8, 15);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    ASSERT_EQ(data.cutoutVertices.size(), 8u); // the two quads
+    for (const MeshVertex& v : data.cutoutVertices) {
+        EXPECT_FLOAT_EQ(v.skyLight, 1.0f)
+            << "cross vertex at (" << v.position.x << "," << v.position.y
+            << "," << v.position.z << ")";
+    }
+}
+
+// The wall / fence / glass pane exemption (deviation 4: the thin
+// geometry is out of the AO scope — the vertex write points untouched):
+// the wall's top-ring vertices (y 5.5, which the row-above block WOULD
+// cover at yInRow 0.5), the fence's posts (the row-below block would
+// cover their bottom ring), the pane's sheet (same) — all full light.
+TEST(ChunkMesherV218Test, WallFencePaneExemptFromAo) {
+    BlockRegistry reg = makeRegistry();
+    const BlockID wall = reg.idForName("wall");
+    const BlockID fence = reg.idForName("fence");
+    const BlockID pane = reg.idForName("glass_pane");
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    world.setBlock(8, 4, 8, wall);
+    world.setBlock(9, 5, 8, stone); // above the wall's viewer row
+    world.setBlock(12, 4, 8, fence);
+    world.setBlock(13, 3, 8, stone); // below the fence's viewer row
+    world.setBlock(12, 4, 12, pane);
+    world.setBlock(13, 3, 12, stone); // below the pane's viewer row
+    Chunk& c = world.getOrCreateChunk({0, 0, 0});
+    c.setSkyLightAt(9, 4, 8, 15);  // the wall's +X face's viewer
+    c.setSkyLightAt(12, 4, 8, 15); // the fence's own cell
+    c.setSkyLightAt(12, 4, 12, 15); // the pane's own cell
+    const auto data = mesh(world, reg, {0, 0, 0});
+    // The wall's +X face top ring (y 5.5): 2 vertices, full light.
+    const Vec3 plusX {1.0f, 0.0f, 0.0f};
+    const MeshVertex* wallTopZ8 = vertexAt(data.opaqueVertices, plusX, 9.0f,
+                                           5.5f, 8.0f);
+    const MeshVertex* wallTopZ9 = vertexAt(data.opaqueVertices, plusX, 9.0f,
+                                           5.5f, 9.0f);
+    ASSERT_NE(wallTopZ8, nullptr);
+    ASSERT_NE(wallTopZ9, nullptr);
+    EXPECT_FLOAT_EQ(wallTopZ8->skyLight, 1.0f);
+    EXPECT_FLOAT_EQ(wallTopZ9->skyLight, 1.0f);
+    // The fence's whole opaque stream is at x/z 12..13: every vertex
+    // full light (the cell's own light — no neighbor sampling at all).
+    int fenceVerts = 0;
+    for (const MeshVertex& v : data.opaqueVertices) {
+        if (v.position.x >= 12.0f && v.position.x < 13.0f &&
+            v.position.z >= 8.0f && v.position.z < 9.0f) {
+            EXPECT_FLOAT_EQ(v.skyLight, 1.0f)
+                << "fence vertex at (" << v.position.x << ","
+                << v.position.y << "," << v.position.z << ")";
+            ++fenceVerts;
+        }
+    }
+    EXPECT_GT(fenceVerts, 0);
+    // The pane's whole transparent stream: full light.
+    int paneVerts = 0;
+    for (const MeshVertex& v : data.transparentVertices) {
+        if (v.position.x >= 12.0f && v.position.x < 13.0f &&
+            v.position.z >= 12.0f && v.position.z < 13.0f) {
+            EXPECT_FLOAT_EQ(v.skyLight, 1.0f);
+            ++paneVerts;
+        }
+    }
+    EXPECT_GT(paneVerts, 0);
+}
+
+// render.ao OFF = the pre-V2-19 mesh bit-identical: the occluder corners
+// bake the UNTOUCHED face light (1.0, not 0.75), and the +Z pair whose
+// shared-edge AO differs ON merges AGAIN off (the ao[4] key is all-zero
+// on both sides — the mask is the pre-V2-19 mask).
+TEST(ChunkMesherV218Test, OffConfigIsPreV219BitIdentical) {
+    BlockRegistry reg = makeRegistry();
+    const BlockID stone = reg.idForName("stone");
+    World world;
+    world.setBlock(8, 4, 8, stone); // A
+    world.setBlock(9, 4, 8, stone); // B
+    world.setBlock(7, 4, 9, stone); // the occluder (A's +Z c0/c3 sides)
+    lightAllViewersOf(world, 8, 4, 8);
+    lightAllViewersOf(world, 9, 4, 8);
+    const AtlasLayout layout = makeLayout({"t"});
+    const ChunkMeshData on = ChunkMesher(world, reg, layout, true).mesh(
+        {0, 0, 0});
+    const ChunkMeshData off = ChunkMesher(world, reg, layout, false).mesh(
+        {0, 0, 0});
+    const Vec3 plusZ {0.0f, 0.0f, 1.0f};
+    const Vec3 minusZ {0.0f, 0.0f, -1.0f};
+    const Vec3 minusX {-1.0f, 0.0f, 0.0f};
+    // OFF +Z at z 9: the pre-V2-19 merged 2x1 quad (4 vertices, tiled
+    // path), every vertex the face's viewer light, UNTOUCHED (1.0).
+    // (The occluder's own +Z face adds 4 vertices at z 10.)
+    int offZ9 = 0;
+    for (const MeshVertex& v : verticesWithNormal(off.opaqueVertices,
+                                                  plusZ)) {
+        if (std::fabs(v.position.z - 9.0f) < 1e-6f) {
+            ++offZ9;
+            EXPECT_FLOAT_EQ(v.tiled, 1.0f);
+            EXPECT_FLOAT_EQ(v.skyLight, 1.0f);
+            EXPECT_FLOAT_EQ(v.blockLight, 0.0f);
+        }
+    }
+    EXPECT_EQ(offZ9, 4);
+    // OFF -Z: A's + B's -Z (plane z 8) share tile + light (15) + zero
+    // ao -> the pre-V2-19 2x1 merged quad (4 vertices); the occluder's
+    // own -Z (plane z 9) stands alone (4 vertices, legacy UV).
+    EXPECT_EQ(countVerticesWithNormal(off.opaqueVertices, minusZ), 8);
+    int offMerged = 0, offSingle = 0;
+    for (const MeshVertex& v : verticesWithNormal(off.opaqueVertices,
+                                                  minusZ)) {
+        EXPECT_FLOAT_EQ(v.skyLight, 1.0f);
+        if (std::fabs(v.position.z - 8.0f) < 1e-6f) {
+            EXPECT_FLOAT_EQ(v.tiled, 1.0f);
+            ++offMerged;
+        } else {
+            EXPECT_FLOAT_EQ(v.tiled, 0.0f);
+            ++offSingle;
+        }
+    }
+    EXPECT_EQ(offMerged, 4);
+    EXPECT_EQ(offSingle, 4);
+    const MeshVertex* offA0 = vertexAt(off.opaqueVertices, plusZ, 8.0f, 4.0f,
+                                       9.0f);
+    ASSERT_NE(offA0, nullptr); // the merged quad's seed-side end
+    // OFF -X (A's single face, light 1.0 — no multiply): A's -X face
+    // sits at x 8; its c1/c2 corners (8,4,9)/(8,5,9) are unique.
+    const MeshVertex* offX1 = vertexAt(off.opaqueVertices, minusX, 8.0f, 4.0f,
+                                       9.0f);
+    const MeshVertex* offX2 = vertexAt(off.opaqueVertices, minusX, 8.0f, 5.0f,
+                                       9.0f);
+    ASSERT_NE(offX1, nullptr);
+    ASSERT_NE(offX2, nullptr);
+    EXPECT_FLOAT_EQ(offX1->skyLight, 1.0f);
+    EXPECT_FLOAT_EQ(offX2->skyLight, 1.0f);
+    // ON +Z: the run breaks (A's c0/c3 meet the occluder, B's do not) —
+    // A and B stand as single faces (8 vertices at z 9, legacy UV; the
+    // occluder's own +Z adds 4 at z 10), A's corners baked.
+    EXPECT_EQ(countVerticesWithNormal(on.opaqueVertices, plusZ), 12);
+    for (const MeshVertex& v : verticesWithNormal(on.opaqueVertices, plusZ)) {
+        EXPECT_FLOAT_EQ(v.tiled, 0.0f);
+    }
+    const MeshVertex* onA0 = vertexAt(on.opaqueVertices, plusZ, 8.0f, 4.0f,
+                                      9.0f);
+    const MeshVertex* onA3 = vertexAt(on.opaqueVertices, plusZ, 8.0f, 5.0f,
+                                      9.0f);
+    const MeshVertex* onB0 = vertexAt(on.opaqueVertices, plusZ, 9.0f, 4.0f,
+                                      9.0f);
+    const MeshVertex* onB3 = vertexAt(on.opaqueVertices, plusZ, 9.0f, 5.0f,
+                                      9.0f);
+    ASSERT_NE(onA0, nullptr);
+    ASSERT_NE(onA3, nullptr);
+    ASSERT_NE(onB0, nullptr);
+    ASSERT_NE(onB3, nullptr);
+    EXPECT_FLOAT_EQ(onA0->skyLight, 1.0f * kAoOne);
+    EXPECT_FLOAT_EQ(onA3->skyLight, 1.0f * kAoOne);
+    EXPECT_FLOAT_EQ(onB0->skyLight, 1.0f * kAoFull);
+    EXPECT_FLOAT_EQ(onB3->skyLight, 1.0f * kAoFull);
+    // ON -X: A's c1/c2 corners bake (the occluder covers their side
+    // checks at yInRow 0 and 1).
+    const MeshVertex* onX1 = vertexAt(on.opaqueVertices, minusX, 8.0f, 4.0f,
+                                      9.0f);
+    const MeshVertex* onX2 = vertexAt(on.opaqueVertices, minusX, 8.0f, 5.0f,
+                                      9.0f);
+    ASSERT_NE(onX1, nullptr);
+    ASSERT_NE(onX2, nullptr);
+    EXPECT_FLOAT_EQ(onX1->skyLight, 1.0f * kAoOne);
+    EXPECT_FLOAT_EQ(onX2->skyLight, 1.0f * kAoOne);
+    // ON -Z: A+B still merge (their -Z corners' checks are all air);
+    // the occluder's -Z stands alone with c0/c3 baked — its corner
+    // checks meet A (the solid at (8,4,8), yInRow 0 and 1).
+    EXPECT_EQ(countVerticesWithNormal(on.opaqueVertices, minusZ), 8);
+    const MeshVertex* onO0 = vertexAt(on.opaqueVertices, minusZ, 8.0f, 4.0f,
+                                      9.0f);
+    const MeshVertex* onO3 = vertexAt(on.opaqueVertices, minusZ, 8.0f, 5.0f,
+                                      9.0f);
+    ASSERT_NE(onO0, nullptr);
+    ASSERT_NE(onO3, nullptr);
+    EXPECT_FLOAT_EQ(onO0->skyLight, 1.0f * kAoOne);
+    EXPECT_FLOAT_EQ(onO3->skyLight, 1.0f * kAoOne);
+    // The streams differ by EXACTLY the one broken run (4 vertices, the
+    // +Z pair): AO never changes geometry elsewhere.
+    EXPECT_EQ(off.opaqueVertices.size(), on.opaqueVertices.size() - 4u);
 }

@@ -355,8 +355,10 @@ namespace mc {
 //      entities exist (structurally: a pre-26 file cannot carry
 //      them). Writes are always format 26.
 //  27: the V2-12 ENCHANTMENT SYSTEM — "player" gains "xp_seed" (the
-//      enchanting offer roll's decorrelation seed, a whole number >= 0,
-//      ALWAYS written — the oxygen / velocity key discipline; the fresh
+//      enchanting offer roll's decorrelation seed, a 16-char LOWERCASE
+//      HEX STRING — the 64-bit value does not fit the JSON number's
+//      53-bit double mantissa, the round trip must be lossless — ALWAYS
+//      written, the oxygen / velocity key discipline; the fresh
 //      value is worldSeed ^ kXpSeedInit, the 26->27 migration is the SAME
 //      value). The three stack-carrying places (an inventory slot entry,
 //      an OCCUPIED player.armor slot, and an item ENTITY entry) gain an

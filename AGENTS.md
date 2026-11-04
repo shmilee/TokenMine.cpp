@@ -10,7 +10,7 @@ C++20 / SDL3 / OpenGL 3.3 core，
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（2.0.0 时代）
+## 现状（2.x 已收官 11-04 / v4.x「世界扩展」期开启）
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -35,40 +35,57 @@ C++20 / SDL3 / OpenGL 3.3 core，
   **V2-14 蝙蝠已完成 = v2.15.0 门 186**（项目首只飞行 mob：悬停
   巡航 AI + 洞穴 in-air 生成 + 0.9×0.5 展翼扇翅 + squeak 氛围音，
   零 format savenorm EXACT，结构免疫第 67 次，详见
-  `docs/archive/phase-2.15.0.md`）+ **V2-15 染色羊已完成 = v2.16.0
+  `docs/archive/v2x/phase-2.15.0.md`）+ **V2-15 染色羊已完成 = v2.16.0
   门 187**（shears 238 耐久 + 剪毛 1-3 彩毛 + 出生毛色流首抽 + 染色
   bare 拒染 + 死亡彩毛钩子 + per-entity 变体网格，零 format savenorm
-  EXACT，结构免疫第 68 次，详见 `docs/archive/phase-2.16.0.md`）+
+  EXACT，结构免疫第 68 次，详见 `docs/archive/v2x/phase-2.16.0.md`）+
   **V2-16 雪原已完成 = v2.17.0 门 188**（snowy_taiga 数据驱动 +
   exclude_spawn_area 演示区结构保护 + snow 满块 + planTree 针叶 +
   音效缺陷族 13 件修复，零 format 世界演进，结构免疫第 69 次，详见
-  `docs/archive/phase-2.17.0.md`）+ **V2-17 顶部 slab/双 slab 已完
+  `docs/archive/v2x/phase-2.17.0.md`）+ **V2-17 顶部 slab/双 slab 已完
   成 = v2.18.0 门 189**（stone_slab state_count 3 + drops_count_by_
   state 破掉 2 + 放置瞄准规则 + 同格合并 + partial-aware slab 射线，
   零 format bump，结构免疫第 70 次，详见
-  `docs/archive/phase-2.18.0.md`）；**当前 = V2-18 AO 环境光遮蔽
-  （v2.19.0 = 二批收官）** /
-  原 4.x「世界扩展」V4-1~V4-6 = `docs/BACKLOG_4x.md` 方向底稿
-  **保持大版本**（二批收官时定案晋升）；总量 24 < pre-v2.0 的
-  78-84 = 用户采纳判据 ✓）；2.x 全史 =
+  `docs/archive/v2x/phase-2.18.0.md`）+ **V2-18 AO 环境光遮蔽已完成
+  = v2.19.0 门 190（二批收官：第二批 8/8 全完成）**（经典 MC 顶点 AO
+  4 档 1.0/0.75/0.5/0.3 双邻特例 + opaque ∧ 高度带闭区间 + bake 入
+  既有光 attribute = 零 shader/零顶点格式，greedy MaskCell+ao[4] 合并
+  键，fluid/cross/wall/fence/pane 免 AO，render.ao 严格 bool 默认
+  true，**off = pre-V2-19 位级恒等**【门内 off ≡ 旧锚实证】，零
+  format，**门 190 重锚 base18 ← 224468 B**【单调变暗审计 + 1 px
+  z-fight 白名单】，4 偏离记档，PITS 384，详见
+  `docs/archive/v2x/phase-2.19.0.md`）；**2.x 全史
+  （v2.0.0→v2.19.0，两批 20 版）11-04 收官** /
+  4.x「世界扩展」= **新执行权威** `docs/BACKLOG.md`（11-04 晋升 +
+  逐项定案：6 项全保留，**V4-1 下界维度锚【超大】拆分立项先行**
+  【门框→下界世界→内容三段】，版本 v4.0.0 起）；2.x 总量 24 <
+  pre-v2.0 的 78-84 = 用户
+  采纳判据 ✓）；2.x 全史 =
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
-  存档 11 份）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`（只读，
-  别把历史细节当现状）。
-- 测试 **2455/2455**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+  存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
+  （只读，别把历史细节当现状）。
+- 测试 **2482/2482**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 28（V2-13 床引入 player.respawn 恒写；27 = 附魔
   xp_seed+enchants；26 = XP；V2-14 蝙蝠 / V2-15 染色羊 / V2-16
-  雪原 / V2-17 slab 均零 format【slab state = format 15 states 机制】）；
-  base18 锚 **179027 B**（679×744 WM tile 态——重锚谱系：179116 →
+  雪原 / V2-17 slab / V2-18 AO 均零 format【slab state = format 15
+  states 机制；AO = 纯渲染 bake 入既有光 attribute】）；
+  base18 锚 **224468 B**（679×744 WM tile 态——重锚谱系：179116 →
   178148【V2-10 门 181】→ 178676【V2-19 门 182】→ 179027【V2-11
-  门 183】；门 184-189 = 结构免疫第 65-70 次**免重锚**）；PITS
+  门 183】→ **224468【V2-18 门 190，AO 世界光照】；门 184-189 =
+  结构免疫第 65-70 次免重锚**）；PITS
   375-379 + **PITS 380**（spawn 成功行无 'pick' / 门场景洞穴密封 /
   CAVE config seed 归属 / bob diff 带色相审计）+ **PITS 381**（热栏
   key→RMB ≥0.15s / 活体掉落物品不可作终档断言 / 羊静止窗）+
   **PITS 382**（确定性音效 LCG 逐采样重建 = 静音/退化 wav 缺陷族
   13 件【音频门盲区】）+ **PITS 383**（stateful 块场景 journal 须
   states 条目【init 拒 = 输入静默丢失】/ cell DDA 半块全遮挡 =
-  合并不可达【partial-aware 射线修】/ 临时插桩定界后移除重建）；
-  门计数 189（**V2-1 前视角 v2.1.0** 门 172：
+  合并不可达【partial-aware 射线修】/ 临时插桩定界后移除重建）+
+  **PITS 384**（e+1 索引越界【sign 数组 (e+1)/2 纪律】/ e 向 = 背离
+  网格单元于顶点 + 面表 edgeA/edgeB 轴错配双实现交叉钉 / 重锚
+  z-fight 换面白名单【单调变暗审计豁免上限 + 逐 px 留证】/ 门窗口
+  679×744「y>600 = UI 带」启发式无效【实测 HUD bbox】/ 世界坐标
+  手算 7 连错）；
+  门计数 190（**V2-1 前视角 v2.1.0** 门 172：
   C 键三循环，前视 = 后视同款数学翻转角执行 + aimReach D+kReach——详见
   `docs/archive/v2x/phase-2.1.0.md`；**V2-2 Steve 皮肤 v2.2.0** 门 173：
   模型 per-face 纹理通用能力【既有 mob 位级不变】+ Steve 脸 8×8 像素
@@ -121,16 +138,13 @@ C++20 / SDL3 / OpenGL 3.3 core，
   单测钉）；**base18 第 2 次重锚 178148 B**（diff 4185 px 全叶冠
   区零泄漏论证，Phase 18 先例）+ 零 format——详见
   `docs/archive/v2x/phase-2.10.0.md`）。
-- 活跃已知问题：`docs/KNOWN_ISSUES.md`；**v2.x 第二批任务表（执行
-  权威）：`docs/BACKLOG.md`**（V2-11~V2-18 = 原 3.x 八项并入 +
-  V2-19 用户诉求提前项 ✅ v2.11.0 + V2-11 XP ✅ v2.12.0 +
-  V2-12 附魔 ✅ v2.13.0 + V2-13 床 ✅ v2.14.0 + V2-14 蝙蝠
-  ✅ v2.15.0 + V2-15 染色羊 ✅ v2.16.0 + V2-16 雪原 ✅ v2.17.0 +
-  V2-17 顶部 slab ✅ v2.18.0；**下一项 V2-18 AO 环境光遮蔽
-  （v2.19.0 = 二批收官：tag + GitHub release + 4.x 晋升定案）**；
-  第一批 V2-1~V2-10 + 全史 = `docs/archive/v2x/`；1.x =
-  `docs/archive/v1x/`）；会话交接：`opencode-sessions/SESSION_
-  CONTEXT.md`。
+- 活跃已知问题：`docs/KNOWN_ISSUES.md`；**2.x 两批 8/8 全完成
+  （11-04 收官）；当前执行权威 = v4.x「世界扩展」任务表：
+  `docs/BACKLOG.md`**（11-04 晋升 + 逐项定案：6 项全保留，V4-1 下
+  界维度锚【超大】拆分立项先行，版本 v4.0.0 起；逐版 tag +
+  GitHub release 政策沿用 2.x 定案）；2.x 全任务表 = `docs/archive/
+  v2x/BACKLOG.md`；1.x = `docs/archive/v1x/`；会话交接：
+  `opencode-sessions/SESSION_CONTEXT.md`。
 ## 命令
 
 ```bash
@@ -203,7 +217,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 永不提交 `opencode-sessions/` 下任何文件（本地））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
-## 坑位 Top 8（全文 docs/PITS.md，383 条）
+## 坑位 Top 8（全文 docs/PITS.md，384 条）
 
 1. **SDL grab delta**（P28）：输入 E2E 全帧字节一致不保证——存档 yaw/pitch 为漂移
    探测器；驱动 warp 用实际窗口原点（实测 (4,64)）+ (632,352)。
@@ -239,14 +253,13 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（383 条，都踩过） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（384 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
-| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v2.x 逐版明细；v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |
-| [docs/BACKLOG.md](docs/BACKLOG.md) | **v2.x 第二批任务表（执行权威）**（V2-11~V2-18 = 原 3.x 八项并入，11-03 用户定案；第一批表 → `docs/archive/v2x/BACKLOG.md`、v1.x 表 → `docs/archive/v1x/BACKLOG.md`） | 取下一个任务 |
-| [docs/BACKLOG_4x.md](docs/BACKLOG_4x.md) | v4.x「世界扩展」期方向底稿（下界维度锚 V4-1，保持大版本；二批收官晋升执行权威） | 二批收官定案时 |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v4.x 时代逐版明细；v2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |
+| [docs/BACKLOG.md](docs/BACKLOG.md) | **v4.x「世界扩展」任务表（执行权威）**（11-04 二批收官晋升 + 逐项定案：6 项全保留，V4-1 下界维度锚拆分立项先行；2.x 全任务表 → `docs/archive/v2x/BACKLOG.md`、v1.x 表 → `docs/archive/v1x/BACKLOG.md`） | 取下一个任务 |
 | [docs/archive/v1x/](docs/archive/v1x/) | 1.x 阶段细节存档（181 份 phase，只读历史）+ HISTORY.md 全史 + v1x/CHANGELOG.md + v1x/BACKLOG.md | 深挖 1.x 某阶段 |
 | [docs/archive/v0x/](docs/archive/v0x/) | 0.x 时代文档（ROADMAP 规划 / DISCUSSION 记录 / v0x/CHANGELOG.md） | 深挖 0.x |
-| [docs/archive/v2x/](docs/archive/v2x/) | 2.x 阶段细节存档（11 份 phase，只读历史）+ v2x/HISTORY.md 全史 + v2x/CHANGELOG.md + v2x/BACKLOG.md | 深挖 2.x 某阶段 |
-| `docs/archive/phase-2.x.0.md`（新阶段放 docs/archive/） | 2.x 二批阶段细节存档（第一批 11 份已沉 `docs/archive/v2x/`；二批收官沉 v2x/） | 深挖某阶段 |
+| [docs/archive/v2x/](docs/archive/v2x/) | 2.x 阶段细节存档（20 份 phase，全两批，只读历史）+ v2x/HISTORY.md 全史 + v2x/CHANGELOG.md + v2x/BACKLOG.md | 深挖 2.x 某阶段 |
+| `docs/archive/phase-4.x.0.md`（新阶段放 docs/archive/） | v4.x 阶段细节存档（收官后沉 `docs/archive/v4x/`） | 深挖某阶段 |
 | `opencode-sessions/SESSION_CONTEXT.md`（本地，不入库） | 会话交接：最新状态/提交列表/下一步（+ kickoff_prompt 启动 prompt；SESSION_CONTEXT_PRE2.0 / LEGACY_STATUS_P30 / SESSION_HISTORY / 门资产 → 同目录 `archive/`） | 任何"继续"会话 |

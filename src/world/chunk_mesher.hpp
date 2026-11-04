@@ -62,6 +62,7 @@
 // translate(chunkOrigin).
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -98,7 +99,8 @@ public:
     // One mask cell: a visible face on a greedy slice, carrying everything
     // that must be identical for two cells to merge into one quad — the
     // atlas tile (texture), the sub-mesh (the opaque / cutout / blend
-    // pass), and the baked face light (light-conservative merging).
+    // pass), the baked face light (light-conservative merging) and the 4
+    // corner AO levels (V2-18: AO-conservative merging, same rule).
     struct MaskCell {
         bool valid = false;
         int tileCol = 0;
@@ -111,16 +113,36 @@ public:
         bool cutout = false;
         std::uint8_t sky = 0;
         std::uint8_t blockLight = 0;
+        // V2-18 AO: the 4 corner occlusion LEVELS (0..3, aoFactor tiers)
+        // of this cell's face, in the face table's corner order c0..c3
+        // (the emitMergedQuad vertex order for a 1x1 run — pinned by
+        // unit test). uint8 level EXACT comparison (no float in the key):
+        // two cells whose shared-edge corner AO differs break the run
+        // (the quad shrinks — the MC greedy+AO behavior); the merged
+        // quad's vertex i then takes the run END cell's corner i, which
+        // equals seed.ao[i] because the key forces the whole run's
+        // ao[4] identical (the shared edge's equality is guaranteed —
+        // each side's extra check is the neighbor's in-front cell,
+        // non-opaque by the face-visibility invariant). Zero array =
+        // level 0 = factor 1.0: render.ao OFF leaves the mask bit-
+        // identical to pre-V2-19 (the off gate's root).
+        std::array<std::uint8_t, 4> ao {};
 
         bool sameAs(const MaskCell& o) const {
             return tileCol == o.tileCol && tileRow == o.tileRow &&
                    transparent == o.transparent && cutout == o.cutout &&
-                   sky == o.sky && blockLight == o.blockLight;
+                   sky == o.sky && blockLight == o.blockLight &&
+                   ao == o.ao;
         }
     };
 
+    // `aoEnabled` = render.ao (strict read at init, code default true):
+    // OFF = the AO factor is constant 1.0 and the mask's ao[4] stays
+    // zero = the pre-V2-19 mesh bit-identical (the AO path is gated
+    // here — the shader / vertex format / per-draw light overrides are
+    // untouched either way).
     ChunkMesher(const World& world, const BlockRegistry& blocks,
-                const AtlasLayout& layout);
+                const AtlasLayout& layout, bool aoEnabled = true);
 
     // Meshes the chunk at `pos` (must already exist in the world; a missing
     // chunk yields empty output).
@@ -215,6 +237,9 @@ private:
     const World& m_world;
     const BlockRegistry& m_blocks;
     const AtlasLayout& m_layout;
+    // render.ao (V2-18): the mesh-time AO gate. OFF = every factor 1.0
+    // (pre-V2-19 bit-identical).
+    bool m_aoEnabled;
 };
 
 } // namespace mc

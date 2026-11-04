@@ -83,6 +83,7 @@
 #include "world/cloud.hpp"
 #include "world/day_cycle.hpp"
 #include "world/fluid.hpp"
+#include "world/ao.hpp"
 #include "world/lighting.hpp"
 #include "world/raycast.hpp"
 #include "world/tree_shape.hpp"
@@ -1842,6 +1843,16 @@ private:
     // init — per-run constants, no per-draw variation) and the hostile
     // spawn light gate (findMobSpawnCell).
     int m_nightSkyLevel = kNightSkyLevel;
+
+    // V2-18 AO: render.ao (strict read at init, code default true — the
+    // weatherEnabled / readNightSkyLevel discipline: the committed
+    // config.json carries no such key). The mesher-construction gate:
+    // OFF = the AO factor is constant 1.0 + the mask's ao[4] stays zero
+    // = the pre-V2-19 mesh bit-identical (the gate's "new-off" control;
+    // the shader / vertex format / per-draw light overrides are untouched
+    // either way). Consumed at the single worker-mesh construction site
+    // (postMeshJobs — the mesh() call census).
+    bool m_aoEnabled = true;
 
     // Phase 15 particles + audio: the break bursts (deterministic seeds:
     // world seed mixed with an increasing per-break counter) and the sound

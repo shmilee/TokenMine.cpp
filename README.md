@@ -7,7 +7,7 @@
 **本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒<br>
 （C++20 / SDL3 / OpenGL 3.3，自研 JSON/PNG，内容全数据驱动）。<br>
 确定性是一级要求——无输入运行逐帧字节可复现。<br>
-v2.0.0 已发布（1.x 收官里程碑）· v2.x 进行中（V2-1 前视角 / V2-2 Steve 皮肤已完成，任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
+v2.19.0 已发布（**2.x 全史收官**，tag `v2.19.0`）· v4.x「世界扩展」期开启（任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
 
 [![GitHub stars](https://img.shields.io/github/stars/shmilee/TokenMine.cpp?style=flat-square)](https://github.com/shmilee/TokenMine.cpp/stargazers)
 [![MIT license](https://img.shields.io/badge/license-MIT-555555?style=flat-square)](LICENSE)
@@ -90,17 +90,25 @@ cmake --build build
 
 ## 版本与发布
 
-- **v2.10.0**（2026-11-03）：**2.x「上手与体验补全」收官里程碑**（tag
+- **v2.19.0**（2026-11-04）：**2.x「上手与体验补全」全史收官里程碑**
+  （tag `v2.19.0`）——两批 20 版（v2.0.0→v2.19.0）任务全完成：第二批
+  V2-11~V2-18 八项（门 182-190 全 PASS，每版发布前性能 A/B）= 视角/
+  移动/时钟批 / XP 系统 / 附魔 / 床 / 蝙蝠（首只飞行 mob）/ 染色羊 /
+  雪原 biome / 顶部 slab / **AO 环境光遮蔽（经典 MC 顶点 AO，收官
+  项）**。2482/2482 测试；存档 format 28；2.x 全史 = `docs/archive/
+  v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase 存档 20 份，全两
+  批）。**收官定案：4.x「世界扩展」任务表晋升执行权威
+  （`docs/BACKLOG.md`，11-04 逐项定案：6 项全保留，下界维度锚 V4-1
+  拆分立项先行）。**
+- **v2.10.0**（2026-11-03）：**2.x 第一批收官里程碑**（tag
   `v2.10.0`）——任务矩阵 V2-1~V2-10 十项全完成（门 171-181 全 PASS，
   八版每版发布前性能 A/B 全同世界同成本）：第三人称前视角 / Steve
   皮肤（per-face 纹理通用能力）/ 教程系列化（format 25）/ 天气（雨雷）
   / 猪 / 体验打磨批（手臂/阴影/磁力/月相）/ 材料补齐批（块级 per-face
   + 金钻块 + spider 掉落）/ sky rescan clobber 修复 / step-up quirk
   修复 / 网格修复批（叶子面剔除 + cutout 普查确认）。2181/2181 测试；
-  2.x 全史 = `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/
-  phase 存档 11 份）。**收官日定案：原 3.x 八项并入 2.x 第二批
-  （V2-11~V2-18，`docs/BACKLOG.md` 执行权威）；原 4.x「世界扩展」
-  保持大版本。**
+  2.x 全史 = `docs/archive/v2x/HISTORY.md`。**收官日定案：原 3.x 八项
+  并入 2.x 第二批（V2-11~V2-18）；原 4.x「世界扩展」保持大版本。**
 - **v2.0.0**（2026-11-02）：**1.x 收官里程碑**——任务矩阵 40/40 + 两轮实机报障
   系列（UX-8g/UX-9：云方块化/教程火把步/洞穴底光可配置）全完成 + 发布扫尾
   （1.x 文档归档 `docs/archive/v1x/` / 第三人称准星不压头 / 活文档刷新 2.0 状态）。
@@ -109,18 +117,18 @@ cmake --build build
 - **v1.0.0**（2026-10-27）：**首个正式版**，任务矩阵 34/34 全完成
   （十大系统：流送内存/帧管线/光照/世界生成/流体/实体 Mob/生存战斗/物品
   合成/存档/表现层 + 2 项实机报障修复）。正式版 release 见 GitHub
-  Releases "TokenMine.cpp v1.0.0"。v1.0 后进入 v1.x 迭代（任务矩阵已刷新，
-  见 `docs/BACKLOG.md`）。
+  Releases "TokenMine.cpp v1.0.0"。v1.0 后进入 v1.x 迭代（任务矩阵已
+  刷新，见 `docs/archive/v1x/BACKLOG.md`）。
 - **v0.1.0**（2026-10-17，首个公开版）：功能阶段 P0–P99 + 性能系列 99.x
   全部完成；1195/1195 测试、`-Werror` 0 警告。
 
-v0.2.0 → v2.10.0 逐版明细：v2.x 见 [`docs/archive/v2x/CHANGELOG.md`](docs/archive/v2x/CHANGELOG.md)；v3.x 起见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)；
+v0.2.0 → v2.19.0 逐版明细：v2.x（全两批）见 [`docs/archive/v2x/CHANGELOG.md`](docs/archive/v2x/CHANGELOG.md)；v4.x（下）见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)；
 v1.x（v1.50.0→v1.0）见 `docs/archive/v1x/CHANGELOG.md`；v0.x
 （v0.12.0→v0.1.0）见 `docs/archive/v0x/CHANGELOG.md`；每版工程细节
 （机制/证据/偏离/性能 A/B）见 `docs/archive/*/phase-*.md` 阶段存档与
 GitHub Releases。
 - **0.x 承诺**：可玩、可扩展、确定性运行；但**不承诺稳定**——存档格式
-  （现为 format 25，向前迁移）与内容数据格式仍可能随阶段演进，旧存档
+  （现为 format 28，向前迁移）与内容数据格式仍可能随阶段演进，旧存档
   通常可读但请定期备份。已知限制见 `docs/KNOWN_ISSUES.md`。
 - 许可证：MIT（见 `LICENSE`）。
 - **内存提示**：默认 `config/config.json` 为 `view_distance: 80`（圆盘环
@@ -135,15 +143,16 @@ GitHub Releases。
 |---|---|---|
 | [AGENTS.md](AGENTS.md) | 代理快速接收：现状/命令/硬性规则/E2E 协议/阶段流程/坑位速览 | 新会话第一件事 |
 | [docs/GAMEPLAY.md](docs/GAMEPLAY.md) | 玩法指南（操作/生存循环/战斗与食物/工具路线/昼夜） | 玩法问题 |
-| [docs/MECHANICS.md](docs/MECHANICS.md) | 机制详解（截至 P28：生存/Mob/弓/合成/UI/世界生成） | 改玩法逻辑前 |
+| [docs/MECHANICS.md](docs/MECHANICS.md) | 机制详解（现状 v2.19.0，16 子系统分节；2026-11-04 收官刷新） | 改玩法逻辑前 |
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（383 条，都踩过） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（384 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
-| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v2.11.0 起逐版明细；2.x 第一批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |
-| [docs/archive/](docs/archive/) | 阶段细节存档（v2x/：11 phase + HISTORY.md 全史 + v2x/CHANGELOG.md + v2x/BACKLOG.md；1.x：181 phase + HISTORY.md 全史；2.x 二批新阶段按同款） | 深挖某阶段 |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v4.x 时代逐版明细；v2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |
+| [docs/BACKLOG.md](docs/BACKLOG.md) | **v4.x「世界扩展」任务表（执行权威）**（11-04 二批收官晋升：V4-1 下界维度锚；2.x 全任务表 → `docs/archive/v2x/BACKLOG.md`） | 取下一个任务 |
+| [docs/archive/](docs/archive/) | 阶段细节存档（v2x/：20 phase 全两批 + HISTORY.md 全史 + v2x/CHANGELOG.md + v2x/BACKLOG.md；1.x：181 phase + HISTORY.md 全史） | 深挖某阶段 |
 | [docs/archive/v0x/](docs/archive/v0x/) | 0.x 时代文档（ROADMAP 规划 / DISCUSSION 记录 / v0x/CHANGELOG.md） | 深挖 0.x |
 | `opencode-sessions/SESSION_CONTEXT.md`（本地，不入库） | 会话交接：最新状态/提交列表/下一步（历史块/遗留附录 → 同目录 `archive/`；新会话启动 prompt 同目录） | 任何"继续"会话 |
 

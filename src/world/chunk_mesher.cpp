@@ -4,6 +4,7 @@
 
 #include "block/cube_face_table.hpp"
 #include "core/math/vec3.hpp"
+#include "world/ao.hpp"
 #include "world/growth.hpp"
 #include "world/lighting.hpp"
 
@@ -40,8 +41,9 @@ constexpr Vec3 kAxisUnit[3] = {{1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f},
 } // namespace
 
 ChunkMesher::ChunkMesher(const World& world, const BlockRegistry& blocks,
-                         const AtlasLayout& layout)
-    : m_world(world), m_blocks(blocks), m_layout(layout) {}
+                         const AtlasLayout& layout, bool aoEnabled)
+    : m_world(world), m_blocks(blocks), m_layout(layout),
+      m_aoEnabled(aoEnabled) {}
 
 ChunkMeshData ChunkMesher::mesh(const ChunkPos& pos) const {
     ChunkMeshData out;
@@ -257,6 +259,21 @@ void ChunkMesher::meshFaceDirection(ChunkMeshData& out, const Chunk& chunk,
                 cell.blockLight = m_world.getBlockLight(
                     origin.x + c[0] + face.dx, origin.y + c[1] + face.dy,
                     origin.z + c[2] + face.dz);
+                // V2-18 AO: the 4 corner occlusion levels (the face
+                // table's order c0..c3) from the 8 in-front cells around
+                // the viewer cell — opaque ∧ height band (world/ao).
+                // render.ao OFF = the query never runs and ao[4] stays
+                // zero (level 0, factor 1.0): the pre-V2-19 mask bit-
+                // identical (the off gate's root). The queries are face
+                // neighbor ±1 — inside the mesh job's 3x3 column
+                // snapshot (zero new streaming dependency).
+                if (m_aoEnabled) {
+                    aoCellCornerLevels(m_world, m_blocks,
+                                       BlockPos {origin.x + c[0],
+                                                 origin.y + c[1],
+                                                 origin.z + c[2]},
+                                       face, cell.ao);
+                }
             }
         }
 
@@ -368,6 +385,17 @@ void ChunkMesher::emitMergedQuad(ChunkMeshData& out, const CubeFace& face,
         static_cast<float>(seed.sky) / static_cast<float>(kMaxLight);
     const float blockF =
         static_cast<float>(seed.blockLight) / static_cast<float>(kMaxLight);
+    // V2-18 AO: the merged quad's vertex i takes the run END cell's
+    // corner i — which equals seed.ao[i], the merge key (sameAs' ao[4])
+    // forcing every run cell's levels identical (the face table's corner
+    // order = the vertex emission order for a 1x1 run, pinned by unit
+    // test). The light bakes the factor (skyF/blockF same multiply — the
+    // fragment formula max(sky - retreat, block) is untouched). OFF =
+    // factor 1.0 = the pre-V2-19 stream bit-identical.
+    const float aoF[4] = {m_aoEnabled ? aoFactor(seed.ao[0]) : 1.0f,
+                          m_aoEnabled ? aoFactor(seed.ao[1]) : 1.0f,
+                          m_aoEnabled ? aoFactor(seed.ao[2]) : 1.0f,
+                          m_aoEnabled ? aoFactor(seed.ao[3]) : 1.0f};
     // Single-face quads (w = h = 1) keep the legacy atlas-space UV and
     // the shader's direct-sampling path (tiled = 0) — bit-identical to
     // the Phase 17 per-face mesh. Only actually merged quads (w * h > 1)
@@ -402,8 +430,8 @@ void ChunkMesher::emitMergedQuad(ChunkMeshData& out, const CubeFace& face,
             v.uv = {legacyUv[i][0], legacyUv[i][1]};
             v.tiled = 0.0f;
         }
-        v.skyLight = skyF;
-        v.blockLight = blockF;
+        v.skyLight = skyF * aoF[i];
+        v.blockLight = blockF * aoF[i];
         verts->push_back(v);
     }
     indices->insert(indices->end(),
@@ -683,8 +711,20 @@ void ChunkMesher::emitSlab(ChunkMeshData& out, const Block& block,
                           static_cast<float>(lz + face.corner[i][2])};
             v.normal = face.normal;
             v.uv = faceUv[i];
-            v.skyLight = skyF;
-            v.blockLight = blockF;
+            // V2-18 AO: the half-block height band rules — the corner's
+            // PRE-scale table index selects the e directions, the
+            // EMITTED y (corner*0.5) is the band test's vertex height
+            // (a bottom slab's top vertex at 0.5 only meets same-row
+            // neighbor bands; its mid-plane TOP face is never covered).
+            const float aoF =
+                m_aoEnabled
+                    ? aoFactor(aoVertexLevel(
+                          m_world, m_blocks, BlockPos{wx, wy, wz}, face.normal,
+                          face.corner[i][0], face.corner[i][1],
+                          face.corner[i][2], face.corner[i][1] * h))
+                    : 1.0f;
+            v.skyLight = skyF * aoF;
+            v.blockLight = blockF * aoF;
             verts.push_back(v);
         }
         indices.insert(indices.end(),
@@ -741,8 +781,20 @@ void ChunkMesher::emitSlabTop(ChunkMeshData& out, const Block& block,
                           static_cast<float>(lz + face.corner[i][2])};
             v.normal = face.normal;
             v.uv = faceUv[i];
-            v.skyLight = skyF;
-            v.blockLight = blockF;
+            // V2-18 AO: the top slab's band (kSlabHalf..1) — the EMITTED
+            // y (0.5 + corner*0.5) is the vertex height; the state-1 TOP
+            // face sits on the cell row (y 1.0) and gets AO like a full
+            // top face, its mid-plane BOTTOM face never is.
+            const float aoF =
+                m_aoEnabled
+                    ? aoFactor(aoVertexLevel(
+                          m_world, m_blocks, BlockPos{wx, wy, wz},
+                          face.normal, face.corner[i][0], face.corner[i][1],
+                          face.corner[i][2],
+                          kSlabHalf + face.corner[i][1] * kSlabHalf))
+                    : 1.0f;
+            v.skyLight = skyF * aoF;
+            v.blockLight = blockF * aoF;
             verts.push_back(v);
         }
         indices.insert(indices.end(),
@@ -794,8 +846,18 @@ void ChunkMesher::emitSlabFull(ChunkMeshData& out, const Block& block,
                           static_cast<float>(lz + face.corner[i][2])};
             v.normal = face.normal;
             v.uv = faceUv[i];
-            v.skyLight = skyF;
-            v.blockLight = blockF;
+            // V2-18 AO: the double slab is the FULL cell — the table
+            // corner's y (0/1) is the vertex height, the full-block
+            // band rules.
+            const float aoF =
+                m_aoEnabled
+                    ? aoFactor(aoVertexLevel(
+                          m_world, m_blocks, BlockPos{wx, wy, wz},
+                          face.normal, face.corner[i][0], face.corner[i][1],
+                          face.corner[i][2], face.corner[i][1]))
+                    : 1.0f;
+            v.skyLight = skyF * aoF;
+            v.blockLight = blockF * aoF;
             verts.push_back(v);
         }
         indices.insert(indices.end(),
@@ -1155,6 +1217,31 @@ void ChunkMesher::emitStairs(ChunkMeshData& out, const Block& block,
         const BlockID n = m_world.getBlock(wx + dx, wy + dy, wz + dz);
         return n != BlockID::air() && m_blocks.at(n).properties.opaque;
     };
+    // V2-18 AO: the per-vertex factor — the EMITTED corner (0/1, the
+    // rotated table corner) selects the e directions, the EMITTED y is
+    // the band test's vertex height (the stair's occluder band is [0, 1]
+    // — deviation 2, the slope is not refined). The SLOPE's normal
+    // (the rotated (0,1,1) — up-facing + one horizontal component) is
+    // not a unit axis: it takes the +Y face rule (the row-above
+    // queries), where the vertex's ACTUAL y decides coverage — the
+    // high end (y 1) tests the row above at 0 (an overhang above the
+    // high end darkens the slope's crest, the staircase look), the low
+    // end (y 0) tests it at -1 and is never covered (the mid-slope face
+    // has no same-height row — the design's "顶点实际 y" rule).
+    const auto aoF = [&](const Vec3& c, const Vec3& nrm) -> float {
+        if (!m_aoEnabled) {
+            return 1.0f;
+        }
+        const bool slope =
+            (nrm.y != 0.0f) && (nrm.x != 0.0f || nrm.z != 0.0f);
+        const Vec3 an = slope ? Vec3{0.0f, 1.0f, 0.0f} : nrm;
+        // 0/1 corner (exact floats: the + 0.5 rounding is the int cast).
+        const int ax = static_cast<int>(c.x + 0.5f);
+        const int ay = slope ? 1 : static_cast<int>(c.y + 0.5f);
+        const int az = static_cast<int>(c.z + 0.5f);
+        return aoFactor(aoVertexLevel(
+            m_world, m_blocks, BlockPos{wx, wy, wz}, an, ax, ay, az, c.y));
+    };
     auto emitQuad = [&](const std::array<Vec3, 4>& c, const Vec3& normal,
                         int slot) {
         const Vec2 u0 = AtlasLayout::uvMin(m_layout, cubeFaceTexture(block, slot, normal));
@@ -1168,8 +1255,9 @@ void ChunkMesher::emitStairs(ChunkMeshData& out, const Block& block,
             v.position = {lx + c[i].x, ly + c[i].y, lz + c[i].z};
             v.normal = normal;
             v.uv = uv[i];
-            v.skyLight = skyF;
-            v.blockLight = blockF;
+            const float ao = aoF(c[i], normal);
+            v.skyLight = skyF * ao;
+            v.blockLight = blockF * ao;
             out.opaqueVertices.push_back(v);
         }
         out.opaqueIndices.insert(out.opaqueIndices.end(),
@@ -1188,8 +1276,9 @@ void ChunkMesher::emitStairs(ChunkMeshData& out, const Block& block,
             v.position = {lx + c[i].x, ly + c[i].y, lz + c[i].z};
             v.normal = normal;
             v.uv = uv[i];
-            v.skyLight = skyF;
-            v.blockLight = blockF;
+            const float ao = aoF(c[i], normal);
+            v.skyLight = skyF * ao;
+            v.blockLight = blockF * ao;
             out.opaqueVertices.push_back(v);
         }
         out.opaqueIndices.insert(out.opaqueIndices.end(),

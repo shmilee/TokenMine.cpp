@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 2.18.0 LANGUAGES CXX)
+project(TokenMine VERSION 2.19.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -87,6 +87,7 @@ add_library(mc_core STATIC
     src/player/player.cpp
     src/player/drown.cpp
     src/world/chunk.cpp
+    src/world/ao.cpp
     src/world/raycast.cpp
     src/world/world.cpp
     src/world/chunk_mesher.cpp
@@ -155,6 +156,7 @@ add_executable(tokenmine_tests
     tests/test_atlas.cpp
     tests/test_coordinates.cpp
     tests/test_chunk.cpp
+    tests/test_ao.cpp
     tests/test_raycast.cpp
     tests/test_world.cpp
     tests/test_chunk_mesher.cpp

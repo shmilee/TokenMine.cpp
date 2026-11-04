@@ -8,20 +8,28 @@
 > `src/core/status_effect.cpp`、`src/entity/mob_registry.cpp`、
 > `src/item/recipe.cpp`、`src/world/worldgen_config.cpp`、`src/world/biome.cpp`、
 > `src/core/save.cpp`、`src/core/game.cpp` init 交叉校验段）；新增 worldgen.json
-> 完整参考、config 参考、块音效材质、纹理/atlas 纪律节。文中 `KNOWN_ISSUES`
-> 均指 `docs/KNOWN_ISSUES.md`。每节标题的 phase 标签（PXX / ABC-N）是引入
-> 该数据面的阶段，细节存档见 `docs/archive/v1x/phase-*.md`。
+> 完整参考、config 参考、块音效材质、纹理/atlas 纪律节。
+> 11-04 收官刷新（v2.19.0 / 存档 format 28 / 测试 2482）：二批新数据驱动机制
+> 并入（biome tree 6 键 + exclude_spawn_area / slab 三态 state_count +
+> drops_count_by_state / XP 三发放源 / 附魔 7 项 / 床 15 色染色族 / 染色羊变体
+> / render.ao），各节数量（93 块 / 83 物品 / 86 配方 / 8 mob / 7 附魔 /
+> 图集 122 用 6 空 / 46 wav / 427 字形）与 config、存档、配方表逐一对照真实
+> 资产与解析代码刷新（新增 `src/core/enchanting.cpp` 交叉核）。文中
+> `KNOWN_ISSUES` 均指 `docs/KNOWN_ISSUES.md`。每节标题的 phase 标签（PXX /
+> ABC-N）是引入该数据面的阶段，v1.x 细节存档见 `docs/archive/v1x/phase-*.md`、
+> v2.x 见 `docs/archive/v2x/phase-2.x.0.md`。
 
 ## 数据布局与校验策略总览
 
 | 目录 / 文件 | 内容 | 数量（shipped） |
 |---|---|---|
-| `assets/data/biomes/*.json` | 生物群系 | 4 |
-| `assets/data/blocks/*.json` | 方块（含 3 个流体参考块 water/lava/honey） | 72 |
-| `assets/data/items/*.json` | 显式物品（工具/材料；block 物品无独立 JSON） | 79 |
-| `assets/data/recipes/*.json` | 配方 | 66 |
-| `assets/data/mobs/*.json` | Mob | 6 |
+| `assets/data/biomes/*.json` | 生物群系（含 4 群系：V2-16 snowy_taiga 入列） | 4 |
+| `assets/data/blocks/*.json` | 方块（含 3 个流体参考块 water/lava/honey；V2-7 planks/gold·diamond_block + V2-12 附魔台/书架 + V2-13 床 15 + V2-16 snow） | 93 |
+| `assets/data/items/*.json` | 显式物品（工具/材料；block 物品无独立 JSON；V2-5 pork/cooked_pork/string + V2-15 shears） | 83 |
+| `assets/data/recipes/*.json` | 配方（shaped 52 / shapeless 34） | 86 |
+| `assets/data/mobs/*.json` | Mob（V2-5 pig + V2-14 bat 入列） | 8 |
 | `assets/data/effects/*.json` | 状态效果 | 11 |
+| `assets/data/enchantments/*.json` | 附魔【V2-12，数据驱动新面】 | 7 |
 | `assets/data/worldgen.json` | 世界生成参数 | 1 |
 | `assets/data/mob_spawning.json` | 生成节奏/环/上限/名单 | 1 |
 | `assets/data/hotbar.json` | 初始热栏 + 隐藏 starter 槽 | 1 |
@@ -30,10 +38,13 @@
 校验策略（三条纪律，与代码一致）：
 
 1. **用户数据文件**：顶层未知键**警告但不拒**（前向兼容，block/item/mob/
-   recipe/biome 同款）；但**严格子对象**（`chance_drop`/`tree`/`water_reaction`/
-   `model`（物品）/`swings`/`arrow_effect`/`on_hit_effect`/效果字段白名单/
-   `tier_steps`/`tint`/`lava_lakes[i]` 等）未知键**点名拒绝**（ammo 纪律：
-   显式空串/显式 0/缺配对键 = no-op 笔误，点名拒）。
+   recipe/biome/附魔【V2-12】同款——附魔文件的**字段值纪律**严格：未知
+   effect/class、倒置/重叠 eCost 区间、零权重、未知 incompatible 全点名
+   拒）；但**严格子对象**（`chance_drop`/`tree`（biome 段与 sapling 段
+   同款）/`water_reaction`/`model`（物品）/`swings`/`arrow_effect`/
+   `on_hit_effect`/效果字段白名单/`tier_steps`/`tint`/`lava_lakes[i]`/
+   `wool_weights[i]`【V2-15】等）未知键**点名拒绝**（ammo 纪律：显式空串/
+   显式 0/缺配对键 = no-op 笔误，点名拒）。
 2. **init 交叉校验**（游戏启动，`src/core/game.cpp`）：跨文件引用逐条点名
    （grows_to/ammo/drops/beacon_effects/声音材质 3 件/model 纹理文件/
    挤奶双物品/染色全家族 等）。
@@ -101,7 +112,9 @@ P45 已有）。装饰块建议用可穿过的十字植物（花）或低硬度�
 shipped 4 群系：desert（w2, sand/sand depth 4, tree 0, hs 0.9, cactus
 0.03）/ forest（w4, grass/dirt 3, tree 0.12, hs 1.1, 三花 0.012）/
 plains（w4, grass/dirt 3, tree 0.03, hs 1.0, 三花 0.02）/ snowy_taiga
-（w2【V2-16】, snow/dirt 3, tree_density 0.12, hs 1.1, 无装饰,
+（w2【V2-16】, surface = **snow 满块**（hardness 0.1 MC 精确 / 新
+"snow" 三件音族 / drops 自身 / opaque；MC 1-8 层雪层机制 = 满块替代
+记档偏离）/ dirt 3, tree_density 0.12, hs 1.1, 无装饰,
 **tree = spruce 6-8 高锥冠** {trunk spruce_trunk / leaves
 spruce_leaves / min_height 6 / height_range 3 / leaf_radius 2 / shape
 spruce}, **exclude_spawn_area true**）。群系选择噪声 =
@@ -199,10 +212,15 @@ stone（不破坏洞穴 = 洞壁矿暴露），跨 chunk 无缝（世界坐标�
 ### trees（野生树）
 
 `lattice` ∈ [1, 16]（4）、`trunk`/`leaves`（"wood"/"leaves"，init 解析）、
-`min_height` ∈ [1, 16]（4）、`height_range` ∈ [0, 16]（3）。野生树 = 单橡
-种（sapling stateful ⇒ worldgen 放置源 init 不变量天然拒多树种，见方块节
-ENT-2 约束）；`[GEN-5]` 表面格被洞吃 = 整棵树跳过（守卫在 placeTrees）；
-`[GEN-6]` cz≥cx+1 对角半区缺失已修（修复后两半区都种，内容无需动作）。
+`min_height` ∈ [1, 16]（4）、`height_range` ∈ [0, 16]（3）。野生树 = 默认
+单橡种（本段全局值）；**带 `tree` 字段的 biome 走 planTree 针叶路径**
+（V2-16：同一 `trees.lattice` 格网 + 同 h 密度门/高度位，冠层 =
+`planTree(height, spec)` 逐格 placeIfAir，shipped snowy_taiga = spruce；
+**无 `tree` 的 biome = 原硬编码 oak 路径零触碰**，既有群系位级红线，
+见 biome 节）；sapling stateful ⇒ worldgen 放置源 init 不变量天然拒
+stateful 块（见方块节 ENT-2 约束）；`[GEN-5]` 表面格被洞吃 = 整棵树
+跳过（守卫在 placeTrees）；`[GEN-6]` cz≥cx+1 对角半区缺失已修（修复后
+两半区都种，内容无需动作）。
 
 ### lava_lakes（固定熔岩湖，P86 单湖 → P88 列表）
 
@@ -311,12 +329,14 @@ their block"（CRAFT-6）**：每个数据方块隐式生成同名 block item（
 | `attack_damage` | 数字 (0, 100] | 1.0 | P20 挥击伤害 |
 | `shoot_speed` / `shoot_damage` | (0, 100] / [0, 100] | 0 / 0 | P21/P79：shoot_speed > 0 = 投射物发射器（弓）；拉弓释放按蓄力缩放速度/伤害（core/bow.hpp） |
 | `ammo` | 非空物品名 | 无 | P24：发射消耗 1（init 存在性）；显式空串拒 |
-| `infinite` | 严格 bool | false | P77：要求 `ammo` 非空（无 ammo 发射器本就无限 = no-op 拒）；发射**不消耗**但须持有 ≥1 ammo（MC Infinity） |
+| `infinite` | 严格 bool | false | P77：要求 `ammo` 非空（无 ammo 发射器本就无限 = no-op 拒）；发射**不消耗**但须持有 ≥1 ammo（MC Infinity）；∨ 附魔 `infinite`（V2-12：附魔在则同款免末支） |
+| `shears` | 严格 bool | false | V2-15：剪毛旗（**仅 tool 可携**，非 tool 点名拒 = armor_slot 双生纪律）；手持右键 `wool_drops` mob = 剪毛（每次成功磨损 1，bare no-op，见 Mob 节染色羊） |
 | `arrow_effect` | `{name, duration, tier?}` 严格（未知键点名；duration > 0；tier 整数 ≥0 可选） | 无 | SURV-5：**发射器**箭矢命中施加的效果（poison_bow `{poison, 60}`）；要求 shoot_speed > 0；init：效果存在 **且 `affects_mobs`**（弓箭只命中 mob）+ tier < tier_max |
 | `restore_hunger` | 整数 [1, 20] | 0 = 非食物 | P23：存在 = 食物（右键按住 eat 通道，1.6 s real-dt）；显式 0 拒 |
 | `saturation` | 数字 [0, 20]，**须配 restore_hunger**（非食物带 = 死字段点名拒） | 旧 2× 规则（`foodSatiety` 纯函数位级复现） | SURV-9 食物饱和度（shipped 10 食物 MC 精确值：rotten 0.8 / 生肉 1.2-1.8 / 熟肉 7.2-12.8 / bread 6.0 / apple 2.4 / golden 9.0） |
 | `smeltable_to` | 非空物品名 | 无 | P40/CRAFT-6：炉子产物（init 存在性）；存在 = 可熔炼 |
 | `smelt_time` | 数字 (0, 100] | 10 | 单格熔炼秒数 |
+| `smelt_xp` | 整数 [0, 9] | **1** | V2-11 XP：熔炼完成该物品发该值经验球（默认 1 统一 = MC 分数表记档偏离；**显式 0 = 无球**是合法数据声明——与 fuel_time 显式 0 拒相反）；>9 点名拒（球值上限，无分裂机制） |
 | `fuel_time` | 数字 (0, 1000]，显式 0 拒 | 0 = 非燃料 | 单格燃料燃烧秒数（shipped：coal 80 / planks 7.5 / stick 5 / lava_bucket 1000） |
 | `drink_time` | 数字 (0, 10] | 0 = 不可饮 | P43/SURV-4：饮用通道秒数；**与食物互斥**（同写 = 拒，通道所有权） |
 | `returns_item` | 非空物品名，**须配 drink_time** | 无 | 喝完返还的容器（init 存在性） |
@@ -327,16 +347,24 @@ their block"（CRAFT-6）**：每个数据方块隐式生成同名 block item（
 | `ignites_flamable` | 严格 bool | false | P60：点燃器——右键烧 `flamable` 块（**无掉落、不消耗**；成功点燃磨损 +1 = SURV-3）；与五个右键通道互斥（food/drink/launcher/dye/bucket，逐对点名）；**营火分支先于点火器**（P76：燧石与钢对未点燃营火 = 再点燃而非烧掉） |
 | `dye_color` | 非空颜色名 | 无 | P41/P45：颜色词汇表 = 纯数据（见染料节） |
 | `armor_slot` + `armor_points` | "head"/"chest"/"legs"/"feet" + 整数 [0, 20]，**严格配对**（缺一拒；tool 带 = 拒） | 无 | SURV-1：护甲件（右键穿戴/交换/脱下通道，点火器之后、潜行旋转之前）；减伤 = `floor(amount × (100 − 4 × 总点)) / 100`（次序 armor → resistance → 吸收池，pts 0 位级恒等） |
+| `enchant_class` + `enchantability` | 词汇名（sword/axe/pick/shovel/armor/bow/hoe）+ 整数 ≥ 0，**严格配对**（缺一拒、未知类点名） | 无 | V2-12：可附魔（类须与附魔 `classes` 匹配，见附魔节）；shipped 22 件 = 工具 9（wood 15 / stone 5 / iron 14）+ 护甲 12（leather 15 / iron 9 / diamond 10）+ bow 1（仅基础 bow，变体弓保持替身定位） |
+| `enchant_material` | 严格 bool | false | V2-12：附魔台青金石槽数据驱动门（**仅 material 可携**，tool 点名拒）。shipped = lapis true |
 | `durability` | 数字 > 0，显式 0 拒 | 0 = 无耐久 | SURV-3：**允许集 = 工具 / 护甲 / ammo 发射器 / 点火器**（其余物品带 = no-op 点名拒）。shipped MC 精确值：wood 59 / stone 131 / iron 250（镐斧锹）、弓族 384、燧石 64、护甲 leather 55/80/75/65 / iron 165/240/225/195 / diamond 363/528/495/429。五类帧锁定磨损：破非瞬断块 +1 / 镐斧锹打 mob +2 / 射出 +1（含 infinite）/ 点燃 +1 / 护甲每次实际减伤事件 −max(1, incoming/4)（溺水 bypass 不磨损）。**无修复系统**（KNOWN_ISSUES） |
-| `model` | `{texture, elements[1..16]}` 严格（内部未知键点名拒） | 无 | CRAFT-2：物品 3D 模型——单纹理（`assets/textures/items/<texture>.png`，init 文件存在性，**惯例 = 复用既有 icon PNG**）+ 轴对齐盒 1..16：每盒 `{from[3], to[3], uv[4]?}`，from/to ∈ [0,1]³ 且逐轴 from < to，uv ∈ [0,1]⁴ 且 u0<u1, v0<v1（退化矩形拒）。单位空间居中 −0.5..0.5；无 model = 三上下文（手持/掉落/进食举到嘴）位级不变。ENT-9 后 shipped 全部 79 件非 block 物品**都有** model（= 掉落可见，纯内容） |
+| `model` | `{texture, elements[1..16]}` 严格（内部未知键点名拒） | 无 | CRAFT-2：物品 3D 模型——单纹理（`assets/textures/items/<texture>.png`，init 文件存在性，**惯例 = 复用既有 icon PNG**）+ 轴对齐盒 1..16：每盒 `{from[3], to[3], uv[4]?}`，from/to ∈ [0,1]³ 且逐轴 from < to，uv ∈ [0,1]⁴ 且 u0<u1, v0<v1（退化矩形拒）。单位空间居中 −0.5..0.5；无 model = 三上下文（手持/掉落/进食举到嘴）位级不变。ENT-9 后 shipped 全部 83 件非 block 物品**都有** model（= 掉落可见，纯内容） |
 | `max_stack` | 整数 [1, 64] | 64 | |
 | `icon` | 非空字符串 | 不画图标 | `assets/textures/items/<icon>.png`（32×32 RGBA；文件缺失 = init 报错；可多物品共享同一文件） |
 
 **右键通道顺序**（锁定时命中方块，自上而下，先消费者独占点击）：
 ① 营火（interact = campfire，烤槽放/取 = MC 先于进食）→ ② eat →
-③ drink → ④ milk（挤奶）→ ⑤ interact（crafting_table/furnace 面板）→
+③ drink → ④ milk（挤奶）→ ⑤ interact（crafting_table/furnace/
+**enchant** 面板）→ **⑤b 床睡眠**（V2-13：插入面板分支后、染色前——
+命中 dye_base bed 族且非持染料；持染料落回染色路径，见床节）→
 ⑥ 染色 → ⑦ 流体桶 → ⑧ 点火器 → ⑨ 护甲（穿戴/交换/脱下）→
-⑩ 潜行旋转 stateful 块（ENT-2）→ ⑪ placeBlock（含 plant_on 门）。
+⑩ 潜行旋转 stateful 块（ENT-2；Slab 形排除 = V2-17）→
+⑪ placeBlock（含 plant_on 门；slab 三态放置瞄准 + 同格合并，见方块节）。
+**命中 mob 路径**（targetMob，全数据旗判据无物种 switch）：tryMilk →
+**tryShear**（V2-15：shears 旗 × wool_drops 旗 × !bare）→ **tryDyeMob**
+（V2-15：dyeColor × wool_drops × !bare）。
 **一个物品只拥有一个通道** = 解析期逐对互斥纪律的根源。
 
 物品图标 = 每物品独立 PNG（无 atlas）；block 物品 UI 以 3D 立方/shape
@@ -357,18 +385,22 @@ their block"（CRAFT-6）**：每个数据方块隐式生成同名 block item（
 |---|---|---|---|
 | `solid` / `opaque` / `transparent` | bool | true / true / false | opaque+transparent 同写 = 拒 |
 | `cutout` | 严格 bool | false | PRE-5：alpha cutout 渲染段（discard + 写深度）——叶冠孔/fire 缝/glass 框透见修复。**cutout=true 须 transparent=true**（缺 transparent = 矛盾拒）；**shape 门控：仅 full-cube / cross 可带**（其余 shape = 死字段 init 点名拒；流体同拒）。shipped 20 块 = 3 叶 + 3 花 + 7 麦 + 3 苗 + fire + torch + 2 营火 |
+| `cull_same_id` | 严格 bool | false | V2-10：叶子-叶子内部面剔除——mesher greedy pass 在同 id 相邻格之间剔面（纹理选择前），叶冠内部双绘止；无 init 交叉检（mesher 读属性 + 邻居 block id，两者皆注册表数据）。shipped = leaves 族 3 块（leaves/spruce_leaves/birch_leaves），glass/水/cross 族红线零触碰 |
 | `destroyable` | bool | true | false = 不可破坏（bedrock/流体） |
 | `flamable` | 严格 bool | false | P58/P63：熔岩 6-邻燃烧 pass + 点火器目标（烧成 fire 块、**无掉落**）；**registry 有任何 flamable 块 ⇒ 必须有 `fire` 块**（init 点名） |
 | `beacon_base` | bool | false | P83：信标金字塔基座（连续完整层 3×3/5×5/7×7/9×9 = 等级 1..4，每帧重算） |
+| `enchant_bookshelf` | bool | false | V2-12：附魔台书架环计数数据旗（纯数据旗，beacon_base 双生——核心读属性不读块 id，硬规则 3）；**仅面板打开时求值**（无面板 = 零成本）。shipped = bookshelf true |
 | `fluid` | 字符串 | 无 | 流体参考块：词汇表 **water / lava / honey**（FLUID-6，其他名拒）。其纹理点亮流体面、`light_emission` = 该种类格光（lava 15；honey 无）。shipped 3 参考块均 solid=false/opaque=false/transparent=true/destroyable=false |
 | `hardness` | 数字 ≥ 0 | 1.0 | 破坏耗时 = 1.5 s × hardness ÷ 选中物品有效速度；≤0 且可破坏 = 即时 |
 | `light_emission` | 整数 [0, 15] | 0 | 发光（torch 14 / lava·glowstone·fire·campfire 15） |
 | `light_opacity` | 整数 [0, 15] | **由 opaque 派生**：opaque→15 / 非 opaque→0（LGT-2：缺省 = 未设字段块逐位复现旧行为；显式值覆盖派生） | 光**进入**该格每格扣减（MC 同款刻度）：15 = 全挡、0 = air 同款、中间 = 每层扣 N。shipped：leaves 族 2 / glass 1 / slab·stairs×4·wall·fence 0（LGT-5 半块透光）。**流体格不读本字段**（固定 3/格 = P51 简化）；cross/glass_pane 禁 15（init 点名） |
 | `drops` | 物品名（`""` = 不掉落，如 glass） | 空 = 不掉落 | init 对 ItemRegistry 存在性（点名） |
 | `drops_count` | 整数 [1, 64] | 1 | 单次破坏数量；须 ≤ 掉落物 max_stack（init）；无 drops 却给 = 拒 |
+| `drops_count_by_state` | 整数数组（元素 [1, 64]），**须配 `model.state_count` 且长度 == state_count** | 无 | V2-17：per-state 破坏主掉落数（双 slab 破坏掉 2 = MC 材质守恒）；无显式 state_count 的块携带（含 stairs 隐式状态）= 死数据点名拒；零数组/非整/长度不配全点名；game_init per-state 数 ≤ 掉落物 max_stack 交叉检。shipped = stone_slab [1,1,2] |
+| `mine_xp` | 整数 [0, 9] | 0 | V2-11 XP：挖掘完成发该值经验球（0 = 无球）；非整/负/>9 点名拒（球值上限，无分裂机制）。shipped = coal_ore 1 / diamond_ore 5 / iron_ore 0 / gold_ore 0（现代 MC 1.17 raw 化值 = 定案：铁金矿挖掘无 XP） |
 | `chance_drop` | `{item, count, chance}` **严格三元组**（未知键点名） | 无 | P49：概率次级掉落，与 `drops` 独立（一次破坏最多两个掉落实体）；count [1,64]、chance (0,1]（1 = 保底）；init item 存在 + count ≤ max_stack；**确定性 roll** `rollChanceDrop(world_seed, x, y, z, chance)`（splitmix64 + 位置 hash3 + 专用 salt 纯函数 = 同世界同格每次破坏同果，无 per-instance RNG） |
 | `chance_drops` | 同款三元组**数组**（非空、逐条目点名） | 无 | P52：每条目**独立 roll**（条目索引去相关 salt——同格各条目互不追踪、也不追踪单条目 roll）；**与 chance_drop 互斥**（同写拒）。shipped：grass [wheat_1×1@0.125] / leaves [stick×1@0.02, apple×1@1/128, **oak_sapling×1@0.05**（GEN-2 种植闭环）] / spruce·birch_leaves [对应 sapling@0.05, stick@0.02] / lapis_ore·glowstone [drops_count 2 + 两个 50% 条目 = 2..4 均匀] |
-| `interact` | 字符串 | 无 | **词汇表 = crafting_table / furnace / campfire**（其他值 = 启动报错点名）：右键命中打开对应面板/交互而非放置 |
+| `interact` | 字符串 | 无 | **词汇表 = crafting_table / furnace / campfire / enchant**（其他值 = 启动报错点名）：右键命中打开对应面板/交互而非放置（enchant = V2-12 附魔台，开 EnchantUI 面板，见附魔节） |
 | `dye_base` + `dye_color` | 非空字符串，dye_color 须配 dye_base | 无 | P41 染色家族（见染料节）；dye_base 与 interact 互斥 |
 | `beacon_effect` / `beacon_effects` | 非空效果名 / 非空效果名数组（逐条目点名） | 无 | P83/P91：信标施加的效果——**两字段互斥**（同写拒）；单值 = 1 元素列表向后兼容；init 逐条目存在性（grows_to 纪律）；每帧在范围内刷新（0.5 s 周期，火源范式）。shipped beacon = `["absorption", "speed"]` |
 | `fuel_time` / `smeltable_to` | 数字 (0,1000]（显式 0 拒）/ 非空物品名（显式空串拒） | 无 | CRAFT-6：block item 继承（木 20 s 燃料 / sand→glass / lava_bucket 1000 s 走物品侧） |
@@ -393,7 +425,7 @@ cross / wall / fence / glass_pane**（其他值点名拒）。纹理键纪律按
 | shape | 纹理键 | 属性强制 | 说明 |
 |---|---|---|---|
 | full_cube（缺省） | `top`+`side`+`bottom` 三键必填（给 `cross` 键 = 拒） | — | 整格实心（高度感知碰撞自 P85 起对满块恒 1.0 位级不变） |
-| slab | 同上三键 | — | P85 底部半盒（实心区 [y, y+0.5]） |
+| slab | 同上三键 | — | P85 底部半盒（实心区 [y, y+0.5]）；V2-17 三态（stone_slab state_count 3，见下状态段）；床 15 块 = Slab 形无 state【V2-13，单格适配 MC 1×2 记档偏离】 |
 | stairs | 同上三键 + 可选 `stair_facing` 整数 [0,3]（0 北/1 东/2 南/3 西） | — | P87/P89 楔形；**隐式 per-instance 状态（count 4，default = stair_facing）**；P97 放置自动朝向（低端朝玩家视线，`stairFacingFromYaw` 纯函数）；斜面碰撞按 AABB 覆盖最高斜面点 |
 | cross | **仅 `cross` 单键**（top/side/bottom = 拒） | 强制 solid=false, opaque=false, transparent=true, light_opacity≠15（属性给错 = 拒） | P45 两条交叉竖直面片（混合 pass、双面、自身格光） |
 | wall | 同上三键 | — | P95 1.5 格高柱 barrier（不能穿过也不能跳过）；P96 墙-墙共享侧面剔除 + 墙-满块帽带 |
@@ -417,13 +449,37 @@ trunk/leaves——init 交叉校验点名：per-instance 状态没有 worldgen �
 （atlas 空位 [9,4] 免重锚 + 同 salt 暗化 0.72×）。**零 format**（湿态 =
 世界派生量）。
 
+**slab 三态**（V2-17，stone_slab 首消费，**零 format bump**——states =
+format 15 机制，无 state → 有 state = 同数组新条目）：`state_count 3` +
+`state_default 0`（0 = 底部 slab [y, y+0.5] 既有位级 / 1 = 顶部 slab
+[y+0.5, y+1] / 2 = 双 slab 满格）+ properties `drops_count_by_state
+[1,1,2]`。放置瞄准规则 = `slabStateFromHit` 纯函数（手持 slab 物品 =
+shape Slab ∧ hasState 数据旗：命中点 = eye + forward × distance——
+**顶面 → 0** = 现行为位级根 / **底面 → 1** = 天花板贴放 / **侧面
+local-y > 0.5 → 1 否则 0**，0.5 严格不等式 kSlabHalf 单常量，MC 精确）；
+**同格同 id 互补 state 放置 = 合并双 slab**（消耗 1 = 材质守恒；仅绕过
+canPlaceAt solid 拒、保 Y 范围 + 玩家重叠检查、跳 canPlantAt）；**破坏
+per-state count**（双 slab → 2 件）；**蹲旋转 Slab 形排除**（state = 垂直
+位非朝向，环转 2→0 销毁半块材质不守恒 = 记档偏离；台阶朝向环不受影响）。
+solidRange 物理扩展 0→{0,0.5} / 1→{0.5,1} / ≥2→{0,1}（顶 slab 顶面恰
+1.0 可踏升 = MC 同款；床/stairs/wall/fence/玻璃板/满块现值逐位不变
+红线；mob 生成 spawnFloorTop 纯函数同款消费）。raycast **partial-aware**
+（slab 格自空气半入格 = 穿透、内表面 y=0.5 交点命中 ±Y 法线；块射线 5
+消费点 + 桶 ×2 + 骨架 LOS + 第三人称遮挡共享一致零特判；非 slab 格位级
+不变；**记档行为变更** = 瞄准底 slab 空气半破身后块，MC 同款）。床 15
+块 Slab 形无 state_count = hasState false 位级不变（门 = hasState() 非
+shape）。**stateful 块存档场景须配 `states` journal 条目**（init 双向
+交叉检点名拒 = 输入静默丢失，PITS 383①）。
+
 ### init 交叉校验清单（启动即查，报错点名）
 
 drops / chance_drop(s) 每条目 / grows_to / grows_on / plant_on 每条目 /
 ignites_to / stair_rotates_to / water_reaction 两名 / tree.trunk+leaves /
-beacon_effects 每条目 / sound_material 3 件 wav / 流体块 fluid 名词汇表 /
-dye 全家族（每色染料存在 + 每 (base, 色) 变体存在）/ 有 flamable ⇒ 有
-fire 块 / 图集 tile 存在（含 moisture_top）。
+beacon_effects 每条目 / drops_count_by_state（长度 == state_count + 每
+state ≤ 掉落物 max_stack）/ sound_material 3 件 wav / 流体块 fluid 名
+词汇表 / dye 全家族（每色染料存在 + 每 (base, 色) 变体存在——现 = wool
+15 + bed 15【V2-13 第二染色族】）/ 有 flamable ⇒ 有 fire 块 / 图集 tile
+存在（含 moisture_top）。
 
 ## 新增一个配方（无需改核心代码）
 
@@ -459,16 +515,80 @@ pattern 偏移扫描（任意左上偏移放进网格、空格对应格必须为
 
 **游戏内呈现**：`E` 背包面板右侧 = **shapeless** 配方列（可合成白色、
 不可合成灰色，点击行执行 craft）；放置并右键工作台 = 3×3 面板，右侧
-**shaped 配方提示列（CRAFT-4，两列排布**——34 个 shipped shaped 配方单列
-拟合因子 0.34 不可用），每行 = mini 3×3 pattern（暗格 + 键位物品图标，
+**shaped 配方提示列（CRAFT-4，两列排布**——CRAFT-4 时 34 个 shipped shaped
+配方单列拟合因子 0.34 不可用），每行 = mini 3×3 pattern（暗格 + 键位物品图标，
 按定义左上对齐 = 合法摆放）+ 输出图标 + "name xN"（`canSupply(patternBag)`
 纯函数着色）；**提示行点击 = 消费性 no-op**（不合成不动背包，吞点击 ≠
-槽外点击丢 carry）。当前 shipped 66 条（shaped 34 / shapeless 32）：
-方块/材料/杂项 24（planks/stick/stone/sandstone/smooth_sandstone/
-iron_block/torch/farmland/bucket/glass_pane/fence/stone_slab/stone_wall/
+槽外点击丢 carry）。当前 shipped 86 条（shaped 52 / shapeless 34）：
+方块/材料/杂项 44（planks/stick/stone/sandstone/smooth_sandstone/
+iron_block/gold_block/diamond_block【V2-7：9 锭方块，iron_block
+先例】/torch/farmland/bucket/glass_pane/fence/stone_slab/stone_wall/
 楼梯 4/crafting_table/**furnace【v1.34.0：8 cobblestone 围圈 = MC 摆法，
 补齐 Phase 40 起炉子无获取途径的内容缺口】*/arrow/bread/campfire/
-flint_and_steel/golden_apple）+ 工具 9 + 弓 6 + 护甲 12 + 染料 15。
+flint_and_steel/golden_apple/**bed 15【V2-13：shaped 3 同色 wool + 3
+planks = MC 精确】/**enchanting_table（shapeless 4 obsidian + 2 diamond
++ 3 lapis）+ bookshelf（shaped PPP/LLL/PPP）【V2-12：均 lapis 代 book
+偏离】/**shears【V2-15：shapeless 2 iron_ingot】）+ 工具 9 + 弓 6 +
+护甲 12 + 染料 15。
+
+## 新增一个附魔（无需改核心代码，V2-12）
+
+`assets/data/enchantments/<id>.json`——数据驱动新面（目录按名排序装载，
+`EnchantmentRegistry` init 注册；**字段值纪律严格**：未知 effect/class、
+倒置/重叠 eCost 区间、零权重、未知 incompatible 全点名拒）：
+
+| 字段 | 类型 / 范围 | 说明 |
+|---|---|---|
+| `id` | 非空串，唯一 | 注册表键（存档 `enchants` 交叉校验词表） |
+| `name` | 非空串 | 显示名（面板 offer 行「名 罗马 成本」） |
+| `effect` | 字符串，词汇表 {sharpness, protection, efficiency, unbreaking, power, speed, infinite} | 代码枚举（grants_effects 先例：数据点名、核心读枚举，不读内容 id） |
+| `classes` | 非空数组，词汇表 {sword, axe, pick, shovel, armor, bow, hoe} | 适用物品类（对物品 `enchant_class` 匹配） |
+| `weight` | 整数 ≥ 1 | offer 选择权重（零/负 = pick 破坏，拒） |
+| `ecost` | `[min, max]` 整数对数组，非空 | **每级一条区间**（max = 区间数）；min ≥ 1 / min ≤ max / 区间须连续升序（后段 min > 前段 max，levelForCost 最高段走查定义所系）——逐条点名 `ecost[i]` |
+| `incompatible` | 可选，已注册 id 数组 | 互斥对（双向查）；shipped 7 项无对；typo = 点名拒（drops 纪律） |
+
+**shipped 7 附魔**（区间 + 权重 MC 精确，11-04 wiki 核定入档）：
+
+| id | 名 | classes | weight | max | eCost 区间 | 效果 |
+|---|---|---|---|---|---|---|
+| sharpness | 锋利 | axe | 10 | 5 | 1–11/12–22/23–33/34–44/45–65 | 近战 +（L+1）点 |
+| protection | 保护 | armor | 10 | 4 | 5–12/13–20/21–28/29–37 | +4L 护甲点（共享 20 点 cap 偏离：MC 保护独立 + 总 80%） |
+| efficiency | 效率 | pick/shovel/axe | 10 | 5 | 1–10/11–20/21–30/31–40/41–91 | 正确工具（block ∈ fast_against 门）breakSpeed +（1+L²） |
+| unbreaking | 耐久 | axe/pick/shovel/armor/bow | 5 | 3 | 5–12/13–20/21–71 | 每损点掷骰跳过（工具 L/(L+1) / 护甲 2L/5(L+1) = MC 1.21 remove_binomial 精确，状态 = 伤害史确定性，无帧依赖） |
+| power | 力量 | bow | 10 | 5 | 1–10/11–20/21–30/31–40/41–56 | shoot_damage +L |
+| speed | 速度 | bow | 10 | 3 | 12–31/32–50/51–91 | shoot_speed +L（记档偏离：MC Quick Charge = 蓄力时间，项目 = 弹速范式） |
+| infinite | 无限 | bow | 1 | 1 | 20–50 | 发射不耗尽最后一支（∨ 物品 `infinite` 字段） |
+
+**附魔台 / 书架（2 块 2 配方）**：
+- `enchanting_table`：hardness 5 / light_emission 7 / `interact: "enchant"`
+  （RMB 开 EnchantUI 面板）/ drops 自身【记档偏离：MC 镐门】/ **full_cube**
+  【记档偏离：设计 3/4 盒触 mesher + 碰撞红线，定案全盒】/ stone 音族。
+- `bookshelf`：hardness 1.5 / `enchant_bookshelf: true` 数据旗 / full_cube /
+  wood 音族。
+- 配方：台 = shapeless 4 obsidian + 2 diamond + 3 lapis；书架 = shaped
+  PPP/LLL/PPP（**均 lapis 代 book = 记档偏离**，项目无纸/书链）。
+
+**确定性 offer**（core/enchanting 纯函数，**全整式禁 double** = -O3 融合
+风险，PITS 30 单推进流纪律）：种子 = worldSeed ^ hash3(台位) ^
+enchantability ^ xp_seed（player 存档键，成功附魔后推进）；xpBase/三槽
+成本/lapis 1-3（均匀 = 记档偏离）/eCost 含 randTri 整式/选择循环（候选 =
+类匹配 ∧ eCost 入区间取最高级 → 权重 pick → incompatible 移除 → 继续 =
+v%(eCost+150)<150 → eCost/=2 回环）= MC 精确；bookshelfCount = 5×5 环 ×2
+层 cap 15（**无 MC 视线规则** = 记档偏离），**仅面板打开时求值**（无面板
+零成本 = 结构免疫根）。XP 扣减 = 扣整级、条内余量保留（T(L−c) +
+pool−T(L) 整数精确）。
+
+**物品侧**（见物品字段表 `enchant_class`/`enchantability`/
+`enchant_material`）：shipped 22 件可附魔 = 工具 9（wood 15 / stone 5 /
+iron 14）+ 护甲 12（leather 15 / iron 9 / diamond 10）+ bow 1（**仅基础
+bow**，变体弓保持替身定位）；lapis `enchant_material: true` = 青金石槽
+数据驱动门。
+
+**存档**（format 27）：物品 `enchants {id: level}` 三处（inventory 槽 /
+armor 占位槽 / item 实体，omit-when-empty = 无附魔堆栈逐字节旧形）+
+`player.xp_seed` 恒写；载时交叉校验（level > max / 类不兼容 / 未知 id /
+incompatible 对全点名，validateEnchants 与 validateStats 同款）。详见存档
+节。加新附魔 = 1 个 JSON +（如需新效果行为 = 代码枚举扩展，非纯数据）。
 
 ## 新增一个染料 / 染色方块（P41 框架；P45 起颜色零代码）
 
@@ -487,7 +607,7 @@ flint_and_steel/golden_apple）+ 工具 9 + 弓 6 + 护甲 12 + 染料 15。
    `<base>.json` 本身）：`properties` 加 `"dye_base": "<base>",
    "dye_color": "<color>"`（两者必须同时给——dye_color 须配 dye_base；
    dye_base 与 interact 互斥）；纹理 tile 加进 `block_atlas.json` 空位
-   （16×8 网格现 38 空位；**网格扩容 = 移位所有既有 UV → base18 重锚**，
+   （16×8 网格现 6 空位 = (13,6)-(15,7) 区段；**网格扩容 = 移位所有既有 UV → base18 重锚**，
    见纹理纪律节）。
 3. **合成配方** `assets/data/recipes/dye_<color>.json`（shapeless；当前 15 条
    见 GAMEPLAY「染色」；来源块 = 世界内容：lapis 矿脉 / 仙人掌 / 十字花 /
@@ -495,10 +615,51 @@ flint_and_steel/golden_apple）+ 工具 9 + 弓 6 + 护甲 12 + 染料 15。
 4. **init 交叉校验**（启动即查，报错点名）：每个 dyeable 块的 `dye_color`
    必须有同色染料物品；**每个 (dye_base, 已有染料颜色) 组合的变体块必须
    存在**——加新颜色时**所有** dye 家族都要补变体块（当前 = wool 家族
-   15 个）；加新 dye 家族 = 15 个变体块。
+   15 个 + **bed 家族 15 个**【V2-13 第二染色族首消费，见床节】）；加新
+   dye 家族 = 15 个变体块。
 
 交互（MECHANICS「染色」）：选中染料右键 dye 家族方块 = 换块 + 消耗 1；
 同色重复不消耗（v1 规则）；染色音效 = cloth.wav。
+
+## 新增一个床（V2-13，15 色染色族先例 + 睡眠三门）
+
+床 = **第二个染色族**（wool 15 色 = 第一族；dye 机制零新代码）：
+- **块 15 件**：`dye_base: bed` + `dye_color` 15 色（wool 同款词表无
+  lime，white = base `bed.json` 无后缀）/ **Slab 半格形**（MC 1×2 两格
+  无项目先例，单格适配 = 记档偏离 1；无 state_count = 恒 state 0 位级
+  不变，见方块节 slab 三态）/ hardness 0.2 MC 精确 / cloth 音族 /
+  drops 自身 / 无 interact（dye_base 互斥，init 点名）。
+- **纹理 15 tile**：`generate_block_textures.py` `make_bed_tile`（彩色
+  毯 = WOOL_PALETTE 同款色 + 头端白枕带，新 salt 985-999，既有零变化
+  md5 实证），atlas 104→119 零移位。
+- **配方 15**：shaped `["   ","WWW","PPP"]`（3 同色 wool + 3 planks =
+  MC 精确）。染色 = Phase 41 机制免费（RMB 持染料于床 = 重染色，落回
+  既有路径；init 染色家族交叉校验自动覆盖 15 变体）。
+- **音**：新 `sleep.wav`（确定性合成，既有 wav 重跑字节不变）。
+
+**睡眠三门**（core/bed 纯函数 + game 薄适配；RMB 链插入面板分支后、
+染色前——命中 `dye_base == bed` 族且非持染料；持染料落回染色路径），
+定案序：
+1. **门 b 距离**：玩家脚心 vs 床格中心 3D ≤ 3.0（MC 精确，平方比较
+   含边界）。
+2. **门 c hostile 盒**：床格中心水平 ±8 / 垂直 +5/−1 闭盒内无
+   hostile（数据旗判据，无物种 switch，spawn 保护同款；被动/掉落物/
+   箭豁免）。
+3. b+c 过 → **设重生点**（床格中心；MC：RMB 恒设点，夜或日）→
+   **门 a 夜窗**：t ∈ [0.55, 1) ∪ [0, 0.05)（kDuskEnd/kDawnStart；
+   MC sky≤11 略窄 = 记档偏离 3）：夜内 = **即时跳夜**
+   （`setTimeOfDay(0.05)` = 06:00 黎明 + 雨/雷 → CLEAR 纯重置 +
+   "sleep" 音空间化于床 + "sleep" 教程词；MC 101-tick 入睡动画不做
+   = 记档偏离 2）/ 夜外 = 仅设点（MC 白天 RMB 语义）。
+   **门 b/c 拒 = 全拒含设点**（记档偏离 6）。
+
+**重生点**（format 28，见存档节）：`player.respawn` int 三元组恒写
+（新档 = 世界出生点 init 写入；format 28 = 本阶段唯一存档变更）。R 键
+重生收口 `Game::respawnPlayer` **验床**（纯函数 `bedRespawnValid`：该位
+任意床族块 + 房间空间【床格支撑豁免，hasRoomAt 先例】→ 床位；否则回退
+世界出生点 + 重新钉位 = 床破坏/堵塞永久回退，MC"仅 respawn 时查"同款）。
+mob 炸床不做（记档偏离 5：项目无爆炸机制，门 c 覆盖主语义）。床不入
+worldgen = 无输入基线结构免疫。
 
 ## 新增一个 Mob（无需改核心代码，Phase 20 起全数据驱动）
 
@@ -506,7 +667,7 @@ flint_and_steel/golden_apple）+ 工具 9 + 弓 6 + 护甲 12 + 染料 15。
    同款：splitmix64 确定性噪声 + 简单五官；box 六面同采一个 tile，-Z 面 =
    正面）。**mob tile 与块 tile 共用同一图集**：在
    `assets/data/textures/block_atlas.json` 的 `tiles` 里给它空位 `[col, row]`
-   （16×8 网格现 38 空位；勿动已有条目）。
+   （16×8 网格现 6 空位 = (13,6)-(15,7) 区段；勿动已有条目）。
 2. `assets/data/mobs/<id>.json` —— mob 定义。`properties`（必填 + 可选）：
 
    | 字段 | 类型 / 范围 | 缺省 | 说明 |
@@ -524,13 +685,24 @@ flint_and_steel/golden_apple）+ 工具 9 + 弓 6 + 护甲 12 + 染料 15。
    | `on_hit_effect` | `{name, duration, tier?}` 严格（duration > 0） | 无 | Phase 46：**近战命中落定**时施加（spider `{poison, 15}`）；init 对 EffectRegistry 存在性 |
    | `milk_with` + `milk_gives` | 非空物品名，**严格成对**（只给一边拒） | 无 | Phase 43/SURV-10：挤奶（cow `bucket → milk_bucket`）——手持 milk_with 右键 = 消耗 1 + 产出 1 + "milk" 音；init 两物品存在；**SURV-10 = MC 5 分钟冷却**（per-mob 帧锁定 18000 帧，冷却中点击照吞但不耗桶不产奶；mob 瞬态 = 冷却从不入档） |
    | `drops` | 数组 `[{item, count}]` 或 `[{item, count_min, count_max}]` | [] = 不掉落 | Phase 28/38：count 整数 [1,64]，或 min/max 整数 [0,64] 成对（0 = 可能不掉）；两形混用/只给一边拒；`drops_count` 旧字段显式拒（迁移防护）；init 每条目 ItemRegistry 存在 + max ≤ max_stack |
+   | `xp` | 整数 [0, 9] | 0 = 无球 | V2-11 XP：击杀掉该值经验球（球值上限，无分裂机制，>9/非整点名拒）。shipped：hostile zombie/skeleton/spider 5 / passive pig/cow/sheep/chicken 2（MC 1-3 中值 = 定案）/ bat 0 |
+   | `flying` | 严格 bool | false | V2-14 飞行（悬停巡航 AI，见下 bat 条；**唯一硬互配：flying ⇒ spawns_in_air**——地面生成的飞行者无意义，点名拒）；absent = pre-V2-14 语义位级不变 |
+   | `spawns_in_air` | 严格 bool | false | V2-14：in-air 生成分支（顶向扫描 + box 全空气无流体 + 光 ≤ spawn_max_light + **跳过 floor 带**（任何 Y = MC）+ 出生位盒底格中心） |
+   | `ambient_sound` + `ambient_interval` | 非空音名 + 数字 > 0，**interval 须配 sound 名**（孤 interval = 死数据点名拒） | 无 | V2-14：氛围音（音名 init file-based 交叉检；每帧 p = 1/(interval×60) 流 roll 空间化，无 ambient mob 流零消费）。shipped = bat squeak / 3.0 |
+   | `wool_drops` + `wool_weights` | 严格 bool + `[{color, weight}]` 数组（color 非空串、weight 整数 [1, 10000]、重名拒、空列表拒，逐条目点名），**严格对**（孤字段点名拒 = milk pair 纪律） | 无 / 无 | V2-15 染色羊（见下）：毛色随实例（出生加权 roll / 剪毛 / 染色 / 死亡彩毛）；color 词表点名拒放 **init 交叉检 `checkWoolDrops`**（解析期无 ItemRegistry 可见 = ammo/milkWith/drops 同款纪律） |
 
    `model`（**严格对象**：未知键点名拒——top-level def 仍警告容忍，
    model 内不容忍，ENT-1 起）：`width`/`height`（>0）+ `boxes` 非空数组
    每盒 `{pos[3], size[3] > 0, texture（atlas tile 名，init 存在性）,
-   name?（部件名，非空、模型内唯一）}`，盒须在 `width × height` AABB 内
-   （bottom-center 原点：x/z ∈ [−w/2, w/2]，y ∈ [0, h]，越界点名）+
-   `swings?`（下）。init 对每个 box texture 交叉校验图集存在。
+   name?（部件名，非空、模型内唯一）, faces?（per-face 纹理覆盖，V2-2）}`，
+   盒须在 `width × height` AABB 内（bottom-center 原点：x/z ∈ [−w/2, w/2]，
+   y ∈ [0, h]，越界点名）+ `swings?`（下）。init 对每个 box texture（含
+   faces 各 tile）交叉校验图集存在。**`faces`（V2-2 per-face 纹理通用
+   能力）**：`{front/back/left/right/top/bottom: atlas tile 名}` 严格对象
+   （front = −Z 面）——未知 face 键 = typo 点名拒、空串/非串拒、**部分键
+   合法**（仅命名面覆盖，其余回落 `texture`）、absent/{} = 单 tile 位级
+   不变。shipped = Steve 玩家模型（ph_face/ph_hair/ph_side/pa_arm/
+   pl_pants/pl_boot）+ pig 头盒 front = pig_face 8×8 脸【首个 mob 消费】。
 
    **`swings`（ENT-1 四肢摆动，纯渲染层）**：数组每条目**严格三元组
    {part, amplitude, group}**（未知键点名拒三级）：`part` = 本模型 box 的
@@ -544,7 +716,8 @@ flint_and_steel/golden_apple）+ 工具 9 + 弓 6 + 护甲 12 + 染料 15。
    穿模谓词 `checkSwingClip` 单测验收：相交体积 ≤ 腿 25%）。shipped：
    chicken 2 腿（0.4，group 0/1 对角）/ cow·sheep 4 腿（0.5，FL+RR = 0、
    FR+RL = 1 = MC 四足对角）/ spider 8 腿（0.45，偶奇行分组，翅不摆）/
-   zombie·skeleton 人形无独立 arm part = 不造几何（记档，99.7 几何重做）。
+   zombie·skeleton 人形无独立 arm part = 不造几何（记档，99.7 几何重做）/
+   bat 双翼（0.9 rad 反相扇翅 = chicken 翅盒不摆先例的反例，V2-14）。
    `config mobs.limb_swing` = false → 全静态（v0.9.0 对照）。
 3. 生成名单：`assets/data/mob_spawning.json`（全数据驱动，严格解析）：
    `check_every_frames` [1, 100000]（shipped 30）/ `first_spawn_frame`
@@ -560,15 +733,51 @@ flint_and_steel/golden_apple）+ 工具 9 + 弓 6 + 护甲 12 + 染料 15。
    spawnProtectionRadius = 1e6，敌对自然生成全拒 + 被动豁免照生 =
    MC 和平核心）。
 
-**shipped 6 mob**（NORMAL 难度基线数据）：zombie（敌对 undead：hp 20 /
-speed 0.8 / detect 16 / range 1.6 / dmg 3 / cd 1.0 / light 7；掉
+**shipped 8 mob**（NORMAL 难度基线数据）：zombie（敌对 undead：hp 20 /
+speed 0.8 / detect 16 / range 1.6 / dmg 3 / cd 1.0 / light 7 / xp 5；掉
 rotten_flesh ×1）/ skeleton（敌对 undead 远攻：hp 20 / shoot_range 14 /
 retreat 3 / shoot_speed 15 / ammo arrow / arrow_effect {wither, 10} /
-light 7；掉 bone 0-2 + arrow ×1）/ spider（敌对：hp 16 / speed 1.0 /
-range 1.6 / dmg 2 / light 7 / on_hit_effect {poison, 15}；无掉落）/
-cow（被动：hp 10 / light 15 / 挤奶；掉 leather + beef）/ sheep（被动：
-hp 8 / light 15；掉 wool + mutton）/ chicken（被动：hp 4 / light 15；
-掉 feather + chicken）。
+light 7 / xp 5；掉 bone 0-2 + arrow ×1）/ spider（敌对：hp 16 / speed 1.0 /
+range 1.6 / dmg 2 / light 7 / on_hit_effect {poison, 15} / xp 5；掉
+string 0-2 + spider_eye 0-2【V2-7 纯收集记档】）/ pig（被动【V2-5】：
+hp 10 / speed 0.6 / light 15 / xp 2；掉 pork 1-2 + leather 0-1；头盒
+faces.front = pig_face 8×8 脸 = V2-2 per-face 首个 mob 消费）/ cow（被动：
+hp 10 / light 15 / xp 2 / 挤奶；掉 leather + beef）/ sheep（被动：
+hp 8 / light 15 / xp 2；掉 wool 1-3 + mutton 1【V2-15，染色机制见下】）
+/ chicken（被动：hp 4 / light 15 / xp 2；掉 feather + chicken）/
+bat（飞行【V2-14，项目首只飞行 mob】：hp 6 / speed 1.0 /
+**light 3**（洞穴语义 MC 精确：夜底光 7 > 3 露天不可生）/ xp 0 / 无掉落
+/ flying + spawns_in_air + ambient squeak 3.0；model **0.9×0.5** 4 box
+身/头/双翼（±0.275 = 0.9 极限）【MC 盒 0.5×0.9 竖薄容不下展翼 AABB =
+记档偏离】+ swings 双翼 0.9 rad 反相扇翅（chicken 翅盒不摆先例的
+反例）；悬停巡航 AI：航向 per-mob 流每 wander_interval 2s 重掷 + 数据
+speed 巡航 / 垂直正弦悬停 0.2×sin(2π·frame/60) 帧锁定（bob 初相构造流
+首抽，flying 才消费）/ 重力关 + 终端豁免 + 流体旁路 / 撞壁 = 下帧航向
+重掷（无寻路 = 记档偏离）/ knockback 0.3s 回巡航；in-air 生成 = 顶向
+扫描 + 跳过 floor 带（任何 Y = MC）；消散 40【MC 32 记档偏离】；
+ambient squeak 每帧 p = 1/(3×60) 流 roll 空间化）。
+
+**染色羊（V2-15，per-entity 变体机制）**：新物品 **shears**（type tool /
+durability 238 MC 精确 / break_speed 2 / `shears: true` 严格 bool 旗，
+**仅 tool 可携**非 tool 点名拒 = armor_slot 双生 / **fast_against 整字段
+省略** = 不加速任何块（空 `[]` 非法既有钉；后果 = SURV-8 错工具 1/10 罚）
+/ 配方 shapeless 2 iron_ingot）。出生毛色 = **per-mob 流首抽加权
+roll**（wool_weights shipped：white 850 / black 80 / gray 30 / brown 30 /
+pink 10——MC biome 表 → 项目单一 temperate 表整数近似 = 记档偏离；非
+wool_drops mob 构造零消费位级红线）；**剪毛**（RMB 链 tryMilk →
+tryShear：shears 旗 × wool_drops 旗 × !bare，全数据旗判据无物种
+switch）= 1-3 彩毛（1 个 ItemEntity 携 roll count）+ bare + **再生
+7200 帧 = 120 s 帧锁定**（MC 吃草门随机 ~12 min，项目无草交互 = 记档
+偏离）+ 磨损 1 + shear 音；bare 再剪 = no-op。**染色**（tryDyeMob：
+手持 dye × wool_drops × **!bare = MC 剪后拒染**）= 变色 + 耗 1 + cloth
+音。**死亡彩毛钩子**（纯函数 `woolDeathDropName`：woolly → 实例色 wool
+变体 / bare → 跳过 / 非 wool 位级不变）。渲染 = **per-entity 变体网格**
+（swingMeshes 范式：body box 纹理 = f(woolColor, bare) 变体键入 per-
+entity 动态网格，懒建 / despawn 释放 / 剪毛染色再生触发重建；
+`withWoolVariantTile` 纯函数仅换 texture 几何位级不变；非 wool mob 静态
+网格零触碰）——15 色毛 **复用 wool 族块 tile**（同 atlas，init 交叉检
+覆盖全 15 色存在性）+ bare = 新 sheep_skin tile【(226,178,164) 肉粉，
+atlas (11,6) 零移位】。零 format（mob 不持久化 = 实例态 session-only）。
 
 **行为面（代码驱动，无数据字段）**：AI 状态机（wander/chase/retreat，
 ENT-6 卡住 0.5 s 进度 <25% → BFS 寻路跟随 + 0.5 s 重规划 + 1 s lost 冷却
@@ -895,10 +1104,12 @@ honey]`——一桶全舀三种类）⇄ `water_bucket` + `lava_bucket` + `honey
    placeTrees 逐格同构**（单测钉死）/ spruce = (T-2,2),(T-1,1),(T,1),
    (T+1,1) 下宽上尖锥 / birch = (T-1,1),(T,1),(T+1,1) 细高小冠；(0,0)
    offset ≤ T-1 跳过（trunk 占位）、半径 2 层圆角。
-5. **worldgen 零触碰**：野外森林保持单橡种（sapling stateful ⇒ worldgen
-   放置源 init 不变量天然拒，多树种野外 = 未来项需重锚）。**[GEN-5]**
-   表面格被洞吃 = 整棵树跳过（悬空树修复，守卫在 placeTrees，跨 chunk
-   纯函数重算 = 整树同生同灭无半截冠）。
+5. **worldgen**：野外森林 = 全局单橡种（无 `tree` 字段的 biome 位级不变）；
+   **V2-16 起 biome `tree` 字段实现按群系野生树种**（snowy_taiga =
+   spruce，planTree 纯函数路径，本节生长机制零改动，见 biome 节）。
+   sapling stateful ⇒ worldgen 放置源 init 不变量天然拒 stateful 块。**
+   [GEN-5]** 表面格被洞吃 = 整棵树跳过（悬空树修复，守卫在 placeTrees，
+   跨 chunk 纯函数重算 = 整树同生同灭无半截冠）。
 6. **atlas 空位**（GEN-2 分配的 9 格，免重锚）：oak_sapling (10,1) /
    spruce_sapling (11,1) / birch_sapling (12,1) / spruce_trunk_side
    (13,1) / spruce_trunk_top (14,1) / birch_trunk_side (10,2) /
@@ -935,13 +1146,16 @@ honey]`——一桶全舀三种类）⇄ `water_bucket` + `lava_bucket` + `honey
    hurt/ui_* 保持 2D 位级不变。**音频不入帧状态**（硬规则 8：截图/存档
    零影响）。
 
-shipped 6 材质 × 3 事件 = 18 wav：stone（硬脆/raw noise/2200 Hz ping）/
+shipped 7 材质 × 3 事件 = 21 wav：stone（硬脆/raw noise/2200 Hz ping）/
 wood（中频腔音）/ gravel（双 noise 层干颗粒）/ sand（double lowpass 低
-shush）/ cloth（最静 rustle）/ glass（1900-3200 Hz 铃音）。32 块赋值：
-stone 8【stone/cobblestone/5 矿脉（coal·iron·gold·diamond·lapis_ore）/
-stone_wall = 矿脉族 MC 语义】/ wood 3【wood + 2 trunk】/ gravel 1 / sand
-3【sand + sandstone 族】/ cloth 15【wool 全染变】/ glass 2；未赋值块 =
-通用回退（obsidian/furnace/铁块/楼梯族等 = 下轮候选记档）。
+shush）/ cloth（最静 rustle）/ glass（1900-3200 Hz 铃音）/
+**snow**【V2-16，sand 族范式一阶更软，确定性合成】。51 块赋值：stone
+9【stone/cobblestone/5 矿脉（coal·iron·gold·diamond·lapis_ore）/
+stone_wall = 矿脉族 MC 语义/**enchanting_table**】/ wood 5【wood +
+2 trunk/**planks**/**bookshelf**】/ gravel 1 / sand 3【sand +
+sandstone 族】/ cloth 30【wool 全染变 15 + **bed 族 15**】/ glass 2 /
+snow 1【snow】；未赋值块 = 通用回退（obsidian/furnace/铁·金·钻石块/
+楼梯族等 = 下轮候选记档）。
 
 ## 调节玩家参数（config/config.json `player.*`）
 
@@ -987,8 +1201,10 @@ fire_duration_seconds ≤ 100。已提交 `config/config.json` 的 player 节 =
 ## 其它游戏设置（config/config.json 全键参考）
 
 **纪律**：`getBool/getString/getDouble/getInt` 读键——缺键 = 代码默认，
-类型失配 = **静默回退默认**（player./save. 两例外 = 严格读取点名，见上
-与存档节）。已提交 `config/config.json`（**用户调值，不还原**）现含：
+类型失配 = **静默回退默认**（player./save. 两例外 + render.weather /
+render.night_sky_level / render.cave_ambient / render.ao 四个严格读键
+= 现严格读取点名，见上、存档节与下表）。已提交 `config/config.json`
+（**用户调值，不还原**）现含：
 window{title/1280×720/fullscreen false}、**ui.scale 1.5**、render{vsync
 true, fps_cap 0}、world{**seed 123456789, view_distance 80,
 day_length_seconds 600**, start_time_of_day 0.25}、player{9 键}、
@@ -1006,6 +1222,10 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
 | `render.drop_light` | bool | **true** | PRE-6 掉落光照（掉落物随世界光，每帧采样中心格） |
 | `render.mob_flames` | bool | **true** | PRE-8 燃烧 mob 余烬（每 36 帧一批，自发光） |
 | `render.furnace_flames` | bool | **true** | CRAFT-5 炉口火焰粒子（燃烧中每 36 帧自炉上格发射） |
+| `render.weather` | bool | **true** | V2-4 雨/雷天气（严格读，非 bool 点名拒；off = 状态机永不运行 + 零雨滴 + 零交互 = v2.3.0 管线位级恒等；推进式流首段恒 CLEAR ≥ 9000 帧 = 150 s → 60 帧无输入基线结构免疫根；流种子 = world seed，雷独立 salt） |
+| `render.night_sky_level` | int | **7**（kNightSkyLevel） | UX-1 深夜天空地板（严格读：absent = 7 位级 v1.34.0；present = 整数 [0, 15]——0 = 全黑夜（ambient 地板随之归零），15 = 无 retreat；非整/越界/非数点名拒） |
+| `render.cave_ambient` | number | **0.03**（kAmbientFloor） | UX-9c 全遮挡 ambient 地板（严格读：absent = 0.03 = pre-UX-9c 管线逐位；present = 有限数 [0, 1]——0 = 洞穴/深水/密封室无残光，1 = 全亮；shader 单消费者） |
+| `render.ao` | bool | **true** | V2-18 AO 环境光遮蔽（严格读 weatherEnabled 范式：非 bool 点名拒；**off = 查询不跑 + greedy 合并键 ao[4] 恒零 + 顶点系数恒 1.0 = pre-V2-19 位级恒等**【门内 off ≡ 旧锚实证】；on = 经典 MC 顶点 AO 4 档 1.0/0.75/0.5/0.3（side1∧side2 双邻特例 = 0.3）× opaque ∧ 高度带闭区间，bake 入既有 sky/block 光 attribute（零 shader / 零顶点格式 15 float / 零新 uniform）；生效面 = greedy 满块（MaskCell 合并键扩 ao[4]，共享边角 AO 异断 run）+ slab 三态 + stairs；**fluid/cross/wall/fence/glass_pane 免 AO**（MC 精确：水面不受 smooth lighting 影响 + 薄几何范围外）；per-draw 光覆盖面（信标光束/掉落/XP 球）AO 消失 = 特效光覆盖优先记档偏离；门 190 重锚 base18 ← 224468 B） |
 | `audio.volume` | number | 0.7 | 种子 config 带出 |
 | `audio.ambience` | bool | **true** | PRE-4 昼夜环境音（cave/day/night 三上下文，每 300 帧纯函数 roll，2D 全局） |
 | `world.seed` | int64 | getter 回落 0（种子 config 生成值 = 123456789） | 已提交 = 123456789；`--seed` 覆盖并写回 |
@@ -1024,7 +1244,7 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
 | `save.auto_save_seconds` | number | **120.0**（代码默认，SAVE-1） | 自动存档节奏（**真实 dt**，`--save` 槽门控）；**严格读取**：缺 = 默认、present 须有限数 ≥ 0（**0 = 关闭**、负数/非有限/非数字点名拒）；成功归零、失败不清零下帧重试；日志 "World auto-saved to" 区别于 F5/退出 "World saved to" |
 | `ui.scale` | number | 1.0 | P34 屏幕空间 UI 缩放，**[1.0, 4.0]** 越界/非数值点名；**已提交 = 1.5（用户调值）**。全部屏幕空间 UI（字体/hotbar/心饥饿带/面板/F3/死亡屏/手持/准星）在 "UI 像素" 空间（窗口逻辑 ÷ scale）正交投影拉伸——世界渲染与截图尺寸不受影响 |
 
-## 使用存档（Phase 13 框架 → format 22）
+## 使用存档（Phase 13 框架 → format 28）
 
 ```bash
 ./build/bin/tokenmine --save myworld        # 首次：新游戏；此后：读档
@@ -1049,16 +1269,21 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
   旧档）。写失败只记 ERROR 日志、退出码仍 0。**三路共用原子写**（同目录
   `.tmp` + flush/close + `rename` POSIX 原子——kill 中途最多留陈旧 tmp，
   失败写永不毁旧档）
-- 存档是机器生成的：字段集由 format 号锁定（**当前 format 22**），加载器
-  对未知字段一律报错（与用户手写数据文件的"警告但容忍"策略相反）
+- 存档是机器生成的：字段集由 format 号锁定（**当前 format 28**），加载器
+  对未知字段一律报错（与用户手写数据文件的"警告但容忍"策略相反）。
+  **25→28 谱系**（一句话）：25 = 教程（V2-3）/ 26 = XP 三向键（player.xp
+  + entities 第二 kind xp）/ 27 = 附魔（player.xp_seed + 物品 enchants）/
+  28 = 床（player.respawn 恒写）；完整 layout 与逐版证据见
+  `docs/archive/v2x/CHANGELOG.md` 各版条目 + `phase-2.x.0.md` 档，不在此
+  重抄全文
 - **PITS**：`--save slot` 第二次运行会加载第一次写的存档（E2E 对跑每拍
   从源副本 `cp` 新鲜存档）
 
-### format 22 完整布局
+### format 28 完整布局
 
 ```json
 {
-  "format": 22,
+  "format": 28,
   "seed": 123456789,
   "time": 0.2541666,
   "player": {
@@ -1070,10 +1295,16 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
     "effects": [ { "name": "speed", "remaining": 12.5, "tier": 1 } ],
     "stats": { "deathCount": 1, "kill.chicken": 3 },
     "armor": { "head": "iron_helmet", "chest": { "item": "leather_chestplate", "damage": 12.5 } },
-    "oxygen": 150
+    "oxygen": 150,
+    "xp": 1395,
+    "xp_seed": "5eed1a2b3c4d5e6f",
+    "respawn": [0, 54, -3]
   },
   "inventory": { "selected": 0,
-                 "slots": [ { "item": "stone", "count": 64 }, { "item": "", "count": 0 } ] },
+                 "slots": [ { "item": "stone", "count": 64 },
+                            { "item": "iron_axe", "count": 1, "damage": 2.0,
+                              "enchants": { "efficiency": 1 } },
+                            { "item": "", "count": 0 } ] },
   "inv_grid": [ { "item": "", "count": 0 } ],
   "furnaces": [ { "pos": [0, 53, 0], "input": { "item": "", "count": 0 },
                  "fuel": { "item": "", "count": 0 }, "output": { "item": "", "count": 0 },
@@ -1083,7 +1314,9 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
   "states": [ { "pos": [0, 54, 0], "state": 2 } ],
   "tables": [ { "pos": [0, 53, 0], "slots": [ { "item": "", "count": 0 } ] } ],
   "entities": [ { "type": "item", "item": "dirt", "count": 1, "damage": 2.0,
-                  "pos": [0.5, 52.5, 0.5], "age": 12.5, "pickup_delay": 0.25 } ],
+                  "pos": [0.5, 52.5, 0.5], "age": 12.5, "pickup_delay": 0.25 },
+                { "type": "xp", "xp": 5, "pos": [1.5, 52.5, 0.5],
+                  "age": 12.5, "pickup_delay": 0.25 } ],
   "blocks": [ [0, 53, 0, "air"] ],
   "fluids": [ [4, 50, 4, 5, "water"] ]
 }
@@ -1092,12 +1325,12 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
 （上方 campfires/inv_grid/tables 数组为示意——实际各恰 4 / 9 / 9 个槽
 条目。顶层各段**恒写**（空 = 空数组/空对象，含 `tables`/`states`/`fires`/
 `campfires`/`furnaces`/`inv_grid`——新格式必键纪律）；player 的
-health/hunger/saturation/absorption/oxygen = 游戏恒有值故实际恒写
-（−1"未指定" = 省略字段，仅老 format 读入语义）。）
+health/hunger/saturation/absorption/oxygen/xp/xp_seed/respawn = 游戏恒有
+值故实际恒写（−1"未指定" = 省略字段，仅老 format 读入语义）。）
 
-**player 段**（键纪律：format 22 必键 = pos/**velocity**/yaw/pitch/health/
-absorption/hunger/saturation/effects/armor/**stats**/**oxygen**；低版本带
-新键 = 版本谎报点名）：
+**player 段**（键纪律：format 28 必键 = pos/**velocity**/yaw/pitch/health/
+absorption/hunger/saturation/effects/armor/**stats**/**oxygen**/**xp**
+/**xp_seed**/**respawn**；低版本带新键 = 版本谎报点名）：
 
 | 键 | 引入 | 纪律 |
 |---|---|---|
@@ -1109,11 +1342,16 @@ absorption/hunger/saturation/effects/armor/**stats**/**oxygen**；低版本带
 | `saturation` | 5+ | [0, max_hunger]；format 1-4 读入 = 0 |
 | `effects` | 8+ | **必键**（空数组合法）；名序；`{name, remaining, tier?}`——remaining > 0 秒（real-dt 倒计时；**tick 相位不存** = 读档重启满 interval）；**tier 0 基，仅 >0 时写**（omit-when-default，20+；范围 = 效果 tier_max，点名） |
 | `stats` | 21 | **必键**（空对象合法）；词表**封闭**：`deathCount` + 每注册 mob 一条 `kill.<name>`（非零才存，名序）；未知 `kill.<name>` = game 加载点 validateStats 点名（parseSave 不加 MobRegistry 参 = 184 调用点涟漪，rescan 范式孪生） |
-| `armor` | 16 | **必键**（空对象 = 无甲）；**只含占位槽**、固定槽序 head/chest/legs/feet；值 = 物品名字符串（满耐久保字符串形 = fmt17 逐字节同形）**或** `{item, damage}` 对象（damage > 0，18+）；解析期对 ItemRegistry 校验（物品存在 + 其 armor_slot 匹配键名） |
+| `armor` | 16 | **必键**（空对象 = 无甲）；**只含占位槽**、固定槽序 head/chest/legs/feet；值 = 物品名字符串（满耐久保字符串形 = fmt17 逐字节同形）**或** `{item, damage}` 对象（damage > 0，18+；可携 enchants 27+ 同款）；解析期对 ItemRegistry 校验（物品存在 + 其 armor_slot 匹配键名） |
 | `oxygen` | 17 | **必键**，整数 [0, 150]（kOxygenMax）；drownTicks 不存（读档重启 0——MC 同款记档偏离） |
+| `xp` | 26（V2-11） | **必键**，整数 ≥ 0 **恒写**（累计经验池；HUD 条/等级 = 池派生，**等级永不存储** = 单源真值，core/xp_curve 全整数 MC 现代公式）；pre-26 载 = 迁 0（velocity 零化迁移同款）；≤25 文件携 = 版本谎报点名 |
+| `xp_seed` | 27（V2-12） | **必键**，**16 位小写 hex 串恒写**（附魔 offer 去相关种子；存档 JSON number = double 53 位容不下 64-bit = hex 串记档偏离）；26 载 = worldSeed ^ kXpSeedInit 迁移；pre-27 文件携 = 版本谎报点名 |
+| `respawn` | 28（V2-13） | **必键**，int 三元组 **恒写**（重生点 = 记忆位置的格分量 floor；新档 = 世界出生点 init 写入）；分量非整数 / y ∉ [0,128) 点名拒（x/z 无界）；27 载 = 哨兵 -1 → `applySave` 覆写世界出生点（parse 无法知世界出生点 = game 侧迁移）；pre-28 文件携 = 版本谎报点名 |
 
-**世界段**：`inventory`（27 格 `slots`：{item, count, **damage? >0**} 严格
-白名单——grid 槽不携 damage = 18 范围记档偏离；`selected` 0..8）+
+**世界段**：`inventory`（27 格 `slots`：{item, count, **damage? >0**,
+**enchants? 27+（omit-when-empty，{id: level} 对象，载时交叉校验：未知
+id / level > max / 类不兼容 / incompatible 对全点名**）} 严格白名单——
+grid 槽不携 damage = 18 范围记档偏离；`selected` 0..8）+
 `inv_grid`（E 面板 2×2 的 9 格，恒 9 条目）+ `furnaces`（7+，**每炉子块
 一条目**位置序，空态含；双向交叉校验 = 块编辑 ⇔ 条目）+ `fires`（10+，
 每火块一条目，remaining > 0 = **real-dt** 燃尽倒计时）+ `campfires`（13+，
@@ -1121,33 +1359,43 @@ absorption/hunger/saturation/effects/armor/**stats**/**oxygen**；低版本带
 progress > 0 ⇔ 槽恰 1 可熔炼物品）+ `states`（15+，每个 stateful 块恰一条
 {pos, state}，state 对块 stateCount() 范围校验 + 双向交叉）+ `tables`
 （19+，每工作台块一条目 {pos, slots[9]}，槽 format-3 纪律【槽带 damage
-拒 = SURV-3 grid 范围】）+ `entities`（仅 `type: "item"` 一种：item/count
-[1,64]/pos/age/pickup_delay/**damage? >0**；**mob 与箭 = 瞬态实体不存**
-（读档后不出现，不是错误）+ `blocks`（位置序 [x,y,z,块名]，"air" = 移除）
+拒 = SURV-3 grid 范围】）+ `entities`（`type` ∈ {item, xp} 两种：item
+条目 item/count [1,64]/pos/age/pickup_delay/**damage? >0**/**enchants?
+27+（omit-when-empty）**；**xp 条目（26+）= 严格形 {type, xp 整数 1..9,
+pos, age, pickup_delay}**（球不携堆叠，无 item/count/damage；item 条目
+携 xp 字段 = 版本谎报点名）；**mob 与箭 = 瞬态实体不存**（读档后不
+出现，不是错误）+ `blocks`（位置序 [x,y,z,块名]，"air" = 移除）
 + `fluids`（位置序 [x,y,z,level,种类名]，种类 = water/lava/honey；level 0 =
 抽干）。
 
 **键纪律三向**（与用户数据文件相反）：① 新版本**必键**（effects/fires/
-campfires/armor/oxygen/stats/tables/states/velocity 等，缺 = 拒）；② 低
-版本**带新键 = 版本谎报点名**（如 fmt14 带 states、pre-21 带 stats、
-pre-22 带 velocity）；③ 未知字段一律报错。**迁移先例**：值保真（14 stairs
+campfires/armor/oxygen/stats/tables/states/velocity/**xp/xp_seed/respawn**
+等，缺 = 拒）；② 低版本**带新键 = 版本谎报点名**（如 fmt14 带 states、
+pre-21 带 stats、pre-22 带 velocity、pre-26 带 player.xp 或 xp 实体、
+pre-27 带 xp_seed 或堆栈 enchants、pre-28 带 respawn）；③ 未知字段一律
+报错。**迁移先例**：值保真（14 stairs
 → 15 states facing→state）/ 免迁（tier 0 omit-when-default ⇒ f19 文件 f20
 直接读）/ sole 归属（f18 table_grid 非空 ∧ 恰 1 表 → 归属，0/多 → 丢弃，
 P44 furnace 先例）/ 系统不存在 = 默认（f11 无吸收 → 共享 health 拆分、
-f16 无甲 → 空、f17 无氧 → 满、f20 无 stats → 空、pre-22 无 velocity → 0）。
+f16 无甲 → 空、f17 无氧 → 满、f20 无 stats → 空、pre-22 无 velocity → 0、
+pre-26 无 xp → 0 且无 xp 实体、pre-27 无 xp_seed → worldSeed ^
+kXpSeedInit、pre-28 无 respawn → 哨兵覆写世界出生点）。
 
 ## 纹理 / 图集 / 字体 / 声音资产纪律（重锚红线）
 
 **块图集**（单纹理多 tile）：tile 源 = `assets/textures/blocks/*.png`
-（块，75 件）+ `assets/textures/mobs/*.png`（mob，15 件），均 16×16 RGBA；
+（块，96 件）+ `assets/textures/mobs/*.png`（mob/玩家，26 件），均
+16×16 RGBA；
 布局 = `assets/data/textures/block_atlas.json` `{columns, rows, tiles:
 {name: [col, row]}}`——**显式格子，非计算排布**。解析纪律（纯函数，
 init 双向交叉）：columns/rows 必须**2 的幂**（UV 角 = 精确二进分数，浮点
 管线永不跨界采样）；tile 格须在网格内；**两 tile 不得共格**；PNG 无布局
 条目 / 条目无 PNG = 数据错误点名。
 
-- **shipped = 16 × 8 = 128 格，已用 90，空 38**（如 (8,7)、(9,2)-(9,7)、
-  (10,3)-(15,7) 区段；honey = (15,1)、farmland_wet = (9,4) 先例）。
+- **shipped = 16 × 8 = 128 格，已用 122，空 6**（余空 = (13,6)-(15,7)
+  区段；honey = (15,1)、farmland_wet = (9,4)、sheep_skin = (11,6)、
+  snow = (12,6) 先例）。空位仅剩 6——新 tile 须精确规划，耗尽 = 网格
+  扩容（重锚）。
 - **空位添加 = 无既有 UV 移位 = base18 免重锚**（绝大多数内容相走的路）。
 - **网格扩容 = u = col/列数 全部既有 UV 移位 = 无输入基线门必须重锚**
   （P41 4×8→8×8、P59 8×8→16×8 先例）。
@@ -1160,19 +1408,26 @@ atlas**；可多物品共享同一文件——block item 不用 2D 图标，以 
 **effects.png**：16 px/tile 条带（当前 176×16 = 11 tile）；新效果 =
 **尾部 append**（既有 tile 逐像素零变化验证——SURV-4/SURV-5 先例）。
 
-**font.png**（256×512，32 px 格）：rows 4..15 = ASCII 32..126；rows 0..3 =
-**32 个 ASCII 控制字符死格复用** = PRE-1 的 32 个 CJK 字形（18 UI 字 + 10
-中文标点 + 4 余量）；cell 127（ASCII DEL 死格）= CRAFT-4 补的「作」
-（U+4F5C——PRE-1"18 UI 字"实为 19 字误计，工作台标题 v0.25.0 起渲染
-"工?台"）= **CJK 共 33 字形**（`kCjkGlyphs[33]`，未知 CJK 落 `?` 格）。
-**加 CJK 字形 = 重新生成脚本**：glyph 静态表（font.hpp / generate_font.py
-双份）加条目 + font.png 重跑——rows 0..3 32 格与 cell 127 现已全占用，
-再加字形须调整字体布局（= 既有 UV 变化，按重锚纪律处理）。ASCII 区位级
-不变红线 + 既有 CJK 格逐位复现自校验 + FNV-1a 64 字节钉在测试里；TTF 仅
-工具期输入，游戏构建不依赖。
+**font.png**（256×2112，32 px 格 = 8 列 × 66 行）：rows 4..15 = ASCII
+32..126；rows 0..3 = **32 个 ASCII 控制字符死格复用** = PRE-1 的 32 个
+CJK 字形（18 UI 字 + 10 中文标点 + 4 余量）；cell 127（ASCII DEL 死格）
+= CRAFT-4 补的「作」（U+4F5C——PRE-1"18 UI 字"实为 19 字误计，工作台
+标题 v0.25.0 起渲染"工?台"）= legacy **CJK 33 字形**。**UX-6 扩展 +
+V2-12 附魔 4 字（锋利限魔，魔 re-cell 鸡麦黄默 +1）= 现
+`kCjkGlyphs[427]`**（码点序）：legacy 33 保 PRE-1/CRAFT-4 格 0..31/127
+位级不变；394 扩展字形占 cells 128..521 = rows 16..65（row 65 = 部分
+余量，cells 522..527）；未知 CJK 落 `?` 格。**加 CJK 字形 = 重新生成
+脚本**：glyph 静态表（font.hpp / generate_font.py 双份）加条目 +
+font.png 重跑——**顶 512 px（rows 0..15 = ASCII + legacy CJK 33 格）
+逐字节不变红线**（测试钉），新字形追加尾部 cell；rows 16..65 余量耗尽
+= 字体布局再扩展（按重锚纪律处理）。ASCII 区位级不变红线 + 既有 CJK
+格逐位复现自校验 + FNV-1a 64 字节钉在测试里；TTF 仅工具期输入，游戏
+构建不依赖。
 
-**声音**：`assets/sounds/` 39 件 16-bit mono 44.1 kHz WAV（SoundBank 载入
-时转 stereo 居中，CRAFT-3）。`tools/generate_sounds.py` 确定性生成（固定
+**声音**：`assets/sounds/` 46 件 16-bit mono 44.1 kHz WAV（SoundBank 载入
+时转 stereo 居中，CRAFT-3；2.x 增 thunder【V2-4】/ sleep【V2-13】/
+squeak【V2-14】/ shear【V2-15】/ snow×3【V2-16】）。
+`tools/generate_sounds.py` 确定性生成（固定
 种子 LCG/sine；**重跑后既有文件字节零变化 = md5 实证 + 幂等**）；材质 3
 件见「块音效材质」节。
 
@@ -1185,6 +1440,7 @@ generate_mob_textures.py（mob 16×16，splitmix64）/ generate_item_icons.py
 
 ---
 
-*（完）——各 phase 细节存档见 `docs/archive/v1x/phase-*.md`；活跃已知问题与
-记档偏离见 `docs/KNOWN_ISSUES.md`；玩法语义见 `docs/GAMEPLAY.md` /
+*（完）——各 phase 细节存档：v1.x 见 `docs/archive/v1x/phase-*.md`、
+v2.x 见 `docs/archive/v2x/phase-2.x.0.md`；活跃已知问题与记档偏离见
+`docs/KNOWN_ISSUES.md`；玩法语义见 `docs/GAMEPLAY.md` /
 `docs/MECHANICS.md`。*
