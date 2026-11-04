@@ -204,7 +204,9 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     // join the row-2 free run [9, 2] / [14, 2]; zero existing shift).
     // V2-13: 104 -> 119 (the bed batch's 15 tiles — the dyed family, the
     // wool's vocabulary — join the free cells; zero existing shift).
-    EXPECT_EQ(l.tiles.size(), 119u);
+    // V2-14: 119 -> 120 (the bat's single tile — the first free cell of
+    // the (row, col) scan [10, 6]; zero existing shift).
+    EXPECT_EQ(l.tiles.size(), 120u);
     const struct {
         const char* name;
         int col;
@@ -319,6 +321,24 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     };
     ASSERT_EQ(sizeof(v213) / sizeof(v213[0]), 15u);
     for (const auto& e : v213) {
+        const auto it = l.tiles.find(e.name);
+        ASSERT_NE(it, l.tiles.end()) << e.name;
+        EXPECT_EQ(it->second.col, e.col) << e.name;
+        EXPECT_EQ(it->second.row, e.row) << e.name;
+    }
+    // V2-14: the bat's single tile (the dark brown-black hide + wing
+    // membrane — one tile serves body + head + both wings, no per-face
+    // split) takes the first FREE cell of the deterministic (row, col)
+    // scan [10, 6] — the 119 pre-V2-14 entries above keep their EXACT
+    // cells (the zero-shift red line, no baseline re-anchor).
+    const struct {
+        const char* name;
+        int col;
+        int row;
+    } v214[] = {
+        {"bat", 10, 6},
+    };
+    for (const auto& e : v214) {
         const auto it = l.tiles.find(e.name);
         ASSERT_NE(it, l.tiles.end()) << e.name;
         EXPECT_EQ(it->second.col, e.col) << e.name;

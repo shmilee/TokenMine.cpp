@@ -10,7 +10,7 @@
 > V3-N → V2-N 重编号）；细节立项时设计定案。**用户已授权按 V2-11
 > 起顺序推进**（11-03「继续推进原 3.x 转到 2.x 的 8 个任务」）。
 
-## v2.x 第二批任务矩阵（3/8 完成）
+## v2.x 第二批任务矩阵（4/8 完成）
 
 | 系统 | ① | ② | ③ | ④ | ⑤ | ⑥ | ⑦ |
 |---|---|---|---|---|---|---|---|
@@ -19,7 +19,7 @@
 | LGT 光照 | | | | | | | |
 | GEN 世界与生成 | V2-16 新 biome：雪原/针叶林 | V2-17 顶部 slab/双 slab | | | | | |
 | FLUID 流体 | | | | | | | |
-| ENT 实体/Mob/移动 | V2-14 新 mob 蝙蝠（飞行 AI） | V2-15 16 色染色羊 | | | | | |
+| ENT 实体/Mob/移动 | ~~V2-14 新 mob 蝙蝠（飞行 AI）~~ ✅ v2.15.0（门 186：悬停巡航飞行 AI【正弦 bob 帧锁定 + 航向流重掷】+ 洞穴生成 in-air 分支【光 ≤3 跳过 floor 带任何 Y】+ 0.9×0.5 展翼扇翅模型 + squeak 氛围音 + 三数据旗互配纪律；零 format savenorm EXACT，结构免疫第 67 次） | V2-15 16 色染色羊 | | | | | |
 | SURV 生存/战斗/效果 | ~~V2-11 XP 系统~~ ✅ v2.12.0（门 183：经验球 1..9 无合并分裂 + 全整数 MC 曲线【等级派生不存储】+ 三发放源数据驱动【hostile 5/passive 2/mine coal 1 diamond 5 iron 0 gold 0/smelt 1 统一】+ format 26 三向键 + save.cpp PITS 361 潜在 bug 修复 + XP 条 HUD；base18 第 4 次重锚 179027 B） | ~~V2-13 床（睡觉跳夜）~~ ✅ v2.14.0（门 185：15 色染色族 Slab 床 + 睡眠三门【距离 3.0/hostile 8×5 盒/夜窗】即时跳夜 + 天气重置 + format 28 respawn 恒写 + 验床重生【破坏回退世界出生点】+ sleep 音；结构免疫第 66 次免重锚） | | | | | |
 | CRAFT 物品/合成/面板 | ~~V2-12 附魔~~ ✅ v2.13.0（门 184：7 附魔数据驱动【锋利/保护/效率/耐久/力量/速度/无限，MC 精确区间+权重】+ 附魔台/书架 2 块 2 配方【lapis 代 book 偏离】+ 确定性 offer 全整式【种子 = world^hash3(台位)^ability^xpSeed，仅面板开时求值】+ XP 整级扣减余量保留 + format 27【xp_seed hex + enchants 三处，四拒】+ 面板 furnace 范式 + 字体 +4 字【锋利限魔】；结构免疫第 65 次免重锚） | | | | | |
 | SAVE 存档 | | | | | | | |
@@ -68,6 +68,25 @@
    二批收官 = v2.18.0 系统收官 tag + release，用户可推翻）。
 
 ## 变更记录（v2.x 第二批）
+
+- 2026-11-04：**V2-14 蝙蝠完成（v2.15.0，门 186 全 PASS）**——项
+  目首只飞行 mob。bat.json 全数据（HP 6/被动/spawn_max_light 3 洞
+  穴语义/无 drops/xp 0/三新严格字段 flying+spawns_in_air+
+  ambient_sound，flying⇒spawns_in_air 互配点名拒）+ model 0.9×0.5
+  身头双翼 4 box 扇翅（swing 反相）+ 8 词表 + bat.png + squeak.wav
+  确定性合成（既有资产 md5 全不变）；飞行 AI = runAi 纯新分支
+  （def.flying 门控：航向 per-mob 流 2s 重掷 + 正弦悬停 0.2×sin/60f
+  帧锁定 + 重力关 + 撞壁航向重掷 + knockback 回巡航 + ambient 音
+  帧锁定 roll 空间化），既有 7 mob 族零改动全过；生成 in-air 分支
+  （顶向扫描 + 全空气盒 + 光 ≤3 + 跳过 floor 带 = 任何 Y）；消散
+  40/倒挂不做/takeoff 音不做 = 偏离 5-7。零 format（savenorm
+  EXACT）。2356/2356（+26）、banner v2.15.0。门 186：S1 结构免疫
+  第 67 次免重锚（≡ 锚 179027 + EXACT；编排者首跑误用 v2.13.0 树
+  = PITS 379① 再证）/ S2 洞穴无输入 E2E（密封暗厅 seed 3355 四
+  pick 全 bat：log 孪生逐位同 + 截图 ×2 恒等 + diff 43425 px 全褐
+  色蝙蝠纹理泄漏审计零 + old 7 词表零 bat 行形状互斥）/ S3 / S6
+  6/6 / 性能同档（9/1/3 逐位 + 16/16 36/36 + 洞穴 ents 0.093/0.089
+  = 飞行不比走地贵）。PITS 380。详见 docs/archive/phase-2.15.0.md。
 
 - 2026-11-04：**V2-13 床完成（v2.14.0，门 185 全 PASS）**——15 色
   染色族 Slab 床（wool 15 色词表同款无 lime；配方 3 同色 wool + 3

@@ -253,6 +253,38 @@ def pig_face_tile() -> list:
     return up
 
 
+# V2-14 bat (the project's first flying mob): the dark brown-black hide +
+# the faint warm wing-membrane mottling. ONE tile serves body + head +
+# both wings (no per-face `faces` consumption — the V2-2 capability stays
+# unused, the documented choice: no face features, since the single tile
+# would land eyes on the wings). New salt 0xB441 (the six existing
+# families keep their salts and bytes — the md5/FNV pins are the
+# zero-change proof).
+BAT_HIDE = (40, 34, 30)      # the dark brown-black base (the MC bat's cave-dark)
+BAT_MEMBRANE = (54, 44, 36)  # the warm wing-membrane mottling
+BAT_MEMBRANE_ODDS = 30       # percent of cells that take the membrane shade
+
+
+def bat_tile(salt: int) -> list:
+    """Bat hide (V2-14): the dark brown-black base + light noise (the
+    cave-mob's quiet texture) with a faint warm membrane mottling (the
+    hash decides the patch boundaries — the cow-fur pattern)."""
+    (br, bg, bb) = BAT_HIDE
+    (wr, wg, wb) = BAT_MEMBRANE
+    pixels = []
+    for y in range(SIZE):
+        row = []
+        for x in range(SIZE):
+            n = noise(x, y, salt, 8)
+            if h2(x, y, salt + 3) % 100 < BAT_MEMBRANE_ODDS:
+                r, g, b = clamp(wr + n), clamp(wg + n), clamp(wb + n)
+            else:
+                r, g, b = clamp(br + n), clamp(bg + n), clamp(bb + n)
+            row.append((r, g, b, 255))
+        pixels.append(row)
+    return pixels
+
+
 def main() -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
     # Green zombie skin (eyes on the front face) + teal shirt.
@@ -305,6 +337,9 @@ def main() -> None:
     # face 2x-upscaled (the V2-2 per-face paradigm, zero hash).
     write_png(os.path.join(OUT_DIR, "pig_body.png"), pig_tile(0x5011))
     write_png(os.path.join(OUT_DIR, "pig_face.png"), pig_face_tile())
+    # Dark brown-black bat hide + wing membrane (V2-14): the single tile
+    # (body + head + both wings — no per-face split), new salt 0xB441.
+    write_png(os.path.join(OUT_DIR, "bat.png"), bat_tile(0xB441))
 
 
 if __name__ == "__main__":

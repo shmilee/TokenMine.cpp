@@ -14,6 +14,22 @@
 //     "attack_damage": 3,         // >= 0; damage per hit (0 = harmless)
 //     "attack_cooldown": 1.0,     // seconds between hits
 //     "wander_interval": 2.5,     // seconds between wander decisions
+//                                 // (a flying mob reuses it as the cruise
+//                                 //  heading re-roll cadence)
+//     "flying": false,            // V2-14 optional bool: gravity off +
+//                                 // the flyCruise AI (requires
+//                                 // spawns_in_air — the parse rejects
+//                                 // the pair by name)
+//     "spawns_in_air": false,     // V2-14 optional bool: the spawn cell
+//                                 // is the mob's air box at ANY Y (the
+//                                 // floor band is skipped — the bat's
+//                                 // cave semantics)
+//     "ambient_sound": "squeak",  // V2-14 optional: the ambient sample
+//                                 // (the wav's file stem; the init
+//                                 // cross-checks the sound directory)
+//     "ambient_interval": 3.0,    // V2-14 optional seconds > 0: the
+//                                 // per-frame roll period (the default
+//                                 // when the sound names no interval)
 //     "spawn_max_light": 0,       // 0..15; only spawn where the current
 //                                 // effective light level is <= this
 //                                 // (Minecraft hostile-mob convention:
@@ -116,6 +132,16 @@ struct MobIDHash {
         return std::hash<int>{}(id.value);
     }
 };
+
+// V2-14: the fixed mob step's frame rate (the 1/60 s step — hard rule
+// 8): the ambient roll's per-frame probability is 1 / (interval * this),
+// and the flight bob's period is counted in these frames.
+inline constexpr int kMobFramesPerSecond = 60;
+
+// V2-14: the ambient roll's default period (seconds) when the data names
+// a sound but not an interval (the bat's shipped value — the Minecraft
+// ambience cadence class).
+inline constexpr double kAmbientIntervalDefaultSeconds = 3.0;
 
 // One render box of a mob model (see the file head for the layout).
 struct MobBox {
@@ -260,6 +286,36 @@ struct MobProperties {
     // (Minecraft's fixed 5), passives pig / cow / sheep / chicken 2
     // (Minecraft's 1-3 mid).
     int xp = 0;
+    // V2-14 (the bat — the project's first flying mob): the flight data
+    // flags — the core reads flags, never species (the data-driven red
+    // line). Every pre-V2-14 mob is false / empty = the bit-identical
+    // structural root.
+    // `flying` (data 'flying', strict bool, default false): the gravity
+    // gate off + the flyCruise AI branch (the frame-locked hover-bob
+    // baseline, the cruise steering, the wall-hit heading re-roll — see
+    // MobEntity). The ONE hard pairing: a flying mob must also set
+    // `spawnsInAir` (a ground-spawning flier is meaningless — the parse
+    // rejects the pair by name).
+    bool flying = false;
+    // `spawnsInAir` (data 'spawns_in_air', strict bool, default false):
+    // the spawn cell = the mob's air box at ANY Y (the findMobSpawnCell
+    // in-air branch: the floor band is skipped entirely, the Minecraft
+    // bat cave semantics).
+    bool spawnsInAir = false;
+    // The ambient sound (the bat's squeak — the GENERAL mechanism, not a
+    // bat special case): `ambientSoundName` (data 'ambient_sound', a
+    // non-empty sound name = the wav's file stem; the game init
+    // cross-checks it against the sound directory — the
+    // checkSoundMaterials file-based discipline, strict even with the
+    // audio disabled) and `ambientInterval` (data 'ambient_interval',
+    // seconds > 0, default kAmbientIntervalDefaultSeconds): the flyCruise
+    // per-frame roll plays the sample spatialized at the mob with
+    // probability 1 / (interval * kMobFramesPerSecond) of the per-mob
+    // stream (frame-locked, hard rule 8 — a no-input run squeaks on the
+    // same frames every time). Empty name = no ambient (every
+    // pre-V2-14 mob — the stream draw never happens).
+    std::string ambientSoundName;
+    double ambientInterval = kAmbientIntervalDefaultSeconds;
 };
 
 struct Mob {

@@ -6,6 +6,11 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -280,4 +285,75 @@ TEST(SoundBankTest, DisabledBankIsFullNoOp) {
     bank.play("unknown", std::nullopt);
     EXPECT_FALSE(bank.enabled()); // still disabled (the semantics are pinned)
     EXPECT_EQ(bank.sampleCount(), 0u);
+}
+
+// ---------------------------------------------------------------------------
+// V2-14: the bat's ambient squeak (the sound set 41 -> 42).
+// ---------------------------------------------------------------------------
+
+namespace {
+
+std::string readFileBytes(const std::filesystem::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        return std::string();
+    }
+    std::stringstream ss;
+    ss << in.rdbuf();
+    return ss.str();
+}
+
+} // namespace
+
+TEST(SoundBatTest, SqueakWavShipsAndParses) {
+    // The squeak.wav (the generate_sounds.py's dedicated fixed seed 0xB441
+    // — the sleep precedent): a 16-bit mono 44.1 kHz PCM (the bank's
+    // strict format), 0.12 s (the chirp's length — the MC ambient's
+    // short-cave-squeak figure), in the 0.1 ambient volume class (quieter
+    // than the SFX taps, the ambience beds' class).
+    const std::filesystem::path path = "assets/sounds/squeak.wav";
+    ASSERT_TRUE(std::filesystem::exists(path))
+        << "run the tests from the repository root";
+    const std::string bytes = readFileBytes(path);
+    ASSERT_FALSE(bytes.empty());
+    std::vector<std::uint8_t> raw(bytes.begin(), bytes.end());
+    auto sample = SoundBank::parseWav(raw);
+    ASSERT_TRUE(sample.ok()) << sample.error().describe();
+    EXPECT_EQ(sample->rate, 44100);
+    // 0.12 s at 44100 Hz = 5292 samples (the generator's exact length).
+    EXPECT_EQ(sample->pcm.size(), 5292u);
+    // The chirp is not silence (the synthesis produced content)...
+    bool any = false;
+    for (const std::int16_t s : sample->pcm) {
+        if (s != 0) {
+            any = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(any);
+    // ...and it sits in the ambient volume class: the 0.1 tone under the
+    // 0.15 noise whisper peaks at ~0.11 of the 16-bit range (3589 — the
+    // pinned synthesis figure, the MC volume 0.1 reference + the grit).
+    int peak = 0;
+    for (const std::int16_t s : sample->pcm) {
+        const int m = std::abs(s);
+        if (m > peak) {
+            peak = m;
+        }
+    }
+    EXPECT_EQ(peak, 3589);
+}
+
+TEST(SoundBatTest, SoundDirectoryGrowsToFortyTwo) {
+    // The sound set 41 -> 42 (the squeak is the only new file — the
+    // generate_sounds.py re-run leaves the other 41 byte-identical, the
+    // script's md5 discipline; the FNV pin below holds the squeak's bytes).
+    std::size_t count = 0;
+    for (const auto& entry :
+         std::filesystem::directory_iterator("assets/sounds")) {
+        if (entry.is_regular_file() && entry.path().extension() == ".wav") {
+            ++count;
+        }
+    }
+    EXPECT_EQ(count, 42u);
 }

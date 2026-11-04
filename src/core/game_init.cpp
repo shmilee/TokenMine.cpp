@@ -671,6 +671,21 @@ Result<void> Game::buildScene() {
                                std::to_string(m_items.at(dropId).maxStack));
             }
         }
+        // V2-14: the ambient sound name (the bat's squeak — the data-
+        // driven general mechanism) must name an EXISTING wav in the
+        // sound directory. File-based on purpose (NOT the loaded bank —
+        // the checkSoundMaterials discipline: the headless degradation
+        // path keeps init strict, the unknown name is rejected by name).
+        if (!mob.properties.ambientSoundName.empty()) {
+            const std::string rel = "sounds/" +
+                                    mob.properties.ambientSoundName +
+                                    ".wav";
+            if (!m_assets.exists(rel)) {
+                return MC_FAIL("mob '" + mob.name + "' ambient_sound '" +
+                                mob.properties.ambientSoundName +
+                                "' is missing '" + rel + "'");
+            }
+        }
     }
 
     // -- player body (UX-3): the world-space body model ----------------------

@@ -9,6 +9,52 @@
 > README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本 /
 > v2.10.0 第一批收官 tag / v2.18.0 二批收官 tag）。
 
+## v2.15.0（2026-11-04）— V2-14 蝙蝠（项目首只飞行 mob：悬停巡航 AI + 洞穴生成 + squeak 氛围音）（门 186 全 PASS）
+
+二批 ENT 行（「中」）；MC 机制 11-04 wiki 核定（Bat 页）；**零
+format**（mob 不持久化 PITS 375③ = savenorm EXACT 最强形）：
+**数据**（bat.json 全数据驱动）——HP 6 / 被动全 0 /
+spawn_max_light 3（洞穴语义 MC 精确：夜底光 7>3 露天不可生）/
+无 drops / xp 0 / **三新严格字段** flying + spawns_in_air +
+ambient_sound/ambient_interval（唯一硬互配 flying⇒spawns_in_air；
+孤 interval 死数据点名拒；音名 init file-based 交叉检）+ model
+**0.9×0.5**【偏离 1：MC 盒 0.5×0.9 竖薄容不下展翼 AABB】身/头/
+**双翼 4 box**（±0.275 = 0.9 极限）+ swings 双翼 0.9 rad 反相扇翅
+（chicken 翅盒不摆先例的反例）+ mob_spawning 8 词表【偏离 2：入
+被动池 max_mobs 4，MC ambient 独立 cap】+ bat.png（深褐黑 + 翼膜，
+既有 24 mob tile md5 全不变）+ atlas 119→120 零移位 +
+**squeak.wav**（900→1400Hz 滑升 + 30Hz 微颤 0.12s vol 0.1 类 = MC
+ambient 0.1，既有 41 wav md5 全不变）。
+**飞行 AI**（runAi 顶部 def.flying 纯新分支，既有 7 mob 族零改动
+全过 = 位级红线）——航向 = per-mob 流每 wander_interval 2s 重掷 +
+数据 speed 1.0 巡航 / **垂直正弦悬停**（0.2×sin(2π·frame/60) 帧锁
+定，bob 初相构造流首抽【flying 才消费】）/ integrate 重力关 + 终
+端豁免 + 流体旁路【悬停穿水实现级偏离】/ **撞壁 = 下帧航向重掷**
+【偏离 3 无寻路】/ 玩家碰撞保留【偏离 4：MC JE 不交互】/
+knockback 0.3s 回巡航 / **ambient squeak** 每帧 p=1/(3×60) 流 roll
+空间化（无 ambient mob 流零消费）。
+**生成 in-air 分支**（findMobSpawnCell spawnsInAir 尾参默认
+false）：顶向扫描 + box 全空气无流体 + 光 ≤3 + **跳过 floor 带
+（任何 Y = MC）** + 出生位盒底格中心。消散 40【偏离 5：MC 32】/
+倒挂不做【偏离 6】/ takeoff 音不做【偏离 7】。教程 "kill.bat"
+入闭合格言。2356/2356（+26：解析 5/内容钉 2/生成格判 8/
+flyCruise 帧钉 8【含 900f 密封舱双跑位等】）、banner v2.15.0。门
+186：S1 **结构免疫第 67 次免重锚 + savenorm EXACT**（≡ 锚 179027
+逐字节；**门协议再证 PITS 379①**：编排者首跑又误用 v2.13.0 树当
+旧侧 3 键假象，cc05d53 重建 banner 实证后 EXACT）/ S2 洞穴无输入
+E2E【氛围 mob 范式：证据 = log 层 + 像素孪生；密封暗厅 seed 3355
+（f60/90/120/150 四 pick 全 bat）：new ×2 log 4 蝙蝠 spawn 位置逐
+位同 + 截图逐字节恒等；对照 mobs-off ×2 恒等零 spawn；new vs 对照
+diff 43425 px **全褐色蝙蝠纹理**（4 只 bob 不同屏高 y9-220，近景
+每只 ~10k px）+ 泄漏审计 HUD 区 0/时钟 bbox 0/非褐色 0；old
+v2.14.0 同场景（format 28 双向可载）7 词表零 'bat' 行 = 形状互斥
+最强形】/ S3 / S6 6/6 点名 / 性能 A/B 同世界同成本【主对 9/1/3 逐
+位 + 终档 16/16 36/36 恒等【mob 不入档】+ 洞穴自成本 ents 0.093/
+0.089 同档 = 飞行 AI 不比走地贵】。PITS 380（spawn 成功行无
+'pick' 正则陷阱 / 门场景洞穴须密封【亮洞口 = 流送重光照收敛时序
+依赖】/ CAVE 自成本须场景专属 config seed / 飞行 diff 带随 bob =
+色相 + HUD 区审计非固定带）。详见 docs/archive/phase-2.15.0.md。
+
 ## v2.14.0（2026-11-04）— V2-13 床（15 色染色族 + 睡觉跳夜 + 重生点 + format 28）（门 185 全 PASS）
 
 二批 SURV 行（BACKLOG「中」）；MC 机制 11-04 wiki 核定（Bed 页）：
@@ -163,5 +209,5 @@ PERF-WIN 全指标同档——时钟 +1 文本 draw 成本不可测）。门协�
 PASS 源）。详见 docs/archive/phase-2.11.0.md。
 
 ## v2.x 第二批（V2-11~V2-18，进行中）
-（V2-14 蝙蝠起，逐版条目入此。）
+（V2-15 染色羊起，逐版条目入此。）
 

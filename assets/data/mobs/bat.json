@@ -1,0 +1,50 @@
+{
+  "id": "bat",
+  "properties": {
+    "health": 6,
+    "speed": 1.0,
+    "detect_radius": 0,
+    "attack_range": 0,
+    "attack_damage": 0,
+    "attack_cooldown": 1.0,
+    "wander_interval": 2.0,
+    "spawn_max_light": 3,
+    "flying": true,
+    "spawns_in_air": true,
+    "ambient_sound": "squeak",
+    "ambient_interval": 3.0,
+    "xp": 0
+  },
+  "model": {
+    "width": 0.9,
+    "height": 0.5,
+    "boxes": [
+      {
+        "pos": [0.0, 0.25, 0.0],
+        "size": [0.5, 0.3, 0.5],
+        "texture": "bat"
+      },
+      {
+        "pos": [0.0, 0.35, -0.25],
+        "size": [0.25, 0.2, 0.2],
+        "texture": "bat"
+      },
+      {
+        "name": "wing_l",
+        "pos": [-0.275, 0.3, 0.0],
+        "size": [0.35, 0.05, 0.5],
+        "texture": "bat"
+      },
+      {
+        "name": "wing_r",
+        "pos": [0.275, 0.3, 0.0],
+        "size": [0.35, 0.05, 0.5],
+        "texture": "bat"
+      }
+    ],
+    "swings": [
+      { "part": "wing_l", "amplitude": 0.9, "group": 0 },
+      { "part": "wing_r", "amplitude": 0.9, "group": 1 }
+    ]
+  }
+}

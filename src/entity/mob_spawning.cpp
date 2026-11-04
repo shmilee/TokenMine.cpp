@@ -192,10 +192,12 @@ std::optional<BlockPos> findMobSpawnCell(const World& world,
                                          float protectionRadius,
                                          float protectionX,
                                          float protectionZ,
-                                         int nightLevel) {
+                                         int nightLevel,
+                                         bool spawnsInAir) {
     // Cells the mob's AABB occupies above the floor top: the AABB spans
     // [floorTop, floorTop + height), which strictly overlaps the cells
-    // floorTop .. floorTop + ceil(height - eps) - 1.
+    // floorTop .. floorTop + ceil(height - eps) - 1. (The in-air branch
+    // reuses this as the box's cell count: the bat's 0.5 box = 1 cell.)
     const int airCells =
         std::max(1, static_cast<int>(std::ceil(height - 1e-6f)));
     const int ring = static_cast<int>(std::ceil(maxRadius));
@@ -223,6 +225,74 @@ std::optional<BlockPos> findMobSpawnCell(const World& world,
                                                   protectionRadius) {
                     continue;
                 }
+            }
+
+            // V2-14: the in-air branch (the bat — the data flag). The
+            // FLOOR BAND IS SKIPPED (any Y, the Minecraft bat cave
+            // semantics): the scan walks the column TOP-DOWN and takes
+            // the first cell whose airCells-deep box is air with no
+            // fluid and passes the light gate (the night floor 7 > the
+            // bat's 3 keeps it out of the open sky — caves only; the
+            // light gate is the effective "stone ceiling" filter).
+            // Top-down = the highest dark air = the spawn under the
+            // ceiling (the bat's hang look). No floor, no headroom
+            // above the box (the box IS the airCells cells).
+            if (spawnsInAir) {
+                for (int y = kWorldHeight - airCells; y >= 0; --y) {
+                    // The box's cells must be air with no fluid.
+                    bool open = true;
+                    for (int i = 0; i < airCells; ++i) {
+                        const int yy = y + i;
+                        if (world.getBlock(x, yy, z) != BlockID::air() ||
+                            world.getFluid(x, yy, z) != 0) {
+                            open = false;
+                            break;
+                        }
+                    }
+                    if (!open) {
+                        continue;
+                    }
+                    // Light gate (the day/night rule): the CURRENT
+                    // effective light of the box's floor cell must not
+                    // exceed the mob's spawn_max_light (the bat's 3 =
+                    // caves only: night open sky 7 > 3, day 15 > 3).
+                    if (currentSpawnLight(world, x, y, z, dayFactor,
+                                          nightLevel) > spawnMaxLight) {
+                        continue;
+                    }
+                    // Spawn point (bottom-center, feet at the box floor
+                    // cell's bottom) and its AABB.
+                    const float sx = static_cast<float>(x) + 0.5f;
+                    const float sy = static_cast<float>(y);
+                    const float sz = static_cast<float>(z) + 0.5f;
+                    const float halfW = width / 2.0f;
+                    const Vec3 smin {sx - halfW, sy, sz - halfW};
+                    const Vec3 smax {sx + halfW, sy + height, sz + halfW};
+                    // No overlap with the player (strict AABB test, the
+                    // floor branch's twin).
+                    if (smin.x < playerMax.x && smax.x > playerMin.x &&
+                        smin.y < playerMax.y && smax.y > playerMin.y &&
+                        smin.z < playerMax.z && smax.z > playerMin.z) {
+                        continue;
+                    }
+                    // Clearance: no existing mob too close (horizontal,
+                    // the floor branch's twin).
+                    bool clear = true;
+                    for (const Vec3& mp : mobPositions) {
+                        const float ddx = mp.x - sx;
+                        const float ddz = mp.z - sz;
+                        if (ddx * ddx + ddz * ddz <
+                            kSpawnClearance * kSpawnClearance) {
+                            clear = false;
+                            break;
+                        }
+                    }
+                    if (!clear) {
+                        continue;
+                    }
+                    return BlockPos {x, y, z};
+                }
+                continue;  // no air cell in this column: next column
             }
 
             // Floor: the HIGHEST solid cell within kSpawnFloorDelta of the

@@ -323,6 +323,52 @@ Result<void> MobRegistry::parseProperties(const Json& def,
                            std::to_string(out.xp));
         }
     }
+    // V2-14: the flight data flags + the ambient sound (the bat — the
+    // data drives, no species switch): each field is independently
+    // optional (absent = the pre-V2-14 semantics, bit-identical), the
+    // types are strict (named rejections), and the ONE hard pairing is
+    // flying => spawns_in_air (a ground-spawning flier is meaningless).
+    if (const Json* fl = def.find("flying")) {
+        if (!fl->isBool()) {
+            return MC_FAIL("mob properties: 'flying' must be a boolean");
+        }
+        out.flying = fl->asBool();
+    }
+    if (const Json* sa = def.find("spawns_in_air")) {
+        if (!sa->isBool()) {
+            return MC_FAIL("mob properties: 'spawns_in_air' must be a "
+                           "boolean");
+        }
+        out.spawnsInAir = sa->asBool();
+    }
+    if (out.flying && !out.spawnsInAir) {
+        return MC_FAIL("mob properties: 'flying' requires "
+                       "'spawns_in_air' (a flying mob spawns in the air "
+                       "— the ground-spawn pair is meaningless)");
+    }
+    if (const Json* amb = def.find("ambient_sound")) {
+        if (!amb->isString() || amb->asString().empty()) {
+            return MC_FAIL("mob properties: 'ambient_sound' must be a "
+                           "non-empty string (sound name)");
+        }
+        out.ambientSoundName = amb->asString();
+    }
+    if (const Json* ai = def.find("ambient_interval")) {
+        if (!ai->isNumber()) {
+            return MC_FAIL("mob properties: 'ambient_interval' must be a "
+                           "number");
+        }
+        out.ambientInterval = ai->asDouble();
+        if (out.ambientInterval <= 0.0) {
+            return MC_FAIL("mob properties: 'ambient_interval' must be > "
+                           "0, got " + std::to_string(out.ambientInterval));
+        }
+        if (out.ambientSoundName.empty()) {
+            return MC_FAIL("mob properties: 'ambient_interval' requires "
+                           "'ambient_sound' (the interval is the sound's "
+                           "roll period — a lone interval is dead data)");
+        }
+    }
     // Optional 'on_hit_effect' (Phase 46, spider): the status effect this
     // mob's landed MELEE hit applies to the player —
     // {"name": "poison", "duration": 15.0}. Both keys are required

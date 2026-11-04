@@ -811,23 +811,30 @@ void Game::attemptMobSpawn() {
                                  def.properties.spawnMaxLight,
                                  m_player->aabbMin(), m_player->aabbMax(),
                                  mobPositions, protection, m_mobs.spawnPoint.x,
-                                 m_mobs.spawnPoint.z, m_nightSkyLevel);
+                                 m_mobs.spawnPoint.z, m_nightSkyLevel,
+                                 def.properties.spawnsInAir);
     if (!cell) {
         MC_LOG_DEBUG("mob spawn f" + std::to_string(m_frameCount) +
                      ": pick '" + def.name + "' found no valid cell "
                      "(light gate / clearance / protection)");
         return;
     }
-    // Spawn at the cell center, feet on the floor top; the per-mob seed is
-    // the world seed mixed with the (increasing) spawn counter, so the same
-    // runs produce the same mobs with the same AI streams.
-    const Vec3 spawn {static_cast<float>(cell->x) + 0.5f,
-                      static_cast<float>(cell->y) + 1.0f,
+    // Spawn at the cell center; the floor branch's feet sit on the floor
+    // top (cell.y + 1), the in-air branch's (V2-14, the bat — the data
+    // flag) feet sit at the box floor cell's bottom (cell.y itself — the
+    // cell IS the air box, no floor beneath it).
+    const float spawnY = def.properties.spawnsInAir
+        ? static_cast<float>(cell->y)
+        : static_cast<float>(cell->y) + 1.0f;
+    const Vec3 spawn {static_cast<float>(cell->x) + 0.5f, spawnY,
                       static_cast<float>(cell->z) + 0.5f};
     MC_LOG_DEBUG("mob spawn f" + std::to_string(m_frameCount) +
                  ": '" + def.name + "' at (" + std::to_string(spawn.x) +
                  ", " + std::to_string(spawn.y) + ", " +
                  std::to_string(spawn.z) + ")");
+    // The per-mob seed is the world seed mixed with the (increasing)
+    // spawn counter, so the same runs produce the same mobs with the
+    // same AI streams.
     ++m_mobs.spawnCounter;
     const std::uint64_t seed =
         static_cast<std::uint64_t>(m_generator->seed()) ^
@@ -959,6 +966,19 @@ void Game::attemptMobSpawn() {
                          std::to_string(dist) + " dmg=" +
                          std::to_string(arrowDamage));
         });
+    }
+    // V2-14: the ambient sound (the bat's squeak — the data-driven general
+    // mechanism, no species special-casing): wired for a mob with a data
+    // `ambient_sound` (the name is init-cross-checked against the sound
+    // directory — the checkSoundMaterials pattern), the flyCruise per-frame
+    // roll plays it spatialized at the mob's current position (the
+    // existing 16-block cutoff). A mob without the field never invokes it.
+    if (!def.properties.ambientSoundName.empty()) {
+        const std::string ambientName = def.properties.ambientSoundName;
+        mob->setAmbientSoundCallback(
+            [this, ambientName](Vec3 origin) {
+                m_sound.play(ambientName, origin);
+            });
     }
     m_entities.push_back(std::move(mob));
 }

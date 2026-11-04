@@ -38,6 +38,15 @@
 //     — the WORLD spawn point. Hostile mobs are gated by the difficulty's
 //     radius (core/difficulty.hpp); passive mobs pass protectionRadius 0
 //     (exempt, exactly like Minecraft).
+//
+// V2-14 in-air branch (`spawnsInAir` true — the bat, the data flag): the
+// FLOOR BAND IS SKIPPED ENTIRELY (any Y, the Minecraft bat cave
+// semantics). The scan walks each ring column TOP-DOWN (kWorldHeight -
+// airCells .. 0) and returns the first cell whose airCells-deep box is
+// air with no fluid AND passes the same light gate (the night floor 7 >
+// the bat's 3 keeps it out of the open sky — caves only). Top-down = the
+// spawn under the highest roof (the ceiling-hang look). The returned cell
+// is the box's FLOOR cell (the game spawns at its bottom, not +1).
 
 #pragma once
 
@@ -126,6 +135,12 @@ std::optional<BlockPos> findMobSpawnCell(const World& world,
                                          float protectionRadius = 0.0f,
                                          float protectionX = 0.0f,
                                          float protectionZ = 0.0f,
-                                         int nightLevel = kNightSkyLevel);
+                                         int nightLevel = kNightSkyLevel,
+                                         // V2-14: the in-air branch (the
+                                         // bat's data flag — see the file
+                                         // head; default false = the
+                                         // pre-V2-14 floor scan, the
+                                         // bit-identical root).
+                                         bool spawnsInAir = false);
 
 } // namespace mc

@@ -73,6 +73,13 @@ vocabulary; blocks name one via `sound_material`):
    sleep.wav           a soft low "sigh" (a 180 -> 90 Hz exponential glide
                       under a quiet 360 Hz partial, slow attack/release,
                       tone-only — the hushed bedroom feel)
+-- V2-14 bat (1 one-shot; the ambient squeak — the flyCruise per-frame
+      roll plays it spatialized at the bat, the dropped-item pattern):
+   squeak.wav          a high short cave chirp (a 900 -> 1400 Hz rising
+                      glide with a slight 30 Hz tremolo, 0.12 s, in the
+                      0.1 ambient volume class — the Minecraft ambient
+                      volume 0.1 reference, a quiet noise whisper under
+                      the tone)
 """
 import math
 import os
@@ -671,6 +678,26 @@ def thunder():
     return sound(dur, f)
 
 
+def squeak():
+    """V2-14: the bat's ambient squeak (Minecraft's bat ambience — the
+    high, short cave chirp): a 900 -> 1400 Hz rising glide with a slight
+    30 Hz tremolo, 0.12 s, in the 0.1 ambient volume class (the
+    Minecraft ambient volume 0.1 reference — quieter than the SFX taps,
+    the ambience beds' class), over a fixed-seed noise whisper (the
+    chirp's grit). The fixed-LCG / sine paradigm (the sleep precedent),
+    dedicated seed."""
+    lcg = Lcg(0xB441)  # dedicated fixed seed (unique to this sound)
+    dur = 0.12
+
+    def f(t, _):
+        fr = 900.0 + 500.0 * (t / dur)  # 900 -> 1400 Hz rising glide
+        tremolo = 1.0 - 0.2 * math.sin(2 * math.pi * 30.0 * t)
+        tone = math.sin(2 * math.pi * fr * t) * tremolo
+        noise = lcg.next() * 0.15
+        return (tone + noise) * env(t, dur, 22.0) * 0.1
+    return sound(dur, f)
+
+
 SOUNDS = {
     "dig": dig,
     "place": place,
@@ -721,6 +748,9 @@ SOUNDS = {
     # V2-13: the bed sleep cue (the successful night-skip — spatialized
     # at the bed, the block-center pattern).
     "sleep": sleep,
+    # V2-14: the bat's ambient squeak (the flyCruise per-frame roll —
+    # spatialized at the bat, the dropped-item pattern).
+    "squeak": squeak,
 }
 
 

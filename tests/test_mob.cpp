@@ -15,6 +15,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "block/block_registry.hpp"
@@ -176,10 +177,48 @@ const char* kSkeletonDef = R"({
   }
 })";
 
+// The bat test definition (V2-14): the flying passive mob — the flight
+// flags + the ambient pair (the AI physics tests need the full data
+// shape; a single-box model keeps the mesh out of it).
+const char* kBatDef = R"({
+  "id": "bat",
+  "properties": {
+    "health": 6,
+    "speed": 1.0,
+    "detect_radius": 0,
+    "attack_range": 0,
+    "attack_damage": 0,
+    "attack_cooldown": 1.0,
+    "wander_interval": 2.0,
+    "spawn_max_light": 3,
+    "flying": true,
+    "spawns_in_air": true,
+    "ambient_sound": "squeak",
+    "ambient_interval": 3.0
+  },
+  "model": {
+    "width": 0.9,
+    "height": 0.5,
+    "boxes": [
+      {"pos": [0.0, 0.25, 0.0], "size": [0.5, 0.3, 0.5], "texture": "bat"}
+    ]
+  }
+})";
+
 // Registers the zombie def; ADD_FAILURE on error (tests expect success).
 MobRegistry makeMobRegistry() {
     MobRegistry mobs;
     auto r = mobs.registerMob(parseJson(kZombieDef));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    return mobs;
+}
+
+// Registers the bat def; ADD_FAILURE on error (tests expect success).
+MobRegistry makeBatRegistry() {
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(kBatDef));
     if (!r.ok()) {
         ADD_FAILURE() << r.error().message;
     }
@@ -505,6 +544,108 @@ TEST(MobRegistryTest, RejectsNonIntegerNegativeAndNonNumberXp) {
         EXPECT_NE(r.error().message.find("xp"), std::string::npos)
             << r.error().message;
     }
+}
+
+// -- V2-14: the flight data flags + the ambient sound (the bat) -----------
+
+TEST(MobRegistryTest, FlightFlagsDefaultOff) {
+    // kZombieDef carries no flight / ambient fields: the defaults
+    // (false / empty / the interval default) — the pre-V2-14 structural
+    // root (every shipped mob is bit-identical).
+    MobRegistry mobs = makeMobRegistry();
+    const MobProperties& p = mobs.at(MobID{0}).properties;
+    EXPECT_FALSE(p.flying);
+    EXPECT_FALSE(p.spawnsInAir);
+    EXPECT_TRUE(p.ambientSoundName.empty());
+    EXPECT_DOUBLE_EQ(p.ambientInterval, kAmbientIntervalDefaultSeconds);
+}
+
+TEST(MobRegistryTest, ParsesFlightFlagsAndAmbientSound) {
+    MobRegistry mobs;
+    std::string def = kZombieDef;
+    const std::string key = "\"wander_interval\": 2.5";
+    def.replace(def.find(key), key.size(),
+                "\"wander_interval\": 2.5, \"flying\": true, "
+                "\"spawns_in_air\": true, \"ambient_sound\": \"squeak\", "
+                "\"ambient_interval\": 3.0");
+    auto r = mobs.registerMob(parseJson(def));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const MobProperties& p = mobs.at(MobID{0}).properties;
+    EXPECT_TRUE(p.flying);
+    EXPECT_TRUE(p.spawnsInAir);
+    EXPECT_EQ(p.ambientSoundName, "squeak");
+    EXPECT_DOUBLE_EQ(p.ambientInterval, 3.0);
+}
+
+TEST(MobRegistryTest, AmbientIntervalDefaultsWithLoneSound) {
+    // A sound without an interval: the default period (the fields are
+    // each independently optional — the design's decision).
+    MobRegistry mobs;
+    std::string def = kZombieDef;
+    const std::string key = "\"wander_interval\": 2.5";
+    def.replace(def.find(key), key.size(),
+                "\"wander_interval\": 2.5, \"ambient_sound\": \"squeak\"");
+    auto r = mobs.registerMob(parseJson(def));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const MobProperties& p = mobs.at(MobID{0}).properties;
+    EXPECT_EQ(p.ambientSoundName, "squeak");
+    EXPECT_DOUBLE_EQ(p.ambientInterval, kAmbientIntervalDefaultSeconds);
+}
+
+TEST(MobRegistryTest, RejectsFlyingWithoutSpawnsInAir) {
+    // The ONE hard pairing: flying requires spawns_in_air (a
+    // ground-spawning flier is meaningless — named).
+    MobRegistry mobs;
+    std::string def = kZombieDef;
+    const std::string key = "\"wander_interval\": 2.5";
+    def.replace(def.find(key), key.size(),
+                "\"wander_interval\": 2.5, \"flying\": true");
+    auto r = mobs.registerMob(parseJson(def));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("flying"), std::string::npos);
+    EXPECT_NE(r.error().message.find("spawns_in_air"), std::string::npos);
+    // spawns_in_air WITHOUT flying is legal (the independent optional —
+    // the future extension surface).
+    MobRegistry lone;
+    std::string def2 = kZombieDef;
+    def2.replace(def2.find(key), key.size(),
+                 "\"wander_interval\": 2.5, \"spawns_in_air\": true");
+    auto r2 = lone.registerMob(parseJson(def2));
+    ASSERT_TRUE(r2.ok()) << r2.error().message;
+    EXPECT_TRUE(lone.at(MobID{0}).properties.spawnsInAir);
+    EXPECT_FALSE(lone.at(MobID{0}).properties.flying);
+}
+
+TEST(MobRegistryTest, RejectsBadFlightAndAmbientFields) {
+    for (const char* bad : {
+             // type / range errors
+             "\"flying\": 1",
+             "\"spawns_in_air\": \"yes\"",
+             "\"ambient_sound\": 7",
+             "\"ambient_sound\": \"\"",
+             "\"ambient_interval\": \"3\"",
+             "\"ambient_interval\": 0",
+             "\"ambient_interval\": -1.0",
+             // the lone interval (dead data without the sound)
+             "\"ambient_interval\": 3.0",
+         }) {
+        MobRegistry mobs;
+        std::string def = kZombieDef;
+        const std::string key = "\"wander_interval\": 2.5";
+        def.replace(def.find(key), key.size(),
+                    std::string("\"wander_interval\": 2.5, ") + bad);
+        auto r = mobs.registerMob(parseJson(def));
+        EXPECT_FALSE(r.ok()) << bad;
+    }
+    // The lone-interval rejection names the pairing.
+    MobRegistry mobs;
+    std::string def = kZombieDef;
+    const std::string key = "\"wander_interval\": 2.5";
+    def.replace(def.find(key), key.size(),
+                "\"wander_interval\": 2.5, \"ambient_interval\": 3.0");
+    auto r = mobs.registerMob(parseJson(def));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("ambient_sound"), std::string::npos);
 }
 
 // -- hostile flag (Phase 25: the difficulty system is data-driven) ------------
@@ -907,6 +1048,107 @@ TEST(MobContent, V211MobXpPinned) {
         ASSERT_NE(m, nullptr);
         EXPECT_EQ(m->properties.xp, e.xp);
     }
+    // V2-14: the bat is the zero-grant (the pure ambience mob — the MC
+    // "no drops / xp 0" fact).
+    const Mob* bat = mobs.findByName("bat");
+    ASSERT_NE(bat, nullptr);
+    EXPECT_EQ(bat->properties.xp, 0);
+}
+
+// -- V2-14: the bat content pin (the data-driven mob promise) ------------------
+
+TEST(MobContent, BatDataPinned) {
+    // The REAL asset (data/mobs/bat.json): the MC-verified bat (HP 6,
+    // passive, no drops / xp 0, the light <= 3 cave semantics, the
+    // cruise speed 1.0) + the three new data flags (flying /
+    // spawns_in_air / the ambient pair — the bat is the first carrier
+    // of each).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.loadDirectory(assets, "data/mobs").ok());
+    const Mob* bat = mobs.findByName("bat");
+    ASSERT_NE(bat, nullptr);
+    const MobProperties& p = bat->properties;
+    EXPECT_FLOAT_EQ(p.health, 6.0f);
+    EXPECT_FLOAT_EQ(p.speed, kBatCruiseSpeed);  // the MC cruise 1.0
+    EXPECT_FLOAT_EQ(p.detectRadius, 0.0f);
+    EXPECT_FLOAT_EQ(p.attackRange, 0.0f);
+    EXPECT_FLOAT_EQ(p.attackDamage, 0.0f);
+    EXPECT_DOUBLE_EQ(p.wanderInterval, 2.0);    // the cruise turn cadence
+    EXPECT_EQ(p.spawnMaxLight, 3);              // the MC light <= 3 (cave)
+    EXPECT_FALSE(p.hostile);
+    EXPECT_TRUE(p.drops.empty());                // no drops (omitted)
+    EXPECT_EQ(p.xp, 0);
+    // The three data flags.
+    EXPECT_TRUE(p.flying);
+    EXPECT_TRUE(p.spawnsInAir);
+    EXPECT_EQ(p.ambientSoundName, "squeak");
+    EXPECT_DOUBLE_EQ(p.ambientInterval, 3.0);
+    // Model: the flat hovering form (deviation 1 — the MC 0.5 x 0.9
+    // vertical box cannot fit the AABB's wing spread; 0.9 x 0.5 is the
+    // visual self-consistent hover), 4 boxes (body / head / two wings)
+    // inside the AABB, the two-wing 0.9 rad antiphase flapping.
+    EXPECT_FLOAT_EQ(bat->model.width, 0.9f);
+    EXPECT_FLOAT_EQ(bat->model.height, 0.5f);
+    ASSERT_EQ(bat->model.boxes.size(), 4u);
+    const MobBox& body = bat->model.boxes[0];
+    EXPECT_NEAR(body.center.x, 0.0f, 1e-6f);
+    EXPECT_NEAR(body.center.y, 0.25f, 1e-6f);
+    EXPECT_NEAR(body.center.z, 0.0f, 1e-6f);
+    EXPECT_NEAR(body.size.x, 0.5f, 1e-6f);
+    EXPECT_NEAR(body.size.y, 0.3f, 1e-6f);
+    EXPECT_NEAR(body.size.z, 0.5f, 1e-6f);
+    EXPECT_EQ(body.texture, "bat");
+    EXPECT_TRUE(body.faces.empty());
+    const MobBox& head = bat->model.boxes[1];
+    EXPECT_NEAR(head.center.x, 0.0f, 1e-6f);
+    EXPECT_NEAR(head.center.y, 0.35f, 1e-6f);
+    EXPECT_NEAR(head.center.z, -0.25f, 1e-6f);  // front = -Z
+    EXPECT_NEAR(head.size.x, 0.25f, 1e-6f);
+    EXPECT_NEAR(head.size.y, 0.2f, 1e-6f);
+    EXPECT_NEAR(head.size.z, 0.2f, 1e-6f);
+    EXPECT_EQ(head.texture, "bat");
+    const char* wingNames[] = {"wing_l", "wing_r"};
+    for (int i = 0; i < 2; ++i) {
+        const MobBox& wing = bat->model.boxes[static_cast<std::size_t>(2 + i)];
+        EXPECT_EQ(wing.name, wingNames[i]) << "wing " << i;
+        EXPECT_NEAR(std::abs(wing.center.x), 0.275f, 1e-6f) << "wing " << i;
+        EXPECT_NEAR(wing.center.y, 0.3f, 1e-6f) << "wing " << i;
+        EXPECT_NEAR(wing.center.z, 0.0f, 1e-6f) << "wing " << i;
+        EXPECT_NEAR(wing.size.x, 0.35f, 1e-6f) << "wing " << i;
+        EXPECT_NEAR(wing.size.y, 0.05f, 1e-6f) << "wing " << i;
+        EXPECT_NEAR(wing.size.z, 0.5f, 1e-6f) << "wing " << i;
+        EXPECT_EQ(wing.texture, "bat") << "wing " << i;
+        EXPECT_TRUE(wing.faces.empty()) << "wing " << i;
+    }
+    ASSERT_EQ(bat->model.swings.size(), 2u);
+    for (int i = 0; i < 2; ++i) {
+        const MobSwing& sw = bat->model.swings[static_cast<std::size_t>(i)];
+        EXPECT_FLOAT_EQ(sw.amplitude, 0.9f) << "swing " << i;
+        EXPECT_EQ(sw.group, i) << "swing " << i;  // the antiphase flapping
+        EXPECT_EQ(
+            bat->model.boxes[static_cast<std::size_t>(sw.boxIndex)].name,
+            wingNames[i])
+            << "swing " << i;
+    }
+}
+
+TEST(MobContent, BatAssetsPinned) {
+    // The bat's new asset files (the content is data — the FNV pins, the
+    // PreV25MobFilesUnchanged convention): bat.json, textures/mobs/bat.png
+    // (the single tile — dark brown-black hide + wing membrane),
+    // squeak.wav (the ambient sound) and mob_spawning.json (the 8-entry
+    // vocabulary).
+    EXPECT_EQ(fnv1a64(readAll("assets/data/mobs/bat.json")),
+              "2b86ddaad75a7b84");
+    EXPECT_EQ(fnv1a64(readAll("assets/textures/mobs/bat.png")),
+              "960a8e389c157af2");
+    EXPECT_EQ(fnv1a64(readAll("assets/sounds/squeak.wav")),
+              "3857c104ff96aed5");
+    EXPECT_EQ(fnv1a64(readAll("assets/data/mob_spawning.json")),
+              "a8e3bf9e89ccbbf0");
 }
 
 // -- SURV-5: the mob effect carrier (MobEntity) --------------------------------
@@ -1503,8 +1745,11 @@ TEST(MobSpawningConfigTest, ParsesWeightedMobList) {
 TEST(MobSpawningConfigTest, ShippedSpawnListPinsPig) {
     // V2-5: the REAL assets/data/mob_spawning.json — the pre-pig six +
     // the pig, all weight 1 (the vocabulary pin: with every weight 1 the
-    // pick is the legacy % list.size() extended to seven, and the pig's
-    // cumulative slot is the last one).
+    // pick is the legacy % list.size(), and the pig's cumulative slot is
+    // the last one). V2-14: the 8th entry is the bat (the passive-pool
+    // member — the MC ambient cap deviation, the design's documented
+    // deviation 2): the vocabulary pin extends to eight, the bat's
+    // cumulative slot is the last.
     AssetManager assets;
     ASSERT_TRUE(assets.setRoot("assets").ok())
         << "run the tests from the repository root";
@@ -1514,16 +1759,23 @@ TEST(MobSpawningConfigTest, ShippedSpawnListPinsPig) {
     ASSERT_TRUE(def.ok()) << def.error().message;
     auto r = MobSpawningConfig::parse(*def);
     ASSERT_TRUE(r.ok()) << r.error().message;
-    ASSERT_EQ((*r).mobs.size(), 7u);
+    ASSERT_EQ((*r).mobs.size(), 8u);
     const char* ids[] = {"zombie", "cow", "sheep", "chicken", "skeleton",
-                         "spider", "pig"};
-    for (std::size_t i = 0; i < 7; ++i) {
+                         "spider", "pig", "bat"};
+    for (std::size_t i = 0; i < 8; ++i) {
         EXPECT_EQ((*r).mobs[i].id, ids[i]) << i;
         EXPECT_EQ((*r).mobs[i].weight, 1) << i;
     }
-    EXPECT_EQ((*r).totalWeight(), 7);
-    // The pick's domain: v = 6 (the last unit) resolves to the pig.
+    EXPECT_EQ((*r).totalWeight(), 8);
+    // The pick's domain: v = 7 (the last unit) resolves to the bat.
+    EXPECT_EQ((*r).pickIndex(7), 7u);
+    // The vocabulary 7 -> 8 shifts the weighted pick's stream mapping
+    // (the design's note: pin the new values — the same raw pick value
+    // now lands on a different entry than pre-V2-14): the legacy
+    // v % 7 mapping is gone, the cumulative walk owns [0, 8).
+    EXPECT_EQ((*r).pickIndex(0), 0u);
     EXPECT_EQ((*r).pickIndex(6), 6u);
+    EXPECT_EQ((*r).pickIndex(123456789ULL % 8), 123456789ULL % 8);
 }
 
 TEST(MobSpawningConfigTest, RejectsBadMobListEntries) {
@@ -1967,6 +2219,163 @@ TEST(MobSpawnCellTest, ZeroProtectionRadiusIsLegacyBehavior) {
     EXPECT_EQ(*cell, (BlockPos {0, 0, -6}));
 }
 
+// -- V2-14: the in-air branch (the bat — the spawns_in_air data flag) ---------
+//
+// The FLOOR BAND IS SKIPPED (any Y, the MC bat cave semantics): the scan
+// walks each ring column TOP-DOWN and takes the first cell whose box is
+// air with no fluid at the light gate or below. The fixture's fresh-chunk
+// light is 0 everywhere (no sky propagation), so the OPEN air above a
+// roof would read as a dark spawn cell — the seal helper fills the column
+// above the pocket with stone to emulate the real world's stone column /
+// sky light (the pocket is then the column's only dark air).
+
+namespace {
+
+// A TRUE cave cross-section in the column: stone everywhere except the
+// single air pocket cell at pocketY. (A roof-only seal would leave the
+// column's lower air dark too — the top-down scan would fall through a
+// lit pocket to the unlit air below it; the real cave's floor stone is
+// what stops it.) The fixture's fresh-chunk light is 0 everywhere (no
+// sky propagation), so the OPEN air above a roof would read as a dark
+// spawn cell — the stone column emulates the real world's stone / sky
+// light.
+void sealCaveColumn(Fixture& f, int x, int z, int pocketY) {
+    for (int y = 0; y < kWorldHeight; ++y) {
+        if (y == pocketY) {
+            continue;
+        }
+        f.world.setBlock(x, y, z, f.stone);
+    }
+}
+
+// The in-air call shape (the bat's geometry: 0.9 wide x 0.5 tall, the
+// light gate 3, the fixture's dayFactor/nightLevel arguments explicit).
+std::optional<BlockPos> inAirCell(const Fixture& f, float minRadius,
+                                  float maxRadius, int cx, int cz,
+                                  float dayFactor,
+                                  const Vec3& pmin = kPlayerMin,
+                                  const Vec3& pmax = kPlayerMax,
+                                  const std::vector<Vec3>& mobs = {}) {
+    return findMobSpawnCell(f.world, f.blocks, minRadius, maxRadius, cx, cz,
+                            0, 0.9f, 0.5f, dayFactor, 3, pmin, pmax, mobs,
+                            0.0f, 0.0f, 0.0f, kNightSkyLevel, true);
+}
+
+} // namespace
+
+TEST(MobSpawnCellTest, InAirSpawnsInTheDarkPocketUnderTheRoof) {
+    Fixture f;
+    // The first ring column (0, -6): the pocket at y=4 (the fixture floor
+    // stays at y=0 — the band is irrelevant here).
+    sealCaveColumn(f, 0, -6, 4);
+    auto cell = inAirCell(f, 4.0f, 6.0f, 0, 0, 0.0f);
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {0, 4, -6}));
+    // The light gate's day twin (dayFactor 1.0): the fresh-chunk light is
+    // still 0 (no sky propagation in the fixture) -> the pocket admits.
+    EXPECT_EQ(inAirCell(f, 4.0f, 6.0f, 0, 0, 1.0f).value_or(BlockPos{}),
+              (BlockPos {0, 4, -6}));
+}
+
+TEST(MobSpawnCellTest, InAirIgnoresTheFloorBand) {
+    Fixture f;
+    // The pocket at y=19 is FAR from the player's floor y=0 (the
+    // kSpawnFloorDelta 2 band would bar the floor branch): the in-air
+    // branch takes it (any Y = MC).
+    sealCaveColumn(f, 0, -6, 19);
+    auto cell = inAirCell(f, 4.0f, 6.0f, 0, 0, 0.0f);
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {0, 19, -6}));
+}
+
+TEST(MobSpawnCellTest, InAirRejectsTheNightFloorLight) {
+    Fixture f;
+    // The first pocket (0, 4, -6) lit to the stored open-sky value (15:
+    // at the night floor it reads effective 7 > the gate 3 — the open
+    // night sky the bat must NOT spawn in, the NightMoonlight test's
+    // twin): the scan skips it. The SECOND column (dx=-3, dz=-5 — the
+    // next in-ring in scan order) carries a dark pocket at the same
+    // height.
+    sealCaveColumn(f, 0, -6, 4);
+    f.world.getOrCreateChunk({0, 0, -1}).setSkyLightAt(0, 4, 10, 15);
+    sealCaveColumn(f, -3, -5, 4);
+    auto cell = inAirCell(f, 4.0f, 6.0f, 0, 0, 0.0f);
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {-3, 4, -5}));
+}
+
+TEST(MobSpawnCellTest, InAirRejectsFluidInThePocket) {
+    Fixture f;
+    // Water in the first pocket's cell: the box cell is not air-fluid-
+    // free. The second column's dry pocket takes it.
+    sealCaveColumn(f, 0, -6, 4);
+    f.world.setFluid(0, 4, -6, FluidKind::Water, 1);
+    sealCaveColumn(f, -3, -5, 4);
+    auto cell = inAirCell(f, 4.0f, 6.0f, 0, 0, 0.0f);
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {-3, 4, -5}));
+}
+
+TEST(MobSpawnCellTest, InAirNoDarkPocketYieldsNoCell) {
+    Fixture f;
+    // The ring [4.0, 4.05] holds EXACTLY the four axis columns
+    // (0, ±4) / (±4, 0): every pocket lit to the stored open-sky value
+    // (15 -> effective 7 at the night floor > the gate 3, AND 15 by day)
+    // -> no cell (the light gate's hermetic negative).
+    for (const std::pair<int, int> col :
+         {std::pair {0, -4}, {0, 4}, {-4, 0}, {4, 0}}) {
+        sealCaveColumn(f, col.first, col.second, 4);
+        const int lx = col.first >= 0 ? col.first : col.first + 16;
+        const int lz = col.second >= 0 ? col.second : col.second + 16;
+        f.world.getOrCreateChunk({col.first >= 0 ? 0 : -1, 0,
+                                  col.second >= 0 ? 0 : -1})
+            .setSkyLightAt(lx, 4, lz, 15);
+    }
+    EXPECT_FALSE(inAirCell(f, 4.0f, 4.05f, 0, 0, 0.0f).has_value());
+    EXPECT_FALSE(inAirCell(f, 4.0f, 4.05f, 0, 0, 1.0f).has_value());
+}
+
+TEST(MobSpawnCellTest, InAirRejectsSpawnOverlappingThePlayer) {
+    Fixture f;
+    // A player AABB sitting in the first pocket (the bat's box spans
+    // y [4, 4.5) there): the overlap bars it, the second pocket takes it.
+    sealCaveColumn(f, 0, -6, 4);
+    sealCaveColumn(f, -3, -5, 4);
+    auto cell = inAirCell(f, 4.0f, 6.0f, 0, 0, 0.0f,
+                          Vec3 {0.4f, 4.0f, -5.6f}, Vec3 {0.6f, 4.5f,
+                                                          -5.4f});
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {-3, 4, -5}));
+}
+
+TEST(MobSpawnCellTest, InAirKeepsClearanceFromExistingMobs) {
+    Fixture f;
+    // An existing mob at the first pocket's spawn point (0.5, 4, -5.5):
+    // the horizontal clearance bars it, the second pocket takes it.
+    sealCaveColumn(f, 0, -6, 4);
+    sealCaveColumn(f, -3, -5, 4);
+    auto cell = inAirCell(f, 4.0f, 6.0f, 0, 0, 0.0f, kPlayerMin, kPlayerMax,
+                          {Vec3 {0.5f, 4.0f, -5.5f}});
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {-3, 4, -5}));
+}
+
+TEST(MobSpawnCellTest, InAirKeepsTheProtectionCircle) {
+    Fixture f;
+    // The protection circle centered ON the first pocket's column (its
+    // center (0.5, -5.5) is 6.0 from the player — just past the ring's
+    // inner edge, so the pocket stays in-ring) with radius 1.0: it bars
+    // the first pocket only; the second takes it.
+    sealCaveColumn(f, 0, -6, 4);
+    sealCaveColumn(f, -3, -5, 4);
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.9f, 0.5f, 0.0f, 3, kPlayerMin,
+                                 kPlayerMax, {}, 1.0f, 0.5f, -5.5f,
+                                 kNightSkyLevel, true);
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {-3, 4, -5}));
+}
+
 // -- box-model mesh ------------------------------------------------------------
 
 namespace {
@@ -2333,6 +2742,300 @@ TEST(MobAiTest, RollDropCountStaysInRange) {
         EXPECT_GE(n, 0);
         EXPECT_LE(n, 2);
     }
+}
+
+// ---------------------------------------------------------------------------
+// V2-14: the flight AI (the bat — the flyCruise branch, the data-flag
+// gated, no species switch). CPU frame pins: the cruise speed / heading
+// cadence, the bob's 60-frame period, the wall-hit re-roll, the
+// knockback return-to-cruise and the ambient roll.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// A player far from the fixture origin: the bat's detect_radius 0 never
+// sees it anyway, but the far position also keeps the player-out-of-range
+// bookkeeping out of the picture.
+const Vec3 kFlyFarPlayer {40.0f, 10.0f, 40.0f};
+
+} // namespace
+
+TEST(MobFlyTest, CruiseAtDataSpeedAlongTheRolledHeading) {
+    Fixture f;
+    MobRegistry mobs = makeBatRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 10.5f, 8.5f}, 42);
+    mob.setPlayer(kFlyFarPlayer, true);
+    const Vec3 p0 = mob.position();
+    mob.update(kDt);
+    EXPECT_EQ(mob.state(), MobState::Wander);
+    // Cruise speed = the data speed (kBatCruiseSpeed): the horizontal
+    // velocity magnitude is exactly 1.0...
+    EXPECT_NEAR(std::hypot(mob.velocity().x, mob.velocity().z), 1.0f, 1e-6f);
+    // ...along the heading (the camera yaw convention forward =
+    // (-sin, -cos) — the wander / chase steering's twin).
+    EXPECT_NEAR(mob.velocity().x, -std::sin(mob.facingYaw()), 1e-6f);
+    EXPECT_NEAR(mob.velocity().z, -std::cos(mob.facingYaw()), 1e-6f);
+    // The frame-locked displacement: one 1/60 step along the velocity.
+    EXPECT_NEAR(mob.position().x - p0.x, mob.velocity().x * kDt, 1e-6f);
+    EXPECT_NEAR(mob.position().z - p0.z, mob.velocity().z * kDt, 1e-6f);
+}
+
+TEST(MobFlyTest, HeadingReRollsEveryWanderInterval) {
+    Fixture f;
+    MobRegistry mobs = makeBatRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 10.5f, 8.5f}, 42);
+    mob.setPlayer(kFlyFarPlayer, true);
+    mob.update(kDt);  // frame 1: the first decision (the timer at 0)
+    const float yaw1 = mob.facingYaw();
+    // Frames 2..115: the 2.0 s cadence has not elapsed — no re-roll
+    // (the boundary sits at frame 121, outside the pinned window — the
+    // repeated-subtraction double residue stays below 1e-15 there, so
+    // the 6-frame margin is exact, not fudged).
+    for (int i = 1; i < 115; ++i) {
+        mob.update(kDt);
+        EXPECT_FLOAT_EQ(mob.facingYaw(), yaw1) << "frame " << i + 1;
+    }
+    // By frame 123 the cadence has elapsed (2.0 s = 120 frames): the
+    // re-roll has happened.
+    for (int i = 115; i < 123; ++i) {
+        mob.update(kDt);
+    }
+    EXPECT_NE(mob.facingYaw(), yaw1);
+}
+
+TEST(MobFlyTest, BobIsAFrameLockedSine) {
+    Fixture f;
+    MobRegistry mobs = makeBatRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    const float y0 = 10.5f;  // the spawn height (the bob's center)
+    // Same seed twice: bit-identical trajectories (the per-mob stream).
+    MobEntity a = makeMob(f, def, {8.5f, y0, 8.5f}, 1234);
+    MobEntity b = makeMob(f, def, {8.5f, y0, 8.5f}, 1234);
+    a.setPlayer(kFlyFarPlayer, true);
+    b.setPlayer(kFlyFarPlayer, true);
+    float y30 = y0;
+    float y60 = y0;
+    for (int i = 0; i < 120; ++i) {
+        a.update(kDt);
+        b.update(kDt);
+        if (i == 29) {
+            y30 = a.position().y;
+        }
+        if (i == 59) {
+            y60 = a.position().y;
+        }
+        EXPECT_FLOAT_EQ(a.position().y, b.position().y) << "frame " << i + 1;
+    }
+    const float y120 = a.position().y;
+    // The 60-frame period (kBatBobPeriodFrames): the displacement over
+    // each full period is zero (the sine sums to 0 on the frame grid),
+    // so y returns to the period start within the float residue.
+    EXPECT_NEAR(y60 - y0, 0.0f, 1e-4f);   // frames 1..60: one full period
+    EXPECT_NEAR(y120 - y60, 0.0f, 1e-4f); // frames 61..120: another
+    // The bob's position amplitude (A / omega = 0.2 / (2*pi/1s) ~ 0.032
+    // blocks): the y stays close to the spawn height for every frame.
+    MobEntity c = makeMob(f, def, {8.5f, y0, 8.5f}, 1234);
+    c.setPlayer(kFlyFarPlayer, true);
+    for (int i = 0; i < 120; ++i) {
+        c.update(kDt);
+        EXPECT_GT(c.position().y, y0 - 0.04f) << "frame " << i + 1;
+        EXPECT_LT(c.position().y, y0 + 0.04f) << "frame " << i + 1;
+    }
+    // A different seed (a different spawn-stream phase roll) differs at
+    // a QUARTER period (frame 30: the bob is mid-swing, far from the
+    // period-start value y0 that every phase returns to).
+    MobEntity d = makeMob(f, def, {8.5f, y0, 8.5f}, 4321);
+    d.setPlayer(kFlyFarPlayer, true);
+    for (int i = 0; i < 30; ++i) {
+        d.update(kDt);
+    }
+    EXPECT_NE(d.position().y, y30);
+}
+
+TEST(MobFlyTest, NoGravityWhileFlying) {
+    Fixture f;
+    MobRegistry mobs = makeBatRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 10.5f, 8.5f}, 42);
+    mob.setPlayer(kFlyFarPlayer, true);
+    // 300 frames (5 s): a falling mob would drop ~373 blocks (32*t^2/2);
+    // the flyer hovers (the bob's position bound).
+    for (int i = 0; i < 300; ++i) {
+        mob.update(kDt);
+    }
+    EXPECT_GT(mob.position().y, 10.5f - 0.05f);
+    EXPECT_LT(mob.position().y, 10.5f + 0.05f);
+}
+
+TEST(MobFlyTest, WallHitRerollsTheHeading) {
+    Fixture f;
+    MobRegistry mobs = makeBatRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    // Seed 79149: the constructor's bob-phase draw + the first heading
+    // draw land the initial heading on yaw ~ 3*pi/2 (facing +X — the
+    // forward(yaw) = (-sin, -cos) convention: -sin(3*pi/2) = +1; the
+    // residue 1.5e-5 rad is the pinned stream value's).
+    MobEntity mob = makeMob(f, def, {4.5f, 10.5f, 4.5f}, 79149);
+    mob.setPlayer(kFlyFarPlayer, true);
+    mob.update(kDt);
+    EXPECT_NEAR(mob.facingYaw(), 3.0 * std::numbers::pi / 2.0, 1e-4f);
+    // The wall: the x=6 slab (y 9..12, z 3..7) — the bat's +X face
+    // clamps flush at x = 6.0 - 0.45 = 5.55.
+    for (int y = 9; y <= 12; ++y) {
+        for (int z = 3; z <= 7; ++z) {
+            f.world.setBlock(6, y, z, f.stone);
+        }
+    }
+    // Cruise +X at 1.0 b/s from x = 4.5: the flush clamp lands on frame
+    // 62-64 (the 1.05-block gap at 1.0 b/s = 63 frames, the float
+    // accumulation residue decides the ±1 boundary — both ends pinned).
+    int hitFrame = 0;
+    for (int i = 1; i < 120 && hitFrame == 0; ++i) {
+        mob.update(kDt);
+        if (std::abs(mob.position().x - 5.55f) < 1e-5f) {
+            hitFrame = i;
+        }
+    }
+    ASSERT_GT(hitFrame, 0) << "the bat never reached the wall";
+    EXPECT_GE(hitFrame, 62);
+    EXPECT_LE(hitFrame, 64);
+    // The wall hit (the clamped x velocity) re-rolls the heading on the
+    // NEXT frame (the deviation-3 natural detour: no pathfinding)...
+    const float yawAtWall = mob.facingYaw();
+    mob.update(kDt);
+    EXPECT_NE(mob.facingYaw(), yawAtWall);
+    // ...and the bat never tunnels (600 more frames: x stays < 6.0).
+    for (int i = 0; i < 600; ++i) {
+        mob.update(kDt);
+        EXPECT_LT(mob.position().x, 6.0f) << "frame " << i;
+    }
+}
+
+TEST(MobFlyTest, KnockbackSlidesThenCruiseResumes) {
+    Fixture f;
+    MobRegistry mobs = makeBatRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, {8.5f, 10.5f, 8.5f}, 42);
+    mob.setPlayer(kFlyFarPlayer, true);
+    mob.update(kDt);  // frame 1: the cruise is set
+    const float zBefore = mob.position().z;
+    // The arrow's impulse: the knockback window suppresses the steering;
+    // integrate's exponential damping carries the slide.
+    mob.addKnockback({0.0f, 0.0f, -3.0f});
+    // 0.3 s = kKnockbackTime. A couple of extra updates absorb the float
+    // residue (0.3 is not binary-exact, so the window's close drifts by
+    // one frame — 20 updates = 0.333 s is safely past it).
+    for (int i = 0; i < 20; ++i) {
+        mob.update(kDt);
+    }
+    // The slide ran (the bat moved -z against the cruise)...
+    EXPECT_LT(mob.position().z, zBefore);
+    // ...and the window closed: the cruise is back at the full data
+    // speed (the decayed impulse is overridden by the steering).
+    EXPECT_NEAR(std::hypot(mob.velocity().x, mob.velocity().z), 1.0f, 1e-6f);
+    EXPECT_EQ(mob.state(), MobState::Wander);
+}
+
+TEST(MobFlyTest, AmbientSqueakRollsDeterministically) {
+    Fixture f;
+    MobRegistry mobs = makeBatRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    // The per-frame roll: p = 1 / (ambient_interval * 60) = 1/180 of the
+    // per-mob stream. 3000 frames -> ~16.7 squeaks (the seeded value,
+    // pinned below).
+    auto squeakFrames = [&](std::uint64_t seed) {
+        MobEntity mob = makeMob(f, def, {8.5f, 10.5f, 8.5f}, seed);
+        mob.setPlayer(kFlyFarPlayer, true);
+        int calls = 0;
+        mob.setAmbientSoundCallback([&calls](Vec3) { ++calls; });
+        std::vector<int> frames;
+        for (int i = 1; i <= 3000; ++i) {
+            mob.update(kDt);
+            if (calls > static_cast<int>(frames.size())) {
+                frames.push_back(i);
+            }
+        }
+        return frames;
+    };
+    const std::vector<int> a = squeakFrames(777);
+    const std::vector<int> b = squeakFrames(777);
+    EXPECT_EQ(a, b);  // same seed = same frames (the stream)
+    EXPECT_GT(a.size(), 5u);   // the rate's lower band
+    EXPECT_LT(a.size(), 40u);  // the rate's upper band
+    // The pinned frames (seed 777's first-run values — the frame-locked
+    // roll's bit-level pin; 16 squeaks over 3000 frames ~ the 3000/180
+    // = 16.7 expectation).
+    EXPECT_EQ(a, (std::vector<int> {21, 180, 222, 779, 794, 888, 1142,
+                                    1203, 1680, 2112, 2311, 2648, 2669,
+                                    2708, 2894, 2943}));
+    // A mob WITHOUT the ambient data never rolls (structural: the
+    // pre-V2-14 stream shape).
+    MobRegistry plain;
+    ASSERT_TRUE(plain.registerMob(parseJson(kZombieDef)).ok());
+    MobEntity zombie = makeMob(f, plain.at(MobID{0}), {8.5f, 1.0f, 8.5f}, 777);
+    int zombieCalls = 0;
+    zombie.setAmbientSoundCallback([&zombieCalls](Vec3) { ++zombieCalls; });
+    zombie.setPlayer({8.5f, 1.0f, 40.0f}, true);
+    for (int i = 0; i < 3000; ++i) {
+        zombie.update(kDt);
+    }
+    EXPECT_EQ(zombieCalls, 0);
+}
+
+TEST(MobFlyTest, FlightInARoomIsDeterministicForTheSameSeed) {
+    // The full interaction — cruise + bob + wall hits (heading re-rolls)
+    // + the ambient roll — as a pure function of the seed: two bats in
+    // IDENTICAL sealed rooms (x/z 5..8, y 9..12) run 900 frames (15 s:
+    // 7 heading cadences + several wall hits) bit-identically.
+    Fixture fa;
+    Fixture fb;
+    auto buildRoom = [](Fixture& f) {
+        // The room walls: the x=4 / x=9 and z=4 / z=9 slabs (y 9..12),
+        // the interior (x/z 5..8, y 9..12) air. The bat hovers at
+        // y ~ 10.5 — the interior height keeps it clear of the floor
+        // (the fixture's y=0 slab is far below) and the open top.
+        for (int y = 9; y <= 12; ++y) {
+            for (int z = 4; z <= 9; ++z) {
+                f.world.setBlock(4, y, z, f.stone);
+                f.world.setBlock(9, y, z, f.stone);
+            }
+            for (int x = 5; x <= 8; ++x) {
+                f.world.setBlock(x, y, 4, f.stone);
+                f.world.setBlock(x, y, 9, f.stone);
+            }
+        }
+    };
+    buildRoom(fa);
+    buildRoom(fb);
+    MobRegistry mobs = makeBatRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity a = makeMob(fa, def, {6.5f, 10.5f, 6.5f}, 555);
+    MobEntity b = makeMob(fb, def, {6.5f, 10.5f, 6.5f}, 555);
+    int aCalls = 0;
+    int bCalls = 0;
+    a.setAmbientSoundCallback([&aCalls](Vec3) { ++aCalls; });
+    b.setAmbientSoundCallback([&bCalls](Vec3) { ++bCalls; });
+    a.setPlayer(kFlyFarPlayer, true);
+    b.setPlayer(kFlyFarPlayer, true);
+    for (int i = 0; i < 900; ++i) {
+        a.update(kDt);
+        b.update(kDt);
+        if (i % 30 == 0) {
+            EXPECT_FLOAT_EQ(a.position().x, b.position().x) << "frame " << i;
+            EXPECT_FLOAT_EQ(a.position().y, b.position().y) << "frame " << i;
+            EXPECT_FLOAT_EQ(a.position().z, b.position().z) << "frame " << i;
+            EXPECT_FLOAT_EQ(a.facingYaw(), b.facingYaw()) << "frame " << i;
+        }
+    }
+    // The bats left the room's interior (they hit walls — the re-roll
+    // path ran, not just the open cruise)...
+    const Vec3 atSpawn = Vec3 {6.5f, 10.5f, 6.5f};
+    EXPECT_NE(a.position(), atSpawn);
+    // ...and their squeak counts agree (the stream's full history).
+    EXPECT_EQ(aCalls, bCalls);
+    EXPECT_GT(aCalls, 0);
 }
 
 TEST(MobAiTest, RangedMobShootsAndHoldsDistance) {

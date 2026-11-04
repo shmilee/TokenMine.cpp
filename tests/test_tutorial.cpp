@@ -442,6 +442,27 @@ TEST(TutorialValidateTest, NamesTheUnknownTarget) {
                     .ok());
 }
 
+TEST(TutorialValidateTest, KillBatIsAClosedVocabularyWord) {
+    // V2-14: the bat joins the kill.<mob> closed vocabulary (the grammar
+    // accepts the prefix + the init cross-check resolves the name in the
+    // MobRegistry — the bat's registration is what makes the word valid;
+    // the bat is killable: 6 HP, no drops — the pure ambience mob).
+    RealRegistries r;
+    ASSERT_TRUE(r.load()) << "run from the repository root";
+    auto v = validateTutorialGoals({step("s", "kill.bat", 1)}, r.items,
+                                   r.blocks, r.mobs);
+    ASSERT_TRUE(v.ok()) << v.error().message;
+    // The kill event the game emits for a bat death ("kill." + the data
+    // id) is exactly the word the step waits for.
+    const TutorialStep s = step("s", "kill.bat", 1);
+    const TutorialState s0 {};
+    const TutorialState s1 =
+        tutorialApply(s0, "kill.bat", 1, {std::vector {s}});
+    EXPECT_TRUE(s1.done);  // count 1: the single kill completes the step
+    const TutorialState sNoop = tutorialApply(s0, "kill.pig", 1, {std::vector {s}});
+    EXPECT_FALSE(sNoop.done);  // a different mob's kill does not match
+}
+
 // -- the pure step machine ----------------------------------------------------
 
 TEST(TutorialApplyTest, FirstEventAdvancesCountOne) {

@@ -45,6 +45,23 @@
 //            shoot_range (but inside detect_radius) it chases like a melee
 //            mob. A ranged mob's `attack_range` is its (unused) melee
 //            range — the skeleton sets it to 0, so it never melee-attacks.
+//   FlyCruise (V2-14) — for mobs whose data `flying` is true (the bat —
+//            the project's first flying mob): the state machine's TOP
+//            branch (the data flag gate, no species switch) — a flying
+//            mob never reaches the chase / attack / pathfind branches
+//            below (the bat's detect_radius is 0 in the data anyway).
+//            Gravity is OFF (integrate's hover baseline: the vy is SET to
+//            the frame-locked bob sine every sub-step, not accumulated)
+//            and the mob cruises at its data speed along a heading that a
+//            per-mob stream re-rolls every `wander_interval` (the data's
+//            cruise turn cadence); a wall hit (a blocked sub-step clamps
+//            the move axis to zero velocity) re-rolls the heading next
+//            frame (the documented deviation — MC's bat has no wall
+//            avoidance, this is the natural detour). The optional data
+//            `ambient_sound` / `ambient_interval` pair adds the per-frame
+//            ambient roll (probability 1 / (interval * 60) of the
+//            per-mob stream, played spatialized at the mob through the
+//            game-wired callback — the bat's squeak).
 // A dead player is neither chased nor attacked (the mob wanders).
 // Passive mobs (Phase 22): detect_radius 0 (and/or attack_range 0 /
 // attack_damage 0) make the chase/attack conditions never hold, so the
@@ -98,6 +115,25 @@ enum class MobState {
 // value as the player's Phase-16 rule; a fixed constant rather than a
 // per-mob field: no Minecraft mob varies it, YAGNI).
 inline constexpr float kMobFallDamageOffset = 3.0f;
+
+// V2-14 (the bat — the project's first flying mob): the flight-AI named
+// values. The behavior is data-flag gated (MobProperties::flying — the
+// core never switches on a species); these constants are the frame-
+// locked math's figures (hard rule 8) and the Minecraft-verified
+// reference the bat.json data pins to (the content test asserts the
+// data equals them).
+// The bat's cruise speed (blocks/s) — bat.json's `speed` field is the
+// data source of truth (flyCruise reads it); this is the MC-verified
+// value the content pin holds it to.
+inline constexpr float kBatCruiseSpeed = 1.0f;
+// The hover bob: the flying mob's vy baseline is
+// kBatBobAmplitude * sin(2*pi * frame / kBatBobPeriodFrames + the
+// spawn-stream phase) — the amplitude in blocks/s...
+inline constexpr float kBatBobAmplitude = 0.2f;
+// ...and the period in the fixed mob step's frames (60 = one second at
+// the 1/60 step — the frame-locked discipline: the bob at frame N is a
+// pure function of N, the per-mob local frame count and the phase).
+inline constexpr int kBatBobPeriodFrames = 60;
 
 class MobEntity : public Entity {
 public:
@@ -229,6 +265,17 @@ public:
     void setShootCallback(std::function<void()> cb) {
         m_shootPlayer = std::move(cb);
     }
+    // V2-14: the ambient sound (the bat's squeak — the data-driven general
+    // mechanism, no species special-casing): the game wires this at spawn
+    // for a mob with a data `ambient_sound` (the setShootCallback pattern);
+    // the flyCruise per-frame roll invokes it with the mob's CURRENT
+    // position (the game plays the data sample spatialized there — the
+    // existing 16-block cutoff). A mob without the data field (or the
+    // unwired callback) never invokes it (structural: the pre-V2-14
+    // mobs' streams are untouched).
+    void setAmbientSoundCallback(std::function<void(Vec3)> cb) {
+        m_ambientSound = std::move(cb);
+    }
     // Head height for ranged shots (80% of the model height): the arrow
     // spawn point (the game aims from here at the player's eye).
     Vec3 eyePosition() const {
@@ -247,7 +294,28 @@ public:
 
 private:
     void integrate(float h) override;
+    // V2-14: the flight wall-hit hook (the base no-op for the other
+    // entities' sub-steps): a blocked sub-step of a FLYING mob that
+    // clamped a horizontal axis to zero velocity = a wall (the AI sets
+    // both horizontal components to the nonzero cruise vector every
+    // frame, and only the collision resolve zeroes one) — the next
+    // frame re-rolls the heading (the documented deviation 3: no
+    // pathfinding, the natural detour). A ceiling / floor press (the y
+    // clamp) leaves the horizontal pair untouched: no re-roll.
+    void afterSubstep(bool blocked) override;
     void runAi(double dt);
+    // V2-14: the flyCruise branch (the design: runAi's TOP, gated on the
+    // data flag def.flying — a pure new branch, every non-flying mob
+    // runs the pre-V2-14 state machine bit-identically). The cruise
+    // steering (data speed along the per-mob-stream heading, re-rolled
+    // every wander_interval) + the ambient roll (the per-frame 1 /
+    // (interval * 60) draw, played spatialized at the mob). The hover
+    // baseline itself is integrate's job (the gravity gate).
+    void flyCruise(const MobProperties& p, double dt);
+    // V2-14: the frame-locked bob (a pure function of the local frame
+    // count + the spawn-stream phase — the vy the flying integrate SETS,
+    // the hover's baseline, not an accumulation).
+    float bobVelocity() const;
     // ENT-6: the chase-path helpers (all private, all frame-locked).
     void stepAlongPath(const MobProperties& p, const Vec3& pos, double dt);
     void tryPathfind(const Vec3& pos);
@@ -285,6 +353,20 @@ private:
     std::uint64_t m_rng = 0;        // splitmix64 state (per-mob)
     std::function<void(float)> m_hitPlayer;
     std::function<void()> m_shootPlayer;  // ranged fire (Phase 27)
+    // V2-14: the ambient sound (the game-wired play — the
+    // setShootCallback pattern; empty = no ambient, the pre-V2-14
+    // structural root).
+    std::function<void(Vec3)> m_ambientSound;
+    // V2-14: the flight state (all gated on def.flying — a non-flying
+    // mob keeps m_flyFrame 0 forever and never reads the phase).
+    // `m_flyFrame`: the per-mob local frame count (incremented once per
+    // update — the bob's time base on the fixed 1/60 step, hard rule 8).
+    // `m_bobPhase`: the bob's initial phase (radians), rolled ONCE from
+    // the per-mob stream in the constructor (the stream's first draw —
+    // the PITS-30 advance discipline; a non-flying mob's stream is
+    // untouched = the pre-V2-14 trajectories bit-identical).
+    int m_flyFrame = 0;
+    float m_bobPhase = 0.0f;
 
     // ENT-6: the active chase path (empty = none — the straight chase).
     // Ephemeral like the mob (never saved — zero format). The stuck

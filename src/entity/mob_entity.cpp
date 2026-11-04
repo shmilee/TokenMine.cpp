@@ -38,11 +38,27 @@ MobEntity::MobEntity(const World& world, const BlockRegistry& blocks,
     // ENT-5: pin the fall tracking to the spawn height (a mob spawned
     // mid-air would otherwise credit the drop to a stale start).
     m_fallStartY = pos.y;
+    // V2-14: the hover's initial phase (the bat — the per-mob stream's
+    // FIRST draw, the PITS-30 advance discipline). A non-flying mob
+    // consumes nothing here: its stream stays the pre-V2-14 one (the
+    // bit-identical red line).
+    if (def.properties.flying) {
+        m_bobPhase =
+            static_cast<float>(uniform01(m_rng) * 2.0 * std::numbers::pi);
+    }
 }
 
 void MobEntity::update(double dt) {
     if (m_dead || dt <= 0.0) {
         return;
+    }
+    // V2-14: the hover frame count (flying mobs only — the bob sine's
+    // local time base on the fixed 1/60 step, hard rule 8; a non-flying
+    // mob's field stays 0 forever, the structural bit root). It advances
+    // BEFORE the physics so every sub-step of this frame reads the same
+    // frame index (the vy baseline is per-FRAME, not per sub-step).
+    if (m_def->properties.flying) {
+        ++m_flyFrame;
     }
     // SURV-10: the milking cooldown counts down one frame per update
     // (the fixed 1/60 mob step — the integer-frame discipline).
@@ -110,8 +126,13 @@ void MobEntity::update(double dt) {
     // shore (the "walked in, can't get out" report, A1); a swimming mob
     // (at the swim level, onGround false) still cannot step up — no
     // swim-up shore climb (the documented deviation, the user's look is a
-    // mob swimming at the surface, not stuck).
-    if (m_onGround && lengthSq(preMove) > 0.0f) {
+    // mob swimming at the surface, not stuck). V2-14: a FLYING mob never
+    // steps up (the cruise carries no terrain intelligence — the wall hit
+    // is a heading re-roll, deviation 3; a bob-pressed bat on a step face
+    // would otherwise climb it). Structurally inert for every
+    // non-flying mob (the flag is false in the data).
+    if (m_onGround && lengthSq(preMove) > 0.0f &&
+        !m_def->properties.flying) {
         stepUp(normalized(preMove), preMoveSpeed * static_cast<float>(dt));
     }
 
@@ -205,7 +226,18 @@ void MobEntity::update(double dt) {
 }
 
 void MobEntity::integrate(float h) {
-    if (m_inFluid || m_atSurface) {
+    if (m_def->properties.flying) {
+        // V2-14: the hover baseline (the bat — the data flag gate, no
+        // species switch): gravity is OFF (the vy is SET to the frame-
+        // locked bob sine every sub-step — the baseline, not an
+        // accumulation; the terminal cap never binds) and the fluid
+        // model is bypassed (a flying body hovers through water too —
+        // the documented simplification: the spawn cell is air by
+        // construction and the hover is the flight's whole vertical
+        // story). The knockback damping below still runs (the arrow's
+        // impulse slides the bat, the cruise resumes after the window).
+        m_velocity.y = bobVelocity();
+    } else if (m_inFluid || m_atSurface) {
         // ENT-4 / FLUID-3: the fluid force model (the player's FLUID-2
         // integrate, the input branches removed — a mob has no Space /
         // crouch: it rises or sinks, it does not dive or swim-up). No
@@ -235,6 +267,16 @@ void MobEntity::integrate(float h) {
 
 void MobEntity::runAi(double dt) {
     const MobProperties& p = m_def->properties;
+    // V2-14: the flight AI (the bat — the data flag branch at the TOP of
+    // the state machine, no species switch): a flying mob NEVER reaches
+    // the chase / attack / pathfind / wander branches below (the bat's
+    // detect_radius is 0 in the data anyway — the branch is the
+    // structural guarantee). A non-flying mob takes the pre-V2-14 path
+    // bit-identically (the pure-new-branch red line).
+    if (p.flying) {
+        flyCruise(p, dt);
+        return;
+    }
     const Vec3 pos = position();
     const float dx = m_playerPos.x - pos.x;
     const float dz = m_playerPos.z - pos.z;
@@ -373,6 +415,77 @@ void MobEntity::runAi(double dt) {
     const float s = p.speed * kWanderSpeedFactor;
     m_velocity.x = -std::sin(angle) * s;
     m_velocity.z = -std::cos(angle) * s;
+}
+
+// -- V2-14: the flight AI (the bat — the data-flag-gated cruise) --------
+
+void MobEntity::flyCruise(const MobProperties& p, double dt) {
+    // The cruise IS the bat's wander (the design: MobState is unchanged —
+    // the enum keeps the ground mob's vocabulary, a flying mob reports
+    // Wander).
+    m_state = MobState::Wander;
+    // Heading: a per-mob-stream roll every wander_interval (the data's
+    // cruise turn cadence — bat.json reuses wander_interval 2.0). The
+    // first update decides immediately (the timer starts at 0, the
+    // wander branch's convention). A wall hit (afterSubstep) resets the
+    // timer to 0 = the next frame re-rolls (deviation 3: no pathfinding,
+    // the natural detour).
+    m_wanderTimer -= dt;
+    if (m_wanderTimer <= 0.0) {
+        m_wanderTimer = p.wanderInterval;
+        const float angle =
+            static_cast<float>(uniform01(m_rng) * 2.0 * std::numbers::pi);
+        m_yaw = angle;
+    }
+    // Cruise at the DATA speed along the heading (the camera yaw
+    // convention: forward(yaw) = (-sin, 0, -cos) — the wander / chase
+    // steering's twin; bat.json's speed is kBatCruiseSpeed, the content
+    // pin holds it). The hover baseline (the vy sine) is integrate's job
+    // (the gravity gate) — it is set every sub-step, not here.
+    m_velocity.x = -std::sin(m_yaw) * p.speed;
+    m_velocity.z = -std::cos(m_yaw) * p.speed;
+    // The ambient roll (the bat's squeak — the data-driven general
+    // mechanism, no species special-casing): once per frame, probability
+    // 1 / (interval * kMobFramesPerSecond) of the per-mob stream
+    // (frame-locked, hard rule 8 — a no-input run squeaks on the same
+    // frames every time, the ambience's precedent). The play is
+    // spatialized at the mob's CURRENT position (the game's callback).
+    // A mob without the data field never rolls: the stream draw is the
+    // flying ambient mob's only new per-frame consumption.
+    if (!p.ambientSoundName.empty() && m_ambientSound) {
+        const double pSqueak = 1.0 /
+            (p.ambientInterval * kMobFramesPerSecond);
+        if (uniform01(m_rng) < pSqueak) {
+            m_ambientSound(position());
+        }
+    }
+}
+
+float MobEntity::bobVelocity() const {
+    // The frame-locked hover sine (a pure function of the local frame
+    // count + the spawn-stream phase — std::sin on the physics layer,
+    // the integrate's knockback std::exp precedent: the frame grid makes
+    // the trajectory a pure function of N, hard rule 8).
+    const double arg =
+        (2.0 * std::numbers::pi * static_cast<double>(m_flyFrame)) /
+            kBatBobPeriodFrames +
+        static_cast<double>(m_bobPhase);
+    return static_cast<float>(kBatBobAmplitude * std::sin(arg));
+}
+
+void MobEntity::afterSubstep(bool blocked) {
+    // V2-14: the flight wall hit (deviation 3's natural detour): a
+    // blocked sub-step of a flying mob that clamped a HORIZONTAL axis to
+    // zero velocity = a wall. The AI sets both horizontal components to
+    // the nonzero cruise vector every frame, so a zeroed one can only
+    // come from the collision resolve (the clamp is exact zero). A
+    // ceiling / floor press (the y clamp) leaves the horizontal pair
+    // untouched: no re-roll. The reset timer makes the NEXT frame's
+    // flyCruise re-roll the heading.
+    if (blocked && m_def->properties.flying &&
+        (m_velocity.x == 0.0f || m_velocity.z == 0.0f)) {
+        m_wanderTimer = 0.0;
+    }
 }
 
 // -- ENT-6: the chase path (stuck-triggered BFS, frame-locked) -----------
