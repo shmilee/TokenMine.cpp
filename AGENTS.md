@@ -57,9 +57,10 @@ C++20 / SDL3 / OpenGL 3.3 core，
   `docs/archive/v2x/phase-2.19.0.md`）；**2.x 全史
   （v2.0.0→v2.19.0，两批 20 版）11-04 收官** /
   4.x「世界扩展」= **新执行权威** `docs/BACKLOG.md`（11-04 晋升 +
-  逐项定案：6 项全保留，**V4-1 下界维度锚【超大】拆分立项先行**
-  【门框→下界世界→内容三段】，版本 v4.0.0 起）；2.x 总量 24 <
-  pre-v2.0 的 78-84 = 用户
+  逐项定案：6 项全保留 + 用户实机诉求 **V4-7 存档 gzip 压缩（默认
+  开 = format 29，旧明文档魔数探测零迁移，实测 5.4×）先执 = v4.0.0
+  候选**，其后 V4-1 下界维度锚【超大】拆分立项【门框→下界世界→内容
+  三段】，版本 v4.0.0 起）；2.x 总量 24 < pre-v2.0 的 78-84 = 用户
   采纳判据 ✓）；2.x 全史 =
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
@@ -140,8 +141,9 @@ C++20 / SDL3 / OpenGL 3.3 core，
   `docs/archive/v2x/phase-2.10.0.md`）。
 - 活跃已知问题：`docs/KNOWN_ISSUES.md`；**2.x 两批 8/8 全完成
   （11-04 收官）；当前执行权威 = v4.x「世界扩展」任务表：
-  `docs/BACKLOG.md`**（11-04 晋升 + 逐项定案：6 项全保留，V4-1 下
-  界维度锚【超大】拆分立项先行，版本 v4.0.0 起；逐版 tag +
+  `docs/BACKLOG.md`**（11-04 晋升 + 逐项定案：6 项全保留 + 用户诉求
+  **V4-7 存档 gzip（默认开 = format 29）先执 = v4.0.0 候选**，其后
+  V4-1 下界维度锚【超大】拆分立项，版本 v4.0.0 起；逐版 tag +
   GitHub release 政策沿用 2.x 定案）；2.x 全任务表 = `docs/archive/
   v2x/BACKLOG.md`；1.x = `docs/archive/v1x/`；会话交接：
   `opencode-sessions/SESSION_CONTEXT.md`。
@@ -257,7 +259,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v4.x 时代逐版明细；v2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |
-| [docs/BACKLOG.md](docs/BACKLOG.md) | **v4.x「世界扩展」任务表（执行权威）**（11-04 二批收官晋升 + 逐项定案：6 项全保留，V4-1 下界维度锚拆分立项先行；2.x 全任务表 → `docs/archive/v2x/BACKLOG.md`、v1.x 表 → `docs/archive/v1x/BACKLOG.md`） | 取下一个任务 |
+| [docs/BACKLOG.md](docs/BACKLOG.md) | **v4.x「世界扩展」任务表（执行权威）**（11-04 二批收官晋升 + 逐项定案：6 项全保留 + 用户诉求 **V4-7 存档 gzip（默认开 = format 29）先执 = v4.0.0 候选**，其后 V4-1 下界维度锚拆分立项；2.x 全任务表 → `docs/archive/v2x/BACKLOG.md`、v1.x 表 → `docs/archive/v1x/BACKLOG.md`） | 取下一个任务 |
 | [docs/archive/v1x/](docs/archive/v1x/) | 1.x 阶段细节存档（181 份 phase，只读历史）+ HISTORY.md 全史 + v1x/CHANGELOG.md + v1x/BACKLOG.md | 深挖 1.x 某阶段 |
 | [docs/archive/v0x/](docs/archive/v0x/) | 0.x 时代文档（ROADMAP 规划 / DISCUSSION 记录 / v0x/CHANGELOG.md） | 深挖 0.x |
 | [docs/archive/v2x/](docs/archive/v2x/) | 2.x 阶段细节存档（20 份 phase，全两批，只读历史）+ v2x/HISTORY.md 全史 + v2x/CHANGELOG.md + v2x/BACKLOG.md | 深挖 2.x 某阶段 |
