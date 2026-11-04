@@ -344,12 +344,12 @@ TEST(SoundBatTest, SqueakWavShipsAndParses) {
     EXPECT_EQ(peak, 3589);
 }
 
-TEST(SoundBatTest, SoundDirectoryGrowsToFortyThree) {
+TEST(SoundBatTest, SoundDirectoryGrowsToFortySix) {
     // The sound set 41 -> 42 (the squeak — the V2-14 file) -> 43 (the
-    // shear — the V2-15 file): each phase's new file is the only
-    // addition (the generate_sounds.py re-run leaves the others byte-
-    // identical, the script's md5 discipline; the FNV pins hold each
-    // phase's bytes).
+    // shear — the V2-15 file) -> 46 (the snow family — the three V2-16
+    // files): each phase's new file is the only addition (the
+    // generate_sounds.py re-run leaves the others byte-identical, the
+    // script's md5 discipline; the FNV pins hold each phase's bytes).
     std::size_t count = 0;
     for (const auto& entry :
          std::filesystem::directory_iterator("assets/sounds")) {
@@ -357,7 +357,7 @@ TEST(SoundBatTest, SoundDirectoryGrowsToFortyThree) {
             ++count;
         }
     }
-    EXPECT_EQ(count, 43u);
+    EXPECT_EQ(count, 46u);
 }
 
 // ---------------------------------------------------------------------------
@@ -399,4 +399,104 @@ TEST(SoundShearTest, ShearWavShipsAndParses) {
         }
     }
     EXPECT_EQ(peak, 15899);
+}
+
+// ---------------------------------------------------------------------------
+// V2-16: the snow sound family (the sound set 43 -> 46).
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// One shipped wav: existence, the 16-bit mono 44.1 kHz parse, the exact
+// synthesis length, and the pinned peak (non-silent + byte-stable — the
+// squeak / shear pin paradigm).
+void expectWavPin(const std::string& name, std::size_t samples, int peak) {
+    const std::filesystem::path path = "assets/sounds/" + name + ".wav";
+    ASSERT_TRUE(std::filesystem::exists(path))
+        << "run the tests from the repository root";
+    const std::string bytes = readFileBytes(path);
+    ASSERT_FALSE(bytes.empty());
+    std::vector<std::uint8_t> raw(bytes.begin(), bytes.end());
+    auto sample = SoundBank::parseWav(raw);
+    ASSERT_TRUE(sample.ok()) << sample.error().describe();
+    EXPECT_EQ(sample->rate, 44100);
+    EXPECT_EQ(sample->pcm.size(), samples);
+    int pk = 0;
+    for (const std::int16_t s : sample->pcm) {
+        const int m = std::abs(s);
+        if (m > pk) {
+            pk = m;
+        }
+    }
+    EXPECT_EQ(pk, peak);
+}
+
+} // namespace
+
+TEST(SoundSnowTest, SnowMaterialWavsShipAndParse) {
+    // The snow family (the generate_sounds.py's dedicated fixed seeds
+    // 0x75001 / 0x75111 / 0x75222 — the sand-family paradigm one step
+    // softer: powder, not grains — the double lowpass, the quiet
+    // amplitudes): a single advancing LCG per file (the paradigm the
+    // _noise helper's legacy per-sample rebuild never carried), in the
+    // SFX volume class.
+    expectWavPin("snow_dig", 4851, 9125);    // 0.11 s
+    expectWavPin("snow_place", 5292, 19350); // 0.12 s
+    expectWavPin("snow_break", 7938, 8864);  // 0.18 s
+}
+
+// ---------------------------------------------------------------------------
+// V2-16 follow-up: the _noise helper repair (the 11 material wavs).
+// ---------------------------------------------------------------------------
+
+TEST(SoundNoiseHelperRepairTest, NoiseWavsShipTextured) {
+    // The per-sample-LCG-rebuild defect (round 1 = the _noise helper's 11
+    // material consumers; round 2 = the generic dig / break_sfx, which
+    // inlined the same pattern) returned a CONSTANT stream: the
+    // lowpassed consumers went SILENT when the constant was negative
+    // (the shipped sand_break / gravel_break / dig / break, peak 0 —
+    // lowpass3's max(0.0, ...) clamp) and degenerated into texture-free
+    // DC ramps otherwise. The repair (one advancing instance, the snow
+    // family's paradigm) changed EXACTLY these 13 files' bytes — every
+    // other wav stays byte-identical (the md5 census vs git HEAD); the
+    // lengths are unchanged (the durations are untouched). The exact
+    // peak pins are the regression guard: a constant stream cannot
+    // reproduce them (0 for the silent quartet, a different single
+    // figure for the DC ramp pair).
+    const struct {
+        const char* name;
+        std::size_t samples;
+        int peak;
+    } want[] = {
+        // round 2: the generic set (the no-sound-material fallback —
+        // the most-consumed sounds in the game).
+        {"dig", 4410, 14460},         // 0.10 s (was silent)
+        {"break", 7938, 16060},       // 0.18 s (was silent)
+        // round 1: the _noise helper's material consumers.
+        {"cloth_break", 6615, 7167},  // 0.15 s
+        {"cloth_dig", 5292, 6199},    // 0.12 s
+        {"glass_break", 7938, 25919}, // 0.18 s
+        {"gravel_break", 9702, 16709}, // 0.22 s (was silent)
+        {"gravel_dig", 4410, 14985},  // 0.10 s
+        {"sand_break", 8820, 14721},  // 0.20 s (was silent)
+        {"sand_dig", 5292, 9099},     // 0.12 s
+        {"stone_break", 7056, 30294}, // 0.16 s
+        {"stone_dig", 3528, 17104},   // 0.08 s
+        {"wood_break", 7056, 14618},  // 0.16 s
+        {"wood_dig", 3969, 13567},    // 0.09 s
+    };
+    ASSERT_EQ(sizeof(want) / sizeof(want[0]), 13u); // the full damage set
+    for (const auto& e : want) {
+        expectWavPin(e.name, e.samples, e.peak);
+    }
+    // The census is unchanged (46 files — the repair edits in place, the
+    // directory count is the V2-16 pin).
+    std::size_t count = 0;
+    for (const auto& entry :
+         std::filesystem::directory_iterator("assets/sounds")) {
+        if (entry.is_regular_file() && entry.path().extension() == ".wav") {
+            ++count;
+        }
+    }
+    EXPECT_EQ(count, 46u);
 }

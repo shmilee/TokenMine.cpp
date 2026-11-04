@@ -1,0 +1,11 @@
+{
+  "id": "snow",
+  "properties": {
+    "sound_material": "snow",
+    "hardness": 0.1,
+    "drops": "snow"
+  },
+  "model": {
+    "textures": { "top": "snow", "side": "snow", "bottom": "snow" }
+  }
+}

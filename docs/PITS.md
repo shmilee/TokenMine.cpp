@@ -3041,3 +3041,18 @@
   作臂 80×RMB@0.3s / 双动作臂 40 对【对内 dye→shear 0.2s】。另：
   出生中心 float 的格 = **floor 非 int**（int(−0.5)=0 曾把围盒建错
   格）。
+- **确定性音效 LCG 逐采样重建 = 静音/退化 wav 缺陷族（PITS 382，门
+  188 V2-16 音效修复）**——① **`[Lcg(seed).next() for _ in range(n)]`
+  逐采样重建状态 = 常值流**（同 seed 同值 = PITS 4 纯 finalizer 坑
+  的生成器侧同族）：负常值经 lowpass `max(0.0,·)` 钳位 = **静音
+  wav**（sand_break/gravel_break/generic dig/break peak 0 实证）；
+  正常值 = DC 退化（单符号纯指数斜坡零纹理：stone/wood/gravel/sand/
+  cloth dig + wood/cloth break）；常值 + 真层混合 = DC 偏置音色偏
+  离（stone_break/glass_break）——**共 13 件跨多版本潜伏**。②
+  **截图/存档门不录音频 = 门盲区**：缺陷族存活至 V2-16 才因新音
+  效审计被发现；音效变更的审计口径 = **peak（0 = 静音）+ sign-chg +
+  abs-rise-frac 纹理度量**（逐采样幅度变化占比，常值流 ≈0，健康带
+  0.25-0.50 对照实测）。③ **修复纪律**：单 LCG 实例推进（snow 族
+  正确范式）；重跑 md5 变更集须与受损清单**精确一致**（13/13，其
+  余 33 件 head-identical）+ 二次重跑幂等 + 长度钉不变（时长未动）
+  + 峰值/纹理钉入 test_sound 回归守卫（常值流无法复现该峰值）。

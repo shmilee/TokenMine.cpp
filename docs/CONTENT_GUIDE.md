@@ -16,7 +16,7 @@
 
 | 目录 / 文件 | 内容 | 数量（shipped） |
 |---|---|---|
-| `assets/data/biomes/*.json` | 生物群系 | 3 |
+| `assets/data/biomes/*.json` | 生物群系 | 4 |
 | `assets/data/blocks/*.json` | 方块（含 3 个流体参考块 water/lava/honey） | 72 |
 | `assets/data/items/*.json` | 显式物品（工具/材料；block 物品无独立 JSON） | 79 |
 | `assets/data/recipes/*.json` | 配方 | 66 |
@@ -57,7 +57,21 @@ base18.png`）——P45 先例：lapis 矿脉 + 表面装饰进了数据，但�
 | `subsurface_depth` | 整数 [1, 16] | 次表层厚度 |
 | `tree_density` | [0, 1] | 野生树密度（`trees.lattice` 格网 roll） |
 | `height_scale` | (0, 5] | 高度乘数 |
+| `tree` | 严格 6 键对象，可选【V2-16】 | 本群系自己的野生树（下）；**缺省 = 全局 `worldgen.json` `trees` 段 + 硬编码 oak 冠层（既有 3 群系逐位不变）** |
+| `exclude_spawn_area` | 严格 bool，缺省 false【V2-16】 | 演示区（`caves.spawn_clear_columns` 半径内）群系选择**跳过**该群系（演示区结构保护：区内总权重保持既有值，区内映射逐位不变） |
 | `decorations` | 数组，可选 | 表面装饰（下） |
+
+**`tree` 对象**（V2-16，与树苗块 `tree` 段同款严格面）：`{"trunk",
+"leaves", "min_height", "height_range", "leaf_radius", "shape"}` 六键
+缺一/多一/类型错 = 点名拒；`min_height` ∈ [1,16]、`height_range` ∈
+[0,8]、`leaf_radius` ∈ [1,2]（整数）、`shape` ∈ {oak, spruce, birch}
+（treeShapeValid 词汇）；trunk/leaves 块名在世界生成 setup 对
+BlockRegistry 交叉检（未知 = 启动报错点名）+ ENT-2 无状态块纪律（有
+state 的块拒）。有 `tree` 的群系：同一 `trees.lattice` 格网 + 同一
+确定性 roll（密度门 h>>40 / 高度位 h>>24），高度 = `min_height +
+(h>>24) % (height_range+1)`，冠层 = `planTree(height, spec)` 纯函数
+逐格 placeIfAir（root 格 = 表面格非 air 自然 no-op → 树干自表面 +1 起，
+与既有 oak 路径同款）。
 
 ```json
 {
@@ -84,10 +98,24 @@ base18.png`）——P45 先例：lapis 矿脉 + 表面装饰进了数据，但�
 P45 已有）。装饰块建议用可穿过的十字植物（花）或低硬度实心块（仙人掌）
 ——实心高硬度块会挡 mob 生成/路径。
 
-shipped 3 群系：desert（w2, sand/sand depth 4, tree 0, hs 0.9, cactus 0.03）/
-forest（w4, grass/dirt 3, tree 0.12, hs 1.1, 三花 0.012）/ plains（w4,
-grass/dirt 3, tree 0.03, hs 1.0, 三花 0.02）。群系选择噪声 =
+shipped 4 群系：desert（w2, sand/sand depth 4, tree 0, hs 0.9, cactus
+0.03）/ forest（w4, grass/dirt 3, tree 0.12, hs 1.1, 三花 0.012）/
+plains（w4, grass/dirt 3, tree 0.03, hs 1.0, 三花 0.02）/ snowy_taiga
+（w2【V2-16】, snow/dirt 3, tree_density 0.12, hs 1.1, 无装饰,
+**tree = spruce 6-8 高锥冠** {trunk spruce_trunk / leaves
+spruce_leaves / min_height 6 / height_range 3 / leaf_radius 2 / shape
+spruce}, **exclude_spawn_area true**）。群系选择噪声 =
 `biomes.noise_scale`（见下 worldgen 参考）。
+
+**演示区保护**（V2-16）：群系选择是逐列纯函数（噪声值 → 累计权重走
+查，总权重 12）。`exclude_spawn_area: true` 的群系在 spawn clear 区
+（复用 `caves.spawn_clear_columns` 既有判定 = |chunk| ≤ 2 双轴，
+shipped 2 → chunk [−2,2]² = world [−32,48)²，即 4×4 出生候选区
+[−32,32)² 的同款结构排除超集）的走查中被跳过，区内总权重
+= 12 − 2 = **10 = 既有 desert(2)/forest(4)/plains(4) 映射逐位不变**
+（单测钉：区内全部列 resolvedBiomeAt = 改前公式同值 + 区内 chunk
+3-群系 vs 4-群系生成逐字节恒等）。区外 = 全 4 群系（雪带/针叶林入
+世 = 预期的世界演进，旧存档加载得新区外地形，GEN-1/3/5 先例）。
 
 ## 新增一个矿石 / 世界生成参数（worldgen.json 完整参考）
 

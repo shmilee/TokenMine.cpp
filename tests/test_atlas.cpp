@@ -208,7 +208,9 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     // the (row, col) scan [10, 6]; zero existing shift).
     // V2-15: 120 -> 121 (the bare sheep skin's single tile — the next
     // free cell of the scan [11, 6]; zero existing shift).
-    EXPECT_EQ(l.tiles.size(), 121u);
+    // V2-16: 121 -> 122 (the snow block's single tile — the next free
+    // cell of the scan [12, 6]; zero existing shift).
+    EXPECT_EQ(l.tiles.size(), 122u);
     const struct {
         const char* name;
         int col;
@@ -360,6 +362,24 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
         {"sheep_skin", 11, 6},
     };
     for (const auto& e : v215) {
+        const auto it = l.tiles.find(e.name);
+        ASSERT_NE(it, l.tiles.end()) << e.name;
+        EXPECT_EQ(it->second.col, e.col) << e.name;
+        EXPECT_EQ(it->second.row, e.row) << e.name;
+    }
+    // V2-16: the snow block's single tile (the snowy_taiga biome's
+    // surface — the MC snow_block paradigm, one tile serves all six cube
+    // faces) takes the next FREE cell of the deterministic (row, col)
+    // scan [12, 6] — the 121 pre-V2-16 entries above keep their EXACT
+    // cells (the zero-shift red line, no baseline re-anchor).
+    const struct {
+        const char* name;
+        int col;
+        int row;
+    } v216[] = {
+        {"snow", 12, 6},
+    };
+    for (const auto& e : v216) {
         const auto it = l.tiles.find(e.name);
         ASSERT_NE(it, l.tiles.end()) << e.name;
         EXPECT_EQ(it->second.col, e.col) << e.name;

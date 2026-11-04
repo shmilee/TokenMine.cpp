@@ -119,6 +119,47 @@ struct GenSetup {
     WorldgenParams params = makeParams();
 };
 
+// V2-16: the snowy_taiga fixture — the GenSetup's blocks + the three
+// spruce / snow blocks, and the GenSetup's three biomes + the taiga (the
+// SHIPPED values, mirrored: weight 2 / snow surface / the spruce tree
+// object / the spawn-zone exclusion flag). A separate fixture on purpose:
+// the legacy GenSetup stays bit-for-bit the pre-V2-16 world (the
+// double-pin red line — the existing tests' world is untouched).
+BlockRegistry makeSnowBlocks() {
+    BlockRegistry reg = makeBlocks();
+    for (const char* name :
+         {"snow", "spruce_trunk", "spruce_leaves"}) {
+        auto r = reg.registerBlock(parseJson(blockDef(name)));
+        if (!r.ok()) {
+            ADD_FAILURE() << "block '" << name << "': " << r.error().message;
+        }
+    }
+    return reg;
+}
+
+BiomeRegistry makeSnowBiomes() {
+    BiomeRegistry reg = makeBiomes();
+    // The shipped snowy_taiga.json's values (the field pin is in
+    // test_biome's ShippedBiomesLoad; the fixture mirrors it).
+    const char* def =
+        R"({"id":"snowy_taiga","weight":2,"surface":"snow","subsurface":"dirt",)"
+        R"("subsurface_depth":3,"tree_density":0.12,"height_scale":1.1,)"
+        R"("tree":{"trunk":"spruce_trunk","leaves":"spruce_leaves",)"
+        R"("min_height":6,"height_range":3,"leaf_radius":2,"shape":"spruce"},)"
+        R"("exclude_spawn_area":true})";
+    auto r = reg.registerBiome(parseJson(def));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    return reg;
+}
+
+struct SnowGenSetup {
+    BlockRegistry blocks = makeSnowBlocks();
+    BiomeRegistry biomes = makeSnowBiomes();
+    WorldgenParams params = makeParams();
+};
+
 // A world with one generator, pre-generated over a 2x2x8-chunk region
 // (world x,z in [0, 32), all y layers) — enough to observe cross-chunk
 // features (trees, veins) near the x/z = 16 boundaries.
@@ -2198,6 +2239,290 @@ TEST(WorldGeneratorTest, DesertColumnsHaveNoTrees) {
         << "no desert columns in the 256x256 scan";
 }
 
+// -- V2-16 (snowy_taiga): the spawn-zone structural protection --------------
+//
+// The demo region (|col| <= caves.spawn_clear_columns = 2, the shipped
+// value) must keep the PRE-V2-16 biome mapping bit-for-bit: the
+// cumulative walk inside the zone skips the exclude_spawn_area biomes and
+// scales on the zone's total weight (12 minus the taiga's 2 = 10 — the
+// legacy total), so the in-zone target + the walk are the legacy formula
+// on the legacy 3 biomes. Outside the zone, all four biomes count.
+
+namespace {
+
+// The spawn-zone bounds (the shipped caves.spawn_clear_columns = 2, the
+// fixture's makeParams default): chunks -2..2 on both axes.
+constexpr int kV216ZoneChunkBound = 2;
+
+// The legacy (pre-V2-16) in-zone mapping: valueNoise2(x*0.02, z*0.02,
+// seed ^ kSaltBiome) -> int(n * 10) over the fixture's 3 biomes in load
+// order (desert 2 / forest 4 / plains 4 — the makeBiomes order).
+std::string legacyZoneBiomeAt(int x, int z, std::int64_t seed) {
+    const float n =
+        valueNoise2(static_cast<float>(x) * 0.02f,
+                    static_cast<float>(z) * 0.02f,
+                    seed ^ kSaltBiome);
+    const int target = static_cast<int>(n * 10.0f);
+    int acc = 0;
+    const char* const names[3] = {"desert", "forest", "plains"};
+    const int weights[3] = {2, 4, 4};
+    for (int i = 0; i < 3; ++i) {
+        acc += weights[i];
+        if (target < acc) {
+            return names[i];
+        }
+    }
+    return "plains"; // the fallthrough (target < 10 always)
+}
+
+// The four-biome out-of-zone mapping (the new formula, total 12).
+std::string outOfZoneBiomeAt(int x, int z, std::int64_t seed) {
+    const float n =
+        valueNoise2(static_cast<float>(x) * 0.02f,
+                    static_cast<float>(z) * 0.02f,
+                    seed ^ kSaltBiome);
+    const int target = static_cast<int>(n * 12.0f);
+    int acc = 0;
+    const char* const names[4] = {"desert", "forest", "plains",
+                                  "snowy_taiga"};
+    const int weights[4] = {2, 4, 4, 2};
+    for (int i = 0; i < 4; ++i) {
+        acc += weights[i];
+        if (target < acc) {
+            return names[i];
+        }
+    }
+    return "snowy_taiga"; // the fallthrough (target < 12 always)
+}
+
+} // namespace
+
+TEST(WorldGeneratorTest, V216ZoneMappingIsBitLevelLegacy) {
+    // Every IN-ZONE column of the 4-biome generator resolves to EXACTLY
+    // the legacy 3-biome formula's value — the demo-region structural
+    // protection (the zone's totalWeight stays 10 = the pre-V2-16
+    // desert(2) / forest(4) / plains(4) mapping, bit-for-bit).
+    const std::int64_t seed = 123456789;
+    SnowGenSetup s;
+    auto res = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    const WorldGenerator& gen = *res;
+    for (int cx = -kV216ZoneChunkBound; cx <= kV216ZoneChunkBound; ++cx) {
+        for (int cz = -kV216ZoneChunkBound; cz <= kV216ZoneChunkBound; ++cz) {
+            for (int lx = 0; lx < kChunkSize; ++lx) {
+                for (int lz = 0; lz < kChunkSize; ++lz) {
+                    const int x = cx * kChunkSize + lx;
+                    const int z = cz * kChunkSize + lz;
+                    EXPECT_EQ(gen.biomeNameAt(x, z), legacyZoneBiomeAt(x, z,
+                                                                       seed))
+                        << "x=" << x << " z=" << z;
+                }
+            }
+        }
+    }
+}
+
+TEST(WorldGeneratorTest, V216DemoRegionChunksIdenticalWithAndWithoutTaiga) {
+    // The strongest form: every DEMO-REGION chunk (the 4x4 spawn-candidate
+    // columns, world [-32, 32) — hard rule 10) generated by the 4-biome
+    // generator is BYTE-IDENTICAL (blocks + fluids) to the legacy 3-biome
+    // generator's — terrain, ores, trees, decorations, lakes included.
+    // The taiga is structurally absent from the demo region (its biome
+    // mapping is bit-for-bit the legacy one, pinned by
+    // V216ZoneMappingIsBitLevelLegacy).
+    //
+    // The scan is chunks -2..1 (the 4x4), NOT the full 5x5 cave-clear
+    // zone: a tree trunk one lattice step OUTSIDE the zone (x = 48, the
+    // zone's rim) canopies into the in-zone chunk's rim columns (46, 47)
+    // — the world-evolution rim (the out-of-zone biome remap's canopy
+    // overhang), outside the demo region and outside the base18
+    // 16x16-neighbourhood audit box alike.
+    const std::int64_t seed = 123456789;
+    GenSetup legacy;
+    auto legacyRes =
+        WorldGenerator::create(seed, legacy.params, legacy.biomes,
+                               legacy.blocks);
+    ASSERT_TRUE(legacyRes.ok()) << legacyRes.error().message;
+    SnowGenSetup snowy;
+    auto snowyRes =
+        WorldGenerator::create(seed, snowy.params, snowy.biomes, snowy.blocks);
+    ASSERT_TRUE(snowyRes.ok()) << snowyRes.error().message;
+    int diffs = 0;
+    for (int cx = -kV216ZoneChunkBound; cx <= 1; ++cx) {
+        for (int cz = -kV216ZoneChunkBound; cz <= 1; ++cz) {
+            for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy) {
+                Chunk a, b;
+                legacyRes->generateChunk(a, {cx, cy, cz});
+                snowyRes->generateChunk(b, {cx, cy, cz});
+                for (std::size_t i = 0; i < Chunk::kVolume; ++i) {
+                    if (a.data()[i] != b.data()[i]) {
+                        ++diffs;
+                    }
+                    if (a.fluidData()[i] != b.fluidData()[i]) {
+                        ++diffs;
+                    }
+                }
+            }
+        }
+    }
+    EXPECT_EQ(diffs, 0)
+        << "the demo region must generate identically with and without "
+           "the taiga (the structural protection)";
+}
+
+TEST(WorldGeneratorTest, V216OutOfZoneSeesSnowyTaiga) {
+    // The 4-biome generator's out-of-zone mapping: the snow belt appears
+    // (the world's expected evolution — the 2/12 weight share lands
+    // outside the protected zone) and every biome is covered.
+    const std::int64_t seed = 123456789;
+    SnowGenSetup s;
+    auto res = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    std::set<std::string> seen;
+    for (int x = 48; x <= 511; x += 4) {
+        for (int z = 0; z <= 511; z += 4) {
+            seen.insert(res->biomeNameAt(x, z));
+        }
+    }
+    EXPECT_EQ(seen.size(), 4u) << "all four biomes must occur out of zone";
+    EXPECT_TRUE(seen.count("snowy_taiga") != 0)
+        << "no snowy_taiga columns in the 464x128 out-of-zone scan";
+}
+
+TEST(WorldGeneratorTest, V216OutOfZoneMappingIsTheFourBiomeFormula) {
+    // Every OUT-OF-ZONE column resolves to the full four-biome formula
+    // (totalWeight 12, no exclusions) — pinned against the re-derived
+    // noise predicate (the CaveMatchesPurePredicate pattern).
+    const std::int64_t seed = 123456789;
+    SnowGenSetup s;
+    auto res = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    const WorldGenerator& gen = *res;
+    for (int x = 48; x <= 383; x += 8) {
+        for (int z = -48; z <= 383; z += 8) {
+            const bool inZone =
+                std::abs(floorDiv(x, kChunkSize)) <= kV216ZoneChunkBound &&
+                std::abs(floorDiv(z, kChunkSize)) <= kV216ZoneChunkBound;
+            if (inZone) {
+                continue;
+            }
+            EXPECT_EQ(gen.biomeNameAt(x, z),
+                      outOfZoneBiomeAt(x, z, seed))
+                << "x=" << x << " z=" << z;
+        }
+    }
+}
+
+TEST(WorldGeneratorTest, V216TaigaSpruceTreesAreThePlanTreeCone) {
+    // The placeTrees' spruce path: the SAME kSaltTree lattice roll (the
+    // density gate h >> 40 + the height bits h >> 24) with the tree
+    // object's params, and the canopy = planTree's exact cell set (the
+    // bottom-wide cone: {h-2, r2}, {h-1, r1}, {h, r1}, {h+1, r1} layers
+    // relative to the surface root — the root no-ops, the trunk starts at
+    // hgt + 1). Caves disabled for a clean lattice.
+    const std::int64_t seed = 990011;
+    SnowGenSetup s;
+    s.params.cavesEnabled = false;
+    auto res = WorldGenerator::create(seed, s.params, s.biomes, s.blocks);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    const WorldGenerator& gen = *res;
+    const BlockID snowId = s.blocks.idForName("snow");
+    const BlockID trunkId = s.blocks.idForName("spruce_trunk");
+    const BlockID leavesId = s.blocks.idForName("spruce_leaves");
+
+    // Find a taiga lattice column (out of zone from x, z = 48 — chunk 3,
+    // above sea level, the density gate passed — the same h the
+    // generator rolls with).
+    int wx = 0, wz = 0;
+    std::uint64_t h = 0;
+    int height = 0;
+    for (int x = 48; x <= 512 && wx == 0; x += 4) {
+        for (int z = 48; z <= 512 && wx == 0; z += 4) {
+            if (gen.biomeNameAt(x, z) != "snowy_taiga") {
+                continue;
+            }
+            const int hgt = gen.surfaceHeight(x, z);
+            if (hgt <= s.params.seaLevel) {
+                continue;
+            }
+            h = hash2(static_cast<std::uint64_t>(x),
+                      static_cast<std::uint64_t>(z),
+                      static_cast<std::uint64_t>(seed ^ kSaltTree));
+            if (static_cast<float>(h >> 40) * kLattice24Scale >= 0.12f) {
+                continue;
+            }
+            wx = x;
+            wz = z;
+            height = 6 +
+                static_cast<int>((h >> 24) %
+                                  static_cast<std::uint64_t>(3 + 1));
+        }
+    }
+    ASSERT_NE(wx, 0) << "no taiga spruce column in the 464x464 lattice scan";
+
+    // Generate the column's chunks + its 2-block canopy margin.
+    std::map<ChunkPos, Chunk> chunks;
+    const int cx0 = floorDiv(wx - 2, kChunkSize), cx1 = floorDiv(wx + 2, kChunkSize);
+    const int cz0 = floorDiv(wz - 2, kChunkSize), cz1 = floorDiv(wz + 2, kChunkSize);
+    for (int cx = cx0; cx <= cx1; ++cx) {
+        for (int cz = cz0; cz <= cz1; ++cz) {
+            for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy) {
+                gen.generateChunk(chunks[{cx, cy, cz}], {cx, cy, cz});
+            }
+        }
+    }
+    const auto at = [&](int x, int y, int z) -> BlockID {
+        if (y < 0 || y >= kWorldHeight) {
+            return BlockID::air();
+        }
+        const BlockPos p {x, y, z};
+        const ChunkPos cp = worldToChunk(p);
+        const auto it = chunks.find(cp);
+        if (it == chunks.end()) {
+            return BlockID::air();
+        }
+        const BlockPos local = worldToChunkLocal(cp, p);
+        return it->second.get(local.x, local.y, local.z);
+    };
+
+    const int hgt = gen.surfaceHeight(wx, wz);
+    // The surface cell is the taiga's snow (the biome's surface block).
+    EXPECT_EQ(at(wx, hgt, wz), snowId);
+    // The root cell no-ops: the trunk starts ONE above the surface,
+    // contiguous, and the trunk length is exactly the rolled height - 1
+    // (the root block is the surface, the plan's trunk cell at offset 0
+    // never lands).
+    for (int y = hgt + 1; y <= hgt + height - 1; ++y) {
+        EXPECT_EQ(at(wx, y, wz), trunkId) << "y=" << y;
+    }
+    // The whole planTree set, cell for cell (trunk -> spruce_trunk,
+    // canopy -> spruce_leaves; the root cell is the surface, checked
+    // above).
+    const Biome& taiga = *s.biomes.findByName("snowy_taiga");
+    ASSERT_TRUE(taiga.tree.has_value());
+    const TreeSpec spec {trunkId, leavesId, taiga.tree->minHeight,
+                         taiga.tree->heightRange, taiga.tree->leafRadius,
+                         treeShapeFromName(taiga.tree->shape)};
+    int checkedCells = 0;
+    for (const TreeCell& cell : planTree(height, spec)) {
+        const int y = hgt + cell.offset.y;
+        if (y <= hgt) {
+            continue; // the root (the surface cell — checked above)
+        }
+        const BlockID want = cell.trunkCell ? trunkId : leavesId;
+        EXPECT_EQ(at(wx + cell.offset.x, y, wz + cell.offset.z), want)
+            << "dx=" << cell.offset.x << " dy=" << cell.offset.y
+            << " dz=" << cell.offset.z;
+        ++checkedCells;
+    }
+    EXPECT_GT(checkedCells, 20) << "the cone is a real tree (trunk + 4 layers)";
+    // The height is in the tree object's [min, min + range] domain (min 6,
+    // range 3 — the treeHeightRoll's inclusive semantics, the sapling's
+    // [4, 7] oak precedent).
+    EXPECT_GE(height, 6);
+    EXPECT_LE(height, 9);
+}
+
 // -- construction validation --------------------------------------------------
 
 TEST(WorldGeneratorTest, CreateFailsWithoutBiomes) {
@@ -2263,6 +2588,52 @@ TEST(WorldGeneratorTest, CreateFailsOnStatefulOre) {
     bad.maxY = 16;
     s.params.ores.push_back(bad);
     auto r = WorldGenerator::create(42, s.params, s.biomes, s.blocks);
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("stone_stairs"), std::string::npos);
+    EXPECT_NE(r.error().message.find("per-instance state"),
+              std::string::npos);
+}
+
+// V2-16: the biome tree object's create-time cross-checks (the biome
+// surface discipline + the ENT-2 stateful rejection, named).
+
+TEST(WorldGeneratorTest, CreateFailsOnUnknownTreeTrunk) {
+    SnowGenSetup s;
+    BiomeRegistry biomes;
+    ASSERT_TRUE(biomes.registerBiome(parseJson(
+        R"({"id":"x","surface":"grass","subsurface":"dirt","tree":)"
+        R"({"trunk":"obsidian_wood","leaves":"leaves","min_height":4,)"
+        R"("height_range":3,"leaf_radius":2,"shape":"oak"}})"))
+                    .ok());
+    auto r = WorldGenerator::create(1, s.params, biomes, s.blocks);
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("obsidian_wood"), std::string::npos);
+    EXPECT_NE(r.error().message.find("trunk"), std::string::npos);
+}
+
+TEST(WorldGeneratorTest, CreateFailsOnUnknownTreeLeaves) {
+    SnowGenSetup s;
+    BiomeRegistry biomes;
+    ASSERT_TRUE(biomes.registerBiome(parseJson(
+        R"({"id":"x","surface":"grass","subsurface":"dirt","tree":)"
+        R"({"trunk":"wood","leaves":"obsidian_leaf","min_height":4,)"
+        R"("height_range":3,"leaf_radius":2,"shape":"oak"}})"))
+                    .ok());
+    auto r = WorldGenerator::create(1, s.params, biomes, s.blocks);
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("obsidian_leaf"), std::string::npos);
+    EXPECT_NE(r.error().message.find("leaves"), std::string::npos);
+}
+
+TEST(WorldGeneratorTest, CreateFailsOnStatefulTreeTrunk) {
+    SnowGenSetup s;
+    BiomeRegistry biomes;
+    ASSERT_TRUE(biomes.registerBiome(parseJson(
+        R"({"id":"x","surface":"grass","subsurface":"dirt","tree":)"
+        R"({"trunk":"stone_stairs","leaves":"leaves","min_height":4,)"
+        R"("height_range":3,"leaf_radius":2,"shape":"oak"}})"))
+                    .ok());
+    auto r = WorldGenerator::create(42, s.params, biomes, s.blocks);
     ASSERT_FALSE(r.ok());
     EXPECT_NE(r.error().message.find("stone_stairs"), std::string::npos);
     EXPECT_NE(r.error().message.find("per-instance state"),
@@ -2833,10 +3204,16 @@ TEST(WorldGeneratorTest, Gen3ShippedOreVeinCellCountsPinned) {
     // GEN-8 re-pin (mountain passes raise a few columns): the carve-
     // eligible deep band grows where the height rises, so the vein
     // counts shift back up slightly — the contract is unchanged.
-    EXPECT_EQ(coal, 3337); // pre-GEN-8 3255 (pre-GEN-7 3448)
-    EXPECT_EQ(iron, 1653); // pre-GEN-8 1616 (pre-GEN-7 1684)
-    EXPECT_EQ(diamond, 96); // pre-GEN-7 103 (ratio 0.725 — recorded)
-    EXPECT_EQ(gravel, 1020); // pre-GEN-8 1003 (pre-GEN-7 1087)
+    // V2-16 re-pin (the snowy_taiga's out-of-zone remap): the 4-biome
+    // selection (totalWeight 12) reassigns the probe region's columns
+    // (world x[64,192) — wholly outside the spawn clear zone), so the
+    // heightScales shift the deep-stone band the veins replace — the
+    // shape switch + probability re-tune contract is unchanged (the
+    // GEN-4 / GEN-7 / GEN-8 re-pin precedent).
+    EXPECT_EQ(coal, 3356); // pre-V2-16 3337 (pre-GEN-8 3255, pre-GEN-7 3448)
+    EXPECT_EQ(iron, 1631); // pre-V2-16 1653 (pre-GEN-8 1616, pre-GEN-7 1684)
+    EXPECT_EQ(diamond, 96); // V2-16 unchanged (pre-GEN-7 103, ratio 0.725)
+    EXPECT_EQ(gravel, 1015); // pre-V2-16 1020 (pre-GEN-8 1003, pre-GEN-7 1087)
     // The soft density band vs the old random-walk baseline: drift
     // guard (a shape/parameter regression moves the density out of band
     // long before the exact pin's value changes world meaningfully).

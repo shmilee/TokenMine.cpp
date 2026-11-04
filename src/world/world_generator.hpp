@@ -34,6 +34,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -43,6 +44,7 @@
 #include "world/biome.hpp"
 #include "world/chunk.hpp"
 #include "world/coordinates.hpp"
+#include "world/tree_shape.hpp"
 #include "world/worldgen_config.hpp"
 
 namespace mc {
@@ -154,6 +156,17 @@ private:
         BlockID block = BlockID::invalid();
         float probability = 0.0f;
     };
+    // V2-16: a biome's `tree` object with its block names resolved to ids
+    // (WorldGenerator::create — the biome surface discipline: unknown name
+    // MC_FAILs by name, stateful trunk / leaves are rejected ENT-2 style).
+    struct ResolvedTree {
+        BlockID trunk = BlockID::invalid();
+        BlockID leaves = BlockID::invalid();
+        int minHeight = 0;
+        int heightRange = 0;
+        int leafRadius = 0;
+        TreeShape shape = TreeShape::Oak;
+    };
     struct ResolvedBiome {
         std::string name;
         int weight = 1;
@@ -164,6 +177,13 @@ private:
         float heightScale = 1.0f;
         // Surface decorations (Phase 45): resolved block names -> ids.
         std::vector<ResolvedDecoration> decorations;
+        // V2-16: the biome's own tree (nullopt = the global worldgen.json
+        // trees + the hardcoded oak canopy path — the pre-V2-16 behavior,
+        // untouched for every tree-less biome).
+        std::optional<ResolvedTree> tree;
+        // V2-16: the spawn clear zone exclusion (the demo-region
+        // structural protection — see biome.hpp).
+        bool excludeSpawnArea = false;
     };
     struct ResolvedOre {
         BlockID block = BlockID::invalid();
@@ -186,6 +206,12 @@ private:
     WorldGenerator() = default;
 
     int heightAt(int x, int z) const;
+    // V2-16: the spawn clear zone as a column predicate (the same
+    // |col| <= caves.spawn_clear_columns test carveCaves' per-chunk early
+    // return runs — the zone is column-aligned, a column is wholly in or
+    // out). Pure (no chunk data): the biome selection's demo-region
+    // structural protection.
+    bool inSpawnClearZone(int x, int z) const;
     std::size_t biomeIndexAt(int x, int z) const;
     const ResolvedBiome& resolvedBiomeAt(int x, int z) const;
 
@@ -237,6 +263,11 @@ private:
     WorldgenParams m_params;
     std::vector<ResolvedBiome> m_biomes; // registry load order
     int m_totalWeight = 0;
+    // V2-16: the cumulative weight of the biomes SELECTABLE INSIDE the
+    // spawn clear zone (m_totalWeight minus the exclude_spawn_area
+    // weights — the zone's mapping keeps the pre-V2-16 bit-for-bit value
+    // when the excluded biomes are the only new ones).
+    int m_spawnZoneWeight = 0;
     std::vector<ResolvedOre> m_ores;
 
     // Resolved terrain fill blocks (data-driven names, see WorldgenParams).

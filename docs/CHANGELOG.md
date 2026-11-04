@@ -9,6 +9,51 @@
 > README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本 /
 > v2.10.0 第一批收官 tag / v2.18.0 二批收官 tag）。
 
+## v2.17.0（2026-11-04）— V2-16 雪原/针叶林 biome（snowy_taiga + snow 满块 + 针叶树 + 演示区结构保护）+ 音效缺陷族 13 件修复（门 188 全 PASS）
+
+二批 GEN 行（「中」；消费「无 clay/sandstone/snow」土类缺失声明）；MC
+机制 11-04 wiki 核定（Snowy_taiga 页 temperature −0.5/trees_taiga 密
+林 + freeze_top_layer 雪层/creature 池；Snow 页 雪层 1-8 层薄覆盖
+hardness 0.1 透明 shovel 每层 snowball 光≥12 融）：**snowy_taiga
+biome**（weight 2 = desert 稀有带先例偏离 4 / surface **snow** /
+tree_density 0.12 = forest 偏离 3 / height_scale 1.1 / **新严格字段
+`tree` 6 键对象** = sapling tree 段同款面 {spruce_trunk,
+spruce_leaves, 6, 3, 2, spruce} 缺/多/类型/范围/shape 词汇全点名 +
+create 交叉检 trunk/leaves 存在 + ENT-2 拒 stateful / **新严格字段
+`exclude_spawn_area: true`** = 演示区结构保护【GEN-1 spawn_clear 结
+构排除先例：inSpawnClearZone 纯谓词 = carveCaves 同款列对齐，区内
+累计走查跳旗 → totalWeight 恒 10 = 现有 3 群系映射**逐位不变**
+双单测钉】/ 无 decorations = 偏离 2）+ **snow 满块**（hardness 0.1
+MC 精确 / 新 "snow" 三件音族确定性合成 / drops 自身 / opaque / 单
+tile atlas 121→122 空格零移位；**偏离 1**：MC 1-8 层雪层机制 =
+V2-17 相邻范围 + 无 snowball + 无降雪天气 → 满块替代无配方）。
+**placeTrees 针叶路径**：同 kSaltTree 格网 + 同 h 密度门/高度位复
+用 + 冠层 = **planTree(height, TreeSpec)** 逐 cell placeIfAir（Oak
+表已钉 cell-for-cell 同构；root no-op = 树干自 hgt+1 起既有同款）+
+**无 tree biome 原硬编码路径零触碰**（既有 3 群系位级红线）。
+**音效缺陷族 13 件修复**（记档子项，gate 183 PITS 361 先例）：
+generate_sounds.py `_noise()`/`dig()`/`break_sfx()` LCG **逐采样重
+建 = 常值流** → 4 件静音（sand_break/gravel_break/dig/break peak
+0）+ 5 件 DC 退化 + 2 件部分受损，跨多版本潜伏【截图/存档不录音频
+= 门盲区】；修复 = 单 LCG 实例推进，md5 变更恰 13 件（其余 33 件
+head-identical 幂等），修后峰值全非零 + abs-rise-frac 纹理度量全落
+正常带。2415/2415（+23 biome/worldgen + 1 音效 13 件钉族 + 矿脉/
+洞穴探针区外演进重钉）、banner v2.17.0、**零 format**（biome 不入
+档 = 每次 seed 重生成；旧档加载 = 区外雪带世界演进 GEN-1/3/5 先
+例，演示区结构不变）。门 188：S1 **结构免疫第 69 次免重锚**（设计
+预判「远区雪带入 60f 视野 = 重锚」被证据推翻——60f 流送半径内可见
+地形全落受保护演示区：新侧 ×2 ≡ 现锚 179027 **零 diff** + savenorm
+EXACT + 区内 5×5 chunk 全列映射位级钉）/ S2 雪块破/放**单准星双动
+作** E2E【射线破 (2,54,2) 后穿 air 续行至 (3,53,3) 地顶 = 同准星自
+然转放置 (3,54,3)；hold 0.5s 断点时序（雪 ~0.2s 破 + 地 0.3s 裂释
+放重置）；掉落 2.83 > 磁力 2.5 留地断言；旧侧 snow 词表不存在形状
+互斥】/ S3 / S6 6/6 点名 / 性能 A/B 同世界同成本【主对 9/1/3 逐位
++ 终档 journal 0/0 恒等【**口径发现**：世界演进 = 参考世界变化非
+journal 编辑，雪带不入 journal】+ 雪带自成本传送场景 1800f 稳态
+upd med 111.9 vs 112.5 ms（0.5%）同档】。PITS 382（确定性音效 LCG
+逐采样重建静音缺陷族 + 音频门盲区审计口径 peak/sign-chg/abs-rise-
+frac）。详见 docs/archive/phase-2.17.0.md。
+
 ## v2.16.0（2026-11-04）— V2-15 16 色染色羊（shears 剪毛 + 出生毛色 + 染色改色 + 彩色羊毛掉落）（门 187 全 PASS）
 
 二批 ENT 行（消费「sheep 只掉白 wool」记档 [Phase 41]）；MC 机制
@@ -248,5 +293,5 @@ PERF-WIN 全指标同档——时钟 +1 文本 draw 成本不可测）。门协�
 PASS 源）。详见 docs/archive/phase-2.11.0.md。
 
 ## v2.x 第二批（V2-11~V2-18，进行中）
-（V2-16 雪原 biome 起，逐版条目入此。）
+（V2-17 顶部 slab 起，逐版条目入此。）
 

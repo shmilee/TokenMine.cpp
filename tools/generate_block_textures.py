@@ -424,6 +424,15 @@ def furnace_front(x, y):
     return stone(x, y)
 
 
+def snow(x, y):
+    """V2-16: the snow block (Minecraft's snow_block face — a near-white
+    surface with a faint granular noise, a slight cool tint so it reads
+    as snow, not as the white wool). New salt 1000 (after the bed
+    family's 985..999), every existing texture pixel-identical."""
+    n = noise(x, y, 1000, 5)
+    return (clamp(246 + n), clamp(248 + n), clamp(252 + n), 255)
+
+
 def gold_block(x, y):
     """V2-7: the gold block (the beacon pyramid material next to the iron
     block). A bright, uniform metallic gold with a faint brushed noise
@@ -969,6 +978,11 @@ TEXTURES = {
     # tiles only, every existing PNG stays byte-identical (salts
     # 985..999).
     **{name: make_bed_tile(name) for name in BED_SALT},
+    # V2-16: the snow block (the snowy_taiga biome's surface — the
+    # MC snow_block paradigm, a full block in place of the layered snow).
+    # A new tile only, every existing PNG stays byte-identical (salt
+    # 1000).
+    "snow": snow,
 }
 
 

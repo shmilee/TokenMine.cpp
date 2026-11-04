@@ -56,8 +56,8 @@ Result<WorldGenerator> WorldGenerator::create(std::int64_t seed,
     // (every stateful cell was block-edited this session) — a generator
     // that placed a stateful block would silently lose its state on a
     // journal save. The placement sources: the biome surfaces /
-    // subsurfaces / decorations, the ore veins, the tree trunks / leaves
-    // (checked at each resolution below, named).
+    // subsurfaces / decorations, the biome trees (V2-16), the ore veins,
+    // the tree trunks / leaves (checked at each resolution below, named).
     const auto rejectStateful = [&](const char* what, const std::string& name,
                                     BlockID id) -> Result<void> {
         if (blocks.at(id).hasState()) {
@@ -104,7 +104,39 @@ Result<WorldGenerator> WorldGenerator::create(std::int64_t seed,
                                   rd.block));
             rb.decorations.push_back(std::move(rd));
         }
+        // V2-16: the biome's own tree — resolve the trunk / leaves names
+        // (the biome surface discipline: an unknown name MC_FAILs by
+        // name) and reject a stateful placement source (ENT-2 — the tree
+        // trunk / leaves join the worldgen's named placement sources).
+        if (b.tree.has_value()) {
+            ResolvedTree rt;
+            rt.minHeight = b.tree->minHeight;
+            rt.heightRange = b.tree->heightRange;
+            rt.leafRadius = b.tree->leafRadius;
+            rt.shape = treeShapeFromName(b.tree->shape);
+            rt.trunk = blocks.idForName(b.tree->trunk);
+            if (!rt.trunk.valid()) {
+                return MC_FAIL("biome '" + b.name +
+                               "': unknown tree trunk block '" +
+                               b.tree->trunk + "'");
+            }
+            MC_TRY(rejectStateful("biome tree trunk block", b.tree->trunk,
+                                  rt.trunk));
+            rt.leaves = blocks.idForName(b.tree->leaves);
+            if (!rt.leaves.valid()) {
+                return MC_FAIL("biome '" + b.name +
+                               "': unknown tree leaves block '" +
+                               b.tree->leaves + "'");
+            }
+            MC_TRY(rejectStateful("biome tree leaves block", b.tree->leaves,
+                                  rt.leaves));
+            rb.tree = std::move(rt);
+        }
+        rb.excludeSpawnArea = b.excludeSpawnArea;
         gen.m_totalWeight += rb.weight;
+        if (!rb.excludeSpawnArea) {
+            gen.m_spawnZoneWeight += rb.weight;
+        }
         gen.m_biomes.push_back(std::move(rb));
     }
 
@@ -159,21 +191,52 @@ Result<WorldGenerator> WorldGenerator::create(std::int64_t seed,
     return gen;
 }
 
+bool WorldGenerator::inSpawnClearZone(int x, int z) const {
+    // V2-16: the spawn clear zone as a COLUMN predicate — the same
+    // |col| <= caves.spawn_clear_columns test carveCaves' per-chunk early
+    // return runs (the zone is column-aligned: a column is wholly in or
+    // out). The biome selection uses it to keep the demo-region mapping
+    // bit-for-bit the pre-V2-16 one.
+    const ChunkPos cp = worldToChunk(BlockPos{x, 0, z});
+    return std::abs(cp.x) <= m_params.caveSpawnClearColumns &&
+           std::abs(cp.z) <= m_params.caveSpawnClearColumns;
+}
+
 std::size_t WorldGenerator::biomeIndexAt(int x, int z) const {
     // Low-frequency noise in [0, 1) mapped onto cumulative weight over the
     // biomes in registry load order (deterministic).
+    //
+    // V2-16: the spawn clear zone's structural protection — INSIDE the
+    // zone (|col| <= caves.spawn_clear_columns, the same predicate as the
+    // carveCaves early return) the cumulative walk SKIPS the
+    // exclude_spawn_area biomes and the target scales on the zone's total
+    // weight (m_totalWeight minus the excluded weights — the shipped
+    // value: 12 minus snowy_taiga's 2 = 10, so the zone's desert / forest
+    // / plains mapping is bit-for-bit the pre-V2-16 formula). OUTSIDE the
+    // zone every biome counts (the full m_totalWeight).
+    const bool inZone = inSpawnClearZone(x, z);
     const float n = valueNoise2(static_cast<float>(x) * m_params.biomeNoiseScale,
                                 static_cast<float>(z) * m_params.biomeNoiseScale,
                                 m_seed ^ kSaltBiome);
-    const int target = static_cast<int>(n * static_cast<float>(m_totalWeight));
+    const int total = inZone ? m_spawnZoneWeight : m_totalWeight;
+    const int target = static_cast<int>(n * static_cast<float>(total));
     int acc = 0;
     for (std::size_t i = 0; i < m_biomes.size(); ++i) {
+        if (inZone && m_biomes[i].excludeSpawnArea) {
+            continue; // excluded from the zone's selection (V2-16)
+        }
         acc += m_biomes[i].weight;
         if (target < acc) {
             return i;
         }
     }
-    return m_biomes.size() - 1;
+    // Safety fallthrough (target < total, so the walk returns first for
+    // any valid selection): the last selectable biome in load order.
+    std::size_t last = m_biomes.size() - 1;
+    while (inZone && last > 0 && m_biomes[last].excludeSpawnArea) {
+        --last;
+    }
+    return last;
 }
 
 const WorldGenerator::ResolvedBiome&
@@ -543,6 +606,31 @@ void WorldGenerator::placeTrees(Chunk& chunk, const ChunkPos& pos) const {
             // whole tree (a half-placed canopy straddling a chunk boundary
             // is impossible).
             if (caveCarvesCell(wx, hgt, wz, hgt)) {
+                continue;
+            }
+            // V2-16: the biome's own tree (the spruce path) — the SAME
+            // lattice roll h (the density gate above + the height bits
+            // h >> 24, the determinism pin) with the tree object's height
+            // params, and the canopy = planTree(height, spec) placed
+            // cell-for-cell (the pure geometry whose Oak table is
+            // cell-for-cell this hardcoded canopy — the unit test pins the
+            // isomorphism, so the tree-less biomes below stay untouched).
+            // The root cell (offset (0, 0, 0)) is the surface cell itself:
+            // never air, so placeIfAir no-ops it and the trunk starts at
+            // hgt + 1 — the legacy behavior, the same rule.
+            if (b.tree.has_value()) {
+                const ResolvedTree& t = *b.tree;
+                const int height = t.minHeight +
+                    static_cast<int>((h >> 24) %
+                                     static_cast<std::uint64_t>(
+                                         t.heightRange + 1));
+                const TreeSpec spec {t.trunk, t.leaves, t.minHeight,
+                                     t.heightRange, t.leafRadius, t.shape};
+                for (const TreeCell& cell : planTree(height, spec)) {
+                    placeIfAir(chunk, pos, wx + cell.offset.x,
+                               hgt + cell.offset.y, wz + cell.offset.z,
+                               cell.trunkCell ? t.trunk : t.leaves);
+                }
                 continue;
             }
             const int trunk = m_params.treeMinHeight +

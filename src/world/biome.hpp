@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -34,6 +35,21 @@ struct BiomeDecoration {
     float probability = 0.0f;  // per-lattice-cell chance, [0, 1]
 };
 
+// V2-16: the biome's own worldgen tree — the strict six-key `tree` object
+// (the SAME field face as a sapling block's tree object, the
+// block_registry parsing precedent). The trunk / leaves NAMES are
+// cross-checked against the BlockRegistry at generation setup (World
+// Generator::create — the biome surface discipline); the shape vocabulary
+// + the integer ranges are checked at data load (treeShapeValid).
+struct BiomeTreeSpec {
+    std::string trunk;      // the trunk block name (non-empty once validated)
+    std::string leaves;     // the canopy block name (non-empty once validated)
+    int minHeight = 0;      // [1, 16] once validated
+    int heightRange = 0;    // [0, 8] once validated
+    int leafRadius = 0;     // [1, 2] once validated (the Oak table reads it)
+    std::string shape;      // "oak" / "spruce" / "birch" once validated
+};
+
 struct Biome {
     std::string name;
     int weight = 1;                 // relative selection weight (>= 1)
@@ -45,6 +61,17 @@ struct Biome {
     // Optional surface decorations (Phase 45): cactus (desert), flowers
     // (grass biomes). Absent = no decorations.
     std::vector<BiomeDecoration> decorations;
+    // V2-16: the biome's own tree. Absent (nullopt) = the global
+    // worldgen.json trees section + the hardcoded oak canopy path (the
+    // pre-V2-16 behavior, the bit-level-invariant red line for every
+    // tree-less biome).
+    std::optional<BiomeTreeSpec> tree;
+    // V2-16: excluded from the spawn clear zone's cumulative-weight walk
+    // (the demo-region structural protection — inside
+    // caves.spawn_clear_columns this biome is skipped by the selection,
+    // so the zone's mapping keeps the pre-V2-16 total weight bit-for-bit).
+    // Strict bool, default false (absent = selectable everywhere).
+    bool excludeSpawnArea = false;
 };
 
 class BiomeRegistry {

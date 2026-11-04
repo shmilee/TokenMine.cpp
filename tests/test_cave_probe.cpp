@@ -180,16 +180,20 @@ TEST(CaveProbeTest, Gen4ShippedFinalBeatsLegacy) {
     // long before it moves the world meaningfully). GEN-8 re-pin: the
     // mountain passes raise a few columns, so the per-column carve band
     // [caveMinY, height+guard) grows and the carve set shifts slightly —
+    // every DIRECTION pin below still holds exactly. V2-16 re-pin: the
+    // snowy_taiga's out-of-zone biome remap (totalWeight 10 -> 12) shifts
+    // the sample region's (x >= 112, wholly outside the spawn zone)
+    // heightscales — the band shrinks 158 cells and the carve set shifts;
     // every DIRECTION pin below still holds exactly.
-    EXPECT_EQ(finalA->bandCells, 353587);
-    EXPECT_EQ(finalA->carvedCells, 12216);
-    EXPECT_DOUBLE_EQ(finalA->carveRate, 12216.0 / 353587.0);
-    EXPECT_EQ(finalA->componentCount, 18);
-    EXPECT_DOUBLE_EQ(finalA->volumeP50, 419.0);
-    EXPECT_DOUBLE_EQ(finalA->volumeP90, 2385.0);
-    EXPECT_EQ(finalA->volumeMax, 2762);
-    EXPECT_EQ(finalA->smallCells, 6);
-    EXPECT_EQ(finalA->surfaceOpenings, 408);
+    EXPECT_EQ(finalA->bandCells, 353429);
+    EXPECT_EQ(finalA->carvedCells, 12196);
+    EXPECT_DOUBLE_EQ(finalA->carveRate, 12196.0 / 353429.0);
+    EXPECT_EQ(finalA->componentCount, 19);
+    EXPECT_DOUBLE_EQ(finalA->volumeP50, 378.0);
+    EXPECT_DOUBLE_EQ(finalA->volumeP90, 2385.0); // V2-16 unchanged
+    EXPECT_EQ(finalA->volumeMax, 2773);
+    EXPECT_EQ(finalA->smallCells, 11);
+    EXPECT_EQ(finalA->surfaceOpenings, 406);
 
     // The calibration conclusion (final vs legacy, same seed + sample):
     EXPECT_LT(finalA->smallCellFraction, legacy->smallCellFraction);
@@ -203,10 +207,13 @@ TEST(CaveProbeTest, Gen4ShippedFinalBeatsLegacy) {
     // comparison above cannot silently drift). GEN-8 re-pin: the raised
     // columns grow the band the legacy tuning carves, shifting its
     // component count 27 → 26 (the direction pins above unchanged).
-    EXPECT_EQ(legacy->carvedCells, 18914);
-    EXPECT_EQ(legacy->componentCount, 26);
-    EXPECT_EQ(legacy->smallCells, 25);
-    EXPECT_DOUBLE_EQ(legacy->volumeP50, 42.0);
+    // V2-16 re-pin: the legacy tuning carves the SAME remapped terrain
+    // (the out-of-zone shift), 12216 -> 12196 final / 18914 -> 18926
+    // legacy (the direction pins above unchanged).
+    EXPECT_EQ(legacy->carvedCells, 18926);
+    EXPECT_EQ(legacy->componentCount, 25);
+    EXPECT_EQ(legacy->smallCells, 24);
+    EXPECT_DOUBLE_EQ(legacy->volumeP50, 42.0); // V2-16 unchanged
 }
 
 TEST(CaveProbeTest, Gen4DirectionHoldsAcrossSeeds) {
@@ -220,16 +227,18 @@ TEST(CaveProbeTest, Gen4DirectionHoldsAcrossSeeds) {
     const float t = w.params().caveTubeThreshold;
     // GEN-8 re-pin: the mountain passes raise a few columns (the band
     // grows, the carve sets shift) — the per-seed DIRECTION pins below
-    // all still hold exactly.
+    // all still hold exactly. V2-16 re-pin: the out-of-zone biome remap
+    // shifts every seed's carve set (the per-seed DIRECTION pins below
+    // all still hold exactly).
     const struct {
         std::int64_t seed;
         int finalCarved, finalComps, finalSmall;
         double finalP50;
         int legacyCarved, legacyComps, legacySmall;
     } want[] = {
-        {123456789, 12216, 18, 6, 419.0, 18914, 26, 25},
-        {9, 19408, 6, 0, 1554.0, 22022, 35, 38},
-        {42, 18531, 7, 3, 412.0, 20734, 19, 25},
+        {123456789, 12196, 19, 11, 378.0, 18926, 25, 24},
+        {9, 19405, 6, 0, 1553.0, 22018, 35, 38},
+        {42, 18484, 7, 3, 413.0, 20702, 19, 24},
     };
     long finalCarved = 0, finalBand = 0;
     long legacyCarved = 0;
@@ -257,14 +266,17 @@ TEST(CaveProbeTest, Gen4DirectionHoldsAcrossSeeds) {
         legacyCarved += l.carvedCells;
     }
     // The pinned 3-seed aggregates (the 96x96 calibration table):
-    // final = 50155 carved in a 1045910-cell band (4.80% — in band),
-    // legacy = 61670 (5.90%). GEN-8 re-pin: the mountain passes RAISE a
+    // final = 50085 carved in a 1044777-cell band (4.79% — in band),
+    // legacy = 61646 (5.90%). GEN-8 re-pin: the mountain passes RAISE a
     // few columns (the band is per-column [caveMinY, height+guard)) so
     // the band grows ~11.5k cells and both carve sets shift up slightly
-    // (the direction pins above all still hold exactly).
-    EXPECT_EQ(finalBand, 1045910);
-    EXPECT_EQ(finalCarved, 50155);
-    EXPECT_EQ(legacyCarved, 61670);
+    // (the direction pins above all still hold exactly). V2-16 re-pin:
+    // the out-of-zone biome remap shrinks the band 1133 cells (the
+    // heightscale mix shifts) and both carve sets shift slightly (the
+    // direction pins above all still hold exactly).
+    EXPECT_EQ(finalBand, 1044777);
+    EXPECT_EQ(finalCarved, 50085);
+    EXPECT_EQ(legacyCarved, 61646);
     const double finalRate = static_cast<double>(finalCarved) / finalBand;
     const double legacyRate = static_cast<double>(legacyCarved) / finalBand;
     EXPECT_GE(finalRate, 0.04);
@@ -301,15 +313,18 @@ TEST(CaveProbeTest, Gen4DesignSample32Aggregate) {
     }
     // Pinned aggregates (the 32x32 calibration table). GEN-8 re-pin:
     // the raised columns grow the band (~+1.5k cells) and shift both
-    // carve sets up slightly; the final density 4255/105219 = 4.04%
-    // stays in the 4-6% design band (at its lower edge).
-    EXPECT_EQ(band, 105219);
-    EXPECT_EQ(finalCarved, 4255);
-    EXPECT_EQ(finalSmall, 2);
-    EXPECT_EQ(finalComps, 8);
-    EXPECT_EQ(legacyCarved, 5746);
-    EXPECT_EQ(legacySmall, 10);
-    EXPECT_EQ(legacyComps, 22);
+    // carve sets up slightly; the final density 4254/104902 = 4.05%
+    // stays in the 4-6% design band (at its lower edge). V2-16 re-pin:
+    // the out-of-zone biome remap shrinks the band 317 cells and shifts
+    // both carve sets slightly (the density stays in band at its lower
+    // edge, the fragmentation direction unchanged).
+    EXPECT_EQ(band, 104902);
+    EXPECT_EQ(finalCarved, 4254);
+    EXPECT_EQ(finalSmall, 2); // V2-16 unchanged
+    EXPECT_EQ(finalComps, 8); // V2-16 unchanged
+    EXPECT_EQ(legacyCarved, 5739);
+    EXPECT_EQ(legacySmall, 11);
+    EXPECT_EQ(legacyComps, 23);
     const double finalRate = static_cast<double>(finalCarved) / band;
     EXPECT_GE(finalRate, 0.04);
     EXPECT_LE(finalRate, 0.06);

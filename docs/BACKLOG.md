@@ -10,14 +10,14 @@
 > V3-N → V2-N 重编号）；细节立项时设计定案。**用户已授权按 V2-11
 > 起顺序推进**（11-03「继续推进原 3.x 转到 2.x 的 8 个任务」）。
 
-## v2.x 第二批任务矩阵（5/8 完成）
+## v2.x 第二批任务矩阵（6/8 完成）
 
 | 系统 | ① | ② | ③ | ④ | ⑤ | ⑥ | ⑦ |
 |---|---|---|---|---|---|---|---|
 | STRM 流送与内存 | | | | | | | |
 | PIPE 帧管线与并发 | | | | | | | |
 | LGT 光照 | | | | | | | |
-| GEN 世界与生成 | V2-16 新 biome：雪原/针叶林 | V2-17 顶部 slab/双 slab | | | | | |
+| GEN 世界与生成 | ~~V2-16 新 biome：雪原/针叶林~~ ✅ v2.17.0（门 188：snowy_taiga 数据驱动【tree 6 键严格对象 + exclude_spawn_area 演示区结构保护 = 区内映射逐位不变】+ snow 满块 + planTree 针叶路径【无 tree biome 零触碰】；零 format 世界演进，结构免疫第 69 次免重锚） | V2-17 顶部 slab/双 slab | | | | | |
 | FLUID 流体 | | | | | | | |
 | ENT 实体/Mob/移动 | ~~V2-14 新 mob 蝙蝠（飞行 AI）~~ ✅ v2.15.0（门 186：悬停巡航飞行 AI【正弦 bob 帧锁定 + 航向流重掷】+ 洞穴生成 in-air 分支【光 ≤3 跳过 floor 带任何 Y】+ 0.9×0.5 展翼扇翅模型 + squeak 氛围音 + 三数据旗互配纪律；零 format savenorm EXACT，结构免疫第 67 次） | ~~V2-15 16 色染色羊~~ ✅ v2.16.0（门 187：shears 238 耐久 + 剪毛 1-3 彩毛 + 出生毛色流首抽 temperate 表 + 染色改色 bare 拒染 + 死亡彩毛钩子 + per-entity 变体网格【15 色复用 wool 族 tile + sheep_skin】；零 format savenorm EXACT，结构免疫第 68 次） | | | | | |
 | SURV 生存/战斗/效果 | ~~V2-11 XP 系统~~ ✅ v2.12.0（门 183：经验球 1..9 无合并分裂 + 全整数 MC 曲线【等级派生不存储】+ 三发放源数据驱动【hostile 5/passive 2/mine coal 1 diamond 5 iron 0 gold 0/smelt 1 统一】+ format 26 三向键 + save.cpp PITS 361 潜在 bug 修复 + XP 条 HUD；base18 第 4 次重锚 179027 B） | ~~V2-13 床（睡觉跳夜）~~ ✅ v2.14.0（门 185：15 色染色族 Slab 床 + 睡眠三门【距离 3.0/hostile 8×5 盒/夜窗】即时跳夜 + 天气重置 + format 28 respawn 恒写 + 验床重生【破坏回退世界出生点】+ sleep 音；结构免疫第 66 次免重锚） | | | | | |
@@ -68,6 +68,30 @@
    二批收官 = v2.18.0 系统收官 tag + release，用户可推翻）。
 
 ## 变更记录（v2.x 第二批）
+
+- 2026-11-04：**V2-16 雪原/针叶林 biome 完成（v2.17.0，门 188 全
+  PASS）**——GEN 行。snowy_taiga.json（weight 2 / surface snow /
+  tree_density 0.12 / height_scale 1.1 / **tree 严格 6 键对象**
+  {spruce_trunk, spruce_leaves, 6, 3, 2, spruce} = sapling 同款面
+  缺/多/词汇全点名 + create 交叉检 / **exclude_spawn_area = 演示区
+  结构保护**：区内累计走查跳旗 → totalWeight 恒 10 = 现有映射逐位
+  不变【GEN-1 spawn_clear 先例】）+ snow 满块（hardness 0.1 MC 精确
+  / 新 snow 三件音族 / atlas 122 零移位；MC 1-8 层雪层 = 偏离 1）+
+  placeTrees 针叶路径（同 kSaltTree h 复用 + planTree 锥冠逐 cell +
+  root no-op 既有同款；**无 tree biome 硬编码路径零触碰**）。4 条偏
+  离（满块代层 / 无 decorations / density 0.12 / weight 2）。**音效
+  缺陷族 13 件随版修复**（generate_sounds LCG 逐采样重建 = 常值流
+  → 4 静音 + 5 DC 退化 + 2 部分受损跨多版本潜伏 = 音频门盲区；修后
+  峰值全非零 + 纹理度量落正常带，md5 变更恰 13 件幂等）。2415/2415
+  （+23）、banner v2.17.0、零 format（biome 不入档，旧档 = 区外雪带
+  世界演进 GEN-1/3/5 先例）。门 188：S1 结构免疫第 69 次免重锚（设
+  计重锚预判被证据推翻：60f 流送半径内可见地形全落演示区 → ≡ 锚
+  179027 零 diff + savenorm EXACT + 区内位级双钉）/ S2 雪块破/放单
+  准星双动作 E2E（破 (2,54,2) → 同射线续至 (3,53,3) 地顶 = 放置
+  (3,54,3)；hold 0.5s 断点时序；掉落 2.83>磁力 2.5 留地；旧侧词表
+  互斥）/ S3 / S6 6/6 / 性能同档（9/1/3 逐位 + journal 0/0【世界演
+  进 = 参考变化非 journal 口径发现】+ 雪带 1800f 稳态 111.9/112.5
+  ms 同档）。PITS 382。详见 docs/archive/phase-2.17.0.md。
 
 - 2026-11-04：**V2-15 16 色染色羊完成（v2.16.0，门 187 全 PASS）**
   ——消费「sheep 只掉白 wool」记档 [Phase 41]。shears 物品（238 耐

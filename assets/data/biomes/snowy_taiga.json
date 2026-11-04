@@ -1,0 +1,18 @@
+{
+  "id": "snowy_taiga",
+  "weight": 2,
+  "surface": "snow",
+  "subsurface": "dirt",
+  "subsurface_depth": 3,
+  "tree_density": 0.12,
+  "height_scale": 1.1,
+  "tree": {
+    "trunk": "spruce_trunk",
+    "leaves": "spruce_leaves",
+    "min_height": 6,
+    "height_range": 3,
+    "leaf_radius": 2,
+    "shape": "spruce"
+  },
+  "exclude_spawn_area": true
+}

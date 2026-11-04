@@ -1,11 +1,13 @@
 #include "world/biome.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <string>
 #include <vector>
 
 #include "core/logger.hpp"
+#include "world/tree_shape.hpp"
 
 namespace mc {
 
@@ -52,7 +54,8 @@ Result<void> BiomeRegistry::registerBiome(const Json& def) {
         if (key != "id" && key != "weight" && key != "surface" &&
             key != "subsurface" && key != "subsurface_depth" &&
             key != "tree_density" && key != "height_scale" &&
-            key != "decorations") {
+            key != "decorations" && key != "tree" &&
+            key != "exclude_spawn_area") {
             MC_LOG_WARN("Biome '" + name + "': unknown field '" + key +
                         "' ignored");
         }
@@ -120,6 +123,97 @@ Result<void> BiomeRegistry::registerBiome(const Json& def) {
             deco.probability = static_cast<float>(prob->asDouble());
             biome.decorations.push_back(std::move(deco));
         }
+    }
+
+    // V2-16: 'exclude_spawn_area' — a STRICT bool (the render.weather
+    // strict-read discipline): absent = the default false, present but
+    // non-boolean = named rejection (a 1 / "true" typo would silently
+    // change the spawn-zone selection).
+    if (const Json* excl = def.find("exclude_spawn_area")) {
+        if (!excl->isBool()) {
+            return MC_FAIL("biome '" + name +
+                           "': 'exclude_spawn_area' must be a boolean");
+        }
+        biome.excludeSpawnArea = excl->asBool();
+    }
+
+    // V2-16: the optional 'tree' object — a strict SIX-KEY
+    // {"trunk", "leaves", "min_height", "height_range", "leaf_radius",
+    //  "shape"}, the SAME field face as a sapling block's tree object
+    // (the block_registry parsing precedent: every key present and
+    // typed, unknown keys rejected by name, `tree.<key>` addressing).
+    // The trunk / leaves NAMES are cross-checked against the
+    // BlockRegistry at generation setup (WorldGenerator::create); the
+    // shape vocabulary + the integer ranges are checked here.
+    if (const Json* tr = def.find("tree")) {
+        // The `biome '<name>': 'tree...'` addressing (the existing
+        // field-message style, the sapling tree.<key> discipline).
+        const std::string p = "biome '" + name + "': 'tree";
+        if (!tr->isObject()) {
+            return MC_FAIL(p + "' must be an object "
+                            "{\"trunk\": ..., \"leaves\": ..., "
+                            "\"min_height\": ..., \"height_range\": ..., "
+                            "\"leaf_radius\": ..., \"shape\": ...}");
+        }
+        for (const auto& [key, value] : tr->members()) {
+            if (key != "trunk" && key != "leaves" &&
+                key != "min_height" && key != "height_range" &&
+                key != "leaf_radius" && key != "shape") {
+                return MC_FAIL(p + "' has an unknown field '" + key + "'");
+            }
+        }
+        BiomeTreeSpec tree;
+        // Strict six keys: every key present (a missing one is a no-op
+        // typo — named).
+        for (const char* key : {"trunk", "leaves", "min_height",
+                                "height_range", "leaf_radius", "shape"}) {
+            if (tr->find(key) == nullptr) {
+                return MC_FAIL(p + "." + key + "' is required (a strict "
+                                       "six-key object)");
+            }
+        }
+        auto trc = checkField(*tr, "trunk", "string",
+                              [&](const Json& v) { tree.trunk = v.asString(); });
+        MC_TRY(trc);
+        trc = checkField(*tr, "leaves", "string",
+                         [&](const Json& v) { tree.leaves = v.asString(); });
+        MC_TRY(trc);
+        trc = checkField(*tr, "shape", "string",
+                         [&](const Json& v) { tree.shape = v.asString(); });
+        MC_TRY(trc);
+        // The three integer fields: explicit integer-ness + range (the
+        // sapling tree.<key> discipline).
+        const struct { const char* key; int* out; int lo; int hi; } ints[] = {
+            {"min_height", &tree.minHeight, 1, 16},
+            {"height_range", &tree.heightRange, 0, 8},
+            {"leaf_radius", &tree.leafRadius, 1, 2},
+        };
+        for (const auto& f : ints) {
+            const Json* v = tr->find(f.key);
+            if (!v->isNumber() || v->asDouble() != std::floor(v->asDouble())) {
+                return MC_FAIL(p + "." + f.key + "' must be an integer in "
+                                       "[" + std::to_string(f.lo) + ", " +
+                                       std::to_string(f.hi) + "]");
+            }
+            *f.out = static_cast<int>(v->asDouble());
+            if (*f.out < f.lo || *f.out > f.hi) {
+                return MC_FAIL(p + "." + f.key + "' must be in [" +
+                               std::to_string(f.lo) + ", " +
+                               std::to_string(f.hi) + "], got " +
+                               std::to_string(*f.out));
+            }
+        }
+        if (tree.trunk.empty()) {
+            return MC_FAIL(p + ".trunk' must be a non-empty block name");
+        }
+        if (tree.leaves.empty()) {
+            return MC_FAIL(p + ".leaves' must be a non-empty block name");
+        }
+        if (!treeShapeValid(tree.shape)) {
+            return MC_FAIL(p + ".shape' is unsupported: '" + tree.shape +
+                           "' (only 'oak', 'spruce' and 'birch' exist)");
+        }
+        biome.tree = std::move(tree);
     }
 
     if (biome.weight < 1) {

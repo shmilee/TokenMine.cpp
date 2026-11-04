@@ -1460,8 +1460,11 @@ TEST(MobContent, V215WoolAssetsPinned) {
               "73b48b6aca85ca6c");
     EXPECT_EQ(fnv1a64(readAll("assets/sounds/shear.wav")),
               "f4fb0c5bdd5b6019");
+    // V2-16 re-pin: the atlas layout gained the snow tile's [12, 6] cell
+    // (the 122-tile zero-shift red line lives in test_atlas's census —
+    // this FNV is the file-bytes re-run determinism proof).
     EXPECT_EQ(fnv1a64(readAll("assets/data/textures/block_atlas.json")),
-              "d547179fb0b607c5");
+              "6c0ab85564c453ed");
 }
 
 // -- V2-15: the wool instance state (MobEntity — the frame discipline) ----

@@ -1967,6 +1967,9 @@ TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
     //           variant bed dye family (the wool's sound — the bed's
     //           cloth material, the MC bed's place/break)
     //   glass = glass + glass_pane
+    //   snow  = the snow block (V2-16: the 7th material — the MC
+    //           snow_block's soft shush, the sand-family paradigm one
+    //           step softer)
     //   every other block = NO field (the generic fallback)
     const std::map<std::string, std::string> expected = {
         {"stone", "stone"},
@@ -2022,6 +2025,8 @@ TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
         {"bed_yellow", "cloth"},
         {"glass", "glass"},
         {"glass_pane", "glass"},
+        // V2-16: the snow block (the 7th material family).
+        {"snow", "snow"},
     };
     for (const auto& [name, mat] : expected) {
         const Block* b = reg.findByName(name);
@@ -2050,7 +2055,8 @@ TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
     // event wavs on disk.
     for (const std::string& mat :
          {std::string("stone"), std::string("wood"), std::string("gravel"),
-          std::string("sand"), std::string("cloth"), std::string("glass")}) {
+          std::string("sand"), std::string("cloth"), std::string("glass"),
+          std::string("snow")}) {
         for (const std::string_view ev : kSoundMaterialEvents) {
             EXPECT_TRUE(
                 assets.exists("sounds/" + mat + "_" + std::string(ev) + ".wav"))
@@ -3291,4 +3297,51 @@ TEST(BlockRegistryTest, V27BlockFacesParsing) {
         R"({"shape":"glass_pane","textures":{"side":"s","faces":{"front":"f"}}}})"));
     ASSERT_FALSE(bad.ok());
     EXPECT_NE(bad.error().message.find("glass_pane"), std::string::npos);
+}
+
+// ---------------------------------------------------------------------------
+// V2-16: the snow block (the snowy_taiga biome's surface).
+// ---------------------------------------------------------------------------
+
+TEST(BlockContentTest, V216SnowBlockContentPinned) {
+    // The real assets: the snow block — the MC snow_block paradigm as a
+    // FULL BLOCK (the documented deviation: MC's 1-8 layer snow needs the
+    // layer mechanics / snowball item / snowfall weather the project has
+    // not): hardness 0.1 (the Minecraft snow-block exact), the new "snow"
+    // sound-material family (the three-event vocabulary — the init's
+    // checkSoundMaterials cross-checks the wavs' existence), drops itself
+    // (the auto block item — no item JSON, no recipe: the deviation's
+    // snowball-free side), opaque (light 15 derived), full cube, one tile
+    // on all six faces (the sand / iron_block precedent). NOT in the
+    // default inventory: worldgen-renewable (the snowy_taiga surface),
+    // placeable / breakable by hand.
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* b = reg.findByName("snow");
+    ASSERT_TRUE(b != nullptr) << "the snow block is not shipped";
+    EXPECT_EQ(b->model.shape, BlockModel::Shape::FullCube);
+    EXPECT_EQ(b->model.textures.top, "snow");
+    EXPECT_EQ(b->model.textures.side, "snow");
+    EXPECT_EQ(b->model.textures.bottom, "snow");
+    EXPECT_TRUE(b->properties.solid);
+    EXPECT_TRUE(b->properties.opaque); // light 15 derived
+    EXPECT_FALSE(b->properties.transparent);
+    EXPECT_FALSE(b->properties.cutout);
+    EXPECT_EQ(b->properties.drops, "snow"); // drops itself
+    EXPECT_EQ(b->properties.soundMaterial, "snow");
+    EXPECT_FLOAT_EQ(b->properties.hardness, 0.1f); // the MC snow block
+    // No side override (the V2-7 faces section stays furnace-only).
+    EXPECT_TRUE(b->model.textures.front.empty());
+    // No recipe, no explicit item (the auto block item owns the name).
+    EXPECT_FALSE(std::filesystem::exists("assets/data/items/snow.json"));
+    // The snow_material family's three event wavs exist (the init's
+    // checkSoundMaterials input side, file-based).
+    for (const char* ev : {"dig", "place", "break"}) {
+        EXPECT_TRUE(std::filesystem::exists(
+            std::string("assets/sounds/snow_") + ev + ".wav"))
+            << "the snow material's " << ev << " wav is not shipped";
+    }
 }

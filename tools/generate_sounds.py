@@ -86,6 +86,12 @@ vocabulary; blocks name one via `sound_material`):
                       noise snap — the blades catching — then a muffled
                       lowpassed tap 55 ms later — the wool parting,
                       0.18 s, the SFX volume class)
+ -- V2-16 snow (the 7th sound-material family — the snow block's dig /
+      place / break, the sand-family paradigm one step softer: powder,
+      not grains — the double lowpass, the quiet amplitudes):
+   snow_dig.wav        soft shush (double lowpass, the lightest dig face)
+   snow_place.wav      muffled soft plop 85 Hz (double lowpass)
+   snow_break.wav      quiet powder crumble (double lowpass, slow decay)
 """
 import math
 import os
@@ -153,7 +159,15 @@ def lowpass3(x: list) -> list:
 
 
 def dig():
-    noise = [Lcg(0xD160).next() for _ in range(int(RATE * 0.10))]
+    # V2-16 follow-up repair (round 2): the legacy body rebuilt the Lcg
+    # per sample (`[Lcg(0xD160).next() for ...]` — a fresh instance on
+    # every iteration), so `noise` was a CONSTANT stream — and with a
+    # negative constant, lowpass3's max(0.0, ...) clamp left the shipped
+    # dig.wav SILENT (peak 0). One advancing instance (the _noise / snow
+    # family paradigm, the adjacent place()'s pattern): the docstring's
+    # short filtered-noise tap, actually noise now.
+    lcg = Lcg(0xD160)
+    noise = [lcg.next() for _ in range(int(RATE * 0.10))]
     out = [noise[i] * env(i / RATE, 0.10, 30.0) * 0.5 for i in range(len(noise))]
     return lowpass3(out)
 
@@ -168,7 +182,12 @@ def place():
 
 
 def break_sfx():
-    noise = [Lcg(0xBEEF).next() for _ in range(int(RATE * 0.18))]
+    # V2-16 follow-up repair (round 2): the legacy body rebuilt the Lcg
+    # per sample (same defect as dig(), above) — the shipped break.wav
+    # was SILENT (peak 0). One advancing instance: the docstring's
+    # crumbly noise burst, actually noise now.
+    lcg = Lcg(0xBEEF)
+    noise = [lcg.next() for _ in range(int(RATE * 0.18))]
     out = [noise[i] * env(i / RATE, 0.18, 15.0) * 0.65 for i in range(len(noise))]
     return lowpass3(out)
 
@@ -366,7 +385,22 @@ def smelt():
 # Every LCG seed is fixed (and unique to its sound) — the determinism
 # discipline of the generic set.
 def _noise(seed: int, dur: float) -> list:
-    return [Lcg(seed).next() for _ in range(int(RATE * dur))]
+    # V2-16 follow-up repair: the legacy body rebuilt the Lcg per sample
+    # (`[Lcg(seed).next() for ...]` — a fresh instance on every iteration),
+    # so it returned a CONSTANT stream (the seed's first value, repeated).
+    # Downstream that constant was either a texture-free decaying DC ramp
+    # (the no-lowpass consumers) or, when the constant was NEGATIVE,
+    # clamped to SILENCE by lowpass3's max(0.0, ...) — the shipped
+    # sand_break / gravel_break files were exactly that (peak 0). The fix
+    # is the single-advancing-instance paradigm (the sleep / squeak /
+    # shear / snow precedent): same signature, same length, one genuine
+    # noise stream. The eleven _noise consumers' bytes intentionally
+    # change (degenerate -> the docstrings' intended noise); every other
+    # file stays byte-identical. (The generic dig / break inlined the
+    # same legacy pattern and were repaired the same way in round 2 of
+    # the follow-up — their bytes change there, not here.)
+    lcg = Lcg(seed)
+    return [lcg.next() for _ in range(int(RATE * dur))]
 
 
 def stone_dig():
@@ -545,6 +579,46 @@ def glass_break():
            * math.exp(-(i / RATE) * 25) * 0.3
            for i in range(len(noise))]
     return out
+
+
+# ---------------------------------------------------------------------------
+# V2-16: the snow material (the 7th sound family — the snow block). The
+# sand-family paradigm ONE STEP SOFTER (powder, not grains): the double
+# lowpass, the quiet amplitudes, the lightest decays. Fixed unique seeds
+# (the determinism discipline — a re-run leaves every other file
+# byte-identical).
+#
+# NOTE: the noise layers use a SINGLE advancing Lcg instance — the
+# paradigm the `_noise` helper was meant to carry (the helper's legacy
+# per-sample rebuild returned a constant stream; it was repaired in the
+# V2-16 follow-up, and this family matches that fix).
+def snow_dig():
+    """Soft shush: the lightest dig face (0.40, decay 22, double lowpass)
+    — the sliding powder (the sand_dig paradigm, one step quieter)."""
+    lcg = Lcg(0x75001)
+    out = [lcg.next() * env(i / RATE, 0.11, 22.0) * 0.40
+           for i in range(int(RATE * 0.11))]
+    return lowpass3(lowpass3(out))
+
+
+def snow_place():
+    """Muffled soft plop: an 85 Hz body (between the sand's 75 and the
+    gravel's 100 — the powder settling) + a double lowpassed noise."""
+    lcg = Lcg(0x75111)
+
+    def f(t, _):
+        return (math.sin(2 * math.pi * 85.0 * t) * math.exp(-t * 28) * 0.5
+                + lcg.next() * math.exp(-t * 45) * 0.28)
+    return lowpass3(lowpass3(sound(0.12, f)))
+
+
+def snow_break():
+    """Quiet powder crumble: decay 14 over 0.18 s, double lowpass — the
+    pile giving way silently (the sand_break paradigm, one step softer)."""
+    lcg = Lcg(0x75222)
+    out = [lcg.next() * env(i / RATE, 0.18, 14.0) * 0.5
+           for i in range(int(RATE * 0.18))]
+    return lowpass3(lowpass3(out))
 
 
 # ---------------------------------------------------------------------------
@@ -769,6 +843,11 @@ SOUNDS = {
     "glass_dig": glass_dig,
     "glass_place": glass_place,
     "glass_break": glass_break,
+    # V2-16: the snow material vocabulary (3 events — the sand-family
+    # paradigm one step softer; the snow block's sound_material).
+    "snow_dig": snow_dig,
+    "snow_place": snow_place,
+    "snow_break": snow_break,
     # PRE-4: the ambience beds (quiet by design — the ambient sound sits
     # under the SFX; the placements are LCG-decided per sound).
     "ambience_cave": ambience_cave,
