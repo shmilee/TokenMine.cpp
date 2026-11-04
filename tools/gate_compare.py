@@ -8,8 +8,20 @@ Usage:
                                     entities[*].age, player.saturation —
                                     the PITS 244 / P56 discipline)
 """
+import gzip
 import json
 import sys
+
+
+def load_save(path):
+    """Load a save file, transparently gunzipping the V3-7 gzip encoding
+    (the magic probe — the sole encoding criterion; a legacy plaintext
+    file reads straight through, zero migration)."""
+    with open(path, 'rb') as f:
+        data = f.read()
+    if data[:2] == b'\x1f\x8b':
+        data = gzip.decompress(data)
+    return json.loads(data)
 
 
 def cmp_raw(a, b):
@@ -55,8 +67,8 @@ def diff(a, b, path=''):
 
 
 def cmp_norm(a, b):
-    da = strip_save(json.load(open(a)))
-    db = strip_save(json.load(open(b)))
+    da = strip_save(load_save(a))
+    db = strip_save(load_save(b))
     d = diff(da, db)
     if not d:
         print(f'EXACT {a} \u2261 {b} (savenorm)')

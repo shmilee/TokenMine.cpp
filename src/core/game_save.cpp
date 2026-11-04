@@ -1,8 +1,11 @@
 #include "core/game.hpp"
 
+#include <chrono>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <system_error>
 
 #include "core/json.hpp"
 
@@ -315,16 +318,44 @@ Result<SaveGame> Game::collectSave() const {
 }
 
 Result<void> Game::writeSave(bool byAutoSave) const {
+    // V3-7: the save-write duration (real-dt wall clock — the
+    // performance log line, never part of a byte gate; the perf A/B's
+    // IO-increment metric).
+    const auto started = std::chrono::steady_clock::now();
     auto saved = collectSave();
     MC_TRY(saved);
     auto serialized = serializeSave(*saved, m_items);
     MC_TRY(serialized);
     const std::filesystem::path path = savePath();
+    const std::string payload = serialized->dump(2) + '\n';
+    // V3-7: the on-disk encoding (save.compression): Gzip = the
+    // deterministic container (kGzipHeader + raw deflate + CRC32 /
+    // ISIZE — byte-reproducible, the determinism first-class rule);
+    // None = the plaintext payload (the pre-V3-7 behavior,
+    // bit-identical). Either encoding goes through the SAME atomic
+    // write (a kill mid-write cannot corrupt the slot).
+    std::string disk = payload;
+    if (m_saveCompression == SaveCompression::Gzip) {
+        auto gz = gzipEncode(payload);
+        MC_TRY(gz);
+        disk = std::move(*gz);
+    }
     // SAVE-1: the ATOMIC write (same-directory temp + rename) shared by
     // the exit save, the F5 save and the periodic auto-save — the slot
     // file holds either the previous complete save or this one, never a
     // half-written one (a kill mid-write cannot corrupt it).
-    MC_TRY(writeAtomicFile(path, serialized->dump(2) + '\n'));
+    MC_TRY(writeAtomicFile(path, disk));
+    char msBuf[32];
+    std::snprintf(msBuf, sizeof(msBuf), "%.1f",
+                  std::chrono::duration<double, std::milli>(
+                      std::chrono::steady_clock::now() - started)
+                      .count());
+    const std::string encoding =
+        m_saveCompression == SaveCompression::Gzip
+            ? "gzip: " + std::to_string(payload.size()) +
+                  " B payload -> " + std::to_string(disk.size()) +
+                  " B on disk"
+            : "plain: " + std::to_string(payload.size()) + " B";
     MC_LOG_INFO((byAutoSave ? "World auto-saved to '" : "World saved to '") +
                 path.string() + "' (" +
                 std::to_string(saved->blockEdits.size()) +
@@ -333,18 +364,36 @@ Result<void> Game::writeSave(bool byAutoSave) const {
                 std::to_string(saved->entities.size() +
                                saved->xpEntities.size()) +
                 " entities, " + std::to_string(saved->slots.size()) +
-                " slots)");
+                " slots) in " + msBuf + " ms (" + encoding + ")");
     return {};
 }
 
 Result<SaveGame> Game::readSaveFile(const std::filesystem::path& path) const {
-    std::ifstream in(path);
-    if (!in) {
-        return MC_FAIL("cannot open save file '" + path.string() + "'");
+    std::string raw;
+    {
+        // V3-7: binary mode — the file may be the gzip container
+        // (this build's write default) as well as the legacy plaintext.
+        std::ifstream in(path, std::ios::binary);
+        if (!in) {
+            return MC_FAIL("cannot open save file '" + path.string() + "'");
+        }
+        std::stringstream ss;
+        ss << in.rdbuf();
+        raw = ss.str();
     }
-    std::stringstream ss;
-    ss << in.rdbuf();
-    auto parsed = Json::parse(ss.str());
+    // V3-7: the on-disk encoding probe — the gzip magic 1f 8b = the
+    // deterministic gzip container (strict decode: the header pinned
+    // byte-for-byte, the body inflated, the CRC32 / ISIZE trailer
+    // double-checked — a failure is named, carrying the path);
+    // anything else = the legacy plaintext (format 28 and older),
+    // loaded directly (the zero-migration rule).
+    std::string text = raw;
+    if (looksLikeGzip(raw)) {
+        auto decoded = gzipDecode(raw, path.string());
+        MC_TRY(decoded);
+        text = std::move(*decoded);
+    }
+    auto parsed = Json::parse(text);
     if (!parsed.ok()) {
         return MC_FAIL("invalid JSON in save file '" + path.string() + "': " +
                        parsed.error().message);
@@ -679,16 +728,42 @@ Result<void> Game::tryLoadSave() {
         MC_LOG_INFO("No save at '" + path.string() + "' — starting fresh");
         return {};
     }
+    // V3-7: the load log line's encoding marker — the file's on-disk
+    // encoding probed by the same magic the reader uses (1f 8b = the
+    // deterministic gzip container; anything else = the legacy
+    // plaintext, the zero-migration read path). Real-dt performance
+    // evidence, never part of a byte gate.
+    std::string encoding = "plain";
+    {
+        std::string head(2, '\0');
+        {
+            std::ifstream probeIn(path, std::ios::binary);
+            probeIn.read(&head[0], 2);
+        }
+        if (looksLikeGzip(head)) {
+            std::error_code ec;
+            const std::uintmax_t bytes = std::filesystem::file_size(path, ec);
+            encoding =
+                ec ? "gzip" : "gzip: " + std::to_string(bytes) + " B on disk";
+        }
+    }
+    const auto started = std::chrono::steady_clock::now();
     auto save = readSaveFile(path);
     MC_TRY(save);
+    const double loadMs =
+        std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - started)
+            .count();
     MC_TRY(applySave(*save));
+    char msBuf[32];
+    std::snprintf(msBuf, sizeof(msBuf), "%.1f", loadMs);
     MC_LOG_INFO("Loaded save '" + path.string() + "' (" +
                 std::to_string(save->blockEdits.size()) +
                 " block edits, " + std::to_string(save->fluidEdits.size()) +
                 " fluid edits, " +
                 std::to_string(save->entities.size() +
                                save->xpEntities.size()) +
-                " entities)");
+                " entities) in " + msBuf + " ms (" + encoding + ")");
     return {};
 }
 

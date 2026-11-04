@@ -93,7 +93,22 @@ Result<SaveSlotSummary> readSaveSlotSummary(
         out.problem = openError;
         return out;
     }
-    auto parsed = Json::parse(data);
+    // V3-7: the on-disk encoding probe (the readSaveFile twin): a gzip
+    // slot (this build's write default) decodes before the JSON parse;
+    // a legacy plaintext slot (format 28 and older) reads straight
+    // through (zero migration). A decode failure is a NAMED problem —
+    // the file surfaces in the list, it is never hidden (the existing
+    // problem-naming discipline).
+    std::string text = data;
+    if (looksLikeGzip(data)) {
+        auto decoded = gzipDecode(data, path.string());
+        if (!decoded.ok()) {
+            out.problem = "invalid gzip: " + decoded.error().message;
+            return out;
+        }
+        text = std::move(*decoded);
+    }
+    auto parsed = Json::parse(text);
     if (!parsed.ok()) {
         out.problem = "invalid JSON: " + parsed.error().message;
         return out;

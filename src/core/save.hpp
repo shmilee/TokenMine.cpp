@@ -405,7 +405,22 @@ namespace mc {
 //      bedRespawnValid — the coordinate memory survives the bed's
 //      break / recolor / reorientation in between, the Minecraft rule).
 //      Writes are always format 28.
-inline constexpr int kSaveFormat = 28;
+//  29: the V3-7 GZIP ERA — the schema is COMPLETELY IDENTICAL to 28
+//      (no key added, no shape changed): the format number's only new
+//      meaning is that a write from this build onward emits the save
+//      payload GZIP-ENCODED on disk by default (the deterministic gzip
+//      container — see kGzipHeader below) and that the read side
+//      PROBES the encoding by the file's magic bytes (1f 8b = gzip,
+//      anything else = the legacy plaintext, loaded directly — the
+//      zero-migration rule). The encoding is ORTHOGONAL to the format
+//      number: a "none"-configured v3.1.0 file is the plaintext payload
+//      and differs from the v3.0.0 file of the same state ONLY in this
+//      root "format" key (28 -> 29); the magic probe is the SOLE
+//      encoding criterion (the extension stays .json). An older build
+//      rejecting 29 is the same version-mutual-exclusion any format
+//      bump carries; this build reads format 1..29. Writes are always
+//      format 29.
+inline constexpr int kSaveFormat = 29;
 // UX-8f (format 24): the inventory's total slot count as of format 23
 // (9 hotbar + 18 storage) — the 27-slot array shape a pre-24 file
 // carries (the parser tail-pads it to the current kTotalSize).
@@ -416,6 +431,30 @@ inline constexpr int kPreUx8fInventorySlots = 27;
 // knockback spikes in the tens).
 inline constexpr float kSavedVelocityMax = 100.0f;
 inline constexpr int kSaveFormatMin = 1;
+
+// V3-7: the on-disk ENCODING of the save payload (the format-29 era's
+// companion — ORTHOGONAL to the format number; the file's magic bytes
+// are the sole criterion): Gzip = the deterministic gzip container
+// (the code default, the user decision 11-04), None = the plaintext
+// payload (the pre-V3-7 behavior, bit-identical).
+enum class SaveCompression { Gzip, None };
+
+// V3-7: the gzip compression level (the gzip standard's default —
+// level 9 buys <5% size on the save's KB-MB payloads, not worth a
+// config knob, so no level key exists).
+inline constexpr int kSaveGzipLevel = 6;
+
+// V3-7: the deterministic gzip container's FIXED 10-byte header —
+// every byte pinned (the hand-written container the write side emits
+// and the read side requires, the machine-generated-file discipline):
+// 1f 8b (magic) | 08 (CM = deflate) | 00 (FLG = 0: no FEXTRA / FNAME /
+// FCOMMENT / FHCRC) | 00 00 00 00 (MTIME = 0) | 00 (XFL = 0: level 6
+// is zlib's default, 0 is the honest value) | 03 (OS = Unix). The zlib
+// built-in gzip wrapper (windowBits 16+15) is deliberately NOT used:
+// its MTIME / XFL / OS fields drift across zlib versions, and the
+// determinism first-class rule requires byte-reproducible files.
+inline constexpr std::array<std::uint8_t, 10> kGzipHeader =
+    {0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03};
 
 // Phase 40: the furnace save-field bounds — the max smelt/fuel times the
 // item data allows (smelt_time ≤ 100 s, fuel_time ≤ 1000 s; see
@@ -907,6 +946,45 @@ inline constexpr double kAutoSaveDefaultSeconds = 120.0;
 // save every N real seconds). A negative or non-finite value is named
 // and rejected at init; a non-number type is named and rejected.
 Result<double> autoSaveIntervalSeconds(const Config& config);
+
+// V3-7: the strict read of save.compression (the autoSaveIntervalSeconds
+// + aoEnabled discipline — the Config getters would SILENTLY fall back
+// to a default on a type mismatch, so the raw value is read): absent
+// key = Gzip (the code default, the user decision 11-04; the committed
+// config.json carries no save section); "gzip" = Gzip; "none" = None
+// (the pre-V3-7 plaintext behavior). A non-string, an empty string or
+// an unknown word is named and rejected at init (the message names
+// "save.compression").
+Result<SaveCompression> saveCompression(const Config& config);
+
+// V3-7: the DETERMINISTIC gzip encoder: the fixed kGzipHeader + a raw
+// deflate body (windowBits -15, level kSaveGzipLevel, the zlib / gzip
+// wrappers deliberately NOT used — the hand-pinned container) + the
+// CRC32 / ISIZE trailer (both little-endian, the gzip standard).
+// Identical input yields byte-identical output (the determinism
+// first-class rule: every container byte is either pinned or
+// zlib-level-deterministic). Any zlib failure is named.
+Result<std::string> gzipEncode(const std::string& payload);
+
+// V3-7: the on-disk encoding PROBE — the first two bytes are the gzip
+// magic (1f 8b). Fewer than two bytes = false (the plaintext path — a
+// legacy format-28-and-older file starts with '{' and loads directly,
+// the zero-migration rule). Never fails.
+bool looksLikeGzip(const std::string& raw);
+
+// V3-7: the STRICT gzip decoder (the write side's exact inverse):
+// fewer than 20 bytes (the minimum container = the 10-byte header +
+// the 2-byte empty-deflate body + the 8-byte trailer) is named
+// "truncated gzip"; the 10-byte header must equal kGzipHeader
+// byte-for-byte (ANY deviation — including a system gzip CLI file with
+// a real MTIME — is named "unsupported gzip header"; the
+// machine-generated-file discipline: the read side pins exactly what
+// the write side emits, never silently tolerates foreign encoders);
+// then the raw inflate (a body error is named "corrupt gzip body");
+// then the CRC32 / ISIZE trailer double-check (a mismatch is named
+// "corrupt gzip trailer"). `what` is the file path — the error naming
+// context (every rejection message carries it).
+Result<std::string> gzipDecode(const std::string& raw, const std::string& what);
 
 // The auto-save timer step (pure — the campfire-tick pattern): advance
 // the real-dt accumulator by `dt` and report whether a save is due

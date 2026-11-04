@@ -7,7 +7,7 @@
 **本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒<br>
 （C++20 / SDL3 / OpenGL 3.3，自研 JSON/PNG，内容全数据驱动）。<br>
 确定性是一级要求——无输入运行逐帧字节可复现。<br>
-v3.0.0 已发布（**3.x「世界扩展」期开启**，tag `v3.0.0`；2.x 全史收官 = v2.19.0）· 下一版 v3.1.0 = 存档 gzip（任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
+v3.1.0 已发布（**存档 gzip 压缩**：默认开，确定性 gzip 容器，旧档魔数探测直读零迁移，门档实测 6.3×；tag `v3.1.0`）· 3.x「世界扩展」期进行中，下一版 v3.2.0 = V3-1 下界门框（任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
 
 [![GitHub stars](https://img.shields.io/github/stars/shmilee/TokenMine.cpp?style=flat-square)](https://github.com/shmilee/TokenMine.cpp/stargazers)
 [![MIT license](https://img.shields.io/badge/license-MIT-555555?style=flat-square)](LICENSE)
@@ -105,9 +105,9 @@ cmake --build build
   附魔、15 色染色床（睡觉跳夜）、蝙蝠（首只飞行 mob）与染色羊、雪原
   群系、顶部 / 双 slab、环境光遮蔽（smooth lighting）、天气（雨 / 雷）、
   新手教程系列、Steve 皮肤、滚轮缩放 / 双击 Space 飞行 / 24 小时时钟
-- **v3.0.0**（当前）：3.x「世界扩展」开启——下界维度（传送门 → 下界
-  世界 → 内容）与 netherite 材料链在列；存档 gzip 压缩先行（默认开，
-  旧档直读零迁移）
+- **v3.0.0**（当前）：3.x「世界扩展」开启——存档 gzip 压缩（v3.1.0，
+  默认开，旧档直读零迁移，门档实测 6.3×）；下界维度（传送门 → 下界
+  世界 → 内容）与 netherite 材料链在列
 
 逐版明细与发布历史：[`docs/CHANGELOG.md`](docs/CHANGELOG.md)（当前时
 代）+ `docs/archive/*/CHANGELOG.md`（历史时代）+ GitHub Releases。
@@ -127,7 +127,7 @@ cmake --build build
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（384 条，都踩过） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（385 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；v2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

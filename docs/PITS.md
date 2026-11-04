@@ -3104,3 +3104,20 @@
   （A 的 −X c1 与 O 的 +X c0 同位不同 normal；O 的 −X c0 与 A 的
   −X c1 同位同 normal = 发射序依赖，改用独占位钉）——手算期望前
   先用最小 fixture 打印实现值对照（同 PITS 256 范式）。
+- **gzip 容器可钉 / zlib 宏缺失 / 双跑 RAW 适用域（PITS 385，门 191
+  V3-7 存档 gzip）**——① **zlib 自带 gzip 封装（windowBits 16+15）
+  的 MTIME/XFL/OS 字节随 zlib 版本/发行版漂移**：确定性一级纪律要求
+  同 payload 逐字节可复现 → 必须**手写容器**（固定 10B 头
+  `1f 8b 08 00 00 00 00 00 00 03`【FLG=0/MTIME=0/XFL=0/OS=3】+ raw
+  deflate【deflateInit2 windowBits=−15】+ 自算 CRC32/ISIZE 尾），
+  且解码侧同 10B 头**逐字节全钉**（系统 gzip CLI 产物的真 MTIME =
+  点名拒收，不静默容忍——机器生成文件纪律）。② **本机 zlib 1.3.2
+  的 zconf.h 缺 `Z_DEFAULT_MEM_LEVEL` 宏**（上游 zlib 有，发行版
+  裁剪；`#include <zlib.h>` 后引用 = 编译错实证）→ memLevel 用命名
+  常量 `kSaveGzipMemLevel = 8`（= zlib 文档默认档）钉死，勿依赖该
+  宏。③ **存档双跑 RAW 逐字节恒等的 E2E 适用域 = 无 real-dt 字段
+  漂移的场景**：demo 区场景的 `fires[*].remaining`（硬规则 8 实火
+  real-dt）必漂 = 既有 savenorm 剥离族（PITS 244/P56）——门 S1 口径
+  = savenorm EXACT + 头 10B 钉 + 单测容器恒等（`SameInputYields-
+  IdenticalOutput`），勿把「双跑 RAW 恒等」断言在有火场景当门标准
+  （会假红）。

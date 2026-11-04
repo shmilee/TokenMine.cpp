@@ -131,18 +131,26 @@ worker 窗口（post→flush，硬规则 7）:
   状态效果倒计时/自动存档计时——长墙钟跑触发 36s 饥饿 tick 类相位差，
   savenorm 按类剥离（PITS 244/286）。
 
-### 存档（format 19，data/saves/<slot>.json）
+### 存档（format 29，data/saves/<slot>.json）
 
-seed + time + player{pos/yaw/pitch/health/absorption/hunger/saturation/
-armor[4]/effects/oxygen} + inventory（27 槽，含 damage）+ tables[]（CRAFT-1
-每工作台）+ furnaces[] + campfires[]（4 槽）+ fires[]（real-dt 剩余寿命）+
-entities[]（item/mob 双 type）+ blocks[]（生成 diff）+ fluids[]（五元素，
-format 9 起 water/lava 命名）+ states[]（ENT-2 per-instance byte；format 14
-独立 stairs[] 段在 15 起值保真迁入 states，15+ 文件不含 stairs）。
-严格双向交叉校验（段间引用点名拒绝）+ 全量历史 format 1..18 值保真迁移。
+seed + time + player{pos/velocity/yaw/pitch/health/absorption/hunger/
+saturation/armor[4]/effects/oxygen/xp/xp_seed/respawn/stats/tutorial} +
+inventory（36 槽，含 damage/enchants）+ tables[]（CRAFT-1 每工作台）+
+furnaces[] + campfires[]（4 槽）+ fires[]（real-dt 剩余寿命）+ entities[]
+（item/xp 双 type）+ blocks[]（生成 diff）+ fluids[]（五元素，format 9 起
+water/lava 命名）+ states[]（ENT-2 per-instance byte；format 14 独立
+stairs[] 段在 15 起值保真迁入 states，15+ 文件不含 stairs）。
+严格双向交叉校验（段间引用点名拒绝）+ 全量历史 format 1..28 值保真加载。
+**V3-7 gzip 编码（format 29 时代）**：on-disk = 确定性 gzip 容器（固定
+10B 头 MTIME=0/FLG=0 + raw deflate level 6 + CRC32/ISIZE 尾，同世界逐字节
+可复现；`save.compression: "gzip"|"none"` 严格读默认 gzip）；加载按魔数
+`1f 8b` 自动探测——旧明文档零迁移直读；解码侧头 10B 逐字节全钉（截断/
+半体/CRC·ISIZE 不符/外源 gzip 全点名）。JSON 内容与 format 28 schema
+完全一致（编码与 format 号正交）。
 **增量 journal（PIPE-2）**：World 写收口记位置集，退出 O(会话编辑数) 按
 journal chunk 重算 fresh diff（与全量 diffWorld 字节等价，`--save-full-diff`
-进程内 oracle 守护）。**原子写**（.tmp + rename，SAVE-1 三路共用）。
+进程内 oracle 守护）。**原子写**（.tmp + rename，SAVE-1 三路共用——gzip
+字节同样 tmp+rename 崩溃安全）。
 
 ### 流送与并行
 

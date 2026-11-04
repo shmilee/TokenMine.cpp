@@ -1,12 +1,14 @@
-# 机制详解（现状 v2.19.0）
+# 机制详解（现状 v3.1.0）
 
-> 2026-11-04 收官刷新：现状 = **v2.19.0**（2.x「上手与体验补全」两批 20 版
-> 收官里程碑：v2.0.0 → v2.19.0 = 第一批 V2-1~V2-10 + 提前项 V2-19 +
-> 第二批 V2-11~V2-18）、无输入基线门 **190** 次、单元测试 **2482/2482**、
-> `-Wall -Wextra -Wpedantic -Werror` 0 警告、存档 **format 28**、base18 锚
-> **224468 B**（重锚谱系 179116 → 178148【V2-10 门 181】→ 178676【V2-19 门
-> 182】→ 179027【V2-11 门 183】→ **224468【V2-18 门 190，AO 世界光照】**；
-> 门 184–189 = 结构免疫第 65–70 次免重锚）、PITS **384**。上一轮全面刷新
+> 2026-11-04 V3-7 刷新：现状 = **v3.1.0**（3.x「世界扩展」期首功能版：
+> V3-7 存档 gzip 压缩，门 191 全 PASS；其前 2.x「上手与体验补全」两批 20
+> 版收官里程碑 v2.0.0 → v2.19.0）、无输入基线门 **191** 次、单元测试
+> **2503/2503**、`-Wall -Wextra -Wpedantic -Werror` 0 警告、存档
+> **format 29**（gzip 时代：schema 与 28 一致，on-disk 默认 gzip）、
+> base18 锚 **224468 B**（重锚谱系 179116 → 178148【V2-10 门 181】→
+> 178676【V2-19 门 182】→ 179027【V2-11 门 183】→ **224468【V2-18 门
+> 190，AO 世界光照】**；门 184–189 = 结构免疫第 65–70 次免重锚；门 191
+> = 结构免疫第 72 次免重锚【v3.0.0 banner = 第 71 次】）、PITS **385**。上一轮全面刷新
 > （2026-11-02）止于 v2.0.0、2026-11-03 增量止于 v2.3.0（下条），本次把
 > v2.11.0 → v2.19.0 的机制（提前项 `[V2-19]` + 第二批 `[V2-11]`~`[V2-18]`，
 > 逐版见 `docs/archive/v2x/CHANGELOG.md`，细节证据见 `docs/archive/v2x/`
@@ -1800,9 +1802,24 @@
   至多一个 + 与游戏旗标互斥 = rc 2 点名）；**记档偏离**：无游戏内选档面板/
   会话内换档（游戏无标题画面，会话内载档 = 世界重建级架构变更矩阵外；多槽
   切换 = CLI `--save` 既有面；「保存并退出」= 既有 ESC/退出存档路径）
-- **format 28**（`kSaveFormat` 28 / `kSaveFormatMin` 1；**1..28 全部可加载**，
+- **format 29**（`kSaveFormat` 29 / `kSaveFormatMin` 1；**1..29 全部可加载**，
   各按字段集 + 逐 format 白名单，规则式迁移——「未知字段 = 报错」
-  rejectUnknownFields 保持；**25 = `[V2-3]` 教程系列**：`player.tutorial`
+  rejectUnknownFields 保持；**29 = `[V3-7]` gzip 时代**：schema 与 28
+  完全一致（零键增删改，format 号仅标记写入构建开始默认 gzip 编码）；
+  on-disk = 确定性 gzip 容器（固定 10B 头 `1f 8b 08 00 00 00 00 00 00 03`
+  【MTIME=0/FLG=0/XFL=0/OS=3】+ raw deflate level 6 + CRC32/ISIZE 尾，
+  同世界逐字节可复现）；加载按魔数 `1f 8b` 自动探测 = **旧明文档零迁移
+  直读**（唯一编码判据，扩展名恒 .json）；解码严格（头 10B 逐字节全钉 /
+  截断 <20B / 半体 / CRC·ISIZE 不符全点名带路径，系统 gzip CLI 产物点名
+  拒收 = 机器生成文件纪律）；`save.compression: "gzip"|"none"` 严格读
+  （absent = gzip 代码默认 = 11-04 用户定案 / "none" = 明文 = 旧行为位级
+  恒【同状态文件与 v3.0.0 差异 = 恰 root.format 单键】/ 非 string·空串·
+  未知词 init 点名拒）；写侧单 choke point（`Game::writeSave` exit/F5/
+  autosave 共享，`writeAtomicFile` 原子性对 gzip 字节同样成立）；读侧两
+  消费点（`Game::readSaveFile` + `--list-saves` 摘要，corrupt 槽 problem
+  命名不隐藏）；save copy/rename/delete = 纯字节操作（gzip 槽 copy =
+  字节忠实 gzip 槽）；实测压缩率门档 6.3× / 大档 5.4×；**25 = `[V2-3]`
+  教程系列**：`player.tutorial`
   InProgress 形状加 `series` 整数字段（25 必需 / 23-24 携 = 版本谎报拒 /
   23-24 载入缺省 0 = 值保真免迁）；**26 = `[V2-11]` XP**：`player.xp` 恒写
   （单个整数池，等级永不存储由池派生）+ entities 第二 kind `type: "xp"`
@@ -2461,7 +2478,7 @@
   最短可往返精度（位精确）；worldgen 演进 = 旧存档未编辑列按**当前**生成器
   重建（洞穴/矿/树/基岩/路径演进先例：P86/88/93、GEN-1..8——编辑权威、零
   format）
-- **质量门**：**2482/2482 单元测试**（`./build/bin/tokenmine_tests`）+
+- **质量门**：**2503/2503 单元测试**（`./build/bin/tokenmine_tests`）+
   `-Wall -Wextra -Wpedantic -Werror` **0 警告**；机制逻辑一律上提**纯函数**
   （campfire 范式：`Result<T>` 显式传播 + 游戏与单测共享同一文件），像素/
   存档证据 = E2E 门（`docs/PROTOCOL.md` E2E 协议）；**禁止** TODO/伪代码/魔法

@@ -10,8 +10,8 @@ C++20 / SDL3 / OpenGL 3.3 core，
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（3.x「世界扩展」期——v3.0.0 已发布 11-04，首功能版 v3.1.0 =
-V3-7 存档 gzip 待执行）
+## 现状（3.x「世界扩展」期——v3.1.0 = V3-7 存档 gzip 已完成（门 191
+全 PASS，11-04）；下一项 V3-1 下界维度拆分立项【调研已交付】）
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -60,24 +60,31 @@ V3-7 存档 gzip 待执行）
   3.x「世界扩展」= **新执行权威** `docs/BACKLOG.md`（11-04 晋升 +
   逐项定案 + **同日用户重编号定案：原 4.x 命名改 3.x**【2.x 已吸收
   原 3.x 八项，回归自然序号】）：6 项全保留 + 用户实机诉求 **V3-7
-  存档 gzip 压缩（默认开 = format 29，旧明文档魔数探测零迁移，实测
-  5.4×）先执 = v3.1.0**，其后 V3-1 下界维度锚【超大】拆分立项【门
-  框→下界世界→内容三段】；**v3.0.0 = 3.x 开启版已发布**（11-04：
-  重编号 + README 里程碑精简，纯文档 + banner，零玩法变更，tag +
-  release）；2.x 总量 24 < pre-v2.0 的 78-84 = 用户
+  存档 gzip 压缩（默认开 = format 29，旧明文档魔数探测零迁移）已完成
+  = v3.1.0（门 191 全 PASS，11-04，实测门档 6.3×/大档 5.4×）**，其
+  后 V3-1 下界维度锚【超大】拆分立项【门框→下界世界→内容三段；立项
+  调研已交付 `/tmp/opencode/v31_recon.md`】；**v3.0.0 = 3.x 开启版已
+  发布**（11-04：重编号 + README 里程碑精简，纯文档 + banner，零玩
+  法变更，tag + release）；2.x 总量 24 < pre-v2.0 的 78-84 = 用户
   采纳判据 ✓）；2.x 全史 =
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2482/2482**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
-  存档 format 28（V2-13 床引入 player.respawn 恒写；27 = 附魔
+- 测试 **2503/2503**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+  存档 format 29（V3-7 gzip 时代：schema 与 28 完全一致——编码与
+  format 号正交，on-disk = 确定性 gzip 容器默认开【10B 头全钉 + raw
+  deflate 6 + CRC32/ISIZE 尾】+ 加载魔数 `1f 8b` 探测零迁移 +
+  `save.compression: "gzip"|"none"` 严格读【absent = gzip 用户定案】
+  + 实测 6.3× 门档/5.4× 大档；28 = V2-13 床 respawn 恒写；27 = 附魔
   xp_seed+enchants；26 = XP；V2-14 蝙蝠 / V2-15 染色羊 / V2-16
   雪原 / V2-17 slab / V2-18 AO 均零 format【slab state = format 15
   states 机制；AO = 纯渲染 bake 入既有光 attribute】）；
   base18 锚 **224468 B**（679×744 WM tile 态——重锚谱系：179116 →
   178148【V2-10 门 181】→ 178676【V2-19 门 182】→ 179027【V2-11
   门 183】→ **224468【V2-18 门 190，AO 世界光照】；门 184-189 =
-  结构免疫第 65-70 次免重锚**）；PITS
+  结构免疫第 65-70 次免重锚；门 191【V3-7 存档 gzip】= 结构免疫第
+  71 次后第 72 次免重锚【v3.0.0 banner = 71 次】——存档 = 渲染无关
+  零像素**）；PITS
   375-379 + **PITS 380**（spawn 成功行无 'pick' / 门场景洞穴密封 /
   CAVE config seed 归属 / bob diff 带色相审计）+ **PITS 381**（热栏
   key→RMB ≥0.15s / 活体掉落物品不可作终档断言 / 羊静止窗）+
@@ -89,7 +96,25 @@ V3-7 存档 gzip 待执行）
   网格单元于顶点 + 面表 edgeA/edgeB 轴错配双实现交叉钉 / 重锚
   z-fight 换面白名单【单调变暗审计豁免上限 + 逐 px 留证】/ 门窗口
   679×744「y>600 = UI 带」启发式无效【实测 HUD bbox】/ 世界坐标
-  手算 7 连错）；
+  手算 7 连错）+ **PITS 385**（gzip 容器可钉【zlib 封装 MTIME/
+  XFL/OS 随版本漂移 = 手写 10B 头 + raw deflate -15 + 自算
+  CRC32/ISIZE，解码侧头全钉】/ 本机 zlib 1.3.2 缺
+  Z_DEFAULT_MEM_LEVEL 宏【命名常量 8】/ 存档双跑 RAW 恒等适用域
+  = 无火场景【fires real-dt = savenorm 族】）；
+  门计数 191（**V3-7 存档 gzip v3.1.0** 门 191 全 PASS：确定性 gzip
+  容器【10B 头全钉 + raw deflate 6 + CRC32/ISIZE 尾，同世界逐字节
+  可复现】+ 加载魔数 1f 8b 探测【旧明文档零迁移直读；遗留零迁移最
+  强形式 = savenorm 新旧 fresh-60f 恰 root.format 28→29 单键】+
+  save.compression 严格读【absent = gzip 用户定案，none = 旧行为位
+  级恒等】+ format 29【schema 零变更 = gzip 时代标记，解析侧代码零
+  改动】+ 写侧单 choke point（writeSave exit/F5/autosave 共享，
+  writeAtomicFile 原子性不变）/ 读侧两消费点（readSaveFile +
+  --list-saves 摘要，corrupt 槽 problem 命名不隐藏）+ gate_compare.
+  py savenorm 解压步 + save/load 日志 ms + 体积变换【real-dt 性能
+  证据】；结构免疫第 72 次免重锚【≡ 锚 224468 逐字节 + savenorm
+  EXACT + 头 10B 实证 + 门档 6.3×】；S2 四臂（roundtrip 6.25× /
+  零迁移 / none / corrupt 点名 exit=1）；S6 3/3；2503/2503（+21）；
+  详见 `docs/archive/phase-3.1.0.md`）；
   门计数 190（**V2-1 前视角 v2.1.0** 门 172：
   C 键三循环，前视 = 后视同款数学翻转角执行 + aimReach D+kReach——详见
   `docs/archive/v2x/phase-2.1.0.md`；**V2-2 Steve 皮肤 v2.2.0** 门 173：
@@ -223,7 +248,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 永不提交 `opencode-sessions/` 下任何文件（本地））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
-## 坑位 Top 8（全文 docs/PITS.md，384 条）
+## 坑位 Top 8（全文 docs/PITS.md，385 条）
 
 1. **SDL grab delta**（P28）：输入 E2E 全帧字节一致不保证——存档 yaw/pitch 为漂移
    探测器；驱动 warp 用实际窗口原点（实测 (4,64)）+ (632,352)。
@@ -259,7 +284,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（384 条，都踩过） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（385 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

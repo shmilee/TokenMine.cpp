@@ -1834,6 +1834,15 @@ private:
     double m_autoSaveInterval = kAutoSaveDefaultSeconds;
     double m_autoSaveAccum = 0.0;
 
+    // V3-7: the save's on-disk encoding (save.compression — strict read
+    // at init, absent = Gzip the code default, the user decision 11-04;
+    // the committed config carries no save section). Gzip = the
+    // deterministic gzip container (the format-29 era's write default);
+    // None = the plaintext payload (the pre-V3-7 behavior,
+    // bit-identical). Consumed by writeSave (the encode gate) — the
+    // read side is encoding-agnostic (the magic probe, zero migration).
+    SaveCompression m_saveCompression = SaveCompression::Gzip;
+
     // UX-1: the configured deep-night sky floor (render.night_sky_level —
     // a CODE default kNightSkyLevel; the fire/mobs/beacon config-key
     // discipline: the committed config.json carries no such key). Strict

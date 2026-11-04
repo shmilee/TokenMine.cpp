@@ -9,7 +9,8 @@
 > `src/item/recipe.cpp`、`src/world/worldgen_config.cpp`、`src/world/biome.cpp`、
 > `src/core/save.cpp`、`src/core/game.cpp` init 交叉校验段）；新增 worldgen.json
 > 完整参考、config 参考、块音效材质、纹理/atlas 纪律节。
-> 11-04 收官刷新（v2.19.0 / 存档 format 28 / 测试 2482）：二批新数据驱动机制
+> 11-04 收官刷新（v2.19.0 / 存档 format 28 / 测试 2482）+ V3-7 刷新
+> （v3.1.0 / 存档 format 29 = gzip 时代 / 测试 2503）：二批新数据驱动机制
 > 并入（biome tree 6 键 + exclude_spawn_area / slab 三态 state_count +
 > drops_count_by_state / XP 三发放源 / 附魔 7 项 / 床 15 色染色族 / 染色羊变体
 > / render.ao），各节数量（93 块 / 83 物品 / 86 配方 / 8 mob / 7 附魔 /
@@ -1244,7 +1245,7 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
 | `save.auto_save_seconds` | number | **120.0**（代码默认，SAVE-1） | 自动存档节奏（**真实 dt**，`--save` 槽门控）；**严格读取**：缺 = 默认、present 须有限数 ≥ 0（**0 = 关闭**、负数/非有限/非数字点名拒）；成功归零、失败不清零下帧重试；日志 "World auto-saved to" 区别于 F5/退出 "World saved to" |
 | `ui.scale` | number | 1.0 | P34 屏幕空间 UI 缩放，**[1.0, 4.0]** 越界/非数值点名；**已提交 = 1.5（用户调值）**。全部屏幕空间 UI（字体/hotbar/心饥饿带/面板/F3/死亡屏/手持/准星）在 "UI 像素" 空间（窗口逻辑 ÷ scale）正交投影拉伸——世界渲染与截图尺寸不受影响 |
 
-## 使用存档（Phase 13 框架 → format 28）
+## 使用存档（Phase 13 框架 → format 29）
 
 ```bash
 ./build/bin/tokenmine --save myworld        # 首次：新游戏；此后：读档
@@ -1259,7 +1260,15 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
 启动游戏）。
 
 - 存档槽名只允许字母/数字/`_`/`-`（防路径穿越）；文件在 `data/saves/
-  <slot>.json`（git 忽略），JSON 格式化输出、可直接阅读
+  <slot>.json`（git 忽略）。**V3-7 起 on-disk = 确定性 gzip(JSON) 容器
+  （默认开）**：JSON 格式化输出、`gunzip` 后可直接阅读；加载按魔数
+  `1f 8b` 自动探测编码——**旧明文档（format 28 及更早）零迁移直读**；
+  `config` 键 `save.compression: "gzip"|"none"` 严格读（absent = gzip
+  代码默认；"none" = 明文 = 旧行为位级恒【同状态文件与 v3.0.0 差异
+  = 恰 root.format 单键】；非 string / 未知词 init 点名拒）。gzip 容器
+  每字节可复现（固定 10B 头 MTIME=0/无文件名 + raw deflate level 6 +
+  CRC32/ISIZE 尾）——同世界存档逐字节可复现（确定性一级纪律）；解
+  码侧同 10B 头逐字节全钉（系统 gzip CLI 产物点名拒收）
 - **读档语义**：`--time` 只对全新世界生效（存档时间优先）；`--seed` 与
   存档 seed 不一致 = 启动报错（编辑会落到错误地形上）；存档里的玩家
   位置/朝向/速度覆盖出生点与初始视角
@@ -1269,21 +1278,23 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
   旧档）。写失败只记 ERROR 日志、退出码仍 0。**三路共用原子写**（同目录
   `.tmp` + flush/close + `rename` POSIX 原子——kill 中途最多留陈旧 tmp，
   失败写永不毁旧档）
-- 存档是机器生成的：字段集由 format 号锁定（**当前 format 28**），加载器
+- 存档是机器生成的：字段集由 format 号锁定（**当前 format 29**），加载器
   对未知字段一律报错（与用户手写数据文件的"警告但容忍"策略相反）。
-  **25→28 谱系**（一句话）：25 = 教程（V2-3）/ 26 = XP 三向键（player.xp
+  **25→29 谱系**（一句话）：25 = 教程（V2-3）/ 26 = XP 三向键（player.xp
   + entities 第二 kind xp）/ 27 = 附魔（player.xp_seed + 物品 enchants）/
-  28 = 床（player.respawn 恒写）；完整 layout 与逐版证据见
-  `docs/archive/v2x/CHANGELOG.md` 各版条目 + `phase-2.x.0.md` 档，不在此
-  重抄全文
+  28 = 床（player.respawn 恒写）/ **29 = gzip 时代（V3-7：schema 与 28
+  完全一致，format 号仅标记写入构建开始默认 gzip 编码；编码与 format
+  号正交，魔数探测唯一判据）**；完整 layout 与逐版证据见
+  `docs/archive/v2x/CHANGELOG.md` 各版条目 + `phase-2.x.0.md` 档（29 →
+  `docs/archive/phase-3.1.0.md`），不在此重抄全文
 - **PITS**：`--save slot` 第二次运行会加载第一次写的存档（E2E 对跑每拍
   从源副本 `cp` 新鲜存档）
 
-### format 28 完整布局
+### format 29 完整布局（on-disk = gzip 容器，JSON 内容 = 明文 payload）
 
 ```json
 {
-  "format": 28,
+  "format": 29,
   "seed": 123456789,
   "time": 0.2541666,
   "player": {
@@ -1328,7 +1339,7 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
 health/hunger/saturation/absorption/oxygen/xp/xp_seed/respawn = 游戏恒有
 值故实际恒写（−1"未指定" = 省略字段，仅老 format 读入语义）。）
 
-**player 段**（键纪律：format 28 必键 = pos/**velocity**/yaw/pitch/health/
+**player 段**（键纪律：format 29 必键 = pos/**velocity**/yaw/pitch/health/
 absorption/hunger/saturation/effects/armor/**stats**/**oxygen**/**xp**
 /**xp_seed**/**respawn**；低版本带新键 = 版本谎报点名）：
 

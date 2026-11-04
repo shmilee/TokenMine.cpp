@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 3.0.0 LANGUAGES CXX)
+project(TokenMine VERSION 3.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -200,6 +200,7 @@ add_executable(tokenmine_tests
     tests/test_durability.cpp
     tests/test_repair.cpp
     tests/test_save.cpp
+    tests/test_save_gzip.cpp
     tests/test_save_slot.cpp
     tests/test_save_journal.cpp
     tests/test_retained_column.cpp

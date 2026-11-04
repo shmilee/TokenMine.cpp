@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -10,6 +11,8 @@
 #include <set>
 #include <string>
 #include <utility>
+
+#include <zlib.h>
 
 #include "core/bed.hpp" // V2-13: the respawn cell-center reconstruction
 #include "core/enchanting.hpp" // V2-12: the EnchantmentRegistry + vocab
@@ -3315,6 +3318,220 @@ Result<void> validateEnchants(const SaveGame& save, const ItemRegistry& items,
                                      enchants));
     }
     return {};
+}
+
+// ---------------------------------------------------------------------------
+// V3-7: the save payload's on-disk gzip encoding (the deterministic
+// container — the write side emits byte-pinned headers, the read side
+// requires them; the magic probe is the sole encoding criterion)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// V3-7: the deflate / inflate stream I/O chunk (32 KiB — a round
+// number that bounds the per-call work while keeping the allocation
+// small for the KB-MB-scale save payloads).
+constexpr std::size_t kGzipStreamChunkBytes = 32 * 1024;
+
+// V3-7: the MINIMUM gzip container: the 10-byte header + the 2-byte
+// empty raw-deflate body (a final stored block with zero length) +
+// the 8-byte CRC32 / ISIZE trailer.
+constexpr std::size_t kGzipMinContainerBytes = 20;
+
+// V3-7: the deflate memory level — 8 = zlib's documented default
+// (the Z_DEFAULT_MEM_LEVEL macro does not exist in zlib.h; the level
+// is pinned explicitly so the container stays byte-stable).
+constexpr int kSaveGzipMemLevel = 8;
+
+// V3-7: appends one little-endian 32-bit value (the gzip trailer's
+// word order, the CRC32 and ISIZE fields).
+void appendLe32(std::string& out, std::uint32_t v) {
+    for (int i = 0; i < 4; ++i) {
+        out.push_back(static_cast<char>((v >> (8 * i)) & 0xFFu));
+    }
+}
+
+// V3-7: reads one little-endian 32-bit value from raw bytes.
+std::uint32_t readLe32(const char* p) {
+    return static_cast<std::uint32_t>(static_cast<std::uint8_t>(p[0])) |
+           (static_cast<std::uint32_t>(static_cast<std::uint8_t>(p[1])) << 8) |
+           (static_cast<std::uint32_t>(static_cast<std::uint8_t>(p[2])) << 16) |
+           (static_cast<std::uint32_t>(static_cast<std::uint8_t>(p[3])) << 24);
+}
+
+// V3-7: a byte's two-digit hex form (the header-pinning error's
+// machine-readable dump).
+std::string byteHex(std::uint8_t b) {
+    char buf[3];
+    std::snprintf(buf, sizeof(buf), "%02x", b);
+    return std::string(buf);
+}
+
+// V3-7: a 32-bit value's eight-digit hex form (the trailer error's
+// machine-readable dump).
+std::string u32Hex(std::uint32_t v) {
+    char buf[9];
+    std::snprintf(buf, sizeof(buf), "%08x", v);
+    return std::string(buf);
+}
+
+} // namespace
+
+Result<SaveCompression> saveCompression(const Config& config) {
+    const Json* j = config.at("save.compression");
+    if (j == nullptr) {
+        return SaveCompression::Gzip; // absent: the code default (11-04)
+    }
+    if (!j->isString()) {
+        return MC_FAIL("config save.compression must be the string "
+                       "\"gzip\" or \"none\"");
+    }
+    const std::string v = j->asString();
+    if (v == "gzip") {
+        return SaveCompression::Gzip;
+    }
+    if (v == "none") {
+        return SaveCompression::None;
+    }
+    return MC_FAIL("config save.compression must be \"gzip\" or \"none\" "
+                   "(got '" + v + "')");
+}
+
+Result<std::string> gzipEncode(const std::string& payload) {
+    std::string out;
+    // The payload's own size bound the body (deflate can only grow
+    // short inputs); the reserve is a soft hint for the common case.
+    out.reserve(kGzipHeader.size() + payload.size() +
+                kGzipMinContainerBytes);
+    out.append(reinterpret_cast<const char*>(kGzipHeader.data()),
+               kGzipHeader.size());
+    z_stream strm {};
+    // windowBits -15 = the RAW deflate body (no zlib / gzip wrapper of
+    // its own — the hand-pinned container's design: the wrapper's
+    // MTIME / XFL / OS fields drift across zlib versions).
+    if (deflateInit2(&strm, kSaveGzipLevel, Z_DEFLATED, -15,
+                     kSaveGzipMemLevel, Z_DEFAULT_STRATEGY) != Z_OK) {
+        return MC_FAIL("zlib deflateInit2 failed during save gzip "
+                       "encoding");
+    }
+    strm.next_in = const_cast<Bytef*>(
+        reinterpret_cast<const Bytef*>(payload.data()));
+    strm.avail_in = static_cast<uInt>(payload.size());
+    std::vector<Bytef> chunk(kGzipStreamChunkBytes);
+    bool streamEnd = false;
+    do {
+        strm.next_out = chunk.data();
+        strm.avail_out = static_cast<uInt>(chunk.size());
+        const int zr = deflate(&strm, Z_FINISH);
+        if (zr != Z_OK && zr != Z_BUF_ERROR && zr != Z_STREAM_END) {
+            deflateEnd(&strm);
+            return MC_FAIL("zlib deflate failed during save gzip encoding "
+                           "(error code " + std::to_string(zr) + ")");
+        }
+        out.append(reinterpret_cast<const char*>(chunk.data()),
+                   chunk.size() - static_cast<std::size_t>(strm.avail_out));
+        streamEnd = (zr == Z_STREAM_END);
+    } while (!streamEnd);
+    deflateEnd(&strm);
+    // The trailer: the CRC32 over the PAYLOAD (the decoded content, not
+    // the compressed body) + the payload size mod 2^32, both
+    // little-endian (the gzip standard, RFC 1952).
+    appendLe32(out, static_cast<std::uint32_t>(crc32(
+                        0L, reinterpret_cast<const Bytef*>(payload.data()),
+                        static_cast<uInt>(payload.size()))));
+    appendLe32(out,
+               static_cast<std::uint32_t>(payload.size() & 0xFFFFFFFFULL));
+    return out;
+}
+
+bool looksLikeGzip(const std::string& raw) {
+    return raw.size() >= 2 &&
+           static_cast<std::uint8_t>(raw[0]) == kGzipHeader[0] &&
+           static_cast<std::uint8_t>(raw[1]) == kGzipHeader[1];
+}
+
+Result<std::string> gzipDecode(const std::string& raw,
+                               const std::string& what) {
+    if (raw.size() < kGzipMinContainerBytes) {
+        return MC_FAIL(what + " is a truncated gzip file (" +
+                       std::to_string(raw.size()) + " bytes < " +
+                       std::to_string(kGzipMinContainerBytes) +
+                       "-byte minimum container)");
+    }
+    // The 10-byte header, pinned byte-for-byte (the machine-generated-
+    // file discipline: the write side emits exactly kGzipHeader — a
+    // deviation, including a system gzip CLI file's real MTIME or
+    // foreign OS byte, is named, never silently tolerated).
+    for (std::size_t i = 0; i < kGzipHeader.size(); ++i) {
+        const std::uint8_t b = static_cast<std::uint8_t>(raw[i]);
+        if (b != kGzipHeader[i]) {
+            return MC_FAIL(what + " has an unsupported gzip header (byte " +
+                           std::to_string(i) + " is 0x" + byteHex(b) +
+                           ", expected 0x" + byteHex(kGzipHeader[i]) + ")");
+        }
+    }
+    // The body: everything between the header and the 8-byte trailer.
+    const std::size_t bodyOffset = kGzipHeader.size();
+    const std::size_t bodyLength = raw.size() - bodyOffset - 8;
+    std::string out;
+    z_stream strm {};
+    if (inflateInit2(&strm, -15) != Z_OK) {
+        return MC_FAIL(what + " has a corrupt gzip body (zlib "
+                              "inflateInit2 failed)");
+    }
+    strm.next_in =
+        const_cast<Bytef*>(reinterpret_cast<const Bytef*>(raw.data())) +
+        bodyOffset;
+    strm.avail_in = static_cast<uInt>(bodyLength);
+    std::vector<Bytef> chunk(kGzipStreamChunkBytes);
+    bool streamEnd = false;
+    do {
+        strm.next_out = chunk.data();
+        strm.avail_out = static_cast<uInt>(chunk.size());
+        const int zr = inflate(&strm, Z_FINISH);
+        if (zr == Z_DATA_ERROR) {
+            inflateEnd(&strm);
+            return MC_FAIL(what + " has a corrupt gzip body (zlib inflate "
+                              "data error)");
+        }
+        if (zr != Z_OK && zr != Z_BUF_ERROR && zr != Z_STREAM_END) {
+            inflateEnd(&strm);
+            return MC_FAIL(what + " has a corrupt gzip body (zlib inflate "
+                              "error code " + std::to_string(zr) + ")");
+        }
+        // The input exhausted without a stream end = a body cut off
+        // mid-stream (the truncated-deflate case Z_BUF_ERROR reports).
+        if (zr == Z_BUF_ERROR && strm.avail_in == 0) {
+            inflateEnd(&strm);
+            return MC_FAIL(what + " has a corrupt gzip body (the deflate "
+                              "stream ends before its final block)");
+        }
+        out.append(reinterpret_cast<const char*>(chunk.data()),
+                   chunk.size() - static_cast<std::size_t>(strm.avail_out));
+        streamEnd = (zr == Z_STREAM_END);
+    } while (!streamEnd);
+    inflateEnd(&strm);
+    // The trailer double-check: CRC32 over the DECODED payload + the
+    // decoded size mod 2^32, both little-endian (a mismatch is named —
+    // it also catches trailing data appended after a valid container,
+    // whose "trailer" would not verify).
+    const std::uint32_t crcStored = readLe32(raw.data() + raw.size() - 8);
+    const std::uint32_t isizeStored = readLe32(raw.data() + raw.size() - 4);
+    const std::uint32_t crcActual = static_cast<std::uint32_t>(crc32(
+        0L, reinterpret_cast<const Bytef*>(out.data()),
+        static_cast<uInt>(out.size())));
+    if (crcActual != crcStored) {
+        return MC_FAIL(what + " has a corrupt gzip trailer (CRC32 0x" +
+                       u32Hex(crcActual) + " computed, 0x" + u32Hex(crcStored) +
+                       " stored)");
+    }
+    if (isizeStored !=
+        static_cast<std::uint32_t>(out.size() & 0xFFFFFFFFULL)) {
+        return MC_FAIL(what + " has a corrupt gzip trailer (ISIZE " +
+                       std::to_string(isizeStored) + " stored, " +
+                       std::to_string(out.size()) + " decoded)");
+    }
+    return out;
 }
 
 } // namespace mc

@@ -459,8 +459,8 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     s.tables.push_back(SavedTable {BlockPos {1, 53, 2}, table});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-8f/V2-3/V2-11: writes are always format 28 (V2-13 was 27).
-    EXPECT_EQ(j->find("format")->asInt(), 28);
+    // UX-8f/V2-3/V2-11: writes are always format 29 (V2-13 was 27).
+    EXPECT_EQ(j->find("format")->asInt(), 29);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -1576,8 +1576,8 @@ TEST(SaveRoundTripTest, StatesRoundTrip) {
     SaveGame s = makeStateSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-8f/V2-3/V2-11: writes are always format 28 (V2-13 was 27).
-    EXPECT_EQ(j->find("format")->asInt(), 28);
+    // UX-8f/V2-3/V2-11: writes are always format 29 (V2-13 was 27).
+    EXPECT_EQ(j->find("format")->asInt(), 29);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->states.size(), 1u);
@@ -1866,8 +1866,8 @@ TEST(SaveRoundTripTest, FurnacesRoundTrip) {
     s.furnaces[0].state.fuelSubsteps = 1234;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-8f/V2-3/V2-11: writes are always format 28 (V2-13 was 27).
-    EXPECT_EQ(j->find("format")->asInt(), 28);
+    // UX-8f/V2-3/V2-11: writes are always format 29 (V2-13 was 27).
+    EXPECT_EQ(j->find("format")->asInt(), 29);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
@@ -2263,8 +2263,8 @@ TEST(SaveRoundTripTest, FiresRoundTrip) {
     SaveGame s = makeFireSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-8f/V2-3/V2-11: writes are always format 28 (V2-13 was 27).
-    EXPECT_EQ(j->find("format")->asInt(), 28);
+    // UX-8f/V2-3/V2-11: writes are always format 29 (V2-13 was 27).
+    EXPECT_EQ(j->find("format")->asInt(), 29);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->fires.size(), 2u);
@@ -2867,8 +2867,8 @@ TEST(SaveRoundTripTest, TablesRoundTrip) {
     s.tables[0].grid.setSlot(8, ItemStack {f.items.idForName("stone"), 64});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-8f/V2-3/V2-11: writes are always format 28 (V2-13 was 27).
-    EXPECT_EQ(j->find("format")->asInt(), 28);
+    // UX-8f/V2-3/V2-11: writes are always format 29 (V2-13 was 27).
+    EXPECT_EQ(j->find("format")->asInt(), 29);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->tables.size(), 2u);
@@ -3180,7 +3180,7 @@ TEST(SaveFormat20Test, EffectTierRoundTrips) {
     s.playerEffects.push_back(SavedEffect {"resistance", 30.0, 1});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 28);
+    EXPECT_EQ(j->find("format")->asInt(), 29);
     const Json& entry = (*j)["player"]["effects"].at(0);
     ASSERT_NE(entry.find("tier"), nullptr);
     EXPECT_EQ(entry.find("tier")->asInt(), 1);
@@ -3345,7 +3345,7 @@ TEST(SaveFormat21Test, StatsRoundTrips) {
     s.playerStats["kill.zombie"] = 5;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 28);
+    EXPECT_EQ(j->find("format")->asInt(), 29);
     const Json& st = (*j)["player"]["stats"];
     ASSERT_TRUE(st.isObject());
     ASSERT_NE(st.find("deathCount"), nullptr);
@@ -3444,7 +3444,7 @@ TEST(SaveFormat22Test, VelocityRoundTrips) {
     s.playerVelocity = Vec3 {2.5f, -3.75f, 0.125f};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 28);
+    EXPECT_EQ(j->find("format")->asInt(), 29);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerVelocity.x, 2.5f);
@@ -3703,8 +3703,8 @@ TEST(SaveFormat24Test, FullBackpackRoundTrips) {
     s.slots[35] = ItemStack {f.items.idForName("pick"), 1};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-8f/V2-3/V2-11: writes are always format 28 (V2-13 was 27), 36 entries.
-    EXPECT_EQ(j->find("format")->asInt(), 28);
+    // UX-8f/V2-3/V2-11: writes are always format 29 (V2-13 was 27), 36 entries.
+    EXPECT_EQ(j->find("format")->asInt(), 29);
     const Json& slots = *j->find("inventory")->find("slots");
     ASSERT_TRUE(slots.isArray());
     EXPECT_EQ(slots.size(),

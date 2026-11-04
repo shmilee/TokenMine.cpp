@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "core/save.hpp"
 #include "core/save_slot.hpp"
 
 using mc::copySaveSlot;
@@ -133,6 +134,67 @@ TEST(SaveSlotTest, SummaryUnreadableFileSurfacesTheProblem) {
     ASSERT_TRUE(r.ok());
     EXPECT_FALSE(r->readable);
     EXPECT_NE(r->problem.find("format"), std::string::npos) << r->problem;
+}
+
+// V3-7: the gzip slot (this build's write default) — the summary reads
+// through the same magic probe the game load uses (the zero-migration
+// twin: a legacy plaintext slot reads straight through, unchanged).
+TEST(SaveSlotTest, GzipSlotSummaryIsReadable) {
+    const auto dir = scratchDir();
+    const std::string plaintext = saveJson(29, 123456789, 0.25, 22.5, 38.0,
+                                           0.5, 9.0);
+    auto gz = mc::gzipEncode(plaintext);
+    ASSERT_TRUE(gz.ok()) << gz.error().message;
+    writeFile(dir / "g.json", *gz);
+    auto a = readSaveSlotSummary(dir, "g");
+    ASSERT_TRUE(a.ok());
+    EXPECT_TRUE(a->readable);
+    EXPECT_EQ(a->problem, "");
+    EXPECT_EQ(a->name, "g");
+    EXPECT_EQ(a->format, 29);
+    EXPECT_EQ(a->seed, 123456789);
+    EXPECT_DOUBLE_EQ(a->time, 0.25);
+    EXPECT_DOUBLE_EQ(a->posX, 22.5);
+    EXPECT_DOUBLE_EQ(a->posY, 38.0);
+    EXPECT_DOUBLE_EQ(a->posZ, 0.5);
+    EXPECT_DOUBLE_EQ(a->health, 9.0);
+    // The plaintext twin of the SAME content reads identically — the
+    // summary is a pure function of the decoded contents.
+    writeFile(dir / "p.json", plaintext);
+    auto b = readSaveSlotSummary(dir, "p");
+    ASSERT_TRUE(b.ok());
+    EXPECT_TRUE(b->readable);
+    EXPECT_EQ(a->format, b->format);
+    EXPECT_EQ(a->seed, b->seed);
+}
+
+// V3-7: a CORRUPT gzip slot surfaces with the named problem (the file
+// stays in the list, never hidden — the existing problem-naming
+// discipline), and a cut-mid-body container decodes to the corrupt-
+// body naming, not a crash.
+TEST(SaveSlotTest, CorruptGzipSlotSurfacesTheProblem) {
+    const auto dir = scratchDir();
+    const std::string plaintext = saveJson(29, 7, 0.5, 0.0, 64.0, 0.0, 20.0);
+    auto gz = mc::gzipEncode(plaintext);
+    ASSERT_TRUE(gz.ok()) << gz.error().message;
+    // Truncated to under the 20-byte minimum container.
+    writeFile(dir / "t.json", gz->substr(0, 15));
+    auto t = readSaveSlotSummary(dir, "t");
+    ASSERT_TRUE(t.ok());
+    EXPECT_FALSE(t->readable);
+    EXPECT_NE(t->problem.find("invalid gzip:"), std::string::npos)
+        << t->problem;
+    EXPECT_NE(t->problem.find("truncated gzip"), std::string::npos)
+        << t->problem;
+    // Cut mid-body (the trailer is gone with the rest of the stream).
+    writeFile(dir / "c.json", gz->substr(0, gz->size() / 2));
+    auto c = readSaveSlotSummary(dir, "c");
+    ASSERT_TRUE(c.ok());
+    EXPECT_FALSE(c->readable);
+    EXPECT_NE(c->problem.find("invalid gzip:"), std::string::npos)
+        << c->problem;
+    EXPECT_NE(c->problem.find("corrupt gzip body"), std::string::npos)
+        << c->problem;
 }
 
 TEST(SaveSlotTest, SummaryRejectsInvalidNames) {

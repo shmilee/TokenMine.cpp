@@ -369,7 +369,7 @@ TEST(BedSaveFormat28, BedPositionRoundTripsExactly) {
     SaveFixture f;
     auto j = serializeSave(f.save, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 28);
+    EXPECT_EQ(j->find("format")->asInt(), 29);
     const Json* rp = j->find("player")->find("respawn");
     ASSERT_NE(rp, nullptr);
     ASSERT_TRUE(rp->isArray());

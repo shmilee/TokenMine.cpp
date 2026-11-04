@@ -1112,6 +1112,15 @@ Result<void> Game::buildScene() {
         MC_TRY(interval);
         m_autoSaveInterval = *interval;
     }
+    // V3-7: the save's on-disk encoding (save.compression — strict
+    // read, the autoSaveIntervalSeconds + aoEnabled discipline; absent
+    // = Gzip the user decision 11-04; the committed config.json
+    // carries no save section = zero config change).
+    {
+        auto comp = saveCompression(m_config);
+        MC_TRY(comp);
+        m_saveCompression = *comp;
+    }
 
     // UX-1: the deep-night sky floor (render.night_sky_level — a CODE
     // default kNightSkyLevel, the fire/mobs/beacon config-key discipline:
