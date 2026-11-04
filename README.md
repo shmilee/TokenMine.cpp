@@ -73,6 +73,10 @@ cmake --build build
 视口、投影纵横比与屏幕 UI 布局每帧读取窗口当前像素尺寸，缩放后场景立即跟随
 （最小尺寸 320×200）；设为 `false` 则锁定在配置尺寸。
 
+**内存提示**：默认 `config/config.json` 为 `view_distance: 80`（圆盘环
+满环 ~103k chunk ≈ 4.6 GB，会随探索持续加载）。内存 <8 GB 的机器建议
+改为 16–32（`world.view_distance`，16 ≈ 2 GB 量级）。
+
 ## 构建依赖
 
 **平台**：Linux 验证（Arch；CMake 3.25+ / Ninja）。macOS / Windows 未测试
@@ -90,36 +94,26 @@ cmake --build build
 
 ## 版本与发布
 
-- **v3.0.0**（2026-11-04）：**3.x「世界扩展」期开启**（tag `v3.0.0`）——
-  重编号定案（原 4.x 命名改 3.x：2.x 已吸收原 3.x 八项）+ README
-  里程碑精简；纯文档 + banner，零玩法变更。2.x 全史（v2.0.0→v2.19.0，
-  两批 20 版）11-04 收官（tag `v2.19.0`；release 内容已并入 v3.0.0），
-  全史 =
-  `docs/archive/v2x/HISTORY.md`。下一版 **v3.1.0 = V3-7 存档 gzip 压
-  缩**（默认开，实测 5.4×），其后 V3-1 下界维度锚立项。
-- **v2.0.0**（2026-11-02）：**1.x 收官里程碑**（tag + release）——任务
-  矩阵 40/40 + 实机报障 4 项 + 发布扫尾（1.x 文档归档 / 准星不压头 /
-  活文档刷新）。2075/2075 测试。1.x 全史 = `docs/archive/v1x/
-  HISTORY.md`。
-- **v1.0.0**（2026-10-27）：**首个正式版**（tag + release）——任务矩阵
-  34/34（十大系统 + 2 项实机报障修复）。v1.0 后进入 v1.x 迭代（任务
-  矩阵见 `docs/archive/v1x/BACKLOG.md`）。
-- **v0.1.0**（2026-10-17，首个公开版）：功能阶段 P0–P99 + 性能系列
-  99.x 全部完成；1195/1195 测试、`-Werror` 0 警告。
+- **v0.1.0**（首个公开版）：可玩的 3D 体素沙盒——世界生成与流送、昼夜
+  光照、流体、Mob 与战斗、合成、存档
+- **v1.0.0**（首个正式版）：十大系统完成，生存玩法闭环；其后 1.x 系列
+  深化生存：火系统（蔓延 / 火把 / 燧石与钢）、工具分类（镐 / 斧 / 铲）、
+  护甲与耐久修复、药水与状态效果、死亡统计、炉子燃料熔炼、背包操作、
+  第三人称相机与玩家模型、中文字体与 11 步教程、云方块化、洞穴矿脉
+  演进
+- **v2.0.0**：1.x 收官；其后 2.x「上手与体验补全」系列再添：经验与 7 种
+  附魔、15 色染色床（睡觉跳夜）、蝙蝠（首只飞行 mob）与染色羊、雪原
+  群系、顶部 / 双 slab、环境光遮蔽（smooth lighting）、天气（雨 / 雷）、
+  新手教程系列、Steve 皮肤、滚轮缩放 / 双击 Space 飞行 / 24 小时时钟
+- **v3.0.0**（当前）：3.x「世界扩展」开启——下界维度（传送门 → 下界
+  世界 → 内容）与 netherite 材料链在列；存档 gzip 压缩先行（默认开，
+  旧档直读零迁移）
 
-逐版明细：3.x 见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)；v2.x（全两
-批）见 [`docs/archive/v2x/CHANGELOG.md`](docs/archive/v2x/CHANGELOG.md)；
-v1.x（v1.50.0→v1.0）见 `docs/archive/v1x/CHANGELOG.md`；v0.x
-（v0.12.0→v0.1.0）见 `docs/archive/v0x/CHANGELOG.md`；每版工程细节
-（机制/证据/偏离/性能 A/B）见 `docs/archive/*/phase-*.md` 阶段存档与
-GitHub Releases。
-- **0.x 承诺**：可玩、可扩展、确定性运行；但**不承诺稳定**——存档格式
-  （现为 format 28，向前迁移）与内容数据格式仍可能随阶段演进，旧存档
-  通常可读但请定期备份。已知限制见 `docs/KNOWN_ISSUES.md`。
-- 许可证：MIT（见 `LICENSE`）。
-- **内存提示**：默认 `config/config.json` 为 `view_distance: 80`（圆盘环
-  满环 ~103k chunk ≈ 4.6 GB，会随探索持续加载）。内存 <8 GB 的机器建议
-  改为 16–32（`world.view_distance`，16 ≈ 2 GB 量级）。
+逐版明细与发布历史：[`docs/CHANGELOG.md`](docs/CHANGELOG.md)（当前时
+代）+ `docs/archive/*/CHANGELOG.md`（历史时代）+ GitHub Releases。
+
+> 存档与内容数据格式仍可能随阶段演进（存档向前迁移兼容）——旧存档通常
+> 可读，但请定期备份。已知限制见 `docs/KNOWN_ISSUES.md`。
 
 ## 文档地图
 
@@ -149,3 +143,7 @@ GitHub Releases。
 - 世界坐标 / Chunk 坐标 / Local 坐标严格区分，转换函数集中定义。
 - 错误必须显式传播（`Result<T>` + `MC_TRY`），不允许静默失败。
 - 每个阶段完成后：编译 → 运行 → 测试 → 修复 → 总结，再进入下一阶段。
+
+## 许可证
+
+MIT（见 `LICENSE`）。
