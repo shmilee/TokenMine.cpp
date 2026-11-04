@@ -3135,3 +3135,13 @@
   落盘档 = UnicodeDecodeError 0x8b（魔数第二字节）——gate_compare.py
   load_save 同款探测（raw[:2] == 1f8b → gzip.decompress）；场景文件
   手写明文仍可（零迁移），但 30f base 档是 gzip。
+- **g139 插桩器锚点随调用点形态演进（PITS 387，门 194 V3-1 Phase B）**
+  ——Phase B 的 DimCtx 参数化改了 update() 的 drain 调用点（collectLit
+  Columns(); → collectLitColumns(overworldCtx()); + nether 分支）→
+  `tools/g139_instrument.py` 的 STREAMING 锚点 loudly-fail（PITS 317
+  "锚点断裂 = 失败不静默" 纪律按预期触发，非 bug）。修法 = **插桩器
+  加双形态锚**（新形态优先匹配，旧形态保留 = 旧侧树可重建），随版提交
+  入仓；每个 perf 树用**自己 commit 的插桩器**（git archive 含
+  tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
+  在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
+  调用点形态前先 grep 全部 g139 锚点核一遍。

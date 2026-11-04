@@ -305,7 +305,7 @@ TEST(RetainedColumnDiffTest, MergeSortsTheInterleavedUnion) {
             std::vector<SavedBlockEdit> {{BlockPos {16, 3, 3}, "dirt"}},
             std::vector<SavedFluidEdit> {{BlockPos {20, 10, 4},
                                           FluidKind::Lava, 8}}};
-    mergeRetained(save, retained);
+    mergeRetained(save.blockEdits, save.fluidEdits, retained);
 
     const std::vector<SavedBlockEdit> expectBlocks = {
         {BlockPos {0, 5, 0}, "dirt"},
@@ -328,7 +328,7 @@ TEST(RetainedColumnDiffTest, MergeOfAnEmptyMapIsANoOp) {
     save.blockEdits = {{BlockPos {0, 5, 0}, "dirt"}};
     save.fluidEdits = {{BlockPos {8, 5, 0}, FluidKind::Water, 3}};
     const std::map<ColumnPos, RetainedColumnDiff> empty;
-    mergeRetained(save, empty);
+    mergeRetained(save.blockEdits, save.fluidEdits, empty);
     ASSERT_EQ(save.blockEdits.size(), 1u);
     EXPECT_EQ(save.blockEdits[0].pos, (BlockPos {0, 5, 0}));
     EXPECT_EQ(save.blockEdits[0].blockName, "dirt");
@@ -399,7 +399,7 @@ TEST(RetainedColumnDiffTest, RetainedShapeSaveRoundTrips) {
     save.playerRespawn = {1.5f, 2.0f, 1.5f}; // format 28 (V2-13, always written)
     std::map<ColumnPos, RetainedColumnDiff> retained;
     retained[{2, 0}] = diff;
-    mergeRetained(save, retained);
+    mergeRetained(save.blockEdits, save.fluidEdits, retained);
     EXPECT_TRUE(blockEditsEqual(save.blockEdits, expectBlocks));
     EXPECT_TRUE(fluidEditsEqual(save.fluidEdits, expectFluids));
 

@@ -36,10 +36,11 @@ TEST(DebugOverlayTest, LinesFormat) {
     info.maxHunger = 20.0;
     info.difficulty = "hard";
     const auto lines = debugOverlayLines(info);
-    ASSERT_EQ(lines.size(), 19u);
+    // V3-1 Phase B: 19 -> 20 (the dimension line — the F3's last line).
+    ASSERT_EQ(lines.size(), 20u);
     // Pinned literal (deliberately NOT the TM_VERSION macro): a version
     // bump must force a conscious update of this pin.
-    EXPECT_EQ(lines[0], "TokenMine.cpp v3.3.0");
+    EXPECT_EQ(lines[0], "TokenMine.cpp v3.4.0");
     EXPECT_EQ(lines[1], "60 FPS | frame 1234");
     EXPECT_EQ(lines[2], "chunks 2312 | draws 45 | verts 987654");
     EXPECT_EQ(lines[3], "pos 0.50, 54.00, -34.70  yaw 0.00  pitch -0.25");
@@ -71,6 +72,10 @@ TEST(DebugOverlayTest, LinesFormat) {
     // V3-8: the gamepad line — a unit-test DebugInfo with no gamepad
     // connection renders the baseline "gamepad: none".
     EXPECT_EQ(lines[18], "gamepad: none");
+    // V3-1 Phase B: the dimension line — a unit-test DebugInfo with no
+    // dimension filled renders the baseline "overworld" (the no-nether
+    // session's value).
+    EXPECT_EQ(lines[19], "dimension overworld");
 }
 
 TEST(DebugOverlayTest, CamLine) {
@@ -78,7 +83,7 @@ TEST(DebugOverlayTest, CamLine) {
     // distance (the wheel-zoom readout, one decimal: the kZoomStep 0.5
     // grid) + the fly marker (the double-tap Space toggle).
     DebugInfo none;
-    EXPECT_EQ(debugOverlayLines(none).size(), 19u);
+    EXPECT_EQ(debugOverlayLines(none).size(), 20u);
     EXPECT_EQ(debugOverlayLines(none)[17], "cam (none)");
     DebugInfo back;
     back.camMode = "ThirdBack";
@@ -97,7 +102,7 @@ TEST(DebugOverlayTest, GamepadLine) {
     // "gamepad: <name>" otherwise (the SDL device name; "unknown" when
     // SDL has no mapping for the device).
     DebugInfo none;
-    EXPECT_EQ(debugOverlayLines(none).size(), 19u);
+    EXPECT_EQ(debugOverlayLines(none).size(), 20u);
     EXPECT_EQ(debugOverlayLines(none)[18], "gamepad: none");
     DebugInfo xbox;
     xbox.gamepadConnected = true;
@@ -209,4 +214,16 @@ TEST(DebugOverlayTest, EngagedStreamingAndOpenInventory) {
     EXPECT_EQ(lines[5], "time 0.000  day 0.00  free");
     EXPECT_EQ(lines[6], "streaming engaged  pending 3  radius 0");
     EXPECT_EQ(lines[7], "inventory open  particles 256  entities 2");
+}
+
+TEST(DebugOverlayTest, DimensionLine) {
+    // V3-1 Phase B: the dimension line (the F3's last line — the 19 ->
+    // 20 pin): "dimension overworld" (the default — a unit-test
+    // DebugInfo with no dimension filled, the no-nether session's
+    // value) / "dimension nether" (the player is in the nether).
+    DebugInfo none;
+    EXPECT_EQ(debugOverlayLines(none)[19], "dimension overworld");
+    DebugInfo nether;
+    nether.dimension = "nether";
+    EXPECT_EQ(debugOverlayLines(nether)[19], "dimension nether");
 }

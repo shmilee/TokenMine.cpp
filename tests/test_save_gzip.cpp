@@ -144,13 +144,16 @@ std::size_t countOccurrences(const std::string& hay, const std::string& needle) 
     return count;
 }
 
-std::string replaceOnce(const std::string& hay, const std::string& from,
-                        const std::string& to) {
-    const std::size_t pos = hay.find(from);
-    if (pos == std::string::npos) {
-        return hay;
+// A copy of a JSON object minus one key (Json has no erase — the
+// test_save.cpp withoutKey twin).
+Json withoutKey(const Json& root, const std::string& key) {
+    Json out = Json::object();
+    for (const auto& [k, v] : root.members()) {
+        if (k != key) {
+            out[k] = v;
+        }
     }
-    return hay.substr(0, pos) + to + hay.substr(pos + from.size());
+    return out;
 }
 
 } // namespace
@@ -423,37 +426,55 @@ TEST(SaveCompressionConfigTest, UnknownOrEmptyWordsAreNamed) {
         << re.error().message;
 }
 
-// -- 6. the none-bit-identical identity (the format-29 schema is the
-//        format-28 schema — the single root.format key is the only
-//        delta, and a simulated v3.0.0 file re-parses to the same
-//        state) --------------------------------------------------------------
+// -- 6. the 29 -> 30 schema delta (V3-1 Phase B re-based the V3-7
+//        identity: format 29 and 30 are NO LONGER schema-identical —
+//        30 adds the dimension key + the nether segments. The delta of
+//        the same state is EXACTLY the whitelisted keys {format,
+//        player.dimension, nether, nether_entities} — a simulated
+//        v3.3.0 (format-29) file re-parses to the same state (the
+//        overworld migration), and re-serializing returns to the
+//        format-30 payload byte-for-byte) ---------------------------------
 
-TEST(GzipNoneIdentityTest, FormatKeyIsTheOnlySchemaDelta) {
+TEST(GzipNoneIdentityTest, TwentyNineToThirtyDeltaIsTheWhitelist) {
     const Fixture f;
     const SaveGame s = makeSave(f);
-    auto j29 = serializeSave(s, f.items);
-    ASSERT_TRUE(j29.ok()) << j29.error().message;
-    const std::string p29 = j29->dump(2) + '\n';
+    auto j30 = serializeSave(s, f.items);
+    ASSERT_TRUE(j30.ok()) << j30.error().message;
+    const std::string p30 = j30->dump(2) + '\n';
     // The format marker appears exactly ONCE in the whole file (the
-    // root key) — the structural proof that a 28 -> 29 delta can only
-    // be that single key.
-    EXPECT_EQ(countOccurrences(p29, "\"format\""), 1u);
+    // root key — the "nether" segment's keys are blocks / fluids /
+    // states, no nested "format" string).
+    EXPECT_EQ(countOccurrences(p30, "\"format\""), 1u);
+    EXPECT_EQ(countOccurrences(p30, "\"format\": 30"), 1u);
+    // The format-30 keys are present (the ALWAYS-written discipline).
+    EXPECT_EQ(countOccurrences(p30, "\"dimension\""), 1u);
+    EXPECT_EQ(countOccurrences(p30, "\"nether\""), 1u);
+    EXPECT_EQ(countOccurrences(p30, "\"nether_entities\""), 1u);
+    // The simulated v3.3.0 (format-29) file of the same state: the
+    // whitelisted keys stripped + the format key flipped.
+    Json j = *j30;
+    Json nether = withoutKey(j, "nether");
+    nether = withoutKey(nether, "nether_entities");
+    const Json* player = nether.find("player");
+    ASSERT_TRUE(player != nullptr && player->isObject());
+    Json p = withoutKey(*player, "dimension");
+    nether = withoutKey(nether, "player");
+    nether["player"] = std::move(p);
+    nether["format"] = Json(29);
+    const std::string p29 = nether.dump(2) + '\n';
+    ASSERT_NE(p29, p30);
     EXPECT_EQ(countOccurrences(p29, "\"format\": 29"), 1u);
-    // The simulated v3.0.0 (format-28) file of the same state: the
-    // single key flipped.
-    const std::string p28 = replaceOnce(p29, "\"format\": 29",
-                                        "\"format\": 28");
-    ASSERT_NE(p28, p29);
-    EXPECT_EQ(countOccurrences(p28, "\"format\": 28"), 1u);
-    // The format-28 file parses to the same state (no key added, no
-    // shape changed — the identity load), and re-serializing it returns
-    // to the CURRENT format with every other key unchanged: the
-    // v3.1.0-none file ≡ the v3.0.0 file except root.format.
-    auto jp28 = Json::parse(p28);
-    ASSERT_TRUE(jp28.ok()) << jp28.error().message;
-    auto sp28 = parseSave(*jp28, f.items, f.blocks, f.effects, s.seed);
-    ASSERT_TRUE(sp28.ok()) << sp28.error().message;
-    auto j28out = serializeSave(*sp28, f.items);
-    ASSERT_TRUE(j28out.ok()) << j28out.error().message;
-    EXPECT_EQ(j28out->dump(2) + '\n', p29);
+    // The format-29 file parses to the SAME state (the migration:
+    // dimension -> overworld, the nether segments -> empty), and
+    // re-serializing it returns to the format-30 payload with every
+    // other key unchanged — the v3.4.0-none file ≡ the v3.3.0 file
+    // except the whitelisted keys.
+    auto jp29 = Json::parse(p29);
+    ASSERT_TRUE(jp29.ok()) << jp29.error().message;
+    auto sp29 = parseSave(*jp29, f.items, f.blocks, f.effects, s.seed);
+    ASSERT_TRUE(sp29.ok()) << sp29.error().message;
+    EXPECT_EQ(sp29->playerDimension, "overworld");
+    auto j29out = serializeSave(*sp29, f.items);
+    ASSERT_TRUE(j29out.ok()) << j29out.error().message;
+    EXPECT_EQ(j29out->dump(2) + '\n', p30);
 }

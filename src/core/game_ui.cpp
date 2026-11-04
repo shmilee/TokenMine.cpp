@@ -900,6 +900,23 @@ void Game::respawnPlayer() {
         m_player->params().height)
         ? remembered
         : m_mobs.spawnPoint;
+    // V3-1 Phase B (D8): a NETHER death respawns in the OVERWORLD (the
+    // Minecraft-exact ruling — the respawn point is always the
+    // overworld's bed / spawn; the nether holds no spawn point, the
+    // documented deviation 5: no mob, no spawn-protection need). The
+    // rebind + the catch-up disk run BEFORE the position restore (the
+    // overworld's world is the respawn's coordinate space).
+    if (playerInNether()) {
+        m_player->setWorld(m_world);
+        m_playerDimension = Dimension::Overworld;
+        {
+            const int cx = floorDiv(static_cast<int>(std::floor(target.x)),
+                                    kChunkSize);
+            const int cz = floorDiv(static_cast<int>(std::floor(target.z)),
+                                    kChunkSize);
+            catchUpDisk(Dimension::Overworld, cx, cz);
+        }
+    }
     m_player->setSpawnPos(target);
     m_player->respawn();
 }
@@ -1108,7 +1125,9 @@ void Game::renderUi() {
     // camera is in air: byte-identical).
     {
         const Vec3 eye = m_camera.position;
-        const std::optional<FluidKind> submerged = m_world.getFluidKind(
+        // V3-1 Phase B: the CURRENT world (a player submerged in the
+        // nether's lava sea gets the lava overlay there).
+        const std::optional<FluidKind> submerged = currentWorld().getFluidKind(
             static_cast<int>(std::floor(eye.x)),
             static_cast<int>(std::floor(eye.y)),
             static_cast<int>(std::floor(eye.z)));
@@ -2005,7 +2024,9 @@ void Game::renderUi() {
         info.frame = m_frameCount;
         info.drawCalls = m_renderer.stats().drawCalls;
         info.vertices = m_renderer.stats().vertices;
-        info.chunks = static_cast<int>(m_world.chunkCount());
+        // V3-1 Phase B: the CURRENT dimension's world / entity list (the
+        // F3 readout is the dimension the player is in).
+        info.chunks = static_cast<int>(currentWorld().chunkCount());
         if (m_player) {
             info.posX = m_player->position().x;
             info.posY = m_player->position().y;
@@ -2035,7 +2056,7 @@ void Game::renderUi() {
         info.pointerLocked = locked;
         info.inventoryOpen = panelOpen();
         info.particles = m_particles.size();
-        info.entities = m_entities.size();
+        info.entities = currentEntities().size();
         if (m_player) {
             info.health = m_player->health();
             info.maxHealth = m_player->maxHealth();
@@ -2129,6 +2150,10 @@ void Game::renderUi() {
         // no gamepad is connected, the SDL device name otherwise.
         info.gamepadConnected = m_input.gamepadConnected();
         info.gamepadName = m_input.gamepadName();
+        // V3-1 Phase B: the dimension line (the F3's 20th line — the
+        // developer-tool discipline: the F3 stays English).
+        info.dimension =
+            playerInNether() ? "nether" : "overworld";
         // UX-8e: the F3 line step is a TEXT-STACK pitch — it grows with
         // the glyphs (lround, identity at fs = 1.0); the margin (an
         // icon-space inset) does not.

@@ -86,6 +86,7 @@
 #include "world/fluid.hpp"
 #include "world/ao.hpp"
 #include "world/lighting.hpp"
+#include "world/nether_gen.hpp"
 #include "world/raycast.hpp"
 #include "world/tree_shape.hpp"
 #include "world/world.hpp"
@@ -149,6 +150,14 @@ struct GameArgs {
 
 class Game {
 public:
+    // V3-1 Phase B (D1): the two dimensions (the fixed pair — a >2
+    // dimension future is the structural re-merge point, the design's
+    // documented deviation 1: the incremental parallel members, not the
+    // Dimension-x2 reorganization). The overworld is the pre-Phase-B
+    // world (every member unchanged); the nether is the parallel
+    // NetherDim family (lazy — D2).
+    enum class Dimension { Overworld, Nether };
+
     // Which crafting panel (Phase 17) is open (None = nothing open).
     enum class OpenPanel {
         None,      // no panel
@@ -215,6 +224,46 @@ private:
         std::optional<Mesh> transparent;
     };
 
+    // V3-1 Phase B: the nested types DimCtx references by value /
+    // reference before their definitions (the complete-class context
+    // covers member function bodies, not nested class definitions — the
+    // BeaconStream pattern's forward-declaration twin).
+    struct StreamingState;
+    struct MobSystem;
+
+    // V3-1 Phase B (D1): the streaming/meshing DIMENSION CONTEXT — the
+    // reference bundle the (parameterized) streaming functions run over.
+    // The overworld binds its existing members (m_world / m_streaming /
+    // m_chunkMeshData / ... — zero behavior change: the overworld call
+    // sites pass the same data the pre-Phase-B functions read directly);
+    // the nether binds its parallel NetherDim family. One pool is shared
+    // (the ctx binds the overworld's m_streaming.pool for BOTH — the
+    // per-frame flush barrier then covers every job of both dimensions,
+    // and the inactive dimension's zero-post steady state keeps the
+    // shared pool uncontended, the design's "稳态零争用" ruling). The
+    // protectStates callback is the dimension's per-block state maps'
+    // unload protection (the overworld's seven-map family; the nether's
+    // portal tracking set) — the demo-area protection is the flag (the
+    // overworld only; the nether has no demo area).
+    struct DimCtx {
+        World& world;
+        StreamingState& streaming;
+        ThreadPool& pool;
+        std::unordered_map<ChunkPos, ChunkMeshData>& chunkMeshData;
+        std::unordered_map<ColumnPos, ColumnMesh>& columnMeshes;
+        std::set<ColumnPos>& columnRebuildPending;
+        std::set<ChunkPos>& flammableChunks;
+        std::set<ColumnPos>& lightPendingColumns;
+        std::set<ColumnPos>& fluidLightPending;
+        // The dimension's generation reference (the retain-diff's fresh
+        // comparison — the makeChunkGenerator / makeNetherChunkGenerator
+        // closures).
+        World::ChunkGenerator generator;
+        // The unload pass's per-block state protection (see the struct).
+        std::function<void(std::set<ColumnPos>&)> protectStates;
+        bool protectDemoArea = false;
+    };
+
     // One screen-space draw batch (Phase 15 UI): all quads/glyphs with the
     // same color + texture are merged into a single non-indexed mesh, so
     // the whole UI is a handful of draw calls.
@@ -229,16 +278,18 @@ private:
     void update(double dt);
     void render();
     // Rebuilds the GPU mesh of every column whose merged GL mesh is stale
-    // (m_columnRebuildPending). PIPE-1: the mesher's COMPUTE no longer runs
+    // (ctx.columnRebuildPending). PIPE-1: the mesher's COMPUTE no longer runs
     // here — worker mesh jobs (postMeshJobs / integrateMeshJobs) refresh
-    // the chunk's CPU geometry (m_chunkMeshData) against a private snapshot
+    // the chunk's CPU geometry (ctx.chunkMeshData) against a private snapshot
     // World; what remains on the main thread is the column-merged GL
     // upload (rebuildColumnMesh — the GL context is main-thread only).
-    Result<void> updateChunkMeshes();
+    // V3-1 Phase B: parameterized over the dimension context (the
+    // overworld / nether each merge their own columns).
+    Result<void> updateChunkMeshes(const DimCtx& ctx);
     // Concatenates the column's chunk geometries (baking each chunk's
     // world offset into the vertices, remapping the indices) and uploads
     // the merged opaque + transparent sub-meshes.
-    Result<void> rebuildColumnMesh(const ColumnPos& col);
+    Result<void> rebuildColumnMesh(const DimCtx& ctx, const ColumnPos& col);
 
     // Chunk streaming (Phase 14). integrateStreamedColumns runs after the
     // pool flush: worker-generated columns are inserted into the World
@@ -246,7 +297,7 @@ private:
     // next updateChunkMeshes re-meshes them and the boundary). The two
     // post* methods run last in update, after every main-thread World
     // write: from then on until the next flush the workers own the window.
-    void integrateStreamedColumns();
+    void integrateStreamedColumns(const DimCtx& ctx);
     // Collects the completed lighting jobs (after the pool flush):
     // STREAMING job columns (LightJob::fluid = false) leave
     // m_streaming.unlitColumns, so the next updateChunkMeshes builds their
@@ -259,11 +310,11 @@ private:
     // are not unlit columns). Every job's net-changed chunks (collected
     // job-locally by the workers, 99.10) join the World's dirty set
     // here — the main-thread-writer window, no worker in flight.
-    void collectLitColumns();
+    void collectLitColumns(const DimCtx& ctx);
     // Decides the columns to stream around the player (trigger + radius,
     // see chunk_streaming) and posts up to kStreamColumnsPerFrame
     // generation jobs to the pool.
-    void streamChunks();
+    void streamChunks(const DimCtx& ctx);
     // Finds chunks that appeared this frame (streamed-in or created by the
     // placement path) and posts their worker lighting jobs (99.10): up to
     // TWO per frame — two pending columns whose light regions are
@@ -276,7 +327,7 @@ private:
     // The chunks render one frame dark and are re-meshed with the
     // correct light the frame after the job completes (deterministic,
     // frame-locked by the flush).
-    void postLightJobs();
+    void postLightJobs(const DimCtx& ctx);
     // 99.11: posts the budgeted fluid catch-up light jobs (the worker
     // twin of the old synchronous bounding-box re-light in the fluid
     // tick — that call was the frame's entire cost in the shipped ocean,
@@ -299,7 +350,7 @@ private:
     // re-meshed with the new light, the 99.4 lit-pop-in discipline).
     // A settled world changes nothing: the pending set stays empty and
     // this function is a no-op (structural immunity for the base gate).
-    void postFluidLightJobs();
+    void postFluidLightJobs(const DimCtx& ctx);
     // PIPE-1: posts up to kMaxMeshBacklog worker mesh jobs for the nearest
     // eligible dirty columns (selection: world/mesh_job.hpp). Each job
     // snapshots the column's 3x3 column neighborhood into its own World
@@ -308,7 +359,7 @@ private:
     // (gen posts) and BEFORE postLightJobs — the post order gen -> mesh ->
     // light is what keeps this frame's lighting job the only live-World
     // writer after the snapshots (see the pipeline contract above).
-    void postMeshJobs();
+    void postMeshJobs(const DimCtx& ctx);
     // PIPE-1: collects the completed mesh jobs (after the pool flush,
     // BEFORE integrateStreamedColumns — a stream insert marks neighbor
     // columns dirty, which must not be swallowed by a mesh integrate's
@@ -317,7 +368,7 @@ private:
     // integrate, not post: an edit after this frame's integrate re-marks
     // the chunk and re-queues it), and the column joins
     // m_columnRebuildPending for the GL upload. FIFO = deterministic.
-    void integrateMeshJobs();
+    void integrateMeshJobs(const DimCtx& ctx);
     // Unloads the loaded columns far behind the player (the memory leak
     // fix: streaming only ever ADDED chunks — a radius-80 session grew to
     // 11k+ chunks / several GB and kept rising). Runs right after
@@ -333,7 +384,7 @@ private:
     // re-meshes
     // the boundary neighbors), frees the GL mesh buffers, and drops the lit
     // set entries.
-    void unloadFarColumns();
+    void unloadFarColumns(const DimCtx& ctx);
     Result<void> takeScreenshot(const std::filesystem::path& path);
 
     // Draw the sun, moon and starfield (unlit billboarded quads, blended).
@@ -415,7 +466,14 @@ private:
     // place, dye recolor): the raw world setBlock (which marks the chunk
     // dirty) plus, Phase 42, releasing any STUCK arrow whose box overlaps
     // the changed cell (it falls out and rejoins flight physics).
+    // V3-1 Phase B: the legacy name addresses the PLAYER's dimension
+    // (currentWorld — the pre-Phase-B bit-identical path while the
+    // player is in the overworld); setBlockInWorld is the dimension-
+    // explicit form the travel pipeline's generated-portal writes use
+    // (the target dimension — the player is still in the source when the
+    // frame is written).
     void setBlock(int x, int y, int z, BlockID id);
+    void setBlockInWorld(World& world, int x, int y, int z, BlockID id);
     // V3-1 Phase A: the portal frame event over the setBlock choke point
     // (the furnaces / campfires bookkeeping family's transition twin):
     // an obsidian or fire placement / destruction runs the bounded frame
@@ -427,15 +485,17 @@ private:
     // interior's portals -> air, the "Portal deactivated" log). Idempotent
     // (a repeated event finds no new transition); structurally inert on
     // every non-obsidian / non-fire event and without the portal +
-    // obsidian blocks (the base run's immunity root).
-    void checkPortalTransition(BlockID oldId, BlockID newId, int x, int y,
-                               int z);
+    // obsidian blocks (the base run's immunity root). V3-1 Phase B:
+    // dimension-explicit (the frame event runs over the dimension the
+    // edit landed in — the nether's portals build / deactivate there).
+    void checkPortalTransition(World& world, BlockID oldId, BlockID newId,
+                               int x, int y, int z);
     // V3-1 Phase A: applies the activation plan of a complete frame
     // (called by checkPortalTransition; the pure plan + relight + log).
-    void activatePortal(const PortalFrame& frame);
+    void activatePortal(World& world, const PortalFrame& frame);
     // V3-1 Phase A: applies the deactivation plan of a broken frame
     // (called by checkPortalTransition).
-    void deactivatePortal(const PortalFrame& frame);
+    void deactivatePortal(World& world, const PortalFrame& frame);
     // Performs the break: air + relight + data-driven drop (ItemEntity).
     // The caller guarantees the hit is destroyable.
     void breakBlock(const BlockHit& hit);
@@ -605,6 +665,23 @@ private:
     // semantics pin). A no-input run without portals never arms it
     // (structural immunity).
     void updatePortalEntry();
+    // V3-1 Phase B: the portal frame the player's AABB currently overlaps
+    // (the travel's source — the deterministic cell scan + the
+    // portalValidFrame predicate; nullopt = no valid frame).
+    std::optional<PortalFrame> playerPortalFrame() const;
+    // V3-1 Phase B: the real dimension switch (the completed countdown's
+    // consumer — see the declaration comment near the NetherDim family).
+    // V3-1 Phase B: the overworld's world pass (the pre-Phase-B furnace /
+    // campfire / crop / sapling code moved verbatim — the time-capsule
+    // gate's overworld half, frozen while the player is in the nether).
+    void updateOverworldWorldPass();
+    // V3-1 Phase B: the overworld's fluid / moisture / fire pass (the
+    // pre-Phase-B code moved verbatim — the time-capsule gate's second
+    // half).
+    void updateOverworldFluidPass(double dt);
+    // V3-1 Phase B: the nether's fluid pass (the overworld section's
+    // dimension-bound twin — the static source lava sea's zero churn).
+    void updateNetherFluidTick();
     // V3-1 Phase A: the portal ambient sound (the bat squeak's per-frame
     // roll, spatialized at the portal cell center): every tracked portal
     // within kPortalAmbientRadiusBlocks of the player's feet rolls once
@@ -1108,6 +1185,97 @@ private:
     // full diffWorld and the PIPE-2 journalDiff).
     World::ChunkGenerator makeChunkGenerator() const;
 
+    // ------------------------------------------------------------------
+    // V3-1 Phase B (v3.4.0): the nether dimension + the real travel.
+    // ------------------------------------------------------------------
+    // The player's dimension (the streaming / entity / interaction /
+    // render / save discriminator). Overworld is the default (the pre-
+    // Phase-B bit-identical path — every dimension-gated expression
+    // reduces to the legacy overworld one while it holds); it flips on
+    // the travel pipeline (travelPortal) and the load's player rebind.
+    Dimension m_playerDimension = Dimension::Overworld;
+    bool playerInNether() const {
+        return m_playerDimension == Dimension::Nether;
+    }
+    // The dimension the player (and therefore the interaction, the
+    // raycast, the entity list, the streaming and the render) currently
+    // addresses. The overworld returns m_world — the pre-Phase-B
+    // bit-identical path (the structural-immunity root: a no-travel
+    // session never touches the nether family).
+    World& currentWorld();
+    const World& currentWorld() const;
+    // The dimension's entity list (the player crosses; the drops /
+    // arrows / orbs it spawns and collects ride the CURRENT dimension —
+    // D3: the lists are per-dimension, the inactive dimension's entities
+    // freeze (no tick, the references stay valid — the design's ruling)).
+    std::vector<std::unique_ptr<Entity>>& currentEntities();
+    const std::vector<std::unique_ptr<Entity>>& currentEntities() const;
+    // The dimension's portal tracking set (the setBlock choke point +
+    // the rescan + the ambience + the travel search all read it — the
+    // overworld's m_states.portals / the nether's m_nether.portals).
+    const std::map<BlockPos, BlockID>& portalsOf(Dimension dim) const;
+    std::map<BlockPos, BlockID>& portalsOf(Dimension dim);
+    // The dimension's streaming context (the DimCtx bind — the overworld
+    // family / the nether family; the shared pool for both).
+    DimCtx overworldCtx();
+    DimCtx netherCtx();
+    // D2 (the laziness): the nether is constructed on first need — the
+    // first travel, a load whose nether section is non-empty or whose
+    // player sits in the nether (before ANY chunk / mesh / journal /
+    // streaming job / streaming memory exists, the structural-immunity
+    // strongest form). Builds the skyless World (D5), binds the pure
+    // nether fill as its generator callback + the save-diff reference,
+    // installs the nether's cell-mutation observer (the nether journal),
+    // and copies the streaming radius (the shared config value — no new
+    // config key). Idempotent (a second call is a no-op).
+    void ensureNether();
+    // The nether World (valid after ensureNether; the accessors belt-
+    // check — every consumer runs only once the nether is engaged).
+    World& netherWorld();
+    // The nether's generation reference (the fillNetherChunk closure —
+    // the makeChunkGenerator twin: streaming jobs, first-touch creation,
+    // the save-diff reference and the unload retained diffs all run it).
+    World::ChunkGenerator makeNetherChunkGenerator() const;
+    // The dimension's generation SEED (the overworld's stored seed / the
+    // nether's derived one — the drop-scatter / ambience / tutorial
+    // decorrelation streams read the CURRENT dimension's seed, the
+    // xp_seed single-source-of-truth twin: the nether's is derived,
+    // never stored).
+    std::int64_t currentSeed() const;
+    // D6 step 3 (the synchronous catch-up): the 3x3 column disk around
+    // (cx, cz) of the given dimension — every missing column generated
+    // synchronously (the first-touch precedent amplified: ensureColumn +
+    // loadedColumns, the ~ms one-time cost) + ONE synchronous relight
+    // over the disk's bounding box (newTerrain — the nether's skyless
+    // source 0 through the rescan). Runs in the main-thread-writer
+    // window (the travel frame / the load), so no window conflict (the
+    // design's risk-surface ② ruling).
+    void catchUpDisk(Dimension dim, int cx, int cz);
+    // D6 (the single-frame frame-locked travel pipeline): the completed
+    // standing countdown's consumer — the 8:1 mapping, the target
+    // ±16 portal search (the per-dimension tracking set, O(set size),
+    // no world scan), the generation fallback (the 4x5 corners-included
+    // frame + the 2x3 bedrock platform through the setBlockInWorld
+    // choke point — the journal / editedColumns protection rides
+    // along), the catch-up disk, the player's world rebind (setWorld) +
+    // restorePosition (the fall pin — the Phase 36 load twin: the
+    // in-air landing takes no free fall damage) + camera, the dimension
+    // flip (the streaming center re-engages the target dimension next
+    // frame; the source dimension's streaming freezes — zero post, the
+    // steady-state zero contention), the cooldown arm (the destination
+    // inside-portal ping-pong guard), the two travel sounds (the
+    // trigger on entry — the arming frame — and the travel fade here)
+    // and the "Traveled to <dim> at (x,y,z) from (sx,sy,sz)" info log.
+    // No loading screen, no transition frame (the design's deviation 7):
+    // the switch is one deterministic frame.
+    void travelPortal(const PortalFrame& sourceFrame);
+    // The load-time nether portal frame validity (the rescanPortals
+    // twin over the nether world — the PITS 383① two-way cross-check:
+    // a portal cell not strictly inside a complete frame is an orphan
+    // -> air; the tracking set rebuilds). Runs after the nether's edit
+    // replay at load (and is a no-op while the nether is unengaged).
+    void rescanNetherPortals();
+
     GameArgs m_args;
     Config m_config;
     float m_uiScale = 1.0f; // ui.scale (Phase 34); 1.0 = pixel-exact
@@ -1359,6 +1527,7 @@ private:
     // frame) keeps the two re-light passes serialized, never parallel.
     std::set<ColumnPos> m_fluidLightPending;
 
+
     // Non-player entities (Phase 10): dropped items + projectiles. The
     // game is the sole owner — it updates them each frame, merges items,
     // and removes the despawned.
@@ -1442,6 +1611,67 @@ private:
         std::uint64_t spawnCounter = 0;
     };
     MobSystem m_mobs;
+
+    // V3-1 Phase B (D1/D2): the NETHER dimension — the parallel named
+    // family (the overworld's members are UNTOUCHED: m_world /
+    // m_streaming / m_chunkMeshData / m_columnMeshes / m_entities /
+    // m_flammableChunks / m_lightPendingColumns / m_fluidLightPending /
+    // m_states all stay the overworld's — the zero-diff red line, the
+    // gate's structural-immunity root). Lazy (D2): the World is nullopt
+    // until ensureNether (the first travel / a load with a non-empty
+    // nether section or a nether player) — before that there is no nether
+    // chunk, no mesh, no journal, no streaming job, no streaming memory
+    // (the strongest form). The pool is NOT a member: the nether's
+    // streaming posts to the SHARED overworld pool (netherCtx binds
+    // *m_streaming.pool — the flush barrier covers both dimensions'
+    // jobs, and the inactive dimension's zero-post steady state keeps it
+    // uncontended). Member order: all default-constructed, no cross-reads
+    // (the construction-order red line).
+    struct NetherDim {
+        // The nether's world (SKYLESS — D5: the void / world top read
+        // sky 0, the rescan top source 0; the day/night shader term and
+        // the night floor are structurally inert there).
+        std::optional<World> world;
+        // The fill's resolved content (init name lookup — the P70
+        // family-inert pattern: invalid = the nether is unbuildable,
+        // ensureNether MC_FAILs at the first need).
+        NetherGen gen;
+        // The nether's streaming family (the overworld's m_streaming
+        // twin — the same StreamingState struct, its own instance; the
+        // pool member stays null, the shared pool is the overworld's).
+        StreamingState streaming;
+        // The nether's per-chunk CPU geometry + the per-column GL meshes
+        // (the overworld's m_chunkMeshData / m_columnMeshes twins).
+        std::unordered_map<ChunkPos, ChunkMeshData> chunkMeshData;
+        std::unordered_map<ColumnPos, ColumnMesh> columnMeshes;
+        std::set<ColumnPos> columnRebuildPending;
+        // The nether's cross-domain bookkeeping (the overworld's
+        // m_flammableChunks / m_lightPendingColumns / m_fluidLightPending
+        // twins — the burn pass's gate / the streaming light jobs'
+        // pending set / the fluid catch-up's pending set).
+        std::set<ChunkPos> flammableChunks;
+        std::set<ColumnPos> lightPendingColumns;
+        std::set<ColumnPos> fluidLightPending;
+        // The nether's entity list (D3: the player crosses, the nether's
+        // drops / arrows / orbs live here — Phase B spawns no mobs, the
+        // empty pool below; the list holds the player-thrown content).
+        std::vector<std::unique_ptr<Entity>> entities;
+        // The nether's mob system (Phase B: the EMPTY pool — no mobs
+        // data, the structural-immunity root; Phase C fills it). The
+        // spawn gate fast-exits on the empty config.
+        MobSystem mobs;
+        // The nether's portal tracking set (the overworld's
+        // m_states.portals twin — the choke point / the rescan / the
+        // ambience / the travel search read it; position-sorted
+        // std::map, deterministic iteration).
+        std::map<BlockPos, BlockID> portals;
+    };
+    NetherDim m_nether;
+    // V3-1 Phase B (D6): the post-travel portal cooldown in FRAMES
+    // (kPortalCooldownFrames on a completed travel — the destination
+    // inside-portal ping-pong guard; session state, never saved, the
+    // fly-toggle pattern: a no-travel session keeps it 0).
+    int m_portalCooldownFrames = 0;
     // The player body family (UX-3): the player's world-space body —
     // the data model (data/player_body.json, parsed through MobRegistry::
     // parseModel's full strict discipline) + the render assets (the static
@@ -1827,6 +2057,14 @@ private:
         // absent — the P70 fire/campfire id pattern).
         BlockID obsidianId = BlockID::invalid();
         BlockID portalId = BlockID::invalid();
+        // V3-1 Phase B: the nether's generation content ids (the
+        // obsidianId pattern — init name lookup; invalid = the nether's
+        // fill is unbuildable, ensureNether MC_FAILs at the first need,
+        // the P70 family-inert twin): the netherrack slab (the nether's
+        // identity material) + the bedrock (the floor / roof bands AND
+        // the generated-portal's platform — the design's bedrock ruling).
+        BlockID netherrackId = BlockID::invalid();
+        BlockID bedrockId = BlockID::invalid();
         // V3-1 Phase A: the portal tracking set — the cells holding the
         // portal block (the beacons' twin: maintained through the setBlock
         // choke point, rebuilt by rescanPortals() after load). Consumed by

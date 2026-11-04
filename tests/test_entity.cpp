@@ -180,6 +180,32 @@ TEST(EntityTest, FallsAndRestsExactlyOnFloor) {
     EXPECT_TRUE(item.onGround());
 }
 
+// V3-1 Phase B (D3): the world rebind (setWorld — the dimension switch's
+// mechanism: ONLY the player ever crosses dimensions, but the contract is
+// the Entity base's — this pin owns it). After the rebind, every physics
+// read resolves against the NEW world: an item that landed on the fixture
+// floor, rebound to a void world, does not find the floor anymore.
+TEST(EntityTest, SetWorldRebindsThePhysics) {
+    Fixture f;
+    World other; // the void: no floor anywhere
+    ItemEntity item = f.makeItem({8.5f, 10.0f, 8.5f});
+    // Pre-rebind: the fall lands on the fixture's floor (y = 1).
+    f.run(item, 120);
+    EXPECT_FLOAT_EQ(item.position().y, 1.0f);
+    EXPECT_TRUE(item.onGround());
+    // The rebind (the contract's read side: world() reports it).
+    item.setWorld(other);
+    EXPECT_EQ(&item.world(), &other);
+    // The same fall against the void world: no floor — the item keeps
+    // falling (the fixture floor at y = 1 is in the OTHER world, not
+    // here). 120 frames of free fall from y = 10 goes well past y = 1
+    // (the terminal-velocity class) — the pin is the NOT-landed.
+    item.teleportTo({8.5f, 10.0f, 8.5f});
+    f.run(item, 120);
+    EXPECT_FALSE(item.onGround());
+    EXPECT_LT(item.position().y, 1.0f);
+}
+
 TEST(EntityTest, RestsWithoutJitter) {
     Fixture f;
     ItemEntity item = f.makeItem({8.5f, 1.0f, 8.5f}); // bottom on the surface

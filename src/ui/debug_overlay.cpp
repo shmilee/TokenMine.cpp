@@ -113,6 +113,11 @@ std::vector<std::string> debugOverlayLines(const DebugInfo& info) {
         info.gamepadConnected
             ? fmt("gamepad: %s", info.gamepadName.c_str())
             : std::string("gamepad: none"),
+        // V3-1 Phase B: the dimension line (the F3 stays English — the
+        // developer-tool discipline): "overworld" (the default — the no-
+        // nether session's value) / "nether" (the player is in the nether
+        // dimension).
+        fmt("dimension %s", info.dimension.c_str()),
     };
 }
 

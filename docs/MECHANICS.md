@@ -1,16 +1,17 @@
 # 机制详解（现状 v3.2.0）
 
-> 2026-11-05 V3-8 刷新：现状 = **v3.3.0**（3.x「世界扩展」期：
-> v3.1.0 = V3-7 存档 gzip，门 191；v3.2.0 = V3-1 Phase A 下界门框，门
-> 192；v3.3.0 = V3-8 手柄支持，门 193；其前 2.x 两批 20 版收官
-> v2.0.0 → v2.19.0）、无输入基线门 **193** 次、单元测试
-> **2555/2555**、`-Wall -Wextra -Wpedantic -Werror` 0 警告、存档
-> **format 29**（gzip 时代：schema 与 28 一致，on-disk 默认 gzip；
-> Phase A / V3-8 均零 format）、base18 锚 **224468 B**（重锚谱系
-> 179116 → 178148【V2-10 门 181】→ 178676【V2-19 门 182】→ 179027【V2-11
-> 门 183】→ **224468【V2-18 门 190，AO 世界光照】**；门 184–189 =
-> 结构免疫第 65–70 次免重锚；门 191/192/193 = 第 72/73/74 次【v3.0.0
-> banner = 第 71 次】）、PITS **386**。上一轮全面刷新
+> 2026-11-05 V3-1 Phase B 刷新：现状 = **v3.4.0**（3.x「世界
+> 扩展」期：v3.1.0 = V3-7 存档 gzip，门 191；v3.2.0 = V3-1 Phase A
+> 下界门框，门 192；v3.3.0 = V3-8 手柄，门 193；v3.4.0 = V3-1 Phase B
+> 下界世界 + 真传送，门 194【format 30】；其前 2.x 两批 20 版收官
+> v2.0.0 → v2.19.0）、无输入基线门 **194** 次、单元测试
+> **2582/2582**、`-Wall -Wextra -Wpedantic -Werror` 0 警告、存档
+> **format 30**（下界维度：player.dimension + nether 段 +
+> nether_entities；gzip 编码 V3-7 起）、base18 锚 **224468 B**（重锚
+> 谱系 179116 → 178148【V2-10 门 181】→ 178676【V2-19 门 182】→
+> 179027【V2-11 门 183】→ **224468【V2-18 门 190，AO 世界光照】**；
+> 门 184–189 = 结构免疫第 65–70 次免重锚；门 191–194 = 第 72–75 次
+> 【v3.0.0 banner = 第 71 次】）、PITS **387**。上一轮全面刷新
 > （2026-11-02）止于 v2.0.0、2026-11-03 增量止于 v2.3.0（下条），本次把
 > v2.11.0 → v2.19.0 的机制（提前项 `[V2-19]` + 第二批 `[V2-11]`~`[V2-18]`，
 > 逐版见 `docs/archive/v2x/CHANGELOG.md`，细节证据见 `docs/archive/v2x/`
@@ -1231,6 +1232,54 @@
   38 / 30 s / 插墙 100 s / 卡住格破坏释放 / 底心 1.0 拾取返 ammo / PRE-9 三段
   形 / SURV-5 wither·poison 箭）；**无弓弦模型/拉弓进度条/手部皮肤**（记档
   偏离）
+
+## 下界维度（`[V3-1]` Phase B，v3.4.0）
+
+- **双世界架构**（D1 增量并行成员）：overworld 代码路径零 diff；
+  nether = `NetherDim` 聚合（World 惰性 + generator + StreamingState +
+  网格/集族 + MobSystem 空池 + entities + portals 追踪集）+ `DimCtx`
+  访问器；**首传前零 chunk/零 mesh/零流送/零内存**（结构免疫最强形）。
+- **坐标映射 8:1**（MC 精确）：主世界 (x,y,z) → 下界 (floorDiv(x,8),
+  y, floorDiv(z,8))，Y 不缩放；逆映射 ×8；派生 seed `worldSeed ^
+  kSaltNether` **不落盘**（parse 重建 = 单源真值）。
+- **下界 worldgen**（专属纯函数，坐标纯函数 = 零噪声）：基岩底
+  y[0,4] / **熔岩海 y[5,31] 全源 level 8**（静态源海 = 流体零 churn）/
+  netherrack y[32,122]（hardness 0.4 MC 精确，drops 自身）/ 基岩顶
+  y[123,127]。netherrack 音族复用 stone（记档，Phase C）。
+- **skyless 光照**：下界 World 的 sky 光恒 0（void/顶读 0 + rescan 顶
+  源 0 = 2 处参数）——无天穹无昼夜；block light 规则同款（熔岩 15 /
+  portal 11 / 火把）。ambient 保持 0.03（记档偏离：MC 0.1，Phase C）。
+- **传送**（Phase A 倒计时完成触发，单帧帧锁定）：目标维 **±16 格搜
+  活跃 portal**（含 Y 全高盒，最近 = 框底中距离；无 → **生成 4×5 含
+  角框 + 2×3 基岩平台**，走 setBlock 咽喉点 = editedColumns 保护）→
+  落点 = 目标 portal 内域底中心（hitbox 安全 + step-up 上探）→ 3×3
+  列盘同步 catch-up → Player.setWorld 换绑 + restorePosition（fall
+  pin）+ 相机 → 流送自动 engage。正交 portal（axis 不同）= **yaw
+  −π/2**（MC JE 顺时针 90°；往返 = 180° 观感 quirk 自然继承）。
+  **900 帧冷却**（15 s，会话态不入档——重载即清零）。音效：trigger
+  （进入）+ travel（抵达）。
+- **仅 Player 跨维**：`Entity::setWorld`（m_world 引用→指针，单咽喉
+  点）；per-dimension 实体 list，inactive 维**冻结**（不 tick = 时间
+  胶囊，DayCycle/Weather 全局恒推进 = MC 时间连续）；掉落物不跨维
+  （记档偏离）。
+- **渲染门控**（5 点，零 shader 改动）：暗红 clear 色（0.16,0.04,
+  0.04）/ 日月星不画 / 云不画 / 雨不画 / 雾 10→96 块；F3 dimension
+  行（19→20）。
+- **下界行为收口**（记档偏离族）：下界死亡 = **主世界重生**（MC 精
+  确：重生点恒主世界床/出生点）；7 per-block state 族主世界 only
+  （furnace/campfire/table/crop/sapling/moisture/beacon/fire）；下界
+  火恒定不烧尽；水桶泼水 no-op（水无下界语义，维度感知 FluidSim =
+  Phase C）；床睡眠 no-op；容器面板主世界 only；下界 Mob 空池
+  （Phase V3-3）。
+- **存档 format 30**：`player.dimension` 严格词表恒写（29 缺 =
+  overworld 迁移 / 29 携 = version lie 点名 / 未知词点名）+ `nether`
+  段 {blocks, fluids, states} 恒写空合法 + `nether_entities`（item
+  kind）恒写空合法；两维 portal 载入 rescan（孤立 → air）；nether 内
+  stateful 块须 nether.states 条目（PITS 383① 孪生）；gzip 编码零
+  改动（V3-7 容器自动覆盖）。
+- **首访体验**：Y 映射落 netherrack 带（32..122）内 = 岩中 portal
+  房（MC 同款）；熔岩海 = 向下 24 格可达（Phase C 群系/矿脉/caves
+  后下界立体化）。
 
 ## 流体桶与点燃
 

@@ -344,10 +344,11 @@ TEST(SoundBatTest, SqueakWavShipsAndParses) {
     EXPECT_EQ(peak, 3589);
 }
 
-TEST(SoundBatTest, SoundDirectoryGrowsToFortySeven) {
+TEST(SoundBatTest, SoundDirectoryGrowsToFortyNine) {
     // The sound set 41 -> 42 (the squeak — the V2-14 file) -> 43 (the
     // shear — the V2-15 file) -> 46 (the snow family — the three V2-16
-    // files) -> 47 (the portal ambience — the V3-1 Phase A file): each
+    // files) -> 47 (the portal ambience — the V3-1 Phase A file) -> 49
+    // (the portal trigger + travel — the V3-1 Phase B files): each
     // phase's new file is the only addition (the generate_sounds.py
     // re-run leaves the others byte-identical, the script's md5
     // discipline; the FNV pins hold each phase's bytes).
@@ -358,7 +359,7 @@ TEST(SoundBatTest, SoundDirectoryGrowsToFortySeven) {
             ++count;
         }
     }
-    EXPECT_EQ(count, 47u);
+    EXPECT_EQ(count, 49u);
 }
 
 // ---------------------------------------------------------------------------
@@ -490,9 +491,10 @@ TEST(SoundNoiseHelperRepairTest, NoiseWavsShipTextured) {
     for (const auto& e : want) {
         expectWavPin(e.name, e.samples, e.peak);
     }
-    // The census is unchanged by the repair (47 files — the directory
-    // count is the V3-1 Phase A pin: the V2-16's 46 + the portal
-    // ambience's 1; the repair edits in place, no additions).
+    // The census is the V3-1 Phase B pin (49 files — the directory
+    // count: the V2-16's 46 + the Phase A portal ambience's 1 + the
+    // Phase B trigger / travel's 2; the repair edits in place, no
+    // additions).
     std::size_t count = 0;
     for (const auto& entry :
          std::filesystem::directory_iterator("assets/sounds")) {
@@ -500,7 +502,7 @@ TEST(SoundNoiseHelperRepairTest, NoiseWavsShipTextured) {
             ++count;
         }
     }
-    EXPECT_EQ(count, 47u);
+    EXPECT_EQ(count, 49u);
 }
 
 // ---------------------------------------------------------------------------
@@ -516,4 +518,23 @@ TEST(SoundPortalTest, PortalAmbientWavShipsAndParses) {
     // the PITS 382 regression guard: a silent / degenerate (constant or
     // DC-ramp) synthesis cannot reproduce it.
     expectWavPin("portal_ambient", 52920, 12920);
+}
+
+// ---------------------------------------------------------------------------
+// V3-1 Phase B: the travel pipeline's cues (the sound set 47 -> 49).
+// ---------------------------------------------------------------------------
+
+TEST(SoundPortalTravelTest, TriggerAndTravelWavsShipAndParse) {
+    // The portal_trigger.wav (the generate_sounds.py's dedicated fixed
+    // seed 0xC5A2 — the squeak / sleep precedent): the entry cue (the
+    // Minecraft block.portal.trigger class — the short vortex swish as
+    // the countdown arms), 0.35 s, in the SFX volume class. The
+    // portal_travel.wav (seed 0xC6B3): the travel cue (the Minecraft
+    // block.portal.travel class — the fading-out vortex as the
+    // dimension switch completes), 1.0 s, in the 0.5 ambient volume
+    // class (the portal_ambient's twin). The exact peak pins are the
+    // PITS 382 regression guards: a silent / degenerate (constant or
+    // DC-ramp) synthesis cannot reproduce them.
+    expectWavPin("portal_trigger", 15434, 16177); // 0.35 s
+    expectWavPin("portal_travel", 44100, 10830);  // 1.0 s
 }

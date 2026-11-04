@@ -92,8 +92,7 @@ vocabulary; blocks name one via `sound_material`):
    snow_dig.wav        soft shush (double lowpass, the lightest dig face)
    snow_place.wav      muffled soft plop 85 Hz (double lowpass)
    snow_break.wav      quiet powder crumble (double lowpass, slow decay)
--- V3-1 Phase A nether portal (1 ambient; the trigger / travel one-shots
-      are Phase B — the design's scope split):
+-- V3-1 Phase A nether portal (1 ambient):
    portal_ambient.wav  the low portal hum (Minecraft's block.portal.
                        ambient class — a ~110 Hz body with a 5.2 Hz
                        swirl tremolo + a quiet 220 Hz overtone, under a
@@ -102,6 +101,27 @@ vocabulary; blocks name one via `sound_material`):
                        bakes the volume, the squeak's 0.1-class twin x5):
                        played spatialized at the visible portal cell on
                        the per-frame roll (p = 1 / (2 s x 60))
+-- V3-1 Phase B nether portal (2 one-shots; the travel pipeline's
+      presentation cues — the Minecraft block.portal.trigger / travel
+      pair, the design's D6 step 6):
+   portal_trigger.wav  the entry cue (Minecraft's block.portal.trigger
+                       class — the short vortex swish as the player
+                       steps in and the countdown arms): a 140 -> 420 Hz
+                       rising glide (the pull-in) under a fixed-seed
+                       double-lowpassed noise whoosh, 0.35 s, in the
+                       SFX volume class (the splash / bow precedent),
+                       played spatialized at the portal cell
+   portal_travel.wav   the travel cue (Minecraft's block.portal.travel
+                       class — the fading-out vortex as the dimension
+                       switch completes, the "fade" of the design's
+                       D6): a 320 -> 90 Hz exponential descending glide
+                       (the let-go) with a 6 Hz swirl tremolo under a
+                       fixed-seed double-lowpassed noise decay, 1.0 s,
+                       in the 0.5 ambient volume class (the
+                       portal_ambient's twin — the master amplitude
+                       bakes the volume), played 2D centered (the
+                       switch is global, not a point in space — the
+                       thunder / ambience precedent)
 """
 import math
 import os
@@ -838,6 +858,51 @@ def portal_ambient():
     return sound(dur, f)
 
 
+def portal_trigger():
+    """V3-1 Phase B: the portal entry cue (Minecraft's block.portal.
+    trigger class — the short vortex swish as the player steps in and
+    the countdown arms): a 140 -> 420 Hz rising glide (the pull-in)
+    under a fixed-seed double-lowpassed noise whoosh, 0.35 s, in the
+    SFX volume class (the splash / bow precedent). The fixed-LCG /
+    sine paradigm, dedicated seed — a re-run leaves every other file
+    byte-identical."""
+    lcg = Lcg(0xC5A2)  # dedicated fixed seed (unique to this sound)
+    dur = 0.35
+    n = int(RATE * dur)
+    noise = lowpass3(lowpass3([lcg.next() for _ in range(n)]))
+
+    def f(t, _):
+        i = int(t * RATE)
+        fr = 140.0 + 280.0 * (t / dur)  # the pull-in glide
+        tone = math.sin(2 * math.pi * fr * t) * 0.4
+        return (tone + noise[i] * 0.5) * env(t, dur, 6.0) * 0.8
+    return sound(dur, f)
+
+
+def portal_travel():
+    """V3-1 Phase B: the portal travel cue (Minecraft's block.portal.
+    travel class — the fading-out vortex as the dimension switch
+    completes): a 320 -> 90 Hz exponential descending glide (the
+    let-go) with a 6 Hz swirl tremolo under a fixed-seed
+    double-lowpassed noise decay, 1.0 s, in the 0.5 ambient volume
+    class (the portal_ambient's twin — the master amplitude bakes the
+    volume; the travel sound is 2D centered, the thunder precedent).
+    The fixed-LCG / sine paradigm, dedicated seed — a re-run leaves
+    every other file byte-identical."""
+    lcg = Lcg(0xC6B3)  # dedicated fixed seed (unique to this sound)
+    dur = 1.0
+    n = int(RATE * dur)
+    noise = lowpass3(lowpass3([lcg.next() for _ in range(n)]))
+
+    def f(t, _):
+        i = int(t * RATE)
+        fr = 320.0 * (90.0 / 320.0) ** (t / dur)  # exponential glide down
+        swirl = 0.7 + 0.3 * math.sin(2 * math.pi * 6.0 * t)
+        tone = math.sin(2 * math.pi * fr * t) * 0.5 * swirl
+        return (tone + noise[i] * 0.25) * amb_env(t, dur, 0.05, 0.4) * 0.5
+    return sound(dur, f)
+
+
 SOUNDS = {
     "dig": dig,
     "place": place,
@@ -903,6 +968,12 @@ SOUNDS = {
     # per-frame roll, spatialized at the portal cell — the bat squeak's
     # cadence pattern, the 0.5 volume class baked in).
     "portal_ambient": portal_ambient,
+    # V3-1 Phase B: the travel pipeline's presentation cues (the
+    # Minecraft block.portal.trigger / travel pair): the entry swish
+    # (spatialized at the portal cell, the countdown-arm frame) and the
+    # travel fade (2D centered, the dimension-switch completion frame).
+    "portal_trigger": portal_trigger,
+    "portal_travel": portal_travel,
 }
 
 

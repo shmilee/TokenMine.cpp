@@ -463,6 +463,32 @@ def nether_portal(x, y):
             clamp(84 + noise(x, y, 1008, 12)), 200)
 
 
+def netherrack(x, y):
+    """V3-1 Phase B: the netherrack tile (the `netherrack` block's face —
+    the nether's identity material, one tile serves all six cube faces
+    like the snow / obsidian precedent). Minecraft's netherrack look: a
+    dark reddish-purple rock — a mottled crust with darker pits and faint
+    violet flecks. The per-pixel hash(x, y, salt) discipline (the lava /
+    portal precedent: h2 decides the pit / fleck membership, the noise
+    salts grain it). New salts 1009..1016 (after the portal's 1001..1008);
+    every existing texture stays pixel-identical."""
+    h = h2(x, y, 1009)
+    if h % 100 < 8:
+        # Dark pit: near-black violet (the netherrack's cratered grain).
+        return (clamp(44 + noise(x, y, 1010, 8)),
+                clamp(30 + noise(x, y, 1011, 7)),
+                clamp(38 + noise(x, y, 1012, 8)), 255)
+    if h % 100 < 22:
+        # Violet fleck (the faint crystal grain).
+        return (clamp(116 + noise(x, y, 1013, 10)),
+                clamp(66 + noise(x, y, 1014, 9)),
+                clamp(92 + noise(x, y, 1015, 10)), 255)
+    # Base: dark reddish-brown rock (the cobblestone single-value
+    # monochrome grain — hue constant, brightness varies).
+    v = noise(x, y, 1016, 12)
+    return (clamp(96 + v), clamp(56 + v), clamp(64 + v), 255)
+
+
 def gold_block(x, y):
     """V2-7: the gold block (the beacon pyramid material next to the iron
     block). A bright, uniform metallic gold with a faint brushed noise
@@ -1018,6 +1044,10 @@ TEXTURES = {
     # obsidian precedent). A new tile only, every existing PNG stays
     # byte-identical (salts 1001..1008).
     "nether_portal": nether_portal,
+    # V3-1 Phase B: the netherrack (the nether's identity material — the
+    # flat slab world's surface + subsurface). A new tile only, every
+    # existing PNG stays byte-identical (salts 1009..1016).
+    "netherrack": netherrack,
 }
 
 

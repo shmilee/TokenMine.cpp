@@ -475,7 +475,17 @@ void Lighting::updateRegion(World& world, const BlockRegistry& blocks,
                             continue; // outside the ±R footprint: untouched
                         }
                         bool open = true;
-                        int light = kMaxLight; // sky light just above y top
+                        // V3-1 Phase B (D5, the recon §七 two-site rule,
+                        // site 2 of 2): the skyless dimension (the nether)
+                        // has no daylight source — the rescan's top reads 0
+                        // (the overworld's kMaxLight). The per-column
+                        // `light` then stays 0 down the open run, so the
+                        // stored sky field is structurally 0 (the
+                        // day/night shader term and the night floor are
+                        // inert). propagateAll's skySourceLevel parameter
+                        // is the twin seam (the nether's full re-light
+                        // passes 0 at the call site).
+                        int light = world.skyless() ? 0 : kMaxLight;
                         for (int cy = kLayers - 1; cy >= 0; --cy) {
                             const Chunk* chunk = world.findChunk({cx, cy, cz});
                             if (chunk == nullptr) {

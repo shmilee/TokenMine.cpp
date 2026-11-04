@@ -56,6 +56,13 @@ constexpr float kItemBobAmplitude = 0.05f;
 } // namespace
 
 void Game::updateEntities(double dt) {
+    // V3-1 Phase B (D3): the ACTIVE dimension's entity list + mob system
+    // (the player's dimension ticks; the other dimension's entities
+    // FREEZE — no tick, the references stay valid, the design's ruling).
+    // In the overworld (the default) these aliases are the pre-Phase-B
+    // ents / m_mobs — the bit-identical red line.
+    std::vector<std::unique_ptr<Entity>>& ents = currentEntities();
+    MobSystem& mobs = playerInNether() ? m_nether.mobs : m_mobs;
     // Mob spawning (Phase 20): a deterministic frame cadence from the data
     // config (first_spawn_frame keeps the 60-frame no-input baseline
     // mob-free). The scan is a pure function of world + player, so the
@@ -63,11 +70,15 @@ void Game::updateEntities(double dt) {
     // The cadence is the data base scaled by the difficulty (Phase 25:
     // check_every_frames / hostileSpawnRateScale — 30 -> 60/30/20 for
     // easy/normal/hard). Normal = the base itself (baseline unchanged).
-    if (m_mobs.mobsEnabled &&
-        m_frameCount >= m_mobs.spawnConfig.firstSpawnFrame &&
+    // V3-1 Phase B: the nether's empty pool (mobs list empty — the
+    // structural-immunity root; Phase C fills it) fast-exits here: the
+    // pick would have no type to walk, so the gate adds the empty-
+    // config check (the belt over the Phase C data).
+    if (mobs.mobsEnabled && !mobs.spawnConfig.mobs.empty() &&
+        m_frameCount >= mobs.spawnConfig.firstSpawnFrame &&
         m_frameCount %
-                checkEveryFramesFor(m_mobs.spawnConfig.checkEveryFrames,
-                                    m_mobs.difficulty) ==
+                checkEveryFramesFor(mobs.spawnConfig.checkEveryFrames,
+                                    mobs.difficulty) ==
             0) {
         attemptMobSpawn();
     }
@@ -82,23 +93,23 @@ void Game::updateEntities(double dt) {
     // the swept arrow-vs-mob hit test below can run over each arrow's
     // per-step displacement.
     std::vector<std::pair<Projectile*, Vec3>> arrowSteps;
-    for (auto& entity : m_entities) {
+    for (auto& entity : ents) {
         if (auto* arrow = dynamic_cast<Projectile*>(entity.get())) {
             arrowSteps.push_back({arrow, arrow->position()});
         }
     }
     // Phase 73: INDEX loop (not range-for): the skeleton's shoot
     // callback (invoked inside mob->update) pushes a new arrow into
-    // m_entities — a vector reallocation would DANGLE the range-for's
+    // ents — a vector reallocation would DANGLE the range-for's
     // reference (latent P27 UB, exposed the first time a skeleton
     // finally got an unobstructed line of sight). The index re-fetches
-    // m_entities[i] from the current storage every iteration, so the
+    // ents[i] from the current storage every iteration, so the
     // deferred arrow is reached and takes its spawn-frame step — the
-    // original intent. (No pass ERASES from m_entities mid-loop, so the
+    // original intent. (No pass ERASES from ents mid-loop, so the
     // index is stable enough; removals run in the post-loop despawn
     // pass.)
-    for (std::size_t i = 0; i < m_entities.size(); ++i) {
-        auto& entity = m_entities[i];
+    for (std::size_t i = 0; i < ents.size(); ++i) {
+        auto& entity = ents[i];
         if (auto* mob = dynamic_cast<MobEntity*>(entity.get())) {
             mob->setPlayer(playerPos, playerAlive);
             // V2-4: the weather feed (the setPlayer pattern) — rain
@@ -166,7 +177,7 @@ void Game::updateEntities(double dt) {
                 continue;  // consumed: no mob test this step
             }
         }
-        for (auto& entity : m_entities) {
+        for (auto& entity : ents) {
             auto* mob = dynamic_cast<MobEntity*>(entity.get());
             if (mob == nullptr || mob->dead() || mob == arrow->source()) {
                 continue;  // the shooter's own arrow never self-hits
@@ -209,22 +220,22 @@ void Game::updateEntities(double dt) {
     // (collidesWithEntities). Repeated until stable, capped (see
     // separateEntityList).
     std::vector<Entity*> bodies;
-    bodies.reserve(m_entities.size() + 1);
+    bodies.reserve(ents.size() + 1);
     bodies.push_back(m_player.operator->());
-    for (auto& entity : m_entities) {
+    for (auto& entity : ents) {
         bodies.push_back(entity.get());
     }
     separateEntityList(bodies);
     // Item merge: index order, `j` absorbed into `i` (j > i). A removed
     // entity is skipped as a future merge target, so each item is absorbed
     // at most once (deterministic result for a given spawn order).
-    const std::size_t n = m_entities.size();
+    const std::size_t n = ents.size();
     std::vector<bool> gone(n, false);
     for (std::size_t i = 0; i < n; ++i) {
         if (gone[i]) {
             continue;
         }
-        auto* a = dynamic_cast<ItemEntity*>(m_entities[i].get());
+        auto* a = dynamic_cast<ItemEntity*>(ents[i].get());
         if (a == nullptr) {
             continue;
         }
@@ -232,7 +243,7 @@ void Game::updateEntities(double dt) {
             if (gone[j]) {
                 continue;
             }
-            auto* b = dynamic_cast<ItemEntity*>(m_entities[j].get());
+            auto* b = dynamic_cast<ItemEntity*>(ents[j].get());
             if (b != nullptr && b->canMergeInto(*a)) {
                 a->absorb(*b);
                 gone[j] = true;
@@ -259,7 +270,7 @@ void Game::updateEntities(double dt) {
         if (gone[i]) {
             continue;
         }
-        auto* item = dynamic_cast<ItemEntity*>(m_entities[i].get());
+        auto* item = dynamic_cast<ItemEntity*>(ents[i].get());
         if (item != nullptr) {
             if (!item->pickupReady()) {
                 continue;
@@ -276,7 +287,7 @@ void Game::updateEntities(double dt) {
             }
             continue;
         }
-        auto* arrow = dynamic_cast<Projectile*>(m_entities[i].get());
+        auto* arrow = dynamic_cast<Projectile*>(ents[i].get());
         if (arrow != nullptr) {
             if (arrow->stuck() && !arrow->ammoItem().empty()) {
                 const Vec3 disp =
@@ -292,7 +303,7 @@ void Game::updateEntities(double dt) {
         // items (the dynamic_cast branch — the item / arrow paths above
         // are bit-level unchanged): the frame-locked pull + the room
         // check (the magnet never pushes an orb through a block).
-        auto* orb = dynamic_cast<ExpOrbEntity*>(m_entities[i].get());
+        auto* orb = dynamic_cast<ExpOrbEntity*>(ents[i].get());
         if (orb == nullptr || !orb->pickupReady()) {
             continue;
         }
@@ -318,7 +329,7 @@ void Game::updateEntities(double dt) {
         if (gone[i]) {
             continue;
         }
-        auto* item = dynamic_cast<ItemEntity*>(m_entities[i].get());
+        auto* item = dynamic_cast<ItemEntity*>(ents[i].get());
         if (item == nullptr || !item->pickupReady()) {
             continue;
         }
@@ -361,7 +372,7 @@ void Game::updateEntities(double dt) {
         if (gone[i]) {
             continue;
         }
-        auto* orb = dynamic_cast<ExpOrbEntity*>(m_entities[i].get());
+        auto* orb = dynamic_cast<ExpOrbEntity*>(ents[i].get());
         if (orb == nullptr || !orb->pickupReady()) {
             continue;
         }
@@ -387,7 +398,7 @@ void Game::updateEntities(double dt) {
             if (gone[i]) {
                 continue;
             }
-            auto* arrow = dynamic_cast<Projectile*>(m_entities[i].get());
+            auto* arrow = dynamic_cast<Projectile*>(ents[i].get());
             if (arrow == nullptr || !arrow->stuck() ||
                 arrow->ammoItem().empty()) {
                 continue;
@@ -416,7 +427,7 @@ void Game::updateEntities(double dt) {
     // here, AFTER the list rebuild — pushing during the scan would lose
     // them) + mobs beyond the despawn distance from the player.
     const float despawnSq =
-        m_mobs.spawnConfig.despawnDistance * m_mobs.spawnConfig.despawnDistance;
+        mobs.spawnConfig.despawnDistance * mobs.spawnConfig.despawnDistance;
     struct PendingDrop {
         std::string item;
         int count;
@@ -437,7 +448,7 @@ void Game::updateEntities(double dt) {
         if (gone[i]) {
             continue;
         }
-        MobEntity* mob = dynamic_cast<MobEntity*>(m_entities[i].get());
+        MobEntity* mob = dynamic_cast<MobEntity*>(ents[i].get());
         if (mob != nullptr && !mob->dead()) {
             const Vec3 d = mob->position() - playerPos;
             if (lengthSq(d) > despawnSq) {
@@ -445,7 +456,7 @@ void Game::updateEntities(double dt) {
                 continue;
             }
         }
-        if (!m_entities[i]->shouldDespawn()) {
+        if (!ents[i]->shouldDespawn()) {
             continue;
         }
         gone[i] = true;
@@ -508,29 +519,30 @@ void Game::updateEntities(double dt) {
     kept.reserve(n);
     for (std::size_t i = 0; i < n; ++i) {
         if (!gone[i]) {
-            kept.push_back(std::move(m_entities[i]));
-        } else if (auto* mob = dynamic_cast<MobEntity*>(m_entities[i].get())) {
+            kept.push_back(std::move(ents[i]));
+        } else if (auto* mob = dynamic_cast<MobEntity*>(ents[i].get())) {
             // ENT-1: free the mob's dynamic swing mesh (if it ever swung
             // — the key is absent otherwise) so its GL buffers die with
             // the entity. The pointer key is valid here: the pointee is
             // destroyed only AFTER this rebuild (unique_ptr move).
-            m_mobs.swingMeshes.erase(mob);
+            mobs.swingMeshes.erase(mob);
             // V2-15: the wool variant's per-entity render assets (the
             // same despawn point — the static variant mesh's GL buffers
             // die with the entity, the swingMeshes twin). A non-wool
             // mob never gets a key (structural: the maps stay untouched).
-            m_mobs.woolVariants.erase(mob);
-            m_mobs.woolVariantMeshes.erase(mob);
+            mobs.woolVariants.erase(mob);
+            mobs.woolVariantMeshes.erase(mob);
         }
     }
-    m_entities = std::move(kept);
+    ents = std::move(kept);
     for (const PendingDrop& drop : mobDrops) {
         // Validity is guaranteed: drops are validated at init. The drop
         // spawns at the mob's bottom-center with zero velocity (the same
         // deterministic rest-position convention as broken blocks).
         const Item& it = m_items.at(m_items.idForName(drop.item));
-        m_entities.push_back(std::make_unique<ItemEntity>(
-            m_world, m_blocks, it.name, it.maxStack, drop.count, drop.pos));
+        ents.push_back(std::make_unique<ItemEntity>(
+            currentWorld(), m_blocks, it.name, it.maxStack, drop.count,
+            drop.pos));
     }
     // V2-11 (XP): the dead mobs' XP orbs (the single spawn point; the
     // value is data-validated 1..9 at init — the belt clamp in the
@@ -552,8 +564,8 @@ void Game::spawnExpOrb(int value, Vec3 pos) {
     if (value <= 0) {
         return;
     }
-    m_entities.push_back(std::make_unique<ExpOrbEntity>(m_world, m_blocks,
-                                                        value, pos));
+    currentEntities().push_back(std::make_unique<ExpOrbEntity>(
+        currentWorld(), m_blocks, value, pos));
 }
 
 void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
@@ -575,7 +587,7 @@ void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
     // leak would light the next draw (mobs, chunks, arrows) with this
     // drop's cell light.
     const bool dropLightOn = m_config.getBool("render.drop_light", true);
-    for (const auto& entity : m_entities) {
+    for (const auto& entity : currentEntities()) {
         const ItemEntity* item =
             dynamic_cast<const ItemEntity*>(entity.get());
         if (item == nullptr) {
@@ -650,7 +662,7 @@ void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
             // reset below restores the 0 every other draw expects).
             if (dropLightOn) {
                 const std::pair<float, float> light =
-                    itemDropLight(m_world, *item);
+                    itemDropLight(currentWorld(), *item);
                 m_basicShader.setUniform1i("u_useLightOverride", 1);
                 m_basicShader.setUniform1f("u_lightOverrideSky", light.first);
                 m_basicShader.setUniform1f("u_lightOverrideBlock",
@@ -710,7 +722,7 @@ void Game::drawItemEntities(const Mat4& view, const Mat4& projection,
         // override must be set first — the model path's pattern).
         if (dropLightOn) {
             const std::pair<float, float> light =
-                itemDropLight(m_world, *item);
+                itemDropLight(currentWorld(), *item);
             m_basicShader.bind();
             m_basicShader.setUniform1i("u_useLightOverride", 1);
             m_basicShader.setUniform1f("u_lightOverrideSky", light.first);
@@ -771,16 +783,23 @@ const Mesh& Game::itemModelMesh(ItemID id) {
 }
 
 void Game::attemptMobSpawn() {
+    // V3-1 Phase B: the ACTIVE dimension's mob system / world / entity
+    // list (the overworld aliases are the pre-Phase-B m_mobs / world /
+    // ents — the bit-identical red line; the nether's empty pool
+    // makes this a structural no-op there — Phase C fills it).
+    MobSystem& mobs = playerInNether() ? m_nether.mobs : m_mobs;
+    World& world = currentWorld();
+    std::vector<std::unique_ptr<Entity>>& ents = currentEntities();
     // The live-mob census (count + bottom-centers for the clearance rule).
     int mobCount = 0;
     std::vector<Vec3> mobPositions;
-    for (const auto& entity : m_entities) {
+    for (const auto& entity : ents) {
         if (dynamic_cast<const MobEntity*>(entity.get()) != nullptr) {
             ++mobCount;
             mobPositions.push_back(entity->position());
         }
     }
-    if (mobCount >= m_mobs.spawnConfig.maxMobs) {
+    if (mobCount >= mobs.spawnConfig.maxMobs) {
         MC_LOG_DEBUG("mob spawn f" + std::to_string(m_frameCount) +
                      ": cap reached (" + std::to_string(mobCount) +
                      " live), attempt skipped");
@@ -796,14 +815,14 @@ void Game::attemptMobSpawn() {
     // light is simply wasted (e.g. a zombie pick by day) — the cadence,
     // not the type, decides when attempts happen.
     const std::uint64_t pick =
-        splitmix64(static_cast<std::uint64_t>(m_generator->seed()) ^
+        splitmix64(static_cast<std::uint64_t>(currentSeed()) ^
                    (std::uint64_t{0x9E3779B97F4A7C15} *
                     static_cast<std::uint64_t>(m_frameCount)));
-    const Mob& def = m_mobs.mobTypes.at(m_mobs.mobTypes.idForName(
-        m_mobs.spawnConfig
-            .mobs[m_mobs.spawnConfig.pickIndex(pick %
+    const Mob& def = mobs.mobTypes.at(mobs.mobTypes.idForName(
+        mobs.spawnConfig
+            .mobs[mobs.spawnConfig.pickIndex(pick %
                                           static_cast<std::uint64_t>(
-                                              m_mobs.spawnConfig.totalWeight()))]
+                                              mobs.spawnConfig.totalWeight()))]
             .id));
 
     // Player anchor: the player's column + the floor block under its feet
@@ -813,7 +832,7 @@ void Game::attemptMobSpawn() {
     const int pz = static_cast<int>(std::floor(p.z));
     int floorY = -1;
     for (int y = static_cast<int>(std::floor(p.y)); y >= 0; --y) {
-        if (m_blocks.at(m_world.getBlock(px, y, pz)).properties.solid) {
+        if (m_blocks.at(world.getBlock(px, y, pz)).properties.solid) {
             floorY = y;
             break;
         }
@@ -824,16 +843,16 @@ void Game::attemptMobSpawn() {
     // Spawn protection (Phase 25): hostiles are gated by the difficulty's
     // radius around the world spawn point; passive mobs pass 0 (exempt).
     const float protection = def.properties.hostile
-        ? spawnProtectionRadius(m_mobs.difficulty)
+        ? spawnProtectionRadius(mobs.difficulty)
         : 0.0f;
-    auto cell = findMobSpawnCell(m_world, m_blocks, m_mobs.spawnConfig.minRadius,
-                                 m_mobs.spawnConfig.maxRadius, px, pz, floorY,
+    auto cell = findMobSpawnCell(world, m_blocks, mobs.spawnConfig.minRadius,
+                                 mobs.spawnConfig.maxRadius, px, pz, floorY,
                                  def.model.width, def.model.height,
                                  m_dayCycle.dayFactor(),
                                  def.properties.spawnMaxLight,
                                  m_player->aabbMin(), m_player->aabbMax(),
-                                 mobPositions, protection, m_mobs.spawnPoint.x,
-                                 m_mobs.spawnPoint.z, m_nightSkyLevel,
+                                 mobPositions, protection, mobs.spawnPoint.x,
+                                 mobs.spawnPoint.z, m_nightSkyLevel,
                                  def.properties.spawnsInAir);
     if (!cell) {
         MC_LOG_DEBUG("mob spawn f" + std::to_string(m_frameCount) +
@@ -850,7 +869,7 @@ void Game::attemptMobSpawn() {
     const float spawnY = def.properties.spawnsInAir
         ? static_cast<float>(cell->y)
         : static_cast<float>(cell->y) +
-              spawnFloorTop(m_world, m_blocks, cell->x, cell->y, cell->z);
+              spawnFloorTop(world, m_blocks, cell->x, cell->y, cell->z);
     const Vec3 spawn {static_cast<float>(cell->x) + 0.5f, spawnY,
                       static_cast<float>(cell->z) + 0.5f};
     MC_LOG_DEBUG("mob spawn f" + std::to_string(m_frameCount) +
@@ -860,11 +879,11 @@ void Game::attemptMobSpawn() {
     // The per-mob seed is the world seed mixed with the (increasing)
     // spawn counter, so the same runs produce the same mobs with the
     // same AI streams.
-    ++m_mobs.spawnCounter;
+    ++mobs.spawnCounter;
     const std::uint64_t seed =
-        static_cast<std::uint64_t>(m_generator->seed()) ^
-        (std::uint64_t{0x9E3779B97F4A7C15} * m_mobs.spawnCounter);
-    auto mob = std::make_unique<MobEntity>(m_world, m_blocks, def, spawn,
+        static_cast<std::uint64_t>(currentSeed()) ^
+        (std::uint64_t{0x9E3779B97F4A7C15} * mobs.spawnCounter);
+    auto mob = std::make_unique<MobEntity>(world, m_blocks, def, spawn,
                                            seed);
     // Phase 58: the fire system reaches the mobs (Minecraft's lava ignites
     // every entity). Arm from the SAME fire definition + config duration
@@ -880,7 +899,7 @@ void Game::attemptMobSpawn() {
     // Hostile damage is scaled by the difficulty (Phase 25); passive mobs
     // (attack_damage 0 in the data) pass the scale untouched.
     const float damageScale = def.properties.hostile
-        ? hostileDamageScale(m_mobs.difficulty)
+        ? hostileDamageScale(mobs.difficulty)
         : 1.0f;
     // Phase 46: a landed melee hit also applies the mob's on_hit_effect
     // (the spider's poison) — the effect name is init-cross-checked, so
@@ -912,7 +931,7 @@ void Game::attemptMobSpawn() {
     // hurtPlayer so the update pass sweeps it against the player too.
     // Damage = the data attack_damage × the difficulty scale (the melee
     // callback above uses the same scale). The raw pointer stays valid:
-    // the mob lives in m_entities until the despawn pass removes it, and
+    // the mob lives in ents until the despawn pass removes it, and
     // the callback only runs while the mob is alive (runAi).
     if (def.properties.shootRange > 0.0f) {
         const float arrowDamage = def.properties.attackDamage * damageScale;
@@ -932,8 +951,8 @@ void Game::attemptMobSpawn() {
         const int arrowEffectTier = def.properties.arrowEffectTier;
         MobEntity* raw = mob.get();
         mob->setShootCallback(
-            [this, raw, arrowSpeed, arrowDamage, arrowAmmo, arrowEffectName,
-             arrowEffectDuration, arrowEffectTier]() {
+            [this, raw, &world, &ents, arrowSpeed, arrowDamage, arrowAmmo,
+             arrowEffectName, arrowEffectDuration, arrowEffectTier]() {
             if (m_player->isDead() || raw->dead()) {
                 return;
             }
@@ -949,7 +968,7 @@ void Game::attemptMobSpawn() {
             // already consumed the cooldown, so the skeleton retries after
             // the full interval (Minecraft's behavior: it keeps nocking
             // but never releases).
-            if (!hasLineOfSight(m_world, m_blocks, eye, target)) {
+            if (!hasLineOfSight(world, m_blocks, eye, target)) {
                 MC_LOG_DEBUG("skeleton shot blocked (no line of sight) from ("
                              + std::to_string(eye.x) + ", " +
                              std::to_string(eye.y) + ", " +
@@ -978,12 +997,12 @@ void Game::attemptMobSpawn() {
                 effectTier = arrowEffectTier;
             }
             auto arrow = std::make_unique<Projectile>(
-                m_world, m_blocks, eye + dir * kArrowSpawnOffset, dir,
+                world, m_blocks, eye + dir * kArrowSpawnOffset, dir,
                 arrowSpeed, arrowDamage, /*hurtPlayer=*/true,
                 /*power=*/1.0f, arrowAmmo, effectId, effectDuration,
                 effectTier);
             arrow->setSource(raw);  // the hit test skips its shooter
-            m_entities.push_back(std::move(arrow));
+            ents.push_back(std::move(arrow));
             m_sound.play("shoot");
             MC_LOG_DEBUG("skeleton shot: from (" + std::to_string(eye.x) +
                          ", " + std::to_string(eye.y) + ", " +
@@ -1005,7 +1024,7 @@ void Game::attemptMobSpawn() {
                 m_sound.play(ambientName, origin);
             });
     }
-    m_entities.push_back(std::move(mob));
+    ents.push_back(std::move(mob));
 }
 
 void Game::drawMobs(const Mat4& view, const Mat4& projection) {
@@ -1019,7 +1038,7 @@ void Game::drawMobs(const Mat4& view, const Mat4& projection) {
     // every other mob takes the STATIC per-type cache (the fast path =
     // structural immunity: phase 0 is the identity pose, so the static
     // mesh is byte-identical to a phase-0 frame).
-    for (const auto& entity : m_entities) {
+    for (const auto& entity : currentEntities()) {
         const MobEntity* mob =
             dynamic_cast<const MobEntity*>(entity.get());
         if (mob == nullptr) {
@@ -1091,7 +1110,7 @@ void Game::drawMobShadows(const Mat4& view, const Mat4& projection) {
         float side;
     };
     std::vector<Shadow> shadows;
-    for (const auto& entity : m_entities) {
+    for (const auto& entity : currentEntities()) {
         const MobEntity* mob =
             dynamic_cast<const MobEntity*>(entity.get());
         if (mob == nullptr) {
@@ -1397,7 +1416,7 @@ void Game::drawArrows(const Mat4& view, const Mat4& projection) {
     m_basicShader.bind();
     m_basicShader.setUniform1i("u_useTexture", 0);
     m_basicShader.setUniform1f("u_alpha", 1.0f); // arrows are opaque
-    for (const auto& entity : m_entities) {
+    for (const auto& entity : currentEntities()) {
         const Projectile* arrow =
             dynamic_cast<const Projectile*>(entity.get());
         if (arrow == nullptr) {
@@ -1494,7 +1513,7 @@ void Game::drawExpOrbs(const Mat4& view, const Mat4& projection) {
     // v2.10.0 pipeline is byte-identical (the HUD bar is the documented
     // pixel exception, the gate-182 re-anchor).
     bool any = false;
-    for (const auto& entity : m_entities) {
+    for (const auto& entity : currentEntities()) {
         if (dynamic_cast<const ExpOrbEntity*>(entity.get()) != nullptr) {
             any = true;
             break;
@@ -1512,7 +1531,7 @@ void Game::drawExpOrbs(const Mat4& view, const Mat4& projection) {
     m_basicShader.setUniform1f("u_alpha", 1.0f); // orbs are opaque
     m_basicShader.setUniform3f("u_color", ExpOrbEntity::kColorR,
                                ExpOrbEntity::kColorG, ExpOrbEntity::kColorB);
-    for (const auto& entity : m_entities) {
+    for (const auto& entity : currentEntities()) {
         const ExpOrbEntity* orb =
             dynamic_cast<const ExpOrbEntity*>(entity.get());
         if (orb == nullptr) {
@@ -1527,10 +1546,10 @@ void Game::drawExpOrbs(const Mat4& view, const Mat4& projection) {
         const BlockPos cell =
             entityCenterCell(orb->position(), orb->height());
         const float sky = static_cast<float>(
-                              m_world.getSkyLight(cell.x, cell.y, cell.z)) /
+                              currentWorld().getSkyLight(cell.x, cell.y, cell.z)) /
                           static_cast<float>(kMaxLight);
         const float blockLight = static_cast<float>(
-                                      m_world.getBlockLight(cell.x, cell.y,
+                                      currentWorld().getBlockLight(cell.x, cell.y,
                                                            cell.z)) /
                                  static_cast<float>(kMaxLight);
         m_basicShader.setUniform1i("u_useLightOverride", 1);

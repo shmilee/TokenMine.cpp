@@ -7,7 +7,7 @@
 **本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒<br>
 （C++20 / SDL3 / OpenGL 3.3，自研 JSON/PNG，内容全数据驱动）。<br>
 确定性是一级要求——无输入运行逐帧字节可复现。<br>
-v3.3.0 已发布（**手柄支持**：Xbox 布局左/右摇杆 + 9 键映射，键鼠手柄可同用；tag `v3.3.0`；前版 v3.2.0 = 下界传送门框【4×5 框点火激活，下界世界随 v3.4.0】/ v3.1.0 = 存档 gzip 压缩【默认开，旧档零迁移，门档 6.3×】）· 3.x「世界扩展」期进行中，下一版 v3.4.0 = V3-1 Phase B 下界世界 + 真传送（任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
+v3.4.0 已发布（**下界世界 + 真传送**：站进传送门 = 真的到下界【熔岩海 + netherrack + 无天穹 + 8:1 坐标映射 + 往返】；tag `v3.4.0`；前版 v3.3.0 = 手柄支持 / v3.2.0 = 下界传送门框 / v3.1.0 = 存档 gzip 压缩）· 3.x「世界扩展」期进行中，下一版 v3.5.x = 下界内容族（任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
 
 [![GitHub stars](https://img.shields.io/github/stars/shmilee/TokenMine.cpp?style=flat-square)](https://github.com/shmilee/TokenMine.cpp/stargazers)
 [![MIT license](https://img.shields.io/badge/license-MIT-555555?style=flat-square)](LICENSE)
@@ -106,9 +106,10 @@ cmake --build build
   群系、顶部 / 双 slab、环境光遮蔽（smooth lighting）、天气（雨 / 雷）、
   新手教程系列、Steve 皮肤、滚轮缩放 / 双击 Space 飞行 / 24 小时时钟
 - **v3.0.0**（当前）：3.x「世界扩展」开启——存档 gzip 压缩（v3.1.0，
-  默认开，旧档直读零迁移，门档实测 6.3×）+ 下界传送门（v3.2.0：4×5 框
-  点火激活/去激活/站入，下界世界随 v3.4.0 到）+ 手柄支持（v3.3.0：
-  Xbox 布局，键鼠手柄同用）；netherite 材料链与 demo 回放在列
+  默认开，旧档直读零迁移，门档实测 6.3×）+ **下界维度**（v3.2.0 传送
+  门框 4×5 点火激活/去激活/站入 → v3.4.0 下界世界 + 真传送：熔岩海/
+  netherrack/无天穹/8:1 映射/往返）+ 手柄支持（v3.3.0：Xbox 布局，键
+  鼠手柄同用）；下界内容族（v3.5.x）/ netherite 材料链 / demo 回放在列
 
 逐版明细与发布历史：[`docs/CHANGELOG.md`](docs/CHANGELOG.md)（当前时
 代）+ `docs/archive/*/CHANGELOG.md`（历史时代）+ GitHub Releases。
@@ -128,7 +129,7 @@ cmake --build build
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（386 条，都踩过） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（387 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；v2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

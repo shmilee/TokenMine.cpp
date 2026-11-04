@@ -1,0 +1,12 @@
+{
+  "id": "netherrack",
+  "properties": {
+    "hardness": 0.4,
+    "drops": "netherrack",
+    "sound_material": "stone"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "netherrack", "side": "netherrack", "bottom": "netherrack" }
+  }
+}

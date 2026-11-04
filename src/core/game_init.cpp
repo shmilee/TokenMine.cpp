@@ -381,6 +381,12 @@ Result<void> Game::buildScene() {
     // complete, no portal cell can exist in the tracking set).
     m_states.obsidianId = m_blocks.idForName("obsidian");
     m_states.portalId = m_blocks.idForName("nether_portal");
+    // V3-1 Phase B: the nether's generation content (the obsidianId
+    // pattern — init name lookup; the shipped asset set carries both, so
+    // a stripped set names them invalid and the nether is unbuildable —
+    // ensureNether's MC_FAIL at the first travel).
+    m_states.netherrackId = m_blocks.idForName("netherrack");
+    m_states.bedrockId = m_blocks.idForName("bedrock");
 
     // -- texture atlas (16x16 tiles from assets/textures/blocks/*.png) --------
     // The layout is data (data/textures/block_atlas.json): explicit cells
@@ -1663,6 +1669,12 @@ Result<void> Game::buildScene() {
     // a loaded save finds the player's portals (the block edits + the
     // format-15 states restored them).
     rescanPortals();
+    // V3-1 Phase B (D9's load ordering, the two-dimension portal rescan):
+    // the nether's frame validity (the rescanPortals twin over the nether
+    // world — a no-op while the nether is unengaged: a no-nether load, or
+    // a fresh world, never scans; a nether load finds the player's nether
+    // portals — the nether's block edits + states restored them).
+    rescanNetherPortals();
 
     // The loaded columns mirror (streaming + unload decide on this set,
     // not per-frame chunk scans). The lighting pipeline has covered every
@@ -1671,6 +1683,16 @@ Result<void> Game::buildScene() {
     // appears later is NEW (tracked by m_lightPendingColumns).
     for (const ChunkPos& c : m_world.chunkPositions()) {
         m_streaming.loadedColumns.insert({c.x, c.z});
+    }
+    // V3-1 Phase B: the nether's loaded-columns mirror (the overworld's
+    // twin — the nether's chunks the load's replay + catch-up disk
+    // generated; the nether's streaming / unload decide on this set). A
+    // no-nether load leaves the mirror empty (the lazy D2 — the
+    // structural-immunity root).
+    if (m_nether.world) {
+        for (const ChunkPos& c : m_nether.world->chunkPositions()) {
+            m_nether.streaming.loadedColumns.insert({c.x, c.z});
+        }
     }
 
     // -- audio (Phase 15) ----------------------------------------------------
@@ -1702,6 +1724,226 @@ World::ChunkGenerator Game::makeChunkGenerator() const {
         m_generator->generateChunk(chunk, pos);
     };
 }
+
+// ---------------------------------------------------------------------------
+// V3-1 Phase B: the nether dimension (the incremental parallel family —
+// D1: the overworld members stay untouched; the nether is the m_nether
+// aggregate, engaged lazily by ensureNether — D2).
+// ---------------------------------------------------------------------------
+
+World& Game::currentWorld() {
+    return playerInNether() ? *m_nether.world : m_world;
+}
+
+const World& Game::currentWorld() const {
+    return playerInNether() ? *m_nether.world : m_world;
+}
+
+std::vector<std::unique_ptr<Entity>>& Game::currentEntities() {
+    return playerInNether() ? m_nether.entities : m_entities;
+}
+
+const std::vector<std::unique_ptr<Entity>>& Game::currentEntities() const {
+    return playerInNether() ? m_nether.entities : m_entities;
+}
+
+const std::map<BlockPos, BlockID>& Game::portalsOf(Dimension dim) const {
+    return dim == Dimension::Nether ? m_nether.portals : m_states.portals;
+}
+
+std::map<BlockPos, BlockID>& Game::portalsOf(Dimension dim) {
+    return dim == Dimension::Nether ? m_nether.portals : m_states.portals;
+}
+
+std::int64_t Game::currentSeed() const {
+    // The dimension's generation seed (the nether's is DERIVED — the
+    // kSaltNether discipline; it is never stored, the parse rebuilds it
+    // from the overworld seed, the xp_seed single-source-of-truth twin).
+    return playerInNether()
+               ? netherSeed(static_cast<std::int64_t>(m_generator->seed()))
+               : static_cast<std::int64_t>(m_generator->seed());
+}
+
+void Game::ensureNether() {
+    // D2 (the laziness): the nether World is constructed on first need —
+    // before that there is no nether chunk, no mesh, no journal, no
+    // streaming job, no streaming memory (the structural-immunity
+    // strongest form: a no-travel session never allocates any of it, and
+    // the base gate's byte-identity rests on it). Idempotent.
+    if (m_nether.world) {
+        return;
+    }
+    m_nether.gen.netherrack = m_states.netherrackId;
+    m_nether.gen.bedrock = m_states.bedrockId;
+    if (!m_nether.gen.valid()) {
+        // A stripped asset set (no netherrack / bedrock block): the nether
+        // is unbuildable. Log + stay unengaged (the caller — the travel
+        // pipeline — aborts the travel; the belt is unreachable on the
+        // shipped set, where both blocks are core content).
+        MC_LOG_ERROR("The nether dimension is unbuildable: the asset set "
+                     "is missing the 'netherrack' or 'bedrock' block");
+        return;
+    }
+    // The SKYLESS world (D5: the void / world top read sky 0, the rescan
+    // top source 0 — the day/night shader term and the night floor are
+    // structurally inert in the nether).
+    m_nether.world.emplace(/*skyless=*/true);
+    m_nether.world->setChunkGenerator(makeNetherChunkGenerator());
+    // The nether's cell-mutation observer (the overworld's journal
+    // observer's twin — the nether's edits journal into the nether's
+    // StreamingState, so the exit save's nether section diffs against the
+    // nether's generation reference).
+    m_nether.world->setCellMutationObserver([this](const CellMutation& mu) {
+        bool capped = false;
+        if (mu.block.valid()) {
+            capped = m_nether.streaming.saveJournal.recordBlock(mu.pos);
+        }
+        if (mu.fluidCode.has_value()) {
+            capped = capped ||
+                     m_nether.streaming.saveJournal.recordFluid(mu.pos);
+        }
+        if (capped) {
+            MC_LOG_INFO("Nether save journal exceeded "
+                        "kSaveJournalMaxEntries (" +
+                        std::to_string(kSaveJournalMaxEntries) +
+                        " entries) — the exit save's nether section falls "
+                        "back to the full nether diff");
+        }
+    });
+    // The streaming radius (the shared config value — no new config key;
+    // the nether streams the same view_distance disk as the overworld).
+    m_nether.streaming.streamRadius = m_streaming.streamRadius;
+    MC_LOG_INFO("Nether engaged (derived seed " +
+                std::to_string(netherSeed(
+                    static_cast<std::int64_t>(m_generator->seed()))) +
+                " = world seed ^ kSaltNether)");
+}
+
+World& Game::netherWorld() {
+    // The belt (every consumer runs only once the nether is engaged —
+    // ensureNether at the travel / load sites; an unengaged world here is
+    // a logic error, not a runtime state).
+    if (!m_nether.world) {
+        MC_LOG_ERROR("netherWorld() accessed before ensureNether (logic "
+                     "error — the nether is lazy)");
+    }
+    return *m_nether.world;
+}
+
+World::ChunkGenerator Game::makeNetherChunkGenerator() const {
+    // The nether's generation reference (the makeChunkGenerator twin):
+    // the pure fillNetherChunk (coordinate-pure — zero noise, the
+    // constructive determinism). Streaming jobs, first-touch creation,
+    // the save-diff reference and the unload retained diffs all run the
+    // same fill.
+    const NetherGen gen = m_nether.gen; // captured by value (the closure
+                                        // outlives nothing — the gen is
+                                        // set before any job posts)
+    return [gen](Chunk& chunk, const ChunkPos& pos) {
+        fillNetherChunk(gen, chunk, pos);
+    };
+}
+
+void Game::catchUpDisk(Dimension dim, int cx, int cz) {
+    // D6 step 3 (the synchronous catch-up): the 3x3 column disk around
+    // (cx, cz) — every missing column generated SYNCHRONOUSLY (the
+    // first-touch precedent amplified: ensureColumn + the loaded mirror)
+    // + ONE synchronous relight over the disk's bounding box (newTerrain
+    // — the sky propagation runs even when the rescan writes nothing;
+    // the nether's skyless source 0 through the rescan). The ~ms one-time
+    // cost (9 columns x the pure fill + one relight box) — the design's
+    // "一次性 ~ms 级". Runs in the main-thread-writer window (the travel
+    // frame / the load), so no worker is in flight and no window
+    // conflict (the risk-surface ② ruling).
+    World& w = (dim == Dimension::Nether) ? *m_nether.world : m_world;
+    StreamingState& st =
+        (dim == Dimension::Nether) ? m_nether.streaming : m_streaming;
+    bool any = false;
+    for (int dx = -1; dx <= 1; ++dx) {
+        for (int dz = -1; dz <= 1; ++dz) {
+            const int x = cx + dx;
+            const int z = cz + dz;
+            if (!w.columnComplete(x, z)) {
+                w.ensureColumn(x, z);
+                st.loadedColumns.insert({x, z});
+                any = true;
+            }
+        }
+    }
+    if (any) {
+        // The disk's bounding box (the 3x3 columns' world extent — the
+        // relight's ±R expansion covers the neighborhood's light flow).
+        const BlockPos min {cx * kChunkSize - kChunkSize, 0,
+                            cz * kChunkSize - kChunkSize};
+        const BlockPos max {(cx + 2) * kChunkSize - 1, kWorldHeight - 1,
+                            (cz + 2) * kChunkSize - 1};
+        Lighting::updateRegion(w, m_blocks, min, max, true);
+    }
+}
+
+void Game::rescanNetherPortals() {
+    // The rescanPortals twin over the nether world (the load-time frame
+    // validity — the PITS 383① two-way cross-check): rebuild the nether's
+    // portal tracking set from the world, and every portal cell not
+    // strictly inside a complete frame (an orphan — a hand-edited save,
+    // or the frame outlived its world) is set to air. A no-op while the
+    // nether is unengaged (the lazy D2 — the load engages it first when
+    // its section is non-empty or the player sits in it).
+    if (!m_nether.world) {
+        return;
+    }
+    m_nether.portals.clear();
+    if (!m_states.portalId.valid() || !m_states.obsidianId.valid()) {
+        return; // the structural-inert no-op (the rescanPortals twin)
+    }
+    World& w = *m_nether.world;
+    std::vector<BlockPos> orphans;
+    for (const ChunkPos& cp : w.chunkPositions()) {
+        const Chunk* chunk = w.findChunk(cp);
+        if (chunk == nullptr) {
+            continue;
+        }
+        const int baseX = cp.x * kChunkSize;
+        const int baseY = cp.y * kChunkSize;
+        const int baseZ = cp.z * kChunkSize;
+        for (int ly = 0; ly < kChunkSize; ++ly) {
+            for (int lz = 0; lz < kChunkSize; ++lz) {
+                for (int lx = 0; lx < kChunkSize; ++lx) {
+                    const BlockID id = chunk->get(lx, ly, lz);
+                    if (id != m_states.portalId) {
+                        continue;
+                    }
+                    const BlockPos wp {baseX + lx, baseY + ly, baseZ + lz};
+                    if (portalValidFrame(w, wp, m_states.obsidianId,
+                                         m_states.fireId, m_states.portalId) ==
+                        std::nullopt) {
+                        orphans.push_back(wp);
+                        continue;
+                    }
+                    m_nether.portals[wp] = id;
+                }
+            }
+        }
+    }
+    if (orphans.empty()) {
+        return;
+    }
+    BlockPos min {orphans.front()};
+    BlockPos max {orphans.front()};
+    for (const BlockPos& p : orphans) {
+        w.setBlock(p.x, p.y, p.z, BlockID::air());
+        min.x = std::min(min.x, p.x); min.y = std::min(min.y, p.y);
+        min.z = std::min(min.z, p.z);
+        max.x = std::max(max.x, p.x); max.y = std::max(max.y, p.y);
+        max.z = std::max(max.z, p.z);
+    }
+    // ONE relight over the orphans' bounding box (the rescanPortals
+    // twin — the portal is a light-11 source).
+    Lighting::updateRegion(w, m_blocks, min, max);
+    MC_LOG_INFO("Nether portal rescan: " + std::to_string(orphans.size()) +
+                " orphan portal block(s) set to air (no complete frame)");
+}
+
 
 std::filesystem::path Game::savePath() const {
     return "data/saves/" + *m_args.saveSlot + ".json";

@@ -493,6 +493,10 @@
   "nether_portal": [
    13,
    6
+  ],
+  "netherrack": [
+   13,
+   7
   ]
  }
 }

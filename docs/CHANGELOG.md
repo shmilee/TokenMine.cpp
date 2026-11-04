@@ -11,6 +11,50 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.4.0（2026-11-05）— V3-1 Phase B 下界世界 + 真传送（门 194 全 PASS）
+
+V3-1 三段拆分第二段（**下界维度本体**；Phase A 门框 v3.2.0 已发，
+Phase C 内容族 = v3.5.x 系列）——**站进主世界传送门，真的去下界了**：
+① **下界维度**（D1 增量并行成员：overworld 代码路径零 diff；D2 **惰性
+构造**——首传前零 chunk/零 mesh/零流送/零内存；D3 **仅 Player 换绑**
+（Entity setWorld 单咽喉点，m_world 引用→指针 17 点机械适配），
+inactive 维 = 时间胶囊【world-pass 冻结，DayCycle/Weather 全局恒推进
+= MC 时间连续】）② **下界 worldgen = 专属纯函数**（坐标的纯函数 =
+零噪声构造性确定）：基岩底 0-4 / **熔岩海 5-31 全源静态**（流体零
+churn）/ netherrack 32-122 / 基岩顶 123-127；派生 seed `worldSeed ^
+kSaltNether` 不落盘（单源真值）；netherrack 块（hardness 0.4 MC 精确 /
+drops 自身 / 纹理 atlas [13,7] 零移位 / 音族复用 stone 记档）③
+**skyless 光照 2 参**（void/顶 sky 读 0 + rescan 顶源 0，shader 零
+改动 = 无天穹下界）④ **真传送管线**（单帧帧锁定无 loading screen）：
+60 帧倒计时 → 8:1 floorDiv 双向映射 → 目标维 ±16 搜活跃 portal（无 →
+**生成 4×5 含角框 + 2×3 基岩平台**走咽喉点）→ 落点 hitbox 安全 +
+step-up → 3×3 列盘同步 catch-up → 换绑 + restorePosition + 相机 →
+流送自动 engage → portal_trigger/travel 2 件新音效（47→49）；**900
+帧冷却**（15 s 防振荡，会话态）；**正交 portal yaw −π/2**（MC JE 顺
+时针 90°）⑤ **渲染 5 点门控**（暗红 clear / 日月星云雨不画 / 雾
+10→96 块短程 + F3 dimension 行 19→20）⑥ **format 30**：player.
+dimension 严格词表恒写 + nether 段 {blocks,fluids,states} 恒写 +
+nether_entities（item）恒写；29 携新键 = version lie 点名 / 30 缺键
+点名 / 未知块名点名 / nether 内 stateful 块须 nether.states 条目
+（PITS 383① 孪生）；两维 portal 载入 rescan；gzip 编码零改动；**下界
+死亡 = 主世界重生**（MC 精确）⑦ 下界行为收口（7 per-block state 族
+主世界 only / 床睡眠 no-op / 容器面板主世界 only / 下界火不烧尽 /
+水桶 no-op = 8 条记档偏离）。2582/2582（+27：nether_gen 14【层带/熔
+岩顶边/chunk 连续/负坐标/纯净性/派生 seed/框搜索族/hitbox 上探/正交
+yaw】+ portal 映射往返 2 + format 30 族 7 + setWorld 钉 + F3 行 +
+块内容钉）。门 194 = **结构免疫第 75 次免重锚最强形**（下界惰性未建：
+S1 ≡ 锚 224468 逐字节 + 终档**恰增白名单 4 键**）+ **S2 双跳 arm
+（全 headless）**：传送（"Traveled to nether at (1,55,−1) from
+(0,55,−2)" 映射验算 + 下界截图 ×2 RAW 恒等【netherrack 岩洞 + portal
+光 11 紫晕】+ 落点 [1,55,−0.5] 精确 + nether 段 26 块 = 生成框 +
+平台）+ 返程（±16 搜中原 portal + 落回原 portal 内域底中心 + nether
+段持久化 + time 恰 +120f 帧锁定验算）+ S6 点名 6/6 + 性能 A/B 同世界
+同成本（PERF-WIN 三窗全同档 + changesApplied 9/1/3 逐位 + 终档白名单
+4 键 + **下界稳态 ≤ OW 基线：render 0.349 vs 0.510 med、fluid/fires
+= 0.000【全源静态熔岩海零 churn = recon 风险面 ③ 按设计消解实证】**）。
+PITS 387（g139 插桩器锚点随 DimCtx 调用点形态演进 = 双形态锚 + 每树
+用自己 commit 的插桩器）。详见 `docs/archive/phase-3.4.0.md`。
+
 ## v3.3.0（2026-11-05）— V3-8 手柄支持（门 193 全 PASS）
 
 11-05 用户实机诉求定案（BACKLOG UX 行，v3.2.0 收口后紧接执行）：**SDL3

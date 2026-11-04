@@ -221,7 +221,7 @@ void Player::update(double dt) {
         const int top = static_cast<int>(std::floorf(m_position.y));
         m_surfaceY = -1.0f;
         for (int y = top; y > top - kSurfaceScanDepth; --y) {
-            if (m_world.getFluidOfKind(cx, y, cz, FluidKind::Water) ==
+            if (m_world->getFluidOfKind(cx, y, cz, FluidKind::Water) ==
                 kMaxFluidLevel) {
                 m_surfaceY = static_cast<float>(y) + 1.0f;
                 break;
@@ -709,7 +709,7 @@ void Player::updateCrouchHeight() {
     } else if (m_height < m_params.height) {
         // Stand back up only when the headroom fits the full height
         // (trapped under a low ceiling: stay crouched).
-        if (hasRoomAt(m_world, m_blocks, m_position, m_params.width,
+        if (hasRoomAt(*m_world, m_blocks, m_position, m_params.width,
                       m_params.height)) {
             m_height = m_params.height;
         }
@@ -748,7 +748,7 @@ void Player::applyCrouchEdgeGuard(const Vec3& dir, double dt) {
 }
 
 bool Player::isSolidCell(int x, int y, int z) const {
-    const BlockID id = m_world.getBlock(x, y, z);
+    const BlockID id = m_world->getBlock(x, y, z);
     if (!id.valid() || id == BlockID::air()) {
         return false;
     }

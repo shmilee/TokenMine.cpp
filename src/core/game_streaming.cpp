@@ -87,6 +87,66 @@ constexpr int kVerticalChunksPerColumn = kWorldHeight / kChunkSize;
 } // namespace
 
 // ---------------------------------------------------------------------------
+// V3-1 Phase B (D1): the dimension context binds (the streaming family's
+// parameterization — the overworld's existing members, the nether's
+// parallel family; the shared pool for both, the flush barrier covers
+// every job of both dimensions).
+// ---------------------------------------------------------------------------
+
+Game::DimCtx Game::overworldCtx() {
+    return DimCtx {
+        m_world, m_streaming, *m_streaming.pool, m_chunkMeshData,
+        m_columnMeshes, m_columnRebuildPending, m_flammableChunks,
+        m_lightPendingColumns, m_fluidLightPending, makeChunkGenerator(),
+        [this](std::set<ColumnPos>& protectedColumns) {
+            const auto protectStates =
+                [this, &protectedColumns](const auto& states) {
+                for (const auto& [pos, st] : states) {
+                    (void)st;
+                    protectedColumns.insert({
+                        floorDiv(pos.x, kChunkSize),
+                        floorDiv(pos.z, kChunkSize)});
+                }
+            };
+            protectStates(m_states.furnaces);
+            protectStates(m_states.campfires);
+            protectStates(m_states.tables);
+            protectStates(m_states.crops);
+            protectStates(m_states.saplings);
+            protectStates(m_states.beacons);
+            protectStates(m_states.fires);
+        },
+        /*protectDemoArea=*/true};
+}
+
+Game::DimCtx Game::netherCtx() {
+    // The nether's world is engaged (ensureNether ran) — the ctx is only
+    // built for an active / in-flight nether (the call sites gate on
+    // m_nether.world). The pool is the SHARED overworld one (the
+    // nether's StreamingState.pool stays null — no double-ownership).
+    return DimCtx {
+        *m_nether.world, m_nether.streaming, *m_streaming.pool,
+        m_nether.chunkMeshData, m_nether.columnMeshes,
+        m_nether.columnRebuildPending, m_nether.flammableChunks,
+        m_nether.lightPendingColumns, m_nether.fluidLightPending,
+        makeNetherChunkGenerator(),
+        [this](std::set<ColumnPos>& protectedColumns) {
+            // The nether's per-block state protection: the portal
+            // tracking set (the nether's save cross-checks the states
+            // segment against the block edits — an unloaded portal
+            // column would break the load, the overworld's seven-map
+            // family's twin).
+            for (const auto& [pos, id] : m_nether.portals) {
+                (void)id;
+                protectedColumns.insert({
+                    floorDiv(pos.x, kChunkSize),
+                    floorDiv(pos.z, kChunkSize)});
+            }
+        },
+        /*protectDemoArea=*/false};
+}
+
+// ---------------------------------------------------------------------------
 // Chunk meshing (PIPE-1): the mesher's COMPUTE runs on workers (postMeshJobs
 // snapshots a column's 3x3 neighborhood into a throwaway World; the worker
 // runs the UNCHANGED ChunkMesher against it — face culling across chunk
@@ -96,7 +156,7 @@ constexpr int kVerticalChunksPerColumn = kWorldHeight / kChunkSize;
 // upload (rebuildColumnMesh — the GL context is main-thread only).
 // ---------------------------------------------------------------------------
 
-Result<void> Game::updateChunkMeshes() {
+Result<void> Game::updateChunkMeshes(const DimCtx& ctx) {
     // The merged GL mesh of every column whose chunk meshes landed this
     // frame (integrateMeshJobs) or earlier (a column can be pending across
     // frames — its chunk data exists, the upload is what lags). Phase 99.9:
@@ -104,15 +164,15 @@ Result<void> Game::updateChunkMeshes() {
     // geometry (unlit — their mesh job waits for the light — or not meshed
     // yet) are simply absent from the merged column mesh: the same
     // pop-in visibility the old main-thread budgeted path had.
-    for (const ColumnPos& col : m_columnRebuildPending) {
-        MC_TRY(rebuildColumnMesh(col));
+    for (const ColumnPos& col : ctx.columnRebuildPending) {
+        MC_TRY(rebuildColumnMesh(ctx, col));
     }
-    m_columnRebuildPending.clear();
+    ctx.columnRebuildPending.clear();
     return {};
 }
 
-void Game::integrateMeshJobs() {
-    if (m_streaming.meshJobs.empty()) {
+void Game::integrateMeshJobs(const DimCtx& ctx) {
+    if (ctx.streaming.meshJobs.empty()) {
         return;
     }
     // Runs right after pool->flush() (happens-before via the pool's
@@ -124,7 +184,7 @@ void Game::integrateMeshJobs() {
     // integration preserves the selection order (nearest first) —
     // deterministic, frame-locked.
     std::deque<std::unique_ptr<MeshJob>> inFlight;
-    for (auto& job : m_streaming.meshJobs) {
+    for (auto& job : ctx.streaming.meshJobs) {
         if (!job->done) {
             inFlight.push_back(std::move(job));
             continue;
@@ -132,23 +192,23 @@ void Game::integrateMeshJobs() {
         for (std::size_t cy = 0; cy < job->meshes.size(); ++cy) {
             const ChunkPos cpos{job->column.x,
                                 static_cast<int>(cy), job->column.z};
-            m_chunkMeshData[cpos] = std::move(job->meshes[cy]);
+            ctx.chunkMeshData[cpos] = std::move(job->meshes[cy]);
             // Clear the dirty flag at INTEGRATE, not post: no main-thread
             // World write can land between this frame's post and the next
             // flush (the read-only worker window), and any edit AFTER
             // this integrate re-marks the chunk and re-queues the column
             // (self-healing).
-            m_world.clearChunkDirty(cpos);
+            ctx.world.clearChunkDirty(cpos);
         }
-        m_columnRebuildPending.insert(job->column);
-        m_streaming.meshPending.erase(job->column);
+        ctx.columnRebuildPending.insert(job->column);
+        ctx.streaming.meshPending.erase(job->column);
         MC_LOG_DEBUG("Meshed column (" + std::to_string(job->column.x) +
                      ", " + std::to_string(job->column.z) + ") on worker");
     }
-    m_streaming.meshJobs = std::move(inFlight);
+    ctx.streaming.meshJobs = std::move(inFlight);
 }
 
-Result<void> Game::rebuildColumnMesh(const ColumnPos& col) {
+Result<void> Game::rebuildColumnMesh(const DimCtx& ctx, const ColumnPos& col) {
     // Concatenate the column's chunk geometries. Each chunk's Y offset
     // (its layer in the column) is baked into the vertex positions; the
     // X/Z column origin stays in the model matrix (columnModel) — baking
@@ -164,8 +224,8 @@ Result<void> Game::rebuildColumnMesh(const ColumnPos& col) {
     std::vector<std::uint32_t> transparentIdx;
     for (int cy = 0; cy < kVerticalChunksPerColumn; ++cy) {
         const ChunkPos cp{col.x, cy, col.z};
-        const auto it = m_chunkMeshData.find(cp);
-        if (it == m_chunkMeshData.end()) {
+        const auto it = ctx.chunkMeshData.find(cp);
+        if (it == ctx.chunkMeshData.end()) {
             continue;
         }
         const ChunkMeshData& d = it->second;
@@ -201,21 +261,21 @@ Result<void> Game::rebuildColumnMesh(const ColumnPos& col) {
         if (!d.transparentEmpty()) {
             const std::uint32_t base =
                 static_cast<std::uint32_t>(transparentVerts.size());
-            transparentVerts.reserve(
-                transparentVerts.size() + d.transparentVertices.size());
+            transparentVerts.reserve(transparentVerts.size() +
+                                      d.transparentVertices.size());
             for (const MeshVertex& v : d.transparentVertices) {
                 MeshVertex w = v;
                 w.position.y += oy;
                 transparentVerts.push_back(std::move(w));
             }
-            transparentIdx.reserve(
-                transparentIdx.size() + d.transparentIndices.size());
+            transparentIdx.reserve(transparentIdx.size() +
+                                    d.transparentIndices.size());
             for (const std::uint32_t i : d.transparentIndices) {
                 transparentIdx.push_back(i + base);
             }
         }
     }
-    ColumnMesh& cm = m_columnMeshes[col];
+    ColumnMesh& cm = ctx.columnMeshes[col];
     cm.opaque.reset();
     cm.cutout.reset();
     cm.transparent.reset();
@@ -240,8 +300,8 @@ Result<void> Game::rebuildColumnMesh(const ColumnPos& col) {
 // Chunk streaming (Phase 14): worker-generated columns around the player
 // ---------------------------------------------------------------------------
 
-void Game::integrateStreamedColumns() {
-    if (m_streaming.streamJobs.empty()) {
+void Game::integrateStreamedColumns(const DimCtx& ctx) {
+    if (ctx.streaming.streamJobs.empty()) {
         return;
     }
     // Runs right after pool->flush(): completed jobs are fully published
@@ -249,40 +309,40 @@ void Game::integrateStreamedColumns() {
     // and its face-sharing neighbors dirty, so updateChunkMeshes (later
     // this frame) re-meshes them with correct boundary culling.
     std::deque<std::unique_ptr<StreamJob>> inFlight;
-    for (auto& job : m_streaming.streamJobs) {
+    for (auto& job : ctx.streaming.streamJobs) {
         if (!job->done) {
             inFlight.push_back(std::move(job));
             continue;
         }
         for (int cy = 0; cy < kVerticalChunksPerColumn; ++cy) {
             const ChunkPos cpos {job->column.x, cy, job->column.z};
-            m_world.insertChunk(cpos, std::move(job->chunks[cy]));
+            ctx.world.insertChunk(cpos, std::move(job->chunks[cy]));
             // Burn-pass gate (Phase 99.8): a freshly generated column can
             // carry flamables (wood, leaves, grass) — note the chunks.
-            const Chunk* c = m_world.findChunk(cpos);
+            const Chunk* c = ctx.world.findChunk(cpos);
             if (c != nullptr) {
                 const BlockID* blocks = c->data();
                 for (int i = 0; i < Chunk::kVolume; ++i) {
                     if (m_blocks.at(blocks[i]).properties.flamable) {
-                        m_flammableChunks.insert(cpos);
+                        ctx.flammableChunks.insert(cpos);
                         break;
                     }
                 }
             }
         }
-        m_streaming.streamPending.erase(job->column);
-        m_streaming.loadedColumns.insert(job->column);
+        ctx.streaming.streamPending.erase(job->column);
+        ctx.streaming.loadedColumns.insert(job->column);
         // New terrain needs light propagation (the old m_litChunks full
         // scan detected it; the explicit column set replaces it) — and
-        // stays UNMESHED until that light lands (m_streaming.unlitColumns: the
+        // stays UNMESHED until that light lands (ctx.streaming.unlitColumns: the
         // chunk meshes once, lit, instead of dark-then-re-meshed).
-        m_lightPendingColumns.insert(job->column);
-        m_streaming.unlitColumns.insert(job->column);
+        ctx.lightPendingColumns.insert(job->column);
+        ctx.streaming.unlitColumns.insert(job->column);
         // STRM-2: re-apply this column's retained diff (the session
         // changes it held before an earlier unload — the pure-fluid
         // churn, the fire burn, the water-lava reaction: the writes that
         // bypass the game's setBlock choke point and so never earned the
-        // m_streaming.editedColumns protection). BLOCKS FIRST, then fluids — the
+        // ctx.streaming.editedColumns protection). BLOCKS FIRST, then fluids — the
         // applyWorldEdits order (a block displaces the cell's fluid, so a
         // re-applied placement re-drains the generated fluid before the
         // fluid edits land; a level-0 fluid edit on an already-dry cell
@@ -290,15 +350,15 @@ void Game::integrateStreamedColumns() {
         // the column is in the journal again and out of the retained
         // map — the one-of invariant, and the next unload snapshots it
         // again (the self-similar loop). Deliberately NOT inserted into
-        // m_streaming.editedColumns: that would keep the column's chunks resident
+        // ctx.streaming.editedColumns: that would keep the column's chunks resident
         // for the whole session (the memory regression this feature
         // replaces) — a fluid-only column must stay unloadable.
-        // Lighting: the column just joined m_lightPendingColumns /
-        // m_streaming.unlitColumns above (new terrain, the forced propagation), so
+        // Lighting: the column just joined ctx.lightPendingColumns /
+        // ctx.streaming.unlitColumns above (new terrain, the forced propagation), so
         // this frame's postLightJobs covers the re-applied cells and the
         // meshes form once, lit (no lit-pop-in, the 99.4 discipline).
-        if (auto rit = m_streaming.retainedColumns.find(job->column);
-            rit != m_streaming.retainedColumns.end()) {
+        if (auto rit = ctx.streaming.retainedColumns.find(job->column);
+            rit != ctx.streaming.retainedColumns.end()) {
             for (const SavedBlockEdit& e : rit->second.blocks) {
                 const BlockID id = m_blocks.idForName(e.blockName);
                 if (!id.valid()) {
@@ -317,30 +377,31 @@ void Game::integrateStreamedColumns() {
                 }
                 // The cell's y was valid when the write was journal-
                 // recorded, and the id is valid: setBlock cannot fail.
-                m_world.setBlock(e.pos.x, e.pos.y, e.pos.z, id);
+                ctx.world.setBlock(e.pos.x, e.pos.y, e.pos.z, id);
             }
             for (const SavedFluidEdit& e : rit->second.fluids) {
                 // A positive level targets the cell the block pass left
                 // (air — a cell holds fluid XOR a block), so setFluid
                 // cannot fail for it; the level-0 drain on an already-
                 // dry cell is the expected false no-op.
-                m_world.setFluid(e.pos.x, e.pos.y, e.pos.z, e.kind, e.level);
+                ctx.world.setFluid(e.pos.x, e.pos.y, e.pos.z, e.kind,
+                                   e.level);
             }
-            m_streaming.retainedColumns.erase(rit);
+            ctx.streaming.retainedColumns.erase(rit);
         }
         // Per-column detail at DEBUG (a radius-80 session logs 25921 of
         // these lines; the periodic INFO progress line in streamChunks is
         // the human-readable signal).
         MC_LOG_DEBUG("Streamed column (" + std::to_string(job->column.x) +
                      ", " + std::to_string(job->column.z) +
-                     ") integrated (" + std::to_string(m_world.chunkCount()) +
+                     ") integrated (" + std::to_string(ctx.world.chunkCount()) +
                      " chunks loaded)");
     }
-    m_streaming.streamJobs = std::move(inFlight);
+    ctx.streaming.streamJobs = std::move(inFlight);
 }
 
-void Game::collectLitColumns() {
-    if (m_streaming.lightJobs.empty()) {
+void Game::collectLitColumns(const DimCtx& ctx) {
+    if (ctx.streaming.lightJobs.empty()) {
         return;
     }
     // Runs right after pool->flush(): done jobs have finished writing
@@ -348,7 +409,7 @@ void Game::collectLitColumns() {
     // be meshed this frame with the propagated light. Undone jobs stay
     // in the deque (their columns stay unlit/unmeshed).
     std::deque<std::unique_ptr<LightJob>> inFlight;
-    for (auto& job : m_streaming.lightJobs) {
+    for (auto& job : ctx.streaming.lightJobs) {
         if (!job->done) {
             inFlight.push_back(std::move(job));
             continue;
@@ -356,17 +417,17 @@ void Game::collectLitColumns() {
         for (const ColumnPos& col : job->columns) {
             if (job->fluid) {
                 // 99.11: the fluid catch-up's bookkeeping. The column
-                // already left m_fluidLightPending at POST time (the
+                // already left ctx.fluidLightPending at POST time (the
                 // budget must not re-take an in-flight column) — and
                 // this frame's fluid tick runs AFTER this reap, so no
                 // re-churn can have re-added it: the erase is the
                 // contract belt (a processed column never lingers).
                 // Fluid columns are NOT unlit columns (they were lit
-                // long before the fluid touched them): m_streaming.unlitColumns —
+                // long before the fluid touched them): ctx.streaming.unlitColumns —
                 // the streaming lit-gate — is not touched.
-                m_fluidLightPending.erase(col);
+                ctx.fluidLightPending.erase(col);
             } else {
-                m_streaming.unlitColumns.erase(col);
+                ctx.streaming.unlitColumns.erase(col);
             }
         }
         // 99.10: apply the workers' net-changed chunks to the World's
@@ -379,67 +440,61 @@ void Game::collectLitColumns() {
         // the flush barrier completes every job before this frame's
         // unloadFarColumns runs).
         for (const ChunkPos& pos : job->dirtyChunks) {
-            m_world.markChunkDirty(pos);
+            ctx.world.markChunkDirty(pos);
         }
     }
-    m_streaming.lightJobs = std::move(inFlight);
+    ctx.streaming.lightJobs = std::move(inFlight);
 }
 
-void Game::unloadFarColumns() {
+void Game::unloadFarColumns(const DimCtx& ctx) {
     if (!m_player) {
         return;
     }
     // Safe point: the pool flushed at the top of update and the posts run
     // at its end — no worker touches the World while this erases (the
-    // main-thread-writer window, same as integrateStreamedColumns).
+    // main-thread-writer window, same as integrateStreamedColumns). The
+    // ctx is the ACTIVE dimension (the player's — its coordinates are
+    // the player's position's space; the inactive dimension's disk is
+    // frozen, never unloaded against a foreign player position).
     const Vec3 p = m_player->position();
     const ColumnPos player{
         floorDiv(static_cast<int>(std::floor(p.x)), kChunkSize),
         floorDiv(static_cast<int>(std::floor(p.z)), kChunkSize)};
-    const int keepRadius = std::min(m_streaming.streamRadius, kStreamCapRadius);
+    const int keepRadius = std::min(ctx.streaming.streamRadius, kStreamCapRadius);
     const int keepDist = keepRadius + kUnloadHysteresis;
     // The unload predicate is squared Euclidean (STRM-1): a column
     // survives while its distanceSq is <= (keepRadius + 1)² — the +1
     // hysteresis band around the capped disk.
     const std::int64_t keepDistSq =
         static_cast<std::int64_t>(keepDist) * keepDist;
-    // The per-block state maps (furnace/campfire/table/crop/beacon/fire)
-    // are keyed by BlockPos: their COLUMNS must survive (the save records
-    // the states and cross-checks them against the block edits — an
-    // unloaded column would break the load). The maps are player-scale
-    // (small).
-    std::set<ColumnPos> protectedColumns = m_streaming.editedColumns;
-    protectedColumns.insert(m_streaming.streamPending.begin(), m_streaming.streamPending.end());
+    // The per-block state maps (furnace/campfire/table/crop/beacon/fire —
+    // the nether's portal set) are keyed by BlockPos: their COLUMNS must
+    // survive (the save records the states and cross-checks them against
+    // the block edits — an unloaded column would break the load). The
+    // maps are player-scale (small).
+    std::set<ColumnPos> protectedColumns = ctx.streaming.editedColumns;
+    protectedColumns.insert(ctx.streaming.streamPending.begin(), ctx.streaming.streamPending.end());
     // PIPE-1: in-flight MESH columns too (same paradigm — their
     // integrate must find the column still loaded; unloading it would
-    // strand the 8 ChunkMeshData outputs in m_chunkMeshData).
-    protectedColumns.insert(m_streaming.meshPending.begin(), m_streaming.meshPending.end());
-    const auto protectStates = [this, &protectedColumns](
-                                   const auto& states) {
-        for (const auto& [pos, st] : states) {
-            protectedColumns.insert({
-                floorDiv(pos.x, kChunkSize), floorDiv(pos.z, kChunkSize)});
-        }
-    };
-    protectStates(m_states.furnaces);
-    protectStates(m_states.campfires);
-    protectStates(m_states.tables);
-    protectStates(m_states.crops);
-    protectStates(m_states.saplings);
-    protectStates(m_states.beacons);
-    protectStates(m_states.fires);
+    // strand the 8 ChunkMeshData outputs in ctx.chunkMeshData).
+    protectedColumns.insert(ctx.streaming.meshPending.begin(), ctx.streaming.meshPending.end());
+    ctx.protectStates(protectedColumns);
 
     std::vector<ChunkPos> toErase;
     // The loaded COLUMNS (the incremental mirror), not a full chunk scan:
     // a full-ring world is ~9k-200k chunks, the column set is ~2k-26k.
-    for (const ColumnPos& col : m_streaming.loadedColumns) {
+    for (const ColumnPos& col : ctx.streaming.loadedColumns) {
         if (columnDistanceSq(player, col) <= keepDistSq) {
             continue; // inside the loaded disk (1-column hysteresis band)
         }
-        // The 4x4 demo area is protected: respawn teleports to the spawn
-        // point inside it (an unloaded spawn column would read void).
-        if (col.x >= kDemoChunkMin && col.x <= kDemoChunkMax &&
-            col.z >= kDemoChunkMin && col.z <= kDemoChunkMax) {
+        // The 4x4 demo area is protected (overworld only — the respawn
+        // teleports to the spawn point inside it; an unloaded spawn
+        // column would read void; the nether has no demo area — the
+        // player's nether anchor is the generated portal's
+        // editedColumns / portals protection).
+        if (ctx.protectDemoArea && col.x >= kDemoChunkMin &&
+            col.x <= kDemoChunkMax && col.z >= kDemoChunkMin &&
+            col.z <= kDemoChunkMax) {
             continue;
         }
         if (protectedColumns.count(col) > 0) {
@@ -469,41 +524,41 @@ void Game::unloadFarColumns() {
     // (collectSave) — the one-of invariant with the journal below is
     // established HERE: the snapshot precedes the eviction.
     for (const ColumnPos& col : columns) {
-        const auto jb = m_streaming.saveJournal.blocks.find(col);
-        const auto jf = m_streaming.saveJournal.fluids.find(col);
-        if (jb == m_streaming.saveJournal.blocks.end() &&
-            jf == m_streaming.saveJournal.fluids.end()) {
+        const auto jb = ctx.streaming.saveJournal.blocks.find(col);
+        const auto jf = ctx.streaming.saveJournal.fluids.find(col);
+        if (jb == ctx.streaming.saveJournal.blocks.end() &&
+            jf == ctx.streaming.saveJournal.fluids.end()) {
             continue;
         }
         RetainedColumnDiff diff = retainColumnDiff(
-            m_world, makeChunkGenerator(), m_blocks, col,
-            jb == m_streaming.saveJournal.blocks.end() ? nullptr : &jb->second,
-            jf == m_streaming.saveJournal.fluids.end() ? nullptr : &jf->second);
+            ctx.world, ctx.generator, m_blocks, col,
+            jb == ctx.streaming.saveJournal.blocks.end() ? nullptr : &jb->second,
+            jf == ctx.streaming.saveJournal.fluids.end() ? nullptr : &jf->second);
         if (!diff.blocks.empty() || !diff.fluids.empty()) {
-            m_streaming.retainedColumns.emplace(col, std::move(diff));
+            ctx.streaming.retainedColumns.emplace(col, std::move(diff));
         }
     }
     for (const ChunkPos& pos : toErase) {
-        m_chunkMeshData.erase(pos);
-        m_world.eraseChunk(pos); // marks the boundary neighbors dirty
-        m_flammableChunks.erase(pos);
+        ctx.chunkMeshData.erase(pos);
+        ctx.world.eraseChunk(pos); // marks the boundary neighbors dirty
+        ctx.flammableChunks.erase(pos);
     }
     for (const ColumnPos& col : columns) {
-        m_columnMeshes.erase(col); // frees the GL buffers (Mesh destructor)
-        m_columnRebuildPending.erase(col);
+        ctx.columnMeshes.erase(col); // frees the GL buffers (Mesh destructor)
+        ctx.columnRebuildPending.erase(col);
         // PIPE-2 / STRM-2: the journal entries of an unloaded column go
         // with it — the session's diff they carried was just snapshotted
-        // into m_streaming.retainedColumns above (when non-empty), so nothing is
+        // into ctx.streaming.retainedColumns above (when non-empty), so nothing is
         // lost: the column re-enters as FRESH streamed terrain plus its
         // retained diff.
-        m_streaming.saveJournal.evictColumn(col);
+        ctx.streaming.saveJournal.evictColumn(col);
     }
     for (const ChunkPos& pos : toErase) {
-        m_streaming.loadedColumns.erase({pos.x, pos.z});
+        ctx.streaming.loadedColumns.erase({pos.x, pos.z});
         // Defensive: an unlit column cannot be unloaded (it is either
         // inside the ring, edited, or in flight — all protected above),
         // but the set must not leak entries for dead columns.
-        m_streaming.unlitColumns.erase({pos.x, pos.z});
+        ctx.streaming.unlitColumns.erase({pos.x, pos.z});
         // 99.11: the fluid catch-up pending set must not accumulate
         // entries for dead columns either (a coast tick's changed cell
         // can outlive its column's unload window while the budget lags
@@ -512,21 +567,21 @@ void Game::unloadFarColumns() {
         // this point (the flush barrier completed it before the reap
         // above); its reap applied dirtyOut while the chunks still
         // existed, and markChunkDirty skips any that did not.
-        m_fluidLightPending.erase({pos.x, pos.z});
+        ctx.fluidLightPending.erase({pos.x, pos.z});
     }
-    m_streaming.unloadedColumnsTotal +=
+    ctx.streaming.unloadedColumnsTotal +=
         static_cast<std::size_t>(toErase.size() / kVerticalChunksPerColumn);
     // Per-event detail at DEBUG (walking at radius 80 produces one of
     // these every ~4 s; the periodic INFO progress line carries the
     // count).
     MC_LOG_DEBUG("Unloaded " +
                  std::to_string(toErase.size() / kVerticalChunksPerColumn) +
-                 " far columns (" + std::to_string(m_world.chunkCount()) +
+                 " far columns (" + std::to_string(ctx.world.chunkCount()) +
                  " chunks loaded)");
 }
 
-void Game::streamChunks() {
-    if (!m_streaming.pool || !m_generator || !m_player) {
+void Game::streamChunks(const DimCtx& ctx) {
+    if (!ctx.generator || !m_player) {
         return;
     }
     // While the player is dead the body is frozen and the death screen
@@ -541,7 +596,9 @@ void Game::streamChunks() {
     if (m_player->isDead()) {
         return;
     }
-    // The player's column (bottom-center position).
+    // The player's column (bottom-center position) — the player is in
+    // this dimension (the ctx is the active one), so its position is
+    // this world's coordinate space.
     const Vec3 p = m_player->position();
     const ColumnPos player{
         floorDiv(static_cast<int>(std::floor(p.x)), kChunkSize),
@@ -550,8 +607,8 @@ void Game::streamChunks() {
     // The loaded columns (the incremental mirror built by buildScene /
     // integrate / unload / first-touch creation — the old code rebuilt
     // this from a full per-frame chunk scan + sort).
-    const std::vector<ColumnPos> loaded(m_streaming.loadedColumns.begin(),
-                                        m_streaming.loadedColumns.end());
+    const std::vector<ColumnPos> loaded(ctx.streaming.loadedColumns.begin(),
+                                        ctx.streaming.loadedColumns.end());
 
     // Hysteresis (see chunk_streaming): engage when the player reaches
     // the edge of the loaded area; while engaged, keep filling the full
@@ -561,31 +618,31 @@ void Game::streamChunks() {
     // returns the (radius + 1)² sentinel). A never-engaged idle player
     // in the center of the loaded area stays job-free (keeps headless
     // baselines byte-reproducible). The effective radius is the config
-    // clamped to the far-plane cap (kStreamCapRadius); m_streaming.streamRadius
+    // clamped to the far-plane cap (kStreamCapRadius); ctx.streaming.streamRadius
     // itself keeps the raw config value for the logs and the F3 overlay.
-    const int radius = std::min(m_streaming.streamRadius, kStreamCapRadius);
+    const int radius = std::min(ctx.streaming.streamRadius, kStreamCapRadius);
     const std::int64_t nearestMissingSq =
         nearestMissingDistanceSq(player, loaded, radius);
-    if (!m_streaming.streamingEngaged) {
+    if (!ctx.streaming.streamingEngaged) {
         const std::int64_t triggerSq = static_cast<std::int64_t>(
             kStreamTriggerDistance) * kStreamTriggerDistance;
         if (nearestMissingSq > triggerSq) {
             return;
         }
-        m_streaming.streamingEngaged = true;
+        ctx.streaming.streamingEngaged = true;
         MC_LOG_INFO("Chunk streaming engaged (radius " +
-                    std::to_string(m_streaming.streamRadius) + " columns)");
+                    std::to_string(ctx.streaming.streamRadius) + " columns)");
     } else if (nearestMissingSq >= missingSentinelDistanceSq(radius)) {
-        m_streaming.streamingEngaged = false; // the radius disk is fully loaded
+        ctx.streaming.streamingEngaged = false; // the radius disk is fully loaded
         // One explicit completion line: after this, streaming is quiet
         // (no per-frame work) until the player reaches the loaded edge
         // again — silence in the log = the disk is full, not a stall.
         MC_LOG_INFO("Streaming complete: " +
-                    std::to_string(m_streaming.loadedColumns.size()) + "/" +
+                    std::to_string(ctx.streaming.loadedColumns.size()) + "/" +
                     std::to_string(diskColumnCount(radius)) +
-                    " columns (" + std::to_string(m_world.chunkCount()) +
+                    " columns (" + std::to_string(ctx.world.chunkCount()) +
                     " chunks, " +
-                    std::to_string(m_streaming.unloadedColumnsTotal) +
+                    std::to_string(ctx.streaming.unloadedColumnsTotal) +
                     " unloaded) — quiet until the player reaches the "
                     "loaded edge");
     }
@@ -596,9 +653,9 @@ void Game::streamChunks() {
     // Generation is the heavy post; the per-frame lighting jobs (<= 2,
     // 99.10) stay uncapped (one box each — cheap per integrated column).
     // Skipping the post this frame (not the column) is safe: the loop
-    // re-runs next frame and m_streaming.streamPending only holds actually-posted
+    // re-runs next frame and ctx.streaming.streamPending only holds actually-posted
     // columns.
-    if (m_streaming.pool->pendingCount() >= kMaxStreamBacklog) {
+    if (ctx.pool.pendingCount() >= kMaxStreamBacklog) {
         return;
     }
     int posted = 0;
@@ -608,23 +665,26 @@ void Game::streamChunks() {
         if (posted >= kStreamColumnsPerFrame) {
             break;
         }
-        if (m_streaming.streamPending.count(col) > 0) {
+        if (ctx.streaming.streamPending.count(col) > 0) {
             continue; // a generation job for this column is in flight
         }
         auto job = std::make_unique<StreamJob>();
         job->column = col;
         job->chunks = std::make_unique<Chunk[]>(kVerticalChunksPerColumn);
-        m_streaming.streamPending.insert(col);
+        ctx.streaming.streamPending.insert(col);
         StreamJob* rawJob = job.get();
-        m_streaming.streamJobs.push_back(std::move(job));
+        ctx.streaming.streamJobs.push_back(std::move(job));
         // The worker fills the job's own scratch chunks with the pure
         // generator (no World access, no shared mutable state — the
-        // generator's members are immutable after create()).
-        m_streaming.pool->post([this, rawJob] {
+        // generator's members are immutable after create()). The closure
+        // is captured BY VALUE (the ctx is the call site's temporary —
+        // the job outlives it; the closure itself reads only the stable
+        // Game members through its own capture).
+        World::ChunkGenerator gen = ctx.generator;
+        ctx.pool.post([rawJob, gen = std::move(gen)] {
             for (int cy = 0; cy < kVerticalChunksPerColumn; ++cy) {
-                m_generator->generateChunk(rawJob->chunks[cy],
-                                           {rawJob->column.x, cy,
-                                            rawJob->column.z});
+                gen(rawJob->chunks[cy],
+                    {rawJob->column.x, cy, rawJob->column.z});
             }
             rawJob->done = true;
         });
@@ -636,19 +696,16 @@ void Game::streamChunks() {
     // Frame-based (deterministic cadence).
     if (m_frameCount % 300 == 0) {
         MC_LOG_INFO("Streaming: " +
-                    std::to_string(m_streaming.loadedColumns.size()) + "/" +
+                    std::to_string(ctx.streaming.loadedColumns.size()) + "/" +
                     std::to_string(diskColumnCount(radius)) +
-                    " columns (" + std::to_string(m_world.chunkCount()) +
+                    " columns (" + std::to_string(ctx.world.chunkCount()) +
                     " chunks, " +
-                    std::to_string(m_streaming.unloadedColumnsTotal) +
+                    std::to_string(ctx.streaming.unloadedColumnsTotal) +
                     " unloaded since session start)");
     }
 }
 
-void Game::postLightJobs() {
-    if (!m_streaming.pool) {
-        return;
-    }
+void Game::postLightJobs(const DimCtx& ctx) {
     // Columns that appeared since the last post (integrated at the top of
     // update, or first-touch completed by the setBlock choke point).
     // Everything else is already covered by the lighting pipeline (init/
@@ -656,7 +713,7 @@ void Game::postLightJobs() {
     // full per-frame chunk scan against m_litChunks; the explicit pending
     // set replaces it. Columns are complete (the ensureColumn invariant),
     // so each box is the full column.
-    if (m_lightPendingColumns.empty()) {
+    if (ctx.lightPendingColumns.empty()) {
         return;
     }
     // 99.10 (hard rule 7, revised): up to TWO lighting jobs per frame —
@@ -685,10 +742,10 @@ void Game::postLightJobs() {
     // dirty set; collectLitColumns applies them at the next flush (the
     // main-thread-writer window). The job also carries its COLUMNS and a
     // done flag: at the next flush, collectLitColumns drops them from
-    // m_streaming.unlitColumns so their chunks get a mesh job once, lit (PIPE-1
+    // ctx.streaming.unlitColumns so their chunks get a mesh job once, lit (PIPE-1
     // selection rule).
-    const LightJobPlan plan = planLightJobs(m_lightPendingColumns);
-    m_lightPendingColumns.clear();
+    const LightJobPlan plan = planLightJobs(ctx.lightPendingColumns);
+    ctx.lightPendingColumns.clear();
     for (const std::vector<ColumnPos>& columns : plan.jobs) {
         auto job = std::make_unique<LightJob>();
         job->columns = std::set<ColumnPos>(columns.begin(), columns.end());
@@ -697,15 +754,18 @@ void Game::postLightJobs() {
             job->boxes.push_back(columnLightBox(col));
         }
         LightJob* rawJob = job.get();
-        m_streaming.lightJobs.push_back(std::move(job));
-        m_streaming.pool->post([this, rawJob] {
+        ctx.streaming.lightJobs.push_back(std::move(job));
+        // The World pointer is stable (the dimension's world is a Game
+        // member / a once-emplaced optional — never re-seated).
+        World* w = &ctx.world;
+        ctx.pool.post([this, rawJob, w] {
             for (const auto& box : rawJob->boxes) {
                 // newTerrain = true: the boxes cover freshly inserted
                 // columns — the sky propagation must run even when the
                 // rescan writes nothing (a column born dark still
                 // receives light from its lit neighbors). dirtyOut: the
                 // net change is collected job-locally (see above).
-                Lighting::updateRegion(m_world, m_blocks, box[0], box[1],
+                Lighting::updateRegion(*w, m_blocks, box[0], box[1],
                                        true, &rawJob->dirtyChunks);
             }
             rawJob->done = true;
@@ -713,11 +773,8 @@ void Game::postLightJobs() {
     }
 }
 
-void Game::postFluidLightJobs() {
-    if (!m_streaming.pool) {
-        return;
-    }
-    if (m_fluidLightPending.empty()) {
+void Game::postFluidLightJobs(const DimCtx& ctx) {
+    if (ctx.fluidLightPending.empty()) {
         return; // a settled world: the fast exit (structural immunity)
     }
     // The streaming job columns of THIS window (postLightJobs ran
@@ -730,13 +787,13 @@ void Game::postFluidLightJobs() {
     // next frame. The 99.10 parallel safety is per-plan; a shared
     // window would let two workers write one chunk's light arrays.
     std::set<ColumnPos> streaming;
-    for (const std::unique_ptr<LightJob>& job : m_streaming.lightJobs) {
+    for (const std::unique_ptr<LightJob>& job : ctx.streaming.lightJobs) {
         if (!job->fluid) {
             streaming.insert(job->columns.begin(), job->columns.end());
         }
     }
     const LightJobPlan plan =
-        planFluidLightJobs(m_fluidLightPending, streaming);
+        planFluidLightJobs(ctx.fluidLightPending, streaming);
     if (plan.jobs.empty()) {
         return; // every candidate was blocked: nothing to post
     }
@@ -747,7 +804,7 @@ void Game::postFluidLightJobs() {
     // by the flush barrier.
     for (const std::vector<ColumnPos>& columns : plan.jobs) {
         for (const ColumnPos& col : columns) {
-            m_fluidLightPending.erase(col);
+            ctx.fluidLightPending.erase(col);
         }
     }
     for (const std::vector<ColumnPos>& columns : plan.jobs) {
@@ -759,8 +816,9 @@ void Game::postFluidLightJobs() {
             job->boxes.push_back(columnLightBox(col));
         }
         LightJob* rawJob = job.get();
-        m_streaming.lightJobs.push_back(std::move(job));
-        m_streaming.pool->post([this, rawJob] {
+        ctx.streaming.lightJobs.push_back(std::move(job));
+        World* w = &ctx.world;
+        ctx.pool.post([this, rawJob, w] {
             for (const auto& box : rawJob->boxes) {
                 // newTerrain = true: unlike the old synchronous fluid
                 // re-light (default false), the catch-up forces the sky
@@ -773,7 +831,7 @@ void Game::postFluidLightJobs() {
                 // columns' chunks are re-meshed with the new light at
                 // the next flush (collectLitColumns), the 99.4
                 // lit-pop-in discipline.
-                Lighting::updateRegion(m_world, m_blocks, box[0], box[1],
+                Lighting::updateRegion(*w, m_blocks, box[0], box[1],
                                        true, &rawJob->dirtyChunks);
             }
             rawJob->done = true;
@@ -781,7 +839,7 @@ void Game::postFluidLightJobs() {
     }
 }
 
-void Game::postMeshJobs() {
+void Game::postMeshJobs(const DimCtx& ctx) {
     // PIPE-1: worker meshing. Runs in update AFTER streamChunks (gen
     // posts) and BEFORE the light posts (99.11: postLightJobs THEN
     // postFluidLightJobs) — the post order gen -> mesh -> light is the
@@ -797,10 +855,7 @@ void Game::postMeshJobs() {
     // this frame (interaction, fluids, fire, growth), before the
     // player's next move — so it is the frame's final block/fluid
     // state (a pure function of the World at this point).
-    if (!m_streaming.pool) {
-        return;
-    }
-    const std::set<ChunkPos>& dirtySet = m_world.dirtyChunks();
+    const std::set<ChunkPos>& dirtySet = ctx.world.dirtyChunks();
     if (dirtySet.empty()) {
         return;
     }
@@ -814,13 +869,13 @@ void Game::postMeshJobs() {
         return;
     }
     const Vec3 p =
-        m_player ? m_player->position() : Vec3{0.0, 0.0, 0.0};
+        m_player ? m_player->position() : Vec3{0.0f, 0.0f, 0.0f};
     const ColumnPos player{
         floorDiv(static_cast<int>(std::floor(p.x)), kChunkSize),
         floorDiv(static_cast<int>(std::floor(p.z)), kChunkSize)};
     const std::vector<ColumnPos> chosen = nextMeshColumns(
-        dirtyColumns, player, m_streaming.unlitColumns, m_lightPendingColumns,
-        m_streaming.meshPending, kMaxMeshBacklog);
+        dirtyColumns, player, ctx.streaming.unlitColumns,
+        ctx.lightPendingColumns, ctx.streaming.meshPending, kMaxMeshBacklog);
     for (const ColumnPos& col : chosen) {
         auto job = std::make_unique<MeshJob>();
         job->column = col;
@@ -830,29 +885,34 @@ void Game::postMeshJobs() {
         // against at most the 6 neighbor columns' cells). Missing
         // neighbors stay missing: the snapshot World's void reads match
         // the live world's bit-for-bit (the same World class).
-        // insertSnapshotChunk carries the cell content + light + fluid +
-        // stair facing with no live-World bookkeeping (the snapshot's
-        // indexes are never consulted).
+        // The snapshot's skyless flag must MATCH the live world's: the
+        // mesher bakes neighbor light from the snapshot's getSkyLight —
+        // a void neighbor in a SKYLESS (nether) world reads 0, in the
+        // overworld convention it would read 15 (a white-lit boundary
+        // face at the nether's streaming edge). The fresh MeshJob snap
+        // is an empty overworld-convention World; re-seat it with the
+        // live world's flag (the empty move-assign — no chunks copied).
+        job->snap = World(ctx.world.skyless());
         for (int dx = -1; dx <= 1; ++dx) {
             for (int dz = -1; dz <= 1; ++dz) {
                 for (int cy = 0; cy < kVerticalChunksPerColumn; ++cy) {
                     const ChunkPos cp{col.x + dx, cy, col.z + dz};
-                    const Chunk* src = m_world.findChunk(cp);
+                    const Chunk* src = ctx.world.findChunk(cp);
                     if (src != nullptr) {
                         job->snap.insertSnapshotChunk(cp, *src);
                     }
                 }
             }
         }
-        m_streaming.meshPending.insert(col);
+        ctx.streaming.meshPending.insert(col);
         MeshJob* rawJob = job.get();
-        m_streaming.meshJobs.push_back(std::move(job));
+        ctx.streaming.meshJobs.push_back(std::move(job));
         // The worker meshes the job's OWN snapshot (no live World touch —
         // the generation-job pattern). m_blocks / m_atlas are immutable
         // after init (the render pass reads them concurrently). The chunk
         // mesh is a pure function of the snapshot, so the result is
         // deterministic (frame-locked FIFO integration).
-        m_streaming.pool->post([this, rawJob] {
+        ctx.pool.post([this, rawJob] {
             // V2-18 AO: m_aoEnabled = render.ao (the init strict read,
             // code default true). OFF = the AO factor is constant 1.0 +
             // the mask's ao[4] stays zero = the pre-V2-19 mesh bit-

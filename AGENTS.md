@@ -12,9 +12,12 @@ C++20 / SDL3 / OpenGL 3.3 core，
 
 ## 现状（3.x「世界扩展」期——v3.1.0 = V3-7 存档 gzip（门 191，11-04）；
 v3.2.0 = V3-1 Phase A 下界门框（门 192，11-05）；v3.3.0 = V3-8 手柄
-支持（门 193，11-05）；下一项 **V3-1 Phase B 下界世界 + 真传送 =
-v3.4.0 候选**（format 30，全案最大单点 = 实体 World 换绑），其后
-Phase C 内容族 → V3-2~V3-6 → V3-9 demo 回放【矩阵尾部】）
+支持（门 193，11-05）；**v3.4.0 = V3-1 Phase B 下界世界 + 真传送
+（门 194，11-05，format 30——下界可进出往返）**；下一项 **Phase C
+下界内容族 = v3.5.x 系列（与 V3-2 合并执行：群系族/netherrack 族/
+矿脉/流体规则/ambience/视觉打磨）**，其后 V3-3 下界 mob → V3-4
+netherite 材料链 → V3-5 建筑内容族 → V3-6 世界边缘雾 → V3-9 demo
+回放【矩阵尾部】）
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -73,8 +76,11 @@ Phase C 内容族 → V3-2~V3-6 → V3-9 demo 回放【矩阵尾部】）
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2555/2555**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
-  存档 format 29（V3-7 gzip 时代：schema 与 28 完全一致——编码与
+- 测试 **2582/2582**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+  存档 format 30（V3-1 Phase B 下界维度：player.dimension 严格词表
+  恒写 + nether 段 {blocks,fluids,states} + nether_entities 恒写 +
+  派生 seed 不落盘；schema 其余与 29 一致，29 携新键 = version lie
+  点名）；format 29 = V3-7 gzip 时代（schema 与 28 一致——编码与
   format 号正交，on-disk = 确定性 gzip 容器默认开【10B 头全钉 + raw
   deflate 6 + CRC32/ISIZE 尾】+ 加载魔数 `1f 8b` 探测零迁移 +
   `save.compression: "gzip"|"none"` 严格读【absent = gzip 用户定案】
@@ -86,8 +92,9 @@ Phase C 内容族 → V3-2~V3-6 → V3-9 demo 回放【矩阵尾部】）
   178148【V2-10 门 181】→ 178676【V2-19 门 182】→ 179027【V2-11
   门 183】→ **224468【V2-18 门 190，AO 世界光照】；门 184-189 =
   结构免疫第 65-70 次免重锚；门 191【V3-7】= 第 72 次 + 门 192【V3-1
-  Phase A 门框】= 第 73 次 + 门 193【V3-8 手柄】= 第 74 次免重锚
-  【v3.0.0 banner = 第 71 次】——存档/门框/手柄 = 渲染无关零像素**）；PITS
+  Phase A 门框】= 第 73 次 + 门 193【V3-8 手柄】= 第 74 次 + 门 194
+  【V3-1 Phase B 下界】= 第 75 次免重锚【v3.0.0 banner = 第 71 次】
+  ——存档/门框/手柄/惰性下界 = 渲染无关零像素**）；PITS
   375-379 + **PITS 380**（spawn 成功行无 'pick' / 门场景洞穴密封 /
   CAVE config seed 归属 / bob diff 带色相审计）+ **PITS 381**（热栏
   key→RMB ≥0.15s / 活体掉落物品不可作终档断言 / 羊静止窗）+
@@ -107,7 +114,33 @@ Phase C 内容族 → V3-2~V3-6 → V3-9 demo 回放【矩阵尾部】）
   框几何三坑【点火 = 面法向相邻格方向，aim 环格朝内面非内格中心 /
   站入脚位 cell 索引 vs 格中心差 0.5【框平面 z=−2 跨 −2..−1，脚 z
   须 −1.5】/ V3-7 起门脚本读落盘档须过 gzip 魔数 = UnicodeDecodeError
-  0x8b 先兆】）；
+  0x8b 先兆】）+ **PITS 387**（g139 插桩器锚点随调用点形态演进【Phase
+  B DimCtx 参数化断 STREAMING 锚 = PITS 317 loudly-fail 按预期触发】
+  → 双形态锚 + 每 perf 树用自己 commit 的插桩器重建 + 改调用点前先
+  grep 全部锚点）；
+  门计数 194（**V3-1 Phase B 下界世界 v3.4.0** 门 194 全 PASS：
+  下界维度【D1 增量并行成员 overworld 零 diff + D2 惰性构造【首传前
+  零一切】+ D3 仅 Player 换绑 Entity::setWorld【m_world 引用→指针
+  17 点机械适配】+ 非活跃维时间胶囊】+ 下界 worldgen 专属纯函数
+  【坐标纯函数零噪声：基岩 0-4/熔岩海 5-31 全源静态/netherrack
+  32-122/基岩顶 123-127；派生 seed worldSeed^kSaltNether 不落盘】+
+  netherrack 块【hardness 0.4 MC 精确，atlas [13,7] 零移位】+
+  skyless 光照 2 参【shader 零改动】+ 真传送管线【60 帧倒计时 → 8:1
+  floorDiv 双向映射 → ±16 搜活跃 portal【无 → 生成 4×5 含角 + 2×3
+  基岩平台走咽喉点】→ hitbox 安全 + step-up → 3×3 列盘同步 catch-up
+  → 换绑 + restorePosition → 流送 engage；900 帧冷却会话态；正交
+  portal yaw −π/2 MC JE】+ portal_trigger/travel 2 音效【47→49】+
+  渲染 5 点门控【暗红 clear/日月星云雨不画/雾 10→96/F3 dimension
+  行】+ 下界死亡 = 主世界重生 + 8 条下界行为收口记档 + **format 30**
+  【player.dimension 严格词表恒写 + nether 段 + nether_entities 恒写
+  + 两维 portal rescan + 交叉检】；结构免疫第 75 次免重锚**最强形**
+  【下界惰性未建：S1 ≡ 锚 + 终档恰增白名单 4 键】；S2 双跳 arm 全
+  headless【传送：映射验算 + 下界截图 ×2 RAW 恒等 + 落点 [1,55,−0.5]
+  精确 + nether 段 26 块 = 生成框 + 平台 / 返程：±16 搜中原 portal +
+  nether 段持久化 + time 帧锁定验算】；S6 6/6 点名；性能 A/B 同档
+  【终档白名单 4 键 + 下界稳态 ≤ OW：render 0.349 vs 0.510 med +
+  fluid/fires = 0.000 熔岩海零 churn】；详见
+  `docs/archive/phase-3.4.0.md`）；
   门计数 192（**V3-1 Phase A 门框 v3.2.0** 门 192 全 PASS：nether_portal
   块【full-cell 半透盒 + destroyable false + light 11 + state_count 2
   axis】+ core/portal 纯函数族【MC 框 4×5..23×23 角可选有界扫描 45×45
@@ -286,7 +319,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 永不提交 `opencode-sessions/` 下任何文件（本地））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
-## 坑位 Top 8（全文 docs/PITS.md，386 条）
+## 坑位 Top 8（全文 docs/PITS.md，387 条）
 
 1. **SDL grab delta**（P28）：输入 E2E 全帧字节一致不保证——存档 yaw/pitch 为漂移
    探测器；驱动 warp 用实际窗口原点（实测 (4,64)）+ (632,352)。
@@ -322,7 +355,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（386 条，都踩过） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（387 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

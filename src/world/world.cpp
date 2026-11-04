@@ -21,17 +21,24 @@ BlockID World::getBlock(int x, int y, int z) const {
 }
 
 std::uint8_t World::getSkyLight(int x, int y, int z) const {
+    // V3-1 Phase B (D5): the skyless dimension (the nether) has no
+    // daylight — the world top and the void around it read sky 0 (the
+    // overworld's open-sky 15). The sky-light field is then structurally
+    // 0 (no source propagates), so the day/night shader term and the
+    // night floor are inert in the nether (the recon §七 two-site rule,
+    // site 1 of 2 — site 2 is the lighting rescan's top source).
+    const std::uint8_t voidSky = m_skyless ? 0 : kMaxLight;
     if (y < 0) {
         return 0; // below the world: nothing to light
     }
     if (y >= kWorldHeight) {
-        return kMaxLight; // open sky above the world
+        return voidSky; // open sky above the world (the nether: 0)
     }
     const BlockPos p{x, y, z};
     const ChunkPos cp = worldToChunk(p);
     const auto it = m_chunks.find(cp);
     if (it == m_chunks.end()) {
-        return kMaxLight; // void is open sky
+        return voidSky; // void is open sky (the nether: 0)
     }
     const BlockPos local = worldToChunkLocal(cp, p);
     return it->second.skyLightAt(local.x, local.y, local.z);

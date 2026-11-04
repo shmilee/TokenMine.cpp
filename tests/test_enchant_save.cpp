@@ -45,6 +45,22 @@ Json withoutKeyForTest(const Json& obj, const std::string& key) {
     }
     return out;
 }
+// V3-1 Phase B: the downgrade's format-30 key strip (the test_save.cpp
+// stripFormat30Keys twin — the genuine pre-30 file never carried the
+// format-30 keys: player.dimension / nether / nether_entities).
+Json stripFormat30Keys(Json root) {
+    root = withoutKeyForTest(root, "nether");
+    root = withoutKeyForTest(root, "nether_entities");
+    if (const Json* player = root.find("player");
+        player != nullptr && player->isObject() &&
+        player->find("dimension") != nullptr) {
+        Json p = withoutKeyForTest(*player, "dimension");
+        root = withoutKeyForTest(root, "player");
+        root["player"] = std::move(p);
+    }
+    return root;
+}
+
 
 BlockRegistry makeBlocks() {
     BlockRegistry blocks;
@@ -152,6 +168,7 @@ TEST(SaveFormat27, Pre27LoadMigratesXpSeed) {
     Json root = *j;
     // Downgrade to format 26 + strip the format-27 keys (the pre-27 shape:
     // no xp_seed, no enchants).
+    root = stripFormat30Keys(std::move(root));
     root["format"] = Json(26);
     if (const Json* player = root.find("player")) {
         Json p = *player;
@@ -199,6 +216,7 @@ TEST(SaveFormat27, Format26CarryingXpSeedRejected) {
     // format-27 vocabulary; the player whitelist rejects it). The V2-13
     // respawn key (format 28) is stripped so the xp_seed lie is the one
     // named (the whitelist reports the alphabetically first unknown).
+    root = stripFormat30Keys(std::move(root));
     root["format"] = Json(26);
     if (const Json* player = root.find("player")) {
         Json p = *player;
@@ -318,6 +336,7 @@ TEST(SaveFormat27, Format26CarryingEnchantsRejected) {
     ASSERT_TRUE(j.ok());
     Json root = *j;
     // Downgrade to format 26 but KEEP the slot's enchants -> a version lie.
+    root = stripFormat30Keys(std::move(root));
     root["format"] = Json(26);
     if (const Json* player = root.find("player")) {
         Json p = *player;

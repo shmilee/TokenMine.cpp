@@ -420,7 +420,46 @@ namespace mc {
 //      rejecting 29 is the same version-mutual-exclusion any format
 //      bump carries; this build reads format 1..29. Writes are always
 //      format 29.
-inline constexpr int kSaveFormat = 29;
+//  30: the V3-1 Phase B NETHER (v3.4.0) — the second world space + the
+//      real travel: "player" gains "dimension" (a STRICT VOCABULARY
+//      string "overworld" | "nether" — ALWAYS written: the player's
+//      position is in the CURRENT dimension's coordinates, so the
+//      dimension key is the position's frame of reference; a format-29
+//      file carrying it is a version lie, the per-format field
+//      whitelist names it; a format-29 load MIGRATES to "overworld" —
+//      the system did not exist, the velocity-zeroed migration twin) and
+//      the root gains TWO new segments (ALWAYS written — an empty
+//      array / empty object is valid, the furnaces-key discipline; a
+//      format-30 file REQUIREs both, a format-29 file carrying either
+//      is a version lie):
+//        - "nether": { "blocks": [...], "fluids": [...], "states": [...] }
+//          (the CLOSED SET — the overworld's block-edit / fluid-edit /
+//          per-instance-state shapes verbatim, the nether's cells; the
+//          nether's seed is DERIVED from the overworld's stored "seed"
+//          (worldSeed ^ kSaltNether — the parse rebuilds it, never
+//          stored, the xp_seed single-source-of-truth twin), so the
+//          diff reference is the pure nether fill. The cross-checks run
+//          in BOTH directions like the overworld's: every nether
+//          stateful block edit owns a "states" entry (a portal without
+//          its axis is a version lie — the PITS 383① twin) and every
+//          "states" entry is a nether stateful cell.);
+//        - "nether_entities": the nether's dropped items (the ITEM kind
+//          of the overworld's entity entry shape verbatim; the XP kind
+//          is REJECTED — the nether holds no XP grant source in Phase
+//          B, the documented deviation 6; ALWAYS written, empty valid).
+//      The nether's fire / container states are NOT carried (the D9
+//      closed-set ruling: the nether's Phase-B content is netherrack /
+//      bedrock / obsidian / portal / lava — the stateful block is the
+//      portal, its axis in "nether.states"; the fire / furnace /
+//      campfire / table / crop / sapling / beacon / moisture maps stay
+//      overworld-only, the Phase-C content family's domain). A format-29
+//      (or older) load migrates: dimension "overworld" + the nether
+//      segments empty (the system did not exist — the player was always
+//      in the overworld, the nether world never generated). The gzip
+//      container (format 29's orthogonal encoding) carries the new
+//      schema unchanged (the read side is encoding-agnostic, the magic
+//      probe). Writes are always format 30.
+inline constexpr int kSaveFormat = 30;
 // UX-8f (format 24): the inventory's total slot count as of format 23
 // (9 hotbar + 18 storage) — the 27-slot array shape a pre-24 file
 // carries (the parser tail-pads it to the current kTotalSize).
@@ -799,6 +838,13 @@ struct SaveGame {
     // validated in [0, kWorldHeight), so a real value never reads as
     // the sentinel).
     Vec3 playerRespawn {-1.0f, -1.0f, -1.0f};
+    // V3-1 Phase B (format 30): the player's DIMENSION — the strict
+    // vocabulary word "overworld" / "nether" (ALWAYS written; the
+    // player's pos/vel/yaw/pitch are in this dimension's coordinates —
+    // the position's frame of reference). "overworld" for a format-29
+    // (or older) load (the migration — the system did not exist, the
+    // player was always in the overworld; the velocity-zeroed twin).
+    std::string playerDimension = "overworld";
     std::vector<SavedItemEntity> entities;
     // The XP orbs (V2-11, format 26): the second entity kind of the
     // save's "entities" array (type "xp" — the item entries above keep
@@ -808,6 +854,19 @@ struct SaveGame {
     std::vector<SavedXpEntity> xpEntities;
     std::vector<SavedBlockEdit> blockEdits; // sorted by pos
     std::vector<SavedFluidEdit> fluidEdits; // sorted by pos
+    // V3-1 Phase B (format 30): the NETHER's cell edits + per-instance
+    // states (the overworld's shapes verbatim — the nether's diff
+    // reference is the pure fill against the derived seed). ALWAYS
+    // written (empty valid — a no-travel session's nether is pristine);
+    // empty for a format-29 (or older) load (the migration).
+    std::vector<SavedBlockEdit> netherBlockEdits; // sorted by pos
+    std::vector<SavedFluidEdit> netherFluidEdits; // sorted by pos
+    std::vector<SavedState> netherStates;         // sorted by pos
+    // V3-1 Phase B (format 30): the nether's dropped items (the ITEM
+    // kind only — the XP kind is rejected, the nether holds no grant
+    // source in Phase B, the documented deviation 6). ALWAYS written
+    // (empty valid); empty for a format-29 (or older) load.
+    std::vector<SavedItemEntity> netherEntities;
 };
 
 // Compares every existing chunk of `world` against `reference` (called
@@ -875,14 +934,17 @@ RetainedColumnDiff retainColumnDiff(const World& world,
 // diff was captured at unload (retainColumnDiff) and lives in the
 // retained map. BOTH exit-save paths merge (the journal path and the
 // legacy/oracle --save-full-diff path). Appends every retained entry to
-// save.blockEdits / save.fluidEdits and re-sorts by position: a
-// duplicate cell is STRUCTURALLY IMPOSSIBLE (the one-of invariant — a
-// column sits in at most one of the journal and the retained map — and
-// the diffs above only cover EXISTING chunks, while a retained column is
-// unloaded by definition), so the merge is a pure union. No-op on an
-// empty map (a session that never unloaded a modified column — the
-// pre-STRM-2 behavior, bit-identical).
-void mergeRetained(SaveGame& save,
+// `blockEdits` / `fluidEdits` (the caller's dimension's lists — V3-1
+// Phase B: the overworld's save.blockEdits / save.fluidEdits OR the
+// nether's save.netherBlockEdits / save.netherFluidEdits) and re-sorts
+// by position: a duplicate cell is STRUCTURALLY IMPOSSIBLE (the one-of
+// invariant — a column sits in at most one of the journal and the
+// retained map — and the diffs above only cover EXISTING chunks, while a
+// retained column is unloaded by definition), so the merge is a pure
+// union. No-op on an empty map (a session that never unloaded a modified
+// column — the pre-STRM-2 behavior, bit-identical).
+void mergeRetained(std::vector<SavedBlockEdit>& blockEdits,
+                   std::vector<SavedFluidEdit>& fluidEdits,
                    const std::map<ColumnPos, RetainedColumnDiff>& retained);
 
 // Replays the saved cell edits onto a freshly generated `world`: block

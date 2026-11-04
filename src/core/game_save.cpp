@@ -70,6 +70,10 @@ Result<SaveGame> Game::collectSave() const {
     // the components — exact for both position classes); the parse
     // reconstructs the cell center.
     save.playerRespawn = m_player->spawnPos();
+    // V3-1 Phase B (format 30): the player's dimension — ALWAYS written
+    // (the strict vocabulary word; the position's frame of reference).
+    save.playerDimension =
+        playerInNether() ? "nether" : "overworld";
     save.selectedSlot = static_cast<int>(m_selectedSlot);
     save.slots.resize(m_inventory.size());
     for (std::size_t i = 0; i < save.slots.size(); ++i) {
@@ -313,7 +317,133 @@ Result<SaveGame> Game::collectSave() const {
     // Duplicate cells are structurally impossible (the one-of invariant);
     // a session that never unloaded a modified column passes an empty
     // map (the no-op — the pre-STRM-2 file shape, bit-identical).
-    mergeRetained(save, m_streaming.retainedColumns);
+    mergeRetained(save.blockEdits, save.fluidEdits,
+                  m_streaming.retainedColumns);
+    // V3-1 Phase B (format 30): the NETHER section (the overworld's diff's
+    // twin — the lazy D2: the nether's world exists only after engagement,
+    // so a no-travel session serializes the empty nether section = the
+    // whitelist's keys with empty arrays, the S1 gate's "恰增白名单键").
+    // The nether's journal (the nether's StreamingState — the overworld's
+    // journal's twin; the nether's cell-mutation observer feeds it at
+    // ensureNether). The nether's states derive from the nether's journal
+    // (or the nether's world scan on the fallback path) exactly like the
+    // overworld's: the nether's worldgen (fillNetherChunk) places no
+    // stateful block (netherrack / bedrock are stateless, the lava is a
+    // fluid), so every nether stateful cell (the player's portals) was
+    // block-edited this session and is in the nether's block journal —
+    // the journal-only derivation's completeness argument holds.
+    if (m_nether.world) {
+        const bool netherJournalSave =
+            journalSave && m_nether.streaming.saveJournal.valid;
+        if (netherJournalSave) {
+            auto diff = journalDiff(
+                *m_nether.world, makeNetherChunkGenerator(), m_blocks,
+                m_nether.streaming.saveJournal.blocks,
+                m_nether.streaming.saveJournal.fluids,
+                save.netherBlockEdits, save.netherFluidEdits,
+                kSaveDiffWorkers);
+            if (!diff.ok()) {
+                return diff.error();
+            }
+        } else {
+            auto diff = diffWorld(*m_nether.world, makeNetherChunkGenerator(),
+                                  m_blocks, save.netherBlockEdits,
+                                  save.netherFluidEdits, kSaveDiffWorkers);
+            if (!diff.ok()) {
+                return diff.error();
+            }
+        }
+        mergeRetained(save.netherBlockEdits, save.netherFluidEdits,
+                      m_nether.streaming.retainedColumns);
+        // The nether's per-instance states (the overworld's derivation's
+        // twin — the journal path or the world scan).
+        if (netherJournalSave) {
+            std::vector<SavedState> netherStates;
+            for (const auto& entry : m_nether.streaming.saveJournal.blocks) {
+                for (const BlockPos& p : entry.second) {
+                    const BlockID id =
+                        m_nether.world->getBlock(p.x, p.y, p.z);
+                    if (id == BlockID::air() ||
+                        !m_blocks.at(id).hasState()) {
+                        continue;
+                    }
+                    const std::uint8_t state =
+                        m_nether.world->getBlockState(p.x, p.y, p.z);
+                    const std::uint8_t ns =
+                        (state != Chunk::kBlockStateUnset)
+                            ? state
+                            : static_cast<std::uint8_t>(
+                                  m_blocks.at(id).stateDefault());
+                    netherStates.push_back(SavedState {p, ns});
+                }
+            }
+            std::sort(netherStates.begin(), netherStates.end(),
+                      [](const SavedState& a, const SavedState& b) {
+                          return a.pos < b.pos;
+                      });
+            save.netherStates = std::move(netherStates);
+        } else {
+            for (const ChunkPos& cp : m_nether.world->chunkPositions()) {
+                const Chunk* chunk = m_nether.world->findChunk(cp);
+                if (chunk == nullptr) {
+                    continue;
+                }
+                const int bx = cp.x * kChunkSize;
+                const int by = cp.y * kChunkSize;
+                const int bz = cp.z * kChunkSize;
+                for (int ly = 0; ly < kChunkSize; ++ly) {
+                    for (int lz = 0; lz < kChunkSize; ++lz) {
+                        for (int lx = 0; lx < kChunkSize; ++lx) {
+                            const BlockID id = chunk->get(lx, ly, lz);
+                            if (id == BlockID::air() ||
+                                !m_blocks.at(id).hasState()) {
+                                continue;
+                            }
+                            const std::uint8_t state =
+                                chunk->stateAt(lx, ly, lz);
+                            const BlockPos p {bx + lx, by + ly, bz + lz};
+                            const std::uint8_t ns =
+                                (state != Chunk::kBlockStateUnset)
+                                    ? state
+                                    : static_cast<std::uint8_t>(
+                                          m_blocks.at(id).stateDefault());
+                            save.netherStates.push_back(SavedState {p, ns});
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // V3-1 Phase B (format 30): the nether's dropped items (the
+    // overworld's entity loop's twin — the ITEM kind only; an XP orb in
+    // the nether is the loud failure, the nether carries no XP grant
+    // source in Phase B, the documented deviation 6).
+    for (const std::unique_ptr<Entity>& e : m_nether.entities) {
+        if (dynamic_cast<const ExpOrbEntity*>(e.get()) != nullptr) {
+            return MC_FAIL(
+                "cannot save: the nether holds an XP orb (the nether "
+                "carries no XP grant source in Phase B)");
+        }
+        const ItemEntity* item = dynamic_cast<const ItemEntity*>(e.get());
+        if (item == nullptr) {
+            if (dynamic_cast<const MobEntity*>(e.get()) == nullptr &&
+                dynamic_cast<const Projectile*>(e.get()) == nullptr) {
+                return MC_FAIL(
+                    "cannot save: an entity of a kind this build does not "
+                    "persist exists in the nether");
+            }
+            continue; // mobs / arrows are ephemeral (the overworld twin)
+        }
+        SavedItemEntity se;
+        se.item = item->itemName();
+        se.count = item->count();
+        se.pos = item->position();
+        se.age = item->age();
+        se.pickupDelay = item->pickupDelayRemaining();
+        se.damage = item->damage();
+        se.enchants = item->enchants();
+        save.netherEntities.push_back(std::move(se));
+    }
     return save;
 }
 
@@ -437,12 +567,102 @@ Result<void> Game::applySave(const SaveGame& save) {
     // 2) Lighting: a full re-propagation is exact for any edit count (the
     //    incremental local updates converge to the same values).
     Lighting::propagateAll(m_world, m_blocks);
+    // 2b) V3-1 Phase B (D9's load ordering): the NETHER — engage the
+    //     dimension when the save needs it (the nether section is
+    //     non-empty OR the player sits in the nether), replay the
+    //     nether's cell edits onto the generated nether (the overworld's
+    //     applyWorldEdits on the nether's world + the nether's derived-
+    //     seed fill reference), protect the edited columns, re-light the
+    //     nether (the SKYLESS source 0 — the stored nether sky field is
+    //     structurally 0, the day/night shader term inert), apply the
+    //     nether's per-instance states (the portal axes — the overworld's
+    //     states replay's twin), and restore the nether's dropped items
+    //     (the nether's entity list — D3: the items stay in their
+    //     dimension). A no-nether save (a format-29 migration, or a
+    //     no-travel session) never engages the nether (the lazy D2 —
+    //     the structural-immunity root: the load allocates nothing).
+    const bool netherNeeded = !save.netherBlockEdits.empty() ||
+                              !save.netherFluidEdits.empty() ||
+                              !save.netherStates.empty() ||
+                              !save.netherEntities.empty() ||
+                              save.playerDimension == "nether";
+    if (netherNeeded) {
+        ensureNether();
+        if (!m_nether.world) {
+            return MC_FAIL("cannot load the nether section: the nether "
+                           "is unbuildable (the asset set is missing the "
+                           "netherrack or bedrock block)");
+        }
+        // The nether's edits replay (the overworld's applyWorldEdits on
+        // the nether's world — the temporary SaveGame view carries the
+        // nether's lists in the overworld's fields, the function's
+        // contract: save.blockEdits / save.fluidEdits).
+        SaveGame netherView;
+        netherView.blockEdits = save.netherBlockEdits;
+        netherView.fluidEdits = save.netherFluidEdits;
+        MC_TRY(applyWorldEdits(netherView, m_blocks, *m_nether.world));
+        // The nether's edited columns (the overworld's protection's
+        // twin — the nether's diff must survive a re-save even when the
+        // player is far away).
+        for (const SavedBlockEdit& e : save.netherBlockEdits) {
+            m_nether.streaming.editedColumns.insert(
+                {floorDiv(e.pos.x, kChunkSize),
+                 floorDiv(e.pos.z, kChunkSize)});
+        }
+        for (const SavedFluidEdit& e : save.netherFluidEdits) {
+            m_nether.streaming.editedColumns.insert(
+                {floorDiv(e.pos.x, kChunkSize),
+                 floorDiv(e.pos.z, kChunkSize)});
+        }
+        // The nether's lighting (the SKYLESS source 0 — the stored sky
+        // field is structurally 0, the nether's day/night inert).
+        Lighting::propagateAll(*m_nether.world, m_blocks, 0);
+        // The nether's per-instance states (the overworld's states
+        // replay's twin — the saved value is authoritative: it
+        // overwrites whatever the replay left).
+        for (const SavedState& ss : save.netherStates) {
+            m_nether.world->setBlockState(ss.pos.x, ss.pos.y, ss.pos.z,
+                                          ss.state);
+        }
+        // The nether's dropped items (the nether's entity list — the
+        // overworld's item restore's twin; the nether carries the ITEM
+        // kind only, the parse's rejection).
+        for (const SavedItemEntity& e : save.netherEntities) {
+            const Item& item = m_items.at(m_items.idForName(e.item));
+            auto entity = std::make_unique<ItemEntity>(
+                *m_nether.world, m_blocks, e.item, item.maxStack, e.count,
+                e.pos, e.damage, e.enchants);
+            entity->setAge(e.age);
+            entity->setPickupDelay(e.pickupDelay);
+            m_nether.entities.push_back(std::move(entity));
+        }
+    }
     // 3) Player. restorePosition teleports (velocity zeroed) and re-pins
     //    the fall tracking to the restored Y (Phase 36: a save taken
     //    mid-air has no leave-the-ground transition on load, so without
     //    the pin the saved fall would land damage-free). When the save
     //    was taken at rest the one-frame gravity re-settle is
-    //    position-exact (the floor plane is an integer).
+    //    position-exact (the floor plane is an integer). V3-1 Phase B:
+    //    the player's position is in the CURRENT dimension's
+    //    coordinates (the format-30 dimension key's frame of reference) —
+    //    a nether load rebinds the player to the nether's world (D3's
+    //    setWorld — the only cross-dimension entity) + flips the
+    //    dimension + runs the catch-up disk around the landing (the
+    //    travel's twin: the nether's streaming has never engaged this
+    //    column, the 3x3 disk ensures the neighborhood is complete +
+    //    lit). The overworld load (the default — the pre-Phase-B path)
+    //    runs the exact legacy sequence, bit-for-bit.
+    if (save.playerDimension == "nether") {
+        m_player->setWorld(*m_nether.world);
+        m_playerDimension = Dimension::Nether;
+        {
+            const int cx = floorDiv(
+                static_cast<int>(std::floor(save.playerPos.x)), kChunkSize);
+            const int cz = floorDiv(
+                static_cast<int>(std::floor(save.playerPos.z)), kChunkSize);
+            catchUpDisk(Dimension::Nether, cx, cz);
+        }
+    }
     m_player->restorePosition(save.playerPos);
     // SAVE-2 (format 22): re-apply the saved velocity (pre-22 files
     // carry the zero triple = the legacy zeroed restore, bit-for-bit).

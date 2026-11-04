@@ -802,6 +802,61 @@ TEST(PortalMappingTest, OverworldToNetherFloors) {
     }
 }
 
+TEST(PortalMappingTest, NetherToOverworldScales) {
+    // V3-1 Phase B: the nether -> overworld mapping (the exact integer
+    // product — no floor: the nether coordinate scaled up, Y unscaled;
+    // the negative values scale symmetrically). The seven-group table
+    // (the OverworldToNetherFloors twin): the round trip's stability is
+    // the gate's travel evidence (the nether's landing cell's overworld
+    // origin is the 8x8 block that floor-divides to it).
+    const struct {
+        int x, y, z;
+        BlockPos want;
+    } cases[] = {
+        {1, 5, 1, BlockPos {8, 5, 8}},
+        {-1, 5, -1, BlockPos {-8, 5, -8}},
+        {2, 3, 1, BlockPos {16, 3, 8}},
+        {-2, 3, -1, BlockPos {-16, 3, -8}},
+        {0, 0, 0, BlockPos {0, 0, 0}},
+        {7, 8, -7, BlockPos {56, 8, -56}},
+        {3, 1, -3, BlockPos {24, 1, -24}},
+    };
+    for (const auto& c : cases) {
+        EXPECT_EQ(netherToOverworld(c.x, c.y, c.z), c.want)
+            << c.x << "," << c.y << "," << c.z;
+    }
+}
+
+TEST(PortalMappingTest, RoundTripStability) {
+    // The round trip (the wiki's 8:1 semantics): overworld -> nether ->
+    // overworld lands in the 8x8 overworld block that maps to the nether
+    // cell (floorDiv(ox, 8) * 8 <= ox < floorDiv(ox, 8) * 8 + 8); the
+    // nether -> overworld -> nether round trip is EXACT (the product is
+    // the block's corner — the cell that floor-divides to it includes
+    // the corner). Negative coordinates included (the floorDiscipline's
+    // negative-safe floor).
+    const struct {
+        int ox, oy, oz;
+    } overworld[] = {
+        {0, 55, -2}, {7, 3, 7}, {-7, 5, -7}, {15, 3, 8},
+        {-16, 3, -8}, {100, 64, -200}, {1, 0, 127},
+    };
+    for (const auto& c : overworld) {
+        const BlockPos n = overworldToNether(c.ox, c.oy, c.oz);
+        const BlockPos back = netherToOverworld(n.x, n.y, n.z);
+        // The overworld round trip lands in the 8x8 block.
+        EXPECT_EQ(floorDiv(back.x, kPortalMappingScale), n.x)
+            << c.ox << "," << c.oy << "," << c.oz;
+        EXPECT_EQ(floorDiv(back.z, kPortalMappingScale), n.z)
+            << c.ox << "," << c.oy << "," << c.oz;
+        EXPECT_EQ(back.y, n.y) << c.ox << "," << c.oy << "," << c.oz;
+        // The nether round trip is exact (the product's corner cell
+        // floor-divides back to the nether coordinate).
+        const BlockPos n2 = overworldToNether(back.x, back.y, back.z);
+        EXPECT_EQ(n2, n) << c.ox << "," << c.oy << "," << c.oz;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // The portal ambience roll (the frame-locked pure stream, hard rule 8).
 // ---------------------------------------------------------------------------

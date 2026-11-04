@@ -96,16 +96,33 @@ void Game::update(double dt) {
     // integrateMeshJobs runs BEFORE integrateStreamedColumns: a stream
     // insert re-marks neighbor columns dirty, and that re-dirtying must
     // survive the mesh integrate's clear-dirty (see integrateMeshJobs).
+    // V3-1 Phase B: the drain covers BOTH dimensions (the overworld's
+    // in-flight jobs + the nether's — at most one frame's worth of the
+    // source dimension's jobs linger after a travel, then its sets stay
+    // empty and every drain fast-exits: a no-nether session runs the
+    // exact pre-Phase-B sequence, the bit-identical red line). The
+    // unload pass runs for the ACTIVE dimension only (the player's
+    // coordinates are its space; the frozen dimension's disk is
+    // neither added to nor subtracted from — zero post, zero churn).
     if (m_streaming.pool) {
         m_streaming.pool->flush();
     }
-    collectLitColumns();
-    integrateMeshJobs();
-    integrateStreamedColumns();
-    unloadFarColumns();
+    collectLitColumns(overworldCtx());
+    integrateMeshJobs(overworldCtx());
+    integrateStreamedColumns(overworldCtx());
+    if (m_nether.world) {
+        collectLitColumns(netherCtx());
+        integrateMeshJobs(netherCtx());
+        integrateStreamedColumns(netherCtx());
+    }
+    DimCtx activeCtx = playerInNether() ? netherCtx() : overworldCtx();
+    unloadFarColumns(activeCtx);
 
     // Day/night: a fixed per-frame step (see kDayStepPerFrame) keeps
-    // headless runs byte-reproducible.
+    // headless runs byte-reproducible. V3-1 Phase B: the day cycle +
+    // weather are GLOBAL (the single instance keeps advancing in every
+    // dimension — the Minecraft time-continuity semantics, the design's
+    // D7 ruling: the nether's render simply does not consume them).
     m_dayCycle.update(kDayStepPerFrame);
 
     // V2-4: the weather state machine (the fixed 1/60 frame step, the
@@ -131,157 +148,16 @@ void Game::update(double dt) {
         --m_tutorialToastFrames;
     }
 
-    // Furnaces (Phase 40, per-block Phase 44): one fixed 1/60 substep per
-    // frame, per state (the day-cycle class — integer substep counters,
-    // byte-reproducible). std::map iteration is position-sorted: the tick
-    // order is deterministic. No-op on an empty state; runs in every
-    // pointer/panel state (the world keeps ticking while the panel is
-    // open, as in Minecraft).
-    for (auto& [pos, st] : m_states.furnaces) {
-        // CRAFT-5: snapshot before the tick — the presentation events
-        // (the lit crackle, the smelt-complete ding) are a pure function
-        // of (before, after); audio is outside the frame state (hard
-        // rule 8), so the sound + log never touch determinism.
-        const FurnaceState before = st;
-        tickFurnace(st, m_items);
-        const FurnaceTickEvents ev = furnaceTickEvents(before, st);
-        if (ev.lit) {
-            m_sound.play("ignite", Vec3 {
-                static_cast<float>(pos.x) + 0.5f,
-                static_cast<float>(pos.y) + 0.5f,
-                static_cast<float>(pos.z) + 0.5f});
-            MC_LOG_INFO("Furnace lit at (" + std::to_string(pos.x) +
-                        ", " + std::to_string(pos.y) + ", " +
-                        std::to_string(pos.z) + ")");
-        }
-        if (ev.smeltCompleted) {
-            m_sound.play("smelt", Vec3 {
-                static_cast<float>(pos.x) + 0.5f,
-                static_cast<float>(pos.y) + 0.5f,
-                static_cast<float>(pos.z) + 0.5f});
-            MC_LOG_INFO("Furnace smelt complete: " +
-                        m_items.at(st.output.item).name + " at (" +
-                        std::to_string(pos.x) + ", " +
-                        std::to_string(pos.y) + ", " +
-                        std::to_string(pos.z) + ")");
-            // V2-3: the smelt.<item> tutorial event — the smelt-complete
-            // consumption point (the product the furnace just output),
-            // one fixed 1/60 substep per frame per state (hard rule 8).
-            emitTutorialEvent("smelt." + m_items.at(st.output.item).name, 1);
-            // V2-11 (XP): the smelt-complete grant — one orb worth the
-            // PRODUCT's data smelt_xp (the smelt_xp default 1 unifies
-            // every smelt — the documented simplification of Minecraft's
-            // fractional table), at the furnace block's center raised
-            // +0.5 (the cell above the block — the CRAFT-5 flame-spawn
-            // position; the orb falls onto the furnace's face and rests,
-            // the item convention). smelt_xp 0 = no orb (the data gate
-            // — spawnExpOrb's belt makes it structural). Frame-locked
-            // event boundary (hard rule 8: the smelt event fires on the
-            // fixed 1/60 substep, the pool mutation lands on the frame).
-            if (m_items.at(st.output.item).smeltXp > 0) {
-                spawnExpOrb(m_items.at(st.output.item).smeltXp,
-                            Vec3 {static_cast<float>(pos.x) + 0.5f,
-                                  static_cast<float>(pos.y) + 1.0f,
-                                  static_cast<float>(pos.z) + 0.5f});
-            }
-        }
-    }
-
-    // Campfire water extinguish (Phase 75): a LIT campfire with a WATER
-    // fluid (any level) in one of its 6 neighbors goes out instantly —
-    // water beats fire (the Phase 57/64 rule, the fire-block twin). V2-4:
-    // the condition is the shared fire-family predicate extended with the
-    // rain disjunct (extinguishedByWaterOrRain — the rain puts a lit
-    // campfire out like the water does, no roof-shade check = the
-    // documented deviation; the world seed never changes, so a no-input
-    // run's first rain still lands only after kClearMin frames). The
-    // cooking state SURVIVES (the items stay on the unlit logs: the
-    // take-back works, the clocks pause); there is no re-light in v2
-    // (documented deviation). A frame-state check (deterministic; the
-    // fluid state is world state), run BEFORE the cook tick so an
-    // extinguished campfire does not cook on its extinguish frame.
-    // Fast-exit: a no-input run has no campfires (worldgen never emits
-    // one) and the fresh world has no water next to one.
-    if (!m_states.campfires.empty() && m_states.campfireLitId.valid() &&
-        m_states.campfireExtId.valid()) {
-        std::vector<BlockPos> goOut;
-        for (const auto& entry : m_states.campfires) {
-            const BlockPos& pos = entry.first;
-            if (m_world.getBlock(pos.x, pos.y, pos.z) != m_states.campfireLitId) {
-                continue; // already out (or the family id is stale)
-            }
-            if (extinguishedByWaterOrRain(m_world, pos, m_weather.raining)) {
-                goOut.push_back(pos);
-            }
-        }
-        // Apply AFTER the scan (setBlock touches the world state the scan
-        // reads — the snapshot discipline, like the fire put-out pass).
-        for (const BlockPos& pos : goOut) {
-            setBlock(pos.x, pos.y, pos.z, m_states.campfireExtId);
-            // Light 15 -> 0: re-light the touched region (the P64
-            // fire-put-out pattern).
-            Lighting::updateLocal(m_world, m_blocks, pos);
-        }
-    }
-
-    // Campfires (Phase 71, the four-slot tick in Phase 75): one fixed
-    // 1/60 substep per frame, per state (the day-cycle class — integer
-    // substep counters, byte-reproducible; the furnace pace via
-    // smeltSubstepsFor). std::map iteration is position-sorted: the tick
-    // order is deterministic. Only LIT campfires cook (an extinguished
-    // one holds its items, no progress). No-op on an empty state; runs
-    // in every pointer/panel state (the world keeps ticking).
-    for (auto& [pos, st] : m_states.campfires) {
-        if (m_world.getBlock(pos.x, pos.y, pos.z) != m_states.campfireLitId) {
-            continue;
-        }
-        tickCampfireCook(st, m_items);
-    }
-
-    // Crop growth (Phase 48): one fixed 1/60 substep per frame (the
-    // day-cycle class — byte-reproducible). The pure roll lives in
-    // world/growth (hash of world seed + frame + position); the position-
-    // ordered set makes the step list deterministic. Advances go through
-    // setBlock (chunk dirty marking + tracking-set maintenance). Runs in
-    // every pointer/panel state (the world keeps ticking while a panel is
-    // open, as in Minecraft). V2-4: the live rain state releases the
-    // dry_slowdown gate (cropGrowthSteps' raining argument — off/clear =
-    // false = the pre-V2-4 pace bit-identical).
-    {
-        const std::vector<GrowthStep> steps = cropGrowthSteps(
-            m_world, m_blocks, m_states.crops,
-            static_cast<std::uint64_t>(m_generator->seed()),
-            static_cast<std::uint64_t>(m_frameCount), m_weather.raining);
-        for (const GrowthStep& s : steps) {
-            setBlock(s.pos.x, s.pos.y, s.pos.z, s.to);
-            // Cross-shaped crops are non-opaque: the light field is
-            // unchanged, but the local update is a harmless no-op kept for
-            // consistency with every other block change.
-            Lighting::updateLocal(m_world, m_blocks, s.pos);
-        }
-    }
-
-    // GEN-2 sapling growth (the crop tick's twin, one fixed 1/60 substep
-    // per frame — the day-cycle class, byte-reproducible): the pure roll
-    // + gates live in world/growth (seed + frame + position); the steps
-    // are state-only (Advance — the ENT-2 byte: NO light update, a state
-    // change never alters the light, the documented constraint) or a full
-    // tree placement (Complete — placeGrownTree relights the bbox ONCE).
-    // Runs in every pointer/panel state, like the crops.
-    {
-        const std::vector<SaplingStep> steps = saplingGrowthSteps(
-            m_world, m_blocks, m_states.saplings,
-            static_cast<std::uint64_t>(m_generator->seed()),
-            static_cast<std::uint64_t>(m_frameCount));
-        for (const SaplingStep& s : steps) {
-            if (s.action == SaplingAction::Advance) {
-                m_world.setBlockState(s.pos.x, s.pos.y, s.pos.z,
-                                      static_cast<std::uint8_t>(s.stage));
-                continue; // the state change marks the chunk dirty (mesh);
-                // the light is untouched (the ENT-2 constraint).
-            }
-            placeGrownTree(s.pos, s.height);
-        }
+    // V3-1 Phase B (D3 time-capsule ruling): the overworld's world pass
+    // (the per-block states + the growth family) is FROZEN while the
+    // player is in the nether — the inactive dimension ticks nothing,
+    // its state is a pure function of its last active frame (the S2
+    // return-leg gate's "OW savenorm ≡ pre-entry except the global
+    // time" rests on it; the nether's twin pass runs in the nether
+    // section below). In the overworld (the default) this is the exact
+    // pre-Phase-B sequence — the bit-identical red line.
+    if (!playerInNether()) {
+        updateOverworldWorldPass();
     }
 
     // Phase 15 UI keys: F3/F5 work in any pointer state; E opens the
@@ -296,98 +172,34 @@ void Game::update(double dt) {
         handleInteraction(dt);
     }
 
-    // Fluids tick at 20/s (every third frame at 60fps). Changed fluid
-    // levels shift the light (water attenuates it). 99.11: the Phase 64
-    // pattern — one SYNCHRONOUS updateRegion over the bounding box of
-    // all changed cells, on the main thread — was the deep root of the
-    // walking stutter: in the shipped ocean the coast film cascade
-    // scatters 713 -> 918 -> 1357 changed cells per tick over hundreds
-    // of columns, and that box's rescan cost 130 -> 396 -> 661 s per
-    // 300-frame window while the tick itself was 20-38 ms (step-0
-    // instrumentation: 99% of the fluid section's cost was the re-light).
-    // Now each changed column is queued for the budgeted worker catch-up
-    // (postFluidLightJobs: kFluidLightColumnsPerFrame per frame on the
-    // 99.10 job infrastructure): the main-thread cost drops to set
-    // inserts, and the light lands with a bounded per-column lag (the
-    // convergence argument in world/light_job.hpp — each re-light fixes
-    // its column exactly, so the drained set equals the full
-    // propagation). A settled world changes nothing (the fast exit is
-    // unchanged).
-    if (m_frameCount % kFluidTickEveryNFrames == 0) {
-        // The fluid tick number (frame-locked): the honey gate is its
-        // period (FLUID-6 — honey simulates on every 3rd fluid tick).
-        const bool honeyActive =
-            (m_frameCount / kFluidTickEveryNFrames) %
-                kHoneyTickPeriodFluidTicks ==
-            0;
-        const std::vector<BlockPos> changed = FluidSim::tick(
-            m_world, m_blocks, &m_flammableChunks, honeyActive);
-        // Phase 64: the burn pass (inside the tick above) turns flamable
-        // blocks into FIRE blocks via world.setBlock — it bypasses the
-        // Game setBlock choke point, so register the changed cells that
-        // now hold fire with their full lifetime here (emplace keeps an
-        // existing countdown; the registry without the fire block makes
-        // this a no-op).
-        if (m_states.fireId.valid()) {
-            for (const BlockPos& p : changed) {
-                if (m_world.getBlock(p.x, p.y, p.z) == m_states.fireId) {
-                    m_states.fires.emplace(p, m_states.fireLifetime);
-                }
-            }
-        }
-        // The burn pass's fire cells ride the SAME `changed` vector: a
-        // fire is a light-15 source, so its column needs the re-light
-        // just like a shifted fluid level (changedCellColumns merges
-        // every cell of one column into one entry).
-        for (const ColumnPos& col : changedCellColumns(changed)) {
-            m_fluidLightPending.insert(col);
-        }
+    // V3-1 Phase B (D3 time-capsule ruling, the section-1 twin): the
+    // overworld's fluid / fire / moisture pass is FROZEN in the nether;
+    // the nether's twin (the fluid tick over the static source lava sea
+    // — zero churn, the recon's risk-surface ③ resolution) runs
+    // instead.
+    if (playerInNether()) {
+        updateNetherFluidTick();
+    } else {
+        updateOverworldFluidPass(dt);
     }
-    // GEN-9: the farmland wet/dry visual — a PERIODIC re-evaluation of
-    // every tracked moisture cell (frame-locked cadence, the m_frameCount
-    // discipline). The wetness is derived at MESH time from the live fluid
-    // field (the mesher's moisture hook), but the mesh runs on a WORKER
-    // over a chunk snapshot: a farmland chunk can be meshed BEFORE the
-    // neighboring water chunk has streamed in (the cross-chunk fluid read
-    // then sees void and bakes DRY — and nothing would re-mesh it). The
-    // sweep is the convergence pass: once the neighborhood exists, the
-    // next sweep (<= kMoistureRefreshEveryNFrames frames) sees the water,
-    // flips the tracked state, and marks the chunk dirty. It also covers
-    // pours/drains (the fluid edit is visible to the next sweep) — the
-    // cost is |tracked| x 81 fluid lookups per sweep (zero while the
-    // world holds no moisture block: the fresh world and the perf scenes
-    // fast-exit on the empty map).
-    if (!m_states.moistureBlocks.empty() &&
-        m_frameCount % kMoistureRefreshEveryNFrames == 0) {
-        refreshMoistureStates();
-    }
-    // Fire (Phase 64): the per-frame real-dt burn-out countdown (a fire
-    // at zero becomes air — no char, like the Phase 58 lava burn) + the
-    // water extinguish. Runs AFTER the fluids tick so the newly burned
-    // cells are registered and the new water is visible; the block changes
-    // it makes are meshed on the next frame (the effects' setBlock
-    // pattern). A no-op while the world holds no fire.
-    updateFires(dt);
-    // CRAFT-5: the lit-furnace mouth flames (frame-locked emission; off
-    // by render.furnace_flames = zero emissions).
-    updateFurnaceFlames();
-    // PRE-8: the burning-mob flames (frame-locked emission; off by
-    // render.mob_flames = zero emissions; inert while no mob burns).
-    updateMobFlames();
-    // Phase 66 (Fire v2): the spread roll (fixed frame step, every
-    // fire.spread_interval_frames frames). Runs AFTER the countdown so a
-    // fire that just burned out does not spread on its last frame, and
-    // the new fires' lights/meshes land on the next frame like any other
-    // setBlock. A no-op while the world holds no fire.
-    updateFireSpread();
 
     // Column-merged GL upload (PIPE-1: the mesher's compute runs on the
-    // workers — postMeshJobs / integrateMeshJobs feed m_chunkMeshData;
-    // this frame's integrates' clear-dirty is the only input here).
+    // workers — postMeshJobs / integrateMeshJobs feed the dimension's
+    // chunk mesh data; this frame's integrates' clear-dirty is the only
+    // input here). V3-1 Phase B: BOTH dimensions upload (the fast exit
+    // on the empty pending set keeps a no-nether session at the exact
+    // pre-Phase-B cost).
     {
-        const auto meshes = updateChunkMeshes();
+        auto meshes = updateChunkMeshes(overworldCtx());
         if (!meshes.ok()) {
             MC_LOG_ERROR("Chunk meshing failed: " + meshes.error().describe());
+        }
+        if (m_nether.world) {
+            meshes = updateChunkMeshes(netherCtx());
+            if (!meshes.ok()) {
+                MC_LOG_ERROR("Chunk meshing failed: " +
+                             meshes.error().describe());
+            }
         }
     }
 
@@ -458,7 +270,7 @@ void Game::update(double dt) {
         // the orbit center is distance-INDEPENDENT — the fixed 0.4 lift —
         // so it keeps its pre-V2-19 signature).
         m_camera.position = resolveThirdPersonCamera(
-            m_world, m_blocks,
+            currentWorld(), m_blocks,
             thirdPersonOrbitCenter(m_player->eyePosition(), m_player->yaw,
                                    m_player->pitch),
             m_player->yaw, m_player->pitch, m_thirdPersonDistance);
@@ -484,7 +296,7 @@ void Game::update(double dt) {
         // zooms identically — one value per session, the design's
         // single-value sharing).
         m_camera.position = resolveThirdPersonCamera(
-            m_world, m_blocks,
+            currentWorld(), m_blocks,
             thirdPersonOrbitCenter(m_player->eyePosition(), m_player->yaw,
                                    m_player->pitch),
             fa.yaw, fa.pitch, m_thirdPersonDistance);
@@ -501,7 +313,7 @@ void Game::update(double dt) {
     // inert (Player::damage no-ops on the frozen body, and the death
     // transition in updateSurvival refills the state for the respawn).
     {
-        const float dmg = drownStep(m_drown, headInFluid(*m_player, m_world),
+        const float dmg = drownStep(m_drown, headInFluid(*m_player, currentWorld()),
                                     static_cast<unsigned>(m_frameCount));
         if (dmg > 0.0f) {
             // Drowning BYPASSES the armor reduction (the wiki damage
@@ -522,7 +334,9 @@ void Game::update(double dt) {
     // sync points inside updateEffects — sees the beacon's freshly applied
     // layer this frame, the fire-source refresh pattern). No-op without a
     // beacon (structural immunity).
-    updateBeacons();
+    if (!playerInNether()) {
+        updateBeacons();
+    }
     // Status-effect ticks (Phase 46): the real-dt durations + the periodic
     // damage/heal (see updateEffects). Runs after the survival poll so a
     // lethal tick's death is handled on the NEXT frame's poll (a poison
@@ -561,12 +375,15 @@ void Game::update(double dt) {
     // the main thread only reads the World (rendering); generation jobs
     // touch no shared state at all (pure generator into the job's own
     // scratch chunks).
-    streamChunks();
+    streamChunks(activeCtx);
     // Worker meshing (PIPE-1): snapshot + post for the nearest eligible
     // dirty columns. AFTER streamChunks and BEFORE postLightJobs — the
     // post order gen -> mesh -> light keeps this frame's lighting job the
     // only live-World writer after the snapshots (see postMeshJobs).
-    postMeshJobs();
+    // V3-1 Phase B: the ACTIVE dimension only (the frozen dimension's
+    // dirty set does not grow — its world is a time capsule, so there
+    // is nothing to mesh; the posts that matter are the player's).
+    postMeshJobs(activeCtx);
     // Lighting for chunks that appeared this frame (streamed-in columns,
     // or the placement path's synchronous creation): up to two worker
     // jobs (99.10) — two bit-level-independent column boxes run in
@@ -575,7 +392,7 @@ void Game::update(double dt) {
     // render one frame dark (light 0) and are re-meshed with the correct
     // light the frame after the jobs complete — deterministic,
     // frame-locked by the flush.
-    postLightJobs();
+    postLightJobs(activeCtx);
     // 99.11: the fluid catch-up light jobs — the budgeted worker drain
     // of m_fluidLightPending (filled by the fluid tick above; the old
     // synchronous bounding-box re-light there was the frame's entire
@@ -586,7 +403,7 @@ void Game::update(double dt) {
     // them (the 99.10 parallel safety is per-plan). The reap + the
     // dirtyOut application land at the next frame's collectLitColumns —
     // the fluid columns' chunks re-mesh with the new light then (99.4).
-    postFluidLightJobs();
+    postFluidLightJobs(activeCtx);
 }
 
 // ---------------------------------------------------------------------------
@@ -921,13 +738,19 @@ void Game::updateAmbience() {
     const int cx = static_cast<int>(std::floor(feet.x));
     const int cy = static_cast<int>(std::floor(feet.y));
     const int cz = static_cast<int>(std::floor(feet.z));
-    const int rawSky = m_world.getSkyLight(cx, cy, cz);
+    // V3-1 Phase B: the CURRENT world (the nether's skyless void reads
+    // raw sky 0 = the cave context — the nether's ambience is the cave
+    // bed, the Minecraft "no sky" rule's twin).
+    const int rawSky = currentWorld().getSkyLight(cx, cy, cz);
     const AmbienceContext ctx =
         ambienceContext(rawSky, m_dayCycle.dayFactor());
     // The roll: the pure function of (world seed, frame, context) — same
     // inputs, same answer across runs (the event sequence is
-    // deterministic; the log line below is the E2E evidence).
-    if (!ambienceRoll(static_cast<std::uint64_t>(m_generator->seed()),
+    // deterministic; the log line below is the E2E evidence). V3-1 Phase
+    // B: the CURRENT dimension's seed (the nether's derived one — the
+    // stream never tracks the overworld's in the nether, the salt
+    // discipline).
+    if (!ambienceRoll(static_cast<std::uint64_t>(currentSeed()),
                       static_cast<std::uint64_t>(m_frameCount), ctx)) {
         return;
     }
@@ -942,7 +765,7 @@ void Game::updateAmbience() {
 }
 
 void Game::updatePortalEntry() {
-    // V3-1 Phase A: the portal entry countdown (the frame-locked class —
+    // V3-1 Phase B: the portal entry countdown (the frame-locked class —
     // hard rule 8, the day-cycle step): the player's AABB overlapping a
     // portal cell (the overlapsBlock precedent — the fire-contact twin)
     // arms kPortalEntryFrames through the pure portalEntryStep (the
@@ -950,19 +773,29 @@ void Game::updatePortalEntry() {
     // exclusion: a panel opened mid-countdown auto-CLOSES (the Minecraft
     // portal rule — the panel cannot stay open in a portal; the close
     // returns the items + frees the pointer, the closePanel cleanup).
-    // Completion with kPortalTravelEnabled = false (Phase A) is the
-    // explicit no-op stub: the "Nether ready at (x, y, z)" info log —
-    // the 8:1 mapped coordinate (floorDiv, the negative-safe floor), the
-    // pure overworldToNether, Phase B's travel input — + zero
-    // displacement + the countdown cleared (the next in-portal frame
-    // re-arms: re-entry re-counts, no cooldown — the Phase A semantics
-    // pin, the static_assert below).
-    static_assert(!kPortalTravelEnabled,
-                  "Phase A ships the portal travel as the explicit no-op "
-                  "stub: kPortalTravelEnabled is false. Flipping it "
-                  "requires the Phase B dimension pipeline (the "
-                  "destination = the overworldToNether mapping logged "
-                  "above) — not a TODO, a build gate.");
+    // Completion (kPortalTravelEnabled = true, Phase B) runs the real
+    // dimension switch: the pure travel-destination decision
+    // (core/portal's portalTravelDestination — the mapped coordinate,
+    // the ±16 portal search / the generation fallback, the bottom-center
+    // landing, the orthogonal yaw turn) + the travelPortal pipeline (the
+    // catch-up disk, the rebind, the flip, the cooldown, the two sounds,
+    // the "Traveled to <dim>" log). The cooldown (kPortalCooldownFrames,
+    // the Minecraft 15 s rule) blocks re-arming so the player — left
+    // INSIDE the destination portal by the bottom-center landing — is not
+    // ping-ponged back on the next countdown (the Phase A no-cooldown pin
+    // is superseded: the destination-inside-portal geometry makes the
+    // cooldown mandatory). Dimension-agnostic: the same countdown runs
+    // the overworld -> nether AND the nether -> overworld legs (the
+    // player's world binding makes overlapsBlock read the current
+    // dimension's portal cells).
+    static_assert(kPortalTravelEnabled,
+                  "Phase B ships the real travel pipeline (travelPortal): "
+                  "kPortalTravelEnabled is true. Flipping it back to the "
+                  "Phase A no-op stub requires removing the pipeline — "
+                  "not a TODO, a build gate.");
+    if (m_portalCooldownFrames > 0) {
+        --m_portalCooldownFrames; // the cooldown always runs (frame-locked)
+    }
     if (!m_states.portalId.valid() || m_player->isDead()) {
         m_portalEntryFrames = 0;
         return; // the structural-inert / dead-body no-op (the death
@@ -972,20 +805,206 @@ void Game::updatePortalEntry() {
     if (inPortal && panelOpen()) {
         closePanel(); // the GUI cannot stay open in a portal (Minecraft)
     }
-    const PortalEntryStep step = portalEntryStep(inPortal, m_portalEntryFrames);
+    // The cooldown blocks re-arm (the ping-pong guard) — but the panel
+    // mutual exclusion above still applies (the GUI rule is independent
+    // of the timer, the Minecraft twin).
+    const bool canArm = m_portalCooldownFrames == 0;
+    const PortalEntryStep step =
+        portalEntryStep(canArm && inPortal, m_portalEntryFrames);
     m_portalEntryFrames = step.framesRemaining;
     if (step.completed) {
-        // The completion frame: the player's CELL (the position's floor —
-        // the position = the AABB bottom center, the feet convention).
-        const Vec3 p = m_player->position();
-        const BlockPos mapped = overworldToNether(
-            static_cast<int>(std::floor(p.x)),
-            static_cast<int>(std::floor(p.y)),
-            static_cast<int>(std::floor(p.z)));
-        MC_LOG_INFO("Nether ready at (" + std::to_string(mapped.x) + ", " +
-                    std::to_string(mapped.y) + ", " +
-                    std::to_string(mapped.z) + ")");
+        // The completion frame: resolve the SOURCE frame (the portal the
+        // player's AABB overlaps — the travel's axis + the mapping's
+        // anchor) and run the dimension switch (the single-frame,
+        // frame-locked pipeline — see travelPortal).
+        const std::optional<PortalFrame> source = playerPortalFrame();
+        if (source) {
+            // The travel sound (the fade, 2D centered — the switch is
+            // global, not a point in space; the thunder / ambience
+            // precedent). The trigger sound played on the ARM frame below.
+            travelPortal(*source);
+        }
+        return;
     }
+    // The ARM frame (the first in-portal frame of the countdown): the
+    // portal TRIGGER sound (the Minecraft block.portal.trigger — the
+    // entry cue), spatialized at the player's feet (the player is inside
+    // the portal, so the pan is centered — the 2D-centered class).
+    // (The step completes on the kPortalEntryFrames-th frame, so the arm
+    // and the completion are distinct frames: this branch never co-fires
+    // with the travel above.)
+    if (step.framesRemaining == kPortalEntryFrames - 1) {
+        m_sound.play("portal_trigger");
+        MC_LOG_INFO("Portal entry: travel countdown armed");
+    }
+}
+
+// The portal frame the player's AABB currently overlaps (the travel's
+// SOURCE): the player's cells (the strict-overlap convention, the
+// overlapsBlock twin — the per-axis cell ranges from the AABB's min/max)
+// scanned in deterministic (x, y, z) order for a portal block; the first
+// hit's VALID frame (portalValidFrame — a cell whose ring is broken is
+// an orphan, not a source) is returned. nullopt = the player overlaps a
+// portal cell whose frame is invalid (structurally unreachable for a
+// tracked portal — the rescan keeps the tracking set valid; the belt
+// returns nullopt and the travel is a no-op).
+std::optional<PortalFrame> Game::playerPortalFrame() const {
+    if (!m_states.portalId.valid()) {
+        return std::nullopt;
+    }
+    const World& world =
+        playerInNether() ? *m_nether.world : m_world;
+    const Vec3 mn = m_player->aabbMin();
+    const Vec3 mx = m_player->aabbMax();
+    const int x0 = static_cast<int>(std::floor(mn.x));
+    const int x1 = static_cast<int>(std::ceil(mx.x)) - 1;
+    const int y0 = static_cast<int>(std::floor(mn.y));
+    const int y1 = static_cast<int>(std::ceil(mx.y)) - 1;
+    const int z0 = static_cast<int>(std::floor(mn.z));
+    const int z1 = static_cast<int>(std::ceil(mx.z)) - 1;
+    for (int x = x0; x <= x1; ++x) {
+        for (int y = y0; y <= y1; ++y) {
+            for (int z = z0; z <= z1; ++z) {
+                if (!(mn.x < x + 1 && mx.x > x)) {
+                    continue;
+                }
+                if (!(mn.y < y + 1 && mx.y > y)) {
+                    continue;
+                }
+                if (!(mn.z < z + 1 && mx.z > z)) {
+                    continue;
+                }
+                if (world.getBlock(x, y, z) != m_states.portalId) {
+                    continue;
+                }
+                return portalValidFrame(world, BlockPos {x, y, z},
+                                        m_states.obsidianId,
+                                        m_states.fireId,
+                                        m_states.portalId);
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+void Game::travelPortal(const PortalFrame& sourceFrame) {
+    // D6 (the single-frame frame-locked travel pipeline — no loading
+    // screen, no transition frame; the design's deviation 7). Runs in the
+    // update's main-thread-writer window (updatePortalEntry's call site),
+    // so the synchronous catch-up + the generated-portal writes are safe
+    // (no worker in flight — the flush barrier ran at the top of update).
+    const Dimension source = m_playerDimension;
+    const Dimension target =
+        (source == Dimension::Overworld) ? Dimension::Nether
+                                         : Dimension::Overworld;
+    // 1. The source cell (the position's floor — the feet convention) +
+    //    the 8:1 mapping (the pure overworldToNether / netherToOverworld).
+    const Vec3 p = m_player->position();
+    const BlockPos src {static_cast<int>(std::floor(p.x)),
+                        static_cast<int>(std::floor(p.y)),
+                        static_cast<int>(std::floor(p.z))};
+    const BlockPos mapped =
+        (source == Dimension::Overworld)
+            ? overworldToNether(src.x, src.y, src.z)
+            : netherToOverworld(src.x, src.y, src.z);
+    // 2. The target dimension (the nether is LAZY — engage it now; the
+    //    overworld always exists). A stripped asset set leaves the
+    //    nether unengaged (ensureNether's named error): abort the travel
+    //    (the countdown clears — re-entry re-counts, the Phase A twin).
+    if (target == Dimension::Nether) {
+        ensureNether();
+        if (!m_nether.world) {
+            m_portalEntryFrames = 0;
+            return;
+        }
+    }
+    World& targetWorld =
+        (target == Dimension::Overworld) ? m_world : *m_nether.world;
+    // 3. The destination decision (the pure portalTravelDestination — the
+    //    ±16 portal search over the target's tracking set, the generation
+    //    fallback, the bottom-center landing + hitbox probe, the
+    //    orthogonal yaw turn).
+    std::vector<BlockPos> cells;
+    cells.reserve(portalsOf(target).size());
+    for (const auto& [pos, id] : portalsOf(target)) {
+        (void)id;
+        cells.push_back(pos); // the std::map is position-sorted
+    }
+    const PortalTravelQuery q {
+        mapped, sourceFrame.axis, m_player->yaw, cells, targetWorld,
+        m_blocks, m_states.obsidianId, m_states.fireId, m_states.portalId,
+        m_player->params().width, m_player->params().height};
+    const PortalTravelPlan plan = portalTravelDestination(q);
+    // 4. The generation fallback: write the frame (the 2x3 bedrock
+    //    platform, the corners-included obsidian ring, the portal interior
+    //    in the frame's axis state) through the TARGET's choke point
+    //    (the journal / editedColumns / tracking-set protection rides
+    //    along — the player is still in the SOURCE dimension, so the
+    //    dimension-explicit setBlockInWorld is required, not the player-
+    //    facing setBlock). A found portal writes nothing (it is live).
+    if (plan.generated) {
+        for (const BlockPos& plat : portalPlatformPlan(plan.frame)) {
+            setBlockInWorld(targetWorld, plat.x, plat.y, plat.z,
+                            m_states.bedrockId);
+        }
+        for (const BlockPos& ring : portalFrameRing(plan.frame)) {
+            setBlockInWorld(targetWorld, ring.x, ring.y, ring.z,
+                            m_states.obsidianId);
+        }
+        for (const BlockPos& interior : portalFrameInterior(plan.frame)) {
+            setBlockInWorld(targetWorld, interior.x, interior.y, interior.z,
+                            m_states.portalId);
+            targetWorld.setBlockState(interior.x, interior.y, interior.z,
+                                      static_cast<std::uint8_t>(plan.frame.axis));
+        }
+    }
+    // 5. The synchronous catch-up disk (3x3 columns around the landing —
+    //    the first-touch precedent amplified: ensureColumn + ONE
+    //    synchronous relight, the ~ms one-time cost, the design's D6
+    //    step 3).
+    {
+        const int cx = floorDiv(static_cast<int>(std::floor(plan.destination.x)),
+                                kChunkSize);
+        const int cz = floorDiv(static_cast<int>(std::floor(plan.destination.z)),
+                                kChunkSize);
+        catchUpDisk(target, cx, cz);
+    }
+    // 6. The player's world rebind (D3: only the player crosses — setWorld
+    //    is the mechanical change; every read the player's physics does
+    //    now resolves against the target world) + the landing (restorePosition
+    //    = the teleport + the fall pin — the Phase 36 load twin: the
+    //    in-air landing takes no free-fall damage) + the yaw (kept or
+    //    ortho-turned) + the camera sync.
+    m_player->setWorld(targetWorld);
+    m_player->restorePosition(plan.destination);
+    m_player->yaw = plan.yaw;
+    m_camera.position = m_player->eyePosition();
+    m_camera.yaw = m_player->yaw;
+    m_camera.pitch = m_player->pitch;
+    // 7. The dimension flip (the streaming center = the player's position
+    //    re-engages the TARGET dimension's StreamingState next frame — the
+    //    nether's streamer starts un-engaged, so the player's own column
+    //    missing-distance 0 engages it immediately; the SOURCE dimension's
+    //    streaming freezes — zero post, the steady-state zero contention).
+    m_playerDimension = target;
+    // 8. The cooldown (the destination inside-portal ping-pong guard) +
+    //    the countdown reset + the travel sound (the fade, 2D centered —
+    //    the switch is global) + the info log (the E2E evidence). The log
+    //    carries the landing's CELL (the floor of the destination — the
+    //    bottom center is the cell's center, so the floor is exact) in
+    //    the TARGET dimension's coordinates + the source cell.
+    m_portalCooldownFrames = kPortalCooldownFrames;
+    m_portalEntryFrames = 0;
+    m_sound.play("portal_travel");
+    const int destX = static_cast<int>(std::floor(plan.destination.x));
+    const int destY = static_cast<int>(std::floor(plan.destination.y));
+    const int destZ = static_cast<int>(std::floor(plan.destination.z));
+    MC_LOG_INFO(std::string("Traveled to ") +
+                (target == Dimension::Nether ? "nether" : "overworld") +
+                " at (" + std::to_string(destX) + ", " +
+                std::to_string(destY) + ", " + std::to_string(destZ) +
+                ") from (" + std::to_string(src.x) + ", " +
+                std::to_string(src.y) + ", " + std::to_string(src.z) + ")");
 }
 
 void Game::updatePortalAmbience() {
@@ -1001,13 +1020,15 @@ void Game::updatePortalAmbience() {
     // heard, never seen or saved); a no-input run without portals never
     // arms it (the empty tracking set's fast exit, the structural-
     // immunity root).
-    if (m_states.portals.empty()) {
+    const std::map<BlockPos, BlockID>& portals =
+        portalsOf(playerInNether() ? Dimension::Nether : Dimension::Overworld);
+    if (portals.empty()) {
         return;
     }
     const Vec3 feet = m_player->position();
     const float r2 =
         kPortalAmbientRadiusBlocks * kPortalAmbientRadiusBlocks;
-    for (const auto& [pos, id] : m_states.portals) {
+    for (const auto& [pos, id] : portals) {
         (void)id; // the tracking value is the id — the predicate, not data
         // The squared 3D distance, feet to the portal cell's center.
         const float dx = static_cast<float>(pos.x) + 0.5f - feet.x;
@@ -1016,7 +1037,11 @@ void Game::updatePortalAmbience() {
         if (dx * dx + dy * dy + dz * dz > r2) {
             continue; // out of the visible range
         }
-        if (portalAmbientRoll(static_cast<std::uint64_t>(m_generator->seed()),
+        // V3-1 Phase B: the CURRENT dimension's seed (the portal hum
+        // stream in the nether runs on the derived seed — the same portal
+        // cell in both dimensions never hums in lockstep, the salt
+        // discipline).
+        if (portalAmbientRoll(static_cast<std::uint64_t>(currentSeed()),
                               static_cast<std::uint64_t>(m_frameCount), pos)) {
             m_sound.play("portal_ambient",
                          Vec3 {static_cast<float>(pos.x) + 0.5f,
@@ -1105,4 +1130,293 @@ void Game::emitTutorialEvent(const std::string& name, int n) {
     }
 }
 
+
+// ---------------------------------------------------------------------------
+// V3-1 Phase B: the dimension-split world passes (the time-capsule rule —
+// see update's gates). updateOverworldWorldPass / updateOverworldFluidPass
+// are the pre-Phase-B code MOVED VERBATIM (the overworld sequence in the
+// overworld is unchanged — the bit-identical red line); updateNetherFluidTick
+// is the nether's twin (the fluid tick over the nether world — the static
+// source lava sea's zero churn; no fire registration: the nether holds no
+// fire state, the D9 closed-set ruling, the permanent-fire documented
+// deviation).
+// ---------------------------------------------------------------------------
+
+void Game::updateOverworldWorldPass() {
+    // Furnaces (Phase 40, per-block Phase 44): one fixed 1/60 substep per
+    // frame, per state (the day-cycle class — integer substep counters,
+    // byte-reproducible). std::map iteration is position-sorted: the tick
+    // order is deterministic. No-op on an empty state; runs in every
+    // pointer/panel state (the world keeps ticking while the panel is
+    // open, as in Minecraft).
+    for (auto& [pos, st] : m_states.furnaces) {
+        // CRAFT-5: snapshot before the tick — the presentation events
+        // (the lit crackle, the smelt-complete ding) are a pure function
+        // of (before, after); audio is outside the frame state (hard
+        // rule 8), so the sound + log never touch determinism.
+        const FurnaceState before = st;
+        tickFurnace(st, m_items);
+        const FurnaceTickEvents ev = furnaceTickEvents(before, st);
+        if (ev.lit) {
+            m_sound.play("ignite", Vec3 {
+                static_cast<float>(pos.x) + 0.5f,
+                static_cast<float>(pos.y) + 0.5f,
+                static_cast<float>(pos.z) + 0.5f});
+            MC_LOG_INFO("Furnace lit at (" + std::to_string(pos.x) +
+                        ", " + std::to_string(pos.y) + ", " +
+                        std::to_string(pos.z) + ")");
+        }
+        if (ev.smeltCompleted) {
+            m_sound.play("smelt", Vec3 {
+                static_cast<float>(pos.x) + 0.5f,
+                static_cast<float>(pos.y) + 0.5f,
+                static_cast<float>(pos.z) + 0.5f});
+            MC_LOG_INFO("Furnace smelt complete: " +
+                        m_items.at(st.output.item).name + " at (" +
+                        std::to_string(pos.x) + ", " +
+                        std::to_string(pos.y) + ", " +
+                        std::to_string(pos.z) + ")");
+            // V2-3: the smelt.<item> tutorial event — the smelt-complete
+            // consumption point (the product the furnace just output),
+            // one fixed 1/60 substep per frame per state (hard rule 8).
+            emitTutorialEvent("smelt." + m_items.at(st.output.item).name, 1);
+            // V2-11 (XP): the smelt-complete grant — one orb worth the
+            // PRODUCT's data smelt_xp (the smelt_xp default 1 unifies
+            // every smelt — the documented simplification of Minecraft's
+            // fractional table), at the furnace block's center raised
+            // +0.5 (the cell above the block — the CRAFT-5 flame-spawn
+            // position; the orb falls onto the furnace's face and rests,
+            // the item convention). smelt_xp 0 = no orb (the data gate
+            // — spawnExpOrb's belt makes it structural). Frame-locked
+            // event boundary (hard rule 8: the smelt event fires on the
+            // fixed 1/60 substep, the pool mutation lands on the frame).
+            if (m_items.at(st.output.item).smeltXp > 0) {
+                spawnExpOrb(m_items.at(st.output.item).smeltXp,
+                            Vec3 {static_cast<float>(pos.x) + 0.5f,
+                                  static_cast<float>(pos.y) + 1.0f,
+                                  static_cast<float>(pos.z) + 0.5f});
+            }
+        }
+    }
+
+    // Campfire water extinguish (Phase 75): a LIT campfire with a WATER
+    // fluid (any level) in one of its 6 neighbors goes out instantly —
+    // water beats fire (the Phase 57/64 rule, the fire-block twin). V2-4:
+    // the condition is the shared fire-family predicate extended with the
+    // rain disjunct (extinguishedByWaterOrRain — the rain puts a lit
+    // campfire out like the water does, no roof-shade check = the
+    // documented deviation; the world seed never changes, so a no-input
+    // run's first rain still lands only after kClearMin frames). The
+    // cooking state SURVIVES (the items stay on the unlit logs: the
+    // take-back works, the clocks pause); there is no re-light in v2
+    // (documented deviation). A frame-state check (deterministic; the
+    // fluid state is world state), run BEFORE the cook tick so an
+    // extinguished campfire does not cook on its extinguish frame.
+    // Fast-exit: a no-input run has no campfires (worldgen never emits
+    // one) and the fresh world has no water next to one.
+    if (!m_states.campfires.empty() && m_states.campfireLitId.valid() &&
+        m_states.campfireExtId.valid()) {
+        std::vector<BlockPos> goOut;
+        for (const auto& entry : m_states.campfires) {
+            const BlockPos& pos = entry.first;
+            if (m_world.getBlock(pos.x, pos.y, pos.z) != m_states.campfireLitId) {
+                continue; // already out (or the family id is stale)
+            }
+            if (extinguishedByWaterOrRain(m_world, pos, m_weather.raining)) {
+                goOut.push_back(pos);
+            }
+        }
+        // Apply AFTER the scan (setBlock touches the world state the scan
+        // reads — the snapshot discipline, like the fire put-out pass).
+        for (const BlockPos& pos : goOut) {
+            setBlock(pos.x, pos.y, pos.z, m_states.campfireExtId);
+            // Light 15 -> 0: re-light the touched region (the P64
+            // fire-put-out pattern).
+            Lighting::updateLocal(m_world, m_blocks, pos);
+        }
+    }
+
+    // Campfires (Phase 71, the four-slot tick in Phase 75): one fixed
+    // 1/60 substep per frame, per state (the day-cycle class — integer
+    // substep counters, byte-reproducible; the furnace pace via
+    // smeltSubstepsFor). std::map iteration is position-sorted: the tick
+    // order is deterministic. Only LIT campfires cook (an extinguished
+    // one holds its items, no progress). No-op on an empty state; runs
+    // in every pointer/panel state (the world keeps ticking).
+    for (auto& [pos, st] : m_states.campfires) {
+        if (m_world.getBlock(pos.x, pos.y, pos.z) != m_states.campfireLitId) {
+            continue;
+        }
+        tickCampfireCook(st, m_items);
+    }
+
+    // Crop growth (Phase 48): one fixed 1/60 substep per frame (the
+    // day-cycle class — byte-reproducible). The pure roll lives in
+    // world/growth (hash of world seed + frame + position); the position-
+    // ordered set makes the step list deterministic. Advances go through
+    // setBlock (chunk dirty marking + tracking-set maintenance). Runs in
+    // every pointer/panel state (the world keeps ticking while a panel is
+    // open, as in Minecraft). V2-4: the live rain state releases the
+    // dry_slowdown gate (cropGrowthSteps' raining argument — off/clear =
+    // false = the pre-V2-4 pace bit-identical).
+    {
+        const std::vector<GrowthStep> steps = cropGrowthSteps(
+            m_world, m_blocks, m_states.crops,
+            static_cast<std::uint64_t>(m_generator->seed()),
+            static_cast<std::uint64_t>(m_frameCount), m_weather.raining);
+        for (const GrowthStep& s : steps) {
+            setBlock(s.pos.x, s.pos.y, s.pos.z, s.to);
+            // Cross-shaped crops are non-opaque: the light field is
+            // unchanged, but the local update is a harmless no-op kept for
+            // consistency with every other block change.
+            Lighting::updateLocal(m_world, m_blocks, s.pos);
+        }
+    }
+
+    // GEN-2 sapling growth (the crop tick's twin, one fixed 1/60 substep
+    // per frame — the day-cycle class, byte-reproducible): the pure roll
+    // + gates live in world/growth (seed + frame + position); the steps
+    // are state-only (Advance — the ENT-2 byte: NO light update, a state
+    // change never alters the light, the documented constraint) or a full
+    // tree placement (Complete — placeGrownTree relights the bbox ONCE).
+    // Runs in every pointer/panel state, like the crops.
+    {
+        const std::vector<SaplingStep> steps = saplingGrowthSteps(
+            m_world, m_blocks, m_states.saplings,
+            static_cast<std::uint64_t>(m_generator->seed()),
+            static_cast<std::uint64_t>(m_frameCount));
+        for (const SaplingStep& s : steps) {
+            if (s.action == SaplingAction::Advance) {
+                m_world.setBlockState(s.pos.x, s.pos.y, s.pos.z,
+                                      static_cast<std::uint8_t>(s.stage));
+                continue; // the state change marks the chunk dirty (mesh);
+                // the light is untouched (the ENT-2 constraint).
+            }
+            placeGrownTree(s.pos, s.height);
+        }
+    }
+
+}
+
+void Game::updateNetherFluidTick() {
+    // The nether's fluid pass (the overworld section's dimension-bound
+    // twin): the fluid tick over the nether world on the SAME frame-
+    // locked cadence (every kFluidTickEveryNFrames, the honey gate's
+    // twin). The static source lava sea (fillNetherChunk's full-level-8
+    // cells) changes NOTHING (no level gradient, no flow proposal —
+    // the recon's risk-surface ③ resolution: "全源静态 = 零 churn"): a
+    // settled nether's walk re-reads its cells, re-goes-cold and
+    // returns empty — no changed columns, no light jobs, the fast
+    // exit. A player-poured lava source (the bucket, the nether allows
+    // it) settles into the sea the same way it would in the overworld.
+    if (m_frameCount % kFluidTickEveryNFrames == 0) {
+        // The fluid tick number (frame-locked): the honey gate is its
+        // period (the overworld's twin — honey is an overworld content,
+        // the nether never holds it; the flag rides the same cadence
+        // for the call's signature parity).
+        const bool honeyActive =
+            (m_frameCount / kFluidTickEveryNFrames) %
+                kHoneyTickPeriodFluidTicks == 0;
+        const std::vector<BlockPos> changed = FluidSim::tick(
+            *m_nether.world, m_blocks, &m_nether.flammableChunks,
+            honeyActive);
+        // The nether holds no fire STATE (the D9 closed set {blocks,
+        // fluids, states}): a burn-pass ignition (a player-placed
+        // flamable meeting the sea) lands as a PERMANENT fire block —
+        // no lifetime entry, no burn-out countdown (the documented
+        // deviation; the nether fire segment is Phase C). So the
+        // overworld's fire-registration loop has no twin here.
+        for (const ColumnPos& col : changedCellColumns(changed)) {
+            m_nether.fluidLightPending.insert(col);
+        }
+    }
+}
+
+void Game::updateOverworldFluidPass(double dt) {
+    // Fluids tick at 20/s (every third frame at 60fps). Changed fluid
+    // levels shift the light (water attenuates it). 99.11: the Phase 64
+    // pattern — one SYNCHRONOUS updateRegion over the bounding box of
+    // all changed cells, on the main thread — was the deep root of the
+    // walking stutter: in the shipped ocean the coast film cascade
+    // scatters 713 -> 918 -> 1357 changed cells per tick over hundreds
+    // of columns, and that box's rescan cost 130 -> 396 -> 661 s per
+    // 300-frame window while the tick itself was 20-38 ms (step-0
+    // instrumentation: 99% of the fluid section's cost was the re-light).
+    // Now each changed column is queued for the budgeted worker catch-up
+    // (postFluidLightJobs: kFluidLightColumnsPerFrame per frame on the
+    // 99.10 job infrastructure): the main-thread cost drops to set
+    // inserts, and the light lands with a bounded per-column lag (the
+    // convergence argument in world/light_job.hpp — each re-light fixes
+    // its column exactly, so the drained set equals the full
+    // propagation). A settled world changes nothing (the fast exit is
+    // unchanged).
+    if (m_frameCount % kFluidTickEveryNFrames == 0) {
+        // The fluid tick number (frame-locked): the honey gate is its
+        // period (FLUID-6 — honey simulates on every 3rd fluid tick).
+        const bool honeyActive =
+            (m_frameCount / kFluidTickEveryNFrames) %
+                kHoneyTickPeriodFluidTicks ==
+            0;
+        const std::vector<BlockPos> changed = FluidSim::tick(
+            m_world, m_blocks, &m_flammableChunks, honeyActive);
+        // Phase 64: the burn pass (inside the tick above) turns flamable
+        // blocks into FIRE blocks via world.setBlock — it bypasses the
+        // Game setBlock choke point, so register the changed cells that
+        // now hold fire with their full lifetime here (emplace keeps an
+        // existing countdown; the registry without the fire block makes
+        // this a no-op).
+        if (m_states.fireId.valid()) {
+            for (const BlockPos& p : changed) {
+                if (m_world.getBlock(p.x, p.y, p.z) == m_states.fireId) {
+                    m_states.fires.emplace(p, m_states.fireLifetime);
+                }
+            }
+        }
+        // The burn pass's fire cells ride the SAME `changed` vector: a
+        // fire is a light-15 source, so its column needs the re-light
+        // just like a shifted fluid level (changedCellColumns merges
+        // every cell of one column into one entry).
+        for (const ColumnPos& col : changedCellColumns(changed)) {
+            m_fluidLightPending.insert(col);
+        }
+    }
+    // GEN-9: the farmland wet/dry visual — a PERIODIC re-evaluation of
+    // every tracked moisture cell (frame-locked cadence, the m_frameCount
+    // discipline). The wetness is derived at MESH time from the live fluid
+    // field (the mesher's moisture hook), but the mesh runs on a WORKER
+    // over a chunk snapshot: a farmland chunk can be meshed BEFORE the
+    // neighboring water chunk has streamed in (the cross-chunk fluid read
+    // then sees void and bakes DRY — and nothing would re-mesh it). The
+    // sweep is the convergence pass: once the neighborhood exists, the
+    // next sweep (<= kMoistureRefreshEveryNFrames frames) sees the water,
+    // flips the tracked state, and marks the chunk dirty. It also covers
+    // pours/drains (the fluid edit is visible to the next sweep) — the
+    // cost is |tracked| x 81 fluid lookups per sweep (zero while the
+    // world holds no moisture block: the fresh world and the perf scenes
+    // fast-exit on the empty map).
+    if (!m_states.moistureBlocks.empty() &&
+        m_frameCount % kMoistureRefreshEveryNFrames == 0) {
+        refreshMoistureStates();
+    }
+    // Fire (Phase 64): the per-frame real-dt burn-out countdown (a fire
+    // at zero becomes air — no char, like the Phase 58 lava burn) + the
+    // water extinguish. Runs AFTER the fluids tick so the newly burned
+    // cells are registered and the new water is visible; the block changes
+    // it makes are meshed on the next frame (the effects' setBlock
+    // pattern). A no-op while the world holds no fire.
+    updateFires(dt);
+    // CRAFT-5: the lit-furnace mouth flames (frame-locked emission; off
+    // by render.furnace_flames = zero emissions).
+    updateFurnaceFlames();
+    // PRE-8: the burning-mob flames (frame-locked emission; off by
+    // render.mob_flames = zero emissions; inert while no mob burns).
+    updateMobFlames();
+    // Phase 66 (Fire v2): the spread roll (fixed frame step, every
+    // fire.spread_interval_frames frames). Runs AFTER the countdown so a
+    // fire that just burned out does not spread on its last frame, and
+    // the new fires' lights/meshes land on the next frame like any other
+    // setBlock. A no-op while the world holds no fire.
+    updateFireSpread();
+
+}
 } // namespace mc

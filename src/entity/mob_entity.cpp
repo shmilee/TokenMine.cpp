@@ -532,7 +532,7 @@ void MobEntity::stepAlongPath(const MobProperties& p, const Vec3& pos,
         Result<std::vector<PathNode>> r = MC_FAIL(
             "pathfinding: the route replan is from an off-lattice cell");
         if (from.valid) {
-            r = pathfindBFS(m_world, m_blocks, from, target, bodyCells(),
+            r = pathfindBFS(*m_world, m_blocks, from, target, bodyCells(),
                             kPathMaxNodes);
         }
         if (r.ok() && !r.value().empty()) {
@@ -587,7 +587,7 @@ void MobEntity::tryPathfind(const Vec3& pos) {
     }
     const PathNode target = playerTargetNode();
     const Result<std::vector<PathNode>> r =
-        pathfindBFS(m_world, m_blocks, from, target, bodyCells(),
+        pathfindBFS(*m_world, m_blocks, from, target, bodyCells(),
                     kPathMaxNodes);
     if (r.ok() && !r.value().empty()) {
         m_path = std::move(r.value());

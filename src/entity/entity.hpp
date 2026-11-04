@@ -141,7 +141,19 @@ public:
     // true when the entity moved.
     bool separateFrom(const Vec3& otherMin, const Vec3& otherMax);
 
-    const World& world() const { return m_world; }
+    const World& world() const { return *m_world; }
+    // V3-1 Phase B (D3): rebind the entity's world reference (the
+    // dimension switch). Only the PLAYER ever crosses dimensions (the
+    // design's ruling — mobs / drops / projectiles stay in the dimension
+    // they were born in: the per-dimension entity lists hold each
+    // entity's world for its whole life, so they never rebind). The
+    // rebind is the whole mechanism: every read the entity does (the
+    // collision scan, the fluid immersion, hasRoomAt, overlapsBlock)
+    // resolves through m_world, so the physics / overlap behavior is
+    // unchanged — only the world they resolve against moves. The old
+    // world stays alive (the Game owns both dimensions' worlds for the
+    // session), so no dangling reference is possible.
+    void setWorld(const World& world) { m_world = &world; }
 
     // Fell out of the world (the world's edge is void).
     bool belowKillPlane() const { return m_position.y < kKillPlaneY; }
@@ -174,7 +186,10 @@ protected:
     // A downward Y stop also sets m_onGround.
     bool moveAxis(int axis, float delta);
 
-    const World& m_world;
+    const World* m_world; // V3-1 Phase B (D3): a POINTER (a reference
+                           // cannot be rebound — setWorld's whole
+                           // mechanism); the accessor dereferences (the
+                           // pre-Phase-B read path is unchanged).
     const BlockRegistry& m_blocks;
     Vec3 m_position {0.0f, 0.0f, 0.0f}; // bottom-center of the AABB
     Vec3 m_velocity {0.0f, 0.0f, 0.0f}; // blocks / second

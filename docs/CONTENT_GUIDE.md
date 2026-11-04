@@ -11,7 +11,9 @@
 > 完整参考、config 参考、块音效材质、纹理/atlas 纪律节。
 > 11-04 收官刷新（v2.19.0 / 存档 format 28 / 测试 2482）+ V3-7 刷新
 > （v3.1.0 / 存档 format 29 = gzip 时代 / 测试 2503）+ V3-1 Phase A
-> 刷新（v3.2.0 / nether_portal 块 / 测试 2536）：二批新数据驱动机制
+> 刷新（v3.2.0 / nether_portal 块 / 测试 2536）+ V3-1 Phase B 刷新
+> （v3.4.0 / netherrack 块 + 下界维度 / 存档 format 30 / 测试 2582）：
+> 二批新数据驱动机制
 > 并入（biome tree 6 键 + exclude_spawn_area / slab 三态 state_count +
 > drops_count_by_state / XP 三发放源 / 附魔 7 项 / 床 15 色染色族 / 染色羊变体
 > / render.ao），各节数量（93 块 / 83 物品 / 86 配方 / 8 mob / 7 附魔 /

@@ -7,8 +7,10 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <set>
 
 #include "block/block.hpp"
+#include "player/player.hpp"
 #include "world/noise.hpp"
 #include "world/world.hpp"
 
@@ -299,6 +301,168 @@ std::vector<BlockPos> portalFrameInterior(const PortalFrame& frame) {
 BlockPos overworldToNether(int x, int y, int z) {
     return BlockPos {floorDiv(x, kPortalMappingScale), y,
                      floorDiv(z, kPortalMappingScale)};
+}
+
+BlockPos netherToOverworld(int x, int y, int z) {
+    // The exact inverse shape (the wiki's (X*8, Y, Z*8)): the nether
+    // coordinate scaled up, Y unscaled. Integer product — no floor (the
+    // scale is exact; negative coordinates scale symmetrically). For any
+    // overworld cell (ox, oy, oz) with n = overworldToNether(ox, oy, oz),
+    // netherToOverworld(n) lands inside the 8x8 overworld block that maps
+    // to n (floorDiv(ox, 8) * 8 <= ox < floorDiv(ox, 8) * 8 + 8), so the
+    // round trip is stable (the unit tests pin the 7-group table).
+    return BlockPos {x * kPortalMappingScale, y, z * kPortalMappingScale};
+}
+
+Vec3 portalFrameBottomCenter(const PortalFrame& frame) {
+    // The long-edge center in FLOAT (an even long edge like 4 has an odd
+    // lo + hi — integer division would truncate the half cell): the
+    // interior's two (or more) long-edge cells' centers averaged.
+    const float centerU =
+        static_cast<float>(frame.lo + frame.hi) * 0.5f + 0.5f;
+    const float feetY = static_cast<float>(frame.y0 + 1);
+    if (frame.axis == 0) {
+        return Vec3 {centerU, feetY,
+                     static_cast<float>(frame.plane) + 0.5f};
+    }
+    return Vec3 {static_cast<float>(frame.plane) + 0.5f, feetY, centerU};
+}
+
+std::vector<BlockPos> portalPlatformPlan(const PortalFrame& frame) {
+    // The 2x3 bedrock platform (the wiki's forced-generation platform, the
+    // design's bedrock ruling): the interior's two long-edge cells x the
+    // three cells across the plane (plane - 1 .. plane + 1), one below the
+    // frame's bottom row (y0 - 1). Empty at the world floor (y0 - 1 < 0).
+    const int y = frame.y0 - 1;
+    if (y < 0) {
+        return {};
+    }
+    std::vector<BlockPos> out;
+    out.reserve(6);
+    for (int u = frame.lo + 1; u <= frame.hi - 1; ++u) {
+        for (int p = frame.plane - 1; p <= frame.plane + 1; ++p) {
+            if (frame.axis == 0) {
+                out.push_back(BlockPos {u, y, p});
+            } else {
+                out.push_back(BlockPos {p, y, u});
+            }
+        }
+    }
+    return out;
+}
+
+PortalTravelPlan portalTravelDestination(const PortalTravelQuery& q) {
+    PortalTravelPlan plan;
+
+    // The mapped point the landing distances from (the feet point: the
+    // mapped cell's center on X/Z, the mapped Y on Y — the player's feet
+    // land at the mapped level).
+    const Vec3 mappedPoint {static_cast<float>(q.mapped.x) + 0.5f,
+                            static_cast<float>(q.mapped.y),
+                            static_cast<float>(q.mapped.z) + 0.5f};
+
+    // 1. SEARCH: the qualifying portal cells (±kPortalSearchRadius on X/Z,
+    // any Y) -> their distinct VALID frames -> the nearest by bottom-
+    // center distance (Y included), ties by (axis, lo, y0, plane).
+    struct Candidate {
+        PortalFrame frame;
+        double distSq = 0.0;
+    };
+    std::vector<Candidate> cands;
+    std::set<PortalFrame> seen;
+    for (const BlockPos& c : q.portalCells) {
+        if (std::abs(c.x - q.mapped.x) > kPortalSearchRadius) {
+            continue;
+        }
+        if (std::abs(c.z - q.mapped.z) > kPortalSearchRadius) {
+            continue;
+        }
+        // A cell whose ring is broken is an orphan (the rescan's air-fix
+        // domain) — never a destination (portalValidFrame's predicate).
+        const std::optional<PortalFrame> frame =
+            portalValidFrame(q.targetWorld, c, q.obsidianId, q.fireId,
+                             q.portalId);
+        if (!frame) {
+            continue;
+        }
+        if (!seen.insert(*frame).second) {
+            continue; // the frame's other interior cells re-find it
+        }
+        const Vec3 center = portalFrameBottomCenter(*frame);
+        const double dx = center.x - mappedPoint.x;
+        const double dy = center.y - mappedPoint.y;
+        const double dz = center.z - mappedPoint.z;
+        cands.push_back(Candidate {*frame, dx * dx + dy * dy + dz * dz});
+    }
+    if (!cands.empty()) {
+        std::sort(cands.begin(), cands.end(),
+                  [](const Candidate& a, const Candidate& b) {
+                      if (a.distSq != b.distSq) {
+                          return a.distSq < b.distSq;
+                      }
+                      if (a.frame.axis != b.frame.axis) {
+                          return a.frame.axis < b.frame.axis;
+                      }
+                      if (a.frame.lo != b.frame.lo) {
+                          return a.frame.lo < b.frame.lo;
+                      }
+                      if (a.frame.y0 != b.frame.y0) {
+                          return a.frame.y0 < b.frame.y0;
+                      }
+                      return a.frame.plane < b.frame.plane;
+                  });
+        plan.frame = cands.front().frame;
+        plan.generated = false;
+    } else {
+        // 2. GENERATE fallback: the 4x5 corners-included frame anchored on
+        // the mapped cell, the long edge along the SOURCE frame's axis
+        // (the wiki's "long axis aligns with the source portal"), the
+        // bottom row at mapped.y - 1 (Y-clamped into the world: a mapped
+        // y of 0 still yields a legal frame, the top at y1 = 123 + 4 =
+        // 127 < kWorldHeight).
+        plan.generated = true;
+        PortalFrame frame;
+        frame.axis = q.sourceAxis;
+        frame.y0 = std::clamp(q.mapped.y - 1, 0, kWorldHeight -
+                                                          kPortalMinHeight);
+        frame.y1 = frame.y0 + (kPortalMinHeight - 1);
+        if (frame.axis == 0) {
+            frame.plane = q.mapped.z;
+            frame.lo = q.mapped.x - 1;
+        } else {
+            frame.plane = q.mapped.x;
+            frame.lo = q.mapped.z - 1;
+        }
+        frame.hi = frame.lo + (kPortalMinLongEdge - 1);
+        plan.frame = frame;
+    }
+
+    // 3. LANDING: the bottom center, hitbox-safe (Player::hasRoomAt with
+    // the body's dimensions — the same predicate the spawn / placement
+    // paths use). No room -> probe UP y+1..y+3, the first roomy level
+    // (the design's D6; the portal interior is non-solid, so a failure is
+    // adjacent geometry intruding — deterministic, rare).
+    plan.destination = portalFrameBottomCenter(plan.frame);
+    if (!Player::hasRoomAt(q.targetWorld, q.blocks, plan.destination,
+                           q.width, q.height)) {
+        for (int up = 1; up <= kPortalLandingProbeUp; ++up) {
+            const Vec3 probe {plan.destination.x,
+                              plan.destination.y + static_cast<float>(up),
+                              plan.destination.z};
+            if (Player::hasRoomAt(q.targetWorld, q.blocks, probe, q.width,
+                                  q.height)) {
+                plan.destination = probe;
+                break;
+            }
+        }
+    }
+
+    // 4. YAW: kept (the design's ruling) — except the orthogonal turn
+    // (Minecraft JE's 90° clockwise, kPortalOrthoYawTurn).
+    plan.yaw = (plan.frame.axis != q.sourceAxis)
+                   ? q.sourceYaw + kPortalOrthoYawTurn
+                   : q.sourceYaw;
+    return plan;
 }
 
 bool portalAmbientRoll(std::uint64_t seed, std::uint64_t frame,

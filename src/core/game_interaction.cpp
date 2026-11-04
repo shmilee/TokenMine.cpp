@@ -126,13 +126,20 @@ void Game::handleInteraction(double dt) {
         // precedence the cooking slot could never be filled). The click
         // is consumed either way (a campfire never places through the
         // right button).
-        if (const std::optional<BlockHit> hit = targetBlock(); hit) {
-            const Block& b = m_blocks.at(
-                m_world.getBlock(hit->block.x, hit->block.y,
-                                 hit->block.z));
-            if (b.properties.interact == kInteractCampfire) {
-                tryCampfireCook(hit->block);
-                return;
+        // V3-1 Phase B: the campfire's cooking state is OVERWORLD-ONLY
+        // (the D9 closed-set ruling — the nether holds no campfire
+        // state; a nether campfire is a plain block the player cannot
+        // cook on: the branch is skipped, the click falls through to
+        // the item channels).
+        if (!playerInNether()) {
+            if (const std::optional<BlockHit> hit = targetBlock(); hit) {
+                const Block& b = m_blocks.at(
+                    currentWorld().getBlock(hit->block.x, hit->block.y,
+                                             hit->block.z));
+                if (b.properties.interact == kInteractCampfire) {
+                    tryCampfireCook(hit->block);
+                    return;
+                }
             }
         }
         // Food (Phase 23): a selected food item is EATEN, not used — the
@@ -194,30 +201,39 @@ void Game::handleInteraction(double dt) {
         }
         // Data-driven interaction (Phase 17): a block whose `interact`
         // property names a known GUI opens it instead of placing.
-        if (const std::optional<BlockHit> hit = targetBlock(); hit) {
-            const Block& b = m_blocks.at(
-                m_world.getBlock(hit->block.x, hit->block.y,
-                                 hit->block.z));
-            if (b.properties.interact == kInteractCraftingTable) {
-                // CRAFT-1: the panel is bound to THIS block's grid
-                // (per-block table states — the Phase 44 furnace pattern).
-                openTablePanel(hit->block);
-                return;
+        if (!playerInNether()) {
+            // V3-1 Phase B: the container panels (the per-block states
+            // are OVERWORLD-ONLY — the D9 closed-set ruling: opening a
+            // nether container would bind an overworld-state entry to a
+            // nether position, the cross-dimension key collision; the
+            // nether's container state is Phase C).
+            if (const std::optional<BlockHit> hit = targetBlock(); hit) {
+                const Block& b = m_blocks.at(
+                    currentWorld().getBlock(hit->block.x, hit->block.y,
+                                             hit->block.z));
+                if (b.properties.interact == kInteractCraftingTable) {
+                    // CRAFT-1: the panel is bound to THIS block's grid
+                    // (per-block table states — the Phase 44 furnace
+                    // pattern).
+                    openTablePanel(hit->block);
+                    return;
+                }
+                if (b.properties.interact == kInteractFurnace) {
+                    // Phase 44: the panel is bound to THIS block's state.
+                    openFurnacePanel(hit->block);
+                    return;
+                }
+                if (b.properties.interact == kInteractEnchant) {
+                    // V2-12: the panel rolls its offers for THIS block's
+                    // position (bookshelfCount around it) + the item the
+                    // player places in the slot (session state, the
+                    // furnace twin).
+                    openEnchantPanel(hit->block);
+                    return;
+                }
+                // The campfire (Phase 71) is handled at the TOP of this
+                // handler, before the item channels (see above).
             }
-            if (b.properties.interact == kInteractFurnace) {
-                // Phase 44: the panel is bound to THIS block's state.
-                openFurnacePanel(hit->block);
-                return;
-            }
-            if (b.properties.interact == kInteractEnchant) {
-                // V2-12: the panel rolls its offers for THIS block's
-                // position (bookshelfCount around it) + the item the player
-                // places in the slot (session state, the furnace twin).
-                openEnchantPanel(hit->block);
-                return;
-            }
-            // The campfire (Phase 71) is handled at the TOP of this
-            // handler, before the item channels (see above).
         }
         // Bed sleep (V2-13, core/bed): a bed FAMILY block (the
         // kDyeBaseBed dye_base property — the family check, never a
@@ -228,16 +244,22 @@ void Game::handleInteraction(double dt) {
         // consumed either way (no placement fall-through). A HELD DYE
         // does not sleep: the bed is a dye family like the wool, so
         // the Phase-41 recolor path below owns the click instead.
-        if (const std::optional<BlockHit> hit = targetBlock(); hit) {
-            const Block& b = m_blocks.at(
-                m_world.getBlock(hit->block.x, hit->block.y,
-                                 hit->block.z));
-            if (b.properties.dyeBase == kDyeBaseBed) {
-                const ItemStack& held = m_inventory.at(m_selectedSlot);
-                if (held.empty() ||
-                    m_items.at(held.item).dyeColor.empty()) {
-                    trySleep(*hit);
-                    return;
+        // V3-1 Phase B: the sleep (the respawn point is the OVERWORLD's
+        // bed — the D8 ruling: a respawn is always the overworld; a
+        // nether bed is the documented no-op — the Minecraft nether-bed
+        // explosion is Phase C, the deviation-8 family).
+        if (!playerInNether()) {
+            if (const std::optional<BlockHit> hit = targetBlock(); hit) {
+                const Block& b = m_blocks.at(
+                    currentWorld().getBlock(hit->block.x, hit->block.y,
+                                             hit->block.z));
+                if (b.properties.dyeBase == kDyeBaseBed) {
+                    const ItemStack& held = m_inventory.at(m_selectedSlot);
+                    if (held.empty() ||
+                        m_items.at(held.item).dyeColor.empty()) {
+                        trySleep(*hit);
+                        return;
+                    }
                 }
             }
         }
@@ -250,8 +272,8 @@ void Game::handleInteraction(double dt) {
         // documented v1 rule: a duplicate dye is not consumed).
         if (const std::optional<BlockHit> hit = targetBlock(); hit) {
             const Block& b = m_blocks.at(
-                m_world.getBlock(hit->block.x, hit->block.y,
-                                 hit->block.z));
+                currentWorld().getBlock(hit->block.x, hit->block.y,
+                                         hit->block.z));
             if (!b.properties.dyeBase.empty()) {
                 const ItemStack& held = m_inventory.at(m_selectedSlot);
                 if (!held.empty() &&
@@ -269,7 +291,7 @@ void Game::handleInteraction(double dt) {
                             // arrow stuck in the recolored cell.
                             setBlock(hit->block.x, hit->block.y,
                                      hit->block.z, v->id);
-                            Lighting::updateLocal(m_world, m_blocks,
+                            Lighting::updateLocal(currentWorld(), m_blocks,
                                                   hit->block);
                             m_inventory.take(m_selectedSlot, 1);
                             m_sound.play("cloth");
@@ -308,8 +330,8 @@ void Game::handleInteraction(double dt) {
             !held.empty() && m_items.at(held.item).ignitesFlamable) {
             if (const std::optional<BlockHit> hit = targetBlock(); hit) {
                 const Block& b = m_blocks.at(
-                    m_world.getBlock(hit->block.x, hit->block.y,
-                                     hit->block.z));
+                    currentWorld().getBlock(hit->block.x, hit->block.y,
+                                             hit->block.z));
                 if (!b.properties.ignitesTo.empty()) {
                     // (a) the relight target (Phase 76): set the named
                     // block in place. The name is init-validated (the
@@ -318,7 +340,8 @@ void Game::handleInteraction(double dt) {
                         m_blocks.idForName(b.properties.ignitesTo);
                     setBlock(hit->block.x, hit->block.y, hit->block.z,
                              toId);
-                    Lighting::updateLocal(m_world, m_blocks, hit->block);
+                    Lighting::updateLocal(currentWorld(), m_blocks,
+                                          hit->block);
                     m_sound.play("ignite");
                     // SURV-3: the successful relight wears the held
                     // igniter one point (the action completed — a
@@ -336,7 +359,8 @@ void Game::handleInteraction(double dt) {
                     // block whenever the registry holds one.
                     setBlock(hit->block.x, hit->block.y, hit->block.z,
                              m_states.fireId);
-                    Lighting::updateLocal(m_world, m_blocks, hit->block);
+                    Lighting::updateLocal(currentWorld(), m_blocks,
+                                          hit->block);
                     m_sound.play("ignite");
                     // SURV-3: the successful burn wears the held igniter
                     // one point (the action completed).
@@ -374,7 +398,7 @@ void Game::handleInteraction(double dt) {
                                         hit->block.z +
                                             static_cast<int>(std::lround(
                                                 hit->normal.z))};
-                    if (m_world.getBlock(adj.x, adj.y, adj.z) ==
+                    if (currentWorld().getBlock(adj.x, adj.y, adj.z) ==
                         BlockID::air()) {
                         // The hit cell is on the candidate frames'
                         // perimeter (or corner) by the ring-obsidian
@@ -384,7 +408,7 @@ void Game::handleInteraction(double dt) {
                         // frame's interior is portal, ignition refused) —
                         // takes the fire.
                         const std::vector<PortalFrameStatus> cands =
-                            scanPortalFrames(m_world, hit->block,
+                            scanPortalFrames(currentWorld(), hit->block,
                                              m_states.obsidianId,
                                              m_states.fireId,
                                              m_states.portalId);
@@ -394,7 +418,8 @@ void Game::handleInteraction(double dt) {
                                 continue;
                             }
                             setBlock(adj.x, adj.y, adj.z, m_states.fireId);
-                            Lighting::updateLocal(m_world, m_blocks, adj);
+                            Lighting::updateLocal(currentWorld(), m_blocks,
+                                                  adj);
                             m_sound.play("ignite");
                             // SURV-3: the successful ignition wears the
                             // held igniter one point (the action
@@ -441,8 +466,8 @@ void Game::handleInteraction(double dt) {
         if (m_player->isCrouching()) {
             if (const std::optional<BlockHit> hit = targetBlock(); hit) {
                 const Block& b = m_blocks.at(
-                    m_world.getBlock(hit->block.x, hit->block.y,
-                                     hit->block.z));
+                    currentWorld().getBlock(hit->block.x, hit->block.y,
+                                             hit->block.z));
                 // V2-17 deviation 4: a SLAB's state is its VERTICAL
                 // position (bottom / top / double), not an orientation —
                 // the (s+1)%count cycle would destroy material (a
@@ -452,7 +477,7 @@ void Game::handleInteraction(double dt) {
                 // Minecraft behavior — the stairs' orientation ring is
                 // untouched, the state-0 default is unchanged).
                 if (b.hasState() && b.model.shape != BlockModel::Shape::Slab) {
-                    const int cur = m_world.getBlockState(hit->block.x,
+                    const int cur = currentWorld().getBlockState(hit->block.x,
                                                           hit->block.y,
                                                           hit->block.z);
                     // Unset (the sentinel, e.g. a hand-edited load) falls
@@ -461,7 +486,7 @@ void Game::handleInteraction(double dt) {
                     const int s =
                         (cur != Chunk::kBlockStateUnset) ? cur
                                                          : b.stateDefault();
-                    m_world.setBlockState(hit->block.x, hit->block.y,
+                    currentWorld().setBlockState(hit->block.x, hit->block.y,
                                           hit->block.z,
                                           static_cast<std::uint8_t>(
                                               (s + 1) % b.stateCount()));
@@ -549,7 +574,7 @@ std::optional<BlockHit> Game::targetBlock() const {
     // front-view convention: the front camera is the player's visual
     // eye, D from the real eye). First / ThirdBack: aimReach() = kReach,
     // bit-identical to the pre-V2-1 literal.
-    return raycastBlock(m_world, m_blocks, m_player->eyePosition(),
+    return raycastBlock(currentWorld(), m_blocks, m_player->eyePosition(),
                         m_camera.forward(), aimReach());
 }
 
@@ -566,8 +591,8 @@ void Game::updateBreaking(double dt) {
         return;
     }
     const Block& block =
-        m_blocks.at(m_world.getBlock(hit->block.x, hit->block.y,
-                                     hit->block.z));
+        m_blocks.at(currentWorld().getBlock(hit->block.x, hit->block.y,
+                                            hit->block.z));
     // Breakability is data-driven: water/bedrock set destroyable=false.
     if (!block.properties.destroyable) {
         resetBreaking();
@@ -621,7 +646,7 @@ std::optional<Game::MobHit> Game::targetMob() const {
     // consistent; first person is bit-identical as above).
     const Vec3 o = m_player->eyePosition();
     const Vec3 d = m_camera.forward();
-    for (const auto& entity : m_entities) {
+    for (const auto& entity : currentEntities()) {
         const MobEntity* mob =
             dynamic_cast<const MobEntity*>(entity.get());
         if (mob == nullptr || mob->dead()) {
@@ -817,8 +842,8 @@ void Game::fireBow() {
     // Charge is a draw-time reduction, the project has no draw-time model,
     // so speed = the projectile-speed paradigm, +L to shoot_speed). Both
     // scale by the charge power as the base data does.
-    m_entities.push_back(std::make_unique<Projectile>(
-        m_world, m_blocks, o, f, (item.shootSpeed + speedBonus) * power,
+    currentEntities().push_back(std::make_unique<Projectile>(
+        currentWorld(), m_blocks, o, f, (item.shootSpeed + speedBonus) * power,
         (item.shootDamage + powerBonus) * power, /*hurtPlayer=*/false, power,
         item.ammo, effectId, effectDuration, effectTier));
     // SURV-3 (durability): the SHOT wears the launcher one point (any
@@ -840,6 +865,30 @@ void Game::resetBowDraw() {
 }
 
 void Game::setBlock(int x, int y, int z, BlockID id) {
+    // V3-1 Phase B: the player-facing choke point (the legacy name) —
+    // the edit lands in the PLAYER's dimension (the pre-Phase-B
+    // bit-identical path while the player is in the overworld).
+    setBlockInWorld(currentWorld(), x, y, z, id);
+}
+
+void Game::setBlockInWorld(World& world, int x, int y, int z, BlockID id) {
+    // The dimension-explicit choke point (V3-1 Phase B): the bookkeeping
+    // resolves from the WORLD (m_world = the overworld family; any other
+    // world = the nether family — only the two dimensions exist, so the
+    // pointer test is the discriminator). The overworld path is the
+    // pre-Phase-B code verbatim (the bit-identical red line); the nether
+    // runs the same mechanics over its parallel family — EXCEPT the seven
+    // per-block state maps (furnaces / campfires / tables / crops /
+    // saplings / moisture / beacons / fires) are OVERWORLD-ONLY (the D9
+    // closed-set ruling: the nether holds no container / plant / fire
+    // state in Phase B — a furnace placed in the nether is a plain block,
+    // the P70 family-inert pattern; the nether fire segment is Phase C).
+    const bool nether = (&world != &m_world);
+    StreamingState& st = nether ? m_nether.streaming : m_streaming;
+    std::set<ChunkPos>& flammableChunks =
+        nether ? m_nether.flammableChunks : m_flammableChunks;
+    std::vector<std::unique_ptr<Entity>>& ents =
+        nether ? m_nether.entities : m_entities;
     // A first-touch column must be COMPLETE before the edit: the World's
     // setBlock creates only the target chunk, and the streaming loader
     // counts a column as loaded when ANY chunk exists — a partial column
@@ -848,20 +897,21 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
     // placement path, ~1.6 ms for a fresh column; a no-op cost of 8 map
     // lookups when the column already exists).
     const ChunkPos cp = worldToChunk({x, y, z});
-    if (!m_world.columnComplete(cp.x, cp.z)) {
+    if (!world.columnComplete(cp.x, cp.z)) {
         // First touch of a new column: complete it synchronously and
         // register the column for streaming (loaded), unload (tracked),
         // and the lighting job (new terrain).
-        m_world.ensureColumn(cp.x, cp.z);
-        m_streaming.loadedColumns.insert({cp.x, cp.z});
-        m_lightPendingColumns.insert({cp.x, cp.z});
-        m_streaming.unlitColumns.insert({cp.x, cp.z});
+        world.ensureColumn(cp.x, cp.z);
+        st.loadedColumns.insert({cp.x, cp.z});
+        (nether ? m_nether.lightPendingColumns : m_lightPendingColumns)
+            .insert({cp.x, cp.z});
+        st.unlitColumns.insert({cp.x, cp.z});
     }
-    // The single choke point for every in-game block change (break, place,
-    // dye recolor). Phase 42: in addition to the raw setBlock, any STUCK
-    // arrow hung on the changed cell is released (Minecraft: arrows fall
-    // out when their block is broken or replaced) — it rejoins flight
-    // physics with zero velocity (gravity) and its cumulative age.
+    // The single choke point for every in-game block change (break,
+    // place, dye recolor). Phase 42: in addition to the raw setBlock, any
+    // STUCK arrow hung on the changed cell is released (Minecraft: arrows
+    // fall out when their block is broken or replaced) — it rejoins
+    // flight physics with zero velocity (gravity) and its cumulative age.
     // Phase 44: the per-block furnace state follows the cell — a furnace
     // block always owns a state (created on placement, empty), and a
     // cell that stops holding a furnace drops its state (the invariant
@@ -869,22 +919,26 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
     // V3-1 Phase A: the cell's pre-write content (the obsidian
     // destruction's pre-event ring view — the break's brokenState
     // precedent: the state is read BEFORE the write erases it).
-    const BlockID oldId = m_world.getBlock(x, y, z);
-    m_world.setBlock(x, y, z, id);
-    // Burn-pass gate (Phase 99.8): a flamable placement/rotation makes the
-    // chunk "ever held a flamable" (over-approximation — removals do not
-    // prune; see m_flammableChunks).
+    const BlockID oldId = world.getBlock(x, y, z);
+    world.setBlock(x, y, z, id);
+    // Burn-pass gate (Phase 99.8): a flamable placement/rotation makes
+    // the chunk "ever held a flamable" (over-approximation — removals do
+    // not prune; see m_flammableChunks).
     if (m_blocks.at(id).properties.flamable) {
-        m_flammableChunks.insert(cp);
+        flammableChunks.insert(cp);
     }
     // The column now DIFFERS from pristine generated terrain (break /
     // place / rotate / growth / burn / campfire — everything goes through
-    // this choke point): the save records the diff, so the column's chunks
-    // must survive the unload pass (player-edited columns are never
-    // dropped — a reloaded save would otherwise lose the edits).
-    m_streaming.editedColumns.insert({floorDiv(x, kChunkSize),
-                            floorDiv(z, kChunkSize)});
-    {
+    // this choke point): the save records the diff, so the column's
+    // chunks must survive the unload pass (player-edited columns are
+    // never dropped — a reloaded save would otherwise lose the edits).
+    st.editedColumns.insert({floorDiv(x, kChunkSize),
+                             floorDiv(z, kChunkSize)});
+    if (!nether) {
+        // The seven per-block state families (OVERWORLD-ONLY — see the
+        // function header's D9 ruling: the nether's closed set {blocks,
+        // fluids, states} carries no container / plant / fire state in
+        // Phase B).
         const BlockPos fpos {x, y, z};
         const bool furnace =
             m_blocks.at(id).properties.interact == kInteractFurnace;
@@ -893,104 +947,95 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
         } else {
             m_states.furnaces.erase(fpos);
         }
-    }
-    // Phase 48: the crop-growth tracking set follows the cell (like the
-    // furnace states): a block with a non-empty growsTo is tracked, a cell
-    // that stops holding one drops out — maturity included (the final
-    // stage has no growsTo and never rolls again).
-    {
+        // Phase 48: the crop-growth tracking set follows the cell (like
+        // the furnace states): a block with a non-empty growsTo is
+        // tracked, a cell that stops holding one drops out — maturity
+        // included (the final stage has no growsTo and never rolls
+        // again).
         const BlockPos cpos {x, y, z};
         if (!m_blocks.at(id).properties.growsTo.empty()) {
             m_states.crops[cpos] = id;
         } else {
             m_states.crops.erase(cpos);
         }
-    }
-    // GEN-2: the sapling tracking set follows the cell (the m_states.crops twin,
-    // the `tree` predicate): a sapling placement/break registers/drops the
-    // cell; a GROWN tree's cells (trunk / leaves) never match, so the
-    // completion drops the entry through this same path (the root cell
-    // becoming the trunk). The stage is NOT touched here — the ENT-2
-    // block below it seeds/clears the state byte independently.
-    {
+        // GEN-2: the sapling tracking set follows the cell (the
+        // m_states.crops twin, the `tree` predicate): a sapling
+        // placement/break registers/drops the cell; a GROWN tree's cells
+        // (trunk / leaves) never match, so the completion drops the
+        // entry through this same path (the root cell becoming the
+        // trunk). The stage is NOT touched here — the ENT-2 block below
+        // it seeds/clears the state byte independently.
         const BlockPos spos {x, y, z};
         if (m_blocks.at(id).hasTree()) {
             m_states.saplings[spos] = id;
         } else {
             m_states.saplings.erase(spos);
         }
-    }
-    // GEN-9: the moisture tracking set follows the cell (the m_states.saplings
-    // twin, the model.moisture_top predicate): a farmland placement/break
-    // registers/drops the cell, seeded with its wetness NOW so the first
-    // mesh (and the first refresh) see the correct state. The WETNESS is
-    // derived at mesh time — this entry is only the change detector for
-    // the fluid-tick re-mesh trigger (refreshMoistureStates).
-    {
+        // GEN-9: the moisture tracking set follows the cell (the
+        // m_states.saplings twin, the model.moisture_top predicate): a
+        // farmland placement/break registers/drops the cell, seeded with
+        // its wetness NOW so the first mesh (and the first refresh) see
+        // the correct state. The WETNESS is derived at mesh time — this
+        // entry is only the change detector for the fluid-tick re-mesh
+        // trigger (refreshMoistureStates).
         const BlockPos mpos {x, y, z};
         if (!m_blocks.at(id).model.moistureTop.empty()) {
             m_states.moistureBlocks[mpos] = soilIsWet(m_world, mpos);
             // Seed-time re-mesh: the cell's chunk may hold a STALE mesh
             // (baked before this placement, or before the water neighbor
             // existed — the sweep's flip gate then never fires, because
-            // the tracked state already equals the live one). Forcing one
-            // re-mesh here makes the top face derive from the now-current
-            // fluid field; the sweep covers the later chunk-load case.
+            // the tracked state already equals the live one). Forcing
+            // one re-mesh here makes the top face derive from the
+            // now-current fluid field; the sweep covers the later
+            // chunk-load case.
             m_world.markChunkDirty(worldToChunk(mpos));
         } else {
             m_states.moistureBlocks.erase(mpos);
         }
-    }
-    // Phase 83 (a list in Phase 91): the beacon tracking set follows the
-    // cell (like the crops): a block with a non-empty beaconEffects list is
-    // a beacon (tracked; its power level is re-derived from the world each
-    // frame, so no per-instance state is stored), a cell that stops holding
-    // one drops out.
-    {
+        // Phase 83 (a list in Phase 91): the beacon tracking set follows
+        // the cell (like the crops): a block with a non-empty
+        // beaconEffects list is a beacon (tracked; its power level is
+        // re-derived from the world each frame, so no per-instance state
+        // is stored), a cell that stops holding one drops out.
         const BlockPos bpos {x, y, z};
         if (!m_blocks.at(id).properties.beaconEffects.empty()) {
             m_states.beacons[bpos] = id;
         } else {
             m_states.beacons.erase(bpos);
         }
-    }
-    // Phase 64: the fire remaining life follows the cell (like the
-    // furnace states): a cell that holds a fire block always owns a life
-    // (created with the FULL lifetime on placement/burn — emplace keeps
-    // an existing countdown, so a same-block re-set never resets it), and
-    // a cell that stops holding a fire drops its life (the invariant the
-    // format-10 save cross-checks). m_states.fireId is invalid only in an asset
-    // set without the fire block (then this is a no-op, like the other
-    // registry-keyed bookkeeping).
-    {
+        // Phase 64: the fire remaining life follows the cell (like the
+        // furnace states): a cell that holds a fire block always owns a
+        // life (created with the FULL lifetime on placement/burn —
+        // emplace keeps an existing countdown, so a same-block re-set
+        // never resets it), and a cell that stops holding a fire drops
+        // its life (the invariant the format-10 save cross-checks).
+        // m_states.fireId is invalid only in an asset set without the
+        // fire block (then this is a no-op, like the other registry-
+        // keyed bookkeeping).
         const BlockPos ppos {x, y, z};
         if (m_states.fireId.valid() && id == m_states.fireId) {
             m_states.fires.emplace(ppos, m_states.fireLifetime);
         } else {
             m_states.fires.erase(ppos);
         }
-    }
-    // Phase 71: the campfire cooking state follows the cell (like the
-    // furnace states): a campfire block always owns a state (created on
-    // placement, empty), and a cell that stops holding a campfire drops
-    // its state (the invariant the format-11 save cross-checks against
-    // the block edits).
-    {
-        const BlockPos cpos {x, y, z};
+        // Phase 71: the campfire cooking state follows the cell (like
+        // the furnace states): a campfire block always owns a state
+        // (created on placement, empty), and a cell that stops holding a
+        // campfire drops its state (the invariant the format-13 save
+        // cross-checks against the block edits).
+        const BlockPos kpos {x, y, z};
         if (m_blocks.at(id).properties.interact == kInteractCampfire) {
-            m_states.campfires.emplace(cpos, CampfireCookState {});
+            m_states.campfires.emplace(kpos, CampfireCookState {});
         } else {
-            m_states.campfires.erase(cpos);
+            m_states.campfires.erase(kpos);
         }
-    }
-    // CRAFT-1: the table's grid follows the cell (like the furnace
-    // states): a crafting_table block always owns a grid (created on
-    // placement, empty), and a cell that stops holding one drops its grid
-    // (the invariant the format-19 save cross-checks against the block
-    // edits). BREAKING a table loses the items in it — the container
-    // contents do not drop (the furnace-break semantics: only the block's
-    // own `drops` spawn; the Minecraft rule).
-    {
+        // CRAFT-1: the table's grid follows the cell (like the furnace
+        // states): a crafting_table block always owns a grid (created on
+        // placement, empty), and a cell that stops holding one drops its
+        // grid (the invariant the format-19 save cross-checks against
+        // the block edits). BREAKING a table loses the items in it — the
+        // container contents do not drop (the furnace-break semantics:
+        // only the block's own `drops` spawn; the Minecraft rule).
         const BlockPos tpos {x, y, z};
         if (m_blocks.at(id).properties.interact == kInteractCraftingTable) {
             m_states.tables.emplace(tpos, CraftingGrid {});
@@ -998,37 +1043,43 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
             m_states.tables.erase(tpos);
         }
     }
-    // ENT-2: the per-instance block state follows the cell (the project's
-    // first per-block state — Phase 94's stair facing, generalized). A
-    // stateful block (hasState(): the Stairs shape or an explicit
-    // state_count) owns a state — set to the block's state DEFAULT on
-    // placement (the placeBlock override can set a placement-specific value
-    // afterward), and a cell that stops holding a stateful block keeps its
-    // byte (the World API rejects the sentinel write — no change, no dirty
-    // mark; the consumers are shape/state-gated, so the stale value is
-    // inert). The collision (solidRange) + the mesh (emitStairs / emitSlab) + the
-    // save read it from the World.
+    // ENT-2: the per-instance block state follows the cell (the
+    // project's first per-block state — Phase 94's stair facing,
+    // generalized). A stateful block (hasState(): the Stairs shape or an
+    // explicit state_count) owns a state — set to the block's state
+    // DEFAULT on placement (the placeBlock override can set a placement-
+    // specific value afterward), and a cell that stops holding a
+    // stateful block keeps its byte (the World API rejects the sentinel
+    // write — no change, no dirty mark; the consumers are shape/state-
+    // gated, so the stale value is inert). The collision (solidRange) +
+    // the mesh (emitStairs / emitSlab) + the save read it from the World.
+    // V3-1 Phase B: BOTH dimensions (the nether's portal axis state —
+    // the nether's save `states` segment — seeds through this same path).
     {
         const Block& b = m_blocks.at(id);
         if (b.hasState()) {
-            m_world.setBlockState(x, y, z,
-                                  static_cast<std::uint8_t>(b.stateDefault()));
+            world.setBlockState(x, y, z,
+                                static_cast<std::uint8_t>(b.stateDefault()));
         } else {
             // No state: the sentinel write is rejected (World validates
             // < 255) — zero change, zero dirty marks.
-            m_world.setBlockState(x, y, z, Chunk::kBlockStateUnset);
+            world.setBlockState(x, y, z, Chunk::kBlockStateUnset);
         }
     }
     // V3-1 Phase A: the portal tracking set follows the cell (the
     // beacons' twin, the portalId predicate): the ambient pass iterates
     // it; a cell that stops holding a portal drops out (the choke point's
     // set of plans keeps it exact — the rescan rebuilds it on load).
+    // V3-1 Phase B: PER-DIMENSION (the overworld's m_states.portals /
+    // the nether's m_nether.portals — the nether's portals track there).
     {
         const BlockPos pp {x, y, z};
+        std::map<BlockPos, BlockID>& portals =
+            nether ? m_nether.portals : m_states.portals;
         if (m_states.portalId.valid() && id == m_states.portalId) {
-            m_states.portals[pp] = id;
+            portals[pp] = id;
         } else {
-            m_states.portals.erase(pp);
+            portals.erase(pp);
         }
     }
     // V3-1 Phase A: the portal frame event (an obsidian or fire placement
@@ -1038,13 +1089,15 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
     // base run's immunity root: a no-input worldgen run never places
     // obsidian or fire through this choke point — the fluid reaction's
     // obsidian goes through the raw World API, the journal-seed path).
+    // V3-1 Phase B: dimension-explicit (the frame event runs over the
+    // dimension the edit landed in).
     if (m_states.portalId.valid() && m_states.obsidianId.valid() &&
         (oldId == m_states.obsidianId || id == m_states.obsidianId ||
          oldId == m_states.fireId || id == m_states.fireId)) {
-        checkPortalTransition(oldId, id, x, y, z);
+        checkPortalTransition(world, oldId, id, x, y, z);
     }
     const float half = Projectile::kSize * 0.5f;
-    for (auto& entity : m_entities) {
+    for (auto& entity : ents) {
         auto* arrow = dynamic_cast<Projectile*>(entity.get());
         if (arrow == nullptr || !arrow->stuck()) {
             continue;
@@ -1082,8 +1135,8 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
     }
 }
 
-void Game::checkPortalTransition(BlockID oldId, BlockID newId, int x, int y,
-                                 int z) {
+void Game::checkPortalTransition(World& world, BlockID oldId, BlockID newId,
+                                 int x, int y, int z) {
     (void)newId; // the decision reads the OLD id + the world as it is now
     // The bounded scan over the event cell's two vertical planes (the
     // sub-millisecond worst case, the core/portal discipline) + the pure
@@ -1091,22 +1144,24 @@ void Game::checkPortalTransition(BlockID oldId, BlockID newId, int x, int y,
     // apply before activation plans (the lists are mutually exclusive per
     // frame — a frame is either complete now or broken by the event —
     // and their interiors are disjoint, so the snapshot's census stays
-    // valid through the application).
+    // valid through the application). V3-1 Phase B: dimension-explicit
+    // (the frame event runs over the dimension the edit landed in — the
+    // nether's portals build / deactivate there).
     const BlockPos cell {x, y, z};
     const std::vector<PortalFrameStatus> candidates = scanPortalFrames(
-        m_world, cell, m_states.obsidianId, m_states.fireId,
+        world, cell, m_states.obsidianId, m_states.fireId,
         m_states.portalId);
     const PortalTransitionDecision d =
         portalTransitionDecision(candidates, oldId, m_states.obsidianId);
     for (const PortalFrameStatus& st : d.deactivate) {
-        deactivatePortal(st.frame);
+        deactivatePortal(world, st.frame);
     }
     for (const PortalFrameStatus& st : d.activate) {
-        activatePortal(st.frame);
+        activatePortal(world, st.frame);
     }
 }
 
-void Game::activatePortal(const PortalFrame& frame) {
+void Game::activatePortal(World& world, const PortalFrame& frame) {
     // The pure plan (the interior's air + fire cells — the fire cell is
     // REPLACED, Minecraft's "one of them replacing the fire") applied
     // through the choke point (the journal + the tracking sets + the
@@ -1115,14 +1170,14 @@ void Game::activatePortal(const PortalFrame& frame) {
     // default; the portal's state IS the frame's axis (the per-instance
     // byte the save's format-15 states segment carries — zero format).
     for (const BlockPos& p :
-         portalActivationPlan(m_world, frame, m_states.fireId)) {
-        setBlock(p.x, p.y, p.z, m_states.portalId);
-        m_world.setBlockState(p.x, p.y, p.z,
-                              static_cast<std::uint8_t>(frame.axis));
+         portalActivationPlan(world, frame, m_states.fireId)) {
+        setBlockInWorld(world, p.x, p.y, p.z, m_states.portalId);
+        world.setBlockState(p.x, p.y, p.z,
+                            static_cast<std::uint8_t>(frame.axis));
     }
     // ONE relight over the frame's bounding box (the portal is a light-11
     // source; the fluid-tick bounding-box pattern, not per-cell).
-    Lighting::updateRegion(m_world, m_blocks,
+    Lighting::updateRegion(world, m_blocks,
                            BlockPos {frame.lo, frame.y0, frame.plane},
                            BlockPos {frame.hi, frame.y1, frame.plane});
     // The bottom long edge's center (the log's anchor — deterministic).
@@ -1134,15 +1189,15 @@ void Game::activatePortal(const PortalFrame& frame) {
                 std::to_string(frame.height()) + ")");
 }
 
-void Game::deactivatePortal(const PortalFrame& frame) {
+void Game::deactivatePortal(World& world, const PortalFrame& frame) {
     // The pure plan (the interior's portal cells -> air) through the
     // choke point (the tracking set drops the cells, the journal records
     // the fix so the next save persists it).
     for (const BlockPos& p :
-         portalDeactivationPlan(m_world, frame, m_states.portalId)) {
-        setBlock(p.x, p.y, p.z, BlockID::air());
+         portalDeactivationPlan(world, frame, m_states.portalId)) {
+        setBlockInWorld(world, p.x, p.y, p.z, BlockID::air());
     }
-    Lighting::updateRegion(m_world, m_blocks,
+    Lighting::updateRegion(world, m_blocks,
                            BlockPos {frame.lo, frame.y0, frame.plane},
                            BlockPos {frame.hi, frame.y1, frame.plane});
     MC_LOG_INFO("Portal deactivated at (" +
@@ -1154,7 +1209,8 @@ void Game::deactivatePortal(const PortalFrame& frame) {
 }
 
 void Game::breakBlock(const BlockHit& hit) {
-    const BlockID id = m_world.getBlock(hit.block.x, hit.block.y, hit.block.z);
+    const BlockID id = currentWorld().getBlock(hit.block.x, hit.block.y,
+                                                hit.block.z);
     // V2-17: the broken cell's per-instance state, read BEFORE the
     // setBlock(air) below erases it (the setBlock choke point reseeds the
     // byte for the NEW block — the sentinel for air): the per-state drop
@@ -1163,8 +1219,9 @@ void Game::breakBlock(const BlockHit& hit) {
     const Block& brokenBlock = m_blocks.at(id);
     int brokenState = brokenBlock.stateDefault();
     if (brokenBlock.hasState()) {
-        const int bs = m_world.getBlockState(hit.block.x, hit.block.y,
-                                              hit.block.z);
+        const int bs = currentWorld().getBlockState(hit.block.x,
+                                                     hit.block.y,
+                                                     hit.block.z);
         if (bs != Chunk::kBlockStateUnset) {
             brokenState = bs;
         }
@@ -1174,7 +1231,7 @@ void Game::breakBlock(const BlockHit& hit) {
     setBlock(hit.block.x, hit.block.y, hit.block.z, BlockID::air());
     // Relight the region around the change (a broken occluder lets light
     // in; the broken cell stops blocking).
-    Lighting::updateLocal(m_world, m_blocks, hit.block);
+    Lighting::updateLocal(currentWorld(), m_blocks, hit.block);
     // UX-7: the tutorial break event (the block the break COMPLETED on —
     // the data-driven name, chance drops irrelevant: the goal counts the
     // block, not the drop). Frame-locked: breakBlock only runs from the
@@ -1197,8 +1254,7 @@ void Game::breakBlock(const BlockHit& hit) {
     const Vec3 dropPos {static_cast<float>(hit.block.x) + 0.5f,
                         static_cast<float>(hit.block.y) + 0.5f,
                         static_cast<float>(hit.block.z) + 0.5f};
-    const std::uint64_t dropSeed =
-        static_cast<std::uint64_t>(m_generator->seed());
+    const std::uint64_t dropSeed = static_cast<std::uint64_t>(currentSeed());
     // The scattered spawn for `dropIndex`: 0 = primary `drops`,
     // 1 = `chance_drop`, 2 + i = `chance_drops` list entry i (the same
     // 0-based list order the entry roll uses — block/drop_scatter).
@@ -1220,8 +1276,8 @@ void Game::breakBlock(const BlockHit& hit) {
         if (!block.properties.dropsCountByState.empty()) {
             dropCount = block.properties.dropsCountByState[brokenState];
         }
-        m_entities.push_back(std::make_unique<ItemEntity>(
-            m_world, m_blocks, dropItem.name, dropItem.maxStack,
+        currentEntities().push_back(std::make_unique<ItemEntity>(
+            currentWorld(), m_blocks, dropItem.name, dropItem.maxStack,
             dropCount, dropAt(0)));
     }
     // Chance secondary drop (Phase 49): an OPTIONAL extra item rolled per
@@ -1234,8 +1290,8 @@ void Game::breakBlock(const BlockHit& hit) {
                            block.properties.chanceDropChance)) {
             const Item& cdItem =
                 m_items.at(m_items.idForName(block.properties.chanceDropItem));
-            m_entities.push_back(std::make_unique<ItemEntity>(
-                m_world, m_blocks, cdItem.name, cdItem.maxStack,
+            currentEntities().push_back(std::make_unique<ItemEntity>(
+                currentWorld(), m_blocks, cdItem.name, cdItem.maxStack,
                 block.properties.chanceDropCount, dropAt(1)));
         }
     }
@@ -1248,8 +1304,8 @@ void Game::breakBlock(const BlockHit& hit) {
         if (rollChanceDropEntry(dropSeed, hit.block.x, hit.block.y, hit.block.z,
                                 static_cast<int>(i), cd.chance)) {
             const Item& cdItem = m_items.at(m_items.idForName(cd.item));
-            m_entities.push_back(std::make_unique<ItemEntity>(
-                m_world, m_blocks, cdItem.name, cdItem.maxStack,
+            currentEntities().push_back(std::make_unique<ItemEntity>(
+                currentWorld(), m_blocks, cdItem.name, cdItem.maxStack,
                 cd.count, dropAt(2 + static_cast<int>(i))));
         }
     }
@@ -1268,7 +1324,7 @@ void Game::breakBlock(const BlockHit& hit) {
     // the same burst). The light is baked here — updateLocal already ran
     // above — because the render pass must not read the light arrays
     // (worker lighting jobs may be running while it renders).
-    const Chunk* chunk = m_world.findChunk(worldToChunk(hit.block));
+    const Chunk* chunk = currentWorld().findChunk(worldToChunk(hit.block));
     float sky = 1.0f;
     float blockLight = 0.0f;
     if (chunk != nullptr) {
@@ -1282,7 +1338,7 @@ void Game::breakBlock(const BlockHit& hit) {
                      15.0f;
     }
     const std::uint64_t rngSeed =
-        m_generator->seed() +
+        currentSeed() +
         (++m_particleBreakCounter) * 0x9E3779B97F4A7C15ULL;
     m_particles.spawnBreak(hit.block.x, hit.block.y, hit.block.z, id, sky,
                            blockLight, rngSeed);
@@ -1361,11 +1417,11 @@ void Game::placeBlock() {
         slabPlaceState =
             slabStateFromHit(hitPoint, hit->normal,
                              static_cast<float>(target.y));
-        const BlockID targetId = m_world.getBlock(target.x, target.y,
-                                                  target.z);
+        const BlockID targetId = currentWorld().getBlock(target.x,
+                                                         target.y, target.z);
         if (targetId == item.block) {
             const int cur =
-                m_world.getBlockState(target.x, target.y, target.z);
+                currentWorld().getBlockState(target.x, target.y, target.z);
             const int targetState =
                 (cur != Chunk::kBlockStateUnset) ? cur
                                                  : placedBlock.stateDefault();
@@ -1397,8 +1453,8 @@ void Game::placeBlock() {
         setBlock(target.x, target.y, target.z, item.block);
         // The completed double slab (state 2 — the single-cell
         // representation of the Minecraft same-cell pair).
-        m_world.setBlockState(target.x, target.y, target.z, 2);
-        Lighting::updateLocal(m_world, m_blocks, target);
+        currentWorld().setBlockState(target.x, target.y, target.z, 2);
+        Lighting::updateLocal(currentWorld(), m_blocks, target);
         m_inventory.take(m_selectedSlot, 1);
         emitTutorialEvent("place." + placedBlock.name, 1);
         m_sound.play(
@@ -1408,7 +1464,7 @@ void Game::placeBlock() {
                  static_cast<float>(target.z) + 0.5f});
         return;
     }
-    if (!canPlaceAt(m_world, m_blocks, target, m_player->aabbMin(),
+    if (!canPlaceAt(currentWorld(), m_blocks, target, m_player->aabbMin(),
                     m_player->aabbMax())) {
         return;
     }
@@ -1419,7 +1475,7 @@ void Game::placeBlock() {
     // growth-time grows_on gate (Phase 50). A wrong-soil placement is a
     // silent no-op (the block is not consumed, no sound — same as any other
     // rejected placement).
-    if (!canPlantAt(m_world, m_blocks, target,
+    if (!canPlantAt(currentWorld(), m_blocks, target,
                     m_blocks.at(item.block).properties.plantOn)) {
         return;
     }
@@ -1437,9 +1493,9 @@ void Game::placeBlock() {
     // state (V2-17, slabStateFromHit) consumes it below; other stateful
     // shapes keep the choke point's default.
     if (m_blocks.at(item.block).model.shape == BlockModel::Shape::Stairs) {
-        m_world.setBlockState(target.x, target.y, target.z,
-                              static_cast<std::uint8_t>(
-                                  stairFacingFromYaw(m_player->yaw)));
+        currentWorld().setBlockState(target.x, target.y, target.z,
+                                      static_cast<std::uint8_t>(
+                                          stairFacingFromYaw(m_player->yaw)));
     } else if (slabPlaceState >= 0) {
         // V2-17: the slab's placement state (slabStateFromHit — the aim
         // rule above). The setBlock choke point seeded the block's state
@@ -1447,12 +1503,13 @@ void Game::placeBlock() {
         // ENT-2 post-choke-point pattern). A state-0 placement rewrites
         // the seeded default — a no-op write (zero dirty marks), the
         // pre-V2-17 behavior's bit-level root.
-        m_world.setBlockState(target.x, target.y, target.z,
-                              static_cast<std::uint8_t>(slabPlaceState));
+        currentWorld().setBlockState(target.x, target.y, target.z,
+                                      static_cast<std::uint8_t>(
+                                          slabPlaceState));
     }
     // Relight the region around the change (a placed occluder blocks light;
     // a placed glowstone is a new light source).
-    Lighting::updateLocal(m_world, m_blocks, target);
+    Lighting::updateLocal(currentWorld(), m_blocks, target);
     // Placing consumes one from the selected stack (the inventory is the
     // source of blocks — no more infinite placement).
     m_inventory.take(m_selectedSlot, 1);
@@ -1650,8 +1707,8 @@ bool Game::tryShear() {
         // convention; the pickup delay keeps it from re-collecting on
         // the next frame).
         const Item& w = m_items.at(wid);
-        m_entities.push_back(std::make_unique<ItemEntity>(
-            m_world, m_blocks, w.name, w.maxStack, count,
+        currentEntities().push_back(std::make_unique<ItemEntity>(
+            currentWorld(), m_blocks, w.name, w.maxStack, count,
             mob->mob->position()));
     }
     m_sound.play("shear", mob->mob->position());
@@ -1743,6 +1800,16 @@ bool Game::tryFluidBucket() {
         return false; // not a bucket side: fall through
     }
     const bool collect = !item.collectsFluids.empty();
+    // V3-1 Phase B: the dimension aliases (the bucket acts on the
+    // player's current world — the nether's lava sea scoops; the nether
+    // WATER POUR is the documented no-op deviation: water cannot exist
+    // in the nether, the phase-C dimension-aware fluid sim's domain —
+    // the click falls through to placeBlock's material no-op, the
+    // bucket stays full).
+    World& world = currentWorld();
+    std::set<ColumnPos>& editedColumns =
+        playerInNether() ? m_nether.streaming.editedColumns
+                         : m_streaming.editedColumns;
     if (collect) {
         // UX-8g: the bucket-target ray leaves from the eye in both
         // modes (first person: m_camera.position == eyePosition =
@@ -1752,16 +1819,16 @@ bool Game::tryFluidBucket() {
         // (front view: D + kReach, the same convention as targetBlock
         // — First / ThirdBack bit-identical).
         const std::optional<BlockPos> cell =
-            raycastFluid(m_world, m_blocks, m_player->eyePosition(),
+            raycastFluid(world, m_blocks, m_player->eyePosition(),
                          m_camera.forward(), aimReach());
         // A source cell is level kMaxFluidLevel (flowing cells are lower
         // and cannot be collected, Minecraft). A block cell reads dry.
         const std::optional<FluidKind> kind =
-            cell ? m_world.getFluidKind(cell->x, cell->y, cell->z)
+            cell ? world.getFluidKind(cell->x, cell->y, cell->z)
                  : std::nullopt;
         const bool isSource =
             kind &&
-            m_world.getFluidOfKind(cell->x, cell->y, cell->z, *kind) ==
+            world.getFluidOfKind(cell->x, cell->y, cell->z, *kind) ==
                 kMaxFluidLevel;
         // The source's fluid must be one the bucket names (Minecraft: one
         // empty bucket scoops every fluid it names).
@@ -1788,12 +1855,12 @@ bool Game::tryFluidBucket() {
             m_inventory.add(becomes, 1, m_items);
             m_sound.play("splash");
         };
-        m_world.setFluid(cell->x, cell->y, cell->z, *kind, 0);
+        world.setFluid(cell->x, cell->y, cell->z, *kind, 0);
         // The fluid diff is save-recorded (no setBlock choke point here):
         // keep the column (never unloaded).
-        m_streaming.editedColumns.insert({floorDiv(cell->x, kChunkSize),
-                                floorDiv(cell->z, kChunkSize)});
-        Lighting::updateLocal(m_world, m_blocks, *cell);
+        editedColumns.insert({floorDiv(cell->x, kChunkSize),
+                              floorDiv(cell->z, kChunkSize)});
+        Lighting::updateLocal(world, m_blocks, *cell);
         finish();
         MC_LOG_DEBUG("scooped " + kindName + " at (" +
                      std::to_string(cell->x) + ", " +
@@ -1805,6 +1872,12 @@ bool Game::tryFluidBucket() {
     // The pour side: the item's fluid kind (init guarantees the name is
     // in the vocabulary).
     const FluidKind kind = *fluidKindForName(item.poursFluid);
+    // V3-1 Phase B: the nether WATER POUR no-op (the documented
+    // deviation 8 — water cannot exist in the nether; the bucket stays
+    // full, the click falls through to placeBlock's material no-op).
+    if (kind == FluidKind::Water && playerInNether()) {
+        return false;
+    }
     const ItemID becomes = m_items.idForName(item.poursBecomes);
     if (!becomes.valid()) {
         return true; // defensive (init cross-check); consume the click
@@ -1827,7 +1900,7 @@ bool Game::tryFluidBucket() {
         // matching the targetBlock block hit above — same line and same
         // reach budget in both modes (V2-1: the budget is aimReach() —
         // front view D + kReach; first person bit-identical).
-        fluidHit = raycastFluid(m_world, m_blocks, m_player->eyePosition(),
+        fluidHit = raycastFluid(world, m_blocks, m_player->eyePosition(),
                                 m_camera.forward(), aimReach());
     }
     // The pour cell (bucketPourTarget): the face neighbor of the hit
@@ -1839,19 +1912,19 @@ bool Game::tryFluidBucket() {
     // kind (FLUID-4 pour onto a water surface — it becomes the source);
     // canPlaceAt keeps the Y range / solid / player-overlap tests.
     const std::optional<BlockPos> target = bucketPourTarget(
-        m_world, m_blocks, hit, fluidHit, kind, m_player->aabbMin(),
+        world, m_blocks, hit, fluidHit, kind, m_player->aabbMin(),
         m_player->aabbMax());
 
     if (!target) {
         return false; // no acceptable pour cell: fall through
     }
     const BlockPos& cell = *target;
-    m_world.setFluid(cell.x, cell.y, cell.z, kind, kMaxFluidLevel);
+    world.setFluid(cell.x, cell.y, cell.z, kind, kMaxFluidLevel);
     // The fluid diff is save-recorded (no setBlock choke point here):
     // keep the column (never unloaded).
-    m_streaming.editedColumns.insert({floorDiv(cell.x, kChunkSize),
-                            floorDiv(cell.z, kChunkSize)});
-    Lighting::updateLocal(m_world, m_blocks, cell);
+    editedColumns.insert({floorDiv(cell.x, kChunkSize),
+                          floorDiv(cell.z, kChunkSize)});
+    Lighting::updateLocal(world, m_blocks, cell);
     finish();
     MC_LOG_DEBUG("poured " + item.poursFluid + " at (" +
                  std::to_string(cell.x) + ", " +
@@ -2089,8 +2162,8 @@ void Game::dropSelectedItem() {
     const float droppedDamage = stack.damage;
     const std::map<std::string, int> droppedEnchants = stack.enchants;
     const Vec3 pos = m_player->position();
-    m_entities.push_back(std::make_unique<ItemEntity>(
-        m_world, m_blocks, item.name, item.maxStack, /*count=*/1, pos,
+    currentEntities().push_back(std::make_unique<ItemEntity>(
+        currentWorld(), m_blocks, item.name, item.maxStack, /*count=*/1, pos,
         droppedDamage, droppedEnchants));
     // CRAFT-3: the timbre is the generic "pickup" (items have no
     // sound_material — YAGNI, documented), only the spatialization is

@@ -59,6 +59,19 @@ constexpr float kMoonPhaseColorB = 0.08f;
 
 constexpr float kBeaconBeamBaseHeight = 64.0f;
 
+// V3-1 Phase B (D7): the nether's render constants (the skyless dimension
+// — no sun / moon / stars, no clouds, no rain; the clear color is the
+// dark-red nether void, and the fog is the short-range dark red — the
+// Minecraft nether's fog start 10 / end 96, the Bedrock JSON per the
+// recon §二.3/§十). Named constants, zero config (the kSkyDistance
+// discipline). The overworld's render path never reads them (the inNether
+// gate below — the default-off bit-identity).
+constexpr float kNetherSkyColorR = 0.16f;
+constexpr float kNetherSkyColorG = 0.04f;
+constexpr float kNetherSkyColorB = 0.04f;
+constexpr float kNetherFogStart = 10.0f;
+constexpr float kNetherFogEnd = 96.0f;
+
 constexpr float kBeaconBeamLevelHeight = 32.0f;
 
 // Phase 83 beacon beam color (bright cyan-white, the classic beam) and its
@@ -505,8 +518,10 @@ void Game::drawWorldOverlay(const Mat4& view, const Mat4& projection) {
     m_renderer.enableBlending();
     if (m_interaction.breakTarget.has_value() && m_interaction.breakProgress > 0.0) {
         const BlockPos& b = *m_interaction.breakTarget;
+        // V3-1 Phase B: the crack's block read is the CURRENT world (the
+        // break target is a cell in the dimension the player is in).
         const Block& block =
-            m_blocks.at(m_world.getBlock(b.x, b.y, b.z));
+            m_blocks.at(currentWorld().getBlock(b.x, b.y, b.z));
         const double duration = breakDurationSeconds(
             block.properties.hardness, selectedBreakSpeed(block));
         const int stage =
@@ -654,8 +669,16 @@ void Game::render() {
     const float weatherDim = m_weather.raining ? kRainSkyDim : 1.0f;
     const float weatherPulse =
         thunderPulse(m_frameCount, m_weatherThunderFrame);
-    const Vec3 sky = m_dayCycle.skyColor() * weatherDim +
-                     Vec3 {weatherPulse, weatherPulse, weatherPulse};
+    // V3-1 Phase B (D7 point 1): the CLEAR color — the nether is the
+    // dark red void (no skybox: the day cycle's color + the weather's
+    // dim / pulse are the overworld sky's channels, the nether's render
+    // does not consume them; the overworld's expression is unchanged —
+    // the bit-identical red line).
+    const Vec3 sky =
+        playerInNether()
+            ? Vec3 {kNetherSkyColorR, kNetherSkyColorG, kNetherSkyColorB}
+            : m_dayCycle.skyColor() * weatherDim +
+                  Vec3 {weatherPulse, weatherPulse, weatherPulse};
     m_renderer.clear({sky.x, sky.y, sky.z, 1.0f});
 
     const Mat4 projection = Mat4::perspective(
@@ -697,7 +720,14 @@ void Game::render() {
     const float rEffBlocks = static_cast<float>(
                                  std::min(m_streaming.streamRadius, kStreamCapRadius)) *
                              kChunkSize;
-    const FogRange fog = fogDistanceRange(rEffBlocks, kFar);
+    // V3-1 Phase B (D7 point 5): the nether's fog is the SHORT-RANGE
+    // dark red (the Minecraft nether's fog 10..96, the named constants
+    // above — the fog color is the clear sky, already the dark red); the
+    // overworld's streaming-disc-derived range is unchanged.
+    const FogRange fog =
+        playerInNether()
+            ? FogRange {kNetherFogStart, kNetherFogEnd}
+            : fogDistanceRange(rEffBlocks, kFar);
     const bool fogOn = fogConfigOn && fog.end > fog.start;
     m_basicShader.setUniform1i("u_fogEnabled", fogOn ? 1 : 0);
     m_basicShader.setUniform1f("u_fogStart", fog.start);
@@ -766,14 +796,24 @@ void Game::render() {
     // collapse). The column list is m_streaming.loadedColumns (the incremental
     // mirror): no per-frame chunkPositions() snapshot + sort of the ~200k
     // loaded chunks.
-    const std::vector<ColumnPos> columns(m_streaming.loadedColumns.begin(),
-                                         m_streaming.loadedColumns.end());
+    // V3-1 Phase B (D7): the column passes draw the ACTIVE dimension's
+    // loaded columns + merged column meshes (the overworld = the pre-
+    // Phase-B m_streaming.loadedColumns / m_columnMeshes — unchanged;
+    // the nether's parallel family). The frustum test is dimension-
+    // agnostic (world coordinates — the active dimension's space).
+    const std::set<ColumnPos>& loadedColumns =
+        playerInNether() ? m_nether.streaming.loadedColumns
+                         : m_streaming.loadedColumns;
+    std::unordered_map<ColumnPos, ColumnMesh>& columnMeshes =
+        playerInNether() ? m_nether.columnMeshes : m_columnMeshes;
+    const std::vector<ColumnPos> columns(loadedColumns.begin(),
+                                         loadedColumns.end());
     for (const ColumnPos& col : columns) {
         if (!columnVisible(col)) {
             continue;
         }
-        const auto it = m_columnMeshes.find(col);
-        if (it == m_columnMeshes.end() || !it->second.opaque.has_value()) {
+        const auto it = columnMeshes.find(col);
+        if (it == columnMeshes.end() || !it->second.opaque.has_value()) {
             continue;
         }
         m_renderer.draw(*it->second.opaque, m_basicShader, view, projection,
@@ -808,7 +848,9 @@ void Game::render() {
     // Campfire cooking items (Phase 71): the item icon floating above each
     // campfire with a non-empty slot — opaque pass, depth-occluded. No-op
     // without a cooking campfire (baseline byte-identical).
-    drawCampfireCookItems(view, projection);
+    if (!playerInNether()) {
+        drawCampfireCookItems(view, projection);
+    }
     // Opaque break particles (Phase 15) belong to the opaque pass so the
     // transparent geometry blends over them.
     drawParticles(view, projection, RenderPass::Opaque);
@@ -818,7 +860,9 @@ void Game::render() {
     // the opaque pass so the depth test occludes them behind terrain, and
     // before the transparent pass (they never overlap chunk geometry in
     // depth — they sit behind everything in the demo area).
-    drawSkyObjects(view, projection, h);
+    if (!playerInNether()) {
+        drawSkyObjects(view, projection, h);
+    }
 
     // PRE-5 CUTOUT section (always after the sky, before the blend
     // section — the v0.28.0 relative order for a water/glass-free scene,
@@ -833,8 +877,8 @@ void Game::render() {
         if (!columnVisible(col)) {
             continue;
         }
-        const auto it = m_columnMeshes.find(col);
-        if (it == m_columnMeshes.end() || !it->second.cutout.has_value()) {
+        const auto it = columnMeshes.find(col);
+        if (it == columnMeshes.end() || !it->second.cutout.has_value()) {
             continue;
         }
         m_renderer.draw(*it->second.cutout, m_basicShader, view, projection,
@@ -858,8 +902,8 @@ void Game::render() {
         if (!columnVisible(col)) {
             continue;
         }
-        const auto it = m_columnMeshes.find(col);
-        if (it == m_columnMeshes.end() ||
+        const auto it = columnMeshes.find(col);
+        if (it == columnMeshes.end() ||
             !it->second.transparent.has_value()) {
             continue;
         }
@@ -876,13 +920,17 @@ void Game::render() {
     // Beacon beams (Phase 83): the translucent light columns from active
     // beacons, blended + depth-occluded like the other world geometry.
     // No-op without an active beacon (baseline byte-identical).
-    drawBeaconBeams(view, projection);
+    if (!playerInNether()) {
+        drawBeaconBeams(view, projection);
+    }
     // UX-9a clouds: the drifting translucent layer at y = kCloudHeight,
     // blended + depth-occluded like the other world geometry. Gated on
     // render.clouds (code default true); OFF = zero draw (the v0.27.0
     // pipeline bit-identical). The pattern is per-pixel (the one-time
     // quad, zero upload after init — see drawClouds).
-    drawClouds(view, projection);
+    if (!playerInNether()) {
+        drawClouds(view, projection);
+    }
     // V2-4 rain: the 300-drop field in the 16^3 box around the player —
     // the blend pass after the clouds, before the HUD (the depth test
     // occludes the drops behind terrain; the bar quads are double-sided,
@@ -890,7 +938,9 @@ void Game::render() {
     // drops (the v2.3.0 pipeline bit-identical — the first segment is
     // always >= kClearMin frames, so a no-input run never sees rain in
     // the base-gate window).
-    drawRain(view, projection);
+    if (!playerInNether()) {
+        drawRain(view, projection);
+    }
     // The break crack + target outline (Phase 15): world-space, blended,
     // depth test still on (the overlay cubes sit just outside the block).
     drawWorldOverlay(view, projection);

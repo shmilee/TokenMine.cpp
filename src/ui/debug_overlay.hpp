@@ -80,6 +80,11 @@ struct DebugInfo {
     // F3 stays English — the developer-tool discipline).
     bool gamepadConnected = false;
     std::string gamepadName;
+    // V3-1 Phase B: the dimension line's data — "overworld" (the default)
+    // / "nether" (the F3 stays English — the developer-tool discipline).
+    // Empty (a unit-test DebugInfo with no dimension filled) renders the
+    // baseline "overworld" — the no-nether session's value.
+    std::string dimension = "overworld";
 };
 
 // PRE-12 (the SURV-6 display boundary): the amplifier roman numeral for

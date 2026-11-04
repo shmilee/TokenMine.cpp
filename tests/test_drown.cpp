@@ -96,6 +96,22 @@ Json withoutKey(const Json& root, const std::string& key) {
     }
     return out;
 }
+// V3-1 Phase B: the downgrade's format-30 key strip (the test_save.cpp
+// stripFormat30Keys twin — the genuine pre-30 file never carried the
+// format-30 keys: player.dimension / nether / nether_entities).
+Json stripFormat30Keys(Json root) {
+    root = withoutKey(root, "nether");
+    root = withoutKey(root, "nether_entities");
+    if (const Json* player = root.find("player");
+        player != nullptr && player->isObject() &&
+        player->find("dimension") != nullptr) {
+        Json p = withoutKey(*player, "dimension");
+        root = withoutKey(root, "player");
+        root["player"] = std::move(p);
+    }
+    return root;
+}
+
 
 // CRAFT-1: the empty legacy "table_grid" array (9 slot entries) — a
 // pre-format-19 file carries it (required in format 3-18); a downgrade
@@ -424,6 +440,7 @@ TEST(DrownSaveTest, Format16RejectsTheOxygenKey) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     {
         Json root = *j;
+        root = stripFormat30Keys(std::move(root));
         root["format"] = Json(16); // the "oxygen" key stays -> rejected
         root["player"] = withoutKey(withoutKey(withoutKey(root["player"], "xp"), "xp_seed"), "respawn"); // V2-11: the xp key is format-26 vocabulary; V2-13: the respawn key is format-28 vocabulary
         root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
@@ -441,6 +458,7 @@ TEST(DrownSaveTest, Format16RejectsTheOxygenKey) {
     }
     {
         Json root = *j;
+        root = stripFormat30Keys(std::move(root));
         root["format"] = Json(16);
         root["player"] = withoutKey(withoutKey(withoutKey(root["player"], "xp"), "xp_seed"), "respawn"); // V2-11: the xp key is format-26 vocabulary; V2-13: the respawn key is format-28 vocabulary
         root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
@@ -466,6 +484,7 @@ TEST(DrownSaveTest, Format15MigratesFullAir) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
+    root = stripFormat30Keys(std::move(root));
     root["format"] = Json(15);
     root["player"] = withoutKey(withoutKey(withoutKey(root["player"], "xp"), "xp_seed"), "respawn"); // V2-11: the xp key is format-26 vocabulary; V2-13: the respawn key is format-28 vocabulary
     root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape

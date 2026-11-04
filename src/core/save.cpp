@@ -651,7 +651,8 @@ RetainedColumnDiff retainColumnDiff(const World& world,
     return out;
 }
 
-void mergeRetained(SaveGame& save,
+void mergeRetained(std::vector<SavedBlockEdit>& blockEdits,
+                   std::vector<SavedFluidEdit>& fluidEdits,
                    const std::map<ColumnPos, RetainedColumnDiff>& retained) {
     if (retained.empty()) {
         return; // the pre-STRM-2 shape: the lists stay exactly as diffed
@@ -664,16 +665,16 @@ void mergeRetained(SaveGame& save,
     // diffWorld tail sort left.
     for (const auto& entry : retained) {
         const RetainedColumnDiff& diff = entry.second;
-        save.blockEdits.insert(save.blockEdits.end(), diff.blocks.begin(),
-                               diff.blocks.end());
-        save.fluidEdits.insert(save.fluidEdits.end(), diff.fluids.begin(),
-                               diff.fluids.end());
+        blockEdits.insert(blockEdits.end(), diff.blocks.begin(),
+                          diff.blocks.end());
+        fluidEdits.insert(fluidEdits.end(), diff.fluids.begin(),
+                          diff.fluids.end());
     }
-    std::sort(save.blockEdits.begin(), save.blockEdits.end(),
+    std::sort(blockEdits.begin(), blockEdits.end(),
               [](const SavedBlockEdit& a, const SavedBlockEdit& b) {
                   return a.pos < b.pos;
               });
-    std::sort(save.fluidEdits.begin(), save.fluidEdits.end(),
+    std::sort(fluidEdits.begin(), fluidEdits.end(),
               [](const SavedFluidEdit& a, const SavedFluidEdit& b) {
                   return a.pos < b.pos;
               });
@@ -947,6 +948,12 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         }
         player["tutorial"] = std::move(tut);
     }
+    // V3-1 Phase B (format 30): the player's dimension — ALWAYS written
+    // (the strict vocabulary word — the game's collectSave always fills
+    // the live value, so the sentinel never reaches the serializer; the
+    // position's frame of reference: the pos / velocity / yaw / pitch
+    // are in this dimension's coordinates).
+    player["dimension"] = Json(save.playerDimension);
     root["player"] = player;
 
     Json slots = Json::array();
@@ -1202,6 +1209,74 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     }
     root["entities"] = entities;
 
+    // V3-1 Phase B (format 30): the NETHER segment (the closed set
+    // {blocks, fluids, states} — the overworld's shapes verbatim, the
+    // nether's cells; ALWAYS written — an empty array is valid, the
+    // furnaces-key discipline: a no-travel session's nether is pristine
+    // and serializes empty).
+    {
+        Json nether = Json::object();
+        Json netherBlocks = Json::array();
+        for (const SavedBlockEdit& e : save.netherBlockEdits) {
+            Json a = Json::array();
+            a.push_back(Json(e.pos.x));
+            a.push_back(Json(e.pos.y));
+            a.push_back(Json(e.pos.z));
+            a.push_back(Json(e.blockName));
+            netherBlocks.push_back(std::move(a));
+        }
+        nether["blocks"] = netherBlocks;
+        Json netherFluids = Json::array();
+        for (const SavedFluidEdit& e : save.netherFluidEdits) {
+            Json a = Json::array();
+            a.push_back(Json(e.pos.x));
+            a.push_back(Json(e.pos.y));
+            a.push_back(Json(e.pos.z));
+            a.push_back(Json(static_cast<int>(e.level)));
+            a.push_back(Json(fluidKindName(e.kind)));
+            netherFluids.push_back(std::move(a));
+        }
+        nether["fluids"] = netherFluids;
+        Json netherStates = Json::array();
+        for (const SavedState& ss : save.netherStates) {
+            Json se = Json::object();
+            Json pos = Json::array();
+            pos.push_back(Json(ss.pos.x));
+            pos.push_back(Json(ss.pos.y));
+            pos.push_back(Json(ss.pos.z));
+            se["pos"] = pos;
+            se["state"] = Json(static_cast<int>(ss.state));
+            netherStates.push_back(std::move(se));
+        }
+        nether["states"] = netherStates;
+        root["nether"] = std::move(nether);
+    }
+    // V3-1 Phase B (format 30): the nether's dropped items (the ITEM
+    // kind of the overworld's entity entry shape verbatim; ALWAYS
+    // written — empty valid, the nether-entities key discipline).
+    {
+        Json netherEntities = Json::array();
+        for (const SavedItemEntity& e : save.netherEntities) {
+            Json jpos = Json::array();
+            jpos.push_back(Json(e.pos.x));
+            jpos.push_back(Json(e.pos.y));
+            jpos.push_back(Json(e.pos.z));
+            Json je = Json::object();
+            je["type"] = Json(std::string("item"));
+            je["item"] = Json(e.item);
+            je["count"] = Json(e.count);
+            if (e.damage > 0.0f) {
+                je["damage"] = Json(e.damage);
+            }
+            je["pos"] = jpos;
+            je["age"] = Json(e.age);
+            je["pickup_delay"] = Json(e.pickupDelay);
+            writeEnchantsObj(je, e.enchants);
+            netherEntities.push_back(std::move(je));
+        }
+        root["nether_entities"] = std::move(netherEntities);
+    }
+
     Json blockEdits = Json::array();
     for (const SavedBlockEdit& e : save.blockEdits) {
         Json a = Json::array();
@@ -1246,13 +1321,18 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // Likewise "table_grid" (format 3-18) and "tables" (format 19,
     // CRAFT-1's generalization): both are known, the per-format key
     // discipline below enforces which one a file may carry ("table_grid"
-    // is restricted to 18 and older, "tables" to 19).
+    // is restricted to 18 and older, "tables" to 19). Likewise "nether"
+    // / "nether_entities" (format 30, V3-1 Phase B): known keys, the
+    // per-format discipline below enforces which format may carry them
+    // (restricted to 30 and newer — a format-29 file carrying either is
+    // a version lie).
     const std::set<std::string> topLevel {"format", "seed", "time", "player",
                                           "inventory", "inv_grid",
                                           "table_grid", "furnace",
                                           "furnaces", "fires", "campfires",
                                           "stairs", "states", "tables",
-                                          "entities", "blocks", "fluids"};
+                                          "entities", "blocks", "fluids",
+                                          "nether", "nether_entities"};
     MC_TRY(rejectUnknownFields(def, topLevel, "save file"));
 
     const Json* fmt = def.find("format");
@@ -1335,6 +1415,13 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // three-way discipline).
     if (fmt->asInt() >= 28) {
         playerFields.insert("respawn");
+    }
+    // V3-1 Phase B: "dimension" is format-30-and-newer vocabulary — a
+    // pre-30 file carrying it is a version lie (the whitelist naming
+    // above; the player.dimension parse below requires it ON format-30
+    // files, the three-way discipline).
+    if (fmt->asInt() >= 30) {
+        playerFields.insert("dimension");
     }
     MC_TRY(rejectUnknownFields(*player, playerFields, "save 'player'"));
     const Json* ppos = player->find("pos");
@@ -1804,6 +1891,35 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                            "), got " + std::to_string(comps[1]));
         }
         save.playerRespawn = bedSpawnPosition(comps[0], comps[1], comps[2]);
+    }
+    // V3-1 Phase B (format 30): the player's DIMENSION — the strict
+    // VOCABULARY word "overworld" | "nether" (ALWAYS written; the
+    // player's position is in this dimension's coordinates — the
+    // frame-of-reference key). A format-30 file REQUIRES the key (a
+    // missing key is a version lie — the oxygen / velocity key
+    // discipline) and names any other word (a non-vocabulary dimension
+    // is corruption, the S6 gate's "void" arm). A format-29 (or older)
+    // file CARRYING the key was rejected above by the format-dependent
+    // whitelist (the version-lie naming); its load MIGRATES to
+    // "overworld" (the system did not exist — the player was always in
+    // the overworld; the velocity-zeroed migration twin).
+    if (fmt->asInt() >= 30) {
+        const Json* dim = player->find("dimension");
+        if (dim == nullptr || !dim->isString()) {
+            return MC_FAIL("save format 30 requires 'player.dimension' "
+                           "(the string \"overworld\" or \"nether\" — "
+                           "the player's position is in that "
+                           "dimension's coordinates)");
+        }
+        const std::string dimName = dim->asString();
+        if (dimName != "overworld" && dimName != "nether") {
+            return MC_FAIL("save 'player.dimension' holds the unknown "
+                           "word '" + dimName +
+                           "' (vocabulary: \"overworld\", \"nether\")");
+        }
+        save.playerDimension = dimName;
+    } else {
+        save.playerDimension = "overworld"; // the migration (format <= 29)
     }
     // UX-7 (format 23) / V2-3 (format 25): the player's tutorial
     // progress. REQUIRED for a format-23 file (a missing key is a
@@ -2977,6 +3093,326 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         }
     }
 
+    // -- V3-1 Phase B (format 30): the NETHER segment ---------------------
+    // The CLOSED SET {blocks, fluids, states} (the overworld's shapes
+    // verbatim — the nether's cells; the cross-checks run in BOTH
+    // directions like the overworld's). A format-30 file REQUIRES the
+    // "nether" object (an empty segment is valid — a no-travel session's
+    // nether is pristine); a format-29 (or older) file CARRYING it is a
+    // version lie (named — the per-format key discipline; the topLevel
+    // whitelist above knows the key, this is the format gate). The
+    // nether's seed is DERIVED (worldSeed ^ kSaltNether — never stored:
+    // the overworld's "seed" is the frame of reference, the xp_seed
+    // single-source-of-truth twin), so no nether seed key exists.
+    const Json* netherObj = def.find("nether");
+    if (fmtVersion >= 30) {
+        if (netherObj == nullptr || !netherObj->isObject()) {
+            return MC_FAIL("save format 30 requires a 'nether' object "
+                           "({blocks, fluids, states} — the empty arrays "
+                           "are valid: a no-travel session's nether is "
+                           "pristine)");
+        }
+        const std::set<std::string> netherFields {"blocks", "fluids",
+                                                  "states"};
+        MC_TRY(rejectUnknownFields(*netherObj, netherFields,
+                                   "save 'nether'"));
+        // The nether's block edits (the overworld's 'blocks' validation
+        // verbatim — registered names, the y bound, no duplicates).
+        std::map<BlockPos, std::string> netherBlockCells;
+        const Json* nblks = netherObj->find("blocks");
+        if (nblks == nullptr || !nblks->isArray()) {
+            return MC_FAIL("save 'nether' requires a 'blocks' array "
+                           "(empty valid)");
+        }
+        for (std::size_t i = 0; i < nblks->size(); ++i) {
+            const Json& e = nblks->at(i);
+            const std::string what = "save 'nether.blocks' #" +
+                                     std::to_string(i);
+            if (!e.isArray() || e.size() != 4) {
+                return MC_FAIL(what + " must be [x, y, z, block name]");
+            }
+            double x, y, z;
+            if (!isInt(e.at(0), &x) || !isInt(e.at(1), &y) ||
+                !isInt(e.at(2), &z)) {
+                return MC_FAIL(what + ": x, y, z must be integers");
+            }
+            const int yi = static_cast<int>(y);
+            if (!isWorldYValid(yi)) {
+                return MC_FAIL(what + " has y=" + std::to_string(yi) +
+                               " outside the world height [0, " +
+                               std::to_string(kWorldHeight) + ")");
+            }
+            if (!e.at(3).isString() || e.at(3).asString().empty()) {
+                return MC_FAIL(what + " requires a non-empty block name");
+            }
+            const std::string name = e.at(3).asString();
+            if (!blocks.idForName(name).valid()) {
+                return MC_FAIL(what + " names unknown block '" + name +
+                               "'");
+            }
+            const BlockPos pos {static_cast<int>(x), yi, static_cast<int>(z)};
+            if (netherBlockCells.count(pos) != 0) {
+                return MC_FAIL("save has duplicate nether block edits at " +
+                               posStr(pos));
+            }
+            netherBlockCells.emplace(pos, name);
+            save.netherBlockEdits.push_back({pos, name});
+        }
+        // The nether's fluid edits (the overworld's 'fluids' validation
+        // verbatim — the named kind, the co-location rule).
+        std::set<BlockPos> netherFluidCells;
+        const Json* nfls = netherObj->find("fluids");
+        if (nfls == nullptr || !nfls->isArray()) {
+            return MC_FAIL("save 'nether' requires a 'fluids' array "
+                           "(empty valid)");
+        }
+        for (std::size_t i = 0; i < nfls->size(); ++i) {
+            const Json& e = nfls->at(i);
+            const std::string what = "save 'nether.fluids' #" +
+                                     std::to_string(i);
+            if (!e.isArray() || e.size() != 5) {
+                return MC_FAIL(what + " must be [x, y, z, level, fluid]");
+            }
+            double x, y, z, level;
+            if (!isInt(e.at(0), &x) || !isInt(e.at(1), &y) ||
+                !isInt(e.at(2), &z) || !isInt(e.at(3), &level)) {
+                return MC_FAIL(what + ": x, y, z, level must be "
+                                "integers");
+            }
+            const int yi = static_cast<int>(y);
+            const int li = static_cast<int>(level);
+            if (!isWorldYValid(yi)) {
+                return MC_FAIL(what + " has y=" + std::to_string(yi) +
+                               " outside the world height [0, " +
+                               std::to_string(kWorldHeight) + ")");
+            }
+            if (li < 0 || li > kMaxFluidLevel) {
+                return MC_FAIL(what + " level " + std::to_string(li) +
+                               " is out of range [0, " +
+                               std::to_string(kMaxFluidLevel) + "]");
+            }
+            const Json& f = e.at(4);
+            if (!f.isString()) {
+                return MC_FAIL(what + ": the fluid kind must be a name "
+                                "string");
+            }
+            const std::optional<FluidKind> k = fluidKindForName(f.asString());
+            if (!k) {
+                return MC_FAIL(what + " has unknown fluid '" +
+                               f.asString() +
+                               "' (vocabulary: \"water\", \"lava\")");
+            }
+            const BlockPos pos {static_cast<int>(x), yi, static_cast<int>(z)};
+            const auto bit = netherBlockCells.find(pos);
+            if (bit != netherBlockCells.end() && bit->second != "air" &&
+                li > 0) {
+                return MC_FAIL("save has a nether block edit and a nether "
+                               "fluid edit at the same cell " + posStr(pos) +
+                               " (a block displaces fluid)");
+            }
+            if (netherFluidCells.count(pos) != 0) {
+                return MC_FAIL("save has duplicate nether fluid edits at " +
+                               posStr(pos));
+            }
+            netherFluidCells.insert(pos);
+            save.netherFluidEdits.push_back(
+                {pos, *k, static_cast<std::uint8_t>(li)});
+        }
+        // The nether's per-instance states (the overworld's 'states'
+        // discipline verbatim — the cross-check runs in BOTH directions
+        // against the NETHER's stateful block edits: every nether stateful
+        // cell owns a state, every state is a nether stateful cell — the
+        // PITS 383① twin: a portal without its axis is a version lie).
+        const Json* nstates = netherObj->find("states");
+        if (nstates == nullptr || !nstates->isArray()) {
+            return MC_FAIL("save 'nether' requires a 'states' array "
+                           "(empty valid)");
+        }
+        std::set<BlockPos> netherStateCells;
+        std::map<BlockPos, std::string> netherStateCellBlock;
+        for (const SavedBlockEdit& e : save.netherBlockEdits) {
+            const Block* b = blocks.findByName(e.blockName);
+            if (b != nullptr && b->hasState()) {
+                netherStateCells.insert(e.pos);
+                netherStateCellBlock[e.pos] = e.blockName;
+            }
+        }
+        std::set<BlockPos> netherEntryPos;
+        for (std::size_t i = 0; i < nstates->size(); ++i) {
+            const Json& e = nstates->at(i);
+            const std::string what = "save 'nether.states' entry #" +
+                                     std::to_string(i);
+            if (!e.isObject()) {
+                return MC_FAIL(what + " must be an object");
+            }
+            const std::set<std::string> eFields {"pos", "state"};
+            MC_TRY(rejectUnknownFields(e, eFields, what));
+            Result<BlockPos> pr = parseEntryPos(e, what, netherEntryPos);
+            MC_TRY(pr);
+            const BlockPos& bpos = pr.value();
+            const Json* st = e.find("state");
+            if (st == nullptr || !st->isNumber()) {
+                return MC_FAIL(what + " requires numeric 'state'");
+            }
+            const int si = st->asInt();
+            if (si < 0) {
+                return MC_FAIL(what + " state " + std::to_string(si) +
+                               " is out of range (it must be >= 0)");
+            }
+            const auto cit = netherStateCellBlock.find(bpos);
+            if (cit != netherStateCellBlock.end()) {
+                const Block* cb = blocks.findByName(cit->second);
+                if (cb != nullptr && si >= cb->stateCount()) {
+                    return MC_FAIL(what + " state " + std::to_string(si) +
+                                   " is out of range [0, " +
+                                   std::to_string(cb->stateCount()) +
+                                   ") for the " + cit->second + " at " +
+                                   posStr(bpos));
+                }
+            }
+            save.netherStates.push_back(
+                SavedState {bpos, static_cast<std::uint8_t>(si)});
+        }
+        if (netherEntryPos != netherStateCells) {
+            for (const BlockPos& p : netherEntryPos) {
+                if (netherStateCells.count(p) == 0) {
+                    return MC_FAIL("save 'nether.states' has an entry at " +
+                                   posStr(p) +
+                                   " which is not a stateful block in the "
+                                   "nether's block edits");
+                }
+            }
+            for (const BlockPos& p : netherStateCells) {
+                if (netherEntryPos.count(p) == 0) {
+                    return MC_FAIL("the nether's stateful block at " +
+                                   posStr(p) +
+                                   " has no 'nether.states' entry (every "
+                                   "stateful block owns a per-instance "
+                                   "state)");
+                }
+            }
+            return MC_FAIL("save 'nether.states' does not match the "
+                           "nether's stateful blocks");
+        }
+    } else {
+        // The version-lie gate (the per-format key discipline — the
+        // topLevel whitelist knows the key, this is the format) + the
+        // migration (the segments stay empty: the system did not exist,
+        // the nether world never generated, the player was in the
+        // overworld — the velocity-zeroed twin).
+        if (netherObj != nullptr) {
+            return MC_FAIL("save 'nether' requires format 30 or newer "
+                           "(got " + std::to_string(fmtVersion) +
+                           ") (a version lie)");
+        }
+    }
+
+    // -- V3-1 Phase B (format 30): the NETHER's dropped items ------------
+    // The ITEM kind of the overworld's entity entry shape verbatim; the
+    // XP kind is REJECTED (the nether holds no XP grant source in Phase
+    // B — the documented deviation 6, the named version-lie twin). A
+    // format-30 file REQUIRES the key (an empty array is valid); a
+    // format-29 (or older) file carrying it is a version lie.
+    const Json* netherEnts = def.find("nether_entities");
+    if (fmtVersion >= 30) {
+        if (netherEnts == nullptr || !netherEnts->isArray()) {
+            return MC_FAIL("save format 30 requires a 'nether_entities' "
+                           "array (empty valid: a no-travel session's "
+                           "nether holds no drops)");
+        }
+        for (std::size_t i = 0; i < netherEnts->size(); ++i) {
+            const Json& e = netherEnts->at(i);
+            const std::string what = "save 'nether_entities' entry #" +
+                                     std::to_string(i);
+            if (!e.isObject()) {
+                return MC_FAIL(what + " must be an object");
+            }
+            const Json* type = e.find("type");
+            if (type == nullptr || !type->isString() ||
+                type->asString() != "item") {
+                return MC_FAIL(what + " 'type' must be \"item\" (the "
+                               "nether carries no XP orbs — the nether "
+                               "holds no XP grant source in Phase B)");
+            }
+            const std::set<std::string> eFields {"type", "item", "count",
+                                                 "pos", "age",
+                                                 "pickup_delay", "damage",
+                                                 "enchants"};
+            MC_TRY(rejectUnknownFields(e, eFields, what));
+            SavedItemEntity se;
+            const Json* name = e.find("item");
+            if (name == nullptr || !name->isString() ||
+                name->asString().empty()) {
+                return MC_FAIL(what + " requires a non-empty string "
+                               "'item'");
+            }
+            const ItemID id = items.idForName(name->asString());
+            if (!id.valid()) {
+                return MC_FAIL(what + " holds unknown item '" +
+                               name->asString() + "'");
+            }
+            const int maxStack =
+                std::min(items.at(id).maxStack, ItemEntity::kMaxStack);
+            const Json* count = e.find("count");
+            if (count == nullptr || !count->isNumber()) {
+                return MC_FAIL(what + " requires numeric 'count'");
+            }
+            se.count = count->asInt();
+            if (se.count < 1 || se.count > maxStack) {
+                return MC_FAIL(what + " count " + std::to_string(se.count) +
+                               " is out of range for '" + name->asString() +
+                               "' (max " + std::to_string(maxStack) + ")");
+            }
+            if (const Json* dmg = e.find("damage")) {
+                MC_TRY(checkDamageValue(*dmg, items.at(id), what, se.damage));
+            }
+            if (const Json* ench = e.find("enchants")) {
+                MC_TRY(parseEnchantsObj(*ench, what, se.enchants));
+            }
+            const Json* epos = e.find("pos");
+            if (epos == nullptr || !epos->isArray() || epos->size() != 3) {
+                return MC_FAIL(what + " requires 'pos' (an array of 3 "
+                               "numbers)");
+            }
+            for (std::size_t k = 0; k < 3; ++k) {
+                if (!epos->at(k).isNumber()) {
+                    return MC_FAIL(what + " 'pos'[" + std::to_string(k) +
+                                   "] must be a number");
+                }
+            }
+            se.pos = {static_cast<float>(epos->at(0).asDouble()),
+                      static_cast<float>(epos->at(1).asDouble()),
+                      static_cast<float>(epos->at(2).asDouble())};
+            const Json* age = e.find("age");
+            if (age == nullptr || !age->isNumber() ||
+                !(age->asDouble() >= 0.0 && age->asDouble() <
+                  ItemEntity::kDespawnSeconds)) {
+                return MC_FAIL(what + " 'age' must be a number in [0, " +
+                               std::to_string(ItemEntity::kDespawnSeconds) +
+                               ")");
+            }
+            se.age = age->asDouble();
+            const Json* delay = e.find("pickup_delay");
+            if (delay == nullptr || !delay->isNumber() ||
+                !(delay->asDouble() >= 0.0 && delay->asDouble() <=
+                  ItemEntity::kPickupDelaySeconds)) {
+                return MC_FAIL(what + " 'pickup_delay' must be a number in "
+                               "[0, " +
+                               std::to_string(
+                                   ItemEntity::kPickupDelaySeconds) + "]");
+            }
+            se.pickupDelay = delay->asDouble();
+            se.item = name->asString();
+            save.netherEntities.push_back(std::move(se));
+        }
+    } else {
+        if (netherEnts != nullptr) {
+            return MC_FAIL("save 'nether_entities' requires format 30 or "
+                           "newer (got " + std::to_string(fmtVersion) +
+                           ") (a version lie)");
+        }
+    }
+
     // -- per-block crafting-table grids (format 19; CRAFT-1) -------------
     // A "table block" = a block whose `interact` property names the
     // crafting-table GUI (data-driven — no block-id switch; the furnace's
@@ -3316,6 +3752,22 @@ Result<void> validateEnchants(const SaveGame& save, const ItemRegistry& items,
         MC_TRY(validateStackEnchants(e.enchants, *item, "save entity #" +
                                                        std::to_string(i),
                                      enchants));
+    }
+    // V3-1 Phase B (format 30): the nether's dropped items (the overworld
+    // entity loop's twin — the nether's enchant cross-check).
+    for (std::size_t i = 0; i < save.netherEntities.size(); ++i) {
+        const SavedItemEntity& e = save.netherEntities[i];
+        if (e.enchants.empty()) {
+            continue;
+        }
+        const Item* item = items.findByName(e.item);
+        if (item == nullptr) {
+            return MC_FAIL("save nether entity #" + std::to_string(i) +
+                           " holds an unregistered item with enchants");
+        }
+        MC_TRY(validateStackEnchants(
+            e.enchants, *item, "save nether entity #" + std::to_string(i),
+            enchants));
     }
     return {};
 }

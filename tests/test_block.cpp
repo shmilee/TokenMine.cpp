@@ -2236,6 +2236,9 @@ TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
         // V3-1 Phase A: the nether portal (the glass sound family — the
         // MC portal's glass-class break sound).
         {"nether_portal", "glass"},
+        // V3-1 Phase B: the netherrack (the stone sound family — the
+        // documented deviation 3: the netherrack's own family is Phase C).
+        {"netherrack", "stone"},
         // V2-16: the snow block (the 7th material family).
         {"snow", "snow"},
     };
@@ -3616,4 +3619,55 @@ TEST(BlockContentTest, V320NetherPortalBlockContentPinned) {
             std::string("assets/sounds/glass_") + ev + ".wav"))
             << "the glass material's " << ev << " wav is not shipped";
     }
+}
+
+// ---------------------------------------------------------------------------
+// V3-1 Phase B: the netherrack block (the nether's identity material —
+// the slab world's surface + subsurface).
+// ---------------------------------------------------------------------------
+
+TEST(BlockContentTest, V340NetherrackBlockContentPinned) {
+    // The real assets: the netherrack (Minecraft's nether stone — the
+    // wiki-verified 11-04 set): hardness 0.4 (the Minecraft netherrack
+    // EXACT — a pickaxe's fast break, the bare-hand's slow one), drops
+    // ITSELF (the block item form — mine the nether, build with it), the
+    // STONE sound material family (the documented deviation 3: the
+    // netherrack's own sound family is the Phase C content; the stone
+    // timbre stands in — the three stone wavs exist for the init's
+    // checkSoundMaterials), the full opaque cube (the default solid /
+    // opaque — the stone precedent's shape).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* b = reg.findByName("netherrack");
+    ASSERT_TRUE(b != nullptr) << "the netherrack block is not shipped";
+    EXPECT_EQ(b->model.shape, BlockModel::Shape::FullCube);
+    EXPECT_EQ(b->model.textures.top, "netherrack");
+    EXPECT_EQ(b->model.textures.side, "netherrack");
+    EXPECT_EQ(b->model.textures.bottom, "netherrack");
+    EXPECT_TRUE(b->properties.solid); // the slab's solid
+    EXPECT_TRUE(b->properties.opaque); // the light blocker
+    EXPECT_FALSE(b->properties.transparent);
+    EXPECT_TRUE(b->properties.destroyable); // mineable (the stone twin)
+    EXPECT_FLOAT_EQ(b->properties.hardness, 0.4f); // the Minecraft exact
+    EXPECT_EQ(b->properties.drops, "netherrack"); // it drops itself
+    EXPECT_EQ(b->properties.soundMaterial, "stone"); // deviation 3
+    // Stateless (the fill's plain slab — no per-instance byte).
+    EXPECT_FALSE(b->hasState());
+    // No explicit item file (the auto block item owns the name — the
+    // snow precedent).
+    EXPECT_FALSE(std::filesystem::exists(
+        "assets/data/items/netherrack.json"));
+    // The stone material family's three event wavs exist (the init's
+    // checkSoundMaterials input side, file-based).
+    for (const char* ev : {"dig", "place", "break"}) {
+        EXPECT_TRUE(std::filesystem::exists(
+            std::string("assets/sounds/stone_") + ev + ".wav"))
+            << "the stone material's " << ev << " wav is not shipped";
+    }
+    // The texture ships (the atlas's tile's file side).
+    EXPECT_TRUE(std::filesystem::exists(
+        "assets/textures/blocks/netherrack.png"));
 }

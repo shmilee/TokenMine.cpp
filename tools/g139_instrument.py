@@ -154,6 +154,35 @@ STREAMING_OLD = '''    collectLitColumns();
     unloadFarColumns();
 '''
 
+# V3-1 Phase B (v3.4.0 onward): the drain call sites are DimCtx-
+# parameterized (the overworld's members + the lazy nether's). The
+# instrumented form wraps the WHOLE drain (both dimensions) — the
+# stream metric is the per-frame drain cost of the active session.
+STREAMING_OLD2 = '''    collectLitColumns(overworldCtx());
+    integrateMeshJobs(overworldCtx());
+    integrateStreamedColumns(overworldCtx());
+    if (m_nether.world) {
+        collectLitColumns(netherCtx());
+        integrateMeshJobs(netherCtx());
+        integrateStreamedColumns(netherCtx());
+    }
+    DimCtx activeCtx = playerInNether() ? netherCtx() : overworldCtx();
+    unloadFarColumns(activeCtx);
+'''
+STREAMING_NEW2 = '''    const auto g139_tst = std::chrono::steady_clock::now();
+    collectLitColumns(overworldCtx());
+    integrateMeshJobs(overworldCtx());
+    integrateStreamedColumns(overworldCtx());
+    if (m_nether.world) {
+        collectLitColumns(netherCtx());
+        integrateMeshJobs(netherCtx());
+        integrateStreamedColumns(netherCtx());
+    }
+    DimCtx activeCtx = playerInNether() ? netherCtx() : overworldCtx();
+    unloadFarColumns(activeCtx);
+    g139win().stream.push_back(g139_ms(g139_tst));
+'''
+
 FLUID_NEW = '''        const auto g139_tf = std::chrono::steady_clock::now();
         const std::vector<BlockPos> changed = FluidSim::tick(
             m_world, m_blocks, &m_flammableChunks, honeyActive);
@@ -203,7 +232,13 @@ if is_split:
         write(f, ref[0])
     ref = [read(frame)]
     rep = make_repper(ref)
-    rep(STREAMING_OLD, STREAMING_NEW)
+    # The patcher follows the version: each side's tree carries the
+    # patcher of ITS OWN commit (git archive), so the dual anchor is
+    # belt-and-braces for rebuilds — the newer call shape wins.
+    if STREAMING_OLD2 in ref[0]:
+        rep(STREAMING_OLD2, STREAMING_NEW2)
+    else:
+        rep(STREAMING_OLD, STREAMING_NEW)
     rep(FLUID_OLD, FLUID_NEW)
     rep(FIRES[1], FIRES[0])
     rep(SPREAD[1], SPREAD[0])

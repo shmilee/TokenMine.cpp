@@ -58,6 +58,20 @@ public:
     // back into this World (no re-entrant chunk creation).
     using ChunkGenerator = std::function<void(Chunk&, const ChunkPos&)>;
 
+    // Default-constructs an OVERWORLD world (skyless = false): the void
+    // around / above the world reads open sky (sky 15) — the pre-V3-1
+    // behavior, bit-for-bit. The nether constructs a SKYLESS world
+    // (skyless = true, the V3-1 Phase B design D5): the void and the
+    // world top read sky 0 (no daylight — the nether has no sky; the
+    // sky-light field is structurally 0, so the day/night shader term and
+    // the night floor are inert). Defaulting to false keeps every
+    // overworld World (and every test fixture) bit-identical.
+    explicit World(bool skyless = false) : m_skyless(skyless) {}
+    // The dimension's skyless flag (the V3-1 Phase B D5 two read sites:
+    // getSkyLight's void / top reads, and the lighting rescan's top
+    // source).
+    bool skyless() const { return m_skyless; }
+
     // World coordinates. y outside [0, kWorldHeight) reads as air.
     BlockID getBlock(int x, int y, int z) const;
     // Returns false (and changes nothing) when y is out of range or the id
@@ -244,6 +258,11 @@ private:
     void wakeFluidChunks(const ChunkPos& pos);
 
     std::unordered_map<ChunkPos, Chunk> m_chunks;
+    // V3-1 Phase B (D5): the skyless flag (the nether — the void / world
+    // top read sky 0 instead of open sky 15; the lighting rescan's top
+    // source reads it too, world/lighting). false = the overworld (the
+    // default — every pre-V3-1 World, bit-for-bit).
+    bool m_skyless = false;
     // Chunks marked dirty (a mirror of each Chunk's own flag — the mesh
     // pass iterates this instead of every chunk).
     std::set<ChunkPos> m_dirtyChunks;

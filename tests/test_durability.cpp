@@ -438,8 +438,8 @@ TEST(SaveFormat18Test, MidDamageRoundTripsInAllThreePlaces) {
     s.entities.push_back(e);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // UX-7/V2-3/V2-11: writes are always format 29 (V2-13 was 27).
-    EXPECT_EQ(j->find("format")->asInt(), 29);
+    // V3-1 Phase B: writes are always format 30 (V3-7 was 29).
+    EXPECT_EQ(j->find("format")->asInt(), 30);
     // The shapes: the damaged slot + the entity carry the key; the
     // full-durability armor slot is a STRING; the damaged one an
     // OBJECT {item, damage}.
@@ -488,6 +488,26 @@ TEST(SaveFormat18Test, Format17WithDamageKeyIsAVersionLie) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
+    // V3-1 Phase B: the format-30 keys (dimension / nether /
+    // nether_entities) are stripped for the downgrade (the genuine pre-30
+    // file never carried them — the test_save.cpp stripFormat30Keys
+    // discipline; this file has no withoutKey helper, the inline strip).
+    {
+        Json player30 = Json::object();
+        for (const auto& [k, v] : root["player"].members()) {
+            if (k != "dimension") {
+                player30[k] = v;
+            }
+        }
+        root["player"] = std::move(player30);
+    }
+    Json netherFree = Json::object();
+    for (const auto& [k, v] : root.members()) {
+        if (k != "nether" && k != "nether_entities") {
+            netherFree[k] = v;
+        }
+    }
+    root = std::move(netherFree);
     root["format"] = Json(17);
     root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
     // SURV-7: the stats key is format-21 vocabulary — a format-17 file

@@ -7,7 +7,7 @@ namespace mc {
 
 Entity::Entity(const World& world, const BlockRegistry& blocks, Vec3 pos,
                float width, float height)
-    : m_world(world),
+    : m_world(&world),
       m_blocks(blocks),
       m_position(pos),
       m_width(width),
@@ -49,7 +49,7 @@ SolidRange Entity::solidRange(BlockID id, const Vec3& mn, const Vec3& mx,
         // bed family) NEVER reads a state -> the bottom half (the exact
         // pre-V2-17 value — the bit-level red line).
         if (b.hasState()) {
-            const int st = m_world.getBlockState(cell.x, cell.y, cell.z);
+            const int st = m_world->getBlockState(cell.x, cell.y, cell.z);
             const int s =
                 (st != Chunk::kBlockStateUnset) ? st : b.stateDefault();
             if (s == 1) {
@@ -97,7 +97,7 @@ SolidRange Entity::solidRange(BlockID id, const Vec3& mn, const Vec3& mx,
         // game sets it when the block is placed (to the block's state
         // default) + on rotation. Unset (the sentinel, e.g. unit tests
         // without a game) falls back to the block's state default.
-        const int st = m_world.getBlockState(cell.x, cell.y, cell.z);
+        const int st = m_world->getBlockState(cell.x, cell.y, cell.z);
         const int facing =
             (st != Chunk::kBlockStateUnset) ? st : b.stateDefault();
         switch (facing) {
@@ -156,7 +156,7 @@ bool Entity::hasRoomAt(Vec3 pos) const {
                 const Vec3 mx {x1f, y1f, z1f};
                 const BlockPos cell {x, y, z};
                 const SolidRange rng =
-                    solidRange(m_world.getBlock(x, y, z), mn, mx, cell);
+                    solidRange(m_world->getBlock(x, y, z), mn, mx, cell);
                 if (rng.top > 0.0f &&
                     (y0f < y + rng.top && y1f > y + rng.bottom)) {
                     return false;
@@ -188,7 +188,7 @@ bool Entity::overlapsFluid(FluidKind kind) const {
                 if (!(mn.z < z + 1 && mx.z > z)) {
                     continue;
                 }
-                if (m_world.getFluidOfKind(x, y, z, kind) > 0) {
+                if (m_world->getFluidOfKind(x, y, z, kind) > 0) {
                     return true;
                 }
             }
@@ -223,7 +223,7 @@ bool Entity::overlapsBlock(BlockID id) const {
                 if (!(mn.z < z + 1 && mx.z > z)) {
                     continue;
                 }
-                if (m_world.getBlock(x, y, z) == id) {
+                if (m_world->getBlock(x, y, z) == id) {
                     return true;
                 }
             }
@@ -500,7 +500,7 @@ bool Entity::moveAxis(int axis, float delta) {
                 // height at the AABB's low end.
                 const BlockPos cell {x, y, z};
                 const SolidRange rng =
-                    solidRange(m_world.getBlock(x, y, z), mn, mx, cell);
+                    solidRange(m_world->getBlock(x, y, z), mn, mx, cell);
                 if (rng.top <= 0.0f) {
                     continue;
                 }
@@ -611,7 +611,7 @@ void Entity::stepUp(const Vec3& wishDir, float distPerTick) {
         // pre-V2-9 (the shared stepUp unit pins run unchanged).
         bool frontBlocks = false;
         for (int y = fy; y < m_position.y + m_height && !frontBlocks; ++y) {
-            const BlockID id = m_world.getBlock(cx, y, cz);
+            const BlockID id = m_world->getBlock(cx, y, cz);
             if (!isSolid(id)) {
                 continue;
             }
@@ -642,14 +642,14 @@ void Entity::stepUp(const Vec3& wishDir, float distPerTick) {
         // (the ~1.125 lift from foot 46) CLEARED the 1.5 barrier (the
         // Phase-99 E2E wall-contrast exposed it). Stairs/slabs
         // (top < 1.0) still step as before.
-        const BlockID frontId = m_world.getBlock(cx, fy, cz);
+        const BlockID frontId = m_world->getBlock(cx, fy, cz);
         const float frontTop =
             solidRange(frontId, m_position, m_position,
                        BlockPos {cx, fy, cz})
                 .top;
         if (frontTop <= 0.0f || frontTop > 1.0f + kStepUpTopTol ||
-            isSolid(m_world.getBlock(cx, fy + 1, cz)) ||
-            isSolid(m_world.getBlock(cx, fy + 2, cz))) {
+            isSolid(m_world->getBlock(cx, fy + 1, cz)) ||
+            isSolid(m_world->getBlock(cx, fy + 2, cz))) {
             continue;
         }
         m_position.y += 1.0f;
@@ -698,7 +698,7 @@ void Entity::refreshFluidState() {
     m_fluidSurfaceY = -1.0f;
     if (m_inFluid) {
         for (int y = top + kFluidSurfaceScanDepth; y > top; --y) {
-            if (m_world.getFluidOfKind(cx, y, cz, m_surfaceKind) ==
+            if (m_world->getFluidOfKind(cx, y, cz, m_surfaceKind) ==
                 kMaxFluidLevel) {
                 m_fluidSurfaceY = static_cast<float>(y) + 1.0f;
                 break;
@@ -707,7 +707,7 @@ void Entity::refreshFluidState() {
     }
     if (m_fluidSurfaceY < 0.0f) {
         for (int y = top; y > top - kFluidSurfaceScanDepth; --y) {
-            if (m_world.getFluidOfKind(cx, y, cz, m_surfaceKind) ==
+            if (m_world->getFluidOfKind(cx, y, cz, m_surfaceKind) ==
                 kMaxFluidLevel) {
                 m_fluidSurfaceY = static_cast<float>(y) + 1.0f;
                 break;
@@ -810,7 +810,7 @@ bool Entity::isRestingOnSolid() const {
                 const Vec3 mx {m_position.x + half, m_position.y + m_height,
                                m_position.z + half};
                 const float top =
-                    solidRange(m_world.getBlock(x, y, z), mn, mx, cell).top;
+                    solidRange(m_world->getBlock(x, y, z), mn, mx, cell).top;
                 if (top > 0.0f &&
                     std::abs(m_position.y -
                              (static_cast<float>(y) + top)) <= kFaceEps) {
