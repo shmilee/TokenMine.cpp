@@ -1,0 +1,18 @@
+{
+  "id": "nether_portal",
+  "properties": {
+    "hardness": 0,
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "destroyable": false,
+    "light_emission": 11,
+    "sound_material": "glass"
+  },
+  "model": {
+    "shape": "full_cube",
+    "state_count": 2,
+    "state_default": 0,
+    "textures": { "top": "nether_portal", "side": "nether_portal", "bottom": "nether_portal" }
+  }
+}

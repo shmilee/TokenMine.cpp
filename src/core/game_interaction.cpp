@@ -347,6 +347,68 @@ void Game::handleInteraction(double dt) {
                                                    // successful ignition
                         }
                     }
+                } else if (m_states.obsidianId.valid() &&
+                           m_states.portalId.valid() &&
+                           b.id == m_states.obsidianId) {
+                    // (c) V3-1 Phase A: the portal ignition — the ray
+                    // can never aim at the frame's interior air directly
+                    // (the obsidian ring is coplanar with it and
+                    // occludes it): the hit is the ring cell, and the
+                    // FIRE lands in the hit face's neighbor along the
+                    // normal — when that neighbor is the STRICTLY-
+                    // INTERIOR air of a complete frame (the slab
+                    // placement's hit-face-adjacent-cell pattern). The
+                    // player aims the ring cell's face TOWARD the frame's
+                    // interior. The choke point auto-activates on the
+                    // fire placement (the setBlock below triggers
+                    // checkPortalTransition). An obsidian hit with no
+                    // complete frame owning the neighbor = no reaction
+                    // (the material's placeBlock no-op fall-through, the
+                    // existing behavior bit-invariant).
+                    const BlockPos adj {hit->block.x +
+                                            static_cast<int>(std::lround(
+                                                hit->normal.x)),
+                                        hit->block.y +
+                                            static_cast<int>(std::lround(
+                                                hit->normal.y)),
+                                        hit->block.z +
+                                            static_cast<int>(std::lround(
+                                                hit->normal.z))};
+                    if (m_world.getBlock(adj.x, adj.y, adj.z) ==
+                        BlockID::air()) {
+                        // The hit cell is on the candidate frames'
+                        // perimeter (or corner) by the ring-obsidian
+                        // premise; the first (deterministic-order)
+                        // complete frame whose strictly-interior holds
+                        // the neighbor — and no portal (an already-live
+                        // frame's interior is portal, ignition refused) —
+                        // takes the fire.
+                        const std::vector<PortalFrameStatus> cands =
+                            scanPortalFrames(m_world, hit->block,
+                                             m_states.obsidianId,
+                                             m_states.fireId,
+                                             m_states.portalId);
+                        for (const PortalFrameStatus& st : cands) {
+                            if (!st.ringComplete || st.interiorPortal != 0 ||
+                                !portalFrameStrictlyInterior(st.frame, adj)) {
+                                continue;
+                            }
+                            setBlock(adj.x, adj.y, adj.z, m_states.fireId);
+                            Lighting::updateLocal(m_world, m_blocks, adj);
+                            m_sound.play("ignite");
+                            // SURV-3: the successful ignition wears the
+                            // held igniter one point (the action
+                            // completed — the (a) / (b) twin).
+                            if (m_items.at(held.item).durability > 0.0f) {
+                                if (wearItem(m_inventory.at(m_selectedSlot),
+                                             kIgniteWear)) {
+                                    m_sound.play("break"); // it broke on
+                                                           // the ignition
+                                }
+                            }
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -804,6 +866,10 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
     // block always owns a state (created on placement, empty), and a
     // cell that stops holding a furnace drops its state (the invariant
     // the format-7 save cross-checks against the block edits).
+    // V3-1 Phase A: the cell's pre-write content (the obsidian
+    // destruction's pre-event ring view — the break's brokenState
+    // precedent: the state is read BEFORE the write erases it).
+    const BlockID oldId = m_world.getBlock(x, y, z);
     m_world.setBlock(x, y, z, id);
     // Burn-pass gate (Phase 99.8): a flamable placement/rotation makes the
     // chunk "ever held a flamable" (over-approximation — removals do not
@@ -953,6 +1019,30 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
             m_world.setBlockState(x, y, z, Chunk::kBlockStateUnset);
         }
     }
+    // V3-1 Phase A: the portal tracking set follows the cell (the
+    // beacons' twin, the portalId predicate): the ambient pass iterates
+    // it; a cell that stops holding a portal drops out (the choke point's
+    // set of plans keeps it exact — the rescan rebuilds it on load).
+    {
+        const BlockPos pp {x, y, z};
+        if (m_states.portalId.valid() && id == m_states.portalId) {
+            m_states.portals[pp] = id;
+        } else {
+            m_states.portals.erase(pp);
+        }
+    }
+    // V3-1 Phase A: the portal frame event (an obsidian or fire placement
+    // or destruction — the bounded scan + the pure transition decision +
+    // the plans, see checkPortalTransition). Structurally inert without
+    // the portal + obsidian blocks and on every other event class (the
+    // base run's immunity root: a no-input worldgen run never places
+    // obsidian or fire through this choke point — the fluid reaction's
+    // obsidian goes through the raw World API, the journal-seed path).
+    if (m_states.portalId.valid() && m_states.obsidianId.valid() &&
+        (oldId == m_states.obsidianId || id == m_states.obsidianId ||
+         oldId == m_states.fireId || id == m_states.fireId)) {
+        checkPortalTransition(oldId, id, x, y, z);
+    }
     const float half = Projectile::kSize * 0.5f;
     for (auto& entity : m_entities) {
         auto* arrow = dynamic_cast<Projectile*>(entity.get());
@@ -990,6 +1080,77 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
                          ", " + std::to_string(p.z) + ")");
         }
     }
+}
+
+void Game::checkPortalTransition(BlockID oldId, BlockID newId, int x, int y,
+                                 int z) {
+    (void)newId; // the decision reads the OLD id + the world as it is now
+    // The bounded scan over the event cell's two vertical planes (the
+    // sub-millisecond worst case, the core/portal discipline) + the pure
+    // transition decision (the unit tests own both). Deactivation plans
+    // apply before activation plans (the lists are mutually exclusive per
+    // frame — a frame is either complete now or broken by the event —
+    // and their interiors are disjoint, so the snapshot's census stays
+    // valid through the application).
+    const BlockPos cell {x, y, z};
+    const std::vector<PortalFrameStatus> candidates = scanPortalFrames(
+        m_world, cell, m_states.obsidianId, m_states.fireId,
+        m_states.portalId);
+    const PortalTransitionDecision d =
+        portalTransitionDecision(candidates, oldId, m_states.obsidianId);
+    for (const PortalFrameStatus& st : d.deactivate) {
+        deactivatePortal(st.frame);
+    }
+    for (const PortalFrameStatus& st : d.activate) {
+        activatePortal(st.frame);
+    }
+}
+
+void Game::activatePortal(const PortalFrame& frame) {
+    // The pure plan (the interior's air + fire cells — the fire cell is
+    // REPLACED, Minecraft's "one of them replacing the fire") applied
+    // through the choke point (the journal + the tracking sets + the
+    // ENT-2 state seeding ride along; a replaced fire drops its burn
+    // life with the cell). The choke point seeds each portal's state
+    // default; the portal's state IS the frame's axis (the per-instance
+    // byte the save's format-15 states segment carries — zero format).
+    for (const BlockPos& p :
+         portalActivationPlan(m_world, frame, m_states.fireId)) {
+        setBlock(p.x, p.y, p.z, m_states.portalId);
+        m_world.setBlockState(p.x, p.y, p.z,
+                              static_cast<std::uint8_t>(frame.axis));
+    }
+    // ONE relight over the frame's bounding box (the portal is a light-11
+    // source; the fluid-tick bounding-box pattern, not per-cell).
+    Lighting::updateRegion(m_world, m_blocks,
+                           BlockPos {frame.lo, frame.y0, frame.plane},
+                           BlockPos {frame.hi, frame.y1, frame.plane});
+    // The bottom long edge's center (the log's anchor — deterministic).
+    MC_LOG_INFO("Portal activated at (" +
+                std::to_string((frame.lo + frame.hi) / 2) + ", " +
+                std::to_string(frame.y0) + ", " +
+                std::to_string(frame.plane) + ") (" +
+                std::to_string(frame.longEdge()) + "x" +
+                std::to_string(frame.height()) + ")");
+}
+
+void Game::deactivatePortal(const PortalFrame& frame) {
+    // The pure plan (the interior's portal cells -> air) through the
+    // choke point (the tracking set drops the cells, the journal records
+    // the fix so the next save persists it).
+    for (const BlockPos& p :
+         portalDeactivationPlan(m_world, frame, m_states.portalId)) {
+        setBlock(p.x, p.y, p.z, BlockID::air());
+    }
+    Lighting::updateRegion(m_world, m_blocks,
+                           BlockPos {frame.lo, frame.y0, frame.plane},
+                           BlockPos {frame.hi, frame.y1, frame.plane});
+    MC_LOG_INFO("Portal deactivated at (" +
+                std::to_string((frame.lo + frame.hi) / 2) + ", " +
+                std::to_string(frame.y0) + ", " +
+                std::to_string(frame.plane) + ") (" +
+                std::to_string(frame.longEdge()) + "x" +
+                std::to_string(frame.height()) + ")");
 }
 
 void Game::breakBlock(const BlockHit& hit) {

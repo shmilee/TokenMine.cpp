@@ -10,7 +10,8 @@
 > `src/core/save.cpp`、`src/core/game.cpp` init 交叉校验段）；新增 worldgen.json
 > 完整参考、config 参考、块音效材质、纹理/atlas 纪律节。
 > 11-04 收官刷新（v2.19.0 / 存档 format 28 / 测试 2482）+ V3-7 刷新
-> （v3.1.0 / 存档 format 29 = gzip 时代 / 测试 2503）：二批新数据驱动机制
+> （v3.1.0 / 存档 format 29 = gzip 时代 / 测试 2503）+ V3-1 Phase A
+> 刷新（v3.2.0 / nether_portal 块 / 测试 2536）：二批新数据驱动机制
 > 并入（biome tree 6 键 + exclude_spawn_area / slab 三态 state_count +
 > drops_count_by_state / XP 三发放源 / 附魔 7 项 / 床 15 色染色族 / 染色羊变体
 > / render.ao），各节数量（93 块 / 83 物品 / 86 配方 / 8 mob / 7 附魔 /
@@ -379,6 +380,13 @@ their block"（CRAFT-6）**：每个数据方块隐式生成同名 block item（
    不变**，见「纹理/atlas 纪律」）+ `assets/data/textures/block_atlas.json`
    空位 `[col, row]`（**有空位 = 免重锚**；网格扩容 = 重锚）。
 2. `assets/data/blocks/<id>.json` —— 方块定义（`properties` + `model`）。
+
+> **系统块先例（`nether_portal`，`[V3-1]` Phase A）**：无物品形态（不
+> 入 `buildBlockItems` 物品词表、不可放置/不可拾取）+ `destroyable:
+> false` + 仅由游戏系统写入（传送门激活/去激活的咽喉点转换 + 载入
+> rescan 孤立置 air）；`state_count 2` = 框 axis（ENT-2 机制）。玩家
+> 接触面 = 打火石点火框内格激活 + 站入倒计时（见 MECHANICS 传送门
+> 节）+ worldgen 结构性不放（init 交叉检 = 结构免疫根）。
 
 ### properties 字段全集
 

@@ -1462,9 +1462,11 @@ TEST(MobContent, V215WoolAssetsPinned) {
               "f4fb0c5bdd5b6019");
     // V2-16 re-pin: the atlas layout gained the snow tile's [12, 6] cell
     // (the 122-tile zero-shift red line lives in test_atlas's census —
-    // this FNV is the file-bytes re-run determinism proof).
+    // this FNV is the file-bytes re-run determinism proof). V3-1 Phase A
+    // re-pin: the atlas layout gained the nether portal's [13, 6] cell
+    // (the 123-tile zero-shift red line, the test_atlas census).
     EXPECT_EQ(fnv1a64(readAll("assets/data/textures/block_atlas.json")),
-              "6c0ab85564c453ed");
+              "6302b467fa4fc5d6");
 }
 
 // -- V2-15: the wool instance state (MobEntity — the frame discipline) ----

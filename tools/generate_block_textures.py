@@ -433,6 +433,36 @@ def snow(x, y):
     return (clamp(246 + n), clamp(248 + n), clamp(252 + n), 255)
 
 
+def nether_portal(x, y):
+    """V3-1 Phase A: the nether portal tile (the `nether_portal` block's
+    face — the violet vortex Minecraft's portal reads as: a dark purple
+    base with a bright swirling band + hot streaks). The per-pixel
+    hash(x, y, salt) discipline (the lava precedent: h2 decides the band
+    membership, the noise salts grain it, one salt per channel — the
+    dirt 2/3/4 convention). New salts 1001..1008 (after the snow's
+    1000); every existing texture stays pixel-identical. The alpha 200 =
+    the water's translucent-box class (the full-cell translucent
+    non-solid box, the blend pass — the lava box precedent)."""
+    h = h2(x, y, 1001)
+    if h % 100 < 14:
+        # Hot streak: near-white violet (the vortex's bright core).
+        return (clamp(200 + noise(x, y, 1002, 14)),
+                clamp(120 + noise(x, y, 1003, 16)),
+                clamp(235 + noise(x, y, 1004, 10)), 200)
+    # The swirl band: a per-column phase diagonal (the vortex's rotating
+    # feel — the phase from the column hash, the band width 6 of 16).
+    phase = h2(x, y // 4, 1005) % 16
+    band = (x + y * 3 + phase) % 16
+    if band < 6:
+        return (clamp(138 + noise(x, y, 1002, 16)),
+                clamp(64 + noise(x, y, 1003, 14)),
+                clamp(190 + noise(x, y, 1004, 16)), 200)
+    # The base: dark purple.
+    return (clamp(52 + noise(x, y, 1006, 10)),
+            clamp(22 + noise(x, y, 1007, 8)),
+            clamp(84 + noise(x, y, 1008, 12)), 200)
+
+
 def gold_block(x, y):
     """V2-7: the gold block (the beacon pyramid material next to the iron
     block). A bright, uniform metallic gold with a faint brushed noise
@@ -983,6 +1013,11 @@ TEXTURES = {
     # A new tile only, every existing PNG stays byte-identical (salt
     # 1000).
     "snow": snow,
+    # V3-1 Phase A: the nether portal (the frame's fill block — the violet
+    # vortex face, one tile serves all six cube faces like the snow /
+    # obsidian precedent). A new tile only, every existing PNG stays
+    # byte-identical (salts 1001..1008).
+    "nether_portal": nether_portal,
 }
 
 

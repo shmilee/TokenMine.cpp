@@ -210,7 +210,9 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     // free cell of the scan [11, 6]; zero existing shift).
     // V2-16: 121 -> 122 (the snow block's single tile — the next free
     // cell of the scan [12, 6]; zero existing shift).
-    EXPECT_EQ(l.tiles.size(), 122u);
+    // V3-1 Phase A: 122 -> 123 (the nether portal's single tile — the
+    // next free cell of the scan [13, 6]; zero existing shift).
+    EXPECT_EQ(l.tiles.size(), 123u);
     const struct {
         const char* name;
         int col;
@@ -380,6 +382,25 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
         {"snow", 12, 6},
     };
     for (const auto& e : v216) {
+        const auto it = l.tiles.find(e.name);
+        ASSERT_NE(it, l.tiles.end()) << e.name;
+        EXPECT_EQ(it->second.col, e.col) << e.name;
+        EXPECT_EQ(it->second.row, e.row) << e.name;
+    }
+    // V3-1 Phase A: the nether portal's single tile (the violet vortex —
+    // one tile serves all six cube faces of the frame's fill block, the
+    // snow / obsidian precedent) takes the next FREE cell of the
+    // deterministic (row, col) scan [13, 6] — the 122 pre-V3-2 entries
+    // above keep their EXACT cells (the zero-shift red line, no baseline
+    // re-anchor).
+    const struct {
+        const char* name;
+        int col;
+        int row;
+    } v320[] = {
+        {"nether_portal", 13, 6},
+    };
+    for (const auto& e : v320) {
         const auto it = l.tiles.find(e.name);
         ASSERT_NE(it, l.tiles.end()) << e.name;
         EXPECT_EQ(it->second.col, e.col) << e.name;

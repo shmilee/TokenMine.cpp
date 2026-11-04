@@ -41,6 +41,7 @@
 #include "core/food.hpp"
 #include "core/input.hpp"
 #include "core/logger.hpp"
+#include "core/portal.hpp"
 #include "core/save.hpp"
 #include "core/sound.hpp"
 #include "core/status_effect.hpp"
@@ -415,6 +416,26 @@ private:
     // dirty) plus, Phase 42, releasing any STUCK arrow whose box overlaps
     // the changed cell (it falls out and rejoins flight physics).
     void setBlock(int x, int y, int z, BlockID id);
+    // V3-1 Phase A: the portal frame event over the setBlock choke point
+    // (the furnaces / campfires bookkeeping family's transition twin):
+    // an obsidian or fire placement / destruction runs the bounded frame
+    // scan (core/portal's scanPortalFrames) + the pure transition
+    // decision (portalTransitionDecision) and applies the plans —
+    // activation (the interior's air + fire cells -> the portal block in
+    // the frame's axis state, one updateRegion over the frame box, the
+    // "Portal activated at (x, y, z) (WxH)" log) and deactivation (the
+    // interior's portals -> air, the "Portal deactivated" log). Idempotent
+    // (a repeated event finds no new transition); structurally inert on
+    // every non-obsidian / non-fire event and without the portal +
+    // obsidian blocks (the base run's immunity root).
+    void checkPortalTransition(BlockID oldId, BlockID newId, int x, int y,
+                               int z);
+    // V3-1 Phase A: applies the activation plan of a complete frame
+    // (called by checkPortalTransition; the pure plan + relight + log).
+    void activatePortal(const PortalFrame& frame);
+    // V3-1 Phase A: applies the deactivation plan of a broken frame
+    // (called by checkPortalTransition).
+    void deactivatePortal(const PortalFrame& frame);
     // Performs the break: air + relight + data-driven drop (ItemEntity).
     // The caller guarantees the hit is destroyable.
     void breakBlock(const BlockHit& hit);
@@ -571,6 +592,27 @@ private:
     // pass; OFF = zero events, zero sounds (the gate's "new-off"
     // control).
     void updateAmbience();
+    // V3-1 Phase A: the portal entry countdown (the frame-locked class —
+    // hard rule 8, the day-cycle step; the pure step is
+    // core/portal's portalEntryStep, the unit tests own it). The player's
+    // AABB overlapping a portal cell arms kPortalEntryFrames; leaving
+    // cancels; a panel opened mid-countdown auto-closes (the Minecraft
+    // portal rule — no GUI in a portal, the E2E scene pin); completion
+    // with kPortalTravelEnabled = false (Phase A) is the explicit no-op
+    // stub: the "Nether ready at (x, y, z)" info log (the 8:1 mapped
+    // coordinate, Phase B's travel input) + zero displacement + the
+    // countdown cleared (re-entry re-counts — no cooldown, the Phase A
+    // semantics pin). A no-input run without portals never arms it
+    // (structural immunity).
+    void updatePortalEntry();
+    // V3-1 Phase A: the portal ambient sound (the bat squeak's per-frame
+    // roll, spatialized at the portal cell center): every tracked portal
+    // within kPortalAmbientRadiusBlocks of the player's feet rolls once
+    // per frame — the (seed, frame, cell) pure stream's
+    // 1 / (kPortalAmbientIntervalSeconds × 60) probability. Audio never
+    // enters the frame state (hard rule 8); a no-input run without
+    // portals never arms it (the structural-immunity root).
+    void updatePortalAmbience();
     // V2-4 weather: the frame-locked state-machine step (the fixed 1/60
     // day-cycle class, hard rule 8 — the pure logic in core/weather, the
     // unit tests own it). The game owns the streams + the event effects:
@@ -1051,6 +1093,16 @@ private:
     // of buildScene (like rescanCrops; no save-format field: the block is
     // a beacon, the level is derived each frame).
     void rescanBeacons();
+    // V3-1 Phase A: the portal load-time frame validity (the Minecraft
+    // update semantics + the PITS 383① two-way cross-check discipline):
+    // rebuilds the portal tracking set (m_states.portals) from the world,
+    // and every portal cell that does not sit strictly inside a complete
+    // frame (a hand-edited save's orphan) is set to air. Runs at the end
+    // of buildScene (like rescanBeacons; no save-format field: the portal
+    // is a plain stateful block, the format-15 states segment carries its
+    // axis — zero format). A fresh world finds nothing (worldgen rejects
+    // stateful blocks — the structural-immunity root).
+    void rescanPortals();
     // The pure generator as a World chunk callback — used at world
     // creation AND as the generation reference for the save diffs (the
     // full diffWorld and the PIPE-2 journalDiff).
@@ -1767,6 +1819,22 @@ private:
         // the path is structurally inert — the m_fireEffectId pattern).
         Mesh beaconBeamMesh;
         int beaconEffectId = -1;
+        // V3-1 Phase A nether portal: the frame material's resolved id
+        // (init name lookup, the campfireLitId pattern — invalid when the
+        // asset set has no obsidian block, then the whole portal system
+        // is structurally inert: no frame can ever be complete) and the
+        // portal block's own id (invalid when the nether_portal block is
+        // absent — the P70 fire/campfire id pattern).
+        BlockID obsidianId = BlockID::invalid();
+        BlockID portalId = BlockID::invalid();
+        // V3-1 Phase A: the portal tracking set — the cells holding the
+        // portal block (the beacons' twin: maintained through the setBlock
+        // choke point, rebuilt by rescanPortals() after load). Consumed by
+        // the ambient pass (the per-frame roll over the visible portals).
+        // The power / validity is NOT stored — the frame validity is
+        // re-derived by the scan when needed (the beacon's derived-level
+        // twin). std::map: position-sorted, deterministic iteration.
+        std::map<BlockPos, BlockID> portals;
     };
     PerBlockStates m_states;
 
@@ -1941,6 +2009,10 @@ private:
     Mesh m_skyPointMesh; // one quad at the origin (offset per draw)
 
     int m_frameCount = 0;
+    // V3-1 Phase A: the portal entry countdown (the frames remaining of
+    // kPortalEntryFrames; 0 = unarmed — session state, never saved, the
+    // fly-toggle pattern: a no-input run without portals keeps it 0).
+    int m_portalEntryFrames = 0;
     double m_fpsSmoothed = 0.0;
     double m_lastTitleUpdate = 0.0;
     bool m_initialized = false;

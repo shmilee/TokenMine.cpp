@@ -1,14 +1,15 @@
-# 机制详解（现状 v3.1.0）
+# 机制详解（现状 v3.2.0）
 
-> 2026-11-04 V3-7 刷新：现状 = **v3.1.0**（3.x「世界扩展」期首功能版：
-> V3-7 存档 gzip 压缩，门 191 全 PASS；其前 2.x「上手与体验补全」两批 20
-> 版收官里程碑 v2.0.0 → v2.19.0）、无输入基线门 **191** 次、单元测试
-> **2503/2503**、`-Wall -Wextra -Wpedantic -Werror` 0 警告、存档
-> **format 29**（gzip 时代：schema 与 28 一致，on-disk 默认 gzip）、
-> base18 锚 **224468 B**（重锚谱系 179116 → 178148【V2-10 门 181】→
-> 178676【V2-19 门 182】→ 179027【V2-11 门 183】→ **224468【V2-18 门
-> 190，AO 世界光照】**；门 184–189 = 结构免疫第 65–70 次免重锚；门 191
-> = 结构免疫第 72 次免重锚【v3.0.0 banner = 第 71 次】）、PITS **385**。上一轮全面刷新
+> 2026-11-05 V3-1 Phase A 刷新：现状 = **v3.2.0**（3.x「世界扩展」期：
+> v3.1.0 = V3-7 存档 gzip 压缩，门 191 全 PASS；v3.2.0 = V3-1 Phase A
+> 下界传送门框，门 192 全 PASS；其前 2.x 两批 20 版收官 v2.0.0 →
+> v2.19.0）、无输入基线门 **192** 次、单元测试 **2536/2536**、`-Wall
+> -Wextra -Wpedantic -Werror` 0 警告、存档 **format 29**（gzip 时代：
+> schema 与 28 一致，on-disk 默认 gzip；Phase A 零 format）、base18 锚
+> **224468 B**（重锚谱系 179116 → 178148【V2-10 门 181】→ 178676【V2-19
+> 门 182】→ 179027【V2-11 门 183】→ **224468【V2-18 门 190，AO 世界
+> 光照】**；门 184–189 = 结构免疫第 65–70 次免重锚；门 191/192 = 第
+> 72/73 次【v3.0.0 banner = 第 71 次】）、PITS **386**。上一轮全面刷新
 > （2026-11-02）止于 v2.0.0、2026-11-03 增量止于 v2.3.0（下条），本次把
 > v2.11.0 → v2.19.0 的机制（提前项 `[V2-19]` + 第二批 `[V2-11]`~`[V2-18]`，
 > 逐版见 `docs/archive/v2x/CHANGELOG.md`，细节证据见 `docs/archive/v2x/`
@@ -1272,6 +1273,49 @@
   （MC 配方）；**确定性**：单点击边缘事件、无计时器、无随机——同存档同点击
   帧 = 同结果
 
+## 下界传送门（`[V3-1]` Phase A，v3.2.0；传送 = Phase B）
+
+- **框**：竖直平面 obsidian 环，外廓 **4×5 .. 23×23**（长边 [4,23] ×
+  高 [5,23]；"躺式" 5×4 拒 = 高度恒 ≥5，MC 精确）；**四角可选**（角
+  任意内容环仍完整——玩家可省 4 块）；水平环不存在。判定 = 事件触发
+  有界扫描（事件格两竖直平面各 45×45 窗口 + 前缀和 O(1) 候选判定，
+  `core/portal` 纯函数族，<1 ms 级）。
+- **激活**：完整框 ∧ 内有活 fire ∧ 内无 portal → 内 air+fire 格全部
+  转 `nether_portal`（**state = 框 axis**：0 = 长边沿 X（z=const
+  平面）/ 1 = 沿 Z；ENT-2 机制，走 format-15 states 段）；fire 格被
+  替换（MC "one of them replacing the fire"）；bbox 一次重光（portal
+  **light 11**）；info 日志。obsidian 与 fire 两事件都查（**偏离**：
+  wiki "火须最后放" quirk 不复现——事件驱动模型下"最后"无意义，双向
+  检查确定性更强）。**点火几何**（PITS 386①）：框内 air 与环共面 =
+  射线不可直达——打火石命中环格、**命中面法向的相邻格**是框内 air 才
+  点火（aim 环格朝框内的面）。
+- **去激活**：非角环格脱离 obsidian（破坏/替换）→ 内 portal 全回 air +
+  重光 + 日志；**角格破坏保留 portal**（MC 精确）；**fire 熄灭 ≠
+  去激活**（portal 自持——fire 在内域非环）。
+- **站入**：玩家 AABB 与 portal 格重叠 → **60 帧（1 s）帧锁定倒计时**
+  （硬规则 8；MC 80-tick 生存延迟的帧锁定对应值，10~80 tick 史值区间
+  内）；走出即取消；无冷却重计（Phase A 语义钉）；**GUI 互斥**：倒计时
+  中开面板自动关（MC 传送门规则；closePanel 既有语义 = 指针释放，
+  click 重捕获 = 项目既有 UX）；完成 = Phase A **no-op 桩**（
+  `kPortalTravelEnabled = false` + static_assert 构建门）：日志
+  "Nether ready at (mapped)"（**8:1 映射** floorDiv，负坐标安全——
+  Phase B 消费）+ 零位移。
+- **块**：`nether_portal` = full-cell 半透盒（lava 先例）/ solid·opaque
+  false / **destroyable false**（生存不可破）/ 无 drops / sound glass /
+  light 11 / state_count 2（axis）。紫罗兰漩涡纹理（atlas [13,6]）+
+  portal_ambient 氛围音（32 块可视域，per-frame 确定性 roll p=1/120，
+  蝙蝠 squeak 节奏先例）。
+- **载入 rescan**：孤立 portal 块（不严格位于完整框内域 = 手改档）→
+  init 置 air（MC 更新语义 + 双向交叉检纪律）+ 追踪集重建 + 一次性
+  重光。
+- **存档**：**零 format**（29 不动）——portal = 普通 stateful 块走
+  blockEdits + states 段；worldgen 不放 obsidian/portal（结构免疫根）。
+- **传送门之外**（Phase B 立项，v3.4.0 候选）：第二世界空间（Dimension
+  ×2 + 实体 World 换绑 + 下界 worldgen 熔岩海/基岩顶 + skyless 光照 +
+  真传送管线 + format 30）；Phase C：下界内容族（群系/netherrack 族/
+  矿脉/mob/流体规则）。立项调研 `docs/` 外 scratch
+  `/tmp/opencode/v31_recon.md`（PITS 317 纪律：/tmp 丢失按仓库重建）。
+
 ## 合成与容器
 
 - **配方系统**（`assets/data/recipes/*.json`，**86** = shaped 52 + shapeless
@@ -2478,7 +2522,7 @@
   最短可往返精度（位精确）；worldgen 演进 = 旧存档未编辑列按**当前**生成器
   重建（洞穴/矿/树/基岩/路径演进先例：P86/88/93、GEN-1..8——编辑权威、零
   format）
-- **质量门**：**2503/2503 单元测试**（`./build/bin/tokenmine_tests`）+
+- **质量门**：**2536/2536 单元测试**（`./build/bin/tokenmine_tests`）+
   `-Wall -Wextra -Wpedantic -Werror` **0 警告**；机制逻辑一律上提**纯函数**
   （campfire 范式：`Result<T>` 显式传播 + 游戏与单测共享同一文件），像素/
   存档证据 = E2E 门（`docs/PROTOCOL.md` E2E 协议）；**禁止** TODO/伪代码/魔法

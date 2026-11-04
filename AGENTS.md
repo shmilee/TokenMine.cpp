@@ -11,7 +11,9 @@ C++20 / SDL3 / OpenGL 3.3 core，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
 ## 现状（3.x「世界扩展」期——v3.1.0 = V3-7 存档 gzip 已完成（门 191
-全 PASS，11-04）；下一项 V3-1 下界维度拆分立项【调研已交付】）
+全 PASS，11-04）；v3.2.0 = V3-1 Phase A 下界门框 已完成（门 192 全
+PASS，11-05）；下一项 V3-8 手柄支持 = v3.3.0【11-05 用户定案】，其后
+V3-1 Phase B 下界世界 + 真传送 = v3.4.0 候选）
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -70,7 +72,7 @@ C++20 / SDL3 / OpenGL 3.3 core，
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2503/2503**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2536/2536**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 29（V3-7 gzip 时代：schema 与 28 完全一致——编码与
   format 号正交，on-disk = 确定性 gzip 容器默认开【10B 头全钉 + raw
   deflate 6 + CRC32/ISIZE 尾】+ 加载魔数 `1f 8b` 探测零迁移 +
@@ -82,9 +84,9 @@ C++20 / SDL3 / OpenGL 3.3 core，
   base18 锚 **224468 B**（679×744 WM tile 态——重锚谱系：179116 →
   178148【V2-10 门 181】→ 178676【V2-19 门 182】→ 179027【V2-11
   门 183】→ **224468【V2-18 门 190，AO 世界光照】；门 184-189 =
-  结构免疫第 65-70 次免重锚；门 191【V3-7 存档 gzip】= 结构免疫第
-  71 次后第 72 次免重锚【v3.0.0 banner = 71 次】——存档 = 渲染无关
-  零像素**）；PITS
+  结构免疫第 65-70 次免重锚；门 191【V3-7 存档 gzip】= 第 72 次 +
+  门 192【V3-1 Phase A 门框】= 第 73 次免重锚【v3.0.0 banner = 第 71
+  次】——存档/门框 = 渲染无关零像素**）；PITS
   375-379 + **PITS 380**（spawn 成功行无 'pick' / 门场景洞穴密封 /
   CAVE config seed 归属 / bob diff 带色相审计）+ **PITS 381**（热栏
   key→RMB ≥0.15s / 活体掉落物品不可作终档断言 / 羊静止窗）+
@@ -100,7 +102,27 @@ C++20 / SDL3 / OpenGL 3.3 core，
   XFL/OS 随版本漂移 = 手写 10B 头 + raw deflate -15 + 自算
   CRC32/ISIZE，解码侧头全钉】/ 本机 zlib 1.3.2 缺
   Z_DEFAULT_MEM_LEVEL 宏【命名常量 8】/ 存档双跑 RAW 恒等适用域
-  = 无火场景【fires real-dt = savenorm 族】）；
+  = 无火场景【fires real-dt = savenorm 族】）+ **PITS 386**（portal
+  框几何三坑【点火 = 面法向相邻格方向，aim 环格朝内面非内格中心 /
+  站入脚位 cell 索引 vs 格中心差 0.5【框平面 z=−2 跨 −2..−1，脚 z
+  须 −1.5】/ V3-7 起门脚本读落盘档须过 gzip 魔数 = UnicodeDecodeError
+  0x8b 先兆】）；
+  门计数 192（**V3-1 Phase A 门框 v3.2.0** 门 192 全 PASS：nether_portal
+  块【full-cell 半透盒 + destroyable false + light 11 + state_count 2
+  axis】+ core/portal 纯函数族【MC 框 4×5..23×23 角可选有界扫描 45×45
+  前缀和 O(1) / 激活·去激活决策【非角破去激活·角破保留 MC 精确·fire
+  熄灭自持】/ 8:1 floorDiv 映射 / 站入 60 帧 step / ambient roll】+
+  咽喉点钩子 + 点火 (c)【面法向相邻内 air 格】+ GUI 互斥自动关 +
+  载入 rescan 孤立置 air + **零 format 29**；结构免疫第 73 次免重锚
+  【≡ 锚 224468：worldgen 零 obsidian + 打火石不在默认热栏】；S2 六臂
+  （激活终档 6 portal state 0 + fires 0 + flint damage 1 / 去激活 /
+  角保留 / 站入 "Nether ready at (0,55,−1)" 验算 + 零位移 + 每秒重计 /
+  **GUI 互斥决定性六跑 d6 站入+E+重捕获 ≡ d3 对照 RAW 逐字节** +
+  d4/d5 框外面板留开条件化 / 旧侧形状互斥）；S6 4/4 点名；性能 A/B
+  同档【changesApplied 9/1/3 逐位 + 终档 savenorm EXACT 零 format 最
+  强形 + portal 自成本无可测增量】；Phase A 传送 = kPortalTravelEnabled
+  false 桩 + static_assert 构建门，Phase B 接真传送；详见
+  `docs/archive/phase-3.2.0.md`）；
   门计数 191（**V3-7 存档 gzip v3.1.0** 门 191 全 PASS：确定性 gzip
   容器【10B 头全钉 + raw deflate 6 + CRC32/ISIZE 尾，同世界逐字节
   可复现】+ 加载魔数 1f 8b 探测【旧明文档零迁移直读；遗留零迁移最
@@ -248,7 +270,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 永不提交 `opencode-sessions/` 下任何文件（本地））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
-## 坑位 Top 8（全文 docs/PITS.md，385 条）
+## 坑位 Top 8（全文 docs/PITS.md，386 条）
 
 1. **SDL grab delta**（P28）：输入 E2E 全帧字节一致不保证——存档 yaw/pitch 为漂移
    探测器；驱动 warp 用实际窗口原点（实测 (4,64)）+ (632,352)。
@@ -284,7 +306,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（385 条，都踩过） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（386 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

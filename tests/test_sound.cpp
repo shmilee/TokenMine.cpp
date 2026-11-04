@@ -344,12 +344,13 @@ TEST(SoundBatTest, SqueakWavShipsAndParses) {
     EXPECT_EQ(peak, 3589);
 }
 
-TEST(SoundBatTest, SoundDirectoryGrowsToFortySix) {
+TEST(SoundBatTest, SoundDirectoryGrowsToFortySeven) {
     // The sound set 41 -> 42 (the squeak — the V2-14 file) -> 43 (the
     // shear — the V2-15 file) -> 46 (the snow family — the three V2-16
-    // files): each phase's new file is the only addition (the
-    // generate_sounds.py re-run leaves the others byte-identical, the
-    // script's md5 discipline; the FNV pins hold each phase's bytes).
+    // files) -> 47 (the portal ambience — the V3-1 Phase A file): each
+    // phase's new file is the only addition (the generate_sounds.py
+    // re-run leaves the others byte-identical, the script's md5
+    // discipline; the FNV pins hold each phase's bytes).
     std::size_t count = 0;
     for (const auto& entry :
          std::filesystem::directory_iterator("assets/sounds")) {
@@ -357,7 +358,7 @@ TEST(SoundBatTest, SoundDirectoryGrowsToFortySix) {
             ++count;
         }
     }
-    EXPECT_EQ(count, 46u);
+    EXPECT_EQ(count, 47u);
 }
 
 // ---------------------------------------------------------------------------
@@ -489,8 +490,9 @@ TEST(SoundNoiseHelperRepairTest, NoiseWavsShipTextured) {
     for (const auto& e : want) {
         expectWavPin(e.name, e.samples, e.peak);
     }
-    // The census is unchanged (46 files — the repair edits in place, the
-    // directory count is the V2-16 pin).
+    // The census is unchanged by the repair (47 files — the directory
+    // count is the V3-1 Phase A pin: the V2-16's 46 + the portal
+    // ambience's 1; the repair edits in place, no additions).
     std::size_t count = 0;
     for (const auto& entry :
          std::filesystem::directory_iterator("assets/sounds")) {
@@ -498,5 +500,20 @@ TEST(SoundNoiseHelperRepairTest, NoiseWavsShipTextured) {
             ++count;
         }
     }
-    EXPECT_EQ(count, 46u);
+    EXPECT_EQ(count, 47u);
+}
+
+// ---------------------------------------------------------------------------
+// V3-1 Phase A: the nether portal's ambience (the sound set 46 -> 47).
+// ---------------------------------------------------------------------------
+
+TEST(SoundPortalTest, PortalAmbientWavShipsAndParses) {
+    // The portal_ambient.wav (the generate_sounds.py's dedicated fixed
+    // seed 0xC4F1 — the squeak / sleep precedent): a 16-bit mono
+    // 44.1 kHz PCM (the bank's strict format), 1.2 s (the hum's length),
+    // in the 0.5 ambient volume class (the squeak's 0.1 class one step
+    // up — the master amplitude bakes the volume). The exact peak pin is
+    // the PITS 382 regression guard: a silent / degenerate (constant or
+    // DC-ramp) synthesis cannot reproduce it.
+    expectWavPin("portal_ambient", 52920, 12920);
 }

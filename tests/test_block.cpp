@@ -2171,7 +2171,10 @@ TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
     //   cloth = the FULL 15-variant wool dye family + the V2-13 15-
     //           variant bed dye family (the wool's sound — the bed's
     //           cloth material, the MC bed's place/break)
-    //   glass = glass + glass_pane
+    //   glass = glass + glass_pane + the V3-1 Phase A nether portal
+    //           (the MC portal's glass-class break sound; the dead-data
+    //           twin — the portal is unbreakable in survival, the
+    //           material's wavs exist for the init cross-check)
     //   snow  = the snow block (V2-16: the 7th material — the MC
     //           snow_block's soft shush, the sand-family paradigm one
     //           step softer)
@@ -2230,6 +2233,9 @@ TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
         {"bed_yellow", "cloth"},
         {"glass", "glass"},
         {"glass_pane", "glass"},
+        // V3-1 Phase A: the nether portal (the glass sound family — the
+        // MC portal's glass-class break sound).
+        {"nether_portal", "glass"},
         // V2-16: the snow block (the 7th material family).
         {"snow", "snow"},
     };
@@ -3548,5 +3554,66 @@ TEST(BlockContentTest, V216SnowBlockContentPinned) {
         EXPECT_TRUE(std::filesystem::exists(
             std::string("assets/sounds/snow_") + ev + ".wav"))
             << "the snow material's " << ev << " wav is not shipped";
+    }
+}
+
+// ---------------------------------------------------------------------------
+// V3-1 Phase A: the nether portal block (the frame's fill block — the
+// full-cell translucent non-solid box, the lava box precedent).
+// ---------------------------------------------------------------------------
+
+TEST(BlockContentTest, V320NetherPortalBlockContentPinned) {
+    // The real assets: the nether_portal — the portal frame's fill block
+    // (Minecraft's Nether Portal block, the wiki-verified 11-04 set):
+    // the lava.json precedent's shape (a full-cell translucent non-solid
+    // box — solid false + opaque false + transparent true, the glass's
+    // blend-pass routing with the water's translucent alpha class),
+    // destroyable false (survival unbreakable — the lava flag; the
+    // hardness 0 is the schema's non-negative discipline, the MC -1
+    // semantics covered by the destroyable flag), light_emission 11
+    // (the Minecraft portal exact — the glow that makes the frame read
+    // in the dark), NO drops (the field's absence — the portal has no
+    // item form: it is never picked up, the lava's twin), the glass
+    // sound material family (the break sound's dead-data twin: the
+    // material's three wavs exist for the init's checkSoundMaterials),
+    // and the ENT-2 strict state pair (state_count 2 + state_default 0:
+    // the axis state — 0 = the long edge along X, 1 = along Z; the
+    // format-15 save segment carries it, zero format).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    const Block* b = reg.findByName("nether_portal");
+    ASSERT_TRUE(b != nullptr) << "the nether_portal block is not shipped";
+    EXPECT_EQ(b->model.shape, BlockModel::Shape::FullCube);
+    EXPECT_EQ(b->model.textures.top, "nether_portal");
+    EXPECT_EQ(b->model.textures.side, "nether_portal");
+    EXPECT_EQ(b->model.textures.bottom, "nether_portal");
+    EXPECT_FALSE(b->properties.solid); // the translucent box (the lava)
+    EXPECT_FALSE(b->properties.opaque);
+    EXPECT_TRUE(b->properties.transparent);
+    EXPECT_FALSE(b->properties.cutout); // the blend pass, not the cutout
+    EXPECT_FALSE(b->properties.destroyable); // survival unbreakable
+    EXPECT_FLOAT_EQ(b->properties.hardness, 0.0f); // the non-negative pin
+    EXPECT_EQ(b->properties.lightEmission, 11); // the Minecraft exact
+    EXPECT_TRUE(b->properties.drops.empty()); // no item form
+    EXPECT_EQ(b->properties.soundMaterial, "glass");
+    // The ENT-2 strict pair: the axis state (0 = X long edge, 1 = Z).
+    EXPECT_TRUE(b->hasState());
+    EXPECT_EQ(b->stateCount(), 2);
+    EXPECT_EQ(b->stateDefault(), 0);
+    // No side override (the V2-7 faces section stays furnace-only).
+    EXPECT_TRUE(b->model.textures.front.empty());
+    // No explicit item file (the auto block item owns the name — the
+    // snow precedent; the drops-absence keeps it pick-up-free in the
+    // break path: no drop = no ItemEntity, by construction).
+    EXPECT_FALSE(std::filesystem::exists("assets/data/items/nether_portal.json"));
+    // The glass_material family's three event wavs exist (the init's
+    // checkSoundMaterials input side, file-based).
+    for (const char* ev : {"dig", "place", "break"}) {
+        EXPECT_TRUE(std::filesystem::exists(
+            std::string("assets/sounds/glass_") + ev + ".wav"))
+            << "the glass material's " << ev << " wav is not shipped";
     }
 }

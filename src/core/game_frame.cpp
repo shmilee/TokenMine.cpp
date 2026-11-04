@@ -423,6 +423,16 @@ void Game::update(double dt) {
             emitTutorialEvent("jump", 1);
         }
     }
+    // V3-1 Phase A: the portal entry countdown (the frame-locked class —
+    // the pure step is core/portal's portalEntryStep, the unit tests own
+    // it). Runs in EVERY pointer/panel state: the player's physics pauses
+    // behind a panel, but a panel opened mid-countdown auto-CLOSES (the
+    // Minecraft portal rule — the GUI cannot stay open in a portal), so
+    // the section must see the player even while the panel is up. A
+    // no-input run without portals never arms it (the structural-immunity
+    // root: the AABB overlap is the only trigger, worldgen places no
+    // portal blocks — the stateful worldgen rejection).
+    updatePortalEntry();
     // UX-4: first person keeps the legacy assignment bit-exactly (the
     // camera is the eye). Third person orbits kThirdPersonDistance from
     // the eye on the view's own sphere and clamps against the first
@@ -525,6 +535,11 @@ void Game::update(double dt) {
     // pointer/panel state (the world keeps ticking — the ambience with
     // it, the Minecraft behavior).
     updateAmbience();
+    // V3-1 Phase A: the portal ambient sound (the visible-portal per-
+    // frame roll, the bat squeak's cadence — the same runs-in-every-state
+    // ambience discipline). A no-input run without portals never arms it
+    // (the tracking set is empty — the structural-immunity root).
+    updatePortalAmbience();
 
     // Other entities (Phase 10): per-entity physics, then item merging and
     // despawn (see updateEntities).
@@ -924,6 +939,94 @@ void Game::updateAmbience() {
     // play() a silent no-op — the log line still fires.
     m_sound.play(name);
     MC_LOG_INFO(std::string("Ambience: ") + name);
+}
+
+void Game::updatePortalEntry() {
+    // V3-1 Phase A: the portal entry countdown (the frame-locked class —
+    // hard rule 8, the day-cycle step): the player's AABB overlapping a
+    // portal cell (the overlapsBlock precedent — the fire-contact twin)
+    // arms kPortalEntryFrames through the pure portalEntryStep (the
+    // unit tests own the step); leaving cancels. The GUI mutual
+    // exclusion: a panel opened mid-countdown auto-CLOSES (the Minecraft
+    // portal rule — the panel cannot stay open in a portal; the close
+    // returns the items + frees the pointer, the closePanel cleanup).
+    // Completion with kPortalTravelEnabled = false (Phase A) is the
+    // explicit no-op stub: the "Nether ready at (x, y, z)" info log —
+    // the 8:1 mapped coordinate (floorDiv, the negative-safe floor), the
+    // pure overworldToNether, Phase B's travel input — + zero
+    // displacement + the countdown cleared (the next in-portal frame
+    // re-arms: re-entry re-counts, no cooldown — the Phase A semantics
+    // pin, the static_assert below).
+    static_assert(!kPortalTravelEnabled,
+                  "Phase A ships the portal travel as the explicit no-op "
+                  "stub: kPortalTravelEnabled is false. Flipping it "
+                  "requires the Phase B dimension pipeline (the "
+                  "destination = the overworldToNether mapping logged "
+                  "above) — not a TODO, a build gate.");
+    if (!m_states.portalId.valid() || m_player->isDead()) {
+        m_portalEntryFrames = 0;
+        return; // the structural-inert / dead-body no-op (the death
+                // screen owns the frozen body)
+    }
+    const bool inPortal = m_player->overlapsBlock(m_states.portalId);
+    if (inPortal && panelOpen()) {
+        closePanel(); // the GUI cannot stay open in a portal (Minecraft)
+    }
+    const PortalEntryStep step = portalEntryStep(inPortal, m_portalEntryFrames);
+    m_portalEntryFrames = step.framesRemaining;
+    if (step.completed) {
+        // The completion frame: the player's CELL (the position's floor —
+        // the position = the AABB bottom center, the feet convention).
+        const Vec3 p = m_player->position();
+        const BlockPos mapped = overworldToNether(
+            static_cast<int>(std::floor(p.x)),
+            static_cast<int>(std::floor(p.y)),
+            static_cast<int>(std::floor(p.z)));
+        MC_LOG_INFO("Nether ready at (" + std::to_string(mapped.x) + ", " +
+                    std::to_string(mapped.y) + ", " +
+                    std::to_string(mapped.z) + ")");
+    }
+}
+
+void Game::updatePortalAmbience() {
+    // V3-1 Phase A: the portal ambient sound (the bat squeak's per-frame
+    // roll, spatialized at the portal cell's center — the 0.5 volume
+    // class is BAKED into the sample's master amplitude, the squeak's
+    // 0.1-class twin one step up). Every tracked portal within
+    // kPortalAmbientRadiusBlocks of the player's feet rolls once per
+    // frame: the (seed, frame, cell) pure stream (the fire-particle-roll
+    // pattern, the dedicated kPortalAmbientSalt) at
+    // 1 / (kPortalAmbientIntervalSeconds × 60). Audio never enters the
+    // frame state (hard rule 8 / the CRAFT-3 discipline — the sound is
+    // heard, never seen or saved); a no-input run without portals never
+    // arms it (the empty tracking set's fast exit, the structural-
+    // immunity root).
+    if (m_states.portals.empty()) {
+        return;
+    }
+    const Vec3 feet = m_player->position();
+    const float r2 =
+        kPortalAmbientRadiusBlocks * kPortalAmbientRadiusBlocks;
+    for (const auto& [pos, id] : m_states.portals) {
+        (void)id; // the tracking value is the id — the predicate, not data
+        // The squared 3D distance, feet to the portal cell's center.
+        const float dx = static_cast<float>(pos.x) + 0.5f - feet.x;
+        const float dy = static_cast<float>(pos.y) + 0.5f - feet.y;
+        const float dz = static_cast<float>(pos.z) + 0.5f - feet.z;
+        if (dx * dx + dy * dy + dz * dz > r2) {
+            continue; // out of the visible range
+        }
+        if (portalAmbientRoll(static_cast<std::uint64_t>(m_generator->seed()),
+                              static_cast<std::uint64_t>(m_frameCount), pos)) {
+            m_sound.play("portal_ambient",
+                         Vec3 {static_cast<float>(pos.x) + 0.5f,
+                               static_cast<float>(pos.y) + 0.5f,
+                               static_cast<float>(pos.z) + 0.5f});
+            MC_LOG_INFO("Portal ambience at (" + std::to_string(pos.x) +
+                        ", " + std::to_string(pos.y) + ", " +
+                        std::to_string(pos.z) + ")");
+        }
+    }
 }
 
 void Game::updateWeather() {

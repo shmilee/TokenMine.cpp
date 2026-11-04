@@ -373,6 +373,14 @@ Result<void> Game::buildScene() {
     // the P70 fire/campfire id pattern).
     m_states.campfireLitId = m_blocks.idForName("campfire");
     m_states.campfireExtId = m_blocks.idForName("campfire_extinguished");
+    // V3-1 Phase A: the portal frame's two ids (the campfireLitId
+    // pattern): the frame MATERIAL (obsidian — the named reference the
+    // core never switches on by id, hard rule 3: the scan takes the
+    // resolved id as a parameter) + the portal block itself (absent =
+    // the whole portal system is structurally inert — no frame can ever
+    // complete, no portal cell can exist in the tracking set).
+    m_states.obsidianId = m_blocks.idForName("obsidian");
+    m_states.portalId = m_blocks.idForName("nether_portal");
 
     // -- texture atlas (16x16 tiles from assets/textures/blocks/*.png) --------
     // The layout is data (data/textures/block_atlas.json): explicit cells
@@ -1649,6 +1657,12 @@ Result<void> Game::buildScene() {
     rescanMoistureBlocks();
     rescanBeacons();
     rescanFlammableChunks();
+    // V3-1 Phase A: the portal load-time frame validity (the rescanBeacons
+    // twin + the orphan air-fix): a fresh world scans to nothing (worldgen
+    // rejects the stateful portal block — the structural-immunity root),
+    // a loaded save finds the player's portals (the block edits + the
+    // format-15 states restored them).
+    rescanPortals();
 
     // The loaded columns mirror (streaming + unload decide on this set,
     // not per-frame chunk scans). The lighting pipeline has covered every
@@ -1891,6 +1905,79 @@ void Game::rescanBeacons() {
             }
         }
     }
+}
+
+void Game::rescanPortals() {
+    // V3-1 Phase A: the load-time frame validity (the Minecraft update
+    // semantics + the PITS 383① two-way cross-check discipline): rebuild
+    // the portal tracking set (the rescanBeacons twin) from the world, and
+    // every portal cell that does not sit STRICTLY INSIDE a complete
+    // frame — the ring all obsidian (corners optional) + the interior all
+    // {air, fire, portal} — is an ORPHAN (a hand-edited save, or the frame
+    // outlived its world) and is set to air (the load-time fix; the
+    // session's journal records it, so the next save persists the clean
+    // world — the two-way check's input side). The raw World API applies
+    // the air (the applyWorldEdits precedent — the choke point is the
+    // session's writer, the rescan is init's); the tracking set is
+    // rebuilt directly, so the air writes need not round-trip it. A
+    // fresh world finds nothing (worldgen rejects the stateful portal
+    // block — the structural-immunity root); a loaded save finds the
+    // player's portals. The per-cell frame scan is bounded (the
+    // core/portal discipline); a save holding a 23×23 frame pays one
+    // scan per interior cell at LOAD — the one-time init cost, the
+    // documented placement-path ~1.6 ms/column class.
+    m_states.portals.clear();
+    if (!m_states.portalId.valid() || !m_states.obsidianId.valid()) {
+        return; // the structural-inert no-op (no portal block or no
+                // frame material — the paths never engage)
+    }
+    std::vector<BlockPos> orphans;
+    for (const ChunkPos& cp : m_world.chunkPositions()) {
+        const Chunk* chunk = m_world.findChunk(cp);
+        if (chunk == nullptr) {
+            continue;
+        }
+        const int baseX = cp.x * kChunkSize;
+        const int baseY = cp.y * kChunkSize;
+        const int baseZ = cp.z * kChunkSize;
+        for (int ly = 0; ly < kChunkSize; ++ly) {
+            for (int lz = 0; lz < kChunkSize; ++lz) {
+                for (int lx = 0; lx < kChunkSize; ++lx) {
+                    const BlockID id = chunk->get(lx, ly, lz);
+                    if (id != m_states.portalId) {
+                        continue;
+                    }
+                    const BlockPos wp {baseX + lx, baseY + ly, baseZ + lz};
+                    if (portalValidFrame(m_world, wp, m_states.obsidianId,
+                                         m_states.fireId,
+                                         m_states.portalId) ==
+                        std::nullopt) {
+                        orphans.push_back(wp);
+                        continue;
+                    }
+                    m_states.portals[wp] = id;
+                }
+            }
+        }
+    }
+    if (orphans.empty()) {
+        return;
+    }
+    BlockPos min {orphans.front()};
+    BlockPos max {orphans.front()};
+    for (const BlockPos& p : orphans) {
+        m_world.setBlock(p.x, p.y, p.z, BlockID::air());
+        min.x = std::min(min.x, p.x); min.y = std::min(min.y, p.y);
+        min.z = std::min(min.z, p.z);
+        max.x = std::max(max.x, p.x); max.y = std::max(max.y, p.y);
+        max.z = std::max(max.z, p.z);
+    }
+    // ONE relight over the orphans' bounding box (the portal is a light-
+    // 11 source — its removal shifts the neighborhood; applySave's full
+    // propagation ran BEFORE this fix, the fluid-tick box pattern).
+    Lighting::updateRegion(m_world, m_blocks, min, max);
+    MC_LOG_INFO("Portal rescan: " + std::to_string(orphans.size()) +
+                " orphan portal block(s) set to air (no complete frame)");
 }
 
 // ---------------------------------------------------------------------------

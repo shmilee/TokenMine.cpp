@@ -92,6 +92,16 @@ vocabulary; blocks name one via `sound_material`):
    snow_dig.wav        soft shush (double lowpass, the lightest dig face)
    snow_place.wav      muffled soft plop 85 Hz (double lowpass)
    snow_break.wav      quiet powder crumble (double lowpass, slow decay)
+-- V3-1 Phase A nether portal (1 ambient; the trigger / travel one-shots
+      are Phase B — the design's scope split):
+   portal_ambient.wav  the low portal hum (Minecraft's block.portal.
+                       ambient class — a ~110 Hz body with a 5.2 Hz
+                       swirl tremolo + a quiet 220 Hz overtone, under a
+                       fixed-seed lowpassed noise grit, 1.2 s, in the
+                       0.5 ambient volume class — the sample's master
+                       bakes the volume, the squeak's 0.1-class twin x5):
+                       played spatialized at the visible portal cell on
+                       the per-frame roll (p = 1 / (2 s x 60))
 """
 import math
 import os
@@ -804,6 +814,30 @@ def squeak():
     return sound(dur, f)
 
 
+def portal_ambient():
+    """V3-1 Phase A: the nether portal's ambience (Minecraft's
+    block.portal.ambient class — the low humming vortex under the
+    visible portal): a ~110 Hz body with a 5.2 Hz swirl tremolo + a
+    quiet 220 Hz overtone, under a fixed-seed double-lowpassed noise
+    grit (the vortex's texture), 1.2 s, in the 0.5 ambient volume class
+    (the master amplitude bakes the volume — the squeak's 0.1 class one
+    step up: the portal hum is louder than a bat, quieter than SFX).
+    The fixed-LCG / sine paradigm (the ambience beds' precedent),
+    dedicated seed — a re-run leaves every other file byte-identical."""
+    lcg = Lcg(0xC4F1)  # dedicated fixed seed (unique to this sound)
+    dur = 1.2
+    n = int(RATE * dur)
+    grit = lowpass3(lowpass3([lcg.next() for _ in range(n)]))
+
+    def f(t, _):
+        i = int(t * RATE)
+        swirl = 0.65 + 0.35 * math.sin(2 * math.pi * 5.2 * t)
+        body = (math.sin(2 * math.pi * 110.0 * t) * 0.55
+                + math.sin(2 * math.pi * 220.0 * t) * 0.18) * swirl
+        return (body + grit[i] * 0.22) * amb_env(t, dur, 0.12, 0.35) * 0.5
+    return sound(dur, f)
+
+
 SOUNDS = {
     "dig": dig,
     "place": place,
@@ -865,6 +899,10 @@ SOUNDS = {
     # V2-15: the shears' cut (the sheep shearing — the right-click
     # action's cue, spatialized at the mob, the milk precedent).
     "shear": shear,
+    # V3-1 Phase A: the nether portal's ambience (the visible-portal
+    # per-frame roll, spatialized at the portal cell — the bat squeak's
+    # cadence pattern, the 0.5 volume class baked in).
+    "portal_ambient": portal_ambient,
 }
 
 
