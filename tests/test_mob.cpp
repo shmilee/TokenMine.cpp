@@ -954,13 +954,16 @@ TEST(MobContent, PreV25MobFilesUnchanged) {
     // V2-11: every mob GAINS its `xp` grant (the intended edit — the
     // wiki-verified values, the V2-7 pin-update precedent); all six
     // FNVs update accordingly.
+    // V2-15: the sheep GAINS its wool data (the wool_drops pair + the
+    // 1-3 wool range + the body box's name — the intended edit, the V2-11
+    // pin-update precedent); the other five files stay.
     const struct {
         const char* path;
         const char* fnv;
     } files[] = {
         {"assets/data/mobs/chicken.json", "315c4f4f1ac672bc"},
         {"assets/data/mobs/cow.json", "17b36715e3e0f286"},
-        {"assets/data/mobs/sheep.json", "96f952ab9c56ac8b"},
+        {"assets/data/mobs/sheep.json", "2ebd17a8200597d2"},
         {"assets/data/mobs/skeleton.json", "a444383845de7fb8"},
         {"assets/data/mobs/spider.json", "9b2b53e9ffa14ed8"},
         {"assets/data/mobs/zombie.json", "653a09208010cccb"},
@@ -1012,7 +1015,9 @@ TEST(MobContent, V27SpiderDropsPinned) {
     } untouched[] = {
         {"assets/data/mobs/chicken.json", "315c4f4f1ac672bc"},
         {"assets/data/mobs/cow.json", "17b36715e3e0f286"},
-        {"assets/data/mobs/sheep.json", "96f952ab9c56ac8b"},
+        // V2-15: the sheep's wool data (the intended edit, the PreV25
+        // test's twin update).
+        {"assets/data/mobs/sheep.json", "2ebd17a8200597d2"},
         {"assets/data/mobs/skeleton.json", "a444383845de7fb8"},
         {"assets/data/mobs/zombie.json", "653a09208010cccb"},
         {"assets/data/mobs/pig.json", "b49895541001dfcb"},
@@ -1149,6 +1154,492 @@ TEST(MobContent, BatAssetsPinned) {
               "3857c104ff96aed5");
     EXPECT_EQ(fnv1a64(readAll("assets/data/mob_spawning.json")),
               "a8e3bf9e89ccbbf0");
+}
+
+// -- V2-15: the sheep's wool content (the 16-color dyed sheep) ------------------
+
+namespace {
+
+// The sheep's REAL data shape as an inline def (the passive AI — the
+// MobEntity tests never see a player) + the full wool pair (the shipped
+// weights). The twin without the wool fields is the zero-consumption
+// red line's control.
+const char* kSheepWoolDef = R"({
+  "id": "sheep",
+  "properties": {
+    "health": 8,
+    "speed": 0.5,
+    "detect_radius": 0,
+    "attack_range": 0,
+    "attack_damage": 0,
+    "attack_cooldown": 1.0,
+    "wander_interval": 3.0,
+    "drops": [
+      {"item": "wool", "count_min": 1, "count_max": 3},
+      {"item": "mutton", "count": 1}
+    ],
+    "wool_drops": true,
+    "wool_weights": [
+      {"color": "white", "weight": 850},
+      {"color": "black", "weight": 80},
+      {"color": "gray", "weight": 30},
+      {"color": "brown", "weight": 30},
+      {"color": "pink", "weight": 10}
+    ]
+  },
+  "model": {
+    "width": 1.2,
+    "height": 1.5,
+    "boxes": [
+      {"name": "wool", "pos": [0.0, 1.025, 0.0],
+       "size": [0.625, 0.55, 0.95], "texture": "a"},
+      {"pos": [0.0, 1.1, -0.375], "size": [0.5, 0.5, 0.45],
+       "texture": "b"}
+    ]
+  }
+})";
+
+const char* kSheepNoWoolDef = R"({
+  "id": "sheep",
+  "properties": {
+    "health": 8,
+    "speed": 0.5,
+    "detect_radius": 0,
+    "attack_range": 0,
+    "attack_damage": 0,
+    "attack_cooldown": 1.0,
+    "wander_interval": 3.0,
+    "drops": [
+      {"item": "mutton", "count": 1}
+    ]
+  },
+  "model": {
+    "width": 1.2,
+    "height": 1.5,
+    "boxes": [
+      {"pos": [0.0, 1.025, 0.0], "size": [0.625, 0.55, 0.95],
+       "texture": "a"},
+      {"pos": [0.0, 1.1, -0.375], "size": [0.5, 0.5, 0.45],
+       "texture": "b"}
+    ]
+  }
+})";
+
+MobRegistry makeSheepRegistry(const char* def) {
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(def));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    return mobs;
+}
+
+} // namespace
+
+TEST(MobContent, SheepWoolContentPinned) {
+    // The REAL asset (data/mobs/sheep.json): the V2-15 edit — the wool
+    // drop RANGE (MC exact 1-3, the Phase 38 form), the wool_drops pair
+    // (the MC temperate table's integer approximation — deviation 2:
+    // white 850 / black 80 / gray 30 / brown 30 / pink 10), the body
+    // box's variant anchor name ("wool"), and EVERY other field
+    // unchanged (the health / speed / xp / legs pins — the V2-11
+    // pin-update precedent).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.loadDirectory(assets, "data/mobs").ok());
+    const Mob* sheep = mobs.findByName("sheep");
+    ASSERT_NE(sheep, nullptr);
+    const MobProperties& p = sheep->properties;
+    EXPECT_FLOAT_EQ(p.health, 8.0f);
+    EXPECT_FLOAT_EQ(p.speed, 0.5f);
+    EXPECT_DOUBLE_EQ(p.wanderInterval, 3.0);
+    EXPECT_EQ(p.xp, 2);
+    ASSERT_TRUE(p.drops.size() == 2);
+    EXPECT_EQ(p.drops[0].item, "wool");
+    EXPECT_EQ(p.drops[0].countMin, 1);  // MC: 1-3 wool
+    EXPECT_EQ(p.drops[0].countMax, 3);
+    EXPECT_EQ(p.drops[1].item, "mutton");
+    EXPECT_EQ(p.drops[1].countMin, 1);
+    EXPECT_EQ(p.drops[1].countMax, 1);
+    // The wool pair (deviation 2's shipped temperate table).
+    EXPECT_TRUE(p.woolDrops);
+    ASSERT_EQ(p.woolWeights.size(), 5u);
+    const struct {
+        const char* color;
+        int weight;
+    } weights[] = {
+        {"white", 850}, {"black", 80}, {"gray", 30}, {"brown", 30},
+        {"pink", 10},
+    };
+    for (std::size_t i = 0; i < p.woolWeights.size(); ++i) {
+        EXPECT_EQ(p.woolWeights[i].color, weights[i].color) << i;
+        EXPECT_EQ(p.woolWeights[i].weight, weights[i].weight) << i;
+    }
+    // Model: the body box GAINS the variant anchor name; the head /
+    // legs / geometry are untouched.
+    ASSERT_EQ(sheep->model.boxes.size(), 6u);
+    EXPECT_EQ(sheep->model.boxes[0].name, "wool");
+    EXPECT_EQ(sheep->model.boxes[0].texture, "sheep_body");
+    EXPECT_EQ(sheep->model.boxes[5].texture, "sheep_head");
+    // The other shipped mobs are wool-less (the default-off red line).
+    for (const char* name :
+         {"zombie", "skeleton", "spider", "pig", "cow", "chicken",
+          "bat"}) {
+        const Mob* m = mobs.findByName(name);
+        ASSERT_NE(m, nullptr) << name;
+        EXPECT_FALSE(m->properties.woolDrops) << name;
+        EXPECT_TRUE(m->properties.woolWeights.empty()) << name;
+    }
+}
+
+TEST(MobRegistryTest, WoolFieldsDefaultOff) {
+    // Absent both = the pre-V2-15 semantics (the bit-identical root for
+    // every non-sheep mob).
+    const MobRegistry mobs = makeSheepRegistry(kSheepNoWoolDef);
+    const Mob& sheep = mobs.at(MobID{0});
+    EXPECT_FALSE(sheep.properties.woolDrops);
+    EXPECT_TRUE(sheep.properties.woolWeights.empty());
+}
+
+TEST(MobRegistryTest, ParsesWoolPair) {
+    const MobRegistry mobs = makeSheepRegistry(kSheepWoolDef);
+    const Mob& sheep = mobs.at(MobID{0});
+    EXPECT_TRUE(sheep.properties.woolDrops);
+    ASSERT_EQ(sheep.properties.woolWeights.size(), 5u);
+    EXPECT_EQ(sheep.properties.woolWeights[0].color, "white");
+    EXPECT_EQ(sheep.properties.woolWeights[0].weight, 850);
+    EXPECT_EQ(sheep.properties.woolWeights[4].color, "pink");
+    EXPECT_EQ(sheep.properties.woolWeights[4].weight, 10);
+}
+
+TEST(MobRegistryTest, RejectsLoneWoolFields) {
+    // The strict pair (the milk pair's discipline): one without the
+    // other is dead data, rejected by name.
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(R"({
+      "id": "sheep",
+      "properties": {
+        "health": 8, "speed": 0.5, "detect_radius": 0,
+        "attack_range": 0, "attack_damage": 0,
+        "attack_cooldown": 1.0, "wander_interval": 3.0,
+        "wool_drops": true
+      },
+      "model": {
+        "width": 1.2, "height": 1.5,
+        "boxes": [{"pos": [0.0, 0.5, 0.0], "size": [0.5, 0.5, 0.5],
+                   "texture": "a"}]
+      }
+    })"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("given together"),
+              std::string::npos)
+        << r.error().message;
+    r = mobs.registerMob(parseJson(R"({
+      "id": "sheep",
+      "properties": {
+        "health": 8, "speed": 0.5, "detect_radius": 0,
+        "attack_range": 0, "attack_damage": 0,
+        "attack_cooldown": 1.0, "wander_interval": 3.0,
+        "wool_weights": [{"color": "white", "weight": 1}]
+      },
+      "model": {
+        "width": 1.2, "height": 1.5,
+        "boxes": [{"pos": [0.0, 0.5, 0.0], "size": [0.5, 0.5, 0.5],
+                   "texture": "a"}]
+      }
+    })"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("given together"),
+              std::string::npos)
+        << r.error().message;
+}
+
+TEST(MobRegistryTest, RejectsNonBoolWoolDrops) {
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(R"({
+      "id": "sheep",
+      "properties": {
+        "health": 8, "speed": 0.5, "detect_radius": 0,
+        "attack_range": 0, "attack_damage": 0,
+        "attack_cooldown": 1.0, "wander_interval": 3.0,
+        "wool_drops": "yes",
+        "wool_weights": [{"color": "white", "weight": 1}]
+      },
+      "model": {
+        "width": 1.2, "height": 1.5,
+        "boxes": [{"pos": [0.0, 0.5, 0.0], "size": [0.5, 0.5, 0.5],
+                   "texture": "a"}]
+      }
+    })"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("'wool_drops' must be a boolean"),
+              std::string::npos)
+        << r.error().message;
+}
+
+TEST(MobRegistryTest, RejectsEmptyWoolWeights) {
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(R"({
+      "id": "sheep",
+      "properties": {
+        "health": 8, "speed": 0.5, "detect_radius": 0,
+        "attack_range": 0, "attack_damage": 0,
+        "attack_cooldown": 1.0, "wander_interval": 3.0,
+        "wool_drops": true,
+        "wool_weights": []
+      },
+      "model": {
+        "width": 1.2, "height": 1.5,
+        "boxes": [{"pos": [0.0, 0.5, 0.0], "size": [0.5, 0.5, 0.5],
+                   "texture": "a"}]
+      }
+    })"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("empty array"),
+              std::string::npos)
+        << r.error().message;
+}
+
+TEST(MobRegistryTest, RejectsBadWoolWeightEntries) {
+    // The strict entry shape: {color, weight} only; weight an integer in
+    // [1, 10000]; no duplicate colors. Each typo is named.
+    const struct {
+        const char* weights;
+        const char* needle;
+    } cases[] = {
+        {R"([{"color": "white", "weight": 0}])", "[1, 10000]"},
+        {R"([{"color": "white", "weight": 10001}])", "[1, 10000]"},
+        {R"([{"color": "white", "weight": 3.5}])", "[1, 10000]"},
+        {R"([{"weight": 1}])", "'color'"},
+        {R"([{"color": "white"}])", "'weight'"},
+        {R"([{"color": "white", "weight": 1, "extra": 2}])",
+         "unknown field"},
+        {R"([{"color": "white", "weight": 1}, {"color": "white", "weight": 2}])",
+         "twice"},
+    };
+    for (const auto& c : cases) {
+        SCOPED_TRACE(c.weights);
+        MobRegistry mobs;
+        const std::string def = std::string(R"({
+          "id": "sheep",
+          "properties": {
+            "health": 8, "speed": 0.5, "detect_radius": 0,
+            "attack_range": 0, "attack_damage": 0,
+            "attack_cooldown": 1.0, "wander_interval": 3.0,
+            "wool_drops": true,
+            "wool_weights": )") +
+                                c.weights + R"(
+          },
+          "model": {
+            "width": 1.2, "height": 1.5,
+            "boxes": [{"pos": [0.0, 0.5, 0.0], "size": [0.5, 0.5, 0.5],
+                       "texture": "a"}]
+          }
+        })";
+        auto r = mobs.registerMob(parseJson(def));
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find(c.needle), std::string::npos)
+            << r.error().message;
+    }
+}
+
+TEST(MobContent, V215WoolAssetsPinned) {
+    // The V2-15 new asset files (the BatAssetsPinned convention — the
+    // content is data, the FNV pins are the re-run determinism proof):
+    // the shears item + recipe (the 2 iron ingots shapeless), the
+    // shears icon (the new salt 152+), the shear sound (the new seed
+    // 0x5B4A) and the atlas layout (the sheep_skin's [11, 6] cell — the
+    // 121-tile zero-shift red line).
+    EXPECT_EQ(fnv1a64(readAll("assets/data/items/shears.json")),
+              "32e8220dfca768c2");
+    EXPECT_EQ(fnv1a64(readAll("assets/data/recipes/shears.json")),
+              "a83ef51067e50fee");
+    EXPECT_EQ(fnv1a64(readAll("assets/textures/items/shears.png")),
+              "73b48b6aca85ca6c");
+    EXPECT_EQ(fnv1a64(readAll("assets/sounds/shear.wav")),
+              "f4fb0c5bdd5b6019");
+    EXPECT_EQ(fnv1a64(readAll("assets/data/textures/block_atlas.json")),
+              "d547179fb0b607c5");
+}
+
+// -- V2-15: the wool instance state (MobEntity — the frame discipline) ----
+
+TEST(MobWoolTest, SpawnColorIsTheStreamFirstDraw) {
+    // The bit-level red line, observed: with the SAME seed, the
+    // non-wool mob's FIRST stream draw is its frame-1 wander decision
+    // (seed 11's draw 1: stand — the velocity stays zero), while the
+    // wool mob's draw 1 is the CONSTRUCTOR's color roll (draw 2 becomes
+    // its frame-1 decision: walk — the velocity is nonzero at the
+    // data-speed x kWanderSpeedFactor magnitude). One extra draw, no
+    // more: the two streams differ by exactly the color roll.
+    const std::uint64_t kSeed = 11;  // draw1 % 3 == 0, draw2 % 3 == 1
+    Fixture f;
+    MobRegistry woolMobs = makeSheepRegistry(kSheepWoolDef);
+    MobRegistry plainMobs = makeSheepRegistry(kSheepNoWoolDef);
+    const Mob& woolDef = woolMobs.at(MobID{0});
+    const Mob& plainDef = plainMobs.at(MobID{0});
+    MobEntity plain = makeMob(f, plainDef, Vec3 {0.5f, 1.0f, 0.5f}, kSeed);
+    MobEntity wool = makeMob(f, woolDef, Vec3 {0.5f, 1.0f, 0.5f}, kSeed);
+    // The color roll: seed 11's first uniform (0.579101...) lands in
+    // the white band [0, 850) of the shipped weights — pinned.
+    EXPECT_EQ(wool.woolColor(), "white");
+    plain.update(kDt);
+    wool.update(kDt);
+    EXPECT_EQ(plain.velocity(), Vec3::zero());  // draw 1: stand
+    const Vec3 v = wool.velocity();
+    EXPECT_NE(v, Vec3::zero());                  // draw 2: walk
+    EXPECT_NEAR(std::hypot(v.x, v.z), 0.25f,
+                1e-6f);  // speed 0.5 x kWanderSpeedFactor
+}
+
+TEST(MobWoolTest, ThreeInstanceSpawnSequencePinned) {
+    // The game's spawn-seed derivation (attemptMobSpawn: the world seed
+    // ^ gamma * counter, counters 1..3, world seed 0): the three
+    // instances' spawn colors are the pinned sequence (the roll is the
+    // stream's first draw — the E2E's "same run, same colors" basis).
+    Fixture f;
+    MobRegistry mobs = makeSheepRegistry(kSheepWoolDef);
+    const Mob& def = mobs.at(MobID{0});
+    const std::uint64_t gamma = 0x9E3779B97F4A7C15ULL;
+    const char* expect[] = {"white", "white", "brown"};
+    for (int c = 1; c <= 3; ++c) {
+        const std::uint64_t seed = gamma * static_cast<std::uint64_t>(c);
+        MobEntity mob = makeMob(f, def,
+                                Vec3 {static_cast<float>(c), 1.0f, 0.5f},
+                                seed);
+        EXPECT_EQ(mob.woolColor(), expect[static_cast<int>(c) - 1]) << c;
+    }
+}
+
+TEST(MobWoolTest, ShearRollsTheWoolEntryRangeAndSetsBare) {
+    // Seed 11's fresh mob (the color roll consumed draw 1): the shear
+    // roll is draw 2 (m % 3 == 1) -> 1 + 1 = 2 wool — pinned (the
+    // wool entry's 1-3 range, the rollDropCount's % span). The bare
+    // state + the FULL regrow window; the re-shear is a no-op (0, the
+    // regrow UNRESET — the second shear must not extend the window).
+    Fixture f;
+    MobRegistry mobs = makeSheepRegistry(kSheepWoolDef);
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, Vec3 {0.5f, 1.0f, 0.5f}, 11);
+    const std::string color = mob.woolColor();
+    EXPECT_FALSE(mob.isBare());
+    EXPECT_EQ(mob.woolRegrowFrames(), 0);
+    EXPECT_EQ(mob.shearWool(), 2);
+    EXPECT_TRUE(mob.isBare());
+    EXPECT_EQ(mob.woolRegrowFrames(), kSheepRegrowFrames);
+    EXPECT_EQ(mob.woolColor(), color);  // the shear keeps the color
+    EXPECT_EQ(mob.shearWool(), 0);      // the bare re-shear: no-op
+    EXPECT_EQ(mob.woolRegrowFrames(), kSheepRegrowFrames);  // unreset
+}
+
+TEST(MobWoolTest, RegrowRestoresTheWoolOnTheFrameBoundary) {
+    // One frame short: still bare; the boundary frame: woolly again
+    // (the milkCooldown's frame-boundary twin, deviation 3's fixed
+    // duration).
+    Fixture f;
+    MobRegistry mobs = makeSheepRegistry(kSheepWoolDef);
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, Vec3 {0.5f, 1.0f, 0.5f}, 12);
+    mob.shearWool();
+    runMob(mob, kSheepRegrowFrames - 1);
+    EXPECT_TRUE(mob.isBare());
+    EXPECT_EQ(mob.woolRegrowFrames(), 1);
+    runMob(mob, 1);
+    EXPECT_FALSE(mob.isBare());
+    EXPECT_EQ(mob.woolRegrowFrames(), 0);
+}
+
+TEST(MobWoolTest, DyeRecoloredRefusedWhileBareKeptOnRegrow) {
+    // Minecraft's two dye rules: a woolly mob takes the held dye's
+    // color; a BARE mob refuses it (the no-op — the color unchanged,
+    // the click is the game's concern); the regrow RESTORES the dyed
+    // color (the "sheared sheep keeps its dye" semantics).
+    Fixture f;
+    MobRegistry mobs = makeSheepRegistry(kSheepWoolDef);
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, Vec3 {0.5f, 1.0f, 0.5f}, 12);
+    mob.dyeWool("red");
+    EXPECT_EQ(mob.woolColor(), "red");
+    mob.shearWool();
+    mob.dyeWool("blue");  // refused (bare)
+    EXPECT_EQ(mob.woolColor(), "red");
+    runMob(mob, kSheepRegrowFrames);
+    EXPECT_FALSE(mob.isBare());
+    EXPECT_EQ(mob.woolColor(), "red");  // the dye survived the regrow
+    // The empty color is a no-op (the belt).
+    mob.dyeWool("");
+    EXPECT_EQ(mob.woolColor(), "red");
+}
+
+TEST(MobWoolTest, WoolVariantTileNames) {
+    // The render variant key (dyeVariantName's naming law — white is
+    // the suffix-less base): woolly gray -> "wool_gray"; dyed red ->
+    // "wool_red"; dyed WHITE -> "wool" (no suffix); bare -> the skin
+    // tile.
+    Fixture f;
+    MobRegistry mobs = makeSheepRegistry(kSheepWoolDef);
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, Vec3 {0.5f, 1.0f, 0.5f}, 11);
+    EXPECT_EQ(mob.woolColor(), "white");  // seed 11's spawn roll
+    EXPECT_EQ(mob.woolVariantTile(), "wool");  // white = the base (no suffix)
+    mob.dyeWool("gray");
+    EXPECT_EQ(mob.woolVariantTile(), "wool_gray");
+    mob.dyeWool("red");
+    EXPECT_EQ(mob.woolVariantTile(), "wool_red");
+    mob.dyeWool("white");
+    EXPECT_EQ(mob.woolVariantTile(), "wool");
+    mob.shearWool();
+    EXPECT_EQ(mob.woolVariantTile(), "sheep_skin");
+    runMob(mob, kSheepRegrowFrames);
+    EXPECT_EQ(mob.woolVariantTile(), "wool");  // the regrown white
+}
+
+// -- V2-15: the wool variant's render geometry (the box rebuild) ---------
+
+TEST(MobMeshTest, WoolVariantRebuildsOnlyTheWoolBoxUv) {
+    // The variant rebuild swaps ONLY the wool box's UVs (the geometry —
+    // positions and normals — is bit-identical; the head box's UVs are
+    // untouched): the variant tile resolves to its layout cell (the
+    // faceUv corner pattern: (u0,v1),(u1,v1),(u1,v0),(u0,v0)).
+    // The two-tile layout ("a" = cell (0,0) v [0, 0.5], "b" = cell
+    // (0,1) v [0.5, 1] — the box-model section's makeMobLayout twin,
+    // inlined: that helper is declared later in this file).
+    auto layout = AtlasLayout::parse(parseJson(
+        R"({"columns":1,"rows":2,"tiles":{"a":[0,0],"b":[0,1]}})"));
+    ASSERT_TRUE(layout.ok()) << layout.error().message;
+    const AtlasLayout l = *layout;
+    // makeMobLayout's two tiles: "a" = cell (0,0) v [0, 0.5], "b" =
+    // cell (0,1) v [0.5, 1] (one column: u spans [0, 1]).
+    const MobRegistry mobs = makeSheepRegistry(kSheepWoolDef);
+    const MobModel& model = mobs.at(MobID{0}).model;
+    ASSERT_EQ(model.boxes.size(), 2u);
+    EXPECT_EQ(model.boxes[0].name, "wool");  // the variant anchor
+    EXPECT_EQ(model.boxes[0].texture, "a");
+    EXPECT_EQ(model.boxes[1].texture, "b");
+    const ItemMeshGeometry base = makeMobModelGeometry(model, l);
+    const ItemMeshGeometry bare =
+        makeMobModelGeometry(withWoolVariantTile(model, "b"), l);
+    ASSERT_EQ(base.vertices.size(), bare.vertices.size());
+    ASSERT_EQ(base.indices.size(), bare.indices.size());
+    for (std::size_t i = 0; i < base.vertices.size(); ++i) {
+        EXPECT_EQ(base.vertices[i].position, bare.vertices[i].position);
+        EXPECT_EQ(base.vertices[i].normal, bare.vertices[i].normal);
+    }
+    const Vec2 u0 = AtlasLayout::uvMin(l, "b");
+    const Vec2 u1 = AtlasLayout::uvMax(l, "b");
+    const Vec2 corner[4] = {{u0.x, u1.y}, {u1.x, u1.y},
+                            {u1.x, u0.y}, {u0.x, u0.y}};
+    for (std::size_t i = 0; i < kBoxVertexCount; ++i) {
+        // The wool box (vertices 0..23): the UVs moved to tile "b".
+        EXPECT_NE(base.vertices[i].uv, bare.vertices[i].uv);
+        EXPECT_EQ(bare.vertices[i].uv, corner[i % 4]);
+    }
+    for (std::size_t i = kBoxVertexCount; i < base.vertices.size(); ++i) {
+        // The head box (vertices 24..47): "b" in BOTH — untouched.
+        EXPECT_EQ(base.vertices[i].uv, bare.vertices[i].uv);
+    }
 }
 
 // -- SURV-5: the mob effect carrier (MobEntity) --------------------------------

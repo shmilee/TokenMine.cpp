@@ -83,6 +83,8 @@
 
 #include <cstdint>
 #include <functional>
+#include <string>
+#include <string_view>
 
 #include "entity/entity.hpp"
 #include "entity/mob_registry.hpp"
@@ -97,6 +99,16 @@ namespace mc {
 // (18000 x 1/60 s = 300 s) — the frame-locked discipline (hard rule 8).
 inline constexpr int kMilkingCooldownSeconds = 300;
 inline constexpr int kMilkingCooldownFrames = kMilkingCooldownSeconds * 60;
+
+// V2-15 (sheep): the sheared wool's regrow duration in the fixed mob
+// step's frames (7200 x 1/60 s = 120 s) — the frame-locked discipline
+// (hard rule 8), the kMilkingCooldownFrames twin. DOCUMENTED DEVIATION 3
+// (the v2.16.0 design): Minecraft regrows the wool on a RANDOM grazing
+// gate (1/500 tick, ~12 min expected); the project has no grass
+// interaction, so the duration is a FIXED frame-locked value (the
+// determinism > real-dt rule, E2E-assertable).
+inline constexpr int kSheepRegrowSeconds = 120;
+inline constexpr int kSheepRegrowFrames = kSheepRegrowSeconds * 60;
 
 // The mob's AI state (observable for tests and the debug overlay).
 enum class MobState {
@@ -158,6 +170,47 @@ public:
     // mobs are ephemeral, so it is never saved.
     bool milkReady() const { return m_milkCooldownFrames <= 0; }
     void startMilkCooldown() { m_milkCooldownFrames = kMilkingCooldownFrames; }
+    // V2-15 (sheep): the WOOL instance state (the data-flag gated —
+    // MobProperties::woolDrops; every non-wool mob keeps the default
+    // values forever = the bit-level red line, the bat's m_flyFrame
+    // twin). The state is session-only (mobs are ephemeral — zero
+    // format, the milkCooldown precedent).
+    // `woolColor()`: the instance's dye color name — rolled ONCE from
+    // the per-mob stream's first draw at spawn (the def's wool_weights,
+    // rollWoolColor), re-set by a successful dye (dyeWool). A non-wool
+    // mob's stream is untouched (the constructor consumes nothing).
+    bool woolDrops() const { return m_def->properties.woolDrops; }
+    const std::string& woolColor() const { return m_woolColor; }
+    // `isBare()`: sheared (the wool is off; the regrow window is
+    // counting). `woolRegrowFrames()`: the remaining regrow countdown
+    // (the fixed 1/60 step's frames, the milkCooldown's integer
+    // discipline).
+    bool isBare() const { return m_bare; }
+    int woolRegrowFrames() const { return m_woolRegrowFrames; }
+    // The render variant tile of the wool box (the per-entity variant
+    // mesh's key, see Game::drawMobs): bare = the skin tile, woolly =
+    // the instance-color dye variant (the wool family's EXISTING block
+    // tiles, the 15-color reuse — zero new texture).
+    std::string woolVariantTile() const {
+        return m_bare ? std::string(kWoolBareTile)
+                      : dyeVariantName(kWoolDyeFamily, m_woolColor);
+    }
+    // Shear (the game calls it on a successful right-click with a
+    // `shears` item on a woolly wool-drops mob): rolls the wool COUNT
+    // from the mob's own wool drop entry (the per-mob stream — the
+    // rollDropCount twin, so the same run yields the same drops) and
+    // sets the bare state + the full regrow window (kSheepRegrowFrames,
+    // deviation 3's fixed duration). Returns the count (1..3 on the
+    // shipped sheep); 0 = not eligible (already bare / no wool drop
+    // entry — defensive; the state is UNCHANGED on a 0).
+    int shearWool();
+    // Dye (the game calls it on a successful right-click with a dye on
+    // a woolly wool-drops mob): sets the instance color (the held dye's
+    // color name — the DATA, so NO stream draw: the recolor is a pure
+    // function of the input, the block recolor's twin). Refused when
+    // bare (Minecraft: a sheared mob cannot be dyed) or non-wool (the
+    // flag gate).
+    void dyeWool(const std::string& color);
     MobState state() const { return m_state; }
     // ENT-6: the active chase path (test / debug observability).
     bool pathActive() const { return !m_path.empty(); }
@@ -331,6 +384,16 @@ private:
     // SURV-10: the remaining milking cooldown in FRAMES (the fixed mob
     // step — integer counting, the Phase 58 off-by-one discipline).
     int m_milkCooldownFrames = 0;
+    // V2-15: the wool instance state (all gated on
+    // def.properties.woolDrops — a non-wool mob keeps "" / false / 0
+    // forever and consumes NO stream draw: the constructor's first draw
+    // is the wool roll only, the bat's m_bobPhase first-draw twin).
+    // `m_woolColor`: the dye color name (the spawn roll; a dye re-sets
+    // it). `m_bare`: sheared (the wool off until the regrow expires).
+    // `m_woolRegrowFrames`: the remaining regrow countdown (frames).
+    std::string m_woolColor;
+    bool m_bare = false;
+    int m_woolRegrowFrames = 0;
     // ENT-1: the limb-swing phase (see swingPhase()). Spawn = 0 (the
     // identity pose); render-only, never saved.
     int m_swingPhase = 0;

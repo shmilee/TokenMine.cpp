@@ -24,4 +24,11 @@ namespace mc {
 ItemMeshGeometry makeMobModelGeometry(const MobModel& model,
                                       const AtlasLayout& layout);
 
+// V2-15 (sheep): the model with the WOOL BOX (the kWoolBoxName-named box
+// — the variant anchor) rebuilt with `tile` (every other box verbatim:
+// the geometry is untouched, only the wool box's UVs move). Pure; the
+// caller's model is copied. A model without the named box is returned
+// unchanged (the belt — a non-wool model never comes here).
+MobModel withWoolVariantTile(const MobModel& model, const std::string& tile);
+
 } // namespace mc

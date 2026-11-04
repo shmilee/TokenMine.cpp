@@ -344,10 +344,12 @@ TEST(SoundBatTest, SqueakWavShipsAndParses) {
     EXPECT_EQ(peak, 3589);
 }
 
-TEST(SoundBatTest, SoundDirectoryGrowsToFortyTwo) {
-    // The sound set 41 -> 42 (the squeak is the only new file — the
-    // generate_sounds.py re-run leaves the other 41 byte-identical, the
-    // script's md5 discipline; the FNV pin below holds the squeak's bytes).
+TEST(SoundBatTest, SoundDirectoryGrowsToFortyThree) {
+    // The sound set 41 -> 42 (the squeak — the V2-14 file) -> 43 (the
+    // shear — the V2-15 file): each phase's new file is the only
+    // addition (the generate_sounds.py re-run leaves the others byte-
+    // identical, the script's md5 discipline; the FNV pins hold each
+    // phase's bytes).
     std::size_t count = 0;
     for (const auto& entry :
          std::filesystem::directory_iterator("assets/sounds")) {
@@ -355,5 +357,46 @@ TEST(SoundBatTest, SoundDirectoryGrowsToFortyTwo) {
             ++count;
         }
     }
-    EXPECT_EQ(count, 42u);
+    EXPECT_EQ(count, 43u);
+}
+
+// ---------------------------------------------------------------------------
+// V2-15: the shears' cut (the sound set 42 -> 43).
+// ---------------------------------------------------------------------------
+
+TEST(SoundShearTest, ShearWavShipsAndParses) {
+    // The shear.wav (the generate_sounds.py's dedicated fixed seed
+    // 0x5B4A — the sleep / squeak precedent): a 16-bit mono 44.1 kHz PCM
+    // (the bank's strict format), 0.18 s (the double-snick's length), in
+    // the SFX volume class.
+    const std::filesystem::path path = "assets/sounds/shear.wav";
+    ASSERT_TRUE(std::filesystem::exists(path))
+        << "run the tests from the repository root";
+    const std::string bytes = readFileBytes(path);
+    ASSERT_FALSE(bytes.empty());
+    std::vector<std::uint8_t> raw(bytes.begin(), bytes.end());
+    auto sample = SoundBank::parseWav(raw);
+    ASSERT_TRUE(sample.ok()) << sample.error().describe();
+    EXPECT_EQ(sample->rate, 44100);
+    // 0.18 s at 44100 Hz = 7938 samples (the generator's exact length).
+    EXPECT_EQ(sample->pcm.size(), 7938u);
+    // The snick is not silence (the synthesis produced content)...
+    bool any = false;
+    for (const std::int16_t s : sample->pcm) {
+        if (s != 0) {
+            any = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(any);
+    // ...and its peak is the pinned synthesis figure (the 0.55 bright
+    // catch layer under the 0.9 master, the SFX class).
+    int peak = 0;
+    for (const std::int16_t s : sample->pcm) {
+        const int m = std::abs(s);
+        if (m > peak) {
+            peak = m;
+        }
+    }
+    EXPECT_EQ(peak, 15899);
 }

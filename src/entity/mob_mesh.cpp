@@ -2,6 +2,8 @@
 
 #include "block/cube_face_table.hpp"
 
+#include <string>
+
 namespace mc {
 
 namespace {
@@ -87,6 +89,16 @@ ItemMeshGeometry makeMobModelGeometry(const MobModel& model,
         }
     }
     return out;
+}
+
+MobModel withWoolVariantTile(const MobModel& model, const std::string& tile) {
+    MobModel variant = model;
+    for (MobBox& box : variant.boxes) {
+        if (box.name == kWoolBoxName) {
+            box.texture = tile;
+        }
+    }
+    return variant;
 }
 
 } // namespace mc

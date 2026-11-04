@@ -15,6 +15,8 @@
 //   - a melee hit on a mob with a tool: +2
 //   - firing the launcher (any charge, Infinity included): +1
 //   - a successful ignition with an igniter: +1
+//   - a successful SHEARING with the shears (V2-15, the wool-drops
+//     mob's right-click action): +1
 //   - a damage event the armor actually reduced: each worn piece
 //     +max(kArmorWearMin, incoming / kArmorWearPerIncoming) (incoming =
 //     the PRE-reduction original amount; the float 10 -> 2.5, 1 -> 1
@@ -38,6 +40,10 @@ inline constexpr float kToolMeleeWear = 2.0f;
 inline constexpr float kLauncherShotWear = 1.0f;
 // One successful ignition (flint and steel).
 inline constexpr float kIgniteWear = 1.0f;
+// V2-15: one successful shearing (the shears on a woolly wool-drops
+// mob — the action completed; the kIgniteWear twin. The shears'
+// Minecraft durability is 238, so one shear = 1 of 238 uses).
+inline constexpr float kShearWear = 1.0f;
 // Armor: the incoming-damage amount (HP) per 1 durability point of wear.
 inline constexpr float kArmorWearPerIncoming = 4.0f;
 // Armor: the per-piece wear floor (Minecraft: "never below 1").

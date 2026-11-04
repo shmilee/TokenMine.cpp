@@ -53,6 +53,14 @@ inline std::string dyeVariantName(std::string_view base,
     return std::string(base) + "_" + std::string(color);
 }
 
+// V2-15: the wool dye family's base name (the white variant's name — the
+// dyeVariantName base the wool_drops mobs' colored wool resolves from:
+// the death pass recolors the mob's "wool" drop entry to
+// dyeVariantName(kWoolDyeFamily, instance color), and shearing drops the
+// same items). A family name, not a species: the core never switches on
+// a mob type, it matches the drop entry's ITEM name against this base.
+inline constexpr std::string_view kWoolDyeFamily = "wool";
+
 // Stable handle into a BlockRegistry. Invalid until assigned.
 //
 // Convention: BlockID{0} is the reserved "air" sentinel — the absence of a

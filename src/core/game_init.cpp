@@ -15,6 +15,7 @@
 #include "core/game_local.hpp"
 #include "core/json.hpp"
 #include "core/png.hpp"
+#include "entity/wool_drops.hpp"
 #include "item/repair.hpp"
 #include "renderer/alpha_test.hpp"
 #include "ui/ui_scale.hpp"
@@ -687,6 +688,13 @@ Result<void> Game::buildScene() {
             }
         }
     }
+
+    // -- V2-15 (sheep): the wool_drops cross-check (the checkRepair-
+    // Materials pure pattern — a wool-drops mob's data must be complete
+    // against the dye vocabulary + the atlas: the "wool" drop entry, the
+    // wool_weights' colors, the bare tile + every dye color's wool
+    // variant tile. The first failing mob is named.)
+    MC_TRY(checkWoolDrops(m_mobs.mobTypes, m_items, m_atlas.layout()));
 
     // -- player body (UX-3): the world-space body model ----------------------
     // data/player_body.json is a MODEL-ONLY file (exactly one top-level

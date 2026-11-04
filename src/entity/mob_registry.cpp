@@ -369,6 +369,79 @@ Result<void> MobRegistry::parseProperties(const Json& def,
                            "roll period — a lone interval is dead data)");
         }
     }
+    // V2-15: the wool data pair (the sheep — the data drives, no species
+    // switch): 'wool_drops' (a strict bool, default false) +
+    // 'wool_weights' (a NON-EMPTY array of strict {color, weight}
+    // entries — color a non-empty dye color name (the vocabulary is
+    // cross-checked against the dye items at game init, the
+    // family-completeness pattern), weight an integer in [1, 10000],
+    // duplicate colors rejected). The two are a STRICT PAIR (one
+    // without the other is a dead-data typo — the milk pair's
+    // discipline). Absent both = the pre-V2-15 semantics (every shipped
+    // mob except the sheep is bit-identical).
+    if (const Json* wd = def.find("wool_drops")) {
+        if (!wd->isBool()) {
+            return MC_FAIL("mob properties: 'wool_drops' must be a "
+                           "boolean");
+        }
+        out.woolDrops = wd->asBool();
+    }
+    if (const Json* ww = def.find("wool_weights")) {
+        if (!ww->isArray()) {
+            return MC_FAIL("mob properties: 'wool_weights' must be an "
+                           "array of {color, weight} entries");
+        }
+        if (ww->size() == 0) {
+            return MC_FAIL("mob properties: 'wool_weights' must not be an "
+                           "empty array (the spawn color's roll needs at "
+                           "least one entry)");
+        }
+        for (std::size_t i = 0; i < ww->size(); ++i) {
+            const Json& e = ww->at(i);
+            const std::string what = "mob properties: 'wool_weights[" +
+                                     std::to_string(i) + "]";
+            if (!e.isObject()) {
+                return MC_FAIL(what + " must be an object "
+                               "{\"color\": ..., \"weight\": ...}");
+            }
+            for (const auto& [key, value] : e.members()) {
+                if (key != "color" && key != "weight") {
+                    return MC_FAIL(what + " has an unknown field '" + key +
+                                   "'");
+                }
+            }
+            const Json* c = e.find("color");
+            if (c == nullptr || !c->isString() || c->asString().empty()) {
+                return MC_FAIL(what + " requires a non-empty string "
+                               "'color' (a dye color name)");
+            }
+            const Json* w = e.find("weight");
+            if (w == nullptr || !w->isNumber() ||
+                w->asDouble() != std::floor(w->asDouble()) ||
+                w->asDouble() < 1.0 || w->asDouble() > 10000.0) {
+                return MC_FAIL(what + " requires an integer 'weight' in "
+                               "[1, 10000], got " +
+                               (w != nullptr && w->isNumber()
+                                    ? std::to_string(w->asDouble())
+                                    : "a non-number"));
+            }
+            const std::string color = c->asString();
+            for (const WoolWeight& prev : out.woolWeights) {
+                if (prev.color == color) {
+                    return MC_FAIL(what + " lists the color '" + color +
+                                   "' twice");
+                }
+            }
+            out.woolWeights.push_back({color,
+                                       static_cast<int>(w->asDouble())});
+        }
+    }
+    if (out.woolDrops != !out.woolWeights.empty()) {
+        return MC_FAIL("mob properties: 'wool_drops' and 'wool_weights' "
+                       "must be given together (the spawn color's roll "
+                       "needs both — a lone field is dead data, the "
+                       "milk pair's discipline)");
+    }
     // Optional 'on_hit_effect' (Phase 46, spider): the status effect this
     // mob's landed MELEE hit applies to the player —
     // {"name": "poison", "duration": 15.0}. Both keys are required

@@ -173,6 +173,25 @@ void Game::handleInteraction(double dt) {
         if (tryMilk()) {
             return;
         }
+        // V2-15 (sheep): shearing — a selected item carrying the 'shears'
+        // data flag on a mob whose data carries 'wool_drops' (the instance
+        // still woolly) shears the mob: 1-3 of the instance-color wool
+        // drop at the mob (ground items, the Q-drop precedent), the mob
+        // enters the bare regrow window, the shears wear kShearWear and
+        // the "shear" cue plays at the mob. The bare state is a no-op
+        // that still consumes the click (Minecraft, the failed-milk rule).
+        if (tryShear()) {
+            return;
+        }
+        // V2-15 (sheep): the mob dye — a selected DYE (dyeColor
+        // non-empty — the data flag, the block recolor's predicate) on a
+        // wool-drops mob recolors the instance wool: one dye consumed +
+        // the "cloth" cue (the block recolor's sound twin). Minecraft: a
+        // sheared (bare) mob refuses the dye — the click is still
+        // consumed.
+        if (tryDyeMob()) {
+            return;
+        }
         // Data-driven interaction (Phase 17): a block whose `interact`
         // property names a known GUI opens it instead of placing.
         if (const std::optional<BlockHit> hit = targetBlock(); hit) {
@@ -1299,6 +1318,119 @@ bool Game::tryMilk() {
     m_sound.play("milk");
     MC_LOG_DEBUG("milked mob '" + mob->mob->def().name + "' (" +
                  item.name + " -> " + props.milkGives + ")");
+    return true;
+}
+
+bool Game::tryShear() {
+    // V2-15 (sheep): the shearing action (the tryMilk paradigm — both
+    // data flags, no species switch: the item's 'shears' flag x the mob's
+    // 'wool_drops' flag). The crosshair must be on a wool-drops mob
+    // (melee targeting: kReach + block occlusion, see targetMob) and the
+    // selected item must be the shears (the data predicate — the
+    // ignitesFlamable pattern). The woolly instance: the mob's OWN wool
+    // drop entry's count (1-3 on the shipped sheep — the per-mob stream
+    // roll, the death pass's twin) of the INSTANCE-COLOR wool (the
+    // dyeVariantName item, the init cross-checked family) drops at the
+    // mob as a ground item (zero velocity + the pickup delay — the Q-
+    // drop precedent), the mob enters the bare regrow window
+    // (kSheepRegrowFrames — deviation 3's fixed duration), the shears
+    // wear kShearWear (the successful-action wear, the kIgniteWear twin —
+    // a shears that breaks on the shear is simply gone), and the "shear"
+    // cue plays spatialized at the mob. The BARE instance: a no-op that
+    // still consumes the click (Minecraft, the failed-milk rule). The
+    // click is consumed whenever the crosshair is on the target mob.
+    if (!m_player || m_player->isDead()) {
+        return false;
+    }
+    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    if (stack.empty()) {
+        return false;
+    }
+    const Item& item = m_items.at(stack.item);
+    if (!item.shearsTool) {
+        return false; // not the shears: fall through to the next channel
+    }
+    const std::optional<MobHit> mob = targetMob();
+    if (!mob) {
+        return false;
+    }
+    const MobProperties& props = mob->mob->def().properties;
+    if (!props.woolDrops) {
+        return false; // a non-wool mob: the shears do nothing here
+    }
+    // The bare instance (Minecraft: shearing a sheared mob does nothing):
+    // no wool, no wear, no sound — the click is still consumed.
+    if (mob->mob->isBare()) {
+        return true;
+    }
+    // The successful shear: the state change + the count roll (the
+    // per-mob stream — the rollDropCount twin inside shearWool).
+    const int count = mob->mob->shearWool();
+    const std::string woolName =
+        dyeVariantName(kWoolDyeFamily, mob->mob->woolColor());
+    const ItemID wid = m_items.idForName(woolName);
+    if (count > 0 && wid.valid()) {
+        // One ground item at the mob's bottom-center (the death pass's
+        // rest-position twin — zero velocity, the deterministic
+        // convention; the pickup delay keeps it from re-collecting on
+        // the next frame).
+        const Item& w = m_items.at(wid);
+        m_entities.push_back(std::make_unique<ItemEntity>(
+            m_world, m_blocks, w.name, w.maxStack, count,
+            mob->mob->position()));
+    }
+    m_sound.play("shear", mob->mob->position());
+    // kShearWear (the successful-action wear — the kIgniteWear twin).
+    if (item.durability > 0.0f) {
+        if (wearItem(m_inventory.at(m_selectedSlot), kShearWear)) {
+            m_sound.play("break"); // the shears broke on the shear
+        }
+    }
+    MC_LOG_DEBUG("sheared '" + mob->mob->def().name + "' (" +
+                 std::to_string(count) + " x " + woolName + ")");
+    return true;
+}
+
+bool Game::tryDyeMob() {
+    // V2-15 (sheep): the mob dye (the block recolor's mob twin — the
+    // tryMilk paradigm, both data flags: the item's dyeColor x the mob's
+    // 'wool_drops'). The crosshair must be on a wool-drops mob and the
+    // selected item a DYE (dyeColor non-empty — the data predicate,
+    // never an item name). The woolly instance: the color becomes the
+    // dye's (the data — no stream draw, the recolor is a pure function
+    // of the input), one dye is consumed, the "cloth" cue plays (the
+    // block recolor's sound twin). MINECRAFT: a sheared (bare) mob
+    // REFUSES the dye — no color change, no consumption — but the click
+    // is still consumed (the failed-milk rule). The click is consumed
+    // whenever the crosshair is on the target mob.
+    if (!m_player || m_player->isDead()) {
+        return false;
+    }
+    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    if (stack.empty()) {
+        return false;
+    }
+    const Item& item = m_items.at(stack.item);
+    if (item.dyeColor.empty()) {
+        return false; // not a dye: fall through to the next channel
+    }
+    const std::optional<MobHit> mob = targetMob();
+    if (!mob) {
+        return false;
+    }
+    const MobProperties& props = mob->mob->def().properties;
+    if (!props.woolDrops) {
+        return false; // a non-wool mob: the dye does nothing here
+    }
+    // The bare instance (Minecraft: a sheared mob cannot be dyed): no
+    // color, no dye consumed — the click is still consumed.
+    if (mob->mob->isBare()) {
+        return true;
+    }
+    mob->mob->dyeWool(item.dyeColor);
+    m_inventory.take(m_selectedSlot, 1);
+    m_sound.play("cloth");
+    MC_LOG_DEBUG("dyed '" + mob->mob->def().name + "' to " + item.dyeColor);
     return true;
 }
 

@@ -290,5 +290,6 @@ TEST(ItemModelMeshTest, ShippedModelsHaveNoFaceCoincidentBoxes) {
     // V2-7: -1 (planks retired into its BLOCK item — block items render
     // the 3D block cube, the Phase 41 wool precedent) +2 (string /
     // spider_eye, the spider's drops) -> 82.
-    EXPECT_EQ(modelCount, 82) << "ENT-9: all 82 items have models";
+    // V2-15: +1 (shears, the sheep shearing tool) -> 83.
+    EXPECT_EQ(modelCount, 83) << "ENT-9: all 83 items have models";
 }

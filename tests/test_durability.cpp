@@ -602,3 +602,28 @@ TEST(ArmorWearTest, DrowningBypassNeverWears) {
     EXPECT_FLOAT_EQ(f.player->armorSlot(0).damage, 0.0f);
     EXPECT_FLOAT_EQ(f.player->armorSlot(1).damage, 0.0f);
 }
+
+// -- V2-15: the shear wear (the shears' successful-action wear) ---------
+
+TEST(ShearWearTest, ConstantAndWearBreakSemantics) {
+    // kShearWear = 1 per successful shear (the kIgniteWear twin — the
+    // action completed; the shears' Minecraft durability is 238, so one
+    // shear = 1 of 238 uses). The pure wear step (the registry-free
+    // applyDurability): a fresh shears stack takes 1 damage and
+    // survives; a stack at 237 breaks on the 238th shear (the stack is
+    // emptied — the break path, no drop entity, the modern Minecraft
+    // behavior).
+    EXPECT_FLOAT_EQ(kShearWear, 1.0f);
+    const ItemID iid {0};
+    ItemStack fresh {iid, 1};
+    EXPECT_FALSE(applyDurability(fresh, kShearWear, 238.0f));
+    EXPECT_FLOAT_EQ(fresh.damage, 1.0f);
+    EXPECT_EQ(fresh.count, 1);
+    ItemStack worn {iid, 1, 237.0f};
+    EXPECT_TRUE(applyDurability(worn, kShearWear, 238.0f));
+    EXPECT_TRUE(worn.empty()); // the broken shears are simply gone
+    // A no-durability item never wears (the belt — the no-op case).
+    ItemStack plain {iid, 1};
+    EXPECT_FALSE(applyDurability(plain, kShearWear, 0.0f));
+    EXPECT_FLOAT_EQ(plain.damage, 0.0f);
+}

@@ -641,3 +641,15 @@ TEST(PlayerBodyTest, V25PigMobTilesPinned) {
             << t.name;
     }
 }
+
+TEST(PlayerBodyTest, V215SheepSkinTilePinned) {
+    // V2-15: the generated bare-sheep skin tile is byte-stable (re-running
+    // tools/generate_mob_textures.py must not change it — the new salt
+    // 0x5EE4 pinkish-tan + noise, the sheep family's next slot; the three
+    // existing sheep tiles + every other mob tile stay pinned by
+    // SkinPngBytesPinned / V25PigMobTilesPinned — the zero-change red
+    // line). The 15 dyed wool colors need NO new tile (the wool family's
+    // existing block tiles, the atlas's zero-shift red line).
+    EXPECT_EQ(fnv1a64(readAll("assets/textures/mobs/sheep_skin.png")),
+              "247a2ad529474b20");
+}

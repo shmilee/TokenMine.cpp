@@ -35,23 +35,29 @@ C++20 / SDL3 / OpenGL 3.3 core，
   **V2-14 蝙蝠已完成 = v2.15.0 门 186**（项目首只飞行 mob：悬停
   巡航 AI + 洞穴 in-air 生成 + 0.9×0.5 展翼扇翅 + squeak 氛围音，
   零 format savenorm EXACT，结构免疫第 67 次，详见
-  `docs/archive/phase-2.15.0.md`）；**当前 = V2-15 16 色染色羊
-  （v2.16.0）** /
+  `docs/archive/phase-2.15.0.md`）+ **V2-15 染色羊已完成 = v2.16.0
+  门 187**（shears 238 耐久 + 剪毛 1-3 彩毛 + 出生毛色流首抽 + 染色
+  bare 拒染 + 死亡彩毛钩子 + per-entity 变体网格，零 format savenorm
+  EXACT，结构免疫第 68 次，详见 `docs/archive/phase-2.16.0.md`）；
+  **当前 = V2-16 雪原 biome（v2.17.0）** /
   原 4.x「世界扩展」V4-1~V4-6 = `docs/BACKLOG_4x.md` 方向底稿
   **保持大版本**（二批收官时定案晋升）；总量 24 < pre-v2.0 的
   78-84 = 用户采纳判据 ✓）；2.x 全史 =
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 11 份）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`（只读，
   别把历史细节当现状）。
-- 测试 **2356/2356**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2391/2391**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 28（V2-13 床引入 player.respawn 恒写；27 = 附魔
-  xp_seed+enchants；26 = XP；V2-14 蝙蝠零 format）；base18 锚
-  **179027 B**（679×744 WM tile 态——重锚谱系：179116 → 178148
-  【V2-10 门 181】→ 178676【V2-19 门 182】→ 179027【V2-11 门
-  183】；门 184/185/186 = 结构免疫第 65/66/67 次**免重锚**）；
-  PITS 375-379 + **PITS 380**（spawn 成功行无 'pick' / 门场景
-  洞穴密封 / CAVE config seed 归属 / bob diff 带色相审计）；
-  门计数 186（**V2-1 前视角 v2.1.0** 门 172：
+  xp_seed+enchants；26 = XP；V2-14 蝙蝠 / V2-15 染色羊均零
+  format）；base18 锚 **179027 B**（679×744 WM tile 态——重锚谱
+  系：179116 → 178148【V2-10 门 181】→ 178676【V2-19 门 182】→
+  179027【V2-11 门 183】；门 184/185/186/187 = 结构免疫第 65-68 次
+  **免重锚**）；PITS 375-379 + **PITS 380**（spawn 成功行无
+  'pick' / 门场景洞穴密封 / CAVE config seed 归属 / bob diff 带色
+  相审计）+ **PITS 381**（热栏 key→RMB ≥0.15s / 活体掉落物品不可
+  作终档断言【磁力→首空槽→弹幕误放置成块】/ 羊静止窗 = 出生→首次
+  wander）；
+  门计数 187（**V2-1 前视角 v2.1.0** 门 172：
   C 键三循环，前视 = 后视同款数学翻转角执行 + aimReach D+kReach——详见
   `docs/archive/v2x/phase-2.1.0.md`；**V2-2 Steve 皮肤 v2.2.0** 门 173：
   模型 per-face 纹理通用能力【既有 mob 位级不变】+ Steve 脸 8×8 像素
@@ -108,9 +114,9 @@ C++20 / SDL3 / OpenGL 3.3 core，
   权威）：`docs/BACKLOG.md`**（V2-11~V2-18 = 原 3.x 八项并入 +
   V2-19 用户诉求提前项 ✅ v2.11.0 + V2-11 XP ✅ v2.12.0 +
   V2-12 附魔 ✅ v2.13.0 + V2-13 床 ✅ v2.14.0 + V2-14 蝙蝠
-  ✅ v2.15.0；**下一项 V2-15 16 色染色羊（v2.16.0）**；第一批
-  V2-1~V2-10 + 全史 = `docs/archive/v2x/`；1.x =
-  `docs/archive/v1x/`）；会话交接：`opencode-sessions/SESSION_
+  ✅ v2.15.0 + V2-15 染色羊 ✅ v2.16.0；**下一项 V2-16 雪原 biome
+  （v2.17.0）**；第一批 V2-1~V2-10 + 全史 = `docs/archive/v2x/`；
+  1.x = `docs/archive/v1x/`）；会话交接：`opencode-sessions/SESSION_
   CONTEXT.md`。
 ## 命令
 
@@ -184,7 +190,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 永不提交 `opencode-sessions/` 下任何文件（本地））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
-## 坑位 Top 8（全文 docs/PITS.md，380 条）
+## 坑位 Top 8（全文 docs/PITS.md，381 条）
 
 1. **SDL grab delta**（P28）：输入 E2E 全帧字节一致不保证——存档 yaw/pitch 为漂移
    探测器；驱动 warp 用实际窗口原点（实测 (4,64)）+ (632,352)。
@@ -220,7 +226,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（380 条，都踩过） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（381 条，都踩过） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（v2.x 逐版明细；v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

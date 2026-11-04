@@ -206,7 +206,9 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     // wool's vocabulary — join the free cells; zero existing shift).
     // V2-14: 119 -> 120 (the bat's single tile — the first free cell of
     // the (row, col) scan [10, 6]; zero existing shift).
-    EXPECT_EQ(l.tiles.size(), 120u);
+    // V2-15: 120 -> 121 (the bare sheep skin's single tile — the next
+    // free cell of the scan [11, 6]; zero existing shift).
+    EXPECT_EQ(l.tiles.size(), 121u);
     const struct {
         const char* name;
         int col;
@@ -339,6 +341,25 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
         {"bat", 10, 6},
     };
     for (const auto& e : v214) {
+        const auto it = l.tiles.find(e.name);
+        ASSERT_NE(it, l.tiles.end()) << e.name;
+        EXPECT_EQ(it->second.col, e.col) << e.name;
+        EXPECT_EQ(it->second.row, e.row) << e.name;
+    }
+    // V2-15: the bare sheep skin tile (the sheared sheep's body — the
+    // 15 dyed colors REUSE the wool family's existing block tiles, zero
+    // new texture for them) takes the next FREE cell of the
+    // deterministic (row, col) scan [11, 6] — the 120 pre-V2-15 entries
+    // above keep their EXACT cells (the zero-shift red line, no
+    // baseline re-anchor).
+    const struct {
+        const char* name;
+        int col;
+        int row;
+    } v215[] = {
+        {"sheep_skin", 11, 6},
+    };
+    for (const auto& e : v215) {
         const auto it = l.tiles.find(e.name);
         ASSERT_NE(it, l.tiles.end()) << e.name;
         EXPECT_EQ(it->second.col, e.col) << e.name;

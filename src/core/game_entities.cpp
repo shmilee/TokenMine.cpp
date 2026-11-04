@@ -12,6 +12,7 @@
 #include "entity/mob_mesh.hpp"
 #include "entity/mob_swing.hpp"
 #include "entity/pickup_magnet.hpp"
+#include "entity/wool_drops.hpp"
 #include "world/noise.hpp"
 
 namespace mc {
@@ -466,11 +467,26 @@ void Game::updateEntities(double dt) {
             // entry is rolled once with the mob's seeded stream (a
             // deterministic death frame → a reproducible roll); a roll of
             // 0 drops nothing for that entry (the skeleton's 0-2 bones).
+            // V2-15: a wool_drops mob's WOOL entry follows the INSTANCE
+            // state (the pure woolDeathDropName — the armor / bed
+            // pattern): the woolly death drops the instance-color
+            // variant (the 1-3 count, the entry's range); the BARE
+            // death (a sheared mob) drops NO wool at all — the entry is
+            // skipped BEFORE its roll (no stream draw for a drop that
+            // cannot happen). Every other entry, and every non-wool
+            // mob, is bit-identical to the pre-V2-15 path.
             for (const MobDrop& drop : mob->def().properties.drops) {
+                const std::optional<std::string> itemName =
+                    woolDeathDropName(mob->def().properties, drop,
+                                      mob->isBare(), mob->woolColor());
+                if (!itemName) {
+                    continue; // the sheared death: the wool entry is
+                              // skipped (no roll, no drop)
+                }
                 const int n = mob->rollDropCount(drop.countMin,
                                                  drop.countMax);
                 if (n > 0) {
-                    mobDrops.push_back({drop.item, n, mob->position()});
+                    mobDrops.push_back({*itemName, n, mob->position()});
                 }
             }
             ++mobDeaths;
@@ -499,6 +515,12 @@ void Game::updateEntities(double dt) {
             // the entity. The pointer key is valid here: the pointee is
             // destroyed only AFTER this rebuild (unique_ptr move).
             m_mobs.swingMeshes.erase(mob);
+            // V2-15: the wool variant's per-entity render assets (the
+            // same despawn point — the static variant mesh's GL buffers
+            // die with the entity, the swingMeshes twin). A non-wool
+            // mob never gets a key (structural: the maps stay untouched).
+            m_mobs.woolVariants.erase(mob);
+            m_mobs.woolVariantMeshes.erase(mob);
         }
     }
     m_entities = std::move(kept);
@@ -1001,11 +1023,42 @@ void Game::drawMobs(const Mat4& view, const Mat4& projection) {
             continue;
         }
         const Mob& def = m_mobs.mobTypes.at(mob->typeId());
-        const Mesh& mesh =
+        const bool swinging =
             limbSwingActive(m_mobs.limbSwing, !def.model.swings.empty(),
-                            mob->swingPhase())
-                ? swingMobMesh(*mob, def)
-                : mobMesh(mob->typeId());
+                            mob->swingPhase());
+        // V2-15: the WOOL VARIANT (the sheep — the data flag gate, no
+        // species switch): a wool_drops mob's wool box (the model's
+        // kWoolBoxName-named box) renders the INSTANCE's variant tile
+        // (woolVariantTile — the instance-color dye variant, or the
+        // bare skin tile after a shear) through the per-entity dynamic
+        // assets (the swingMeshes paradigm: lazy build + despawn free,
+        // the variant change = the re-upload / rebuild trigger). Every
+        // non-wool mob takes the pre-V2-15 paths bit-identically (the
+        // structural-immunity red line — the maps above are never even
+        // touched).
+        if (def.properties.woolDrops) {
+            const std::string tile = mob->woolVariantTile();
+            std::string& last = m_mobs.woolVariants[mob];
+            if (last != tile) {
+                // The variant changed since this entity's last draw
+                // (a shear / dye / the regrow): the dynamic swing mesh's
+                // VBO baked the PREVIOUS tile's UVs — drop it (the next
+                // swing frame re-uploads from the variant's base) and
+                // the static variant mesh is rebuilt lazily.
+                m_mobs.swingMeshes.erase(mob);
+                m_mobs.woolVariantMeshes.erase(mob);
+                last = tile;
+            }
+        }
+        const Mesh& mesh =
+            def.properties.woolDrops
+                ? (swinging ? swingMobMesh(
+                                  *mob, def,
+                                  variantSwingModel(
+                                      def.id, mob->woolVariantTile()))
+                            : woolVariantMesh(*mob, def))
+                : (swinging ? swingMobMesh(*mob, def)
+                            : mobMesh(mob->typeId()));
         if (!mesh.valid()) {
             continue;
         }
@@ -1122,7 +1175,16 @@ const Mesh& Game::swingMobMesh(const MobEntity& mob, const Mob& def) {
     // per-entity dynamic mesh (allocated on the first swing frame; its
     // VBO is rewritten every frame afterwards — the topology is static,
     // so the IBO/VAO are never touched again).
-    const SwingModel& sm = swingModel(def.id);
+    return swingMobMesh(mob, def, swingModel(def.id));
+}
+
+const Mesh& Game::swingMobMesh(const MobEntity& mob, const Mob& def,
+                               const SwingModel& sm) {
+    // The swingMobMesh core over a CALLER-PROVIDED swing model (V2-15:
+    // the wool variant's per-(type, tile) base — the per-entity dynamic
+    // mesh's upload reads sm.base, so the variant's UVs ride the same
+    // VBO rewrite; the variant-change re-upload trigger is drawMobs'
+    // job, the swingMeshes erase above).
     buildSwingFrame(sm, mob.swingPhase(), m_mobs.swingFrameVerts);
     Mesh& mesh = m_mobs.swingMeshes[&mob];
     if (!mesh.valid()) {
@@ -1143,6 +1205,48 @@ const SwingModel& Game::swingModel(MobID id) {
     }
     SwingModel& sm = m_mobs.swingModels[id];
     sm = buildSwingModel(m_mobs.mobTypes.at(id).model, m_atlas.layout());
+    return sm;
+}
+
+// -- V2-15: the wool variant's render builders (the sheep — the data-
+// flag gated; drawMobs is the only consumer) ----------------------------
+
+const Mesh& Game::woolVariantMesh(const MobEntity& mob, const Mob& def) {
+    // The per-entity STATIC variant mesh (the swingMeshes twin — lazy
+    // build on the first resting frame, GL buffers freed in the
+    // updateEntities despawn rebuild). drawMobs guarantees the entry is
+    // CURRENT (it erases the key on a variant change before calling),
+    // so an invalid entry here is simply the first build.
+    Mesh& mesh = m_mobs.woolVariantMeshes[&mob];
+    if (!mesh.valid()) {
+        const ItemMeshGeometry geom = makeMobModelGeometry(
+            withWoolVariantTile(def.model, mob.woolVariantTile()),
+            m_atlas.layout());
+        auto r = mesh.upload(geom.vertices, geom.indices);
+        if (!r.ok()) {
+            MC_LOG_ERROR("Wool variant mesh build failed for mob '" +
+                         def.name + "': " + r.error().describe());
+        }
+    }
+    return mesh;
+}
+
+const SwingModel& Game::variantSwingModel(MobID id, const std::string& tile) {
+    // The per-(type, variant-tile) swing geometry (the swingModels twin,
+    // the key extended with the tile): the model's wool box rebuilt with
+    // the variant's UVs, built once per (type, tile) pair — session-
+    // scoped like swingModels (15 dye variants + the bare tile per wool
+    // type: a handful of entries, no per-entity cleanup, the type-level
+    // cache's discipline).
+    const std::string key = std::to_string(id.value) + ":" + tile;
+    auto it = m_mobs.variantSwingModels.find(key);
+    if (it != m_mobs.variantSwingModels.end()) {
+        return it->second;
+    }
+    SwingModel& sm = m_mobs.variantSwingModels[key];
+    sm = buildSwingModel(withWoolVariantTile(m_mobs.mobTypes.at(id).model,
+                                             tile),
+                         m_atlas.layout());
     return sm;
 }
 

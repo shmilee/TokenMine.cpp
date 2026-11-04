@@ -10,7 +10,7 @@
 > V3-N → V2-N 重编号）；细节立项时设计定案。**用户已授权按 V2-11
 > 起顺序推进**（11-03「继续推进原 3.x 转到 2.x 的 8 个任务」）。
 
-## v2.x 第二批任务矩阵（4/8 完成）
+## v2.x 第二批任务矩阵（5/8 完成）
 
 | 系统 | ① | ② | ③ | ④ | ⑤ | ⑥ | ⑦ |
 |---|---|---|---|---|---|---|---|
@@ -19,7 +19,7 @@
 | LGT 光照 | | | | | | | |
 | GEN 世界与生成 | V2-16 新 biome：雪原/针叶林 | V2-17 顶部 slab/双 slab | | | | | |
 | FLUID 流体 | | | | | | | |
-| ENT 实体/Mob/移动 | ~~V2-14 新 mob 蝙蝠（飞行 AI）~~ ✅ v2.15.0（门 186：悬停巡航飞行 AI【正弦 bob 帧锁定 + 航向流重掷】+ 洞穴生成 in-air 分支【光 ≤3 跳过 floor 带任何 Y】+ 0.9×0.5 展翼扇翅模型 + squeak 氛围音 + 三数据旗互配纪律；零 format savenorm EXACT，结构免疫第 67 次） | V2-15 16 色染色羊 | | | | | |
+| ENT 实体/Mob/移动 | ~~V2-14 新 mob 蝙蝠（飞行 AI）~~ ✅ v2.15.0（门 186：悬停巡航飞行 AI【正弦 bob 帧锁定 + 航向流重掷】+ 洞穴生成 in-air 分支【光 ≤3 跳过 floor 带任何 Y】+ 0.9×0.5 展翼扇翅模型 + squeak 氛围音 + 三数据旗互配纪律；零 format savenorm EXACT，结构免疫第 67 次） | ~~V2-15 16 色染色羊~~ ✅ v2.16.0（门 187：shears 238 耐久 + 剪毛 1-3 彩毛 + 出生毛色流首抽 temperate 表 + 染色改色 bare 拒染 + 死亡彩毛钩子 + per-entity 变体网格【15 色复用 wool 族 tile + sheep_skin】；零 format savenorm EXACT，结构免疫第 68 次） | | | | | |
 | SURV 生存/战斗/效果 | ~~V2-11 XP 系统~~ ✅ v2.12.0（门 183：经验球 1..9 无合并分裂 + 全整数 MC 曲线【等级派生不存储】+ 三发放源数据驱动【hostile 5/passive 2/mine coal 1 diamond 5 iron 0 gold 0/smelt 1 统一】+ format 26 三向键 + save.cpp PITS 361 潜在 bug 修复 + XP 条 HUD；base18 第 4 次重锚 179027 B） | ~~V2-13 床（睡觉跳夜）~~ ✅ v2.14.0（门 185：15 色染色族 Slab 床 + 睡眠三门【距离 3.0/hostile 8×5 盒/夜窗】即时跳夜 + 天气重置 + format 28 respawn 恒写 + 验床重生【破坏回退世界出生点】+ sleep 音；结构免疫第 66 次免重锚） | | | | | |
 | CRAFT 物品/合成/面板 | ~~V2-12 附魔~~ ✅ v2.13.0（门 184：7 附魔数据驱动【锋利/保护/效率/耐久/力量/速度/无限，MC 精确区间+权重】+ 附魔台/书架 2 块 2 配方【lapis 代 book 偏离】+ 确定性 offer 全整式【种子 = world^hash3(台位)^ability^xpSeed，仅面板开时求值】+ XP 整级扣减余量保留 + format 27【xp_seed hex + enchants 三处，四拒】+ 面板 furnace 范式 + 字体 +4 字【锋利限魔】；结构免疫第 65 次免重锚） | | | | | |
 | SAVE 存档 | | | | | | | |
@@ -68,6 +68,29 @@
    二批收官 = v2.18.0 系统收官 tag + release，用户可推翻）。
 
 ## 变更记录（v2.x 第二批）
+
+- 2026-11-04：**V2-15 16 色染色羊完成（v2.16.0，门 187 全 PASS）**
+  ——消费「sheep 只掉白 wool」记档 [Phase 41]。shears 物品（238 耐
+  久/break_speed 2/`shears` 严格旗/shapeless 2 iron_ingot/fast_
+  against 整字段省略 = 不加速任何块）+ 剪毛磨损 1；sheep.json
+  drops 1-3 wool MC 精确 + **wool_drops/wool_weights 严格对**（白
+  850 黑 80 灰 30 棕 30 粉 10 temperate 整数表 = biome 表偏离；
+  词表/零权重/空列表/孤字段点名拒，词表拒放 init checkWoolDrops
+  交叉检）；实例态（per-mob 流首抽出生色【非 wool mob 零消费位级
+  钉】/ bare / 再生 7200f 帧锁定 = 吃草门偏离）；渲染 = 15 色复用
+  wool 族块 tile + sheep_skin（atlas 121 零移位）+ **per-entity 变
+  体网格**（swingMeshes 范式，几何位级不变，非 sheep 零触碰）；RMB
+  链 tryShear（1 ItemEntity 携 roll 活体掉落 + shear.wav 43 + 磨损）
+  → tryDyeMob（bare 拒染 MC 同款）全数据旗无物种 switch；死亡彩毛
+  纯函数 woolDeathDropName（bare 跳过/非 wool 位级不变）。2391/
+  2391（+35）、banner v2.16.0、零 format。门 187：S1 结构免疫第 68
+  次免重锚 + savenorm EXACT（≡ 锚 179027）/ S2 剪毛染色 E2E【两
+  pass 瞄准 + 弹幕【围盒弃：羊 1.2>1×1；命中窗 = 出生→首次
+  wander ~3s；key→RMB ≥0.15s】+ **断言 = DEBUG 日志行权威**：a
+  剪毛+damage 1 / b 染红→剪 wool_red+染料耗尽 / c bare 拒染染料保
+  留 / o 旧侧零行】/ S3 / S6 6/6 / 性能同档（9/1/3 逐位 + 16/16
+  36/36 + 羊群 2 羊双树同位出生 ents 0.0606/0.0600）。PITS 381。
+  详见 docs/archive/phase-2.16.0.md。
 
 - 2026-11-04：**V2-14 蝙蝠完成（v2.15.0，门 186 全 PASS）**——项
   目首只飞行 mob。bat.json 全数据（HP 6/被动/spawn_max_light 3 洞

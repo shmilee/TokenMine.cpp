@@ -443,6 +443,28 @@ private:
     // true when the click was consumed (crosshair on the mob, including
     // the no-milk case of a full inventory).
     bool tryMilk();
+    // V2-15 (sheep): shears a wool mob — the crosshair on a mob whose
+    // data carries 'wool_drops', the selected item carrying the 'shears'
+    // data flag, and the instance still WOOLLY (the bare state is a
+    // no-op that still consumes the click, the failed-milk rule):
+    // the mob's own wool drop entry's count (1-3, the per-mob stream
+    // roll) of the INSTANCE-COLOR wool drops at the mob (a ground item,
+    // the Q-drop precedent — zero velocity + the pickup delay), the mob
+    // enters the bare regrow window (kSheepRegrowFrames), the shears
+    // wear kShearWear (the successful-action wear, the kIgniteWear twin),
+    // and the "shear" cue plays spatialized at the mob. Returns true
+    // when the click was consumed (crosshair on the target mob, the
+    // bare no-op included).
+    bool tryShear();
+    // V2-15 (sheep): dyes a wool mob's instance wool — the crosshair on
+    // a 'wool_drops' mob, the selected item a DYE (dyeColor non-empty —
+    // the data flag, the block recolor's predicate), the instance still
+    // WOOLLY (Minecraft: a sheared mob refuses the dye — the click is
+    // consumed): the instance color becomes the dye's color, one dye is
+    // consumed, the "cloth" cue plays (the block recolor's sound twin).
+    // Returns true when the click was consumed (crosshair on the target
+    // mob, the bare refusal included).
+    bool tryDyeMob();
     // Fluid bucket (Phase 47): when the selected slot holds a bucket side
     // (item data 'collects_fluid' or 'pours_fluid'; the pair is
     // cross-checked at init): COLLECT — the bucket-target ray (kReach,
@@ -677,6 +699,17 @@ private:
     const Mesh& mobMesh(MobID id);
     const Mesh& swingMobMesh(const MobEntity& mob, const Mob& def);
     const SwingModel& swingModel(MobID id);
+    // V2-15: the wool variant's render builders (the sheep — the
+    // data-flag gated; see drawMobs). `woolVariantMesh`: the per-entity
+    // STATIC variant mesh (the model's wool box — kWoolBoxName — rebuilt
+    // with the mob's current variant tile, the swingMeshes lazy/despawn
+    // twin). `variantSwingModel`: the per-(type, variant-tile) swing
+    // geometry (the swingModels twin). The swingMobMesh overload takes
+    // the caller-built SwingModel (the variant's base).
+    const Mesh& woolVariantMesh(const MobEntity& mob, const Mob& def);
+    const SwingModel& variantSwingModel(MobID id, const std::string& tile);
+    const Mesh& swingMobMesh(const MobEntity& mob, const Mob& def,
+                             const SwingModel& sm);
     // V2-6: the blob shadows — the flat double-sided translucent-black
     // quad under each mob (and the player, THIRD PERSON only — first
     // person has no self-shadow, the MC look). Pure rendering: the
@@ -1337,6 +1370,22 @@ private:
         std::unordered_map<MobID, SwingModel, MobIDHash> swingModels;
         std::unordered_map<const MobEntity*, Mesh> swingMeshes;
         std::vector<MeshVertex> swingFrameVerts;
+        // V2-15: the WOOL VARIANT render assets (the sheep — the data-
+        // flag gated: only a wool_drops mob ever touches these; every
+        // other mob's render path is bit-identical, the structural
+        // immunity root). `woolVariants`: the per-entity LAST APPLIED
+        // variant tile (the re-upload trigger — a shear / dye / regrow
+        // changes the tile, so the entity's dynamic swing mesh (the
+        // swingMeshes entry) is dropped and re-uploaded from the
+        // variant's base, and the static variant mesh is rebuilt).
+        // `woolVariantMeshes`: the per-entity STATIC variant mesh (the
+        // swingMeshes twin — lazy build, despawn free).
+        // `variantSwingModels`: the per-(type, variant-tile) swing
+        // geometry (the swingModels twin, the key extended with the
+        // tile: the model's wool box rebuilt with the variant's UVs).
+        std::unordered_map<const MobEntity*, std::string> woolVariants;
+        std::unordered_map<const MobEntity*, Mesh> woolVariantMeshes;
+        std::unordered_map<std::string, SwingModel> variantSwingModels;
         std::uint64_t spawnCounter = 0;
     };
     MobSystem m_mobs;

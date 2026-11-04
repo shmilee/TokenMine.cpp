@@ -46,6 +46,17 @@ MobEntity::MobEntity(const World& world, const BlockRegistry& blocks,
         m_bobPhase =
             static_cast<float>(uniform01(m_rng) * 2.0 * std::numbers::pi);
     }
+    // V2-15: the spawn-time WOOL COLOR (the sheep — the per-mob stream's
+    // FIRST draw for a wool_drops mob, the PITS-30 advance discipline,
+    // the bat's bobPhase twin): one uniform reduced over the def's
+    // wool_weights (rollWoolColor — the data-order cumulative walk). A
+    // non-wool mob consumes NOTHING here: its stream stays the
+    // pre-V2-15 one (the bit-identical red line — the first draw of a
+    // wandering mob's stream is still the wander decision, as before).
+    if (def.properties.woolDrops) {
+        m_woolColor =
+            rollWoolColor(def.properties.woolWeights, uniform01(m_rng));
+    }
 }
 
 void MobEntity::update(double dt) {
@@ -64,6 +75,19 @@ void MobEntity::update(double dt) {
     // (the fixed 1/60 mob step — the integer-frame discipline).
     if (m_milkCooldownFrames > 0) {
         --m_milkCooldownFrames;
+    }
+    // V2-15: the wool regrow countdown (the same frame discipline —
+    // one frame per fixed step): a sheared mob regrows its wool after
+    // kSheepRegrowFrames (deviation 3: the FIXED duration, not
+    // Minecraft's random grazing gate). The regrown wool keeps the
+    // CURRENT instance color (the dyed-sheep semantics — the color
+    // state is untouched by the bare window). Structurally inert for a
+    // non-wool mob (the counter stays 0 = the pre-V2-15 frame).
+    if (m_woolRegrowFrames > 0) {
+        --m_woolRegrowFrames;
+        if (m_woolRegrowFrames == 0) {
+            m_bare = false;
+        }
     }
     // ENT-1: captured BEFORE the AI + physics so the "moving" decision
     // is the strict frame-boundary horizontal displacement (see below).
@@ -611,6 +635,42 @@ int MobEntity::rollDropCount(int minCount, int maxCount) {
     const std::uint64_t span =
         static_cast<std::uint64_t>(maxCount - minCount + 1);
     return minCount + static_cast<int>(nextMix(m_rng) % span);
+}
+
+int MobEntity::shearWool() {
+    // V2-15: the successful shear — the state change ONLY (the game owns
+    // the drop spawn / the shears wear / the sound, the tryMilk adapter
+    // pattern). Not eligible (a non-wool mob or an already-bare one) =
+    // 0 with the state UNTOUCHED (no stream draw, no regrow reset — the
+    // bare re-shear no-op, the Minecraft twin).
+    if (m_bare || !m_def->properties.woolDrops) {
+        return 0;
+    }
+    const MobDrop* wool = woolDropEntry(&m_def->properties);
+    if (wool == nullptr) {
+        return 0; // defensive (init rejects a wool_drops mob without a
+                  // wool drop entry); no state change
+    }
+    // The wool count: the mob's OWN wool entry's range, rolled with the
+    // per-mob stream (the rollDropCount twin — a deterministic death /
+    // shear frame yields a reproducible roll; the degenerate range
+    // consumes nothing, as there).
+    const int n = rollDropCount(wool->countMin, wool->countMax);
+    m_bare = true;
+    m_woolRegrowFrames = kSheepRegrowFrames; // deviation 3: fixed 120 s
+    return n;
+}
+
+void MobEntity::dyeWool(const std::string& color) {
+    // V2-15: the successful dye — the instance color re-set (the input
+    // is DATA, so NO stream draw — the recolor is a pure function of
+    // the held dye, the block recolor's twin). Refused when bare
+    // (Minecraft: a sheared mob cannot be dyed), non-wool (the flag
+    // gate) or given an empty color (the belt).
+    if (m_bare || color.empty() || !m_def->properties.woolDrops) {
+        return;
+    }
+    m_woolColor = color;
 }
 
 bool MobEntity::damage(float amount) {

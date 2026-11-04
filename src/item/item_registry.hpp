@@ -173,6 +173,15 @@ private:
     // pattern; the checks run after all the other channels parsed, the
     // parse flow order).
     static Result<void> parseArmor(const Json& def, bool isTool, Item& out);
+    // Parse the optional 'shears' field (V2-15, the sheep shearing
+    // tool) into `out`: a strict bool (default false — the absent field
+    // is the "not shears" default, the ignites_flamable twin). true
+    // marks the item as a SHEARS (the right-click WOOL-MOB interaction
+    // predicate — the game's tryShear channel reads the flag, never an
+    // item name). TOOL-ONLY: a material carrying it is a dead-channel
+    // rejection by name (the armor_slot's tool-rejection twin — a
+    // material's right click is a different channel owner's).
+    static Result<void> parseShears(const Json& def, bool isTool, Item& out);
     // Parse the optional 'durability' field (SURV-3) into `out`: a strict
     // number > 0 (the accumulated damage at which the item breaks). The
     // ALLOWED set = the "has a use action" items — a tool (mining / melee

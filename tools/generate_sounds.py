@@ -80,6 +80,12 @@ vocabulary; blocks name one via `sound_material`):
                       0.1 ambient volume class — the Minecraft ambient
                       volume 0.1 reference, a quiet noise whisper under
                       the tone)
+-- V2-15 sheep (1 one-shot; the shearing cue — played spatialized at
+      the mob, the milk precedent):
+   shear.wav           the short double "snick" (a bright fixed-seed
+                      noise snap — the blades catching — then a muffled
+                      lowpassed tap 55 ms later — the wool parting,
+                      0.18 s, the SFX volume class)
 """
 import math
 import os
@@ -678,6 +684,32 @@ def thunder():
     return sound(dur, f)
 
 
+def shear():
+    """V2-15: the shears' cut (the sheep shearing — the right-click
+    action's cue, played spatialized at the mob, the milk precedent):
+    the short double "snick" (Minecraft's shears.shear class) — a
+    bright noise snap (the blades catching) at the head, then a muffled
+    lowpassed tap (the wool parting) 55 ms later, 0.18 s, in the SFX
+    volume class. The fixed-LCG noise paradigm (the cloth_break
+    precedent), dedicated seed."""
+    lcg = Lcg(0x5B4A)  # dedicated fixed seed (unique to this sound)
+    dur = 0.18
+    n = int(RATE * dur)
+    raw = [lcg.next() for _ in range(n)]
+    lp = lowpass3(lowpass3(raw))  # the muffled parting layer
+    out = []
+    for i in range(n):
+        t = i / RATE
+        s = 0.0
+        if t < 0.05:
+            s += raw[i] * math.exp(-t * 55.0) * 0.55  # the bright catch
+        u = t - 0.055
+        if 0.0 <= u < 0.125:
+            s += lp[i] * math.exp(-u * 26.0) * 0.5  # the wool parting
+        out.append(s * 0.9)
+    return out
+
+
 def squeak():
     """V2-14: the bat's ambient squeak (Minecraft's bat ambience — the
     high, short cave chirp): a 900 -> 1400 Hz rising glide with a slight
@@ -751,6 +783,9 @@ SOUNDS = {
     # V2-14: the bat's ambient squeak (the flyCruise per-frame roll —
     # spatialized at the bat, the dropped-item pattern).
     "squeak": squeak,
+    # V2-15: the shears' cut (the sheep shearing — the right-click
+    # action's cue, spatialized at the mob, the milk precedent).
+    "shear": shear,
 }
 
 

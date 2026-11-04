@@ -10,16 +10,25 @@
     "wander_interval": 3.0,
     "spawn_max_light": 15,
     "drops": [
-      { "item": "wool", "count": 1 },
+      { "item": "wool", "count_min": 1, "count_max": 3 },
       { "item": "mutton", "count": 1 }
     ],
-    "xp": 2
+    "xp": 2,
+    "wool_drops": true,
+    "wool_weights": [
+      { "color": "white", "weight": 850 },
+      { "color": "black", "weight": 80 },
+      { "color": "gray", "weight": 30 },
+      { "color": "brown", "weight": 30 },
+      { "color": "pink", "weight": 10 }
+    ]
   },
   "model": {
     "width": 1.2,
     "height": 1.5,
     "boxes": [
       {
+        "name": "wool",
         "pos": [0.0, 1.025, 0.0],
         "size": [0.625, 0.55, 0.95],
         "texture": "sheep_body"

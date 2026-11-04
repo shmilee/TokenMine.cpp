@@ -335,6 +335,20 @@ struct Item {
     // the item as the panel's lapis-slot content (the data-driven gate —
     // the core never hardcodes "lapis"). Shipped = lapis.
     bool enchantMaterial = false;
+    // V2-15 (shears): the SHEARS flag (optional data field 'shears', a
+    // strict bool, default false; tool-only — a material carrying it is
+    // rejected by name, the armor_slot's tool-rejection twin). true
+    // marks the item as a SHEARS: right-clicking a wool mob (the mob
+    // data's `wool_drops` flag, the instance still woolly) shears it —
+    // 1-3 of the instance-color wool drop at the mob, the mob enters
+    // the bare regrow window, and the item wears kShearWear (the
+    // successful-action wear, the kIgniteWear twin). The DATA-DRIVEN
+    // predicate (the ignitesFlamable flag's pattern — the core never
+    // switches on an item name; a bare mob's re-shear is a no-op that
+    // still consumes the click, the failed-milk rule). Shipped =
+    // shears (durability 238 — the Minecraft exact value; break_speed
+    // 2; max_stack 1).
+    bool shearsTool = false;
     // Phase 15 UI: the item's 2D icon texture name (a file under
     // assets/textures/items/, validated against the filesystem at game
     // init). Empty for block items, which render a 3D block cube instead.

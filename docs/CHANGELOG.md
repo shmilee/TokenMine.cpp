@@ -9,6 +9,45 @@
 > README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本 /
 > v2.10.0 第一批收官 tag / v2.18.0 二批收官 tag）。
 
+## v2.16.0（2026-11-04）— V2-15 16 色染色羊（shears 剪毛 + 出生毛色 + 染色改色 + 彩色羊毛掉落）（门 187 全 PASS）
+
+二批 ENT 行（消费「sheep 只掉白 wool」记档 [Phase 41]）；MC 机制
+11-04 wiki 核定（Sheep 页）；**零 format**（mob 不持久化 = 实例态
+session-only，savenorm EXACT 最强形）；词表 = 项目 15 色（wool 族无
+lime，MC 16 含 lime = 偏离 1）：**新物品 shears**（durability 238
+MC 精确 / break_speed 2 / `shears:true` 严格 bool 旗【非 tool 携带
+点名拒】/ shapeless 2 iron_ingot / fast_against 整字段省略 = 不加速
+任何块 / 5 盒 model + icon tile）+ 剪毛磨损 kShearWear 1。**
+sheep.json**：drops 1-3 wool（MC 精确）+ mutton / **wool_drops +
+wool_weights 严格对**（白 850 黑 80 灰 30 棕 30 粉 10 = temperate
+整数表，biome 表偏离 2；词表/零权重/空列表/孤字段全点名拒，词表拒
+放 init 交叉检 checkWoolDrops）+ body box name "wool"。**实例态**
+（milkCooldown 帧纪律同款）：出生毛色 = **per-mob 流首抽**（非
+wool mob 构造零消费位级钉）/ bare + **再生 7200f = 120 s 帧锁定**
+（偏离 3：MC 吃草门随机 ~12 min，项目无草交互）/ 染色保留语义。**
+渲染**：15 色复用 wool 族块 tile（同 atlas）+ bare = 新 sheep_skin
+tile（atlas 120→121 零移位）+ **per-entity 变体网格**（swingMeshes
+范式：懒建/despawn 释放/变体变更重建；withWoolVariantTile 纯函数
+几何位级不变；非 sheep 静态网格零触碰）。**RMB 链** tryMilk →
+**tryShear**（shears 旗 × wool_drops 旗，无物种 switch：1 个
+ItemEntity 携 roll count 活体掉落 + shear.wav【双咔嚓确定性合成，
+42→43】+ 磨损 1 + bare 再剪 no-op）→ **tryDyeMob**（手持 dye
+× wool_drops，**bare 拒染** = MC 剪后不可染，"cloth" 音）。**死亡
+彩毛钩子**：纯函数 woolDeathDropName（woolly → 实例色 wool 变体 /
+bare → 跳过 / 非 wool 位级不变）。2391/2391（+35）、banner
+v2.16.0、format 28 不变。门 187：S1 **结构免疫第 68 次免重锚 +
+savenorm EXACT**（≡ 锚 179027 B 逐字节）/ S2 剪毛染色输入 E2E
+（两 pass 确定性瞄准【scratch sheep-only f900 单生 + yaw/pitch 算
+准】+ **弹幕范式**【羊 1.2>1×1 围盒弃 / 命中窗 = 出生→首次
+wander ~3s / key→RMB ≥0.15s】，**断言 = DEBUG 日志行权威**：a
+剪毛 (1 x wool)+damage 1 / b 染红→剪 wool_red+染料耗尽 / c 剪后拒
+染染料保留 / o 旧侧零行形状互斥）/ S3 / S6 6/6 点名 / 性能 A/B 同
+世界同成本（主对 9/1/3 逐位 + 16/16 36/36 + 羊群自成本 2 羊双树同
+位确定性出生 ents 0.0606/0.0600 同档 = 变体网格不贵）。PITS 381
+（热栏 key→RMB ≥0.15s / 活体掉落物品不可作终档断言【磁力→首空槽→
+弹幕误放置成块】/ 羊静止窗 = 出生→首次 wander）。详见
+docs/archive/phase-2.16.0.md。
+
 ## v2.15.0（2026-11-04）— V2-14 蝙蝠（项目首只飞行 mob：悬停巡航 AI + 洞穴生成 + squeak 氛围音）（门 186 全 PASS）
 
 二批 ENT 行（「中」）；MC 机制 11-04 wiki 核定（Bat 页）；**零
@@ -209,5 +248,5 @@ PERF-WIN 全指标同档——时钟 +1 文本 draw 成本不可测）。门协�
 PASS 源）。详见 docs/archive/phase-2.11.0.md。
 
 ## v2.x 第二批（V2-11~V2-18，进行中）
-（V2-15 染色羊起，逐版条目入此。）
+（V2-16 雪原 biome 起，逐版条目入此。）
 

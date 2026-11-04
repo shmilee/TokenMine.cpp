@@ -1,0 +1,7 @@
+{
+  "id": "shears",
+  "output": { "item": "shears", "count": 1 },
+  "ingredients": [
+    { "item": "iron_ingot", "count": 2 }
+  ]
+}

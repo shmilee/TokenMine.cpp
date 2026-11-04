@@ -285,6 +285,30 @@ def bat_tile(salt: int) -> list:
     return pixels
 
 
+# V2-15 sheep (the 16-color dyed sheep): the BARE (sheared) body tile —
+# the pinkish sheep skin under the wool (the Minecraft bare-sheep look).
+# ONE new tile; the three existing sheep tiles keep their salts and
+# bytes (the FNV pins in the tests are the zero-change proof). New salt
+# 0x5EE4 (the sheep family's next slot after 0x5EE1..0x5EE3).
+SHEEP_SKIN = (226, 178, 164)  # the pinkish-tan bare-sheep base
+
+
+def sheep_skin_tile(salt: int) -> list:
+    """Bare sheep skin (V2-15): the pinkish-tan base + light noise
+    (smooth skin — the pig's noise level, the sheep_wool_tile's salt
+    discipline)."""
+    (br, bg, bb) = SHEEP_SKIN
+    pixels = []
+    for y in range(SIZE):
+        row = []
+        for x in range(SIZE):
+            n = noise(x, y, salt, 10)
+            r, g, b = clamp(br + n), clamp(bg + n), clamp(bb + n)
+            row.append((r, g, b, 255))
+        pixels.append(row)
+    return pixels
+
+
 def main() -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
     # Green zombie skin (eyes on the front face) + teal shirt.
@@ -340,6 +364,10 @@ def main() -> None:
     # Dark brown-black bat hide + wing membrane (V2-14): the single tile
     # (body + head + both wings — no per-face split), new salt 0xB441.
     write_png(os.path.join(OUT_DIR, "bat.png"), bat_tile(0xB441))
+    # Pinkish-tan bare sheep skin (V2-15): the sheared sheep's body tile
+    # (new salt 0x5EE4 — the sheep family's next slot).
+    write_png(os.path.join(OUT_DIR, "sheep_skin.png"),
+              sheep_skin_tile(0x5EE4))
 
 
 if __name__ == "__main__":

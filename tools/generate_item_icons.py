@@ -646,6 +646,35 @@ def make_dye_icon(name: str):
     return icon
 
 
+def shears():
+    """Shears (V2-15, the sheep shearing tool): the twin steel blades
+    crossing at the lower center to two upper tips + the two iron handle
+    rings at the lower left / right (the Minecraft shears silhouette).
+    New salts 152-154 — every existing icon stays pixel-identical."""
+    px = blank()
+    steel = (196, 196, 204)
+    steel_hi = (232, 232, 240)
+    ring = (160, 160, 170)
+    ring_hi = (198, 198, 208)
+    # The blades: twin 2 px lines from the crossing (16, 22) to the
+    # upper tips (5, 7) / (27, 7) (the V opening upward).
+    line(px, 16, 22, 5, 7, steel, salt=152, width=2)
+    line(px, 16, 22, 27, 7, steel, salt=152, width=2)
+    # The bright edge on the left blade (the polished cut).
+    line(px, 15, 21, 5, 7, steel_hi, salt=153, width=1)
+    # The handle rings: two steel ellipses under the crossing, centered
+    # at (10, 26) / (22, 26) (the grip ends).
+    for cx in (10, 22):
+        for y in range(22, 31):
+            for x in range(cx - 4, cx + 5):
+                nx = (x - cx) / 3.4
+                ny = (y - 26.5) / 4.4
+                d = nx * nx + ny * ny
+                if 0.45 < d <= 1.0:
+                    setpx(px, x, y, ring_hi if d < 0.72 else ring, salt=154)
+    return px
+
+
 def bone():
     """A bone (Phase 38): a white diagonal shaft (bottom-left to
     top-right) with a pair of rounded knobs at each end — the
@@ -1175,6 +1204,8 @@ ITEMS = {
     # V2-7: the spider's drops (string + spider eye, the MC values).
     "string": string,
     "spider_eye": spider_eye,
+    # V2-15: the sheep shearing tool (2 iron ingots shapeless).
+    "shears": shears,
     "bucket": bucket_icon,
     "milk_bucket": milk_bucket_icon,
     "water_bucket": water_bucket_icon,

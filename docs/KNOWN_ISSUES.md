@@ -365,8 +365,12 @@ SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作�
 - **同色重复染色不消耗染料** — 对已是目标颜色的方块再右键同色染料 = no-op
   （点击落到 placeBlock，染料非方块物品 = 无操作）；Minecraft 会消耗 1 个。
   v1 规则，文档化（MECHANICS「染色」）。`[Phase 41]`
-- **sheep 只掉白 wool** — 无染色 sheep（MC 有 16 色羊）；彩色 wool 只能靠
-  染色获得。`[Phase 41]`
+- ~~**sheep 只掉白 wool** — 无染色 sheep（MC 有 16 色羊）；彩色 wool 只能靠
+  染色获得。~~ **`[V2-15]` 已解决（v2.16.0）**：sheep 出生毛色 per-mob
+  流首抽（temperate 表 850:80:30:30:10 白主稀有色）+ shears 剪毛掉
+  1-3 对应色 wool + RMB 染料改色（bare 拒染）+ 死亡彩毛钩子 + 7200f
+  再生；词表 15 色无 lime = 记档偏离（MC 16 含 lime）。`[Phase 41]`
+  → `[V2-15]`
 - **wool 物品图标 = 3D 方块体** — `wool` 块与既有显式 material 物品同名，
   冲突解法是删显式物品、用隐式 block item（hotbar 渲染 3D 方块体而非 2D
   图标）；与 MC 的 2D 羊毛图标不同。`[Phase 41]`

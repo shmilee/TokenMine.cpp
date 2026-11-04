@@ -1948,6 +1948,112 @@ TEST(ItemRegistryTest, FastAgainstRejectsMaterial) {
 }
 
 // ---------------------------------------------------------------------------
+// V2-15: the shears (the sheep shearing tool — the 'shears' data flag).
+// ---------------------------------------------------------------------------
+
+TEST(ItemRegistryTest, ParsesShearsFlag) {
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(
+        R"({"id":"shears","type":"tool","tool":{"break_speed":2},"shears":true})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Item& it = items.at(*r);
+    EXPECT_TRUE(it.shearsTool);
+    EXPECT_EQ(it.type, ItemType::Tool);
+}
+
+TEST(ItemRegistryTest, ShearsDefaultsFalse) {
+    ItemRegistry items;
+    auto r = items.registerItem(
+        parseJson(R"({"id":"x","type":"tool"})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FALSE(items.at(*r).shearsTool);
+}
+
+TEST(ItemRegistryTest, RejectsNonBoolShears) {
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(
+        R"({"id":"x","type":"tool","shears":"yes"})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("'shears' must be a boolean"),
+              std::string::npos)
+        << r.error().message;
+}
+
+TEST(ItemRegistryTest, RejectsShearsOnMaterial) {
+    // The tool-only gate (the armor_slot's tool-rejection twin): a
+    // material cannot shear.
+    ItemRegistry items;
+    auto r = items.registerItem(parseJson(
+        R"({"id":"x","type":"material","shears":true})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("only valid for type"),
+              std::string::npos)
+        << r.error().message;
+}
+
+TEST(ItemRegistryTest, ShearsContentPinned) {
+    // The REAL asset (the MC-verified values): type tool, break_speed 2
+    // (the Minecraft shears), durability 238 (the Minecraft exact),
+    // max_stack 1, the 'shears' flag, the icon. NO fast_against — the
+    // shears accelerate no block: the field is ABSENT (the empty-list
+    // form is rejected at parse — the FastAgainstRejectsEmptyList twin —
+    // so the omission is the minimal legal encoding; the SURV-8 wrong-
+    // tool penalty on mining is the sword case, the documented default
+    // for a listless tool). attack_damage stays the data default 1.0
+    // (the design's pin set — the MC 2.5 is out of the v2.16.0 scope).
+    ItemRegistry items;
+    FILE* fp = std::fopen("assets/data/items/shears.json", "rb");
+    ASSERT_NE(fp, nullptr) << "run from the repo root";
+    std::string text;
+    char buf[4096];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+        text.append(buf, n);
+    }
+    std::fclose(fp);
+    auto parsed = Json::parse(text);
+    ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+    auto reg = items.registerItem(*parsed);
+    ASSERT_TRUE(reg.ok()) << reg.error().message;
+    const Item& it = items.at(*reg);
+    EXPECT_EQ(it.name, "shears");
+    EXPECT_EQ(it.type, ItemType::Tool);
+    EXPECT_FLOAT_EQ(it.breakSpeed, 2.0f);
+    EXPECT_FLOAT_EQ(it.durability, 238.0f);  // the Minecraft exact
+    EXPECT_EQ(it.maxStack, 1);
+    EXPECT_TRUE(it.shearsTool);
+    EXPECT_EQ(it.icon, "shears");
+    EXPECT_TRUE(it.fastAgainst.empty());
+    EXPECT_FLOAT_EQ(it.attackDamage, 1.0f);
+    EXPECT_FALSE(it.ignitesFlamable);
+    EXPECT_TRUE(it.dyeColor.empty());
+}
+
+TEST(ItemRegistryTest, ShearsRecipePinned) {
+    // The REAL recipe (the MC shapeless 2 iron ingots -> 1 shears).
+    FILE* fp = std::fopen("assets/data/recipes/shears.json", "rb");
+    ASSERT_NE(fp, nullptr) << "run from the repo root";
+    std::string text;
+    char buf[4096];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0) {
+        text.append(buf, n);
+    }
+    std::fclose(fp);
+    auto parsed = Json::parse(text);
+    ASSERT_TRUE(parsed.ok()) << parsed.error().message;
+    const Json& def = *parsed;
+    // Absent 'type' = shapeless (the arrow recipe's default).
+    EXPECT_EQ(def.find("type"), nullptr);
+    EXPECT_EQ(def.find("output")->find("item")->asString(), "shears");
+    EXPECT_EQ(def.find("output")->find("count")->asInt(), 1);
+    const Json& ing = *def.find("ingredients");
+    ASSERT_EQ(ing.size(), 1u);
+    EXPECT_EQ(ing.at(0).find("item")->asString(), "iron_ingot");
+    EXPECT_EQ(ing.at(0).find("count")->asInt(), 2);
+}
+
+// ---------------------------------------------------------------------------
 // SURV-1: armor ('armor_slot' + 'armor_points' — the strict material pair).
 // ---------------------------------------------------------------------------
 

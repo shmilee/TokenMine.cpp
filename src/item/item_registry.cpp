@@ -600,6 +600,29 @@ Result<void> ItemRegistry::parseArmor(const Json& def, bool isTool,
     return {};
 }
 
+Result<void> ItemRegistry::parseShears(const Json& def, bool isTool,
+                                       Item& out) {
+    // V2-15: optional 'shears' (strict bool, default false): the sheep
+    // shearing predicate (the item the player must hold to shear a
+    // wool-drops mob — the data flag the game reads, never an item
+    // name, the ignitesFlamable pattern). TOOL-ONLY: the shears' use
+    // is the right-click mob action with DURABILITY wear (a tool's
+    // wear event), so a material carrying the flag is a dead-channel
+    // typo, rejected by name (the armor_slot's tool-rejection twin).
+    if (const Json* s = def.find("shears")) {
+        if (!s->isBool()) {
+            return MC_FAIL("'shears' must be a boolean");
+        }
+        if (s->asBool() && !isTool) {
+            return MC_FAIL("'shears' is only valid for type \"tool\" "
+                           "(the shearing tool — a material cannot "
+                           "shear)");
+        }
+        out.shearsTool = s->asBool();
+    }
+    return {};
+}
+
 Result<void> ItemRegistry::parseDurability(const Json& def, Item& out) {
     // Optional 'durability' (SURV-3): the accumulated damage at which the
     // item breaks (a strict number > 0; the absent field is the "no
@@ -1072,6 +1095,7 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
             key != "fast_against_multiplier" &&
             key != "armor_slot" &&
             key != "armor_points" &&
+            key != "shears" &&
             key != "durability" &&
             key != "repair_with" &&
             key != "enchant_class" &&
@@ -1120,6 +1144,10 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     r = parseArmor(def, isTool, item); // SURV-1: LAST of the channel
                                        // owners (its exclusivity checks
                                        // see every other channel parsed)
+    MC_TRY(r);
+    r = parseShears(def, isTool, item); // V2-15: the shears flag (the
+                                        // tool-only strict bool — the
+                                        // type gate reads isTool)
     MC_TRY(r);
     r = parseDurability(def, item); // SURV-3: LAST of the parse flow (the
                                     // allowed-set check reads the tool /

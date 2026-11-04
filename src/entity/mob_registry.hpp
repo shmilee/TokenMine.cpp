@@ -107,9 +107,11 @@
 #include <deque>
 #include <map>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
+#include "block/block.hpp"
 #include "core/asset_manager.hpp"
 #include "core/error.hpp"
 #include "core/json.hpp"
@@ -197,6 +199,56 @@ struct MobDrop {
     int countMin = 1;
     int countMax = 1;
 };
+
+// V2-15 (sheep): one entry of a mob's `wool_weights` list (the
+// spawn-time wool color's weighted roll): the DYE COLOR NAME (the
+// vocabulary is data — cross-checked against the dye items' colors at
+// game init, the family-completeness pattern) + the roll weight (a
+// strict integer 1..10000, parse-validated).
+struct WoolWeight {
+    std::string color;
+    int weight = 0;
+};
+
+// V2-15: the model box NAME of a wool_drops mob's wool body (the
+// render-layer variant's anchor: the per-instance tile — the instance-
+// color dye variant or the bare skin tile — is applied to this box's
+// texture when the variant mesh is built). Shipped on the sheep's body
+// box. An unnamed box is simply never a variant target.
+inline constexpr std::string_view kWoolBoxName = "wool";
+
+// V2-15: the BARE (sheared) wool mob's body tile (the new atlas tile
+// "sheep_skin" — the pinkish skin under the wool, the generator's
+// 0x5EE4 salt). The render derives it for the wool box when the
+// instance is bare; a woolly instance takes the instance-color dye
+// variant instead (dyeVariantName over the kWoolDyeFamily base — the
+// wool family's EXISTING block tiles, same atlas: zero new texture
+// for the 15 colors).
+inline constexpr std::string_view kWoolBareTile = "sheep_skin";
+
+// V2-15: the spawn-time weighted roll of a wool color: ONE uniform `u`
+// in [0, 1) reduced into the total-weight domain and walked over the
+// cumulative list in DATA ORDER (the attemptMobSpawn pick's paradigm —
+// the same single-draw discipline; all weights 1 would pick exactly
+// entry `u * n`). The parse guarantees total >= 1, so `u` always lands
+// on an entry (the trailing return is the rounding safety for
+// u -> 1).
+inline std::string rollWoolColor(const std::vector<WoolWeight>& weights,
+                                 double u) {
+    int total = 0;
+    for (const WoolWeight& w : weights) {
+        total += w.weight;
+    }
+    const double target = u * static_cast<double>(total);
+    double cum = 0.0;
+    for (const WoolWeight& w : weights) {
+        cum += static_cast<double>(w.weight);
+        if (target < cum) {
+            return w.color;
+        }
+    }
+    return weights.back().color;
+}
 
 // Behavior parameters of a mob type (all from data; see the file head).
 struct MobProperties {
@@ -316,7 +368,51 @@ struct MobProperties {
     // pre-V2-14 mob — the stream draw never happens).
     std::string ambientSoundName;
     double ambientInterval = kAmbientIntervalDefaultSeconds;
+    // V2-15 (sheep — the project's first per-instance-colored mob): the
+    // WOOL data (the data-flag gates, no species switch — the core reads
+    // flags, and every pre-V2-15 mob is false / empty = the bit-
+    // identical structural root).
+    // `woolDrops` (data 'wool_drops', strict bool, default false): the
+    // mob's wool is per-INSTANCE state — it spawns with a weighted color
+    // (the `wool_weights` roll, the per-mob stream's first draw), a
+    // right-click with a `shears` item shears it (1-3 of the instance-
+    // color wool drop, the mob goes bare for the regrow window), a right-
+    // click with a DYE recolors it (Minecraft: a bare mob refuses the
+    // dye), and on death it drops its instance-color wool — a bare death
+    // drops none (the Minecraft sheared-sheep rule). A wool_drops mob
+    // must also carry a drop entry named for the wool family + a
+    // non-empty wool_weights (the strict pair — init / parse rejections
+    // name it).
+    bool woolDrops = false;
+    // `woolWeights` (data 'wool_weights'): the spawn-time wool color's
+    // weighted roll — a non-empty list of strict {color, weight}
+    // entries (color = a dye color name, init-vocabulary-cross-checked
+    // against the dye items; weight = an integer 1..10000; duplicate
+    // colors rejected; the empty list rejected). The MobEntity
+    // constructor consumes ONE per-mob-stream draw and walks the
+    // cumulative weights (rollWoolColor — the attemptMobSpawn pick's
+    // paradigm). MUST be paired with woolDrops (the milk pair's
+    // discipline: a lone field is a dead-data typo).
+    std::vector<WoolWeight> woolWeights;
 };
+
+// V2-15: a wool_drops mob's WOOL drop entry — the drop named for the
+// wool dye family (the item's base name, block.hpp's kWoolDyeFamily):
+// the death pass recolors it per instance (dyeVariantName) and skips it
+// when the mob is bare, and shearing rolls its count range. nullptr =
+// absent (a wool_drops mob without one is rejected at game init — the
+// init cross-check makes this the belt).
+inline const MobDrop* woolDropEntry(const MobProperties* p) {
+    if (p == nullptr || !p->woolDrops) {
+        return nullptr;
+    }
+    for (const MobDrop& d : p->drops) {
+        if (d.item == kWoolDyeFamily) {
+            return &d;
+        }
+    }
+    return nullptr;
+}
 
 struct Mob {
     MobID id = MobID::invalid();
