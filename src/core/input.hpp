@@ -10,11 +10,31 @@
 //
 // SDL types are mapped to GameKey/MouseButton at the boundary so the rest
 // of the codebase (and the unit tests) never touches SDL.
+//
+// V3-8: gamepad support (the input boundary layer, on par with keyboard and
+// mouse). The held state is a per-action SOURCE BITMASK (bit 0 =
+// kInputSourceKeyboard, bit 1 = kInputSourceGamepad):
+//   - isDown = any source holds (the OR semantics — the two sources are the
+//     union of the same action; there is no keyboard-priority override, the
+//     keyboard mapping is untouched and the gamepad never rebinds a key);
+//   - each source has its OWN rising edge into wasPressed (a second source
+//     pressing an already-down action sets the edge again — documented
+//     semantics);
+//   - a release clears only that source's bit (the other source still
+//     holding keeps the action down);
+//   - wasReleased (mouse buttons, the bow) fires only on a source's
+//     falling edge that clears the WHOLE mask (the other source still
+//     holding = not released = the bow keeps its draw).
+// No gamepad connected = bit 1 is never set = the keyboard/mouse path is
+// bit-identical to the pre-V3-8 bool behavior (the structural-immunity
+// root; the legacy fixture unit test pins it).
 #pragma once
 
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <string>
+#include <variant>
 
 #include "core/math/vec2.hpp"
 
@@ -49,7 +69,7 @@ enum class GameKey {
     Digit8,
     Digit9,
     C, // UX-4: cycle the camera First -> ThirdBack -> ThirdFront (locked
-       // pointer only; V2-1: the Minecraft F5 order)
+        // pointer only; V2-1: the Minecraft F5 order)
     T, // UX-7: skip the tutorial (locked pointer only)
     // Keep in sync with kKeyCount.
 };
@@ -65,6 +85,41 @@ enum class MouseButton {
 inline constexpr int kMouseButtonCount =
     static_cast<int>(MouseButton::Middle) + 1;
 
+// V3-8: the input source bits (the m_keyDown / m_buttonDown masks — the
+// sources of one action are OR'd, see the file header).
+inline constexpr std::uint8_t kInputSourceKeyboard = 0x1;
+inline constexpr std::uint8_t kInputSourceGamepad = 0x2;
+
+// V3-8: the gamepad's axis deadzone (the standard digital threshold — both
+// the left stick's digitize and the right stick's deadzone).
+inline constexpr float kGamepadAxisDeadzone = 0.2f;
+// V3-8: the look speed — the right stick's full deflection =
+// kGamepadLookPixelsPerUnit pixels of synthetic mouseDelta per event, the
+// mouseDelta pixels-equivalent scale (the player's mouseSensitivity then
+// applies as for the mouse; the future config-ization anchor).
+inline constexpr float kGamepadLookPixelsPerUnit = 100.0f;
+// V3-8: the SDL axis raw range (Sint16, -32768..32767) — the normalization
+// divisor to the float [-1, 1] scale (32768 keeps -32768 at exactly -1.0).
+inline constexpr float kGamepadAxisFullScale = 32768.0f;
+
+// V3-8: the gamepad button's mapped action (the project's two input
+// targets: a GameKey or a MouseButton). std::monostate = the button is NOT
+// mapped in v1 (the documented deviation: LT/RT are trigger AXES, not
+// buttons; GUIDE / L3 / R3 / DPAD up-down-left / the paddles / the touchpad
+// are intentionally unmapped).
+using GamepadButtonAction =
+    std::variant<std::monostate, GameKey, MouseButton>;
+
+// V3-8: the button mapping table (a pure function — the unit tests pin it;
+// the v1 table is the Xbox standard layout).
+GamepadButtonAction mapGamepadButton(int sdlButton);
+
+// V3-8: remap a normalized axis value from outside the deadzone to the full
+// [-1, 1] range: sign(v) x min(1, (|v| - dz) / (1 - dz)); inside or on the
+// deadzone (|v| <= dz) = 0. A pure function (the unit tests pin the
+// formula).
+float remapAxisOutsideDeadzone(float v, float dz);
+
 class Input {
 public:
     // Call once at the start of each frame: clears edge-triggered state and
@@ -78,13 +133,13 @@ public:
     bool quitRequested() const { return m_quit; }
 
     bool isDown(GameKey key) const {
-        return m_keyDown[static_cast<int>(key)];
+        return m_keyDown[static_cast<int>(key)] != 0;
     }
     bool wasPressed(GameKey key) const {
         return m_keyPressed[static_cast<int>(key)];
     }
     bool isDown(MouseButton button) const {
-        return m_buttonDown[static_cast<int>(button)];
+        return m_buttonDown[static_cast<int>(button)] != 0;
     }
     bool wasPressed(MouseButton button) const {
         return m_buttonPressed[static_cast<int>(button)];
@@ -112,6 +167,14 @@ public:
     // is stale by design — the UI is only used while the pointer is free).
     Vec2 mousePosition() const { return m_mousePos; }
 
+    // V3-8: the gamepad's connection state (the F3 line + the Game's log).
+    // Single-gamepad model: the first connected gamepad is tracked; a
+    // second one is ignored until the first disconnects.
+    bool gamepadConnected() const { return m_gamepadWhich != 0; }
+    // The SDL device name ("unknown" when SDL has no mapping for the
+    // device); only valid while gamepadConnected().
+    const std::string& gamepadName() const { return m_gamepadName; }
+
     // -- Event entry points --------------------------------------------------
     // Used by pump() and directly by unit tests (SDL key codes are the
     // platform-independent SDLK_* virtual key codes).
@@ -122,14 +185,34 @@ public:
     // absolute positions; the consumer accumulates through this handler).
     void handleMouseWheel(int deltaY);
     void handleQuit();
+    // V3-8: the gamepad's entry points (same pattern as handleKey — the
+    // unit tests drive them directly; pump() pre-filters the device: only
+    // the tracked gamepad's button/axis events reach the handlers, and a
+    // not-connected Input ignores them as well).
+    void handleGamepadButton(int sdlButton, bool down);
+    void handleGamepadAxis(int sdlAxis, std::int16_t value);
+    void handleGamepadAdded(int which);
+    void handleGamepadRemoved(int which);
 
 private:
     static std::optional<GameKey> mapKey(std::uint32_t sdlKeycode);
     static std::optional<MouseButton> mapButton(int sdlButton);
 
-    std::array<bool, kKeyCount> m_keyDown {};
+    // V3-8: the source-bit operation shared by the keyboard/mouse and the
+    // gamepad handlers: down sets THIS source's bit (the wasPressed edge on
+    // this source's rising edge); up clears this source's bit ONLY.
+    void setKeySource(GameKey key, std::uint8_t source, bool down);
+    void setButtonSource(MouseButton button, std::uint8_t source, bool down);
+    // V3-8: recompute the four movement directions' gamepad source bits
+    // from the CACHED left-stick pair (each AXIS_MOTION event carries one
+    // axis only); a full recompute on every event = idempotent (the stick
+    // returning into the deadzone clears the direction naturally).
+    void updateGamepadMovement();
+
+    // V3-8: the source bitmasks (bit 0 keyboard/mouse, bit 1 gamepad).
+    std::array<std::uint8_t, kKeyCount> m_keyDown {};
     std::array<bool, kKeyCount> m_keyPressed {};
-    std::array<bool, kMouseButtonCount> m_buttonDown {};
+    std::array<std::uint8_t, kMouseButtonCount> m_buttonDown {};
     std::array<bool, kMouseButtonCount> m_buttonPressed {};
     std::array<bool, kMouseButtonCount> m_buttonReleased {};
     Vec2 m_mouseDelta {0.0f, 0.0f};
@@ -140,6 +223,19 @@ private:
     // frameBegin (the cursor sits where it last was).
     Vec2 m_mousePos {0.0f, 0.0f};
     bool m_quit = false;
+    // V3-8: the single-gamepad model — the tracked device's SDL instance
+    // id (0 = none; SDL ids are 1-based; SDL_JoystickID = Uint32). Only
+    // this device's REMOVED disconnects; a second device is ignored (the
+    // documented deviation, v1).
+    std::uint32_t m_gamepadWhich = 0;
+    // V3-8: the connected device's SDL name (the F3 line + the log;
+    // "unknown" when SDL has no mapping for the device).
+    std::string m_gamepadName;
+    // V3-8: the cached left-stick raw values (Sint16; each axis event
+    // updates its own, then the four directions are recomputed from the
+    // pair). 0 = centered.
+    std::int16_t m_gamepadLeftX = 0;
+    std::int16_t m_gamepadLeftY = 0;
 };
 
 } // namespace mc

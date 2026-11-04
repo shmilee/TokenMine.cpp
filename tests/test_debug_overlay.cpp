@@ -36,10 +36,10 @@ TEST(DebugOverlayTest, LinesFormat) {
     info.maxHunger = 20.0;
     info.difficulty = "hard";
     const auto lines = debugOverlayLines(info);
-    ASSERT_EQ(lines.size(), 18u);
+    ASSERT_EQ(lines.size(), 19u);
     // Pinned literal (deliberately NOT the TM_VERSION macro): a version
     // bump must force a conscious update of this pin.
-    EXPECT_EQ(lines[0], "TokenMine.cpp v3.2.0");
+    EXPECT_EQ(lines[0], "TokenMine.cpp v3.3.0");
     EXPECT_EQ(lines[1], "60 FPS | frame 1234");
     EXPECT_EQ(lines[2], "chunks 2312 | draws 45 | verts 987654");
     EXPECT_EQ(lines[3], "pos 0.50, 54.00, -34.70  yaw 0.00  pitch -0.25");
@@ -68,6 +68,9 @@ TEST(DebugOverlayTest, LinesFormat) {
     // V2-19: the camera line — a unit-test DebugInfo with no camera
     // data renders the baseline "(none)".
     EXPECT_EQ(lines[17], "cam (none)");
+    // V3-8: the gamepad line — a unit-test DebugInfo with no gamepad
+    // connection renders the baseline "gamepad: none".
+    EXPECT_EQ(lines[18], "gamepad: none");
 }
 
 TEST(DebugOverlayTest, CamLine) {
@@ -75,7 +78,7 @@ TEST(DebugOverlayTest, CamLine) {
     // distance (the wheel-zoom readout, one decimal: the kZoomStep 0.5
     // grid) + the fly marker (the double-tap Space toggle).
     DebugInfo none;
-    EXPECT_EQ(debugOverlayLines(none).size(), 18u);
+    EXPECT_EQ(debugOverlayLines(none).size(), 19u);
     EXPECT_EQ(debugOverlayLines(none)[17], "cam (none)");
     DebugInfo back;
     back.camMode = "ThirdBack";
@@ -86,6 +89,28 @@ TEST(DebugOverlayTest, CamLine) {
     front.camDistance = 6.5;
     front.flying = true;
     EXPECT_EQ(debugOverlayLines(front)[17], "cam ThirdFront D 6.5  flying");
+}
+
+TEST(DebugOverlayTest, GamepadLine) {
+    // V3-8: the gamepad line (the F3 stays English — the developer-tool
+    // discipline): "gamepad: none" when no gamepad is connected,
+    // "gamepad: <name>" otherwise (the SDL device name; "unknown" when
+    // SDL has no mapping for the device).
+    DebugInfo none;
+    EXPECT_EQ(debugOverlayLines(none).size(), 19u);
+    EXPECT_EQ(debugOverlayLines(none)[18], "gamepad: none");
+    DebugInfo xbox;
+    xbox.gamepadConnected = true;
+    xbox.gamepadName = "Xbox 360 Controller";
+    EXPECT_EQ(debugOverlayLines(xbox)[18], "gamepad: Xbox 360 Controller");
+    DebugInfo unknown;
+    unknown.gamepadConnected = true;
+    unknown.gamepadName = "unknown";
+    EXPECT_EQ(debugOverlayLines(unknown)[18], "gamepad: unknown");
+    // Not connected = the name field is ignored (the "none" form wins).
+    DebugInfo stale;
+    stale.gamepadName = "Xbox 360 Controller";
+    EXPECT_EQ(debugOverlayLines(stale)[18], "gamepad: none");
 }
 
 TEST(DebugOverlayTest, TutorialLine) {

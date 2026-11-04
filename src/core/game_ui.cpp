@@ -2123,6 +2123,12 @@ void Game::renderUi() {
                                                           : "First");
         info.camDistance = m_thirdPersonDistance;
         info.flying = m_player ? m_player->isFlying() : false;
+        // V3-8: the gamepad line (the F3 stays English — the developer-
+        // tool discipline): the Input's connection state (the single
+        // consumer of the pump's gamepad events) — "gamepad: none" when
+        // no gamepad is connected, the SDL device name otherwise.
+        info.gamepadConnected = m_input.gamepadConnected();
+        info.gamepadName = m_input.gamepadName();
         // UX-8e: the F3 line step is a TEXT-STACK pitch — it grows with
         // the glyphs (lround, identity at fs = 1.0); the margin (an
         // icon-space inset) does not.

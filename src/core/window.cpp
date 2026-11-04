@@ -27,9 +27,12 @@ Result<void> Window::init(const Config& config) {
     const bool fullscreen = config.getBool("window.fullscreen", false);
     m_vsync = config.getBool("render.vsync", true);
 
-    // SDL3: bool return, true = success.
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
-        return MC_FAIL(std::string("SDL_Init(VIDEO) failed: ") + SDL_GetError());
+    // SDL3: bool return, true = success. V3-8: the gamepad subsystem
+    // (lazy — a gamepad-less environment pays no cost; init failure
+    // semantics are the same MC_FAIL as VIDEO).
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
+        return MC_FAIL(std::string("SDL_Init(VIDEO|GAMEPAD) failed: ") +
+                       SDL_GetError());
     }
     m_sdlActive = true;
 

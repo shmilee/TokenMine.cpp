@@ -74,6 +74,12 @@ struct DebugInfo {
     std::string camMode;
     double camDistance = 0.0;
     bool flying = false;
+    // V3-8: the gamepad line's data — "gamepad: none" when
+    // gamepadConnected is false, "gamepad: <name>" otherwise (the SDL
+    // device name, "unknown" when SDL has no mapping for the device; the
+    // F3 stays English — the developer-tool discipline).
+    bool gamepadConnected = false;
+    std::string gamepadName;
 };
 
 // PRE-12 (the SURV-6 display boundary): the amplifier roman numeral for

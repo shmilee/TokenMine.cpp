@@ -11,6 +11,39 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.3.0（2026-11-05）— V3-8 手柄支持（门 193 全 PASS）
+
+11-05 用户实机诉求定案（BACKLOG UX 行，v3.2.0 收口后紧接执行）：**SDL3
+GameController 一阶 API，实现面 = 输入边界层**（世界/渲染/存档/物理
+零触碰）——① **源位掩码 OR 语义**：`m_keyDown`/`m_buttonDown` bool →
+每源一 bit（bit0 键鼠 / bit1 手柄），`isDown` = 任一源按下，每源独立
+rising edge，`wasReleased`（弓）仅本源 falling 且掩码清 0 才置 =
+**键鼠手柄天然双连共存**（同一动作的并集，任一侧按住不松）+ **无手柄
+= bit1 永不置位 = 位级恒等**（legacy fixture 单测钉）；② **v1 映射**
+（Xbox 布局，9 钮 + 2 摇杆）：左摇杆移动（死区 0.2 外数字化，四方向
+全量重算幂等回中清键）/ 右摇杆视角（死区外重映射 × 100 px 当量合成
+mouseDelta：杆右 = xrel+，杆上 = yrel−）/ A = Space【双击飞行自动
+继承】/ B = LeftShift 疾跑 / X = E 背包 / Y = Q 丢弃 / LB = 挖掘 / RB =
+使用 / Back = C 相机 / Start = ESC / D-pad 右 = Tab；LT/RT/L3/R3/Guide/
+D-pad 上下左/paddles = v1 不映射记档；③ 单手柄模型（第二手柄忽略）+
+连断日志（`SDL_GetGamepadNameForID`，无 = "unknown"）+ F3 末行连接态
+（18→19 行）+ 断连清全部手柄位**不置释放边**（弓 stale-up 取消蓄力而
+非悬挂）；④ `SDL_Init(VIDEO | SDL_INIT_GAMEPAD)`（无手柄环境惰性零成
+本）；无 config 键（映射 = 命名常量，`kGamepadLookPixelsPerUnit` = 未来
+config 化锚点）。2555/2555（+19：test_gamepad 18【映射纯函数钉 / 9 钮
+按压释放含 RB 弓边 / 17 不映射钮零变化 / 死区边界 6225·6553·6554 /
+四方向+对角+回中+切换幂等 / 右摇杆符号+增益精确 + 累积 + frameBegin
+复位 / 重映射公式钉 / trigger 零变化 / 键·钮 OR 弓语义双序 / 断连清位
++ 再连 + 陈旧 no-op / 单手柄模型 / 未连接 no-op / **legacy 位级恒等
+fixture**】+ DebugOverlay GamepadLine 四形）。门 193 = **结构免疫第 74
+次免重锚**（本环境无物理手柄 = 零 SDL 手柄事件：S1 无输入 ×2 ≡ 锚
+224468 逐字节 + gamepad 日志行 = 0）+ S3 全套 + S6 跳过记档（无
+config/内容面）+ 性能 A/B 同世界同成本（PERF-WIN 三窗全同档 +
+changesApplied 9/1/3 逐位 + **终档 savenorm EXACT 零 format 最强形**）；
+**门强度记档**：全部 handler 逻辑单测覆盖（handle 入口 = handleKey 同
+款模式）+ 实机验收 = 用户（release 提示）。详见
+`docs/archive/phase-3.3.0.md`。
+
 ## v3.2.0（2026-11-05）— V3-1 Phase A 下界传送门框（门 192 全 PASS）
 
 V3-1「下界维度·传送门与下界」三段拆分第一段（**门框**；Phase B 下界

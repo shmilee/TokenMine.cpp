@@ -10,10 +10,11 @@ C++20 / SDL3 / OpenGL 3.3 core，
 自研 `Result`/JSON/PNG，**内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，
 不改核心代码），**确定性是一级要求**（无输入运行逐帧字节可复现）。
 
-## 现状（3.x「世界扩展」期——v3.1.0 = V3-7 存档 gzip 已完成（门 191
-全 PASS，11-04）；v3.2.0 = V3-1 Phase A 下界门框 已完成（门 192 全
-PASS，11-05）；下一项 V3-8 手柄支持 = v3.3.0【11-05 用户定案】，其后
-V3-1 Phase B 下界世界 + 真传送 = v3.4.0 候选）
+## 现状（3.x「世界扩展」期——v3.1.0 = V3-7 存档 gzip（门 191，11-04）；
+v3.2.0 = V3-1 Phase A 下界门框（门 192，11-05）；v3.3.0 = V3-8 手柄
+支持（门 193，11-05）；下一项 **V3-1 Phase B 下界世界 + 真传送 =
+v3.4.0 候选**（format 30，全案最大单点 = 实体 World 换绑），其后
+Phase C 内容族 → V3-2~V3-6 → V3-9 demo 回放【矩阵尾部】）
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -72,7 +73,7 @@ V3-1 Phase B 下界世界 + 真传送 = v3.4.0 候选）
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2536/2536**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2555/2555**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 29（V3-7 gzip 时代：schema 与 28 完全一致——编码与
   format 号正交，on-disk = 确定性 gzip 容器默认开【10B 头全钉 + raw
   deflate 6 + CRC32/ISIZE 尾】+ 加载魔数 `1f 8b` 探测零迁移 +
@@ -84,9 +85,9 @@ V3-1 Phase B 下界世界 + 真传送 = v3.4.0 候选）
   base18 锚 **224468 B**（679×744 WM tile 态——重锚谱系：179116 →
   178148【V2-10 门 181】→ 178676【V2-19 门 182】→ 179027【V2-11
   门 183】→ **224468【V2-18 门 190，AO 世界光照】；门 184-189 =
-  结构免疫第 65-70 次免重锚；门 191【V3-7 存档 gzip】= 第 72 次 +
-  门 192【V3-1 Phase A 门框】= 第 73 次免重锚【v3.0.0 banner = 第 71
-  次】——存档/门框 = 渲染无关零像素**）；PITS
+  结构免疫第 65-70 次免重锚；门 191【V3-7】= 第 72 次 + 门 192【V3-1
+  Phase A 门框】= 第 73 次 + 门 193【V3-8 手柄】= 第 74 次免重锚
+  【v3.0.0 banner = 第 71 次】——存档/门框/手柄 = 渲染无关零像素**）；PITS
   375-379 + **PITS 380**（spawn 成功行无 'pick' / 门场景洞穴密封 /
   CAVE config seed 归属 / bob diff 带色相审计）+ **PITS 381**（热栏
   key→RMB ≥0.15s / 活体掉落物品不可作终档断言 / 羊静止窗）+
@@ -123,6 +124,19 @@ V3-1 Phase B 下界世界 + 真传送 = v3.4.0 候选）
   强形 + portal 自成本无可测增量】；Phase A 传送 = kPortalTravelEnabled
   false 桩 + static_assert 构建门，Phase B 接真传送；详见
   `docs/archive/phase-3.2.0.md`）；
+  门计数 193（**V3-8 手柄支持 v3.3.0** 门 193 全 PASS：SDL3
+  GameController 输入边界层——**源位掩码 OR 语义**【m_keyDown 每源一
+  bit：bit0 键鼠 / bit1 手柄，isDown = 任一源，wasReleased 弓语义仅
+  本源 falling 且掩码清 0 = 键鼠手柄天然双连共存 + 无手柄位级恒等
+  结构免疫根】+ v1 Xbox 映射 9 钮 2 摇杆【左摇杆移动死区 0.2 数字化 /
+  右摇杆视角死区外重映射 ×100 px 合成 mouseDelta / A=Space 双击飞行
+  继承 / B=疾跑 / X=背包 / Y=丢弃 / LB=挖掘 / RB=使用 / Back=相机 /
+  Start=ESC / D-pad 右=Tab；LT/RT/L3/R3 等 v1 不映射记档】+ 单手柄
+  模型 + 连断日志 + F3 末行连接态 18→19 行 + SDL_Init(VIDEO|GAMEPAD) +
+  无 config 键；2555/2555（+19 含 legacy 位级恒等 fixture）；S1 ≡ 锚
+  224468 + gamepad 日志行 = 0；性能 A/B 同档 + 终档 savenorm EXACT 零
+  format；**门强度记档 = 本环境无物理手柄，全逻辑单测 + 实机验收归
+  用户**；详见 `docs/archive/phase-3.3.0.md`）；
   门计数 191（**V3-7 存档 gzip v3.1.0** 门 191 全 PASS：确定性 gzip
   容器【10B 头全钉 + raw deflate 6 + CRC32/ISIZE 尾，同世界逐字节
   可复现】+ 加载魔数 1f 8b 探测【旧明文档零迁移直读；遗留零迁移最

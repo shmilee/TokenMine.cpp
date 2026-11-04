@@ -106,6 +106,13 @@ std::vector<std::string> debugOverlayLines(const DebugInfo& info) {
             ? std::string("cam (none)")
             : fmt("cam %s D %.1f%s", info.camMode.c_str(), info.camDistance,
                   info.flying ? "  flying" : ""),
+        // V3-8: the gamepad line (the F3 stays English — the developer-
+        // tool discipline): "gamepad: none" when no gamepad is connected,
+        // "gamepad: <name>" otherwise (the SDL device name, "unknown" when
+        // SDL has no mapping for the device).
+        info.gamepadConnected
+            ? fmt("gamepad: %s", info.gamepadName.c_str())
+            : std::string("gamepad: none"),
     };
 }
 

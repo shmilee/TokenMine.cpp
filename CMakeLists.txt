@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 3.2.0 LANGUAGES CXX)
+project(TokenMine VERSION 3.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -239,6 +239,7 @@ add_executable(tokenmine_tests
     tests/test_enchant_save.cpp
     tests/test_bed.cpp
     tests/test_portal.cpp
+    tests/test_gamepad.cpp
 )
 target_compile_definitions(tokenmine_tests PRIVATE
     MC_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data")
