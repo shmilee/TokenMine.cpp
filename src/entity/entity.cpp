@@ -20,10 +20,11 @@ bool Entity::isSolid(BlockID id) const {
     return m_blocks.at(id).properties.solid;
 }
 
-float Entity::solidTopHeight(BlockID id, const Vec3& mn, const Vec3& mx,
-                             const BlockPos& cell) const {
-    // Phase 85: the top of the cell's SOLID region, in cell-local units
-    // (0 = not solid, 0.5 = a bottom slab, 1.0 = a full solid block). The
+SolidRange Entity::solidRange(BlockID id, const Vec3& mn, const Vec3& mx,
+                              const BlockPos& cell) const {
+    // Phase 85 / V2-17: the cell's SOLID region, in cell-local units, as
+    // the Y interval {bottom, top} (0 = not solid, {0, 0.5} = a bottom
+    // slab, {0, 1} = a full solid block, {0.5, 1} = a top slab). The
     // collision (moveAxis / hasRoomAt) tests overlap against this region,
     // not the whole cell — so an entity can stand on a slab's top (its feet
     // at y + 0.5) without the AABB counting as "inside" the slab.
@@ -32,32 +33,51 @@ float Entity::solidTopHeight(BlockID id, const Vec3& mn, const Vec3& mx,
     // blocking height is the slope at the AABB's LOW end on that axis (the
     // feet rest on the slope at the lowest point under the AABB).
     if (id == BlockID::air() || !id.valid()) {
-        return 0.0f;
+        return {};
     }
     const Block& b = m_blocks.at(id);
     if (!b.properties.solid) {
-        return 0.0f;
+        return {};
     }
     if (b.model.shape == BlockModel::Shape::Slab) {
-        return 0.5f;
+        // V2-17: the slab's solid region by per-cell state (the World's
+        // per-cell byte — unset falls back to the block's state default,
+        // the emitStairs rule): 0 = the bottom half (the pre-V2-17 value,
+        // the bit-level root), 1 = the top half (the ceiling mount — the
+        // cell's bottom half is air), >= 2 = the double slab, the full
+        // cell (the shipped stone_slab's state 2). A stateless slab (the
+        // bed family) NEVER reads a state -> the bottom half (the exact
+        // pre-V2-17 value — the bit-level red line).
+        if (b.hasState()) {
+            const int st = m_world.getBlockState(cell.x, cell.y, cell.z);
+            const int s =
+                (st != Chunk::kBlockStateUnset) ? st : b.stateDefault();
+            if (s == 1) {
+                return {kSlabHalf, 1.0f};
+            }
+            if (s >= 2) {
+                return {0.0f, 1.0f};
+            }
+        }
+        return {0.0f, kSlabHalf};
     }
     // Phase 95: a wall is solid in y 0..1.5 (a full block + a half cap on
     // top). A barrier: the player cannot pass through (the AABB overlaps the
     // solid region) nor jump over it (the jump is ~1.25 < 1.5).
     if (b.model.shape == BlockModel::Shape::Wall) {
-        return 1.5f;
+        return {0.0f, 1.5f};
     }
     // Phase 98: a fence is a barrier with the SAME solid region as the wall
     // (y 0..1.5 — the crossed posts + bars span the full height); only the
     // meshing differs (the thin posts, not a full pillar).
     if (b.model.shape == BlockModel::Shape::Fence) {
-        return 1.5f;
+        return {0.0f, 1.5f};
     }
     // Phase 99: a glass pane is a full-cell solid (y 0..1) — the 1/16
     // sheet is mesh-only, the collision is the whole cell. JUMPABLE (the
     // jump is ~1.125 > 1.0), unlike the wall/fence 1.5 barrier.
     if (b.model.shape == BlockModel::Shape::GlassPane) {
-        return 1.0f;
+        return {0.0f, 1.0f};
     }
     if (b.model.shape == BlockModel::Shape::Stairs) {
         // The AABB's local range on each axis (clamped to the cell). The
@@ -81,13 +101,13 @@ float Entity::solidTopHeight(BlockID id, const Vec3& mn, const Vec3& mx,
         const int facing =
             (st != Chunk::kBlockStateUnset) ? st : b.stateDefault();
         switch (facing) {
-            case 0: return 1.0f - mnlz; // north: high at -Z (the AABB's -Z edge)
-            case 2: return mxlz;        // south: high at +Z (the AABB's +Z edge)
-            case 1: return mxlx;        // east:  high at +X (the AABB's +X edge)
-            default: return 1.0f - mnx; // west:  high at -X (the AABB's -X edge)
+            case 0: return {0.0f, 1.0f - mnlz}; // north: high at -Z (the AABB's -Z edge)
+            case 2: return {0.0f, mxlz};        // south: high at +Z (the AABB's +Z edge)
+            case 1: return {0.0f, mxlx};        // east:  high at +X (the AABB's +X edge)
+            default: return {0.0f, 1.0f - mnx}; // west:  high at -X (the AABB's -X edge)
         }
     }
-    return 1.0f;
+    return {0.0f, 1.0f};
 }
 
 bool Entity::hasRoomAt(Vec3 pos) const {
@@ -121,18 +141,24 @@ bool Entity::hasRoomAt(Vec3 pos) const {
                 if (!(z0f < z + 1 && z1f > z)) {
                     continue;
                 }
-                // Phase 85: overlap against the cell's SOLID region [y,
-                // y+top], not the whole cell — a slab's top half is air, so
-                // standing on a slab's top (feet at y+0.5) leaves room.
-                // Phase 87/89: a stair's top varies along its facing axis;
-                // the AABB corners (x0f/y0f/z0f..x1f/y1f/z1f) give the slope
-                // height at the AABB's low end.
+                // Phase 85 / V2-17: overlap against the cell's SOLID
+                // region [y + bottom, y + top], not the whole cell — a
+                // state-0 slab's top half is air (standing on the slab's
+                // top, feet at y+0.5, leaves room); a state-1 slab's
+                // bottom half is air (a body resting on its top, feet at
+                // y+1, leaves room too — the strict convention, the
+                // moveAxis twin). Phase 87/89: a stair's top varies along
+                // its facing axis; the AABB corners (x0f/y0f/z0f..
+                // x1f/y1f/z1f) give the slope height at the AABB's low
+                // end. Every pre-V2-17 shape has bottom == 0, so this
+                // test is the exact legacy [y, y+top] overlap.
                 const Vec3 mn {x0f, y0f, z0f};
                 const Vec3 mx {x1f, y1f, z1f};
                 const BlockPos cell {x, y, z};
-                const float top =
-                    solidTopHeight(m_world.getBlock(x, y, z), mn, mx, cell);
-                if (top > 0.0f && (y0f < y + top && y1f > y)) {
+                const SolidRange rng =
+                    solidRange(m_world.getBlock(x, y, z), mn, mx, cell);
+                if (rng.top > 0.0f &&
+                    (y0f < y + rng.top && y1f > y + rng.bottom)) {
                     return false;
                 }
             }
@@ -464,30 +490,37 @@ bool Entity::moveAxis(int axis, float delta) {
                 if (!(mn.z < z + 1 && mx.z > z)) {
                     continue;
                 }
-                // Phase 85: overlap against the cell's SOLID region [y,
-                // y+top], not the whole cell (a slab is solid in its bottom
-                // half only). A face resting exactly on the region's top is
-                // not an overlap (the strict convention). Phase 87/89: a
-                // stair's top varies along its facing axis — the AABB corners
-                // (mn/mx) give the slope height at the AABB's low end.
+                // Phase 85 / V2-17: overlap against the cell's SOLID
+                // region [y + bottom, y + top], not the whole cell (a
+                // state-0 slab is solid in its bottom half only; a
+                // state-1 slab in its TOP half). A face resting exactly on
+                // the region's boundary is not an overlap (the strict
+                // convention). Phase 87/89: a stair's top varies along its
+                // facing axis — the AABB corners (mn/mx) give the slope
+                // height at the AABB's low end.
                 const BlockPos cell {x, y, z};
-                const float top =
-                    solidTopHeight(m_world.getBlock(x, y, z), mn, mx, cell);
-                if (top <= 0.0f) {
+                const SolidRange rng =
+                    solidRange(m_world.getBlock(x, y, z), mn, mx, cell);
+                if (rng.top <= 0.0f) {
                     continue;
                 }
-                if (!(mn.y < y + top && mx.y > y)) {
+                if (!(mn.y < y + rng.top && mx.y > y + rng.bottom)) {
                     continue;
                 }
                 // The face of this cell opposing the travel direction. For
-                // Y travel the limit is the slab's TOP (feet landing,
-                // delta < 0) or BOTTOM (head bumping, delta > 0); a full
-                // block (top = 1.0) reproduces the old y / y+1 faces.
+                // Y travel the limit is the region's TOP (feet landing,
+                // delta < 0) or its BOTTOM (head bumping, delta > 0 — a
+                // state-1 slab's bottom is y + kSlabHalf, not the cell
+                // floor); a full block ({0, 1}) reproduces the old
+                // y / y+1 faces (every pre-V2-17 shape has bottom == 0 —
+                // the bit-level red line).
                 const float face =
                     (axis == 0)
                         ? static_cast<float>(delta > 0 ? x : x + 1)
                     : (axis == 1)
-                          ? static_cast<float>(delta > 0 ? y : y + top)
+                          ? (delta > 0)
+                                ? static_cast<float>(y) + rng.bottom
+                                : static_cast<float>(y) + rng.top
                           : static_cast<float>(delta > 0 ? z : z + 1);
                 if (!hit) {
                     hit = true;
@@ -582,10 +615,20 @@ void Entity::stepUp(const Vec3& wishDir, float distPerTick) {
             if (!isSolid(id)) {
                 continue;
             }
+            // V2-17: the solid region [y + bottom, y + top] strictly
+            // overlaps the body's y span (the moveAxis twin, the same
+            // rows): the region's top is STRICTLY above the feet (the
+            // legacy test) AND the region's bottom is strictly below the
+            // body's top (for every pre-V2-17 shape bottom == 0 — the
+            // second test is then implied by the loop bound, the
+            // bit-identical root; a state-1 slab's bottom = kSlabHalf is
+            // what it adds: a body entirely BELOW the slab's region does
+            // not count as clamped by it).
+            const SolidRange rng =
+                solidRange(id, m_position, m_position, BlockPos {cx, y, cz});
             frontBlocks =
-                static_cast<float>(y) +
-                solidTopHeight(id, m_position, m_position, BlockPos {cx, y, cz}) >
-                m_position.y;
+                static_cast<float>(y) + rng.bottom < m_position.y + m_height &&
+                static_cast<float>(y) + rng.top > m_position.y;
         }
         if (!frontBlocks) {
             continue;
@@ -601,8 +644,9 @@ void Entity::stepUp(const Vec3& wishDir, float distPerTick) {
         // (top < 1.0) still step as before.
         const BlockID frontId = m_world.getBlock(cx, fy, cz);
         const float frontTop =
-            solidTopHeight(frontId, m_position, m_position,
-                           BlockPos {cx, fy, cz});
+            solidRange(frontId, m_position, m_position,
+                       BlockPos {cx, fy, cz})
+                .top;
         if (frontTop <= 0.0f || frontTop > 1.0f + kStepUpTopTol ||
             isSolid(m_world.getBlock(cx, fy + 1, cz)) ||
             isSolid(m_world.getBlock(cx, fy + 2, cz))) {
@@ -766,7 +810,7 @@ bool Entity::isRestingOnSolid() const {
                 const Vec3 mx {m_position.x + half, m_position.y + m_height,
                                m_position.z + half};
                 const float top =
-                    solidTopHeight(m_world.getBlock(x, y, z), mn, mx, cell);
+                    solidRange(m_world.getBlock(x, y, z), mn, mx, cell).top;
                 if (top > 0.0f &&
                     std::abs(m_position.y -
                              (static_cast<float>(y) + top)) <= kFaceEps) {

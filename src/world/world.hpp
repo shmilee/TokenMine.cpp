@@ -91,7 +91,7 @@ public:
     // model.state_count block's state 0..count-1). Same coordinate
     // conventions as getFluid: y outside [0, kWorldHeight) or a chunk that
     // was never created reads the sentinel 255 (kBlockStateUnset) — the
-    // collision (solidTopHeight) + the mesh (emitStairs) + the save
+    // collision (solidRange) + the mesh (emitStairs / emitSlab) + the save
     // derivation fall back to the block's state default
     // (Block::stateDefault). Written by the game (the setBlock choke point,
     // the placement, the rotation); read by the collision + the mesh + the

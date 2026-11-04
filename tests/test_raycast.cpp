@@ -57,31 +57,35 @@ bool vecNear(const Vec3& a, const Vec3& b, float eps = 1e-4f) {
 // -- geometry -----------------------------------------------------------------
 
 TEST(RaycastTest, EmptyWorldNoHit) {
+    BlockRegistry blocks = makeBlocks();
     World world;
-    EXPECT_FALSE(raycastBlock(world, {0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, -1.0f},
+    EXPECT_FALSE(raycastBlock(world, blocks, {0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, -1.0f},
                               kInfT).has_value());
 }
 
 TEST(RaycastTest, ZeroDirectionNoHit) {
+    BlockRegistry blocks = makeBlocks();
     World world;
     ASSERT_TRUE(world.setBlock(0, 0, -1, BlockID{1}));
-    EXPECT_FALSE(raycastBlock(world, {0.5f, 0.5f, 0.5f}, Vec3::zero(),
+    EXPECT_FALSE(raycastBlock(world, blocks, {0.5f, 0.5f, 0.5f}, Vec3::zero(),
                               kInfT).has_value());
 }
 
 TEST(RaycastTest, NonPositiveReachNoHit) {
+    BlockRegistry blocks = makeBlocks();
     World world;
     ASSERT_TRUE(world.setBlock(0, 0, -1, BlockID{1}));
-    EXPECT_FALSE(raycastBlock(world, {0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, -1.0f},
+    EXPECT_FALSE(raycastBlock(world, blocks, {0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, -1.0f},
                               0.0f).has_value());
-    EXPECT_FALSE(raycastBlock(world, {0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, -1.0f},
+    EXPECT_FALSE(raycastBlock(world, blocks, {0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, -1.0f},
                               -1.0f).has_value());
 }
 
 TEST(RaycastTest, HitsBlockInFront) {
+    BlockRegistry blocks = makeBlocks();
     World world;
     ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID{1}));
-    auto hit = raycastBlock(world, {0.5f, 0.5f, 2.5f}, {0.0f, 0.0f, -1.0f},
+    auto hit = raycastBlock(world, blocks, {0.5f, 0.5f, 2.5f}, {0.0f, 0.0f, -1.0f},
                             kInfT);
     ASSERT_TRUE(hit.has_value());
     EXPECT_EQ(hit->block.x, 0);
@@ -94,16 +98,18 @@ TEST(RaycastTest, HitsBlockInFront) {
 }
 
 TEST(RaycastTest, StopsAtFirstBlock) {
+    BlockRegistry blocks = makeBlocks();
     World world;
     ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID{1}));
     ASSERT_TRUE(world.setBlock(0, 0, -1, BlockID{1}));
-    auto hit = raycastBlock(world, {0.5f, 0.5f, 2.5f}, {0.0f, 0.0f, -1.0f},
+    auto hit = raycastBlock(world, blocks, {0.5f, 0.5f, 2.5f}, {0.0f, 0.0f, -1.0f},
                             kInfT);
     ASSERT_TRUE(hit.has_value());
     EXPECT_EQ(hit->block.z, 0); // the nearer block wins
 }
 
 TEST(RaycastTest, AllSixFaceNormals) {
+    BlockRegistry blocks = makeBlocks();
     const BlockID stone {1};
     struct Case {
         Vec3 origin;
@@ -121,7 +127,7 @@ TEST(RaycastTest, AllSixFaceNormals) {
     for (const Case& c : cases) {
         World world;
         ASSERT_TRUE(world.setBlock(0, 0, 0, stone));
-        auto hit = raycastBlock(world, c.origin, c.dir, kInfT);
+        auto hit = raycastBlock(world, blocks, c.origin, c.dir, kInfT);
         ASSERT_TRUE(hit.has_value());
         EXPECT_EQ(hit->block.x, 0) << "case " << c.origin.x;
         EXPECT_EQ(hit->block.y, 0);
@@ -133,12 +139,13 @@ TEST(RaycastTest, AllSixFaceNormals) {
 }
 
 TEST(RaycastTest, DiagonalRayHitsExpectedCell) {
+    BlockRegistry blocks = makeBlocks();
     World world;
     ASSERT_TRUE(world.setBlock(1, 0, 0, BlockID{1}));
     // direction (2,1,0)/sqrt(5) from (0.5,0.5,0.5): crosses the x=1 plane
     // at t = 0.5/sqrt(5)/2 = sqrt(5)/4 ~ 0.559, where y = 0.75 (cell y=0).
     const float inv = 1.0f / std::sqrt(5.0f);
-    auto hit = raycastBlock(world, {0.5f, 0.5f, 0.5f},
+    auto hit = raycastBlock(world, blocks, {0.5f, 0.5f, 0.5f},
                             {2.0f * inv, 1.0f * inv, 0.0f}, kInfT);
     ASSERT_TRUE(hit.has_value());
     EXPECT_EQ(hit->block.x, 1);
@@ -149,6 +156,7 @@ TEST(RaycastTest, DiagonalRayHitsExpectedCell) {
 }
 
 TEST(RaycastTest, NegativeCoordinates) {
+    BlockRegistry blocks = makeBlocks();
     World world;
     ASSERT_TRUE(world.setBlock(-5, 3, -2, BlockID{1}));
     // From inside cell (-4,3,-1) with direction (-2,0,-3)/sqrt(13): first
@@ -156,7 +164,7 @@ TEST(RaycastTest, NegativeCoordinates) {
     // (No corner tie: the two planes are crossed at t = sqrt(13)/6 and
     // t = sqrt(13)/4.)
     const float inv = 1.0f / std::sqrt(13.0f);
-    auto hit = raycastBlock(world, {-3.5f, 3.5f, -0.5f},
+    auto hit = raycastBlock(world, blocks, {-3.5f, 3.5f, -0.5f},
                             {-2.0f * inv, 0.0f, -3.0f * inv}, kInfT);
     ASSERT_TRUE(hit.has_value());
     EXPECT_EQ(hit->block.x, -5);
@@ -167,35 +175,38 @@ TEST(RaycastTest, NegativeCoordinates) {
 }
 
 TEST(RaycastTest, BeyondReachNoHit) {
+    BlockRegistry blocks = makeBlocks();
     World world;
     // The near face of cell (0,0,-1) is the z=0 plane: distance 5.5 from
     // the origin.
     ASSERT_TRUE(world.setBlock(0, 0, -1, BlockID{1}));
     const Vec3 origin {0.5f, 0.5f, 5.5f};
     const Vec3 dir {0.0f, 0.0f, -1.0f};
-    EXPECT_FALSE(raycastBlock(world, origin, dir, 5.0f).has_value());
-    auto hit = raycastBlock(world, origin, dir, 5.5f);
+    EXPECT_FALSE(raycastBlock(world, blocks, origin, dir, 5.0f).has_value());
+    auto hit = raycastBlock(world, blocks, origin, dir, 5.5f);
     ASSERT_TRUE(hit.has_value()); // exactly at reach still hits
     EXPECT_NEAR(hit->distance, 5.5f, 1e-4f);
 }
 
 TEST(RaycastTest, OriginInsideBlockSkipsIt) {
+    BlockRegistry blocks = makeBlocks();
     World world;
     ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID{1}));
     ASSERT_TRUE(world.setBlock(0, 0, -1, BlockID{1}));
     // The eye is inside the first block: it is skipped, the next one wins.
-    auto hit = raycastBlock(world, {0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, -1.0f},
+    auto hit = raycastBlock(world, blocks, {0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, -1.0f},
                             kInfT);
     ASSERT_TRUE(hit.has_value());
     EXPECT_EQ(hit->block.z, -1);
 }
 
 TEST(RaycastTest, OriginOnCellBoundary) {
+    BlockRegistry blocks = makeBlocks();
     World world;
     ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID{1}));
     // The eye sits exactly on the z=1 plane: the cell ahead (z=0) must be
     // tested immediately, not missed by an off-by-one.
-    auto hit = raycastBlock(world, {0.5f, 0.5f, 1.0f}, {0.0f, 0.0f, -1.0f},
+    auto hit = raycastBlock(world, blocks, {0.5f, 0.5f, 1.0f}, {0.0f, 0.0f, -1.0f},
                             kInfT);
     ASSERT_TRUE(hit.has_value());
     EXPECT_EQ(hit->block.z, 0);
@@ -203,25 +214,27 @@ TEST(RaycastTest, OriginOnCellBoundary) {
 }
 
 TEST(RaycastTest, ParallelAxesNeverCrossed) {
+    BlockRegistry blocks = makeBlocks();
     World world;
     // A slab of stone at z=-3 spanning all x,y tested; the ray travels
     // purely along X (dy=dz=0) at y=0.5,z=0.5 and must NOT hit it...
     ASSERT_TRUE(world.setBlock(5, 0, -3, BlockID{1}));
-    EXPECT_FALSE(raycastBlock(world, {0.5f, 0.5f, 0.5f}, {1.0f, 0.0f, 0.0f},
+    EXPECT_FALSE(raycastBlock(world, blocks, {0.5f, 0.5f, 0.5f}, {1.0f, 0.0f, 0.0f},
                               100.0f).has_value());
     // ...while a ray with a z component does.
     ASSERT_TRUE(world.setBlock(5, 0, 0, BlockID{1}));
-    EXPECT_TRUE(raycastBlock(world, {0.5f, 0.5f, 0.5f}, {1.0f, 0.0f, 0.0f},
+    EXPECT_TRUE(raycastBlock(world, blocks, {0.5f, 0.5f, 0.5f}, {1.0f, 0.0f, 0.0f},
                              100.0f).has_value());
 }
 
 TEST(RaycastTest, FliesOutOfWorldWithoutHit) {
+    BlockRegistry blocks = makeBlocks();
     World world;
     ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID{1}));
     // Start above the world's Y range and shoot further up: getBlock reads
     // air, so there is no hit even with a huge reach.
     EXPECT_FALSE(
-        raycastBlock(world, {0.5f, 200.5f, 0.5f}, {0.0f, 1.0f, 0.0f},
+        raycastBlock(world, blocks, {0.5f, 200.5f, 0.5f}, {0.0f, 1.0f, 0.0f},
                      1000.0f)
             .has_value());
 }
@@ -233,7 +246,7 @@ TEST(RaycastTest, NonSolidBlockIsHitGeometrically) {
     const BlockID glass = blocks.idForName("glass");
     World world;
     ASSERT_TRUE(world.setBlock(0, 0, -1, glass));
-    auto hit = raycastBlock(world, {0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, -1.0f},
+    auto hit = raycastBlock(world, blocks, {0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, -1.0f},
                             kInfT);
     ASSERT_TRUE(hit.has_value());
     EXPECT_EQ(world.getBlock(hit->block.x, hit->block.y, hit->block.z), glass);
@@ -248,7 +261,7 @@ TEST(RaycastTest, RaycastPassesThroughFluid) {
     world.getOrCreateChunk({0, 0, 0});
     ASSERT_TRUE(world.setFluid(0, 0, 0, FluidKind::Water, kMaxFluidLevel));
     ASSERT_TRUE(world.setBlock(0, 0, -1, BlockID{1}));
-    auto hit = raycastBlock(world, {0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, -1.0f},
+    auto hit = raycastBlock(world, blocks, {0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, -1.0f},
                             kInfT);
     ASSERT_TRUE(hit.has_value());
     EXPECT_EQ(hit->block, (BlockPos{0, 0, -1}));
@@ -391,66 +404,73 @@ TEST(RaycastTest, CannotPlaceInCellPlayerIsWalkingInto) {
 // -- line of sight (Phase 38, skeleton shooting) --------------------------------
 
 TEST(RaycastTest, LineOfSightClearThroughAir) {
+    BlockRegistry blocks = makeBlocks();
     World world;
-    EXPECT_TRUE(hasLineOfSight(world, {0.5f, 1.5f, 5.5f}, {0.5f, 1.5f, -4.5f}));
+    EXPECT_TRUE(hasLineOfSight(world, blocks, {0.5f, 1.5f, 5.5f}, {0.5f, 1.5f, -4.5f}));
 }
 
 TEST(RaycastTest, LineOfSightBlockedByWallBetween) {
+    BlockRegistry blocks = makeBlocks();
     World world;
     // A block in the middle of the segment: the shot must not be fired.
     ASSERT_TRUE(world.setBlock(0, 1, 0, BlockID{1}));
-    EXPECT_FALSE(hasLineOfSight(world, {0.5f, 1.5f, 5.5f},
+    EXPECT_FALSE(hasLineOfSight(world, blocks, {0.5f, 1.5f, 5.5f},
                                 {0.5f, 1.5f, -4.5f}));
 }
 
 TEST(RaycastTest, LineOfSightClearWhenWallIsBeyondTheTarget) {
+    BlockRegistry blocks = makeBlocks();
     World world;
     // A wall PAST the target does not block the segment.
     ASSERT_TRUE(world.setBlock(0, 1, -6, BlockID{1}));
-    EXPECT_TRUE(hasLineOfSight(world, {0.5f, 1.5f, 5.5f},
+    EXPECT_TRUE(hasLineOfSight(world, blocks, {0.5f, 1.5f, 5.5f},
                                {0.5f, 1.5f, -4.5f}));
 }
 
 TEST(RaycastTest, LineOfSightExemptFromCell) {
+    BlockRegistry blocks = makeBlocks();
     World world;
     // The ray never hits the block it starts in (raycastBlock convention):
     // a solid cell around `from` is transparent to the shot.
     ASSERT_TRUE(world.setBlock(0, 1, 5, BlockID{1}));
-    EXPECT_TRUE(hasLineOfSight(world, {0.5f, 1.5f, 5.5f},
+    EXPECT_TRUE(hasLineOfSight(world, blocks, {0.5f, 1.5f, 5.5f},
                                {0.5f, 1.5f, -4.5f}));
 }
 
 TEST(RaycastTest, LineOfSightDiagonalWall) {
+    BlockRegistry blocks = makeBlocks();
     World world;
     // A diagonal line from (0.5, 1.5, 4.5) to (3.5, 1.5, 0.5) crosses the
     // cells (1, 1, 3), (2, 1, 2), ... — a block in any of them blocks,
     // one in a cell the line never enters does not.
     ASSERT_TRUE(world.setBlock(2, 1, 2, BlockID{1}));
-    EXPECT_FALSE(hasLineOfSight(world, {0.5f, 1.5f, 4.5f},
+    EXPECT_FALSE(hasLineOfSight(world, blocks, {0.5f, 1.5f, 4.5f},
                                 {3.5f, 1.5f, 0.5f}));
     world = World();
     ASSERT_TRUE(world.setBlock(0, 1, 0, BlockID{1})); // off the diagonal
-    EXPECT_TRUE(hasLineOfSight(world, {0.5f, 1.5f, 4.5f},
+    EXPECT_TRUE(hasLineOfSight(world, blocks, {0.5f, 1.5f, 4.5f},
                                {3.5f, 1.5f, 0.5f}));
 }
 
 TEST(RaycastTest, LineOfSightCoincidentPoints) {
+    BlockRegistry blocks = makeBlocks();
     World world;
     ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID{1}));
-    EXPECT_TRUE(hasLineOfSight(world, {0.5f, 0.5f, 0.5f},
+    EXPECT_TRUE(hasLineOfSight(world, blocks, {0.5f, 0.5f, 0.5f},
                                {0.5f, 0.5f, 0.5f}));
 }
 
 // -- raycastFluid (Phase 47, the bucket's target ray) ------------------------
 
 TEST(RaycastFluidTest, HitsFluidCellInOpenSpace) {
+    BlockRegistry blocks = makeBlocks();
     // The first cell carrying fluid is returned (an otherwise empty
     // world). setFluid requires an existing chunk (the void stays dry),
     // so one block creates it (off the ray's path).
     World world;
     ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID{1}));
     ASSERT_TRUE(world.setFluid(5, 3, 2, FluidKind::Water, 8));
-    const auto hit = raycastFluid(world, {0.5f, 3.5f, 2.5f},
+    const auto hit = raycastFluid(world, blocks, {0.5f, 3.5f, 2.5f},
                                   {1.0f, 0.0f, 0.0f}, 20.0f);
     ASSERT_TRUE(hit.has_value());
     EXPECT_EQ(hit->x, 5);
@@ -459,6 +479,7 @@ TEST(RaycastFluidTest, HitsFluidCellInOpenSpace) {
 }
 
 TEST(RaycastFluidTest, BlockOccludesTheRay) {
+    BlockRegistry blocks = makeBlocks();
     // A solid wall between the origin and the water returns the BLOCK
     // cell (Minecraft: the bucket uses block targeting — you cannot
     // scoop through a wall). The caller then sees fluid level 0 and does
@@ -466,7 +487,7 @@ TEST(RaycastFluidTest, BlockOccludesTheRay) {
     World world;
     ASSERT_TRUE(world.setBlock(3, 3, 0, BlockID{1}));
     ASSERT_TRUE(world.setFluid(6, 3, 0, FluidKind::Water, 8));
-    const auto hit = raycastFluid(world, {0.5f, 3.5f, 0.5f},
+    const auto hit = raycastFluid(world, blocks, {0.5f, 3.5f, 0.5f},
                                   {1.0f, 0.0f, 0.0f}, 20.0f);
     ASSERT_TRUE(hit.has_value());
     EXPECT_EQ(hit->x, 3);
@@ -474,11 +495,12 @@ TEST(RaycastFluidTest, BlockOccludesTheRay) {
 }
 
 TEST(RaycastFluidTest, StopsAtFirstOccluder) {
+    BlockRegistry blocks = makeBlocks();
     // Fluid BEFORE the block: the fluid cell wins (it is nearer).
     World world;
     ASSERT_TRUE(world.setBlock(4, 1, 1, BlockID{1})); // creates the chunk
     ASSERT_TRUE(world.setFluid(2, 1, 1, FluidKind::Water, 7)); // flowing (not a source)
-    const auto hit = raycastFluid(world, {0.5f, 1.5f, 1.5f},
+    const auto hit = raycastFluid(world, blocks, {0.5f, 1.5f, 1.5f},
                                   {1.0f, 0.0f, 0.0f}, 20.0f);
     ASSERT_TRUE(hit.has_value());
     EXPECT_EQ(hit->x, 2);
@@ -486,22 +508,25 @@ TEST(RaycastFluidTest, StopsAtFirstOccluder) {
 }
 
 TEST(RaycastFluidTest, BeyondReachNoHit) {
+    BlockRegistry blocks = makeBlocks();
     World world;
     ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID{1})); // creates the chunk
     ASSERT_TRUE(world.setFluid(9, 1, 1, FluidKind::Water, 8));
-    EXPECT_FALSE(raycastFluid(world, {0.5f, 1.5f, 1.5f},
+    EXPECT_FALSE(raycastFluid(world, blocks, {0.5f, 1.5f, 1.5f},
                               {1.0f, 0.0f, 0.0f}, 5.0f)
                      .has_value());
 }
 
 TEST(RaycastFluidTest, EmptyWorldNoHit) {
+    BlockRegistry blocks = makeBlocks();
     World world;
-    EXPECT_FALSE(raycastFluid(world, {0.5f, 1.5f, 1.5f},
+    EXPECT_FALSE(raycastFluid(world, blocks, {0.5f, 1.5f, 1.5f},
                               {1.0f, 0.0f, 0.0f}, 20.0f)
                      .has_value());
 }
 
 TEST(RaycastFluidTest, OriginCellFluidIsSkipped) {
+    BlockRegistry blocks = makeBlocks();
     // The ray never hits the cell it starts in (the raycastBlock
     // convention): water around the eye is transparent, water further
     // ahead is not.
@@ -509,10 +534,282 @@ TEST(RaycastFluidTest, OriginCellFluidIsSkipped) {
     ASSERT_TRUE(world.setBlock(0, 0, 0, BlockID{1})); // creates the chunk
     ASSERT_TRUE(world.setFluid(0, 1, 1, FluidKind::Water, 8));  // the origin cell
     ASSERT_TRUE(world.setFluid(3, 1, 1, FluidKind::Water, 8));
-    const auto hit = raycastFluid(world, {0.5f, 1.5f, 1.5f},
+    const auto hit = raycastFluid(world, blocks, {0.5f, 1.5f, 1.5f},
                                   {1.0f, 0.0f, 0.0f}, 20.0f);
     ASSERT_TRUE(hit.has_value());
     EXPECT_EQ(hit->x, 3);
+}
+
+// -- V2-17 gap fill: the partial-solid-aware slab raycast ---------------------
+//
+// A slab cell is solid in ONE half only (state 0 / the stateless bed slab:
+// the bottom half y 0..0.5; state 1: the top half y 0.5..1; state 2: the
+// full cell). The shared dda walk (the block ray + the fluid ray) now
+// treats the slab's AIR half as pass-through (the Minecraft raycast
+// semantics, wiki-verified 11-04): a ray entering the air half hits either
+// the slab's interior surface (the y = 0.5 plane — the hit cell is the
+// slab cell, the normal points back at the ray: +Y for a bottom slab,
+// -Y for a top slab) or the block BEHIND; a ray entering the solid half
+// hits the boundary face exactly as before; a double slab (state 2) is a
+// whole cell (unchanged).
+
+namespace {
+
+BlockRegistry makeSlabBlocks() {
+    BlockRegistry blocks;
+    auto r = blocks.registerBlock(parseJson(
+        R"({"id":"stone","model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    r = blocks.registerBlock(parseJson(
+        R"({"id":"slab","model":{"shape":"slab",)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    r = blocks.registerBlock(parseJson(
+        R"({"id":"slab3","model":{"shape":"slab","state_count":3,)"
+        R"("state_default":0,"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    return blocks;
+}
+
+} // namespace
+
+TEST(RaycastSlabTest, BottomSlabAirHalfPassesThrough) {
+    // A state-0 slab at (0,0,0) (solid y 0..0.5) + a stone at (1,0,0). A
+    // horizontal ray at local-y 0.7 (the slab's AIR half) passes THROUGH
+    // the slab cell and hits the stone's -X face — the cell-DDA legacy hit
+    // the slab cell itself (the merge-unreachable root).
+    BlockRegistry blocks = makeSlabBlocks();
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, blocks.idForName("slab3")));
+    ASSERT_TRUE(world.setBlockState(0, 0, 0, 0));
+    ASSERT_TRUE(world.setBlock(1, 0, 0, blocks.idForName("stone")));
+    auto hit = raycastBlock(world, blocks, {-0.5f, 0.7f, 0.5f},
+                            {1.0f, 0.0f, 0.0f}, kInfT);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->block, (BlockPos {1, 0, 0}));
+    EXPECT_TRUE(vecNear(hit->normal, Vec3 {-1.0f, 0.0f, 0.0f}));
+    EXPECT_NEAR(hit->distance, 1.5f, 1e-4f); // the x = 1 face, past the slab
+}
+
+TEST(RaycastSlabTest, TopSlabLowerHalfPassesThrough) {
+    // The twin: a state-1 slab at (0,0,0) (solid y 0.5..1) — a horizontal
+    // ray at local-y 0.3 (its AIR half, the lower one) passes through and
+    // hits the stone behind.
+    BlockRegistry blocks = makeSlabBlocks();
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, blocks.idForName("slab3")));
+    ASSERT_TRUE(world.setBlockState(0, 0, 0, 1));
+    ASSERT_TRUE(world.setBlock(1, 0, 0, blocks.idForName("stone")));
+    auto hit = raycastBlock(world, blocks, {-0.5f, 0.3f, 0.5f},
+                            {1.0f, 0.0f, 0.0f}, kInfT);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->block, (BlockPos {1, 0, 0}));
+    EXPECT_TRUE(vecNear(hit->normal, Vec3 {-1.0f, 0.0f, 0.0f}));
+    EXPECT_NEAR(hit->distance, 1.5f, 1e-4f); // the x = 1 face, past the slab
+}
+
+TEST(RaycastSlabTest, BottomSlabInteriorTopSurfaceHit) {
+    // A state-0 slab at (0,0,0): a ray descending into the cell's TOP
+    // (entry local-y 1.0 = the air half) crosses the interior surface
+    // (y = 0.5, the slab's top face) INSIDE the cell: the hit cell is the
+    // slab cell itself, the normal points back at the ray (+Y), and the
+    // distance is the surface crossing (1.7 - 0.5 = 1.2).
+    BlockRegistry blocks = makeSlabBlocks();
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, blocks.idForName("slab3")));
+    ASSERT_TRUE(world.setBlockState(0, 0, 0, 0));
+    auto hit = raycastBlock(world, blocks, {0.5f, 1.7f, 0.5f},
+                            {0.0f, -1.0f, 0.0f}, kInfT);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->block, (BlockPos {0, 0, 0}));
+    EXPECT_TRUE(vecNear(hit->normal, Vec3 {0.0f, 1.0f, 0.0f}));
+    EXPECT_NEAR(hit->distance, 1.2f, 1e-4f);
+}
+
+TEST(RaycastSlabTest, TopSlabInteriorBottomSurfaceHit) {
+    // The twin: a state-1 slab at (0,0,0): a ray ASCENDING into the cell's
+    // bottom (entry local-y 0.0 = the air half) crosses the interior
+    // surface (y = 0.5, the slab's bottom face) inside the cell: the hit
+    // cell is the slab cell, the normal -Y (back at the ray), distance
+    // 0.5 - (-0.3) = 0.8.
+    BlockRegistry blocks = makeSlabBlocks();
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, blocks.idForName("slab3")));
+    ASSERT_TRUE(world.setBlockState(0, 0, 0, 1));
+    auto hit = raycastBlock(world, blocks, {0.5f, -0.3f, 0.5f},
+                            {0.0f, 1.0f, 0.0f}, kInfT);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->block, (BlockPos {0, 0, 0}));
+    EXPECT_TRUE(vecNear(hit->normal, Vec3 {0.0f, -1.0f, 0.0f}));
+    EXPECT_NEAR(hit->distance, 0.8f, 1e-4f);
+}
+
+TEST(RaycastSlabTest, DoubleSlabIsAWholeCell) {
+    // State 2 (the double slab) is a FULL cell: no air half to pass
+    // through — side and top entries hit the boundary face exactly as a
+    // whole block does (the pre-gap-fill behavior, unchanged).
+    BlockRegistry blocks = makeSlabBlocks();
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, blocks.idForName("slab3")));
+    ASSERT_TRUE(world.setBlockState(0, 0, 0, 2));
+    // The side entry at local-y 0.7 (an "air half" for any other state)
+    // hits the -X face anyway.
+    auto hit = raycastBlock(world, blocks, {-0.5f, 0.7f, 0.5f},
+                            {1.0f, 0.0f, 0.0f}, kInfT);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->block, (BlockPos {0, 0, 0}));
+    EXPECT_TRUE(vecNear(hit->normal, Vec3 {-1.0f, 0.0f, 0.0f}));
+    EXPECT_NEAR(hit->distance, 0.5f, 1e-4f);
+    // The top entry hits the +Y face at the cell boundary (NOT the
+    // interior surface at y = 0.5).
+    World world2;
+    ASSERT_TRUE(world2.setBlock(0, 0, 0, blocks.idForName("slab3")));
+    ASSERT_TRUE(world2.setBlockState(0, 0, 0, 2));
+    auto hit2 = raycastBlock(world2, blocks, {0.5f, 1.7f, 0.5f},
+                             {0.0f, -1.0f, 0.0f}, kInfT);
+    ASSERT_TRUE(hit2.has_value());
+    EXPECT_EQ(hit2->block, (BlockPos {0, 0, 0}));
+    EXPECT_TRUE(vecNear(hit2->normal, Vec3 {0.0f, 1.0f, 0.0f}));
+    EXPECT_NEAR(hit2->distance, 0.7f, 1e-4f); // the y = 1 boundary, not 1.2
+}
+
+TEST(RaycastSlabTest, TopSlabTopFaceEntryIsBoundaryHit) {
+    // The inclusive-boundary pin: a ray DESCENDING into a state-1 (top)
+    // slab through its top face (entry local-y 1.0 = the slab's solid
+    // top) hits the cell boundary at the entry (t = 0.7, the y = 1
+    // crossing) — NOT the interior surface at y = 0.5 (t = 1.2, the
+    // bottom slab's twin), and not a pass-through. The material is
+    // exactly at the entry point (the solid range's inclusive top end).
+    BlockRegistry blocks = makeSlabBlocks();
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, blocks.idForName("slab3")));
+    ASSERT_TRUE(world.setBlockState(0, 0, 0, 1));
+    auto hit = raycastBlock(world, blocks, {0.5f, 1.7f, 0.5f},
+                            {0.0f, -1.0f, 0.0f}, kInfT);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->block, (BlockPos {0, 0, 0}));
+    EXPECT_TRUE(vecNear(hit->normal, Vec3 {0.0f, 1.0f, 0.0f}));
+    EXPECT_NEAR(hit->distance, 0.7f, 1e-4f); // the entry, not the surface
+}
+
+TEST(RaycastSlabTest, SlabSolidHalfHitUnchanged) {
+    // A ray entering the SOLID half hits the boundary face exactly as
+    // before the gap fill (the pre-existing behavior, unchanged): the
+    // side entry at local-y 0.3 (the bottom slab's solid half) hits the
+    // -X face; the bottom entry at local-y 0.0 hits the -Y face.
+    BlockRegistry blocks = makeSlabBlocks();
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, blocks.idForName("slab3")));
+    ASSERT_TRUE(world.setBlockState(0, 0, 0, 0));
+    auto hit = raycastBlock(world, blocks, {-0.5f, 0.3f, 0.5f},
+                            {1.0f, 0.0f, 0.0f}, kInfT);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->block, (BlockPos {0, 0, 0}));
+    EXPECT_TRUE(vecNear(hit->normal, Vec3 {-1.0f, 0.0f, 0.0f}));
+    EXPECT_NEAR(hit->distance, 0.5f, 1e-4f);
+    auto hit2 = raycastBlock(world, blocks, {0.5f, -0.3f, 0.5f},
+                             {0.0f, 1.0f, 0.0f}, kInfT);
+    ASSERT_TRUE(hit2.has_value());
+    EXPECT_EQ(hit2->block, (BlockPos {0, 0, 0}));
+    EXPECT_TRUE(vecNear(hit2->normal, Vec3 {0.0f, -1.0f, 0.0f}));
+    EXPECT_NEAR(hit2->distance, 0.3f, 1e-4f);
+}
+
+TEST(RaycastSlabTest, LateralExitBeforeTheSurfacePassesThrough) {
+    // A state-0 slab at (0,0,0): a ray descending into the cell's top
+    // (entry at y = 1, local-x 0.15) angled at |dx|/|dy| = 0.5: it leaves
+    // the cell through the x = 0 face (absolute t = 0.7826 + 0.15/0.4472
+    // = 1.1180) BEFORE reaching the interior surface (y = 0.5, at
+    // absolute t = 0.7826 + 0.5/0.8944 = 1.3416): it passes through the
+    // air half and keeps walking — no hit in an otherwise empty world
+    // (the cell-DDA legacy hit the cell at the entry, t = 0.7826).
+    BlockRegistry blocks = makeSlabBlocks();
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, blocks.idForName("slab3")));
+    ASSERT_TRUE(world.setBlockState(0, 0, 0, 0));
+    const float len = std::sqrt(1.0f + 0.25f); // |(0.5, 1, 0)|
+    const Vec3 dir {-0.5f / len, -1.0f / len, 0.0f};
+    EXPECT_FALSE(raycastBlock(world, blocks, {0.5f, 1.7f, 0.5f}, dir,
+                              kInfT).has_value());
+}
+
+TEST(RaycastSlabTest, MergeReachableThroughSlabAirHalf) {
+    // The gate-189 S2b root, pinned: a state-0 slab at (0,0,0) + an anchor
+    // stone at (1,0,0). A ray through the slab's air half (local-y 0.7)
+    // hits the anchor's -X face — the placement target (the face
+    // neighbor) is the SLAB CELL itself, so the placeBlock slab-merge
+    // path (slabMergesToDouble) is reachable (the cell-DDA legacy hit the
+    // slab cell, whose face neighbor was never a slab).
+    BlockRegistry blocks = makeSlabBlocks();
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, blocks.idForName("slab3")));
+    ASSERT_TRUE(world.setBlockState(0, 0, 0, 0));
+    ASSERT_TRUE(world.setBlock(1, 0, 0, blocks.idForName("stone")));
+    auto hit = raycastBlock(world, blocks, {-0.5f, 0.7f, 0.5f},
+                            {1.0f, 0.0f, 0.0f}, kInfT);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->block, (BlockPos {1, 0, 0}));
+    EXPECT_TRUE(vecNear(hit->normal, Vec3 {-1.0f, 0.0f, 0.0f}));
+    // The placement target (the face neighbor of the hit):
+    const BlockPos target {hit->block.x + static_cast<int>(hit->normal.x),
+                           hit->block.y + static_cast<int>(hit->normal.y),
+                           hit->block.z + static_cast<int>(hit->normal.z)};
+    EXPECT_EQ(target, (BlockPos {0, 0, 0})); // the slab cell
+    EXPECT_EQ(world.getBlock(target.x, target.y, target.z),
+              blocks.idForName("slab3"));
+}
+
+TEST(RaycastSlabTest, StatelessSlabAirHalfPassesThrough) {
+    // The gate is the SHAPE (a Slab block), not hasState: a stateless
+    // slab (the bed family's shape, solid in the bottom half) passes the
+    // ray through its air half too (the collision twin).
+    BlockRegistry blocks = makeSlabBlocks();
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, blocks.idForName("slab")));
+    ASSERT_TRUE(world.setBlock(1, 0, 0, blocks.idForName("stone")));
+    auto hit = raycastBlock(world, blocks, {-0.5f, 0.7f, 0.5f},
+                            {1.0f, 0.0f, 0.0f}, kInfT);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->block, (BlockPos {1, 0, 0}));
+}
+
+TEST(RaycastSlabTest, HorizontalRayOnTheSurfacePassesThrough) {
+    // Strictness pin: a horizontal ray running EXACTLY along the
+    // interior surface (local-y 0.5, the bottom slab's top) has no
+    // vertical component toward the solid — it passes through (the
+    // toward-solid rule needs a strict dir.y sign).
+    BlockRegistry blocks = makeSlabBlocks();
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, blocks.idForName("slab3")));
+    ASSERT_TRUE(world.setBlockState(0, 0, 0, 0));
+    EXPECT_FALSE(raycastBlock(world, blocks, {-0.5f, 0.5f, 0.5f},
+                              {1.0f, 0.0f, 0.0f}, kInfT).has_value());
+}
+
+TEST(RaycastSlabTest, ObliqueSideEntryInteriorHit) {
+    // A state-0 slab at (0,0,0): a ray entering the cell's -X face at
+    // local-y 0.7 (the air half) while descending at 45 degrees crosses
+    // the interior surface (y = 0.5) at t = (1.2 - 0.5) / sin(45deg) =
+    // 0.7 * sqrt(2) ~ 0.9899 — inside the cell (the x = 1 exit is at
+    // 1.5 / sin(45deg) ~ 2.1213): the interior hit, normal +Y, at the
+    // exact surface crossing.
+    BlockRegistry blocks = makeSlabBlocks();
+    World world;
+    ASSERT_TRUE(world.setBlock(0, 0, 0, blocks.idForName("slab3")));
+    ASSERT_TRUE(world.setBlockState(0, 0, 0, 0));
+    const float inv = 1.0f / std::sqrt(2.0f);
+    auto hit = raycastBlock(world, blocks, {-0.5f, 1.2f, 0.5f},
+                            {inv, -inv, 0.0f}, kInfT);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->block, (BlockPos {0, 0, 0}));
+    EXPECT_TRUE(vecNear(hit->normal, Vec3 {0.0f, 1.0f, 0.0f}));
+    EXPECT_NEAR(hit->distance, 0.7f * std::sqrt(2.0f), 1e-4f);
 }
 
 // -- FLUID-4: bucketPourTarget (the pour onto a water surface) ----------------

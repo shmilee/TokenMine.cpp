@@ -9,6 +9,47 @@
 > README 只保留里程碑版本（v0.1.0 首个公开版 / v1.0 大版本 /
 > v2.10.0 第一批收官 tag / v2.18.0 二批收官 tag）。
 
+## v2.18.0（2026-11-04）— V2-17 顶部 slab/双 slab（state 化 + 放置瞄准规则 + 同格合并 + partial-aware 射线）（门 189 全 PASS）
+
+二批 GEN 行（消费「slab = 仅下半块」记档 [Phase 85]）；MC 机制
+11-04 wiki 核定（Slab 页：面上半/底面 → 顶 slab、下半 → 底 slab；
+同型上下同格 = 双 slab；**双 slab 破坏 = 整块掉 2**）；**零 format
+bump**（states = format 15 机制，stone_slab 无 state → 有 state 同
+数组新条目）：**stone_slab state 化**（state_count 3：0 底部既有位
+级 / 1 顶部 y 0.5..1 / 2 双 slab 满格）+ **新严格字段 drops_count_
+by_state [1,1,2]**（长度==state_count/零/非整/无 state 块携带全点名
+拒 = 双 slab 破掉 2 MC 材质守恒）；**solidRange 物理扩展**（单 top
+锚格底 → {bottom,top} 区间：0→{0,0.5} 位级 / 1→{0.5,1} / ≥2→{0,1}；
+床/stairs/满块现值逐位不变红线，消费点 hasRoomAt/moveAxis/stepUp
+【顶 slab 顶面恰 1.0 可踏升 MC 同款】/mob 生成 spawnFloorTop 纯函数/
+pathfind）；**emitSlab 三态**（state 0 逐语句未动 / emitSlabTop 镜像
+底面恒绘对称 / emitSlabFull 满格标准剔，slab pass 内绘制 greedy 不
+动；零新剔除规则 = 拼合面无共面双绘）；**放置 slab 规则**（:1173
+自称扩展点消费：命中点 = eye+forward×distance，顶面→0 位级根 / 底面
+→1 天花板贴放 / 侧面 local-y>0.5→1 否则 0 = slabStateFromHit 纯函数
+kSlabHalf 单常量）+ **同格同 id 互补 state 合并 → 双 slab**（仅绕
+canPlaceAt solid 拒保 Y+玩家重叠，消耗 1）+ **破坏 per-state count**
++ **蹲旋转 Slab 形排除**（偏离 4：垂直位非朝向，环转不守恒）；
+**partial-aware slab raycast**（门机范围缺口补口 = 合并 E2E 可达根：
+cell DDA 全遮挡 → 共享 dda walk 子格判定 slabSolidRangeAt：空气半入
+= 穿透【内表面 y=0.5 交点命中 ±Y 法线 + t 位值 / 否则继续】实心半入
+= 整格现行为 / 双 slab = 整格；块射线 5 消费点 + 桶 ×2 + 骨架 LOS +
+第三人称遮挡共享一致零特判；非 slab 格位级不变；**记档行为变更** =
+瞄准底 slab 空气半破身后块 MC 同款）；床 15 块 hasState false 位级
+不变。2455/2455（+23 V2-17 + 12 raycast）、banner v2.18.0、format
+28 不变。门 189：S1 **结构免疫第 70 次免重锚**（≡ 锚 179027 零
+diff + savenorm EXACT；fixer 终版二进制自证第 71 次）/ S2 三臂×双侧
+（**顶 slab** 石底面瞄准 → state 1【旧侧 legacy 底 slab 互斥】/
+**合并** 锚块 +Z 面上半【partial-aware 射线穿 slab 空气半命中锚面 →
+target = slab 格】→ state 2 物品耗尽【旧侧 cell DDA 邻格叠第二块无
+state = 互斥最强形】/ **双 slab 破 2** hold 3.3s 断点时序【旧侧底
+slab 破 1】+ 掉落 2.83>磁力 2.5 留地断言）/ S3 / S6 6/6 点名 / 性能
+同档（9/1/3 逐位 + fluids/blocks/**states 全集合恒等**【V2-17 不触
+worldgen 强口径】+ 3 slab 结构自成本 0.62/0.50 同档）。PITS 383
+（stateful 块场景 journal 须 states 条目【init 拒 = 输入静默丢失】/
+cell DDA 全遮挡 = 合并不可达【probe 三组对照定位】/ 临时插桩定界后
+移除重建）。详见 docs/archive/phase-2.18.0.md。
+
 ## v2.17.0（2026-11-04）— V2-16 雪原/针叶林 biome（snowy_taiga + snow 满块 + 针叶树 + 演示区结构保护）+ 音效缺陷族 13 件修复（门 188 全 PASS）
 
 二批 GEN 行（「中」；消费「无 clay/sandstone/snow」土类缺失声明）；MC
@@ -293,5 +334,5 @@ PERF-WIN 全指标同档——时钟 +1 文本 draw 成本不可测）。门协�
 PASS 源）。详见 docs/archive/phase-2.11.0.md。
 
 ## v2.x 第二批（V2-11~V2-18，进行中）
-（V2-17 顶部 slab 起，逐版条目入此。）
+（V2-18 AO 起，逐版条目入此。）
 

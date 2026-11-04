@@ -17,7 +17,9 @@
 
 #include <cmath>
 
+#include "block/block_registry.hpp"
 #include "core/camera.hpp"
+#include "core/json.hpp"
 #include "core/third_person.hpp"
 #include "world/coordinates.hpp"
 #include "world/world.hpp"
@@ -25,6 +27,26 @@
 using namespace mc;
 
 namespace {
+
+// V2-17 gap fill: the occlusion ray is partial-solid-aware for slab cells
+// (the registry is needed for the shape / state read). One block (id 1,
+// the raw BlockID{1} the tests place) — no slabs, so the walk is the
+// whole-cell legacy for every pin below.
+BlockRegistry makeBlocks() {
+    BlockRegistry blocks;
+    auto j = Json::parse(
+        R"({"id":"stone","model":{"textures":{"top":"t","side":"t","bottom":"t"}}})");
+    if (!j.ok()) {
+        ADD_FAILURE() << j.error().message;
+        return blocks;
+    }
+    auto r = blocks.registerBlock(*j);
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    return blocks;
+}
+
 
 // A fixed eye position (yaw 0 = facing -Z puts the ideal camera at +Z
 // behind it, 4 blocks off). sin(0) = 0 and cos(0) = 1 are exact in
@@ -143,23 +165,25 @@ TEST(ThirdPersonTest, OrbitCenterLiftPins) {
 // -- occlusion resolve ---------------------------------------------------------
 
 TEST(ThirdPersonTest, ResolveEmptyWorldIsIdeal) {
+    BlockRegistry blocks = makeBlocks();
     World world; // no chunks: every read is air
     // 2.0.0: the yaw-0/pitch-0 orbit center is exactly the eye +
     // (0, 0.4, 0) (up_cam = +Y), so the ideal is exactly the orbit +
     // (0, 0, 4): the unoccluded path returns it BIT-exactly.
     const Vec3 orbit = thirdPersonOrbitCenter(kEye, 0.0f, 0.0f);
     const Vec3 ideal {22.5f, 40.9f, 4.5f};
-    const Vec3 cam = resolveThirdPersonCamera(world, orbit, 0.0f, 0.0f);
+    const Vec3 cam = resolveThirdPersonCamera(world, blocks, orbit, 0.0f, 0.0f);
     EXPECT_EQ(cam, ideal);
     // A non-axis orientation too (same function, so bit-exact here).
     const Vec3 orbit2 = thirdPersonOrbitCenter(kEye, 0.4f, -0.2f);
-    const Vec3 cam2 = resolveThirdPersonCamera(world, orbit2, 0.4f, -0.2f);
+    const Vec3 cam2 = resolveThirdPersonCamera(world, blocks, orbit2, 0.4f, -0.2f);
     const Vec3 ideal2 = orbit2 +
         thirdPersonCameraOffset(0.4f, -0.2f, kThirdPersonDistance);
     EXPECT_EQ(cam2, ideal2);
 }
 
 TEST(ThirdPersonTest, ResolveClampsInFrontOfWall) {
+    BlockRegistry blocks = makeBlocks();
     World world;
     // Eye at kEye, yaw 0 / pitch 0 -> 2.0.0: the orbit center at
     // (22.5, 40.9, 0.5) (the eye 0.4 up, up_cam = +Y) and the ideal
@@ -170,13 +194,14 @@ TEST(ThirdPersonTest, ResolveClampsInFrontOfWall) {
     ASSERT_TRUE(world.setBlock(22, 40, 1, BlockID{1}));
     ASSERT_TRUE(world.setBlock(22, 40, 2, BlockID{1}));
     const Vec3 orbit = thirdPersonOrbitCenter(kEye, 0.0f, 0.0f);
-    const Vec3 cam = resolveThirdPersonCamera(world, orbit, 0.0f, 0.0f);
+    const Vec3 cam = resolveThirdPersonCamera(world, blocks, orbit, 0.0f, 0.0f);
     // Stop kCameraOcclusionMargin in front of the face: 4.5 - (1.5 -
     // 0.1) = 3.1 (0.1 in front of the wall's z = 3 face).
     expectVecNear("clamp", cam, 22.5f, 40.9f, 3.1f);
 }
 
 TEST(ThirdPersonTest, ResolveEmbeddedIdealExitsTheFace) {
+    BlockRegistry blocks = makeBlocks();
     // The acceptance scene: the ideal position is INSIDE the wall cell.
     // Eye at (22.5, 39.62, 0.5), yaw 0 / pitch 0 -> 2.0.0: the orbit
     // center at (22.5, 40.02, 0.5) (the eye 0.4 up, up_cam = +Y) and
@@ -193,11 +218,12 @@ TEST(ThirdPersonTest, ResolveEmbeddedIdealExitsTheFace) {
     const Vec3 orbit =
         thirdPersonOrbitCenter(Vec3{22.5f, 39.62f, 0.5f}, 0.0f, 0.0f);
     ASSERT_TRUE(world.setBlock(22, 40, 4, BlockID{1}));
-    const Vec3 cam = resolveThirdPersonCamera(world, orbit, 0.0f, 0.0f);
+    const Vec3 cam = resolveThirdPersonCamera(world, blocks, orbit, 0.0f, 0.0f);
     expectVecNear("embedded", cam, 22.5f, 40.02f, 3.9f);
 }
 
 TEST(ThirdPersonTest, ResolveIgnoresFluids) {
+    BlockRegistry blocks = makeBlocks();
     // A water source between the ideal camera and the eye: the block
     // ray passes through fluids (raycastBlock semantics), so the
     // camera stays at the ideal position bit-exactly.
@@ -206,19 +232,20 @@ TEST(ThirdPersonTest, ResolveIgnoresFluids) {
     ASSERT_TRUE(world.setFluid(22, 40, 3, FluidKind::Water,
                                kMaxFluidLevel));
     const Vec3 orbit = thirdPersonOrbitCenter(kEye, 0.0f, 0.0f);
-    const Vec3 cam = resolveThirdPersonCamera(world, orbit, 0.0f, 0.0f);
+    const Vec3 cam = resolveThirdPersonCamera(world, blocks, orbit, 0.0f, 0.0f);
     const Vec3 ideal {22.5f, 40.9f, 4.5f};
     EXPECT_EQ(cam, ideal);
 }
 
 TEST(ThirdPersonTest, ResolveIgnoresWallBeyondReach) {
+    BlockRegistry blocks = makeBlocks();
     // A wall past the orbit center (more than kThirdPersonDistance from
     // the ideal, at the z = 0 plane = t 4.5 > 4.0): it occludes nothing
     // on the camera->orbit segment.
     World world;
     ASSERT_TRUE(world.setBlock(22, 40, -1, BlockID{1}));
     const Vec3 orbit = thirdPersonOrbitCenter(kEye, 0.0f, 0.0f);
-    const Vec3 cam = resolveThirdPersonCamera(world, orbit, 0.0f, 0.0f);
+    const Vec3 cam = resolveThirdPersonCamera(world, blocks, orbit, 0.0f, 0.0f);
     const Vec3 ideal {22.5f, 40.9f, 4.5f};
     EXPECT_EQ(cam, ideal);
 }
@@ -282,6 +309,7 @@ TEST(ThirdPersonTest, UpCamIsOrthonormalToTheViewAxes) {
 // -- UX-8g: the aim rays leave from the eye in both modes ------------------------
 
 TEST(ThirdPersonTest, EyeAimRayCoincidesWithTheViewAxis) {
+    BlockRegistry blocks = makeBlocks();
     // UX-8g: the interaction raycasts (targetBlock / targetMob / the
     // bucket rays / the arrow origin) leave from the EYE along
     // m_camera.forward() in BOTH camera modes. In third person the
@@ -309,7 +337,7 @@ TEST(ThirdPersonTest, EyeAimRayCoincidesWithTheViewAxis) {
         view.yaw = c[0];
         view.pitch = c[1];
         const Vec3 orbit = thirdPersonOrbitCenter(kEye, c[0], c[1]);
-        const Vec3 cam = resolveThirdPersonCamera(world, orbit, c[0], c[1]);
+        const Vec3 cam = resolveThirdPersonCamera(world, blocks, orbit, c[0], c[1]);
         // The camera is on the screen-center line (through the lifted
         // orbit center) at t = -kThirdPersonDistance.
         const Vec3 onRay =
@@ -321,6 +349,7 @@ TEST(ThirdPersonTest, EyeAimRayCoincidesWithTheViewAxis) {
 }
 
 TEST(ThirdPersonTest, UnoccludedCameraPinsTheLiftedOrbitInvariant) {
+    BlockRegistry blocks = makeBlocks();
     // 2.0.0 invariants for the unoccluded resolve, at every
     // orientation:
     //   (1) the resolved camera is BIT-exactly on the lifted orbit
@@ -345,7 +374,7 @@ TEST(ThirdPersonTest, UnoccludedCameraPinsTheLiftedOrbitInvariant) {
         view.yaw = c[0];
         view.pitch = c[1];
         const Vec3 orbit = thirdPersonOrbitCenter(kEye, c[0], c[1]);
-        const Vec3 cam = resolveThirdPersonCamera(world, orbit, c[0], c[1]);
+        const Vec3 cam = resolveThirdPersonCamera(world, blocks, orbit, c[0], c[1]);
         // (1) bit-exact on the lifted orbit line.
         const Vec3 want = orbit +
             thirdPersonCameraOffset(c[0], c[1], kThirdPersonDistance);
@@ -414,6 +443,7 @@ TEST(ThirdPersonTest, FrontViewUpIsInvariant) {
 }
 
 TEST(ThirdPersonTest, FrontViewEmptyWorldResolveIdentity) {
+    BlockRegistry blocks = makeBlocks();
     // Empty world (no occlusion): the front-view resolve is the ideal
     // position, and the ideal is orbit + forward(yaw, pitch) * D — the
     // camera IN FRONT of the player (the player's front is visible).
@@ -439,9 +469,9 @@ TEST(ThirdPersonTest, FrontViewEmptyWorldResolveIdentity) {
         // above) — the same point the back view orbits.
         const Vec3 orbit = thirdPersonOrbitCenter(kEye, c[0], c[1]);
         const Vec3 camFront =
-            resolveThirdPersonCamera(world, orbit, fa.yaw, fa.pitch);
+            resolveThirdPersonCamera(world, blocks, orbit, fa.yaw, fa.pitch);
         const Vec3 camBack =
-            resolveThirdPersonCamera(world, orbit, c[0], c[1]);
+            resolveThirdPersonCamera(world, blocks, orbit, c[0], c[1]);
         // (1) bit-exact: the resolve's own unoccluded arithmetic.
         const Vec3 want =
             orbit + thirdPersonCameraOffset(fa.yaw, fa.pitch,
@@ -470,6 +500,7 @@ TEST(ThirdPersonTest, FrontViewEmptyWorldResolveIdentity) {
 }
 
 TEST(ThirdPersonTest, FrontViewClampsInFrontOfWall) {
+    BlockRegistry blocks = makeBlocks();
     // The back-view wall clamp (ResolveClampsInFrontOfWall) mirrored to
     // the +f side: eye at kEye, yaw 0 (facing -Z) / pitch 0 -> the orbit
     // center at (22.5, 40.9, 0.5) and the FRONT ideal camera at
@@ -483,7 +514,7 @@ TEST(ThirdPersonTest, FrontViewClampsInFrontOfWall) {
     const Vec3 orbit = thirdPersonOrbitCenter(kEye, 0.0f, 0.0f);
     const ThirdPersonAngles fa = thirdPersonFrontAngles(0.0f, 0.0f);
     const Vec3 cam =
-        resolveThirdPersonCamera(world, orbit, fa.yaw, fa.pitch);
+        resolveThirdPersonCamera(world, blocks, orbit, fa.yaw, fa.pitch);
     // Stop kCameraOcclusionMargin in front of the face, on the
     // PLAYER's side (z > -2): -3.5 + (1.5 - 0.1) = -2.1 (the exact
     // mirror of the back view's 3.1 about the orbit's z = 0.5).
@@ -506,6 +537,7 @@ TEST(ThirdPersonTest, ZoomConstantsPinned) {
 }
 
 TEST(ThirdPersonTest, ResolveDistanceDefaultIsBitIdentical) {
+    BlockRegistry blocks = makeBlocks();
     // The red line: the explicit default argument and the omitted one
     // agree BIT-exactly (every pre-V2-19 call site and unit test is
     // untouched — the whole file above passes unchanged).
@@ -516,27 +548,29 @@ TEST(ThirdPersonTest, ResolveDistanceDefaultIsBitIdentical) {
     };
     for (const auto& c : cases) {
         const Vec3 orbit = thirdPersonOrbitCenter(kEye, c[0], c[1]);
-        const Vec3 a = resolveThirdPersonCamera(world, orbit, c[0], c[1]);
-        const Vec3 b = resolveThirdPersonCamera(world, orbit, c[0], c[1],
+        const Vec3 a = resolveThirdPersonCamera(world, blocks, orbit, c[0], c[1]);
+        const Vec3 b = resolveThirdPersonCamera(world, blocks, orbit, c[0], c[1],
                                                 kThirdPersonDistance);
         EXPECT_EQ(a, b) << "yaw " << c[0];
     }
 }
 
 TEST(ThirdPersonTest, ResolveDistanceScalesTheOrbit) {
+    BlockRegistry blocks = makeBlocks();
     // Empty world: the unoccluded resolve is the ideal = orbit + offset
     // at the given distance, bit-exactly (yaw 0 / pitch 0: behind = +Z).
     World world;
     const Vec3 orbit = thirdPersonOrbitCenter(kEye, 0.0f, 0.0f);
     const float dists[] = {kZoomMin, kThirdPersonDistance, kZoomMax};
     for (const float d : dists) {
-        const Vec3 cam = resolveThirdPersonCamera(world, orbit, 0.0f, 0.0f, d);
+        const Vec3 cam = resolveThirdPersonCamera(world, blocks, orbit, 0.0f, 0.0f, d);
         const Vec3 ideal {22.5f, 40.9f, 0.5f + d};
         EXPECT_EQ(cam, ideal) << "distance " << d;
     }
 }
 
 TEST(ThirdPersonTest, ResolveDistanceFollowsTheWallClamp) {
+    BlockRegistry blocks = makeBlocks();
     // The occlusion clamp follows the radius (the farther camera is
     // clamped by the SAME first face — the correct behavior, the pre-
     // V2-19 resolve semantics at any distance): the single wall block
@@ -552,12 +586,12 @@ TEST(ThirdPersonTest, ResolveDistanceFollowsTheWallClamp) {
     ASSERT_TRUE(world.setBlock(22, 40, 3, BlockID{1}));
     const Vec3 orbit = thirdPersonOrbitCenter(kEye, 0.0f, 0.0f);
     expectVecNear("d8",
-                  resolveThirdPersonCamera(world, orbit, 0.0f, 0.0f, 8.0f),
+                  resolveThirdPersonCamera(world, blocks, orbit, 0.0f, 0.0f, 8.0f),
                   22.5f, 40.9f, 4.1f);
     expectVecNear("d4",
-                  resolveThirdPersonCamera(world, orbit, 0.0f, 0.0f, 4.0f),
+                  resolveThirdPersonCamera(world, blocks, orbit, 0.0f, 0.0f, 4.0f),
                   22.5f, 40.9f, 4.1f);
     expectVecNear("d2",
-                  resolveThirdPersonCamera(world, orbit, 0.0f, 0.0f, 2.0f),
+                  resolveThirdPersonCamera(world, blocks, orbit, 0.0f, 0.0f, 2.0f),
                   22.5f, 40.9f, 2.5f);
 }

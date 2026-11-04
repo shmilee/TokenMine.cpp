@@ -842,12 +842,15 @@ void Game::attemptMobSpawn() {
         return;
     }
     // Spawn at the cell center; the floor branch's feet sit on the floor
-    // top (cell.y + 1), the in-air branch's (V2-14, the bat — the data
-    // flag) feet sit at the box floor cell's bottom (cell.y itself — the
-    // cell IS the air box, no floor beneath it).
+    // top (cell.y + 1 — V2-17: a stateful slab floor tops out at its solid
+    // region, spawnFloorTop, the findMobSpawnCell twin; every other shape
+    // keeps the exact legacy cell.y + 1.0), the in-air branch's (V2-14,
+    // the bat — the data flag) feet sit at the box floor cell's bottom
+    // (cell.y itself — the cell IS the air box, no floor beneath it).
     const float spawnY = def.properties.spawnsInAir
         ? static_cast<float>(cell->y)
-        : static_cast<float>(cell->y) + 1.0f;
+        : static_cast<float>(cell->y) +
+              spawnFloorTop(m_world, m_blocks, cell->x, cell->y, cell->z);
     const Vec3 spawn {static_cast<float>(cell->x) + 0.5f, spawnY,
                       static_cast<float>(cell->z) + 0.5f};
     MC_LOG_DEBUG("mob spawn f" + std::to_string(m_frameCount) +
@@ -946,7 +949,7 @@ void Game::attemptMobSpawn() {
             // already consumed the cooldown, so the skeleton retries after
             // the full interval (Minecraft's behavior: it keeps nocking
             // but never releases).
-            if (!hasLineOfSight(m_world, eye, target)) {
+            if (!hasLineOfSight(m_world, m_blocks, eye, target)) {
                 MC_LOG_DEBUG("skeleton shot blocked (no line of sight) from ("
                              + std::to_string(eye.x) + ", " +
                              std::to_string(eye.y) + ", " +

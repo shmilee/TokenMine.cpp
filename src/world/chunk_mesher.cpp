@@ -614,17 +614,36 @@ void ChunkMesher::emitCross(ChunkMeshData& out, const Block& block,
 void ChunkMesher::emitSlab(ChunkMeshData& out, const Block& block,
                            const BlockPos& origin, int lx, int ly, int lz)
     const {
-    // Phase 85: the unit-cube faces scaled to the bottom half (y 0..0.5) —
-    // a flat step you can stand on (the player's feet rest at y + 0.5). The
-    // unit-cube corner Y is scaled by 0.5 (emitFluid's h pattern). The top
-    // face is ALWAYS emitted (the cell's top half is air, so nothing above
-    // occludes it within the cell); the bottom + side faces are culled by an
-    // opaque neighbor (which covers their y 0..0.5 extent). Opaque sub-mesh
-    // (a slab is solid, not glass).
-    const float h = 0.5f;
     const int wx = origin.x + lx;
     const int wy = origin.y + ly;
     const int wz = origin.z + lz;
+    // V2-17: the per-cell state (the emitStairs read rule: the World's
+    // per-cell byte — unset falls back to the block's state default). A
+    // stateless slab (the bed family) has no state -> 0 -> the EXACT
+    // pre-V2-17 bottom-slab geometry (the bit-level red line).
+    int st = 0;
+    if (block.model.stateCount > 0) {
+        st = m_world.getBlockState(wx, wy, wz);
+        if (st == Chunk::kBlockStateUnset) {
+            st = block.stateDefault();
+        }
+    }
+    if (st == 1) {
+        emitSlabTop(out, block, lx, ly, lz, wx, wy, wz);
+        return;
+    }
+    if (st >= 2) {
+        emitSlabFull(out, block, lx, ly, lz, wx, wy, wz);
+        return;
+    }
+    // Phase 85 / state 0: the unit-cube faces scaled to the bottom half
+    // (y 0..0.5) — a flat step you can stand on (the player's feet rest at
+    // y + 0.5). The unit-cube corner Y is scaled by 0.5 (emitFluid's h
+    // pattern). The top face is ALWAYS emitted (the cell's top half is
+    // air, so nothing above occludes it within the cell); the bottom +
+    // side faces are culled by an opaque neighbor (which covers their
+    // y 0..0.5 extent). Opaque sub-mesh (a slab is solid, not glass).
+    const float h = 0.5f;
     for (const CubeFace& face : kCubeFaces) {
         if (face.dy < 0) {
             // Bottom + side faces: hidden by an opaque neighbor (which spans
@@ -661,6 +680,117 @@ void ChunkMesher::emitSlab(ChunkMeshData& out, const Block& block,
             MeshVertex v;
             v.position = {static_cast<float>(lx + face.corner[i][0]),
                           static_cast<float>(ly + face.corner[i][1] * h),
+                          static_cast<float>(lz + face.corner[i][2])};
+            v.normal = face.normal;
+            v.uv = faceUv[i];
+            v.skyLight = skyF;
+            v.blockLight = blockF;
+            verts.push_back(v);
+        }
+        indices.insert(indices.end(),
+                       {first, first + 1, first + 2, first, first + 2,
+                        first + 3});
+    }
+}
+
+void ChunkMesher::emitSlabTop(ChunkMeshData& out, const Block& block,
+                              int lx, int ly, int lz,
+                              int wx, int wy, int wz) const {
+    // V2-17: the state-0 geometry mirrored into the cell's UPPER half
+    // (y kSlabHalf..1 — the unit-cube corner Y maps corner.y -> kSlabHalf
+    // + corner.y*kSlabHalf, the emitFluid h pattern anchored at the top).
+    // The BOTTOM face (dy<0) is ALWAYS emitted (the state-0 top-face twin:
+    // the cell's bottom half is air, so nothing below the face occludes it
+    // within the cell); the TOP face (dy>0, on the cell boundary) + the
+    // SIDE faces (spanning y kSlabHalf..1) are culled by an opaque
+    // neighbor (the general rule). The per-face light keeps the state-0
+    // convention (the cell the face borders: bottom -> the cell below,
+    // top -> the cell above, side -> the horizontal neighbor).
+    for (const CubeFace& face : kCubeFaces) {
+        if (face.dy >= 0) {
+            const BlockID neighbor = m_world.getBlock(wx + face.dx,
+                                                       wy + face.dy,
+                                                       wz + face.dz);
+            if (neighbor != BlockID::air() &&
+                m_blocks.at(neighbor).properties.opaque) {
+                continue;
+            }
+        }
+        const Vec2 u0 = AtlasLayout::uvMin(
+            m_layout, cubeFaceTexture(block, face.textureSlot, face.normal));
+        const Vec2 u1 = AtlasLayout::uvMax(
+            m_layout, cubeFaceTexture(block, face.textureSlot, face.normal));
+        const Vec2 faceUv[4] = {{u0.x, u1.y}, {u1.x, u1.y},
+                                {u1.x, u0.y}, {u0.x, u0.y}};
+        const std::uint8_t faceSky = m_world.getSkyLight(
+            wx + face.dx, wy + face.dy, wz + face.dz);
+        const std::uint8_t faceBlock = m_world.getBlockLight(
+            wx + face.dx, wy + face.dy, wz + face.dz);
+        const float skyF =
+            static_cast<float>(faceSky) / static_cast<float>(kMaxLight);
+        const float blockF =
+            static_cast<float>(faceBlock) / static_cast<float>(kMaxLight);
+        std::vector<MeshVertex>& verts = out.opaqueVertices;
+        std::vector<std::uint32_t>& indices = out.opaqueIndices;
+        const std::uint32_t first = static_cast<std::uint32_t>(verts.size());
+        for (int i = 0; i < 4; ++i) {
+            MeshVertex v;
+            v.position = {static_cast<float>(lx + face.corner[i][0]),
+                          static_cast<float>(ly + kSlabHalf +
+                                             face.corner[i][1] * kSlabHalf),
+                          static_cast<float>(lz + face.corner[i][2])};
+            v.normal = face.normal;
+            v.uv = faceUv[i];
+            v.skyLight = skyF;
+            v.blockLight = blockF;
+            verts.push_back(v);
+        }
+        indices.insert(indices.end(),
+                       {first, first + 1, first + 2, first, first + 2,
+                        first + 3});
+    }
+}
+
+void ChunkMesher::emitSlabFull(ChunkMeshData& out, const Block& block,
+                               int lx, int ly, int lz,
+                               int wx, int wy, int wz) const {
+    // V2-17: the double slab — the FULL cell (the unit-cube vertices) with
+    // the STANDARD full-block culling on ALL six faces (an opaque neighbor
+    // in the face direction hides the face — the top by the cell above,
+    // the bottom by the cell below, the sides by the horizontal neighbors:
+    // the full-block rule, NOT the half-slab always-emit rule). The slab
+    // pass owns the geometry (the greedy full-cube pass still skips the
+    // Slab shape — the mesh() dispatch, unchanged), so a double slab next
+    // to a full block culls exactly like the full block does.
+    for (const CubeFace& face : kCubeFaces) {
+        const BlockID neighbor = m_world.getBlock(wx + face.dx,
+                                                   wy + face.dy,
+                                                   wz + face.dz);
+        if (neighbor != BlockID::air() &&
+            m_blocks.at(neighbor).properties.opaque) {
+            continue;
+        }
+        const Vec2 u0 = AtlasLayout::uvMin(
+            m_layout, cubeFaceTexture(block, face.textureSlot, face.normal));
+        const Vec2 u1 = AtlasLayout::uvMax(
+            m_layout, cubeFaceTexture(block, face.textureSlot, face.normal));
+        const Vec2 faceUv[4] = {{u0.x, u1.y}, {u1.x, u1.y},
+                                {u1.x, u0.y}, {u0.x, u0.y}};
+        const std::uint8_t faceSky = m_world.getSkyLight(
+            wx + face.dx, wy + face.dy, wz + face.dz);
+        const std::uint8_t faceBlock = m_world.getBlockLight(
+            wx + face.dx, wy + face.dy, wz + face.dz);
+        const float skyF =
+            static_cast<float>(faceSky) / static_cast<float>(kMaxLight);
+        const float blockF =
+            static_cast<float>(faceBlock) / static_cast<float>(kMaxLight);
+        std::vector<MeshVertex>& verts = out.opaqueVertices;
+        std::vector<std::uint32_t>& indices = out.opaqueIndices;
+        const std::uint32_t first = static_cast<std::uint32_t>(verts.size());
+        for (int i = 0; i < 4; ++i) {
+            MeshVertex v;
+            v.position = {static_cast<float>(lx + face.corner[i][0]),
+                          static_cast<float>(ly + face.corner[i][1]),
                           static_cast<float>(lz + face.corner[i][2])};
             v.normal = face.normal;
             v.uv = faceUv[i];

@@ -3056,3 +3056,18 @@
   正确范式）；重跑 md5 变更集须与受损清单**精确一致**（13/13，其
   余 33 件 head-identical）+ 二次重跑幂等 + 长度钉不变（时长未动）
   + 峰值/纹理钉入 test_sound 回归守卫（常值流无法复现该峰值）。
+- **stateful 场景条目 / cell DDA 遮挡 / 插桩定界（PITS 383，门 189
+  V2-17 顶部 slab S2）**——① **stateful 块的场景 journal 必须配
+  states 条目**：stone_slab state 化后（state_count 3），门场景 blocks
+  数组放 slab 而无对应 `states` 条目 = 加载时双向交叉检点名拒
+  （"the stateful block at (x,y,z) has no 'states' entry"）→ **游戏
+  不启动 → 输入静默丢失**（终档 = 场景文件原样回读，假"无响应"）；
+  场景 builder 加块须同步加 states（state 0 = 显式条目也要）。②
+  **cell-based DDA 对半块全遮挡**：raycast 按格判 non-air 时，slab 格
+  的空气半也挡住射线 → 瞄准身后块的面永远先命中 slab 格（MC 的
+  partial-solid-aware 射线穿空气半）——同格合并（双 slab）E2E 不可
+  达 + 「瞄准底 slab 空气半」命中错格；定位探针链 = init 日志（加载
+  拒）→ 零 'Pointer captured'（游戏没跑）→ 场景文件回读（终档 = 场
+  景原样）→ 仅 slab/仅石块/旧二进制三组对照隔离射线行为。③ **临时
+  插桩定界后移除重建**：编排者探针 MC_LOG 插桩在 fixer 会话恢复前
+  必须移除（工作树污染 = fixer 构建带 DBG 行进 gate）。

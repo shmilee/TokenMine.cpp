@@ -3,10 +3,13 @@
     "properties": {
         "hardness": 2.0,
         "light_opacity": 0,
-        "drops": "stone_slab"
+        "drops": "stone_slab",
+        "drops_count_by_state": [1, 1, 2]
     },
     "model": {
         "shape": "slab",
+        "state_count": 3,
+        "state_default": 0,
         "textures": {
             "top": "stone",
             "side": "stone",

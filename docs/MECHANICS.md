@@ -116,7 +116,12 @@
   速度）；**工具/弓/点火器近战命中 = 耐久磨损事件**（`[SURV-3]`，见下）。
   未命中 mob = **破坏方块**
 - **破坏**（DDA 体素 raycast，`kReach` 5 格；raycast 把水体当 air 穿过 = 可隔水
-  破坏湖底/水下方块，水被排水后流体模拟补回）：耗时 = `kBreakBaseSeconds`
+  破坏湖底/水下方块，水被排水后流体模拟补回；**`[V2-17]` slab 半格感知**：
+  射线从 slab 格的**空气半**进入 = 穿透（命中内表面 y=0.5【hit cell = slab
+  格，法线 ±Y】或身后的块——MC 同款；**记档偏离：cell-DDA 旧行为变更**，
+  旧「瞄准底 slab 空气半 = 破 slab」→ 新「破身后的块」；瞄准实心半 / 双
+  slab 满格 = 整格命中不变；共享 dda 走块射线 + 流体射线一致，第三人称
+  相机遮挡 / 箭视线同享）：耗时 = `kBreakBaseSeconds`
   **1.5s** × `properties.hardness` ÷ `effectiveBreakSpeed`（`properties.
   destroyable` 数据驱动，基岩不可破坏；准星移开/松键/换工具 = 进度清零）。
   **有效速度 = `effectiveBreakSpeed(item, block)` 纯函数**（`item.hpp`，
@@ -295,23 +300,27 @@
   瞬置**（流体模型独立调参 = 记档偏离）；mob 侧范围外（AI 每帧设精确速度 =
   既有设计）
 - **1 格自动台阶（step-up）`[ENT-3]`**：非潜行 + 贴地 + 身体贴住整数块面
-  （1e-4）+ 面前脚位 **`solidTopHeight ≤ 1.0`**（`[P99]` 加固 ×2 之另一：原格
+  （1e-4）+ 面前脚位 **`solidRange.top ≤ 1.0`**（`[P99]` 加固 ×2 之另一：原格
   solid 属性判定会踏上墙/栅栏 1.5 实心区的帽 = 翻越隐患）+ 其上方 2 格为空 →
   自动抬升 1 格并继续本 tick 水平移动（slab 0.5/满块 1.0/glass_pane 可踏、
-  墙/栅栏 1.5 不可踏、楼梯脚位点采样）；判定**纯几何上提 `Entity::stepUp`，
-  player 与 mob 同一函数**（player 行为逐位不变 = test_player 零改动红线）；
-  2 格仍须跳跃。**P16 两个潜伏 quirk 记档不修**（`[ENT-3]` 探针实证，
+  墙/栅栏 1.5 不可踏、楼梯脚位点采样；**`[V2-17]`** 顶 slab / 双 slab 实心区
+  顶 = 1.0 同款可踏——抬升后脚贴顶 slab 顶面 y+1 整数脚高位级不变）；判定
+  **纯几何上提 `Entity::stepUp`，player 与 mob 同一函数**（player 行为逐位
+  不变 = test_player 零改动红线）；2 格仍须跳跃。**P16 两个潜伏 quirk 记档不修**（`[ENT-3]` 探针实证，
   player/mob 共享）：① +X/+Z 方向恰 1 格宽台阶踏不过（front 格查 snapped+1，
   ≥2 格宽或 −X/−Z 正常）② 非整数脚高（slab 顶/楼梯斜面）face 巧合对齐整数可
   触发凭空抬升 1.0 再落回；修复 = player 行为变更单独立项
-- **barrier 块**：wall/fence `solidTopHeight` **1.5** = 不能穿过（AABB 与实心
+- **barrier 块**：wall/fence `solidRange` **{0, 1.5}** = 不能穿过（AABB 与实心
   区 [y, y+1.5] 重叠）也不能跳过（1.129 < 1.5）；**帽伸进上方格**：
   `hasRoomAt`/`moveAxis` 的 y 扫描扩到 y0−1（AABB 在 y+1 格时查 y 格的帽；
   非墙格 top ≤1 为 no-op backward-compat）；glass_pane = 整格实心 **1.0 可跳**
-- **斜面碰撞**（楼梯 `[P87]`/`[P89]`）：`solidTopHeight(id, mn, mx, cell)` 按
+- **斜面/区间碰撞**（楼梯 `[P87]`/`[P89]`；`[V2-17]` 扩 solidRange 区间）：
+  `solidRange(id, mn, mx, cell)` 返 {bottom, top} 实心区区间——楼梯按
   facing 沿对应轴取 **AABB 覆盖的最高斜面点**（north = 1−mnLocalZ / south =
   mxLocalZ / east = mxLocalX / west = 1−mnLocalX——`[P89]` 修正低端边切入高端
-  bug）；slab = 固定 0.5、满块 = 1.0（忽略 AABB，backward-compat）
+  bug，top 现值位级）；slab state 0 = {0, 0.5}（现值）、state 1 = {0.5, 1}、
+  state 2 = {0, 1}、无状态 slab（床）= {0, 0.5} 位级；满块 = {0, 1}（忽略
+  AABB，backward-compat——pre-V2-17 形状全 bottom = 0）
 - **坠落伤害**（`[P16]`/`[P36]`）：`max(0, 净下落格数 − fall_damage_offset)`
   （offset 代码默认 **3** = MC「3 格安全」，config 可覆盖），从离地帧记录
   `fallStartY` 到落地结算；**落入流体的落地取消伤害**（落地格 fresh 流体检查）；
@@ -1250,19 +1259,49 @@
     （双面可见）；`[GEN-2]` stage 视觉：有状态 cross（sapling）quad 两对角线
     4 角落绕**格心**缩放 (stage+1)/stateCount（MC sapling 同款），**无状态
     cross 恒 scale 1 = 逐位零变化**
-  - **slab `[P85]`**（首个新块模型类型）：底部半块（cell y 0..0.5 实心），复用
-    cube 纹理；mesh = 单位立方 6 面 Y 缩 0.5（**顶面恒绘**【cell 顶半格是
-    空气，无遮挡】、底/侧面邻 opaque 剔除；贪婪满块路径**跳过 slab**）；
-    碰撞 = `solidTopOffset` 0.5（`moveAxis`/`hasRoomAt` 对实心区 [y, y+top]
-    判重叠——满块 top = 1 复现旧整格行为 backward-compat）；**v1 只有底部
-    slab**（无顶/叠合/斜向）；slab 邻满块同层侧面 Z-fight/缺面 = 贪婪 mesh
-    不能半面剔除（v1 局限，KNOWN_ISSUES）；**`[LGT-5]`** 起 `light_opacity`
-    0 = 透光（opaque 保持 true 挡光规则演进——光照如空气穿过，剔面/渲染零
-    变更）
+  - **slab `[P85]`→`[V2-17]`**（首个新块模型类型）：半块复用 cube 纹理；
+    **有状态**（shipped stone_slab `state_count 3` / `state_default 0`）：
+    0 = 底部（cell y 0..0.5 实心，P85 既有几何位级）/ 1 = 顶部（y 0.5..1，
+    天花板贴放）/ 2 = 双 slab（满格——破坏掉 2，`drops_count_by_state`
+    [1,1,2] = MC 材质守恒）；**无状态 slab（床族 15 块）恒底部**（门 =
+    hasState 非 shape，位级不变）。mesh = 单位立方 6 面按 state 映射 Y
+    （state 0：Y 缩 0.5 锚底，**顶面恒绘**【cell 顶半格是空气】、底/侧面邻
+    opaque 剔除；state 1：Y 偏移 0.5 + 缩 0.5 镜像锚顶，**底面恒绘**对称、
+    顶/侧面邻 opaque 剔除【通用规则】；state 2：满格标准邻剔除【满块规则，
+    非常绘】；贪婪满块路径**跳过 slab** 不变）；碰撞 = `solidRange`
+    {bottom, top} 区间（state 0 = {0, 0.5} 现值 / 1 = {0.5, 1} / 2 = {0, 1}；
+    `moveAxis`/`hasRoomAt`/`stepUp` 对实心区 [y+bottom, y+top] 判重叠——
+    pre-V2-17 形状全 bottom = 0 位级 backward-compat；顶 slab 顶面 y+1 恰
+    1.0 可踏升 MC 同款，顶 slab 格内站立 = AABB 重叠全挡【无 sneak 缩高，
+    偏离 3】）；**放置 = 瞄准规则**（`slabStateFromHit` 纯函数：顶面命中 →
+    state 0 现行为位级 / 底面命中 → state 1 天花板贴放 / 侧面命中 → 命中点
+    local-y > 0.5 → state 1 否则 0，MC 精确）+ **合并**（同格同 id 互补
+    state → 双 slab state 2 消耗 1，`slabMergesToDouble`；state 2 目标拒 =
+    canPlaceAt solid 常规；异 id 不合并 = 偏离 2）；**蹲+右键旋转 Slab 形
+    排除**（偏离 4：state = 垂直位非朝向，环转 2→0 销毁半块材质不守恒；
+    台阶朝向环不受影响）；mob 生成 floor-top = 格底 + 实心区顶
+    （`spawnFloorTop`：顶 slab 顶面 y+1 可生，底部 slab 脚踩 slab 顶
+    floorY+0.5 不再悬空）；slab 邻满块同层侧面 Z-fight/缺面 = 贪婪 mesh
+    不能半面剔除（v1 局限，KNOWN_ISSUES——state 1 侧邻 state 0 slab 同款
+    半面残差）；**`[LGT-5]`** 起 `light_opacity` 0 = 透光（opaque 保持
+    true；**state 值不改光属性**——ENT-2 状态约束①，LGT-5 族三 state 位级
+    同款）
+    **射线半格感知**（`[V2-17]` 缺口补修，门 189 S2 实证）：共享 dda
+    （块射线 + 流体射线）对 slab 格做子格判定（`slabSolidRangeAt`，读
+    World per-cell state，unset → stateDefault 同款回落）——从**空气
+    半**进入 = 穿透（命中内表面 y=0.5【hit cell = slab 格、法线指向
+    来向空气半：底 slab +Y 顶面 / 顶 slab −Y 底面】或身后块；侧穿出
+    先于内表面 = 继续 DDA）/ 从**实心半**进入 = 整格边界命中现行为
+    （边界「入实心」判 = 严格内部 ∪ 顶边且下行 ∪ 底边且上行；水平恰
+    贴面沿行 = 穿透）/ 双 slab 满格 = 整格不变。**合并场景由此可达**
+    （空气半穿透 → 身后锚块命中面指向 slab 格 → target = slab 格 →
+    `slabMerge`；placeBlock 代码零改动）；**记档偏离：cell-DDA 旧
+    「瞄准底 slab 空气半 = 破 slab」→ 新「破身后块」**（MC 同款）；
+    第三人称相机遮挡 / 箭视线 / 桶射线走共享 dda 自动一致（无特判）
   - **stairs `[P87]`/`[P89]`/`[P92]`/`[P94]`/`[P97]`→`[ENT-2]`**（第二个新块
     模型类型）：斜面（一端满高、另一端落地）；mesh = 楔形（斜顶恒绘 + 背墙 +
     两侧三角 + 底面，按朝向绕 Y 旋转 corner/normal/cull；侧/背/底邻 opaque
-    剔除；贪婪跳过）；碰撞 = 斜面高度感知（`solidTopHeight` 取 AABB 覆盖
+    剔除；贪婪跳过）；碰撞 = 斜面高度感知（`solidRange` 取 AABB 覆盖
     **最高**斜面点——玩家脚落在斜面高端）；朝向演进：`[P89]` 4 块变体
     （stone_stairs[_east/_south/_west]，`stair_facing` 0-3 数据）→ `[P92]`
     `stair_rotates_to` 块 id 环（保留解析不再用于旋转）→ **`[P94]` per-
@@ -1311,12 +1350,18 @@
     [1,255] + `state_default` [0,count) **严格配对**（缺一点名拒，fast_against
     范式；楼梯显式写 state_count = 矛盾点名拒）。**写入点**（Game 三处）：①
     setBlock 收口——hasState → 写 `stateDefault()`，非 stateful → 哨兵写被
-    World 拒（**零变化零脏**）；② 潜行 + 右键——门 `hasState()`，
+    World 拒（**零变化零脏**）；② 潜行 + 右键——门 `hasState()`（**`[V2-17]`
+    Slab 形排除**——slab state = 垂直位非朝向，环转销毁半块材质，偏离 4），
     (s+1)%stateCount()（stair = (f+1)%4 同值），"place" 音【`[CRAFT-3]` 材质
-    音】、点击消费；③ placeBlock 钩子——stair yaw 覆写（`[P97]` 语义不变）。
-    **消费方**：碰撞 `solidTopHeight` + mesh `emitStairs`（形状门 + 哨兵回落
-    `stateDefault()`）+ 存档推导（collectSave 两路）——**哨兵回落三处同一
-    规则**。**存档 format 15 `states` 段**（替 14 `stairs`）：`{pos, state}`
+    音】、点击消费；③ placeBlock 钩子——stair yaw 覆写（`[P97]` 语义不变）+
+    **`[V2-17]` slab 瞄准态覆写**（`slabStateFromHit`：顶面 → 0 现行为 /
+    底面 → 1 / 侧面 local-y > 0.5 → 1 否则 0）+ **同格同 id 互补 state 合并**
+    → 双 slab state 2（`slabMergesToDouble`，消耗 1；state 2 目标拒 / 异 id
+    不合并 = 偏离 2）；**破坏 = `drops_count_by_state`[state] 计数**（双 slab
+    掉 2 = MC 材质守恒，物品名不变）。**消费方**：碰撞 `solidRange` + mesh
+    `emitStairs`/`emitSlab`（形状门 + 哨兵回落 `stateDefault()`）+ mob 生成
+    `spawnFloorTop` + 存档推导（collectSave 两路）——**哨兵回落各处同一规
+    则**。**存档 format 15 `states` 段**（替 14 `stairs`）：`{pos, state}`
     严格字段、位置排序、**全量**（每个 stateful 格恰一条，**含默认值**——避免
     「非默认才存」手改静默回落陷阱）；域校验按 entry 位置对应块（blockEdits
     名 → registry `stateCount()`）越界点名；**双向交叉校验**（stateful cell

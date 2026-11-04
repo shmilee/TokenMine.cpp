@@ -29,6 +29,7 @@
 namespace mc {
 
 class World;
+class BlockRegistry;
 
 // The camera's orbit radius: ideal position = eye + offset, and
 // |offset| = this. 4.0 blocks is the back-camera distance — and the
@@ -139,9 +140,13 @@ Vec3 thirdPersonCameraOffset(float yaw, float pitch, float distance);
 //
 // dir = normalize(orbitCenter - ideal) = the unit forward (the offset
 // length is exactly distance != 0, so the normalization is safe). Pure
-// read-only World access.
-Vec3 resolveThirdPersonCamera(const World& world, const Vec3& orbitCenter,
-                              float yaw, float pitch,
+// read-only World access. V2-17 gap fill: the occlusion ray is
+// partial-solid-aware for slab cells (the raycastBlock twin — the
+// registry is needed for the shape / state read), so a camera between
+// the eye and a slab's AIR half passes through it (the slab's interior
+// surface or the block behind occludes).
+Vec3 resolveThirdPersonCamera(const World& world, const BlockRegistry& blocks,
+                              const Vec3& orbitCenter, float yaw, float pitch,
                               float distance = kThirdPersonDistance);
 
 // V2-1: the third-person FRONT view — the back camera's math executed at

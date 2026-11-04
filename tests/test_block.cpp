@@ -1614,6 +1614,8 @@ TEST(BlockRegistryTest, Phase85StoneSlabContent) {
     // The shipped stone slab (Phase 85): the bottom half-block shape, reusing
     // the stone texture (no new atlas tile), hardness 2.0, drops itself,
     // solid + opaque (it occludes light like a full block, a v1 simplification).
+    // V2-17: the slab is STATEFUL (3 states: 0 = bottom, 1 = top, 2 =
+    // double) with a per-state drop count (the double slab drops TWO).
     AssetManager assets;
     ASSERT_TRUE(assets.setRoot("assets").ok())
         << "run the tests from the repository root";
@@ -1630,6 +1632,209 @@ TEST(BlockRegistryTest, Phase85StoneSlabContent) {
     EXPECT_EQ(b->model.textures.top, "stone"); // reuses the stone texture
     EXPECT_EQ(b->model.textures.side, "stone");
     EXPECT_EQ(b->model.textures.bottom, "stone");
+    // V2-17: the state pair + the per-state drop counts (the double slab's
+    // 2 = the Minecraft material conservation).
+    EXPECT_TRUE(b->hasState());
+    EXPECT_EQ(b->stateCount(), 3);
+    EXPECT_EQ(b->stateDefault(), 0); // 0 = the Phase-85 bottom geometry
+    ASSERT_EQ(b->properties.dropsCountByState.size(), 3u);
+    EXPECT_EQ(b->properties.dropsCountByState[0], 1);
+    EXPECT_EQ(b->properties.dropsCountByState[1], 1);
+    EXPECT_EQ(b->properties.dropsCountByState[2], 2);
+}
+
+// ---------------------------------------------------------------------------
+// V2-17: drops_count_by_state — the strict per-state drop count list.
+// ---------------------------------------------------------------------------
+
+TEST(BlockRegistryTest, V217DropsCountByStateParsed) {
+    // The valid pair: an explicit state_count 3 + a 3-entry list (one
+    // count per state) — the shipped stone_slab's shape.
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"s","properties":{"drops":"s","drops_count_by_state":[1,1,2]},)"
+        R"("model":{"shape":"slab","state_count":3,"state_default":0,)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Block& b = reg.at(*r);
+    ASSERT_EQ(b.properties.dropsCountByState.size(), 3u);
+    EXPECT_EQ(b.properties.dropsCountByState[0], 1);
+    EXPECT_EQ(b.properties.dropsCountByState[1], 1);
+    EXPECT_EQ(b.properties.dropsCountByState[2], 2);
+    // The fixed dropsCount stays the fallback for blocks without the list.
+    EXPECT_EQ(b.properties.dropsCount, 1);
+}
+
+TEST(BlockRegistryTest, V217DropsCountByStateLengthMismatchRejected) {
+    // The length must equal the state count (one count per state) — both
+    // directions are named.
+    auto short_ = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"a","properties":{"drops":"a","drops_count_by_state":[1,1]},)"
+        R"("model":{"shape":"slab","state_count":3,"state_default":0,)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(short_.ok());
+    EXPECT_NE(short_.error().message.find("drops_count_by_state"),
+              std::string::npos);
+    EXPECT_NE(short_.error().message.find("state_count"), std::string::npos);
+    auto long_ = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"b","properties":{"drops":"b","drops_count_by_state":[1,1,2,3]},)"
+        R"("model":{"shape":"slab","state_count":3,"state_default":0,)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(long_.ok());
+    EXPECT_NE(long_.error().message.find("drops_count_by_state"),
+              std::string::npos);
+}
+
+TEST(BlockRegistryTest, V217DropsCountByStateWithoutStateRejected) {
+    // A stateless block (no explicit model.state_count) carrying the list
+    // is dead data — named (a stair's IMPLICIT state never pairs with it:
+    // it has no explicit state_count, the same rejection).
+    auto stateless = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"a","properties":{"drops":"a","drops_count_by_state":[1]},)"
+        R"("model":{"shape":"slab","textures":)"
+        R"({"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(stateless.ok());
+    EXPECT_NE(stateless.error().message.find("drops_count_by_state"),
+              std::string::npos);
+    EXPECT_NE(stateless.error().message.find("state_count"),
+              std::string::npos);
+    auto stairs = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"b","properties":{"drops":"b","drops_count_by_state":[1,1,1,1]},)"
+        R"("model":{"shape":"stairs","textures":)"
+        R"({"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(stairs.ok());
+    EXPECT_NE(stairs.error().message.find("drops_count_by_state"),
+              std::string::npos);
+}
+
+TEST(BlockRegistryTest, V217DropsCountByStateEntryDomain) {
+    // Each entry is an integer in [1, 64] (the drops_count domain): zero,
+    // negative and non-integer are named; 65 is over; the boundaries 1 and
+    // 64 parse.
+    auto zero = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"a","properties":{"drops":"a","drops_count_by_state":[1,0,2]},)"
+        R"("model":{"shape":"slab","state_count":3,"state_default":0,)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(zero.ok());
+    EXPECT_NE(zero.error().message.find("drops_count_by_state[1]"),
+              std::string::npos);
+    auto neg = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"b","properties":{"drops":"b","drops_count_by_state":[1,-1,2]},)"
+        R"("model":{"shape":"slab","state_count":3,"state_default":0,)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(neg.ok());
+    EXPECT_NE(neg.error().message.find("drops_count_by_state[1]"),
+              std::string::npos);
+    auto frac = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"c","properties":{"drops":"c","drops_count_by_state":[1,1.5,2]},)"
+        R"("model":{"shape":"slab","state_count":3,"state_default":0,)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(frac.ok());
+    EXPECT_NE(frac.error().message.find("drops_count_by_state[1]"),
+              std::string::npos);
+    auto big = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"d","properties":{"drops":"d","drops_count_by_state":[1,1,65]},)"
+        R"("model":{"shape":"slab","state_count":3,"state_default":0,)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(big.ok());
+    EXPECT_NE(big.error().message.find("drops_count_by_state[2]"),
+              std::string::npos);
+    BlockRegistry reg;
+    auto bounds = reg.registerBlock(parseDef(
+        R"({"id":"e","properties":{"drops":"e","drops_count_by_state":[1,64,1]},)"
+        R"("model":{"shape":"slab","state_count":3,"state_default":0,)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(bounds.ok()) << bounds.error().message;
+    EXPECT_EQ(reg.at(*bounds).properties.dropsCountByState[1], 64);
+}
+
+TEST(BlockRegistryTest, V217DropsCountByStateEmptyArrayRejected) {
+    // An empty array is a no-op typo (the ammo discipline, the plant_on
+    // pattern) — named; a non-array is named too.
+    auto empty = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"a","properties":{"drops":"a","drops_count_by_state":[]},)"
+        R"("model":{"shape":"slab","state_count":3,"state_default":0,)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(empty.ok());
+    EXPECT_NE(empty.error().message.find("drops_count_by_state"),
+              std::string::npos);
+    auto notArray = BlockRegistry{}.registerBlock(parseDef(
+        R"({"id":"b","properties":{"drops":"b","drops_count_by_state":1},)"
+        R"("model":{"shape":"slab","state_count":3,"state_default":0,)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_FALSE(notArray.ok());
+    EXPECT_NE(notArray.error().message.find("drops_count_by_state"),
+              std::string::npos);
+}
+
+// V2-17: the slab placement state from the aim hit (the pure rule).
+TEST(BlockRegistryTest, V217SlabStateFromHitTopFaceAimPlacesBottom) {
+    // A +Y face hit (aiming at a block's top) -> state 0 (the bottom slab
+    // in the cell above — the pre-V2-17 behavior, the bit-level root),
+    // regardless of the hit point.
+    EXPECT_EQ(slabStateFromHit(Vec3{0.5f, 3.99f, 0.5f}, Vec3{0.0f, 1.0f, 0.0f},
+                               4.0f),
+              0);
+    EXPECT_EQ(slabStateFromHit(Vec3{0.5f, 4.01f, 0.5f}, Vec3{0.0f, 1.0f, 0.0f},
+                               4.0f),
+              0);
+}
+
+TEST(BlockRegistryTest, V217SlabStateFromHitBottomFaceAimPlacesTop) {
+    // A -Y face hit (aiming at a block's bottom, the ceiling) -> state 1
+    // (the top slab in the cell below — the Minecraft ceiling mount),
+    // regardless of the hit point.
+    EXPECT_EQ(slabStateFromHit(Vec3{0.5f, 2.01f, 0.5f},
+                               Vec3{0.0f, -1.0f, 0.0f}, 2.0f),
+              1);
+    EXPECT_EQ(slabStateFromHit(Vec3{0.5f, 1.99f, 0.5f},
+                               Vec3{0.0f, -1.0f, 0.0f}, 2.0f),
+              1);
+}
+
+TEST(BlockRegistryTest, V217SlabStateFromHitSideAimByHeight) {
+    // A side hit -> by the hit height within the TARGET cell (local y):
+    // strictly above the middle (> 0.5) -> the top slab, at or below it
+    // -> the bottom slab (the Minecraft half-plane rule).
+    EXPECT_EQ(slabStateFromHit(Vec3{1.5f, 5.6f, 0.5f}, Vec3{1.0f, 0.0f, 0.0f},
+                               5.0f),
+              1);
+    EXPECT_EQ(slabStateFromHit(Vec3{1.5f, 5.5f, 0.5f}, Vec3{1.0f, 0.0f, 0.0f},
+                               5.0f),
+              0); // EXACTLY the middle -> bottom (the boundary pin)
+    EXPECT_EQ(slabStateFromHit(Vec3{1.5f, 5.49f, 0.5f},
+                               Vec3{1.0f, 0.0f, 0.0f}, 5.0f),
+              0);
+    EXPECT_EQ(slabStateFromHit(Vec3{1.5f, 5.01f, 0.5f},
+                               Vec3{1.0f, 0.0f, 0.0f}, 5.0f),
+              0);
+    EXPECT_EQ(slabStateFromHit(Vec3{1.5f, 5.99f, 0.5f},
+                               Vec3{-1.0f, 0.0f, 0.0f}, 5.0f),
+              1);
+}
+
+// V2-17: the slab merge decision (the pure rule).
+TEST(BlockRegistryTest, V217SlabMergesToDoubleComplementary) {
+    // The same id in complementary halves -> the double slab (both
+    // orderings: a state-0 target + a state-1 placement, and vice versa).
+    const BlockID a{5};
+    EXPECT_TRUE(slabMergesToDouble(a, a, 0, 1));
+    EXPECT_TRUE(slabMergesToDouble(a, a, 1, 0));
+}
+
+TEST(BlockRegistryTest, V217SlabMergesToDoubleRefusals) {
+    // A state-2 target (the full cell) is NOT a merge (canPlaceAt's solid
+    // rejection owns it); a same-state target is not (aiming at the same
+    // half does nothing); a different id is not (the cross-type stack
+    // merge is out of scope — the design deviation 2).
+    const BlockID a{5};
+    const BlockID b{6};
+    EXPECT_FALSE(slabMergesToDouble(a, a, 2, 0));
+    EXPECT_FALSE(slabMergesToDouble(a, a, 2, 1));
+    EXPECT_FALSE(slabMergesToDouble(a, a, 0, 0));
+    EXPECT_FALSE(slabMergesToDouble(a, a, 1, 1));
+    EXPECT_FALSE(slabMergesToDouble(a, b, 0, 1));
+    EXPECT_FALSE(slabMergesToDouble(b, a, 1, 0));
 }
 
 TEST(BlockRegistryTest, Phase95WallShapeParsed) {

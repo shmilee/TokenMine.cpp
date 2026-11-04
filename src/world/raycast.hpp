@@ -39,8 +39,25 @@ struct BlockHit {
 //     first non-air one wins.
 //   - Hits at exactly `maxDistance` count; beyond it, no hit.
 //   - A zero direction or non-positive maxDistance never hits.
-std::optional<BlockHit> raycastBlock(const World& world, Vec3 origin,
-                                     Vec3 direction, float maxDistance);
+//
+// V2-17 gap fill: PARTIAL-SOLID-AWARE for slab cells (the Minecraft
+// raycast semantics, wiki-verified 11-04): a ray that ENTERS a slab cell
+// (a stateful slab's state 0 / 1, or the stateless bed slab — both
+// solid in the bottom half only; a state-1 top slab in its top half)
+// through its AIR half does not hit the cell's boundary face — it passes
+// through, hitting either the slab's INTERIOR surface (the y = 0.5
+// plane — the hit cell is the slab cell itself, the normal points back
+// at the ray: +Y for a bottom slab, -Y for a top slab) or, when the ray
+// leaves the cell laterally before reaching the surface (or travels away
+// from the slab), the block BEHIND. A ray entering the SOLID half hits
+// the boundary face exactly as before; a double slab (state 2) is a full
+// cell (whole-cell hit, unchanged). Consequence (the recorded
+// deviation): aiming a bottom slab's AIR half now breaks the block
+// behind it (the cell-DDA legacy broke the slab).
+std::optional<BlockHit> raycastBlock(const World& world,
+                                     const BlockRegistry& blocks,
+                                     Vec3 origin, Vec3 direction,
+                                     float maxDistance);
 
 // DDA traversal for the FLUID-BUCKET target (Phase 47): the first cell
 // that is a non-air BLOCK or carries a fluid level. Same convention as
@@ -51,8 +68,10 @@ std::optional<BlockHit> raycastBlock(const World& world, Vec3 origin,
 // passes through fluids. The caller then reads the returned cell's
 // fluid level: kMaxFluidLevel (8, a source) is the scoop, anything else
 // (a block, or a flowing cell) means "no action".
-std::optional<BlockPos> raycastFluid(const World& world, Vec3 origin,
-                                     Vec3 direction, float maxDistance);
+std::optional<BlockPos> raycastFluid(const World& world,
+                                     const BlockRegistry& blocks,
+                                     Vec3 origin, Vec3 direction,
+                                     float maxDistance);
 
 // Can a block be placed at `cell`?
 //   - the cell must be inside the world's Y range [0, kWorldHeight);
@@ -125,10 +144,12 @@ float raycastAabb(Vec3 origin, Vec3 dir, Vec3 boxMin, Vec3 boxMax);
 
 // Line of sight (Phase 38, skeleton shooting): true when no non-air cell
 // blocks the segment from `from` to `to` — the same first-non-air-cell
-// predicate the arrows fly through, so the skeleton never fires a shot a
-// wall would stop (previously it shot through walls and the arrow
+// predicate the arrows fly through (V2-17 gap fill: partial-solid-aware
+// for slab cells, the raycastBlock twin), so the skeleton never fires a
+// shot a wall would stop (previously it shot through walls and the arrow
 // vanished on impact). The cell containing `from` is exempt (the
 // raycastBlock convention: a ray does not hit the block it starts in).
-bool hasLineOfSight(const World& world, Vec3 from, Vec3 to);
+bool hasLineOfSight(const World& world, const BlockRegistry& blocks,
+                    Vec3 from, Vec3 to);
 
 } // namespace mc

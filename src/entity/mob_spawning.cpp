@@ -180,6 +180,26 @@ int currentSpawnLight(const World& world, int x, int y, int z,
     return std::max(skyNow, block);
 }
 
+float spawnFloorTop(const World& world, const BlockRegistry& blocks,
+                    int x, int y, int z) {
+    // The legacy floor top is the cell top (1.0) for EVERY shape — the
+    // only V2-17 change is the stateful slab (see the header): state 0 =
+    // kSlabHalf, state 1 / >= 2 = 1.0. A stateless slab (the bed family),
+    // stairs and full cubes never read a state -> the exact legacy value
+    // (the bit-level red line).
+    const BlockID id = world.getBlock(x, y, z);
+    if (id == BlockID::air() || !id.valid()) {
+        return 1.0f;
+    }
+    const Block& b = blocks.at(id);
+    if (b.model.shape != BlockModel::Shape::Slab || !b.hasState()) {
+        return 1.0f;
+    }
+    const int st = world.getBlockState(x, y, z);
+    const int s = (st != Chunk::kBlockStateUnset) ? st : b.stateDefault();
+    return (s == 1 || s >= 2) ? 1.0f : kSlabHalf;
+}
+
 std::optional<BlockPos> findMobSpawnCell(const World& world,
                                          const BlockRegistry& blocks,
                                          float minRadius, float maxRadius,
@@ -339,9 +359,14 @@ std::optional<BlockPos> findMobSpawnCell(const World& world,
                 continue;
             }
 
-            // Spawn point (bottom-center) and its AABB.
+            // Spawn point (bottom-center) and its AABB. V2-17: the feet
+            // rest on the floor TOP (spawnFloorTop — a stateful slab floor
+            // tops out at its solid region, not the cell top; every other
+            // shape = the exact legacy + 1.0).
             const float sx = static_cast<float>(x) + 0.5f;
-            const float sy = static_cast<float>(floorY) + 1.0f;
+            const float sy =
+                static_cast<float>(floorY) +
+                spawnFloorTop(world, blocks, x, floorY, z);
             const float sz = static_cast<float>(z) + 0.5f;
             const float halfW = width / 2.0f;
             const Vec3 smin {sx - halfW, sy, sz - halfW};

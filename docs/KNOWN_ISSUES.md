@@ -646,8 +646,19 @@ SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作�
 
 ## 台阶 slab（Phase 85）
 
-- **slab = 仅下半块** — v1 只有**底部 slab**（y 0..0.5 实心，顶面站立）；MC
-  的顶部 slab / 双 slab 叠合 / 斜向 = 无。`[Phase 85]`
+- **~~slab = 仅下半块~~** — `[Phase 85]` 已解决 `[V2-17]`（v2.18.0）：
+  stone_slab state 化（state_count 3）= 0 底部（既有位级）/ 1 顶部
+  （y 0.5..1 天花板贴放）/ 2 双 slab（满格，破坏掉 2 = MC 材质守恒，
+  `drops_count_by_state` [1,1,2]）；放置 = 瞄准规则（顶面 → 0 / 底面 → 1 /
+  侧面 local-y > 0.5 → 1 否则 0，`slabStateFromHit`）+ 同格同 id 互补 state
+  合并 → 双 slab；详见 docs/archive/phase-2.18.0.md。**4 条记档偏离**：
+  ① 双 slab = 单格 state 2 合并表示（一 cell 一 id 红线下的唯一表示——MC
+  「同格上下两块共存」语义 = 状态合并，破坏掉 2 = 材质守恒）② 跨型堆叠
+  合并不做（同 id 才合并，MC 1.14+ 跨 slab 型合并 = 范围外）③ 顶 slab 格内
+  站立 = AABB 重叠全挡（项目无 sneak 缩高 = 既有 KNOWN_ISSUES，MC sneak
+  1.5 高可钻顶 slab 下不可用）④ 蹲+右键旋转 Slab 形排除（state = 垂直位
+  非朝向，环转 2→0 销毁半块材质不守恒；台阶朝向环不受影响）。
+  `[Phase 85]` `[V2-17]`
 - **slab 邻满块的同层侧面可能 Z-fight / 缺面** — 贪婪 mesh 不能做"半面剔
   除"：满块贴着 slab 时，满块的侧面要么整面绘制（slab 半区经深度测试遮挡，
   半重合面 Z-fight）要么整面剔除（顶部半区露洞）。shipped stone_slab 放在

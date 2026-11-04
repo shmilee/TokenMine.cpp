@@ -448,7 +448,7 @@ void Game::update(double dt) {
         // the orbit center is distance-INDEPENDENT — the fixed 0.4 lift —
         // so it keeps its pre-V2-19 signature).
         m_camera.position = resolveThirdPersonCamera(
-            m_world,
+            m_world, m_blocks,
             thirdPersonOrbitCenter(m_player->eyePosition(), m_player->yaw,
                                    m_player->pitch),
             m_player->yaw, m_player->pitch, m_thirdPersonDistance);
@@ -474,7 +474,7 @@ void Game::update(double dt) {
         // zooms identically — one value per session, the design's
         // single-value sharing).
         m_camera.position = resolveThirdPersonCamera(
-            m_world,
+            m_world, m_blocks,
             thirdPersonOrbitCenter(m_player->eyePosition(), m_player->yaw,
                                    m_player->pitch),
             fa.yaw, fa.pitch, m_thirdPersonDistance);

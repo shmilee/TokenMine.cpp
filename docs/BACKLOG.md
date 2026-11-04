@@ -10,14 +10,14 @@
 > V3-N → V2-N 重编号）；细节立项时设计定案。**用户已授权按 V2-11
 > 起顺序推进**（11-03「继续推进原 3.x 转到 2.x 的 8 个任务」）。
 
-## v2.x 第二批任务矩阵（6/8 完成）
+## v2.x 第二批任务矩阵（7/8 完成）
 
 | 系统 | ① | ② | ③ | ④ | ⑤ | ⑥ | ⑦ |
 |---|---|---|---|---|---|---|---|
 | STRM 流送与内存 | | | | | | | |
 | PIPE 帧管线与并发 | | | | | | | |
 | LGT 光照 | | | | | | | |
-| GEN 世界与生成 | ~~V2-16 新 biome：雪原/针叶林~~ ✅ v2.17.0（门 188：snowy_taiga 数据驱动【tree 6 键严格对象 + exclude_spawn_area 演示区结构保护 = 区内映射逐位不变】+ snow 满块 + planTree 针叶路径【无 tree biome 零触碰】；零 format 世界演进，结构免疫第 69 次免重锚） | V2-17 顶部 slab/双 slab | | | | | |
+| GEN 世界与生成 | ~~V2-16 新 biome：雪原/针叶林~~ ✅ v2.17.0（门 188：snowy_taiga 数据驱动【tree 6 键严格对象 + exclude_spawn_area 演示区结构保护 = 区内映射逐位不变】+ snow 满块 + planTree 针叶路径【无 tree biome 零触碰】；零 format 世界演进，结构免疫第 69 次免重锚） | ~~V2-17 顶部 slab/双 slab~~ ✅ v2.18.0（门 189：stone_slab state_count 3【底/顶/双满格】+ drops_count_by_state [1,1,2] 破掉 2 MC 材质守恒 + 放置瞄准规则 slabStateFromHit + 同格互补合并 + solidRange 物理区间 + partial-aware slab 射线【合并可达根】；零 format bump，结构免疫第 70 次） | | | | | |
 | FLUID 流体 | | | | | | | |
 | ENT 实体/Mob/移动 | ~~V2-14 新 mob 蝙蝠（飞行 AI）~~ ✅ v2.15.0（门 186：悬停巡航飞行 AI【正弦 bob 帧锁定 + 航向流重掷】+ 洞穴生成 in-air 分支【光 ≤3 跳过 floor 带任何 Y】+ 0.9×0.5 展翼扇翅模型 + squeak 氛围音 + 三数据旗互配纪律；零 format savenorm EXACT，结构免疫第 67 次） | ~~V2-15 16 色染色羊~~ ✅ v2.16.0（门 187：shears 238 耐久 + 剪毛 1-3 彩毛 + 出生毛色流首抽 temperate 表 + 染色改色 bare 拒染 + 死亡彩毛钩子 + per-entity 变体网格【15 色复用 wool 族 tile + sheep_skin】；零 format savenorm EXACT，结构免疫第 68 次） | | | | | |
 | SURV 生存/战斗/效果 | ~~V2-11 XP 系统~~ ✅ v2.12.0（门 183：经验球 1..9 无合并分裂 + 全整数 MC 曲线【等级派生不存储】+ 三发放源数据驱动【hostile 5/passive 2/mine coal 1 diamond 5 iron 0 gold 0/smelt 1 统一】+ format 26 三向键 + save.cpp PITS 361 潜在 bug 修复 + XP 条 HUD；base18 第 4 次重锚 179027 B） | ~~V2-13 床（睡觉跳夜）~~ ✅ v2.14.0（门 185：15 色染色族 Slab 床 + 睡眠三门【距离 3.0/hostile 8×5 盒/夜窗】即时跳夜 + 天气重置 + format 28 respawn 恒写 + 验床重生【破坏回退世界出生点】+ sleep 音；结构免疫第 66 次免重锚） | | | | | |
@@ -68,6 +68,31 @@
    二批收官 = v2.18.0 系统收官 tag + release，用户可推翻）。
 
 ## 变更记录（v2.x 第二批）
+
+- 2026-11-04：**V2-17 顶部 slab/双 slab 完成（v2.18.0，门 189 全
+  PASS）**——GEN 行，消费「slab = 仅下半块」记档 [Phase 85]。
+  stone_slab state 化（state_count 3：0 底部既有位级 / 1 顶部 y
+  0.5..1 天花板贴放 / 2 双 slab 满格）+ drops_count_by_state [1,1,2]
+  严格字段（双 slab 破坏掉 2 = MC 材质守恒；长度==state_count/零/非
+  整/无 state 携带全点名拒）+ solidRange 物理区间扩展（{bottom,top}：
+  0→{0,0.5} 位级 / 1→{0.5,1} / ≥2→{0,1}；床/stairs 现值位级红线，
+  顶 slab 顶面恰 1.0 可踏升 + mob 生成 spawnFloorTop）+ emitSlab 三
+  态（state 0 逐语句未动 / 顶镜像底面恒绘 / 双满格标准剔，零新剔除
+  规则）+ 放置 slab 规则（:1173 扩展点：顶面→0 位级根 / 底面→1 / 侧
+  面 local-y>0.5→1，slabStateFromHit 纯函数）+ 同格同 id 互补 state
+  合并 → 双 slab + 蹲旋转 Slab 形排除（偏离 4）+ **partial-aware
+  slab raycast**（门机缺口补口：cell DDA 全遮挡 → 共享 dda 子格判
+  定，空气半穿透 + 内表面 ±Y 命中，5 块射线消费点 + 桶 + LOS + 第三
+  人称共享一致 = 合并 E2E 可达根；记档行为变更 = 瞄准底 slab 空气半
+  破身后块 MC 同款）。4 条偏离（双 slab 单格 state 表示 / 跨型合并不
+  做 / 顶 slab 全挡无 sneak 缩高 / 蹲旋转排除）。2455/2455（+35）、
+  banner v2.18.0、零 format bump（states format 15 机制）。门 189：
+  S1 结构免疫第 70 次免重锚（≡ 锚 179027 零 diff + savenorm EXACT）/
+  S2 三臂×双侧（顶 slab / 合并 state 2【旧侧 cell DDA 叠 2 格无
+  state 互斥】/ 双 slab 破 2【旧侧 1】hold 3.3s 断点 + 2.83>磁力
+  2.5 留地）/ S3 / S6 6/6 / 性能同档（9/1/3 逐位 + states 全集合恒
+  等强口径 + 3 slab 自成本同档）。PITS 383。详见
+  docs/archive/phase-2.18.0.md。
 
 - 2026-11-04：**V2-16 雪原/针叶林 biome 完成（v2.17.0，门 188 全
   PASS）**——GEN 行。snowy_taiga.json（weight 2 / surface snow /

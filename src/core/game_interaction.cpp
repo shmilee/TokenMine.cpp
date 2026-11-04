@@ -381,7 +381,15 @@ void Game::handleInteraction(double dt) {
                 const Block& b = m_blocks.at(
                     m_world.getBlock(hit->block.x, hit->block.y,
                                      hit->block.z));
-                if (b.hasState()) {
+                // V2-17 deviation 4: a SLAB's state is its VERTICAL
+                // position (bottom / top / double), not an orientation —
+                // the (s+1)%count cycle would destroy material (a
+                // state-2 double slab cycled to 0 vanishes a half block),
+                // so the rotation gate excludes the Slab shape: a
+                // crouching right-click on a slab PLACES instead (the
+                // Minecraft behavior — the stairs' orientation ring is
+                // untouched, the state-0 default is unchanged).
+                if (b.hasState() && b.model.shape != BlockModel::Shape::Slab) {
                     const int cur = m_world.getBlockState(hit->block.x,
                                                           hit->block.y,
                                                           hit->block.z);
@@ -479,8 +487,8 @@ std::optional<BlockHit> Game::targetBlock() const {
     // front-view convention: the front camera is the player's visual
     // eye, D from the real eye). First / ThirdBack: aimReach() = kReach,
     // bit-identical to the pre-V2-1 literal.
-    return raycastBlock(m_world, m_player->eyePosition(), m_camera.forward(),
-                        aimReach());
+    return raycastBlock(m_world, m_blocks, m_player->eyePosition(),
+                        m_camera.forward(), aimReach());
 }
 
 void Game::resetBreaking() {
@@ -932,7 +940,7 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
     // afterward), and a cell that stops holding a stateful block keeps its
     // byte (the World API rejects the sentinel write — no change, no dirty
     // mark; the consumers are shape/state-gated, so the stale value is
-    // inert). The collision (solidTopHeight) + the mesh (emitStairs) + the
+    // inert). The collision (solidRange) + the mesh (emitStairs / emitSlab) + the
     // save read it from the World.
     {
         const Block& b = m_blocks.at(id);
@@ -986,6 +994,20 @@ void Game::setBlock(int x, int y, int z, BlockID id) {
 
 void Game::breakBlock(const BlockHit& hit) {
     const BlockID id = m_world.getBlock(hit.block.x, hit.block.y, hit.block.z);
+    // V2-17: the broken cell's per-instance state, read BEFORE the
+    // setBlock(air) below erases it (the setBlock choke point reseeds the
+    // byte for the NEW block — the sentinel for air): the per-state drop
+    // count (drops_count_by_state) needs it. The unset -> stateDefault
+    // rule (the emitStairs / collision / mesh twin).
+    const Block& brokenBlock = m_blocks.at(id);
+    int brokenState = brokenBlock.stateDefault();
+    if (brokenBlock.hasState()) {
+        const int bs = m_world.getBlockState(hit.block.x, hit.block.y,
+                                              hit.block.z);
+        if (bs != Chunk::kBlockStateUnset) {
+            brokenState = bs;
+        }
+    }
     // setBlock marks the chunk (and face-sharing neighbors) dirty; the mesh
     // rebuild happens on the next frame.
     setBlock(hit.block.x, hit.block.y, hit.block.z, BlockID::air());
@@ -1027,9 +1049,19 @@ void Game::breakBlock(const BlockHit& hit) {
     if (!block.properties.drops.empty()) {
         const Item& dropItem = m_items.at(m_items.idForName(block.properties.drops));
         // dropsCount (validated at init to fit the item's max stack).
+        // V2-17: the PER-STATE count — a stateful block with a
+        // drops_count_by_state list yields the entry for the broken
+        // cell's state (read above, before the setBlock erasure): the
+        // shipped double slab (state 2) drops TWO slabs (the Minecraft
+        // material conservation); an empty list = dropsCount for every
+        // state (the pre-V2-17 behavior, the drop item's name unchanged).
+        int dropCount = block.properties.dropsCount;
+        if (!block.properties.dropsCountByState.empty()) {
+            dropCount = block.properties.dropsCountByState[brokenState];
+        }
         m_entities.push_back(std::make_unique<ItemEntity>(
             m_world, m_blocks, dropItem.name, dropItem.maxStack,
-            block.properties.dropsCount, dropAt(0)));
+            dropCount, dropAt(0)));
     }
     // Chance secondary drop (Phase 49): an OPTIONAL extra item rolled per
     // break, independent of (and in addition to) the primary drop. The roll
@@ -1143,6 +1175,78 @@ void Game::placeBlock() {
         hit->block.x + static_cast<int>(hit->normal.x),
         hit->block.y + static_cast<int>(hit->normal.y),
         hit->block.z + static_cast<int>(hit->normal.z)};
+    // V2-17: the slab placement state rule (the Phase-97 stair auto-orient
+    // slot — the placement-state-rule extension point). A stateful slab
+    // (the shape + the hasState data flag — no species switch) places by
+    // the aim hit (slabStateFromHit, the Minecraft rule): a top-face aim =
+    // the bottom slab above (the pre-V2-17 behavior, the bit-level root),
+    // a bottom-face aim (the ceiling) = the top slab below, a side aim =
+    // by the hit height within the target cell (strictly above the middle
+    // -> top). A target cell that ALREADY holds the same slab in its
+    // complementary half completes the DOUBLE slab (state 2 — the
+    // Minecraft same-cell merge, one item consumed); a state-2 target is
+    // not a merge (the full cell — canPlaceAt's solid rejection below
+    // handles it, the legacy path).
+    const Block& placedBlock = m_blocks.at(item.block);
+    int slabPlaceState = -1;
+    bool slabMerge = false;
+    if (placedBlock.model.shape == BlockModel::Shape::Slab &&
+        placedBlock.hasState()) {
+        // The aim ray's hit point: eye + forward * distance (the
+        // targetBlock ray — the BlockHit's distance is the ray parameter,
+        // so the hit point is reconstructible, the targetBlock contract).
+        const Vec3 hitPoint =
+            m_player->eyePosition() + m_camera.forward() * hit->distance;
+        slabPlaceState =
+            slabStateFromHit(hitPoint, hit->normal,
+                             static_cast<float>(target.y));
+        const BlockID targetId = m_world.getBlock(target.x, target.y,
+                                                  target.z);
+        if (targetId == item.block) {
+            const int cur =
+                m_world.getBlockState(target.x, target.y, target.z);
+            const int targetState =
+                (cur != Chunk::kBlockStateUnset) ? cur
+                                                 : placedBlock.stateDefault();
+            slabMerge = slabMergesToDouble(targetId, item.block,
+                                           targetState, slabPlaceState);
+        }
+    }
+    if (slabMerge) {
+        // The merge bypasses canPlaceAt's SOLID rejection (the target
+        // cell holds the complementary half — the merge's precondition)
+        // but keeps its Y-range + player-overlap rejections: the
+        // completed double slab is a FULL solid, so a cell the player's
+        // body overlaps may not become one (the strict canPlaceAt
+        // convention, inlined — the merge is the only caller with a
+        // solid target; canPlantAt is skipped — the first half was
+        // soil-validated when it was placed, the soil is unchanged).
+        if (target.y < 0 || target.y >= kWorldHeight) {
+            return;
+        }
+        const Vec3& pmin = m_player->aabbMin();
+        const Vec3& pmax = m_player->aabbMax();
+        const float cx = static_cast<float>(target.x);
+        const float cy = static_cast<float>(target.y);
+        const float cz = static_cast<float>(target.z);
+        if (pmin.x < cx + 1.0f && pmax.x > cx && pmin.y < cy + 1.0f &&
+            pmax.y > cy && pmin.z < cz + 1.0f && pmax.z > cz) {
+            return;
+        }
+        setBlock(target.x, target.y, target.z, item.block);
+        // The completed double slab (state 2 — the single-cell
+        // representation of the Minecraft same-cell pair).
+        m_world.setBlockState(target.x, target.y, target.z, 2);
+        Lighting::updateLocal(m_world, m_blocks, target);
+        m_inventory.take(m_selectedSlot, 1);
+        emitTutorialEvent("place." + placedBlock.name, 1);
+        m_sound.play(
+            blockSoundName(placedBlock, "place"),
+            Vec3{static_cast<float>(target.x) + 0.5f,
+                 static_cast<float>(target.y) + 0.5f,
+                 static_cast<float>(target.z) + 0.5f});
+        return;
+    }
     if (!canPlaceAt(m_world, m_blocks, target, m_player->aabbMin(),
                     m_player->aabbMax())) {
         return;
@@ -1168,12 +1272,22 @@ void Game::placeBlock() {
     // for stairs. Any stair-shaped block (the base stone_stairs or a
     // Phase-89 variant) gets the same placement rule (the variant's baked
     // facing only matters outside the game, e.g. unit fixtures). This slot
-    // is the future placement-state-rule extension point (ENT-2): other
-    // stateful shapes keep the choke point's default.
+    // is the placement-state-rule extension point (ENT-2): the slab's aim
+    // state (V2-17, slabStateFromHit) consumes it below; other stateful
+    // shapes keep the choke point's default.
     if (m_blocks.at(item.block).model.shape == BlockModel::Shape::Stairs) {
         m_world.setBlockState(target.x, target.y, target.z,
                               static_cast<std::uint8_t>(
                                   stairFacingFromYaw(m_player->yaw)));
+    } else if (slabPlaceState >= 0) {
+        // V2-17: the slab's placement state (slabStateFromHit — the aim
+        // rule above). The setBlock choke point seeded the block's state
+        // default; this overrides it (the stair auto-orient twin, the
+        // ENT-2 post-choke-point pattern). A state-0 placement rewrites
+        // the seeded default — a no-op write (zero dirty marks), the
+        // pre-V2-17 behavior's bit-level root.
+        m_world.setBlockState(target.x, target.y, target.z,
+                              static_cast<std::uint8_t>(slabPlaceState));
     }
     // Relight the region around the change (a placed occluder blocks light;
     // a placed glowstone is a new light source).
@@ -1477,7 +1591,7 @@ bool Game::tryFluidBucket() {
         // (front view: D + kReach, the same convention as targetBlock
         // — First / ThirdBack bit-identical).
         const std::optional<BlockPos> cell =
-            raycastFluid(m_world, m_player->eyePosition(),
+            raycastFluid(m_world, m_blocks, m_player->eyePosition(),
                          m_camera.forward(), aimReach());
         // A source cell is level kMaxFluidLevel (flowing cells are lower
         // and cannot be collected, Minecraft). A block cell reads dry.
@@ -1552,7 +1666,7 @@ bool Game::tryFluidBucket() {
         // matching the targetBlock block hit above — same line and same
         // reach budget in both modes (V2-1: the budget is aimReach() —
         // front view D + kReach; first person bit-identical).
-        fluidHit = raycastFluid(m_world, m_player->eyePosition(),
+        fluidHit = raycastFluid(m_world, m_blocks, m_player->eyePosition(),
                                 m_camera.forward(), aimReach());
     }
     // The pour cell (bucketPourTarget): the face neighbor of the hit

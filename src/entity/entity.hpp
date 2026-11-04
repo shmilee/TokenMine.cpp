@@ -42,6 +42,18 @@
 
 namespace mc {
 
+// V2-17: the cell's SOLID region as a cell-local Y interval {bottom, top}
+// (the Phase-85 single-top view generalized — every pre-V2-17 shape has
+// bottom == 0, so the top-only consumers are bit-identical). See
+// Entity::solidRange for the per-shape values.
+struct SolidRange {
+    float bottom = 0.0f; // cell-local (0 = the region starts at the cell floor)
+    float top = 0.0f;    // cell-local (0 = not solid)
+    bool operator==(const SolidRange& o) const {
+        return bottom == o.bottom && top == o.top;
+    }
+};
+
 class Entity {
 public:
     virtual ~Entity() = default;
@@ -192,20 +204,32 @@ private:
     bool isSolid(BlockID id) const;
 
 protected:
-    // Phase 85: the top of the cell's SOLID region in cell-local units (0 =
-    // not solid, 0.5 = bottom slab, 1.0 = full block) — the collision tests
-    // overlap against this region, not the whole cell. Phase 87/89 stairs:
-    // the height varies across the cell along the stair's facing axis (a
-    // slope); `mn`/`mx` are the AABB's world corners and `cell` the cell's
-    // origin, so the effective blocking height is the slope at the AABB's LOW
-    // end on the facing axis (north: 1 - mxLocalZ, south: mnLocalZ, east:
-    // mnLocalX, west: 1 - mxLocalX). A slab / full cube ignore the AABB (a
-    // fixed height). Phase 99: also 1.5 for the wall / fence barrier.
-    // Protected (not private): stepUp (below) and the player's resting
-    // check need the same solid-region height to distinguish a TRUE
-    // 1-block step from the wall/fence cap.
-    float solidTopHeight(BlockID id, const Vec3& mn, const Vec3& mx,
-                         const BlockPos& cell) const;
+    // V2-17: the cell's SOLID region as a cell-local Y INTERVAL {bottom,
+    // top} (the Phase-85 single-top view generalized — every pre-V2-17
+    // shape has bottom == 0, so the top-only consumers are bit-identical):
+    //   - air / non-solid: {0, 0} (not solid);
+    //   - a STATEFUL slab (the explicit model.state_count — the shipped
+    //     stone_slab's 3 states): state 0 = the bottom half {0, kSlabHalf}
+    //     (the Phase-85 value), state 1 = the top half {kSlabHalf, 1} (the
+    //     ceiling mount — the cell's bottom half is AIR, which the
+    //     single-top view could not express), state >= 2 = the double
+    //     slab, the full cell {0, 1}; the state is the World's per-cell
+    //     byte (unset -> the block's state default, the emitStairs rule);
+    //   - a stateless slab (the bed family) = the bottom half (the exact
+    //     pre-V2-17 value — the bit-level red line);
+    //   - a stair (Phase 87/89): {0, the slope at the AABB's edge NEAREST
+    //     the high end} — `mn`/`mx` are the AABB's world corners and
+    //     `cell` the cell's origin (north: 1 - mnLocalZ, south: mxLocalZ,
+    //     east: mxLocalX, west: 1 - mxLocalX — unchanged);
+    //   - a wall / fence (Phase 95/98): {0, 1.5} (the barrier cap extends
+    //     above the cell); a glass pane (Phase 99): {0, 1} (the jumpable
+    //     full cell); a full cube: {0, 1}.
+    // The collision (moveAxis / hasRoomAt / stepUp) tests overlap against
+    // this region, not the whole cell. Protected (not private): stepUp
+    // (below) and the player's resting check need the same solid region
+    // to distinguish a TRUE 1-block step from the wall/fence cap.
+    SolidRange solidRange(BlockID id, const Vec3& mn, const Vec3& mx,
+                          const BlockPos& cell) const;
 
     // Step up 1 block when flush against a TRUE 1-block step (Phase 16, the
     // player's auto step-up; ENT-3: the mobs share it — the same geometry,
@@ -289,7 +313,7 @@ protected:
     // lifted to the base in ENT-4 so the mob + item share it): a solid
     // that the Y resolve would clamp against right now (a solid-region top
     // at the feet, within kFaceEps) — the same scan as moveAxis (the
-    // strict footprint overlap + solidTopHeight), the cell row at and one
+    // strict footprint overlap + solidRange), the cell row at and one
     // below the feet plane (the wall-cap extension, Phase 95). FRESH
     // because the tick m_onGround is the previous sub-step's result: a
     // body preset at — or restored onto — a pool floor has no collision

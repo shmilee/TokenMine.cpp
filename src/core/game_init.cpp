@@ -433,6 +433,17 @@ Result<void> Game::buildScene() {
                            "' but its max stack is " +
                            std::to_string(m_items.at(dropId).maxStack));
         }
+        // V2-17: the per-state counts carry the SAME max-stack discipline
+        // (one entry per state; the shipped double slab's 2 must fit).
+        for (int c : b.properties.dropsCountByState) {
+            if (c > m_items.at(dropId).maxStack) {
+                return MC_FAIL("block '" + b.name +
+                               "' state drops " + std::to_string(c) +
+                               " of '" + b.properties.drops +
+                               "' but its max stack is " +
+                               std::to_string(m_items.at(dropId).maxStack));
+            }
+        }
     }
 
     // Strict data check (Phase 48): a block's grows_to must name an

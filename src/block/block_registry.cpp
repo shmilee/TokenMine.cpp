@@ -152,6 +152,36 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "drops_count", "number",
                    [&](const Json& v) { out.dropsCount = v.asInt(); });
     MC_TRY(r);
+    // V2-17: the PER-STATE primary drop count list (drops_count_by_state):
+    // a STRICT int array, each entry in [1, 64] (the drops_count domain —
+    // a zero / negative / non-integer entry is named and rejected); an
+    // empty array is a no-op typo (the ammo discipline, the plant_on
+    // pattern). The PAIRING against the model — it requires an explicit
+    // model.state_count (a stateless block's list is dead data) and one
+    // entry per state — is cross-checked in registerBlock (the model is
+    // parsed after the properties; the existence-check-at-init pattern).
+    if (const Json* dcs = p->find("drops_count_by_state")) {
+        if (!dcs->isArray()) {
+            return MC_FAIL("block property 'drops_count_by_state' must be "
+                           "an array of integers");
+        }
+        if (dcs->size() == 0) {
+            return MC_FAIL("block property 'drops_count_by_state' must not "
+                           "be an empty array (omit it when every state "
+                           "drops the same count)");
+        }
+        for (std::size_t i = 0; i < dcs->size(); ++i) {
+            const Json& e = dcs->at(i);
+            if (!e.isNumber() || e.asDouble() != std::floor(e.asDouble()) ||
+                e.asDouble() < 1.0 || e.asDouble() > 64.0) {
+                return MC_FAIL("drops_count_by_state[" + std::to_string(i) +
+                               "] must be an integer in [1, 64], got " +
+                               (e.isNumber() ? std::to_string(e.asDouble())
+                                             : "a non-number"));
+            }
+            out.dropsCountByState.push_back(static_cast<int>(e.asDouble()));
+        }
+    }
     // V2-11 (XP): the mine-complete grant (the orb's value). A STRICT
     // integer in [0, 9]: 0 (the absent-field default) = no orb; a
     // non-integer / negative is named and rejected (the integer
@@ -1138,6 +1168,33 @@ Result<BlockID> BlockRegistry::registerBlock(const Json& def) {
                        "' has a 'tree' object and requires "
                        "'model.state_count' >= 2 (the growth stage is the "
                        "per-instance state)");
+    }
+
+    // V2-17: drops_count_by_state <-> model.state_count (the strict
+    // pairing, the state-pair discipline): the per-state count list only
+    // makes sense for a block with an EXPLICIT per-instance state — a
+    // stateless block's list is dead data (named and rejected; a stair's
+    // IMPLICIT state never pairs with it — no explicit state_count), and
+    // the length must equal the state count (one count per state — a
+    // mismatched list cannot be indexed by state, the chance_drops entry
+    // pattern).
+    if (!block.properties.dropsCountByState.empty()) {
+        if (block.model.stateCount == 0) {
+            return MC_FAIL("block '" + name +
+                           "' carries 'drops_count_by_state' without a "
+                           "'model.state_count' (dead data — a stateless "
+                           "block drops one fixed count)");
+        }
+        if (block.properties.dropsCountByState.size() !=
+            static_cast<std::size_t>(block.model.stateCount)) {
+            return MC_FAIL("block '" + name + "' 'drops_count_by_state' "
+                           "has " +
+                           std::to_string(
+                               block.properties.dropsCountByState.size()) +
+                           " entries but 'model.state_count' is " +
+                           std::to_string(block.model.stateCount) +
+                           " (one count per state)");
+        }
     }
 
     block.id = BlockID{static_cast<int>(m_blocks.size())};

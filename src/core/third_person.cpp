@@ -72,8 +72,9 @@ Vec3 thirdPersonOrbitCenter(const Vec3& eye, float yaw, float pitch) {
     return eye + cam.up() * kThirdPersonOrbitHeight;
 }
 
-Vec3 resolveThirdPersonCamera(const World& world, const Vec3& orbitCenter,
-                              float yaw, float pitch, float distance) {
+Vec3 resolveThirdPersonCamera(const World& world, const BlockRegistry& blocks,
+                              const Vec3& orbitCenter, float yaw, float pitch,
+                              float distance) {
     const Vec3 ideal = orbitCenter + thirdPersonCameraOffset(yaw, pitch,
                                                              distance);
     // Toward the orbit center (the eye): the unit forward. The offset
@@ -97,7 +98,8 @@ Vec3 resolveThirdPersonCamera(const World& world, const Vec3& orbitCenter,
         // (the DDA first step out of `cell` along dir).
         embedded = true;
         t = firstExitDistance(ideal, dir);
-    } else if (const auto hit = raycastBlock(world, ideal, dir, distance)) {
+    } else if (const auto hit =
+                   raycastBlock(world, blocks, ideal, dir, distance)) {
         t = hit->distance;
     }
     if (!t) {

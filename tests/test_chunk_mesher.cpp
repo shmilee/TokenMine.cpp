@@ -242,6 +242,243 @@ TEST(ChunkMesherTest, FlatSlabTopMergesIntoOneQuad) {
     EXPECT_EQ(top[3].uvLocal, (Vec2 {0.0f, -15.0f}));
 }
 
+// -- V2-17: the stateful slab (state 1 = the top slab, state 2 = the
+// double slab / full cell; state 0 = the exact Phase-85 bottom slab). --
+
+namespace {
+
+// The shipped stone_slab's shape: a stateful slab (state_count 3).
+BlockID registerStatefulSlab(BlockRegistry& reg) {
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"slab3","model":{"shape":"slab","state_count":3,)"
+        R"("state_default":0,"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+        return BlockID::invalid();
+    }
+    return *r;
+}
+
+// A stateless slab (the bed family's shape — the legacy geometry).
+BlockID registerStatelessSlab(BlockRegistry& reg) {
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"slab0","model":{"shape":"slab",)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+        return BlockID::invalid();
+    }
+    return *r;
+}
+
+// Position + normal equality of two vertex streams (the state-0 bit-level
+// red line check: same faces, same corners).
+bool samePositionsAndNormals(const std::vector<MeshVertex>& a,
+                             const std::vector<MeshVertex>& b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        if (a[i].position != b[i].position || a[i].normal != b[i].normal) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+TEST(ChunkMesherTest, V217SlabState1GeometryMirroredTop) {
+    // The isolated top slab: all six faces (the bottom is always emitted —
+    // the state-0 top-face twin; the top + sides against air) = 24
+    // vertices, and every vertex sits in the cell's UPPER half: y in
+    // {2.5, 3.0} (the state-0 mirror — {2.0, 2.5}).
+    BlockRegistry reg = makeRegistry();
+    const BlockID slab3 = registerStatefulSlab(reg);
+    World world;
+    world.setBlock(8, 2, 8, slab3);
+    world.setBlockState(8, 2, 8, 1);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    ASSERT_EQ(data.opaqueVertices.size(), 24u);
+    for (const MeshVertex& v : data.opaqueVertices) {
+        EXPECT_TRUE(v.position.y == 2.5f || v.position.y == 3.0f)
+            << "a top-slab vertex sits in the cell's upper half: "
+            << v.position.y;
+    }
+    // The bottom face (normal -Y) sits at y=2.5 (the region's bottom).
+    const auto bottom =
+        verticesWithNormal(data.opaqueVertices, Vec3{0.0f, -1.0f, 0.0f});
+    ASSERT_EQ(bottom.size(), 4u);
+    for (const MeshVertex& v : bottom) {
+        EXPECT_FLOAT_EQ(v.position.y, 2.5f);
+    }
+    // The top face (normal +Y) sits at y=3.0 (the cell top).
+    const auto top =
+        verticesWithNormal(data.opaqueVertices, Vec3{0.0f, 1.0f, 0.0f});
+    ASSERT_EQ(top.size(), 4u);
+    for (const MeshVertex& v : top) {
+        EXPECT_FLOAT_EQ(v.position.y, 3.0f);
+    }
+}
+
+namespace {
+
+// Counts the vertices carrying normal `n` at EXACTLY position axis value
+// `at` (the neighbor stones in these tests emit their own faces — the
+// exact slab-face plane isolates the slab's vertices; all the planes
+// below are exact binary fractions).
+int countAt(const std::vector<MeshVertex>& verts, Vec3 n, int axis, float at) {
+    int count = 0;
+    for (const MeshVertex& v : verts) {
+        if (v.normal != n) {
+            continue;
+        }
+        const float p =
+            axis == 0 ? v.position.x : axis == 1 ? v.position.y : v.position.z;
+        if (p == at) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+} // namespace
+
+TEST(ChunkMesherTest, V217SlabState1BottomAlwaysEmitted) {
+    // An opaque block BELOW the top slab does not hide its bottom face
+    // (the face is mid-cell, y=2.5 — the neighbor borders the cell bottom,
+    // not the face): the -Y face stays emitted (the state-0 top-face twin;
+    // the stone's own -Y face sits at y=1.0, a different plane).
+    BlockRegistry reg = makeRegistry();
+    const BlockID slab3 = registerStatefulSlab(reg);
+    World world;
+    world.setBlock(8, 2, 8, slab3);
+    world.setBlockState(8, 2, 8, 1);
+    world.setBlock(8, 1, 8, reg.idForName("stone"));
+    const auto data = mesh(world, reg, {0, 0, 0});
+    EXPECT_EQ(countAt(data.opaqueVertices, Vec3{0.0f, -1.0f, 0.0f}, 1, 2.5f),
+              4); // the slab's bottom face, mid-cell
+}
+
+TEST(ChunkMesherTest, V217SlabState1TopCulledByOpaqueAbove) {
+    // The top slab's top face sits on the cell boundary: an opaque block
+    // above hides it (the general rule — the state-0 bottom-face twin; the
+    // stone's own +Y face sits at y=4.0, a different plane).
+    BlockRegistry reg = makeRegistry();
+    const BlockID slab3 = registerStatefulSlab(reg);
+    World world;
+    world.setBlock(8, 2, 8, slab3);
+    world.setBlockState(8, 2, 8, 1);
+    world.setBlock(8, 3, 8, reg.idForName("stone"));
+    const auto data = mesh(world, reg, {0, 0, 0});
+    EXPECT_EQ(countAt(data.opaqueVertices, Vec3{0.0f, 1.0f, 0.0f}, 1, 3.0f),
+              0); // the slab's top face is culled
+}
+
+TEST(ChunkMesherTest, V217SlabState1SideCulledByOpaqueNeighbor) {
+    // The top slab's side faces (spanning y 2.5..3.0) are culled by an
+    // opaque horizontal neighbor (the general rule, the state-0 side twin;
+    // the stone's own faces sit on x=10.0 / y=2.0 planes, not x=9.0).
+    BlockRegistry reg = makeRegistry();
+    const BlockID slab3 = registerStatefulSlab(reg);
+    World world;
+    world.setBlock(8, 2, 8, slab3);
+    world.setBlockState(8, 2, 8, 1);
+    world.setBlock(9, 2, 8, reg.idForName("stone"));
+    const auto data = mesh(world, reg, {0, 0, 0});
+    EXPECT_EQ(countAt(data.opaqueVertices, Vec3{1.0f, 0.0f, 0.0f}, 0, 9.0f),
+              0); // the +X face (toward the stone) is hidden
+    EXPECT_EQ(countAt(data.opaqueVertices, Vec3{-1.0f, 0.0f, 0.0f}, 0, 8.0f),
+              4); // the -X face stays
+    EXPECT_EQ(countAt(data.opaqueVertices, Vec3{0.0f, -1.0f, 0.0f}, 1, 2.5f),
+              4); // the bottom face stays (always emitted, mid-cell)
+    // The top face stays too (air above) — the isolated top-slab pin
+    // (V217SlabState1GeometryMirroredTop) owns that assertion (the stone's
+    // own top face shares the y=3.0 plane, so it is not isolable here).
+}
+
+TEST(ChunkMesherTest, V217SlabState2FullGeometry) {
+    // The isolated double slab: the FULL cell — all six faces, 24
+    // vertices, y in {2.0, 3.0} (the unit-cube corners, no half-scale).
+    BlockRegistry reg = makeRegistry();
+    const BlockID slab3 = registerStatefulSlab(reg);
+    World world;
+    world.setBlock(8, 2, 8, slab3);
+    world.setBlockState(8, 2, 8, 2);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    ASSERT_EQ(data.opaqueVertices.size(), 24u);
+    for (const MeshVertex& v : data.opaqueVertices) {
+        EXPECT_TRUE(v.position.y == 2.0f || v.position.y == 3.0f)
+            << "a double-slab vertex sits on a cell corner: "
+            << v.position.y;
+    }
+}
+
+TEST(ChunkMesherTest, V217SlabState2StandardCulling) {
+    // The double slab culls like a FULL block (the standard rule — NOT the
+    // half-slab always-emit rule): the top by the cell above, the bottom
+    // by the cell below; only the four sides stay. The stones' side faces
+    // share the slab's x/z planes (coplanar corners), so the sides are
+    // pinned DIFFERENTIALLY: with-slab count minus the stones-only count
+    // = exactly the slab's own side vertices.
+    BlockRegistry reg = makeRegistry();
+    const BlockID slab3 = registerStatefulSlab(reg);
+    const BlockID stone = reg.idForName("stone");
+    // The stones-only baseline: two SEPARATE full cubes (a gap between
+    // them), all six faces each = 24 vertices each.
+    World baseline;
+    baseline.setBlock(8, 3, 8, stone);
+    baseline.setBlock(8, 1, 8, stone);
+    const auto base = mesh(baseline, reg, {0, 0, 0});
+    ASSERT_EQ(base.opaqueVertices.size(), 48u);
+    // The stones + the double slab between them: the slab's top / bottom
+    // faces are culled (the standard full-block rule), its four sides
+    // stay (16 vertices) — and, the slab being opaque, each stone loses
+    // the face toward it (the upper stone's bottom face, the lower
+    // stone's top face: 8 vertices gone).
+    World world;
+    world.setBlock(8, 2, 8, slab3);
+    world.setBlockState(8, 2, 8, 2);
+    world.setBlock(8, 3, 8, stone);
+    world.setBlock(8, 1, 8, stone);
+    const auto data = mesh(world, reg, {0, 0, 0});
+    EXPECT_EQ(data.opaqueVertices.size(),
+              base.opaqueVertices.size() - 8 /* the stones' inner faces */ +
+                  16 /* the slab's four sides */);
+    // The slab's top face is culled (the +Y vertices at y=3.0 are the
+    // stones' side-face corners only — no +Y-NORMAL vertex sits there:
+    // the upper stone's bottom face is culled by the slab, its top face
+    // is at y=4.0).
+    EXPECT_EQ(countAt(data.opaqueVertices, Vec3{0.0f, 1.0f, 0.0f}, 1, 3.0f),
+              0);
+    // The slab's bottom face is culled (the twin at y=2.0).
+    EXPECT_EQ(countAt(data.opaqueVertices, Vec3{0.0f, -1.0f, 0.0f}, 1, 2.0f),
+              0);
+}
+
+TEST(ChunkMesherTest, V217SlabState0MatchesUnsetAndStateless) {
+    // The bit-level red line: a stateful slab with state 0 (and with the
+    // state UNSET — the sentinel fallback) meshes to the EXACT Phase-85
+    // geometry: positions + normals identical to a stateless slab (the bed
+    // family's shape) in the same cell.
+    BlockRegistry reg = makeRegistry();
+    const BlockID slab3 = registerStatefulSlab(reg);
+    const BlockID slab0 = registerStatelessSlab(reg);
+    World unsetWorld, stateZeroWorld, statelessWorld;
+    unsetWorld.setBlock(8, 2, 8, slab3); // the state byte stays unset
+    stateZeroWorld.setBlock(8, 2, 8, slab3);
+    stateZeroWorld.setBlockState(8, 2, 8, 0);
+    statelessWorld.setBlock(8, 2, 8, slab0);
+    const auto a = mesh(unsetWorld, reg, {0, 0, 0});
+    const auto b = mesh(stateZeroWorld, reg, {0, 0, 0});
+    const auto c = mesh(statelessWorld, reg, {0, 0, 0});
+    EXPECT_TRUE(samePositionsAndNormals(a.opaqueVertices,
+                                        c.opaqueVertices));
+    EXPECT_TRUE(samePositionsAndNormals(b.opaqueVertices,
+                                        c.opaqueVertices));
+    EXPECT_EQ(a.opaqueIndices, c.opaqueIndices);
+}
+
 TEST(ChunkMesherTest, DifferentFaceLightSplitsRun) {
     BlockRegistry reg = makeRegistry();
     World world;

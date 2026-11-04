@@ -1175,6 +1175,171 @@ TEST(EntityTest, Phase85SlabHasRoom) {
     EXPECT_FALSE(item.hasRoomAt(Vec3{9.5f, 2.5f, 8.5f})); // inside it
 }
 
+// -- V2-17: the top slab / double slab (the stateful slab solid range) ------
+
+namespace {
+
+// A stateful slab (state_count 3, the shipped stone_slab's shape): 0 =
+// bottom, 1 = top, 2 = double.
+BlockID registerStatefulSlab(Fixture& f) {
+    auto r = f.blocks.registerBlock(parseJson(
+        R"({"id":"slab3","model":{"shape":"slab","state_count":3,)"
+        R"("state_default":0,"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+        return BlockID::invalid();
+    }
+    return *r;
+}
+
+// A probe exposing the protected solid range (the V2-17 successor of the
+// single-top solid height) for direct value pins.
+class RangeProbe : public Entity {
+public:
+    RangeProbe(const World& world, const BlockRegistry& blocks, Vec3 pos)
+        : Entity(world, blocks, pos, 0.6f, 1.8f) {}
+    void update(double) override {}
+    void integrate(float) override {}
+    SolidRange range(BlockID id, const Vec3& mn, const Vec3& mx,
+                     const BlockPos& cell) const {
+        return solidRange(id, mn, mx, cell);
+    }
+};
+
+} // namespace
+
+TEST(EntityTest, V217SolidRangeStatefulSlabByState) {
+    // The stateful slab's solid region by per-cell state (the World's
+    // per-cell byte — unset -> the block's state default): 0 = the bottom
+    // half {0, 0.5} (the Phase-85 value), 1 = the top half {0.5, 1} (the
+    // ceiling mount), 2 = the double slab, the full cell {0, 1}.
+    Fixture f;
+    const BlockID slab3 = registerStatefulSlab(f);
+    const RangeProbe probe(f.world, f.blocks, {8.5f, 1.0f, 8.5f});
+    const Vec3 p {8.5f, 2.0f, 8.5f};
+    const BlockPos cell {8, 2, 8};
+    f.world.setBlock(8, 2, 8, slab3);
+    // Unset (the sentinel) -> the block's state default (0 = the bottom).
+    const SolidRange unset = probe.range(slab3, p, p, cell);
+    EXPECT_FLOAT_EQ(unset.bottom, 0.0f);
+    EXPECT_FLOAT_EQ(unset.top, 0.5f);
+    f.world.setBlockState(8, 2, 8, 0);
+    const SolidRange bottom = probe.range(slab3, p, p, cell);
+    EXPECT_FLOAT_EQ(bottom.bottom, 0.0f);
+    EXPECT_FLOAT_EQ(bottom.top, 0.5f);
+    f.world.setBlockState(8, 2, 8, 1);
+    const SolidRange top = probe.range(slab3, p, p, cell);
+    EXPECT_FLOAT_EQ(top.bottom, 0.5f);
+    EXPECT_FLOAT_EQ(top.top, 1.0f);
+    f.world.setBlockState(8, 2, 8, 2);
+    const SolidRange dbl = probe.range(slab3, p, p, cell);
+    EXPECT_FLOAT_EQ(dbl.bottom, 0.0f);
+    EXPECT_FLOAT_EQ(dbl.top, 1.0f);
+}
+
+TEST(EntityTest, V217SolidRangeLegacyShapesBitLevel) {
+    // Every pre-V2-17 shape keeps its EXACT solid region (bottom == 0,
+    // the legacy top): a stateless slab (the bed family's shape) = the
+    // bottom half; a stair = the AABB-dependent slope; wall / fence = the
+    // 1.5 barrier; a glass pane = the jumpable 1.0; a full cube = 1.0;
+    // air / non-solid = not solid.
+    Fixture f;
+    const RangeProbe probe(f.world, f.blocks, {8.5f, 1.0f, 8.5f});
+    const BlockPos cell {8, 2, 8};
+    const Vec3 p {8.5f, 2.0f, 8.5f};
+    const BlockID slab = f.blocks.idForName("slab"); // stateless (the bed shape)
+    EXPECT_EQ(probe.range(slab, p, p, cell),
+              (SolidRange {0.0f, 0.5f}));
+    EXPECT_EQ(probe.range(f.stone, p, p, cell),
+              (SolidRange {0.0f, 1.0f}));
+    EXPECT_EQ(probe.range(BlockID::air(), p, p, cell),
+              (SolidRange {0.0f, 0.0f}));
+    const BlockID wall = f.blocks.idForName("wall");
+    EXPECT_EQ(probe.range(wall, p, p, cell), (SolidRange {0.0f, 1.5f}));
+    const BlockID fence = f.blocks.idForName("fence");
+    EXPECT_EQ(probe.range(fence, p, p, cell), (SolidRange {0.0f, 1.5f}));
+    const BlockID pane = f.blocks.idForName("glass_pane");
+    EXPECT_EQ(probe.range(pane, p, p, cell), (SolidRange {0.0f, 1.0f}));
+    // A north stair (high at -Z): the slope at the AABB's -Z edge
+    // (1 - mnLocalZ) — the Phase-89 rule, unchanged. Exact binary
+    // fractions (decimal float literals would break the bit comparison).
+    const BlockID stairs = f.blocks.idForName("stairs");
+    const Vec3 back {8.5f, 2.0f, 8.25f}; // localZ 0.25 -> top 0.75
+    const Vec3 front {8.5f, 2.0f, 8.75f}; // localZ 0.75 -> top 0.25
+    EXPECT_EQ(probe.range(stairs, back, back, cell),
+              (SolidRange {0.0f, 0.75f}));
+    EXPECT_EQ(probe.range(stairs, front, front, cell),
+              (SolidRange {0.0f, 0.25f}));
+}
+
+TEST(EntityTest, V217TopSlabHasRoom) {
+    // The state-1 slab (solid region y 2.5..3.0 in cell 2): a body resting
+    // on its TOP (feet at 3.0) has room; a body INSIDE the top half (feet
+    // at 2.6) does not; a body in the cell's BOTTOM half (feet at 2.0 —
+    // the air under the ceiling mount) HAS room (the new bottom — the
+    // state-0 slab's twin from below).
+    Fixture f;
+    const BlockID slab3 = registerStatefulSlab(f);
+    f.world.setBlock(8, 2, 8, slab3);
+    f.world.setBlockState(8, 2, 8, 1);
+    const ItemEntity item = f.makeItem({8.5f, 10.0f, 8.5f});
+    EXPECT_TRUE(item.hasRoomAt(Vec3{8.5f, 3.0f, 8.5f})); // on the top
+    EXPECT_FALSE(item.hasRoomAt(Vec3{8.5f, 2.6f, 8.5f})); // inside the body
+    EXPECT_TRUE(item.hasRoomAt(Vec3{8.5f, 2.0f, 8.5f})); // under the mount
+}
+
+TEST(EntityTest, V217DoubleSlabHasRoomIsFullBlock) {
+    // The state-2 double slab (the full cell, solid region y 2..3): the
+    // full-block behavior — no room anywhere in the cell, room on top.
+    Fixture f;
+    const BlockID slab3 = registerStatefulSlab(f);
+    f.world.setBlock(8, 2, 8, slab3);
+    f.world.setBlockState(8, 2, 8, 2);
+    const ItemEntity item = f.makeItem({8.5f, 10.0f, 8.5f});
+    EXPECT_TRUE(item.hasRoomAt(Vec3{8.5f, 3.0f, 8.5f})); // on the top
+    EXPECT_FALSE(item.hasRoomAt(Vec3{8.5f, 2.5f, 8.5f})); // inside it
+    EXPECT_FALSE(item.hasRoomAt(Vec3{8.5f, 2.0f, 8.5f})); // inside it
+}
+
+TEST(EntityTest, V217ItemRestsOnTopSlab) {
+    // A state-1 slab at y=2 (solid region 2.5..3.0): an item dropped above
+    // it rests on the SLAB TOP — the cell top (feet at y=3.0), not the
+    // cell's bottom face (2.5) and not inside the slab.
+    Fixture f;
+    const BlockID slab3 = registerStatefulSlab(f);
+    f.world.setBlock(8, 2, 8, slab3);
+    f.world.setBlockState(8, 2, 8, 1);
+    ItemEntity item = f.makeItem({8.5f, 4.0f, 8.5f});
+    f.run(item, 300);
+    EXPECT_FLOAT_EQ(item.position().y, 3.0f);
+    EXPECT_TRUE(item.onGround());
+}
+
+TEST(EntityTest, V217HeadBumpsTopSlabBottom) {
+    // A state-1 slab at y=1 (solid region 1.5..2.0) above the fixture floor
+    // (top 1.0): an item launched upward clamps its HEAD to the slab's
+    // BOTTOM face (the region's bottom, y=1.5 — the moveAxis delta>0 face
+    // generalization), so its feet never pass 1.25 (a legacy cell-bottom
+    // clamp would have kept them at 1.0, a no-riser).
+    Fixture f;
+    const BlockID slab3 = registerStatefulSlab(f);
+    f.world.setBlock(8, 1, 8, slab3);
+    f.world.setBlockState(8, 1, 8, 1);
+    ItemEntity item = f.makeItem({8.5f, 1.0f, 8.5f});
+    item.setVelocity({0.0f, 8.0f, 0.0f});
+    // Track the ascent's peak over the launch frames (deterministic: the
+    // fixed-dt item physics, no input).
+    float peak = 1.0f;
+    for (int i = 0; i < 30; ++i) {
+        item.update(kDt);
+        peak = std::max(peak, item.position().y);
+    }
+    EXPECT_GT(peak, 1.1f) << "the item rose toward the slab's bottom face";
+    EXPECT_LE(peak, 1.25f + 1e-4f)
+        << "the head clamp is at the region's bottom (feet 1.25), not the "
+           "cell floor";
+}
+
 // Phase 95: the wall is a 1.5-block-tall barrier. The solid region is
 // [y, y+1.5] (the cell + a half cap above). An item can rest on the wall's
 // top (AABB bottom at y+1.5) but NOT occupy the wall's body (AABB bottom in

@@ -21,6 +21,8 @@
 #include <string_view>
 #include <vector>
 
+#include "core/math/vec3.hpp"
+
 namespace mc {
 
 // Right-click interaction kinds (Phase 17). A block whose
@@ -188,6 +190,17 @@ struct BlockProperties {
     // How many of the drop item one break yields (1..64, must fit in one
     // stack of the drop item — cross-checked at game init).
     int dropsCount = 1;
+    // V2-17: the PER-STATE primary drop count (JSON
+    // `drops_count_by_state`, a strict int array, each entry 1..64): when
+    // non-empty, breaking a cell yields dropsCountByState[state] of the
+    // `drops` item (one entry per state — the length is pinned to
+    // model.state_count at data load; the state's unset -> stateDefault
+    // rule applies, like every state consumer). The shipped double slab
+    // (state 2) drops TWO slabs (the Minecraft double-slab break — the
+    // single-cell double's material conservation). The drop item's NAME
+    // (drops) is unchanged across states. Empty (the default) = dropsCount
+    // for every state (the pre-V2-17 behavior).
+    std::vector<int> dropsCountByState;
     // V2-11 (XP): the experience points a COMPLETED break of this block
     // grants (the mine-complete orb's value). Optional data field
     // `mine_xp`, a strict integer in [0, 9]: 0 (the default) = no orb;
@@ -397,15 +410,24 @@ struct BlockTexture {
 struct BlockModel {
     enum class Shape {
         FullCube, // 1x1x1
-        Slab,     // Phase 85: a bottom half-block (y 0..0.5 of the cell) —
-                  // a flat step you can stand on top of (feet at y + 0.5);
-                  // the cell is solid in its lower half only (height-aware
-                  // collision). Uses the cube face textures.
+        Slab,     // Phase 85: a half-block (y 0..0.5 of the cell) — a flat
+                  // step you can stand on top of (feet at y + 0.5); the cell
+                  // is solid in its lower half only (height-aware
+                  // collision). V2-17: a STATEFUL slab (the explicit
+                  // model.state_count — the shipped stone_slab's 3 states)
+                  // fills the cell by state: 0 = the bottom half (the
+                  // Phase-85 geometry, the bit-level root), 1 = the top
+                  // half (y 0.5..1, the ceiling mount), 2 = both halves
+                  // (the double slab, a full cell — the break drops two,
+                  // drops_count_by_state). A stateless slab (the bed
+                  // family) keeps the bottom-half geometry (the shape
+                  // gate, the bit-level red line). Uses the cube face
+                  // textures.
         Stairs,   // Phase 87 (4-directional in Phase 89): a step you climb —
                   // a wedge from full height at one end to zero at the other,
                   // oriented by `stairFacing`. The solid height varies across
                   // the cell along the facing axis: the collision
-                  // (Entity::solidTopHeight) uses the AABB's low end on that
+                  // (Entity::solidRange) uses the AABB's low end on that
                   // axis so the feet rest on the slope at that position.
                   // Uses the cube face textures.
         Cross,    // Phase 45: two crossing vertical quads (cross plants —
@@ -415,14 +437,14 @@ struct BlockModel {
         Wall,     // Phase 95: a 1.5-block-tall pillar (Minecraft's wall) —
                   // the cell is solid in y 0..1.5 (a full block + a half
                   // cap on top). A barrier: the collision (height-aware,
-                  // solidTopHeight = 1.5) blocks the player, who cannot
+                  // solidRange {0, 1.5}) blocks the player, who cannot
                   // jump over it (the jump is ~1.25 < 1.5). Uses the cube
                   // face textures. The third new block model type (after the
                   // slab Phase 85 + the stairs Phase 87).
         Fence,    // Phase 98: Minecraft's fence — two crossed 1/8-thick
                   // vertical posts (y 0..1.5, like the wall) + a connecting
                   // BAR toward each horizontal fence / full opaque block
-                  // neighbor. A barrier (solidTopHeight = 1.5). Uses a
+                  // neighbor. A barrier (solidRange {0, 1.5}). Uses a
                   // single "side" texture (the top/bottom cube keys are
                   // rejected, the cross discipline). The fourth new block
                   // model type.
@@ -430,7 +452,7 @@ struct BlockModel {
                   // glass SHEET (full cell height, the z-centered plane) +
                   // thin rim slivers on the four edges (culled against a
                   // pane neighbor — the seam where two rows of panes meet).
-                  // A JUMPABLE solid (solidTopHeight = 1.0, the jump is
+                  // A JUMPABLE solid (solidRange {0, 1.0}, the jump is
                   // ~1.125 > 1.0). Blended in the transparent pass, light
                   // passes through (non-opaque). Uses a single "side"
                   // texture (the pane). The fifth new block model type.
@@ -489,6 +511,55 @@ inline int stairFacingFromYaw(float yaw) {
         return fx >= 0.0f ? 3 : 1; // facing +X -> west; facing -X -> east
     }
     return fz >= 0.0f ? 0 : 2; // facing +Z -> north; facing -Z -> south
+}
+
+// V2-17: a slab's half-block height, in cell-local units (the Minecraft
+// half-block = exactly half a cell): the state-0 slab fills the lower half
+// [0, kSlabHalf), the state-1 slab the upper half [kSlabHalf, 1), the
+// state-2 (double) slab the full cell [0, 1). The collision
+// (Entity::solidRange), the mesh (ChunkMesher::emitSlab) and the
+// placement rule (slabStateFromHit) read this ONE constant (no magic
+// 0.5s).
+inline constexpr float kSlabHalf = 0.5f;
+
+// V2-17: the slab placement state from the aim hit (the Minecraft rule,
+// wiki-verified 11-04): a +Y face hit (aiming at a block's TOP) places the
+// BOTTOM slab in the cell above (state 0 — the pre-V2-17 behavior, the
+// bit-level root); a -Y face hit (aiming at a block's BOTTOM, the
+// ceiling) places the TOP slab in the cell below (state 1); a SIDE face
+// hit places by the hit point's height within the TARGET cell: strictly
+// above the cell's middle (local y > kSlabHalf) -> the top slab, at or
+// below it -> the bottom slab. Pure function (unit-tested).
+// `hitPoint` = the aim ray's hit position (eye + forward * distance, the
+// targetBlock ray), `normal` = the hit face's outward normal (a unit axis
+// vector), `targetBottomY` = the placement cell's bottom world Y (the hit
+// block's face neighbor — the same row for a horizontal normal).
+inline int slabStateFromHit(const Vec3& hitPoint, const Vec3& normal,
+                            float targetBottomY) {
+    if (normal.y > 0.0f) {
+        return 0; // top-face aim: the bottom slab above (the legacy rule)
+    }
+    if (normal.y < 0.0f) {
+        return 1; // bottom-face aim (the ceiling): the top slab below
+    }
+    // The side aim: the hit height within the target cell (0..1).
+    const float localY = hitPoint.y - targetBottomY;
+    return localY > kSlabHalf ? 1 : 0; // strictly above the middle = top
+}
+
+// V2-17: the slab MERGE decision (the Minecraft same-cell double slab):
+// true when the target cell ALREADY holds the same slab in its
+// COMPLEMENTARY half — a state-0 slab with a desired state-1 placement
+// (or vice versa) completes the double slab (state 2, one item consumed).
+// A state-2 target (the full cell) is NOT a merge (the placement is
+// rejected by canPlaceAt's solid rule); a same-state target is not (aiming
+// at the same half does nothing); a DIFFERENT id is not (the cross-type
+// stack merge is out of scope — the design deviation 2). Pure function
+// (unit-tested).
+inline bool slabMergesToDouble(const BlockID& targetId, const BlockID& placeId,
+                               int targetState, int desiredState) {
+    return targetId == placeId && targetState < 2 && desiredState < 2 &&
+           targetState != desiredState;
 }
 
 struct Block {

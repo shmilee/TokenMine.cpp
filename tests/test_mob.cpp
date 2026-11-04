@@ -2870,6 +2870,81 @@ TEST(MobSpawnCellTest, InAirKeepsTheProtectionCircle) {
     EXPECT_EQ(*cell, (BlockPos {-3, 4, -5}));
 }
 
+TEST(MobSpawnCellTest, V217SpawnFloorTopByFloorShape) {
+    // V2-17: the spawn floor top by floor shape — a stateful slab floor
+    // tops out at its solid region (state 0 = kSlabHalf, state 1 / 2 =
+    // the cell top); EVERY other shape (full blocks, the stateless bed
+    // slab, stairs) keeps the exact legacy top (1.0 — the bit-level red
+    // line).
+    Fixture f;
+    auto r = f.blocks.registerBlock(parseJson(
+        R"({"id":"slab3","model":{"shape":"slab","state_count":3,)"
+        R"("state_default":0,"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const BlockID slab3 = *r;
+    auto rs = f.blocks.registerBlock(parseJson(
+        R"({"id":"stairs","model":{"shape":"stairs",)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(rs.ok()) << rs.error().message;
+    // Full block / stateless slab (the bed family's shape) / stairs /
+    // wall: the legacy floor top (1.0).
+    f.world.setBlock(8, 2, 8, f.stone);
+    EXPECT_FLOAT_EQ(spawnFloorTop(f.world, f.blocks, 8, 2, 8), 1.0f);
+    f.world.setBlock(8, 2, 8, f.slab);
+    EXPECT_FLOAT_EQ(spawnFloorTop(f.world, f.blocks, 8, 2, 8), 1.0f);
+    f.world.setBlock(8, 2, 8, *rs);
+    EXPECT_FLOAT_EQ(spawnFloorTop(f.world, f.blocks, 8, 2, 8), 1.0f);
+    f.world.setBlock(8, 2, 8, f.wall);
+    EXPECT_FLOAT_EQ(spawnFloorTop(f.world, f.blocks, 8, 2, 8), 1.0f);
+    // The stateful slab, by per-cell state (unset -> the default 0).
+    f.world.setBlock(8, 2, 8, slab3);
+    EXPECT_FLOAT_EQ(spawnFloorTop(f.world, f.blocks, 8, 2, 8), 0.5f); // unset
+    f.world.setBlockState(8, 2, 8, 0);
+    EXPECT_FLOAT_EQ(spawnFloorTop(f.world, f.blocks, 8, 2, 8), 0.5f);
+    f.world.setBlockState(8, 2, 8, 1);
+    EXPECT_FLOAT_EQ(spawnFloorTop(f.world, f.blocks, 8, 2, 8), 1.0f);
+    f.world.setBlockState(8, 2, 8, 2);
+    EXPECT_FLOAT_EQ(spawnFloorTop(f.world, f.blocks, 8, 2, 8), 1.0f);
+}
+
+TEST(MobSpawnCellTest, V217TopSlabIsASpawnFloor) {
+    // A TOP slab (state 1) in the first candidate column (0, -6) is the
+    // highest solid: the scan returns it as the floor cell (the feet rest
+    // on its top face, cell.y + 1.0 — the spawnFloorTop's game-side twin;
+    // pre-V2-17 the top slab's cell-top was not a reachable floor).
+    Fixture f;
+    auto r = f.blocks.registerBlock(parseJson(
+        R"({"id":"slab3","model":{"shape":"slab","state_count":3,)"
+        R"("state_default":0,"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    f.world.setBlock(0, 1, -6, *r);
+    f.world.setBlockState(0, 1, -6, 1);
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax,
+                                 {});
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {0, 1, -6}));
+}
+
+TEST(MobSpawnCellTest, V217BottomSlabIsASpawnFloor) {
+    // A BOTTOM slab (state 0, the unset default) is a spawn floor too —
+    // the feet rest on the slab top, floorY + kSlabHalf (the legacy scan
+    // put them at floorY + 1.0: floating half a block above the slab,
+    // now the exact standing-on-slab twin).
+    Fixture f;
+    auto r = f.blocks.registerBlock(parseJson(
+        R"({"id":"slab3","model":{"shape":"slab","state_count":3,)"
+        R"("state_default":0,"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    f.world.setBlock(0, 1, -6, *r); // the state byte stays unset -> default 0
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, 0.0f, 0, kPlayerMin, kPlayerMax,
+                                 {});
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {0, 1, -6}));
+    EXPECT_FLOAT_EQ(spawnFloorTop(f.world, f.blocks, 0, 1, -6), 0.5f);
+}
+
 // -- box-model mesh ------------------------------------------------------------
 
 namespace {
@@ -3649,6 +3724,36 @@ TEST(MobStepUpTest, StepsUpSlabAndRestsOnSlabTop) {
     EXPECT_GE(mob.position().x, 16.8f);
     EXPECT_LE(mob.position().x, 16.9f);
     EXPECT_FLOAT_EQ(mob.position().y, 1.5f); // feet flush on the slab top
+    EXPECT_TRUE(mob.onGround());
+}
+
+TEST(MobStepUpTest, V217StepsUpTopSlabAndRestsOnCellTop) {
+    // V2-17: a row of TOP slabs (state 1, solid region 1.5..2.0): the
+    // step's front top = 1.0 (the slab's top face IS the cell top — the
+    // true-1-block step, the Minecraft "the top slab's top is walkable"
+    // twin): the mob steps up and its feet settle at 2.0 = the top slab's
+    // top face (not floating at a 1.5 lift, not inside the slab).
+    Fixture f;
+    auto r = f.blocks.registerBlock(parseJson(
+        R"({"id":"slab3","model":{"shape":"slab","state_count":3,)"
+        R"("state_default":0,"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const BlockID slab3 = *r;
+    MobRegistry mobs = makeMobRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    for (int x = 10; x < 20; ++x) {
+        for (int z = 8; z < 10; ++z) {
+            f.world.setBlock(x, 1, z, slab3);
+            f.world.setBlockState(x, 1, z, 1);
+        }
+    }
+    MobEntity mob = makeMob(f, def, {8.5f, 1.0f, 8.5f});
+    mob.setPlayer({18.4f, 1.0f, 8.5f}, true); // stop 18.4 - 1.6 = 16.8
+    runMob(mob, 900);
+    EXPECT_EQ(mob.state(), MobState::Attack);
+    EXPECT_GE(mob.position().x, 16.8f);
+    EXPECT_LE(mob.position().x, 16.9f);
+    EXPECT_FLOAT_EQ(mob.position().y, 2.0f); // feet flush on the top slab's top
     EXPECT_TRUE(mob.onGround());
 }
 

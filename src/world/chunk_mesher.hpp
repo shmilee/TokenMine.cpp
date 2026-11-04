@@ -159,12 +159,34 @@ private:
     // visible from both sides.
     void emitCross(ChunkMeshData& out, const Block& block,
                    const BlockPos& origin, int lx, int ly, int lz) const;
-    // Phase 85 slab: the unit-cube faces scaled to the bottom half (y 0..0.5)
-    // — the top face is always emitted (the cell's top half is air); the
-    // bottom/side faces are culled by an opaque neighbor (like emitFluid,
-    // but into the OPAQUE sub-mesh and the top is never occluded).
+    // Phase 85 / V2-17 slab: the per-cell state (the World's per-cell byte,
+    // unset -> the block's state default — a stateless slab, the bed
+    // family, has no state) selects the solid half: state 0 = the unit-
+    // cube faces scaled to the bottom half (y 0..kSlabHalf — the EXACT
+    // pre-V2-17 geometry: the top face always emitted (the cell's top half
+    // is air), the bottom/side faces culled by an opaque neighbor); state
+    // 1 = the top slab (emitSlabTop); state >= 2 = the double slab, the
+    // full cell (emitSlabFull).
     void emitSlab(ChunkMeshData& out, const Block& block,
                   const BlockPos& origin, int lx, int ly, int lz) const;
+    // V2-17 top slab (state 1): the state-0 geometry mirrored into the
+    // cell's upper half (y kSlabHalf..1, corner.y -> kSlabHalf +
+    // corner.y*kSlabHalf). The BOTTOM face (dy<0) is ALWAYS emitted (the
+    // state-0 top-face twin — the cell's bottom half is air, nothing
+    // occludes the face within the cell); the top face (on the cell
+    // boundary) + the side faces (spanning y kSlabHalf..1) are culled by
+    // an opaque neighbor (the general rule).
+    void emitSlabTop(ChunkMeshData& out, const Block& block,
+                     int lx, int ly, int lz, int wx, int wy, int wz) const;
+    // V2-17 double slab (state >= 2): the FULL cell — the unit-cube
+    // vertices with the standard full-block culling on ALL six faces (an
+    // opaque neighbor in the face direction hides the face: top by the
+    // cell above, bottom by the cell below, sides by the horizontal
+    // neighbors — the full-block rule, not the half-slab always-emit
+    // rule). The slab pass owns the geometry (the greedy full-cube pass
+    // still skips the Slab shape — the mesh() dispatch, unchanged).
+    void emitSlabFull(ChunkMeshData& out, const Block& block,
+                      int lx, int ly, int lz, int wx, int wy, int wz) const;
     // Phase 87 stair: a north-facing wedge (-Z end full height, +Z end at the
     // floor). A slanted top (always drawn) + the -Z back wall + the -X/+X side
     // triangles + the bottom; the +Z front is at floor level (no face). Side /

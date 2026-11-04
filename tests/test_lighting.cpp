@@ -1021,6 +1021,48 @@ TEST(LightingTest, BlockLightThroughHalfBlockLayer) {
     EXPECT_EQ(stoneWorld.getBlockLight(1, 2, 1), 0);
 }
 
+// 3. V2-17: the STATEFUL slab's light is the per-BLOCK field (the ENT-2
+//    state constraint: a state value never changes the block's light
+//    properties) — every slab state (0 / 1 / 2) transmits exactly like
+//    the stateless half-block (the LGT-5 rule).
+TEST(LightingTest, V217StatefulSlabLightTransmission) {
+    BlockRegistry reg = makeRegistry();
+    auto r = reg.registerBlock(parseDef(
+        R"({"id":"slab3","properties":{"light_opacity":0},)"
+        R"("model":{"shape":"slab","state_count":3,"state_default":0,)"
+        R"("textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const BlockID slab3 = *r;
+    const BlockID stone = idOf(reg, "stone");
+    const BlockID glow = idOf(reg, "glowstone");
+    // The sealed-box twin of BlockLightThroughHalfBlockLayer: the source
+    // at (1,1,1) (glowstone 15), the test layer at (1,2,1).
+    const auto build = [&](World& w, int state) {
+        fillBox(w, 0, 0, 0, 2, 4, 2, stone); // the shell + fill
+        for (int x = 0; x <= 2; ++x) {       // hollow the interior
+            for (int z = 0; z <= 2; ++z) {
+                w.setBlock(x, 1, z, BlockID::air());
+                w.setBlock(x, 2, z, BlockID::air());
+                w.setBlock(x, 3, z, BlockID::air());
+            }
+        }
+        w.setBlock(1, 1, 1, glow); // the source (15)
+        w.setBlock(1, 2, 1, slab3);
+        w.setBlockState(1, 2, 1, static_cast<std::uint8_t>(state));
+    };
+    for (int state : {0, 1, 2}) {
+        World w;
+        build(w, state);
+        Lighting::propagateAll(w, reg);
+        // The LGT-5 assertion for every state: the layer adds NO
+        // attenuation beyond the air-like entry cost — the cell above
+        // reads exactly what an air cell would (13), the layer cell
+        // itself the air-like entry (14).
+        EXPECT_EQ(w.getBlockLight(1, 3, 1), 13) << "state " << state;
+        EXPECT_EQ(w.getBlockLight(1, 2, 1), 14) << "state " << state;
+    }
+}
+
 TEST(LightingTest, InsertedTwoChunkColumnRelightMatchesFullPropagation) {
     const BlockRegistry reg = makeRegistry();
     const BlockID stone = idOf(reg, "stone");

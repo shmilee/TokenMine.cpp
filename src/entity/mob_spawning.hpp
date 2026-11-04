@@ -104,6 +104,20 @@ struct MobSpawningConfig {
 inline constexpr int kSpawnFloorDelta = 2;
 inline constexpr float kSpawnClearance = 1.0f;
 
+// V2-17: the floor TOP — in cell units above the floor cell's bottom —
+// that a spawn's feet rest on (the findMobSpawnCell player-overlap test
+// and the game's actual spawn height, one shared definition): a stateful
+// slab floor (the shipped stone_slab's per-cell state) is solid LOWER
+// than the cell top — state 0 (the bottom half): kSlabHalf (the exact
+// slab top, the standing-on-slab twin); state 1 / >= 2 (the top slab /
+// the double slab): 1.0 (the cell top — the top slab's top face is a
+// spawnable floor). Every other floor shape (the stateless bed slab,
+// stairs, full cubes): 1.0 (the exact legacy value — the bit-level red
+// line). The state's unset -> stateDefault rule (the emitStairs twin).
+// Pure (unit-tested).
+float spawnFloorTop(const World& world, const BlockRegistry& blocks,
+                    int x, int y, int z);
+
 // The CURRENT effective light level (0..15) of a cell for spawn gating —
 // the Minecraft semantics emulated with this engine's presentation-layer
 // day/night (see day_cycle.hpp): the stored daytime (noon) sky light
