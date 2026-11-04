@@ -1,6 +1,6 @@
 {
  "columns": 16,
- "rows": 8,
+ "rows": 16,
  "tiles": {
   "bedrock": [
    0,
@@ -497,6 +497,54 @@
   "netherrack": [
    13,
    7
+  ],
+  "nether_brick": [
+   0,
+   8
+  ],
+  "magma_block": [
+   1,
+   8
+  ],
+  "quartz_ore": [
+   2,
+   8
+  ],
+  "nether_gold_ore": [
+   3,
+   8
+  ],
+  "ancient_debris": [
+   4,
+   8
+  ],
+  "soul_sand": [
+   5,
+   8
+  ],
+  "soul_soil": [
+   6,
+   8
+  ],
+  "crimson_nylium": [
+   7,
+   8
+  ],
+  "warped_nylium": [
+   8,
+   8
+  ],
+  "basalt": [
+   9,
+   8
+  ],
+  "crimson_stem": [
+   10,
+   8
+  ],
+  "warped_stem": [
+   11,
+   8
   ]
  }
 }

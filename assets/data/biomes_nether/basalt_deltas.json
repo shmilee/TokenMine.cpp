@@ -1,0 +1,7 @@
+{
+  "id": "basalt_deltas",
+  "weight": 16,
+  "surface": "netherrack",
+  "subsurface": "netherrack",
+  "tree_density": 0.5
+}

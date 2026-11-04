@@ -1,0 +1,12 @@
+{
+  "id": "crimson_stem",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 0.4,
+    "drops": "crimson_stem"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "crimson_stem", "side": "crimson_stem", "bottom": "crimson_stem" }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "soul_sand",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 0.5,
+    "drops": "soul_sand"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "soul_sand", "side": "soul_sand", "bottom": "soul_sand" }
+  }
+}

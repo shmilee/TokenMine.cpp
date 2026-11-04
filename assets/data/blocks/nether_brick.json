@@ -1,0 +1,12 @@
+{
+  "id": "nether_brick",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 2.0,
+    "drops": "nether_brick"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "nether_brick", "side": "nether_brick", "bottom": "nether_brick" }
+  }
+}

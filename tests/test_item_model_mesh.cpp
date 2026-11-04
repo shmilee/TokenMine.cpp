@@ -291,5 +291,8 @@ TEST(ItemModelMeshTest, ShippedModelsHaveNoFaceCoincidentBoxes) {
     // the 3D block cube, the Phase 41 wool precedent) +2 (string /
     // spider_eye, the spider's drops) -> 82.
     // V2-15: +1 (shears, the sheep shearing tool) -> 83.
-    EXPECT_EQ(modelCount, 83) << "ENT-9: all 83 items have models";
+    // V3-2 Part 1: +1 (quartz, the nether ore's material drop — the
+    // ancient_debris's item is its BLOCK item, model-less by the
+    // block-cube render path) -> 84.
+    EXPECT_EQ(modelCount, 84) << "ENT-9: all 84 items have models";
 }

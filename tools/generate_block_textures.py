@@ -502,6 +502,165 @@ def gold_block(x, y):
             clamp(base[2] + v), 255)
 
 
+# --- V3-2 Part 1: the nether content family (12 tiles, salts 1017..1064) ---
+# Every existing texture stays pixel-identical (new salts only, the
+# netherrack 1009..1016 precedent). The per-pixel hash(x, y, salt)
+# discipline: h2 decides feature membership, the noise salts grain it.
+
+def nether_brick(x, y):
+    """V3-2 Part 1: the nether brick block face (the smelted netherrack
+    material). A dark red-brown brick pattern: horizontal mortar seams
+    every 4 rows + staggered vertical seams (the cobblestone stagger
+    convention), a mottled brick body between them. New salts
+    1017..1020."""
+    mortar_h = (y % 4) == 3
+    mortar_v = ((x + (y // 4) * 2) % 8) == 7
+    if mortar_h or mortar_v:
+        return (clamp(48 + noise(x, y, 1017, 6)),
+                clamp(30 + noise(x, y, 1018, 5)),
+                clamp(34 + noise(x, y, 1019, 5)), 255)
+    return (clamp(96 + noise(x, y, 1017, 9)),
+            clamp(56 + noise(x, y, 1018, 8)),
+            clamp(62 + noise(x, y, 1019, 8)), 255)
+
+
+def magma_block(x, y):
+    """V3-2 Part 1: the magma block face (the soul sand valley's
+    emissive-look patch block — MC magma block: dark charcoal with
+    bright orange crack networks). The crack membership is a per-pixel
+    hash (a winding 1-px network: the crack pixels are where BOTH the
+    row hash and the column hash agree — the X-brace convention), the
+    body is a near-black warm charcoal. New salts 1021..1024."""
+    h = h2(x, y, 1021)
+    row_crack = h2(x, y // 3, 1022) % 10 < 3
+    col_crack = h2(x // 3, y, 1023) % 10 < 3
+    if row_crack or col_crack:
+        hot = 1.0 if (row_crack and col_crack) else 0.7
+        return (clamp(int(255 * hot) + noise(x, y, 1024, 10)),
+                clamp(int(140 * hot) + noise(x, y, 1024, 8)),
+                clamp(int(30 * hot) + noise(x, y, 1024, 6)), 255)
+    v = noise(x, y, 1022, 6)
+    return (clamp(46 + v), clamp(38 + v), clamp(36 + v), 255)
+
+
+def nether_ore(x, y, salt, color, density):
+    """V3-2 Part 1: the nether ore helper — the overworld ore() pattern
+    on a NETHERRACK base (the nether ores sit in netherrack, not stone)."""
+    if h2(x, y, salt) % 100 < density:
+        return (clamp(color[0] + noise(x, y, salt + 1, 8)),
+                clamp(color[1] + noise(x, y, salt + 2, 8)),
+                clamp(color[2] + noise(x, y, salt + 3, 8)), 255)
+    return netherrack(x, y)
+
+
+def quartz_ore(x, y):
+    return nether_ore(x, y, 1025, (242, 218, 218), 16)
+
+
+def nether_gold_ore(x, y):
+    return nether_ore(x, y, 1029, (255, 208, 64), 14)
+
+
+def ancient_debris(x, y):
+    """V3-2 Part 1: the ancient debris face (MC: a near-black nether
+    block studded with dark-bronze metallic chunks). The chunk
+    membership is a 2x2-block hash (the gravel pebble convention) so
+    the pieces read as chunks, not specks. New salts 1033..1036."""
+    bx, by = x // 2, y // 2
+    h = h2(bx, by, 1033)
+    v = noise(x, y, 1034, 6)
+    if h % 16 < 3:  # the bronze chunk
+        shine = 24 if h2(x, y, 1035) % 8 == 0 else 0
+        return (clamp(150 + v + shine), clamp(104 + v + shine),
+                clamp(62 + v + shine // 2), 255)
+    return (clamp(40 + v), clamp(34 + v), clamp(36 + v), 255)
+
+
+def soul_sand(x, y):
+    """V3-2 Part 1: the soul sand face (MC: pale blue-gray sand with
+    ghostly light flecks). The sand palette (the overworld sand's
+    grain convention) in a cold blue-gray + rare pale specks. New
+    salts 1037..1040."""
+    if h2(x, y, 1037) % 100 < 10:
+        return (clamp(216 + noise(x, y, 1038, 8)),
+                clamp(224 + noise(x, y, 1039, 8)),
+                clamp(236 + noise(x, y, 1040, 6)), 255)
+    return (clamp(168 + noise(x, y, 1038, 10)),
+            clamp(178 + noise(x, y, 1039, 10)),
+            clamp(188 + noise(x, y, 1040, 8)), 255)
+
+
+def soul_soil(x, y):
+    """V3-2 Part 1: the soul soil face (MC: the soul sand's moist,
+    slightly green-tinged variant). The soul sand palette darkened +
+    a green bias, with damp patches. New salts 1041..1044."""
+    damp = h2(x // 2, y // 2, 1041) % 7 < 2
+    dr = -16 if damp else 0
+    dg = -8 if damp else 0
+    return (clamp(140 + dr + noise(x, y, 1042, 9)),
+            clamp(158 + dg + noise(x, y, 1043, 9)),
+            clamp(158 + noise(x, y, 1044, 8)), 255)
+
+
+def crimson_nylium(x, y):
+    """V3-2 Part 1: the crimson nylium face (MC: dark crimson soil with
+    red root streaks). A deep red-brown body + vertical root streaks
+    (the cactus ridge convention, a hash-picked column pair). New
+    salts 1045..1048."""
+    streak = h2(x // 2, 0, 1045) % 5 < 2
+    n = noise(x, y, 1046, 10)
+    if streak:
+        return (clamp(150 + n), clamp(44 + n // 2), clamp(52 + n // 2), 255)
+    return (clamp(104 + n), clamp(36 + n // 2), clamp(44 + n // 2), 255)
+
+
+def warped_nylium(x, y):
+    """V3-2 Part 1: the warped nylium face (MC: dark indigo soil with
+    teal root streaks). The crimson nylium pattern in the warped
+    purple/teal palette. New salts 1049..1052."""
+    streak = h2(x // 2, 0, 1049) % 5 < 2
+    n = noise(x, y, 1050, 10)
+    if streak:
+        return (clamp(84 + n // 2), clamp(130 + n // 2), clamp(116 + n), 255)
+    return (clamp(64 + n), clamp(48 + n // 2), clamp(96 + n), 255)
+
+
+def basalt(x, y):
+    """V3-2 Part 1: the basalt face (MC: dark blue-gray rock with
+    vertical columnar-joint striations). A cold dark body + darker
+    vertical joint lines (a hash-picked single column, the fence X
+    line convention without the diagonal). New salts 1053..1056."""
+    joint = (x % 4) == h2(x // 4, 0, 1053) % 4
+    n = noise(x, y, 1054, 8)
+    if joint:
+        return (clamp(48 + n), clamp(52 + n), clamp(62 + n), 255)
+    return (clamp(74 + n), clamp(78 + n), clamp(90 + n), 255)
+
+
+def _stem(x, y, palette, salt):
+    """V3-2 Part 1: the mushroom-stem side face (the crimson / warped
+    stem shares the geometry — the palette differs): vertical grooves
+    (alternating 2-px column bands, the wood_side stripe convention)
+    + a faint ring band every 4 rows (the fungal ring)."""
+    groove = (x // 2) % 2 == 0
+    ring = (y % 4) == 0
+    n = noise(x, y, salt, 8)
+    r, g, b = (palette[0], palette[1], palette[2])
+    if groove:
+        r, g, b = (int(r * 0.72), int(g * 0.72), int(b * 0.72))
+    if ring:
+        r, g, b = (r + 26, g + 20, b + 20)
+    return (clamp(r + n), clamp(g + n), clamp(b + n), 255)
+
+
+def crimson_stem(x, y):
+    return _stem(x, y, (124, 52, 60), 1057)
+
+
+def warped_stem(x, y):
+    return _stem(x, y, (92, 62, 124), 1061)
+
+
 def diamond_block(x, y):
     """V2-7: the diamond block (the beacon pyramid material next to the
     iron block). A bright, uniform metallic cyan with a faint brushed
@@ -1048,6 +1207,21 @@ TEXTURES = {
     # flat slab world's surface + subsurface). A new tile only, every
     # existing PNG stays byte-identical (salts 1009..1016).
     "netherrack": netherrack,
+    # V3-2 Part 1: the nether content family (12 tiles — the biomes'
+    # surfaces / the nether ores / the decoration blocks). New tiles only,
+    # every existing PNG stays byte-identical (salts 1017..1064).
+    "nether_brick": nether_brick,
+    "magma_block": magma_block,
+    "quartz_ore": quartz_ore,
+    "nether_gold_ore": nether_gold_ore,
+    "ancient_debris": ancient_debris,
+    "soul_sand": soul_sand,
+    "soul_soil": soul_soil,
+    "crimson_nylium": crimson_nylium,
+    "warped_nylium": warped_nylium,
+    "basalt": basalt,
+    "crimson_stem": crimson_stem,
+    "warped_stem": warped_stem,
 }
 
 

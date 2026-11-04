@@ -11,6 +11,38 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.5.0（2026-11-05）— 下界内容族 Part 1（V3-2 合并执行：群系 +
+块族 + 矿脉 + 装饰 + **下界带修订为可航行空腔**，门 195 全 PASS）
+
+**下界变成 MC 的下界**（第一步）——① **D9 带修订（编排者布局裁决，
+实现后实证 v3.4.0 实心岩板下界不可航行）**：MC 下界废土形态 =
+基岩底 0-4 / 熔岩海 5-31 全源（岩板下挖穿可见）/ **netherrack 台地
+32-52**（群系表面 = 台地顶）/ **空气空间 53-122**（70 格可航行空腔）/
+天花板 glowstone y=122（贴基岩顶底面 MC 精确）/ 基岩顶 123-127——
+传送落点 Y=55 → 空腔内（首访观感实证：暗红天穹 + 远地平线雾吞 +
+portal 平台）；世界生成演进先例（未编辑列按当前生成器重建，既有
+portal 框持久）② **5 群系**（biomes_nether/ 独立池独立 registry，
+MC 比例权重 36/22/17/16/9；netherBiomeAt = biomeIndexAt 克隆 + 独立
+盐；装饰门控 = 数据派生旗 fill 零 name switch）③ **12 新块**
+（nether_brick 2.0 / magma 1.5 / quartz_ore 3.0 / nether_gold_ore 3.0
+drops gold_ingot / ancient_debris **10** = MC 50 的 obsidian /5 缩放
+先例 / soul_sand·soil 0.5 / 双 nylium 0.4 grass 先例 / basalt 1.2 /
+双 stem 0.4——全 stateless；纹理 12 件确定性生成，**atlas 16×8→16×16
+幂二增长既有 124 格零移位 + 像素行恒等 = base 锚免重锚实证**）④ **3
+矿脉**（lattice 8 per-cell 纯函数，台地 only：quartz p 0.0376 /
+nether gold p 0.0208 / ancient debris p 0.0026）⑤ **5 装饰**（stem
+柱 4..9 / basalt 柱 5..30 自 y53 可见 / soul_soil·magma per-cell 带
+48-52 / 天花板 glowstone 复用既有块）⑥ quartz 物品 + nether brick 熔
+炼/2×2 配方 2 件⑦ **init fail-fast**（门内 S6 实证发现：surface 存在
+性/stateful 拒收从首传惰性前移 buildScene，主世界同款）。2617/2617
+（+35）。门 195 = **结构免疫第 76 次免重锚**（S1 ≡ 锚逐字节 + 白名单
+4 键）+ S2 内容双臂【(a) 传送空腔截图 ×2 RAW 恒等 + 观感实证 / (b)
+**下界原生采矿**：quartz_ore 破 → quartz ×1 入库存【磁力 1.08<2.5】+
+按住续破 soul_sand【PITS 7】+ 掉落 2.5 边缘留地【PITS 377】+ OW 段
+26 块原样】+ S6 5/5 init 点名【weight 0 / 重复 id / 未知 surface /
+空池 / stateful surface】+ 性能 A/B 同世界同成本【主对 900f 无输入：PERF-WIN 三窗全同档（upd med 0.578/0.615/0.634 vs 0.556/0.563/0.584 ms / render 0.597/0.651/0.596 vs 0.600/0.598/0.544）+ changesApplied 9/1/3 逐位 + 终档 savenorm **EXACT**【零 format 完全恒等】+ 下界含内容稳态 ≤ OW 基线（render med 0.365/0.361/0.362 vs 0.60 + fluid/fires 0.000 熔岩海零 churn）】。
+详见 `docs/archive/phase-3.5.0.md`。
+
 ## v3.4.0（2026-11-05）— V3-1 Phase B 下界世界 + 真传送（门 194 全 PASS）
 
 V3-1 三段拆分第二段（**下界维度本体**；Phase A 门框 v3.2.0 已发，

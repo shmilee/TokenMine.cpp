@@ -1,0 +1,12 @@
+{
+  "id": "soul_soil",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 0.5,
+    "drops": "soul_soil"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "soul_soil", "side": "soul_soil", "bottom": "soul_soil" }
+  }
+}

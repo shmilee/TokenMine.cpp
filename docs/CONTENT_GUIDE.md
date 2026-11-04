@@ -12,8 +12,9 @@
 > 11-04 收官刷新（v2.19.0 / 存档 format 28 / 测试 2482）+ V3-7 刷新
 > （v3.1.0 / 存档 format 29 = gzip 时代 / 测试 2503）+ V3-1 Phase A
 > 刷新（v3.2.0 / nether_portal 块 / 测试 2536）+ V3-1 Phase B 刷新
-> （v3.4.0 / netherrack 块 + 下界维度 / 存档 format 30 / 测试 2582）：
-> 二批新数据驱动机制
+> （v3.4.0 / netherrack 块 + 下界维度 / 存档 format 30 / 测试 2582）
+> + V3-2 Part 1 刷新（v3.5.0 / 下界内容族 12 块 + 5 群系 + 3 矿脉 +
+> 2 配方 / 测试 2617）：二批新数据驱动机制
 > 并入（biome tree 6 键 + exclude_spawn_area / slab 三态 state_count +
 > drops_count_by_state / XP 三发放源 / 附魔 7 项 / 床 15 色染色族 / 染色羊变体
 > / render.ao），各节数量（93 块 / 83 物品 / 86 配方 / 8 mob / 7 附魔 /
@@ -389,6 +390,22 @@ their block"（CRAFT-6）**：每个数据方块隐式生成同名 block item（
 > rescan 孤立置 air）；`state_count 2` = 框 axis（ENT-2 机制）。玩家
 > 接触面 = 打火石点火框内格激活 + 站入倒计时（见 MECHANICS 传送门
 > 节）+ worldgen 结构性不放（init 交叉检 = 结构免疫根）。
+>
+> **下界内容块族（`[V3-2]` Part 1，v3.5.0，12 件纯数据）**：
+> nether_brick（熔炼 netherrack 1:1 + 2×2 配方成块）/ magma_block /
+> quartz_ore（drops quartz）/ nether_gold_ore（drops gold_ingot）/
+> ancient_debris（hardness 10 = MC /5 缩放先例）/ soul_sand /
+> soul_soil / crimson_nylium / warped_nylium（grass 音先例 =
+> sound_material 缺省）/ basalt / crimson_stem / warped_stem（drops
+> 自身 = 记档偏离）——全 stateless（worldgen 永不写 state 纪律）。
+> **下界群系文件 = `assets/data/biomes_nether/`**（独立目录独立
+> registry，主世界 `data/biomes/` 零触碰）：{id, weight, surface,
+> subsurface_depth?, subsurface, tree_density?}——tree_density 复用 =
+> 柱状装饰 per-lattice 概率（数据驱动门控）；weight 0 / 重复 id /
+> 未知 surface / stateful surface / 空池 = init 点名拒收（fail-fast，
+> 主世界同款时序）。下界生成带 = nether_gen 命名常量（熔岩海 5-31 /
+> 台地 32-52 / 空腔 53-122 / 天花板 122 / 基岩顶 123-127），改带 =
+> 代码常量（非数据，记档）。
 
 ### properties 字段全集
 

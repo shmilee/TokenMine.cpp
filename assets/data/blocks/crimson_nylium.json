@@ -1,0 +1,11 @@
+{
+  "id": "crimson_nylium",
+  "properties": {
+    "hardness": 0.4,
+    "drops": "crimson_nylium"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "crimson_nylium", "side": "crimson_nylium", "bottom": "crimson_nylium" }
+  }
+}

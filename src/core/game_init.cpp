@@ -384,8 +384,10 @@ Result<void> Game::buildScene() {
     // V3-1 Phase B: the nether's generation content (the obsidianId
     // pattern — init name lookup; the shipped asset set carries both, so
     // a stripped set names them invalid and the nether is unbuildable —
-    // ensureNether's MC_FAIL at the first travel).
-    m_states.netherrackId = m_blocks.idForName("netherrack");
+    // ensureNether's MC_FAIL at the first travel). The bedrock doubles
+    // as the generated-portal's platform (the design's bedrock ruling);
+    // the netherrack + the V3-2 Part 1 content family resolve at init
+    // (buildScene's NetherGen::create — the nether module's vocabulary).
     m_states.bedrockId = m_blocks.idForName("bedrock");
 
     // -- texture atlas (16x16 tiles from assets/textures/blocks/*.png) --------
@@ -1465,12 +1467,37 @@ Result<void> Game::buildScene() {
     // -- world generation (Phase 4: seeded, data-driven) ---------------------
     auto biomesLoad = m_biomes.loadDirectory(m_assets, "data/biomes");
     MC_TRY(biomesLoad);
+    // V3-2 Part 1: the nether's INDEPENDENT biome pool (D1: a second
+    // registry instance over data/biomes_nether — the overworld pool
+    // stays untouched, the nether's selection walks this pool over the
+    // derived seed). A missing / empty directory is a named content
+    // regression (the overworld pool's non-empty discipline at create()
+    // — the nether's twin, so a stripped asset set fails init loudly
+    // instead of degrading the nether to the v3.4.0 slab silently).
+    auto netherBiomesLoad =
+        m_netherBiomes.loadDirectory(m_assets, "data/biomes_nether");
+    MC_TRY(netherBiomesLoad);
+    if (m_netherBiomes.count() == 0) {
+        return MC_FAIL("nether world generation requires at least one "
+                       "biome (assets/data/biomes_nether/*.json)");
+    }
     auto worldgen = WorldgenParams::load(m_assets);
     MC_TRY(worldgen);
     const std::int64_t seed = m_config.getInt64("world.seed", 0);
     auto gen = WorldGenerator::create(seed, *worldgen, m_biomes, m_blocks);
     MC_TRY(gen);
     m_generator = std::move(*gen);
+    // V3-2 Part 1: the nether's content resolution — FAIL-FAST at init
+    // (the WorldGenerator::create's twin: the biome surfaces' block
+    // existence + the stateful rejection run HERE, so a bad nether biome
+    // file rejects startup with the init's naming, not the first travel
+    // — the S6 timing ruling). The result is cached in m_nether.gen; the
+    // lazy D2 is the nether World itself (the chunks / meshes / journal /
+    // streaming — ensureNether), NOT the content resolution.
+    auto netherGen =
+        NetherGen::create(netherSeed(seed), m_netherBiomes, m_blocks);
+    MC_TRY(netherGen);
+    m_nether.gen = std::move(*netherGen);
 
     // -- V2-4 weather (rain/thunder): the session-derived state machine --
     // NOT saved (zero format, the cloud-drift precedent class): every run
@@ -1773,15 +1800,16 @@ void Game::ensureNether() {
     if (m_nether.world) {
         return;
     }
-    m_nether.gen.netherrack = m_states.netherrackId;
-    m_nether.gen.bedrock = m_states.bedrockId;
+    // V3-2 Part 1: the content resolution runs at INIT (buildScene's
+    // NetherGen::create — the fail-fast timing ruling); ensureNether
+    // only consumes the cached gen. An invalid cache is structurally
+    // impossible (init MC_TRYs the create — the game never boots with a
+    // bad nether gen): the belt over the belt keeps the travel pipeline's
+    // named-abort path for the unreachable case.
     if (!m_nether.gen.valid()) {
-        // A stripped asset set (no netherrack / bedrock block): the nether
-        // is unbuildable. Log + stay unengaged (the caller — the travel
-        // pipeline — aborts the travel; the belt is unreachable on the
-        // shipped set, where both blocks are core content).
-        MC_LOG_ERROR("The nether dimension is unbuildable: the asset set "
-                     "is missing the 'netherrack' or 'bedrock' block");
+        MC_LOG_ERROR("The nether dimension is unbuildable: the generation "
+                     "content failed to resolve at init (structurally "
+                     "unreachable — buildScene MC_TRYs the resolution)");
         return;
     }
     // The SKYLESS world (D5: the void / world top read sky 0, the rescan

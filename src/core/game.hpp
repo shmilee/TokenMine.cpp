@@ -1293,6 +1293,10 @@ private:
     // Data-driven content.
     BlockRegistry m_blocks;
     BiomeRegistry m_biomes;
+    // V3-2 Part 1: the nether's INDEPENDENT biome pool (assets/data/
+    // biomes_nether — the D1: the overworld's m_biomes stays untouched,
+    // the nether's selection walks this pool over the derived seed).
+    BiomeRegistry m_netherBiomes;
     TextureAtlas m_atlas;
 
     // Voxel world + per-chunk GPU meshes.
@@ -1632,9 +1636,14 @@ private:
         // sky 0, the rescan top source 0; the day/night shader term and
         // the night floor are structurally inert there).
         std::optional<World> world;
-        // The fill's resolved content (init name lookup — the P70
-        // family-inert pattern: invalid = the nether is unbuildable,
-        // ensureNether MC_FAILs at the first need).
+        // The fill's resolved content. Populated at INIT (buildScene's
+        // NetherGen::create — the fail-fast timing ruling, the
+        // WorldGenerator::create's twin: a bad biome surface rejects
+        // startup, not the first travel). ensureNether only CONSUMES
+        // this cache (the lazy D2 is the nether World — the chunks /
+        // meshes / journal / streaming — not the content resolution).
+        // Invalid = structurally impossible post-init (the belt the
+        // ensureNether's named-abort reads).
         NetherGen gen;
         // The nether's streaming family (the overworld's m_streaming
         // twin — the same StreamingState struct, its own instance; the
@@ -2060,10 +2069,11 @@ private:
         // V3-1 Phase B: the nether's generation content ids (the
         // obsidianId pattern — init name lookup; invalid = the nether's
         // fill is unbuildable, ensureNether MC_FAILs at the first need,
-        // the P70 family-inert twin): the netherrack slab (the nether's
-        // identity material) + the bedrock (the floor / roof bands AND
-        // the generated-portal's platform — the design's bedrock ruling).
-        BlockID netherrackId = BlockID::invalid();
+        // the P70 family-inert twin): the bedrock (the floor / roof bands
+        // AND the generated-portal's platform — the design's bedrock
+        // ruling). The netherrack + the V3-2 Part 1 content family are
+        // resolved by NetherGen::create at engagement (the nether
+        // module's data vocabulary — the WorldGenerator::create twin).
         BlockID bedrockId = BlockID::invalid();
         // V3-1 Phase A: the portal tracking set — the cells holding the
         // portal block (the beacons' twin: maintained through the setBlock

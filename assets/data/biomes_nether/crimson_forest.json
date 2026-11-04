@@ -1,0 +1,8 @@
+{
+  "id": "crimson_forest",
+  "weight": 22,
+  "surface": "crimson_nylium",
+  "subsurface": "netherrack",
+  "subsurface_depth": 1,
+  "tree_density": 0.5
+}

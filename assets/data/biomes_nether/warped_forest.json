@@ -1,0 +1,8 @@
+{
+  "id": "warped_forest",
+  "weight": 9,
+  "surface": "warped_nylium",
+  "subsurface": "netherrack",
+  "subsurface_depth": 1,
+  "tree_density": 0.5
+}

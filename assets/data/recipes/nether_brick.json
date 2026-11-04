@@ -1,0 +1,15 @@
+{
+  "id": "nether_brick",
+  "type": "shaped",
+  "output": {
+    "item": "nether_brick",
+    "count": 1
+  },
+  "pattern": [
+    "NN",
+    "NN"
+  ],
+  "key": {
+    "N": "nether_brick"
+  }
+}

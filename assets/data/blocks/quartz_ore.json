@@ -1,0 +1,12 @@
+{
+  "id": "quartz_ore",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 3.0,
+    "drops": "quartz"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "quartz_ore", "side": "quartz_ore", "bottom": "quartz_ore" }
+  }
+}

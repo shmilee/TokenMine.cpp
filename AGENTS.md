@@ -12,12 +12,12 @@ C++20 / SDL3 / OpenGL 3.3 core，
 
 ## 现状（3.x「世界扩展」期——v3.1.0 = V3-7 存档 gzip（门 191，11-04）；
 v3.2.0 = V3-1 Phase A 下界门框（门 192，11-05）；v3.3.0 = V3-8 手柄
-支持（门 193，11-05）；**v3.4.0 = V3-1 Phase B 下界世界 + 真传送
-（门 194，11-05，format 30——下界可进出往返）**；下一项 **Phase C
-下界内容族 = v3.5.x 系列（与 V3-2 合并执行：群系族/netherrack 族/
-矿脉/流体规则/ambience/视觉打磨）**，其后 V3-3 下界 mob → V3-4
-netherite 材料链 → V3-5 建筑内容族 → V3-6 世界边缘雾 → V3-9 demo
-回放【矩阵尾部】）
+支持（门 193，11-05）；v3.4.0 = V3-1 Phase B 下界世界 + 真传送（门
+194，11-05，format 30）；**v3.5.0 = V3-2/Phase C Part 1 下界内容族
+（门 195，11-05：5 群系 + 12 块 + 3 矿脉 + 5 装饰 + D9 空腔带修订 =
+下界可航行）**；下一项 **netherite 材料链 + Part 2 下界深化**，其后
+V3-3 下界 mob → V3-5 建筑内容族 → V3-6 世界边缘雾 → V3-9 demo 回放
+【矩阵尾部】）
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -76,7 +76,7 @@ netherite 材料链 → V3-5 建筑内容族 → V3-6 世界边缘雾 → V3-9 d
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2582/2582**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2617/2617**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 30（V3-1 Phase B 下界维度：player.dimension 严格词表
   恒写 + nether 段 {blocks,fluids,states} + nether_entities 恒写 +
   派生 seed 不落盘；schema 其余与 29 一致，29 携新键 = version lie
@@ -93,8 +93,10 @@ netherite 材料链 → V3-5 建筑内容族 → V3-6 世界边缘雾 → V3-9 d
   门 183】→ **224468【V2-18 门 190，AO 世界光照】；门 184-189 =
   结构免疫第 65-70 次免重锚；门 191【V3-7】= 第 72 次 + 门 192【V3-1
   Phase A 门框】= 第 73 次 + 门 193【V3-8 手柄】= 第 74 次 + 门 194
-  【V3-1 Phase B 下界】= 第 75 次免重锚【v3.0.0 banner = 第 71 次】
-  ——存档/门框/手柄/惰性下界 = 渲染无关零像素**）；PITS
+  【V3-1 Phase B 下界】= 第 75 次 + 门 195【V3-2 Part 1 下界内容族】
+  = 第 76 次免重锚【v3.0.0 banner = 第 71 次】——存档/门框/手柄/惰性
+  下界/下界内容 = 渲染无关零像素【下界内容 = nether-only + 惰性下界；
+  atlas 16×16 幂二增长像素行恒等**）；PITS
   375-379 + **PITS 380**（spawn 成功行无 'pick' / 门场景洞穴密封 /
   CAVE config seed 归属 / bob diff 带色相审计）+ **PITS 381**（热栏
   key→RMB ≥0.15s / 活体掉落物品不可作终档断言 / 羊静止窗）+
@@ -118,6 +120,21 @@ netherite 材料链 → V3-5 建筑内容族 → V3-6 世界边缘雾 → V3-9 d
   B DimCtx 参数化断 STREAMING 锚 = PITS 317 loudly-fail 按预期触发】
   → 双形态锚 + 每 perf 树用自己 commit 的插桩器重建 + 改调用点前先
   grep 全部锚点）；
+  门计数 195（**V3-2/Phase C Part 1 下界内容族 v3.5.0** 门 195 全
+  PASS：**D9 带修订 = 下界可航行**【编排者布局裁决：v3.4.0 实心岩板
+  埋传送落点实证不可探索 → MC 下界废土形态 = 熔岩海 5-31 + netherrack
+  台地 32-52【群系表面 = 台地顶】+ 空气空间 53-122 + 天花板 glowstone
+  122 + 基岩顶 123-127；世界生成演进先例】+ 5 群系独立池【biomes_
+  nether/，MC 比例 36/22/17/16/9，netherBiomeAt 克隆 + 独立盐，装饰
+  门控数据派生旗】+ 12 新块【全 stateless，ancient debris 10 = MC 50
+  的 /5 缩放先例】+ 3 矿脉 lattice 8 台地 only + 5 装饰【stem/basalt
+  柱自 y53 可见 + per-cell blob】+ quartz 物品 + 2 配方 + **atlas
+  16×8→16×16 幂二增长零移位**【像素行恒等 = 锚免重锚实证】+ **init
+  fail-fast**【门内 S6 实证发现：surface 存在性/stateful 拒收从首传
+  惰性前移 buildScene】；2617/2617（+35）；S1 ≡ 锚 + 白名单 4 键；S2
+  双臂【传送空腔截图 ×2 恒等 + 观感实证 / 下界采矿 quartz 入库存 +
+  PITS 7 续破 + PITS 377 磁力边缘实证】；S6 5/5 init 点名；详见
+  `docs/archive/phase-3.5.0.md`）；
   门计数 194（**V3-1 Phase B 下界世界 v3.4.0** 门 194 全 PASS：
   下界维度【D1 增量并行成员 overworld 零 diff + D2 惰性构造【首传前
   零一切】+ D3 仅 Player 换绑 Entity::setWorld【m_world 引用→指针

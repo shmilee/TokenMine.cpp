@@ -179,12 +179,13 @@ TEST(AtlasLayoutTest, UvUnknownTileThrows) {
 }
 
 TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
-    // Per-entry census of the REAL block_atlas.json on the unchanged 16x8
-    // grid (the V2-5 red line, extended per phase): the 99 pre-V2-7
-    // entries (the 97 pre-V2-5 — the 90 V2-2 legacy + the 7 player tiles —
-    // + pig_body / pig_face) keep their EXACT cells (zero UV shift = no
-    // re-anchor of the byte-stable baseline) and the new ones sit in the
-    // row-7 free run (V2-5: [8..9, 7]; V2-7: [10..12, 7]).
+    // Per-entry census of the REAL block_atlas.json (the V2-5 red line,
+    // extended per phase): the pre-V3-5 entries keep their EXACT cells
+    // (zero UV shift = no re-anchor of the byte-stable baseline — the
+    // 16x8 -> 16x16 grid growth doubles the v-space, but every tile's
+    // PIXEL row (16*row) is unchanged, so the sampled texel is identical:
+    // the NEAREST-filter's byte-identity root) and the V3-2 Part 1's 12
+    // tiles sit in the new row 8.
     // NOTE: the pork / cooked_pork food icons are standalone PNGs (the
     // every-shipped-food-icon convention: textures/items/*.png loaded by
     // the item-icon pass, NOT atlas tiles — an atlas entry would fail
@@ -196,7 +197,10 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     ASSERT_TRUE(text.ok()) << text.error().message;
     const AtlasLayout l = parseLayout(*text);
     EXPECT_EQ(l.columns, 16);
-    EXPECT_EQ(l.rows, 8);
+    // V3-2 Part 1: the grid grew 16x8 -> 16x16 (the 124-tile layout
+    // needed 136 cells — the power-of-two growth; the existing 124 keep
+    // their exact cells, the pixel-row identity above).
+    EXPECT_EQ(l.rows, 16);
     // V2-7: 99 -> 102 (the material batch's three tiles — gold_block /
     // diamond_block / furnace_front — join the row-7 free run [10..12, 7];
     // planks reuses its EXISTING tile, zero new texture). V2-12: 102 -> 104
@@ -215,7 +219,10 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     // V3-1 Phase B: 123 -> 124 (the netherrack's single tile — the next
     // free cell of the scan [13, 7], the portal's cell below; zero
     // existing shift).
-    EXPECT_EQ(l.tiles.size(), 124u);
+    // V3-2 Part 1: 124 -> 136 (the content family's 12 tiles — the grid's
+    // new row 8, cols 0..11 in the design's block order; zero existing
+    // shift, the 16x16 growth above).
+    EXPECT_EQ(l.tiles.size(), 136u);
     const struct {
         const char* name;
         int col;
@@ -423,6 +430,30 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
         {"netherrack", 13, 7},
     };
     for (const auto& e : v340) {
+        const auto it = l.tiles.find(e.name);
+        ASSERT_NE(it, l.tiles.end()) << e.name;
+        EXPECT_EQ(it->second.col, e.col) << e.name;
+        EXPECT_EQ(it->second.row, e.row) << e.name;
+    }
+    // V3-2 Part 1: the nether content family's 12 tiles (the biomes'
+    // surfaces / the nether ores / the decoration blocks — the 16x16
+    // grid growth's new row 8, cols 0..11 in the design's block order;
+    // the 124 pre-V3-5 entries above keep their EXACT cells — the
+    // zero-shift red line, no baseline re-anchor).
+    const struct {
+        const char* name;
+        int col;
+        int row;
+    } v350[] = {
+        {"nether_brick", 0, 8},    {"magma_block", 1, 8},
+        {"quartz_ore", 2, 8},      {"nether_gold_ore", 3, 8},
+        {"ancient_debris", 4, 8},  {"soul_sand", 5, 8},
+        {"soul_soil", 6, 8},       {"crimson_nylium", 7, 8},
+        {"warped_nylium", 8, 8},   {"basalt", 9, 8},
+        {"crimson_stem", 10, 8},   {"warped_stem", 11, 8},
+    };
+    ASSERT_EQ(sizeof(v350) / sizeof(v350[0]), 12u);
+    for (const auto& e : v350) {
         const auto it = l.tiles.find(e.name);
         ASSERT_NE(it, l.tiles.end()) << e.name;
         EXPECT_EQ(it->second.col, e.col) << e.name;

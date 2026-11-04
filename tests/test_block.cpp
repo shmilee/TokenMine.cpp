@@ -2239,6 +2239,19 @@ TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
         // V3-1 Phase B: the netherrack (the stone sound family — the
         // documented deviation 3: the netherrack's own family is Phase C).
         {"netherrack", "stone"},
+        // V3-2 Part 1: the nether content family (the stone sound — the
+        // design's "v1 全复用 stone"; the nylium pair is the fieldless
+        // grass precedent — NOT in this map, the no-field census below).
+        {"nether_brick", "stone"},
+        {"magma_block", "stone"},
+        {"quartz_ore", "stone"},
+        {"nether_gold_ore", "stone"},
+        {"ancient_debris", "stone"},
+        {"soul_sand", "stone"},
+        {"soul_soil", "stone"},
+        {"basalt", "stone"},
+        {"crimson_stem", "stone"},
+        {"warped_stem", "stone"},
         // V2-16: the snow block (the 7th material family).
         {"snow", "snow"},
     };

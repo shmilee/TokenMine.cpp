@@ -1,0 +1,11 @@
+{
+  "id": "warped_nylium",
+  "properties": {
+    "hardness": 0.4,
+    "drops": "warped_nylium"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "warped_nylium", "side": "warped_nylium", "bottom": "warped_nylium" }
+  }
+}

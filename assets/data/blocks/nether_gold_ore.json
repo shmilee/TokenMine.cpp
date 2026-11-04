@@ -1,0 +1,12 @@
+{
+  "id": "nether_gold_ore",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 3.0,
+    "drops": "gold_ingot"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "nether_gold_ore", "side": "nether_gold_ore", "bottom": "nether_gold_ore" }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "magma_block",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 1.5,
+    "drops": "magma_block"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "magma_block", "side": "magma_block", "bottom": "magma_block" }
+  }
+}

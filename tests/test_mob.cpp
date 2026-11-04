@@ -1466,9 +1466,11 @@ TEST(MobContent, V215WoolAssetsPinned) {
     // re-pin: the atlas layout gained the nether portal's [13, 6] cell
     // (the 123-tile zero-shift red line, the test_atlas census). V3-1
     // Phase B re-pin: the netherrack's [13, 7] cell (the 124-tile zero-
-    // shift red line, the test_atlas census).
+    // shift red line, the test_atlas census). V3-2 Part 1 re-pin: the
+    // nether content family's 12 tiles (row 8, the 16x16 grid growth —
+    // the 136-tile zero-shift red line, the test_atlas census).
     EXPECT_EQ(fnv1a64(readAll("assets/data/textures/block_atlas.json")),
-              "bcf3fde4fb6cf4d2");
+              "a3ed0965d330749e");
 }
 
 // -- V2-15: the wool instance state (MobEntity — the frame discipline) ----

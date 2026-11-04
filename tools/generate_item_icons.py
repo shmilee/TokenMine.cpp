@@ -1159,6 +1159,31 @@ def make_bottle(liquid, salt, has_liquid=True,
     return px
 
 
+def quartz():
+    """Quartz (V3-2 Part 1, the nether quartz ore's drop): a cluster of
+    pale pink-white crystal shards (three tapering spires on a common
+    base, the flint shard silhouette convention in the quartz palette).
+    New salts 155-157 — every existing icon stays pixel-identical."""
+    px = blank()
+    base = (236, 220, 222)
+    base_lo = (204, 182, 186)
+    hi = (252, 244, 244)
+    # Shards: (centre-x, base-y, half-width at base, height).
+    for (cx, by, hw, hgt) in ((7, 26, 3, 14), (16, 26, 3, 18),
+                              (23, 26, 2, 12)):
+        tip = by - hgt
+        for y in range(tip, by + 1):
+            t = (y - tip) / float(hgt)          # 0 at the tip -> 1 at the base
+            w = int(hw * t) + 1
+            for x in range(cx - w, cx + w + 1):
+                setpx2(px, x, y, base if x >= cx else base_lo,
+                       salt=155)
+    # Bright crystal glints (the shine of the cut faces).
+    for (x, y) in ((7, 14), (16, 10), (23, 18)):
+        setpx2(px, x, y, hi, salt=156, amount=3)
+    return px
+
+
 ITEMS = {
     # V2-7: the planks icon is retired — planks is now a BLOCK item (the
     # 3D cube renders in its place, the Phase 41 wool precedent), so its
@@ -1229,6 +1254,9 @@ ITEMS = {
     "potion_poison": lambda: make_bottle((120, 60, 160), 133),
     "potion_healing": lambda: make_bottle((210, 50, 50), 134),
     "potion_harming": lambda: make_bottle((150, 30, 40), 135),
+    # V3-2 Part 1: the nether quartz ore's drop (the ancient_debris's
+    # item is its BLOCK item — the name-collision's structural form).
+    "quartz": quartz,
 }
 
 

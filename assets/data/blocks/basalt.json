@@ -1,0 +1,12 @@
+{
+  "id": "basalt",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 1.2,
+    "drops": "basalt"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "basalt", "side": "basalt", "bottom": "basalt" }
+  }
+}

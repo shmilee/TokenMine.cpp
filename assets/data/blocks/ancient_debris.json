@@ -1,0 +1,12 @@
+{
+  "id": "ancient_debris",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 10,
+    "drops": "ancient_debris"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "ancient_debris", "side": "ancient_debris", "bottom": "ancient_debris" }
+  }
+}

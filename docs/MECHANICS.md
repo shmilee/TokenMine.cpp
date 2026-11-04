@@ -1,17 +1,19 @@
 # 机制详解（现状 v3.2.0）
 
-> 2026-11-05 V3-1 Phase B 刷新：现状 = **v3.4.0**（3.x「世界
+> 2026-11-05 V3-2 Part 1 刷新：现状 = **v3.5.0**（3.x「世界
 > 扩展」期：v3.1.0 = V3-7 存档 gzip，门 191；v3.2.0 = V3-1 Phase A
 > 下界门框，门 192；v3.3.0 = V3-8 手柄，门 193；v3.4.0 = V3-1 Phase B
-> 下界世界 + 真传送，门 194【format 30】；其前 2.x 两批 20 版收官
-> v2.0.0 → v2.19.0）、无输入基线门 **194** 次、单元测试
-> **2582/2582**、`-Wall -Wextra -Wpedantic -Werror` 0 警告、存档
+> 下界世界 + 真传送，门 194【format 30】；v3.5.0 = V3-2/Phase C Part 1
+> 下界内容族 + D9 空腔带修订，门 195；其前 2.x 两批 20 版收官
+> v2.0.0 → v2.19.0）、无输入基线门 **195** 次、单元测试
+> **2617/2617**、`-Wall -Wextra -Wpedantic -Werror` 0 警告、存档
 > **format 30**（下界维度：player.dimension + nether 段 +
-> nether_entities；gzip 编码 V3-7 起）、base18 锚 **224468 B**（重锚
-> 谱系 179116 → 178148【V2-10 门 181】→ 178676【V2-19 门 182】→
-> 179027【V2-11 门 183】→ **224468【V2-18 门 190，AO 世界光照】**；
-> 门 184–189 = 结构免疫第 65–70 次免重锚；门 191–194 = 第 72–75 次
-> 【v3.0.0 banner = 第 71 次】）、PITS **387**。上一轮全面刷新
+> nether_entities；gzip 编码 V3-7 起；下界内容 = 世界生成演进零
+> format）、base18 锚 **224468 B**（重锚谱系 179116 → 178148【V2-10
+> 门 181】→ 178676【V2-19 门 182】→ 179027【V2-11 门 183】→ **224468
+> 【V2-18 门 190，AO 世界光照】**；门 184–189 = 结构免疫第 65–70 次
+> 免重锚；门 191–195 = 第 72–76 次【v3.0.0 banner = 第 71 次】）、
+> PITS **387**。上一轮全面刷新
 > （2026-11-02）止于 v2.0.0、2026-11-03 增量止于 v2.3.0（下条），本次把
 > v2.11.0 → v2.19.0 的机制（提前项 `[V2-19]` + 第二批 `[V2-11]`~`[V2-18]`，
 > 逐版见 `docs/archive/v2x/CHANGELOG.md`，细节证据见 `docs/archive/v2x/`
@@ -1242,10 +1244,26 @@
 - **坐标映射 8:1**（MC 精确）：主世界 (x,y,z) → 下界 (floorDiv(x,8),
   y, floorDiv(z,8))，Y 不缩放；逆映射 ×8；派生 seed `worldSeed ^
   kSaltNether` **不落盘**（parse 重建 = 单源真值）。
-- **下界 worldgen**（专属纯函数，坐标纯函数 = 零噪声）：基岩底
-  y[0,4] / **熔岩海 y[5,31] 全源 level 8**（静态源海 = 流体零 churn）/
-  netherrack y[32,122]（hardness 0.4 MC 精确，drops 自身）/ 基岩顶
-  y[123,127]。netherrack 音族复用 stone（记档，Phase C）。
+- **下界 worldgen**（专属纯函数，坐标纯函数 = 零噪声；**D9 带修订
+  v3.5.0 = 可航行空腔**，世界生成演进先例）：基岩底 y[0,4] /
+  **熔岩海 y[5,31] 全源 level 8**（静态源海 = 流体零 churn，岩板下
+  挖穿可见）/ **netherrack 台地 y[32,52]**（hardness 0.4 MC 精确，
+  drops 自身，音族复用 stone 记档）/ **空气空间 y[53,122]**（70 格
+  可航行空腔）/ 天花板 **glowstone per-cell 团 y=122**（复用既有
+  glowstone 块 light 15）/ 基岩顶 y[123,127]。
+- **下界群系族（v3.5.0）**：`biomes_nether/` 独立池（主世界池零触碰）
+  5 群系 MC 比例权重：nether_wastes 36（台地基线）/ crimson_forest 22
+  （crimson_nylium 表面 + crimson_stem 柱 4..9）/ soul_sand_valley 17
+  （soul_sand 表面 depth 3 + soul_soil·magma_block per-cell 团 48-52）
+  / basalt_deltas 16（basalt 柱 5..30 自 y53）/ warped_forest 9
+  （warped_nylium + warped_stem）；`netherBiomeAt` = biomeIndexAt 克隆
+  （valueNoise2 + 独立盐 + 派生 seed；装饰门控 = 数据派生旗，fill 零
+  name switch）。
+- **下界矿脉（v3.5.0）**：per-cell lattice 8（GEN-3 先例克隆，台地
+  y[32,52] only——熔岩海/基岩/覆写格不放）：quartz_ore p 0.0376（drops
+  quartz）/ nether_gold_ore p 0.0208（drops gold_ingot MC 精确）/
+  ancient_debris p 0.0026（hardness 10 = MC 50 的 obsidian /5 缩放
+  先例；带 = 台地【MC 深带 8-22 在全源熔岩海无承载 = 记档偏离】）。
 - **skyless 光照**：下界 World 的 sky 光恒 0（void/顶读 0 + rescan 顶
   源 0 = 2 处参数）——无天穹无昼夜；block light 规则同款（熔岩 15 /
   portal 11 / 火把）。ambient 保持 0.03（记档偏离：MC 0.1，Phase C）。
@@ -1277,9 +1295,10 @@
   kind）恒写空合法；两维 portal 载入 rescan（孤立 → air）；nether 内
   stateful 块须 nether.states 条目（PITS 383① 孪生）；gzip 编码零
   改动（V3-7 容器自动覆盖）。
-- **首访体验**：Y 映射落 netherrack 带（32..122）内 = 岩中 portal
-  房（MC 同款）；熔岩海 = 向下 24 格可达（Phase C 群系/矿脉/caves
-  后下界立体化）。
+- **首访体验（D9 修订后）**：Y 映射落空气空间（53..122）= 悬浮
+  portal 房间（框 + 基岩平台自足，落点安全 = 框底行 + 出框 1 格落台
+  地顶无伤）；开阔空腔 + 群系表面远地平线 + stem/basalt 柱 + 天花板
+  glowstone（门 195 截图观感实证）；熔岩海 = 向下 21 格（台地）可达。
 
 ## 流体桶与点燃
 
@@ -2587,7 +2606,7 @@
   最短可往返精度（位精确）；worldgen 演进 = 旧存档未编辑列按**当前**生成器
   重建（洞穴/矿/树/基岩/路径演进先例：P86/88/93、GEN-1..8——编辑权威、零
   format）
-- **质量门**：**2555/2555 单元测试**（`./build/bin/tokenmine_tests`）+
+- **质量门**：**2617/2617 单元测试**（`./build/bin/tokenmine_tests`）+
   `-Wall -Wextra -Wpedantic -Werror` **0 警告**；机制逻辑一律上提**纯函数**
   （campfire 范式：`Result<T>` 显式传播 + 游戏与单测共享同一文件），像素/
   存档证据 = E2E 门（`docs/PROTOCOL.md` E2E 协议）；**禁止** TODO/伪代码/魔法
