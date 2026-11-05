@@ -490,7 +490,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 永不提交 `opencode-sessions/` 下任何文件（本地））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
-## 坑位 Top 8（全文 docs/PITS.md，387 条）
+## 坑位 Top 8（全文 docs/PITS.md，393 条；pre-3.x 条目在 docs/archive/PITS_PRE3X.md）
 
 1. **SDL grab delta**（P28）：输入 E2E 全帧字节一致不保证——存档 yaw/pitch 为漂移
    探测器；驱动 warp 用实际窗口原点（实测 (4,64)）+ (632,352)。
@@ -522,11 +522,11 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | 文档 | 内容 | 何时读 |
 |---|---|---|
 | [docs/GAMEPLAY.md](docs/GAMEPLAY.md) | 玩法指南（操作/生存循环/战斗与食物/工具路线/昼夜） | 玩法问题 |
-| [docs/MECHANICS.md](docs/MECHANICS.md) | 机制详解（现状 v2.0.0，16 子系统分节；2026-11-02 刷新，细节证据在 v1x 阶段存档） | 改玩法逻辑前 |
-| [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
+| [docs/MECHANICS.md](docs/MECHANICS.md) | 机制详解（现状 v2.0.0，16 子系统分节；2026-11-02 刷新，细节证据在 v1x 阶段存档；世界/渲染侧 = `docs/MECHANICS_WORLD.md`） | 改玩法逻辑前 |
+| [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（387 条，都踩过） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（393 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

@@ -120,16 +120,16 @@ cmake --build build
 |---|---|---|
 | [AGENTS.md](AGENTS.md) | 代理快速接收：现状/命令/硬性规则/E2E 协议/阶段流程/坑位速览 | 新会话第一件事 |
 | [docs/GAMEPLAY.md](docs/GAMEPLAY.md) | 玩法指南（操作/生存循环/下界/netherite/建筑材料/**demo 回放教程**；2026-11-06 全量刷新） | 玩法问题 |
-| [docs/MECHANICS.md](docs/MECHANICS.md) | 机制详解（现状 v3.12.0，17 子系统分节含下界维度/demo 回放；2026-11-06 全量刷新） | 改玩法逻辑前 |
-| [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/下界群系/方块/配方/Mob/下界池/附魔/sediment/worldgen 全参考）+ 存档使用 | 加内容/调世界 |
+| [docs/MECHANICS.md](docs/MECHANICS.md) | 机制详解（现状 v3.12.0，17 子系统分节含下界维度/demo 回放；2026-11-06 全量刷新；世界/渲染侧 = `docs/MECHANICS_WORLD.md`） | 改玩法逻辑前 |
+| [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/下界群系/方块/配方/Mob/下界池/附魔/sediment/worldgen 全参考）+ 配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（392 条，都踩过） | 遇到怪问题 |
-| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃条目；已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（393 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃条目；已修复（含修复史）→ `docs/archive/KI_FIXED.md`；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；v2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |
 | [docs/BACKLOG.md](docs/BACKLOG.md) | **3.x「世界扩展」任务表（执行权威，11 项矩阵 + 报障版全完成）**；2.x 全任务表 → `docs/archive/v2x/BACKLOG.md` | 取下一个任务 |
-| [docs/archive/](docs/archive/) | 阶段细节存档（v2x/：20 phase 全两批 + HISTORY.md 全史 + v2x/CHANGELOG.md + v2x/BACKLOG.md；1.x：181 phase + HISTORY.md 全史） | 深挖某阶段 |
+| [docs/archive/](docs/archive/) | 阶段细节存档（v2x/：20 phase 全两批 + HISTORY.md 全史 + v2x/CHANGELOG.md + v2x/BACKLOG.md；1.x：181 phase + HISTORY.md 全史；+ PITS_PRE3X.md pre-3.x 坑位 + KI_FIXED.md 已修复条目存档） | 深挖某阶段 |
 | [docs/archive/v0x/](docs/archive/v0x/) | 0.x 时代文档（ROADMAP 规划 / DISCUSSION 记录 / v0x/CHANGELOG.md） | 深挖 0.x |
 | `opencode-sessions/SESSION_CONTEXT.md`（本地，不入库） | 会话交接：最新状态/提交列表/下一步（历史块/遗留附录 → 同目录 `archive/`；新会话启动 prompt 同目录） | 任何"继续"会话 |
 
