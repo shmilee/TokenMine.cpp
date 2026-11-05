@@ -37,6 +37,8 @@
 #include <string>
 #include <variant>
 
+#include <SDL3/SDL.h>
+
 #include "core/math/vec2.hpp"
 
 namespace mc {
@@ -216,6 +218,11 @@ public:
     // The SDL device name ("unknown" when SDL has no mapping for the
     // device); only valid while gamepadConnected().
     const std::string& gamepadName() const { return m_gamepadName; }
+    // V3-8a (11-06 real-device acceptance): true when the tracked pad's
+    // OPEN succeeded. SDL 3.x delivers button/axis events only after an
+    // explicit SDL_OpenGamepad; a failed open (e.g. permissions) is
+    // logged as a warning — without the open no button can ever arrive.
+    bool gamepadOpen() const { return m_gamepad != nullptr; }
 
     // -- Event entry points --------------------------------------------------
     // Used by pump() and directly by unit tests (SDL key codes are the
@@ -288,6 +295,14 @@ private:
     // V3-8: the connected device's SDL name (the F3 line + the log;
     // "unknown" when SDL has no mapping for the device).
     std::string m_gamepadName;
+    // V3-8a (11-06 real-device acceptance): the opened gamepad's handle
+    // (nullptr = no pad, or the open failed). SDL delivers button/axis
+    // events only after an explicit SDL_OpenGamepad (real-device
+    // verified: zero events pre-open, all post-open — the gate-193
+    // synthetic-event unit tests could never surface this); opening
+    // also stabilizes the shanwan clone (unopened + button press = USB
+    // disconnect, the 11-06 log chain).
+    SDL_Gamepad* m_gamepad = nullptr;
     // V3-8: the cached left-stick raw values (Sint16; each axis event
     // updates its own, then the four directions are recomputed from the
     // pair). 0 = centered.

@@ -591,3 +591,22 @@ TEST(GamepadTest, LegacyKeyboardMouseBitIdentical) {
     // immunity's root).
     EXPECT_FALSE(input.gamepadConnected());
 }
+
+// V3-8a (11-06 real-device acceptance): an OPEN failure (the SDL-less
+// test process = no such device) must not break the tracking state:
+// the buttons still map into the source bits and the REMOVED still
+// matches and clears. (The open's success path is real-device-only —
+// the gate-strength note applies as for the rest of V3-8.)
+TEST(GamepadTest, OpenFailureKeepsTrackingAndMapping) {
+    Input input;
+    input.handleGamepadAdded(999); // no device: the open fails (logged)
+    EXPECT_TRUE(input.gamepadConnected());
+    EXPECT_FALSE(input.gamepadOpen());
+    input.handleGamepadButton(SDL_GAMEPAD_BUTTON_SOUTH, true);
+    EXPECT_TRUE(input.isDown(GameKey::Space));
+    input.handleGamepadButton(SDL_GAMEPAD_BUTTON_SOUTH, false);
+    EXPECT_FALSE(input.isDown(GameKey::Space));
+    input.handleGamepadRemoved(999);
+    EXPECT_FALSE(input.gamepadConnected());
+    EXPECT_FALSE(input.gamepadOpen());
+}

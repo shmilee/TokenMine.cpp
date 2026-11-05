@@ -352,6 +352,19 @@ void Input::handleGamepadAdded(int which) {
     // device (safe to call — a null subsystem returns null, verified).
     const char* name = SDL_GetGamepadNameForID(m_gamepadWhich);
     m_gamepadName = name != nullptr ? std::string(name) : std::string("unknown");
+    // V3-8a (11-06 real-device acceptance): OPEN the pad — SDL 3.x
+    // delivers BUTTON/AXIS events only after an explicit open (real-
+    // device verified: zero events pre-open, all post-open; the
+    // gate-193 synthetic-event unit tests could never surface this).
+    // Opening also stabilizes the shanwan clone (unopened + button
+    // press = USB disconnect, the 11-06 log chain). A failed open
+    // (permissions, ...) keeps the tracking state — the REMOVED below
+    // must still match — but is logged loudly: without the open no
+    // button can arrive.
+    m_gamepad = SDL_OpenGamepad(static_cast<SDL_JoystickID>(which));
+    if (m_gamepad == nullptr) {
+        MC_LOG_WARN("Gamepad open failed: " + std::string(SDL_GetError()));
+    }
     MC_LOG_INFO("Gamepad connected: " + m_gamepadName);
 }
 
@@ -362,6 +375,15 @@ void Input::handleGamepadRemoved(int which) {
     if (m_gamepadWhich == 0 ||
         static_cast<std::uint32_t>(which) != m_gamepadWhich) {
         return;
+    }
+    // V3-8a: close the opened handle. SDL tore the device down
+    // internally on REMOVED already, so this is belt-and-braces —
+    // SDL_CloseGamepad looks the handle up in its internal list and
+    // no-ops safely on a stale pointer (keeps open/close symmetric on
+    // the hot-plug path).
+    if (m_gamepad != nullptr) {
+        SDL_CloseGamepad(m_gamepad);
+        m_gamepad = nullptr;
     }
     // Clear every gamepad source bit (the keys + the mouse buttons the
     // gamepad was driving; the other source's bits stay untouched — the
