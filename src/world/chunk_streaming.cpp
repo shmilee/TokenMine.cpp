@@ -115,4 +115,22 @@ bool streamingActive(const ColumnPos& player,
     return d2 <= r2 && d2 <= t2;
 }
 
+int filledChebyshevRadius(const std::vector<ColumnPos>& loaded,
+                          const ColumnPos& player) {
+    // The max is order-independent (the set's lexicographic iteration
+    // is deterministic, the value is not order-dependent): the read is
+    // a single linear pass, zero allocations (the caller passes its
+    // per-frame snapshot vector — the render fog's clamp).
+    int radius = 0;
+    for (const ColumnPos& col : loaded) {
+        const int dx = col.x >= player.x ? col.x - player.x : player.x - col.x;
+        const int dz = col.z >= player.z ? col.z - player.z : player.z - col.z;
+        const int cheb = dx > dz ? dx : dz;
+        if (cheb > radius) {
+            radius = cheb;
+        }
+    }
+    return radius;
+}
+
 } // namespace mc

@@ -32,4 +32,24 @@ struct FogRange {
 // the fog must never be enabled without a real disc edge.
 FogRange fogDistanceRange(float streamRadiusBlocks, float farPlane);
 
+// V3-6: the fill-aware clamp on the fog end: the static end (the
+// existing PRE-2 value — the far-plane / stream-radius-clamped
+// overworld end, or the nether's constant end) further limited by the
+// actually-filled disk's Chebyshev rim in BLOCKS (the caller converts
+// filledChebyshevRadius * kChunkSize — the world constants stay
+// passed-in, the fog.hpp premise). A fully filled disk (
+// filledRadiusBlocks >= staticEnd) returns staticEnd bit-for-bit —
+// the steady-state bit-identity red line.
+float fillClampedEnd(float staticEnd, float filledRadiusBlocks);
+
+// V3-6: the fill-aware overworld range: end = min(farPlane,
+// streamRadiusBlocks, filledRadiusBlocks); start = kFogStartScale *
+// end (the scale tracks the CLAMPED end — the ramp always ends where
+// the filled rim is). A fully filled disk (filledRadiusBlocks >=
+// min(farPlane, streamRadiusBlocks)) returns fogDistanceRange(
+// streamRadiusBlocks, farPlane) bit-for-bit — the steady-state red
+// line.
+FogRange fogFilledRange(float streamRadiusBlocks, float filledRadiusBlocks,
+                        float farPlane);
+
 } // namespace mc

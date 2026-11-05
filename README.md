@@ -7,7 +7,7 @@
 **本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒<br>
 （C++20 / SDL3 / OpenGL 3.3，自研 JSON/PNG，内容全数据驱动）。<br>
 确定性是一级要求——无输入运行逐帧字节可复现。<br>
-v3.9.0 已发布（**建筑内容族**：水底黏土 → 黏土球 → 砖 → 陶瓦 + 15 色染色陶瓦 / 石砖 / 苔石；tag `v3.9.0`；前版 v3.8.0 = 下界 mob 5 种 / v3.7.0 = 下界深化 / v3.6.0 = netherite 材料链 / v3.5.0 = 下界内容族 / v3.4.0 = 下界世界 + 真传送 / v3.3.0 = 手柄 / v3.2.0 = 门框 / v3.1.0 = 存档 gzip）· 3.x「世界扩展」期进行中，下一版 = 世界边缘雾（任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
+v3.10.0 已发布（**世界边缘雾**：流送盘边缘的悬空截面现在雾化淡出（雾随实际填充范围收缩，满盘后与旧版逐位一致）；tag `v3.10.0`；前版 v3.9.0 = 建筑内容族 / v3.8.0 = 下界 mob 5 种 / v3.7.0 = 下界深化 / v3.6.0 = netherite 材料链 / v3.5.0 = 下界内容族 / v3.4.0 = 下界世界 + 真传送 / v3.3.0 = 手柄 / v3.2.0 = 门框 / v3.1.0 = 存档 gzip）· 3.x「世界扩展」期进行中，下一版 = demo 回放（矩阵收官）（任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
 
 [![GitHub stars](https://img.shields.io/github/stars/shmilee/TokenMine.cpp?style=flat-square)](https://github.com/shmilee/TokenMine.cpp/stargazers)
 [![MIT license](https://img.shields.io/badge/license-MIT-555555?style=flat-square)](LICENSE)
@@ -110,7 +110,7 @@ cmake --build build
   v3.4.0 下界世界 + 真传送 8:1 映射往返 → v3.5.0 下界内容：5 群系/
   熔岩海/netherrack 台地/空腔/glowstone 天花板/矿脉）+ 手柄支持
   （v3.3.0：Xbox 布局，键鼠手柄同用）+ netherite 材料链（v3.6.0：第四
-  档工具 2031 耐久/护甲，纯数据） + 下界深化（v3.7.0：水蒸发/音效族/magma 光/环境音/灵魂沙减速）+ 下界 mob（v3.8.0：5 种，蹼足兽走熔岩）+ 建筑内容族（v3.9.0：黏土链/石砖/苔石/染色陶瓦）；边缘雾 / demo 回放在列
+  档工具 2031 耐久/护甲，纯数据） + 下界深化（v3.7.0：水蒸发/音效族/magma 光/环境音/灵魂沙减速）+ 下界 mob（v3.8.0：5 种，蹼足兽走熔岩）+ 建筑内容族（v3.9.0：黏土链/石砖/苔石/染色陶瓦）+ 世界边缘雾（v3.10.0：盘缘截面雾化淡出）；demo 回放在列
 
 逐版明细与发布历史：[`docs/CHANGELOG.md`](docs/CHANGELOG.md)（当前时
 代）+ `docs/archive/*/CHANGELOG.md`（历史时代）+ GitHub Releases。

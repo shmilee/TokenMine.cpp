@@ -706,28 +706,76 @@ void Game::render() {
     m_basicShader.setUniform2f(
         "u_tileSize", 1.0f / static_cast<float>(m_atlas.layout().columns),
         1.0f / static_cast<float>(m_atlas.layout().rows));
+    // V3-6: the ACTIVE dimension's loaded columns — the set→vector
+    // snapshot the fog's fill clamp (below) and the three column passes
+    // (opaque / cutout / transparent) all consume. The copy the column
+    // passes used to make at their own block lives here now: still ONE
+    // set walk per frame, and the fog's filled-radius scan runs on the
+    // contiguous vector (a linear read) instead of a second pointer-
+    // chasing tree walk over the same ~13k columns.
+    // V3-1 Phase B (D7): the active dimension (the overworld = the
+    // pre-Phase-B m_streaming.loadedColumns — unchanged; the nether's
+    // parallel family). The set is stable across render() (the pool
+    // flushed at the top of update; no streaming job posts during the
+    // render pass), so the snapshot matches what the passes draw.
+    const std::set<ColumnPos>& activeLoadedColumns =
+        playerInNether() ? m_nether.streaming.loadedColumns
+                         : m_streaming.loadedColumns;
+    const std::vector<ColumnPos> columns(activeLoadedColumns.begin(),
+                                         activeLoadedColumns.end());
     // PRE-2 distance fog: the streaming disc edge (raw chunk
     // cross-sections) dissolves into the horizon — a linear ramp toward
     // the same-frame sky color from kFogStartScale * end to end, where
-    // end = min(far plane, effective stream radius in blocks). The
-    // radius is m_streaming.streamRadius capped to kStreamCapRadius (STRM-1)
+    // end = min(far plane, effective stream radius in blocks,
+    // actually-filled disc rim in blocks — V3-6). The stream radius is
+    // m_streaming.streamRadius capped to kStreamCapRadius (STRM-1)
     // times kChunkSize — the same clamp the stream disk itself uses.
+    // V3-6: the fill term — filledChebyshevRadius (the loaded
+    // columns' max Chebyshev distance from the player's column, the
+    // streaming pass's column math) times kChunkSize. The fog end is
+    // pinned to the FILLED rim, not the target disk: a startup /
+    // filling disk (the no-input run's 4x4 demo area: radius 2 = end
+    // 32 / start 24) has its raw cross-sections at or beyond the
+    // fully-white end, so they dissolve into the sky instead of
+    // showing a hard floating edge; a fully filled disk reads
+    // >= its static end / kChunkSize (shipped: min(1000, 1024) / 16
+    // = 62.5, so R >= 63 — the capped disk reads 64 or the hysteresis
+    // 65), where the clamp is a no-op and the range is the pre-V3-6
+    // one bit-for-bit (the steady-state red line — test_fog's V36
+    // pins). The fill order
+    // (nearest-first posts, FIFO integration) keeps the loaded set
+    // downward-closed in column distance, so the filled rim never
+    // overstates the terrain (the conservative bias).
     // render.fog (code default true, the fire.particles getBool
     // precedent) gates it; a degenerate range (end <= start — a
-    // zero/negative view distance) falls back to off. Four per-frame
-    // uniform sets, zero per-draw cost; the streaming code is untouched.
+    // zero/negative view distance, or an empty fill) falls back to off.
+    // Four per-frame uniform sets, zero per-draw cost; the streaming
+    // code is untouched (the radius is READ from its loaded-column
+    // mirror — no post, no job).
     const bool fogConfigOn = m_config.getBool("render.fog", true);
     const float rEffBlocks = static_cast<float>(
                                  std::min(m_streaming.streamRadius, kStreamCapRadius)) *
                              kChunkSize;
+    const Vec3 fogPlayerPos = m_player->position();
+    const ColumnPos fogPlayerColumn{
+        floorDiv(static_cast<int>(std::floor(fogPlayerPos.x)), kChunkSize),
+        floorDiv(static_cast<int>(std::floor(fogPlayerPos.z)), kChunkSize)};
+    const float filledBlocks =
+        static_cast<float>(filledChebyshevRadius(columns, fogPlayerColumn)) *
+        kChunkSize;
     // V3-1 Phase B (D7 point 5): the nether's fog is the SHORT-RANGE
     // dark red (the Minecraft nether's fog 10..96, the named constants
-    // above — the fog color is the clear sky, already the dark red); the
-    // overworld's streaming-disc-derived range is unchanged.
+    // above — the fog color is the clear sky, already the dark red).
+    // V3-6: its end takes the SAME fill clamp (a first-teleport nether
+    // — the 3x3 catch-up, radius 1 = end 16 — hides its rim the same
+    // way; a filled nether disk reads >= 96 / 16 = 6 => end 96
+    // bit-for-bit); the overworld's streaming-disc-derived range is
+    // unchanged.
     const FogRange fog =
         playerInNether()
-            ? FogRange {kNetherFogStart, kNetherFogEnd}
-            : fogDistanceRange(rEffBlocks, kFar);
+            ? FogRange {kNetherFogStart,
+                        fillClampedEnd(kNetherFogEnd, filledBlocks)}
+            : fogFilledRange(rEffBlocks, filledBlocks, kFar);
     const bool fogOn = fogConfigOn && fog.end > fog.start;
     m_basicShader.setUniform1i("u_fogEnabled", fogOn ? 1 : 0);
     m_basicShader.setUniform1f("u_fogStart", fog.start);
@@ -797,17 +845,12 @@ void Game::render() {
     // mirror): no per-frame chunkPositions() snapshot + sort of the ~200k
     // loaded chunks.
     // V3-1 Phase B (D7): the column passes draw the ACTIVE dimension's
-    // loaded columns + merged column meshes (the overworld = the pre-
-    // Phase-B m_streaming.loadedColumns / m_columnMeshes — unchanged;
-    // the nether's parallel family). The frustum test is dimension-
-    // agnostic (world coordinates — the active dimension's space).
-    const std::set<ColumnPos>& loadedColumns =
-        playerInNether() ? m_nether.streaming.loadedColumns
-                         : m_streaming.loadedColumns;
+    // merged column meshes over the `columns` snapshot taken at the fog
+    // block (V3-6 — the shared set→vector copy). The frustum test is
+    // dimension-agnostic (world coordinates — the active dimension's
+    // space).
     std::unordered_map<ColumnPos, ColumnMesh>& columnMeshes =
         playerInNether() ? m_nether.columnMeshes : m_columnMeshes;
-    const std::vector<ColumnPos> columns(loadedColumns.begin(),
-                                         loadedColumns.end());
     for (const ColumnPos& col : columns) {
         if (!columnVisible(col)) {
             continue;

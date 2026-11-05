@@ -11,6 +11,34 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.10.0（2026-11-05）— V3-6 世界边缘雾（填充感知 fog end，base19 重锚，门 200 全 PASS）
+
+**流送盘边缘不再露截面**——消费「世界边缘即虚空（无雾）」Phase
+3/14 时代记档。编排者实证定案：无输入跑 worker = 启动 16 列（4×4
+演示区 cheb 半径 2）后零扩展（PIPE-1 结构免疫纪律）→ 锚图"浮空
+截面" = 演示区边界 32-45 块，远在雾 start 750 内完全可见（fog off ≡
+on 逐字节实证：可见世界全 <750）；现有 PRE-2 雾按**目标盘**（min
+1000/1024 = 1000）算 = 对未填充盘缘无效。修复 = **候选 B 标量化：
+fog end = min(静态 end, 实际填充盘 chebyshev 半径 ×16)**：无输入/
+填充中盘面雾吞截面（end 32 / start 24 = "浮空岛淡出"）；稳态行走
+盘满 64 → min(1000, 1024) = 1000 **位级恒等**（单测含 65 滞回变体
+钉）；**下界同款 clamp**（首传 3×3 catch-up 半径 1 = end 16 同款
+隐藏）。纯代码 9 文件：`filledChebyshevRadius` 纯函数（流送已载列
+max Chebyshev，填充 rim 语义 = 下闭保守性论证）+ `fillClampedEnd` /
+`fogFilledRange` 纯函数（start = 0.75 × clamp 后 end——ramp 总止于
+填充 rim）+ render 雾块（列 set→vector 快照共享零新树走查）；**零
+配置新键 / 零 format / 零新 worker 活动**（无输入日志逐行恒等实证）。
+2734/2734（+10：FogFilledTest 6【满盘位级恒等含 65 滞回 / 2→32 / 0
+→ degenerate off / clamp 只降不升 / nether 16·32·96】+
+FilledChebyshevRadius 4【演示区 4 可达列全 = 2 / 满盘 64·65 / 部分
+填充】）。门 200 = **base19 重锚（首重锚，225272 B）**【diff 审计
+20940 px 全在盘缘带：上天空 0 diff + 前景/HUD 0 diff + 逐通道单调
+趋天空 0 违例 + 单雾因子 100% ≤2 LSB 舍入签名 + 留证五图；存档面
+savenorm vs v3.9.0 旧侧 EXACT = 雾纯渲染】+ S1 ≡ base19 ×2 + S2
+**fog-off 控制臂 ≡ base18 逐字节**（三方闭环 = 唯一像素面实证）+
+性能 A/B 同档【无输入对 = 16 列扫描零成本 + changesApplied 逐位 +
+终档 savenorm EXACT】。详见 `docs/archive/phase-3.10.0.md`。
+
 ## v3.9.0（2026-11-05）— V3-5 建筑内容族（黏土链/石砖/苔石/15 色陶瓦染色族/水底 sediment 生成，门 199 全 PASS）
 
 **建筑的多样性**——① 黏土链（MC 完整形态）：水底 sediment 生成

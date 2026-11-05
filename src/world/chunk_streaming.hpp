@@ -86,6 +86,32 @@ bool streamingActive(const ColumnPos& player,
                      const std::vector<ColumnPos>& loaded, int radius,
                      int triggerDistance);
 
+// V3-6: the Chebyshev radius of the ACTUALLY-FILLED disk: the maximum
+// of max(|col.x - player.x|, |col.z - player.z|) over the loaded
+// columns (0 for an empty set — the degenerate the fog's off guard
+// consumes). The render fog's fill clamp (renderer/fog.hpp) turns it
+// into blocks (radius * kChunkSize — the caller converts) and limits
+// the fog end: the unfilled streaming rim (raw chunk cross-sections)
+// must sit at or beyond the fog's fully-white end, so a startup /
+// filling disk (the no-input run's 4x4 demo area: radius 2) dissolves
+// into the sky instead of showing a hard floating edge.
+//
+// Semantics = the FILLED rim (the farthest loaded column), not the
+// missing rim: the streaming's nearest-first posts + FIFO integration
+// keep the fill downward-closed in column distance, so while a disk
+// fills this read IS the actual terrain rim — the fog swallows no less
+// than exists (the conservative bias: smaller-biased = the fog
+// swallows earlier). The +1 unload-hysteresis band keeps old rim
+// columns at Chebyshev 64-65 for a while after a big move (a bed
+// respawn, a portal trip): the read can then only inflate PAST the
+// no-op threshold (>= 63 — the clamp is a no-op, the pre-V3-6 end),
+// never enable it beyond the static end (end = min(static, rim)). A
+// fully loaded capped disk reads 64 (the axis points are in-disk; the
+// band can add 65); the no-input startup's 4x4 demo area reads 2 —
+// end 32, the base19 anchor's fog.
+int filledChebyshevRadius(const std::vector<ColumnPos>& loaded,
+                          const ColumnPos& player);
+
 } // namespace mc
 
 // Deterministic mixing (the coordinates.hpp ChunkPos/BlockPos style).

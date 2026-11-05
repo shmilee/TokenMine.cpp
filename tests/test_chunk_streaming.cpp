@@ -231,3 +231,83 @@ TEST(ChunkStreamingTest, MissingColumnsEuclideanOrderDiffersFromChebyshev) {
     const std::vector<ColumnPos> expect = missing4; // (sq, x, z) order
     EXPECT_EQ(missingColumns(player, loaded, 3), expect);
 }
+
+// ---------------------------------------------------------------------------
+// V3-6: the actually-filled disk's Chebyshev radius (the render fog's
+// fill clamp — the no-input startup's 4x4 demo area reads 2, the fully
+// loaded capped disk reads 64/65).
+// ---------------------------------------------------------------------------
+
+TEST(ChunkStreamingTest, FilledChebyshevRadiusDemoArea) {
+    // The 4x4 startup demo area {-2..1}² around the spawn column: the
+    // player's column is always in {-1, 0}² (the spawn candidates are
+    // within 8.5 blocks of the origin — hard rule 10), and from every
+    // such column the farthest demo corner is Chebyshev 2 (the
+    // no-input run's fog end 2 * 16 = 32 — the base19 anchor).
+    EXPECT_EQ(filledChebyshevRadius(square(-2, 1), {0, 0}), 2);
+    EXPECT_EQ(filledChebyshevRadius(square(-2, 1), {-1, -1}), 2);
+    EXPECT_EQ(filledChebyshevRadius(square(-2, 1), {-1, 0}), 2);
+    EXPECT_EQ(filledChebyshevRadius(square(-2, 1), {0, -1}), 2);
+    // An edge-of-square read (a column that cannot be the spawn column)
+    // is 3 — the function reports the rim, not a clamped one.
+    EXPECT_EQ(filledChebyshevRadius(square(-2, 1), {-2, -2}), 3);
+}
+
+TEST(ChunkStreamingTest, FilledChebyshevRadiusDegenerate) {
+    // Empty: 0 (the fog's `end > start` guard turns it off — never on
+    // without a real rim). Only the player's own column: 0.
+    EXPECT_EQ(filledChebyshevRadius({}, {0, 0}), 0);
+    EXPECT_EQ(filledChebyshevRadius({{3, -2}}, {3, -2}), 0);
+    // The nether's first-touch 3x3 catch-up: 1 (end 16 — the nether's
+    // fog 10..96 clamps to 10..16 on the first teleport).
+    EXPECT_EQ(filledChebyshevRadius(square(-1, 1), {0, 0}), 1);
+}
+
+TEST(ChunkStreamingTest, FilledChebyshevRadiusFullDisk) {
+    const ColumnPos player{0, 0};
+    // The full radius-64 disk: the axis points (±64, 0) / (0, ±64) are
+    // in-disk (64² <= 64²) — the Chebyshev rim is 64 (64 * 16 = 1024
+    // >= kFar 1000: the steady-state no-op, the bit-identity red line).
+    EXPECT_EQ(filledChebyshevRadius(disk(player, 64), player), 64);
+    // The +1 unload-hysteresis band keeps a column at Euclidean 65
+    // (e.g. (65, 0): 65² <= 65²): the read inflates to 65 — still
+    // past the no-op threshold (65 * 16 = 1040 >= 1000).
+    std::vector<ColumnPos> withBand = disk(player, 64);
+    withBand.push_back({65, 0});
+    EXPECT_EQ(filledChebyshevRadius(withBand, player), 65);
+    // A smaller fully filled disk (view_distance 8): rim 8 = 128
+    // blocks = its static end (the clamp is a no-op at every fill
+    // that completes — the bit-identity holds for any config radius).
+    EXPECT_EQ(filledChebyshevRadius(disk(player, 8), player), 8);
+}
+
+TEST(ChunkStreamingTest, FilledChebyshevRadiusPartialFill) {
+    const ColumnPos player{0, 0};
+    // A partially filled disk (nearest-first fill in progress): the
+    // read is the FILLED rim — the fog clamps to what exists (the
+    // conservative bias: smaller-biased = the fog swallows earlier).
+    EXPECT_EQ(filledChebyshevRadius(disk(player, 5), player), 5);
+    // The downward-closed property the streaming fill order guarantees
+    // (all of distanceSq < D loaded, part of D): disk 4 = rim 4.
+    EXPECT_EQ(filledChebyshevRadius(disk(player, 4), player), 4);
+    // The same disk with its farthest ring's axis points missing
+    // (a mid-fill frame: the four (±5, 0) / (0, ±5) columns not yet
+    // integrated): the rim is 4 — the value is the max over the
+    // loaded columns (order-independent — deterministic).
+    const std::vector<ColumnPos> axes5 = {{5, 0}, {-5, 0}, {0, 5},
+                                          {0, -5}};
+    std::vector<ColumnPos> midFill;
+    for (const ColumnPos& c : disk(player, 5)) {
+        bool isAxis = false;
+        for (const ColumnPos& a : axes5) {
+            if (c == a) {
+                isAxis = true;
+                break;
+            }
+        }
+        if (!isAxis) {
+            midFill.push_back(c);
+        }
+    }
+    EXPECT_EQ(filledChebyshevRadius(midFill, player), 4);
+}

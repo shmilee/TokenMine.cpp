@@ -22,8 +22,8 @@ sand walk_speed_factor 0.4 数据驱动减速，全 nether-scoped overworld
 位级不变）；**v3.8.0 = V3-3 下界 mob（门 198，11-05：5 种 + neutral/
 walks_on_lava 旗 + 下界生成池零新基建——Phase B 预留槽兑现）；
 v3.9.0 = V3-5 建筑内容族（门 199，11-05：黏土链/石砖/苔石/15 色
-陶瓦染色族/水底 sediment 生成 pass，核心仅 worldgen 4 文件）**；
-下一项 **V3-6 世界边缘雾** → V3-9 demo 回放【矩阵尾部】）
+陶瓦染色族/水底 sediment 生成 pass，核心仅 worldgen 4 文件）；
+v3.10.0 = V3-6 世界边缘雾（门 200，11-05：填充感知 fog end = min(静态, 填充盘 cheb 半径×16)，**base19 重锚首重锚**，稳态位级恒等）**；下一项 **V3-9 demo 回放【矩阵收官】**）
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -82,7 +82,7 @@ v3.9.0 = V3-5 建筑内容族（门 199，11-05：黏土链/石砖/苔石/15 色
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2724/2724**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2734/2734**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 30（V3-1 Phase B 下界维度：player.dimension 严格词表
   恒写 + nether 段 {blocks,fluids,states} + nether_entities 恒写 +
   派生 seed 不落盘；schema 其余与 29 一致，29 携新键 = version lie
@@ -94,10 +94,13 @@ v3.9.0 = V3-5 建筑内容族（门 199，11-05：黏土链/石砖/苔石/15 色
   xp_seed+enchants；26 = XP；V2-14 蝙蝠 / V2-15 染色羊 / V2-16
   雪原 / V2-17 slab / V2-18 AO 均零 format【slab state = format 15
   states 机制；AO = 纯渲染 bake 入既有光 attribute】）；
-  base18 锚 **224468 B**（679×744 WM tile 态——重锚谱系：179116 →
+  base19 锚 **225272 B**（679×744 WM tile 态——重锚谱系：179116 →
   178148【V2-10 门 181】→ 178676【V2-19 门 182】→ 179027【V2-11
-  门 183】→ **224468【V2-18 门 190，AO 世界光照】；门 184-189 =
-  结构免疫第 65-70 次免重锚；门 191【V3-7】= 第 72 次 + 门 192【V3-1
+  门 183】→ 224468【V2-18 门 190，AO 世界光照】→ **225272【V3-6
+  门 200，填充感知雾 = base18 后首重锚：无输入视图盘缘截面雾化（20940
+  px diff 全盘缘带 + 单调趋天空 0 违例），稳态位级恒等，fog-off ≡
+  base18 三方闭环】**；门 184-189 = 结构免疫第 65-70 次免重锚；门
+  191【V3-7】= 第 72 次 + 门 192【V3-1
   Phase A 门框】= 第 73 次 + 门 193【V3-8 手柄】= 第 74 次 + 门 194
   【V3-1 Phase B 下界】= 第 75 次 + 门 195【V3-2 Part 1 下界内容族】
   = 第 76 次 + 门 196【V3-4 netherite 材料链】= 第 77 次 + 门 197【V3-2 Part 2 下界深化】= 第 78 次 + 门 198【V3-3 下界 mob】= 第 79 次 + 门 199【V3-5 建筑内容族】= 第 80 次免重锚
@@ -158,6 +161,21 @@ v3.9.0 = V3-5 建筑内容族（门 199，11-05：黏土链/石砖/苔石/15 色
   双臂【传送空腔截图 ×2 恒等 + 观感实证 / 下界采矿 quartz 入库存 +
   PITS 7 续破 + PITS 377 磁力边缘实证】；S6 5/5 init 点名；详见
   `docs/archive/phase-3.5.0.md`）；
+  门计数 200（**V3-6 世界边缘雾 v3.10.0** 门 200 全 PASS【**base19
+  重锚首重锚 225272 B**】：编排者实证定案【无输入 worker = 16 列后
+  零扩展 PIPE-1 纪律 → 锚图"浮空截面" = 演示区边界 32-45 块 < 雾
+  start 750 完全可见；fog off ≡ on 实证可见世界全 <750；现有雾按
+  目标盘算对未填充盘缘无效】→ **fog end = min(静态 end, 实际填充盘
+  cheb 半径 ×16)**【filledChebyshevRadius 填充 rim 语义下闭保守 +
+  fillClampedEnd/fogFilledRange 纯函数 + render 雾块列快照共享零新
+  树走查 + 下界同款 clamp【首传 3×3 半径 1 = end 16】；稳态盘满 64
+  → min(1000,1024) = 1000 位级恒等【65 滞回变体钉】；零配置新键/零
+  format/零新 worker 活动】；2734/2734（+10）；重锚论证【diff 20940
+  px 全盘缘带 + 前景/HUD 0 diff + 单调趋天空 0 违例 + 单雾因子 100%
+  ≤2LSB + 留证五图 + 存档 savenorm vs 旧侧 EXACT】；S1 ≡ base19 ×2；
+  S2 fog-off ≡ base18 逐字节【三方闭环 = 唯一像素面】；性能 A/B 同
+  档【16 列扫描零成本 + 逐位 + 终档 EXACT】；详见
+  `docs/archive/phase-3.10.0.md`）；
   门计数 199（**V3-5 建筑内容族 v3.9.0** 门 199 全 PASS：**核心仅
   worldgen 4 文件**【Sediment 解析 absent=disabled 位级 legacy +
   [0,1] 严格 + pass 生成链最后读最终湖底 + 3 纯谓词 + fail-fast】：
