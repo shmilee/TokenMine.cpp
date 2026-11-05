@@ -369,7 +369,9 @@ v3.10.0 = V3-6 世界边缘雾（门 200，11-05：填充感知 fog end = min(�
   V3-1 下界维度锚【超大】拆分立项；v3.0.0 = 开启版已发布【纯文档 +
   banner】；11-05 UX 行 +2 = V3-8 手柄支持【v3.3.0 执行中】/ V3-9 demo
    回放【矩阵尾部默认，双入口 + 只观察交互模型定案，详见 BACKLOG】；逐版
-   tag + GitHub release 政策沿用 2.x 定案）；2.x 全
+   release 政策 11-05 用户定案撤销【v3.1.0–v3.10.0 只留 v3.9.0 代表，9
+   release + 9 tag 删除，Latest = v3.9.0；v3.0.0 开启版保留；矩阵收官
+   v3.11.0 发单一 release】）；2.x 全
   任务表 = `docs/archive/v2x/BACKLOG.md`；1.x = `docs/archive/v1x/`；
   会话交接：`opencode-sessions/SESSION_CONTEXT.md`。
 ## 命令
