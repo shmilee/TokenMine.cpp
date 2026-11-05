@@ -160,7 +160,7 @@ Game Over / 末地 / 创造 / 多人）矩阵外立项需用户定案
   锚 gameplay 循环——新循环（回放）perf 树手工镜像 / ⑥ 暂停态 +
   --frames = 设计不退出【headless 退出仅 m_demoFrame ≥ total】；**PITS 392**（门日志 grep 假阴性：`mob spawn f` 等事件行 =
   MC_LOG_DEBUG——info 级跑 grep 计数恒 0 ≠ 事件未发生；事件计数
-  断言须 --log-level debug 跑，或截图 crop 目检互补））；
+  断言须 --log-level debug 跑，或截图 crop 目检互补）；
   门计数 195（**V3-2/Phase C Part 1 下界内容族 v3.5.0** 门 195 全
   PASS：**D9 带修订 = 下界可航行**【编排者布局裁决：v3.4.0 实心岩板
   埋传送落点实证不可探索 → MC 下界废土形态 = 熔岩海 5-31 + netherrack
