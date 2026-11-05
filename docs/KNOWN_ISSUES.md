@@ -113,9 +113,11 @@ nospread 位稳 oracle 存档 RAW 逐字节同 + 同 OLD 二进制自分歧实�
 
 ## 合成（Phase 12）
 
-- **配方 = shapeless + shaped（`[Phase 17]` 起）** — shaped（`pattern` + `key`，1..3 行 × 1..3 列；shaped 禁用 `ingredients`）`[Phase 17]` 实装（**现状 shipped 34 个**——`[v1.34.0]` 起含炉子配方 `8 cobblestone 围圈 →
-1 furnace`【MC 1.14+ 摆法，内容缺口修复】；其余 = 工具 9 / 护甲 12 / 营火
-SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作台 / 弓 / 桶）；网格匹配 **shaped 先、shapeless 后，首个命中即成**（注册表加载序）。**"需要工作台" = de facto 网格尺寸门**：E 面板只暴露 2×2（共享 3×3 左上，见「工作台 / 形状合成」节 E 面板条），宽/高 3 的 pattern 只能在工作台摆出（与 MC 一致）。**无多配方消歧仍成立**：`craft` 按 id 精确执行；shipped **32** 个 shapeless 原料集互不重复（`[SURV-5]` poison_bow 入列）——若将来重复 = 加载序首个命中，系统不猜。`[Phase 12]`（shaped + 工作台门 `[Phase 17]` 已解决；炉子配方 `[v1.34.0]`）
+- **配方 = shapeless + shaped（`[Phase 17]` 起）** — shaped（`pattern` + `key`，1..3 行 × 1..3 列；shaped 禁用 `ingredients`）`[Phase 17]` 实装（**现状 shipped 58 个**——CRAFT-4 时 34，随配方集增长：
+`[v1.34.0]` 炉子入列 33→34 / V3-2 nether_brick / V3-4 netherite 3 工具 /
+V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
+工具 12 / 护甲 16 / 营火 SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 /
+金苹果 / 铁块 / 工作台 / 弓 / 桶 / 床 15 / 附魔台 + 书架）；网格匹配 **shaped 先、shapeless 后，首个命中即成**（注册表加载序）。**"需要工作台" = de facto 网格尺寸门**：E 面板只暴露 2×2（共享 3×3 左上，见「工作台 / 形状合成」节 E 面板条），宽/高 3 的 pattern 只能在工作台摆出（与 MC 一致）。**无多配方消歧仍成立**：`craft` 按 id 精确执行；shipped **54** 个 shapeless 原料集互不重复（`[SURV-5]` poison_bow 起逐版入列）——若将来重复 = 加载序首个命中，系统不猜。`[Phase 12]`（shaped + 工作台门 `[Phase 17]` 已解决；炉子配方 `[v1.34.0]`；3.x 增长 V3-2/4/5）
 - **部分材料暂无用途** — **`gold_ingot`/`diamond` 用途已解决**：gold_ingot = 金苹果（shaped 镶金，`[Phase 49]`）/ 黄色染料（`[Phase 45]`）/ 速度弓（`[Phase 79]`）；diamond = 无限弓（`[Phase 77]`）/ 力量弓（`[Phase 79]` ×2），大师弓（`[Phase 82]`）间接。**仍无配方消费的材料 = 仅 `leather`**（见「Mob」节；**`[UX-5]` 起有非配方
 消费 = 皮甲 4 件修复材料**——材料用途已闭环，但无合成路线消费）。无饰品、火把用 coal（金/钻石不用于火把 = 偏离不变）；`coal`/`planks`/`stick` 在 Phase 40 起是炉子燃料（`fuel_time`）；`coal` 另进火把配方（Phase 65）；`planks`/`stick`/`iron_ingot` 已在配方链中；`[v2.7.0]`：`planks` **块化**（可放置 + fuel_time 7.5 迁块属性值不变 + 图标 = 3D 方块体记档偏离，wool 先例）/ gold_ingot·diamond 各 + 9 锭→块配方（gold_block/diamond_block，另见「信标」节基座条）。`[Phase 12]`（coal `[Phase 40/65]`、gold/diamond `[Phase 45]`→`[Phase 49]`→`[Phase 77]`→`[Phase 79]` 已解决、planks 块化 `[v2.7.0]`）
 - **矿石掉落改为材料（行为变化，刻意）** — 4 种矿石现在掉材料物品（coal_ore→coal、iron_ore→iron_ingot、gold_ore→gold_ingot、diamond_ore→diamond，MC 同款），**矿方块物品不能再从采矿获得**（数据仍在、可放置，只是无产出途径）；wood 仍掉 wood 本身（它是木板配方的原料，若改掉 planks 则配方链断）。`[Phase 12]`
@@ -131,7 +133,7 @@ SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作�
 - **`DayCycle::setTimeOfDay` 至多 1 ulp 偏差** — 存 timeOfDay [0,1)，恢复时解出 totalSeconds；对远离配置 start_time 的值，`startTime + delta` 的浮点往返可能差 1 ulp（~1e-16）。昼夜渐变段是常量/平滑的，呈现无影响。`[Phase 13]`
 - **演示区外的编辑会带上"生成的 chunk"** — 在演示区外放置方块会同步生成该 chunk（既有行为），存档 diff 覆盖它；读档时 `setBlock` 重建同样生成该 chunk——一致，但读档后的世界含全新世界没有的 chunk（读档后 `propagateAll` 全量重传播，之后新出现的 chunk 由 Phase 14 的 worker 光照 job 处理）。`[Phase 13]`
 - **抽干的天然熔岩入档不完整、读档后"复活"** — `diffWorld`/journal 流体 diff 不对称：对「生成态有熔岩、会话抽干（level 0）」的格，`fluidKindOf(0)` 特例按 Water 记账 → diff 记为 **level-0 水**编辑（被抽掉的 kind 不记录）；回载 `World::setFluid(level 0)` 只清同 kind 水、不清熔岩，且 `applyWorldEdits` 对「level-0 且该 kind 已空」的编辑跳过 → 读档后生成熔岩复活。触发路径：玩家用熔岩桶抽干天然熔岩湖后存档重开。修复方向（二选一）：diff 对被抽干的格记 drained kind / level-0 编辑清任意 kind。`[PRE-3 2026-10-26 上报，未修，矩阵外]`
-- ~~**存档无迁移机制**~~ — 当前 **format 25**（save.hpp `kSaveFormat=25` / `kSaveFormatMin=1`），**format 1..25 全部可加载**（各按其字段集 + 逐 format 白名单，规则式迁移——"未知字段=报错" rejectUnknownFields 保持）。format 演进（15 → 25）：15 `states`（ENT-2，14→15 值保真）/ 16 `player.armor`（SURV-1，恒写占位槽）/ 17 `player.oxygen`（SURV-2，恒写）/ 18 耐久 `damage`（SURV-3，>0 才写）/ 19 `tables`（CRAFT-1，恒写 + 18→19 sole 归属迁移）/ 20 效果 `tier`（SURV-6，omit-when-0 免迁）/ 21 `player.stats`（SURV-7，恒写空对象合法）/ 22 `player.velocity`（SAVE-2，恒写 ≤21 零速免迁）/ 23 `player.tutorial`（UX-7，恒写 {id,count}/{} ≤22 免迁）/ **24 inventory 36 槽（UX-8f，写恒 36；per-format 尺寸检查双向点名【24 须恰 36 / ≤23 须恰 27】+ 23→24 尾部补 9 空槽值保真迁移 `kPreUx8fInventorySlots`）/ 25 `player.tutorial` 加 `series`（V2-3 教程系列化，InProgress 形状 {series,id,count}；25 缺 series 拒 / 23-24 携 series = 版本谎报拒 / 23-24 载入缺省 0 = 值保真免迁；per-format 形状边界用引入 format 字面量 = PITS 361）**。更早的规则式迁移：6→7 炉子（sole 归属/丢弃）、≤11→12 吸收（共享 health 拆分）、11/12→13 营火（单槽→槽 0）、13→14 stairs（迁移为空）。写入恒 format 24。`[Phase 13]`（`[Phase 16/17]` 起 format 2/3 可加载，其后逐 format 追加；UX-8f format 24）
+- ~~**存档无迁移机制**~~ — 当前 **format 30**（save.hpp `kSaveFormat=30` / `kSaveFormatMin=1`），**format 1..30 全部可加载**（各按其字段集 + 逐 format 白名单，规则式迁移——"未知字段=报错" rejectUnknownFields 保持）。format 演进（15 → 30）：15 `states`（ENT-2，14→15 值保真）/ 16 `player.armor`（SURV-1，恒写占位槽）/ 17 `player.oxygen`（SURV-2，恒写）/ 18 耐久 `damage`（SURV-3，>0 才写）/ 19 `tables`（CRAFT-1，恒写 + 18→19 sole 归属迁移）/ 20 效果 `tier`（SURV-6，omit-when-0 免迁）/ 21 `player.stats`（SURV-7，恒写空对象合法）/ 22 `player.velocity`（SAVE-2，恒写 ≤21 零速免迁）/ 23 `player.tutorial`（UX-7，恒写 {id,count}/{} ≤22 免迁）/ **24 inventory 36 槽（UX-8f，写恒 36；per-format 尺寸检查双向点名【24 须恰 36 / ≤23 须恰 27】+ 23→24 尾部补 9 空槽值保真迁移 `kPreUx8fInventorySlots`）/ 25 `player.tutorial` 加 `series`（V2-3 教程系列化，InProgress 形状 {series,id,count}；25 缺 series 拒 / 23-24 携 series = 版本谎报拒 / 23-24 载入缺省 0 = 值保真免迁；per-format 形状边界用引入 format 字面量 = PITS 361）**/ 26 `player.xp` + entities 第二 kind xp（V2-11 XP）/ 27 `player.xp_seed` + 物品 `enchants`（V2-12 附魔）/ 28 `player.respawn`（V2-13 床）/ **29 gzip 时代（V3-7：schema 与 28 完全一致，format 号仅标记默认 gzip 编码；编码与 format 号正交，魔数 `1f 8b` 探测唯一判据，旧明文档零迁移）**/ **30 下界维度（V3-1：`player.dimension` 严格词表恒写【29 缺 = overworld 迁移 / 29 携 = version lie 点名】+ `nether{blocks,fluids,states}` 恒写 + `nether_entities` 恒写 + 派生 seed 不落盘 + 两维 portal rescan + 交叉检）**。更早的规则式迁移：6→7 炉子（sole 归属/丢弃）、≤11→12 吸收（共享 health 拆分）、11/12→13 营火（单槽→槽 0）、13→14 stairs（迁移为空）。写入恒 format 30。`[Phase 13]`（`[Phase 16/17]` 起 format 2/3 可加载，其后逐 format 追加；UX-8f format 24；V2-11..V3-1 = 26..30）
 
 ## Chunk 流式（Phase 14）
 
@@ -255,12 +257,13 @@ SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作�
   放置/交互（对齐 MC "满条时不能放置"）；该次点击被静默消耗。`[Phase 23]`
 - **食物不直接回血** — `restore_hunger` 只加饥饿点；HP 恢复只走（门控后的）
   自然回复与饥饿=0 的扣血，无"吃牛排直接 +4 HP"类食物。`[Phase 23]`
-- **食物共 12 种：5 生肉/腐肉 + 4 熟肉 + 面包/苹果/金苹果** — Phase 28 起：`rotten_flesh`（+4，zombie）、
+- **食物共 14 种：5 生肉/腐肉 + 5 熟肉 + 面包/苹果/金苹果** — Phase 28 起：`rotten_flesh`（+4，zombie/zombified_piglin）、
   `beef`（+3，cow）、`mutton`（+2，sheep）、`chicken`（+2，chicken）；V2-5 起：
-  `pork`（+3，pig，MC 生猪排 3）；
+  `pork`（+3，pig，MC 生猪排 3）；V3-3 起：`hoglin_meat`（+4，hoglin 掉 1–2）；
   Phase 40 起：`cooked_beef`（+8）、`cooked_mutton`（+6）、`cooked_chicken`（+6）；
-  V2-5 起：`cooked_pork`（+8，MC 熟猪排 8 = 熟牛肉同款刻度）
-  —— 由炉子熔炼对应生肉得到（MC 数值：牛排 8 / 熟羊肉 6 / 熟鸡肉 6 / 熟猪排 8）；
+  V2-5 起：`cooked_pork`（+8，MC 熟猪排 8 = 熟牛肉同款刻度）；V3-3 起：
+  `cooked_hoglin_meat`（+8）
+  —— 由炉子熔炼对应生肉得到（MC 数值：牛排 8 / 熟羊肉 6 / 熟鸡肉 6 / 熟猪排 8 / 熟 hoglin 肉 8）；
   **`bread`（+5，shapeless 3 wheat，`[Phase 48]`）**、**`apple`（+4，leaves 1/128 概率掉，`[Phase 49]`）**、
   **`golden_apple`（+4，shaped 镶金，`[Phase 49]`；`[Phase 56]` 起 grants_effects = regeneration 10 s + absorption 5 s）**。
   `leather`/`wool`/`feather` 刻意**不是**食物（对齐 MC 的收集品定位）。
@@ -276,7 +279,7 @@ SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作�
 ## 工作台 / 形状合成（Phase 17）
 
 - ~~**全工作台的网格是同一个容器**~~ — Phase 17 的 v1：`Game` 持有单个 `m_tableGrid`（`CraftingGrid`）：右键打开的**任何**工作台的 3×3 网格都是它（存档 format 3 `table_grid`）。`[Phase 17]`，**`[CRAFT-1]` 已修复**：每工作台方块独立容器（`Game` 持 `std::map<BlockPos, CraftingGrid> m_tables`，位置序 → 存档写序确定；`setBlock` 收口创建/销毁 + 读档 parse 时不变量保证完整性【炉子同款，无 rescan】）+ 右键面板绑定所点方块（`InventoryUI::bind`，`FurnaceUI::bind` 范式——面板 UI 零视觉变化，只换数据源）+ 存档 format 19 `tables`（每工作台块一条目 {pos, slots[9]}、位置序、与方块差集**双向**交叉校验、19 必需空数组合法 / 19 携 `table_grid` 拒 / ≤18 携 `tables` 拒；**18→19 迁移 = sole 归属**：旧全局 `table_grid` 非空且世界恰 1 个工作台 → 归属之，0 或多个 → 丢弃【P44 先例】；`inv_grid`（E 面板）不动）。**记档偏离：破坏工作台丢弃容器内物品**（setBlock 收口删 state，只掉工作台自身 `drops` = 炉子破坏同款语义 = MC 规则）；**格式 19 槽不携 `damage`**（合成网格属 SURV-3 三处范围外的 grid 纪律，受损物品入格读档回满 = 同款 quirk）。`[CRAFT-1]`
-- **工作台面板配方提示** — 表格面板 3×3 网格 + 输出格旁有 **shaped 配方提示列**（`[CRAFT-4]` 已解决）：**34 个** shipped shaped 配方两列排布（`[v1.34.0]` 炉子配方入列 = 33→34），每行 = mini 3×3 pattern（暗格 + 键位物品图标，按定义左上对齐 = 合法摆放）+ 输出图标 + "name xN"（背包可供应则白 / 否则暗 = `canSupply(patternBag)` 纯函数）；**提示行点击 = 消费性 no-op**（不合成不动背包，但吞点击 ≠ 槽外点击丢 carry）。E 面板位级不变（shapeless 列表保持，`[UX-8c]` 两列 + 可合成排序）。`[Phase 17]`（提示 `[CRAFT-4]`；数量 `[v1.34.0]`）
+- **工作台面板配方提示** — 表格面板 3×3 网格 + 输出格旁有 **shaped 配方提示列**（`[CRAFT-4]` 已解决）：**58 个** shipped shaped 配方两列排布（CRAFT-4 时 34；随配方集增长——`[v1.34.0]` 炉子入列 33→34 / V3-2/4/5 下界·netherite·建筑族 34→58），每行 = mini 3×3 pattern（暗格 + 键位物品图标，按定义左上对齐 = 合法摆放）+ 输出图标 + "name xN"（背包可供应则白 / 否则暗 = `canSupply(patternBag)` 纯函数）；**提示行点击 = 消费性 no-op**（不合成不动背包，但吞点击 ≠ 槽外点击丢 carry）。E 面板位级不变（shapeless 列表保持，`[UX-8c]` 两列 + 可合成排序）。`[Phase 17]`（提示 `[CRAFT-4]`；数量 `[v1.34.0]`）
 - **E 面板 2×2 固定在共享 3×3 模型的左上** — E 面板合成格与表格面板共用同一个 `CraftingGrid` 3×3 模型，只暴露槽 {0,1,3,4}（左上 2×2）；宽度或高度为 3 的 pattern（如 pickaxe `PPP/.S./.S.`）无法摆入，E 里的 shaped 匹配只可能命中落在左上角的 pattern（2×2 工作台配方可在 E 摆出合成，与 MC 一致）。`[Phase 17]`
 - **E 配方列表只显示 shapeless 配方** — shaped 配方不出现在 E 列表里（既有设计 = "shaped 在网格里摆"，2×2 网格摆不下的 pattern 占多数）；shaped 摆法的**游戏内指引 = 工作台面板的提示列**（`[CRAFT-4]`：mini pattern + 可供应着色）。**`[UX-8c]` 列表本身演进**：单列满高 → **两列排布**（CRAFT-4 机制泛化，左列 (n+1)/2 行；CraftingTable kind 位级不变红线）+ **可合成排序置顶**（`orderedRecipeHints` 纯函数两遍同序稳定分区 canCraft 真在前、组内保注册表序；工作台 shaped 列表不排序 = display-only 记档偏离）+ 行内 fitLabel 约束列宽（E 面板 native 宽 1000→1288）。`[Phase 17]`（指引 `[CRAFT-4]`；两列 + 排序 `[UX-8c]`）
 - **E2E 合成输入的环境约束（本机 :0）** — xdotool 每次调用 ~150 ms（长序列追不上帧帽截图）；XTest 伪事件**每个动作后必须 `XFlush`**（libX11 会缓冲无应答请求成 ~1s 一批投递，同帧事件被 `wasPressed` 边沿逻辑折叠）；合成输入要求点击位置处游戏窗口在最上层（运行时临时 unmap UI 窗口），但 unmap 期间用户的真实鼠标会污染运行（指针锁定期间的真实 motion = 相机旋转），所以运行前须等光标静止 ~400 ms；地面命中格瞄准容差在 pitch −0.80 时仅 ~±10 px，驱动用 pitch −0.68（~±49 px）。Xephyr :99 仅作逻辑回退（:0 光标扫过 Xephyr 窗口会被转发进 :99；llvmpipe 渲染不能用于 base 字节基线）。`[Phase 17]`
@@ -401,11 +404,11 @@ SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作�
 
 ## Mob（Phase 20）
 
-- **mob 不入存档** — 生成物是瞬态的（与 Minecraft 一致：存档只持久化玩家/物品/方块编辑）；读档后 mob 重新按帧节奏生成。zombie 死亡掉落 `rotten_flesh` 是物品实体，随存档正常保存。`[Phase 20]`
+- **mob 不入存档** — 生成物是瞬态的（与 Minecraft 一致：存档只持久化玩家/物品/方块编辑）；读档后 mob 重新按帧节奏生成。zombie 死亡掉落 `rotten_flesh` 是物品实体，随存档正常保存。**下界维度同款**（V3-1：`nether_entities` 段只含掉落物 kind，mob 两维皆瞬态）。`[Phase 20]`（两维 `[V3-1]`）
 - ~~**无 Peaceful 难度**~~ — `[ENT-8]` 已解决：`mobs.difficulty = "peaceful"` 四值词汇表（peaceful = Phase-25 保护环扩到全球 kSpawnProtectionPeaceful 1e6 → 敌对自然生成全拒，被动豁免照生，MC 和平核心语义）；"现有敌对消亡" 退化 = mobs ephemeral + difficulty 只 init 读取（无运行期切换）→ 读档后本无敌对（偏离记档，详见 phase-ent8.md）。`[Phase 25]`
 - **保护环是水平圆、不跟随玩家** — 保护中心 = 新世界出生点（读档不改变它），半径为水平距离（无垂直分量）；v1 无床/村庄，保护不随玩家移动（Minecraft 的村庄保护环未实现）。`[Phase 25]`
 - ~~**生成率缩放为全局节奏**~~ — 难度缩放的是尝试节奏（全部 mob 类型共享的 `check_every_frames`），不是 Minecraft 的按类型生成权重；easy/normal/hard = 30÷0.5/1.0/1.5 帧。`[Phase 25]` 发现，`[Phase 39]` 已修复：`mob_spawning.json` 的 `mobs` 条目改为 `{"id", "weight"?}` 对象（weight 1..10000，缺省 1；旧纯字符串条目显式拒绝 = 迁移防护；重复 id/越界/非整数 = 加载失败），类型抽取改为「每次 1 次流值映射进 [0, Σweight) 后按累计权重走名单序」——全 weight 1 与旧 `pick % 名单长度` 逐位相同（已发行数据零行为变化）。难度节奏缩放保留（与权重正交：节奏 = 多久尝试，权重 = 尝试时抽中哪种）。
-- **无阴影/无咆哮声；肢体动画已实现** — `[Phase 20]` 原条三项：① 无行走摆臂 = **已修复 `[ENT-1]`（v0.10.0，详见 docs/archive/v1x/phase-ent1.md）**（纯渲染层：per-mob 整数 swing 相位 + constexpr 16.16 定点正弦表 + mob JSON `swings` 数据段 + CPU 逐帧部件顶点变换 + `checkSwingClip` 防穿模验收；chicken 2 腿 / cow·sheep 4 腿对角步态 / spider 8 腿偶奇分组；zombie/skeleton 99.7 几何无独立 arm part = 不造几何）+ 比例/摆幅/关节 `[ENT-1b]`（v0.11.0）实机校准；② 无 blob 阴影 = **已解决 `[V2-6]`（v2.6.0）**：每 mob 脚下（+ 玩家**仅第三人称**）世界空间扁 quad（双面、半透明黑 alpha 0.3、边长 = 1.5×模型宽，entity/blob_shadow.hpp 纯几何：中心 = 底心正下方**底格顶面** + 0.01 防 z-fight 抬升，贴地面而非悬浮脚边 = MC blob 观感）；纯渲染零帧状态（几何 = 实体当前位置的纯函数），blend pass 深度写关/测开（山丘遮挡、地形承托）。**记档偏离**：玩家第一人称无自身阴影（MC 同款）/ quad 为方块扁影（MC 是径向渐变软影）/ 无方块投射阴影（blob ≠ shadowmap）；③ 无咆哮/低吼（受击 "hurt" / 死亡 "death" 复用）= **仍活跃**。
+- **无阴影/无咆哮声；肢体动画已实现** — `[Phase 20]` 原条三项：① 无行走摆臂 = **已修复 `[ENT-1]`（v0.10.0，详见 docs/archive/v1x/phase-ent1.md）**（纯渲染层：per-mob 整数 swing 相位 + constexpr 16.16 定点正弦表 + mob JSON `swings` 数据段 + CPU 逐帧部件顶点变换 + `checkSwingClip` 防穿模验收；chicken 2 腿 / cow·sheep 4 腿对角步态 / spider 8 腿偶奇分组；zombie/skeleton 99.7 几何无独立 arm part = 不造几何）+ 比例/摆幅/关节 `[ENT-1b]`（v0.11.0）实机校准；② 无 blob 阴影 = **已解决 `[V2-6]`（v2.6.0）**：每 mob 脚下（+ 玩家**仅第三人称**）世界空间扁 quad（双面、半透明黑 alpha 0.3、边长 = 1.5×模型宽，entity/blob_shadow.hpp 纯几何：中心 = 底心正下方**底格顶面** + 0.01 防 z-fight 抬升，贴地面而非悬浮脚边 = MC blob 观感）；纯渲染零帧状态（几何 = 实体当前位置的纯函数），blend pass 深度写关/测开（山丘遮挡、地形承托）。**记档偏离**：玩家第一人称无自身阴影（MC 同款）/ quad 为方块扁影（MC 是径向渐变软影）/ 无方块投射阴影（blob ≠ shadowmap）。**v3.12.0 修订（门 202）**：边长 **1.5× → 1.0×**（= 身体同宽足迹）——用户实机报障「阴影比 mob 大、落体瞬间阴影角压高处方块 = 看似按阴影判落」；编排者探针定案**物理 = AABB 质心规则**（失接地 = 身体中心恰过边缘 0.3000 = 半宽，MC 同款；`blobShadow*` 仅渲染消费零参与判定）→ 所见 = 1.5× 阴影的落体瞬间视觉误导，处置 = 物理不动只缩阴影（玩家第三人称阴影同共享常量收拢）；③ 无咆哮/低吼（受击 "hurt" / 死亡 "death" 复用；**下界 mob 氛围音 3 件 `[V3-3]` 部分消费**）= **仍活跃**。
 - ~~**mob 无 step-up**~~ — 1 格台阶会挡住追逐（贴墙滑动、可能永远到不了玩家）；玩家有 P16 step-up，mob 没有。`[Phase 20]`（追逐卡台阶）**`[ENT-3]` 已修复**：step-up 纯几何上提为 `Entity::stepUp`（player 逐位不变 = 既有 stepUp 单测零改动全过），mob 在水平移动受阻的同一位置、同一判定（P99 TRUE-1-block：solid 区顶高 ≤ 1.0 → slab/满块/玻璃板可踏、墙/栅栏 1.5 帽不可踏）调用同款抬升 + 本 tick 水平位移重放；AI/速度/子步节奏零改动、零 format（mob ephemeral）。**共享判定顺带钉死 P16 两个潜伏 quirk**（player 同款、ENT-3 探针实证）——**`[v2.9.0]` 双双已修**（详见「生存」step-up 条：front 格对称化 + 真 clamp 无状态验；player/mob 共享生效）。
 - ~~**mob 无游泳/水交互**~~ — `[ENT-4]` 已解决：走进水 = 共享流体模型（浮力 12 / 上浮帽 1.5 / 下沉帽 4 = 玩家 FLUID-2 同常量）——沉水被动上浮、水面 W' 几何漂浮（fps 无关终态）、池底站立、水平速度 ×0.6 门控、水下禁 step-up（**FLUID-3 修订**：`!m_inFluid` 门已删 = 涉水 mob 可踏 1 格岸壁出池；浮漂终态 = 游泳位 W'−h/2 半浸没；池深 ≥2 的 resting 体上浮；详见 phase-fluid3.md）；AI 状态机零改动（追逐/游走照常驱动，只是水下更慢）；熔岩同路（P58 燃烧照旧）。生成检查（地面格 + 头顶空余）不变。`[Phase 20]`
 - ~~**mob 无坠落伤害**~~ — `[ENT-5]` 已解决：MobEntity 落地块镜像玩家 Phase-16 规则（净落差 > 3 且落地格 fresh 无流体 → damage，详见 phase-ent5.md）。`[Phase 20]`
@@ -634,7 +637,8 @@ SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作�
 - **信标基座 = iron/gold/diamond 三金属块** — `beacon_base` 布尔属性
   （`[v2.7.0]` 起 shipped = iron_block / gold_block / diamond_block
   三块带——金/钻块 = iron_block 先例复制 + 9 锭 shaped 配方）；
-  MC 的 netherite 块基座 = 无（项目无 netherite）。金字塔
+  MC 的 netherite 块基座 = 无（**netherite 物品族 `[V3-4]` 在场但无
+  netherite_block = 无基座块**）。金字塔
   等级 = 3×3/5×5/7×7/9×9 连续完整层（`world/beacon` 纯函数，零
   核心代码——基座判定读块属性）。`[Phase 83]`（`[v2.7.0]` 金钻块
   入列）
@@ -859,7 +863,85 @@ SSS/LCL/LLL / 楼梯 ×4 / 台阶 / 墙 / 栅栏 / 金苹果 / 铁块 / 工作�
 
 - **天气 = 帧锁定状态机 + 雨滴渲染 + 雷声，session 派生不持久** — `[V2-4]`（v2.4.0，详见 docs/archive/v2x/phase-2.4.0.md）：`core/weather` 纯状态机（推进式 splitmix64【PITS 4】主流 seed = 世界 seed【同世界同序列】+ 雷独立 salt 流；CLEAR 9000-18000f / RAIN 3000-6000f / 雷 600-1800f）+ rain shader program（cloud 第四先例：静态 300 滴 VBO + 顶点 shader 逐滴纯函数位置 + per-frame 零上传）+ 天空 dayFactor 单收口（RAIN ×0.85 + 雷 5 帧 +0.15 脉冲）+ 交互四件（雨灭火块/灭营火/灭燃烧效果/润耕地 2×）+ `render.weather` strict 默认 true（**off = 状态机不跑+零雨滴+零交互 = v2.3.0 位级恒等**）+ `--weather clear|rain`（仅初始 state，rain = kRainMin 3000f 固定）+ F3 `weather` 行 + 雷新 wav（既有 39 md5 零变化幂等）。**记档偏离**：① **初始 CLEAR 不持久**（零 format 定案——重载/新 run 一律首段 CLEAR 重启，MC 持久天气 = 偏离；云漂移同款 session 派生先例类）② **屋檐遮蔽无**（雨中 fire/营火/燃烧效果一律灭，MC 有遮蔽检查）③ **无雨声循环**（项目音效集无循环音范式——雷 = 一次性远雷 2D 中心不空间化）④ **雷无伤害/落点**（无声外效果，MC 闪电可落点伤害）⑤ **流体不注水**（雨不产生流体，MC 同款）⑥ 首段恒 CLEAR ≥9000f = 无输入 60f 基线结构性免疫根（也是「开局 2.5 分钟内必无雨」的玩法事实）。
 
+## 下界维度（V3-1 Phase B v3.4.0；内容 V3-2/4/5；深化 V3-2 Part 2；mob V3-3）
+
+- **首访体验 = 悬浮 portal 房间** — v3.4.0 实心岩板 32..122 把传送落点
+  Y=55 埋进岩层 = 下界不可探索（实证）→ **v3.5.0 D9 带修订**（编排者布局
+  裁决，世界生成演进先例）：熔岩海 5-31 全源静态 / netherrack 台地 32-52
+  （群系表面 = 台地顶）/ **空气空间 53-122（70 格可航行空腔）** / 天花板
+  glowstone per-cell y122 / 基岩顶 123-127——落点 = 悬浮 portal 房间（框
+  + 基岩平台自足，落点安全），向下 21 格 = 熔岩海。
+- **下界 fire 恒定不烧尽** — 主世界火块 real-dt 燃尽（4 s）；下界 fire 块
+  不烧尽（记档偏离；水浇灭机制仍在——但下界无水 = 实践不可达）。
+- **下界没有水** — 倒水桶 = **水瞬间蒸发**（桶回空桶 + "evaporate" 音 +
+  日志，零格触碰，v3.7.0）：水无下界世界语义（MC 同款）；维度感知
+  FluidSim（下界独立 FluidSim 实例）= 矩阵外记档。熔岩桶照常。
+- **床睡眠下界 no-op** — 右键床无效果（项目无爆炸机制，MC 床爆炸 = 不做
+  记档；ghast = 爆炸机制的延后立项）。重生点恒主世界（**下界死亡 = 回
+  主世界重生**，MC 精确）。
+- **容器面板 / per-block state 族主世界 only** — furnace/campfire/table/
+  crop/sapling/moisture/beacon/fire 七类状态主世界专属（下界放置这些块
+  = 无状态行为）。
+- **掉落物不跨维** — 传送不携掉落物实体（记档偏离；MC 掉落物随玩家跨维）。
+- **下界原点保护圈** — 敌对保护环锚 = 世界出生点，下界池同款应用（MC 下
+  界无保护 = 记档偏离，门 198）。
+- **下界 mob 既定不做**（V3-3 记档）：piglin 无交易 / magma_cube 不分裂
+  不跳 / strider 不可骑乘 / **ghast 延后 = 爆炸机制**（与床爆炸同基建）/
+  zombified_piglin `undead: false`（MC 非亡灵 = 中毒不免疫）。
+- **传送 = 900 帧冷却（15 s）** — 会话态不入档（重载即清零，记档）。
+  正交 portal 往返 yaw −π/2（MC JE 顺时针 90°，往返 180° 观感 quirk 自然
+  继承）。
+
+## netherite 材料链（V3-4，v3.6.0）
+
+- **netherite 无火/熔岩免疫、无击退抗性** — 伤害管线改造面 = 矩阵外记
+  档（Phase B 候选未立项）；穿了 netherite 护甲掉熔岩海照样烧/溺。
+- **无 netherite_block** — 物品族在场（ingot/scrap/工具 3/护甲 4）但无块
+  （信标配基座集合 {iron, gold, diamond} 不变）。
+- **升级配方 = ingot + diamond_<slot> shapeless** — 无锻造台（记档偏离
+  2）；ingot 配方 = 4 scrap + 4 gold_ingot（MC 用 nugget = 记档偏离 1）。
+- **fast_against = 铁 10 块清单 + 下界台地 11 块 = 21 块 ×2** — 新块不加
+  进既有铁工具清单（清单演进纪律）。
+
+## 建筑内容族 / 水底 sediment（V3-5，v3.9.0）
+
+- **sediment pass 时机 = 生成链最后**（记档偏离 3）——读最终湖底（place-
+  LavaLakes 之后）；既有顺序装饰先于湖，设计「湖后装饰前」不可满足。
+- **sediment 只铺顶 1 层**（MC 3-4 层 = 简化记档）；**4 词表表面**
+  （dirt/gravel/sand/stone，代码常量记档——grass 等拒收）。
+- **mossy_cobblestone 无废墟替代来源**（MC 废墟/林地府邸 = 不做记档）。
+- **陶瓦 15 色词表含 white 无 lime**（项目染料词表收敛，记档偏离 1）；
+  染色混合公式 (base×3+dye×2)//5 = 自建（项目无 base×染料混合先例，记档
+  偏离 4）。
+- **建筑块 light_opacity 键省略 = 派生 opaque 15**（记档偏离 2：设计 "1"
+  与同不透明度论证自相矛盾）。
+
+## demo 回放（V3-9，v3.11.0）
+
+- **慢机掉渲染帧，模拟不追** — 墙钟只 pacing 渲染（int64 µs 累计防漂
+  移）；渲染掉帧 = 观感卡顿，模拟终态不变（记档偏离 2）。
+- **倍率切换的真实鼠标点击同触发** — 手柄 LB/RB = V3-8 映射的鼠标
+  Left/Right；手柄连接时真实鼠标点击仍切倍率（v1 局限记档，倍率仅
+  pacing 无害）。
+- **demo UI 字符串英文** — 字体 427 字形 CJK 表无 demo 词汇（记档：加
+  字 = 字体表扩展，偏离 1 设计稿记档）。
+- **ESC = 暂停菜单非退出** — pre-V3-9 的 ESC 语义属玩家通道（demo 事件
+  拥有）；观众退出 = 暂停/结束面板的 Q。
+- **录制 quit 帧未模拟尾部排除**（`discardPendingFrame`，记档偏离 3）；
+  录制带 `--save` = 槽 spec 被退出写覆写终态（闭环起点漂移，PITS
+  391③——fresh 会话录制）。
+- **world spec = 起点权威** — `--demo` + `--new`/`--seed` = 点名拒（记档
+  偏离 4）；引用存档槽永不回写（观察红线）。
+
+## 实机报障阴影缩尺（v3.12.0，门 202）
+
+- **mob 阴影 = 1.0× 身体宽足迹**（原 1.5× MC blob 观感缩小）——落体瞬间
+  「阴影角压高处方块 = 看似按阴影判落」视觉误导消除；**物理 = AABB 质心
+  规则不动**（探针定案：失接地 = 身体中心恰过边缘 0.3000 = 半宽，MC 同
+  款）。详见「Mob」节阴影条 + `docs/archive/phase-3.12.0.md`。
+
 ## 已修复（归档）→ 细节存档
 
 pre-2.0 已修复条目全索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`（按需查找；各
-阶段修复细节 = `docs/archive/v1x/phase-*.md`）。
+阶段修复细节 = `docs/archive/v1x/phase-*.md`）。3.x 全 12 版阶段存档 =
+`docs/archive/phase-3.x.0.md`（v3.1.0–v3.12.0，含门证据与记档偏离全文）。
