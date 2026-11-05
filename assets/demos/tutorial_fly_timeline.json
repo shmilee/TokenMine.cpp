@@ -1,0 +1,25 @@
+{
+  "world": { "type": "fresh", "seed": 123456789 },
+  "actions": [
+    { "at_frame": 10, "action": "mouse_down", "button": "left" },
+    { "at_frame": 15, "action": "mouse_up", "button": "left" },
+    { "at_frame": 25, "action": "mouse_move", "dx": -200, "dy": 0 },
+    { "at_frame": 90, "action": "mouse_move", "dx": 200, "dy": 0 },
+    { "at_frame": 130, "action": "key_down", "key": "space" },
+    { "at_frame": 135, "action": "key_up", "key": "space" },
+    { "at_frame": 142, "action": "key_down", "key": "space" },
+    { "at_frame": 147, "action": "key_up", "key": "space" },
+    { "at_frame": 170, "action": "key_down", "key": "space" },
+    { "at_frame": 220, "action": "key_up", "key": "space" },
+    { "at_frame": 235, "action": "key_down", "key": "w" },
+    { "at_frame": 315, "action": "key_up", "key": "w" },
+    { "at_frame": 330, "action": "mouse_move", "dx": -250, "dy": 0 },
+    { "at_frame": 420, "action": "key_down", "key": "shift" },
+    { "at_frame": 475, "action": "key_up", "key": "shift" },
+    { "at_frame": 495, "action": "key_down", "key": "space" },
+    { "at_frame": 500, "action": "key_up", "key": "space" },
+    { "at_frame": 507, "action": "key_down", "key": "space" },
+    { "at_frame": 512, "action": "key_up", "key": "space" },
+    { "at_frame": 540, "action": "mouse_move", "dx": 250, "dy": 0 }
+  ]
+}

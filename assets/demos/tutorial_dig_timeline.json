@@ -1,0 +1,24 @@
+{
+  "world": { "type": "fresh", "seed": 123456789 },
+  "actions": [
+    { "at_frame": 10, "action": "mouse_down", "button": "left" },
+    { "at_frame": 15, "action": "mouse_up", "button": "left" },
+    { "at_frame": 25, "action": "mouse_move", "dx": 0, "dy": 628 },
+    { "at_frame": 30, "action": "mouse_down", "button": "left" },
+    { "at_frame": 92, "action": "mouse_up", "button": "left" },
+    { "at_frame": 104, "action": "mouse_down", "button": "left" },
+    { "at_frame": 150, "action": "mouse_up", "button": "left" },
+    { "at_frame": 168, "action": "mouse_down", "button": "left" },
+    { "at_frame": 214, "action": "mouse_up", "button": "left" },
+    { "at_frame": 232, "action": "mouse_down", "button": "left" },
+    { "at_frame": 278, "action": "mouse_up", "button": "left" },
+    { "at_frame": 298, "action": "key_down", "key": "9" },
+    { "at_frame": 303, "action": "key_up", "key": "9" },
+    { "at_frame": 308, "action": "mouse_down", "button": "left" },
+    { "at_frame": 376, "action": "mouse_up", "button": "left" },
+    { "at_frame": 400, "action": "mouse_move", "dx": 0, "dy": -628 },
+    { "at_frame": 430, "action": "mouse_move", "dx": -150, "dy": 0 },
+    { "at_frame": 500, "action": "mouse_move", "dx": 150, "dy": 0 },
+    { "at_frame": 560, "action": "mouse_move", "dx": 0, "dy": -250 }
+  ]
+}

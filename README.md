@@ -7,7 +7,7 @@
 **本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒<br>
 （C++20 / SDL3 / OpenGL 3.3，自研 JSON/PNG，内容全数据驱动）。<br>
 确定性是一级要求——无输入运行逐帧字节可复现。<br>
-v3.12.0 已提交（**实机报障修复**：mob 阴影 1.5× → 1.0×——落体瞬间阴影压边的视觉误导；物理经探针核实 = 质心规则（原版同款）未动；tag `v3.12.0`；前版 v3.11.0 = demo 回放（**3.x 矩阵收官**：下界世界 + 传送 / 下界内容族 / netherite 链 / 下界 5 mob / 建筑内容族 / 边缘雾 / 存档 gzip / 手柄，v3.1.0–v3.11.0 门 191–201）；任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
+当前 v3.12.0（3.x「世界扩展」期收官）· tag `v3.12.0` · 任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)**
 
 [![GitHub stars](https://img.shields.io/github/stars/shmilee/TokenMine.cpp?style=flat-square)](https://github.com/shmilee/TokenMine.cpp/stargazers)
 [![MIT license](https://img.shields.io/badge/license-MIT-555555?style=flat-square)](LICENSE)
@@ -36,7 +36,7 @@ v3.12.0 已提交（**实机报障修复**：mob 阴影 1.5× → 1.0×——落
 | 构建 | CMake + Ninja | |
 | 窗口/输入 | SDL3 | |
 | 图形 | OpenGL 3.3 Core (GLEW) | |
-| 音频 | SDL3 Audio（`SoundBank`，SDL 内置音频后端） | Phase 15 引入，38 个程序化 WAV（确定性生成，含 CRAFT-3 材质音效 + PRE-4 环境音） |
+| 音频 | SDL3 Audio（`SoundBank`，SDL 内置音频后端） | 63 个程序化 WAV（确定性生成，含材质音效 + 4 上下文环境音 + 下界音效族） |
 | 图像 | 内置 PNG 编解码器（`src/core/png.hpp`，zlib） | 8/16 位 RGB/RGBA/灰度/调色板，全 filter，CRC 校验 |
 | 测试 | GoogleTest | |
 | JSON | 内置实现（`src/core/json.hpp`） | 无外部依赖 |
@@ -58,6 +58,12 @@ cmake --build build
 
 # 其他参数
 ./build/bin/tokenmine --config config/config.json --seed 42 --log-level debug
+
+# 看预设教程 demo（只观察：转镜头/切视角/0.5×~2× 变速/暂停，Q 退出）
+./build/bin/tokenmine --demo assets/demos/tutorial_fly.dmo   # 双击 Space 飞行
+./build/bin/tokenmine --demo assets/demos/tutorial_dig.dmo   # 挖掘 + 换工具
+./build/bin/tokenmine --demo assets/demos/tutorial_build.dmo # 数字键 + 环绕建造
+./build/bin/tokenmine --demo assets/demos/example.dmo        # 基础操作巡礼
 
 # 从指定时刻开始（0 = 黎明前, 0.25 = 正午, 0.5 = 日落, 0.75 = 午夜）
 ./build/bin/tokenmine --time 0.75
@@ -94,23 +100,11 @@ cmake --build build
 
 ## 版本与发布
 
-- **v0.1.0**（首个公开版）：可玩的 3D 体素沙盒——世界生成与流送、昼夜
-  光照、流体、Mob 与战斗、合成、存档
-- **v1.0.0**（首个正式版）：十大系统完成，生存玩法闭环；其后 1.x 系列
-  深化生存：火系统（蔓延 / 火把 / 燧石与钢）、工具分类（镐 / 斧 / 铲）、
-  护甲与耐久修复、药水与状态效果、死亡统计、炉子燃料熔炼、背包操作、
-  第三人称相机与玩家模型、中文字体与 11 步教程、云方块化、洞穴矿脉
-  演进
-- **v2.0.0**：1.x 收官；其后 2.x「上手与体验补全」系列再添：经验与 7 种
-  附魔、15 色染色床（睡觉跳夜）、蝙蝠（首只飞行 mob）与染色羊、雪原
-  群系、顶部 / 双 slab、环境光遮蔽（smooth lighting）、天气（雨 / 雷）、
-  新手教程系列、Steve 皮肤、滚轮缩放 / 双击 Space 飞行 / 24 小时时钟
-- **v3.0.0**（当前）：3.x「世界扩展」开启——存档 gzip 压缩（v3.1.0，
-  默认开，旧档直读零迁移）+ **下界维度完整**（v3.2.0 传送门框 →
-  v3.4.0 下界世界 + 真传送 8:1 映射往返 → v3.5.0 下界内容：5 群系/
-  熔岩海/netherrack 台地/空腔/glowstone 天花板/矿脉）+ 手柄支持
-  （v3.3.0：Xbox 布局，键鼠手柄同用）+ netherite 材料链（v3.6.0：第四
-  档工具 2031 耐久/护甲，纯数据） + 下界深化（v3.7.0：水蒸发/音效族/magma 光/环境音/灵魂沙减速）+ 下界 mob（v3.8.0：5 种，蹼足兽走熔岩）+ 建筑内容族（v3.9.0：黏土链/石砖/苔石/染色陶瓦）+ 世界边缘雾（v3.10.0：盘缘截面雾化淡出）+ demo 回放（v3.11.0：录制/编写/回放，只观察）** = 3.x 矩阵收官**；死亡统计屏 / 末地 / 创造 / 多人等方向项待立项
+- **v0.1.0**：可玩的 3D 体素沙盒（世界生成 / 昼夜光照 / 流体 / Mob 战斗 / 合成 / 存档）
+- **v1.0.0**（1.x）：十大系统完成，生存玩法闭环——火与工具分类、护甲耐久、药水效果、第三人称、教程
+- **v2.0.0**（2.x）：上手与体验补全——XP 与 7 种附魔、染色床睡觉跳夜、蝙蝠/染色羊/雪原、AO 环境光遮蔽、天气、飞行与滚轮缩放
+- **v3.0.0**（3.x，当前）：**世界扩展**——下界维度（传送门 / 5 群系 / 熔岩海 / 5 专属 mob）+ netherite 材料链 + 建筑内容族（黏土/石砖/陶瓦）+ 存档 gzip + 手柄 + **demo 回放（录屏式只观察教程）**；v3.12.0 矩阵后报障修复
+- 方向项（末地 / 创造 / 多人 / 死亡统计屏）待立项
 
 逐版明细与发布历史：[`docs/CHANGELOG.md`](docs/CHANGELOG.md)（当前时
 代）+ `docs/archive/*/CHANGELOG.md`（历史时代）+ GitHub Releases。
@@ -125,16 +119,16 @@ cmake --build build
 | 文档 | 内容 | 何时读 |
 |---|---|---|
 | [AGENTS.md](AGENTS.md) | 代理快速接收：现状/命令/硬性规则/E2E 协议/阶段流程/坑位速览 | 新会话第一件事 |
-| [docs/GAMEPLAY.md](docs/GAMEPLAY.md) | 玩法指南（操作/生存循环/战斗与食物/工具路线/昼夜） | 玩法问题 |
-| [docs/MECHANICS.md](docs/MECHANICS.md) | 机制详解（现状 v2.19.0，16 子系统分节；2026-11-04 收官刷新） | 改玩法逻辑前 |
-| [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ 存档使用 + worldgen 参数 | 加内容/调世界 |
+| [docs/GAMEPLAY.md](docs/GAMEPLAY.md) | 玩法指南（操作/生存循环/下界/netherite/建筑材料/**demo 回放教程**；2026-11-06 全量刷新） | 玩法问题 |
+| [docs/MECHANICS.md](docs/MECHANICS.md) | 机制详解（现状 v3.12.0，17 子系统分节含下界维度/demo 回放；2026-11-06 全量刷新） | 改玩法逻辑前 |
+| [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/下界群系/方块/配方/Mob/下界池/附魔/sediment/worldgen 全参考）+ 存档使用 | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（387 条，都踩过） | 遇到怪问题 |
-| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（392 条，都踩过） | 遇到怪问题 |
+| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃条目；已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；v2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |
-| [docs/BACKLOG.md](docs/BACKLOG.md) | **3.x「世界扩展」任务表（执行权威）**（11-04 二批收官晋升 + 同日重编号【原 4.x 命名改 3.x】：V3-7 存档 gzip 先执 = v3.1.0，其后 V3-1 下界维度锚；2.x 全任务表 → `docs/archive/v2x/BACKLOG.md`） | 取下一个任务 |
+| [docs/BACKLOG.md](docs/BACKLOG.md) | **3.x「世界扩展」任务表（执行权威，11 项矩阵 + 报障版全完成）**；2.x 全任务表 → `docs/archive/v2x/BACKLOG.md` | 取下一个任务 |
 | [docs/archive/](docs/archive/) | 阶段细节存档（v2x/：20 phase 全两批 + HISTORY.md 全史 + v2x/CHANGELOG.md + v2x/BACKLOG.md；1.x：181 phase + HISTORY.md 全史） | 深挖某阶段 |
 | [docs/archive/v0x/](docs/archive/v0x/) | 0.x 时代文档（ROADMAP 规划 / DISCUSSION 记录 / v0x/CHANGELOG.md） | 深挖 0.x |
 | `opencode-sessions/SESSION_CONTEXT.md`（本地，不入库） | 会话交接：最新状态/提交列表/下一步（历史块/遗留附录 → 同目录 `archive/`；新会话启动 prompt 同目录） | 任何"继续"会话 |

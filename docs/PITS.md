@@ -3145,6 +3145,23 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **demo 编写（--demo-author）几何三坑（PITS 393，11-06 预设教程
+  demo）**——① **初始俯仰 = −0.25 rad 非 0**（spawn 默认 pitch）：
+  瞄准像素换算从 0 推 = 放置/挖掘全偏（实证：dy 158 以为 −0.395 实为
+  −0.645，4 个放置点 3 个偏 1 格 + 1 个侧脸命中）；校准 = **单点微
+  demo 实证**（锁指针 + 单发 mouse_move + RMB 放置 → 读存档实际落
+  块，反推有效像素窗——环 1 格地面放置窗 dy ∈ [330,508]@sens 0.0025
+  不含偏移 / 含偏移 [145,315]）。② **按住 Space = 第三次 tap**：
+  双击窗 0.3 s（18 帧）内的任何 space key_down 都参与 flyToggle
+  判定——双击起飞后 <18 帧内再按（升空 hold）= 立刻切回飞行关
+  （实证：f130/f142 起飞 + f155 hold = 13 帧飞行后走路；修法 = hold
+  起始 ≥ 第二 tap + 20 帧）。③ **demo 版本指纹 = TM_VERSION**：
+  升版后旧 .dmo 拒播（「recorded with … incompatible」点名，设计
+  纪律）——**提交仓的 .dmo 须随版重新 author**（--demo-author 逐字节
+  可复现 = md5 恒等实证，时间线 JSON 即人类可读源）。另：探针算
+  角度的 double-normalize bug（归一化后向量再除 len = 角度系统性
+  偏浅）——**角度输出前核一遍归一化**，或直接用 raycast 命中格
+  反推（probe4 范式：扫 dy 窗报命中，不手算）。
 - **门日志 grep 假阴性（PITS 392，门 202 阴影缩尺报障）**——
   `mob spawn f...` / 多数子系统事件行 = **MC_LOG_DEBUG**：info 级
   门跑里 grep 事件计数恒 0 ≠ 事件未发生（首跑 "0 spawns" 误判，
