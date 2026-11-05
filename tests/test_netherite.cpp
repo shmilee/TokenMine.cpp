@@ -421,7 +421,7 @@ TEST(V34NetheriteMaterialChain, IconCensusPinned) {
             ++iconCount;
         }
     }
-    EXPECT_EQ(iconCount, 93); // 84 pre-V3-4 + 9
+    EXPECT_EQ(iconCount, 95); // 84 pre-V3-4 + 9 + the V3-3 hoglin meat chain's 2
     int itemCount = 0;
     for (const auto& e :
          std::filesystem::directory_iterator("assets/data/items")) {
@@ -429,7 +429,7 @@ TEST(V34NetheriteMaterialChain, IconCensusPinned) {
             ++itemCount;
         }
     }
-    EXPECT_EQ(itemCount, 93); // the 1:1 icon naming (no planks-style
+    EXPECT_EQ(itemCount, 95); // the 1:1 icon naming (no planks-style
                               // block-item retirement in this family)
 }
 

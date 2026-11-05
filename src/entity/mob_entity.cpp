@@ -57,6 +57,11 @@ MobEntity::MobEntity(const World& world, const BlockRegistry& blocks,
         m_woolColor =
             rollWoolColor(def.properties.woolWeights, uniform01(m_rng));
     }
+    // V3-3: the neutral class flag (resolved once — the m_fireBlockId
+    // pattern; a non-neutral mob keeps false / 0 forever = the bit-
+    // level red line). The enrage state is session-only (mobs are
+    // ephemeral — zero format, the wool state's twin).
+    m_neutral = def.properties.neutral;
 }
 
 void MobEntity::update(double dt) {
@@ -89,6 +94,24 @@ void MobEntity::update(double dt) {
             m_bare = false;
         }
     }
+    // V3-3: the NEUTRAL's enrage window (the survival-class real-dt
+    // countdown — hard rule 8: entity age = real dt, the player's
+    // hunger-timer class, NOT a frame count): a damaged neutral mob
+    // stays angry for kNeutralAngryDurationSeconds; the timer's expiry
+    // de-enrages it (the wander resumes — the chase predicate's anger
+    // term falls out), and the PLAYER'S DEATH de-enrages it instantly
+    // (the design's ruling: a dead player is no threat — the existing
+    // "dead player -> wander" path's twin, made state-explicit so a
+    // respawned player does not find a 29-second-old grudge). A
+    // non-neutral mob never enters the branch (m_neutral false = the
+    // pre-V3-3 frame, the structural bit root).
+    if (m_neutral && m_angry) {
+        m_angryTimer -= dt;
+        if (m_angryTimer <= 0.0 || !m_playerAlive) {
+            m_angry = false;
+            m_angryTimer = 0.0;
+        }
+    }
     // ENT-1: captured BEFORE the AI + physics so the "moving" decision
     // is the strict frame-boundary horizontal displacement (see below).
     const float prevX = position().x;
@@ -111,7 +134,16 @@ void MobEntity::update(double dt) {
     // state machine is untouched: chase / wander steer as usual, only the
     // physics changes.
     refreshFluidState();
-    if (m_inFluid || m_atSurface) {
+    // V3-3: the lava-surface walker (the strider) is EXEMPT from the
+    // underwater pace gate — it WALKS on the lava's surface plane at
+    // full data speed (the design's walk pace; the gate would slow it
+    // to 0.6x, the swim pace the walk pace replaces). The predicate is
+    // the flag + the at-surface band + the LAVA kind (a strider in
+    // WATER still swims at the gated pace — the nether's water
+    // evaporation makes that unreachable in practice, the documented
+    // boundary). A non-walker's condition is exactly the pre-V3-3 one
+    // (onLavaSurface false = the gate runs, the bit root).
+    if ((m_inFluid || m_atSurface) && !onLavaSurface()) {
         m_velocity.x *= kUnderwaterSpeedFactor;
         m_velocity.z *= kUnderwaterSpeedFactor;
     }
@@ -120,11 +152,17 @@ void MobEntity::update(double dt) {
     // player's FLUID-2 peak set, input-free — a peak SET, not one gravity
     // step); in air, this tick's post-gravity vertical velocity (UNCHANGED
     // — the on-land trajectory stays bit-identical to the pre-ENT-4
-    // model; the horizontal one only decays or is reset).
-    const float vyAfter = m_inFluid || m_atSurface
-        ? std::max(std::abs(m_velocity.y), kWaterTerminalVelocity)
-        : std::max(m_velocity.y - kGravity * static_cast<float>(dt),
-                   -kTerminalVelocity);
+    // model; the horizontal one only decays or is reset). V3-3: the
+    // lava-surface walker is DRY at its floor (the plane's fixed point
+    // holds vy 0 — the dry estimate applies: the walk pace is the data
+    // speed, no rise/sink cap); a non-walker's branch is the pre-V3-3
+    // one (onLavaSurface false = the fluid estimate, the bit root).
+    const bool walkerDry = onLavaSurface();
+    const float vyAfter =
+        (m_inFluid || m_atSurface) && !walkerDry
+            ? std::max(std::abs(m_velocity.y), kWaterTerminalVelocity)
+            : std::max(m_velocity.y - kGravity * static_cast<float>(dt),
+                       -kTerminalVelocity);
     const float maxSpeed =
         std::max({std::abs(m_velocity.x), std::abs(vyAfter),
                   std::abs(m_velocity.z)});
@@ -213,7 +251,15 @@ void MobEntity::update(double dt) {
     // order). The countdown + tick run after leaving (the lingering burn), with the
     // Phase 46 effect semantics (the expiry step does not tick).
     if (m_fireArmed) {
-        const bool inLava = overlapsFluid(FluidKind::Lava);
+        // V3-3: the lava-surface walker (the strider) is EXEMPT from the
+        // LAVA ignition — it walks on the lava, the design's M2 ruling;
+        // the FIRE BLOCK contact still ignites it (Minecraft's strider
+        // burns on fire too — the inFire term is untouched). A non-
+        // walker's term is exactly the pre-V3-3 one (the data flag
+        // false = the bit root; the strider is the only carrier).
+        const bool inLava =
+            overlapsFluid(FluidKind::Lava) &&
+            !m_def->properties.walksOnLava;
         // Fire v3 (Phase 73): the block twin of the lava ignition — the
         // strict AABB overlap of a fire-block cell (the cross-model fire,
         // never a fluid; the invalid id = never, resolved at
@@ -269,7 +315,16 @@ void MobEntity::integrate(float h) {
         // dry band above the surface: the full-speed pass + the splash
         // fall-back) and the swim-level snap keeps the float terminal a
         // fixed point.
-        integrateFluid(h);
+        if (onLavaSurface()) {
+            // V3-3: the lava-surface walker (the strider — the data-flag
+            // branch, the flyCruise's pure-new-branch twin): the lava's
+            // surface plane is its FLOOR — the feet-on-surface walk pace
+            // (the swim-level float's surface twin; the design's M2
+            // ruling: the strider WALKS on the lava, it does not swim).
+            integrateLavaSurface(h);
+        } else {
+            integrateFluid(h);
+        }
     } else {
         // Gravity, capped at terminal velocity.
         m_velocity.y -= kGravity * h;
@@ -289,6 +344,64 @@ void MobEntity::integrate(float h) {
     }
 }
 
+bool MobEntity::onLavaSurface() const {
+    // V3-3: the single judgment the walker's three exemptions read (the
+    // fire ignition / the pace gate / the integrate's walk branch — the
+    // refreshFluidState per-tick state, consumed the same way): the data
+    // flag + a live LAVA plane (the immersion kind LAVA — a strider over
+    // WATER is not a walker: the nether's evaporation makes that
+    // unreachable in practice, the documented boundary) + the body AT the
+    // plane's float band (m_atSurface — the feet within kMaxSubstepMove
+    // of the plane, not resting on a solid: the walker's floor case) or
+    // INSIDE the column (m_inFluid — the deep-recovery case: a body that
+    // reached the column's depth below the band rises back to its floor,
+    // the integrateLavaSurface's rise branch). The (atSurface || inFluid)
+    // union is exactly the integrate's fluid-case gate, so the walker's
+    // walk pace owns the fluid case whole; a strider on SOLID ground (no
+    // band, no immersion) takes the gravity branch as any other mob.
+    return m_def->properties.walksOnLava && m_fluidSurfaceY > 0.0f &&
+           m_surfaceKind == FluidKind::Lava &&
+           (m_atSurface || m_inFluid);
+}
+
+void MobEntity::integrateLavaSurface(float h) {
+    // V3-3: the lava-surface walk pace (the strider — the data-flag
+    // branch of integrate's fluid case). The lava's surface plane is
+    // this body's FLOOR — the integrateFluid twin with the swim level
+    // replaced by the plane (the design's M2 ruling: the strider WALKS
+    // on the lava, it does not swim). The branch order:
+    //   1. in the float band (the feet within kMaxSubstepMove of the
+    //      plane — the at-surface case, on the plane OR a dry body above
+    //      it landing with entry momentum): the FEET snap onto the plane
+    //      and vy zeroes. The terminal (y = plane, vy = 0) is a fixed
+    //      point: the snap re-fires every sub-step as a no-op, so it is
+    //      fps-independent (the swim-level snap's twin). The strider sets
+    //      down on the lava and walks — the splash-less landing, it never
+    //      dives (the Minecraft behavior; the sub-step cap
+    //      kMaxSubstepMove bounds the per-step drop, so a crossing body
+    //      always lands in the band).
+    //   2. below the band, rising or still (the deep-recovery case — a
+    //      body that reached the column's depth): the passive rise (the
+    //      integrateFluid rise's twin — the same buoyancy / rise-speed
+    //      constants: the engine's lava is the water's in density), the
+    //      swim level replaced by the PLANE: the recovery is feet-on,
+    //      not half-submerged.
+    //   3. (else — below the band, falling with entry momentum: keep its
+    //      vy, the integrateFluid's "keep vy" twin: the sub-step cap
+    //      bounds the drop to the column floor (the onGround clamp), and
+    //      the still frame takes the rise — the self-correcting dive.)
+    // NO GRAVITY in the branch (the integrateFluid's "no gravity in
+    // fluid" twin — the plane's fixed point owns the vertical story).
+    const float surface = m_fluidSurfaceY;
+    if (m_position.y >= surface - kMaxSubstepMove) {
+        m_position.y = surface;
+        m_velocity.y = 0.0f;
+    } else if (m_velocity.y >= 0.0f) {
+        m_velocity.y = std::min(m_velocity.y + kWaterBuoyancy * h,
+                                kWaterRiseSpeed);
+    }
+}
+
 void MobEntity::runAi(double dt) {
     const MobProperties& p = m_def->properties;
     // V2-14: the flight AI (the bat — the data flag branch at the TOP of
@@ -301,12 +414,40 @@ void MobEntity::runAi(double dt) {
         flyCruise(p, dt);
         return;
     }
+    // V3-3: the GROUND-mob ambient roll (the hoglin / piglin / strider —
+    // the flyCruise squeak's ground twin, the data-driven general
+    // mechanism, no species special-casing): once per frame, probability
+    // 1 / (interval * kMobFramesPerSecond) of the per-mob stream
+    // (frame-locked, hard rule 8 — a no-input run grunts on the same
+    // frames every time), played spatialized at the mob's CURRENT
+    // position (the game's callback). A mob without the data field never
+    // rolls: the stream draw is an ambient mob's only new per-frame
+    // consumption (every shipped overworld ground mob is ambient-free =
+    // the bit-identical structural root; the bat returns above, its
+    // roll stays in flyCruise).
+    if (!p.ambientSoundName.empty() && m_ambientSound) {
+        const double pAmbient = 1.0 /
+            (p.ambientInterval * kMobFramesPerSecond);
+        if (uniform01(m_rng) < pAmbient) {
+            m_ambientSound(position());
+        }
+    }
     const Vec3 pos = position();
     const float dx = m_playerPos.x - pos.x;
     const float dz = m_playerPos.z - pos.z;
     const float distH = std::hypot(dx, dz);
     const float dy = m_playerPos.y - pos.y;
-    const bool seesPlayer = m_playerAlive && distH <= p.detectRadius &&
+    // V3-3: the NEUTRAL class's chase gate (the design's single
+    // predicate — no species switch): the existing detect test stands
+    // for hostile / passive mobs (p.neutral false = the term is a
+    // constant true = the pre-V3-3 expression bit-identically), while a
+    // neutral mob's detect test holds ONLY WHILE ANGRY (m_angry — any
+    // damage source enragues for kNeutralAngryDurationSeconds real dt,
+    // the damage() hook + the update's de-enrage; a non-enraged neutral
+    // mob wanders through the player, the Minecraft piglin's twin).
+    const bool seesPlayer = m_playerAlive &&
+                            (p.neutral ? m_angry : true) &&
+                            distH <= p.detectRadius &&
                             std::abs(dy) <= kDetectVertical;
 
     // ENT-6: leaving the chase context (the player out of range or dead)
@@ -681,6 +822,19 @@ bool MobEntity::damage(float amount) {
     if (m_health <= 0.0f) {
         m_health = 0.0f;
         m_dead = true;
+    } else if (m_neutral) {
+        // V3-3: the NEUTRAL's enrage hook (the design's M1 ruling —
+        // ANY damage source enragues: the player's melee / the arrow's
+        // swept hit / the fire tick / the fall landing / the poison
+        // tick all flow through this one choke point, the Minecraft
+        // piglin's deviation-7 twin). A killing hit leaves the mob dead
+        // (it despawns this frame — the enrage state would be dead data);
+        // a surviving hit sets the window to the full
+        // kNeutralAngryDurationSeconds (a repeat hit REFRESHES it —
+        // the burning neutral's continuous enrage, the MC behavior). A
+        // non-neutral mob never enters the branch (the bit root).
+        m_angry = true;
+        m_angryTimer = kNeutralAngryDurationSeconds;
     }
     return m_dead;
 }

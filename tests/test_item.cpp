@@ -3214,6 +3214,58 @@ TEST(ItemRegistryTest, V25PorkChainPinned) {
     }
 }
 
+TEST(ItemRegistryTest, V33HoglinMeatChainPinned) {
+    // V3-3: the hoglin's food chain (the pork chain's dark-red twin —
+    // the MC hoglin steak): raw hoglin meat (restore 4) smelts to
+    // cooked (restore 8 = the pork / beef cooked scale); the saturation
+    // follows the pork chain (1.8 raw / 12.8 cooked, the SURV-9
+    // per-food values). The icons are byte-pinned (the new two — the
+    // generate_item_icons salt block 172-179 — + the pre-V3-3 meat
+    // family unchanged, the pork test's convention).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    ItemRegistry items;
+    BlockRegistry blocks;
+    ASSERT_TRUE(blocks.loadDirectory(assets, "data/blocks").ok());
+    ASSERT_TRUE(items.buildBlockItems(blocks).ok());
+    ASSERT_TRUE(items.loadDirectory(assets, "data/items").ok());
+    const Item* raw = items.findByName("hoglin_meat");
+    ASSERT_NE(raw, nullptr);
+    EXPECT_EQ(raw->restoreHunger, 4);
+    ASSERT_TRUE(raw->saturation.has_value());
+    EXPECT_FLOAT_EQ(raw->saturation.value(), 1.8f);
+    EXPECT_EQ(raw->smeltableTo, "cooked_hoglin_meat");
+    EXPECT_EQ(raw->icon, "hoglin_meat");
+    const Item* cooked = items.findByName("cooked_hoglin_meat");
+    ASSERT_NE(cooked, nullptr);
+    EXPECT_EQ(cooked->restoreHunger, 8);
+    ASSERT_TRUE(cooked->saturation.has_value());
+    EXPECT_FLOAT_EQ(cooked->saturation.value(), 12.8f);
+    EXPECT_TRUE(cooked->smeltableTo.empty());
+    EXPECT_EQ(cooked->icon, "cooked_hoglin_meat");
+    // The smelt chain resolves (the furnace's pure data view): the
+    // default 10 s = 600 substeps; the cooked side is not smeltable.
+    EXPECT_EQ(smeltSubstepsFor(*raw), 600);
+    EXPECT_EQ(smeltSubstepsFor(*cooked), 0);
+    // The icon PNGs (generate_item_icons.py, the new salt block 172-179)
+    // + the pre-V3-3 meat family byte-unchanged.
+    const struct {
+        const char* path;
+        const char* fnv;
+    } icons[] = {
+        {"assets/textures/items/hoglin_meat.png", "fcab29b08916a19a"},
+        {"assets/textures/items/cooked_hoglin_meat.png", "c3c1a6500aa7ddd8"},
+        {"assets/textures/items/pork.png", "ac9d53802504a470"},
+        {"assets/textures/items/cooked_pork.png", "f2664e5b61be6bd7"},
+        {"assets/textures/items/leather.png", "52103f216058ad22"},
+        {"assets/textures/items/rotten_flesh.png", "cb176f3af09b5696"},
+    };
+    for (const auto& i : icons) {
+        EXPECT_EQ(fnv1a64(readAll(i.path)), i.fnv) << i.path;
+    }
+}
+
 // -- V2-7: the material-completion batch ----------------------------------------
 // planks retires from an explicit material item into its BLOCK item (the
 // Phase 41 wool precedent — "block items are defined by their block"), the

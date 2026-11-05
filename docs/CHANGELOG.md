@@ -11,6 +11,46 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.8.0（2026-11-05）— V3-3 下界 mob（5 种 + neutral/walks_on_lava 旗 + 下界生成池，门 198 全 PASS）
+
+**下界有了居民**——① **5 mob 纯数据**：zombified_piglin（hostile，
+zombie 数据孪生，**undead false**）/ **piglin·hoglin = neutral 新类**
+（闲逛；受击追击——piglin 16HP/6 伤，hoglin 40HP/慢速 1.0/drops
+hoglin_meat 1-2 + leather）/ magma_cube（hostile 16HP 慢速，**不分裂
+不跳** blob 3 盒）/ **strider**（passive + **walks_on_lava**，熔岩面
+行走）② **M1 neutral 旗**（与 hostile 互斥点名拒）：`damage()` 单
+收口任意来源激怒（玩家/箭/火/摔落/毒，MC piglin 同款）+ 30 s real-dt
+脱激 + 再击刷新 + 玩家死亡即时脱激；chase 谓词单式第二支
+`(p.neutral ? m_angry : true)` = 非 neutral 位级恒等 ③ **M2
+walks_on_lava 旗**：熔岩点火豁免（火块仍点燃 = MC 同款）+ 熔岩面
+**feet-on-plane walk 档**（snap 不动点 fps 无关 + 深潜浮回 + 免溅
+落）+ 生成面 = 熔岩源格顶面（findMobSpawnCell 尾参 flag 门控）④
+**M3 下界生成池零新基建**（Phase B 预留槽兑现）：
+mob_spawning_nether.json 权重 10/8/7/5/1 + fail-fast init 点名 +
+单一共享类型表 + 策略继承主世界会话值；维度选池/只 tick 活跃维/非
+活跃维冻结/mob 不入存档 = 既有语义零代码 ⑤ **strider
+spawn_max_light 7→15**（门内实证机制缺口：熔岩自发光 15，7 门自毁
+= 偏离 1）⑥ 食物链 hoglin_meat +4 / 熟 +8（pork 先例）+ 3 地面
+ambient（hoglin grunt/piglin whisper/strider hiss——地面 roll 新
+runAi 分支 = bat flyCruise 先例推广，数据门控零流抽取 = 偏离 3）+
+纹理 9（atlas 136→145 空格零移位）。**版本三件套** 3.7.0→3.8.0。
+2697/2697（+39：旗解析互斥 4 / 内容钉 6 / neutral 激怒态 7 / 熔岩
+行走 7 / 生成谓词 6 / 池 5 / 音效 3 / 食物链 1 + census 重钉）。门
+198 = **结构免疫第 79 次免重锚**（S1 ≡ 锚 224468 + EXACT + 白名单
+4 键）+ S2 三臂【(a) 下界高原 ×2 生成流恒等（piglin f60/magma f90/
+zpig f120/piglin f150 位置逐字节）+ 截图 RAW 恒等 + 终档 census /
+(a2) **strider 决定性臂**（环全清 4704 air 编辑 = cap 永不饱和——
+每次尝试新抽：**`strider f660 at (13.5, 32.0, −5.5)` ×2 恒等，y =
+32.0 熔岩海顶面精确 + 540f 零 burn 点火豁免 E2E**）/ (b) 池隔离
+（OW 生成 4 + 下界物种 0）】+ S6 6/6 点名【互斥 / 双旗非 bool /
+池缺失 / 池未知 mob / ambient 单向严格对】+ 性能 A/B 同世界同成本
+【PERF-WIN 三窗同档 + changesApplied 9/1/3 逐位 + **终档 savenorm
+EXACT**【nether-pool only 零 format 最强形】】。记档偏离 7 条
+（光门 15 / 异种流体 / 地面 ambient 分支 / 共享类型表 / 策略继承 /
+下界原点保护圈 / ghast 延后）。PITS 389（门配置 mobs-off 纪律 / sed
+派生 OUT 目录 / spawn 行正则负号 / cap 吞尝试 / 落点光场压制）。详见
+`docs/archive/phase-3.8.0.md`。
+
 ## v3.7.0（2026-11-05）— V3-2 Part 2 下界深化（水蒸发/音效族 11 件/magma 光/ambience 第 4 上下文/soul sand 数据驱动减速，门 197 全 PASS）
 
 **下界的行为补全**——收口 v3.4.0/v3.5.0 的 4 条记档偏离，全

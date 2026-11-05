@@ -297,5 +297,8 @@ TEST(ItemModelMeshTest, ShippedModelsHaveNoFaceCoincidentBoxes) {
     // V3-4: +9 (the netherite material chain — 2 materials + 3 tools +
     // 4 armor, every one an explicit item with a model; the
     // ancient_debris's item stays its BLOCK item, model-less) -> 93.
-    EXPECT_EQ(modelCount, 93) << "ENT-9: all 93 items have models";
+    // V3-3: +2 (hoglin_meat / cooked_hoglin_meat — the hoglin's food
+    // chain, the pork chain's twin, every one an explicit item with a
+    // model) -> 95.
+    EXPECT_EQ(modelCount, 95) << "ENT-9: all 95 items have models";
 }

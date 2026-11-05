@@ -15,6 +15,7 @@
 #include "core/game_local.hpp"
 #include "core/json.hpp"
 #include "core/png.hpp"
+#include "entity/nether_spawn_pool.hpp"
 #include "entity/wool_drops.hpp"
 #include "item/repair.hpp"
 #include "renderer/alpha_test.hpp"
@@ -1498,6 +1499,27 @@ Result<void> Game::buildScene() {
         NetherGen::create(netherSeed(seed), m_netherBiomes, m_blocks);
     MC_TRY(netherGen);
     m_nether.gen = std::move(*netherGen);
+    // V3-3: the NETHER'S mob spawn pool (data/mob_spawning_nether.json —
+    // the Phase B "Phase C fills it" slot). The pure resolution (the
+    // file load + the shared strict schema + the vocabulary cross-check
+    // against the SHARED type table — the loadNetherSpawnPool, the
+    // checkWoolDrops pattern) FAILS FAST at init (the NetherGen::create
+    // S6 timing ruling: a missing file / an unknown mob name rejects
+    // startup with the naming, not the first travel). The dimension's
+    // MobSystem gets the pool + the overworld's session policy (the
+    // enable flag / difficulty / limb swing — the player's config is
+    // one game-wide: a mobs.enabled off run stays mob-free in BOTH
+    // dimensions, the bit-identical no-input baseline's twin). The
+    // overworld pool (m_mobs.spawnConfig, the file above) is UNTOUCHED
+    // (the zero-touch red line — the structural-immunity root: the
+    // nether's pool is consumed only while playerInNether, the
+    // attemptMobSpawn's dimension gate).
+    auto netherPool = loadNetherSpawnPool(m_assets, m_mobs.mobTypes);
+    MC_TRY(netherPool);
+    m_nether.mobs.spawnConfig = *netherPool;
+    m_nether.mobs.mobsEnabled = m_mobs.mobsEnabled;
+    m_nether.mobs.difficulty = m_mobs.difficulty;
+    m_nether.mobs.limbSwing = m_mobs.limbSwing;
 
     // -- V2-4 weather (rain/thunder): the session-derived state machine --
     // NOT saved (zero format, the cloud-drift precedent class): every run

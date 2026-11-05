@@ -28,6 +28,7 @@
 #include "entity/mob_swing.hpp"
 #include "item/item_registry.hpp"
 #include "renderer/texture_atlas.hpp"
+#include "world/fluid.hpp"
 #include "world/lighting.hpp"
 #include "world/raycast.hpp"
 #include "world/world.hpp"
@@ -1468,9 +1469,12 @@ TEST(MobContent, V215WoolAssetsPinned) {
     // Phase B re-pin: the netherrack's [13, 7] cell (the 124-tile zero-
     // shift red line, the test_atlas census). V3-2 Part 1 re-pin: the
     // nether content family's 12 tiles (row 8, the 16x16 grid growth —
-    // the 136-tile zero-shift red line, the test_atlas census).
+    // the 136-tile zero-shift red line, the test_atlas census). V3-3
+    // re-pin: the nether mob family's 9 tiles (the row-8 free run
+    // [12..15, 8] + the row-9 free run [0..4, 9] — the 145-tile
+    // zero-shift red line, the test_atlas census).
     EXPECT_EQ(fnv1a64(readAll("assets/data/textures/block_atlas.json")),
-              "a3ed0965d330749e");
+              "3b5f51b9a1688b3a");
 }
 
 // -- V2-15: the wool instance state (MobEntity — the frame discipline) ----
@@ -6021,4 +6025,923 @@ TEST(MobMilkCooldownTest, CooldownIsPerMobInstance) {
     EXPECT_TRUE(b.milkReady());
     runMob(a, kMilkingCooldownFrames - 1);
     EXPECT_FALSE(a.milkReady()); // a is still one frame short
+}
+
+// ===========================================================================
+// V3-3: the nether's mob family (the 4+1 nether mobs + the three minimal
+// data-flag mechanisms — M1 neutral / M2 walks_on_lava / M3 the nether
+// pool). The overworld red line: every new flag is false in the shipped
+// overworld data (the structural-immunity root — the existing family's
+// tests above run the flagless paths bit-identically).
+// ===========================================================================
+
+namespace {
+
+// A neutral test definition (the zombie's shape + the neutral flag):
+// the AI physics tests never see a player by default (m_playerAlive
+// true, m_playerPos zero — the setPlayer feed).
+const char* kNeutralDef = R"({
+  "id": "neutral_mob",
+  "properties": {
+    "health": 20,
+    "speed": 0.8,
+    "detect_radius": 16,
+    "attack_range": 1.6,
+    "attack_damage": 3,
+    "attack_cooldown": 1.0,
+    "wander_interval": 2.5,
+    "neutral": true
+  },
+  "model": {
+    "width": 0.6,
+    "height": 1.8,
+    "boxes": [
+      {"pos": [0.0, 1.25, 0.0], "size": [0.5, 0.5, 0.5], "texture": "a"},
+      {"pos": [0.0, 0.5, 0.0], "size": [0.5, 1.0, 0.3], "texture": "b"}
+    ]
+  }
+})";
+
+// The neutral test definition + a ground ambient pair (the runAi roll's
+// carrier — the strider's data face).
+const char* kNeutralAmbientDef = R"({
+  "id": "neutral_mob",
+  "properties": {
+    "health": 20,
+    "speed": 0.8,
+    "detect_radius": 16,
+    "attack_range": 1.6,
+    "attack_damage": 3,
+    "attack_cooldown": 1.0,
+    "wander_interval": 2.5,
+    "neutral": true,
+    "ambient_sound": "strider_hiss",
+    "ambient_interval": 3.0
+  },
+  "model": {
+    "width": 0.6,
+    "height": 1.8,
+    "boxes": [
+      {"pos": [0.0, 1.25, 0.0], "size": [0.5, 0.5, 0.5], "texture": "a"},
+      {"pos": [0.0, 0.5, 0.0], "size": [0.5, 1.0, 0.3], "texture": "b"}
+    ]
+  }
+})";
+
+// A walks_on_lava test definition (the strider's data face — passive:
+// detect 0, no attack, the lava walker's whole story is the physics).
+const char* kStriderDef = R"({
+  "id": "strider_mob",
+  "properties": {
+    "health": 20,
+    "speed": 1.0,
+    "detect_radius": 0,
+    "attack_range": 0,
+    "attack_damage": 0,
+    "attack_cooldown": 1.0,
+    "wander_interval": 2.0,
+    "walks_on_lava": true
+  },
+  "model": {
+    "width": 1.0,
+    "height": 1.5,
+    "boxes": [
+      {"pos": [0.0, 0.55, 0.0], "size": [0.7, 0.5, 0.8], "texture": "s"}
+    ]
+  }
+})";
+
+// A flagless control definition (the hoglin's shape: the no-flag lava
+// swimmer — the generic integrateFluid's carrier).
+const char* kFlaglessDef = R"({
+  "id": "flagless_mob",
+  "properties": {
+    "health": 40,
+    "speed": 1.0,
+    "detect_radius": 16,
+    "attack_range": 1.6,
+    "attack_damage": 6,
+    "attack_cooldown": 2.0,
+    "wander_interval": 2.5
+  },
+  "model": {
+    "width": 1.2,
+    "height": 1.5,
+    "boxes": [
+      {"pos": [0.0, 1.0, 0.0], "size": [0.8, 0.7, 0.9], "texture": "f"}
+    ]
+  }
+})";
+
+MobRegistry makeNeutralRegistry(const char* def) {
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(def));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    return mobs;
+}
+
+// A fixture world with a 3x3 LAVA POOL (cells 4..6 on x and z, y=0 —
+// the fixture stone floor cleared there, setFluid's air-only cell rule,
+// a source cell per pool cell): the surface plane is y = 1.0, the
+// strider's floor. The pool is wide enough for the test bodies (the
+// hoglin's 1.2 AABB spans three cells — a one-cell hole would embed a
+// wide body in the surrounding floor and the collision resolve's far-
+// side push would move it, the PITS-style fixture trap).
+void makeLavaPuddle(Fixture& f) {
+    for (int x = 4; x <= 6; ++x) {
+        for (int z = 4; z <= 6; ++z) {
+            f.world.setBlock(x, 0, z, BlockID::air());
+            EXPECT_TRUE(f.world.setFluid(x, 0, z, FluidKind::Lava,
+                                         kMaxFluidLevel));
+        }
+    }
+}
+
+} // namespace
+
+// -- M1: the neutral class flag (the parse face) -----------------------------
+
+TEST(NeutralRegistryTest, FlagsDefaultOff) {
+    // kZombieDef has neither flag: the defaults (false / false) apply —
+    // every pre-V3-3 mob is the bit-identical structural root.
+    MobRegistry mobs = makeMobRegistry();
+    const auto& p = mobs.at(MobID{0}).properties;
+    EXPECT_FALSE(p.neutral);
+    EXPECT_FALSE(p.walksOnLava);
+}
+
+TEST(NeutralRegistryTest, ParsesNeutralAndWalksOnLava) {
+    for (const char* def : {kNeutralDef, kStriderDef}) {
+        MobRegistry mobs;
+        auto r = mobs.registerMob(parseJson(def));
+        ASSERT_TRUE(r.ok()) << r.error().message;
+    }
+    const auto& n = makeNeutralRegistry(kNeutralDef).at(MobID{0}).properties;
+    EXPECT_TRUE(n.neutral);
+    EXPECT_FALSE(n.walksOnLava);
+    EXPECT_FALSE(n.hostile);
+    const auto& s = makeNeutralRegistry(kStriderDef).at(MobID{0}).properties;
+    EXPECT_TRUE(s.walksOnLava);
+    EXPECT_FALSE(s.neutral);
+    EXPECT_FALSE(s.hostile);
+}
+
+TEST(NeutralRegistryTest, RejectsNeutralHostileBoth) {
+    // The strict mutual exclusion (the design's S6 face — the parse
+    // rejects the pair by name: a sight-chasing hostile cannot also
+    // carry the anger gate).
+    std::string def = kNeutralDef;
+    const std::string key = "\"neutral\": true";
+    ASSERT_NE(def.find(key), std::string::npos);
+    def.replace(def.find(key), key.size(),
+                std::string(key) + ", \"hostile\": true");
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(def));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("mutually exclusive"),
+              std::string::npos);
+}
+
+TEST(NeutralRegistryTest, RejectsNonBoolFlags) {
+    for (const char* field : {"neutral", "walks_on_lava"}) {
+        for (const char* bad : {"\"yes\"", "1", "0.5"}) {
+            MobRegistry mobs;
+            std::string def = kZombieDef;
+            const std::string key = "\"wander_interval\": 2.5";
+            def.replace(def.find(key), key.size(),
+                        std::string("\"wander_interval\": 2.5, \"") + field +
+                            "\": " + bad);
+            auto r = mobs.registerMob(parseJson(def));
+            EXPECT_FALSE(r.ok()) << field << " accepted: " << bad;
+        }
+    }
+}
+
+// -- the 5 nether mob data pins (the content is data — the real assets) -----
+
+TEST(NetherMobContent, ZombifiedPiglinDataPinned) {
+    // The REAL asset (data/mobs/zombified_piglin.json): the zombie's data
+    // twin (deviation 6 — the MC zombified piglin's stats) with the
+    // undead flag explicitly FALSE (the MC zombie pigman is not undead —
+    // the poison exemption's data half).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.loadDirectory(assets, "data/mobs").ok());
+    const Mob* z = mobs.findByName("zombified_piglin");
+    ASSERT_NE(z, nullptr);
+    const MobProperties& p = z->properties;
+    EXPECT_FLOAT_EQ(p.health, 20.0f);
+    EXPECT_FLOAT_EQ(p.speed, 0.8f);
+    EXPECT_FLOAT_EQ(p.detectRadius, 16.0f);
+    EXPECT_FLOAT_EQ(p.attackRange, 1.6f);
+    EXPECT_FLOAT_EQ(p.attackDamage, 3.0f);
+    EXPECT_FLOAT_EQ(p.attackCooldown, 1.0f);
+    EXPECT_DOUBLE_EQ(p.wanderInterval, 2.5);
+    EXPECT_EQ(p.spawnMaxLight, 7);
+    EXPECT_TRUE(p.hostile);
+    EXPECT_FALSE(p.neutral);
+    EXPECT_FALSE(p.walksOnLava);
+    EXPECT_FALSE(p.undead);
+    ASSERT_EQ(p.drops.size(), 1u);
+    EXPECT_EQ(p.drops[0].item, "rotten_flesh");
+    EXPECT_EQ(p.drops[0].countMin, 1);
+    EXPECT_EQ(p.drops[0].countMax, 1);
+    EXPECT_EQ(p.xp, 5);
+    // The model: the zombie's two-box humanoid, the zombified palette +
+    // the per-face head (the V2-2 consumption).
+    EXPECT_FLOAT_EQ(z->model.width, 0.6f);
+    EXPECT_FLOAT_EQ(z->model.height, 1.8f);
+    ASSERT_EQ(z->model.boxes.size(), 2u);
+    EXPECT_EQ(z->model.boxes[0].texture, "zpiglin_body");
+    ASSERT_EQ(z->model.boxes[0].faces.size(), 1u);
+    EXPECT_EQ(z->model.boxes[0].faces.at("front"), "zpiglin_face");
+    EXPECT_EQ(z->model.boxes[1].texture, "zpiglin_body");
+    EXPECT_TRUE(z->model.boxes[1].faces.empty());
+    EXPECT_TRUE(z->model.swings.empty());
+}
+
+TEST(NetherMobContent, PiglinDataPinned) {
+    // The REAL asset (data/mobs/piglin.json): the NEUTRAL class (the
+    // M1 flag's first carrier): wanders calm, chases only while angry.
+    // No drops (deviation 1 — no barter), the whisper ambient (the
+    // ground-mob roll's carrier), xp 3.
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok());
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.loadDirectory(assets, "data/mobs").ok());
+    const Mob* pl = mobs.findByName("piglin");
+    ASSERT_NE(pl, nullptr);
+    const MobProperties& p = pl->properties;
+    EXPECT_FLOAT_EQ(p.health, 16.0f);
+    EXPECT_FLOAT_EQ(p.speed, 1.0f);
+    EXPECT_FLOAT_EQ(p.detectRadius, 16.0f);
+    EXPECT_FLOAT_EQ(p.attackRange, 1.6f);
+    EXPECT_FLOAT_EQ(p.attackDamage, 6.0f);
+    EXPECT_FLOAT_EQ(p.attackCooldown, 1.5f);
+    EXPECT_DOUBLE_EQ(p.wanderInterval, 2.5);
+    EXPECT_EQ(p.spawnMaxLight, 7);
+    EXPECT_FALSE(p.hostile);
+    EXPECT_TRUE(p.neutral);
+    EXPECT_FALSE(p.walksOnLava);
+    EXPECT_TRUE(p.drops.empty());
+    EXPECT_EQ(p.xp, 3);
+    EXPECT_EQ(p.ambientSoundName, "piglin_whisper");
+    EXPECT_DOUBLE_EQ(p.ambientInterval, 3.0);
+    EXPECT_FLOAT_EQ(pl->model.width, 0.6f);
+    EXPECT_FLOAT_EQ(pl->model.height, 1.8f);
+    ASSERT_EQ(pl->model.boxes.size(), 2u);
+    EXPECT_EQ(pl->model.boxes[0].faces.at("front"), "piglin_face");
+    EXPECT_EQ(pl->model.boxes[0].texture, "piglin_body");
+    EXPECT_EQ(pl->model.boxes[1].texture, "piglin_body");
+}
+
+TEST(NetherMobContent, HoglinDataPinned) {
+    // The REAL asset (data/mobs/hoglin.json): the NEUTRAL quadruped (the
+    // HP 40 tank — the slow 1.0 chase), the food chain's source (the
+    // hoglin_meat 1-2 + leather 0-1 drops, the pig's range precedent),
+    // the grunt ambient.
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok());
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.loadDirectory(assets, "data/mobs").ok());
+    const Mob* h = mobs.findByName("hoglin");
+    ASSERT_NE(h, nullptr);
+    const MobProperties& p = h->properties;
+    EXPECT_FLOAT_EQ(p.health, 40.0f);
+    EXPECT_FLOAT_EQ(p.speed, 1.0f);
+    EXPECT_FLOAT_EQ(p.detectRadius, 16.0f);
+    EXPECT_FLOAT_EQ(p.attackRange, 1.6f);
+    EXPECT_FLOAT_EQ(p.attackDamage, 6.0f);
+    EXPECT_FLOAT_EQ(p.attackCooldown, 2.0f);
+    EXPECT_DOUBLE_EQ(p.wanderInterval, 2.5);
+    EXPECT_EQ(p.spawnMaxLight, 7);
+    EXPECT_FALSE(p.hostile);
+    EXPECT_TRUE(p.neutral);
+    EXPECT_FALSE(p.walksOnLava);
+    ASSERT_EQ(p.drops.size(), 2u);
+    EXPECT_EQ(p.drops[0].item, "hoglin_meat");
+    EXPECT_EQ(p.drops[0].countMin, 1);
+    EXPECT_EQ(p.drops[0].countMax, 2);
+    EXPECT_EQ(p.drops[1].item, "leather");
+    EXPECT_EQ(p.drops[1].countMin, 0);
+    EXPECT_EQ(p.drops[1].countMax, 1);
+    EXPECT_EQ(p.xp, 5);
+    EXPECT_EQ(p.ambientSoundName, "hoglin_grunt");
+    EXPECT_DOUBLE_EQ(p.ambientInterval, 3.0);
+    // The model: the pig's quadruped scaled up (width 1.2 / height 1.5),
+    // 6 boxes (body / 4 legs / head) + the diagonal 4-leg swing + the
+    // per-face tusked head.
+    EXPECT_FLOAT_EQ(h->model.width, 1.2f);
+    EXPECT_FLOAT_EQ(h->model.height, 1.5f);
+    ASSERT_EQ(h->model.boxes.size(), 6u);
+    for (int i = 1; i <= 4; ++i) {
+        EXPECT_EQ(h->model.boxes[static_cast<std::size_t>(i)].texture,
+                  "hoglin_body");
+    }
+    EXPECT_EQ(h->model.boxes[5].faces.at("front"), "hoglin_face");
+    ASSERT_EQ(h->model.swings.size(), 4u);
+    // The diagonal quadruped gait (the cow's swing spec — the data-order
+    // leg pair): fl/rr in group 0, fr/rl in group 1, amplitude 0.5.
+    const char* legNames[] = {"leg_fl", "leg_fr", "leg_rl", "leg_rr"};
+    const int groups[] = {0, 1, 1, 0};
+    for (int i = 0; i < 4; ++i) {
+        const MobSwing& sw = h->model.swings[static_cast<std::size_t>(i)];
+        EXPECT_FLOAT_EQ(sw.amplitude, 0.5f) << i;
+        EXPECT_EQ(sw.group, groups[i]) << i;
+        EXPECT_EQ(h->model.boxes[static_cast<std::size_t>(sw.boxIndex)].name,
+                  legNames[i]) << i;
+    }
+}
+
+TEST(NetherMobContent, MagmaCubeDataPinned) {
+    // The REAL asset (data/mobs/magma_cube.json): the HOSTILE blob (the
+    // slow 0.8 chase, deviation 3 — no hop AI: the static three-box
+    // model, no swings), no drops / xp 0, NO ambient (the documented
+    // absence — the magma's rumble is the ambience_nether bed's face).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok());
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.loadDirectory(assets, "data/mobs").ok());
+    const Mob* m = mobs.findByName("magma_cube");
+    ASSERT_NE(m, nullptr);
+    const MobProperties& p = m->properties;
+    EXPECT_FLOAT_EQ(p.health, 16.0f);
+    EXPECT_FLOAT_EQ(p.speed, 0.8f);
+    EXPECT_FLOAT_EQ(p.detectRadius, 16.0f);
+    EXPECT_FLOAT_EQ(p.attackRange, 1.6f);
+    EXPECT_FLOAT_EQ(p.attackDamage, 3.0f);
+    EXPECT_FLOAT_EQ(p.attackCooldown, 1.0f);
+    EXPECT_EQ(p.spawnMaxLight, 7);
+    EXPECT_TRUE(p.hostile);
+    EXPECT_FALSE(p.neutral);
+    EXPECT_TRUE(p.drops.empty());
+    EXPECT_EQ(p.xp, 0);
+    EXPECT_TRUE(p.ambientSoundName.empty());
+    // The model: the faceless 3-box blob (deviation 2 — no split: the
+    // static mesh, the single dark-red cracked tile, no swings).
+    EXPECT_FLOAT_EQ(m->model.width, 0.9f);
+    EXPECT_FLOAT_EQ(m->model.height, 0.9f);
+    ASSERT_EQ(m->model.boxes.size(), 3u);
+    for (const MobBox& box : m->model.boxes) {
+        EXPECT_EQ(box.texture, "magma_cube");
+        EXPECT_TRUE(box.faces.empty());
+    }
+    EXPECT_TRUE(m->model.swings.empty());
+}
+
+TEST(NetherMobContent, StriderDataPinned) {
+    // The REAL asset (data/mobs/strider.json): the PASSIVE lava walker
+    // (the M2 flag's only carrier — detect 0, no attack, the wander
+    // only) + the hiss ambient + the leather 0-1 drop + xp 3.
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok());
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.loadDirectory(assets, "data/mobs").ok());
+    const Mob* s = mobs.findByName("strider");
+    ASSERT_NE(s, nullptr);
+    const MobProperties& p = s->properties;
+    EXPECT_FLOAT_EQ(p.health, 20.0f);
+    EXPECT_FLOAT_EQ(p.speed, 1.0f);
+    EXPECT_FLOAT_EQ(p.detectRadius, 0.0f);
+    EXPECT_FLOAT_EQ(p.attackRange, 0.0f);
+    EXPECT_FLOAT_EQ(p.attackDamage, 0.0f);
+    EXPECT_DOUBLE_EQ(p.wanderInterval, 2.0);
+    // spawn_max_light 15 (deviation 9 — the lava's light 15 gates its
+    // own surface: the foot cell over the sea reads 14-15 by
+    // construction, so the 7 gate would be self-defeating; 15 = the
+    // lava-surface rule owns the location, the MC nether spawn class).
+    EXPECT_EQ(p.spawnMaxLight, 15);
+    EXPECT_FALSE(p.hostile);
+    EXPECT_FALSE(p.neutral);
+    EXPECT_TRUE(p.walksOnLava);
+    ASSERT_EQ(p.drops.size(), 1u);
+    EXPECT_EQ(p.drops[0].item, "leather");
+    EXPECT_EQ(p.drops[0].countMin, 0);
+    EXPECT_EQ(p.drops[0].countMax, 1);
+    EXPECT_EQ(p.xp, 3);
+    EXPECT_EQ(p.ambientSoundName, "strider_hiss");
+    EXPECT_DOUBLE_EQ(p.ambientInterval, 3.0);
+    // The model: the long-necked quadruped (width 1.0 / height 1.5) —
+    // 7 boxes (body / 4 legs / neck / head) + the diagonal swing + the
+    // per-face head (the saddle band's body tile).
+    EXPECT_FLOAT_EQ(s->model.width, 1.0f);
+    EXPECT_FLOAT_EQ(s->model.height, 1.5f);
+    ASSERT_EQ(s->model.boxes.size(), 7u);
+    EXPECT_EQ(s->model.boxes[6].faces.at("front"), "strider_face");
+    ASSERT_EQ(s->model.swings.size(), 4u);
+    for (const MobSwing& sw : s->model.swings) {
+        EXPECT_FLOAT_EQ(sw.amplitude, 0.4f);
+    }
+}
+
+TEST(NetherMobContent, NetherMobAssetsPinned) {
+    // The V3-3 new asset files (the FNV pins — the re-run determinism
+    // proof, the BatAssetsPinned convention): the 5 mob JSONs, the nether
+    // pool, the 9 mob tiles, the 3 ambient wavs, the food chain's 2 item
+    // JSONs + 2 icons.
+    const struct {
+        const char* path;
+        const char* fnv;
+    } files[] = {
+        {"assets/data/mobs/zombified_piglin.json", "e1bf3ff177362499"},
+        {"assets/data/mobs/piglin.json", "937c28cd99aa98ad"},
+        {"assets/data/mobs/hoglin.json", "e596d325a2f9e783"},
+        {"assets/data/mobs/magma_cube.json", "4ea96c29f0ceb813"},
+        {"assets/data/mobs/strider.json", "051e3fff099af0e5"},
+        {"assets/data/mob_spawning_nether.json", "a48b27ef25b673ec"},
+        {"assets/textures/mobs/zpiglin_body.png", "310db573d5a32124"},
+        {"assets/textures/mobs/zpiglin_face.png", "9016c729122ae26b"},
+        {"assets/textures/mobs/piglin_body.png", "94c29a6cd03b92c3"},
+        {"assets/textures/mobs/piglin_face.png", "fb6a0b46ec9f8e50"},
+        {"assets/textures/mobs/hoglin_body.png", "ecf71d3c8d3a9b08"},
+        {"assets/textures/mobs/hoglin_face.png", "95e8bb720361de40"},
+        {"assets/textures/mobs/strider_body.png", "b5570a01bbbd6213"},
+        {"assets/textures/mobs/strider_face.png", "3062c95192b05c35"},
+        {"assets/textures/mobs/magma_cube.png", "7fc6832baf615911"},
+        {"assets/sounds/hoglin_grunt.wav", "33f7b09e10814b57"},
+        {"assets/sounds/piglin_whisper.wav", "10de938161925ccf"},
+        {"assets/sounds/strider_hiss.wav", "2fa1016f6c43f0dd"},
+        {"assets/data/items/hoglin_meat.json", "4733bf49c98fb5bd"},
+        {"assets/data/items/cooked_hoglin_meat.json", "46dcf633a7a3858b"},
+        {"assets/textures/items/hoglin_meat.png", "fcab29b08916a19a"},
+        {"assets/textures/items/cooked_hoglin_meat.png", "c3c1a6500aa7ddd8"},
+    };
+    for (const auto& f : files) {
+        EXPECT_EQ(fnv1a64(readAll(f.path)), f.fnv) << f.path;
+    }
+    // The overworld pool's ZERO-TOUCH red line (the M3 structural
+    // immunity root — the file is byte-identical to the V2-14 pin in
+    // BatAssetsPinned: a98e3bf9e89ccbbf0 is the bat's pin — re-asserted
+    // here as the nether family's isolation witness).
+    EXPECT_EQ(fnv1a64(readAll("assets/data/mob_spawning.json")),
+              "a8e3bf9e89ccbbf0");
+}
+
+// -- M1: the neutral's enrage state machine (the frame discipline) ---------
+
+TEST(NeutralMobTest, CalmNeutralDoesNotChase) {
+    // The design's single predicate: a calm neutral mob's detect test
+    // holds only while angry — the player within the detect_radius (16)
+    // does NOT start a chase (the passive-walk semantics). The mob
+    // wanders (or stands) — never Chase / Attack / Pathfind.
+    Fixture f;
+    MobRegistry mobs = makeNeutralRegistry(kNeutralDef);
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, Vec3 {0.5f, 1.0f, 0.5f}, 42);
+    mob.setPlayer({8.5f, 1.0f, 0.5f}, true);  // 8 away: in detect range
+    EXPECT_FALSE(mob.angry());
+    for (int i = 0; i < 120; ++i) {
+        mob.update(kDt);
+        EXPECT_NE(mob.state(), MobState::Chase) << "frame " << i;
+        EXPECT_NE(mob.state(), MobState::Attack) << "frame " << i;
+        EXPECT_NE(mob.state(), MobState::Pathfind) << "frame " << i;
+    }
+    EXPECT_FALSE(mob.angry());
+}
+
+TEST(NeutralMobTest, AnyDamageEnragesAndTheChaseBegins) {
+    // deviation 7: ANY damage source enragues (the damage() choke point —
+    // the player's melee / the arrow / the fire tick / the fall all flow
+    // through it). One hit flips the state: the next AI run chases the
+    // player at full data speed.
+    Fixture f;
+    MobRegistry mobs = makeNeutralRegistry(kNeutralDef);
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, Vec3 {0.5f, 1.0f, 0.5f}, 42);
+    mob.setPlayer({8.5f, 1.0f, 0.5f}, true);
+    EXPECT_FALSE(mob.angry());
+    mob.damage(1.0f);
+    EXPECT_TRUE(mob.angry());
+    EXPECT_FLOAT_EQ(mob.health(), 19.0f);
+    mob.update(kDt);
+    EXPECT_EQ(mob.state(), MobState::Chase);
+    // The chase faces the player (the camera yaw convention: -sin/-cos).
+    const Vec3 p = mob.position();
+    const float dx = 8.5f - p.x;
+    const float dz = 0.5f - p.z;
+    EXPECT_NEAR(mob.facingYaw(), std::atan2(-dx, -dz), 1e-4f);
+}
+
+TEST(NeutralMobTest, EnrageExpiresAfterTheThirtySecondWindow) {
+    // The real-dt survival-class countdown (hard rule 8: entity age =
+    // real dt — the game's fixed 1/60 step IS the dt): angry at hit,
+    // calm at 1799 frames (29.98 s, one frame short) is NOT asserted at
+    // the float boundary — the band pins are 1700 (still angry) and
+    // 1900 (de-enraged), the kNeutralAngryDurationSeconds = 30 s figure.
+    Fixture f;
+    MobRegistry mobs = makeNeutralRegistry(kNeutralDef);
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, Vec3 {0.5f, 1.0f, 0.5f}, 42);
+    mob.setPlayer({8.5f, 1.0f, 0.5f}, true);
+    mob.damage(1.0f);
+    runMob(mob, 1700);  // 28.33 s: inside the 30 s window
+    EXPECT_TRUE(mob.angry());
+    // Engaged (the 8.5-block player is REACHED inside the window — the
+    // 0.8 b/s chase covers 22.6 blocks in 28.3 s): Chase, Attack (the
+    // terminal, stand-swing) or Pathfind are all the angry states.
+    EXPECT_TRUE(mob.state() == MobState::Chase ||
+                mob.state() == MobState::Attack ||
+                mob.state() == MobState::Pathfind);
+    runMob(mob, 200);   // 31.67 s: past the window
+    EXPECT_FALSE(mob.angry());
+    // The player is within attack range now — the de-enrage is the WANDER
+    // (the anger term of the predicate falls out, the calm-neutral
+    // does-not-chase witness).
+    EXPECT_EQ(mob.state(), MobState::Wander);
+}
+
+TEST(NeutralMobTest, RepeatHitRefreshesTheWindow) {
+    // A repeat hit (the burning neutral's continuous enrage — the MC
+    // behavior) resets the full window: the 1700-frame-ago enrage that
+    // would have expired at 1800 lives to 1700 + 1900 from the second
+    // hit.
+    Fixture f;
+    MobRegistry mobs = makeNeutralRegistry(kNeutralDef);
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, Vec3 {0.5f, 1.0f, 0.5f}, 42);
+    mob.setPlayer({8.5f, 1.0f, 0.5f}, true);
+    mob.damage(1.0f);
+    runMob(mob, 1700);
+    mob.damage(1.0f);  // refresh: the window restarts at 30 s
+    runMob(mob, 1700);
+    EXPECT_TRUE(mob.angry());  // 3400 from the first, 1700 from the last
+    runMob(mob, 200);
+    EXPECT_FALSE(mob.angry());
+}
+
+TEST(NeutralMobTest, PlayerDeathDeEnrages) {
+    // The design's ruling: a dead player is no threat — the de-enrage
+    // is instant (the existing "dead player -> wander" path's twin, made
+    // state-explicit: a respawned player does not find a stale grudge).
+    Fixture f;
+    MobRegistry mobs = makeNeutralRegistry(kNeutralDef);
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, Vec3 {0.5f, 1.0f, 0.5f}, 42);
+    mob.setPlayer({8.5f, 1.0f, 0.5f}, true);
+    mob.damage(1.0f);
+    runMob(mob, 10);
+    EXPECT_TRUE(mob.angry());
+    mob.setPlayer({8.5f, 1.0f, 0.5f}, false);  // the player dies
+    runMob(mob, 1);
+    EXPECT_FALSE(mob.angry());
+    // The player respawns (alive again): the calm neutral does NOT
+    // re-chase on sight (the enrage is damage-gated, not sight-gated).
+    mob.setPlayer({8.5f, 1.0f, 0.5f}, true);
+    runMob(mob, 10);
+    EXPECT_FALSE(mob.angry());
+    EXPECT_NE(mob.state(), MobState::Chase);
+}
+
+TEST(NeutralMobTest, HostileMobIsNotAngerGated) {
+    // The control: a HOSTILE mob (the zombie — m_neutral false) takes
+    // the pre-V3-3 chase path: damage never sets the anger state (the
+    // hook's m_neutral gate) and the chase is sight-gated as before
+    // (the bit-level red line, the design's single-predicate witness).
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry();  // the zombie
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, Vec3 {0.5f, 1.0f, 0.5f}, 42);
+    mob.setPlayer({8.5f, 1.0f, 0.5f}, true);
+    runMob(mob, 1);
+    EXPECT_EQ(mob.state(), MobState::Chase);  // sight-gated, as pre-V3-3
+    EXPECT_FALSE(mob.angry());
+    mob.damage(1.0f);
+    EXPECT_FALSE(mob.angry());  // the hook's gate: no anger state
+    runMob(mob, 1);
+    EXPECT_EQ(mob.state(), MobState::Chase);
+}
+
+// -- M2: the lava-surface walker (the strider's physics) ---------------------
+
+TEST(LavaWalkerTest, StriderHoldsTheLavaSurfacePlane) {
+    // The design's M2: the lava's surface plane is the strider's FLOOR —
+    // the feet rest ON it (y = 1.0, the puddle's top) with vy zeroed
+    // (the fixed-point terminal), DRY at the surface (the strict AABB
+    // overlap is false — the face rests exactly on the boundary), and
+    // the walk pace is the data speed (no 0.6x underwater gate).
+    // The settle: frame 1 the fresh (kind-default Water) column drops
+    // the body 0.009 into the lava, frame 2 the kind flips to LAVA and
+    // the snap lands the feet on the plane, frame 3 the body is dry and
+    // the remembered kind keeps the plane its floor (the fixed point).
+    Fixture f;
+    makeLavaPuddle(f);
+    MobRegistry mobs = makeNeutralRegistry(kStriderDef);
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity strider = makeMob(f, def, Vec3 {5.5f, 1.0f, 5.5f}, 42);
+    strider.setPlayer({50.5f, 1.0f, 50.5f}, true);  // far: the wander
+    runMob(strider, 3);
+    EXPECT_FLOAT_EQ(strider.position().y, 1.0f);
+    EXPECT_FALSE(strider.inFluid());  // dry at its surface
+    const Vec3 start = strider.position();
+    runMob(strider, 600);  // 10 s of wandering on the plane
+    EXPECT_FLOAT_EQ(strider.position().y, 1.0f);  // the plane is invariant
+    // The walk pace moved it (the wander's data-speed steering — the
+    // 0.6x gate would halve the same trajectory's displacement class).
+    const float dx = strider.position().x - start.x;
+    const float dz = strider.position().z - start.z;
+    EXPECT_GT(std::hypot(dx, dz), 0.5f);
+}
+
+TEST(LavaWalkerTest, StriderWalksAtFullDataPace) {
+    // The pace gate's EXEMPTION (the design's walk pace): the witness is
+    // the per-frame step size while walking — the data-speed wander
+    // (speed 1.0 x the wander factor 0.5 = 0.5 b/s) divided by the 60
+    // frame steps = 0.5/60 per frame. The 0.6x underwater gate would
+    // give 0.3/60 = 0.005 — OUTSIDE the pin band (the gate's detection
+    // witness, seed-independent: every walking frame steps 0.5/60).
+    // The gross displacement (seed 8's 600-frame wander covers 5.0) and
+    // the plane invariance (y = 1.0 forever) complete the pin.
+    Fixture f;
+    makeLavaPuddle(f);
+    MobRegistry mobs = makeNeutralRegistry(kStriderDef);
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity strider = makeMob(f, def, Vec3 {5.5f, 1.0f, 5.5f}, 8);
+    strider.setPlayer({50.5f, 1.0f, 50.5f}, true);
+    runMob(strider, 2);
+    const Vec3 start = strider.position();
+    float maxStep = 0.0f;
+    for (int i = 0; i < 600; ++i) {
+        const Vec3 before = strider.position();
+        strider.update(kDt);
+        const float step =
+            std::hypot(strider.position().x - before.x,
+                       strider.position().z - before.z);
+        if (step > maxStep) {
+            maxStep = step;
+        }
+    }
+    EXPECT_NEAR(maxStep, 0.5f / 60.0f, 2e-4f);  // 0.5 b/s, NOT 0.3
+    const float gross = std::abs(strider.position().x - start.x) +
+                        std::abs(strider.position().z - start.z);
+    EXPECT_GT(gross, 2.0f);  // the walking class (the stand-still fail)
+    EXPECT_FLOAT_EQ(strider.position().y, 1.0f);  // still on the plane
+}
+
+TEST(LavaWalkerTest, FallingStriderLandsOnTheLavaPlane) {
+    // The splash-less landing (the design's M2: the strider sets down on
+    // the lava and walks — it never dives): a fall from 2 blocks above
+    // the plane (entry velocity ~11 b/s, the band-crossing sub-step)
+    // lands the feet ON the plane, vy zeroed.
+    Fixture f;
+    makeLavaPuddle(f);
+    MobRegistry mobs = makeNeutralRegistry(kStriderDef);
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity strider = makeMob(f, def, Vec3 {5.5f, 3.0f, 5.5f}, 42);
+    strider.setPlayer({50.5f, 1.0f, 50.5f}, true);
+    runMob(strider, 60);  // the fall (~0.35 s) + the landing + the settle
+    EXPECT_FLOAT_EQ(strider.position().y, 1.0f);
+    EXPECT_FLOAT_EQ(strider.velocity().y, 0.0f);
+    runMob(strider, 120);
+    EXPECT_FLOAT_EQ(strider.position().y, 1.0f);  // the fixed point holds
+}
+
+TEST(LavaWalkerTest, StriderIsIgnitionExemptInLava) {
+    // The design's M2: the lava ignition's EXEMPTION (the fire block
+    // still ignites — the inFire term is untouched, the next test). The
+    // strider is placed SUBMERGED in the lava (feet y = 0.5, the mid-
+    // column — the AABB strictly overlaps the lava cell, so the raw
+    // inLava read is TRUE): the rise carries it to its surface floor,
+    // and the lava contact along the way (the first frames, the wet
+    // band) would have ignited a flagless body — the flag keeps the
+    // burn at zero. 600 frames (10 s — the burn would have ticked ~50
+    // times) take zero damage.
+    Fixture f;
+    makeLavaPuddle(f);
+    MobRegistry mobs = makeNeutralRegistry(kStriderDef);
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity strider = makeMob(f, def, Vec3 {5.5f, 0.5f, 5.5f}, 42);
+    strider.setPlayer({50.5f, 1.0f, 50.5f}, true);
+    strider.armFire(0.2, 1.0f, 10.0);  // the game's spawn arming
+    runMob(strider, 600);
+    EXPECT_FALSE(strider.burning());
+    EXPECT_FLOAT_EQ(strider.health(), 20.0f);
+    EXPECT_FLOAT_EQ(strider.position().y, 1.0f);  // risen to its floor
+}
+
+TEST(LavaWalkerTest, FireBlockStillIgnitesTheStrider) {
+    // The M2 boundary: the FIRE BLOCK contact ignites the strider too
+    // (Minecraft's strider burns on fire — the inFire term is NOT
+    // gated by the flag; only the inLava term is).
+    BlockRegistry blocks;
+    auto r = blocks.registerBlock(parseJson(
+        R"({"id":"stone","model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    ASSERT_TRUE(r.ok());
+    r = blocks.registerBlock(parseJson(
+        R"({"id":"fire","properties":{"solid":false,"opaque":false,"transparent":true},"model":{"shape":"cross","textures":{"cross":"f"}}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    World world;
+    const BlockID stone = blocks.idForName("stone");
+    const BlockID fire = blocks.idForName("fire");
+    world.setBlock(5, 0, 5, stone);  // the floor
+    world.setBlock(5, 1, 5, fire);  // a fire cell in the strider's AABB
+    MobRegistry mobs = makeNeutralRegistry(kStriderDef);
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity strider(world, blocks, def, Vec3 {5.5f, 1.0f, 5.5f}, 42);
+    strider.setPlayer({50.5f, 1.0f, 50.5f}, true);
+    strider.armFire(0.2, 1.0f, 10.0);
+    runMob(strider, 2);
+    EXPECT_TRUE(strider.burning());  // the fire cell ignited it
+}
+
+TEST(LavaWalkerTest, FlaglessMobIgnitesInLava) {
+    // The control (the design's M2 witness): the SAME lava puddle, a
+    // FLAGLESS mob (the hoglin's shape) SUBMERGED at the same feet —
+    // the pre-V3-3 ignition: the lava contact ignites it on the first
+    // wet frame, the burn ticks its health down (the strider's
+    // exemption is the flag, not a lava change).
+    Fixture f;
+    makeLavaPuddle(f);
+    MobRegistry mobs = makeNeutralRegistry(kFlaglessDef);
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity hoglin = makeMob(f, def, Vec3 {5.5f, 0.5f, 5.5f}, 42);
+    hoglin.setPlayer({50.5f, 1.0f, 50.5f}, true);
+    hoglin.armFire(0.2, 1.0f, 10.0);
+    runMob(hoglin, 30);  // 0.5 s: the ignition + the first burn ticks
+    EXPECT_TRUE(hoglin.burning());
+    EXPECT_LT(hoglin.health(), 40.0f);
+}
+
+TEST(LavaWalkerTest, FlaglessMobInLavaKeepsTheSwimLevelFloat) {
+    // The no-flag fluid REGRESSION (the design's M2 red line: the
+    // generic integrateFluid's swim-level float is bit-identical for a
+    // flagless mob in lava — the strider's surface walk is the flag's
+    // branch, not a lava physics change): the flagless mob in the puddle
+    // floats at the swim level (y = surface - height/2 = 1.0 - 0.75 =
+    // 0.25, the half-submerged MC swim look), NOT on the plane.
+    Fixture f;
+    makeLavaPuddle(f);
+    MobRegistry mobs = makeNeutralRegistry(kFlaglessDef);
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity mob = makeMob(f, def, Vec3 {5.5f, 0.5f, 5.5f}, 42);
+    mob.setPlayer({50.5f, 1.0f, 50.5f}, true);
+    runMob(mob, 120);
+    EXPECT_NEAR(mob.position().y, 0.25f, 1e-3f);  // the swim level
+    EXPECT_TRUE(mob.inFluid());                    // the half-submerged
+}
+
+// -- M2: the lava-surface spawn predicate (the findMobSpawnCell branch) ------
+
+namespace {
+
+// The spawn-predicate fixture world: the fixture floor (stone at y=0)
+// with a SOURCE cell at (0, 1, -6) (the air cell above the floor —
+// setFluid's air-only rule) in the first ring column (distance 6.0).
+void makeSpawnLava(Fixture& f, FluidKind kind, bool belowFluid, bool cover) {
+    EXPECT_TRUE(f.world.setFluid(0, 1, -6, kind, kMaxFluidLevel));
+    if (belowFluid) {
+        // A second fluid below the source: the double-fluid rejection
+        // (the lava film over water — not a walkable top). The stone
+        // floor cell is cleared first (the fluid's air-only rule).
+        f.world.setBlock(0, 0, -6, BlockID::air());
+        EXPECT_TRUE(f.world.setFluid(0, 0, -6, FluidKind::Water,
+                                     kMaxFluidLevel));
+    }
+    if (cover) {
+        // A solid in the headroom: the covered-lava rejection (the
+        // plateau-over-sea case — the lava is not an exposed top).
+        f.world.setBlock(0, 2, -6, f.stone);
+    }
+}
+
+} // namespace
+
+TEST(MobSpawnCellTest, LavaSurfaceBranchAcceptsTheLavaSourceTop) {
+    // The design's M2 spawn surface: the LAVA SOURCE cell whose top is a
+    // free surface (the air above, no fluid below) is the strider's
+    // floor — the first ring column (0, -6) at distance 6.0, the
+    // returns the LAVA CELL (the game's spawnY = cell.y + 1.0 = the top).
+    Fixture f;
+    makeSpawnLava(f, FluidKind::Lava, false, false);
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 1.0f, 1.5f, 0.0f, 0, kPlayerMin,
+                                 kPlayerMax, {}, 0.0f, 0.0f, 0.0f,
+                                 kNightSkyLevel, false, true);
+    ASSERT_TRUE(cell.has_value());
+    // The LAVA CELL (y=1) — the game's spawnY = cell.y + 1.0 = 2.0 (the
+    // top face the walker's feet rest on, the plane its integrate owns).
+    EXPECT_EQ(*cell, (BlockPos {0, 1, -6}));
+}
+
+TEST(MobSpawnCellTest, LavaSurfaceBranchAcceptsTheSeaColumn) {
+    // The design's accepted form over the REAL lava sea: the all-source
+    // column's TOPMOST L8 cell is the sea's top — the cell below holds
+    // LAVA (the same kind, not a second fluid) and is the accepted case
+    // (the strider's MC spawn: the lava sea's surface).
+    Fixture f;
+    makeSpawnLava(f, FluidKind::Lava, false, false);
+    // A second lava source directly below the first (the sea column).
+    f.world.setBlock(0, 0, -6, BlockID::air());
+    EXPECT_TRUE(f.world.setFluid(0, 0, -6, FluidKind::Lava, kMaxFluidLevel));
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 1.0f, 1.5f, 0.0f, 0, kPlayerMin,
+                                 kPlayerMax, {}, 0.0f, 0.0f, 0.0f,
+                                 kNightSkyLevel, false, true);
+    ASSERT_TRUE(cell.has_value());
+    // The TOPMOST L8 (the sea's top, y=1) — the walker's feet plane.
+    EXPECT_EQ(*cell, (BlockPos {0, 1, -6}));
+}
+
+TEST(MobSpawnCellTest, LavaSurfaceBranchRejectsNonLava) {
+    // The flag-gated predicate is LAVA-only (the design's 3-form's
+    // "non-lava reject"): a WATER source top is not a walker's floor —
+    // the strider sinks in water (the M2 boundary, the documented
+    // eviction). No lava anywhere in the ring = no cell.
+    Fixture f;
+    makeSpawnLava(f, FluidKind::Water, false, false);
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 1.0f, 1.5f, 0.0f, 0, kPlayerMin,
+                                 kPlayerMax, {}, 0.0f, 0.0f, 0.0f,
+                                 kNightSkyLevel, false, true);
+    EXPECT_FALSE(cell.has_value());
+}
+
+TEST(MobSpawnCellTest, LavaSurfaceBranchRejectsDoubleFluid) {
+    // The design's 3-form's "double-fluid reject": a lava source with a
+    // fluid cell BELOW it (the lava film over water) is not a walkable
+    // surface — the walker would stand in the double film.
+    Fixture f;
+    makeSpawnLava(f, FluidKind::Lava, true, false);
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 1.0f, 1.5f, 0.0f, 0, kPlayerMin,
+                                 kPlayerMax, {}, 0.0f, 0.0f, 0.0f,
+                                 kNightSkyLevel, false, true);
+    EXPECT_FALSE(cell.has_value());
+}
+
+TEST(MobSpawnCellTest, LavaSurfaceBranchRejectsCoveredLava) {
+    // The headroom twin: a solid in the cell above the lava source (the
+    // nether plateau over the lava sea — the covered lava is not an
+    // exposed top) rejects the column.
+    Fixture f;
+    makeSpawnLava(f, FluidKind::Lava, false, true);
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 1.0f, 1.5f, 0.0f, 0, kPlayerMin,
+                                 kPlayerMax, {}, 0.0f, 0.0f, 0.0f,
+                                 kNightSkyLevel, false, true);
+    EXPECT_FALSE(cell.has_value());
+}
+
+TEST(MobSpawnCellTest, FlaglessMobIgnoresTheLavaSurface) {
+    // The flag's default-false red line (the design's "flagless mob
+    // candidate predicate bit-level invariant"): the SAME lava column
+    // the walker takes is NOT a floor for a flagless mob (the floor scan
+    // needs a SOLID cell — the lava's cell block is air) — the scan
+    // falls through to the next candidate, exactly as pre-V3-3.
+    Fixture f;
+    makeSpawnLava(f, FluidKind::Lava, false, false);
+    auto cell = findMobSpawnCell(f.world, f.blocks, 4.0f, 6.0f, 0, 0, 0,
+                                 0.6f, 1.8f, 0.0f, 0, kPlayerMin,
+                                 kPlayerMax, {});
+    ASSERT_TRUE(cell.has_value());
+    EXPECT_EQ(*cell, (BlockPos {-3, 0, -5}));  // the lava column skipped
+}
+
+// -- the ground-mob ambient roll (the runAi frame-locked draw) ---------------
+
+TEST(NeutralMobTest, GroundAmbientRollIsFrameLocked) {
+    // The flyCruise squeak's ground twin (the design's ambient face): a
+    // ground mob with the data ambient pair rolls once per frame —
+    // probability 1 / (interval * 60) of the per-mob stream — and plays
+    // through the wired callback. The pin: two SAME-SEEDED instances
+    // fire on the EXACT same frames (the frame-locked determinism, hard
+    // rule 8) and the count over 3600 frames is the 1/180 rate class
+    // (the 3.0 s interval = 180 frames — ~20 fires, the band witness).
+    Fixture f;
+    MobRegistry mobs = makeNeutralRegistry(kNeutralAmbientDef);
+    const Mob& def = mobs.at(MobID{0});
+    std::vector<int> firesA;
+    std::vector<int> firesB;
+    {
+        MobEntity a = makeMob(f, def, Vec3 {0.5f, 1.0f, 0.5f}, 99);
+        a.setPlayer({50.5f, 1.0f, 50.5f}, true);
+        // The frame index: the callback fires with the mob's CURRENT
+        // position (the spatialization), the pin tracks the frame
+        // number (the counter's order — the frame-locked draw).
+        int frame = 0;
+        a.setAmbientSoundCallback(
+            [&firesA, &frame](Vec3) { firesA.push_back(frame); });
+        for (int i = 0; i < 3600; ++i) {
+            a.update(kDt);
+            ++frame;
+        }
+    }
+    {
+        MobEntity b = makeMob(f, def, Vec3 {0.5f, 1.0f, 0.5f}, 99);
+        b.setPlayer({50.5f, 1.0f, 50.5f}, true);
+        int frame = 0;
+        b.setAmbientSoundCallback(
+            [&firesB, &frame](Vec3) { firesB.push_back(frame); });
+        for (int i = 0; i < 3600; ++i) {
+            b.update(kDt);
+            ++frame;
+        }
+    }
+    ASSERT_FALSE(firesA.empty());  // the roll fired (the ~20 class)
+    EXPECT_EQ(firesA, firesB);     // the same seed, the same frames
+    EXPECT_GT(firesA.size(), 10u);  // the 1/180 rate class over 3600
+    EXPECT_LT(firesA.size(), 40u);
 }

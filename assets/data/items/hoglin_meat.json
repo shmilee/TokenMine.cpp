@@ -1,0 +1,26 @@
+{
+ "id": "hoglin_meat",
+ "type": "material",
+ "max_stack": 64,
+ "icon": "hoglin_meat",
+ "restore_hunger": 4,
+ "saturation": 1.8,
+ "smeltable_to": "cooked_hoglin_meat",
+ "model": {
+  "texture": "hoglin_meat",
+  "elements": [
+   {
+    "from": [
+     0.2,
+     0.25,
+     0.28
+    ],
+    "to": [
+     0.8,
+     0.75,
+     0.72
+    ]
+   }
+  ]
+ }
+}

@@ -1666,8 +1666,16 @@ private:
         // empty pool below; the list holds the player-thrown content).
         std::vector<std::unique_ptr<Entity>> entities;
         // The nether's mob system (Phase B: the EMPTY pool — no mobs
-        // data, the structural-immunity root; Phase C fills it). The
-        // spawn gate fast-exits on the empty config.
+        // data, the structural-immunity root; Phase C fills it).
+        // V3-3: the pool IS filled (data/mob_spawning_nether.json,
+        // parsed at init — the loadNetherSpawnPool's fail-fast; the
+        // spawn gate fast-exits on the empty config only for a
+        // stripped asset set). The type table is the game's SHARED
+        // registry (m_mobs.mobTypes — the single-table ruling: a mob's
+        // data is dimension-agnostic content; this member's mobTypes
+        // stays default-empty, never loaded). The live entities are
+        // the dimension's list above (D3: the mobs are born and tick
+        // here — the inactive dimension's freeze is the time-capsule).
         MobSystem mobs;
         // The nether's portal tracking set (the overworld's
         // m_states.portals twin — the choke point / the rescan / the

@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "core/logger.hpp"
+#include "world/fluid.hpp"
 #include "world/lighting.hpp"
 
 namespace mc {
@@ -213,7 +214,8 @@ std::optional<BlockPos> findMobSpawnCell(const World& world,
                                          float protectionX,
                                          float protectionZ,
                                          int nightLevel,
-                                         bool spawnsInAir) {
+                                         bool spawnsInAir,
+                                         bool walksOnLava) {
     // Cells the mob's AABB occupies above the floor top: the AABB spans
     // [floorTop, floorTop + height), which strictly overlaps the cells
     // floorTop .. floorTop + ceil(height - eps) - 1. (The in-air branch
@@ -313,6 +315,99 @@ std::optional<BlockPos> findMobSpawnCell(const World& world,
                     return BlockPos {x, y, z};
                 }
                 continue;  // no air cell in this column: next column
+            }
+
+            // V3-3: the LAVA-SURFACE branch (the strider — the data flag).
+            // The walker's floor is the lava's surface plane: the FLOOR
+            // BAND IS SKIPPED (the lava sea sits far below the player's
+            // floor — the nether plateau's feet vs the sea's top, the
+            // kSpawnFloorDelta band would never reach it). The scan walks
+            // the column TOP-DOWN and takes the first LAVA SOURCE cell
+            // (level 8) whose top is a free surface: the airCells above
+            // are air with no fluid (headroom — covered lava is not a
+            // walkable top) and the cell below holds no fluid of a
+            // DIFFERENT kind (the second-fluid rejection — a lava film
+            // over water is not a surface a walker can stand on; lava
+            // below is the sea itself, the accepted case). The light
+            // gate / player-overlap /
+            // clearance / protection checks are the floor branch's twins
+            // (the feet cell = y + 1; the protection ran at the top of
+            // this column's loop). The returned cell is the LAVA CELL
+            // ITSELF — the game's spawnY = cell.y + spawnFloorTop = the
+            // cell's top (the block there is air: a fluid is not a block,
+            // so spawnFloorTop's exact +1.0).
+            if (walksOnLava) {
+                for (int y = kWorldHeight - 1 - airCells; y >= 0; --y) {
+                    if (world.getFluidOfKind(x, y, z, FluidKind::Lava) !=
+                        kMaxFluidLevel) {
+                        continue;
+                    }
+                    // The second-fluid rejection (the design's 3-form):
+                    // the cell below holds a fluid of a DIFFERENT kind
+                    // (the lava film over water — not a walkable top).
+                    // LAVA below is the sea itself (the nether lava sea's
+                    // 5-31 all-source column: the topmost L8 is the sea's
+                    // top, the walker's floor — the single fluid, the
+                    // accepted case).
+                    if (y > 0) {
+                        const std::optional<FluidKind> below =
+                            world.getFluidKind(x, y - 1, z);
+                        if (below.has_value() && *below != FluidKind::Lava) {
+                            continue;
+                        }
+                    }
+                    bool open = true;
+                    for (int i = 1; i <= airCells; ++i) {
+                        if (world.getBlock(x, y + i, z) != BlockID::air() ||
+                            world.getFluid(x, y + i, z) != 0) {
+                            open = false;
+                            break;
+                        }
+                    }
+                    if (!open) {
+                        continue;
+                    }
+                    // Light gate (the floor branch's twin): the CURRENT
+                    // effective light of the feet cell (y + 1) must not
+                    // exceed the mob's spawn_max_light. The nether is
+                    // skyless (the stored sky 0) — the gate reads the
+                    // block light (the magma's 3, the glowstone's 15).
+                    if (currentSpawnLight(world, x, y + 1, z, dayFactor,
+                                          nightLevel) > spawnMaxLight) {
+                        continue;
+                    }
+                    // Spawn point (bottom-center, feet on the lava's top)
+                    // and its AABB (the floor branch's twin, +1.0).
+                    const float sx = static_cast<float>(x) + 0.5f;
+                    const float sy = static_cast<float>(y) + 1.0f;
+                    const float sz = static_cast<float>(z) + 0.5f;
+                    const float halfW = width / 2.0f;
+                    const Vec3 smin {sx - halfW, sy, sz - halfW};
+                    const Vec3 smax {sx + halfW, sy + height, sz + halfW};
+                    // No overlap with the player (the floor branch's twin).
+                    if (smin.x < playerMax.x && smax.x > playerMin.x &&
+                        smin.y < playerMax.y && smax.y > playerMin.y &&
+                        smin.z < playerMax.z && smax.z > playerMin.z) {
+                        continue;
+                    }
+                    // Clearance: no existing mob too close (the floor
+                    // branch's twin).
+                    bool clear = true;
+                    for (const Vec3& mp : mobPositions) {
+                        const float ddx = mp.x - sx;
+                        const float ddz = mp.z - sz;
+                        if (ddx * ddx + ddz * ddz <
+                            kSpawnClearance * kSpawnClearance) {
+                            clear = false;
+                            break;
+                        }
+                    }
+                    if (!clear) {
+                        continue;
+                    }
+                    return BlockPos {x, y, z};
+                }
+                continue;  // no lava surface in this column: next column
             }
 
             // Floor: the HIGHEST solid cell within kSpawnFloorDelta of the

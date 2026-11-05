@@ -1,0 +1,68 @@
+{
+ "id": "hoglin",
+ "properties": {
+  "health": 40,
+  "speed": 1.0,
+  "detect_radius": 16,
+  "attack_range": 1.6,
+  "attack_damage": 6,
+  "attack_cooldown": 2.0,
+  "wander_interval": 2.5,
+  "spawn_max_light": 7,
+  "neutral": true,
+  "ambient_sound": "hoglin_grunt",
+  "ambient_interval": 3.0,
+  "drops": [
+   { "item": "hoglin_meat", "count_min": 1, "count_max": 2 },
+   { "item": "leather", "count_min": 0, "count_max": 1 }
+  ],
+  "xp": 5
+ },
+ "model": {
+  "width": 1.2,
+  "height": 1.5,
+  "boxes": [
+   {
+    "pos": [0.0, 1.0, 0.1],
+    "size": [0.8, 0.7, 0.9],
+    "texture": "hoglin_body"
+   },
+   {
+    "name": "leg_fl",
+    "pos": [-0.3, 0.3, -0.25],
+    "size": [0.25, 0.6, 0.25],
+    "texture": "hoglin_body"
+   },
+   {
+    "name": "leg_fr",
+    "pos": [0.3, 0.3, -0.25],
+    "size": [0.25, 0.6, 0.25],
+    "texture": "hoglin_body"
+   },
+   {
+    "name": "leg_rl",
+    "pos": [-0.3, 0.3, 0.45],
+    "size": [0.25, 0.6, 0.25],
+    "texture": "hoglin_body"
+   },
+   {
+    "name": "leg_rr",
+    "pos": [0.3, 0.3, 0.45],
+    "size": [0.25, 0.6, 0.25],
+    "texture": "hoglin_body"
+   },
+   {
+    "pos": [0.0, 1.05, -0.375],
+    "size": [0.6, 0.6, 0.45],
+    "texture": "hoglin_body",
+    "faces": { "front": "hoglin_face" }
+   }
+  ],
+  "swings": [
+   { "part": "leg_fl", "amplitude": 0.5, "group": 0 },
+   { "part": "leg_fr", "amplitude": 0.5, "group": 1 },
+   { "part": "leg_rl", "amplitude": 0.5, "group": 1 },
+   { "part": "leg_rr", "amplitude": 0.5, "group": 0 }
+  ]
+ }
+}

@@ -1100,6 +1100,73 @@ def ambience_nether():
     return sound(dur, f)
 
 
+# ---------------------------------------------------------------------------
+# V3-3 (v3.8.0): the nether mob ambient family — the three per-mob
+# ambients (the squeak's ground-mob twin: the runAi per-frame roll plays
+# them spatialized at the mob). Every file is a fixed-seed LCG / sine
+# composition, one advancing LCG instance per noise face, dedicated
+# fixed seeds — a re-run leaves every OTHER file byte-identical (the
+# md5 discipline).
+def hoglin_grunt():
+    """V3-3: the hoglin's ambient grunt (Minecraft's entity.hoglin.
+    idle class — the low bovine grunt): a 120 -> 70 Hz descending glide
+    with a 5 Hz larynx tremolo under a quiet fixed-seed
+    double-lowpassed grit, 0.30 s, in the 0.25 ambient volume class
+    (the squeak's 0.1 class one step up: the grunt is a bovine, not a
+    whisper — the master amplitude bakes the volume)."""
+    lcg = Lcg(0x9201)  # dedicated fixed seed (unique to this sound)
+    dur = 0.30
+    n = int(RATE * dur)
+    grit = lowpass3(lowpass3([lcg.next() for _ in range(n)]))
+
+    def f(t, _):
+        i = int(t * RATE)
+        fr = 120.0 - 50.0 * (t / dur)
+        tremolo = 0.75 + 0.25 * math.sin(2 * math.pi * 5.0 * t)
+        return (math.sin(2 * math.pi * fr * t) * tremolo * 0.6
+                + grit[i] * 0.30) * env(t, dur, 18.0) * 0.25
+    return sound(dur, f)
+
+
+def piglin_whisper():
+    """V3-3: the piglin's ambient whisper (Minecraft's entity.piglin.
+    idle class — the soft high murmur): a 2100 -> 2600 Hz trill with a
+    24 Hz murmur tremolo over a quiet fixed-seed double-lowpassed
+    murmur bed, 0.25 s, in the squeak's 0.1 ambient volume class
+    (the piglin's whisper sits under the hoglin's grunt)."""
+    lcg = Lcg(0x9202)  # dedicated fixed seed (unique to this sound)
+    dur = 0.25
+    n = int(RATE * dur)
+    murmur = lowpass3(lowpass3([lcg.next() for _ in range(n)]))
+
+    def f(t, _):
+        i = int(t * RATE)
+        fr = 2100.0 + 500.0 * (t / dur)
+        trill = 0.7 + 0.3 * math.sin(2 * math.pi * 24.0 * t)
+        return (math.sin(2 * math.pi * fr * t) * trill * 0.25
+                + murmur[i] * 0.45) * env(t, dur, 16.0) * 0.1
+    return sound(dur, f)
+
+
+def strider_hiss():
+    """V3-3: the strider's ambient hiss (the lava-walker's breath —
+    the hiss-over-undertone, the evaporate cue's quieter ambient
+    twin): a fixed-seed single-lowpassed hiss (brighter than the
+    whisper's double-lowpassed murmur) over a quiet 300 -> 150 Hz
+    undertone, 0.35 s, in the 0.2 ambient volume class."""
+    lcg = Lcg(0x9203)  # dedicated fixed seed (unique to this sound)
+    dur = 0.35
+    n = int(RATE * dur)
+    hiss = lowpass3([lcg.next() for _ in range(n)])
+
+    def f(t, _):
+        i = int(t * RATE)
+        return (hiss[i] * 0.55
+                + math.sin(2 * math.pi * (300.0 - 150.0 * (t / dur)) * t)
+                * 0.20) * env(t, dur, 14.0) * 0.2
+    return sound(dur, f)
+
+
 SOUNDS = {
     "dig": dig,
     "place": place,
@@ -1191,6 +1258,12 @@ SOUNDS = {
     # V3-7 (v3.7.0): T4 — the nether ambience bed (the fourth context —
     # the player in the nether, priority over cave / day / night).
     "ambience_nether": ambience_nether,
+    # V3-3 (v3.8.0): the nether mob ambient family (the per-mob
+    # ambient_sound carriers — the squeak's ground-mob twin; the magma
+    # cube is the documented no-ambient).
+    "hoglin_grunt": hoglin_grunt,
+    "piglin_whisper": piglin_whisper,
+    "strider_hiss": strider_hiss,
 }
 
 

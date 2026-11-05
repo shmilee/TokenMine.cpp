@@ -344,16 +344,18 @@ TEST(SoundBatTest, SqueakWavShipsAndParses) {
     EXPECT_EQ(peak, 3589);
 }
 
-TEST(SoundBatTest, SoundDirectoryGrowsToSixty) {
+TEST(SoundBatTest, SoundDirectoryGrowsToSixtyThree) {
     // The sound set 41 -> 42 (the squeak — the V2-14 file) -> 43 (the
     // shear — the V2-15 file) -> 46 (the snow family — the three V2-16
     // files) -> 47 (the portal ambience — the V3-1 Phase A file) -> 49
     // (the portal trigger + travel — the V3-1 Phase B files) -> 60 (the
     // V3-7 Part 2 nether face — the nine material wavs + the
-    // evaporate + the ambience_nether, the 49 -> 60 conscious census
-    // update: each phase's new files are the only additions, the
-    // generate_sounds.py re-run leaves the others byte-identical, the
-    // script's md5 discipline; the FNV pins hold each phase's bytes).
+    // evaporate + the ambience_nether) -> 63 (the V3-3 nether mob
+    // ambient family — the hoglin grunt + the piglin whisper + the
+    // strider hiss, the 60 -> 63 conscious census update: each phase's
+    // new files are the only additions, the generate_sounds.py re-run
+    // leaves the others byte-identical, the script's md5 discipline;
+    // the FNV pins hold each phase's bytes).
     std::size_t count = 0;
     for (const auto& entry :
          std::filesystem::directory_iterator("assets/sounds")) {
@@ -361,7 +363,7 @@ TEST(SoundBatTest, SoundDirectoryGrowsToSixty) {
             ++count;
         }
     }
-    EXPECT_EQ(count, 60u);
+    EXPECT_EQ(count, 63u);
 }
 
 // ---------------------------------------------------------------------------
@@ -493,10 +495,10 @@ TEST(SoundNoiseHelperRepairTest, NoiseWavsShipTextured) {
     for (const auto& e : want) {
         expectWavPin(e.name, e.samples, e.peak);
     }
-    // The census is the V3-7 Part 2 pin (60 files — the directory
-    // count: the V3-1 Phase B's 49 + the nether material families'
-    // 9 + the evaporate + the ambience_nether, the V3-7 conscious
-    // update — the repair itself edits in place, no additions).
+    // The census is the V3-3 pin (63 files — the directory count: the
+    // V3-7 Part 2's 60 + the nether mob ambient family's 3 — the hoglin
+    // grunt / piglin whisper / strider hiss, the V3-3 conscious update —
+    // the repair itself edits in place, no additions).
     std::size_t count = 0;
     for (const auto& entry :
          std::filesystem::directory_iterator("assets/sounds")) {
@@ -504,7 +506,7 @@ TEST(SoundNoiseHelperRepairTest, NoiseWavsShipTextured) {
             ++count;
         }
     }
-    EXPECT_EQ(count, 60u);
+    EXPECT_EQ(count, 63u);
 }
 
 // ---------------------------------------------------------------------------
@@ -590,4 +592,38 @@ TEST(SoundNetherFamilyTest, EvaporateWavShipsAndParses) {
     // class (the splash / ignite precedent). The exact peak pin is
     // the PITS 382 regression guard.
     expectWavPin("evaporate", 17640, 13764); // 0.40 s
+}
+
+// ---------------------------------------------------------------------------
+// V3-3 (v3.8.0): the nether mob ambient family (the sound set 60 -> 63).
+// The three per-mob ambients — the runAi ground roll plays them
+// spatialized at the mob (the squeak's ground twin; the magma cube is
+// the documented no-ambient).
+// ---------------------------------------------------------------------------
+
+TEST(SoundNetherMobTest, HoglinGruntWavShipsAndParses) {
+    // The hoglin's ambient grunt (the generate_sounds.py's dedicated
+    // fixed seed 0x9201): the 120 -> 70 Hz low glide with the 5 Hz
+    // larynx tremolo under the quiet double-lowpassed grit, 0.30 s, in
+    // the 0.25 ambient volume class (the squeak's 0.1 class one step
+    // up — the master amplitude bakes the volume). The exact peak pin
+    // is the PITS 382 regression guard.
+    expectWavPin("hoglin_grunt", 13230, 4794); // 0.30 s
+}
+
+TEST(SoundNetherMobTest, PiglinWhisperWavShipsAndParses) {
+    // The piglin's ambient whisper (seed 0x9202): the 2100 -> 2600 Hz
+    // trill over the quiet double-lowpassed murmur bed, 0.25 s, in the
+    // squeak's 0.1 ambient volume class (the piglin's whisper sits
+    // under the hoglin's grunt).
+    expectWavPin("piglin_whisper", 11025, 1616); // 0.25 s
+}
+
+TEST(SoundNetherMobTest, StriderHissWavShipsAndParses) {
+    // The strider's ambient hiss (seed 0x9203): the lava-walker's
+    // breath — the single-lowpassed hiss (brighter than the whisper's
+    // double-lowpassed murmur) over the quiet 300 -> 150 Hz undertone,
+    // 0.35 s, in the 0.2 ambient volume class (the evaporate cue's
+    // quieter ambient twin).
+    expectWavPin("strider_hiss", 15434, 3298); // 0.35 s
 }

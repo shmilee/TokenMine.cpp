@@ -324,6 +324,33 @@ struct MobProperties {
     // An effect flagged `undead_exempt` (the poison) is ignored when
     // applied to this mob. false = a normal mob (every pre-SURV-5 mob).
     bool undead = false;
+    // V3-3 (the nether mobs): the NEUTRAL class flag (data 'neutral',
+    // strict bool, default false) — the data-driven MIDDLE class between
+    // passive (detect_radius 0 — wanders, never chases) and hostile
+    // (chases on sight): a neutral mob carries a live detect_radius but
+    // CHASES ONLY WHILE ANGRY (the MobEntity's m_angry state — any
+    // damage source enragues it for kNeutralAngryDurationSeconds real dt,
+    // the player's death de-enragues, the design's single-predicate
+    // gate: the chase condition ORs the existing detect test with
+    // `neutral && angry` — no species switch). STRICTLY EXCLUSIVE with
+    // `hostile` (both true = the parse rejects by name — a mob cannot be
+    // both sight-chasing and anger-gated). false = the pre-V3-3
+    // semantics (every shipped overworld mob is false = the bit-
+    // identical structural root).
+    bool neutral = false;
+    // V3-3 (the strider): the WALKS-ON-LAVA flag (data 'walks_on_lava',
+    // strict bool, default false) — the lava's surface plane is this
+    // mob's FLOOR: the fire system's lava ignition is exempt (the fire
+    // block still ignites — Minecraft's strider burns on fire too), the
+    // fluid integrate runs the feet-on-surface walk pace (data speed,
+    // no underwater gate — the integrateLavaSurface branch) instead of
+    // the swim-level float, and the spawn scan's lava-surface branch
+    // (the findMobSpawnCell walks the column top-down for a lava source
+    // cell whose top is a free surface) offers it cells the floor scan
+    // never would. false = the pre-V3-3 fluid semantics (every shipped
+    // mob is false = the bit-identical structural root — the
+    // pigs-in-water regression pins it).
+    bool walksOnLava = false;
     // Drops (Phase 28): the item list the mob drops on death — one entry
     // per dropped item, spawned in list order. Empty = no drops.
     std::vector<MobDrop> drops;

@@ -47,6 +47,23 @@
 // the bat's 3 keeps it out of the open sky — caves only). Top-down = the
 // spawn under the highest roof (the ceiling-hang look). The returned cell
 // is the box's FLOOR cell (the game spawns at its bottom, not +1).
+//
+// V3-3 lava-surface branch (`walksOnLava` true — the strider, the data
+// flag): the walker's floor is the LAVA'S SURFACE PLANE — the FLOOR BAND
+// IS SKIPPED (the lava sea sits far below the player's floor: the nether
+// plateau's y 53 feet vs the sea's y 32 top, the kSpawnFloorDelta band
+// would never reach it). The scan walks each ring column TOP-DOWN and
+// returns the first LAVA SOURCE cell (level 8) whose top is a free
+// surface: the airCells above are air with no fluid (headroom — the
+// floor branch's twin; covered lava is not a walkable top) AND the cell
+// below holds no fluid of a DIFFERENT kind (the second-fluid rejection —
+// a lava film over water is not a surface a walker can stand on; lava
+// below is the sea itself — the nether lava sea's all-source column's
+// topmost L8 IS the sea's top, the accepted case). The same light gate /
+// player-overlap / clearance / protection checks apply (the feet cell =
+// y + 1). The returned cell is the LAVA CELL ITSELF (the game's spawnY =
+// cell.y + spawnFloorTop = the cell's top: the block there is air — a
+// fluid is not a block — so +1.0, the exact floor-branch height).
 
 #pragma once
 
@@ -155,6 +172,16 @@ std::optional<BlockPos> findMobSpawnCell(const World& world,
                                          // head; default false = the
                                          // pre-V2-14 floor scan, the
                                          // bit-identical root).
-                                         bool spawnsInAir = false);
+                                         bool spawnsInAir = false,
+                                         // V3-3: the lava-surface branch
+                                         // (the strider's data flag — the
+                                         // walker's floor is the lava's
+                                         // surface plane: the top-down
+                                         // column scan for a lava source
+                                         // cell with a free top, see the
+                                         // file head; default false = the
+                                         // pre-V3-3 scan, the bit-
+                                         // identical root).
+                                         bool walksOnLava = false);
 
 } // namespace mc

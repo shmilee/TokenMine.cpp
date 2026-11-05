@@ -222,7 +222,10 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     // V3-2 Part 1: 124 -> 136 (the content family's 12 tiles — the grid's
     // new row 8, cols 0..11 in the design's block order; zero existing
     // shift, the 16x16 growth above).
-    EXPECT_EQ(l.tiles.size(), 136u);
+    // V3-3: 136 -> 145 (the nether mob family's 9 tiles — the row-8 free
+    // run [12..15, 8] + the row-9 free run [0..4, 9]; zero existing
+    // shift, the 16x16 grid's free-cell scan).
+    EXPECT_EQ(l.tiles.size(), 145u);
     const struct {
         const char* name;
         int col;
@@ -454,6 +457,29 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     };
     ASSERT_EQ(sizeof(v350) / sizeof(v350[0]), 12u);
     for (const auto& e : v350) {
+        const auto it = l.tiles.find(e.name);
+        ASSERT_NE(it, l.tiles.end()) << e.name;
+        EXPECT_EQ(it->second.col, e.col) << e.name;
+        EXPECT_EQ(it->second.row, e.row) << e.name;
+    }
+    // V3-3: the nether mob family's 9 tiles (the four per-face heads in
+    // each mob's palette + the four bodies + the faceless magma blob —
+    // the row-8 free run [12..15, 8] + the row-9 free run [0..4, 9] in
+    // the design's mob order; the 136 pre-V3-3 entries above keep their
+    // EXACT cells — the zero-shift red line, no baseline re-anchor).
+    const struct {
+        const char* name;
+        int col;
+        int row;
+    } v330[] = {
+        {"zpiglin_body", 12, 8},  {"zpiglin_face", 13, 8},
+        {"piglin_body", 14, 8},   {"piglin_face", 15, 8},
+        {"hoglin_body", 0, 9},    {"hoglin_face", 1, 9},
+        {"strider_body", 2, 9},   {"strider_face", 3, 9},
+        {"magma_cube", 4, 9},
+    };
+    ASSERT_EQ(sizeof(v330) / sizeof(v330[0]), 9u);
+    for (const auto& e : v330) {
         const auto it = l.tiles.find(e.name);
         ASSERT_NE(it, l.tiles.end()) << e.name;
         EXPECT_EQ(it->second.col, e.col) << e.name;

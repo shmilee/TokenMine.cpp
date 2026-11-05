@@ -16,7 +16,16 @@
  // FLUID-3 lift of the ENT-4 ban — a wading mob steps out of a 1-deep
  // pool; a swimming mob, onGround false, cannot step up: no swim-up shore
  // climb, the documented deviation). The AI state machine is untouched —
- // chase / wander steer as usual underwater.
+ // chase / wander steer as usual underwater. V3-3: the walks_on_lava
+// mob (the strider — the data flag) is the EXCEPTED fluid case: the
+// lava's surface plane is its FLOOR (the integrateLavaSurface branch —
+// the feet-on-plane walk pace at full data speed, no 0.6x underwater
+// gate, the splash-less landing, the passive rise back to the plane
+// from depth), the lava ignition is exempt (the fire BLOCK still
+// ignites — Minecraft's strider burns on fire too), and the spawn
+// scan's lava-surface branch offers it the lava's tops (the floor scan
+// never would). Every non-walker's fluid path is the pre-V3-3 one
+// (the flag false in the data, the unit-pinned red line).
 //
 // AI (deterministic: the same seed + input sequence yields the same
 // trajectory). The game steps mobs with a FIXED per-frame dt (the day
@@ -67,6 +76,23 @@
 // attack_damage 0) make the chase/attack conditions never hold, so the
 // mob only ever wanders — no code path distinguishes them from hostile
 // mobs, the data alone decides.
+// Neutral mobs (V3-3, the nether's piglin / hoglin — the data flag
+// `neutral`, strictly exclusive with `hostile` at parse): the chase
+// condition gains ONE anger term — the single predicate is
+// `playerAlive && (neutral ? angry : true) && detect tests`, so a calm
+// neutral wanders through the player (the detect test holds only while
+// angry) and an ANGRY one chases / attacks exactly like a hostile (the
+// data attack_range / attack_damage / attack_cooldown drive the loop).
+// ANY damage source enragues (the damage() choke point — the player's
+// melee, the arrow, the fire tick, the fall, the poison: deviation 7,
+// the Minecraft piglin's twin), arming the kNeutralAngryDurationSeconds
+// (30 s) window — a SURVIVAL-CLASS real-dt countdown (hard rule 8:
+// entity age = real dt, the update's dt — the game's fixed mob step in
+// a session), refreshed by every enraging hit; the timer's expiry or
+// the player's death de-enrages (the respawned player finds no stale
+// grudge). Every non-neutral mob keeps angry false forever: the anger
+// term is a constant true there, the pre-V3-3 expression bit-identical
+// (the structural-immunity root, the unit-pinned red line).
 //
 // Combat (player side): damage() subtracts from health; a killing hit sets
 // the dead state — the game removes the mob the same frame and spawns its
@@ -109,6 +135,16 @@ inline constexpr int kMilkingCooldownFrames = kMilkingCooldownSeconds * 60;
 // determinism > real-dt rule, E2E-assertable).
 inline constexpr int kSheepRegrowSeconds = 120;
 inline constexpr int kSheepRegrowFrames = kSheepRegrowSeconds * 60;
+
+// V3-3 (the nether's neutral class — the piglin / hoglin): the ANGER
+// duration in SECONDS (the design's value: the Minecraft piglin's
+// ~enraged window class). This is a SURVIVAL-CLASS TIMER (hard rule 8:
+// entity age = real dt — like the player's hunger / damage flash), so
+// the countdown runs on the update's REAL dt (the game's fixed mob step
+// IS that dt in a session; a test may pass any dt) — NOT a frame count.
+// Any damage source enragues (the piglin's Minecraft twin, deviation 7);
+// the timer's expiry or the player's death de-enragues.
+inline constexpr double kNeutralAngryDurationSeconds = 30.0;
 
 // The mob's AI state (observable for tests and the debug overlay).
 enum class MobState {
@@ -232,6 +268,25 @@ public:
     // fire system's checks below stay FRESH per the P57 pattern, a
     // different read). Exposed for tests and the debug overlay.
     bool inFluid() const { return m_inFluid; }
+    // V3-3: the NEUTRAL class state (the data flag
+    // MobProperties::neutral — every non-neutral mob keeps false / 0
+    // forever = the bit-level red line, the bat's m_flyFrame twin):
+    // `neutral()` the class flag itself; `angry()` the enrage state
+    // (any damage source sets it for kNeutralAngryDurationSeconds real
+    // dt — the chase condition's anger gate, the design's single
+    // predicate; the player's death de-enragues instantly).
+    bool neutral() const { return m_neutral; }
+    bool angry() const { return m_angry; }
+    // V3-3: the WALKS-ON-LAVA state (the data flag
+    // MobProperties::walksOnLava — every other mob is false = the
+    // pre-V3-3 fluid semantics bit-identically): `onLavaSurface()` is
+    // this tick's judgment that the lava's surface plane is this body's
+    // FLOOR (the flag + the at-surface band + the immersion kind LAVA +
+    // a live plane) — the fire system's ignition exemption, the
+    // underwater speed gate's exemption and the integrate's walk-pace
+    // branch all read this one predicate (the single source, the
+    // refreshFluidState pattern).
+    bool onLavaSurface() const;
 
     // Subtract damage; returns true when THIS hit killed the mob.
     bool damage(float amount);
@@ -357,6 +412,17 @@ private:
     // clamp) leaves the horizontal pair untouched: no re-roll.
     void afterSubstep(bool blocked) override;
     void runAi(double dt);
+    // V3-3: the lava-surface walk pace (the strider — the data-flag
+    // branch of integrate's fluid case, the flyCruise's pure-new-branch
+    // twin): the lava's surface plane is this body's FLOOR — the feet
+    // snap onto it (the swim-level snap's surface twin, the fixed point),
+    // a body below the plane rises to it (the passive-rise twin, the
+    // surface instead of the swim level), a body falling onto it from
+    // above LANDS (the feet plane, the splash-less landing). NO GRAVITY
+    // in the branch (the integrateFluid's "no gravity in fluid" twin).
+    // Every non-walksOnLava mob's integrate path is bit-identical (the
+    // gate reads the data flag).
+    void integrateLavaSurface(float h);
     // V2-14: the flyCruise branch (the design: runAi's TOP, gated on the
     // data flag def.flying — a pure new branch, every non-flying mob
     // runs the pre-V2-14 state machine bit-identically). The cruise
@@ -394,6 +460,20 @@ private:
     std::string m_woolColor;
     bool m_bare = false;
     int m_woolRegrowFrames = 0;
+    // V3-3: the NEUTRAL class state (all gated on
+    // def.properties.neutral — a non-neutral mob keeps false / 0
+    // forever and the chase predicate's anger term stays false: the
+    // bit-level red line, the m_bare twin). `m_neutral`: the class flag
+    // (resolved once — the m_fireBlockId pattern). `m_angry`: enraged
+    // (any damage source — the damage() hook, the design's deviation 7:
+    // the player / fire / fall alike, the Minecraft piglin's twin).
+    // `m_angryTimer`: the remaining enrage window in SECONDS, a
+    // SURVIVAL-CLASS real-dt countdown (hard rule 8: entity age = real
+    // dt — the update's dt, the game's fixed mob step in a session),
+    // reset to kNeutralAngryDurationSeconds on every enraging hit.
+    bool m_neutral = false;
+    bool m_angry = false;
+    double m_angryTimer = 0.0;
     // ENT-1: the limb-swing phase (see swingPhase()). Spawn = 0 (the
     // identity pose); render-only, never saved.
     int m_swingPhase = 0;

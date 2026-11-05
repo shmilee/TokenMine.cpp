@@ -18,7 +18,9 @@
 > 8 配方，零核心代码 / 测试 2640）+ V3-2 Part 2 刷新（v3.7.0 / 下界
 > 音效族 nether·nylium·stem + 块属性 `walk_speed_factor`【number (0,1]，
 > absent = 1.0，仅步行消费 = 双 feet 格取最小，疾跑含】+ SoundBank
-> 60 / 测试 2658）：二批新数据驱动机制
+> 60 / 测试 2658）+ V3-3 刷新（v3.8.0 / 下界 mob 5 种 + neutral·
+> walks_on_lava 数据旗 + mob_spawning_nether.json 生成池 / 测试
+> 2697）：二批新数据驱动机制
 > 并入（biome tree 6 键 + exclude_spawn_area / slab 三态 state_count +
 > drops_count_by_state / XP 三发放源 / 附魔 7 项 / 床 15 色染色族 / 染色羊变体
 > / render.ao），各节数量（93 块 / 83 物品 / 86 配方 / 8 mob / 7 附魔 /

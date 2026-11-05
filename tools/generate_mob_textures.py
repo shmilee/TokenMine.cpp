@@ -309,6 +309,126 @@ def sheep_skin_tile(salt: int) -> list:
     return pixels
 
 
+# V3-3 nether mob family (the four per-face heads + the five bodies, the
+# new salt block 0x9A01..0x9A05): the head tiles reuse the pig face's
+# 8x8 GRID SHAPE (the V2-2 paradigm) in each mob's own palette — zero
+# hash, deterministic by construction; the body tiles are the base +
+# noise families. The 17 existing tiles keep their salts and bytes —
+# the FNV pins in the tests are the zero-change proof.
+ZPIGLIN_HIDE = (128, 142, 96)     # the zombie-tinted pigman hide
+ZPIGLIN_SNOUT = (104, 112, 74)    # the zombie-tinted snout band
+PIGLIN_HIDE = (196, 148, 120)     # the MC piglin's tan-pink
+PIGLIN_SNOUT = (156, 104, 88)     # the piglin's dark snout band
+HOGLIN_HIDE = (122, 62, 48)       # the dark reddish-brown hog
+HOGLIN_SNOUT = (90, 44, 36)       # the hog's dark snout band
+HOGLIN_TUSK = (226, 220, 206)     # the hog's white tusks (row 7)
+STRIDER_HIDE = (142, 96, 62)      # the brown strider hide
+STRIDER_SADDLE = (104, 66, 42)    # the darker saddle band (rows 5-9)
+STRIDER_SNOUT = (110, 70, 46)     # the strider's dark snout band
+MOB_EYE = (36, 26, 22)            # the shared dark eye (the pig eye's nether twin)
+ZPIGLIN_EYE = (35, 45, 30)        # the zombie eye (the skin_tile's eyes twin)
+MAGMA_BASE = (112, 38, 30)        # the dark red magma mass
+MAGMA_CRACK = (216, 120, 48)      # the bright lava crack
+MAGMA_CRACK_ODDS = 10             # percent of cells that take the crack shade
+
+# The hoglin's face grid: the pig shape + the white tusks at the snout
+# corners (row 7 — the MC hoglin's look).
+HOGLIN_FACE = [
+    "PPPPPPPP",  # y0
+    "PPPPPPPP",  # y1
+    "PEEPPEEP",  # y2: 2x2 eyes
+    "PEEPPEEP",  # y3: 2x2 eyes
+    "PPPPPPPP",  # y4
+    "PPSSSSPP",  # y5: dark snout band
+    "PPSSSSPP",  # y6: snout band
+    "PPTTPPTT",  # y7: the tusks (x2 / x13)
+]
+
+
+def face_grid_tile(grid: list, colors: dict) -> list:
+    """An explicit 8x8 face grid 2x-upscaled to 16x16 (nearest
+    neighbor, the pig face's zero-hash packing, the palette
+    parameterized — the V2-2 per-face consumption)."""
+    up = []
+    for gy in range(SIZE):
+        src_row = grid[gy // 2]
+        row = []
+        for gx in range(SIZE):
+            (r, g, b) = colors[src_row[gx // 2]]
+            row.append((r, g, b, 255))
+        up.append(row)
+    return up
+
+
+def zpiglin_face_tile() -> list:
+    """The zombified piglin's head face (the pig shape, the zombie
+    tint — the MC zombified piglin = the pigman face greened)."""
+    return face_grid_tile(PIG_FACE, {
+        "P": ZPIGLIN_HIDE, "E": ZPIGLIN_EYE, "S": ZPIGLIN_SNOUT})
+
+
+def piglin_face_tile() -> list:
+    """The piglin's head face (the pig shape, the tan-pink palette)."""
+    return face_grid_tile(PIG_FACE, {
+        "P": PIGLIN_HIDE, "E": MOB_EYE, "S": PIGLIN_SNOUT})
+
+
+def hoglin_face_tile() -> list:
+    """The hoglin's head face (the tusked grid, the dark red palette)."""
+    return face_grid_tile(HOGLIN_FACE, {
+        "P": HOGLIN_HIDE, "E": MOB_EYE, "S": HOGLIN_SNOUT,
+        "T": HOGLIN_TUSK})
+
+
+def strider_face_tile() -> list:
+    """The strider's head face (the pig shape, the brown palette —
+    the MC strider's pig-like head)."""
+    return face_grid_tile(PIG_FACE, {
+        "P": STRIDER_HIDE, "E": MOB_EYE, "S": STRIDER_SNOUT})
+
+
+def strider_body_tile(salt: int) -> list:
+    """Strider hide (V3-3): the brown base + light noise (the pig's
+    smooth-skin level) with the darker SADDLE BAND across rows 5-9
+    (the MC strider's saddle — the hash-free stripe, the design's
+    'saddle band color block')."""
+    (br, bg, bb) = STRIDER_HIDE
+    (sr, sg, sb) = STRIDER_SADDLE
+    pixels = []
+    for y in range(SIZE):
+        row = []
+        for x in range(SIZE):
+            n = noise(x, y, salt, 8)
+            if 5 <= y <= 9:
+                r, g, b = clamp(sr + n), clamp(sg + n), clamp(sb + n)
+            else:
+                r, g, b = clamp(br + n), clamp(bg + n), clamp(bb + n)
+            row.append((r, g, b, 255))
+        pixels.append(row)
+    return pixels
+
+
+def magma_tile(salt: int) -> list:
+    """Magma cube (V3-3): the dark red mass + light noise with the
+    bright LAVA CRACKS (the hash decides the crack placement — the
+    cow-fur patch pattern). ONE faceless tile serves the three blob
+    boxes (the bat single-tile precedent — no per-face split)."""
+    (br, bg, bb) = MAGMA_BASE
+    (cr, cg, cb) = MAGMA_CRACK
+    pixels = []
+    for y in range(SIZE):
+        row = []
+        for x in range(SIZE):
+            n = noise(x, y, salt, 10)
+            if h2(x, y, salt + 3) % 100 < MAGMA_CRACK_ODDS:
+                r, g, b = clamp(cr + n), clamp(cg + n), clamp(cb + n)
+            else:
+                r, g, b = clamp(br + n), clamp(bg + n), clamp(bb + n)
+            row.append((r, g, b, 255))
+        pixels.append(row)
+    return pixels
+
+
 def main() -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
     # Green zombie skin (eyes on the front face) + teal shirt.
@@ -368,6 +488,27 @@ def main() -> None:
     # (new salt 0x5EE4 — the sheep family's next slot).
     write_png(os.path.join(OUT_DIR, "sheep_skin.png"),
               sheep_skin_tile(0x5EE4))
+    # V3-3: the nether mob family (5 mobs, 9 tiles — the per-face heads in
+    # each mob's palette + the bodies; magma is the faceless blob's single
+    # dark-red cracked tile). New salts 0x9A01..0x9A05.
+    write_png(os.path.join(OUT_DIR, "zpiglin_body.png"),
+              skin_tile(0x9A01, ZPIGLIN_HIDE))
+    write_png(os.path.join(OUT_DIR, "zpiglin_face.png"),
+              zpiglin_face_tile())
+    write_png(os.path.join(OUT_DIR, "piglin_body.png"),
+              skin_tile(0x9A02, PIGLIN_HIDE))
+    write_png(os.path.join(OUT_DIR, "piglin_face.png"),
+              piglin_face_tile())
+    write_png(os.path.join(OUT_DIR, "hoglin_body.png"),
+              skin_tile(0x9A03, HOGLIN_HIDE))
+    write_png(os.path.join(OUT_DIR, "hoglin_face.png"),
+              hoglin_face_tile())
+    write_png(os.path.join(OUT_DIR, "strider_body.png"),
+              strider_body_tile(0x9A04))
+    write_png(os.path.join(OUT_DIR, "strider_face.png"),
+              strider_face_tile())
+    write_png(os.path.join(OUT_DIR, "magma_cube.png"),
+              magma_tile(0x9A05))
 
 
 if __name__ == "__main__":

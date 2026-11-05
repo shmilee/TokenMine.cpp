@@ -1242,6 +1242,57 @@ def netherite_shovel():
     return shovel(NETHERITE_BASE, NETHERITE_BEVEL, salt=169)
 
 
+def hoglin_meat():
+    """Raw hoglin meat (V3-3): a dark-red chop slab with a pale fat cap
+    (the pork slab silhouette in the hoglin palette — the MC hoglin
+    steak's dark red) + the chop's white bone knob. New salts 172-175
+    (the next free block after the netherite shovel's 169-171)."""
+    px = blank()
+    meat = (158, 66, 58)
+    fat = (222, 186, 148)
+    bone = (250, 246, 236)
+    for y in range(10, 26):
+        for x in range(4, 28):
+            if (x in (4, 27)) and (y in (10, 25)):
+                continue
+            if y < 14:
+                setpx(px, x, y, fat, salt=172)
+            else:
+                setpx(px, x, y, meat, salt=173)
+    # Seam between the fat cap and the meat.
+    for x in range(4, 28):
+        setpx(px, x, 14, (120, 44, 40), salt=174, amount=4)
+    # The bone knob (the same position as the raw pork's).
+    for (x, y) in ((11, 10), (12, 10), (11, 11), (12, 11)):
+        setpx2(px, x, y, bone, salt=175, amount=3)
+    return px
+
+
+def cooked_hoglin_meat():
+    """Cooked hoglin meat (V3-3): the raw slab browned (the cooked-pork
+    convention, one step darker — the hoglin's meat sears hard: the
+    MC cooked hoglin steak's deep brown). New salts 176-179."""
+    px = blank()
+    meat = (118, 54, 40)
+    fat = (200, 158, 120)
+    bone = (250, 246, 236)
+    for y in range(10, 26):
+        for x in range(4, 28):
+            if (x in (4, 27)) and (y in (10, 25)):
+                continue
+            if y < 14:
+                setpx(px, x, y, fat, salt=176)
+            else:
+                setpx(px, x, y, meat, salt=177)
+    # Seam between the fat cap and the meat.
+    for x in range(4, 28):
+        setpx(px, x, 14, (86, 36, 28), salt=178, amount=4)
+    # The bone knob (the same position as the raw pork's).
+    for (x, y) in ((11, 10), (12, 10), (11, 11), (12, 11)):
+        setpx2(px, x, y, bone, salt=179, amount=3)
+    return px
+
+
 ITEMS = {
     # V2-7: the planks icon is retired — planks is now a BLOCK item (the
     # 3D cube renders in its place, the Phase 41 wool precedent), so its
@@ -1324,6 +1375,9 @@ ITEMS = {
     "netherite_pickaxe": netherite_pickaxe,
     "netherite_axe": netherite_axe,
     "netherite_shovel": netherite_shovel,
+    # V3-3: the hoglin's food chain (the pork chain's dark-red twin).
+    "hoglin_meat": hoglin_meat,
+    "cooked_hoglin_meat": cooked_hoglin_meat,
 }
 
 

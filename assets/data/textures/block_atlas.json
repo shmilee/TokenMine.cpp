@@ -545,6 +545,42 @@
   "warped_stem": [
    11,
    8
+  ],
+  "zpiglin_body": [
+   12,
+   8
+  ],
+  "zpiglin_face": [
+   13,
+   8
+  ],
+  "piglin_body": [
+   14,
+   8
+  ],
+  "piglin_face": [
+   15,
+   8
+  ],
+  "hoglin_body": [
+   0,
+   9
+  ],
+  "hoglin_face": [
+   1,
+   9
+  ],
+  "strider_body": [
+   2,
+   9
+  ],
+  "strider_face": [
+   3,
+   9
+  ],
+  "magma_cube": [
+   4,
+   9
   ]
  }
 }

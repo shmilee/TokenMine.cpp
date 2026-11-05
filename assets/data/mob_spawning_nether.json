@@ -1,0 +1,15 @@
+{
+ "check_every_frames": 30,
+ "first_spawn_frame": 60,
+ "max_mobs": 4,
+ "min_radius": 4,
+ "max_radius": 6,
+ "despawn_distance": 40,
+ "mobs": [
+  {"id": "zombified_piglin", "weight": 10},
+  {"id": "piglin", "weight": 8},
+  {"id": "hoglin", "weight": 7},
+  {"id": "magma_cube", "weight": 5},
+  {"id": "strider", "weight": 1}
+ ]
+}

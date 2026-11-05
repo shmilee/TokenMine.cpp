@@ -3145,6 +3145,27 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **门脚本生成臂五坑（PITS 389，门 198 V3-3 下界 mob）**——① **门
+  QUIET 配置 mobs.enabled = false 是静默纪律**：锚/无输入基线跑用
+  g179_quiet.json（mob 生成全禁 = 基线干净），**生成臂须 mobs-on 变
+  体配置**（g198_mobs.json = quiet + mobs.enabled true）——首跑零
+  spawn 且无尝试日志 = 查配置先于查代码（插桩实证 enabled=0）。②
+  **sed 派生门脚本的 OUT 目录要换**：g198_s1 首跑 OUT 仍指 s197/
+  = PNG 落别处，`cmp -s 缺失文件` 静默假 DIFF（"S1 ANCHOR DIFF" =
+  文件不存在）——cmp 前先 `ls` 验文件。③ **spawn 行坐标正则须含负
+  号**：`at (x, y, z)` 的 z/x 可负（`[0-9.-]*`），`[0-9.]*` 漏全部
+  负坐标行 = "NO SPAWNS" 假红（实际 4 只已生成）；另 "Registered
+  mob" init 行 ≠ spawn 行（池隔离断言须锚 "mob spawn f"）。④
+  **maxMobs cap 吞后续尝试**：4 只存活后每次尝试 "cap reached"（mob
+  不跑 40 块不 despawn）——低权重 mob（strider 1/31）只在首批 ~4
+  次抽选中有机会（8×600f 零命中 = 0.31 幂次运气内）；**决定性
+  构造 = 环全清**（4704 air 编辑清掉生成环台地，留玩家立柱）→
+  陆地 pick 全 "no valid cell" → cap 永不饱和 → 每次尝试新抽
+  （1200f 场景 P≈71%，3 场景 99.9%）。⑤ **传送落点 = 生成压制
+  位**：portal 光 11 场 + 下界原点 12 保护圈（hostile）= 落点周边
+  环全拒（尝试全 "no valid cell"，机制正确非 bug）——下界生成臂用
+  远离落点的高原场景（(13.5, 53, 0.5) 级）。air 编辑合法
+  （落盘档 blocks 段 'air' 名 = 显式清空，实证 63-4704 格保留）。
 - **输入门脚本四坑（PITS 388，门 197 Part 2 下界深化）**——①
   **timeout 包装使 `$!` = timeout 的 pid ≠ 游戏 pid**：`xdotool
   search --pid` 按 _NET_WM_PID 匹配 = 全败（FOCUS-FAIL / 窗搜空）——

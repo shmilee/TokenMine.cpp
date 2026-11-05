@@ -19,8 +19,9 @@ netherite 材料链（门 196，11-05：debris→scrap→ingot→工具 2031/护
 ×1.5 刻度，零核心代码纯数据）；v3.7.0 = V3-2 Part 2 下界深化（门
 197，11-05：水蒸发/音效族 11 件/magma 光 3/ambience 第 4 上下文/soul
 sand walk_speed_factor 0.4 数据驱动减速，全 nether-scoped overworld
-位级不变）**；下一项 **V3-3 下界 mob** → V3-5 建筑内容族 → V3-6
-世界边缘雾 → V3-9 demo 回放【矩阵尾部】）
+位级不变）；**v3.8.0 = V3-3 下界 mob（门 198，11-05：5 种 + neutral/
+walks_on_lava 旗 + 下界生成池零新基建——Phase B 预留槽兑现）**；
+下一项 **V3-5 建筑内容族** → V3-6 世界边缘雾 → V3-9 demo 回放【矩阵尾部】）
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -79,7 +80,7 @@ sand walk_speed_factor 0.4 数据驱动减速，全 nether-scoped overworld
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2658/2658**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2697/2697**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 30（V3-1 Phase B 下界维度：player.dimension 严格词表
   恒写 + nether 段 {blocks,fluids,states} + nether_entities 恒写 +
   派生 seed 不落盘；schema 其余与 29 一致，29 携新键 = version lie
@@ -97,10 +98,10 @@ sand walk_speed_factor 0.4 数据驱动减速，全 nether-scoped overworld
   结构免疫第 65-70 次免重锚；门 191【V3-7】= 第 72 次 + 门 192【V3-1
   Phase A 门框】= 第 73 次 + 门 193【V3-8 手柄】= 第 74 次 + 门 194
   【V3-1 Phase B 下界】= 第 75 次 + 门 195【V3-2 Part 1 下界内容族】
-  = 第 76 次 + 门 196【V3-4 netherite 材料链】= 第 77 次 + 门 197【V3-2 Part 2 下界深化】= 第 78 次免重锚
+  = 第 76 次 + 门 196【V3-4 netherite 材料链】= 第 77 次 + 门 197【V3-2 Part 2 下界深化】= 第 78 次 + 门 198【V3-3 下界 mob】= 第 79 次免重锚
   【v3.0.0 banner = 第 71 次】——存档/门框/手柄/惰性下界/下界内容/
-  材料链/下界深化 = 渲染无关零像素【下界内容 = nether-only + 惰性下界；atlas
-  16×16 幂二增长像素行恒等；材料链 = 纯物品内容不在默认热栏；下界深化 = nether-scoped 全维度门**）；PITS
+  材料链/下界深化/下界 mob = 渲染无关零像素【下界内容 = nether-only + 惰性下界；atlas
+  16×16 幂二增长像素行恒等；材料链 = 纯物品内容不在默认热栏；下界深化 = nether-scoped 全维度门；下界 mob = 下界池 + atlas 空格零移位**）；PITS
   375-379 + **PITS 380**（spawn 成功行无 'pick' / 门场景洞穴密封 /
   CAVE config seed 归属 / bob diff 带色相审计）+ **PITS 381**（热栏
   key→RMB ≥0.15s / 活体掉落物品不可作终档断言 / 羊静止窗）+
@@ -128,7 +129,13 @@ sand walk_speed_factor 0.4 数据驱动减速，全 nether-scoped overworld
   【1.0 s W 比值 0.823 伪影 vs 3.0 s 0.403 真值——长 hold 稀释】/ 水
   放置守卫拒玩家重叠格【aim 几何须避自身 feet 格：yaw 0 射线 x 恒等
   → 第二行 + pitch 落位】/ 性能 A/B 不得与流送负载臂并行【300f 窗
-  0.444→0.806 污染弃用——独占复跑】）；
+  0.444→0.806 污染弃用——独占复跑】；**PITS 389**（门 QUIET 配置 mobs.enabled = false 是静默
+  纪律【生成臂须 mobs-on 变体配置】/ sed 派生门脚本 OUT 目录未换 =
+  PNG 落别处假 DIFF【cmp 前先验文件存在】/ spawn 行坐标正则须含负
+  号【z 可负】/ maxMobs cap 吞后续尝试【1/31 权重 mob 只在首批抽
+  中——环全清 = 陆地 pick 全失败 cap 不饱和 = 决定性】/ 传送落点 =
+  portal 光 11 + 原点保护圈 = 生成压制位【下界生成臂用远离落点高原
+  场景】）；
   门计数 195（**V3-2/Phase C Part 1 下界内容族 v3.5.0** 门 195 全
   PASS：**D9 带修订 = 下界可航行**【编排者布局裁决：v3.4.0 实心岩板
   埋传送落点实证不可探索 → MC 下界废土形态 = 熔岩海 5-31 + netherrack
@@ -144,6 +151,23 @@ sand walk_speed_factor 0.4 数据驱动减速，全 nether-scoped overworld
   双臂【传送空腔截图 ×2 恒等 + 观感实证 / 下界采矿 quartz 入库存 +
   PITS 7 续破 + PITS 377 磁力边缘实证】；S6 5/5 init 点名；详见
   `docs/archive/phase-3.5.0.md`）；
+  门计数 198（**V3-3 下界 mob v3.8.0** 门 198 全 PASS：**5 mob 纯
+  数据**【zombified_piglin hostile 孪生 zombie undead false / piglin·
+  hoglin **neutral 新类**【damage() 单收口任意来源激怒 + 30 s real-dt
+  脱激 + chase 谓词第二支 (neutral ? m_angry : true) 位级根】/ magma_
+  cube 不分裂不跳 blob / **strider passive + walks_on_lava**【点火豁免
+  【火块仍点燃】+ 熔岩面 feet-on-plane walk 档 snap 不动点 + 生成面
+  熔岩源顶面】】+ **下界生成池零新基建**【m_nether.mobs 预留槽 +
+  loadNetherSpawnPool fail-fast + 共享类型表 + 策略继承 + 只 tick 活跃
+  维既有】+ **strider 光门 7→15**【熔岩自发光 15 机制缺口门内实证】
+  + 食物链 hoglin_meat +4/熟 +8 + 地面 ambient 3 件【runAi 数据门控
+  分支】+ 纹理 9【atlas 145 空格零移位】；2697/2697（+39）；结构免疫
+  第 79 次【S1 ≡ 锚 + EXACT + 白名单 4 键】；S2 三臂【下界生成流 ×2
+  恒等 + 截图 RAW / **strider f660 @ y=32.0 熔岩海顶面精确 ×2 + 540f
+  零 burn**【环全清 cap 永不饱和 = 决定性臂】/ 池隔离 OW 4 + 下界 0】；
+  S6 6/6 点名【互斥/双旗非 bool/池缺失/池未知 mob/ambient 单向对】；
+  性能 A/B 同档【changesApplied 逐位 + 终档 savenorm EXACT】；7 偏离；
+  详见 `docs/archive/phase-3.8.0.md`）；
   门计数 197（**V3-2 Part 2 下界深化 v3.7.0** 门 197 全 PASS：**全
   nether-scoped overworld 位级不变**【ambience 30 组输入面单测 + S1 锚
   双保险】零渲染/零 format/零 config：T1 水蒸发【下界泼水桶 = 桶变空

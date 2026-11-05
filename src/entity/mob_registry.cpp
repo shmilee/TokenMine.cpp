@@ -485,6 +485,33 @@ Result<void> MobRegistry::parseProperties(const Json& def,
         }
         out.undead = un->asBool();
     }
+    // V3-3: the neutral class flag (strict bool, default false — see
+    // MobProperties::neutral). STRICTLY EXCLUSIVE with `hostile`: a mob
+    // that is both sight-chasing and anger-gated is a data contradiction
+    // (the hostile default false + the passive = no-flags semantics stay
+    // untouched — the parse rejects the pair by name, the flying /
+    // spawns_in_air pairing discipline).
+    if (const Json* ne = def.find("neutral")) {
+        if (!ne->isBool()) {
+            return MC_FAIL("mob properties: 'neutral' must be a boolean");
+        }
+        out.neutral = ne->asBool();
+    }
+    if (out.neutral && out.hostile) {
+        return MC_FAIL("mob properties: 'neutral' and 'hostile' are "
+                       "mutually exclusive (the neutral class chases only "
+                       "while angry — a sight-chasing hostile cannot also "
+                       "carry the anger gate)");
+    }
+    // V3-3: the walks_on_lava flag (strict bool, default false — see
+    // MobProperties::walksOnLava).
+    if (const Json* wl = def.find("walks_on_lava")) {
+        if (!wl->isBool()) {
+            return MC_FAIL("mob properties: 'walks_on_lava' must be a "
+                           "boolean");
+        }
+        out.walksOnLava = wl->asBool();
+    }
     // SURV-5: the optional 'arrow_effect' — the status effect this mob's
     // ARROW applies to the target ({wither, 10} on the skeleton: the
     // Minecraft wither-skeleton twin). The SAME strict {name, duration}

@@ -70,10 +70,13 @@ void Game::updateEntities(double dt) {
     // The cadence is the data base scaled by the difficulty (Phase 25:
     // check_every_frames / hostileSpawnRateScale — 30 -> 60/30/20 for
     // easy/normal/hard). Normal = the base itself (baseline unchanged).
-    // V3-1 Phase B: the nether's empty pool (mobs list empty — the
-    // structural-immunity root; Phase C fills it) fast-exits here: the
-    // pick would have no type to walk, so the gate adds the empty-
-    // config check (the belt over the Phase C data).
+    // V3-1 Phase B / V3-3: the nether's pool fast-exits while its
+    // spawn list is empty (the structural no-op — the Phase B "Phase C
+    // fills it" slot; V3-3 fills it from data/mob_spawning_nether.json
+    // at init, so an in-session run with the nether built spawns from
+    // the nether pool, the overworld's from the overworld's — the
+    // dimension gate above). The belt over the data: the empty-config
+    // check keeps a stripped asset set from picking a no-type pool.
     if (mobs.mobsEnabled && !mobs.spawnConfig.mobs.empty() &&
         m_frameCount >= mobs.spawnConfig.firstSpawnFrame &&
         m_frameCount %
@@ -787,6 +790,14 @@ void Game::attemptMobSpawn() {
     // list (the overworld aliases are the pre-Phase-B m_mobs / world /
     // ents — the bit-identical red line; the nether's empty pool
     // makes this a structural no-op there — Phase C fills it).
+    // V3-3: the TYPE TABLE is the game's single registry (m_mobs.
+    // mobTypes — the content is dimension-agnostic: one mob's data is
+    // the same mob in both dimensions, and the render caches key on
+    // THIS table's MobID space). The dimension's MobSystem owns the
+    // POOL (spawnConfig / difficulty / spawnCounter / the enable flag)
+    // + the live entities — the nether's mobs member therefore never
+    // loads a type table (its empty registry is structural: the gate
+    // below exits on its pool, not its types).
     MobSystem& mobs = playerInNether() ? m_nether.mobs : m_mobs;
     World& world = currentWorld();
     std::vector<std::unique_ptr<Entity>>& ents = currentEntities();
@@ -818,7 +829,10 @@ void Game::attemptMobSpawn() {
         splitmix64(static_cast<std::uint64_t>(currentSeed()) ^
                    (std::uint64_t{0x9E3779B97F4A7C15} *
                     static_cast<std::uint64_t>(m_frameCount)));
-    const Mob& def = mobs.mobTypes.at(mobs.mobTypes.idForName(
+    // V3-3: the type resolves in the SHARED registry (m_mobs.mobTypes —
+    // see the function head; the overworld's mobs IS m_mobs, so this is
+    // the pre-V3-3 expression there, the bit-identical red line).
+    const Mob& def = m_mobs.mobTypes.at(m_mobs.mobTypes.idForName(
         mobs.spawnConfig
             .mobs[mobs.spawnConfig.pickIndex(pick %
                                           static_cast<std::uint64_t>(
@@ -853,7 +867,8 @@ void Game::attemptMobSpawn() {
                                  m_player->aabbMin(), m_player->aabbMax(),
                                  mobPositions, protection, mobs.spawnPoint.x,
                                  mobs.spawnPoint.z, m_nightSkyLevel,
-                                 def.properties.spawnsInAir);
+                                 def.properties.spawnsInAir,
+                                 def.properties.walksOnLava);
     if (!cell) {
         MC_LOG_DEBUG("mob spawn f" + std::to_string(m_frameCount) +
                      ": pick '" + def.name + "' found no valid cell "
@@ -865,7 +880,11 @@ void Game::attemptMobSpawn() {
     // region, spawnFloorTop, the findMobSpawnCell twin; every other shape
     // keeps the exact legacy cell.y + 1.0), the in-air branch's (V2-14,
     // the bat — the data flag) feet sit at the box floor cell's bottom
-    // (cell.y itself — the cell IS the air box, no floor beneath it).
+    // (cell.y itself — the cell IS the air box, no floor beneath it), and
+    // the lava-surface branch's (V3-3, the strider — the data flag) feet
+    // sit on the lava's top (cell.y + 1.0 — the cell holds a FLUID, the
+    // block there is air, so spawnFloorTop's exact legacy +1.0; the
+    // walker's integrate then owns the plane as its floor).
     const float spawnY = def.properties.spawnsInAir
         ? static_cast<float>(cell->y)
         : static_cast<float>(cell->y) +
