@@ -7,7 +7,7 @@
 **本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒<br>
 （C++20 / SDL3 / OpenGL 3.3，自研 JSON/PNG，内容全数据驱动）。<br>
 确定性是一级要求——无输入运行逐帧字节可复现。<br>
-当前 v3.12.0（3.x「世界扩展」期收官）· tag `v3.12.0` · 任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)**
+当前 v3.13.0（demo 回放独立 sim 版本：旧 .dmo 零迁移直放，模拟语义变更才拒播）· tag `v3.13.0` · 任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)**
 
 [![GitHub stars](https://img.shields.io/github/stars/shmilee/TokenMine.cpp?style=flat-square)](https://github.com/shmilee/TokenMine.cpp/stargazers)
 [![MIT license](https://img.shields.io/badge/license-MIT-555555?style=flat-square)](LICENSE)
@@ -103,7 +103,7 @@ cmake --build build
 - **v0.1.0**：可玩的 3D 体素沙盒（世界生成 / 昼夜光照 / 流体 / Mob 战斗 / 合成 / 存档）
 - **v1.0.0**（1.x）：十大系统完成，生存玩法闭环——火与工具分类、护甲耐久、药水效果、第三人称、教程
 - **v2.0.0**（2.x）：上手与体验补全——XP 与 7 种附魔、染色床睡觉跳夜、蝙蝠/染色羊/雪原、AO 环境光遮蔽、天气、飞行与滚轮缩放
-- **v3.0.0**（3.x，当前）：**世界扩展**——下界维度（传送门 / 5 群系 / 熔岩海 / 5 专属 mob）+ netherite 材料链 + 建筑内容族（黏土/石砖/陶瓦）+ 存档 gzip + 手柄 + **demo 回放（录屏式只观察教程）**；v3.12.0 矩阵后报障修复
+- **v3.0.0**（3.x，当前）：**世界扩展**——下界维度（传送门 / 5 群系 / 熔岩海 / 5 专属 mob）+ netherite 材料链 + 建筑内容族（黏土/石砖/陶瓦）+ 存档 gzip + 手柄 + **demo 回放（录屏式只观察教程，含 4 个预设教程 demo）**；v3.12.0 矩阵后报障修复 + v3.13.0 demo 独立版本号
 - 方向项（末地 / 创造 / 多人 / 死亡统计屏）待立项
 
 逐版明细与发布历史：[`docs/CHANGELOG.md`](docs/CHANGELOG.md)（当前时
@@ -120,11 +120,11 @@ cmake --build build
 |---|---|---|
 | [AGENTS.md](AGENTS.md) | 代理快速接收：现状/命令/硬性规则/E2E 协议/阶段流程/坑位速览 | 新会话第一件事 |
 | [docs/GAMEPLAY.md](docs/GAMEPLAY.md) | 玩法指南（操作/生存循环/下界/netherite/建筑材料/**demo 回放教程**；2026-11-06 全量刷新） | 玩法问题 |
-| [docs/MECHANICS.md](docs/MECHANICS.md) | 机制详解（现状 v3.12.0，17 子系统分节含下界维度/demo 回放；2026-11-06 全量刷新；世界/渲染侧 = `docs/MECHANICS_WORLD.md`） | 改玩法逻辑前 |
+| [docs/MECHANICS.md](docs/MECHANICS.md) | 机制详解（现状 v3.13.0，17 子系统分节含下界维度/demo 回放；2026-11-06 全量刷新；世界/渲染侧 = `docs/MECHANICS_WORLD.md`） | 改玩法逻辑前 |
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/下界群系/方块/配方/Mob/下界池/附魔/sediment/worldgen 全参考）+ 配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（393 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（394 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃条目；已修复（含修复史）→ `docs/archive/KI_FIXED.md`；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；v2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

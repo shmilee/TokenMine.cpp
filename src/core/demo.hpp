@@ -38,11 +38,30 @@
 
 namespace mc {
 
-// The demo file's version fingerprint: the TM_VERSION at record /
-// author time. A mismatch at load = the named REJECT (the incompatible
-// simulation semantics — the fake-replay guard; the save's format
-// field is untouched, the demo family carries its own).
+// The recorded build's string (TM_VERSION at record / author time) —
+// INFORMATIONAL only (the replay log line / the end panel's
+// "recorded with …"): the replay-admissibility gate is the SIM
+// version below, not the build string (v3.13.0 user ruling: the
+// build-string fingerprint was a proxy for "the simulation is
+// identical" and any core bump — even a render-constant-only release
+// like v3.12.0's shadow scale — killed every recorded demo).
 inline constexpr const char* kDemoFileVersion = TM_VERSION;
+
+// The demo's SIMULATION-semantics version (the replay-admissibility
+// gate — the demo family's own number, independent of TM_VERSION):
+// BUMP ONLY when a frame-locked SIMULATION semantics changes (the
+// update loop / physics / AI / fluid / spawn / input routing / the
+// demo pacing). Pure render / UI / audio / content-data (JSON) /
+// docs releases do NOT bump = the demo stays replayable across them
+// (the "compatible when it should be" half). The "reject when it
+// should be" half is enforced by the CANARY: the shipped demos are
+// replayed in every gate (savenorm EXACT vs the reference tree) — a
+// core change that alters the simulation breaks the canary = bump
+// here + re-author the timelines (byte-reproducible, PITS 393).
+// Legacy files (the pre-v3.13.0 `version`-only schema) map to sim 1
+// (sound: the old strict gate proved record-build == replay-build,
+// hence sim-identical lineage).
+inline constexpr int kDemoSimVersion = 1;
 
 // The demo dt's bound: the main loop's kMaxDt clamp (the same value —
 // a recorded wall dt is already clamped by the loop, an author's 1/60
@@ -121,8 +140,10 @@ struct DemoEvent {
 };
 
 struct DemoFile {
-    std::string version; // the record-time fingerprint (the load
-                         // requires kDemoFileVersion)
+    std::string recordedWith; // the record-time build string
+                              // (informational; the gate is `sim`)
+    int sim = 1;              // the record-time kDemoSimVersion (the
+                              // replay-admissibility gate)
     DemoWorldSpec world;
     std::vector<double> dts;         // per demo frame (0-based)
     std::vector<DemoEvent> events;   // frame non-decreasing (enforced)
@@ -132,25 +153,39 @@ struct DemoFile {
 
 // -- strict parse (the save discipline) ------------------------------------
 //
-// The payload JSON's parse. The reject family (all named): missing
-// key / unexpected key (the closed vocabulary — the top level is
-// exactly {version, world, dts, events}; the world exactly
-// {type, seed} or {type, slot}; every event type its exact key set) /
-// unknown event type / out-of-order frame / event frame out of range
-// (>= dts.size(), the dangling frame) / negative dt / dt > kDemoMaxDt
-// / non-integer frame / world double key (a fresh with a slot or
-// vice versa) / fresh missing seed / save missing slot / invalid slot
-// charset (the --save charset, the traversal guard).
+// The payload JSON's parse. v3.13.0: TWO schemas — the new file
+// {sim, recorded_with, world, dts, events} (sim = the record-time
+// kDemoSimVersion, the replay-admissibility gate; recorded_with = the
+// record-time build string, informational only) and the LEGACY file
+// {version, world, dts, events} (pre-v3.13.0), which maps to sim := 1
+// + recorded_with := version (the old strict gate proved record-build
+// == replay-build, hence the lineage is sim-identical). Both
+// `version` AND `sim` or `recorded_with` present = the named
+// mixed-schema reject.
+//
+// The reject family (all named): missing key / unexpected key (the
+// closed vocabulary — the top level is exactly {sim, recorded_with,
+// world, dts, events} (new) or {version, world, dts, events}
+// (legacy); the world exactly {type, seed} or {type, slot}; every
+// event type its exact key set) / unknown event type / out-of-order
+// frame / event frame out of range (>= dts.size(), the dangling frame)
+// / negative dt / dt > kDemoMaxDt / non-integer frame / world double
+// key (a fresh with a slot or vice versa) / fresh missing seed / save
+// missing slot / invalid slot charset (the --save charset, the
+// traversal guard).
 Result<DemoFile> parseDemoJson(const Json& root);
 
 // A .dmo's load: the bytes read (a missing file is named) + the gzip
 // MAGIC PROBE (the demo family has no plaintext legacy — a non-gzip
 // file is named "not a gzip demo") + the container's strict decode
 // (the V3-7 gzipDecode: the pinned 10-byte header / the raw inflate /
-// the CRC32+ISIZE trailer) + the payload's strict parse + the version
-// fingerprint check (a mismatch = "demo recorded with vX, this is vY
-// - incompatible").
-Result<DemoFile> loadDemoFile(const std::filesystem::path& path);
+// the CRC32+ISIZE trailer) + the payload's strict parse + the SIM
+// version gate (a mismatch = "demo sim X != this build sim Y
+// (recorded with Z) - the simulation semantics differ"; the
+// `forceSimMismatch` escape — main's `--demo-force` — bypasses the
+// gate only, the schema's strictness stays).
+Result<DemoFile> loadDemoFile(const std::filesystem::path& path,
+                              bool forceSimMismatch = false);
 
 // The payload's serialize (the deterministic compact JSON: the
 // alphabetical key order, the doubles' shortest round-trip, the

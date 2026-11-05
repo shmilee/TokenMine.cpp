@@ -162,23 +162,66 @@ Result<DemoFile> parseDemoJson(const Json& root) {
     if (!root.isObject()) {
         return MC_FAIL("demo file must be a JSON object");
     }
-    // The top level is the CLOSED set {version, world, dts, events}
-    // (the unexpected key is named).
+    // v3.13.0: TWO schemas — the legacy file (pre-v3.13.0) carries
+    // {version, world, dts, events}; the current file carries
+    // {sim, recorded_with, world, dts, events}. The presence of
+    // `version` selects the legacy schema; both `version` AND
+    // `sim`/`recorded_with` = the named mixed-schema reject.
+    const Json* version = root.find("version");
+    const Json* sim = root.find("sim");
+    const Json* recorded = root.find("recorded_with");
+    const bool legacy = version != nullptr;
+    if (legacy && (sim != nullptr || recorded != nullptr)) {
+        return MC_FAIL("demo file: mixed schemas — 'version' (legacy) "
+                       "and 'sim'/'recorded_with' (current) are "
+                       "mutually exclusive");
+    }
+    // The top level is the CLOSED set of the file's schema (the
+    // unexpected key is named).
     for (const auto& p : root.members()) {
         const std::string& key = p.first;
-        if (key != "version" && key != "world" && key != "dts" &&
-            key != "events") {
+        if (legacy) {
+            if (key != "version" && key != "world" && key != "dts" &&
+                key != "events") {
+                return MC_FAIL("demo file: unexpected top-level key '" +
+                               key + "' (version/world/dts/events)");
+            }
+        } else if (key != "sim" && key != "recorded_with" &&
+                   key != "world" && key != "dts" && key != "events") {
             return MC_FAIL("demo file: unexpected top-level key '" + key +
-                           "' (version/world/dts/events)");
+                           "' (sim/recorded_with/world/dts/events)");
         }
     }
     DemoFile file;
-    const Json* version = root.find("version");
-    if (!version || !version->isString() || version->asString().empty()) {
-        return MC_FAIL("demo file is missing the 'version' key (a "
-                       "non-empty string)");
+    if (legacy) {
+        if (!version->isString() || version->asString().empty()) {
+            return MC_FAIL("demo file's 'version' key (legacy schema) "
+                           "must be a non-empty string");
+        }
+        // The legacy mapping (zero migration): the old strict gate
+        // proved record-build == replay-build, hence every legacy
+        // file's lineage is sim-identical = sim 1; the build string
+        // becomes the informational recorded_with.
+        file.sim = 1;
+        file.recordedWith = version->asString();
+    } else {
+        if (!sim) {
+            return MC_FAIL("demo file is missing the 'sim' key (an "
+                           "integer >= 1)");
+        }
+        long long simValue = 0;
+        if (!isIntValue(*sim, simValue) || simValue < 1) {
+            return MC_FAIL("demo file's 'sim' key must be an integer "
+                           ">= 1");
+        }
+        file.sim = static_cast<int>(simValue);
+        if (!recorded || !recorded->isString() ||
+            recorded->asString().empty()) {
+            return MC_FAIL("demo file is missing the 'recorded_with' "
+                           "key (a non-empty string)");
+        }
+        file.recordedWith = recorded->asString();
     }
-    file.version = version->asString();
     const Json* world = root.find("world");
     if (!world) {
         return MC_FAIL("demo file is missing the 'world' key");
@@ -409,7 +452,8 @@ Result<DemoFile> parseDemoJson(const Json& root) {
     return file;
 }
 
-Result<DemoFile> loadDemoFile(const std::filesystem::path& path) {
+Result<DemoFile> loadDemoFile(const std::filesystem::path& path,
+                              bool forceSimMismatch) {
     std::ifstream in(path, std::ios::binary);
     if (!in) {
         return MC_FAIL("cannot open demo file: '" + path.string() + "'");
@@ -428,11 +472,15 @@ Result<DemoFile> loadDemoFile(const std::filesystem::path& path) {
     MC_TRY(js);
     auto file = parseDemoJson(*js);
     MC_TRY(file);
-    if (file->version != kDemoFileVersion) {
-        return MC_FAIL("demo recorded with v" + file->version +
-                       ", this is v" + kDemoFileVersion +
-                       " - incompatible (the simulation semantics "
-                       "differ)");
+    // The SIM version gate (v3.13.0): the build string is
+    // informational, the simulation-semantics version decides.
+    if (file->sim != kDemoSimVersion && !forceSimMismatch) {
+        return MC_FAIL("demo sim " + std::to_string(file->sim) +
+                       " != this build sim " +
+                       std::to_string(kDemoSimVersion) + " (recorded "
+                       "with " + file->recordedWith +
+                       ") - the simulation semantics differ (use "
+                       "--demo-force to replay anyway)");
     }
     return file;
 }
@@ -443,7 +491,11 @@ Result<DemoFile> loadDemoFile(const std::filesystem::path& path) {
 
 std::string serializeDemoJson(const DemoFile& file) {
     Json root = Json::object();
-    root["version"] = Json(file.version);
+    // v3.13.0: the current schema {sim, recorded_with, world, dts,
+    // events} (the legacy `version`-only schema is accepted on read
+    // with the sim-1 mapping, never written again).
+    root["sim"] = Json(file.sim);
+    root["recorded_with"] = Json(file.recordedWith);
     Json world = Json::object();
     world["type"] = Json(file.world.type == DemoWorldSpec::Type::Fresh
                              ? std::string("fresh")
@@ -626,7 +678,8 @@ double DemoPlayer::nextSpeed(double current) {
 // ---------------------------------------------------------------------------
 
 DemoRecorder::DemoRecorder() {
-    m_file.version = kDemoFileVersion;
+    m_file.sim = kDemoSimVersion;
+    m_file.recordedWith = kDemoFileVersion;
 }
 
 void DemoRecorder::tapEvent(const InputEvent& ev, int frame) {
@@ -871,7 +924,8 @@ Result<std::vector<TimelineAction>> parseTimelineActions(const Json& actions) {
 DemoFile authorDemoFile(const DemoWorldSpec& world,
                         const std::vector<TimelineAction>& actions) {
     DemoFile file;
-    file.version = kDemoFileVersion;
+    file.sim = kDemoSimVersion;
+    file.recordedWith = kDemoFileVersion;
     file.world = world;
     // The frames: every action's events land inside [0, frames) — a
     // hold's release extends the demo to its until_frame (a held-to-

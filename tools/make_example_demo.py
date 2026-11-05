@@ -16,6 +16,12 @@ XFL / OS bytes, so the container is built by hand). The expansion rules
 mirror src/core/demo.cpp's authorDemoFile EXACTLY (the dts = 1/60 fixed
 step, the event order = (frame, action index, the hold's release = the
 second half), frames = max(all at_frame, all until_frame) + 1).
+
+v3.13.0: the payload carries the CURRENT schema {sim, recorded_with,
+world, dts, events} (the sim = src/core/demo.hpp's kDemoSimVersion, the
+recorded_with = the project VERSION below — informational only; the
+replay gate is the sim). Legacy {version, ...} files are accepted on
+read with the sim-1 mapping.
 """
 import json
 import re
@@ -39,6 +45,11 @@ KEYCODES = {
 
 # The author's button vocabulary -> the SDL button.
 BUTTONS = {"left": 0x01, "right": 0x02, "middle": 0x04}
+
+# The demo's simulation-semantics version (mirrors src/core/demo.hpp's
+# kDemoSimVersion — the replay-admissibility gate, NOT the project
+# version).
+SIM_VERSION = 1
 
 # The example's timeline (the design's contract's "simple version": the
 # spawn area's look-around + the mine hold + the inventory + the end's
@@ -111,8 +122,12 @@ def expand(world, actions, version):
         else:
             sys.exit("unknown action " + act)
     evs.sort(key=lambda t: (t[0], t[1], t[2]))
+    # The current schema (v3.13.0): {sim, recorded_with, world, dts,
+    # events} — key order mirrors the C++ serializeDemoJson's
+    # insertion order (the byte idempotence).
     return {
-        "version": version,
+        "sim": SIM_VERSION,
+        "recorded_with": version,
         "world": world,
         "dts": dts,
         "events": [e for *_, e in evs],

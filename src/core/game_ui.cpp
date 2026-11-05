@@ -2274,6 +2274,13 @@ void Game::renderUi() {
             const std::string title =
                 m_demoPaused ? "Demo paused" : "Demo finished";
             const std::string name = demoFileName(m_demoPath);
+            // v3.13.0: the informational recorded-with line (the sim
+            // gate's message carries it too — the build string is
+            // display-only, it never rejects). Its own line: a
+            // combined name + recorded-with line overflows the 679 px
+            // gate window at ui.scale 2 (16 px glyphs x2 = 32 px/char).
+            const std::string recorded = "recorded with " +
+                                         m_args.demoFile->recordedWith;
             const std::string speed =
                 "Speed " + demoSpeedLabel(m_demoSpeed);
             const std::string hint =
@@ -2283,15 +2290,18 @@ void Game::renderUi() {
             const double s1 = fScale(1.0);
             demoText(title,
                      w / 2 - static_cast<int>(textWidth(title, s2)) / 2,
-                     h / 2 - 56, s2, kText);
+                     h / 2 - 68, s2, kText);
             demoText(name, w / 2 - static_cast<int>(textWidth(name, s1)) / 2,
-                     h / 2 - 12, s1, kTextDim);
+                     h / 2 - 36, s1, kTextDim);
             demoText(speed,
                      w / 2 - static_cast<int>(textWidth(speed, s1)) / 2,
-                     h / 2 + 10, s1, kText);
+                     h / 2 - 8, s1, kText);
+            demoText(recorded,
+                     w / 2 - static_cast<int>(textWidth(recorded, s1)) / 2,
+                     h / 2 + 16, s1, kTextDim);
             demoText(hint,
                      w / 2 - static_cast<int>(textWidth(hint, s1)) / 2,
-                     h / 2 + 32, s1, kTextDim);
+                     h / 2 + 40, s1, kTextDim);
         }
         // The badge (always, above the veil when one is up).
         const std::string badge = "DEMO " + demoSpeedLabel(m_demoSpeed);

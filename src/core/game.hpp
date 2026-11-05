@@ -158,6 +158,10 @@ struct GameArgs {
     // mode (normal gameplay + the Input boundary tap; the exit saves
     // the .dmo; demoRecordOut empty = data/demos/rec_<ts>.dmo).
     std::filesystem::path demo;
+    // v3.13.0: the --demo-force ESCAPE — bypasses the replay's SIM
+    // version gate only (the schema's strictness stays; a WARN is
+    // printed when the forced sim differs). Requires --demo.
+    bool demoForce = false;
     std::optional<DemoFile> demoFile;
     std::filesystem::path demoAuthor;
     bool demoRecord = false;

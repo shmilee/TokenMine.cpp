@@ -46,6 +46,21 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **S1 锚假失败 = 用户 config 调值 + 时钟映射误读（PITS 394，门 203
+  v3.13.0 demo sim 版本）**——base19 锚 = **committed config** 捕获
+  （ui.scale 1.5）；用户其后把工作树 config.json 调成 ui.scale 2.0
+  （规则：永不提交/还原）→ 无输入截图时钟/XP 文本 4/3× 放大 + 位移 →
+  S1 ≠ 锚**假失败**（差 3846 px 全在 UI 文本带：右上时钟 + 底部 XP
+  「0」两带，世界/HUD 图标零 diff）。判别三件套：① 像素 diff 仅 UI
+  文本带 ② glyph 尺寸比 = ui.scale 比精确（152/114 = 2.0/1.5）③
+  `git show HEAD:config/config.json` vs 工作树 diff = 恰 ui.scale 单键
+  → **S1 锚比较失败先 diff config**（committed vs 工作树），有 UI 几何
+  调值 = 用 committed config 副本 + `--config` 重跑 S1（锚语义 =
+  committed config 态）。伴生误读教训：`clockString` = dawn 对齐映射
+  （hour24 = (t−kDawnStart 0.05)×24+6）——start_time 0.25 的表读
+  **10:48 非直觉的 6:00**（day-plateau 天空 ≠ 正午表读；noon = t
+  0.30），时间断言先套公式推（`day_cycle.hpp` 默认注释「// noon」已
+  随本版更正）。
 - **demo 编写（--demo-author）几何三坑（PITS 393，11-06 预设教程
   demo）**——① **初始俯仰 = −0.25 rad 非 0**（spawn 默认 pitch）：
   瞄准像素换算从 0 推 = 放置/挖掘全偏（实证：dy 158 以为 −0.395 实为

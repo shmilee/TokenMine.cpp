@@ -689,6 +689,15 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
   391③——fresh 会话录制）。
 - **world spec = 起点权威** — `--demo` + `--new`/`--seed` = 点名拒（记档
   偏离 4）；引用存档槽永不回写（观察红线）。
+- **sim 版本门 + `--demo-force` 逃生门（v3.13.0 用户定案）**——demo 兼
+  容性判据 = 独立 sim 版本（帧锁定模拟语义同期性），**非游戏版本字
+  串**：legacy .dmo（v3.11/v3.12 时代 `version` 指纹 schema）**零迁移映
+  射 sim 1 直放**（用户报障"demo recorded with v3.11.0, this is
+  v3.12.0 - incompatible" = 旧设计把构建版本当模拟语义的代理，纯渲染
+  版误杀全部 demo，已废）；sim 不匹配 = rc 1 点名拒 + `--demo-force`
+  强制试放（结果可能不对，WARN 点名，仅 bypass sim 门 schema 严格性
+  保留）；`recorded_with` 构建串仅信息展示永不拒播；sim bump 纪律 +
+  canary 条 = MECHANICS.md「demo 回放」节 / PROTOCOL.md E2E 协议。
 
 ## 实机报障阴影缩尺（v3.12.0，门 202）
 
@@ -700,5 +709,5 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
 ## 已修复（归档）→ 细节存档
 
 pre-2.0 已修复条目全索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`（按需查找；各
-阶段修复细节 = `docs/archive/v1x/phase-*.md`）。3.x 全 12 版阶段存档 =
-`docs/archive/phase-3.x.0.md`（v3.1.0–v3.12.0，含门证据与记档偏离全文）。
+阶段修复细节 = `docs/archive/v1x/phase-*.md`）。3.x 全 13 版阶段存档 =
+`docs/archive/phase-3.x.0.md`（v3.1.0–v3.13.0，含门证据与记档偏离全文）。

@@ -128,6 +128,15 @@ ctest --test-dir build --output-on-failure
   常干净、后续拍 4 px 可复现）。缓解：warp 到实际窗口原点 + (632,352)（SDL 中心；
   实测原点 (4,64) 而非名义 (0,60)）、同批同 warp、手保持不动；**存档 yaw/pitch 作
   漂移探测器**（干净 = 0.0000/初始值，漂移 = ±0.0100）。
+- **demo 回放 canary（v3.13.0 起）**：`assets/demos/` 4 个 shipped demo
+  （example / tutorial_dig / tutorial_build / tutorial_fly）= 模拟语义金
+  丝雀。每版门内回放 ×2 RAW 恒等 + savenorm EXACT（回放 = 文件驱动的
+  确定性重演，模拟变更的敏感度高于无输入跑）。核心改动**破坏 canary
+  （终档漂移）= 该改动改变了帧锁定模拟语义 = 必须 bump sim**
+  （`src/core/demo.hpp` `kDemoSimVersion` +1）+ 重新 author 4 个时间线
+  （字节可复现，PITS 393）；纯渲染/UI/音频/内容数据/文档改动**不得破
+  canary**（破了先查是否误改模拟侧——v3.12.0 阴影缩尺 = canary 恒等
+  先例）。
 - **窗口发现延迟 D**：输入锚定在窗口发现（`xdotool search` 首次命中）时刻，D ∈
   [0.1, 0.5] s；tick 类断言需 ≥1.6 s 裕量（P28 进食对 5 连验证模式：
   1/60 双累加边界精确推帧——1.6s 进食通道完成帧 97、36s 衰减 tick 帧 2161、

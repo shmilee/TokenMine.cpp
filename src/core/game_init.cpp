@@ -2605,7 +2605,9 @@ void Game::runDemoReplay() {
     MC_LOG_INFO("Demo replay: '" + m_demoPath + "' (" +
                 std::to_string(total) + " frames, " +
                 std::to_string(nEvents) + " events, world: " +
-                demoWorldDescription(m_args.demoFile->world) + ")");
+                demoWorldDescription(m_args.demoFile->world) +
+                ", recorded with " +
+                m_args.demoFile->recordedWith + ")");
     // The synthetic gamepad connect (only when the demo carries
     // gamepad events — the player's Input has no real device on the
     // replay machine; the handleGamepad* entry points' not-connected

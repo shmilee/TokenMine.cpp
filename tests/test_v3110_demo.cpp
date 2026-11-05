@@ -12,6 +12,7 @@
 // zero-leak count).
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -68,7 +69,8 @@ const ScratchCleanup kScratchCleanup;
 // vocabulary — the round-trip / the player / the recorder's reference).
 DemoFile fixtureFile() {
     DemoFile f;
-    f.version = kDemoFileVersion;
+    f.sim = kDemoSimVersion;
+    f.recordedWith = kDemoFileVersion;
     f.world.type = DemoWorldSpec::Type::Fresh;
     f.world.seed = 123456789;
     f.dts = {0.016666666666666666, 0.01, 0.0, 0.25};
@@ -129,7 +131,8 @@ TEST(V3110Demo, ParseRoundTrip) {
     const DemoFile in = fixtureFile();
     auto out = parseDemoJson(Json::parse(serializeDemoJson(in)).value());
     ASSERT_TRUE(out.ok()) << out.error().describe();
-    EXPECT_EQ(out->version, in.version);
+    EXPECT_EQ(out->sim, in.sim);
+    EXPECT_EQ(out->recordedWith, in.recordedWith);
     EXPECT_EQ(out->world.type, in.world.type);
     EXPECT_EQ(out->world.seed, in.world.seed);
     ASSERT_EQ(out->dts.size(), in.dts.size());
@@ -164,10 +167,12 @@ TEST(V3110Demo, ParseRoundTripSaveWorld) {
 }
 
 TEST(V3110Demo, ParseRejectMissingKeys) {
-    // version / world / dts / events — each missing is named (the
-    // hand-built variants, the strict top level's reject face).
+    // sim / world / dts / events — each missing is named (the
+    // hand-built variants, the strict top level's reject face; the
+    // first is the CURRENT schema, the rest the legacy `version`
+    // form).
     const std::vector<std::pair<std::string, std::string>> variants = {
-        {"version", R"({"world": {"type": "fresh", "seed": 1}, )"
+        {"sim", R"({"world": {"type": "fresh", "seed": 1}, )"
                    R"("dts": [0.01], "events": []})"},
         {"world", R"({"version": "v", "dts": [0.01], "events": []})"},
         {"dts", R"({"version": "v", "world": {"type": "fresh", "seed": 1}, )"
@@ -364,20 +369,141 @@ TEST(V3110Demo, ParseRejectEventFaces) {
 }
 
 // ---------------------------------------------------------------------------
-// The load-level family (the container + the version fingerprint)
+// The load-level family (the container + the sim version gate)
 // ---------------------------------------------------------------------------
 
-TEST(V3110Demo, LoadVersionMismatch) {
+TEST(V3110Demo, LoadSimMismatch) {
+    // v3.13.0: the gate is the SIM version, not the build string —
+    // a demo recorded at a different simulation-semantics version is
+    // rejected by name (the recorded build is informational in the
+    // message).
     DemoFile f = fixtureFile();
-    f.version = "3.0.0";
+    f.sim = 2;
+    f.recordedWith = "3.0.0";
     const auto p = tempDemo(f);
     auto r = loadDemoFile(p);
     ASSERT_FALSE(r.ok());
-    EXPECT_NE(r.error().message.find("demo recorded with v3.0.0"),
+    const std::string expectGate = "demo sim 2 != this build sim " +
+                                   std::to_string(kDemoSimVersion);
+    EXPECT_NE(r.error().message.find(expectGate), std::string::npos);
+    EXPECT_NE(r.error().message.find("(recorded with 3.0.0)"),
               std::string::npos);
-    EXPECT_NE(r.error().message.find("this is v" + std::string(kDemoFileVersion)),
+    EXPECT_NE(r.error().message.find("simulation semantics differ"),
               std::string::npos);
-    EXPECT_NE(r.error().message.find("incompatible"), std::string::npos);
+    // The --demo-force escape (bypass the gate only): the file loads,
+    // the payload untouched.
+    auto forced = loadDemoFile(p, true);
+    ASSERT_TRUE(forced.ok()) << forced.error().describe();
+    EXPECT_EQ(forced->sim, 2);
+    EXPECT_EQ(forced->recordedWith, "3.0.0");
+}
+
+// ---------------------------------------------------------------------------
+// v3.13.0: the SIM version family (the dual schema + the legacy
+// mapping + the mixed-schema reject)
+// ---------------------------------------------------------------------------
+
+TEST(V3110Demo, SimPinnedToOne) {
+    // The demo family's first simulation-semantics version.
+    EXPECT_EQ(kDemoSimVersion, 1);
+}
+
+TEST(V3110Demo, ParseLegacyMapping) {
+    // The legacy (pre-v3.13.0) {version, ...} file maps to sim 1 +
+    // recorded_with := version (zero migration — every recorded demo
+    // stays replayable).
+    auto r = parseDemoJson(Json::parse(R"({"version": "3.11.0", )"
+                                       R"("world": {"type": "fresh", "seed": 1}, )"
+                                       R"("dts": [0.01], "events": []})")
+                               .value());
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    EXPECT_EQ(r->sim, 1);
+    EXPECT_EQ(r->recordedWith, "3.11.0");
+}
+
+TEST(V3110Demo, ParseCurrentSchema) {
+    // The current {sim, recorded_with, ...} file: the fields land
+    // verbatim (a future sim 2 parses fine — the GATE is the load's
+    // job, not the parse's).
+    auto r = parseDemoJson(Json::parse(R"({"sim": 2, "recorded_with": "9.9.9", )"
+                                       R"("world": {"type": "fresh", "seed": 1}, )"
+                                       R"("dts": [0.01], "events": []})")
+                               .value());
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    EXPECT_EQ(r->sim, 2);
+    EXPECT_EQ(r->recordedWith, "9.9.9");
+}
+
+TEST(V3110Demo, ParseRejectMixedSchemas) {
+    // `version` (legacy) AND `sim`/`recorded_with` (current) = the
+    // named mixed-schema reject.
+    auto vsim = parseDemoJson(Json::parse(R"({"version": "3.11.0", "sim": 1, )"
+                                          R"("world": {"type": "fresh", "seed": 1}, )"
+                                          R"("dts": [0.01], "events": []})")
+                                            .value());
+    ASSERT_FALSE(vsim.ok());
+    EXPECT_NE(vsim.error().message.find("mixed schemas"), std::string::npos);
+    auto vrec = parseDemoJson(
+        Json::parse(R"({"version": "3.11.0", "recorded_with": "3.11.0", )"
+                    R"("world": {"type": "fresh", "seed": 1}, )"
+                    R"("dts": [0.01], "events": []})")
+            .value());
+    ASSERT_FALSE(vrec.ok());
+    EXPECT_NE(vrec.error().message.find("mixed schemas"), std::string::npos);
+}
+
+TEST(V3110Demo, ParseRejectCurrentSchemaFieldShapes) {
+    // The current schema's field shapes: sim = an integer >= 1,
+    // recorded_with = a non-empty string (each reject named).
+    const std::vector<std::array<std::string, 3>> variants = {
+        {"sim: string",
+         R"({"sim": "1", "recorded_with": "v", )"
+         R"("world": {"type": "fresh", "seed": 1}, )"
+         R"("dts": [0.01], "events": []})",
+         "must be an integer >= 1"},
+        {"sim: zero",
+         R"({"sim": 0, "recorded_with": "v", )"
+         R"("world": {"type": "fresh", "seed": 1}, )"
+         R"("dts": [0.01], "events": []})",
+         "must be an integer >= 1"},
+        {"sim: negative",
+         R"({"sim": -1, "recorded_with": "v", )"
+         R"("world": {"type": "fresh", "seed": 1}, )"
+         R"("dts": [0.01], "events": []})",
+         "must be an integer >= 1"},
+        {"recorded_with: missing",
+         R"({"sim": 1, )"
+         R"("world": {"type": "fresh", "seed": 1}, )"
+         R"("dts": [0.01], "events": []})",
+         "missing the 'recorded_with' key"},
+        {"recorded_with: empty",
+         R"({"sim": 1, "recorded_with": "", )"
+         R"("world": {"type": "fresh", "seed": 1}, )"
+         R"("dts": [0.01], "events": []})",
+         "missing the 'recorded_with' key"},
+    };
+    for (const auto& v : variants) {
+        auto r = parseDemoJson(Json::parse(v[1]).value());
+        ASSERT_FALSE(r.ok()) << v[0];
+        EXPECT_NE(r.error().message.find(v[2]), std::string::npos)
+            << v[0] << ": " << r.error().message;
+    }
+}
+
+TEST(V3110Demo, LoadLegacyFileAccepted) {
+    // The load face of the legacy mapping: a hand-written
+    // pre-v3.13.0 container (the `version`-only payload, the gzip
+    // demo family) loads at sim 1 (the recorded demos stay
+    // replayable — the user's bug-report case).
+    const std::string body =
+        R"({"version": "3.11.0", "world": {"type": "fresh", "seed": 1}, )"
+        R"("dts": [0.01], "events": []})";
+    const auto p = scratchDir() / "legacy.dmo";
+    writeAll(p.string(), gzipEncode(body).value());
+    auto r = loadDemoFile(p);
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    EXPECT_EQ(r->sim, 1);
+    EXPECT_EQ(r->recordedWith, "3.11.0");
 }
 
 TEST(V3110Demo, LoadMissingFile) {
@@ -508,7 +634,8 @@ TEST(V3110Demo, PlayerInjectOrderWithinFrame) {
     // order — the simulation's faithfulness): the W's down AFTER the
     // E's down keeps both edges, in that order.
     DemoFile f;
-    f.version = kDemoFileVersion;
+    f.sim = kDemoSimVersion;
+    f.recordedWith = kDemoFileVersion;
     f.world.type = DemoWorldSpec::Type::Fresh;
     f.world.seed = 1;
     f.dts = {0.01};
@@ -701,7 +828,8 @@ TEST(V3110Demo, AuthorHoldExpansion) {
     world.type = DemoWorldSpec::Type::Fresh;
     world.seed = 42;
     const DemoFile f = authorDemoFile(world, *r);
-    EXPECT_EQ(f.version, kDemoFileVersion);
+    EXPECT_EQ(f.sim, kDemoSimVersion);
+    EXPECT_EQ(f.recordedWith, kDemoFileVersion);
     EXPECT_EQ(f.dts.size(), 31u);
     for (const double d : f.dts) {
         EXPECT_DOUBLE_EQ(d, kDemoAuthorDt);

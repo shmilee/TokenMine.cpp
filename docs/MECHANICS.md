@@ -1,4 +1,4 @@
-# 机制详解（现状 v3.12.0）
+# 机制详解（现状 v3.13.0）
 
 > 2026-11-06 报障刷新：现状 = **v3.12.0**（3.x 矩阵收官于 v3.11.0；v3.12.0 = 实机报障阴影缩尺）（3.x「世界
 > 扩展」期：v3.1.0 = V3-7 存档 gzip，门 191；v3.2.0 = V3-1 Phase A
@@ -14,7 +14,7 @@
 > 【V2-18 门 190，AO 世界光照】→ **225272【V3-6 门 200，填充感知雾 = 3.x
 > 首重锚】**；门 184–189 = 结构免疫第 65–70 次免重锚；门 191–199 =
 > 第 72–80 次；门 201–202 = 第 81–82 次免重锚（对 base19）【v3.0.0
-> banner = 第 71 次】）、PITS **393**。上一轮全面刷新
+> banner = 第 71 次】）、PITS **394**。上一轮全面刷新
 > （2026-11-02）止于 v2.0.0、2026-11-03 增量止于 v2.3.0（下条），本次把
 > v2.11.0 → v2.19.0 的机制（提前项 `[V2-19]` + 第二批 `[V2-11]`~`[V2-18]`，
 > 逐版见 `docs/archive/v2x/CHANGELOG.md`，细节证据见 `docs/archive/v2x/`
@@ -1012,14 +1012,29 @@
     快照恒等单测钉；**quit 帧未模拟尾部排除** `discardPendingFrame`
     记档偏离 3）
 - **demo 文件 = V3-7 确定性 gzip 容器**（10B 头全钉 + raw deflate 6 +
-  CRC32/ISIZE 尾）+ **严格 schema**：`version` 指纹 = 录制构建 TM_
-  VERSION【不匹配拒播点名「recorded with … incompatible」】/ `world` 双
-  键 fresh{seed}|save{slot}【双键·缺键·槽字符集拒】/ `dts`【负 / >
-  `kDemoMaxDt` 0.25 拒】/ `events` **封闭 8 型词表**（key_down/key_up/
-  mouse_down/mouse_up/mouse_move/wheel/gamepad_button/gamepad_axis——未
-  知 type 带 8 词表点名）+ per-type payload 面严格（意外键拒）；乱序/悬
-  空帧/gzip 损坏全点名 rc=1 带路径（门 201 S6 七面实证）；**零 format** =
-  独立文件族，存档 schema 30 零触碰。
+  CRC32/ISIZE 尾）+ **严格 schema（v3.13.0 双 schema = 独立 sim 版本）**：
+  现行文件 = `sim`（录制时 `kDemoSimVersion` = **回放准入唯一判定轴**，
+  独立于 TM_VERSION——**bump 纪律：仅帧锁定模拟语义变更**（update
+  循环/物理/AI/流体/生成/输入路由/demo pacing）**才 +1**；纯渲染/UI/
+  音频/内容数据/文档版本**不 bump** = demo 跨这些版本持续可放
+  【v3.12.0 阴影缩尺 = 不 bump 实例】）+ `recorded_with`（录制时构建
+  TM_VERSION 串，**仅信息展示**——回放日志行/结束面板，永不拒播）；
+  legacy 文件（pre-v3.13.0 `version` 指纹）= **零迁移映射 sim := 1 +
+  recorded_with := version**（旧严格门已证 record-build == replay-build
+  = sim 同期系，用户手头全部 .dmo 继续可放）；混用 schema（`version`
+  与 `sim`/`recorded_with` 同现）= 点名拒；**sim 不匹配 = rc 1 点名**
+  「demo sim X != this build sim Y (recorded with Z) - the simulation
+  semantics differ」+ `--demo-force` 逃生门（**仅 bypass sim 门**，
+  schema 严格性保留，WARN 点名；无 `--demo` 带 force = rc 2 点名）；
+  `world` 双键 fresh{seed}|save{slot}【双键·缺键·槽字符集拒】/ `dts`
+  【负 / > `kDemoMaxDt` 0.25 拒】/ `events` **封闭 8 型词表**
+  （key_down/key_up/mouse_down/mouse_up/mouse_move/wheel/gamepad_
+  button/gamepad_axis——未知 type 带 8 词表点名）+ per-type payload 面
+  严格（意外键拒）；乱序/悬空帧/gzip 损坏全点名 rc=1 带路径（门 201
+  S6 七面实证）；**零 format** = 独立文件族，存档 schema 30 零触碰；
+  **canary 纪律**（见 PROTOCOL.md E2E 协议）：4 个 shipped demo = 模拟
+  语义金丝雀，每版门内回放 savenorm EXACT——核心改动破坏 canary =
+  必须 bump sim + 重新 author（时间线 JSON 字节可复现）。
 - **注入内核**（`core/demo` 纯函数，三入口共享）：`DemoPlayer.
   injectForFrame` = 该帧全部 events **同序** → `m_input.handle*`（**Input
   公开事件入口 = pump 的 SDL 事件同款收口，零映射层** = E2E xdotool 同
@@ -1047,11 +1062,14 @@
   手柄 LB/RB）= 倍率 0.5→1→2**（切换落在 demo 帧边界之间 = 永不半帧，确
   定性；真实鼠标点击同触发 = 记档偏离 v1 局限，倍率仅 pacing）/ 手柄
   Start = 暂停、左摇杆 = 数字化步进 0.03 rad（记档偏离 7）。
-- **shipped 示例**：`assets/demos/example.dmo` **285 B / 266 帧 / 14 事件**
+- **shipped 示例**：`assets/demos/example.dmo` **294 B / 266 帧 / 14 事件**
   （W 走 50 帧 + LMB 指针锁定 + 俯角挖掘 ~3 s【2 块 dirt 被挖】+ E 背包
   开关 + C 三后视角 + 滚轮 zoom；`tools/make_example_demo.py` 确定性生成
   **重跑字节恒等**（手写 10B 钉头 PITS 385 纪律），`example_timeline.
-  json` 人类可读源）。
+  json` 人类可读源）+ 三个预设教程 demo（`tutorial_dig` /
+  `tutorial_build` / `tutorial_fly`，11-06 新增，时间线 JSON 源 + 逐字节
+  可复现，玩法见 GAMEPLAY.md「demo 回放」节速查表）——**4 件全 = canary
+  家族**（每版门内回放 savenorm EXACT）。
 
 ## 合成与容器
 

@@ -11,6 +11,54 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.13.0（2026-11-06）— demo 回放独立 sim 版本（旧 .dmo 零迁移直放，门 203 全 PASS）
+
+**用户报障**：`--demo assets/demos/example.dmo` 被拒「demo recorded
+with v3.11.0, this is v3.12.0 - incompatible」——旧设计把**构建版本串
+当模拟语义的代理**，v3.12.0 这种纯渲染常量版也误杀全部已录 demo。**
+用户定案设计**：demo 有独立版本号，游戏版本变化时按兼容性判断。
+
+**实现**：① `kDemoSimVersion = 1`（`src/core/demo.hpp` 新常量）= 回放
+准入**唯一判定轴**，独立于 TM_VERSION；**bump 纪律**：仅帧锁定模拟
+语义变更（update 循环/物理/AI/流体/生成/输入路由/demo pacing）才 +1
+——纯渲染/UI/音频/内容数据/文档版本**不 bump**（v3.12.0 阴影缩尺 =
+不 bump 实例）。② `recorded_with`（录制时 TM_VERSION 串）**仅信息展
+示**（回放日志行 + 结束面板新「recorded with」行，4 行 → 5 行布局）
+永不拒播。③ **legacy 映射零迁移**：旧 schema（仅 `version` 键）→
+sim := 1 + recorded_with := version（旧严格门已证 record-build ==
+replay-build = sim 同期系，用户手头全部 .dmo 继续可放）；新 schema =
+{sim int ≥1, recorded_with 非空串, world, dts, events}；`version` 与
+sim/recorded_with 同现 = 混用 schema 点名拒。④ sim 不匹配 = rc 1 点
+名「demo sim X != this build sim Y (recorded with Z) - the simulation
+semantics differ」+ `--demo-force` 逃生门（仅 bypass sim 门，schema
+严格性保留，WARN 点名；无 `--demo` 带 force = rc 2 点名）。⑤ **canary
+纪律**（PROTOCOL.md E2E 新条）：4 个 shipped demo = 模拟语义金丝雀，
+每版门内回放 savenorm EXACT——核心改动破坏 canary = 必须 bump + 重新
+author（时间线 JSON 字节可复现）。
+
+**门 203**：结构免疫第 83 次【S1 无输入 60f ×2 ≡ base19（committed
+config ui.scale 1.5 口径）逐字节 + savenorm EXACT；用户工作树
+ui.scale 2.0 口径 ×2 自洽——S1 首跑假失败 = 用户 config 调值（锚在
+1.5 时代捕获，时钟/XP 文本 4/3× = 2.0/1.5 精确比），PITS 394】；S2
+四 demo（含重新 author 的现行 schema 294 B example）回放 ×2 RAW 恒等
++ savenorm EXACT；**S2b 用户报障场景实证**【git 4531c42 旧 example.
+dmo（legacy `version` 3.11.0）回放成功 + 终档 savenorm ≡ 现行 schema
+回放 = 映射行为恒等】；S2c sim-2 拒 rc 1 点名 + force 旁路 rc 0 WARN；
+S6 force 无 --demo rc 2 点名；性能 A/B 同档【旧 = 648b80d v3.12.0 +
+g139 vs 新 = v3.13.0 + g139，900f 无输入：PERF-WIN upd/render/swap 三
+窗同档（新侧 win1 swap max 14955 ms = 一次性 OS 停顿 med 正常）+
+fluid·fires·spread·ents·stream 同档 + **终档 savenorm EXACT**（changes-
+Applied 9/2/1 vs 9/3/1 窗口差 = real-dt 追赶抖动 PITS 385 域，savenorm
+权威恒等）】。2784/2784（2777 基线 + V3-8a 手柄 open 修复 1【用户
+11-06 并行提交 d5a5ea6，本提交前已入树】+ 本版 +6：SimPinnedToOne /
+ParseLegacyMapping / ParseCurrentSchema / ParseRejectMixedSchemas /
+ParseRejectCurrentSchemaFieldShapes / LoadLegacyFileAccepted +
+LoadVersionMismatch 重钉为 LoadSimMismatch）。PITS 394（S1 锚假失败 = 用户 config 调值 + 时钟
+dawn 对齐映射误读 start 0.25 = 10:48 非 6:00；`day_cycle.hpp`
+startTimeOfDay 默认注释「// noon」随版更正）。4 个 demo 资产重新
+author（现行 schema，字节可复现 md5 恒等）。详见
+`docs/archive/phase-3.13.0.md`。
+
 ## v3.12.0（2026-11-06）— 实机报障：mob 阴影缩尺（1.5× → 1.0×，物理不动，门 202 全 PASS）
 
 **用户实机报障**：mob 阴影方块比 mob 大，落体瞬间阴影角还压在高处

@@ -28,8 +28,11 @@ v3.10.0 = V3-6 世界边缘雾（门 200，11-05：填充感知 fog end，
 回放（门 201，11-05：注入内核 + 编写/录制/回放三入口 + 观众只观察
 双 Input 路由 = 矩阵收官）；v3.12.0 = 实机报障阴影缩尺（门
 202，11-06：kMobShadowSideScale 1.5→1.0，物理 AABB 质心探针定案
-不动——MC 同款）**）——**3.x 矩阵 11 项全 ✅（v3.1.0–v3.11.0 门
-191–201）+ 矩阵后报障 v3.12.0（门 202）**；方向项（死亡统计屏 /
+不动——MC 同款）；**v3.13.0 = demo 独立 sim 版本（门 203，11-06：
+仅模拟语义变更才 bump + legacy 版本指纹零迁移直放 + --demo-force +
+4 demo canary）**）——**3.x 矩阵 11 项全 ✅（v3.1.0–v3.11.0 门
+191–201）+ 矩阵后报障 v3.12.0（门 202）+ v3.13.0（门 203）**；方向
+项（死亡统计屏 /
 Game Over / 末地 / 创造 / 多人）矩阵外立项需用户定案
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
@@ -89,7 +92,7 @@ Game Over / 末地 / 创造 / 多人）矩阵外立项需用户定案
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2777/2777**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2784/2784**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 30（V3-1 Phase B 下界维度：player.dimension 严格词表
   恒写 + nether 段 {blocks,fluids,states} + nether_entities 恒写 +
   派生 seed 不落盘；schema 其余与 29 一致，29 携新键 = version lie
@@ -188,6 +191,26 @@ Game Over / 末地 / 创造 / 多人）矩阵外立项需用户定案
   零 diff + crop 3× 目检同场景同羊同位】；性能 A/B 同档【changes-
   Applied 逐位 + 终档 savenorm EXACT】；PITS 392【DEBUG 事件行
   grep 假阴性】；详见 `docs/archive/phase-3.12.0.md`）；
+  门计数 203（**demo 独立 sim 版本 v3.13.0** 门 203 全 PASS：用户
+  报障 `--demo example.dmo` 被拒"recorded with v3.11.0, this is
+  v3.12.0 - incompatible"【旧设计 = 构建版本串当模拟语义代理，纯渲染
+  版误杀全部 demo】；**定案 = 独立 sim 版本** `kDemoSimVersion = 1`
+  【bump 纪律：仅帧锁定模拟语义变更（update/物理/AI/流体/生成/输入
+  路由/demo pacing）才 +1，纯渲染/UI/音频/内容/文档不 bump = v3.12.0
+  阴影缩尺不 bump 实例】+ `recorded_with` 构建串仅信息展示永不拒播
+  + **legacy `version` 指纹零迁移映射 sim 1**【用户手头 .dmo 全部继续
+  可放】+ 混用 schema 点名拒 + sim 不匹配 rc 1 点名 + `--demo-force`
+  逃生门【仅 bypass sim 门 schema 严格性保留 WARN 点名 / 无 --demo
+  带 force rc 2】；**canary 纪律**【4 shipped demo = 模拟语义金丝雀
+  每版门内回放 savenorm EXACT，破坏 = bump + 重新 author】；2784/
+  2784（= 2777 + V3-8a 手柄 1【d5a5ea6 并行提交】+ 本版 6）；结构免疫
+  第 83 次【S1 ≡ base19 committed config 口径逐
+  字节 + 用户 ui.scale 2.0 口径 ×2 自洽——锚假失败 = 用户 config 调
+  值 PITS 394】；S2 四 demo ×2 RAW + savenorm EXACT + **S2b 用户报
+  障场景实证**【git 4531c42 旧 example.dmo legacy 回放成功 + 终档 ≡
+  现行 schema 回放 = 映射行为恒等】；S2c sim-2 拒 + force 旁路；S6
+  force 无 --demo rc 2；性能 A/B 同档【changesApplied 逐位 + 终档
+  savenorm EXACT】；详见 `docs/archive/phase-3.13.0.md`）；
   门计数 201（**V3-9 demo 回放 v3.11.0** 门 201 全 PASS【**3.x
   矩阵收官**】：注入内核 = Input handle* 收口【与 xdotool 同款路径】
   + **双 Input 路由**【回放 = 观众 Input 为 SDL 单消费者 + 玩家通道

@@ -55,6 +55,12 @@ void printUsage() {
         "                    quits from it); composes with --frames\n"
         "                    (the truncated replay) and --save (the exit\n"
         "                    write of the replay's result)\n"
+        "  --demo-force    v3.13.0: with --demo, bypass the SIM version\n"
+        "                    gate (the demo's recorded simulation-\n"
+        "                    semantics version != this build's): the\n"
+        "                    replay runs anyway (a WARN is printed; the\n"
+        "                    result may be wrong if the simulation\n"
+        "                    differs) — the schema's strictness is kept\n"
         "  --demo-author <t> V3-9: expand the JSON action timeline <t> to a\n"
         "                    .dmo (the input's <stem>.dmo) and exit —\n"
         "                    STANDALONE headless (the save management's\n"
@@ -171,6 +177,8 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
             const char* v = nextValue(i, "--demo");
             if (!v) return false;
             args.demo = v;
+        } else if (arg == "--demo-force") {
+            args.demoForce = true;
         } else if (arg == "--demo-author") {
             const char* v = nextValue(i, "--demo-author");
             if (!v) return false;
@@ -234,6 +242,13 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
     if (demoCount > 1) {
         err = "--demo / --demo-author / --demo-record are mutually "
               "exclusive (one per run)";
+        return false;
+    }
+    // v3.13.0: --demo-force is the sim-mismatch ESCAPE of the --demo
+    // replay (it needs the replay entry point to be present).
+    if (args.demoForce && args.demo.empty()) {
+        err = "--demo-force requires --demo (it bypasses the replay's "
+              "sim version gate only)";
         return false;
     }
     // V3-9: --demo-author is STANDALONE headless (the timeline expands
@@ -381,11 +396,20 @@ int main(int argc, char** argv) {
     // strict schema + the version fingerprint reject before the window
     // boots; the world spec is the start-point authority).
     if (!args.demo.empty()) {
-        auto demo = loadDemoFile(args.demo);
+        auto demo = loadDemoFile(args.demo, args.demoForce);
         if (!demo.ok()) {
             std::fprintf(stderr, "Demo error: %s\n",
                          demo.error().message.c_str());
             return 1;
+        }
+        if (args.demoForce && demo->sim != kDemoSimVersion) {
+            std::fprintf(stderr,
+                         "Demo warning: --demo-force: demo sim %d != "
+                         "this build sim %d (recorded with %s) — the "
+                         "simulation semantics differ, the replay "
+                         "result may be wrong\n",
+                         demo->sim, kDemoSimVersion,
+                         demo->recordedWith.c_str());
         }
         const DemoFile& d = *demo;
         if (d.world.type == DemoWorldSpec::Type::Fresh) {

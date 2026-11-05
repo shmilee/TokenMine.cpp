@@ -41,7 +41,8 @@ namespace mc {
 // argument below can value-initialize it.
 struct DayCycleParams {
     double dayLengthSeconds = 240.0; // one full cycle
-    double startTimeOfDay = 0.25;    // noon
+    double startTimeOfDay = 0.25;    // 10:48 by the clockString mapping
+                                     // (the day-plateau sky)
 };
 
 class DayCycle {
