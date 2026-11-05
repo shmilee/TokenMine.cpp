@@ -2195,6 +2195,7 @@ void Game::renderUi() {
                     b.textured, b.color);
     }
 
+
     // 3D block-cube icons last: on top of every 2D element (the slot
     // backgrounds would otherwise cover them). The batch draws above may
     // have bound the font/icon textures to unit 0; the cube UVs live in
@@ -2227,6 +2228,82 @@ void Game::renderUi() {
                 Mat4::scale(s));
             m_renderer.draw(mesh, m_basicShader, Mat4::identity(), ortho,
                             model);
+        }
+    }
+
+    // -- V3-9: the demo replay's audience UI (replay mode only — a normal
+    // run executes ZERO of this block, the structural immunity). The
+    // batches are SELF-CONTAINED: each quad / text line gets its OWN
+    // UiBatch (no batchFor merge into the main `batches` — a merge would
+    // draw the demo's text at an EXISTING same-color batch's vector
+    // position, under the veil), and they are flushed HERE — AFTER the
+    // main 2D flush + the 3D block-cube icons (the demo player can open
+    // a panel mid-replay: the veil sits over every player-panel element
+    // including the cube icons), BEFORE the cursor tooltip + the effect
+    // tints + the hurt flash (their LAST-of-UI-passes discipline keeps
+    // them above). The badge (the corner "DEMO x<speed>" line — the
+    // ASCII 'x' stands for the multiplication sign, the font carries no
+    // U+00D7) is added LAST = above the veil (the death-screen's HUD-over-
+    // veil precedent); it sits BELOW the top-right clock (the clock's
+    // 16 px line at y 8..24, the badge at y 28). The strings are ENGLISH
+    // (the font's CJK set carries no demo vocabulary — the F3 overlay's
+    // English developer-tool precedent); the panel = the pause /
+    // finished state (the ESC's replay semantics: the pause MENU, not
+    // the exit; Q quits).
+    if (m_demoMode == DemoMode::Replay) {
+        std::vector<UiBatch> demoBatches;
+        auto demoQuad = [&demoBatches, &addQuadUv](const Vec4& color, int x,
+                                                   int y, int qw, int qh) {
+            UiBatch b;
+            b.color = color;
+            addQuadUv(b, x, y, qw, qh, Vec2 {0.0f, 0.0f}, Vec2 {1.0f, 1.0f});
+            demoBatches.push_back(std::move(b));
+        };
+        auto demoText = [this, &demoBatches](const std::string& text, int x,
+                                             int y, double scale,
+                                             const Vec4& color) {
+            UiBatch b;
+            b.color = color;
+            b.textured = true;
+            b.texture = &m_fontTexture;
+            makeTextVertices(text, x, y, scale, b.vertices);
+            demoBatches.push_back(std::move(b));
+        };
+        if (m_demoPaused || (m_demoEnded && m_demoEndPanelOpen)) {
+            demoQuad(Vec4 {0.0f, 0.0f, 0.0f, 0.55f}, 0, 0, w, h);
+            const std::string title =
+                m_demoPaused ? "Demo paused" : "Demo finished";
+            const std::string name = demoFileName(m_demoPath);
+            const std::string speed =
+                "Speed " + demoSpeedLabel(m_demoSpeed);
+            const std::string hint =
+                m_demoPaused ? "ESC to resume - Q to quit"
+                             : "ESC to keep watching - Q to quit";
+            const double s2 = fScale(2.0);
+            const double s1 = fScale(1.0);
+            demoText(title,
+                     w / 2 - static_cast<int>(textWidth(title, s2)) / 2,
+                     h / 2 - 56, s2, kText);
+            demoText(name, w / 2 - static_cast<int>(textWidth(name, s1)) / 2,
+                     h / 2 - 12, s1, kTextDim);
+            demoText(speed,
+                     w / 2 - static_cast<int>(textWidth(speed, s1)) / 2,
+                     h / 2 + 10, s1, kText);
+            demoText(hint,
+                     w / 2 - static_cast<int>(textWidth(hint, s1)) / 2,
+                     h / 2 + 32, s1, kTextDim);
+        }
+        // The badge (always, above the veil when one is up).
+        const std::string badge = "DEMO " + demoSpeedLabel(m_demoSpeed);
+        demoText(badge,
+                 w - static_cast<int>(textWidth(badge, fScale(1.0))) - kF3Margin,
+                 28, fScale(1.0), kTextDim);
+        // The flush (this position = after the main 2D flush + the 3D
+        // cube icons, before the tooltip / tints / hurt flash).
+        for (auto& b : demoBatches) {
+            drawUiBatch(b.vertices, ortho, b.textured ? *b.texture
+                                                      : m_fontTexture,
+                        b.textured, b.color);
         }
     }
 

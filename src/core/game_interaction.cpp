@@ -55,6 +55,30 @@ float Game::aimReach() const {
                : kReach;
 }
 
+Vec3 Game::aimForward() const {
+    // V3-9: the aim ray's direction — every world-facing ray (the break
+    // / the attack's knockback / the mob / the bow / the bucket / the
+    // slab hit point) reads this. The NORMAL path = the camera's forward
+    // (the pre-V3-9 expression, bit-identically — the function's only
+    // cost is the mode check). The REPLAY = the mode's BASE view (the
+    // audience's orbit is RENDER-ONLY — it re-resolves the camera but
+    // must not steer the demo player's aim: the input-routing red line,
+    // the demo stays the pure function of its file). The ThirdFront's
+    // flip is the pre-V3-9 camera's own (the screen-center aim, V2-1).
+    if (m_demoMode == DemoMode::Replay) {
+        float yaw = m_player->yaw;
+        float pitch = m_player->pitch;
+        if (m_cameraMode == CameraMode::ThirdFront) {
+            const ThirdPersonAngles fa = thirdPersonFrontAngles(yaw, pitch);
+            yaw = fa.yaw;
+            pitch = fa.pitch;
+        }
+        const float cp = std::cos(pitch);
+        return {std::sin(yaw) * -cp, std::sin(pitch), std::cos(yaw) * -cp};
+    }
+    return m_camera.forward();
+}
+
 void Game::handleInteraction(double dt) {
     // CRAFT-3: the listener for the spatialized sounds (the material dig /
     // place / break at the block, the pickup at the item) — the camera
@@ -575,7 +599,7 @@ std::optional<BlockHit> Game::targetBlock() const {
     // eye, D from the real eye). First / ThirdBack: aimReach() = kReach,
     // bit-identical to the pre-V2-1 literal.
     return raycastBlock(currentWorld(), m_blocks, m_player->eyePosition(),
-                        m_camera.forward(), aimReach());
+                        aimForward(), aimReach());
 }
 
 void Game::resetBreaking() {
@@ -645,7 +669,7 @@ std::optional<Game::MobHit> Game::targetMob() const {
     // SAME point, so the block-vs-mob occlusion comparison stays
     // consistent; first person is bit-identical as above).
     const Vec3 o = m_player->eyePosition();
-    const Vec3 d = m_camera.forward();
+    const Vec3 d = aimForward();
     for (const auto& entity : currentEntities()) {
         const MobEntity* mob =
             dynamic_cast<const MobEntity*>(entity.get());
@@ -693,7 +717,7 @@ void Game::updateAttacking(double dt, MobEntity& mob) {
             }
         }
     }
-    const Vec3 f = m_camera.forward();
+    const Vec3 f = aimForward();
     Vec3 kb {f.x, 0.0f, f.z};
     const float len = std::sqrt(kb.x * kb.x + kb.z * kb.z);
     if (len > 1e-4f) {
@@ -814,7 +838,7 @@ void Game::fireBow() {
     // age / kill plane, and a block impact STICKS it (Phase 24). Arrows
     // are not saved (ephemeral, like mobs).
     const float power = bowPower(m_interaction.bowDrawSeconds);
-    const Vec3 f = m_camera.forward();
+    const Vec3 f = aimForward();
     // UX-8g: the arrow leaves from in front of the EYE in both modes
     // (first person: m_camera.position == eyePosition = the bit-
     // identical legacy origin). Third person the camera sits 4 blocks
@@ -1413,7 +1437,7 @@ void Game::placeBlock() {
         // targetBlock ray — the BlockHit's distance is the ray parameter,
         // so the hit point is reconstructible, the targetBlock contract).
         const Vec3 hitPoint =
-            m_player->eyePosition() + m_camera.forward() * hit->distance;
+            m_player->eyePosition() + aimForward() * hit->distance;
         slabPlaceState =
             slabStateFromHit(hitPoint, hit->normal,
                              static_cast<float>(target.y));
@@ -1818,7 +1842,7 @@ bool Game::tryFluidBucket() {
         // — First / ThirdBack bit-identical).
         const std::optional<BlockPos> cell =
             raycastFluid(world, m_blocks, m_player->eyePosition(),
-                         m_camera.forward(), aimReach());
+                         aimForward(), aimReach());
         // A source cell is level kMaxFluidLevel (flowing cells are lower
         // and cannot be collected, Minecraft). A block cell reads dry.
         const std::optional<FluidKind> kind =
@@ -1921,7 +1945,7 @@ bool Game::tryFluidBucket() {
         // reach budget in both modes (V2-1: the budget is aimReach() —
         // front view D + kReach; first person bit-identical).
         fluidHit = raycastFluid(world, m_blocks, m_player->eyePosition(),
-                                m_camera.forward(), aimReach());
+                                aimForward(), aimReach());
     }
     // The pour cell (bucketPourTarget): the face neighbor of the hit
     // block (the placement-target convention — the block ray passes

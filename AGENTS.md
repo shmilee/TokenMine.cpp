@@ -23,7 +23,12 @@ sand walk_speed_factor 0.4 数据驱动减速，全 nether-scoped overworld
 walks_on_lava 旗 + 下界生成池零新基建——Phase B 预留槽兑现）；
 v3.9.0 = V3-5 建筑内容族（门 199，11-05：黏土链/石砖/苔石/15 色
 陶瓦染色族/水底 sediment 生成 pass，核心仅 worldgen 4 文件）；
-v3.10.0 = V3-6 世界边缘雾（门 200，11-05：填充感知 fog end = min(静态, 填充盘 cheb 半径×16)，**base19 重锚首重锚**，稳态位级恒等）**；下一项 **V3-9 demo 回放【矩阵收官】**）
+v3.10.0 = V3-6 世界边缘雾（门 200，11-05：填充感知 fog end，
+**base19 重锚首重锚**，稳态位级恒等）；**v3.11.0 = V3-9 demo
+回放（门 201，11-05：注入内核 + 编写/录制/回放三入口 + 观众只观察
+双 Input 路由 = 矩阵收官）**）——**3.x 矩阵 11 项全 ✅（v3.1.0–
+v3.11.0 门 191–201）**；方向项（死亡统计屏 / Game Over / 末地 /
+创造 / 多人）矩阵外立项需用户定案
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -82,7 +87,7 @@ v3.10.0 = V3-6 世界边缘雾（门 200，11-05：填充感知 fog end = min(�
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2734/2734**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2777/2777**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 30（V3-1 Phase B 下界维度：player.dimension 严格词表
   恒写 + nether 段 {blocks,fluids,states} + nether_entities 恒写 +
   派生 seed 不落盘；schema 其余与 29 一致，29 携新键 = version lie
@@ -103,10 +108,10 @@ v3.10.0 = V3-6 世界边缘雾（门 200，11-05：填充感知 fog end = min(�
   191【V3-7】= 第 72 次 + 门 192【V3-1
   Phase A 门框】= 第 73 次 + 门 193【V3-8 手柄】= 第 74 次 + 门 194
   【V3-1 Phase B 下界】= 第 75 次 + 门 195【V3-2 Part 1 下界内容族】
-  = 第 76 次 + 门 196【V3-4 netherite 材料链】= 第 77 次 + 门 197【V3-2 Part 2 下界深化】= 第 78 次 + 门 198【V3-3 下界 mob】= 第 79 次 + 门 199【V3-5 建筑内容族】= 第 80 次免重锚
+  = 第 76 次 + 门 196【V3-4 netherite 材料链】= 第 77 次 + 门 197【V3-2 Part 2 下界深化】= 第 78 次 + 门 198【V3-3 下界 mob】= 第 79 次 + 门 199【V3-5 建筑内容族】= 第 80 次 + 门 201【V3-9 demo 回放】= 第 81 次免重锚
   【v3.0.0 banner = 第 71 次】——存档/门框/手柄/惰性下界/下界内容/
   材料链/下界深化/下界 mob = 渲染无关零像素【下界内容 = nether-only + 惰性下界；atlas
-  16×16 幂二增长像素行恒等；材料链 = 纯物品内容不在默认热栏；下界深化 = nether-scoped 全维度门；下界 mob = 下界池 + atlas 空格零移位；建筑内容 = 水底生成不可见 + 生成内容不入 diff**）；PITS
+  16×16 幂二增长像素行恒等；材料链 = 纯物品内容不在默认热栏；下界深化 = nether-scoped 全维度门；下界 mob = 下界池 + atlas 空格零移位；建筑内容 = 水底生成不可见 + 生成内容不入 diff；demo 回放 = 三旗 absent 位级恒等（tap 判空分支 + demo 批零构造）**）；PITS
   375-379 + **PITS 380**（spawn 成功行无 'pick' / 门场景洞穴密封 /
   CAVE config seed 归属 / bob diff 带色相审计）+ **PITS 381**（热栏
   key→RMB ≥0.15s / 活体掉落物品不可作终档断言 / 羊静止窗）+
@@ -145,7 +150,13 @@ v3.10.0 = V3-6 世界边缘雾（门 200，11-05：填充感知 fog end = min(�
   y≥55 参考 air 区】/ ② 开放水源漫溢【源水扩同层邻 air，无围堰池
   32→402 格】——密封池 = 满底 + 顶周围墙环 / ③ 发货世界程序湖
   ~30 块外 fluid-settle 编辑入档【x25-30 y34 level 6-7 确定性】——
-  场景断言须自格 scoped 非全量计数）；
+  场景断言须自格 scoped 非全量计数；**PITS 391**（demo 门脚本六坑：① UI 批绘制序——addText/
+  addQuad 追加进已冲刷批次 = 顶点永不消费【独立批自含冲刷】/ ② 截图
+  = swap 后读 back 落后一渲染帧既有语义【放完态退出需双渲染才可
+  捕获】/ ③ 录制带 --save = 槽 spec 被退出写覆写终态 = 闭环起点漂
+  移【fresh 录制】/ ④ author 输出 = 输入基名 + .dmo / ⑤ g139 标记
+  锚 gameplay 循环——新循环（回放）perf 树手工镜像 / ⑥ 暂停态 +
+  --frames = 设计不退出【headless 退出仅 m_demoFrame ≥ total】）；
   门计数 195（**V3-2/Phase C Part 1 下界内容族 v3.5.0** 门 195 全
   PASS：**D9 带修订 = 下界可航行**【编排者布局裁决：v3.4.0 实心岩板
   埋传送落点实证不可探索 → MC 下界废土形态 = 熔岩海 5-31 + netherrack
@@ -161,6 +172,23 @@ v3.10.0 = V3-6 世界边缘雾（门 200，11-05：填充感知 fog end = min(�
   双臂【传送空腔截图 ×2 恒等 + 观感实证 / 下界采矿 quartz 入库存 +
   PITS 7 续破 + PITS 377 磁力边缘实证】；S6 5/5 init 点名；详见
   `docs/archive/phase-3.5.0.md`）；
+  门计数 201（**V3-9 demo 回放 v3.11.0** 门 201 全 PASS【**3.x
+  矩阵收官**】：注入内核 = Input handle* 收口【与 xdotool 同款路径】
+  + **双 Input 路由**【回放 = 观众 Input 为 SDL 单消费者 + 玩家通道
+  零 pump 纯注入 = 改世界操作观众通道无消费者 结构性零遗漏】+ 编写
+  /录制/回放三 CLI 旗互斥 + demo 文件 = V3-7 gzip 容器严格 schema
+  【version 指纹拒播 / 乱序 / 未知 type 带 8 词表 / world 双键 /
+  gzip 损坏】+ 0.5× = render-only 保持【帧锁定不双推】+ --frames 按
+  模拟帧计【任意倍率同终态】+ 观众 orbit render-only【aimForward 不
+  偷 demo 瞄准】+ save 引用槽永不回写观察红线 + shipped 示例 demo
+  285 B 幂等；2777/2777（+43）；结构免疫第 81 次【S1 ≡ base19 +
+  EXACT】；S2 六臂【回放 ×2 首放固化 / 录制→回放闭环 2810 B / 编写
+  臂位移 4.121 / 观众路由姿态恒等 / 变速双向 EXACT+76px 角标 / 结束
+  面板 lum 32.0】；S6 7 面点名；性能 A/B 同档【回放自成本 sub-ms】；
+  **门内捕获修复 demo UI 绘制序缺陷**【块在主批 flush 后 = 顶点不
+  消费 + 截图 = back buffer 落后一帧既有语义 → 独立批 + headless
+  双渲染 + badge 移时钟下】；8 偏离；详见
+  `docs/archive/phase-3.11.0.md`）；
   门计数 200（**V3-6 世界边缘雾 v3.10.0** 门 200 全 PASS【**base19
   重锚首重锚 225272 B**】：编排者实证定案【无输入 worker = 16 列后
   零扩展 PIPE-1 纪律 → 锚图"浮空截面" = 演示区边界 32-45 块 < 雾

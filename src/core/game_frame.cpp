@@ -84,6 +84,102 @@ std::uint64_t asU64(int v) {
 
 } // namespace
 
+// ---------------------------------------------------------------------------
+// V3-9: the per-frame camera sync — the pre-V3-9 update()'s camera block,
+// EXTRACTED VERBATIM (the mode's base view: first person the legacy eye
+// assignment bit-exactly; third person the orbit resolve at the session's
+// zoomed distance; the front view at the flipped angles — the UX-4 /
+// V2-1 / V2-19 comments follow the code). update() calls it at the same
+// point (the bit-identical normal run); the replay's still frames (the
+// pause menu / the finished panel / the observation) call it too so the
+// audience orbit stays live without the simulation.
+// ---------------------------------------------------------------------------
+void Game::syncCamera() {
+    // UX-4: first person keeps the legacy assignment bit-exactly (the
+    // camera is the eye). Third person orbits kThirdPersonDistance from
+    // the eye on the view's own sphere and clamps against the first
+    // occluding block face (the pure read-only resolve in
+    // core/third_person — the campfire pattern). V2-1: the front view is
+    // the SAME resolve executed at the flipped view angles
+    // (thirdPersonFrontAngles) — the camera in front of the player,
+    // looking at it. The mode is session state (never saved, defaults
+    // to First), so a no-input run stays on the legacy path.
+    m_camera.yaw = m_player->yaw;
+    m_camera.pitch = m_player->pitch;
+    if (m_cameraMode == CameraMode::ThirdBack) {
+        // 2.0.0: orbit kThirdPersonOrbitHeight ABOVE the eye along the
+        // view's up axis (the Minecraft third-person convention) so the
+        // screen-center crosshair no longer sits on the player's head.
+        // The aim rays still leave from eyePosition() in both modes
+        // (UX-8g red line, untouched); the screen-center ray is the
+        // view's own forward — parallel to the eye ray, offset by the
+        // lift along up_cam = the fixed third-person parallax
+        // (documented deviation, the MC third-person look).
+        // V2-19: the wheel-zoomed session distance (default
+        // kThirdPersonDistance — a no-input run resolves bit-identically;
+        // the orbit center is distance-INDEPENDENT — the fixed 0.4 lift —
+        // so it keeps its pre-V2-19 signature).
+        m_camera.position = resolveThirdPersonCamera(
+            currentWorld(), m_blocks,
+            thirdPersonOrbitCenter(m_player->eyePosition(), m_player->yaw,
+                                   m_player->pitch),
+            m_player->yaw, m_player->pitch, m_thirdPersonDistance);
+    } else if (m_cameraMode == CameraMode::ThirdFront) {
+        // V2-1: front view = the back camera's resolve run at the flipped
+        // view angles (thirdPersonFrontAngles): the camera sits
+        // kThirdPersonDistance IN FRONT of the eye, looking at the
+        // player (the player's front is visible). The orbit center still
+        // uses the PLAYER's angles (up_cam is invariant under the flip —
+        // the same 0.4 lift, so the head stays 29-96 px below the screen
+        // center as in the back view). The occlusion / fluid / embedded
+        // clamps apply symmetrically (the same geometry, mirrored about
+        // the orbit center). The aim rays still leave from eyePosition()
+        // (UX-8g); the direction is now the camera's own forward = the
+        // player's backward, and the reach is extended (aimReach — see
+        // the V2-1 note in game_interaction, the MC front-view
+        // convention).
+        const ThirdPersonAngles fa =
+            thirdPersonFrontAngles(m_player->yaw, m_player->pitch);
+        m_camera.yaw = fa.yaw;
+        m_camera.pitch = fa.pitch;
+        // V2-19: the same wheel-zoomed session distance (the front view
+        // zooms identically — one value per session, the design's
+        // single-value sharing).
+        m_camera.position = resolveThirdPersonCamera(
+            currentWorld(), m_blocks,
+            thirdPersonOrbitCenter(m_player->eyePosition(), m_player->yaw,
+                                   m_player->pitch),
+            fa.yaw, fa.pitch, m_thirdPersonDistance);
+    } else {
+        m_camera.position = m_player->eyePosition(); // First: legacy
+    }
+
+    // V3-9: the AUDIENCE orbit (replay only, RENDER-ONLY): the
+    // observation view = the mode's base angles + the orbit offset the
+    // audience's mouse / gamepad sticks accumulate, the camera
+    // re-resolved around the eye at the offset angles (the third-
+    // person geometry — the single trig source; the session's zoomed
+    // distance, the base's own). A ZERO orbit skips the branch
+    // entirely (the pre-V3-9 camera path, bit-exactly — the First's
+    // legacy eye, the Third* base resolves). The orbit never touches
+    // the simulation: the aim rays read aimForward (the player's base
+    // view), the offset is session state (never saved), the player's
+    // yaw / pitch stay the demo's.
+    if (m_demoMode == DemoMode::Replay &&
+        (m_demoOrbitYaw != 0.0f || m_demoOrbitPitch != 0.0f)) {
+        const float oyaw = m_camera.yaw + m_demoOrbitYaw;
+        const float opitch = std::clamp(
+            m_camera.pitch + m_demoOrbitPitch, -kAudienceOrbitMaxPitch,
+            kAudienceOrbitMaxPitch);
+        m_camera.position = resolveThirdPersonCamera(
+            currentWorld(), m_blocks,
+            thirdPersonOrbitCenter(m_player->eyePosition(), oyaw, opitch),
+            oyaw, opitch, m_thirdPersonDistance);
+        m_camera.yaw = oyaw;
+        m_camera.pitch = opitch;
+    }
+}
+
 void Game::update(double dt) {
     // Chunk streaming (Phase 14) + worker meshing (PIPE-1) — frame
     // pipeline, the race-free part: every worker job from the previous
@@ -245,64 +341,10 @@ void Game::update(double dt) {
     // root: the AABB overlap is the only trigger, worldgen places no
     // portal blocks — the stateful worldgen rejection).
     updatePortalEntry();
-    // UX-4: first person keeps the legacy assignment bit-exactly (the
-    // camera is the eye). Third person orbits kThirdPersonDistance from
-    // the eye on the view's own sphere and clamps against the first
-    // occluding block face (the pure read-only resolve in
-    // core/third_person — the campfire pattern). V2-1: the front view is
-    // the SAME resolve executed at the flipped view angles
-    // (thirdPersonFrontAngles) — the camera in front of the player,
-    // looking at it. The mode is session state (never saved, defaults
-    // to First), so a no-input run stays on the legacy path.
-    m_camera.yaw = m_player->yaw;
-    m_camera.pitch = m_player->pitch;
-    if (m_cameraMode == CameraMode::ThirdBack) {
-        // 2.0.0: orbit kThirdPersonOrbitHeight ABOVE the eye along the
-        // view's up axis (the Minecraft third-person convention) so the
-        // screen-center crosshair no longer sits on the player's head.
-        // The aim rays still leave from eyePosition() in both modes
-        // (UX-8g red line, untouched); the screen-center ray is the
-        // view's own forward — parallel to the eye ray, offset by the
-        // lift along up_cam = the fixed third-person parallax
-        // (documented deviation, the MC third-person look).
-        // V2-19: the wheel-zoomed session distance (default
-        // kThirdPersonDistance — a no-input run resolves bit-identically;
-        // the orbit center is distance-INDEPENDENT — the fixed 0.4 lift —
-        // so it keeps its pre-V2-19 signature).
-        m_camera.position = resolveThirdPersonCamera(
-            currentWorld(), m_blocks,
-            thirdPersonOrbitCenter(m_player->eyePosition(), m_player->yaw,
-                                   m_player->pitch),
-            m_player->yaw, m_player->pitch, m_thirdPersonDistance);
-    } else if (m_cameraMode == CameraMode::ThirdFront) {
-        // V2-1: front view = the back camera's resolve run at the flipped
-        // view angles (thirdPersonFrontAngles): the camera sits
-        // kThirdPersonDistance IN FRONT of the eye, looking at the
-        // player (the player's front is visible). The orbit center still
-        // uses the PLAYER's angles (up_cam is invariant under the flip —
-        // the same 0.4 lift, so the head stays 29-96 px below the screen
-        // center as in the back view). The occlusion / fluid / embedded
-        // clamps apply symmetrically (the same geometry, mirrored about
-        // the orbit center). The aim rays still leave from eyePosition()
-        // (UX-8g); the direction is now the camera's own forward = the
-        // player's backward, and the reach is extended (aimReach — see
-        // the V2-1 note in game_interaction, the MC front-view
-        // convention).
-        const ThirdPersonAngles fa =
-            thirdPersonFrontAngles(m_player->yaw, m_player->pitch);
-        m_camera.yaw = fa.yaw;
-        m_camera.pitch = fa.pitch;
-        // V2-19: the same wheel-zoomed session distance (the front view
-        // zooms identically — one value per session, the design's
-        // single-value sharing).
-        m_camera.position = resolveThirdPersonCamera(
-            currentWorld(), m_blocks,
-            thirdPersonOrbitCenter(m_player->eyePosition(), m_player->yaw,
-                                   m_player->pitch),
-            fa.yaw, fa.pitch, m_thirdPersonDistance);
-    } else {
-        m_camera.position = m_player->eyePosition(); // First: legacy
-    }
+    // UX-4 / V2-1 / V2-19: the per-frame camera sync (the mode's base
+    // view — extracted VERBATIM into syncCamera(); the V3-9 replay's
+    // still frames call it too for the live audience orbit).
+    syncCamera();
 
     // SURV-2: the oxygen / drowning pass (the frame-locked class — driven
     // by m_frameCount, not dt, like the day cycle; the pure step + the

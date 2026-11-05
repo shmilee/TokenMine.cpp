@@ -34,6 +34,7 @@
 #include "core/bed.hpp"
 #include "core/camera.hpp"
 #include "core/config.hpp"
+#include "core/demo.hpp"
 #include "core/difficulty.hpp"
 #include "core/enchanting.hpp"
 #include "core/error.hpp"
@@ -146,6 +147,21 @@ struct GameArgs {
     std::optional<std::pair<std::string, std::string>> copySave; // src, dst
     std::optional<std::pair<std::string, std::string>> renameSave;
     std::optional<std::string> deleteSave;
+    // V3-9: the demo family (main.cpp enforces the mutual exclusion:
+    // at most one of the three per run). demo = the --demo <file.dmo>
+    // replay (main LOADS + PARSES the file headless before the Game
+    // boots and fills demoFile; the world spec is applied to seed /
+    // saveSlot there, the demo is the start-point authority).
+    // demoAuthor = the --demo-author <timeline.json> STANDALONE
+    // headless run (main expands + writes the .dmo and exits — the
+    // game never boots). demoRecord = the --demo-record [out.dmo]
+    // mode (normal gameplay + the Input boundary tap; the exit saves
+    // the .dmo; demoRecordOut empty = data/demos/rec_<ts>.dmo).
+    std::filesystem::path demo;
+    std::optional<DemoFile> demoFile;
+    std::filesystem::path demoAuthor;
+    bool demoRecord = false;
+    std::filesystem::path demoRecordOut;
 };
 
 class Game {
@@ -199,7 +215,40 @@ public:
 
     Result<void> init(const GameArgs& args);
     // Runs the main loop. Returns the process exit code (0 = clean exit).
+    // V3-9: the loop is BRANCHED on the demo mode — Off / Record run
+    // runGameplayLoop (the pre-V3-9 loop verbatim + the record's dt
+    // append, flag-gated); Replay runs runDemoReplay (the audience
+    // owns the SDL queue, the demo's dts are the only time source, the
+    // wall clock only paces the rendering). Three flags absent =
+    // runGameplayLoop = the bit-identical normal run (the structural
+    // immunity root).
     int run();
+    // The gameplay loop (Off / Record) — the pre-V3-9 main loop body,
+    // verbatim (the dt = the wall clock, clamped kMaxDt).
+    void runGameplayLoop(double lastFrame);
+    // The demo replay loop (see run()). The audience Input pumps the
+    // SDL queue (the single-consumer discipline — the player's Input
+    // is demo-fed, never pumped); the demo frame's events inject into
+    // the player's Input in file order; dt = the demo's dts; the
+    // 0.5x hold renders twice (the second render-only — no update, no
+    // m_frameCount); the audience's whitelist (orbit / speed / pause /
+    // view mode / quit-from-panel) never touches the simulation.
+    void runDemoReplay();
+    // The per-frame camera sync (the pre-V3-9 update()'s camera block,
+    // extracted VERBATIM — the player's state + the session's camera
+    // mode / zoom; update() calls it at the same point, the bit-
+    // identical normal run) + the V3-9 replay's audience orbit (the
+    // render-only offset, re-resolved around the eye — see the
+    // implementation). The replay's paused / hold renders call it too
+    // (the orbit stays live without the simulation).
+    void syncCamera();
+    // The aim ray's direction (every world-facing ray: the break /
+    // attack / mob / bow / bucket / slab hit point). The normal path
+    // = the camera's forward (bit-identical — the pre-V3-9
+    // expression); the replay = the mode's BASE view (no audience
+    // orbit — the orbit is render-only, the demo's aim stays the
+    // player's faithful view, the input-routing red line).
+    Vec3 aimForward() const;
 
     const Config& config() const { return m_config; }
     AssetManager& assets() { return m_assets; }
@@ -2272,6 +2321,48 @@ private:
     double m_fpsSmoothed = 0.0;
     double m_lastTitleUpdate = 0.0;
     bool m_initialized = false;
+
+    // V3-9 (demo replay / record / author): the family's state, APPENDED
+    // last (the existing members' declaration order is untouched — the
+    // family is new ground). Three CLI flags absent = m_demoMode Off =
+    // the bit-identical normal run: m_audienceInput is constructed but
+    // NEVER pumped (the SDL queue's sole consumer stays m_input), no
+    // injection (m_demoPlayer empty), no tap (m_input's event tap is
+    // null), no pacing, no UI (every render gate reads m_demoMode),
+    // syncCamera's replay branch never runs (the structural immunity
+    // root).
+    Input m_audienceInput; // the REPLAY's SDL-queue consumer (the
+                           // audience channel — separate from the
+                           // player's m_input, the routing boundary)
+    enum class DemoMode { Off, Replay, Record };
+    DemoMode m_demoMode = DemoMode::Off;
+    // Replay (--demo): the injection kernel (the demo's dts + events)
+    // + the playback state. The wall-clock fields are PACING ONLY —
+    // never the simulation (the demo's dts are the time source; a
+    // slow machine drops render frames, the simulation does not chase
+    // — the documented deviation).
+    std::optional<DemoPlayer> m_demoPlayer;
+    std::string m_demoPath; // the .dmo's path (the log + the panel)
+    int m_demoFrame = 0;    // the demo frame index (0-based)
+    double m_demoSpeed = kDemoSpeedDefault;
+    bool m_demoPaused = false; // the ESC pause menu (NOT the exit)
+    bool m_demoEnded = false;  // the sequence finished
+    bool m_demoEndPanelOpen = true; // the finished panel (ESC = keep
+                                    // observing the still last frame)
+    double m_demoPacingAnchorWall = 0.0; // the re-anchor's wall time
+    std::int64_t m_demoPacingAnchorUs = 0; // the demo-time us at the
+                                           // anchor (the int64 drift
+                                           // guard)
+    std::int64_t m_demoTimeUs = 0; // the completed demo frames' us
+                                   // (the llround(dt x 1e6) sum)
+    // The audience camera's orbit (render-only — syncCamera re-resolves
+    // around the eye; never saved, never touches the simulation; the
+    // aim rays read aimForward, not the orbit — the red line).
+    float m_demoOrbitYaw = 0.0f;
+    float m_demoOrbitPitch = 0.0f;
+    // Record (--demo-record): the boundary-tap kernel (the Input's
+    // event tap closure; the world spec set in init).
+    DemoRecorder m_demoRecorder;
 };
 
 } // namespace mc

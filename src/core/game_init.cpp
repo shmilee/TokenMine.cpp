@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <ctime>
 #include <numbers>
 #include <sstream>
 
@@ -61,6 +62,22 @@ constexpr float kOutlineScale = 1.004f;
 // name, or the box index when the box is unnamed).
 std::string boxRef(const MobBox& box, std::size_t index) {
     return box.name.empty() ? std::to_string(index) : box.name;
+}
+
+// V3-9: the record's default file name (data/demos/rec_<ts>.dmo — the
+// wall clock names the file, never its CONTENT: the recording is
+// byte-deterministic for the same session, the timestamp is the user's
+// convenience, the PITS 15 second-run collision is avoided by the
+// seconds).
+std::string defaultRecordName() {
+    std::time_t t = std::time(nullptr);
+    std::tm tmv {};
+    localtime_r(&t, &tmv);
+    char buf[48];
+    std::snprintf(buf, sizeof(buf), "rec_%04d%02d%02d_%02d%02d%02d.dmo",
+                  tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday,
+                  tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+    return std::string(buf);
 }
 
 } // namespace
@@ -2310,6 +2327,52 @@ Result<void> Game::init(const GameArgs& args) {
                 std::to_string(seed) + ", view_distance=" +
                 std::to_string(viewDistance) + ")");
 
+    // --- V3-9: the demo mode's state (the three flags absent = Off —
+    // the bit-identical normal run below) ---------------------------------
+    if (m_args.demoFile.has_value()) {
+        m_demoMode = DemoMode::Replay;
+        // The emplace (DemoPlayer holds the file's REFERENCE — the
+        // m_args member's lifetime covers the session; no move).
+        m_demoPlayer.emplace(*m_args.demoFile);
+        m_demoPath = m_args.demo.string();
+        // The demo's SAVE spec references a slot (deviation 6: not
+        // embedded) — a deleted slot is the named reject HERE (the
+        // tryLoadSave's "starting fresh" silent fallback is out: a
+        // save demo must start from its state).
+        const DemoWorldSpec& spec = m_args.demoFile->world;
+        if (spec.type == DemoWorldSpec::Type::Save &&
+            !std::filesystem::exists(savePath())) {
+            return MC_FAIL("demo's save slot '" + spec.slot +
+                           "' not found (the demo references the slot, "
+                           "it is not embedded — restore it or re-"
+                           "record)");
+        }
+    } else if (m_args.demoRecord) {
+        m_demoMode = DemoMode::Record;
+        DemoWorldSpec spec;
+        if (m_args.saveSlot.has_value()) {
+            // The record's start point = the slot (the replay loads
+            // it — the slot's state at the REPLAY is the start; a
+            // modified slot shifts it, the documented boundary).
+            spec.type = DemoWorldSpec::Type::Save;
+            spec.slot = *m_args.saveSlot;
+        } else {
+            spec.type = DemoWorldSpec::Type::Fresh;
+            spec.seed = seed; // the config's (the --seed-overridden)
+        }
+        m_demoRecorder.setWorld(spec);
+        // The boundary tap (record-first-then-inject — the Input fires
+        // it BEFORE the state mutation; the null tap in every other
+        // mode = the bit-identical run). The frame attribution = the
+        // loop's m_frameCount at the tap moment (the simulated frame
+        // the event feeds).
+        m_input.setEventTap([this](const InputEvent& ev) {
+            m_demoRecorder.tapEvent(ev, m_frameCount);
+        });
+        MC_LOG_INFO("Demo record mode (world: " +
+                    demoWorldDescription(spec) + ")");
+    }
+
     // --- assets -----------------------------------------------------------
     auto assetRoot = m_assets.setRoot("assets");
     MC_TRY(assetRoot);
@@ -2330,6 +2393,17 @@ Result<void> Game::init(const GameArgs& args) {
     auto scene = buildScene();
     MC_TRY(scene);
 
+    // V3-9: the replay's SAVE spec loaded the slot (buildScene's
+    // tryLoadSave) — the OBSERVATION-ONLY red line: the referenced
+    // slot is NEVER written back (the replay's edits — the mined
+    // blocks, the picked-up drops — stay in the session; the fresh
+    // spec + --save keeps the slot: that one is the user's EXIT write
+    // of the replay's result, not the demo's reference).
+    if (m_demoMode == DemoMode::Replay &&
+        m_args.demoFile->world.type == DemoWorldSpec::Type::Save) {
+        m_args.saveSlot.reset();
+    }
+
     m_initialized = true;
     return {};
 }
@@ -2343,6 +2417,84 @@ int Game::run() {
                                    : std::string("unlimited")) +
                 ")");
 
+    // V3-9: the loop BRANCHES on the demo mode — Off / Record = the
+    // pre-V3-9 loop verbatim (runGameplayLoop; the three flags absent
+    // = the bit-identical normal run, the structural immunity root);
+    // Replay = the demo-fed loop (runDemoReplay: the audience owns the
+    // SDL queue, the demo's dts are the only time source).
+    if (m_demoMode == DemoMode::Replay) {
+        runDemoReplay();
+    } else {
+        runGameplayLoop(lastFrame);
+    }
+
+    // Chunk streaming (Phase 14): drain the worker pool before the save
+    // and shutdown — a job exception would surface in the flush, and the
+    // reset joins the workers. In-flight generation columns are not
+    // integrated (integration happens in update); that is correct, they
+    // are pristine generated terrain that a save never records.
+    if (m_streaming.pool) {
+        m_streaming.pool->flush();
+        m_streaming.pool.reset();
+    }
+
+    // Audio (Phase 15): close the stream/device before the window's
+    // SDL_Quit (idempotent — the destructor does the same).
+    m_sound.shutdown();
+
+    // Save (Phase 13): persist the world state for the slot (opt-in via
+    // --save, after the final frame — and after any screenshot, which is
+    // taken inside the loop). A failed save is logged, not fatal: the
+    // session itself ran cleanly.
+    if (m_args.saveSlot.has_value()) {
+        auto saved = writeSave();
+        if (!saved.ok()) {
+            MC_LOG_ERROR("Save failed: " + saved.error().describe());
+        }
+    }
+
+    // V3-9: the record's EXIT save (the window close / the ESC exit =
+    // the loop's normal break — no special path; the .dmo is written
+    // AFTER the save, so a --save run records the slot it left). The
+    // quit frame's un-simulated tail events are excluded (see
+    // discardPendingFrame).
+    if (m_demoMode == DemoMode::Record) {
+        m_demoRecorder.discardPendingFrame();
+        std::filesystem::path out = m_args.demoRecordOut;
+        if (out.empty()) {
+            out = "data/demos/" + defaultRecordName();
+        }
+        auto rec = writeDemoFile(out, m_demoRecorder.file());
+        if (!rec.ok()) {
+            MC_LOG_ERROR("Demo record failed: " + rec.error().describe());
+        } else {
+            std::error_code ec;
+            const std::uintmax_t bytes = std::filesystem::file_size(out, ec);
+            MC_LOG_INFO("Demo recorded: '" + out.string() + "' (" +
+                        std::to_string(m_demoRecorder.frameCount()) +
+                        " frames, " +
+                        std::to_string(m_demoRecorder.file().events.size()) +
+                        " events" +
+                        (ec ? std::string()
+                            : ", " + std::to_string(bytes) + " B") +
+                        ")");
+        }
+    }
+
+    m_window.shutdown();
+    m_initialized = false;
+    MC_LOG_INFO("Game shut down cleanly");
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// The gameplay loop (V3-9: the pre-V3-9 main loop body, verbatim — the
+// Off / Record modes. The record's only addition is the flag-gated dt
+// append after the frame count (the demo's dts carry the clamped wall
+// value the simulation used).)
+// ---------------------------------------------------------------------------
+
+void Game::runGameplayLoop(double lastFrame) {
     while (true) {
         m_input.frameBegin();
         m_input.pump();
@@ -2381,6 +2533,15 @@ int Game::run() {
         m_window.swapBuffers();
         ++m_frameCount;
 
+        // V3-9: the record's dt append (flag-gated — Off = the pre-V3-9
+        // loop verbatim). The dt = the just-simulated frame's clamped
+        // wall value (the replay's dts carry it verbatim; the frame's
+        // pump already tapped its events at m_frameCount = this index,
+        // so the event's frame < dts.size() — the parser's invariant).
+        if (m_demoMode == DemoMode::Record) {
+            m_demoRecorder.frame(dt);
+        }
+
         if (m_args.frames > 0 && m_frameCount >= m_args.frames) {
             MC_LOG_INFO("Frame limit reached (" + std::to_string(m_frameCount) +
                         " frames), exiting");
@@ -2414,36 +2575,238 @@ int Game::run() {
                               " draw calls");
         }
     }
+}
 
-    // Chunk streaming (Phase 14): drain the worker pool before the save
-    // and shutdown — a job exception would surface in the flush, and the
-    // reset joins the workers. In-flight generation columns are not
-    // integrated (integration happens in update); that is correct, they
-    // are pristine generated terrain that a save never records.
-    if (m_streaming.pool) {
-        m_streaming.pool->flush();
-        m_streaming.pool.reset();
+// ---------------------------------------------------------------------------
+// The demo replay loop (V3-9 — the --demo mode).
+//
+// The audience's Input owns the SDL queue (the single-consumer
+// discipline — the player's Input is demo-fed, NEVER pumped). The
+// demo's dts are the ONLY time source (the wall clock paces the
+// rendering: target = the anchor + the completed demo time / the
+// speed, the int64-microsecond sum guards the float drift; a slow
+// machine drops render frames, the simulation does not chase — the
+// documented deviation 2). The 0.5x hold renders the demo frame twice
+// (the second render-only — no update, no m_frameCount: a frame-
+// locked system advances once per demo frame, never twice). The
+// audience's WHITELIST (the orbit / the speed / the pause / the view
+// mode / the quit-from-panel) never touches the simulation: the orbit
+// re-resolves the camera around the eye (render-only; the aim rays
+// read aimForward — the player's base view, the red line), the speed
+// is pacing, the pause freezes the loop (the re-anchor), the C cycle
+// is the session's camera mode. ESC = the pause menu (NOT the exit —
+// the pre-V3-9 ESC semantics are the player channel's, the demo's
+// events own them).
+// ---------------------------------------------------------------------------
+
+void Game::runDemoReplay() {
+    const int total = m_demoPlayer->frameCount();
+    const std::size_t nEvents = m_args.demoFile->events.size();
+    MC_LOG_INFO("Demo replay: '" + m_demoPath + "' (" +
+                std::to_string(total) + " frames, " +
+                std::to_string(nEvents) + " events, world: " +
+                demoWorldDescription(m_args.demoFile->world) + ")");
+    // The synthetic gamepad connect (only when the demo carries
+    // gamepad events — the player's Input has no real device on the
+    // replay machine; the handleGamepad* entry points' not-connected
+    // guard needs a tracked device to pass, the source-bit semantics
+    // then match the record side exactly).
+    if (m_demoPlayer->hasGamepadEvents()) {
+        m_input.handleGamepadAdded(kDemoSyntheticGamepadWhich);
     }
+    // The pacing's anchor (the wall clock — re-anchored at the speed
+    // change and the pause/resume, the demo time is untouched).
+    m_demoPacingAnchorWall = nowSeconds();
+    m_demoPacingAnchorUs = 0;
+    m_demoTimeUs = 0;
+    m_demoFrame = 0;
 
-    // Audio (Phase 15): close the stream/device before the window's
-    // SDL_Quit (idempotent — the destructor does the same).
-    m_sound.shutdown();
-
-    // Save (Phase 13): persist the world state for the slot (opt-in via
-    // --save, after the final frame — and after any screenshot, which is
-    // taken inside the loop). A failed save is logged, not fatal: the
-    // session itself ran cleanly.
-    if (m_args.saveSlot.has_value()) {
-        auto saved = writeSave();
-        if (!saved.ok()) {
-            MC_LOG_ERROR("Save failed: " + saved.error().describe());
+    while (true) {
+        const double frameStart = nowSeconds();
+        // The audience owns the SDL queue (see the section header).
+        m_audienceInput.frameBegin();
+        m_audienceInput.pump();
+        // The window close = the exit (the audience's quit — the demo
+        // vocabulary has no quit event; the player channel is demo-fed).
+        if (m_audienceInput.quitRequested()) {
+            MC_LOG_INFO("Exit requested, shutting down");
+            break;
+        }
+        if (!m_demoEnded && m_demoFrame >= total) {
+            m_demoEnded = true;
+            m_demoEndPanelOpen = true;
+            MC_LOG_INFO("Demo replay finished (" +
+                        std::to_string(total) + " frames)");
+        }
+        const bool panelUp = m_demoPaused ||
+                             (m_demoEnded && m_demoEndPanelOpen);
+        // The audience's controls (the whitelist — never the
+        // simulation).
+        if (m_audienceInput.wasPressed(GameKey::Escape)) {
+            if (m_demoPaused) {
+                m_demoPaused = false;
+            } else if (m_demoEnded && m_demoEndPanelOpen) {
+                m_demoEndPanelOpen = false; // keep observing the
+                                            // still last frame
+            } else {
+                m_demoPaused = true;
+            }
+            m_demoPacingAnchorWall = nowSeconds();
+            m_demoPacingAnchorUs = m_demoTimeUs;
+        }
+        if (panelUp && m_audienceInput.wasPressed(GameKey::Q)) {
+            MC_LOG_INFO("Demo replay quit (audience)");
+            break;
+        }
+        if (m_audienceInput.wasPressed(GameKey::C)) {
+            m_cameraMode =
+                m_cameraMode == CameraMode::First
+                    ? CameraMode::ThirdBack
+                    : m_cameraMode == CameraMode::ThirdBack
+                          ? CameraMode::ThirdFront
+                          : CameraMode::First;
+        }
+        // The speed: the audience's wheel (0.5 -> 1 -> 2) at the frame
+        // boundary (the switch lands BETWEEN demo frames — never a
+        // half frame, the determinism). The gamepad's LB / RB (the
+        // V3-8 mapping's mouse Left / Right — the gamepad-connected
+        // guard keeps the audience's REAL mouse clicks out of the
+        // cycle; a real click with a connected gamepad still cycles —
+        // the documented v1 limitation, the speed is pacing-only).
+        const bool audienceSpeed =
+            m_audienceInput.wheelDelta() != 0 ||
+            (m_audienceInput.gamepadConnected() &&
+             (m_audienceInput.wasPressed(MouseButton::Left) ||
+              m_audienceInput.wasPressed(MouseButton::Right)));
+        if (audienceSpeed) {
+            m_demoSpeed = DemoPlayer::nextSpeed(m_demoSpeed);
+            m_demoPacingAnchorWall = nowSeconds();
+            m_demoPacingAnchorUs = m_demoTimeUs;
+        }
+        // The audience's orbit (render-only — the mouse's delta + the
+        // gamepad's sticks; the player's look convention: right = the
+        // yaw decrease, down = the pitch decrease).
+        {
+            const Vec2 a = m_audienceInput.mouseDelta();
+            m_demoOrbitYaw -= a.x * kAudienceOrbitSensitivity;
+            m_demoOrbitPitch -= a.y * kAudienceOrbitSensitivity;
+            if (m_audienceInput.isDown(GameKey::D)) {
+                m_demoOrbitYaw -= kAudienceStickOrbitStep;
+            }
+            if (m_audienceInput.isDown(GameKey::A)) {
+                m_demoOrbitYaw += kAudienceStickOrbitStep;
+            }
+            if (m_audienceInput.isDown(GameKey::S)) {
+                m_demoOrbitPitch -= kAudienceStickOrbitStep;
+            }
+            if (m_audienceInput.isDown(GameKey::W)) {
+                m_demoOrbitPitch += kAudienceStickOrbitStep;
+            }
+            m_demoOrbitPitch = std::clamp(
+                m_demoOrbitPitch, -kAudienceOrbitMaxPitch,
+                kAudienceOrbitMaxPitch);
+        }
+        // The still frame (the pause menu / the finished panel / the
+        // finished observation): the simulation freezes, the wall-
+        // clock pacing stops, the orbit stays live (syncCamera).
+        if (panelUp || m_demoFrame >= total) {
+            m_input.frameBegin(); // the stale edges are dropped (the
+                                  // demo's events land on the next
+                                  // SIMULATED frame, fresh)
+            syncCamera();
+            render();
+            m_window.swapBuffers();
+            if (frameStart - m_lastTitleUpdate >= 0.5) {
+                m_lastTitleUpdate = frameStart;
+                m_window.setTitle("TokenMine.cpp - " +
+                                  std::to_string(static_cast<int>(
+                                      std::lround(m_fpsSmoothed))) +
+                                  " FPS | " +
+                                  std::to_string(m_renderer.stats().drawCalls) +
+                                  " draw calls");
+            }
+            // The headless run's exit (--frames): a limit BEYOND the
+            // demo's end = the demo's end + the still state. The
+            // screenshot (takeScreenshot's glReadPixels) reads the
+            // BACK buffer after a swap = the PREVIOUS front (the GLX
+            // double-buffer exchange — the project's screenshots are
+            // all one rendered frame behind the last swap, the gate's
+            // cross-run identity is unaffected because every run lags
+            // the same way): so the finished state renders + swaps a
+            // SECOND time before the screenshot, making the still
+            // content (the panel + the badge) the back buffer's. The
+            // interactive run keeps observing here (the panel's ESC /
+            // Q owns it — no exit, no double render).
+            if (m_args.frames > 0 && m_demoFrame >= total) {
+                render();
+                m_window.swapBuffers();
+            }
+            if (m_args.frames > 0 && m_demoFrame >= total) {
+                MC_LOG_INFO("Demo replay finished, frame limit " +
+                            std::to_string(m_args.frames) + " beyond the "
+                            "demo's " + std::to_string(total) + " frames - "
+                            "exiting after the finished state");
+                if (!m_args.screenshotPath.empty()) {
+                    takeScreenshot(m_args.screenshotPath);
+                }
+                break;
+            }
+            SDL_Delay(kDemoIdleRenderDelayMs);
+            continue;
+        }
+        // --- The demo frame f (the dts = the time source) ----------
+        // The pacing: the wall clock only waits for the frame's start
+        // moment (the anchor + the COMPLETED demo time / the speed; a
+        // slow machine drops render frames — the simulation never
+        // chases, the documented deviation).
+        {
+            const double target = m_demoPacingAnchorWall +
+                                  (m_demoTimeUs - m_demoPacingAnchorUs) /
+                                      (kDemoUsPerSecond * m_demoSpeed);
+            const double now = nowSeconds();
+            if (target - now > kDemoMinPacingWaitSeconds) {
+                SDL_Delay(static_cast<Uint32>((target - now) * 1000.0));
+            }
+        }
+        m_input.frameBegin();
+        m_demoPlayer->injectForFrame(m_demoFrame, m_input);
+        const double dt = m_demoPlayer->dtForFrame(m_demoFrame);
+        update(dt);
+        if (dt > 0.0) {
+            const double fps = 1.0 / dt;
+            m_fpsSmoothed =
+                (m_fpsSmoothed <= 0.0) ? fps : (m_fpsSmoothed * 0.95 + fps * 0.05);
+        }
+        render();
+        m_window.swapBuffers();
+        ++m_frameCount;
+        m_demoTimeUs +=
+            static_cast<std::int64_t>(std::llround(dt * kDemoUsPerSecond));
+        // The 0.5x hold (the render-only second — see the section
+        // header; the same frame renders identically, the byte-
+        // identity is trivial).
+        for (int r = 1; r < DemoPlayer::rendersPerFrame(m_demoSpeed); ++r) {
+            render();
+            m_window.swapBuffers();
+        }
+        ++m_demoFrame;
+        if (m_args.frames > 0 && m_frameCount >= m_args.frames) {
+            MC_LOG_INFO("Frame limit reached (" + std::to_string(m_frameCount) +
+                        " frames), exiting");
+            if (!m_args.screenshotPath.empty()) {
+                takeScreenshot(m_args.screenshotPath);
+            }
+            break;
+        }
+        if (frameStart - m_lastTitleUpdate >= 0.5) {
+            m_lastTitleUpdate = frameStart;
+            m_window.setTitle("TokenMine.cpp - " +
+                              std::to_string(static_cast<int>(
+                                  std::lround(m_fpsSmoothed))) +
+                              " FPS | " + std::to_string(m_renderer.stats().drawCalls) +
+                              " draw calls");
         }
     }
-
-    m_window.shutdown();
-    m_initialized = false;
-    MC_LOG_INFO("Game shut down cleanly");
-    return 0;
 }
 
 } // namespace mc

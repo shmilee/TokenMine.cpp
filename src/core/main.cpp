@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <string>
 
+#include "core/demo.hpp"
 #include "core/game.hpp"
 #include "core/logger.hpp"
 #include "core/save_slot.hpp"
@@ -44,6 +45,24 @@ void printUsage() {
         "                    (slot names: letters/digits/_/-, the --save\n"
         "                    charset; management flags are standalone — one\n"
         "                    per run, no game-run flags)\n"
+        "  --demo <file>     V3-9: replay the demo file (.dmo) — the world\n"
+        "                    start (a fresh seed or a save slot) + the frame\n"
+        "                    dt sequence + the input event stream are the\n"
+        "                    ONLY time source (deterministic replay); the\n"
+        "                    audience's mouse orbits the camera (render-)\n"
+        "                    only, the wheel cycles the speed (0.5/1/2),\n"
+        "                    C cycles the view, ESC = the pause menu (Q\n"
+        "                    quits from it); composes with --frames\n"
+        "                    (the truncated replay) and --save (the exit\n"
+        "                    write of the replay's result)\n"
+        "  --demo-author <t> V3-9: expand the JSON action timeline <t> to a\n"
+        "                    .dmo (the input's <stem>.dmo) and exit —\n"
+        "                    STANDALONE headless (the save management's\n"
+        "                    twin; the game never boots)\n"
+        "  --demo-record [o] V3-9: record the session to a .dmo (the input\n"
+        "                    events + the per-frame dts; o = the output\n"
+        "                    path, default data/demos/rec_<ts>.dmo) and save\n"
+        "                    it on exit (the window close / the ESC exit)\n"
         "  --log-level <l>   trace|debug|info|warn|error\n"
         "  -h, --help        Show this help\n");
 }
@@ -148,6 +167,23 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
             const char* v = nextValue(i, "--delete-save");
             if (!v) return false;
             args.deleteSave = v;
+        } else if (arg == "--demo") {
+            const char* v = nextValue(i, "--demo");
+            if (!v) return false;
+            args.demo = v;
+        } else if (arg == "--demo-author") {
+            const char* v = nextValue(i, "--demo-author");
+            if (!v) return false;
+            args.demoAuthor = v;
+        } else if (arg == "--demo-record") {
+            // V3-9: the OPTIONAL value — the next argument that is not
+            // another flag is the output path (the default = the
+            // data/demos/rec_<ts>.dmo the epilogue names).
+            args.demoRecord = true;
+            if (i + 1 < argc && argv[i + 1][0] != '\0' &&
+                argv[i + 1][0] != '-') {
+                args.demoRecordOut = argv[++i];
+            }
         } else if (arg == "--log-level") {
             const char* v = nextValue(i, "--log-level");
             if (!v) return false;
@@ -187,6 +223,40 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
         err = "save management runs without a game: drop the game-run "
               "flags (--save / --new / --frames / --screenshot / --time / "
               "--seed / --weather / --save-full-diff)";
+        return false;
+    }
+    // V3-9: the demo's three flags are MUTUALLY EXCLUSIVE (one per
+    // run — the replay / the author / the record are different entry
+    // points into one injection kernel).
+    const int demoCount = (args.demo.empty() ? 0 : 1) +
+                          (args.demoAuthor.empty() ? 0 : 1) +
+                          (args.demoRecord ? 1 : 0);
+    if (demoCount > 1) {
+        err = "--demo / --demo-author / --demo-record are mutually "
+              "exclusive (one per run)";
+        return false;
+    }
+    // V3-9: --demo-author is STANDALONE headless (the timeline expands
+    // to the .dmo, the game never boots — the save management's twin).
+    if (!args.demoAuthor.empty() &&
+        (args.frames != 0 || args.saveSlot.has_value() ||
+         !args.screenshotPath.empty() || args.newWorld ||
+         args.time >= 0.0 || args.seed >= 0 ||
+         args.weather.has_value() || args.saveFullDiff)) {
+        err = "--demo-author runs headless: drop the game-run flags "
+              "(--frames / --save / --screenshot / --new / --time / "
+              "--seed / --weather / --save-full-diff)";
+        return false;
+    }
+    // V3-9: the --demo replay's world spec is the start-point
+    // AUTHORITY — the CLI's --seed / --new are redundant (the spec's
+    // fresh seed is applied in main; the fresh spec ignores an
+    // existing slot by construction). --save composes (the fresh
+    // spec's EXIT write of the replay's result) and must match the
+    // save spec's slot (checked in main, the spec is known there).
+    if (!args.demo.empty() && (args.seed >= 0 || args.newWorld)) {
+        err = "--demo's world spec is the start-point authority: drop "
+              "--seed / --new";
         return false;
     }
     return true;
@@ -288,6 +358,55 @@ int main(int argc, char** argv) {
         args.deleteSave) {
         Logger::instance().shutdown();
         return runSaveManagement(args) ? 0 : 1;
+    }
+
+    // V3-9: the --demo-author STANDALONE headless run (the timeline
+    // expands to the .dmo — the save management's twin, the game never
+    // boots; the author uses no SDL / GL, the zlib container only).
+    if (!args.demoAuthor.empty()) {
+        auto out = authorDemoFromFile(args.demoAuthor);
+        if (!out.ok()) {
+            std::fprintf(stderr, "Demo author error: %s\n",
+                         out.error().message.c_str());
+            return 1;
+        }
+        std::printf("wrote demo '%s' (from timeline '%s')\n",
+                    out->string().c_str(),
+                    args.demoAuthor.string().c_str());
+        Logger::instance().shutdown();
+        return 0;
+    }
+
+    // V3-9: the --demo replay (the file LOADS + PARSES headless — the
+    // strict schema + the version fingerprint reject before the window
+    // boots; the world spec is the start-point authority).
+    if (!args.demo.empty()) {
+        auto demo = loadDemoFile(args.demo);
+        if (!demo.ok()) {
+            std::fprintf(stderr, "Demo error: %s\n",
+                         demo.error().message.c_str());
+            return 1;
+        }
+        const DemoFile& d = *demo;
+        if (d.world.type == DemoWorldSpec::Type::Fresh) {
+            args.seed = d.world.seed;
+            // The fresh spec IGNORES an existing slot at start (the
+            // start-point authority — the PITS 15 second-run load is
+            // out by construction; the --save, when given, stays the
+            // EXIT write of the replay's result).
+            args.newWorld = true;
+        } else {
+            if (args.saveSlot.has_value() &&
+                *args.saveSlot != d.world.slot) {
+                std::fprintf(stderr,
+                             "Argument error: --demo's world references "
+                             "save slot '%s' (drop --save or match it)\n",
+                             d.world.slot.c_str());
+                return 2;
+            }
+            args.saveSlot = d.world.slot;
+        }
+        args.demoFile = std::move(demo).value();
     }
 
     Game game;

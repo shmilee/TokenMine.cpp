@@ -32,6 +32,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <variant>
@@ -39,6 +40,47 @@
 #include "core/math/vec2.hpp"
 
 namespace mc {
+
+// V3-9 (demo replay / record): the input event RECORD — the raw arguments
+// of the public entry points, zero mapping layer (the replay re-injects
+// them as-is through the SAME handle* closure that pump()'s SDL events
+// and the unit tests use; the demo recorder's tap carries them). The
+// field meanings per Kind (the unused fields stay zero):
+//   KeyDown/KeyUp      u32 = the SDL virtual keycode
+//   MouseDown/MouseUp  code = the SDL button (SDL_BUTTON_LEFT/RIGHT/
+//                        MIDDLE; a button outside the map is recorded
+//                        faithfully — the replay's handleMouseButton
+//                        no-ops it, as the original did)
+//   MouseMove          dx/dy = the relative delta (pixels),
+//                        ax/ay = the absolute position (pixels)
+//   Wheel              code = the vertical ticks (SDL convention:
+//                        positive = up / away)
+//   GamepadButton      u32 = the tracked device's which,
+//                        code = the SDL_GAMEPAD_BUTTON_* value,
+//                        down = the press state
+//   GamepadAxis        u32 = the tracked device's which,
+//                        code = the SDL_GAMEPAD_AXIS_* value,
+//                        value = the raw Sint16 deflection
+struct InputEvent {
+    enum class Kind : std::uint8_t {
+        KeyDown,
+        KeyUp,
+        MouseDown,
+        MouseUp,
+        MouseMove,
+        Wheel,
+        GamepadButton,
+        GamepadAxis,
+    } kind = Kind::KeyDown;
+    std::uint32_t u32 = 0;
+    std::int32_t code = 0;
+    std::int16_t value = 0;
+    float dx = 0.0f;
+    float dy = 0.0f;
+    float ax = 0.0f;
+    float ay = 0.0f;
+    bool down = false;
+};
 
 enum class GameKey {
     W,
@@ -194,7 +236,22 @@ public:
     void handleGamepadAdded(int which);
     void handleGamepadRemoved(int which);
 
+    // V3-9 (demo replay / record): the event TAP — an optional observer
+    // of every event reaching the public entry points (the demo
+    // recorder's capture point: "record first, inject later" — the tap
+    // fires BEFORE the state mutation, so recording is a zero-side-
+    // effect observer). The raw arguments are the replay's
+    // faithfulness: an unmapped keycode / button still taps (the replay
+    // re-injects the same no-op). A null tap (the default — every
+    // normal run) = one checked branch per event, bit-identical
+    // behavior (the structural-immunity root).
+    using EventTap = std::function<void(const InputEvent&)>;
+    void setEventTap(EventTap tap) { m_eventTap = std::move(tap); }
+    bool hasEventTap() const { return static_cast<bool>(m_eventTap); }
+
 private:
+    void tapEvent(const InputEvent& ev) const;
+
     static std::optional<GameKey> mapKey(std::uint32_t sdlKeycode);
     static std::optional<MouseButton> mapButton(int sdlButton);
 
@@ -236,6 +293,8 @@ private:
     // pair). 0 = centered.
     std::int16_t m_gamepadLeftX = 0;
     std::int16_t m_gamepadLeftY = 0;
+    // V3-9: the event tap (null in every normal run — see setEventTap).
+    EventTap m_eventTap;
 };
 
 } // namespace mc

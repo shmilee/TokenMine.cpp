@@ -4,6 +4,7 @@ logs/*.log
 data/*.save
 data/chunks/
 data/saves/
+data/demos/
 compile_commands.json
 opencode-sessions/
 .cache/

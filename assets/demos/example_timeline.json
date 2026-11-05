@@ -1,0 +1,75 @@
+{
+  "world": {
+    "type": "fresh",
+    "seed": 123456789
+  },
+  "actions": [
+    {
+      "at_frame": 10,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 60
+    },
+    {
+      "at_frame": 65,
+      "action": "mouse_down",
+      "button": "left"
+    },
+    {
+      "at_frame": 68,
+      "action": "mouse_move",
+      "dx": 30,
+      "dy": 200
+    },
+    {
+      "at_frame": 210,
+      "action": "mouse_up",
+      "button": "left"
+    },
+    {
+      "at_frame": 215,
+      "action": "key_down",
+      "key": "e"
+    },
+    {
+      "at_frame": 220,
+      "action": "key_up",
+      "key": "e"
+    },
+    {
+      "at_frame": 240,
+      "action": "key_down",
+      "key": "e"
+    },
+    {
+      "at_frame": 245,
+      "action": "key_up",
+      "key": "e"
+    },
+    {
+      "at_frame": 250,
+      "action": "mouse_down",
+      "button": "left"
+    },
+    {
+      "at_frame": 255,
+      "action": "key_down",
+      "key": "c"
+    },
+    {
+      "at_frame": 260,
+      "action": "key_up",
+      "key": "c"
+    },
+    {
+      "at_frame": 262,
+      "action": "mouse_up",
+      "button": "left"
+    },
+    {
+      "at_frame": 265,
+      "action": "wheel",
+      "ticks": 1
+    }
+  ]
+}

@@ -3145,6 +3145,28 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **demo 门脚本六坑（PITS 391，门 201 V3-9 demo 回放）**——①
+  **UI 批绘制序**：renderUi 的 addText/addQuad 经 batchFor 追加进
+  `batches`，但主批冲刷循环在调用点之前已遍历完毕 = 顶点永不被
+  drawUiBatch 消费（demo 角标/面板/暗帷全不可见；冒烟"面板像素"
+  声称与门 E2E 矛盾 = claims 非 evidence 纪律实证）——修复 =
+  自包含独立批（局部 vector 块内自冲刷）或移到冲刷循环之前。
+  ② **截图 = swap 后读 back buffer = 落后一次渲染帧**（既有全部门
+  语义，跑间恒等从未暴露）——headless 放完态退出（--frames 超 demo
+  长度）的退出帧内容（帷/面板）需 still 帧**双渲染**才可被截图
+  捕获（交互运行零影响；中段截图 = 第 N-1 帧内容）。③ **录制带
+  --save = 闭环起点漂移**：槽会话 demo world spec = save 引用，而
+  槽在录制退出时被终态覆写——录制→回放闭环须 **fresh 会话**（无
+  --save，spec = fresh seed）。④ **author 输出名 = 输入基名 +
+  .dmo**（timeline.json → timeline.dmo，非 --demo-record 的
+  显式/时间戳名）。⑤ **g139 插桩标记锚 gameplay 循环**：V3-9 把
+  run() 拆 runGameplayLoop + runDemoReplay，回放循环无标记 = demo
+  自成本 PERF-WIN 零输出——perf 树手工镜像 3 测量点（scratch 不入
+  库，PITS 387 族延伸；改循环结构前先 grep g139 锚）。⑥ **暂停态
+  + --frames = 设计不退出**：headless 退出仅 `m_demoFrame ≥ total`
+  触发——门脚本暂停探针（ESC 后不再恢复）会挂到 timeout；暂停帷
+  像素证据 = 结束面板共路径覆盖（m_demoPaused 与 endPanel 共用
+  demoQuad/demoText 块）。
 - **场景手术几何三坑（PITS 390，门 199 V3-5 建筑内容）**——①
   **场景室坐标须查参考地形**：demo 区表面 y=53（seed 123456789
   发行值）——首跑水室放 y=50/51 = 参考石内，流体编辑 load 拒

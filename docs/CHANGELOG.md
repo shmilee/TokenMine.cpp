@@ -11,6 +11,62 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.11.0（2026-11-05）— V3-9 demo 回放（注入内核 + 编写/录制/回放三入口 + 观众只观察路由，门 201 全 PASS，**3.x 矩阵收官**）
+
+**用户 11-05 BACKLOG 定案条目执行**——① **demo 文件格式**（V3-7
+确定性 gzip 容器 10B 头全钉 + 严格 schema：version 指纹 TM_VERSION
+【不匹配拒播点名】/ world fresh{seed}|save{slot}【双键·缺键·槽字符
+集拒】/ dts【负·>0.25 拒】/ events【乱序·悬空帧·未知 type 带 8 词
+表·payload 面全严格】；**零 format** = 独立文件族）② **注入内核**
+（core/demo 新：DemoPlayer 注入 = Input 公开 handle* 入口【与
+xdotool 跑的游戏内路径同形，游戏逻辑零触碰】/ dtForFrame = **demo
+dts 唯一时间源** / rendersPerFrame【0.5→2·1→1·2→1】/ nextSpeed
+0.5→1→2 循环 纯函数）③ **双 Input 路由 = 架构边界**（回放：观众
+Input 实例 = SDL 队列单消费者 + 玩家 m_input 零 pump 纯 demo 注入——
+**改世界操作在观众通道无消费者 = 白名单非黑名单结构性零遗漏**；
+录制：现状 pump + handle* 边界 tap 先记后注【录制零副作用单测钉】；
+普通运行 tap 恒 null = 位级恒等）④ **三 CLI 旗互斥**（--demo 回放
+/ --demo-author 头less 编写【timeline JSON 展开：hold 展开 + dts =
+1/60 定步全帧锁定】/ --demo-record 游玩捕获 O(1)/帧【quit 帧未模拟
+尾部排除】）⑤ **回放循环**（墙钟只 pacing int64µs 防漂移，慢机掉
+渲染帧模拟不追；倍率切点 = demo 帧边界不切半帧；**0.5× = render-
+only 保持**【第二渲染帧零 update 零 ++m_frameCount = 帧锁定系统不
+双推】；**--frames 按模拟帧计** = 任意倍率同终态）⑥ **观众只观察**
+（ESC = 暂停菜单**非退出**【Q 退出】/ C = 观察视角循环 / mouse +
+摇杆 = 转镜头 **orbit render-only**【aimForward() = 回放模式基视角
+无 orbit——观众转镜头不偷 demo 玩家瞄准，7 处世界向射线机械替换】/
+手柄 Start=暂停 LB/RB=倍率 左摇杆=数字化步进【V3-8 已先行 = 定案
+立项加】）⑦ **观察红线**（save-spec 回放引用槽永不回写【md5 前后
+逐字节不变实证】/ --demo + --new/--seed 点名拒 = world spec 权威）
+⑧ shipped 示例 demo（assets/demos/example.dmo 285 B 266 帧 14 事件：
+W 走 + 挖掘 2 块 dirt + E 背包 + C 三后 + zoom；生成脚本重跑字节
+恒等）+ data/demos/ gitignore（录制默认 rec_<ts>.dmo）。**版本三
+件套** 3.10.0→3.11.0。2777/2777（+43：schema 拒收 14 / 加载级 4 /
+gzip 容器恒等 3 / 注入内核 5 / 录制零副作用 3 / 编写展开 8 / 观众
+路由 2 / 标签 3）。门 201 = **结构免疫第 81 次免重锚（对 base19）**
+【S1 三旗 absent ≡ base19 逐字节 + savenorm EXACT vs v3.10.0 旧侧】
++ S2 六臂【(a) shipped 示例回放 ×2 RAW + savenorm EXACT = 定案"首
+放固化" / (b) **录制→回放闭环**（rec.dmo 2810 B 10B 钉头 → ×2
+RAW + EXACT）/ (c) **编写臂**（timeline → ×2 EXACT + 玩家位移
+4.121 块 = xdotool 替代面实证）/ (d) **观众路由**（转镜头终档姿态
+≡ 无转镜头逐位恒等 = orbit render-only）/ (e) **变速双向**（wheel
+up/down 终档 savenorm EXACT vs 参照 + 像素 diff 76 px 全在 HUD
+角标 = 任意倍率同模拟实证）/ (f) **结束面板**（放完态退出截图
+patch lum 32.0 < 120 暗帷在场 + ×2 恒等）】+ S6 点名 7 面【版本
+拒播 / 乱序 / 未知 type 带词表 / 负 dt / 超 0.25 / world 双键 /
+gzip 损坏 全 rc=1 带路径】+ 性能 A/B 同档【主对旗 absent：upd 均值
+0.501 vs 0.579 窗口噪声带 + changesApplied 逐位 + 终档 EXACT；回放
+自成本 = sub-ms 零可测增量】。**门内缺陷修复**（fixer 二次交付）：
+观众 UI 不可见 = demo UI 块位于主批冲刷循环之后【顶点永不被消费】
++ 项目截图 = swap 后读 back 落后一帧既有语义 → 自包含独立批 +
+headless 放完双渲染 + badge 移时钟下（S1 锚修复后回归 PASS）。记档
+偏离 8 条（英文 UI 串 + 独立批 / LB/RB 不分源 / quit 尾排除 / world
+spec 权威 + 观察红线 / 简版示例 / 放完态退出 / 左摇杆数字化 / E2E
+实证门内补齐）。**3.x「世界扩展」矩阵 11 项编号任务全 ✅（V3-1~
+V3-9 + V3-8/V3-9 UX 行）**；方向项（死亡统计屏 / Game Over 屏 /
+末地 / 创造 / 多人）矩阵外立项需用户定案。详见
+`docs/archive/phase-3.11.0.md`。
+
 ## v3.10.0（2026-11-05）— V3-6 世界边缘雾（填充感知 fog end，base19 重锚，门 200 全 PASS）
 
 **流送盘边缘不再露截面**——消费「世界边缘即虚空（无雾）」Phase
