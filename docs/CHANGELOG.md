@@ -11,6 +11,50 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.7.0（2026-11-05）— V3-2 Part 2 下界深化（水蒸发/音效族 11 件/magma 光/ambience 第 4 上下文/soul sand 数据驱动减速，门 197 全 PASS）
+
+**下界的行为补全**——收口 v3.4.0/v3.5.0 的 4 条记档偏离，全
+nether-scoped（**overworld 位级不变**单测 + 锚双保险），零渲染/零
+format（30 不变）/零 config。① **T1 水在下界蒸发**（v3.4.0 偏离 8
+no-op → MC 蒸发语义）：下界泼水桶 = 桶变空桶 + `evaporate` 音 + info
+日志，**零格触碰**（桶独占事件）+ 点击恒消耗；下界熔岩桶正常放置
+（MC 同款）；主世界泼水 = 同一语句 false 分支位级恒等。② **T2 下界
+音效族**（v3.5.0 偏离 3/4 stone·grass 复用收口）：新 `nether`/
+`nylium`/`stem` 3 族 9 件（固定种子确定性合成）+ soul 族 → 既有
+`sand` / ore·basalt·nether_brick → 既有 `stone` 重指派（sound_material
+字段数据驱动零核心）——13 下界块音族全钉；SoundBank 49→60（11 新
+wav 含 evaporate + ambience_nether，既有 49 件 md5 逐一不变幂等实证）。
+③ **T3 magma_block light_emission 3**（v3.5.0 偏离 5 收口，MC 精确，
+数据一行）。④ **T4 下界 ambience 第 4 上下文**（优先级 nether > cave
+> day/night，MC 同款"下界洞窟也是下界"= 偏离 5）：
+`ambienceContext` 加**默认参 inNether=false**（既有调用点位级不变，
+overworld 30 组输入面恒等单测钉）+ `ambience_nether` 48 Hz 隆隆 2.0 s
+新 wav；调度常量复用（300f 窗 × p 0.5 不动）。⑤ **T5 soul sand 减速**
+（v3.5.0 偏离 D6 收口，数据驱动）：块属性 **`walk_speed_factor`** 严格
+解析 number (0,1]（absent=1.0，越界/非数字 init 点名；**仅
+soul_sand 0.4** MC 精确）+ player 步行消费 = **双 feet 格取最小因子**
+（支撑行 × X 跨双端点严格重叠 × 中心 Z 列；飞行/流体/潜行豁免，疾跑
+= 步行受减速 MC 同款偏离 3）；`speed × 1.0f ≡ speed` 位级恒等 = 主
+世界无携带块时的结构免疫根。**版本三件套** 3.6.0→3.7.0。2658/2658
+（+18：WalkSpeedFactorParses 6 形 / WalkSpeedFactorTest 7【纯函数
+1.0 位级 / 2 s 位移比 0.4±0.005 / 边界双格 / 疾跑亦减速 / 潜行·飞行
+·涉水豁免轨迹恒等】/ AmbienceNetherTest 5【优先级四形 / overworld
+位级恒等钉 / 发行 seed roll 首 FALSE = 帧 2100 边界 + day 流去相关 /
+wav 钉】/ SoundNetherFamilyTest 4【PITS 382 守卫】/ census 60 ×2 /
+T1 谓词四形）。门 197 = **结构免疫第 78 次免重锚**（S1 无输入 ×2 ≡
+锚 224468 + savenorm EXACT + 白名单 4 键）+ S2 下界场景三臂【(a)
+shot ×2 RAW 恒等 + **ambience_nether 事件 a=2 b=2 逐一对**（帧锁定
+确定性）+ nether 段 16 块编辑持久 / (b) **soul sand 步行比值
+0.403**（全 soul 行 vs 全 neth 行 3.0 s W-hold：dx 4.321 vs 10.712，
+T5 端到端）/ (c) **桶蒸发**：日志 + slot0 空桶 + nether 段零 water +
+(c2) 主世界对照**水正常放置**零蒸发】+ S6 3/3 点名【1.5 / 0 /
+"0.4" 字符串全带 "walk_speed_factor" 路径 rc=1】+ 性能 A/B 同世界同
+成本【PERF-WIN 三窗同档（均值 0.568 vs 0.557 ms 新侧更低）+
+changesApplied 9/1/3 逐位 + **终档 savenorm EXACT**】。记档偏离 6 条
+（无蒸汽粒子 / portal UV 动画延后 = 渲染器基建 / 疾跑亦减速 / 双 feet
+格取定形 / nether>cave 优先 / 11 wav = 设计计数笔误 T1 规格胜）。详见
+`docs/archive/phase-3.7.0.md`。
+
 ## v3.6.0（2026-11-05）— V3-4 netherite 材料链（第四材料档，**零核心代码纯数据**，门 196 全 PASS）
 
 **ancient_debris → scrap → ingot → netherite 工具/护甲**（完整 MC 链的

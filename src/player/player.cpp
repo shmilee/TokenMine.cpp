@@ -282,6 +282,37 @@ void Player::update(double dt) {
     // instant set — the fluid integration is separately tuned (the
     // documented deviation); only the ground/air path gets the inertia.
     const bool inFluidTier = m_inWater || m_atSurface || m_inLava;
+    // T5 (v3.7.0): the walk factor of the two feet cells (the soul sand
+    // slowdown — the block's data-driven walk_speed_factor, the min =
+    // the slowest surface). The FEET ROW is floor(position.y -
+    // kFaceEps): grounded the feet rest EXACTLY on the integer support
+    // plane, so this row is the SUPPORT (the crouch-edge-guard's "one
+    // cell below the feet air" convention); mid-air it is the feet' own
+    // row, which a solid block cannot occupy — one uniform formula for
+    // both states (the fire-contact scan, restricted to the feet row).
+    // The cells are the AABB's X span (the two feet at the feet' center
+    // Z — the m_surfaceY column convention), strict-overlap gated (the
+    // hard-rule-6 convention). A factor of 1.0 (no feet cell carries
+    // the property — the overworld's content) keeps the walk pace
+    // bit-identical (x * 1.0f == x, IEEE 754).
+    float walkFactor = 1.0f;
+    {
+        const Vec3 mn = aabbMin();
+        const Vec3 mx = aabbMax();
+        const int y0 = static_cast<int>(std::floorf(m_position.y - kFaceEps));
+        const int z0 = static_cast<int>(std::floorf(m_position.z));
+        const int xLast = static_cast<int>(std::floorf(mx.x));
+        for (int x = static_cast<int>(std::floorf(mn.x)); x <= xLast; ++x) {
+            if (!(mn.x < x + 1 && mx.x > x)) {
+                continue; // no strict X overlap (the hard rule 6)
+            }
+            const BlockID id = m_world->getBlock(x, y0, z0);
+            if (id.valid() && id != BlockID::air()) {
+                walkFactor = feetWalkFactor(
+                    walkFactor, m_blocks.at(id).properties.walkSpeedFactor);
+            }
+        }
+    }
     if (lengthSq(wish) > 0.0f) {
         // V2-19: the fly's horizontal pace — the WALK speed x
         // kFlySpeedMultiplier (the user's "faster than walking": 6.88
@@ -302,6 +333,17 @@ void Player::update(double dt) {
         if (m_crouching && !m_inWater && !m_atSurface && !m_inLava) {
             speed *= m_params.crouchSpeedScale;
         }
+        // T5 (v3.7.0): the walk-only slowdown (the soul sand): the GROUND
+        // walk/sprint pace is scaled by the feet' factor (the min over
+        // the two feet cells — the slowest surface). Flight / any fluid
+        // tier / crouch are EXEMPT (the walking-only rule — the recorded
+        // deviation 4); a factor of 1.0 (no feet cell carries the
+        // property — the overworld's content) is a bit-identical no-op
+        // (the structural-immunity root).
+        speed = applyWalkSpeedFactor(
+            speed, walkFactor,
+            !m_flying && !m_inWater && !m_atSurface && !m_inLava &&
+                !m_crouching);
         // Phase 84: the beacon's speed effect (the game pushes the
         // effect-derived multiplier each frame; 1.0 when none is active).
         speed *= m_speedMultiplier;

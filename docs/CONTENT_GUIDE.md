@@ -15,7 +15,10 @@
 > （v3.4.0 / netherrack 块 + 下界维度 / 存档 format 30 / 测试 2582）
 > + V3-2 Part 1 刷新（v3.5.0 / 下界内容族 12 块 + 5 群系 + 3 矿脉 +
 > 2 配方 / 测试 2617）+ V3-4 刷新（v3.6.0 / netherite 材料链 9 物品 +
-> 8 配方，零核心代码 / 测试 2640）：二批新数据驱动机制
+> 8 配方，零核心代码 / 测试 2640）+ V3-2 Part 2 刷新（v3.7.0 / 下界
+> 音效族 nether·nylium·stem + 块属性 `walk_speed_factor`【number (0,1]，
+> absent = 1.0，仅步行消费 = 双 feet 格取最小，疾跑含】+ SoundBank
+> 60 / 测试 2658）：二批新数据驱动机制
 > 并入（biome tree 6 键 + exclude_spawn_area / slab 三态 state_count +
 > drops_count_by_state / XP 三发放源 / 附魔 7 项 / 床 15 色染色族 / 染色羊变体
 > / render.ao），各节数量（93 块 / 83 物品 / 86 配方 / 8 mob / 7 附魔 /
@@ -1157,7 +1160,8 @@ honey]`——一桶全舀三种类）⇄ `water_bucket` + `lava_bucket` + `honey
 **数据面 = 块属性 `sound_material` + 3 件 wav 文件**（无新解析机制）：
 
 1. 块 JSON 加 `"properties": { "sound_material": "<m>" }`（严格字符串，
-   **显式空串拒** = ammo 纪律；缺省 = 通用事件名位级不变）。
+   **显式空串拒** = ammo 纪律；缺省 = 通用事件名位级不变）。既有族
+   含下界族 nether/nylium/stem（v3.7.0，49→60 wav）。
 2. `assets/sounds/` 补 3 件：`<m>_dig.wav` / `<m>_place.wav` /
    `<m>_break.wav`（16-bit mono 44.1 kHz；`tools/generate_sounds.py`
    确定性扩展——固定种子 LCG/sine；**重跑须保持既有 wav 字节零变化**，

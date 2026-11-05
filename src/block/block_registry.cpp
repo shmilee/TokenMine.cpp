@@ -277,6 +277,23 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
                            std::to_string(out.fuelTime));
         }
     }
+    // T5 (v3.7.0): the walk speed factor (the soul sand slowdown): a
+    // STRICT number in (0, 1] — ABSENT = 1.0 (the no-slowdown default,
+    // the bit-level root); > 1 (a speedup — the property is a SLOWDOWN)
+    // or <= 0 (a stop), or a non-number (a string "0.4"), is named and
+    // rejected (the fuel_time range discipline — the checkField "number"
+    // type gate first, the narrowed (0, 1] domain after).
+    r = checkField(*p, "walk_speed_factor", "number",
+                   [&](const Json& v) {
+                       out.walkSpeedFactor = static_cast<float>(v.asDouble());
+                   });
+    MC_TRY(r);
+    if (p->find("walk_speed_factor") != nullptr &&
+        !(out.walkSpeedFactor > 0.0f && out.walkSpeedFactor <= 1.0f)) {
+        return MC_FAIL("block property 'walk_speed_factor' must be a number "
+                       "in (0, 1], got " +
+                       std::to_string(out.walkSpeedFactor));
+    }
     // CRAFT-6: the block item's smelting product (the item-side
     // 'smeltable_to' discipline mirrored; the product's existence is
     // cross-checked at game init over all items, block items included).

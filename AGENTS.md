@@ -16,9 +16,11 @@ v3.2.0 = V3-1 Phase A 下界门框（门 192，11-05）；v3.3.0 = V3-8 手柄
 194，11-05，format 30）；**v3.5.0 = V3-2/Phase C Part 1 下界内容族（门 195，11-05：5 群系 + 12
 块 + 3 矿脉 + 5 装饰 + D9 空腔带修订 = 下界可航行）；**v3.6.0 = V3-4
 netherite 材料链（门 196，11-05：debris→scrap→ingot→工具 2031/护甲
-×1.5 刻度，零核心代码纯数据）**；下一项 **Part 2 下界深化**（流体
-规则/音效族/ambience/视觉），其后 V3-3 下界 mob → V3-5 建筑内容族 →
-V3-6 世界边缘雾 → V3-9 demo 回放【矩阵尾部】）
+×1.5 刻度，零核心代码纯数据）；v3.7.0 = V3-2 Part 2 下界深化（门
+197，11-05：水蒸发/音效族 11 件/magma 光 3/ambience 第 4 上下文/soul
+sand walk_speed_factor 0.4 数据驱动减速，全 nether-scoped overworld
+位级不变）**；下一项 **V3-3 下界 mob** → V3-5 建筑内容族 → V3-6
+世界边缘雾 → V3-9 demo 回放【矩阵尾部】）
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -77,7 +79,7 @@ V3-6 世界边缘雾 → V3-9 demo 回放【矩阵尾部】）
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2640/2640**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2658/2658**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 30（V3-1 Phase B 下界维度：player.dimension 严格词表
   恒写 + nether 段 {blocks,fluids,states} + nether_entities 恒写 +
   派生 seed 不落盘；schema 其余与 29 一致，29 携新键 = version lie
@@ -95,10 +97,10 @@ V3-6 世界边缘雾 → V3-9 demo 回放【矩阵尾部】）
   结构免疫第 65-70 次免重锚；门 191【V3-7】= 第 72 次 + 门 192【V3-1
   Phase A 门框】= 第 73 次 + 门 193【V3-8 手柄】= 第 74 次 + 门 194
   【V3-1 Phase B 下界】= 第 75 次 + 门 195【V3-2 Part 1 下界内容族】
-  = 第 76 次 + 门 196【V3-4 netherite 材料链】= 第 77 次免重锚
+  = 第 76 次 + 门 196【V3-4 netherite 材料链】= 第 77 次 + 门 197【V3-2 Part 2 下界深化】= 第 78 次免重锚
   【v3.0.0 banner = 第 71 次】——存档/门框/手柄/惰性下界/下界内容/
-  材料链 = 渲染无关零像素【下界内容 = nether-only + 惰性下界；atlas
-  16×16 幂二增长像素行恒等；材料链 = 纯物品内容不在默认热栏**）；PITS
+  材料链/下界深化 = 渲染无关零像素【下界内容 = nether-only + 惰性下界；atlas
+  16×16 幂二增长像素行恒等；材料链 = 纯物品内容不在默认热栏；下界深化 = nether-scoped 全维度门**）；PITS
   375-379 + **PITS 380**（spawn 成功行无 'pick' / 门场景洞穴密封 /
   CAVE config seed 归属 / bob diff 带色相审计）+ **PITS 381**（热栏
   key→RMB ≥0.15s / 活体掉落物品不可作终档断言 / 羊静止窗）+
@@ -121,7 +123,12 @@ V3-6 世界边缘雾 → V3-9 demo 回放【矩阵尾部】）
   0x8b 先兆】）+ **PITS 387**（g139 插桩器锚点随调用点形态演进【Phase
   B DimCtx 参数化断 STREAMING 锚 = PITS 317 loudly-fail 按预期触发】
   → 双形态锚 + 每 perf 树用自己 commit 的插桩器重建 + 改调用点前先
-  grep 全部锚点）；
+  grep 全部锚点）；**PITS 388**（timeout 包装 pid ≠ 子进程 pid【_NET_WM_PID 窗搜
+  全败 = 输入臂 FOCUS-FAIL——游戏直跑 tp=$!】/ 短 hold 按键注册抖动
+  【1.0 s W 比值 0.823 伪影 vs 3.0 s 0.403 真值——长 hold 稀释】/ 水
+  放置守卫拒玩家重叠格【aim 几何须避自身 feet 格：yaw 0 射线 x 恒等
+  → 第二行 + pitch 落位】/ 性能 A/B 不得与流送负载臂并行【300f 窗
+  0.444→0.806 污染弃用——独占复跑】）；
   门计数 195（**V3-2/Phase C Part 1 下界内容族 v3.5.0** 门 195 全
   PASS：**D9 带修订 = 下界可航行**【编排者布局裁决：v3.4.0 实心岩板
   埋传送落点实证不可探索 → MC 下界废土形态 = 熔岩海 5-31 + netherrack
@@ -137,6 +144,21 @@ V3-6 世界边缘雾 → V3-9 demo 回放【矩阵尾部】）
   双臂【传送空腔截图 ×2 恒等 + 观感实证 / 下界采矿 quartz 入库存 +
   PITS 7 续破 + PITS 377 磁力边缘实证】；S6 5/5 init 点名；详见
   `docs/archive/phase-3.5.0.md`）；
+  门计数 197（**V3-2 Part 2 下界深化 v3.7.0** 门 197 全 PASS：**全
+  nether-scoped overworld 位级不变**【ambience 30 组输入面单测 + S1 锚
+  双保险】零渲染/零 format/零 config：T1 水蒸发【下界泼水桶 = 桶变空
+  桶 + evaporate 音 + 日志，零格触碰点击恒消耗；熔岩桶正常放置】+
+  T2 音效族 11 件【nether/nylium/stem 3 族 9 + evaporate + ambience_
+  nether，49→60 幂等；13 下界块 sound_material 重指派全钉】+ T3 magma
+  light 3 + T4 ambience 第 4 上下文【nether > cave > day/night 默认参
+  inNether=false 位级】+ T5 soul sand walk_speed_factor 0.4【严格
+  (0,1] 解析 + 双 feet 格取最小 + 仅步行疾跑含 MC 同款 + ×1.0f 位级
+  恒等】；2658/2658（+18）；结构免疫第 78 次【S1 ≡ 锚 + EXACT + 白名
+  单 4 键】；S2 三臂【下界 shot ×2 RAW + ambience_nether 事件 a=2 b=2
+  逐一对 / **步行比值 0.403**（3.0 s W-hold dx 4.321 vs 10.712）/ 桶
+  蒸发 + OW 对照水正常放置】；S6 3/3 点名【1.5/0/"0.4" 字符串】；性能
+  A/B 同档【均值 0.568 vs 0.557 + changesApplied 逐位 + 终档 savenorm
+  EXACT】；详见 `docs/archive/phase-3.7.0.md`）；
   门计数 196（**V3-4 netherite 材料链 v3.6.0** 门 196 全 PASS：
   **零核心代码纯数据**【git status src/ = 空——"加材料 = 数据"第四档
   验证】：ancient_debris 块 +smeltable_to netherite_scrap（CRAFT-6 块

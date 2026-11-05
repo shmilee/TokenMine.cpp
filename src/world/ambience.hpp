@@ -2,8 +2,10 @@
 // schedule — the "render strip" audio twin of the clouds: pure
 // presentation, no frame state).
 //
-// Three contexts (Minecraft's ambient-sound families, the minimal
+// Four contexts (Minecraft's ambient-sound families, the minimal
 // version):
+//   - nether : T4 (v3.7.0) — the player is in the nether (the TOP
+//     priority: a nether cave is a nether, the recorded deviation 5)
 //   - cave : the player's FEET cell has raw sky light 0 (no sky path —
 //     the Minecraft "no sky" rule; takes priority over day/night)
 //   - day  : dayFactor >= kAmbienceDayCutoff (the renderer's day/night
@@ -49,13 +51,26 @@ enum class AmbienceContext : int {
     Cave = 0,
     Day = 1,
     Night = 2,
+    // T4 (v3.7.0): the nether's own context — the player in the nether is
+    // in the nether ambience world, regardless of sky light or time of
+    // day (the TOP priority: a nether cave is a nether — the recorded
+    // deviation 5, Minecraft's twin). Without it the nether would ride
+    // on the cave bed (the skyless void reads raw sky 0 — the v3.4.0
+    // documented behavior).
+    Nether = 3,
 };
 
-// The context decision (pure): rawSkyLight = the player's feet cell's
-// RAW sky light (0-15, the day/night unscaled stored value — 0 = no sky
-// path = cave, priority over day/night); dayFactor = the same-day/night
-// scale the renderer uses (0 = deep night, 1 = noon).
-AmbienceContext ambienceContext(int rawSkyLight, float dayFactor);
+// The context decision (pure): inNether = the player's CURRENT
+// dimension is the nether (T4 (v3.7.0) — the top priority: the nether
+// context full stop); rawSkyLight = the player's feet cell's RAW sky
+// light (0-15, the day/night unscaled stored value — 0 = no sky path =
+// cave, priority over day/night); dayFactor = the same day/night scale
+// the renderer uses (0 = deep night, 1 = noon). The OVERWORLD
+// (inNether = false) is the pre-T4 decision, bit-identical (the default
+// argument — the existing call sites' behavior is unchanged; the unit
+// tests pin the identity over the full input face).
+AmbienceContext ambienceContext(int rawSkyLight, float dayFactor,
+                                bool inNether = false);
 
 // The schedule roll (pure): true = play the context's sound this frame.
 // Deterministic in (seed, frame, context); ~kAmbienceProbability over a

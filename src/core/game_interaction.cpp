@@ -1801,11 +1801,9 @@ bool Game::tryFluidBucket() {
     }
     const bool collect = !item.collectsFluids.empty();
     // V3-1 Phase B: the dimension aliases (the bucket acts on the
-    // player's current world — the nether's lava sea scoops; the nether
-    // WATER POUR is the documented no-op deviation: water cannot exist
-    // in the nether, the phase-C dimension-aware fluid sim's domain —
-    // the click falls through to placeBlock's material no-op, the
-    // bucket stays full).
+    // player's current world — the nether's lava sea scoops). T1
+    // (v3.7.0): the nether WATER POUR evaporates (the bucket empties,
+    // no cell touched — see the pour side's dimension gate below).
     World& world = currentWorld();
     std::set<ColumnPos>& editedColumns =
         playerInNether() ? m_nether.streaming.editedColumns
@@ -1872,15 +1870,37 @@ bool Game::tryFluidBucket() {
     // The pour side: the item's fluid kind (init guarantees the name is
     // in the vocabulary).
     const FluidKind kind = *fluidKindForName(item.poursFluid);
-    // V3-1 Phase B: the nether WATER POUR no-op (the documented
-    // deviation 8 — water cannot exist in the nether; the bucket stays
-    // full, the click falls through to placeBlock's material no-op).
-    if (kind == FluidKind::Water && playerInNether()) {
-        return false;
-    }
     const ItemID becomes = m_items.idForName(item.poursBecomes);
     if (!becomes.valid()) {
         return true; // defensive (init cross-check); consume the click
+    }
+    // T1 (v3.7.0): the nether WATER POUR = evaporation (Minecraft's
+    // water-cannot-exist-in-the-nether rule — the v3.4.0 documented
+    // no-op deviation's UPGRADE): the water simply vanishes — the item
+    // swaps to the empty bucket, the "evaporate" sound plays (the 2D
+    // centered path — the bucket action is the player's, the splash's
+    // twin) and the info log is the E2E evidence. NO cell is touched
+    // (no water is placed, no fluid diff, no light update — the
+    // evaporation is a bucket-only event) and the click is ALWAYS
+    // consumed (the water is gone, whatever the aim — the nether has no
+    // placement cell for it). The no-room case: nothing happens, the
+    // click consumed (the pour side's own isFull pattern). The pure
+    // dimension gate (netherWaterPourEvaporates — the unit tests own
+    // the four forms): the OVERWORLD path below is bit-identical (the
+    // same statements, the same order — the false branch), and the
+    // nether LAVA pour falls through to the normal placement
+    // (Minecraft's twin: lava is legal in the nether — the recorded
+    // deviation).
+    if (netherWaterPourEvaporates(kind, playerInNether())) {
+        if (m_inventory.isFull(becomes, m_items)) {
+            return true; // no room for the companion: nothing happens
+        }
+        m_inventory.take(m_selectedSlot, 1);
+        m_inventory.add(becomes, 1, m_items);
+        m_sound.play("evaporate");
+        MC_LOG_INFO(std::string("Evaporated ") + item.poursFluid +
+                    " bucket in the nether (water cannot exist there)");
+        return true;
     }
     if (m_inventory.isFull(becomes, m_items)) {
         return true; // no room for the companion: nothing happens (Minecraft)

@@ -733,17 +733,20 @@ void Game::updateAmbience() {
     // cell (position = the AABB bottom-center, the floor on each axis) —
     // raw sky light 0 = no sky path = cave (priority over day/night, the
     // Minecraft "no sky" rule); otherwise the renderer's day/night split
-    // (the dayFactor's 0.5 cutoff).
+    // (the dayFactor's 0.5 cutoff). T4 (v3.7.0): the nether is its own
+    // context at the TOP of the priority (a nether cave is a nether —
+    // the recorded deviation 5); the overworld (inNether = false) is
+    // the pre-T4 decision, bit-identical (the unit-test pin).
     const Vec3 feet = m_player->position();
     const int cx = static_cast<int>(std::floor(feet.x));
     const int cy = static_cast<int>(std::floor(feet.y));
     const int cz = static_cast<int>(std::floor(feet.z));
     // V3-1 Phase B: the CURRENT world (the nether's skyless void reads
-    // raw sky 0 = the cave context — the nether's ambience is the cave
-    // bed, the Minecraft "no sky" rule's twin).
+    // raw sky 0 — the nether context (T4) owns the ambience now, the
+    // cave bed is the overworld's no-sky rule only).
     const int rawSky = currentWorld().getSkyLight(cx, cy, cz);
     const AmbienceContext ctx =
-        ambienceContext(rawSky, m_dayCycle.dayFactor());
+        ambienceContext(rawSky, m_dayCycle.dayFactor(), playerInNether());
     // The roll: the pure function of (world seed, frame, context) — same
     // inputs, same answer across runs (the event sequence is
     // deterministic; the log line below is the E2E evidence). V3-1 Phase

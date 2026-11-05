@@ -374,6 +374,16 @@ struct BlockProperties {
     // the product's existence is cross-checked at game init over ALL
     // items, block items included): sand -> glass shipped.
     std::string smeltableTo;
+    // T5 (v3.7.0): the walk speed factor (the soul sand slowdown): the
+    // factor the player's GROUND walk pace is scaled by while one of the
+    // player's feet cells holds this block (strict float in (0, 1] —
+    // ABSENT = 1.0, the no-slowdown default, the overworld's bit-
+    // identical root; a value > 1 (a speedup — the property is a
+    // SLOWDOWN) or <= 0, or a non-number, is rejected at data load by
+    // name). Shipped = soul_sand only (0.4 — the Minecraft exact value).
+    // Pure data — the player reads the property, it never switches on a
+    // block id (hard rule 3).
+    float walkSpeedFactor = 1.0f;
 };
 
 // Which texture name is applied to each face group (full_cube shapes) — or

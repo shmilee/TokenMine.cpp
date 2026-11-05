@@ -3,7 +3,7 @@
   "properties": {
     "hardness": 0.4,
     "drops": "netherrack",
-    "sound_material": "stone",
+    "sound_material": "nether",
     "smeltable_to": "nether_brick"
   },
   "model": {

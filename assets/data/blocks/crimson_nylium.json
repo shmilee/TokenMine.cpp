@@ -2,6 +2,7 @@
   "id": "crimson_nylium",
   "properties": {
     "hardness": 0.4,
+    "sound_material": "nylium",
     "drops": "crimson_nylium"
   },
   "model": {

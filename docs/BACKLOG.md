@@ -26,7 +26,7 @@ Phase B 下界世界 + 真传送【v3.4.0 候选】/ Phase C 内容族【v3.5.x 
 | STRM 流送与内存 | （方向：双世界流送/内存设计，依赖 V3-1） | | | | | | |
 | PIPE 帧管线与并发 | （方向：传送过渡帧管线，依赖 V3-1） | | | | | | |
 | LGT 光照 | | | | | | | |
-| GEN 世界与生成 | **V3-1 下界维度·传送门与下界（三段：Phase A 门框 ✅ v3.2.0 门 192 / Phase B 下界世界 + 真传送 ✅ v3.4.0 门 194【format 30】/ Phase C Part 1 内容族 ✅ v3.5.0 门 195【群系 5 + 块族 12 + 矿脉 3 + 装饰 5 + 空腔带修订】/ Part 2 netherite 链相邻项待定版）** | **V3-2 下界内容族（Part 1 ✅ v3.5.0 合并执行；矿脉深化/流体规则/ambience = Part 2）** | V3-5 建筑内容族（clay/苔石/砖） | | | | |
+| GEN 世界与生成 | **V3-1 下界维度·传送门与下界（三段：Phase A 门框 ✅ v3.2.0 门 192 / Phase B 下界世界 + 真传送 ✅ v3.4.0 门 194【format 30】/ Phase C Part 1 内容族 ✅ v3.5.0 门 195【群系 5 + 块族 12 + 矿脉 3 + 装饰 5 + 空腔带修订】/ Part 2 netherite 链相邻项待定版）** | **✅ V3-2 下界内容族（Part 1 v3.5.0 门 195 + Part 2 下界深化 v3.7.0 门 197【水蒸发/音效族 11/magma 光/ambience 第 4 上下文/soul sand 减速】= 全收口）** | V3-5 建筑内容族（clay/苔石/砖） | | | | |
 | FLUID 流体 | | | | | | | |
 | ENT 实体/Mob/移动 | V3-3 下界 mob（方向，依赖 V3-1/V3-2） | | | | | | |
 | SURV 生存/战斗/效果 | **✅ V3-4 netherite 材料链（v3.6.0，门 196：debris→scrap→ingot→工具 2031/护甲 ×1.5 刻度，零核心代码纯数据）**（火免疫/击退抗 = Part 2 候选） | | | | | | |
@@ -93,6 +93,15 @@ Phase B 下界世界 + 真传送【v3.4.0 候选】/ Phase C 内容族【v3.5.x 
 
 ## 变更记录（3.x）
 
+- **11-05（V3-2 Part 2 完成）**：**v3.7.0 已发布**（门 197 全 PASS：
+  结构免疫第 78 次 + S2 三臂【下界截图 ×2 RAW + ambience_nether 事件
+  逐一对 / **soul sand 步行比值 0.403** / 桶蒸发 + 主世界对照水正常
+  放置】+ S6 3/3 + 性能 A/B 同档【终档 savenorm EXACT】；2658/2658；
+  收口 v3.4.0/v3.5.0 四条偏离——详见 `docs/archive/phase-3.7.0.md`）。
+  下一项 = **V3-3 下界 mob**（zombified piglin/piglin/hoglin/magma
+  cube/strider + neutral·walks_on_lava 旗 + 下界生成池——Phase B 已留
+  维度就绪架构零新基建）→ V3-5 建筑内容族 → V3-6 世界边缘雾 → V3-9
+  demo 回放。
 - **11-05（V3-4 完成）**：**v3.6.0 已发布**（门 196 全 PASS：结构
   免疫第 77 次 + S6 5/5 + 性能 A/B 同档【终档 savenorm EXACT】+ 熔炼
   臂实证；2640/2640；**零核心代码 = 纯数据**——ancient_debris →

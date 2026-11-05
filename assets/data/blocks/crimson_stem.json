@@ -1,7 +1,7 @@
 {
   "id": "crimson_stem",
   "properties": {
-    "sound_material": "stone",
+    "sound_material": "stem",
     "hardness": 0.4,
     "drops": "crimson_stem"
   },

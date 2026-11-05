@@ -101,6 +101,97 @@ TEST(AmbienceSoundNameTest, NamesPinned) {
     EXPECT_STREQ(ambienceSoundName(AmbienceContext::Day), "ambience_day");
     EXPECT_STREQ(
         ambienceSoundName(AmbienceContext::Night), "ambience_night");
+    // T4 (v3.7.0): the nether's bed (the fourth context).
+    EXPECT_STREQ(ambienceSoundName(AmbienceContext::Nether),
+                 "ambience_nether");
+}
+
+// ---------------------------------------------------------------------------
+// T4 (v3.7.0): the nether context (the fourth — the player in the nether
+// is in the nether ambience world, priority over cave / day / night; the
+// recorded deviation 5: a nether cave is a nether, Minecraft's twin).
+// ---------------------------------------------------------------------------
+
+// The context decision's TOP priority: in the nether the context is
+// Nether, full stop — regardless of the raw sky light (the skyless void
+// reads 0 = the cave's input) or the time of day (the four-form face).
+TEST(AmbienceNetherTest, ContextPriorityOverAllThree) {
+    // Nether + the cave's input (raw sky 0 — the nether's skyless void
+    // reads exactly this): NETHER, not CAVE (the deviation 5).
+    EXPECT_EQ(ambienceContext(0, 0.9f, true), AmbienceContext::Nether);
+    // Nether + day: NETHER, not DAY.
+    EXPECT_EQ(ambienceContext(15, 0.9f, true), AmbienceContext::Nether);
+    // Nether + night (the cutoff's below side): NETHER, not NIGHT.
+    EXPECT_EQ(ambienceContext(15, 0.0f, true), AmbienceContext::Nether);
+    // Nether + raw sky 0 at the dayFactor's exact cutoff: NETHER (the
+    // cave's day/night boundary is never reached in the nether).
+    EXPECT_EQ(ambienceContext(0, 0.5f, true), AmbienceContext::Nether);
+}
+
+// The OVERWORLD bit-level-invariant pin (the structural-immunity red
+// line): with inNether = false the decision is the PRE-T4 one for every
+// input of the full face (the raw sky light's extremes + the dayFactor's
+// band around the cutoff) — the same context enumerator, hence the same
+// roll stream (ambienceRoll is untouched), hence the same event sequence
+// (the no-input overworld runs stay byte-identical, the S1 anchor's
+// audio twin).
+TEST(AmbienceNetherTest, OverworldContextBitIdenticalToPreT4) {
+    const int skys[] = {0, 1, 7, 14, 15};
+    const float dayFactors[] = {0.0f, 0.25f, 0.499f, 0.5f, 0.75f, 1.0f};
+    for (const int sky : skys) {
+        for (const float df : dayFactors) {
+            // The pre-T4 decision re-derived (the implementation's own
+            // rule — the test-side oracle).
+            const AmbienceContext want =
+                (sky == 0)        ? AmbienceContext::Cave
+                : (df >= 0.5f)    ? AmbienceContext::Day
+                                  : AmbienceContext::Night;
+            EXPECT_EQ(ambienceContext(sky, df, /*inNether=*/false), want)
+                << "sky=" << sky << " dayFactor=" << df;
+            // The default-argument form (the existing call sites) is the
+            // same decision.
+            EXPECT_EQ(ambienceContext(sky, df), want)
+                << "sky=" << sky << " dayFactor=" << df;
+        }
+    }
+}
+
+// The nether roll stream on the SHIPPED world seed (123456789 — the gate
+// S2's scene, the overworld's derived-seed input here — the nether's
+// own derived seed's stream is the same shape): the pins are the
+// contract. The early windows tie TRUE (the deterministic streak — a
+// pin, not a pattern), frame 2100 is the first FALSE (the stream is
+// alive, not stuck — the PITS 382 degenerate-roll guard's twin), and
+// the 2099/2100 boundary proves the PITS #4 advance.
+TEST(AmbienceNetherTest, RollPins) {
+    const std::uint64_t seed = 123456789ULL;
+    EXPECT_TRUE(ambienceRoll(seed, 0, AmbienceContext::Nether));
+    EXPECT_TRUE(ambienceRoll(seed, 600, AmbienceContext::Nether));
+    EXPECT_TRUE(ambienceRoll(seed, 1800, AmbienceContext::Nether));
+    EXPECT_FALSE(ambienceRoll(seed, 2100, AmbienceContext::Nether));
+    // The 2099/2100 boundary: different frames, different rolls (the
+    // advance is live — a constant-input finalizer would tie them).
+    EXPECT_TRUE(ambienceRoll(seed, 2099, AmbienceContext::Nether));
+    // Decorrelation from the overworld's streams (the kAmbienceCtxStep
+    // discipline — the nether's bed never rides on the cave's): at frame
+    // 2100 the nether and day rolls disagree.
+    EXPECT_NE(ambienceRoll(seed, 2100, AmbienceContext::Nether),
+              ambienceRoll(seed, 2100, AmbienceContext::Day));
+}
+
+// The ~0.5 probability of the nether's frame sequence (the splitmix64
+// top half — the overworld contexts' band's twin).
+TEST(AmbienceNetherTest, RollProbabilityBand) {
+    const std::uint64_t seed = 123456789ULL;
+    int netherPass = 0;
+    for (int i = 0; i < 1000; ++i) {
+        const std::uint64_t frame = static_cast<std::uint64_t>(i) * 300;
+        if (ambienceRoll(seed, frame, AmbienceContext::Nether)) {
+            ++netherPass;
+        }
+    }
+    EXPECT_GT(netherPass, 400);
+    EXPECT_LT(netherPass, 600);
 }
 
 namespace {
@@ -121,6 +212,42 @@ bool readFile(const std::string& path, std::vector<std::uint8_t>& out) {
 }
 
 } // namespace
+
+// The ambience_nether asset (tools/generate_sounds.py's dedicated fixed
+// seed 0x91A2 — the ambience beds' paradigm): existence, the 16-bit mono
+// 44100 parse, the 2.0 s length (the design's 1.5-2 s band) and the
+// pinned peak (non-silent + byte-stable — the PITS 382 regression guard:
+// a silent / degenerate synthesis cannot reproduce it).
+TEST(AmbienceNetherTest, NetherBedWavShipsAndParses) {
+    std::vector<std::uint8_t> data;
+    ASSERT_TRUE(readFile("assets/sounds/ambience_nether.wav", data))
+        << "run from the repo root";
+    auto r = mc::SoundBank::parseWav(data);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(r->rate, 44100);
+    // 2.0 s at 44100 Hz = 88200 samples (the generator's exact length).
+    EXPECT_EQ(r->pcm.size(), 88200u);
+    // A bed is never silent: some audible content in the middle.
+    bool audible = false;
+    for (std::size_t i = r->pcm.size() / 4; i < r->pcm.size() * 3 / 4;
+         ++i) {
+        if (std::abs(r->pcm[i]) > 32) {
+            audible = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(audible) << "ambience_nether is silent in its middle";
+    // The pinned peak (the 0.5 ambient volume class — the
+    // portal_ambient's twin, the PITS 382 guard).
+    int peak = 0;
+    for (const std::int16_t s : r->pcm) {
+        const int m = std::abs(s);
+        if (m > peak) {
+            peak = m;
+        }
+    }
+    EXPECT_EQ(peak, 4699);
+}
 
 // The 3 ambience assets (tools/generate_sounds.py — the fixed-seed
 // LCG/sine paradigm): existence, the 16-bit mono 44100 parse, and the

@@ -344,14 +344,16 @@ TEST(SoundBatTest, SqueakWavShipsAndParses) {
     EXPECT_EQ(peak, 3589);
 }
 
-TEST(SoundBatTest, SoundDirectoryGrowsToFortyNine) {
+TEST(SoundBatTest, SoundDirectoryGrowsToSixty) {
     // The sound set 41 -> 42 (the squeak — the V2-14 file) -> 43 (the
     // shear — the V2-15 file) -> 46 (the snow family — the three V2-16
     // files) -> 47 (the portal ambience — the V3-1 Phase A file) -> 49
-    // (the portal trigger + travel — the V3-1 Phase B files): each
-    // phase's new file is the only addition (the generate_sounds.py
-    // re-run leaves the others byte-identical, the script's md5
-    // discipline; the FNV pins hold each phase's bytes).
+    // (the portal trigger + travel — the V3-1 Phase B files) -> 60 (the
+    // V3-7 Part 2 nether face — the nine material wavs + the
+    // evaporate + the ambience_nether, the 49 -> 60 conscious census
+    // update: each phase's new files are the only additions, the
+    // generate_sounds.py re-run leaves the others byte-identical, the
+    // script's md5 discipline; the FNV pins hold each phase's bytes).
     std::size_t count = 0;
     for (const auto& entry :
          std::filesystem::directory_iterator("assets/sounds")) {
@@ -359,7 +361,7 @@ TEST(SoundBatTest, SoundDirectoryGrowsToFortyNine) {
             ++count;
         }
     }
-    EXPECT_EQ(count, 49u);
+    EXPECT_EQ(count, 60u);
 }
 
 // ---------------------------------------------------------------------------
@@ -491,10 +493,10 @@ TEST(SoundNoiseHelperRepairTest, NoiseWavsShipTextured) {
     for (const auto& e : want) {
         expectWavPin(e.name, e.samples, e.peak);
     }
-    // The census is the V3-1 Phase B pin (49 files — the directory
-    // count: the V2-16's 46 + the Phase A portal ambience's 1 + the
-    // Phase B trigger / travel's 2; the repair edits in place, no
-    // additions).
+    // The census is the V3-7 Part 2 pin (60 files — the directory
+    // count: the V3-1 Phase B's 49 + the nether material families'
+    // 9 + the evaporate + the ambience_nether, the V3-7 conscious
+    // update — the repair itself edits in place, no additions).
     std::size_t count = 0;
     for (const auto& entry :
          std::filesystem::directory_iterator("assets/sounds")) {
@@ -502,7 +504,7 @@ TEST(SoundNoiseHelperRepairTest, NoiseWavsShipTextured) {
             ++count;
         }
     }
-    EXPECT_EQ(count, 49u);
+    EXPECT_EQ(count, 60u);
 }
 
 // ---------------------------------------------------------------------------
@@ -537,4 +539,55 @@ TEST(SoundPortalTravelTest, TriggerAndTravelWavsShipAndParse) {
     // DC-ramp) synthesis cannot reproduce them.
     expectWavPin("portal_trigger", 15434, 16177); // 0.35 s
     expectWavPin("portal_travel", 44100, 10830);  // 1.0 s
+}
+
+// ---------------------------------------------------------------------------
+// V3-7 Part 2 (v3.7.0): the nether material families + the evaporation
+// cue (the sound set 49 -> 60: the nine material wavs + the evaporate
+// + the ambience_nether — the last one's pin lives with the ambience
+// assets in test_ambience.cpp).
+// ---------------------------------------------------------------------------
+
+TEST(SoundNetherFamilyTest, NetherMaterialWavsShipAndParse) {
+    // The nether family (the generate_sounds.py's dedicated fixed seeds
+    // 0x8E001 / 0x8E111 / 0x8E222 — the netherrack / magma_block /
+    // ancient_debris sound_material reassignment, T2): the muffled low
+    // nether-rock face (the sand-family paradigm, one step darker — the
+    // double lowpass's rectified texture is the family's signature, the
+    // stone's bright face replaced). The exact peak pins are the PITS
+    // 382 regression guards: a silent / degenerate (constant or DC-ramp)
+    // synthesis cannot reproduce them.
+    expectWavPin("nether_dig", 3969, 15638);   // 0.09 s
+    expectWavPin("nether_place", 4851, 21340); // 0.11 s
+    expectWavPin("nether_break", 6615, 18887); // 0.15 s
+}
+
+TEST(SoundNetherFamilyTest, NyliumMaterialWavsShipAndParse) {
+    // The nylium family (seeds 0x8F001 / 0x8F111 / 0x8F222 — the
+    // crimson / warped nylium reassignment, T2): the soft wet
+    // mushroom-stone face (the grass precedent's fieldless generic
+    // events replaced — the double lowpass's one step darker).
+    expectWavPin("nylium_dig", 4410, 12158);   // 0.10 s
+    expectWavPin("nylium_place", 5292, 18996); // 0.12 s
+    expectWavPin("nylium_break", 7938, 11706); // 0.18 s
+}
+
+TEST(SoundNetherFamilyTest, StemMaterialWavsShipAndParse) {
+    // The stem family (seeds 0x90001 / 0x90111 / 0x90222 — the crimson
+    // / warped stem reassignment, T2): the mid woody nether-stem face
+    // (the wood family's one step crisper — the single lowpass's
+    // brighter texture).
+    expectWavPin("stem_dig", 3528, 15450);   // 0.08 s
+    expectWavPin("stem_place", 3969, 22796); // 0.09 s
+    expectWavPin("stem_break", 6174, 18182); // 0.14 s
+}
+
+TEST(SoundNetherFamilyTest, EvaporateWavShipsAndParses) {
+    // T1 (v3.7.0): the nether's water evaporation cue (seed 0x9151 —
+    // the water bucket empties in the nether, water cannot exist
+    // there): the hiss (the double-lowpassed noise's fast decay) over
+    // the quiet descending bubble tone, 0.40 s, in the SFX volume
+    // class (the splash / ignite precedent). The exact peak pin is
+    // the PITS 382 regression guard.
+    expectWavPin("evaporate", 17640, 13764); // 0.40 s
 }

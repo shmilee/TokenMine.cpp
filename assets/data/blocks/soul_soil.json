@@ -1,7 +1,7 @@
 {
   "id": "soul_soil",
   "properties": {
-    "sound_material": "stone",
+    "sound_material": "sand",
     "hardness": 0.5,
     "drops": "soul_soil"
   },

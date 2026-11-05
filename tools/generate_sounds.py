@@ -122,6 +122,22 @@ vocabulary; blocks name one via `sound_material`):
                        bakes the volume), played 2D centered (the
                        switch is global, not a point in space — the
                        thunder / ambience precedent)
+ -- V3-7 Part 2 nether deepening (11 files: the three material families
+       + the evaporation cue + the nether ambience bed):
+    nether_dig.wav      muffled low dig (double lowpass + 65 Hz body)
+    nether_place.wav    muffled low thud 60 Hz (double lowpass)
+    nether_break.wav    crisp break (lowpassed burst + 900 Hz ping)
+    nylium_dig.wav      soft wet dig (double lowpass + 90 -> 60 Hz wobble)
+    nylium_place.wav    wet low plop 55 Hz (double lowpass)
+    nylium_break.wav    soft squelch (double lowpass, slow decay)
+    stem_dig.wav        mid woody knock (lowpassed noise + 200 Hz tone)
+    stem_place.wav      woody thud 130 Hz + noise
+    stem_break.wav      woody crisp break (lowpassed burst + 350 -> 250
+                        Hz wobble)
+    evaporate.wav       the nether's water evaporation cue (hiss +
+                        descending bubble tone, 0.4 s, SFX class)
+    ambience_nether.wav the nether ambience bed (48 Hz rumble + distant
+                        lava cracks, 2.0 s, 0.5 ambient class)
 """
 import math
 import os
@@ -903,6 +919,187 @@ def portal_travel():
     return sound(dur, f)
 
 
+# ---------------------------------------------------------------------------
+# V3-7 (v3.7.0): the nether sound face — the three NEW material families
+# (nether / nylium / stem — the block sound_material reassignments, the
+# v3.5.0 stone / grass reuse deviation's closure), the water evaporation
+# cue (T1) and the nether ambience bed (T4). Every file is a fixed-seed
+# LCG / sine composition (the paradigm: a re-run leaves every OTHER file
+# byte-identical — the md5 discipline), one advancing LCG instance per
+# noise face (the _noise repair's convention).
+def nether_dig():
+    """Muffled low dig (netherrack / magma block / ancient debris —
+    Minecraft: the three share the nether-rock face): double-lowpassed
+    noise (the muffled face — the sand paradigm, one step darker) under
+    a ~65 Hz body (the hollow knock)."""
+    lcg = Lcg(0x8E001)  # dedicated fixed seed (unique to this sound)
+    n = int(RATE * 0.09)
+    noise = [lcg.next() for _ in range(n)]
+    out = [noise[i] * env(i / RATE, 0.09, 26.0) * 0.50
+           + math.sin(2 * math.pi * 65.0 * (i / RATE))
+           * math.exp(-(i / RATE) * 40.0) * 0.22
+           for i in range(n)]
+    return lowpass3(lowpass3(out))
+
+
+def nether_place():
+    """Muffled low thud: a 60 Hz body (the lowest place strike of the
+    set) + a double-lowpassed noise."""
+    lcg = Lcg(0x8E111)  # dedicated fixed seed (unique to this sound)
+
+    def f(t, _):
+        return (math.sin(2 * math.pi * 60.0 * t) * math.exp(-t * 30.0) * 0.55
+                + lcg.next() * math.exp(-t * 45.0) * 0.28)
+    return lowpass3(lowpass3(sound(0.11, f)))
+
+
+def nether_break():
+    """Crisp break: a fast-decay lowpassed noise burst + a 900 Hz ping
+    (the crack flash — the nether rock snaps, it does not shatter
+    bright like the stone family)."""
+    lcg = Lcg(0x8E222)  # dedicated fixed seed (unique to this sound)
+    n = int(RATE * 0.15)
+    noise = [lcg.next() for _ in range(n)]
+    out = [noise[i] * env(i / RATE, 0.15, 32.0) * 0.6
+           + math.sin(2 * math.pi * 900.0 * (i / RATE))
+           * math.exp(-(i / RATE) * 50.0) * 0.22
+           for i in range(n)]
+    return lowpass3(out)
+
+
+def nylium_dig():
+    """Soft wet dig (crimson / warped nylium — Minecraft's mushroom
+    stone, grass-class but muffled): double-lowpassed noise under a
+    slow 90 -> 60 Hz wet wobble."""
+    lcg = Lcg(0x8F001)  # dedicated fixed seed (unique to this sound)
+    n = int(RATE * 0.10)
+    noise = [lcg.next() for _ in range(n)]
+    out = [noise[i] * env(i / RATE, 0.10, 22.0) * 0.48
+           + math.sin(2 * math.pi * (90.0 - 30.0 * (i / n)) * (i / RATE))
+           * math.exp(-(i / RATE) * 30.0) * 0.20
+           for i in range(n)]
+    return lowpass3(lowpass3(out))
+
+
+def nylium_place():
+    """Wet low plop: a 55 Hz body (below the nether's 60 — the mush
+    sets deeper) + a double-lowpassed noise."""
+    lcg = Lcg(0x8F111)  # dedicated fixed seed (unique to this sound)
+
+    def f(t, _):
+        return (math.sin(2 * math.pi * 55.0 * t) * math.exp(-t * 28.0) * 0.52
+                + lcg.next() * math.exp(-t * 42.0) * 0.26)
+    return lowpass3(lowpass3(sound(0.12, f)))
+
+
+def nylium_break():
+    """Soft squelch: double-lowpassed noise, the slow 12 decay over
+    0.18 s — the mush giving way wetly (the sand_break paradigm, one
+    step darker)."""
+    lcg = Lcg(0x8F222)  # dedicated fixed seed (unique to this sound)
+    n = int(RATE * 0.18)
+    noise = [lcg.next() for _ in range(n)]
+    out = [noise[i] * env(i / RATE, 0.18, 12.0) * 0.55
+           for i in range(n)]
+    return lowpass3(lowpass3(out))
+
+
+def stem_dig():
+    """Mid woody knock (crimson / warped stem — Minecraft's nether
+    stem, wood-class but crisp): single-lowpassed noise under a 200 Hz
+    hollow-log tone (the wood_dig paradigm, one step brighter)."""
+    lcg = Lcg(0x90001)  # dedicated fixed seed (unique to this sound)
+    n = int(RATE * 0.08)
+    noise = [lcg.next() for _ in range(n)]
+    out = [noise[i] * env(i / RATE, 0.08, 34.0) * 0.38
+           + math.sin(2 * math.pi * 200.0 * (i / RATE))
+           * math.exp(-(i / RATE) * 50.0) * 0.26
+           for i in range(n)]
+    return lowpass3(out)
+
+
+def stem_place():
+    """Woody thud: a 130 Hz strike (below the wood's 150 — the stem
+    is denser) + a single-lowpassed noise body."""
+    lcg = Lcg(0x90111)  # dedicated fixed seed (unique to this sound)
+
+    def f(t, _):
+        return (math.sin(2 * math.pi * 130.0 * t) * math.exp(-t * 40.0) * 0.58
+                + lcg.next() * math.exp(-t * 60.0) * 0.26)
+    return lowpass3(sound(0.09, f))
+
+
+def stem_break():
+    """Woody crisp break: a lowpassed noise burst (decay 35 — snappier
+    than the wood's 20) + a 350 -> 250 Hz split wobble (the grain
+    parting)."""
+    lcg = Lcg(0x90222)  # dedicated fixed seed (unique to this sound)
+    n = int(RATE * 0.14)
+    noise = [lcg.next() for _ in range(n)]
+    out = [noise[i] * env(i / RATE, 0.14, 35.0) * 0.55
+           + math.sin(2 * math.pi * (350.0 - 100.0 * (i / n)) * (i / RATE))
+           * math.exp(-(i / RATE) * 30.0) * 0.20
+           for i in range(n)]
+    return lowpass3(out)
+
+
+def evaporate():
+    """T1 (v3.7.0): the nether's water evaporation cue (the water
+    bucket empties — water cannot exist in the nether): a hiss (the
+    fixed-seed double-lowpassed noise, the fast exponential decay) over
+    a quiet descending bubble tone, 0.40 s, in the SFX volume class
+    (the splash / ignite precedent). One advancing LCG instance,
+    dedicated fixed seed — a re-run leaves every other file
+    byte-identical."""
+    lcg = Lcg(0x9151)  # dedicated fixed seed (unique to this sound)
+    dur = 0.40
+    n = int(RATE * dur)
+    noise = [lcg.next() for _ in range(n)]
+    out = [noise[i] * env(i / RATE, dur, 14.0) * 0.55
+           + math.sin(2 * math.pi * (300.0 - 180.0 * (i / n)) * (i / RATE))
+           * math.exp(-(i / RATE) * 10.0) * 0.12
+           for i in range(n)]
+    return lowpass3(lowpass3(out))
+
+
+def ambience_nether():
+    """T4 (v3.7.0): the nether ambience bed (the fourth context — the
+    player in the nether, priority over cave / day / night): a low
+    rumble (a 48 Hz body with a slow 0.3 Hz wobble + a quiet 96 Hz
+    overtone) over a fixed-seed double-lowpassed rumble bed, with
+    three LCG-placed distant lava cracks (400 -> 90 Hz fast glides,
+    quiet — the ambience_cave drip precedent's nether twin), 2.0 s,
+    faded with amb_env (no clicks), in the 0.5 ambient volume class
+    (the portal_ambient precedent — the master amplitude bakes the
+    volume). One advancing LCG instance, dedicated fixed seed — a
+    re-run leaves every other file byte-identical."""
+    lcg = Lcg(0x91A2)  # dedicated fixed seed (unique to this sound)
+    dur = 2.0
+    n = int(RATE * dur)
+    bed = lowpass3(lowpass3([lcg.next() for _ in range(n)]))
+    # Three cracks spread over [0.40, 1.60] with jitter (the LCG
+    # decides — the ambience_cave placement pattern).
+    cracks = []
+    for i in range(3):
+        u = lcg.next() * 0.5 + 0.5
+        cracks.append(0.40 + 0.40 * ((i + u) / 3.0))
+
+    def f(t, _):
+        i = int(t * RATE)
+        rumble = (math.sin(2 * math.pi * 48.0 * t)
+                  * (0.75 + 0.25 * math.sin(2 * math.pi * 0.3 * t))
+                  + math.sin(2 * math.pi * 96.0 * t) * 0.20)
+        out = rumble * 0.14 + bed[i] * 0.10
+        for t0 in cracks:
+            u = t - t0
+            if 0.0 <= u < 0.16:
+                fr = 400.0 - 1875.0 * (u / 0.16)  # 400 -> 90 Hz glide
+                out += (math.sin(2 * math.pi * fr * u)
+                        * math.exp(-u * 24.0) * 0.12)
+        return out * amb_env(t, dur, 0.2, 0.4) * 0.5
+    return sound(dur, f)
+
+
 SOUNDS = {
     "dig": dig,
     "place": place,
@@ -974,6 +1171,26 @@ SOUNDS = {
     # travel fade (2D centered, the dimension-switch completion frame).
     "portal_trigger": portal_trigger,
     "portal_travel": portal_travel,
+    # V3-7 (v3.7.0): the nether material families (3 x 3 events — the
+    # block sound_material reassignments, the v3.5.0 stone / grass reuse
+    # deviation's closure: nether = netherrack / magma_block /
+    # ancient_debris, nylium = the two nyliums, stem = the two stems).
+    "nether_dig": nether_dig,
+    "nether_place": nether_place,
+    "nether_break": nether_break,
+    "nylium_dig": nylium_dig,
+    "nylium_place": nylium_place,
+    "nylium_break": nylium_break,
+    "stem_dig": stem_dig,
+    "stem_place": stem_place,
+    "stem_break": stem_break,
+    # V3-7 (v3.7.0): T1 — the nether's water evaporation cue (the water
+    # bucket empties in the nether — no cell touched, the 2D centered
+    # path, the splash's twin).
+    "evaporate": evaporate,
+    # V3-7 (v3.7.0): T4 — the nether ambience bed (the fourth context —
+    # the player in the nether, priority over cave / day / night).
+    "ambience_nether": ambience_nether,
 }
 
 

@@ -21,7 +21,15 @@ constexpr double kU53 = 9007199254740992.0;
 
 } // namespace
 
-AmbienceContext ambienceContext(int rawSkyLight, float dayFactor) {
+AmbienceContext ambienceContext(int rawSkyLight, float dayFactor,
+                                bool inNether) {
+    // T4 (v3.7.0): the nether is its own ambience world (the TOP
+    // priority — a nether cave is a nether, the recorded deviation 5):
+    // in the nether the context is Nether, full stop (the raw sky light
+    // / the dayFactor never reach the overworld branches below).
+    if (inNether) {
+        return AmbienceContext::Nether;
+    }
     // The cave takes priority: no sky path at the player's feet cell is
     // the Minecraft "no sky" rule (a cave is a cave at night too).
     if (rawSkyLight == 0) {
@@ -55,6 +63,8 @@ const char* ambienceSoundName(AmbienceContext context) {
         return "ambience_day";
     case AmbienceContext::Night:
         return "ambience_night";
+    case AmbienceContext::Nether:
+        return "ambience_nether";
     }
     // Unreachable (every enumerator is handled above) — the return keeps
     // the non-void path warning-free.

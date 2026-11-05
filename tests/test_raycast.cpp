@@ -1132,3 +1132,27 @@ TEST(RaycastPourTargetTest, LavaOnFlowingWaterReplacementPour) {
     EXPECT_EQ(t->y, 1);
     EXPECT_EQ(t->z, 8);
 }
+
+// ---------------------------------------------------------------------------
+// T1 (v3.7.0): the nether water-pour decision (evaporation — the v3.4.0
+// documented no-op deviation's upgrade). The pure gate's four forms:
+// only WATER in the NETHER evaporates (the bucket empties, no cell
+// touched, the click consumed); nether lava pours as usual (Minecraft's
+// twin — lava is legal in the nether) and the overworld keeps the
+// pre-T1 bit-identical pour path for both kinds (the false branch).
+// ---------------------------------------------------------------------------
+
+TEST(RaycastPourTargetTest, NetherWaterPourEvaporationGate) {
+    // The four forms (the unit pin of the dimension predicate):
+    EXPECT_TRUE(netherWaterPourEvaporates(FluidKind::Water,
+                                          /*inNether=*/true));
+    EXPECT_FALSE(netherWaterPourEvaporates(FluidKind::Lava,
+                                           /*inNether=*/true)); // lava
+    // is legal in the nether (the normal placement, the recorded
+    // deviation)
+    EXPECT_FALSE(netherWaterPourEvaporates(FluidKind::Water,
+                                           /*inNether=*/false)); // the
+    // overworld's water = the pre-T1 bit-identical path
+    EXPECT_FALSE(netherWaterPourEvaporates(FluidKind::Lava,
+                                           /*inNether=*/false));
+}

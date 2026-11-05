@@ -1,8 +1,9 @@
 {
   "id": "magma_block",
   "properties": {
-    "sound_material": "stone",
+    "sound_material": "nether",
     "hardness": 1.5,
+    "light_emission": 3,
     "drops": "magma_block"
   },
   "model": {

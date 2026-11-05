@@ -2147,6 +2147,64 @@ TEST(BlockRegistryTest, Craft3SoundMaterialParses) {
               std::string::npos);
 }
 
+// ---------------------------------------------------------------------------
+// Walk speed factor (T5, v3.7.0 — the soul sand slowdown): the optional
+// `walk_speed_factor` field (STRICT number in (0, 1] — ABSENT = 1.0 the
+// no-slowdown default; > 1 a speedup / <= 0 a stop / a non-number =
+// named rejection, the fuel_time range discipline). The consumption is
+// unit-tested in test_player.cpp (the feet cells' pure functions + the
+// walk-only movement behavior).
+// ---------------------------------------------------------------------------
+
+TEST(BlockRegistryTest, WalkSpeedFactorParses) {
+    const std::string model =
+        R"("model":{"textures":{"top":"t","side":"t","bottom":"t"}})";
+    BlockRegistry reg;
+    // 0.4 parses (the shipped soul_sand value — the Minecraft exact).
+    auto r = reg.registerBlock(parseDef(
+        std::string(R"({"id":"ss","properties":{"walk_speed_factor":0.4},)") +
+        model + "}"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FLOAT_EQ(reg.at(*r).properties.walkSpeedFactor, 0.4f);
+    // 1.0 is the LEGAL boundary (a factor that slows nothing — the
+    // no-op value is data-legal, the (0, 1] domain's top).
+    auto rOne = reg.registerBlock(parseDef(
+        std::string(R"({"id":"one","properties":{"walk_speed_factor":1.0},)") +
+        model + "}"));
+    ASSERT_TRUE(rOne.ok()) << rOne.error().message;
+    EXPECT_FLOAT_EQ(reg.at(*rOne).properties.walkSpeedFactor, 1.0f);
+    // ABSENT = 1.0 (the no-slowdown default — the overworld's
+    // bit-identical root).
+    auto rNone = reg.registerBlock(parseDef(
+        std::string(R"({"id":"plain","properties":{"hardness":1.0},)") +
+        model + "}"));
+    ASSERT_TRUE(rNone.ok()) << rNone.error().message;
+    EXPECT_FLOAT_EQ(reg.at(*rNone).properties.walkSpeedFactor, 1.0f);
+    // > 1 is a SPEEDUP — the property is a slowdown: rejected by name.
+    auto rHigh = reg.registerBlock(parseDef(
+        std::string(R"({"id":"hi","properties":{"walk_speed_factor":1.5},)") +
+        model + "}"));
+    ASSERT_FALSE(rHigh.ok());
+    EXPECT_NE(rHigh.error().message.find("walk_speed_factor"),
+              std::string::npos);
+    EXPECT_NE(rHigh.error().message.find("(0, 1]"), std::string::npos);
+    // 0 is a STOP: rejected by name.
+    auto rZero = reg.registerBlock(parseDef(
+        std::string(R"({"id":"z","properties":{"walk_speed_factor":0},)") +
+        model + "}"));
+    ASSERT_FALSE(rZero.ok());
+    EXPECT_NE(rZero.error().message.find("walk_speed_factor"),
+              std::string::npos);
+    // A STRING "0.4" is a non-number: the type gate names it (no silent
+    // parse, the checkField "number" discipline).
+    auto rStr = reg.registerBlock(parseDef(
+        std::string(R"({"id":"s","properties":{"walk_speed_factor":"0.4"},)") +
+        model + "}"));
+    ASSERT_FALSE(rStr.ok());
+    EXPECT_NE(rStr.error().message.find("walk_speed_factor"),
+              std::string::npos);
+}
+
 TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
     // ACTUAL asset files (not a synthetic copy): the assignment is the
     // content contract (the Minecraft sound families) — a typo'd material
@@ -2236,22 +2294,27 @@ TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
         // V3-1 Phase A: the nether portal (the glass sound family — the
         // MC portal's glass-class break sound).
         {"nether_portal", "glass"},
-        // V3-1 Phase B: the netherrack (the stone sound family — the
-        // documented deviation 3: the netherrack's own family is Phase C).
-        {"netherrack", "stone"},
-        // V3-2 Part 1: the nether content family (the stone sound — the
-        // design's "v1 全复用 stone"; the nylium pair is the fieldless
-        // grass precedent — NOT in this map, the no-field census below).
+        // T2 (v3.7.0): the nether material families — the v3.4.0 /
+        // v3.5.0 stone / grass reuse deviations' CLOSURE: nether =
+        // netherrack / magma_block / ancient_debris (the nether-rock
+        // face), nylium = the two nyliums (the mushroom-stone face, the
+        // fieldless grass precedent replaced), stem = the two stems
+        // (the nether-wood face). soul sand / soil = the sand family,
+        // basalt / nether_brick = the stone family (Minecraft's
+        // assignments).
+        {"netherrack", "nether"},
         {"nether_brick", "stone"},
-        {"magma_block", "stone"},
+        {"magma_block", "nether"},
         {"quartz_ore", "stone"},
         {"nether_gold_ore", "stone"},
-        {"ancient_debris", "stone"},
-        {"soul_sand", "stone"},
-        {"soul_soil", "stone"},
+        {"ancient_debris", "nether"},
+        {"soul_sand", "sand"},
+        {"soul_soil", "sand"},
         {"basalt", "stone"},
-        {"crimson_stem", "stone"},
-        {"warped_stem", "stone"},
+        {"crimson_nylium", "nylium"},
+        {"warped_nylium", "nylium"},
+        {"crimson_stem", "stem"},
+        {"warped_stem", "stem"},
         // V2-16: the snow block (the 7th material family).
         {"snow", "snow"},
     };
@@ -2283,7 +2346,9 @@ TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
     for (const std::string& mat :
          {std::string("stone"), std::string("wood"), std::string("gravel"),
           std::string("sand"), std::string("cloth"), std::string("glass"),
-          std::string("snow")}) {
+          std::string("snow"),
+          // T2 (v3.7.0): the nether material families.
+          std::string("nether"), std::string("nylium"), std::string("stem")}) {
         for (const std::string_view ev : kSoundMaterialEvents) {
             EXPECT_TRUE(
                 assets.exists("sounds/" + mat + "_" + std::string(ev) + ".wav"))
@@ -3644,11 +3709,11 @@ TEST(BlockContentTest, V340NetherrackBlockContentPinned) {
     // wiki-verified 11-04 set): hardness 0.4 (the Minecraft netherrack
     // EXACT — a pickaxe's fast break, the bare-hand's slow one), drops
     // ITSELF (the block item form — mine the nether, build with it), the
-    // STONE sound material family (the documented deviation 3: the
-    // netherrack's own sound family is the Phase C content; the stone
-    // timbre stands in — the three stone wavs exist for the init's
-    // checkSoundMaterials), the full opaque cube (the default solid /
-    // opaque — the stone precedent's shape).
+    // NETHER sound material family (T2 v3.7.0 — the v3.4.0 documented
+    // deviation 3's CLOSURE: the stone timbre's stand-in is replaced by
+    // the nether-rock family — the three nether wavs exist for the
+    // init's checkSoundMaterials), the full opaque cube (the default
+    // solid / opaque — the stone precedent's shape).
     AssetManager assets;
     ASSERT_TRUE(assets.setRoot("assets").ok())
         << "run the tests from the repository root";
@@ -3666,19 +3731,19 @@ TEST(BlockContentTest, V340NetherrackBlockContentPinned) {
     EXPECT_TRUE(b->properties.destroyable); // mineable (the stone twin)
     EXPECT_FLOAT_EQ(b->properties.hardness, 0.4f); // the Minecraft exact
     EXPECT_EQ(b->properties.drops, "netherrack"); // it drops itself
-    EXPECT_EQ(b->properties.soundMaterial, "stone"); // deviation 3
+    EXPECT_EQ(b->properties.soundMaterial, "nether"); // T2 (v3.7.0)
     // Stateless (the fill's plain slab — no per-instance byte).
     EXPECT_FALSE(b->hasState());
     // No explicit item file (the auto block item owns the name — the
     // snow precedent).
     EXPECT_FALSE(std::filesystem::exists(
         "assets/data/items/netherrack.json"));
-    // The stone material family's three event wavs exist (the init's
+    // The nether material family's three event wavs exist (the init's
     // checkSoundMaterials input side, file-based).
     for (const char* ev : {"dig", "place", "break"}) {
         EXPECT_TRUE(std::filesystem::exists(
-            std::string("assets/sounds/stone_") + ev + ".wav"))
-            << "the stone material's " << ev << " wav is not shipped";
+            std::string("assets/sounds/nether_") + ev + ".wav"))
+            << "the nether material's " << ev << " wav is not shipped";
     }
     // The texture ships (the atlas's tile's file side).
     EXPECT_TRUE(std::filesystem::exists(

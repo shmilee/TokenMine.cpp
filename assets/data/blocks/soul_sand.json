@@ -1,8 +1,9 @@
 {
   "id": "soul_sand",
   "properties": {
-    "sound_material": "stone",
+    "sound_material": "sand",
     "hardness": 0.5,
+    "walk_speed_factor": 0.4,
     "drops": "soul_sand"
   },
   "model": {

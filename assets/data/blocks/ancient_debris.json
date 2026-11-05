@@ -1,7 +1,7 @@
 {
   "id": "ancient_debris",
   "properties": {
-    "sound_material": "stone",
+    "sound_material": "nether",
     "hardness": 10,
     "drops": "ancient_debris",
     "smeltable_to": "netherite_scrap"

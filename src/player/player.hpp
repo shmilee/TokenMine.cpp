@@ -40,6 +40,27 @@
 
 namespace mc {
 
+// T5 (v3.7.0): the walk-speed factor of the TWO feet cells (the soul
+// sand slowdown — the block's data-driven walk_speed_factor): the
+// SLOWEST surface wins (the min — one foot on the slowing block slows
+// the whole walk, the Minecraft rule). A factor of 1.0 (neither cell
+// carries the property — the overworld's content, the structural-
+// immunity root) is the no-slowdown identity. Pure — unit-tested.
+inline float feetWalkFactor(float factorA, float factorB) {
+    return std::min(factorA, factorB);
+}
+
+// T5 (v3.7.0): the walk-ONLY gate + scale: the factor applies to the
+// ground walk pace (walk AND sprint — both are walks) only; flight /
+// any fluid tier / crouch are EXEMPT (the Minecraft walking-only rule —
+// the recorded deviation 4). walking = false leaves the pace untouched
+// (the exempt tiers' bit-identical root); a factor of 1.0 is a bit-
+// identical no-op even when walking (x * 1.0f == x, IEEE 754 — the
+// overworld's structural-immunity root). Pure — unit-tested.
+inline float applyWalkSpeedFactor(float speed, float factor, bool walking) {
+    return walking ? speed * factor : speed;
+}
+
 class Player : public Entity {
 public:
     struct Params {

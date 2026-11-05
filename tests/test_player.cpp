@@ -2466,3 +2466,243 @@ TEST(PlayerTest, SingleSpacePressStillJumps) {
     EXPECT_FLOAT_EQ(p.velocity().y, p.params().jumpSpeed);
     EXPECT_FALSE(p.onGround()); // left the ground
 }
+
+// ===========================================================================
+// T5 (v3.7.0): the soul sand walk slowdown — the block's data-driven
+// walk_speed_factor (the (0, 1] strict parse is unit-tested in
+// test_block.cpp; the content pin in test_nether_gen.cpp): the GROUND
+// walk/sprint pace is scaled by the min of the two feet cells' factors
+// (the slowest surface — any feet cell on the slowing block slows the
+// walk), flight / the fluid tiers / crouch are EXEMPT (the walking-only
+// rule — the recorded deviation 4). A factor of 1.0 (the field-less
+// overworld content) is a bit-identical no-op (the structural-immunity
+// red line — the control runs below prove the factor-less path is
+// untouched).
+// ===========================================================================
+
+namespace {
+
+// The soul fixture: a stone floor (the factor-less control) with an
+// optional 2-cell-wide soul strip (the walk_speed_factor 0.4 block —
+// the shipped soul_sand's Minecraft exact value) and an optional
+// 1-deep water pool over it (the fluid-tier exemption's face).
+struct SoulFixture {
+    BlockRegistry blocks;
+    World world;
+    BlockID stone;
+    BlockID soul;
+
+    SoulFixture() {
+        auto r = blocks.registerBlock(parseJson(
+            R"({"id":"stone","model":{"textures":{"top":"t","side":"t",)"
+            R"("bottom":"t"}}})"));
+        if (!r.ok()) {
+            ADD_FAILURE() << r.error().message;
+        }
+        r = blocks.registerBlock(parseJson(
+            R"({"id":"soul","properties":{"walk_speed_factor":0.4},)"
+            R"("model":{"textures":{"top":"s","side":"s","bottom":"s"}}})"));
+        if (!r.ok()) {
+            ADD_FAILURE() << r.error().message;
+        }
+        stone = blocks.idForName("stone");
+        soul = blocks.idForName("soul");
+        for (int x = -16; x < 16; ++x) {
+            for (int z = -16; z < 16; ++z) {
+                world.setBlock(x, 0, z, stone); // floor top at y = 1
+            }
+        }
+    }
+
+    // The soul strip: cells x in [x0, x0 + 2), all Z, at the floor row.
+    void soulStrip(int x0) {
+        for (int x = x0; x < x0 + 2; ++x) {
+            for (int z = -16; z < 16; ++z) {
+                world.setBlock(x, 0, z, soul);
+            }
+        }
+    }
+
+    // A 1-deep pool (the water cell y = 1) over the strip's X span: a
+    // wading player's feet rest on the strip floor at y = 1.0 (the feet
+    // row = the strip — the exemption test's geometry).
+    void pool(int x0) {
+        for (int x = x0; x < x0 + 2; ++x) {
+            for (int z = -16; z < 16; ++z) {
+                world.setFluid(x, 1, z, FluidKind::Water, kMaxFluidLevel);
+            }
+        }
+    }
+
+    Player makePlayer(Vec3 pos) const {
+        return Player(world, blocks, pos);
+    }
+};
+
+} // namespace
+
+TEST(WalkSpeedFactorTest, PureFunctionsPinned) {
+    // The two feet cells: the SLOWEST surface wins (the min) — one foot
+    // on the factor-0.4 block slows the walk, the factor-1.0 cell (the
+    // field-less stone) never out-weights it.
+    EXPECT_FLOAT_EQ(feetWalkFactor(0.4f, 1.0f), 0.4f);
+    EXPECT_FLOAT_EQ(feetWalkFactor(1.0f, 0.4f), 0.4f); // the min is
+                                                       // commutative
+    EXPECT_FLOAT_EQ(feetWalkFactor(0.5f, 0.4f), 0.4f); // the slower of
+                                                       // two slow cells
+    EXPECT_FLOAT_EQ(feetWalkFactor(1.0f, 1.0f), 1.0f); // the no-slowdown
+                                                       // identity
+    // The walk-only gate: the factor scales the walk pace when walking...
+    EXPECT_FLOAT_EQ(applyWalkSpeedFactor(4.3f, 0.4f, true), 4.3f * 0.4f);
+    // ...and is a bit-identical no-op for a factor of 1.0 (x * 1.0f ==
+    // x, IEEE 754 — the overworld's structural-immunity root, the
+    // field-less content's pace is EXACTLY the pre-T5 value).
+    EXPECT_FLOAT_EQ(applyWalkSpeedFactor(4.3f, 1.0f, true), 4.3f);
+    EXPECT_FLOAT_EQ(applyWalkSpeedFactor(5.6f, 1.0f, true), 5.6f);
+    // ...and is untouched for the exempt tiers (flying / swimming /
+    // crouching — the walking-only rule, the recorded deviation 4).
+    EXPECT_FLOAT_EQ(applyWalkSpeedFactor(6.88f, 0.4f, false), 6.88f);
+    EXPECT_FLOAT_EQ(applyWalkSpeedFactor(3.1f, 0.4f, false), 3.1f);
+}
+
+TEST(WalkSpeedFactorTest, WalksSlowerOnTheSoulBlock) {
+    // The walk pace over the soul strip is 0.4x the pace over the stone
+    // control (the same start-up ramp shape — the ENT-7 exponential
+    // approach scales linearly in the target, so the 2 s distances'
+    // ratio IS the factor, the real-dt tolerance band's unit form).
+    SoulFixture f;
+    f.soulStrip(/*x0=*/0);
+    Player onSoul = f.makePlayer({0.5f, 1.0f, 8.5f}); // the strip's cell
+    Player onStone = f.makePlayer({4.5f, 1.0f, 8.5f}); // the control
+    Input idle = heldInput({});
+    run(onSoul, 5, idle);
+    run(onStone, 5, idle);
+    Input walk = heldInput({GameKey::W}); // yaw 0 = -Z
+    run(onSoul, 120, walk);
+    run(onStone, 120, walk);
+    const float soulMove = 8.5f - onSoul.position().z;
+    const float stoneMove = 8.5f - onStone.position().z;
+    EXPECT_GT(soulMove, 0.0f);
+    EXPECT_NEAR(stoneMove, 8.06f, 0.05f); // the control = the pre-T5
+                                           // walk distance (4.3 x 1.875)
+    EXPECT_NEAR(soulMove / stoneMove, 0.4f, 0.005f); // the Minecraft exact
+}
+
+TEST(WalkSpeedFactorTest, StandingOnTheStripBoundarySlows) {
+    // The ANY-feet-cell rule (the dual-cell scan): a player centered on
+    // the strip's EDGE (x = 2.0: the AABB's X span [1.7, 2.3] straddles
+    // the soul cell x = 1 and the stone cell x = 2) is slowed (the min
+    // over the two feet cells = 0.4 — the slowest surface wins).
+    SoulFixture f;
+    f.soulStrip(/*x0=*/0);
+    Player edge = f.makePlayer({2.0f, 1.0f, 8.5f});
+    Player control = f.makePlayer({4.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(edge, 5, idle);
+    run(control, 5, idle);
+    Input walk = heldInput({GameKey::W});
+    run(edge, 120, walk);
+    run(control, 120, walk);
+    const float edgeMove = 8.5f - edge.position().z;
+    const float controlMove = 8.5f - control.position().z;
+    EXPECT_NEAR(edgeMove / controlMove, 0.4f, 0.005f);
+}
+
+TEST(WalkSpeedFactorTest, SprintIsSlowedToo) {
+    // Sprint is a WALK (the Minecraft rule — the exemption list is
+    // flight / fluids / crouch only): the sprint pace over the strip is
+    // 0.4x the sprint pace over the control.
+    SoulFixture f;
+    f.soulStrip(/*x0=*/0);
+    Player onSoul = f.makePlayer({0.5f, 1.0f, 8.5f});
+    Player onStone = f.makePlayer({4.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(onSoul, 5, idle);
+    run(onStone, 5, idle);
+    Input sprint = heldInput({GameKey::W, GameKey::LeftShift});
+    run(onSoul, 120, sprint);
+    run(onStone, 120, sprint);
+    const float soulMove = 8.5f - onSoul.position().z;
+    const float stoneMove = 8.5f - onStone.position().z;
+    EXPECT_GT(stoneMove, soulMove);
+    EXPECT_NEAR(soulMove / stoneMove, 0.4f, 0.005f);
+}
+
+TEST(WalkSpeedFactorTest, CrouchIsExempt) {
+    // The walking-only rule (the recorded deviation 4): crouching over
+    // the soul strip keeps the crouch pace (4.3 x 0.3 — the factor does
+    // NOT stack): the crouch trajectories over the strip and the control
+    // are IDENTICAL (the exemption's bit-level form).
+    SoulFixture f;
+    f.soulStrip(/*x0=*/0);
+    Player onSoul = f.makePlayer({0.5f, 1.0f, 8.5f});
+    Player onStone = f.makePlayer({4.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(onSoul, 5, idle);
+    run(onStone, 5, idle);
+    Input crouch = heldInput({GameKey::W, GameKey::LeftControl});
+    run(onSoul, 120, crouch);
+    run(onStone, 120, crouch);
+    EXPECT_NEAR(onSoul.position().z, onStone.position().z, 1e-4f);
+    // And the crouch pace is the FACTOR-LESS crouch (no 0.4 stacking):
+    // 1.29 x 1.875 ~ 2.42 blocks over 2 s (the walk's 3.22 minus the
+    // crouch's own scale).
+    EXPECT_NEAR(8.5f - onSoul.position().z, 2.42f, 0.05f);
+}
+
+TEST(WalkSpeedFactorTest, FlightIsExempt) {
+    // The walking-only rule: the fly's horizontal pace (walkSpeed x
+    // kFlySpeedMultiplier) is FACTOR-FREE — the fly trajectories over
+    // the strip and the control are IDENTICAL (the exemption's bit-level
+    // form).
+    SoulFixture f;
+    f.soulStrip(/*x0=*/0);
+    Player onSoul = f.makePlayer({0.5f, 1.0f, 8.5f});
+    Player onStone = f.makePlayer({4.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(onSoul, 5, idle);
+    run(onStone, 5, idle);
+    onSoul.setFlying(true);
+    onStone.setFlying(true);
+    Input fly = heldInput({GameKey::W});
+    run(onSoul, 120, fly);
+    run(onStone, 120, fly);
+    EXPECT_NEAR(onSoul.position().z, onStone.position().z, 1e-4f);
+    // The fly pace is the factor-free 6.88 b/s class (~6.4 blocks over
+    // 2 s minus the start-up ramp — FAR above the walk's 3.22).
+    EXPECT_GT(8.5f - onSoul.position().z, 6.0f);
+}
+
+TEST(WalkSpeedFactorTest, WadingInAPoolIsExempt) {
+    // The walking-only rule's fluid face: a WADING player (the feet on
+    // the strip floor, the AABB in the water cell — the feet row IS the
+    // soul strip) swims at the swim pace — the factor does NOT apply
+    // (the m_inWater gate): the wade trajectories over the strip and the
+    // control are IDENTICAL.
+    SoulFixture f;
+    f.soulStrip(/*x0=*/0);
+    f.pool(/*x0=*/0); // the soul wade (cells x 0..1, y = 1)
+    {
+        // The control pool on the plain stone floor (cells x 4..5).
+        for (int x = 4; x < 6; ++x) {
+            for (int z = -16; z < 16; ++z) {
+                f.world.setFluid(x, 1, z, FluidKind::Water,
+                                 kMaxFluidLevel);
+            }
+        }
+    }
+    Player onSoul = f.makePlayer({0.5f, 1.0f, 8.5f});
+    Player onStone = f.makePlayer({4.5f, 1.0f, 8.5f});
+    Input idle = heldInput({});
+    run(onSoul, 5, idle);
+    run(onStone, 5, idle);
+    ASSERT_TRUE(onSoul.inWater()); // the wade is in the swim state
+    ASSERT_TRUE(onStone.inWater());
+    Input walk = heldInput({GameKey::W});
+    run(onSoul, 120, walk);
+    run(onStone, 120, walk);
+    EXPECT_NEAR(onSoul.position().z, onStone.position().z, 1e-4f);
+    // The swim pace (3.1 b/s class — the factor-free control, the
+    // ENT-7 instant set: ~3.1 x 2 minus the first step's approach).
+    EXPECT_NEAR(8.5f - onSoul.position().z, 6.2f, 0.1f);
+}

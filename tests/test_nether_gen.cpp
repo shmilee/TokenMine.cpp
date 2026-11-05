@@ -2339,8 +2339,12 @@ void realAssets(AssetManager& assets) {
 
 TEST(NetherContentTest, RealTwelveBlocks) {
     // The 12 content blocks' field faces (the design's D3 pin): the
-    // hardness / the drops / the sound material (v1 reuses stone — the
-    // nylium's grass precedent = the fieldless generic events), the
+    // hardness / the drops / the sound material (T2 v3.7.0 — the v3.5.0
+    // stone / grass reuse deviations' CLOSURE: nether = netherrack's
+    // family is the NETHER material, the nylium pair the NYLIUM
+    // material (the fieldless grass precedent replaced), the stem pair
+    // the STEM material, the soul pair the SAND family, basalt /
+    // nether_brick the STONE family — the Minecraft assignments), the
     // statelessness (the ENT-2 premise), the full-cube shape.
     AssetManager assets;
     realAssets(assets);
@@ -2350,31 +2354,43 @@ TEST(NetherContentTest, RealTwelveBlocks) {
         const char* name;
         float hardness;
         const char* drops;
-        const char* sound; // nullptr = the fieldless (grass) precedent
+        const char* sound;
+        float walkFactor; // T5 v3.7.0: the walk_speed_factor (1.0 =
+                          // absent — the no-slowdown default)
     } want[] = {
-        {"nether_brick", 2.0f, "nether_brick", "stone"},
-        {"magma_block", 1.5f, "magma_block", "stone"},
-        {"quartz_ore", 3.0f, "quartz", "stone"},
-        {"nether_gold_ore", 3.0f, "gold_ingot", "stone"},
-        {"ancient_debris", 10.0f, "ancient_debris", "stone"},
-        {"soul_sand", 0.5f, "soul_sand", "stone"},
-        {"soul_soil", 0.5f, "soul_soil", "stone"},
-        {"crimson_nylium", 0.4f, "crimson_nylium", nullptr},
-        {"warped_nylium", 0.4f, "warped_nylium", nullptr},
-        {"basalt", 1.2f, "basalt", "stone"},
-        {"crimson_stem", 0.4f, "crimson_stem", "stone"},
-        {"warped_stem", 0.4f, "warped_stem", "stone"},
+        {"nether_brick", 2.0f, "nether_brick", "stone", 1.0f},
+        {"magma_block", 1.5f, "magma_block", "nether", 1.0f},
+        {"quartz_ore", 3.0f, "quartz", "stone", 1.0f},
+        {"nether_gold_ore", 3.0f, "gold_ingot", "stone", 1.0f},
+        {"ancient_debris", 10.0f, "ancient_debris", "nether", 1.0f},
+        {"soul_sand", 0.5f, "soul_sand", "sand", 0.4f},
+        {"soul_soil", 0.5f, "soul_soil", "sand", 1.0f},
+        {"crimson_nylium", 0.4f, "crimson_nylium", "nylium", 1.0f},
+        {"warped_nylium", 0.4f, "warped_nylium", "nylium", 1.0f},
+        {"basalt", 1.2f, "basalt", "stone", 1.0f},
+        {"crimson_stem", 0.4f, "crimson_stem", "stem", 1.0f},
+        {"warped_stem", 0.4f, "warped_stem", "stem", 1.0f},
     };
     for (const auto& w : want) {
         const Block* b = blocks.findByName(w.name);
         ASSERT_NE(b, nullptr) << w.name;
         EXPECT_FLOAT_EQ(b->properties.hardness, w.hardness) << w.name;
         EXPECT_EQ(b->properties.drops, w.drops) << w.name;
-        EXPECT_EQ(b->properties.soundMaterial, w.sound ? w.sound : "")
+        EXPECT_EQ(b->properties.soundMaterial, w.sound) << w.name;
+        // T5 (v3.7.0): the walk_speed_factor — soul_sand carries the
+        // Minecraft exact 0.4, every other content block is absent
+        // (1.0 — the no-slowdown default, the overworld's twin).
+        EXPECT_FLOAT_EQ(b->properties.walkSpeedFactor, w.walkFactor)
             << w.name;
         EXPECT_FALSE(b->hasState()) << w.name; // the ENT-2 premise
         EXPECT_EQ(b->model.shape, BlockModel::Shape::FullCube) << w.name;
     }
+    // T3 (v3.7.0): the magma block's light emission (the v3.5.0
+    // documented deviation 5's CLOSURE — the Minecraft exact 3: the
+    // dim orange glow, the lava-adjacent feel).
+    const Block* magma = blocks.findByName("magma_block");
+    ASSERT_NE(magma, nullptr);
+    EXPECT_EQ(magma->properties.lightEmission, 3);
     // The smelt recipe's data half: netherrack -> nether_brick (the
     // CRAFT-6 block-item inheritance — the item-side pin is below).
     const Block* netherrack = blocks.findByName("netherrack");

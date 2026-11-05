@@ -135,6 +135,19 @@ std::optional<BlockPos> bucketPourTarget(const World& world,
                                          const Vec3& playerMin,
                                          const Vec3& playerMax);
 
+// T1 (v3.7.0): the nether water-pour decision (evaporation —
+// Minecraft's water-cannot-exist-in-the-nether rule, the v3.4.0
+// documented no-op deviation's UPGRADE): true = the water bucket's
+// content simply vanishes (the bucket empties, the "evaporate" cue
+// plays, NO cell is touched, the click is consumed); false = the normal
+// pour path (the nether LAVA is legal — Minecraft's twin: it pours as
+// usual; the OVERWORLD water is the pre-T1 bit-identical path — the
+// false branch runs exactly the legacy statements). Pure — unit-tested
+// (the four forms).
+inline bool netherWaterPourEvaporates(FluidKind kind, bool inNether) {
+    return kind == FluidKind::Water && inNether;
+}
+
 // Slab test of a ray against an axis-aligned box (Phase 20, mob targeting).
 // Returns the ray parameter t at ENTRY, or -1 for a miss. `dir` does not
 // need to be normalized (t is then in dir-units); the game passes the unit

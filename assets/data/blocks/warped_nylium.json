@@ -2,6 +2,7 @@
   "id": "warped_nylium",
   "properties": {
     "hardness": 0.4,
+    "sound_material": "nylium",
     "drops": "warped_nylium"
   },
   "model": {
