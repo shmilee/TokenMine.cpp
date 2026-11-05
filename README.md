@@ -7,7 +7,7 @@
 **本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒<br>
 （C++20 / SDL3 / OpenGL 3.3，自研 JSON/PNG，内容全数据驱动）。<br>
 确定性是一级要求——无输入运行逐帧字节可复现。<br>
-v3.11.0 已提交（**demo 回放**：录制游玩 / 编写动作时间线 / 回放只观察（转镜头·切视角·0.5×/1×/2× 变速·暂停），观众输入结构性零触达世界；**3.x「世界扩展」矩阵收官** = 下界世界 + 传送 / 下界内容族 / netherite 链 / 下界 5 mob / 建筑内容族 / 边缘雾 / 存档 gzip / 手柄，v3.1.0–v3.11.0 门 191–201；任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
+v3.12.0 已提交（**实机报障修复**：mob 阴影 1.5× → 1.0×——落体瞬间阴影压边的视觉误导；物理经探针核实 = 质心规则（原版同款）未动；tag `v3.12.0`；前版 v3.11.0 = demo 回放（**3.x 矩阵收官**：下界世界 + 传送 / 下界内容族 / netherite 链 / 下界 5 mob / 建筑内容族 / 边缘雾 / 存档 gzip / 手柄，v3.1.0–v3.11.0 门 191–201）；任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
 
 [![GitHub stars](https://img.shields.io/github/stars/shmilee/TokenMine.cpp?style=flat-square)](https://github.com/shmilee/TokenMine.cpp/stargazers)
 [![MIT license](https://img.shields.io/badge/license-MIT-555555?style=flat-square)](LICENSE)

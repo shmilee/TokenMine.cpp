@@ -3145,6 +3145,12 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **门日志 grep 假阴性（PITS 392，门 202 阴影缩尺报障）**——
+  `mob spawn f...` / 多数子系统事件行 = **MC_LOG_DEBUG**：info 级
+  门跑里 grep 事件计数恒 0 ≠ 事件未发生（首跑 "0 spawns" 误判，
+  crop 目检实证 3 只羊在场）——事件计数断言的门跑加
+  `--log-level debug`，或截图 crop 目检互补（日志计数与像素证据
+  二选一须在场，勿以 info 级零计数当"未发生"证据）。
 - **demo 门脚本六坑（PITS 391，门 201 V3-9 demo 回放）**——①
   **UI 批绘制序**：renderUi 的 addText/addQuad 经 batchFor 追加进
   `batches`，但主批冲刷循环在调用点之前已遍历完毕 = 顶点永不被

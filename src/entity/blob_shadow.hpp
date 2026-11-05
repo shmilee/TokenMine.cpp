@@ -17,8 +17,12 @@
 namespace mc {
 
 // The shadow quad's side as a multiple of the entity's model width
-// (1.5 = a bit wider than the body, the MC blob look).
-inline constexpr float kMobShadowSideScale = 1.5f;
+// (1.0 = the body's own footprint; the V2-6 1.5x MC-blob look was
+// shrunk in v3.12.0 — the wider quad straddled the cliff edge at the
+// moment of the fall (the physics falls at the AABB's center of mass,
+// MC-twin) and read as if the shadow supported the mob; user field
+// report, the physics was verified AABB-only by probe).
+inline constexpr float kMobShadowSideScale = 1.0f;
 // The lift of the quad above the supporting face (blocks): at exact
 // rest the quad would coincide with the block's top face and z-fight it
 // under the LESS depth test; 0.01 keeps it visually on the face

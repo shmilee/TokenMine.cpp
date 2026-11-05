@@ -25,16 +25,19 @@ TEST(BlobShadowTest, CenterIsTopOfBlockBelowFeet) {
 }
 
 TEST(BlobShadowTest, SideScalesWithWidth) {
-    // Pinned: the quad's side = 1.5 x the entity's model width.
-    EXPECT_FLOAT_EQ(0.9f, blobShadowSide(0.6f)); // a mob (width 0.6)
-    EXPECT_FLOAT_EQ(1.5f, blobShadowSide(1.0f)); // the player (width 1.0)
-    EXPECT_FLOAT_EQ(0.75f, blobShadowSide(0.5f));
+    // Pinned (v3.12.0): the quad's side = 1.0 x the entity's model
+    // width (the body's own footprint — the 1.5x scale's edge
+    // overhang read as shadow-support at cliff edges, the user field
+    // report; the physics stays the AABB's center-of-mass rule).
+    EXPECT_FLOAT_EQ(0.6f, blobShadowSide(0.6f)); // a mob (width 0.6)
+    EXPECT_FLOAT_EQ(1.0f, blobShadowSide(1.0f)); // the player (width 1.0)
+    EXPECT_FLOAT_EQ(0.5f, blobShadowSide(0.5f));
     EXPECT_FLOAT_EQ(blobShadowSide(0.6f) * 2.0f,
                     blobShadowSide(1.2f)); // linear in width
 }
 
 TEST(BlobShadowTest, ConstantsPinned) {
-    EXPECT_FLOAT_EQ(1.5f, kMobShadowSideScale);
+    EXPECT_FLOAT_EQ(1.0f, kMobShadowSideScale);
     EXPECT_FLOAT_EQ(0.01f, kMobShadowLift);
     EXPECT_FLOAT_EQ(0.3f, kMobShadowAlpha);
 }
