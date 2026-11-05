@@ -1,0 +1,9 @@
+{
+  "id": "netherite_ingot",
+  "type": "shapeless",
+  "output": { "item": "netherite_ingot", "count": 1 },
+  "ingredients": [
+    { "item": "netherite_scrap", "count": 4 },
+    { "item": "gold_ingot", "count": 4 }
+  ]
+}

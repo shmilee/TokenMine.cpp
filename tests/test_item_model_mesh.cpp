@@ -294,5 +294,8 @@ TEST(ItemModelMeshTest, ShippedModelsHaveNoFaceCoincidentBoxes) {
     // V3-2 Part 1: +1 (quartz, the nether ore's material drop — the
     // ancient_debris's item is its BLOCK item, model-less by the
     // block-cube render path) -> 84.
-    EXPECT_EQ(modelCount, 84) << "ENT-9: all 84 items have models";
+    // V3-4: +9 (the netherite material chain — 2 materials + 3 tools +
+    // 4 armor, every one an explicit item with a model; the
+    // ancient_debris's item stays its BLOCK item, model-less) -> 93.
+    EXPECT_EQ(modelCount, 93) << "ENT-9: all 93 items have models";
 }

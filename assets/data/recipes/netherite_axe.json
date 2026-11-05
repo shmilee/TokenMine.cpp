@@ -1,0 +1,14 @@
+{
+  "id": "netherite_axe",
+  "type": "shaped",
+  "output": { "item": "netherite_axe", "count": 1 },
+  "pattern": [
+    "II",
+    "IX",
+    " X"
+  ],
+  "key": {
+    "I": "netherite_ingot",
+    "X": "stick"
+  }
+}

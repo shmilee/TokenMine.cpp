@@ -1,0 +1,46 @@
+{
+  "id": "netherite_shovel",
+  "enchant_class": "shovel",
+  "enchantability": 14,
+  "type": "tool",
+  "fast_against": [
+    "stone",
+    "cobblestone",
+    "coal_ore",
+    "iron_ore",
+    "gold_ore",
+    "diamond_ore",
+    "lapis_ore",
+    "glowstone",
+    "sandstone",
+    "smooth_sandstone",
+    "netherrack",
+    "crimson_nylium",
+    "warped_nylium",
+    "basalt",
+    "crimson_stem",
+    "warped_stem",
+    "soul_sand",
+    "soul_soil",
+    "ancient_debris",
+    "nether_brick",
+    "magma_block"
+  ],
+  "fast_against_multiplier": 2.0,
+  "attack_damage": 4.5,
+  "max_stack": 1,
+  "icon": "netherite_shovel",
+  "durability": 2031,
+  "repair_with": "netherite_ingot",
+  "model": {
+    "texture": "netherite_shovel",
+    "elements": [
+      { "from": [0.22, 0.53, 0.34],
+        "to": [0.78, 0.88, 0.66],
+        "uv": [0.22, 0.12, 0.78, 0.47] },
+      { "from": [0.44, 0.1, 0.42],
+        "to": [0.56, 0.58, 0.58],
+        "uv": [0.44, 0.4, 0.56, 0.88] }
+    ]
+  }
+}

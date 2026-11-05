@@ -1041,12 +1041,25 @@ def golden_apple():
 # slot) in the material's palette; new salts 105+ (the next free block
 # after the master bow's 101-104) — every existing icon stays
 # pixel-identical (the determinism proof the re-run is).
+# V3-4 (netherite material chain): the dark-red-bronze netherite palette
+# (the ancient_debris's bronze chunks (150,104,62) over the netherrack's
+# dark red-brown (96,56,64) — the nether's identity hues, the design's
+# "暗红" family). Salt block 158-179 (after the quartz's 155-157).
+NETHERITE_BASE = (122, 84, 74)
+NETHERITE_BEVEL = (164, 122, 108)
+NETHERITE_DARK = (76, 50, 44)
+NETHERITE_BRONZE = (150, 104, 62)  # the ancient_debris chunk glint
+
 ARMOR_PALETTES = {
     "leather": ((166, 124, 78), (120, 86, 52)),   # tan + dark rim
     "iron": ((206, 206, 212), (160, 160, 170)),   # steel + bevel
     "diamond": ((100, 225, 235), (58, 175, 190)), # cyan + deep facet
+    # V3-4: netherite (the dark-red bronze + the darker rim, the
+    # NETHERITE palette constants below the quartz icon).
+    "netherite": (NETHERITE_BASE, NETHERITE_DARK),
 }
-ARMOR_SALT = {"leather": 105, "iron": 113, "diamond": 121}
+ARMOR_SALT = {"leather": 105, "iron": 113, "diamond": 121,
+              "netherite": 172}
 ARMOR_PIECE_OFFSET = {"helmet": 0, "chestplate": 2, "leggings": 4, "boots": 6}
 
 
@@ -1184,6 +1197,51 @@ def quartz():
     return px
 
 
+def netherite_scrap():
+    """Netherite scrap (V3-4, the smelted ancient debris): a dark-red
+    slag chunk — the coal's irregular-chunk silhouette in the netherite
+    palette, with the ancient-debris bronze glints (the molten-metal
+    specks). New salts 158-159 — every existing icon stays
+    pixel-identical."""
+    px = blank()
+    for y in range(SIZE):
+        for x in range(SIZE):
+            # Irregular chunk: a rounded square eroded by the hash.
+            d = max(abs(x - 15.0), abs(y - 15.0))
+            if d < 9.0 + (h2(x, y, 158) % 3) * 2 - 2:
+                setpx(px, x, y, NETHERITE_BASE, salt=158)
+    # Bronze glints (the ancient_debris chunk's palette).
+    for (x, y) in ((5, 5), (9, 6), (7, 9)):
+        setpx2(px, x, y, NETHERITE_BRONZE, salt=159, amount=4)
+    return px
+
+
+def netherite_ingot():
+    """Netherite ingot (V3-4, 4 scrap + 4 gold ingot shapeless): the
+    trapezoid ingot silhouette in the netherite palette (the iron
+    ingot's salt-block twin). New salts 160-162."""
+    return ingot(NETHERITE_BASE, NETHERITE_BEVEL, salt=160)
+
+
+def netherite_pickaxe():
+    """Netherite pickaxe (V3-4, the fourth tool tier): the pickaxe
+    silhouette with the netherite head (the iron pickaxe's palette
+    twin). New salts 163-165."""
+    return pickaxe(NETHERITE_BASE, NETHERITE_BEVEL, salt=163)
+
+
+def netherite_axe():
+    """Netherite axe (V3-4): the axe silhouette with the netherite head.
+    New salts 166-168."""
+    return axe(NETHERITE_BASE, NETHERITE_BEVEL, salt=166)
+
+
+def netherite_shovel():
+    """Netherite shovel (V3-4): the shovel silhouette with the netherite
+    blade. New salts 169-171."""
+    return shovel(NETHERITE_BASE, NETHERITE_BEVEL, salt=169)
+
+
 ITEMS = {
     # V2-7: the planks icon is retired — planks is now a BLOCK item (the
     # 3D cube renders in its place, the Phase 41 wool precedent), so its
@@ -1241,8 +1299,9 @@ ITEMS = {
     "apple": apple,
     "golden_apple": golden_apple,
     # SURV-1 (armor): the 12 pieces (material x slot, the MC full chain).
+    # V3-4: the netherite 4th tier joins the comprehension (16 pieces).
     **{m + "_" + p: make_armor_icon(m, p)
-       for m in ("leather", "iron", "diamond")
+       for m in ("leather", "iron", "diamond", "netherite")
        for p in ("helmet", "chestplate", "leggings", "boots")},
     # SURV-4 (potions): the glass bottle (empty) + the water bottle + the
     # six single-effect potions (the liquid color marks the effect).
@@ -1257,6 +1316,14 @@ ITEMS = {
     # V3-2 Part 1: the nether quartz ore's drop (the ancient_debris's
     # item is its BLOCK item — the name-collision's structural form).
     "quartz": quartz,
+    # V3-4 (netherite material chain): the smelted-debris scrap + the
+    # 4-scrap+4-gold ingot + the 3 tools (the iron tier's silhouettes in
+    # the netherite palette; the armor 4 are the comprehension above).
+    "netherite_scrap": netherite_scrap,
+    "netherite_ingot": netherite_ingot,
+    "netherite_pickaxe": netherite_pickaxe,
+    "netherite_axe": netherite_axe,
+    "netherite_shovel": netherite_shovel,
 }
 
 

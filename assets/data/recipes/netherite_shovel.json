@@ -1,0 +1,14 @@
+{
+  "id": "netherite_shovel",
+  "type": "shaped",
+  "output": { "item": "netherite_shovel", "count": 1 },
+  "pattern": [
+    "M",
+    "S",
+    "S"
+  ],
+  "key": {
+    "M": "netherite_ingot",
+    "S": "stick"
+  }
+}

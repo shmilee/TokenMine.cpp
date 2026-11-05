@@ -11,6 +11,38 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.6.0（2026-11-05）— V3-4 netherite 材料链（第四材料档，**零核心代码纯数据**，门 196 全 PASS）
+
+**ancient_debris → scrap → ingot → netherite 工具/护甲**（完整 MC 链的
+项目形态）——① 熔炼链：ancient_debris 块 `+smeltable_to: netherite_
+scrap`（CRAFT-6 块物品继承，netherrack → nether_brick 先例）→ scrap
+material 物品 ② **netherite_ingot** = shapeless 4× scrap + 4×
+gold_ingot（记档偏离 1 = MC 用 gold nugget，项目无 nugget）③
+**netherite 工具 3 件**（项目无钻石工具 = 直接 crafting 克隆铁形状，
+记档偏离 2）：**durability 2031**（MC 精确）/ pick break_speed 4.0（
+项目铁刻度）/ attack_damage 4·5·4.5（铁 +1）/ enchantability 14 /
+**fast_against 2.0 × 21 块**（铁石族 10 + nether 台地 11 = 正确工具
+语义）/ repair netherite_ingot ④ **netherite 护甲 4 件** = **shapeless
+升级 ingot + diamond_<slot>**（项目无锻造台，记档偏离 3）：**durability
+545/792/743/644**（= 钻石 ×1.5 MC 精确）/ armor_points 3/8/6/3 /
+enchantability 10（钻石同款刻度）⑤ icon 9 件（暗红铜色板 = 下界世界观
+一致，生成脚本确定性，既有 84 张 md5 不变）+ model 9 件（工具克隆铁系
+/ 护甲克隆钻石系换纹理）。**零核心代码**（git status src/ = 空——
+"加材料 = 数据"承诺的第四档验证）：smeltable_to/shapeless/shaped/
+repair_with/fast_against/model 全既有机制。2640/2640（+23：内容钉族 /
+熔炼数据 + tick 两段 / 合成行为 3 族（ingot/升级/工具网格）/ 护甲
+×1.5 刻度验算 / icon·recipe census / **SmeltThenCraftEndToEnd** / S6
+拒收 4 面）。门 196 = **结构免疫第 77 次免重锚**（S1 ≡ 锚 224468 +
+白名单 4 键——新物品不在默认热栏 + 无世界生成消费 = 纯内容零像素）+
+S6 点名 5/5【durability 0 / enchant_class 未知词带词表 / strict pair /
+未知材料物品 / fast_against 未知块引用——全 init 带路径】+ 性能 A/B
+同世界同成本【PERF-WIN 三窗全同档 + changesApplied 9/1/3 逐位 + 终档
+savenorm EXACT 完全恒等】+ 熔炼臂实证（fixer 冒烟：600f 无输入
+debris 入炉 → "Furnace smelt complete: netherite_scrap" + 炉内 output
+×1 + fuel_substeps 4201 精确验算 + **xp orb ×1 = smelt_xp 发放面实证**
+）。记档偏离 4 条（nugget/直接 crafting/无锻造台/暗红色板）。详见
+`docs/archive/phase-3.6.0.md`。
+
 ## v3.5.0（2026-11-05）— 下界内容族 Part 1（V3-2 合并执行：群系 +
 块族 + 矿脉 + 装饰 + **下界带修订为可航行空腔**，门 195 全 PASS）
 

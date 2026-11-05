@@ -3,7 +3,8 @@
   "properties": {
     "sound_material": "stone",
     "hardness": 10,
-    "drops": "ancient_debris"
+    "drops": "ancient_debris",
+    "smeltable_to": "netherite_scrap"
   },
   "model": {
     "shape": "full_cube",

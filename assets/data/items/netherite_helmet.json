@@ -1,0 +1,29 @@
+{
+ "id": "netherite_helmet",
+ "enchant_class": "armor",
+ "enchantability": 10,
+ "type": "material",
+ "max_stack": 1,
+ "icon": "netherite_helmet",
+ "armor_slot": "head",
+ "armor_points": 3,
+ "durability": 545,
+ "repair_with": "netherite_ingot",
+ "model": {
+  "texture": "netherite_helmet",
+  "elements": [
+   {
+    "from": [
+     0.18,
+     0.3,
+     0.2
+    ],
+    "to": [
+     0.82,
+     0.8,
+     0.8
+    ]
+   }
+  ]
+ }
+}

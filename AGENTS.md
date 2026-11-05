@@ -13,11 +13,12 @@ C++20 / SDL3 / OpenGL 3.3 core，
 ## 现状（3.x「世界扩展」期——v3.1.0 = V3-7 存档 gzip（门 191，11-04）；
 v3.2.0 = V3-1 Phase A 下界门框（门 192，11-05）；v3.3.0 = V3-8 手柄
 支持（门 193，11-05）；v3.4.0 = V3-1 Phase B 下界世界 + 真传送（门
-194，11-05，format 30）；**v3.5.0 = V3-2/Phase C Part 1 下界内容族
-（门 195，11-05：5 群系 + 12 块 + 3 矿脉 + 5 装饰 + D9 空腔带修订 =
-下界可航行）**；下一项 **netherite 材料链 + Part 2 下界深化**，其后
-V3-3 下界 mob → V3-5 建筑内容族 → V3-6 世界边缘雾 → V3-9 demo 回放
-【矩阵尾部】）
+194，11-05，format 30）；**v3.5.0 = V3-2/Phase C Part 1 下界内容族（门 195，11-05：5 群系 + 12
+块 + 3 矿脉 + 5 装饰 + D9 空腔带修订 = 下界可航行）；**v3.6.0 = V3-4
+netherite 材料链（门 196，11-05：debris→scrap→ingot→工具 2031/护甲
+×1.5 刻度，零核心代码纯数据）**；下一项 **Part 2 下界深化**（流体
+规则/音效族/ambience/视觉），其后 V3-3 下界 mob → V3-5 建筑内容族 →
+V3-6 世界边缘雾 → V3-9 demo 回放【矩阵尾部】）
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -76,7 +77,7 @@ V3-3 下界 mob → V3-5 建筑内容族 → V3-6 世界边缘雾 → V3-9 demo 
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2617/2617**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2640/2640**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 30（V3-1 Phase B 下界维度：player.dimension 严格词表
   恒写 + nether 段 {blocks,fluids,states} + nether_entities 恒写 +
   派生 seed 不落盘；schema 其余与 29 一致，29 携新键 = version lie
@@ -94,9 +95,10 @@ V3-3 下界 mob → V3-5 建筑内容族 → V3-6 世界边缘雾 → V3-9 demo 
   结构免疫第 65-70 次免重锚；门 191【V3-7】= 第 72 次 + 门 192【V3-1
   Phase A 门框】= 第 73 次 + 门 193【V3-8 手柄】= 第 74 次 + 门 194
   【V3-1 Phase B 下界】= 第 75 次 + 门 195【V3-2 Part 1 下界内容族】
-  = 第 76 次免重锚【v3.0.0 banner = 第 71 次】——存档/门框/手柄/惰性
-  下界/下界内容 = 渲染无关零像素【下界内容 = nether-only + 惰性下界；
-  atlas 16×16 幂二增长像素行恒等**）；PITS
+  = 第 76 次 + 门 196【V3-4 netherite 材料链】= 第 77 次免重锚
+  【v3.0.0 banner = 第 71 次】——存档/门框/手柄/惰性下界/下界内容/
+  材料链 = 渲染无关零像素【下界内容 = nether-only + 惰性下界；atlas
+  16×16 幂二增长像素行恒等；材料链 = 纯物品内容不在默认热栏**）；PITS
   375-379 + **PITS 380**（spawn 成功行无 'pick' / 门场景洞穴密封 /
   CAVE config seed 归属 / bob diff 带色相审计）+ **PITS 381**（热栏
   key→RMB ≥0.15s / 活体掉落物品不可作终档断言 / 羊静止窗）+
@@ -135,6 +137,23 @@ V3-3 下界 mob → V3-5 建筑内容族 → V3-6 世界边缘雾 → V3-9 demo 
   双臂【传送空腔截图 ×2 恒等 + 观感实证 / 下界采矿 quartz 入库存 +
   PITS 7 续破 + PITS 377 磁力边缘实证】；S6 5/5 init 点名；详见
   `docs/archive/phase-3.5.0.md`）；
+  门计数 196（**V3-4 netherite 材料链 v3.6.0** 门 196 全 PASS：
+  **零核心代码纯数据**【git status src/ = 空——"加材料 = 数据"第四档
+  验证】：ancient_debris 块 +smeltable_to netherite_scrap（CRAFT-6 块
+  物品继承）+ ingot = shapeless 4 scrap + 4 gold_ingot【偏离 1：MC 用
+  nugget】+ 工具 3【dur **2031** MC 精确 / bp 4.0 项目铁刻度 / ad
+  4·5·4.5 / ea 14 / **fast_against 2.0 × 21 块**【铁石族 10 + nether
+  台地 11】/ repair ingot / 直接 crafting【偏离 2：项目无钻石工具】】+
+  护甲 4【dur **545/792/743/644** = 钻石 ×1.5 MC 精确 / ap 3/8/6/3 /
+  ea 10 / **shapeless 升级 ingot + diamond_<slot>**【偏离 3：无锻造
+  台】/ model 克隆钻石系】+ icon 9【暗红铜色板偏离 4，既有 84 张 md5
+  不变】；2640/2640（+23 含 SmeltThenCraftEndToEnd 全链）；结构免疫
+  第 77 次【S1 ≡ 锚 + 白名单 4 键】；S2 熔炼臂【无输入 600f：smelt
+  complete 恰 10 s + fuel_substeps 4201 验算 + **xp orb ×1 发放面实证**
+  + 合成链单测】；S6 5/5 init 点名【durability 0 / enchant_class 未知
+  词带 7 词表 / strict pair / 未知材料 / fast_against 未知块】+ 非拒收
+  面 2 实证留证；性能 A/B 同档【终档 savenorm EXACT 完全恒等】；详见
+  `docs/archive/phase-3.6.0.md`）；
   门计数 194（**V3-1 Phase B 下界世界 v3.4.0** 门 194 全 PASS：
   下界维度【D1 增量并行成员 overworld 零 diff + D2 惰性构造【首传前
   零一切】+ D3 仅 Player 换绑 Entity::setWorld【m_world 引用→指针

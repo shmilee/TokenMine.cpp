@@ -1,0 +1,52 @@
+{
+  "id": "netherite_pickaxe",
+  "enchant_class": "pick",
+  "enchantability": 14,
+  "type": "tool",
+  "tool": {
+    "break_speed": 4.0
+  },
+  "fast_against": [
+    "stone",
+    "cobblestone",
+    "coal_ore",
+    "iron_ore",
+    "gold_ore",
+    "diamond_ore",
+    "lapis_ore",
+    "glowstone",
+    "sandstone",
+    "smooth_sandstone",
+    "netherrack",
+    "crimson_nylium",
+    "warped_nylium",
+    "basalt",
+    "crimson_stem",
+    "warped_stem",
+    "soul_sand",
+    "soul_soil",
+    "ancient_debris",
+    "nether_brick",
+    "magma_block"
+  ],
+  "fast_against_multiplier": 2.0,
+  "attack_damage": 4,
+  "max_stack": 1,
+  "icon": "netherite_pickaxe",
+  "durability": 2031,
+  "repair_with": "netherite_ingot",
+  "model": {
+    "texture": "netherite_pickaxe",
+    "elements": [
+      { "from": [0.05, 0.62, 0.34],
+        "to": [0.95, 0.8, 0.66],
+        "uv": [0.05, 0.2, 0.95, 0.38] },
+      { "from": [0.3, 0.78, 0.4],
+        "to": [0.75, 0.94, 0.6],
+        "uv": [0.3, 0.06, 0.75, 0.22] },
+      { "from": [0.44, 0.13, 0.44],
+        "to": [0.94, 0.66, 0.56],
+        "uv": [0.44, 0.34, 0.94, 0.88] }
+    ]
+  }
+}

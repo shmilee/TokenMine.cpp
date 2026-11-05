@@ -7,7 +7,7 @@
 **本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒<br>
 （C++20 / SDL3 / OpenGL 3.3，自研 JSON/PNG，内容全数据驱动）。<br>
 确定性是一级要求——无输入运行逐帧字节可复现。<br>
-v3.5.0 已发布（**下界内容族**：5 群系 + 12 新块 + 3 矿脉 + 天花板 glowstone + 可航行的下界空腔；tag `v3.5.0`；前版 v3.4.0 = 下界世界 + 真传送 / v3.3.0 = 手柄 / v3.2.0 = 门框 / v3.1.0 = 存档 gzip）· 3.x「世界扩展」期进行中，下一版 = netherite 材料链 + 下界深化（任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
+v3.6.0 已发布（**netherite 材料链**：远古残骸 → 碎屑 → 锭 → 第四档工具/护甲，纯数据驱动零核心代码；tag `v3.6.0`；前版 v3.5.0 = 下界内容族 5 群系 + 12 块 + 矿脉 / v3.4.0 = 下界世界 + 真传送 / v3.3.0 = 手柄 / v3.2.0 = 门框 / v3.1.0 = 存档 gzip）· 3.x「世界扩展」期进行中，下一版 = 下界深化（流体规则/音效/ambience）（任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)）**
 
 [![GitHub stars](https://img.shields.io/github/stars/shmilee/TokenMine.cpp?style=flat-square)](https://github.com/shmilee/TokenMine.cpp/stargazers)
 [![MIT license](https://img.shields.io/badge/license-MIT-555555?style=flat-square)](LICENSE)
@@ -109,8 +109,8 @@ cmake --build build
   默认开，旧档直读零迁移）+ **下界维度完整**（v3.2.0 传送门框 →
   v3.4.0 下界世界 + 真传送 8:1 映射往返 → v3.5.0 下界内容：5 群系/
   熔岩海/netherrack 台地/空腔/glowstone 天花板/矿脉）+ 手柄支持
-  （v3.3.0：Xbox 布局，键鼠手柄同用）；netherite 材料链 / 下界 mob /
-  demo 回放在列
+  （v3.3.0：Xbox 布局，键鼠手柄同用）+ netherite 材料链（v3.6.0：第四
+  档工具 2031 耐久/护甲，纯数据）；下界深化 / 下界 mob / demo 回放在列
 
 逐版明细与发布历史：[`docs/CHANGELOG.md`](docs/CHANGELOG.md)（当前时
 代）+ `docs/archive/*/CHANGELOG.md`（历史时代）+ GitHub Releases。

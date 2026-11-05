@@ -502,8 +502,9 @@ TEST(RepairContentTest, Pinned28ExactMaterials) {
 
 TEST(RepairContentTest, NoNonDurableItemCarriesTheField) {
     // The whole explicit item set: 'repair_with' appears exactly on the
-    // 28 durable items — never on a non-durable one (the pairing
-    // discipline over the real content).
+    // 35 durable items — never on a non-durable one (the pairing
+    // discipline over the real content). V3-4: 28 + 7 (the netherite
+    // 3 tools + 4 armor — the scrap / ingot carry no field).
     int durableWithField = 0;
     const std::filesystem::path dir = "assets/data/items";
     for (const auto& entry : std::filesystem::directory_iterator(dir)) {
@@ -525,7 +526,7 @@ TEST(RepairContentTest, NoNonDurableItemCarriesTheField) {
             }
         }
     }
-    EXPECT_EQ(durableWithField, 28);
+    EXPECT_EQ(durableWithField, 35);
 }
 
 // -- the InventoryUI output-click round (the harness) ---------------------------

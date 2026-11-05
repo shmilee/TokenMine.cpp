@@ -1,0 +1,29 @@
+{
+ "id": "netherite_chestplate",
+ "enchant_class": "armor",
+ "enchantability": 10,
+ "type": "material",
+ "max_stack": 1,
+ "icon": "netherite_chestplate",
+ "armor_slot": "chest",
+ "armor_points": 8,
+ "durability": 792,
+ "repair_with": "netherite_ingot",
+ "model": {
+  "texture": "netherite_chestplate",
+  "elements": [
+   {
+    "from": [
+     0.18,
+     0.12,
+     0.28
+    ],
+    "to": [
+     0.82,
+     0.88,
+     0.72
+    ]
+   }
+  ]
+ }
+}

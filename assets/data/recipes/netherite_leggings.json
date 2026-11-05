@@ -1,0 +1,9 @@
+{
+  "id": "netherite_leggings",
+  "type": "shapeless",
+  "output": { "item": "netherite_leggings", "count": 1 },
+  "ingredients": [
+    { "item": "netherite_ingot", "count": 1 },
+    { "item": "diamond_leggings", "count": 1 }
+  ]
+}

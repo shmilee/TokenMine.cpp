@@ -1,0 +1,9 @@
+{
+  "id": "netherite_helmet",
+  "type": "shapeless",
+  "output": { "item": "netherite_helmet", "count": 1 },
+  "ingredients": [
+    { "item": "netherite_ingot", "count": 1 },
+    { "item": "diamond_helmet", "count": 1 }
+  ]
+}

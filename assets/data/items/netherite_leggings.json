@@ -1,0 +1,29 @@
+{
+ "id": "netherite_leggings",
+ "enchant_class": "armor",
+ "enchantability": 10,
+ "type": "material",
+ "max_stack": 1,
+ "icon": "netherite_leggings",
+ "armor_slot": "legs",
+ "armor_points": 6,
+ "durability": 743,
+ "repair_with": "netherite_ingot",
+ "model": {
+  "texture": "netherite_leggings",
+  "elements": [
+   {
+    "from": [
+     0.18,
+     0.08,
+     0.28
+    ],
+    "to": [
+     0.82,
+     0.92,
+     0.72
+    ]
+   }
+  ]
+ }
+}

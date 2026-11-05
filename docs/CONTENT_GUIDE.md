@@ -14,7 +14,8 @@
 > 刷新（v3.2.0 / nether_portal 块 / 测试 2536）+ V3-1 Phase B 刷新
 > （v3.4.0 / netherrack 块 + 下界维度 / 存档 format 30 / 测试 2582）
 > + V3-2 Part 1 刷新（v3.5.0 / 下界内容族 12 块 + 5 群系 + 3 矿脉 +
-> 2 配方 / 测试 2617）：二批新数据驱动机制
+> 2 配方 / 测试 2617）+ V3-4 刷新（v3.6.0 / netherite 材料链 9 物品 +
+> 8 配方，零核心代码 / 测试 2640）：二批新数据驱动机制
 > 并入（biome tree 6 键 + exclude_spawn_area / slab 三态 state_count +
 > drops_count_by_state / XP 三发放源 / 附魔 7 项 / 床 15 色染色族 / 染色羊变体
 > / render.ao），各节数量（93 块 / 83 物品 / 86 配方 / 8 mob / 7 附魔 /
@@ -354,7 +355,7 @@ their block"（CRAFT-6）**：每个数据方块隐式生成同名 block item（
 | `armor_slot` + `armor_points` | "head"/"chest"/"legs"/"feet" + 整数 [0, 20]，**严格配对**（缺一拒；tool 带 = 拒） | 无 | SURV-1：护甲件（右键穿戴/交换/脱下通道，点火器之后、潜行旋转之前）；减伤 = `floor(amount × (100 − 4 × 总点)) / 100`（次序 armor → resistance → 吸收池，pts 0 位级恒等） |
 | `enchant_class` + `enchantability` | 词汇名（sword/axe/pick/shovel/armor/bow/hoe）+ 整数 ≥ 0，**严格配对**（缺一拒、未知类点名） | 无 | V2-12：可附魔（类须与附魔 `classes` 匹配，见附魔节）；shipped 22 件 = 工具 9（wood 15 / stone 5 / iron 14）+ 护甲 12（leather 15 / iron 9 / diamond 10）+ bow 1（仅基础 bow，变体弓保持替身定位） |
 | `enchant_material` | 严格 bool | false | V2-12：附魔台青金石槽数据驱动门（**仅 material 可携**，tool 点名拒）。shipped = lapis true |
-| `durability` | 数字 > 0，显式 0 拒 | 0 = 无耐久 | SURV-3：**允许集 = 工具 / 护甲 / ammo 发射器 / 点火器**（其余物品带 = no-op 点名拒）。shipped MC 精确值：wood 59 / stone 131 / iron 250（镐斧锹）、弓族 384、燧石 64、护甲 leather 55/80/75/65 / iron 165/240/225/195 / diamond 363/528/495/429。五类帧锁定磨损：破非瞬断块 +1 / 镐斧锹打 mob +2 / 射出 +1（含 infinite）/ 点燃 +1 / 护甲每次实际减伤事件 −max(1, incoming/4)（溺水 bypass 不磨损）。**无修复系统**（KNOWN_ISSUES） |
+| `durability` | 数字 > 0，显式 0 拒 | 0 = 无耐久 | SURV-3：**允许集 = 工具 / 护甲 / ammo 发射器 / 点火器**（其余物品带 = no-op 点名拒）。shipped MC 精确值：wood 59 / stone 131 / iron 250（镐斧锹）、弓族 384、燧石 64、护甲 leather 55/80/75/65 / iron 165/240/225/195 / diamond 363/528/495/429 / **netherite 2031（镐斧锹）/ 545/792/743/644（护甲，[V3-4] 第四材料档）**。五类帧锁定磨损：破非瞬断块 +1 / 镐斧锹打 mob +2 / 射出 +1（含 infinite）/ 点燃 +1 / 护甲每次实际减伤事件 −max(1, incoming/4)（溺水 bypass 不磨损）。**无修复系统**（KNOWN_ISSUES） |
 | `model` | `{texture, elements[1..16]}` 严格（内部未知键点名拒） | 无 | CRAFT-2：物品 3D 模型——单纹理（`assets/textures/items/<texture>.png`，init 文件存在性，**惯例 = 复用既有 icon PNG**）+ 轴对齐盒 1..16：每盒 `{from[3], to[3], uv[4]?}`，from/to ∈ [0,1]³ 且逐轴 from < to，uv ∈ [0,1]⁴ 且 u0<u1, v0<v1（退化矩形拒）。单位空间居中 −0.5..0.5；无 model = 三上下文（手持/掉落/进食举到嘴）位级不变。ENT-9 后 shipped 全部 83 件非 block 物品**都有** model（= 掉落可见，纯内容） |
 | `max_stack` | 整数 [1, 64] | 64 | |
 | `icon` | 非空字符串 | 不画图标 | `assets/textures/items/<icon>.png`（32×32 RGBA；文件缺失 = init 报错；可多物品共享同一文件） |

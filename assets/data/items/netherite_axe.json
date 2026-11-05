@@ -1,0 +1,46 @@
+{
+  "id": "netherite_axe",
+  "enchant_class": "axe",
+  "enchantability": 14,
+  "type": "tool",
+  "fast_against": [
+    "stone",
+    "cobblestone",
+    "coal_ore",
+    "iron_ore",
+    "gold_ore",
+    "diamond_ore",
+    "lapis_ore",
+    "glowstone",
+    "sandstone",
+    "smooth_sandstone",
+    "netherrack",
+    "crimson_nylium",
+    "warped_nylium",
+    "basalt",
+    "crimson_stem",
+    "warped_stem",
+    "soul_sand",
+    "soul_soil",
+    "ancient_debris",
+    "nether_brick",
+    "magma_block"
+  ],
+  "fast_against_multiplier": 2.0,
+  "attack_damage": 5,
+  "max_stack": 1,
+  "icon": "netherite_axe",
+  "durability": 2031,
+  "repair_with": "netherite_ingot",
+  "model": {
+    "texture": "netherite_axe",
+    "elements": [
+      { "from": [0.06, 0.5, 0.34],
+        "to": [0.42, 0.92, 0.66],
+        "uv": [0.06, 0.08, 0.42, 0.47] },
+      { "from": [0.38, 0.16, 0.44],
+        "to": [0.94, 0.7, 0.56],
+        "uv": [0.38, 0.3, 0.94, 0.85] }
+    ]
+  }
+}

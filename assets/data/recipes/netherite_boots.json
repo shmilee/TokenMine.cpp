@@ -1,0 +1,9 @@
+{
+  "id": "netherite_boots",
+  "type": "shapeless",
+  "output": { "item": "netherite_boots", "count": 1 },
+  "ingredients": [
+    { "item": "netherite_ingot", "count": 1 },
+    { "item": "diamond_boots", "count": 1 }
+  ]
+}

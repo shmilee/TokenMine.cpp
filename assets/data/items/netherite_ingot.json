@@ -1,0 +1,22 @@
+{
+ "id": "netherite_ingot",
+ "type": "material",
+ "icon": "netherite_ingot",
+ "model": {
+  "texture": "netherite_ingot",
+  "elements": [
+   {
+    "from": [
+     0.15,
+     0.4,
+     0.3
+    ],
+    "to": [
+     0.85,
+     0.6,
+     0.7
+    ]
+   }
+  ]
+ }
+}

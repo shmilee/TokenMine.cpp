@@ -1,0 +1,22 @@
+{
+ "id": "netherite_scrap",
+ "type": "material",
+ "icon": "netherite_scrap",
+ "model": {
+  "texture": "netherite_scrap",
+  "elements": [
+   {
+    "from": [
+     0.25,
+     0.28,
+     0.3
+    ],
+    "to": [
+     0.75,
+     0.72,
+     0.7
+    ]
+   }
+  ]
+ }
+}

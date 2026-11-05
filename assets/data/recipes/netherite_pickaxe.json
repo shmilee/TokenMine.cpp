@@ -1,0 +1,14 @@
+{
+  "id": "netherite_pickaxe",
+  "type": "shaped",
+  "output": { "item": "netherite_pickaxe", "count": 1 },
+  "pattern": [
+    "III",
+    " S ",
+    " S "
+  ],
+  "key": {
+    "I": "netherite_ingot",
+    "S": "stick"
+  }
+}
