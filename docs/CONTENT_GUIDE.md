@@ -22,11 +22,14 @@
 > walks_on_lava 数据旗 + mob_spawning_nether.json 生成池 / 测试
 > 2697）+ V3-5 刷新（v3.9.0 / 建筑内容族 20 块含 15 色陶瓦染色
 > 族 + 2 物品 + 17 配方 + worldgen.json sediment 水底生成节 / 测试
-> 2724）：二批新数据驱动机制
+> 2724）+ V3-6 刷新（v3.10.0 / 填充感知 fog end = 渲染侧零数据面
+> / 测试 2734）+ V3-9 刷新（v3.11.0 / demo 文件 schema = gzip 容器 +
+> 8 型事件词表 + 编写/录制/回放三入口 / 测试 2777）+ 报障刷新
+> （v3.12.0 / 阴影 1.0× 渲染常量）：二批新数据驱动机制
 > 并入（biome tree 6 键 + exclude_spawn_area / slab 三态 state_count +
 > drops_count_by_state / XP 三发放源 / 附魔 7 项 / 床 15 色染色族 / 染色羊变体
-> / render.ao），各节数量（93 块 / 83 物品 / 86 配方 / 8 mob / 7 附魔 /
-> 图集 122 用 6 空 / 46 wav / 427 字形）与 config、存档、配方表逐一对照真实
+> / render.ao），各节数量（127 块 / 97 物品 / 112 配方 / 13 mob / 7 附魔 /
+> 图集 165 用 91 空 / 63 wav / 427 字形）与 config、存档、配方表逐一对照真实
 > 资产与解析代码刷新（新增 `src/core/enchanting.cpp` 交叉核）。文中
 > `KNOWN_ISSUES` 均指 `docs/KNOWN_ISSUES.md`。每节标题的 phase 标签（PXX /
 > ABC-N）是引入该数据面的阶段，v1.x 细节存档见 `docs/archive/v1x/phase-*.md`、
@@ -36,17 +39,20 @@
 
 | 目录 / 文件 | 内容 | 数量（shipped） |
 |---|---|---|
-| `assets/data/biomes/*.json` | 生物群系（含 4 群系：V2-16 snowy_taiga 入列） | 4 |
-| `assets/data/blocks/*.json` | 方块（含 3 个流体参考块 water/lava/honey；V2-7 planks/gold·diamond_block + V2-12 附魔台/书架 + V2-13 床 15 + V2-16 snow） | 93 |
-| `assets/data/items/*.json` | 显式物品（工具/材料；block 物品无独立 JSON；V2-5 pork/cooked_pork/string + V2-15 shears） | 83 |
-| `assets/data/recipes/*.json` | 配方（shaped 52 / shapeless 34） | 86 |
-| `assets/data/mobs/*.json` | Mob（V2-5 pig + V2-14 bat 入列） | 8 |
+| `assets/data/biomes/*.json` | 主世界群系（含 4 群系：V2-16 snowy_taiga 入列） | 4 |
+| `assets/data/biomes_nether/*.json` | **下界群系独立池**【V3-2：5 群系 MC 比例，主世界池零触碰】 | 5 |
+| `assets/data/blocks/*.json` | 方块（含 3 个流体参考块 water/lava/honey；V2-7/V2-12/V2-13/V2-16 + **V3-1 nether_portal·netherrack + V3-2 下界内容 12 + V3-5 建筑 20**） | 127 |
+| `assets/data/items/*.json` | 显式物品（工具/材料；block 物品无独立 JSON；3.x 增 quartz / hoglin 肉 2 / netherite 9 / clay_ball·brick 2） | 97 |
+| `assets/data/recipes/*.json` | 配方（shaped 58 / shapeless 54；3.x 增 nether_brick 1 / netherite 8 / 建筑族 17） | 112 |
+| `assets/data/mobs/*.json` | Mob（V2-5 pig + V2-14 bat + **V3-3 下界 5 种**） | 13 |
 | `assets/data/effects/*.json` | 状态效果 | 11 |
 | `assets/data/enchantments/*.json` | 附魔【V2-12，数据驱动新面】 | 7 |
-| `assets/data/worldgen.json` | 世界生成参数 | 1 |
-| `assets/data/mob_spawning.json` | 生成节奏/环/上限/名单 | 1 |
+| `assets/data/worldgen.json` | 世界生成参数（V3-5 起含 `sediment` 水底沉积节） | 1 |
+| `assets/data/mob_spawning.json` | 主世界生成节奏/环/上限/名单 | 1 |
+| `assets/data/mob_spawning_nether.json` | **下界生成池**【V3-3：独立文件，cadence 同款】 | 1 |
 | `assets/data/hotbar.json` | 初始热栏 + 隐藏 starter 槽 | 1 |
-| `assets/data/textures/block_atlas.json` | 图集布局（16×8 网格） | 1 |
+| `assets/data/textures/block_atlas.json` | 图集布局（**16×16 网格**，V3-2 幂二增长） | 1 |
+| `assets/demos/*.dmo` | demo 回放文件【V3-9：gzip 容器 + 严格 schema；示例 example.dmo 285 B】 | 1（示例） |
 
 校验策略（三条纪律，与代码一致）：
 
@@ -66,8 +72,8 @@
 
 加内容 = JSON + 纹理，不改核心代码。**新增/修改任何数据面都须过 E2E 基线门
 论证**（无输入下零活动 = 结构性免疫免重锚，或按协议重锚 `/tmp/opencode/
-base18.png`）——P45 先例：lapis 矿脉 + 表面装饰进了数据，但出生点视野内
-无变化 → 免重锚。
+base19.png`【3.x 后锚 = V3-6 填充感知雾重锚 225272 B】）——P45 先例：
+lapis 矿脉 + 表面装饰进了数据，但出生点视野内无变化 → 免重锚。
 
 ## 新增一个生物群系（无需改核心代码）
 
@@ -142,6 +148,22 @@ shipped 2 → chunk [−2,2]² = world [−32,48)²，即 4×4 出生候选区
 （单测钉：区内全部列 resolvedBiomeAt = 改前公式同值 + 区内 chunk
 3-群系 vs 4-群系生成逐字节恒等）。区外 = 全 4 群系（雪带/针叶林入
 世 = 预期的世界演进，旧存档加载得新区外地形，GEN-1/3/5 先例）。
+
+**下界群系 = 独立池（V3-2，v3.5.0）**：`assets/data/biomes_nether/*.json`
+（**独立目录 + 独立 BiomeRegistry 实例**，主世界 `data/biomes/` 零触碰）：
+nether_wastes 36 / crimson_forest 22 / soul_sand_valley 17 / basalt_deltas
+16 / warped_forest 9（= MC 比例，权重和 100）；`netherBiomeAt` =
+biomeIndexAt 克隆（valueNoise2 + 独立盐 kSaltNetherBiome + 派生 seed
+worldSeed ^ kSaltNether）；下界 biome 文件 = 同款 schema 子集（无
+decorations——**柱状装饰 = `tree_density` 数据驱动门控**：forest↔nylium
+兄弟 stem / netherrack+tree_density↔basalt / soul_sand↔soul_soil·magma
+族，fill 只读旗零 name switch）；depth 0 群系省略 `subsurface_depth`
+（共享 schema [1,16] 拒 0，surface = netherrack 构造性 no-op，记档偏
+离）；weight 0 / 重复 id / 未知 surface / **stateful surface**（worldgen
+永不写 state 纪律）/ 空池 = init 点名拒收（fail-fast，主世界同款时
+序）。下界生成带 = `nether_gen` 命名常量（熔岩海 5-31 / 台地 32-52 /
+空腔 53-122 / 天花板 122 / 基岩顶 123-127）——**改带 = 代码常量（非数
+据，记档）**。
 
 ## 新增一个矿石 / 世界生成参数（worldgen.json 完整参考）
 
@@ -261,6 +283,25 @@ radius/depth/fill 各从区间随机取值。交叉校验（enabled 时）：`co
 shipped：`{true, 5, 1..3, 2..4, 1..2, region [60,90]×[60,90]}`（出生点
 -Z 视野外 + 流送视图距离内；与固定湖并存）。
 
+### sediment（水底沉积，V3-5 v3.9.0）
+
+`{enabled, clay_probability, mossy_cobblestone_probability}`：`enabled`
+**absent = disabled 位级 legacy**（严格 bool present 时）/ 概率严格
+[0,1]（非数/字符串/越界 init 点名，`"0.06"` 字符串 = "must be a
+number"）+ **create() fail-fast**（解析 2 沉积块存在性 + 拒 stateful +
+4 词表块 dirt/gravel/sand/stone 代码常量记档）。pass = **生成链最
+后**（placeLavaLakes 之后读最终湖底——记档偏离 3：既有顺序装饰先于
+湖，「湖后装饰前」不可满足），per-column 纯函数（新盐
+kSaltSediment/kSaltSedimentMossy，hash2 零噪声，chunk 间顺序无关 =
+双序逐字节单测）：dry 列（h ≥ seaLevel）首行 continue 零触碰 / 表面
+格终数据 ∈ 4 词表（洞穴/矿脉/湖挖过的拒）/ **两个熔岩湖谓词**（列顶
+流体 = water【熔岩带 ≥ seaLevel 拒】+ 水面接触地板【熔岩带占地板
+拒】）/ 双独立 roll **clay 优先**（同格双中确定性）/ **顶 1 层**
+（MC 3-4 层简化记档）。shipped = `{true, 0.06, 0.008}`。发行世界
+census（seed 123456789 ±512² 真实 biome 词表面 = desert 沙洋底
+only）：eligible 3683 / clay 211 / mossy 26。**零 format**（生成内容
+= 参考，不入 diff）。
+
 ### 世界生成改动与基线门
 
 改 worldgen.json / biome JSON 会改变生成的世界 → 无输入基线门需要重锚
@@ -346,7 +387,7 @@ their block"（CRAFT-6）**：每个数据方块隐式生成同名 block item（
 | `shears` | 严格 bool | false | V2-15：剪毛旗（**仅 tool 可携**，非 tool 点名拒 = armor_slot 双生纪律）；手持右键 `wool_drops` mob = 剪毛（每次成功磨损 1，bare no-op，见 Mob 节染色羊） |
 | `arrow_effect` | `{name, duration, tier?}` 严格（未知键点名；duration > 0；tier 整数 ≥0 可选） | 无 | SURV-5：**发射器**箭矢命中施加的效果（poison_bow `{poison, 60}`）；要求 shoot_speed > 0；init：效果存在 **且 `affects_mobs`**（弓箭只命中 mob）+ tier < tier_max |
 | `restore_hunger` | 整数 [1, 20] | 0 = 非食物 | P23：存在 = 食物（右键按住 eat 通道，1.6 s real-dt）；显式 0 拒 |
-| `saturation` | 数字 [0, 20]，**须配 restore_hunger**（非食物带 = 死字段点名拒） | 旧 2× 规则（`foodSatiety` 纯函数位级复现） | SURV-9 食物饱和度（shipped 10 食物 MC 精确值：rotten 0.8 / 生肉 1.2-1.8 / 熟肉 7.2-12.8 / bread 6.0 / apple 2.4 / golden 9.0） |
+| `saturation` | 数字 [0, 20]，**须配 restore_hunger**（非食物带 = 死字段点名拒） | 旧 2× 规则（`foodSatiety` 纯函数位级复现） | SURV-9 食物饱和度（shipped 14 食物 MC 精确值：rotten 0.8 / 生肉 1.2-1.8【+hoglin_meat 1.8 V3-3】/ 熟肉 7.2-12.8【+cooked_hoglin_meat 12.8 V3-3】/ bread 6.0 / apple 2.4 / golden 9.0） |
 | `smeltable_to` | 非空物品名 | 无 | P40/CRAFT-6：炉子产物（init 存在性）；存在 = 可熔炼 |
 | `smelt_time` | 数字 (0, 100] | 10 | 单格熔炼秒数 |
 | `smelt_xp` | 整数 [0, 9] | **1** | V2-11 XP：熔炼完成该物品发该值经验球（默认 1 统一 = MC 分数表记档偏离；**显式 0 = 无球**是合法数据声明——与 fuel_time 显式 0 拒相反）；>9 点名拒（球值上限，无分裂机制） |
@@ -360,10 +401,11 @@ their block"（CRAFT-6）**：每个数据方块隐式生成同名 block item（
 | `ignites_flamable` | 严格 bool | false | P60：点燃器——右键烧 `flamable` 块（**无掉落、不消耗**；成功点燃磨损 +1 = SURV-3）；与五个右键通道互斥（food/drink/launcher/dye/bucket，逐对点名）；**营火分支先于点火器**（P76：燧石与钢对未点燃营火 = 再点燃而非烧掉） |
 | `dye_color` | 非空颜色名 | 无 | P41/P45：颜色词汇表 = 纯数据（见染料节） |
 | `armor_slot` + `armor_points` | "head"/"chest"/"legs"/"feet" + 整数 [0, 20]，**严格配对**（缺一拒；tool 带 = 拒） | 无 | SURV-1：护甲件（右键穿戴/交换/脱下通道，点火器之后、潜行旋转之前）；减伤 = `floor(amount × (100 − 4 × 总点)) / 100`（次序 armor → resistance → 吸收池，pts 0 位级恒等） |
-| `enchant_class` + `enchantability` | 词汇名（sword/axe/pick/shovel/armor/bow/hoe）+ 整数 ≥ 0，**严格配对**（缺一拒、未知类点名） | 无 | V2-12：可附魔（类须与附魔 `classes` 匹配，见附魔节）；shipped 22 件 = 工具 9（wood 15 / stone 5 / iron 14）+ 护甲 12（leather 15 / iron 9 / diamond 10）+ bow 1（仅基础 bow，变体弓保持替身定位） |
+| `enchant_class` + `enchantability` | 词汇名（sword/axe/pick/shovel/armor/bow/hoe）+ 整数 ≥ 0，**严格配对**（缺一拒、未知类点名） | 无 | V2-12：可附魔（类须与附魔 `classes` 匹配，见附魔节）；shipped **29 件** = 工具 12（wood 15 / stone 5 / iron·**netherite 14【V3-4】**）+ 护甲 16（leather 15 / iron 9 / diamond·**netherite 10【V3-4】**）+ bow 1（仅基础 bow，变体弓保持替身定位） |
 | `enchant_material` | 严格 bool | false | V2-12：附魔台青金石槽数据驱动门（**仅 material 可携**，tool 点名拒）。shipped = lapis true |
-| `durability` | 数字 > 0，显式 0 拒 | 0 = 无耐久 | SURV-3：**允许集 = 工具 / 护甲 / ammo 发射器 / 点火器**（其余物品带 = no-op 点名拒）。shipped MC 精确值：wood 59 / stone 131 / iron 250（镐斧锹）、弓族 384、燧石 64、护甲 leather 55/80/75/65 / iron 165/240/225/195 / diamond 363/528/495/429 / **netherite 2031（镐斧锹）/ 545/792/743/644（护甲，[V3-4] 第四材料档）**。五类帧锁定磨损：破非瞬断块 +1 / 镐斧锹打 mob +2 / 射出 +1（含 infinite）/ 点燃 +1 / 护甲每次实际减伤事件 −max(1, incoming/4)（溺水 bypass 不磨损）。**无修复系统**（KNOWN_ISSUES） |
-| `model` | `{texture, elements[1..16]}` 严格（内部未知键点名拒） | 无 | CRAFT-2：物品 3D 模型——单纹理（`assets/textures/items/<texture>.png`，init 文件存在性，**惯例 = 复用既有 icon PNG**）+ 轴对齐盒 1..16：每盒 `{from[3], to[3], uv[4]?}`，from/to ∈ [0,1]³ 且逐轴 from < to，uv ∈ [0,1]⁴ 且 u0<u1, v0<v1（退化矩形拒）。单位空间居中 −0.5..0.5；无 model = 三上下文（手持/掉落/进食举到嘴）位级不变。ENT-9 后 shipped 全部 83 件非 block 物品**都有** model（= 掉落可见，纯内容） |
+| `durability` | 数字 > 0，显式 0 拒 | 0 = 无耐久 | SURV-3：**允许集 = 工具 / 护甲 / ammo 发射器 / 点火器**（其余物品带 = no-op 点名拒）。shipped MC 精确值：wood 59 / stone 131 / iron 250（镐斧锹）、弓族 384、燧石 64、护甲 leather 55/80/75/65 / iron 165/240/225/195 / diamond 363/528/495/429 / **netherite 2031（镐斧锹）/ 545/792/743/644（护甲，[V3-4] 第四材料档）**。五类帧锁定磨损：破非瞬断块 +1 / 镐斧锹打 mob +2 / 射出 +1（含 infinite）/ 点燃 +1 / 护甲每次实际减伤事件 −max(1, incoming/4)（溺水 bypass 不磨损）。**修复 = UX-5 工作台材料修复**（受损 + 1 材料 → +25% max 耐久，`repair_with` 字段 35 件全配；无 XP 成本/无成本递增 = 记档偏离） |
+| `repair_with` | 非空物品名，**要求本物品带 `durability`**（无耐久携带 = 点名拒） | 无 | UX-5：工作台材料修复的材料（init `checkRepairMaterials` 交叉校验材料存在 = CRAFT-3 范式；35 件 shipped 全配 MC 精确材料【V3-4 +netherite 7 件 → netherite_ingot】；shears 无 = 剪毛工具定位） |
+| `model` | `{texture, elements[1..16]}` 严格（内部未知键点名拒） | 无 | CRAFT-2：物品 3D 模型——单纹理（`assets/textures/items/<texture>.png`，init 文件存在性，**惯例 = 复用既有 icon PNG**）+ 轴对齐盒 1..16：每盒 `{from[3], to[3], uv[4]?}`，from/to ∈ [0,1]³ 且逐轴 from < to，uv ∈ [0,1]⁴ 且 u0<u1, v0<v1（退化矩形拒）。单位空间居中 −0.5..0.5；无 model = 三上下文（手持/掉落/进食举到嘴）位级不变。ENT-9 后 shipped 全部 **97 件**非 block 物品**都有** model（= 掉落可见，纯内容；3.x 增 quartz【V3-2】/ hoglin 肉 2【V3-3】/ netherite 9【V3-4】/ clay_ball·brick 2【V3-5】） |
 | `max_stack` | 整数 [1, 64] | 64 | |
 | `icon` | 非空字符串 | 不画图标 | `assets/textures/items/<icon>.png`（32×32 RGBA；文件缺失 = init 报错；可多物品共享同一文件） |
 
@@ -414,6 +456,20 @@ their block"（CRAFT-6）**：每个数据方块隐式生成同名 block item（
 > 主世界同款时序）。下界生成带 = nether_gen 命名常量（熔岩海 5-31 /
 > 台地 32-52 / 空腔 53-122 / 天花板 122 / 基岩顶 123-127），改带 =
 > 代码常量（非数据，记档）。
+>
+> **下界深化（`[V3-2]` Part 2，v3.7.0，全 nether-scoped 主世界位级不
+> 变）**：13 下界块 `sound_material` 重指派全钉（nether/nylium/stem
+> 3 材质族，见「块音效材质」）+ **magma_block `light_emission`
+> 3**（下界光景观）+ **块属性 `walk_speed_factor`**（soul_sand 0.4，
+> 见 properties 表）。**建筑内容族（`[V3-5]`，v3.9.0，20 块 + 2 物品 +
+> 17 配方）**：clay（drops clay_ball ×4，hardness 0.6）/
+> mossy_cobblestone（2.0，水底稀有生成）/ bricks（2.0，**smeltable_to
+> terracotta**）/ stone_bricks（1.5）/ mossy_stone_bricks（1.5）/
+> terracotta **15 色染色族**（white 基块 `dye_base: terracotta` =
+> **第三个染色族**，14 变体；硬度 1.25；纹理 = 确定性混合公式
+> (base×3+dye×2)//5 自建记档）——全 opaque `light_opacity` 键省略 =
+> 派生 15（记档偏离 2）；物品 clay_ball·brick 各 64 叠（brick 亦 =
+> clay_ball 熔炼产物）。
 
 ### properties 字段全集
 
@@ -428,7 +484,8 @@ their block"（CRAFT-6）**：每个数据方块隐式生成同名 block item（
 | `enchant_bookshelf` | bool | false | V2-12：附魔台书架环计数数据旗（纯数据旗，beacon_base 双生——核心读属性不读块 id，硬规则 3）；**仅面板打开时求值**（无面板 = 零成本）。shipped = bookshelf true |
 | `fluid` | 字符串 | 无 | 流体参考块：词汇表 **water / lava / honey**（FLUID-6，其他名拒）。其纹理点亮流体面、`light_emission` = 该种类格光（lava 15；honey 无）。shipped 3 参考块均 solid=false/opaque=false/transparent=true/destroyable=false |
 | `hardness` | 数字 ≥ 0 | 1.0 | 破坏耗时 = 1.5 s × hardness ÷ 选中物品有效速度；≤0 且可破坏 = 即时 |
-| `light_emission` | 整数 [0, 15] | 0 | 发光（torch 14 / lava·glowstone·fire·campfire 15） |
+| `light_emission` | 整数 [0, 15] | 0 | 发光（torch 14 / lava·glowstone·fire·campfire 15 / **nether portal 11【V3-1】/ magma_block 3【V3-2 Part 2】**） |
+| `walk_speed_factor` | 数字 (0, 1]，严格 | **1.0（absent 位级恒等）** | V3-2 Part 2：步行/疾跑移速因子（**仅这两档消费**——流体/潜行/飞行既有门不变；双 feet 格取最小；非数/越界/字符串 init 点名拒）。shipped = **soul_sand 0.4**（MC 同款刻度） |
 | `light_opacity` | 整数 [0, 15] | **由 opaque 派生**：opaque→15 / 非 opaque→0（LGT-2：缺省 = 未设字段块逐位复现旧行为；显式值覆盖派生） | 光**进入**该格每格扣减（MC 同款刻度）：15 = 全挡、0 = air 同款、中间 = 每层扣 N。shipped：leaves 族 2 / glass 1 / slab·stairs×4·wall·fence 0（LGT-5 半块透光）。**流体格不读本字段**（固定 3/格 = P51 简化）；cross/glass_pane 禁 15（init 点名） |
 | `drops` | 物品名（`""` = 不掉落，如 glass） | 空 = 不掉落 | init 对 ItemRegistry 存在性（点名） |
 | `drops_count` | 整数 [1, 64] | 1 | 单次破坏数量；须 ≤ 掉落物 max_stack（init）；无 drops 却给 = 拒 |
@@ -437,7 +494,7 @@ their block"（CRAFT-6）**：每个数据方块隐式生成同名 block item（
 | `chance_drop` | `{item, count, chance}` **严格三元组**（未知键点名） | 无 | P49：概率次级掉落，与 `drops` 独立（一次破坏最多两个掉落实体）；count [1,64]、chance (0,1]（1 = 保底）；init item 存在 + count ≤ max_stack；**确定性 roll** `rollChanceDrop(world_seed, x, y, z, chance)`（splitmix64 + 位置 hash3 + 专用 salt 纯函数 = 同世界同格每次破坏同果，无 per-instance RNG） |
 | `chance_drops` | 同款三元组**数组**（非空、逐条目点名） | 无 | P52：每条目**独立 roll**（条目索引去相关 salt——同格各条目互不追踪、也不追踪单条目 roll）；**与 chance_drop 互斥**（同写拒）。shipped：grass [wheat_1×1@0.125] / leaves [stick×1@0.02, apple×1@1/128, **oak_sapling×1@0.05**（GEN-2 种植闭环）] / spruce·birch_leaves [对应 sapling@0.05, stick@0.02] / lapis_ore·glowstone [drops_count 2 + 两个 50% 条目 = 2..4 均匀] |
 | `interact` | 字符串 | 无 | **词汇表 = crafting_table / furnace / campfire / enchant**（其他值 = 启动报错点名）：右键命中打开对应面板/交互而非放置（enchant = V2-12 附魔台，开 EnchantUI 面板，见附魔节） |
-| `dye_base` + `dye_color` | 非空字符串，dye_color 须配 dye_base | 无 | P41 染色家族（见染料节）；dye_base 与 interact 互斥 |
+| `dye_base` + `dye_color` | 非空字符串，dye_color 须配 dye_base | 无 | P41 染色家族（见染料节）；dye_base 与 interact 互斥。**shipped 三族**：wool 15（P41）+ bed 15【V2-13】+ **terracotta 15【V3-5】** |
 | `beacon_effect` / `beacon_effects` | 非空效果名 / 非空效果名数组（逐条目点名） | 无 | P83/P91：信标施加的效果——**两字段互斥**（同写拒）；单值 = 1 元素列表向后兼容；init 逐条目存在性（grows_to 纪律）；每帧在范围内刷新（0.5 s 周期，火源范式）。shipped beacon = `["absorption", "speed"]` |
 | `fuel_time` / `smeltable_to` | 数字 (0,1000]（显式 0 拒）/ 非空物品名（显式空串拒） | 无 | CRAFT-6：block item 继承（木 20 s 燃料 / sand→glass / lava_bucket 1000 s 走物品侧） |
 | `ignites_to` | 非空块名（显式空串拒） | 无 | P76：点火器右键该块 = 原位变体（**烤制/状态保留续烤**、不消耗物品、"ignite" 音）；init 存在性。shipped = campfire_extinguished → campfire |
@@ -514,7 +571,8 @@ ignites_to / stair_rotates_to / water_reaction 两名 / tree.trunk+leaves /
 beacon_effects 每条目 / drops_count_by_state（长度 == state_count + 每
 state ≤ 掉落物 max_stack）/ sound_material 3 件 wav / 流体块 fluid 名
 词汇表 / dye 全家族（每色染料存在 + 每 (base, 色) 变体存在——现 = wool
-15 + bed 15【V2-13 第二染色族】）/ 有 flamable ⇒ 有 fire 块 / 图集 tile
+15 + bed 15【V2-13】+ **terracotta 15【V3-5，缺一色点名实证】**）/
+repair_with 材料存在（UX-5）/ 有 flamable ⇒ 有 fire 块 / 图集 tile
 存在（含 moisture_top）。
 
 ## 新增一个配方（无需改核心代码）
@@ -555,8 +613,8 @@ pattern 偏移扫描（任意左上偏移放进网格、空格对应格必须为
 配方单列拟合因子 0.34 不可用），每行 = mini 3×3 pattern（暗格 + 键位物品图标，
 按定义左上对齐 = 合法摆放）+ 输出图标 + "name xN"（`canSupply(patternBag)`
 纯函数着色）；**提示行点击 = 消费性 no-op**（不合成不动背包，吞点击 ≠
-槽外点击丢 carry）。当前 shipped 86 条（shaped 52 / shapeless 34）：
-方块/材料/杂项 44（planks/stick/stone/sandstone/smooth_sandstone/
+槽外点击丢 carry）。当前 shipped 112 条（shaped 58 / shapeless 54）：
+方块/材料/杂项 62（planks/stick/stone/sandstone/smooth_sandstone/
 iron_block/gold_block/diamond_block【V2-7：9 锭方块，iron_block
 先例】/torch/farmland/bucket/glass_pane/fence/stone_slab/stone_wall/
 楼梯 4/crafting_table/**furnace【v1.34.0：8 cobblestone 围圈 = MC 摆法，
@@ -564,8 +622,16 @@ iron_block/gold_block/diamond_block【V2-7：9 锭方块，iron_block
 flint_and_steel/golden_apple/**bed 15【V2-13：shaped 3 同色 wool + 3
 planks = MC 精确】/**enchanting_table（shapeless 4 obsidian + 2 diamond
 + 3 lapis）+ bookshelf（shaped PPP/LLL/PPP）【V2-12：均 lapis 代 book
-偏离】/**shears【V2-15：shapeless 2 iron_ingot】）+ 工具 9 + 弓 6 +
-护甲 12 + 染料 15。
+偏离】/**shears【V2-15：shapeless 2 iron_ingot】/**nether_brick
+2×2 自压缩【V3-2：项目单物品空间坍缩记档】/**stone_bricks（2×2
+cobblestone）/ bricks（2×2 brick）/ mossy_stone_bricks（shapeless
+石砖 3 + 苔石 1）+ terracotta 染色 14（shapeless 染料 + 陶瓦）【V3-5
+建筑族 17 条：3 块配方 + 14 染色；双熔炼走 smeltable_to 数据字段
+CRAFT-6 纪律，非配方】）+ 工具 12（+netherite 3【V3-4：shaped 直接
+crafted，ingot + 木棍】）+ 弓 6 + 护甲 16（+netherite 4【V3-4：
+shapeless 升级 = ingot + diamond_<slot>】）+ 染料 15 + netherite_ingot
+（shapeless 4 scrap + 4 gold_ingot【V3-4，MC 用 nugget = 记档偏离
+1】）。
 
 ## 新增一个附魔（无需改核心代码，V2-12）
 
@@ -615,10 +681,19 @@ v%(eCost+150)<150 → eCost/=2 回环）= MC 精确；bookshelfCount = 5×5 环 
 pool−T(L) 整数精确）。
 
 **物品侧**（见物品字段表 `enchant_class`/`enchantability`/
-`enchant_material`）：shipped 22 件可附魔 = 工具 9（wood 15 / stone 5 /
-iron 14）+ 护甲 12（leather 15 / iron 9 / diamond 10）+ bow 1（**仅基础
-bow**，变体弓保持替身定位）；lapis `enchant_material: true` = 青金石槽
-数据驱动门。
+`enchant_material`）：shipped **29 件**可附魔 = 工具 12（wood 15 / stone
+5 / iron·netherite 14【V3-4】）+ 护甲 16（leather 15 / iron 9 /
+diamond·netherite 10【V3-4】）+ bow 1（**仅基础 bow**，变体弓保持替身
+定位）；lapis `enchant_material: true` = 青金石槽 数据驱动门。
+**netherite 材料链【V3-4，零核心代码纯数据】**：ancient_debris 块
+`smeltable_to: netherite_scrap`（CRAFT-6 块属性继承）→ shapeless
+4 scrap + 4 gold_ingot = netherite_ingot（MC 用 nugget = 记档偏离 1）→
+工具 3（shaped 直接 crafted：dur **2031 MC 精确** / break_speed 4.0 项目
+铁刻度 / `fast_against` 2.0 × **21 块** = 铁 10 块清单 + nether 台地
+11 块 / repair netherite_ingot）+ 护甲 4（dur **545/792/743/644 =
+钻石 ×1.5 MC 精确** / ap 3/8/6/3 / shapeless 升级 ingot + diamond_<
+slot>【记档偏离 2：无锻造台】/ model 克隆钻石系）；icon 9 件暗红铜色板
+（记档偏离 4，既有 84 张 md5 逐一不变）。
 
 **存档**（format 27）：物品 `enchants {id: level}` 三处（inventory 槽 /
 armor 占位槽 / item 实体，omit-when-empty = 无附魔堆栈逐字节旧形）+
@@ -643,8 +718,8 @@ incompatible 对全点名，validateEnchants 与 validateStats 同款）。详�
    `<base>.json` 本身）：`properties` 加 `"dye_base": "<base>",
    "dye_color": "<color>"`（两者必须同时给——dye_color 须配 dye_base；
    dye_base 与 interact 互斥）；纹理 tile 加进 `block_atlas.json` 空位
-   （16×8 网格现 6 空位 = (13,6)-(15,7) 区段；**网格扩容 = 移位所有既有 UV → base18 重锚**，
-   见纹理纪律节）。
+   （16×16 网格现 91 空位；**列数扩容 = 移位所有既有 UV → base19 重
+   锚**（行数幂二 = 零移位免，见纹理纪律节））。
 3. **合成配方** `assets/data/recipes/dye_<color>.json`（shapeless；当前 15 条
    见 GAMEPLAY「染色」；来源块 = 世界内容：lapis 矿脉 / 仙人掌 / 十字花 /
    熟肉 / 骨粉 / 金锭）。
@@ -703,7 +778,7 @@ worldgen = 无输入基线结构免疫。
    同款：splitmix64 确定性噪声 + 简单五官；box 六面同采一个 tile，-Z 面 =
    正面）。**mob tile 与块 tile 共用同一图集**：在
    `assets/data/textures/block_atlas.json` 的 `tiles` 里给它空位 `[col, row]`
-   （16×8 网格现 6 空位 = (13,6)-(15,7) 区段；勿动已有条目）。
+   （16×16 网格现 91 空位；勿动已有条目）。
 2. `assets/data/mobs/<id>.json` —— mob 定义。`properties`（必填 + 可选）：
 
    | 字段 | 类型 / 范围 | 缺省 | 说明 |
@@ -712,7 +787,9 @@ worldgen = 无输入基线结构免疫。
    | `detect_radius` / `attack_range` / `attack_damage` | 数字 ≥ 0 | 必填 | 0 = 被动/无害（AI 视为"从不"） |
    | `attack_cooldown` / `wander_interval` | 数字 > 0 | 必填 | |
    | `spawn_max_light` | 整数 [0, 15] | 0 = 只在黑暗 | 光照门；shipped hostile = **7**（LGT-3 MC 月光配对：夜露天 7≤7 保夜险 / 火把 14>7 免疫 / 白天 15>7 不生成）、passive = 15 |
-   | `hostile` | bool | false | Phase 25 难度系统数据开关（保护环 + 伤害/生成速率缩放，见 config `mobs.difficulty`） |
+   | `hostile` | bool | false | Phase 25 难度系统数据开关（保护环 + 伤害/生成速率缩放，见 config `mobs.difficulty`）；**与 `neutral` 互斥**（同写 init 点名拒，V3-3） |
+| `neutral` | 严格 bool | false | V3-3 中立新类（piglin/hoglin）：生成即被动，**任意来源** `damage()` 单收口激怒（玩家/箭/火 tick/摔落/毒，无物种 switch）+ **30 s real-dt 脱激**（再击刷新、玩家死亡即时脱激、致死不置态）+ chase 谓词第二支 `(neutral ? m_angry : true)`（非 neutral 常量 true 位级恒等） |
+| `walks_on_lava` | 严格 bool | false | V3-3（strider）：**点火豁免**（inLava 不点燃，火块接触仍点燃）+ **feet-on-plane snap 不动点**（fps 无关；深潜浮回；落体免溅落）+ 水下 0.6× 速度门同旗豁免 + **生成面 = 熔岩源格顶面**（顶向下扫 + 头顶 air + 下方异种流体拒）；shipped = strider（**`spawn_max_light` 须 15** 配熔岩自发光，否则自毁门永不生成——见光门行） |
    | `undead` | 严格 bool | false | SURV-5：不死族——`undead_exempt` 效果（poison）免疫（wither 照中 = MC 独一份性） |
    | `shoot_range` / `retreat_distance` | 数字 ≥ 0 | 0 = 近战 | Phase 27 远攻对；shoot_range > 0 = 远攻者 |
    | `shoot_speed` | 数字 (0, 100] | 0 | 远攻必填（配对点名） |
@@ -721,10 +798,10 @@ worldgen = 无输入基线结构免疫。
    | `on_hit_effect` | `{name, duration, tier?}` 严格（duration > 0） | 无 | Phase 46：**近战命中落定**时施加（spider `{poison, 15}`）；init 对 EffectRegistry 存在性 |
    | `milk_with` + `milk_gives` | 非空物品名，**严格成对**（只给一边拒） | 无 | Phase 43/SURV-10：挤奶（cow `bucket → milk_bucket`）——手持 milk_with 右键 = 消耗 1 + 产出 1 + "milk" 音；init 两物品存在；**SURV-10 = MC 5 分钟冷却**（per-mob 帧锁定 18000 帧，冷却中点击照吞但不耗桶不产奶；mob 瞬态 = 冷却从不入档） |
    | `drops` | 数组 `[{item, count}]` 或 `[{item, count_min, count_max}]` | [] = 不掉落 | Phase 28/38：count 整数 [1,64]，或 min/max 整数 [0,64] 成对（0 = 可能不掉）；两形混用/只给一边拒；`drops_count` 旧字段显式拒（迁移防护）；init 每条目 ItemRegistry 存在 + max ≤ max_stack |
-   | `xp` | 整数 [0, 9] | 0 = 无球 | V2-11 XP：击杀掉该值经验球（球值上限，无分裂机制，>9/非整点名拒）。shipped：hostile zombie/skeleton/spider 5 / passive pig/cow/sheep/chicken 2（MC 1-3 中值 = 定案）/ bat 0 |
+   | `xp` | 整数 [0, 9] | 0 = 无球 | V2-11 XP：击杀掉该值经验球（球值上限，无分裂机制，>9/非整点名拒）。shipped：hostile zombie/skeleton/spider 5 / passive pig/cow/sheep/chicken 2（MC 1-3 中值 = 定案）/ bat 0；**下界【V3-3】**：zombified_piglin 5 / hoglin 5 / piglin 3 / strider 3 / magma_cube 0 |
    | `flying` | 严格 bool | false | V2-14 飞行（悬停巡航 AI，见下 bat 条；**唯一硬互配：flying ⇒ spawns_in_air**——地面生成的飞行者无意义，点名拒）；absent = pre-V2-14 语义位级不变 |
    | `spawns_in_air` | 严格 bool | false | V2-14：in-air 生成分支（顶向扫描 + box 全空气无流体 + 光 ≤ spawn_max_light + **跳过 floor 带**（任何 Y = MC）+ 出生位盒底格中心） |
-   | `ambient_sound` + `ambient_interval` | 非空音名 + 数字 > 0，**interval 须配 sound 名**（孤 interval = 死数据点名拒） | 无 | V2-14：氛围音（音名 init file-based 交叉检；每帧 p = 1/(interval×60) 流 roll 空间化，无 ambient mob 流零消费）。shipped = bat squeak / 3.0 |
+   | `ambient_sound` + `ambient_interval` | 非空音名 + 数字 > 0，**interval 须配 sound 名**（孤 interval = 死数据点名拒；单向严格对——孤 ambient_sound 合法 = 缺省 interval 3.0） | 无 | V2-14：氛围音（音名 init file-based 交叉检；每帧 p = 1/(interval×60) 流 roll 空间化，无 ambient mob 流零消费）。shipped = bat squeak / 3.0 + **下界地面 3 件【V3-3】= piglin piglin_whisper / hoglin hoglin_grunt / strider strider_hiss 各 3.0**（`runAi` 数据门控分支 = bat 悬停 ambient 先例的地面推广） |
    | `wool_drops` + `wool_weights` | 严格 bool + `[{color, weight}]` 数组（color 非空串、weight 整数 [1, 10000]、重名拒、空列表拒，逐条目点名），**严格对**（孤字段点名拒 = milk pair 纪律） | 无 / 无 | V2-15 染色羊（见下）：毛色随实例（出生加权 roll / 剪毛 / 染色 / 死亡彩毛）；color 词表点名拒放 **init 交叉检 `checkWoolDrops`**（解析期无 ItemRegistry 可见 = ammo/milkWith/drops 同款纪律） |
 
    `model`（**严格对象**：未知键点名拒——top-level def 仍警告容忍，
@@ -760,7 +837,17 @@ worldgen = 无输入基线结构免疫。
    [0, 1000000]（60）/ `max_mobs` [1, 1000]（4）/ `min_radius` <
    `max_radius`（4 < 6）/ `despawn_distance` > max_radius（40，离玩家
    消散）/ `mobs` 非空数组 `{"id", "weight"?}`（weight 整数 [1, 10000]，
-   缺省 1 = 等概率；旧纯字符串条目显式拒；重复 id 拒）。**生成环 = 整数
+   缺省 1 = 等概率；旧纯字符串条目显式拒；重复 id 拒）。**下界池【V3-3】
+   = `assets/data/mob_spawning_nether.json` 独立文件**（同款 schema 严格
+   解析；`loadNetherSpawnPool` 纯函数——文件缺失/坏 schema/未知 mob 全
+   init 点名 fail-fast = v3.5.0 先例；shipped 权重 zombified_piglin 10 /
+   piglin 8 / hoglin 7 / magma_cube 5 / strider 1 = MC 近似；cadence/
+   半径/despawn 与主世界同款表）；**会话策略继承**（enabled/
+   difficulty/limb_swing ← 主世界同 config 值，记档偏离 5）+ **类型表 =
+   游戏单一共享 MobRegistry**（记档偏离 4：双注册表 MobID 错位风险）+
+   **池隔离**（`playerInNether() ? m_nether.mobs : m_mobs` 既有维度分
+   派——主世界生成永不抽下界物种反之亦然，门 198 实证）+ 只 tick 活跃
+   维、非活跃维冻结（Phase B 时间胶囊既有）。**生成环 = 整数
    格偏移环，半径带 [min_radius, max_radius]（shipped 4..6）**，锚
    **世界出生点**（floor band ±2 + headroom 2 格含流体 + 自然地形 =
    潜在生成平台 + ±0.5 jitter = spawner 精确语义，PITS 307：ENT-8 文档
@@ -769,7 +856,9 @@ worldgen = 无输入基线结构免疫。
    spawnProtectionRadius = 1e6，敌对自然生成全拒 + 被动豁免照生 =
    MC 和平核心）。
 
-**shipped 8 mob**（NORMAL 难度基线数据）：zombie（敌对 undead：hp 20 /
+**shipped 13 mob**（NORMAL 难度基线数据；主世界 8 + **下界 5【V3-3
+v3.8.0，纯数据 + neutral/walks_on_lava 两旗零新生成基建**——下界池独立
+文件，主世界名单零触碰）：zombie（敌对 undead：hp 20 /
 speed 0.8 / detect 16 / range 1.6 / dmg 3 / cd 1.0 / light 7 / xp 5；掉
 rotten_flesh ×1）/ skeleton（敌对 undead 远攻：hp 20 / shoot_range 14 /
 retreat 3 / shoot_speed 15 / ammo arrow / arrow_effect {wither, 10} /
@@ -791,7 +880,18 @@ speed 巡航 / 垂直正弦悬停 0.2×sin(2π·frame/60) 帧锁定（bob 初相
 首抽，flying 才消费）/ 重力关 + 终端豁免 + 流体旁路 / 撞壁 = 下帧航向
 重掷（无寻路 = 记档偏离）/ knockback 0.3s 回巡航；in-air 生成 = 顶向
 扫描 + 跳过 floor 带（任何 Y = MC）；消散 40【MC 32 记档偏离】；
-ambient squeak 每帧 p = 1/(3×60) 流 roll 空间化）。
+ambient squeak 每帧 p = 1/(3×60) 流 roll 空间化）/
+**zombified_piglin**（敌对【V3-3】：hp 20 / speed 0.8 / light 7 / xp 5；
+zombie 数据孪生但 **`undead: false`**——MC zombie piglin 非亡灵 = 中毒
+不免疫记档；掉 rotten_flesh ×1）/ **piglin**（neutral【V3-3】：hp 16 /
+speed 1.0 / light 7 / xp 3；无掉落；ambient piglin_whisper；无交易 =
+记档不做）/ **hoglin**（neutral【V3-3】：hp 40 / speed 1.0 / light 7 /
+xp 5；掉 hoglin_meat 1-2 + leather 0-1；ambient hoglin_grunt）/
+**magma_cube**（敌对【V3-3】：hp 16 / speed 0.8 / light 7 / xp 0；无
+掉落；**不分裂不跳** blob 3 盒无脸 = MC 简化记档）/ **strider**（passive
++ `walks_on_lava`【V3-3】：hp 20 / speed 1.0 / **light 15**（熔岩自发光
+配对，门内实证机制缺口修正）/ xp 3；掉 leather 0-1；ambient
+strider_hiss；**不可骑乘** = 记档不做）。
 
 **染色羊（V2-15，per-entity 变体机制）**：新物品 **shears**（type tool /
 durability 238 MC 精确 / break_speed 2 / `shears: true` 严格 bool 旗，
@@ -815,7 +915,8 @@ entity 动态网格，懒建 / despawn 释放 / 剪毛染色再生触发重建�
 覆盖全 15 色存在性）+ bare = 新 sheep_skin tile【(226,178,164) 肉粉，
 atlas (11,6) 零移位】。零 format（mob 不持久化 = 实例态 session-only）。
 
-**行为面（代码驱动，无数据字段）**：AI 状态机（wander/chase/retreat，
+**行为面（代码驱动，数据旗门控）**：AI 状态机（wander/chase/retreat，
+**neutral 激怒/脱激 = 数据旗第二支【V3-3】**，
 ENT-6 卡住 0.5 s 进度 <25% → BFS 寻路跟随 + 0.5 s 重规划 + 1 s lost 冷却
 + 2 s 节点超时逃逸）/ 踏阶 ENT-3（与玩家同一 `Entity::stepUp` 判定：
 slab 0.5 / 满块 1.0 / 玻璃板可踏、墙/栅栏 1.5 不可踏）/ 涉水 ENT-4 /
@@ -1183,16 +1284,18 @@ honey]`——一桶全舀三种类）⇄ `water_bucket` + `lava_bucket` + `honey
    hurt/ui_* 保持 2D 位级不变。**音频不入帧状态**（硬规则 8：截图/存档
    零影响）。
 
-shipped 7 材质 × 3 事件 = 21 wav：stone（硬脆/raw noise/2200 Hz ping）/
-wood（中频腔音）/ gravel（双 noise 层干颗粒）/ sand（double lowpass 低
-shush）/ cloth（最静 rustle）/ glass（1900-3200 Hz 铃音）/
-**snow**【V2-16，sand 族范式一阶更软，确定性合成】。51 块赋值：stone
-9【stone/cobblestone/5 矿脉（coal·iron·gold·diamond·lapis_ore）/
-stone_wall = 矿脉族 MC 语义/**enchanting_table**】/ wood 5【wood +
-2 trunk/**planks**/**bookshelf**】/ gravel 1 / sand 3【sand +
-sandstone 族】/ cloth 30【wool 全染变 15 + **bed 族 15**】/ glass 2 /
-snow 1【snow】；未赋值块 = 通用回退（obsidian/furnace/铁·金·钻石块/
-楼梯族等 = 下轮候选记档）。
+shipped **10 材质 × 3 事件 = 30 wav**：stone（硬脆/raw noise/2200 Hz
+ping）/ wood（中频腔音）/ gravel（双 noise 层干颗粒）/ sand（double
+lowpass 低 shush）/ cloth（最静 rustle）/ glass（1900-3200 Hz 铃音）/
+**snow**【V2-16，sand 族范式一阶更软】/ **nether·nylium·stem**【V3-2
+Part 2 v3.7.0，下界 3 材质族，确定性合成，49→60 wav】。**85 块赋
+值**：stone 33【含 5 主世界矿脉 + 下界 3 矿（quartz_ore/
+nether_gold_ore/ancient_debris）+ stone_wall/enchanting_table 等 = 矿脉
+族 MC 语义】/ wood 5【wood + 2 trunk/planks/bookshelf】/ gravel 1 /
+sand 5【sand + sandstone 族】/ cloth 30【wool 全染变 15 + bed 族 15】/
+glass 3 / snow 1 / **nether 3 / nylium 2 / stem 2【V3-2 Part 2，13 下
+界块重指派全钉】**；未赋值块 = 通用回退（obsidian/furnace/铁·金·钻石
+块/楼梯族/terracotta 族等）。
 
 ## 调节玩家参数（config/config.json `player.*`）
 
@@ -1252,7 +1355,7 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
 |---|---|---|---|
 | `window.title` / `window.width` / `window.height` / `window.fullscreen` / `window.resizable` | str/int/int/bool/bool | "TokenMine.cpp"/1280/720/false/true | 窗口（种子 config 带出 title/width/height/fullscreen） |
 | `render.vsync` / `render.fps_cap` | bool/int | true/0 | 0 = 不封顶 |
-| `render.fog` | bool | **true** | PRE-2 边缘距离雾（流送盘缘溶解，同帧天空色跟随昼夜；off = 对前版位级恒等） |
+| `render.fog` | bool | **true** | PRE-2 边缘距离雾（流送盘缘溶解，同帧天空色跟随昼夜；**V3-6 填充感知**：end = min(静态, 实际填充盘 cheb 半径 ×16)，稳态满盘位级恒等，base19 重锚；off = 对前版位级恒等） |
 | `render.water_ripples` | bool | **true** | PRE-3 水面 shimmer（帧锁定 120 帧周期；lava 不闪） |
 | `render.clouds` | bool | **true** | PRE-4 云（y=108 平板层、100 s/格漂移、alpha 0.55；相机云格/t 变化才重建 mesh） |
 | `render.alpha_test` | bool | **true** | PRE-5 透明 discard（cutout 段写深度 + alpha<0.5 丢弃；off = 混合段序偏离记档） |
@@ -1264,12 +1367,12 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
 | `render.cave_ambient` | number | **0.03**（kAmbientFloor） | UX-9c 全遮挡 ambient 地板（严格读：absent = 0.03 = pre-UX-9c 管线逐位；present = 有限数 [0, 1]——0 = 洞穴/深水/密封室无残光，1 = 全亮；shader 单消费者） |
 | `render.ao` | bool | **true** | V2-18 AO 环境光遮蔽（严格读 weatherEnabled 范式：非 bool 点名拒；**off = 查询不跑 + greedy 合并键 ao[4] 恒零 + 顶点系数恒 1.0 = pre-V2-19 位级恒等**【门内 off ≡ 旧锚实证】；on = 经典 MC 顶点 AO 4 档 1.0/0.75/0.5/0.3（side1∧side2 双邻特例 = 0.3）× opaque ∧ 高度带闭区间，bake 入既有 sky/block 光 attribute（零 shader / 零顶点格式 15 float / 零新 uniform）；生效面 = greedy 满块（MaskCell 合并键扩 ao[4]，共享边角 AO 异断 run）+ slab 三态 + stairs；**fluid/cross/wall/fence/glass_pane 免 AO**（MC 精确：水面不受 smooth lighting 影响 + 薄几何范围外）；per-draw 光覆盖面（信标光束/掉落/XP 球）AO 消失 = 特效光覆盖优先记档偏离；门 190 重锚 base18 ← 224468 B） |
 | `audio.volume` | number | 0.7 | 种子 config 带出 |
-| `audio.ambience` | bool | **true** | PRE-4 昼夜环境音（cave/day/night 三上下文，每 300 帧纯函数 roll，2D 全局） |
+| `audio.ambience` | bool | **true** | PRE-4 环境音（**4 上下文【V3-2 Part 2：nether 优先** > cave/day/night，inNether 默认参 = 主世界位级恒等；ambience_nether 音】，每 300 帧纯函数 roll，2D 全局） |
 | `world.seed` | int64 | getter 回落 0（种子 config 生成值 = 123456789） | 已提交 = 123456789；`--seed` 覆盖并写回 |
 | `world.view_distance` | int | 8 | **已提交 = 80（用户调值）**；流送半径 = min(vd, 64)（STRM-1 远平面帽 R_eff） |
 | `world.day_length_seconds` | number | 240 | **已提交 = 600（用户调值）** |
 | `world.start_time_of_day` | number | 0.25 | `--time` 覆盖（仅新世界） |
-| `mobs.enabled` | bool | true | 生成总开关 |
+| `mobs.enabled` | bool | true | 生成总开关（**下界池同款消费** = 会话策略继承【V3-3】） |
 | `mobs.limb_swing` | bool | true | ENT-1 四肢摆动（off = v0.9.0 静态对照） |
 | `mobs.difficulty` | string | "normal" | Phase 25/ENT-8：**"easy" / "normal" / "hard" / "peaceful"**（大小写敏感，其他值点名拒）——敌对保护环 8/12/16/**全球(peaceful)**、伤害 ×0.5/1/4÷3/0、生成速率 ÷0.5/1/1.5（check_every_frames 30 → 60/30/20）；peaceful = 敌对自然生成全拒 + 被动豁免（无"现有敌对消亡"= mob 瞬态，记档偏离）；只 init 读取（无运行时切换） |
 | `fire.lifetime_seconds` | number | 4.0 | P64 火块寿命（real-dt 倒计时；>0 点名） |
@@ -1279,9 +1382,10 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
 | `beacon.range_blocks` | int | 50 | P83 信标效果范围（玩家脚到信标格 Chebyshev；>0 点名） |
 | `beacon.beam` | bool | true | P83 半透明光束（E2E 对照） |
 | `save.auto_save_seconds` | number | **120.0**（代码默认，SAVE-1） | 自动存档节奏（**真实 dt**，`--save` 槽门控）；**严格读取**：缺 = 默认、present 须有限数 ≥ 0（**0 = 关闭**、负数/非有限/非数字点名拒）；成功归零、失败不清零下帧重试；日志 "World auto-saved to" 区别于 F5/退出 "World saved to" |
+| `save.compression` | string | **"gzip"（absent = gzip，V3-7 用户定案）** | 存档编码（**严格读**：`"gzip"` / `"none"` = 明文旧行为位级恒等；非 string/空串/未知词 init 点名拒）——与 format 号正交（魔数 `1f 8b` 探测唯一判据），见「使用存档」 |
 | `ui.scale` | number | 1.0 | P34 屏幕空间 UI 缩放，**[1.0, 4.0]** 越界/非数值点名；**已提交 = 1.5（用户调值）**。全部屏幕空间 UI（字体/hotbar/心饥饿带/面板/F3/死亡屏/手持/准星）在 "UI 像素" 空间（窗口逻辑 ÷ scale）正交投影拉伸——世界渲染与截图尺寸不受影响 |
 
-## 使用存档（Phase 13 框架 → format 29）
+## 使用存档（Phase 13 框架 → format 30）
 
 ```bash
 ./build/bin/tokenmine --save myworld        # 首次：新游戏；此后：读档
@@ -1314,23 +1418,28 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
   旧档）。写失败只记 ERROR 日志、退出码仍 0。**三路共用原子写**（同目录
   `.tmp` + flush/close + `rename` POSIX 原子——kill 中途最多留陈旧 tmp，
   失败写永不毁旧档）
-- 存档是机器生成的：字段集由 format 号锁定（**当前 format 29**），加载器
+- 存档是机器生成的：字段集由 format 号锁定（**当前 format 30**），加载器
   对未知字段一律报错（与用户手写数据文件的"警告但容忍"策略相反）。
-  **25→29 谱系**（一句话）：25 = 教程（V2-3）/ 26 = XP 三向键（player.xp
+  **25→30 谱系**（一句话）：25 = 教程（V2-3）/ 26 = XP 三向键（player.xp
   + entities 第二 kind xp）/ 27 = 附魔（player.xp_seed + 物品 enchants）/
   28 = 床（player.respawn 恒写）/ **29 = gzip 时代（V3-7：schema 与 28
   完全一致，format 号仅标记写入构建开始默认 gzip 编码；编码与 format
-  号正交，魔数探测唯一判据）**；完整 layout 与逐版证据见
+  号正交，魔数探测唯一判据）**/ **30 = 下界维度（V3-1：player.dimension
+  严格词表恒写 + nether 段 {blocks, fluids, states} 恒写 + nether_
+  entities 恒写 + 派生 seed 不落盘【worldSeed ^ kSaltNether parse 重
+  建】+ 两维 portal 载入 rescan + 交叉检；29 缺 dimension = overworld
+  迁移 / 29 携 = version lie 点名）**；完整 layout 与逐版证据见
   `docs/archive/v2x/CHANGELOG.md` 各版条目 + `phase-2.x.0.md` 档（29 →
-  `docs/archive/phase-3.1.0.md`），不在此重抄全文
+  `docs/archive/phase-3.1.0.md`，30 → `docs/archive/phase-3.4.0.md`），
+  不在此重抄全文
 - **PITS**：`--save slot` 第二次运行会加载第一次写的存档（E2E 对跑每拍
   从源副本 `cp` 新鲜存档）
 
-### format 29 完整布局（on-disk = gzip 容器，JSON 内容 = 明文 payload）
+### format 30 完整布局（on-disk = gzip 容器，JSON 内容 = 明文 payload）
 
 ```json
 {
-  "format": 29,
+  "format": 30,
   "seed": 123456789,
   "time": 0.2541666,
   "player": {
@@ -1345,8 +1454,11 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
     "oxygen": 150,
     "xp": 1395,
     "xp_seed": "5eed1a2b3c4d5e6f",
-    "respawn": [0, 54, -3]
+    "respawn": [0, 54, -3],
+    "dimension": "overworld"
   },
+  "nether": { "blocks": [], "fluids": [], "states": [] },
+  "nether_entities": [],
   "inventory": { "selected": 0,
                  "slots": [ { "item": "stone", "count": 64 },
                             { "item": "iron_axe", "count": 1, "damage": 2.0,
@@ -1375,9 +1487,9 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
 health/hunger/saturation/absorption/oxygen/xp/xp_seed/respawn = 游戏恒有
 值故实际恒写（−1"未指定" = 省略字段，仅老 format 读入语义）。）
 
-**player 段**（键纪律：format 29 必键 = pos/**velocity**/yaw/pitch/health/
+**player 段**（键纪律：format 30 必键 = pos/**velocity**/yaw/pitch/health/
 absorption/hunger/saturation/effects/armor/**stats**/**oxygen**/**xp**
-/**xp_seed**/**respawn**；低版本带新键 = 版本谎报点名）：
+/**xp_seed**/**respawn**/**dimension**；低版本带新键 = 版本谎报点名）：
 
 | 键 | 引入 | 纪律 |
 |---|---|---|
@@ -1394,6 +1506,15 @@ absorption/hunger/saturation/effects/armor/**stats**/**oxygen**/**xp**
 | `xp` | 26（V2-11） | **必键**，整数 ≥ 0 **恒写**（累计经验池；HUD 条/等级 = 池派生，**等级永不存储** = 单源真值，core/xp_curve 全整数 MC 现代公式）；pre-26 载 = 迁 0（velocity 零化迁移同款）；≤25 文件携 = 版本谎报点名 |
 | `xp_seed` | 27（V2-12） | **必键**，**16 位小写 hex 串恒写**（附魔 offer 去相关种子；存档 JSON number = double 53 位容不下 64-bit = hex 串记档偏离）；26 载 = worldSeed ^ kXpSeedInit 迁移；pre-27 文件携 = 版本谎报点名 |
 | `respawn` | 28（V2-13） | **必键**，int 三元组 **恒写**（重生点 = 记忆位置的格分量 floor；新档 = 世界出生点 init 写入）；分量非整数 / y ∉ [0,128) 点名拒（x/z 无界）；27 载 = 哨兵 -1 → `applySave` 覆写世界出生点（parse 无法知世界出生点 = game 侧迁移）；pre-28 文件携 = 版本谎报点名 |
+| `dimension` | **30（V3-1）** | **必键**，严格词表 overworld\|nether **恒写**（当前维度；下界死亡重生回主世界 = 维度换绑既有语义）；29 载 = overworld 迁移（免迁）；29 携 = version lie 点名；未知词点名 |
+
+**nether 段（30+）**：`nether = {blocks, fluids, states}` 三子段恒写（空
+合法）= 下界维度的 journal 同款结构（blocks 位置序 / fluids 五元组 /
+states 全量含默认值）；`nether_entities`（item kind 掉落物）恒写空合法；
+**mob 与箭不存**（两维同款瞬态纪律）；两维 portal 载入 rescan（孤立 →
+air，双向交叉检）；nether 内 stateful 块须 nether.states 条目（PITS 383①
+孪生）。派生 seed 不落盘 = parse 重建（单源真值）。gzip 编码零改动
+（V3-7 容器自动覆盖两维）。
 
 **世界段**：`inventory`（27 格 `slots`：{item, count, **damage? >0**,
 **enchants? 27+（omit-when-empty，{id: level} 对象，载时交叉校验：未知
@@ -1419,19 +1540,22 @@ pos, age, pickup_delay}**（球不携堆叠，无 item/count/damage；item 条�
 campfires/armor/oxygen/stats/tables/states/velocity/**xp/xp_seed/respawn**
 等，缺 = 拒）；② 低版本**带新键 = 版本谎报点名**（如 fmt14 带 states、
 pre-21 带 stats、pre-22 带 velocity、pre-26 带 player.xp 或 xp 实体、
-pre-27 带 xp_seed 或堆栈 enchants、pre-28 带 respawn）；③ 未知字段一律
-报错。**迁移先例**：值保真（14 stairs
+pre-27 带 xp_seed 或堆栈 enchants、pre-28 带 respawn、**pre-30 带
+dimension/nether/nether_entities**）；③ 未知字段一律报错。**迁移先例**：值保真（14 stairs
 → 15 states facing→state）/ 免迁（tier 0 omit-when-default ⇒ f19 文件 f20
 直接读）/ sole 归属（f18 table_grid 非空 ∧ 恰 1 表 → 归属，0/多 → 丢弃，
 P44 furnace 先例）/ 系统不存在 = 默认（f11 无吸收 → 共享 health 拆分、
 f16 无甲 → 空、f17 无氧 → 满、f20 无 stats → 空、pre-22 无 velocity → 0、
 pre-26 无 xp → 0 且无 xp 实体、pre-27 无 xp_seed → worldSeed ^
-kXpSeedInit、pre-28 无 respawn → 哨兵覆写世界出生点）。
+kXpSeedInit、pre-28 无 respawn → 哨兵覆写世界出生点、**pre-30 无
+dimension → overworld + nether 段空**）。
 
 ## 纹理 / 图集 / 字体 / 声音资产纪律（重锚红线）
 
 **块图集**（单纹理多 tile）：tile 源 = `assets/textures/blocks/*.png`
-（块，96 件）+ `assets/textures/mobs/*.png`（mob/玩家，26 件），均
+（块，**130 件**，3.x 增 nether portal/netherrack/下界内容 12/建筑 20 族
+等）+ `assets/textures/mobs/*.png`（mob/玩家，**35 件**，V3-3 下界 mob
+9 件：per-face 脸 4 + 身体 4 + magma blob 1），均
 16×16 RGBA；
 布局 = `assets/data/textures/block_atlas.json` `{columns, rows, tiles:
 {name: [col, row]}}`——**显式格子，非计算排布**。解析纪律（纯函数，
@@ -1439,13 +1563,15 @@ init 双向交叉）：columns/rows 必须**2 的幂**（UV 角 = 精确二进�
 管线永不跨界采样）；tile 格须在网格内；**两 tile 不得共格**；PNG 无布局
 条目 / 条目无 PNG = 数据错误点名。
 
-- **shipped = 16 × 8 = 128 格，已用 122，空 6**（余空 = (13,6)-(15,7)
-  区段；honey = (15,1)、farmland_wet = (9,4)、sheep_skin = (11,6)、
-  snow = (12,6) 先例）。空位仅剩 6——新 tile 须精确规划，耗尽 = 网格
-  扩容（重锚）。
-- **空位添加 = 无既有 UV 移位 = base18 免重锚**（绝大多数内容相走的路）。
+- **shipped = 16 × 16 = 256 格，已用 165，空 91**（3.x 增长谱系：
+  122【v2.19.0】→ 136【V3-2】→ 145【V3-3】→ 165【V3-5】；全部既有格
+  坐标 JSON 逐字不变，新增 = 尾部空格）。
+- **空位添加 = 无既有 UV 移位 = base19 免重锚**（绝大多数内容相走的路；
+  3.x 三次空位增长全实证）。
 - **网格扩容 = u = col/列数 全部既有 UV 移位 = 无输入基线门必须重锚**
-  （P41 4×8→8×8、P59 8×8→16×8 先例）。
+  （P41 4×8→8×8、P59 8×8→16×8 先例）——**例外先例 = 幂二增长零移位
+  【V3-2：16×8→16×16，行数 ×2 时 u 不变 = 既有像素行恒等，门 195 S1
+  逐字节实证免重锚】**（列数变 = 移位必须重锚；行数幂二 = 免）。
 
 **物品图标**：每物品独立 PNG（`assets/textures/items/`，32×32 RGBA，**无
 atlas**；可多物品共享同一文件——block item 不用 2D 图标，以 3D 模型/
@@ -1471,9 +1597,12 @@ font.png 重跑——**顶 512 px（rows 0..15 = ASCII + legacy CJK 33 格）
 格逐位复现自校验 + FNV-1a 64 字节钉在测试里；TTF 仅工具期输入，游戏
 构建不依赖。
 
-**声音**：`assets/sounds/` 46 件 16-bit mono 44.1 kHz WAV（SoundBank 载入
-时转 stereo 居中，CRAFT-3；2.x 增 thunder【V2-4】/ sleep【V2-13】/
-squeak【V2-14】/ shear【V2-15】/ snow×3【V2-16】）。
+**声音**：`assets/sounds/` **63 件** 16-bit mono 44.1 kHz WAV
+（SoundBank 载入时转 stereo 居中，CRAFT-3；2.x 增 thunder【V2-4】/
+sleep【V2-13】/ squeak【V2-14】/ shear【V2-15】/ snow×3【V2-16】；
+3.x 增 portal×3【V3-1】/ 下界族 11 = nether·nylium·stem 9 + evaporate +
+ambience_nether【V3-2 Part 2】/ 下界 mob 氛围 3 = piglin_whisper/
+hoglin_grunt/strider_hiss【V3-3】）。
 `tools/generate_sounds.py` 确定性生成（固定
 种子 LCG/sine；**重跑后既有文件字节零变化 = md5 实证 + 幂等**）；材质 3
 件见「块音效材质」节。

@@ -11,6 +11,7 @@ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build  # 构
 ctest --test-dir build --output-on-failure                                  # 测试
 ./build/bin/tokenmine --frames 60 --screenshot /tmp/opencode/shot.png       # 自动化验证（退出码 0）
 ./build/bin/tokenmine --seed 999 ...                                        # 换种子
+./build/bin/tokenmine --demo assets/demos/example.dmo                       # demo 回放（V3-9；--demo-author / --demo-record 互斥三旗，--help 看全部）
 magick shot.png -format "%[pixel:p{x,y}]" info:                             # 像素采样
 ```
 
@@ -109,7 +110,8 @@ ctest --test-dir build --output-on-failure
   指针未锁定时 SDL 仍投递 mouse motion 事件，P5 条）；每拍截图前 `unmap_covers`
   解映射覆盖游戏区（(0,60) 1280×720 邻域）的已映射窗口（P27 用户鼠标污染教训）。
 - **无输入运行**：×2 全帧字节一致 + skygate（FRESH = 天空模式色正午 (120,181,242) /
-  黄昏 (130,63,38)，采样中心区像素众数）+ **base 门** `/tmp/opencode/base18.png`
+  黄昏 (130,63,38)，采样中心区像素众数）+ **base 门** `/tmp/opencode/base19.png`（3.x 后锚 = 填充感知雾重锚；
+  base18 224468 B 留档）
   字节一致（无输入基线；新系统需论证"无输入下零活动 = 结构性免疫"，P26 起惯例）。
   **notblack 判别必须用 PNG 字节尺寸**（PITS 286）：环境窗口态把截图打成
   均色时文件 ~22 KB（有效帧 300-430 KB），`fx:mean` 探针不可信（均色值不
