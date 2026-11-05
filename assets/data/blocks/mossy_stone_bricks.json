@@ -1,0 +1,16 @@
+{
+  "id": "mossy_stone_bricks",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 1.5,
+    "drops": "mossy_stone_bricks"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": {
+      "top": "mossy_stone_bricks",
+      "side": "mossy_stone_bricks",
+      "bottom": "mossy_stone_bricks"
+    }
+  }
+}

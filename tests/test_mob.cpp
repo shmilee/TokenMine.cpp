@@ -1472,9 +1472,12 @@ TEST(MobContent, V215WoolAssetsPinned) {
     // the 136-tile zero-shift red line, the test_atlas census). V3-3
     // re-pin: the nether mob family's 9 tiles (the row-8 free run
     // [12..15, 8] + the row-9 free run [0..4, 9] — the 145-tile
-    // zero-shift red line, the test_atlas census).
+    // zero-shift red line, the test_atlas census). V3-5 re-pin: the
+    // building content family's 20 tiles (the row-9 free run [5..15, 9]
+    // + the row-10 free run [0..8, 10] — the 165-tile zero-shift red
+    // line, the test_atlas census).
     EXPECT_EQ(fnv1a64(readAll("assets/data/textures/block_atlas.json")),
-              "3b5f51b9a1688b3a");
+              "e1bd5060286ec6b0");
 }
 
 // -- V2-15: the wool instance state (MobEntity — the frame discipline) ----

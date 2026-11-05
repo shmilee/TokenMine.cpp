@@ -1,0 +1,18 @@
+{
+  "id": "terracotta_green",
+  "type": "shapeless",
+  "output": {
+    "item": "terracotta_green",
+    "count": 1
+  },
+  "ingredients": [
+    {
+      "item": "dye_green",
+      "count": 1
+    },
+    {
+      "item": "terracotta",
+      "count": 1
+    }
+  ]
+}

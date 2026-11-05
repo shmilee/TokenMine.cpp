@@ -1,0 +1,18 @@
+{
+  "id": "terracotta_black",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 1.25,
+    "drops": "terracotta_black",
+    "dye_base": "terracotta",
+    "dye_color": "black"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": {
+      "top": "terracotta_black",
+      "side": "terracotta_black",
+      "bottom": "terracotta_black"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "terracotta_red",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 1.25,
+    "drops": "terracotta_red",
+    "dye_base": "terracotta",
+    "dye_color": "red"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": {
+      "top": "terracotta_red",
+      "side": "terracotta_red",
+      "bottom": "terracotta_red"
+    }
+  }
+}

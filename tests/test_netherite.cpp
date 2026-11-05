@@ -421,7 +421,9 @@ TEST(V34NetheriteMaterialChain, IconCensusPinned) {
             ++iconCount;
         }
     }
-    EXPECT_EQ(iconCount, 95); // 84 pre-V3-4 + 9 + the V3-3 hoglin meat chain's 2
+    EXPECT_EQ(iconCount, 97); // 84 pre-V3-4 + 9 + the V3-3 hoglin meat
+                              // chain's 2 + the V3-5 building family's 2
+                              // (clay_ball / brick)
     int itemCount = 0;
     for (const auto& e :
          std::filesystem::directory_iterator("assets/data/items")) {
@@ -429,7 +431,7 @@ TEST(V34NetheriteMaterialChain, IconCensusPinned) {
             ++itemCount;
         }
     }
-    EXPECT_EQ(itemCount, 95); // the 1:1 icon naming (no planks-style
+    EXPECT_EQ(itemCount, 97); // the 1:1 icon naming (no planks-style
                               // block-item retirement in this family)
 }
 
@@ -529,10 +531,13 @@ TEST(V34NetheriteMaterialChain, UpgradeRecipesPinned) {
 }
 
 TEST(V34NetheriteMaterialChain, RecipeCensusPinned) {
-    // The recipe registry's count face (87 pre-V3-4 + 8 = 95): a new
-    // recipe file is a conscious census update.
+    // The recipe registry's count face (87 pre-V3-4 + 8 = 95; V3-5
+    // building family +17 — the 3 masonry recipes + the 14 dyed-
+    // terracotta shapeless recipes; the two smelts are the data-side
+    // smeltable_to fields, not recipe files): a new recipe file is a
+    // conscious census update.
     RealChain c;
-    EXPECT_EQ(c.recipes.count(), 95u);
+    EXPECT_EQ(c.recipes.count(), 112u);
 }
 
 // ===========================================================================

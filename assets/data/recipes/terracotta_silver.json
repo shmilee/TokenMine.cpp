@@ -1,0 +1,18 @@
+{
+  "id": "terracotta_silver",
+  "type": "shapeless",
+  "output": {
+    "item": "terracotta_silver",
+    "count": 1
+  },
+  "ingredients": [
+    {
+      "item": "dye_silver",
+      "count": 1
+    },
+    {
+      "item": "terracotta",
+      "count": 1
+    }
+  ]
+}

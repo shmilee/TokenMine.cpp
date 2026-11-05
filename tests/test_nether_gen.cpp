@@ -2721,13 +2721,17 @@ TEST(NetherContentTest, RealContentGenCensus) {
     }
 }
 
-TEST(NetherContentTest, AtlasLayoutGrewTo145) {
+TEST(NetherContentTest, AtlasLayoutGrewTo165) {
     // The atlas's census face (the 124 -> 136 tile's zero-shift red line
     // lives in test_atlas's full census; this is the count + the new
     // cells' existence): the grid grew 16x8 -> 16x16 (the new tiles sit
     // in the new rows — no existing tile moved). V3-3: 136 -> 145 (the
     // nether mob family's 9 tiles — the row-8 free run [12..15, 8] + the
     // row-9 free run [0..4, 9], the zero-shift red line's continuation).
+    // V3-5: 145 -> 165 (the building content family's 20 tiles — the
+    // row-9 free run [5..15, 9] + the row-10 free run [0..8, 10], the
+    // zero-shift red line's continuation; the 16x16 grid holds 165 <
+    // 256, no power-of-two growth).
     AssetManager assets;
     realAssets(assets);
     auto text = assets.loadText("data/textures/block_atlas.json");
@@ -2738,7 +2742,7 @@ TEST(NetherContentTest, AtlasLayoutGrewTo145) {
     ASSERT_TRUE(layout.ok()) << layout.error().message;
     EXPECT_EQ(layout->columns, 16);
     EXPECT_EQ(layout->rows, 16);
-    EXPECT_EQ(layout->tiles.size(), 145u);
+    EXPECT_EQ(layout->tiles.size(), 165u);
     const char* newTiles[21] = {
         "nether_brick",    "magma_block",     "quartz_ore",
         "nether_gold_ore", "ancient_debris",  "soul_sand",

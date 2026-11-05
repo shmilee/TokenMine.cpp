@@ -1,0 +1,18 @@
+{
+  "id": "terracotta_cyan",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 1.25,
+    "drops": "terracotta_cyan",
+    "dye_base": "terracotta",
+    "dye_color": "cyan"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": {
+      "top": "terracotta_cyan",
+      "side": "terracotta_cyan",
+      "bottom": "terracotta_cyan"
+    }
+  }
+}

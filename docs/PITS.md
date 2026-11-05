@@ -3145,6 +3145,20 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **场景手术几何三坑（PITS 390，门 199 V3-5 建筑内容）**——①
+  **场景室坐标须查参考地形**：demo 区表面 y=53（seed 123456789
+  发行值）——首跑水室放 y=50/51 = 参考石内，流体编辑 load 拒
+  （save.cpp "cannot apply save fluid edit ... (cell occupied or
+  level unchanged)"，窗口即毁 = 输入臂 BadWindow 假象）——场景室放
+  y≥55 参考 air 区（块编辑覆盖任何参考均可；**流体编辑拒 solid
+  参考**）。② **开放水源必漫溢**：源水（level 8）每 tick 扩同层邻
+  air——无围堰"池"32 格 → 300f 后 402 格流体编辑（×2 恒等但断言
+  计数全错 + 视觉淹没场景）——密封池 = 满底 + 顶周围墙环
+  （24+24 格实证 32 恒定 60f+）。③ **发货世界自带确定性 fluid-
+  settle 编辑**：程序湖边缘非源水（level 6-7）在 base 30f 跑中结算
+  入档（seed 123456789 实证 x25-30, y34, z27-28 共 9 格，距 spawn
+  ~30 块）——场景终档断言须**自格 scoped**（池格坐标精确匹配），非
+  水格全量计数。
 - **门脚本生成臂五坑（PITS 389，门 198 V3-3 下界 mob）**——① **门
   QUIET 配置 mobs.enabled = false 是静默纪律**：锚/无输入基线跑用
   g179_quiet.json（mob 生成全禁 = 基线干净），**生成臂须 mobs-on 变

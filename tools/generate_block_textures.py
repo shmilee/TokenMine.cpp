@@ -661,6 +661,122 @@ def warped_stem(x, y):
     return _stem(x, y, (92, 62, 124), 1061)
 
 
+# --- V3-5: the building content family (20 tiles, salts 1065..1075) --------
+# The clay / mossy cobblestone / bricks / stone bricks / terracotta family.
+# Every existing texture stays pixel-identical (new salts only, the
+# V3-2 Part 1's 1017..1064 precedent). The per-pixel hash(x, y, salt)
+# discipline: h2 decides feature membership, the noise salts grain it.
+
+def clay(x, y):
+    """V3-5: the clay tile (the under-water sediment's deposit — MC clay:
+    a grayish-blue mottled sediment). The monochrome grain
+    (the snow / netherrack convention) in the clay's blue-gray palette +
+    a rare darker sediment speck (the hash-membership convention).
+    New salts 1065..1066."""
+    v = noise(x, y, 1065, 9)
+    if h2(x, y, 1066) % 100 < 18:  # the darker sediment speck
+        return (clamp(112 + v), clamp(126 + v), clamp(130 + v), 255)
+    return (clamp(138 + v), clamp(152 + v), clamp(155 + v), 255)
+
+
+def mossy_cobblestone(x, y):
+    """V3-5: the mossy cobblestone (the rare lakebed moss — the cobblestone
+    tile DERIVED with moss speckles over it, the design's
+    'cobblestone + moss' rule). New salts 1067 (the speck grain) / 1068
+    (the speck membership)."""
+    (br, bg, bb, _) = cobblestone(x, y)
+    if h2(x, y, 1068) % 100 < 24:
+        v = noise(x, y, 1067, 8)
+        return (clamp((br * 3 + 96 * 2) // 5 + v),
+                clamp((bg * 3 + 124 * 2) // 5 + v),
+                clamp((bb * 3 + 78 * 2) // 5 + v), 255)
+    return (br, bg, bb, 255)
+
+
+def bricks(x, y):
+    """V3-5: the bricks block (the baked-clay masonry — MC bricks: a red
+    brick body with pale mortar seams). The nether_brick seam convention
+    (horizontal mortar every 4 rows + staggered vertical seams, the
+    cobblestone stagger). New salts 1069 (body) / 1070 (mortar)."""
+    mortar_h = (y % 4) == 3
+    mortar_v = ((x + (y // 4) * 2) % 8) == 7
+    if mortar_h or mortar_v:
+        return (clamp(172 + noise(x, y, 1070, 8)),
+                clamp(160 + noise(x, y, 1070, 8)),
+                clamp(150 + noise(x, y, 1070, 8)), 255)
+    return (clamp(150 + noise(x, y, 1069, 9)),
+            clamp(60 + noise(x, y, 1069, 9)),
+            clamp(50 + noise(x, y, 1069, 9)), 255)
+
+
+def stone_bricks(x, y):
+    """V3-5: the stone bricks (the cut-stone masonry — MC stone_bricks: a
+    gray brick body with darker seams, two brick rows per 8 px band, the
+    joints staggered per band). New salts 1071 (body) / 1072 (seam)."""
+    seam_h = (y % 4) == 0
+    seam_v = ((x + (y // 4) * 4) % 8) == 0
+    if seam_h or seam_v:
+        return (clamp(94 + noise(x, y, 1072, 7)),
+                clamp(94 + noise(x, y, 1072, 7)),
+                clamp(98 + noise(x, y, 1072, 7)), 255)
+    return (clamp(122 + noise(x, y, 1071, 8)),
+            clamp(122 + noise(x, y, 1071, 8)),
+            clamp(124 + noise(x, y, 1071, 8)), 255)
+
+
+def mossy_stone_bricks(x, y):
+    """V3-5: the mossy stone bricks (the stone bricks DERIVED with moss
+    speckles over them, the mossy_cobblestone's twin). New salt 1073 (the
+    speck membership) + 1074 (the speck grain)."""
+    (br, bg, bb, _) = stone_bricks(x, y)
+    if h2(x, y, 1073) % 100 < 24:
+        v = noise(x, y, 1074, 8)
+        return (clamp((br * 3 + 96 * 2) // 5 + v),
+                clamp((bg * 3 + 124 * 2) // 5 + v),
+                clamp((bb * 3 + 78 * 2) // 5 + v), 255)
+    return (br, bg, bb, 255)
+
+
+def terracotta(x, y):
+    """V3-5: the terracotta (the fired clay — MC terracotta: a warm
+    orange-brown with a darker fleck grain). The monochrome-hue grain
+    (the dirt 2/3/4 convention: one salt, three channels) + a rare dark
+    fleck (the gravel pebble convention, 2x2 blocks). New salts
+    1075..1077."""
+    v = noise(x, y, 1075, 8)
+    if h2(x // 2, y // 2, 1076) % 16 < 3:  # the dark fired fleck
+        return (clamp(158 + v), clamp(84 + v), clamp(56 + v), 255)
+    return (clamp(192 + v), clamp(110 + v), clamp(76 + v), 255)
+
+
+# V3-5: the dyed terracotta family (the 14 non-white members — the wool's
+# exact vocabulary, the bed family's 15-color set minus white = the base
+# block itself, the Phase 41 naming discipline: 'terracotta' IS the white
+# tile, no 'terracotta_white'). The mechanism gap the design names: there
+# is NO pre-existing blend precedent (the bed family reuses the wool
+# palette VERBATIM — each bed color is a wool color, no base mix), so the
+# deterministic blend is new, the documented formula:
+#   dyed_channel = (base_channel * 3 + dye_channel * 2) // 5
+# a 60%-toward-dye integer mix of the terracotta BASE pixel (its grain
+# survives scaled 3/5) and the wool palette's dye color (the bed's shared
+# 15-color source). Pure in (x, y) — zero new salts, re-run identical.
+TERRACOTTA_DYE_COLORS = (
+    "black", "blue", "brown", "cyan", "gray", "green", "light_blue",
+    "magenta", "orange", "pink", "purple", "red", "silver", "yellow",
+)
+
+
+def make_terracotta_tile(color: str):
+    (dr, dg, db) = WOOL_PALETTE["wool_" + color]
+
+    def tile(x, y):
+        (br, bg, bb, _) = terracotta(x, y)
+        return (clamp((br * 3 + dr * 2) // 5),
+                clamp((bg * 3 + dg * 2) // 5),
+                clamp((bb * 3 + db * 2) // 5), 255)
+    return tile
+
+
 def diamond_block(x, y):
     """V2-7: the diamond block (the beacon pyramid material next to the
     iron block). A bright, uniform metallic cyan with a faint brushed
@@ -1222,6 +1338,19 @@ TEXTURES = {
     "basalt": basalt,
     "crimson_stem": crimson_stem,
     "warped_stem": warped_stem,
+    # V3-5: the building content family (20 tiles — the 6 base blocks +
+    # the 14 dyed terracottas; 'terracotta' IS the white member, the
+    # Phase 41 naming discipline). New tiles only, every existing PNG
+    # stays byte-identical (salts 1065..1076 + the dyed blend, zero
+    # salts).
+    "clay": clay,
+    "mossy_cobblestone": mossy_cobblestone,
+    "bricks": bricks,
+    "stone_bricks": stone_bricks,
+    "mossy_stone_bricks": mossy_stone_bricks,
+    "terracotta": terracotta,
+    **{"terracotta_" + c: make_terracotta_tile(c)
+       for c in TERRACOTTA_DYE_COLORS},
 }
 
 

@@ -1,0 +1,18 @@
+{
+  "id": "terracotta_yellow",
+  "type": "shapeless",
+  "output": {
+    "item": "terracotta_yellow",
+    "count": 1
+  },
+  "ingredients": [
+    {
+      "item": "dye_yellow",
+      "count": 1
+    },
+    {
+      "item": "terracotta",
+      "count": 1
+    }
+  ]
+}

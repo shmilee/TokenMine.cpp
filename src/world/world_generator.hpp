@@ -71,6 +71,12 @@ inline constexpr std::int64_t kSaltCave2 = 0x1A2B3C4D5E6F7A08LL;
 inline constexpr std::int64_t kSaltBedrock = 0x1A2B3C4D5E6F7A09LL;
 // GEN-8: the mountain-pass ridge mask (independent of the other fields).
 inline constexpr std::int64_t kSaltPasses = 0x1A2B3C4D5E6F7A0ALL;
+// V3-5: the under-water sediment passes (the clay + the mossy cobblestone
+// rolls — TWO independent salts so the double-hit columns are the hash
+// intersection, not a correlation of one stream; the clay wins on the hit,
+// the pass order, the deterministic pin).
+inline constexpr std::int64_t kSaltSediment = 0x1A2B3C4D5E6F7A0BLL;
+inline constexpr std::int64_t kSaltSedimentMossy = 0x1A2B3C4D5E6F7A0CLL;
 
 // Per-feature mixing constant (the lattice walk's golden step; the per-
 // ore salt advance). Public so the unit tests can pin the generated ore
@@ -122,6 +128,34 @@ public:
     // and pure so the unit tests can pin the generated bedrock cells to
     // the exact predicate (the CaveMatchesPurePredicate pattern).
     bool bedrockLayerRoll(int wx, int wy, int wz) const;
+
+    // V3-5: the sediment pass's per-column predicates — PURE functions of
+    // the column's world coordinates (NO chunk data, so the unit tests can
+    // pin the generated cells to the exact decision, the
+    // CaveMatchesPurePredicate pattern), each covering one side of the
+    // design's "the water stands on this floor" judgment:
+    //
+    // sedimentTopFluidIsWater: the column's TOPMOST fluid is water. In an
+    // ocean column (h < seaLevel) the terrain fill puts full water at
+    // h+1..seaLevel, so the top fluid is the water at the sea level —
+    // UNLESS a lava lake in the column's region pours its band
+    // (floorY, floorY + fill] AT OR ABOVE the sea level (the lava-lake
+    // rejection — the design's fluid-type predicate).
+    bool sedimentTopFluidIsWater(int wx, int wz) const;
+
+    // sedimentWaterContactsFloor: the cell DIRECTLY above the floor
+    // (h + 1) holds water. The lake band (floorY, floorY + fill] is a
+    // full LAVA overwrite, so a floor the lava touches is a lake floor,
+    // not a waterbed (the design's contact rejection; the sea-level
+    // fill's h < seaLevel precondition is the caller's — the pass checks
+    // it before consulting this predicate).
+    bool sedimentWaterContactsFloor(int wx, int h, int wz) const;
+
+    // sedimentFloorBlock: the four-block sediment source word list (the
+    // recorded deviation 4 — a code constant, data-driven resolution: the
+    // names are resolved against the registry at create() and rejected
+    // fail-fast there, ENT-2 style).
+    bool sedimentFloorBlock(BlockID id) const;
 
     // GEN-8: the LEGACY base height field (the fbm2 noise + biome scale +
     // [kMinHeight, kWorldHeight-16] clamp, bit-for-bit the pre-GEN-8
@@ -244,6 +278,30 @@ private:
     // precomputed (m_lakes, computeLakes) — the per-chunk height rescan is
     // gone (it always recomputed the same pure value).
     void placeLavaLakes(Chunk& chunk, const ChunkPos& pos) const;
+    // V3-5: the under-water sediment pass — the LAST generation step
+    // (AFTER the lake pass: it reads the final lakebed — the caves carved,
+    // the basins owned). The waterbed floor is always the column's
+    // SURFACE cell (h = heightAt: water contact at h+1 requires the solid
+    // to sit directly under the water — a cave air gap or a lake carve at
+    // h leaves the water on air, which the floor's chunk read rejects),
+    // so the pass touches exactly one in-chunk cell per column:
+    //   h < seaLevel (an ocean column) AND
+    //   the surface cell is in THIS chunk's y range AND its final data
+    //   (after the cave / ore / lake passes) holds one of the four
+    //   word-list blocks (sedimentFloorBlock) AND
+    //   sedimentTopFluidIsWater + sedimentWaterContactsFloor (the design's
+    //   two fluid-type predicates — the lava-lake rejection) AND
+    //   a per-column roll (the kSaltSediment stream, the tree-roll
+    //   expression) hits `clay_probability` -> clay; otherwise an
+    //   independent roll (the kSaltSedimentMossy stream) hits
+    //   `mossy_cobblestone_probability` -> the mossy cobblestone (the
+    //   double hit is the clay's — the pass order, the deterministic pin).
+    //   The top ONE layer is replaced (the recorded deviation 5 — the
+    //   Minecraft 3-4 layers' project simplification). Disabled (absent /
+    //   enabled false / both probabilities 0) = a no-op: the pre-V3-5
+    //   chunk bit-for-bit.
+    void placeSediment(Chunk& chunk, const ChunkPos& pos,
+                       const std::array<int, kChunkSize * kChunkSize>& heights) const;
     void placeIfAir(Chunk& chunk, const ChunkPos& pos, int wx, int wy, int wz,
                     BlockID id) const;
     // Phase 93: derive the procedural lakes (m_proceduralLakes) from the
@@ -284,6 +342,14 @@ private:
     // the exclusion source for carveCaves and the floor source for
     // placeLavaLakes.
     std::vector<ResolvedLake> m_lakes;
+
+    // V3-5: the sediment pass's resolved blocks (create() — only when
+    // the section is enabled; the disabled pass never resolves, so the
+    // pre-V3-5 failure surface is unchanged). The two deposits + the
+    // four word-list sources.
+    BlockID m_sedimentClay = BlockID::invalid();
+    BlockID m_sedimentMossy = BlockID::invalid();
+    std::array<BlockID, 4> m_sedimentWord = {};
 };
 
 } // namespace mc

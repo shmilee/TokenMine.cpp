@@ -1,0 +1,15 @@
+{
+  "id": "bricks",
+  "type": "shaped",
+  "output": {
+    "item": "bricks",
+    "count": 1
+  },
+  "pattern": [
+    "BB",
+    "BB"
+  ],
+  "key": {
+    "B": "brick"
+  }
+}

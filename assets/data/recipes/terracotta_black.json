@@ -1,0 +1,18 @@
+{
+  "id": "terracotta_black",
+  "type": "shapeless",
+  "output": {
+    "item": "terracotta_black",
+    "count": 1
+  },
+  "ingredients": [
+    {
+      "item": "dye_black",
+      "count": 1
+    },
+    {
+      "item": "terracotta",
+      "count": 1
+    }
+  ]
+}

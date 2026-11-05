@@ -188,6 +188,42 @@ Result<WorldGenerator> WorldGenerator::create(std::int64_t seed,
     // cave carve skips the basins; the lake pass reads the precomputed
     // floor instead of rescanning the region per chunk).
     gen.computeLakes();
+    // V3-5: the sediment pass's block resolution — ONLY when enabled (the
+    // disabled default never resolves, so a pre-V3-5 config with no clay
+    // content loads exactly as before; the enabled form is the ores'
+    // fail-fast discipline: an unknown deposit / a stateful deposit is
+    // named at init, the S6 timing ruling).
+    if (params.sediment.enabled) {
+        const struct {
+            const char* what;
+            const char* name;
+            BlockID* out;
+        } deposits[] = {
+            {"sediment clay block", "clay", &gen.m_sedimentClay},
+            {"sediment mossy cobblestone block", "mossy_cobblestone",
+             &gen.m_sedimentMossy},
+        };
+        for (const auto& d : deposits) {
+            *d.out = blocks.idForName(d.name);
+            if (!d.out->valid()) {
+                return MC_FAIL(std::string("worldgen ") + d.what +
+                               ": unknown block '" + d.name + "'");
+            }
+            MC_TRY(rejectStateful(d.what, d.name, *d.out));
+        }
+        // The four-block source word list (the recorded deviation 4: a
+        // code constant — the data-driven resolution keeps the name
+        // discipline, the low data benefit keeps the value in code).
+        int wi = 0;
+        for (const char* name : {"dirt", "gravel", "sand", "stone"}) {
+            gen.m_sedimentWord[wi] = blocks.idForName(name);
+            if (!gen.m_sedimentWord[wi].valid()) {
+                return MC_FAIL("worldgen sediment word list: unknown block "
+                               "'" + std::string(name) + "'");
+            }
+            ++wi;
+        }
+    }
     return gen;
 }
 
@@ -326,6 +362,9 @@ void WorldGenerator::generateChunk(Chunk& chunk, const ChunkPos& pos) const {
     placeTrees(chunk, pos);
     placeDecorations(chunk, pos); // Phase 45: after trees (trunks win)
     placeLavaLakes(chunk, pos); // Phase 86/88: the contained lava pool(s)
+    // V3-5: LAST — the under-water sediment reads the final lakebed (the
+    // caves carved, the lake basins owned + poured).
+    placeSediment(chunk, pos, heights);
 }
 
 void WorldGenerator::fillTerrain(Chunk& chunk, const ChunkPos& pos,
@@ -857,6 +896,121 @@ void WorldGenerator::placeLavaLakes(Chunk& chunk, const ChunkPos& pos) const {
                                                    kMaxFluidLevel));
                     }
                 }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// V3-5: the under-water sediment pass (the lakebed's clay / mossy
+// cobblestone deposits — the nether ore lattice's overworld twin: a
+// per-column pure decision, dedicated salts, zero noise).
+// ---------------------------------------------------------------------------
+
+bool WorldGenerator::sedimentTopFluidIsWater(int wx, int wz) const {
+    // The ocean column's topmost fluid is the sea-level water (the terrain
+    // fill's h + 1..seaLevel run, h < seaLevel the caller's precondition)
+    // — UNLESS a lava lake in the column's region pours its full-lava band
+    // (floorY, floorY + fill] AT OR ABOVE the sea level: then the band's
+    // top is the column's top fluid and it is LAVA (the design's fluid-
+    // type predicate, the lava-lake rejection).
+    for (const ResolvedLake& rl : m_lakes) {
+        if (wx >= rl.x0 && wx <= rl.x1 && wz >= rl.z0 && wz <= rl.z1 &&
+            rl.floorY + rl.lake.fill >= m_params.seaLevel) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool WorldGenerator::sedimentWaterContactsFloor(int wx, int h, int wz) const {
+    // The cell directly above the floor — the ocean column's first water
+    // level, h + 1 — must be water, not a lake band: placeLavaLakes' full
+    // LAVA overwrite occupies (floorY, floorY + fill] in the region, so a
+    // floor the band touches is a lake floor, not a waterbed.
+    const int wy = h + 1;
+    for (const ResolvedLake& rl : m_lakes) {
+        if (wx >= rl.x0 && wx <= rl.x1 && wz >= rl.z0 && wz <= rl.z1 &&
+            wy > rl.floorY && wy <= rl.floorY + rl.lake.fill) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool WorldGenerator::sedimentFloorBlock(BlockID id) const {
+    for (const BlockID w : m_sedimentWord) {
+        if (id == w) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void WorldGenerator::placeSediment(
+    Chunk& chunk, const ChunkPos& pos,
+    const std::array<int, kChunkSize * kChunkSize>& heights) const {
+    const WorldgenParams::Sediment& sed = m_params.sediment;
+    if (!sed.enabled) {
+        return; // the pre-V3-5 world bit-for-bit
+    }
+    if (sed.clayProbability <= 0.0f &&
+        sed.mossyCobblestoneProbability <= 0.0f) {
+        return; // both rolls can never hit: the disabled pass's data form
+    }
+    const int ox = pos.x * kChunkSize;
+    const int oz = pos.z * kChunkSize;
+    const int y0 = pos.y * kChunkSize;
+    for (int lx = 0; lx < kChunkSize; ++lx) {
+        for (int lz = 0; lz < kChunkSize; ++lz) {
+            const int h =
+                heights[static_cast<std::size_t>(lx) * kChunkSize +
+                        static_cast<std::size_t>(lz)];
+            if (h >= m_params.seaLevel) {
+                continue; // a dry column: no water, no lakebed
+            }
+            const int ly = h - y0;
+            if (ly < 0 || ly >= kChunkSize) {
+                continue; // the surface cell sits in another y-layer chunk
+            }
+            const int wx = ox + lx;
+            const int wz = oz + lz;
+            // The waterbed floor is the surface cell itself (water contact
+            // at h + 1 requires it to be the topmost solid — a cave air gap
+            // or a lake carve at h leaves the water on air). Its FINAL data
+            // (the cave / ore / lake passes ran) must still hold one of the
+            // word-list blocks: a carved floor is air, an ore-replaced one
+            // is an ore — both rejected here.
+            if (!sedimentFloorBlock(chunk.get(lx, ly, lz))) {
+                continue;
+            }
+            // The design's two fluid-type predicates (the lava-lake
+            // rejection): the column's top fluid is water and the floor
+            // touches water.
+            if (!sedimentTopFluidIsWater(wx, wz) ||
+                !sedimentWaterContactsFloor(wx, h, wz)) {
+                continue;
+            }
+            // The two independent per-column rolls (the tree-roll
+            // expression on the dedicated salts — the 24-bit lattice value
+            // scaled to [0, 1)): the clay FIRST (a double hit is its, the
+            // pass order, the deterministic pin).
+            const auto roll = [this](int x, int z,
+                                     std::int64_t salt) {
+                const std::uint64_t hh =
+                    hash2(u64(x), u64(z),
+                          static_cast<std::uint64_t>(m_seed ^ salt));
+                return static_cast<float>(hh >> 40) * kLattice24Scale;
+            };
+            BlockID out = BlockID::invalid();
+            if (roll(wx, wz, kSaltSediment) < sed.clayProbability) {
+                out = m_sedimentClay;
+            } else if (roll(wx, wz, kSaltSedimentMossy) <
+                       sed.mossyCobblestoneProbability) {
+                out = m_sedimentMossy;
+            }
+            if (out.valid()) {
+                chunk.set(lx, ly, lz, out);
             }
         }
     }

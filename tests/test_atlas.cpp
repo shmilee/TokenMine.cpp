@@ -225,7 +225,11 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     // V3-3: 136 -> 145 (the nether mob family's 9 tiles — the row-8 free
     // run [12..15, 8] + the row-9 free run [0..4, 9]; zero existing
     // shift, the 16x16 grid's free-cell scan).
-    EXPECT_EQ(l.tiles.size(), 145u);
+    // V3-5: 145 -> 165 (the building content family's 20 tiles — the
+    // row-9 free run [5..15, 9] + the row-10 free run [0..8, 10]; zero
+    // existing shift, the 16x16 grid's free-cell scan continued — no
+    // power-of-two growth needed, 165 < 256).
+    EXPECT_EQ(l.tiles.size(), 165u);
     const struct {
         const char* name;
         int col;
@@ -480,6 +484,37 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     };
     ASSERT_EQ(sizeof(v330) / sizeof(v330[0]), 9u);
     for (const auto& e : v330) {
+        const auto it = l.tiles.find(e.name);
+        ASSERT_NE(it, l.tiles.end()) << e.name;
+        EXPECT_EQ(it->second.col, e.col) << e.name;
+        EXPECT_EQ(it->second.row, e.row) << e.name;
+    }
+    // V3-5: the building content family's 20 tiles (the 6 base blocks in
+    // the design's order — clay / mossy cobblestone / bricks / stone
+    // bricks / mossy stone bricks / terracotta (the white member) — then
+    // the 14 dyed terracottas in the wool's color order; the row-9 free
+    // run [5..15, 9] + the row-10 free run [0..8, 10] in the
+    // deterministic (row, col) scan; the 145 pre-V3-5 entries above keep
+    // their EXACT cells — the zero-shift red line, no baseline
+    // re-anchor).
+    const struct {
+        const char* name;
+        int col;
+        int row;
+    } v390[] = {
+        {"clay", 5, 9},                {"mossy_cobblestone", 6, 9},
+        {"bricks", 7, 9},              {"stone_bricks", 8, 9},
+        {"mossy_stone_bricks", 9, 9},  {"terracotta", 10, 9},
+        {"terracotta_black", 11, 9},   {"terracotta_blue", 12, 9},
+        {"terracotta_brown", 13, 9},   {"terracotta_cyan", 14, 9},
+        {"terracotta_gray", 15, 9},    {"terracotta_green", 0, 10},
+        {"terracotta_light_blue", 1, 10}, {"terracotta_magenta", 2, 10},
+        {"terracotta_orange", 3, 10},  {"terracotta_pink", 4, 10},
+        {"terracotta_purple", 5, 10},  {"terracotta_red", 6, 10},
+        {"terracotta_silver", 7, 10},  {"terracotta_yellow", 8, 10},
+    };
+    ASSERT_EQ(sizeof(v390) / sizeof(v390[0]), 20u);
+    for (const auto& e : v390) {
         const auto it = l.tiles.find(e.name);
         ASSERT_NE(it, l.tiles.end()) << e.name;
         EXPECT_EQ(it->second.col, e.col) << e.name;

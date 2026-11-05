@@ -362,7 +362,45 @@ Result<WorldgenParams> WorldgenParams::parse(const Json& def) {
         MC_TRY(r);
     }
 
+    // -- sediment (V3-5) ---------------------------------------------------
+    if (const Json* sed = def.find("sediment")) {
+        const std::string label = "sediment";
+        if (!sed->isObject()) {
+            return MC_FAIL("'" + label + "' must be an object");
+        }
+        warnUnknown(*sed, label.c_str(),
+                    {"enabled", "clay_probability",
+                     "mossy_cobblestone_probability"});
+        auto r = readField(*sed, label.c_str(), "enabled", "bool",
+                           [&](const Json& v) {
+                               p.sediment.enabled = v.asBool();
+                           });
+        MC_TRY(r);
+        r = readField(*sed, label.c_str(), "clay_probability", "number",
+                      [&](const Json& v) {
+                          p.sediment.clayProbability =
+                              static_cast<float>(v.asDouble());
+                      });
+        MC_TRY(r);
+        r = readField(*sed, label.c_str(), "mossy_cobblestone_probability",
+                      "number",
+                      [&](const Json& v) {
+                          p.sediment.mossyCobblestoneProbability =
+                              static_cast<float>(v.asDouble());
+                      });
+        MC_TRY(r);
+    }
+
     // -- cross-field validation -----------------------------------------
+    if (p.sediment.clayProbability < 0.0f ||
+        p.sediment.clayProbability > 1.0f) {
+        return MC_FAIL("'sediment.clay_probability' must be in [0, 1]");
+    }
+    if (p.sediment.mossyCobblestoneProbability < 0.0f ||
+        p.sediment.mossyCobblestoneProbability > 1.0f) {
+        return MC_FAIL("'sediment.mossy_cobblestone_probability' must be "
+                       "in [0, 1]");
+    }
     if (p.lavaLakesProcedural.enabled) {
         const auto& pd = p.lavaLakesProcedural;
         if (pd.count < 0 || pd.count > 64) {

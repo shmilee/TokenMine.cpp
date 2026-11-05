@@ -1293,6 +1293,47 @@ def cooked_hoglin_meat():
     return px
 
 
+def clay_ball():
+    """Clay ball (V3-5, the clay block's 4x break drop, smelts to brick):
+    a grayish-blue sediment ball — the apple's circular silhouette in the
+    clay palette (the block tile's (138,152,155) grain base) + a pale
+    glint. New salts 180-181 — every existing icon stays
+    pixel-identical."""
+    px = blank()
+    base = (139, 153, 156)
+    for y in range(5, 15):
+        for x in range(3, 13):
+            nx = (x - 7.5) / 4.2
+            ny = (y - 9.5) / 4.6
+            if nx * nx + ny * ny <= 1.0:
+                setpx2(px, x, y, base, salt=180)
+    # A brighter glint on the upper left (the wet sediment's shine).
+    for (x, y) in ((5, 7), (6, 8)):
+        setpx2(px, x, y, (184, 196, 198), salt=181, amount=4)
+    return px
+
+
+def brick():
+    """Brick (V3-5, the clay_ball's smelt product, the bricks block's
+    2x2 recipe key): a red clay brick — the mutton slab's rounded
+    rectangle silhouette in the bricks palette (the block tile's
+    (150,60,50) body) + a brighter bevel band on its top + a dark
+    shadow line under it (the ingot's bottom-shadow convention). New
+    salts 182-183 — every existing icon stays pixel-identical."""
+    px = blank()
+    body = (150, 60, 50)
+    bevel = (184, 96, 78)
+    for y in range(6, 13):
+        for x in range(2, 14):
+            if (x in (2, 13)) and (y in (6, 12)):
+                continue  # cut the corners for a rounded brick
+            setpx2(px, x, y, bevel if y < 8 else body, salt=182)
+    # Bottom shadow line.
+    for x in range(4, 28):
+        setpx(px, x, 26, (104, 40, 33), salt=183, amount=4)
+    return px
+
+
 ITEMS = {
     # V2-7: the planks icon is retired — planks is now a BLOCK item (the
     # 3D cube renders in its place, the Phase 41 wool precedent), so its
@@ -1378,6 +1419,11 @@ ITEMS = {
     # V3-3: the hoglin's food chain (the pork chain's dark-red twin).
     "hoglin_meat": hoglin_meat,
     "cooked_hoglin_meat": cooked_hoglin_meat,
+    # V3-5: the building content family's two material items (the clay
+    # ball — the clay block's 4x drop, smelts to brick — and the brick —
+    # the 2x2 bricks recipe's key).
+    "clay_ball": clay_ball,
+    "brick": brick,
 }
 
 

@@ -1,0 +1,16 @@
+{
+  "id": "mossy_cobblestone",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 2.0,
+    "drops": "mossy_cobblestone"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": {
+      "top": "mossy_cobblestone",
+      "side": "mossy_cobblestone",
+      "bottom": "mossy_cobblestone"
+    }
+  }
+}

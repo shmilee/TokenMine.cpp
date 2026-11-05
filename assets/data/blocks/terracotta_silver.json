@@ -1,0 +1,18 @@
+{
+  "id": "terracotta_silver",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 1.25,
+    "drops": "terracotta_silver",
+    "dye_base": "terracotta",
+    "dye_color": "silver"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": {
+      "top": "terracotta_silver",
+      "side": "terracotta_silver",
+      "bottom": "terracotta_silver"
+    }
+  }
+}

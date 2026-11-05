@@ -113,5 +113,10 @@
   "region_min_z": 60,
   "region_max_x": 90,
   "region_max_z": 90
+ },
+ "sediment": {
+  "enabled": true,
+  "clay_probability": 0.06,
+  "mossy_cobblestone_probability": 0.008
  }
 }

@@ -1,0 +1,15 @@
+{
+  "id": "stone_bricks",
+  "type": "shaped",
+  "output": {
+    "item": "stone_bricks",
+    "count": 1
+  },
+  "pattern": [
+    "CC",
+    "CC"
+  ],
+  "key": {
+    "C": "cobblestone"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "terracotta_light_blue",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 1.25,
+    "drops": "terracotta_light_blue",
+    "dye_base": "terracotta",
+    "dye_color": "light_blue"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": {
+      "top": "terracotta_light_blue",
+      "side": "terracotta_light_blue",
+      "bottom": "terracotta_light_blue"
+    }
+  }
+}

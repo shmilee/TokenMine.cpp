@@ -2317,6 +2317,28 @@ TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
         {"warped_stem", "stem"},
         // V2-16: the snow block (the 7th material family).
         {"snow", "snow"},
+        // V3-5: the building content family (the stone sound family —
+        // the masonry blocks' Minecraft assignment).
+        {"clay", "stone"},
+        {"mossy_cobblestone", "stone"},
+        {"bricks", "stone"},
+        {"stone_bricks", "stone"},
+        {"mossy_stone_bricks", "stone"},
+        {"terracotta", "stone"},
+        {"terracotta_black", "stone"},
+        {"terracotta_blue", "stone"},
+        {"terracotta_brown", "stone"},
+        {"terracotta_cyan", "stone"},
+        {"terracotta_gray", "stone"},
+        {"terracotta_green", "stone"},
+        {"terracotta_light_blue", "stone"},
+        {"terracotta_magenta", "stone"},
+        {"terracotta_orange", "stone"},
+        {"terracotta_pink", "stone"},
+        {"terracotta_purple", "stone"},
+        {"terracotta_red", "stone"},
+        {"terracotta_silver", "stone"},
+        {"terracotta_yellow", "stone"},
     };
     for (const auto& [name, mat] : expected) {
         const Block* b = reg.findByName(name);

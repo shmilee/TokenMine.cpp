@@ -1,0 +1,18 @@
+{
+  "id": "terracotta_purple",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 1.25,
+    "drops": "terracotta_purple",
+    "dye_base": "terracotta",
+    "dye_color": "purple"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": {
+      "top": "terracotta_purple",
+      "side": "terracotta_purple",
+      "bottom": "terracotta_purple"
+    }
+  }
+}

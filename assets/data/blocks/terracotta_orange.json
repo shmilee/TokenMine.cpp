@@ -1,0 +1,18 @@
+{
+  "id": "terracotta_orange",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 1.25,
+    "drops": "terracotta_orange",
+    "dye_base": "terracotta",
+    "dye_color": "orange"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": {
+      "top": "terracotta_orange",
+      "side": "terracotta_orange",
+      "bottom": "terracotta_orange"
+    }
+  }
+}

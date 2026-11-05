@@ -20,8 +20,10 @@ netherite 材料链（门 196，11-05：debris→scrap→ingot→工具 2031/护
 197，11-05：水蒸发/音效族 11 件/magma 光 3/ambience 第 4 上下文/soul
 sand walk_speed_factor 0.4 数据驱动减速，全 nether-scoped overworld
 位级不变）；**v3.8.0 = V3-3 下界 mob（门 198，11-05：5 种 + neutral/
-walks_on_lava 旗 + 下界生成池零新基建——Phase B 预留槽兑现）**；
-下一项 **V3-5 建筑内容族** → V3-6 世界边缘雾 → V3-9 demo 回放【矩阵尾部】）
+walks_on_lava 旗 + 下界生成池零新基建——Phase B 预留槽兑现）；
+v3.9.0 = V3-5 建筑内容族（门 199，11-05：黏土链/石砖/苔石/15 色
+陶瓦染色族/水底 sediment 生成 pass，核心仅 worldgen 4 文件）**；
+下一项 **V3-6 世界边缘雾** → V3-9 demo 回放【矩阵尾部】）
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -80,7 +82,7 @@ walks_on_lava 旗 + 下界生成池零新基建——Phase B 预留槽兑现）*
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2697/2697**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2724/2724**，`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 30（V3-1 Phase B 下界维度：player.dimension 严格词表
   恒写 + nether 段 {blocks,fluids,states} + nether_entities 恒写 +
   派生 seed 不落盘；schema 其余与 29 一致，29 携新键 = version lie
@@ -98,10 +100,10 @@ walks_on_lava 旗 + 下界生成池零新基建——Phase B 预留槽兑现）*
   结构免疫第 65-70 次免重锚；门 191【V3-7】= 第 72 次 + 门 192【V3-1
   Phase A 门框】= 第 73 次 + 门 193【V3-8 手柄】= 第 74 次 + 门 194
   【V3-1 Phase B 下界】= 第 75 次 + 门 195【V3-2 Part 1 下界内容族】
-  = 第 76 次 + 门 196【V3-4 netherite 材料链】= 第 77 次 + 门 197【V3-2 Part 2 下界深化】= 第 78 次 + 门 198【V3-3 下界 mob】= 第 79 次免重锚
+  = 第 76 次 + 门 196【V3-4 netherite 材料链】= 第 77 次 + 门 197【V3-2 Part 2 下界深化】= 第 78 次 + 门 198【V3-3 下界 mob】= 第 79 次 + 门 199【V3-5 建筑内容族】= 第 80 次免重锚
   【v3.0.0 banner = 第 71 次】——存档/门框/手柄/惰性下界/下界内容/
   材料链/下界深化/下界 mob = 渲染无关零像素【下界内容 = nether-only + 惰性下界；atlas
-  16×16 幂二增长像素行恒等；材料链 = 纯物品内容不在默认热栏；下界深化 = nether-scoped 全维度门；下界 mob = 下界池 + atlas 空格零移位**）；PITS
+  16×16 幂二增长像素行恒等；材料链 = 纯物品内容不在默认热栏；下界深化 = nether-scoped 全维度门；下界 mob = 下界池 + atlas 空格零移位；建筑内容 = 水底生成不可见 + 生成内容不入 diff**）；PITS
   375-379 + **PITS 380**（spawn 成功行无 'pick' / 门场景洞穴密封 /
   CAVE config seed 归属 / bob diff 带色相审计）+ **PITS 381**（热栏
   key→RMB ≥0.15s / 活体掉落物品不可作终档断言 / 羊静止窗）+
@@ -135,7 +137,12 @@ walks_on_lava 旗 + 下界生成池零新基建——Phase B 预留槽兑现）*
   号【z 可负】/ maxMobs cap 吞后续尝试【1/31 权重 mob 只在首批抽
   中——环全清 = 陆地 pick 全失败 cap 不饱和 = 决定性】/ 传送落点 =
   portal 光 11 + 原点保护圈 = 生成压制位【下界生成臂用远离落点高原
-  场景】）；
+  场景】；**PITS 390**（场景手术几何三坑：① demo 区表面 y=53——地下场景
+  编辑【流体格落 solid 参考】load 拒 "cell occupied"【场景室放
+  y≥55 参考 air 区】/ ② 开放水源漫溢【源水扩同层邻 air，无围堰池
+  32→402 格】——密封池 = 满底 + 顶周围墙环 / ③ 发货世界程序湖
+  ~30 块外 fluid-settle 编辑入档【x25-30 y34 level 6-7 确定性】——
+  场景断言须自格 scoped 非全量计数）；
   门计数 195（**V3-2/Phase C Part 1 下界内容族 v3.5.0** 门 195 全
   PASS：**D9 带修订 = 下界可航行**【编排者布局裁决：v3.4.0 实心岩板
   埋传送落点实证不可探索 → MC 下界废土形态 = 熔岩海 5-31 + netherrack
@@ -151,6 +158,24 @@ walks_on_lava 旗 + 下界生成池零新基建——Phase B 预留槽兑现）*
   双臂【传送空腔截图 ×2 恒等 + 观感实证 / 下界采矿 quartz 入库存 +
   PITS 7 续破 + PITS 377 磁力边缘实证】；S6 5/5 init 点名；详见
   `docs/archive/phase-3.5.0.md`）；
+  门计数 199（**V3-5 建筑内容族 v3.9.0** 门 199 全 PASS：**核心仅
+  worldgen 4 文件**【Sediment 解析 absent=disabled 位级 legacy +
+  [0,1] 严格 + pass 生成链最后读最终湖底 + 3 纯谓词 + fail-fast】：
+  20 块【clay drops 4×clay_ball / mossy_cobblestone / bricks +smelt
+  terracotta / stone_bricks / mossy_stone_bricks / **terracotta 15 色
+  染色族**【项目染料词表含 white 无 lime = 设计 16 收敛偏离 1】】+ 2
+  物品 + 17 配方 + 纹理 20【染色混合公式 (base×3+dye×2)//5 自建偏离
+  4】+ atlas 145→165 空格零移位 + **水底 sediment pass**【worldgen.
+  json 数据驱动 0.06/0.008，per-column 纯函数双盐，dry 列零触碰，
+  熔岩湖双谓词拒，clay 优先顶 1 层；发行 census 1024² eligible 3683/
+  clay 211/mossy 26 沙漠沙洋底 only】；2724/2724（+27 含发行世界
+  census 样本列 ground truth）；结构免疫第 80 次【S1 ≡ 锚 +
+  savenorm **EXACT** + 白名单 4 键】；S2 三臂【密封水室展示行 ×2 RAW
+  【6 纹理水下可见 + 池格 32 精确】/ **破 clay → 4× clay_ball**【磁力
+  + 编辑回退】/ 熔炼 → brick【fuel 4201 验算】】；S6 4/4【概率越界
+  ×2 / 字符串 / 染色族缺一色点名】；性能 A/B 同档【upd 均值 0.554 vs
+  0.598 噪声带 + 逐位 + 终档 EXACT】；详见
+  `docs/archive/phase-3.9.0.md`）；
   门计数 198（**V3-3 下界 mob v3.8.0** 门 198 全 PASS：**5 mob 纯
   数据**【zombified_piglin hostile 孪生 zombie undead false / piglin·
   hoglin **neutral 新类**【damage() 单收口任意来源激怒 + 30 s real-dt

@@ -149,6 +149,24 @@ struct WorldgenParams {
     };
     LavaLakeProcedural lavaLakesProcedural;
 
+    // V3-5: the under-water SEDIMENT pass (section "sediment"): per dry
+    // ocean column whose floor is one of the four sediment source blocks,
+    // a deterministic per-column roll replaces the floor block with clay
+    // (the Minecraft lakebed deposit) or, rarer, with the mossy
+    // cobblestone. ABSENT / disabled = the pre-V3-5 worldgen bit-for-bit
+    // (the passes' disabled-default pattern). The two probabilities are
+    // the fraction of eligible columns hosting each deposit; they are
+    // INDEPENDENT rolls (dedicated salts — the bedrock-layer-roll
+    // pattern) and on a double hit the clay wins (the pass order, the
+    // deterministic pin). The pass runs after the lake pass (it reads the
+    // final lakebed: the caves are carved, the basins own their carve).
+    struct Sediment {
+        bool enabled = false;
+        float clayProbability = 0.0f;                  // [0, 1]
+        float mossyCobblestoneProbability = 0.0f;      // [0, 1]
+    };
+    Sediment sediment;
+
     // Parse a worldgen definition. Strict about types, permissive about
     // missing keys (defaults above).
     static Result<WorldgenParams> parse(const Json& def);

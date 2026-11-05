@@ -300,5 +300,7 @@ TEST(ItemModelMeshTest, ShippedModelsHaveNoFaceCoincidentBoxes) {
     // V3-3: +2 (hoglin_meat / cooked_hoglin_meat — the hoglin's food
     // chain, the pork chain's twin, every one an explicit item with a
     // model) -> 95.
-    EXPECT_EQ(modelCount, 95) << "ENT-9: all 95 items have models";
+    // V3-5: +2 (clay_ball / brick — the building family's material
+    // chain, every one an explicit item with a model) -> 97.
+    EXPECT_EQ(modelCount, 97) << "ENT-9: all 97 items have models";
 }

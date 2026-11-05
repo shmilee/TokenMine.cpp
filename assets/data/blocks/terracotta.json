@@ -1,0 +1,18 @@
+{
+  "id": "terracotta",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 1.25,
+    "drops": "terracotta",
+    "dye_base": "terracotta",
+    "dye_color": "white"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": {
+      "top": "terracotta",
+      "side": "terracotta",
+      "bottom": "terracotta"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "terracotta_magenta",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 1.25,
+    "drops": "terracotta_magenta",
+    "dye_base": "terracotta",
+    "dye_color": "magenta"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": {
+      "top": "terracotta_magenta",
+      "side": "terracotta_magenta",
+      "bottom": "terracotta_magenta"
+    }
+  }
+}

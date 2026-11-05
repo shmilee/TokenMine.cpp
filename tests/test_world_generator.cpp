@@ -1232,6 +1232,10 @@ TEST(WorldGeneratorTest, Gen8ShippedPassesPinned) {
     // passes config that drives the height stays exactly as shipped.
     WorldgenParams p = *pr;
     p.ores = {};
+    // V3-5: the height field is independent of the sediment pass too —
+    // strip it (the fixture's block registry does not carry the clay /
+    // mossy_cobblestone deposits the shipped section resolves).
+    p.sediment.enabled = false;
     GenSetup s;
     s.params = p;
     auto r = WorldGenerator::create(123456789, s.params, s.biomes, s.blocks);
@@ -3440,4 +3444,613 @@ TEST(WorldGeneratorTest, Gen3GravelCellsMatchEllipsoidPlans) {
     }
     EXPECT_GT(inPlan, 100) << "the region holds plenty of planned gravel";
     EXPECT_GT(checked, 200000);
+}
+
+// ---------------------------------------------------------------------------
+// V3-5: the under-water sediment pass (the lakebed's clay / mossy
+// cobblestone deposits).
+// ---------------------------------------------------------------------------
+
+// The sediment fixture's block set: the generator's base content + the
+// pass's registry dependencies (the two deposits + the word list's gravel
+// — dirt / sand / stone are already in makeBlocks).
+BlockRegistry makeSedimentBlocks() {
+    BlockRegistry reg = makeBlocks();
+    for (const char* name : {"clay", "mossy_cobblestone", "gravel"}) {
+        auto r = reg.registerBlock(parseJson(blockDef(name)));
+        if (!r.ok()) {
+            ADD_FAILURE() << "block '" << name << "': " << r.error().message;
+        }
+    }
+    return reg;
+}
+
+// The all-sand fixture biome: EVERY ocean column's floor is sand (in the
+// word list) — the maximal-density sediment test world (the desert's
+// surface values, a single weight-1 biome).
+BiomeRegistry makeSandBiomes() {
+    BiomeRegistry reg;
+    auto r = reg.registerBiome(parseJson(
+        R"({"id":"sea","weight":1,"surface":"sand","subsurface":"sand",)"
+        R"("subsurface_depth":4,"tree_density":0.0,"height_scale":1.0})"));
+    if (!r.ok()) {
+        ADD_FAILURE() << r.error().message;
+    }
+    return reg;
+}
+
+// The split fixture biomes (equal weights): the sand sea (the word-list
+// floor) + the grass sea (the rejection face — grass is NOT a sediment
+// source, the word list's four blocks only).
+BiomeRegistry makeSplitBiomes() {
+    BiomeRegistry reg;
+    for (const char* def : {
+             R"({"id":"sea","weight":1,"surface":"sand","subsurface":"sand",)"
+             R"("subsurface_depth":4,"tree_density":0.0,"height_scale":1.0})",
+             R"({"id":"meadow","weight":1,"surface":"grass",)"
+             R"("subsurface":"dirt","subsurface_depth":3,"tree_density":0.0,)"
+             R"("height_scale":1.0})"}) {
+        auto r = reg.registerBiome(parseJson(def));
+        if (!r.ok()) {
+            ADD_FAILURE() << r.error().message;
+        }
+    }
+    return reg;
+}
+
+// The sediment test params: the fixture's values + the pass ON with a
+// dense clay roll (0.5) + a mossy roll (0.2) — enough hits in a 32x64
+// region to exercise every outcome (the placed clay / the placed mossy /
+// the rolled-miss).
+WorldgenParams sedimentParams() {
+    WorldgenParams p = makeParams();
+    p.sediment.enabled = true;
+    p.sediment.clayProbability = 0.5f;
+    p.sediment.mossyCobblestoneProbability = 0.2f;
+    return p;
+}
+
+// The pass's per-column roll (the tree-roll expression, the dedicated
+// salt) — the oracle's exact recomputation.
+float sedimentRoll(const WorldGenerator& gen, int wx, int wz,
+                   std::int64_t salt) {
+    const std::uint64_t h =
+        hash2(static_cast<std::uint64_t>(static_cast<std::int64_t>(wx)),
+              static_cast<std::uint64_t>(static_cast<std::int64_t>(wz)),
+              static_cast<std::uint64_t>(gen.seed() ^ salt));
+    return static_cast<float>(h >> 40) * kLattice24Scale;
+}
+
+TEST(WorldGeneratorTest, SedimentDisabledPlacesNothing) {
+    // The disabled default (absent section) AND the enabled-but-zero-
+    // probability data form: both are the pass's no-op — the pre-V3-5
+    // world bit-for-bit (zero clay / mossy cells in an ocean region).
+    const BlockRegistry blocks = makeSedimentBlocks();
+    const BiomeRegistry biomes = makeSandBiomes();
+    const std::int64_t seed = 42;
+    {
+        auto r = WorldGenerator::create(seed, makeParams(), biomes, blocks);
+        ASSERT_TRUE(r.ok()) << r.error().message;
+        const auto chunks = genColumns(*r, 4, 5, 0, 3);
+        const BlockID clay = blocks.idForName("clay");
+        const BlockID mossy = blocks.idForName("mossy_cobblestone");
+        int deposits = 0;
+        for (const auto& [pos, chunk] : chunks) {
+            for (int i = 0; i < Chunk::kVolume; ++i) {
+                deposits += chunk.data()[i] == clay ||
+                            chunk.data()[i] == mossy;
+            }
+        }
+        EXPECT_EQ(deposits, 0);
+    }
+    {
+        WorldgenParams p = makeParams();
+        p.sediment.enabled = true; // probabilities stay 0: the data no-op
+        auto r = WorldGenerator::create(seed, p, biomes, blocks);
+        ASSERT_TRUE(r.ok()) << r.error().message;
+        const auto chunks = genColumns(*r, 4, 5, 0, 3);
+        const BlockID clay = blocks.idForName("clay");
+        const BlockID mossy = blocks.idForName("mossy_cobblestone");
+        int deposits = 0;
+        for (const auto& [pos, chunk] : chunks) {
+            for (int i = 0; i < Chunk::kVolume; ++i) {
+                deposits += chunk.data()[i] == clay ||
+                            chunk.data()[i] == mossy;
+            }
+        }
+        EXPECT_EQ(deposits, 0);
+    }
+}
+
+TEST(WorldGeneratorTest, SedimentOnlyOnEligibleSurfaceCells) {
+    // The full-column scan (the design's judgment, observed): a cell
+    // differs from the sediment-OFF generation IFF it is the column's
+    // SURFACE cell (h = heightAt, the waterbed floor — the topmost solid,
+    // the contact rule), the ON value is a deposit, the OFF value is the
+    // word-list floor, and the water column above is untouched (the
+    // pass writes blocks only — the fluids are cell-identical).
+    const BlockRegistry blocks = makeSedimentBlocks();
+    const BiomeRegistry biomes = makeSandBiomes();
+    const WorldgenParams pOn = sedimentParams();
+    WorldgenParams pOff = pOn;
+    pOff.sediment.enabled = false;
+    const std::int64_t seed = 42; // the ocean-rich probe seed (region 4..5 x 0..3)
+    auto rOn = WorldGenerator::create(seed, pOn, biomes, blocks);
+    ASSERT_TRUE(rOn.ok()) << rOn.error().message;
+    auto rOff = WorldGenerator::create(seed, pOff, biomes, blocks);
+    ASSERT_TRUE(rOff.ok()) << rOff.error().message;
+    const auto on = genColumns(*rOn, 4, 5, 0, 3);
+    const auto off = genColumns(*rOff, 4, 5, 0, 3);
+    const BlockID clay = blocks.idForName("clay");
+    const BlockID mossy = blocks.idForName("mossy_cobblestone");
+    const BlockID sand = blocks.idForName("sand");
+    int diffs = 0, fluids = 0;
+    for (const auto& [pos, a] : on) {
+        const auto& b = off.at(pos);
+        for (int i = 0; i < Chunk::kVolume; ++i) {
+            if (a.fluidData()[i] != b.fluidData()[i]) {
+                ++fluids;
+            }
+            if (a.data()[i] == b.data()[i]) {
+                continue;
+            }
+            const int lx = i % kChunkSize;
+            const int lz = (i / kChunkSize) % kChunkSize;
+            const int ly = i / (kChunkSize * kChunkSize);
+            const int wx = pos.x * kChunkSize + lx;
+            const int wy = pos.y * kChunkSize + ly;
+            const int wz = pos.z * kChunkSize + lz;
+            const int h = rOn->surfaceHeight(wx, wz);
+            EXPECT_EQ(wy, h) << "a sediment diff off the surface " << wx
+                             << "," << wy << "," << wz;
+            EXPECT_TRUE(a.data()[i] == clay || a.data()[i] == mossy)
+                << "an ON diff that is not a deposit";
+            EXPECT_EQ(b.data()[i], sand)
+                << "an OFF floor outside the word list";
+            // The water stands directly on the deposit (the contact):
+            EXPECT_EQ(rOn->sedimentWaterContactsFloor(wx, h, wz), true);
+            ++diffs;
+        }
+    }
+    EXPECT_EQ(fluids, 0) << "the pass never writes fluid";
+    EXPECT_GT(diffs, 100) << "the ocean region holds plenty of deposits";
+}
+
+TEST(WorldGeneratorTest, SedimentRollMatchesPurePredicate) {
+    // The CaveMatchesPurePredicate pattern: every column's floor cell in
+    // the ON generation equals the oracle's verdict — the word-list floor
+    // (the OFF generation's final surface data: the cave / ore / lake
+    // passes ran) + the two fluid-type predicates + the two independent
+    // rolls (the clay first, the double hit its).
+    const BlockRegistry blocks = makeSedimentBlocks();
+    const BiomeRegistry biomes = makeSandBiomes();
+    const WorldgenParams pOn = sedimentParams();
+    WorldgenParams pOff = pOn;
+    pOff.sediment.enabled = false;
+    const std::int64_t seed = 42; // the ocean-rich probe seed (region 4..5 x 0..3)
+    auto rOn = WorldGenerator::create(seed, pOn, biomes, blocks);
+    ASSERT_TRUE(rOn.ok());
+    auto rOff = WorldGenerator::create(seed, pOff, biomes, blocks);
+    ASSERT_TRUE(rOff.ok());
+    const WorldGenerator& gen = *rOn;
+    const auto on = genColumns(gen, 4, 5, 0, 3);
+    const auto off = genColumns(*rOff, 4, 5, 0, 3);
+    const BlockID clay = blocks.idForName("clay");
+    const BlockID mossy = blocks.idForName("mossy_cobblestone");
+    const BlockID sand = blocks.idForName("sand");
+    const int x0 = 4 * kChunkSize, x1 = 6 * kChunkSize;
+    const int z0 = 0 * kChunkSize, z1 = 4 * kChunkSize;
+    int placedClay = 0, placedMossy = 0, rolledMiss = 0, dry = 0;
+    for (int x = x0; x < x1; ++x) {
+        for (int z = z0; z < z1; ++z) {
+            const int h = gen.surfaceHeight(x, z);
+            if (h >= gen.params().seaLevel) {
+                ++dry;
+                continue;
+            }
+            const BlockID floor = blockAt(off, x, h, z);
+            BlockID expected = floor;
+            if (floor == sand &&
+                gen.sedimentTopFluidIsWater(x, z) &&
+                gen.sedimentWaterContactsFloor(x, h, z)) {
+                const float rollC =
+                    sedimentRoll(gen, x, z, kSaltSediment);
+                const float rollM =
+                    sedimentRoll(gen, x, z, kSaltSedimentMossy);
+                if (rollC < pOn.sediment.clayProbability) {
+                    expected = clay;
+                } else if (rollM < pOn.sediment.mossyCobblestoneProbability) {
+                    expected = mossy;
+                }
+            }
+            EXPECT_EQ(blockAt(on, x, h, z), expected) << x << "," << z;
+            if (expected == clay) {
+                ++placedClay;
+            } else if (expected == mossy) {
+                ++placedMossy;
+            } else if (floor == sand) {
+                ++rolledMiss;
+            }
+        }
+    }
+    EXPECT_GT(placedClay, 100) << "the 0.5 clay roll hits plenty";
+    EXPECT_GT(placedMossy, 10) << "the 0.2 mossy roll hits some";
+    EXPECT_GT(rolledMiss, 100) << "the roll misses are the majority share";
+    EXPECT_GT(dry, 0) << "the region mixes dry and ocean columns";
+}
+
+TEST(WorldGeneratorTest, SedimentClayPriorityOnDoubleHit) {
+    // Both rolls at 1.0: every eligible column's double hit is the
+    // clay's (the pass order, the deterministic pin) — the mossy is
+    // never placed.
+    const BlockRegistry blocks = makeSedimentBlocks();
+    const BiomeRegistry biomes = makeSandBiomes();
+    WorldgenParams p = sedimentParams();
+    p.sediment.clayProbability = 1.0f;
+    p.sediment.mossyCobblestoneProbability = 1.0f;
+    auto r = WorldGenerator::create(42, p, biomes, blocks);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const auto chunks = genColumns(*r, 4, 5, 0, 3);
+    const BlockID clay = blocks.idForName("clay");
+    const BlockID mossy = blocks.idForName("mossy_cobblestone");
+    int clayCells = 0, mossyCells = 0;
+    for (const auto& [pos, chunk] : chunks) {
+        for (int i = 0; i < Chunk::kVolume; ++i) {
+            clayCells += chunk.data()[i] == clay;
+            mossyCells += chunk.data()[i] == mossy;
+        }
+    }
+    EXPECT_GT(clayCells, 100);
+    EXPECT_EQ(mossyCells, 0) << "the double hit is the clay's";
+}
+
+TEST(WorldGeneratorTest, SedimentWordListRejects) {
+    // The split biomes: the sand-sea ocean floors are the word list (the
+    // deposits land there), the grass-sea ocean floors are NOT (the
+    // surface stays grass — the word list's four blocks only, the
+    // recorded deviation 4).
+    const BlockRegistry blocks = makeSedimentBlocks();
+    const BiomeRegistry biomes = makeSplitBiomes();
+    WorldgenParams pOn = sedimentParams();
+    // The biome noise at the fixture's 0.02 scale has ~50-unit features —
+    // too coarse for the 32x64 region to hold BOTH biomes; a finer
+    // fixture scale (a legal knob, the test-local tuning) interleaves the
+    // sand / grass seas across the region.
+    pOn.biomeNoiseScale = 0.2f;
+    WorldgenParams pOff = pOn;
+    pOff.sediment.enabled = false;
+    const std::int64_t seed = 991;
+    auto rOn = WorldGenerator::create(seed, pOn, biomes, blocks);
+    ASSERT_TRUE(rOn.ok());
+    auto rOff = WorldGenerator::create(seed, pOff, biomes, blocks);
+    ASSERT_TRUE(rOff.ok());
+    const WorldGenerator& gen = *rOn;
+    const auto on = genColumns(gen, 4, 5, 0, 3);
+    const auto off = genColumns(*rOff, 4, 5, 0, 3);
+    const BlockID clay = blocks.idForName("clay");
+    const BlockID mossy = blocks.idForName("mossy_cobblestone");
+    const BlockID sand = blocks.idForName("sand");
+    const BlockID grass = blocks.idForName("grass");
+    int sandDeposits = 0, grassDeposits = 0, grassOcean = 0, sandOcean = 0;
+    const int x0 = 4 * kChunkSize, x1 = 6 * kChunkSize;
+    const int z0 = 0 * kChunkSize, z1 = 4 * kChunkSize;
+    for (int x = x0; x < x1; ++x) {
+        for (int z = z0; z < z1; ++z) {
+            const int h = gen.surfaceHeight(x, z);
+            if (h >= gen.params().seaLevel) {
+                continue;
+            }
+            const BlockID floor = blockAt(off, x, h, z);
+            const BlockID now = blockAt(on, x, h, z);
+            const bool isDeposit =
+                now == clay || now == mossy;
+            if (floor == sand) {
+                ++sandOcean;
+                sandDeposits += isDeposit;
+            } else if (floor == grass) {
+                ++grassOcean;
+                grassDeposits += isDeposit;
+                EXPECT_FALSE(isDeposit)
+                    << "a deposit on a grass floor " << x << "," << z;
+                EXPECT_EQ(now, grass) << "the grass floor is untouched";
+            }
+        }
+    }
+    EXPECT_GT(sandOcean, 100);
+    EXPECT_GT(grassOcean, 100) << "both biomes hold ocean columns";
+    EXPECT_GT(sandDeposits, 100) << "the sand floors take the deposits";
+    EXPECT_EQ(grassDeposits, 0);
+}
+
+TEST(WorldGeneratorTest, SedimentRejectsLavaLakes) {
+    // (a) the generation face: a lake in the ocean region owns its carve
+    // (the basin floor is air, not a word-list solid) — no deposit lands
+    // in the box, the surrounding ocean still does.
+    const BlockRegistry blocks = makeSedimentBlocks();
+    const BiomeRegistry biomes = makeSandBiomes();
+    const std::int64_t seed = 4242;
+    auto r = WorldGenerator::create(seed, makeParams(), biomes, blocks);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    // Find an ocean column (any h < seaLevel) for the lake's centre.
+    int lcx = -1, lcz = -1;
+    for (int x = 4 * kChunkSize; x < 6 * kChunkSize && lcx < 0; ++x) {
+        for (int z = 0 * kChunkSize; z < 4 * kChunkSize; ++z) {
+            if (r->surfaceHeight(x, z) < makeParams().seaLevel) {
+                lcx = x;
+                lcz = z;
+                break;
+            }
+        }
+    }
+    ASSERT_GE(lcx, 0) << "the region holds an ocean column";
+    WorldgenParams pOn = sedimentParams();
+    WorldgenParams::LavaLake lake;
+    lake.centerX = lcx;
+    lake.centerZ = lcz;
+    lake.radius = 4;
+    lake.depth = 3;
+    lake.fill = 2;
+    pOn.lavaLakes = {lake};
+    auto rOn = WorldGenerator::create(seed, pOn, biomes, blocks);
+    ASSERT_TRUE(rOn.ok());
+    const auto on = genColumns(*rOn, 2, 6, 0, 5);
+    const BlockID clay = blocks.idForName("clay");
+    const BlockID mossy = blocks.idForName("mossy_cobblestone");
+    int inBox = 0, outBox = 0;
+    for (int x = 2 * kChunkSize; x < 7 * kChunkSize; ++x) {
+        for (int z = 0 * kChunkSize; z < 6 * kChunkSize; ++z) {
+            const int h = rOn->surfaceHeight(x, z);
+            if (h >= pOn.seaLevel) {
+                continue;
+            }
+            const bool in =
+                std::abs(x - lcx) <= lake.radius &&
+                std::abs(z - lcz) <= lake.radius;
+            const bool deposit =
+                blockAt(on, x, h, z) == clay ||
+                blockAt(on, x, h, z) == mossy;
+            if (in) {
+                inBox += deposit;
+            } else {
+                outBox += deposit;
+            }
+        }
+    }
+    EXPECT_EQ(inBox, 0) << "no deposit on the lake's carved basin floor";
+    EXPECT_GT(outBox, 100) << "the surrounding ocean still deposits";
+    // (b) the pure predicate faces: the floor the lava band touches is
+    // not a waterbed (the single-column lake, depth 1 / fill 2: the band
+    // (h-1, h+1] covers the floor's first water level), and the column
+    // whose top fluid the band raises to the sea level is not water.
+    {
+        WorldgenParams p = makeParams();
+        WorldgenParams::LavaLake single;
+        single.centerX = 66;
+        single.centerZ = 2;
+        single.radius = 0;
+        single.depth = 1;
+        single.fill = 2;
+        p.lavaLakes = {single};
+        auto r2 = WorldGenerator::create(seed, p, biomes, blocks);
+        ASSERT_TRUE(r2.ok());
+        const int h = r2->surfaceHeight(66, 2);
+        // The lake floor is h - 1 (the single column's minH = h): the
+        // cell above the floor (h) is in the lava band -> the contact is
+        // not water.
+        EXPECT_FALSE(r2->sedimentWaterContactsFloor(66, h - 1, 2));
+        // The floor BELOW the band (h - 2 + 1 = h - 1's own cell)... the
+        // band is (h-1, h+1]: the floor at h - 2 has water at h - 1? No —
+        // h - 1 is below the band's bottom edge (exclusive) — the
+        // contact at h - 1 is the band's FIRST level... it IS in the
+        // band: (h-1, h+1] contains h and h + 1 only. The floor h - 2's
+        // first water level h - 1 is NOT in the band -> contact holds.
+        EXPECT_TRUE(r2->sedimentWaterContactsFloor(66, h - 2, 2));
+        // Control: the same column, no lake — every contact holds.
+        auto r3 = WorldGenerator::create(seed, makeParams(), biomes,
+                                         blocks);
+        ASSERT_TRUE(r3.ok());
+        EXPECT_TRUE(r3->sedimentWaterContactsFloor(66, h - 1, 2));
+        // The top-fluid face: a dry column (h >= seaLevel) under a
+        // single-column lake whose band top (h - 1 + 2 = h + 1) reaches
+        // the sea level only when h >= seaLevel - 1 — use the column's
+        // actual h: the predicate is the pure band-vs-sea test.
+        WorldgenParams pDeep = makeParams();
+        WorldgenParams::LavaLake deep;
+        deep.centerX = 66;
+        deep.centerZ = 2;
+        deep.radius = 0;
+        deep.depth = 1;
+        deep.fill = 2;
+        pDeep.lavaLakes = {deep};
+        auto r4 = WorldGenerator::create(seed, pDeep, biomes, blocks);
+        ASSERT_TRUE(r4.ok());
+        const int h4 = r4->surfaceHeight(66, 2);
+        if (h4 - 1 + 2 >= r4->params().seaLevel) {
+            EXPECT_FALSE(r4->sedimentTopFluidIsWater(66, 2));
+        } else {
+            EXPECT_TRUE(r4->sedimentTopFluidIsWater(66, 2));
+        }
+        EXPECT_TRUE(r3->sedimentTopFluidIsWater(66, 2));
+    }
+}
+
+TEST(WorldGeneratorTest, SedimentDeterministicAcrossGenerators) {
+    // Two fresh generators, same seed: the deposit SETS (the clay's +
+    // the mossy's columns) are identical across instances — the per-
+    // column pure decision (no state, no chunk cross-reads).
+    const BlockRegistry blocks = makeSedimentBlocks();
+    const BiomeRegistry biomes = makeSandBiomes();
+    const WorldgenParams p = sedimentParams();
+    const std::int64_t seed = 31337; // the ocean-rich probe seed
+    auto a = WorldGenerator::create(seed, p, biomes, blocks);
+    ASSERT_TRUE(a.ok());
+    auto b = WorldGenerator::create(seed, p, biomes, blocks);
+    ASSERT_TRUE(b.ok());
+    const auto ca = genColumns(*a, 4, 5, 0, 3);
+    const auto cb = genColumns(*b, 4, 5, 0, 3);
+    for (const auto& [pos, chunk] : ca) {
+        const auto& other = cb.at(pos);
+        for (int i = 0; i < Chunk::kVolume; ++i) {
+            EXPECT_EQ(chunk.data()[i], other.data()[i]);
+        }
+    }
+    // A different seed moves the deposits (the roll is seed-derived —
+    // not every cell, but the region's deposit set differs).
+    auto c = WorldGenerator::create(seed + 1, p, biomes, blocks);
+    ASSERT_TRUE(c.ok());
+    const auto cc = genColumns(*c, 4, 5, 0, 3);
+    int diffs = 0;
+    for (const auto& [pos, chunk] : ca) {
+        const auto& other = cc.at(pos);
+        for (int i = 0; i < Chunk::kVolume; ++i) {
+            diffs += chunk.data()[i] != other.data()[i];
+        }
+    }
+    EXPECT_GT(diffs, 0) << "the seed moves the roll stream";
+}
+
+TEST(WorldGeneratorTest, ShippedWorldSedimentCensus) {
+    // The content-in-place proof (the v3.5.0 RealContentGenCensus
+    // precedent, the deterministic unit twin of the gate's hunt): the
+    // REAL gen (the QUIET config's seed 123456789, the shipped
+    // worldgen.json's sediment 0.06 / 0.008) — the pure oracle hunts
+    // the ocean desert columns (the real biomes' ONLY word-list surface
+    // — sand; grass / snow are not sediment sources) over a wide range,
+    // and the sample columns are chunk-generated to verify the oracle's
+    // verdicts (the generator's and the oracle's agreement).
+    Gen3World w;
+    ASSERT_TRUE(w.load()) << "run the tests from the repository root";
+    const WorldGenerator& gen = *w.gen;
+    const WorldgenParams& p = w.params;
+    ASSERT_TRUE(p.sediment.enabled) << "the shipped worldgen.json's pin";
+    // The procedural lake region (the params' public bounds) is EXCLUDED
+    // from the oracle (its lakes' carve is seed-derived — the fixed
+    // list is checked below, the region's 31x31 exclusion keeps the
+    // oracle exact); the fixed lakes' boxes are carved-checked.
+    const auto& pd = p.lavaLakesProcedural;
+    const auto inProceduralRegion = [&](int x, int z) {
+        return x >= pd.regionMinX && x <= pd.regionMaxX &&
+               z >= pd.regionMinZ && z <= pd.regionMaxZ;
+    };
+    const auto fixedLakeCarves = [&](int x, int h, int z) {
+        for (const WorldgenParams::LavaLake& lake : p.lavaLakes) {
+            if (!lake.enabled) {
+                continue;
+            }
+            if (x < lake.centerX - lake.radius ||
+                x > lake.centerX + lake.radius ||
+                z < lake.centerZ - lake.radius ||
+                z > lake.centerZ + lake.radius) {
+                continue;
+            }
+            int minH = INT_MAX;
+            for (int lx = lake.centerX - lake.radius;
+                 lx <= lake.centerX + lake.radius; ++lx) {
+                for (int lz = lake.centerZ - lake.radius;
+                     lz <= lake.centerZ + lake.radius; ++lz) {
+                    minH = std::min(minH, gen.surfaceHeight(lx, lz));
+                }
+            }
+            if (h > minH - lake.depth) {
+                return true;
+            }
+        }
+        return false;
+    };
+    const BlockID clayId = w.blocks.idForName("clay");
+    const BlockID mossyId = w.blocks.idForName("mossy_cobblestone");
+    const int x0 = -512, x1 = 512, z0 = -512, z1 = 512;
+    int clayCols = 0, mossyCols = 0, eligible = 0;
+    std::vector<std::pair<int, int>> claySamples;
+    std::vector<std::pair<int, int>> mossySamples;
+    for (int x = x0; x < x1; ++x) {
+        for (int z = z0; z < z1; ++z) {
+            if (inProceduralRegion(x, z)) {
+                continue;
+            }
+            const int h = gen.surfaceHeight(x, z);
+            if (h >= p.seaLevel) {
+                continue; // a dry column
+            }
+            // The real biomes' word-list surface: the desert's sand only
+            // (forest / plains grass + the taiga's snow are not sources —
+            // the word list's four blocks, the recorded deviation 4).
+            if (gen.biomeNameAt(x, z) != "desert") {
+                continue;
+            }
+            if (gen.caveCarvesCell(x, h, z, h) ||
+                fixedLakeCarves(x, h, z)) {
+                continue; // a carved floor: the water stands on air
+            }
+            if (!gen.sedimentTopFluidIsWater(x, z) ||
+                !gen.sedimentWaterContactsFloor(x, h, z)) {
+                continue;
+            }
+            ++eligible;
+            const float rollC =
+                sedimentRoll(gen, x, z, kSaltSediment);
+            const float rollM =
+                sedimentRoll(gen, x, z, kSaltSedimentMossy);
+            if (rollC < p.sediment.clayProbability) {
+                ++clayCols;
+                if (claySamples.size() < 3) {
+                    claySamples.emplace_back(x, z);
+                }
+            } else if (rollM < p.sediment.mossyCobblestoneProbability) {
+                ++mossyCols;
+                if (mossySamples.size() < 3) {
+                    mossySamples.emplace_back(x, z);
+                }
+            }
+        }
+    }
+    EXPECT_GT(eligible, 2000) << "the wide range holds plenty of ocean "
+                                 "desert floors";
+    EXPECT_GT(clayCols, 100) << "the 0.06 clay roll's census";
+    EXPECT_GT(mossyCols, 10) << "the 0.008 mossy roll's census";
+    // The sample columns: chunk-generated ground truth (the oracle's
+    // verdicts verified against the actual cells + the sediment-OFF
+    // floor = the word-list sand).
+    WorldgenParams pOff = p;
+    pOff.sediment.enabled = false;
+    auto genOff = WorldGenerator::create(kGen3ProbeSeed, pOff, w.biomes,
+                                         w.blocks);
+    ASSERT_TRUE(genOff.ok());
+    std::map<ChunkPos, Chunk> onChunks, offChunks;
+    const auto verify = [&](const std::pair<int, int>& col,
+                            const BlockID want) {
+        const int h = gen.surfaceHeight(col.first, col.second);
+        const ChunkPos cp = worldToChunk(
+            BlockPos {col.first, h, col.second});
+        for (int cy = 0; cy * kChunkSize < kWorldHeight; ++cy) {
+            const ChunkPos cpos {cp.x, cy, cp.z};
+            Chunk cOn;
+            gen.generateChunk(cOn, cpos);
+            onChunks[cpos] = cOn;
+            Chunk cOff;
+            genOff->generateChunk(cOff, cpos);
+            offChunks[cpos] = cOff;
+        }
+        EXPECT_EQ(blockAt(onChunks, col.first, h, col.second), want);
+        EXPECT_EQ(blockAt(offChunks, col.first, h, col.second),
+                  w.blocks.idForName("sand"));
+        // The water stands on the deposit (the contact, observed):
+        EXPECT_EQ(fluidAt(onChunks, col.first, h + 1, col.second),
+                  fluidCode(FluidKind::Water, kMaxFluidLevel));
+        // The decoration / tree pass' underwater zero-touch (the
+        // existing rule, regression face): the first water cell above
+        // the surface holds air + water, no placed content (the design's
+        // pass-order immunity — sediment runs LAST and writes nothing
+        // above; decorations skip underwater columns, trees' canopies
+        // start at the dry column's surface and never dip into the
+        // water cells of a neighbor).
+        EXPECT_EQ(blockAt(onChunks, col.first, h + 1, col.second),
+                  BlockID::air());
+    };
+    for (const auto& c : claySamples) {
+        verify(c, clayId);
+    }
+    for (const auto& c : mossySamples) {
+        verify(c, mossyId);
+    }
 }

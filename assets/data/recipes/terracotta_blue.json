@@ -1,0 +1,18 @@
+{
+  "id": "terracotta_blue",
+  "type": "shapeless",
+  "output": {
+    "item": "terracotta_blue",
+    "count": 1
+  },
+  "ingredients": [
+    {
+      "item": "dye_blue",
+      "count": 1
+    },
+    {
+      "item": "terracotta",
+      "count": 1
+    }
+  ]
+}

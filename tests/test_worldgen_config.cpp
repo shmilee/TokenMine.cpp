@@ -485,6 +485,111 @@ TEST(WorldgenConfigTest, Gen3VeinSizeClusterDomain) {
     EXPECT_EQ(r8->ores[0].veinSize, 8);
 }
 
+// ---------------------------------------------------------------------------
+// V3-5: the under-water sediment pass (section "sediment").
+// ---------------------------------------------------------------------------
+
+TEST(WorldgenConfigTest, SedimentAbsentIsDisabledLegacy) {
+    // The absent section keeps the defaults: disabled, both rolls zero —
+    // the pre-V3-5 worldgen bit-for-bit (the passes' disabled-default
+    // pattern).
+    auto r = WorldgenParams::parse(parseJson(R"({})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_FALSE(r->sediment.enabled);
+    EXPECT_FLOAT_EQ(r->sediment.clayProbability, 0.0f);
+    EXPECT_FLOAT_EQ(r->sediment.mossyCobblestoneProbability, 0.0f);
+}
+
+TEST(WorldgenConfigTest, ParsesSediment) {
+    auto r = WorldgenParams::parse(parseJson(
+        R"({"sediment":{"enabled":true,"clay_probability":0.1,)"
+        R"("mossy_cobblestone_probability":0.02}})"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const WorldgenParams& p = *r;
+    EXPECT_TRUE(p.sediment.enabled);
+    EXPECT_FLOAT_EQ(p.sediment.clayProbability, 0.1f);
+    EXPECT_FLOAT_EQ(p.sediment.mossyCobblestoneProbability, 0.02f);
+    // The other sections are untouched by the new key.
+    EXPECT_EQ(p.baseHeight, 40);
+    EXPECT_TRUE(p.cavesEnabled);
+}
+
+TEST(WorldgenConfigTest, SedimentSectionWrongType) {
+    auto r = WorldgenParams::parse(parseJson(R"({"sediment":[true]})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("sediment"), std::string::npos);
+}
+
+TEST(WorldgenConfigTest, SedimentFieldWrongType) {
+    auto r = WorldgenParams::parse(
+        parseJson(R"({"sediment":{"clay_probability":"high"}})"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("clay_probability"),
+              std::string::npos);
+    auto r2 = WorldgenParams::parse(
+        parseJson(R"({"sediment":{"enabled":"yes"}})"));
+    ASSERT_FALSE(r2.ok());
+    EXPECT_NE(r2.error().message.find("sediment.enabled"),
+              std::string::npos);
+}
+
+TEST(WorldgenConfigTest, RejectsSedimentProbabilityOutOfRange) {
+    for (const char* v : {"1.5", "-0.1"}) {
+        auto r = WorldgenParams::parse(parseJson(
+            std::string("{\"sediment\":{\"clay_probability\":") + v +
+            "}}"));
+        ASSERT_FALSE(r.ok()) << v;
+        EXPECT_NE(r.error().message.find("clay_probability"),
+                  std::string::npos)
+            << v;
+    }
+    for (const char* v : {"1.5", "-0.1"}) {
+        auto r = WorldgenParams::parse(parseJson(
+            std::string("{\"sediment\":{\"mossy_cobblestone_probability\":") +
+            v + "}}"));
+        ASSERT_FALSE(r.ok()) << v;
+        EXPECT_NE(r.error().message.find(
+                      "mossy_cobblestone_probability"),
+                  std::string::npos)
+            << v;
+    }
+    // The inclusive boundaries parse (0 = a disabled-by-data roll, 1 =
+    // every eligible column).
+    auto z = WorldgenParams::parse(parseJson(
+        R"({"sediment":{"clay_probability":0,"mossy_cobblestone_probability":1}})"));
+    ASSERT_TRUE(z.ok()) << z.error().message;
+    EXPECT_FLOAT_EQ(z->sediment.clayProbability, 0.0f);
+    EXPECT_FLOAT_EQ(z->sediment.mossyCobblestoneProbability, 1.0f);
+}
+
+// Content pin: the SHIPPED worldgen.json carries the sediment pass's
+// calibrated values (the Gen1ShippedCaveTuning precedent — the values
+// are the content contract, a typo'd probability parses fine, so this
+// is the unit-level guard).
+TEST(WorldgenConfigTest, V35ShippedSediment) {
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    auto r = WorldgenParams::load(assets);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const WorldgenParams& p = *r;
+    EXPECT_TRUE(p.sediment.enabled);
+    EXPECT_FLOAT_EQ(p.sediment.clayProbability, 0.06f);
+    EXPECT_FLOAT_EQ(p.sediment.mossyCobblestoneProbability, 0.008f);
+    // Raw check: the section's three keys exactly (no unknown-field
+    // warnings at load — the warnUnknown's clean surface).
+    auto text = assets.loadText("data/worldgen.json");
+    ASSERT_TRUE(text.ok());
+    auto parsed = Json::parse(*text);
+    ASSERT_TRUE(parsed.ok());
+    const Json* s = parsed->find("sediment");
+    ASSERT_TRUE(s != nullptr && s->isObject());
+    ASSERT_EQ(s->members().size(), 3u);
+    EXPECT_NE(s->find("enabled"), nullptr);
+    EXPECT_NE(s->find("clay_probability"), nullptr);
+    EXPECT_NE(s->find("mossy_cobblestone_probability"), nullptr);
+}
+
 // GEN-3 calibration pin: the shipped six veins are ALL single-ellipsoid
 // (K = 1) with the one-round re-tuned probabilities (the probe's
 // new/old cell-count ratio pulled the density back to the old baseline —

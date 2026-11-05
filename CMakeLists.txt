@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 3.8.0 LANGUAGES CXX)
+project(TokenMine VERSION 3.9.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -245,6 +245,7 @@ add_executable(tokenmine_tests
     tests/test_nether_gen.cpp
     tests/test_netherite.cpp
     tests/test_gamepad.cpp
+    tests/test_v390.cpp
 )
 target_compile_definitions(tokenmine_tests PRIVATE
     MC_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data")

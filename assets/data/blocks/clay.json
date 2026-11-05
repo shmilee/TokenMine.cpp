@@ -1,0 +1,17 @@
+{
+  "id": "clay",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 0.6,
+    "drops": "clay_ball",
+    "drops_count": 4
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": {
+      "top": "clay",
+      "side": "clay",
+      "bottom": "clay"
+    }
+  }
+}

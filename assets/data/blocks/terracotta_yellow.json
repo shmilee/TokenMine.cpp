@@ -1,0 +1,18 @@
+{
+  "id": "terracotta_yellow",
+  "properties": {
+    "sound_material": "stone",
+    "hardness": 1.25,
+    "drops": "terracotta_yellow",
+    "dye_base": "terracotta",
+    "dye_color": "yellow"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": {
+      "top": "terracotta_yellow",
+      "side": "terracotta_yellow",
+      "bottom": "terracotta_yellow"
+    }
+  }
+}

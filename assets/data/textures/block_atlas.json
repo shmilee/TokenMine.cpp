@@ -581,6 +581,86 @@
   "magma_cube": [
    4,
    9
+  ],
+  "clay": [
+   5,
+   9
+  ],
+  "mossy_cobblestone": [
+   6,
+   9
+  ],
+  "bricks": [
+   7,
+   9
+  ],
+  "stone_bricks": [
+   8,
+   9
+  ],
+  "mossy_stone_bricks": [
+   9,
+   9
+  ],
+  "terracotta": [
+   10,
+   9
+  ],
+  "terracotta_black": [
+   11,
+   9
+  ],
+  "terracotta_blue": [
+   12,
+   9
+  ],
+  "terracotta_brown": [
+   13,
+   9
+  ],
+  "terracotta_cyan": [
+   14,
+   9
+  ],
+  "terracotta_gray": [
+   15,
+   9
+  ],
+  "terracotta_green": [
+   0,
+   10
+  ],
+  "terracotta_light_blue": [
+   1,
+   10
+  ],
+  "terracotta_magenta": [
+   2,
+   10
+  ],
+  "terracotta_orange": [
+   3,
+   10
+  ],
+  "terracotta_pink": [
+   4,
+   10
+  ],
+  "terracotta_purple": [
+   5,
+   10
+  ],
+  "terracotta_red": [
+   6,
+   10
+  ],
+  "terracotta_silver": [
+   7,
+   10
+  ],
+  "terracotta_yellow": [
+   8,
+   10
   ]
  }
 }

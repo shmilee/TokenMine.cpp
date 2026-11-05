@@ -1,0 +1,18 @@
+{
+  "id": "terracotta_purple",
+  "type": "shapeless",
+  "output": {
+    "item": "terracotta_purple",
+    "count": 1
+  },
+  "ingredients": [
+    {
+      "item": "dye_purple",
+      "count": 1
+    },
+    {
+      "item": "terracotta",
+      "count": 1
+    }
+  ]
+}

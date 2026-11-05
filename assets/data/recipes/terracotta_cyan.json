@@ -1,0 +1,18 @@
+{
+  "id": "terracotta_cyan",
+  "type": "shapeless",
+  "output": {
+    "item": "terracotta_cyan",
+    "count": 1
+  },
+  "ingredients": [
+    {
+      "item": "dye_cyan",
+      "count": 1
+    },
+    {
+      "item": "terracotta",
+      "count": 1
+    }
+  ]
+}

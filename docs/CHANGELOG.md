@@ -11,6 +11,39 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.9.0（2026-11-05）— V3-5 建筑内容族（黏土链/石砖/苔石/15 色陶瓦染色族/水底 sediment 生成，门 199 全 PASS）
+
+**建筑的多样性**——① 黏土链（MC 完整形态）：水底 sediment 生成
+（世界生成新 pass，worldgen.json 数据驱动 `sediment` 节：
+clay_probability 0.06 / mossy_cobblestone 0.008，per-column 纯函数
+新盐零噪声，dry 列零触碰，熔岩湖双谓词拒收，顶 1 层）→ 破 clay 掉
+**clay_ball ×4** → 熔炼 brick → 2×2 合成 bricks → 熔炼 **terracotta**
+② 石砖族：stone_bricks（2×2 cobblestone）/ mossy_cobblestone（水底
+稀有生成，记档偏离 = MC 废墟替代）/ mossy_stone_bricks（shapeless
+石砖×3 + 苔石×1）③ **陶瓦染色族**（Phase 41 机制首个新族）：
+terracotta white 基块 + **14 染色变体**（项目染料词表 15 色含 white
+无 lime——设计 16 色按项目词表收敛，偏离 1；init 交叉检缺一色点名）
+④ 纹理 20 tile（14 染色 = 新确定性混合公式 (base×3+dye×2)//5，
+零新盐）+ 2 icon + atlas 145→165 空格零移位（无幂二增长）。
+**核心 = 仅 worldgen 4 文件**（Sediment 解析 + pass + 3 纯谓词 +
+fail-fast；absent = disabled 位级 legacy；[0,1] 严格）。2724/2724
+（+27：内容钉 13 / 生成 pass 8【含发行世界 census 1024²：eligible
+3683 / clay 211 / mossy 26 沙漠沙洋底 only + 样本列 ground truth】/
+config 6）。门 199 = **结构免疫第 80 次免重锚**（S1 ≡ 锚 224468 +
+savenorm **EXACT** + 白名单 4 键——生成内容不入 diff + 锚图零水域 +
+opaque 派生 15 同不透明度）+ S2 三臂【全手工密封水室（围堰 48 格，
+PITS 390 场景几何教训）：(a) 展示行 ×2 RAW 恒等【6 件新纹理水下
+可见实证 + 池格 32 精确】/ (b) **破 clay → 4× clay_ball 入库存**
+【磁力拾取 + 编辑回退参考】/ (c) 熔炼臂【"Furnace smelt complete:
+brick" + fuel_substeps 4201 验算】】+ S6 4/4 点名【概率越界 ×2 /
+字符串 / **染色族缺一色交叉检**】+ 性能 A/B 同世界同成本（PERF-WIN 三窗同档：upd med 0.550/0.539/0.574 vs 0.607/0.574/0.612
+  ms = 窗口间机器噪声带，均值 0.554 vs 0.598——sediment pass =
+  生成链一次性列成本零每帧开销；render 均值 0.573 vs 0.579 同档；
+  swap vsync 同档；fluid·fires·spread·ents·stream 同档）+
+  changesApplied 9/1/3 逐位 + 终档 savenorm **EXACT**（生成内容不入
+  diff 零 format 完全恒等最强形）。
+记档偏离 6 条。详见 `docs/archive/phase-3.9.0.md`。
+
 ## v3.8.0（2026-11-05）— V3-3 下界 mob（5 种 + neutral/walks_on_lava 旗 + 下界生成池，门 198 全 PASS）
 
 **下界有了居民**——① **5 mob 纯数据**：zombified_piglin（hostile，
