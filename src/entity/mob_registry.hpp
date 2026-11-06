@@ -287,6 +287,19 @@ struct MobProperties {
     float retreatDistance = 0.0f;
     float shootSpeed = 0.0f;
     std::string ammoItem;
+    // V3-14b: the shot's sound (the data-driven shoot cue — the
+    // skeleton's "shoot" default; the ghast's "ghast_roar" is its
+    // pre-fireball warning). The init cross-checks the wav's existence
+    // (the ambient_sound's twin).
+    std::string shootSound = "shoot";
+    // V3-14b: the exploding shooter (the ghast): `explodeRadius > 0`
+    // turns the mob's shot from an arrow into a FIREBALL — damage 0
+    // direct, it explodes on block impact / player contact through the
+    // Game::explodeAt seam (V3-14a, the sourceName = the mob's id
+    // names the death line). A fireball is consumed at impact (it never
+    // sticks), so its pickup is unreachable and the ammo rule exempts
+    // exploding shooters (a fireball returns nothing).
+    float explodeRadius = 0.0f;
     // Milking (Phase 43, cow): `milkWith` is the item the player must
     // hold and `milkGives` is the item a right-click ON the mob returns
     // (one held consumed, one given; the mob is NOT affected — no damage,

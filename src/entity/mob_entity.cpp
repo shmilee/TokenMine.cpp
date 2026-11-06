@@ -411,7 +411,16 @@ void MobEntity::runAi(double dt) {
     // structural guarantee). A non-flying mob takes the pre-V2-14 path
     // bit-identically (the pure-new-branch red line).
     if (p.flying) {
-        flyCruise(p, dt);
+        // V3-14b: the flying ranged attacker (the ghast) takes the
+        // flyShoot branch (the hover-hold + the cooldown fire fused
+        // with the bat's cruise); a flying mob WITHOUT a shoot range
+        // (the bat — shootRange 0 in the data) runs flyCruise
+        // bit-identically (the pure-new-branch red line).
+        if (p.shootRange > 0.0f) {
+            flyShoot(p, dt);
+        } else {
+            flyCruise(p, dt);
+        }
         return;
     }
     // V3-3: the GROUND-mob ambient roll (the hoglin / piglin / strider —
@@ -622,6 +631,45 @@ void MobEntity::flyCruise(const MobProperties& p, double dt) {
             (p.ambientInterval * kMobFramesPerSecond);
         if (uniform01(m_rng) < pSqueak) {
             m_ambientSound(position());
+        }
+    }
+}
+
+void MobEntity::flyShoot(const MobProperties& p, double dt) {
+    // V3-14b: the ghast's AI — the bat's hover cruise fused with the
+    // skeleton's ranged branch (the flight's vertical handling stays
+    // integrate's job: the bob baseline runs under both branches, so
+    // the "hold" below is the hover, not a freeze).
+    const Vec3 pos = position();
+    const float dx = m_playerPos.x - pos.x;
+    const float dz = m_playerPos.z - pos.z;
+    const float distH = std::hypot(dx, dz);
+    const float dy = m_playerPos.y - pos.y;
+    const bool seesPlayer = m_playerAlive && distH <= p.detectRadius &&
+                            std::abs(dy) <= kDetectVertical &&
+                            distH <= p.shootRange;
+    if (!seesPlayer) {
+        // Out of the shot's context: the bat's cruise verbatim (the
+        // wander + the ambient roll live there — the ghast's screech
+        // cruises exactly like the bat's squeak).
+        flyCruise(p, dt);
+        return;
+    }
+    // The shot's context (the skeleton branch's flying twin): face the
+    // player, hold the hover position (zero horizontal velocity), and
+    // fire on the cooldown (the LOS gate + the aim + the fireball's
+    // launch live in the game's shoot callback, the skeleton's seam).
+    m_state = MobState::RangedAttack;
+    if (distH > 1e-4f) {
+        // Camera yaw convention: forward(yaw) = (-sin, 0, -cos).
+        m_yaw = std::atan2(-dx, -dz);
+    }
+    m_velocity.x = 0.0f;
+    m_velocity.z = 0.0f;
+    if (m_attackCooldown <= 0.0) {
+        m_attackCooldown = p.attackCooldown;
+        if (m_shootPlayer) {
+            m_shootPlayer();
         }
     }
 }

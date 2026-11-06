@@ -29,7 +29,7 @@
 | LGT 光照 | | | | | | | |
 | GEN 世界与生成 | ✅ V3-1 下界维度·门与下界（三段） | ✅ V3-2 下界内容族（Part 1+2） | ✅ V3-5 建筑内容族 | ⬜ V3-10 末地维度（大·立项定案） | | | |
 | FLUID 流体 | | | | | | | |
-| ENT 实体/Mob/移动 | ✅ V3-3 下界 mob | ✅ V3-14a 爆炸机制（v3.19.0）/ ⬜ V3-14b~d | | | | | |
+| ENT 实体/Mob/移动 | ✅ V3-3 下界 mob | ✅ V3-14b ghast（v3.20.0）/ ⬜ V3-14c~d | | | | | |
 | SURV 生存/战斗/效果 | ✅ V3-4 netherite 材料链 | ✅ V3-11a 创造基础（v3.17.0） | ✅ V3-11b 创造物品栏（v3.18.0） | ✅ V3-15 生存/表现批（v3.16.0） | | | |
 | CRAFT 物品/合成/面板 | | | | | | | |
 | SAVE 存档 | ✅ V3-7 存档 gzip | （方向：双世界存档 format，依赖 V3-1） | | | | | |
@@ -157,7 +157,20 @@
     31 不变 / sim 不 bump / 无击退（项目无玩家击退面 = 记档偏离，
     V3-15 先例）/ 破碎无掉落（MC 孪生）/ 点火 100% 确定（creeper 25%
     roll = 偏离）/ 流体不触碰
-  - **V3-14b ghast**（飞行 + 咆哮 + 爆炸召唤，消费 14a）
+  - **V3-14b ghast = v3.20.0 门 210（11-06 完成）**（飞行 + 咆哮
+    + 爆炸召唤，消费 14a）：flyShoot 分支（flying && shootRange>0
+    数据门，bat cruise 位级红线）+ explode_radius/shoot_sound 数
+    据属性（ammo 规则豁免爆炸射手 + init wav 交叉检）+ 火球 =
+    Projectile 复用（damage 0/hurtPlayer/explodeSource="ghast"
+    尾参缺省位级）+ 爆炸三接线（stuck 即爆/玩家接触爆/mob 扫描
+    跳过）+ 火球发光立方渲染 + 内容族（ghast.json/ghast.png
+    16×16 atlas [9,10] 165→166/ghast_membrane 物品 + 32×32 独立
+    图标/声音 2 件 64→66/池 +ghast 2 总 33）；**门内捕获 = V3-14a
+    字体码点笔误修复**（爽 U+723D → 炸 U+70B8，九 glyph 重格
+    +1，top-512 红线 + S1 ≡ base19 字节恒等）；零 format 31 不变 /
+    sim 不 bump（canary 4 EXACT）；2833/2833（+12）；记档偏离：
+    火球 = 箭弹道（近程弧线补偿朝上）+ 射手自伤（MC 免疫自身火
+    球）
   - **V3-14c piglin 交易**（barter 物物交换 + 激怒联动既有 neutral
     类）
   - **V3-14d strider 骑乘**（骑乘机制 = 新基建）

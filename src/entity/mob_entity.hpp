@@ -431,6 +431,17 @@ private:
     // (interval * 60) draw, played spatialized at the mob). The hover
     // baseline itself is integrate's job (the gravity gate).
     void flyCruise(const MobProperties& p, double dt);
+    // V3-14b: the flying RANGED attacker's branch (the ghast — the
+    // bat's hover cruise fused with the skeleton's ranged branch):
+    // inside the shot's context (player alive + visible + within the
+    // shoot range) it holds the hover position (zero horizontal
+    // velocity — the integrate's bob baseline keeps the vertical) and
+    // fires on the cooldown through the game's shoot callback (the
+    // skeleton's seam — the LOS gate + the launch live there); outside
+    // it, the bat's cruise verbatim. Gated on the data (p.flying &&
+    // p.shootRange > 0) — the bat (shootRange 0) runs flyCruise
+    // bit-identically, the pre-V3-14b red line.
+    void flyShoot(const MobProperties& p, double dt);
     // V2-14: the frame-locked bob (a pure function of the local frame
     // count + the spawn-stream phase — the vy the flying integrate SETS,
     // the hover's baseline, not an accumulation).

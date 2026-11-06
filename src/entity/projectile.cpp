@@ -11,11 +11,14 @@ namespace mc {
 Projectile::Projectile(const World& world, const BlockRegistry& blocks,
                        Vec3 pos, Vec3 direction, float speed, float damage,
                        bool hurtPlayer, float power, std::string ammoItem,
-                       int effectId, double effectDuration, int effectTier)
+                       int effectId, double effectDuration, int effectTier,
+                       float explodeRadius, std::string explodeSource)
     : Entity(world, blocks, pos, kSize, kSize), m_damage(damage),
       m_hurtPlayer(hurtPlayer), m_power(power),
       m_ammoItem(std::move(ammoItem)), m_effectId(effectId),
-      m_effectDuration(effectDuration), m_effectTier(effectTier) {
+      m_effectDuration(effectDuration), m_effectTier(effectTier),
+      m_explodeRadius(explodeRadius),
+      m_explodeSource(std::move(explodeSource)) {
     m_velocity = normalized(direction) * speed;
 }
 

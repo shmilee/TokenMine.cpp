@@ -501,7 +501,7 @@ TEST(V390BuildingContent, ContentCensusPinned) {
             ++itemJson;
         }
     }
-    EXPECT_EQ(itemJson, 97);
+    EXPECT_EQ(itemJson, 98); // + the V3-14b ghast_membrane
     int tilePng = 0;
     for (const auto& e :
          std::filesystem::directory_iterator("assets/textures/blocks")) {
@@ -517,7 +517,7 @@ TEST(V390BuildingContent, ContentCensusPinned) {
             ++iconPng;
         }
     }
-    EXPECT_EQ(iconPng, 95 + 2); // 95 pre-V3-5 + the family's 2
+    EXPECT_EQ(iconPng, 95 + 2 + 1); // 95 pre-V3-5 + the family's 2 + the V3-14b membrane
 }
 
 TEST(V390BuildingContent, NewAssetsFNVpinned) {

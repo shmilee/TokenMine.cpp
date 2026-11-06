@@ -228,8 +228,10 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     // V3-5: 145 -> 165 (the building content family's 20 tiles — the
     // row-9 free run [5..15, 9] + the row-10 free run [0..8, 10]; zero
     // existing shift, the 16x16 grid's free-cell scan continued — no
-    // power-of-two growth needed, 165 < 256).
-    EXPECT_EQ(l.tiles.size(), 165u);
+    // power-of-two growth needed, 165 < 256). V3-14b: 165 -> 166 (the
+    // ghast's body tile — the row-10 free run [9, 10]; the membrane
+    // icon is a standalone item PNG, not an atlas tile).
+    EXPECT_EQ(l.tiles.size(), 166u);
     const struct {
         const char* name;
         int col;

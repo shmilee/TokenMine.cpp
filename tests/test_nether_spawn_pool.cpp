@@ -162,7 +162,8 @@ TEST(NetherSpawnPool, ShippedNetherPoolPinsTheDesign) {
     // 7 / magma_cube 5 / strider 1, the MC nether pool's approximation),
     // the shared cadence (30 / 60 / 4 / ring 4-6 / despawn 40), and the
     // vocabulary resolves in the REAL shared type table (the 13 shipped
-    // mobs — the 8 overworld + the 5 nether).
+    // mobs — the 8 overworld + the 6 nether (the V3-14b ghast, the
+    // nether's second flyer, the pool's rare slot after the strider)).
     AssetManager assets;
     ASSERT_TRUE(assets.setRoot("assets").ok())
         << "run the tests from the repository root";
@@ -170,15 +171,15 @@ TEST(NetherSpawnPool, ShippedNetherPoolPinsTheDesign) {
     ASSERT_TRUE(types.loadDirectory(assets, "data/mobs").ok());
     auto cfg = loadNetherSpawnPool(assets, types);
     ASSERT_TRUE(cfg.ok()) << cfg.error().message;
-    ASSERT_EQ(cfg->mobs.size(), 5u);
+    ASSERT_EQ(cfg->mobs.size(), 6u);
     const struct {
         const char* id;
         int weight;
     } expect[] = {
         {"zombified_piglin", 10}, {"piglin", 8}, {"hoglin", 7},
-        {"magma_cube", 5},        {"strider", 1},
+        {"magma_cube", 5},        {"strider", 1}, {"ghast", 2},
     };
-    for (std::size_t i = 0; i < 5; ++i) {
+    for (std::size_t i = 0; i < 6; ++i) {
         EXPECT_EQ(cfg->mobs[i].id, expect[i].id) << i;
         EXPECT_EQ(cfg->mobs[i].weight, expect[i].weight) << i;
     }
@@ -188,11 +189,13 @@ TEST(NetherSpawnPool, ShippedNetherPoolPinsTheDesign) {
     EXPECT_FLOAT_EQ(cfg->minRadius, 4.0f);
     EXPECT_FLOAT_EQ(cfg->maxRadius, 6.0f);
     EXPECT_FLOAT_EQ(cfg->despawnDistance, 40.0f);
-    EXPECT_EQ(cfg->totalWeight(), 31);
-    // The weighted pick's domain (the design's census: 31 = 10+8+7+5+1).
+    EXPECT_EQ(cfg->totalWeight(), 33); // V3-14b: + the ghast's weight 2
+    // The weighted pick's domain (the design's census: 33 =
+    // 10+8+7+5+1+2 — the V3-14b ghast appends the last slot).
     EXPECT_EQ(cfg->pickIndex(9u), 0u);   // zombified_piglin owns [0, 10)
     EXPECT_EQ(cfg->pickIndex(17u), 1u);  // piglin owns [10, 18)
     EXPECT_EQ(cfg->pickIndex(24u), 2u);  // hoglin owns [18, 25)
     EXPECT_EQ(cfg->pickIndex(29u), 3u);  // magma_cube owns [25, 30)
     EXPECT_EQ(cfg->pickIndex(30u), 4u);  // strider owns [30, 31)
+    EXPECT_EQ(cfg->pickIndex(32u), 5u);  // ghast owns [31, 33)
 }

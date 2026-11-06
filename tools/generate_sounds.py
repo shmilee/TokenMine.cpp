@@ -865,6 +865,50 @@ def squeak():
     return sound(dur, f)
 
 
+def ghast():
+    """V3-14b: the ghast's ambient screech (Minecraft's mob.ghast.
+    ambience class — the long, low, wavering wail of the nether's
+    floating horror): a ~140 -> 90 Hz falling wail with a slow 5.5 Hz
+    vibrato + a quiet 280 Hz moan overtone, over a fixed-seed
+    double-lowpassed breath (the screech's grit), 1.4 s, in the 0.5
+    ambient volume class (the portal_ambient's twin — the ghast's
+    ambient is the nether's second voice). The fixed-LCG / sine
+    paradigm, dedicated seed."""
+    lcg = Lcg(0x6600)  # dedicated fixed seed (unique to this sound)
+    dur = 1.4
+
+    def f(t, _):
+        fr = 140.0 - 50.0 * (t / dur)  # the falling wail
+        vibrato = 1.0 + 0.18 * math.sin(2 * math.pi * 5.5 * t)
+        tone = math.sin(2 * math.pi * fr * vibrato * t) * 0.8
+        moan = math.sin(2 * math.pi * 280.0 * t) * 0.12
+        breath = lowpass3([lcg.next() for _ in range(3)])
+        return (tone + moan + (lcg.next() * 0.2)) * env(t, dur, 4.0) * 0.5
+
+    out = sound(dur, f)
+    return lowpass3(out)
+
+
+def ghast_roar():
+    """V3-14b: the ghast's pre-shot roar (Minecraft's mob.ghast.fire
+    class — the rising screech that warns of the fireball): a 300 ->
+    900 Hz rising glide sharpened by a 1.5x overtone, over a fixed-seed
+    noise hiss, 0.5 s, in the SFX volume class (the ignite's twin —
+    the shot's warning is a sound effect, not ambience). The
+    fixed-LCG / sine paradigm, dedicated seed."""
+    lcg = Lcg(0x6E0B)  # dedicated fixed seed (unique to this sound)
+    dur = 0.5
+
+    def f(t, _):
+        fr = 300.0 + 600.0 * (t / dur)  # the rising screech
+        tone = math.sin(2 * math.pi * fr * t) * 0.7
+        overtone = math.sin(2 * math.pi * fr * 1.5 * t) * 0.25
+        hiss = lcg.next() * 0.3
+        return (tone + overtone + hiss) * env(t, dur, 14.0) * 0.7
+
+    return lowpass3(sound(dur, f))
+
+
 def portal_ambient():
     """V3-1 Phase A: the nether portal's ambience (Minecraft's
     block.portal.ambient class — the low humming vortex under the
@@ -1202,6 +1246,10 @@ SOUNDS = {
     "ignite": ignite,
     # V3-14a: the explosion's thud (the blast's apply seam's sound).
     "boom": boom,
+    # V3-14b: the ghast's two voices (the ambient screech + the
+    # pre-shot roar).
+    "ghast": ghast,
+    "ghast_roar": ghast_roar,
     # CRAFT-5: the smelt-complete ding (furnace presentation).
     "smelt": smelt,
     # CRAFT-3: the six material vocabularies (3 events each).

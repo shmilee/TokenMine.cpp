@@ -90,7 +90,8 @@ public:
                float damage = 0.0f, bool hurtPlayer = false,
                float power = 1.0f, std::string ammoItem = {},
                int effectId = -1, double effectDuration = 0.0,
-               int effectTier = 0);
+               int effectTier = 0, float explodeRadius = 0.0f,
+               std::string explodeSource = {});
 
     void update(double dt) override;
     bool shouldDespawn() const override {
@@ -131,13 +132,26 @@ public:
     // The game calls this when the block the arrow is stuck in is broken
     // or replaced (Phase 42): the arrow falls from where it hung (zero
     // velocity + gravity) and rejoins flight physics. No-op when not
-    // stuck.
+    // stuck. (An exploding shooter's fireball is consumed at the impact
+    // BEFORE it can stick — release is an arrow-only path.)
     void release() {
         if (m_stuck) {
             m_stuck = false;
             m_velocity = {0.0f, 0.0f, 0.0f};
         }
     }
+    // V3-14b: the exploding shooter (the ghast's fireball): true when
+    // this projectile carries a blast — the game explodes it (the
+    // Game::explodeAt seam, V3-14a) on a block impact or a player
+    // contact, and the swept mob test lets it pass through (the
+    // Minecraft fireball's twin: mobs do not block a fireball). 0
+    // radius = the pre-V3-14b arrow (every legacy call site
+    // bit-identical).
+    bool explodes() const { return m_explodeRadius > 0.0f; }
+    float explodeRadius() const { return m_explodeRadius; }
+    // The blast's source name (the death line's "被 <name> 的爆炸杀死"
+    // — the ghast's id; empty = the unattributed blast).
+    const std::string& explodeSource() const { return m_explodeSource; }
     // True when the game's swept test may hit the player with this arrow
     // (Phase 27: mob-shot arrows).
     bool hurtPlayer() const { return m_hurtPlayer; }
@@ -178,6 +192,10 @@ private:
     int m_effectId = -1;
     double m_effectDuration = 0.0;
     int m_effectTier = 0; // SURV-6 (0-based; 0 = the pre-SURV-6 value)
+    // V3-14b: the blast the projectile carries (0 = no blast, the
+    // pre-V3-14b arrow) + its source name (the death line's attribution).
+    float m_explodeRadius = 0.0f;
+    std::string m_explodeSource;
 
     // Same fall cap as the player: keeps the sub-stepper's tunneling bound
     // (an uncapped arrow could reach 600 blocks/s after 30 s).

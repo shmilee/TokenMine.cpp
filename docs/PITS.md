@@ -3,7 +3,7 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–401，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–402，新条目继续前插于尾部块首。
 
 - **gzip 容器可钉 / zlib 宏缺失 / 双跑 RAW 适用域（PITS 385，门 191
   V3-7 存档 gzip）**——① **zlib 自带 gzip 封装（windowBits 16+15）
@@ -68,6 +68,39 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **下界决定性场景 + 字体码点笔误 + canary --frames 五坑（PITS 402，
+  门 210 v3.20.0 V3-14b ghast）**——① **下界生成决定性构造三件**：
+  **环清三带**（kSpawnFloorDelta 2 → 地面 pick 的 floor top 须 ∈
+  [player±2]；只清一层沟底 top 仍在带内 = 地面 mob 饱和 cap 吞 ghast
+  抽选【scene v1 实证：4 只地面 mob 后 cap reached】；清 y50-52 三
+  带 = 沟底 top 50 出带 = 地面 pick 全败 cap 永不饱和）+ **obsidian
+  顶盖**（in-air 生成 = 柱内顶向下扫描首个 airCells 全空气格；无
+  顶盖 ghast 生 y121 天花板下【scene v2】，顶盖 y58 起 feet 56 =
+  kDetectVertical 2.0 眼差 3.0 不可见不发射【scene v3】，y57 起 feet
+  55 = 恰线 dy 2.0 可见 = 定案）+ **场景手术必需字段**（player.
+  effects format 8+ / absorption format 12+，pop 掉 = init 点名拒载
+  ——两次踩坑）。② **mob 不入档 = 「同位重生」假说陷阱**：format 30
+  nether_entities 只存 items（设计项，deviation 6）——两次「同 cell
+  ghast spawn」= 新抽选落同确定性 cell（前一只漂移出 kSpawnClearance
+  1.0），非重生；**死亡反证法** = 死 mob 必留 XP orb（xp>0 恒发，
+  120s 寿命）+ 掉落（0-1 roll 可 0）——终档 orb 缺席 = 未死。③
+  **爆点 = 火球盒底位**（arrow->position()，非发射眼非盒中心）：正/
+  负对照格的判定距离按盒底算（玩家接触爆点在玩家盒边 → 头顶 1.2-3.0
+  的 netherrack 架被破、br 3 obsidian 平台/顶盖恰界存活；顶盖卡壳
+  爆点在盒底 → 距发射 ghast 中心 1.91 = 5 自伤【MC 免疫自身火球 =
+  记档偏离】）。④ **字体一致性 pin 抓不到码点语义错**：V3-14a 加的
+  「第二爆炸字」= 爽 U+723D（本意 炸 U+70B8）——charset/表/PNG/
+  单测四处一致地错（430 排序连续 + FNV 全自洽），首渲染（死因屏
+  crop）才显「爆?杀死」。**加 CJK 字形必目检新字 glyph + 首渲染
+  E2E crop**（生成器 emit snippet 后 grep 目标字 U+XXXX 回验码点）。
+  修复面 = charset 换入 + 九 glyph 重格 +1（0x70B9..0x7206）+ top-
+  512 红线 131072 px 恒等 + **S1 锚字节恒等**（锚场景无消费方文本 =
+  免重锚）。⑤ **canary headless 必 --frames > demo total**：--demo
+  无 --frames = 播完进 finished panel 观察循环等观众 ESC/Q，
+  headless 永等（10 分钟无输出假 hang）；timeout 杀进程留的 mid-run
+  autosave 双跑「EXACT」= 假阳性证据陷阱（同模拟时刻 auto-save 恒
+  等 ≠ 终态）——demo total = Σdts×60 帧（example 266 / dig 561 /
+  build 571 / fly 541），--frames 700 通吃。
 - **爆炸门场景三纪律（PITS 401，门 209 v3.19.0 V3-14a 爆炸机制）**
   ——① **森林生物群系 = 到处可燃**：blast 必点火 → real-dt 火寿命域
   （PITS 385：RAW 不适用，savenorm 权威）——**密封石室场景**（房间

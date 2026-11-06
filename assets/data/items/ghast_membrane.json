@@ -1,0 +1,23 @@
+{
+ "id": "ghast_membrane",
+ "type": "material",
+ "max_stack": 64,
+ "icon": "ghast_membrane",
+ "model": {
+  "texture": "ghast_membrane",
+  "elements": [
+   {
+    "from": [
+     0.18,
+     0.42,
+     0.18
+    ],
+    "to": [
+     0.82,
+     0.58,
+     0.82
+    ]
+   }
+  ]
+ }
+}

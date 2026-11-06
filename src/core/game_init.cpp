@@ -732,6 +732,18 @@ Result<void> Game::buildScene() {
                                 "' is missing '" + rel + "'");
             }
         }
+        // V3-14b: the shot's sound (the shoot cue's data-driven name —
+        // the ambient_sound's existence twin, the checkSoundMaterials
+        // file-based discipline).
+        if (!mob.properties.shootSound.empty()) {
+            const std::string rel = "sounds/" + mob.properties.shootSound +
+                                    ".wav";
+            if (!m_assets.exists(rel)) {
+                return MC_FAIL("mob '" + mob.name + "' shoot_sound '" +
+                                mob.properties.shootSound +
+                                "' is missing '" + rel + "'");
+            }
+        }
     }
 
     // -- V2-15 (sheep): the wool_drops cross-check (the checkRepair-

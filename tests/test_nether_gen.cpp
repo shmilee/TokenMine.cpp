@@ -2721,7 +2721,7 @@ TEST(NetherContentTest, RealContentGenCensus) {
     }
 }
 
-TEST(NetherContentTest, AtlasLayoutGrewTo165) {
+TEST(NetherContentTest, AtlasLayoutGrewTo166) {
     // The atlas's census face (the 124 -> 136 tile's zero-shift red line
     // lives in test_atlas's full census; this is the count + the new
     // cells' existence): the grid grew 16x8 -> 16x16 (the new tiles sit
@@ -2731,7 +2731,10 @@ TEST(NetherContentTest, AtlasLayoutGrewTo165) {
     // V3-5: 145 -> 165 (the building content family's 20 tiles — the
     // row-9 free run [5..15, 9] + the row-10 free run [0..8, 10], the
     // zero-shift red line's continuation; the 16x16 grid holds 165 <
-    // 256, no power-of-two growth).
+    // 256, no power-of-two growth). V3-14b: 165 -> 166 (the ghast's
+    // body tile — the row-10 free run [9, 10]; the membrane icon is a
+    // standalone item PNG, not an atlas tile — the zero-shift red
+    // line's continuation).
     AssetManager assets;
     realAssets(assets);
     auto text = assets.loadText("data/textures/block_atlas.json");
@@ -2742,8 +2745,8 @@ TEST(NetherContentTest, AtlasLayoutGrewTo165) {
     ASSERT_TRUE(layout.ok()) << layout.error().message;
     EXPECT_EQ(layout->columns, 16);
     EXPECT_EQ(layout->rows, 16);
-    EXPECT_EQ(layout->tiles.size(), 165u);
-    const char* newTiles[21] = {
+    EXPECT_EQ(layout->tiles.size(), 166u);
+    const char* newTiles[22] = {
         "nether_brick",    "magma_block",     "quartz_ore",
         "nether_gold_ore", "ancient_debris",  "soul_sand",
         "soul_soil",       "crimson_nylium",  "warped_nylium",
@@ -2751,6 +2754,7 @@ TEST(NetherContentTest, AtlasLayoutGrewTo165) {
         "zpiglin_body",    "zpiglin_face",    "piglin_body",
         "piglin_face",     "hoglin_body",     "hoglin_face",
         "strider_body",    "strider_face",    "magma_cube",
+        "ghast",
     };
     for (const char* t : newTiles) {
         EXPECT_TRUE(layout->contains(t)) << t;

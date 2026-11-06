@@ -75,10 +75,11 @@
   `[V2-7]` / shears `[V2-15]` / quartz `[V3-2]` / hoglin_meat·cooked_
   hoglin_meat `[V3-3]` / netherite_scrap·ingot·工具×3·护甲×4 `[V3-4]` /
   clay_ball·brick `[V3-5]`）
-- **状态效果**：**11**（`assets/data/effects/`，见「状态效果」）；**Mob**：**13**
+- **状态效果**：**11**（`assets/data/effects/`，见「状态效果」）；**Mob**：**14**
   （主世界 8 = zombie/skeleton/spider + cow/sheep/chicken/pig `[V2-5]`/bat
-  `[V2-14]` + 下界 5 `[V3-3]` = zombified_piglin/piglin/hoglin/magma_cube/
-  strider，`assets/data/mobs/`，见「实体与 Mob」）；**配方**：**112**（shaped 58 /
+  `[V2-14]` + 下界 6 `[V3-3]`/`[V3-14b]` = zombified_piglin/piglin/
+  hoglin/magma_cube/strider/ghast，`assets/data/mobs/`，见「实体与
+  Mob」）；**配方**：**112**（shaped 58 /
   shapeless 54，`assets/data/recipes/`）；**生物群系**：9（主世界 4 = desert/
   forest/plains/snowy_taiga `[V2-16]` + 下界 5 `[V3-2]` = nether_wastes/
   crimson_forest/soul_sand_valley/basalt_deltas/warped_forest，
@@ -456,6 +457,29 @@
     会自毁 strider 永不生成 = 门 198 内实证；15 = 熔岩面独占位，其余 4
     种留 7 台地表 0–3 暗区不受影响）/ ambient strider_hiss 3.0 s /
     **不可骑乘**（记档不做）
+  - **ghast**（敌对 + **flying 远程**，`[V3-14b]` v3.20.0，**下界漂浮
+    恐怖 = 项目首个爆炸射手**）：10 HP / 0.7 / 探测 16 / **shoot 14 @
+    速度 10 / 冷却 4.0** / **`explode_radius` 3**（strict 非负；>0 须
+    shoot_range>0 = 爆炸近战笔误点名；**ammo 规则豁免**——火球撞击
+    即消耗永不钉住，pickup 不可达）/ **`shoot_sound` "ghast_roar"**
+    （数据字段默认 "shoot" 位级；发射前咆哮 = 音警示，init wav 交叉
+    检 ambient_sound 孪生）/ spawn_max_light 15 / 掉 **ghast_membrane
+    0–1**（物品 + 32×32 独立图标）/ xp 5 / model **1.5×1.75 五盒**
+    （body + 4 tentacles，atlas [9,10]）；**flyShoot 分支** = `runAi`
+    飞行 dispatch 内 `flying && shootRange>0` 数据门（**bat
+    shootRange 0 走 flyCruise 原文位级红线**）：seesPlayer（alive +
+    detect + kDetectVertical 2.0 + shootRange）→ **hover 保持**（水平
+    速度归零，bob 基线在 integrate）+ 面向玩家 + 冷却发射；否则 bat
+    cruise 原文（bob 恰线闪烁：spawn dy = 恰 2.0，bob 抬过线瞬回
+    cruise 漂移再回 = PITS 402⑥）；**火球 = Projectile 复用**
+    （damage 0 / hurtPlayer / 无 ammo 无 effect / explodeRadius +
+    explodeSource="ghast" 尾参缺省 0 = 旧调用位级）+ **爆炸三接线**
+    （stuck→explodeAt+kill 钉住即爆 / 玩家接触→explodeAt / **mob
+    扫描跳过爆炸弹** = 火球穿 mob MC 孪生）+ **渲染 = 单色发光立方**
+    （0.4，色 1.0/0.55/0.15 无旋转，drawArrows 分支惰性 mesh）；
+    弹道 = 箭同款 g 20 + 弧线补偿（**近程朝上** = MC 火球近直线
+    偏离 + **射手自伤** MC 免疫偏离，PITS 402③）；ambient ghast
+    嘶鸣 8.0 s（140→90 Hz 下滑哀鸣 + 5.5 Hz 颤音）
 - **生成**（`data/mob_spawning.json` + 帧节奏驱动，纯函数 = 同一运行必生成
   同一只）：每 `check_every_frames` **30** 帧尝试一次（难度节奏缩放：easy 60 /
   normal 30 / hard 20，见「难度」）、`first_spawn_frame` **60** 之前不生成、
@@ -472,7 +496,7 @@
   1，全 1 与旧 `pick % 长度` 逐位相同；shipped 主世界池 8 种全 weight 1【`[V2-14]`
   +bat】；**下界池 `[V3-3]` = `mob_spawning_nether.json` 独立文件**（
   zombified_piglin **10** / piglin **8** / hoglin **7** / magma_cube
-  **5** / strider **1** = MC 近似权重；cadence/半径/despawn 参数与主
+  **5** / strider **1** / ghast **2** `[V3-14b]` = MC 近似权重；cadence/半径/despawn 参数与主
   世界同款表，会话策略（enabled/difficulty/limb_swing）继承主世界
   config = 记档偏离 5；类型表 = 游戏单一共享注册表 = 记档偏离 4；
   文件缺失/坏 schema/未知 mob 全 init 点名 fail-fast）；**池隔离**

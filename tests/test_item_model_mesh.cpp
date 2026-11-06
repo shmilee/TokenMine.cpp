@@ -302,5 +302,7 @@ TEST(ItemModelMeshTest, ShippedModelsHaveNoFaceCoincidentBoxes) {
     // model) -> 95.
     // V3-5: +2 (clay_ball / brick — the building family's material
     // chain, every one an explicit item with a model) -> 97.
-    EXPECT_EQ(modelCount, 97) << "ENT-9: all 97 items have models";
+    // V3-14b: +1 (ghast_membrane — the ghast's drop, an explicit item
+    // with a model) -> 98.
+    EXPECT_EQ(modelCount, 98) << "ENT-9: all 98 items have models";
 }

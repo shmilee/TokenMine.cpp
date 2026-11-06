@@ -633,17 +633,18 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
 - **下界没有水** — 倒水桶 = **水瞬间蒸发**（桶回空桶 + "evaporate" 音 +
   日志，零格触碰，v3.7.0）：水无下界世界语义（MC 同款）；维度感知
   FluidSim（下界独立 FluidSim 实例）= 矩阵外记档。熔岩桶照常。
-- **床睡眠下界 no-op** — 右键床无效果（项目无爆炸机制，MC 床爆炸 = 不做
-  记档；ghast = 爆炸机制的延后立项）。重生点恒主世界（**下界死亡 = 回
-  主世界重生**，MC 精确）。
+- **床睡眠下界 no-op** — 右键床无效果（MC 床爆炸 = 不做记档；爆炸
+  机制本体 = v3.19.0 已建，ghast = v3.20.0 已落地，床爆炸触发仍
+  不做）。重生点恒主世界（**下界死亡 = 回主世界重生**，MC 精确）。
 - **容器面板 / per-block state 族主世界 only** — furnace/campfire/table/
   crop/sapling/moisture/beacon/fire 七类状态主世界专属（下界放置这些块
   = 无状态行为）。
 - **掉落物不跨维** — 传送不携掉落物实体（记档偏离；MC 掉落物随玩家跨维）。
 - **下界原点保护圈** — 敌对保护环锚 = 世界出生点，下界池同款应用（MC 下
   界无保护 = 记档偏离，门 198）。
-- **下界 mob 既定不做**（V3-3 记档）：piglin 无交易 / magma_cube 不分裂
-  不跳 / strider 不可骑乘 / **ghast 延后 = 爆炸机制**（与床爆炸同基建）/
+- **下界 mob 既定不做**（V3-3 记档）：piglin 无交易（= V3-14c 立项）/
+  magma_cube 不分裂不跳 / strider 不可骑乘（= V3-14d 立项）/
+  **ghast = v3.20.0 已落地**（飞行爆炸射手，V3-14b）/
   zombified_piglin `undead: false`（MC 非亡灵 = 中毒不免疫）。
 - **传送 = 900 帧冷却（15 s）** — 会话态不入档（重载即清零，记档）。
   正交 portal 往返 yaw −π/2（MC JE 顺时针 90°，往返 180° 观感 quirk 自然
@@ -725,9 +726,9 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
 
 ## V3-14a 爆炸机制（v3.19.0）
 
-- **游戏内无触发方（V3-14a 相位设计）**——爆炸机制先行（ghast
-  前置）：当前仅 `--explode` CLI seam 可触发；V3-14b 的 ghast 火球
-  = 首个真触发（同一 `Game::explodeAt`）。
+- **触发方 = --explode CLI seam + ghast 火球（V3-14b 已落地）**——
+  v3.19.0 时机制先行仅 seam 可触发；v3.20.0 起 ghast 火球 = 首个
+  游戏内真触发（同一 `Game::explodeAt`）。
 - **无击退**——项目无玩家/mob 击退面（V3-15 击退抗性弃做同款：
   字段无消费方）；blast 只伤不破（位移）。
 - **点火 = 100% 确定**（flamable 谓词同款 fire spread）——MC
@@ -736,6 +737,22 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
   格在 blast 中不动（块层 only，流体交互 = 记档偏离）。
 - **地下生成火簇 = 场景域 real-dt**（PITS 401③）——爆炸门场景须
   密封石室 + 去火（savenorm 域）。
+
+## V3-14b ghast（v3.20.0）
+
+- **火球 = 箭弹道（非 MC 近直线）**——Projectile 复用 = g 20 +
+  `computeAimDirection` 弧线补偿 0.5·g·t²：近程（<8m）补偿 2.4+ 块
+  = 发射朝上（6.26m @ 速度 10 → 3.9 块上扬），有顶盖场景打天花板
+  自爆（确定性弹道恒等保证开阔场景过预视点打得到）。MC ghast
+  火球近直线 = 偏离记档（火球独立弹道 = 后续语义变更单独立项）。
+- **射手自伤**——`explodeAt` 无 source 豁免：顶盖卡壳爆点（火球盒
+  底位）距发射 ghast 中心 ~1.9 < r 3 = 5 衰减自伤（探跑实证）。MC
+  ghast 免疫自身火球 = 偏离记档。
+- **bob 恰线闪烁**——spawn 定案 dy = 恰 kDetectVertical 2.0：bob
+  抬 feet 过线即瞬回 flyCruise 漂移 0.3-1.6 块再回 hover（确定性
+  frame-locked，发射节奏非严格 4.0s 整数倍）。
+- **无击退 / 破碎无掉落 / 点火 100% / 流体不触碰**——V3-14a 爆炸
+  语义继承（见上节）。
 
 ## V3-11b 创造物品栏（v3.18.0）
 

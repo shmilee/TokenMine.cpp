@@ -151,6 +151,17 @@ void Game::updateEntities(double dt) {
             continue;  // a mob hit this step already consumed it
         }
         if (arrow->stuck()) {
+            // V3-14b: the fireball's impact blast — a stuck fireball
+            // explodes where it hit (the arrow's stick-and-age twin
+            // replaced by the consume-at-impact; the arrow itself
+            // keeps Phase 24's stick, the branch's data gate is the
+            // explode flag). The position is the box center (the
+            // kSize/2 offset is under the blast's radius noise).
+            if (arrow->explodes() && !arrow->dead()) {
+                explodeAt(arrow->position(), arrow->explodeRadius(),
+                          arrow->explodeSource());
+                arrow->kill();
+            }
             continue;  // stuck in a block (Phase 24): no motion, no hits
         }
         const Vec3 step = arrow->position() - prev;
@@ -176,6 +187,13 @@ void Game::updateEntities(double dt) {
                     syncAbsorption(); // the pool takes the new total
                 }
                 arrow->kill();
+                if (arrow->explodes()) {
+                    // V3-14b: the player-contact blast — the fireball's
+                    // hurtPlayer flag is the contact trigger (the
+                    // direct damage is 0, the blast is the hit).
+                    explodeAt(arrow->position(), arrow->explodeRadius(),
+                              arrow->explodeSource());
+                }
                 MC_LOG_DEBUG("mob arrow hit player for " +
                              std::to_string(arrow->damage()));
                 continue;  // consumed: no mob test this step
@@ -185,6 +203,12 @@ void Game::updateEntities(double dt) {
             auto* mob = dynamic_cast<MobEntity*>(entity.get());
             if (mob == nullptr || mob->dead() || mob == arrow->source()) {
                 continue;  // the shooter's own arrow never self-hits
+            }
+            if (arrow->explodes()) {
+                // V3-14b: the fireball passes through mobs (the
+                // Minecraft fireball's twin — a mob cannot block the
+                // ghast's shot; its block is the terrain's).
+                continue;
             }
             const float t =
                 raycastAabb(prev, step, mob->aabbMin(), mob->aabbMax());
@@ -958,7 +982,18 @@ void Game::attemptMobSpawn() {
     // the mob lives in ents until the despawn pass removes it, and
     // the callback only runs while the mob is alive (runAi).
     if (def.properties.shootRange > 0.0f) {
-        const float arrowDamage = def.properties.attackDamage * damageScale;
+        // V3-14b: the exploding shooter (the ghast) — the fireball's
+        // parameters (damage 0 direct: the blast is the damage; the
+        // hurtPlayer flag ON: the player contact is the blast's
+        // trigger, the swept test's kill path explodes it at the
+        // contact; the source name = the mob's id, the death line's
+        // attribution). A normal arrow shooter (explodeRadius 0) keeps
+        // the pre-V3-14b parameters bit-identically.
+        const bool exploding = def.properties.explodeRadius > 0.0f;
+        const float explodeRadius = def.properties.explodeRadius;
+        const std::string shootSound = def.properties.shootSound;
+        const float arrowDamage =
+            exploding ? 0.0f : def.properties.attackDamage * damageScale;
         const float arrowSpeed = def.properties.shootSpeed;
         // Phase 42: the mob's arrows are full-power shots (power 1.0 =
         // the legacy knockback constants) and return the mob's data 'ammo'
@@ -976,7 +1011,8 @@ void Game::attemptMobSpawn() {
         MobEntity* raw = mob.get();
         mob->setShootCallback(
             [this, raw, &world, &ents, arrowSpeed, arrowDamage, arrowAmmo,
-             arrowEffectName, arrowEffectDuration, arrowEffectTier]() {
+             arrowEffectName, arrowEffectDuration, arrowEffectTier,
+             exploding, explodeRadius, shootSound]() {
             if (m_player->isDead() || raw->dead()) {
                 return;
             }
@@ -1020,19 +1056,33 @@ void Game::attemptMobSpawn() {
                 effectDuration = arrowEffectDuration;
                 effectTier = arrowEffectTier;
             }
+            // V3-14b: the fireball's parameters (the arrow's twin with
+            // the blast — the ammo / effect are arrow-only: a fireball
+            // carries neither, it carries the radius + the source name
+            // the blast's death line reads). The trailing defaults keep
+            // the normal arrow bit-identically (explodeRadius 0).
             auto arrow = std::make_unique<Projectile>(
                 world, m_blocks, eye + dir * kArrowSpawnOffset, dir,
                 arrowSpeed, arrowDamage, /*hurtPlayer=*/true,
-                /*power=*/1.0f, arrowAmmo, effectId, effectDuration,
-                effectTier);
+                /*power=*/1.0f, exploding ? std::string {} : arrowAmmo,
+                exploding ? -1 : effectId,
+                exploding ? 0.0 : effectDuration,
+                exploding ? 0 : effectTier,
+                exploding ? explodeRadius : 0.0f,
+                exploding ? raw->def().name : std::string {});
             arrow->setSource(raw);  // the hit test skips its shooter
             ents.push_back(std::move(arrow));
-            m_sound.play("shoot");
-            MC_LOG_DEBUG("skeleton shot: from (" + std::to_string(eye.x) +
+            // V3-14b: the shot's cue is data-driven (the skeleton's
+            // "shoot" default; the ghast's pre-fireball roar).
+            m_sound.play(shootSound);
+            MC_LOG_DEBUG("mob shot: from (" + std::to_string(eye.x) +
                          ", " + std::to_string(eye.y) + ", " +
                          std::to_string(eye.z) + ") dist=" +
                          std::to_string(dist) + " dmg=" +
-                         std::to_string(arrowDamage));
+                         std::to_string(arrowDamage) +
+                         (exploding ? " (fireball r=" +
+                                          std::to_string(explodeRadius) + ")"
+                                    : ""));
         });
     }
     // V2-14: the ambient sound (the bat's squeak — the data-driven general
@@ -1428,6 +1478,7 @@ void Game::drawArrows(const Mat4& view, const Mat4& projection) {
     // the white fletching) — three single-color draws per arrow (the
     // classic MC arrow colors).
     buildArrowMeshes();
+    buildFireballMesh(); // V3-14b: the fireball's glow cube (lazy twin)
     if (!m_arrowShaftMesh.valid() || !m_arrowTipMesh.valid() ||
         !m_arrowFletchMesh.valid()) {
         return;
@@ -1444,6 +1495,23 @@ void Game::drawArrows(const Mat4& view, const Mat4& projection) {
         const Projectile* arrow =
             dynamic_cast<const Projectile*>(entity.get());
         if (arrow == nullptr) {
+            continue;
+        }
+        // V3-14b: the fireball (the exploding shooter's projectile) —
+        // the glow cube, a single solid-color draw (no orientation: a
+        // blob reads as a sphere from any heading; no sticking either —
+        // it explodes at the impact, so a stuck fireball never renders).
+        if (arrow->explodes()) {
+            if (!m_fireballMesh.valid()) {
+                continue;
+            }
+            const Vec3 fc = arrow->position() +
+                            Vec3 {0.0f, Projectile::kSize * 0.5f, 0.0f};
+            m_basicShader.bind();
+            m_basicShader.setUniform3f("u_color", kFireballColorR,
+                                       kFireballColorG, kFireballColorB);
+            m_renderer.draw(m_fireballMesh, m_basicShader, view, projection,
+                            Mat4::translate(fc));
             continue;
         }
         // Collision-box center (the box is kSize tall; the part meshes
@@ -1509,6 +1577,19 @@ void Game::buildArrowMeshes() {
     if (!rFletch.ok()) {
         MC_LOG_ERROR("Arrow fletching mesh build failed: " +
                      rFletch.error().describe());
+    }
+}
+
+void Game::buildFireballMesh() {
+    // V3-14b: the fireball's glow cube (the arrow parts' lazy-build
+    // twin — idempotent, the pure makeFireballGeometry).
+    if (m_fireballMesh.valid()) {
+        return;
+    }
+    const ItemMeshGeometry geom = makeFireballGeometry();
+    const auto r = m_fireballMesh.upload(geom.vertices, geom.indices);
+    if (!r.ok()) {
+        MC_LOG_ERROR("Fireball mesh build failed: " + r.error().describe());
     }
 }
 

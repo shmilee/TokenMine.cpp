@@ -10,6 +10,7 @@
   {"id": "piglin", "weight": 8},
   {"id": "hoglin", "weight": 7},
   {"id": "magma_cube", "weight": 5},
-  {"id": "strider", "weight": 1}
+  {"id": "strider", "weight": 1},
+  {"id": "ghast", "weight": 2}
  ]
 }

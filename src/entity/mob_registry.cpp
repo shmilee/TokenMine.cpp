@@ -183,9 +183,45 @@ Result<void> MobRegistry::parseProperties(const Json& def,
         }
         out.ammoItem = am->asString();
     }
-    if (out.shootRange > 0.0f && out.ammoItem.empty()) {
+    // Optional 'shoot_sound' (string, V3-14b): the shot's cue (the
+    // skeleton's "shoot" default; the ghast's pre-fireball roar).
+    // Explicit empty is rejected (the ammo discipline); the game
+    // cross-checks the wav's existence at init.
+    if (const Json* ssn = def.find("shoot_sound")) {
+        if (!ssn->isString() || ssn->asString().empty()) {
+            return MC_FAIL("mob properties: 'shoot_sound' must be a "
+                           "non-empty string (sound name)");
+        }
+        out.shootSound = ssn->asString();
+    }
+    // Optional 'explode_radius' (number, V3-14b): the shot's blast
+    // radius (0 = a normal arrow shooter, the pre-V3-14b default).
+    // Strict: a non-number / negative is named; > 0 requires a ranged
+    // shooter (an exploding melee is a typo — the shot is the blast's
+    // only carrier).
+    if (const Json* er = def.find("explode_radius")) {
+        if (!er->isNumber()) {
+            return MC_FAIL("mob properties: 'explode_radius' must be a "
+                           "number");
+        }
+        out.explodeRadius = static_cast<float>(er->asDouble());
+        if (out.explodeRadius < 0.0f) {
+            return MC_FAIL("mob properties: 'explode_radius' must be "
+                           ">= 0, got " + std::to_string(out.explodeRadius));
+        }
+    }
+    if (out.explodeRadius > 0.0f && out.shootRange <= 0.0f) {
+        return MC_FAIL("mob properties: 'explode_radius' > 0 requires "
+                       "'shoot_range' > 0 (the shot is the blast's "
+                       "carrier)");
+    }
+    if (out.shootRange > 0.0f && out.explodeRadius <= 0.0f &&
+        out.ammoItem.empty()) {
         return MC_FAIL("mob properties: 'shoot_range' > 0 requires 'ammo' "
-                       "(the item its stuck arrows return on pickup)");
+                       "(the item its stuck arrows return on pickup) — "
+                       "an exploding shooter (explode_radius > 0) is "
+                       "exempt: its fireball is consumed at impact and "
+                       "never sticks");
     }
     // Optional milking pair (string, Phase 43, cow): 'milk_with' is the
     // item the player must hold, 'milk_gives' the item a right-click on

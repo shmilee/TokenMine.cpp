@@ -11,6 +11,66 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.20.0（2026-11-06）— V3-14b ghast（飞行爆炸射手 + 火球，门 210 全 PASS）
+
+**矩阵 ⬜ 项小→大推进**（V3-14 下界 mob 深化相位 B/4——ghast =
+bat 飞行数据旗 + skeleton 射击数据融合，首个爆炸射手，V3-14a 爆
+炸机制首个游戏内消费方；零 format 31 不变 / **sim 不 bump**（canary
+4 demo EXACT 实证）/ 零 config 键）。
+
+**机制族**：`explode_radius` mob 数据属性（strict 非负；
+>0 须 shoot_range>0；**ammo 规则豁免爆炸射手**——火球撞击即消
+耗永不钉住 = pickup 不可达）+ `shoot_sound` 数据字段（默认
+"shoot" 位级；ghast = "ghast_roar" 发射前咆哮；init 交叉检 wav
+存在 = ambient_sound 孪生）+ **flyShoot 分支**（飞行 dispatch
+内 `flying && shootRange>0` 数据门：seesPlayer【alive + detect +
+kDetectVertical 2.0 + shootRange】→ hover 保持（水平速度归零）+
+面向 + 4.0s 冷却发射；否则 bat cruise 原文——bat shootRange 0
+位级红线，MobFlyShootTest 4 测钉）+ **火球 = Projectile 复用**
+（damage 0 / hurtPlayer / 无 ammo 无 effect / explodeRadius +
+explodeSource="ghast" 尾参缺省 0 = 旧调用位级）+ 爆炸接线三处
+（stuck→explodeAt+kill 钉住即爆 / 玩家接触→explodeAt / mob 扫描
+跳过爆炸弹 = 火球穿 mob MC 孪生）+ **火球渲染**（单色发光立方
+0.4，色 1.0/0.55/0.15 无旋转，drawArrows 分支 + 惰性 mesh = 箭
+三段孪生）。
+
+**内容族**：ghast 数据（health 10 / speed 0.7 / detect 16 /
+shoot 14@10 / cooldown 4.0 / explode_radius 3 / spawn_max_light
+15 / hostile / flying / spawns_in_air / ambient ghast 8.0 /
+drops ghast_membrane 0-1 / xp 5；model 1.5×1.75 五盒）+
+ghast.png 16×16 自绘（atlas [9,10] 空格零移位 165→166；**物品
+图标 = 独立 32×32 RGBA 透明底 PNG 非 atlas tile**）+ 声音 2 件
+（ghast 环境嘶鸣 0x6600 1.4s 0.5 ambient class / ghast_roar 发射
+咆哮 0x6E0B 0.5s SFX class；64→66 幂等）+ 下界池 +ghast weight
+2（总 33，尾追加既有 5 条目位级）。
+
+**门内捕获（字体修复并入）**：V3-14a 的「第二爆炸字」= 爽
+U+723D（笔误，本意 炸 U+70B8）——charset/表/PNG/单测四处一致
+地错，门 210 死因屏 crop 首渲染 `被 ghast 的爆炸杀死` 显「爆?
+杀死」。修复 = charset 换入 0x70B8（0x70B9..0x7206 九 glyph 重格
++1，0x7248 起净零）+ 生成器重跑（TTF pin / legacy 33 位级 /
+top-512 红线 131072 px 恒等）+ font.png FNV 重钉
+94cbd43cfb750568→0fce6a0766e78125 + test_font cell 锚重钉——
+**修复后 S1 ≡ base19 字节恒等**（锚场景无消费方文本）。教训 =
+一致性 pin 抓不到码点语义错，E2E 目检 = 语义门（PITS 402④）。
+
+**门 210**：S1 结构免疫第 91 次（≡ base19 ×2 + savenorm EXACT）
+/ S2 下界决定性场景 v5（1800f ×2 截图 RAW + savenorm EXACT +
+终档 9/9：架 4/4 破【玩家接触爆破——爆点 = 火球盒底位】/ 平台 +
+顶盖 obsidian 全存【br 3 = r 3 恰界】/ 玩家 4 接触死 deathCount 1
+/ fires [] / nether_entities []【mob 不入档 = format 30 设计】）
++ 决定性时间线（f240 ghast#1 生 + 4s 冷却发射 + 顶盖卡壳自爆自伤
+5 + f870/f1110 同确定性 cell 新生 = 非重生【mob 无死亡日志 + XP
+orb 120s 寿命反证】）/ S2 视觉（492f 火球发光立方 + ghast 五盒
+同框 + 死因屏 `被 ghast 的爆炸杀死` 全行正确）/ S6（shoot_sound
+缺 wav init rc 1 点名）/ canary 4 demo ×2 RAW + savenorm EXACT /
+2833/2833（+12）/ 性能 A/B 同档【banner 实证 + PERF-WIN 三窗
+upd med 0.578/0.604/0.640 vs 0.549/0.530/0.557 + changesApplied
+9/2-3/1【win2 streaming 边界 real-dt 域】+ 终档 savenorm EXACT
+零 format 最强形】。记档偏离：火球 = 箭弹道（近程弧线补偿朝上，
+MC 火球近直线）+ 射手自伤（MC 免疫自身火球）+ 无击退/破碎无掉
+落/点火 100%（V3-14a 继承）。详见 `docs/archive/phase-3.20.0.md`。
+
 ## v3.19.0（2026-11-06）— V3-14a 爆炸机制（衰减伤害/破块/点火 + --explode seam，门 209 全 PASS）
 
 **矩阵 ⬜ 项小→大推进**（V3-14 下界 mob 深化相位 A/4——爆炸机制

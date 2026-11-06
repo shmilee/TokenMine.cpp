@@ -178,6 +178,37 @@ const char* kSkeletonDef = R"({
   }
 })";
 
+// The ghast test definition (V3-14b): the flying RANGED attacker —
+// the bat's flight flags + the skeleton's shoot data fused, the first
+// exploding shooter (explode_radius 3, NO ammo key — the exemption's
+// witness; the single-box model keeps the mesh out of the AI tests).
+const char* kGhastDef = R"({
+  "id": "ghast",
+  "properties": {
+    "health": 10,
+    "speed": 0.7,
+    "detect_radius": 16,
+    "attack_range": 0,
+    "attack_damage": 0,
+    "attack_cooldown": 4.0,
+    "shoot_range": 14,
+    "shoot_speed": 10,
+    "explode_radius": 3,
+    "wander_interval": 2.0,
+    "spawn_max_light": 15,
+    "hostile": true,
+    "flying": true,
+    "spawns_in_air": true
+  },
+  "model": {
+    "width": 1.5,
+    "height": 1.75,
+    "boxes": [
+      {"pos": [0.0, 1.0, 0.0], "size": [1.5, 1.5, 1.5], "texture": "g"}
+    ]
+  }
+})";
+
 // The bat test definition (V2-14): the flying passive mob — the flight
 // flags + the ambient pair (the AI physics tests need the full data
 // shape; a single-box model keeps the mesh out of it).
@@ -647,6 +678,78 @@ TEST(MobRegistryTest, RejectsBadFlightAndAmbientFields) {
     auto r = mobs.registerMob(parseJson(def));
     ASSERT_FALSE(r.ok());
     EXPECT_NE(r.error().message.find("ambient_sound"), std::string::npos);
+}
+
+// -- V3-14b: the exploding shooter's data (the blast's registry face) ----
+
+TEST(MobRegistryTest, ExplodeRadiusPinsTheGhastShape) {
+    // The ghast's definition (no 'ammo' — the explode shooter's
+    // exemption witness: the fireball is consumed at impact and never
+    // sticks, so its pickup is unreachable): the radius parses, the
+    // shoot sound defaults to "shoot" (the data's absence), the ammo
+    // stays empty.
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(kGhastDef));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const MobProperties& p = mobs.at(MobID{0}).properties;
+    EXPECT_FLOAT_EQ(p.explodeRadius, 3.0f);
+    EXPECT_EQ(p.shootSound, "shoot");
+    EXPECT_EQ(p.ammoItem, "");
+    EXPECT_TRUE(p.flying);
+    // A non-exploding shooter keeps the pre-V3-14b defaults.
+    MobRegistry arrows;
+    ASSERT_TRUE(arrows.registerMob(parseJson(kSkeletonDef)).ok());
+    EXPECT_FLOAT_EQ(arrows.at(MobID{0}).properties.explodeRadius, 0.0f);
+}
+
+TEST(MobRegistryTest, RejectsBadExplodeRadius) {
+    // The strict number (the shoot_speed's twin): negative / non-number
+    // are named.
+    auto bad = std::string(kGhastDef);
+    bad.replace(bad.find("\"explode_radius\": 3"), 19,
+                "\"explode_radius\": -1");
+    auto r = MobRegistry{}.registerMob(parseJson(bad));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("explode_radius"), std::string::npos);
+    bad = std::string(kGhastDef);
+    bad.replace(bad.find("\"explode_radius\": 3"), 19,
+                "\"explode_radius\": \"big\"");
+    r = MobRegistry{}.registerMob(parseJson(bad));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("explode_radius"), std::string::npos);
+}
+
+TEST(MobRegistryTest, ExplodeRadiusRequiresShootRange) {
+    // An exploding MELEE is a typo (the shot is the blast's only
+    // carrier): explode_radius > 0 without shoot_range is named.
+    auto bad = std::string(kGhastDef);
+    bad.replace(bad.find("\"shoot_range\": 14,"), 18, "\"shoot_range\": 0,");
+    auto r = MobRegistry{}.registerMob(parseJson(bad));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("explode_radius"), std::string::npos);
+}
+
+TEST(MobRegistryTest, RangedShooterStillRequiresAmmo) {
+    // The exemption is the exploding shooter's ONLY: a normal ranged
+    // mob (explode_radius 0) without ammo is still rejected (the
+    // skeleton's rule untouched).
+    auto bad = std::string(kSkeletonDef);
+    bad.erase(bad.find("\"ammo\": \"arrow\",\n"), 17);
+    auto r = MobRegistry{}.registerMob(parseJson(bad));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("ammo"), std::string::npos);
+}
+
+TEST(MobRegistryTest, RejectsBadShootSound) {
+    // The shoot cue's strict string (the ammo discipline's twin):
+    // explicit empty / non-string are named.
+    auto bad = std::string(kGhastDef);
+    const std::string anchor = "\"explode_radius\": 3,";
+    bad.insert(bad.find(anchor) + anchor.size(),
+               "\n    \"shoot_sound\": \"\",");
+    auto r = MobRegistry{}.registerMob(parseJson(bad));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("shoot_sound"), std::string::npos);
 }
 
 // -- hostile flag (Phase 25: the difficulty system is data-driven) ------------
@@ -1475,9 +1578,12 @@ TEST(MobContent, V215WoolAssetsPinned) {
     // zero-shift red line, the test_atlas census). V3-5 re-pin: the
     // building content family's 20 tiles (the row-9 free run [5..15, 9]
     // + the row-10 free run [0..8, 10] — the 165-tile zero-shift red
-    // line, the test_atlas census).
+    // line, the test_atlas census). V3-14b re-pin: the ghast's body
+    // tile (the row-10 free run [9, 10] — the 166-tile zero-shift red
+    // line, the test_atlas census; the membrane icon is a standalone
+    // item PNG, not an atlas tile).
     EXPECT_EQ(fnv1a64(readAll("assets/data/textures/block_atlas.json")),
-              "e1bd5060286ec6b0");
+              "1e10b3cae7fcb8c9");
 }
 
 // -- V2-15: the wool instance state (MobEntity — the frame discipline) ----
@@ -3671,6 +3777,97 @@ TEST(MobAiTest, RangedMobRetreatsWhenClose) {
     EXPECT_GT(distH, 3.0f);  // kited the player past the retreat distance
     EXPECT_GE(shots, 1);     // kept firing while retreating
     EXPECT_EQ(hits, 0);
+}
+
+// -- V3-14b: the flying ranged attacker (the ghast's flyShoot branch) ---
+
+TEST(MobFlyShootTest, GhastHoversAndShootsInContext) {
+    // The ghast 8 blocks from the player (inside shoot_range 14 + the
+    // detect radius, level with the eyes): it HOLDS the hover position
+    // (zero horizontal velocity — the skeleton branch's flying twin:
+    // no kite, no close-in) and fires on the 4.0 s cooldown.
+    Fixture f;
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.registerMob(parseJson(kGhastDef)).ok());
+    MobEntity mob = makeMob(f, mobs.at(MobID{0}), {8.5f, 10.5f, 1.5f});
+    mob.setPlayer({8.5f, 10.5f, 9.5f}, true);  // 8 blocks away, level
+    int shots = 0;
+    mob.setShootCallback([&] { ++shots; });
+    for (int i = 0; i < 300; ++i) {
+        mob.update(kDt);
+        EXPECT_EQ(mob.state(), MobState::RangedAttack);
+        // The hover hold: no horizontal drift (the bob's vertical is
+        // integrate's — the horizontal is the branch's job).
+        EXPECT_NEAR(mob.velocity().x, 0.0f, 1e-6f);
+        EXPECT_NEAR(mob.velocity().z, 0.0f, 1e-6f);
+    }
+    // 5 s at a 4.0 s cooldown: the first shot on frame 0, the second
+    // at ~4.02 s (the 1/60 double subtraction's residue) — 2 shots.
+    EXPECT_EQ(shots, 2);
+    // It faces the player (the camera yaw convention: forward =
+    // (-sin, -cos) — the 8-block +z offset reads yaw ±pi; the signed
+    // zero of dx = 0 pins -pi on IEEE, so the heading is compared by
+    // its direction cosines, not the raw angle).
+    EXPECT_NEAR(std::cos(mob.facingYaw()), -1.0f, 0.01f);
+    EXPECT_NEAR(std::sin(mob.facingYaw()), 0.0f, 0.01f);
+    EXPECT_NEAR(mob.position().x, 8.5f, 0.01f);
+    EXPECT_NEAR(mob.position().z, 1.5f, 0.01f);
+}
+
+TEST(MobFlyShootTest, GhastCruisesWhenOutOfRange) {
+    // The player past the detect radius (40 blocks — the bat test's
+    // kFlyFarPlayer twin): the shot's context is off, the bat's cruise
+    // runs verbatim (Wander + the data speed 0.7 along the rolled
+    // heading), no shots.
+    Fixture f;
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.registerMob(parseJson(kGhastDef)).ok());
+    MobEntity mob = makeMob(f, mobs.at(MobID{0}), {8.5f, 10.5f, 8.5f});
+    mob.setPlayer(kFlyFarPlayer, true);
+    int shots = 0;
+    mob.setShootCallback([&] { ++shots; });
+    mob.update(kDt);
+    EXPECT_EQ(mob.state(), MobState::Wander);
+    EXPECT_NEAR(std::hypot(mob.velocity().x, mob.velocity().z), 0.7f,
+                1e-6f);
+    EXPECT_EQ(shots, 0);
+}
+
+TEST(MobFlyShootTest, GhastCruisesWhenPlayerDead) {
+    // The shot's context's alive gate (the seesPlayer's m_playerAlive
+    // term): a dead player (even in range) sends the ghast back to the
+    // cruise — the skeleton branch's twin.
+    Fixture f;
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.registerMob(parseJson(kGhastDef)).ok());
+    MobEntity mob = makeMob(f, mobs.at(MobID{0}), {8.5f, 10.5f, 1.5f});
+    mob.setPlayer({8.5f, 10.5f, 9.5f}, /*alive=*/false);
+    int shots = 0;
+    mob.setShootCallback([&] { ++shots; });
+    mob.update(kDt);
+    EXPECT_EQ(mob.state(), MobState::Wander);
+    EXPECT_EQ(shots, 0);
+}
+
+TEST(MobFlyShootTest, BatStaysBitIdenticalCruiser) {
+    // The pre-V3-14b red line, observed: the bat (flying, shootRange 0
+    // in the data) still runs flyCruise verbatim — the shootRange gate
+    // in the flying branch keeps the bat's stream untouched (its first
+    // stream draw is the wander decision, the FlyShootTest's shots
+    // counter would steal it otherwise).
+    Fixture f;
+    MobRegistry mobs = makeBatRegistry();
+    const Mob& def = mobs.at(MobID{0});
+    ASSERT_FLOAT_EQ(def.properties.shootRange, 0.0f);
+    MobEntity mob = makeMob(f, def, {8.5f, 10.5f, 8.5f}, 42);
+    mob.setPlayer(kFlyFarPlayer, true);
+    int shots = 0;
+    mob.setShootCallback([&] { ++shots; });
+    mob.update(kDt);
+    EXPECT_EQ(mob.state(), MobState::Wander);
+    EXPECT_NEAR(std::hypot(mob.velocity().x, mob.velocity().z), 1.0f,
+                1e-6f);  // the bat's cruise speed, the V2-14 pin
+    EXPECT_EQ(shots, 0);
 }
 
 // -- ENT-3: mob step-up (the player's 1-block step, shared) --------------------
@@ -6441,11 +6638,63 @@ TEST(NetherMobContent, StriderDataPinned) {
     }
 }
 
+TEST(NetherMobContent, GhastDataPinned) {
+    // The REAL asset (data/mobs/ghast.json): the V3-14b nether's
+    // floating horror — the FLYING RANGED attacker (the bat's flight
+    // data flags + the skeleton's shoot data fused, the first exploding
+    // shooter: explode_radius 3 turns its shot into the fireball, the
+    // V3-14a blast's first in-game consumer; the ammo rule's exemption
+    // witness — no 'ammo' key, the fireball is consumed at impact).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok());
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.loadDirectory(assets, "data/mobs").ok());
+    const Mob* g = mobs.findByName("ghast");
+    ASSERT_NE(g, nullptr);
+    const MobProperties& p = g->properties;
+    EXPECT_FLOAT_EQ(p.health, 10.0f); // the MC ghast's 10 hearts / 2
+    EXPECT_FLOAT_EQ(p.speed, 0.7f);
+    EXPECT_FLOAT_EQ(p.detectRadius, 16.0f);
+    EXPECT_FLOAT_EQ(p.attackRange, 0.0f);
+    EXPECT_FLOAT_EQ(p.attackDamage, 0.0f); // the blast is the damage
+    EXPECT_FLOAT_EQ(p.attackCooldown, 4.0f);
+    EXPECT_FLOAT_EQ(p.shootRange, 14.0f);
+    EXPECT_FLOAT_EQ(p.shootSpeed, 10.0f);
+    EXPECT_FLOAT_EQ(p.explodeRadius, 3.0f); // the TNT-class blast
+    EXPECT_EQ(p.shootSound, "ghast_roar"); // the pre-fireball warning
+    EXPECT_DOUBLE_EQ(p.wanderInterval, 2.0);
+    // spawn_max_light 15 (the strider's lava-surface twin — the ghast
+    // spawns in the nether's lit open too, the MC nether class).
+    EXPECT_EQ(p.spawnMaxLight, 15);
+    EXPECT_TRUE(p.hostile);
+    EXPECT_FALSE(p.neutral);
+    EXPECT_TRUE(p.flying);
+    EXPECT_TRUE(p.spawnsInAir);
+    EXPECT_EQ(p.ammoItem, ""); // the explode shooter's exemption
+    ASSERT_EQ(p.drops.size(), 1u);
+    EXPECT_EQ(p.drops[0].item, "ghast_membrane");
+    EXPECT_EQ(p.drops[0].countMin, 0);
+    EXPECT_EQ(p.drops[0].countMax, 1);
+    EXPECT_EQ(p.xp, 5);
+    EXPECT_EQ(p.ambientSoundName, "ghast");
+    EXPECT_DOUBLE_EQ(p.ambientInterval, 8.0);
+    // The model: the big blob (width 1.5 / height 1.75) — 5 boxes
+    // (body + 4 tentacles), all the ghast tile.
+    EXPECT_FLOAT_EQ(g->model.width, 1.5f);
+    EXPECT_FLOAT_EQ(g->model.height, 1.75f);
+    ASSERT_EQ(g->model.boxes.size(), 5u);
+    for (const auto& b : g->model.boxes) {
+        EXPECT_EQ(b.texture, "ghast");
+    }
+}
+
 TEST(NetherMobContent, NetherMobAssetsPinned) {
     // The V3-3 new asset files (the FNV pins — the re-run determinism
-    // proof, the BatAssetsPinned convention): the 5 mob JSONs, the nether
-    // pool, the 9 mob tiles, the 3 ambient wavs, the food chain's 2 item
-    // JSONs + 2 icons.
+    // proof, the BatAssetsPinned convention): the 6 mob JSONs (the
+    // V3-14b ghast's JSON + texture + roar/ambient wavs + the
+    // membrane's item JSON + icon), the nether pool, the 10 mob
+    // tiles, the 5 ambient/shot wavs, the food chain's 2 item JSONs +
+    // 2 icons.
     const struct {
         const char* path;
         const char* fnv;
@@ -6455,7 +6704,8 @@ TEST(NetherMobContent, NetherMobAssetsPinned) {
         {"assets/data/mobs/hoglin.json", "e596d325a2f9e783"},
         {"assets/data/mobs/magma_cube.json", "4ea96c29f0ceb813"},
         {"assets/data/mobs/strider.json", "051e3fff099af0e5"},
-        {"assets/data/mob_spawning_nether.json", "a48b27ef25b673ec"},
+        {"assets/data/mobs/ghast.json", "848d8741dc090816"},
+        {"assets/data/mob_spawning_nether.json", "3ccb76538c02c146"},
         {"assets/textures/mobs/zpiglin_body.png", "310db573d5a32124"},
         {"assets/textures/mobs/zpiglin_face.png", "9016c729122ae26b"},
         {"assets/textures/mobs/piglin_body.png", "94c29a6cd03b92c3"},
@@ -6472,6 +6722,13 @@ TEST(NetherMobContent, NetherMobAssetsPinned) {
         {"assets/data/items/cooked_hoglin_meat.json", "46dcf633a7a3858b"},
         {"assets/textures/items/hoglin_meat.png", "fcab29b08916a19a"},
         {"assets/textures/items/cooked_hoglin_meat.png", "c3c1a6500aa7ddd8"},
+        // V3-14b: the ghast's face (the blob's body tile + the two
+        // voices + the membrane's item JSON + icon).
+        {"assets/textures/mobs/ghast.png", "e51f396f1a50f0c2"},
+        {"assets/sounds/ghast.wav", "631de1267caf050e"},
+        {"assets/sounds/ghast_roar.wav", "04714ab128e8d0b8"},
+        {"assets/data/items/ghast_membrane.json", "4d1407e0343ab953"},
+        {"assets/textures/items/ghast_membrane.png", "995ecfa4b7bdf84e"},
     };
     for (const auto& f : files) {
         EXPECT_EQ(fnv1a64(readAll(f.path)), f.fnv) << f.path;

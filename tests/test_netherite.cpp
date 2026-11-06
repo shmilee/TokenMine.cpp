@@ -421,9 +421,10 @@ TEST(V34NetheriteMaterialChain, IconCensusPinned) {
             ++iconCount;
         }
     }
-    EXPECT_EQ(iconCount, 97); // 84 pre-V3-4 + 9 + the V3-3 hoglin meat
+    EXPECT_EQ(iconCount, 98); // 84 pre-V3-4 + 9 + the V3-3 hoglin meat
                               // chain's 2 + the V3-5 building family's 2
-                              // (clay_ball / brick)
+                              // (clay_ball / brick) + the V3-14b
+                              // ghast_membrane
     int itemCount = 0;
     for (const auto& e :
          std::filesystem::directory_iterator("assets/data/items")) {
@@ -431,7 +432,7 @@ TEST(V34NetheriteMaterialChain, IconCensusPinned) {
             ++itemCount;
         }
     }
-    EXPECT_EQ(itemCount, 97); // the 1:1 icon naming (no planks-style
+    EXPECT_EQ(itemCount, 98); // the 1:1 icon naming (no planks-style
                               // block-item retirement in this family)
 }
 

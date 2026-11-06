@@ -944,6 +944,9 @@ private:
     // The three shared arrow-part meshes (Phase 21; PRE-9 three-part;
     // built lazily on first render, idempotent).
     void buildArrowMeshes();
+    // V3-14b: the fireball's glow-cube mesh (the arrow parts' lazy-
+    // build twin — idempotent, built on first render).
+    void buildFireballMesh();
 
     // 3D held hand (Phase 42, the Minecraft hand): while the pointer is
     // locked and no panel is open, the selected item renders as a view-
@@ -1877,10 +1880,13 @@ private:
     };
     InteractionState m_interaction;
     // The three shared arrow-part meshes (Phase 21; PRE-9 three-part:
-    // shaft/tip/fletching; built lazily on first render).
+    // shaft/tip/fletching; built lazily on first render) + the V3-14b
+    // fireball's glow cube (the exploding shooter's projectile — built
+    // lazily on first render, the arrow parts' twin).
     Mesh m_arrowShaftMesh;
     Mesh m_arrowTipMesh;
     Mesh m_arrowFletchMesh;
+    Mesh m_fireballMesh;
 
     // Item/inventory system (Phase 11): item registry (implicit block
     // items + explicit tools/materials from assets/data/items), the

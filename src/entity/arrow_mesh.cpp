@@ -117,4 +117,12 @@ std::pair<float, float> arrowOrientation(Vec3 velocity) {
     return {static_cast<float>(yaw), static_cast<float>(pitch)};
 }
 
+ItemMeshGeometry makeFireballGeometry() {
+    // V3-14b: the fireball's glow cube — the shared makeBox (the
+    // solid-color path, the UVs unused, full sky light like the arrow
+    // parts), centered on the origin, no rotation at draw time (a blob
+    // reads as a sphere from any heading).
+    return makeBox(kFireballSize, kFireballSize, kFireballSize, 0.0f);
+}
+
 } // namespace mc

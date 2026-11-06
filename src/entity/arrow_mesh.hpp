@@ -68,6 +68,17 @@ struct ArrowGeometry {
 // faces (12 vertices / 12 indices).
 ArrowGeometry makeArrowGeometry();
 
+// V3-14b: the ghast fireball's glow — a solid-color cube (the unlit
+// render path's arrow twin: the basic shader's u_color, no texture —
+// the fireball's read is the glow, not a surface). Centered on the
+// origin (the draw translates it to the projectile's box center),
+// no rotation (a blob reads as a sphere from any heading).
+inline constexpr float kFireballSize = 0.4f; // the glow cube's edge
+inline constexpr float kFireballColorR = 1.0f; // the MC fireball's
+inline constexpr float kFireballColorG = 0.55f; // orange glow (the
+inline constexpr float kFireballColorB = 0.15f; // blast's read)
+ItemMeshGeometry makeFireballGeometry();
+
 // The (yaw, pitch) that rotates local -Z onto `velocity` under
 // model = rotateY(yaw) * rotateX(pitch) — the camera convention (yaw 0 =
 // -Z: forward(yaw, pitch) = (-sin yaw * cos pitch, sin pitch,
