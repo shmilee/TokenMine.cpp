@@ -113,3 +113,17 @@ CMakeLists.txt（3.3.0 + 测试列表）。
 
 零改动红线核证：player/相机/渲染/存档/场景/config 零触碰（git
 status 10 文件 = 合同全清单）；legacy 键盘映射位级恒等 fixture 钉。
+
+## V3-8a 修订（11-06 实机验收，d5a5ea6）
+
+用户山湾克隆（045e:028e）实机验收发现两处实机缺口（门 193 合成事件单
+测永不暴露，PITS 395 三坑全记档）：① **SDL3 的 BUTTON/AXIS 事件须显式
+`SDL_OpenGamepad` 后才投递**（游戏从不 open = "连接日志正常但零按键"）
+→ `handleGamepadAdded` 补 open（失败 = WARN 点名 `SDL_GetError()`、
+跟踪态保留）/ `handleGamepadRemoved` 补 close（belt-and-braces 对称）+
+`gamepadOpen()` 诊断 getter + 1 新测（open 失败不破坏跟踪/映射，
+2784/2784、-Werror 0）。② 该克隆"未 open + 按键 = USB 自断"（~6 s 周
+期、dmesg 设备先消失非驱动 reset），**open 状态 = 稳定**（探针 5 分钟
+狂按零 REMOVED）= ①的附带治愈（四象限实证，机制未实证记档）。本版
+"本环境无物理手柄 = 全逻辑单测 + 实机验收归用户"的门强度记档 = 本次
+实机验收完成并修复，手柄功能自此实机可用。

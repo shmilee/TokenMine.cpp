@@ -22,6 +22,28 @@
   = savenorm EXACT + 头 10B 钉 + 单测容器恒等（`SameInputYields-
   IdenticalOutput`），勿把「双跑 RAW 恒等」断言在有火场景当门标准
   （会假红）。
+- **手柄实机验收三坑（PITS 395，V3-8a 11-06，用户山湾克隆
+  045e:028e）**——① **SDL3 的 BUTTON/AXIS 事件须显式
+  `SDL_OpenGamepad` 后才投递**（SDL 3.4.18 实机实证：PRE-OPEN 零事件 /
+  POST-OPEN 全到，两段探针 = /tmp/opencode/gamepad_demo）：
+  `GAMEPAD_ADDED` + 名字无 open 也有（"Gamepad connected" 日志正常）=
+  **connected ≠ 可用**——门 193 合成事件单测永不暴露此 = "实机验收归
+  用户"的结构性缺口。修 = V3-8a（d5a5ea6）：ADDED + open（失败 WARN
+  点名、跟踪态保留）/ REMOVED + close + `gamepadOpen()` 诊断 getter +
+  1 新测；诊断纪律 = 手柄"连接"日志正常 ≠ 输入通道正常，必验按键事件
+  行。② **SDL 打开 evdev 节点失败只静默返 NULL**（首案 "Unable to open
+  /dev/input/event15" = 用户不在 input 组）：旧代码不 open 不报错 =
+  "连上但无反应"日志零线索——SDL 边界 NULL 返回必点名
+  `SDL_GetError()`；排查先跑 `id -nG | grep input` +
+  `ls -l /dev/input/by-id/`。③ **克隆件：未 open + 按键 = USB 自断**
+  （~6 s 周期、每次全量重枚举 which 递增、dmesg = `USB disconnect` 在
+  先 xpad `-19` 在后 = 设备先消失非驱动 reset）——**四象限实证**：未
+  open+静置 = 稳（实验 A）/ 未 open+按键 = 周期断（游戏 + demo#1 open
+  失败态）/ open+按键 = 5 分钟稳（demo#2）→ open 状态 = 判别变量；
+  机制（xpad 输出报告流 × 克隆固件）未实证 = 记档。误诊记录：
+  `wine control` 可用 ≠ 游戏可用（Wine 不走 SDL）；A/B 双机混淆（内核
+  层检查全在 A 机、现象在 B 机）+ TLP/autosuspend 首嫌被实机数据推翻
+  = **硬件问题排查先钉死"现象在哪台机器、哪一层"**。
 - **portal 框几何三坑（PITS 386，门 192 V3-1 Phase A 门框）**——①
   **点火瞄准 = 面法向相邻格方向**：框内 air 与 obsidian 环共面（单格
   厚），射线穿过内 air 先命中环块的**面**——命中面法向的相邻格必须是
