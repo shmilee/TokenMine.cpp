@@ -16,7 +16,7 @@
 > 【V2-18 门 190，AO 世界光照】→ **225272【V3-6 门 200，填充感知雾 = 3.x
 > 首重锚】**；门 184–189 = 结构免疫第 65–70 次免重锚；门 191–199 =
 > 第 72–80 次；门 201–202 = 第 81–82 次免重锚（对 base19）【v3.0.0
-> banner = 第 71 次】）、PITS **397**。上一轮全面刷新
+> banner = 第 71 次】）、PITS **398**。上一轮全面刷新
 > （2026-11-02）止于 v2.0.0、2026-11-03 增量止于 v2.3.0（下条），本次把
 > v2.11.0 → v2.19.0 的机制（提前项 `[V2-19]` + 第二批 `[V2-11]`~`[V2-18]`，
 > 逐版见 `docs/archive/v2x/CHANGELOG.md`，细节证据见 `docs/archive/v2x/`
@@ -555,6 +555,21 @@
   重光。
 - **存档**：**零 format**（29 不动）——portal = 普通 stateful 块走
   blockEdits + states 段；worldgen 不放 obsidian/portal（结构免疫根）。
+- **UV 动画 `[V3-15]`（v3.16.0）**：portal 纹理 = **水平 2 周期**
+  （生成器 `x % 8` 重写，左半 ≡ 右半）+ fragment 的 tile-rect 分支：
+  `u_portalAnim`（config `portal.anim` 严格 bool 默认 true，**off = 分支
+  不执行 = pre-V3-15 位级**）门控下，portal tile 内 `x += phase`
+  （fract 回绕，2 周期 = 无缝）；phase = `m_frameCount % 120 / 120`
+  纯函数（frame-locked，ripple 同款纪律）；tiled 与 legacy 单片双路径
+  统一（sampleUv 收敛 atlas 空间后判定）。init fail-fast：atlas 缺
+  `nether_portal` tile 点名。
+- **蒸汽粒子 `[V3-15]`（v3.16.0）**：portal 格的氛围发射——
+  `updatePortalSteam` 每 6 帧一次，玩家脚下 8×8×9 盒（y 非对称
+  feet-4..feet+5 = portal 顶框行）扫描 portal 格，每格 1/10 确定性
+  roll（fire 种子契约 + 专属盐）发射 **1 粒**（portal 自身纹理的
+  0.12 半透立方体走 blend pass，慢升 -0.4 m/s²，0.8-1.4 s 寿命）；
+  config `portal.steam` 严格 bool 默认 true（fire.particles 先例，off
+  = 零发射）。局限：距离玩家 >4 块的 portal 不发射（盒限）。
 - **传送门之外——全完成**：Phase B 真传送 + format 30（v3.4.0，见「下界
   维度」）/ Phase C Part 1 下界内容族（v3.5.0）/ netherite 材料链
   （v3.6.0）/ Part 2 下界深化（v3.7.0）/ 下界 mob（v3.8.0）。

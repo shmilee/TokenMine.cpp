@@ -434,7 +434,10 @@ public:
     // damage()'s per-slot wear step needs the max WITHOUT an
     // ItemRegistry, the points pattern). The game passes all three.
     void setArmorSlot(int slot, const ItemStack& piece, int points,
-                      float durability = 0.0f);
+                      float durability = 0.0f,
+                      bool fireResistant = false);
+    // V3-15 (netherite): the equipped fire immunity (the points' twin).
+    bool hasFireResistantArmor() const;
     // The total equipped points, capped at kArmorMaxPoints (the damage
     // formula's input; 0 = no armor = the pre-SURV-1 bit-identical
     // path).
@@ -666,6 +669,10 @@ bool m_dead = false;
     // kArmorSlotNames slot order (head/chest/legs/feet).
     std::array<ItemStack, kArmorSlotCount> m_armor;
     std::array<int, kArmorSlotCount> m_armorPoints {};
+    // V3-15 (netherite): the per-slot effects (the points' sync twins —
+    // setArmorSlot owns all four).
+    std::array<bool, kArmorSlotCount> m_armorFireResistant {};
+    bool m_fireResistant = false; // ANY worn piece (the immunity)
     // SURV-3: the per-slot data DURABILITY of the worn pieces (the
     // item's max damage; 0 = the piece has no durability — it never
     // wears). Kept in sync by the same setter (the points pattern: the

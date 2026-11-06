@@ -14,7 +14,7 @@
 > 【V2-18 门 190，AO 世界光照】→ **225272【V3-6 门 200，填充感知雾 = 3.x
 > 首重锚】**；门 184–189 = 结构免疫第 65–70 次免重锚；门 191–199 =
 > 第 72–80 次；门 201–202 = 第 81–82 次免重锚（对 base19）【v3.0.0
-> banner = 第 71 次】）、PITS **397**。上一轮全面刷新
+> banner = 第 71 次】）、PITS **398**。上一轮全面刷新
 > （2026-11-02）止于 v2.0.0、2026-11-03 增量止于 v2.3.0（下条），本次把
 > v2.11.0 → v2.19.0 的机制（提前项 `[V2-19]` + 第二批 `[V2-11]`~`[V2-18]`，
 > 逐版见 `docs/archive/v2x/CHANGELOG.md`，细节证据见 `docs/archive/v2x/`
@@ -1226,8 +1226,16 @@
   **shapeless 升级配方 = netherite_ingot + diamond_<slot>** 记档偏离 2：项目
   无锻造台 / model 克隆钻石系 记档偏离 3）；icon 9 件暗红铜色板（记档偏离
   4，既有 84 张 md5 逐一不变）；附魔面：工具 pick/axe/shovel 类
-  enchantability 14、护甲 10（可附魔 22 → **29 件**，见下条）；**记档不做**：
-  击退抗性/火·熔岩免疫/悬浮熔岩（伤害管线改造面，矩阵外）
+  enchantability 14、护甲 10（可附魔 22 → **29 件**，见下条）；
+  **火·熔岩免疫 `[V3-15]`（v3.16.0）**：物品可选属性 `fire_resistant`
+  （strict bool，armor-only = parseArmor 守卫，shears tool-only 孪生）
+  4 件 netherite 护甲 = true——**任一件穿在身上**（setArmorSlot 单收口
+  同步 ANY 派生）：熔岩 burn tick 不落地（accumulator 重置 = 脱件无余
+  伤）+ 火/熔岩接触**不再点燃**（Phase-57 重应用门控）+ 既有火效果
+  的伤害 tick 抑制（视觉保留，MC fire-resistance 语义）；**熔岩中死亡
+  的原因行覆写**（致死一击若为 fire 效果 tick 且 inLava → 「死于熔岩」
+  = MC 元素归因）；**记档不做**：击退抗性（项目无玩家击退面 = 数据字段
+  无消费方，弃字段）/ 悬浮熔岩（流体模型改造面）
 - **建筑内容族 `[V3-5]`（v3.9.0）**：① **黏土链（MC 完整形态）**：水底
   sediment 生成（见 MECHANICS_WORLD.md「世界生成 · 水底 sediment」）→ 破 **clay 掉 clay_ball
   ×4**（hardness 0.6）→ **clay_ball 熔炼 → brick** → **2×2 brick shaped →

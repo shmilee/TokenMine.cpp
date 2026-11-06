@@ -68,6 +68,26 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **场景手术三坑 + 动画内容的门协议（PITS 398，门 206 v3.16.0
+  V3-15 小批）**——① **新种子 123456789 的 fresh 档自带 3 团地下火**
+  （(23,35,28)/(24,35,28)/(26,35,27) y35 视角外，worldgen 产物，全
+  config 同现）：场景存档继承火 = fire 家族 real-dt（PITS 385）破 ×2
+  RAW 域（fires 3↔4 蔓延漂移实证）——**场景手术先去火**：移除
+  `blocks` 里的 fire 条目（单元格回落生成值）+ `fires: []`；**勿加
+  air 覆盖**（同格双日志 = "duplicate block edits" 拒载）。② **存档
+  手术格式**：流体日志 = `[x,y,z,level,name]`（**level 在 name 前**，
+  熔岩满级 = 7）进 `fluids` 数组——块数组写流体名 = 静默错位；
+  `player.armor` = **命名 dict**（head/chest/legs/feet）非数组
+  （写索引键 = "not a known slot" 拒载）；池区地形表面 = 53（种子
+  实况）——流体格落 solid = "cell occupied" 拒载（PITS 390 续），须
+  先挖 air 再填流体 + 石环保险。③ **动画内容的门协议**：退出渲染帧
+  数 off-by-one 抖动（PITS 391② 族）× 高频纹理（portal 漩涡）= 截图
+  ×2 RAW 差 ~1300 px 全在动画 tile 区（相位差 1/120 tile）——**动画
+  内容（UV 滚动/粒子）截图 ×2 恒等不是有效断言**；权威三件套 = 存档
+  ×2 RAW（模拟确定性）+ **动画关控制臂 ×2 RAW**（管线确定性，
+  `portal.anim/steam: false` 同场景复跑恒等实证）+ 单跑动画目检 /
+  双帧 diff > 0（f400 vs f460 = 3560 px）。另：`MC_LOG_*` 宏 = 单参
+  消息串（无 printf 格式）——插桩日志用 `+ std::to_string()` 拼接。
 - **fScale 不含 ui.scale + 字体加字工作流（PITS 397，门 205 v3.15.0
   死亡统计屏）**——① **`fScale(s) = s × m_fontScale`（仅 ui.font_scale，
   不含 ui.scale）**：makeTextVertices 的字形物理尺寸 = 16px × ui.scale

@@ -664,6 +664,9 @@ private:
     // spawnFire reused; gated on m_states.furnaceFlames — zero emissions
     // when off, no furnaces, or no fire block for the texture).
     void updateFurnaceFlames();
+    // V3-15: the portal steam emission (the frame-locked box scan, the
+    // fire-particle seed contract with the dedicated salt).
+    void updatePortalSteam();
     // PRE-8: the burning-mob flames — every kMobFlameEveryNFrames frame,
     // each BURNING mob (MobEntity::burning, the P57/P73 fire system's
     // state) emits a rising ember batch from its AABB-center cell (the
@@ -2032,6 +2035,9 @@ private:
         int fireSpreadInterval = 6;
         double fireSpreadChance = 0.05;
         bool fireParticles = true;
+        // V3-15: the portal's ambient steam particles (the fire.
+        // particles' twin gate — absent = the code default true).
+        bool portalSteam = true;
         // CRAFT-5: the lit-furnace mouth flames (render.furnace_flames,
         // default true — off = zero emissions = bit-identical to v1.21.0;
         // the fire.particles E2E-control pattern).

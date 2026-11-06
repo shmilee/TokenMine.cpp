@@ -292,6 +292,13 @@ struct Item {
     // (Minecraft: armor never stacks).
     std::string armorSlot;
     int armorPoints = 0;
+    // V3-15 (netherite): the optional armor effect (armor-only,
+    // parseArmor guards — the shears tool-only twin). fireResistant =
+    // the wearer takes no lava / fire damage (Minecraft's netherite
+    // fire immunity, the V3-4 follow-up candidate). (Knockback
+    // resistance was dropped with the field: the project has no player
+    // knockback surface, a data field without a consumer = dead data.)
+    bool fireResistant = false;
     // SURV-3 (durability): the max accumulated damage before the item
     // breaks (an optional data field 'durability', a strict number > 0).
     // 0 = the item has no durability (the absent-field default; it never

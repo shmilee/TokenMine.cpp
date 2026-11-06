@@ -114,6 +114,40 @@ void ParticleSystem::spawnFire(int cx, int cy, int cz, BlockID id,
     }
 }
 
+void ParticleSystem::spawnSteam(int cx, int cy, int cz, BlockID id,
+                                float skyLight, float blockLight,
+                                std::uint64_t rngSeed) {
+    // V3-15: the portal's ambient steam — the fire-ember pattern with
+    // the slower rise / longer life / single-particle emission.
+    Particle p;
+    p.block = id;
+    p.skyLight = skyLight;
+    p.blockLight = blockLight;
+    p.gravity = kSteamGravity; // slow rise
+    p.life = kSteamMinLife +
+             static_cast<float>(uniform01(rngSeed) *
+                                (kSteamMaxLife - kSteamMinLife));
+
+    // Start near the portal body (a tight offset around the cell
+    // center — the steam reads as coming out of the portal face).
+    const float ox = static_cast<float>(uniform01(rngSeed) - 0.5) * 0.4f;
+    const float oy = static_cast<float>(uniform01(rngSeed) - 0.5) * 0.4f;
+    const float oz = static_cast<float>(uniform01(rngSeed) - 0.5) * 0.4f;
+    p.position = {static_cast<float>(cx) + 0.5f + ox,
+                  static_cast<float>(cy) + 0.5f + oy,
+                  static_cast<float>(cz) + 0.5f + oz};
+
+    // Velocity: a gentle drift (the rise is mostly the negative
+    // gravity; the initial vy is small — the steam lingers).
+    const float vx = static_cast<float>(uniform01(rngSeed) - 0.5) * 0.2f;
+    const float vy =
+        static_cast<float>(0.1 + 0.2 * uniform01(rngSeed));
+    const float vz = static_cast<float>(uniform01(rngSeed) - 0.5) * 0.2f;
+    p.velocity = {vx, vy, vz};
+    p.age = 0.0f;
+    m_particles.push_back(p);
+}
+
 void ParticleSystem::update(double dt) {
     if (m_particles.empty()) {
         return;

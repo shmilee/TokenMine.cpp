@@ -847,7 +847,7 @@ Result<void> Game::applySave(const SaveGame& save) {
         piece.enchants =
             save.playerArmorEnchants[static_cast<std::size_t>(slot)];
         m_player->setArmorSlot(slot, piece, item.armorPoints,
-                               item.durability);
+                               item.durability, item.fireResistant);
     }
     m_prevHealth = m_player->health(); // no hurt event from the load itself
     // 4g) The player's oxygen (format 17; SURV-2, the drowning

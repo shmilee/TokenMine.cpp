@@ -11,6 +11,54 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.16.0（2026-11-06）— V3-15 生存/表现小批（netherite 火免疫 + portal UV 动画 + 蒸汽粒子，门 206 全 PASS）
+
+**矩阵 ⬜ 项小→大推进 2/6**（三小项打包 1 版，零 format / 零新
+config 键依赖【portal.anim / portal.steam = 严格 bool 默认 true，
+off = 位级 pre-v3.16.0】）。
+
+① **netherite 火·熔岩免疫**（V3-4 记档后续兑现）：物品可选属性
+`fire_resistant`（strict bool，armor-only = parseArmor 守卫，shears
+tool-only 孪生；4 件 netherite 护甲 = true）——任一件穿上（setArmorSlot
+单收口 ANY 派生）：熔岩 burn tick 不落地（accumulator 重置 = 脱件无
+余伤）+ 火/熔岩接触不再点燃（Phase-57 重应用门控）+ 既有火效果伤害
+tick 抑制（视觉保留 = MC fire-resistance 语义）；**熔岩中死亡原因行
+覆写**（fire 效果致死一击且 inLava → 「死于熔岩」= MC 元素归因，门内
+实证：首版死因 = 效果 tick 报「死于燃烧」）。**击退抗性弃做**（项目
+无玩家击退面 = 数据字段无消费方，记档）。
+② **portal UV 动画**：纹理水平 2 周期重写（生成器 x%8，左半 ≡ 右半，
+其余 164 张位级不变）+ basic.frag tile-rect 分支（`u_portalAnim` 门控
++ `u_portalPhase = m_frameCount % 120 / 120` frame-locked，tiled /
+legacy 双路径统一于 sampleUv；off = 分支不执行位级恒等）+ init
+fail-fast（atlas 缺 tile 点名）。
+③ **蒸汽粒子**：`updatePortalSteam` 每 6 帧玩家脚下 8×8×9 盒（y 非
+对称 feet-4..+5 = portal 顶框行，门内首版盒 y+3 漏顶行 = 场景实证
+捕获）扫描 portal 格，1/10 确定性 roll（fire 种子契约 + 专属盐）发
+射 1 粒（portal 纹理 0.12 半透立方体走 blend pass，-0.4 m/s² 慢升，
+0.8-1.4 s 寿命）。
+
+**门 206**：结构免疫第 86 次【S1 无输入 ≡ base19 逐字节 ×2 + savenorm
+EXACT——shader 分支 / 蒸汽 / 免疫全为死亡态·场景态渲染面】；S2a
+**portal 场景**（场景手术 4×5 框 + 2×3 内域 + states 6 条目【stateful
+必带 PITS 383】+ 地板平台 + **去火**【种子 fresh 档自带 3 团地下火 =
+real-dt 污染 PITS 398①】）：存档 ×2 RAW 恒等【无火域】+ **动画关
+控制臂 ×2 RAW 恒等**【管线确定性】+ 动画开单跑目检【漩涡流动 + 蒸汽
+点】+ f400/f460 diff 3560 px【scroll + steam 在动】——截图 ×2 恒等
+对动画内容非有效断言（退出帧 off-by-one × 高频纹理 = PITS 398③）；
+S2b **熔岩池双臂**（挖掘池 + 石环 + 流体日志 [x,y,z,7,'lava']
+【PITS 398②：fluids 数组 level 前置于 name / armor = 命名 dict 非
+数组】）：免疫臂 health 20 ×2 + 存档 ×2 RAW【免疫 = 确定性】/ 对照臂
+health 0 ×2 + 死亡屏「死于熔岩」目检【real-dt 场景域 = health 断言
+权威】；S3 全套 2795/2795（+3：FireResistantArmorField /
+SteamIsDeterministicAndRises / NetheriteArmorSuppressesLavaBurn）；
+性能 A/B 同档【旧 = 55da85d v3.15.0 + g139 vs 新 + g139 banner 实证，
+900f 无输入：PERF-WIN upd med 0.541/0.648/0.648 vs 0.650/0.657/0.583
++ render/swap 三窗同档（新侧 win1 swap max 31 ms = 一次性停顿 med 正
+常）+ fluid·fires·spread·ents·stream 同档 + **changesApplied 9/3/1
+逐位恒等** + **终档 savenorm EXACT**——蒸汽/免疫/scroll 无输入场景全
+惰性 = 结构性零成本】。PITS 398（场景手术三坑 + 动画内容门协议 +
+MC_LOG 单参）。详见 `docs/archive/phase-3.16.0.md`。
+
 ## v3.15.0（2026-11-06）— V3-13 死亡统计屏（死因行 + 会话统计 5 行 + 字体 +1「于」，门 205 全 PASS）
 
 **矩阵 ⬜ 项执行（小→大序第 1 项）**：死亡统计屏 / Game Over 屏。

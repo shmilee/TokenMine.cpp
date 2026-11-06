@@ -443,24 +443,30 @@ def nether_portal(x, y):
     1000); every existing texture stays pixel-identical. The alpha 200 =
     the water's translucent-box class (the full-cell translucent
     non-solid box, the blend pass — the lava box precedent)."""
-    h = h2(x, y, 1001)
+    # V3-15: horizontally 2-PERIODIC (every column function takes x % 8
+    # — the left half is byte-identical to the right half), so the UV
+    # scroll animation (the render.portal_anim's fragment branch) wraps
+    # seamlessly across the tile = the portal's flowing read.
+    x8 = x % 8
+    h = h2(x8, y, 1001)
     if h % 100 < 14:
         # Hot streak: near-white violet (the vortex's bright core).
-        return (clamp(200 + noise(x, y, 1002, 14)),
-                clamp(120 + noise(x, y, 1003, 16)),
-                clamp(235 + noise(x, y, 1004, 10)), 200)
+        return (clamp(200 + noise(x8, y, 1002, 14)),
+                clamp(120 + noise(x8, y, 1003, 16)),
+                clamp(235 + noise(x8, y, 1004, 10)), 200)
     # The swirl band: a per-column phase diagonal (the vortex's rotating
-    # feel — the phase from the column hash, the band width 6 of 16).
-    phase = h2(x, y // 4, 1005) % 16
-    band = (x + y * 3 + phase) % 16
-    if band < 6:
-        return (clamp(138 + noise(x, y, 1002, 16)),
-                clamp(64 + noise(x, y, 1003, 14)),
-                clamp(190 + noise(x, y, 1004, 16)), 200)
+    # feel — the phase from the column hash, the band width 4 of 8 = the
+    # 6 of 16 ratio kept over the periodic half).
+    phase = h2(x8, y // 4, 1005) % 8
+    band = (x8 + y * 3 + phase) % 8
+    if band < 4:
+        return (clamp(138 + noise(x8, y, 1002, 16)),
+                clamp(64 + noise(x8, y, 1003, 14)),
+                clamp(190 + noise(x8, y, 1004, 16)), 200)
     # The base: dark purple.
-    return (clamp(52 + noise(x, y, 1006, 10)),
-            clamp(22 + noise(x, y, 1007, 8)),
-            clamp(84 + noise(x, y, 1008, 12)), 200)
+    return (clamp(52 + noise(x8, y, 1006, 10)),
+            clamp(22 + noise(x8, y, 1007, 8)),
+            clamp(84 + noise(x8, y, 1008, 12)), 200)
 
 
 def netherrack(x, y):

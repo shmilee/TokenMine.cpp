@@ -527,12 +527,18 @@ Result<void> ItemRegistry::parseArmor(const Json& def, bool isTool,
     // parse flow order).
     const Json* slot = def.find("armor_slot");
     const Json* pts = def.find("armor_points");
-    if (slot == nullptr && pts == nullptr) {
+    const Json* fr = def.find("fire_resistant");
+    if (slot == nullptr && pts == nullptr && fr == nullptr) {
         return {}; // absent = not armor (the default)
     }
     if (slot == nullptr || pts == nullptr) {
         return MC_FAIL("'armor_slot' and 'armor_points' are a strict pair "
                        "(both are required when either is present)");
+    }
+    if (fr != nullptr && slot == nullptr) {
+        return MC_FAIL("'fire_resistant' requires the 'armor_slot' + "
+                       "'armor_points' pair (armor only — the shears' "
+                       "tool-only twin)");
     }
     if (isTool) {
         return MC_FAIL("'armor_slot' is only valid for type \"material\" "
@@ -596,6 +602,14 @@ Result<void> ItemRegistry::parseArmor(const Json& def, bool isTool,
         return MC_FAIL("an item cannot both be armor ('armor_slot') and "
                        "ignite flammable blocks ('ignites_flamable'): "
                        "one item owns one right-click channel");
+    }
+    // V3-15: the optional netherite effects (strict shapes; absent =
+    // the false / 0.0 defaults — no netherite item is affected).
+    if (fr != nullptr) {
+        if (!fr->isBool()) {
+            return MC_FAIL("'fire_resistant' must be a boolean");
+        }
+        out.fireResistant = fr->asBool();
     }
     return {};
 }
@@ -1095,6 +1109,7 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
             key != "fast_against_multiplier" &&
             key != "armor_slot" &&
             key != "armor_points" &&
+            key != "fire_resistant" && // V3-15: the netherite immunity
             key != "shears" &&
             key != "durability" &&
             key != "repair_with" &&

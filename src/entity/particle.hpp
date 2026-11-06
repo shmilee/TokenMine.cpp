@@ -56,6 +56,12 @@ public:
     static constexpr float kFireGravity = -2.0f; // blocks/s^2 (rising)
     static constexpr float kFireMinLife = 0.3f;  // seconds
     static constexpr float kFireMaxLife = 0.5f;  // seconds
+    // Portal steam (V3-15): the nether portal's ambient emission — one
+    // translucent portal-textured cube per call, a slow rise, a longer
+    // life than the fire embers (the steam lingers).
+    static constexpr float kSteamGravity = -0.4f; // blocks/s^2 (rising)
+    static constexpr float kSteamMinLife = 0.8f;  // seconds
+    static constexpr float kSteamMaxLife = 1.4f;  // seconds
 
     // Spawns a deterministic burst around the center of cell (cx, cy,
     // cz). rngSeed must differ per burst (the game passes the world seed
@@ -70,6 +76,12 @@ public:
     // particles.
     void spawnFire(int cx, int cy, int cz, BlockID id, float skyLight,
                    float blockLight, std::uint64_t rngSeed);
+
+    // Spawns ONE deterministic steam cube around the center of cell
+    // (cx, cy, cz) (the portal's ambient emission — the slow rise, the
+    // longer life). Same seed contract as spawnFire.
+    void spawnSteam(int cx, int cy, int cz, BlockID id, float skyLight,
+                    float blockLight, std::uint64_t rngSeed);
 
     // Integrates gravity + motion and culls expired particles.
     void update(double dt);

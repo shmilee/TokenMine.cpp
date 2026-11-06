@@ -1116,6 +1116,7 @@ Result<void> Game::buildScene() {
                        std::to_string(m_states.fireSpreadChance) + ")");
     }
     m_states.fireParticles = m_config.getBool("fire.particles", true);
+    m_states.portalSteam = m_config.getBool("portal.steam", true); // V3-15
     // CRAFT-5: the lit-furnace flame gate (the fire.particles pattern;
     // off = zero emissions = bit-identical to v1.21.0).
     m_states.furnaceFlames = m_config.getBool("render.furnace_flames", true);
@@ -1203,6 +1204,18 @@ Result<void> Game::buildScene() {
                                ambientFloorForLevel(m_nightSkyLevel));
     m_basicShader.setUniform1f("u_caveAmbient",
                                static_cast<float>(*caveAmbient));
+    // V3-15: the portal's tile index (the fragment scroll's target —
+    // a per-run constant: the atlas layout is fixed at init; the tile
+    // is the Phase-A shipped block, its absence is an asset error).
+    if (!m_atlas.layout().contains("nether_portal")) {
+        return MC_FAIL("the nether_portal tile is missing from the "
+                       "block atlas (the portal scroll's target)");
+    }
+    const auto& portalTile =
+        m_atlas.layout().tiles.at("nether_portal");
+    m_basicShader.setUniform2f("u_portalTile",
+                               static_cast<float>(portalTile.col),
+                               static_cast<float>(portalTile.row));
     m_basicShader.unbind();
 
     // -- item icons (Phase 15 UI) ------------------------------------------

@@ -567,12 +567,20 @@ void Player::update(double dt) {
     // Leaving the lava resets the pending tick (no lingering fire in v1,
     // see KNOWN_ISSUES).
     if (m_inLava && !m_dead) {
-        m_lavaAccum += dt;
-        while (m_lavaAccum >= m_params.lavaDamageIntervalSeconds) {
-            m_lavaAccum -= m_params.lavaDamageIntervalSeconds;
-            damage(m_params.lavaDamage, false, {DamageSource::Lava, {}});
-            if (m_dead) {
-                break;
+        if (hasFireResistantArmor()) {
+            // V3-15 (netherite): the fire immunity — the lava's burn
+            // tick never lands; the accumulator resets (no lingering
+            // damage after the piece comes off).
+            m_lavaAccum = 0.0;
+        } else {
+            m_lavaAccum += dt;
+            while (m_lavaAccum >= m_params.lavaDamageIntervalSeconds) {
+                m_lavaAccum -= m_params.lavaDamageIntervalSeconds;
+                damage(m_params.lavaDamage, false,
+                       {DamageSource::Lava, {}});
+                if (m_dead) {
+                    break;
+                }
             }
         }
     } else {
@@ -615,16 +623,24 @@ ItemStack& Player::armorSlot(int slot) {
 }
 
 void Player::setArmorSlot(int slot, const ItemStack& piece, int points,
-                          float durability) {
+                          float durability, bool fireResistant) {
     assert(slot >= 0 && slot < kArmorSlotCount);
     m_armor[static_cast<std::size_t>(slot)] = piece;
-    // The three arrays stay in sync through this single setter (the empty
-    // piece forces 0 — a corrupted caller cannot leave a piece without
-    // its points / durability, or points without a piece).
+    // The four per-slot data stay in sync through this single setter
+    // (the empty piece forces 0 / false — a corrupted caller cannot
+    // leave a piece without its points / durability / effects).
     m_armorPoints[static_cast<std::size_t>(slot)] =
         piece.empty() ? 0 : points;
     m_armorDurability[static_cast<std::size_t>(slot)] =
         piece.empty() ? 0.0f : durability;
+    m_armorFireResistant[static_cast<std::size_t>(slot)] =
+        piece.empty() ? false : fireResistant;
+    // V3-15: the derived equipped immunity (recomputed over all slots —
+    // the setter is the single choke point; ANY piece suffices).
+    m_fireResistant = false;
+    for (std::size_t i = 0; i < m_armorFireResistant.size(); ++i) {
+        m_fireResistant = m_fireResistant || m_armorFireResistant[i];
+    }
 }
 
 int Player::armorPoints() const {
@@ -633,6 +649,10 @@ int Player::armorPoints() const {
         sum += p;
     }
     return std::min(sum, kArmorMaxPoints);
+}
+
+bool Player::hasFireResistantArmor() const {
+    return m_fireResistant;
 }
 
 bool Player::damage(float amount, bool bypassArmor) {
@@ -737,9 +757,17 @@ bool Player::damage(float amount, bool bypassArmor,
         m_health = 0.0f;
         m_dead = true;
         // V3-13: the KILLING blow's source owns the death cause (the
-        // heal's None default never overwrites).
+        // heal's None default never overwrites). V3-15: a fire-effect
+        // killing blow while in the lava reads as the LAVA (the
+        // ignition's ticks do the killing, but Minecraft's death
+        // message names the element — the inLava state is the
+        // discriminator).
         if (info.source != DamageSource::None) {
             m_deathInfo = info;
+            if (m_deathInfo.source == DamageSource::Effect &&
+                m_inLava) {
+                m_deathInfo.source = DamageSource::Lava;
+            }
         }
     }
     return true;

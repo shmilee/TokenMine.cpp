@@ -32,12 +32,12 @@ v3.10.0 = V3-6 世界边缘雾（门 200，11-05：填充感知 fog end，
 仅模拟语义变更才 bump + legacy 版本指纹零迁移直放 + --demo-force +
 4 demo canary）；**v3.14.0 = V3-8b 手柄习惯映射定案（门 204，11-06：
 L3 蹲伏 + RT 疾跑 + B 飞行专用钮【用户三项定案，config 自定义不做】+
-SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）；**v3.15.0 = V3-13 死亡统计屏（门 205，11-06：致死原因行 9 措辞 + 会话统计 5 行 + 字体 +1 字形「于」428）= 矩阵 ⬜ 项小→大推进 1/5**）**）——**3.x 矩阵
+SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）；**v3.15.0 = V3-13 死亡统计屏（门 205，11-06：致死原因行 9 措辞 + 会话统计 5 行 + 字体 +1 字形「于」428）；**v3.16.0 = V3-15 生存/表现小批（门 206，11-06：netherite 火·熔岩免疫【fire_resistant armor-only + 三抑制 + 熔岩死因覆写】+ portal 2 周期纹理 UV 滚动 + 蒸汽粒子 8×8×9 盒）= 矩阵 ⬜ 项小→大推进 2/6**）**）——**3.x 矩阵
 18 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
 （门 202）/ v3.13.0（门 203）/ v3.14.0（门 204）/ v3.15.0（门 205）
-+ 11-06 扩容 7 项（V3-8b ✅ v3.14.0 + V3-13 ✅ v3.15.0 + V3-10~V3-15
-⬜ 五项【大项已相位拆分 V3-10a~d / V3-11a~b / V3-12a~c / V3-14a~d，
-BACKLOG 待执行项明细】）**
+/ v3.16.0（门 206）+ 11-06 扩容 7 项（V3-8b ✅ v3.14.0 + V3-13 ✅
+v3.15.0 + V3-15 ✅ v3.16.0 + V3-10~V3-14 ⬜ 四项【大项已相位拆分
+V3-10a~d / V3-11a~b / V3-12a~c / V3-14a~d，BACKLOG 待执行项明细】）**
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -96,7 +96,7 @@ BACKLOG 待执行项明细】）**
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2792/2792**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2792/2792**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 30（V3-1 Phase B 下界维度：player.dimension 严格词表
   恒写 + nether 段 {blocks,fluids,states} + nether_entities 恒写 +
   派生 seed 不落盘；schema 其余与 29 一致，29 携新键 = version lie
@@ -195,6 +195,33 @@ BACKLOG 待执行项明细】）**
   零 diff + crop 3× 目检同场景同羊同位】；性能 A/B 同档【changes-
   Applied 逐位 + 终档 savenorm EXACT】；PITS 392【DEBUG 事件行
   grep 假阴性】；详见 `docs/archive/phase-3.12.0.md`）；
+  门计数 206（**V3-15 生存/表现小批 v3.16.0** 门 206 全 PASS【矩阵 ⬜
+  项小→大推进 2/6】：**netherite 火·熔岩免疫**【物品 fire_resistant
+  strict bool armor-only = parseArmor 守卫 shears 孪生 + 4 件护甲 true；
+  setArmorSlot ANY 派生；三抑制 = 熔岩 tick 不落地 accumulator 重置 /
+  接触不点燃 Phase-57 门控 / 火效果 tick 抑制视觉保留；**熔岩死因覆
+  写**（fire 效果致死 ∧ inLava → 「死于熔岩」= MC 元素归因，门内实证
+  首版报「死于燃烧」）；击退抗性弃做 = 无玩家击退面无消费方记档】+
+  **portal UV 动画**【纹理水平 2 周期重写 x%8 左半 ≡ 右半其余 164 张
+  位级不变；basic.frag tile-rect 分支 u_portalAnim 门控 + phase =
+  m_frameCount % 120 纯函数，tiled/legacy 双路径统一 sampleUv，off =
+  位级 pre-v3.16.0；init atlas 缺 tile fail-fast】+ **蒸汽粒子**
+  【updatePortalSteam 每 6 帧 8×8×9 盒【y 非对称 feet-4..+5 = 门内首
+  版 y+3 漏顶行场景捕获】1/10 确定性 roll fire 种子契约专属盐；
+  spawnSteam = portal 纹理 0.12 半透立方体 blend pass -0.4 m/s² 慢升
+  0.8-1.4 s；portal.steam 门控 off = 零发射】；2795/2795（+3
+  FireResistantArmorField/SteamIsDeterministicAndRises/
+  NetheriteArmorSuppressesLavaBurn）；结构免疫第 86 次【S1 ≡ base19
+  逐字节 ×2 终态树复核】；S2a portal 场景【存档 ×2 RAW 恒等无火域 +
+  动画关控制臂 ×2 RAW + 单跑目检漩涡流动/蒸汽 + f400/f460 diff 3560
+  px；**动画内容截图 ×2 恒等非有效断言** = 退出帧 off-by-one × 高频
+  纹理 PITS 398③】；S2b 熔岩池双臂【免疫 health 20 ×2 存档 RAW /
+  对照 health 0 ×2 + 「死于熔岩」目检 = real-dt 场景域 health 断言权
+  威】；性能 A/B 同档【旧 = 55da85d + g139：PERF-WIN 三窗同档 +
+  changesApplied 9/3/1 逐位 + 终档 savenorm EXACT——三功能无输入全
+  惰性结构性零成本】；PITS 398【场景 fresh 档自带 worldgen 地下火
+  去火纪律 + 存档手术格式 fluids/armor/池格 + 动画内容门协议 + MC_LOG
+  单参】；详见 `docs/archive/phase-3.16.0.md`）；
   门计数 205（**V3-13 死亡统计屏 v3.15.0** 门 205 全 PASS【矩阵 ⬜
   项小→大推进 1/5，用户 11-06 目标定案】：死亡屏 2 行 → 统计屏 =
   「你死了！」+ **致死原因行**【`Player::damage` DamageInfo 重载，2 参
@@ -564,7 +591,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 （细节归阶段文档，不写长句））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
-## 坑位 Top 8（全文 docs/PITS.md，397 条；pre-3.x 条目在 docs/archive/PITS_PRE3X.md）
+## 坑位 Top 8（全文 docs/PITS.md，398 条；pre-3.x 条目在 docs/archive/PITS_PRE3X.md）
 
 1. **SDL grab delta**（P28）：输入 E2E 全帧字节一致不保证——存档 yaw/pitch 为漂移
    探测器；驱动 warp 用实际窗口原点（实测 (4,64)）+ (632,352)。
@@ -600,7 +627,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（397 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（398 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

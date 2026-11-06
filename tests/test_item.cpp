@@ -3410,3 +3410,33 @@ TEST(ItemRegistryTest, V27GoldDiamondRecipesPinned) {
         EXPECT_EQ(key.find("I")->asString(), w.keyItem);
     }
 }
+
+
+// V3-15: the netherite's fire immunity (the optional armor effect).
+TEST(ItemTest, FireResistantArmorField) {
+    ItemRegistry items;
+    // The armor pair + the flag (the netherite shape).
+    auto r = items.registerItem(parseJson(
+        R"({"id":"nplate","type":"material","armor_slot":"chest",)"
+        R"("armor_points":8,"fire_resistant":true})"));
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    EXPECT_TRUE(items.at(r.value()).fireResistant);
+    // Absent = false (the iron shape, the pre-V3-15 bit).
+    auto r2 = items.registerItem(parseJson(
+        R"({"id":"iplate","type":"material","armor_slot":"chest",)"
+        R"("armor_points":8})"));
+    ASSERT_TRUE(r2.ok()) << r2.error().describe();
+    EXPECT_FALSE(items.at(r2.value()).fireResistant);
+    // A non-armor item carrying the flag = the named reject (the
+    // shears' tool-only twin).
+    auto bad1 = items.registerItem(parseJson(
+        R"({"id":"stick","type":"material","fire_resistant":true})"));
+    ASSERT_FALSE(bad1.ok());
+    EXPECT_NE(bad1.error().message.find("armor_slot"), std::string::npos);
+    // A non-bool = the named reject.
+    auto bad2 = items.registerItem(parseJson(
+        R"({"id":"nplate2","type":"material","armor_slot":"chest",)"
+        R"("armor_points":8,"fire_resistant":"yes"})"));
+    ASSERT_FALSE(bad2.ok());
+    EXPECT_NE(bad2.error().message.find("boolean"), std::string::npos);
+}

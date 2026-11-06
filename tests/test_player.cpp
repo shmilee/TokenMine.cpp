@@ -2787,3 +2787,30 @@ TEST(PlayerTest, StatsDistanceWalkAndTeleportGuard) {
     p.respawn();
     EXPECT_FLOAT_EQ(p.statsDistance(), walked);
 }
+
+// V3-15: the netherite's fire immunity (the lava's burn tick never
+// lands while a fire-resistant piece is worn; unequip resumes it).
+TEST(PlayerTest, NetheriteArmorSuppressesLavaBurn) {
+    Fixture f;
+    // The sealed lava pool (the FallDamageCancelledInLava's twin).
+    for (int x = 6; x <= 10; ++x) {
+        for (int z = 6; z <= 10; ++z) {
+            f.world.setFluid(x, 1, z, FluidKind::Lava, kMaxFluidLevel);
+        }
+    }
+    Player p = f.makePlayer({8.5f, 12.0f, 8.5f});
+    Input idle = heldInput({});
+    run(p, 60, idle); // the fall settles, the feet in the lava
+    ASSERT_TRUE(p.inLava());
+    // Equip the fire-resistant piece (the setArmorSlot's effects param).
+    p.setArmorSlot(1, ItemStack {ItemID {3}, 1}, 8, 0.0f, true);
+    ASSERT_TRUE(p.hasFireResistantArmor());
+    run(p, 240, idle); // 4 s of soaking: the 1.0 s burn ticks would
+                       // drain 16 HP — the immunity keeps the full bar
+    EXPECT_FLOAT_EQ(p.health(), p.maxHealth());
+    // Unequip: the burn resumes (the control arm).
+    p.setArmorSlot(1, ItemStack {}, 0);
+    ASSERT_FALSE(p.hasFireResistantArmor());
+    run(p, 240, idle);
+    EXPECT_LT(p.health(), p.maxHealth()); // the lava's tick landed
+}

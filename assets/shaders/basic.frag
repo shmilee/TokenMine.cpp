@@ -14,6 +14,15 @@ in float v_viewDepth;
 // — fract(x + (0,0)) is x bit-for-bit, so this changes nothing for the
 // tiled greedy quads or any non-water geometry.
 in vec2 v_rippleOff;
+// V3-15: the portal's UV scroll (the flowing read). u_portalTile = the
+// nether portal's tile index (tile units, the tile's TOP-LEFT corner);
+// u_portalAnim = the config gate (0 = the phase term is never added =
+// the pre-V3-15 pipeline bit-for-bit); u_portalPhase = the frame-locked
+// scroll in [0, 1) tile units (the texture is 2-periodic horizontally,
+// so the in-tile x scroll wraps seamlessly).
+uniform vec2 u_portalTile;
+uniform int u_portalAnim;
+uniform float u_portalPhase;
 
 uniform sampler2D u_texture;
 uniform int u_useTexture;
@@ -86,7 +95,17 @@ void main() {
         // water-on-water (the tile is generated periodic). With
         // v_rippleOff = (0,0) this line is bit-identical to the pre-PRE-3
         // (v_uv + fract(v_uvLocal)) * u_tileSize.
-        sampleUv = (v_uv + fract(v_uvLocal + v_rippleOff)) * u_tileSize;
+        // V3-15: the portal scroll joins the in-tile coordinate before
+        // the fract wrap (the ripple's twin — the wander is (0,0) for
+        // every non-portal tile and the phase branch is gated, so the
+        // pre-V3-15 pipeline stays bit-identical).
+        vec2 inTile = v_uvLocal + v_rippleOff;
+        if (u_portalAnim != 0 &&
+            abs(v_uv.x - u_portalTile.x) < 0.5 &&
+            abs(v_uv.y - u_portalTile.y) < 0.5) {
+            inTile.x += u_portalPhase;
+        }
+        sampleUv = (v_uv + fract(inTile)) * u_tileSize;
     }
     vec4 texel = texture(u_texture, sampleUv);
     vec3 base = (u_useTexture != 0) ? texel.rgb : u_color;

@@ -118,7 +118,11 @@ void Game::updateEffects(double dt) {
     // check = the documented deviation; off/clear = the water-only path
     // bit-identical).
     if (m_fireEffectId != -1) {
-        if (m_player->inLava() || m_player->isInFire()) {
+        // V3-15 (netherite): the fire immunity — no re-ignition while
+        // a fire-resistant piece is worn (the lava tick's suppression
+        // is the player's own, the Phase-57 twin).
+        if ((m_player->inLava() || m_player->isInFire()) &&
+            !m_player->hasFireResistantArmor()) {
             m_playerEffects.apply(
                 m_fireEffectId,
                 m_player->params().fireDurationSeconds);
@@ -141,7 +145,17 @@ void Game::updateEffects(double dt) {
     m_playerEffects.update(
         dt, m_effects, [this](const Effect& def) {
             if (def.tick == Effect::Tick::Damage) {
-                if (m_player->health() - def.tickAmount >= def.minHealth) {
+                // V3-15 (netherite): the fire's damage tick is
+                // suppressed by a worn fire-resistant piece (the
+                // ignition itself never lands — the re-apply gate
+                // above; a burn started before the piece equips keeps
+                // its visual but stops damaging, the Minecraft
+                // fire-resistance semantics).
+                const bool fireImmune =
+                    def.name == "fire" &&
+                    m_player->hasFireResistantArmor();
+                if (!fireImmune &&
+                    m_player->health() - def.tickAmount >= def.minHealth) {
                     m_player->damage(def.tickAmount, false,
                                      {Player::DamageSource::Effect,
                                       def.name});

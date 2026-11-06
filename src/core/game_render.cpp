@@ -38,6 +38,12 @@ constexpr float kFar = 1000.0f;
 // bounded (float precision loss over a long session).
 constexpr int kRipplePeriodFrames = 120;
 
+// V3-15: the portal's UV scroll period in FRAMES (2.0 s at the 60 FPS
+// cap — the frame-locked class, the ripple's twin: one FULL tile
+// scroll per period; the texture is 2-periodic horizontally, so the
+// wrap is seamless).
+constexpr int kPortalAnimPeriodFrames = 120;
+
 // Sprite sizes in pixels (billboarded quads — see sky.vert).
 constexpr float kStarSpriteSize = 2.0f;
 
@@ -800,6 +806,18 @@ void Game::render() {
         (static_cast<float>(M_PI) * 2.0f);
     m_basicShader.setUniform1i("u_ripplesEnabled", rippleOn ? 1 : 0);
     m_basicShader.setUniform1f("u_ripplePhase", ripplePhase);
+    // V3-15: the portal's UV scroll (the frame-locked phase — a pure
+    // function of m_frameCount, the ripple's twin discipline; the
+    // config gate portal.anim defaults true, OFF = the fragment's
+    // phase branch never executes = the pre-V3-15 pipeline
+    // bit-identical). Two per-frame uniform sets, zero per-draw cost
+    // (the ripple precedent).
+    const bool portalAnimOn = m_config.getBool("portal.anim", true);
+    const float portalPhase =
+        static_cast<float>(m_frameCount % kPortalAnimPeriodFrames) /
+        static_cast<float>(kPortalAnimPeriodFrames);
+    m_basicShader.setUniform1i("u_portalAnim", portalAnimOn ? 1 : 0);
+    m_basicShader.setUniform1f("u_portalPhase", portalPhase);
     // PRE-5 alpha cutout: the render.alpha_test gate (code default true,
     // the render.fog / render.clouds getBool precedent — config.json is
     // untouched). ON = the fragment's `alpha < 0.5 -> discard` branch

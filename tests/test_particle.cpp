@@ -212,3 +212,29 @@ TEST(ParticleTest, BreakDebrisKeepsTheDefaultGravity) {
         EXPECT_FLOAT_EQ(part.gravity, ParticleSystem::kGravity);
     }
 }
+
+
+// V3-15: the portal steam (the single rising cube, the fire-ember
+// contract's slower twin).
+TEST(ParticleTest, SteamIsDeterministicAndRises) {
+    ParticleSystem a, b;
+    a.spawnSteam(0, 5, 0, BlockID {7}, 1.0f, 0.5f, 0xABCD1234ULL);
+    b.spawnSteam(0, 5, 0, BlockID {7}, 1.0f, 0.5f, 0xABCD1234ULL);
+    ASSERT_EQ(a.size(), static_cast<std::size_t>(1));
+    ASSERT_EQ(a.size(), b.size());
+    const auto& p = a.particles().front();
+    const auto& q = b.particles().front();
+    EXPECT_FLOAT_EQ(p.position.x, q.position.x);
+    EXPECT_FLOAT_EQ(p.position.y, q.position.y);
+    EXPECT_FLOAT_EQ(p.position.z, q.position.z);
+    EXPECT_FLOAT_EQ(p.velocity.x, q.velocity.x);
+    EXPECT_FLOAT_EQ(p.velocity.y, q.velocity.y);
+    EXPECT_FLOAT_EQ(p.velocity.z, q.velocity.z);
+    EXPECT_FLOAT_EQ(p.life, q.life);
+    EXPECT_FLOAT_EQ(p.gravity, ParticleSystem::kSteamGravity);
+    EXPECT_LT(p.gravity, 0.0f); // rising
+    EXPECT_GE(p.life, ParticleSystem::kSteamMinLife);
+    EXPECT_LE(p.life, ParticleSystem::kSteamMaxLife);
+    EXPECT_GT(p.velocity.y, 0.0f); // the initial rise
+    EXPECT_EQ(p.block, BlockID {7}); // the portal's own texture
+}

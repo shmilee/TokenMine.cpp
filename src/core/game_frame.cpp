@@ -56,6 +56,18 @@ constexpr std::uint64_t kFireParticleRollSalt = 0xE4B6F1C2D9A83574ULL;
 // fixed frame step keeps headless runs byte-reproducible.
 constexpr int kFurnaceParticleEveryNFrames = 36;
 
+// V3-15: the portal's ambient steam — the emission pass runs every Nth
+// frame (N = 6, the fire-ember step: the 0.8-1.4 s steam life spans ~8
+// passes, so several steams per portal cell are alive at once = the
+// lingering column). The scan is the 8-block box around the player's
+// feet (the player's dimension — the portalId is per dimension); each
+// portal cell emits on its deterministic roll (1 in 10, the fire's
+// seed contract with the dedicated salt).
+constexpr int kPortalSteamEveryNFrames = 6;
+constexpr std::uint64_t kPortalSteamRollSalt = 0x9C41F2A7E5B60D33ULL;
+constexpr int kPortalSteamEmitModulus = 100;
+constexpr int kPortalSteamEmitBelow = 10;
+
 // Dedicated salt for the furnace flame seeds (the P66 discipline — the
 // furnace stream never tracks the fire-ember stream).
 constexpr std::uint64_t kFurnaceParticleRollSalt = 0x4F7A2C9E1B5D8360ULL;
@@ -605,6 +617,69 @@ void Game::updateFurnaceFlames() {
                 0x9E3779B97F4A7C15ULL;
         m_particles.spawnFire(pos.x, pos.y + 1, pos.z, m_states.fireId, sky,
                               blockLight, rngSeed);
+    }
+}
+
+void Game::updatePortalSteam() {
+    // V3-15: the nether portal's ambient steam — the rising
+    // translucent cubes (the portal block's own texture routes the
+    // particle to the blend pass, the translucent-box precedent).
+    // Frame-locked (hard rule 8): the pass step, the box and the roll
+    // are pure functions of (seed, cell, frame) — an identical run
+    // emits identical steams.
+    if (!m_states.portalSteam ||
+        m_frameCount % kPortalSteamEveryNFrames != 0 ||
+        !m_states.portalId.valid()) {
+        return;
+    }
+    const World& world = currentWorld();
+    const Vec3 f = m_player->position();
+    const int fx = static_cast<int>(std::floor(f.x));
+    const int fy = static_cast<int>(std::floor(f.y));
+    const int fz = static_cast<int>(std::floor(f.z));
+    // The y range is asymmetric (feet-4 .. feet+5): the portal's top
+    // frame row stands 4 above the ground at the portal base, and the
+    // steam reads from the whole surface, not the player's eye line.
+    for (int x = fx - 4; x < fx + 4; ++x) {
+        for (int z = fz - 4; z < fz + 4; ++z) {
+            for (int y = fy - 4; y < fy + 6; ++y) {
+                if (world.getBlock(x, y, z) != m_states.portalId) {
+                    continue;
+                }
+                // The deterministic roll (the fire's seed contract —
+                // the dedicated salt never tracks another stream).
+                const std::uint64_t roll =
+                    m_generator->seed() +
+                    hash3(asU64(x), asU64(y), asU64(z),
+                          kPortalSteamRollSalt) +
+                    static_cast<std::uint64_t>(m_frameCount) *
+                        0x9E3779B97F4A7C15ULL;
+                if (static_cast<int>(roll % kPortalSteamEmitModulus) >=
+                    kPortalSteamEmitBelow) {
+                    continue;
+                }
+                const Chunk* chunk =
+                    world.findChunk(worldToChunk({x, y, z}));
+                float sky = 0.0f;
+                float blockLight = 1.0f; // the portal's own light 11
+                if (chunk != nullptr) {
+                    const BlockPos local =
+                        worldToChunkLocal(worldToChunk({x, y, z}),
+                                          {x, y, z});
+                    sky = static_cast<float>(
+                              chunk->skyLightAt(local.x, local.y,
+                                                local.z)) /
+                          15.0f;
+                    blockLight = static_cast<float>(
+                                     chunk->blockLightAt(local.x,
+                                                         local.y,
+                                                         local.z)) /
+                                 15.0f;
+                }
+                m_particles.spawnSteam(x, y, z, m_states.portalId, sky,
+                                       blockLight, roll);
+            }
+        }
     }
 }
 
@@ -1454,6 +1529,10 @@ void Game::updateOverworldFluidPass(double dt) {
     // CRAFT-5: the lit-furnace mouth flames (frame-locked emission; off
     // by render.furnace_flames = zero emissions).
     updateFurnaceFlames();
+    // V3-15: the portal steam (frame-locked emission; off by
+    // portal.steam = zero emissions; inert while the box holds no
+    // portal).
+    updatePortalSteam();
     // PRE-8: the burning-mob flames (frame-locked emission; off by
     // render.mob_flames = zero emissions; inert while no mob burns).
     updateMobFlames();
