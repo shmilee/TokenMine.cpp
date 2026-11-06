@@ -533,7 +533,9 @@ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build  # 构
 1. 用户确认方向 → 2. 实现（数据驱动、无 TODO）→ 3. 构建 + 全量测试（`-Werror`）→
 4. E2E（base 门 + 回归对 + 场景专属验证，按上面协议）→ 5. 文档（CHANGELOG v2.x 条 / BACKLOG v2.x 表 + 变更记录、
 KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表** git commit（永不 `git add -A`；
-永不提交 `opencode-sessions/` 下任何文件（本地））→
+永不提交 `opencode-sessions/` 下任何文件（本地）；**message 格式（11-06 用户定案）=
+一句话标题 + 精简多行正文**——标题 = 版本 + 一件事；正文只留关键定案/门结论/测试数
+（细节归阶段文档，不写长句））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
 ## 坑位 Top 8（全文 docs/PITS.md，396 条；pre-3.x 条目在 docs/archive/PITS_PRE3X.md）
