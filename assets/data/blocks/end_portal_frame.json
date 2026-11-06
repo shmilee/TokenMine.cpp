@@ -1,0 +1,15 @@
+{
+  "id": "end_portal_frame",
+  "properties": {
+    "hardness": 0,
+    "opaque": true,
+    "destroyable": false,
+    "light_emission": 0,
+    "end_frame": true,
+    "sound_material": "stone"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "end_portal_frame", "side": "end_portal_frame", "bottom": "end_portal_frame" }
+  }
+}

@@ -426,38 +426,44 @@ TEST(SaveCompressionConfigTest, UnknownOrEmptyWordsAreNamed) {
         << re.error().message;
 }
 
-// -- 6. the 29 -> 31 schema delta (V3-11a re-based the V3-7 identity:
-//        format 29 and 31 are NO LONGER schema-identical — 30 adds the
-//        dimension key + the nether segments, 31 adds player.creative.
-//        The delta of the same state is EXACTLY the whitelisted keys
-//        {format, player.dimension, nether, nether_entities,
-//        player.creative} — a simulated v3.3.0 (format-29) file
-//        re-parses to the same state (the overworld + survival
-//        migrations), and re-serializing returns to the format-31
-//        payload byte-for-byte) ---------------------------------
+// -- 6. the 29 -> 32 schema delta (V3-10a re-based the V3-11a
+//        identity: format 29 and 32 are NO LONGER schema-identical —
+//        30 adds the dimension key + the nether segments, 31 adds
+//        player.creative, 32 adds the end segments + the "end"
+//        dimension word. The delta of the same state is EXACTLY the
+//        whitelisted keys {format, player.dimension, nether,
+//        nether_entities, player.creative, end, end_entities} — a
+//        simulated v3.3.0 (format-29) file re-parses to the same state
+//        (the overworld + survival migrations), and re-serializing
+//        returns to the format-32 payload byte-for-byte) ------
 
 TEST(GzipNoneIdentityTest,
-     TwentyNineToThirtyOneDeltaIsTheWhitelist) {
+     TwentyNineToThirtyTwoDeltaIsTheWhitelist) {
     const Fixture f;
     const SaveGame s = makeSave(f);
-    auto j31 = serializeSave(s, f.items);
-    ASSERT_TRUE(j31.ok()) << j31.error().message;
-    const std::string p31 = j31->dump(2) + '\n';
+    auto j32 = serializeSave(s, f.items);
+    ASSERT_TRUE(j32.ok()) << j32.error().message;
+    const std::string p32 = j32->dump(2) + '\n';
     // The format marker appears exactly ONCE in the whole file (the
-    // root key — the "nether" segment's keys are blocks / fluids /
-    // states, no nested "format" string).
-    EXPECT_EQ(countOccurrences(p31, "\"format\""), 1u);
-    EXPECT_EQ(countOccurrences(p31, "\"format\": 31"), 1u);
-    // The format-30/31 keys are present (the ALWAYS-written discipline).
-    EXPECT_EQ(countOccurrences(p31, "\"dimension\""), 1u);
-    EXPECT_EQ(countOccurrences(p31, "\"nether\""), 1u);
-    EXPECT_EQ(countOccurrences(p31, "\"nether_entities\""), 1u);
-    EXPECT_EQ(countOccurrences(p31, "\"creative\""), 1u);
+    // root key — the segment's keys are blocks / fluids / states, no
+    // nested "format" string).
+    EXPECT_EQ(countOccurrences(p32, "\"format\""), 1u);
+    EXPECT_EQ(countOccurrences(p32, "\"format\": 32"), 1u);
+    // The format-30/31/32 keys are present (the ALWAYS-written
+    // discipline).
+    EXPECT_EQ(countOccurrences(p32, "\"dimension\""), 1u);
+    EXPECT_EQ(countOccurrences(p32, "\"nether\""), 1u);
+    EXPECT_EQ(countOccurrences(p32, "\"nether_entities\""), 1u);
+    EXPECT_EQ(countOccurrences(p32, "\"creative\""), 1u);
+    EXPECT_EQ(countOccurrences(p32, "\"end\""), 1u);
+    EXPECT_EQ(countOccurrences(p32, "\"end_entities\""), 1u);
     // The simulated v3.3.0 (format-29) file of the same state: the
     // whitelisted keys stripped + the format key flipped.
-    Json j = *j31;
+    Json j = *j32;
     Json nether = withoutKey(j, "nether");
     nether = withoutKey(nether, "nether_entities");
+    nether = withoutKey(nether, "end");
+    nether = withoutKey(nether, "end_entities");
     const Json* player = nether.find("player");
     ASSERT_TRUE(player != nullptr && player->isObject());
     Json p = withoutKey(*player, "dimension");
@@ -466,13 +472,13 @@ TEST(GzipNoneIdentityTest,
     nether["player"] = std::move(p);
     nether["format"] = Json(29);
     const std::string p29 = nether.dump(2) + '\n';
-    ASSERT_NE(p29, p31);
+    ASSERT_NE(p29, p32);
     EXPECT_EQ(countOccurrences(p29, "\"format\": 29"), 1u);
     // The format-29 file parses to the SAME state (the migration:
-    // dimension -> overworld, creative -> false, the nether segments
-    // -> empty), and re-serializing it returns to the format-31
-    // payload with every other key unchanged — the current-none file
-    // ≡ the v3.3.0 file except the whitelisted keys.
+    // dimension -> overworld, creative -> false, the nether / end
+    // segments -> empty), and re-serializing it returns to the
+    // format-32 payload with every other key unchanged — the
+    // current-none file ≡ the v3.3.0 file except the whitelisted keys.
     auto jp29 = Json::parse(p29);
     ASSERT_TRUE(jp29.ok()) << jp29.error().message;
     auto sp29 = parseSave(*jp29, f.items, f.blocks, f.effects, s.seed);
@@ -481,5 +487,5 @@ TEST(GzipNoneIdentityTest,
     EXPECT_FALSE(sp29->playerCreative);
     auto j29out = serializeSave(*sp29, f.items);
     ASSERT_TRUE(j29out.ok()) << j29out.error().message;
-    EXPECT_EQ(j29out->dump(2) + '\n', p31);
+    EXPECT_EQ(j29out->dump(2) + '\n', p32);
 }

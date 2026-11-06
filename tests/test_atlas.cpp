@@ -230,8 +230,11 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     // existing shift, the 16x16 grid's free-cell scan continued — no
     // power-of-two growth needed, 165 < 256). V3-14b: 165 -> 166 (the
     // ghast's body tile — the row-10 free run [9, 10]; the membrane
-    // icon is a standalone item PNG, not an atlas tile).
-    EXPECT_EQ(l.tiles.size(), 166u);
+    // icon is a standalone item PNG, not an atlas tile). V3-10a:
+    // 166 -> 170 (the End's four tiles — the row-10 free run
+    // [10..13, 10]; the ender_eye icon is a standalone item PNG, not
+    // an atlas tile; no power-of-two growth needed, 170 < 256).
+    EXPECT_EQ(l.tiles.size(), 170u);
     const struct {
         const char* name;
         int col;
@@ -517,6 +520,26 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     };
     ASSERT_EQ(sizeof(v390) / sizeof(v390[0]), 20u);
     for (const auto& e : v390) {
+        const auto it = l.tiles.find(e.name);
+        ASSERT_NE(it, l.tiles.end()) << e.name;
+        EXPECT_EQ(it->second.col, e.col) << e.name;
+        EXPECT_EQ(it->second.row, e.row) << e.name;
+    }
+    // V3-10a (v3.23.0): the End's four tiles (the row-10 free run
+    // [10..13, 10] — the ghast's [9, 10] cell's free continuation; zero
+    // existing shift, the pixel-row identity the census's premise).
+    const struct {
+        const char* name;
+        int col;
+        int row;
+    } v310a[] = {
+        {"endstone", 10, 10},
+        {"end_portal", 11, 10},
+        {"end_portal_frame", 12, 10},
+        {"end_portal_frame_eyed", 13, 10},
+    };
+    ASSERT_EQ(sizeof(v310a) / sizeof(v310a[0]), 4u);
+    for (const auto& e : v310a) {
         const auto it = l.tiles.find(e.name);
         ASSERT_NE(it, l.tiles.end()) << e.name;
         EXPECT_EQ(it->second.col, e.col) << e.name;

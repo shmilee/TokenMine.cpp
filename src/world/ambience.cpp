@@ -22,7 +22,14 @@ constexpr double kU53 = 9007199254740992.0;
 } // namespace
 
 AmbienceContext ambienceContext(int rawSkyLight, float dayFactor,
-                                bool inNether) {
+                                bool inNether, bool inEnd) {
+    // V3-10a: the End is its own ambience world (the Nether's shape —
+    // the dimension context full stop, checked first; the two flags are
+    // mutually exclusive by construction: the player is in one
+    // dimension).
+    if (inEnd) {
+        return AmbienceContext::End;
+    }
     // T4 (v3.7.0): the nether is its own ambience world (the TOP
     // priority — a nether cave is a nether, the recorded deviation 5):
     // in the nether the context is Nether, full stop (the raw sky light
@@ -65,6 +72,8 @@ const char* ambienceSoundName(AmbienceContext context) {
         return "ambience_night";
     case AmbienceContext::Nether:
         return "ambience_nether";
+    case AmbienceContext::End:
+        return "ambience_end";
     }
     // Unreachable (every enumerator is handled above) — the return keeps
     // the non-void path warning-free.

@@ -493,7 +493,9 @@ TEST(V390BuildingContent, ContentCensusPinned) {
             ++blockCount;
         }
     }
-    EXPECT_EQ(blockCount, 127);
+    // V3-10a re-pin: 127 -> 131 (the End's four minimum blocks —
+    // endstone / end_portal / the two frames; the zero-shift red line).
+    EXPECT_EQ(blockCount, 131);
     int itemJson = 0;
     for (const auto& e :
          std::filesystem::directory_iterator("assets/data/items")) {
@@ -501,7 +503,7 @@ TEST(V390BuildingContent, ContentCensusPinned) {
             ++itemJson;
         }
     }
-    EXPECT_EQ(itemJson, 98); // + the V3-14b ghast_membrane
+    EXPECT_EQ(itemJson, 99); // + the V3-14b ghast_membrane + the V3-10a ender_eye
     int tilePng = 0;
     for (const auto& e :
          std::filesystem::directory_iterator("assets/textures/blocks")) {
@@ -509,7 +511,7 @@ TEST(V390BuildingContent, ContentCensusPinned) {
             ++tilePng;
         }
     }
-    EXPECT_EQ(tilePng, 110 + 20); // 110 pre-V3-5 + the family's 20
+    EXPECT_EQ(tilePng, 110 + 20 + 4); // 110 pre-V3-5 + the family's 20 + the V3-10a End's 4
     int iconPng = 0;
     for (const auto& e :
          std::filesystem::directory_iterator("assets/textures/items")) {
@@ -517,7 +519,7 @@ TEST(V390BuildingContent, ContentCensusPinned) {
             ++iconPng;
         }
     }
-    EXPECT_EQ(iconPng, 95 + 2 + 1); // 95 pre-V3-5 + the family's 2 + the V3-14b membrane
+    EXPECT_EQ(iconPng, 95 + 2 + 1 + 1); // 95 pre-V3-5 + the family's 2 + the V3-14b membrane + the V3-10a ender_eye
 }
 
 TEST(V390BuildingContent, NewAssetsFNVpinned) {

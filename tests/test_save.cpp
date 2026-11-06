@@ -83,6 +83,20 @@ BlockRegistry makeBlocks() {
         R"({"id":"bedrock","properties":{"hardness":0.0,"destroyable":false},"model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
     blocks.registerBlock(parseJson(
         R"({"id":"nether_portal","properties":{"solid":false,"opaque":false,"transparent":true,"destroyable":false,"light_emission":11},"model":{"shape":"full_cube","state_count":2,"state_default":0,"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    // V3-10a (format 32): the End's minimum blocks (the A-lite shape —
+    // the two stateless frames + the stateless portal + the endstone +
+    // the reused obsidian; the stateful block the End states
+    // cross-checks uses is stone_stairs, the fixture's STAIRS shape).
+    blocks.registerBlock(parseJson(
+        R"({"id":"endstone","properties":{"hardness":0.5,"drops":"endstone"},"model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    blocks.registerBlock(parseJson(
+        R"({"id":"obsidian","properties":{"hardness":10.0,"destroyable":false},"model":{"textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    blocks.registerBlock(parseJson(
+        R"({"id":"end_portal","properties":{"solid":false,"opaque":false,"transparent":true,"destroyable":false,"light_emission":11,"end_portal":true},"model":{"shape":"full_cube","textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    blocks.registerBlock(parseJson(
+        R"({"id":"end_portal_frame","properties":{"hardness":0,"opaque":true,"destroyable":false,"end_frame":true},"model":{"shape":"full_cube","textures":{"top":"t","side":"t","bottom":"t"}}})"));
+    blocks.registerBlock(parseJson(
+        R"({"id":"end_portal_frame_eyed","properties":{"hardness":0,"opaque":true,"destroyable":false,"end_frame":true,"end_frame_eyed":true},"model":{"shape":"full_cube","textures":{"top":"t","side":"t","bottom":"t"}}})"));
     return blocks;
 }
 
@@ -132,6 +146,13 @@ struct Fixture {
             parseJson(R"({"id":"pick","type":"tool","max_stack":1})"));
         if (!t.ok()) {
             ADD_FAILURE() << t.error().message;
+        }
+        // V3-10a: the ender_eye item (the end_entities' cross-check
+        // vocabulary — the embed interaction's held item).
+        auto e = items.registerItem(
+            parseJson(R"({"id":"ender_eye","type":"material","max_stack":64})"));
+        if (!e.ok()) {
+            ADD_FAILURE() << e.error().message;
         }
         // Phase 40: the furnace test items (beef is smeltable -> cooked;
         // coal is fuel).
@@ -260,8 +281,13 @@ Json withoutPlayerKey(const Json& root, const std::string& key) {
 // so the claim is genuine only after the strip. The specific key a test leaves in (or re-adds)
 // is the one under assertion (the version-lie's subject).
 Json stripFormat31Keys(Json root) {
+    // V3-10a: the format-32 keys join the strip (a genuine pre-32 file
+    // never carried end / end_entities either — the claim is genuine
+    // only after the strip, the dimension/creative shape).
     root = withoutKey(root, "nether");
     root = withoutKey(root, "nether_entities");
+    root = withoutKey(root, "end");
+    root = withoutKey(root, "end_entities");
     root = withoutPlayerKey(root, "dimension");
     root = withoutPlayerKey(root, "creative");
     return root;
@@ -496,8 +522,8 @@ TEST(SaveRoundTripTest, CraftingGridsRoundTrip) {
     s.tables.push_back(SavedTable {BlockPos {1, 53, 2}, table});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // V3-11a: writes are always format 31 (V3-1 Phase B was 30).
-    EXPECT_EQ(j->find("format")->asInt(), 31);
+    // V3-11a: writes are always the current format (V3-1 Phase B was 30, V3-11a 31, V3-10a 32).
+    EXPECT_EQ(j->find("format")->asInt(), kSaveFormat);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->invGrid.size(), static_cast<std::size_t>(CraftingGrid::kSize));
@@ -594,24 +620,32 @@ TEST(SaveParseTest, FormatThreeRequiresBothGrids) {
     EXPECT_FALSE(parseSave(missingTable, f.items, f.blocks, f.effects, 42).ok());
 }
 
+// V3-10a: the empty crafting cell (the RejectsBadCraftingGrid's
+// wrong-size grid's element — its own function: the GCC-16 -O3
+// maybe-uninitialized false positive's inlining break, the
+// serializeSlotEntry precedent from save.cpp).
+static Json makeEmptyCraftingCell() {
+    Json e = Json::object();
+    e["item"] = Json(std::string(""));
+    e["count"] = Json(0);
+    return e;
+}
+
 TEST(SaveParseTest, RejectsBadCraftingGrid) {
     Fixture f;
     const SaveGame s = makeSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    auto withGrid = [&](Json grid) {
+    auto withGrid = [&](const Json& grid) {
         Json root = *j;
-        root["inv_grid"] = std::move(grid);
+        root["inv_grid"] = grid;
         return root;
     };
     // Wrong size (8 cells).
     {
         Json shortGrid = Json::array();
         for (int i = 0; i < CraftingGrid::kSize - 1; ++i) {
-            Json e = Json::object();
-            e["item"] = Json(std::string(""));
-            e["count"] = Json(0);
-            shortGrid.push_back(std::move(e));
+            shortGrid.push_back(makeEmptyCraftingCell());
         }
         EXPECT_FALSE(parseSave(withGrid(shortGrid), f.items, f.blocks, f.effects, 42).ok());
     }
@@ -1622,8 +1656,8 @@ TEST(SaveRoundTripTest, StatesRoundTrip) {
     SaveGame s = makeStateSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // V3-11a: writes are always format 31 (V3-1 Phase B was 30).
-    EXPECT_EQ(j->find("format")->asInt(), 31);
+    // V3-11a: writes are always the current format (V3-1 Phase B was 30, V3-11a 31, V3-10a 32).
+    EXPECT_EQ(j->find("format")->asInt(), kSaveFormat);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->states.size(), 1u);
@@ -1916,8 +1950,8 @@ TEST(SaveRoundTripTest, FurnacesRoundTrip) {
     s.furnaces[0].state.fuelSubsteps = 1234;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // V3-11a: writes are always format 31 (V3-1 Phase B was 30).
-    EXPECT_EQ(j->find("format")->asInt(), 31);
+    // V3-11a: writes are always the current format (V3-1 Phase B was 30, V3-11a 31, V3-10a 32).
+    EXPECT_EQ(j->find("format")->asInt(), kSaveFormat);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->furnaces.size(), 2u);
@@ -2319,8 +2353,8 @@ TEST(SaveRoundTripTest, FiresRoundTrip) {
     SaveGame s = makeFireSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // V3-11a: writes are always format 31 (V3-1 Phase B was 30).
-    EXPECT_EQ(j->find("format")->asInt(), 31);
+    // V3-11a: writes are always the current format (V3-1 Phase B was 30, V3-11a 31, V3-10a 32).
+    EXPECT_EQ(j->find("format")->asInt(), kSaveFormat);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->fires.size(), 2u);
@@ -2934,8 +2968,8 @@ TEST(SaveRoundTripTest, TablesRoundTrip) {
     s.tables[0].grid.setSlot(8, ItemStack {f.items.idForName("stone"), 64});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // V3-11a: writes are always format 31 (V3-1 Phase B was 30).
-    EXPECT_EQ(j->find("format")->asInt(), 31);
+    // V3-11a: writes are always the current format (V3-1 Phase B was 30, V3-11a 31, V3-10a 32).
+    EXPECT_EQ(j->find("format")->asInt(), kSaveFormat);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->tables.size(), 2u);
@@ -3248,7 +3282,7 @@ TEST(SaveFormat20Test, EffectTierRoundTrips) {
     s.playerEffects.push_back(SavedEffect {"resistance", 30.0, 1});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 31);
+    EXPECT_EQ(j->find("format")->asInt(), kSaveFormat);
     const Json& entry = (*j)["player"]["effects"].at(0);
     ASSERT_NE(entry.find("tier"), nullptr);
     EXPECT_EQ(entry.find("tier")->asInt(), 1);
@@ -3415,7 +3449,7 @@ TEST(SaveFormat21Test, StatsRoundTrips) {
     s.playerStats["kill.zombie"] = 5;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 31);
+    EXPECT_EQ(j->find("format")->asInt(), kSaveFormat);
     const Json& st = (*j)["player"]["stats"];
     ASSERT_TRUE(st.isObject());
     ASSERT_NE(st.find("deathCount"), nullptr);
@@ -3515,7 +3549,7 @@ TEST(SaveFormat22Test, VelocityRoundTrips) {
     s.playerVelocity = Vec3 {2.5f, -3.75f, 0.125f};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 31);
+    EXPECT_EQ(j->find("format")->asInt(), kSaveFormat);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FLOAT_EQ(out->playerVelocity.x, 2.5f);
@@ -3779,7 +3813,7 @@ TEST(SaveFormat24Test, FullBackpackRoundTrips) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     // V3-1 Phase B: writes are always format 30 (V3-7 was 29), 36 entries.
-    EXPECT_EQ(j->find("format")->asInt(), 31);
+    EXPECT_EQ(j->find("format")->asInt(), kSaveFormat);
     const Json& slots = *j->find("inventory")->find("slots");
     ASSERT_TRUE(slots.isArray());
     EXPECT_EQ(slots.size(),
@@ -4342,7 +4376,7 @@ TEST(SaveFormat30Test, NetherSectionRoundTrips) {
         {"dirt", 2, {0.5f, 56.5f, 0.5f}, 12.5, 0.25});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 31);
+    EXPECT_EQ(j->find("format")->asInt(), kSaveFormat);
     EXPECT_EQ((*j)["player"]["dimension"].asString(), "nether");
     ASSERT_TRUE(j->find("nether") != nullptr);
     ASSERT_TRUE(j->find("nether_entities") != nullptr);
@@ -4649,7 +4683,7 @@ TEST(SaveFormat31Test, RoundTripCreativeTrueAndFalse) {
         s.playerCreative = flag;
         auto base = serializeSave(s, f.items);
         ASSERT_TRUE(base.ok()) << base.error().message;
-        EXPECT_EQ((*base)["format"].asInt(), 31);
+        EXPECT_EQ((*base)["format"].asInt(), kSaveFormat);
         EXPECT_EQ((*base)["player"]["creative"].asBool(), flag);
         auto out = parseSave(*base, f.items, f.blocks, f.effects, 42);
         ASSERT_TRUE(out.ok()) << out.error().message;
@@ -4663,9 +4697,16 @@ TEST(SaveFormat31Test, Pre31LoadMigratesToFalse) {
     Fixture f;
     auto base = serializeSave(makeSave(f), f.items);
     ASSERT_TRUE(base.ok()) << base.error().message;
+    // V3-10a: the forgery strips exactly the post-30 keys (the
+    // player.creative format-31 key + the end / end_entities format-32
+    // keys — a genuine format-30 file carried the nether segments +
+    // the dimension, the stripFormat31Keys' pre-30 shape would be the
+    // wrong forgery here).
     Json j = *base;
     j["format"] = Json(30);
     j = withoutPlayerKey(j, "creative");
+    j = withoutKey(j, "end");
+    j = withoutKey(j, "end_entities");
     auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_FALSE(out->playerCreative);
@@ -4708,3 +4749,252 @@ TEST(SaveFormat31Test, ThreeWayKeyDiscipline) {
     }
 }
 
+
+// ---------------------------------------------------------------------------
+// V3-10a (format 32): the End dimension's key discipline (the
+// format-30 nether family's second consumption — the end segments +
+// the per-format dimension word split).
+// ---------------------------------------------------------------------------
+
+TEST(SaveFormat32Test, EndSectionRoundTrips) {
+    // The full End shape: the player's dimension + the End's block /
+    // fluid edits + its per-instance states (the stairs' facing — the
+    // 10a fill is stateless, a player-placed stateful block is the
+    // source) + its dropped items — all serialized ALWAYS and parsed
+    // back bit-faithfully.
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.playerDimension = "end";
+    s.endBlockEdits = {{BlockPos {0, 53, -2}, "endstone"},
+                       {BlockPos {4, 55, 0}, "stone_stairs"},
+                       {BlockPos {5, 53, 0}, "obsidian"}};
+    s.endFluidEdits = {{BlockPos {4, 30, 4}, FluidKind::Water, 8}};
+    s.endStates = {{BlockPos {4, 55, 0}, 1}};
+    s.endEntities.push_back({"ender_eye", 3, {0.5f, 56.5f, 0.5f}, 12.5, 0.25});
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    EXPECT_EQ(j->find("format")->asInt(), kSaveFormat);
+    EXPECT_EQ((*j)["player"]["dimension"].asString(), "end");
+    ASSERT_TRUE(j->find("end") != nullptr);
+    ASSERT_TRUE(j->find("end_entities") != nullptr);
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_EQ(out->playerDimension, "end");
+    ASSERT_EQ(out->endBlockEdits.size(), 3u);
+    EXPECT_EQ(out->endBlockEdits[0].pos, (BlockPos {0, 53, -2}));
+    EXPECT_EQ(out->endBlockEdits[0].blockName, "endstone");
+    EXPECT_EQ(out->endBlockEdits[2].blockName, "obsidian");
+    ASSERT_EQ(out->endFluidEdits.size(), 1u);
+    EXPECT_EQ(out->endFluidEdits[0].kind, FluidKind::Water);
+    EXPECT_EQ(out->endFluidEdits[0].level, 8);
+    ASSERT_EQ(out->endStates.size(), 1u);
+    EXPECT_EQ(out->endStates[0].state, 1);
+    ASSERT_EQ(out->endEntities.size(), 1u);
+    EXPECT_EQ(out->endEntities[0].item, "ender_eye");
+    EXPECT_EQ(out->endEntities[0].count, 3);
+    // The overworld's / the nether's sections are untouched by the
+    // End's (the red line: the shapes + content keep).
+    EXPECT_EQ(out->playerPos, s.playerPos);
+    ASSERT_EQ(out->blockEdits.size(), s.blockEdits.size());
+    EXPECT_TRUE(out->netherBlockEdits.empty());
+}
+
+TEST(SaveFormat32Test, EmptyEndSectionIsValid) {
+    // A no-travel session: the End's segments serialize EMPTY (the
+    // keys present — the S1 gate's whitelist triple), and parse back
+    // empty.
+    Fixture f;
+    SaveGame s = makeSave(f); // playerDimension = "overworld" (default)
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    EXPECT_EQ((*j)["player"]["dimension"].asString(), "overworld");
+    const Json* end = j->find("end");
+    ASSERT_TRUE(end != nullptr && end->isObject());
+    EXPECT_TRUE(end->find("blocks")->isArray());
+    EXPECT_EQ(end->find("blocks")->size(), 0u);
+    EXPECT_EQ(end->find("fluids")->size(), 0u);
+    EXPECT_EQ(end->find("states")->size(), 0u);
+    EXPECT_EQ(j->find("end_entities")->size(), 0u);
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_EQ(out->playerDimension, "overworld");
+    EXPECT_TRUE(out->endBlockEdits.empty());
+    EXPECT_TRUE(out->endFluidEdits.empty());
+    EXPECT_TRUE(out->endStates.empty());
+    EXPECT_TRUE(out->endEntities.empty());
+}
+
+TEST(SaveFormat32Test, Pre32LoadMigratesToEndEmpty) {
+    // A format-31 file (no end segments, the dimension's two words)
+    // LOADS — the end's segments migrate to empty (the system did not
+    // exist), the dimension keeps its word; re-serializing returns the
+    // format-32 payload of the same state (the whitelisted keys'
+    // delta: format + end + end_entities).
+    Fixture f;
+    auto base = serializeSave(makeSave(f), f.items);
+    ASSERT_TRUE(base.ok()) << base.error().message;
+    Json j = *base;
+    j["format"] = Json(31);
+    j = withoutKey(j, "end");
+    j = withoutKey(j, "end_entities");
+    auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_TRUE(out->endBlockEdits.empty());
+    EXPECT_TRUE(out->endEntities.empty());
+    // The re-serialization's delta is exactly the whitelisted triple.
+    auto out32 = serializeSave(*out, f.items);
+    ASSERT_TRUE(out32.ok()) << out32.error().message;
+    EXPECT_EQ(out32->dump(2) + '\n', base->dump(2) + '\n');
+}
+
+TEST(SaveFormat32Test, ThreeWayKeyDiscipline) {
+    // The format-32 key discipline (the five named rejections — the
+    // format-30 family's shape): (a) a format-31 file carrying the
+    // "end" segment is a version lie; (b) a format-32 file MISSING
+    // the "end" segment is a version lie; (c) a format-31 file
+    // carrying the dimension word "end" is a version lie (the
+    // PER-FORMAT word split); (d) a format-32 file's dimension word
+    // outside the three words is corruption (the vocabulary named);
+    // (e) the end's XP kind is rejected (10a's End holds no grant
+    // source — the nether's deviation 6 twin).
+    Fixture f;
+    auto base = serializeSave(makeSave(f), f.items);
+    ASSERT_TRUE(base.ok()) << base.error().message;
+    {
+        // (a) the end segment on a format-31 file.
+        Json j31 = *base;
+        j31["format"] = Json(31);
+        auto out = parseSave(j31, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("end"), std::string::npos);
+        EXPECT_NE(out.error().message.find("format 32 or newer"),
+                  std::string::npos);
+    }
+    {
+        // (b) a format-32 file missing the segment.
+        Json j = withoutKey(*base, "end");
+        auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("end"), std::string::npos);
+    }
+    {
+        // (c) the dimension word "end" on a format-31 file (the
+        // per-format word split's version lie).
+        Json j31 = *base;
+        j31["format"] = Json(31);
+        j31 = withoutKey(j31, "end");
+        j31 = withoutKey(j31, "end_entities");
+        const Json* player = j31.find("player");
+        Json p = *player;
+        p["dimension"] = Json(std::string("end"));
+        j31 = withoutKey(j31, "player");
+        j31["player"] = std::move(p);
+        auto out = parseSave(j31, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("end"), std::string::npos);
+        EXPECT_NE(out.error().message.find("vocabulary"), std::string::npos);
+    }
+    {
+        // (d) a format-32 dimension word outside the three (the
+        // vocabulary named with the "end" word present).
+        Json j = *base;
+        const Json* player = j.find("player");
+        Json p = *player;
+        p["dimension"] = Json(std::string("void"));
+        j = withoutKey(j, "player");
+        j["player"] = std::move(p);
+        auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("void"), std::string::npos);
+        EXPECT_NE(out.error().message.find("end"), std::string::npos);
+    }
+    {
+        // (e) the XP kind in end_entities.
+        Json ents = Json::array();
+        Json e = Json::object();
+        e["type"] = Json(std::string("xp"));
+        e["xp"] = Json(3);
+        Json pos = Json::array();
+        pos.push_back(Json(0.5));
+        pos.push_back(Json(55.5));
+        pos.push_back(Json(0.5));
+        e["pos"] = pos;
+        e["age"] = Json(1.0);
+        e["pickup_delay"] = Json(0.25);
+        ents.push_back(std::move(e));
+        Json j = withoutKey(*base, "end_entities");
+        j["end_entities"] = std::move(ents);
+        auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("item"), std::string::npos);
+    }
+}
+
+TEST(SaveFormat32Test, EndStatesCrossCheckBothDirections) {
+    // The PITS 383① twin over the End's stateful blocks: every End
+    // STATEFUL block edit owns an end.states entry, and every entry is
+    // an End stateful cell — both directions named. The 10a fill is
+    // stateless (the endstone / the frames / the portal), so the
+    // fixture's stateful block is the player-placed stone_stairs.
+    Fixture f;
+    auto base = serializeSave(makeSave(f), f.items);
+    ASSERT_TRUE(base.ok()) << base.error().message;
+    {
+        // The stateful edit WITHOUT its state entry.
+        SaveGame s = makeSave(f);
+        s.endBlockEdits = {{BlockPos {4, 55, 0}, "stone_stairs"}};
+        auto jr = serializeSave(s, f.items);
+        ASSERT_TRUE(jr.ok());
+        Json j = *jr;
+        const Json* endPtr = j.find("end");
+        Json endObj = *endPtr;
+        endObj["states"] = Json::array(); // the stairs' entry stripped
+        j = withoutKey(j, "end");
+        j["end"] = endObj;
+        auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("end.states"), std::string::npos);
+    }
+    {
+        // The state entry WITHOUT its stateful cell (an endstone cell —
+        // the stateless block cannot own a state).
+        SaveGame s = makeSave(f);
+        auto jr = serializeSave(s, f.items);
+        ASSERT_TRUE(jr.ok());
+        Json j = *jr;
+        const Json* endPtr = j.find("end");
+        Json endObj = *endPtr;
+        Json blks = Json::array();
+        Json b = Json::array();
+        b.push_back(Json(4)); b.push_back(Json(55)); b.push_back(Json(0));
+        b.push_back(Json(std::string("endstone")));
+        blks.push_back(std::move(b));
+        endObj["blocks"] = blks;
+        Json sts = Json::array();
+        Json st = Json::object();
+        Json pos = Json::array();
+        pos.push_back(Json(4)); pos.push_back(Json(55)); pos.push_back(Json(0));
+        st["pos"] = pos;
+        st["state"] = Json(1);
+        sts.push_back(std::move(st));
+        endObj["states"] = sts;
+        j = withoutKey(j, "end");
+        j["end"] = endObj;
+        auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("stateful"), std::string::npos);
+    }
+}
+
+TEST(SaveFormat32Test, EndBlockNameValidated) {
+    // The End's block edits resolve against the registry (the
+    // nether's twin — an unknown name is corruption, named).
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.endBlockEdits = {{BlockPos {0, 53, 0}, "not_a_block"}};
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok());
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("not_a_block"), std::string::npos);
+}

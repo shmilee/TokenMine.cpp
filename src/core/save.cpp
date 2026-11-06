@@ -745,6 +745,82 @@ Result<void> applyWorldEdits(const SaveGame& save, const BlockRegistry& blocks,
 // same shape). A free function rather than an in-function lambda: the
 // Result<Json> value construction here trips GCC's -O3
 // maybe-uninitialized false positive when inlined into serializeSave
+// V3-10a (format 32): the END segment's serialization (the nether
+// segment's member-for-member twin — the closed set {blocks, fluids,
+// states} ALWAYS written, empty valid + the "end_entities" item kind).
+// Its own function (not inlined into serializeSave): the -O3
+// maybe-uninitialized false positive in serializeSlotEntry's inlining
+// recurs when this segment's growth lands in serializeSave's body
+// (the free-function precedent, the code is the nether's verbatim).
+static Result<void> appendEndSections(Json& root, const SaveGame& save) {
+    // V3-10a (format 32): the END segment (the nether segment's
+    // member-for-member twin — the closed set {blocks, fluids, states},
+    // ALWAYS written, empty valid: a no-travel session's End is
+    // pristine) + "end_entities" (the ITEM kind only, the nether's
+    // shape verbatim).
+    {
+        Json end = Json::object();
+        Json endBlocks = Json::array();
+        for (const SavedBlockEdit& e : save.endBlockEdits) {
+            Json a = Json::array();
+            a.push_back(Json(e.pos.x));
+            a.push_back(Json(e.pos.y));
+            a.push_back(Json(e.pos.z));
+            a.push_back(Json(e.blockName));
+            endBlocks.push_back(std::move(a));
+        }
+        end["blocks"] = endBlocks;
+        Json endFluids = Json::array();
+        for (const SavedFluidEdit& e : save.endFluidEdits) {
+            Json a = Json::array();
+            a.push_back(Json(e.pos.x));
+            a.push_back(Json(e.pos.y));
+            a.push_back(Json(e.pos.z));
+            a.push_back(Json(static_cast<int>(e.level)));
+            a.push_back(Json(fluidKindName(e.kind)));
+            endFluids.push_back(std::move(a));
+        }
+        end["fluids"] = endFluids;
+        Json endStates = Json::array();
+        for (const SavedState& ss : save.endStates) {
+            Json se = Json::object();
+            Json pos = Json::array();
+            pos.push_back(Json(ss.pos.x));
+            pos.push_back(Json(ss.pos.y));
+            pos.push_back(Json(ss.pos.z));
+            se["pos"] = pos;
+            se["state"] = Json(static_cast<int>(ss.state));
+            endStates.push_back(std::move(se));
+        }
+        end["states"] = endStates;
+        root["end"] = std::move(end);
+    }
+    {
+        Json endEntities = Json::array();
+        for (const SavedItemEntity& e : save.endEntities) {
+            Json jpos = Json::array();
+            jpos.push_back(Json(e.pos.x));
+            jpos.push_back(Json(e.pos.y));
+            jpos.push_back(Json(e.pos.z));
+            Json je = Json::object();
+            je["type"] = Json(std::string("item"));
+            je["item"] = Json(e.item);
+            je["count"] = Json(e.count);
+            if (e.damage > 0.0f) {
+                je["damage"] = Json(e.damage);
+            }
+            je["pos"] = jpos;
+            je["age"] = Json(e.age);
+            je["pickup_delay"] = Json(e.pickupDelay);
+            writeEnchantsObj(je, e.enchants);
+            endEntities.push_back(std::move(je));
+        }
+        root["end_entities"] = std::move(endEntities);
+    }
+
+    return {};
+}
+
 // (the variant move ctor; the code is trivially initialized).
 static Result<Json> serializeSlotEntry(const ItemStack& s,
                                        const ItemRegistry& items,
@@ -753,16 +829,19 @@ static Result<Json> serializeSlotEntry(const ItemStack& s,
     if (s.empty()) {
         e["item"] = Json(std::string(""));
         e["count"] = Json(0);
-    } else {
-        const Item* item = items.find(s.item);
-        if (item == nullptr) {
-            return MC_FAIL(std::string(what) +
-                           " holds an unregistered item id " +
-                           std::to_string(s.item.value));
-        }
-        e["item"] = Json(item->name);
-        e["count"] = Json(s.count);
+        return e; // V3-10a: the early return (the GCC-16 -O3
+                  // maybe-uninitialized false positive's variant-
+                  // analysis break — the unified return below is the
+                  // pre-V3-10a shape's behavior, bit-identical)
     }
+    const Item* item = items.find(s.item);
+    if (item == nullptr) {
+        return MC_FAIL(std::string(what) +
+                       " holds an unregistered item id " +
+                       std::to_string(s.item.value));
+    }
+    e["item"] = Json(item->name);
+    e["count"] = Json(s.count);
     return e;
 }
 
@@ -1281,6 +1360,16 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         root["nether_entities"] = std::move(netherEntities);
     }
 
+    // V3-10a (format 32): the END segment + end_entities (the nether
+    // segment's member-for-member twin — the helper's own inlining
+    // region: the -O3 maybe-uninitialized false positive in
+    // serializeSlotEntry's inlining recurs when the end segment's
+    // serializer growth lands directly in serializeSave's body, so the
+    // twin serialization gets its own function — the slotEntry's
+    // free-function precedent, the code paths are the nether's
+    // verbatim).
+    MC_TRY(appendEndSections(root, save));
+
     Json blockEdits = Json::array();
     for (const SavedBlockEdit& e : save.blockEdits) {
         Json a = Json::array();
@@ -1330,13 +1419,17 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // per-format discipline below enforces which format may carry them
     // (restricted to 30 and newer — a format-29 file carrying either is
     // a version lie).
+    // V3-10a: "end" / "end_entities" (format 32) join the whitelist —
+    // the per-format discipline below restricts them to 32 and newer
+    // (a format-31 file carrying either is a version lie, named).
     const std::set<std::string> topLevel {"format", "seed", "time", "player",
                                           "inventory", "inv_grid",
                                           "table_grid", "furnace",
                                           "furnaces", "fires", "campfires",
                                           "stairs", "states", "tables",
                                           "entities", "blocks", "fluids",
-                                          "nether", "nether_entities"};
+                                          "nether", "nether_entities",
+                                          "end", "end_entities"};
     MC_TRY(rejectUnknownFields(def, topLevel, "save file"));
 
     const Json* fmt = def.find("format");
@@ -1915,18 +2008,29 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // "overworld" (the system did not exist — the player was always in
     // the overworld; the velocity-zeroed migration twin).
     if (fmt->asInt() >= 30) {
+        // V3-10a (format 32): the PER-FORMAT vocabulary (the
+        // version-lie's word split — the format-30/31 files' two-word
+        // vocabulary overworld|nether; "end" on one of them is a
+        // version lie, named; the format-32-and-newer three words
+        // overworld|nether|end).
+        const bool threeWord = fmt->asInt() >= 32;
         const Json* dim = player->find("dimension");
         if (dim == nullptr || !dim->isString()) {
             return MC_FAIL("save format 30 requires 'player.dimension' "
-                           "(the string \"overworld\" or \"nether\" — "
-                           "the player's position is in that "
+                           "(the string \"overworld\" or \"nether\"" +
+                           std::string(threeWord ? " or \"end\"" : "") +
+                           " — the player's position is in that "
                            "dimension's coordinates)");
         }
         const std::string dimName = dim->asString();
-        if (dimName != "overworld" && dimName != "nether") {
+        const std::string vocab = threeWord
+            ? "\"overworld\", \"nether\", \"end\""
+            : "\"overworld\", \"nether\"";
+        if (dimName != "overworld" && dimName != "nether" &&
+            !(threeWord && dimName == "end")) {
             return MC_FAIL("save 'player.dimension' holds the unknown "
-                           "word '" + dimName +
-                           "' (vocabulary: \"overworld\", \"nether\")");
+                           "word '" + dimName + "' (vocabulary: " +
+                           vocab + ")");
         }
         save.playerDimension = dimName;
     } else {
@@ -3437,6 +3541,334 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                            ") (a version lie)");
         }
     }
+
+    // -- V3-10a (format 32): the END segment (the nether segment's
+    // member-for-member twin — the CLOSED SET {blocks, fluids, states};
+    // a format-32 file REQUIRES the "end" object (empty arrays valid);
+    // a format-31 (or older) file carrying it is a version lie).
+    // The CLOSED SET {blocks, fluids, states} (the nether segment's
+    // shapes verbatim — the End's cells; the cross-checks run in BOTH
+    // directions like the nether's). A format-32 file REQUIRES the
+    // "end" object (an empty segment is valid — a no-travel session's
+    // End is pristine); a format-31 (or older) file CARRYING it is a
+    // version lie (named — the per-format key discipline; the topLevel
+    // whitelist above knows the key, this is the format gate). The
+    // End's seed is DERIVED (worldSeed ^ kSaltEnd — never stored: the
+    // overworld's "seed" is the frame of reference, the xp_seed
+    // single-source-of-truth twin), so no end seed key exists.
+    const Json* endObj = def.find("end");
+    if (fmtVersion >= 32) {
+        if (endObj == nullptr || !endObj->isObject()) {
+            return MC_FAIL("save format 32 requires an 'end' object "
+                           "({blocks, fluids, states} — the empty arrays "
+                           "are valid: a no-travel session's End is "
+                           "pristine)");
+        }
+        const std::set<std::string> endFields {"blocks", "fluids",
+                                               "states"};
+        MC_TRY(rejectUnknownFields(*endObj, endFields,
+                                   "save 'end'"));
+        // The End's block edits (the nether's 'blocks' validation
+        // verbatim — registered names, the y bound, no duplicates).
+        std::map<BlockPos, std::string> endBlockCells;
+        const Json* eblks = endObj->find("blocks");
+        if (eblks == nullptr || !eblks->isArray()) {
+            return MC_FAIL("save 'end' requires a 'blocks' array "
+                           "(empty valid)");
+        }
+        for (std::size_t i = 0; i < eblks->size(); ++i) {
+            const Json& e = eblks->at(i);
+            const std::string what = "save 'end.blocks' #" +
+                                     std::to_string(i);
+            if (!e.isArray() || e.size() != 4) {
+                return MC_FAIL(what + " must be [x, y, z, block name]");
+            }
+            double x, y, z;
+            if (!isInt(e.at(0), &x) || !isInt(e.at(1), &y) ||
+                !isInt(e.at(2), &z)) {
+                return MC_FAIL(what + ": x, y, z must be integers");
+            }
+            const int yi = static_cast<int>(y);
+            if (!isWorldYValid(yi)) {
+                return MC_FAIL(what + " has y=" + std::to_string(yi) +
+                               " outside the world height [0, " +
+                               std::to_string(kWorldHeight) + ")");
+            }
+            if (!e.at(3).isString() || e.at(3).asString().empty()) {
+                return MC_FAIL(what + " requires a non-empty block name");
+            }
+            const std::string name = e.at(3).asString();
+            if (!blocks.idForName(name).valid()) {
+                return MC_FAIL(what + " names unknown block '" + name +
+                               "'");
+            }
+            const BlockPos pos {static_cast<int>(x), yi, static_cast<int>(z)};
+            if (endBlockCells.count(pos) != 0) {
+                return MC_FAIL("save has duplicate end block edits at " +
+                               posStr(pos));
+            }
+            endBlockCells.emplace(pos, name);
+            save.endBlockEdits.push_back({pos, name});
+        }
+        // The End's fluid edits (the nether's 'fluids' validation
+        // verbatim — the named kind, the co-location rule).
+        std::set<BlockPos> endFluidCells;
+        const Json* efls = endObj->find("fluids");
+        if (efls == nullptr || !efls->isArray()) {
+            return MC_FAIL("save 'end' requires a 'fluids' array "
+                           "(empty valid)");
+        }
+        for (std::size_t i = 0; i < efls->size(); ++i) {
+            const Json& e = efls->at(i);
+            const std::string what = "save 'end.fluids' #" +
+                                     std::to_string(i);
+            if (!e.isArray() || e.size() != 5) {
+                return MC_FAIL(what + " must be [x, y, z, level, fluid]");
+            }
+            double x, y, z, level;
+            if (!isInt(e.at(0), &x) || !isInt(e.at(1), &y) ||
+                !isInt(e.at(2), &z) || !isInt(e.at(3), &level)) {
+                return MC_FAIL(what + ": x, y, z, level must be "
+                                "integers");
+            }
+            const int yi = static_cast<int>(y);
+            const int li = static_cast<int>(level);
+            if (!isWorldYValid(yi)) {
+                return MC_FAIL(what + " has y=" + std::to_string(yi) +
+                               " outside the world height [0, " +
+                               std::to_string(kWorldHeight) + ")");
+            }
+            if (li < 0 || li > kMaxFluidLevel) {
+                return MC_FAIL(what + " level " + std::to_string(li) +
+                               " is out of range [0, " +
+                               std::to_string(kMaxFluidLevel) + "]");
+            }
+            const Json& f = e.at(4);
+            if (!f.isString()) {
+                return MC_FAIL(what + ": the fluid kind must be a name "
+                                "string");
+            }
+            const std::optional<FluidKind> k = fluidKindForName(f.asString());
+            if (!k) {
+                return MC_FAIL(what + " has unknown fluid '" +
+                               f.asString() +
+                               "' (vocabulary: \"water\", \"lava\")");
+            }
+            const BlockPos pos {static_cast<int>(x), yi, static_cast<int>(z)};
+            const auto bit = endBlockCells.find(pos);
+            if (bit != endBlockCells.end() && bit->second != "air" &&
+                li > 0) {
+                return MC_FAIL("save has an end block edit and an end "
+                               "fluid edit at the same cell " + posStr(pos) +
+                               " (a block displaces fluid)");
+            }
+            if (endFluidCells.count(pos) != 0) {
+                return MC_FAIL("save has duplicate end fluid edits at " +
+                               posStr(pos));
+            }
+            endFluidCells.insert(pos);
+            save.endFluidEdits.push_back(
+                {pos, *k, static_cast<std::uint8_t>(li)});
+        }
+        // The End's per-instance states (the nether's states derivation
+        // verbatim — the cross-check runs in BOTH directions against
+        // the END's stateful block edits: every end stateful cell owns
+        // a state, every state is an end stateful cell — the PITS 383①
+        // twin: a stateless 10a fill means a player-placed stateful
+        // block is the only source).
+        const Json* ests = endObj->find("states");
+        if (ests == nullptr || !ests->isArray()) {
+            return MC_FAIL("save 'end' requires a 'states' array "
+                           "(empty valid)");
+        }
+        std::set<BlockPos> endStateCells;
+        std::map<BlockPos, std::string> endStateCellBlock;
+        for (const SavedBlockEdit& e : save.endBlockEdits) {
+            const Block* b = blocks.findByName(e.blockName);
+            if (b != nullptr && b->hasState()) {
+                endStateCells.insert(e.pos);
+                endStateCellBlock[e.pos] = e.blockName;
+            }
+        }
+        std::set<BlockPos> endEntryPos;
+        for (std::size_t i = 0; i < ests->size(); ++i) {
+            const Json& e = ests->at(i);
+            const std::string what = "save 'end.states' entry #" +
+                                     std::to_string(i);
+            if (!e.isObject()) {
+                return MC_FAIL(what + " must be an object");
+            }
+            const std::set<std::string> eFields {"pos", "state"};
+            MC_TRY(rejectUnknownFields(e, eFields, what));
+            Result<BlockPos> pr = parseEntryPos(e, what, endEntryPos);
+            MC_TRY(pr);
+            const BlockPos& bpos = pr.value();
+            const Json* st = e.find("state");
+            if (st == nullptr || !st->isNumber()) {
+                return MC_FAIL(what + " requires numeric 'state'");
+            }
+            const int si = st->asInt();
+            if (si < 0) {
+                return MC_FAIL(what + " state " + std::to_string(si) +
+                               " is out of range (it must be >= 0)");
+            }
+            const auto cit = endStateCellBlock.find(bpos);
+            if (cit != endStateCellBlock.end()) {
+                const Block* cb = blocks.findByName(cit->second);
+                if (cb != nullptr && si >= cb->stateCount()) {
+                    return MC_FAIL(what + " state " + std::to_string(si) +
+                                   " is out of range [0, " +
+                                   std::to_string(cb->stateCount()) +
+                                   ") for the " + cit->second + " at " +
+                                   posStr(bpos));
+                }
+            }
+            save.endStates.push_back(
+                SavedState {bpos, static_cast<std::uint8_t>(si)});
+        }
+        if (endEntryPos != endStateCells) {
+            for (const BlockPos& p : endEntryPos) {
+                if (endStateCells.count(p) == 0) {
+                    return MC_FAIL("save 'end.states' has an entry at " +
+                                   posStr(p) +
+                                   " which is not a stateful block in the "
+                                   "end's block edits");
+                }
+            }
+            for (const BlockPos& p : endStateCells) {
+                if (endEntryPos.count(p) == 0) {
+                    return MC_FAIL("the end's stateful block at " +
+                                   posStr(p) +
+                                   " has no 'end.states' entry (every "
+                                   "stateful block owns a per-instance "
+                                   "state)");
+                }
+            }
+            return MC_FAIL("save 'end.states' does not match the "
+                           "end's stateful blocks");
+        }
+    } else {
+        // The version-lie gate (the per-format key discipline — the
+        // topLevel whitelist knows the key, this is the format) + the
+        // migration (the segments stay empty: the system did not exist,
+        // the End world never generated, the player was in the
+        // overworld — the velocity-zeroed twin).
+        if (endObj != nullptr) {
+            return MC_FAIL("save 'end' requires format 32 or newer "
+                           "(got " + std::to_string(fmtVersion) +
+                           ") (a version lie)");
+        }
+    }
+
+    // -- V3-10a (format 32): the END's dropped items (the nether's
+    // shape verbatim — the ITEM kind only, the XP kind rejected — 10a's
+    // End holds no grant source; a format-32 file REQUIRES the key,
+    // a format-31 (or older) file carrying it is a version lie).
+    // The ITEM kind of the nether's entity entry shape verbatim; the
+    // XP kind is REJECTED (the End holds no XP grant source in V3-10a —
+    // the documented deviation, the named version-lie twin). A
+    // format-32 file REQUIRES the key (an empty array is valid); a
+    // format-31 (or older) file carrying it is a version lie.
+    const Json* endEnts = def.find("end_entities");
+    if (fmtVersion >= 32) {
+        if (endEnts == nullptr || !endEnts->isArray()) {
+            return MC_FAIL("save format 32 requires an 'end_entities' "
+                           "array (empty valid: a no-travel session's "
+                           "End holds no drops)");
+        }
+        for (std::size_t i = 0; i < endEnts->size(); ++i) {
+            const Json& e = endEnts->at(i);
+            const std::string what = "save 'end_entities' entry #" +
+                                     std::to_string(i);
+            if (!e.isObject()) {
+                return MC_FAIL(what + " must be an object");
+            }
+            const Json* type = e.find("type");
+            if (type == nullptr || !type->isString() ||
+                type->asString() != "item") {
+                return MC_FAIL(what + " 'type' must be \"item\" (the "
+                               "End carries no XP orbs — the End "
+                               "holds no XP grant source in V3-10a)");
+            }
+            const std::set<std::string> eFields {"type", "item", "count",
+                                                 "pos", "age",
+                                                 "pickup_delay", "damage",
+                                                 "enchants"};
+            MC_TRY(rejectUnknownFields(e, eFields, what));
+            SavedItemEntity se;
+            const Json* name = e.find("item");
+            if (name == nullptr || !name->isString() ||
+                name->asString().empty()) {
+                return MC_FAIL(what + " requires a non-empty string "
+                               "'item'");
+            }
+            const ItemID id = items.idForName(name->asString());
+            if (!id.valid()) {
+                return MC_FAIL(what + " holds unknown item '" +
+                               name->asString() + "'");
+            }
+            const int maxStack =
+                std::min(items.at(id).maxStack, ItemEntity::kMaxStack);
+            const Json* count = e.find("count");
+            if (count == nullptr || !count->isNumber()) {
+                return MC_FAIL(what + " requires numeric 'count'");
+            }
+            se.count = count->asInt();
+            if (se.count < 1 || se.count > maxStack) {
+                return MC_FAIL(what + " count " + std::to_string(se.count) +
+                               " is out of range for '" + name->asString() +
+                               "' (max " + std::to_string(maxStack) + ")");
+            }
+            if (const Json* dmg = e.find("damage")) {
+                MC_TRY(checkDamageValue(*dmg, items.at(id), what, se.damage));
+            }
+            if (const Json* ench = e.find("enchants")) {
+                MC_TRY(parseEnchantsObj(*ench, what, se.enchants));
+            }
+            const Json* epos = e.find("pos");
+            if (epos == nullptr || !epos->isArray() || epos->size() != 3) {
+                return MC_FAIL(what + " requires 'pos' (an array of 3 "
+                               "numbers)");
+            }
+            for (std::size_t k = 0; k < 3; ++k) {
+                if (!epos->at(k).isNumber()) {
+                    return MC_FAIL(what + " 'pos'[" + std::to_string(k) +
+                                   "] must be a number");
+                }
+            }
+            se.pos = {static_cast<float>(epos->at(0).asDouble()),
+                      static_cast<float>(epos->at(1).asDouble()),
+                      static_cast<float>(epos->at(2).asDouble())};
+            const Json* age = e.find("age");
+            if (age == nullptr || !age->isNumber() ||
+                !(age->asDouble() >= 0.0 && age->asDouble() <
+                  ItemEntity::kDespawnSeconds)) {
+                return MC_FAIL(what + " 'age' must be a number in [0, " +
+                               std::to_string(ItemEntity::kDespawnSeconds) +
+                               ")");
+            }
+            se.age = age->asDouble();
+            const Json* delay = e.find("pickup_delay");
+            if (delay == nullptr || !delay->isNumber() ||
+                !(delay->asDouble() >= 0.0 && delay->asDouble() <=
+                  ItemEntity::kPickupDelaySeconds)) {
+                return MC_FAIL(what + " 'pickup_delay' must be a number in "
+                               "[0, " +
+                               std::to_string(
+                                   ItemEntity::kPickupDelaySeconds) + "]");
+            }
+            se.pickupDelay = delay->asDouble();
+            se.item = name->asString();
+            save.endEntities.push_back(std::move(se));
+        }
+    } else {
+        if (endEnts != nullptr) {
+            return MC_FAIL("save 'end_entities' requires format 32 or "
+                           "newer (got " + std::to_string(fmtVersion) +
+                           ") (a version lie)");
+        }
+    }
+
 
     // -- per-block crafting-table grids (format 19; CRAFT-1) -------------
     // A "table block" = a block whose `interact` property names the

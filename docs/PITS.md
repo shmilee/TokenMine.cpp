@@ -3,7 +3,7 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–404，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–405，新条目继续前插于尾部块首。
 
 - **gzip 容器可钉 / zlib 宏缺失 / 双跑 RAW 适用域（PITS 385，门 191
   V3-7 存档 gzip）**——① **zlib 自带 gzip 封装（windowBits 16+15）
@@ -68,6 +68,29 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **场景手术先探地形 + shader 无光分支双 floor + GCC-16 假阳性结构
+  隔离 + 存档伪造只剥对应后键 + 场景派生同步 fluids 五坑（PITS 405，
+  门 213 v3.23.0 V3-10a 末地维度框架）**——① **场景手术选位 = 先探
+  地形**：fresh 世界出生点邻域是丘陵（feet 54 起爬升）——body 层环 +
+  地板手术被高处地形埋没（黑屏 + RMB 全落空，假象极似「没瞄准」）；
+  纪律 = **7×7 挖深坑**（目标层..70 air + 目标层−1 石地板）平顶化，
+  与绝对高度无关（门内首探 → 二探实证）。② **shader 无光分支只读
+  u_caveAmbient**：basic.frag `light <= 0.001 → amb = u_caveAmbient`
+  ——无光源维度（10a 末地全岛 light 0）的 ambient floor 须 **u_ambient
+  + u_caveAmbient 双 uniform 同设**，单设 u_ambient = 岛面仍走
+  config 0.03 cave floor = 全黑截图（门内黑屏首因之二）。③ **GCC-16
+  -O3 maybe-uninitialized 假阳性族**：新代码增量改变 -O3 内联决策，
+  **既有** serializeSlotEntry 的 Json variant 假阳性复发（`-Wall
+  -Wextra -Wpedantic -Werror` 下报错但行为正确）；`noinline` 属性
+  无效，**结构隔离有效**（大段序列化抽独立静态函数 + 测试 TU 的 cell
+  构造抽助手）；判别纪律 = 先验 HEAD 树同编译器干净（真回归 vs 假阳
+  性），再动结构。④ **存档伪造真形 = 只剥对应后键**：format-30 伪造
+  若用 pre-30 strip 助手（剥 nether/dimension = 30 必携键）= 缺键假
+  失败；正确 = 只剥 31/32 键（creative/end/end_entities）保留 30 键；
+  pre-32 strip 助手（5 文件本地副本）须随 format bump 扩新键。⑤ **场
+  景派生须同步 fluids**：从带 fluids 编辑的 base 派生新场景清 blocks
+  不清 fluids → init rc 1「cell occupied」（fluid 落生成固体格）——
+  派生时 blocks/fluids/fires 三节同清。
 - **git checkout 还原回退未提交功能 + 骑乘场景视线三件 + demo 瞄准
   换算 + Space 双击窗 + 分离 opt-out 五坑（PITS 404，门 212
   v3.22.0 V3-14d strider 骑乘）**——① **`git checkout --` 还原

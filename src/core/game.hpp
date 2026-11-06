@@ -41,6 +41,7 @@
 #include "core/fly.hpp"
 #include "core/food.hpp"
 #include "core/input.hpp"
+#include "core/end_portal.hpp"
 #include "core/logger.hpp"
 #include "core/portal.hpp"
 #include "core/save.hpp"
@@ -87,6 +88,7 @@
 #include "world/fluid.hpp"
 #include "world/explosion.hpp"
 #include "world/ao.hpp"
+#include "world/end_gen.hpp"
 #include "world/lighting.hpp"
 #include "world/nether_gen.hpp"
 #include "world/raycast.hpp"
@@ -184,7 +186,7 @@ public:
     // Dimension-x2 reorganization). The overworld is the pre-Phase-B
     // world (every member unchanged); the nether is the parallel
     // NetherDim family (lazy — D2).
-    enum class Dimension { Overworld, Nether };
+    enum class Dimension { Overworld, Nether, End };
 
     // Which crafting panel (Phase 17) is open (None = nothing open).
     enum class OpenPanel {
@@ -1308,6 +1310,17 @@ private:
     bool playerInNether() const {
         return m_playerDimension == Dimension::Nether;
     }
+    // V3-10a: the WORLD->dimension discriminator (the setBlockInWorld
+    // choke point's pointer test, the recon's risk ② redo: with a
+    // third world the `&w != &m_world` binary breaks — an explicit
+    // identity check over the engaged dimensions, overworld the
+    // default; unengaged dimensions are skipped, so a stray pointer
+    // can only ever be the overworld).
+    Dimension dimensionOfWorld(const World& w) const;
+    // V3-10a: the End dimension's reader (the playerInNether's twin — the
+    // 33 dispatch sites ternary through the three predicates).
+    bool playerInEnd() const { return m_playerDimension == Dimension::End; }
+    bool inOverworld() const { return m_playerDimension == Dimension::Overworld; }
     // The dimension the player (and therefore the interaction, the
     // raycast, the entity list, the streaming and the render) currently
     // addresses. The overworld returns m_world — the pre-Phase-B
@@ -1327,9 +1340,26 @@ private:
     const std::map<BlockPos, BlockID>& portalsOf(Dimension dim) const;
     std::map<BlockPos, BlockID>& portalsOf(Dimension dim);
     // The dimension's streaming context (the DimCtx bind — the overworld
-    // family / the nether family; the shared pool for both).
+    // family / the nether family; the shared pool for all three).
     DimCtx overworldCtx();
     DimCtx netherCtx();
+    // V3-10a: the End's streaming context (the netherCtx's third member —
+    // the protectStates = the End portal set, the shared pool).
+    DimCtx endCtx();
+    // V3-10a: the End's ambient light floor (the recon's §5 point 6 —
+    // the Minecraft End's ambient_light 0.25: the 10a island has NO
+    // light sources, so without it the plateau is untestable black; the
+    // overworld / nether keep their config-derived values bit-for-bit).
+    // The set points: init + every dimension flip frame (travelEnd /
+    // the respawn rebind / the load's player rebind) — the shader
+    // uniform u_ambient, zero per-frame cost (a GL state set, the
+    // per-run constant's shape).
+    static constexpr float kAmbientEnd = 0.25f;
+    // The per-dimension u_ambient apply (the flip frame's presentation
+    // set — the End reads kAmbientEnd, every other dimension the
+    // config-derived floor, the init's one-time set's per-dimension
+    // generalization).
+    void applyDimensionAmbient();
     // D2 (the laziness): the nether is constructed on first need — the
     // first travel, a load whose nether section is non-empty or whose
     // player sits in the nether (before ANY chunk / mesh / journal /
@@ -1386,6 +1416,61 @@ private:
     // -> air; the tracking set rebuilds). Runs after the nether's edit
     // replay at load (and is a no-op while the nether is unengaged).
     void rescanNetherPortals();
+
+    // ------------------------------------------------------------------
+    // V3-10a: the End dimension (the nether family's third member — the
+    // lazy world + the entry/exit travel pipeline + the embed-eye
+    // interaction). The travelPortal / updatePortalEntry originals are
+    // NEVER touched (the nether path's bit-identical red line).
+    // ------------------------------------------------------------------
+    // The End's lazy construction (the ensureNether's twin — the skyless
+    // World + the pure fillEndChunk generator + the end journal observer
+    // + the streaming radius; idempotent; the init's EndGen::create
+    // fail-fast feeds the cache this consumes).
+    void ensureEnd();
+    // The End World (valid after ensureEnd; the belt-checked accessor,
+    // the netherWorld's twin).
+    World& endWorld();
+    // The End's generation reference (the fillEndChunk closure — the
+    // makeNetherChunkGenerator's third member).
+    World::ChunkGenerator makeEndChunkGenerator() const;
+    // The End's fluid pass (the updateNetherFluidTick's dimension-bound
+    // twin — 10a's worldgen holds no fluid; a player-poured bucket
+    // settles the same way, the static-sea zero-churn discipline).
+    void updateEndFluidTick();
+    // The end portal's entry countdown (the updatePortalEntry's OW-side
+    // twin: the player's AABB overlaps a TRACKED end_portal cell in the
+    // OVERWORLD — the 60f kPortalEntryFrames count, the GUI-mutex auto-
+    // close, the ride dismount; the arm plays the portal_trigger).
+    void updateEndPortalEntry();
+    // The End's real travel (the travelPortal's twin, NO 8:1 mapping —
+    // the 1:1 independent origin): the OW->End leg writes the entry
+    // platform (the 5x5 obsidian at (40,52,0), the per-entry rewrite —
+    // the journal's first-visit diff, idempotent thereafter) and lands
+    // at the fixed point facing west; the End->OW leg (the origin exit)
+    // returns to the overworld's spawn (the bed-validated respawn
+    // precedent). Both legs: catchUpDisk + setWorld + flip + the 900f
+    // cooldown + the travel sound (reused — zero new wav, deviation).
+    void travelEnd();
+    // The load-time End portal frame validity (the rescanNetherPortals
+    // twin — the entry's OW ring: an end_portal cell not strictly inside
+    // a complete 12-eyeful ring is an orphan -> air; the tracking set
+    // rebuilds. Runs after the end's edit replay at load).
+    void rescanEndPortals();
+    // The embed-eye interaction (V3-10a's A-lite activation): the
+    // crosshair on an end_frame cell, the selected item an ender_eye —
+    // one eye is consumed, the cell becomes the EYED frame, and the
+    // ring's scan activates the center (all 12 eyed + center air -> the
+    // 3x3 end_portal, the destroyable-false frames' no-deactivation
+    // path, deviation). The click is consumed on a frame cell (the
+    // failed-milk rule); a non-frame target falls through (the
+    // bit-identical legacy path).
+    bool tryEyePortal();
+
+    // V3-10a: the ender_eye item's resolved id (the init name lookup —
+    // invalid = the embed interaction is structurally inert, the
+    // absent-asset twin).
+    ItemID m_enderEyeId = ItemID::invalid();
 
     GameArgs m_args;
     Config m_config;
@@ -1795,6 +1880,47 @@ private:
         std::map<BlockPos, BlockID> portals;
     };
     NetherDim m_nether;
+    // V3-10a: the END dimension — the NetherDim's third member (the
+    // 12-point mirror: world (skyless) / gen (EndGen, init fail-fast) /
+    // streaming family / mesh data / bookkeeping sets / entities / the
+    // mobs empty pool (10c's two-phase slot) / the exit portal tracking
+    // set). Same laziness (ensureEnd on first travel / load) — a
+    // no-End session never allocates any of it (the structural-immunity
+    // strongest form: the S1 anchor's byte-identity rests on it).
+    struct EndDim {
+        // The End's world (SKYLESS — the nether's D5 twin: the void /
+        // world top read sky 0; no day/night, no weather — the render's
+        // 6-point gate does not consume them).
+        std::optional<World> world;
+        // The fill's resolved content (init's EndGen::create — the
+        // fail-fast timing ruling, the nether's twin). 10a: the four
+        // minimum names (endstone / obsidian / end_portal /
+        // end_portal_frame_eyed); 10b widens the vocabulary.
+        EndGen gen;
+        // The End's streaming family (the nether's member-for-member
+        // twin; the shared pool is the overworld's).
+        StreamingState streaming;
+        std::unordered_map<ChunkPos, ChunkMeshData> chunkMeshData;
+        std::unordered_map<ColumnPos, ColumnMesh> columnMeshes;
+        std::set<ColumnPos> columnRebuildPending;
+        // The cross-domain bookkeeping (the nether's twins).
+        std::set<ChunkPos> flammableChunks;
+        std::set<ColumnPos> lightPendingColumns;
+        std::set<ColumnPos> fluidLightPending;
+        // The End's entity list (D3: the player crosses; the drops /
+        // arrows it spawns live here — 10a spawns no mobs, the empty
+        // pool below; the player-thrown content only).
+        std::vector<std::unique_ptr<Entity>> entities;
+        // The End's mob system (10a: the EMPTY pool — no mobs data, the
+        // structural-immunity root; V3-10c fills it with the
+        // mob_spawning_end.json's two-phase slot, the V3-3 precedent).
+        MobSystem mobs;
+        // The End's EXIT portal tracking set (the worldgen's origin
+        // portal — the m_nether.portals twin; the choke point / the
+        // rescan / the ambience read it).
+        std::map<BlockPos, BlockID> portals;
+    };
+    EndDim m_end;
     // V3-1 Phase B (D6): the post-travel portal cooldown in FRAMES
     // (kPortalCooldownFrames on a completed travel — the destination
     // inside-portal ping-pong guard; session state, never saved, the
@@ -1810,6 +1936,13 @@ private:
     // pass is one null check, the tryRide never fires without an RMB on
     // a rideable mob).
     MobEntity* m_ridingMount = nullptr;
+    // V3-10a: the End portal's entry countdown in FRAMES (the
+    // m_portalEntryFrames' twin — the two dimensions' portals never
+    // co-arm (the player is in one), so the states are separate; the
+    // SHARED cooldown m_portalCooldownFrames gates both, the ping-pong
+    // guard is dimension-agnostic). 0 = not counting (the structural-
+    // immunity root: a no-end-portal session keeps it 0 forever).
+    int m_endPortalEntryFrames = 0;
     // The player body family (UX-3): the player's world-space body —
     // the data model (data/player_body.json, parsed through MobRegistry::
     // parseModel's full strict discipline) + the render assets (the static
@@ -2218,6 +2351,13 @@ private:
         // resolved by NetherGen::create at engagement (the nether
         // module's data vocabulary — the WorldGenerator::create twin).
         BlockID bedrockId = BlockID::invalid();
+        // V3-10a: the End portal's resolved ids (the portalId's twins —
+        // init name lookup; invalid = the End portal system is
+        // structurally inert, the nether's absent-asset twin).
+        BlockID endPortalId = BlockID::invalid();
+        // The eyed frame's resolved id (the embed interaction's write
+        // target — the frame cell becomes THIS on an eye placement).
+        BlockID endFrameEyedId = BlockID::invalid();
         // V3-1 Phase A: the portal tracking set — the cells holding the
         // portal block (the beacons' twin: maintained through the setBlock
         // choke point, rebuilt by rescanPortals() after load). Consumed by
@@ -2226,6 +2366,10 @@ private:
         // re-derived by the scan when needed (the beacon's derived-level
         // twin). std::map: position-sorted, deterministic iteration.
         std::map<BlockPos, BlockID> portals;
+        // V3-10a: the OVERWORLD's end-portal cell tracking set (the
+        // portals' twin — the entry frames live in the overworld; the
+        // END's exit set is m_end.portals, the nether's split precedent).
+        std::map<BlockPos, BlockID> endPortals;
     };
     PerBlockStates m_states;
 

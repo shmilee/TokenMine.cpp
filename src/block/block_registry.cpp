@@ -122,6 +122,27 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
                        out.blastResistance = static_cast<float>(v.asDouble());
                    });
     MC_TRY(r);
+    // V3-10a (the End): the portal's data flags (the strict-bool family,
+    // the beacon_base's twin — the core reads the property, never a
+    // block id).
+    r = checkField(*p, "end_portal", "boolean",
+                   [&](const Json& v) { out.endPortal = v.asBool(); });
+    MC_TRY(r);
+    r = checkField(*p, "end_frame", "boolean",
+                   [&](const Json& v) { out.endFrame = v.asBool(); });
+    MC_TRY(r);
+    r = checkField(*p, "end_frame_eyed", "boolean",
+                   [&](const Json& v) { out.endFrameEyed = v.asBool(); });
+    MC_TRY(r);
+    if (out.endFrameEyed && !out.endFrame) {
+        const Json* id = def.find("id");
+        const std::string name =
+            (id && id->isString() && !id->asString().empty())
+                ? id->asString()
+                : "<unknown>";
+        return MC_FAIL("block '" + name + "': 'end_frame_eyed' "
+                       "requires 'end_frame' (an eyed frame is a frame)");
+    }
     // Beacon pyramid base flag (Phase 83): a pure data flag (the core reads
     // the property, never a block id — hard rule 3).
     r = checkField(*p, "beacon_base", "boolean",

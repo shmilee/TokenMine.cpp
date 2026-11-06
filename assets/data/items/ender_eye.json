@@ -1,0 +1,22 @@
+{
+ "id": "ender_eye",
+ "type": "material",
+ "icon": "ender_eye",
+ "model": {
+  "texture": "ender_eye",
+  "elements": [
+   {
+    "from": [
+     0.3,
+     0.4,
+     0.35
+    ],
+    "to": [
+     0.7,
+     0.7,
+     0.75
+    ]
+   }
+  ]
+ }
+}

@@ -156,8 +156,11 @@ STREAMING_OLD = '''    collectLitColumns();
 
 # V3-1 Phase B (v3.4.0 onward): the drain call sites are DimCtx-
 # parameterized (the overworld's members + the lazy nether's). The
-# instrumented form wraps the WHOLE drain (both dimensions) — the
+# instrumented form wraps the WHOLE drain (all dimensions) — the
 # stream metric is the per-frame drain cost of the active session.
+# V3-10a (v3.23.0 onward, PITS 387's THIRD form): the drain is the
+# three-way (the lazy End's block joins the nether's) — every perf
+# tree rebuilds its instrumenter from its own commit's shape.
 STREAMING_OLD2 = '''    collectLitColumns(overworldCtx());
     integrateMeshJobs(overworldCtx());
     integrateStreamedColumns(overworldCtx());
@@ -179,6 +182,53 @@ STREAMING_NEW2 = '''    const auto g139_tst = std::chrono::steady_clock::now();
         integrateStreamedColumns(netherCtx());
     }
     DimCtx activeCtx = playerInNether() ? netherCtx() : overworldCtx();
+    unloadFarColumns(activeCtx);
+    g139win().stream.push_back(g139_ms(g139_tst));
+'''
+# The v3.23.0 (V3-10a) three-way drain — the NEW instrument target.
+STREAMING_OLD3 = '''    collectLitColumns(overworldCtx());
+    integrateMeshJobs(overworldCtx());
+    integrateStreamedColumns(overworldCtx());
+    if (m_nether.world) {
+        collectLitColumns(netherCtx());
+        integrateMeshJobs(netherCtx());
+        integrateStreamedColumns(netherCtx());
+    }
+    // V3-10a: the End's drain (the nether's block verbatim — at most one
+    // frame's worth of the source dimension's jobs linger after a
+    // travel, then every drain fast-exits; a no-End session runs the
+    // exact pre-V3-10a sequence, the bit-identical red line).
+    if (m_end.world) {
+        collectLitColumns(endCtx());
+        integrateMeshJobs(endCtx());
+        integrateStreamedColumns(endCtx());
+    }
+    DimCtx activeCtx =
+        playerInNether() ? netherCtx()
+        : playerInEnd() ? endCtx() : overworldCtx();
+    unloadFarColumns(activeCtx);
+'''
+STREAMING_NEW3 = '''    const auto g139_tst = std::chrono::steady_clock::now();
+    collectLitColumns(overworldCtx());
+    integrateMeshJobs(overworldCtx());
+    integrateStreamedColumns(overworldCtx());
+    if (m_nether.world) {
+        collectLitColumns(netherCtx());
+        integrateMeshJobs(netherCtx());
+        integrateStreamedColumns(netherCtx());
+    }
+    // V3-10a: the End's drain (the nether's block verbatim — at most one
+    // frame's worth of the source dimension's jobs linger after a
+    // travel, then every drain fast-exits; a no-End session runs the
+    // exact pre-V3-10a sequence, the bit-identical red line).
+    if (m_end.world) {
+        collectLitColumns(endCtx());
+        integrateMeshJobs(endCtx());
+        integrateStreamedColumns(endCtx());
+    }
+    DimCtx activeCtx =
+        playerInNether() ? netherCtx()
+        : playerInEnd() ? endCtx() : overworldCtx();
     unloadFarColumns(activeCtx);
     g139win().stream.push_back(g139_ms(g139_tst));
 '''
@@ -233,9 +283,12 @@ if is_split:
     ref = [read(frame)]
     rep = make_repper(ref)
     # The patcher follows the version: each side's tree carries the
-    # patcher of ITS OWN commit (git archive), so the dual anchor is
-    # belt-and-braces for rebuilds — the newer call shape wins.
-    if STREAMING_OLD2 in ref[0]:
+    # patcher of ITS OWN commit (git archive), so the triple anchor is
+    # belt-and-braces for rebuilds — the newest call shape wins
+    # (V3-10a's three-way drain > the Phase B two-way > the legacy).
+    if STREAMING_OLD3 in ref[0]:
+        rep(STREAMING_OLD3, STREAMING_NEW3)
+    elif STREAMING_OLD2 in ref[0]:
         rep(STREAMING_OLD2, STREAMING_NEW2)
     else:
         rep(STREAMING_OLD, STREAMING_NEW)

@@ -223,7 +223,18 @@ void Game::update(double dt) {
         integrateMeshJobs(netherCtx());
         integrateStreamedColumns(netherCtx());
     }
-    DimCtx activeCtx = playerInNether() ? netherCtx() : overworldCtx();
+    // V3-10a: the End's drain (the nether's block verbatim — at most one
+    // frame's worth of the source dimension's jobs linger after a
+    // travel, then every drain fast-exits; a no-End session runs the
+    // exact pre-V3-10a sequence, the bit-identical red line).
+    if (m_end.world) {
+        collectLitColumns(endCtx());
+        integrateMeshJobs(endCtx());
+        integrateStreamedColumns(endCtx());
+    }
+    DimCtx activeCtx =
+        playerInNether() ? netherCtx()
+        : playerInEnd() ? endCtx() : overworldCtx();
     unloadFarColumns(activeCtx);
 
     // Day/night: a fixed per-frame step (see kDayStepPerFrame) keeps
@@ -263,8 +274,11 @@ void Game::update(double dt) {
     // return-leg gate's "OW savenorm ≡ pre-entry except the global
     // time" rests on it; the nether's twin pass runs in the nether
     // section below). In the overworld (the default) this is the exact
-    // pre-Phase-B sequence — the bit-identical red line.
-    if (!playerInNether()) {
+    // pre-Phase-B sequence — the bit-identical red line. V3-10a: the
+    // End freezes it too (the triple-capsule — the nether AND the
+    // overworld freeze while the player is in the End; neither has a
+    // world pass of its own, the End's frozen content is the frame's).
+    if (!playerInNether() && !playerInEnd()) {
         updateOverworldWorldPass();
     }
 
@@ -292,9 +306,13 @@ void Game::update(double dt) {
     // overworld's fluid / fire / moisture pass is FROZEN in the nether;
     // the nether's twin (the fluid tick over the static source lava sea
     // — zero churn, the recon's risk-surface ③ resolution) runs
-    // instead.
+    // instead. V3-10a: the End's twin (10a's worldgen holds no fluid —
+    // a player-poured bucket settles the same way, the static zero-
+    // churn discipline; the evaporation rule stays nether-scoped).
     if (playerInNether()) {
         updateNetherFluidTick();
+    } else if (playerInEnd()) {
+        updateEndFluidTick();
     } else {
         updateOverworldFluidPass(dt);
     }
@@ -312,6 +330,16 @@ void Game::update(double dt) {
         }
         if (m_nether.world) {
             meshes = updateChunkMeshes(netherCtx());
+            if (!meshes.ok()) {
+                MC_LOG_ERROR("Chunk meshing failed: " +
+                             meshes.error().describe());
+            }
+        }
+        // V3-10a: the End's upload (the nether's block verbatim — the
+        // fast exit on the empty pending set keeps a no-End session at
+        // the exact pre-V3-10a cost).
+        if (m_end.world) {
+            meshes = updateChunkMeshes(endCtx());
             if (!meshes.ok()) {
                 MC_LOG_ERROR("Chunk meshing failed: " +
                              meshes.error().describe());
@@ -361,6 +389,11 @@ void Game::update(double dt) {
     // root: the AABB overlap is the only trigger, worldgen places no
     // portal blocks — the stateful worldgen rejection).
     updatePortalEntry();
+    // V3-10a: the End portal's entry countdown (the updatePortalEntry's
+    // twin — the player's AABB over an end_portal cell in the CURRENT
+    // dimension arms the same 60-frame step, the SHARED cooldown; a
+    // no-end-portal run never arms it, the structural-immunity root).
+    updateEndPortalEntry();
     // UX-4 / V2-1 / V2-19: the per-frame camera sync (the mode's base
     // view — extracted VERBATIM into syncCamera(); the V3-9 replay's
     // still frames call it too for the live audience orbit).
@@ -871,8 +904,10 @@ void Game::updateAmbience() {
     // raw sky 0 — the nether context (T4) owns the ambience now, the
     // cave bed is the overworld's no-sky rule only).
     const int rawSky = currentWorld().getSkyLight(cx, cy, cz);
-    const AmbienceContext ctx =
-        ambienceContext(rawSky, m_dayCycle.dayFactor(), playerInNether());
+    // V3-10a: the three-way (the End's own context — the Nether's T4
+    // shape; the two flags are mutually exclusive by construction).
+    const AmbienceContext ctx = ambienceContext(
+        rawSky, m_dayCycle.dayFactor(), playerInNether(), playerInEnd());
     // The roll: the pure function of (world seed, frame, context) — same
     // inputs, same answer across runs (the event sequence is
     // deterministic; the log line below is the E2E evidence). V3-1 Phase
@@ -1226,6 +1261,166 @@ void Game::travelPortal(const PortalFrame& sourceFrame) {
                 std::to_string(src.y) + ", " + std::to_string(src.z) + ")");
 }
 
+void Game::updateEndPortalEntry() {
+    // V3-10a: the End portal's entry countdown (the updatePortalEntry's
+    // shape — the frame-locked class, hard rule 8): the player's AABB
+    // overlapping an end_portal cell in the CURRENT dimension (the
+    // overlapsBlock precedent — the nether's travel reads the same way)
+    // arms kPortalEntryFrames through the SAME pure portalEntryStep;
+    // leaving cancels. The GUI mutual exclusion is the nether's twin
+    // (a panel opened mid-countdown auto-CLOSES). Completion runs
+    // travelEnd (the 1:1 independent-origin pipeline — NO 8:1 mapping,
+    // the fixed entry platform / the overworld-spawn return). The
+    // cooldown is the SHARED m_portalCooldownFrames (the ping-pong
+    // guard is dimension-agnostic — a destination inside-portal
+    // landing is blocked exactly as the nether's is). The trigger sound
+    // reuses "portal_trigger" (zero new wav, the documented deviation);
+    // the travel sound reuses "portal_travel".
+    if (!m_states.endPortalId.valid() || m_player->isDead()) {
+        m_endPortalEntryFrames = 0;
+        return; // the structural-inert / dead-body no-op
+    }
+    const bool inPortal = m_player->overlapsBlock(m_states.endPortalId);
+    if (inPortal && panelOpen()) {
+        closePanel(); // the GUI cannot stay open in a portal (Minecraft)
+    }
+    const bool canArm = m_portalCooldownFrames == 0;
+    const PortalEntryStep step =
+        portalEntryStep(canArm && inPortal, m_endPortalEntryFrames);
+    m_endPortalEntryFrames = step.framesRemaining;
+    if (step.completed) {
+        travelEnd();
+        return;
+    }
+    // The ARM frame (the first in-portal frame of the countdown): the
+    // trigger sound + the dismount (a rider cannot cross dimensions —
+    // the nether's arm frame's twin) + the log.
+    if (step.framesRemaining == kPortalEntryFrames - 1) {
+        dismountRide();
+        m_sound.play("portal_trigger");
+        MC_LOG_INFO("End portal entry: travel countdown armed");
+    }
+}
+
+void Game::travelEnd() {
+    // V3-10a: the End's single-frame frame-locked travel pipeline (the
+    // travelPortal's shape, the 1:1 independent origin — the 8:1 mapping
+    // does NOT apply: the End has its own coordinates, the Minecraft
+    // scale-1.0 ruling). The OW->End leg lands on the entry platform
+    // (the 5x5 obsidian at (40,52,0) — the PER-ENTRY rewrite: the
+    // platform's cells are journaled the first time, idempotent
+    // thereafter — the recon's risk ⑦); the End->OW leg (the origin
+    // exit) returns to the overworld's SPAWN (the bed-validated respawn
+    // precedent — the broken-bed world-spawn fallback). Runs in the
+    // update's main-thread-writer window (the flush barrier ran at the
+    // top), so the platform writes + the synchronous catch-up are safe.
+    const Dimension source = m_playerDimension;
+    const Dimension target =
+        (source == Dimension::End) ? Dimension::Overworld : Dimension::End;
+    const Vec3 p = m_player->position();
+    const BlockPos src {static_cast<int>(std::floor(p.x)),
+                        static_cast<int>(std::floor(p.y)),
+                        static_cast<int>(std::floor(p.z))};
+    // 1. The target dimension (the End is LAZY — engage it now; the
+    //    overworld always exists). A stripped asset set leaves the End
+    //    unengaged (ensureEnd's named error): abort the travel (the
+    //    countdown clears — re-entry re-counts).
+    if (target == Dimension::End) {
+        ensureEnd();
+        if (!m_end.world) {
+            m_endPortalEntryFrames = 0;
+            return;
+        }
+        // 2. The entry platform (the per-entry rewrite — the
+        //    portalPlatformPlan's twin): the 3 layers above cleared
+        //    FIRST (the landing safety — the void above is air already,
+        //    the clear is the idempotent belt over 10b's future
+        //    content), the 5x5 obsidian square second (the feet land on
+        //    its top, y 53). Through the TARGET's choke point (the
+        //    journal / editedColumns / tracking-set protection ride
+        //    along — the player is still in the SOURCE dimension, so the
+        //    dimension-explicit setBlockInWorld is required). A
+        //    stripped asset set's invalid obsidianId makes the writes
+        //    structural no-ops (the landing is the island's endstone,
+        //    the platform's absence is a belt-only loss).
+        const EndEntryPlatformPlan plan = endEntryPlatformPlan();
+        for (const BlockPos& c : plan.clearAir) {
+            setBlockInWorld(*m_end.world, c.x, c.y, c.z, BlockID::air());
+        }
+        if (m_states.obsidianId.valid()) {
+            for (const BlockPos& c : plan.setObsidian) {
+                setBlockInWorld(*m_end.world, c.x, c.y, c.z,
+                                m_states.obsidianId);
+            }
+        }
+    }
+    World& targetWorld = (target == Dimension::End) ? *m_end.world : m_world;
+    // 3. The destination decision (the pure fixed point — the nether's
+    //    ±16 search / generation fallback has no twin: the entry is the
+    //    platform's top center facing WEST (the +pi/2 camera
+    //    convention, the Minecraft-exact landing), the exit is the
+    //    overworld's bed-validated spawn (the respawnPlayer's D8
+    //    ruling: the End death's return twin — the coordinate memory is
+    //    re-pinned by the spawn-restore below).
+    const Vec3 destination = (target == Dimension::End)
+        ? endEntryPosition()
+        : bedRespawnValid(m_world, m_blocks, m_player->spawnPos(),
+                          m_player->params().width,
+                          m_player->params().height)
+              ? m_player->spawnPos()
+              : m_mobs.spawnPoint;
+    const float yaw =
+        (target == Dimension::End) ? endEntryYaw() : m_player->yaw;
+    // 4. The synchronous catch-up disk (3x3 columns around the landing —
+    //    the nether's step 5 verbatim).
+    {
+        const int cx =
+            floorDiv(static_cast<int>(std::floor(destination.x)),
+                     kChunkSize);
+        const int cz =
+            floorDiv(static_cast<int>(std::floor(destination.z)),
+                     kChunkSize);
+        catchUpDisk(target, cx, cz);
+    }
+    // 5. The player's world rebind (D3: only the player crosses) + the
+    //    landing (restorePosition = the teleport + the fall pin) + the
+    //    yaw + the camera sync. The exit leg re-pins the spawn memory
+    //    (the respawnPlayer's twin — the return's coordinate is the
+    //    respawn's coordinate: a later End death lands on the same spot).
+    m_player->setWorld(targetWorld);
+    if (target == Dimension::Overworld) {
+        m_player->setSpawnPos(destination);
+    }
+    m_player->restorePosition(destination);
+    m_player->yaw = yaw;
+    m_camera.position = m_player->eyePosition();
+    m_camera.yaw = m_player->yaw;
+    m_camera.pitch = m_player->pitch;
+    // 6. The dimension flip (the nether's step 7 verbatim — the
+    //    target's streamer engages on the player's own column).
+    m_playerDimension = target;
+    // 6b. V3-10a: the flip frame's ambient set (the End's kAmbientEnd /
+    //     the return's config floor — the u_ambient's per-dimension
+    //     shape, zero per-frame cost).
+    applyDimensionAmbient();
+    // 7. The SHARED cooldown (the ping-pong guard) + the countdown reset
+    //    + the travel sound (the "portal_travel" reuse — zero new wav,
+    //    the deviation) + the info log (the E2E evidence — the landing's
+    //    cell in the TARGET dimension's coordinates + the source cell).
+    m_portalCooldownFrames = kPortalCooldownFrames;
+    m_endPortalEntryFrames = 0;
+    m_sound.play("portal_travel");
+    const int destX = static_cast<int>(std::floor(destination.x));
+    const int destY = static_cast<int>(std::floor(destination.y));
+    const int destZ = static_cast<int>(std::floor(destination.z));
+    MC_LOG_INFO(std::string("Traveled to ") +
+                (target == Dimension::End ? "end" : "overworld (end exit)") +
+                " at (" + std::to_string(destX) + ", " +
+                std::to_string(destY) + ", " + std::to_string(destZ) +
+                ") from (" + std::to_string(src.x) + ", " +
+                std::to_string(src.y) + ", " + std::to_string(src.z) + ")");
+}
+
 void Game::updatePortalAmbience() {
     // V3-1 Phase A: the portal ambient sound (the bat squeak's per-frame
     // roll, spatialized at the portal cell's center — the 0.5 volume
@@ -1547,6 +1742,35 @@ void Game::updateNetherFluidTick() {
         // overworld's fire-registration loop has no twin here.
         for (const ColumnPos& col : changedCellColumns(changed)) {
             m_nether.fluidLightPending.insert(col);
+        }
+    }
+}
+
+void Game::updateEndFluidTick() {
+    // V3-10a: the End's fluid pass (the updateNetherFluidTick's
+    // dimension-bound twin — the same frame-locked cadence, the same
+    // static zero-churn discipline). 10a's worldgen holds NO fluid (the
+    // void + the endstone plateau), so a settled End's walk re-reads its
+    // cells, re-goes-cold and returns empty — no changed columns, no
+    // light jobs, the fast exit. A player-poured bucket settles the same
+    // way it would in the overworld. The evaporation rule (the nether's
+    // water-vanish) stays NETHER-scoped (the game_interaction predicate
+    // — the End's water is plain water, the documented deviation).
+    if (m_frameCount % kFluidTickEveryNFrames == 0) {
+        // The fluid tick number (frame-locked): the honey gate is its
+        // period (the nether's twin — the End holds no honey, the flag
+        // rides the same cadence for the call's signature parity).
+        const bool honeyActive =
+            (m_frameCount / kFluidTickEveryNFrames) %
+                kHoneyTickPeriodFluidTicks == 0;
+        const std::vector<BlockPos> changed = FluidSim::tick(
+            *m_end.world, m_blocks, &m_end.flammableChunks, honeyActive);
+        // The End holds no fire STATE (the D9 closed-set twin — a burn-
+        // pass ignition lands as a permanent fire block, the nether's
+        // documented deviation). So the overworld's fire-registration
+        // loop has no twin here.
+        for (const ColumnPos& col : changedCellColumns(changed)) {
+            m_end.fluidLightPending.insert(col);
         }
     }
 }

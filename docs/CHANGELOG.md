@@ -11,6 +11,47 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.23.0（2026-11-07）— V3-10a 末地维度框架 + 真传送（项目第三维度，门 213 全 PASS）
+
+**矩阵大项 V3-10 末地首相位**（V3-1 下界维度基建的**第二次消费**：
+worldgen 纯函数 / 流送 / 光照 / 传送管线 / 存档 format 末地段；规模
+≈ V3-1 Phase B 门 194；**format 31→32** / **sim 不 bump**（canary 4
+EXACT 实证）/ 零 config / 块 127→131 / atlas 166→170 零移位 / item
+98→99 / 声音 67→68）。
+
+**入口 = A-lite**：`end_portal_frame`（空）/`end_portal_frame_eyed`
+（嵌眼）= 两个 stateless 块（项目无 per-state 纹理机制）+ 数据谓词
+`end_frame`/`end_frame_eyed`/`end_portal` + **5×5 水平环纯函数族**
+（scan/激活 plan/8 候选中心反解/孤儿谓词）+ `ender_eye` 物品 +
+**嵌眼交互**（持眼右键 frame：吞 1 眼 + 嵌眼态 + 环扫描；12 全 eyed
++ 中心 3×3 全 air → 中心激活 end_portal；frame 不可破坏 = 无去激活
+路记偏离）。**最小末地** = 120×120 末地石台地 y[48,52] + 原点出口
+门（worldgen 常活）+ 虚空无地板 + 入场平台 5×5 obsidian @(40,52,0)
+**每次传送写入**（偏离 MC (100,49,0)）+ 落点朝西 +π/2。**传送管线
+= 新函数**（travelPortal 原文零触碰位级红线）：1:1 独立原点无 8:1 /
+返程 = 主世界出生点（床校验）/ 60f 倒计时 + 900f 冷却复用 / 死亡回
+OW 重生 D8 三值化。**渲染 6 点**：暗紫黑 clear 0.05/0.03/0.06 / 雾
+8..48 / 日月星云雨 inOverworld 门 / F3 +end / ambience 第 5 上下文
++ambience_end.wav / **u_ambient + u_caveAmbient 双 floor 0.25 按维
+度**（门内捕获：shader 无光分支只读 u_caveAmbient，单设 = 全黑）。
+
+**门 213**：S1 结构免疫第 94 次（≡ base19 ×2 + 终档恰白名单 3 键
+{format,end,end_entities}）/ S2 去程 authored demo（12 嵌眼 →
+`End portal activated at (3, 54, 3)` → `Traveled to end at (40, 53,
+0)` ×2 RAW + 逐字恒等 + 热栏 13→1 眼）+ 返程零输入臂（`Traveled to
+overworld (end exit)` ×2 + pos 出生点精确）+ 末地持久化臂（end 段 =
+恰 25 obsidian 平台格集合精确）/ S6 五面点名 / canary 4 EXACT /
+2885/2885（+29）/ 性能 A/B 同档【banner 实证 v3.22.0/v3.23.0 +
+PERF-WIN 三窗 upd med 0.327/0.323/0.324 vs 0.533/0.573/0.575【旧树
+同二进制复跑 2× spread = 环境漂移带，新在带内】+ render/swap 同档 +
+changesApplied 9/3/1 全逐位 + 终档 savenorm 恰白名单 3 键
+{format 31→32, end, end_entities} format bump 最强形】。PITS 405
+（场景手术先探地形挖深坑 + shader 无光分支双 floor + GCC-16 假阳性
+结构隔离 + 存档伪造只剥对应后键 + 场景派生同步 fluids）。记档偏离 10 项（A-lite 双块 /
+平台位置 / 60f 倒计时 / 出口常活 / 无去激活 / 声音复用 / 水不蒸发 /
+虚空 / 生成池空槽 / frame 生存不可得）。详见
+`docs/archive/phase-3.23.0.md`。
+
 ## v3.22.0（2026-11-06）— V3-14d strider 骑乘（项目首个骑乘面，门 212 全 PASS）
 
 **矩阵 ⬜ 项小→大推进**（V3-14 下界 mob 深化相位 D/4——骑乘机制

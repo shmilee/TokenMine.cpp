@@ -273,6 +273,10 @@ Json withoutKey(const Json& root, const std::string& key) {
 Json stripFormat31Keys(Json root) {
     root = withoutKey(root, "nether");
     root = withoutKey(root, "nether_entities");
+    // V3-10a: the format-32 keys join the strip (the test_save twin —
+    // a genuine pre-32 file never carried end / end_entities).
+    root = withoutKey(root, "end");
+    root = withoutKey(root, "end_entities");
     if (const Json* player = root.find("player");
         player != nullptr && player->isObject() &&
         player->find("dimension") != nullptr) {
@@ -354,7 +358,7 @@ TEST(CampfireSaveTest, FormatIsThirteenAndRoundTrips) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     // V3-11a: writes are always format 31 (V3-1 Phase B was 30).
-    EXPECT_EQ(j->find("format")->asInt(), 31);
+    EXPECT_EQ(j->find("format")->asInt(), kSaveFormat);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->campfires.size(), 3u);

@@ -304,5 +304,7 @@ TEST(ItemModelMeshTest, ShippedModelsHaveNoFaceCoincidentBoxes) {
     // chain, every one an explicit item with a model) -> 97.
     // V3-14b: +1 (ghast_membrane — the ghast's drop, an explicit item
     // with a model) -> 98.
-    EXPECT_EQ(modelCount, 98) << "ENT-9: all 98 items have models";
+    // V3-10a: 98 -> 99 (the ender_eye model — the quartz's single-
+    // box shape, the every-shipped-item-model discipline).
+    EXPECT_EQ(modelCount, 99) << "ENT-9: all 99 items have models";
 }

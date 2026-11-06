@@ -181,8 +181,9 @@ void Game::handleInteraction(double dt) {
         // (the D9 closed-set ruling — the nether holds no campfire
         // state; a nether campfire is a plain block the player cannot
         // cook on: the branch is skipped, the click falls through to
-        // the item channels).
-        if (!playerInNether()) {
+        // the item channels). V3-10a: the triple (the End's closed set
+        // is the nether's twin — no campfire state there either).
+        if (inOverworld()) {
             if (const std::optional<BlockHit> hit = targetBlock(); hit) {
                 const Block& b = m_blocks.at(
                     currentWorld().getBlock(hit->block.x, hit->block.y,
@@ -265,9 +266,18 @@ void Game::handleInteraction(double dt) {
         if (tryRide()) {
             return;
         }
+        // V3-10a (the End): the embed-eye — the crosshair on an
+        // end_frame cell, the selected item an ender_eye: one eye
+        // consumed, the cell becomes the eyed frame, the ring's scan
+        // activates the center (all 12 eyed + center air).
+        if (tryEyePortal()) {
+            return;
+        }
         // Data-driven interaction (Phase 17): a block whose `interact`
         // property names a known GUI opens it instead of placing.
-        if (!playerInNether()) {
+        // V3-10a: the inOverworld gate (the D9 closed-set triple — the
+        // End holds no container state, the nether's shape).
+        if (inOverworld()) {
             // V3-1 Phase B: the container panels (the per-block states
             // are OVERWORLD-ONLY — the D9 closed-set ruling: opening a
             // nether container would bind an overworld-state entry to a
@@ -313,8 +323,11 @@ void Game::handleInteraction(double dt) {
         // V3-1 Phase B: the sleep (the respawn point is the OVERWORLD's
         // bed — the D8 ruling: a respawn is always the overworld; a
         // nether bed is the documented no-op — the Minecraft nether-bed
-        // explosion is Phase C, the deviation-8 family).
-        if (!playerInNether()) {
+        // explosion is Phase C, the deviation-8 family). V3-10a: the
+        // inOverworld gate (the End's bed is the same documented no-op
+        // — the respawn point is always the overworld's, the D8
+        // triple).
+        if (inOverworld()) {
             if (const std::optional<BlockHit> hit = targetBlock(); hit) {
                 const Block& b = m_blocks.at(
                     currentWorld().getBlock(hit->block.x, hit->block.y,
@@ -960,12 +973,20 @@ void Game::setBlockInWorld(World& world, int x, int y, int z, BlockID id) {
     // closed-set ruling: the nether holds no container / plant / fire
     // state in Phase B — a furnace placed in the nether is a plain block,
     // the P70 family-inert pattern; the nether fire segment is Phase C).
-    const bool nether = (&world != &m_world);
-    StreamingState& st = nether ? m_nether.streaming : m_streaming;
+    // V3-10a: the explicit dimension discriminator (the recon's risk ②
+    // redo — the `&world != &m_world` pointer test breaks with a third
+    // world; dimensionOfWorld is the identity check over the engaged
+    // dimensions, overworld the default).
+    const Dimension dim = dimensionOfWorld(world);
+    const bool nether = dim == Dimension::Nether;
+    const bool end = dim == Dimension::End;
+    StreamingState& st = nether ? m_nether.streaming
+                       : end ? m_end.streaming : m_streaming;
     std::set<ChunkPos>& flammableChunks =
-        nether ? m_nether.flammableChunks : m_flammableChunks;
+        nether ? m_nether.flammableChunks
+        : end ? m_end.flammableChunks : m_flammableChunks;
     std::vector<std::unique_ptr<Entity>>& ents =
-        nether ? m_nether.entities : m_entities;
+        nether ? m_nether.entities : end ? m_end.entities : m_entities;
     // A first-touch column must be COMPLETE before the edit: the World's
     // setBlock creates only the target chunk, and the streaming loader
     // counts a column as loaded when ANY chunk exists — a partial column
@@ -980,7 +1001,8 @@ void Game::setBlockInWorld(World& world, int x, int y, int z, BlockID id) {
         // and the lighting job (new terrain).
         world.ensureColumn(cp.x, cp.z);
         st.loadedColumns.insert({cp.x, cp.z});
-        (nether ? m_nether.lightPendingColumns : m_lightPendingColumns)
+        (nether ? m_nether.lightPendingColumns
+         : end ? m_end.lightPendingColumns : m_lightPendingColumns)
             .insert({cp.x, cp.z});
         st.unlitColumns.insert({cp.x, cp.z});
     }
@@ -1011,11 +1033,13 @@ void Game::setBlockInWorld(World& world, int x, int y, int z, BlockID id) {
     // never dropped — a reloaded save would otherwise lose the edits).
     st.editedColumns.insert({floorDiv(x, kChunkSize),
                              floorDiv(z, kChunkSize)});
-    if (!nether) {
+    if (!nether && !end) {
         // The seven per-block state families (OVERWORLD-ONLY — see the
         // function header's D9 ruling: the nether's closed set {blocks,
         // fluids, states} carries no container / plant / fire state in
-        // Phase B).
+        // Phase B; the End's closed set is the nether's twin — V3-10a's
+        // frame / portal blocks are stateless, so the End holds no
+        // per-block state either).
         const BlockPos fpos {x, y, z};
         const bool furnace =
             m_blocks.at(id).properties.interact == kInteractFurnace;
@@ -1149,14 +1173,33 @@ void Game::setBlockInWorld(World& world, int x, int y, int z, BlockID id) {
     // set of plans keeps it exact — the rescan rebuilds it on load).
     // V3-1 Phase B: PER-DIMENSION (the overworld's m_states.portals /
     // the nether's m_nether.portals — the nether's portals track there).
+    // V3-10a: the End's exit portals track in m_end.portals (the
+    // dimension the edit landed in — the exit ring lives in the End).
     {
         const BlockPos pp {x, y, z};
         std::map<BlockPos, BlockID>& portals =
-            nether ? m_nether.portals : m_states.portals;
+            nether ? m_nether.portals
+            : end ? m_end.portals : m_states.portals;
         if (m_states.portalId.valid() && id == m_states.portalId) {
             portals[pp] = id;
         } else {
             portals.erase(pp);
+        }
+    }
+    // V3-10a: the END portal tracking set follows the cell (the
+    // portals' twin, the endPortalId predicate): the entry cells track
+    // in the OVERWORLD's m_states.endPortals (the frames live there),
+    // the exit cells in the End's m_end.portals (the worldgen's origin
+    // ring). A cell that stops holding an end portal drops out; the
+    // rescanEndPortals rebuilds both sets on load.
+    {
+        const BlockPos pp {x, y, z};
+        std::map<BlockPos, BlockID>& endPortals =
+            end ? m_end.portals : m_states.endPortals;
+        if (m_states.endPortalId.valid() && id == m_states.endPortalId) {
+            endPortals[pp] = id;
+        } else {
+            endPortals.erase(pp);
         }
     }
     // V3-1 Phase A: the portal frame event (an obsidian or fire placement
@@ -1964,6 +2007,97 @@ bool Game::tryRide() {
     return true;
 }
 
+bool Game::tryEyePortal() {
+    // V3-10a (the End): the embed-eye interaction (the A-lite
+    // activation — the tryMilk paradigm's block twin). The crosshair on
+    // an end_frame cell + the selected item an ender_eye: one eye is
+    // consumed, the cell becomes the EYED frame (the choke point — the
+    // journal / the tracking sets ride along), and the ring's scan
+    // (the 8 candidate centers — the reverse ring map) ACTIVES when a
+    // candidate reads all 12 frames EYED + the 3x3 center all air: the
+    // center becomes end_portal (the activation plan's order) + ONE
+    // relight over the ring's bounding box + the trigger cue + the info
+    // log (the E2E evidence). The frames are UNBREAKABLE (the
+    // destroyable-false data) — the eyed state is monotone: there is no
+    // deactivation path (the documented deviation — MC's eye-break
+    // deactivation has no consumer here). A non-frame target / a
+    // non-eye item / an already-eyed cell fall through or no-op: the
+    // bit-identical legacy path (the structural-immunity root — a
+    // no-eye run never reaches the write).
+    if (!m_player || m_player->isDead()) {
+        return false;
+    }
+    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    if (stack.empty() || stack.item != m_enderEyeId) {
+        return false; // the item predicate (the resolved id — the
+                      // m_states.portalId pattern, never a name switch)
+    }
+    if (!m_states.endFrameEyedId.valid() || !m_states.endPortalId.valid()) {
+        return false; // the structural-inert no-op (the absent-asset
+                      // twin — the whole End system is off)
+    }
+    const std::optional<BlockHit> hit = targetBlock();
+    if (!hit) {
+        return false;
+    }
+    const BlockPos cell = hit->block;
+    const Block& b = m_blocks.at(
+        currentWorld().getBlock(cell.x, cell.y, cell.z));
+    if (!b.properties.endFrame) {
+        return false; // not a frame: the legacy fall-through
+    }
+    if (b.properties.endFrameEyed) {
+        return true; // already eyed: the no-op (the click is consumed —
+                     // the failed-milk rule)
+    }
+    // The embed: consume one eye + write the eyed frame.
+    m_inventory.take(m_selectedSlot, 1);
+    setBlock(cell.x, cell.y, cell.z, m_states.endFrameEyedId);
+    // The ring scan (the 8 candidate centers, the deterministic order —
+    // the FIRST activatable candidate wins; a genuine ring has exactly
+    // one, a hand-crafted cluster the first in order).
+    int completeEyed = -1; // the best completed ring's eyed count (the log)
+    bool activated = false;
+    for (const BlockPos& center : endRingCenterCandidates(cell)) {
+        const EndPortalScan s =
+            scanEndPortalRing(currentWorld(), m_blocks, center.x,
+                              center.y, center.z);
+        if (!s.ringComplete) {
+            continue;
+        }
+        completeEyed = std::max(completeEyed, s.eyedCount);
+        if (s.eyedCount != 12 || !s.centerAir || activated) {
+            continue;
+        }
+        // The activation: the 3x3 center becomes end_portal (the plan's
+        // order, through the choke point — the journal rides along) +
+        // ONE relight over the ring's bounding box (the portal is a
+        // light-11 source, the nether's activatePortal's twin) + the
+        // trigger cue + the info log.
+        activated = true;
+        for (const BlockPos& c :
+             endPortalActivationPlan(center.x, center.y, center.z)) {
+            setBlock(c.x, c.y, c.z, m_states.endPortalId);
+        }
+        Lighting::updateRegion(
+            currentWorld(), m_blocks,
+            BlockPos {center.x - 2, center.y, center.z - 2},
+            BlockPos {center.x + 2, center.y, center.z + 2});
+        m_sound.play("portal_trigger");
+        MC_LOG_INFO("End portal activated at (" +
+                    std::to_string(center.x) + ", " +
+                    std::to_string(center.y) + ", " +
+                    std::to_string(center.z) + ")");
+    }
+    if (!activated) {
+        MC_LOG_DEBUG(completeEyed >= 0
+                         ? "embedded an end eye (" +
+                               std::to_string(completeEyed) + "/12)"
+                         : "embedded an end eye (no complete ring)");
+    }
+    return true;
+}
+
 bool Game::tryFluidBucket() {
     // Fluid bucket (Phase 47; kinds in Phase 51 — water and lava). The
     // selected item must be a bucket side (item data 'collects_fluid' or
@@ -2003,9 +2137,11 @@ bool Game::tryFluidBucket() {
     // (v3.7.0): the nether WATER POUR evaporates (the bucket empties,
     // no cell touched — see the pour side's dimension gate below).
     World& world = currentWorld();
+    // V3-10a: the three-way (the End's parallel editedColumns family).
     std::set<ColumnPos>& editedColumns =
         playerInNether() ? m_nether.streaming.editedColumns
-                         : m_streaming.editedColumns;
+        : playerInEnd() ? m_end.streaming.editedColumns
+                        : m_streaming.editedColumns;
     if (collect) {
         // UX-8g: the bucket-target ray leaves from the eye in both
         // modes (first person: m_camera.position == eyePosition =

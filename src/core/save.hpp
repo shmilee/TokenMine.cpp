@@ -471,7 +471,23 @@ namespace mc {
 //      + the flight on entry. The schema is otherwise IDENTICAL to
 //      30 (the nether segments / states / everything unchanged).
 //      Writes are always format 31.
-inline constexpr int kSaveFormat = 31;
+//  32: V3-10a the END dimension (v3.23.0) — the nether's format-30
+//      shape's second consumption: "player".'s "dimension" strict
+//      vocabulary gains "end" (PER-FORMAT: a format-30/31 file
+//      carrying "end" is a version lie, named; a format-32 file takes
+//      the three words overworld|nether|end); the new ALWAYS-written
+//      segments "end" {blocks, fluids, states — the closed set, the
+//      nether's verbatim} + "end_entities" (the ITEM kind only, the XP
+//      kind rejected — 10a's End holds no grant source). The End's
+//      worldgen places no stateful block (endstone / obsidian / the
+//      frame family are stateless — A-lite's two-stateless-blocks
+//      ruling), so the journal-only derivation's completeness holds
+//      exactly as the nether's. A format-31 (or older) load migrates:
+//      dimension unchanged + the end segments empty (the system did
+//      not exist). The derived seed (endSeed = worldSeed ^ kSaltEnd)
+//      is never stored (the parse rebuilds it, the nether's twin).
+//      Writes are always format 32.
+inline constexpr int kSaveFormat = 32;
 // UX-8f (format 24): the inventory's total slot count as of format 23
 // (9 hotbar + 18 storage) — the 27-slot array shape a pre-24 file
 // carries (the parser tail-pads it to the current kTotalSize).
@@ -882,6 +898,19 @@ struct SaveGame {
     // source in Phase B, the documented deviation 6). ALWAYS written
     // (empty valid); empty for a format-29 (or older) load.
     std::vector<SavedItemEntity> netherEntities;
+    // V3-10a (format 32): the END's cell edits + per-instance states
+    // (the nether's shapes verbatim — the End's diff reference is the
+    // pure fill against the derived seed endSeed). ALWAYS written
+    // (empty valid — a no-travel session's End is pristine); empty for
+    // a format-31 (or older) load (the migration).
+    std::vector<SavedBlockEdit> endBlockEdits; // sorted by pos
+    std::vector<SavedFluidEdit> endFluidEdits; // sorted by pos
+    std::vector<SavedState> endStates;         // sorted by pos
+    // V3-10a (format 32): the End's dropped items (the ITEM kind only —
+    // the XP kind is rejected, 10a's End holds no grant source, the
+    // documented deviation; ALWAYS written, empty valid). Empty for a
+    // format-31 (or older) load.
+    std::vector<SavedItemEntity> endEntities;
 };
 
 // Compares every existing chunk of `world` against `reference` (called

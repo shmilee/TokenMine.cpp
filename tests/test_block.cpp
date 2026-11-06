@@ -2339,6 +2339,14 @@ TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
         {"terracotta_red", "stone"},
         {"terracotta_silver", "stone"},
         {"terracotta_yellow", "stone"},
+        // V3-10a (v3.23.0): the End's minimum blocks — endstone / the
+        // frames = the stone family (the MC end_stone's stone-class
+        // read), the portal = the glass family (the nether_portal's
+        // twin).
+        {"endstone", "stone"},
+        {"end_portal", "glass"},
+        {"end_portal_frame", "stone"},
+        {"end_portal_frame_eyed", "stone"},
     };
     for (const auto& [name, mat] : expected) {
         const Block* b = reg.findByName(name);

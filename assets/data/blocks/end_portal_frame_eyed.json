@@ -1,0 +1,16 @@
+{
+  "id": "end_portal_frame_eyed",
+  "properties": {
+    "hardness": 0,
+    "opaque": true,
+    "destroyable": false,
+    "light_emission": 0,
+    "end_frame": true,
+    "end_frame_eyed": true,
+    "sound_material": "stone"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "end_portal_frame_eyed", "side": "end_portal_frame_eyed", "bottom": "end_portal_frame_eyed" }
+  }
+}

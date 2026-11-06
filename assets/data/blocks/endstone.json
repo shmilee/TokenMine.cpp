@@ -1,0 +1,12 @@
+{
+  "id": "endstone",
+  "properties": {
+    "hardness": 0.5,
+    "drops": "endstone",
+    "sound_material": "stone"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "endstone", "side": "endstone", "bottom": "endstone" }
+  }
+}

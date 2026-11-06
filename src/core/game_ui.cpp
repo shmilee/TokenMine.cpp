@@ -1003,8 +1003,11 @@ void Game::respawnPlayer() {
     // overworld's bed / spawn; the nether holds no spawn point, the
     // documented deviation 5: no mob, no spawn-protection need). The
     // rebind + the catch-up disk run BEFORE the position restore (the
-    // overworld's world is the respawn's coordinate space).
-    if (playerInNether()) {
+    // overworld's world is the respawn's coordinate space). V3-10a: an
+    // END death respawns in the OVERWORLD too (the Minecraft "the End
+    // can only be left by dying or the exit" ruling — the D8 triple;
+    // the End holds no spawn point either).
+    if (playerInNether() || playerInEnd()) {
         m_player->setWorld(m_world);
         m_playerDimension = Dimension::Overworld;
         {
@@ -1014,6 +1017,10 @@ void Game::respawnPlayer() {
                                     kChunkSize);
             catchUpDisk(Dimension::Overworld, cx, cz);
         }
+        // V3-10a: the End-death return's ambient restore (the config
+        // floor — the u_ambient's per-dimension shape; the nether-death
+        // leg is a value-identical no-op, the floor is unchanged).
+        applyDimensionAmbient();
     }
     m_player->setSpawnPos(target);
     m_player->respawn();
@@ -2380,9 +2387,11 @@ void Game::renderUi() {
         info.gamepadConnected = m_input.gamepadConnected();
         info.gamepadName = m_input.gamepadName();
         // V3-1 Phase B: the dimension line (the F3's 20th line — the
-        // developer-tool discipline: the F3 stays English).
+        // developer-tool discipline: the F3 stays English). V3-10a:
+        // the three-way (the "end" value — the F3 pin family's +1).
         info.dimension =
-            playerInNether() ? "nether" : "overworld";
+            playerInNether() ? "nether"
+            : playerInEnd() ? "end" : "overworld";
         // UX-8e: the F3 line step is a TEXT-STACK pitch — it grows with
         // the glyphs (lround, identity at fs = 1.0); the margin (an
         // icon-space inset) does not.

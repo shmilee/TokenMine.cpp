@@ -78,6 +78,19 @@ constexpr float kNetherSkyColorB = 0.04f;
 constexpr float kNetherFogStart = 10.0f;
 constexpr float kNetherFogEnd = 96.0f;
 
+// V3-10a: the End's sky + fog (the nether's constant family's third
+// member — the Minecraft End's sky #000000 with the void-violet read +
+// the THICK short fog, the recon's §5 ruling: the island is lit by the
+// ambient floor only, the fog swallows the void's edge early). Named
+// constants, zero config (the kSkyDistance discipline). The overworld /
+// nether render paths never read them (the inEnd gate — the default-off
+// bit-identity).
+constexpr float kEndSkyColorR = 0.05f;
+constexpr float kEndSkyColorG = 0.03f;
+constexpr float kEndSkyColorB = 0.06f;
+constexpr float kEndFogStart = 8.0f;
+constexpr float kEndFogEnd = 48.0f;
+
 constexpr float kBeaconBeamLevelHeight = 32.0f;
 
 // Phase 83 beacon beam color (bright cyan-white, the classic beam) and its
@@ -680,11 +693,17 @@ void Game::render() {
     // dim / pulse are the overworld sky's channels, the nether's render
     // does not consume them; the overworld's expression is unchanged —
     // the bit-identical red line).
+    // V3-10a: the three-way (the End's constant dark-violet — the day /
+    // weather channels are the overworld sky's, both the nether's and
+    // the End's renders do not consume them; the overworld's expression
+    // is unchanged — the bit-identical red line).
     const Vec3 sky =
         playerInNether()
             ? Vec3 {kNetherSkyColorR, kNetherSkyColorG, kNetherSkyColorB}
-            : m_dayCycle.skyColor() * weatherDim +
-                  Vec3 {weatherPulse, weatherPulse, weatherPulse};
+            : playerInEnd()
+                  ? Vec3 {kEndSkyColorR, kEndSkyColorG, kEndSkyColorB}
+                  : m_dayCycle.skyColor() * weatherDim +
+                        Vec3 {weatherPulse, weatherPulse, weatherPulse};
     m_renderer.clear({sky.x, sky.y, sky.z, 1.0f});
 
     const Mat4 projection = Mat4::perspective(
@@ -724,9 +743,13 @@ void Game::render() {
     // parallel family). The set is stable across render() (the pool
     // flushed at the top of update; no streaming job posts during the
     // render pass), so the snapshot matches what the passes draw.
+    // V3-10a: the three-way (the End's parallel loadedColumns family —
+    // the fog's fill clamp + the column passes read the ACTIVE
+    // dimension's set, the nether's D7 point-2 shape).
     const std::set<ColumnPos>& activeLoadedColumns =
         playerInNether() ? m_nether.streaming.loadedColumns
-                         : m_streaming.loadedColumns;
+        : playerInEnd() ? m_end.streaming.loadedColumns
+                        : m_streaming.loadedColumns;
     const std::vector<ColumnPos> columns(activeLoadedColumns.begin(),
                                          activeLoadedColumns.end());
     // PRE-2 distance fog: the streaming disc edge (raw chunk
@@ -777,11 +800,19 @@ void Game::render() {
     // way; a filled nether disk reads >= 96 / 16 = 6 => end 96
     // bit-for-bit); the overworld's streaming-disc-derived range is
     // unchanged.
+    // V3-10a: the End's fog is the SHORT thick dark violet (the
+    // kEndFogStart..kEndFogEnd named constants — the nether's shape: the
+    // fog color is the clear sky, the fill clamp the first-teleport rim
+    // guard; a filled End disk reads >= 48 / 16 = 3 => end 48
+    // bit-for-bit).
     const FogRange fog =
         playerInNether()
             ? FogRange {kNetherFogStart,
                         fillClampedEnd(kNetherFogEnd, filledBlocks)}
-            : fogFilledRange(rEffBlocks, filledBlocks, kFar);
+            : playerInEnd()
+                  ? FogRange {kEndFogStart,
+                              fillClampedEnd(kEndFogEnd, filledBlocks)}
+                  : fogFilledRange(rEffBlocks, filledBlocks, kFar);
     const bool fogOn = fogConfigOn && fog.end > fog.start;
     m_basicShader.setUniform1i("u_fogEnabled", fogOn ? 1 : 0);
     m_basicShader.setUniform1f("u_fogStart", fog.start);
@@ -867,8 +898,10 @@ void Game::render() {
     // block (V3-6 — the shared set→vector copy). The frustum test is
     // dimension-agnostic (world coordinates — the active dimension's
     // space).
+    // V3-10a: the three-way (the End's parallel columnMeshes family).
     std::unordered_map<ColumnPos, ColumnMesh>& columnMeshes =
-        playerInNether() ? m_nether.columnMeshes : m_columnMeshes;
+        playerInNether() ? m_nether.columnMeshes
+        : playerInEnd() ? m_end.columnMeshes : m_columnMeshes;
     for (const ColumnPos& col : columns) {
         if (!columnVisible(col)) {
             continue;
@@ -909,7 +942,9 @@ void Game::render() {
     // Campfire cooking items (Phase 71): the item icon floating above each
     // campfire with a non-empty slot — opaque pass, depth-occluded. No-op
     // without a cooking campfire (baseline byte-identical).
-    if (!playerInNether()) {
+    // V3-10a: the inOverworld gate (the End holds no cooking campfire —
+    // the D9 closed-set triple, the nether's shape).
+    if (inOverworld()) {
         drawCampfireCookItems(view, projection);
     }
     // Opaque break particles (Phase 15) belong to the opaque pass so the
@@ -921,7 +956,8 @@ void Game::render() {
     // the opaque pass so the depth test occludes them behind terrain, and
     // before the transparent pass (they never overlap chunk geometry in
     // depth — they sit behind everything in the demo area).
-    if (!playerInNether()) {
+    if (inOverworld()) { // V3-10a: the End is skyless (the nether's
+                        // shape — the sun / moon / stars never draw).
         drawSkyObjects(view, projection, h);
     }
 
@@ -981,7 +1017,7 @@ void Game::render() {
     // Beacon beams (Phase 83): the translucent light columns from active
     // beacons, blended + depth-occluded like the other world geometry.
     // No-op without an active beacon (baseline byte-identical).
-    if (!playerInNether()) {
+    if (inOverworld()) { // V3-10a: the D9 closed-set triple.
         drawBeaconBeams(view, projection);
     }
     // UX-9a clouds: the drifting translucent layer at y = kCloudHeight,
@@ -989,7 +1025,7 @@ void Game::render() {
     // render.clouds (code default true); OFF = zero draw (the v0.27.0
     // pipeline bit-identical). The pattern is per-pixel (the one-time
     // quad, zero upload after init — see drawClouds).
-    if (!playerInNether()) {
+    if (inOverworld()) { // V3-10a: the D9 closed-set triple.
         drawClouds(view, projection);
     }
     // V2-4 rain: the 300-drop field in the 16^3 box around the player —
@@ -999,7 +1035,7 @@ void Game::render() {
     // drops (the v2.3.0 pipeline bit-identical — the first segment is
     // always >= kClearMin frames, so a no-input run never sees rain in
     // the base-gate window).
-    if (!playerInNether()) {
+    if (inOverworld()) { // V3-10a: the D9 closed-set triple.
         drawRain(view, projection);
     }
     // The break crack + target outline (Phase 15): world-space, blended,
@@ -1185,6 +1221,30 @@ Result<void> Game::takeScreenshot(const std::filesystem::path& path) {
     MC_LOG_INFO("Screenshot saved: " + path.string() + " (" +
                 std::to_string(w) + "x" + std::to_string(h) + ")");
     return {};
+}
+
+void Game::applyDimensionAmbient() {
+    // V3-10a: the per-dimension ambient floor (the init's one-time set's
+    // flip-frame generalization): the End reads kAmbientEnd on BOTH
+    // floors (the Minecraft ambient_light 0.25 — the sourceless island
+    // is LIGHT-0 everywhere, and the shader's light<=0 branch reads
+    // u_caveAmbient, not u_ambient: setting one alone left the island
+    // at the config's 0.03 cave floor — the gate's black-screenshot
+    // catch). Every other dimension keeps the init's exact values
+    // bit-for-bit (the OW / nether red line — the re-read config is
+    // the init's same source).
+    m_basicShader.bind();
+    if (playerInEnd()) {
+        m_basicShader.setUniform1f("u_ambient", kAmbientEnd);
+        m_basicShader.setUniform1f("u_caveAmbient", kAmbientEnd);
+        return;
+    }
+    m_basicShader.setUniform1f("u_ambient",
+                               ambientFloorForLevel(m_nightSkyLevel));
+    if (auto caveAmbient = readCaveAmbient(m_config); caveAmbient.ok()) {
+        m_basicShader.setUniform1f(
+            "u_caveAmbient", static_cast<float>(*caveAmbient));
+    }
 }
 
 } // namespace mc

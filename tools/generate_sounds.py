@@ -1189,6 +1189,46 @@ def ambience_nether():
     return sound(dur, f)
 
 
+def ambience_end():
+    """V3-10a (v3.23.0): the End ambience bed (the FIFTH context — the
+    player in the End, the dimension context checked before the nether's
+    T4): the Minecraft end ambience's read — a deep sub drone (a 40 Hz
+    body with a slow 0.2 Hz wobble) + a quiet airless shimmer (the 2.17x
+    partial, the void's thin atmosphere) over a fixed-seed
+    double-lowpassed bed, with two LCG-placed distant whooshes (220 ->
+    55 Hz slow glides, very quiet — the nether crack's void twin, the
+    ender's unlocalized drift read), 2.0 s, faded with amb_env (no
+    clicks), in the 0.5 ambient volume class (the ambience_nether
+    precedent — the master amplitude bakes the volume). One advancing
+    LCG instance, dedicated fixed seed — a re-run leaves every other
+    file byte-identical."""
+    lcg = Lcg(0xC0DE)  # dedicated fixed seed (unique to this sound)
+    dur = 2.0
+    n = int(RATE * dur)
+    bed = lowpass3(lowpass3([lcg.next() for _ in range(n)]))
+    # Two whooshes spread over [0.50, 1.70] with jitter (the LCG
+    # decides — the ambience_nether placement pattern).
+    whooshes = []
+    for i in range(2):
+        u = lcg.next() * 0.5 + 0.5
+        whooshes.append(0.50 + 0.40 * ((i + u) / 2.0))
+
+    def f(t, _):
+        i = int(t * RATE)
+        drone = (math.sin(2 * math.pi * 40.0 * t)
+                 * (0.80 + 0.20 * math.sin(2 * math.pi * 0.2 * t))
+                 + math.sin(2 * math.pi * 40.0 * 2.17 * t) * 0.18)
+        out = drone * 0.16 + bed[i] * 0.08
+        for t0 in whooshes:
+            u = t - t0
+            if 0.0 <= u < 0.60:
+                fr = 220.0 - 275.0 * (u / 0.60)  # 220 -> 55 Hz glide
+                out += (math.sin(2 * math.pi * fr * u)
+                        * math.exp(-u * 4.0) * 0.08)
+        return out * amb_env(t, dur, 0.2, 0.4) * 0.5
+    return sound(dur, f)
+
+
 # ---------------------------------------------------------------------------
 # V3-3 (v3.8.0): the nether mob ambient family — the three per-mob
 # ambients (the squeak's ground-mob twin: the runAi per-frame roll plays
@@ -1355,6 +1395,9 @@ SOUNDS = {
     # V3-7 (v3.7.0): T4 — the nether ambience bed (the fourth context —
     # the player in the nether, priority over cave / day / night).
     "ambience_nether": ambience_nether,
+    # V3-10a (v3.23.0): the End ambience bed (the fifth context — the
+    # dimension's checked-before-nether priority).
+    "ambience_end": ambience_end,
     # V3-3 (v3.8.0): the nether mob ambient family (the per-mob
     # ambient_sound carriers — the squeak's ground-mob twin; the magma
     # cube is the documented no-ambient).

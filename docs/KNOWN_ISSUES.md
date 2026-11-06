@@ -740,6 +740,31 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
 - **地下生成火簇 = 场景域 real-dt**（PITS 401③）——爆炸门场景须
   密封石室 + 去火（savenorm 域）。
 
+## V3-10a 末地维度框架（v3.23.0）
+
+- **frame 生存不可得**——入口环的 frame / 眼 10a 仅 creative 授予 +
+  门存档手术可得（MC 的 stronghold portal room + 末影人掉眼 + 合
+  成 = V3-10b/10c 定案面）；生存玩家暂无法自建末地入口。
+- **入场平台 (40,52,0) 每次传送重写**（5×5 obsidian + 上方 3 层清
+  air；首访 end 段 journal diff = 恰 25 格，二次入场幂等零新增）；
+  偏离 MC (100,49,0)（保留 MC x 须扩 200×200 岛——决策弃）。
+- **60f 站入倒计时 + 900f 冷却**（复用下界管线；MC 末地门即时传
+  送）。
+- **出口门常活**（worldgen 原点 12 eyed frame + 3×3 portal；MC 的
+  出口 = 龙死后激活——10d 前偏离）。
+- **无去激活路**（frame destroyable false，嵌眼单调；MC 破 frame
+  去激活）；中心被混入他块 = 载入 rescan 孤儿判定（PITS 383 双向
+  检点名）。
+- **末地水不蒸发**（蒸发谓词 nether-scoped；MC 末地同下界蒸发——
+  10b 复议）。
+- **末地无 mob / 无生成**（10c 空槽；虚空坠落 = 既有 kill plane
+  −32 + 「死于世界之外」+ 死亡回主世界重生（D8 三值化））。
+- **u_ambient 双 floor**（末地 0.25 同设 u_ambient + u_caveAmbient
+  ——shader 无光分支只读后者；OW/nether 配置值位级不变）。
+- **A-lite 双 stateless frame 块**（项目无 per-state 纹理机制；MC
+  单块 16 态 = 偏离）；声音复用 portal_trigger/travel（零新 wav；
+  +1 ambience_end）。
+
 ## V3-14d strider 骑乘（v3.22.0）
 
 - **骑乘 = 会话态（不入档）**——mob 不入档（format 30 设计），重载

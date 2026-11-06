@@ -115,6 +115,10 @@ Game::DimCtx Game::overworldCtx() {
             protectStates(m_states.saplings);
             protectStates(m_states.beacons);
             protectStates(m_states.fires);
+            // V3-10a: the End entry portal's columns (the rescan's
+            // getBlock-based validation premise — the ring's cells must
+            // stay resident with the portal's).
+            protectStates(m_states.endPortals);
         },
         /*protectDemoArea=*/true};
 }
@@ -137,6 +141,31 @@ Game::DimCtx Game::netherCtx() {
             // column would break the load, the overworld's seven-map
             // family's twin).
             for (const auto& [pos, id] : m_nether.portals) {
+                (void)id;
+                protectedColumns.insert({
+                    floorDiv(pos.x, kChunkSize),
+                    floorDiv(pos.z, kChunkSize)});
+            }
+        },
+        /*protectDemoArea=*/false};
+}
+
+Game::DimCtx Game::endCtx() {
+    // V3-10a: the End's streaming context (the netherCtx's third member
+    // — the same shape: the engaged world, its own StreamingState, the
+    // SHARED overworld pool, the End's generator closure, the exit
+    // portal set's column protection, no demo area).
+    return DimCtx {
+        *m_end.world, m_end.streaming, *m_streaming.pool,
+        m_end.chunkMeshData, m_end.columnMeshes,
+        m_end.columnRebuildPending, m_end.flammableChunks,
+        m_end.lightPendingColumns, m_end.fluidLightPending,
+        makeEndChunkGenerator(),
+        [this](std::set<ColumnPos>& protectedColumns) {
+            // The End's portal tracking set (the netherCtx's twin — the
+            // exit ring's columns stay resident, the rescan's
+            // getBlock-based validation premise).
+            for (const auto& [pos, id] : m_end.portals) {
                 (void)id;
                 protectedColumns.insert({
                     floorDiv(pos.x, kChunkSize),

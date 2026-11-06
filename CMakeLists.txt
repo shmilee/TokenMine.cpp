@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 3.22.0 LANGUAGES CXX)
+project(TokenMine VERSION 3.23.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -32,6 +32,7 @@ add_library(mc_core STATIC
     src/core/demo.cpp
     src/core/asset_manager.cpp
     src/core/bed.cpp
+    src/core/end_portal.cpp
     src/core/portal.cpp
     src/core/window.cpp
     src/core/input.cpp
@@ -109,6 +110,7 @@ add_library(mc_core STATIC
     src/world/beam_light.cpp
     src/world/mesh_job.cpp
     src/world/light_job.cpp
+    src/world/end_gen.cpp
     src/world/lighting.cpp
     src/world/nether_gen.cpp
     src/world/noise.cpp
@@ -248,6 +250,8 @@ add_executable(tokenmine_tests
     tests/test_enchant_save.cpp
     tests/test_bed.cpp
     tests/test_portal.cpp
+    tests/test_end_gen.cpp
+    tests/test_end_portal.cpp
     tests/test_nether_gen.cpp
     tests/test_netherite.cpp
     tests/test_gamepad.cpp

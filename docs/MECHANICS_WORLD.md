@@ -1,22 +1,28 @@
-# 机制详解 · 世界与渲染（现状 v3.13.0）
+# 机制详解 · 世界与渲染（现状 v3.23.0）
 
 > 玩家/系统侧（内容总览/操作与交互/实体与 Mob/生存系统/状态效果/弓与箭/流体桶与点燃/demo 回放/合成与容器/存档/难度/确定性约定）= `docs/MECHANICS.md`（主文件；头部「来源约定」全文在主文件）。
 
-> 2026-11-06 报障刷新：现状 = **v3.12.0**（3.x 矩阵收官于 v3.11.0；v3.12.0 = 实机报障阴影缩尺）（3.x「世界
-> 扩展」期：v3.1.0 = V3-7 存档 gzip，门 191；v3.2.0 = V3-1 Phase A
-> 下界门框，门 192；v3.3.0 = V3-8 手柄，门 193；v3.4.0 = V3-1 Phase B
-> 下界世界 + 真传送，门 194【format 30】；v3.5.0 = V3-2/Phase C Part 1
-> 下界内容族 + D9 空腔带修订，门 195；v3.6.0 = V3-4 netherite 材料链，门 196【零核心代码】；v3.7.0 = V3-2 Part 2 下界深化，门 197【全 nether-scoped】；v3.8.0 = V3-3 下界 mob，门 198【neutral/walks_on_lava 旗 + 下界池】；v3.9.0 = V3-5 建筑内容族，门 199【水底 sediment 生成】；v3.10.0 = V3-6 世界边缘雾，门 200【填充感知 fog end，base19 重锚】；v3.11.0 = V3-9 demo 回放，门 201【注入内核 + 双 Input 路由，3.x 矩阵收官】；其前 2.x 两批 20 版收官
-> v2.0.0 → v2.19.0）、无输入基线门 **202** 次、单元测试
-> **2777/2777**、`-Wall -Wextra -Wpedantic -Werror` 0 警告、存档
-> **format 30**（下界维度：player.dimension + nether 段 +
-> nether_entities；gzip 编码 V3-7 起；下界内容 = 世界生成演进零
-> format）、base19 锚 **225272 B**（重锚谱系 179116 → 178148【V2-10
-> 门 181】→ 178676【V2-19 门 182】→ 179027【V2-11 门 183】→ 224468
-> 【V2-18 门 190，AO 世界光照】→ **225272【V3-6 门 200，填充感知雾 = 3.x
-> 首重锚】**；门 184–189 = 结构免疫第 65–70 次免重锚；门 191–199 =
-> 第 72–80 次；门 201–202 = 第 81–82 次免重锚（对 base19）【v3.0.0
-> banner = 第 71 次】）、PITS **398**。上一轮全面刷新
+> 2026-11-07 增量刷新：现状 = **v3.23.0**（V3-10a 末地维度框架 + 真
+> 传送，门 213【format 32】；其前 v3.22.0 = V3-14d strider 骑乘，门
+> 212；v3.21.0 = V3-14c piglin 交易，门 211；v3.20.0 = V3-14b ghast，
+> 门 210；v3.19.0 = V3-14a 爆炸机制，门 209；v3.18.0 = V3-11b 创造物
+> 品栏，门 208；v3.17.0 = V3-11a 创造基础，门 207【format 31】；v3.16.0
+> = V3-15 生存/表现小批，门 206；v3.15.0 = V3-13 死亡统计屏，门 205；
+> v3.14.0 = V3-8b 手柄映射，门 204【sim 2】；v3.13.0 = demo sim 版
+> 本，门 203；v3.12.0 = 实机报障阴影缩尺，门 202；3.x 矩阵收官于
+> v3.11.0；其前 2.x 两批 20 版收官 v2.0.0 → v2.19.0）、无输入基线门
+> **213** 次、单元测试
+> **2885/2885**、`-Wall -Wextra -Wpedantic -Werror` 0 警告、存档
+> **format 32**（下界维度 format 30：player.dimension + nether 段 +
+> nether_entities；创造 format 31：player.creative；末地 format 32：
+> dimension 词表 +end 按 format 分词 + end 段 + end_entities；gzip
+> 编码 V3-7 起；下界/末地内容 = 世界生成演进零 format）、base19 锚
+> **225272 B**（重锚谱系 179116 → 178148【V2-10 门 181】→ 178676
+> 【V2-19 门 182】→ 179027【V2-11 门 183】→ 224468【V2-18 门 190，AO
+> 世界光照】→ **225272【V3-6 门 200，填充感知雾 = 3.x 首重锚】**；门
+> 184–189 = 结构免疫第 65–70 次免重锚；门 191–199 = 第 72–80 次；门
+> 201–213 = 第 81–94 次免重锚（对 base19）【v3.0.0 banner = 第 71 次】）、
+> PITS **405**。上一轮全面刷新
 > （2026-11-02）止于 v2.0.0、2026-11-03 增量止于 v2.3.0（下条），本次把
 > v2.11.0 → v2.19.0 的机制（提前项 `[V2-19]` + 第二批 `[V2-11]`~`[V2-18]`，
 > 逐版见 `docs/archive/v2x/CHANGELOG.md`，细节证据见 `docs/archive/v2x/`
@@ -518,6 +524,62 @@
   portal 房间（框 + 基岩平台自足，落点安全 = 框底行 + 出框 1 格落台
   地顶无伤）；开阔空腔 + 群系表面远地平线 + stem/basalt 柱 + 天花板
   glowstone（门 195 截图观感实证）；熔岩海 = 向下 21 格（台地）可达。
+
+## 末地维度（`[V3-10a]`，v3.23.0）
+
+- **第三维度**（下界维度基建的**第二次消费**）：`EndDim` = NetherDim
+  12 成员镜像聚合 + `Dimension::End` + `playerInEnd()`/`inOverworld()`
+  + `dimensionOfWorld()`（setBlock 咽喉点指针判别三值化重做）；**首
+  传前零 chunk/零 mesh/零流送/零内存**（结构免疫最强形，S1 ≡ base19
+  实证）。
+- **坐标 = 1:1 独立原点**（MC 精确，无 8:1 映射）；派生 seed
+  `worldSeed ^ kSaltEnd` **不落盘**（parse 重建）。
+- **末地 worldgen**（`end_gen` 纯函数，坐标纯函数零噪声）：120×120
+  末地石台地 x/z∈[−60,60] y∈[48,52]（feet 53）+ **原点出口门**
+  （y53 12 格 frame_eyed 环 + 3×3 end_portal，常活——10d 前偏离）+
+  岛外虚空无地板；10b 换真内容（原野/基岩洋/岛群）。
+- **末地块族（10a 最小面，块 127→131 / atlas 166→170 零移位）**：
+  endstone 0.5（stone 音族）/ end_portal（transparent/solid false/
+  light 11/destroyable false，nether_portal 逐字镜像，glass 音族）/
+  end_portal_frame + end_portal_frame_eyed（**A-lite 双 stateless
+  块**——项目无 per-state 纹理机制，偏离 MC 单块 16 态；destroyable
+  false = **无去激活路**嵌眼单调）。
+- **入口门（A-lite）**：5×5 水平环（四角缺 12 frame 格）body 层 +
+  中心 3×3；**嵌眼交互**（持 `ender_eye` 右键 frame：吞 1 眼 + 嵌眼
+  态 + 8 候选中心环扫描）= **12 全 eyed + 中心全 air → 中心激活
+  end_portal**（纯函数族 `end_portal.{hpp,cpp}`：scan/activation
+  plan/cellValid 孤儿谓词）；`ender_eye` 物品（32×32 独立 icon +
+  单盒 model，item 98→99）。**frame 生存不可得**（creative 授予 +
+  门手术；10b/10c 复议）。
+- **传送**（**新函数** `updateEndPortalEntry`/`travelEnd`——
+  travelPortal 原文零触碰位级红线）：OW→End 站入口 60f 倒计时（复
+  用）→ 入场平台 **5×5 obsidian @(40,52,0) 每次传送写入**（上方 3 层
+  清 air；首访 end 段 journal diff = 恰 25 格，二次幂等——偏离 MC
+  (100,49,0)）→ 落点 (40.5,53,0.5) **朝西 yaw +π/2**（MC 精确）→
+  3×3 盘 catch-up → setWorld 换绑 → 翻维；End→OW 站原点出口 → 返回
+  **主世界出生点**（床校验先例，D8 三值化）。900f 冷却复用（共享）
+  + 声音复用 portal_trigger/travel（零新 wav）+ 日志 "Traveled to
+  end at (40, 53, 0)" / "Traveled to overworld (end exit)"。
+- **渲染 6 点**：暗紫黑 clear (0.05,0.03,0.06) / 雾 8..48（fill
+  clamp 复用）/ 日月星云雨 inOverworld 门 / F3 dimension +end /
+  **ambience 第 5 上下文**（AmbienceContext::End=4 + ambience_end.
+  wav，声音 67→68）/ **u_ambient + u_caveAmbient 双 floor 0.25**
+  （MC ambient_light 精确；shader 无光分支只读 u_caveAmbient——单设
+  = 全黑门内捕获；OW/nether 配置值位级不变；set 点 = init + 翻维帧）。
+- **末地行为收口**：死亡 = **主世界重生**（D8 三值化，MC「末地只能
+  死回去」）；虚空坠落 = kill plane −32 + 「死于世界之外」既有；7
+  per-block state 族主世界 only（末地闭集同款）；**水蒸发谓词
+  nether-scoped = 末地水不蒸发**（偏离 MC，10b 复议）；床/容器/营
+  火 inOverworld 门；**生成池空槽**（10c 两段式，mob_spawning_end.
+  json 后相位）；流体 pass = 静态零 churn 纪律（10a worldgen 无流
+  体，桶正常流动）。
+- **存档 format 32**：`player.dimension` 词表 **按 format 分词**
+  （30/31 = overworld|nether 二词，携 "end" = version lie 点名；≥32
+  = 三词）+ `end` 段 {blocks, fluids, states} 恒写空合法 +
+  `end_entities`（item kind，XP 拒收）恒写空合法；pre-32 载入迁
+  end 段空 dimension 不变；**末地内 stateful 块须 end.states 条目**
+  （PITS 383 双向检）；入口环（OW 段）+ 出口环（end 段）载入
+  rescan（孤儿 → air）；gzip 容器自动覆盖。
 
 ## 下界传送门（`[V3-1]` Phase A，v3.2.0；传送 = Phase B）
 
@@ -1091,7 +1153,11 @@
   （nether/nylium/stem 3 材质族 ×3 事件 = 13 下界块 sound_material 重指
   派全钉 + evaporate 水蒸发 + ambience_nether 第 4 上下文音）+ **3 下界
   mob 氛围 `[V3-3]`**（piglin_whisper/hoglin_grunt/strider_hiss，runAi
-  数据门控分支，种子 0x9201–3）；**`[V2-16]` 音效缺陷族 13 件修复**（`_noise()`/
+  数据门控分支，种子 0x9201–3）+ **1 boom `[V3-14a]`**（爆炸闷响）+
+  **2 ghast 族 `[V3-14b]`**（ghast 嘶鸣 / ghast_roar 发射咆哮）+ **1
+  barter `[V3-14c]`**（piglin 交易 chime 880→1318.5 Hz）+ **1
+  ambience_end `[V3-10a]`**（第 5 上下文音：40 Hz 低频体 + 0.2 Hz 颤 +
+  2.17× 微光 + 2 远距 whoosh 220→55 Hz，种子 0xC0DE）；**`[V2-16]` 音效缺陷族 13 件修复**（`_noise()`/
   `dig()`/`break_sfx()` LCG **逐采样重建 = 常值流** → 4 件静音 + 5 件 DC 退
   化 + 2 件部分受损，跨多版本潜伏【截图/存档不录音频 = 门盲区，PITS
   382】；修复 = 单 LCG 实例推进，md5 变更恰 13 件、其余 head-identical 幂等
@@ -1107,7 +1173,10 @@
   squeak（`[V2-14]`，bat ambient 空间化）、shear（`[V2-15]`，mob 位空间
   化）、portal trigger/travel（`[V3-1]`，传送进/出空间化）、evaporate
   （`[V3-2 Part 2]`，下界水桶泼出空间化）、下界 mob 氛围 ×3（`[V3-3]`，
-  mob 位空间化）
+  mob 位空间化）、boom（`[V3-14a]`，爆点位空间化）、ghast_roar
+  （`[V3-14b]`，发射前咆哮空间化）+ ghast 嘶鸣（ambient）、barter
+  （`[V3-14c]`，交易 chime mob 位空间化）、strider_hiss 骑乘中保留
+  （`[V3-14d]`）、ambience_end（`[V3-10a]`，第 5 上下文 2D 全局）
 - **空间化 `[CRAFT-3]`**：块 JSON 可选 `properties.sound_material`（严格
   字符串 + 显式空串拒 = ammo 纪律）+ init 交叉校验（`block_sound.{hpp,cpp}`
   纯函数 `checkSoundMaterials`：引用材质 ⇒ `<m>_dig/_place/_break.wav` 3 件
@@ -1123,11 +1192,12 @@
   MC】/ cloth 15【wool 全染变】/ glass 2；未赋值块 = 通用回退，obsidian/
   furnace/铁块/楼梯族等 = 下轮候选记档）；手持物品破碎/箭拾取/营火放取/
   step/shoot/eat/hurt/ui_* 保持 2D 位级不变
-- **昼夜环境音 `[PRE-4]`**：**4 上下文**纯函数 `ambienceContext`（**nether
-  `[V3-2 Part 2]` 优先** = 玩家在下界 → ambience_nether / **cave = 玩家
+- **昼夜环境音 `[PRE-4]`**：**5 上下文**纯函数 `ambienceContext`（**end
+  `[V3-10a]` 优先** = 玩家在末地 → ambience_end / **nether
+  `[V3-2 Part 2]`** = 玩家在下界 → ambience_nether / **cave = 玩家
   脚格 raw skyLight 0 优先**【MC 无天空规则，洞口边缘抖动记档】/ day =
-  dayFactor ≥ 0.5 / night；`inNether` 默认参 false = 主世界位级恒等——门
-  197 30 组输入面单测 + S1 锚双保险）+ 每 **300 帧**（`kAmbienceIntervalFrames` = 5 s
+  dayFactor ≥ 0.5 / night；`inNether`/`inEnd` 默认参 false = 主世界位级
+  恒等——门 197 30 组输入面单测 + 门 213 End 上下文单测 + S1 锚双保险）+ 每 **300 帧**（`kAmbienceIntervalFrames` = 5 s
   at 60 fps）`ambienceRoll(seed, frame, ctx)` 纯函数 < **0.5** → 2D play
   （**全局不空间化**）+ `Ambience: <name>` info 日志（帧锁定事件序列 = E2E
   证据）；`audio.ambience` getBool 代码默认 true；**偏离**：MC 不规则多音池

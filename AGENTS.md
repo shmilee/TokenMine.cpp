@@ -32,16 +32,17 @@ v3.10.0 = V3-6 世界边缘雾（门 200，11-05：填充感知 fog end，
 仅模拟语义变更才 bump + legacy 版本指纹零迁移直放 + --demo-force +
 4 demo canary）；**v3.14.0 = V3-8b 手柄习惯映射定案（门 204，11-06：
 L3 蹲伏 + RT 疾跑 + B 飞行专用钮【用户三项定案，config 自定义不做】+
-SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）；**v3.15.0 = V3-13 死亡统计屏（门 205，11-06：致死原因行 9 措辞 + 会话统计 5 行 + 字体 +1 字形「于」428）；**v3.16.0 = V3-15 生存/表现小批（门 206，11-06：netherite 火·熔岩免疫【fire_resistant armor-only + 三抑制 + 熔岩死因覆写】+ portal 2 周期纹理 UV 滚动 + 蒸汽粒子 8×8×9 盒）；**v3.17.0 = V3-11a 创造基础（门 207，11-06：G 切换 + 存档 flag format 31 player.creative 恒写 + 全源伤害门 + 饥饿静态满 + 即挖 + 无掉落/无耐久 + 放置不消耗 + 入场飞行；sim 不 bump canary 4 demo EXACT）；**v3.18.0 = V3-11b 创造物品栏（门 208，11-06：E 面板双 tab 物品栏/背包 + 前缀搜索【SDL 文本输入首个打字面，仅创造面板期开】+ 6×4 网格滚轮翻页 + 左键满组/右键单个授予选中热栏位 + 搜索焦点数字语义 + demo author x/y 绝对位与 g 键）= 矩阵 ⬜ 项小→大推进 4/6，V3-11 创造模式全项完成；**v3.19.0 = V3-14a 爆炸机制（门 209，11-06：纯核心 scanExplosion/explosionDamage【局域强度 radius−dist 破块 + 线性衰减整读伤害 + flamable 点火】+ 块属性 blast_resistance【obsidian 3 数据存活】+ Game::explodeAt 接线 + --explode CLI seam【帧 0，--weather 孪生】+ 死因「死于爆炸」+ 字体 +2 爆/炸 430 + boom 音 64；零 format/sim 不 bump/无击退记档）= V3-14 相位 A/4**）；**v3.20.0 = V3-14b ghast（门 210，11-06：flyShoot 悬停射击分支【flying∧shootRange>0 数据门，bat cruise 位级红线】+ explode_radius/shoot_sound 数据属性【ammo 规则豁免爆炸射手 + init wav 交叉检】+ 火球 = Projectile 复用三爆炸接线【stuck 即爆/玩家接触爆/mob 扫描跳过】+ 发光立方渲染 + 内容族【声音 2 件 64→66/池 +2 总 33/atlas 166/膜物品】；**门内捕获 = V3-14a 字体码点笔误修复**【爽 U+723D→炸 U+70B8，九 glyph 重格 +1，top-512 红线 + S1 ≡ base19 字节恒等】；零 format/sim 不 bump canary 4 EXACT）= V3-14 相位 B/4**）；**v3.21.0 = V3-14c piglin 交易（门 211，11-06：barter_input 单输入 gold_ingot + barter_outputs 12 项加权表【MC 比例项目近似，netherite_scrap 1 头奖，数量 [1,64]】+ checkBarter 纯函数 init 交叉检 + tryBarter（tryMilk 范式）+ barterItem() 无状态 roll + **不激怒 = 结构性质**【零 damage 路径】+ barter.wav 67；零 format/sim 不 bump canary 4 EXACT）= V3-14 相位 C/4**）；**v3.22.0 = V3-14d strider 骑乘（门 212，11-06：rideable strict bool + Player m_carried 承载旁路【wish 锁 + move/stepUp 旁路 + integrate no-op + fall 复锚 = 落乘 1.05 落差永不坠伤】+ m_ridden + riderSteer【WASD 直控 + kRideDecel 0.9 漂停 + ambient 流契约 + collidesWithEntities opt-out = 分离 pass 不顶坐骑】+ ride pass 单收口【落乘 6 条件 + 承载 snap 背位 1.05 + steer 推送】+ tryRide（tryMilk 范式）+ Space/LeftControl 落乘【绕双击飞行窗】+ **承载 = 会话态零 format**【mob 不入档 = 唯一自洽解】+ 渲染零改动；MC 偏离 6 记档【无 saddle/WASD 直控/无水伤下沉/原地落乘/无脚步音/站姿背位】；零 format/sim 不 bump canary 4 EXACT）= V3-14 相位 D/4 全 4 相位收官**）**）——**3.x 矩阵
+SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）；**v3.15.0 = V3-13 死亡统计屏（门 205，11-06：致死原因行 9 措辞 + 会话统计 5 行 + 字体 +1 字形「于」428）；**v3.16.0 = V3-15 生存/表现小批（门 206，11-06：netherite 火·熔岩免疫【fire_resistant armor-only + 三抑制 + 熔岩死因覆写】+ portal 2 周期纹理 UV 滚动 + 蒸汽粒子 8×8×9 盒）；**v3.17.0 = V3-11a 创造基础（门 207，11-06：G 切换 + 存档 flag format 31 player.creative 恒写 + 全源伤害门 + 饥饿静态满 + 即挖 + 无掉落/无耐久 + 放置不消耗 + 入场飞行；sim 不 bump canary 4 demo EXACT）；**v3.18.0 = V3-11b 创造物品栏（门 208，11-06：E 面板双 tab 物品栏/背包 + 前缀搜索【SDL 文本输入首个打字面，仅创造面板期开】+ 6×4 网格滚轮翻页 + 左键满组/右键单个授予选中热栏位 + 搜索焦点数字语义 + demo author x/y 绝对位与 g 键）= 矩阵 ⬜ 项小→大推进 4/6，V3-11 创造模式全项完成；**v3.19.0 = V3-14a 爆炸机制（门 209，11-06：纯核心 scanExplosion/explosionDamage【局域强度 radius−dist 破块 + 线性衰减整读伤害 + flamable 点火】+ 块属性 blast_resistance【obsidian 3 数据存活】+ Game::explodeAt 接线 + --explode CLI seam【帧 0，--weather 孪生】+ 死因「死于爆炸」+ 字体 +2 爆/炸 430 + boom 音 64；零 format/sim 不 bump/无击退记档）= V3-14 相位 A/4**）；**v3.20.0 = V3-14b ghast（门 210，11-06：flyShoot 悬停射击分支【flying∧shootRange>0 数据门，bat cruise 位级红线】+ explode_radius/shoot_sound 数据属性【ammo 规则豁免爆炸射手 + init wav 交叉检】+ 火球 = Projectile 复用三爆炸接线【stuck 即爆/玩家接触爆/mob 扫描跳过】+ 发光立方渲染 + 内容族【声音 2 件 64→66/池 +2 总 33/atlas 166/膜物品】；**门内捕获 = V3-14a 字体码点笔误修复**【爽 U+723D→炸 U+70B8，九 glyph 重格 +1，top-512 红线 + S1 ≡ base19 字节恒等】；零 format/sim 不 bump canary 4 EXACT）= V3-14 相位 B/4**）；**v3.21.0 = V3-14c piglin 交易（门 211，11-06：barter_input 单输入 gold_ingot + barter_outputs 12 项加权表【MC 比例项目近似，netherite_scrap 1 头奖，数量 [1,64]】+ checkBarter 纯函数 init 交叉检 + tryBarter（tryMilk 范式）+ barterItem() 无状态 roll + **不激怒 = 结构性质**【零 damage 路径】+ barter.wav 67；零 format/sim 不 bump canary 4 EXACT）= V3-14 相位 C/4**）；**v3.22.0 = V3-14d strider 骑乘（门 212，11-06：rideable strict bool + Player m_carried 承载旁路【wish 锁 + move/stepUp 旁路 + integrate no-op + fall 复锚 = 落乘 1.05 落差永不坠伤】+ m_ridden + riderSteer【WASD 直控 + kRideDecel 0.9 漂停 + ambient 流契约 + collidesWithEntities opt-out = 分离 pass 不顶坐骑】+ ride pass 单收口【落乘 6 条件 + 承载 snap 背位 1.05 + steer 推送】+ tryRide（tryMilk 范式）+ Space/LeftControl 落乘【绕双击飞行窗】+ **承载 = 会话态零 format**【mob 不入档 = 唯一自洽解】+ 渲染零改动；MC 偏离 6 记档【无 saddle/WASD 直控/无水伤下沉/原地落乘/无脚步音/站姿背位】；零 format/sim 不 bump canary 4 EXACT）= V3-14 相位 D/4 全 4 相位收官**）；**v3.23.0 = V3-10a 末地维度框架 + 真传送（门 213，11-07：项目第三维度 = 下界维度基建第二次消费【end_gen 纯函数 + EndDim 12 成员镜像 + 33 分派点三值化】+ 入口 A-lite【双 stateless frame 块 + 数据谓词 end_frame/end_frame_eyed/end_portal + 5×5 水平环纯函数族 + ender_eye 物品 + 嵌眼交互 12 全 eyed 激活】+ 最小末地【120×120 台地 + 原点出口门常活 + 虚空 + 入场平台 5×5 obsidian 每次写入，偏离 MC (100,49,0)】+ 传送新函数【1:1 无 8:1 / 返程出生点床校验 / 60f 倒计时 + 900f 冷却复用 / travelPortal 原文零触碰】+ 渲染 6 点【暗紫黑 clear + 雾 8..48 + inOverworld 门族 + F3 +end + ambience 第 5 上下文 + **u_ambient/u_caveAmbient 双 floor 0.25 按维度**】+ **format 32**【dimension 词表按 format 分词 + end/end_entities 段恒写 + PITS 399 四类降级点同 commit 盘点】；块 127→131 / atlas 166→170 零移位 / item 98→99 / 声音 67→68；门内捕获 ×2【shader 无光分支只读 u_caveAmbient = 单设 u_ambient 全黑 + 场景手术丘陵埋没 = 挖深坑】；sim 不 bump canary 4 EXACT）= V3-10 相位 A/4**）**）——**3.x 矩阵
 18 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
 （门 202）/ v3.13.0（门 203）/ v3.14.0（门 204）/ v3.15.0（门 205）
 / v3.16.0（门 206）/ v3.17.0（门 207）/ v3.18.0（门 208）/ v3.19.0
 （门 209）/ v3.20.0（门 210）/ v3.21.0（门 211）/ v3.22.0（门 212）
+/ v3.23.0（门 213）
 + 11-06 扩容 7 项（V3-8b ✅ v3.14.0 + V3-13 ✅ v3.15.0 + V3-15 ✅
 v3.16.0 + V3-11 ✅ v3.17.0/v3.18.0 + V3-14a ✅ v3.19.0 + V3-14b ✅
 v3.20.0 + V3-14c ✅ v3.21.0 + V3-14d ✅ v3.22.0【V3-14 全 4 相位完成】+
-V3-10~V3-14 ⬜【大项已相位拆分 V3-10a~d / V3-11a~b / V3-12a~c /
-V3-14a~d，BACKLOG 待执行项明细】）**
+V3-10a ✅ v3.23.0 + V3-10b~d/V3-12a~c ⬜【大项已相位拆分
+V3-10a~d / V3-11a~b / V3-12a~c / V3-14a~d，BACKLOG 待执行项明细】）**
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -100,10 +101,13 @@ V3-14a~d，BACKLOG 待执行项明细】）**
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2856/2856**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
-  存档 format 31（V3-11a 创造：player.creative strict bool 恒写，
-  pre-31 载迁 false，30 携键 = version lie 点名；schema 其余与 30
-  一致）；format 30 = V3-1 Phase B 下界维度（player.dimension 严格
+- 测试 **2885/2885**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+  存档 format 32（V3-10a 末地：dimension 词表按 format 分词【30/31
+  二词，31 携 "end" = version lie；≥32 三词】+ end 段 {blocks,
+  fluids,states} + end_entities 恒写 + endSeed 不落盘；schema 其余与
+  31 一致）；format 31 = V3-11a 创造（player.creative strict bool
+  恒写，pre-31 载迁 false，30 携键 = version lie 点名；schema 其余
+  与 30 一致）；format 30 = V3-1 Phase B 下界维度（player.dimension 严格
   词表恒写 + nether 段 {blocks,fluids,states} + nether_entities 恒写 +
   派生 seed 不落盘；schema 其余与 29 一致，29 携新键 = version lie
   点名）；format 29 = V3-7 gzip 时代（schema 与 28 一致——编码与
@@ -201,6 +205,60 @@ V3-14a~d，BACKLOG 待执行项明细】）**
   零 diff + crop 3× 目检同场景同羊同位】；性能 A/B 同档【changes-
   Applied 逐位 + 终档 savenorm EXACT】；PITS 392【DEBUG 事件行
   grep 假阴性】；详见 `docs/archive/phase-3.12.0.md`）；
+  门计数 213（**V3-10a 末地维度框架 + 真传送 v3.23.0** 门 213 全
+  PASS【V3-10 相位 A/4，**项目第三维度** = 下界维度基建第二次消
+  费，规模 ≈ V3-1 Phase B 门 194】：**入口 A-lite**【`end_portal_
+  frame`（空）/`end_portal_frame_eyed`（嵌眼）= 双 stateless 块【项
+  目无 per-state 纹理机制——单块 state_count 2 否决】+ 数据谓词
+  end_frame/end_frame_eyed/end_portal strict bool 配对检 + `end_
+  portal` 块【nether_portal 逐字镜像 light 11/destroyable false】+
+  5×5 水平环纯函数族【ring/center cells + scan + 8 候选中心反解 +
+  cellValid 孤儿谓词 + activation plan】+ `ender_eye` 物品【32×32
+  独立 icon + 单盒 model，item 98→99】+ **嵌眼交互**【持眼右键
+  frame：吞 1 眼 + 嵌眼态 + 环扫描；12 全 eyed + 中心 3×3 air →
+  激活；frame 不可破坏 = 无去激活路记偏离】】+ **最小末地**【120×
+  120 末地石台地 y[48,52] + 原点出口门 worldgen 常活【10d 前偏
+  离】+ 虚空无地板 + 入场平台 5×5 obsidian @(40,52,0) **每次传送
+  写入**【首访 end 段 journal diff = 恰 25 格，二次幂等——风险⑦
+  实证；偏离 MC (100,49,0)】+ 落点 (40.5,53,0.5) 朝西 +π/2】+
+  **传送新函数**【updateEndPortalEntry/travelEnd——travelPortal
+  原文零触碰位级红线；1:1 独立原点无 8:1 / 返程 = 主世界出生点床
+  校验【D8 三值化】/ 60f 倒计时 + 900f 冷却复用 / 声音复用
+  portal_trigger/travel】+ **format 32**【dimension 词表**按 format
+  分词**：30/31 携 "end" = version lie；≥32 三词 + end 段 {blocks,
+  fluids,states} + end_entities 恒写 + endSeed 不落盘 + PITS 399
+  四类降级点同 commit 盘点【strip 助手 ×5 扩 end 键 + gzip identity
+  29→32 rebase】】+ **渲染 6 点**【暗紫黑 clear 0.05/0.03/0.06 +
+  雾 8..48 + 日月星云雨 inOverworld 门 + F3 +end + ambience 第 5
+  上下文 End=4 +ambience_end.wav 67→68 + **u_ambient/u_caveAmbient
+  双 floor 0.25 按维度**【OW/nether 位级不变；set 点 = init + 翻维
+  帧】】；块 127→131 / atlas 166→170（[10..13,10] 零移位）/ item
+  98→99 / 声音 67→68；**门内捕获 ×2**【① shader 无光分支只读
+  u_caveAmbient——单设 u_ambient = 末地全黑截图 ② 场景手术丘陵埋没
+  = 7×7 挖深坑平顶】；2885/2885（+29 EndGen ×10 / EndPortal ×11 /
+  SaveFormat32 ×6 + census re-pin 8 文件）；结构免疫第 94 次【S1 ≡
+  base19 逐字节 ×2 + savenorm EXACT + 终档恰白名单 3 键 {format,
+  end, end_entities}——末地惰性最强形】；S2 去程 = authored demo【7×
+  7 坑场景 + 12×【瞄准+RMB】：12 嵌眼【4 次「no complete ring」= 环
+  未全时正确语义】→ f100 `End portal activated at (3, 54, 3)` →
+  f175 `Traveled to end at (40, 53, 0) from (3, 54, 3)` ×2 逐字恒等
+  + 截图 RAW 恒等 + 末地场景视觉 + 热栏 13→1 眼 crop】+ 返程零输入
+  臂【玩家站 worldgen 出口中心：`Traveled to overworld (end exit)
+  at (0, 54, 0)` ×2 + 终档 pos 出生点精确 + end 段空】+ 末地持久化
+  臂【end 段 = 恰 25 obsidian 平台格集合精确】；S6 五面点名【end
+  stone 缺失 / 31 携 "end" 词 / 31 携 end 段 / 32 缺 end 段 / end
+  stateful 缺 states 条目】；S2b canary 4 demo ×2 RAW + savenorm
+  EXACT【sim 不 bump 实证】；性能 A/B 同档【旧 = bc26bed v3.22.0 +
+  g139 三形态锚【STREAMING_OLD3/NEW3，PITS 387 第三演进】：banner
+  实证 v3.22.0/v3.23.0 + PERF-WIN 三窗 upd med 0.327/0.323/0.324 vs
+  0.533/0.573/0.575【旧树同二进制复跑 2× spread = 环境漂移带实证，
+  新在带内 = 同档裁决】+ render/swap 同档 + changesApplied 9/3/1
+  全逐位 + 终档 savenorm **恰白名单 3 键**【format 31→32 + end +
+  end_entities——门 207「恰白名单 2 键」先例的 format bump 最强形】】；
+  PITS 405【场景手术
+  先探地形 + shader 无光分支双 floor + GCC-16 假阳性结构隔离 + 存
+  档伪造只剥对应后键 + 场景派生同步 fluids】；详见
+  `docs/archive/phase-3.23.0.md`）；
   门计数 212（**V3-14d strider 骑乘 v3.22.0** 门 212 全 PASS【V3-14
   相位 D/4，**全 4 相位收官**，项目首个骑乘面 = 新基建】：**rideable
   strict bool**【walks_on_lava 孪生解析；strider 首个/唯一骑乘物】+
@@ -843,7 +901,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 （细节归阶段文档，不写长句））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
-## 坑位 Top 8（全文 docs/PITS.md，404 条；pre-3.x 条目在 docs/archive/PITS_PRE3X.md）
+## 坑位 Top 8（全文 docs/PITS.md，405 条；pre-3.x 条目在 docs/archive/PITS_PRE3X.md）
 
 1. **SDL grab delta**（P28）：输入 E2E 全帧字节一致不保证——存档 yaw/pitch 为漂移
    探测器；驱动 warp 用实际窗口原点（实测 (4,64)）+ (632,352)。
@@ -879,7 +937,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（404 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（405 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

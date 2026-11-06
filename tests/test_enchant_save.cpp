@@ -51,6 +51,10 @@ Json withoutKeyForTest(const Json& obj, const std::string& key) {
 Json stripFormat31Keys(Json root) {
     root = withoutKeyForTest(root, "nether");
     root = withoutKeyForTest(root, "nether_entities");
+    // V3-10a: the format-32 keys join the strip (the test_save twin —
+    // a genuine pre-32 file never carried end / end_entities).
+    root = withoutKeyForTest(root, "end");
+    root = withoutKeyForTest(root, "end_entities");
     if (const Json* player = root.find("player");
         player != nullptr && player->isObject() &&
         player->find("dimension") != nullptr) {

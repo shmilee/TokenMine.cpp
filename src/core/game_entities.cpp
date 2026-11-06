@@ -62,7 +62,9 @@ void Game::updateEntities(double dt) {
     // In the overworld (the default) these aliases are the pre-Phase-B
     // ents / m_mobs — the bit-identical red line.
     std::vector<std::unique_ptr<Entity>>& ents = currentEntities();
-    MobSystem& mobs = playerInNether() ? m_nether.mobs : m_mobs;
+    // V3-10a: the three-way (the End's empty pool fast-exits — the 10c slot, the Phase B structural no-op shape).
+    MobSystem& mobs = playerInNether() ? m_nether.mobs
+        : playerInEnd() ? m_end.mobs : m_mobs;
     // Mob spawning (Phase 20): a deterministic frame cadence from the data
     // config (first_spawn_frame keeps the 60-frame no-input baseline
     // mob-free). The scan is a pure function of world + player, so the
@@ -826,7 +828,9 @@ void Game::attemptMobSpawn() {
     // + the live entities — the nether's mobs member therefore never
     // loads a type table (its empty registry is structural: the gate
     // below exits on its pool, not its types).
-    MobSystem& mobs = playerInNether() ? m_nether.mobs : m_mobs;
+    // V3-10a: the three-way (the End's empty pool fast-exits — the 10c slot, the Phase B structural no-op shape).
+    MobSystem& mobs = playerInNether() ? m_nether.mobs
+        : playerInEnd() ? m_end.mobs : m_mobs;
     World& world = currentWorld();
     std::vector<std::unique_ptr<Entity>>& ents = currentEntities();
     // The live-mob census (count + bottom-centers for the clearance rule).

@@ -1966,10 +1966,11 @@ TEST(MobContent, V215WoolAssetsPinned) {
     // + the row-10 free run [0..8, 10] — the 165-tile zero-shift red
     // line, the test_atlas census). V3-14b re-pin: the ghast's body
     // tile (the row-10 free run [9, 10] — the 166-tile zero-shift red
-    // line, the test_atlas census; the membrane icon is a standalone
-    // item PNG, not an atlas tile).
+    // line). V3-10a re-pin: the End's four tiles (the row-10 free run
+    // [10..13, 10] — the 170-tile zero-shift red line, the test_atlas
+    // census; the ender_eye icon is a standalone item PNG).
     EXPECT_EQ(fnv1a64(readAll("assets/data/textures/block_atlas.json")),
-              "1e10b3cae7fcb8c9");
+              "9105c11c82ca30b1");
 }
 
 // -- V2-15: the wool instance state (MobEntity — the frame discipline) ----

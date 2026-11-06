@@ -160,6 +160,17 @@ struct BlockProperties {
     // local intensity everywhere, the portal's bedrock twin by data).
     // The core reads the property, never a block id (hard rule 3).
     float blastResistance = 0.0f;
+    // V3-10a (the End): the end portal's data flags (the core reads the
+    // property, never a block id — hard rule 3; the nether_portal's
+    // twin family). `endPortal` = the active portal cell (the entry's
+    // AABB-overlap trigger + the tracking set's predicate); `endFrame`
+    // = a portal-frame cell (the 5x5 ring scan's member);
+    // `endFrameEyed` = the frame EMBEDS its eye (the ring's activation
+    // predicate: all 12 frames eyed = the center activates). All
+    // default false = every pre-V3-10a block bit-identical.
+    bool endPortal = false;
+    bool endFrame = false;
+    bool endFrameEyed = false;
     // Simulated as a fluid (Phase 9; KINDED in Phase 51): the fluid's name
     // (vocabulary: "water", "lava" — validated at data load). Empty = not
     // a fluid. A fluid block is stored as a fluid level in the chunk's

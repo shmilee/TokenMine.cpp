@@ -665,6 +665,22 @@
   "ghast": [
    9,
    10
+  ],
+  "endstone": [
+   10,
+   10
+  ],
+  "end_portal": [
+   11,
+   10
+  ],
+  "end_portal_frame": [
+   12,
+   10
+  ],
+  "end_portal_frame_eyed": [
+   13,
+   10
   ]
  }
 }

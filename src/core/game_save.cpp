@@ -72,8 +72,11 @@ Result<SaveGame> Game::collectSave() const {
     save.playerRespawn = m_player->spawnPos();
     // V3-1 Phase B (format 30): the player's dimension — ALWAYS written
     // (the strict vocabulary word; the position's frame of reference).
+    // V3-10a (format 32): the three-way (the "end" word — the ≥32
+    // three-word vocabulary, the per-format version-lie gate's twin).
     save.playerDimension =
-        playerInNether() ? "nether" : "overworld";
+        playerInNether() ? "nether"
+        : playerInEnd() ? "end" : "overworld";
     // V3-11a (format 31): the creative flag — ALWAYS written (the
     // live mode; the collectSave's single choke point).
     save.playerCreative = m_player->isCreative();
@@ -447,6 +450,124 @@ Result<SaveGame> Game::collectSave() const {
         se.enchants = item->enchants();
         save.netherEntities.push_back(std::move(se));
     }
+    // V3-10a (format 32): the END section (the nether section's member-
+    // for-member twin — the lazy D2: the End's world exists only after
+    // engagement, so a no-travel session serializes the empty end
+    // section = the whitelist's keys with empty arrays, the S1 gate's
+    // "恰增白名单键" triple). The End's worldgen (fillEndChunk) places
+    // no stateful block (endstone / obsidian / the frame family are
+    // stateless), so the journal-only derivation's completeness argument
+    // holds exactly as the nether's.
+    if (m_end.world) {
+        const bool endJournalSave =
+            journalSave && m_end.streaming.saveJournal.valid;
+        if (endJournalSave) {
+            auto diff = journalDiff(
+                *m_end.world, makeEndChunkGenerator(), m_blocks,
+                m_end.streaming.saveJournal.blocks,
+                m_end.streaming.saveJournal.fluids,
+                save.endBlockEdits, save.endFluidEdits, kSaveDiffWorkers);
+            if (!diff.ok()) {
+                return diff.error();
+            }
+        } else {
+            auto diff = diffWorld(*m_end.world, makeEndChunkGenerator(),
+                                  m_blocks, save.endBlockEdits,
+                                  save.endFluidEdits, kSaveDiffWorkers);
+            if (!diff.ok()) {
+                return diff.error();
+            }
+        }
+        mergeRetained(save.endBlockEdits, save.endFluidEdits,
+                      m_end.streaming.retainedColumns);
+        // The End's per-instance states (the nether's derivation twin —
+        // the journal path or the world scan; 10a's fill is stateless,
+        // so a player-placed stateful block is the only source).
+        if (endJournalSave) {
+            std::vector<SavedState> endStates;
+            for (const auto& entry : m_end.streaming.saveJournal.blocks) {
+                for (const BlockPos& p : entry.second) {
+                    const BlockID id = m_end.world->getBlock(p.x, p.y, p.z);
+                    if (id == BlockID::air() ||
+                        !m_blocks.at(id).hasState()) {
+                        continue;
+                    }
+                    const std::uint8_t state =
+                        m_end.world->getBlockState(p.x, p.y, p.z);
+                    const std::uint8_t ns =
+                        (state != Chunk::kBlockStateUnset)
+                            ? state
+                            : static_cast<std::uint8_t>(
+                                  m_blocks.at(id).stateDefault());
+                    endStates.push_back(SavedState {p, ns});
+                }
+            }
+            std::sort(endStates.begin(), endStates.end(),
+                      [](const SavedState& a, const SavedState& b) {
+                          return a.pos < b.pos;
+                      });
+            save.endStates = std::move(endStates);
+        } else {
+            for (const ChunkPos& cp : m_end.world->chunkPositions()) {
+                const Chunk* chunk = m_end.world->findChunk(cp);
+                if (chunk == nullptr) {
+                    continue;
+                }
+                const int bx = cp.x * kChunkSize;
+                const int by = cp.y * kChunkSize;
+                const int bz = cp.z * kChunkSize;
+                for (int ly = 0; ly < kChunkSize; ++ly) {
+                    for (int lz = 0; lz < kChunkSize; ++lz) {
+                        for (int lx = 0; lx < kChunkSize; ++lx) {
+                            const BlockID id = chunk->get(lx, ly, lz);
+                            if (id == BlockID::air() ||
+                                !m_blocks.at(id).hasState()) {
+                                continue;
+                            }
+                            const std::uint8_t state =
+                                chunk->stateAt(lx, ly, lz);
+                            const BlockPos p {bx + lx, by + ly, bz + lz};
+                            const std::uint8_t ns =
+                                (state != Chunk::kBlockStateUnset)
+                                    ? state
+                                    : static_cast<std::uint8_t>(
+                                          m_blocks.at(id).stateDefault());
+                            save.endStates.push_back(SavedState {p, ns});
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // V3-10a (format 32): the End's dropped items (the nether's entity
+    // loop's twin — the ITEM kind only; 10a's End carries no mob / XP
+    // source, the same loud-failure belt).
+    for (const std::unique_ptr<Entity>& e : m_end.entities) {
+        if (dynamic_cast<const ExpOrbEntity*>(e.get()) != nullptr) {
+            return MC_FAIL(
+                "cannot save: the End holds an XP orb (the End carries "
+                "no XP grant source in V3-10a)");
+        }
+        const ItemEntity* item = dynamic_cast<const ItemEntity*>(e.get());
+        if (item == nullptr) {
+            if (dynamic_cast<const MobEntity*>(e.get()) == nullptr &&
+                dynamic_cast<const Projectile*>(e.get()) == nullptr) {
+                return MC_FAIL(
+                    "cannot save: an entity of a kind this build does not "
+                    "persist exists in the End");
+            }
+            continue; // mobs / arrows are ephemeral (the overworld twin)
+        }
+        SavedItemEntity se;
+        se.item = item->itemName();
+        se.count = item->count();
+        se.pos = item->position();
+        se.age = item->age();
+        se.pickupDelay = item->pickupDelayRemaining();
+        se.damage = item->damage();
+        se.enchants = item->enchants();
+        save.endEntities.push_back(std::move(se));
+    }
     return save;
 }
 
@@ -640,6 +761,55 @@ Result<void> Game::applySave(const SaveGame& save) {
             m_nether.entities.push_back(std::move(entity));
         }
     }
+    // V3-10a (format 32): the END section (the nether section's
+    // member-for-member twin — the lazy D2: engaged only when the save
+    // carries an end edit / the player sits in the End).
+    const bool endNeeded = !save.endBlockEdits.empty() ||
+        !save.endFluidEdits.empty() || !save.endStates.empty() ||
+        !save.endEntities.empty() || save.playerDimension == "end";
+    if (endNeeded) {
+        ensureEnd();
+        if (!m_end.world) {
+            return MC_FAIL("cannot load the end section: the End is "
+                           "unbuildable (the asset set is missing the "
+                           "endstone or obsidian block)");
+        }
+        // The End's edits replay (the netherView pattern — the
+        // temporary SaveGame view carries the End's lists).
+        SaveGame endView;
+        endView.blockEdits = save.endBlockEdits;
+        endView.fluidEdits = save.endFluidEdits;
+        MC_TRY(applyWorldEdits(endView, m_blocks, *m_end.world));
+        // The End's edited columns (the nether's protection twin).
+        for (const SavedBlockEdit& e : save.endBlockEdits) {
+            m_end.streaming.editedColumns.insert(
+                {floorDiv(e.pos.x, kChunkSize),
+                 floorDiv(e.pos.z, kChunkSize)});
+        }
+        for (const SavedFluidEdit& e : save.endFluidEdits) {
+            m_end.streaming.editedColumns.insert(
+                {floorDiv(e.pos.x, kChunkSize),
+                 floorDiv(e.pos.z, kChunkSize)});
+        }
+        // The End's lighting (the SKYLESS source 0 — the nether's twin).
+        Lighting::propagateAll(*m_end.world, m_blocks, 0);
+        // The End's per-instance states (the nether's states replay
+        // twin — the saved value is authoritative).
+        for (const SavedState& ss : save.endStates) {
+            m_end.world->setBlockState(ss.pos.x, ss.pos.y, ss.pos.z,
+                                       ss.state);
+        }
+        // The End's dropped items (the nether's entity restore twin).
+        for (const SavedItemEntity& e : save.endEntities) {
+            const Item& item = m_items.at(m_items.idForName(e.item));
+            auto entity = std::make_unique<ItemEntity>(
+                *m_end.world, m_blocks, e.item, item.maxStack, e.count,
+                e.pos, e.damage, e.enchants);
+            entity->setAge(e.age);
+            entity->setPickupDelay(e.pickupDelay);
+            m_end.entities.push_back(std::move(entity));
+        }
+    }
     // 3) Player. restorePosition teleports (velocity zeroed) and re-pins
     //    the fall tracking to the restored Y (Phase 36: a save taken
     //    mid-air has no leave-the-ground transition on load, so without
@@ -672,6 +842,21 @@ Result<void> Game::applySave(const SaveGame& save) {
                 static_cast<int>(std::floor(save.playerPos.z)), kChunkSize);
             catchUpDisk(Dimension::Nether, cx, cz);
         }
+    } else if (save.playerDimension == "end") {
+        // V3-10a (format 32): the End's player rebind (the nether's
+        // branch verbatim — the D3 setWorld + the flip + the catch-up
+        // disk around the landing; the u_ambient's flip-frame set —
+        // the End's kAmbientEnd, the load's presentation restore).
+        m_player->setWorld(*m_end.world);
+        m_playerDimension = Dimension::End;
+        {
+            const int cx = floorDiv(
+                static_cast<int>(std::floor(save.playerPos.x)), kChunkSize);
+            const int cz = floorDiv(
+                static_cast<int>(std::floor(save.playerPos.z)), kChunkSize);
+            catchUpDisk(Dimension::End, cx, cz);
+        }
+        applyDimensionAmbient();
     }
     m_player->restorePosition(save.playerPos);
     // SAVE-2 (format 22): re-apply the saved velocity (pre-22 files

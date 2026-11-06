@@ -1570,6 +1570,26 @@ Result<void> Game::buildScene() {
     m_nether.mobs.difficulty = m_mobs.difficulty;
     m_nether.mobs.limbSwing = m_mobs.limbSwing;
 
+    // V3-10a: the END's generation content (the NetherGen::create's third
+    // consumption — the four minimum names resolved once; the fail-fast
+    // timing ruling: a missing / stateful name rejects STARTUP, not the
+    // first travel). The End's mob pool = the 10c two-phase slot: 10a
+    // ships NO mobs file (m_end.mobs stays default-empty — the
+    // structural-immunity root, the Phase B precedent).
+    auto endGen = EndGen::create(endSeed(seed), m_blocks);
+    MC_TRY(endGen);
+    m_end.gen = std::move(*endGen);
+    // The End portal block's resolved id (the m_states.portalId pattern —
+    // absent = the whole End portal system is structurally inert: no
+    // ring can ever activate, no portal cell can exist in the tracking
+    // sets, the rescan / entry countdown fast-exit).
+    m_states.endPortalId = m_blocks.idForName("end_portal");
+    m_states.endFrameEyedId = m_blocks.idForName("end_portal_frame_eyed");
+    // The ender_eye item (the embed interaction's held-item predicate —
+    // the resolved id, the m_states.portalId pattern; invalid = the
+    // interaction is structurally inert).
+    m_enderEyeId = m_items.idForName("ender_eye");
+
     // -- V2-4 weather (rain/thunder): the session-derived state machine --
     // NOT saved (zero format, the cloud-drift precedent class): every run
     // restarts the machine — the first segment is ALWAYS CLEAR with a
@@ -1773,6 +1793,12 @@ Result<void> Game::buildScene() {
     // a fresh world, never scans; a nether load finds the player's nether
     // portals — the nether's block edits + states restored them).
     rescanNetherPortals();
+    // V3-10a (D9's load ordering, the THREE-dimension portal rescan):
+    // the End's frame validity over BOTH End-side sets (the exit in the
+    // End world — a no-op while the End is unengaged, the lazy D2; the
+    // entry in the overworld — the loaded save's block edits restored
+    // the frames + the eyes).
+    rescanEndPortals();
 
     // The loaded columns mirror (streaming + unload decide on this set,
     // not per-frame chunk scans). The lighting pipeline has covered every
@@ -1790,6 +1816,14 @@ Result<void> Game::buildScene() {
     if (m_nether.world) {
         for (const ChunkPos& c : m_nether.world->chunkPositions()) {
             m_nether.streaming.loadedColumns.insert({c.x, c.z});
+        }
+    }
+    // V3-10a: the End's loaded-columns mirror (the nether's twin — the
+    // End's chunks the load's replay + catch-up disk generated; a
+    // no-End load leaves the mirror empty, the lazy D2).
+    if (m_end.world) {
+        for (const ChunkPos& c : m_end.world->chunkPositions()) {
+            m_end.streaming.loadedColumns.insert({c.x, c.z});
         }
     }
 
@@ -1829,37 +1863,95 @@ World::ChunkGenerator Game::makeChunkGenerator() const {
 // aggregate, engaged lazily by ensureNether — D2).
 // ---------------------------------------------------------------------------
 
+Game::Dimension Game::dimensionOfWorld(const World& w) const {
+    if (m_nether.world && &w == &*m_nether.world) {
+        return Dimension::Nether;
+    }
+    if (m_end.world && &w == &*m_end.world) {
+        return Dimension::End;
+    }
+    return Dimension::Overworld;
+}
+
 World& Game::currentWorld() {
-    return playerInNether() ? *m_nether.world : m_world;
+    // V3-10a: the three-way (the nether's second consumption — the End
+    // leg is the playerInEnd branch; the overworld keeps its exact
+    // pre-V3-10a expression).
+    if (playerInNether()) {
+        return *m_nether.world;
+    }
+    if (playerInEnd()) {
+        return *m_end.world;
+    }
+    return m_world;
 }
 
 const World& Game::currentWorld() const {
-    return playerInNether() ? *m_nether.world : m_world;
+    if (playerInNether()) {
+        return *m_nether.world;
+    }
+    if (playerInEnd()) {
+        return *m_end.world;
+    }
+    return m_world;
 }
 
 std::vector<std::unique_ptr<Entity>>& Game::currentEntities() {
-    return playerInNether() ? m_nether.entities : m_entities;
+    if (playerInNether()) {
+        return m_nether.entities;
+    }
+    if (playerInEnd()) {
+        return m_end.entities;
+    }
+    return m_entities;
 }
 
 const std::vector<std::unique_ptr<Entity>>& Game::currentEntities() const {
-    return playerInNether() ? m_nether.entities : m_entities;
+    if (playerInNether()) {
+        return m_nether.entities;
+    }
+    if (playerInEnd()) {
+        return m_end.entities;
+    }
+    return m_entities;
 }
 
 const std::map<BlockPos, BlockID>& Game::portalsOf(Dimension dim) const {
-    return dim == Dimension::Nether ? m_nether.portals : m_states.portals;
+    // The dimension's PORTAL tracking set (the overworld's nether
+    // portals / the nether's own / the End's exit — the end ENTRY set
+    // is m_states.endPortals, the overworld's per-block family).
+    if (dim == Dimension::Nether) {
+        return m_nether.portals;
+    }
+    if (dim == Dimension::End) {
+        return m_end.portals;
+    }
+    return m_states.portals;
 }
 
 std::map<BlockPos, BlockID>& Game::portalsOf(Dimension dim) {
-    return dim == Dimension::Nether ? m_nether.portals : m_states.portals;
+    if (dim == Dimension::Nether) {
+        return m_nether.portals;
+    }
+    if (dim == Dimension::End) {
+        return m_end.portals;
+    }
+    return m_states.portals;
 }
 
 std::int64_t Game::currentSeed() const {
-    // The dimension's generation seed (the nether's is DERIVED — the
-    // kSaltNether discipline; it is never stored, the parse rebuilds it
-    // from the overworld seed, the xp_seed single-source-of-truth twin).
-    return playerInNether()
-               ? netherSeed(static_cast<std::int64_t>(m_generator->seed()))
-               : static_cast<std::int64_t>(m_generator->seed());
+    // The dimension's generation seed (the nether's / the End's are
+    // DERIVED — the kSaltNether / kSaltEnd discipline; neither is
+    // stored, the parse rebuilds both from the overworld seed, the
+    // xp_seed single-source-of-truth twin).
+    const std::int64_t seed = m_generator->seed();
+    if (playerInNether()) {
+        return netherSeed(seed);
+    }
+    if (playerInEnd()) {
+        return endSeed(seed);
+    }
+    return seed;
 }
 
 void Game::ensureNether() {
@@ -1943,6 +2035,89 @@ World::ChunkGenerator Game::makeNetherChunkGenerator() const {
     };
 }
 
+// ---------------------------------------------------------------------------
+// V3-10a: the End dimension (the nether family's third member — D2's
+// laziness, D5's skyless world, the ensureNether / makeNetherChunkGenerator
+// twins).
+// ---------------------------------------------------------------------------
+
+void Game::ensureEnd() {
+    // D2 (the laziness): the End World is constructed on first need —
+    // before that there is no End chunk, no mesh, no journal, no
+    // streaming job, no streaming memory (the structural-immunity
+    // strongest form: a no-End session never allocates any of it, and
+    // the base gate's byte-identity rests on it). Idempotent.
+    if (m_end.world) {
+        return;
+    }
+    // V3-10a: the content resolution runs at INIT (buildScene's
+    // EndGen::create — the fail-fast timing ruling, the nether's twin);
+    // ensureEnd only consumes the cached gen (the belt's named-abort
+    // keeps the travel pipeline's unreachable-case path).
+    if (!m_end.gen.valid()) {
+        MC_LOG_ERROR("The End dimension is unbuildable: the generation "
+                     "content failed to resolve at init (structurally "
+                     "unreachable — buildScene MC_TRYs the resolution)");
+        return;
+    }
+    // The SKYLESS world (the nether's D5 twin: the void / world top read
+    // sky 0 — no day/night, no weather, the render's 6-point gate does
+    // not consume them).
+    m_end.world.emplace(/*skyless=*/true);
+    m_end.world->setChunkGenerator(makeEndChunkGenerator());
+    // The End's cell-mutation observer (the nether's journal twin — the
+    // End's edits journal into the End's StreamingState, so the exit
+    // save's end section diffs against the End's generation reference).
+    m_end.world->setCellMutationObserver([this](const CellMutation& mu) {
+        bool capped = false;
+        if (mu.block.valid()) {
+            capped = m_end.streaming.saveJournal.recordBlock(mu.pos);
+        }
+        if (mu.fluidCode.has_value()) {
+            capped = capped ||
+                     m_end.streaming.saveJournal.recordFluid(mu.pos);
+        }
+        if (capped) {
+            MC_LOG_INFO("End save journal exceeded "
+                        "kSaveJournalMaxEntries (" +
+                        std::to_string(kSaveJournalMaxEntries) +
+                        " entries) — the exit save's end section falls "
+                        "back to the full End diff");
+        }
+    });
+    // The streaming radius (the shared config value — no new config key;
+    // the End streams the same view_distance disk as the overworld).
+    m_end.streaming.streamRadius = m_streaming.streamRadius;
+    MC_LOG_INFO("End engaged (derived seed " +
+                std::to_string(endSeed(
+                    static_cast<std::int64_t>(m_generator->seed()))) +
+                " = world seed ^ kSaltEnd)");
+}
+
+World& Game::endWorld() {
+    // The belt (every consumer runs only once the End is engaged —
+    // ensureEnd at the travel / load sites; an unengaged world here is
+    // a logic error, not a runtime state).
+    if (!m_end.world) {
+        MC_LOG_ERROR("endWorld() accessed before ensureEnd (logic error "
+                     "— the End is lazy)");
+    }
+    return *m_end.world;
+}
+
+World::ChunkGenerator Game::makeEndChunkGenerator() const {
+    // The End's generation reference (the makeNetherChunkGenerator's
+    // third member): the pure fillEndChunk (coordinate-pure — zero
+    // noise, the constructive determinism). The save-diff reference and
+    // the unload retained diffs all run the same fill.
+    const EndGen gen = m_end.gen; // captured by value (the closure
+                                   // outlives nothing — the gen is set
+                                   // before any job posts)
+    return [gen](Chunk& chunk, const ChunkPos& pos) {
+        fillEndChunk(gen, chunk, pos);
+    };
+}
+
 void Game::catchUpDisk(Dimension dim, int cx, int cz) {
     // D6 step 3 (the synchronous catch-up): the 3x3 column disk around
     // (cx, cz) — every missing column generated SYNCHRONOUSLY (the
@@ -1954,9 +2129,20 @@ void Game::catchUpDisk(Dimension dim, int cx, int cz) {
     // "一次性 ~ms 级". Runs in the main-thread-writer window (the travel
     // frame / the load), so no worker is in flight and no window
     // conflict (the risk-surface ② ruling).
-    World& w = (dim == Dimension::Nether) ? *m_nether.world : m_world;
-    StreamingState& st =
-        (dim == Dimension::Nether) ? m_nether.streaming : m_streaming;
+    // V3-10a: the three-way (the End disk's synchronous catch-up — the
+    // nether's branch untouched, the overworld keeps its exact
+    // pre-V3-10a expression).
+    World* wPtr = &m_world;
+    StreamingState* stPtr = &m_streaming;
+    if (dim == Dimension::Nether) {
+        wPtr = &*m_nether.world;
+        stPtr = &m_nether.streaming;
+    } else if (dim == Dimension::End) {
+        wPtr = &*m_end.world;
+        stPtr = &m_end.streaming;
+    }
+    World& w = *wPtr;
+    StreamingState& st = *stPtr;
     bool any = false;
     for (int dx = -1; dx <= 1; ++dx) {
         for (int dz = -1; dz <= 1; ++dz) {
@@ -2041,6 +2227,77 @@ void Game::rescanNetherPortals() {
     Lighting::updateRegion(w, m_blocks, min, max);
     MC_LOG_INFO("Nether portal rescan: " + std::to_string(orphans.size()) +
                 " orphan portal block(s) set to air (no complete frame)");
+}
+
+// V3-10a: the End portal's load-time rescan — the rescanNetherPortals'
+// twin over BOTH End-side sets (the exit in the End world / the entry
+// in the overworld): every end_portal cell not strictly inside a
+// complete ALL-EYED ring (the endPortalCellValid pure — the PITS 383①
+// two-way cross-check) is an orphan -> air; the tracking sets rebuild.
+// One private walk per world (the nether's chunk-scan shape).
+namespace {
+
+template <typename SetRef>
+void rescanEndPortalWorld(World& w, const BlockRegistry& blocks,
+                          SetRef tracking) {
+    tracking.clear();
+    std::vector<BlockPos> orphans;
+    for (const ChunkPos& cp : w.chunkPositions()) {
+        const Chunk* chunk = w.findChunk(cp);
+        if (chunk == nullptr) {
+            continue;
+        }
+        const int baseX = cp.x * kChunkSize;
+        const int baseY = cp.y * kChunkSize;
+        const int baseZ = cp.z * kChunkSize;
+        for (int ly = 0; ly < kChunkSize; ++ly) {
+            for (int lz = 0; lz < kChunkSize; ++lz) {
+                for (int lx = 0; lx < kChunkSize; ++lx) {
+                    const BlockID id = chunk->get(lx, ly, lz);
+                    const Block& b = blocks.at(id);
+                    if (!b.properties.endPortal) {
+                        continue;
+                    }
+                    const BlockPos wp {baseX + lx, baseY + ly, baseZ + lz};
+                    if (!endPortalCellValid(w, blocks, wp)) {
+                        orphans.push_back(wp);
+                        continue;
+                    }
+                    tracking[wp] = id;
+                }
+            }
+        }
+    }
+    if (orphans.empty()) {
+        return;
+    }
+    BlockPos min {orphans.front()};
+    BlockPos max {orphans.front()};
+    for (const BlockPos& p : orphans) {
+        w.setBlock(p.x, p.y, p.z, BlockID::air());
+        min.x = std::min(min.x, p.x); min.y = std::min(min.y, p.y);
+        min.z = std::min(min.z, p.z); max.x = std::max(max.x, p.x);
+        max.y = std::max(max.y, p.y); max.z = std::max(max.z, p.z);
+    }
+    // ONE relight over the orphans' bounding box (the rescan's twin —
+    // the end portal is a light-11 source, the nether_portal's mirror).
+    Lighting::updateRegion(w, blocks, min, max);
+    MC_LOG_INFO("End portal rescan: " + std::to_string(orphans.size()) +
+                " orphan portal block(s) set to air (no complete all-eyed "
+                "ring)");
+}
+
+} // namespace
+
+void Game::rescanEndPortals() {
+    // The two End-side sets: the EXIT (the End world — a no-op while
+    // the End is unengaged, the lazy D2) + the ENTRY (the overworld —
+    // always present, the structural-inert no-op while no end portal
+    // exists: the per-chunk scan only reads the endPortal predicate).
+    if (m_end.world) {
+        rescanEndPortalWorld(*m_end.world, m_blocks, m_end.portals);
+    }
+    rescanEndPortalWorld(m_world, m_blocks, m_states.endPortals);
 }
 
 

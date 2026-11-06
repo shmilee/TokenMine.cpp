@@ -58,19 +58,25 @@ enum class AmbienceContext : int {
     // on the cave bed (the skyless void reads raw sky 0 — the v3.4.0
     // documented behavior).
     Nether = 3,
+    // V3-10a (v3.23.0): the End's own context (the Nether's fifth
+    // member — the player in the End is in the End ambience world,
+    // regardless of sky light or time of day; the two dimension flags
+    // are mutually exclusive by construction, the End's check first).
+    End = 4,
 };
 
 // The context decision (pure): inNether = the player's CURRENT
 // dimension is the nether (T4 (v3.7.0) — the top priority: the nether
-// context full stop); rawSkyLight = the player's feet cell's RAW sky
-// light (0-15, the day/night unscaled stored value — 0 = no sky path =
-// cave, priority over day/night); dayFactor = the same day/night scale
-// the renderer uses (0 = deep night, 1 = noon). The OVERWORLD
-// (inNether = false) is the pre-T4 decision, bit-identical (the default
-// argument — the existing call sites' behavior is unchanged; the unit
-// tests pin the identity over the full input face).
+// context full stop); inEnd = the End's twin (V3-10a — the End context
+// full stop, checked first); rawSkyLight = the player's feet cell's RAW
+// sky light (0-15, the day/night unscaled stored value — 0 = no sky
+// path = cave, priority over day/night); dayFactor = the same
+// day/night scale the renderer uses (0 = deep night, 1 = noon). The
+// OVERWORLD (both flags false) is the pre-T4 decision, bit-identical
+// (the default arguments — the existing call sites' behavior is
+// unchanged; the unit tests pin the identity over the full input face).
 AmbienceContext ambienceContext(int rawSkyLight, float dayFactor,
-                                bool inNether = false);
+                                bool inNether = false, bool inEnd = false);
 
 // The schedule roll (pure): true = play the context's sound this frame.
 // Deterministic in (seed, frame, context); ~kAmbienceProbability over a
