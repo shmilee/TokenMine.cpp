@@ -96,7 +96,7 @@ V3-10a~d / V3-11a~b / V3-12a~c / V3-14a~d，BACKLOG 待执行项明细】）**
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2792/2792**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2795/2795**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 30（V3-1 Phase B 下界维度：player.dimension 严格词表
   恒写 + nether 段 {blocks,fluids,states} + nether_entities 恒写 +
   派生 seed 不落盘；schema 其余与 29 一致，29 携新键 = version lie
