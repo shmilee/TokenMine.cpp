@@ -16,6 +16,7 @@
 #include "core/game_local.hpp"
 #include "core/json.hpp"
 #include "core/png.hpp"
+#include "entity/end_spawn_pool.hpp"
 #include "entity/nether_spawn_pool.hpp"
 #include "entity/barter_check.hpp"
 #include "entity/wool_drops.hpp"
@@ -782,6 +783,24 @@ Result<void> Game::buildScene() {
                 return MC_FAIL("item '" + it.name + "' throw sound '" +
                                snd + "' is missing '" + rel + "'");
             }
+        }
+    }
+
+    // V3-10c (the enderman): the TELEPORT cue's cross-check (the
+    // shoot_sound's mob-twin over the item's throw channel — ANY
+    // teleport-capable mob (the data interval pair) requires the
+    // landing's wav; the name is the generic teleport action's, not a
+    // species switch — the S6 gate's missing-wav face).
+    for (const MobID mid : m_mobs.mobTypes.allIds()) {
+        const Mob& mob = m_mobs.mobTypes.at(mid);
+        if (mob.properties.teleportIntervalMin <= 0.0) {
+            continue; // no teleport (the pre-V3-10c bit root)
+        }
+        const std::string rel = "sounds/enderman_teleport.wav";
+        if (!m_assets.exists(rel)) {
+            return MC_FAIL("mob '" + mob.name +
+                           "' carries a teleport interval — the "
+                           "landing cue is missing '" + rel + "'");
         }
     }
 
@@ -1605,12 +1624,24 @@ Result<void> Game::buildScene() {
     m_nether.mobs.difficulty = m_mobs.difficulty;
     m_nether.mobs.limbSwing = m_mobs.limbSwing;
 
+    // V3-10c: the END's mob spawn pool (data/mob_spawning_end.json —
+    // the 10a "two-phase slot"'s consumer, the loadNetherSpawnPool's
+    // third consumption: the fail-fast timing ruling — a missing file /
+    // unknown mob name rejects STARTUP, not the first travel). 10c
+    // ships the single-species pool (enderman — the End's only mob);
+    // the overworld / nether pools stay enderman-free (the End-only
+    // deviation, the 10d dragon's era re-discusses).
+    auto endPool = loadEndSpawnPool(m_assets, m_mobs.mobTypes);
+    MC_TRY(endPool);
+    m_end.mobs.spawnConfig = *endPool;
+    m_end.mobs.mobsEnabled = m_mobs.mobsEnabled;
+    m_end.mobs.difficulty = m_mobs.difficulty;
+    m_end.mobs.limbSwing = m_mobs.limbSwing;
+
     // V3-10a: the END's generation content (the NetherGen::create's third
     // consumption — the four minimum names resolved once; the fail-fast
     // timing ruling: a missing / stateful name rejects STARTUP, not the
-    // first travel). The End's mob pool = the 10c two-phase slot: 10a
-    // ships NO mobs file (m_end.mobs stays default-empty — the
-    // structural-immunity root, the Phase B precedent).
+    // first travel).
     auto endGen = EndGen::create(endSeed(seed), m_endBiomes, m_blocks);
     MC_TRY(endGen);
     m_end.gen = std::move(*endGen);

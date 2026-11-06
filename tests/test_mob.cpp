@@ -1969,8 +1969,11 @@ TEST(MobContent, V215WoolAssetsPinned) {
     // line). V3-10a re-pin: the End's four tiles (the row-10 free run
     // [10..13, 10] — the 170-tile zero-shift red line, the test_atlas
     // census; the ender_eye icon is a standalone item PNG).
+    // V3-10c re-pin: the enderman's two tiles (the row-11 free run
+    // [2..3, 11] — the 174-tile zero-shift red line, the test_atlas
+    // census).
     EXPECT_EQ(fnv1a64(readAll("assets/data/textures/block_atlas.json")),
-              "cf127c15a903407e");
+              "9bb55b0e10445d4e");
 }
 
 // -- V2-15: the wool instance state (MobEntity — the frame discipline) ----

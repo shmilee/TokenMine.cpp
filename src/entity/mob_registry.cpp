@@ -669,6 +669,72 @@ Result<void> MobRegistry::parseProperties(const Json& def,
         }
         out.rideable = rd->asBool();
     }
+    // V3-10c: the eye-contact provocation range (the shoot_range's
+    // numeric-gate shape: 0 (the default) = OFF; a negative is a typo,
+    // named). The game's pass consumes it, the MobEntity's frame
+    // counter does the provoking.
+    if (const Json* ec = def.find("eye_contact_range")) {
+        if (!ec->isNumber()) {
+            return MC_FAIL("mob properties: 'eye_contact_range' must be "
+                           "a number");
+        }
+        out.eyeContactRange = static_cast<float>(ec->asDouble());
+        if (out.eyeContactRange < 0.0f) {
+            return MC_FAIL("mob properties: 'eye_contact_range' must be "
+                           ">= 0, got " + std::to_string(out.eyeContactRange));
+        }
+    }
+    // V3-10c: the teleport interval pair (the milk pairing discipline:
+    // PRESENT TOGETHER, each in (0, 60], min <= max — the 60 s cap is
+    // the wander_interval's domain read: an interval past a minute is a
+    // typo, not a cadence). Absent = no teleport (the capability gate).
+    {
+        const Json* tm = def.find("teleport_interval_min");
+        const Json* tx = def.find("teleport_interval_max");
+        if (tm == nullptr && tx == nullptr) {
+            // the pre-V3-10c default (0/0 = no teleport)
+        } else if (tm == nullptr || tx == nullptr) {
+            return MC_FAIL("mob properties: 'teleport_interval_min' and "
+                           "'teleport_interval_max' must be given "
+                           "together");
+        } else {
+            if (!tm->isNumber() || !tx->isNumber()) {
+                return MC_FAIL("mob properties: the teleport interval "
+                               "pair must be numbers (seconds)");
+            }
+            out.teleportIntervalMin = tm->asDouble();
+            out.teleportIntervalMax = tx->asDouble();
+            if (out.teleportIntervalMin <= 0.0 ||
+                out.teleportIntervalMin > 60.0) {
+                return MC_FAIL("mob properties: 'teleport_interval_min' "
+                               "must be in (0, 60], got " +
+                               std::to_string(out.teleportIntervalMin));
+            }
+            if (out.teleportIntervalMax <= 0.0 ||
+                out.teleportIntervalMax > 60.0) {
+                return MC_FAIL("mob properties: 'teleport_interval_max' "
+                               "must be in (0, 60], got " +
+                               std::to_string(out.teleportIntervalMax));
+            }
+            if (out.teleportIntervalMin > out.teleportIntervalMax) {
+                return MC_FAIL("mob properties: 'teleport_interval_min' "
+                               "must be <= 'teleport_interval_max' (got " +
+                               std::to_string(out.teleportIntervalMin) +
+                               " > " + std::to_string(out.teleportIntervalMax) +
+                               ")");
+            }
+        }
+    }
+    // V3-10c: the carries_blocks flag (the strict-bool twin, default
+    // false — the block-side 'carriable' must also ship for the carry
+    // to run, the two-phase asset discipline).
+    if (const Json* cb = def.find("carries_blocks")) {
+        if (!cb->isBool()) {
+            return MC_FAIL("mob properties: 'carries_blocks' must be a "
+                           "boolean");
+        }
+        out.carriesBlocks = cb->asBool();
+    }
     // SURV-5: the optional 'arrow_effect' — the status effect this mob's
     // ARROW applies to the target ({wither, 10} on the skeleton: the
     // Minecraft wither-skeleton twin). The SAME strict {name, duration}

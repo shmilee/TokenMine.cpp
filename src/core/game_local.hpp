@@ -78,4 +78,14 @@ constexpr int kPearlThrowCooldownFrames = 60;
 // EXACT value — the sphere-uniform roll's bound).
 constexpr float kPearlTeleportOffset = 2.5f;
 
+// V3-10c (the enderman's carry): the PLACE cadence in FRAMES (the
+// Minecraft 1/2000-tick read at the 60 fps step = 6000 frames ~ 100 s —
+// the frame-mod's zero-stream discipline: the global frame, the shared
+// cadence, the deterministic; the recon's R6's named constant). The
+// pickup is every frame (the MC 1/20-tick read — no constant).
+constexpr int kCarryPlaceFrames = 6000;
+// The carried cube's draw scale (the Minecraft 0.9 read over the
+// 1.0 item cube — the overhead block's project scale).
+constexpr float kCarryBlockScale = 0.9f;
+
 } // namespace mc

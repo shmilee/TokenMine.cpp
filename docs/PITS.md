@@ -3,7 +3,7 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–406，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–407，新条目继续前插于尾部块首。
 
 - **gzip 容器可钉 / zlib 宏缺失 / 双跑 RAW 适用域（PITS 385，门 191
   V3-7 存档 gzip）**——① **zlib 自带 gzip 封装（windowBits 16+15）
@@ -68,6 +68,37 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **demo 槽不回写 + 火脚级重叠 + 拾格带含脚下 + 遮挡首格语义
+  + 下探穿固体虚空 + 截图尺寸/按住 LMB 七坑（PITS 407，门 215
+  v3.25.0 V3-10c 末影人）**——① **demo 引用槽永不回写（假测量
+  根）**：demo replay world=save 时 `m_args.saveSlot` 被
+  reset（game_init.cpp 的引用槽红线）= 跑完读 slot 文件读到的
+  **永远是输入场景副本**（yaw/pitch 恒不动的假象 → 误判
+  mouse_move 无效，绕了两小时插桩）；判别 = g213 旧 demo 复跑
+  （12 格不同嵌入实证 mouse_move 有效）；**demo 臂终态权威 =
+  DEBUG 事件行 + 截图**，勿读 slot。② **火须放脚级（air 层）
+  才有严格 AABB 重叠**：mob 脚 y53.0 站 y52 块顶——火格 y52
+  与身体盒仅面接触（y=53 边界）= 严格不等式拒（inFire 永不真，
+  点燃零实证）；火格 y53（脚所占地块）= 真重叠点燃。③ **拾格
+  带须含脚下（dy −1）**：feet 53 的站立体下方地块 = y52；摸取
+  扫描带 dy 0..2 = 纯空气层 → 恒不触发（首 probe 零 carried
+  实证）；dy −1..1 含脚下才活。④ **遮挡检 = ray 首非 air 须
+  == 目标格**：`hasLineOfSight` 的语义是「段内无非 air」——
+  目标格自身即首非 air = 恒拒（箭撞击语义）；「mob 看得见
+  块」须 `raycastBlock(eye→格心)` 首命中 == 目标格（更近命中
+  = 遮挡）。⑤ **瞬移「向下首个 roomy」探针穿固体掉虚空**：
+  从候选位下探到首个站得下的层 = 台地实体层之下（y45 虚空）
+  → 落点 >40 距静默 despawn（门内实证：#1 f436 后消失，
+  无任何日志）；正解 = 候选位本身须空旷（hasRoomAt ∧ 无
+  流体）+ **16 格内 footprint 有地面**（任一 solid 支撑 =
+  站立约定），过隙候选拒收；全败吞没 = 永久 DEBUG 行
+  （swallowed）= 吞没可观测。⑥ **无头截图 = 679×744 渲染目
+  标（非窗口 1280×720）**：aim 投影 crop 数学须读**实际图像
+  尺寸**（identify）——按窗口尺寸 crop 全偏（门内 4 连踩）。
+  ⑦ **按住 LMB 会挖准星所指（创造即挖）**：截图转身前须先
+  松 LMB——f908 按住到 f1501 的 LMB 在 f1200 转身瞬间开始挖
+  掉落物下方地板（f1203 地板格被挖、item 下坠 1 块 = 视觉
+  谜团根）；timeline 纪律 = 观察段无按下键。
 - **lattice 位切 int 截断 + JS 三元误写 + stale assets 再踩三坑
   （PITS 406，门 214 v3.24.0 V3-10b 末地内容族）**——① **hash 位切
   直接 int 截断 = 负值模运算**：`static_cast<int>(h >> 24) % span`

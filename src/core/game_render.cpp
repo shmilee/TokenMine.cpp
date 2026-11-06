@@ -922,6 +922,11 @@ void Game::render() {
     // Mobs (Phase 20): opaque box models, with the opaque pass (the depth
     // test then occludes them behind terrain exactly like the chunks).
     drawMobs(view, projection);
+    // V3-10c: the carried block's OPAQUE cubes (the endstone — the
+    // carriable set's opaque member; the cutout member's twin call sits
+    // in the cutout section below). A no-carry session draws nothing
+    // (the structural-immunity root: the bit root's zero-cube frame).
+    drawCarriedBlocks(view, projection, RenderPass::Opaque);
     // UX-3: the player's world-space body — third person ONLY
     // (m_cameraMode != First); UX-3 ships First = a no-op on every run
     // (baseline byte-identical, the structural-immunity root).
@@ -982,6 +987,10 @@ void Game::render() {
                         columnModel(col));
     }
     drawItemEntities(view, projection, RenderPass::Cutout);
+    // V3-10c: the carried block's CUTOUT cubes (the chorus_plant — the
+    // carriable set's cutout member; the discard pipeline is the
+    // cutout section's, the item drop's routing twin).
+    drawCarriedBlocks(view, projection, RenderPass::Cutout);
     drawParticles(view, projection, RenderPass::Cutout);
 
     // PRE-5 BLEND section: the translucent geometry (glass, the pane, the

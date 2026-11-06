@@ -108,6 +108,9 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "cull_same_id", "boolean",
                    [&](const Json& v) { out.cullSameId = v.asBool(); });
     MC_TRY(r);
+    r = checkField(*p, "carriable", "boolean",
+                   [&](const Json& v) { out.carriable = v.asBool(); });
+    MC_TRY(r);
     r = checkField(*p, "destroyable", "boolean",
                    [&](const Json& v) { out.destroyable = v.asBool(); });
     MC_TRY(r);
@@ -1132,6 +1135,17 @@ Result<BlockID> BlockRegistry::registerBlock(const Json& def) {
     MC_TRY(r);
     r = parseModel(def, block.model);
     MC_TRY(r);
+
+    // V3-10c: the carriable STATELESS gate (the ENT-2 worldgen twin,
+    // the S6 gate's subject): a per-instance state is a journal the
+    // carry cannot write — a carriable stateful block is a data
+    // contradiction, named at register time.
+    if (block.properties.carriable && block.hasState()) {
+        return MC_FAIL("block '" + name +
+                       "' is 'carriable' but has a per-instance state "
+                       "(a carried block cannot own state — the carry "
+                       "drops the ITEM, the journal is the player's)");
+    }
 
     // Cross plants (Phase 45): they render as two blended quads in the
     // transparent pass and are walk-through, so the property combination is

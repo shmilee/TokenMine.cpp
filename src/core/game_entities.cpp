@@ -94,6 +94,47 @@ void Game::updateEntities(double dt) {
     // an exact boundary regardless of the dt history).
     const Vec3 playerPos = m_player->position();
     const bool playerAlive = !m_player->isDead();
+    // V3-10c: the EYE-CONTACT pass (the FIXED slot — before the mob
+    // loop, the setPlayer feed's position twin: the geometry reads the
+    // frame-fresh player aim, and the mobs' update below then runs
+    // with the provocation's current truth). Per mob with a data
+    // eye_contact_range > 0 (the flag gate — a range-0 mob is the bit
+    // root): the aim ray (eye origin, the UX-8g convention) hits the
+    // mob's FULL AABB (the head-only read's documented relaxation —
+    // the 2.9 box's head is its top ~0.5) inside the data range AND
+    // unoccluded by the aim block (the t_block > t_mob strict
+    // ordering — the transparent-block occlusion's MC read, the
+    // raycast's own semantics). ZERO stream draws (pure geometry +
+    // the mob's integer frame counter — the ambient roll's contrast,
+    // the determinism's clean side: a no-input run's aim is the saved
+    // view, byte-identical across runs).
+    if (playerAlive) {
+        const Vec3 eye = m_player->eyePosition();
+        const Vec3 aim = aimForward();
+        const std::optional<BlockHit> aimBlock = targetBlock();
+        const float tBlock = aimBlock ? aimBlock->distance : 1e30f;
+        for (auto& entity : ents) {
+            auto* mob = dynamic_cast<MobEntity*>(entity.get());
+            if (mob == nullptr || mob->dead()) {
+                continue;
+            }
+            const float range = mob->def().properties.eyeContactRange;
+            if (range <= 0.0f) {
+                continue; // no eye contact (the bit root)
+            }
+            const float tMob =
+                raycastAabb(eye, aim, mob->aabbMin(), mob->aabbMax());
+            const bool looking =
+                tMob >= 0.0f && tMob < std::min(range, tBlock);
+            if (mob->eyeContactFeed(looking)) {
+                MC_LOG_DEBUG("eye contact provoked '" + mob->def().name +
+                             "' at (" + std::to_string(mob->position().x) +
+                             ", " + std::to_string(mob->position().y) +
+                             ", " + std::to_string(mob->position().z) +
+                             ") f" + std::to_string(m_frameCount));
+            }
+        }
+    }
     // Arrow pre-step positions (Phase 21): captured before the update so
     // the swept arrow-vs-mob hit test below can run over each arrow's
     // per-step displacement.
@@ -135,6 +176,157 @@ void Game::updateEntities(double dt) {
             entity->update(kProjectileStepPerFrame);
         } else {
             entity->update(dt);
+        }
+    }
+    // V3-10c: the CARRY pass (the 10c-lite block steal — the FIXED slot
+    // after the mob loop: the mobs' positions this frame are the scan's
+    // truth, and the setBlock writes run in the update's main-thread-
+    // writer window, the journal's single choke point). Per
+    // carries_blocks mob (the data flag gate — the bit root otherwise):
+    //   PICKUP (uncarried, EVERY frame — the Minecraft 1/20-tick read at
+    //   the 60 fps step): the 4x3x4 region around the feet (x/z ±2,
+    //   y 0..2), the x→y→z deterministic order (the scanExplosion's
+    //   scan-order precedent — the recon's R6: an un-pinned order is an
+    //   un-pickable cell) — the first non-air ∧ carriable (the block's
+    //   data predicate) ∧ stateless (the register-time belt — a stateful
+    //   carriable cannot exist, the defensive read) with an unoccluded
+    //   line from the mob's eye (the hasLineOfSight's aim-occlusion
+    //   twin — the eye sees the block) is picked up.
+    //   PLACE (carried, once every kCarryPlaceFrames — the MC 1/2000-
+    //   tick read at 60 fps = 6000 frames ~ 100 s; the frame-mod's
+    //   zero-stream discipline over a per-frame probability: the shared
+    //   global cadence is deterministic and the deviation is recorded):
+    //   the 2x2x2 region around the feet (x/z ±1, y 0..1), the same
+    //   order — the first AIR cell with a SOLID floor beneath (the
+    //   block rests on something) and no player-box intersection (the
+    //   mob never places on the player) is placed.
+    //   The Minecraft "flat-floor exemption" (never steal a block whose
+    //   floor is a full flat field) is REMOVED — the recon's ruling:
+    //   the End is all flat endstone, the rule would make the feature
+    //   inert, and the hollowing IS the experience goal (deviation).
+    {
+        // the pass itself runs every frame (the pickup's cadence — the
+        // frame-mod gates only the PLACE branch below).
+        World& world = currentWorld();
+        const Vec3 pmin = m_player->aabbMin();
+        const Vec3 pmax = m_player->aabbMax();
+        for (auto& entity : ents) {
+            auto* mob = dynamic_cast<MobEntity*>(entity.get());
+            if (mob == nullptr || mob->dead() || !mob->carriesBlocks()) {
+                continue;
+            }
+            const Vec3 pos = mob->position();
+            const int fx = static_cast<int>(std::floor(pos.x));
+            const int fy = static_cast<int>(std::floor(pos.y));
+            const int fz = static_cast<int>(std::floor(pos.z));
+            if (!mob->carried().valid()) {
+                // The pickup (the every-frame attempt). The 4x3x4 band
+                // is the GROUND + the two levels up (dy -1..1 from the
+                // feet's cell: the enderman stands ON the block it
+                // steals — the plateau's endstone is one below the feet,
+                // the void-air band above is the chorus's level): a
+                // 0..2-from-feet band would scan the air over a
+                // standing mob and the feature would be inert (the
+                // probe's first catch).
+                bool picked = false;
+                for (int dx = -2; dx <= 2 && !picked; ++dx) {
+                    for (int dy = -1; dy <= 1 && !picked; ++dy) {
+                        for (int dz = -2; dz <= 2 && !picked; ++dz) {
+                            const int cx = fx + dx;
+                            const int cy = fy + dy;
+                            const int cz = fz + dz;
+                            const BlockID id = world.getBlock(cx, cy, cz);
+                            if (id == BlockID::air()) {
+                                continue;
+                            }
+                            const Block& b = m_blocks.at(id);
+                            if (!b.properties.carriable || b.hasState()) {
+                                continue; // not a carry target (the belt)
+                            }
+                            // The eye's line (the §3 aim-occlusion's
+                            // twin — the mob "sees" the block the way
+                            // the player aims it: the FIRST non-air
+                            // cell of the eye->center ray is the
+                            // target itself = seen; a nearer non-air
+                            // cell = occluded. (hasLineOfSight would
+                            // reject the target's own cell — the
+                            // arrow-impact read, the probe's second
+                            // catch.)
+                            const Vec3 from = mob->eyePosition();
+                            const Vec3 to {static_cast<float>(cx) + 0.5f,
+                                           static_cast<float>(cy) + 0.5f,
+                                           static_cast<float>(cz) + 0.5f};
+                            const float reach = length(to - from);
+                            if (reach > 1e-4f) {
+                                const Vec3 dir = (to - from) / reach;
+                                const std::optional<BlockHit> hit =
+                                    raycastBlock(world, m_blocks, from, dir,
+                                                 reach);
+                                if (hit &&
+                                    (hit->block.x != cx ||
+                                     hit->block.y != cy ||
+                                     hit->block.z != cz)) {
+                                    continue; // a nearer block occludes
+                                }
+                            }
+                            // The steal (the choke point — the journal /
+                            // the light / the mesh ride along, the
+                            // V3-14a explodeAt's write precedent).
+                            setBlock(cx, cy, cz, BlockID::air());
+                            mob->setCarried(id);
+                            MC_LOG_DEBUG("carried '" + b.name + "' at (" +
+                                         std::to_string(cx) + ", " +
+                                         std::to_string(cy) + ", " +
+                                         std::to_string(cz) + ") f" +
+                                         std::to_string(m_frameCount));
+                            picked = true;
+                        }
+                    }
+                }
+            } else if (m_frameCount % kCarryPlaceFrames == 0) {
+                // The place (the cadence-gated branch).
+                const BlockID carried = mob->carried();
+                bool placed = false;
+                for (int dx = -1; dx <= 1 && !placed; ++dx) {
+                    for (int dy = 0; dy <= 1 && !placed; ++dy) {
+                        for (int dz = -1; dz <= 1 && !placed; ++dz) {
+                            const int cx = fx + dx;
+                            const int cy = fy + dy;
+                            const int cz = fz + dz;
+                            if (world.getBlock(cx, cy, cz) !=
+                                BlockID::air()) {
+                                continue;
+                            }
+                            // The floor (the block rests on a solid —
+                            // the end's plateau / the base-rock ocean's
+                            // top, the MC's "on the ground" read).
+                            if (!m_blocks.at(world.getBlock(cx, cy - 1, cz))
+                                     .properties.solid) {
+                                continue;
+                            }
+                            // The player's box (the strict cell-AABB
+                            // overlap — the mob never places ON the
+                            // player, the knockback-less belt).
+                            const bool overlapsPlayer =
+                                pmin.x < cx + 1 && pmax.x > cx &&
+                                pmin.y < cy + 1 && pmax.y > cy &&
+                                pmin.z < cz + 1 && pmax.z > cz;
+                            if (overlapsPlayer) {
+                                continue;
+                            }
+                            setBlock(cx, cy, cz, carried);
+                            mob->setCarried(BlockID::invalid());
+                            MC_LOG_DEBUG("placed '" +
+                                         m_blocks.at(carried).name +
+                                         "' at (" + std::to_string(cx) +
+                                         ", " + std::to_string(cy) + ", " +
+                                         std::to_string(cz) + ") f" +
+                                         std::to_string(m_frameCount));
+                            placed = true;
+                        }
+                    }
+                }
+            }
         }
     }
     // Arrow hits (Phase 21): a swept test from each arrow's pre-step
@@ -511,6 +703,16 @@ void Game::updateEntities(double dt) {
             // any cause of death — the same place the drops spawn; the
             // data-driven mob name).
             emitTutorialEvent("kill." + mob->def().name, 1);
+            // V3-10c: the death's E2E evidence line (the teleport /
+            // provoke / carry DEBUG lines' twin — the death frame + the
+            // rest position, the drop point's coordinates): the gate's
+            // kill-arm assertion. Every other mob's death logs the same
+            // shape (the data-driven name, no species switch).
+            const Vec3 dp = mob->position();
+            MC_LOG_DEBUG("mob '" + mob->def().name + "' died at (" +
+                         std::to_string(dp.x) + ", " + std::to_string(dp.y) +
+                         ", " + std::to_string(dp.z) + ") f" +
+                         std::to_string(m_frameCount));
         }
         if (mob != nullptr && mob->dead() &&
             !mob->def().properties.drops.empty()) {
@@ -553,6 +755,19 @@ void Game::updateEntities(double dt) {
             mob->def().properties.xp > 0) {
             mobXpOrbs.push_back({mob->def().properties.xp, mob->position()});
         }
+        // V3-10c: the CARRIED instance's 100% death drop (the Minecraft
+        // read — the enderman dies holding its block; the instance
+        // state, the wool death drop's twin position: it rides the
+        // death pass, not the data drops' list). The item is the
+        // block's OWN name (buildBlockItems' 1:1 — every block ships
+        // its item, the init's belt; endstone drops endstone, the
+        // chorus drops the chorus_plant item, its chance_drops' twin).
+        // A mob that died without the carry flag (the bit root) never
+        // reaches the valid check.
+        if (mob != nullptr && mob->dead() && mob->carried().valid()) {
+            mobDrops.push_back({m_blocks.at(mob->carried()).name, 1,
+                                mob->position()});
+        }
     }
     if (std::none_of(gone.begin(), gone.end(), [](bool g) { return g; })) {
         return;
@@ -585,6 +800,18 @@ void Game::updateEntities(double dt) {
         ents.push_back(std::make_unique<ItemEntity>(
             currentWorld(), m_blocks, it.name, it.maxStack, drop.count,
             drop.pos));
+        // V3-10c: the drop's E2E evidence line (the death / teleport /
+        // carry DEBUG lines' twin — the item, the count (a 0-1 rolled
+        // drop that came up 0 never reaches this line: the n > 0 gate
+        // upstream), and the rest position): the gate's kill-arm
+        // assertion. Data-driven (every mob's death drop logs the same
+        // shape, no species switch).
+        const Vec3 dp = drop.pos;
+        MC_LOG_DEBUG("mob drop '" + drop.item + "' x" +
+                     std::to_string(drop.count) + " at (" +
+                     std::to_string(dp.x) + ", " + std::to_string(dp.y) +
+                     ", " + std::to_string(dp.z) + ") f" +
+                     std::to_string(m_frameCount));
     }
     // V2-11 (XP): the dead mobs' XP orbs (the single spawn point; the
     // value is data-validated 1..9 at init — the belt clamp in the
@@ -1111,6 +1338,23 @@ void Game::attemptMobSpawn() {
                 m_sound.play(ambientName, origin);
             });
     }
+    // V3-10c: the teleport EXECUTION seam (the setShootCallback's game
+    // side — the mob rolls its candidates through its OWN stream, the
+    // game probes + lands them over the world). Wired for every
+    // teleport-capable mob (the data pair's presence — the bit root for
+    // the rest); the raw pointer stays valid (the mob lives in ents
+    // until the despawn pass, the shoot callback's twin comment).
+    if (def.properties.teleportIntervalMin > 0.0) {
+        // The raw pointer (the unique_ptr is moved into ents below; the
+        // object's address is stable until the despawn pass — the shoot
+        // callback's capture discipline).
+        MobEntity* raw = mob.get();
+        mob->setTeleportCallback(
+            [this, raw](const std::array<TeleportCandidate,
+                                         kTeleportAttempts>& candidates) {
+                return executeMobTeleport(raw, candidates);
+            });
+    }
     ents.push_back(std::move(mob));
 }
 
@@ -1175,6 +1419,51 @@ void Game::drawMobs(const Mat4& view, const Mat4& projection) {
         // (camera yaw convention — the -Z face of a box is the front).
         const Mat4 model = Mat4::multiply(
             Mat4::translate(mob->position()), Mat4::rotateY(mob->facingYaw()));
+        m_renderer.draw(mesh, m_basicShader, view, projection, model);
+    }
+}
+
+void Game::drawCarriedBlocks(const Mat4& view, const Mat4& projection,
+                             RenderPass pass) {
+    // V3-10c: the carried block's overhead cube (the enderman's visual
+    // read — see the declaration). The cube reuses the ITEM MESH's lazy
+    // per-block build (the ground-drop's block cube — the same texture,
+    // the same geometry: zero new mesh code) at the kCarryBlockScale
+    // over the head, rotated by the mob's facing (the Minecraft "the
+    // held block faces where the enderman faces" read). The pass routes
+    // by the block's OWN render class (the item drop's twin: endstone
+    // opaque, the chorus's cutout — the shipped carriable set's two
+    // passes; a blend carriable would need the third call — the census
+    // test's pin catches it). A mob without a carried block (the bit
+    // root) never reaches the mesh build.
+    for (const auto& entity : currentEntities()) {
+        const MobEntity* mob =
+            dynamic_cast<const MobEntity*>(entity.get());
+        if (mob == nullptr || !mob->carried().valid()) {
+            continue;
+        }
+        const Block& block = m_blocks.at(mob->carried());
+        const RenderPass want =
+            !block.properties.transparent
+                ? RenderPass::Opaque
+                : (block.properties.cutout ? RenderPass::Cutout
+                                           : RenderPass::Blend);
+        if (want != pass) {
+            continue;
+        }
+        const Mesh& mesh = itemMesh(mob->carried());
+        if (!mesh.valid()) {
+            continue;
+        }
+        // The overhead center: the model's head top + the 0.5 gap (the
+        // 2.9 enderman reads its block floating half a head above).
+        const Vec3 p = mob->position();
+        const Vec3 center {p.x,
+                           p.y + mob->def().model.height + 0.5f, p.z};
+        const Mat4 model = Mat4::multiply(
+            Mat4::translate(center),
+            Mat4::multiply(Mat4::rotateY(mob->facingYaw()),
+                           Mat4::scale(kCarryBlockScale)));
         m_renderer.draw(mesh, m_basicShader, view, projection, model);
     }
 }

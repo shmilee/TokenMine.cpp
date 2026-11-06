@@ -171,6 +171,16 @@ struct BlockProperties {
     bool endPortal = false;
     bool endFrame = false;
     bool endFrameEyed = false;
+    // V3-10c (the enderman): the CARRIED-block predicate (data
+    // 'carriable', strict boolean, default false — the cull_same_id
+    // shape): a block the carry pass may PICK UP (the enderman's
+    // 10c-lite holdable set is DATA — endstone + chorus_plant ship
+    // it, every other block stays false = the bit-identical
+    // structural root). Stateful carriable is rejected at register
+    // time (a per-instance state is a journal the carry cannot
+    // write — the ENT-2 worldgen twin, the S6 gate's subject). The
+    // core reads the property, never a block id (hard rule 3).
+    bool carriable = false;
     // Simulated as a fluid (Phase 9; KINDED in Phase 51): the fluid's name
     // (vocabulary: "water", "lava" — validated at data load). Empty = not
     // a fluid. A fluid block is stored as a fluid level in the chunk's

@@ -689,6 +689,14 @@
   "chorus_plant": [
    1,
    11
+  ],
+  "enderman_body": [
+   2,
+   11
+  ],
+  "enderman_face": [
+   3,
+   11
   ]
  }
 }

@@ -755,12 +755,37 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
   面）；chorus 掉落 ≈ MC 比例（1 果 + 50% 2 果 + 33% 株）。
 - **末影珍珠**：重力复用 kGravity 20（MC 0.03 b/t²=12 偏离）/
   **落地无 5HP 伤害**（零新 DamageSource/死因/字体——MC 偏离）/
-  无 endermite 5%（10c 末影人相）/ 不跨维（飞越 portal 不做）/
+  无 endermite 5%（10d 复议）/ 不跨维（飞越 portal 不做）/
   虚空条款无消费方（洋底恒落实体）/ probe 全败 = 吞没不瞬移
-  （封闭洞罕见，MC 恒瞬移偏离）/ 可得性 = creative/存档手术
-  （末影人掉率 10c 后移）。
+  （封闭洞罕见，MC 恒瞬移偏离）/ 可得性 = **v3.25.0 起生存可
+  得**（末影人掉落 pearl 0-1 + ender_eye 0-1，10b 记档闭合）。
 - **end_stone_bricks** = 2×2 endstone 配方 count 4（MC 精确）；
-  ender chest（state 容器 + D9 跨维）/ dragon egg = 10c/10d 后移。
+  ender chest（state 容器 + D9 跨维）/ dragon egg = 10d 后移。
+
+## V3-10c 末影人（v3.25.0）
+
+- **注视激怒 = 全 AABB 命中**（MC 读头）——2.9 盒的头是其顶部
+  ~0.5；全盒读 = 近距瞄腿也激怒（放宽记档）。遮挡 = 瞄准块
+  t 严格小于 mob t（透明块遮挡 MC 读，ray 自身语义）。
+- **瞬移盒 = 项目缩放**（MC 平静 64³ / 激怒 16h×17v 朝玩家 →
+  平静 ±16x/z ±8y 自位锚 / 激怒 ±8x/z ±4y 朝玩家 min(12,d)
+  点锚）；落地 = 候选位须空旷 ∧ 16 格内有地面（PITS 407⑤：
+  下探首个 roomy 会穿固体掉台地下虚空）；probe 全败 = 吞没不
+  瞬移（MC 恒瞬移偏离，封闭洞罕见）。
+- **携格 = 10c-lite**：carriable 集 = {endstone, chorus_plant}
+  （项目 holdable 集 ∩ 末地相关，主世界/下界集无消费方不扩）；
+  摸取 = 每帧扫（MC 1/20 tick 概率读帧化）+ 放置 = 全局
+  6000 帧节拍（MC 每 mob ~1/2000 tick 随机读帧化，偏离记档）；
+  **平地板豁免移除**（末地全平 endstone，MC 该规则会让功能
+  惰性，掏空即体验，偏离记档）。
+- **末影人声音 = 仅瞬移落点音**（enderman_teleport）；ambient
+  vwoop / scream / stare（激怒瞬间）后移 10d 记偏离。
+- **无 endermite**（MC 珍珠 5% / 瞬移生成 endermite；R11 承接
+  10d 复议）。
+- **末影人 = End-only 池**（主世界/下界池无 enderman 条目；
+  10d 龙时代复议跨维条目）。
+- **瞬移无自伤/无击退**（项目无击退面 V3-15 先例同款；MC 亦
+  无瞬移自伤，一致）。
 
 ## V3-10a 末地维度框架（v3.23.0）
 

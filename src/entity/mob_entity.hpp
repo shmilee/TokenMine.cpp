@@ -107,6 +107,7 @@
 // items and DO save.
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -187,6 +188,60 @@ inline constexpr float kBatBobAmplitude = 0.2f;
 // the 1/60 step — the frame-locked discipline: the bob at frame N is a
 // pure function of N, the per-mob local frame count and the phase).
 inline constexpr int kBatBobPeriodFrames = 60;
+
+// V3-10c (the enderman): the TELEPORT math's named values (the bat
+// constants' shape — the data pins the interval pair, the code owns the
+// box geometry + the stream contract's figures; the capability gate is
+// the data pair's presence, every pre-V3-10c mob runs none of this).
+// The eye-contact provocation's frame counter (the Minecraft 5-tick =
+// 0.25 s read, the frame-locked class, hard rule 8 — the code constant
+// the kNeutralAngryDurationSeconds precedent): 5 CONSECUTIVE looking
+// frames provoke (an un-occluded aim ray inside the data
+// eye_contact_range, the game pass feeds the per-frame bool).
+inline constexpr int kEyeContactFrames = 5;
+// The attempt's FIXED candidate count (the stream contract's K — the
+// Minecraft 64-attempt read scaled to the project's ±16 box; a variable
+// count would step the per-mob stream by the world's answer, the
+// PITS 389 discipline).
+inline constexpr int kTeleportAttempts = 8;
+// The landing probe's downward depth (the Minecraft "probe down to the
+// ground" read, bounded — the pearl's upward 0..3's mirror extension):
+// from the candidate's feet, the first of these levels that holds the
+// body (hasRoomAt, the strict inequality) AND no fluid cell is the
+// landing. A fixed bound (not a stream draw — the contract's 3 draws
+// per candidate are the two offsets + the y slice, see below).
+inline constexpr int kTeleportProbeDown = 16;
+// The candidate box's half-ranges (the Minecraft 64³ read's project
+// scale — the fog's kEndFogEnd 48 sees a ±16 jump, the island's r 5..12
+// scale: CALM = ±16 x/z, ±8 y; ENRAGED = toward the player's 12-block
+// point ±8 x/z, ±4 y, the recon's project-scale read, the deviations
+// recorded).
+inline constexpr float kTeleportCalmH = 16.0f;
+inline constexpr float kTeleportCalmV = 8.0f;
+inline constexpr float kTeleportAngryH = 8.0f;
+inline constexpr float kTeleportAngryV = 4.0f;
+inline constexpr float kTeleportAngryAnchor = 12.0f;
+// The landing cue's sound name (the GENERIC teleport action's — not a
+// species switch: any teleport-capable mob plays it, the game init
+// cross-checks its wav against the data capability, the S6 gate's face).
+inline constexpr const char* kTeleportSound = "enderman_teleport";
+
+// V3-10c: one TELEPORT CANDIDATE (the roll's output, the game-side
+// probe's input): the candidate's feet position (bottom-center, the
+// Entity convention). The roll is a PURE function of (the per-mob
+// stream state, the mob's position, the player's position, the enrage
+// flag) — 3 draws per candidate (u1 the x offset, u2 the z offset, n
+// the y slice — the PITS 4 lattice-bit discipline: the modulus BEFORE
+// any int conversion), kTeleportAttempts candidates per ATTEMPT, so an
+// attempt ALWAYS consumes exactly 3 * kTeleportAttempts stream values
+// whether or not the game's probe lands one (the swallowed-attempt's
+// stream alignment, the savenorm arms' catch).
+struct TeleportCandidate {
+    Vec3 pos;
+};
+
+std::array<TeleportCandidate, kTeleportAttempts> rollTeleportCandidates(
+    std::uint64_t& state, Vec3 pos, Vec3 playerPos, bool enraged);
 
 class MobEntity : public Entity {
 public:
@@ -420,6 +475,57 @@ public:
     void setAmbientSoundCallback(std::function<void(Vec3)> cb) {
         m_ambientSound = std::move(cb);
     }
+    // V3-10c (the enderman): the eye-contact FEED (the game pass calls it
+    // once per frame, BEFORE the mob's own update — the fixed slot:
+    // `looking` = the aim ray hits this mob's full AABB inside the data
+    // eye_contact_range unoccluded by the aim block). The integer frame
+    // counter (the frame-locked class, hard rule 8): 5 consecutive true
+    // frames provoke (m_angry + the full 30 s window, the damage-
+    // provocation's state twin); a single false frame RESETS it (the
+    // line-of-sight break's de-provocation — the provocation does not
+    // persist across a blink, the Minecraft read). Returns true on the
+    // PROVOKING frame (the game's DEBUG log / cue); false otherwise
+    // (already angry, not yet, or a non-eye-contact mob — the flag gate
+    // reads the DATA, the counter of a range-0 mob never moves). ZERO
+    // stream draws (pure geometry + counting — the ambient roll's
+    // contrast: the provocation's cadence is the PLAYER's aim, not the
+    // mob's stream).
+    bool eyeContactFeed(bool looking);
+    // V3-10c: the TELEPORT capability gate (the data pair's presence —
+    // the eyeContactRange's numeric-gate shape): a mob with no interval
+    // pair runs none of the teleport state (the bit-identical root).
+    bool canTeleport() const {
+        return m_def->properties.teleportIntervalMin > 0.0;
+    }
+    // V3-10c: the game wires the TELEPORT EXECUTION at spawn (the
+    // setShootCallback's seam — the mob rolls the candidates through
+    // its own stream, the game probes + lands them: the catch-up disk,
+    // the downward hasRoomAt / fluid probe, the setPosition + fall
+    // re-anchor, the landing's sound + DEBUG line). Returns true when a
+    // candidate landed (the mob is MOVED — the stream tail re-roll
+    // still runs, the contract's fixedness). Unwired = the attempt
+    // rolls and swallows (structurally unreachable: the game wires
+    // every canTeleport mob, the belt).
+    void setTeleportCallback(
+        std::function<bool(const std::array<TeleportCandidate,
+                                             kTeleportAttempts>&)> cb) {
+        m_teleport = std::move(cb);
+    }
+    // V3-10c: the post-landing mob-side RESET (the game calls it after a
+    // successful probe): the fall tracking re-anchors to the landing
+    // (the pearl's fall-cancel twin — the drop from the candidate's air
+    // is NOT damage) + the stuck window / path drop (a teleported chaser
+    // re-measures its progress from the landing — the ENT-6 anchor's
+    // stale-state guard).
+    void finishTeleport();
+    // V3-10c: the CARRY session state (the data flag carriesBlocks's
+    // gate; every non-carry mob keeps invalid forever = the bit root).
+    // The carried block's id (the ITEM is the block's own — the death
+    // drops the block item, the instance state, the wool color's
+    // precedent class: session-only, never saved).
+    bool carriesBlocks() const { return m_def->properties.carriesBlocks; }
+    BlockID carried() const { return m_carried; }
+    void setCarried(BlockID id) { m_carried = id; }
     // Head height for ranged shots (80% of the model height): the arrow
     // spawn point (the game aims from here at the player's eye).
     Vec3 eyePosition() const {
@@ -490,6 +596,11 @@ private:
     // count + the spawn-stream phase — the vy the flying integrate SETS,
     // the hover's baseline, not an accumulation).
     float bobVelocity() const;
+    // V3-10c: the teleport interval's re-roll (ONE per-mob-stream draw:
+    // lerp over the data pair — the spawn's first draw + every
+    // post-attempt tail draw; the stream contract's fixed 25-draw
+    // attempt = 8 candidates x 3 + this 1).
+    double rollTeleportInterval();
     // ENT-6: the chase-path helpers (all private, all frame-locked).
     void stepAlongPath(const MobProperties& p, const Vec3& pos, double dt);
     void tryPathfind(const Vec3& pos);
@@ -529,6 +640,28 @@ private:
     bool m_neutral = false;
     bool m_angry = false;
     double m_angryTimer = 0.0;
+    // V3-10c (the enderman): the eye-contact frame counter (the
+    // kEyeContactFrames provocation count — 0 for a range-0 mob, the
+    // bit root; reset by a single un-looking frame, the blink read).
+    int m_eyeContactFrames = 0;
+    // V3-10c: the TELEPORT state (all gated on canTeleport() — the data
+    // pair's presence; a non-teleport mob keeps false / 0 forever and
+    // consumes NO stream draw: the constructor's first interval roll is
+    // a canTeleport mob's only new spawn draw, the bat's bobPhase twin).
+    // `m_wantTeleport`: the HIT-requested attempt (damage() sets it, the
+    // update's slot consumes it BEFORE the timer — the stream order
+    // pinned; it never touches the stream itself, the call-site
+    // frame-ordering's reason). `m_teleportTimer`: the random interval's
+    // remaining SECONDS (the real-dt countdown, the wanderTimer's
+    // domain — the fixed 1/60 step makes it frame-exact); a re-roll
+    // consumes ONE per-mob-stream draw (lerp over the data pair).
+    // `m_carried`: the carried block (carriesBlocks gate, the wool
+    // color's instance-state class).
+    bool m_wantTeleport = false;
+    double m_teleportTimer = 0.0;
+    std::function<bool(const std::array<TeleportCandidate,
+                                         kTeleportAttempts>&)> m_teleport;
+    BlockID m_carried = BlockID::invalid();
     // ENT-1: the limb-swing phase (see swingPhase()). Spawn = 0 (the
     // identity pose); render-only, never saved.
     int m_swingPhase = 0;

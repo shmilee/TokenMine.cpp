@@ -75,11 +75,11 @@
   `[V2-7]` / shears `[V2-15]` / quartz `[V3-2]` / hoglin_meat·cooked_
   hoglin_meat `[V3-3]` / netherite_scrap·ingot·工具×3·护甲×4 `[V3-4]` /
   clay_ball·brick `[V3-5]`）
-- **状态效果**：**11**（`assets/data/effects/`，见「状态效果」）；**Mob**：**14**
+- **状态效果**：**11**（`assets/data/effects/`，见「状态效果」）；**Mob**：**15**
   （主世界 8 = zombie/skeleton/spider + cow/sheep/chicken/pig `[V2-5]`/bat
   `[V2-14]` + 下界 6 `[V3-3]`/`[V3-14b]` = zombified_piglin/piglin/
-  hoglin/magma_cube/strider/ghast，`assets/data/mobs/`，见「实体与
-  Mob」）；**配方**：**112**（shaped 58 /
+  hoglin/magma_cube/strider/ghast + **末地 1 `[V3-10c]`** = enderman，
+  `assets/data/mobs/`，见「实体与 Mob」）；**配方**：**112**（shaped 58 /
   shapeless 54，`assets/data/recipes/`）；**生物群系**：9（主世界 4 = desert/
   forest/plains/snowy_taiga `[V2-16]` + 下界 5 `[V3-2]` = nether_wastes/
   crimson_forest/soul_sand_valley/basalt_deltas/warped_forest，
@@ -89,7 +89,7 @@
   16 件（+netherite×4 `[V3-4]`）；**耐久**：36 件（12 工具 + shears + 6 弓 +
   燧石与钢 + 16 护甲，`[SURV-3]` 首批 27 件 + `[SURV-5]` poison_bow +
   `[V2-15]` shears 238 + `[V3-4]` netherite 7 件）
-- **音效**：**70** 个确定性 WAV（`tools/generate_sounds.py` 固定种子，重跑字节
+- **音效**：**71** 个确定性 WAV（`tools/generate_sounds.py` 固定种子，重跑字节
   幂等；17 基础事件 + 18 材质音 6×3 + 3 环境音 + 1 smelt + 1 雷 `[V2-4]` + 1
   sleep `[V2-13]` + 1 squeak `[V2-14]` + 1 shear `[V2-15]` + 3 snow 族
   `[V2-16]` + **3 portal 族 `[V3-1]`**（trigger/travel/ambient）+ **11 下界族
@@ -99,13 +99,16 @@
   （ghast 嘶鸣 / ghast_roar 发射咆哮）+ **1 barter `[V3-14c]`**（piglin
   交易 chime）+ **1 ambience_end `[V3-10a]`**（末地第 5 上下文音）+
   **2 珍珠族 `[V3-10b]`**（ender_pearl_throw whoop / ender_pearl_
-  teleport shimmer——首个投掷物的声音面）；`[V2-16]` 音效缺陷族 13
+  teleport shimmer——首个投掷物的声音面）+ **1 末影人瞬移
+  `[V3-10c]`**（enderman_teleport 落点 void-shimmer——首个 mob 瞬移的
+  声音面）；`[V2-16]` 音效缺陷族 13
   件修复 = 字节变更件数不变）
-- **纹理**：block atlas **16×16**（256 tile，**现状 172 tile 占用**——3.x 增长
+- **纹理**：block atlas **16×16**（256 tile，**现状 174 tile 占用**——3.x 增长
   谱系 122→136 `[V3-2]`（16×8→16×16 幂二增长，**既有格零移位** = 像素行恒等
   锚免重锚实证）→145 `[V3-3]` →165 `[V3-5]` →166 `[V3-14b]`（ghast）→170
   `[V3-10a]`（endstone/end_portal/双 frame，[10..13,10] 零移位）→172
-  `[V3-10b]`（end_stone_bricks/chorus_plant，[0..1,11] 零移位），
+  `[V3-10b]`（end_stone_bricks/chorus_plant，[0..1,11] 零移位）→174
+  `[V3-10c]`（enderman_body/enderman_face，[2..3,11] 零移位），
   `assets/data/textures/block_atlas.json` 数据驱动布局——加纹理 = 加 PNG + 加一行
   JSON，不改代码；**atlas 空位**纪律 = 不重锚基线）；物品图标 = 每物品独立
   32×32 PNG；字体 **256×2112**（ASCII 16×16 字形 + **427 个 CJK glyph**
@@ -385,8 +388,9 @@
   affects_mobs 效果 / mob 侧要求 shoot_range；init 双向点名；Projectile 尾部
   effectId/effectDuration 默认 −1 位级恒等）——skeleton 箭 = **wither 10 s**
   （玩家侧）/ poison_bow 箭 = **poison 60 s**（mob 侧可毒死）= MC 值
-- **13 种 mob**（`assets/data/mobs/`，全数据驱动 `MobEntity`/`MobRegistry`；
-  数值 = normal 基线；下界 5 种 = `[V3-3]` v3.8.0，主世界池/下界池隔离生成）：
+- **15 种 mob**（`assets/data/mobs/`，全数据驱动 `MobEntity`/`MobRegistry`；
+  数值 = normal 基线；下界 6 种 = `[V3-3]`/`[V3-14b]` + 末地 1 种 =
+  `[V3-10c]` v3.25.0，主世界池/下界池/末地池隔离生成）：
   - **zombie**（敌对）：20 HP / speed 0.8 / 探测 16 / 近战 1.6 / 伤害 3 /
     冷却 1.0 / 掉 rotten_flesh ×1 / `undead: true`
   - **skeleton**（敌对，远程）：20 HP / 0.8 / 探测 16 / `shoot_range` 14 /
@@ -517,6 +521,61 @@
     弹道 = 箭同款 g 20 + 弧线补偿（**近程朝上** = MC 火球近直线
     偏离 + **射手自伤** MC 免疫偏离，PITS 402③）；ambient ghast
     嘶鸣 8.0 s（140→90 Hz 下滑哀鸣 + 5.5 Hz 颤音）
+   - **enderman**（neutral + **瞬移** + **携格**，`[V3-10c]` v3.25.0，
+     **End 首个/唯一 mob**）：40 HP / 0.8 / 探测 16 / 近战 1.6 /
+     伤害 6 / 冷却 1.5 / `spawn_max_light` **0**（末地暗处 + 出口门
+     光 11 圈排除）/ 掉 **ender_pearl 0-1 + ender_eye 0-1**（**生存
+     唯一来源**，10a 入口/10b 珍珠记档闭合）/ xp 5 / model **0.6×2.9
+     六盒**（head + torso + 2 长臂 + 2 长腿，四 swing 长臂特征，
+     atlas [2..3,11] 零移位）；**注视激怒** = `eye_contact_range`
+     **48**（= kEndFogEnd「看见它 = 激怒它」定案；数值门 0 = 关）——
+     game pass（mob 循环前固定位，零流）：玩家瞄准射线（眼位出发
+     UX-8g）命中 mob **全 AABB**（MC 读头 = 放宽记档）且 < min(range,
+     瞄准块 t)（**瞄准块 t 严格遮挡** = 透明块遮挡 MC 读）→ 逐帧喂
+     `eyeContactFeed`：**5 连续帧**（kEyeContactFrames 帧锁定整数
+     计数，零流）激怒 = m_angry + 30 s 窗（damage 激怒同款复用），
+     **单帧未看 = 计数复位**（眨眼不持续激怒，MC 读）；**瞬移** =
+     `teleport_interval_min/max` **2/6**（strict 配对 (0,60] min≤max，
+     **存在性 = 能力门**，milk 配对纪律）——**动作非状态**（MobState
+     零新增）；来源 2 = **受击 100%**（`damage()` 只置 m_wantTeleport
+     旗——调用点帧序不可钉，旗由 update 固定槽消费 = 帧序钉死 R2）+
+     **随机间隔**（构造首掷 1 抽 + 每次尝试后 1 重掷，real-dt 倒计时
+     lerp over 数据对）；每次尝试 = **纯函数 roll**（8 候选 × 3 抽：
+     u1 x 偏移 / u2 z 偏移 / nextMix y 切片【模先于 int 转换 PITS
+     406①】）**+ 1 重掷 = 25 抽固定**（全败亦消耗 = 流对齐，PITS 389
+     纪律）；盒 = **平静 ±16x/z ±8y 自位锚 / 激怒 ±8x/z ±4y 朝玩家
+     min(12,d) 点锚**（MC 64³ / 16h×17v 项目缩放偏离）；执行 =
+     game 缝 `setTeleportCallback`（spawn 时接线，setShootCallback
+     范式）→ `executeMobTeleport`：逐候选 catchUpDisk → **候选位须
+     空旷（hasRoomAt 严格 ∧ 无流体）+ 16 格内 footprint 有地面**（任
+     一 solid 支撑 = 站立约定；**过隙候选拒收**——「向下首个 roomy」
+     会穿固体掉台地下虚空 = 静默 despawn，PITS 407⑤）→ teleportTo +
+     `finishTeleport`（**fall 复锚** = 候选空气落差非伤害，珍珠孪生
+     + stuck 窗/path 丢弃）+ 落点音 + DEBUG；**全败 = swallowed 行**
+     （mob 原地不动，MC 恒瞬移偏离 = 封闭洞罕见）；**携格** = mob
+     `carries_blocks` + 块 **`carriable`**（双 strict bool 缺省冷——
+     两端齐发才活；**stateful carriable = init 点名拒**，ENT-2
+     孪生）+ **10c-lite 集 = {endstone, chorus_plant}**（项目
+     holdable ∩ 末地相关；主世界/下界集无消费方不扩，偏离记档）——
+     game pass（mob 循环后固定位，journal 收口 setBlock）：**摸取**
+     未携每帧（MC 1/20 tick 读帧化）4×3×4 区（x/z ±2，**y feet−1..+1
+     含脚下**【站立体下方地块 = 偷取主对象，PITS 407③】）**x→y→z
+     定序**（scanExplosion 先例）首个非 air ∧ carriable ∧ stateless ∧
+     **首格遮挡**（raycastBlock eye→格心 首命中 == 目标格【has-
+     LineOfSight 拒目标格自身 = 箭撞击语义误用，PITS 407④】）→ 拾起
+     + setCarried + DEBUG；**放置** 已携每 **6000 帧**（kCarryPlace-
+     Frames = MC 1/2000 tick 读全局长拍，帧 mod 零流，偏离记档）2×2×2
+     首个 air + 下方 solid 地板 + 不叠玩家盒；**死亡 = 100% 掉所携**
+     （实例态，wool 死亡掉落孪生位）；**MC 平地板豁免移除**（末地全
+     平 endstone，该规则会让功能惰性——掏空即体验，偏离记档）；渲染
+     = **0.9× 头顶携块立方**（kCarryBlockScale，facing 旋转，
+     itemMesh 惰性复用零新几何，按块渲染类 Opaque/Cutout 双 pass
+     路由）；声音 = **仅 enderman_teleport**（落点空间化，70→71，
+     init 对一切瞬移能力 mob 交叉检 wav 存在）；ambient/scream/stare
+     后移 10d；**End 池** = `mob_spawning_end.json` 单种族（enderman
+     10，cadence 30/60/4/环 4-6/despawn 40 = 下界文件孪生，loadEnd-
+     SpawnPool init fail-fast = 10a 两相位槽消费）；**承载/激怒 =
+     会话态零 format**（mob 不入档 = 骑乘先例同款）
 - **生成**（`data/mob_spawning.json` + 帧节奏驱动，纯函数 = 同一运行必生成
   同一只）：每 `check_every_frames` **30** 帧尝试一次（难度节奏缩放：easy 60 /
   normal 30 / hard 20，见「难度」）、`first_spawn_frame` **60** 之前不生成、
@@ -536,9 +595,13 @@
   **5** / strider **1** / ghast **2** `[V3-14b]` = MC 近似权重；cadence/半径/despawn 参数与主
   世界同款表，会话策略（enabled/difficulty/limb_swing）继承主世界
   config = 记档偏离 5；类型表 = 游戏单一共享注册表 = 记档偏离 4；
-  文件缺失/坏 schema/未知 mob 全 init 点名 fail-fast）；**池隔离**
-  （`playerInNether() ? m_nether.mobs : m_mobs` 既有维度分派——主世界
-  生成永不抽下界物种反之亦然，门 198 S2(b) 实证））；**抽中的类型
+  文件缺失/坏 schema/未知 mob 全 init 点名 fail-fast）+ **末地池
+  `[V3-10c]` = `mob_spawning_end.json`**（单种族 enderman **10**——End
+  首个 mob；10a 两相位槽的消费方；loadEndSpawnPool = 下界 load 第 3
+  次消费同 fail-fast；10d 龙时代复议跨维池 enderman 条目 = End-only
+  偏离记档）；**池隔离**（`playerInNether() ? m_nether.mobs :
+  playerInEnd() ? m_end.mobs : m_mobs` 三值维度分派 `[V3-10a]`——主
+  世界/下界/末地生成互不抽物种，门 198/215 实证））；**抽中的类型
   过不了光门则该次尝试作废**（如白天抽中 zombie，v1 接受）；**`[V2-14]`
   in-air 分支**（`spawns_in_air` mob = bat，`findMobSpawnCell` 尾参默认
   false）：跳过 ②floor band/③headroom，**顶向扫描**（世界顶向下）box 全

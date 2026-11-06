@@ -236,8 +236,11 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     // an atlas tile; no power-of-two growth needed, 170 < 256).
     // V3-10b: 170 -> 172 (the End content family's two tiles — the
     // row-11 free run [0..1, 11]; zero existing shift, the 10a's
-    // zero-shift red line continued).
-    EXPECT_EQ(l.tiles.size(), 172u);
+    // zero-shift red line continued). V3-10c: 172 -> 174 (the
+    // enderman's two tiles — the row-11 free run [2..3, 11]; the
+    // 10b's zero-shift red line continued, no power-of-two growth
+    // needed, 174 < 256).
+    EXPECT_EQ(l.tiles.size(), 174u);
     const struct {
         const char* name;
         int col;
@@ -561,6 +564,24 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     };
     ASSERT_EQ(sizeof(v310b) / sizeof(v310b[0]), 2u);
     for (const auto& e : v310b) {
+        const auto it = l.tiles.find(e.name);
+        ASSERT_NE(it, l.tiles.end()) << e.name;
+        EXPECT_EQ(it->second.col, e.col) << e.name;
+        EXPECT_EQ(it->second.row, e.row) << e.name;
+    }
+    // V3-10c (v3.25.0): the enderman's two tiles (the row-11 free run
+    // [2..3, 11] — the 10b's [0..1, 11]'s free continuation; zero
+    // existing shift).
+    const struct {
+        const char* name;
+        int col;
+        int row;
+    } v310c[] = {
+        {"enderman_body", 2, 11},
+        {"enderman_face", 3, 11},
+    };
+    ASSERT_EQ(sizeof(v310c) / sizeof(v310c[0]), 2u);
+    for (const auto& e : v310c) {
         const auto it = l.tiles.find(e.name);
         ASSERT_NE(it, l.tiles.end()) << e.name;
         EXPECT_EQ(it->second.col, e.col) << e.name;

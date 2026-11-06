@@ -1533,6 +1533,135 @@ void Game::pearlLanding(Projectile* pearl) {
                  std::to_string(target.z) + ")");
 }
 
+namespace {
+// V3-10c: the strict AABB-fluid overlap at an arbitrary feet position
+// (the Entity::overlapsFluid's static probe form — the same per-axis
+// strict convention: a face resting exactly on a cell boundary is NOT
+// an overlap). The teleport's landing probe uses it over its candidate
+// (the End is structurally fluid-free — the base-rock ocean is SOLID —
+// so this is the belt over a player-poured bucket, the contract's
+// completeness, not the expected path).
+bool aabbHasFluid(const World& world, Vec3 feet, float width, float height) {
+    const float half = width * 0.5f;
+    const float xn = feet.x - half, xx = feet.x + half;
+    const float yn = feet.y, yy = feet.y + height;
+    const float zn = feet.z - half, zx = feet.z + half;
+    for (int y = static_cast<int>(std::floor(yn));
+         y <= static_cast<int>(std::floor(yy)); ++y) {
+        if (yn >= y + 1 || yy <= y) {
+            continue;
+        }
+        for (int z = static_cast<int>(std::floor(zn));
+             z <= static_cast<int>(std::floor(zx)); ++z) {
+            if (zn >= z + 1 || zx <= z) {
+                continue;
+            }
+            for (int x = static_cast<int>(std::floor(xn));
+                 x <= static_cast<int>(std::floor(xx)); ++x) {
+                if (xn >= x + 1 || xx <= x) {
+                    continue;
+                }
+                if (world.getFluidKind(x, y, z)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+bool Game::executeMobTeleport(
+    MobEntity* mob, const std::array<TeleportCandidate, kTeleportAttempts>&
+                        candidates) {
+    // V3-10c: the teleport's GAME side (the callback the mob's roll
+    // invokes — the stream contract is the ROLL's, this is pure world
+    // I/O). Runs in the update's main-thread-writer window (the flush
+    // barrier ran at the top of update), so the catch-up disk + the
+    // landing are safe (the pearlLanding's twin). The candidates are
+    // probed IN ORDER: the first with a landing (the downward
+    // hasRoomAt / fluid probe) wins; the total failure SWALLOWS (the
+    // mob stays put — the pearl's sealed-pocket precedent, the
+    // documented deviation over the Minecraft's always-land).
+    World& world = currentWorld();
+    const float w = mob->width();
+    const float h = mob->height();
+    for (const TeleportCandidate& cand : candidates) {
+        // 1. The catch-up disk around the candidate (the probe's
+        //    premise — the recon's R3: an unloaded chunk's hasRoomAt is
+        //    a read hazard; the pearlLanding's verbatim twin).
+        {
+            const int cx = floorDiv(static_cast<int>(std::floor(cand.pos.x)),
+                                    kChunkSize);
+            const int cz = floorDiv(static_cast<int>(std::floor(cand.pos.z)),
+                                    kChunkSize);
+            catchUpDisk(m_playerDimension, cx, cz);
+        }
+        // 2. The landing probe (the Minecraft read: the candidate point
+        //    must be OPEN — the body's box in the air with no fluid —
+        //    and GROUND must exist within kTeleportProbeDown below it:
+        //    the enderman falls the gap naturally (the fall re-anchor
+        //    in finishTeleport cancels the damage — the pearl twin).
+        //    The ground bound is the void-ditch guard: an open point
+        //    over a >16 gap (the plateau's underside void, the island's
+        //    edge) has no floor in reach — the candidate is rejected
+        //    (a tunneling "first roomy level" probe would land the mob
+        //    IN the void below solid terrain — the gate's catch: the
+        //    enderman dropped under the plateau and despawned). The
+        //    support = ANY solid cell under the box's footprint (the
+        //    resting convention: one supporting corner holds the box).
+        const float half = w * 0.5f;
+        const int x0 = static_cast<int>(std::floor(cand.pos.x - half));
+        const int x1 = static_cast<int>(std::floor(cand.pos.x + half));
+        const int z0 = static_cast<int>(std::floor(cand.pos.z - half));
+        const int z1 = static_cast<int>(std::floor(cand.pos.z + half));
+        const int feetCell = static_cast<int>(std::floor(cand.pos.y));
+        bool ground = false;
+        for (int down = 1; down <= kTeleportProbeDown && !ground; ++down) {
+            const int yL = feetCell - down;
+            if (yL < 0) {
+                break;
+            }
+            for (int z = z0; z <= z1 && !ground; ++z) {
+                for (int x = x0; x <= x1 && !ground; ++x) {
+                    ground = m_blocks.at(world.getBlock(x, yL, z))
+                                  .properties.solid;
+                }
+            }
+        }
+        const Vec3 landing = cand.pos;
+        if (!ground ||
+            !Player::hasRoomAt(world, m_blocks, landing, w, h) ||
+            aabbHasFluid(world, landing, w, h)) {
+            continue; // sealed / over-void / in-fluid — the next
+        }
+        // 3. The landing: the move + the mob-side re-anchor (the fall
+        //    pin + the stuck window / path drop — the pearl's
+        //    fall-cancel twin) + the landing cue (the CRAFT-3
+        //    spatialized, the pearl's twin) + the DEBUG line (the E2E
+        //    evidence — the run-to-run verbatim string, the pearl's
+        //    precedent's shape over the from/to pair).
+        const Vec3 from = mob->position();
+        mob->teleportTo(landing);
+        mob->finishTeleport();
+        m_sound.play(kTeleportSound, landing);
+        MC_LOG_DEBUG("mob '" + mob->def().name + "' teleported to (" +
+                     std::to_string(landing.x) + ", " +
+                     std::to_string(landing.y) + ", " +
+                     std::to_string(landing.z) + ") from (" +
+                     std::to_string(from.x) + ", " + std::to_string(from.y) +
+                     ", " + std::to_string(from.z) + ") f" +
+                     std::to_string(m_frameCount));
+        return true;
+    }
+    MC_LOG_DEBUG("mob '" + mob->def().name + "' teleport attempt " +
+                 "swallowed (no roomy landing among the " +
+                 std::to_string(kTeleportAttempts) + " candidates) f" +
+                 std::to_string(m_frameCount));
+    return false; // the total failure — the swallow (the mob stays put)
+}
+
 void Game::updatePortalAmbience() {
     // V3-1 Phase A: the portal ambient sound (the bat squeak's per-frame
     // roll, spatialized at the portal cell's center — the 0.5 volume

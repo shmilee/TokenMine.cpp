@@ -1,18 +1,19 @@
-# 机制详解 · 世界与渲染（现状 v3.24.0）
+# 机制详解 · 世界与渲染（现状 v3.25.0）
 
 > 玩家/系统侧（内容总览/操作与交互/实体与 Mob/生存系统/状态效果/弓与箭/流体桶与点燃/demo 回放/合成与容器/存档/难度/确定性约定）= `docs/MECHANICS.md`（主文件；头部「来源约定」全文在主文件）。
 
-> 2026-11-07 增量刷新：现状 = **v3.24.0**（V3-10b 末地内容族 +
-> 末影珍珠，门 214；其前 v3.23.0 = V3-10a 末地维度框架 + 真传送，门
-> 213【format 32】；v3.22.0 = V3-14d strider 骑乘，门 212；v3.21.0 =
+> 2026-11-07 增量刷新：现状 = **v3.25.0**（V3-10c 末影人——End
+> 首个 mob：注视激怒 + 瞬移 + 携格，门 215）；其前 v3.24.0 =
+> V3-10b 末地内容族 + 末影珍珠，门 214；v3.23.0 = V3-10a 末地
+> 维度框架 + 真传送，门 213【format 32】；v3.22.0 = V3-14d strider 骑乘，门 212；v3.21.0 =
 > V3-14c piglin 交易，门 211；v3.20.0 = V3-14b ghast，门 210；v3.19.0 =
 > V3-14a 爆炸机制，门 209；v3.18.0 = V3-11b 创造物品栏，门 208；
 > v3.17.0 = V3-11a 创造基础，门 207【format 31】；v3.16.0 = V3-15
 > 生存/表现小批，门 206；v3.15.0 = V3-13 死亡统计屏，门 205；v3.14.0 =
 > V3-8b 手柄映射，门 204【sim 2】；v3.13.0 = demo sim 版本，门 203；
 > v3.12.0 = 实机报障阴影缩尺，门 202；3.x 矩阵收官于 v3.11.0；其前
-> 2.x 两批 20 版收官 v2.0.0 → v2.19.0）、无输入基线门 **214** 次、
-> 单元测试 **2899/2899**、`-Wall -Wextra -Wpedantic -Werror` 0
+> 2.x 两批 20 版收官 v2.0.0 → v2.19.0）、无输入基线门 **215** 次、
+> 单元测试 **2930/2930**、`-Wall -Wextra -Wpedantic -Werror` 0
 > 警告、存档 **format 32**（下界维度 format 30：player.dimension +
 > nether 段 + nether_entities；创造 format 31：player.creative；末地
 > format 32：dimension 词表 +end 按 format 分词 + end 段 +
@@ -22,8 +23,8 @@
 > 【V2-19 门 182】→ 179027【V2-11 门 183】→ 224468【V2-18 门 190，AO
 > 世界光照】→ **225272【V3-6 门 200，填充感知雾 = 3.x 首重锚】**；门
 > 184–189 = 结构免疫第 65–70 次免重锚；门 191–199 = 第 72–80 次；门
-> 201–214 = 第 81–95 次免重锚（对 base19）【v3.0.0 banner = 第 71 次】）、
-> PITS **406**。上一轮全面刷新
+> 201–215 = 第 81–96 次免重锚（对 base19）【v3.0.0 banner = 第 71 次】）、
+> PITS **407**。上一轮全面刷新
 > （2026-11-02）止于 v2.0.0、2026-11-03 增量止于 v2.3.0（下条），本次把
 > v2.11.0 → v2.19.0 的机制（提前项 `[V2-19]` + 第二批 `[V2-11]`~`[V2-18]`，
 > 逐版见 `docs/archive/v2x/CHANGELOG.md`，细节证据见 `docs/archive/v2x/`
@@ -548,8 +549,8 @@
   果 + 0-1 株；生长不做 = 主世界 only 生长 tick 后移 10c/10d）/
   **biomes_end 单群系池**（end_plains surface endstone no-op 覆写；
   MC 无群系偏离 + 10d 第二群系零核心缝）。
-- **末地块族（10a 最小面 + 10b 内容面，块 127→133 / atlas
-  166→172 零移位）**：endstone 0.5（stone 音族）/ end_portal
+- **末地块族（10a 最小面 + 10b 内容面 + 10c carriable 旗，块
+  127→133 / atlas 166→174 零移位）**：endstone 0.5（stone 音族）/ end_portal
   （transparent/solid false/light 11/destroyable false，
   nether_portal 逐字镜像，glass 音族）/ end_portal_frame +
   end_portal_frame_eyed（**A-lite 双 stateless 块**——项目无
@@ -585,8 +586,9 @@
   （10b 基岩洋后 = 洋底终结「死于高处掉落」）；7 per-block state
   族主世界 only（末地闭集同款）；**水蒸发谓词 nether-scoped = 末地
   水不蒸发**（偏离 MC，10b 复议）；床/容器/营火 inOverworld 门；
-  **生成池空槽**（10c 两段式，mob_spawning_end.json 后相位）；流体
-  pass = 静态零 churn 纪律（10a worldgen 无流体，桶正常流动）。
+  **生成池 = 10c 消费**（两段式落地：mob_spawning_end.json 单种族
+  enderman，loadEndSpawnPool init fail-fast = 下界 load 第 3 次消费）；
+  流体 pass = 静态零 churn 纪律（10a worldgen 无流体，桶正常流动）。
 - **末影珍珠投掷 `[V3-10b]`**（项目首个投掷物，item 99→101）：
   `throws_teleport` strict bool + throw_sound/teleport_sound 配对
   （init 交叉检：缺一 = 死字段点名 / wav 缺失点名）+ one-right-
@@ -603,6 +605,27 @@
   probe 全败吞没不瞬移（偏离）；mob 扫掠跳过（穿 mob MC 孪生）+
   0.625× 青色发光立方渲染（火球 mesh 复用）+ 2 wav（68→70：
   throw whoop 320→980 Hz / teleport shimmer 1400→240 Hz）。
+- **末影人 `[V3-10c]` v3.25.0**（End 首个/唯一 mob；neutral + 瞬移 +
+  携格；数据全旗，核心零物种 switch）：40 HP / 0.8 / detect 16 /
+  attack 6 / 0.6×2.9 六盒四 swing / light 0（出口门光 11 圈排除）/
+  掉 pearl 0-1 + eye 0-1（**生存唯一来源**，10a/10b 记档闭合）+
+  xp 5；**注视激怒** = `eye_contact_range` 48（= kEndFogEnd「看见 =
+  激怒」定案，数值门 0 = 关）+ game pass 瞄准射线全 AABB（MC 读头
+  放宽记档）+ 瞄准块 t 严格遮挡 + 5 连续帧零流计数（单帧未看复
+  位）→ m_angry + 30 s 窗（damage 激怒复用）；**瞬移** = interval
+  2/6 严格配对（存在性 = 能力门）+ 动作非状态 + 受击 100%（damage
+  只置旗，update 固定槽消费）+ 流契约 8 候选 × 3 抽 + 1 重掷 = 25
+  抽/尝试（全败亦消耗）+ 平静 ±16/±8 自位锚 / 激怒 ±8/±4 朝玩家
+  min(12,d) 点锚（MC 项目缩放偏离）+ game 缝 executeMobTeleport
+  （catchUpDisk → 候选空旷 ∧ 16 格内有地面【下探穿固体虚空 PITS
+  407⑤】→ fall 复锚 + 落点音 + DEBUG；全败 swallowed 行）；**携
+  格** = `carries_blocks` + 块 `carriable` 双严格旗（缺省冷；stateful
+  carriable = init 点名拒）+ 10c-lite 集 {endstone, chorus_plant} +
+  摸每帧 4×3×4 dy 含脚下 x→y→z 定序 + 首格遮挡（PITS 407④）+ 放
+  6000 帧全局长拍 + 死亡 100% 掉所携 + 0.9× 头顶立方渲染（itemMesh
+  复用，Opaque/Cutout 双 pass）；声音 = 仅 enderman_teleport（70→71，
+  init 交叉检）；ambient/scream/stare/endermite/定身/跨维池 = 10d
+  复议。
 - **存档 format 32**：`player.dimension` 词表 **按 format 分词**
   （30/31 = overworld|nether 二词，携 "end" = version lie 点名；≥32
   = 三词）+ `end` 段 {blocks, fluids, states} 恒写空合法 +

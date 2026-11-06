@@ -939,6 +939,30 @@ def ender_pearl_teleport():
     return sound(dur, f)
 
 
+def enderman_teleport():
+    """V3-10c (v3.25.0): the enderman's TELEPORT cue (Minecraft's
+    entity.enderman.teleport read — the sharp void-shimmer: a fast
+    falling dual-tone sweep + a crackle burst, played ONLY at the
+    landing, the CRAFT-3 spatialized origin). The pearl-teleport's
+    higher-pitched cousin one octave down (the mob's bigger void fold),
+    0.28 s, SFX volume class. Fixed-LCG / sine paradigm, dedicated
+    fixed seed — a re-run leaves every other file byte-identical (the
+    md5 discipline)."""
+    lcg = Lcg(0x1E40)  # dedicated fixed seed (unique to this sound)
+    dur = 0.28
+
+    def f(t, _):
+        u = t / dur
+        fr = 1100.0 - 880.0 * u  # the falling shimmer sweep
+        tone = (math.sin(2 * math.pi * fr * t)
+                + math.sin(2 * math.pi * fr * 1.91 * t) * 0.35)
+        out = tone * 0.45
+        if t < 0.06:
+            out += lcg.next() * 0.35 * (1.0 - t / 0.06)
+        return out * env(t, dur, 10.0) * 0.5
+    return sound(dur, f)
+
+
 def ghast():
     """V3-14b: the ghast's ambient screech (Minecraft's mob.ghast.
     ambience class — the long, low, wavering wail of the nether's
@@ -1410,6 +1434,9 @@ SOUNDS = {
     # teleport's shimmer — the first throwable's sound face).
     "ender_pearl_throw": ender_pearl_throw,
     "ender_pearl_teleport": ender_pearl_teleport,
+    # V3-10c (v3.25.0): the enderman's teleport cue (the landing's
+    # spatialized void-shimmer — the first mob teleport's sound face).
+    "enderman_teleport": enderman_teleport,
     # V2-15: the shears' cut (the sheep shearing — the right-click
     # action's cue, spatialized at the mob, the milk precedent).
     "shear": shear,

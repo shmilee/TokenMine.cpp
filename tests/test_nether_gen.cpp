@@ -2721,7 +2721,7 @@ TEST(NetherContentTest, RealContentGenCensus) {
     }
 }
 
-TEST(NetherContentTest, AtlasLayoutGrewTo172) {
+TEST(NetherContentTest, AtlasLayoutGrewTo174) {
     // The atlas's census face (the 124 -> 136 tile's zero-shift red line
     // lives in test_atlas's full census; this is the count + the new
     // cells' existence): the grid grew 16x8 -> 16x16 (the new tiles sit
@@ -2750,8 +2750,10 @@ TEST(NetherContentTest, AtlasLayoutGrewTo172) {
     // test_atlas census; the ender_eye icon is a standalone item
     // PNG, not an atlas tile). V3-10b re-pin: the End content
     // family's two tiles (the row-11 free run [0..1, 11] — the
-    // 172-tile zero-shift red line).
-    EXPECT_EQ(layout->tiles.size(), 172u);
+    // 172-tile zero-shift red line). V3-10c re-pin: the enderman's
+    // two tiles (the row-11 free run [2..3, 11] — the 174-tile
+    // zero-shift red line).
+    EXPECT_EQ(layout->tiles.size(), 174u);
     const char* newTiles[22] = {
         "nether_brick",    "magma_block",     "quartz_ore",
         "nether_gold_ore", "ancient_debris",  "soul_sand",

@@ -929,6 +929,16 @@ private:
     const Mesh& mobMesh(MobID id);
     const Mesh& swingMobMesh(const MobEntity& mob, const Mob& def);
     const SwingModel& swingModel(MobID id);
+    // V3-10c: the carried block's overhead cube (the enderman's 10c-lite
+    // visual read — the 0.9 cube above the head, the mob's facing
+    // rotation, the itemMesh's lazy per-block cube + the block's own
+    // texture: zero new geometry). The pass routes by the block's
+    // render class (the item drop's twin: endstone opaque, the chorus
+    // cutout — the shipped carriable set's two passes), so each cube
+    // draws exactly once in its pipeline. A mob without a carried block
+    // (the bit root) never reaches the mesh build.
+    void drawCarriedBlocks(const Mat4& view, const Mat4& projection,
+                           RenderPass pass);
     // V2-15: the wool variant's render builders (the sheep — the
     // data-flag gated; see drawMobs). `woolVariantMesh`: the per-entity
     // STATIC variant mesh (the model's wool box — kWoolBoxName — rebuilt
@@ -1469,6 +1479,19 @@ private:
     // (a sealed pocket) swallows the pearl WITHOUT the teleport (the
     // documented deviation — the MC always teleports).
     void pearlLanding(Projectile* pearl);
+    // V3-10c (the enderman): the teleport's GAME side — the callback the
+    // mob's roll invokes with its fixed candidate array (the stream
+    // contract is the roll's; this is pure world I/O). Probes the
+    // candidates in order (the catch-up disk + the downward hasRoomAt /
+    // fluid landing probe — the pearlLanding's twin over the 16-cell
+    // depth) and lands the first roomy one (the setPosition + the mob's
+    // finishTeleport re-anchor + the landing cue + the DEBUG line); the
+    // total failure swallows (the mob stays put). Runs in the update's
+    // main-thread-writer window (the flush barrier ran at the top), so
+    // the disk + the writes are safe.
+    bool executeMobTeleport(
+        MobEntity* mob, const std::array<TeleportCandidate,
+                                         kTeleportAttempts>& candidates);
     // The embed-eye interaction (V3-10a's A-lite activation): the
     // crosshair on an end_frame cell, the selected item an ender_eye —
     // one eye is consumed, the cell becomes the EYED frame, and the

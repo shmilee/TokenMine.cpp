@@ -416,6 +416,40 @@ struct MobProperties {
     // session state gates the BEHAVIOR. Every non-rideable mob's data
     // is unchanged (the pre-V3-14d structural red line).
     bool rideable = false;
+    // V3-10c (the enderman): the EYE-CONTACT provocation range (data
+    // 'eye_contact_range', a number >= 0, default 0 = OFF): the game's
+    // per-frame pass raycasts the player's aim at the mob's FULL AABB
+    // (occluded by the aim block) and, while the aim is inside this
+    // range, feeds the MobEntity's integer frame counter — kEyeContact-
+    // Frames consecutive looking frames provoke it (the neutral's m_angry
+    // + the 30 s window, the damage-provocation's twin source). The
+    // pass is zero-stream (pure geometry + frame counting — the
+    // stream-discipline's clean side, the ambient roll's contrast).
+    // 0 = no eye contact (every pre-V3-10c mob, the bit-identical
+    // structural root).
+    float eyeContactRange = 0.0f;
+    // V3-10c (the enderman): the TELEPORT interval pair (data
+    // 'teleport_interval_min' / 'teleport_interval_max', seconds, each
+    // in (0, 60], min <= max, PRESENT TOGETHER — the milk pairing
+    // discipline): the random teleport's re-roll window (lerp over one
+    // per-mob-stream draw). The pair's PRESENCE is the teleport
+    // capability's structural gate (0/0 = no teleport, every
+    // pre-V3-10c mob); the HIT-triggered attempt (damage sets the
+    // want-flag, the update's slot consumes it BEFORE the timer — the
+    // stream order pinned) rides the same capability. Absent = the
+    // pre-V3-10c bit root.
+    double teleportIntervalMin = 0.0;
+    double teleportIntervalMax = 0.0;
+    // V3-10c (the enderman): the CARRY flag (data 'carries_blocks',
+    // strict bool, default false): the game's carry pass may pick up a
+    // 'carriable' block (the block-side data predicate — 10c-lite
+    // ships endstone + chorus_plant) into the mob's session state and
+    // drop it back (the 1/6000-frame place roll) — the death drops the
+    // carried instance (100%). false = no carry (every pre-V3-10c mob,
+    // the bit-identical structural root; the block-side carriable
+    // defaults false, so BOTH ends must ship for the feature to run —
+    // the two-phase asset discipline).
+    bool carriesBlocks = false;
     // Drops (Phase 28): the item list the mob drops on death — one entry
     // per dropped item, spawned in list order. Empty = no drops.
     std::vector<MobDrop> drops;

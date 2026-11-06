@@ -25,6 +25,56 @@ double uniform01(std::uint64_t& state) {
 
 } // namespace
 
+std::array<TeleportCandidate, kTeleportAttempts>
+rollTeleportCandidates(std::uint64_t& state, Vec3 pos, Vec3 playerPos,
+                       bool enraged) {
+    // V3-10c: the teleport candidate roll — the PURE function of the
+    // per-mob stream + the two positions + the enrage flag (the unit
+    // tests own it headless). The stream contract (the recon's R2 /
+    // PITS 389 discipline): EXACTLY 3 draws per candidate — u1 the x
+    // offset, u2 the z offset, n the y slice — kTeleportAttempts
+    // candidates, whether or not the caller's probe lands one. The
+    // modulus runs BEFORE the int conversion (the PITS 406① lattice-bit
+    // discipline: a hash slice's int truncation is a negative-remainder
+    // bug) — the y slice is a nextMix (already a fresh 64-bit), so its
+    // low-bit modulus is the uniform read.
+    //
+    // The anchor: CALM = the mob's own position (the ±16 x/z, ±8 y box,
+    // the Minecraft 64³ read's project scale); ENRAGED = the player-
+    // toward point kTeleportAngryAnchor blocks from the mob (clamped to
+    // the player when it is nearer — the teleport lands ON the player's
+    // neighborhood, the chase-teleport's read) with the ±8 x/z, ±4 y
+    // box (the MC 16h/17v + 9x11x9 read's project scale, deviation).
+    Vec3 anchor = pos;
+    if (enraged) {
+        const float dx = playerPos.x - pos.x;
+        const float dy = playerPos.y - pos.y;
+        const float dz = playerPos.z - pos.z;
+        const float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+        if (dist > 1e-4f) {
+            const float t = std::min(kTeleportAngryAnchor, dist) / dist;
+            anchor = {pos.x + dx * t, pos.y + dy * t, pos.z + dz * t};
+        }
+    }
+    const float h = enraged ? kTeleportAngryH : kTeleportCalmH;
+    const float v = enraged ? kTeleportAngryV : kTeleportCalmV;
+    // The y slice's domain (the uniform integer count over the ±v band:
+    // calm v 8 = 17 values, enraged v 4 = 9 values — the half-integers
+    // kept out: a feet offset of a whole block is the cell grid's read).
+    const int yCount = static_cast<int>(2.0 * v) + 1;
+    std::array<TeleportCandidate, kTeleportAttempts> out;
+    for (int i = 0; i < kTeleportAttempts; ++i) {
+        const double u1 = uniform01(state); // the x offset
+        const double u2 = uniform01(state); // the z offset
+        const std::uint64_t n = nextMix(state); // the y slice
+        const int ySlice = static_cast<int>(n % static_cast<std::uint64_t>(yCount));
+        out[i].pos = {anchor.x + static_cast<float>(2.0 * u1 - 1.0) * h,
+                      anchor.y + static_cast<float>(ySlice - v),
+                      anchor.z + static_cast<float>(2.0 * u2 - 1.0) * h};
+    }
+    return out;
+}
+
 MobEntity::MobEntity(const World& world, const BlockRegistry& blocks,
                      const Mob& def, Vec3 pos, std::uint64_t rngSeed)
     : Entity(world, blocks, pos, def.model.width, def.model.height),
@@ -62,6 +112,66 @@ MobEntity::MobEntity(const World& world, const BlockRegistry& blocks,
     // level red line). The enrage state is session-only (mobs are
     // ephemeral — zero format, the wool state's twin).
     m_neutral = def.properties.neutral;
+    // V3-10c: the teleport interval's FIRST draw (the canTeleport mob's
+    // only new spawn draw — the bat's bobPhase / the sheep's wool roll
+    // precedent; a non-teleport mob's stream is untouched, the bit
+    // root). The random attempt's cadence starts from a uniform point
+    // in the window (a spawn-synchronized otherwise — every enderman
+    // would jump on the same frame).
+    if (canTeleport()) {
+        m_teleportTimer = rollTeleportInterval();
+    }
+}
+
+double MobEntity::rollTeleportInterval() {
+    // V3-10c: the interval re-roll (ONE stream draw — the lerp over the
+    // data pair: min + (max - min) * u. The degenerate pair (min ==
+    // max, legal data) returns the constant WITHOUT a draw — the
+    // rollDropCount's degenerate discipline, the stream's fixedness
+    // preserved for the non-degenerate shipped data (2/6).
+    const MobProperties& p = m_def->properties;
+    if (p.teleportIntervalMin >= p.teleportIntervalMax) {
+        return p.teleportIntervalMin;
+    }
+    return p.teleportIntervalMin +
+        (p.teleportIntervalMax - p.teleportIntervalMin) * uniform01(m_rng);
+}
+
+bool MobEntity::eyeContactFeed(bool looking) {
+    // V3-10c: the eye-contact provocation's per-frame feed (the game
+    // pass's consumer — see the declaration for the geometry contract).
+    // Zero stream draws; the counter is the provocation's whole state.
+    if (m_def->properties.eyeContactRange <= 0.0f) {
+        return false; // no eye contact (the bit root for every other mob)
+    }
+    if (looking) {
+        ++m_eyeContactFrames;
+        if (m_eyeContactFrames >= kEyeContactFrames && !m_angry) {
+            m_eyeContactFrames = 0;
+            m_angry = true;
+            m_angryTimer = kNeutralAngryDurationSeconds;
+            return true; // the PROVOKING frame (the game's cue)
+        }
+        return false;
+    }
+    m_eyeContactFrames = 0; // the line-of-sight break (the blink reset)
+    return false;
+}
+
+void MobEntity::finishTeleport() {
+    // V3-10c: the post-landing reset (the game calls it AFTER the
+    // setPosition — the position is the landing's, the re-anchor reads
+    // it): the fall tracking pins to the landing height (the pearl's
+    // fall-cancel twin — the air-drop from the candidate to the ground
+    // is not damage) + the ENT-6 chase bookkeeping drops (a teleported
+    // chaser re-measures its stuck progress from the landing; the stale
+    // anchor would pathfind on the pre-teleport position next frame).
+    m_fallStartY = position().y;
+    m_wasOnGround = false;
+    m_path.clear();
+    m_pathIdx = 0;
+    m_stuckWindowT = 0.0;
+    m_stuckAnchor = position();
 }
 
 void MobEntity::update(double dt) {
@@ -110,6 +220,38 @@ void MobEntity::update(double dt) {
         if (m_angryTimer <= 0.0 || !m_playerAlive) {
             m_angry = false;
             m_angryTimer = 0.0;
+        }
+    }
+    // V3-10c: the TELEPORT attempt slot (the FIXED position — before
+    // the AI + physics, after the enrage window's countdown, so the
+    // anger state this frame is the provocation's current truth). Two
+    // sources, the order pinned (the recon's R2): the HIT-requested
+    // flag FIRST (damage() sets it at an un-ordered frame point — the
+    // melee / fire / effect ticks — and this slot is the ONLY stream
+    // consumer), then the interval's expiry. One attempt = the fixed
+    // candidate roll (8 x 3 draws) + the game's probe (the callback) +
+    // the interval re-roll (1 draw) — 25 stream values per attempt,
+    // success or failure (the PITS 389 stream-alignment discipline: a
+    // variable count would step the mob's stream by the world's
+    // answer, and the savenorm's no-input arms catch it). A
+    // non-teleport mob never enters (canTeleport false = the bit root,
+    // the timer's field stays 0 forever).
+    if (canTeleport()) {
+        m_teleportTimer -= dt;
+        if (m_wantTeleport || m_teleportTimer <= 0.0) {
+            m_wantTeleport = false;
+            const bool enraged = m_angry && m_playerAlive;
+            const auto candidates =
+                rollTeleportCandidates(m_rng, position(), m_playerPos,
+                                       enraged);
+            if (m_teleport) {
+                m_teleport(candidates); // the game probes + lands (or
+                                        // swallows — the stream is the
+                                        // roll's, the outcome's not)
+            }
+            m_teleportTimer = rollTeleportInterval(); // the re-roll —
+                                                      // ALWAYS (the
+                                                      // contract's tail)
         }
     }
     // ENT-1: captured BEFORE the AI + physics so the "moving" decision
@@ -940,7 +1082,19 @@ bool MobEntity::damage(float amount) {
     if (m_health <= 0.0f) {
         m_health = 0.0f;
         m_dead = true;
-    } else if (m_neutral) {
+    } else {
+        // V3-10c: the HIT-triggered teleport (the Minecraft 100%-on-hit
+        // read — the capability gate, the damage() single choke point's
+        // twin: the melee / the arrow / the fire tick / the fall all
+        // flow through here). The FLAG only — this call site's frame
+        // order is un-pinnable (the R2 discipline), so the stream
+        // consumption happens in the update's fixed slot, never here.
+        // A non-teleport mob's flag never moves (the bit root).
+        if (canTeleport()) {
+            m_wantTeleport = true;
+        }
+    }
+    if (!m_dead && m_neutral) {
         // V3-3: the NEUTRAL's enrage hook (the design's M1 ruling —
         // ANY damage source enragues: the player's melee / the arrow's
         // swept hit / the fire tick / the fall landing / the poison

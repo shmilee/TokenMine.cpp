@@ -27,7 +27,7 @@
 | STRM 流送与内存 | （方向：双世界流送/内存设计，依赖 V3-1） | | | | | | |
 | PIPE 帧管线与并发 | （方向：传送过渡帧管线，依赖 V3-1） | ⬜ V3-12 多人（最大·立项） | | | | | |
 | LGT 光照 | | | | | | | |
-| GEN 世界与生成 | ✅ V3-1 下界维度·门与下界（三段） | ✅ V3-2 下界内容族（Part 1+2） | ✅ V3-5 建筑内容族 | ⬜ V3-10 末地维度：✅ V3-10a 框架（v3.23.0）+ ✅ V3-10b 内容族（v3.24.0）/ ⬜ V3-10c~d | | | |
+| GEN 世界与生成 | ✅ V3-1 下界维度·门与下界（三段） | ✅ V3-2 下界内容族（Part 1+2） | ✅ V3-5 建筑内容族 | ⬜ V3-10 末地维度：✅ V3-10a 框架（v3.23.0）+ ✅ V3-10b 内容族（v3.24.0）+ ✅ V3-10c 末影人（v3.25.0）/ ⬜ V3-10d | | | |
 | FLUID 流体 | | | | | | | |
 | ENT 实体/Mob/移动 | ✅ V3-3 下界 mob | ✅ V3-14d strider 骑乘（v3.22.0）【V3-14 全 4 相位完成】 | | | | | |
 | SURV 生存/战斗/效果 | ✅ V3-4 netherite 材料链 | ✅ V3-11a 创造基础（v3.17.0） | ✅ V3-11b 创造物品栏（v3.18.0） | ✅ V3-15 生存/表现批（v3.16.0） | | | |
@@ -149,7 +149,37 @@
     canary 4 EXACT / 2899/2899（+14）/ 性能 A/B 同档；PITS 406
     （lattice 位切 int 截断负值 = 模先于转换 + JS 三元误写 + stale
     assets 再踩）
-  - **V3-10c 末影人 mob**（瞬移 AI + 拾格行为；≈ V3-3 单 mob）
+  - **V3-10c 末影人 = v3.25.0 门 215（11-07 完成）**（End 首个
+    mob = neutral + 瞬移 + 携格；≈ V3-3 单 mob，纯数据 + 数据
+    旗）：末影人 40 HP/speed 0.8/detect 16/attack 6/0.6×2.9 六盒
+    四 swing/light 0（出口门光 11 圈排除）+ **注视激怒**
+    （eye_contact_range 48 = kEndFogEnd「看见 = 激怒」定案 + 5 连
+    续帧零流计数眨眼复位 + game pass 全 AABB 瞄准射线 + 瞄准块 t
+    严格遮挡 → m_angry + 30s 复用）+ **瞬移**（interval 2/6 严格
+    配对存在性 = 能力门；动作非状态 MobState 零新增；受击 100%
+    damage 只置旗 + update 固定槽帧序钉；流契约 8 候选 × 3 抽 + 1
+    重掷 = 25 抽/尝试全败亦消耗；平静 ±16/±8 自位锚 / 激怒 ±8/±4
+    朝玩家 min(12,d) 点锚 = MC 项目缩放偏离；executeMobTeleport
+    game 缝：catchUpDisk → 候选空旷 ∧ 16 格内有地面【下探穿固体
+    虚空 PITS 407⑤】→ teleportTo + fall 复锚 + 落点音 + DEBUG；全
+    败 swallowed 行）+ **携格 10c-lite**（carries_blocks +
+    carriable 双严格旗缺省冷 + stateful carriable init 点名拒；集
+    = {endstone, chorus_plant}；摸每帧 4×3×4 dy 含脚下 x→y→z 定
+    序 + 首格遮挡 PITS 407④；放 6000 帧全局长拍；死亡 100% 掉所
+    携；0.9× 头顶立方 itemMesh 复用 Opaque/Cutout 双 pass）+ **生
+    成** = mob_spawning_end.json 单种族池（nether 孪生
+    fail-fast = 10a 两相位槽消费）+ **掉落** = pearl 0-1 + eye 0-1
+    【生存唯一来源，10a/10b 记档闭合】+ xp 5 + 声音仅
+    enderman_teleport（落点音，70→71；ambient/scream/stare 后移
+    10d）；后移：定身/endermite（R11）/主世界·下界池 = 10d 复议；
+    format 32 不变 / sim 2 不 bump / 块 133 不变 / atlas 172→174
+    零移位 / item 101 不变；门 215：S1 第 96 次（≡ base19 + 恰白
+    名单 3 键）+ 无输入末地臂 600f（×2 RAW + 逐字 + end 段恰 4
+    air 格）+ 火杀 demo 臂（death f1016 逐字 + 所携 endstone x1
+    掉落 + ×2 RAW + crop 目检）+ S6 七面点名 / canary 4 EXACT /
+    2930/2930（+31）/ 性能 A/B 同档；PITS 407（demo 槽不回写 /
+    火脚级 / 携格带含脚下 / 遮挡首格 / 下探虚空 / 截图 679×744 /
+    按住 LMB 挖掘）
   - **V3-10d 末影龙 boss**（血条 UI/AI 阶段/死亡仪式/龙蛋——**唯一的
     真大项** 1-2 版，范围相位立项时定案）
 - **V3-11 创造模式**（2 相位，11-06 定案拆分；与 V3-13 无依赖可并

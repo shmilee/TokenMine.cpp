@@ -1,0 +1,70 @@
+{
+ "id": "enderman",
+ "properties": {
+  "health": 40,
+  "speed": 0.8,
+  "detect_radius": 16,
+  "attack_range": 1.6,
+  "attack_damage": 6,
+  "attack_cooldown": 1.5,
+  "wander_interval": 2.0,
+  "spawn_max_light": 0,
+  "neutral": true,
+  "eye_contact_range": 48,
+  "teleport_interval_min": 2,
+  "teleport_interval_max": 6,
+  "carries_blocks": true,
+  "drops": [
+   { "item": "ender_pearl", "count_min": 0, "count_max": 1 },
+   { "item": "ender_eye", "count_min": 0, "count_max": 1 }
+  ],
+  "xp": 5
+ },
+ "model": {
+  "width": 0.6,
+  "height": 2.9,
+  "boxes": [
+   {
+    "pos": [0.0, 2.65, 0.0],
+    "size": [0.5, 0.5, 0.5],
+    "texture": "enderman_body",
+    "faces": { "front": "enderman_face" }
+   },
+   {
+    "pos": [0.0, 1.75, 0.0],
+    "size": [0.5, 1.0, 0.25],
+    "texture": "enderman_body"
+   },
+   {
+    "pos": [-0.15, 1.75, 0.0],
+    "size": [0.25, 1.0, 0.25],
+    "texture": "enderman_body",
+    "name": "arm_l"
+   },
+   {
+    "pos": [0.15, 1.75, 0.0],
+    "size": [0.25, 1.0, 0.25],
+    "texture": "enderman_body",
+    "name": "arm_r"
+   },
+   {
+    "pos": [-0.125, 0.625, 0.0],
+    "size": [0.25, 1.25, 0.25],
+    "texture": "enderman_body",
+    "name": "leg_l"
+   },
+   {
+    "pos": [0.125, 0.625, 0.0],
+    "size": [0.25, 1.25, 0.25],
+    "texture": "enderman_body",
+    "name": "leg_r"
+   }
+  ],
+  "swings": [
+   { "part": "arm_l", "amplitude": 0.4, "group": 0 },
+   { "part": "arm_r", "amplitude": 0.4, "group": 1 },
+   { "part": "leg_l", "amplitude": 0.4, "group": 1 },
+   { "part": "leg_r", "amplitude": 0.4, "group": 0 }
+  ]
+ }
+}

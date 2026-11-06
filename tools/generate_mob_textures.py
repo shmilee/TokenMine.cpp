@@ -360,6 +360,34 @@ def face_grid_tile(grid: list, colors: dict) -> list:
     return up
 
 
+# V3-10c (v3.25.0): the enderman's palette (the MC read — the near-black
+# void body + the violet glowing eyes). The body tile reuses skin_tile's
+# noise at the new salt 0x10C1; the face is the body with the two eye
+# rows (5-6) in the glowing violet (0x10C2, the hash-free grid — the
+# MOB_EYE pattern, the recon's R9 idempotence: every existing tile stays
+# pixel-identical).
+ENDERMAN_BODY = (28, 26, 32)
+ENDERMAN_EYE = (200, 80, 220)
+
+
+def enderman_face_tile() -> list:
+    """The enderman's head face: the void body + the two glowing violet
+    eyes (rows 5-6, the skin_tile eye-row convention)."""
+    (br, bg, bb) = ENDERMAN_BODY
+    (er, eg, eb) = ENDERMAN_EYE
+    pixels = []
+    for y in range(SIZE):
+        row = []
+        for x in range(SIZE):
+            n = noise(x, y, 0x10C2, 10)
+            r, g, b = clamp(br + n), clamp(bg + n), clamp(bb + n)
+            if 5 <= y <= 6 and (3 <= x <= 5 or 10 <= x <= 12):
+                (r, g, b) = (er, eg, eb)
+            row.append((r, g, b, 255))
+        pixels.append(row)
+    return pixels
+
+
 def zpiglin_face_tile() -> list:
     """The zombified piglin's head face (the pig shape, the zombie
     tint — the MC zombified piglin = the pigman face greened)."""
@@ -509,6 +537,13 @@ def main() -> None:
               strider_face_tile())
     write_png(os.path.join(OUT_DIR, "magma_cube.png"),
               magma_tile(0x9A05))
+
+    # V3-10c: the enderman (the End's only mob — the near-black void body
+    # + the violet eye face; new salts 0x10C1/0x10C2).
+    write_png(os.path.join(OUT_DIR, "enderman_body.png"),
+              skin_tile(0x10C1, ENDERMAN_BODY))
+    write_png(os.path.join(OUT_DIR, "enderman_face.png"),
+              enderman_face_tile())
 
 
 if __name__ == "__main__":

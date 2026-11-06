@@ -11,6 +11,50 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.25.0（2026-11-07）— V3-10c 末影人（End 首个 mob，门 215 全 PASS）
+
+**矩阵大项 V3-10 末地相位 C/4**（End 首个 mob = neutral + 瞬移 + 携
+格；format 32 不变 / **sim 2 不 bump**（canary 4 EXACT）/ 零 config /
+块 133 不变 / atlas 172→174 零移位 / item 101 不变 / 声音 70→71）。
+
+**末影人**（纯数据 + 数据旗，核心零物种 switch）：40 HP / speed 0.8 /
+detect 16 / attack 6 / 0.6×2.9 六盒四 swing / light 0（出口门光 11 圈
+排除）。**注视激怒** = `eye_contact_range` 48（=kEndFogEnd「看见它 =
+激怒它」定案）+ 5 连续帧（零流计数，眨眼单帧复位）+ game pass（瞄准
+射线全 AABB + 瞄准块 t 严格遮挡）→ m_angry + 30s 窗复用。**瞬移** =
+`teleport_interval_min/max` 2/6 严格配对（存在性 = 能力门）+ 动作非状
+态（MobState 零新增）+ 受击 100%（damage 只置旗，update 固定槽消费 =
+帧序钉）+ 流契约 8 候选 × 3 抽 + 1 重掷 = 25 抽/尝试（全败亦消耗）+
+平静 ±16/±8 自位锚 / 激怒 ±8/±4 朝玩家 min(12,d) 点锚（MC 64³/
+16h17v 项目缩放偏离记档）+ 执行 = setTeleportCallback game 缝
+（catchUpDisk → 候选须空旷 ∧ 16 格内有地面 → teleportTo + fall 复
+锚 → 落点音 + DEBUG；全败 = swallowed 行）。**携格** = mob
+`carries_blocks` + 块 `carriable` 双严格旗（缺省冷，stateful
+carriable = init 点名拒）+ 10c-lite 集 {endstone, chorus_plant} + 摸
+每帧 4×3×4（dy 含脚下）x→y→z 定序 + 首格遮挡 + 放 6000 帧全局长拍
+（1/2000 tick 读）+ 死亡 100% 掉所携 + 0.9× 头顶立方渲染（itemMesh
+复用，Opaque/Cutout 双 pass）。**生成** = mob_spawning_end.json 单种
+族池（nether 孪生 fail-fast）= 10a 两相位槽消费；**掉落** = pearl
+0-1 + eye 0-1（**生存唯一来源，10a/10b 记档闭合**）+ xp 5；**声音** =
+enderman_teleport 单件（仅落点音；ambient/scream/stare 后移 10d）。后
+移：定身/endermite（R11）/主世界·下界池 = 10d 复议。
+
+**门 215**：S1 结构免疫第 96 次（≡ base19 逐字节 ×2 + savenorm EXACT +
+终档恰白名单 3 键）/ S2 无输入末地臂 600f（spawn 4 + provoked ×2 +
+teleported ×8 + carried ×4 = end 段恰 4 air 格 + ×2 RAW + 逐字）/
+**火杀 demo 臂**（chorus 点火 → 燃烧链 → death f1016
+(37.695915, 53.306664, 3.944854) + 所携 endstone x1 掉落逐字 +
+pearl/eye 0-1 roll 0-0 合法 + ×2 RAW + 事件行逐字 + 掉落物 crop
+目检）/ S6 七面点名 / canary 4 ×2 RAW + savenorm EXACT【sim 2 不
+bump 实证】/ **2930/2930**（+31：enderman 族 26 / end 池 5）/ 性能
+A/B 同档【旧 = e2e2071 v3.24.0 + g139：banner 实证 v3.24.0/v3.25.0 +
+PERF-WIN 三窗 upd med 0.307/0.352/0.315 vs 0.366/0.349/0.334 + render
+0.387/0.407/0.371 vs 0.455/0.433/0.379 + swap 15.8 同档 + changes-
+Applied 9/3/1 全逐位 + 终档 savenorm EXACT 零 format 最强形】。PITS
+407（demo 槽不回写 / 火脚级重
+叠 / 携格带含脚下 / 遮挡首格语义 / 下探穿固体虚空 / 截图 679×744 /
+按住 LMB 挖掘）。详见 `docs/archive/phase-3.25.0.md`。
+
 ## v3.24.0（2026-11-07）— V3-10b 末地内容族（基岩洋/岛群/chorus + 末影珍珠，门 214 全 PASS）
 
 **矩阵大项 V3-10 末地相位 B/4**（10a 最小 fill 换真内容 + **项目首
