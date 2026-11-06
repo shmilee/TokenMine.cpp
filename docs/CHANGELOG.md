@@ -11,6 +11,51 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.21.0（2026-11-06）— V3-14c piglin 交易（barter 物物交换，门 211 全 PASS）
+
+**矩阵 ⬜ 项小→大推进**（V3-14 下界 mob 深化相位 C/4——piglin
+neutral 类上叠加交易面；零 format 31 不变 / **sim 不 bump**（canary
+4 demo EXACT 实证）/ 零 config / 零新纹理）。
+
+**数据驱动 barter 面**：`barter_input: "gold_ingot"`（单输入——
+现行 MC 仅 gold ingot，无三档表 = 立项假设证伪弃做）+
+`barter_outputs` 12 项加权表（MC 比例项目近似 Σ=249：gravel
+80×8-16 / nether_brick 40 / obsidian 40 / string 20×3-9 / leather
+20×2-4 / soul_sand 10×2-8 / quartz 10×5-12 / ghast_membrane 10 /
+hoglin_meat 10 / water_bottle 6 / golden_apple 2 / **netherite_scrap
+1 头奖**；数量区间 [1,64]——drops 的 0 概率式拒收 = 付金无货是
+笔误）；解析纪律 = milk 配对 + wool_weights 字段族 + drops 两形式
+互斥；**init 交叉检 = 纯函数 `checkBarter`**（checkWoolDrops 范
+式：input/output 存在 + countMax ≤ maxStack，首个失败 mob 点名，
+S6 实机 rc 1 直证）。
+
+**交互 + 不激怒**：`tryBarter`（tryMilk 范式挂点 tryDyeMob 后：
+targetMob kReach + 数据谓词 barterInput == 手持名；错手持 = 吞
+点击 failed-milk 规则；非 barter mob = 穿透位级）+ `barterItem()`
+无状态 roll（rollBarterOutput 单 uniform01 累计权重 + rollDropCount
+单 nextMix，固定数量零流消耗）；**不激怒 = 结构性质**（激怒单收
+口 damage()，barter 路径零调用——挤奶先例同款证明，无豁免字
+段）；产出走地面 ItemEntity + V2-6 磁力（MC 抛出孪生，非直接入
+包）；**barter.wav**（0x6A11 定种双音 chime 880→1318.5 Hz，
+66→67 幂等既有 66 件字节恒等）。
+
+**门 211**：S1 结构免疫第 92 次（≡ base19 ×2）/ S2 交易臂 =
+**authored demo**（猪灵独占池变体 run 目录 + 1×3 视线沟【1×1 洞
+被 rim 遮挡不可见】+ 12 拒生沟【scan 序钉生成 cell】+ 临时插桩
+校准准星至 kReach 界内：f60 猪灵生沟 + f120 RMB = `bartered with
+'piglin' (gold_ingot -> obsidian x1)` ×2 逐字恒等 + 终帧截图 RAW
+恒等 + 热栏 crop 目检 gold 3→2 + 心满 HP 20）+ 无输入臂 1800f ×2
+RAW + savenorm EXACT 6/6【**demo 引用存档槽 = 观察红线不回写终
+档**——终态权威 = 截图 + DEBUG 行 PITS 403①】/ S6 点名 / canary
+4 ×2 RAW + EXACT / 2847/2847（+14）/ 性能 A/B 同档【banner 实证 +
+PERF-WIN 三窗 upd med 0.561/0.584/0.571 vs 0.552/0.567/0.567 +
+changesApplied 9/3-2/1【win2 streaming 边界 real-dt 域】+ 终档
+savenorm EXACT 零 format 最强形】。PITS 403（demo 观察红线 + run
+目录 stale assets 两连探踩坑 + kReach 边界瞄准 + 生成环视线几何 +
+ambient 每帧耗流 = roll 断言必 authored demo）。记档偏离：即时交易（MC 6s 检视）+ 表 = 项目
+近似（golden_apple/hoglin_meat/netherite_scrap 特色项）。详见
+`docs/archive/phase-3.21.0.md`。
+
 ## v3.20.0（2026-11-06）— V3-14b ghast（飞行爆炸射手 + 火球，门 210 全 PASS）
 
 **矩阵 ⬜ 项小→大推进**（V3-14 下界 mob 深化相位 B/4——ghast =

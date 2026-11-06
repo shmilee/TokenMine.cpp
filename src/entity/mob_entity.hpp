@@ -240,6 +240,18 @@ public:
     // shipped sheep); 0 = not eligible (already bare / no wool drop
     // entry — defensive; the state is UNCHANGED on a 0).
     int shearWool();
+    // V3-14c (piglin bartering): the trade roll — the game calls it on a
+    // successful right-click with the data `barter_input` item held.
+    // STATELESS (the mob is untouched: no damage, no cooldown — a neutral
+    // barter never enrages, the milk non-enrage's structural twin; the
+    // game owns the gold consumption + the ground drop + the sound).
+    // Draws the OUTPUT from the weighted table (rollBarterOutput, one
+    // uniform01) + the COUNT from the entry's range (rollDropCount, one
+    // nextMix; the fixed-count entries draw nothing — the degenerate
+    // discipline). Returns (item name, count); an empty item name = not
+    // a bartering mob (defensive; init rejects the pairing, the mob data
+    // gate in tryBarter keeps this unreachable) with NO stream draw.
+    std::pair<std::string, int> barterItem();
     // Dye (the game calls it on a successful right-click with a dye on
     // a woolly wool-drops mob): sets the instance color (the held dye's
     // color name — the DATA, so NO stream draw: the recolor is a pure

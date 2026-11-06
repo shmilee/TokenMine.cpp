@@ -29,7 +29,7 @@
 | LGT 光照 | | | | | | | |
 | GEN 世界与生成 | ✅ V3-1 下界维度·门与下界（三段） | ✅ V3-2 下界内容族（Part 1+2） | ✅ V3-5 建筑内容族 | ⬜ V3-10 末地维度（大·立项定案） | | | |
 | FLUID 流体 | | | | | | | |
-| ENT 实体/Mob/移动 | ✅ V3-3 下界 mob | ✅ V3-14b ghast（v3.20.0）/ ⬜ V3-14c~d | | | | | |
+| ENT 实体/Mob/移动 | ✅ V3-3 下界 mob | ✅ V3-14c piglin 交易（v3.21.0）/ ⬜ V3-14d | | | | | |
 | SURV 生存/战斗/效果 | ✅ V3-4 netherite 材料链 | ✅ V3-11a 创造基础（v3.17.0） | ✅ V3-11b 创造物品栏（v3.18.0） | ✅ V3-15 生存/表现批（v3.16.0） | | | |
 | CRAFT 物品/合成/面板 | | | | | | | |
 | SAVE 存档 | ✅ V3-7 存档 gzip | （方向：双世界存档 format，依赖 V3-1） | | | | | |
@@ -171,8 +171,18 @@
     sim 不 bump（canary 4 EXACT）；2833/2833（+12）；记档偏离：
     火球 = 箭弹道（近程弧线补偿朝上）+ 射手自伤（MC 免疫自身火
     球）
-  - **V3-14c piglin 交易**（barter 物物交换 + 激怒联动既有 neutral
-    类）
+  - **V3-14c piglin 交易 = v3.21.0 门 211（11-06 完成）**（barter
+    物物交换 + 激怒联动既有 neutral 类）：barter_input
+    gold_ingot 单输入 + barter_outputs 12 项加权表（MC 比例项目
+    近似 Σ=249，netherite_scrap 1 头奖；数量 [1,64] drops 0 概率
+    式拒收）+ checkBarter 纯函数 init 交叉检（checkWoolDrops 范
+    式）+ tryBarter（tryMilk 范式挂点）+ barterItem() 无状态
+    roll（单 uniform01 + 单 nextMix）+ **不激怒 = 结构性质**（零
+    damage 路径）+ barter.wav 66→67；零 format / sim 不 bump
+    （canary 4 EXACT）/ 2847/2847（+14）；门 211 S2 交易臂 =
+    authored demo（视线沟 + 12 拒生沟 + kReach 边界校准准星）；
+    PITS 403（demo 观察红线 = 无退出写 + run 目录 stale assets +
+    ambient 每帧耗流 = roll 断言必帧锁定）
   - **V3-14d strider 骑乘**（骑乘机制 = 新基建）
 - **V3-15 内容遗留·生存/表现小批** = **v3.16.0 门 206（11-06 完
   成）**：netherite 火·熔岩免疫（fire_resistant armor-only 属性 + 熔岩

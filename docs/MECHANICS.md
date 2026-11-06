@@ -89,13 +89,15 @@
   16 件（+netherite×4 `[V3-4]`）；**耐久**：36 件（12 工具 + shears + 6 弓 +
   燧石与钢 + 16 护甲，`[SURV-3]` 首批 27 件 + `[SURV-5]` poison_bow +
   `[V2-15]` shears 238 + `[V3-4]` netherite 7 件）
-- **音效**：**63** 个确定性 WAV（`tools/generate_sounds.py` 固定种子，重跑字节
+- **音效**：**67** 个确定性 WAV（`tools/generate_sounds.py` 固定种子，重跑字节
   幂等；17 基础事件 + 18 材质音 6×3 + 3 环境音 + 1 smelt + 1 雷 `[V2-4]` + 1
   sleep `[V2-13]` + 1 squeak `[V2-14]` + 1 shear `[V2-15]` + 3 snow 族
   `[V2-16]` + **3 portal 族 `[V3-1]`**（trigger/travel/ambient）+ **11 下界族
   `[V3-2 Part 2]`**（nether/nylium/stem 3 材质×3 + evaporate + ambience_
   nether）+ **3 下界 mob 氛围 `[V3-3]`**（piglin_whisper/hoglin_grunt/
-  strider_hiss）；`[V2-16]` 音效缺陷族 13 件修复 = 字节变更件数不变）
+  strider_hiss）+ **1 boom `[V3-14a]`** + **2 ghast 族 `[V3-14b]`**
+  （ghast 嘶鸣 / ghast_roar 发射咆哮）+ **1 barter `[V3-14c]`**（piglin
+  交易 chime）；`[V2-16]` 音效缺陷族 13 件修复 = 字节变更件数不变）
 - **纹理**：block atlas **16×16**（256 tile，**现状 165 tile 占用**——3.x 增长
   谱系 122→136 `[V3-2]`（16×8→16×16 幂二增长，**既有格零移位** = 像素行恒等
   锚免重锚实证）→145 `[V3-3]` →165 `[V3-5]`，
@@ -441,7 +443,23 @@
     生成即被动不追击，受击才激怒**——`damage()` **单收口钩子任意来源**
     （玩家/箭/火 tick/摔落/毒，MC piglin 偏离 7 同款）+ **30 s real-dt
     脱激**（再击刷新；玩家死亡即时脱激 = 重生不见 29 s 旧怨；致死不置
-    态）/ ambient piglin_whisper 3.0 s / **无交易**（记档不做）
+    态）/ ambient piglin_whisper 3.0 s / **barter 交易 `[V3-14c]`
+    v3.21.0**：`barter_input: "gold_ingot"` 单输入（现行 MC 无三档
+    表）+ `barter_outputs` 12 项加权表（MC 比例项目近似 Σ=249：
+    gravel 80×8-16 / nether_brick 40 / obsidian 40 / string 20×3-9 /
+    leather 20×2-4 / soul_sand 10×2-8 / quartz 10×5-12 /
+    ghast_membrane 10 / hoglin_meat 10 / water_bottle 6 / golden_
+    apple 2 / **netherite_scrap 1 头奖**；数量 [1,64]）——右键
+    piglin 手持金锭 = 消耗 1 + `barterItem()` 无状态 roll（roll
+    BarterOutput 单 uniform01 累计权重 + rollDropCount 单 nextMix，
+    固定数量零流消耗）+ 产出走**地面 ItemEntity + 磁力吸回**（MC
+    抛出孪生，非直接入包）+ barter chime 音（66→67）；**即时交易**
+    （MC 6s 检视 = 记档偏离）；**不激怒 = 结构性质**（激怒单收口
+    damage()，barter 路径零调用——挤奶先例同款，无豁免字段）；
+    init 交叉检 = 纯函数 checkBarter（checkWoolDrops 范式：input /
+    每 output 存在 + countMax ≤ maxStack，首个失败 mob 点名）；
+    解析纪律 = milk 配对（孤字段拒）+ wool_weights 字段族（未知 /
+    重名 / weight [1,10000] 拒）+ drops 数量两形式互斥
   - **hoglin**（neutral，`[V3-3]`）：40 HP / 1.0 / 掉 **hoglin_meat
     1–2 + leather 0–1**（食物链，见「生存系统」）/ ambient hoglin_grunt
     3.0 s

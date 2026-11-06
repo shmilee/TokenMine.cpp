@@ -32,13 +32,14 @@ v3.10.0 = V3-6 世界边缘雾（门 200，11-05：填充感知 fog end，
 仅模拟语义变更才 bump + legacy 版本指纹零迁移直放 + --demo-force +
 4 demo canary）；**v3.14.0 = V3-8b 手柄习惯映射定案（门 204，11-06：
 L3 蹲伏 + RT 疾跑 + B 飞行专用钮【用户三项定案，config 自定义不做】+
-SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）；**v3.15.0 = V3-13 死亡统计屏（门 205，11-06：致死原因行 9 措辞 + 会话统计 5 行 + 字体 +1 字形「于」428）；**v3.16.0 = V3-15 生存/表现小批（门 206，11-06：netherite 火·熔岩免疫【fire_resistant armor-only + 三抑制 + 熔岩死因覆写】+ portal 2 周期纹理 UV 滚动 + 蒸汽粒子 8×8×9 盒）；**v3.17.0 = V3-11a 创造基础（门 207，11-06：G 切换 + 存档 flag format 31 player.creative 恒写 + 全源伤害门 + 饥饿静态满 + 即挖 + 无掉落/无耐久 + 放置不消耗 + 入场飞行；sim 不 bump canary 4 demo EXACT）；**v3.18.0 = V3-11b 创造物品栏（门 208，11-06：E 面板双 tab 物品栏/背包 + 前缀搜索【SDL 文本输入首个打字面，仅创造面板期开】+ 6×4 网格滚轮翻页 + 左键满组/右键单个授予选中热栏位 + 搜索焦点数字语义 + demo author x/y 绝对位与 g 键）= 矩阵 ⬜ 项小→大推进 4/6，V3-11 创造模式全项完成；**v3.19.0 = V3-14a 爆炸机制（门 209，11-06：纯核心 scanExplosion/explosionDamage【局域强度 radius−dist 破块 + 线性衰减整读伤害 + flamable 点火】+ 块属性 blast_resistance【obsidian 3 数据存活】+ Game::explodeAt 接线 + --explode CLI seam【帧 0，--weather 孪生】+ 死因「死于爆炸」+ 字体 +2 爆/炸 430 + boom 音 64；零 format/sim 不 bump/无击退记档）= V3-14 相位 A/4**）；**v3.20.0 = V3-14b ghast（门 210，11-06：flyShoot 悬停射击分支【flying∧shootRange>0 数据门，bat cruise 位级红线】+ explode_radius/shoot_sound 数据属性【ammo 规则豁免爆炸射手 + init wav 交叉检】+ 火球 = Projectile 复用三爆炸接线【stuck 即爆/玩家接触爆/mob 扫描跳过】+ 发光立方渲染 + 内容族【声音 2 件 64→66/池 +2 总 33/atlas 166/膜物品】；**门内捕获 = V3-14a 字体码点笔误修复**【爽 U+723D→炸 U+70B8，九 glyph 重格 +1，top-512 红线 + S1 ≡ base19 字节恒等】；零 format/sim 不 bump canary 4 EXACT）= V3-14 相位 B/4**）**）——**3.x 矩阵
+SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）；**v3.15.0 = V3-13 死亡统计屏（门 205，11-06：致死原因行 9 措辞 + 会话统计 5 行 + 字体 +1 字形「于」428）；**v3.16.0 = V3-15 生存/表现小批（门 206，11-06：netherite 火·熔岩免疫【fire_resistant armor-only + 三抑制 + 熔岩死因覆写】+ portal 2 周期纹理 UV 滚动 + 蒸汽粒子 8×8×9 盒）；**v3.17.0 = V3-11a 创造基础（门 207，11-06：G 切换 + 存档 flag format 31 player.creative 恒写 + 全源伤害门 + 饥饿静态满 + 即挖 + 无掉落/无耐久 + 放置不消耗 + 入场飞行；sim 不 bump canary 4 demo EXACT）；**v3.18.0 = V3-11b 创造物品栏（门 208，11-06：E 面板双 tab 物品栏/背包 + 前缀搜索【SDL 文本输入首个打字面，仅创造面板期开】+ 6×4 网格滚轮翻页 + 左键满组/右键单个授予选中热栏位 + 搜索焦点数字语义 + demo author x/y 绝对位与 g 键）= 矩阵 ⬜ 项小→大推进 4/6，V3-11 创造模式全项完成；**v3.19.0 = V3-14a 爆炸机制（门 209，11-06：纯核心 scanExplosion/explosionDamage【局域强度 radius−dist 破块 + 线性衰减整读伤害 + flamable 点火】+ 块属性 blast_resistance【obsidian 3 数据存活】+ Game::explodeAt 接线 + --explode CLI seam【帧 0，--weather 孪生】+ 死因「死于爆炸」+ 字体 +2 爆/炸 430 + boom 音 64；零 format/sim 不 bump/无击退记档）= V3-14 相位 A/4**）；**v3.20.0 = V3-14b ghast（门 210，11-06：flyShoot 悬停射击分支【flying∧shootRange>0 数据门，bat cruise 位级红线】+ explode_radius/shoot_sound 数据属性【ammo 规则豁免爆炸射手 + init wav 交叉检】+ 火球 = Projectile 复用三爆炸接线【stuck 即爆/玩家接触爆/mob 扫描跳过】+ 发光立方渲染 + 内容族【声音 2 件 64→66/池 +2 总 33/atlas 166/膜物品】；**门内捕获 = V3-14a 字体码点笔误修复**【爽 U+723D→炸 U+70B8，九 glyph 重格 +1，top-512 红线 + S1 ≡ base19 字节恒等】；零 format/sim 不 bump canary 4 EXACT）= V3-14 相位 B/4**）；**v3.21.0 = V3-14c piglin 交易（门 211，11-06：barter_input 单输入 gold_ingot + barter_outputs 12 项加权表【MC 比例项目近似，netherite_scrap 1 头奖，数量 [1,64]】+ checkBarter 纯函数 init 交叉检 + tryBarter（tryMilk 范式）+ barterItem() 无状态 roll + **不激怒 = 结构性质**【零 damage 路径】+ barter.wav 67；零 format/sim 不 bump canary 4 EXACT）= V3-14 相位 C/4**）**）——**3.x 矩阵
 18 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
 （门 202）/ v3.13.0（门 203）/ v3.14.0（门 204）/ v3.15.0（门 205）
 / v3.16.0（门 206）/ v3.17.0（门 207）/ v3.18.0（门 208）/ v3.19.0
-（门 209）/ v3.20.0（门 210）+ 11-06 扩容 7 项（V3-8b ✅ v3.14.0 +
-V3-13 ✅ v3.15.0 + V3-15 ✅ v3.16.0 + V3-11 ✅ v3.17.0/v3.18.0 +
-V3-14a ✅ v3.19.0 + V3-14b ✅ v3.20.0 +
+（门 209）/ v3.20.0（门 210）/ v3.21.0（门 211）+ 11-06 扩容 7 项
+（V3-8b ✅ v3.14.0 + V3-13 ✅ v3.15.0 + V3-15 ✅ v3.16.0 + V3-11
+✅ v3.17.0/v3.18.0 + V3-14a ✅ v3.19.0 + V3-14b ✅ v3.20.0 +
+V3-14c ✅ v3.21.0 +
 V3-10~V3-14 ⬜【大项已相位拆分 V3-10a~d / V3-11a~b / V3-12a~c /
 V3-14a~d，BACKLOG 待执行项明细】）**
 
@@ -99,7 +100,7 @@ V3-14a~d，BACKLOG 待执行项明细】）**
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2833/2833**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2847/2847**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 31（V3-11a 创造：player.creative strict bool 恒写，
   pre-31 载迁 false，30 携键 = version lie 点名；schema 其余与 30
   一致）；format 30 = V3-1 Phase B 下界维度（player.dimension 严格
@@ -200,6 +201,47 @@ V3-14a~d，BACKLOG 待执行项明细】）**
   零 diff + crop 3× 目检同场景同羊同位】；性能 A/B 同档【changes-
   Applied 逐位 + 终档 savenorm EXACT】；PITS 392【DEBUG 事件行
   grep 假阴性】；详见 `docs/archive/phase-3.12.0.md`）；
+  门计数 211（**V3-14c piglin 交易 v3.21.0** 门 211 全 PASS【V3-14
+  相位 C/4，neutral 类叠加交易面】：**数据驱动 barter 面**【barter_
+  input 单输入 gold_ingot【现行 MC 无三档表 = 立项假设证伪弃做】+
+  barter_outputs 12 项加权表【MC 比例项目近似 Σ=249：gravel 80×8-16
+  / nether_brick 40 / obsidian 40 / string 20×3-9 / leather 20×2-4 /
+  soul_sand 10×2-8 / quartz 10×5-12 / ghast_membrane 10 / hoglin_
+  meat 10 / water_bottle 6 / golden_apple 2 / netherite_scrap 1 头奖
+  ；数量 [1,64]——drops 0 概率式拒收 = 付金无货非机制】+ 解析纪律 =
+  milk 配对 + wool_weights 字段族 + drops 两形式互斥】+ **checkBarter
+  纯函数**【checkWoolDrops 范式：input/output 存在 + countMax ≤
+  maxStack，首个失败 mob 点名，S6 实机 rc 1 直证】+ **tryBarter**
+  【tryMilk 范式挂点 tryDyeMob 后：targetMob kReach + 数据谓词；错
+  手持 = 吞点击 failed-milk 规则；非 barter mob = 穿透位级】+
+  **barterItem() 无状态 roll**【rollBarterOutput 单 uniform01 累计
+  权重 + rollDropCount 单 nextMix，固定数量零流消耗，非 barter mob
+  零流红线】+ **不激怒 = 结构性质**【激怒单收口 damage()，barter
+  路径零调用——挤奶先例同款，无豁免字段】+ **产出走地面
+  ItemEntity + V2-6 磁力**【MC 抛出孪生非直接入包】+ **barter.wav**
+  【0x6A11 定种双音 chime 880→1318.5 Hz，66→67 幂等既有 66 件字节
+  恒等】；即时交易（MC 6s 检视 = 记档偏离）；零 format 31 不变 /
+  **sim 不 bump**【canary 4 EXACT】/ 零 config / 零新纹理【物品图标
+  全既有，atlas 166 不动】；2847/2847（+14 BarterCheck ×6 / 解析 ×4 /
+  roll 纯函数 ×1 / MobBarter ×2 / SoundBarter ×1 + FNV 重钉）；结构
+  免疫第 92 次【S1 ≡ base19 逐字节 ×2 + savenorm EXACT——barter 活
+  在 wasPressed(Right) 下全冷】；S2 交易臂 = **authored demo**【猪灵
+  独占池变体 run 目录 + 1×3 视线沟【1×1 洞被 rim 遮挡不可见 = 射线
+  几何 PITS 403④】+ 12 拒生沟【scan 序钉生成 cell】+ 临时插桩校准
+  准星至 kReach 界内【眼-体心 5.0 恰界，feet 距 5.54 = MISS 假象】：
+  f60 猪灵生沟 (40.5,51,34.5) → f120 RMB = `bartered with 'piglin'
+  (gold_ingot -> obsidian x1)` ×2 逐字恒等【帧锁定 roll】+ 终帧截图
+  RAW 恒等 + 热栏 crop 目检 gold 3→2 + 心满 HP 20 不激怒】+ 无输入
+  臂 1800f ×2 RAW + savenorm EXACT 6/6；S6 点名【temp 假 output →
+  init rc 1】；S2b canary 4 demo ×2 RAW + EXACT；性能 A/B 同档【旧 =
+  113ed11 v3.20.0 + g139：banner 实证 v3.20.0/v3.21.0 + PERF-WIN 三窗
+  upd med 0.561/0.584/0.571 vs 0.552/0.567/0.567 + render/swap 同档 +
+  changesApplied 9/3-2/1【win2 = streaming 边界 real-dt 域】+ 终档
+  savenorm EXACT【零 format = 最强形】】；
+  PITS 403【demo 观察红线 = 无退出写 + run 目录 stale assets 两连探
+  踩坑 + kReach 边界瞄准按体心 + 生成环视线几何 + ambient 每帧耗流
+  = roll 断言必 authored demo】；详见
+  `docs/archive/phase-3.21.0.md`）；
   门计数 210（**V3-14b ghast v3.20.0** 门 210 全 PASS【V3-14
   相位 B/4，下界首个爆炸射手】：**flyShoot 分支**【runAi 飞行
   dispatch 内 flying ∧ shootRange>0 数据门——bat shootRange 0 走
@@ -748,7 +790,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 （细节归阶段文档，不写长句））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
-## 坑位 Top 8（全文 docs/PITS.md，402 条；pre-3.x 条目在 docs/archive/PITS_PRE3X.md）
+## 坑位 Top 8（全文 docs/PITS.md，403 条；pre-3.x 条目在 docs/archive/PITS_PRE3X.md）
 
 1. **SDL grab delta**（P28）：输入 E2E 全帧字节一致不保证——存档 yaw/pitch 为漂移
    探测器；驱动 warp 用实际窗口原点（实测 (4,64)）+ (632,352)。
@@ -784,7 +826,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（402 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（403 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

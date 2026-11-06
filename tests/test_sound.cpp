@@ -344,7 +344,7 @@ TEST(SoundBatTest, SqueakWavShipsAndParses) {
     EXPECT_EQ(peak, 3589);
 }
 
-TEST(SoundBatTest, SoundDirectoryGrowsToSixtySix) {
+TEST(SoundBatTest, SoundDirectoryGrowsToSixtySeven) {
     // The sound set 41 -> 42 (the squeak — the V2-14 file) -> 43 (the
     // shear — the V2-15 file) -> 46 (the snow family — the three V2-16
     // files) -> 47 (the portal ambience — the V3-1 Phase A file) -> 49
@@ -354,10 +354,11 @@ TEST(SoundBatTest, SoundDirectoryGrowsToSixtySix) {
     // ambient family — the hoglin grunt + the piglin whisper + the
     // strider hiss, the 60 -> 63 conscious census update; -> 64 (the
     // V3-14a boom — the explosion's thud); -> 66 (the V3-14b ghast's
-    // two voices — the ambient screech + the pre-shot roar). Each
-    // phase's new files are the only additions, the generate_sounds.py
-    // re-run leaves the others byte-identical, the script's md5
-    // discipline; the FNV pins hold each phase's bytes.
+    // two voices — the ambient screech + the pre-shot roar); -> 67 (the
+    // V3-14c barter chime — the piglin's gold-trade cue). Each phase's
+    // new files are the only additions, the generate_sounds.py re-run
+    // leaves the others byte-identical, the script's md5 discipline;
+    // the FNV pins hold each phase's bytes.
     std::size_t count = 0;
     for (const auto& entry :
          std::filesystem::directory_iterator("assets/sounds")) {
@@ -365,7 +366,7 @@ TEST(SoundBatTest, SoundDirectoryGrowsToSixtySix) {
             ++count;
         }
     }
-    EXPECT_EQ(count, 66u);
+    EXPECT_EQ(count, 67u);
 }
 
 // ---------------------------------------------------------------------------
@@ -497,8 +498,8 @@ TEST(SoundNoiseHelperRepairTest, NoiseWavsShipTextured) {
     for (const auto& e : want) {
         expectWavPin(e.name, e.samples, e.peak);
     }
-    // The census is the V3-14b pin (66 files — the directory count:
-    // the V3-14a's 64 + the ghast's two voices — the repair itself
+    // The census is the V3-14c pin (67 files — the directory count:
+    // the V3-14b's 66 + the piglin's barter chime — the repair itself
     // edits in place, no other additions).
     std::size_t count = 0;
     for (const auto& entry :
@@ -507,7 +508,20 @@ TEST(SoundNoiseHelperRepairTest, NoiseWavsShipTextured) {
             ++count;
         }
     }
-    EXPECT_EQ(count, 66u);
+    EXPECT_EQ(count, 67u);
+}
+
+// ---------------------------------------------------------------------------
+// V3-14c: the piglin's barter chime (the sound set 66 -> 67).
+// ---------------------------------------------------------------------------
+
+TEST(SoundBarterTest, BarterWavShipsAndParses) {
+    // The barter.wav (the generate_sounds.py's dedicated fixed seed
+    // 0x6A11 — the smelt-ding precedent): a 16-bit mono 44.1 kHz PCM
+    // (the bank's strict format), 0.16 s (the chime's length), the SFX
+    // volume class. The exact peak pin is the PITS 382 regression
+    // guard: a silent / degenerate synthesis cannot reproduce it.
+    expectWavPin("barter", 7056, 20792);
 }
 
 // ---------------------------------------------------------------------------

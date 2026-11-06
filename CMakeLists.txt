@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 3.20.0 LANGUAGES CXX)
+project(TokenMine VERSION 3.21.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -72,6 +72,7 @@ add_library(mc_core STATIC
     src/entity/mob_registry.cpp
     src/entity/mob_spawning.cpp
     src/entity/nether_spawn_pool.cpp
+    src/entity/barter_check.cpp
     src/entity/wool_drops.cpp
     src/entity/pathfind.cpp
     src/entity/mob_swing.cpp
@@ -191,6 +192,7 @@ add_executable(tokenmine_tests
     tests/test_mob.cpp
     tests/test_mob_model.cpp
     tests/test_nether_spawn_pool.cpp
+    tests/test_barter.cpp
     tests/test_wool_drops.cpp
     tests/test_player_body.cpp
     tests/test_pathfind.cpp

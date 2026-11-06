@@ -12,7 +12,22 @@
   "neutral": true,
   "ambient_sound": "piglin_whisper",
   "ambient_interval": 3.0,
-  "xp": 3
+  "xp": 3,
+  "barter_input": "gold_ingot",
+  "barter_outputs": [
+   { "item": "gravel", "weight": 80, "count_min": 8, "count_max": 16 },
+   { "item": "nether_brick", "weight": 40, "count": 1 },
+   { "item": "obsidian", "weight": 40, "count": 1 },
+   { "item": "string", "weight": 20, "count_min": 3, "count_max": 9 },
+   { "item": "leather", "weight": 20, "count_min": 2, "count_max": 4 },
+   { "item": "soul_sand", "weight": 10, "count_min": 2, "count_max": 8 },
+   { "item": "quartz", "weight": 10, "count_min": 5, "count_max": 12 },
+   { "item": "ghast_membrane", "weight": 10, "count": 1 },
+   { "item": "hoglin_meat", "weight": 10, "count": 1 },
+   { "item": "water_bottle", "weight": 6, "count": 1 },
+   { "item": "golden_apple", "weight": 2, "count": 1 },
+   { "item": "netherite_scrap", "weight": 1, "count": 1 }
+  ]
  },
  "model": {
   "width": 0.6,

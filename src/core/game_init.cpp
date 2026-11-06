@@ -17,6 +17,7 @@
 #include "core/json.hpp"
 #include "core/png.hpp"
 #include "entity/nether_spawn_pool.hpp"
+#include "entity/barter_check.hpp"
 #include "entity/wool_drops.hpp"
 #include "item/repair.hpp"
 #include "renderer/alpha_test.hpp"
@@ -752,6 +753,12 @@ Result<void> Game::buildScene() {
     // wool_weights' colors, the bare tile + every dye color's wool
     // variant tile. The first failing mob is named.)
     MC_TRY(checkWoolDrops(m_mobs.mobTypes, m_items, m_atlas.layout()));
+
+    // V3-14c (piglin): the barter cross-check (the checkWoolDrops pure
+    // pattern — a bartering mob's data must be complete against the item
+    // registry: the input exists, every output exists, each output's
+    // rolled top fits its stack. The first failing mob is named.)
+    MC_TRY(checkBarter(m_mobs.mobTypes, m_items));
 
     // -- player body (UX-3): the world-space body model ----------------------
     // data/player_body.json is a MODEL-ONLY file (exactly one top-level

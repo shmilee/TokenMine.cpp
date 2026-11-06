@@ -850,6 +850,24 @@ int MobEntity::shearWool() {
     return n;
 }
 
+std::pair<std::string, int> MobEntity::barterItem() {
+    // V3-14c: the stateless trade roll (shearWool's pattern minus the
+    // state — the mob is NOT touched, so a neutral barter cannot enrage;
+    // the damage() single-choke-point is the only enrage source and this
+    // path never calls it). The item draw is FIRST (the roll order is
+    // the stream contract: one uniform01 for the weighted pick, then the
+    // count's nextMix when the range is non-degenerate — a fixed-count
+    // entry draws nothing, the rollDropCount discipline).
+    const MobProperties& p = m_def->properties;
+    if (p.barterOutputs.empty() || p.barterInput.empty()) {
+        return {std::string {}, 0}; // not a bartering mob: NO stream draw
+    }
+    const int idx = rollBarterOutput(p.barterOutputs, uniform01(m_rng));
+    const BarterOutput& entry = p.barterOutputs.at(idx);
+    const int n = rollDropCount(entry.countMin, entry.countMax);
+    return {entry.item, n};
+}
+
 void MobEntity::dyeWool(const std::string& color) {
     // V2-15: the successful dye — the instance color re-set (the input
     // is DATA, so NO stream draw — the recolor is a pure function of

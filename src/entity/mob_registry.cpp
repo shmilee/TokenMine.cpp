@@ -247,6 +247,119 @@ Result<void> MobRegistry::parseProperties(const Json& def,
         return MC_FAIL("mob properties: 'milk_with' and 'milk_gives' "
                        "must be given together");
     }
+    // Optional bartering pair (V3-14c, piglin): 'barter_input' is the
+    // item the player must hold to trade, 'barter_outputs' the weighted
+    // output table. Present TOGETHER (the milk pairing discipline), the
+    // game cross-checks every item name at init (checkBarter).
+    if (const Json* bi = def.find("barter_input")) {
+        if (!bi->isString() || bi->asString().empty()) {
+            return MC_FAIL("mob properties: 'barter_input' must be a "
+                           "non-empty string (item name)");
+        }
+        out.barterInput = bi->asString();
+    }
+    if (const Json* bo = def.find("barter_outputs")) {
+        if (!bo->isArray()) {
+            return MC_FAIL("mob properties: 'barter_outputs' must be an "
+                           "array of {item, weight, count...} entries");
+        }
+        if (bo->size() == 0) {
+            return MC_FAIL("mob properties: 'barter_outputs' must not be "
+                           "an empty array (the trade's roll needs at "
+                           "least one entry)");
+        }
+        for (std::size_t i = 0; i < bo->size(); ++i) {
+            const Json& e = bo->at(i);
+            const std::string what = "mob properties: 'barter_outputs[" +
+                                     std::to_string(i) + "]";
+            if (!e.isObject()) {
+                return MC_FAIL(what + " must be an object "
+                               "{\"item\": ..., \"weight\": ..., ...}");
+            }
+            for (const auto& [key, value] : e.members()) {
+                if (key != "item" && key != "weight" && key != "count" &&
+                    key != "count_min" && key != "count_max") {
+                    return MC_FAIL(what + " has an unknown field '" + key +
+                                   "'");
+                }
+            }
+            const Json* it = e.find("item");
+            if (it == nullptr || !it->isString() || it->asString().empty()) {
+                return MC_FAIL(what + " requires a non-empty string "
+                               "'item'");
+            }
+            const std::string itemName = it->asString();
+            for (const BarterOutput& prev : out.barterOutputs) {
+                if (prev.item == itemName) {
+                    return MC_FAIL(what + " lists the item '" + itemName +
+                                   "' twice");
+                }
+            }
+            const Json* w = e.find("weight");
+            if (w == nullptr || !w->isNumber() ||
+                w->asDouble() != std::floor(w->asDouble()) ||
+                w->asDouble() < 1.0 || w->asDouble() > 10000.0) {
+                return MC_FAIL(what + " requires an integer 'weight' in "
+                               "[1, 10000], got " +
+                               (w != nullptr && w->isNumber()
+                                    ? std::to_string(w->asDouble())
+                                    : "a non-number"));
+            }
+            // The count: the drops' two forms (a single 'count' or the
+            // 'count_min'/'count_max' range, never both — the drops
+            // discipline). Barter bounds are [1, 64] (a 0-count trade
+            // consumes the gold for nothing — rejected, unlike drops'
+            // 0-1 probability form).
+            BarterOutput entry {itemName,
+                                static_cast<int>(w->asDouble()), 1, 1};
+            const Json* count = e.find("count");
+            const Json* cmin = e.find("count_min");
+            const Json* cmax = e.find("count_max");
+            if (count && (cmin || cmax)) {
+                return MC_FAIL(what + " gives both 'count' and a "
+                               "'count_min'/'count_max' range — use one "
+                               "form, not both");
+            }
+            if (cmin || cmax) {
+                if (!cmin || !cmax) {
+                    return MC_FAIL(what + " gives only one of "
+                                   "'count_min'/'count_max' — both are "
+                                   "required for a random range");
+                }
+                for (const Json* v : {cmin, cmax}) {
+                    if (!v->isNumber() || v->asDouble() !=
+                                                std::floor(v->asDouble()) ||
+                        v->asDouble() < 1.0 || v->asDouble() > 64.0) {
+                        return MC_FAIL(what + " range bound must be an "
+                                       "integer in [1, 64]");
+                    }
+                }
+                entry.countMin = static_cast<int>(cmin->asDouble());
+                entry.countMax = static_cast<int>(cmax->asDouble());
+                if (entry.countMin > entry.countMax) {
+                    return MC_FAIL(what + " has 'count_min' " +
+                                   std::to_string(entry.countMin) +
+                                   " > 'count_max' " +
+                                   std::to_string(entry.countMax));
+                }
+            } else if (count) {
+                if (!count->isNumber() || count->asDouble() !=
+                                                     std::floor(
+                                                         count->asDouble()) ||
+                    count->asDouble() < 1.0 || count->asDouble() > 64.0) {
+                    return MC_FAIL(what + " 'count' must be an integer "
+                                   "in [1, 64]");
+                }
+                entry.countMin = entry.countMax =
+                    static_cast<int>(count->asDouble());
+            }
+            out.barterOutputs.push_back(std::move(entry));
+        }
+    }
+    if (out.barterInput.empty() != out.barterOutputs.empty()) {
+        return MC_FAIL("mob properties: 'barter_input' and "
+                       "'barter_outputs' must be given together");
+    }
 
     // Migration guard (Phase 28): the single-drop schema
     // ("drops": "item" + "drops_count") is gone — the count now lives

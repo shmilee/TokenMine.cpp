@@ -210,6 +210,15 @@ struct WoolWeight {
     int weight = 0;
 };
 
+// V3-14c: a barter output entry (the piglin's trade — the weighted roll
+// + the deterministic count range, the wool_weights / drops fusion).
+struct BarterOutput {
+    std::string item;
+    int weight = 1;
+    int countMin = 1;
+    int countMax = 1;
+};
+
 // V2-15: the model box NAME of a wool_drops mob's wool body (the
 // render-layer variant's anchor: the per-instance tile — the instance-
 // color dye variant or the bare skin tile — is applied to this box's
@@ -248,6 +257,27 @@ inline std::string rollWoolColor(const std::vector<WoolWeight>& weights,
         }
     }
     return weights.back().color;
+}
+
+// V3-14c: the barter's item pick — the rollWoolColor twin (a single
+// uniform01 draw over the cumulative weights, DATA order; the degenerate
+// one-entry table still consumes the one draw, the roll discipline).
+// Returns the chosen entry's index.
+inline int rollBarterOutput(const std::vector<BarterOutput>& outputs,
+                            double u) {
+    int total = 0;
+    for (const BarterOutput& o : outputs) {
+        total += o.weight;
+    }
+    const double target = u * static_cast<double>(total);
+    double cum = 0.0;
+    for (std::size_t i = 0; i < outputs.size(); ++i) {
+        cum += static_cast<double>(outputs[i].weight);
+        if (target < cum) {
+            return static_cast<int>(i);
+        }
+    }
+    return static_cast<int>(outputs.size()) - 1;
 }
 
 // Behavior parameters of a mob type (all from data; see the file head).
@@ -310,6 +340,19 @@ struct MobProperties {
     // not milkable (every pre-Phase-43 mob).
     std::string milkWith;
     std::string milkGives;
+    // Bartering (V3-14c, piglin): `barterInput` is the item the player
+    // must HOLD for a right-click ON the mob to trade (one held
+    // consumed), and `barterOutputs` the weighted table the trade rolls
+    // (item + weight + the count range, the drops' interval twin). Both
+    // fields must be present TOGETHER (a lone field is a typo, rejected
+    // — the milk pairing discipline); every item name is cross-checked
+    // against the ItemRegistry at init (the checkWoolDrops pure
+    // pattern). The trade NEVER damages the mob (a neutral barter does
+    // not enrage — the milk non-enrage's structural twin: the
+    // interaction path never calls damage()). Empty = not a bartering
+    // mob (every pre-V3-14c mob).
+    std::string barterInput;
+    std::vector<BarterOutput> barterOutputs;
     // Status effect on hit (Phase 46, spider): when this mob's landed
     // MELEE attack hits the player, the named status effect is applied
     // for `hitEffectDuration` seconds (data/effects/*.json; the game

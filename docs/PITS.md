@@ -3,7 +3,7 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–402，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–403，新条目继续前插于尾部块首。
 
 - **gzip 容器可钉 / zlib 宏缺失 / 双跑 RAW 适用域（PITS 385，门 191
   V3-7 存档 gzip）**——① **zlib 自带 gzip 封装（windowBits 16+15）
@@ -68,6 +68,32 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **demo 观察红线 + run 目录 stale 资产 + kReach 瞄准 + 生成环
+  视线 + ambient 耗流五坑（PITS 403，门 211 v3.21.0 V3-14c piglin
+  交易）**——① **demo 引用存档槽 = 永不回写**（game_init
+  saveSlot.reset 观察红线）：CLI「drop --save or match it」的
+  match = 红线不写而非写档——交易臂终态权威 = 终帧截图 ×2 RAW +
+  DEBUG 动作行（`bartered with 'piglin' (...)` 逐字恒等 = 帧锁定
+  roll 实证），勿等「World saved」。② **run 目录 stale assets**：
+  池变体/副本树每次仓内资产改动后必须**整体重拷**（rm -rf + cp -r
+  + 重打池补丁）——两连探跑静默用旧 piglin.json（targetMob HIT +
+  无 barter + gold 未动 = 数据缺而非瞄准错，假象极似「没打中」）；
+  判别 = 拷后 grep 目标数据字段存在性。③ **kReach 边界瞄准**：
+  眼-mob feet 距 5.54 > kReach 5.0 但眼-体心 5.0 恰界内——瞄准
+  验算按**体心**（feet + height/2）非 feet；校准工具 = 临时插桩
+  HIT/MISS + 近 mob 位打印（PITS 383③ 定界后移除重建纪律，门内
+  实证 3 轮：MISS(aim 偏 0.47x) → HIT 无 barter(stale 资产) →
+  HIT + barter(数据齐)）。④ **生成环视线几何**：scan 序 = dz 降
+  dx 升（ring ceil(maxRadius) 圈）——钉目标 cell 须拒**全部
+  scan-序先行格**（本门 12 拒生沟：dz=-6 行 1 + dz=-5 行 7 +
+  dz=-4 行 4 = 先行有效格全灭，目标 (dx=0,dz=-4) 首中）；1×1
+  洞**不可见**（2 深挖洞的 rim 遮挡：射线降过台地顶 y53 的 z 点
+  = 洞口远端外 0.09-1.1m）→ **1×3 视线沟**（超环 cell【dist 3 <
+  min 4】自由挖，不扰生成）。⑤ **ambient 每帧耗流**：ground
+  ambient 每帧 roll uniform01（流态 = 点击帧的函数）——xdotool
+  ±帧抖动破 roll 恒等（两次 run 掷出不同物 = savenorm 必裂）；
+  **断言 roll 结果的输入臂必用 authored demo**（帧锁定，roll 逐字
+  恒等），xdotool 只用于结果不变量型断言（「某物入包」级）。
 - **下界决定性场景 + 字体码点笔误 + canary --frames 五坑（PITS 402，
   门 210 v3.20.0 V3-14b ghast）**——① **下界生成决定性构造三件**：
   **环清三带**（kSpawnFloorDelta 2 → 地面 pick 的 floor top 须 ∈

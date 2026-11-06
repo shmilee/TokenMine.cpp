@@ -234,6 +234,13 @@ void Game::handleInteraction(double dt) {
         if (tryDyeMob()) {
             return;
         }
+        // V3-14c (piglin): the barter — a selected item == the mob's
+        // data 'barter_input' on a bartering mob trades: one input
+        // consumed, the rolled output drops at the mob (ground items),
+        // the mob unharmed (a neutral barter never enrages).
+        if (tryBarter()) {
+            return;
+        }
         // Data-driven interaction (Phase 17): a block whose `interact`
         // property names a known GUI opens it instead of placing.
         if (!playerInNether()) {
@@ -1831,6 +1838,65 @@ bool Game::tryDyeMob() {
     m_inventory.take(m_selectedSlot, 1);
     m_sound.play("cloth");
     MC_LOG_DEBUG("dyed '" + mob->mob->def().name + "' to " + item.dyeColor);
+    return true;
+}
+
+bool Game::tryBarter() {
+    // V3-14c (piglin): the barter — the tryMilk paradigm (both data
+    // predicates: the mob's 'barter_input' == the selected item's NAME,
+    // melee targeting kReach + block occlusion via targetMob). One held
+    // input is consumed and the ROLLED output drops at the mob as a
+    // ground item (the shear's drop precedent: zero velocity, the
+    // kPickupDelaySeconds re-collect guard, the V2-6 magnet pulls it in
+    // deterministically). The mob is NEVER damaged — a neutral barter
+    // does not enrage (the structural twin of the milk non-enrage: this
+    // path never calls damage(), the enrage single choke point). The
+    // click is consumed whenever the crosshair is on a bartering mob
+    // (the failed-milk rule — e.g. the wrong item in hand still eats it);
+    // a non-barter mob returns false (the click falls through to the
+    // legacy block interact, the bit-identical path).
+    if (!m_player || m_player->isDead()) {
+        return false;
+    }
+    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    if (stack.empty()) {
+        return false;
+    }
+    const Item& item = m_items.at(stack.item);
+    const std::optional<MobHit> mob = targetMob();
+    if (!mob) {
+        return false;
+    }
+    const MobProperties& props = mob->mob->def().properties;
+    if (props.barterInput.empty()) {
+        return false; // not a bartering mob: the legacy fall-through
+    }
+    if (props.barterInput != item.name) {
+        return true; // a bartering mob, the wrong item in hand: the
+                     // click is consumed (the failed-milk rule)
+    }
+    // The trade roll (the per-mob stream — a deterministic frame yields
+    // a reproducible output + count; the game owns the effect).
+    const auto [outName, outCount] = mob->mob->barterItem();
+    if (outName.empty()) {
+        return true; // defensive (init rejects the pairing); click eaten
+    }
+    m_inventory.take(m_selectedSlot, 1);
+    if (outCount > 0) {
+        // Init cross-checks guarantee the item exists; the guard is a
+        // defensive no-op (the milk pattern).
+        const ItemID oid = m_items.idForName(outName);
+        if (oid.valid()) {
+            const Item& out = m_items.at(oid);
+            currentEntities().push_back(std::make_unique<ItemEntity>(
+                currentWorld(), m_blocks, out.name, out.maxStack, outCount,
+                mob->mob->position()));
+        }
+    }
+    m_sound.play("barter", mob->mob->position());
+    MC_LOG_DEBUG("bartered with '" + mob->mob->def().name + "' (" +
+                 props.barterInput + " -> " + outName + " x" +
+                 std::to_string(outCount) + ")");
     return true;
 }
 

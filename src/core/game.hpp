@@ -608,6 +608,18 @@ private:
     // Returns true when the click was consumed (crosshair on the target
     // mob, the bare refusal included).
     bool tryDyeMob();
+    // V3-14c (piglin): the barter — the crosshair on a 'barter_input'
+    // mob, the selected item == the data's barter input name (the data
+    // predicate, no species switch): one held input is consumed and the
+    // rolled output drops at the mob (ground items, the shear's
+    // precedent: zero velocity + pickup delay + the magnet), the
+    // "barter" cue plays at the mob. The mob is NEVER damaged (a neutral
+    // barter does not enrage — the milk non-enrage's structural twin).
+    // Returns true when the crosshair is on a bartering mob (the click
+    // is consumed even when the held item is wrong — the failed-milk
+    // rule); false = fall through (a non-barter mob, the legacy
+    // bit-identical).
+    bool tryBarter();
     // Fluid bucket (Phase 47): when the selected slot holds a bucket side
     // (item data 'collects_fluid' or 'pours_fluid'; the pair is
     // cross-checked at init): COLLECT — the bucket-target ray (kReach,

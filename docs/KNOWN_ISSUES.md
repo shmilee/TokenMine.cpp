@@ -642,7 +642,8 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
 - **掉落物不跨维** — 传送不携掉落物实体（记档偏离；MC 掉落物随玩家跨维）。
 - **下界原点保护圈** — 敌对保护环锚 = 世界出生点，下界池同款应用（MC 下
   界无保护 = 记档偏离，门 198）。
-- **下界 mob 既定不做**（V3-3 记档）：piglin 无交易（= V3-14c 立项）/
+- **下界 mob 既定不做**（V3-3 记档）：piglin 交易 = v3.21.0 已落地
+  （V3-14c）/
   magma_cube 不分裂不跳 / strider 不可骑乘（= V3-14d 立项）/
   **ghast = v3.20.0 已落地**（飞行爆炸射手，V3-14b）/
   zombified_piglin `undead: false`（MC 非亡灵 = 中毒不免疫）。
@@ -737,6 +738,23 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
   格在 blast 中不动（块层 only，流体交互 = 记档偏离）。
 - **地下生成火簇 = 场景域 real-dt**（PITS 401③）——爆炸门场景须
   密封石室 + 去火（savenorm 域）。
+
+## V3-14c piglin 交易（v3.21.0）
+
+- **即时交易（非 MC 6s 检视）**——piglin 收到金锭立即掷出产出
+  （挤奶先例的即时化简化，记档偏离）。
+- **单输入 gold_ingot**——现行 MC 无 nugget/block 三档表（立项
+  假设证伪弃做）；猪灵拾取地面金锭的交易路径亦不做（记档）。
+- **产出表 = MC 比例项目近似**——12 项全项目既有物品（gravel 80
+  / nether_brick 40 / obsidian 40 / string 20 / leather 20 /
+  soul_sand 10 / quartz 10 / ghast_membrane 10 / hoglin_meat 10 /
+  water_bottle 6 / golden_apple 2 / netherite_scrap 1；golden_
+  apple/hoglin_meat/netherite_scrap = 项目特色项，MC 表无；
+  blackstone/spectral arrow 项目无对应弃）。
+- **产出走地面 ItemEntity + 磁力吸回**（MC 抛出孪生，非直接入
+  包）；数量 [1,64]（drops 的 0 概率式拒收 = 付金无货非机制）。
+- **barter 不激怒 = 结构性质**（零 damage 路径）；破坏金相关块
+  / 脱金甲等 MC 激怒源项目无对应面（记档）。
 
 ## V3-14b ghast（v3.20.0）
 

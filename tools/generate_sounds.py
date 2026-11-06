@@ -845,6 +845,36 @@ def shear():
     return out
 
 
+def barter():
+    """V3-14c: the piglin's barter chime (Minecraft's piglin.barter
+    class — the bright two-note "ding-ding" as the gold trades for the
+    loot, played spatialized at the mob, the milk/shear action-cue
+    precedent): two short metallic sines (a rising fifth) each carrying
+    a quiet 2.01x shimmer overtone (the chime's ring) over a fixed-seed
+    noise tick at each attack (the metal's edge), 0.16 s, in the SFX
+    volume class. The fixed-LCG / sine paradigm (the smelt-ding
+    precedent), dedicated seed."""
+    lcg = Lcg(0x6A11)  # dedicated fixed seed (unique to this sound)
+    dur = 0.16
+
+    def ding(f0, u):
+        shimmer = 0.3 * math.sin(2 * math.pi * f0 * 2.01 * u)
+        return (math.sin(2 * math.pi * f0 * u) + shimmer) * math.exp(-u * 34.0)
+
+    def f(t, _):
+        s = 0.0
+        if t < 0.02:
+            s += lcg.next() * math.exp(-t * 90.0) * 0.25  # the first edge tick
+        s += ding(880.0, t) * 0.5  # the lower note
+        u = t - 0.07
+        if u >= 0.0:
+            s += lcg.next() * math.exp(-u * 90.0) * 0.2  # the second edge tick
+            s += ding(1318.5, u) * 0.5  # the rising fifth
+        return s * 0.85
+
+    return sound(dur, f)
+
+
 def squeak():
     """V2-14: the bat's ambient squeak (Minecraft's bat ambience — the
     high, short cave chirp): a 900 -> 1400 Hz rising glide with a slight
@@ -1250,6 +1280,8 @@ SOUNDS = {
     # pre-shot roar).
     "ghast": ghast,
     "ghast_roar": ghast_roar,
+    # V3-14c: the piglin's barter chime (the gold-trade action cue).
+    "barter": barter,
     # CRAFT-5: the smelt-complete ding (furnace presentation).
     "smelt": smelt,
     # CRAFT-3: the six material vocabularies (3 events each).

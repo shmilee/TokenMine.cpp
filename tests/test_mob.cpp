@@ -752,6 +752,197 @@ TEST(MobRegistryTest, RejectsBadShootSound) {
     EXPECT_NE(r.error().message.find("shoot_sound"), std::string::npos);
 }
 
+// -- V3-14c: the bartering's data (the trade's registry face) ----------
+
+// A bartering test definition (the piglin's shape, the single-box model
+// keeps the mesh out of the AI tests).
+const char* kBarterDef = R"({
+  "id": "piglin",
+  "properties": {
+    "health": 16,
+    "speed": 1.0,
+    "detect_radius": 16,
+    "attack_range": 1.6,
+    "attack_damage": 6,
+    "attack_cooldown": 1.5,
+    "wander_interval": 2.5,
+    "spawn_max_light": 7,
+    "neutral": true,
+    "xp": 3,
+    "barter_input": "gold_ingot",
+    "barter_outputs": [
+      {"item": "quartz", "weight": 10, "count_min": 5, "count_max": 12},
+      {"item": "obsidian", "weight": 40, "count": 1},
+      {"item": "leather", "weight": 20, "count_min": 2, "count_max": 4}
+    ]
+  },
+  "model": {
+    "width": 0.6,
+    "height": 1.8,
+    "boxes": [
+      {"pos": [0.0, 1.0, 0.0], "size": [0.5, 1.0, 0.5], "texture": "p"}
+    ]
+  }
+})";
+
+TEST(MobRegistryTest, ParsesBarterPairAndOutputs) {
+    // The full valid shape: the input + the weighted table (the two
+    // count forms: the range and the single). Data order is the roll
+    // order (the cumulative walk's contract).
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(kBarterDef));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const MobProperties& p = mobs.at(MobID{0}).properties;
+    EXPECT_EQ(p.barterInput, "gold_ingot");
+    ASSERT_EQ(p.barterOutputs.size(), 3u);
+    EXPECT_EQ(p.barterOutputs[0].item, "quartz");
+    EXPECT_EQ(p.barterOutputs[0].weight, 10);
+    EXPECT_EQ(p.barterOutputs[0].countMin, 5);
+    EXPECT_EQ(p.barterOutputs[0].countMax, 12);
+    EXPECT_EQ(p.barterOutputs[1].item, "obsidian");
+    EXPECT_EQ(p.barterOutputs[1].weight, 40);
+    EXPECT_EQ(p.barterOutputs[1].countMin, 1); // the single 'count' form
+    EXPECT_EQ(p.barterOutputs[1].countMax, 1);
+    EXPECT_EQ(p.barterOutputs[2].item, "leather");
+    EXPECT_EQ(p.barterOutputs[2].weight, 20);
+    EXPECT_EQ(p.barterOutputs[2].countMin, 2);
+    EXPECT_EQ(p.barterOutputs[2].countMax, 4);
+    // Every pre-V3-14c mob (no barter data) keeps the empty defaults.
+    MobRegistry zombies;
+    ASSERT_TRUE(zombies.registerMob(parseJson(kZombieDef)).ok());
+    EXPECT_TRUE(zombies.at(MobID{0}).properties.barterInput.empty());
+    EXPECT_TRUE(zombies.at(MobID{0}).properties.barterOutputs.empty());
+}
+
+TEST(MobRegistryTest, BarterPairingDiscipline) {
+    // A lone field is a typo (the milk pairing's twin): each side alone
+    // is named; an empty input / an empty table are named.
+    {
+        MobRegistry m;
+        auto r = m.registerMob(parseJson(R"({
+          "id": "x",
+          "properties": {"health": 1, "speed": 1.0, "detect_radius": 0, "attack_range": 0, "attack_damage": 0, "attack_cooldown": 1.0, "wander_interval": 2.0,
+                         "barter_input": "gold_ingot"},
+          "model": {"width": 1, "height": 1,
+                    "boxes": [{"pos": [0, 0.5, 0], "size": [1, 1, 1],
+                               "texture": "p"}]}
+        })"));
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("together"), std::string::npos);
+    }
+    {
+        MobRegistry m;
+        auto r = m.registerMob(parseJson(R"({
+          "id": "x",
+          "properties": {"health": 1, "speed": 1.0, "detect_radius": 0, "attack_range": 0, "attack_damage": 0, "attack_cooldown": 1.0, "wander_interval": 2.0,
+                         "barter_outputs": [{"item": "quartz",
+                                              "weight": 1, "count": 1}]},
+          "model": {"width": 1, "height": 1,
+                    "boxes": [{"pos": [0, 0.5, 0], "size": [1, 1, 1],
+                               "texture": "p"}]}
+        })"));
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("together"), std::string::npos);
+    }
+    {
+        MobRegistry m;
+        auto r = m.registerMob(parseJson(R"({
+          "id": "x",
+          "properties": {"health": 1, "speed": 1.0, "detect_radius": 0, "attack_range": 0, "attack_damage": 0, "attack_cooldown": 1.0, "wander_interval": 2.0,
+                         "barter_input": "",
+                         "barter_outputs": [{"item": "quartz",
+                                              "weight": 1, "count": 1}]},
+          "model": {"width": 1, "height": 1,
+                    "boxes": [{"pos": [0, 0.5, 0], "size": [1, 1, 1],
+                               "texture": "p"}]}
+        })"));
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("barter_input"), std::string::npos);
+    }
+    {
+        MobRegistry m;
+        auto r = m.registerMob(parseJson(R"({
+          "id": "x",
+          "properties": {"health": 1, "speed": 1.0, "detect_radius": 0, "attack_range": 0, "attack_damage": 0, "attack_cooldown": 1.0, "wander_interval": 2.0,
+                         "barter_input": "gold_ingot",
+                         "barter_outputs": []},
+          "model": {"width": 1, "height": 1,
+                    "boxes": [{"pos": [0, 0.5, 0], "size": [1, 1, 1],
+                               "texture": "p"}]}
+        })"));
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("barter_outputs"),
+                  std::string::npos);
+    }
+}
+
+TEST(MobRegistryTest, RejectsBadBarterEntries) {
+    // The entry discipline: the unknown field / the duplicate item /
+    // the weight out of [1,10000] / both count forms / the one-sided
+    // range / the 0-count (the gold-for-nothing rejection) / the
+    // min>max range are all named.
+    const struct {
+        const char* entry;
+        const char* named;
+    } cases[] = {
+        {"{\"item\": \"quartz\", \"weight\": 1, \"count\": 1, "
+         "\"nope\": 2}",
+         "unknown field"},
+        {"{\"item\": \"quartz\", \"weight\": 1, \"count\": 1}, "
+         "{\"item\": \"quartz\", \"weight\": 2, \"count\": 1}",
+         "twice"},
+        {"{\"item\": \"quartz\", \"weight\": 0, \"count\": 1}",
+         "weight"},
+        {"{\"item\": \"quartz\", \"weight\": 10001, \"count\": 1}",
+         "weight"},
+        {"{\"item\": \"quartz\", \"weight\": 1, \"count\": 1, "
+         "\"count_min\": 1, \"count_max\": 2}",
+         "one form"},
+        {"{\"item\": \"quartz\", \"weight\": 1, \"count_min\": 1}",
+         "count_max"},
+        {"{\"item\": \"quartz\", \"weight\": 1, \"count\": 0}",
+         "count"},
+        {"{\"item\": \"quartz\", \"weight\": 1, \"count_min\": 3, "
+         "\"count_max\": 2}",
+         "count_min"},
+    };
+    for (const auto& c : cases) {
+        const std::string def =
+            std::string(R"({
+  "id": "x",
+  "properties": {"health": 1, "speed": 1.0, "detect_radius": 0,
+                 "attack_range": 0, "attack_damage": 0, "attack_cooldown": 1.0, "wander_interval": 2.0,
+                 "barter_input": "gold_ingot",
+                 "barter_outputs": [)") +
+            c.entry + R"(]},
+  "model": {"width": 1, "height": 1,
+            "boxes": [{"pos": [0, 0.5, 0], "size": [1, 1, 1],
+                       "texture": "p"}]}
+})";
+        auto r = MobRegistry{}.registerMob(parseJson(def));
+        ASSERT_FALSE(r.ok()) << c.entry;
+        EXPECT_NE(r.error().message.find(c.named), std::string::npos)
+            << r.error().message;
+    }
+}
+
+TEST(MobRegistryTest, RollBarterOutputIsTheCumulativeWalk) {
+    // The pure pick (the rollWoolColor twin): u in [0,1) over the
+    // cumulative weights, DATA order; the boundary u=1 lands on the
+    // last entry (the walk's fallback).
+    const BarterOutput a {"a", 1, 1, 1};
+    const BarterOutput b {"b", 3, 1, 1};
+    const std::vector<BarterOutput> table {a, b};
+    EXPECT_EQ(rollBarterOutput(table, 0.0), 0);    // a owns [0, 0.25)
+    EXPECT_EQ(rollBarterOutput(table, 0.24), 0);
+    EXPECT_EQ(rollBarterOutput(table, 0.25), 1);   // b owns [0.25, 1)
+    EXPECT_EQ(rollBarterOutput(table, 0.999), 1);
+    EXPECT_EQ(rollBarterOutput(table, 1.0), 1);    // the fallback
+    // The one-entry table: the single draw still lands (the
+    // degenerate-discipline witness).
+    EXPECT_EQ(rollBarterOutput({a}, 0.5), 0);
+}
+
 // -- hostile flag (Phase 25: the difficulty system is data-driven) ------------
 
 TEST(MobRegistryTest, HostileDefaultsToFalse) {
@@ -3870,6 +4061,66 @@ TEST(MobFlyShootTest, BatStaysBitIdenticalCruiser) {
     EXPECT_EQ(shots, 0);
 }
 
+// -- V3-14c: the bartering's mob face (the roll + the non-enrage) ---
+
+TEST(MobBarterTest, NonBarterMobDrawsNothingAndReturnsEmpty) {
+    // The structural immunity root: a pre-V3-14c mob (no barter data)
+    // returns the empty item with NO stream draw — the next wander
+    // heading roll is bit-identical to one that never called
+    // barterItem (the ambient-free mob's bit-identical twin).
+    Fixture f;
+    MobRegistry mobs = makeMobRegistry(); // the zombie-like def
+    const Mob& def = mobs.at(MobID{0});
+    ASSERT_TRUE(def.properties.barterInput.empty());
+    MobEntity a = makeMob(f, def, {8.5f, 10.5f, 8.5f}, 42);
+    MobEntity b = makeMob(f, def, {8.5f, 10.5f, 8.5f}, 42);
+    const auto r = a.barterItem();
+    EXPECT_TRUE(r.first.empty());
+    EXPECT_EQ(r.second, 0);
+    // The stream parity: both mobs, the same seed, one update each —
+    // the wander heading roll (a's first stream draw) lands on the
+    // same value as b's (the barter drew nothing).
+    a.update(kDt);
+    b.update(kDt);
+    EXPECT_FLOAT_EQ(a.velocity().x, b.velocity().x);
+    EXPECT_FLOAT_EQ(a.velocity().z, b.velocity().z);
+}
+
+TEST(MobBarterTest, BarterIsDeterministicAndNeverEnrages) {
+    // The trade roll (the per-mob stream): the same seed + the same
+    // call count yields the same (item, count) sequence, every count
+    // inside its entry's range, and the neutral's m_angry stays FALSE
+    // (the barter path never touches the enrage state — the damage()
+    // single choke point is the only enrage source).
+    Fixture f;
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.registerMob(parseJson(kBarterDef)).ok());
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity a = makeMob(f, def, {8.5f, 10.5f, 8.5f}, 7);
+    MobEntity b = makeMob(f, def, {8.5f, 10.5f, 8.5f}, 7);
+    ASSERT_FALSE(a.angry());
+    for (int i = 0; i < 20; ++i) {
+        const auto ra = a.barterItem();
+        const auto rb = b.barterItem();
+        ASSERT_FALSE(ra.first.empty());
+        EXPECT_EQ(ra.first, rb.first) << i;
+        EXPECT_EQ(ra.second, rb.second) << i;
+        for (std::size_t t = 0; t < def.properties.barterOutputs.size();
+             ++t) {
+            if (def.properties.barterOutputs[t].item == ra.first) {
+                EXPECT_GE(ra.second,
+                          def.properties.barterOutputs[t].countMin)
+                    << i;
+                EXPECT_LE(ra.second,
+                          def.properties.barterOutputs[t].countMax)
+                    << i;
+            }
+        }
+        ASSERT_FALSE(a.angry()) << "the barter must not enrage (i=" << i
+                                << ")";
+    }
+}
+
 // -- ENT-3: mob step-up (the player's 1-block step, shared) --------------------
 //
 // The mobs now step up one-block terrain steps exactly like the player:
@@ -6467,8 +6718,9 @@ TEST(NetherMobContent, ZombifiedPiglinDataPinned) {
 TEST(NetherMobContent, PiglinDataPinned) {
     // The REAL asset (data/mobs/piglin.json): the NEUTRAL class (the
     // M1 flag's first carrier): wanders calm, chases only while angry.
-    // No drops (deviation 1 — no barter), the whisper ambient (the
-    // ground-mob roll's carrier), xp 3.
+    // No DROPS (the trade's output is the barter table — V3-14c, the
+    // next test), the whisper ambient (the ground-mob roll's carrier),
+    // xp 3.
     AssetManager assets;
     ASSERT_TRUE(assets.setRoot("assets").ok());
     MobRegistry mobs;
@@ -6497,6 +6749,44 @@ TEST(NetherMobContent, PiglinDataPinned) {
     EXPECT_EQ(pl->model.boxes[0].faces.at("front"), "piglin_face");
     EXPECT_EQ(pl->model.boxes[0].texture, "piglin_body");
     EXPECT_EQ(pl->model.boxes[1].texture, "piglin_body");
+}
+
+TEST(NetherMobContent, PiglinBarterDataPinned) {
+    // The REAL asset (data/mobs/piglin.json): the V3-14c bartering —
+    // the single input (gold_ingot — the current-MC ruling: no
+    // nugget/block tiers) + the 12-output weighted table (the MC
+    // barter's project-approximation: the weights follow MC's ratios,
+    // the outputs are the project's existing items — the pool-weight
+    // "MC 近似" precedent). The full table is pinned (a data edit
+    // re-runs the rolls — the stream contract).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok());
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.loadDirectory(assets, "data/mobs").ok());
+    const Mob* pl = mobs.findByName("piglin");
+    ASSERT_NE(pl, nullptr);
+    const MobProperties& p = pl->properties;
+    EXPECT_EQ(p.barterInput, "gold_ingot");
+    ASSERT_EQ(p.barterOutputs.size(), 12u);
+    const struct {
+        const char* item;
+        int weight;
+        int cmin;
+        int cmax;
+    } expect[] = {
+        {"gravel", 80, 8, 16},       {"nether_brick", 40, 1, 1},
+        {"obsidian", 40, 1, 1},      {"string", 20, 3, 9},
+        {"leather", 20, 2, 4},       {"soul_sand", 10, 2, 8},
+        {"quartz", 10, 5, 12},       {"ghast_membrane", 10, 1, 1},
+        {"hoglin_meat", 10, 1, 1},   {"water_bottle", 6, 1, 1},
+        {"golden_apple", 2, 1, 1},   {"netherite_scrap", 1, 1, 1},
+    };
+    for (std::size_t i = 0; i < p.barterOutputs.size(); ++i) {
+        EXPECT_EQ(p.barterOutputs[i].item, expect[i].item) << i;
+        EXPECT_EQ(p.barterOutputs[i].weight, expect[i].weight) << i;
+        EXPECT_EQ(p.barterOutputs[i].countMin, expect[i].cmin) << i;
+        EXPECT_EQ(p.barterOutputs[i].countMax, expect[i].cmax) << i;
+    }
 }
 
 TEST(NetherMobContent, HoglinDataPinned) {
@@ -6700,7 +6990,7 @@ TEST(NetherMobContent, NetherMobAssetsPinned) {
         const char* fnv;
     } files[] = {
         {"assets/data/mobs/zombified_piglin.json", "e1bf3ff177362499"},
-        {"assets/data/mobs/piglin.json", "937c28cd99aa98ad"},
+        {"assets/data/mobs/piglin.json", "0aaa11fa09c81302"},
         {"assets/data/mobs/hoglin.json", "e596d325a2f9e783"},
         {"assets/data/mobs/magma_cube.json", "4ea96c29f0ceb813"},
         {"assets/data/mobs/strider.json", "051e3fff099af0e5"},
