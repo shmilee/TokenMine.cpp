@@ -399,6 +399,21 @@ def ignite():
         return (lcg.next() * 0.72 + tone) * env(t, dur, 30.0) * 0.7
     return lowpass3(sound(dur, f))
 
+def boom():
+    """Explosion (V3-14a, the blast's thud): a heavy LOW rumble — a
+    55 -> 28 Hz glide over a double-lowpassed fixed-seed LCG body with
+    a slow attack (the blast's shock wave) and a longer decay than the
+    ignite crackle (the concussion outlasts the flash)."""
+    lcg = Lcg(0xB007)
+    dur = 0.9
+
+    def f(t, _):
+        tone = math.sin(2 * math.pi * (55.0 - 27.0 * (t / dur)) * t) * 0.8
+        return (lcg.next() * 0.6 + tone) * env(t, dur, 6.0) * 0.85
+
+    return lowpass3(lowpass3(sound(dur, f)))
+
+
 
 def smelt():
     """The smelt-complete ding (CRAFT-5, the furnace's product-done
@@ -1185,6 +1200,8 @@ SOUNDS = {
     "milk": milk,
     "splash": splash,
     "ignite": ignite,
+    # V3-14a: the explosion's thud (the blast's apply seam's sound).
+    "boom": boom,
     # CRAFT-5: the smelt-complete ding (furnace presentation).
     "smelt": smelt,
     # CRAFT-3: the six material vocabularies (3 events each).

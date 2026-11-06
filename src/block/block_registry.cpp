@@ -114,6 +114,14 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "flamable", "boolean",
                    [&](const Json& v) { out.flamable = v.asBool(); });
     MC_TRY(r);
+    // V3-14a: the blast's resistance (a pure data number — the
+    // explosion core's break gate; ABSENT = 0.0 = blastable by any
+    // in-range blast, the backward-compat default).
+    r = checkField(*p, "blast_resistance", "number",
+                   [&](const Json& v) {
+                       out.blastResistance = static_cast<float>(v.asDouble());
+                   });
+    MC_TRY(r);
     // Beacon pyramid base flag (Phase 83): a pure data flag (the core reads
     // the property, never a block id — hard rule 3).
     r = checkField(*p, "beacon_base", "boolean",
@@ -624,6 +632,10 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     if (out.hardness < 0.0) {
         return MC_FAIL("'hardness' must be >= 0, got " +
                        std::to_string(out.hardness));
+    }
+    if (out.blastResistance < 0.0f) {
+        return MC_FAIL("'blast_resistance' must be >= 0, got " +
+                       std::to_string(out.blastResistance));
     }
     if (out.lightEmission < 0 || out.lightEmission > 15) {
         return MC_FAIL("'light_emission' must be in [0, 15], got " +

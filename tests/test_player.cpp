@@ -2756,6 +2756,15 @@ TEST(PlayerTest, DeathCauseLineFontSafe) {
               "死于药水");
     EXPECT_EQ(Player::deathCauseLine({Player::DamageSource::None, {}}),
               "死了");
+    // V3-14a: the explosion's lines (the 爆/炸 glyphs — the +2 that grew
+    // the font set 428 -> 430; the named blast reads like the Mob line's
+    // twin, the unattributed one is the bare cause).
+    EXPECT_EQ(
+        Player::deathCauseLine({Player::DamageSource::Explosion, {}}),
+        "死于爆炸");
+    EXPECT_EQ(
+        Player::deathCauseLine({Player::DamageSource::Explosion, "ghast"}),
+        "被 ghast 的爆炸杀死");
 }
 
 TEST(PlayerTest, RespawnClearsDeathCause) {

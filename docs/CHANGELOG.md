@@ -11,6 +11,60 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.19.0（2026-11-06）— V3-14a 爆炸机制（衰减伤害/破块/点火 + --explode seam，门 209 全 PASS）
+
+**矩阵 ⬜ 项小→大推进**（V3-14 下界 mob 深化相位 A/4——爆炸机制
+族核心，ghast 前置；零 format 31 不变 / sim 不 bump / 零 config 键）。
+
+**纯核心 `world/explosion`**（fire_spread 纯函数模型，单测可测）：
+`scanExplosion` = 包围盒 (2r+1)³ 确定 x/y/z 序扫描（格中心 +0.5 距
+离），`broken` = in-range ∧ solid ∧ destroyable ∧ **`blast_resistance`
+< 局域强度**（radius − dist：中心满强度、边界 0——**obsidian 数据
+3.0 在 radius-3 blast 全域存活** = 门的 a2 臂对照实证）；`ignited`
+= in-range ∧ 未破 ∧ `flamable`（fire spread 同款谓词；100% 确定点
+火，MC creeper 25% roll = 记档偏离）。`explosionDamage` =
+`ceil((1 − dist/radius) × 12)` 整读（中心 12、界 0）。破碎**无掉
+落**（MC 孪生）/ **流体不触碰**（记档）/ **无击退**（项目无击退面，
+V3-15 先例）。
+
+**接线 `Game::explodeAt`**：setBlock 收口（破碎→air / 点燃→fire +
+relight）+ 碎片 spawnBreak（共享计数器黄金比种子契约）+ 中心
+spawnFire 余烬 + **boom 音**（生成器 0xB007 定种，音效 63→64，
+peak pin 32574）+ 衰减伤害（玩家 damage 单收口【创造门自动免
+疫】+ mobs MobEntity::damage）+ 死因「死于爆炸」/「被 <name> 的爆
+炸杀死」（**字体 +2 字形 爆/炸 428→430**：扩展区 re-cell +2、
+top-512 红线位级、test_font 全锚重钉含 PNG FNV 重钉）。
+
+**块属性 `blast_resistance`**（数据驱动，hard rule 3）：strict 非负
+数（absent = 0.0 = 任意 blast 可破；负值/非数 init 点名——S6 实机
+rc 1 实证）；**obsidian = 3**（传送门黑曜石在爆炸中存活 = 数据而
+非代码）。
+
+**触发 = `--explode x y z [r]` CLI seam**（--weather 孪生：帧 0 应
+用 = 整场回放可见 + 严格有限数解析 + r 缺省 3 + 管理旗/
+demo-author/demo-replay 三重互斥）——**游戏内暂无消费方**（V3-14b
+ghast 火球 = 首个真触发，调同一 explodeAt，sourceName 命名死因）。
+
+**门 209**：S1 ≡ base19 逐字节 ×2 + savenorm EXACT（**结构免疫第
+89 次**——爆炸无 seam 全冷 + obsidian 数据仅 init 解析 + boom 音频
+不入帧态）；S2 密封石室双臂【场景 = fresh 60f 去火 + 14×14×7 石
+室填充 + 玩家空气口袋【森林群系到处可燃 = 石室封死火域，PITS
+401①】：a1 = blast (0.5,56.5,0.5) r3 → **health 18**（dist 2.5 →
+dmg 2 衰减整读）+ (1,56,0)/(2,56,0) 破【journal 回生成态 = 条目消
+失 PITS 401②】+ **(3,56,0) 界上存活**（local 强度 0 硬界 pin）+
+(5,56,5) 房外石墙残留对照 + entities=0 无掉落 / a2 = 石室 + obsidian
+柱 (2,56,0)/(2,57,0) → **obsidian 双双存活** vs 邻格 (1,56,0) 破
+（数据属性对照）；双臂截图 ×2 RAW + savenorm EXACT×2【fires[] = 地
+下生成火簇回落 real-dt 域 PITS 401③，savenorm 权威】】；S2b canary
+4 demo ×2 RAW + savenorm EXACT（sim 不 bump 实证）；S6 点名【init
+负 blast_resistance → rc 1「'blast_resistance' must be >= 0」】；全
+套 **2821/2821**（+10：ExplosionTest ×5 / BlastResistance ×4 /
+SoundExplosionTest ×1 + 死因行 2 断言并入既有测试），`-Werror` 0 警
+告；性能 A/B 同档【旧 = b71cb5e v3.18.0（git archive）+ g139 vs 新 +
+g139 banner 实证，PERF-WIN 三窗 upd med 0.393/0.550/0.593 vs 0.571/0.549/0.588 + render 0.494/0.661/0.675 vs 0.651/0.678/0.675 + swap med 15.571/15.269/15.215 vs 15.212/15.282/15.249（旧侧 win1-3 swap max ~32 ms = 一次性 OS 停顿 med 正常）+ fluid·fires·spread·ents·stream 同档 + **changesApplied 9/3-2/1**【win2 ±1 = streaming 边界 real-dt 域，v3.14.0 先例】+ **终档 savenorm EXACT**（零 format = 最强形——爆炸全冷路径结构性零成本）】。PITS 401（爆炸门
+场景三纪律：石室封火域 + journal 回生成态消失断言法 + 地下火簇
+savenorm 域）。详见 `docs/archive/phase-3.19.0.md`。
+
 ## v3.18.0（2026-11-06）— V3-11b 创造物品栏（E 面板双 tab + 前缀搜索 + 点击授予，门 208 全 PASS）
 
 **矩阵 ⬜ 项小→大推进 4/6，V3-11 创造模式全项完成**（零 format 31

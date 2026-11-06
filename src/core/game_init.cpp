@@ -2508,6 +2508,22 @@ int Game::run() {
 // ---------------------------------------------------------------------------
 
 void Game::runGameplayLoop(double lastFrame) {
+    // V3-14a: the --explode seam's single deterministic blast —
+    // applied BEFORE the first frame (frame-0 state, the --weather's
+    // initial-state twin): every frame of the run sees the post-blast
+    // world, and an identical run blasts identically. The ghast's
+    // V3-14b fireball will call the same Game::explodeAt from its
+    // impact (the seam has no demo form — the replay's input is the
+    // demo's, main.cpp's mutual exclusion).
+    if (m_args.explode.has_value()) {
+        const ExplosionSpec& spec = *m_args.explode;
+        MC_LOG_INFO("Exploding at (" + std::to_string(spec.center.x) +
+                    ", " + std::to_string(spec.center.y) + ", " +
+                    std::to_string(spec.center.z) + ") radius " +
+                    std::to_string(spec.radius));
+        explodeAt(spec.center, spec.radius, "");
+        m_args.explode.reset();
+    }
     while (true) {
         m_input.frameBegin();
         m_input.pump();

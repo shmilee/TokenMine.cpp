@@ -152,6 +152,14 @@ struct BlockProperties {
     // KNOWN_ISSUES). No drop on burn (a burned crop is gone, like
     // Minecraft's char).
     bool flamable = false;
+    // V3-14a: the blast's resistance (the explosion core's break gate —
+    // a cell breaks when this loses to the blast's LOCAL intensity
+    // (radius - distance); 0.0 = blastable by any in-range blast, the
+    // default; a value >= the blast's radius survives even at the
+    // center — obsidian's 3.0 beats the TNT-class radius-3 blast's
+    // local intensity everywhere, the portal's bedrock twin by data).
+    // The core reads the property, never a block id (hard rule 3).
+    float blastResistance = 0.0f;
     // Simulated as a fluid (Phase 9; KINDED in Phase 51): the fluid's name
     // (vocabulary: "water", "lava" — validated at data load). Empty = not
     // a fluid. A fluid block is stored as a fluid level in the chunk's

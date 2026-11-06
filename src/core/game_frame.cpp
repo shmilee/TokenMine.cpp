@@ -1544,4 +1544,86 @@ void Game::updateOverworldFluidPass(double dt) {
     updateFireSpread();
 
 }
+
+void Game::explodeAt(const Vec3& center, double radius,
+                     const std::string& sourceName) {
+    // V3-14a: the blast's apply seam — the pure scan (world/explosion)
+    // reads the player's dimension; the apply runs the setBlock choke
+    // point (journal/relight/bookkeeping), the particles' seed
+    // contract, the boom, and the falloff damage.
+    World& world = currentWorld();
+    const ExplosionScan scan = scanExplosion(world, m_blocks, center,
+                                             radius);
+    for (const BlockPos& c : scan.broken) {
+        const BlockID id = world.getBlock(c.x, c.y, c.z);
+        const float sky = static_cast<float>(world.getSkyLight(c.x, c.y,
+                                                               c.z)) /
+                          static_cast<float>(kMaxLight);
+        const float blockLight = static_cast<float>(
+                                     world.getBlockLight(c.x, c.y, c.z)) /
+                                 static_cast<float>(kMaxLight);
+        setBlock(c.x, c.y, c.z, BlockID::air());
+        // The debris's seed contract (the breakBlock's twin: the world
+        // seed + the shared counter's golden-ratio step — the blast's
+        // cell order is the scan's deterministic loop order).
+        const std::uint64_t rngSeed =
+            currentSeed() +
+            (++m_particleBreakCounter) * 0x9E3779B97F4A7C15ULL;
+        m_particles.spawnBreak(c.x, c.y, c.z, id, sky, blockLight, rngSeed);
+    }
+    for (const BlockPos& c : scan.ignited) {
+        setBlock(c.x, c.y, c.z, m_states.fireId);
+        Lighting::updateLocal(world, m_blocks, c);
+    }
+    m_sound.play("boom");
+    // The center's ember flash (the spawnFire's seed-contract twin —
+    // the blast's own counter step, after the debris's).
+    if (m_states.fireId.valid()) {
+        const int fx = static_cast<int>(std::floor(center.x));
+        const int fy = static_cast<int>(std::floor(center.y));
+        const int fz = static_cast<int>(std::floor(center.z));
+        const float sky = static_cast<float>(world.getSkyLight(fx, fy, fz)) /
+                          static_cast<float>(kMaxLight);
+        const float blockLight =
+            static_cast<float>(world.getBlockLight(fx, fy, fz)) /
+            static_cast<float>(kMaxLight);
+        const std::uint64_t rngSeed =
+            currentSeed() +
+            (++m_particleBreakCounter) * 0x9E3779B97F4A7C15ULL;
+        m_particles.spawnFire(fx, fy, fz, m_states.fireId, sky, blockLight,
+                              rngSeed);
+    }
+    // The falloff damage: the player first (the creative's gate lives
+    // in Player::damage — a creative player survives the blast
+    // unharmed), then the mobs (their damage has no cause line — the
+    // death's read is the player's only).
+    const Vec3 ppos = m_player->position();
+    const double pdx = ppos.x - center.x;
+    const double pdy = ppos.y - center.y;
+    const double pdz = ppos.z - center.z;
+    const double pdist = std::sqrt(pdx * pdx + pdy * pdy + pdz * pdz);
+    const int pdmg = explosionDamage(pdist, radius, kExplosionBaseDamage);
+    if (pdmg > 0) {
+        m_player->damage(static_cast<float>(pdmg), false,
+                         {Player::DamageSource::Explosion, sourceName});
+    }
+    for (auto& entity : m_entities) {
+        MobEntity* mob = dynamic_cast<MobEntity*>(entity.get());
+        if (mob == nullptr) {
+            continue;
+        }
+        const Vec3 mpos = mob->position();
+        const double mdx = mpos.x - center.x;
+        const double mdy = mpos.y - center.y;
+        const double mdz = mpos.z - center.z;
+        const double mdist =
+            std::sqrt(mdx * mdx + mdy * mdy + mdz * mdz);
+        const int mdmg =
+            explosionDamage(mdist, radius, kExplosionBaseDamage);
+        if (mdmg > 0) {
+            mob->damage(static_cast<float>(mdmg));
+        }
+    }
+}
+
 } // namespace mc

@@ -3771,3 +3771,45 @@ TEST(BlockContentTest, V340NetherrackBlockContentPinned) {
     EXPECT_TRUE(std::filesystem::exists(
         "assets/textures/blocks/netherrack.png"));
 }
+
+// -- V3-14a: the blast's resistance (the explosion core's break gate) --
+
+TEST(BlockRegistryTest, BlastResistanceAbsentIsZero) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(minimalDef("blastable")));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Block& b = reg.at(*r);
+    EXPECT_FLOAT_EQ(b.properties.blastResistance, 0.0f); // the default
+}
+
+TEST(BlockRegistryTest, BlastResistanceRoundTrips) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        "{\"id\":\"obsidian\",\"properties\":{\"blast_resistance\":3},"
+        "\"model\":{\"textures\":{\"top\":\"t\",\"side\":\"t\","
+        "\"bottom\":\"t\"}}}"));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const Block& b = reg.at(*r);
+    EXPECT_FLOAT_EQ(b.properties.blastResistance, 3.0f);
+}
+
+TEST(BlockRegistryTest, BlastResistanceNegativeRejected) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        "{\"id\":\"x\",\"properties\":{\"blast_resistance\":-1},"
+        "\"model\":{\"textures\":{\"top\":\"t\",\"side\":\"t\","
+        "\"bottom\":\"t\"}}}"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("blast_resistance"), std::string::npos);
+}
+
+TEST(BlockRegistryTest, BlastResistanceNonNumberRejected) {
+    BlockRegistry reg;
+    auto r = reg.registerBlock(parseDef(
+        "{\"id\":\"x\",\"properties\":{\"blast_resistance\":"
+        "\"strong\"},"
+        "\"model\":{\"textures\":{\"top\":\"t\",\"side\":\"t\","
+        "\"bottom\":\"t\"}}}"));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("blast_resistance"), std::string::npos);
+}

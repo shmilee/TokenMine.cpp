@@ -344,7 +344,7 @@ TEST(SoundBatTest, SqueakWavShipsAndParses) {
     EXPECT_EQ(peak, 3589);
 }
 
-TEST(SoundBatTest, SoundDirectoryGrowsToSixtyThree) {
+TEST(SoundBatTest, SoundDirectoryGrowsToSixtyFour) {
     // The sound set 41 -> 42 (the squeak — the V2-14 file) -> 43 (the
     // shear — the V2-15 file) -> 46 (the snow family — the three V2-16
     // files) -> 47 (the portal ambience — the V3-1 Phase A file) -> 49
@@ -352,10 +352,11 @@ TEST(SoundBatTest, SoundDirectoryGrowsToSixtyThree) {
     // V3-7 Part 2 nether face — the nine material wavs + the
     // evaporate + the ambience_nether) -> 63 (the V3-3 nether mob
     // ambient family — the hoglin grunt + the piglin whisper + the
-    // strider hiss, the 60 -> 63 conscious census update: each phase's
-    // new files are the only additions, the generate_sounds.py re-run
-    // leaves the others byte-identical, the script's md5 discipline;
-    // the FNV pins hold each phase's bytes).
+    // strider hiss, the 60 -> 63 conscious census update; -> 64 (the
+    // V3-14a boom — the explosion's thud). Each phase's new files are
+    // the only additions, the generate_sounds.py re-run leaves the
+    // others byte-identical, the script's md5 discipline; the FNV pins
+    // hold each phase's bytes).
     std::size_t count = 0;
     for (const auto& entry :
          std::filesystem::directory_iterator("assets/sounds")) {
@@ -363,7 +364,7 @@ TEST(SoundBatTest, SoundDirectoryGrowsToSixtyThree) {
             ++count;
         }
     }
-    EXPECT_EQ(count, 63u);
+    EXPECT_EQ(count, 64u);
 }
 
 // ---------------------------------------------------------------------------
@@ -495,10 +496,9 @@ TEST(SoundNoiseHelperRepairTest, NoiseWavsShipTextured) {
     for (const auto& e : want) {
         expectWavPin(e.name, e.samples, e.peak);
     }
-    // The census is the V3-3 pin (63 files — the directory count: the
-    // V3-7 Part 2's 60 + the nether mob ambient family's 3 — the hoglin
-    // grunt / piglin whisper / strider hiss, the V3-3 conscious update —
-    // the repair itself edits in place, no additions).
+    // The census is the V3-14a pin (64 files — the directory count:
+    // the V3-3's 63 + the V3-14a boom — the repair itself edits in
+    // place, no other additions).
     std::size_t count = 0;
     for (const auto& entry :
          std::filesystem::directory_iterator("assets/sounds")) {
@@ -506,7 +506,21 @@ TEST(SoundNoiseHelperRepairTest, NoiseWavsShipTextured) {
             ++count;
         }
     }
-    EXPECT_EQ(count, 63u);
+    EXPECT_EQ(count, 64u);
+}
+
+// ---------------------------------------------------------------------------
+// V3-14a: the explosion's thud (the sound set 63 -> 64).
+// ---------------------------------------------------------------------------
+
+TEST(SoundExplosionTest, BoomWavShipsAndParses) {
+    // The boom.wav (the generate_sounds.py's dedicated fixed seed
+    // 0xB007 — the squeak / sleep precedent): a 16-bit mono 44.1 kHz
+    // PCM (the bank's strict format), 0.9 s (the concussion's length),
+    // the SFX volume class. The exact peak pin is the PITS 382
+    // regression guard: a silent / degenerate synthesis cannot
+    // reproduce it.
+    expectWavPin("boom", 39690, 32574);
 }
 
 // ---------------------------------------------------------------------------

@@ -17,7 +17,10 @@
 // 128..521), the top 512 rows STILL untouched (the red line holds).
 // V3-13: the +1 death-screen glyph (于) re-celled the extended region
 // once more in place (cells 128..522; every extended glyph after
-// 0x4E8E +1), the top 512 rows STILL untouched.
+// 0x4E8E +1), the top 512 rows STILL untouched. V3-14a: the +2
+// explosion-cause glyphs (爆 0x7206 / 炸 0x723D) re-celled the extended
+// region once more (cells 128..524; every extended glyph after
+// 0x71E7 +2), the top 512 rows STILL untouched.
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -382,27 +385,35 @@ TEST(FontTest, GlyphUvCjkCellPositions) {
     // takes the dead ASCII-DEL cell 127 = (col 7, row 15).
     expectUv(glyphUv(0x4F5C), 232, 488);
     // UX-6/UX-8/UX-9b/V2-3/V2-5/V2-12: the extended set starts at cell
-    // 128 (row 16, col 0) and its last glyph 默 takes cell 522 (row 65,
-    // col 2) — V2-12's 锋利限 re-celled the later glyphs (利 +1 for all
+    // 128 (row 16, col 0) and its last glyph 默 takes cell 524 (row 65,
+    // col 4) — V2-12's 锋利限 re-celled the later glyphs (利 +1 for all
     // after 0x5229, 锋 +1 more after 0x950B, 限 +1 more after 0x9650),
-    // and the 魔 panel-title addition (0x9B54, cell 518) re-celled 鸡麦
+    // and the 魔 panel-title addition (0x9B54, cell 520) re-celled 鸡麦
     // 黄默 by +1 more; V3-13's 于 (0x4E8E, cell 150) re-celled every
-    // later extended glyph by +1 once more; 猪 (cell 385) sits at
-    // (col 1, row 48); 镐 (cell 495) at (col 7, row 61).
+    // later extended glyph by +1 once more; V3-14a's 爆 (0x7206,
+    // cell 381) + 炸 (0x723D, cell 382) re-celled every later extended
+    // glyph by +2 once more; 猪 (cell 387) sits at (col 3, row 48);
+    // 限 (cell 497) at (col 1, row 62).
     expectUv(glyphUv(0x00B7), 8, 16 * kFontCell + kGlyphOffset);
     expectUv(glyphUv(0x4E8E), 6 * kFontCell + kGlyphOffset,
              18 * kFontCell + kGlyphOffset); // 于 V3-13 cell 150 (col 6,
                                               // row 18)
-    expectUv(glyphUv(0x732A), 1 * kFontCell + kGlyphOffset,
-             48 * kFontCell + kGlyphOffset); // 猪 V2-5 (V3-13 re-celled)
-    expectUv(glyphUv(0x9550), 7 * kFontCell + kGlyphOffset,
-             61 * kFontCell + kGlyphOffset);
-    expectUv(glyphUv(0x9ED8), 2 * kFontCell + kGlyphOffset,
-             65 * kFontCell + kGlyphOffset); // 默 cell 522 (col 2, row 65)
-    expectUv(glyphUv(0x9B54), 6 * kFontCell + kGlyphOffset,
-             64 * kFontCell + kGlyphOffset); // 魔 cell 518 (col 6, row 64)
+    expectUv(glyphUv(0x732A), 3 * kFontCell + kGlyphOffset,
+             48 * kFontCell + kGlyphOffset); // 猪 V2-5 (V3-14a re-celled)
+    expectUv(glyphUv(0x9550), 1 * kFontCell + kGlyphOffset,
+             62 * kFontCell + kGlyphOffset); // 限 V2-12 (V3-14a re-celled)
+    expectUv(glyphUv(0x7206), 5 * kFontCell + kGlyphOffset,
+             47 * kFontCell + kGlyphOffset); // 爆 V3-14a cell 381 (col 5,
+                                              // row 47)
+    expectUv(glyphUv(0x723D), 6 * kFontCell + kGlyphOffset,
+             47 * kFontCell + kGlyphOffset); // 炸 V3-14a cell 382 (col 6,
+                                              // row 47)
+    expectUv(glyphUv(0x9ED8), 4 * kFontCell + kGlyphOffset,
+             65 * kFontCell + kGlyphOffset); // 默 cell 524 (col 4, row 65)
+    expectUv(glyphUv(0x9B54), 0 * kFontCell + kGlyphOffset,
+             65 * kFontCell + kGlyphOffset); // 魔 cell 520 (col 0, row 65)
     // Every entry stays inside the atlas; the legacy 33 inside the
-    // legacy region (rows 0..15), the extended 395 inside rows 16..65.
+    // legacy region (rows 0..15), the extended 397 inside rows 16..65.
     for (const CjkGlyph& g : kCjkGlyphs) {
         const GlyphUv uv = glyphUv(g.cp);
         EXPECT_GE(uv.v0, 0.0f);
@@ -431,37 +442,39 @@ TEST(FontTest, GlyphUvUnknownCodepointsMapToQuestionMark) {
 }
 
 TEST(FontTest, CjkTablePinned) {
-    // UX-6/UX-8/UX-9b/V2-3/V2-5/V2-12/V3-13: the set grew 33 -> 428
+    // UX-6/UX-8/UX-9b/V2-3/V2-5/V2-12/V3-13/V3-14a: the set grew 33 -> 430
     // (codepoint order, the charset endpoints pinned; V2-12 added 锋利限 +
-    // the 魔 panel-title glyph; V3-13 added the death-screen 于); the
-    // legacy 33 keep their exact cells, and the extended 395 take cells
-    // 128..522 in codepoint-rank order.
-    ASSERT_EQ(std::size(kCjkGlyphs), 428u);
+    // the 魔 panel-title glyph; V3-13 added the death-screen 于; V3-14a
+    // added the explosion-cause 爆/炸); the legacy 33 keep their exact
+    // cells, and the extended 397 take cells 128..524 in codepoint-rank
+    // order.
+    ASSERT_EQ(std::size(kCjkGlyphs), 430u);
     for (std::size_t i = 1; i < std::size(kCjkGlyphs); ++i) {
         EXPECT_GT(kCjkGlyphs[i].cp, kCjkGlyphs[i - 1].cp); // sorted, unique
     }
     EXPECT_EQ(kCjkGlyphs[0].cp, 0x00B7u);    // charset first: ·
-    EXPECT_EQ(kCjkGlyphs[427].cp, 0xFF1Fu);  // charset last: ？
+    EXPECT_EQ(kCjkGlyphs[429].cp, 0xFF1Fu);  // charset last: ？
     // V2-12 member pins: the enchantment-vocabulary glyphs (锋利限魔).
     bool liFound = false, fengFound = false, xianFound = false, moFound = false;
     for (const CjkGlyph& g : kCjkGlyphs) {
         if (g.cp == 0x5229u) { liFound = true; EXPECT_EQ(g.cell, 191); }
-        if (g.cp == 0x950Bu) { fengFound = true; EXPECT_EQ(g.cell, 491); }
-        if (g.cp == 0x9650u) { xianFound = true; EXPECT_EQ(g.cell, 501); }
-        if (g.cp == 0x9B54u) { moFound = true; EXPECT_EQ(g.cell, 518); }
+        if (g.cp == 0x950Bu) { fengFound = true; EXPECT_EQ(g.cell, 493); }
+        if (g.cp == 0x9650u) { xianFound = true; EXPECT_EQ(g.cell, 503); }
+        if (g.cp == 0x9B54u) { moFound = true; EXPECT_EQ(g.cell, 520); }
     }
     EXPECT_TRUE(liFound);   // 利
     EXPECT_TRUE(fengFound); // 锋
     EXPECT_TRUE(xianFound); // 限
     EXPECT_TRUE(moFound);   // 魔 (the 附魔台 panel title)
-    // V2-5 member pin: 猪 (U+732A, the pig) is IN the table at cell 385
-    // (V2-12's 利 at 0x5229 sorts before it, re-celling it +1 from 384).
+    // V2-5 member pin: 猪 (U+732A, the pig) is IN the table at cell 387
+    // (V2-12's 利 at 0x5229 sorts before it, re-celling it +1 from 384;
+    // V3-14a's 爆/炸 after 0x71E7 re-celled it +2 more from 385).
     // Without it every render of the mob's vocabulary would fall back to '?'.
     bool pigFound = false;
     for (const CjkGlyph& g : kCjkGlyphs) {
         if (g.cp == 0x732Au) {
             pigFound = true;
-            EXPECT_EQ(g.cell, 385);
+            EXPECT_EQ(g.cell, 387);
         }
     }
     EXPECT_TRUE(pigFound);
@@ -479,7 +492,7 @@ TEST(FontTest, CjkTablePinned) {
             ++legacyCount;
         } else {
             EXPECT_GE(g.cell, 128);
-            EXPECT_LE(g.cell, 522); // rows 16..65 (V3-13 默: 521 -> 522)
+            EXPECT_LE(g.cell, 524); // rows 16..65 (V3-14a 默: 522 -> 524)
         }
     }
     EXPECT_EQ(legacyCount, 33u);
@@ -516,9 +529,9 @@ TEST(FontTest, CjkTablePinned) {
             ++extendedCount;
         }
     }
-    EXPECT_EQ(extendedCount, 395u);
-    EXPECT_EQ(nextCell, 523); // max used cell 522; row 65 = partial
-                              // headroom (cells 523..527)
+    EXPECT_EQ(extendedCount, 397u);
+    EXPECT_EQ(nextCell, 525); // max used cell 524; row 65 = partial
+                              // headroom (cells 525..527)
 }
 
 TEST(FontTest, CjkExtendedGlyphCellsPinned) {
@@ -533,8 +546,8 @@ TEST(FontTest, CjkExtendedGlyphCellsPinned) {
         {0x50F5, 174}, // 僵
         {0x5E8A, 267}, // 床
         {0x5251, 195}, // 剑
-        {0x9550, 495}, // 镐 (V2-5 re-celled +1)
-        {0x7761, 401}, // 睡 (V2-5 re-celled +1)
+        {0x9550, 497}, // 镐 (V2-5 re-celled +1, V3-14a +2)
+        {0x7761, 403}, // 睡 (V2-5 re-celled +1, V3-14a +2)
         {0x5065, 173}, // 健
         {0x5EB7, 271}, // 康
         {0x5B89, 250}, // 安
@@ -546,14 +559,14 @@ TEST(FontTest, CjkExtendedGlyphCellsPinned) {
         {0x6324, 296}, // 挤
         {0x5976, 244}, // 奶
         {0x6BD2, 356}, // 毒
-        {0x7BAD, 417}, // 箭 (V2-5 re-celled +1)
+        {0x7BAD, 419}, // 箭 (V2-5 re-celled +1, V3-14a +2)
         {0x5CA9, 262}, // 岩
         {0x706B, 369}, // 火
         {0x71C3, 379}, // 燃
         {0x70E7, 374}, // 烧
         {0x6392, 301}, // 排 (UX-8)
         {0x6446, 303}, // 摆 (UX-8)
-        {0x8F93, 468}, // 输 (UX-8, V2-5 re-celled +1)
+        {0x8F93, 470}, // 输 (UX-8, V2-5 re-celled +1, V3-14a +2)
         {0x4EAE, 154}, // 亮 (UX-9b)
         {0x5904, 238}, // 处 (UX-9b)
         {0x628A, 291}, // 把 (UX-9b)
@@ -570,20 +583,22 @@ TEST(FontTest, CjkExtendedGlyphCellsPinned) {
         {0x682A, 343}, // 株 (V2-3 fix: the harvest count-2 text)
         {0x70AD, 370}, // 炭 (V2-3)
         {0x70BC, 372}, // 炼 (V2-3)
-        {0x7840, 408}, // 础 (V2-3, V2-5 re-celled +1)
-        {0x7EA6, 421}, // 约 (V2-3, V2-5 re-celled +1)
-        {0x8015, 432}, // 耕 (V2-3, V2-5 re-celled +1)
-        {0x8349, 443}, // 草 (V2-3, V2-5 re-celled +1)
-        {0x949F, 488}, // 钟 (V2-3, V2-5 re-celled +1)
-        {0x94FE, 490}, // 链 (V2-3, V2-5 re-celled +1)
-        {0x953B, 494}, // 锻 (V2-3, V2-5 re-celled +1)
-        {0x9897, 512}, // 颗 (V2-3, V2-5 re-celled +1)
-        {0x9B54, 518}, // 魔 (V2-12, the 附魔台 panel title)
-        {0x9E21, 519}, // 鸡 (V2-3, V2-5 +1, V2-12 魔 +1)
-        {0x9EA6, 520}, // 麦 (V2-3, V2-5 +1, V2-12 魔 +1)
-        {0x9EC4, 521}, // 黄 (V2-3, V2-5 +1, V2-12 魔 +1)
-        {0x732A, 385}}; // 猪 (V2-5, V2-12 +1, V3-13 +1)
-    // expectUv pins the EXACT cell of every codepoint — a '?' fallback
+        {0x7840, 410}, // 础 (V2-3, V2-5 re-celled +1, V3-14a +2)
+        {0x7EA6, 423}, // 约 (V2-3, V2-5 re-celled +1, V3-14a +2)
+        {0x8015, 434}, // 耕 (V2-3, V2-5 re-celled +1, V3-14a +2)
+        {0x8349, 445}, // 草 (V2-3, V2-5 re-celled +1, V3-14a +2)
+        {0x949F, 490}, // 钟 (V2-3, V2-5 re-celled +1, V3-14a +2)
+        {0x94FE, 492}, // 链 (V2-3, V2-5 re-celled +1, V3-14a +2)
+        {0x953B, 496}, // 锻 (V2-3, V2-5 re-celled +1, V3-14a +2)
+        {0x9897, 514}, // 颗 (V2-3, V2-5 re-celled +1, V3-14a +2)
+        {0x9B54, 520}, // 魔 (V2-12, the 附魔台 panel title, V3-14a +2)
+        {0x9E21, 521}, // 鸡 (V2-3, V2-5 +1, V2-12 魔 +1, V3-14a +2)
+        {0x9EA6, 522}, // 麦 (V2-3, V2-5 +1, V2-12 魔 +1, V3-14a +2)
+        {0x9EC4, 523}, // 黄 (V2-3, V2-5 +1, V2-12 魔 +1, V3-14a +2)
+        {0x7206, 381}, // 爆 (V3-14a, the explosion cause)
+        {0x723D, 382}, // 炸 (V3-14a, the explosion cause)
+        {0x732A, 387} // 猪 (V2-5, V2-12 +1, V3-13 +1, V3-14a +2)
+    }; // 猪 (V2-5, V2-12 +1, V3-13 +1) +2 V3-14a    // expectUv pins the EXACT cell of every codepoint — a '?' fallback
     // would address cell 36 (row 4), which none of the pinned cells are,
     // so the UV pin alone proves table membership.
     for (const auto& [cp, cell] : pinned) {
@@ -676,17 +691,18 @@ TEST(FontTest, FitLabelKeepsSuffixAndTrimsName) {
 TEST(FontTest, FontPngBytesPinned) {
     // Determinism pin: the generated atlas is byte-stable (re-running
     // tools/generate_font.py must not change it). FNV-1a 64 over the
-    // file bytes; the hex below is the V3-13 atlas (256x2112: the legacy
-    // 512 rows pixel-identical + 395 extended glyphs in cells 128..522,
-    // 于 at cell 150, 猪 at cell 385, 锋利限 at 191/491/501, 魔 at 518 —
-    // the death-screen glyph re-celled every later extended glyph by +1,
-    // the atlas size unchanged).
+    // file bytes; the hex below is the V3-14a atlas (256x2112: the legacy
+    // 512 rows pixel-identical + 397 extended glyphs in cells 128..524,
+    // 于 at cell 150, 猪 at cell 387, 锋利限 at 191/493/503, 魔 at 520,
+    // 爆 at cell 381, 炸 at cell 382 — the explosion-cause glyphs
+    // re-celled every later extended glyph by +2, the atlas size
+    // unchanged).
     std::ifstream in("assets/textures/font.png", std::ios::binary);
     ASSERT_TRUE(in);
     const std::string data((std::istreambuf_iterator<char>(in)),
                            std::istreambuf_iterator<char>());
     ASSERT_FALSE(data.empty());
-    EXPECT_EQ(fnv1a64Hex(data), "db4bbdf1afeb7491");
+    EXPECT_EQ(fnv1a64Hex(data), "94cbd43cfb750568");
 }
 
 TEST(FontTest, FontPngIsTheUx6Atlas) {

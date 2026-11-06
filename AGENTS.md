@@ -32,14 +32,14 @@ v3.10.0 = V3-6 世界边缘雾（门 200，11-05：填充感知 fog end，
 仅模拟语义变更才 bump + legacy 版本指纹零迁移直放 + --demo-force +
 4 demo canary）；**v3.14.0 = V3-8b 手柄习惯映射定案（门 204，11-06：
 L3 蹲伏 + RT 疾跑 + B 飞行专用钮【用户三项定案，config 自定义不做】+
-SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）；**v3.15.0 = V3-13 死亡统计屏（门 205，11-06：致死原因行 9 措辞 + 会话统计 5 行 + 字体 +1 字形「于」428）；**v3.16.0 = V3-15 生存/表现小批（门 206，11-06：netherite 火·熔岩免疫【fire_resistant armor-only + 三抑制 + 熔岩死因覆写】+ portal 2 周期纹理 UV 滚动 + 蒸汽粒子 8×8×9 盒）；**v3.17.0 = V3-11a 创造基础（门 207，11-06：G 切换 + 存档 flag format 31 player.creative 恒写 + 全源伤害门 + 饥饿静态满 + 即挖 + 无掉落/无耐久 + 放置不消耗 + 入场飞行；sim 不 bump canary 4 demo EXACT）；**v3.18.0 = V3-11b 创造物品栏（门 208，11-06：E 面板双 tab 物品栏/背包 + 前缀搜索【SDL 文本输入首个打字面，仅创造面板期开】+ 6×4 网格滚轮翻页 + 左键满组/右键单个授予选中热栏位 + 搜索焦点数字语义 + demo author x/y 绝对位与 g 键）= 矩阵 ⬜ 项小→大推进 4/6，V3-11 创造模式全项完成**）**）——**3.x 矩阵
+SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）；**v3.15.0 = V3-13 死亡统计屏（门 205，11-06：致死原因行 9 措辞 + 会话统计 5 行 + 字体 +1 字形「于」428）；**v3.16.0 = V3-15 生存/表现小批（门 206，11-06：netherite 火·熔岩免疫【fire_resistant armor-only + 三抑制 + 熔岩死因覆写】+ portal 2 周期纹理 UV 滚动 + 蒸汽粒子 8×8×9 盒）；**v3.17.0 = V3-11a 创造基础（门 207，11-06：G 切换 + 存档 flag format 31 player.creative 恒写 + 全源伤害门 + 饥饿静态满 + 即挖 + 无掉落/无耐久 + 放置不消耗 + 入场飞行；sim 不 bump canary 4 demo EXACT）；**v3.18.0 = V3-11b 创造物品栏（门 208，11-06：E 面板双 tab 物品栏/背包 + 前缀搜索【SDL 文本输入首个打字面，仅创造面板期开】+ 6×4 网格滚轮翻页 + 左键满组/右键单个授予选中热栏位 + 搜索焦点数字语义 + demo author x/y 绝对位与 g 键）= 矩阵 ⬜ 项小→大推进 4/6，V3-11 创造模式全项完成；**v3.19.0 = V3-14a 爆炸机制（门 209，11-06：纯核心 scanExplosion/explosionDamage【局域强度 radius−dist 破块 + 线性衰减整读伤害 + flamable 点火】+ 块属性 blast_resistance【obsidian 3 数据存活】+ Game::explodeAt 接线 + --explode CLI seam【帧 0，--weather 孪生】+ 死因「死于爆炸」+ 字体 +2 爆/炸 430 + boom 音 64；零 format/sim 不 bump/无击退记档）= V3-14 相位 A/4**）**）——**3.x 矩阵
 18 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
 （门 202）/ v3.13.0（门 203）/ v3.14.0（门 204）/ v3.15.0（门 205）
-/ v3.16.0（门 206）/ v3.17.0（门 207）/ v3.18.0（门 208）
-+ 11-06 扩容 7 项（V3-8b ✅ v3.14.0 + V3-13 ✅ v3.15.0 + V3-15 ✅
-v3.16.0 + V3-11 ✅ v3.17.0/v3.18.0 + V3-10~V3-14 ⬜ 四项【大项
-已相位拆分 V3-10a~d / V3-11a~b / V3-12a~c / V3-14a~d，BACKLOG
-待执行项明细】）**
+/ v3.16.0（门 206）/ v3.17.0（门 207）/ v3.18.0（门 208）/ v3.19.0
+（门 209）+ 11-06 扩容 7 项（V3-8b ✅ v3.14.0 + V3-13 ✅ v3.15.0 +
+V3-15 ✅ v3.16.0 + V3-11 ✅ v3.17.0/v3.18.0 + V3-14a ✅ v3.19.0 +
+V3-10~V3-14 ⬜【大项已相位拆分 V3-10a~d / V3-11a~b / V3-12a~c /
+V3-14a~d，BACKLOG 待执行项明细】）**
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -98,7 +98,7 @@ v3.16.0 + V3-11 ✅ v3.17.0/v3.18.0 + V3-10~V3-14 ⬜ 四项【大项
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2811/2811**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2821/2821**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 31（V3-11a 创造：player.creative strict bool 恒写，
   pre-31 载迁 false，30 携键 = version lie 点名；schema 其余与 30
   一致）；format 30 = V3-1 Phase B 下界维度（player.dimension 严格
@@ -199,6 +199,38 @@ v3.16.0 + V3-11 ✅ v3.17.0/v3.18.0 + V3-10~V3-14 ⬜ 四项【大项
   零 diff + crop 3× 目检同场景同羊同位】；性能 A/B 同档【changes-
   Applied 逐位 + 终档 savenorm EXACT】；PITS 392【DEBUG 事件行
   grep 假阴性】；详见 `docs/archive/phase-3.12.0.md`）；
+  门计数 209（**V3-14a 爆炸机制 v3.19.0** 门 209 全 PASS【V3-14
+  相位 A/4，ghast 前置机制族】：**纯核心 world/explosion**【scanExplosion
+  = 包围盒确定 x/y/z 序扫描 + 格中心距离 + broken = destroyable ∧
+  blast_resistance < 局域强度(radius−dist) + ignited = flamable 未破
+  【break 优先】/ explosionDamage = ceil((1−dist/r)×12) 整读 界 0】+
+  **块属性 blast_resistance**【strict 非负 absent 0.0；obsidian = 3
+  数据存活 radius-3 blast 全域】+ **Game::explodeAt**【setBlock 收口 +
+  碎片 spawnBreak 种子契约 + 中心 spawnFire + boom 音 64 + 玩家/mob
+  衰减伤害【创造门自动免疫】】+ **--explode x y z [r] CLI seam**【帧 0
+  应用 --weather 孪生 + 严格有限数 + r 缺省 3 + 管理旗/demo 三重互
+  斥；游戏内暂无消费方 = V3-14b ghast 火球首个真触发】+ 死因「死于爆
+  炸/被 <name> 的爆炸杀死」【字体 +2 爆/炸 428→430 扩展区 re-cell +2
+  top-512 位级 test_font 全锚重钉】；无击退（项目无击退面 V3-15 先
+  例）/ 破碎无掉落 / 流体不触碰 / 点火 100% 确定（creeper 25% roll
+  偏离）记档；零 format 31 不变 / **sim 不 bump**（canary 4 demo EXACT
+  实证——seam 无 demo 形）；2821/2821（+10 ExplosionTest ×5 /
+  BlastResistance ×4 / SoundExplosionTest ×1 + 死因 2 断言）；结构免
+  疫第 89 次【S1 ≡ base19 逐字节 ×2 + savenorm EXACT——无 seam 无
+  blast 全冷】；S2 密封石室双臂【场景 = fresh 60f 去火 + 14×14×7 石
+  室封死火域 + 玩家口袋（PITS 401①③）：a1 = health 18【dist 2.5 →
+  dmg 2 衰减整读】+ (1,56,0)/(2,56,0) 破【journal 回生成态条目消失
+  PITS 401②】+ **(3,56,0) 恰界上存活**【local 0 硬界 pin】+ (5,56,5)
+  房外对照 + entities=0 无掉落 / a2 = obsidian 柱 (2,56,0)/(2,57,0)
+  双存活 vs 邻格破 = blast_resistance 数据对照；双臂截图 ×2 RAW +
+  savenorm EXACT×2【fires[] 地下生成火簇 real-dt 域】】；S2b canary 4
+  demo ×2 RAW + EXACT；S6 点名【init 负 blast_resistance → rc 1】；性
+  能 A/B 同档【旧 = b71cb5e v3.18.0 + g139 banner 实证：PERF-WIN 三窗
+  upd med 0.393/0.550/0.593 vs 0.571/0.549/0.588 + render/swap 同档 +
+  changesApplied 9/3-2/1【win2 = streaming 边界 real-dt 域】+ **终档
+  savenorm EXACT**【零 format = 最强形】】；PITS 401【爆炸门场景三纪
+  律：石室封火域 + journal 回生成态消失断言法 + 地下火簇 savenorm
+  域】；详见 `docs/archive/phase-3.19.0.md`）；
   门计数 208（**V3-11b 创造物品栏 v3.18.0** 门 208 全 PASS【矩阵 ⬜
   项小→大推进 4/6，**V3-11 创造模式全项完成**】：E 面板创造双
   tab【标题行「物品栏/背包」按钮，激活橙框；背包 tab = 既有 E 内容
@@ -661,7 +693,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 （细节归阶段文档，不写长句））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
-## 坑位 Top 8（全文 docs/PITS.md，400 条；pre-3.x 条目在 docs/archive/PITS_PRE3X.md）
+## 坑位 Top 8（全文 docs/PITS.md，401 条；pre-3.x 条目在 docs/archive/PITS_PRE3X.md）
 
 1. **SDL grab delta**（P28）：输入 E2E 全帧字节一致不保证——存档 yaw/pitch 为漂移
    探测器；驱动 warp 用实际窗口原点（实测 (4,64)）+ (632,352)。
@@ -697,7 +729,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（400 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（401 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

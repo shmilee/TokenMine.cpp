@@ -2,6 +2,7 @@
   "id": "obsidian",
   "properties": {
     "hardness": 10,
+    "blast_resistance": 3,
     "drops": "obsidian"
   },
   "model": {

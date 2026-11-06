@@ -800,8 +800,9 @@ bool Player::damage(float amount, bool bypassArmor,
 }
 
 std::string Player::deathCauseLine(const DamageInfo& info) {
-    // V3-13: the font-safe cause strings (every CJK glyph in the 418-
-    // char font set — the 摔/掘/外-missing lesson checked per char).
+    // V3-13: the font-safe cause strings (every CJK glyph in the 430-
+    // char font set — the 摔/掘/外-missing lesson checked per char;
+    // V3-14a's 爆/炸 were the +2 that grew the set 428 -> 430).
     switch (info.source) {
         case DamageSource::Fall:
             return "死于高处掉落";
@@ -817,6 +818,14 @@ std::string Player::deathCauseLine(const DamageInfo& info) {
             return "被箭射死";
         case DamageSource::Mob:
             return "被 " + info.name + " 杀死";
+        case DamageSource::Explosion:
+            // The named blast (the ghast's, V3-14b) reads like the
+            // Mob line's twin; the unattributed one (the --explode
+            // seam) is the bare cause.
+            if (info.name.empty()) {
+                return "死于爆炸";
+            }
+            return "被 " + info.name + " 的爆炸杀死";
         case DamageSource::Effect:
             if (info.name == "fire") {
                 return "死于燃烧";

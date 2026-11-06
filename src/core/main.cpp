@@ -1,4 +1,5 @@
 // TokenMine.cpp entry point: argument parsing, logging setup, game bootstrap.
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -24,6 +25,11 @@ void printUsage() {
         "  --weather <w>     Initial weather (V2-4): clear (the default) or\n"
         "                    rain (the opening segment runs the fixed kRainMin\n"
         "                    frames, then the world-seed stream takes over)\n"
+        "  --explode <x y z> [r]\n"
+        "                    V3-14a: one deterministic blast at the run's\n"
+        "                    start (the explosion's gate seam — the ghast's\n"
+        "                    V3-14b fireball is its first in-game trigger;\n"
+        "                    r absent = the TNT-class radius 3)\n"
         "  --frames <n>      Exit after N frames (0 = run until closed)\n"
         "  --screenshot <p>  Save a PNG screenshot of the last frame\n"
         "  --save <slot>     Save slot (letters/digits/_/-): load\n"
@@ -120,6 +126,48 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
                 return false;
             }
             args.weather = *w;
+        } else if (arg == "--explode") {
+            // V3-14a: the blast's gate seam (--explode <x> <y> <z>
+            // [radius]) — the strict finite-read discipline (a non-
+            // finite / short argument is named, not silently zeroed).
+            const char* vx = nextValue(i, "--explode");
+            if (!vx) return false;
+            const char* vy = nextValue(i, "--explode");
+            if (!vy) return false;
+            const char* vz = nextValue(i, "--explode");
+            if (!vz) return false;
+            char* ex = nullptr;
+            char* ey = nullptr;
+            char* ez = nullptr;
+            const double x = std::strtod(vx, &ex);
+            const double y = std::strtod(vy, &ey);
+            const double z = std::strtod(vz, &ez);
+            if (*ex != '\0' || *ey != '\0' || *ez != '\0' ||
+                !std::isfinite(x) || !std::isfinite(y) ||
+                !std::isfinite(z)) {
+                err = "--explode takes three finite coordinates "
+                      "(<x> <y> <z> [radius])";
+                return false;
+            }
+            ExplosionSpec spec;
+            spec.center = Vec3 {static_cast<float>(x),
+                                static_cast<float>(y),
+                                static_cast<float>(z)};
+            // The optional radius (absent = the TNT-class default;
+            // present = strict finite + > 0).
+            if (i + 1 < argc && std::string(argv[i + 1]) != "--" &&
+                argv[i + 1][0] != '-') {
+                const char* vr = nextValue(i, "--explode");
+                char* er = nullptr;
+                const double r = std::strtod(vr, &er);
+                if (*er != '\0' || !std::isfinite(r) || r <= 0.0) {
+                    err = "--explode's radius must be a finite number "
+                          "> 0";
+                    return false;
+                }
+                spec.radius = r;
+            }
+            args.explode = spec;
         } else if (arg == "--frames") {
             const char* v = nextValue(i, "--frames");
             if (!v) return false;
@@ -227,10 +275,11 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
                                  !args.screenshotPath.empty() ||
                                  args.time >= 0.0 || args.seed >= 0 ||
                                  args.weather.has_value() ||
+                                 args.explode.has_value() ||
                                  args.saveFullDiff)) {
         err = "save management runs without a game: drop the game-run "
               "flags (--save / --new / --frames / --screenshot / --time / "
-              "--seed / --weather / --save-full-diff)";
+              "--seed / --weather / --explode / --save-full-diff)";
         return false;
     }
     // V3-9: the demo's three flags are MUTUALLY EXCLUSIVE (one per
@@ -257,10 +306,11 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
         (args.frames != 0 || args.saveSlot.has_value() ||
          !args.screenshotPath.empty() || args.newWorld ||
          args.time >= 0.0 || args.seed >= 0 ||
-         args.weather.has_value() || args.saveFullDiff)) {
+         args.weather.has_value() || args.explode.has_value() ||
+         args.saveFullDiff)) {
         err = "--demo-author runs headless: drop the game-run flags "
               "(--frames / --save / --screenshot / --new / --time / "
-              "--seed / --weather / --save-full-diff)";
+              "--seed / --weather / --explode / --save-full-diff)";
         return false;
     }
     // V3-9: the --demo replay's world spec is the start-point
@@ -269,9 +319,11 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
     // existing slot by construction). --save composes (the fresh
     // spec's EXIT write of the replay's result) and must match the
     // save spec's slot (checked in main, the spec is known there).
-    if (!args.demo.empty() && (args.seed >= 0 || args.newWorld)) {
+    if (!args.demo.empty() && (args.seed >= 0 || args.newWorld ||
+                               args.explode.has_value())) {
         err = "--demo's world spec is the start-point authority: drop "
-              "--seed / --new";
+              "--seed / --new / --explode (the replay's input is the "
+              "demo's — the blast's seam has no demo form)";
         return false;
     }
     return true;

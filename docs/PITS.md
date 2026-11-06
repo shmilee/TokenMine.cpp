@@ -3,7 +3,7 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–400，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–401，新条目继续前插于尾部块首。
 
 - **gzip 容器可钉 / zlib 宏缺失 / 双跑 RAW 适用域（PITS 385，门 191
   V3-7 存档 gzip）**——① **zlib 自带 gzip 封装（windowBits 16+15）
@@ -68,6 +68,19 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **爆炸门场景三纪律（PITS 401，门 209 v3.19.0 V3-14a 爆炸机制）**
+  ——① **森林生物群系 = 到处可燃**：blast 必点火 → real-dt 火寿命域
+  （PITS 385：RAW 不适用，savenorm 权威）——**密封石室场景**（房间
+  全 stone 编辑填充 blast 全域 + 玩家空气口袋 + 场景手术去火
+  【PITS 398①：移除 fire 日志条目，漏移 = init 点名"fire block has
+  no fires entry"】）= 无火确定性域。② **blast 破回生成态 = 日志条
+  目消失**（blocks journal = 与生成世界的 DIFF，非事件日志）：断言
+  破块用 `blocks.get(cell) == None` + **界外对照格**（恰好 radius 处
+  local 强度 0 = 存活 pin，(3,56,0) 先例）+ 房内石墙残留对照，勿断
+  "air 编辑存在"。③ **地下生成火簇回落**：场景去火后载档世界生成
+  重放 3 团火（(23,35,28) 簇 + 1 蔓延）= 存档 fires[] 恒 4 条
+  real-dt——断言域 = savenorm（剥 fires[*].remaining）+ 截图 RAW
+  （火在 y35 地下不可见）。
 - **demo 输入四坑 + X grab 屏捕 + 门机窗口口径（PITS 400，门 208
   v3.18.0 V3-11b 创造物品栏）**——① **demo 无初始指针锁定**：游戏
   启动指针未锁（首次 LMB = 捕获帧，game_interaction 的 capture 路径），

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 3.18.0 LANGUAGES CXX)
+project(TokenMine VERSION 3.19.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -100,6 +100,7 @@ add_library(mc_core STATIC
     src/world/day_cycle.cpp
     src/world/fluid.cpp
     src/world/fire_spread.cpp
+    src/world/explosion.cpp
     src/world/growth.cpp
     src/world/tree_shape.cpp
     src/world/ore_vein.cpp
@@ -169,6 +170,7 @@ add_executable(tokenmine_tests
     tests/test_fluid_streaming_gate.cpp
     tests/test_fluid_cell_list.cpp
     tests/test_fire_spread.cpp
+    tests/test_explosion.cpp
     tests/test_growth.cpp
     tests/test_tree_shape.cpp
     tests/test_ore_vein.cpp

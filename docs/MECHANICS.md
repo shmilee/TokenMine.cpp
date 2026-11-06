@@ -14,7 +14,7 @@
 > 【V2-18 门 190，AO 世界光照】→ **225272【V3-6 门 200，填充感知雾 = 3.x
 > 首重锚】**；门 184–189 = 结构免疫第 65–70 次免重锚；门 191–199 =
 > 第 72–80 次；门 201–202 = 第 81–82 次免重锚（对 base19）【v3.0.0
-> banner = 第 71 次】）、PITS **400**。上一轮全面刷新
+> banner = 第 71 次】）、PITS **401**。上一轮全面刷新
 > （2026-11-02）止于 v2.0.0、2026-11-03 增量止于 v2.3.0（下条），本次把
 > v2.11.0 → v2.19.0 的机制（提前项 `[V2-19]` + 第二批 `[V2-11]`~`[V2-18]`，
 > 逐版见 `docs/archive/v2x/CHANGELOG.md`，细节证据见 `docs/archive/v2x/`
@@ -956,6 +956,33 @@
   38 / 30 s / 插墙 100 s / 卡住格破坏释放 / 底心 1.0 拾取返 ammo / PRE-9 三段
   形 / SURV-5 wither·poison 箭）；**无弓弦模型/拉弓进度条/手部皮肤**（记档
   偏离）
+
+## 爆炸（`[V3-14a]`，v3.19.0）
+
+- **纯核心 `world/explosion`**（fire_spread 纯函数模型）：
+  `scanExplosion(world, blocks, center, radius)` = 包围盒 (2r+1)³
+  的确定 x/y/z 序扫描（格中心 +0.5 距离），`broken` = in-range ∧
+  solid ∧ `destroyable` ∧ **`blast_resistance` < 局域强度**
+  （radius − dist：中心满强度、边界 0——obsidian 数据 3.0 在
+  radius-3 blast 全域存活 = 门 209 a2 臂对照实证）；`ignited` =
+  in-range ∧ 未破 ∧ **`flamable`**（fire spread 同款谓词；点火
+  100% 确定，MC creeper 25% roll = 记档偏离）。破碎**无掉落**（MC
+  孪生——journal + relight 走 setBlock 收口）；**流体不触碰**（块
+  层 only，记档）。
+- **伤害衰减 `explosionDamage`**：`ceil((1 − dist/radius) × 12)`
+  整读（中心 12，界 = 0；HP 整数纪律）；玩家（damage 单收口，创造
+  门自动免疫）+ mobs（`MobEntity::damage`，无死因行）；**无击退**
+  （项目无玩家/mob 击退面 = 记档偏离，V3-15 先例）。
+- **接线 `Game::explodeAt`**：setBlock 收口（破碎→air / 点燃→fire +
+  updateLocal）+ 碎片 `spawnBreak`（种子契约 = 共享计数器黄金比步）
+  + 中心 `spawnFire` 余烬 + **`boom` 音**（生成器 0xB007 定种，
+  63→64）+ 死因「死于爆炸」/「被 <name> 的爆炸杀死」（字体 +2 字形
+  爆/炸 428→430，扩展区 re-cell +2，top-512 红线位级）。
+- **触发 = `--explode x y z [r]` CLI seam**（--weather 孪生：帧 0
+  应用、严格有限数解析、r 缺省 3、管理旗/demo 互斥）——**游戏内暂无
+  消费方**（ghast 的 V3-14b 火球 = 首个真触发，调同一
+  `explodeAt`，sourceName 命名死因）。零 format（31 不变）/ sim 不
+  bump（无输入路径全冷：canary EXACT 实证）。
 
 ## 流体桶与点燃
 

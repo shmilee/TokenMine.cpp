@@ -74,6 +74,9 @@ public:
         Arrow,  // the hurtPlayer arrow hit
         Mob,    // the mob's melee hit (name = the mob's id)
         Effect, // the potion / effect's damage tick (name = the id)
+        Explosion, // V3-14a: the blast's falloff hit (name = the
+                   // exploder, "" = the unattributed blast — the --
+                   // explode seam; the ghast's V3-14b blast names it)
     };
     struct DamageInfo {
         DamageSource source = DamageSource::None;

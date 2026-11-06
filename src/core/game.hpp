@@ -85,6 +85,7 @@
 #include "world/cloud.hpp"
 #include "world/day_cycle.hpp"
 #include "world/fluid.hpp"
+#include "world/explosion.hpp"
 #include "world/ao.hpp"
 #include "world/lighting.hpp"
 #include "world/nether_gen.hpp"
@@ -124,6 +125,13 @@ struct GameArgs {
     // It touches the initial state ONLY, never the stream sequence
     // (same world seed, same weather after the opening segment).
     std::optional<bool> weather;
+    // V3-14a: --explode <x> <y> <z> [radius] — a single deterministic
+    // blast at the run's start (the gate/test seam's --weather twin:
+    // the V3-14a explosion has no in-game trigger yet — the ghast's
+    // V3-14b fireball is its first consumer; the seam exercises the
+    // same Game::explodeAt the ghast will call). nullopt = no blast
+    // (the no-input run's structural-immunity root).
+    std::optional<ExplosionSpec> explode;
     LogLevel logLevel = LogLevel::Info;
     std::filesystem::path screenshotPath; // if set: save after the last frame
     // Save slot (Phase 13): --save <slot>. At startup loads
@@ -686,6 +694,19 @@ private:
     // fire's full life). Runs every frame after updateFires; a no-op
     // without fires or without the fire block.
     void updateFireSpread();
+    // V3-14a: the explosion's apply seam (the pure scan's game-side
+    // twin, world/explosion): applies the blast to the player's
+    // dimension — the broken cells to air (the setBlock choke point's
+    // journal/relight + the debris's seed-contract particles, no
+    // drops), the ignited cells to fire, the boom sound, the center's
+    // ember flash, and the falloff damage to the player + the mobs
+    // (the creative's gate is inside Player::damage). `sourceName`
+    // names the exploder for the death line ("" = the unattributed
+    // blast — the --explode seam; the ghast's V3-14b blast passes its
+    // id). The frame-locked world + the seed-contract particles keep
+    // an identical run byte-identical.
+    void explodeAt(const Vec3& center, double radius,
+                   const std::string& sourceName);
     // Phase 83 beacon: re-derive the power level of EVERY tracked beacon
     // (world/beacon — a pure pyramid scan of the `beacon_base` layers
     // below it) and, for each level >= 1, apply its NAMED effect to the

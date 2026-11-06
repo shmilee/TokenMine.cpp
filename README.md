@@ -7,7 +7,7 @@
 **本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒<br>
 （C++20 / SDL3 / OpenGL 3.3，自研 JSON/PNG，内容全数据驱动）。<br>
 确定性是一级要求——无输入运行逐帧字节可复现。<br>
-当前 v3.18.0（V3-11b 创造物品栏：E 面板双 tab + 前缀搜索 + 点击授予；3.x 矩阵 16/18，⬜ 项小→大推进中）· tag `v3.18.0` · 任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)**
+当前 v3.19.0（V3-14a 爆炸机制：衰减伤害/破块/点火 + blast_resistance 数据属性 + --explode seam；3.x 矩阵推进中）· tag `v3.19.0` · 任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)**
 
 [![GitHub stars](https://img.shields.io/github/stars/shmilee/TokenMine.cpp?style=flat-square)](https://github.com/shmilee/TokenMine.cpp/stargazers)
 [![MIT license](https://img.shields.io/badge/license-MIT-555555?style=flat-square)](LICENSE)
