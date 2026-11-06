@@ -426,55 +426,60 @@ TEST(SaveCompressionConfigTest, UnknownOrEmptyWordsAreNamed) {
         << re.error().message;
 }
 
-// -- 6. the 29 -> 30 schema delta (V3-1 Phase B re-based the V3-7
-//        identity: format 29 and 30 are NO LONGER schema-identical —
-//        30 adds the dimension key + the nether segments. The delta of
-//        the same state is EXACTLY the whitelisted keys {format,
-//        player.dimension, nether, nether_entities} — a simulated
-//        v3.3.0 (format-29) file re-parses to the same state (the
-//        overworld migration), and re-serializing returns to the
-//        format-30 payload byte-for-byte) ---------------------------------
+// -- 6. the 29 -> 31 schema delta (V3-11a re-based the V3-7 identity:
+//        format 29 and 31 are NO LONGER schema-identical — 30 adds the
+//        dimension key + the nether segments, 31 adds player.creative.
+//        The delta of the same state is EXACTLY the whitelisted keys
+//        {format, player.dimension, nether, nether_entities,
+//        player.creative} — a simulated v3.3.0 (format-29) file
+//        re-parses to the same state (the overworld + survival
+//        migrations), and re-serializing returns to the format-31
+//        payload byte-for-byte) ---------------------------------
 
-TEST(GzipNoneIdentityTest, TwentyNineToThirtyDeltaIsTheWhitelist) {
+TEST(GzipNoneIdentityTest,
+     TwentyNineToThirtyOneDeltaIsTheWhitelist) {
     const Fixture f;
     const SaveGame s = makeSave(f);
-    auto j30 = serializeSave(s, f.items);
-    ASSERT_TRUE(j30.ok()) << j30.error().message;
-    const std::string p30 = j30->dump(2) + '\n';
+    auto j31 = serializeSave(s, f.items);
+    ASSERT_TRUE(j31.ok()) << j31.error().message;
+    const std::string p31 = j31->dump(2) + '\n';
     // The format marker appears exactly ONCE in the whole file (the
     // root key — the "nether" segment's keys are blocks / fluids /
     // states, no nested "format" string).
-    EXPECT_EQ(countOccurrences(p30, "\"format\""), 1u);
-    EXPECT_EQ(countOccurrences(p30, "\"format\": 30"), 1u);
-    // The format-30 keys are present (the ALWAYS-written discipline).
-    EXPECT_EQ(countOccurrences(p30, "\"dimension\""), 1u);
-    EXPECT_EQ(countOccurrences(p30, "\"nether\""), 1u);
-    EXPECT_EQ(countOccurrences(p30, "\"nether_entities\""), 1u);
+    EXPECT_EQ(countOccurrences(p31, "\"format\""), 1u);
+    EXPECT_EQ(countOccurrences(p31, "\"format\": 31"), 1u);
+    // The format-30/31 keys are present (the ALWAYS-written discipline).
+    EXPECT_EQ(countOccurrences(p31, "\"dimension\""), 1u);
+    EXPECT_EQ(countOccurrences(p31, "\"nether\""), 1u);
+    EXPECT_EQ(countOccurrences(p31, "\"nether_entities\""), 1u);
+    EXPECT_EQ(countOccurrences(p31, "\"creative\""), 1u);
     // The simulated v3.3.0 (format-29) file of the same state: the
     // whitelisted keys stripped + the format key flipped.
-    Json j = *j30;
+    Json j = *j31;
     Json nether = withoutKey(j, "nether");
     nether = withoutKey(nether, "nether_entities");
     const Json* player = nether.find("player");
     ASSERT_TRUE(player != nullptr && player->isObject());
     Json p = withoutKey(*player, "dimension");
+    p = withoutKey(p, "creative");
     nether = withoutKey(nether, "player");
     nether["player"] = std::move(p);
     nether["format"] = Json(29);
     const std::string p29 = nether.dump(2) + '\n';
-    ASSERT_NE(p29, p30);
+    ASSERT_NE(p29, p31);
     EXPECT_EQ(countOccurrences(p29, "\"format\": 29"), 1u);
     // The format-29 file parses to the SAME state (the migration:
-    // dimension -> overworld, the nether segments -> empty), and
-    // re-serializing it returns to the format-30 payload with every
-    // other key unchanged — the v3.4.0-none file ≡ the v3.3.0 file
-    // except the whitelisted keys.
+    // dimension -> overworld, creative -> false, the nether segments
+    // -> empty), and re-serializing it returns to the format-31
+    // payload with every other key unchanged — the current-none file
+    // ≡ the v3.3.0 file except the whitelisted keys.
     auto jp29 = Json::parse(p29);
     ASSERT_TRUE(jp29.ok()) << jp29.error().message;
     auto sp29 = parseSave(*jp29, f.items, f.blocks, f.effects, s.seed);
     ASSERT_TRUE(sp29.ok()) << sp29.error().message;
     EXPECT_EQ(sp29->playerDimension, "overworld");
+    EXPECT_FALSE(sp29->playerCreative);
     auto j29out = serializeSave(*sp29, f.items);
     ASSERT_TRUE(j29out.ok()) << j29out.error().message;
-    EXPECT_EQ(j29out->dump(2) + '\n', p30);
+    EXPECT_EQ(j29out->dump(2) + '\n', p31);
 }

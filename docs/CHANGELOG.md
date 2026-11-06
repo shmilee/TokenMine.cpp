@@ -11,6 +11,50 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.17.0（2026-11-06）— V3-11a 创造基础（G 模式切换 + 不死 + 飞行 + 即挖，门 207 全 PASS）
+
+**矩阵 ⬜ 项小→大推进 3/6**（V3-11 创造模式相位 A/2；B = 创造物品栏
+v3.18.0）。
+
+**设计定案**（11-06 编排者定案）：① 创造 = **存档 flag**（format 31
+`player.creative` strict bool **恒写**，dimension 恒写先例；pre-31 载
+迁 false；format 30 文件携键 = version lie 点名）= MC per-player
+/gamemode 语义，**非**会话态；② 切换键 **G**（GameKey::G 插在
+FlyToggle 前，kKeyCount 尾钉不变；locked pointer + 仅存活 = C 键范式）；
+③ 不死 = **全源伤害门**（Player::damage 单收口——lava/fire/fall/mob/
+arrow/starve/void 全走这里，一处门控免疫）；④ 饥饿条**静态满**
+（setCreative 入场填饱 + 衰减/饥饿 tick 用 `if (!m_creative)` 包裹
+——**非** early return，保护下方 lava/kill-plane 段）；⑤ **即挖** =
+creative 强制 duration 0（复用既有 data-driven instant-break 路径）；
+⑥ **无掉落/无 XP/无挖掘耐久**（breakBlock gate 只包 4 段 drops/chance
+drops/XP——粒子与音效保留 = 创造挖掘手感；声明前移重构 = gate 尾段
+可见性）；⑦ **放置不消耗**（3 点：cloth/顶部 slab 合并/常规放置）；⑧
+创造开/关 = setFlying(true/false)（模式拥有飞行过渡，双击 Space 保留
+作模式内 toggle）；⑨ **sim 不 bump**（创造 = 存档态增量功能，survival
+路径位级不变；canary 4 demo 回放 savenorm EXACT = 门内实证）。
+
+**门 207**：S1 ≡ base19 逐字节 ×2 + savenorm EXACT（**结构免疫第 87
+次**——creative 默认 off = 零存档键差零像素）；S2 creative demo 臂【场
+景 = 60f fresh 去火 + format 31 creative true；时间线 = 低头 dy 628 +
+LMB f20-30 即挖 + **F5 @f50 结果捕获**【demo save-spec 回放 --save 须
+匹配槽 + 退出永不回写槽 → F5 = 唯一结果机制】：creative=True / health
+20 / pos (0.5,54,0.5) 飞行不坠 / (0,53,0) 已挖 / entities=0 无掉落 /
+截图 ×2 RAW + 结果存档 ×2 RAW 恒等】；S2b **canary 4 demo ×2 RAW +
+savenorm EXACT**（sim 不 bump 实证）；S6 点名【实机 format-30 文件携
+creative → rc 1 点名 + 单元 ThreeWay 三面：30 携键/31 缺键/非 bool】；
+全套 **2801/2801**（+6：SaveFormat31Test ×3 + PlayerTest.Creative
+×3）；`-Werror` 0 警告；性能 A/B 同档【旧 = 6b031c5 v3.16.0 + g139 vs
+新 + g139 banner 实证，900f 无输入：PERF-WIN 三窗 upd med
+0.578/0.667/0.650 vs 0.690/0.596/0.652 + render/swap 三窗同档（新旧各
+一窗 swap max ~32 ms = 一次性 OS 停顿 med 正常）+ fluid·fires·
+spread·ents·stream 同档 + changesApplied 9/2-3/1【win2 ±1 = streaming
+边界 real-dt 域，v3.14.0 先例】+ **终档 = 恰白名单 2 键**（format
+30→31 + player.creative missing-in-old，零其它漂移——format 跳变版
+v3.4.0「恰白名单 4 键」同款）】。PITS 399（format bump 测试面 = 4 类
+降级点：strip helper ×5 文件本地复制 / 手动 withoutKey 链 / inline
+rebuild / gzip identity rebase——首跑全套 61 失败全此族；demo save-spec
+结果捕获 F5 机制）。详见 `docs/archive/phase-3.17.0.md`。
+
 ## v3.16.0（2026-11-06）— V3-15 生存/表现小批（netherite 火免疫 + portal UV 动画 + 蒸汽粒子，门 206 全 PASS）
 
 **矩阵 ⬜ 项小→大推进 2/6**（三小项打包 1 版，零 format / 零新

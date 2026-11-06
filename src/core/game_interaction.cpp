@@ -328,7 +328,11 @@ void Game::handleInteraction(double dt) {
                                      hit->block.z, v->id);
                             Lighting::updateLocal(currentWorld(), m_blocks,
                                                   hit->block);
-                            m_inventory.take(m_selectedSlot, 1);
+                            // V3-11a: the creative's free placement
+                            // (no item consumption).
+                            if (!m_player->isCreative()) {
+                                m_inventory.take(m_selectedSlot, 1);
+                            }
                             m_sound.play("cloth");
                         }
                         return;
@@ -637,8 +641,13 @@ void Game::updateBreaking(double dt) {
         m_interaction.breakTarget = hit->block;
         m_interaction.breakProgress = 0.0;
     }
-    const double duration = breakDurationSeconds(
-        block.properties.hardness, selectedBreakSpeed(block));
+    // V3-11a: the creative's instant break (the mode overrides the
+    // tool pace — duration 0 lands the break this frame, the existing
+    // data-driven instant-break path).
+    const double duration = m_player->isCreative()
+        ? 0.0
+        : breakDurationSeconds(block.properties.hardness,
+                               selectedBreakSpeed(block));
     if (duration <= 0.0) {
         // Data-driven instant break (hardness 0 while destroyable).
         breakBlock(*hit);
@@ -1277,15 +1286,6 @@ void Game::breakBlock(const BlockHit& hit) {
     // frame.
     emitTutorialEvent("break." + m_blocks.at(id).name, 1);
 
-    // Drops are data-driven: `properties.drops` names an item (validated
-    // against the ItemRegistry at init). Each spawned item rests at its
-    // spawn position with zero velocity, so headless runs stay
-    // byte-reproducible (see ItemEntity). UX-8d: the spawns scatter
-    // deterministically around the block center (dropSpawnOffset — a pure
-    // function of (seed, position, drop index); the item always stays
-    // inside the broken cell, see its bound argument) so a multi-drop block
-    // no longer stacks its items at one point and a broken column no longer
-    // lines up on the block centers.
     const Block& block = m_blocks.at(id);
     // The break sound stays at the exact block center (the BLOCK is the
     // sound's source, not the scattered items).
@@ -1301,7 +1301,24 @@ void Game::breakBlock(const BlockHit& hit) {
                                          hit.block.z, dropIndex);
         return Vec3 {dropPos.x + off.x, dropPos.y, dropPos.z + off.y};
     };
-    if (!block.properties.drops.empty()) {
+    if (!m_player->isCreative()) {
+        // V3-11a: the creative's no-drops rule (Minecraft) — the block
+        // is gone, nothing drops, no XP orb, no item economy. The
+        // break PARTICLES below still fire (the creative's break feel).
+        // The drop scatter seeds roll nothing (the sections are
+        // skipped, not rolled-and-discarded — the stream stays still).
+        //
+        // Drops are data-driven: `properties.drops` names an item
+        // (validated against the ItemRegistry at init). Each spawned
+        // item rests at its spawn position with zero velocity, so
+        // headless runs stay byte-reproducible (see ItemEntity). UX-8d:
+        // the spawns scatter deterministically around the block center
+        // (dropSpawnOffset — a pure function of (seed, position, drop
+        // index); the item always stays inside the broken cell, see its
+        // bound argument) so a multi-drop block no longer stacks its
+        // items at one point and a broken column no longer lines up on
+        // the block centers.
+        if (!block.properties.drops.empty()) {
         const Item& dropItem = m_items.at(m_items.idForName(block.properties.drops));
         // dropsCount (validated at init to fit the item's max stack).
         // V2-17: the PER-STATE count — a stateful block with a
@@ -1356,6 +1373,7 @@ void Game::breakBlock(const BlockHit& hit) {
     if (block.properties.mineXp > 0) {
         spawnExpOrb(block.properties.mineXp, dropPos);
     }
+    } // the creative's no-drops gate
 
     // Break particles (Phase 15): a deterministic burst (world seed mixed
     // with an increasing per-break counter: the same input sequence gives
@@ -1387,7 +1405,9 @@ void Game::breakBlock(const BlockHit& hit) {
     // The break COMPLETES regardless (the block is already air +
     // dropped + sounded — the wear is the action's epilogue): a tool
     // that breaks on this block is simply gone from the slot.
-    if (block.properties.hardness != 0.0f) {
+    // V3-11a: the creative's zero wear (the mode owns the economy —
+    // the tool never wears on a creative break, the MC rule).
+    if (block.properties.hardness != 0.0f && !m_player->isCreative()) {
         ItemStack& held = m_inventory.at(m_selectedSlot);
         if (!held.empty()) {
             const Item& heldItem = m_items.at(held.item);
@@ -1493,7 +1513,10 @@ void Game::placeBlock() {
         // representation of the Minecraft same-cell pair).
         currentWorld().setBlockState(target.x, target.y, target.z, 2);
         Lighting::updateLocal(currentWorld(), m_blocks, target);
-        m_inventory.take(m_selectedSlot, 1);
+        // V3-11a: the creative's free placement (no item consumption).
+        if (!m_player->isCreative()) {
+            m_inventory.take(m_selectedSlot, 1);
+        }
         m_sessionStats.blocksPlaced += 1; // V3-13: the merge completion counts
                                    // as the placement
         emitTutorialEvent("place." + placedBlock.name, 1);
@@ -1553,8 +1576,11 @@ void Game::placeBlock() {
     // a placed glowstone is a new light source).
     Lighting::updateLocal(currentWorld(), m_blocks, target);
     // Placing consumes one from the selected stack (the inventory is the
-    // source of blocks — no more infinite placement).
-    m_inventory.take(m_selectedSlot, 1);
+    // source of blocks — no more infinite placement). V3-11a: the
+    // creative's placement is free (the mode owns the economy).
+    if (!m_player->isCreative()) {
+        m_inventory.take(m_selectedSlot, 1);
+    }
     // UX-7: the tutorial place event (the block that was PLACED — the
     // success point: setBlock committed + the item consumed).
     emitTutorialEvent("place." + m_blocks.at(item.block).name, 1);

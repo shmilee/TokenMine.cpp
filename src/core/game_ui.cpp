@@ -250,6 +250,21 @@ void Game::handleUiKeys() {
                       ? CameraMode::ThirdFront
                       : CameraMode::First;
     }
+    // V3-11a: the creative mode toggle (G — the C-key's game-mode twin:
+    // locked-pointer only, the E-key pattern, alive only). The mode is
+    // a SAVE flag (format 31, the per-player Minecraft gamemode — unlike
+    // the camera's session state). ON: the flight comes up with it (the
+    // creative's default — the mode owns the transition; the Space
+    // double-tap stays for toggling flight within the mode); OFF: the
+    // flight down (the respawn's reset twin).
+    if (m_input.wasPressed(GameKey::G) && m_window.relativeMouseMode() &&
+        !m_player->isDead()) {
+        const bool on = !m_player->isCreative();
+        m_player->setCreative(on);
+        m_player->setFlying(on);
+        MC_LOG_INFO("Creative mode " + std::string(on ? "ON" : "OFF") +
+                    " (G)");
+    }
     // V2-19: the mouse wheel zooms the third-person orbit distance
     // (session state — never saved, the camera-mode precedent; the C mode
     // switch does NOT reset it). Third views only: First is a no-op

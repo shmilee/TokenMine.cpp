@@ -46,6 +46,8 @@ std::optional<GameKey> Input::mapKey(std::uint32_t sdlKeycode) {
         case SDLK_7: return GameKey::Digit7;
         case SDLK_8: return GameKey::Digit8;
         case SDLK_9: return GameKey::Digit9;
+        // V3-11a: the creative mode toggle (the C-key's game-mode twin).
+        case SDLK_G: return GameKey::G;
         default: return std::nullopt;
     }
 }

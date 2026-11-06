@@ -2814,3 +2814,52 @@ TEST(PlayerTest, NetheriteArmorSuppressesLavaBurn) {
     run(p, 240, idle);
     EXPECT_LT(p.health(), p.maxHealth()); // the lava's tick landed
 }
+
+// -- V3-11a (creative): the mode's player-side gates -------------------------
+
+TEST(PlayerTest, CreativeBlocksAllDamageSources) {
+    // The immunity is the mode itself: every source funnels the gate.
+    BlockRegistry blocks = makeBlocks();
+    World world;
+    Player p(world, blocks, {8.5f, 10.0f, 8.5f});
+    p.setCreative(true);
+    for (Player::DamageSource src :
+         {Player::DamageSource::Fall, Player::DamageSource::Void,
+          Player::DamageSource::Starve, Player::DamageSource::Lava,
+          Player::DamageSource::Drown, Player::DamageSource::Arrow,
+          Player::DamageSource::Mob, Player::DamageSource::Effect}) {
+        p.damage(25.0f, false, {src, "x"});
+        EXPECT_FALSE(p.isDead()) << static_cast<int>(src);
+        EXPECT_FLOAT_EQ(p.health(), p.maxHealth()) << static_cast<int>(src);
+    }
+}
+
+TEST(PlayerTest, CreativeHungerIsStatic) {
+    // The decay AND the starvation tick never run in creative; the entry
+    // fills the bar (the creative's full static read).
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 10.0f, 8.5f});
+    p.setCreative(true);
+    EXPECT_FLOAT_EQ(p.hunger(), p.params().maxHunger);
+    Input idle = heldInput({});
+    run(p, 3600, idle); // a minute: the decay would drain the bar
+    EXPECT_FLOAT_EQ(p.hunger(), p.params().maxHunger);
+    EXPECT_FLOAT_EQ(p.health(), p.maxHealth());
+    // Back to survival: the decay resumes (the control — 23 ticks'
+    // window: the 20-point saturation buffer drains first, then the
+    // bar; 36 s = the default decay interval; the +2 tick margin is
+    // the 1/60 double-accumulation boundary's slack, the
+    // HungerDecaysEvery36Seconds' window discipline).
+    p.setCreative(false);
+    run(p, 23 * 36 * 60, idle);
+    EXPECT_LT(p.hunger(), p.params().maxHunger);
+}
+
+TEST(PlayerTest, CreativeEntryFillsAStarvingBar) {
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 10.0f, 8.5f});
+    p.setHealth(3.0f);
+    p.setCreative(true); // the entry fills the bar (the mode's read)
+    EXPECT_FLOAT_EQ(p.hunger(), p.params().maxHunger);
+}
+

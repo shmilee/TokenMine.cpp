@@ -115,6 +115,8 @@ enum class GameKey {
     C, // UX-4: cycle the camera First -> ThirdBack -> ThirdFront (locked
         // pointer only; V2-1: the Minecraft F5 order)
     T, // UX-7: skip the tutorial (locked pointer only)
+    G, // V3-11a: the creative mode toggle (the C-key pattern — the
+       // game's creative gamemode switch, no other consumer)
     FlyToggle, // V3-8b: the gamepad's DEDICATED flight toggle (the B/EAST
                // button — a single press flips the fly; the keyboard's
                // Space double-tap is untouched). Gamepad-only: no
@@ -122,7 +124,7 @@ enum class GameKey {
     // Keep in sync with kKeyCount.
 };
 
-inline constexpr int kKeyCount = static_cast<int>(GameKey::FlyToggle) + 1;
+inline constexpr int kKeyCount = static_cast<int>(GameKey::FlyToggle) + 1; // G sits before FlyToggle (the enum tail = FlyToggle)
 
 enum class MouseButton {
     Left,

@@ -3,7 +3,7 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–393，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–399，新条目继续前插于尾部块首。
 
 - **gzip 容器可钉 / zlib 宏缺失 / 双跑 RAW 适用域（PITS 385，门 191
   V3-7 存档 gzip）**——① **zlib 自带 gzip 封装（windowBits 16+15）
@@ -68,6 +68,22 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **format bump 测试面 4 类降级点 + demo save-spec 结果捕获（PITS 399，
+  门 207 v3.17.0 V3-11a 创造基础）**——① **存档 format 跳变 = 测试
+  面全家**（首跑全套 61 失败全此族，非实现 bug）：4 类降级点须同
+  commit 盘点——(a) **strip 助手本地复制 ×5 文件**（test_save/bed/
+  campfire/drown/enchant_save 各持一份 `stripFormat30Keys` = 升
+  `stripFormat31Keys` + 新键 strip）；(b) **手动 withoutKey 链**
+  （SaveFormat8Test 的 player rebuild 链加 creative 一环）；(c)
+  **inline rebuild**（test_durability player30 块 `k != "dimension"`
+  加 `&& k != "creative"`）；(d) **gzip identity 测试**（29→30 rebase
+  29→31：模拟旧档 strip creative + format 断言 + 往返断言）。盘点
+  口诀 = grep tests/ 的 strip 助手 / `"format\": 30` 断言 /
+  `asInt(), 30` 断言 / withoutKey player 链。② **demo save-spec 回放
+  结果捕获 = demo 内 F5**：world = save slot spec 时 `--save` 须匹配
+  槽（rc 2 点名）且退出**永不回写槽**（观察红线）→ 常规退出存档不
+  存在；结果捕获 = 时间线显式 F5 键（F5 handler 无条件 writeSave 当
+  活跃槽）。fresh world spec（4 canary）无此问题（常规退出写档）。
 - **场景手术三坑 + 动画内容的门协议（PITS 398，门 206 v3.16.0
   V3-15 小批）**——① **新种子 123456789 的 fresh 档自带 3 团地下火**
   （(23,35,28)/(24,35,28)/(26,35,27) y35 视角外，worldgen 产物，全

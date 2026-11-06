@@ -74,6 +74,9 @@ Result<SaveGame> Game::collectSave() const {
     // (the strict vocabulary word; the position's frame of reference).
     save.playerDimension =
         playerInNether() ? "nether" : "overworld";
+    // V3-11a (format 31): the creative flag — ALWAYS written (the
+    // live mode; the collectSave's single choke point).
+    save.playerCreative = m_player->isCreative();
     save.selectedSlot = static_cast<int>(m_selectedSlot);
     save.slots.resize(m_inventory.size());
     for (std::size_t i = 0; i < save.slots.size(); ++i) {
@@ -652,6 +655,13 @@ Result<void> Game::applySave(const SaveGame& save) {
     //    column, the 3x3 disk ensures the neighborhood is complete +
     //    lit). The overworld load (the default — the pre-Phase-B path)
     //    runs the exact legacy sequence, bit-for-bit.
+    // V3-11a (format 31): the creative mode restore (the flag + the
+    // flight default — a creative load flies, the G toggle's twin; a
+    // survival load is untouched, bit-identical).
+    m_player->setCreative(save.playerCreative);
+    if (save.playerCreative) {
+        m_player->setFlying(true);
+    }
     if (save.playerDimension == "nether") {
         m_player->setWorld(*m_nether.world);
         m_playerDimension = Dimension::Nether;

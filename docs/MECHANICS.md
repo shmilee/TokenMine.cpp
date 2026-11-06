@@ -14,7 +14,7 @@
 > 【V2-18 门 190，AO 世界光照】→ **225272【V3-6 门 200，填充感知雾 = 3.x
 > 首重锚】**；门 184–189 = 结构免疫第 65–70 次免重锚；门 191–199 =
 > 第 72–80 次；门 201–202 = 第 81–82 次免重锚（对 base19）【v3.0.0
-> banner = 第 71 次】）、PITS **398**。上一轮全面刷新
+> banner = 第 71 次】）、PITS **399**。上一轮全面刷新
 > （2026-11-02）止于 v2.0.0、2026-11-03 增量止于 v2.3.0（下条），本次把
 > v2.11.0 → v2.19.0 的机制（提前项 `[V2-19]` + 第二批 `[V2-11]`~`[V2-18]`，
 > 逐版见 `docs/archive/v2x/CHANGELOG.md`，细节证据见 `docs/archive/v2x/`
@@ -1227,6 +1227,18 @@
   无锻造台 / model 克隆钻石系 记档偏离 3）；icon 9 件暗红铜色板（记档偏离
   4，既有 84 张 md5 逐一不变）；附魔面：工具 pick/axe/shovel 类
   enchantability 14、护甲 10（可附魔 22 → **29 件**，见下条）；
+  **创造模式 `[V3-11a]`（v3.17.0）**：`G` 键切换（locked pointer +
+  仅存活，C 键范式）；**存档 flag**（format 31 `player.creative`，
+  MC per-player /gamemode 语义）——进入即填饱饥饿 + 开飞行，关闭回
+  生存（飞行关、饥饿自满条起衰减）。语义（全在 Player/Game 侧门控，
+  数据零字段）：**全源伤害 no-op**（damage 单收口 `if (m_creative)
+  return false`——lava/fire/fall/mob/arrow/starve/void 一律免疫 = 不
+  死）+ **饥饿静态满**（衰减/饥饿 tick `if (!m_creative)` 包裹，非
+  early return 保护 lava 段）+ **即挖**（creative 强制 break
+  duration 0 = 复用 data-driven instant path）+ **无掉落/无 XP/无
+  挖掘耐久**（breakBlock gate 只包 4 段 drops/chance/XP——粒子音效
+  保留）+ **放置不消耗**（3 点）；sim 不 bump（canary 4 demo 回放
+  EXACT 实证）；**创造物品栏 = V3-11b 未做**（现仅有既有背包内容）。
   **火·熔岩免疫 `[V3-15]`（v3.16.0）**：物品可选属性 `fire_resistant`
   （strict bool，armor-only = parseArmor 守卫，shears tool-only 孪生）
   4 件 netherite 护甲 = true——**任一件穿在身上**（setArmorSlot 单收口
@@ -1684,10 +1696,13 @@
   至多一个 + 与游戏旗标互斥 = rc 2 点名）；**记档偏离**：无游戏内选档面板/
   会话内换档（游戏无标题画面，会话内载档 = 世界重建级架构变更矩阵外；多槽
   切换 = CLI `--save` 既有面；「保存并退出」= 既有 ESC/退出存档路径）
-- **format 30**（`kSaveFormat` 30 / `kSaveFormatMin` 1；**1..30 全部可加载**，
+- **format 31**（`kSaveFormat` 31 / `kSaveFormatMin` 1；**1..31 全部可加载**，
   各按字段集 + 逐 format 白名单，规则式迁移——「未知字段 = 报错」
-  rejectUnknownFields 保持；**30 = `[V3-1]` 下界维度时代**：`player.
-  dimension` 严格词表（`overworld`|`nether`）**恒写**（29 缺 = overworld
+  rejectUnknownFields 保持；**31 = `[V3-11a]` 创造时代**：`player.
+  creative` strict bool **恒写**（format 30 载 → false 迁移 / format 30
+  携键 = version lie 点名 / 非 bool 点名——dimension 恒写先例；创造
+  语义全在游戏侧，见下「创造模式」）；schema 其余与 30 一致（**30 =
+  `[V3-1]` 下界维度时代**：`player.dimension` 严格词表（`overworld`|`nether`）**恒写**（29 缺 = overworld
   迁移 / 29 携 = version lie 点名 / 未知词点名）+ `nether` 段
   `{blocks, fluids, states}` **恒写**（空合法 = 下界 journal；nether 内
   stateful 块须 nether.states 条目）+ `nether_entities`（item kind 掉落物）

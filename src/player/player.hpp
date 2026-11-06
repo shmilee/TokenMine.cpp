@@ -438,6 +438,15 @@ public:
                       bool fireResistant = false);
     // V3-15 (netherite): the equipped fire immunity (the points' twin).
     bool hasFireResistantArmor() const;
+    // V3-11a (creative, format 31): the per-player mode flag (the
+    // Minecraft's gamemode twin — a save flag, not a config key).
+    // Creative = no damage of any source + the hunger bar is static
+    // (full on entry) + the flight default (the game's G toggle owns
+    // the flight transition) + the instant break / no drops / no
+    // item consumption (the game's side).
+    bool isCreative() const { return m_creative; }
+    void setCreative(bool on);
+    bool m_creative = false; // format 31: player.creative
     // The total equipped points, capped at kArmorMaxPoints (the damage
     // formula's input; 0 = no armor = the pre-SURV-1 bit-identical
     // path).

@@ -459,7 +459,19 @@ namespace mc {
 //      container (format 29's orthogonal encoding) carries the new
 //      schema unchanged (the read side is encoding-agnostic, the magic
 //      probe). Writes are always format 30.
-inline constexpr int kSaveFormat = 30;
+//  31: V3-11a the CREATIVE mode (v3.17.0) — "player" gains "creative"
+//      (a STRICT boolean, ALWAYS written: the per-player gamemode
+//      flag — the Minecraft's per-player /gamemode twin, the
+//      dimension's always-written precedent; a format-30 file
+//      carrying it is a version lie, the per-format field whitelist
+//      names it; a format-30 load MIGRATES to false — the mode did
+//      not exist). The creative's semantics (the game's side): no
+//      damage of any source + the static full hunger bar + the
+//      instant break / no drops / no item consumption on placement
+//      + the flight on entry. The schema is otherwise IDENTICAL to
+//      30 (the nether segments / states / everything unchanged).
+//      Writes are always format 31.
+inline constexpr int kSaveFormat = 31;
 // UX-8f (format 24): the inventory's total slot count as of format 23
 // (9 hotbar + 18 storage) — the 27-slot array shape a pre-24 file
 // carries (the parser tail-pads it to the current kTotalSize).
@@ -845,6 +857,9 @@ struct SaveGame {
     // (or older) load (the migration — the system did not exist, the
     // player was always in the overworld; the velocity-zeroed twin).
     std::string playerDimension = "overworld";
+    // V3-11a (format 31): the player's creative mode (ALWAYS written,
+    // the strict boolean; a format-30 load migrates to false).
+    bool playerCreative = false;
     std::vector<SavedItemEntity> entities;
     // The XP orbs (V2-11, format 26): the second entity kind of the
     // save's "entities" array (type "xp" — the item entries above keep

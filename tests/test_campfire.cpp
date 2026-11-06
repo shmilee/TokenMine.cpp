@@ -268,15 +268,23 @@ Json withoutKey(const Json& root, const std::string& key) {
     return out;
 }
 // V3-1 Phase B: the downgrade's format-30 key strip (the test_save.cpp
-// stripFormat30Keys twin — the genuine pre-30 file never carried the
+// stripFormat31Keys twin — the genuine pre-30 file never carried the
 // format-30 keys: player.dimension / nether / nether_entities).
-Json stripFormat30Keys(Json root) {
+Json stripFormat31Keys(Json root) {
     root = withoutKey(root, "nether");
     root = withoutKey(root, "nether_entities");
     if (const Json* player = root.find("player");
         player != nullptr && player->isObject() &&
         player->find("dimension") != nullptr) {
         Json p = withoutKey(*player, "dimension");
+        root = withoutKey(root, "player");
+        root["player"] = std::move(p);
+    }
+    // V3-11a: the format-31 creative key strip (the dimension twin).
+    if (const Json* player = root.find("player");
+        player != nullptr && player->isObject() &&
+        player->find("creative") != nullptr) {
+        Json p = withoutKey(*player, "creative");
         root = withoutKey(root, "player");
         root["player"] = std::move(p);
     }
@@ -345,8 +353,8 @@ TEST(CampfireSaveTest, FormatIsThirteenAndRoundTrips) {
     s.campfires.push_back({BlockPos {4, 53, 4}, unlit});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // V3-1 Phase B: writes are always format 30 (V3-7 was 29).
-    EXPECT_EQ(j->find("format")->asInt(), 30);
+    // V3-11a: writes are always format 31 (V3-1 Phase B was 30).
+    EXPECT_EQ(j->find("format")->asInt(), 31);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     ASSERT_EQ(out->campfires.size(), 3u);
@@ -372,7 +380,7 @@ TEST(CampfireSaveTest, FormatTwelveOldShapeMigratesToSlotZero) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
     Json root = *j;
-    root = stripFormat30Keys(std::move(root));
+    root = stripFormat31Keys(std::move(root));
     root["format"] = Json(12);
     root["player"] = withoutKey(withoutKey(withoutKey(root["player"], "xp"), "xp_seed"), "respawn"); // V2-11: the xp key is format-26 vocabulary; V2-13: the respawn key is format-28 vocabulary
     root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
@@ -418,7 +426,7 @@ TEST(CampfireSaveTest, FormatTwelveEntryWithSlotsKeyRejected) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
     Json root = *j;
-    root = stripFormat30Keys(std::move(root));
+    root = stripFormat31Keys(std::move(root));
     root["format"] = Json(12);
     root["player"] = withoutKey(withoutKey(withoutKey(root["player"], "xp"), "xp_seed"), "respawn"); // V2-11: the xp key is format-26 vocabulary; V2-13: the respawn key is format-28 vocabulary
     root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
@@ -477,7 +485,7 @@ TEST(CampfireSaveTest, FormatTenLoadsWithoutCampfires) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
     Json root = *j;
-    root = stripFormat30Keys(std::move(root));
+    root = stripFormat31Keys(std::move(root));
     root["format"] = Json(10);
     root["player"] = withoutKey(withoutKey(withoutKey(root["player"], "xp"), "xp_seed"), "respawn"); // V2-11: the xp key is format-26 vocabulary; V2-13: the respawn key is format-28 vocabulary
     root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
@@ -506,7 +514,7 @@ TEST(CampfireSaveTest, FormatTenCampfireEditMigratesEmpty) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
     Json root = *j;
-    root = stripFormat30Keys(std::move(root));
+    root = stripFormat31Keys(std::move(root));
     root["format"] = Json(10);
     root["player"] = withoutKey(withoutKey(withoutKey(root["player"], "xp"), "xp_seed"), "respawn"); // V2-11: the xp key is format-26 vocabulary; V2-13: the respawn key is format-28 vocabulary
     root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape
@@ -532,7 +540,7 @@ TEST(CampfireSaveTest, RejectsCampfiresFieldInFormatTen) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
     Json root = *j;
-    root = stripFormat30Keys(std::move(root));
+    root = stripFormat31Keys(std::move(root));
     root["format"] = Json(10); // keeps the "campfires" field
     root["player"] = withoutKey(withoutKey(withoutKey(root["player"], "xp"), "xp_seed"), "respawn"); // V2-11: the xp key is format-26 vocabulary; V2-13: the respawn key is format-28 vocabulary
     root = downgradeSlots(root);  // UX-8f: the pre-24 27-slot shape

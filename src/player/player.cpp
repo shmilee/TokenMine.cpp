@@ -534,28 +534,36 @@ void Player::update(double dt) {
     // 28), else drops one hunger point. At zero the player starves (1 HP
     // per interval, through the normal damage path so the game's hurt
     // flash/sound and death handling all fire).
-    m_hungerAccum +=
-        dt * (sprinting ? m_params.sprintHungerDecayFactor : 1.0);
-    if (m_hunger > 0.0f) {
-        m_starveAccum = 0.0; // a meal resets the pending starvation tick
-    }
-    while (m_hungerAccum >= m_params.hungerDecaySeconds) {
-        m_hungerAccum -= m_params.hungerDecaySeconds;
-        // SURV-9: the shared one-point drain (the buffer first, else the
-        // bar — the Phase 28 primitive, now also the regen's cost).
-        drainOneHungerPoint();
-        if (m_hunger <= 0.0f) {
-            m_hungerAccum = 0.0;
-            break;
+    if (!m_creative) {
+        // V3-11a: the creative's static bar — the decay AND the
+        // starvation tick never run (the damage gate alone would leave
+        // the bar draining; the full bar is the creative's read). The
+        // wrap (not an early return) keeps the lava/void sections below
+        // running (their damage is gated by the creative anyway).
+        m_hungerAccum +=
+            dt * (sprinting ? m_params.sprintHungerDecayFactor : 1.0);
+        if (m_hunger > 0.0f) {
+            m_starveAccum = 0.0; // a meal resets the pending starvation tick
         }
-    }
-    if (m_hunger <= 0.0f && !m_dead) {
-        m_starveAccum += dt;
-        while (m_starveAccum >= m_params.starveDamageIntervalSeconds) {
-            m_starveAccum -= m_params.starveDamageIntervalSeconds;
-            damage(1.0f, false, {DamageSource::Starve, {}});
-            if (m_dead) {
+        while (m_hungerAccum >= m_params.hungerDecaySeconds) {
+            m_hungerAccum -= m_params.hungerDecaySeconds;
+            // SURV-9: the shared one-point drain (the buffer first,
+            // else the bar — the Phase 28 primitive, now also the
+            // regen's cost).
+            drainOneHungerPoint();
+            if (m_hunger <= 0.0f) {
+                m_hungerAccum = 0.0;
                 break;
+            }
+        }
+        if (m_hunger <= 0.0f && !m_dead) {
+            m_starveAccum += dt;
+            while (m_starveAccum >= m_params.starveDamageIntervalSeconds) {
+                m_starveAccum -= m_params.starveDamageIntervalSeconds;
+                damage(1.0f, false, {DamageSource::Starve, {}});
+                if (m_dead) {
+                    break;
+                }
             }
         }
     }
@@ -655,6 +663,18 @@ bool Player::hasFireResistantArmor() const {
     return m_fireResistant;
 }
 
+void Player::setCreative(bool on) {
+    m_creative = on;
+    if (on) {
+        // The creative's full static bar (the entry fills it; the
+        // decay gate below keeps it there).
+        m_hunger = m_params.maxHunger;
+        m_saturation = m_params.maxHunger;
+        m_hungerAccum = 0.0;
+        m_starveAccum = 0.0;
+    }
+}
+
 bool Player::damage(float amount, bool bypassArmor) {
     return damage(amount, bypassArmor, DamageInfo {});
 }
@@ -662,6 +682,12 @@ bool Player::damage(float amount, bool bypassArmor) {
 bool Player::damage(float amount, bool bypassArmor,
                     const DamageInfo& info) {
     if (m_dead || amount <= 0.0f) {
+        return false;
+    }
+    // V3-11a (creative): no damage of any source (the immunity is the
+    // mode itself — the lava/fire/fall/mob/arrow/starve/void paths all
+    // funnel through this one choke point).
+    if (m_creative) {
         return false;
     }
     // SURV-3: the incoming PRE-reduction amount (the armor-wear formula's

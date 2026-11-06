@@ -55,15 +55,23 @@ Json withoutKeyForTest(const Json& obj, const std::string& key) {
     return out;
 }
 // V3-1 Phase B: the downgrade's format-30 key strip (the test_save.cpp
-// stripFormat30Keys twin — the genuine pre-30 file never carried the
+// stripFormat31Keys twin — the genuine pre-30 file never carried the
 // format-30 keys: player.dimension / nether / nether_entities).
-Json stripFormat30Keys(Json root) {
+Json stripFormat31Keys(Json root) {
     root = withoutKeyForTest(root, "nether");
     root = withoutKeyForTest(root, "nether_entities");
     if (const Json* player = root.find("player");
         player != nullptr && player->isObject() &&
         player->find("dimension") != nullptr) {
         Json p = withoutKeyForTest(*player, "dimension");
+        root = withoutKeyForTest(root, "player");
+        root["player"] = std::move(p);
+    }
+    // V3-11a: the format-31 creative key strip (the dimension twin).
+    if (const Json* player = root.find("player");
+        player != nullptr && player->isObject() &&
+        player->find("creative") != nullptr) {
+        Json p = withoutKeyForTest(*player, "creative");
         root = withoutKeyForTest(root, "player");
         root["player"] = std::move(p);
     }
@@ -385,7 +393,7 @@ TEST(BedSaveFormat28, BedPositionRoundTripsExactly) {
     SaveFixture f;
     auto j = serializeSave(f.save, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ(j->find("format")->asInt(), 30);
+    EXPECT_EQ(j->find("format")->asInt(), 31);
     const Json* rp = j->find("player")->find("respawn");
     ASSERT_NE(rp, nullptr);
     ASSERT_TRUE(rp->isArray());
@@ -444,7 +452,7 @@ TEST(BedSaveFormat28, Format27CarryingRespawnRejected) {
     auto j = serializeSave(f.save, f.items);
     ASSERT_TRUE(j.ok());
     Json root = *j;
-    root = stripFormat30Keys(std::move(root));
+    root = stripFormat31Keys(std::move(root));
     root["format"] = Json(27);
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
@@ -461,7 +469,7 @@ TEST(BedSaveFormat28, Pre28LoadMigratesToTheSentinel) {
     auto j = serializeSave(f.save, f.items);
     ASSERT_TRUE(j.ok());
     Json root = *j;
-    root = stripFormat30Keys(std::move(root));
+    root = stripFormat31Keys(std::move(root));
     root["format"] = Json(27);
     root["player"] = withoutKeyForTest(*root.find("player"), "respawn");
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);

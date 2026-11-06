@@ -438,8 +438,8 @@ TEST(SaveFormat18Test, MidDamageRoundTripsInAllThreePlaces) {
     s.entities.push_back(e);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    // V3-1 Phase B: writes are always format 30 (V3-7 was 29).
-    EXPECT_EQ(j->find("format")->asInt(), 30);
+    // V3-11a: writes are always format 31 (V3-1 Phase B was 30).
+    EXPECT_EQ(j->find("format")->asInt(), 31);
     // The shapes: the damaged slot + the entity carry the key; the
     // full-durability armor slot is a STRING; the damaged one an
     // OBJECT {item, damage}.
@@ -488,14 +488,15 @@ TEST(SaveFormat18Test, Format17WithDamageKeyIsAVersionLie) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     Json root = *j;
-    // V3-1 Phase B: the format-30 keys (dimension / nether /
-    // nether_entities) are stripped for the downgrade (the genuine pre-30
-    // file never carried them — the test_save.cpp stripFormat30Keys
-    // discipline; this file has no withoutKey helper, the inline strip).
+    // V3-11a: the format-30/31 keys (dimension / creative / nether /
+    // nether_entities) are stripped for the downgrade (the genuine
+    // pre-31 file never carried them — the test_save.cpp
+    // stripFormat31Keys discipline; this file has no withoutKey helper,
+    // the inline strip).
     {
         Json player30 = Json::object();
         for (const auto& [k, v] : root["player"].members()) {
-            if (k != "dimension") {
+            if (k != "dimension" && k != "creative") {
                 player30[k] = v;
             }
         }

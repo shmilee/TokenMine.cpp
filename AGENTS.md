@@ -32,12 +32,13 @@ v3.10.0 = V3-6 世界边缘雾（门 200，11-05：填充感知 fog end，
 仅模拟语义变更才 bump + legacy 版本指纹零迁移直放 + --demo-force +
 4 demo canary）；**v3.14.0 = V3-8b 手柄习惯映射定案（门 204，11-06：
 L3 蹲伏 + RT 疾跑 + B 飞行专用钮【用户三项定案，config 自定义不做】+
-SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）；**v3.15.0 = V3-13 死亡统计屏（门 205，11-06：致死原因行 9 措辞 + 会话统计 5 行 + 字体 +1 字形「于」428）；**v3.16.0 = V3-15 生存/表现小批（门 206，11-06：netherite 火·熔岩免疫【fire_resistant armor-only + 三抑制 + 熔岩死因覆写】+ portal 2 周期纹理 UV 滚动 + 蒸汽粒子 8×8×9 盒）= 矩阵 ⬜ 项小→大推进 2/6**）**）——**3.x 矩阵
+SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）；**v3.15.0 = V3-13 死亡统计屏（门 205，11-06：致死原因行 9 措辞 + 会话统计 5 行 + 字体 +1 字形「于」428）；**v3.16.0 = V3-15 生存/表现小批（门 206，11-06：netherite 火·熔岩免疫【fire_resistant armor-only + 三抑制 + 熔岩死因覆写】+ portal 2 周期纹理 UV 滚动 + 蒸汽粒子 8×8×9 盒）；**v3.17.0 = V3-11a 创造基础（门 207，11-06：G 切换 + 存档 flag format 31 player.creative 恒写 + 全源伤害门 + 饥饿静态满 + 即挖 + 无掉落/无耐久 + 放置不消耗 + 入场飞行；sim 不 bump canary 4 demo EXACT）= 矩阵 ⬜ 项小→大推进 3/6**）**）——**3.x 矩阵
 18 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
 （门 202）/ v3.13.0（门 203）/ v3.14.0（门 204）/ v3.15.0（门 205）
-/ v3.16.0（门 206）+ 11-06 扩容 7 项（V3-8b ✅ v3.14.0 + V3-13 ✅
-v3.15.0 + V3-15 ✅ v3.16.0 + V3-10~V3-14 ⬜ 四项【大项已相位拆分
-V3-10a~d / V3-11a~b / V3-12a~c / V3-14a~d，BACKLOG 待执行项明细】）**
+/ v3.16.0（门 206）/ v3.17.0（门 207）+ 11-06 扩容 7 项（V3-8b ✅
+v3.14.0 + V3-13 ✅ v3.15.0 + V3-15 ✅ v3.16.0 + V3-11a ✅ v3.17.0
++ V3-10~V3-14 ⬜ 四项【V3-11 仅剩 b；大项已相位拆分 V3-10a~d /
+V3-11a~b / V3-12a~c / V3-14a~d，BACKLOG 待执行项明细】）**
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -96,9 +97,11 @@ V3-10a~d / V3-11a~b / V3-12a~c / V3-14a~d，BACKLOG 待执行项明细】）**
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2795/2795**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
-  存档 format 30（V3-1 Phase B 下界维度：player.dimension 严格词表
-  恒写 + nether 段 {blocks,fluids,states} + nether_entities 恒写 +
+- 测试 **2801/2801**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+  存档 format 31（V3-11a 创造：player.creative strict bool 恒写，
+  pre-31 载迁 false，30 携键 = version lie 点名；schema 其余与 30
+  一致）；format 30 = V3-1 Phase B 下界维度（player.dimension 严格
+  词表恒写 + nether 段 {blocks,fluids,states} + nether_entities 恒写 +
   派生 seed 不落盘；schema 其余与 29 一致，29 携新键 = version lie
   点名）；format 29 = V3-7 gzip 时代（schema 与 28 一致——编码与
   format 号正交，on-disk = 确定性 gzip 容器默认开【10B 头全钉 + raw
@@ -195,6 +198,35 @@ V3-10a~d / V3-11a~b / V3-12a~c / V3-14a~d，BACKLOG 待执行项明细】）**
   零 diff + crop 3× 目检同场景同羊同位】；性能 A/B 同档【changes-
   Applied 逐位 + 终档 savenorm EXACT】；PITS 392【DEBUG 事件行
   grep 假阴性】；详见 `docs/archive/phase-3.12.0.md`）；
+  门计数 207（**V3-11a 创造基础 v3.17.0** 门 207 全 PASS【矩阵 ⬜
+  项小→大推进 3/6】：**G 切换**【GameKey::G 插 FlyToggle 前 kKeyCount
+  尾钉不动；locked pointer + 仅存活 = C 键范式】+ **创造 = 存档
+  flag**【format 31 player.creative strict bool 恒写【dimension 先例】
+  pre-31 迁 false / 30 携键 = version lie 点名 / 非 bool 点名】+ **不
+  死**【damage 单收口 creative 门 = 全源免疫】+ **饥饿静态满**【入场
+  填饱 + 衰减/饥饿 tick if(!m_creative) 包裹非 early return 保护 lava
+  段】+ **即挖**【duration 0 复用 data-driven instant path】+ **无
+  掉落/无 XP/无挖掘耐久**【breakBlock gate 只包 4 段，粒子音效保留；
+  声明前移重构】+ **放置 3 点免消耗** + **开关 = setFlying**；**sim
+  不 bump**【canary 4 demo 回放 EXACT 实证 = 存档态增量功能 survival
+  路径位级不变】；2801/2801（+6 SaveFormat31Test ×3 / PlayerTest.
+  Creative ×3【对照臂 23 tick 裕量 = 1/60 双累加边界纪律】）；结构免
+  疫第 87 次【S1 ≡ base19 逐字节 ×2 + savenorm EXACT——creative 默认
+  off 零键差零像素】；S2 creative demo 臂【场景 60f fresh 去火 +
+  format 31 creative true；时间线低头 dy 628 + LMB f20-30 即挖 + F5
+  @f50 结果捕获【save-spec 回放 --save 须匹配槽 + 退出不回写 → F5
+  唯一结果机制 = PITS 399②】：creative=True / health 20 / pos
+  (0.5,54,0.5) 飞行不坠 / (0,53,0) 已挖 / entities=0 无掉落 / 截图 ×2
+  RAW + 结果存档 ×2 RAW】；S2b canary 4 demo ×2 RAW + savenorm
+  EXACT；S6 点名【实机 format-30 携 creative → rc 1 + 单元 ThreeWay
+  三面】；性能 A/B 同档【旧 = 6b031c5 v3.16.0 + g139 banner 实证：
+  PERF-WIN 三窗 upd med 0.578/0.667/0.650 vs 0.690/0.596/0.652 +
+  render/swap 同档 + changesApplied 9/2-3/1【win2 = streaming 边界
+  real-dt 域 v3.14.0 先例】+ **终档 = 恰白名单 2 键**【format 30→31 +
+  player.creative missing-in-old，v3.4.0 format 跳变「恰白名单 4
+  键」同款】——creative 无输入全冷路径结构性零成本】；PITS 399【format
+  bump 测试面 = 4 类降级点盘点【首跑 61 失败全此族】+ demo save-spec
+  结果捕获 F5】；详见 `docs/archive/phase-3.17.0.md`）；
   门计数 206（**V3-15 生存/表现小批 v3.16.0** 门 206 全 PASS【矩阵 ⬜
   项小→大推进 2/6】：**netherite 火·熔岩免疫**【物品 fire_resistant
   strict bool armor-only = parseArmor 守卫 shears 孪生 + 4 件护甲 true；
@@ -591,7 +623,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 （细节归阶段文档，不写长句））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
-## 坑位 Top 8（全文 docs/PITS.md，398 条；pre-3.x 条目在 docs/archive/PITS_PRE3X.md）
+## 坑位 Top 8（全文 docs/PITS.md，399 条；pre-3.x 条目在 docs/archive/PITS_PRE3X.md）
 
 1. **SDL grab delta**（P28）：输入 E2E 全帧字节一致不保证——存档 yaw/pitch 为漂移
    探测器；驱动 warp 用实际窗口原点（实测 (4,64)）+ (632,352)。
@@ -627,7 +659,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（398 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（399 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

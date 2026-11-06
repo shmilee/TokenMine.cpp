@@ -954,6 +954,10 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     // position's frame of reference: the pos / velocity / yaw / pitch
     // are in this dimension's coordinates).
     player["dimension"] = Json(save.playerDimension);
+    // V3-11a (format 31): the player's creative mode — ALWAYS written
+    // (the strict boolean; the collectSave always fills the live
+    // value, the dimension's precedent).
+    player["creative"] = Json(save.playerCreative);
     root["player"] = player;
 
     Json slots = Json::array();
@@ -1422,6 +1426,13 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // files, the three-way discipline).
     if (fmt->asInt() >= 30) {
         playerFields.insert("dimension");
+    }
+    // V3-11a: "creative" is format-31-and-newer vocabulary — a pre-31
+    // file carrying it is a version lie (the whitelist naming above;
+    // the player.creative parse below requires it ON format-31 files,
+    // the three-way discipline).
+    if (fmt->asInt() >= 31) {
+        playerFields.insert("creative");
     }
     MC_TRY(rejectUnknownFields(*player, playerFields, "save 'player'"));
     const Json* ppos = player->find("pos");
@@ -1920,6 +1931,20 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         save.playerDimension = dimName;
     } else {
         save.playerDimension = "overworld"; // the migration (format <= 29)
+    }
+    // V3-11a (format 31): the player's creative mode — REQUIRED for a
+    // format-31 file (a missing key is a version lie, the strict
+    // boolean), a pre-31 load migrates to false (the mode did not
+    // exist — the dimension's overworld migration twin).
+    if (fmt->asInt() >= 31) {
+        const Json* creative = player->find("creative");
+        if (creative == nullptr || !creative->isBool()) {
+            return MC_FAIL("save format 31 requires 'player.creative' "
+                           "(a strict boolean — the per-player gamemode)");
+        }
+        save.playerCreative = creative->asBool();
+    } else {
+        save.playerCreative = false; // the migration (format <= 30)
     }
     // UX-7 (format 23) / V2-3 (format 25): the player's tutorial
     // progress. REQUIRED for a format-23 file (a missing key is a
