@@ -423,6 +423,18 @@ void MobEntity::runAi(double dt) {
         }
         return;
     }
+    // V3-14d: the ridden takeover (the SESSION-state branch at the TOP
+    // of the ground path — the flyCruise pure-new-branch twin): while
+    // a player sits on this mob, the wander is suspended and the rider's
+    // steer owns the heading / velocity. Gated on m_ridden (the game's
+    // mount/dismount), NOT on a data flag — every non-ridden mob takes
+    // the pre-V3-14d path bit-identically (the red line). The AMBIENT
+    // roll is duplicated inside (the per-mob stream contract — the
+    // hiss plays while ridden and the stream stays aligned, PITS 403⑤).
+    if (m_ridden) {
+        riderSteer(p);
+        return;
+    }
     // V3-3: the GROUND-mob ambient roll (the hoglin / piglin / strider —
     // the flyCruise squeak's ground twin, the data-driven general
     // mechanism, no species special-casing): once per frame, probability
@@ -589,6 +601,46 @@ void MobEntity::runAi(double dt) {
     const float s = p.speed * kWanderSpeedFactor;
     m_velocity.x = -std::sin(angle) * s;
     m_velocity.z = -std::cos(angle) * s;
+}
+
+// -- V3-14d: the ridden AI (the rider's steer takeover) -----------------
+
+void MobEntity::riderSteer(const MobProperties& p) {
+    m_state = MobState::Ridden;
+    // The ambient roll (the per-mob stream contract — the ground
+    // branch's verbatim twin, kept so the ridden hiss frame + the
+    // stream alignment survive the takeover; PITS 403⑤).
+    if (!p.ambientSoundName.empty() && m_ambientSound) {
+        const double pAmbient = 1.0 /
+            (p.ambientInterval * kMobFramesPerSecond);
+        if (uniform01(m_rng) < pAmbient) {
+            m_ambientSound(position());
+        }
+    }
+    if (m_riderForward && lengthSq(m_riderDir) > 1e-8f) {
+        // Forward: face the rider's heading (the camera yaw convention:
+        // forward(yaw) = (-sin, -cos) — the chase steering's twin) and
+        // walk at the DATA speed along it (the AI set-velocity
+        // convention — the wander's `m_velocity = dir * speed` twin).
+        const float inv = 1.0f / std::sqrt(lengthSq(m_riderDir));
+        const float dx = m_riderDir.x * inv;
+        const float dz = m_riderDir.z * inv;
+        m_yaw = std::atan2(-dx, -dz);
+        m_velocity.x = dx * p.speed;
+        m_velocity.z = dz * p.speed;
+        return;
+    }
+    // Released (no forward wish / no direction key): the kRideDecel
+    // ease-out to a stand (the frame-locked twin of the player's ENT-7
+    // decay — the fixed 1/60 step keeps the stop frame exact; the
+    // stop-epsilon zeroes the residual, the player's :382-387 twin).
+    m_velocity.x *= kRideDecel;
+    m_velocity.z *= kRideDecel;
+    if (std::abs(m_velocity.x) < kRideStopEps &&
+        std::abs(m_velocity.z) < kRideStopEps) {
+        m_velocity.x = 0.0f;
+        m_velocity.z = 0.0f;
+    }
 }
 
 // -- V2-14: the flight AI (the bat — the data-flag-gated cruise) --------

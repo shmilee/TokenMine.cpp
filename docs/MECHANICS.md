@@ -474,7 +474,21 @@
     【海柱收形】）/ **`spawn_max_light` 15**（本引擎熔岩自发光 15，7 门
     会自毁 strider 永不生成 = 门 198 内实证；15 = 熔岩面独占位，其余 4
     种留 7 台地表 0–3 暗区不受影响）/ ambient strider_hiss 3.0 s /
-    **不可骑乘**（记档不做）
+    **骑乘 `[V3-14d]` v3.22.0**：`rideable: true`（strict bool，
+    walks_on_lava 孪生；项目首个/唯一骑乘物）——右键骑上 = **承载
+    会话态**（Player `m_carried` 旁路：wish 锁 + move/stepUp 旁路 +
+    integrate no-op + fall 复锚每帧 = 落乘 1.05 落差永不坠伤；保留
+    look/survival/swing——落乘进熔岩会烧 = MC 语义）+ **riderSteer
+    接管 wander**（WASD 直控：数据 speed 沿航向 + kRideDecel 0.9
+    漂停【停帧 = release+38】+ ambient 流契约保留 + **collides-
+    WithEntities opt-out** = 分离 pass 不顶坐骑）+ **ride pass 单
+    收口**（落乘 6 条件：坐骑死/玩家死/飞行/面板/入水【熔岩面保持
+    = MC 定案】/portal arm + 承载 snap 背位 kRideCarryHeight 1.05
+    + steer 推送）+ **Space/LeftControl 落乘**（Space 挂双击飞行窗
+    记录之前 = 落乘 tap 不武装飞行）；**承载不入档**（mob 不入档 =
+    唯一自洽解，先例 = portal 冷却/飞行）；渲染零改动（相机/第三
+    人称/站姿体自动）；MC 偏离 6 记档（无 saddle/WASD 直控/无水伤
+    下沉/原地落乘/无脚步音/站姿背位）
   - **ghast**（敌对 + **flying 远程**，`[V3-14b]` v3.20.0，**下界漂浮
     恐怖 = 项目首个爆炸射手**）：10 HP / 0.7 / 探测 16 / **shoot 14 @
     速度 10 / 冷却 4.0** / **`explode_radius` 3**（strict 非负；>0 须

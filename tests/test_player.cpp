@@ -2872,3 +2872,49 @@ TEST(PlayerTest, CreativeEntryFillsAStarvingBar) {
     EXPECT_FLOAT_EQ(p.hunger(), p.params().maxHunger);
 }
 
+// -- V3-14d: the carried (ridden) physics bypass --------------------------
+
+TEST(PlayerTest, CarriedBypassesSelfMovementAndGravity) {
+    // The carried (the strider's carry — the game's ride pass owns the
+    // pose): the player's W wish is LOCKED (no self-drive), the gravity
+    // is skipped (the integrate no-op), and the position never moves on
+    // its own (the ride pass's snap is the only writer). A carried
+    // player in the air holding W stays exactly where the pass put it.
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 10.0f, 8.5f});
+    p.setCarried(true);
+    Input w = heldInput({GameKey::W});
+    for (int i = 0; i < 60; ++i) {
+        w.frameBegin();
+        p.update(kDt, w, false);
+        EXPECT_FLOAT_EQ(p.position().x, 8.5f);
+        EXPECT_FLOAT_EQ(p.position().z, 8.5f);
+        EXPECT_FLOAT_EQ(p.position().y, 10.0f); // no gravity, no fall
+        EXPECT_FLOAT_EQ(p.velocity().y, 0.0f); // the integrate no-op
+    }
+}
+
+TEST(PlayerTest, DismountDropFromTheCarryHeightNeverDamages) {
+    // The fall re-anchor (the fly's twin): while carried, m_fallStartY
+    // re-pins to the (carry-snapped) position every frame, so the
+    // dismount drop from the carry height never accrues fall distance.
+    // The game's ride pass re-snaps the player to the mount's back
+    // position every carried frame — the test mirrors it (the setPosition
+    // before each update, at the carry height over the ground top 1.0).
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 1.05f, 8.5f});
+    p.setCarried(true);
+    Input idle = heldInput({});
+    for (int i = 0; i < 120; ++i) {
+        p.setPosition({8.5f, 1.05f, 8.5f}); // the ride pass's snap
+        idle.frameBegin();
+        p.update(kDt, idle, false);
+    }
+    p.setCarried(false); // the dismount (the player is AT the carry
+                         // height — the game's dismount-frame state)
+    run(p, 60, idle);
+    EXPECT_FLOAT_EQ(p.position().y, 1.0f); // landed on the ground
+    EXPECT_TRUE(p.onGround());
+    EXPECT_FLOAT_EQ(p.health(), p.params().maxHealth); // no fall damage
+}
+

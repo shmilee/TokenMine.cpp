@@ -3,7 +3,7 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–403，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–404，新条目继续前插于尾部块首。
 
 - **gzip 容器可钉 / zlib 宏缺失 / 双跑 RAW 适用域（PITS 385，门 191
   V3-7 存档 gzip）**——① **zlib 自带 gzip 封装（windowBits 16+15）
@@ -68,6 +68,31 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **git checkout 还原回退未提交功能 + 骑乘场景视线三件 + demo 瞄准
+  换算 + Space 双击窗 + 分离 opt-out 五坑（PITS 404，门 212
+  v3.22.0 V3-14d strider 骑乘）**——① **`git checkout --` 还原
+  temp 改的数据文件 = 未提交的功能加法一并回退**：S6 点名臂
+  （temp 改坏 → 跑 → `git checkout --` 还原）把**同文件里未提交的
+  功能键**也回退了（v3.21 piglin.json 的 barter、v3.22 strider.json
+  的 rideable 两连踩）——后续探跑静默用旧数据（谓词假 = 瞄准全对
+  也不触发，假象极似「没打中」）。纪律 = temp 改动用 python 原地
+  改 + **手工字符串还原**（非 git）+ 还原后 **grep 回验功能字段
+  仍在**。② **骑乘场景视线三件 = 贯通沟 + 桥 + 灯**：1×1/浅沟的
+  rim 遮挡（射线降过台面 y 在沟口外 0.09-1.1m）→ 贯通沟（目标列 +
+  进深列全挖到流体顶，射线沿线每列空气）+ **桥格**（流体顶 +1 的
+  固体顶面 = 玩家起点/骑行通道，免 burn 且同层可行走）+ **灯排**
+  （glowstone 高位照亮——18 格上 = 光 0 不可见，6 格上 = 光 9；
+  **灯位须对 spawn 光门验算**：strider 15 门，脚格光 ≤15 不变）。
+  ③ **demo 瞄准换算**：pitch/yaw 按**体心**（feet + height/2）非
+  feet（feet 距 5.54 > kReach 5.0 但体心 5.0 恰界 = MISS 假象的
+  反面）；delta px = Δrad / mouseSensitivity **0.0025**（180° =
+  1257px 单帧——mouseDelta 无钳制）；LMB 捕获点击**先打空**（下方
+  桥面/流体，勿打坐骑 = 1 HP + 击退污染）。④ **Space 落乘须绕过
+  双击飞行窗记录**：落乘 tap 若记 m_lastSpacePressTime = 落乘后速
+  按误开飞行——落乘分支在记录之前 return。⑤ **分离 pass 顶坐骑**：
+  骑手盒（背位起 1.8）与坐骑盒（1.5）设计性重叠 → separateEntity-
+  List 逐帧把坐骑从骑手脚下推出；`collidesWithEntities()` 虚门
+  （弹道 opt-out 先例）首消费于 mob = `!m_ridden`。
 - **demo 观察红线 + run 目录 stale 资产 + kReach 瞄准 + 生成环
   视线 + ambient 耗流五坑（PITS 403，门 211 v3.21.0 V3-14c piglin
   交易）**——① **demo 引用存档槽 = 永不回写**（game_init

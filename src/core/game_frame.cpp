@@ -280,6 +280,14 @@ void Game::update(double dt) {
         handleInteraction(dt);
     }
 
+    // V3-14d: the ride pass (the dismount conditions + the carry snap +
+    // the steer push) — AFTER the input handlers (a Space / LeftControl
+    // press or a panel-open dismounts THIS frame, before the player's
+    // update) and BEFORE the entities' update (the steer is pushed
+    // before the mount's own update). One null check in every no-ride
+    // session (the structural-immunity root).
+    updateRide();
+
     // V3-1 Phase B (D3 time-capsule ruling, the section-1 twin): the
     // overworld's fluid / fire / moisture pass is FROZEN in the nether;
     // the nether's twin (the fluid tick over the static source lava sea
@@ -955,9 +963,99 @@ void Game::updatePortalEntry() {
     // and the completion are distinct frames: this branch never co-fires
     // with the travel above.)
     if (step.framesRemaining == kPortalEntryFrames - 1) {
+        // V3-14d: the portal arm DISMOUNTS the rider (the mount cannot
+        // cross dimensions — the strider stays behind in the nether;
+        // the player continues the 60-frame countdown on foot, the
+        // recon's risk ② double-gate's second half: the ride pass's
+        // dimension-agnostic conditions plus this arm frame).
+        dismountRide();
         m_sound.play("portal_trigger");
         MC_LOG_INFO("Portal entry: travel countdown armed");
     }
+}
+
+// V3-14d: the carry's height — the ride point on the mount (the
+// strider's BODY box top: 0.55 + 0.5 = 1.05 above the feet,
+// strider.json's model boxes — the YAGNI core constant: the first
+// mount's pose is fixed by its model, a second rideable species
+// re-opens the data-fication, the MC's per-species saddle point).
+static constexpr float kRideCarryHeight = 1.05f;
+
+void Game::updateRide() {
+    // V3-14d: the ride pass — the per-frame choke point (the recon's
+    // design: one place owns the dismount conditions, the carry snap
+    // and the steer push). No ride = one null check (the structural-
+    // immunity root: a no-input session never mounts, the pass is
+    // inert, the S1 anchor stays byte-identical).
+    if (m_ridingMount == nullptr) {
+        return;
+    }
+    MobEntity& mount = *m_ridingMount;
+    // The dismount conditions (every exit funnel here): the mount dies
+    // / the player dies (the death screen owns the body) / the flight
+    // toggle (G / the gamepad's B — the carry and the fly cannot
+    // stack) / a panel opens (the pointer frees, the panel owns the
+    // input — same-frame, handlePanelClicks ran first) / the mount is
+    // IN WATER (the dismounts_underwater structural twin — the LAVA
+    // SURFACE stays ridden: onLavaSurface is the strider's home, the
+    // Minecraft ruling).
+    if (mount.dead() || m_player->isDead() || m_player->isFlying() ||
+        panelOpen() || (mount.inFluid() && !mount.onLavaSurface())) {
+        dismountRide();
+        return;
+    }
+    // The steer push (the player's key wish in the CAMERA frame — the
+    // player update's flatFwd / right twins, yaw 0 = -Z): W forward,
+    // S back, A/D side (the WASD-direct ruling — the MC fungus-stick
+    // turn is the documented deviation 2; any wish = forward drive,
+    // no wish = the kRideDecel drift-stop).
+    const float cy = std::cos(m_player->yaw);
+    const float sy = std::sin(m_player->yaw);
+    Vec3 dir {0.0f, 0.0f, 0.0f};
+    if (m_input.isDown(GameKey::W)) {
+        dir = dir + Vec3 {-sy, 0.0f, -cy};
+    }
+    if (m_input.isDown(GameKey::S)) {
+        dir = dir - Vec3 {-sy, 0.0f, -cy};
+    }
+    if (m_input.isDown(GameKey::D)) {
+        dir = dir + Vec3 {cy, 0.0f, -sy};
+    }
+    if (m_input.isDown(GameKey::A)) {
+        dir = dir - Vec3 {cy, 0.0f, -sy};
+    }
+    mount.setRiderSteer(dir, lengthSq(dir) > 0.0f);
+    // The carry snap (the player's pose = the mount's back position;
+    // the horizontal velocity is pushed for the swing phase's
+    // displacement drive + the dismount's drift — the vertical stays
+    // 0: the strider's feet-on-plane snap owns the height, the
+    // player's integrate is the no-op while carried).
+    m_player->setPosition(mount.position() +
+                          Vec3 {0.0f, kRideCarryHeight, 0.0f});
+    const Vec3 mv = mount.velocity();
+    m_player->setVelocity(Vec3 {mv.x, 0.0f, mv.z});
+    m_player->setCarried(true);
+}
+
+void Game::dismountRide() {
+    // V3-14d: the dismount exit (every dismount funnels here — the
+    // Space / LeftControl keys, the ride pass's conditions, the portal
+    // arm): the mount's AI returns to its wander (the m_ridden release
+    // + the steer zero), the player's carry bypass lifts (the next
+    // update runs the normal physics: gravity from the back position).
+    // The fall bookkeeping is safe by construction: the last carried
+    // frame re-anchored m_fallStartY to the back position (the player
+    // update's fly twin), so the ~1.05-block dismount drop never
+    // damages. The player KEEPS the mount's horizontal velocity (the
+    // drift — the knockback-free project's natural exit).
+    if (m_ridingMount == nullptr) {
+        return;
+    }
+    MC_LOG_DEBUG("dismounted the '" + m_ridingMount->def().name + "'");
+    m_ridingMount->setRidden(false);
+    m_ridingMount->setRiderSteer(Vec3::zero(), false);
+    m_ridingMount = nullptr;
+    m_player->setCarried(false);
 }
 
 // The portal frame the player's AABB currently overlaps (the travel's

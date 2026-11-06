@@ -11,6 +11,50 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.22.0（2026-11-06）— V3-14d strider 骑乘（项目首个骑乘面，门 212 全 PASS）
+
+**矩阵 ⬜ 项小→大推进**（V3-14 下界 mob 深化相位 D/4——骑乘机制
+新基建收官 V3-14；**承载 = 会话态零 format**（31 不变）【唯一自洽
+解：mob 不入档，骑乘关系无从持久，先例 = portal 冷却/飞行】/
+**sim 不 bump**（canary 4 demo EXACT 实证）/ 零 config / 零新
+wav / 零新纹理）。
+
+**机制族**：strider.json +`rideable: true`（strict bool，walks_
+on_lava 孪生）+ **Player `m_carried` 承载旁路**（setFlying 孪生：
+wish 锁 + move/stepUp 旁路 + integrate no-op + fall 复锚每帧 = 落
+乘 1.05 落差永不坠伤；保留 look/survival/swing——落乘进熔岩会烧 =
+MC 语义）+ **MobEntity `m_ridden` + riderSteer**（runAi 顶部纯新
+分支：WASD 直控——数据 speed 沿航向 + kRideDecel 0.9 漂停（停帧
+= release+38 钉）+ ambient 流契约保留（1800f = 13 hiss 钉）+
+**collidesWithEntities opt-out**【分离 pass 不顶坐骑——骑手盒设计
+性重叠】）+ **Game ride pass 单收口**（落乘条件：坐骑死/玩家死/
+飞行/面板/入水【熔岩面保持骑乘 = MC 定案】/portal arm + 承载 snap
+背位 1.05【kRideCarryHeight，ride_height 不数据化 = YAGNI】+ steer
+推送）+ **tryRide**（RMB 链 tryBarter 后，tryMilk 范式：rideable
+数据谓词 + 已骑吞点击/异坐骑穿透 + 飞行拒骑）+ **Space/
+LeftControl 落乘**（Space 挂双击飞行窗记录之前 = 落乘 tap 不武装
+飞行）。渲染零改动（相机/第三人称/站姿体全自动——承载 snap 后）。
+**MC 语义偏离 6 记档**：无 saddle 直骑 / WASD 直控（无 fungus
+stick）/ 水伤下沉不做（下界无水 = 单测臂）/ 原地落乘 / 无脚步音
+族 / 站姿背位（无坐姿 pose）。
+
+**门 212**：S1 结构免疫第 93 次（≡ base19 ×2）/ S2 骑乘臂 =
+authored demo（lava 沟场景【5 列贯通沟 + 4 桥格 + glowstone 灯排
+y38——spawn 光门验算】+ strider 独占池变体：f60 strider 生
+(40.5,32,34.5)【(40,34) 唯一合法列】→ f120 `rode the 'strider'` →
+180° 转向（1257px 单帧）→ W hold 120f 沿桥 2.0 块 → f320
+`dismounted the 'strider'` + 1.05 落桥零伤；×2 RAW 恒等 + 逐字
+恒等 + 第三人称骑乘视觉；**终态权威 = 截图 + DEBUG 行【demo save
+红线不回写 PITS 403①】**）+ 无输入臂 1800f ×2 RAW + savenorm
+EXACT 7/7 / S6 点名（rideable 非 bool rc 1）/ canary 4 EXACT /
+2856/2856（+9）/ 性能 A/B 同档【banner 实证 v3.21.0/v3.22.0 +
+PERF-WIN 三窗 upd med 0.589/0.762/0.702 vs 0.690/0.679/0.709 +
+changesApplied 9/3/1 全逐位 + 终档 savenorm EXACT 零 format 最强
+形】。PITS 404（git checkout
+还原 = 未提交功能回退两连踩 + 骑乘场景视线三件【沟/桥/灯】+ demo
+瞄准换算【体心 + 0.0025 px/rad】+ Space 双击窗绕过 + 分离 pass
+opt-out 首消费）。详见 `docs/archive/phase-3.22.0.md`。
+
 ## v3.21.0（2026-11-06）— V3-14c piglin 交易（barter 物物交换，门 211 全 PASS）
 
 **矩阵 ⬜ 项小→大推进**（V3-14 下界 mob 深化相位 C/4——piglin

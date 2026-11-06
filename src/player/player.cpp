@@ -270,6 +270,12 @@ void Player::update(double dt) {
     if (m_sitting) {
         wish = Vec3 {0.0f, 0.0f, 0.0f};
     }
+    // V3-14d: the carried (ridden) — the movement is locked (the game's
+    // ride pass owns the position via the carry snap, the sitting lock's
+    // twin; the sprint condition below also falls out).
+    if (m_carried) {
+        wish = Vec3 {0.0f, 0.0f, 0.0f};
+    }
     // Sprinting (Phase 28): the exact condition that selects sprintSpeed
     // (Shift + moving, out of water) — it also doubles the hunger decay
     // pace further down (Minecraft's 40 s -> 20 s relative shape).
@@ -442,7 +448,12 @@ void Player::update(double dt) {
     // zeroes its velocity inside the sub-steps; stepUp needs the value).
     const float preMoveSpeed =
         std::max(std::abs(m_velocity.x), std::abs(m_velocity.z));
-    moveInSubsteps(dt, maxSpeed);
+    // V3-14d: the carried — the self-movement is bypassed (the ride
+    // pass's carry snap owns the position; the player neither drives
+    // nor collides on its own, the fly's gravity skip's sibling).
+    if (!m_carried) {
+        moveInSubsteps(dt, maxSpeed);
+    }
     // V2-19: the toggle press's jump swallow is a ONE-frame flag — the
     // sub-steps above had their jump grants gated on it; clear it for the
     // next update (a Space STILL held on later frames jumps normally, the
@@ -450,8 +461,9 @@ void Player::update(double dt) {
     m_jumpGrantSuppressed = false;
 
     // 3b. Step up 1 block when flush against a step (not crouching, on
-    // the ground).
-    if (!m_crouching && m_onGround && lengthSq(wish) > 0.0f) {
+    // the ground). V3-14d: never while carried (the snap owns the pose).
+    if (!m_carried && !m_crouching && m_onGround &&
+        lengthSq(wish) > 0.0f) {
         stepUp(dir, preMoveSpeed * static_cast<float>(dt));
     }
 
@@ -501,7 +513,10 @@ void Player::update(double dt) {
     // last pin) — no burst damage at the switch instant, the normal fall
     // damage after (the landing path's `fall = m_fallStartY -
     // m_position.y`, unchanged).
-    if (flying) {
+    // V3-14d: the carried's fall re-anchor (the fly's twin — the carry
+    // snap owns the height, no distance accrues while ridden; the
+    // dismount drop from the 1.05 back position never damages).
+    if (flying || m_carried) {
         m_fallStartY = m_position.y;
     }
     m_wasOnGround = m_onGround;
@@ -1005,6 +1020,13 @@ void Player::integrate(float h) {
         // dual meaning is the creative's), neither = hover. The
         // horizontal move, the collision (the moveInSubsteps AABB, the
         // creative's wall bump) and the tunneling sub-steps are UNCHANGED.
+        // V3-14d: the carried (ridden) — the integrate is a no-op
+        // (the ride pass's carry snap + velocity push own the pose;
+        // the fly's skip one step more locked — even the vertical keys
+        // do nothing, the mount's surface is the ground).
+        if (m_carried) {
+            return;
+        }
         if (m_flying) {
             m_velocity.y =
                 m_input->isDown(GameKey::Space)

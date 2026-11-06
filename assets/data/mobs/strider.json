@@ -10,6 +10,7 @@
   "wander_interval": 2.0,
   "spawn_max_light": 15,
   "walks_on_lava": true,
+  "rideable": true,
   "ambient_sound": "strider_hiss",
   "ambient_interval": 3.0,
   "drops": [

@@ -29,7 +29,7 @@
 | LGT 光照 | | | | | | | |
 | GEN 世界与生成 | ✅ V3-1 下界维度·门与下界（三段） | ✅ V3-2 下界内容族（Part 1+2） | ✅ V3-5 建筑内容族 | ⬜ V3-10 末地维度（大·立项定案） | | | |
 | FLUID 流体 | | | | | | | |
-| ENT 实体/Mob/移动 | ✅ V3-3 下界 mob | ✅ V3-14c piglin 交易（v3.21.0）/ ⬜ V3-14d | | | | | |
+| ENT 实体/Mob/移动 | ✅ V3-3 下界 mob | ✅ V3-14d strider 骑乘（v3.22.0）【V3-14 全 4 相位完成】 | | | | | |
 | SURV 生存/战斗/效果 | ✅ V3-4 netherite 材料链 | ✅ V3-11a 创造基础（v3.17.0） | ✅ V3-11b 创造物品栏（v3.18.0） | ✅ V3-15 生存/表现批（v3.16.0） | | | |
 | CRAFT 物品/合成/面板 | | | | | | | |
 | SAVE 存档 | ✅ V3-7 存档 gzip | （方向：双世界存档 format，依赖 V3-1） | | | | | |
@@ -183,7 +183,22 @@
     authored demo（视线沟 + 12 拒生沟 + kReach 边界校准准星）；
     PITS 403（demo 观察红线 = 无退出写 + run 目录 stale assets +
     ambient 每帧耗流 = roll 断言必帧锁定）
-  - **V3-14d strider 骑乘**（骑乘机制 = 新基建）
+  - **V3-14d strider 骑乘 = v3.22.0 门 212（11-06 完成）**（骑乘机制
+    = 新基建，**V3-14 全 4 相位收官**）：strider.json +rideable
+    strict bool + Player m_carried 承载旁路（wish 锁 + move/stepUp
+    旁路 + integrate no-op + fall 复锚 = 落乘 1.05 落差永不坠伤）+
+    MobEntity m_ridden + riderSteer（WASD 直控 + kRideDecel 0.9 漂
+    停 + ambient 流契约保留 + collidesWithEntities opt-out 分离
+    pass 不顶坐骑）+ Game ride pass 单收口（落乘条件 6 项 + 承载
+    snap 背位 1.05 + steer 推送）+ tryRide（tryMilk 范式）+ Space/
+    LeftControl 落乘（Space 绕双击飞行窗）；**承载 = 会话态零
+    format**（mob 不入档 = 唯一自洽解）；MC 语义偏离 6 记档（无
+    saddle/WASD 直控/无水伤下沉/原地落乘/无脚步音/站姿背位）；
+    门 212 S1 第 93 次 + S2 骑乘臂 authored demo（rode/dismounted
+    ×2 逐字 + RAW 恒等 + 第三人称视觉）+ 无输入臂 7/7 + canary 4
+    EXACT / 2856/2856（+9）/ 性能 A/B 同档；PITS 404（git
+    checkout 还原两连踩 + 视线三件 + 瞄准换算 + 双击窗绕过 +
+    分离 opt-out 首消费）
 - **V3-15 内容遗留·生存/表现小批** = **v3.16.0 门 206（11-06 完
   成）**：netherite 火·熔岩免疫（fire_resistant armor-only 属性 + 熔岩
   tick/点燃/火 tick 三抑制 + 熔岩死因覆写「死于熔岩」；**击退抗性弃

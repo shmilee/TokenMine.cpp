@@ -661,6 +661,14 @@ Result<void> MobRegistry::parseProperties(const Json& def,
         }
         out.walksOnLava = wl->asBool();
     }
+    // V3-14d: the rideable flag (the walks_on_lava's strict-bool twin,
+    // default false): the right-click mount target's data predicate.
+    if (const Json* rd = def.find("rideable")) {
+        if (!rd->isBool()) {
+            return MC_FAIL("mob properties: 'rideable' must be a boolean");
+        }
+        out.rideable = rd->asBool();
+    }
     // SURV-5: the optional 'arrow_effect' — the status effect this mob's
     // ARROW applies to the target ({wither, 10} on the skeleton: the
     // Minecraft wither-skeleton twin). The SAME strict {name, duration}

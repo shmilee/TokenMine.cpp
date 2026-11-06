@@ -241,6 +241,17 @@ public:
     // buoyancy model does not stack the fly).
     bool isFlying() const { return m_flying; }
     void setFlying(bool f) { m_flying = f; }
+    // V3-14d (strider riding): the carried state — SESSION (never
+    // saved: the ride cannot outlive the session, the fly's twin; the
+    // Game's ride pass owns the mount/dismount and pushes the carry
+    // snap + the velocity each frame BEFORE the player's update).
+    // While carried the player owns only the LOOK + the survival
+    // timers + the swing phase: the wish is locked, the self-movement
+    // (moveInSubsteps / stepUp) is bypassed, the integrate is a no-op
+    // (the carry snap owns the pose), and the fall re-anchor runs each
+    // frame (the dismount drop never damages).
+    bool isCarried() const { return m_carried; }
+    void setCarried(bool c) { m_carried = c; }
     // The toggle press consumed this frame's jump grant (the "second tap
     // swallows the jump"): the air branch's Space jump is skipped until
     // the end of the next update (a one-frame input-only flag, cleared in
@@ -672,6 +683,9 @@ bool m_dead = false;
     // V2-19: the fly state (see isFlying()) + the toggle press's
     // one-frame jump-swallow flag (see suppressJumpGrant()).
     bool m_flying = false;
+    // V3-14d: the carried (ridden) session flag (the m_flying twin —
+    // the Game's ride pass is the single writer).
+    bool m_carried = false;
     bool m_jumpGrantSuppressed = false;
     // Phase 71: the sitting state this tick (see isSitting()).
     bool m_sitting = false;

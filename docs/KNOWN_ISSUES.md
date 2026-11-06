@@ -644,7 +644,8 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
   界无保护 = 记档偏离，门 198）。
 - **下界 mob 既定不做**（V3-3 记档）：piglin 交易 = v3.21.0 已落地
   （V3-14c）/
-  magma_cube 不分裂不跳 / strider 不可骑乘（= V3-14d 立项）/
+  magma_cube 不分裂不跳 / **strider 骑乘 = v3.22.0 已落地**（V3-
+  14d）/
   **ghast = v3.20.0 已落地**（飞行爆炸射手，V3-14b）/
   zombified_piglin `undead: false`（MC 非亡灵 = 中毒不免疫）。
 - **传送 = 900 帧冷却（15 s）** — 会话态不入档（重载即清零，记档）。
@@ -738,6 +739,25 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
   格在 blast 中不动（块层 only，流体交互 = 记档偏离）。
 - **地下生成火簇 = 场景域 real-dt**（PITS 401③）——爆炸门场景须
   密封石室 + 去火（savenorm 域）。
+
+## V3-14d strider 骑乘（v3.22.0）
+
+- **骑乘 = 会话态（不入档）**——mob 不入档（format 30 设计），重载
+  strider 即消失，骑乘关系无从持久（存了 = 悬空引用）；先例族 =
+  portal 冷却 / 飞行 / 羊毛实例态。副作用：存档时玩家位 = 背位
+  （y≈33.05），重载落乘位（≤1.05 格，无坠伤，熔岩面 4HP/s 或
+  netherite 免疫）。
+- **MC 语义偏离 6 项**：① 无 saddle 右键直骑（数据面可后补
+  ride_requires）② WASD 直控 + W-hold/漂停（无 fungus stick 转向/
+  加速/耐久，无自动前进）③ 水伤/下沉不做（入水落乘触发保留；
+  项目 strider 入水 = 既有 0.6× 泳档，且下界无水 E2E 不可达）
+  ④ 原地落乘（无「面向可达固体块安全落乘」判定）⑤ 无 step/
+  step_lava 脚步音族（strider_hiss ambient 保留，67 件不动）⑥
+  站姿背位 1.05（无坐姿 pose 变体——player_body.json 无 pose
+  机制，范围蔓延弃做）。
+- **落乘保留坐骑水平速度**（漂移出口——无击退面项目的自然语义）。
+- **落乘入水 = 单测臂 only**（下界无水：worldgen 无 + 水桶蒸发
+  定案；strider 仅下界池——E2E 不可达，记档）。
 
 ## V3-14c piglin 交易（v3.21.0）
 

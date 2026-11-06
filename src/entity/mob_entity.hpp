@@ -157,6 +157,11 @@ enum class MobState {
     // ENT-6: following the BFS chase path (the stuck-triggered route
     // around terrain the straight chase cannot cross).
     Pathfind,
+    // V3-14d: the ridden state — the AI is taken over by the rider's
+    // steer (the game pushes it each frame), no player interaction.
+    // Appended at the TAIL (no serialization consumer — mobs are not
+    // persisted, the PITS 396 kKeyCount tail-pin discipline twin).
+    Ridden,
 };
 
 // ENT-5: the safe-fall offset for mobs (Minecraft: 3 blocks — the same
@@ -373,8 +378,27 @@ public:
     // roof-shade check = the documented deviation; default false = the
     // pre-V2-4 water-only semantics bit-identical).
     void setRaining(bool raining) { m_raining = raining; }
-    // The AI invokes this when an attack lands (the game wires it to
-    // Player::damage; tests record calls).
+    // V3-14d: the ridden session state (the player's m_carried twin —
+    // SESSION state, never persisted: mobs are not saved, so the ride
+    // cannot outlive the session, the portal-cooldown / flight
+    // precedent). The game sets it on mount/dismount; while ridden the
+    // AI is the riderSteer takeover (the wander is suspended) and the
+    // separation pass skips this mob (the rider's box overlaps the
+    // mount by design — the carry snap owns the relative pose).
+    void setRidden(bool ridden) { m_ridden = ridden; }
+    bool ridden() const { return m_ridden; }
+    // The rider's steer (the setPlayer pattern — the game pushes it
+    // each frame BEFORE update(): `dir` = the rider's desired heading
+    // (a unit vector, or zero when the rider pushes no direction key)
+    // and `forward` = whether the rider pushes forward (W held).
+    // Zeroed by the game on dismount.
+    void setRiderSteer(Vec3 dir, bool forward) {
+        m_riderDir = dir;
+        m_riderForward = forward;
+    }
+    // The separation pass's opt-out (the projectile's twin): a ridden
+    // mount is pushed neither by the rider nor by other mobs.
+    bool collidesWithEntities() const override { return !m_ridden; }
     void setHitCallback(std::function<void(float)> cb) {
         m_hitPlayer = std::move(cb);
     }
@@ -454,6 +478,14 @@ private:
     // p.shootRange > 0) — the bat (shootRange 0) runs flyCruise
     // bit-identically, the pre-V3-14b red line.
     void flyShoot(const MobProperties& p, double dt);
+    // V3-14d: the ridden mob's AI takeover (the rider's steer replaces
+    // the wander — the runAi's TOP branch, gated on the SESSION state
+    // m_ridden, the flyCruise pure-new-branch twin): forward = face
+    // the rider's heading + walk at the data speed along it; released
+    // = the kRideDecel ease-out to the kRideStopEps stand. The AMBIENT
+    // roll is kept (the per-mob stream contract — PITS 403⑤: the
+    // hiss plays while ridden, the stream stays aligned).
+    void riderSteer(const MobProperties& p);
     // V2-14: the frame-locked bob (a pure function of the local frame
     // count + the spawn-stream phase — the vy the flying integrate SETS,
     // the hover's baseline, not an accumulation).
@@ -507,6 +539,12 @@ private:
     bool m_wasOnGround = false;
     Vec3 m_playerPos = Vec3::zero();
     bool m_playerAlive = true;
+    // V3-14d: the ridden session state + the rider's steer (the game
+    // pushes both — the ride cannot outlive the session, mobs are not
+    // persisted).
+    bool m_ridden = false;
+    Vec3 m_riderDir = Vec3::zero();
+    bool m_riderForward = false;
     // V2-4: the weather flag (the setRaining per-frame feed — rain
     // extinguishes the burn, see the setter). Default false = the
     // pre-V2-4 water-only semantics.
@@ -576,6 +614,14 @@ private:
     static constexpr float kWanderSpeedFactor = 0.5f;
     // Chase/attack only at comparable height (vertical band, blocks).
     static constexpr float kDetectVertical = 2.0f;
+    // V3-14d: the ride's release decay — the strider eases to a stop
+    // after the rider lets go of W (the player's ENT-7 exponential
+    // decay's frame-locked twin: per fixed 1/60 step, the speed
+    // factor — a release at any frame decays identically every run).
+    static constexpr float kRideDecel = 0.90f;
+    // V3-14d: the ride's stop epsilon (the player's :382-387 twin —
+    // below it the velocity is zeroed, the strider stands).
+    static constexpr float kRideStopEps = 0.02f;
     static constexpr float kAttackVertical = 1.0f;
     // Knockback window: the impulse decays (kKnockbackDamping per second)
     // while the AI holds off; then steering resumes.

@@ -132,15 +132,31 @@ void Game::handleInteraction(double dt) {
     // it: on the toggle-ON frame the fly branch owns Space, on the
     // toggle-OFF frame the grant gate does).
     if (m_input.wasPressed(GameKey::Space) && !m_player->isDead()) {
-        const double now = nowSeconds();
-        const FlyToggleDecision d =
-            flyToggleDecision(now, m_lastSpacePressTime,
-                              m_player->isFlying());
-        m_lastSpacePressTime = now;
-        if (d.doubleTap) {
-            m_player->setFlying(d.nowFlying);
-            m_player->suppressJumpGrant();
+        // V3-14d: Space while riding = DISMOUNT (the task's "jump off"
+        // ruling) — the press is consumed and NEVER records the
+        // double-tap window (the dismount tap must not arm the fly
+        // toggle: a quick second tap after dismounting would otherwise
+        // open the flight, the recon's risk ④).
+        if (m_ridingMount != nullptr) {
+            dismountRide();
+        } else {
+            const double now = nowSeconds();
+            const FlyToggleDecision d =
+                flyToggleDecision(now, m_lastSpacePressTime,
+                                  m_player->isFlying());
+            m_lastSpacePressTime = now;
+            if (d.doubleTap) {
+                m_player->setFlying(d.nowFlying);
+                m_player->suppressJumpGrant();
+            }
         }
+    }
+    // V3-14d: LeftControl (the crouch key) while riding = DISMOUNT (the
+    // Minecraft dismount key's twin — crouching has no meaning while
+    // carried, the press owns the exit).
+    if (m_input.wasPressed(GameKey::LeftControl) &&
+        !m_player->isDead() && m_ridingMount != nullptr) {
+        dismountRide();
     }
     // V3-8b: the gamepad's DEDICATED flight toggle (the B/EAST button —
     // GameKey::FlyToggle is gamepad-only, mapKey never returns it): a
@@ -239,6 +255,14 @@ void Game::handleInteraction(double dt) {
         // consumed, the rolled output drops at the mob (ground items),
         // the mob unharmed (a neutral barter never enrages).
         if (tryBarter()) {
+            return;
+        }
+        // V3-14d (strider): the ride — the crosshair on a 'rideable'
+        // mob MOUNTS it (the carry snap runs in this frame's ride
+        // pass, before the player's update); Space / LeftControl
+        // dismount, the ride pass's conditions (the mount dead, the
+        // flight, the panel, the water) own the rest.
+        if (tryRide()) {
             return;
         }
         // Data-driven interaction (Phase 17): a block whose `interact`
@@ -1897,6 +1921,46 @@ bool Game::tryBarter() {
     MC_LOG_DEBUG("bartered with '" + mob->mob->def().name + "' (" +
                  props.barterInput + " -> " + outName + " x" +
                  std::to_string(outCount) + ")");
+    return true;
+}
+
+bool Game::tryRide() {
+    // V3-14d (strider): the mount entry (the tryMilk paradigm — the
+    // data predicate 'rideable' gates the interaction, no species
+    // switch). A non-rideable target falls through (return false —
+    // the legacy block interact runs, the bit-identical path). The
+    // click is consumed on a rideable target (the failed-milk rule):
+    // already riding (the mount itself = the no-op; another mob = the
+    // fall-through so a riding player can still interact / place) or
+    // flying (dismount first — the flight and the carry cannot stack).
+    if (!m_player || m_player->isDead()) {
+        return false;
+    }
+    const std::optional<MobHit> mob = targetMob();
+    if (!mob) {
+        return false;
+    }
+    const MobProperties& props = mob->mob->def().properties;
+    if (!props.rideable) {
+        return false; // not a ride target: the legacy fall-through
+    }
+    if (m_ridingMount != nullptr) {
+        // Already riding: the OWN mount = the no-op (the click is
+        // consumed — dismounting is Space / LeftControl's); ANOTHER
+        // rideable mob = the fall-through (the block channel stays
+        // live while riding, the Minecraft ruling).
+        return m_ridingMount == mob->mob;
+    }
+    if (m_player->isFlying() || m_player->isCarried()) {
+        return true; // the flight owns the pose: dismount first
+                     // (the click is consumed, the failed-ride rule)
+    }
+    m_ridingMount = mob->mob;
+    m_ridingMount->setRidden(true);
+    MC_LOG_DEBUG("rode the '" + m_ridingMount->def().name + "'");
+    // The carry snap + the m_carried flag run in THIS frame's ride
+    // pass (updateRide, after handleInteraction, before the player's
+    // update) — the mount's position is the frame-fresh one.
     return true;
 }
 

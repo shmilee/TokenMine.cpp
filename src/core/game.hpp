@@ -620,6 +620,25 @@ private:
     // rule); false = fall through (a non-barter mob, the legacy
     // bit-identical).
     bool tryBarter();
+    // V3-14d (strider riding): the ride pass — the per-frame choke point
+    // (the dismount conditions + the carry snap + the steer push). Runs
+    // after the input handlers (a panel-open / a Space / a LeftControl
+    // dismounts THIS frame) and before the player's update (the snap
+    // owns the pose the update then bypasses) and the entities' update
+    // (the steer is pushed before the mount's update). One null check
+    // in every no-ride session (the structural-immunity root).
+    void updateRide();
+    // V3-14d: the mount entry (the tryMilk paradigm, the RMB chain's
+    // tryBarter twin): the crosshair on a 'rideable' mob, the player
+    // not already riding / flying. The click is consumed on a rideable
+    // target (the failed-milk rule); a non-rideable target falls
+    // through to the legacy block interact (the bit-identical path).
+    bool tryRide();
+    // V3-14d: the dismount exit (every dismount funnels here — the
+    // Space / LeftControl keys, the ride pass's conditions: the mount
+    // dead, the player dead, the flight toggle, the panel-open, the
+    // mount in water, the portal arm).
+    void dismountRide();
     // Fluid bucket (Phase 47): when the selected slot holds a bucket side
     // (item data 'collects_fluid' or 'pours_fluid'; the pair is
     // cross-checked at init): COLLECT — the bucket-target ray (kReach,
@@ -1781,6 +1800,16 @@ private:
     // inside-portal ping-pong guard; session state, never saved, the
     // fly-toggle pattern: a no-travel session keeps it 0).
     int m_portalCooldownFrames = 0;
+    // V3-14d (strider riding): the ridden mount — SESSION state (never
+    // saved: mobs are not persisted, so the ride cannot outlive the
+    // session, the portal-cooldown / flight precedent). Non-null while
+    // the player is carried; the ride pass (updateRide) is the single
+    // choke point (the dismount conditions + the carry snap + the steer
+    // push), the tryRide the mount entry, the dismountRide the exit.
+    // Null in every no-ride session (the structural-immunity root: the
+    // pass is one null check, the tryRide never fires without an RMB on
+    // a rideable mob).
+    MobEntity* m_ridingMount = nullptr;
     // The player body family (UX-3): the player's world-space body —
     // the data model (data/player_body.json, parsed through MobRegistry::
     // parseModel's full strict discipline) + the render assets (the static

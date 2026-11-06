@@ -943,6 +943,201 @@ TEST(MobRegistryTest, RollBarterOutputIsTheCumulativeWalk) {
     EXPECT_EQ(rollBarterOutput({a}, 0.5), 0);
 }
 
+// -- V3-14d: the rideable flag (the right-click mount's data predicate) --
+
+TEST(MobRegistryTest, RideableDefaultsToFalse) {
+    // Every pre-V3-14d mob (kZombieDef has no 'rideable'): the default
+    // (not rideable) applies — the tryRide's fall-through predicate.
+    MobRegistry mobs = makeMobRegistry();
+    EXPECT_FALSE(mobs.at(MobID{0}).properties.rideable);
+}
+
+TEST(MobRegistryTest, ParsesRideableStrict) {
+    // The strict bool (the walks_on_lava's twin): true parses, the
+    // non-boolean is named.
+    auto def = std::string(kGhastDef);
+    const std::string anchor = "\"spawn_max_light\": 15,";
+    def.insert(def.find(anchor) + anchor.size(),
+               "\n    \"rideable\": true,");
+    MobRegistry mobs;
+    auto r = mobs.registerMob(parseJson(def));
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_TRUE(mobs.at(MobID{0}).properties.rideable);
+    auto bad = std::string(kGhastDef);
+    bad.insert(bad.find(anchor) + anchor.size(),
+               "\n    \"rideable\": \"yes\",");
+    r = MobRegistry{}.registerMob(parseJson(bad));
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("rideable"), std::string::npos);
+}
+
+// The strider test definition (V3-14d): the RIDEABLE lava walker —
+// the ride's data predicate + the ambient (the per-mob stream's
+// ridden-alignment test needs the hiss roll).
+const char* kStriderRideDef = R"({
+  "id": "strider",
+  "properties": {
+    "health": 20,
+    "speed": 1.0,
+    "detect_radius": 0,
+    "attack_range": 0,
+    "attack_damage": 0,
+    "attack_cooldown": 1.0,
+    "wander_interval": 2.0,
+    "spawn_max_light": 15,
+    "walks_on_lava": true,
+    "rideable": true,
+    "ambient_sound": "strider_hiss",
+    "ambient_interval": 3.0,
+    "xp": 3
+  },
+  "model": {
+    "width": 1.0,
+    "height": 1.5,
+    "boxes": [
+      {"pos": [0.0, 0.55, 0.0], "size": [1.0, 0.5, 1.0], "texture": "s"}
+    ]
+  }
+})";
+
+// -- V3-14d: the ridden AI (the rider's steer takeover) -------------------
+
+namespace {
+// A player far from the fixture origin: the strider's detect_radius 0
+// never sees it (the ride test's kRideFarPlayer twin, local — that
+// constant lives in the flight section below).
+const Vec3 kRideFarPlayer {40.0f, 10.0f, 40.0f};
+} // namespace
+
+TEST(MobRideTest, RiddenFlagTogglesTheSeparationOptOut) {
+    // The separation pass's opt-out (the projectile's twin): a ridden
+    // mount is pushed neither by the rider nor by other mobs (the
+    // rider's box overlaps the mount's by design — the carry snap owns
+    // the pose); a non-ridden one participates.
+    Fixture f;
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.registerMob(parseJson(kStriderRideDef)).ok());
+    MobEntity mob = makeMob(f, mobs.at(MobID{0}), {8.5f, 1.0f, 8.5f});
+    EXPECT_TRUE(mob.collidesWithEntities());
+    mob.setRidden(true);
+    EXPECT_FALSE(mob.collidesWithEntities());
+    EXPECT_TRUE(mob.ridden());
+    mob.setRidden(false);
+    EXPECT_TRUE(mob.collidesWithEntities());
+    EXPECT_FALSE(mob.ridden());
+}
+
+TEST(MobRideTest, ForwardDriveSetsDataSpeedAlongTheHeading) {
+    // The rider pushes forward toward +Z (dir (0,0,1)): the strider
+    // faces the heading (yaw pi — the camera convention forward(yaw) =
+    // (-sin, -cos)) and walks at the DATA speed along it. The state is
+    // Ridden (the takeover's report).
+    Fixture f;
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.registerMob(parseJson(kStriderRideDef)).ok());
+    MobEntity mob = makeMob(f, mobs.at(MobID{0}), {8.5f, 1.0f, 8.5f});
+    mob.setPlayer(kRideFarPlayer, true);
+    mob.setRidden(true);
+    mob.setRiderSteer({0.0f, 0.0f, 1.0f}, true);
+    mob.update(kDt);
+    EXPECT_EQ(mob.state(), MobState::Ridden);
+    EXPECT_NEAR(mob.velocity().x, 0.0f, 1e-6f);
+    EXPECT_NEAR(mob.velocity().z, 1.0f, 1e-6f); // the data speed 1.0
+    // yaw pi (the ±pi signed-zero twin — the direction cosines are the
+    // heading's authority, the V3-14b ghast test's discipline):
+    // forward(pi) = (-sin, -cos) = (0, +1) = the +Z wish.
+    EXPECT_NEAR(std::cos(mob.facingYaw()), -1.0f, 1e-4f);
+    EXPECT_NEAR(std::sin(mob.facingYaw()), 0.0f, 1e-4f);
+}
+
+TEST(MobRideTest, ReleaseDecaysToTheStand) {
+    // The drift-stop: the rider releases (no direction wish) — the
+    // kRideDecel ease-out (per fixed 1/60 step) decays the speed to the
+    // kRideStopEps stand. 0.9^k * 1.0 < 0.02 first at k = 36 (0.9^35 =
+    // 0.0206 > 0.02, 0.9^36 = 0.0185 < 0.02) — the stop frame is
+    // frame-locked (the pin proves the decay contract).
+    Fixture f;
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.registerMob(parseJson(kStriderRideDef)).ok());
+    MobEntity mob = makeMob(f, mobs.at(MobID{0}), {8.5f, 1.0f, 8.5f});
+    mob.setPlayer(kRideFarPlayer, true);
+    mob.setRidden(true);
+    mob.setRiderSteer({0.0f, 0.0f, 1.0f}, true);
+    mob.update(kDt); // one driven frame: the full data speed
+    EXPECT_NEAR(mob.velocity().z, 1.0f, 1e-6f);
+    mob.setRiderSteer({0.0f, 0.0f, 0.0f}, false); // the release
+    // The decay contract (the pinned sequence): each release frame
+    // multiplies the speed by kRideDecel 0.9 — 0.9, 0.81, 0.729, ...
+    // The zeroing: 0.9^k < kRideStopEps 0.02 first at k = 38
+    // (0.9^37 = 0.0203 > 0.02, 0.9^38 = 0.0183 < 0.02) — the stand
+    // frame is frame-locked (the pin proves the decay contract).
+    const float expect[] = {0.9f, 0.81f, 0.729f, 0.6561f, 0.59049f};
+    for (int k = 1; k <= 5; ++k) {
+        mob.update(kDt);
+        EXPECT_NEAR(mob.velocity().z, expect[k - 1], 1e-6f) << "k=" << k;
+    }
+    for (int k = 6; k <= 37; ++k) {
+        mob.update(kDt);
+        EXPECT_GT(mob.velocity().z, 0.0f) << "k=" << k;
+    }
+    mob.update(kDt); // k = 38: below the epsilon, zeroed
+    EXPECT_FLOAT_EQ(mob.velocity().x, 0.0f);
+    EXPECT_FLOAT_EQ(mob.velocity().z, 0.0f);
+}
+
+TEST(MobRideTest, RiddenKeepsTheAmbientStreamAlive) {
+    // The per-mob stream contract (PITS 403⑤): the ridden takeover
+    // KEEPS the ambient roll (the hiss plays while ridden — the
+    // strider's home voice), so the stream stays aligned with the
+    // twin that never rode. Over 1800 frames at the 3.0 s interval
+    // (p = 1/180) the deterministic hiss frames fire — the count is
+    // pinned (a silent / degenerate stream would read 0).
+    Fixture f;
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.registerMob(parseJson(kStriderRideDef)).ok());
+    MobEntity mob = makeMob(f, mobs.at(MobID{0}), {8.5f, 1.0f, 8.5f});
+    mob.setPlayer(kRideFarPlayer, true);
+    int hisses = 0;
+    mob.setAmbientSoundCallback([&](Vec3) { ++hisses; });
+    mob.setRidden(true);
+    mob.setRiderSteer({0.0f, 0.0f, 0.0f}, false);
+    for (int i = 0; i < 1800; ++i) {
+        mob.update(kDt);
+    }
+    EXPECT_GT(hisses, 0);
+    // The exact count (the pinned deterministic roll — a stream drift
+    // changes it; 13 hisses in 1800 frames at the 3.0 s interval).
+    EXPECT_EQ(hisses, 13);
+}
+
+TEST(MobRideTest, NonRiddenStriderStaysBitIdentical) {
+    // The pure-new-branch red line: a strider that is NEVER ridden
+    // takes the pre-V3-14d wander path bit-identically (the m_ridden
+    // gate at the runAi's top skips the takeover; the ambient / the
+    // wander stream are untouched). Twin the ridden one's first-frame
+    // release against a never-ridden strider's wander: the positions
+    // diverge (different AI) but the NEVER-ridden twin matches a fresh
+    // same-seed strider exactly (the structural immunity).
+    Fixture f;
+    MobRegistry mobs;
+    ASSERT_TRUE(mobs.registerMob(parseJson(kStriderRideDef)).ok());
+    const Mob& def = mobs.at(MobID{0});
+    MobEntity a = makeMob(f, def, {8.5f, 1.0f, 8.5f}, 42);
+    MobEntity b = makeMob(f, def, {8.5f, 1.0f, 8.5f}, 42);
+    a.setPlayer(kRideFarPlayer, true);
+    b.setPlayer(kRideFarPlayer, true);
+    for (int i = 0; i < 120; ++i) {
+        a.update(kDt);
+        b.update(kDt);
+    }
+    EXPECT_FLOAT_EQ(a.position().x, b.position().x);
+    EXPECT_FLOAT_EQ(a.position().y, b.position().y);
+    EXPECT_FLOAT_EQ(a.position().z, b.position().z);
+    EXPECT_FLOAT_EQ(a.velocity().x, b.velocity().x);
+    EXPECT_FLOAT_EQ(a.velocity().z, b.velocity().z);
+    EXPECT_EQ(a.state(), MobState::Wander); // the wander, not Ridden
+}
+
 // -- hostile flag (Phase 25: the difficulty system is data-driven) ------------
 
 TEST(MobRegistryTest, HostileDefaultsToFalse) {
@@ -6908,6 +7103,9 @@ TEST(NetherMobContent, StriderDataPinned) {
     EXPECT_FALSE(p.hostile);
     EXPECT_FALSE(p.neutral);
     EXPECT_TRUE(p.walksOnLava);
+    // V3-14d: the rideable flag (the strider is the project's first —
+    // and only — ride target; the right-click mount's data predicate).
+    EXPECT_TRUE(p.rideable);
     ASSERT_EQ(p.drops.size(), 1u);
     EXPECT_EQ(p.drops[0].item, "leather");
     EXPECT_EQ(p.drops[0].countMin, 0);
@@ -6993,7 +7191,7 @@ TEST(NetherMobContent, NetherMobAssetsPinned) {
         {"assets/data/mobs/piglin.json", "0aaa11fa09c81302"},
         {"assets/data/mobs/hoglin.json", "e596d325a2f9e783"},
         {"assets/data/mobs/magma_cube.json", "4ea96c29f0ceb813"},
-        {"assets/data/mobs/strider.json", "051e3fff099af0e5"},
+        {"assets/data/mobs/strider.json", "b0f3fef8c3449477"},
         {"assets/data/mobs/ghast.json", "848d8741dc090816"},
         {"assets/data/mob_spawning_nether.json", "3ccb76538c02c146"},
         {"assets/textures/mobs/zpiglin_body.png", "310db573d5a32124"},

@@ -407,6 +407,15 @@ struct MobProperties {
     // mob is false = the bit-identical structural root — the
     // pigs-in-water regression pins it).
     bool walksOnLava = false;
+    // V3-14d: the rideable flag (the walks_on_lava's strict-bool twin,
+    // default false): the player may MOUNT this mob (right-click, the
+    // tryRide interaction). A rideable mob is a RIDE TARGET only — the
+    // riding mechanics (the carry snap, the steer takeover, the
+    // dismounts) live on the game's ride pass + the MobEntity's
+    // m_ridden session state; the flag gates the INTERACTION, the
+    // session state gates the BEHAVIOR. Every non-rideable mob's data
+    // is unchanged (the pre-V3-14d structural red line).
+    bool rideable = false;
     // Drops (Phase 28): the item list the mob drops on death — one entry
     // per dropped item, spawned in list order. Empty = no drops.
     std::vector<MobDrop> drops;
