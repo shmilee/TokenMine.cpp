@@ -7,7 +7,7 @@
 **本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒<br>
 （C++20 / SDL3 / OpenGL 3.3，自研 JSON/PNG，内容全数据驱动）。<br>
 确定性是一级要求——无输入运行逐帧字节可复现。<br>
-当前 v3.17.0（V3-11a 创造基础：G 模式切换 + 不死 + 飞行 + 即挖；3.x 矩阵 15/18，⬜ 项小→大推进中）· tag `v3.17.0` · 任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)**
+当前 v3.18.0（V3-11b 创造物品栏：E 面板双 tab + 前缀搜索 + 点击授予；3.x 矩阵 16/18，⬜ 项小→大推进中）· tag `v3.18.0` · 任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)**
 
 [![GitHub stars](https://img.shields.io/github/stars/shmilee/TokenMine.cpp?style=flat-square)](https://github.com/shmilee/TokenMine.cpp/stargazers)
 [![MIT license](https://img.shields.io/badge/license-MIT-555555?style=flat-square)](LICENSE)

@@ -11,6 +11,51 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.18.0（2026-11-06）— V3-11b 创造物品栏（E 面板双 tab + 前缀搜索 + 点击授予，门 208 全 PASS）
+
+**矩阵 ⬜ 项小→大推进 4/6，V3-11 创造模式全项完成**（零 format 31
+不变 / 零 config 键 / sim 不 bump【canary 4 demo 回放 EXACT 实证】）。
+
+**入口 = 创造下 E 面板双 tab**（MC 同款整合）：标题行「物品栏/背包」
+按钮（激活橙框）；**物品栏 tab** = 前缀搜索框 + 224 物品 name 升序
+过滤 + 6×4 网格滚轮翻页（1 tick = 1 项，双向夹紧；搜索缩表重夹）+
+左键满组/右键单个**授予选中热栏位**（同物合并清耐久附魔 / 异物替换
+/ 满同物 no-op / pickup 音）；**背包 tab** = 既有 E 面板内容位级。
+**生存 E 面板零变化**（门 208 旧≡新二进制字节恒等实证）。
+
+**文本输入 = 项目首个打字面**：`SDL_StartTextInput` 仅「创造 +
+Inventory 面板」期开（SDL3 默认关 = 无输入运行零 TEXT_INPUT = 结构
+性免疫根）；Input 帧态 frameText/frameBackspace（wheelDelta 孪生，
+frameBegin 重置，256 raw 界）；词表 [a-z0-9_] 小写归一 + 24 上限 +
+光标帧锁定闪烁；**不入 tap 词表**（demo 录制 schema 8 型不变，录制
+的 demo 永不打字）；IME 组合不处理（记档偏离）。**搜索焦点数字语
+义**：物品栏 tab 开时数字键 = 文本入搜索不切热栏（MC 搜索焦点；槽
+位须在开面板前选——门内 xdotool 实证捕获：数字键双投递 KEYDOWN+
+TEXT_INPUT = "app2" 无匹配假象，PITS 400③）。
+
+**demo author 面扩展**：timeline `mouse_move` 可选 x/y 绝对位（文件
+schema 既有，author 面补齐 = 面板点击坐标；缺省 0 = 4 canary 位级
+恒等）+ 键词表 +g（Python 镜像同步）。
+
+**门 208**：S1 ≡ base19 逐字节 ×2 + savenorm EXACT（**结构免疫第
+88 次**）；S2 面板臂【全 headless demo，捕获点击先行 = PITS 400①：
+a0 vs a1 = 55 360 px（面板在）/ a1 vs a3 = tab 视图差 + tab 行 107
+px / a2 授予臂 fresh + 退出写 = **存档 slot0 = allium×64** + 背包视
+图 slot0 渲染 / **a7 生存 E 旧≡新字节恒等** / 全臂截图 + 存档 ×2
+RAW】；**S2c v3.17.0 补证臂**【门 207 空转断言的真 E2E（PITS
+400①②）：a4b = fresh + 捕获 + G + 低头 + 单帧 LMB → 退出写档
+**creative=True / (0,53,0)=air 即挖 / entities=0 无掉落 / pos 飞行
+不坠** + a5 生存对照 = 同窗口未破】；**S2d 搜索 xdotool 臂 ×2**【项
+目首个文本输入 E2E：捕获 + G + 2（开面板前选槽）+ E + 打字 "app" +
+cell0 点击 → 退出写档 **slot1 = apple×64** + 退出截图 cell0 = 苹果
+图标；调试日志实证 frameText 逐字符送达】；S2b canary 4 demo ×2
+RAW + savenorm EXACT；S6 无（零新解析面）；全套 **2811/2811**（+10：
+CreativeLayout ×2 / CreativeTabUI ×6 / Input frame ×2）；性能 A/B 同
+档【旧 = 57c417e v3.17.0（git archive）+ g139 vs 新 + g139 banner 实
+证，900f 无输入独占：PERF-WIN 三窗 upd med 0.635/0.624/0.753 vs 0.712/0.586/0.605 + render 0.665/0.712/0.841 vs 0.714/0.584/0.649 + swap med 15.173/15.049/14.820 vs 14.927/15.240/15.177（新侧 win2 swap max 208 ms = 一次性 OS 停顿 med 正常）+ fluid·fires·spread·ents·stream 同档 + **changesApplied 9/3/1 逐位恒等** + **终档 savenorm EXACT**（零 format = 最强形——面板/文本输入无输入全冷路径结构性零成本）】。PITS 400（demo 无初始指针锁定 +
+save-spec 红线禁 F5 + xdotool 数字双投递 + X grab 阻塞外来屏捕 +
+门机窗口 679×744 口径）。详见 `docs/archive/phase-3.18.0.md`。
+
 ## v3.17.0（2026-11-06）— V3-11a 创造基础（G 模式切换 + 不死 + 飞行 + 即挖，门 207 全 PASS）
 
 **矩阵 ⬜ 项小→大推进 3/6**（V3-11 创造模式相位 A/2；B = 创造物品栏
@@ -34,12 +79,10 @@ drops/XP——粒子与音效保留 = 创造挖掘手感；声明前移重构 = 
 路径位级不变；canary 4 demo 回放 savenorm EXACT = 门内实证）。
 
 **门 207**：S1 ≡ base19 逐字节 ×2 + savenorm EXACT（**结构免疫第 87
-次**——creative 默认 off = 零存档键差零像素）；S2 creative demo 臂【场
-景 = 60f fresh 去火 + format 31 creative true；时间线 = 低头 dy 628 +
-LMB f20-30 即挖 + **F5 @f50 结果捕获**【demo save-spec 回放 --save 须
-匹配槽 + 退出永不回写槽 → F5 = 唯一结果机制】：creative=True / health
-20 / pos (0.5,54,0.5) 飞行不坠 / (0,53,0) 已挖 / entities=0 无掉落 /
-截图 ×2 RAW + 结果存档 ×2 RAW 恒等】；S2b **canary 4 demo ×2 RAW +
+次**——creative 默认 off = 零存档键差零像素）；S2 creative demo 臂【场景 = 60f fresh 去火 + format 31 creative
+true；截图 ×2 RAW + 装载态断言；⚠ 门 208 复盘：F5 结果捕获被
+save-spec 红线禁用 + demo 无初始指针锁定 = "已挖/无掉落" 断言空
+转（PITS 400①②），真 E2E 补证 = 门 208 S2c a4b 臂】；S2b **canary 4 demo ×2 RAW +
 savenorm EXACT**（sim 不 bump 实证）；S6 点名【实机 format-30 文件携
 creative → rc 1 点名 + 单元 ThreeWay 三面：30 携键/31 缺键/非 bool】；
 全套 **2801/2801**（+6：SaveFormat31Test ×3 + PlayerTest.Creative

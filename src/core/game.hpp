@@ -1962,12 +1962,20 @@ private:
         ItemStack enchantLapisSlot;
         EnchantOffers enchantOffers;
         EnchantUI enchantUi;
+        // V3-11b: the creative's E-panel face (the 物品栏 tab): the
+        // search / scroll / grant UI + the active tab (0 = 物品栏,
+        // 1 = 背包). SESSION state — reset on every creative open,
+        // never saved (the enchant slots' precedent). The survival's
+        // E panel ignores both (the creative-only render/click gates).
+        CreativeTabUI creativeUi;
+        int creativeTab = 1;
         PanelState(Inventory& inventory, const ItemRegistry& items,
                    const RecipeRegistry& recipes)
             : inventoryUi(inventory, items, recipes),
               tableUi(inventory, items, recipes),
               furnaceUi(inventory, items),
-              enchantUi(inventory, items) {}
+              enchantUi(inventory, items),
+              creativeUi(inventory, items) {}
     };
     PanelState m_panel {m_inventory, m_items, m_recipes};
     bool panelOpen() const {

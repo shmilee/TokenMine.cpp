@@ -46,7 +46,9 @@
 // inventory on close).
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
+#include <string>
 #include <vector>
 
 #include "item/crafting_grid.hpp"
@@ -304,6 +306,111 @@ private:
     ItemStack* m_itemSlot = nullptr;
     ItemStack* m_lapisSlot = nullptr;
     ItemStack m_carry;
+};
+
+// V3-11b: the creative's E-panel face (the 物品栏 tab's layout + the
+// search / scroll / grant state machine). The OUTER panel is the
+// Inventory kind's (both tabs share it — the survival's layout and the
+// 背包 tab's content stay bit-identical; the tabs live in the title
+// row, the creative's default). No SDL, no GL — pure geometry + the
+// Inventory's public slot operations, unit-testable without a game
+// (the EnchantUI's model).
+struct CreativeLayout {
+    // Native (unscaled) design, in UI px (the InventoryLayout's twin).
+    static constexpr int kTabWidth = 96;
+    static constexpr int kTabHeight = 32;
+    static constexpr int kTabGap = 8;
+    static constexpr int kSearchWidth = 300;
+    static constexpr int kSearchHeight = 32;
+    static constexpr int kSearchGap = 16;
+    static constexpr int kGridColumns = 6;
+    static constexpr int kGridRows = 4;
+    static constexpr int kVisible = kGridColumns * kGridRows;
+
+    UIRect panel; // = the Inventory kind's outer (the shared rect)
+    UIRect tabItems; // the title row's left button (active = 物品栏)
+    UIRect tabBackpack; // the title row's second button (背包)
+    UIRect search; // the search box (the 物品栏 tab only)
+    std::vector<UIRect> cells; // kVisible grid cells (the 物品栏 tab)
+
+    // The 物品栏 tab's layout. The outer panel + the fit factor come
+    // from the E kind's compute (the recipeCount keeps the 背包 tab's
+    // outer identical to the survival's), so both tabs share the exact
+    // rect + scale.
+    static CreativeLayout compute(int windowWidth, int windowHeight,
+                                  int recipeCount);
+    int tabAt(int px, int py) const; // 0 = 物品栏, 1 = 背包, -1 = none
+    int cellAt(int px, int py) const; // 0..kVisible-1, -1 = none
+};
+
+// The creative tab's state machine (see the CreativeLayout header). The
+// search text + the scroll are SESSION state (cleared on every open —
+// the enchant slots' precedent; nothing is saved). The grant writes the
+// player's SELECTED hotbar slot — the game passes the index, the UI
+// never knows which slot is selected (the same data-source split as
+// the EnchantUI's bind).
+class CreativeTabUI {
+public:
+    // The search filter's cap (item names are short; 24 covers the
+    // longest + headroom).
+    static constexpr int kSearchTextMax = 24;
+
+    CreativeTabUI(Inventory& inventory, const ItemRegistry& items)
+        : m_inv(inventory), m_items(items) {}
+
+    // Fresh session state (the openPanel's reset).
+    void reset() {
+        m_text.clear();
+        m_scroll = 0;
+        m_filtered.clear();
+        m_dirty = true;
+    }
+
+    // The frame's typed text (the Input's frameText twin — the
+    // consumer-side filter: only [a-z0-9_] survives, uppercased input
+    // lowercased, capped at kSearchTextMax — the item names' charset,
+    // the vocabulary's twin).
+    void appendFrameText(const std::string& frame);
+    void backspace();
+    const std::string& text() const { return m_text; }
+
+    // The wheel's ticks (one tick = one item, clamped to the filtered
+    // list's tail; an empty delta is a no-op).
+    void scrollBy(int delta);
+    int scroll() const { return m_scroll; }
+
+    // The filtered list: every item whose NAME starts with the search
+    // text (empty text = every grantable item), name-ascending
+    // (deterministic — the registry's id order is build-order, the
+    // name order is the player's). Calling it re-filters when the text
+    // changed AND re-clamps the scroll to the tail (the text can
+    // shrink the list under a scrolled window).
+    const std::vector<ItemID>& filtered() const;
+    // The visible window's START index (= the scroll — the invariant
+    // is that it is always clamped to [0, tail], the filtered() twin).
+    int visibleStart() const { return m_scroll; }
+
+    // Grant: cell = the 0-based index into the VISIBLE window (the
+    // layout's cellAt), targetSlot = the player's selected hotbar slot
+    // (0..8). full = a max-stack stack (the left click), single = one
+    // (the right click). Same item with room = merge (the damage /
+    // enchants drop — a creative grant carries neither); a different
+    // item, or a full same-item slot, = replace / no-op. Returns true
+    // when the slot CHANGED (the game's pickup-sound cue).
+    bool grant(int targetSlot, int cell, bool full);
+
+private:
+    // const (the filtered() twin — the mutable state carries it).
+    void refreshFiltered() const;
+    Inventory& m_inv;
+    const ItemRegistry& m_items;
+    std::string m_text;
+    // mutable: the filtered() const path re-clamps the scroll when the
+    // text shrinks the list under a scrolled window (the state machine
+    // is read-through for the renderer).
+    mutable int m_scroll = 0;
+    mutable std::vector<ItemID> m_filtered;
+    mutable bool m_dirty = true;
 };
 
 // The pick-and-place + craft state machine over one inventory and ONE

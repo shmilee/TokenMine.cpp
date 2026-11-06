@@ -123,6 +123,8 @@ void Input::frameBegin() {
     m_buttonReleased.fill(false);
     m_mouseDelta = Vec2 {0.0f, 0.0f};
     m_wheelDelta = 0; // V2-19: the wheel is per-frame input state
+    m_frameText.clear(); // V3-11b: the typed text is per-frame input state
+    m_frameBackspace = false;
 }
 
 void Input::pump() {
@@ -151,6 +153,17 @@ void Input::pump() {
                 // ticks only — the Game's consumer reads the per-frame
                 // accumulated total).
                 handleMouseWheel(static_cast<int>(event.wheel.y));
+                break;
+            case SDL_EVENT_TEXT_INPUT:
+                // V3-11b: the creative search's typed characters
+                // (SDL3's text input is disabled by default — these
+                // events exist only while the creative panel started
+                // them, so a no-input run never sees one). The
+                // composition events (SDL_EVENT_TEXT_EDITING) are
+                // deliberately unhandled (IME preedit unsupported —
+                // documented deviation; X11/Windows' direct Latin
+                // typing delivers TEXT_INPUT only).
+                handleTextInput(event.text.text);
                 break;
             case SDL_EVENT_GAMEPAD_ADDED:
                 // V3-8: the connection state is the gamepad's own decision
@@ -200,6 +213,12 @@ void Input::handleKey(std::uint32_t sdlKeycode, bool down) {
     tapEvent(InputEvent {down ? InputEvent::Kind::KeyDown
                               : InputEvent::Kind::KeyUp,
                          sdlKeycode, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, false});
+    // V3-11b: the search's delete — Backspace maps to no GameKey (the
+    // tap above records its no-op as with every unmapped key), so this
+    // frame flag is its only carrier.
+    if (down && sdlKeycode == SDLK_BACKSPACE) {
+        m_frameBackspace = true;
+    }
     auto key = mapKey(sdlKeycode);
     if (!key) {
         return;
@@ -230,6 +249,22 @@ void Input::handleMouseWheel(int deltaY) {
     tapEvent(InputEvent {InputEvent::Kind::Wheel, 0, deltaY, 0, 0.0f, 0.0f,
                          0.0f, 0.0f, false});
     m_wheelDelta += deltaY;
+}
+
+void Input::handleTextInput(const char* text) {
+    // V3-11b: the RAW typed characters (UTF-8), bounded. The consumer
+    // (the creative search) filters the vocabulary — this layer only
+    // caps the frame's buffer (kFrameTextMax) so a synthetic injection
+    // can never grow it without bound.
+    if (text == nullptr) {
+        return;
+    }
+    for (const char* p = text; *p != '\0' &&
+                              static_cast<int>(m_frameText.size()) <
+                                  kFrameTextMax;
+         ++p) {
+        m_frameText.push_back(*p);
+    }
 }
 
 void Input::handleQuit() {

@@ -219,11 +219,22 @@ void Game::handleUiKeys() {
     // (Minecraft; the Tab cycle stays). In the GLOBAL key section
     // (handleUiKeys, not the locked-world section): it must work with a
     // panel open, as in Minecraft — the world section early-returns
-    // while the pointer is free (panel open).
+    // while the pointer is free (panel open). V3-11b: with the creative
+    // search FOCUSED (the 物品栏 tab open) a digit is TEXT (it types
+    // into the search — the key's printable character) and does NOT
+    // switch the hotbar (the Minecraft's search-focus semantics; the
+    // slot is chosen before the panel opens, or with the pointer
+    // locked). The text side-effect is the panel branch's
+    // appendFrameText — the digit is typed either way.
+    const bool searchFocused = m_panel.openPanel == OpenPanel::Inventory &&
+                               m_player->isCreative() &&
+                               m_panel.creativeTab == 0;
     for (int d = 0; d < 9; ++d) {
         if (m_input.wasPressed(static_cast<GameKey>(
                 static_cast<int>(GameKey::Digit1) + d))) {
-            m_selectedSlot = static_cast<std::size_t>(d);
+            if (!searchFocused) {
+                m_selectedSlot = static_cast<std::size_t>(d);
+            }
         }
     }
     if (m_input.wasPressed(GameKey::F5)) {
@@ -324,6 +335,19 @@ void Game::openPanel(OpenPanel panel) {
     resetBreaking();
     resetBowDraw(); // a panel interrupts a draw (Phase 24)
     resetEatChannel(); // a panel interrupts an eat too (Phase 28)
+    // V3-11b: the creative's E opens on the 物品栏 tab (the Minecraft's
+    // creative-tab default — the search + grant face first), with a
+    // FRESH session state (the enchant slots' precedent). The typed
+    // text is enabled ONLY for the creative's Inventory panel —
+    // SDL3's text input is off by default, so every other open (and
+    // the whole no-input run) never delivers a TEXT_INPUT event
+    // (the structural-immunity root).
+    if (panel == OpenPanel::Inventory && m_player->isCreative()) {
+        m_panel.creativeUi.reset();
+        m_panel.creativeTab = 0;
+    }
+    m_window.setTextInputEnabled(
+        panel == OpenPanel::Inventory && m_player->isCreative());
     m_sound.play("ui_open");
 }
 
@@ -338,6 +362,10 @@ void Game::closePanel() {
         returnEnchantSlot(m_panel.enchantLapisSlot);
         m_panel.enchantOffers = EnchantOffers {};
     }
+    // V3-11b: the typed text is a creative-Inventory-panel state — a
+    // close (of any panel) stops it (the open's twin; SDL3's default
+    // stays off, so the no-input run's immunity holds across close).
+    m_window.setTextInputEnabled(false);
     m_panel.openPanel = OpenPanel::None;
     m_sound.play("ui_close");
 }
@@ -736,6 +764,45 @@ void Game::handlePanelClicks() {
     const InventoryLayout layout =
         InventoryLayout::compute(w, h, static_cast<int>(hints.size()), kind);
     const std::pair<int, int> mp = uiMouse();
+    // V3-11b: the creative's E-panel face (the tabs + the 物品栏 tab).
+    // The outer layout above is shared (the 背包 tab's content IS the
+    // ordinary E panel's — bit-identical to the survival's; only the
+    // title row's face differs). The 物品栏 tab consumes the frame's
+    // typed text (the search), the wheel (the scroll) and the clicks
+    // (the tab switch / the grant).
+    if (!table && m_player->isCreative()) {
+        const CreativeLayout cl =
+            CreativeLayout::compute(w, h, static_cast<int>(hints.size()));
+        if (m_panel.creativeTab == 0) {
+            if (!m_input.frameText().empty()) {
+                m_panel.creativeUi.appendFrameText(m_input.frameText());
+            }
+            if (m_input.frameBackspace()) {
+                m_panel.creativeUi.backspace();
+            }
+            m_panel.creativeUi.scrollBy(m_input.wheelDelta());
+        }
+        const int tab = cl.tabAt(mp.first, mp.second);
+        if (leftPressed && tab >= 0 && tab != m_panel.creativeTab) {
+            m_panel.creativeTab = tab;
+            disarmDoubleClick();
+            return;
+        }
+        if (m_panel.creativeTab == 0) {
+            const int ccell = cl.cellAt(mp.first, mp.second);
+            if (leftPressed || rightPressed) {
+                if (ccell >= 0 &&
+                    m_panel.creativeUi.grant(
+                        static_cast<int>(m_selectedSlot), ccell,
+                        leftPressed)) {
+                    m_sound.play("pickup");
+                }
+                disarmDoubleClick();
+            }
+            return; // the 物品栏 tab: no slot pick-and-place
+        }
+        // The 背包 tab: fall through to the ordinary routing below.
+    }
     const int px = mp.first;
     const int py = mp.second;
     InventoryUI& ui = table ? m_panel.tableUi : m_panel.inventoryUi;
@@ -1864,9 +1931,104 @@ void Game::renderUi() {
         // Panel background + titles.
         addQuad(batchFor(kPanel, false, nullptr), layout.panel.x,
                 layout.panel.y, layout.panel.w, layout.panel.h);
-        addText(table ? "工作台" : "背包", layout.title.x,
-                layout.title.y + titleOffset,
-                fScale(InventoryLayout::kTitleFontScale * s), kText);
+        // V3-11b: the creative's E-panel face (the E kind only — the
+        // table panel is a survival-style face for everyone): the title
+        // row becomes two tab buttons, and the 物品栏 tab swaps the
+        // content for the search box + the grant grid. The 背包 tab's
+        // content IS the ordinary face below (bit-identical to the
+        // survival's — the creative's delta is the title row + the
+        // 物品栏 tab only).
+        const bool creative = !table && m_player->isCreative();
+        const bool ordinaryFace = !creative || m_panel.creativeTab == 1;
+        if (creative) {
+            const CreativeLayout cl =
+                CreativeLayout::compute(w, h, static_cast<int>(hints.size()));
+            const std::string tabNames[2] = {"物品栏", "背包"};
+            for (int t = 0; t < 2; ++t) {
+                const UIRect& tr = t == 0 ? cl.tabItems : cl.tabBackpack;
+                addQuad(batchFor(kSlotBg, false, nullptr), tr.x, tr.y, tr.w,
+                        tr.h);
+                addBorder(
+                    batchFor(t == m_panel.creativeTab ? kSelected : kBorder,
+                             false, nullptr),
+                    tr, 2);
+                const std::string& name = tabNames[static_cast<std::size_t>(t)];
+                addText(name, tr.x + (tr.w - textWidth(name, fScale(s))) / 2,
+                        tr.y + (tr.h - L(kGlyphSize)) / 2, fScale(s), kText);
+            }
+            if (!ordinaryFace) {
+                // The 物品栏 tab: the search box (the typed text + the
+                // frame-locked cursor blink, the portal phase's twin) +
+                // the 6x4 grant grid + the two hint rows.
+                const std::string& text = m_panel.creativeUi.text();
+                addQuad(batchFor(kSlotBg, false, nullptr), cl.search.x,
+                        cl.search.y, cl.search.w, cl.search.h);
+                addBorder(batchFor(kBorder, false, nullptr), cl.search, 1);
+                const bool placeholder = text.empty();
+                const std::string shown = placeholder ? "输入匹配" : text;
+                const int textY =
+                    cl.search.y + (cl.search.h - L(kGlyphSize)) / 2;
+                const int textX = cl.search.x + L(6);
+                addText(shown, textX, textY, fScale(s),
+                        placeholder ? kTextDim : kText);
+                if ((m_frameCount % 30) < 15) { // the cursor's blink
+                    addText("_", textX + textWidth(shown, fScale(s)) + L(2),
+                            textY, fScale(s), kTextDim);
+                }
+                const std::vector<ItemID>& list = m_panel.creativeUi.filtered();
+                const int start = m_panel.creativeUi.visibleStart();
+                const int hoverCell = cl.cellAt(mx, my);
+                for (int i = 0; i < CreativeLayout::kVisible; ++i) {
+                    const UIRect& r = cl.cells[static_cast<std::size_t>(i)];
+                    addQuad(batchFor(kSlotBg, false, nullptr), r.x, r.y, r.w,
+                            r.h);
+                    addBorder(
+                        batchFor(i == hoverCell ? kHover : kBorder, false,
+                                 nullptr),
+                        r, 2);
+                    const int idx = start + i;
+                    if (idx < static_cast<int>(list.size())) {
+                        drawIcon(ItemStack {list[static_cast<std::size_t>(idx)],
+                                            1, 0.0f, {}},
+                                 static_cast<float>(r.x + r.w / 2),
+                                 static_cast<float>(r.y + r.h / 2), slotIcon);
+                    }
+                }
+                // The hint rows (every CJK char in the 428-glyph set —
+                // the PITS 397 char-check discipline, zero new glyphs).
+                const std::string hint1 = "点击 = 放入选中热栏一整组 · 右键 = 1 个";
+                const std::string hint2 = "滚轮 = 切换 · 输入 = 匹配";
+                const int hintY = cl.cells.back().y + cl.cells.back().h + L(8);
+                addText(hint1, cl.tabItems.x, hintY, fScale(s), kTextDim);
+                addText(hint2, cl.tabItems.x, hintY + L(18), fScale(s),
+                        kTextDim);
+                if (hoverCell >= 0) {
+                    const int idx = start + hoverCell;
+                    if (idx < static_cast<int>(list.size())) {
+                        // The count-1 stack renders the title only (the
+                        // x-count line's >1 gate — the name's clean read).
+                        const ItemID hid =
+                            list[static_cast<std::size_t>(idx)];
+                        appendTooltip(
+                            itemTooltip(m_items.at(hid),
+                                        ItemStack {hid, 1, 0.0f, {}}),
+                            mx + L(12), my + L(12), s, L(16));
+                    }
+                }
+                const std::string close = "按 E 关闭"; // PRE-1
+                addText(close,
+                        layout.panel.x + static_cast<int>(std::lround(
+                            (layout.panel.w - textWidth(close, fScale(s))) /
+                            2.0)),
+                        layout.panel.y + layout.panel.h - L(20), fScale(s),
+                        kTextDim);
+            }
+        } else {
+            addText(table ? "工作台" : "背包", layout.title.x,
+                    layout.title.y + titleOffset,
+                    fScale(InventoryLayout::kTitleFontScale * s), kText);
+        }
+        if (ordinaryFace) {
         // The list header ("合成") now serves both panels (CRAFT-4: the
         // table panel's hint column).
         addText("合成", layout.craftHeader.x,
@@ -2081,6 +2243,7 @@ void Game::renderUi() {
                 layout.panel.x + static_cast<int>(std::lround(
                     (layout.panel.w - textWidth(hint, fScale(s))) / 2.0)),
                 layout.panel.y + layout.panel.h - L(20), fScale(s), kTextDim);
+        } // the ordinaryFace (the 背包 tab / the survival's face)
     }
 
     // -- F3 debug overlay (while toggled) ------------------------------------

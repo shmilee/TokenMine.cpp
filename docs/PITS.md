@@ -3,7 +3,7 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–399，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–400，新条目继续前插于尾部块首。
 
 - **gzip 容器可钉 / zlib 宏缺失 / 双跑 RAW 适用域（PITS 385，门 191
   V3-7 存档 gzip）**——① **zlib 自带 gzip 封装（windowBits 16+15）
@@ -68,6 +68,28 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **demo 输入四坑 + X grab 屏捕 + 门机窗口口径（PITS 400，门 208
+  v3.18.0 V3-11b 创造物品栏）**——① **demo 无初始指针锁定**：游戏
+  启动指针未锁（首次 LMB = 捕获帧，game_interaction 的 capture 路径），
+  一切 locked-pointer 门控键（G/E/C/挖掘）在 demo 里必须先有一击
+  捕获 LMB 才生效——门 207 的 S2 "G 切换"因此从未在 demo 里生效
+  （其"即挖"实为 f21 捕获次帧，"结果存档"实为场景副本，F5 被
+  save-spec 红线禁用 = 见②，记录已修正，补证 = 门 208 S2c）。②
+  **demo save-spec = 观察红线禁 F5**：replay 的 world = save slot 时
+  `m_args.saveSlot.reset()`（该槽永不回写）→ F5 handler 同判空报
+  "no save slot"（WARN 不显 = 默认 info 级漏看，PITS 392 族）；
+  **结果捕获只存在于 fresh spec + --save**（退出写 = 回放结果的唯一
+  落盘点）。③ **xdotool 数字键双投递**：`xdotool key 2` = KEYDOWN
+  （热栏选择）+ TEXT_INPUT（'2' 字符）——搜索聚焦态下数字入搜索串
+  （"app2" 无匹配 = 授予全灭假象）；定案 = 物品栏 tab 开时数字 =
+  文本不切热栏（MC 搜索焦点语义），槽位须在开面板前选。④ **X
+  指针抓握阻塞外来 X 客户端**：游戏捕获指针期间 `import -window`
+  等屏捕恒挂 EAGAIN（X grab 纪律）——面板态视觉证据 = **游戏自身
+  退出截图**（退出时面板仍开 = 帧定格捕获）；屏捕只许在指针自由
+  窗口。⑤ **门机实际窗口 = 679×744**（config 请求 1280×720 被 WM
+  约束不生效）——布局探针/点击坐标必须按**截图实测尺寸**算 UI
+  空间（÷ui.scale），且臂必须 `--config` committed 口径（用户
+  ui.scale 2.0 = PITS 394 族，漏 --config 坐标全错）。
 - **format bump 测试面 4 类降级点 + demo save-spec 结果捕获（PITS 399，
   门 207 v3.17.0 V3-11a 创造基础）**——① **存档 format 跳变 = 测试
   面全家**（首跑全套 61 失败全此族，非实现 bug）：4 类降级点须同
@@ -79,11 +101,12 @@
   加 `&& k != "creative"`）；(d) **gzip identity 测试**（29→30 rebase
   29→31：模拟旧档 strip creative + format 断言 + 往返断言）。盘点
   口诀 = grep tests/ 的 strip 助手 / `"format\": 30` 断言 /
-  `asInt(), 30` 断言 / withoutKey player 链。② **demo save-spec 回放
-  结果捕获 = demo 内 F5**：world = save slot spec 时 `--save` 须匹配
-  槽（rc 2 点名）且退出**永不回写槽**（观察红线）→ 常规退出存档不
-  存在；结果捕获 = 时间线显式 F5 键（F5 handler 无条件 writeSave 当
-  活跃槽）。fresh world spec（4 canary）无此问题（常规退出写档）。
+  `asInt(), 30` 断言 / withoutKey player 链。② **demo save-spec 回放的结果捕获**：world = save slot spec 时
+  `--save` 须匹配槽（rc 2 点名）且退出**永不回写槽**（观察红线）——
+  门 208 实证红线同时禁用了 F5（saveSlot.reset = F5 判空 WARN，
+  门 207 的"F5 结果捕获"记录无效 = PITS 400①②）；**结果捕获 =
+  fresh world spec + `--save` 的退出写**（唯一落盘点）。fresh world
+  spec（4 canary）无此问题（常规退出写档）。
 - **场景手术三坑 + 动画内容的门协议（PITS 398，门 206 v3.16.0
   V3-15 小批）**——① **新种子 123456789 的 fresh 档自带 3 团地下火**
   （(23,35,28)/(24,35,28)/(26,35,27) y35 视角外，worldgen 产物，全

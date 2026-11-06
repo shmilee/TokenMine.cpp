@@ -950,4 +950,177 @@ void EnchantUI::quickMove(int slot, int panelSlot) {
                        inventorySlotOrder(m_inv, /*hotbarFirst=*/false));
 }
 
+// =========================================================================
+// V3-11b: the creative tab (layout + state machine)
+// =========================================================================
+
+CreativeLayout CreativeLayout::compute(int windowWidth, int windowHeight,
+                                       int recipeCount) {
+    CreativeLayout out;
+    // The shared outer: the E kind's compute (the recipeCount keeps the
+    // 背包 tab's panel IDENTICAL to the survival's — the creative's
+    // face is the title row's tabs + the 物品栏 tab's content only).
+    const InventoryLayout inv =
+        InventoryLayout::compute(windowWidth, windowHeight, recipeCount,
+                                 PanelKind::Inventory);
+    out.panel = inv.panel;
+    const double s = inv.scale;
+    const int pad = scaledLength(InventoryLayout::kPanelPadding * s);
+    const int titleH = scaledLength(InventoryLayout::kTitleHeight * s);
+    const int tabW = scaledLength(kTabWidth * s);
+    const int tabH = scaledLength(kTabHeight * s);
+    const int tabGap = scaledLength(kTabGap * s);
+    // The tabs sit in the title row (vertically centered, left-aligned
+    // like the title text).
+    const int tx = inv.panel.x + pad;
+    const int ty = inv.panel.y + pad + (titleH - tabH) / 2;
+    out.tabItems = UIRect {tx, ty, tabW, tabH};
+    out.tabBackpack = UIRect {tx + tabW + tabGap, ty, tabW, tabH};
+    // The 物品栏 tab's content: the search box under the title row, then
+    // the kGridColumns x kGridRows grid (left-aligned like the slots).
+    const int searchW = scaledLength(kSearchWidth * s);
+    const int searchH = scaledLength(kSearchHeight * s);
+    const int searchGap = scaledLength(kSearchGap * s);
+    const int searchY = inv.panel.y + pad + titleH + searchGap;
+    out.search = UIRect {tx, searchY, searchW, searchH};
+    const int cell = scaledLength(InventoryLayout::kSlot * s);
+    const int gap = scaledLength(InventoryLayout::kGap * s);
+    const int gridY = searchY + searchH + searchGap;
+    for (int r = 0; r < kGridRows; ++r) {
+        for (int c = 0; c < kGridColumns; ++c) {
+            out.cells.push_back(UIRect {tx + c * (cell + gap),
+                                        gridY + r * (cell + gap), cell,
+                                        cell});
+        }
+    }
+    return out;
+}
+
+int CreativeLayout::tabAt(int px, int py) const {
+    if (tabItems.contains(px, py)) {
+        return 0;
+    }
+    if (tabBackpack.contains(px, py)) {
+        return 1;
+    }
+    return -1;
+}
+
+int CreativeLayout::cellAt(int px, int py) const {
+    for (int i = 0; i < static_cast<int>(cells.size()); ++i) {
+        if (cells[i].contains(px, py)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+namespace {
+// The search's vocabulary: ASCII [a-z0-9_] (the item names' charset —
+// an uppercased character lowercases, everything else is dropped).
+bool isSearchChar(char c) {
+    return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';
+}
+} // namespace
+
+void CreativeTabUI::appendFrameText(const std::string& frame) {
+    bool changed = false;
+    for (const char c0 : frame) {
+        if (m_text.size() >= kSearchTextMax) {
+            break;
+        }
+        const char c = (c0 >= 'A' && c0 <= 'Z')
+            ? static_cast<char>(c0 + ('a' - 'A'))
+            : c0;
+        if (isSearchChar(c)) {
+            m_text.push_back(c);
+            changed = true;
+        }
+    }
+    if (changed) {
+        m_dirty = true;
+    }
+}
+
+void CreativeTabUI::backspace() {
+    if (m_text.empty()) {
+        return;
+    }
+    m_text.pop_back();
+    m_dirty = true;
+}
+
+void CreativeTabUI::refreshFiltered() const {
+    if (!m_dirty) {
+        return;
+    }
+    m_dirty = false;
+    m_filtered.clear();
+    for (const ItemID id : m_items.allIds()) {
+        const std::string& name = m_items.at(id).name;
+        if (name.size() >= m_text.size() &&
+            name.compare(0, m_text.size(), m_text) == 0) {
+            m_filtered.push_back(id);
+        }
+    }
+    std::sort(m_filtered.begin(), m_filtered.end(),
+              [this](ItemID a, ItemID b) {
+                  return m_items.at(a).name < m_items.at(b).name;
+              });
+    // The text can shrink the list under a scrolled window — re-clamp.
+    const int limit = std::max(0, static_cast<int>(m_filtered.size()) -
+                                       CreativeLayout::kVisible);
+    if (m_scroll > limit) {
+        m_scroll = limit;
+    }
+}
+
+const std::vector<ItemID>& CreativeTabUI::filtered() const {
+    refreshFiltered();
+    return m_filtered;
+}
+
+void CreativeTabUI::scrollBy(int delta) {
+    if (delta == 0) {
+        return;
+    }
+    const int limit = std::max(0, static_cast<int>(filtered().size()) -
+                                       CreativeLayout::kVisible);
+    m_scroll += delta;
+    if (m_scroll < 0) {
+        m_scroll = 0;
+    } else if (m_scroll > limit) {
+        m_scroll = limit;
+    }
+}
+
+bool CreativeTabUI::grant(int targetSlot, int cell, bool full) {
+    if (targetSlot < 0 || cell < 0 ||
+        cell >= CreativeLayout::kVisible) {
+        return false;
+    }
+    const std::vector<ItemID>& list = filtered();
+    const int idx = visibleStart() + cell;
+    if (idx >= static_cast<int>(list.size())) {
+        return false; // a window cell past the filtered tail
+    }
+    const ItemID id = list[idx];
+    const Item& item = m_items.at(id);
+    ItemStack& slot = m_inv.at(static_cast<std::size_t>(targetSlot));
+    if (slot.item == id) {
+        if (slot.count >= item.maxStack) {
+            return false; // the slot is already full of the item
+        }
+        slot.count = std::min(item.maxStack,
+                              slot.count + (full ? item.maxStack : 1));
+        // A creative grant carries no damage / enchants (the fresh
+        // stack's rule) — the merge keeps the item + count only.
+        slot.damage = 0.0f;
+        slot.enchants.clear();
+        return true;
+    }
+    slot = ItemStack {id, full ? item.maxStack : 1, 0.0f, {}};
+    return true;
+}
+
 } // namespace mc

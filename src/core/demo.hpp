@@ -318,6 +318,10 @@ struct TimelineAction {
     std::string button; // Mouse*: left / right / middle
     double dx = 0.0;    // MouseMove: the delta pixels
     double dy = 0.0;
+    double x = 0.0;     // MouseMove: the ABSOLUTE position (the file's
+    double y = 0.0;     //   mouse_move's x/y, optional — the panels'
+                        //   click coordinates; 0 = the legacy delta-only
+                        //   shape, the shipped demos' bit-identity)
     int ticks = 0;      // Wheel: the ticks
 };
 

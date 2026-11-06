@@ -14,7 +14,7 @@
 > 【V2-18 门 190，AO 世界光照】→ **225272【V3-6 门 200，填充感知雾 = 3.x
 > 首重锚】**；门 184–189 = 结构免疫第 65–70 次免重锚；门 191–199 =
 > 第 72–80 次；门 201–202 = 第 81–82 次免重锚（对 base19）【v3.0.0
-> banner = 第 71 次】）、PITS **399**。上一轮全面刷新
+> banner = 第 71 次】）、PITS **400**。上一轮全面刷新
 > （2026-11-02）止于 v2.0.0、2026-11-03 增量止于 v2.3.0（下条），本次把
 > v2.11.0 → v2.19.0 的机制（提前项 `[V2-19]` + 第二批 `[V2-11]`~`[V2-18]`，
 > 逐版见 `docs/archive/v2x/CHANGELOG.md`，细节证据见 `docs/archive/v2x/`
@@ -1238,7 +1238,26 @@
   duration 0 = 复用 data-driven instant path）+ **无掉落/无 XP/无
   挖掘耐久**（breakBlock gate 只包 4 段 drops/chance/XP——粒子音效
   保留）+ **放置不消耗**（3 点）；sim 不 bump（canary 4 demo 回放
-  EXACT 实证）；**创造物品栏 = V3-11b 未做**（现仅有既有背包内容）。
+  EXACT 实证）。**创造物品栏 `[V3-11b]`（v3.18.0）**：创造下 E
+  面板 = 双 tab（标题行「物品栏/背包」按钮，生存 E 面板位级不变 =
+  门 208 旧≡新字节恒等实证）——物品栏 tab = **前缀搜索框**（SDL 文
+  本输入新面：`SDL_StartTextInput` 仅创造 Inventory 面板期开启【SDL3
+  文本输入默认关 = 无输入运行结构性免疫根】，Input 帧态 frameText +
+  frameBackspace【wheel delta 孪生，frameBegin 重置；**不入 tap 词
+  表** = demo 录制 schema 8 型不变，录制的 demo 永不打字，记档偏
+  离】，词表 [a-z0-9_] 小写归一 + 24 上限 + 光标帧锁定闪烁）→
+  **224 物品 name 升序前缀过滤** + **6×4 网格滚轮翻页**（1 tick =
+  1 项，双向夹紧；搜索缩表重夹）+ **左键 = 满组授予 / 右键 = 单个**
+  到**选中热栏位**（同物品有隙 = 合并并清 damage/enchants【创造
+  授予不带耐久附魔 = 新栈规则】，异物品 = 替换；满同物品 = no-op；
+  授予播放 pickup 音）；**搜索焦点数字语义**（物品栏 tab 开时数字
+  键 = 文本入搜索，不切热栏 = MC 搜索焦点，槽位须在开面板前选）；
+  背包 tab = 既有 E 面板内容位级（+标题行 tab）；面板 = 会话态零
+  format（搜索串/滚动/激活 tab 均不落盘）；sim 不 bump（授予经既
+  有 Inventory 公开操作，canary EXACT 实证）。**demo author 面扩展
+  `[V3-11b]`**：timeline `mouse_move` 可选 `x`/`y` 绝对位【文件
+  schema 既有 mouse_move x/y，author 面补齐——面板点击坐标；缺省
+  0 = 既有 4 canary 位级恒等】+ 键词表 `+g`（V3-11a 的 G 键）。
   **火·熔岩免疫 `[V3-15]`（v3.16.0）**：物品可选属性 `fire_resistant`
   （strict bool，armor-only = parseArmor 守卫，shears tool-only 孪生）
   4 件 netherite 护甲 = true——**任一件穿在身上**（setArmorSlot 单收口

@@ -211,6 +211,12 @@ public:
     // third-person wheel zoom only moves its session distance on a
     // nonzero reading).
     int wheelDelta() const { return m_wheelDelta; }
+    // V3-11b: the frame's typed text / backspace (the wheelDelta twins).
+    // kFrameTextMax = the frame buffer's bound (a synthetic injection
+    // can never grow it without limit — public: the gate's tests pin it).
+    static constexpr int kFrameTextMax = 256;
+    const std::string& frameText() const { return m_frameText; }
+    bool frameBackspace() const { return m_frameBackspace; }
 
     // Last absolute mouse position in window pixels (the UI screens read
     // it; while the pointer is captured SDL reports (0, 0) and the value
@@ -239,6 +245,14 @@ public:
     // V2-19: one wheel event's vertical delta (SDL delivers ticks, not
     // absolute positions; the consumer accumulates through this handler).
     void handleMouseWheel(int deltaY);
+    // V3-11b: one SDL_EVENT_TEXT_INPUT event's characters (the pump's
+    // consumer + the unit tests' synthetic injection). RAW capture
+    // (UTF-8, bounded) — the consumer (the creative search) filters the
+    // vocabulary. NOT part of the tap vocabulary (InputEvent has no
+    // string carrier, the demo's 8-type schema stays untouched — a
+    // recorded demo can never type; the search is unit- + real-input
+    // gated, documented deviation).
+    void handleTextInput(const char* text);
     void handleQuit();
     // V3-8: the gamepad's entry points (same pattern as handleKey — the
     // unit tests drive them directly; pump() pre-filters the device: only
@@ -289,6 +303,18 @@ private:
     // V2-19: the frame's accumulated wheel ticks (reset by frameBegin,
     // like the mouse delta — input state, never a persisted level).
     int m_wheelDelta = 0;
+    // V3-11b: the frame's TYPED text (the SDL_EVENT_TEXT_INPUT events'
+    // raw UTF-8, reset by frameBegin — the wheel delta's twin: input
+    // state, never a persisted level). Empty on every no-input frame
+    // (SDL's text input is disabled by default + only started by the
+    // creative panel — the structural-immunity root). Bounded to
+    // kFrameTextMax characters (one frame of typing is small; the cap
+    // is the synthetic-injection bound).
+    std::string m_frameText;
+    // V3-11b: the frame's backspace press (the key's frame state, reset
+    // by frameBegin — the search's delete; Backspace maps to no
+    // GameKey, so this flag is its only carrier).
+    bool m_frameBackspace = false;
     // Absolute position: updated on every motion event, NOT reset by
     // frameBegin (the cursor sits where it last was).
     Vec2 m_mousePos {0.0f, 0.0f};

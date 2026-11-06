@@ -97,6 +97,10 @@ void Window::shutdown() {
         m_glContext = nullptr;
     }
     if (m_window != nullptr) {
+        if (m_textInputEnabled) {
+            SDL_StopTextInput(m_window);
+            m_textInputEnabled = false;
+        }
         SDL_DestroyWindow(m_window);
         m_window = nullptr;
     }
@@ -118,6 +122,19 @@ void Window::setRelativeMouseMode(bool enabled) {
 bool Window::relativeMouseMode() const {
     return m_window != nullptr && SDL_GetWindowRelativeMouseMode(m_window);
 }
+
+void Window::setTextInputEnabled(bool enabled) {
+    if (m_window != nullptr && enabled != m_textInputEnabled) {
+        if (enabled) {
+            SDL_StartTextInput(m_window);
+        } else {
+            SDL_StopTextInput(m_window);
+        }
+        m_textInputEnabled = enabled;
+    }
+}
+
+bool Window::textInputEnabled() const { return m_textInputEnabled; }
 
 int Window::width() const {
     if (m_window == nullptr) {

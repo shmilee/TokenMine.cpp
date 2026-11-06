@@ -725,6 +725,7 @@ Result<std::uint32_t> authorKeycode(const std::string& name) {
     if (name == "r") return std::uint32_t(SDLK_R);
     if (name == "c") return std::uint32_t(SDLK_C);
     if (name == "t") return std::uint32_t(SDLK_T);
+    if (name == "g") return std::uint32_t(SDLK_G); // V3-11a: creative
     if (name == "space") return std::uint32_t(SDLK_SPACE);
     if (name == "shift") return std::uint32_t(SDLK_LSHIFT);
     if (name == "escape") return std::uint32_t(SDLK_ESCAPE);
@@ -741,7 +742,7 @@ Result<std::uint32_t> authorKeycode(const std::string& name) {
     if (name == "8") return std::uint32_t(SDLK_8);
     if (name == "9") return std::uint32_t(SDLK_9);
     return MC_FAIL("unknown timeline key '" + name +
-                   "' (the vocabulary: w a s d q e r c t space shift "
+                   "' (the vocabulary: w a s d q e r c t g space shift "
                    "escape tab f3 f5 1..9)");
 }
 
@@ -766,7 +767,7 @@ const std::vector<std::string>& actionKeys(TimelineAction::Type type) {
     static const std::vector<std::string> kMouse = {"at_frame", "action",
                                                     "button"};
     static const std::vector<std::string> kMove = {"at_frame", "action",
-                                                   "dx", "dy"};
+                                                   "dx", "dy", "x", "y"};
     static const std::vector<std::string> kWheel = {"at_frame", "action",
                                                     "ticks"};
     switch (type) {
@@ -901,6 +902,19 @@ Result<std::vector<TimelineAction>> parseTimelineActions(const Json& actions) {
                 if (!k || !isFiniteNumber(*k, t.dx)) {
                     return fail("'dx' is required (a finite number)");
                 }
+                // The optional absolute position (the file's mouse_move's
+                // x/y — the panels' click coordinates; absent = 0, the
+                // legacy delta-only shape's bit-identity).
+                if (const Json* kx = a.find("x"); kx) {
+                    if (!isFiniteNumber(*kx, t.x)) {
+                        return fail("'x' must be a finite number");
+                    }
+                }
+                if (const Json* ky = a.find("y"); ky) {
+                    if (!isFiniteNumber(*ky, t.y)) {
+                        return fail("'y' must be a finite number");
+                    }
+                }
                 k = a.find("dy");
                 if (!k || !isFiniteNumber(*k, t.dy)) {
                     return fail("'dy' is required (a finite number)");
@@ -1001,12 +1015,18 @@ DemoFile authorDemoFile(const DemoWorldSpec& world,
                                   mouseEv(InputEvent::Kind::MouseUp)});
                 break;
             case TimelineAction::Type::MouseMove:
+                // The absolute position (the panels' click coordinates)
+                // rides the event's x/y (the file's mouse_move face —
+                // 0.0f when the timeline omitted them, the legacy
+                // delta-only shape).
                 evs.push_back(Ev {a.atFrame, i, 0,
                                   InputEvent {InputEvent::Kind::MouseMove,
                                               0, 0, 0,
                                               static_cast<float>(a.dx),
                                               static_cast<float>(a.dy),
-                                              0.0f, 0.0f, false}});
+                                              static_cast<float>(a.x),
+                                              static_cast<float>(a.y),
+                                              false}});
                 break;
             case TimelineAction::Type::Wheel:
                 evs.push_back(Ev {a.atFrame, i, 0,

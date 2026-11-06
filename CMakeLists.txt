@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 3.17.0 LANGUAGES CXX)
+project(TokenMine VERSION 3.18.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -219,6 +219,7 @@ add_executable(tokenmine_tests
     tests/test_debug_overlay.cpp
     tests/test_item_tooltip.cpp
     tests/test_inventory_ui.cpp
+    tests/test_creative_ui.cpp
     tests/test_ui_scale.cpp
     tests/test_alpha_cutout.cpp
     tests/test_fog.cpp

@@ -39,6 +39,14 @@ public:
     void setRelativeMouseMode(bool enabled);
     bool relativeMouseMode() const;
 
+    // V3-11b: the typed-text delivery (the creative search's input).
+    // SDL3's text input is DISABLED by default — enabling it only while
+    // the creative panel needs it is the no-input run's
+    // structural-immunity root (a no-input run never starts it, so no
+    // TEXT_INPUT event can exist there).
+    void setTextInputEnabled(bool enabled);
+    bool textInputEnabled() const;
+
     void swapBuffers();
     void setTitle(const std::string& title);
 
@@ -68,6 +76,9 @@ private:
     std::string m_title;
     bool m_vsync = true;
     bool m_sdlActive = false;
+    // V3-11b: the typed-text delivery state (mirrors the SDL side —
+    // setTextInputEnabled is a no-op when the flag is unchanged).
+    bool m_textInputEnabled = false;
 };
 
 } // namespace mc

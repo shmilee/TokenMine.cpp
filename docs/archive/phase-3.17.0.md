@@ -65,12 +65,16 @@
   - 场景 = 种子 123456789 60f fresh 档**去火**（3 团地下火移除 +
     fires:[]，PITS 398① 纪律）+ `player.creative = true`（format 31）。
   - 时间线：f10 低头 dy 628（准星对地面）/ f20 LMB down / f30 up
-    （**即挖** (0,53,0)）/ **f50 F5 down / f55 up**（结果捕获——
-    demo save-spec 回放 `--save` 须匹配槽 + 退出永不回写槽 → F5 =
-    唯一结果机制，PITS 399②）。
-  - 断言（×2 臂）：`creative=True` / `health 20` / `pos (0.5,54,0.5)`
-    【飞行不坠】/ `(0,53,0) = air`【已挖】/ `entities=0`【无掉落】+
-    截图 ×2 RAW 恒等 + 结果存档 ×2 RAW 恒等。
+    （即挖）/ f50 F5 down / f55 up。
+  - 断言（×2 臂）：截图 ×2 RAW 恒等 + "结果存档" ×2 RAW 恒等。
+  - **⚠ 门 208 复盘修正（PITS 400①②）**：demo 无初始指针锁定
+    （首次 LMB = 捕获帧）+ save-spec 红线禁用 F5（saveSlot.reset →
+    F5 判空 WARN，"结果存档"实为**场景副本**，"已挖/无掉落/飞行"
+    断言对副本 = **空断言**）——本臂实证效力 = 回放确定性（截图
+    ×2 RAW）+ 场景装载 creative 态；**即挖/无掉落/飞行/G 切换的真
+    E2E 补证 = 门 208 S2c**（a4b 臂：fresh + 捕获 + G + 低头 + 单
+    帧 LMB → 退出写档断言 creative=True / (0,53,0)=air / entities=0
+    / pos y=54 + a5 生存对照臂）。
 - **S2b canary 4 demo**（sim 不 bump 实证）：example / tutorial_dig /
   tutorial_build / tutorial_fly（sim 2，fresh world spec，0 动作）×2
   RAW 恒等 + savenorm EXACT（300f）。

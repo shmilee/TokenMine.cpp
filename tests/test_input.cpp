@@ -207,3 +207,43 @@ TEST(InputTest, PumpWithoutVideoSubsystemIsSafe) {
     input.pump();
     EXPECT_FALSE(input.quitRequested());
 }
+
+TEST(InputTest, FrameTextAccumulatesAndResets) {
+    // V3-11b: the creative search's frame text — RAW capture (the
+    // consumer filters the vocabulary), bounded to kFrameTextMax, and
+    // per-frame (frameBegin resets it, like the wheel delta).
+    Input input;
+    input.frameBegin();
+    EXPECT_TRUE(input.frameText().empty());
+    EXPECT_FALSE(input.frameBackspace());
+    input.handleTextInput("sto");
+    input.handleTextInput("n"); // a second event appends
+    EXPECT_EQ(input.frameText(), "ston");
+    // The bound: a single over-long frame keeps the first kFrameTextMax.
+    input.frameBegin();
+    std::string longText(Input::kFrameTextMax + 10, 'a');
+    input.handleTextInput(longText.c_str());
+    EXPECT_EQ(input.frameText().size(),
+              static_cast<std::size_t>(Input::kFrameTextMax));
+    // frameBegin resets it (the no-input frame reads empty forever).
+    input.frameBegin();
+    EXPECT_TRUE(input.frameText().empty());
+}
+
+TEST(InputTest, FrameBackspaceIsPerFrame) {
+    // V3-11b: Backspace maps to no GameKey (the UnmappedKeysIgnored
+    // twin) but sets the frame flag (the search's delete).
+    Input input;
+    input.frameBegin();
+    EXPECT_FALSE(input.frameBackspace());
+    for (int i = 0; i < kKeyCount; ++i) {
+        EXPECT_FALSE(input.isDown(static_cast<GameKey>(i))) << i;
+    }
+    input.handleKey(SDLK_BACKSPACE, true);
+    EXPECT_TRUE(input.frameBackspace());
+    for (int i = 0; i < kKeyCount; ++i) {
+        EXPECT_FALSE(input.isDown(static_cast<GameKey>(i))) << i;
+    }
+    input.frameBegin();
+    EXPECT_FALSE(input.frameBackspace());
+}
