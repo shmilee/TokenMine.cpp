@@ -63,6 +63,23 @@ inline float applyWalkSpeedFactor(float speed, float factor, bool walking) {
 
 class Player : public Entity {
 public:
+
+    enum class DamageSource {
+        None,
+        Fall,   // the fall damage (the landing)
+        Void,   // below the kill plane (fell out of the world)
+        Starve, // the hunger's starvation tick
+        Lava,   // the lava's burn tick
+        Drown,  // the drowning (the head in the water)
+        Arrow,  // the hurtPlayer arrow hit
+        Mob,    // the mob's melee hit (name = the mob's id)
+        Effect, // the potion / effect's damage tick (name = the id)
+    };
+    struct DamageInfo {
+        DamageSource source = DamageSource::None;
+        std::string name;
+    };
+
     struct Params {
         float width = 0.6f;
         float height = 1.8f;
@@ -254,6 +271,14 @@ public:
 
     // -- survival (Phase 16) --------------------------------------------------
     float health() const { return m_health; }
+    // V3-13: the death cause (valid while dead; respawn clears it).
+    const DamageInfo& deathInfo() const { return m_deathInfo; }
+    // The death screen's cause line (the pure font-safe string — the
+    // unit test pins it; the CJK glyphs are all in the 418-char set).
+    static std::string deathCauseLine(const DamageInfo& info);
+    // V3-13: the session's horizontal distance (the death screen's
+    // "行走 N 格" — frame-locked, the teleport/respawn jumps skip).
+    float statsDistance() const { return m_statsDistance; }
     // The BASE max health (Phase 72: the absorption pool is a SEPARATE
     // value — see absorption()). damage()/heal()/setHealth() clamp the
     // health against this value only.
@@ -444,7 +469,17 @@ public:
     // BREAKS in place (the slot clears + its points drop out of the
     // total — the action that caused the wear is unaffected: the damage
     // already settled, the item is simply gone).
+    // V3-13: the death cause (the death screen's cause line — SESSION
+    // ONLY, not serialized: the stats are per session, the documented
+    // deviation). The KILLING blow's source wins (a non-lethal hit
+    // never updates it); Mob carries the killer's id, Effect the
+    // effect's id (poison / wither / fire).
     bool damage(float amount, bool bypassArmor = false);
+    // The source-carrying overload (V3-13): no default for info — the
+    // 2-arg form delegates with the None source (the pre-V3-13
+    // bit-identical path).
+    bool damage(float amount, bool bypassArmor,
+                const DamageInfo& info);
 
     // Back at the spawn point with full health and cleared fall state. The
     // game calls this on the R key. The inventory is untouched
@@ -575,7 +610,13 @@ private:
     double m_regenAccum = 0.0;
     bool m_wasOnGround = false;
     float m_fallStartY = 0.0f;
-    bool m_dead = false;
+        // V3-13: the death cause + the session distance stat.
+    DamageInfo m_deathInfo {};
+    float m_statsDistance = 0.0f;
+    // V3-13: the update's start position (the distance stat's delta;
+    // the teleport threshold guard).
+    Vec3 m_updateStartPos {};
+bool m_dead = false;
     // Hunger (Phase 23): the level, the decay accumulator (runs always —
     // a dead player never reaches update), and the starvation accumulator
     // (only runs at zero). Phase 28: the hidden saturation buffer.

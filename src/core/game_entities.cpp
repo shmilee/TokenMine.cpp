@@ -162,7 +162,8 @@ void Game::updateEntities(double dt) {
             const float tp = raycastAabb(prev, step, m_player->aabbMin(),
                                          m_player->aabbMax());
             if (tp >= 0.0f && tp <= 1.0f && !m_player->isDead()) {
-                m_player->damage(arrow->damage());
+                m_player->damage(arrow->damage(), false,
+                                 {Player::DamageSource::Arrow, {}});
                 if (arrow->effectId() >= 0) {
                     // SURV-5: the arrow's effect lands on the player
                     // (the skeleton's wither) through the SAME single
@@ -190,7 +191,10 @@ void Game::updateEntities(double dt) {
             if (t < 0.0f || t > 1.0f) {
                 continue;
             }
-            mob->damage(arrow->damage());
+            if (mob->damage(arrow->damage())) {
+                m_sessionStats.mobsKilled += 1; // V3-13: the kill stat (the
+                                         // arrow's lethal hit)
+            }
             // Phase 42: the knockback scales with the shot's charge
             // (arrowKnockback in core/bow.hpp — a full-power shot
             // reproduces the legacy melee-style constants bit-exactly).
@@ -928,11 +932,12 @@ void Game::attemptMobSpawn() {
     const int hitEffectTier = def.properties.hitEffectTier;
     mob->setHitCallback(
         [this, damageScale, hitEffectName, hitEffectDuration,
-         hitEffectTier](float amount) {
+         hitEffectTier, killerName = def.name](float amount) {
             if (m_player->isDead()) {
                 return;
             }
-            m_player->damage(amount * damageScale);
+            m_player->damage(amount * damageScale, false,
+                             {Player::DamageSource::Mob, killerName});
             if (!hitEffectName.empty()) {
                 // SURV-4: through the single choke point (the name is
                 // init-cross-checked; the instant settlement is a no-op for

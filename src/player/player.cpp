@@ -175,6 +175,7 @@ void Player::update(double dt) {
     if (dt <= 0.0 || m_dead) {
         return; // a dead player is frozen; the game re-enters via respawn()
     }
+    m_updateStartPos = m_position; // V3-13: the distance stat's delta
 
     // 1. Mouse look (only while the pointer is captured).
     if (m_lookEnabled) {
@@ -485,7 +486,8 @@ void Player::update(double dt) {
         // (see `flying` above).
         if (fall > m_params.fallDamageOffset && !isInWater() && !isInLava() &&
             !flying) {
-            damage(fall - m_params.fallDamageOffset);
+            damage(fall - m_params.fallDamageOffset, false,
+                   {DamageSource::Fall, {}});
         }
         m_fallStartY = m_position.y;
     }
@@ -551,7 +553,7 @@ void Player::update(double dt) {
         m_starveAccum += dt;
         while (m_starveAccum >= m_params.starveDamageIntervalSeconds) {
             m_starveAccum -= m_params.starveDamageIntervalSeconds;
-            damage(1.0f);
+            damage(1.0f, false, {DamageSource::Starve, {}});
             if (m_dead) {
                 break;
             }
@@ -568,7 +570,7 @@ void Player::update(double dt) {
         m_lavaAccum += dt;
         while (m_lavaAccum >= m_params.lavaDamageIntervalSeconds) {
             m_lavaAccum -= m_params.lavaDamageIntervalSeconds;
-            damage(m_params.lavaDamage);
+            damage(m_params.lavaDamage, false, {DamageSource::Lava, {}});
             if (m_dead) {
                 break;
             }
@@ -585,7 +587,20 @@ void Player::update(double dt) {
 
     // Fell out of the world (the world's edge is void): death.
     if (belowKillPlane()) {
-        damage(m_params.maxHealth * 1000.0f); // instant, always lethal
+        damage(m_params.maxHealth * 1000.0f, false,
+               {DamageSource::Void, {}}); // instant, always lethal
+    }
+
+    // V3-13: the session's distance stat (the horizontal movement only
+    // — the death screen's "行走 N 格"). A teleport / respawn jump
+    // exceeds any single-frame motion (the terminal-velocity bound), so
+    // the 1.0 threshold skips it without a flag.
+    {
+        const float dx = std::fabsf(m_position.x - m_updateStartPos.x);
+        const float dz = std::fabsf(m_position.z - m_updateStartPos.z);
+        if (dx + dz < 1.0f) {
+            m_statsDistance += dx + dz;
+        }
     }
 }
 
@@ -621,6 +636,11 @@ int Player::armorPoints() const {
 }
 
 bool Player::damage(float amount, bool bypassArmor) {
+    return damage(amount, bypassArmor, DamageInfo {});
+}
+
+bool Player::damage(float amount, bool bypassArmor,
+                    const DamageInfo& info) {
     if (m_dead || amount <= 0.0f) {
         return false;
     }
@@ -716,12 +736,50 @@ bool Player::damage(float amount, bool bypassArmor) {
     if (m_health <= 0.0f) {
         m_health = 0.0f;
         m_dead = true;
+        // V3-13: the KILLING blow's source owns the death cause (the
+        // heal's None default never overwrites).
+        if (info.source != DamageSource::None) {
+            m_deathInfo = info;
+        }
     }
     return true;
 }
 
+std::string Player::deathCauseLine(const DamageInfo& info) {
+    // V3-13: the font-safe cause strings (every CJK glyph in the 418-
+    // char font set — the 摔/掘/外-missing lesson checked per char).
+    switch (info.source) {
+        case DamageSource::Fall:
+            return "死于高处掉落";
+        case DamageSource::Void:
+            return "死于世界之外";
+        case DamageSource::Starve:
+            return "饿死";
+        case DamageSource::Lava:
+            return "死于熔岩";
+        case DamageSource::Drown:
+            return "死于落水";
+        case DamageSource::Arrow:
+            return "被箭射死";
+        case DamageSource::Mob:
+            return "被 " + info.name + " 杀死";
+        case DamageSource::Effect:
+            if (info.name == "fire") {
+                return "死于燃烧";
+            }
+            if (info.name == "poison") {
+                return "死于毒";
+            }
+            return "死于药水";
+        case DamageSource::None:
+        default:
+            return "死了";
+    }
+}
+
 void Player::respawn() {
     m_dead = false;
+    m_deathInfo = {}; // V3-13: the cause dies with the corpse
     // Respawn starts clean (Phase 72): the pool dies with the player
     // (the game clears the effects on death), so the absorption is 0 and
     // the health refills to the base max.

@@ -362,7 +362,8 @@ void Game::update(double dt) {
             // table: Drowning = "Armor: No effect"); the resistance
             // effect and the absorption pool still apply (damage()'s
             // pipeline, the bypass flag skips the armor step only).
-            m_player->damage(dmg, /*bypassArmor=*/true);
+            m_player->damage(dmg, /*bypassArmor=*/true,
+                              {Player::DamageSource::Drown, {}});
         }
     }
 

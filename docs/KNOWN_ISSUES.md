@@ -709,6 +709,16 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
   规则不动**（探针定案：失接地 = 身体中心恰过边缘 0.3000 = 半宽，MC 同
   款）。详见「Mob」节阴影条 + `docs/archive/phase-3.12.0.md`。
 
+## 死亡统计屏（V3-13，v3.15.0）
+
+- **会话统计不存档** — 死亡屏的采挖/放置/击杀/行走 = 会话级
+  SessionStats（随进程重置，记档偏离：MC scoreboard 持久）；死亡次数 /
+  击杀数（SURV-7 format 21）与存活时长口径独立——统计屏「击杀」=
+  玩家致死（近战 + 箭）会话级，F3 `kill.<name>` = 全部死因 mob 死亡
+  持久计数（两者语义不同，勿混读）。
+- **Game Over 屏 = 死亡屏本身** — 无 hardcore 模式，R 重生既有；MC 的
+  双屏（死亡屏 / Game Over）收敛为一屏（记档偏离）。
+
 ## 已修复（归档）→ 细节存档
 
 pre-2.0 已修复条目全索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`（按需查找；各

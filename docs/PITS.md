@@ -68,6 +68,23 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **fScale 不含 ui.scale + 字体加字工作流（PITS 397，门 205 v3.15.0
+  死亡统计屏）**——① **`fScale(s) = s × m_fontScale`（仅 ui.font_scale，
+  不含 ui.scale）**：makeTextVertices 的字形物理尺寸 = 16px × ui.scale
+  × fScale 参数，但**行距/坐标是调用方给的物理 px**——按「fScale(1.0)
+  = 一行物理高度」算布局 = 低估 1 个 ui.scale 倍（死亡屏 8 行首版全叠
+  在一行，门内 ×2 RAW 恒等 + 裁剪目检捕获）；文本行布局用**固定物理
+  偏移**（demo 面板先例 h/2±N，行距 ≥ 26px 覆盖 ui.scale 2 的 32px
+  字形 cap 高）。② **加 CJK 字工作流**：字形表查缺（418→428 字表在
+  `tools/generate_font.py` CJK_CHARSET，代码点排序）→ charset +1 +
+  CHARSET_COUNT +1 → 重跑生成器（TTF pin + legacy 33 位级自检 +
+  top-512 红线 + 扩展区**重排格**：新字之后全部 +1 格）→ snippet 手贴
+  `src/ui/font.hpp` kCjkGlyphs（tools 永不碰 src/）→ **test_font 4 锚
+  重钉**（PngBytes FNV / TablePinned 尺寸+成员格 / ExtendedCellsPinned
+  全向量 / UvCellPositions）——ExtendedCellsPinned 的 vector **末元素
+  无尾逗号**（`{0x732A, 384}};`）= 正则重钉必漏，单独查。③ 扩展区重
+  排格**零像素面**论证 = 无输入渲染无 CJK 文本（教程 = locked pointer
+  才显）→ S1 锚恒等（门 205 实证）。
 - **demo sim 镜像常量漏 bump + GameKey 尾钉 kKeyCount（PITS 396，
   门 204 v3.14.0 V3-8b 手柄映射）**——① **`tools/make_example_demo.py`
   的 `SIM_VERSION` = kDemoSimVersion 的 Python 镜像**：C++ bump

@@ -11,6 +11,48 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.15.0（2026-11-06）— V3-13 死亡统计屏（死因行 + 会话统计 5 行 + 字体 +1「于」，门 205 全 PASS）
+
+**矩阵 ⬜ 项执行（小→大序第 1 项）**：死亡统计屏 / Game Over 屏。
+HP 归零 → 冻结画面死亡屏从 2 行（你死了！/ 按 R 重生）升级为**统计
+屏**：① **致死原因行** = `Player::damage` 新增 `DamageInfo` 重载
+（2 参旧签名保留 = 委托 None 源，pre-V3-13 位级路径）——**仅致死一
+击**的来源记录：Fall「死于高处掉落」/ Void「死于世界之外」/ Starve
+「饿死」/ Lava「死于熔岩」/ Drown「死于落水」/ Arrow「被箭射死」/
+Mob「被 <name> 杀死」（hit callback init-capture killerName）/
+Effect「死于燃烧（fire）/死于毒（poison）/死于药水（其余）」——全部
+经 5 个 damage 调用点接入（箭/mob 近战/溺水/效果 tick/内部
+fall·starve·lava·void）。② **会话统计 5 行**：采挖/放置/击杀 =
+Game::SessionStats（breakBlock 单收口 / placeBlock 双 setBlock 点
+含 slab 合并 / 玩家致死近战 + 箭；**不存档** = 记档偏离，MC
+scoreboard 持久）+ 行走 = Player 水平位移累计（传送阈值守卫）+ 存活
+= 帧锁定 m_frameCount/60。③ **Game Over 屏 = 死亡屏本身**（无
+hardcore，R 重生既有 = 记档偏离 MC 双屏）。④ **字体 +1 字形「于」**
+（CJK_CHARSET 427→428，扩展区重排格：0x4E8E 之后全部 +1，top-512
+红线位级恒等，atlas 尺寸不变 256×2112；死因字符串全字体表内——
+摔/掘/外缺字教训 = 逐字查表定措辞）。固定物理偏移行距（fScale 仅
+font_scale 不含 ui.scale = PITS 397）。
+
+**门 205**：结构免疫第 85 次【S1 无输入 60f ×2 ≡ base19 逐字节 +
+savenorm EXACT——死亡屏不渲染 + 字体扩展区重排格无输入零像素（教程 =
+locked pointer 才显）+ 双跑复核】；S2 **坠落死亡场景臂**【场景手术
+挖 24 格竖井（种子 123456789 spawn 列）+ 无输入 ×2：**RAW 恒等 +
+savenorm EXACT**（fall = 帧锁定物理 = 死亡帧确定；saturation = 已知
+real-dt 字段 savenorm 域）+ 死亡屏裁剪目检（「死于高处掉落」+ 5 统
+计行全渲染）】；S3 全套 **2792/2792**（+5：DeathCauseKillingBlow
+Wins / DeathCauseMobCarriesKillerName / DeathCauseLineFontSafe【全
+9 死因字符串钉】/ RespawnClearsDeathCause / StatsDistanceWalkAnd
+TeleportGuard）+ test_font 4 锚重钉（PngBytes FNV / TablePinned /
+ExtendedCellsPinned【含 vector 末元素无尾逗号 = 正则必漏单查】/
+UvCellPositions）；S6 无（零新解析面：DamageInfo = 内存态不序列化，
+SessionStats 不存档）；性能 A/B 同档【旧 = d61a757 v3.14.0 + g139 vs
+新 + g139 banner 实证，900f 无输入：PERF-WIN upd med
+0.588/0.634/0.629 vs 0.655/0.624/0.575 + render/swap 三窗同档 +
+fluid·fires·spread·ents·stream 同档 + **changesApplied 9/3/1 逐位恒
+等** + **终档 savenorm EXACT**（死亡屏/统计 = 死亡态渲染面，无输入
+零触碰）。PITS 397（fScale 不含 ui.scale + 加字工作流 + 重排格零像
+素论证）。详见 `docs/archive/phase-3.15.0.md`。
+
 ## v3.14.0（2026-11-06）— V3-8b 手柄按键映射定案（L3 蹲伏 / RT 疾跑 / B 飞行专用钮 + 首个 sim bump 1→2，门 204 全 PASS）
 
 **用户 11-06 报障后续定案**（V3-8a 连接修复后）：「按键习惯问题需

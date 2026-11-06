@@ -2706,3 +2706,84 @@ TEST(WalkSpeedFactorTest, WadingInAPoolIsExempt) {
     // ENT-7 instant set: ~3.1 x 2 minus the first step's approach).
     EXPECT_NEAR(8.5f - onSoul.position().z, 6.2f, 0.1f);
 }
+
+// -- V3-13: the death cause + the session stats (the death screen) -----------
+
+TEST(PlayerTest, DeathCauseKillingBlowWins) {
+    // The non-lethal hit never sets the cause (the KILLING blow owns it).
+    BlockRegistry blocks = makeBlocks();
+    World world;
+    Player p(world, blocks, {8.5f, 10.0f, 8.5f});
+    p.damage(5.0f, false, {Player::DamageSource::Fall, {}});
+    EXPECT_FALSE(p.isDead());
+    EXPECT_EQ(p.deathInfo().source, Player::DamageSource::None);
+    p.damage(15.0f, false, {Player::DamageSource::Starve, {}});
+    ASSERT_TRUE(p.isDead());
+    EXPECT_EQ(p.deathInfo().source, Player::DamageSource::Starve);
+    EXPECT_EQ(p.deathInfo().name, "");
+}
+
+TEST(PlayerTest, DeathCauseMobCarriesKillerName) {
+    BlockRegistry blocks = makeBlocks();
+    World world;
+    Player p(world, blocks, {8.5f, 10.0f, 8.5f});
+    p.damage(25.0f, false, {Player::DamageSource::Mob, "zombie"});
+    ASSERT_TRUE(p.isDead());
+    EXPECT_EQ(p.deathInfo().name, "zombie");
+    EXPECT_EQ(p.deathCauseLine(p.deathInfo()), "被 zombie 杀死");
+}
+
+TEST(PlayerTest, DeathCauseLineFontSafe) {
+    // Every cause's line pinned (the CJK glyphs are all in the font's
+    // 418-char set — a font-set regression fails loudly here).
+    EXPECT_EQ(Player::deathCauseLine({Player::DamageSource::Fall, {}}),
+              "死于高处掉落");
+    EXPECT_EQ(Player::deathCauseLine({Player::DamageSource::Void, {}}),
+              "死于世界之外");
+    EXPECT_EQ(Player::deathCauseLine({Player::DamageSource::Starve, {}}),
+              "饿死");
+    EXPECT_EQ(Player::deathCauseLine({Player::DamageSource::Lava, {}}),
+              "死于熔岩");
+    EXPECT_EQ(Player::deathCauseLine({Player::DamageSource::Drown, {}}),
+              "死于落水");
+    EXPECT_EQ(Player::deathCauseLine({Player::DamageSource::Arrow, {}}),
+              "被箭射死");
+    EXPECT_EQ(Player::deathCauseLine({Player::DamageSource::Effect, "fire"}),
+              "死于燃烧");
+    EXPECT_EQ(Player::deathCauseLine({Player::DamageSource::Effect, "poison"}),
+              "死于毒");
+    EXPECT_EQ(Player::deathCauseLine({Player::DamageSource::Effect, "wither"}),
+              "死于药水");
+    EXPECT_EQ(Player::deathCauseLine({Player::DamageSource::None, {}}),
+              "死了");
+}
+
+TEST(PlayerTest, RespawnClearsDeathCause) {
+    BlockRegistry blocks = makeBlocks();
+    World world;
+    Player p(world, blocks, {8.5f, 10.0f, 8.5f});
+    p.damage(25.0f, false, {Player::DamageSource::Lava, {}});
+    ASSERT_TRUE(p.isDead());
+    p.respawn();
+    EXPECT_FALSE(p.isDead());
+    EXPECT_EQ(p.deathInfo().source, Player::DamageSource::None);
+    EXPECT_FLOAT_EQ(p.health(), p.params().maxHealth);
+}
+
+TEST(PlayerTest, StatsDistanceWalkAndTeleportGuard) {
+    Fixture f;
+    Player p = f.makePlayer({8.5f, 10.0f, 8.5f});
+    Input walk = heldInput({GameKey::W});
+    run(p, 60, walk);
+    const float walked = p.statsDistance();
+    ASSERT_GT(walked, 1.0f); // a walking second covers > 1 block
+    // The vertical fall adds nothing (the horizontal-only stat).
+    const float afterFall = p.statsDistance();
+    EXPECT_FLOAT_EQ(afterFall, walked);
+    // The respawn's teleport back to the spawn (a >1-block jump) is
+    // skipped by the threshold guard — the stat does not balloon.
+    p.damage(25.0f, false, {Player::DamageSource::Fall, {}});
+    ASSERT_TRUE(p.isDead());
+    p.respawn();
+    EXPECT_FLOAT_EQ(p.statsDistance(), walked);
+}

@@ -2273,6 +2273,15 @@ private:
     // per active effect (left-aligned on the heart row).
     EffectRegistry m_effects;
     StatusEffects m_playerEffects;
+    // V3-13: the session stats (the death screen's panel — SESSION
+    // ONLY, not serialized, the documented deviation: the counters
+    // reset with the process, Minecraft's scoreboard persists).
+    struct SessionStats {
+        int blocksMined = 0;
+        int blocksPlaced = 0;
+        int mobsKilled = 0;
+    };
+    SessionStats m_sessionStats;
     // SURV-7: the player's death-related statistics (format 21):
     // "deathCount" + one "kill.<mob name>" per registered mob. Only
     // NON-ZERO counters are held (the save omits zeros — the

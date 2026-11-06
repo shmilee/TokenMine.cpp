@@ -142,7 +142,9 @@ void Game::updateEffects(double dt) {
         dt, m_effects, [this](const Effect& def) {
             if (def.tick == Effect::Tick::Damage) {
                 if (m_player->health() - def.tickAmount >= def.minHealth) {
-                    m_player->damage(def.tickAmount);
+                    m_player->damage(def.tickAmount, false,
+                                     {Player::DamageSource::Effect,
+                                      def.name});
                 }
             } else if (def.tick == Effect::Tick::Heal) {
                 m_player->heal(def.tickAmount);
@@ -1498,17 +1500,52 @@ void Game::renderUi() {
                 0, w, h);
         // PRE-1: the user-visible strings are localized to Chinese
         // (the CJK glyphs live in the font atlas rows 0..3); the F3
-        // debug overlay stays English (a developer tool).
+        // debug overlay stays English (a developer tool). V3-13: the
+        // death STATS screen — the cause line (the killing blow's
+        // source, the font-safe string) + the session stats (mined /
+        // placed / killed / distance / survival — session only, the
+        // documented deviation: they reset with the process) + the
+        // R hint. The line step tracks fScale (no overlap at any
+        // ui.scale).
         const std::string died = "你死了！";
+        const std::string cause = m_player->deathCauseLine(
+            m_player->deathInfo());
+        const double totalSeconds = static_cast<double>(m_frameCount) / 60.0;
+        const std::string mined =
+            "采挖 " + std::to_string(m_sessionStats.blocksMined) + " 块";
+        const std::string placed =
+            "放置 " + std::to_string(m_sessionStats.blocksPlaced) + " 块";
+        const std::string killed =
+            "击杀 " + std::to_string(m_sessionStats.mobsKilled) + " 只";
+        const std::string walked =
+            "行走 " + std::to_string(static_cast<int>(m_player->
+                                     statsDistance())) + " 格";
+        const std::string survived =
+            "存活 " + std::to_string(static_cast<int>(totalSeconds / 60)) +
+            " 分 " +
+            std::to_string(static_cast<int>(totalSeconds) % 60) + " 秒";
         const std::string hint = "按 R 重生";
-        // 16 px glyphs (Phase 35): "died" at scale 2 = 32 px tall, hint
-        // 16 px — the block spans h/2-40 .. h/2+28, roughly centered.
-        addText(died,
-                w / 2 - static_cast<int>(textWidth(died, fScale(2.0))) / 2,
-                h / 2 - 40, fScale(2.0), Vec4 {1.0f, 0.35f, 0.35f, 1.0f});
-        addText(hint,
-                w / 2 - static_cast<int>(textWidth(hint, fScale(1.0))) / 2,
-                h / 2 + 12, fScale(1.0), kText);
+        // Fixed physical offsets (the demo panel's precedent — fScale
+        // carries the font_scale only; the glyph's ui.scale growth is
+        // covered by the 26 px line step at every shipped scale).
+        const std::vector<std::tuple<std::string, double, int>> lines = {
+            {died, 2.0, h / 2 - 130},
+            {cause, 1.0, h / 2 - 56},
+            {mined, 1.0, h / 2 - 30},
+            {placed, 1.0, h / 2 - 4},
+            {killed, 1.0, h / 2 + 22},
+            {walked, 1.0, h / 2 + 48},
+            {survived, 1.0, h / 2 + 74},
+            {hint, 1.0, h / 2 + 100},
+        };
+        for (const auto& [text, scale, y] : lines) {
+            const bool title = scale > 1.0;
+            addText(text, w / 2 -
+                         static_cast<int>(textWidth(text, fScale(scale))) / 2,
+                    y, fScale(scale),
+                    title ? Vec4 {1.0f, 0.35f, 0.35f, 1.0f}
+                          : (text == hint ? kText : kTextDim));
+        }
     }
 
     // -- furnace panel (Phase 40/44): the smelting GUI (right-clicked

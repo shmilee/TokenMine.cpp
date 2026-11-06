@@ -32,10 +32,12 @@ v3.10.0 = V3-6 世界边缘雾（门 200，11-05：填充感知 fog end，
 仅模拟语义变更才 bump + legacy 版本指纹零迁移直放 + --demo-force +
 4 demo canary）；**v3.14.0 = V3-8b 手柄习惯映射定案（门 204，11-06：
 L3 蹲伏 + RT 疾跑 + B 飞行专用钮【用户三项定案，config 自定义不做】+
-SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）**）——**3.x 矩阵
+SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）；**v3.15.0 = V3-13 死亡统计屏（门 205，11-06：致死原因行 9 措辞 + 会话统计 5 行 + 字体 +1 字形「于」428）= 矩阵 ⬜ 项小→大推进 1/5**）**）——**3.x 矩阵
 18 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
-（门 202）/ v3.13.0（门 203）/ v3.14.0（门 204）+ 11-06 扩容 7 项
-（V3-8b ✅ + V3-10~V3-15 ⬜ 六项，BACKLOG 待执行项明细）**
+（门 202）/ v3.13.0（门 203）/ v3.14.0（门 204）/ v3.15.0（门 205）
++ 11-06 扩容 7 项（V3-8b ✅ v3.14.0 + V3-13 ✅ v3.15.0 + V3-10~V3-15
+⬜ 五项【大项已相位拆分 V3-10a~d / V3-11a~b / V3-12a~c / V3-14a~d，
+BACKLOG 待执行项明细】）**
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -94,7 +96,7 @@ SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）**）——**3.x
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2787/2787**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2792/2792**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 30（V3-1 Phase B 下界维度：player.dimension 严格词表
   恒写 + nether 段 {blocks,fluids,states} + nether_entities 恒写 +
   派生 seed 不落盘；schema 其余与 29 一致，29 携新键 = version lie
@@ -193,6 +195,30 @@ SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）**）——**3.x
   零 diff + crop 3× 目检同场景同羊同位】；性能 A/B 同档【changes-
   Applied 逐位 + 终档 savenorm EXACT】；PITS 392【DEBUG 事件行
   grep 假阴性】；详见 `docs/archive/phase-3.12.0.md`）；
+  门计数 205（**V3-13 死亡统计屏 v3.15.0** 门 205 全 PASS【矩阵 ⬜
+  项小→大推进 1/5，用户 11-06 目标定案】：死亡屏 2 行 → 统计屏 =
+  「你死了！」+ **致死原因行**【`Player::damage` DamageInfo 重载，2 参
+  旧签名保留委托 None = pre-V3-13 位级；仅致死一击来源：Fall 死于高
+  处掉落 / Void 死于世界之外 / Starve 饿死 / Lava 死于熔岩 / Drown 死
+  于落水 / Arrow 被箭射死 / Mob「被 <name> 杀死」init-capture / Effect
+  死于燃烧·毒·药水——9 措辞全字体表内 = 字体 418→428 +1 字形「于」
+  【CJK_CHARSET 代码点序插入 + 重跑生成器：TTF pin / legacy 33 位级 /
+  top-512 红线恒等 / 扩展区重排格 0x4E8E 后 +1 / atlas 256×2112 尺寸
+  不变 / snippet 手贴 font.hpp；test_font 4 锚重钉含 vector 末元素无
+  尾逗号正则必漏】+ 固定物理偏移行距【fScale 仅 font_scale 不含
+  ui.scale = PITS 397，首版 8 行叠一行门内捕获】+ **会话统计 5 行**
+  【采挖/放置/击杀 = Game::SessionStats（breakBlock 单收口 /
+  placeBlock 双 setBlock 含 slab 合并 / 玩家致死近战 + 箭——与 SURV-7
+  持久 kill.<name> 全部死因语义不同记档）+ 行走 = Player 水平位移
+  累计传送阈值守卫 + 存活 = 帧锁定 m_frameCount/60；不存档 = 记档偏
+  离 MC scoreboard 持久】；**Game Over 屏 = 死亡屏本身**（无 hardcore
+  = 记档偏离）；2792/2792（+5）；结构免疫第 85 次【S1 ≡ base19 逐字
+  节 + 字体重排格零像素复核——无输入无 CJK 渲染】；S2 场景手术 24 格
+  竖井坠落死亡臂【无输入 ×2 RAW + savenorm EXACT（fall 帧锁定死亡帧
+  确定）+ 死亡屏裁剪目检全行】；S6 无（零新解析面）；性能 A/B 同档
+  【旧 = d61a757 v3.14.0 + g139：PERF-WIN 三窗同档 + changesApplied
+  9/3/1 逐位 + 终档 savenorm EXACT】；详见
+  `docs/archive/phase-3.15.0.md`）；
   门计数 204（**V3-8b 手柄习惯映射定案 v3.14.0** 门 204 全 PASS：
   用户 11-06 三项定案【调研先：SDL3 手柄数据库归一化 Xbox/PS/Switch
   三大布局到同一逻辑位 = 单表覆盖无需多表，山湾克隆 = 数据库已识别
@@ -538,7 +564,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 （细节归阶段文档，不写长句））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
-## 坑位 Top 8（全文 docs/PITS.md，396 条；pre-3.x 条目在 docs/archive/PITS_PRE3X.md）
+## 坑位 Top 8（全文 docs/PITS.md，397 条；pre-3.x 条目在 docs/archive/PITS_PRE3X.md）
 
 1. **SDL grab delta**（P28）：输入 E2E 全帧字节一致不保证——存档 yaw/pitch 为漂移
    探测器；驱动 warp 用实际窗口原点（实测 (4,64)）+ (632,352)。
@@ -574,7 +600,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（396 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（397 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

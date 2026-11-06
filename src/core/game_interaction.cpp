@@ -709,7 +709,9 @@ void Game::updateAttacking(double dt, MobEntity& mob) {
     // aim (horizontal) with a lift. Removal + drops happen in the
     // updateEntities despawn pass (same frame).
     m_interaction.swingCooldown = kSwingInterval;
-    mob.damage(selectedAttackDamage());
+    if (mob.damage(selectedAttackDamage())) {
+        m_sessionStats.mobsKilled += 1; // V3-13: the kill stat (the lethal hit)
+    }
     // SURV-3 (durability): the held TOOL wears two points per melee hit
     // that LANDS (the event table: pickaxe / axe / shovel +2). A bow's
     // melee swing does not wear (it is a material, not a tool — its wear
@@ -1244,6 +1246,7 @@ void Game::deactivatePortal(World& world, const PortalFrame& frame) {
 }
 
 void Game::breakBlock(const BlockHit& hit) {
+    m_sessionStats.blocksMined += 1; // V3-13: the mining stat (player path only)
     const BlockID id = currentWorld().getBlock(hit.block.x, hit.block.y,
                                                 hit.block.z);
     // V2-17: the broken cell's per-instance state, read BEFORE the
@@ -1491,6 +1494,8 @@ void Game::placeBlock() {
         currentWorld().setBlockState(target.x, target.y, target.z, 2);
         Lighting::updateLocal(currentWorld(), m_blocks, target);
         m_inventory.take(m_selectedSlot, 1);
+        m_sessionStats.blocksPlaced += 1; // V3-13: the merge completion counts
+                                   // as the placement
         emitTutorialEvent("place." + placedBlock.name, 1);
         m_sound.play(
             blockSoundName(placedBlock, "place"),
@@ -1517,6 +1522,8 @@ void Game::placeBlock() {
     // Game::setBlock (Phase 42): also releases any arrow stuck in the
     // newly occupied cell (placing into a cell an arrow hangs in).
     setBlock(target.x, target.y, target.z, item.block);
+    m_sessionStats.blocksPlaced += 1; // V3-13: the placement stat (all gates
+                               // passed, one item consumed)
     // Phase 97: stair placement AUTO-ORIENTS (Minecraft): the per-instance
     // facing (Phase 94, the state in ENT-2) is set from the player's yaw —
     // the stair's low side faces where the player looks. setBlock above
