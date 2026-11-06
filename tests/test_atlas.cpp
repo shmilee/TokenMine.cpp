@@ -234,7 +234,10 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     // 166 -> 170 (the End's four tiles — the row-10 free run
     // [10..13, 10]; the ender_eye icon is a standalone item PNG, not
     // an atlas tile; no power-of-two growth needed, 170 < 256).
-    EXPECT_EQ(l.tiles.size(), 170u);
+    // V3-10b: 170 -> 172 (the End content family's two tiles — the
+    // row-11 free run [0..1, 11]; zero existing shift, the 10a's
+    // zero-shift red line continued).
+    EXPECT_EQ(l.tiles.size(), 172u);
     const struct {
         const char* name;
         int col;
@@ -540,6 +543,24 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     };
     ASSERT_EQ(sizeof(v310a) / sizeof(v310a[0]), 4u);
     for (const auto& e : v310a) {
+        const auto it = l.tiles.find(e.name);
+        ASSERT_NE(it, l.tiles.end()) << e.name;
+        EXPECT_EQ(it->second.col, e.col) << e.name;
+        EXPECT_EQ(it->second.row, e.row) << e.name;
+    }
+    // V3-10b (v3.24.0): the End content family's two tiles (the row-11
+    // free run [0..1, 11] — the 10a's [10..13, 10]'s free
+    // continuation; zero existing shift).
+    const struct {
+        const char* name;
+        int col;
+        int row;
+    } v310b[] = {
+        {"end_stone_bricks", 0, 11},
+        {"chorus_plant", 1, 11},
+    };
+    ASSERT_EQ(sizeof(v310b) / sizeof(v310b[0]), 2u);
+    for (const auto& e : v310b) {
         const auto it = l.tiles.find(e.name);
         ASSERT_NE(it, l.tiles.end()) << e.name;
         EXPECT_EQ(it->second.col, e.col) << e.name;

@@ -356,6 +356,18 @@ struct Item {
     // shears (durability 238 — the Minecraft exact value; break_speed
     // 2; max_stack 1).
     bool shearsTool = false;
+    // V3-10b (the ender pearl): the TELEPORT-THROW predicate — the
+    // strict-bool data flag the game reads (never an item name, the
+    // shearsTool / ignitesFlamable pattern). A material carrying it is
+    // THROWABLE: the right-click launches it as a projectile that
+    // teleports the thrower on landing (the throws_teleport channel —
+    // one item owns one right-click, the exclusivity below). The two
+    // optional sound names (throw_sound / teleport_sound, the mob's
+    // shoot_sound twin) are cross-checked against the sound directory
+    // at init (a missing wav names the item).
+    bool throwsTeleport = false;
+    std::string throwSound;
+    std::string teleportSound;
     // Phase 15 UI: the item's 2D icon texture name (a file under
     // assets/textures/items/, validated against the filesystem at game
     // init). Empty for block items, which render a 3D block cube instead.

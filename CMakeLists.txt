@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 3.23.0 LANGUAGES CXX)
+project(TokenMine VERSION 3.24.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -252,6 +252,7 @@ add_executable(tokenmine_tests
     tests/test_portal.cpp
     tests/test_end_gen.cpp
     tests/test_end_portal.cpp
+    tests/test_ender_pearl.cpp
     tests/test_nether_gen.cpp
     tests/test_netherite.cpp
     tests/test_gamepad.cpp

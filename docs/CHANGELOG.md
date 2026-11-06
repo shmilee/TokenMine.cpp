@@ -11,6 +11,42 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.24.0（2026-11-07）— V3-10b 末地内容族（基岩洋/岛群/chorus + 末影珍珠，门 214 全 PASS）
+
+**矩阵大项 V3-10 末地相位 B/4**（10a 最小 fill 换真内容 + **项目首
+个投掷物**；format 32 不变 / sim 2 不 bump（canary 4 EXACT）/ 零
+config / 块 131→133 / atlas 170→172 零移位 / item 99→101 / 配方
+112→113 / 声音 68→70）。
+
+**末地内容**：基岩洋 = 全维 y[0,4] 实心带（下界地板镜像，非流体海
+零 churn；跌落死因 Void→Fall + 珍珠逃生面）+ **岛群 pass**
+（lattice 16 p0.15 独立盐，半径 5..12 顶 y 44..56，顶 2 层 + 下锥
+2 层悬浮岛；air-only 谓词 + 中央足迹护栏保出口/平台；跨 chunk 走格
+外扩 rMax）+ chorus 岛顶装饰（独立盐 p0.6，cross stateless +
+chance_drops ≈ MC 比例，生长不做记偏离）+ biomes_end 单群系池
+（10d 缝 + S6 面）+ end_stone_bricks（2×2 配方 count 4 MC 精确）。
+
+**末影珍珠全链**：`throws_teleport` strict bool + 双音配对 +
+one-right-click 8 面互斥 + material-only + init 交叉检；挂点 = 潜
+行旋转后 placeBlock 前（MC 可交互块优先）；发射 = 眼位前 0.3 +
+**投掷者速度并入**（MC 1.9+）+ **30 b/s（MC 1.5 b/t 绝对值）** +
+冷却 60f 会话态；Projectile 尾参 teleports（箭/火球位级）+ stuck
+复用 → **pearlLanding**：catchUpDisk + **2.5 球面均匀偏移**（counter
+流帧锁定）+ hasRoomAt 上探 3 + fall 复锚（落地消坠伤）+ 落乘 +
+probe 全败吞没不瞬移（偏离）+ **无自伤**（MC 5HP 偏离）+ 0.625×
+青色发光立方渲染 + 2 wav。
+
+**门 214**：S1 结构免疫第 95 次（≡ base19 + 恰白名单 3 键——10b
+内容 = 生成参考零 diff 最强形）/ S2a 去程臂（10a demo 复跑 ×2
+RAW + 逐字 + 末地新内容雾内可见）+ S2b 珍珠臂（`threw a
+'ender_pearl'` + `pearl teleport to (1.395792, 54.893940,
+-1.207714)` ×2 逐字 + 冷却窗内第二次静默 no-op 实证 + 心行全满 +
+热栏 16→15 crop）/ S6 六面点名 / canary 4 EXACT / 2899/2899（+14）/ 性能 A/B 同档【banner 实证 v3.23.0/v3.24.0 +
+PERF-WIN 三窗 upd med 0.575/0.585/0.594 vs 0.569/0.587/0.597 +
+changesApplied 9/2/1 全逐位 + 终档 savenorm EXACT 零 format 最强
+形】。PITS 406（lattice 位切 int 截断负值 = 模运算先于转换 + JS
+三元误写 + stale assets 再踩）。详见 `docs/archive/phase-3.24.0.md`。
+
 ## v3.23.0（2026-11-07）— V3-10a 末地维度框架 + 真传送（项目第三维度，门 213 全 PASS）
 
 **矩阵大项 V3-10 末地首相位**（V3-1 下界维度基建的**第二次消费**：

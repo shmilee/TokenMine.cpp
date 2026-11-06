@@ -1,4 +1,5 @@
 #include "core/game.hpp"
+#include "core/game_local.hpp" // V3-10b: the pearl's constants (kPearlTeleportOffset)
 
 #include <algorithm>
 #include <cmath>
@@ -301,6 +302,13 @@ void Game::update(double dt) {
     // before the mount's own update). One null check in every no-ride
     // session (the structural-immunity root).
     updateRide();
+
+    // V3-10b: the pearl's throw cooldown (the frame-locked bookkeeping
+    // — one decrement per frame; a no-throw session keeps it 0, the
+    // structural-immunity root, the portal-cooldown's shape).
+    if (m_pearlThrowCooldownFrames > 0) {
+        --m_pearlThrowCooldownFrames;
+    }
 
     // V3-1 Phase B (D3 time-capsule ruling, the section-1 twin): the
     // overworld's fluid / fire / moisture pass is FROZEN in the nether;
@@ -1419,6 +1427,110 @@ void Game::travelEnd() {
                 std::to_string(destY) + ", " + std::to_string(destZ) +
                 ") from (" + std::to_string(src.x) + ", " +
                 std::to_string(src.y) + ", " + std::to_string(src.z) + ")");
+}
+
+namespace {
+// V3-10b: the 53-bit uniform in [0, 1) from an advancing splitmix64
+// stream (the particle.cpp's local twin — the repo's splitmix64 is a
+// pure finalizer: the golden-step advance before the mix, the PITS 4
+// discipline).
+double uniform01(std::uint64_t& state) {
+    state += 0x9E3779B97F4A7C15ULL;
+    return static_cast<double>(splitmix64(state) >> 11) /
+           static_cast<double>(1ull << 53);
+}
+
+// V3-10b: the pearl's landing offset (the particle.cpp's sphere
+// direction's 2-draw pure form — u1 the polar cosine, u2 the azimuth,
+// the FIXED kPearlTeleportOffset radius on the sphere's surface, the
+// MC "2.5 blocks" read; the deterministic stream contract: same seed
+// + same counter, same offset every run).
+Vec3 pearlOffset(std::uint64_t state) {
+    const double u1 = uniform01(state);
+    const double u2 = uniform01(state);
+    const double theta = 2.0 * 3.14159265358979323846 * u2;
+    const double cosPhi = 2.0 * u1 - 1.0;
+    const double sinPhi =
+        std::sqrt(std::max(0.0, 1.0 - cosPhi * cosPhi));
+    return Vec3 {
+        static_cast<float>(sinPhi * std::cos(theta) * kPearlTeleportOffset),
+        static_cast<float>(cosPhi * kPearlTeleportOffset),
+        static_cast<float>(sinPhi * std::sin(theta) * kPearlTeleportOffset)};
+}
+
+} // namespace
+
+void Game::pearlLanding(Projectile* pearl) {
+    // V3-10b: the pearl's landing seam (the stuck pass's consumer — the
+    // fireball's consume-at-impact twin, the zero-damage shape): the
+    // thrower is teleported to the landing point + the uniform 2.5
+    // offset, the fall bookkeeping re-anchored (the pearl CANCELS the
+    // fall damage — the restorePosition's fall pin, the MC twin), a
+    // rider dismounts first (the thrower's MC 1.10 twin), the teleport
+    // cue plays AT the landing (the CRAFT-3 spatialized origin), the
+    // pearl despawns. The probe's TOTAL failure (a sealed pocket — all
+    // 4 levels solid) swallows the pearl WITHOUT the teleport (the
+    // documented deviation: the MC always teleports; the pocket is
+    // rare and the pearl's loss is the visible tell). Runs in the
+    // entities' update's main-thread-writer window (the stuck pass —
+    // the catch-up disk is safe: the flush barrier ran at the top of
+    // update).
+    const Vec3 landing = pearl->position();
+    const Vec3 offset = pearlOffset(currentSeed() +
+                                    (++m_particleBreakCounter) *
+                                        0x9E3779B97F4A7C15ULL);
+    World& world = currentWorld();
+    // The catch-up disk AROUND THE LANDING (the probe's premise: the
+    // terrain the offset reaches is generated — the travelEnd's twin,
+    // the landing's chunk disk, the offset's 2.5 bound inside the
+    // 3x3 columns).
+    {
+        const int cx = floorDiv(static_cast<int>(std::floor(landing.x)),
+                                kChunkSize);
+        const int cz = floorDiv(static_cast<int>(std::floor(landing.z)),
+                                kChunkSize);
+        catchUpDisk(m_playerDimension, cx, cz);
+    }
+    // The target: the landing + offset (the pearl's position IS the
+    // box's bottom-center, the player's feet convention — the stuck
+    // resolver put the pearl's bottom face on the surface it struck,
+    // so the feet land ON it), the hitbox probe (the strict
+    // inequality, hard rule 6) + the +1..+3 up-step (the portal's
+    // landing-probe twin — the sealed-pocket total failure swallows).
+    Vec3 target = landing + offset;
+    const float width = m_player->params().width;
+    const float height = m_player->params().height;
+    bool roomy = false;
+    for (int up = 0; up <= kPortalLandingProbeUp && !roomy; ++up) {
+        const Vec3 probe {target.x, target.y + static_cast<float>(up),
+                          target.z};
+        roomy = Player::hasRoomAt(world, m_blocks, probe, width, height);
+        if (roomy) {
+            target = probe;
+        }
+    }
+    pearl->kill();
+    if (!roomy) {
+        MC_LOG_DEBUG("pearl swallowed (the sealed landing pocket — no "
+                     "teleport, the documented deviation)");
+        return;
+    }
+    // The dismount (a rider throws — the ride pass's condition would
+    // otherwise drop the rider on the flip's frame; the MC 1.10
+    // dismounts-underwater-throw's pearl twin).
+    dismountRide();
+    m_player->restorePosition(target);
+    m_camera.position = m_player->eyePosition();
+    m_camera.yaw = m_player->yaw;
+    m_camera.pitch = m_player->pitch;
+    const Item& pearlItem =
+        m_items.at(m_items.idForName("ender_pearl"));
+    if (!pearlItem.teleportSound.empty()) {
+        m_sound.play(pearlItem.teleportSound, target);
+    }
+    MC_LOG_DEBUG("pearl teleport to (" + std::to_string(target.x) + ", " +
+                 std::to_string(target.y) + ", " +
+                 std::to_string(target.z) + ")");
 }
 
 void Game::updatePortalAmbience() {

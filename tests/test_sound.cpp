@@ -344,7 +344,7 @@ TEST(SoundBatTest, SqueakWavShipsAndParses) {
     EXPECT_EQ(peak, 3589);
 }
 
-TEST(SoundBatTest, SoundDirectoryGrowsToSixtyEight) {
+TEST(SoundBatTest, SoundDirectoryGrowsToSeventy) {
     // The sound set 41 -> 42 (the squeak — the V2-14 file) -> 43 (the
     // shear — the V2-15 file) -> 46 (the snow family — the three V2-16
     // files) -> 47 (the portal ambience — the V3-1 Phase A file) -> 49
@@ -356,8 +356,10 @@ TEST(SoundBatTest, SoundDirectoryGrowsToSixtyEight) {
     // V3-14a boom — the explosion's thud); -> 66 (the V3-14b ghast's
     // two voices — the ambient screech + the pre-shot roar); -> 67 (the
     // V3-14c barter chime — the piglin's gold-trade cue); -> 68 (the
-    // V3-10a ambience_end — the fifth context's bed, the T4's twin).
-    // Each phase's new files are the only additions, the
+    // V3-10a ambience_end — the fifth context's bed, the T4's twin);
+    // -> 70 (the V3-10b pearl's two cues — the first throwable's
+    // sound face: the throw's whoop + the teleport's shimmer). Each
+    // phase's new files are the only additions, the
     // generate_sounds.py re-run leaves the others byte-identical, the
     // script's md5 discipline; the FNV pins hold each phase's bytes.
     std::size_t count = 0;
@@ -367,7 +369,7 @@ TEST(SoundBatTest, SoundDirectoryGrowsToSixtyEight) {
             ++count;
         }
     }
-    EXPECT_EQ(count, 68u);
+    EXPECT_EQ(count, 70u);
 }
 
 // ---------------------------------------------------------------------------
@@ -499,9 +501,10 @@ TEST(SoundNoiseHelperRepairTest, NoiseWavsShipTextured) {
     for (const auto& e : want) {
         expectWavPin(e.name, e.samples, e.peak);
     }
-    // The census is the V3-10a pin (68 files — the directory count:
-    // the V3-14c's 67 + the End's ambience bed, the fifth context —
-    // the repair itself edits in place, no other additions).
+    // The census is the V3-10b pin (70 files — the directory count:
+    // the V3-10a's 68 + the pearl's two cues, the first throwable's
+    // sound face — the repair itself edits in place, no other
+    // additions).
     std::size_t count = 0;
     for (const auto& entry :
          std::filesystem::directory_iterator("assets/sounds")) {
@@ -509,7 +512,7 @@ TEST(SoundNoiseHelperRepairTest, NoiseWavsShipTextured) {
             ++count;
         }
     }
-    EXPECT_EQ(count, 68u);
+    EXPECT_EQ(count, 70u);
 }
 
 // ---------------------------------------------------------------------------

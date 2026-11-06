@@ -3,7 +3,7 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–405，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–406，新条目继续前插于尾部块首。
 
 - **gzip 容器可钉 / zlib 宏缺失 / 双跑 RAW 适用域（PITS 385，门 191
   V3-7 存档 gzip）**——① **zlib 自带 gzip 封装（windowBits 16+15）
@@ -68,6 +68,19 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **lattice 位切 int 截断 + JS 三元误写 + stale assets 再踩三坑
+  （PITS 406，门 214 v3.24.0 V3-10b 末地内容族）**——① **hash 位切
+  直接 int 截断 = 负值模运算**：`static_cast<int>(h >> 24) % span`
+  的 `h >> 24` 最高 2^40——int 截断取低 32 位可负 → `%` 负余数 →
+  参数出带（半径 -2..12 实测，单测边界断言首跑全炸）；纪律 =
+  **模运算先于 int 转换**（`(h >> 24) % span` 再 cast），nether
+  盐族位切同纪律普查。② **JS 三元误写进 Python 生成器**（`? :`
+  语法错）——纹理生成器是 Python，函数体从 C++ 思维带过来的语法
+  杂音须先 `py_compile` 再跑（md5 幂等纪律只在跑成后才起作用）。
+  ③ **run 目录 stale assets 三连踩**（PITS 403② 再验）：10b 新
+  biomes_end/ 未同步 g213 run 目录 → init rc 1「requires at least
+  one biome」= fail-fast 按预期工作（非 bug）；每版资产面变更后
+  run 目录 rm -rf + cp -r 重建 + 新目录存在性 grep 回验。
 - **场景手术先探地形 + shader 无光分支双 floor + GCC-16 假阳性结构
   隔离 + 存档伪造只剥对应后键 + 场景派生同步 fluids 五坑（PITS 405，
   门 213 v3.23.0 V3-10a 末地维度框架）**——① **场景手术选位 = 先探

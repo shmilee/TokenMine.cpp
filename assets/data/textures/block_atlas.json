@@ -681,6 +681,14 @@
   "end_portal_frame_eyed": [
    13,
    10
+  ],
+  "end_stone_bricks": [
+   0,
+   11
+  ],
+  "chorus_plant": [
+   1,
+   11
   ]
  }
 }

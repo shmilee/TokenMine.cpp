@@ -433,6 +433,45 @@ def snow(x, y):
     return (clamp(246 + n), clamp(248 + n), clamp(252 + n), 255)
 
 
+def end_stone_bricks(x, y):
+    """V3-10b (v3.24.0): the end_stone_bricks tile (the endstone's crafted
+    face — Minecraft's end_stone_bricks read: the pale ivory endstone with
+    a fine brick-course line pattern, one mortar line every 4 rows + the
+    staggered vertical joints). New salts 1076..1078 — every existing
+    texture stays pixel-identical."""
+    n = noise(x, y, 1076, 5)
+    r, g, b = clamp(224 + n), clamp(216 + n), clamp(168 + n)
+    # The mortar course (row 3 of every 4) + the staggered joint column.
+    course = y % 4 == 3
+    mx = x + 2 * ((y // 4) % 2)   # the stagger offset
+    joint = mx % 8 == 7
+    if course or joint:
+        m = noise(x, y, 1077, 3)
+        return (clamp(200 + m), clamp(192 + m), clamp(146 + m), 255)
+    return (r, g, b, 255)
+
+
+def chorus_plant(x, y):
+    """V3-10b (v3.24.0): the chorus_plant cross tile (Minecraft's chorus
+    plant read — the dark magenta bud cluster: a 2px stem column + the
+    bumpy magenta head at the top, the wheat cross pattern's silhouette
+    convention). New salts 1078..1080 — every existing texture stays
+    pixel-identical."""
+    # Stem: a 2-px dark-magenta column from y 6 to the base.
+    if 7 <= x <= 8 and 6 <= y <= 15:
+        n = noise(x, y, 1078, 6)
+        return (clamp(96 + n), clamp(40 + n), clamp(88 + n), 255)
+    # Head: a soft bumpy cluster centred on (7.5, 3.5).
+    dx = x - 7.5
+    dy = y - 3.5
+    if dx * dx * 0.9 + dy * dy * 1.1 <= 8.0:
+        n = noise(x, y, 1079, 10)
+        if n > 4:
+            return (clamp(190 + n), clamp(90 + n), clamp(178 + n), 255)
+        return (clamp(132 + n), clamp(52 + n), clamp(120 + n), 255)
+    return (0, 0, 0, 0)  # transparent
+
+
 def nether_portal(x, y):
     """V3-1 Phase A: the nether portal tile (the `nether_portal` block's
     face — the violet vortex Minecraft's portal reads as: a dark purple
@@ -1329,6 +1368,11 @@ TEXTURES = {
     # flat slab world's surface + subsurface). A new tile only, every
     # existing PNG stays byte-identical (salts 1009..1016).
     "netherrack": netherrack,
+    # V3-10b (v3.24.0): the End content family — the end_stone_bricks'
+    # crafted face + the chorus_plant cross (the 10a four tiles stay
+    # hand-comitted, unregistered — R8: the re-run never touches them).
+    "end_stone_bricks": end_stone_bricks,
+    "chorus_plant": chorus_plant,
     # V3-2 Part 1: the nether content family (12 tiles — the biomes'
     # surfaces / the nether ores / the decoration blocks). New tiles only,
     # every existing PNG stays byte-identical (salts 1017..1064).

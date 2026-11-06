@@ -79,6 +79,15 @@ inline constexpr float kFireballColorG = 0.55f; // orange glow (the
 inline constexpr float kFireballColorB = 0.15f; // blast's read)
 ItemMeshGeometry makeFireballGeometry();
 
+// V3-10b: the ender pearl's glow — the fireball's mesh REUSED at a
+// smaller draw scale (the 0.25 orb's edge over the fireball's 0.4
+// cube: the uniform scale factor below) in the pearl's teal (the MC
+// orb's read — the unlit u_color path, the fireball's twin).
+inline constexpr float kPearlDrawScale = 0.625f; // 0.25 / 0.4 (the edge ratio)
+inline constexpr float kPearlColorR = 0.35f;
+inline constexpr float kPearlColorG = 0.85f;
+inline constexpr float kPearlColorB = 0.8f;
+
 // The (yaw, pitch) that rotates local -Z onto `velocity` under
 // model = rotateY(yaw) * rotateX(pitch) — the camera convention (yaw 0 =
 // -Z: forward(yaw, pitch) = (-sin yaw * cos pitch, sin pitch,

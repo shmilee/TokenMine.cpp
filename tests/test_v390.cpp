@@ -332,7 +332,7 @@ TEST(V390BuildingContent, DyedTerracottaRecipesPinned) {
 }
 
 TEST(V390BuildingContent, RecipeCensusPinned) {
-    // The recipe directory's count face (95 pre-V3-5 + 17 = 112): the
+    // The recipe directory's count face (95 pre-V3-5 + 17 = 112; the
     // two smelts are data fields, not recipe files (the CRAFT-6
     // discipline).
     RealChain c;
@@ -343,8 +343,9 @@ TEST(V390BuildingContent, RecipeCensusPinned) {
             ++recipeFiles;
         }
     }
-    EXPECT_EQ(c.recipes.count(), 112u);
-    EXPECT_EQ(recipeFiles, 112);
+    // V3-10b: 112 -> 113 (the end_stone_bricks' 2x2 shaped recipe).
+    EXPECT_EQ(c.recipes.count(), 113u);
+    EXPECT_EQ(recipeFiles, 113);
 }
 
 // ===========================================================================
@@ -494,8 +495,10 @@ TEST(V390BuildingContent, ContentCensusPinned) {
         }
     }
     // V3-10a re-pin: 127 -> 131 (the End's four minimum blocks —
-    // endstone / end_portal / the two frames; the zero-shift red line).
-    EXPECT_EQ(blockCount, 131);
+    // endstone / end_portal / the two frames; the zero-shift red
+    // line). V3-10b re-pin: 131 -> 133 (the End content family's two
+    // blocks — end_stone_bricks + chorus_plant).
+    EXPECT_EQ(blockCount, 133);
     int itemJson = 0;
     for (const auto& e :
          std::filesystem::directory_iterator("assets/data/items")) {
@@ -503,7 +506,8 @@ TEST(V390BuildingContent, ContentCensusPinned) {
             ++itemJson;
         }
     }
-    EXPECT_EQ(itemJson, 99); // + the V3-14b ghast_membrane + the V3-10a ender_eye
+    EXPECT_EQ(itemJson, 101); // + the V3-14b ghast_membrane + the V3-10a ender_eye
+    // + the V3-10b ender_pearl + chorus_fruit
     int tilePng = 0;
     for (const auto& e :
          std::filesystem::directory_iterator("assets/textures/blocks")) {
@@ -511,7 +515,7 @@ TEST(V390BuildingContent, ContentCensusPinned) {
             ++tilePng;
         }
     }
-    EXPECT_EQ(tilePng, 110 + 20 + 4); // 110 pre-V3-5 + the family's 20 + the V3-10a End's 4
+    EXPECT_EQ(tilePng, 110 + 20 + 4 + 2); // 110 pre-V3-5 + the family's 20 + the V3-10a End's 4 + the V3-10b family's 2
     int iconPng = 0;
     for (const auto& e :
          std::filesystem::directory_iterator("assets/textures/items")) {
@@ -519,7 +523,7 @@ TEST(V390BuildingContent, ContentCensusPinned) {
             ++iconPng;
         }
     }
-    EXPECT_EQ(iconPng, 95 + 2 + 1 + 1); // 95 pre-V3-5 + the family's 2 + the V3-14b membrane + the V3-10a ender_eye
+    EXPECT_EQ(iconPng, 95 + 2 + 1 + 1 + 2); // 95 pre-V3-5 + the family's 2 + the V3-14b membrane + the V3-10a ender_eye + the V3-10b pearl's 2
 }
 
 TEST(V390BuildingContent, NewAssetsFNVpinned) {

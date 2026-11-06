@@ -421,7 +421,9 @@ TEST(V34NetheriteMaterialChain, IconCensusPinned) {
             ++iconCount;
         }
     }
-    EXPECT_EQ(iconCount, 99); // 84 pre-V3-4 + 9 + the V3-3 hoglin meat + the V3-10a ender_eye
+    // V3-10b: 99 -> 101 (the End content family's two icons — the
+    // ender_pearl + the chorus_fruit).
+    EXPECT_EQ(iconCount, 101); // 84 pre-V3-4 + 9 + the V3-3 hoglin meat + the V3-10a ender_eye
                               // chain's 2 + the V3-5 building family's 2
                               // (clay_ball / brick) + the V3-14b
                               // ghast_membrane
@@ -432,7 +434,7 @@ TEST(V34NetheriteMaterialChain, IconCensusPinned) {
             ++itemCount;
         }
     }
-    EXPECT_EQ(itemCount, 99); // the 1:1 icon naming (no planks-style
+    EXPECT_EQ(itemCount, 101); // the 1:1 icon naming (no planks-style
                               // block-item retirement in this family)
 }
 
@@ -538,7 +540,8 @@ TEST(V34NetheriteMaterialChain, RecipeCensusPinned) {
     // smeltable_to fields, not recipe files): a new recipe file is a
     // conscious census update.
     RealChain c;
-    EXPECT_EQ(c.recipes.count(), 112u);
+    // V3-10b: 112 -> 113 (the end_stone_bricks' 2x2 shaped recipe).
+    EXPECT_EQ(c.recipes.count(), 113u);
 }
 
 // ===========================================================================

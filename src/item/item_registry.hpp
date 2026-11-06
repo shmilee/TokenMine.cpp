@@ -182,6 +182,10 @@ private:
     // rejection by name (the armor_slot's tool-rejection twin — a
     // material's right click is a different channel owner's).
     static Result<void> parseShears(const Json& def, bool isTool, Item& out);
+    // V3-10b: the teleport-throw channel (the throws_teleport strict
+    // bool + the two sound names + the pairing / one-right-click
+    // exclusivity — the parseIgnites block's shape).
+    static Result<void> parseThrows(const Json& def, Item& out);
     // Parse the optional 'durability' field (SURV-3) into `out`: a strict
     // number > 0 (the accumulated damage at which the item breaks). The
     // ALLOWED set = the "has a use action" items — a tool (mining / melee

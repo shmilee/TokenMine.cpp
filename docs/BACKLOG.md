@@ -27,7 +27,7 @@
 | STRM 流送与内存 | （方向：双世界流送/内存设计，依赖 V3-1） | | | | | | |
 | PIPE 帧管线与并发 | （方向：传送过渡帧管线，依赖 V3-1） | ⬜ V3-12 多人（最大·立项） | | | | | |
 | LGT 光照 | | | | | | | |
-| GEN 世界与生成 | ✅ V3-1 下界维度·门与下界（三段） | ✅ V3-2 下界内容族（Part 1+2） | ✅ V3-5 建筑内容族 | ⬜ V3-10 末地维度：✅ V3-10a 框架+真传送（v3.23.0）/ ⬜ V3-10b~d | | | |
+| GEN 世界与生成 | ✅ V3-1 下界维度·门与下界（三段） | ✅ V3-2 下界内容族（Part 1+2） | ✅ V3-5 建筑内容族 | ⬜ V3-10 末地维度：✅ V3-10a 框架（v3.23.0）+ ✅ V3-10b 内容族（v3.24.0）/ ⬜ V3-10c~d | | | |
 | FLUID 流体 | | | | | | | |
 | ENT 实体/Mob/移动 | ✅ V3-3 下界 mob | ✅ V3-14d strider 骑乘（v3.22.0）【V3-14 全 4 相位完成】 | | | | | |
 | SURV 生存/战斗/效果 | ✅ V3-4 netherite 材料链 | ✅ V3-11a 创造基础（v3.17.0） | ✅ V3-11b 创造物品栏（v3.18.0） | ✅ V3-15 生存/表现批（v3.16.0） | | | |
@@ -128,8 +128,27 @@
     EXACT / 2885/2885（+29）/ 性能 A/B 同档；sim 不 bump；PITS 405
     （场景手术先探地形 + shader 无光分支双 floor + GCC-16 假阳性结
     构隔离 + 存档伪造只剥对应后键 + 场景派生同步 fluids）
-  - **V3-10b 内容族**（末地石原野/基岩洋/末地岛 + 末影珍珠投掷——纯
-    数据 + 生成；≈ V3-5 建筑内容族）
+  - **V3-10b 内容族 = v3.24.0 门 214（11-07 完成）**（末地石原野/基
+    岩洋/末地岛 + 末影珍珠投掷——纯数据 + 生成；≈ V3-5 建筑内容族）：
+    基岩洋全维 y[0,4]（下界地板镜像，跌落死因 Void→Fall + 珍珠逃
+    生面）+ 岛群 pass（lattice 16 p0.15 独立盐，r 5..12 顶 44..56，
+    顶 2 层 + 下锥 2 层悬浮岛；air-only 谓词 + 中央足迹护栏保出口/
+    平台；跨 chunk 走格外扩 rMax）+ chorus 岛顶装饰（独立盐 p0.6，
+    cross stateless + chance_drops ≈ MC；生长不做记偏离）+ biomes_end
+    单群系池（10d 缝）+ end_stone_bricks（2×2 配方 count 4 MC 精确）
+    + **末影珍珠全链 = 项目首个投掷物**（throws_teleport strict bool
+    + 双音配对 + one-right-click 8 面互斥 + material-only + init 交叉
+    检；挂点潜行旋转后 placeBlock 前；发射 = 投掷者速度并入 + 30
+    b/s MC 绝对值 + 冷却 60f；Projectile 尾参 teleports + stuck 复用
+    → pearlLanding：catchUpDisk + 2.5 球面均匀偏移（counter 流）+
+    hasRoomAt 上探 3 + fall 复锚消坠伤 + 落乘 + probe 全败吞没 + 无
+    自伤【MC 5HP 偏离】+ 0.625× 青色发光立方渲染 + 2 wav 68→70）；
+    format 32/sim 2 不变；门 214：S1 第 95 次（≡ base19 + 恰白名单 3
+    键零 diff 最强形）+ S2a 去程复跑 + S2b 珍珠臂（threw + pearl
+    teleport ×2 逐字 + 冷却窗 no-op + 心满 + 16→15 crop）+ S6 六面 /
+    canary 4 EXACT / 2899/2899（+14）/ 性能 A/B 同档；PITS 406
+    （lattice 位切 int 截断负值 = 模先于转换 + JS 三元误写 + stale
+    assets 再踩）
   - **V3-10c 末影人 mob**（瞬移 AI + 拾格行为；≈ V3-3 单 mob）
   - **V3-10d 末影龙 boss**（血条 UI/AI 阶段/死亡仪式/龙蛋——**唯一的
     真大项** 1-2 版，范围相位立项时定案）

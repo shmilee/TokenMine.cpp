@@ -1970,7 +1970,7 @@ TEST(MobContent, V215WoolAssetsPinned) {
     // [10..13, 10] — the 170-tile zero-shift red line, the test_atlas
     // census; the ender_eye icon is a standalone item PNG).
     EXPECT_EQ(fnv1a64(readAll("assets/data/textures/block_atlas.json")),
-              "9105c11c82ca30b1");
+              "cf127c15a903407e");
 }
 
 // -- V2-15: the wool instance state (MobEntity — the frame discipline) ----

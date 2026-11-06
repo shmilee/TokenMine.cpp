@@ -1,0 +1,18 @@
+{
+  "id": "ender_pearl",
+  "type": "material",
+  "max_stack": 16,
+  "icon": "ender_pearl",
+  "throws_teleport": true,
+  "throw_sound": "ender_pearl_throw",
+  "teleport_sound": "ender_pearl_teleport",
+
+  "model": {
+    "texture": "ender_pearl",
+    "elements": [
+      { "from": [0.3, 0.35, 0.35],
+        "to": [0.7, 0.75, 0.75],
+        "uv": [0.3, 0.35, 0.7, 0.75] }
+    ]
+  }
+}

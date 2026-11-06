@@ -306,5 +306,7 @@ TEST(ItemModelMeshTest, ShippedModelsHaveNoFaceCoincidentBoxes) {
     // with a model) -> 98.
     // V3-10a: 98 -> 99 (the ender_eye model — the quartz's single-
     // box shape, the every-shipped-item-model discipline).
-    EXPECT_EQ(modelCount, 99) << "ENT-9: all 99 items have models";
+    // V3-10b: 99 -> 101 (the End content family's two item models
+    // — the ender_pearl + the chorus_fruit).
+    EXPECT_EQ(modelCount, 101) << "ENT-9: all 101 items have models";
 }

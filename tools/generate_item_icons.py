@@ -1172,6 +1172,50 @@ def make_bottle(liquid, salt, has_liquid=True,
     return px
 
 
+def ender_pearl():
+    """V3-10b (v3.24.0): the ender pearl (Minecraft's read — the dark
+    teal-blue orb with the bright swirling vein + the top highlight).
+    New salts 184-186 — every existing icon stays pixel-identical."""
+    px = blank()
+    for y in range(32):
+        for x in range(32):
+            dx = x - 15.5
+            dy = y - 16.0
+            d2 = dx * dx / (7.2 ** 2) + dy * dy / (7.2 ** 2)
+            if d2 <= 1.0:
+                edge = d2 > 0.72
+                vein = ((x * 3 + y * 7) % 11) < 2 and d2 < 0.8
+                base = (52, 96, 110) if edge else (86, 158, 172)
+                c = (168, 236, 240) if vein else base
+                if d2 < 0.25:
+                    c = (210, 250, 248)
+                setpx2(px, x, y, c, salt=184)
+    return px
+
+
+def chorus_fruit():
+    """V3-10b (v3.24.0): the chorus fruit (Minecraft's read — the bumpy
+    dark magenta sphere, the bump highlights + the stem nub on top).
+    New salts 185-187 — every existing icon stays pixel-identical."""
+    px = blank()
+    for y in range(32):
+        for x in range(32):
+            dx = x - 15.5
+            dy = y - 16.5
+            d2 = dx * dx / (7.0 ** 2) + dy * dy / (7.0 ** 2)
+            if d2 <= 1.0:
+                bump = ((x * 5 + y * 3) % 9) < 2
+                base = (120, 44, 104)
+                c = (176, 84, 160) if bump else base
+                if dy < -4.0:
+                    # the stem nub (the two top pixels, the quartz tip
+                    # convention one step lower).
+                    if abs(x - 15.5) < 1.5:
+                        c = (72, 110, 52)
+                setpx2(px, x, y, c, salt=185)
+    return px
+
+
 def quartz():
     """Quartz (V3-2 Part 1, the nether quartz ore's drop): a cluster of
     pale pink-white crystal shards (three tapering spires on a common
@@ -1408,6 +1452,10 @@ ITEMS = {
     # V3-2 Part 1: the nether quartz ore's drop (the ancient_debris's
     # item is its BLOCK item — the name-collision's structural form).
     "quartz": quartz,
+    # V3-10b (v3.24.0): the End content family's items — the pearl
+    # (the first throwable) + the chorus fruit (the End's food).
+    "ender_pearl": ender_pearl,
+    "chorus_fruit": chorus_fruit,
     # V3-4 (netherite material chain): the smelted-debris scrap + the
     # 4-scrap+4-gold ingot + the 3 tools (the iron tier's silhouettes in
     # the netherite palette; the armor 4 are the comprehension above).

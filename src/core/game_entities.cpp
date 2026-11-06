@@ -164,6 +164,13 @@ void Game::updateEntities(double dt) {
                           arrow->explodeSource());
                 arrow->kill();
             }
+            // V3-10b: the pearl's landing — a stuck pearl teleports the
+            // THROWER to the landing point (the fireball's consume-at-
+            // impact twin, the zero-damage shape: no blast, no self-
+            // hit, the documented deviation) and despawns.
+            if (arrow->teleports() && !arrow->dead()) {
+                pearlLanding(arrow);
+            }
             continue;  // stuck in a block (Phase 24): no motion, no hits
         }
         const Vec3 step = arrow->position() - prev;
@@ -206,10 +213,12 @@ void Game::updateEntities(double dt) {
             if (mob == nullptr || mob->dead() || mob == arrow->source()) {
                 continue;  // the shooter's own arrow never self-hits
             }
-            if (arrow->explodes()) {
+            if (arrow->explodes() || arrow->teleports()) {
                 // V3-14b: the fireball passes through mobs (the
                 // Minecraft fireball's twin — a mob cannot block the
-                // ghast's shot; its block is the terrain's).
+                // ghast's shot; its block is the terrain's). V3-10b:
+                // the pearl's twin (a mob cannot block the throw; the
+                // MC's pass-through, the zero-damage shape).
                 continue;
             }
             const float t =
@@ -1516,6 +1525,25 @@ void Game::drawArrows(const Mat4& view, const Mat4& projection) {
                                        kFireballColorG, kFireballColorB);
             m_renderer.draw(m_fireballMesh, m_basicShader, view, projection,
                             Mat4::translate(fc));
+            continue;
+        }
+        // V3-10b: the ender pearl (the teleporting thrower) — the
+        // fireball's glow cube REUSED at the smaller draw scale in the
+        // pearl's teal (a stuck pearl never renders: it teleports at
+        // the impact, the fireball's twin).
+        if (arrow->teleports()) {
+            if (!m_fireballMesh.valid()) {
+                continue;
+            }
+            const Vec3 pc = arrow->position() +
+                            Vec3 {0.0f, Projectile::kSize * 0.5f, 0.0f};
+            m_basicShader.bind();
+            m_basicShader.setUniform3f("u_color", kPearlColorR, kPearlColorG,
+                                       kPearlColorB);
+            m_renderer.draw(
+                m_fireballMesh, m_basicShader, view, projection,
+                Mat4::multiply(Mat4::translate(pc),
+                               Mat4::scale(kPearlDrawScale)));
             continue;
         }
         // Collision-box center (the box is kSize tall; the part meshes

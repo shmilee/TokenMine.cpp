@@ -760,6 +760,31 @@ Result<void> Game::buildScene() {
     // rolled top fits its stack. The first failing mob is named.)
     MC_TRY(checkBarter(m_mobs.mobTypes, m_items));
 
+    // V3-10b (the ender pearl): the throw channel's cross-check (the
+    // mob's shoot_sound's item twin — the throws_teleport item's two
+    // sound names must exist in the sound directory; the first failing
+    // item names, the S6 gate's subject).
+    for (const ItemID iid : m_items.allIds()) {
+        const Item& it = m_items.at(iid);
+        if (!it.throwsTeleport) {
+            continue;
+        }
+        if (it.throwSound.empty() || it.teleportSound.empty()) {
+            return MC_FAIL("item '" + it.name +
+                           "' carries 'throws_teleport' — the throw "
+                           "channel requires BOTH 'throw_sound' and "
+                           "'teleport_sound' (a one-sided cue is a dead "
+                           "field)");
+        }
+        for (const std::string& snd : {it.throwSound, it.teleportSound}) {
+            const std::string rel = "sounds/" + snd + ".wav";
+            if (!m_assets.exists(rel)) {
+                return MC_FAIL("item '" + it.name + "' throw sound '" +
+                               snd + "' is missing '" + rel + "'");
+            }
+        }
+    }
+
     // -- player body (UX-3): the world-space body model ----------------------
     // data/player_body.json is a MODEL-ONLY file (exactly one top-level
     // 'model' key — no id / properties / AI fields, the mob file's
@@ -1531,6 +1556,16 @@ Result<void> Game::buildScene() {
         return MC_FAIL("nether world generation requires at least one "
                        "biome (assets/data/biomes_nether/*.json)");
     }
+    // V3-10b: the End's biome pool (the nether load's twin — the
+    // fail-fast: a missing directory / an empty pool names the asset,
+    // the S6 gate's subject; 10b ships the single end_plains).
+    auto endBiomesLoad =
+        m_endBiomes.loadDirectory(m_assets, "data/biomes_end");
+    MC_TRY(endBiomesLoad);
+    if (m_endBiomes.count() == 0) {
+        return MC_FAIL("end world generation requires at least one "
+                       "biome (assets/data/biomes_end/*.json)");
+    }
     auto worldgen = WorldgenParams::load(m_assets);
     MC_TRY(worldgen);
     const std::int64_t seed = m_config.getInt64("world.seed", 0);
@@ -1576,7 +1611,7 @@ Result<void> Game::buildScene() {
     // first travel). The End's mob pool = the 10c two-phase slot: 10a
     // ships NO mobs file (m_end.mobs stays default-empty — the
     // structural-immunity root, the Phase B precedent).
-    auto endGen = EndGen::create(endSeed(seed), m_blocks);
+    auto endGen = EndGen::create(endSeed(seed), m_endBiomes, m_blocks);
     MC_TRY(endGen);
     m_end.gen = std::move(*endGen);
     // The End portal block's resolved id (the m_states.portalId pattern —

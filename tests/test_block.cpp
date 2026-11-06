@@ -1392,7 +1392,8 @@ TEST(BlockRegistryTest, Phase63FlamableContent) {
     }
     // The complete flamable set = 10 (Phase 63) + 7 (GEN-2: 3 saplings,
     // 2 trunks, 2 leaves) + 1 (V2-7: planks, the wood precedent — the
-    // placeable plank block burns like the log it is crafted from) = 18
+    // placeable plank block burns like the log it is crafted from)
+    // + 1 (V3-10b: chorus_plant, the cross plant's fire read) = 19
     // blocks, nothing else.
     std::vector<std::string> flamables;
     for (std::size_t i = 0; i < reg.count(); ++i) {
@@ -1402,9 +1403,10 @@ TEST(BlockRegistryTest, Phase63FlamableContent) {
         }
     }
     std::sort(flamables.begin(), flamables.end());
-    EXPECT_EQ(flamables.size(), 18u);
+    EXPECT_EQ(flamables.size(), 19u);
     const std::vector<std::string> want = {"birch_leaves", "birch_sapling",
-                                           "birch_trunk", "grass", "leaves",
+                                           "birch_trunk", "chorus_plant",
+                                           "grass", "leaves",
                                            "oak_sapling", "planks",
                                            "spruce_leaves", "spruce_sapling",
                                            "spruce_trunk", "wheat_1",
@@ -2347,6 +2349,10 @@ TEST(BlockRegistryTest, Craft3SoundMaterialContent) {
         {"end_portal", "glass"},
         {"end_portal_frame", "stone"},
         {"end_portal_frame_eyed", "stone"},
+        // V3-10b: the End content family — the bricks' stone read
+        // (the chorus_plant carries NO field — the wheat cross's
+        // generic-fallback shape).
+        {"end_stone_bricks", "stone"},
     };
     for (const auto& [name, mat] : expected) {
         const Block* b = reg.findByName(name);

@@ -895,6 +895,50 @@ def squeak():
     return sound(dur, f)
 
 
+def ender_pearl_throw():
+    """V3-10b (v3.24.0): the pearl's THROW cue (Minecraft's
+    ender_pearl.throw read — the short upward whoop of the orb leaving
+    the hand): a 320 -> 980 Hz rising sine glide (the throw's arc
+    anticipation) over a fixed-seed swish noise bed (the hand's air
+    displacement), 0.18 s, in the SFX volume class (the bow's draw
+    tap's cousin). The fixed-LCG / sine paradigm (the squeak
+    precedent), dedicated fixed seed — a re-run leaves every other
+    file byte-identical (the md5 discipline)."""
+    lcg = Lcg(0x1E3A)  # dedicated fixed seed (unique to this sound)
+    dur = 0.18
+
+    def f(t, _):
+        fr = 320.0 + 660.0 * (t / dur)  # the rising throw whoop
+        tone = math.sin(2 * math.pi * fr * t)
+        swish = lcg.next() * 0.35
+        return (tone * 0.55 + swish) * env(t, dur, 14.0) * 0.5
+    return sound(dur, f)
+
+
+def ender_pearl_teleport():
+    """V3-10b (v3.24.0): the pearl's TELEPORT cue (Minecraft's
+    ender_pearl.teleport read — the classic "zzip": the fast falling
+    shimmer of the void folding): a 1400 -> 240 Hz sine glide (the
+    space-compression sweep) carrying a 2.02x shimmer overtone (the
+    void's iridescence) + a fixed-seed crackle burst over the first
+    80 ms (the orb's shatter), 0.34 s, in the SFX volume class. The
+    fixed-LCG / sine paradigm, dedicated fixed seed — a re-run leaves
+    every other file byte-identical (the md5 discipline)."""
+    lcg = Lcg(0x2FA7)  # dedicated fixed seed (unique to this sound)
+    dur = 0.34
+
+    def f(t, _):
+        u = t / dur
+        fr = 1400.0 - 1160.0 * u  # the falling shimmer sweep
+        tone = (math.sin(2 * math.pi * fr * t)
+                + math.sin(2 * math.pi * fr * 2.02 * t) * 0.3)
+        out = tone * 0.5
+        if t < 0.08:
+            out += lcg.next() * 0.3 * (1.0 - t / 0.08)
+        return out * env(t, dur, 8.0) * 0.5
+    return sound(dur, f)
+
+
 def ghast():
     """V3-14b: the ghast's ambient screech (Minecraft's mob.ghast.
     ambience class — the long, low, wavering wail of the nether's
@@ -1362,6 +1406,10 @@ SOUNDS = {
     # V2-14: the bat's ambient squeak (the flyCruise per-frame roll —
     # spatialized at the bat, the dropped-item pattern).
     "squeak": squeak,
+    # V3-10b (v3.24.0): the pearl's two cues (the throw's whoop + the
+    # teleport's shimmer — the first throwable's sound face).
+    "ender_pearl_throw": ender_pearl_throw,
+    "ender_pearl_teleport": ender_pearl_teleport,
     # V2-15: the shears' cut (the sheep shearing — the right-click
     # action's cue, spatialized at the mob, the milk precedent).
     "shear": shear,

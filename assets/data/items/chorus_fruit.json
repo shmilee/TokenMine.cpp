@@ -1,0 +1,16 @@
+{
+  "id": "chorus_fruit",
+  "type": "material",
+  "max_stack": 64,
+  "icon": "chorus_fruit",
+  "restore_hunger": 2,
+  "saturation": 0.0,
+  "model": {
+    "texture": "chorus_fruit",
+    "elements": [
+      { "from": [0.25, 0.35, 0.3],
+        "to": [0.75, 0.75, 0.7],
+        "uv": [0.25, 0.35, 0.75, 0.75] }
+    ]
+  }
+}

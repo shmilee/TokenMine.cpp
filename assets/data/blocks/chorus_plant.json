@@ -1,0 +1,20 @@
+{
+  "id": "chorus_plant",
+  "properties": {
+    "hardness": 0.0,
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "cutout": true,
+    "flamable": true,
+    "drops": "chorus_fruit",
+    "chance_drops": [
+      { "item": "chorus_fruit", "count": 1, "chance": 0.5 },
+      { "item": "chorus_plant", "count": 1, "chance": 0.33 }
+    ]
+  },
+  "model": {
+    "shape": "cross",
+    "textures": { "cross": "chorus_plant" }
+  }
+}

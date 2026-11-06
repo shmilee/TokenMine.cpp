@@ -66,4 +66,16 @@ inline Mat4 columnModel(const ColumnPos& col) {
 // launch origin never sits inside the camera near plane).
 constexpr float kArrowSpawnOffset = 0.3f;
 
+// V3-10b (the ender pearl): the throw's launch speed in blocks/second
+// (the Minecraft 1.5 b/t EXACT value — the arrow's 15 b/s is the
+// project's documented 1/4-scale deviation, a pearl at 7.5 would fly
+// ~3 blocks: unhittable, the ruling's absolute value) + the throw's
+// cooldown in frames (the Minecraft 1 s = 20 ticks frame-locked; the
+// session state, the fly-toggle precedent class).
+constexpr float kPearlLaunchSpeed = 30.0f;
+constexpr int kPearlThrowCooldownFrames = 60;
+// The landing's uniform offset RADIUS in blocks (the Minecraft 2.5
+// EXACT value — the sphere-uniform roll's bound).
+constexpr float kPearlTeleportOffset = 2.5f;
+
 } // namespace mc

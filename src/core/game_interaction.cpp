@@ -584,6 +584,14 @@ void Game::handleInteraction(double dt) {
                 }
             }
         }
+        // V3-10b (the ender pearl): the teleport-throw — AFTER every
+        // interactive channel (the MC semantics: a held pearl right-
+        // clicks a furnace's panel, a bed's sleep, a frame's eye, a
+        // mob's ride — the throw is the last item channel before the
+        // placement, which a material pearl no-ops).
+        if (tryThrowPearl()) {
+            return;
+        }
         placeBlock();
     }
     if (m_input.wasPressed(GameKey::Tab)) {
@@ -2095,6 +2103,66 @@ bool Game::tryEyePortal() {
                                std::to_string(completeEyed) + "/12)"
                          : "embedded an end eye (no complete ring)");
     }
+    return true;
+}
+
+bool Game::tryThrowPearl() {
+    // V3-10b (the ender pearl): the teleport-throw (the project's first
+    // throwable — the data predicate `throws_teleport` gates the
+    // channel, never an item name: hard rule 3). The predicate: the
+    // player is alive, the selected item throws, and the frame-locked
+    // cooldown has run (the 60f window — a re-click inside it is the
+    // SILENT no-op that still consumes the click, the failed-milk
+    // rule's cooldown shape; a non-throwable selected item returns
+    // false, the legacy fall-through bit-identical). The launch
+    // (the fireBow's shape): one pearl consumed (creative consumes
+    // none — the V3-11a no-consumption twin), the projectile from the
+    // eye ahead along the aim at kPearlLaunchSpeed + the THROWER'S
+    // velocity added (the MC 1.9+ motion-composition twin), the throw
+    // cue (the item's data throw_sound — init cross-checked the wav),
+    // the cooldown armed. The landing's teleport is the pearlLanding
+    // seam (the stuck pass's twin branch — zero damage, the MC 5HP's
+    // documented deviation).
+    if (!m_player || m_player->isDead()) {
+        return false;
+    }
+    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    if (stack.empty()) {
+        return false;
+    }
+    const Item& item = m_items.at(stack.item);
+    if (!item.throwsTeleport) {
+        return false; // not a thrower: the legacy fall-through
+    }
+    if (m_pearlThrowCooldownFrames > 0) {
+        return true; // the cooldown window: the click is the silent no-op
+    }
+    if (!m_player->isCreative()) {
+        m_inventory.take(m_selectedSlot, 1);
+    }
+    const Vec3 f = aimForward();
+    // The eye-ahead origin (the fireBow's UX-8g twin — the launch
+    // origin never sits inside the near plane). The constructor's
+    // normalized-direction * speed launch is the aim's speed; the
+    // THROWER'S velocity is folded in AFTER (the MC 1.9+ motion
+    // composition: a running throw flies farther — the setVelocity
+    // over the constructor's, the entity's public writer).
+    const Vec3 o = m_player->eyePosition() + f * kArrowSpawnOffset;
+    auto pearl = std::make_unique<Projectile>(
+        currentWorld(), m_blocks, o, f, kPearlLaunchSpeed,
+        /*damage=*/0.0f, /*hurtPlayer=*/false, /*power=*/1.0f,
+        /*ammoItem=*/std::string {}, /*effectId=*/-1,
+        /*effectDuration=*/0.0, /*effectTier=*/0, /*explodeRadius=*/0.0f,
+        /*explodeSource=*/std::string {}, /*teleports=*/true);
+    pearl->setVelocity(pearl->velocity() + m_player->velocity());
+    currentEntities().push_back(std::move(pearl));
+    // The throw's cue (the item's data name — init cross-checked the
+    // wav's existence; the 2D-centered class, the "shoot" precedent).
+    if (!item.throwSound.empty()) {
+        m_sound.play(item.throwSound);
+    }
+    m_pearlThrowCooldownFrames = kPearlThrowCooldownFrames;
+    MC_LOG_DEBUG("threw a '" + item.name + "'");
     return true;
 }
 

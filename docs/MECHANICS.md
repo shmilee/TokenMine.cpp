@@ -89,7 +89,7 @@
   16 件（+netherite×4 `[V3-4]`）；**耐久**：36 件（12 工具 + shears + 6 弓 +
   燧石与钢 + 16 护甲，`[SURV-3]` 首批 27 件 + `[SURV-5]` poison_bow +
   `[V2-15]` shears 238 + `[V3-4]` netherite 7 件）
-- **音效**：**68** 个确定性 WAV（`tools/generate_sounds.py` 固定种子，重跑字节
+- **音效**：**70** 个确定性 WAV（`tools/generate_sounds.py` 固定种子，重跑字节
   幂等；17 基础事件 + 18 材质音 6×3 + 3 环境音 + 1 smelt + 1 雷 `[V2-4]` + 1
   sleep `[V2-13]` + 1 squeak `[V2-14]` + 1 shear `[V2-15]` + 3 snow 族
   `[V2-16]` + **3 portal 族 `[V3-1]`**（trigger/travel/ambient）+ **11 下界族
@@ -97,12 +97,15 @@
   nether）+ **3 下界 mob 氛围 `[V3-3]`**（piglin_whisper/hoglin_grunt/
   strider_hiss）+ **1 boom `[V3-14a]`** + **2 ghast 族 `[V3-14b]`**
   （ghast 嘶鸣 / ghast_roar 发射咆哮）+ **1 barter `[V3-14c]`**（piglin
-  交易 chime）+ **1 ambience_end `[V3-10a]`**（末地第 5 上下文音）；
-  `[V2-16]` 音效缺陷族 13 件修复 = 字节变更件数不变）
-- **纹理**：block atlas **16×16**（256 tile，**现状 170 tile 占用**——3.x 增长
+  交易 chime）+ **1 ambience_end `[V3-10a]`**（末地第 5 上下文音）+
+  **2 珍珠族 `[V3-10b]`**（ender_pearl_throw whoop / ender_pearl_
+  teleport shimmer——首个投掷物的声音面）；`[V2-16]` 音效缺陷族 13
+  件修复 = 字节变更件数不变）
+- **纹理**：block atlas **16×16**（256 tile，**现状 172 tile 占用**——3.x 增长
   谱系 122→136 `[V3-2]`（16×8→16×16 幂二增长，**既有格零移位** = 像素行恒等
   锚免重锚实证）→145 `[V3-3]` →165 `[V3-5]` →166 `[V3-14b]`（ghast）→170
-  `[V3-10a]`（endstone/end_portal/双 frame，[10..13,10] 零移位），
+  `[V3-10a]`（endstone/end_portal/双 frame，[10..13,10] 零移位）→172
+  `[V3-10b]`（end_stone_bricks/chorus_plant，[0..1,11] 零移位），
   `assets/data/textures/block_atlas.json` 数据驱动布局——加纹理 = 加 PNG + 加一行
   JSON，不改代码；**atlas 空位**纪律 = 不重锚基线）；物品图标 = 每物品独立
   32×32 PNG；字体 **256×2112**（ASCII 16×16 字形 + **427 个 CJK glyph**

@@ -1457,6 +1457,18 @@ private:
     // a complete 12-eyeful ring is an orphan -> air; the tracking set
     // rebuilds. Runs after the end's edit replay at load).
     void rescanEndPortals();
+    // V3-10b: the pearl's landing seam (the stuck pass's consumer — a
+    // stuck pearl teleports the THROWER to the landing point): the
+    // 3x3 catch-up disk around the target, the uniform 2.5-block
+    // offset roll (the particle counter's deterministic stream — the
+    // frame-locked contract), the hasRoomAt probe with the +1..+3
+    // up-step (the portal's landing-probe twin), the restorePosition's
+    // fall re-anchor (the pearl cancels the fall damage, the MC twin),
+    // the dismount (a rider throws, the MC 1.10 twin) + the teleport
+    // cue + the DEBUG log (the E2E evidence). The probe's total failure
+    // (a sealed pocket) swallows the pearl WITHOUT the teleport (the
+    // documented deviation — the MC always teleports).
+    void pearlLanding(Projectile* pearl);
     // The embed-eye interaction (V3-10a's A-lite activation): the
     // crosshair on an end_frame cell, the selected item an ender_eye —
     // one eye is consumed, the cell becomes the EYED frame, and the
@@ -1466,11 +1478,31 @@ private:
     // failed-milk rule); a non-frame target falls through (the
     // bit-identical legacy path).
     bool tryEyePortal();
+    // V3-10b (the ender pearl): the TELEPORT-THROW — the crosshair is
+    // the aim (the aimForward twin), the selected item carries the data
+    // predicate throws_teleport, the cooldown is 0 and the player is
+    // alive: one pearl is consumed (creative consumes none — the V3-11a
+    // no-consumption twin) and the projectile launches from the eye
+    // ahead along the aim at kPearlLaunchSpeed WITH the thrower's
+    // velocity added (the MC 1.9+ twin). The click is consumed on a
+    // throw (the cooldown's window included — a rapid re-click inside
+    // the 60f window is the silent no-op, the failed-milk rule's
+    // cooldown shape); a non-throwable item returns false (the legacy
+    // bit-identical fall-through). The landing's teleport is the
+    // pearlLanding seam (the stuck pass's twin branch).
+    bool tryThrowPearl();
 
     // V3-10a: the ender_eye item's resolved id (the init name lookup —
     // invalid = the embed interaction is structurally inert, the
     // absent-asset twin).
     ItemID m_enderEyeId = ItemID::invalid();
+    // V3-10b: the pearl's throw cooldown in FRAMES (the frame-locked
+    // session state — the kPearlThrowCooldownFrames window after a
+    // throw; 0 = ready. Never saved, the fly-toggle / portal-cooldown
+    // precedent class). The gate's one member: the tryThrowPearl's
+    // predicate reads it, the throw decrements nothing (the pass runs
+    // it, the update's frame-locked bookkeeping).
+    int m_pearlThrowCooldownFrames = 0;
 
     GameArgs m_args;
     Config m_config;
@@ -1493,6 +1525,10 @@ private:
     // biomes_nether — the D1: the overworld's m_biomes stays untouched,
     // the nether's selection walks this pool over the derived seed).
     BiomeRegistry m_netherBiomes;
+    // V3-10b: the End's biome pool (data/biomes_end/ — 10b ships the
+    // single end_plains, the 10d's second-biome seam; the nether pool's
+    // member shape).
+    BiomeRegistry m_endBiomes;
     TextureAtlas m_atlas;
 
     // Voxel world + per-chunk GPU meshes.

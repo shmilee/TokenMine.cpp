@@ -245,13 +245,15 @@ TEST(AlphaCutoutContentTest, ShippedCutoutSetIsExact) {
         }
     }
     std::sort(cutouts.begin(), cutouts.end());
-    EXPECT_EQ(cutouts.size(), 20u);
+    // V3-10b: 20 -> 21 (the chorus_plant's cross joins the cutout set).
+    EXPECT_EQ(cutouts.size(), 21u);
     const std::vector<std::string> want = {
         "allium",            "birch_leaves", "birch_sapling", "campfire",
-        "campfire_extinguished", "cornflower", "fire",        "leaves",
-        "oak_sapling",       "spruce_leaves", "spruce_sapling", "torch",
-        "tulip",             "wheat_1",       "wheat_2",       "wheat_3",
-        "wheat_4",           "wheat_5",       "wheat_6",       "wheat_7",
+        "campfire_extinguished", "chorus_plant", "cornflower",   "fire",
+        "leaves",            "oak_sapling", "spruce_leaves", "spruce_sapling",
+        "torch",             "tulip",       "wheat_1",         "wheat_2",
+        "wheat_3",           "wheat_4",     "wheat_5",         "wheat_6",
+        "wheat_7",
     };
     EXPECT_EQ(cutouts, want);
 }
@@ -394,8 +396,10 @@ TEST(AlphaCutoutContentTest, EveryHoleTextureIsDiscardCovered) {
     // intermediate-alpha hole texture — 187 holes + 9 core pixels).
     // water / glass_pane / honey are mid-only (zero holes, above the pin
     // line).
-    EXPECT_EQ(holeTextures, 21);
-    EXPECT_EQ(pureHoleTextures, 20);
+    // V3-10b: 21 -> 22 holes / 20 -> 21 pure (the chorus_plant's
+    // cross — a hole-only texture, the wheat's class).
+    EXPECT_EQ(holeTextures, 22);
+    EXPECT_EQ(pureHoleTextures, 21);
     EXPECT_EQ(nonPureHoleTextures, (std::vector<std::string>{"glass"}));
 }
 

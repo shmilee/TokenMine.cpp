@@ -637,6 +637,104 @@ Result<void> ItemRegistry::parseShears(const Json& def, bool isTool,
     return {};
 }
 
+Result<void> ItemRegistry::parseThrows(const Json& def, Item& out) {
+    // V3-10b (the ender pearl): the TELEPORT-THROW channel — the
+    // throws_teleport strict bool (default false: every pre-V3-10b item
+    // is cold) + the two optional sound names (the mob's shoot_sound
+    // twin — the game cross-checks both against the sound directory at
+    // init). MATERIAL-ONLY: a tool carrying the flag is a dead-channel
+    // typo (the shears' tool-rejection mirror, inverted), and the one-
+    // item-owns-one-right-click discipline names every fight (the
+    // ignites_flamable block's shape).
+    if (const Json* tt = def.find("throws_teleport")) {
+        if (!tt->isBool()) {
+            return MC_FAIL("'throws_teleport' must be a boolean");
+        }
+        const Json* type = def.find("type");
+        if (tt->asBool() && type != nullptr && type->isString() &&
+            type->asString() == "tool") {
+            return MC_FAIL("'throws_teleport' is only valid for type "
+                           "\"material\" (a tool's right-click is its "
+                           "use — a throwable tool is a dead-channel "
+                           "typo, the shears' material-rejection twin)");
+        }
+        out.throwsTeleport = tt->asBool();
+    }
+    if (const Json* ts = def.find("throw_sound")) {
+        if (!ts->isString() || ts->asString().empty()) {
+            return MC_FAIL("'throw_sound' must be a non-empty string "
+                           "(a sound name)");
+        }
+        out.throwSound = ts->asString();
+    }
+    if (const Json* ps = def.find("teleport_sound")) {
+        if (!ps->isString() || ps->asString().empty()) {
+            return MC_FAIL("'teleport_sound' must be a non-empty string "
+                           "(a sound name)");
+        }
+        out.teleportSound = ps->asString();
+    }
+    // The pairing discipline: a sound name without the flag is a dead
+    // field (the milk_with/milk_gives twin).
+    if (!out.throwsTeleport &&
+        (!out.throwSound.empty() || !out.teleportSound.empty())) {
+        return MC_FAIL("'throw_sound' / 'teleport_sound' require "
+                       "'throws_teleport' (a lone sound name is a dead "
+                       "field)");
+    }
+    if (out.throwsTeleport) {
+        if (out.restoreHunger > 0) {
+            return MC_FAIL("an item cannot both teleport-throw "
+                           "('throws_teleport') and be food "
+                           "('restore_hunger'): one item owns one "
+                           "right-click channel");
+        }
+        if (out.drinkTime > 0.0f) {
+            return MC_FAIL("an item cannot both teleport-throw "
+                           "('throws_teleport') and be a drinkable "
+                           "('drink_time'): one item owns one right-click "
+                           "channel");
+        }
+        if (out.shootSpeed > 0.0f) {
+            return MC_FAIL("an item cannot both teleport-throw "
+                           "('throws_teleport') and be a launcher "
+                           "('shoot_speed'): one item owns one right-click "
+                           "channel");
+        }
+        if (out.ignitesFlamable) {
+            return MC_FAIL("an item cannot both teleport-throw "
+                           "('throws_teleport') and ignite flammable "
+                           "blocks ('ignites_flamable'): one item owns "
+                           "one right-click channel");
+        }
+        if (!out.dyeColor.empty()) {
+            return MC_FAIL("an item cannot both teleport-throw "
+                           "('throws_teleport') and be a dye "
+                           "('dye_color'): one item owns one right-click "
+                           "channel");
+        }
+        if (!out.collectsFluids.empty() || !out.poursFluid.empty()) {
+            return MC_FAIL("an item cannot both teleport-throw "
+                           "('throws_teleport') and be a fluid bucket "
+                           "('collects_fluid' / 'pours_fluid'): one item "
+                           "owns one right-click channel");
+        }
+        if (out.shearsTool) {
+            return MC_FAIL("an item cannot both teleport-throw "
+                           "('throws_teleport') and be shears "
+                           "('shears'): one item owns one right-click "
+                           "channel");
+        }
+        if (!out.armorSlot.empty()) {
+            return MC_FAIL("an item cannot both teleport-throw "
+                           "('throws_teleport') and be armor "
+                           "('armor_slot'): one item owns one right-click "
+                           "channel");
+        }
+    }
+    return {};
+}
+
 Result<void> ItemRegistry::parseDurability(const Json& def, Item& out) {
     // Optional 'durability' (SURV-3): the accumulated damage at which the
     // item breaks (a strict number > 0; the absent field is the "no
@@ -1111,6 +1209,9 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
             key != "armor_points" &&
             key != "fire_resistant" && // V3-15: the netherite immunity
             key != "shears" &&
+            key != "throws_teleport" && // V3-10b: the pearl's channel
+            key != "throw_sound" &&
+            key != "teleport_sound" &&
             key != "durability" &&
             key != "repair_with" &&
             key != "enchant_class" &&
@@ -1163,6 +1264,11 @@ Result<ItemID> ItemRegistry::registerItem(const Json& def) {
     r = parseShears(def, isTool, item); // V2-15: the shears flag (the
                                         // tool-only strict bool — the
                                         // type gate reads isTool)
+    MC_TRY(r);
+    r = parseThrows(def, item); // V3-10b: the teleport-throw channel
+                                // (the throws_teleport strict bool + the
+                                // two sound names + the one-right-click
+                                // exclusivity)
     MC_TRY(r);
     r = parseDurability(def, item); // SURV-3: LAST of the parse flow (the
                                     // allowed-set check reads the tool /

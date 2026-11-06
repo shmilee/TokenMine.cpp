@@ -1,28 +1,29 @@
-# 机制详解 · 世界与渲染（现状 v3.23.0）
+# 机制详解 · 世界与渲染（现状 v3.24.0）
 
 > 玩家/系统侧（内容总览/操作与交互/实体与 Mob/生存系统/状态效果/弓与箭/流体桶与点燃/demo 回放/合成与容器/存档/难度/确定性约定）= `docs/MECHANICS.md`（主文件；头部「来源约定」全文在主文件）。
 
-> 2026-11-07 增量刷新：现状 = **v3.23.0**（V3-10a 末地维度框架 + 真
-> 传送，门 213【format 32】；其前 v3.22.0 = V3-14d strider 骑乘，门
-> 212；v3.21.0 = V3-14c piglin 交易，门 211；v3.20.0 = V3-14b ghast，
-> 门 210；v3.19.0 = V3-14a 爆炸机制，门 209；v3.18.0 = V3-11b 创造物
-> 品栏，门 208；v3.17.0 = V3-11a 创造基础，门 207【format 31】；v3.16.0
-> = V3-15 生存/表现小批，门 206；v3.15.0 = V3-13 死亡统计屏，门 205；
-> v3.14.0 = V3-8b 手柄映射，门 204【sim 2】；v3.13.0 = demo sim 版
-> 本，门 203；v3.12.0 = 实机报障阴影缩尺，门 202；3.x 矩阵收官于
-> v3.11.0；其前 2.x 两批 20 版收官 v2.0.0 → v2.19.0）、无输入基线门
-> **213** 次、单元测试
-> **2885/2885**、`-Wall -Wextra -Wpedantic -Werror` 0 警告、存档
-> **format 32**（下界维度 format 30：player.dimension + nether 段 +
-> nether_entities；创造 format 31：player.creative；末地 format 32：
-> dimension 词表 +end 按 format 分词 + end 段 + end_entities；gzip
-> 编码 V3-7 起；下界/末地内容 = 世界生成演进零 format）、base19 锚
+> 2026-11-07 增量刷新：现状 = **v3.24.0**（V3-10b 末地内容族 +
+> 末影珍珠，门 214；其前 v3.23.0 = V3-10a 末地维度框架 + 真传送，门
+> 213【format 32】；v3.22.0 = V3-14d strider 骑乘，门 212；v3.21.0 =
+> V3-14c piglin 交易，门 211；v3.20.0 = V3-14b ghast，门 210；v3.19.0 =
+> V3-14a 爆炸机制，门 209；v3.18.0 = V3-11b 创造物品栏，门 208；
+> v3.17.0 = V3-11a 创造基础，门 207【format 31】；v3.16.0 = V3-15
+> 生存/表现小批，门 206；v3.15.0 = V3-13 死亡统计屏，门 205；v3.14.0 =
+> V3-8b 手柄映射，门 204【sim 2】；v3.13.0 = demo sim 版本，门 203；
+> v3.12.0 = 实机报障阴影缩尺，门 202；3.x 矩阵收官于 v3.11.0；其前
+> 2.x 两批 20 版收官 v2.0.0 → v2.19.0）、无输入基线门 **214** 次、
+> 单元测试 **2899/2899**、`-Wall -Wextra -Wpedantic -Werror` 0
+> 警告、存档 **format 32**（下界维度 format 30：player.dimension +
+> nether 段 + nether_entities；创造 format 31：player.creative；末地
+> format 32：dimension 词表 +end 按 format 分词 + end 段 +
+> end_entities；gzip 编码 V3-7 起；下界/末地内容 = 世界生成演进零
+> format）、base19 锚
 > **225272 B**（重锚谱系 179116 → 178148【V2-10 门 181】→ 178676
 > 【V2-19 门 182】→ 179027【V2-11 门 183】→ 224468【V2-18 门 190，AO
 > 世界光照】→ **225272【V3-6 门 200，填充感知雾 = 3.x 首重锚】**；门
 > 184–189 = 结构免疫第 65–70 次免重锚；门 191–199 = 第 72–80 次；门
-> 201–213 = 第 81–94 次免重锚（对 base19）【v3.0.0 banner = 第 71 次】）、
-> PITS **405**。上一轮全面刷新
+> 201–214 = 第 81–95 次免重锚（对 base19）【v3.0.0 banner = 第 71 次】）、
+> PITS **406**。上一轮全面刷新
 > （2026-11-02）止于 v2.0.0、2026-11-03 增量止于 v2.3.0（下条），本次把
 > v2.11.0 → v2.19.0 的机制（提前项 `[V2-19]` + 第二批 `[V2-11]`~`[V2-18]`，
 > 逐版见 `docs/archive/v2x/CHANGELOG.md`，细节证据见 `docs/archive/v2x/`
@@ -534,16 +535,29 @@
   实证）。
 - **坐标 = 1:1 独立原点**（MC 精确，无 8:1 映射）；派生 seed
   `worldSeed ^ kSaltEnd` **不落盘**（parse 重建）。
-- **末地 worldgen**（`end_gen` 纯函数，坐标纯函数零噪声）：120×120
-  末地石台地 x/z∈[−60,60] y∈[48,52]（feet 53）+ **原点出口门**
-  （y53 12 格 frame_eyed 环 + 3×3 end_portal，常活——10d 前偏离）+
-  岛外虚空无地板；10b 换真内容（原野/基岩洋/岛群）。
-- **末地块族（10a 最小面，块 127→131 / atlas 166→170 零移位）**：
-  endstone 0.5（stone 音族）/ end_portal（transparent/solid false/
-  light 11/destroyable false，nether_portal 逐字镜像，glass 音族）/
-  end_portal_frame + end_portal_frame_eyed（**A-lite 双 stateless
-  块**——项目无 per-state 纹理机制，偏离 MC 单块 16 态；destroyable
-  false = **无去激活路**嵌眼单调）。
+- **末地 worldgen**（`end_gen` 纯函数，坐标纯函数——10a 零噪声，
+  10b 的 lattice roll = hash 纯函数）：120×120 末地石台地
+  x/z∈[−60,60] y∈[48,52]（feet 53）+ **原点出口门**（y53 12 格
+  frame_eyed 环 + 3×3 end_portal，常活——10d 前偏离）+ 岛外虚空 +
+  **10b 内容族**：基岩洋 = 全维 y[0,4] 实心带（下界地板镜像，非
+  流体零 churn；跌落死因 Void→Fall + 珍珠逃生面）/ **岛群 pass**
+  （lattice 16 p 0.15 独立盐 kSaltEndIsland，半径 5..12 顶 y 44..56，
+  顶 2 层 + 下锥 2 层悬浮岛；air-only 谓词 + **中央足迹护栏**保出口
+  /平台区零岛；跨 chunk 走格外扩 rMax）/ **chorus 岛顶装饰**（独立
+  盐 kSaltEndChorus p 0.6，cross stateless + chance_drops ≈ MC 0-2
+  果 + 0-1 株；生长不做 = 主世界 only 生长 tick 后移 10c/10d）/
+  **biomes_end 单群系池**（end_plains surface endstone no-op 覆写；
+  MC 无群系偏离 + 10d 第二群系零核心缝）。
+- **末地块族（10a 最小面 + 10b 内容面，块 127→133 / atlas
+  166→172 零移位）**：endstone 0.5（stone 音族）/ end_portal
+  （transparent/solid false/light 11/destroyable false，
+  nether_portal 逐字镜像，glass 音族）/ end_portal_frame +
+  end_portal_frame_eyed（**A-lite 双 stateless 块**——项目无
+  per-state 纹理机制，偏离 MC 单块 16 态；destroyable false =
+  **无去激活路**嵌眼单调）/ **end_stone_bricks**（10b：hardness
+  1.25 MC，stone 音族，2×2 endstone 配方 count 4 MC 精确）/
+  **chorus_plant**（10b：cross stateless + flamable + drops
+  chorus_fruit + chance_drops 果 0.5/株 0.33 ≈ MC）。
 - **入口门（A-lite）**：5×5 水平环（四角缺 12 frame 格）body 层 +
   中心 3×3；**嵌眼交互**（持 `ender_eye` 右键 frame：吞 1 眼 + 嵌眼
   态 + 8 候选中心环扫描）= **12 全 eyed + 中心全 air → 中心激活
@@ -567,12 +581,28 @@
   （MC ambient_light 精确；shader 无光分支只读 u_caveAmbient——单设
   = 全黑门内捕获；OW/nether 配置值位级不变；set 点 = init + 翻维帧）。
 - **末地行为收口**：死亡 = **主世界重生**（D8 三值化，MC「末地只能
-  死回去」）；虚空坠落 = kill plane −32 + 「死于世界之外」既有；7
-  per-block state 族主世界 only（末地闭集同款）；**水蒸发谓词
-  nether-scoped = 末地水不蒸发**（偏离 MC，10b 复议）；床/容器/营
-  火 inOverworld 门；**生成池空槽**（10c 两段式，mob_spawning_end.
-  json 后相位）；流体 pass = 静态零 churn 纪律（10a worldgen 无流
-  体，桶正常流动）。
+  死回去」）；虚空坠落 = kill plane −32 + 「死于世界之外」既有
+  （10b 基岩洋后 = 洋底终结「死于高处掉落」）；7 per-block state
+  族主世界 only（末地闭集同款）；**水蒸发谓词 nether-scoped = 末地
+  水不蒸发**（偏离 MC，10b 复议）；床/容器/营火 inOverworld 门；
+  **生成池空槽**（10c 两段式，mob_spawning_end.json 后相位）；流体
+  pass = 静态零 churn 纪律（10a worldgen 无流体，桶正常流动）。
+- **末影珍珠投掷 `[V3-10b]`**（项目首个投掷物，item 99→101）：
+  `throws_teleport` strict bool + throw_sound/teleport_sound 配对
+  （init 交叉检：缺一 = 死字段点名 / wav 缺失点名）+ one-right-
+  click 8 面互斥（food/drink/launcher/ignite/dye/bucket/shears/
+  armor）+ material-only；挂点 = RMB 链潜行旋转后 placeBlock 前
+  （MC 可交互块优先）；发射 = 眼位前 0.3 + **投掷者速度并入**
+  （MC 1.9+）+ kPearlLaunchSpeed **30 b/s（MC 1.5 b/t 绝对值；箭的
+  1/4 比例 = 7.5 仅 3 块弃）** + 冷却 60f 会话态（窗内再点 = 静默
+  no-op 吞点击）+ creative 不消耗；Projectile 尾参 `teleports`
+  （缺省 false = 箭/火球位级）+ stuck 复用 → **pearlLanding**：
+  catchUpDisk 先行 + 落点 **2.5 球面均匀偏移**（particle counter
+  流 2 抽帧锁定）+ hasRoomAt 上探 3（portal 先例）+ restorePosition
+  **fall 复锚**（落地消坠伤）+ 落乘 + **无自伤**（MC 5HP 偏离）+
+  probe 全败吞没不瞬移（偏离）；mob 扫掠跳过（穿 mob MC 孪生）+
+  0.625× 青色发光立方渲染（火球 mesh 复用）+ 2 wav（68→70：
+  throw whoop 320→980 Hz / teleport shimmer 1400→240 Hz）。
 - **存档 format 32**：`player.dimension` 词表 **按 format 分词**
   （30/31 = overworld|nether 二词，携 "end" = version lie 点名；≥32
   = 三词）+ `end` 段 {blocks, fluids, states} 恒写空合法 +
@@ -1157,7 +1187,9 @@
   **2 ghast 族 `[V3-14b]`**（ghast 嘶鸣 / ghast_roar 发射咆哮）+ **1
   barter `[V3-14c]`**（piglin 交易 chime 880→1318.5 Hz）+ **1
   ambience_end `[V3-10a]`**（第 5 上下文音：40 Hz 低频体 + 0.2 Hz 颤 +
-  2.17× 微光 + 2 远距 whoosh 220→55 Hz，种子 0xC0DE）；**`[V2-16]` 音效缺陷族 13 件修复**（`_noise()`/
+  2.17× 微光 + 2 远距 whoosh 220→55 Hz，种子 0xC0DE）+ **2 珍珠族
+  `[V3-10b]`**（ender_pearl_throw 320→980 Hz whoop / ender_pearl_
+  teleport 1400→240 Hz shimmer，首个投掷物的声音面）；**`[V2-16]` 音效缺陷族 13 件修复**（`_noise()`/
   `dig()`/`break_sfx()` LCG **逐采样重建 = 常值流** → 4 件静音 + 5 件 DC 退
   化 + 2 件部分受损，跨多版本潜伏【截图/存档不录音频 = 门盲区，PITS
   382】；修复 = 单 LCG 实例推进，md5 变更恰 13 件、其余 head-identical 幂等

@@ -1,0 +1,15 @@
+{
+  "id": "end_stone_bricks",
+  "type": "shaped",
+  "output": {
+    "item": "end_stone_bricks",
+    "count": 4
+  },
+  "pattern": [
+    "EE",
+    "EE"
+  ],
+  "key": {
+    "E": "endstone"
+  }
+}

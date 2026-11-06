@@ -91,7 +91,7 @@ public:
                float power = 1.0f, std::string ammoItem = {},
                int effectId = -1, double effectDuration = 0.0,
                int effectTier = 0, float explodeRadius = 0.0f,
-               std::string explodeSource = {});
+               std::string explodeSource = {}, bool teleports = false);
 
     void update(double dt) override;
     bool shouldDespawn() const override {
@@ -152,6 +152,14 @@ public:
     // The blast's source name (the death line's "被 <name> 的爆炸杀死"
     // — the ghast's id; empty = the unattributed blast).
     const std::string& explodeSource() const { return m_explodeSource; }
+    // V3-10b: the teleporting thrower (the ender pearl): true when this
+    // projectile teleports the THROWER to its landing point on a block
+    // impact (the game's pearlLanding seam) and despawns — the
+    // explodes() twin, but with NO damage and NO blast (the zero-new-
+    // DamageSource ruling: the pearl's self-hit is the documented
+    // deviation). false = the pre-V3-10b projectile (every legacy call
+    // site bit-identical — the trailing-parameter default).
+    bool teleports() const { return m_teleports; }
     // True when the game's swept test may hit the player with this arrow
     // (Phase 27: mob-shot arrows).
     bool hurtPlayer() const { return m_hurtPlayer; }
@@ -196,6 +204,9 @@ private:
     // pre-V3-14b arrow) + its source name (the death line's attribution).
     float m_explodeRadius = 0.0f;
     std::string m_explodeSource;
+    // V3-10b: the teleporting-thrower flag (false = the pre-V3-10b
+    // projectile — the trailing constructor parameter's default).
+    bool m_teleports = false;
 
     // Same fall cap as the player: keeps the sub-stepper's tunneling bound
     // (an uncapped arrow could reach 600 blocks/s after 30 s).

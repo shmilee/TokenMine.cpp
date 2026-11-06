@@ -1,0 +1,12 @@
+{
+  "id": "end_stone_bricks",
+  "properties": {
+    "hardness": 1.25,
+    "drops": "end_stone_bricks",
+    "sound_material": "stone"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "end_stone_bricks", "side": "end_stone_bricks", "bottom": "end_stone_bricks" }
+  }
+}
