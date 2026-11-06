@@ -11,6 +11,51 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.14.0（2026-11-06）— V3-8b 手柄按键映射定案（L3 蹲伏 / RT 疾跑 / B 飞行专用钮 + 首个 sim bump 1→2，门 204 全 PASS）
+
+**用户 11-06 报障后续定案**（V3-8a 连接修复后）：「按键习惯问题需
+进一步确认（可能有多套常见映射表?）」→ 调研 + 三项习惯定案。**调研
+结论**：SDL3 GameController 按手柄数据库把 **Xbox / PlayStation /
+Switch 三大布局归一化到同一逻辑位**（PS 的 ✕ = SOUTH = Xbox A 同角
+色）= **现行单表已结构性覆盖三大布局，无需多表**（山湾克隆 = 数据库
+已识别，V3-8a 实机 open 铁证）。**用户三项定案**（config 全自定义 =
+定案**不做**）：① **L3 = 蹲伏**（补键盘 LeftControl 的手柄缺口，
+MC Java 惯例；`SDL_GAMEPAD_BUTTON_LEFT_STICK` → 虚拟 Ctrl 既有源位
+掩码模式）② **RT 扳机 = 疾跑**（`RIGHT_TRIGGER` 轴 0.2 死区数字化
+按住 = Shift，左摇杆移动同款；B 位解放）③ **B = 飞行 toggle 专用
+钮**（新 `GameKey::FlyToggle` **仅手柄键** = `mapKey` 永不返回【黑盒
+256 键扫描单测钉】，单击直接 `setFlying(!)` 无双击窗；键盘双击 Space
+不变，A 双击仍生效 = MC 同款冗余记偏离）。LT / R3 / GUIDE / Dpad
+上下左保持未映射（记档）。
+
+**首个实际 sim bump（1 → 2）**（v3.13.0 定案的 bump 纪律「输入路由」
+条款首实例）：录制的 gamepad 事件按**当前解释**重放——sim-1 demo
+携 L3/RT/B 事件将静默变行为 = 必须 bump。`tools/make_example_demo.py`
+的 Python 镜像常量 `SIM_VERSION` 漏 bump = **门 204 S2 首跑捕获**
+（example.dmo 静默写成 sim 1 + recorded_with 3.14.0 自相矛盾 → sim
+门点名拒收，金丝雀先于用户发现，PITS 396①）。4 个 canary demo 重新
+author（sim 2，字节可复现）。
+
+**门 204**：结构免疫第 84 次【S1 无输入 60f ×2 ≡ base19（committed
+config ui.scale 1.5 口径）逐字节 + savenorm EXACT——手柄映射 = 无手柄
+冷路径 + GameKey 尾扩零像素零存档面】；S2 sim-2 canary 4 demo ×2 RAW
++ savenorm EXACT；**S2b 首个 bump 实证**【git 0705139 的 sim-1 canary
+= rc 1 点名「demo sim 1 != this build sim 2 (recorded with 3.13.0)」
++ `--demo-force` rc 0 WARN + **force 回放终档 savenorm ≡ sim-2 canary
+= 纯键鼠录制行为恒等最强形**】；S3 全套 **2787/2787**（+3：
+RTTriggerSprintDigitize【0.2 死区边界 6553/6554 同款钉 + LT 恒零】/
+L3CrouchHold / FlyToggleKeyIsGamepadOnly【256 键黑盒无孪生 + B 边
+缘精确】+ TriggersUnmapped re-pin 为 LeftTriggerUnmapped）；性能 A/B
+同档【旧 = d9c8c0a v3.13.0 + g139 vs 新 + g139，900f 无输入：PERF-WIN
+upd 0.665/0.647/0.705 vs 0.671/0.628/0.693 + render/swap 三窗同档（旧
+侧 win1 swap max 15139 ms = 一次性 OS 停顿 med 正常）+ fluid·fires·
+spread·ents·stream 同档 + changesApplied 9/2/1 vs 9/3/1【win2 差 =
+real-dt 追赶抖动 PITS 385 域】+ **终档 savenorm EXACT**】。PITS 396
+（Python 镜像常量漏 bump 门内捕获 + `kKeyCount` 尾钉 = GameKey 加成员
+须同步【漏 = 新键索引越出 array 边界 -Werror 零报警静默 OOB】）。
+**实机验收归用户**（门强度记档同款 V3-8：本环境全合成事件单测，山湾
+克隆实机手感 = 你终审）。详见 `docs/archive/phase-3.14.0.md`。
+
 ## v3.13.0（2026-11-06）— demo 回放独立 sim 版本（旧 .dmo 零迁移直放，门 203 全 PASS）
 
 **用户报障**：`--demo assets/demos/example.dmo` 被拒「demo recorded

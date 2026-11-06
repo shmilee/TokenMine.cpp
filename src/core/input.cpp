@@ -60,17 +60,26 @@ std::optional<MouseButton> Input::mapButton(int sdlButton) {
 }
 
 GamepadButtonAction mapGamepadButton(int sdlButton) {
-    // V3-8: the v1 mapping table (the Xbox standard layout). The
+    // V3-8: the mapping table (the Xbox standard layout; the SDL
+    // controller DB normalizes the PlayStation / Switch layouts to the
+    // same logical buttons, so this single table covers all three).
+    // V3-8b (the user's three habit rulings): the sprint moves from B
+    // to the RT TRIGGER (an axis, below), B becomes the DEDICATED
+    // flight toggle (GameKey::FlyToggle — a single press flips, no
+    // double-tap window), and L3 fills the crouch gap (the keyboard's
+    // LeftControl's gamepad twin, the MC Java convention). The
     // intentionally-unmapped buttons return std::monostate (the
-    // documented deviation: LT/RT are trigger axes, not buttons; GUIDE /
-    // L3 / R3 / DPAD up-down-left / the paddles / the touchpad stay
-    // unmapped in v1).
+    // documented deviation: LT / GUIDE / R3 / DPAD up-down-left / the
+    // paddles / the touchpad stay unmapped).
     switch (sdlButton) {
         case SDL_GAMEPAD_BUTTON_SOUTH:
             return GameKey::Space; // A: jump (double-tap = the fly, the
-                                    // Space's existing semantics inherit)
+                                    // Space's existing semantics inherit
+                                    // — the B's dedicated toggle is the
+                                    // V3-8b addition, the redundancy is
+                                    // documented)
         case SDL_GAMEPAD_BUTTON_EAST:
-            return GameKey::LeftShift; // B: sprint
+            return GameKey::FlyToggle; // B: the flight toggle (V3-8b)
         case SDL_GAMEPAD_BUTTON_NORTH:
             return GameKey::E; // X: the inventory screen
         case SDL_GAMEPAD_BUTTON_WEST:
@@ -85,6 +94,10 @@ GamepadButtonAction mapGamepadButton(int sdlButton) {
             return GameKey::Escape; // close panel / ESC
         case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
             return GameKey::Tab; // the hotbar cycle
+        case SDL_GAMEPAD_BUTTON_LEFT_STICK:
+            return GameKey::LeftControl; // L3: crouch (V3-8b — the
+                                          // keyboard's Ctrl's gamepad
+                                          // twin, held while pressed)
         default:
             return std::monostate {};
     }
@@ -331,9 +344,22 @@ void Input::handleGamepadAxis(int sdlAxis, std::int16_t value) {
                                           kGamepadAxisDeadzone) *
                 kGamepadLookPixelsPerUnit;
             break;
+        case SDL_GAMEPAD_AXIS_RIGHT_TRIGGER: {
+            // V3-8b: the RT trigger = the sprint (the keyboard's
+            // LeftShift's gamepad twin). The digitize mirrors the left
+            // stick (the same deadzone; the trigger is one-directional,
+            // so the remap's sign IS the pressed test): outside the
+            // deadzone = held, at/below = released. A full recompute
+            // per event (the down/up edges land on the crossings).
+            const float rt = remapAxisOutsideDeadzone(
+                static_cast<float>(value) / kGamepadAxisFullScale,
+                kGamepadAxisDeadzone);
+            setKeySource(GameKey::LeftShift, kInputSourceGamepad, rt > 0.0f);
+            break;
+        }
         default:
-            // V3-8: the triggers (LEFT_TRIGGER / RIGHT_TRIGGER) are not
-            // mapped in v1 (the documented deviation) — zero state change.
+            // V3-8: the LEFT_TRIGGER is not mapped (the documented
+            // deviation) — zero state change.
             break;
     }
 }

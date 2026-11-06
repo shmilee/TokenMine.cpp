@@ -68,6 +68,18 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **demo sim 镜像常量漏 bump + GameKey 尾钉 kKeyCount（PITS 396，
+  门 204 v3.14.0 V3-8b 手柄映射）**——① **`tools/make_example_demo.py`
+  的 `SIM_VERSION` = kDemoSimVersion 的 Python 镜像**：C++ bump
+  （1→2）后忘记同步 Python 常量 → 重新 author 的 example.dmo 静默
+  写成 sim 1（recorded_with 却是新版 = 自相矛盾的资产）——门 S2 首跑
+  即被 sim 门点名拒收**捕获**（正是 sim 门的设计目的 = 金丝雀先于
+  用户发现）；教训 = **bump kDemoSimVersion 时 grep 全仓镜像**（C++
+  常量 + Python 工具 + 文档计数）。② **`kKeyCount = GameKey::T + 1`
+  = 尾成员钉**：GameKey 加成员（FlyToggle）须同步 kKeyCount——漏更
+  新 = 新键索引越出 `std::array<..., kKeyCount>` 边界（-Werror 零
+  报警，静默 OOB）；enum 尾部「Keep in sync with kKeyCount」注释是
+  唯一守卫，加成员先 grep kKeyCount。
 - **S1 锚假失败 = 用户 config 调值 + 时钟映射误读（PITS 394，门 203
   v3.13.0 demo sim 版本）**——base19 锚 = **committed config** 捕获
   （ui.scale 1.5）；用户其后把工作树 config.json 调成 ui.scale 2.0

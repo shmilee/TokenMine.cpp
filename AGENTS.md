@@ -30,10 +30,12 @@ v3.10.0 = V3-6 世界边缘雾（门 200，11-05：填充感知 fog end，
 202，11-06：kMobShadowSideScale 1.5→1.0，物理 AABB 质心探针定案
 不动——MC 同款）；**v3.13.0 = demo 独立 sim 版本（门 203，11-06：
 仅模拟语义变更才 bump + legacy 版本指纹零迁移直放 + --demo-force +
-4 demo canary）**）——**3.x 矩阵 11 项全 ✅（v3.1.0–v3.11.0 门
-191–201）+ 矩阵后报障 v3.12.0（门 202）+ v3.13.0（门 203）**；方向
-项/内容遗留 = 11-06 用户定案入 3.x 矩阵（V3-8b / V3-10~V3-15 七项
-⬜，BACKLOG 待执行项明细）
+4 demo canary）；**v3.14.0 = V3-8b 手柄习惯映射定案（门 204，11-06：
+L3 蹲伏 + RT 疾跑 + B 飞行专用钮【用户三项定案，config 自定义不做】+
+SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）**）——**3.x 矩阵
+18 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
+（门 202）/ v3.13.0（门 203）/ v3.14.0（门 204）+ 11-06 扩容 7 项
+（V3-8b ✅ + V3-10~V3-15 ⬜ 六项，BACKLOG 待执行项明细）**
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -92,7 +94,7 @@ v3.10.0 = V3-6 世界边缘雾（门 200，11-05：填充感知 fog end，
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2784/2784**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2787/2787**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 30（V3-1 Phase B 下界维度：player.dimension 严格词表
   恒写 + nether 段 {blocks,fluids,states} + nether_entities 恒写 +
   派生 seed 不落盘；schema 其余与 29 一致，29 携新键 = version lie
@@ -191,6 +193,27 @@ v3.10.0 = V3-6 世界边缘雾（门 200，11-05：填充感知 fog end，
   零 diff + crop 3× 目检同场景同羊同位】；性能 A/B 同档【changes-
   Applied 逐位 + 终档 savenorm EXACT】；PITS 392【DEBUG 事件行
   grep 假阴性】；详见 `docs/archive/phase-3.12.0.md`）；
+  门计数 204（**V3-8b 手柄习惯映射定案 v3.14.0** 门 204 全 PASS：
+  用户 11-06 三项定案【调研先：SDL3 手柄数据库归一化 Xbox/PS/Switch
+  三大布局到同一逻辑位 = 单表覆盖无需多表，山湾克隆 = 数据库已识别
+  V3-8a 实机铁证】：**L3 = 蹲伏**【补键盘 LeftControl 手柄缺口 MC
+  Java 惯例】/ **RT 扳机 = 疾跑**【0.2 死区数字化按住 = Shift 左摇
+  杆同款，B 解放】/ **B = 飞行 toggle 专用钮**【新 GameKey::FlyToggle
+  仅手柄键 = mapKey 永不返回 256 键黑盒钉，单击 setFlying(!) 无双击
+  窗，键盘双击 Space 不变 A 双击冗余记偏离】；config 全自定义 = 定案
+  不做；LT/R3/GUIDE/Dpad 上下左保持未映射记档；**首个实际 sim bump
+  1 → 2**【录制的 gamepad 事件按当前解释重放 = v3.13.0「输入路由」
+  条款首实例；4 canary 重新 author；门内捕获 Python 镜像常量 SIM_
+  VERSION 漏 bump = 金丝雀先于用户发现 PITS 396①】；2787/2787（+3
+  RTTriggerSprintDigitize/L3CrouchHold/FlyToggleKeyIsGamepadOnly +
+  TriggersUnmapped re-pin）；结构免疫第 84 次【S1 ≡ base19 committed
+  config 口径逐字节 + savenorm EXACT——手柄映射 = 无手柄冷路径】；S2
+  sim-2 canary 4 demo ×2 RAW + savenorm EXACT；**S2b 首个 bump 实证**
+  【sim-1 旧 canary rc 1 点名 + --demo-force rc 0 WARN + force 终档
+  savenorm ≡ sim-2 canary = 纯键鼠录制行为恒等最强形】；性能 A/B 同
+  档【900f 无输入 PERF-WIN 三窗同档 + changesApplied 9/2/1 vs 9/3/1
+  real-dt 域 + 终档 savenorm EXACT】；**实机手感验收归用户**【门强度
+  记档同款 V3-8】；详见 `docs/archive/phase-3.14.0.md`）；
   门计数 203（**demo 独立 sim 版本 v3.13.0** 门 203 全 PASS：用户
   报障 `--demo example.dmo` 被拒"recorded with v3.11.0, this is
   v3.12.0 - incompatible"【旧设计 = 构建版本串当模拟语义代理，纯渲染
@@ -513,7 +536,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 永不提交 `opencode-sessions/` 下任何文件（本地））→
 7. 中文阶段报告（标准结构：实现内容/变更文件/测试/构建与验证结果/已知问题/下一步建议）。
 
-## 坑位 Top 8（全文 docs/PITS.md，395 条；pre-3.x 条目在 docs/archive/PITS_PRE3X.md）
+## 坑位 Top 8（全文 docs/PITS.md，396 条；pre-3.x 条目在 docs/archive/PITS_PRE3X.md）
 
 1. **SDL grab delta**（P28）：输入 E2E 全帧字节一致不保证——存档 yaw/pitch 为漂移
    探测器；驱动 warp 用实际窗口原点（实测 (4,64)）+ (632,352)。
@@ -549,7 +572,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（395 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（396 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

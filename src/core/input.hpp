@@ -115,10 +115,14 @@ enum class GameKey {
     C, // UX-4: cycle the camera First -> ThirdBack -> ThirdFront (locked
         // pointer only; V2-1: the Minecraft F5 order)
     T, // UX-7: skip the tutorial (locked pointer only)
+    FlyToggle, // V3-8b: the gamepad's DEDICATED flight toggle (the B/EAST
+               // button — a single press flips the fly; the keyboard's
+               // Space double-tap is untouched). Gamepad-only: no
+               // keyboard key maps to it (mapKey never returns it).
     // Keep in sync with kKeyCount.
 };
 
-inline constexpr int kKeyCount = static_cast<int>(GameKey::T) + 1;
+inline constexpr int kKeyCount = static_cast<int>(GameKey::FlyToggle) + 1;
 
 enum class MouseButton {
     Left,

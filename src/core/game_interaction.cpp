@@ -142,6 +142,17 @@ void Game::handleInteraction(double dt) {
             m_player->suppressJumpGrant();
         }
     }
+    // V3-8b: the gamepad's DEDICATED flight toggle (the B/EAST button —
+    // GameKey::FlyToggle is gamepad-only, mapKey never returns it): a
+    // SINGLE press flips the fly, no double-tap window, no jump grant
+    // to swallow (FlyToggle is not Space, so no jump is granted). Same
+    // guards as the Space toggle (the locked-pointer section, alive
+    // only). The A's double-tap through the Space's path still works —
+    // the documented redundancy (the user's ruling: the dedicated
+    // button, the keyboard convention untouched).
+    if (m_input.wasPressed(GameKey::FlyToggle) && !m_player->isDead()) {
+        m_player->setFlying(!m_player->isFlying());
+    }
     if (m_input.wasPressed(MouseButton::Right)) {
         // Campfire cooking (Phase 71): a campfire under the crosshair
         // owns the click BEFORE the item channels — Minecraft places the

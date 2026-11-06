@@ -14,7 +14,7 @@
 > 【V2-18 门 190，AO 世界光照】→ **225272【V3-6 门 200，填充感知雾 = 3.x
 > 首重锚】**；门 184–189 = 结构免疫第 65–70 次免重锚；门 191–199 =
 > 第 72–80 次；门 201–202 = 第 81–82 次免重锚（对 base19）【v3.0.0
-> banner = 第 71 次】）、PITS **394**。上一轮全面刷新
+> banner = 第 71 次】）、PITS **396**。上一轮全面刷新
 > （2026-11-02）止于 v2.0.0、2026-11-03 增量止于 v2.3.0（下条），本次把
 > v2.11.0 → v2.19.0 的机制（提前项 `[V2-19]` + 第二批 `[V2-11]`~`[V2-18]`，
 > 逐版见 `docs/archive/v2x/CHANGELOG.md`，细节证据见 `docs/archive/v2x/`
@@ -129,21 +129,32 @@
   鼠标转向——**左键点击锁定指针；转向仅在指针锁定时生效**（未锁定光标不转
   视角 = 无输入运行截图逐字节复现的保证，硬规则 5）：yaw 0 = 朝 -Z、正 =
   左转；pitch 正 = 上、clamp ±~89°；灵敏度 0.0025 rad/px
-- **手柄 `[V3-8]`（v3.3.0，输入边界层）**：SDL3 GameController 事件 →
+- **手柄 `[V3-8]`（v3.3.0，输入边界层）+ `[V3-8b]`（v3.14.0 习惯定案
+  映射）**：SDL3 GameController 事件 →
   游戏已消费的同一 `GameKey`/`MouseButton` 状态——**源位掩码 OR 语义**
   （`m_keyDown` 每源一 bit：bit0 键鼠 / bit1 手柄；`isDown` = 任一源按
   下；每源独立 rising edge；`wasReleased`（弓）仅本源 falling 且掩码清 0
   才置 = 另一源仍按着弓不松手；**无手柄 = bit1 永不置位 = 位级恒等**
-  （结构免疫根 + legacy fixture 单测钉））。映射（v1，Xbox 布局）：左摇杆
-  = 移动（死区 `kGamepadAxisDeadzone 0.2` 外数字化，每次 axis 事件四方向
-  全量重算幂等）/ 右摇杆 = 视角（死区外重映射 × `kGamepadLookPixelsPerUnit
-  100` 合成 mouseDelta：杆右 = xrel+，杆上 = yrel−）/ A = Space（双击飞行
-  自动继承）/ B = LeftShift / X = E / Y = Q / LB = 左键 / RB = 右键 /
-  Back = C / Start = Escape / D-pad 右 = Tab；LT/RT/L3/R3/Guide/D-pad 上下
-  左/paddles = v1 不映射（记档）。单手柄模型（第二手柄忽略）；连断日志 +
-  F3 末行连接态；断连清全部手柄位**不置释放边**（弓 stale-up 分支取消蓄力
-  而非悬挂）。无 config 键（映射 = 命名常量）；`SDL_Init(VIDEO | GAMEPAD)`
-  （无手柄环境惰性零成本）
+  （结构免疫根 + legacy fixture 单测钉））。映射（**V3-8b 定案表**，
+  Xbox 布局——SDL 手柄数据库把 PlayStation / Switch 布局归一化到同一
+  逻辑位 = 单表覆盖三大布局）：左摇杆 = 移动（死区
+  `kGamepadAxisDeadzone 0.2` 外数字化，每次 axis 事件四方向全量重算幂
+  等）/ 右摇杆 = 视角（死区外重映射 × `kGamepadLookPixelsPerUnit 100`
+  合成 mouseDelta：杆右 = xrel+，杆上 = yrel−）/ **RT 扳机 = LeftShift
+  疾跑**（V3-8b：0.2 死区数字化按住 = Shift，左摇杆同款；原 B 位解放）/
+  **A = Space**（跳跃 + 双击飞行继承，记档冗余 = B 已有专用钮）/ **B =
+  `GameKey::FlyToggle` 飞行专用钮**（V3-8b：单击直接 `setFlying(!)`，无
+  双击窗；**仅手柄键** = `mapKey` 永不返回【黑盒 256 键扫描单测钉】，键
+  盘飞行 = Space 双击不变）/ X = E / Y = Q / LB = 左键 / RB = 右键 /
+  Back = C / Start = Escape / D-pad 右 = Tab / **L3 = LeftControl 蹲伏**
+  （V3-8b：补键盘 Ctrl 的手柄孪生缺口，MC Java 惯例，按住 = 蹲）；LT /
+  R3 / Guide / D-pad 上下左 / paddles = 不映射（记档）。单手柄模型
+  （第二手柄忽略）；连断日志 + F3 末行连接态；断连清全部手柄位**不置释
+  放边**（弓 stale-up 分支取消蓄力而非悬挂）。无 config 键（映射 = 命
+  名常量；全自定义 = V3-8b 用户定案不做）；`SDL_Init(VIDEO | GAMEPAD)`
+  （无手柄环境惰性零成本）；**V3-8a**（用户 11-06 并行提交 d5a5ea6）=
+  `SDL_OpenGamepad` 显式 open（SDL 3.x 事件须 open 后才投递——connected
+  ≠ 可用，合成事件单测盲区，PITS 395）
 - **第三人称 `[UX-4]`/`[UX-8g]`/v2.0.0**：`C` 切换第一/第三人称（MC 现代相机键；
   F5 已被手动存档占用 = 记档偏离；仅指针锁定时生效）——第三人称 = 相机**眼位后
   上方球面偏移 4.0 块**（`kThirdPersonDistance`，offset = −Camera::forward×D 与
@@ -1034,7 +1045,12 @@
   S6 七面实证）；**零 format** = 独立文件族，存档 schema 30 零触碰；
   **canary 纪律**（见 PROTOCOL.md E2E 协议）：4 个 shipped demo = 模拟
   语义金丝雀，每版门内回放 savenorm EXACT——核心改动破坏 canary =
-  必须 bump sim + 重新 author（时间线 JSON 字节可复现）。
+  必须 bump sim + 重新 author（时间线 JSON 字节可复现）。**v3.14.0 =
+  首个实际 bump（1 → 2）**：V3-8b 手柄输入语义变更（B 疾跑 → 飞行专用
+  钮 / L3 → 蹲伏 / RT → 疾跑——录制的 gamepad 事件按**当前解释**重放
+  =「输入路由」条款首个实例），v3.11–v3.13 时代 .dmo（sim 1）= 点名
+  拒 + `--demo-force` 强制回放【纯键鼠录制的 force 回放行为恒等 = 门
+  204 S2b 终档 savenorm ≡ 实证】。
 - **注入内核**（`core/demo` 纯函数，三入口共享）：`DemoPlayer.
   injectForFrame` = 该帧全部 events **同序** → `m_input.handle*`（**Input
   公开事件入口 = pump 的 SDL 事件同款收口，零映射层** = E2E xdotool 同

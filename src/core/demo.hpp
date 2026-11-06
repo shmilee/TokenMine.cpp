@@ -61,7 +61,15 @@ inline constexpr const char* kDemoFileVersion = TM_VERSION;
 // Legacy files (the pre-v3.13.0 `version`-only schema) map to sim 1
 // (sound: the old strict gate proved record-build == replay-build,
 // hence sim-identical lineage).
-inline constexpr int kDemoSimVersion = 1;
+//
+// Bump history: 1 = the V3-9..V3-13 era (the sim gate's introduction).
+// 2 (v3.14.0, V3-8b) = the gamepad's INPUT-SEMANTICS change: B/EAST
+// sprint -> the dedicated flight toggle, L3 -> crouch, the RT trigger
+// -> sprint — a recorded gamepad event replays through the CURRENT
+// interpretation, so a sim-1 demo carrying L3/RT/B events would
+// silently behave differently = the bump (the discipline's "input
+// routing" clause, first real instance).
+inline constexpr int kDemoSimVersion = 2;
 
 // The demo dt's bound: the main loop's kMaxDt clamp (the same value —
 // a recorded wall dt is already clamped by the loop, an author's 1/60

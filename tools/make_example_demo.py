@@ -48,8 +48,9 @@ BUTTONS = {"left": 0x01, "right": 0x02, "middle": 0x04}
 
 # The demo's simulation-semantics version (mirrors src/core/demo.hpp's
 # kDemoSimVersion — the replay-admissibility gate, NOT the project
-# version).
-SIM_VERSION = 1
+# version; BUMP IT with the C++ constant, the v3.14.0/V3-8b gamepad
+# input-semantics change = 2).
+SIM_VERSION = 2
 
 # The example's timeline (the design's contract's "simple version": the
 # spawn area's look-around + the mine hold + the inventory + the end's

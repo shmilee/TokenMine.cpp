@@ -54,10 +54,11 @@ bool actionIs(const GamepadButtonAction& action, const T& value) {
     return std::holds_alternative<T>(action) && std::get<T>(action) == value;
 }
 
-// The nine v1-mapped buttons (the design's table — the Xbox standard
-// layout; LT/RT are trigger AXES, not buttons).
-const std::array<int, 9>& mappedButtons() {
-    static const std::array<int, 9> kMapped = {
+// The ten V3-8b-mapped buttons (the ruling table — the Xbox standard
+// layout normalized; LT is a trigger AXIS not mapped, RT is the
+// sprint's axis tested separately).
+const std::array<int, 10>& mappedButtons() {
+    static const std::array<int, 10> kMapped = {
         SDL_GAMEPAD_BUTTON_SOUTH,
         SDL_GAMEPAD_BUTTON_EAST,
         SDL_GAMEPAD_BUTTON_WEST,
@@ -67,6 +68,7 @@ const std::array<int, 9>& mappedButtons() {
         SDL_GAMEPAD_BUTTON_BACK,
         SDL_GAMEPAD_BUTTON_START,
         SDL_GAMEPAD_BUTTON_DPAD_RIGHT,
+        SDL_GAMEPAD_BUTTON_LEFT_STICK,
     };
     return kMapped;
 }
@@ -78,8 +80,10 @@ TEST(GamepadTest, ButtonMappingTable) {
     // Xbox standard layout).
     EXPECT_TRUE(actionIs(mapGamepadButton(SDL_GAMEPAD_BUTTON_SOUTH),
                          GameKey::Space));
+    // V3-8b: B is the dedicated flight toggle (the sprint moved to
+    // the RT trigger axis).
     EXPECT_TRUE(actionIs(mapGamepadButton(SDL_GAMEPAD_BUTTON_EAST),
-                         GameKey::LeftShift));
+                         GameKey::FlyToggle));
     EXPECT_TRUE(actionIs(mapGamepadButton(SDL_GAMEPAD_BUTTON_NORTH),
                          GameKey::E));
     EXPECT_TRUE(actionIs(mapGamepadButton(SDL_GAMEPAD_BUTTON_WEST),
@@ -94,6 +98,10 @@ TEST(GamepadTest, ButtonMappingTable) {
                          GameKey::Escape));
     EXPECT_TRUE(actionIs(mapGamepadButton(SDL_GAMEPAD_BUTTON_DPAD_RIGHT),
                          GameKey::Tab));
+    // V3-8b: L3 fills the crouch gap (the keyboard's LeftControl's
+    // gamepad twin).
+    EXPECT_TRUE(actionIs(mapGamepadButton(SDL_GAMEPAD_BUTTON_LEFT_STICK),
+                         GameKey::LeftControl));
 }
 
 TEST(GamepadTest, MappedButtonsPressAndRelease) {
@@ -108,7 +116,7 @@ TEST(GamepadTest, MappedButtonsPressAndRelease) {
         bool isMouse;
     } cases[] = {
         {SDL_GAMEPAD_BUTTON_SOUTH, GameKey::Space, MouseButton::Left, false},
-        {SDL_GAMEPAD_BUTTON_EAST, GameKey::LeftShift, MouseButton::Left, false},
+        {SDL_GAMEPAD_BUTTON_EAST, GameKey::FlyToggle, MouseButton::Left, false},
         {SDL_GAMEPAD_BUTTON_NORTH, GameKey::E, MouseButton::Left, false},
         {SDL_GAMEPAD_BUTTON_WEST, GameKey::Q, MouseButton::Left, false},
         {SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, GameKey::W, MouseButton::Left, true},
@@ -116,6 +124,8 @@ TEST(GamepadTest, MappedButtonsPressAndRelease) {
         {SDL_GAMEPAD_BUTTON_BACK, GameKey::C, MouseButton::Left, false},
         {SDL_GAMEPAD_BUTTON_START, GameKey::Escape, MouseButton::Left, false},
         {SDL_GAMEPAD_BUTTON_DPAD_RIGHT, GameKey::Tab, MouseButton::Left, false},
+        {SDL_GAMEPAD_BUTTON_LEFT_STICK, GameKey::LeftControl,
+         MouseButton::Left, false},
     };
     for (const auto& c : cases) {
         Input input;
@@ -141,10 +151,11 @@ TEST(GamepadTest, MappedButtonsPressAndRelease) {
 }
 
 TEST(GamepadTest, UnmappedButtonsZeroChange) {
-    // V3-8: every valid SDL button NOT in the v1 table (GUIDE / L3 / R3 /
+    // V3-8: every valid SDL button NOT in the V3-8b table (GUIDE / R3 /
     // DPAD up-down-left / the paddles / the touchpad / the MISC family —
-    // LT/RT are trigger AXES, tested separately) = zero state change,
-    // over a primed state (the unmapped press must not disturb it).
+    // LT/RT are trigger AXES, the RT's sprint is tested separately) =
+    // zero state change, over a primed state (the unmapped press must
+    // not disturb it).
     const auto& kMapped = mappedButtons();
     Input input;
     input.frameBegin();
@@ -160,6 +171,86 @@ TEST(GamepadTest, UnmappedButtonsZeroChange) {
         input.handleGamepadButton(b, false);
         EXPECT_EQ(snapshot(input), before) << b;
     }
+}
+
+// ---------------------------------------------------------------------------
+// V3-8b: the user's three habit rulings (L3 = crouch / RT = sprint /
+// B = the dedicated flight toggle)
+// ---------------------------------------------------------------------------
+
+TEST(GamepadTest, RTTriggerSprintDigitize) {
+    // V3-8b: the RT trigger = the sprint (the keyboard's LeftShift's
+    // gamepad twin), the left-stick's digitize twin (the same 0.2
+    // deadzone; the trigger is one-directional so the remap's sign IS
+    // the pressed test). The boundary values mirror the stick's
+    // pin: 6553/32768 = 0.19998 <= 0.2 inside, 6554 = 0.20001
+    // outside.
+    Input input;
+    input.frameBegin();
+    connectGamepad(input);
+    // Below / on the deadzone = no sprint.
+    for (int v : {0, 3000, 6553}) {
+        input.handleGamepadAxis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER,
+                                static_cast<std::int16_t>(v));
+        EXPECT_FALSE(input.isDown(GameKey::LeftShift)) << v;
+    }
+    // Past the deadzone = the press edge + held.
+    input.frameBegin();
+    input.handleGamepadAxis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, 10000);
+    EXPECT_TRUE(input.isDown(GameKey::LeftShift));
+    EXPECT_TRUE(input.wasPressed(GameKey::LeftShift));
+    input.frameBegin();
+    EXPECT_TRUE(input.isDown(GameKey::LeftShift));
+    EXPECT_FALSE(input.wasPressed(GameKey::LeftShift));
+    // Back inside the deadzone = the release.
+    input.frameBegin();
+    input.handleGamepadAxis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, 0);
+    EXPECT_FALSE(input.isDown(GameKey::LeftShift));
+    // The LT trigger stays unmapped (the documented deviation) — zero
+    // state change even at full press.
+    const InputSnapshot before = snapshot(input);
+    input.handleGamepadAxis(SDL_GAMEPAD_AXIS_LEFT_TRIGGER, 32767);
+    input.handleGamepadAxis(SDL_GAMEPAD_AXIS_LEFT_TRIGGER, 0);
+    EXPECT_EQ(snapshot(input), before);
+}
+
+TEST(GamepadTest, L3CrouchHold) {
+    // V3-8b: L3 (the left-stick press, a BUTTON in the SDL gamepad
+    // vocabulary) = the crouch (the keyboard's LeftControl's gamepad
+    // twin, held while the stick is pressed).
+    Input input;
+    input.frameBegin();
+    connectGamepad(input);
+    input.handleGamepadButton(SDL_GAMEPAD_BUTTON_LEFT_STICK, true);
+    EXPECT_TRUE(input.isDown(GameKey::LeftControl));
+    EXPECT_TRUE(input.wasPressed(GameKey::LeftControl));
+    input.frameBegin();
+    input.handleGamepadButton(SDL_GAMEPAD_BUTTON_LEFT_STICK, false);
+    EXPECT_FALSE(input.isDown(GameKey::LeftControl));
+}
+
+TEST(GamepadTest, FlyToggleKeyIsGamepadOnly) {
+    // V3-8b: GameKey::FlyToggle has NO keyboard twin (the keyboard's
+    // fly stays the Space double-tap — the black-box proof: pressing
+    // every virtual keycode never lands FlyToggle) and the B press
+    // lands exactly its edge.
+    Input kb;
+    kb.frameBegin();
+    for (int k = 1; k < 256; ++k) {
+        kb.handleKey(static_cast<std::uint32_t>(k), true);
+        EXPECT_FALSE(kb.isDown(GameKey::FlyToggle)) << k;
+        kb.handleKey(static_cast<std::uint32_t>(k), false);
+    }
+    Input input;
+    input.frameBegin();
+    connectGamepad(input);
+    input.handleGamepadButton(SDL_GAMEPAD_BUTTON_EAST, true);
+    EXPECT_TRUE(input.wasPressed(GameKey::FlyToggle));
+    EXPECT_FALSE(input.isDown(GameKey::Space));
+    EXPECT_FALSE(input.isDown(GameKey::LeftShift));
+    input.frameBegin();
+    input.handleGamepadButton(SDL_GAMEPAD_BUTTON_EAST, false);
+    EXPECT_FALSE(input.isDown(GameKey::FlyToggle));
 }
 
 TEST(GamepadTest, LeftStickDeadzoneBoundary) {
@@ -344,17 +435,16 @@ TEST(GamepadTest, RemapAxisFormulaPinned) {
     EXPECT_EQ(kInputSourceGamepad, 0x2);
 }
 
-TEST(GamepadTest, TriggersUnmappedZeroChange) {
-    // V3-8: LT/RT are trigger AXES (not buttons) and are not mapped in
-    // v1 (the documented deviation) = zero state change at any value.
+TEST(GamepadTest, LeftTriggerUnmappedZeroChange) {
+    // V3-8b: the LT trigger stays unmapped (the documented deviation)
+    // = zero state change at any value (the RT moved to the sprint —
+    // RTTriggerSprintDigitize covers it).
     Input input;
     input.frameBegin();
     connectGamepad(input);
     const InputSnapshot before = snapshot(input);
     for (int v : {0, 32767, -32767, 16384}) {
         input.handleGamepadAxis(SDL_GAMEPAD_AXIS_LEFT_TRIGGER,
-                                static_cast<std::int16_t>(v));
-        input.handleGamepadAxis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER,
                                 static_cast<std::int16_t>(v));
     }
     EXPECT_EQ(snapshot(input), before);

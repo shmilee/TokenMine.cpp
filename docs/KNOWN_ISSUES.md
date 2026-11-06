@@ -698,6 +698,9 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
   强制试放（结果可能不对，WARN 点名，仅 bypass sim 门 schema 严格性
   保留）；`recorded_with` 构建串仅信息展示永不拒播；sim bump 纪律 +
   canary 条 = MECHANICS.md「demo 回放」节 / PROTOCOL.md E2E 协议。
+  **v3.14.0 起 sim = 2**（V3-8b 手柄输入语义 = 首个实际 bump）：
+  v3.11–v3.13 时代录的 .dmo（sim 1）须 `--demo-force`（纯键鼠录制
+  行为恒等，门 204 S2b 实证）。
 
 ## 实机报障阴影缩尺（v3.12.0，门 202）
 

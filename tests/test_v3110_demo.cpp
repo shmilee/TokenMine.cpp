@@ -378,12 +378,14 @@ TEST(V3110Demo, LoadSimMismatch) {
     // rejected by name (the recorded build is informational in the
     // message).
     DemoFile f = fixtureFile();
-    f.sim = 2;
+    f.sim = kDemoSimVersion + 1;
     f.recordedWith = "3.0.0";
     const auto p = tempDemo(f);
     auto r = loadDemoFile(p);
     ASSERT_FALSE(r.ok());
-    const std::string expectGate = "demo sim 2 != this build sim " +
+    const std::string expectGate = "demo sim " +
+                                   std::to_string(kDemoSimVersion + 1) +
+                                   " != this build sim " +
                                    std::to_string(kDemoSimVersion);
     EXPECT_NE(r.error().message.find(expectGate), std::string::npos);
     EXPECT_NE(r.error().message.find("(recorded with 3.0.0)"),
@@ -394,7 +396,7 @@ TEST(V3110Demo, LoadSimMismatch) {
     // the payload untouched.
     auto forced = loadDemoFile(p, true);
     ASSERT_TRUE(forced.ok()) << forced.error().describe();
-    EXPECT_EQ(forced->sim, 2);
+    EXPECT_EQ(forced->sim, kDemoSimVersion + 1);
     EXPECT_EQ(forced->recordedWith, "3.0.0");
 }
 
@@ -403,9 +405,13 @@ TEST(V3110Demo, LoadSimMismatch) {
 // mapping + the mixed-schema reject)
 // ---------------------------------------------------------------------------
 
-TEST(V3110Demo, SimPinnedToOne) {
-    // The demo family's first simulation-semantics version.
-    EXPECT_EQ(kDemoSimVersion, 1);
+TEST(V3110Demo, SimPinnedToTwo) {
+    // The demo family's simulation-semantics version: 1 = the V3-9..
+    // V3-13 era, 2 = the V3-8b gamepad input-semantics change (B/EAST
+    // sprint -> the dedicated flight toggle, L3 -> crouch, the RT
+    // trigger -> sprint — a recorded gamepad event replays through the
+    // CURRENT interpretation, hence the first real bump).
+    EXPECT_EQ(kDemoSimVersion, 2);
 }
 
 TEST(V3110Demo, ParseLegacyMapping) {
@@ -490,20 +496,26 @@ TEST(V3110Demo, ParseRejectCurrentSchemaFieldShapes) {
     }
 }
 
-TEST(V3110Demo, LoadLegacyFileAccepted) {
-    // The load face of the legacy mapping: a hand-written
-    // pre-v3.13.0 container (the `version`-only payload, the gzip
-    // demo family) loads at sim 1 (the recorded demos stay
-    // replayable — the user's bug-report case).
+TEST(V3110Demo, LoadLegacyFileSimMismatch) {
+    // The load face of the legacy mapping AFTER the first sim bump
+    // (v3.14.0, V3-8b): a hand-written pre-v3.13.0 container (the
+    // `version`-only payload, the gzip demo family) maps to sim 1 —
+    // the gate now names the mismatch (sim 1 != build sim 2) and the
+    // --demo-force escape loads it (payload untouched).
     const std::string body =
         R"({"version": "3.11.0", "world": {"type": "fresh", "seed": 1}, )"
         R"("dts": [0.01], "events": []})";
     const auto p = scratchDir() / "legacy.dmo";
     writeAll(p.string(), gzipEncode(body).value());
     auto r = loadDemoFile(p);
-    ASSERT_TRUE(r.ok()) << r.error().describe();
-    EXPECT_EQ(r->sim, 1);
-    EXPECT_EQ(r->recordedWith, "3.11.0");
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("demo sim 1 != this build sim " +
+                                     std::to_string(kDemoSimVersion)),
+              std::string::npos);
+    auto forced = loadDemoFile(p, true);
+    ASSERT_TRUE(forced.ok()) << forced.error().describe();
+    EXPECT_EQ(forced->sim, 1);
+    EXPECT_EQ(forced->recordedWith, "3.11.0");
 }
 
 TEST(V3110Demo, LoadMissingFile) {
