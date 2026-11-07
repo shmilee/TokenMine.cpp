@@ -7,6 +7,8 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstring>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -263,8 +265,85 @@ Json withoutKey(const Json& root, const std::string& key) {
 
 // A copy of the root minus the "player" object's one key (the withoutKey
 // twin for the nested player — the dimension strip's helper).
+// V3-12c2 (format 33): the serialized document's per-player seam
+// family (the root "player" object's relocated twin — the players[0]
+// entry + the nested "inventory" / "inv_grid"). The shape reads / the
+// entry strips / the old-format simulations all route through these.
+const Json* primaryEntry(const Json& doc) {
+    const Json* players = doc.find("players");
+    return (players != nullptr && players->isArray() &&
+            players->size() > 0)
+               ? &players->at(0)
+               : nullptr;
+}
+Json withPrimaryEntry(
+    const Json& doc, const std::function<Json(const Json&)>& fn) {
+    const Json* players = doc.find("players");
+    if (players == nullptr || players->size() == 0) {
+        return doc;
+    }
+    Json arr = Json::array();
+    arr.push_back(fn(players->at(0)));
+    for (std::size_t i = 1; i < players->size(); ++i) {
+        arr.push_back(players->at(i));
+    }
+    Json out = withoutKey(doc, "players");
+    out["players"] = std::move(arr);
+    return out;
+}
+// The old-format simulation's shape conversion (the 33 document -> the
+// 32-or-below root shape: players[0] -> "player", the nested inventory /
+// inv_grid promoted to the root, the 33-only "end_xp_entities"
+// stripped).
+Json legacyShape(Json doc) {
+    const Json* players = doc.find("players");
+    if (players == nullptr || !players->isArray() || players->size() == 0) {
+        return doc;
+    }
+    Json entry = players->at(0);
+    doc = withoutKey(doc, "players");
+    doc = withoutKey(doc, "end_xp_entities");
+    if (const Json* inv = entry.find("inventory")) {
+        doc["inventory"] = *inv;
+        entry = withoutKey(entry, "inventory");
+    }
+    if (const Json* g = entry.find("inv_grid")) {
+        doc["inv_grid"] = *g;
+        entry = withoutKey(entry, "inv_grid");
+    }
+    doc["player"] = std::move(entry);
+    // V3-12c2: the respawn's int cell's RE-ENCODE (the format-33
+    // document's exact float's legacy (the 32-and-below) shape — the
+    // old writer's floor's twin; the 32-and-below parse's cell-
+    // center's reconstruction's premise).
+    if (const Json* pl = doc.find("player");
+        pl != nullptr && pl->isObject()) {
+        const Json* rp = pl->find("respawn");
+        if (rp != nullptr && rp->isArray() && rp->size() == 3) {
+            Json cell = Json::array();
+            for (std::size_t i = 0; i < 3; ++i) {
+                cell.push_back(Json(std::floor(rp->at(i).asDouble())));
+            }
+            Json plOut = withoutKey(*pl, "respawn");
+            plOut["respawn"] = std::move(cell);
+            doc = withoutKey(doc, "player");
+            doc["player"] = std::move(plOut);
+        }
+    }
+    return doc;
+}
+
 Json withoutPlayerKey(const Json& root, const std::string& key) {
-    const Json* player = root.find("player");
+    // Dual-shape (V3-12c2): the format-33 document's players[0] entry
+    // OR the legacy root "player" (a post-downgrade document — the
+    // stripFormat31Keys's legacyShape-first order's consumer).
+    const Json* player = primaryEntry(root);
+    if (player != nullptr && player->isObject()) {
+        return withPrimaryEntry(root, [key](const Json& e) {
+            return withoutKey(e, key);
+        });
+    }
+    player = root.find("player");
     if (player == nullptr || !player->isObject()) {
         return root;
     }
@@ -281,6 +360,10 @@ Json withoutPlayerKey(const Json& root, const std::string& key) {
 // so the claim is genuine only after the strip. The specific key a test leaves in (or re-adds)
 // is the one under assertion (the version-lie's subject).
 Json stripFormat31Keys(Json root) {
+    // V3-12c2: the format-33 shape's downgrade first (the per-player
+    // array -> the legacy root shape — the 32-or-below claim is
+    // genuine only after the relocation's revert).
+    root = legacyShape(std::move(root));
     // V3-10a: the format-32 keys join the strip (a genuine pre-32 file
     // never carried end / end_entities either — the claim is genuine
     // only after the strip, the dimension/creative shape).
@@ -325,13 +408,26 @@ Json downgradeSlots(const Json& root) {
 // per-format field whitelist rejects it as a version lie otherwise
 // (the downgradeFluids / downgradeSlots twins).
 Json stripTutorialSeries(const Json& root) {
-    const Json* player = root.find("player");
+    // Dual-shape (V3-12c2): the format-33 entry OR the legacy root
+    // "player" (a post-legacyShape document).
+    const Json* player = primaryEntry(root);
+    if (player == nullptr) {
+        player = root.find("player");
+    }
     if (player == nullptr || !player->isObject()) {
         return root;
     }
+    const bool entryShape = (player == primaryEntry(root));
     const Json* tut = player->find("tutorial");
     if (tut == nullptr || !tut->isObject() || tut->find("series") == nullptr) {
         return root;
+    }
+    if (entryShape) {
+        return withPrimaryEntry(root, [tut](const Json& e) {
+            Json playerOut = withoutKey(e, "tutorial");
+            playerOut["tutorial"] = withoutKey(*tut, "series");
+            return playerOut;
+        });
     }
     Json playerOut = withoutKey(*player, "tutorial");
     playerOut["tutorial"] = withoutKey(*tut, "series");
@@ -358,14 +454,36 @@ Json stripXp(const Json& root) {
     Json out = root;
     // The player.xp + player.xp_seed keys (the latter is V2-12, format 27)
     // + player.respawn (V2-13, format 28).
-    if (const Json* player = root.find("player")) {
-        if (player->isObject() &&
-            (player->find("xp") != nullptr ||
-             player->find("xp_seed") != nullptr ||
-             player->find("respawn") != nullptr)) {
+    // Dual-shape (V3-12c2): the format-33 entry OR the legacy root
+    // "player" (a post-legacyShape document — the stripXp's caller
+    // order: stripFormat31Keys first, the xp strip after).
+    const Json* player = primaryEntry(root);
+    const bool entryShape = (player != nullptr);
+    if (!entryShape) {
+        player = root.find("player");
+    }
+    if (player != nullptr && player->isObject() &&
+        (player->find("xp") != nullptr ||
+         player->find("xp_seed") != nullptr ||
+         player->find("respawn") != nullptr)) {
+        if (entryShape) {
+            out = withPrimaryEntry(out, [player](const Json& e) {
+                Json p = e;
+                if (player->find("xp") != nullptr) {
+                    p = withoutKey(p, "xp");
+                }
+                if (player->find("xp_seed") != nullptr) {
+                    p = withoutKey(p, "xp_seed");
+                }
+                if (player->find("respawn") != nullptr) {
+                    p = withoutKey(p, "respawn");
+                }
+                return p;
+            });
+        } else {
             Json p = *player;
             if (player->find("xp") != nullptr) {
-                p = withoutKey(*player, "xp");
+                p = withoutKey(p, "xp");
             }
             if (player->find("xp_seed") != nullptr) {
                 p = withoutKey(p, "xp_seed");
@@ -373,20 +491,39 @@ Json stripXp(const Json& root) {
             if (player->find("respawn") != nullptr) {
                 p = withoutKey(p, "respawn");
             }
+            out = withoutKey(out, "player");
             out["player"] = std::move(p);
         }
     }
-    // The inventory slots' "enchants" (V2-12, format 27).
-    if (const Json* inv = root.find("inventory")) {
-        if (inv->isObject()) {
-            const Json* slots = inv->find("slots");
-            if (slots != nullptr && slots->isArray()) {
-                Json kept = Json::array();
-                for (std::size_t i = 0; i < slots->size(); ++i) {
-                    kept.push_back(stripEnchants(slots->at(i)));
-                }
+    // The inventory slots' "enchants" (V2-12, format 27) — dual-shape:
+    // the format-33 nested entry inventory OR the legacy root one.
+    const Json* inv = nullptr;
+    if (primaryEntry(root) != nullptr) {
+        inv = primaryEntry(root)->find("inventory");
+    } else {
+        inv = root.find("inventory");
+    }
+    if (inv != nullptr && inv->isObject()) {
+        const Json* slots = inv->find("slots");
+        if (slots != nullptr && slots->isArray()) {
+            Json kept = Json::array();
+            for (std::size_t i = 0; i < slots->size(); ++i) {
+                kept.push_back(stripEnchants(slots->at(i)));
+            }
+            if (primaryEntry(root) != nullptr) {
+                out = withPrimaryEntry(out, [inv, &kept](
+                                                const Json& e) {
+                    Json entry = e;
+                    Json invCopy = *inv;
+                    invCopy["slots"] = Json(kept);
+                    entry = withoutKey(entry, "inventory");
+                    entry["inventory"] = std::move(invCopy);
+                    return entry;
+                });
+            } else {
                 Json invCopy = *inv;
                 invCopy["slots"] = std::move(kept);
+                out = withoutKey(out, "inventory");
                 out["inventory"] = std::move(invCopy);
             }
         }
@@ -562,7 +699,7 @@ TEST(SaveParseTest, FormatTwoLoadsWithEmptyGrids) {
     const SaveGame s = makeSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    Json root = *j;
+    Json root = legacyShape(*j);
     root = stripFormat31Keys(std::move(root));
     root["format"] = Json(2);
     root = stripXp(root); // V2-11: strip the format-26+ xp field for this downgrade
@@ -594,8 +731,9 @@ TEST(SaveParseTest, FormatThreeRequiresBothGrids) {
     ASSERT_TRUE(j.ok());
     // Format 19 (CRAFT-1): the E panel's grid ("inv_grid") and the
     // per-block table arrays ("tables") are both required keys.
-    Json missingInv = *j;
-    missingInv = withoutKey(missingInv, "inv_grid");
+    Json missingInv = withPrimaryEntry(*j, [](const Json& e) {
+        return withoutKey(e, "inv_grid");
+    });
     EXPECT_FALSE(parseSave(missingInv, f.items, f.blocks, f.effects, 42).ok());
     Json missingTables = *j;
     missingTables = withoutKey(missingTables, "tables");
@@ -701,7 +839,7 @@ TEST(SaveParseTest, FormatOneLoadsWithoutHealth) {
     SaveGame s = makeSave(f); // playerHealth -1: the field is omitted
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    Json root = *j;
+    Json root = legacyShape(*j);
     root = stripFormat31Keys(std::move(root));
     root["format"] = Json(1);
     root = stripXp(root); // V2-11: strip the format-26+ xp field for this downgrade
@@ -733,7 +871,7 @@ TEST(SaveParseTest, RejectsNegativeHealth) {
     s.playerHealth = 5.0f;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    Json root = *j;
+    Json root = legacyShape(*j);
     root["player"]["health"] = Json(-1.0);
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
@@ -761,7 +899,7 @@ TEST(SaveParseTest, FormatThreeLoadsWithoutHunger) {
     s.playerHunger = -1.0f; // omitted by the serializer
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    Json root = *j;
+    Json root = legacyShape(*j);
     root = stripFormat31Keys(std::move(root));
     root["format"] = Json(3);
     root = stripXp(root); // V2-11: strip the format-26+ xp field for this downgrade
@@ -792,7 +930,7 @@ TEST(SaveParseTest, RejectsNegativeHunger) {
     s.playerHunger = 5.0f;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    Json root = *j;
+    Json root = legacyShape(*j);
     root["player"]["hunger"] = Json(-1.0);
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
@@ -820,7 +958,7 @@ TEST(SaveParseTest, FormatFourLoadsWithoutSaturation) {
     s.playerSaturation = -1.0f; // omitted by the serializer
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    Json root = *j;
+    Json root = legacyShape(*j);
     root = stripFormat31Keys(std::move(root));
     root["format"] = Json(4);
     root = stripXp(root); // V2-11: strip the format-26+ xp field for this downgrade
@@ -851,7 +989,7 @@ TEST(SaveParseTest, RejectsNegativeSaturation) {
     s.playerSaturation = 5.0f;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    Json root = *j;
+    Json root = legacyShape(*j);
     root["player"]["saturation"] = Json(-0.5);
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
@@ -881,9 +1019,27 @@ TEST(SaveParseTest, RejectsMissingRequiredFields) {
     ASSERT_TRUE(j.ok());
     for (const char* key :
          {"seed", "time", "player", "inventory", "entities", "blocks", "fluids"}) {
-        EXPECT_FALSE(
-            parseSave(withoutKey(*j, key), f.items, f.blocks, f.effects, 42).ok())
-            << "missing '" << key << "' must be rejected";
+        if (std::strcmp(key, "player") == 0) {
+            // format 33: the "player" authority is the "players" array
+            // (the whole array missing = the named rejection).
+            EXPECT_FALSE(
+                parseSave(withoutKey(*j, "players"), f.items, f.blocks,
+                          f.effects, 42).ok())
+                << "missing 'players' must be rejected";
+        } else if (std::strcmp(key, "inventory") == 0) {
+            // format 33: the inventory is nested in the entry.
+            Json doc = withPrimaryEntry(*j, [](const Json& e) {
+                return withoutKey(e, "inventory");
+            });
+            EXPECT_FALSE(
+                parseSave(doc, f.items, f.blocks, f.effects, 42).ok())
+                << "missing entry 'inventory' must be rejected";
+        } else {
+            EXPECT_FALSE(
+                parseSave(withoutKey(*j, key), f.items, f.blocks, f.effects,
+                          42).ok())
+                << "missing '" << key << "' must be rejected";
+        }
     }
 }
 
@@ -908,14 +1064,20 @@ TEST(SaveParseTest, RejectsBadPlayer) {
     const SaveGame s = makeSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    Json bad = *j;
+    // V3-12c2: the format-33 entry's field (the root "player"'s
+    // relocated twin — the withPrimaryEntry seam).
     Json shortPos = Json::array();
     shortPos.push_back(Json(1.0));
     shortPos.push_back(Json(2.0));
-    bad["player"]["pos"] = shortPos;
+    Json bad = withPrimaryEntry(*j, [shortPos](const Json& e) {
+        Json entry = withoutKey(e, "pos");
+        entry["pos"] = shortPos;
+        return entry;
+    });
     EXPECT_FALSE(parseSave(bad, f.items, f.blocks, f.effects, 42).ok());
-    bad = *j;
-    bad["player"] = withoutKey(bad["player"], "yaw");
+    bad = withPrimaryEntry(*j, [](const Json& e) {
+        return withoutKey(e, "yaw");
+    });
     EXPECT_FALSE(parseSave(bad, f.items, f.blocks, f.effects, 42).ok());
 }
 
@@ -925,10 +1087,18 @@ TEST(SaveParseTest, RejectsBadInventory) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
 
+    // V3-12c2: the slot-array seam — the format-33 entry's nested
+    // inventory (the root "inventory"'s relocated twin).
     auto withSlots = [&](Json slots) {
-        Json root = *j;
-        root["inventory"]["slots"] = std::move(slots);
-        return root;
+        return withPrimaryEntry(*j, [slots = std::move(slots)](
+                                    const Json& e) mutable {
+            Json entry = e;
+            Json inv = *entry.find("inventory");
+            inv["slots"] = std::move(slots);
+            entry = withoutKey(entry, "inventory");
+            entry["inventory"] = std::move(inv);
+            return entry;
+        });
     };
     // Exactly 36 slots are required in a format-24 file (UX-8f's full
     // backpack): one short, the legacy 27 shape (a version lie) and one
@@ -957,9 +1127,15 @@ TEST(SaveParseTest, RejectsBadInventory) {
             << r.error().message;
     }
 
-    // selected must be a hotbar index.
-    Json bad = *j;
-    bad["inventory"]["selected"] = Json(9);
+    // selected must be a hotbar index (the entry's nested inventory).
+    Json bad = withPrimaryEntry(*j, [](const Json& e) {
+        Json entry = e;
+        Json inv = *entry.find("inventory");
+        inv["selected"] = Json(9);
+        entry = withoutKey(entry, "inventory");
+        entry["inventory"] = std::move(inv);
+        return entry;
+    });
     EXPECT_FALSE(parseSave(bad, f.items, f.blocks, f.effects, 42).ok());
 
     // The specific slot rejections need a FULL 36-slot array (UX-8f)
@@ -1988,7 +2164,7 @@ TEST(SaveParseTest, FormatFiveLoadsWithEmptyFurnaces) {
     s.furnaces[0].state.input = ItemStack {f.items.idForName("beef"), 3};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    Json root = *j;
+    Json root = legacyShape(*j);
     root = stripFormat31Keys(std::move(root));
     root["format"] = Json(5);
     root = stripXp(root); // V2-11: strip the format-26+ xp field for this downgrade
@@ -2026,7 +2202,7 @@ TEST(SaveParseTest, FormatSixMigratesStateToSoleFurnace) {
     s.furnaces[0].state.progressSubsteps = 300;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    Json root = *j;
+    Json root = legacyShape(*j);
     root = stripFormat31Keys(std::move(root));
     root["format"] = Json(6);
     root = stripXp(root); // V2-11: strip the format-26+ xp field for this downgrade
@@ -2067,7 +2243,7 @@ TEST(SaveParseTest, FormatSixMigrationDiscardsWithoutSoleFurnace) {
     s.furnaces[0].state.progressSubsteps = 300;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    Json root = *j;
+    Json root = legacyShape(*j);
     root = stripFormat31Keys(std::move(root));
     root["format"] = Json(6);
     root = stripXp(root); // V2-11: strip the format-26+ xp field for this downgrade
@@ -2384,7 +2560,7 @@ TEST(SaveParseTest, FormatNineLoadsWithoutFires) {
     SaveGame s = makeSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    Json root = *j;
+    Json root = legacyShape(*j);
     root = stripFormat31Keys(std::move(root));
     root["format"] = Json(9);
     root = stripXp(root); // V2-11: strip the format-26+ xp field for this downgrade
@@ -2414,7 +2590,7 @@ TEST(SaveParseTest, FormatNineFireEditMigratesEmpty) {
     s.blockEdits.push_back({BlockPos {1, 53, 1}, "fire"});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    Json root = *j;
+    Json root = legacyShape(*j);
     root = stripFormat31Keys(std::move(root));
     root["format"] = Json(9);
     root = stripXp(root); // V2-11: strip the format-26+ xp field for this downgrade
@@ -2522,7 +2698,7 @@ TEST(SaveFormat8Test, EffectsRoundTripNameSorted) {
                        {"weakness", 30.0}};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    const Json& arr = *j->find("player")->find("effects");
+    const Json& arr = *primaryEntry(*j)->find("effects");
     ASSERT_EQ(arr.size(), 3u);
     EXPECT_EQ(arr.at(0).find("name")->asString(), "poison");
     EXPECT_EQ(arr.at(1).find("name")->asString(), "regeneration");
@@ -2543,8 +2719,8 @@ TEST(SaveFormat8Test, EmptyEffectsArrayIsValid) {
     SaveGame s = makeSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    ASSERT_TRUE(j->find("player")->find("effects") != nullptr);
-    EXPECT_EQ(j->find("player")->find("effects")->size(), 0u);
+    ASSERT_TRUE(primaryEntry(*j)->find("effects") != nullptr);
+    EXPECT_EQ(primaryEntry(*j)->find("effects")->size(), 0u);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_TRUE(out->playerEffects.empty());
@@ -2575,7 +2751,9 @@ TEST(SaveFormat8Test, FormatSevenFileWithoutEffectsLoads) {
     // the rebuild.
     root["player"] = withoutKey(
         withoutKey(withoutKey(withoutKey(withoutKey(withoutKey(
-            *j->find("player"),
+            withoutKey(withoutKey(*primaryEntry(*j),
+                                  "inventory"), // V3-12c2: the entry's
+            "inv_grid"), // nested twins are not legacy player fields
             "xp"),
             "xp_seed"),
             "respawn"),
@@ -2600,8 +2778,9 @@ TEST(SaveFormat8Test, FormatEightRequiresTheEffectsKey) {
     SaveGame s = makeSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    Json root = *j;
-    root["player"] = withoutKey(*j->find("player"), "effects");
+    Json root = withPrimaryEntry(*j, [](const Json& e) {
+        return withoutKey(e, "effects");
+    });
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
 
@@ -2612,12 +2791,17 @@ TEST(SaveFormat8Test, RejectsBadEffectEntries) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
 
+    // V3-12c2: the effects ride the per-player entry (the root
+    // "player"'s relocated twin).
     auto withEffect = [&](Json entry) {
-        Json root = *j;
-        Json arr = Json::array();
-        arr.push_back(std::move(entry));
-        root["player"]["effects"] = std::move(arr);
-        return root;
+        return withPrimaryEntry(*j, [entry = std::move(entry)](
+                                    const Json& e) mutable {
+            Json en = e;
+            Json arr = Json::array();
+            arr.push_back(std::move(entry));
+            en["effects"] = std::move(arr);
+            return en;
+        });
     };
     const auto entry = [&]() {
         Json e = Json::object();
@@ -2645,11 +2829,14 @@ TEST(SaveFormat8Test, RejectsBadEffectEntries) {
     }
     // A duplicate name.
     {
-        Json root = *j;
-        Json arr = Json::array();
-        arr.push_back(entry());
-        arr.push_back(entry());
-        root["player"]["effects"] = std::move(arr);
+        Json root = withPrimaryEntry(*j, [&](const Json& e) {
+            Json en = e;
+            Json arr = Json::array();
+            arr.push_back(entry());
+            arr.push_back(entry());
+            en["effects"] = std::move(arr);
+            return en;
+        });
         EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
     }
     // An unknown field inside the entry.
@@ -2698,8 +2885,11 @@ TEST(SaveFormat12Test, Format12RequiresTheAbsorptionKey) {
     SaveGame s = makeSave(f); // playerAbsorption 0 -> the key IS written
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    Json root = *j;
-    root["player"] = withoutKey(root["player"], "absorption");
+    // V3-12c2: the entry's key (the format stays 33 — the required
+    // message names "player.absorption", the hardcoded form).
+    Json root = withPrimaryEntry(*j, [](const Json& e) {
+        return withoutKey(e, "absorption");
+    });
     EXPECT_FALSE(parseSave(root, f.items, f.blocks, f.effects, 42).ok());
 }
 
@@ -2793,8 +2983,13 @@ TEST(SaveSchemaTest, NoSwingPhaseSurfaceInTheSave) {
     auto j = serializeSave(in, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     ASSERT_EQ(j->find("format")->asInt(), kSaveFormat);
-    Json root = *j;
-    root["player"]["swing_phase"] = Json(3);
+    // V3-12c2: the entry's key whitelist (the root "player"'s
+    // relocated twin).
+    Json root = withPrimaryEntry(*j, [](const Json& e) {
+        Json en = e;
+        en["swing_phase"] = Json(3);
+        return en;
+    });
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("swing_phase"), std::string::npos)
@@ -2814,7 +3009,7 @@ TEST(SaveFormat16Test, ArmorRoundTrips) {
     s.playerArmor[3] = "diamond_boots";    // feet
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    const Json* armor = j->find("player")->find("armor");
+    const Json* armor = primaryEntry(*j)->find("armor");
     ASSERT_TRUE(armor != nullptr && armor->isObject());
     ASSERT_EQ(armor->memberCount(), 3u);
     EXPECT_EQ(armor->find("head")->asString(), "iron_helmet");
@@ -2836,7 +3031,7 @@ TEST(SaveFormat16Test, EmptyArmorObjectValid) {
     const SaveGame s = makeSave(f); // the fixture wears nothing
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    const Json* armor = j->find("player")->find("armor");
+    const Json* armor = primaryEntry(*j)->find("armor");
     ASSERT_TRUE(armor != nullptr && armor->isObject() && armor->memberCount() == 0);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
@@ -2852,11 +3047,14 @@ TEST(SaveFormat16Test, Format16RequiresTheArmorKey) {
     const SaveGame s = makeSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    Json root = *j;
-    root["player"] = withoutKey(root["player"], "armor");
+    // V3-12c2: the entry-level strip (the format stays 33 — the
+    // relocation's twin of the root "player" strip).
+    Json root = withPrimaryEntry(*j, [](const Json& e) {
+        return withoutKey(e, "armor");
+    });
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
-    EXPECT_NE(out.error().message.find("player.armor"), std::string::npos)
+    EXPECT_NE(out.error().message.find("armor"), std::string::npos)
         << out.error().message;
 }
 
@@ -2917,7 +3115,7 @@ TEST(SaveFormat16Test, ArmorSlotMismatchRejected) {
     ASSERT_TRUE(j.ok());
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
-    EXPECT_NE(out.error().message.find("player.armor.legs"),
+    EXPECT_NE(out.error().message.find("armor.legs"),
               std::string::npos)
         << out.error().message;
     EXPECT_NE(out.error().message.find("iron_helmet"), std::string::npos)
@@ -2943,8 +3141,15 @@ TEST(SaveFormat16Test, ArmorUnknownSlotKeyRejected) {
     const SaveGame s = makeSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    Json root = *j;
-    root["player"]["armor"]["hood"] = Json("iron_helmet");
+    // V3-12c2: the entry's armor object (the relocated twin).
+    Json root = withPrimaryEntry(*j, [](const Json& e) {
+        Json en = e;
+        Json armor = *en.find("armor");
+        armor["hood"] = Json("iron_helmet");
+        en = withoutKey(en, "armor");
+        en["armor"] = std::move(armor);
+        return en;
+    });
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("hood"), std::string::npos)
@@ -3033,7 +3238,7 @@ TEST(SaveParseTest, RejectsTablesFieldInFormat18) {
     const SaveGame s = makeSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    Json root = *j;
+    Json root = legacyShape(*j);
     root = stripFormat31Keys(std::move(root));
     root["format"] = Json(18); // keeps the "tables" field
     root = stripXp(root); // V2-11: strip the format-26+ xp field for this downgrade
@@ -3283,7 +3488,7 @@ TEST(SaveFormat20Test, EffectTierRoundTrips) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     EXPECT_EQ(j->find("format")->asInt(), kSaveFormat);
-    const Json& entry = (*j)["player"]["effects"].at(0);
+    const Json& entry = (*j)["players"].at(0)["effects"].at(0);
     ASSERT_NE(entry.find("tier"), nullptr);
     EXPECT_EQ(entry.find("tier")->asInt(), 1);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
@@ -3301,7 +3506,7 @@ TEST(SaveFormat20Test, TierZeroIsOmitted) {
     s.playerEffects.push_back(SavedEffect {"resistance", 30.0, 0});
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    const Json& entry = (*j)["player"]["effects"].at(0);
+    const Json& entry = (*j)["players"].at(0)["effects"].at(0);
     EXPECT_EQ(entry.find("tier"), nullptr) << "tier 0 must be omitted";
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
@@ -3329,20 +3534,24 @@ TEST(SaveFormat20Test, TierNonIntegerIsRejected) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
     // The Json array has no element-mutation API (the P75 precedent) —
-    // rebuild the effects array with a fractional tier.
-    Json& player = (*j)["player"];
-    const Json& old = *player.find("effects");
-    Json newArr = Json::array();
-    for (std::size_t i = 0; i < old.size(); ++i) {
-        const Json& el = old.at(i);
-        Json ne = Json::object();
-        ne["name"] = Json(el.find("name")->asString());
-        ne["remaining"] = Json(el.find("remaining")->asDouble());
-        ne["tier"] = Json(1.5);
-        newArr.push_back(std::move(ne));
-    }
-    player["effects"] = std::move(newArr);
-    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    // rebuild the entry's effects array with a fractional tier (the
+    // V3-12c2 relocation: the root "player"'s twin).
+    Json root = withPrimaryEntry(*j, [](const Json& e) {
+        const Json& old = *e.find("effects");
+        Json newArr = Json::array();
+        for (std::size_t i = 0; i < old.size(); ++i) {
+            const Json& el = old.at(i);
+            Json ne = Json::object();
+            ne["name"] = Json(el.find("name")->asString());
+            ne["remaining"] = Json(el.find("remaining")->asDouble());
+            ne["tier"] = Json(1.5);
+            newArr.push_back(std::move(ne));
+        }
+        Json en = withoutKey(e, "effects");
+        en["effects"] = std::move(newArr);
+        return en;
+    });
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("integer"), std::string::npos);
 }
@@ -3430,14 +3639,16 @@ MobRegistry makeStatsMobs() {
 // Rebuilds the save's "player" object WITHOUT the "stats" member (the Json
 // has no member-erase API — the P75 rebuild pattern).
 void dropStatsKey(Json& j) {
-    Json& player = j["player"];
+    // V3-12c2: the stats ride the per-player entry (the root
+    // "player"'s relocated twin).
+    Json& player = j["players"].at(0);
     Json p2 = Json::object();
     for (const auto& [k, v] : player.members()) {
         if (k != "stats") {
             p2[k] = v;
         }
     }
-    j["player"] = std::move(p2);
+    j["players"].at(0) = std::move(p2);
 }
 
 } // namespace
@@ -3450,7 +3661,7 @@ TEST(SaveFormat21Test, StatsRoundTrips) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     EXPECT_EQ(j->find("format")->asInt(), kSaveFormat);
-    const Json& st = (*j)["player"]["stats"];
+    const Json& st = (*j)["players"].at(0)["stats"];
     ASSERT_TRUE(st.isObject());
     ASSERT_NE(st.find("deathCount"), nullptr);
     EXPECT_EQ(st.find("deathCount")->asInt64(), 2);
@@ -3466,7 +3677,7 @@ TEST(SaveFormat21Test, StatsEmptyObjectIsValid) {
     SaveGame s = makeSave(f);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    const Json& st = (*j)["player"]["stats"];
+    const Json& st = (*j)["players"].at(0)["stats"];
     ASSERT_TRUE(st.isObject());
     EXPECT_EQ(st.memberCount(), 0u);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
@@ -3512,7 +3723,7 @@ TEST(SaveFormat21Test, StatsShapeRejections) {
         dropStatsKey(j);
         Json st = Json::object();
         st["deathCount"] = parseJson(bad);
-        j["player"]["stats"] = std::move(st);
+        j["players"].at(0)["stats"] = std::move(st);
         auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
         ASSERT_FALSE(out.ok()) << "accepted stats value: " << bad;
     }
@@ -3563,7 +3774,7 @@ TEST(SaveFormat22Test, RestVelocityIsTheZeroTriple) {
     Fixture f;
     auto j = serializeSave(makeSave(f), f.items);
     ASSERT_TRUE(j.ok());
-    const Json* v = j->find("player")->find("velocity");
+    const Json* v = primaryEntry(*j)->find("velocity");
     ASSERT_NE(v, nullptr);
     ASSERT_TRUE(v->isArray());
     ASSERT_EQ(v->size(), 3u);
@@ -3576,8 +3787,10 @@ TEST(SaveFormat22Test, Format22WithoutVelocityIsRejected) {
     Fixture f;
     auto j = serializeSave(makeSave(f), f.items);
     ASSERT_TRUE(j.ok());
-    (*j)["player"] = withoutKey((*j)["player"], "velocity");
-    (*j)["player"] = withoutKey((*j)["player"], "tutorial");  // UX-7: the tutorial key is format 23 (the pre-23 version-lie twin)
+    // V3-12c2: the entry's keys (the root "player"'s relocated twin).
+    (*j)["players"].at(0) = withoutKey((*j)["players"].at(0), "velocity");
+    (*j)["players"].at(0) =
+        withoutKey((*j)["players"].at(0), "tutorial");
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("velocity"), std::string::npos)
@@ -3637,7 +3850,7 @@ TEST(SaveFormat22Test, VelocityBoundsAndTypeNaming) {
             v.push_back(Json(dy));
             v.push_back(Json(dz));
         }
-        (*j)["player"]["velocity"] = v;
+        (*j)["players"].at(0)["velocity"] = v;
         return *j;
     };
     auto parse = [&](const Json& j) {
@@ -3675,7 +3888,7 @@ TEST(SaveFormat23Test, InProgressRoundTrips) {
     ASSERT_TRUE(serialized.ok()) << serialized.error().message;
     // The file shape: { "series": 1, "id": "chop", "count": 2 } (an
     // OBJECT, not an array — the armor-object shape).
-    const Json* tut = (*serialized)["player"].find("tutorial");
+    const Json* tut = (*serialized)["players"].at(0).find("tutorial");
     ASSERT_NE(tut, nullptr);
     ASSERT_TRUE(tut->isObject());
     ASSERT_EQ(tut->members().size(), 3u);
@@ -3698,7 +3911,7 @@ TEST(SaveFormat23Test, DoneSerializesAsEmptyObject) {
     s.tutorial = TutorialSaveState::Done;
     auto serialized = serializeSave(s, f.items);
     ASSERT_TRUE(serialized.ok()) << serialized.error().message;
-    const Json* tut = (*serialized)["player"].find("tutorial");
+    const Json* tut = (*serialized)["players"].at(0).find("tutorial");
     ASSERT_NE(tut, nullptr); // the key is ALWAYS written (the discipline)
     ASSERT_TRUE(tut->isObject());
     EXPECT_TRUE(tut->members().empty());
@@ -3745,10 +3958,11 @@ TEST(SaveFormat23Test, Format23RequiresTheKey) {
     Fixture f;
     auto j = serializeSave(makeSave(f), f.items);
     ASSERT_TRUE(j.ok());
-    (*j)["player"] = withoutKey((*j)["player"], "tutorial");
+    // V3-12c2: the entry's key (the root "player"'s relocated twin).
+    (*j)["players"].at(0) = withoutKey((*j)["players"].at(0), "tutorial");
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
-    EXPECT_NE(out.error().message.find("player.tutorial"),
+    EXPECT_NE(out.error().message.find("tutorial"),
               std::string::npos);
 }
 
@@ -3760,7 +3974,7 @@ TEST(SaveFormat23Test, InProgressShapeViolationsNamed) {
             ADD_FAILURE() << j.error().message;
             return Json::object();
         }
-        (*j)["player"]["tutorial"] = parseJson(shape);
+        (*j)["players"].at(0)["tutorial"] = parseJson(shape);
         return *j;
     };
     auto parse = [&](const Json& j) {
@@ -3814,7 +4028,7 @@ TEST(SaveFormat24Test, FullBackpackRoundTrips) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     // V3-1 Phase B: writes are always format 30 (V3-7 was 29), 36 entries.
     EXPECT_EQ(j->find("format")->asInt(), kSaveFormat);
-    const Json& slots = *j->find("inventory")->find("slots");
+    const Json& slots = *primaryEntry(*j)->find("inventory")->find("slots");
     ASSERT_TRUE(slots.isArray());
     EXPECT_EQ(slots.size(),
               static_cast<std::size_t>(Inventory::kTotalSize));
@@ -3878,8 +4092,23 @@ TEST(SaveFormat24Test, Format24With27EntriesIsAVersionLie) {
     Fixture f;
     auto j = serializeSave(makeSave(f), f.items);
     ASSERT_TRUE(j.ok());
-    Json root = *j;
-    root = downgradeSlots(root);
+    // V3-12c2: the legacy 27-slot shape on the entry's nested
+    // inventory (the root "inventory"'s relocated twin — the format
+    // stays 33).
+    Json root = withPrimaryEntry(*j, [](const Json& e) {
+        Json entry = e;
+        const Json* inv = entry.find("inventory");
+        const Json* slots = inv->find("slots");
+        Json legacy = Json::array();
+        for (std::size_t i = 0; i < kPreUx8fInventorySlots; ++i) {
+            legacy.push_back(slots->at(i));
+        }
+        Json invOut = withoutKey(*inv, "slots");
+        invOut["slots"] = std::move(legacy);
+        entry = withoutKey(entry, "inventory");
+        entry["inventory"] = std::move(invOut);
+        return entry;
+    });
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("36"), std::string::npos)
@@ -3897,7 +4126,7 @@ TEST(SaveFormat25Test, InProgressShapeIsSeriesIdCount) {
     auto serialized = serializeSave(in, f.items);
     ASSERT_TRUE(serialized.ok()) << serialized.error().message;
     EXPECT_EQ(serialized->find("format")->asInt(), kSaveFormat);
-    const Json* tut = (*serialized)["player"].find("tutorial");
+    const Json* tut = (*serialized)["players"].at(0).find("tutorial");
     ASSERT_NE(tut, nullptr);
     ASSERT_TRUE(tut->isObject());
     ASSERT_EQ(tut->members().size(), 3u);
@@ -3909,7 +4138,7 @@ TEST(SaveFormat25Test, InProgressShapeIsSeriesIdCount) {
     s.tutorial = TutorialSaveState::Done;
     auto done = serializeSave(s, f.items);
     ASSERT_TRUE(done.ok()) << done.error().message;
-    const Json* dtut = (*done)["player"].find("tutorial");
+    const Json* dtut = (*done)["players"].at(0).find("tutorial");
     ASSERT_NE(dtut, nullptr); // the key is ALWAYS written (the discipline)
     EXPECT_TRUE(dtut->members().empty());
     auto out = parseSave(*done, f.items, f.blocks, f.effects, 42);
@@ -3924,10 +4153,12 @@ TEST(SaveFormat25Test, Format25MissingSeriesIsAVersionLie) {
     Fixture f;
     auto j = serializeSave(makeSave(f), f.items);
     ASSERT_TRUE(j.ok());
-    Json root = *j;
-    root["player"] = withoutKey(root["player"], "tutorial");
-    root["player"]["tutorial"] =
-        parseJson(R"({"id": "chop", "count": 2})");
+    // V3-12c2: the entry's tutorial object (the relocated twin).
+    Json root = withPrimaryEntry(*j, [](const Json& e) {
+        Json en = withoutKey(e, "tutorial");
+        en["tutorial"] = parseJson(R"({"id": "chop", "count": 2})");
+        return en;
+    });
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("series"), std::string::npos)
@@ -3943,7 +4174,7 @@ TEST(SaveFormat25Test, Format25SeriesViolationsNamed) {
             ADD_FAILURE() << j.error().message;
             return Json::object();
         }
-        (*j)["player"]["tutorial"]["series"] =
+        (*j)["players"].at(0)["tutorial"]["series"] =
             parseJson(seriesJson);
         return *j;
     };
@@ -4064,7 +4295,7 @@ TEST(SaveFormat26Test, PlayerXpIsAlwaysWrittenAndRoundTrips) {
     ASSERT_EQ(in.playerXp, 37);
     auto serialized = serializeSave(in, f.items);
     ASSERT_TRUE(serialized.ok()) << serialized.error().message;
-    const Json* xp = (*serialized)["player"].find("xp");
+    const Json* xp = (*serialized)["players"].at(0).find("xp");
     ASSERT_NE(xp, nullptr) << "player.xp must be ALWAYS written (format 26)";
     EXPECT_TRUE(xp->isNumber());
     EXPECT_EQ(xp->asInt(), 37);
@@ -4088,8 +4319,11 @@ TEST(SaveFormat26Test, Format26MissingPlayerXpIsAVersionLie) {
     Fixture f;
     auto j = serializeSave(makeSave(f), f.items);
     ASSERT_TRUE(j.ok());
-    Json root = withoutKey(*j, "player");
-    root["player"] = withoutKey((*j)["player"], "xp");
+    // V3-12c2: the entry's xp key (the root "player"'s relocated
+    // twin — the format-26 message names "player.xp", unchanged).
+    Json root = withPrimaryEntry(*j, [](const Json& e) {
+        return withoutKey(e, "xp");
+    });
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("player.xp"), std::string::npos)
@@ -4107,25 +4341,25 @@ TEST(SaveFormat26Test, PlayerXpViolationsNamed) {
             ADD_FAILURE() << j.error().message;
             return Json::object();
         }
-        (*j)["player"]["xp"] = parseJson(xpJson);
+        (*j)["players"].at(0)["xp"] = parseJson(xpJson);
         return *j;
     };
     auto parse = [&](const Json& j) {
         return parseSave(j, f.items, f.blocks, f.effects, 42);
     };
-    // Negative.
+    // Negative. (V3-12c2: the violation's message names the entry.)
     auto bad = parse(build(R"(-1)"));
     ASSERT_FALSE(bad.ok());
-    EXPECT_NE(bad.error().message.find("player.xp"), std::string::npos)
+    EXPECT_NE(bad.error().message.find("xp"), std::string::npos)
         << bad.error().message;
     // Non-integer.
     bad = parse(build(R"(1.5)"));
     ASSERT_FALSE(bad.ok());
-    EXPECT_NE(bad.error().message.find("player.xp"), std::string::npos);
+    EXPECT_NE(bad.error().message.find("xp"), std::string::npos);
     // A string.
     bad = parse(build(R"("many")"));
     ASSERT_FALSE(bad.ok());
-    EXPECT_NE(bad.error().message.find("player.xp"), std::string::npos);
+    EXPECT_NE(bad.error().message.find("xp"), std::string::npos);
     // A large whole number is legal (the pool has no upper bound).
     auto ok = parse(build(R"(999999)"));
     ASSERT_TRUE(ok.ok()) << ok.error().message;
@@ -4377,7 +4611,7 @@ TEST(SaveFormat30Test, NetherSectionRoundTrips) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     EXPECT_EQ(j->find("format")->asInt(), kSaveFormat);
-    EXPECT_EQ((*j)["player"]["dimension"].asString(), "nether");
+    EXPECT_EQ((*j)["players"].at(0)["dimension"].asString(), "nether");
     ASSERT_TRUE(j->find("nether") != nullptr);
     ASSERT_TRUE(j->find("nether_entities") != nullptr);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
@@ -4408,7 +4642,9 @@ TEST(SaveFormat30Test, EmptyNetherSectionIsValid) {
     SaveGame s = makeSave(f); // playerDimension = "overworld" (default)
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ((*j)["player"]["dimension"].asString(), "overworld");
+    // V3-12c2: the dimension rides the per-player entry (the root
+    // "player"'s relocated twin).
+    EXPECT_EQ(primaryEntry(*j)->find("dimension")->asString(), "overworld");
     const Json* nether = j->find("nether");
     ASSERT_TRUE(nether != nullptr && nether->isObject());
     EXPECT_TRUE(nether->find("blocks")->isArray());
@@ -4465,13 +4701,14 @@ TEST(SaveFormat30Test, ThreeWayKeyDiscipline) {
         EXPECT_NE(out.error().message.find("dimension"), std::string::npos);
     }
     // (d) a non-vocabulary dimension word ("void" — the S6 arm).
+    // V3-12c2: the entry's dimension (the root "player"'s relocated
+    // twin — the format stays 33).
     {
-        Json j = *base;
-        const Json* player = j.find("player");
-        Json p = *player;
-        p["dimension"] = Json(std::string("void"));
-        j = withoutKey(j, "player");
-        j["player"] = std::move(p);
+        Json j = withPrimaryEntry(*base, [](const Json& e) {
+            Json p = e;
+            p["dimension"] = Json(std::string("void"));
+            return p;
+        });
         auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
         ASSERT_FALSE(out.ok());
         EXPECT_NE(out.error().message.find("void"), std::string::npos);
@@ -4684,7 +4921,8 @@ TEST(SaveFormat31Test, RoundTripCreativeTrueAndFalse) {
         auto base = serializeSave(s, f.items);
         ASSERT_TRUE(base.ok()) << base.error().message;
         EXPECT_EQ((*base)["format"].asInt(), kSaveFormat);
-        EXPECT_EQ((*base)["player"]["creative"].asBool(), flag);
+        // V3-12c2: the entry's creative key (the relocated twin).
+        EXPECT_EQ((*base)["players"].at(0)["creative"].asBool(), flag);
         auto out = parseSave(*base, f.items, f.blocks, f.effects, 42);
         ASSERT_TRUE(out.ok()) << out.error().message;
         EXPECT_EQ(out->playerCreative, flag);
@@ -4702,7 +4940,9 @@ TEST(SaveFormat31Test, Pre31LoadMigratesToFalse) {
     // keys — a genuine format-30 file carried the nether segments +
     // the dimension, the stripFormat31Keys' pre-30 shape would be the
     // wrong forgery here).
-    Json j = *base;
+    // V3-12c2: the 33 shape's revert first (the 30 claim's legacy
+    // form).
+    Json j = legacyShape(*base);
     j["format"] = Json(30);
     j = withoutPlayerKey(j, "creative");
     j = withoutKey(j, "end");
@@ -4721,8 +4961,9 @@ TEST(SaveFormat31Test, ThreeWayKeyDiscipline) {
     auto base = serializeSave(makeSave(f), f.items);
     ASSERT_TRUE(base.ok()) << base.error().message;
     {
-        // (a) the creative key on a format-30 file.
-        Json j30 = *base;
+        // (a) the creative key on a format-30 file (V3-12c2: the 33
+        // shape's revert first — the 30 claim's legacy form).
+        Json j30 = legacyShape(*base);
         j30["format"] = Json(30);
         auto out = parseSave(j30, f.items, f.blocks, f.effects, 42);
         ASSERT_FALSE(out.ok());
@@ -4737,12 +4978,12 @@ TEST(SaveFormat31Test, ThreeWayKeyDiscipline) {
     }
     {
         // (c) a non-bool creative (the "on" string — the strict read).
-        Json j = *base;
-        const Json* player = j.find("player");
-        Json p = *player;
-        p["creative"] = Json(std::string("on"));
-        j = withoutKey(j, "player");
-        j["player"] = std::move(p);
+        // V3-12c2: the entry's key (the format stays 33).
+        Json j = withPrimaryEntry(*base, [](const Json& e) {
+            Json p = e;
+            p["creative"] = Json(std::string("on"));
+            return p;
+        });
         auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
         ASSERT_FALSE(out.ok());
         EXPECT_NE(out.error().message.find("creative"), std::string::npos);
@@ -4774,7 +5015,7 @@ TEST(SaveFormat32Test, EndSectionRoundTrips) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     EXPECT_EQ(j->find("format")->asInt(), kSaveFormat);
-    EXPECT_EQ((*j)["player"]["dimension"].asString(), "end");
+    EXPECT_EQ((*j)["players"].at(0)["dimension"].asString(), "end");
     ASSERT_TRUE(j->find("end") != nullptr);
     ASSERT_TRUE(j->find("end_entities") != nullptr);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
@@ -4807,7 +5048,7 @@ TEST(SaveFormat32Test, EmptyEndSectionIsValid) {
     SaveGame s = makeSave(f); // playerDimension = "overworld" (default)
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    EXPECT_EQ((*j)["player"]["dimension"].asString(), "overworld");
+    EXPECT_EQ((*j)["players"].at(0)["dimension"].asString(), "overworld");
     const Json* end = j->find("end");
     ASSERT_TRUE(end != nullptr && end->isObject());
     EXPECT_TRUE(end->find("blocks")->isArray());
@@ -4833,7 +5074,9 @@ TEST(SaveFormat32Test, Pre32LoadMigratesToEndEmpty) {
     Fixture f;
     auto base = serializeSave(makeSave(f), f.items);
     ASSERT_TRUE(base.ok()) << base.error().message;
-    Json j = *base;
+    // V3-12c2: the 33 shape's revert first (the 31 claim's legacy
+    // form — the end segments' strip below).
+    Json j = legacyShape(*base);
     j["format"] = Json(31);
     j = withoutKey(j, "end");
     j = withoutKey(j, "end_entities");
@@ -4861,8 +5104,9 @@ TEST(SaveFormat32Test, ThreeWayKeyDiscipline) {
     auto base = serializeSave(makeSave(f), f.items);
     ASSERT_TRUE(base.ok()) << base.error().message;
     {
-        // (a) the end segment on a format-31 file.
-        Json j31 = *base;
+        // (a) the end segment on a format-31 file (V3-12c2: the 33
+        // shape's revert first — the 31 claim's legacy form).
+        Json j31 = legacyShape(*base);
         j31["format"] = Json(31);
         auto out = parseSave(j31, f.items, f.blocks, f.effects, 42);
         ASSERT_FALSE(out.ok());
@@ -4880,7 +5124,7 @@ TEST(SaveFormat32Test, ThreeWayKeyDiscipline) {
     {
         // (c) the dimension word "end" on a format-31 file (the
         // per-format word split's version lie).
-        Json j31 = *base;
+        Json j31 = legacyShape(*base);
         j31["format"] = Json(31);
         j31 = withoutKey(j31, "end");
         j31 = withoutKey(j31, "end_entities");
@@ -4897,12 +5141,13 @@ TEST(SaveFormat32Test, ThreeWayKeyDiscipline) {
     {
         // (d) a format-32 dimension word outside the three (the
         // vocabulary named with the "end" word present).
-        Json j = *base;
-        const Json* player = j.find("player");
-        Json p = *player;
-        p["dimension"] = Json(std::string("void"));
-        j = withoutKey(j, "player");
-        j["player"] = std::move(p);
+        // V3-12c2: the entry's dimension (the format stays 33 — the
+        // 33 vocabulary keeps the three words).
+        Json j = withPrimaryEntry(*base, [](const Json& e) {
+            Json p = e;
+            p["dimension"] = Json(std::string("void"));
+            return p;
+        });
         auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
         ASSERT_FALSE(out.ok());
         EXPECT_NE(out.error().message.find("void"), std::string::npos);
@@ -4997,4 +5242,604 @@ TEST(SaveFormat32Test, EndBlockNameValidated) {
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("not_a_block"), std::string::npos);
+}
+
+// ---------------------------------------------------------------------------
+// V3-12c2 (format 33): the per-player relocation + the End's XP orbs.
+// ---------------------------------------------------------------------------
+
+namespace {
+// The format-33 fixture's second player (entry 1): a distinctive,
+// fully-shaped body (the ghost player's round trip authority — every
+// field the primary carries, its own values).
+SavePlayer makeRemotePlayer(const Fixture& f) {
+    SavePlayer p;
+    p.pos = {8.5f, 53.75f, 2.25f};
+    p.velocity = {0.5f, 0.0f, -0.25f};
+    p.yaw = 1.5707f;
+    p.pitch = 0.1f;
+    p.health = 12.0f;
+    p.absorption = 0.0f;
+    p.hunger = 17.0f;
+    p.saturation = 3.0f;
+    p.selectedSlot = 5;
+    p.slots.resize(Inventory::kTotalSize);
+    p.slots[0] = ItemStack {f.items.idForName("dirt"), 3};
+    p.slots[5] = ItemStack {f.items.idForName("wood"), 10};
+    p.invGrid.resize(CraftingGrid::kSize);
+    p.invGrid[0] = ItemStack {f.items.idForName("stone"), 1};
+    p.effects.push_back(SavedEffect {"poison", 7.5, 0});
+    p.stats["deathCount"] = 5;
+    p.tutorial = TutorialSaveState::Done;
+    p.armor[1] = "leather_chestplate"; // the string form (no damage
+                                       // — the fixture's item carries
+                                       // no durability)
+    p.oxygen = 87;
+    p.xp = 55;
+    p.xpSeed = 0xC0FFEE1234ULL;
+    // A live bed cell (the sentinel never reaches the serializer —
+    // collectSave always fills the live value, the format-28 twin).
+    p.respawn = {-4.5f, 54.5f, 9.5f};
+    p.dimension = "overworld";
+    p.creative = false;
+    return p;
+}
+} // namespace
+
+TEST(SaveFormat33Test, TwoPlayerEntriesRoundTrips) {
+    // The per-player relocation: the primary's legacy members are the
+    // mirror (players[0]), entry 1 carries the remote's full state —
+    // every field bit-faithful across serialize/parse.
+    Fixture f;
+    SaveGame s = makeSave(f);
+    SavePlayer remote = makeRemotePlayer(f);
+    s.players.emplace_back(); // entry 0 = the primary's mirror (the
+                              // legacy members at that moment — the
+                              // collectSave's fill discipline)
+    s.players.push_back(remote);
+    // Entry 0's fields (the fixture's primary).
+    {
+        s.players[0].pos = s.playerPos;
+        s.players[0].velocity = s.playerVelocity;
+        s.players[0].yaw = s.playerYaw;
+        s.players[0].pitch = s.playerPitch;
+        s.players[0].health = s.playerHealth;
+        s.players[0].absorption = s.playerAbsorption;
+        s.players[0].hunger = s.playerHunger;
+        s.players[0].saturation = s.playerSaturation;
+        s.players[0].selectedSlot = s.selectedSlot;
+        s.players[0].slots = s.slots;
+        s.players[0].invGrid = s.invGrid;
+        s.players[0].effects = s.playerEffects;
+        s.players[0].stats = s.playerStats;
+        s.players[0].tutorial = s.tutorial;
+        s.players[0].tutorialSeries = s.tutorialSeries;
+        s.players[0].tutorialId = s.tutorialId;
+        s.players[0].tutorialProgress = s.tutorialProgress;
+        s.players[0].armor = s.playerArmor;
+        s.players[0].armorDamage = s.playerArmorDamage;
+        s.players[0].armorEnchants = s.playerArmorEnchants;
+        s.players[0].oxygen = s.playerOxygen;
+        s.players[0].xp = s.playerXp;
+        s.players[0].xpSeed = s.playerXpSeed;
+        s.players[0].respawn = s.playerRespawn;
+        s.players[0].dimension = s.playerDimension;
+        s.players[0].creative = s.playerCreative;
+    }
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    EXPECT_EQ(j->find("format")->asInt(), 33);
+    const Json* players = j->find("players");
+    ASSERT_TRUE(players != nullptr && players->isArray());
+    ASSERT_EQ(players->size(), 2u);
+    // The root relocation: the legacy keys are gone (the entries are
+    // the authority).
+    EXPECT_EQ(j->find("player"), nullptr);
+    EXPECT_EQ(j->find("inventory"), nullptr);
+    EXPECT_EQ(j->find("inv_grid"), nullptr);
+    // Entry 1's distinctive values ride the document.
+    const Json& e1 = players->at(1);
+    EXPECT_EQ(e1.find("inventory")->find("selected")->asInt(), 5);
+    EXPECT_EQ(e1.find("inventory")->find("slots")->at(0)
+                  .find("item")->asString(),
+              "dirt");
+    EXPECT_EQ(e1.find("oxygen")->asInt(), 87);
+    EXPECT_EQ(e1.find("xp")->asInt(), 55);
+    // The plain full-durability piece uses the string form (the
+    // SURV-3 discipline — the object form is for the damaged /
+    // enchanted piece).
+    EXPECT_EQ(e1.find("armor")->find("chest")->asString(),
+              "leather_chestplate");
+    EXPECT_EQ(e1.find("effects")->at(0).find("name")->asString(),
+              "poison");
+    // The parse: both entries back, the mirror is entry 0.
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    ASSERT_EQ(out->players.size(), 2u);
+    EXPECT_EQ(out->players[0].pos, s.playerPos);
+    EXPECT_EQ(out->players[0].selectedSlot, 3);
+    EXPECT_EQ(out->players[0].slots[0],
+              (ItemStack {f.items.idForName("stone"), 64}));
+    const SavePlayer& r = out->players[1];
+    EXPECT_EQ(r.pos, remote.pos);
+    EXPECT_EQ(r.velocity, remote.velocity);
+    EXPECT_EQ(r.yaw, remote.yaw);
+    EXPECT_EQ(r.pitch, remote.pitch);
+    EXPECT_FLOAT_EQ(r.health, 12.0f);
+    EXPECT_FLOAT_EQ(r.hunger, 17.0f);
+    EXPECT_EQ(r.selectedSlot, 5);
+    EXPECT_EQ(r.slots[0], (ItemStack {f.items.idForName("dirt"), 3}));
+    EXPECT_EQ(r.slots[5], (ItemStack {f.items.idForName("wood"), 10}));
+    EXPECT_EQ(r.invGrid[0], (ItemStack {f.items.idForName("stone"), 1}));
+    ASSERT_EQ(r.effects.size(), 1u);
+    EXPECT_EQ(r.effects[0].name, "poison");
+    EXPECT_DOUBLE_EQ(r.effects[0].remaining, 7.5);
+    EXPECT_EQ(r.stats.at("deathCount"), 5u);
+    EXPECT_EQ(r.tutorial, TutorialSaveState::Done);
+    EXPECT_EQ(r.armor[1], "leather_chestplate");
+    EXPECT_EQ(r.oxygen, 87);
+    EXPECT_EQ(r.xp, 55);
+    EXPECT_EQ(r.xpSeed, 0xC0FFEE1234ULL);
+    // The mirror: the legacy primary members are entry 0's values.
+    EXPECT_EQ(out->playerPos, s.playerPos);
+    EXPECT_EQ(out->selectedSlot, 3);
+    EXPECT_EQ(out->playerOxygen, kOxygenMax);
+    EXPECT_EQ(out->playerXp, 37);
+}
+
+TEST(SaveFormat33Test, Format32LoadMigratesToOneEntry) {
+    // The value-faithful migration: a format-32 document's root
+    // "player" + root "inventory" / "inv_grid" load as a one-entry
+    // players[] (entry 0 = the primary); re-serializing returns the
+    // 33 shape of the same state.
+    Fixture f;
+    auto base = serializeSave(makeSave(f), f.items);
+    ASSERT_TRUE(base.ok()) << base.error().message;
+    Json j32 = legacyShape(*base);
+    j32["format"] = Json(32);
+    auto out = parseSave(j32, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    ASSERT_EQ(out->players.size(), 1u);
+    const SavePlayer& p = out->players[0];
+    EXPECT_EQ(p.pos, makeSave(f).playerPos);
+    EXPECT_EQ(p.selectedSlot, 3);
+    EXPECT_EQ(p.slots[0], (ItemStack {f.items.idForName("stone"), 64}));
+    EXPECT_EQ(p.oxygen, kOxygenMax);
+    // The mirror discipline (the legacy members == entry 0).
+    EXPECT_EQ(out->playerPos, p.pos);
+    EXPECT_EQ(out->selectedSlot, p.selectedSlot);
+    // Re-serializing = the 33 single-entry shape (the document's
+    // players array carries the legacy root's values verbatim).
+    auto reser = serializeSave(*out, f.items);
+    ASSERT_TRUE(reser.ok()) << reser.error().message;
+    EXPECT_EQ(reser->find("format")->asInt(), 33);
+    ASSERT_EQ(reser->find("players")->size(), 1u);
+}
+
+TEST(SaveFormat33Test, ThreeWayKeyDiscipline) {
+    // The relocation's version-lie family: (a) a format-32 file
+    // CARRYING "players"; (b) a format-33 file MISSING "players";
+    // (c) a format-33 file carrying the root "player"; (d) the root
+    // "inventory"; (e) the root "inv_grid" — all named.
+    Fixture f;
+    auto base = serializeSave(makeSave(f), f.items);
+    ASSERT_TRUE(base.ok()) << base.error().message;
+    // (a) players on a 32 claim (the legacy form otherwise).
+    {
+        Json j = legacyShape(*base);
+        j["format"] = Json(32);
+        const Json* players = base->find("players");
+        j["players"] = *players;
+        auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("players"), std::string::npos);
+        EXPECT_NE(out.error().message.find("version lie"),
+                  std::string::npos);
+    }
+    // (b) the 33 document without its players array.
+    {
+        Json j = withoutKey(*base, "players");
+        auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("players"), std::string::npos);
+    }
+    // (c) the 33 document carrying a root "player".
+    {
+        Json j = *base;
+        j["player"] = *primaryEntry(*base);
+        auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("player"), std::string::npos);
+    }
+    // (d) the root "inventory".
+    {
+        Json j = *base;
+        const Json* inv = primaryEntry(*base)->find("inventory");
+        j["inventory"] = *inv;
+        auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("inventory"), std::string::npos);
+    }
+    // (e) the root "inv_grid".
+    {
+        Json j = *base;
+        const Json* grid = primaryEntry(*base)->find("inv_grid");
+        j["inv_grid"] = *grid;
+        auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("inv_grid"), std::string::npos);
+    }
+}
+
+TEST(SaveFormat33Test, EntryRequiresNestedInventoryAndGrid) {
+    // The per-entry shape: the nested "inventory" object and the
+    // nested "inv_grid" array are REQUIRED on every entry (the root
+    // twins' relocation — a missing one is named).
+    Fixture f;
+    auto base = serializeSave(makeSave(f), f.items);
+    ASSERT_TRUE(base.ok()) << base.error().message;
+    {
+        Json j = withPrimaryEntry(*base, [](const Json& e) {
+            return withoutKey(e, "inventory");
+        });
+        auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("inventory"), std::string::npos);
+    }
+    {
+        Json j = withPrimaryEntry(*base, [](const Json& e) {
+            return withoutKey(e, "inv_grid");
+        });
+        auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("inv_grid"), std::string::npos);
+    }
+}
+
+TEST(SaveFormat33Test, EndXpEntitiesRoundTrips) {
+    // The 10d1's deferred face: the End's orbs persist (the
+    // overworld's xp entry shape verbatim, the dedicated segment).
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.endXpEntities.push_back({9, {1.5f, 52.5f, 1.5f}, 12.5, 0.25});
+    s.endXpEntities.push_back({1, {-2.5f, 53.5f, 3.5f}, 0.75, 0.0});
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    const Json* ents = j->find("end_xp_entities");
+    ASSERT_TRUE(ents != nullptr && ents->isArray());
+    ASSERT_EQ(ents->size(), 2u);
+    EXPECT_EQ(ents->at(0).find("xp")->asInt(), 9);
+    EXPECT_EQ(ents->at(0).find("type")->asString(), "xp");
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    ASSERT_EQ(out->endXpEntities.size(), 2u);
+    EXPECT_EQ(out->endXpEntities[0].xp, 9);
+    EXPECT_DOUBLE_EQ(out->endXpEntities[0].age, 12.5);
+    EXPECT_DOUBLE_EQ(out->endXpEntities[0].pickupDelay, 0.25);
+    EXPECT_EQ(out->endXpEntities[1].pos,
+              (Vec3 {-2.5f, 53.5f, 3.5f}));
+    // The empty segment is valid (the end_entities' twin — a no-End
+    // session).
+    SaveGame empty = makeSave(f);
+    auto je = serializeSave(empty, f.items);
+    ASSERT_TRUE(je.ok());
+    EXPECT_EQ(je->find("end_xp_entities")->size(), 0u);
+    auto outE = parseSave(*je, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(outE.ok()) << outE.error().message;
+    EXPECT_TRUE(outE->endXpEntities.empty());
+}
+
+TEST(SaveFormat33Test, EndXpVersionLie) {
+    // The segment's three-way discipline: (a) a format-32 file
+    // CARRYING end_xp_entities; (b) a format-33 file MISSING it —
+    // both named.
+    Fixture f;
+    auto base = serializeSave(makeSave(f), f.items);
+    ASSERT_TRUE(base.ok()) << base.error().message;
+    {
+        Json j = legacyShape(*base);
+        j["format"] = Json(32);
+        const Json* xp = base->find("end_xp_entities");
+        ASSERT_TRUE(xp != nullptr && xp->size() == 0);
+        j["end_xp_entities"] = *xp;
+        auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("end_xp_entities"),
+                  std::string::npos);
+    }
+    {
+        Json j = withoutKey(*base, "end_xp_entities");
+        auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("end_xp_entities"),
+                  std::string::npos);
+    }
+}
+
+TEST(SaveFormat33Test, PlayerCapExceededRejected) {
+    // The protocol's cap (kSavePlayerCap = 8): a wider array is named
+    // corruption (a hand-rolled file, the kNetMaxPlayers' twin).
+    Fixture f;
+    auto base = serializeSave(makeSave(f), f.items);
+    ASSERT_TRUE(base.ok()) << base.error().message;
+    const Json* players = base->find("players");
+    Json arr = Json::array();
+    for (int i = 0; i < 9; ++i) {
+        arr.push_back(players->at(0));
+    }
+    Json j = withoutKey(*base, "players");
+    j["players"] = std::move(arr);
+    auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("players"), std::string::npos);
+    EXPECT_NE(out.error().message.find("8"), std::string::npos);
+}
+
+TEST(SaveFormat33Test, EmptyPlayersArrayRejected) {
+    // "players" is >= 1 entry (the primary ALWAYS exists — a zero
+    // array is the named corruption, the non-empty requirement).
+    Fixture f;
+    auto base = serializeSave(makeSave(f), f.items);
+    ASSERT_TRUE(base.ok()) << base.error().message;
+    Json j = withoutKey(*base, "players");
+    j["players"] = Json::array();
+    auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("players"), std::string::npos);
+}
+
+TEST(SaveFormat33Test, SerializeWithoutPlayersFallsBackToPrimary) {
+    // The belt (the hand-rolled SaveGame — the unit fixtures' shape):
+    // an empty players array serializes from the legacy primary
+    // members (the mirror discipline — collectSave fills both, the
+    // serializer's fallback keeps the fixtures' single source).
+    Fixture f;
+    SaveGame s = makeSave(f); // s.players empty (the legacy members
+                              // only — the fixture's shape)
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    const Json* players = j->find("players");
+    ASSERT_TRUE(players != nullptr && players->isArray());
+    ASSERT_EQ(players->size(), 1u);
+    // The fallback entry == the legacy primary's values.
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    ASSERT_EQ(out->players.size(), 1u);
+    EXPECT_EQ(out->players[0].pos, s.playerPos);
+    EXPECT_EQ(out->players[0].selectedSlot, 3);
+    EXPECT_EQ(out->players[0].xp, 37);
+    EXPECT_EQ(out->playerOxygen, kOxygenMax);
+}
+
+// -- V3-12c2: the net rejoin snapshot's segments ---------------------------
+// (the save-form WELCOME's document face — the on-disk collectSave leaves
+//  them absent, the savenorm anchor's unchanged; the ≤32 version-lie's
+//  named rejection; the shape's strict parse.)
+
+TEST(SaveFormat33Test, NetSnapshotSegmentsRoundTrips) {
+    // The rejoin's document carries the session's counter family + the
+    // live particles + the per-player session state (the hash's face the
+    // persistable entry does not carry). All index-aligned / presence-
+    // flagged, the round trip bit-faithful.
+    Fixture f;
+    SaveGame s = makeSave(f);
+    // One live particle (the texture source's block name rides).
+    SavedParticle pt;
+    pt.position = {1.5f, 52.5f, -2.5f};
+    pt.velocity = {0.1f, -3.25f, 0.05f};
+    pt.age = 0.42f;
+    pt.life = 0.75f;
+    pt.block = "stone";
+    pt.skyLight = 0.85f;
+    pt.blockLight = 0.3f;
+    pt.gravity = -2.0f;
+    s.particles.push_back(pt);
+    // The weather machine's full state (the three visible fields + the
+    // two splitmix64 streams — the underdetermination's belt).
+    s.netCounters.weatherPresent = true;
+    s.netCounters.raining = true;
+    s.netCounters.weatherFramesLeft = 4321;
+    s.netCounters.weatherThunderLeft = 123;
+    s.netCounters.weatherStream = 0x1234567890ABCDEFULL;
+    s.netCounters.weatherThunderStream = 0xFEDCBA0987654321ULL;
+    // The per-dimension spawn counters (the continuation's values).
+    s.netCounters.spawnCountersPresent = true;
+    s.netCounters.spawnCounterOverworld = 77;
+    s.netCounters.spawnCounterNether = 8;
+    s.netCounters.spawnCounterEnd = 0;
+    // The break-particle's counter.
+    s.netCounters.particleBreakCounterPresent = true;
+    s.netCounters.particleBreakCounter = 3;
+    // The per-player session state (index 0 = the primary's fallback).
+    SavedNetPlayer np;
+    np.prevHealth = 14.5f;
+    np.hurtFlash = 0.25;
+    np.lastSpacePressTime = 12.75;
+    np.pearlThrowCooldownFrames = 40;
+    np.drownTicks = 3;
+    np.flying = true;
+    s.netPlayers.push_back(np);
+
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    // The segments' presence (the non-default's written face).
+    ASSERT_NE(j->find("particles"), nullptr);
+    ASSERT_EQ(j->find("particles")->size(), 1u);
+    ASSERT_NE(j->find("weather"), nullptr);
+    ASSERT_NE(j->find("spawn_counters"), nullptr);
+    ASSERT_NE(j->find("particle_break_counter"), nullptr);
+    ASSERT_NE(j->find("net_players"), nullptr);
+    ASSERT_EQ(j->find("net_players")->size(), 1u);
+    // The round trip.
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    ASSERT_EQ(out->particles.size(), 1u);
+    const SavedParticle& rp = out->particles[0];
+    EXPECT_EQ(rp.position, pt.position);
+    EXPECT_EQ(rp.velocity, pt.velocity);
+    EXPECT_FLOAT_EQ(rp.age, 0.42f);
+    EXPECT_FLOAT_EQ(rp.life, 0.75f);
+    EXPECT_EQ(rp.block, "stone");
+    EXPECT_FLOAT_EQ(rp.skyLight, 0.85f);
+    EXPECT_FLOAT_EQ(rp.blockLight, 0.3f);
+    EXPECT_FLOAT_EQ(rp.gravity, -2.0f);
+    const SavedNetCounters& rc = out->netCounters;
+    EXPECT_TRUE(rc.weatherPresent);
+    EXPECT_TRUE(rc.raining);
+    EXPECT_EQ(rc.weatherFramesLeft, 4321);
+    EXPECT_EQ(rc.weatherThunderLeft, 123);
+    EXPECT_EQ(rc.weatherStream, 0x1234567890ABCDEFULL);
+    EXPECT_EQ(rc.weatherThunderStream, 0xFEDCBA0987654321ULL);
+    EXPECT_TRUE(rc.spawnCountersPresent);
+    EXPECT_EQ(rc.spawnCounterOverworld, 77u);
+    EXPECT_EQ(rc.spawnCounterNether, 8u);
+    EXPECT_EQ(rc.spawnCounterEnd, 0u);
+    EXPECT_TRUE(rc.particleBreakCounterPresent);
+    EXPECT_EQ(rc.particleBreakCounter, 3u);
+    ASSERT_EQ(out->netPlayers.size(), 1u);
+    const SavedNetPlayer& rn = out->netPlayers[0];
+    EXPECT_FLOAT_EQ(rn.prevHealth, 14.5f);
+    EXPECT_DOUBLE_EQ(rn.hurtFlash, 0.25);
+    EXPECT_DOUBLE_EQ(rn.lastSpacePressTime, 12.75);
+    EXPECT_EQ(rn.pearlThrowCooldownFrames, 40u);
+    EXPECT_EQ(rn.drownTicks, 3u);
+    EXPECT_TRUE(rn.flying);
+}
+
+TEST(SaveFormat33Test, NetSnapshotSegmentsVersionLie) {
+    // A format-32 (or older) document carrying any net snapshot segment
+    // is a version lie (the on-disk discipline: collectSave never fills
+    // them; they are the format-33 net's vocabulary) — named.
+    Fixture f;
+    SaveGame s = makeSave(f);
+    s.netCounters.weatherPresent = true;
+    s.netCounters.raining = false;
+    s.netCounters.weatherFramesLeft = 100;
+    s.netCounters.weatherThunderLeft = 0;
+    s.netCounters.weatherStream = 1;
+    s.netCounters.weatherThunderStream = 2;
+    SavedParticle pt;
+    pt.position = {0.5f, 52.5f, 0.5f};
+    pt.velocity = {0, 0, 0};
+    pt.age = 0.1f;
+    pt.life = 0.5f;
+    pt.block = "dirt";
+    s.particles.push_back(pt);
+    auto base = serializeSave(s, f.items);
+    ASSERT_TRUE(base.ok()) << base.error().message;
+    // The 33 document's legacy shape + the format's downgrade (the net
+    // keys ride through the legacyShape, the lie's subject).
+    Json j = legacyShape(*base);
+    j["format"] = Json(32);
+    ASSERT_NE(j.find("weather"), nullptr);
+    ASSERT_NE(j.find("particles"), nullptr);
+    auto out = parseSave(j, f.items, f.blocks, f.effects, 42);
+    ASSERT_FALSE(out.ok());
+    EXPECT_NE(out.error().message.find("net snapshot"), std::string::npos)
+        << out.error().message;
+}
+
+TEST(SaveFormat33Test, NetSnapshotSegmentsAbsentByDefault) {
+    // The on-disk document (the collectSave's shape — no particles, no
+    // net counters present, no net players) carries NO net snapshot
+    // segment: the savenorm anchor's unchanged face (the presence-
+    // gated writer's omission).
+    Fixture f;
+    SaveGame s = makeSave(f); // the net fields' defaults (absent)
+    auto j = serializeSave(s, f.items);
+    ASSERT_TRUE(j.ok()) << j.error().message;
+    EXPECT_EQ(j->find("particles"), nullptr);
+    EXPECT_EQ(j->find("weather"), nullptr);
+    EXPECT_EQ(j->find("spawn_counters"), nullptr);
+    EXPECT_EQ(j->find("particle_break_counter"), nullptr);
+    EXPECT_EQ(j->find("net_players"), nullptr);
+    // The parse's fresh-zero migration (the absent = the solo's
+    // derivation, the single-machine's premise).
+    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    ASSERT_TRUE(out.ok()) << out.error().message;
+    EXPECT_TRUE(out->particles.empty());
+    EXPECT_FALSE(out->netCounters.weatherPresent);
+    EXPECT_FALSE(out->netCounters.spawnCountersPresent);
+    EXPECT_FALSE(out->netCounters.particleBreakCounterPresent);
+    EXPECT_TRUE(out->netPlayers.empty());
+}
+
+TEST(SaveFormat33Test, NetSnapshotSegmentShapeRejections) {
+    // The net segments' strict shape (the corruption's naming — the
+    // per-field discipline).
+    Fixture f;
+    auto base = serializeSave(makeSave(f), f.items);
+    ASSERT_TRUE(base.ok()) << base.error().message;
+    // A particles entry with a negative age.
+    {
+        SaveGame s = makeSave(f);
+        SavedParticle pt;
+        pt.position = {0.5f, 52.5f, 0.5f};
+        pt.velocity = {0, 0, 0};
+        pt.age = -1.0f;
+        pt.life = 0.5f;
+        pt.block = "dirt";
+        s.particles.push_back(pt);
+        auto j = serializeSave(s, f.items);
+        ASSERT_TRUE(j.ok());
+        // Force a malformed age past the writer (the writer writes the
+        // raw value; the parse's >= 0 gate names it).
+        Json bad = *j;
+        bad["particles"].at(0)["age"] = Json(-1.0);
+        auto out = parseSave(bad, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("age"), std::string::npos)
+            << out.error().message;
+    }
+    // A particles entry with a non-positive life.
+    {
+        SaveGame s = makeSave(f);
+        SavedParticle pt;
+        pt.position = {0.5f, 52.5f, 0.5f};
+        pt.velocity = {0, 0, 0};
+        pt.age = 0.1f;
+        pt.life = 0.0f;
+        pt.block = "dirt";
+        s.particles.push_back(pt);
+        auto j = serializeSave(s, f.items);
+        ASSERT_TRUE(j.ok());
+        Json bad = *j;
+        bad["particles"].at(0)["life"] = Json(0.0);
+        auto out = parseSave(bad, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("life"), std::string::npos)
+            << out.error().message;
+    }
+    // A weather segment with a non-boolean raining.
+    {
+        SaveGame s = makeSave(f);
+        s.netCounters.weatherPresent = true;
+        s.netCounters.raining = false;
+        s.netCounters.weatherFramesLeft = 10;
+        s.netCounters.weatherStream = 1;
+        s.netCounters.weatherThunderStream = 2;
+        auto j = serializeSave(s, f.items);
+        ASSERT_TRUE(j.ok());
+        Json bad = *j;
+        bad["weather"]["raining"] = Json(1);
+        auto out = parseSave(bad, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("raining"), std::string::npos)
+            << out.error().message;
+    }
+    // A net_players entry with a non-boolean flying.
+    {
+        SaveGame s = makeSave(f);
+        SavedNetPlayer np;
+        np.flying = true;
+        s.netPlayers.push_back(np);
+        auto j = serializeSave(s, f.items);
+        ASSERT_TRUE(j.ok());
+        Json bad = *j;
+        bad["net_players"].at(0)["flying"] = Json("yes");
+        auto out = parseSave(bad, f.items, f.blocks, f.effects, 42);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("flying"), std::string::npos)
+            << out.error().message;
+    }
 }

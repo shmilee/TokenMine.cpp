@@ -3,7 +3,7 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–407，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–412，新条目继续前插于尾部块首。
 
 - **gzip 容器可钉 / zlib 宏缺失 / 双跑 RAW 适用域（PITS 385，门 191
   V3-7 存档 gzip）**——① **zlib 自带 gzip 封装（windowBits 16+15）
@@ -68,6 +68,42 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **REJOIN 快照面 + 幽灵/renumber/accept 节拍 + journal live-diff +
+  respawn 0.5-y 八坑（PITS 412，门 221 v3.31.0 V3-12c2 断线恢复 +
+  format 33）**——① **Json(bool) 指针陷阱**：`Json x = obj->find("k")`
+  （const Json* 未解引用）= 隐式 bool 构造 → 后续 .at()/.find() 变体崩
+  "std::get: wrong index for variant"；一律 `*obj->find("k")`（本会话
+  test_durability 首踩，re-pin 族系统性排查）。② **legacyShape 改形不
+  改 format 键**：33 format + legacy root 形 = 假 lie（"format 33 must
+  not carry a root 'player'"）——当前 format 的负向测试必须走
+  withPrimaryEntry（entry 级，format 保 33），legacyShape 仅用于降级
+  声明 ≤32 的测试。③ **respawn int-cell 丢 0.5-y**：format 28 的
+  int cell triple + bedSpawnPosition 还原对**非 cell-center 值**（net
+  spawn 位整数 y = 地面顶）丢 0.5（host c1 spawnPos (4.5,52,0.5) →
+  档 (4,52,0) → client 还原 (4.5,52.5,0.5) = hash player1 分歧根）；
+  format 33 改精确 float triple，≤32 保 int cell（per-format 解析分
+  支 + 测试 legacyShape 重编码 floor）。④ **removal 的 slot 重编号破
+  旧客户端**：compact erase 使 slot 移位 → 已有客户端 ring 越界写
+  （3 玩家帧 states 写入 2 行 ring = 堆破坏 → 后续 segfault）+ N 增长
+  不知情 → 必须 **Join/Renumber CTRL 广播**（行随玩家移、输入历史跟
+  走、无冲洗）。⑤ **中会话 accept 节拍**：barrier 停滞的 host 不再跑
+  per-frame accept → backlog 连接等 15s（门内实证）——**listener fd
+  入 barrier 的 select**（停滞期也 accept）。⑥ **client renumber 必须
+  跑 100% drop**（调 netRemovePlayer 非裸 erase）——裸 erase 只 host
+  drop、client 无 → ents 分歧（门内实证 c1@420）。⑦ **net 主机载多玩
+  家档 = stale 幽灵 → slot/m_nets 错乱 → segfault**：重启后存档的其
+  他玩家连接已死、slot 1.. 无连接但占位 → 新客 netAddPlayer(1) 覆写
+  幽灵 + m_nets index=slot-1 映射破 → **net 主机（m_args.listenPort
+  != 0）抑制幽灵**（玩家集 = {自身}+{新连接}，与 solo 档 host 等价；
+  重连者 = 新体 D25，其旧物在 removal 的 100% drop 已在 entities 可捡
+  回）。⑧ **feedJournal 须哈希 live-diff**（journal ∪ retained 对生成
+  参考的 diff，journalDiff 单线程）非 journal 原始 cell——rejoin client
+  回填 journal = 文档 cell、host live journal 含回滚编辑的幽灵 cell →
+  原始 cell 集合不等（门内实证 journals 节分歧）；retained 本身即 diff
+  逐字入。环境面：本机 Mesa GL init ~10s 恰超 host 10s 首客窗（竞态，
+  host+client 同起或 client 迟 2s 入窗）；多进程负载下 client 首帧
+  worker 饥饿 15s（PITS 388④ 独占纪律，门臂串行）。
+
 - **accept 窗单次 break + ms/s 混用 + 客户端全槽体 + E isLocal 门
   + typed 'e' 截断 + Mesa 读回竞态 + WM 几何噪声 + 尾帧 broken
   pipe + 屏障 min 水印九坑（PITS 411，门 220 v3.30.0 V3-12c1 大厅/

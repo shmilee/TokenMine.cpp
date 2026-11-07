@@ -487,7 +487,36 @@ namespace mc {
 //      not exist). The derived seed (endSeed = worldSeed ^ kSaltEnd)
 //      is never stored (the parse rebuilds it, the nether's twin).
 //      Writes are always format 32.
-inline constexpr int kSaveFormat = 32;
+//  33: V3-12c2 the MULTIPLAYER player states (v3.31.0) — the
+//      single-player "player" object + the root "inventory" /
+//      "inv_grid" segments become the PER-PLAYER "players" ARRAY
+//      (ALWAYS written, >= 1 entry; the entry shape = the format-32
+//      "player" object verbatim PLUS the player's "inventory"
+//      {selected, slots} object and "inv_grid" array nested inside —
+//      the root-level twins are RELOCATED, not duplicated: a
+//      format-33 file carrying root "inventory" / "inv_grid" is a
+//      version lie, named; a format-32 (or older) file carrying
+//      "players" is a version lie, named). Entry 0 = the PRIMARY
+//      (the host player — every pre-33 consumer's read, the
+//      bit-identical values); entries 1.. = the remote players
+//      (the 12b D13's "the host's single-player save" lifted — the
+//      remote's personal state IS the world state: position /
+//      motion / survival / inventory / effects / stats / tutorial /
+//      the per-player dimension + creative). A format-32 (or
+//      older) load migrates: its "player" + root inventory become
+//      players[0] (a single-entry array — the value-faithful
+//      shape). The REJOIN's consumer: the save-form WELCOME carries
+//      the host's CURRENT document (collectSave at the handshake) —
+//      the reconnecting client applies it over its worldgen'd world
+//      (the applySave's full path, the file-load's twin). Also in
+//      33: the 10d1 deferred face — the End's XP orbs are
+//      PERSISTED (the new ALWAYS-written "end_xp_entities" segment,
+//      the overworld's xp entry shape verbatim — the dragon's burst
+//      orbs survive a reload; the 10d1's "the 120-s fuse bounds the
+//      loss" deviation closes; a format-32 file carrying the key is
+//      a version lie). The gzip container's encoding stays
+//      orthogonal. Writes are always format 33.
+inline constexpr int kSaveFormat = 33;
 // UX-8f (format 24): the inventory's total slot count as of format 23
 // (9 hotbar + 18 storage) — the 27-slot array shape a pre-24 file
 // carries (the parser tail-pads it to the current kTotalSize).
@@ -716,6 +745,111 @@ struct SavedXpEntity {
     double pickupDelay = 0.0;
 };
 
+// V3-12c2 (format 33): ONE player's full save state — the format-32
+// "player" object's fields verbatim PLUS the player's inventory /
+// selection / panel grid (the root "inventory" / "inv_grid" segments
+// relocated per player). The SaveGame's legacy `player*` / `slots` /
+// `invGrid` members are the PRIMARY'S mirror (players[0]) — every
+// pre-33 code path reads them unchanged; the players[] vector is the
+// schema's authority. Sentinel / range discipline = the primary's
+// twin per field (the -1 "unspecified" migrations run identically on
+// every entry — a format-33 file's entries are all post-migration,
+// so the sentinels never serialize there, the primary's precedent).
+// V3-12c2: ONE live particle's full state (the net rejoin snapshot's
+// "particles" segment — the rejoining client rebuilds the host's live
+// system bit-for-bit: the hash's m_particles.size() field + the
+// update's cull timing (the age over the life, the real-dt integration
+// under the BROADCAST's dt sequence — the two machines' identical
+// step). The on-disk save NEVER carries it (collectSave leaves the
+// segment empty — the format-33 document's savenorm anchor's
+// unchanged). BlockID rides as the block's NAME (the registry's
+// resolution, the entities' item-name twin).
+struct SavedParticle {
+    Vec3 position;
+    Vec3 velocity;
+    float age = 0.0f;
+    float life = 0.0f;
+    std::string block; // the texture source's block name
+    float skyLight = 1.0f;
+    float blockLight = 0.0f;
+    float gravity = 0.0f;
+};
+
+// The net rejoin snapshot's SESSION COUNTER family (the hash field
+// list's state the on-disk save does not carry — the solo reload's
+// fresh-derivation has no second machine to match against, the net's
+// does). Absent on the on-disk document (collectSave leaves them at
+// the defaults — the savenorm anchor's unchanged); present on the
+// save-form WELCOME's document (collectNetSnapshot's fill).
+struct SavedNetCounters {
+    // The weather machine's three hashed fields (the fresh-derivation
+    // absent = the CLEAR's zero triple).
+    bool raining = false;
+    std::int32_t weatherFramesLeft = 0;
+    std::int32_t weatherThunderLeft = 0;
+    bool weatherPresent = false; // the "weather" segment's presence
+    // The weather machine's two splitmix64 streams (the segment's full
+    // state — the three visible fields alone underdetermine the next
+    // roll: the machine's pure step is over (state, streams)).
+    std::uint64_t weatherStream = 0;
+    std::uint64_t weatherThunderStream = 0;
+    // The per-dimension spawn counters (the spawn attempt's
+    // deterministic sequence's continuation).
+    std::uint64_t spawnCounterOverworld = 0;
+    std::uint64_t spawnCounterNether = 0;
+    std::uint64_t spawnCounterEnd = 0;
+    bool spawnCountersPresent = false; // the "spawn_counters" segment
+    // The break-particle's per-break counter (the spawnBreak's rng
+    // seed's mix — the deterministic burst's continuation).
+    std::uint64_t particleBreakCounter = 0;
+    bool particleBreakCounterPresent = false;
+};
+
+// V3-12c2: ONE player's SESSION-ONLY sim state (the net rejoin
+// snapshot's "net_players" segment — the hash field list's per-player
+// state the persistable entry does not carry: the real-dt timers +
+// the frame-locked cooldowns + the flying flag + the prev-health's
+// hurt-event discriminator). Index-aligned with the players[] entries
+// (entry i's session state). Absent on the on-disk document (the
+// collectSave's fresh-zero — the savenorm anchor's unchanged).
+struct SavedNetPlayer {
+    float prevHealth = 0.0f; // the hurt event's previous-frame health
+    double hurtFlash = 0.0; // the real-dt flash timer
+    double lastSpacePressTime = 0.0; // the sim-time of the last tap
+    std::uint32_t pearlThrowCooldownFrames = 0;
+    std::uint32_t drownTicks = 0;
+    bool flying = false; // the double-tap / creative's live flag
+};
+
+struct SavePlayer {
+    Vec3 pos;
+    Vec3 velocity {0.0f, 0.0f, 0.0f};
+    float yaw = 0.0f;
+    float pitch = 0.0f;
+    float health = -1.0f; // -1 = unspecified (the base pool)
+    float absorption = -1.0f;
+    float hunger = -1.0f;
+    float saturation = -1.0f;
+    int selectedSlot = 0;
+    std::vector<ItemStack> slots; // exactly Inventory::kTotalSize
+    std::vector<ItemStack> invGrid; // the E panel's grid (9)
+    std::vector<SavedEffect> effects;
+    std::map<std::string, std::uint64_t> stats;
+    TutorialSaveState tutorial = TutorialSaveState::Absent;
+    int tutorialSeries = 0;
+    std::string tutorialId;
+    int tutorialProgress = 0;
+    std::array<std::string, kArmorSlotCount> armor {};
+    std::array<float, kArmorSlotCount> armorDamage {};
+    std::array<std::map<std::string, int>, kArmorSlotCount> armorEnchants {};
+    int oxygen = -1; // -1 = unspecified (full on load)
+    int xp = -1;     // -1 = unspecified (0 on load)
+    std::uint64_t xpSeed = 0;
+    Vec3 respawn {-1.0f, -1.0f, -1.0f}; // the sentinel triple
+    std::string dimension = "overworld";
+    bool creative = false;
+};
+
 // Everything one save file holds (state already resolved to names, so
 // serialization does not need the registries — parsing does).
 struct SaveGame {
@@ -876,6 +1010,11 @@ struct SaveGame {
     // V3-11a (format 31): the player's creative mode (ALWAYS written,
     // the strict boolean; a format-30 load migrates to false).
     bool playerCreative = false;
+    // V3-12c2 (format 33): the PER-PLAYER array (>= 1; entry 0 = the
+    // primary = the legacy members above mirrored). Empty for a
+    // hand-rolled SaveGame (the serializer's belt: collectSave ALWAYS
+    // fills it; a serialize of an empty array is a named error).
+    std::vector<SavePlayer> players;
     std::vector<SavedItemEntity> entities;
     // The XP orbs (V2-11, format 26): the second entity kind of the
     // save's "entities" array (type "xp" — the item entries above keep
@@ -883,6 +1022,25 @@ struct SaveGame {
     // (structurally: they cannot carry the kind — the version-lie
     // rejection).
     std::vector<SavedXpEntity> xpEntities;
+    // V3-12c2 (format 33): the END's XP orbs (the 10d1's deferred
+    // face — the dragon's burst / the enderman's kills persist; the
+    // overworld's xpEntities' shape verbatim; ALWAYS written, empty
+    // valid; a format-32 load migrates it empty).
+    std::vector<SavedXpEntity> endXpEntities;
+    // V3-12c2: the net rejoin snapshot's live particles (the
+    // host's m_particles at the handshake — the insertion order's
+    // verbatim; ALWAYS the empty vector on the on-disk document, the
+    // serializer writes the segment only when non-empty).
+    std::vector<SavedParticle> particles;
+    // V3-12c2: the net rejoin snapshot's session counters (the
+    // defaults = absent on the on-disk document; the presence flags
+    // carry the segment's written-or-not for the round trip).
+    SavedNetCounters netCounters;
+    // V3-12c2: the net rejoin snapshot's per-player session state
+    // (index-aligned with players[]; the empty vector on the on-disk
+    // document — the serializer writes the segment only when
+    // non-empty).
+    std::vector<SavedNetPlayer> netPlayers;
     std::vector<SavedBlockEdit> blockEdits; // sorted by pos
     std::vector<SavedFluidEdit> fluidEdits; // sorted by pos
     // V3-1 Phase B (format 30): the NETHER's cell edits + per-instance
@@ -927,6 +1085,21 @@ Result<void> diffWorld(const World& world, const World::ChunkGenerator& referenc
                        std::vector<SavedBlockEdit>& outBlockEdits,
                        std::vector<SavedFluidEdit>& outFluidEdits,
                        int workers = 1);
+// V3-12c2: the journal's incremental diff (the collectSave's PIPE-2
+// path — promoted to the public face for the net state hash's
+// journal feed: the hash's cell SET must be the save document's
+// (the load/reload-invariant face), not the journal's raw cells (the
+// reverted edit's ghost).
+Result<void> journalDiff(const World& world,
+                         const World::ChunkGenerator& reference,
+                         const BlockRegistry& blocks,
+                         const std::map<ColumnPos, std::set<BlockPos>>&
+                             journalBlocks,
+                         const std::map<ColumnPos, std::set<BlockPos>>&
+                             journalFluids,
+                         std::vector<SavedBlockEdit>& outBlockEdits,
+                         std::vector<SavedFluidEdit>& outFluidEdits,
+                         int workers);
 
 // PIPE-2: the INCREMENTAL variant of diffWorld — byte-identical output
 // (same per-cell comparison, same encoded-fluid byte with the

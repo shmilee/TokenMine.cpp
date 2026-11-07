@@ -437,6 +437,48 @@ TEST(SaveCompressionConfigTest, UnknownOrEmptyWordsAreNamed) {
 //        (the overworld + survival migrations), and re-serializing
 //        returns to the format-32 payload byte-for-byte) ------
 
+// V3-12c2 (format 33): the serialized document's per-player shape
+// conversion (players[0] -> root "player", the nested inventory /
+// inv_grid promoted, the 33-only "end_xp_entities" stripped) — the
+// 29-simulation's premise (the test_save's legacyShape twin).
+Json legacyShape(Json doc) {
+    const Json* players = doc.find("players");
+    if (players == nullptr || !players->isArray() || players->size() == 0) {
+        return doc;
+    }
+    Json entry = players->at(0);
+    doc = withoutKey(doc, "players");
+    doc = withoutKey(doc, "end_xp_entities");
+    if (const Json* inv = entry.find("inventory")) {
+        doc["inventory"] = *inv;
+        entry = withoutKey(entry, "inventory");
+    }
+    if (const Json* g = entry.find("inv_grid")) {
+        doc["inv_grid"] = *g;
+        entry = withoutKey(entry, "inv_grid");
+    }
+    doc["player"] = std::move(entry);
+    // V3-12c2: the respawn's int cell's RE-ENCODE (the format-33
+    // document's exact float's legacy (the 32-and-below) shape — the
+    // old writer's floor's twin; the 32-and-below parse's cell-
+    // center's reconstruction's premise).
+    if (const Json* pl = doc.find("player");
+        pl != nullptr && pl->isObject()) {
+        const Json* rp = pl->find("respawn");
+        if (rp != nullptr && rp->isArray() && rp->size() == 3) {
+            Json cell = Json::array();
+            for (std::size_t i = 0; i < 3; ++i) {
+                cell.push_back(Json(std::floor(rp->at(i).asDouble())));
+            }
+            Json plOut = withoutKey(*pl, "respawn");
+            plOut["respawn"] = std::move(cell);
+            doc = withoutKey(doc, "player");
+            doc["player"] = std::move(plOut);
+        }
+    }
+    return doc;
+}
+
 TEST(GzipNoneIdentityTest,
      TwentyNineToThirtyTwoDeltaIsTheWhitelist) {
     const Fixture f;
@@ -448,18 +490,23 @@ TEST(GzipNoneIdentityTest,
     // root key — the segment's keys are blocks / fluids / states, no
     // nested "format" string).
     EXPECT_EQ(countOccurrences(p32, "\"format\""), 1u);
-    EXPECT_EQ(countOccurrences(p32, "\"format\": 32"), 1u);
-    // The format-30/31/32 keys are present (the ALWAYS-written
-    // discipline).
+    EXPECT_EQ(countOccurrences(p32, "\"format\": 33"), 1u);
+    // The format-30/31/32/33 keys are present (the ALWAYS-written
+    // discipline — the format-33 players' relocation: the per-player
+    // entry's dimension / creative + the dedicated end orbs segment).
     EXPECT_EQ(countOccurrences(p32, "\"dimension\""), 1u);
+    EXPECT_EQ(countOccurrences(p32, "\"players\""), 1u);
     EXPECT_EQ(countOccurrences(p32, "\"nether\""), 1u);
     EXPECT_EQ(countOccurrences(p32, "\"nether_entities\""), 1u);
     EXPECT_EQ(countOccurrences(p32, "\"creative\""), 1u);
     EXPECT_EQ(countOccurrences(p32, "\"end\""), 1u);
     EXPECT_EQ(countOccurrences(p32, "\"end_entities\""), 1u);
+    EXPECT_EQ(countOccurrences(p32, "\"end_xp_entities\""), 1u);
     // The simulated v3.3.0 (format-29) file of the same state: the
-    // whitelisted keys stripped + the format key flipped.
-    Json j = *j32;
+    // whitelisted keys stripped + the format key flipped. The
+    // format-33 shape's revert first (the per-player array -> the
+    // legacy root shape — the 29 simulation's premise).
+    Json j = legacyShape(*j32);
     Json nether = withoutKey(j, "nether");
     nether = withoutKey(nether, "nether_entities");
     nether = withoutKey(nether, "end");

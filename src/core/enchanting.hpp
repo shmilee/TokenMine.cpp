@@ -205,12 +205,21 @@ std::uint64_t xpSeedInit(std::uint64_t worldSeed);
 // streams (the kSalt family's continuation discipline — the value is
 // collision-checked against every kSalt* / k*RollSalt in src/: the 0x10D
 // 0E11D5E4D73A2..A6 end family is the nearest, A7 is the next free slot).
-inline constexpr std::uint64_t kSaltPlayerXp[2] = {
+// V3-12c2: the table's 8-entry width (the kNetMaxPlayers' cap — the
+// c1's N-generalization's de-collision for every slot; the A8..AC
+// continuation, the same family's spacing).
+inline constexpr std::uint64_t kSaltPlayerXp[8] = {
     0x0000000000000000ULL,  // primary (solo bit-level)
-    0x10D0E11D5E4D73A7ULL,  // the remote player (12b's second slot)
+    0x10D0E11D5E4D73A7ULL,  // slot 1 (the 12b's second)
+    0x10D0E11D5E4D73A8ULL,  // slot 2
+    0x10D0E11D5E4D73A9ULL,  // slot 3
+    0x10D0E11D5E4D73AAULL,  // slot 4
+    0x10D0E11D5E4D73ABULL,  // slot 5
+    0x10D0E11D5E4D73ACULL,  // slot 6
+    0x10D0E11D5E4D73ADULL,  // slot 7
 };
 inline std::uint64_t xpSeedInitFor(std::uint64_t worldSeed, std::size_t i) {
-    return xpSeedInit(worldSeed ^ kSaltPlayerXp[i % 2]);
+    return xpSeedInit(worldSeed ^ kSaltPlayerXp[i % 8]);
 }
 
 // The UNBREAKING wear roll (the durability-skip): for a wear event of

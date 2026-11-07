@@ -210,11 +210,11 @@ std::string NetSession::waitPacket(NetPacket& out, int timeoutSec) {
     }
 }
 
-std::string NetSession::startHost(std::uint16_t port, NetHello& outHello,
-                                  int timeoutMs) {
+int NetSession::openListener(std::uint16_t port) {
     const int listenFd = ::socket(AF_INET, SOCK_STREAM, 0);
     if (listenFd < 0) {
-        return "net listen socket: " + errnoStr();
+        MC_LOG_ERROR("net listen socket: " + errnoStr());
+        return -1;
     }
     int on = 1;
     ::setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
@@ -224,18 +224,27 @@ std::string NetSession::startHost(std::uint16_t port, NetHello& outHello,
     addr.sin_port = htons(port);
     if (::bind(listenFd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) <
         0) {
-        const std::string err = "net bind : " + errnoStr();
+        MC_LOG_ERROR("net bind : " + errnoStr());
         ::close(listenFd);
-        return err;
+        return -1;
     }
-    if (::listen(listenFd, 1) < 0) {
-        const std::string err = "net listen: " + errnoStr();
+    // The backlog 8 (the protocol's player cap — the mid-session
+    // rejoin's queue's belt, the initial window's shape).
+    if (::listen(listenFd, 8) < 0) {
+        MC_LOG_ERROR("net listen: " + errnoStr());
         ::close(listenFd);
-        return err;
+        return -1;
     }
     MC_LOG_DEBUG("net: listening on port " + std::to_string(port));
+    return listenFd;
+}
+
+std::string NetSession::acceptFromListener(int listenFd, NetHello& outHello,
+                                           int timeoutMs) {
     // The accept's select (the timeout's ms — the first client's
-    // blocking 10-s / the accept window's 250-ms attempt).
+    // 10-s blocking accept / the accept window's 250-ms attempt /
+    // the rejoin's per-frame 0-ms quiet attempt: a no-pending = the
+    // "timed out" face, the caller's ignore).
     sockaddr_in peer {};
     socklen_t plen = sizeof(peer);
     for (;;) {
@@ -245,15 +254,11 @@ std::string NetSession::startHost(std::uint16_t port, NetHello& outHello,
         timeval tv {timeoutMs / 1000, (timeoutMs % 1000) * 1000};
         const int sel = ::select(listenFd + 1, &set, nullptr, nullptr, &tv);
         if (sel < 0) {
-            const std::string err = "net accept select: " + errnoStr();
-            ::close(listenFd);
-            return err;
+            return "net accept select: " + errnoStr();
         }
         if (sel == 0) {
-            const std::string err = "net accept timed out (no client in " +
-                                    std::to_string(timeoutMs) + " ms)";
-            ::close(listenFd);
-            return err;
+            return "net accept timed out (no client in " +
+                   std::to_string(timeoutMs) + " ms)";
         }
         m_sock = ::accept(listenFd, reinterpret_cast<sockaddr*>(&peer), &plen);
         if (m_sock < 0) {
@@ -261,7 +266,6 @@ std::string NetSession::startHost(std::uint16_t port, NetHello& outHello,
         }
         break;
     }
-    ::close(listenFd);
     char ip[INET_ADDRSTRLEN] = "?";
     ::inet_ntop(AF_INET, &peer.sin_addr, ip, sizeof(ip));
     MC_LOG_INFO("net: client connected from " + std::string(ip) + ":" +

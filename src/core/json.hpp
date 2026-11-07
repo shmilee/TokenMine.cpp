@@ -105,6 +105,10 @@ public:
         assert(isArray() && index < std::get<Array>(m_value).size());
         return std::get<Array>(m_value)[index];
     }
+    Json& at(std::size_t index) {
+        assert(isArray() && index < std::get<Array>(m_value).size());
+        return std::get<Array>(m_value)[index];
+    }
 
     // -- mutation ------------------------------------------------------------
     Json& operator[](const std::string& key) {

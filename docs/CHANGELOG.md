@@ -11,6 +11,60 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.31.0（2026-11-08）— V3-12c2 断线恢复 REJOIN + format 33 players[]（门 221 全 PASS，V3-12 全 4 相位收官）
+
+**V3-12 多人收官相位 c2**（**format 32→33**【players[] 迁移 + 末地
+orb 持久化】/ **sim 2 不 bump**【canary 4 EXACT 执法】/ 全 sim 覆盖）：
+**format 33 players[]** = root `player` + root `inventory`/`inv_grid`
+迁入 per-player entry【entry 0 = primary 镜像，applySave 主路径零改；
+entries 1.. = 远程玩家】+ 三面 version lie【≤32 携 players / ≥33 缺
+players / ≥33 携 root player/inventory/inv_grid】+ 序列化 fallback
+【save.players 空 = 从 legacy 主字段派生单条——fixture 兼容 + belt】
++ kSavePlayerCap 8；**末地 XP orb 持久化**（10d1 后移复议兑现：
+`end_xp_entities` 恒写，overworld xp entry 形 verbatim，parseXpEntry
+单源）；**REJOIN 快照** = save 形 WELCOME 携主机当前文档【磁盘档 +
+会话计数族 {weather 5 字段含双 splitmix 流 / spawnCounter×3 /
+particleBreakCounter} + 活粒子 + per-player 会话计时器族
+{prevHealth/hurtFlash/lastSpace/pearl/drownTicks/flying}——全
+presence-gated，on-disk 格式不变 S1 锚免重锚】+ 重连流程【主机持久
+listener + 中会话非阻塞 accept + WELCOME startFrame 采纳 + 重连者 =
+新体 + 起始库存 D25【原体物品 100% 掉落仍在 entities 可捡回】】；
+**Join/Renumber CTRL 广播**【N 增长/移除的 slot 重编号——行随玩家
+移、输入历史跟走、无冲洗；removal 的 compact erase 破旧客户端 ring
+越界的门内捕获修】；**net 主机抑制幽灵**【载多玩家档 = stale 幽灵的
+slot/m_nets 错乱 segfault 修——重启后其他玩家连接已死，玩家集 =
+{自身}+{新连接}，与 solo 档 host 等价】；feedJournal 改哈希
+**live-diff**【journal ∪ retained 对生成参考的 diff，load 不变面——
+rejoin client 回填 journal ≠ host live journal 的原始 cell 集合的门内
+捕获修】；respawn **精确 float**（≤32 int cell 对非 cell-center 值
+丢 0.5-y 的门内捕获修）；**mob-quiet 合同**【活 mob 在场 = 点名拒收
+REJOIN，全 mob 快照传输后移 D24——门臂 mobs-off 实证】。门 221：S1
+结构免疫第 102 次（≡ base19 逐字节 ×2 + savenorm EXACT + on-disk 无
+net 段）+ canary 4 EXACT（sim 2 不 bump）+ 迁移臂（v3.30.0 format 32
+档 → v3.31.0 载入 → 重存 33，值保真 pos/yaw/34 blockEdits/
+inventory + root player→players 迁移正确）+ **REJOIN 臂**【host
+--listen --save + C1 初始窗 + C2 中会话重连 slot 2 of 3 @ frame 366
++ 三向哈希 f600 ad509c664ccdeb4b host≡C1≡C2 逐字 + 零 desync + 双
+rc=0；C1 移除的 Renumber 广播 + 双端 100% drop 同步】+ S6【listen×
+save 转正（旧「save-form WELCOME is the 12c's face」拒收移除）+ WELCOME
+payload 损坏 → client 点名 + mob 在场拒收命名实证】+ 性能 A/B 同档
+【旧 = d316cfc v3.30.0 + g139 双树：OW 900f 无输入 PERF-WIN 三窗 upd
+med 旧 0.640/0.638/0.650（复跑带 0.648/0.702/0.696）vs 新
+0.707/0.701/0.642（复跑 0.717/0.722/0.721）同档【win2 在旧树带内、
+win3 低于带、win1 略高于带 = warmup 窗噪声】+ render/swap 同档 +
+changesApplied 9/3/1 逐位【新树复跑 win2 单 cell 9/2/1 = real-dt 流体
+沉降抖动 PITS 385 域】= format 33/net 面全冷 solo 路径结构性零成本；
+net 自成本（新树 mobs-off 600f）：solo upd med 0.696/0.727 vs 2P 主机
+0.773/0.783 = +~0.07ms/帧（per-player sim pass + per-remote 轮询/屏障
++ socket，sub-ms 同档）+ 零 desync】；2987/2987（+13：SaveFormat33
+9 项【双玩家 round-trip/32→33 迁移/lie 五面/嵌套必需/end_xp
+round-trip+lie/cap/空数组/fallback】+ NetSnapshot 4 项【net 段
+round-trip/≤32 lie/absent 默认/shape 拒收】+ NetProto codec 扩展
+【startFrame + Renumber/Join + name 16-cap】）。PITS 412（八坑：
+Json(bool) 指针陷阱 / legacyShape-format 矛盾 / respawn 0.5-y / slot
+重编号 ring 越界 / barrier 停滞 accept 节拍 / client renumber 无 drop /
+net 主机幽灵 segfault / feedJournal 原始 cell）。
+
 ## v3.30.0（2026-11-07）— V3-12c1 大厅/聊天/N 泛化/心跳（门 220 全 PASS）
 
 **V3-12 多人收官相位 c1**（**format 32 不变**【大厅/聊天/名牌全表

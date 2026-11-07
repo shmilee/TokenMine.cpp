@@ -144,6 +144,79 @@ Json withArrayElement(const Json& arr, std::size_t idx, const Json& v) {
 // legacy shape — the parser tail-pads it back to the current kTotalSize
 // (value-faithful, the new 9 slots load empty). Self-contained (this
 // file has no withoutKey helper — the P75 inline-rebuild pattern).
+// V3-12c2 (format 33): the serialized document's per-player seam
+// (the root "player"'s relocated twin — players[0] + the nested
+// "inventory" / "inv_grid"). This file has no withoutKey helper —
+// the members() rebuild pattern inline (the P75 discipline).
+const Json* primaryEntry(const Json& doc) {
+    const Json* players = doc.find("players");
+    return (players != nullptr && players->isArray() && players->size() > 0)
+               ? &players->at(0)
+               : nullptr;
+}
+Json withoutKeyLocal(const Json& obj, const std::string& key) {
+    Json out = Json::object();
+    for (const auto& [k, v] : obj.members()) {
+        if (k != key) {
+            out[k] = v;
+        }
+    }
+    return out;
+}
+Json withPrimaryEntryLocal(const Json& doc,
+                           const std::function<Json(const Json&)>& fn) {
+    const Json* players = doc.find("players");
+    if (players == nullptr || players->size() == 0) {
+        return doc;
+    }
+    Json arr = Json::array();
+    arr.push_back(fn(players->at(0)));
+    for (std::size_t i = 1; i < players->size(); ++i) {
+        arr.push_back(players->at(i));
+    }
+    Json out = withoutKeyLocal(doc, "players");
+    out["players"] = std::move(arr);
+    return out;
+}
+
+Json legacyShape(Json doc) {
+    const Json* players = doc.find("players");
+    if (players == nullptr || !players->isArray() || players->size() == 0) {
+        return doc;
+    }
+    Json entry = players->at(0);
+    doc = withoutKeyLocal(doc, "players");
+    doc = withoutKeyLocal(doc, "end_xp_entities");
+    if (const Json* inv = entry.find("inventory")) {
+        doc["inventory"] = *inv;
+        entry = withoutKeyLocal(entry, "inventory");
+    }
+    if (const Json* g = entry.find("inv_grid")) {
+        doc["inv_grid"] = *g;
+        entry = withoutKeyLocal(entry, "inv_grid");
+    }
+    doc["player"] = std::move(entry);
+    // V3-12c2: the respawn's int cell's RE-ENCODE (the format-33
+    // document's exact float's legacy (the 32-and-below) shape — the
+    // old writer's floor's twin; the 32-and-below parse's cell-
+    // center's reconstruction's premise).
+    if (const Json* pl = doc.find("player");
+        pl != nullptr && pl->isObject()) {
+        const Json* rp = pl->find("respawn");
+        if (rp != nullptr && rp->isArray() && rp->size() == 3) {
+            Json cell = Json::array();
+            for (std::size_t i = 0; i < 3; ++i) {
+                cell.push_back(Json(std::floor(rp->at(i).asDouble())));
+            }
+            Json plOut = withoutKeyLocal(*pl, "respawn");
+            plOut["respawn"] = std::move(cell);
+            doc = withoutKeyLocal(doc, "player");
+            doc["player"] = std::move(plOut);
+        }
+    }
+    return doc;
+}
+
 Json downgradeSlots(const Json& root) {
     const Json* inv = root.find("inventory");
     if (inv == nullptr || !inv->isObject()) {
@@ -443,11 +516,11 @@ TEST(SaveFormat18Test, MidDamageRoundTripsInAllThreePlaces) {
     // The shapes: the damaged slot + the entity carry the key; the
     // full-durability armor slot is a STRING; the damaged one an
     // OBJECT {item, damage}.
-    const Json& slot = j->find("inventory")->find("slots")->at(3);
+    const Json& slot = primaryEntry(*j)->find("inventory")->find("slots")->at(3);
     EXPECT_FLOAT_EQ(slot.find("damage")->asDouble(), 123.5f);
     const Json& ent = j->find("entities")->at(0);
     EXPECT_FLOAT_EQ(ent.find("damage")->asDouble(), 30.0f);
-    const Json& armor = *j->find("player")->find("armor");
+    const Json& armor = *primaryEntry(*j)->find("armor");
     EXPECT_TRUE(armor.find("chest")->isString());
     const Json& head = *armor.find("head");
     EXPECT_TRUE(head.isObject());
@@ -464,7 +537,7 @@ TEST(SaveFormat18Test, MidDamageRoundTripsInAllThreePlaces) {
     ASSERT_EQ(out->entities.size(), 1u);
     EXPECT_FLOAT_EQ(out->entities[0].damage, 30.0f);
     // The no-damage slot omits the key (the omit-when-default pin).
-    EXPECT_EQ(j->find("inventory")->find("slots")->at(0)
+    EXPECT_EQ(primaryEntry(*j)->find("inventory")->find("slots")->at(0)
                   .find("damage"),
               nullptr);
 }
@@ -487,7 +560,7 @@ TEST(SaveFormat18Test, Format17WithDamageKeyIsAVersionLie) {
     s.entities.push_back(e);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    Json root = *j;
+    Json root = legacyShape(*j); // V3-12c2: the 33 shape's revert
     // V3-11a: the format-30/31 keys (dimension / creative / nether /
     // nether_entities) are stripped for the downgrade (the genuine
     // pre-31 file never carried them — the test_save.cpp
@@ -546,11 +619,18 @@ TEST(SaveFormat18Test, DamageAtOrAboveDurabilityRejected) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     for (double bad : {250.0, 251.0}) {
-        Json root = *j;
-        Json slots = root["inventory"]["slots"];
-        Json slot3 = slots.at(3);
-        slot3["damage"] = Json(bad);
-        root["inventory"]["slots"] = withArrayElement(slots, 3, slot3);
+        Json root = withPrimaryEntryLocal(*j, [bad](const Json& e) {
+            Json entry = e;
+            const Json* inv = e.find("inventory");
+            Json slots = *inv->find("slots");
+            Json slot3 = slots.at(3);
+            slot3["damage"] = Json(bad);
+            Json invOut = withoutKeyLocal(*inv, "slots");
+            invOut["slots"] = withArrayElement(slots, 3, slot3);
+            entry = withoutKeyLocal(entry, "inventory");
+            entry["inventory"] = std::move(invOut);
+            return entry;
+        });
         auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
         ASSERT_FALSE(out.ok()) << bad;
         EXPECT_NE(out.error().message.find("damage"), std::string::npos)
@@ -568,11 +648,18 @@ TEST(SaveFormat18Test, DamageOnNoDurabilityItemRejected) {
     s.slots[5] = ItemStack {f.id("stick"), 3, 5.0f};
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    Json root = *j;
-    Json slots = root["inventory"]["slots"];
-    Json slot5 = slots.at(5);
-    slot5["damage"] = Json(5.0);
-    root["inventory"]["slots"] = withArrayElement(slots, 5, slot5);
+    Json root = withPrimaryEntryLocal(*j, [](const Json& e) {
+        Json entry = e;
+        const Json* inv = e.find("inventory");
+        Json slots = *inv->find("slots");
+        Json slot5 = slots.at(5);
+        slot5["damage"] = Json(5.0);
+        Json invOut = withoutKeyLocal(*inv, "slots");
+        invOut["slots"] = withArrayElement(slots, 5, slot5);
+        entry = withoutKeyLocal(entry, "inventory");
+        entry["inventory"] = std::move(invOut);
+        return entry;
+    });
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("no durability"), std::string::npos)

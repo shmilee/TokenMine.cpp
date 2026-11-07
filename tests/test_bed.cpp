@@ -57,7 +57,57 @@ Json withoutKeyForTest(const Json& obj, const std::string& key) {
 // V3-1 Phase B: the downgrade's format-30 key strip (the test_save.cpp
 // stripFormat31Keys twin — the genuine pre-30 file never carried the
 // format-30 keys: player.dimension / nether / nether_entities).
+// V3-12c2 (format 33): the serialized document's per-player seam
+// (the root "player"'s relocated twin — players[0] + the nested
+// "inventory" / "inv_grid"); the old-format simulation's shape
+// conversion (players[0] -> root "player", the nested segments
+// promoted, the 33-only "end_xp_entities" stripped).
+const Json* primaryEntry(const Json& doc) {
+    const Json* players = doc.find("players");
+    return (players != nullptr && players->isArray() && players->size() > 0)
+               ? &players->at(0)
+               : nullptr;
+}
+Json legacyShape(Json doc) {
+    const Json* players = doc.find("players");
+    if (players == nullptr || !players->isArray() || players->size() == 0) {
+        return doc;
+    }
+    Json entry = players->at(0);
+    doc = withoutKeyForTest(doc, "players");
+    doc = withoutKeyForTest(doc, "end_xp_entities");
+    if (const Json* inv = entry.find("inventory")) {
+        doc["inventory"] = *inv;
+        entry = withoutKeyForTest(entry, "inventory");
+    }
+    if (const Json* g = entry.find("inv_grid")) {
+        doc["inv_grid"] = *g;
+        entry = withoutKeyForTest(entry, "inv_grid");
+    }
+    doc["player"] = std::move(entry);
+    // V3-12c2: the respawn's int cell's RE-ENCODE (the format-33
+    // document's exact float's legacy (the 32-and-below) shape — the
+    // old writer's floor's twin; the 32-and-below parse's cell-
+    // center's reconstruction's premise).
+    if (const Json* pl = doc.find("player");
+        pl != nullptr && pl->isObject()) {
+        const Json* rp = pl->find("respawn");
+        if (rp != nullptr && rp->isArray() && rp->size() == 3) {
+            Json cell = Json::array();
+            for (std::size_t i = 0; i < 3; ++i) {
+                cell.push_back(Json(std::floor(rp->at(i).asDouble())));
+            }
+            Json plOut = withoutKeyForTest(*pl, "respawn");
+            plOut["respawn"] = std::move(cell);
+            doc = withoutKeyForTest(doc, "player");
+            doc["player"] = std::move(plOut);
+        }
+    }
+    return doc;
+}
+
 Json stripFormat31Keys(Json root) {
+    root = legacyShape(std::move(root)); // V3-12c2: the 33 shape's revert
     root = withoutKeyForTest(root, "nether");
     root = withoutKeyForTest(root, "nether_entities");
     // V3-10a: the format-32 keys join the strip (the test_save twin —
@@ -398,15 +448,16 @@ TEST(BedSaveFormat28, BedPositionRoundTripsExactly) {
     auto j = serializeSave(f.save, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     EXPECT_EQ(j->find("format")->asInt(), kSaveFormat);
-    const Json* rp = j->find("player")->find("respawn");
+    const Json* rp = primaryEntry(*j)->find("respawn");
     ASSERT_NE(rp, nullptr);
     ASSERT_TRUE(rp->isArray());
     ASSERT_EQ(rp->size(), 3u);
-    EXPECT_EQ(rp->at(0).asInt(), 3);
-    EXPECT_EQ(rp->at(1).asInt(), 54);
-    // The negative-floor discipline: the cell of -7.5 is -8 (the cell
-    // spans [-8, -7) — the floorDiv convention, the coordinates rule).
-    EXPECT_EQ(rp->at(2).asInt(), -8);
+    // V3-12c2 (format 33): the EXACT float triple (the ≤32's int
+    // cell's loss's lifting — the bed's cell-center's value is
+    // value-faithful, the round trip's exact).
+    EXPECT_DOUBLE_EQ(rp->at(0).asDouble(), 3.5);
+    EXPECT_DOUBLE_EQ(rp->at(1).asDouble(), 54.5);
+    EXPECT_DOUBLE_EQ(rp->at(2).asDouble(), -7.5);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_EQ(out->playerRespawn, f.save.playerRespawn);
@@ -422,12 +473,19 @@ TEST(BedSaveFormat28, WorldSpawnFormFloorsToTheCell) {
     f.save.playerRespawn = {1.5f, 54.0f, 2.5f};
     auto j = serializeSave(f.save, f.items);
     ASSERT_TRUE(j.ok());
-    const Json* rp = j->find("player")->find("respawn");
+    // V3-12c2: the floor-to-cell's face is the 32-and-below's (the
+    // format-33 document's exact float's loss-less twin) — the
+    // downgrade's legacy shape's int cell.
+    Json root = stripFormat31Keys(*j); // V3-12c2: the legacyShape's
+                                       // first + the 30/31/32/33 key's
+                                       // strip (the 28 claim's face)
+    root["format"] = Json(28);
+    const Json* rp = root.find("player")->find("respawn");
     ASSERT_NE(rp, nullptr);
     EXPECT_EQ(rp->at(0).asInt(), 1);
     EXPECT_EQ(rp->at(1).asInt(), 54);
     EXPECT_EQ(rp->at(2).asInt(), 2);
-    auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
+    auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_EQ(out->playerRespawn, bedSpawnPosition(1, 54, 2));
 }
@@ -438,8 +496,17 @@ TEST(BedSaveFormat28, Format28MissingRespawnRejected) {
     SaveFixture f;
     auto j = serializeSave(f.save, f.items);
     ASSERT_TRUE(j.ok());
+    // V3-12c2: the entry's respawn key (the format stays 33 — the
+    // required-key message names "player.respawn", the hardcoded form).
     Json root = *j;
-    root["player"] = withoutKeyForTest(*root.find("player"), "respawn");
+    {
+        const Json* players = root.find("players");
+        Json entry = withoutKeyForTest(players->at(0), "respawn");
+        Json arr = Json::array();
+        arr.push_back(std::move(entry));
+        root = withoutKeyForTest(root, "players");
+        root["players"] = std::move(arr);
+    }
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("player.respawn"), std::string::npos)
@@ -484,21 +551,53 @@ TEST(BedSaveFormat28, Pre28LoadMigratesToTheSentinel) {
 // Rebuild the respawn array with a replaced y (the const-at twin of the
 // test_drown's `root["player"]["oxygen"] = ...` pattern).
 Json withRespawnY(const Json& root, double y) {
+    // V3-12c2: the entry's respawn (the root "player"'s relocated
+    // twin — the players array's element rebuild) — DUAL-SHAPE (the
+    // post-legacyShape document's root "player"'s face).
+    const Json* entry = primaryEntry(root);
+    if (entry != nullptr) {
+        const Json* rp = entry->find("respawn");
+        Json arr = Json::array();
+        arr.push_back(rp->at(0));
+        arr.push_back(Json(y));
+        arr.push_back(rp->at(2));
+        const Json* players = root.find("players");
+        Json playersOut = Json::array();
+        for (std::size_t i = 0; i < players->size(); ++i) {
+            Json e = players->at(i);
+            if (i == 0) {
+                e["respawn"] = arr;
+            }
+            playersOut.push_back(std::move(e));
+        }
+        Json out = withoutKeyForTest(root, "players");
+        out["players"] = std::move(playersOut);
+        return out;
+    }
     const Json* rp = root.find("player")->find("respawn");
     Json arr = Json::array();
     arr.push_back(rp->at(0));
     arr.push_back(Json(y));
     arr.push_back(rp->at(2));
-    Json out = root;
-    out["player"]["respawn"] = std::move(arr);
+    Json pl = withoutKeyForTest(*root.find("player"), "respawn");
+    pl["respawn"] = std::move(arr);
+    Json out = withoutKeyForTest(root, "player");
+    out["player"] = std::move(pl);
     return out;
 }
 
 TEST(BedSaveFormat28, NonIntegerComponentRejected) {
+    // V3-12c2: the whole-number's discipline is the 32-and-below's
+    // (the format-33 document's exact float accepts the fractional y —
+    // the 0.5's cell-center's value-faithful's form).
     SaveFixture f;
     auto j = serializeSave(f.save, f.items);
     ASSERT_TRUE(j.ok());
-    Json root = withRespawnY(*j, 54.5); // the y is not a whole number
+    Json root = stripFormat31Keys(*j); // V3-12c2: the legacyShape's
+                                       // first + the 30/31/32/33 key's
+                                       // strip (the 28 claim's face)
+    root["format"] = Json(28);
+    root = withRespawnY(root, 54.5); // the y is not a whole number
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
     EXPECT_NE(out.error().message.find("respawn"), std::string::npos)

@@ -88,6 +88,15 @@ public:
 
     const std::vector<Particle>& particles() const { return m_particles; }
     std::size_t size() const { return m_particles.size(); }
+    // V3-12c2: the net rejoin snapshot's restore (the host's live
+    // system's verbatim rebuild — the spawn's rng contract is NOT
+    // re-run: the document's values ARE the state, the kMaxParticles'
+    // cap held on the host by construction, the size's belt).
+    void addRestored(const Particle& p) {
+        if (m_particles.size() < kMaxParticles) {
+            m_particles.push_back(p);
+        }
+    }
     bool empty() const { return m_particles.empty(); }
     void clear() { m_particles.clear(); }
 

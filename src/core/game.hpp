@@ -1330,6 +1330,9 @@ std::optional<MobHit> targetMob() const;
     // No-op unless --save is set, the slot is not --new, and the file
     // exists; then reads + applies it.
     Result<void> tryLoadSave();
+    // V3-12c2 (format 33): one ghost body's restore (the save's
+    // players[] entry i >= 1 — the applySave's looped twin).
+    Result<void> applyGhostPlayer(const SavePlayer& sp);
     // Rebuilds the crop-growth tracking set from the world: every cell
     // whose block has a non-empty growsTo (Phase 48). Runs at the end of
     // buildScene — after a save load, whose block edits restore the
@@ -3002,6 +3005,15 @@ std::optional<MobHit> targetMob() const;
     // the solo loop is the pre-V3-12b sequence).
     std::vector<std::unique_ptr<NetSession>> m_nets;
     bool m_netActive = false;
+    // V3-12c2: the rejoin snapshot's WELCOME payload (the save-form's
+    // document — empty on the fresh form + every solo run; the
+    // client's apply's source, the post-buildScene face).
+    std::string m_netSnapshotPayload;
+    std::uint32_t m_netStartFrame = 0;
+    // V3-12c2: the host's persistent listener's fd (the port's single
+    // owner — the initial window + the mid-session rejoin's accepts;
+    // -1 = the non-host / the closed face; the destructor's close).
+    int m_listenFd = -1;
     bool m_netIsHost = false;
     bool netActive() const { return m_netActive; }
     // The client's WELCOME seed (the world spec's authority — the
@@ -3079,7 +3091,34 @@ std::optional<MobHit> targetMob() const;
     void preloadNetInputs();
     // The player add / remove (the connect's slot 1 / the disconnect's
     // R19 removal — the 100% drop + the dismount + the effect clear).
-    void netAddPlayer(std::size_t slot);
+    // V3-12c2: `joinFrame` — the REJOIN's watermark's adoption (the
+    // host's m_frameCount at the handshake; the barrier's trivial
+    // pass over the pre-join frames, the 12b's cold-zero twin at 0).
+    void netAddPlayer(std::size_t slot, std::uint32_t joinFrame = 0);
+    // V3-12c2: the renumber's CTRL's client apply (the host's
+    // compact-erase's local mirror — the bodies / sessions / rings /
+    // watermarks' rows shift with the players, the local slot's
+    // adjustment; "" on success, the named error (the corrupt face /
+    // the own-slot's transport-death's exit)).
+    std::string netApplyRenumber(std::uint8_t removed);
+    // V3-12c2: the join's CTRL's client apply (the N's growth's
+    // local mirror — the rows' push + the new body's construction,
+    // the host's netAddPlayer's twin; "" on success, the named
+    // error (the corrupt face)).
+    std::string netApplyJoin(std::uint8_t slot, std::uint8_t players,
+                             const std::string& name);
+    // V3-12c2: the mid-session accept's attempt (the non-blocking's
+    // quiet face; the pre's per-frame + the barrier's stall select's
+    // dual cadence).
+    void netTryMidSessionAccept();
+    // V3-12c2: the rejoin snapshot's document (collectSave's twin +
+    // the session's counter family + the live particles; the
+    // mob-quiet's gate's named rejection).
+    Result<Json> collectNetSnapshot() const;
+    // V3-12c2: the client's WELCOME-document's apply (the parse/apply
+    // path's full reuse over the worldgen'd world + the counters'
+    // restore + the frame's adoption).
+    Result<void> applyNetSnapshot();
     void netRemovePlayer(std::size_t slot, const std::string& why);
     // The state-hash's exchange (the 30-frame cadence's compute +
     // compare — the desync's named exit).

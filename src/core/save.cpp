@@ -15,6 +15,7 @@
 #include <zlib.h>
 
 #include "core/bed.hpp" // V2-13: the respawn cell-center reconstruction
+#include "core/weather.hpp" // V3-12c2: the net snapshot's weather bounds
 #include "core/enchanting.hpp" // V2-12: the EnchantmentRegistry + vocab
 #include "entity/exp_orb.hpp" // V2-11: the xp entity's timer constants
 #include "entity/item_entity.hpp"
@@ -752,6 +753,23 @@ Result<void> applyWorldEdits(const SaveGame& save, const BlockRegistry& blocks,
 // maybe-uninitialized false positive in serializeSlotEntry's inlining
 // recurs when this segment's growth lands in serializeSave's body
 // (the free-function precedent, the code is the nether's verbatim).
+// V3-12c2 (format 33): the XP-orb entity entry (the overworld's
+// "entities" xp-kind shape verbatim — the end_xp_entities' reuse,
+// the single source).
+static Json makeXpEntityJson(const SavedXpEntity& e) {
+    Json jpos = Json::array();
+    jpos.push_back(Json(e.pos.x));
+    jpos.push_back(Json(e.pos.y));
+    jpos.push_back(Json(e.pos.z));
+    Json je = Json::object();
+    je["type"] = Json(std::string("xp"));
+    je["xp"] = Json(e.xp);
+    je["pos"] = jpos;
+    je["age"] = Json(e.age);
+    je["pickup_delay"] = Json(e.pickupDelay);
+    return je;
+}
+
 static Result<void> appendEndSections(Json& root, const SaveGame& save) {
     // V3-10a (format 32): the END segment (the nether segment's
     // member-for-member twin — the closed set {blocks, fluids, states},
@@ -817,6 +835,83 @@ static Result<void> appendEndSections(Json& root, const SaveGame& save) {
         }
         root["end_entities"] = std::move(endEntities);
     }
+    // V3-12c2 (format 33): the END's XP orbs (the 10d1's deferred face
+    // — the dragon's burst / the enderman's kills persist; the
+    // overworld's xp entry shape verbatim, the makeXpEntityJson's
+    // single source; ALWAYS written, empty valid — a no-End session
+    // serializes the empty array, the end_entities' twin).
+    {
+        Json endXp = Json::array();
+        for (const SavedXpEntity& e : save.endXpEntities) {
+            endXp.push_back(makeXpEntityJson(e));
+        }
+        root["end_xp_entities"] = std::move(endXp);
+    }
+    // V3-12c2: the NET REJOIN SNAPSHOT's segments — written ONLY when
+    // present (collectSave — the on-disk path — leaves them absent:
+    // the format-33 document's savenorm anchor is unchanged; the
+    // save-form WELCOME's collectNetSnapshot fills them).
+    if (!save.particles.empty()) {
+        Json parts = Json::array();
+        for (const SavedParticle& pt : save.particles) {
+            Json e = Json::object();
+            Json ppos = Json::array();
+            ppos.push_back(Json(pt.position.x));
+            ppos.push_back(Json(pt.position.y));
+            ppos.push_back(Json(pt.position.z));
+            e["pos"] = ppos;
+            Json pvel = Json::array();
+            pvel.push_back(Json(pt.velocity.x));
+            pvel.push_back(Json(pt.velocity.y));
+            pvel.push_back(Json(pt.velocity.z));
+            e["vel"] = pvel;
+            e["age"] = Json(pt.age);
+            e["life"] = Json(pt.life);
+            e["block"] = Json(pt.block);
+            e["sky_light"] = Json(pt.skyLight);
+            e["block_light"] = Json(pt.blockLight);
+            e["gravity"] = Json(pt.gravity);
+            parts.push_back(std::move(e));
+        }
+        root["particles"] = std::move(parts);
+    }
+    if (!save.netPlayers.empty()) {
+        Json np = Json::array();
+        for (const SavedNetPlayer& npv : save.netPlayers) {
+            Json e = Json::object();
+            e["prev_health"] = Json(npv.prevHealth);
+            e["hurt_flash"] = Json(npv.hurtFlash);
+            e["last_space_press"] = Json(npv.lastSpacePressTime);
+            e["pearl_cooldown"] =
+                Json(static_cast<double>(npv.pearlThrowCooldownFrames));
+            e["drown_ticks"] =
+                Json(static_cast<double>(npv.drownTicks));
+            e["flying"] = Json(npv.flying);
+            np.push_back(std::move(e));
+        }
+        root["net_players"] = std::move(np);
+    }
+    const SavedNetCounters& nc = save.netCounters;
+    if (nc.weatherPresent) {
+        Json w = Json::object();
+        w["raining"] = Json(nc.raining);
+        w["frames_left"] = Json(nc.weatherFramesLeft);
+        w["thunder_left"] = Json(nc.weatherThunderLeft);
+        w["stream"] = Json(xpSeedToHex(nc.weatherStream));
+        w["thunder_stream"] = Json(xpSeedToHex(nc.weatherThunderStream));
+        root["weather"] = std::move(w);
+    }
+    if (nc.spawnCountersPresent) {
+        Json sc = Json::object();
+        sc["overworld"] = Json(xpSeedToHex(nc.spawnCounterOverworld));
+        sc["nether"] = Json(xpSeedToHex(nc.spawnCounterNether));
+        sc["end"] = Json(xpSeedToHex(nc.spawnCounterEnd));
+        root["spawn_counters"] = std::move(sc);
+    }
+    if (nc.particleBreakCounterPresent) {
+        root["particle_break_counter"] =
+            Json(xpSeedToHex(nc.particleBreakCounter));
+    }
 
     return {};
 }
@@ -845,55 +940,56 @@ static Result<Json> serializeSlotEntry(const ItemStack& s,
     return e;
 }
 
-Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
-    Json root = Json::object();
-    root["format"] = Json(kSaveFormat);
-    root["seed"] = Json(static_cast<double>(save.seed));
-    root["time"] = Json(save.time);
-
+// V3-12c2 (format 33): the per-player ENTRY — the format-32 "player"
+// object verbatim PLUS the player's "inventory" {selected, slots}
+// object and "inv_grid" array nested inside (the root-level twins
+// relocated per player — the schema's authority; the SaveGame's
+// legacy primary members are the mirror, collectSave's fill).
+static Result<Json> makePlayerJson(const SavePlayer& p,
+                                   const ItemRegistry& items) {
     Json pos = Json::array();
-    pos.push_back(Json(save.playerPos.x));
-    pos.push_back(Json(save.playerPos.y));
-    pos.push_back(Json(save.playerPos.z));
+    pos.push_back(Json(p.pos.x));
+    pos.push_back(Json(p.pos.y));
+    pos.push_back(Json(p.pos.z));
     Json player = Json::object();
     player["pos"] = pos;
     // SAVE-2 (format 22): the player's velocity — ALWAYS written (a
     // format-22 file REQUIREs the key; the game always has the real
     // value, [0,0,0] at rest).
     Json vel = Json::array();
-    vel.push_back(Json(save.playerVelocity.x));
-    vel.push_back(Json(save.playerVelocity.y));
-    vel.push_back(Json(save.playerVelocity.z));
+    vel.push_back(Json(p.velocity.x));
+    vel.push_back(Json(p.velocity.y));
+    vel.push_back(Json(p.velocity.z));
     player["velocity"] = vel;
-    player["yaw"] = Json(save.playerYaw);
-    player["pitch"] = Json(save.playerPitch);
+    player["yaw"] = Json(p.yaw);
+    player["pitch"] = Json(p.pitch);
     // Format 2: the player's health. -1 (unspecified) omits the field —
     // a missing health loads as full, so this stays a valid file either
     // way. The game always writes the real value (Phase 72: the
     // BASE-pool value only, 0..base max).
-    if (save.playerHealth >= 0.0f) {
-        player["health"] = Json(save.playerHealth);
+    if (p.health >= 0.0f) {
+        player["health"] = Json(p.health);
     }
     // Format 12: the player's absorption pool (Phase 72, always written
     // — a format-12 file REQUIREs the key; the game always has the real
     // value, 0 when no layer is active).
-    if (save.playerAbsorption >= 0.0f) {
-        player["absorption"] = Json(save.playerAbsorption);
+    if (p.absorption >= 0.0f) {
+        player["absorption"] = Json(p.absorption);
     }
     // Format 4: the player's hunger (same omit-when-unspecified pattern).
-    if (save.playerHunger >= 0.0f) {
-        player["hunger"] = Json(save.playerHunger);
+    if (p.hunger >= 0.0f) {
+        player["hunger"] = Json(p.hunger);
     }
     // Format 5: the player's saturation (the hidden satiety buffer, Phase
     // 28; the game always writes the real value 0..max).
-    if (save.playerSaturation >= 0.0f) {
-        player["saturation"] = Json(save.playerSaturation);
+    if (p.saturation >= 0.0f) {
+        player["saturation"] = Json(p.saturation);
     }
     // Format 8: the player's active status effects (Phase 46), name-
     // sorted. The key is ALWAYS written (an empty array is valid — the
     // format-8 loader requires it, the furnaces-key discipline).
     {
-        std::vector<SavedEffect> effSorted = save.playerEffects;
+        std::vector<SavedEffect> effSorted = p.effects;
         std::sort(effSorted.begin(), effSorted.end(),
                   [](const SavedEffect& a, const SavedEffect& b) {
                       return a.name < b.name;
@@ -920,7 +1016,7 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     // non-zero entries.
     {
         Json statsObj = Json::object();
-        for (const auto& [name, count] : save.playerStats) {
+        for (const auto& [name, count] : p.stats) {
             // The double cast is exact for every realistic counter (the
             // uint64 value is far below 2^53); Json has no integer
             // factory (the ambiguous-overload trap).
@@ -938,10 +1034,10 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         Json armorObj = Json::object();
         for (int slot = 0; slot < kArmorSlotCount; ++slot) {
             const std::string& name =
-                save.playerArmor[static_cast<std::size_t>(slot)];
+                p.armor[static_cast<std::size_t>(slot)];
             if (!name.empty()) {
                 const float dmg =
-                    save.playerArmorDamage[static_cast<std::size_t>(slot)];
+                    p.armorDamage[static_cast<std::size_t>(slot)];
                 if (dmg > 0.0f) {
                     Json entry = Json::object();
                     entry["item"] = Json(name);
@@ -950,7 +1046,7 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
                     // non-empty (the object shape is the damaged/
                     // enchanted piece).
                     writeEnchantsObj(entry,
-                        save.playerArmorEnchants[static_cast<std::size_t>(
+                        p.armorEnchants[static_cast<std::size_t>(
                             slot)]);
                     armorObj[kArmorSlotNames[slot]] = std::move(entry);
                 } else {
@@ -958,14 +1054,14 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
                     // ALSO use the object shape (the enchants have no
                     // string form) — the string is reserved for the plain
                     // unenchanted, full-durability piece.
-                    if (save.playerArmorEnchants[static_cast<std::size_t>(
+                    if (p.armorEnchants[static_cast<std::size_t>(
                             slot)].empty()) {
                         armorObj[kArmorSlotNames[slot]] = Json(name);
                     } else {
                         Json entry = Json::object();
                         entry["item"] = Json(name);
                         writeEnchantsObj(entry,
-                            save.playerArmorEnchants[static_cast<std::size_t>(
+                            p.armorEnchants[static_cast<std::size_t>(
                                 slot)]);
                         armorObj[kArmorSlotNames[slot]] = std::move(entry);
                     }
@@ -977,38 +1073,39 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     // SURV-2: the player's oxygen (format 17, ALWAYS written — a
     // format-17 file REQUIRES the key; the game always has the real
     // value, kOxygenMax when breathing).
-    if (save.playerOxygen >= 0) {
-        player["oxygen"] = Json(save.playerOxygen);
+    if (p.oxygen >= 0) {
+        player["oxygen"] = Json(p.oxygen);
     }
     // V2-11 (format 26): the player's XP pool — ALWAYS written (a
     // format-26 file REQUIRES the key — the oxygen / velocity key
     // discipline). The game always has the real value (0 for a fresh
     // player). The LEVEL is never written: it is derived from the pool
     // at read time (core/xp_curve.hpp — the single source of truth).
-    if (save.playerXp >= 0) {
-        player["xp"] = Json(save.playerXp);
+    if (p.xp >= 0) {
+        player["xp"] = Json(p.xp);
     }
     // V2-12 (format 27): the player's XP seed — ALWAYS written (a
     // format-27 file REQUIRES the key — the oxygen / velocity key
     // discipline). Stored as a HEX STRING (the full 64-bit value does not
     // fit the JSON number's 53-bit double mantissa — the round trip must
     // be lossless or the next offer roll would diverge).
-    player["xp_seed"] = Json(xpSeedToHex(save.playerXpSeed));
+    player["xp_seed"] = Json(xpSeedToHex(p.xpSeed));
     // V2-13 (format 28): the player's respawn point — ALWAYS written (a
     // format-28 file REQUIRES the key — the oxygen / velocity key
     // discipline; the game's collectSave always fills the live value, so
-    // the sentinel never reaches the serializer). The int CELL triple of
-    // the position (the floor of each component: the bed's cell — the
-    // cell-center position floors exactly — or the world spawn's cell,
-    // whose integer y stays put). The parser reconstructs the cell
-    // center (core/bed's bedSpawnPosition).
+    // the sentinel never reaches the serializer). V3-12c2 (format 33):
+    // the EXACT float triple (the ≤32's int cell's reconstruction's
+    // 0.5-y's loss's lifting — the bed's cell-center's value round-
+    // trips exactly as before, the NON-cell-center value's (the net's
+    // spawn-position's ground-plane's integer-y) the value-faithful's
+    // gate-catch fix; the ≤32's legacy document keeps the int cell,
+    // the test's legacyShape's re-encode).
     {
         Json rpos = Json::array();
-        const float comps[3] = {save.playerRespawn.x, save.playerRespawn.y,
-                                save.playerRespawn.z};
+        const float comps[3] = {p.respawn.x, p.respawn.y,
+                                p.respawn.z};
         for (int i = 0; i < 3; ++i) {
-            rpos.push_back(Json(static_cast<double>(
-                static_cast<int>(std::floor(comps[i])))));
+            rpos.push_back(Json(static_cast<double>(comps[i])));
         }
         player["respawn"] = std::move(rpos);
     }
@@ -1020,10 +1117,10 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     // collectSave never emits one) normalizes to the Done shape.
     {
         Json tut = Json::object();
-        if (save.tutorial == TutorialSaveState::InProgress) {
-            tut["series"] = Json(save.tutorialSeries);
-            tut["id"] = Json(save.tutorialId);
-            tut["count"] = Json(save.tutorialProgress);
+        if (p.tutorial == TutorialSaveState::InProgress) {
+            tut["series"] = Json(p.tutorialSeries);
+            tut["id"] = Json(p.tutorialId);
+            tut["count"] = Json(p.tutorialProgress);
         }
         player["tutorial"] = std::move(tut);
     }
@@ -1032,15 +1129,14 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     // the live value, so the sentinel never reaches the serializer; the
     // position's frame of reference: the pos / velocity / yaw / pitch
     // are in this dimension's coordinates).
-    player["dimension"] = Json(save.playerDimension);
+    player["dimension"] = Json(p.dimension);
     // V3-11a (format 31): the player's creative mode — ALWAYS written
     // (the strict boolean; the collectSave always fills the live
     // value, the dimension's precedent).
-    player["creative"] = Json(save.playerCreative);
-    root["player"] = player;
+    player["creative"] = Json(p.creative);
 
     Json slots = Json::array();
-    for (const ItemStack& s : save.slots) {
+    for (const ItemStack& s : p.slots) {
         Json e = Json::object();
         if (s.empty()) {
             e["item"] = Json(std::string(""));
@@ -1064,13 +1160,13 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         slots.push_back(std::move(e));
     }
     Json inventory = Json::object();
-    inventory["selected"] = Json(save.selectedSlot);
+    inventory["selected"] = Json(p.selectedSlot);
     inventory["slots"] = slots;
-    root["inventory"] = inventory;
+    player["inventory"] = inventory;
 
-    // Format 3: the crafting grids (9 slot entries each; the inventory
-    // panel's 2x2 lives in its grid's top-left 4 cells). Always written —
-    // format-3 files must carry both, even when empty.
+    // The E panel's grid (format 3, relocated per player — the
+    // table grid's per-block twin stays at the root, the "tables"
+    // array).
     auto serializeGrid = [&](const std::vector<ItemStack>& grid) -> Result<Json> {
         Json arr = Json::array();
         const ItemStack emptyStack;
@@ -1095,12 +1191,68 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
         }
         return arr;
     };
-    // The E panel's grid (format 3, the table grid's twin — the TABLE
-    // grid is per-block since CRAFT-1, the "tables" array below).
+
     {
-        auto invGrid = serializeGrid(save.invGrid);
+        auto invGrid = serializeGrid(p.invGrid);
         MC_TRY(invGrid);
-        root["inv_grid"] = std::move(*invGrid);
+        player["inv_grid"] = std::move(*invGrid);
+    }
+    return player;
+}
+
+
+Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
+    Json root = Json::object();
+    root["format"] = Json(kSaveFormat);
+    root["seed"] = Json(static_cast<double>(save.seed));
+    root["time"] = Json(save.time);
+
+    // V3-12c2 (format 33): the PER-PLAYER array (the format-32
+    // "player" + root "inventory" / "inv_grid" relocated per entry —
+    // entry 0 = the primary, entries 1.. = the remote players).
+    // The belt: a hand-rolled SaveGame (the unit tests' fixtures)
+    // carries only the legacy primary members — they ARE entry 0 (the
+    // mirror discipline: collectSave fills both, the serializer never
+    // sees an empty array from the game).
+    std::vector<SavePlayer> playerEntries = save.players;
+    if (playerEntries.empty()) {
+        SavePlayer sp;
+        sp.pos = save.playerPos;
+        sp.velocity = save.playerVelocity;
+        sp.yaw = save.playerYaw;
+        sp.pitch = save.playerPitch;
+        sp.health = save.playerHealth;
+        sp.absorption = save.playerAbsorption;
+        sp.hunger = save.playerHunger;
+        sp.saturation = save.playerSaturation;
+        sp.selectedSlot = save.selectedSlot;
+        sp.slots = save.slots;
+        sp.invGrid = save.invGrid;
+        sp.effects = save.playerEffects;
+        sp.stats = save.playerStats;
+        sp.tutorial = save.tutorial;
+        sp.tutorialSeries = save.tutorialSeries;
+        sp.tutorialId = save.tutorialId;
+        sp.tutorialProgress = save.tutorialProgress;
+        sp.armor = save.playerArmor;
+        sp.armorDamage = save.playerArmorDamage;
+        sp.armorEnchants = save.playerArmorEnchants;
+        sp.oxygen = save.playerOxygen;
+        sp.xp = save.playerXp;
+        sp.xpSeed = save.playerXpSeed;
+        sp.respawn = save.playerRespawn;
+        sp.dimension = save.playerDimension;
+        sp.creative = save.playerCreative;
+        playerEntries.push_back(std::move(sp));
+    }
+    {
+        Json players = Json::array();
+        for (const SavePlayer& p : playerEntries) {
+            auto pj = makePlayerJson(p, items);
+            MC_TRY(pj);
+            players.push_back(std::move(*pj));
+        }
+        root["players"] = std::move(players);
     }
 
     // Format 7: the per-block furnace states (Phase 44): one entry per
@@ -1278,17 +1430,7 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
     // not carried: the pickup / magnet passes are structurally
     // kind-ordered anyway, the item-then-orb loop order).
     for (const SavedXpEntity& e : save.xpEntities) {
-        Json jpos = Json::array();
-        jpos.push_back(Json(e.pos.x));
-        jpos.push_back(Json(e.pos.y));
-        jpos.push_back(Json(e.pos.z));
-        Json je = Json::object();
-        je["type"] = Json(std::string("xp"));
-        je["xp"] = Json(e.xp);
-        je["pos"] = jpos;
-        je["age"] = Json(e.age);
-        je["pickup_delay"] = Json(e.pickupDelay);
-        entities.push_back(std::move(je));
+        entities.push_back(makeXpEntityJson(e));
     }
     root["entities"] = entities;
 
@@ -1398,80 +1540,73 @@ Result<Json> serializeSave(const SaveGame& save, const ItemRegistry& items) {
 
 // -- parsing --------------------------------------------------------------------
 
-Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
-                           const BlockRegistry& blocks,
-                           const EffectRegistry& effects,
-                           std::int64_t expectedSeed) {
-    if (!def.isObject()) {
-        return MC_FAIL("save file must be a JSON object");
+// V3-12c2 (format 33): the XP-orb entry's strict parse (the
+// overworld's entities xp-kind branch factored — the end_xp_entities'
+// reuse single source; the shape {type "xp", xp, pos, age,
+// pickup_delay} verbatim, the orb value / lifetime bounds the
+// ExpOrbEntity's constants).
+static Result<void> parseXpEntry(const Json& e, const std::string& what,
+                                 SavedXpEntity& out) {
+    const Json* type = e.find("type");
+    if (type == nullptr || !type->isString() || type->asString() != "xp") {
+        return MC_FAIL(what + " 'type' must be \"xp\" (the orb's kind)");
     }
-    // "furnace" (format 6) and "furnaces" (format 7) are BOTH known keys —
-    // which one a file may carry is enforced per format below (a format-6
-    // file must still parse for the Phase 44 migration). Likewise "stairs"
-    // (format 14) and "states" (format 15, ENT-2's generalization): both
-    // are known, the per-format key discipline below enforces which one a
-    // file may carry ("stairs" is restricted to 14, "states" to 15).
-    // Likewise "table_grid" (format 3-18) and "tables" (format 19,
-    // CRAFT-1's generalization): both are known, the per-format key
-    // discipline below enforces which one a file may carry ("table_grid"
-    // is restricted to 18 and older, "tables" to 19). Likewise "nether"
-    // / "nether_entities" (format 30, V3-1 Phase B): known keys, the
-    // per-format discipline below enforces which format may carry them
-    // (restricted to 30 and newer — a format-29 file carrying either is
-    // a version lie).
-    // V3-10a: "end" / "end_entities" (format 32) join the whitelist —
-    // the per-format discipline below restricts them to 32 and newer
-    // (a format-31 file carrying either is a version lie, named).
-    const std::set<std::string> topLevel {"format", "seed", "time", "player",
-                                          "inventory", "inv_grid",
-                                          "table_grid", "furnace",
-                                          "furnaces", "fires", "campfires",
-                                          "stairs", "states", "tables",
-                                          "entities", "blocks", "fluids",
-                                          "nether", "nether_entities",
-                                          "end", "end_entities"};
-    MC_TRY(rejectUnknownFields(def, topLevel, "save file"));
+    const Json* xpv = e.find("xp");
+    double xd = 0.0;
+    if (xpv == nullptr || !isInt(*xpv, &xd) || xd < 1.0 || xd > 9.0) {
+        return MC_FAIL(what + " 'xp' must be an integer in [1, 9] (the orb "
+                       "value cap), got " +
+                       (xpv != nullptr && xpv->isNumber()
+                            ? std::to_string(xpv->asDouble())
+                            : "a missing or non-number key"));
+    }
+    out.xp = static_cast<int>(xd);
+    const Json* epos = e.find("pos");
+    if (epos == nullptr || !epos->isArray() || epos->size() != 3) {
+        return MC_FAIL(what + " requires 'pos' (an array of 3 numbers)");
+    }
+    for (std::size_t k = 0; k < 3; ++k) {
+        if (!epos->at(k).isNumber()) {
+            return MC_FAIL(what + " 'pos'[" + std::to_string(k) +
+                           "] must be a number");
+        }
+    }
+    out.pos = {static_cast<float>(epos->at(0).asDouble()),
+               static_cast<float>(epos->at(1).asDouble()),
+               static_cast<float>(epos->at(2).asDouble())};
+    const Json* age = e.find("age");
+    if (age == nullptr || !age->isNumber() ||
+        !(age->asDouble() >= 0.0 && age->asDouble() <
+          ExpOrbEntity::kDespawnSeconds)) {
+        return MC_FAIL(what + " 'age' must be a number in [0, " +
+                       std::to_string(ExpOrbEntity::kDespawnSeconds) + ")");
+    }
+    out.age = age->asDouble();
+    const Json* delay = e.find("pickup_delay");
+    if (delay == nullptr || !delay->isNumber() ||
+        !(delay->asDouble() >= 0.0 && delay->asDouble() <=
+          ExpOrbEntity::kPickupDelaySeconds)) {
+        return MC_FAIL(what + " 'pickup_delay' must be a number in [0, " +
+                       std::to_string(ExpOrbEntity::kPickupDelaySeconds) +
+                       "]");
+    }
+    out.pickupDelay = delay->asDouble();
+    return {};
+}
 
-    const Json* fmt = def.find("format");
-    if (fmt == nullptr || !fmt->isNumber()) {
-        return MC_FAIL("save file requires 'format' (a number)");
-    }
-    // Format 1 (Phase 13, no health field) and 2 (Phase 16, player
-    // health) both load; anything else is a version mismatch.
-    if (fmt->asInt() < kSaveFormatMin || fmt->asInt() > kSaveFormat) {
-        return MC_FAIL("unsupported save format " +
-                       std::to_string(fmt->asInt()) +
-                       " (this build reads formats " +
-                       std::to_string(kSaveFormatMin) + "-" +
-                       std::to_string(kSaveFormat) + ")");
-    }
-
-    const Json* seed = def.find("seed");
-    if (seed == nullptr || !seed->isNumber()) {
-        return MC_FAIL("save file requires 'seed' (a number)");
-    }
-    const std::int64_t saveSeed = seed->asInt64();
-    if (saveSeed != expectedSeed) {
-        return MC_FAIL("save seed " + std::to_string(saveSeed) +
-                       " does not match the world seed " +
-                       std::to_string(expectedSeed) +
-                       " (the edits would apply to the wrong terrain)");
-    }
-
-    SaveGame save;
-    save.seed = saveSeed;
-
-    const Json* time = def.find("time");
-    if (time == nullptr || !time->isNumber() ||
-        !(time->asDouble() >= 0.0 && time->asDouble() < 1.0)) {
-        return MC_FAIL("save 'time' must be a number in [0, 1)");
-    }
-    save.time = time->asDouble();
-
-    // -- player ----------------------------------------------------------------
-    const Json* player = def.find("player");
+// V3-12c2 (format 33): ONE player's field parse — the format-32
+// root "player" object's strict validation verbatim (the per-format
+// field vocabulary, the sentinel / range disciplines, the
+// three-way key checks) factored for the per-entry reuse. `ctx`
+// names the entry in the error messages (the root's "save
+// 'player'" / the array's "save 'players[i]'").
+static Result<void> parsePlayerFields(const Json* player, int fmt,
+                                      SavePlayer& out, const std::string& ctx,
+                                      const ItemRegistry& items,
+                                      const EffectRegistry& effects,
+                                      std::int64_t expectedSeed) {
     if (player == nullptr || !player->isObject()) {
-        return MC_FAIL("save file requires a 'player' object");
+        return MC_FAIL(ctx + " must be an object (the save's player)");
     }
     // SURV-7: "stats" is format-21-and-newer vocabulary — a pre-21 file
     // carrying it is a version lie (the unknown-field naming below).
@@ -1480,64 +1615,73 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                                        "hunger", "saturation",
                                        "effects", "armor",
                                        "oxygen"};
-    if (fmt->asInt() >= 21) {
+    if (fmt >= 21) {
         playerFields.insert("stats");
     }
     // SAVE-2: "velocity" is format-22-and-newer vocabulary — a pre-22
     // file carrying it is a version lie (the unknown-field naming
     // below).
-    if (fmt->asInt() >= 22) {
+    if (fmt >= 22) {
         playerFields.insert("velocity");
     }
     // UX-7: "tutorial" is format-23-and-newer vocabulary — a pre-23
     // file carrying it is a version lie (the whitelist naming above).
-    if (fmt->asInt() >= 23) {
+    if (fmt >= 23) {
         playerFields.insert("tutorial");
     }
     // V2-11: "xp" is format-26-and-newer vocabulary — a pre-26 file
     // carrying it is a version lie (the whitelist naming above; the
     // player.xp parse below requires it ON format-26 files, the
     // three-way discipline).
-    if (fmt->asInt() >= 26) {
+    if (fmt >= 26) {
         playerFields.insert("xp");
     }
     // V2-12: "xp_seed" is format-27-and-newer vocabulary — a pre-27 file
     // carrying it is a version lie (the whitelist naming above).
-    if (fmt->asInt() >= 27) {
+    if (fmt >= 27) {
         playerFields.insert("xp_seed");
     }
     // V2-13: "respawn" is format-28-and-newer vocabulary — a pre-28 file
     // carrying it is a version lie (the whitelist naming above; the
     // player.respawn parse below requires it ON format-28 files, the
     // three-way discipline).
-    if (fmt->asInt() >= 28) {
+    if (fmt >= 28) {
         playerFields.insert("respawn");
     }
     // V3-1 Phase B: "dimension" is format-30-and-newer vocabulary — a
     // pre-30 file carrying it is a version lie (the whitelist naming
     // above; the player.dimension parse below requires it ON format-30
     // files, the three-way discipline).
-    if (fmt->asInt() >= 30) {
+    if (fmt >= 30) {
         playerFields.insert("dimension");
     }
     // V3-11a: "creative" is format-31-and-newer vocabulary — a pre-31
     // file carrying it is a version lie (the whitelist naming above;
     // the player.creative parse below requires it ON format-31 files,
     // the three-way discipline).
-    if (fmt->asInt() >= 31) {
+    if (fmt >= 31) {
         playerFields.insert("creative");
     }
-    MC_TRY(rejectUnknownFields(*player, playerFields, "save 'player'"));
+    // V3-12c2: "inventory" / "inv_grid" are format-33-and-newer
+    // vocabulary ON the entry (the per-player relocation — a pre-33
+    // file's entry is the bare player object; the root carries the
+    // inventory). A format-32 (or older) file carrying them at the
+    // entry is a version lie (named below).
+    if (fmt >= 33) {
+        playerFields.insert("inventory");
+        playerFields.insert("inv_grid");
+    }
+    MC_TRY(rejectUnknownFields(*player, playerFields, ctx + "'"));
     const Json* ppos = player->find("pos");
     if (ppos == nullptr || !ppos->isArray() || ppos->size() != 3) {
-        return MC_FAIL("save 'player.pos' must be an array of 3 numbers");
+        return MC_FAIL(ctx + ".pos' must be an array of 3 numbers");
     }
-    save.playerPos = {static_cast<float>(ppos->at(0).asDouble()),
+    out.pos = {static_cast<float>(ppos->at(0).asDouble()),
                       static_cast<float>(ppos->at(1).asDouble()),
                       static_cast<float>(ppos->at(2).asDouble())};
     for (std::size_t i = 0; i < 3; ++i) {
         if (!ppos->at(i).isNumber()) {
-            return MC_FAIL("save 'player.pos'[" + std::to_string(i) +
+            return MC_FAIL(ctx + ".pos'[" + std::to_string(i) +
                            "] must be a number");
         }
     }
@@ -1546,7 +1690,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // stats key discipline); ABSENT in format <=21 = the velocity
     // stays (0,0,0) = the legacy velocity-zeroed restore (the value-
     // faithful migration: pre-22 saves never carried motion).
-    if (fmt->asInt() >= 22) {
+    if (fmt >= 22) {
         const Json* pvel = player->find("velocity");
         if (pvel == nullptr || !pvel->isArray() || pvel->size() != 3) {
             return MC_FAIL("format 22 save 'player' requires 'velocity' "
@@ -1554,17 +1698,17 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         }
         for (std::size_t i = 0; i < 3; ++i) {
             if (!pvel->at(i).isNumber()) {
-                return MC_FAIL("save 'player.velocity'[" +
+                return MC_FAIL(ctx + ".velocity'[" +
                                std::to_string(i) + "] must be a number");
             }
             const double v = pvel->at(i).asDouble();
             if (v < -kSavedVelocityMax || v > kSavedVelocityMax) {
-                return MC_FAIL("save 'player.velocity'[" +
+                return MC_FAIL(ctx + ".velocity'[" +
                                std::to_string(i) + "] must be in "
                                "[-100, 100], got " + std::to_string(v));
             }
         }
-        save.playerVelocity = {static_cast<float>(pvel->at(0).asDouble()),
+        out.velocity = {static_cast<float>(pvel->at(0).asDouble()),
                                static_cast<float>(pvel->at(1).asDouble()),
                                static_cast<float>(pvel->at(2).asDouble())};
     }
@@ -1572,19 +1716,19 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     const Json* pitch = player->find("pitch");
     if (yaw == nullptr || !yaw->isNumber() || pitch == nullptr ||
         !pitch->isNumber()) {
-        return MC_FAIL("save 'player' requires numeric 'yaw' and 'pitch'");
+        return MC_FAIL(ctx + "' requires numeric 'yaw' and 'pitch'");
     }
-    save.playerYaw = static_cast<float>(yaw->asDouble());
-    save.playerPitch = static_cast<float>(pitch->asDouble());
+    out.yaw = static_cast<float>(yaw->asDouble());
+    out.pitch = static_cast<float>(pitch->asDouble());
     // Optional (absent in format 1): -1 stays "unspecified" and the game
     // applies the player's max health. The upper bound is the player's max
     // (unknown here); the game clamps on load.
     const Json* health = player->find("health");
     if (health != nullptr) {
         if (!health->isNumber() || health->asDouble() < 0.0) {
-            return MC_FAIL("save 'player.health' must be a number >= 0");
+            return MC_FAIL(ctx + ".health' must be a number >= 0");
         }
-        save.playerHealth = static_cast<float>(health->asDouble());
+        out.health = static_cast<float>(health->asDouble());
     }
     // Optional (absent in format 1-3): -1 stays "unspecified" and the
     // game applies the player's max hunger. Upper bound is the player's
@@ -1592,9 +1736,9 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     const Json* hunger = player->find("hunger");
     if (hunger != nullptr) {
         if (!hunger->isNumber() || hunger->asDouble() < 0.0) {
-            return MC_FAIL("save 'player.hunger' must be a number >= 0");
+            return MC_FAIL(ctx + ".hunger' must be a number >= 0");
         }
-        save.playerHunger = static_cast<float>(hunger->asDouble());
+        out.hunger = static_cast<float>(hunger->asDouble());
     }
     // Optional (absent in format 1-4): -1 stays "unspecified" and the
     // game loads it at 0 (no buffer). Upper bound is the player's max
@@ -1602,9 +1746,9 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     const Json* saturation = player->find("saturation");
     if (saturation != nullptr) {
         if (!saturation->isNumber() || saturation->asDouble() < 0.0) {
-            return MC_FAIL("save 'player.saturation' must be a number >= 0");
+            return MC_FAIL(ctx + ".saturation' must be a number >= 0");
         }
-        save.playerSaturation = static_cast<float>(saturation->asDouble());
+        out.saturation = static_cast<float>(saturation->asDouble());
     }
     // Status effects (format 8; Phase 46): absent in format 1-7 files
     // (the effects did not exist — they load empty). Format 8 REQUIRES
@@ -1612,8 +1756,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // discipline): entries {name, remaining}, each name registered,
     // remaining > 0, no duplicate name. The entries are normalized to
     // name-sorted order (the serializer's write order).
-    if (def.find("format")->asInt() >= 8) {
-        const int fmt = def.find("format")->asInt();
+    if (fmt >= 8) {
         const Json* effArr = player->find("effects");
         if (effArr == nullptr || !effArr->isArray()) {
             return MC_FAIL("save format 8 requires a 'player.effects' "
@@ -1623,7 +1766,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         std::set<std::string> seen;
         for (std::size_t i = 0; i < effArr->size(); ++i) {
             const Json& e = effArr->at(i);
-            const std::string what = "save 'player.effects'[" +
+            const std::string what = ctx + ".effects'[" +
                                      std::to_string(i) + "]";
             if (!e.isObject()) {
                 return MC_FAIL(what + " must be an object "
@@ -1682,10 +1825,10 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                 return MC_FAIL(what + " holds the effect '" +
                                nm->asString() + "' twice");
             }
-            save.playerEffects.push_back(
+            out.effects.push_back(
                 SavedEffect {nm->asString(), rem->asDouble(), tier});
         }
-        std::sort(save.playerEffects.begin(), save.playerEffects.end(),
+        std::sort(out.effects.begin(), out.effects.end(),
                   [](const SavedEffect& a, const SavedEffect& b) {
                       return a.name < b.name;
                   });
@@ -1698,7 +1841,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // already rejected above (the version-lie whitelist). The vocabulary
     // check (kill.<name> names a registered mob) runs at GAME load —
     // validateStats; the mob registry is not a parseSave parameter.
-    if (fmt->asInt() >= 21) {
+    if (fmt >= 21) {
         const Json* st = player->find("stats");
         if (st == nullptr || !st->isObject()) {
             return MC_FAIL("save format 21 requires a 'player.stats' "
@@ -1706,9 +1849,9 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                            "was non-zero)");
         }
         for (const auto& [key, value] : st->members()) {
-            const std::string what = "save 'player.stats'[" + key + "]";
+            const std::string what = ctx + ".stats'[" + key + "]";
             if (key.empty()) {
-                return MC_FAIL("save 'player.stats' holds an empty stat "
+                return MC_FAIL(ctx + ".stats' holds an empty stat "
                                "name");
             }
             if (!value.isNumber() || value.asDouble() < 0.0 ||
@@ -1718,7 +1861,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                                     ? std::to_string(value.asDouble())
                                     : "a non-number"));
             }
-            save.playerStats[key] =
+            out.stats[key] =
                 static_cast<std::uint64_t>(value.asDouble());
         }
     }
@@ -1732,7 +1875,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // the layer — damage only drains it, so it may sit BELOW the total;
     // the registry is available here, so the invariant is enforced at
     // parse time).
-    if (def.find("format")->asInt() >= 12) {
+    if (fmt >= 12) {
         const Json* absorption = player->find("absorption");
         if (absorption == nullptr || !absorption->isNumber()) {
             return MC_FAIL("save format 12 requires 'player.absorption' "
@@ -1740,25 +1883,25 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         }
         const double a = absorption->asDouble();
         if (a < 0.0 || a > 64.0) {
-            return MC_FAIL("save 'player.absorption' must be a number in "
+            return MC_FAIL(ctx + ".absorption' must be a number in "
                            "[0, 64], got " + std::to_string(a));
         }
         double total = 0.0;
-        for (const SavedEffect& se : save.playerEffects) {
+        for (const SavedEffect& se : out.effects) {
             if (const Effect* e = effects.findByName(se.name)) {
                 total += e->absorbHp;
             }
         }
         if (a > total + 1e-4) {
-            return MC_FAIL("save 'player.absorption' (" + std::to_string(a) +
+            return MC_FAIL(ctx + ".absorption' (" + std::to_string(a) +
                            ") exceeds the effects' absorption total (" +
                            std::to_string(total) + ")");
         }
-        save.playerAbsorption = static_cast<float>(a);
+        out.absorption = static_cast<float>(a);
     } else if (player->find("absorption") != nullptr) {
-        return MC_FAIL("save 'player.absorption' requires format 12 or "
+        return MC_FAIL(ctx + ".absorption' requires format 12 or "
                        "newer (got " +
-                       std::to_string(def.find("format")->asInt()) + ")");
+                       std::to_string(fmt) + ")");
     }
     // Armor (format 16; SURV-1). Absent in format 1-15 files (the
     // player had no armor — the game loads all four slots empty; the
@@ -1770,7 +1913,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // that IS an armor piece for exactly that slot (the registry is
     // available here, so the item existence + the data-slot match are
     // enforced at parse time, the effects-name discipline).
-    if (def.find("format")->asInt() >= 16) {
+    if (fmt >= 16) {
         const Json* armor = player->find("armor");
         if (armor == nullptr || !armor->isObject()) {
             return MC_FAIL("save format 16 requires a 'player.armor' "
@@ -1778,7 +1921,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                            "wore no armor)");
         }
         for (const auto& [key, value] : armor->members()) {
-            const std::string what = "save 'player.armor." + key + "'";
+            const std::string what = ctx + ".armor." + key + "'";
             const int slot = armorSlotIndex(key);
             if (slot < 0) {
                 return MC_FAIL(what + " is not a known slot (vocabulary: "
@@ -1799,12 +1942,12 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                 }
                 name = value.asString();
             } else if (value.isObject() &&
-                       def.find("format")->asInt() >= 18) {
+                       fmt >= 18) {
                 std::set<std::string> entryFields {"item", "damage"};
                 // V2-12 (format 27): the enchanted-piece object gains the
                 // OPTIONAL "enchants" key (a format-26 and older file
                 // carrying it is a version lie — the whitelist naming).
-                if (def.find("format")->asInt() >= 27) {
+                if (fmt >= 27) {
                     entryFields.insert("enchants");
                 }
                 MC_TRY(rejectUnknownFields(value, entryFields, what));
@@ -1833,11 +1976,11 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                 }
                 if (const Json* vEnch = value.find("enchants")) {
                     MC_TRY(parseEnchantsObj(*vEnch, what,
-                        save.playerArmorEnchants[static_cast<std::size_t>(
+                        out.armorEnchants[static_cast<std::size_t>(
                             slot)]));
                 }
                 if (!hasDamage &&
-                    save.playerArmorEnchants[static_cast<std::size_t>(
+                    out.armorEnchants[static_cast<std::size_t>(
                         slot)].empty()) {
                     return MC_FAIL(what + " object requires 'damage' > 0 "
                                        "or a non-empty 'enchants' (a plain "
@@ -1848,7 +1991,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                     (value.isObject()
                          ? " is an object: the damaged-piece shape "
                            "requires format 18 or newer (got " +
-                           std::to_string(def.find("format")->asInt()) +
+                           std::to_string(fmt) +
                            ")"
                          : " requires an item name string (or the "
                            "format-18 damaged-piece object)"));
@@ -1870,13 +2013,13 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                 // durability, or a damage at/above it, is named).
                 MC_TRY(checkDamageValue(Json(dmg), *item, what, dmg));
             }
-            save.playerArmor[static_cast<std::size_t>(slot)] = name;
-            save.playerArmorDamage[static_cast<std::size_t>(slot)] = dmg;
+            out.armor[static_cast<std::size_t>(slot)] = name;
+            out.armorDamage[static_cast<std::size_t>(slot)] = dmg;
         }
     } else if (player->find("armor") != nullptr) {
-        return MC_FAIL("save 'player.armor' requires format 16 or newer "
+        return MC_FAIL(ctx + ".armor' requires format 16 or newer "
                        "(got " +
-                       std::to_string(def.find("format")->asInt()) + ")");
+                       std::to_string(fmt) + ")");
     }
     // Oxygen (format 17; SURV-2, the drowning system). Absent in format
     // 1-16 files (the player had full air — the sentinel stays -1 for
@@ -1884,7 +2027,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // key is rejected (the version-lie discipline, the armor twin).
     // Format 17 REQUIRES the field (the armor-key discipline): an
     // integer in [0, kOxygenMax] (the air cap, player/drown.hpp).
-    if (def.find("format")->asInt() >= 17) {
+    if (fmt >= 17) {
         const Json* oxygen = player->find("oxygen");
         if (oxygen == nullptr) {
             return MC_FAIL("save format 17 requires a 'player.oxygen' "
@@ -1893,19 +2036,19 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         }
         double d = 0.0;
         if (!isInt(*oxygen, &d)) {
-            return MC_FAIL("save 'player.oxygen' must be an integer in "
+            return MC_FAIL(ctx + ".oxygen' must be an integer in "
                            "[0, " + std::to_string(kOxygenMax) + "]");
         }
         if (d < 0.0 || d > static_cast<double>(kOxygenMax)) {
-            return MC_FAIL("save 'player.oxygen' must be in [0, " +
+            return MC_FAIL(ctx + ".oxygen' must be in [0, " +
                            std::to_string(kOxygenMax) + "], got " +
                            std::to_string(d));
         }
-        save.playerOxygen = static_cast<int>(d);
+        out.oxygen = static_cast<int>(d);
     } else if (player->find("oxygen") != nullptr) {
-        return MC_FAIL("save 'player.oxygen' requires format 17 or newer "
+        return MC_FAIL(ctx + ".oxygen' requires format 17 or newer "
                        "(got " +
-                       std::to_string(def.find("format")->asInt()) + ")");
+                       std::to_string(fmt) + ")");
     }
     // XP (format 26; V2-11, the experience system). The player's TOTAL
     // pool — the single int the level derives from (core/xp_curve.hpp;
@@ -1916,7 +2059,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // exist, the velocity-zeroed twin); a pre-26 file CARRYING the key
     // is a version lie (the playerFields whitelist above rejects it,
     // the "xp" key is format-26-and-newer vocabulary).
-    if (def.find("format")->asInt() >= 26) {
+    if (fmt >= 26) {
         const Json* xp = player->find("xp");
         if (xp == nullptr) {
             return MC_FAIL("save format 26 requires a 'player.xp' "
@@ -1924,12 +2067,12 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
         }
         double d = 0.0;
         if (!isInt(*xp, &d) || d < 0.0) {
-            return MC_FAIL("save 'player.xp' must be a whole number >= 0, "
+            return MC_FAIL(ctx + ".xp' must be a whole number >= 0, "
                            "got " +
                            (xp->isNumber() ? std::to_string(xp->asDouble())
                                            : "a non-number"));
         }
-        save.playerXp = static_cast<int>(d);
+        out.xp = static_cast<int>(d);
     }
     // XP seed (format 27; V2-12, the enchantment system). The player's
     // enchanting offer-roll decorrelation seed — a FULL 64-bit value stored
@@ -1940,20 +2083,20 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // kXpSeedInit (the fresh-world value; the system did not exist, the
     // pool's 0-migration twin). expectedSeed is the world's seed (the
     // parseSave parameter).
-    if (def.find("format")->asInt() >= 27) {
+    if (fmt >= 27) {
         const Json* xs = player->find("xp_seed");
         if (xs == nullptr) {
             return MC_FAIL("save format 27 requires a 'player.xp_seed' "
                            "(a 1..16-char lowercase hex string, the "
                            "enchanting offer-roll seed)");
         }
-        auto xsr = xpSeedFromHex(*xs, "save 'player.xp_seed'");
+        auto xsr = xpSeedFromHex(*xs, ctx + ".xp_seed'");
         MC_TRY(xsr);
-        save.playerXpSeed = *xsr;
+        out.xpSeed = *xsr;
     } else {
         // The pre-27 migration: the deterministic fresh value (the pool's
         // 0-migration twin). expectedSeed ^ kXpSeedInit.
-        save.playerXpSeed =
+        out.xpSeed =
             static_cast<std::uint64_t>(expectedSeed) ^ kXpSeedInit;
     }
     // Respawn point (format 28; V2-13, the bed system). The player's
@@ -1970,31 +2113,57 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // SPAWN, which is unknowable at parse time (the generator's
     // room-checked scan in the game's init) — Game::applySave re-pins
     // the player's remembered spawn from the sentinel to it.
-    if (def.find("format")->asInt() >= 28) {
+    if (fmt >= 28) {
         const Json* rpos = player->find("respawn");
         if (rpos == nullptr || !rpos->isArray() || rpos->size() != 3) {
             return MC_FAIL("save format 28 requires 'player.respawn' "
                            "(an array of 3 integers — the respawn cell's "
                            "coordinates)");
         }
-        int comps[3] = {0, 0, 0};
-        for (int i = 0; i < 3; ++i) {
-            double d = 0.0;
-            if (!isInt(rpos->at(i), &d)) {
-                return MC_FAIL("save 'player.respawn'[" + std::to_string(i) +
-                               "] must be a whole number, got " +
-                               (rpos->at(i).isNumber()
-                                    ? std::to_string(rpos->at(i).asDouble())
-                                    : "a non-number"));
+        if (fmt >= 33) {
+            // V3-12c2: the EXACT float triple (the value-faithful —
+            // the ≤32's cell reconstruction's loss's lifting; the y's
+            // bound + the x/z's unboundedness the twin).
+            double comps[3] = {0.0, 0.0, 0.0};
+            for (int i = 0; i < 3; ++i) {
+                if (!rpos->at(i).isNumber()) {
+                    return MC_FAIL(ctx + ".respawn'[" +
+                                   std::to_string(i) +
+                                   "] must be a number");
+                }
+                comps[i] = rpos->at(i).asDouble();
             }
-            comps[i] = static_cast<int>(d);
+            if (comps[1] < 0.0 || comps[1] >= kWorldHeight) {
+                return MC_FAIL(ctx + ".respawn'[1] (y) must be in "
+                               "[0, " + std::to_string(kWorldHeight) +
+                               "), got " + std::to_string(comps[1]));
+            }
+            out.respawn = {static_cast<float>(comps[0]),
+                           static_cast<float>(comps[1]),
+                           static_cast<float>(comps[2])};
+        } else {
+            int comps[3] = {0, 0, 0};
+            for (int i = 0; i < 3; ++i) {
+                double d = 0.0;
+                if (!isInt(rpos->at(i), &d)) {
+                    return MC_FAIL(ctx + ".respawn'[" +
+                                   std::to_string(i) +
+                                   "] must be a whole number, got " +
+                                   (rpos->at(i).isNumber()
+                                        ? std::to_string(
+                                              rpos->at(i).asDouble())
+                                        : "a non-number"));
+                }
+                comps[i] = static_cast<int>(d);
+            }
+            if (comps[1] < 0 || comps[1] >= kWorldHeight) {
+                return MC_FAIL(ctx + ".respawn'[1] (y) must be in "
+                               "[0, " + std::to_string(kWorldHeight) +
+                               "), got " + std::to_string(comps[1]));
+            }
+            out.respawn =
+                bedSpawnPosition(comps[0], comps[1], comps[2]);
         }
-        if (comps[1] < 0 || comps[1] >= kWorldHeight) {
-            return MC_FAIL("save 'player.respawn'[1] (y) must be in "
-                           "[0, " + std::to_string(kWorldHeight) +
-                           "), got " + std::to_string(comps[1]));
-        }
-        save.playerRespawn = bedSpawnPosition(comps[0], comps[1], comps[2]);
     }
     // V3-1 Phase B (format 30): the player's DIMENSION — the strict
     // VOCABULARY word "overworld" | "nether" (ALWAYS written; the
@@ -2007,13 +2176,13 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // whitelist (the version-lie naming); its load MIGRATES to
     // "overworld" (the system did not exist — the player was always in
     // the overworld; the velocity-zeroed migration twin).
-    if (fmt->asInt() >= 30) {
+    if (fmt >= 30) {
         // V3-10a (format 32): the PER-FORMAT vocabulary (the
         // version-lie's word split — the format-30/31 files' two-word
         // vocabulary overworld|nether; "end" on one of them is a
         // version lie, named; the format-32-and-newer three words
         // overworld|nether|end).
-        const bool threeWord = fmt->asInt() >= 32;
+        const bool threeWord = fmt >= 32;
         const Json* dim = player->find("dimension");
         if (dim == nullptr || !dim->isString()) {
             return MC_FAIL("save format 30 requires 'player.dimension' "
@@ -2028,27 +2197,27 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
             : "\"overworld\", \"nether\"";
         if (dimName != "overworld" && dimName != "nether" &&
             !(threeWord && dimName == "end")) {
-            return MC_FAIL("save 'player.dimension' holds the unknown "
+            return MC_FAIL(ctx + ".dimension' holds the unknown "
                            "word '" + dimName + "' (vocabulary: " +
                            vocab + ")");
         }
-        save.playerDimension = dimName;
+        out.dimension = dimName;
     } else {
-        save.playerDimension = "overworld"; // the migration (format <= 29)
+        out.dimension = "overworld"; // the migration (format <= 29)
     }
     // V3-11a (format 31): the player's creative mode — REQUIRED for a
     // format-31 file (a missing key is a version lie, the strict
     // boolean), a pre-31 load migrates to false (the mode did not
     // exist — the dimension's overworld migration twin).
-    if (fmt->asInt() >= 31) {
+    if (fmt >= 31) {
         const Json* creative = player->find("creative");
         if (creative == nullptr || !creative->isBool()) {
             return MC_FAIL("save format 31 requires 'player.creative' "
                            "(a strict boolean — the per-player gamemode)");
         }
-        save.playerCreative = creative->asBool();
+        out.creative = creative->asBool();
     } else {
-        save.playerCreative = false; // the migration (format <= 30)
+        out.creative = false; // the migration (format <= 30)
     }
     // UX-7 (format 23) / V2-3 (format 25): the player's tutorial
     // progress. REQUIRED for a format-23 file (a missing key is a
@@ -2065,10 +2234,10 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // the count's bound against the step's count are cross-checked at
     // GAME load (tutorialRestore — the data is not a parseSave
     // parameter, the validateStats pattern). Pre-23 files load FRESH
-    // (the system did not exist — save.tutorial stays Absent; the
+    // (the system did not exist — out.tutorial stays Absent; the
     // "tutorial" key on one was rejected above by the format-dependent
     // whitelist).
-    if (fmt->asInt() >= 23) {
+    if (fmt >= 23) {
         const Json* tut = player->find("tutorial");
         if (tut == nullptr || !tut->isObject()) {
             return MC_FAIL("save format 23 requires a 'player.tutorial' "
@@ -2076,7 +2245,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                            "was done or skipped)");
         }
         if (tut->members().empty()) {
-            save.tutorial = TutorialSaveState::Done;
+            out.tutorial = TutorialSaveState::Done;
         } else {
             // The per-format field whitelist: format 23/24 carry
             // {id, count} (a "series" key on one is a version lie —
@@ -2084,78 +2253,88 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
             // PITS 361: the per-format shape boundary uses the
             // INTRODUCING format's literal (25), not kSaveFormat —
             // the comparison must survive every future format bump.
-            const bool isV25 = fmt->asInt() >= 25;
+            const bool isV25 = fmt >= 25;
             std::set<std::string> tutFields {"id", "count"};
             if (isV25) {
                 tutFields.insert("series");
             }
             MC_TRY(rejectUnknownFields(*tut, tutFields,
-                                       "save 'player.tutorial'"));
+                                       ctx + ".tutorial'"));
             if (isV25) {
                 // V2-3 (format 25): the series is REQUIRED (the oxygen
                 // / velocity key discipline — a format-25 in-progress
                 // object without it is a version lie).
                 const Json* tser = tut->find("series");
                 if (tser == nullptr) {
-                    return MC_FAIL("save 'player.tutorial' (non-empty, "
+                    return MC_FAIL(ctx + ".tutorial' (non-empty, "
                                    "format 25) requires 'series' (the "
                                    "current tutorial series, a whole "
                                    "number >= 0)");
                 }
                 double sd = 0.0;
                 if (!isInt(*tser, &sd) || sd < 0.0) {
-                    return MC_FAIL("save 'player.tutorial' 'series' must "
+                    return MC_FAIL(ctx + ".tutorial' 'series' must "
                                    "be a whole number >= 0, got " +
                                    (tser->isNumber()
                                         ? std::to_string(tser->asDouble())
                                         : "a non-number"));
                 }
-                save.tutorialSeries = static_cast<int>(sd);
+                out.tutorialSeries = static_cast<int>(sd);
             }
             const Json* tid = tut->find("id");
             if (tid == nullptr || !tid->isString() ||
                 tid->asString().empty()) {
-                return MC_FAIL("save 'player.tutorial' (non-empty) "
+                return MC_FAIL(ctx + ".tutorial' (non-empty) "
                                "requires a non-empty string 'id' (the "
                                "current step)");
             }
             const Json* tcount = tut->find("count");
             if (tcount == nullptr) {
-                return MC_FAIL("save 'player.tutorial' (non-empty) "
+                return MC_FAIL(ctx + ".tutorial' (non-empty) "
                                "requires 'count' (the step's progress, a "
                                "whole number >= 0)");
             }
             double td = 0.0;
             if (!isInt(*tcount, &td) || td < 0.0) {
-                return MC_FAIL("save 'player.tutorial' 'count' must be a "
+                return MC_FAIL(ctx + ".tutorial' 'count' must be a "
                                "whole number >= 0, got " +
                                (tcount->isNumber()
                                     ? std::to_string(tcount->asDouble())
                                     : "a non-number"));
             }
-            save.tutorial = TutorialSaveState::InProgress;
-            save.tutorialId = tid->asString();
-            save.tutorialProgress = static_cast<int>(td);
+            out.tutorial = TutorialSaveState::InProgress;
+            out.tutorialId = tid->asString();
+            out.tutorialProgress = static_cast<int>(td);
         }
     }
 
-    // -- inventory ---------------------------------------------------------------
-    const Json* inv = def.find("inventory");
+    return {};
+}
+
+// V3-12c2 (format 33): ONE player's inventory parse — the format-32
+// root "inventory" object's strict validation verbatim (the
+// selected + the 36 slots, the kPreUx8f tail-pad migration, the
+// per-slot damage / enchants gates) factored for the per-entry
+// reuse. `ctx` names the entry in the error messages.
+static Result<void> parseInventoryFields(const Json* inv, int fmt,
+                                         SavePlayer& out,
+                                         const std::string& ctx,
+                                         const ItemRegistry& items) {
     if (inv == nullptr || !inv->isObject()) {
-        return MC_FAIL("save file requires an 'inventory' object");
+        return MC_FAIL(ctx + " must be an object (the player's inventory)");
     }
     const std::set<std::string> invFields {"selected", "slots"};
-    MC_TRY(rejectUnknownFields(*inv, invFields, "save 'inventory'"));
+    MC_TRY(rejectUnknownFields(*inv, invFields, ctx + "'"));
     const Json* selected = inv->find("selected");
     if (selected == nullptr || !selected->isNumber()) {
         return MC_FAIL("save 'inventory' requires numeric 'selected'");
     }
-    save.selectedSlot = selected->asInt();
-    if (save.selectedSlot < 0 ||
-        save.selectedSlot >= Inventory::kHotbarSize) {
+    out.selectedSlot = selected->asInt();
+    if (out.selectedSlot < 0 ||
+        out.selectedSlot >= Inventory::kHotbarSize) {
         return MC_FAIL("save 'inventory.selected' must be in [0, " +
                        std::to_string(Inventory::kHotbarSize) +
-                       "], got " + std::to_string(save.selectedSlot));
+                       "], got " + std::to_string(out.selectedSlot));
     }
     const Json* slots = inv->find("slots");
     // UX-8f (format 24): the slot count is format-dependent — a
@@ -2165,7 +2344,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // introduction format — kSaveFormat moved on to 25 in V2-3, so the
     // old `>= kSaveFormat` form would misclassify format-24 files).
     const std::size_t wantSlots =
-        fmt->asInt() >= 24
+        fmt >= 24
             ? static_cast<std::size_t>(Inventory::kTotalSize)
             : static_cast<std::size_t>(kPreUx8fInventorySlots);
     if (slots == nullptr || !slots->isArray() || slots->size() != wantSlots) {
@@ -2176,20 +2355,217 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // 0..26 value-faithful; the resize leaves 27..35 default-empty
     // (ItemStack value-initializes empty — the velocity-zeroed
     // migration twin).
-    save.slots.resize(static_cast<std::size_t>(Inventory::kTotalSize));
+    out.slots.resize(static_cast<std::size_t>(Inventory::kTotalSize));
     for (std::size_t i = 0; i < slots->size(); ++i) {
         // SURV-3 (format 18): the inventory slots carry the per-stack
         // "damage" key (the grids do not — the format-18 scope); a
         // format-17 and older file carrying it is a version lie
         // (rejected by name, the allowDamage=false whitelist).
-        auto r = parseSlotEntry(slots->at(i), items, "save slot #" +
+        auto r = parseSlotEntry(slots->at(i), items, ctx + " slot #" +
                                        std::to_string(i),
-                                       def.find("format")->asInt() >= 18,
-                                       def.find("format")->asInt() >= 27,
-                                       save.slots[i]);
+                                       fmt >= 18,
+                                       fmt >= 27,
+                                       out.slots[i]);
         MC_TRY(r);
     }
 
+    return {};
+}
+
+Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
+                           const BlockRegistry& blocks,
+                           const EffectRegistry& effects,
+                           std::int64_t expectedSeed) {
+    if (!def.isObject()) {
+        return MC_FAIL("save file must be a JSON object");
+    }
+    // "furnace" (format 6) and "furnaces" (format 7) are BOTH known keys —
+    // which one a file may carry is enforced per format below (a format-6
+    // file must still parse for the Phase 44 migration). Likewise "stairs"
+    // (format 14) and "states" (format 15, ENT-2's generalization): both
+    // are known, the per-format key discipline below enforces which one a
+    // file may carry ("stairs" is restricted to 14, "states" to 15).
+    // Likewise "table_grid" (format 3-18) and "tables" (format 19,
+    // CRAFT-1's generalization): both are known, the per-format key
+    // discipline below enforces which one a file may carry ("table_grid"
+    // is restricted to 18 and older, "tables" to 19). Likewise "nether"
+    // / "nether_entities" (format 30, V3-1 Phase B): known keys, the
+    // per-format discipline below enforces which format may carry them
+    // (restricted to 30 and newer — a format-29 file carrying either is
+    // a version lie).
+    // V3-10a: "end" / "end_entities" (format 32) join the whitelist —
+    // the per-format discipline below restricts them to 32 and newer
+    // (a format-31 file carrying either is a version lie, named).
+    const std::set<std::string> topLevel {"format", "seed", "time", "player",
+                                          "players", "inventory",
+                                          "inv_grid", "table_grid",
+                                          "furnace", "furnaces", "fires",
+                                          "campfires", "stairs", "states",
+                                          "tables", "entities", "blocks",
+                                          "fluids", "nether",
+                                          "nether_entities", "end",
+                                          "end_entities", "end_xp_entities",
+                                          "particles", "weather",
+                                          "spawn_counters",
+                                          "particle_break_counter",
+                                          "net_players"};
+    MC_TRY(rejectUnknownFields(def, topLevel, "save file"));
+
+    const Json* fmt = def.find("format");
+    if (fmt == nullptr || !fmt->isNumber()) {
+        return MC_FAIL("save file requires 'format' (a number)");
+    }
+    // Format 1 (Phase 13, no health field) and 2 (Phase 16, player
+    // health) both load; anything else is a version mismatch.
+    if (fmt->asInt() < kSaveFormatMin || fmt->asInt() > kSaveFormat) {
+        return MC_FAIL("unsupported save format " +
+                       std::to_string(fmt->asInt()) +
+                       " (this build reads formats " +
+                       std::to_string(kSaveFormatMin) + "-" +
+                       std::to_string(kSaveFormat) + ")");
+    }
+
+    const Json* seed = def.find("seed");
+    if (seed == nullptr || !seed->isNumber()) {
+        return MC_FAIL("save file requires 'seed' (a number)");
+    }
+    const std::int64_t saveSeed = seed->asInt64();
+    if (saveSeed != expectedSeed) {
+        return MC_FAIL("save seed " + std::to_string(saveSeed) +
+                       " does not match the world seed " +
+                       std::to_string(expectedSeed) +
+                       " (the edits would apply to the wrong terrain)");
+    }
+
+    SaveGame save;
+    save.seed = saveSeed;
+
+    const Json* time = def.find("time");
+    if (time == nullptr || !time->isNumber() ||
+        !(time->asDouble() >= 0.0 && time->asDouble() < 1.0)) {
+        return MC_FAIL("save 'time' must be a number in [0, 1)");
+    }
+    save.time = time->asDouble();
+
+    // -- player(s) ----------------------------------------------------------------
+    // V3-12c2 (format 33): the PER-PLAYER array (the format-32 root
+    // "player" object + the root "inventory" / "inv_grid" relocated
+    // per entry). Entry 0 = the PRIMARY — the SaveGame's legacy
+    // members are its mirror (every pre-33 consumer reads them
+    // unchanged); entries 1.. = the remote players (the 12b D13's
+    // lifted face: the remote's personal state IS the world state —
+    // the REJOIN's snapshot's authority). A format-32 (or older)
+    // load migrates its single "player" into a one-entry array.
+    const int fmtVersion = def.find("format")->asInt();
+    constexpr std::size_t kSavePlayerCap = 8; // the net protocol's
+                                              // kNetMaxPlayers (the
+                                              // save's own bound — a
+                                              // wider array is a
+                                              // named corruption)
+    auto mirrorPrimary = [&save](const SavePlayer& sp) {
+        save.playerPos = sp.pos;
+        save.playerVelocity = sp.velocity;
+        save.playerYaw = sp.yaw;
+        save.playerPitch = sp.pitch;
+        save.playerHealth = sp.health;
+        save.playerAbsorption = sp.absorption;
+        save.playerHunger = sp.hunger;
+        save.playerSaturation = sp.saturation;
+        save.selectedSlot = sp.selectedSlot;
+        save.slots = sp.slots;
+        save.invGrid = sp.invGrid;
+        save.playerEffects = sp.effects;
+        save.playerStats = sp.stats;
+        save.tutorial = sp.tutorial;
+        save.tutorialSeries = sp.tutorialSeries;
+        save.tutorialId = sp.tutorialId;
+        save.tutorialProgress = sp.tutorialProgress;
+        save.playerArmor = sp.armor;
+        save.playerArmorDamage = sp.armorDamage;
+        save.playerArmorEnchants = sp.armorEnchants;
+        save.playerOxygen = sp.oxygen;
+        save.playerXp = sp.xp;
+        save.playerXpSeed = sp.xpSeed;
+        save.playerRespawn = sp.respawn;
+        save.playerDimension = sp.dimension;
+        save.playerCreative = sp.creative;
+    };
+    if (fmtVersion >= 33) {
+        if (def.find("player") != nullptr) {
+            return MC_FAIL("save format 33 must not carry a root "
+                           "'player' object (the per-player 'players' "
+                           "array is the authority — the format-33 "
+                           "relocation)");
+        }
+        if (def.find("inventory") != nullptr) {
+            return MC_FAIL("save format 33 must not carry a root "
+                           "'inventory' object (the per-player "
+                           "entries' nested twin is the authority — "
+                           "the format-33 relocation)");
+        }
+        const Json* players = def.find("players");
+        if (players == nullptr || !players->isArray() ||
+            players->size() == 0) {
+            return MC_FAIL("format 33 save requires a non-empty "
+                           "'players' array (the per-player "
+                           "relocation of the format-32 'player' "
+                           "object)");
+        }
+        if (players->size() > kSavePlayerCap) {
+            return MC_FAIL("save holds " +
+                           std::to_string(players->size()) +
+                           " players (the protocol's cap is " +
+                           std::to_string(kSavePlayerCap) + ")");
+        }
+        for (std::size_t i = 0; i < players->size(); ++i) {
+            const Json& entry = players->at(i);
+            const std::string ctx =
+                "save 'players[" + std::to_string(i) + "]";
+            SavePlayer sp;
+            MC_TRY(parsePlayerFields(&entry, fmtVersion, sp, ctx, items,
+                                     effects, expectedSeed));
+            const Json* einv = entry.find("inventory");
+            if (einv == nullptr || !einv->isObject()) {
+                return MC_FAIL(ctx + " requires a nested 'inventory' "
+                               "object (the format-33 per-player "
+                               "relocation)");
+            }
+            MC_TRY(parseInventoryFields(einv, fmtVersion, sp, ctx,
+                                        items));
+            const Json* egrid = entry.find("inv_grid");
+            if (egrid == nullptr) {
+                return MC_FAIL(ctx + " requires a nested 'inv_grid' "
+                               "array (the format-33 per-player "
+                               "relocation)");
+            }
+            MC_TRY(parseGrid(*egrid, items, ctx + ".inv_grid",
+                             sp.invGrid));
+            if (i == 0) {
+                mirrorPrimary(sp);
+            }
+            save.players.push_back(std::move(sp));
+        }
+    } else {
+        // The format-32 (and older) shape: the single root "player" +
+        // the root "inventory" (mirrored into a one-entry players[]).
+        // A format-32 (or older) file CARRYING the "players" array is
+        // a version lie (the per-player relocation's three-way twin —
+        // the end_xp_entities' lie below).
+        if (def.find("players") != nullptr) {
+            return MC_FAIL("save 'players' is restricted to format 33 "
+                           "or newer (got " + std::to_string(fmtVersion) +
+                           ") (a version lie — the per-player "
+                           "relocation)");
+        }
+        SavePlayer sp;
+        MC_TRY(parsePlayerFields(def.find("player"), fmtVersion, sp,
+                                 "save 'player", items, effects,
+                                 expectedSeed));
+        MC_TRY(parseInventoryFields(def.find("inventory"), fmtVersion,
+                                    sp, "save 'inventory", items));
+        mirrorPrimary(sp);
+        save.players.push_back(sp);
+    }
     // -- crafting grids (format 3; Phase 17; CRAFT-1) -------------------
     // Absent in format 1/2 files: the grids load empty (the old saves
     // predate them). Required and strictly validated in format 3.
@@ -2198,33 +2574,43 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
     // ("tables", parsed below). "table_grid" is restricted to format 18
     // and older (it is the format-18 migration source: the ONE global
     // grid is attributed to the world's sole table block, or discarded —
-    // the Phase 44 precedent).
-    const int fmtVersion = def.find("format")->asInt();
+    // the Phase 44 precedent). V3-12c2: the ROOT grids are the
+    // format-32-and-older face — a format-33 file's grids ride the
+    // per-player entries (the relocation above), the root keys are
+    // version lies.
     std::vector<ItemStack> legacyTableGrid; // format 3-18; parsed here,
                                             // migrated into save.tables
-    if (fmtVersion >= 3) {
-        const Json* invGrid = def.find("inv_grid");
-        if (invGrid == nullptr) {
-            return MC_FAIL("save format 3 requires an 'inv_grid' array");
+    if (fmtVersion <= 32) {
+        if (fmtVersion >= 3) {
+            const Json* invGrid = def.find("inv_grid");
+            if (invGrid == nullptr) {
+                return MC_FAIL("save format 3 requires an 'inv_grid' array");
+            }
+            MC_TRY(parseGrid(*invGrid, items, "inv_grid", save.invGrid));
+        } else if (def.find("inv_grid") != nullptr ||
+                   def.find("table_grid") != nullptr) {
+            return MC_FAIL("save grids ('inv_grid'/'table_grid') require "
+                           "format 3 (got " + std::to_string(fmtVersion) + ")");
         }
-        MC_TRY(parseGrid(*invGrid, items, "inv_grid", save.invGrid));
+        if (fmtVersion >= 3 && fmtVersion <= 18) {
+            const Json* tableGrid = def.find("table_grid");
+            if (tableGrid == nullptr) {
+                return MC_FAIL("save format 3 requires a 'table_grid' array");
+            }
+            MC_TRY(parseGrid(*tableGrid, items, "table_grid", legacyTableGrid));
+        } else if (fmtVersion >= 19 && def.find("table_grid") != nullptr) {
+            return MC_FAIL("save 'table_grid' is restricted to format 18 or "
+                           "older (a format-19 file carries the per-block "
+                           "'tables' array instead)");
+        }
+
     } else if (def.find("inv_grid") != nullptr ||
                def.find("table_grid") != nullptr) {
-        return MC_FAIL("save grids ('inv_grid'/'table_grid') require "
-                       "format 3 (got " + std::to_string(fmtVersion) + ")");
+        return MC_FAIL("save format 33 must not carry root 'inv_grid' / "
+                       "'table_grid' (the per-player entries' nested "
+                       "grids are the authority — the format-33 "
+                       "relocation)");
     }
-    if (fmtVersion >= 3 && fmtVersion <= 18) {
-        const Json* tableGrid = def.find("table_grid");
-        if (tableGrid == nullptr) {
-            return MC_FAIL("save format 3 requires a 'table_grid' array");
-        }
-        MC_TRY(parseGrid(*tableGrid, items, "table_grid", legacyTableGrid));
-    } else if (fmtVersion >= 19 && def.find("table_grid") != nullptr) {
-        return MC_FAIL("save 'table_grid' is restricted to format 18 or "
-                       "older (a format-19 file carries the per-block "
-                       "'tables' array instead)");
-    }
-
     // -- furnace states (format 6/7) -----------------------------------------
     // Parsed AFTER the block edits (below): the format-7 entries are
     // cross-checked against the world's furnace blocks, and the format-6
@@ -2301,56 +2687,7 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
                                                std::to_string(i)));
         if (isXp) {
             SavedXpEntity se;
-            const Json* xpv = e.find("xp");
-            double xd = 0.0;
-            if (xpv == nullptr || !isInt(*xpv, &xd) || xd < 1.0 || xd > 9.0) {
-                return MC_FAIL("save entity #" + std::to_string(i) +
-                               " (type \"xp\") 'xp' must be an integer in "
-                               "[1, 9] (the orb value cap), got " +
-                               (xpv != nullptr && xpv->isNumber()
-                                    ? std::to_string(xpv->asDouble())
-                                    : "a missing or non-number key"));
-            }
-            se.xp = static_cast<int>(xd);
-            // pos / age / pickup_delay: the item entry's twin rules
-            // (the orb's own constants — same values, named from the
-            // orb's discipline).
-            const Json* epos = e.find("pos");
-            if (epos == nullptr || !epos->isArray() || epos->size() != 3) {
-                return MC_FAIL("save entity #" + std::to_string(i) +
-                               " requires 'pos' (an array of 3 numbers)");
-            }
-            for (std::size_t k = 0; k < 3; ++k) {
-                if (!epos->at(k).isNumber()) {
-                    return MC_FAIL("save entity #" + std::to_string(i) +
-                                   " 'pos'[" + std::to_string(k) +
-                                   "] must be a number");
-                }
-            }
-            se.pos = {static_cast<float>(epos->at(0).asDouble()),
-                      static_cast<float>(epos->at(1).asDouble()),
-                      static_cast<float>(epos->at(2).asDouble())};
-            const Json* age = e.find("age");
-            if (age == nullptr || !age->isNumber() ||
-                !(age->asDouble() >= 0.0 && age->asDouble() <
-                  ExpOrbEntity::kDespawnSeconds)) {
-                return MC_FAIL("save entity #" + std::to_string(i) +
-                               " 'age' must be a number in [0, " +
-                               std::to_string(ExpOrbEntity::kDespawnSeconds) +
-                               ")");
-            }
-            se.age = age->asDouble();
-            const Json* delay = e.find("pickup_delay");
-            if (delay == nullptr || !delay->isNumber() ||
-                !(delay->asDouble() >= 0.0 && delay->asDouble() <=
-                  ExpOrbEntity::kPickupDelaySeconds)) {
-                return MC_FAIL("save entity #" + std::to_string(i) +
-                               " 'pickup_delay' must be a number in [0, " +
-                               std::to_string(
-                                   ExpOrbEntity::kPickupDelaySeconds) +
-                               "]");
-            }
-            se.pickupDelay = delay->asDouble();
+            MC_TRY(parseXpEntry(e, "save entity #" + std::to_string(i), se));
             save.xpEntities.push_back(std::move(se));
             continue;
         }
@@ -3787,8 +4124,9 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
             if (type == nullptr || !type->isString() ||
                 type->asString() != "item") {
                 return MC_FAIL(what + " 'type' must be \"item\" (the "
-                               "End carries no XP orbs — the End "
-                               "holds no XP grant source in V3-10a)");
+                               "End's XP orbs ride the "
+                               "'end_xp_entities' segment — the "
+                               "format-33 10d1 deferred face)");
             }
             const std::set<std::string> eFields {"type", "item", "count",
                                                  "pos", "age",
@@ -3866,6 +4204,277 @@ Result<SaveGame> parseSave(const Json& def, const ItemRegistry& items,
             return MC_FAIL("save 'end_entities' requires format 32 or "
                            "newer (got " + std::to_string(fmtVersion) +
                            ") (a version lie)");
+        }
+    }
+    // V3-12c2 (format 33): the END's XP orbs (the 10d1's deferred
+    // face — the dragon's burst / the enderman's kills persist; the
+    // overworld's xp entry shape verbatim, the parseXpEntry's single
+    // source). ALWAYS written on format 33 (empty valid — the
+    // end_entities' twin); a format-32 (or older) file carrying it is
+    // a version lie, named.
+    const Json* endXp = def.find("end_xp_entities");
+    if (fmtVersion >= 33) {
+        if (endXp == nullptr || !endXp->isArray()) {
+            return MC_FAIL("save format 33 requires an 'end_xp_entities' "
+                           "array (empty valid: a no-End session's End "
+                           "holds no orbs)");
+        }
+        for (std::size_t i = 0; i < endXp->size(); ++i) {
+            const Json& e = endXp->at(i);
+            const std::string what = "save 'end_xp_entities' entry #" +
+                                     std::to_string(i);
+            if (!e.isObject()) {
+                return MC_FAIL(what + " must be an object");
+            }
+            SavedXpEntity se;
+            MC_TRY(parseXpEntry(e, what, se));
+            save.endXpEntities.push_back(std::move(se));
+        }
+    } else if (endXp != nullptr) {
+        return MC_FAIL("save 'end_xp_entities' is restricted to format "
+                       "33 or newer (got " + std::to_string(fmtVersion) +
+                       ") (a version lie — the 10d1's deferred face)");
+    }
+    // V3-12c2: the NET REJOIN SNAPSHOT's optional segments (the
+    // save-form WELCOME's document face — collectSave's on-disk path
+    // leaves them absent, the savenorm anchor's unchanged). A
+    // format-32 (or older) file carrying any of them is a version lie
+    // (the on-disk discipline: they are the format-33 net's
+    // vocabulary). Absent = the fresh zero (the solo reload's
+    // derivation — the solo's single-machine semantics).
+    const Json* parts = def.find("particles");
+    const Json* wthr = def.find("weather");
+    const Json* spawnC = def.find("spawn_counters");
+    const Json* pbc = def.find("particle_break_counter");
+    if (fmtVersion < 33 && (parts != nullptr || wthr != nullptr ||
+                            spawnC != nullptr || pbc != nullptr)) {
+        return MC_FAIL("the net snapshot segments ('particles' / "
+                       "'weather' / 'spawn_counters' / "
+                       "'particle_break_counter') are restricted to "
+                       "format 33 or newer (got " +
+                       std::to_string(fmtVersion) +
+                       ") (a version lie — the rejoin's face)");
+    }
+    if (parts != nullptr) {
+        if (!parts->isArray()) {
+            return MC_FAIL("save 'particles' must be an array (the "
+                           "live particle's multiset)");
+        }
+        for (std::size_t i = 0; i < parts->size(); ++i) {
+            const Json& e = parts->at(i);
+            const std::string what = "save 'particles' entry #" +
+                                     std::to_string(i);
+            if (!e.isObject()) {
+                return MC_FAIL(what + " must be an object");
+            }
+            const std::set<std::string> pFields {"pos", "vel", "age",
+                                                 "life", "block",
+                                                 "sky_light",
+                                                 "block_light",
+                                                 "gravity"};
+            MC_TRY(rejectUnknownFields(e, pFields, "save 'particles'"));
+            SavedParticle pt;
+            for (const char* key : {"pos", "vel"}) {
+                const Json* kv = e.find(key);
+                Vec3& vec = (key[0] == 'p') ? pt.position : pt.velocity;
+                if (kv == nullptr || !kv->isArray() || kv->size() != 3) {
+                    return MC_FAIL(what + " requires '" + std::string(key) +
+                                   "' (an array of 3 numbers)");
+                }
+                for (std::size_t k = 0; k < 3; ++k) {
+                    if (!kv->at(k).isNumber()) {
+                        return MC_FAIL(what + " '" + std::string(key) +
+                                       "['" + std::to_string(k) +
+                                       "] must be a number");
+                    }
+                    float* c = (k == 0) ? &vec.x : (k == 1) ? &vec.y : &vec.z;
+                    *c = static_cast<float>(kv->at(k).asDouble());
+                }
+            }
+            const Json* age = e.find("age");
+            if (age == nullptr || !age->isNumber() ||
+                !(age->asDouble() >= 0.0)) {
+                return MC_FAIL(what + " 'age' must be a number >= 0");
+            }
+            pt.age = static_cast<float>(age->asDouble());
+            const Json* life = e.find("life");
+            if (life == nullptr || !life->isNumber() ||
+                !(life->asDouble() > 0.0)) {
+                return MC_FAIL(what + " 'life' must be a number > 0");
+            }
+            pt.life = static_cast<float>(life->asDouble());
+            const Json* blk = e.find("block");
+            if (blk == nullptr || !blk->isString() ||
+                blk->asString().empty()) {
+                return MC_FAIL(what + " 'block' must be a non-empty "
+                                   "string (the texture source's "
+                                   "name)");
+            }
+            pt.block = blk->asString();
+            for (const char* key : {"sky_light", "block_light"}) {
+                const Json* kv = e.find(key);
+                float& out = (key[0] == 's') ? pt.skyLight : pt.blockLight;
+                if (kv == nullptr || !kv->isNumber() ||
+                    !(kv->asDouble() >= 0.0 && kv->asDouble() <= 1.0)) {
+                    return MC_FAIL(what + " '" + std::string(key) +
+                                   "' must be a number in [0, 1]");
+                }
+                out = static_cast<float>(kv->asDouble());
+            }
+            const Json* grav = e.find("gravity");
+            if (grav == nullptr || !grav->isNumber()) {
+                return MC_FAIL(what + " 'gravity' must be a number");
+            }
+            pt.gravity = static_cast<float>(grav->asDouble());
+            save.particles.push_back(std::move(pt));
+        }
+    }
+    if (wthr != nullptr) {
+        const std::string what = "save 'weather'";
+        if (!wthr->isObject()) {
+            return MC_FAIL(what + " must be an object");
+        }
+        const std::set<std::string> wFields {"raining", "frames_left",
+                                             "thunder_left", "stream",
+                                             "thunder_stream"};
+        MC_TRY(rejectUnknownFields(*wthr, wFields, "save 'weather'"));
+        const Json* rain = wthr->find("raining");
+        if (rain == nullptr || !rain->isBool()) {
+            return MC_FAIL(what + " 'raining' must be a boolean");
+        }
+        double fl = 0.0, tl = 0.0;
+        const Json* flv = wthr->find("frames_left");
+        if (flv == nullptr || !isInt(*flv, &fl) || fl < 0.0 ||
+            fl > kClearMax) {
+            return MC_FAIL(what + " 'frames_left' must be an integer "
+                               "in [0, " + std::to_string(kClearMax) +
+                               "]");
+        }
+        const Json* tlv = wthr->find("thunder_left");
+        if (tlv == nullptr || !isInt(*tlv, &tl) || tl < 0.0 ||
+            tl > kThunderMax) {
+            return MC_FAIL(what + " 'thunder_left' must be an integer "
+                               "in [0, " + std::to_string(kThunderMax) +
+                               "]");
+        }
+        const Json* wstr = wthr->find("stream");
+        if (wstr == nullptr) {
+            return MC_FAIL(what + " requires 'stream' (the machine's "
+                                   "duration stream)");
+        }
+        auto ws = xpSeedFromHex(*wstr, "save 'weather.stream'");
+        MC_TRY(ws);
+        const Json* wtstr = wthr->find("thunder_stream");
+        if (wtstr == nullptr) {
+            return MC_FAIL(what + " requires 'thunder_stream' (the "
+                                   "machine's independent strike "
+                                   "stream)");
+        }
+        auto wts = xpSeedFromHex(*wtstr, "save 'weather.thunder_stream'");
+        MC_TRY(wts);
+        save.netCounters.weatherPresent = true;
+        save.netCounters.raining = rain->asBool();
+        save.netCounters.weatherFramesLeft = static_cast<std::int32_t>(fl);
+        save.netCounters.weatherThunderLeft =
+            static_cast<std::int32_t>(tl);
+        save.netCounters.weatherStream = *ws;
+        save.netCounters.weatherThunderStream = *wts;
+    }
+    if (spawnC != nullptr) {
+        const std::set<std::string> cFields {"overworld", "nether",
+                                             "end"};
+        MC_TRY(rejectUnknownFields(*spawnC, cFields, "save 'spawn_counters'"));
+        std::uint64_t vals[3] = {0, 0, 0};
+        const char* keys[3] = {"overworld", "nether", "end"};
+        for (int k = 0; k < 3; ++k) {
+            const Json* cv = spawnC->find(keys[k]);
+            if (cv == nullptr) {
+                return MC_FAIL("save 'spawn_counters' requires '" +
+                               std::string(keys[k]) + "'");
+            }
+            auto v = xpSeedFromHex(*cv, std::string("save 'spawn_counters.'") +
+                                           keys[k] + "'");
+            MC_TRY(v);
+            vals[k] = *v;
+        }
+        save.netCounters.spawnCountersPresent = true;
+        save.netCounters.spawnCounterOverworld = vals[0];
+        save.netCounters.spawnCounterNether = vals[1];
+        save.netCounters.spawnCounterEnd = vals[2];
+    }
+    if (pbc != nullptr) {
+        auto v = xpSeedFromHex(*pbc, "save 'particle_break_counter'");
+        MC_TRY(v);
+        save.netCounters.particleBreakCounterPresent = true;
+        save.netCounters.particleBreakCounter = *v;
+    }
+    const Json* netPl = def.find("net_players");
+    if (fmtVersion < 33 && netPl != nullptr) {
+        return MC_FAIL("the net snapshot's 'net_players' segment is "
+                       "restricted to format 33 or newer (got " +
+                       std::to_string(fmtVersion) +
+                       ") (a version lie — the rejoin's face)");
+    }
+    if (netPl != nullptr) {
+        if (!netPl->isArray()) {
+            return MC_FAIL("save 'net_players' must be an array (the "
+                           "per-player session state's index-aligned "
+                           "multiset)");
+        }
+        for (std::size_t i = 0; i < netPl->size(); ++i) {
+            const Json& e = netPl->at(i);
+            const std::string what = "save 'net_players' entry #" +
+                                     std::to_string(i);
+            if (!e.isObject()) {
+                return MC_FAIL(what + " must be an object");
+            }
+            const std::set<std::string> nFields {"prev_health",
+                                                 "hurt_flash",
+                                                 "last_space_press",
+                                                 "pearl_cooldown",
+                                                 "drown_ticks",
+                                                 "flying"};
+            MC_TRY(rejectUnknownFields(e, nFields, "save 'net_players'"));
+            SavedNetPlayer npv;
+            const Json* ph = e.find("prev_health");
+            if (ph == nullptr || !ph->isNumber()) {
+                return MC_FAIL(what + " 'prev_health' must be a number");
+            }
+            npv.prevHealth = static_cast<float>(ph->asDouble());
+            const Json* hf = e.find("hurt_flash");
+            if (hf == nullptr || !hf->isNumber() ||
+                !(hf->asDouble() >= 0.0)) {
+                return MC_FAIL(what + " 'hurt_flash' must be a number "
+                                   ">= 0");
+            }
+            npv.hurtFlash = hf->asDouble();
+            const Json* lsp = e.find("last_space_press");
+            const double lspV = lsp != nullptr ? lsp->asDouble() : 0.0;
+            if (lsp == nullptr || !lsp->isNumber() ||
+                !(lspV >= 0.0 || lspV == -1.0)) {
+                return MC_FAIL(what + " 'last_space_press' must be a "
+                                    "sim-time (>= 0) or the -1 "
+                                    "sentinel (never pressed)");
+            }
+            npv.lastSpacePressTime = lsp->asDouble();
+            for (const char* key : {"pearl_cooldown", "drown_ticks"}) {
+                const Json* kv = e.find(key);
+                std::uint32_t& out = (key[0] == 'p')
+                    ? npv.pearlThrowCooldownFrames
+                    : npv.drownTicks;
+                double dv = 0.0;
+                if (kv == nullptr || !isInt(*kv, &dv) || dv < 0.0) {
+                    return MC_FAIL(what + " '" + std::string(key) +
+                                   "' must be an integer >= 0");
+                }
+                out = static_cast<std::uint32_t>(dv);
+            }
+            const Json* fly = e.find("flying");
+            if (fly == nullptr || !fly->isBool()) {
+                return MC_FAIL(what + " 'flying' must be a boolean");
+            }
+            npv.flying = fly->asBool();
+            save.netPlayers.push_back(std::move(npv));
         }
     }
 

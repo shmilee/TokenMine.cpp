@@ -271,6 +271,27 @@ Json withoutKey(const Json& root, const std::string& key) {
 // stripFormat31Keys twin — the genuine pre-30 file never carried the
 // format-30 keys: player.dimension / nether / nether_entities).
 Json stripFormat31Keys(Json root) {
+    // V3-12c2: the format-33 shape's downgrade — the serialized
+    // document holds the per-player "players" array (the root "player"
+    // + the root "inventory" / "inv_grid" relocated per entry); the
+    // legacy parse (<=32) wants the root shape: players[0] is the
+    // authority, the 33-only keys are stripped (the nested inventory /
+    // inv_grid promoted to the root).
+    if (const Json* players = root.find("players");
+        players != nullptr && players->isArray() && players->size() > 0) {
+        Json entry = players->at(0);
+        root = withoutKey(root, "players");
+        root = withoutKey(root, "end_xp_entities");
+        if (const Json* inv = entry.find("inventory")) {
+            root["inventory"] = *inv;
+            entry = withoutKey(entry, "inventory");
+        }
+        if (const Json* grid = entry.find("inv_grid")) {
+            root["inv_grid"] = *grid;
+            entry = withoutKey(entry, "inv_grid");
+        }
+        root["player"] = std::move(entry);
+    }
     root = withoutKey(root, "nether");
     root = withoutKey(root, "nether_entities");
     // V3-10a: the format-32 keys join the strip (the test_save twin —

@@ -99,7 +99,71 @@ Json withoutKey(const Json& root, const std::string& key) {
 // V3-1 Phase B: the downgrade's format-30 key strip (the test_save.cpp
 // stripFormat31Keys twin — the genuine pre-30 file never carried the
 // format-30 keys: player.dimension / nether / nether_entities).
+// V3-12c2 (format 33): the serialized document's per-player seam
+// (the root "player"'s relocated twin — players[0] + the nested
+// "inventory" / "inv_grid"); the old-format simulation's shape
+// conversion (the test_save's legacyShape twin).
+const Json* primaryEntry(const Json& doc) {
+    const Json* players = doc.find("players");
+    return (players != nullptr && players->isArray() && players->size() > 0)
+               ? &players->at(0)
+               : nullptr;
+}
+Json withPrimaryEntry(const Json& doc, const std::function<Json(const Json&)>& fn) {
+    const Json* players = doc.find("players");
+    if (players == nullptr || players->size() == 0) {
+        return doc;
+    }
+    Json arr = Json::array();
+    arr.push_back(fn(players->at(0)));
+    for (std::size_t i = 1; i < players->size(); ++i) {
+        arr.push_back(players->at(i));
+    }
+    Json out = withoutKey(doc, "players");
+    out["players"] = std::move(arr);
+    return out;
+}
+
+Json legacyShape(Json doc) {
+    const Json* players = doc.find("players");
+    if (players == nullptr || !players->isArray() || players->size() == 0) {
+        return doc;
+    }
+    Json entry = players->at(0);
+    doc = withoutKey(doc, "players");
+    doc = withoutKey(doc, "end_xp_entities");
+    if (const Json* inv = entry.find("inventory")) {
+        doc["inventory"] = *inv;
+        entry = withoutKey(entry, "inventory");
+    }
+    if (const Json* g = entry.find("inv_grid")) {
+        doc["inv_grid"] = *g;
+        entry = withoutKey(entry, "inv_grid");
+    }
+    doc["player"] = std::move(entry);
+    // V3-12c2: the respawn's int cell's RE-ENCODE (the format-33
+    // document's exact float's legacy (the 32-and-below) shape — the
+    // old writer's floor's twin; the 32-and-below parse's cell-
+    // center's reconstruction's premise).
+    if (const Json* pl = doc.find("player");
+        pl != nullptr && pl->isObject()) {
+        const Json* rp = pl->find("respawn");
+        if (rp != nullptr && rp->isArray() && rp->size() == 3) {
+            Json cell = Json::array();
+            for (std::size_t i = 0; i < 3; ++i) {
+                cell.push_back(Json(std::floor(rp->at(i).asDouble())));
+            }
+            Json plOut = withoutKey(*pl, "respawn");
+            plOut["respawn"] = std::move(cell);
+            doc = withoutKey(doc, "player");
+            doc["player"] = std::move(plOut);
+        }
+    }
+    return doc;
+}
+
 Json stripFormat31Keys(Json root) {
+    root = legacyShape(std::move(root)); // V3-12c2: the 33 shape's revert
     root = withoutKey(root, "nether");
     root = withoutKey(root, "nether_entities");
     // V3-10a: the format-32 keys join the strip (the test_save twin —
@@ -421,19 +485,21 @@ TEST(DrownSaveTest, OxygenRoundTrips) {
     s.playerOxygen = 123;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    const Json* oxygen = j->find("player")->find("oxygen");
+    const Json* oxygen = primaryEntry(*j)->find("oxygen");
     ASSERT_TRUE(oxygen != nullptr && oxygen->isNumber());
     EXPECT_EQ(oxygen->asInt(), 123);
     auto out = parseSave(*j, f.items, f.blocks, f.effects, 42);
     ASSERT_TRUE(out.ok()) << out.error().message;
     EXPECT_EQ(out->playerOxygen, 123);
-    // A format-17 file WITHOUT the key is rejected (named).
+    // A format-17 file WITHOUT the key is rejected (named) — the
+    // format-33 entry's nested key (the relocation's twin).
     {
-        Json root = *j;
-        root["player"] = withoutKey(root["player"], "oxygen");
+        Json root = withPrimaryEntry(*j, [](const Json& e) {
+            return withoutKey(e, "oxygen");
+        });
         auto bad = parseSave(root, f.items, f.blocks, f.effects, 42);
         ASSERT_FALSE(bad.ok());
-        EXPECT_NE(bad.error().message.find("player.oxygen"), std::string::npos)
+        EXPECT_NE(bad.error().message.find("oxygen"), std::string::npos)
             << bad.error().message;
         EXPECT_NE(bad.error().message.find("format 17"), std::string::npos)
             << bad.error().message;
@@ -524,24 +590,33 @@ TEST(DrownSaveTest, OxygenBoundsRejected) {
     ASSERT_TRUE(j.ok()) << j.error().message;
     const std::vector<int> overCap {kOxygenMax + 1, 1000};
     for (const int bad : overCap) {
-        Json root = *j;
-        root["player"]["oxygen"] = Json(bad);
+        Json root = withPrimaryEntry(*j, [bad](const Json& e) {
+            Json entry = e;
+            entry["oxygen"] = Json(bad);
+            return entry;
+        });
         auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
         ASSERT_FALSE(out.ok()) << bad;
-        EXPECT_NE(out.error().message.find("player.oxygen"), std::string::npos)
+        EXPECT_NE(out.error().message.find("oxygen"), std::string::npos)
             << out.error().message;
         EXPECT_NE(out.error().message.find(std::to_string(bad)),
                   std::string::npos)
             << out.error().message;
     }
-    Json rootNeg = *j;
-    rootNeg["player"]["oxygen"] = Json(-1);
+    Json rootNeg = withPrimaryEntry(*j, [](const Json& e) {
+        Json entry = e;
+        entry["oxygen"] = Json(-1);
+        return entry;
+    });
     auto neg = parseSave(rootNeg, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(neg.ok());
-    EXPECT_NE(neg.error().message.find("player.oxygen"), std::string::npos)
+    EXPECT_NE(neg.error().message.find("oxygen"), std::string::npos)
         << neg.error().message;
-    Json rootFrac = *j;
-    rootFrac["player"]["oxygen"] = Json(1.5);
+    Json rootFrac = withPrimaryEntry(*j, [](const Json& e) {
+        Json entry = e;
+        entry["oxygen"] = Json(1.5);
+        return entry;
+    });
     auto frac = parseSave(rootFrac, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(frac.ok());
     EXPECT_NE(frac.error().message.find("integer"), std::string::npos)

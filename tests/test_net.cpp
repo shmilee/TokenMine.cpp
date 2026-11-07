@@ -122,6 +122,9 @@ TEST(NetProto, HelloWelcomeRejectCtrlRoundTrip) {
     w.slot = 1;
     w.delay = mc::kNetInputDelay;
     w.hashInterval = mc::kNetHashInterval;
+    // V3-12c2: the startFrame's zero (the fresh form + the initial
+    // window's save form — the session's frame zero).
+    w.startFrame = 0;
     const auto wp = mc::packWelcome(w);
     NetWelcome w2;
     ASSERT_TRUE(mc::unpackWelcome(wp.data(), wp.size(), w2));
@@ -131,6 +134,10 @@ TEST(NetProto, HelloWelcomeRejectCtrlRoundTrip) {
     ws.fresh = false;
     ws.seed = -7;
     ws.journalPayload = "the save document's payload";
+    // V3-12c2: the rejoin's mid-session startFrame (the host's
+    // m_frameCount at the handshake — the client's pacing's
+    // adoption).
+    ws.startFrame = 12345;
     const auto wsp = mc::packWelcome(ws);
     NetWelcome ws2;
     ASSERT_TRUE(mc::unpackWelcome(wsp.data(), wsp.size(), ws2));
@@ -148,6 +155,36 @@ TEST(NetProto, HelloWelcomeRejectCtrlRoundTrip) {
     NetCtrl c2;
     ASSERT_TRUE(mc::unpackCtrl(cp.data(), cp.size(), c2));
     EXPECT_EQ(c2, c);
+
+    // V3-12c2: the Renumber (the removal's broadcast — the slot's
+    // face only, no name).
+    NetCtrl rn;
+    rn.kind = NetCtrl::Kind::Renumber;
+    rn.slot = 2;
+    const auto rnp = mc::packCtrl(rn);
+    NetCtrl rn2;
+    ASSERT_TRUE(mc::unpackCtrl(rnp.data(), rnp.size(), rn2));
+    EXPECT_EQ(rn2, rn);
+
+    // V3-12c2: the Join (the N's growth's broadcast — the slot + the
+    // joining player's name; the name's 16-cap).
+    NetCtrl jn;
+    jn.kind = NetCtrl::Kind::Join;
+    jn.slot = 2;
+    jn.name = "reconnector";
+    const auto jnp = mc::packCtrl(jn);
+    NetCtrl jn2;
+    ASSERT_TRUE(mc::unpackCtrl(jnp.data(), jnp.size(), jn2));
+    EXPECT_EQ(jn2, jn);
+    NetCtrl jl;
+    jl.kind = NetCtrl::Kind::Join;
+    jl.slot = 3;
+    jl.name = "a-very-long-name-over-sixteen";
+    const auto jlp = mc::packCtrl(jl);
+    NetCtrl jl2;
+    ASSERT_TRUE(mc::unpackCtrl(jlp.data(), jlp.size(), jl2));
+    EXPECT_EQ(jl2.name, "a-very-long-name");
+    EXPECT_EQ(jl2.slot, 3u);
 }
 
 // The decoders' corrupt-stream tolerance (the R16's bound check — a

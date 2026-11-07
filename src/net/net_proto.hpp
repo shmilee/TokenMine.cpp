@@ -122,6 +122,12 @@ struct NetWelcome {
     std::uint8_t slot = 1; // the client's player index
     std::uint8_t delay = kNetInputDelay;
     std::uint8_t hashInterval = kNetHashInterval;
+    // V3-12c2: the save-form WELCOME's START FRAME — the host's
+    // m_frameCount at the handshake (the client's m_frameCount
+    // adoption: the frame-absolute pacing aligns over the document's
+    // apply; 0 on the fresh form + the initial window's save form —
+    // the session's frame zero).
+    std::uint32_t startFrame = 0;
     bool operator==(const NetWelcome&) const = default;
 };
 
@@ -129,11 +135,30 @@ struct NetWelcome {
 // type 0 = leave / kick (the slot's player is removed — the 100% drop
 // + the dismount, R19), type 1 = disconnect (the slot's transport
 // died; the host is the session's owner — a client seeing the host's
-// EOF exits, D2).
+// EOF exits, D2). V3-12c2: type 2 = renumber (the slot's removal's
+// BROADCAST — the host's compact-erase's face: every slot > removed
+// shifts down one; the survivors' bodies / rings / watermarks shift
+// WITH their rows (the input history's owner follows the player),
+// the local slot's adjustment is the receiver's; the rejoin's
+// mid-session removal's desync root's gate-catch fix).
 struct NetCtrl {
-    enum class Kind : std::uint8_t { Leave = 0, Disconnect = 1 };
+    enum class Kind : std::uint8_t {
+        Leave = 0,
+        Disconnect = 1,
+        Renumber = 2,
+        // V3-12c2: join (the rejoin's mid-session WELCOME's BROADCAST
+        // to the EXISTING remotes — the N's growth: their rings /
+        // inputs / names push a row, their netAddPlayer(slot) builds
+        // the new body (the host's twin — the construction's
+        // determinism, no transfer), the slot is ALWAYS the tail
+        // (the compact vector's append)).
+        Join = 3,
+    };
     Kind kind = Kind::Disconnect;
     std::uint8_t slot = 0;
+    // The Join's face only: the joining player's name (the nametag's
+    // presentation — the latin's 16-cap, the HELLO name's twin).
+    std::string name;
     bool operator==(const NetCtrl&) const = default;
 };
 

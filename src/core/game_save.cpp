@@ -243,6 +243,108 @@ Result<SaveGame> Game::collectSave() const {
                 [static_cast<std::size_t>(m_tutorial.stepIndex)].id;
         save.tutorialProgress = m_tutorial.progress;
     }
+    // V3-12c2 (format 33): the PER-PLAYER array (entry 0 = the primary
+    // mirror — the legacy members above; entries 1.. = the remote
+    // players, the 12b D13's lifted face: the remote's personal state
+    // IS the world state — the REJOIN's snapshot's authority). A solo
+    // save is a one-entry array (the pre-33 shape's value-faithful
+    // relocation).
+    save.players.clear();
+    for (std::size_t i = 0; i < m_players.size(); ++i) {
+        const Player& p = *m_players[i];
+        const PlayerSession& ps = *m_sessions[i];
+        SavePlayer sp;
+        if (i == 0) {
+            sp.pos = save.playerPos;
+            sp.velocity = save.playerVelocity;
+            sp.yaw = save.playerYaw;
+            sp.pitch = save.playerPitch;
+            sp.health = save.playerHealth;
+            sp.absorption = save.playerAbsorption;
+            sp.hunger = save.playerHunger;
+            sp.saturation = save.playerSaturation;
+            sp.selectedSlot = save.selectedSlot;
+            sp.slots = save.slots;
+            sp.invGrid = save.invGrid;
+            sp.effects = save.playerEffects;
+            sp.stats = save.playerStats;
+            sp.tutorial = save.tutorial;
+            sp.tutorialSeries = save.tutorialSeries;
+            sp.tutorialId = save.tutorialId;
+            sp.tutorialProgress = save.tutorialProgress;
+            sp.armor = save.playerArmor;
+            sp.armorDamage = save.playerArmorDamage;
+            sp.armorEnchants = save.playerArmorEnchants;
+            sp.oxygen = save.playerOxygen;
+            sp.xp = save.playerXp;
+            sp.xpSeed = save.playerXpSeed;
+            sp.respawn = save.playerRespawn;
+            sp.dimension = save.playerDimension;
+            sp.creative = save.playerCreative;
+        } else {
+            sp.pos = p.position();
+            sp.velocity = p.velocity();
+            sp.yaw = p.yaw;
+            sp.pitch = p.pitch;
+            sp.health = p.health();
+            sp.absorption = p.absorption();
+            sp.hunger = p.hunger();
+            sp.saturation = p.saturation();
+            sp.selectedSlot = static_cast<int>(ps.selectedSlot);
+            sp.slots.resize(ps.inventory.size());
+            for (std::size_t k = 0; k < sp.slots.size(); ++k) {
+                sp.slots[k] = ps.inventory.at(k);
+            }
+            sp.invGrid.resize(CraftingGrid::kSize);
+            for (int k = 0; k < CraftingGrid::kSize; ++k) {
+                sp.invGrid[static_cast<std::size_t>(k)] =
+                    ps.panel.inventoryGrid.at(static_cast<std::size_t>(k));
+            }
+            for (const ActiveEffect& a : ps.effects.list()) {
+                sp.effects.push_back(
+                    SavedEffect {m_effects.at(a.effect).name, a.remaining,
+                                 a.tier});
+            }
+            sp.stats = ps.stats;
+            if (ps.tutorial.done) {
+                sp.tutorial = TutorialSaveState::Done;
+            } else {
+                sp.tutorial = TutorialSaveState::InProgress;
+                sp.tutorialSeries = ps.tutorial.seriesIndex;
+                if (ps.tutorial.seriesIndex >= 0 &&
+                    ps.tutorial.seriesIndex <
+                        static_cast<int>(m_tutorialSeries.size()) &&
+                    ps.tutorial.stepIndex >= 0 &&
+                    ps.tutorial.stepIndex < static_cast<int>(
+                        m_tutorialSeries[static_cast<std::size_t>(
+                            ps.tutorial.seriesIndex)].size())) {
+                    sp.tutorialId = m_tutorialSeries
+                        [static_cast<std::size_t>(ps.tutorial.seriesIndex)]
+                        [static_cast<std::size_t>(ps.tutorial.stepIndex)]
+                            .id;
+                }
+                sp.tutorialProgress = ps.tutorial.progress;
+            }
+            for (int k = 0; k < kArmorSlotCount; ++k) {
+                const ItemStack& worn = p.armorSlot(k);
+                sp.armor[static_cast<std::size_t>(k)] =
+                    worn.empty() ? std::string {} : m_items.at(worn.item).name;
+                sp.armorDamage[static_cast<std::size_t>(k)] =
+                    worn.empty() ? 0.0f : worn.damage;
+                sp.armorEnchants[static_cast<std::size_t>(k)] =
+                    worn.empty() ? std::map<std::string, int> {} : worn.enchants;
+            }
+            sp.oxygen = ps.drown.oxygen;
+            sp.xp = p.xpTotal();
+            sp.xpSeed = p.xpSeed();
+            sp.respawn = p.spawnPos();
+            // The remote body lives in the primary's dimension (D9's
+            // global-dimension ruling) — the entry's word mirrors it.
+            sp.dimension = save.playerDimension;
+            sp.creative = p.isCreative();
+        }
+        save.players.push_back(std::move(sp));
+    }
     for (const std::unique_ptr<Entity>& e : m_entities) {
         // V2-11 (format 26): the XP orbs are the SECOND persisted entity
         // kind (the strict {type, xp, pos, age, pickup_delay} save entry —
@@ -547,9 +649,21 @@ Result<SaveGame> Game::collectSave() const {
     // deviation: the End's orbs are not persisted — their 120-s fuse
     // bounds the loss, the MC persistence read would need the
     // format-33 end_xp_entities key, the 10d2 re-discussion).
+    // V3-12c2: the End's XP orbs are PERSISTED (the 10d1's deferred
+    // face — the skip lifted: the dragon's burst / the enderman's
+    // kills survive a reload; the orbs ride the dedicated
+    // end_xp_entities segment, the end_entities' item-only shape
+    // unchanged).
     for (const std::unique_ptr<Entity>& e : m_end.entities) {
-        if (dynamic_cast<const ExpOrbEntity*>(e.get()) != nullptr) {
-            continue; // the 10d orb's skip (the deviation above)
+        if (const ExpOrbEntity* orb =
+                dynamic_cast<const ExpOrbEntity*>(e.get())) {
+            SavedXpEntity se;
+            se.xp = orb->value();
+            se.pos = orb->position();
+            se.age = orb->age();
+            se.pickupDelay = orb->pickupDelayRemaining();
+            save.endXpEntities.push_back(std::move(se));
+            continue;
         }
         const ItemEntity* item = dynamic_cast<const ItemEntity*>(e.get());
         if (item == nullptr) {
@@ -772,7 +886,8 @@ Result<void> Game::applySave(const SaveGame& save) {
     // carries an end edit / the player sits in the End).
     const bool endNeeded = !save.endBlockEdits.empty() ||
         !save.endFluidEdits.empty() || !save.endStates.empty() ||
-        !save.endEntities.empty() || save.playerDimension == "end";
+        !save.endEntities.empty() || !save.endXpEntities.empty() ||
+        save.playerDimension == "end";
     if (endNeeded) {
         ensureEnd();
         if (!m_end.world) {
@@ -814,6 +929,18 @@ Result<void> Game::applySave(const SaveGame& save) {
             entity->setAge(e.age);
             entity->setPickupDelay(e.pickupDelay);
             m_end.entities.push_back(std::move(entity));
+        }
+        // V3-12c2 (format 33): the End's XP orbs (the 10d1's deferred
+        // face — the 5-bis's End twin: the dragon's burst / the
+        // enderman's kills restore with their value + position + the
+        // two lifetime timers).
+        for (const SavedXpEntity& e : save.endXpEntities) {
+            auto orb =
+                std::make_unique<ExpOrbEntity>(*m_end.world, m_blocks,
+                                               e.xp, e.pos);
+            orb->setAge(e.age);
+            orb->setPickupDelay(e.pickupDelay);
+            m_end.entities.push_back(std::move(orb));
         }
     }
     // 3) Player. restorePosition teleports (velocity zeroed) and re-pins
@@ -1111,6 +1238,28 @@ Result<void> Game::applySave(const SaveGame& save) {
                     ") is not in the current tutorial data — resetting "
                     "to the first step");
     }
+    // V3-12c2 (format 33): the GHOST players (the save's players[]
+    // entries 1.. — the remote players of the session that took the
+    // save). A solo load of a multi-player save restores their bodies
+    // as idle sim entities (the documented 12c2 face: the personal
+    // state IS the world state — the bodies run zero input, the
+    // net session's zero-relay twin). A one-entry array (the solo /
+    // pre-33-migrated shape) runs this loop zero times — the
+    // bit-identical pre-33 load. The NET HOST (m_args.listenPort != 0)
+    // SUPPRESSES the ghosts: after a restart the saved other-players
+    // are stale (their connections died) — the host's player set is
+    // {itself} + {the newly-connected clients} (the slot 1.. base's
+    // netAddPlayer's premise, the m_nets' index = slot-1's map); a
+    // reconnecting client gets a FRESH body (the D25's deviation — its
+    // old items rode the removal's 100% drop, the document's entities'
+    // pickup's path). The net CLIENT keeps the ghosts (it reconstructs
+    // the OTHER connected players' bodies from the document, the host
+    // keeps them live via its netAddPlayer's — the lockstep's same-set).
+    if (m_args.listenPort == 0) {
+        for (std::size_t i = 1; i < save.players.size(); ++i) {
+            MC_TRY(applyGhostPlayer(save.players[i]));
+        }
+    }
     // 5) Dropped items (with their lifetime/pickup timers restored;
     // SURV-3: the stack's accumulated damage; V2-12 format 27: the
     // stack's enchantments too).
@@ -1137,6 +1286,279 @@ Result<void> Game::applySave(const SaveGame& save) {
     }
     // 6) Day-cycle time (wins over --time for a loaded save).
     m_dayCycle.setTimeOfDay(save.time);
+    return {};
+}
+
+Result<Json> Game::collectNetSnapshot() const {
+    // V3-12c2: the REJOIN's snapshot document (collectSave's twin +
+    // the session's counter family + the live particles — the hash
+    // field list's state the on-disk save does not carry; the
+    // mob-quiet's contract: a live mob's AI state is the deferred
+    // face, the D24's named rejection — the initial window's
+    // save-form join is structurally mob-free (the format-30's
+    // ephemeral design: a loaded world has no mobs at frame zero)).
+    for (const auto* ents :
+         {&m_entities, &m_nether.entities, &m_end.entities}) {
+        for (const auto& e : *ents) {
+            if (dynamic_cast<const MobEntity*>(e.get()) != nullptr) {
+                return MC_FAIL("net: the rejoin snapshot cannot carry "
+                               "mobs (the AI state's transfer is the "
+                               "deferred face — the D24's named "
+                               "rejection)");
+            }
+        }
+    }
+    auto cs = collectSave();
+    MC_TRY(cs);
+    SaveGame save = std::move(*cs);
+    for (const Particle& pt : m_particles.particles()) {
+        SavedParticle sp;
+        sp.position = pt.position;
+        sp.velocity = pt.velocity;
+        sp.age = pt.age;
+        sp.life = pt.life;
+        sp.block = m_blocks.at(pt.block).name;
+        sp.skyLight = pt.skyLight;
+        sp.blockLight = pt.blockLight;
+        sp.gravity = pt.gravity;
+        save.particles.push_back(std::move(sp));
+    }
+    save.netCounters.weatherPresent = true;
+    save.netCounters.raining = m_weather.raining;
+    save.netCounters.weatherFramesLeft = m_weather.framesLeft;
+    save.netCounters.weatherThunderLeft = m_weather.thunderLeft;
+    save.netCounters.weatherStream = m_weatherStream;
+    save.netCounters.weatherThunderStream = m_weatherThunderStream;
+    save.netCounters.spawnCountersPresent = true;
+    save.netCounters.spawnCounterOverworld = m_mobs.spawnCounter;
+    save.netCounters.spawnCounterNether = m_nether.mobs.spawnCounter;
+    save.netCounters.spawnCounterEnd = m_end.mobs.spawnCounter;
+    save.netCounters.particleBreakCounterPresent = true;
+    save.netCounters.particleBreakCounter = m_particleBreakCounter;
+    // The per-player session state (the hash's per-player face the
+    // persistable entry does not carry — the index alignment with
+    // save.players[]).
+    save.netPlayers.clear();
+    for (std::size_t i = 0; i < m_players.size(); ++i) {
+        const Player& p = *m_players[i];
+        const PlayerSession& ps = *m_sessions[i];
+        SavedNetPlayer npv;
+        npv.prevHealth = ps.prevHealth;
+        npv.hurtFlash = ps.hurtFlash;
+        npv.lastSpacePressTime = ps.lastSpacePressTime;
+        npv.pearlThrowCooldownFrames =
+            ps.pearlThrowCooldownFrames;
+        npv.drownTicks = ps.drown.drownTicks;
+        npv.flying = p.isFlying();
+        save.netPlayers.push_back(npv);
+    }
+    return serializeSave(save, m_items);
+}
+
+Result<void> Game::applyNetSnapshot() {
+    // V3-12c2: the client's WELCOME-document's apply (the host's
+    // collectNetSnapshot at the handshake — the parse/apply path's
+    // full reuse over the worldgen'd world, the file-load's twin;
+    // the seed's expected = the WELCOME's authority, the host's
+    // world). The document's players[] entries 0..N-2 restore the
+    // existing bodies (entry 0 = the primary's applySave path,
+    // entries 1.. = the ghosts' applyGhostPlayer's loop); the
+    // joining body (entry N) is the netAddPlayer's fresh
+    // construction (the starter gift — the D25's new-body's
+    // deviation: the old body's drops ride the document's entities,
+    // the pickup's path).
+    auto doc = Json::parse(m_netSnapshotPayload);
+    MC_TRY(doc);
+    auto save = parseSave(*doc, m_items, m_blocks, m_effects,
+                          m_netSeedOverride);
+    MC_TRY(save);
+    MC_TRY(applySave(*save));
+    // The session's counter family (applySave's blind spot — the
+    // on-disk document never carries them, the solo's fresh-
+    // derivation's single-machine premise; the rejoin's two-machine
+    // continuation).
+    const SavedNetCounters& nc = save->netCounters;
+    if (nc.weatherPresent) {
+        m_weather.raining = nc.raining;
+        m_weather.framesLeft = nc.weatherFramesLeft;
+        m_weather.thunderLeft = nc.weatherThunderLeft;
+        m_weatherStream = nc.weatherStream;
+        m_weatherThunderStream = nc.weatherThunderStream;
+    }
+    if (nc.spawnCountersPresent) {
+        m_mobs.spawnCounter = nc.spawnCounterOverworld;
+        m_nether.mobs.spawnCounter = nc.spawnCounterNether;
+        m_end.mobs.spawnCounter = nc.spawnCounterEnd;
+    }
+    if (nc.particleBreakCounterPresent) {
+        m_particleBreakCounter = nc.particleBreakCounter;
+    }
+    for (const SavedParticle& sp : save->particles) {
+        Particle pt;
+        pt.position = sp.position;
+        pt.velocity = sp.velocity;
+        pt.age = sp.age;
+        pt.life = sp.life;
+        pt.block = m_blocks.idForName(sp.block);
+        pt.skyLight = sp.skyLight;
+        pt.blockLight = sp.blockLight;
+        pt.gravity = sp.gravity;
+        m_particles.addRestored(pt);
+    }
+    // The per-player session state (the hash's per-player face — the
+    // apply's fresh-zero override: the host's live timers at the
+    // handshake; the index alignment with the restored bodies).
+    if (save->netPlayers.size() == m_players.size()) {
+        for (std::size_t i = 0; i < save->netPlayers.size(); ++i) {
+            const SavedNetPlayer& npv = save->netPlayers[i];
+            Player& p = *m_players[i];
+            PlayerSession& ps = *m_sessions[i];
+            ps.prevHealth = npv.prevHealth;
+            ps.hurtFlash = npv.hurtFlash;
+            ps.lastSpacePressTime = npv.lastSpacePressTime;
+            ps.pearlThrowCooldownFrames = npv.pearlThrowCooldownFrames;
+            ps.drown.drownTicks = npv.drownTicks;
+            p.setFlying(npv.flying);
+        }
+    }
+    // The frame's adoption (the pacing's alignment — the host's
+    // m_frameCount at the handshake; the day cycle + the weather's
+    // time source is the document's already).
+    m_frameCount = m_netStartFrame;
+    MC_LOG_INFO("net: the rejoin snapshot applied (the host's frame " +
+                std::to_string(m_netStartFrame) + ")");
+    return {};
+}
+
+Result<void> Game::applyGhostPlayer(const SavePlayer& sp) {
+    // V3-12c2 (format 33): one ghost body's restore (the save's
+    // players[] entry i >= 1 — the primary's 3)/4a-4h sequence's
+    // per-player twin, the session's fresh construction). The ghost
+    // lives in the PRIMARY's dimension (the collectSave's D9 ruling —
+    // every entry carries the primary's word), so the dimension's
+    // world is already ensured by the primary's branch: the rebind is
+    // the setWorld + the catch-up disk around the ghost's own column
+    // (its neighborhood may be far from the primary's disk).
+    auto params = Player::Params::fromConfig(m_config);
+    MC_TRY(params);
+    m_sessions.push_back(
+        std::make_unique<PlayerSession>(m_items, m_recipes));
+    PlayerSession& ps = *m_sessions.back();
+    auto p = std::make_unique<Player>(m_world, m_blocks, sp.pos, *params);
+    Player& raw = *p;
+    if (sp.dimension == "nether") {
+        raw.setWorld(*m_nether.world);
+        const int cx = floorDiv(
+            static_cast<int>(std::floor(sp.pos.x)), kChunkSize);
+        const int cz = floorDiv(
+            static_cast<int>(std::floor(sp.pos.z)), kChunkSize);
+        catchUpDisk(Dimension::Nether, cx, cz);
+    } else if (sp.dimension == "end") {
+        raw.setWorld(*m_end.world);
+        const int cx = floorDiv(
+            static_cast<int>(std::floor(sp.pos.x)), kChunkSize);
+        const int cz = floorDiv(
+            static_cast<int>(std::floor(sp.pos.z)), kChunkSize);
+        catchUpDisk(Dimension::End, cx, cz);
+    }
+    raw.restorePosition(sp.pos);
+    raw.setWorldSeed(static_cast<std::uint64_t>(
+        m_config.getInt64("world.seed", 0)));
+    raw.setVelocity(sp.velocity);
+    raw.yaw = sp.yaw;
+    raw.pitch = sp.pitch;
+    raw.setHunger(sp.hunger < 0.0f ? raw.maxHunger() : sp.hunger);
+    raw.setSaturation(sp.saturation < 0.0f ? 0.0f : sp.saturation);
+    // The inventory (the 4) twin).
+    for (std::size_t i = 0; i < ps.inventory.size(); ++i) {
+        if (i < sp.slots.size()) {
+            ps.inventory.setSlot(i, sp.slots[i]);
+        }
+    }
+    ps.selectedSlot =
+        static_cast<std::size_t>(sp.selectedSlot);
+    // The panel grid (the 4b's twin).
+    ps.panel.inventoryGrid.clear();
+    for (int i = 0; i < CraftingGrid::kSize; ++i) {
+        if (i < static_cast<int>(sp.invGrid.size())) {
+            ps.panel.inventoryGrid.setSlot(
+                static_cast<std::size_t>(i), sp.invGrid[static_cast<std::size_t>(i)]);
+        }
+    }
+    // The effects (the 4d's twin) + the stats.
+    ps.effects.clearAll();
+    for (const SavedEffect& se : sp.effects) {
+        ps.effects.apply(m_effects.idForName(se.name), se.remaining,
+                         se.tier);
+    }
+    ps.stats = sp.stats;
+    // The health + absorption (the 4e's twin — the two pools'
+    // sentinel / range disciplines verbatim).
+    const float baseMax = raw.maxHealth();
+    const float effectsTotal = ps.effects.totalAbsorption(m_effects);
+    if (sp.absorption < 0.0f) {
+        const float h = sp.health < 0.0f ? baseMax : sp.health;
+        if (h > baseMax + effectsTotal + 1e-4f) {
+            return MC_FAIL("save players' 'health' is above the base max "
+                           "plus the effects' absorption total (a "
+                           "hand-edited shared health)");
+        }
+        raw.setAbsorption(std::max(0.0f, h - baseMax));
+        raw.setHealth(std::min(h, baseMax));
+    } else {
+        if (sp.health >= 0.0f && sp.health > baseMax + 1e-4f) {
+            return MC_FAIL("save players' 'health' is above the base max "
+                           "(the absorption is a separate pool)");
+        }
+        raw.setAbsorption(sp.absorption);
+        raw.setHealth(sp.health < 0.0f ? baseMax : sp.health);
+        ps.prevHealth = raw.health(); // no hurt event from the load
+                                      // itself (the primary's twin)
+    }
+    // The armor (the 4f's twin).
+    for (int slot = 0; slot < kArmorSlotCount; ++slot) {
+        const std::string& name = sp.armor[static_cast<std::size_t>(slot)];
+        if (name.empty()) {
+            raw.setArmorSlot(slot, ItemStack {}, 0);
+            continue;
+        }
+        const Item& item = m_items.at(m_items.idForName(name));
+        const float dmg =
+            sp.armorDamage[static_cast<std::size_t>(slot)];
+        ItemStack piece {item.id, 1, dmg};
+        piece.enchants =
+            sp.armorEnchants[static_cast<std::size_t>(slot)];
+        raw.setArmorSlot(slot, piece, item.armorPoints,
+                         item.durability, item.fireResistant);
+    }
+    // The oxygen (the 4g's twin).
+    ps.drown.oxygen = sp.oxygen < 0 ? kOxygenMax : sp.oxygen;
+    ps.drown.drownTicks = 0;
+    // The XP pool / seed / respawn (the 4g-bis/ter/quater's twins).
+    raw.setXpTotal(sp.xp);
+    raw.setXpSeed(sp.xpSeed);
+    if (sp.respawn.y >= 0.0f) {
+        raw.setSpawnPos(sp.respawn);
+    } else {
+        raw.setSpawnPos(m_mobs.spawnPoint);
+    }
+    // The creative flag (the format-31's twin).
+    raw.setCreative(sp.creative);
+    if (sp.creative) {
+        raw.setFlying(true);
+    }
+    // The tutorial (the 4h's twin — the pure restore's cross-checks;
+    // no toast, the live-session presentation's discipline).
+    bool tutReset = false;
+    auto tutState = tutorialRestore(sp.tutorial, sp.tutorialSeries,
+                                    sp.tutorialId, sp.tutorialProgress,
+                                    m_tutorialSeries, &tutReset);
+    MC_TRY(tutState);
+    ps.tutorial = *tutState;
+    m_players.push_back(std::move(p));
+    MC_LOG_INFO("Save ghost player restored at (" +
+                std::to_string(sp.pos.x) + ", " + std::to_string(sp.pos.y) +
+                ", " + std::to_string(sp.pos.z) + ") in " + sp.dimension);
     return {};
 }
 

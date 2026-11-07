@@ -48,7 +48,56 @@ Json withoutKeyForTest(const Json& obj, const std::string& key) {
 // V3-1 Phase B: the downgrade's format-30 key strip (the test_save.cpp
 // stripFormat31Keys twin — the genuine pre-30 file never carried the
 // format-30 keys: player.dimension / nether / nether_entities).
+// V3-12c2 (format 33): the serialized document's per-player seam
+// (the root "player"'s relocated twin — players[0] + the nested
+// "inventory" / "inv_grid"); the old-format simulation's shape
+// conversion (the test_save's legacyShape twin).
+const Json* primaryEntry(const Json& doc) {
+    const Json* players = doc.find("players");
+    return (players != nullptr && players->isArray() && players->size() > 0)
+               ? &players->at(0)
+               : nullptr;
+}
+Json legacyShape(Json doc) {
+    const Json* players = doc.find("players");
+    if (players == nullptr || !players->isArray() || players->size() == 0) {
+        return doc;
+    }
+    Json entry = players->at(0);
+    doc = withoutKeyForTest(doc, "players");
+    doc = withoutKeyForTest(doc, "end_xp_entities");
+    if (const Json* inv = entry.find("inventory")) {
+        doc["inventory"] = *inv;
+        entry = withoutKeyForTest(entry, "inventory");
+    }
+    if (const Json* g = entry.find("inv_grid")) {
+        doc["inv_grid"] = *g;
+        entry = withoutKeyForTest(entry, "inv_grid");
+    }
+    doc["player"] = std::move(entry);
+    // V3-12c2: the respawn's int cell's RE-ENCODE (the format-33
+    // document's exact float's legacy (the 32-and-below) shape — the
+    // old writer's floor's twin; the 32-and-below parse's cell-
+    // center's reconstruction's premise).
+    if (const Json* pl = doc.find("player");
+        pl != nullptr && pl->isObject()) {
+        const Json* rp = pl->find("respawn");
+        if (rp != nullptr && rp->isArray() && rp->size() == 3) {
+            Json cell = Json::array();
+            for (std::size_t i = 0; i < 3; ++i) {
+                cell.push_back(Json(std::floor(rp->at(i).asDouble())));
+            }
+            Json plOut = withoutKeyForTest(*pl, "respawn");
+            plOut["respawn"] = std::move(cell);
+            doc = withoutKeyForTest(doc, "player");
+            doc["player"] = std::move(plOut);
+        }
+    }
+    return doc;
+}
+
 Json stripFormat31Keys(Json root) {
+    root = legacyShape(std::move(root)); // V3-12c2: the 33 shape's revert
     root = withoutKeyForTest(root, "nether");
     root = withoutKeyForTest(root, "nether_entities");
     // V3-10a: the format-32 keys join the strip (the test_save twin —
@@ -162,7 +211,7 @@ TEST(SaveFormat27, XpSeedRoundTripsLosslessly) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     // Stored as a 16-char lowercase hex string.
-    const Json* xs = j->find("player")->find("xp_seed");
+    const Json* xs = primaryEntry(*j)->find("xp_seed");
     ASSERT_NE(xs, nullptr);
     ASSERT_TRUE(xs->isString());
     EXPECT_EQ(xs->asString(), "5eed123456789abc");
@@ -207,11 +256,18 @@ TEST(SaveFormat27, Format27MissingXpSeedRejected) {
     SaveGame s = makeSave(0x1234ULL);
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
+    // V3-12c2: the entry's xp_seed (the format stays 33 — the
+    // required-key message names "player.xp_seed", the hardcoded
+    // form).
     Json root = *j;
-    // Strip xp_seed from a format-27 file -> a version lie (required key).
     {
-        Json p = *root.find("player");
-        root["player"] = withoutKeyForTest(p, "xp_seed");
+        const Json* players = root.find("players");
+        Json entry = players->at(0);
+        entry = withoutKeyForTest(entry, "xp_seed");
+        Json arr = Json::array();
+        arr.push_back(std::move(entry));
+        root = withoutKeyForTest(root, "players");
+        root["players"] = std::move(arr);
     }
     auto out = parseSave(root, f.items, f.blocks, f.effects, 42);
     ASSERT_FALSE(out.ok());
@@ -257,7 +313,7 @@ TEST(SaveFormat27, SlotEnchantsRoundTrip) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     // The "enchants" object is written (the id-sorted map).
-    const Json& slot0 = j->find("inventory")->find("slots")->at(0);
+    const Json& slot0 = primaryEntry(*j)->find("inventory")->find("slots")->at(0);
     ASSERT_NE(slot0.find("enchants"), nullptr);
     EXPECT_EQ(slot0.find("enchants")->find("sharpness")->asInt(), 5);
     EXPECT_EQ(slot0.find("enchants")->find("unbreaking")->asInt(), 2);
@@ -266,7 +322,7 @@ TEST(SaveFormat27, SlotEnchantsRoundTrip) {
     EXPECT_EQ(out->slots[0].enchants.at("sharpness"), 5);
     EXPECT_EQ(out->slots[0].enchants.at("unbreaking"), 2);
     // An EMPTY slot carries NO "enchants" key (the omit-when-empty).
-    const Json& slot1 = j->find("inventory")->find("slots")->at(1);
+    const Json& slot1 = primaryEntry(*j)->find("inventory")->find("slots")->at(1);
     EXPECT_EQ(slot1.find("enchants"), nullptr);
 }
 
@@ -276,7 +332,7 @@ TEST(SaveFormat27, UnenchantedSlotHasNoEnchantsKey) {
     s.slots[0] = ItemStack {f.axe, 1}; // no enchants
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok());
-    const Json& slot0 = j->find("inventory")->find("slots")->at(0);
+    const Json& slot0 = primaryEntry(*j)->find("inventory")->find("slots")->at(0);
     EXPECT_EQ(slot0.find("enchants"), nullptr); // byte-identical pre-27 shape
 }
 
@@ -288,7 +344,7 @@ TEST(SaveFormat27, ArmorEnchantsRoundTrip) {
     s.playerArmorEnchants[1]["protection"] = 3;
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
-    const Json* armor = j->find("player")->find("armor");
+    const Json* armor = primaryEntry(*j)->find("armor");
     ASSERT_NE(armor, nullptr);
     ASSERT_NE(armor->find("chest"), nullptr);
     const Json& entry = *armor->find("chest");
@@ -308,7 +364,7 @@ TEST(SaveFormat27, FullDurabilityEnchantedArmorUsesObjectShape) {
     auto j = serializeSave(s, f.items);
     ASSERT_TRUE(j.ok()) << j.error().message;
     // The object shape (damage absent, enchants present) — NOT the string.
-    const Json& entry = *j->find("player")->find("armor")->find("chest");
+    const Json& entry = *primaryEntry(*j)->find("armor")->find("chest");
     ASSERT_TRUE(entry.isObject());
     EXPECT_EQ(entry.find("damage"), nullptr); // omit-when-0 (full)
     EXPECT_EQ(entry.find("enchants")->find("protection")->asInt(), 4);

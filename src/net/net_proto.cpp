@@ -269,26 +269,56 @@ void feedEntities(Fnv64& h, const std::vector<std::unique_ptr<Entity>>& ents) {
     }
 }
 
-void feedJournal(Fnv64& h, const SaveJournal& j) {
-    h.feedScalar(static_cast<std::uint64_t>(j.entries));
+void feedJournal(Fnv64& h, const World& world,
+                 const World::ChunkGenerator& reference,
+                 const BlockRegistry& blocks, const SaveJournal& j,
+                 const std::map<ColumnPos, RetainedColumnDiff>& retained) {
+    // V3-12c2: the hash's cell SET is the SAVE DOCUMENT's — the
+    // journal's cells' LIVE DIFF against the generated reference
+    // (the collectSave's journalDiff's single-threaded twin: the
+    // reverted edit's ghost excluded, the load/reload-invariant face
+    // — the rejoin's client backfills its fresh journal from the
+    // document, the host's live journal may carry more cells; both
+    // machines diff their own universe over the SAME world, the
+    // self-healing agreement) + the retained's cells' VERBATIM (the
+    // STRM-2's unload capture IS the diff — its columns are unloaded,
+    // no live check possible; the one-of invariant keeps the two
+    // universes disjoint). The diff's vectors are position-sorted
+    // (the collectSave's order, the deterministic face).
+    std::vector<SavedBlockEdit> db;
+    std::vector<SavedFluidEdit> df;
+    (void)journalDiff(world, reference, blocks, j.blocks, j.fluids, db, df,
+                      1);
+    h.feedScalar(static_cast<std::uint64_t>(db.size() + df.size()));
     h.feedScalar(static_cast<std::uint64_t>(j.valid));
-    // The map's iteration order is the key-sorted deterministic one —
-    // the two machines' journals are the sim's output, the hash's job
-    // is the divergence tripwire over the cell SETS.
-    for (const auto& [col, cells] : j.blocks) {
-        h.feedScalar(static_cast<std::uint64_t>(cells.size()));
-        for (const BlockPos& c : cells) {
-            h.feedScalar(static_cast<std::uint64_t>(c.x));
-            h.feedScalar(static_cast<std::uint64_t>(c.y));
-            h.feedScalar(static_cast<std::uint64_t>(c.z));
-        }
+    for (const SavedBlockEdit& b : db) {
+        h.feedScalar(static_cast<std::uint64_t>(b.pos.x));
+        h.feedScalar(static_cast<std::uint64_t>(b.pos.y));
+        h.feedScalar(static_cast<std::uint64_t>(b.pos.z));
+        h.feed(b.blockName.data(), b.blockName.size());
     }
-    for (const auto& [col, cells] : j.fluids) {
-        h.feedScalar(static_cast<std::uint64_t>(cells.size()));
-        for (const BlockPos& c : cells) {
-            h.feedScalar(static_cast<std::uint64_t>(c.x));
-            h.feedScalar(static_cast<std::uint64_t>(c.y));
-            h.feedScalar(static_cast<std::uint64_t>(c.z));
+    for (const SavedFluidEdit& f : df) {
+        h.feedScalar(static_cast<std::uint64_t>(f.pos.x));
+        h.feedScalar(static_cast<std::uint64_t>(f.pos.y));
+        h.feedScalar(static_cast<std::uint64_t>(f.pos.z));
+        h.feedScalar(static_cast<std::uint64_t>(f.kind));
+        h.feedScalar(static_cast<std::uint64_t>(f.level));
+    }
+    // The retained's verbatim (position-sorted per column, the
+    // map's key order's deterministic one).
+    for (const auto& [col, diff] : retained) {
+        for (const SavedBlockEdit& b : diff.blocks) {
+            h.feedScalar(static_cast<std::uint64_t>(b.pos.x));
+            h.feedScalar(static_cast<std::uint64_t>(b.pos.y));
+            h.feedScalar(static_cast<std::uint64_t>(b.pos.z));
+            h.feed(b.blockName.data(), b.blockName.size());
+        }
+        for (const SavedFluidEdit& f : diff.fluids) {
+            h.feedScalar(static_cast<std::uint64_t>(f.pos.x));
+            h.feedScalar(static_cast<std::uint64_t>(f.pos.y));
+            h.feedScalar(static_cast<std::uint64_t>(f.pos.z));
+            h.feedScalar(static_cast<std::uint64_t>(f.kind));
+            h.feedScalar(static_cast<std::uint64_t>(f.level));
         }
     }
 }
@@ -338,6 +368,7 @@ std::vector<std::uint8_t> packWelcome(const NetWelcome& w) {
     putU8(v, w.slot);
     putU8(v, w.delay);
     putU8(v, w.hashInterval);
+    putU32(v, w.startFrame);
     return v;
 }
 
@@ -355,6 +386,7 @@ bool unpackWelcome(const std::uint8_t* p, std::size_t n, NetWelcome& out) {
     out.slot = r.u8();
     out.delay = r.u8();
     out.hashInterval = r.u8();
+    out.startFrame = r.u32();
     return r.ok && out.players <= kNetMaxPlayers;
 }
 
@@ -416,6 +448,14 @@ std::vector<std::uint8_t> packCtrl(const NetCtrl& c) {
     std::vector<std::uint8_t> v;
     putU8(v, static_cast<std::uint8_t>(c.kind));
     putU8(v, c.slot);
+    if (c.kind == NetCtrl::Kind::Join) {
+        const std::string cap = c.name.size() > 16 ? c.name.substr(0, 16)
+                                                    : c.name;
+        putU8(v, static_cast<std::uint8_t>(cap.size()));
+        for (char ch : cap) {
+            putU8(v, static_cast<std::uint8_t>(ch));
+        }
+    }
     return v;
 }
 
@@ -423,6 +463,14 @@ bool unpackCtrl(const std::uint8_t* p, std::size_t n, NetCtrl& out) {
     Reader r {p, n};
     out.kind = static_cast<NetCtrl::Kind>(r.u8());
     out.slot = r.u8();
+    if (out.kind == NetCtrl::Kind::Join) {
+        const std::uint8_t len = r.u8();
+        if (r.off + len > r.n) {
+            return false;
+        }
+        out.name.assign(reinterpret_cast<const char*>(p + r.off), len);
+        r.skip(len);
+    }
     return r.ok;
 }
 
@@ -632,6 +680,7 @@ bool unpackChat(const std::uint8_t* p, std::size_t n, std::uint8_t& slot,
     return r.ok;
 }
 
+
 std::uint64_t netStateHash(const Game& g) {
     // The design §2.3's field list (the R15's single source — the
     // mutation test's poke surface). The order is the contract: a
@@ -650,9 +699,33 @@ std::uint64_t netStateHash(const Game& g) {
     feedEntities(h, g.m_entities);
     feedEntities(h, g.m_nether.entities);
     feedEntities(h, g.m_end.entities);
-    feedJournal(h, g.m_streaming.saveJournal);
-    feedJournal(h, g.m_nether.streaming.saveJournal);
-    feedJournal(h, g.m_end.streaming.saveJournal);
+    // The per-dimension generated reference (the collectSave's
+    // makeChunkGenerator / the nether's derived-seed twin's — the
+    // END's reference is the overworld's generator over the end's
+    // derived seed, the makeEndChunkGenerator's twin; the friend's
+    // read, the feedJournal's pure face).
+    const World::ChunkGenerator owRef = g.makeChunkGenerator();
+    feedJournal(h, g.m_world, owRef, g.m_blocks,
+                g.m_streaming.saveJournal, g.m_streaming.retainedColumns);
+    if (g.m_nether.world.has_value()) {
+        feedJournal(h, *g.m_nether.world, g.makeNetherChunkGenerator(),
+                    g.m_blocks, g.m_nether.streaming.saveJournal,
+                    g.m_nether.streaming.retainedColumns);
+    } else {
+        // The unengaged dimension's journal is structurally empty (the
+        // lazy D2: no world, no edits) — the reference is never read
+        // (journalDiff's zero-chunk no-op).
+        feedJournal(h, g.m_world, owRef, g.m_blocks, SaveJournal {},
+                    std::map<ColumnPos, RetainedColumnDiff> {});
+    }
+    if (g.m_end.world.has_value()) {
+        feedJournal(h, *g.m_end.world, g.makeEndChunkGenerator(),
+                    g.m_blocks, g.m_end.streaming.saveJournal,
+                    g.m_end.streaming.retainedColumns);
+    } else {
+        feedJournal(h, g.m_world, owRef, g.m_blocks, SaveJournal {},
+                    std::map<ColumnPos, RetainedColumnDiff> {});
+    }
     h.feedScalar(g.m_mobs.spawnCounter);
     h.feedScalar(g.m_nether.mobs.spawnCounter);
     h.feedScalar(g.m_end.mobs.spawnCounter);

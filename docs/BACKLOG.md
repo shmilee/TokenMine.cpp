@@ -18,8 +18,8 @@
 
 ## 3.x 任务矩阵（**11-05 原 11 项全完成 + 11-06 用户定案 7 项入表
 （V3-8b + 方向项 V3-10~V3-15）+ 11-07 用户实机诉求 2 项入表（V3-16 扩
-展指导 demo 族 + V3-17 主菜单系统）= 21 项矩阵（17 ✅ + V3-12 进行中
-【a/b/c1 ✅，c2 ⬜ = 矩阵收官项】+ V3-16/V3-17 ⬜ 待执行）**，
+展指导 demo 族 + V3-17 主菜单系统）= 21 项矩阵（18 ✅【含 V3-12 全
+4 相位 a/b/c1/c2】+ V3-16/V3-17 ⬜ 待执行）**，
 11-05 v3.11.0；11-04 定案：6 项全保留 + V3-7 先执 + 11-05 用户诉求 V3-8 手柄
 入 UX 行 + 11-05 用户定案 V3-9 demo 回放入 UX 行；**表格只留简写，详情见「完
 成项明细」节 +「待执行项明细」节（表外）**）
@@ -27,7 +27,7 @@
 | 系统 | ① | ② | ③ | ④ | ⑤ | ⑥ | ⑦ |
 |---|---|---|---|---|---|---|---|
 | STRM 流送与内存 | （方向：双世界流送/内存设计，依赖 V3-1） | | | | | | |
-| PIPE 帧管线与并发 | （方向：传送过渡帧管线，依赖 V3-1） | ⬜ V3-12 多人：✅ a 设计（v3.28.0）+ ✅ b 2 人 PoC（v3.29.0）+ ✅ c1 大厅/聊天/N/心跳（v3.30.0）/ ⬜ c2 断线恢复 + format 33（矩阵收官项） | | | | | |
+| PIPE 帧管线与并发 | （方向：传送过渡帧管线，依赖 V3-1） | ✅ V3-12 多人【全 4 相位】：✅ a 设计（v3.28.0）+ ✅ b 2 人 PoC（v3.29.0）+ ✅ c1 大厅/聊天/N/心跳（v3.30.0）+ ✅ c2 断线恢复 + format 33（v3.31.0，矩阵收官项） | | | | | |
 | LGT 光照 | | | | | | | |
 | GEN 世界与生成 | ✅ V3-1 下界维度·门与下界（三段） | ✅ V3-2 下界内容族（Part 1+2） | ✅ V3-5 建筑内容族 | ✅ V3-10 末地维度：✅ V3-10a 框架（v3.23.0）+ ✅ V3-10b 内容族（v3.24.0）+ ✅ V3-10c 末影人（v3.25.0）+ ✅ V3-10d1 龙核心（v3.26.0）+ ✅ V3-10d2 召唤复杀（v3.27.0）【V3-10 全 4 相位完成】 | | | |
 | FLUID 流体 | | | | | | | |
@@ -241,8 +241,8 @@
     cell 中心 -N+0.5【10d1 词表负侧偏格静默修】/ 无蛋 ≠ 首访 /
     demo 同帧点击死 + hold 续取目标 / 旋转 dy 累计 / /tmp 路径重
     写）
-  - **末地 orb 持久化复议**（⬜ 10d 尾巴，非矩阵编号）：format 33
-    end_xp_entities 立项时定案
+  - **末地 orb 持久化复议**（✅ v3.31.0 兑现，非矩阵编号）：format 33
+    end_xp_entities 恒写（10d1 的「120-s 引信限界损失」偏离闭合）
 - **V3-11 创造模式**（2 相位，11-06 定案拆分；与 V3-13 无依赖可并
   行，执行序 a→b）：
   - **V3-11a 模式切换 + 不死 + 飞行 + 即挖 = v3.17.0 门 207（11-06
@@ -306,14 +306,37 @@
     臂【F3 players 行 + 名牌 + 聊天浮层 OCR 实证】+ 聊天臂（xdotool
     T+type+Return 双进程日志逐字）+ S6 八面复验 + accept 窗 2 新面
     【2 客→N=3 / 窗 3.01s 超时→N=2 续跑】；PITS 411（九坑）
-  - **V3-12c2 断线恢复 + format 33 = v3.31.0 门 221（⬜ 待执行——
-    矩阵收官项）**：REJOIN 快照（save 形 WELCOME = journal + 实体 +
-    players[] 全量传输——D16 复议：净世界 fresh only 的 12c 面）+
-    format 33 players[]（远程个人态落盘——末地 orb 持久化复议同
-    commit 盘点）+ 重连流程（客户端断线后重连恢复世界/位置/库存）
-    + 后移候选复议（per-player 维度 D9 / 最近玩家目标 D10 / 玩家
-    碰撞 D7 / 协作挖掘 D6 / 物品交换 D5 / creative 多人 D11 / 本地
-    预测 D3 / swing 体 D18 / aim 相机形 D17）
+  - **V3-12c2 断线恢复 + format 33 = v3.31.0 门 221（11-08 完成，
+    矩阵收官项，全 PASS）**：format 33 players[]（root player +
+    inventory/inv_grid 迁入 per-player entry，entry 0 = primary 镜像，
+    三面 version lie）+ **末地 XP orb 持久化**（end_xp_entities 恒写，
+    10d1 后移复议兑现）+ **REJOIN 快照**（save 形 WELCOME = 磁盘档 +
+    会话计数族 {weather 5 字段含双 splitmix 流 / spawnCounter×3 /
+    particleBreakCounter} + 活粒子 + per-player 会话计时器族
+    {prevHealth/hurtFlash/lastSpace/pearl/drownTicks/flying}——全
+    presence-gated，on-disk 格式不变 S1 锚免重锚）+ 重连流程（主机
+    持久 listener + 中会话非阻塞 accept + startFrame 采纳 + 重连者 =
+    新体 D25）+ **Join/Renumber CTRL 广播**（N 增长/移除的 slot 重编
+    号，行随玩家移）+ **net 主机抑制幽灵**（载多玩家档 = stale 幽灵
+    的 slot/m_nets 错乱 segfault 修）+ feedJournal 改哈希 live-diff
+    （load 不变面）+ respawn 精确 float（≤32 int cell 的 0.5-y 丢失
+    修）；**mob-quiet 合同**（活 mob 在场 = 点名拒收，全 mob 快照后
+    移 D24）；门内捕获八坑全 PITS 412（Json(bool) 指针陷阱 /
+    legacyShape-format 矛盾 / respawn 0.5-y / slot 重编号 ring 越界 /
+    barrier 停滞 accept 节拍 / client renumber 无 drop / net 主机幽灵
+    segfault / feedJournal 原始 cell）；2987/2987（+13：SaveFormat33
+    9 + NetSnapshot 4 + codec 扩展）；S1 结构免疫第 102 次（≡ base19
+    逐字节 ×2 + savenorm EXACT + on-disk 无 net 段）+ canary 4 EXACT
+    （sim 2 不 bump）+ 迁移臂（32→33 值保真 pos/yaw/34 blockEdits/
+    inventory）+ REJOIN 臂（slot 2 of 3 @ frame 366 + 三向哈希 f600
+    ad509c… 逐字 + 零 desync）+ S6（listen×save 转正 + mob 拒收命名）
+    + 性能 A/B 同档（OW 900f upd 在旧树噪声带内 + changesApplied
+    9/3/1 + net 自成本 +~0.07ms/帧 sub-ms + 结构零成本 solo）；后移
+    候选复议定案：per-player 维度 D9 / 最近玩家目标 D10 / 玩家碰撞 D7
+    / 协作挖掘 D6 / 物品交换 D5 / creative 多人 D11 / 本地预测 D3 /
+    swing 体 D18 / aim 相机形 D17 全后移（12c2 只做断线恢复 + format 33，
+    不做即记档）+ **全 mob 快照传输后移 D24**（mob-quiet 合同，门臂
+    mobs-off 实证）
 - **V3-16 扩展指导 demo 族**（⬜ 待执行，**11-07 用户实机诉求**——
   「现有 demo 都太简单，几十秒就结束」）：10 主题玩法指导，
   每支 3-10 分钟级（现行 300-600 帧 = 5-10s 的 10-100×）：① 搭建

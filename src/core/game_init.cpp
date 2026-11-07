@@ -9,6 +9,7 @@
 #include <ctime>
 #include <numbers>
 #include <sstream>
+#include <unistd.h> // V3-12c2: the host's persistent listener's close
 
 #include "block/block_sound.hpp"
 #include "block/chance_drop.hpp"
@@ -85,6 +86,13 @@ std::string defaultRecordName() {
 } // namespace
 
 Game::~Game() {
+    // V3-12c2: the host's persistent listener's close (the port's
+    // release — the early-destruction's belt, the normal path's
+    // process exit's twin).
+    if (m_listenFd >= 0) {
+        ::close(m_listenFd);
+        m_listenFd = -1;
+    }
     // Close audio before the window's SDL_Quit (idempotent: run() already
     // did this on the normal path; this covers an early destruction).
     m_sound.shutdown();
@@ -2870,6 +2878,13 @@ Result<void> Game::init(const GameArgs& args) {
     if (m_args.listenPort != 0) {
         MC_TRY(netHostHandshake());
     }
+    if (m_netActive && !m_netIsHost && !m_netSnapshotPayload.empty()) {
+        // V3-12c2: the REJOIN's snapshot's apply (the save-form
+        // WELCOME's document over the worldgen'd world — the
+        // parse/apply path's full reuse, the file-load's twin; the
+        // frame's adoption aligns the pacing to the host's).
+        MC_TRY(applyNetSnapshot());
+    }
     if (m_netActive && !m_netIsHost) {
         // The c1's N-generalization: the client creates EVERY other
         // player's body (slots 1..n-1 — the lockstep simulates every
@@ -2878,8 +2893,16 @@ Result<void> Game::init(const GameArgs& args) {
         // breaks at N>2 (the local slot 2's body missing = the
         // out-of-range read's segfault, and the client's hash feeding
         // its own 2-player count against the host's 3 = the f0
-        // desync's twin — the gate-catch pair).
+        // desync's twin — the gate-catch pair). V3-12c2: the
+        // rejoin's snapshot already built the EXISTING players'
+        // bodies (applySave's ghosts — the document's entries
+        // 1..n-2); the loop's skip-face creates only the missing
+        // ones (the joining slot's fresh body — the starter gift,
+        // the host's netAddPlayer's twin).
         for (std::size_t slot = 1; slot < m_frameRings.size(); ++slot) {
+            if (slot < m_players.size() && m_players[slot] != nullptr) {
+                continue;
+            }
             netAddPlayer(slot);
         }
     }

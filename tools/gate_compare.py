@@ -7,9 +7,20 @@ Usage:
                                     stripped: fires[*].remaining,
                                     entities[*].age, player.saturation —
                                     the PITS 244 / P56 discipline)
+
+V3-12c2 (gate 221): the cross-VERSION savenorm (the performance A/B's
+old-format-32 vs new-format-33) normalizes the schema's relocation:
+  - the format key itself (the 32 vs 33's marker)
+  - the per-player "players" array (format 33) -> the root "player"
+    (format 32's shape): the primary's entry promoted, its nested
+    "inventory" / "inv_grid" to the root, the respawn's exact float
+    triple floored to the 32's int cell (the old writer's twin)
+  - "end_xp_entities" (format 33's always-written segment; the 32's
+    silent-skip deviation, empty on the no-input overworld's arm)
 """
 import gzip
 import json
+import math
 import sys
 
 
@@ -39,7 +50,33 @@ def strip_save(d):
         f.pop('remaining', None)
     for e in d.get('entities', []):
         e.pop('age', None)
+    for e in d.get('nether_entities', []):
+        e.pop('age', None)
+    for e in d.get('end_entities', []):
+        e.pop('age', None)
+    for e in d.get('end_xp_entities', []):
+        e.pop('age', None)
+    # V3-12c2: the format-33 per-player relocation -> the format-32's
+    # root shape (the cross-version's normalization: the primary's
+    # entry promoted, the nested inventory / inv_grid to the root, the
+    # respawn's exact float floored to the 32's int cell).
+    players = d.get('players')
+    if players:
+        primary = dict(players[0])
+        if 'inventory' in primary:
+            d['inventory'] = primary.pop('inventory')
+        if 'inv_grid' in primary:
+            d['inv_grid'] = primary.pop('inv_grid')
+        if 'respawn' in primary and isinstance(primary['respawn'], list):
+            primary['respawn'] = [int(math.floor(v)) for v in primary['respawn']]
+        d['player'] = primary
+        del d['players']
     d.get('player', {}).pop('saturation', None)
+    # V3-12c2: the format-33's always-written End's XP segment (the
+    # 32's silent-skip deviation; empty on the no-input overworld).
+    d.pop('end_xp_entities', None)
+    # V3-12c2: the format key itself (the 32 vs 33's marker).
+    d.pop('format', None)
     return d
 
 

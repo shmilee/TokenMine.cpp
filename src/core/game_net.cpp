@@ -136,6 +136,12 @@ Result<void> Game::netClientHandshake() {
     m_netIsHost = false;
     m_localSlot = static_cast<int>(welcome.slot);
     m_netSeedOverride = welcome.seed;
+    // V3-12c2: the save-form WELCOME's snapshot (the document's
+    // payload — empty on the fresh form; the post-buildScene's
+    // applyNetSnapshot's source) + the frame's adoption (the host's
+    // m_frameCount at the handshake — 0 on the initial window).
+    m_netSnapshotPayload = std::move(welcome.journalPayload);
+    m_netStartFrame = welcome.startFrame;
     // The player set = the WELCOME's count (all slots 0..players-1; the
     // local one is the user's, the rest are the host's + the other
     // clients' — the lockstep simulates EVERY player locally).
@@ -169,13 +175,22 @@ Result<void> Game::netHostHandshake() {
         return MC_FAIL(uiScaleParity.error().describe());
     }
     const std::int64_t seed = m_config.getInt64("world.seed", 0);
-    // The 12b's world shape: the FRESH one (the client's zero-transfer
-    // worldgen). A host with a LOADED save (no --new) = the save-form
-    // WELCOME — the c2's reconnect snapshot's reserved face, the named
-    // reject.
-    if (m_args.saveSlot.has_value() && !m_args.newWorld) {
-        return MC_FAIL("net: the save-form WELCOME is the 12c's face "
-                       "(the host's --save without --new)");
+    // The world shape: FRESH (the client's zero-transfer worldgen) OR
+    // the SAVE form (V3-12c2 — the host's --save without --new: the
+    // initial window's WELCOME carries the loaded world's document,
+    // the rejoin's snapshot's first consumer; the 12b's named
+    // reject's lifting, the 12c2's face).
+    const bool saveForm =
+        m_args.saveSlot.has_value() && !m_args.newWorld;
+    // V3-12c2: the persistent listener (the port's single owner —
+    // the window's attempts + the mid-session rejoin's per-frame
+    // accepts run over this fd; the startHost's per-attempt bind's
+    // lifting: a rebind while the accepted connections live is the
+    // EADDRINUSE's face, the persistent fd's the resolution).
+    m_listenFd = NetSession::openListener(m_args.listenPort);
+    if (m_listenFd < 0) {
+        return MC_FAIL("net: the host's listener's open failed (the "
+                       "port's face — the S6's named error)");
     }
     // The c1's accept window (up to the protocol's cap — the first
     // client's long accept is the gate's shape, the rest ride a short
@@ -218,8 +233,8 @@ Result<void> Game::netHostHandshake() {
             // HELLO joins the window).
             auto session = std::make_unique<NetSession>();
             NetHello hello;
-            err = session->startHost(m_args.listenPort, hello,
-                                     kNetWindowAttemptMs);
+            err = session->acceptFromListener(m_listenFd, hello,
+                                              kNetWindowAttemptMs);
             if (!err.empty()) {
                 if (nowSeconds() - windowStart < kNetAcceptWindowSec) {
                     continue; // the quiet attempt: retry to the deadline
@@ -233,9 +248,9 @@ Result<void> Game::netHostHandshake() {
         // shape: the host waits for a player to join).
         auto session = std::make_unique<NetSession>();
         NetHello hello;
-        err = session->startHost(m_args.listenPort, hello,
-                                 static_cast<int>(kNetStallTimeoutSec *
-                                                  1000.0));
+        err = session->acceptFromListener(
+            m_listenFd, hello,
+            static_cast<int>(kNetStallTimeoutSec * 1000.0));
         if (!err.empty()) {
             m_nets.clear();
             return MC_FAIL(err);
@@ -269,12 +284,31 @@ Result<void> Game::netHostHandshake() {
     // The WELCOME flush (every accepted client sees the SAME N — the
     // lockstep's premise's belt).
     const std::size_t n = accepted.size() + 1;
+    // The save-form's document (the loaded world's state at the
+    // handshake — the session's frame zero: the worldgen'd-then-
+    // document-applied host's collectSave's twin; the mob-quiet's
+    // belt: a loaded world is structurally mob-free at frame zero,
+    // the named rejection's impossible-face guard).
+    std::string snapshotPayload;
+    if (saveForm) {
+        auto snap = collectNetSnapshot();
+        if (!snap.ok()) {
+            for (auto& pc : accepted) {
+                pc.session->close();
+            }
+            return MC_FAIL(snap.error().describe());
+        }
+        snapshotPayload = snap->dump(-1);
+    }
     for (std::size_t i = 0; i < accepted.size(); ++i) {
         NetWelcome welcome;
-        welcome.fresh = true;
+        welcome.fresh = !saveForm;
         welcome.seed = seed;
         welcome.slot = static_cast<std::uint8_t>(i + 1);
         welcome.players = static_cast<std::uint8_t>(n);
+        welcome.startFrame = 0; // the session's frame zero (the host's
+                                // m_frameCount at the handshake)
+        welcome.journalPayload = snapshotPayload;
         err = accepted[i].session->send(NetType::Welcome, packWelcome(welcome));
         if (!err.empty()) {
             accepted[i].session->close();
@@ -299,10 +333,13 @@ Result<void> Game::netHostHandshake() {
     return {};
 }
 
-void Game::netAddPlayer(std::size_t slot) {
+void Game::netAddPlayer(std::size_t slot, std::uint32_t joinFrame) {
     // The player's construction (the init's shape — the same params,
     // the per-index spawn, the per-index xp seed's salt, R10's
-    // de-collision).
+    // de-collision). V3-12c2: `joinFrame` = the barrier's watermark's
+    // adoption (the rejoin's host's m_frameCount at the handshake —
+    // the barrier's trivial pass over the pre-join frames; 0 = the
+    // initial window's cold-zero's 12b behavior).
     auto params = Player::Params::fromConfig(m_config);
     if (!params.ok()) {
         MC_LOG_ERROR("net: the player params' re-derivation failed (the "
@@ -330,6 +367,7 @@ void Game::netAddPlayer(std::size_t slot) {
             m_remoteFrameMax.push_back(0);
         }
     }
+    m_remoteFrameMax[slot] = joinFrame;
     // The fresh-world gift (the host's buildScene's twin — the
     // assetFNV's parity guarantees the same hotbar.json).
     auto starter = fillStarterInventory(*m_sessions[slot]);
@@ -401,7 +439,94 @@ void Game::netRemovePlayer(std::size_t slot, const std::string& why) {
     if (slot == static_cast<std::size_t>(m_localSlot)) {
         m_netActive = false; // the client's own removal (the D2's exit)
         m_nets.clear();
+        return;
     }
+    // V3-12c2: the removal's BROADCAST (the surviving remotes'
+    // renumber — the compact-erase's desync root's fix: the other
+    // clients' bodies / rings shift with the host's, the frame's
+    // states' count's agreement). The host's face only (a client's
+    // removal's D2 exit's return above; the solo's continuation's
+    // zero-remote's no-op).
+    if (m_netIsHost) {
+        NetCtrl ctrl;
+        ctrl.kind = NetCtrl::Kind::Renumber;
+        ctrl.slot = static_cast<std::uint8_t>(slot);
+        const std::vector<std::uint8_t> bytes = packCtrl(ctrl);
+        for (auto& sess : m_nets) {
+            (void)sess->send(NetType::Ctrl, bytes);
+        }
+        MC_LOG_INFO("net: the removal's renumber broadcast (the slot " +
+                    std::to_string(slot) + " dropped, " +
+                    std::to_string(m_nets.size()) + " survivor(s))");
+    }
+}
+
+std::string Game::netApplyRenumber(std::uint8_t removed) {
+    // V3-12c2: the client's mirror of the host's compact-erase (the
+    // removal's CTRL's apply — the rows' shift WITH the players: the
+    // input history's owner follows the player, no flush — the ring
+    // slot (the frame's mod) is the global's, the row's move is the
+    // player's move).
+    const std::size_t s = removed;
+    if (s == 0 || s >= m_players.size()) {
+        return "the renumber's slot is corrupt (the host's " +
+               std::to_string(s) + " / the local " +
+               std::to_string(m_players.size()) + " players)";
+    }
+    if (s == static_cast<std::size_t>(m_localSlot)) {
+        // The own slot's removal = the transport's death's face (the
+        // host's connection's close follows; the D2's exit's belt —
+        // the EOF's waitPacket's named error's twin, the earlier
+        // pick).
+        return "the renumber's slot is my own (the transport's "
+               "death — the D2's exit)";
+    }
+    // The removal's DUAL: the 100% drop + the dismount + the
+    // effects' clear + the vectors' erases — the host's
+    // netRemovePlayer's call (the client's m_netIsHost's gates skip
+    // the connection / the broadcast's faces; the localSlot's D2's
+    // return's pre-checked above). The bare erase (the first
+    // version) DROPPED the removed player's items on the host only
+    // — the ents' desync's gate-catch root.
+    netRemovePlayer(s, "the renumber's broadcast (the host's "
+                       "removal's twin — the 100% drop's face)");
+    if (s < static_cast<std::size_t>(m_localSlot)) {
+        m_localSlot -= 1;
+    }
+    m_player = m_players[0].get(); // the alias re-pin (the primary's belt)
+    MC_LOG_INFO("net: the renumber applied (the slot " +
+                std::to_string(s) + " dropped, the local slot " +
+                std::to_string(m_localSlot) + " of " +
+                std::to_string(m_players.size()) + ")");
+    return {};
+}
+
+std::string Game::netApplyJoin(std::uint8_t slot, std::uint8_t players,
+                               const std::string& name) {
+    // V3-12c2: the client's mirror of the host's mid-session join
+    // (the Join's CTRL's apply — the N's growth: the rows' push +
+    // the new body's construction, the host's netAddPlayer's twin —
+    // the construction is deterministic (the spawn's per-index, the
+    // starter's assetFNV, the salt's per-index), NO transfer; the
+    // slot is ALWAYS the tail, the compact vector's append).
+    const std::size_t s = slot;
+    if (s != m_players.size() ||
+        players != static_cast<std::uint8_t>(m_players.size() + 1)) {
+        return "the join's slot is corrupt (the host's " +
+               std::to_string(s) + " / the local " +
+               std::to_string(m_players.size()) + " players, the "
+               "compact append's face)";
+    }
+    m_frameRings.push_back(
+        std::vector<FrameState>(kRingDepth, FrameState {}));
+    m_netInputs.emplace_back();
+    m_remoteFrameMax.push_back(0);
+    m_playerNames.push_back(name);
+    netAddPlayer(s);
+    MC_LOG_INFO("net: a player joined (slot " + std::to_string(s) +
+                " of " + std::to_string(players) + ", '" + name +
+                "' — the N's growth's broadcast)");
+    return {};
 }
 
 void Game::netConsumeRemote(std::size_t r) {
@@ -521,6 +646,117 @@ void Game::preloadNetInputs() {
     }
 }
 
+void Game::netTryMidSessionAccept() {
+    // V3-12c2: the REJOIN's mid-session accept (the persistent
+    // listener's NON-BLOCKING attempt — the free-slot's gate: the
+    // protocol's cap; no pending connect = the quiet "timed out"
+    // face's ignore, the per-attempt retry's shape). The join = a
+    // NEW body (the starter gift, the D25's deviation: the old body's
+    // drops ride the snapshot's entities, the pickup's path) + the
+    // WELCOME's save-form document (the host's current state — the
+    // client's apply over its worldgen'd world) + the frame's
+    // adoption (the host's m_frameCount: the client's pacing's
+    // alignment, the barrier's watermark's join-frame's trivial
+    // pass). Runs both at the frame's pre face AND inside the
+    // barrier's stall select (a barrier-stalled host must still
+    // accept — the backlog's 15-s wait's gate-catch: the accept's
+    // cadence is the barrier's select's, not the frame's).
+    if (m_listenFd < 0 || m_players.size() >= kNetMaxPlayers) {
+        return;
+    }
+    auto joinSession = std::make_unique<NetSession>();
+    NetHello joinHello;
+    if (joinSession->acceptFromListener(m_listenFd, joinHello, 0)
+            .empty()) {
+        const std::size_t joinSlot = m_players.size();
+        std::string refuse;
+        std::uint64_t jasset = 0;
+        std::uint64_t jcfg = 0;
+        std::string ferr = assetFNV("assets", jasset);
+        if (ferr.empty()) {
+            ferr = simConfigHash(m_config, jcfg);
+        }
+        if (ferr.empty()) {
+            const auto uiScaleParity = uiScaleFromConfig(m_config);
+            if (uiScaleParity.ok()) {
+                refuse = checkHello(
+                    joinHello, jasset, jcfg,
+                    m_window.requestedWidth(),
+                    m_window.requestedHeight(), *uiScaleParity,
+                    m_player != nullptr && m_player->isCreative());
+            } else {
+                refuse = uiScaleParity.error().describe();
+            }
+        } else {
+            refuse = ferr;
+        }
+        if (!refuse.empty()) {
+            (void)joinSession->send(NetType::Reject, packReject(refuse));
+            joinSession->close();
+            MC_LOG_INFO("net: a rejoining client was rejected (" +
+                        refuse + ")");
+        } else {
+            auto snap = collectNetSnapshot();
+            if (!snap.ok()) {
+                (void)joinSession->send(
+                    NetType::Reject,
+                    packReject(snap.error().describe()));
+                joinSession->close();
+                MC_LOG_INFO("net: the rejoin was refused (" +
+                            snap.error().describe() + ")");
+            } else {
+                NetWelcome welcome;
+                welcome.fresh = false;
+                welcome.seed = m_config.getInt64("world.seed", 0);
+                welcome.slot = static_cast<std::uint8_t>(joinSlot);
+                welcome.players = static_cast<std::uint8_t>(joinSlot + 1);
+                welcome.startFrame =
+                    static_cast<std::uint32_t>(m_frameCount);
+                welcome.journalPayload = snap->dump(-1);
+                if (joinSession->send(
+                        NetType::Welcome, packWelcome(welcome))
+                        .empty()) {
+                    const std::string name =
+                        joinHello.name.empty()
+                            ? "player"
+                            : joinHello.name;
+                    // The N's growth's BROADCAST (the existing
+                    // remotes' Join — their rings / bodies push the
+                    // row, the compact append's face). The joiner's
+                    // own session stays out of this fan-out (it
+                    // learned of itself via the WELCOME).
+                    if (!m_nets.empty()) {
+                        NetCtrl join;
+                        join.kind = NetCtrl::Kind::Join;
+                        join.slot =
+                            static_cast<std::uint8_t>(joinSlot);
+                        join.name = name;
+                        const std::vector<std::uint8_t>
+                            jbytes = packCtrl(join);
+                        for (auto& sess : m_nets) {
+                            (void)sess->send(NetType::Ctrl, jbytes);
+                        }
+                    }
+                    m_nets.push_back(std::move(joinSession));
+                    m_playerNames.push_back(name);
+                    netAddPlayer(joinSlot,
+                        static_cast<std::uint32_t>(m_frameCount));
+                    MC_LOG_INFO("net: a client reconnected (slot " +
+                                std::to_string(joinSlot) + " of " +
+                                std::to_string(joinSlot + 1) +
+                                " at frame " +
+                                std::to_string(m_frameCount) +
+                                ", the world seed " +
+                                std::to_string(welcome.seed) +
+                                ")");
+                } else {
+                    joinSession->close();
+                }
+            }
+        }
+    }
+}
+
 std::string Game::netFramePre(double& dt) {
     const std::size_t F = m_frameCount;
     if (m_netIsHost) {
@@ -532,6 +768,10 @@ std::string Game::netFramePre(double& dt) {
                 --r;
             }
         }
+
+        // V3-12c2: the mid-session accept's per-frame face (the
+        // helper — the barrier's stall select runs it too).
+        netTryMidSessionAccept();
         // The lockstep barrier (the mutual wait's host half): the
         // host's sim of frame F consumes EVERY remote's
         // FrameState[F-D] — a fast headless host racing a remote's
@@ -570,8 +810,21 @@ std::string Game::netFramePre(double& dt) {
                 for (auto& sess : m_nets) {
                     fds.push_back(sess->fd());
                 }
+                // V3-12c2: the listener joins the barrier's select
+                // (the stalled host's accept's cadence — the backlog's
+                // 15-s wait's gate-catch).
+                const bool listenArmed =
+                    m_listenFd >= 0 &&
+                    m_players.size() < kNetMaxPlayers;
+                if (listenArmed) {
+                    fds.push_back(m_listenFd);
+                }
                 const auto readyFds = NetSession::selectReady(fds, 1000);
                 for (int rfd : readyFds) {
+                    if (listenArmed && rfd == m_listenFd) {
+                        netTryMidSessionAccept();
+                        continue;
+                    }
                     for (std::size_t r = 0; r < m_nets.size(); ++r) {
                         if (m_nets[r]->fd() == rfd) {
                             netConsumeRemote(r);
@@ -658,6 +911,38 @@ std::string Game::netFramePre(double& dt) {
                 displayChat(static_cast<int>(cslot), ctext);
             }
             return netFramePre(dt); // the CHAT is not the frame's packet
+        }
+        if (pkt.type == NetType::Ctrl) {
+            // V3-12c2: the host's CTRL (the renumber's broadcast — the
+            // removal's frame-boundary's apply, the Chat's recursion's
+            // twin: the CTRL is not the frame's packet).
+            NetCtrl ctrl;
+            if (!unpackCtrl(pkt.payload.data(), pkt.payload.size(),
+                            ctrl)) {
+                return "the host's CTRL's payload is corrupt (the "
+                       "stream's desync — the named exit)";
+            }
+            if (ctrl.kind == NetCtrl::Kind::Renumber) {
+                const std::string err = netApplyRenumber(ctrl.slot);
+                if (!err.empty()) {
+                    return err; // the named exit (the corrupt / the own)
+                }
+                return netFramePre(dt);
+            }
+            if (ctrl.kind == NetCtrl::Kind::Join) {
+                const std::string err = netApplyJoin(
+                    ctrl.slot, ctrl.slot + 1, ctrl.name);
+                if (!err.empty()) {
+                    return err; // the named exit (the corrupt face)
+                }
+                return netFramePre(dt);
+            }
+            if (ctrl.kind == NetCtrl::Kind::Leave) {
+                return "the host's leave/kick (the reserved CTRL's "
+                       "face — the named exit)";
+            }
+            return "the host's CTRL's kind is off (the Renumber's "
+                   "face — the named exit)";
         }
         if (pkt.type != NetType::Frame) {
             return "the host's packet type is off (the FRAME's "

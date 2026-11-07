@@ -37,17 +37,21 @@ public:
     NetSession& operator=(const NetSession&) = delete;
 
     // -- The startup (the handshake — before the frame loop) ---------
-    // Host: bind + listen + accept (ONE client, the 12b's fixed
-    // shape) + the WELCOME's send (the journal payload = the host's
-    // save document, the fresh world's zero-bytes). Returns "" on
-    // success, the named error otherwise (the S6's port face).
-    // The accept + the HELLO's receive (the game compares the HELLO's
-    // four fingerprints and sends the WELCOME / the REJECT via
-    // send()). The timeout's ms (the first client's 10-s blocking
-    // accept / the c1 accept window's 250-ms attempt — a timeout =
-    // the named error, the listen fd's close).
-    std::string startHost(std::uint16_t port, NetHello& outHello,
-                          int timeoutMs);
+    // V3-12c2: the host's persistent LISTENER (socket + bind +
+    // listen, the port's single owner — the initial window's
+    // attempts + the mid-session rejoin's per-frame accepts all run
+    // over this fd, the backlog 8's connect queue). The fd; -1 =
+    // the named error (the S6's port face, logged).
+    static int openListener(std::uint16_t port);
+    // V3-12c2: the accept + the HELLO's receive over the persistent
+    // listener (the listener fd's NON-owning — the caller owns it;
+    // the session owns the accepted connection). timeoutMs 0 = the
+    // rejoin's per-frame non-blocking attempt (no pending connect =
+    // the quiet "timed out" face, the caller's ignore); > 0 = the
+    // window's retry attempt. "" on success (outHello filled, the
+    // session connected), the named error otherwise.
+    std::string acceptFromListener(int listenFd, NetHello& outHello,
+                                   int timeoutMs);
     // Client: the connect + the HELLO's send + the WELCOME's receive
     // (a REJECT = the named refusal surfaced to the caller, the
     // version-lie's exit-1 precedent). "" on success.
