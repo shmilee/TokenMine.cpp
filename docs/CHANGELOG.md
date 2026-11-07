@@ -11,6 +11,27 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.28.0（2026-11-07）— V3-12a 多人设计定案（门 218 全 PASS，纯文档版）
+
+**矩阵最后项 V3-12 多人（唯一「超大」架构级）相位 12a = 立项设计
+稿，无代码**（v3.0.0 开启版同款：纯文档 + banner 3.28.0）：设计权
+威入仓 `docs/V3-12-MULTIPLAYER-DESIGN.md`（390 行，代码引用文件:
+行实证）——**方案 1 主机权威 lockstep 定案**（项目确定性纪律 =
+锁步免费午餐：demo 内核 = 客户端循环形状 + 输入中继 = Input
+handle* 第二消费方 + 世界传输零【worldgen 纯函数同 seed 位级】）/
+**时间源 = 主机广播 clamped wall dt（raw f64 位）**（real-dt 系统
+结构性零 desync；wall 直读仅 2 处 → simTime 化 solo 位级）/ 网络 =
+POSIX TCP 无 net 线程 + 协议 schema 定案（HELLO 四指纹握手 /
+FrameState ~40B / D=2 统一延迟无预测 / 30 帧状态哈希字段清单）/
+**Player 多人化 = 双别名最小方案**（m_player = primaryPlayer() 保
+留 354 处零改动 + 10 成员迁移 + pass 归属二分表）/ streaming 跨机
+2 处修正（primary 锚 + streamPending 共享账本）/ 12b = format 32
+零 bump + sim 2 不 bump + 全 sim 覆盖。风险 R1-R20 / 偏离 D1-D15
+全文。编排者裁定：12b = v3.29.0 门 219（侦察门号顺延修正）。门
+218：S1 第 99 次（≡ base19 逐字节 ×2，banner = F3 文本零像素面）/
+canary 4 EXACT / 性能 A/B 同档【旧 = 3f9ae83 v3.27.0 + g139，二进制差异仅 F3 文本串：PERF-WIN 三窗 upd med 0.563/0.663/0.649 vs 0.520/0.610/0.580 同档 + render 0.562/0.744/0.726 vs 0.543/0.682/0.602 + swap 15.3 同档 + changesApplied 9/3-2/1【win2 = streaming 边界 real-dt 域，门 207 先例带】+ 终档 savenorm EXACT】/ 2964/2964。详见
+`docs/archive/phase-3.28.0.md`。
+
 ## v3.27.0（2026-11-07）— V3-10d2 召唤与复杀（门 217 全 PASS）
 
 **矩阵唯一真大项收官相位 D2/2**（召唤序列 + 复杀闭环；format 32 不
